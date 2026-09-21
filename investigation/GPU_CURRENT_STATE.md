@@ -87,13 +87,17 @@ native libraries built; ONLY DxgiFns.cpp differs in prepared source comparisons.
 EXP732/743 valid Session1 still fails Present and NEVER enters _Present (new
 entry record absent, trace unsaturated). IMMEDIATE fix remains offline-correct,
 not established as the current live cause. No frontend SetError origin either.
-Next EXP733/candidate744: trace entry/unchanged HRESULT for exactly seven registered
-DXGI base callbacks, Blt args and query/rotation counts. Observation-only commit
-d07c803fadee7e327387ed5f1d762e4f1a4d9557; actual x64 full DDI/producer suitePASS,
-x64/ARM64 archivesPASS; only DxgiFns changes in prepared source comparison.
-Candidate744 package gates next, no speculative semantic patch.
-Evidence EXP732-immediate-present/EXP732-umd-trace.txt and EXP733-dxgi-boundary.
-Clean ordinary baseline18:59:18Z: Code28/no residues/signer,8CPU,no autologon.
+EXP733/744 full DXGI boundary diagnostic: native render/dispatch/flush S_OK;
+NONE of seven registered DXGI callback entries/returns appears in45-line trace.
+No frontend SetError either. Client9136/Session1 stillPresent887a0005/reason887a0020.
+Do not change another callback guard without new evidence. Candidate744 unchanged.
+Next EXP734: bounded temporary ETW session (DXGI/D3D10/DxgKrnl + image loads)
+around ONE console client. Measure actual UMDeviceVersion/loaded UMD path and
+first system failure. D3D10 debug layer absent; no component/security install.
+Existing provider metadata in EXP733-dxgi-boundary/EXP733-etw-metadata.json;
+DxgKrnl metadata in EXP733-os-diagnostics.json. WDK IS_DXGI1_1_BASE_FUNCTIONS
+uses runtimeVersion low bits; actual requirement is unknown until measured.
+Clean ordinary baseline19:32:22Z: Code28/no residues/signer,8CPU,no autologon.
 Reuse full-owner/install/autologon/capture/cleanup recipes; package install ONLY
 in driver-absent full-owner584/406; orderly exit; one console Interactive client.
 ## Fixed execution recipe — do not rediscover
@@ -137,7 +141,7 @@ on-disk artifacts/tool exits directly. No repeated "continue" handoff loops.
 
 HARDWARE ROADMAP
 [PASS] Native stack has prior execution evidence;741 paired diagnostic/offline gates.
-[NOW] Candidate744 existing DXGI callback transcript package gates.
-[NEXT] Identify first actual pre-Present callback failure and correct its owner.
+[NOW] EXP734 bounded OS ETW diagnostic on unchanged744.
+[NEXT] Identify runtime/DDI or kernel failure before all DXGI callbacks.
 [HW] Standard Present and stable complete physical image remain unproven.
 POST-HARDWARE: sustained correct desktop, longer acceptance; OpenGL/CS1.6 later.
