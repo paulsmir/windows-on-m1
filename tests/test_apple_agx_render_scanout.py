@@ -49,30 +49,6 @@ class AppleAgxRenderScanoutTests(unittest.TestCase):
         self.assertLess(remove.index("AdmissionScanoutStop(context)"),
                         remove.index("AdmissionMemoryRuntimeStop(context)"))
 
-    def test_post_display_framebuffer_seeds_first_local_primary(self):
-        lifecycle = (RENDER / "src" / "lifecycle.c").read_text()
-        memory = (RENDER / "src" / "memory_runtime_windows.c").read_text()
-        header = (RENDER / "include" / "render_admission.h").read_text()
-        start = function_body(lifecycle, "AdmissionDdiStartDevice")
-        seed = function_body(memory, "AdmissionMemoryRuntimeSeedPostDisplay")
-
-        acquire = start.index("DxgkCbAcquirePostDisplayOwnership(")
-        copy = start.index("AdmissionMemoryRuntimeSeedPostDisplay(")
-        scanout = start.index("AdmissionScanoutStart(context)")
-        self.assertLess(acquire, copy)
-        self.assertLess(copy, scanout)
-        self.assertIn("AdmissionMemoryRuntimeSeedPostDisplay", header)
-        self.assertIn("AdmissionMemoryRuntimeScanoutView", seed)
-        self.assertIn("PostDisplay->PhysicAddress", seed)
-        self.assertIn("DxgkCbMapMemory", seed)
-        self.assertIn("DxgkCbUnmapMemory", seed)
-        self.assertIn("RtlCopyMemory", seed)
-        self.assertNotIn("MmCopyMemory", seed)
-        self.assertNotIn("DxgkCbMapFrameBufferPointer", seed)
-        self.assertIn("APPLE_AGX_SCANOUT_J313_SURFACE_SIZE", seed)
-        self.assertIn("D3DDDIFMT_A8R8G8B8", seed)
-        self.assertIn("D3DDDIFMT_X8R8G8B8", seed)
-
     def test_vidpn_paths_delegate_to_the_registered_fixed_panel(self):
         display = (RENDER / "src" / "display.c").read_text()
         visibility = function_body(

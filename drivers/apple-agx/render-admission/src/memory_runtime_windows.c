@@ -702,50 +702,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeScanoutView(
   return STATUS_SUCCESS;
 }
 
-_Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeSeedPostDisplay(
-    ADMISSION_CONTEXT *Context,
-    const DXGK_DISPLAY_INFORMATION *PostDisplay) {
-  ADMISSION_SCANOUT_MEMORY_VIEW destination;
-  PVOID sourceAddress = NULL;
-  NTSTATUS status;
-  NTSTATUS unmapStatus;
-  if (Context == NULL || PostDisplay == NULL ||
-      KeGetCurrentIrql() != PASSIVE_LEVEL ||
-      PostDisplay->PhysicAddress.QuadPart <= 0 ||
-      PostDisplay->Width != APPLE_AGX_SCANOUT_J313_WIDTH ||
-      PostDisplay->Height != APPLE_AGX_SCANOUT_J313_HEIGHT ||
-      PostDisplay->Pitch != APPLE_AGX_SCANOUT_J313_STRIDE ||
-      (PostDisplay->ColorFormat != D3DDDIFMT_A8R8G8B8 &&
-       PostDisplay->ColorFormat != D3DDDIFMT_X8R8G8B8))
-    return STATUS_INVALID_PARAMETER;
-  status = AdmissionMemoryRuntimeScanoutView(Context, &destination);
-  if (!NT_SUCCESS(status))
-    return status;
-  if (destination.CpuAddress == NULL ||
-      destination.Bytes < APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
-    return STATUS_INVALID_BUFFER_SIZE;
-  if (destination.GuestIpaAddress ==
-      (ULONGLONG)PostDisplay->PhysicAddress.QuadPart)
-    return STATUS_SUCCESS;
-  if (!Context->InterfaceValid || Context->Interface.DeviceHandle == NULL ||
-      Context->Interface.DxgkCbMapMemory == NULL ||
-      Context->Interface.DxgkCbUnmapMemory == NULL)
-    return STATUS_NOT_SUPPORTED;
-  status = Context->Interface.DxgkCbMapMemory(
-      Context->Interface.DeviceHandle, PostDisplay->PhysicAddress,
-      (ULONG)APPLE_AGX_SCANOUT_J313_SURFACE_SIZE,
-      FALSE, FALSE, MmNonCached, &sourceAddress);
-  if (!NT_SUCCESS(status) || sourceAddress == NULL)
-    return NT_SUCCESS(status) ? STATUS_INVALID_ADDRESS : status;
-  RtlCopyMemory(
-      destination.CpuAddress, sourceAddress,
-      APPLE_AGX_SCANOUT_J313_SURFACE_SIZE);
-  KeMemoryBarrier();
-  unmapStatus = Context->Interface.DxgkCbUnmapMemory(
-      Context->Interface.DeviceHandle, sourceAddress);
-  return NT_SUCCESS(unmapStatus) ? STATUS_SUCCESS : unmapStatus;
-}
-
 static ULONGLONG AdmissionMemoryReadU64(
     _In_reads_(8) volatile const unsigned char *Address) {
   ULONGLONG value = 0ULL;

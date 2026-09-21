@@ -1082,9 +1082,6 @@ BOOLEAN AdmissionMemoryRuntimeContextPublished(
 NTSTATUS AdmissionMemoryRuntimeScanoutView(
     _Inout_ ADMISSION_CONTEXT *Context,
     _Out_ ADMISSION_SCANOUT_MEMORY_VIEW *View);
-NTSTATUS AdmissionMemoryRuntimeSeedPostDisplay(
-    _Inout_ ADMISSION_CONTEXT *Context,
-    _In_ const DXGK_DISPLAY_INFORMATION *PostDisplay);
 NTSTATUS AdmissionMemoryRuntimeExecutePaging(
     _Inout_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_PAGING_RECORD *Record);

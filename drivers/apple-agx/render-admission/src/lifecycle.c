@@ -190,19 +190,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
     (void)AdmissionInterruptStop(context);
     return STATUS_GRAPHICS_INVALID_DISPLAY_ADAPTER;
   }
-  status = AdmissionMemoryRuntimeSeedPostDisplay(
-      context, &context->PostDisplayInformation);
-  if (!NT_SUCCESS(status)) {
-    AdmissionRecordStartStage(context, AdmissionStartPostDisplay, status);
-    (void)AdmissionPlatformRuntimeStop(context);
-    (void)AdmissionPagingStop(context);
-    (void)AdmissionSchedulerStop(context);
-    (void)AdmissionBackendImageStop(context);
-    (void)AdmissionMemoryRuntimeStop(context);
-    (void)AdmissionInterruptStop(context);
-    return status;
-  }
-
   status = AdmissionScanoutStart(context);
   AdmissionRecordStartStage(context, AdmissionStartScanout, status);
   if (!NT_SUCCESS(status)) {

@@ -112,6 +112,7 @@ static NTSTATUS AdmissionPagingSubmitPresent(ADMISSION_CONTEXT *c,const DXGKARG_
 static size_t RtlCompareMemory(const void *a,const void *b,size_t n){return memcmp(a,b,n)==0?n:0;}
 static void AdmissionRecordPresent(ADMISSION_DEVICE *d,const DXGKARG_PRESENT *p,unsigned b,NTSTATUS s){(void)d;(void)p;(void)b;(void)s;}
 static void AdmissionFlushPresentTransfer(ADMISSION_CONTEXT *c){(void)c;}
+static void AdmissionFlushGdiReceipt(ADMISSION_CONTEXT *c){(void)c;}
 '''
         cases = r'''
 int main(void){
@@ -128,7 +129,7 @@ int main(void){
  a[1].PhysicalAddress.QuadPart=0x1501000000LL;a[2].hDeviceSpecificAllocation=&od;
  a[2].SegmentId=2;a[2].WriteOperation=1;a[2].PhysicalAddress.QuadPart=0x1500000000LL;
  unsigned char dma[4096]={0},private_data[8192]={0};D3DDDI_PATCHLOCATIONLIST patches[256]={0};
- RECT rect={0,0,2560,1600};DXGKARG_PRESENT p={0};
+ RECT rect={10,20,76,88};DXGKARG_PRESENT p={0};
  p.pDmaBuffer=dma;p.DmaSize=4096;p.pDmaBufferPrivateData=private_data;p.DmaBufferPrivateDataSize=8192;
  p.pAllocationList=a;p.pPatchLocationListOut=patches;p.PatchLocationListOutSize=256;
  p.SrcRect=p.DstRect=rect;p.SubRectCnt=1;p.pDstSubRects=&rect;p.Flags.Value=1;
@@ -142,6 +143,11 @@ int main(void){
  assert(AppleAgxDmaShadowOpen(&shadow,private_data,8192));
  assert(AppleAgxDmaShadowFind(private_data,shadow.BytesUsed,0,184,&view));
  assert(AdmissionPresentBltValidate(view.Bytes,184,1,&command));
+ assert(command.RectCount==1);
+ assert(command.SourceRect.Left==0 && command.SourceRect.Top==0 &&
+        command.SourceRect.Right==2560 && command.SourceRect.Bottom==1600);
+ assert(command.DestinationRect.Left==0 && command.DestinationRect.Top==0 &&
+        command.DestinationRect.Right==2560 && command.DestinationRect.Bottom==1600);
  assert(command.SourceLocation==0x0200001501000000ULL && command.DestinationLocation==0x0200001500000000ULL);
  DXGKARG_SUBMITCOMMAND submit={0};submit.hContext=&context;submit.Flags.Value=2;submit.SubmissionFenceId=37;
  submit.pDmaBufferPrivateData=private_data;submit.DmaBufferPrivateDataSize=8192;submit.DmaBufferSize=4096;
