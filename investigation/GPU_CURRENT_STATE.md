@@ -2707,6 +2707,24 @@ ARM64 package/sign/hash gates.
 [HW] Stable visually correct Air display with GPU driver.
 POST-HARDWARE: longer acceptance, broader D3D, OpenGL and CS1.6.
 
+## EXP722 bugcheck selects ordinary display-memory mapping
+Package736 repeatably bugchecks0x3B/c0000005 inside dxgkrnl during
+MapFrameBufferPointer; dump SHAe857362cc845f466ac561e2810d7b23b82f8bd4cb66ec5149a2bd67ec183abb5.
+The framebuffer save-section does not exist during this PnP Start. Controlled
+hot activation also forced a Windows reset, so the reliable recovery/install/
+full-owner workflow is restored per operator direction.
+
+Implementation41e785a6 maps the exact acquired POST physical address with the
+ordinary DxgkCbMapMemory callback, copies one surface, then unmaps. Failure is a
+normal NTSTATUS/Code43 rather than a dxgkrnl null-section crash. Focused26 tests
+PASS.
+HARDWARE ROADMAP
+[PASS] Save-section callback rejection and crash dump.
+[NOW] ARM64/package gate for translated display-memory mapping.
+[NEXT] Reliable installed Air run verifies admission and inherited contents.
+[HW] Stable correct physical picture remains pending.
+POST-HARDWARE: longer acceptance, broader D3D, OpenGL and CS1.6.
+
 ## EXP722 package736 ready — dxgkrnl framebuffer section map
 Package736 gates PASS; archive SHA
 bb84e4dd72c7af7d1bc0a5f1f2a0711ab869b31e6cfdcd9bfd3008e8febd6e7f.
