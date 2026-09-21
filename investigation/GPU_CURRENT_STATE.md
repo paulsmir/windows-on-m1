@@ -2681,3 +2681,17 @@ Present -> exact physical D589 latch. Evidence EXP719 package733.
 [HW] [PASS] First real standard-runtime hardware Present.
 POST-HARDWARE: sustained DWM/desktop stability beginning with later queue guard2;
 broader D3D; OpenGL; CS1.6.
+
+## Post-Present stability NOW — exact RunTa phase/fence discriminator
+EXP719 proves the first physical Present but a later DWM job ends at aggregate
+RunTa guard2/fence293. Implementationfa1fcea8 records only whether provider phase
+is not3dStaged (0x100) or the exact pending fence differs (0x101), using the
+existing bounded runtime-result receipt. Successful queue behavior is unchanged;
+focused host tests PASS.
+HARDWARE ROADMAP
+[PASS] First standard hardware Present and physical D589 latch.
+[NOW] ARM64 package734 and one Air discriminator for post-Present guard2.
+[NEXT] Fix the selected provider ownership invariant and validate continuous DWM
+Presents plus a stable physical desktop image.
+[HW] Stable visually correct Air display with GPU driver remains unproven.
+POST-HARDWARE: longer desktop acceptance, broader D3D, OpenGL and CS1.6.
