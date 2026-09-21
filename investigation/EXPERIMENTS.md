@@ -45211,6 +45211,18 @@ Single variable: mandatory paging-fence wait. Build package720 with nq ARM64
 props, Release NativeFrontend, pinned26100 client and same signer. Finalize gates,
 then exact Air bind/preflight and one client; evidence EXP705-live, no replay.
 
+### EXP705 finalized artifact gate
+Package720 analysis/Universal/Inf2Cat/catalog PASS. Immutable
+EXP705-residency-wait-720.zip SHA
+f6643bf150d2ec97a9e5e1bac83d270e6f0e912e9896dbf90063f9052fb18b48.
+Member hashes: INF4fbfddaaf54abce8fa626744fcd15ac5983d5e3b84a706f3565be144fdd5c73f;
+SYS402c1edfe0530b5e5804b95a20d176871e3be89910503988d36532c0569ab5a5;
+UMDba75c0393616381bccc2996d139332b932c9e681dbff96a9ec517907f9b902b4;
+CATebf61f61247e3616134c590250301dedcd06efb8d5cff9b4867a9bcb67a205d1;
+client514a8df743bc31de8f67f1195c4a7cde55507ad195e5220a885ec63b55a38fd6;
+cert97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda.
+Next exact stage/bind/preflight and one client.
+
 ### EXP703 actual result — valid handles are all nonresident
 Exact package718 bound with Valid signatures, correct hashes, Code0/Running and
 Start12/Platform14. Clean pre-client gate. One standard client (PID3664/TID2908)
