@@ -1938,6 +1938,8 @@ POST-HARDWARE: complete desktop composition and desktop acceptance.
 
 
 
+
+
 ## EXP708 resident set proven; reliable KMD entry receipt NOW
 All9 are RESIDENTINGPUMEMORY after successful wait, then pfnRenderCb EFAIL with
 no KMD slot; Evict S_OK. Residency is closed. Cleanup complete. KMD Render guard
@@ -2346,4 +2348,25 @@ contract. Completely offline through x64 execution and ARM64 link.
 [NEXT] Exact package and one Air run; require Render/Patch/Submit and AGX
 completion before assessing standard DXGI Present.
 [HW] KMD Render acceptance and first physical AGX completion remain unproven.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP710 package723 ready — real native target bounds
+Implementation070b1481 removes only the stale 16x16 native fixture restriction.
+Native and legacy targets now use the same immutable allocation-description
+bounds for width, height, pitch and referenced bytes; native metadata remains
+mandatory. Portable 2560x1600 acceptance plus malformed/oversize rejection and
+related host15 PASS. ARM64 KMD/UMD/client builds are zero-warning/error and
+analysis, Universal, Inf2Cat and catalog membership PASS. Immutable archive SHA
+5f77799849a2020ed4f58dc1b133b396578cd606bdf9ce2a55caf9841954486b.
+
+Next run is preregistered with one variable and one client. It must either pass
+guard19 and expose the next exact KMD/materializer boundary or reach
+Render/Patch/Submit and AGX completion. No broader inventory or replay.
+HARDWARE ROADMAP
+[PASS] Standard runtime through KMD Render entry; bounded 2560x1600 native-target
+correction; host regression and ARM64 package/sign/hash gates.
+[NOW] Exact EXP710 stage/bind/quiet gate and one Air client.
+[NEXT] If Render advances, collect Patch/Submit and completion receipts and fix
+only the first remaining causal guard; then standard DXGI Present.
+[HW] First successful KMD Render/Patch/Submit and physical AGX completion.
 POST-HARDWARE: complete desktop composition and desktop acceptance.

@@ -45228,6 +45228,53 @@ restriction and applies the existing bounded allocation-view contract to the
 native target as well; no allocator, composer, physical mapping or scheduler
 change.
 
+## EXP710 — bounded native target admission
+UTC preregistration 2026-09-21. Implementation
+070b148141846124d0f29d7cedf6eb3e72522f14. Single variable: remove the stale
+native-only 16x16 fixture restriction and apply the existing allocation-view
+bounds validation to the actual native target.
+
+WHY THIS HYPOTHESIS:
+1. EXP709 proves KMD Render guard19/Prepare returns STATUS_INVALID_ADDRESS.
+2. The exact standard client and batch key are 2560x1600, while the reached
+   AdmissionDynamicRenderBuild path explicitly permits only 16x16 native views.
+3. The allocation is the real 2560x1600 swap-chain allocation and the existing
+   helper already validates width, height, pitch and referenced bytes against
+   its immutable description; the hardcoded fixture is the nearest guaranteed
+   failing term before materialization.
+
+WINDOWS CONTRACT: after the successful WDDM2 residency fence wait, DxgkDdiRender
+receives the physical patch-list allocation placement and the immutable
+request-scoped native command. The KMD must validate the allocation description
+and actual view without imposing a host-fixture size.
+
+AGX/ASAHI CONTRACT: the captured batch carries the real render-target width,
+height and pitch. Dynamic materialization uses those dimensions and the target
+allocation backing; AGX has no 16x16 requirement for this batch.
+
+TRANSLATION: require NativeBatch metadata, validate the target view with
+AdmissionAllocationContainsView, resolve the resident local allocation, then
+continue through the existing materializer, DMA shadow, Patch and Submit path.
+
+WHAT IS STILL UNKNOWN: whether the next inner materializer/patch/submission
+guard accepts this real target and whether AGX completes it. One exact run
+distinguishes that boundary.
+
+Offline gates: portable target/bounds regression plus related host15 PASS using
+LLVM22/lld; ARM64 KMD/UMD/client build zero warnings/errors; driver analysis,
+Universal, Inf2Cat and catalog membership PASS. Package723 hashes: INF
+f7c1be176eb745625df2ce01bd138171657d4adee6d0ab7847dfa5c0c510f0e2; SYS
+098d1bc718bc38dcbf3e17bf9f9ea1b6e63c4ed611fefcfa75957ef1927b3c4d; UMD
+00dc495035b93f466a348af637619aaef3b19bf5130154fe565d0c2bc73e380e; CAT
+caf39597d3b6cf58277f12580f8cd9dc699e9ad2a36732cc371610c05b26e3cc;
+client 45387ad0740544211658019380c66de1ca7a2bc01034e1868b86de5f611f9815;
+certificate 97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda.
+Immutable EXP710-native-target-bounds-723.zip SHA
+5f77799849a2020ed4f58dc1b133b396578cd606bdf9ce2a55caf9841954486b.
+Recovery artifact remains 377/392. Exact clean recovery, stage/Valid signatures,
+full-owner bind, quiet preflight and one client; no replay. Collect guard,
+Patch/Submit/completion/Present evidence before exact cleanup.
+
 ## EXP706 — exact package720 bind retry before paging-wait client
 UTC preregistration 2026-09-21. Reuse immutable package720 archive SHA
 f6643bf150d2ec97a9e5e1bac83d270e6f0e912e9896dbf90063f9052fb18b48,
