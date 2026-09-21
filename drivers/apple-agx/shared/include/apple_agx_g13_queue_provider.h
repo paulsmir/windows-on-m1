@@ -83,7 +83,21 @@ typedef struct _APPLE_AGX_G13_QUEUE_PROVIDER {
   APPLE_AGX_BACKEND_BOOL FailureQuiesced;
   APPLE_AGX_BACKEND_U32 LastIngestGuard;
   APPLE_AGX_BACKEND_U32 LastIngestRuntimeResult;
+  APPLE_AGX_BACKEND_U32 LastSubmitGuard;
+  APPLE_AGX_BACKEND_U32 LastSubmitRuntimeResult;
 } APPLE_AGX_G13_QUEUE_PROVIDER;
+
+enum {
+  AppleAgxG13SubmitGuardNone = 0u,
+  AppleAgxG13SubmitGuardArguments,
+  AppleAgxG13SubmitGuardPhaseFence,
+  AppleAgxG13SubmitGuardD3Match,
+  AppleAgxG13SubmitGuardD3Valid,
+  AppleAgxG13SubmitGuardTaValid,
+  AppleAgxG13SubmitGuardCompute,
+  AppleAgxG13SubmitGuardBuild,
+  AppleAgxG13SubmitGuardRuntime,
+};
 
 APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderInitialize(
     APPLE_AGX_G13_QUEUE_PROVIDER *Provider,

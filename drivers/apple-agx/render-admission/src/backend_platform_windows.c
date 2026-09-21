@@ -2800,6 +2800,10 @@ static VOID AdmissionPlatformWorker(
     APPLE_AGX_G13_QUEUE_PROGRESS failedProgress;
     RtlZeroMemory(&failedProgress, sizeof(failedProgress));
     failedProgress.Fence = description.Fence;
+    failedProgress.TaDonePointer =
+        runtime->Provider.QueueProvider.LastSubmitGuard;
+    failedProgress.TaStamp =
+        runtime->Provider.QueueProvider.LastSubmitRuntimeResult;
     AdmissionGdiReceiptProgressWindows(
         adapter, description.Fence, &failedProgress,
         (ULONG)runtime->Backend.Phase);

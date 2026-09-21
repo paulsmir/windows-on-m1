@@ -287,24 +287,28 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunTa(
   APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
   APPLE_AGX_G13_QUEUE_RUNTIME_RESULT result;
   APPLE_AGX_BACKEND_U32 index;
-  if (provider == APPLE_AGX_G13_PROVIDER_NULL || Job == APPLE_AGX_G13_PROVIDER_NULL ||
-      provider->Phase != AppleAgxG13QueueProvider3dStaged ||
-      Fence != provider->PendingFence ||
-      !AppleAgxG13Provider3dMatches(provider, Job) ||
-      !AppleAgxG13Provider3dValid(provider, Job) ||
-      !AppleAgxG13ProviderTaValid(provider, Job) ||
-      (Job->ComputeWorkAddressCount!=0u &&
+  if (provider == APPLE_AGX_G13_PROVIDER_NULL) return APPLE_AGX_BACKEND_FALSE;
+  provider->LastSubmitGuard=AppleAgxG13SubmitGuardNone;
+  provider->LastSubmitRuntimeResult=0u;
+#define SUBMIT_REJECT(g) do { provider->LastSubmitGuard=(g); return APPLE_AGX_BACKEND_FALSE; } while(0)
+  if (Job == APPLE_AGX_G13_PROVIDER_NULL) SUBMIT_REJECT(AppleAgxG13SubmitGuardArguments);
+  if (provider->Phase != AppleAgxG13QueueProvider3dStaged ||
+      Fence != provider->PendingFence) SUBMIT_REJECT(AppleAgxG13SubmitGuardPhaseFence);
+  if (!AppleAgxG13Provider3dMatches(provider, Job)) SUBMIT_REJECT(AppleAgxG13SubmitGuardD3Match);
+  if (!AppleAgxG13Provider3dValid(provider, Job)) SUBMIT_REJECT(AppleAgxG13SubmitGuardD3Valid);
+  if (!AppleAgxG13ProviderTaValid(provider, Job)) SUBMIT_REJECT(AppleAgxG13SubmitGuardTaValid);
+  if (Job->ComputeWorkAddressCount!=0u &&
        (!provider->Config.HasCompute||Job->ComputeWorkAddressCount!=1u||
         Job->ComputeEvent!=provider->Config.Compute.EventNumber||
         !Job->ComputeExpectedStamp||
         !AppleAgxG13ProviderExpectedDone(provider,&provider->Config.Compute,1u,
-                                         Job->ComputeExpectedDonePointer))))
-    return APPLE_AGX_BACKEND_FALSE;
+                                         Job->ComputeExpectedDonePointer)))
+    SUBMIT_REJECT(AppleAgxG13SubmitGuardCompute);
   AppleAgxG13ProviderZero(&submission,
                           (APPLE_AGX_BACKEND_U32)sizeof(submission));
   if (!provider->ProviderIo.BuildSubmission(
           provider->ProviderIo.Context, Job, Fence, &submission))
-    return APPLE_AGX_BACKEND_FALSE;
+    SUBMIT_REJECT(AppleAgxG13SubmitGuardBuild);
   submission.Fence = Fence;
   for (index = 0u; index < provider->Staged3d.WorkAddressCount; ++index)
     submission.D3.GpuAddresses[index] =
@@ -344,6 +348,8 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunTa(
     result = AppleAgxG13QueueRuntimeSubmit(&provider->Runtime, &submission);
   }
   if (result != AppleAgxG13QueueRuntimeResultOk) {
+    provider->LastSubmitGuard=AppleAgxG13SubmitGuardRuntime;
+    provider->LastSubmitRuntimeResult=(APPLE_AGX_BACKEND_U32)result;
     if (provider->Runtime.Phase == AppleAgxG13QueueRuntimeFaulted) {
       provider->FailureQuiesced =
           result == AppleAgxG13QueueRuntimeResultResetFailed
@@ -353,8 +359,10 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunTa(
     }
     return APPLE_AGX_BACKEND_FALSE;
   }
+  provider->LastSubmitGuard=AppleAgxG13SubmitGuardNone;
   provider->Phase = AppleAgxG13QueueProviderSubmitted;
   return APPLE_AGX_BACKEND_TRUE;
+#undef SUBMIT_REJECT
 }
 
 static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRestoreAfterQuiesce(
