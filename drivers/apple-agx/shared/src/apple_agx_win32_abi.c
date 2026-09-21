@@ -13,6 +13,9 @@ static int AppleAgxWin32NativeVersion(APPLE_AGX_U16 Version) {
 APPLE_AGX_U32 AppleAgxWin32FormatBytesPerPixel(APPLE_AGX_U32 Format) {
   switch (Format) {
   case AppleAgxWin32FormatBgra8Unorm:
+  case AppleAgxWin32FormatBgra8Srgb:
+  case AppleAgxWin32FormatBgrx8Unorm:
+  case AppleAgxWin32FormatBgrx8Srgb:
   case AppleAgxWin32FormatRgba8Unorm:
   case AppleAgxWin32FormatRgb10A2Unorm:
   case AppleAgxWin32FormatR11G11B10Float:

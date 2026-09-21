@@ -118,6 +118,7 @@ static unsigned RuntimeRenders,RuntimeSignals,RuntimeMaterializations;
 static D3DKMT_HANDLE RuntimeExpectedTargetAllocation;
 static APPLE_AGX_U64 RuntimeExpectedTargetBytes;
 static APPLE_AGX_U32 RuntimeExpectedCommandVersion;
+static APPLE_AGX_U32 RuntimeExpectedColorFormat;
 static ADMISSION_UMD_DEVICE *RuntimeActiveDevice;
 static HANDLE RuntimeMarker;
 static HANDLE RuntimeQueryMarkers[ADMISSION_UMD_SCREEN_FENCE_LIMIT*2];
@@ -244,6 +245,8 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
       device->Win32Generation,r->NumAllocations,&view)!=AppleAgxWin32AbiSuccess) return E_INVALIDARG;
   RUNTIME_REQUIRE((APPLE_AGX_WIN32_COMMAND_IS_NATIVE(view.Header->Version)) &&
       view.NativeBatch);
+  if(RuntimeExpectedColorFormat)
+    RUNTIME_REQUIRE(view.Draw->Format==RuntimeExpectedColorFormat);
   if(RuntimeExpectedCommandVersion)
     RUNTIME_REQUIRE(view.Header->Version==RuntimeExpectedCommandVersion);
   if(AdmissionWin32ValidateReferences(&view,device->Win32Generation,RuntimeLookup,NULL,

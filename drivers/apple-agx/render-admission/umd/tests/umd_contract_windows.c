@@ -3297,7 +3297,9 @@ static void test_mesa_d3d10_frontend_open(void) {
         const DXGI_FORMAT typedFormats[]={DXGI_FORMAT_R8_UNORM,
             DXGI_FORMAT_R16_FLOAT,DXGI_FORMAT_R32G32B32A32_FLOAT,
             DXGI_FORMAT_R10G10B10A2_UNORM,DXGI_FORMAT_R11G11B10_FLOAT,
-            DXGI_FORMAT_B5G6R5_UNORM,DXGI_FORMAT_A8_UNORM};
+            DXGI_FORMAT_B5G6R5_UNORM,DXGI_FORMAT_A8_UNORM,
+            DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,DXGI_FORMAT_B8G8R8X8_UNORM,
+            DXGI_FORMAT_B8G8R8X8_UNORM_SRGB};
         for(unsigned typedIndex=0;typedIndex<ARRAYSIZE(typedFormats);++typedIndex) {
         D3D10DDI_MIPINFO typedMip={0};
         D3D10DDIARG_CREATERESOURCE typedCreate={0};
@@ -3321,6 +3323,8 @@ static void test_mesa_d3d10_frontend_open(void) {
         unsigned typedErrors=FrontendErrors;
         deviceFunctions.pfnCreateResource(device,&typedCreate,typed,typedRuntime);
         CHECK(FrontendErrors==typedErrors);
+        if(FrontendErrors!=typedErrors) return;
+        fprintf(stderr,"EXTENDED_RT_CASE: format=%u\n",(unsigned)typedFormats[typedIndex]);
         typedViewCreate.hDrvResource=typed;
         typedViewCreate.Format=typedFormats[typedIndex];
         typedViewCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
@@ -3341,6 +3345,12 @@ static void test_mesa_d3d10_frontend_open(void) {
         RuntimeConsumerGates=RuntimeConsumerRetirements=0;
         RuntimeConsumerFence=0;memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
         RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
+        RuntimeExpectedColorFormat=typedFormats[typedIndex]==DXGI_FORMAT_B8G8R8A8_UNORM_SRGB
+            ? AppleAgxWin32FormatBgra8Srgb
+            : typedFormats[typedIndex]==DXGI_FORMAT_B8G8R8X8_UNORM
+            ? AppleAgxWin32FormatBgrx8Unorm
+            : typedFormats[typedIndex]==DXGI_FORMAT_B8G8R8X8_UNORM_SRGB
+            ? AppleAgxWin32FormatBgrx8Srgb : 0u;
         D3D10_DDI_VIEWPORT typedViewport={0,0,16,16,0,1};
         D3D10_DDI_RECT typedRect={0,0,16,16};
         deviceFunctions.pfnSetRenderTargets(device,&typedView,1,0,
@@ -3366,6 +3376,7 @@ static void test_mesa_d3d10_frontend_open(void) {
           RuntimeCheckpoint(depthOwner,5u);
         }
         RuntimeExpectedCommandVersion=0;
+        RuntimeExpectedColorFormat=0;
         deviceFunctions.pfnDestroyRenderTargetView(device,typedView);
         deviceFunctions.pfnDestroyResource(device,typed);
         free(typedView.pDrvPrivate);free(typed.pDrvPrivate);

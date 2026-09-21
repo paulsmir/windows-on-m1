@@ -558,6 +558,9 @@ void APIENTRY
    if (!pipe->clear || !surface || !resource ||
        resource->target != PIPE_TEXTURE_2D ||
        (resource->format != PIPE_FORMAT_B8G8R8A8_UNORM &&
+        resource->format != PIPE_FORMAT_B8G8R8A8_SRGB &&
+        resource->format != PIPE_FORMAT_B8G8R8X8_UNORM &&
+        resource->format != PIPE_FORMAT_B8G8R8X8_SRGB &&
        resource->format != PIPE_FORMAT_R8G8B8A8_UNORM &&
         resource->format != PIPE_FORMAT_R16G16B16A16_FLOAT &&
         resource->format != PIPE_FORMAT_R8_UNORM &&
@@ -1562,6 +1565,9 @@ AgxD3d10ColorBytes(DXGI_FORMAT format)
    case DXGI_FORMAT_R16_FLOAT:
    case DXGI_FORMAT_B5G6R5_UNORM: return 2;
    case DXGI_FORMAT_B8G8R8A8_UNORM:
+   case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+   case DXGI_FORMAT_B8G8R8X8_UNORM:
+   case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB:
    case DXGI_FORMAT_R8G8B8A8_UNORM:
    case DXGI_FORMAT_A8_UNORM:
    case DXGI_FORMAT_R10G10B10A2_UNORM:

@@ -75,6 +75,12 @@ int AgxWin32AsahiBatchBegin(struct agx_batch *b) {
   switch(b->key.cbufs[0].format) {
   case PIPE_FORMAT_B8G8R8A8_UNORM:
     c->Draw.Format=AppleAgxWin32FormatBgra8Unorm; break;
+  case PIPE_FORMAT_B8G8R8A8_SRGB:
+    c->Draw.Format=AppleAgxWin32FormatBgra8Srgb; break;
+  case PIPE_FORMAT_B8G8R8X8_UNORM:
+    c->Draw.Format=AppleAgxWin32FormatBgrx8Unorm; break;
+  case PIPE_FORMAT_B8G8R8X8_SRGB:
+    c->Draw.Format=AppleAgxWin32FormatBgrx8Srgb; break;
   case PIPE_FORMAT_R8G8B8A8_UNORM:
     c->Draw.Format=AppleAgxWin32FormatRgba8Unorm; break;
   case PIPE_FORMAT_R16G16B16A16_FLOAT:
@@ -187,6 +193,9 @@ int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx,
   struct agx_resource *rt=agx_resource(ctx->framebuffer.cbufs[0].texture);
   int valid=rt->base.target==PIPE_TEXTURE_2D &&
       (rt->base.format==PIPE_FORMAT_B8G8R8A8_UNORM ||
+       rt->base.format==PIPE_FORMAT_B8G8R8A8_SRGB ||
+       rt->base.format==PIPE_FORMAT_B8G8R8X8_UNORM ||
+       rt->base.format==PIPE_FORMAT_B8G8R8X8_SRGB ||
        rt->base.format==PIPE_FORMAT_R8G8B8A8_UNORM ||
        rt->base.format==PIPE_FORMAT_R16G16B16A16_FLOAT ||
        rt->base.format==PIPE_FORMAT_R8_UNORM ||

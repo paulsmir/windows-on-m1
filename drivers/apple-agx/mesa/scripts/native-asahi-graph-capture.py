@@ -338,6 +338,8 @@ windows_graph_texture_table(struct agx_batch *batch, struct agx_ptr ptr,
                  rsrc->base.target != PIPE_TEXTURE_2D_ARRAY) ||
        (rsrc->base.format != PIPE_FORMAT_B8G8R8A8_UNORM &&
         rsrc->base.format != PIPE_FORMAT_B8G8R8X8_UNORM &&
+        rsrc->base.format != PIPE_FORMAT_B8G8R8A8_SRGB &&
+        rsrc->base.format != PIPE_FORMAT_B8G8R8X8_SRGB &&
         rsrc->base.format != PIPE_FORMAT_R8G8B8A8_UNORM &&
         rsrc->base.format != PIPE_FORMAT_R32G32B32A32_FLOAT &&
         rsrc->base.format != PIPE_FORMAT_R32G32B32A32_UINT &&
@@ -463,6 +465,9 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
       !draws->index_bias && ctx->framebuffer.nr_cbufs == 1 &&
       ctx->framebuffer.cbufs[0].texture &&
       (ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_B8G8R8A8_UNORM ||
+       ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_B8G8R8A8_SRGB ||
+       ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_B8G8R8X8_UNORM ||
+       ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_B8G8R8X8_SRGB ||
        ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_R8G8B8A8_UNORM ||
        ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_R16G16B16A16_FLOAT ||
        ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_R8_UNORM ||
