@@ -84,12 +84,18 @@ Native/generic guards now accept IMMEDIATE orONE; invalid intervals/other args
 remain rejected. Existing opt-in native-present-entry records live args next run.
 x64 actual producer/2placements/retirement + DDI suite exit0. Fresh x64/ARM64
 native libraries built; ONLY DxgiFns.cpp differs in prepared source comparisons.
-Candidate743 package/link/sign/hash next; no hardware verdict on interval fix.
-Evidence EXP731-present-trace/EXP731-umd-trace.txt and EXP732-immediate-present.
-Clean ordinary baseline18:18:26Z: Code28/no residues/signer,8CPU, no autologon.
-Reuse executed full-owner/install/autologon/capture/cleanup recipes; install ONLY
-in driver-absent full-owner584/406, orderly exit before chainload, one console
-Interactive-token client. Keep process-local trace to measure actual interval.
+EXP732/743 valid Session1 still fails Present and NEVER enters _Present (new
+entry record absent, trace unsaturated). IMMEDIATE fix remains offline-correct,
+not established as the current live cause. No frontend SetError origin either.
+Next EXP733/candidate744: trace entry/unchanged HRESULT for exactly seven registered
+DXGI base callbacks, Blt args and query/rotation counts. Observation-only commit
+d07c803fadee7e327387ed5f1d762e4f1a4d9557; actual x64 full DDI/producer suitePASS,
+x64/ARM64 archivesPASS; only DxgiFns changes in prepared source comparison.
+Candidate744 package gates next, no speculative semantic patch.
+Evidence EXP732-immediate-present/EXP732-umd-trace.txt and EXP733-dxgi-boundary.
+Clean ordinary baseline18:59:18Z: Code28/no residues/signer,8CPU,no autologon.
+Reuse full-owner/install/autologon/capture/cleanup recipes; package install ONLY
+in driver-absent full-owner584/406; orderly exit; one console Interactive client.
 ## Fixed execution recipe — do not rediscover
 Git: /opt/homebrew/bin/git (system Git hits unaccepted Xcode license).
 Host cwd /Users/pavel/public_windows; Python proxyenv/bin/python.
@@ -131,7 +137,7 @@ on-disk artifacts/tool exits directly. No repeated "continue" handoff loops.
 
 HARDWARE ROADMAP
 [PASS] Native stack has prior execution evidence;741 paired diagnostic/offline gates.
-[NOW] Candidate743 immediate-Present correction package gates.
-[NEXT] Same traced console client verifies live args and reaches Present callback.
+[NOW] Candidate744 existing DXGI callback transcript package gates.
+[NEXT] Identify first actual pre-Present callback failure and correct its owner.
 [HW] Standard Present and stable complete physical image remain unproven.
 POST-HARDWARE: sustained correct desktop, longer acceptance; OpenGL/CS1.6 later.
