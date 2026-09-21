@@ -45406,6 +45406,21 @@ precedes Present and belongs to queue admission. Exact cleanup completed.
 Next discriminator records the existing backend runtime phase on QueueFailed:
 Ready means Run3d rejected atomically; Failed means RunTa rejected after staging.
 
+## EXP713 — Run3d versus RunTa queue discriminator
+Preregistered 2026-09-21. Implementation a2304d33 records the existing backend
+runtime phase in WorkerFinalPhase only when QueueFailed occurs. WHY THIS
+HYPOTHESIS: EXP712 proves Render/Submit success and backend result8 with no
+completion; runtime phase is deterministically Ready after atomic Run3d reject
+and Failed after RunTa reject. Single diagnostic variable; queue behavior is
+unchanged. Package727 ARM64/analysis/Universal/Inf2Cat/catalog PASS. INF
+37bb2e83821473a2acd305358afc4af3e6e51002e9f721060eb1f7291814c144; SYS
+9584c7ccf661f3e5ffa71ff9fc75692920cda93051321aa840d1f6542ed31660;
+UMD3eaf2a89d3be94aba1675b8b448dbe0384f1e2034e1d4fa9ccee1db16f81e4f8;
+CATe821273234ea3aa0c356ba6b6354e757eb20a6a222455e19142cc9239fb1c061;
+client98d40e44ea523384bac844e5288b43eab62d8bb0b13dd8c64786b5aba3010dd0.
+Archive SHA7f06e89e345a1c6d82f86c6c4ab7a892760edccbddda12fc2fbc086021e8eefb.
+One exact client, no replay; evidence then exact cleanup.
+
 ## EXP706 — exact package720 bind retry before paging-wait client
 UTC preregistration 2026-09-21. Reuse immutable package720 archive SHA
 f6643bf150d2ec97a9e5e1bac83d270e6f0e912e9896dbf90063f9052fb18b48,

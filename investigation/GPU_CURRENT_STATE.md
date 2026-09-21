@@ -1950,6 +1950,8 @@ POST-HARDWARE: complete desktop composition and desktop acceptance.
 
 
 
+
+
 ## EXP708 resident set proven; reliable KMD entry receipt NOW
 All9 are RESIDENTINGPUMEMORY after successful wait, then pfnRenderCb EFAIL with
 no KMD slot; Evict S_OK. Residency is closed. Cleanup complete. KMD Render guard
@@ -2474,4 +2476,14 @@ receipt; Present proven downstream of device removal.
 and ARM64 package gate.
 [NEXT] One Air run selects Run3d versus RunTa; fix that exact queue invariant.
 [HW] First TA/3D queue acceptance, completion fence and successful DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP713 package727 ready — exact queue stage
+Diagnostic-only backend-phase receipt is packaged; ARM64 and package gates PASS,
+archive SHA7f06e89e345a1c6d82f86c6c4ab7a892760edccbddda12fc2fbc086021e8eefb.
+HARDWARE ROADMAP
+[PASS] Render/Submit accepted; QueueFailed proven; exact phase receipt packaged.
+[NOW] One EXP713 Air client selects Run3d or RunTa.
+[NEXT] Fix the selected queue invariant and immediately retest.
+[HW] TA/3D acceptance, completion fence and successful DXGI Present.
 POST-HARDWARE: complete desktop composition and desktop acceptance.
