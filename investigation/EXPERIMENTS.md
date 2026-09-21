@@ -45421,6 +45421,16 @@ client98d40e44ea523384bac844e5288b43eab62d8bb0b13dd8c64786b5aba3010dd0.
 Archive SHA7f06e89e345a1c6d82f86c6c4ab7a892760edccbddda12fc2fbc086021e8eefb.
 One exact client, no replay; evidence then exact cleanup.
 
+### EXP713 actual — physical AGX completion PASS; Present still pre-KMD
+Exact package727 and one client completed without reset. Contrary to EXP712's
+QueueFailed, the durable receipt reached stage7 with BackendSubmitResult0,
+fence283, NotifyInterrupt1 and NotifyDpc1. This is the first proven physical AGX
+completion through the Windows interrupt/DPC chain. StandardPresentTrace still
+reported zero events and Present returned887a0005/reason887a0020, so the current
+boundary is the UMD/runtime Present callback before DxgkDdiPresent. Exact cleanup
+completed. Next diagnostic records UMD Present entry scalars and exact
+pfnPresentCb HRESULT; no KMD or render behavior change.
+
 ## EXP706 — exact package720 bind retry before paging-wait client
 UTC preregistration 2026-09-21. Reuse immutable package720 archive SHA
 f6643bf150d2ec97a9e5e1bac83d270e6f0e912e9896dbf90063f9052fb18b48,

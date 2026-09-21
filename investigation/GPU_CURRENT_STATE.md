@@ -1952,6 +1952,8 @@ POST-HARDWARE: complete desktop composition and desktop acceptance.
 
 
 
+
+
 ## EXP708 resident set proven; reliable KMD entry receipt NOW
 All9 are RESIDENTINGPUMEMORY after successful wait, then pfnRenderCb EFAIL with
 no KMD slot; Evict S_OK. Residency is closed. Cleanup complete. KMD Render guard
@@ -2486,4 +2488,17 @@ HARDWARE ROADMAP
 [NOW] One EXP713 Air client selects Run3d or RunTa.
 [NEXT] Fix the selected queue invariant and immediately retest.
 [HW] TA/3D acceptance, completion fence and successful DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP713 proves physical AGX completion; UMD Present callback is NOW
+Package727 reached backend result0, completion fence283, NotifyInterrupt1 and
+NotifyDpc1: physical AGX completion is PASS. Present trace still has zero KMD
+events and DXGI returns887a0005/reason887a0020. Record UMD Present entry and
+exact pfnPresentCb HRESULT to distinguish UMD argument rejection from runtime
+callback rejection.
+HARDWARE ROADMAP
+[PASS] Native Render, TA/3D acceptance, physical completion, DXGK interrupt/DPC.
+[NOW] Exact UMD Present entry/callback receipt; offline UMD/ARM64 gate.
+[NEXT] Fix the rejected Present callback contract and immediately retest.
+[HW] First DxgkDdiPresent entry and successful standard DXGI Present.
 POST-HARDWARE: complete desktop composition and desktop acceptance.
