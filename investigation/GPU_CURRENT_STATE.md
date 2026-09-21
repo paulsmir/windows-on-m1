@@ -2707,6 +2707,16 @@ ARM64 package/sign/hash gates.
 [HW] Stable visually correct Air display with GPU driver.
 POST-HARDWARE: longer acceptance, broader D3D, OpenGL and CS1.6.
 
+## EXP723 package737 ready — ordinary display-memory map
+Package737 gates PASS; archive SHA
+2acd84573f9bdd8e67809b7e8d3a103211d87d6a7443bfee9398bbf84c03a050.
+HARDWARE ROADMAP
+[PASS] Exact0x3B dump and unsupported save-section path removed.
+[NOW] Reliable recovery install then one full-owner Air run.
+[NEXT] Verify admission, logical full frame and physical stability.
+[HW] Stable correct Air picture remains pending.
+POST-HARDWARE: longer acceptance, broader D3D, OpenGL and CS1.6.
+
 ## EXP722 bugcheck selects ordinary display-memory mapping
 Package736 repeatably bugchecks0x3B/c0000005 inside dxgkrnl during
 MapFrameBufferPointer; dump SHAe857362cc845f466ac561e2810d7b23b82f8bd4cb66ec5149a2bd67ec183abb5.

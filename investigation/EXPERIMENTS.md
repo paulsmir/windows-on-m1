@@ -46013,3 +46013,34 @@ Attempt exact cleanup/unload of failed package735 in the current full-owner gues
 activate736 without reboot only if package/service/module/files are all absent
 and the devnode is inert. Otherwise use stage-only recovery. Expected Apple
 StartDevice complete and nonblack logical/physical desktop. One valid client.
+
+### EXP722 actual — rejected with dxgkrnl framebuffer-section crash
+Package736 repeatably bugchecked0x3B/c0000005 inside dxgkrnl while mapping the
+framebuffer section; latest dump `092126-12234-01.dmp` SHA
+e857362cc845f466ac561e2810d7b23b82f8bd4cb66ec5149a2bd67ec183abb5.
+The save-section owner is absent during PnP Start. Controlled hot activation
+also forced a reset, so reliable recovery/install/full-owner sequencing is
+restored per operator request. Exact package736 cleanup used emergency recovery.
+
+## EXP723 — map acquired POST address with DxgkCbMapMemory
+Preregistered 2026-09-21. WHY THIS HYPOTHESIS: MmCopyMemory rejects the address,
+while framebuffer-section mapping crashes because its hidden owner is absent;
+DxgkCbMapMemory is the pinned interface's ordinary PASSIVE translated display
+memory mapper and fails with an NTSTATUS rather than dereferencing save state.
+WINDOWS CONTRACT: map the exact acquired physical range noncached and unmap it.
+AGX/ASAHI CONTRACT: seed existing local primary before DCP registration.
+TRANSLATION: commit41e785a698a2210b791349c1269c340414468fb8 changes only
+map/unmap mechanism. WHAT IS STILL UNKNOWN: whether dxgkrnl admits this POST
+address as display memory.
+
+Package737 gates PASS0 warnings/errors. Source SHA
+87cf4a83ba5a7aa68cff7bd2defe3eda528ca34f9ca161562c7208fa886b964b.
+Artifact `.local/experiments/EXP723-display-memory-map-737.zip` SHA
+2acd84573f9bdd8e67809b7e8d3a103211d87d6a7443bfee9398bbf84c03a050.
+INFa0c050e749ce970ec6fbe7334c7f4f7f45b46c57beacc92fda6ace1629630fbc;
+SYS1ff37a5cf192428252236d21fa94ad2c127f16e305ef0e758f598dff9cf83963;
+UMDe151b309a61940f7664586cf838e2bdce3b3bc97f90325af4d6d71a97c10d558;
+CATd48541fa30da9d98507fdc775739a61e4246efb9d579066c382c6faad53a37dd;
+clientcd8ca0967bb00c836e15046ca9409baa97b4e5cbf79b25caecb004a529c48f39.
+Use the previously proven recovery install and full-owner boot, one guarded
+client, logical screenshot and physical observation, then exact cleanup.
