@@ -1391,6 +1391,12 @@ extern "C" BOOL AgxD3d10FormatViewCompatible(
    DXGI_FORMAT resource, DXGI_FORMAT view, BOOL depth)
 {
    if (resource == view) return FormatTranslate(view, depth) != PIPE_FORMAT_NONE;
+   if (resource == DXGI_FORMAT_B8G8R8A8_TYPELESS)
+      return !depth && (view == DXGI_FORMAT_B8G8R8A8_UNORM ||
+                        view == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB);
+   if (resource == DXGI_FORMAT_B8G8R8X8_TYPELESS)
+      return !depth && (view == DXGI_FORMAT_B8G8R8X8_UNORM ||
+                        view == DXGI_FORMAT_B8G8R8X8_UNORM_SRGB);
    if (resource == DXGI_FORMAT_R8G8B8A8_TYPELESS)
       return view == DXGI_FORMAT_R8G8B8A8_UNORM ||
              view == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB ||
@@ -1838,6 +1844,24 @@ AgxD3d10ResourceWithinRequiredLimits(
          pResource->resource = screen->resource_create_with_modifiers(
             screen, &templat, &modifier, 1);
       }
+   } else if (pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE2D &&
+              (pCreateResource->BindFlags & D3D10_DDI_BIND_SHADER_RESOURCE) &&
+              (pCreateResource->Format == DXGI_FORMAT_B8G8R8A8_TYPELESS ||
+               pCreateResource->Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
+               pCreateResource->Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB ||
+               pCreateResource->Format == DXGI_FORMAT_B8G8R8X8_TYPELESS ||
+               pCreateResource->Format == DXGI_FORMAT_B8G8R8X8_UNORM ||
+               pCreateResource->Format == DXGI_FORMAT_B8G8R8X8_UNORM_SRGB)) {
+      /* The Windows capture contract admits tiled, uncompressed resources.
+       * Default Asahi allocation prefers compression; initial upload would
+       * then emit a compression draw outside that contract. Keep allocation
+       * and upload in Asahi, selecting the already-supported native modifier. */
+      if (!screen->resource_create_with_modifiers) {
+         SetError(hDevice, E_NOTIMPL); return;
+      }
+      const uint64_t modifier = DRM_FORMAT_MOD_APPLE_GPU_TILED;
+      pResource->resource = screen->resource_create_with_modifiers(
+         screen, &templat, &modifier, 1);
    } else {
       pResource->resource = screen->resource_create(screen, &templat);
    }
