@@ -2707,6 +2707,17 @@ ARM64 package/sign/hash gates.
 [HW] Stable visually correct Air display with GPU driver.
 POST-HARDWARE: longer acceptance, broader D3D, OpenGL and CS1.6.
 
+## EXP722 package736 ready — dxgkrnl framebuffer section map
+Package736 gates PASS; archive SHA
+bb84e4dd72c7af7d1bc0a5f1f2a0711ab869b31e6cfdcd9bfd3008e8febd6e7f.
+HARDWARE ROADMAP
+[PASS] Physical-copy failure and official WDDM mapping replacement.
+[NOW] Exact activation; controlled no-reboot swap is permitted only after
+failed735 leaves no loaded owner, otherwise stage-only recovery.
+[NEXT] Verify full inherited screen plus stable DWM dirty updates.
+[HW] Stable correct physical picture remains pending.
+POST-HARDWARE: longer acceptance, broader D3D, OpenGL and CS1.6.
+
 ## EXP721 rejects physical copy; dxgkrnl framebuffer mapping is NOW
 Package735 naturally bound from stage-only recovery, then failed StartDevice at
 PostDisplay stage9 with STATUS_INVALID_ADDRESS before ScanoutStart. This proves

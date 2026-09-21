@@ -45981,3 +45981,35 @@ Stage-only package in recovery without binding, boot full-owner once, verify
 natural exact bind, capture logical and physical screen after Start/Alt+Tab,
 then exact cleanup. Expected complete inherited desktop plus stable dirty updates;
 failure is black/partial surface or StartDevice rejection. One client, no replay.
+
+### EXP721 actual — rejected at unsupported physical read
+Stage-only package735 naturally bound on the first full-owner boot, proving the
+shortened install workflow. StartDevice stopped at PostDisplay stage9 with
+STATUS_INVALID_ADDRESS before ScanoutStart; the guarded client selected Basic
+Render and is excluded from Apple hardware evidence. `MmCopyMemory` cannot read
+the protected framebuffer section as ordinary physical RAM. Exact causal fix is
+the pinned-WDK26100 WDDM2.4 framebuffer mapping callback.
+
+## EXP722 — map inherited framebuffer section through dxgkrnl
+Preregistered 2026-09-21. WHY THIS HYPOTHESIS: EXP721 selects only the copy API;
+pinned WDK26100 exposes DxgkCbMapFrameBufferPointer/Unmap for physical-adapter
+framebuffer sections and Microsoft requires this path under IOMMU isolation.
+WINDOWS CONTRACT: map section offset0 at PASSIVE_LEVEL and honor returned base/
+offset. AGX/ASAHI CONTRACT: copy its complete pixels into existing noncached
+local primary before DCP registration. TRANSLATION: commitbe2b8400 replaces only
+MmCopyMemory with exact map/copy/unmap. WHAT IS STILL UNKNOWN: whether section
+offset0 contains the inherited current frame on this boot.
+
+Package736 gates PASS0 warnings/errors. Source archive SHA
+a5f2d2b2ac8781b7c1a922275566ef98546a374d90b94abd7acde50b51a38b73.
+Artifact `.local/experiments/EXP722-framebuffer-map-736.zip` SHA
+bb84e4dd72c7af7d1bc0a5f1f2a0711ab869b31e6cfdcd9bfd3008e8febd6e7f.
+INF2e98aa53f22668147d537d0007daddc54e7e07b0df13dae3024adc057ab90c87;
+SYS5bf3cf23c14f580b5ce1cf986b0dc1584d200902079cfa973f8846583784ef20;
+UMD04b2cb625e5b093094bc770ee48e199bf5abedb0050ea7bcdd51fdd414232a70;
+CAT588f38e304805054a599f351fa4f0db3741c6e79aec779c3b788771aaf1d0dcc;
+client6657dd17e5e21eb1754ee1c03ba1a8679974da51833f155a5b389d1a0dd7bc66.
+Attempt exact cleanup/unload of failed package735 in the current full-owner guest;
+activate736 without reboot only if package/service/module/files are all absent
+and the devnode is inert. Otherwise use stage-only recovery. Expected Apple
+StartDevice complete and nonblack logical/physical desktop. One valid client.
