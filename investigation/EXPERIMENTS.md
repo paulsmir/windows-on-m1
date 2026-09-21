@@ -45266,6 +45266,15 @@ Next attempt must verify Code0/Running/Start12/Platform14 and installed SYS/UMD
 hashes before creating the client task; reuse package720 only after a fresh
 preregistered bind discriminator.
 
+## EXP707 — aggregate residency after paging wait
+Preregistered 2026-09-21. Diagnostic-only implementation
+2c81faa3b2df8a8c6a2040c9900942f79006abdd; exact source archive
+0162241161a4124e7fc50a3c23f4b73f6e2492d1f9bcacb259d9a08a7336c2d7.
+EXP706 proves exact bind, MakeResident all9 E_PENDING, paging wait S_OK, then
+pre-KMD Render E_FAIL. Single variable: one aggregate QueryResidency after the
+wait and before unchanged Render. Build package721, finalize/sign/hash, exact
+bind preflight, one client, no replay; evidence EXP707-live before cleanup.
+
 ### EXP703 actual result — valid handles are all nonresident
 Exact package718 bound with Valid signatures, correct hashes, Code0/Running and
 Start12/Platform14. Clean pre-client gate. One standard client (PID3664/TID2908)
