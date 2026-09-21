@@ -45206,3 +45206,32 @@ explicit-residency-20260921nn x64 execution0 and ARM64 link0. Exact archive SHA
 x64 executable 43dcf431d82e5fcbb0557b5a0a609ba8ec90b7f68835684b80bdc2ceb4ec3338.
 The actual Render callback asserts ResidencyHeld; producer/materializer/KMD-plan/
 patch/fence-retirement/Evict/remap/teardown PASS. Hardware NOT_RUN for this fix.
+
+## EXP704 — explicit WDDM residency before physical Render
+UTC build preregistration 2026-09-21T00:21:33Z. Integration HEAD
+09fcc89930dfaa662221d5258471512c4c4d2027; implementation
+214d23be4b0d0b94c9f35f9963a3ad9f088c2645; exact ARM64 source archive
+8a66826b8e3cf70fb78cb767c6ddfe7c68c294a1e8bc75100a868c54d15a31df.
+WHY THIS HYPOTHESIS: EXP703 proves every exact submitted handle is valid but
+NOTRESIDENT, then dxgkrnl rejects the command before KMD Render. Official WDDM2+
+documentation states nonresident references in legacy patch mode are illegal
+and residency is controlled exclusively by the device residency requirement
+list. The new lifecycle makes the exact set resident through its completion
+fence and then evicts it.
+WINDOWS CONTRACT: one device paging queue; MakeResident exact deduplicated set
+with final required attempt; Render only after success; paired Evict after same
+fence; queue teardown with device.
+AGX/ASAHI CONTRACT: existing physical KMD BuildPagingBuffer performs page moves;
+native capture identities and holds remain immutable until retirement.
+TRANSLATION: device residency list supplies WDDM residency; existing allocation
+and patch lists still supply physical patching. GPUVA remains closed.
+WHAT IS STILL UNKNOWN: paging-buffer physical success, KMD Render/Patch/Submit,
+AGX completion and Present.
+
+Single variable: explicit residency lifecycle. Build package719 Release
+NativeFrontend with explicit-residency-20260921nn ARM64 props, pinned26100 client
+and same signer; output native-package719-explicit-residency-20260921no-arm64.
+Finalize package gates. Current ordinary Air recovery after EXP703 is Code28/no
+package/service/files/trust,8CPU/NVMe/input/no events. Then exact stage/bind and
+one standard client only; retain make-resident/evict/KMD/event evidence under
+main-root .local/experiments/EXP704-live before exact cleanup and recovery.
