@@ -45352,6 +45352,46 @@ Use clean ordinary recovery, exact stage/signature/bind/quiet gates, one client,
 then evidence-first exact cleanup. Recovery artifact remains377/392 with385
 GPU-hidden emergency only if ordinary recovery cannot restore SSH.
 
+### EXP711 actual — ordered Render completion PASS; Present is current boundary
+Exact package724 bind and pre-client gates passed. One client PID8684/TID1948
+again reached pfnRenderCb S_OK and native-dispatch S_OK. This time the ordered
+CPU event fence signalled, AdmissionDrawRetire completed and the paired
+native-evict of all nine allocations returned S_OK. This proves dxgkrnl
+Patch/Submit ordering and completion far enough to release the request-scoped
+batch; no guest reset occurred.
+
+The standard call then returned Present0x887a0005 with device reason0x887a0020.
+No successful Present receipt or physical-screen observation exists. Launcher
+SHA d1e5d71693a504c45024730ed189dc52aaa15db155630a4c0f75cdf024211898;
+UMD trace SHA 6ae72835377446fa318feae1333a9c212246dbe000a25e20c920aded05f8fae5.
+SubmitQualification broker words are not retained by the power broker, but the
+UMD ordered event is authoritative for retirement. Exact package cleanup
+completed before shutdown.
+
+The existing KMD StandardPresentTrace records DxgkDdiPresent and
+SetVidPnSourceAddress entry/exit but is opt-in. Next diagnostic change makes the
+standard qualification EXE open the already selected adapter LUID, arm that
+trace before device/swap-chain activity, and read/print it after Present. The
+real DXGI/D3D producer and driver behavior remain unchanged.
+
+## EXP712 — exact standard Present trace
+Preregistered 2026-09-21. Diagnostic client implementation2903a7c8; existing
+SubmitQualification KMD and EXP710 render fix are unchanged. Single variable:
+the standard EXE opens the selected Apple AGX adapter by DXGI LUID, arms the
+existing bounded StandardPresentTrace, and reads it after Present. WHY THIS
+HYPOTHESIS: EXP711 proves ordered Render completion and isolates failure to
+Present; the trace records exact DxgkDdiPresent/SetVidPnSourceAddress entry/exit.
+No optional feature or presentation behavior changes.
+
+Package726 ARM64 builds, analysis, Universal, Inf2Cat and catalog PASS. INF
+55b0884181f847f2a774d34767fa1d1788993af2b1e442450588f556ca6f9927; SYS
+961b495c639613b08d3d66f0c59e6e263ead63ea867039b6fcbd73126b3cb74a; UMD
+5d3cfbcd1613aa6a2fba6c8e10a741795bbf223de4a5c6b4565f49dacee711d6; CAT
+9311e5096da60ae2d58818783558db7f50ebf48d02be11ec9cadb334de6a0d0e;
+client19c35b2b3addade147f53dc83872b0c7ff03e38ecafe751334b0c05ee9058d76.
+Immutable archive SHA0137b7ffa5e4aaea21b9f8fbf9006fabc26b5eb0a59e2914d25abbe9e3c5c3ca.
+Exact clean recovery, stage/signature/bind/quiet, one client, no replay.
+
 ## EXP706 — exact package720 bind retry before paging-wait client
 UTC preregistration 2026-09-21. Reuse immutable package720 archive SHA
 f6643bf150d2ec97a9e5e1bac83d270e6f0e912e9896dbf90063f9052fb18b48,

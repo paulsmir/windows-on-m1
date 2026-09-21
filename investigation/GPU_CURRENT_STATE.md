@@ -1944,6 +1944,10 @@ POST-HARDWARE: complete desktop composition and desktop acceptance.
 
 
 
+
+
+
+
 ## EXP708 resident set proven; reliable KMD entry receipt NOW
 All9 are RESIDENTINGPUMEMORY after successful wait, then pfnRenderCb EFAIL with
 no KMD slot; Evict S_OK. Residency is closed. Cleanup complete. KMD Render guard
@@ -2414,4 +2418,38 @@ package/sign/hash gate.
 [NEXT] Fix only the first missing Patch/Submit/backend/completion invariant
 shown by the trace, then immediately return to one hardware verification.
 [HW] Successful completion fence and standard DXGI Present without reset.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP711 proves ordered Render retirement; Present trace is NOW
+Package724 one-client result: pfnRenderCb S_OK, native-dispatch S_OK, ordered
+CPU event fence signalled, request retired and all-nine Evict S_OK. No reset.
+Thus the real Render/Patch/Submit ordering reaches completion sufficiently for
+UMD retirement. Standard Present still returns0x887a0005/device reason0x887a0020
+with no successful Present receipt.
+
+The existing KMD StandardPresentTrace already records DxgkDdiPresent and
+SetVidPnSourceAddress entry/exit. Add diagnostic-only arm/read to the standard
+qualification EXE using the exact DXGI adapter LUID; do not change UMD, KMD or
+submission behavior. Offline gate: helper ABI compile and ARM64 client/package.
+HARDWARE ROADMAP
+[PASS] Standard runtime through real native Render, KMD Patch/Submit ordering,
+completion fence, retirement and residency release.
+[NOW] Arm/read existing StandardPresentTrace from the standard qualification
+EXE; fully offline until the next exact package.
+[NEXT] One Air run identifies synchronous UMD Present callback versus
+DxgkDdiPresent/SetVidPnSourceAddress exit status, then fix that exact invariant.
+[HW] First successful standard DXGI Present with physical result.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP712 package726 ready — exact standard Present trace
+The exact DXGI adapter LUID now arms/reads the existing bounded KMD Present
+trace from the diagnostic client. KMD/UMD/render behavior is unchanged. Host
+tests and ARM64 package gates PASS; immutable archive SHA
+0137b7ffa5e4aaea21b9f8fbf9006fabc26b5eb0a59e2914d25abbe9e3c5c3ca.
+HARDWARE ROADMAP
+[PASS] Native Render through ordered completion and retirement; Present trace
+client plus ARM64 package/sign/hash gates.
+[NOW] EXP712 exact Air run; read exact Present/source-address exit status.
+[NEXT] Fix the first failing Present invariant and immediately retest.
+[HW] First successful standard DXGI Present with physical result.
 POST-HARDWARE: complete desktop composition and desktop acceptance.
