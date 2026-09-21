@@ -2706,3 +2706,17 @@ ARM64 package/sign/hash gates.
 [NEXT] Fix that exact ownership violation and validate a stable physical image.
 [HW] Stable visually correct Air display with GPU driver.
 POST-HARDWARE: longer acceptance, broader D3D, OpenGL and CS1.6.
+
+## EXP720 physical/logical image localizes failure before scanout
+Operator photo and three DWM CopyFromScreen captures match: an almost-black
+2560x1600 desktop with only white UI edges; Start/Alt+Tab captures are identical.
+At the same time KMD completion/DPC and physical D589 latches remain successful.
+The current boundary is therefore DWM composition/native UMD behavior, before
+physical scanout. EXP720-D1 keeps exact package734 and enables only the existing
+UMD trace for a fresh DWM process; no standard client replay.
+HARDWARE ROADMAP
+[PASS] Physical scanout faithfully latches the DWM-visible surface.
+[NOW] Capture first DWM UMD fail-closed operation or SetError.
+[NEXT] Implement the exact composition operation required for a correct frame.
+[HW] Stable correct physical desktop remains RED.
+POST-HARDWARE: longer acceptance, broader D3D, OpenGL and CS1.6.

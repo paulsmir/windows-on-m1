@@ -45924,3 +45924,23 @@ Existing signer and immutable EXP584/406/recovery artifacts unchanged. Stage
 exact hashes, run one guarded standard client, allow DWM to continue briefly,
 collect the last guard2 subcode, then exact cleanup. Expected0x100 or0x101;
 failure is missing bounded receipt. One valid client, no replay.
+
+### EXP720-D1 — DWM UMD trace on the unchanged package734
+Preregistered after the valid EXP720 run. Physical operator observation and
+three 2560x1600 Windows CopyFromScreen captures independently show the same
+almost-black desktop with only white window/UI edges. The screenshots before,
+after Start and after Alt+Tab are byte-identical SHA
+f2057b50dee6e748bed4ca1cb51d8f352a0bf6ab503c2895f4bbcb66b3519f4b.
+Meanwhile package734 remains Code0, its last GDI receipt is successful Stage7,
+fence291, NotifyInterrupt1/NotifyDpc1, and physical D589 latches10/11/12 pass.
+
+WHY THIS HYPOTHESIS: the malformed image already exists in the DWM-visible
+surface, so physical DCP scanout is no longer the nearest cause. The strongest
+remaining cause is a DWM UMD operation reaching an existing fail-closed DDI or
+SetError path. Single variable: set system `APPLE_AGX_UMD_TRACE_FILE` for a new
+DWM process on the unchanged exact package734; unregister both one-shot client
+and screenshot tasks before reboot, so no client replay occurs. Expected:
+first bounded DWM UMD stage/error that precedes the black composition. Failure:
+no UMD trace despite a reproduced black desktop. Same full-owner/recovery and
+package hashes as EXP720. Evidence `C:\Windows\Temp\EXP720-D1-umd.log` and
+`.local/experiments/EXP720-hardware/`.
