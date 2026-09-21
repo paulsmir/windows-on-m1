@@ -17,7 +17,7 @@ KMD Render/Patch/Submit -> AGX. Do not redesign these layers or expand features.
 OpenGL/CS1.6 follow desktop acceptance. Ordinary setup errors are not GPU verdicts.
 
 ## Current source / candidate
-Integration HEAD before this evidence checkpoint:59aa1672d3e30d4085dc0d19275b5e0af8c978f2.
+Current implementation642baea7; last hardware package745 remains immutable.
 Implementation75bc5baff3b638e5d5f483686153cca523738117 accepts exact Blt1 orFlip2.
 EXP736 package745 under /Users/pavel/public_windows/.local/experiments/EXP736-blt-present/package-build/package.
 SYS d352215b5d641c527481f16bb0d985803e6a8791d3dadec3674b2f30ee6e72a5
@@ -61,9 +61,6 @@ current attribution. Its matching-code stack points to CreateD3D11Device;
 this is a lead, not current causal proof. Current Report.wer/Application.evtx saved.
 NEXT: source-first DWM device-creation admission diagnosis; obtain current first
 HRESULT/DDI failure before a semantic fix. No evidence justifies AGX queue changes.
-Exact745 oem5.inf uninstall/delete succeeded20:32:31Z. Orderly shutdown completed;
-ordinary377/392 recovery verified20:34:01Z: Code28/nullINF, no packages/service/
-modules/SYS/UMD/signer,8CPU,autologon0/no password; session71264 active.
 EXP737 passive trace completed on unchanged745, no qualification client. Direct3D11
 journal1820 reports887A0004 "Failed to find DDI to drive requested feature levels"
 in DWM5292/8580/8644 and other shell processes. DWM HWDEVICE409 identifies only
@@ -73,13 +70,33 @@ eventsLost0. This is a DWM runtime-DDI negotiation boundary, not a queue fault.
 Evidence EXP737-dwm-creation/{causal-result.json,device-events.json,
 EXP737-dwm-evidence/runtime.etl,EXP737-dwm-evidence/state.json}.
 Both attempted current WER copies were zero-length and INVALID; do not analyze.
-Read-only static same-version dwmcore shows FL array includes a000/10_0 and lower;
-D3D11CreateDevice flags0xa9 plus priority privilege0x1000. Exact current failed
-request args remain unmeasured. Never infer DWM requires higher FL from fallbackc100.
-Native Adapter.cpp projection advertises only D3D10_0_DDI_SUPPORTED (Vista).
-Pinned WDK confirms x/7 interface differences; Microsoft docs distinguish DDI from
-feature level. Next narrow source decision: why D3D11 cannot select advertisedDDI;
-do not blindly enable higherDDI/caps without companion implementation.
+Source decision: current D3D11.dll ETW checksum5006223/timestamp2013979966 matches
+static inspected binary10.0.26100.9457. FillAPIVersions tests createflags bit5/BGRA:
+skips VistaDDI a0001/build4, retains a0006(D3D10_0_x) and a0009(Win7).
+Dwmcore same-version call uses0xa9(+priority1000), includesBGRA; FLlist includes10_0.
+This explains empty runtime/UMD DDI intersection; no higherFL requirement inferred.
+PinnedWDK minor6/build0 is authority; older Microsoft page macro examples differ.
+Microsoft extended-format-aware requirements mandate BGR families, typed backbuffer
+casting and BGRA/sRGB scanout. Must close companions before advertising0_x.
+EXP738-extended-bgra/causal-contract.json records primarysources and ownership.
+Implementation642baea78033df502947b399e39a8e8762a1d433 closes typeless BGRA/BGRX
+sampled views through actual producer. REDs: view-family rejection, compressed
+initial-upload draw, BGRX texture capture whitelist. Fix: same-family views,
+native TILED modifier via existing allocator, bounded BGRX texture reference.
+Complete source85a5c10332b16055eb6d8c0efd8ae3be711936c530c20b459d840a056afcb8df.
+Actual x64 executable suite exit0/fourUNORM+SRGB cases, initialupload/context clean,
+materializer2placements/retirementPASS; build0warnings0errors; ARM64archivePASS.
+EXE660097af5b93ab4666a7073bf5d63b2f7fcab8a7b4184ccdc109a7b2b0e37098.
+Only preparedFormat.cpp/Resource.cpp/agx_win32_graph.inc changed; no diagnostics
+left in corebatch. Evidence EXP738-extended-bgra/{complete/result.json,
+complete/test.log,projection-comparison.json,causal-contract.json}.
+NEXT: BGR render-target and typed-backbuffer casting / sRGB presentation companions.
+Typed sRGB resource base formats remain absent from texture capture whitelist;
+current proof covers TYPELESS resource with UNORM/SRGB views, not everyformat/use.
+D3D10_0_x advertisement remainsCLOSED until all mandatory companions pass.
+Operator followup: black afterlogon; elements only appear withartifacts after
+Windows key; no spontaneous correctdesktop. Exact additional run/time unspecified.
+Evidence EXP736 physical-observation-followup.json. Does not prove Flush/scanout.
 745 exactcleanup20:47:27Z succeeded. Ordinary377/392 finalbaseline20:49:20Z:
 Code28/nullINF,no package/service/module/SYS/UMD/signer,8CPU,autologon0/no password.
 Recovery launcher session55457 active. No new package or client currently installed.
@@ -125,7 +142,7 @@ on-disk artifacts/tool exits directly. No repeated "continue" handoff loops.
 
 HARDWARE ROADMAP
 [PASS] EXP736 exact745 standard runtime Create/Draw/Present and native callbackS_OK.
-[NOW] EXP737 DWM Direct3D11 negotiation887A0004; Basic Render fallback and crashes.
+[NOW] BGRA_SUPPORT excludes VistaDDI; closing mandatory0_x extended-format companions.
 [NEXT] Derive minimum truthful runtime-DDI admission and required companion contract.
 [HW] Only a justified DWM discriminator/fix run; original first-runtime-test target met.
 POST-HARDWARE: correct stable accelerated desktop; OpenGL/CS1.6 only afterward.
