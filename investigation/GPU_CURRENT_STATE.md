@@ -64,7 +64,25 @@ HRESULT/DDI failure before a semantic fix. No evidence justifies AGX queue chang
 Exact745 oem5.inf uninstall/delete succeeded20:32:31Z. Orderly shutdown completed;
 ordinary377/392 recovery verified20:34:01Z: Code28/nullINF, no packages/service/
 modules/SYS/UMD/signer,8CPU,autologon0/no password; session71264 active.
-No password/autologon left. No extra client or new experimental package installed.
+EXP737 passive trace completed on unchanged745, no qualification client. Direct3D11
+journal1820 reports887A0004 "Failed to find DDI to drive requested feature levels"
+in DWM5292/8580/8644 and other shell processes. DWM HWDEVICE409 identifies only
+Microsoft Basic Render Driver/FLc100; DWM continues crashing889800b0. Loaded
+System32745 image checksum12328883/timestamp1790021801 verified. ETW60s/182698events,
+eventsLost0. This is a DWM runtime-DDI negotiation boundary, not a queue fault.
+Evidence EXP737-dwm-creation/{causal-result.json,device-events.json,
+EXP737-dwm-evidence/runtime.etl,EXP737-dwm-evidence/state.json}.
+Both attempted current WER copies were zero-length and INVALID; do not analyze.
+Read-only static same-version dwmcore shows FL array includes a000/10_0 and lower;
+D3D11CreateDevice flags0xa9 plus priority privilege0x1000. Exact current failed
+request args remain unmeasured. Never infer DWM requires higher FL from fallbackc100.
+Native Adapter.cpp projection advertises only D3D10_0_DDI_SUPPORTED (Vista).
+Pinned WDK confirms x/7 interface differences; Microsoft docs distinguish DDI from
+feature level. Next narrow source decision: why D3D11 cannot select advertisedDDI;
+do not blindly enable higherDDI/caps without companion implementation.
+745 exactcleanup20:47:27Z succeeded. Ordinary377/392 finalbaseline20:49:20Z:
+Code28/nullINF,no package/service/module/SYS/UMD/signer,8CPU,autologon0/no password.
+Recovery launcher session55457 active. No new package or client currently installed.
 
 ## Fixed execution recipe — do not rediscover
 Git: /opt/homebrew/bin/git (system Git hits unaccepted Xcode license).
@@ -107,7 +125,7 @@ on-disk artifacts/tool exits directly. No repeated "continue" handoff loops.
 
 HARDWARE ROADMAP
 [PASS] EXP736 exact745 standard runtime Create/Draw/Present and native callbackS_OK.
-[NOW] DWM repeat889800b0 failures; physical corruption persists per operator.
-[NEXT] Identify first DWM creation HRESULT/contract; deterministic gate when reproducible.
+[NOW] EXP737 DWM Direct3D11 negotiation887A0004; Basic Render fallback and crashes.
+[NEXT] Derive minimum truthful runtime-DDI admission and required companion contract.
 [HW] Only a justified DWM discriminator/fix run; original first-runtime-test target met.
 POST-HARDWARE: correct stable accelerated desktop; OpenGL/CS1.6 only afterward.
