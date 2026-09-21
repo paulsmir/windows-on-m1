@@ -18,7 +18,7 @@ typedef struct _FIXTURE {
   volatile APPLE_AGX_BACKEND_U32 TaStamp,D3Stamp,ComputeStamp;
   unsigned char TaSrc[32],D3Src[32],ComputeSrc[32],TaDst[32],D3Dst[32];
   unsigned int Flushes, Publishes, Sends, SendOrder[3], Quiesces, Reads;
-  unsigned int FailQuiesce, FailReads;
+  unsigned int FailQuiesce, FailReads, FailReadAt;
 } FIXTURE;
 
 static APPLE_AGX_BACKEND_BOOL Flush(void *Context, const void *Address,
@@ -44,7 +44,7 @@ static APPLE_AGX_BACKEND_BOOL Read(
   ++f->Reads;
   if (Address == NULL || Value == NULL)
     return APPLE_AGX_BACKEND_FALSE;
-  if (f->FailReads)
+  if (f->FailReads || (f->FailReadAt != 0u && f->Reads == f->FailReadAt))
     return APPLE_AGX_BACKEND_FALSE;
   *Value = *Address;
   return APPLE_AGX_BACKEND_TRUE;
@@ -302,6 +302,28 @@ static void TestComputeSuccessClearsPriorFailureDiagnostic(void) {
   assert(f.Io.Queues.RunTa(f.Io.Context, &f.Job, 41u));
   assert(!f.Provider.ComputeIdentityDiagnostic.RunTa.Valid);
 }
+
+static void TestComputeDoneGuardFailsClosedAndAllowsWrap(void) {
+  FIXTURE f;
+  InitMode(&f, 1); f.Job.ComputeExpectedDonePointer = 0u;
+  assert(f.Io.Queues.Create(f.Io.Context));
+  assert(f.Io.Queues.Run3d(f.Io.Context, &f.Job, 41u));
+  f.FailReadAt = 5u;
+  assert(!f.Io.Queues.RunTa(f.Io.Context, &f.Job, 41u));
+  assert(f.Provider.LastSubmitRuntimeResult == AppleAgxG13ComputeGuardDonePointer);
+  InitMode(&f, 1); f.Job.ComputeExpectedDonePointer = 0u;
+  assert(f.Io.Queues.Create(f.Io.Context));
+  assert(f.Io.Queues.Run3d(f.Io.Context, &f.Job, 41u));
+  f.ComputeWrite = APPLE_AGX_G13_RING_CAPACITY;
+  assert(!f.Io.Queues.RunTa(f.Io.Context, &f.Job, 41u));
+  assert(f.Provider.LastSubmitRuntimeResult == AppleAgxG13ComputeGuardDonePointer);
+  InitMode(&f, 1); f.Job.ComputeExpectedDonePointer = 0u;
+  f.ComputeWrite = APPLE_AGX_G13_RING_CAPACITY - 1u;
+  f.ComputeDone = APPLE_AGX_G13_RING_CAPACITY - 1u;
+  assert(f.Io.Queues.Create(f.Io.Context));
+  assert(f.Io.Queues.Run3d(f.Io.Context, &f.Job, 41u));
+  assert(f.Io.Queues.RunTa(f.Io.Context, &f.Job, 41u));
+}
 static void TestPhaseFenceRejectReportsExactInvariant(void) {
   FIXTURE f;
   Init(&f);
@@ -554,6 +576,7 @@ int main(void) {
   TestAtomicStagingAndOrder(); TestComputeRejectCapturesOperandsAcrossRollback();
   TestComputeSuccessDoesNotCreateFailureDiagnostic();
   TestComputeSuccessClearsPriorFailureDiagnostic();
+  TestComputeDoneGuardFailsClosedAndAllowsWrap();
   TestPhaseFenceRejectReportsExactInvariant();
   TestExactCompletion(); TestFailClosedQuiesce();
   TestIngestFailureNamesDecoderOwner();
