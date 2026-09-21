@@ -297,13 +297,24 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunTa(
   if (!AppleAgxG13Provider3dMatches(provider, Job)) SUBMIT_REJECT(AppleAgxG13SubmitGuardD3Match);
   if (!AppleAgxG13Provider3dValid(provider, Job)) SUBMIT_REJECT(AppleAgxG13SubmitGuardD3Valid);
   if (!AppleAgxG13ProviderTaValid(provider, Job)) SUBMIT_REJECT(AppleAgxG13SubmitGuardTaValid);
-  if (Job->ComputeWorkAddressCount!=0u &&
-       (!provider->Config.HasCompute||Job->ComputeWorkAddressCount!=1u||
-        Job->ComputeEvent!=provider->Config.Compute.EventNumber||
-        !Job->ComputeExpectedStamp||
-        !AppleAgxG13ProviderExpectedDone(provider,&provider->Config.Compute,1u,
-                                         Job->ComputeExpectedDonePointer)))
-    SUBMIT_REJECT(AppleAgxG13SubmitGuardCompute);
+  if (Job->ComputeWorkAddressCount != 0u) {
+    if (!provider->Config.HasCompute)
+      provider->LastSubmitRuntimeResult =
+          AppleAgxG13ComputeGuardUnavailable;
+    else if (Job->ComputeWorkAddressCount != 1u)
+      provider->LastSubmitRuntimeResult = AppleAgxG13ComputeGuardCount;
+    else if (Job->ComputeEvent != provider->Config.Compute.EventNumber)
+      provider->LastSubmitRuntimeResult = AppleAgxG13ComputeGuardEvent;
+    else if (!Job->ComputeExpectedStamp)
+      provider->LastSubmitRuntimeResult = AppleAgxG13ComputeGuardStamp;
+    else if (!AppleAgxG13ProviderExpectedDone(
+                 provider, &provider->Config.Compute, 1u,
+                 Job->ComputeExpectedDonePointer))
+      provider->LastSubmitRuntimeResult =
+          AppleAgxG13ComputeGuardDonePointer;
+    if (provider->LastSubmitRuntimeResult != AppleAgxG13ComputeGuardNone)
+      SUBMIT_REJECT(AppleAgxG13SubmitGuardCompute);
+  }
   AppleAgxG13ProviderZero(&submission,
                           (APPLE_AGX_BACKEND_U32)sizeof(submission));
   if (!provider->ProviderIo.BuildSubmission(

@@ -99,6 +99,15 @@ enum {
   AppleAgxG13SubmitGuardRuntime,
 };
 
+enum {
+  AppleAgxG13ComputeGuardNone = 0u,
+  AppleAgxG13ComputeGuardUnavailable,
+  AppleAgxG13ComputeGuardCount,
+  AppleAgxG13ComputeGuardEvent,
+  AppleAgxG13ComputeGuardStamp,
+  AppleAgxG13ComputeGuardDonePointer,
+};
+
 APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderInitialize(
     APPLE_AGX_G13_QUEUE_PROVIDER *Provider,
     const APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG *Config,

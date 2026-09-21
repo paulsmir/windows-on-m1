@@ -223,6 +223,19 @@ static void TestAtomicStagingAndOrder(void) {
   assert(f.SendOrder[0]==(unsigned int)AppleAgxG13Queue3d);
   assert(f.SendOrder[1]==(unsigned int)AppleAgxG13QueueTa);
 }
+static void TestComputeRejectReportsExactInvariant(void) {
+  FIXTURE f;
+  APPLE_AGX_BACKEND_JOB_IMAGE mismatch;
+  InitMode(&f, 1);
+  assert(f.Io.Queues.Create(f.Io.Context));
+  assert(f.Io.Queues.Run3d(f.Io.Context, &f.Job, 41u));
+  mismatch = f.Job;
+  ++mismatch.ComputeEvent;
+  assert(!f.Io.Queues.RunTa(f.Io.Context, &mismatch, 41u));
+  assert(f.Provider.LastSubmitGuard == AppleAgxG13SubmitGuardCompute);
+  assert(f.Provider.LastSubmitRuntimeResult ==
+         AppleAgxG13ComputeGuardEvent);
+}
 static void TestExactCompletion(void) {
   FIXTURE f; APPLE_AGX_G13_QUEUE_PROVIDER_EVENT_BATCH batch;
   unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
@@ -455,7 +468,8 @@ static void TestComputeCompletesBeforeRenderPublication(void) {
   Complete(&f);
 }
 int main(void) {
-  TestAtomicStagingAndOrder(); TestExactCompletion(); TestFailClosedQuiesce();
+  TestAtomicStagingAndOrder(); TestComputeRejectReportsExactInvariant();
+  TestExactCompletion(); TestFailClosedQuiesce();
   TestIngestFailureNamesDecoderOwner();
   TestReadOnlyJobPlanTracksQueueLifetime();
   TestSecondSubmitPublishesOnlyWorkTa();
