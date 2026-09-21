@@ -33,7 +33,11 @@ static NTSTATUS StandardPresentTraceQuery(D3DKMT_HANDLE adapter,
     ADMISSION_STANDARD_PRESENT_TRACE *trace) {
   D3DKMT_ESCAPE escape={0};
   if(!adapter || !trace) return (NTSTATUS)0xc000000dL;
-  AdmissionStandardPresentTraceInitialize(trace,command,0u,0u);
+  ZeroMemory(trace,sizeof(*trace));
+  trace->Magic=ADMISSION_STANDARD_PRESENT_TRACE_MAGIC;
+  trace->Version=ADMISSION_STANDARD_PRESENT_TRACE_VERSION;
+  trace->Bytes=sizeof(*trace);
+  trace->Command=command;
   escape.hAdapter=adapter;escape.Type=D3DKMT_ESCAPE_DRIVERPRIVATE;
   escape.pPrivateDriverData=trace;escape.PrivateDriverDataSize=sizeof(*trace);
   return D3DKMTEscape(&escape);
