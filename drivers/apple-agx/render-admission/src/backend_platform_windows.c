@@ -2596,6 +2596,39 @@ static VOID AdmissionOutputThread(PVOID Context) {
 }
 #endif
 
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+_Use_decl_annotations_ VOID AdmissionPlatformRecordPostDpcHealth(
+    ADMISSION_CONTEXT *Context, ULONG Fence) {
+  ADMISSION_PLATFORM_RUNTIME *runtime;
+  ADMISSION_POST_DPC_HEALTH_RECEIPT record;
+  KIRQL oldIrql;
+  if (Context == NULL || Fence == 0u || Context->PlatformRuntime == NULL)
+    return;
+  runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
+  RtlZeroMemory(&record, sizeof(record));
+  record.Version = 1u; record.Bytes = sizeof(record); record.Fence = Fence;
+  record.SchedulerFaulted = (ULONG)InterlockedCompareExchange(
+      &Context->SchedulerFaulted, 0, 0);
+  KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
+  record.CurrentFence = AppleAgxSchedulerCurrentFence(&Context->Scheduler, 0u, 0u);
+  record.ActiveFence = AppleAgxSchedulerActiveFence(&Context->Scheduler, 0u, 0u);
+  record.DispatchedFence = Context->DispatchedFence;
+  record.RenderPacketState = (ULONG)AdmissionRenderPacketState(&Context->RenderPacket);
+  KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
+  record.BackendPhase = (ULONG)runtime->Backend.Phase;
+  record.ProviderPhase = (ULONG)runtime->Provider.QueueProvider.Phase;
+  record.CompletionPhase = (ULONG)runtime->Completion.Phase;
+  record.CompletedOutputPhase = (ULONG)runtime->CompletedOutput.Phase;
+  record.OutputQueuePhase = (ULONG)runtime->OutputQueue.ThreadPhase;
+  record.WorkScheduled = (ULONG)InterlockedCompareExchange(&runtime->WorkScheduled, 0, 0);
+  record.WorkersActive = (ULONG)InterlockedCompareExchange(&runtime->WorkersActive, 0, 0);
+  record.DpcPending = (ULONG)InterlockedCompareExchange(&Context->SchedulerDpcPending, 0, 0);
+  Context->PostDpcHealth = record;
+  KeMemoryBarrier();
+  InterlockedExchange(&Context->PostDpcHealthValid, 1);
+}
+#endif
+
 static APPLE_AGX_BACKEND_BOOL AdmissionBackendRetire(
     void *Context, APPLE_AGX_BACKEND_U32 Fence,
     APPLE_AGX_BACKEND_U32 Node, APPLE_AGX_BACKEND_U32 Engine) {

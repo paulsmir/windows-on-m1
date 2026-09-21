@@ -176,6 +176,14 @@ _Use_decl_annotations_ VOID AdmissionFlushGdiReceipt(
                             sizeof(snapshot));
     ZwClose(key);
   }
+  if (InterlockedCompareExchange(&Context->PostDpcHealthValid, 0, 0) != 0 &&
+      Context->PhysicalDeviceObject != NULL &&
+      NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
+    AdmissionGdiWriteBinary(key, L"Wom1PostDpcHealth", &Context->PostDpcHealth,
+                            sizeof(Context->PostDpcHealth));
+    ZwClose(key);
+  }
 }
 
 #endif /* APPLE_AGX_SUBMIT_QUALIFICATION */

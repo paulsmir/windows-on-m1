@@ -241,6 +241,8 @@ _Use_decl_annotations_ VOID AdmissionSchedulerDpc(
       Context->DispatchedFence = 0u;
     KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
   }
+  if (notified && renderFence != 0u)
+    AdmissionPlatformRecordPostDpcHealth(Context, renderFence);
   AdmissionDispatchQueuedWork(Context);
 }
 

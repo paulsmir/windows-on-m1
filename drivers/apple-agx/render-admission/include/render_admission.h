@@ -335,6 +335,13 @@ typedef struct _ADMISSION_CPU_PACKET {
   } Data;
 } ADMISSION_CPU_PACKET;
 
+typedef struct _ADMISSION_POST_DPC_HEALTH_RECEIPT {
+  ULONG Version, Bytes, Fence, SchedulerFaulted;
+  ULONG CurrentFence, ActiveFence, DispatchedFence, RenderPacketState;
+  ULONG BackendPhase, ProviderPhase, CompletionPhase, CompletedOutputPhase;
+  ULONG OutputQueuePhase, WorkScheduled, WorkersActive, DpcPending;
+} ADMISSION_POST_DPC_HEALTH_RECEIPT;
+
 typedef struct _ADMISSION_CONTEXT {
   ADMISSION_OBJECT_ADAPTER ObjectAdapter;
   ADMISSION_MEMORY_CONTRACT Memory;
@@ -390,6 +397,8 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG GdiSubmitTraceClaimed;
   KSPIN_LOCK GdiReceiptLock;
   ADMISSION_GDI_HW_RECEIPT GdiReceipt;
+  volatile LONG PostDpcHealthValid;
+  ADMISSION_POST_DPC_HEALTH_RECEIPT PostDpcHealth;
   KSPIN_LOCK RenderCorrelationLock;
   PIO_WORKITEM RenderCorrelationWorkItem;
   KEVENT RenderCorrelationIdle;
@@ -823,6 +832,8 @@ VOID AdmissionGdiReceiptProgressWindows(_In_ ADMISSION_CONTEXT *Context,
     ULONG Fence, _In_ const APPLE_AGX_G13_QUEUE_PROGRESS *Progress,
     ULONG WorkerFinalPhase);
 VOID AdmissionGdiReceiptDpcWindows(_In_ ADMISSION_CONTEXT *Context, ULONG Fence);
+VOID AdmissionPlatformRecordPostDpcHealth(_In_ ADMISSION_CONTEXT *Context,
+    ULONG Fence);
 VOID AdmissionFlushGdiReceipt(_In_ ADMISSION_CONTEXT *Context);
 #else
 #define AdmissionSubmitTraceBegin(Context, Args, PrivateStage, Command) FALSE
@@ -997,6 +1008,7 @@ VOID AdmissionFlushGdiReceipt(_In_ ADMISSION_CONTEXT *Context);
 #define AdmissionGdiReceiptCompleteWindows(Context, Fence, Status, NotifyInterrupt) ((void)0)
 #define AdmissionGdiReceiptProgressWindows(Context, Fence, Progress, WorkerFinalPhase) ((void)0)
 #define AdmissionGdiReceiptDpcWindows(Context, Fence) ((void)0)
+#define AdmissionPlatformRecordPostDpcHealth(Context, Fence) ((void)0)
 #define AdmissionFlushGdiReceipt(Context) ((void)0)
 #endif
 NTSTATUS AdmissionPagingSubmitPresent(_In_ ADMISSION_CONTEXT *Context,

@@ -73,6 +73,9 @@ class AppleAgxRenderPlatformTests(unittest.TestCase):
         self.assertIn("failedProgress.Fence = description.Fence", platform)
         self.assertIn("(ULONG)runtime->Backend.Phase", platform)
         self.assertIn("AdmissionGdiReceiptDpcWindows", scheduler)
+        self.assertIn("AdmissionPlatformRecordPostDpcHealth", scheduler)
+        self.assertIn('L"Wom1PostDpcHealth"',
+                      (RENDER / "src" / "gdi_receipt_windows.c").read_text())
         self.assertIn("AdmissionFlushGdiReceipt", lifecycle)
         self.assertIn(r"src\render_gdi_receipt.c", project)
         self.assertIn(r"src\gdi_receipt_windows.c", project)
