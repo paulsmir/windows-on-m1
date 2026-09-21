@@ -75,6 +75,8 @@ static HRESULT APIENTRY Composer_render(HANDLE h, D3DDDICB_RENDER *r) {
   REQUIRE(r->hContext == Composer_device.KernelContext && r->CommandOffset == 0);
   REQUIRE(r->NumAllocations == 8 && r->NumPatchLocations == 0);
   REQUIRE(r->RenderCBSequence == Composer_calls);
+  REQUIRE(Composer_device.DrawSubmission &&
+      Composer_device.DrawSubmission->ResidencyHeld);
   REQUIRE(AdmissionUmdDrawDispatch(&Composer_device, &Composer_tx) == HRESULT_FROM_WIN32(ERROR_BUSY));
   REQUIRE(AdmissionUmdScreenBeginClose(&Composer_device) == HRESULT_FROM_WIN32(ERROR_BUSY));
   {
@@ -150,7 +152,11 @@ static void Composer_setup(void) {
     Composer_adapter.DeviceInfo.Classes[i].Flags=0xf;
   }
   Composer_device.KernelContext=(HANDLE)(UINT_PTR)9; Composer_device.KernelCallbacks=&Composer_callbacks;
+  Composer_device.RuntimeDevice.handle=(VOID *)(UINT_PTR)8;
+  Composer_device.PagingQueue=0x601u;
   Composer_callbacks.pfnRenderCb=Composer_render;
+  Composer_callbacks.pfnMakeResidentCb=TestMakeResident;
+  Composer_callbacks.pfnEvictCb=TestEvict;
   Composer_callbacks.pfnLockCb=Composer_lock;
   Composer_callbacks.pfnUnlockCb=Composer_unlock;
   Composer_callbacks.pfnDeallocateCb=Composer_deallocate;

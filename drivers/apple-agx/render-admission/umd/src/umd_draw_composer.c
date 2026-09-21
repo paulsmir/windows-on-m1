@@ -81,6 +81,59 @@ static VOID diagnose_residency(
   }
 }
 
+static HRESULT evict_residency(
+    ADMISSION_UMD_DEVICE *d, ADMISSION_UMD_DRAW_SUBMISSION *s,
+    UINT count) {
+  D3DKMT_HANDLE handles[APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES];
+  D3DDDICB_EVICT evict={};
+  if(!d || !s || !count || count>s->Count || !d->KernelCallbacks ||
+     !d->KernelCallbacks->pfnEvictCb) return E_INVALIDARG;
+  for(UINT i=0;i<count;++i) handles[i]=s->Allocations[i].hAllocation;
+  evict.NumAllocations=count;
+  evict.AllocationList=handles;
+  HRESULT result=d->KernelCallbacks->pfnEvictCb(
+      d->RuntimeDevice.handle,&evict);
+  UINT values[3]={count,(UINT)evict.NumBytesToTrim,
+      (UINT)(evict.NumBytesToTrim>>32)};
+  AdmissionUmdDiagnostic("native-evict",result,values,ARRAYSIZE(values));
+  return result;
+}
+
+static HRESULT make_resident(
+    ADMISSION_UMD_DEVICE *d, ADMISSION_UMD_DRAW_SUBMISSION *s) {
+  D3DKMT_HANDLE handles[APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES];
+  UINT priorities[APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES];
+  D3DDDI_MAKERESIDENT make={};
+  if(!d || !s || !s->Count || s->Count>ARRAYSIZE(handles) ||
+     !d->PagingQueue || !d->KernelCallbacks ||
+     !d->KernelCallbacks->pfnMakeResidentCb) return E_INVALIDARG;
+  for(UINT i=0;i<s->Count;++i) {
+    handles[i]=s->Allocations[i].hAllocation;
+    priorities[i]=D3DDDI_ALLOCATIONPRIORITY_NORMAL;
+  }
+  make.hPagingQueue=d->PagingQueue;
+  make.NumAllocations=s->Count;
+  make.AllocationList=handles;
+  make.PriorityList=priorities;
+  /* This submission owns the only current residency set, so there is nothing
+   * else this UMD can trim before its final required attempt. */
+  make.Flags.CantTrimFurther=1u;
+  make.Flags.MustSucceed=1u;
+  UINT requested=s->Count;
+  HRESULT result=d->KernelCallbacks->pfnMakeResidentCb(
+      d->RuntimeDevice.handle,&make);
+  UINT values[5]={requested,make.NumAllocations,(UINT)make.PagingFenceValue,
+      (UINT)(make.PagingFenceValue>>32),(UINT)make.NumBytesToTrim};
+  AdmissionUmdDiagnostic("native-make-resident",result,values,ARRAYSIZE(values));
+  if(FAILED(result) || make.NumAllocations!=requested) {
+    UINT partial=make.NumAllocations<requested?make.NumAllocations:requested;
+    if(partial && FAILED(evict_residency(d,s,partial))) d->DrawTerminal=TRUE;
+    return FAILED(result)?result:E_FAIL;
+  }
+  s->ResidencyHeld=TRUE;
+  return S_OK;
+}
+
 struct ComposerLookup {
   ADMISSION_UMD_DEVICE *Device;
   const ADMISSION_UMD_DRAW_SUBMISSION *Submission;
@@ -246,12 +299,40 @@ HRESULT AdmissionUmdDrawDispatch(ADMISSION_UMD_DEVICE *d, ADMISSION_UMD_DRAW_SUB
     ReleaseSRWLockExclusive(&d->ScreenBufferLock);
     return E_FAIL;
   }
-  if(!AdmissionUmdNextRenderSequence(d,&render.RenderCBSequence)) {
-    release(d,s); s->Phase=AdmissionDrawRejected;
+  ReleaseSRWLockExclusive(&d->ScreenBufferLock);
+  diagnose_residency(d,s);
+  result=make_resident(d,s);
+  AcquireSRWLockExclusive(&d->ScreenBufferLock);
+  if(FAILED(result)) {
+    if(owns(d,s) && s->Phase==AdmissionDrawSealed) {
+      release(d,s); s->Phase=AdmissionDrawRejected;
+    }
+    ReleaseSRWLockExclusive(&d->ScreenBufferLock);
+    return result;
+  }
+  if(!owns(d,s) || s->Phase!=AdmissionDrawSealed || d->ScreenClosing ||
+     d->DrawTerminal) {
+    ReleaseSRWLockExclusive(&d->ScreenBufferLock);
+    (void)evict_residency(d,s,s->Count);
+    s->ResidencyHeld=FALSE;
+    AcquireSRWLockExclusive(&d->ScreenBufferLock);
+    if(owns(d,s) && s->Phase==AdmissionDrawSealed) {
+      release(d,s); s->Phase=AdmissionDrawRejected;
+    }
     ReleaseSRWLockExclusive(&d->ScreenBufferLock);
     return E_FAIL;
   }
-  diagnose_residency(d,s);
+  if(!AdmissionUmdNextRenderSequence(d,&render.RenderCBSequence)) {
+    ReleaseSRWLockExclusive(&d->ScreenBufferLock);
+    (void)evict_residency(d,s,s->Count);
+    s->ResidencyHeld=FALSE;
+    AcquireSRWLockExclusive(&d->ScreenBufferLock);
+    if(owns(d,s) && s->Phase==AdmissionDrawSealed) {
+      release(d,s); s->Phase=AdmissionDrawRejected;
+    }
+    ReleaseSRWLockExclusive(&d->ScreenBufferLock);
+    return E_FAIL;
+  }
   render.hContext=s->Context; render.CommandLength=s->CommandBytes;
   render.NumAllocations=s->Count;
   s->Phase=AdmissionDrawCalling;
@@ -310,6 +391,11 @@ HRESULT AdmissionUmdDrawRetire(ADMISSION_UMD_DEVICE *d, ADMISSION_UMD_DRAW_SUBMI
   }
   if(AgxWin32ScreenWaitFence(&d->Screen,s->Fence,timeout)!=AgxWin32ScreenSuccess) {
     result=d->LastScreenError; goto pending;
+  }
+  if(s->ResidencyHeld) {
+    result=evict_residency(d,s,s->Count);
+    if(FAILED(result)) goto pending;
+    s->ResidencyHeld=FALSE;
   }
   if(AgxWin32ScreenRetireFence(&d->Screen,s->Fence)!=AgxWin32ScreenSuccess) {
     result=d->LastScreenError; goto pending;

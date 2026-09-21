@@ -45168,3 +45168,41 @@ cert97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda.
 Immutable EXP703-render-residency-718.zip SHA
 b214b8658dfac4f1dc643b9406e9034866b0543100c0fc714ee2604044daf927.
 Next exact stage/bind/preflight and one client; no replay.
+
+### EXP703 actual result — valid handles are all nonresident
+Exact package718 bound with Valid signatures, correct hashes, Code0/Running and
+Start12/Platform14. Clean pre-client gate. One standard client (PID3664/TID2908)
+reached native seal. All nine exact allocation handles returned
+pfnQueryResidencyCb S_OK and D3DDDI_RESIDENCYSTATUS_NOTRESIDENT; entry8 retained
+WriteOperation1. Render sequence1, context0x00000208ec15e660, allocation count9,
+command bytes0x18a8. pfnRenderCb then returned E_FAIL; Present887a0005 and device
+reason887a0020. This excludes invalid/stale handles and confirms the actual
+submission violates WDDM2+ explicit residency. No KMD Render slot and no fresh
+monitored event. No physical screen observation supplied.
+
+Official WDDM2 residency documentation states that allocation/patch lists no
+longer control residency even for engines without GPUVA; a nonresident reference
+is rejected and loses the device. Exact physical/patch-list architecture remains
+unchanged. The mandatory new pre-hardware scope is device paging-queue creation,
+MakeResident for the deduplicated submission set before Render, and one paired
+Evict only after the same fence retires. The KMD's existing physical paging path
+owns page-in/page-out. No GPUVA migration or new allocator is permitted.
+
+Evidence main-root .local/experiments/EXP703-live/{client-result.txt,
+pre-client.json,post-client.json,post-health.json,cleanup.txt}. Exact package,
+task, trust and stopped-service cleanup succeeded; ordinary recovery launched.
+
+### Explicit WDDM2 residency deterministic gate PASS
+EXP703 is the real standard-runtime RED: all9 exact handles valid but
+NOTRESIDENT, followed by scheduler rejection/device loss before KMD Render.
+The UMD now creates one device paging queue, calls MakeResident for the exact
+deduplicated set before Render, holds one residency reference through the same
+completion fence, and calls paired Evict only after that fence signals. Partial
+MakeResident failure is rolled back and cannot reach Render. Paging queue
+lifetime is paired with device lifetime. No GPUVA or allocation-list redesign.
+
+explicit-residency-20260921nn x64 execution0 and ARM64 link0. Exact archive SHA
+8a66826b8e3cf70fb78cb767c6ddfe7c68c294a1e8bc75100a868c54d15a31df;
+x64 executable 43dcf431d82e5fcbb0557b5a0a609ba8ec90b7f68835684b80bdc2ceb4ec3338.
+The actual Render callback asserts ResidencyHeld; producer/materializer/KMD-plan/
+patch/fence-retirement/Evict/remap/teardown PASS. Hardware NOT_RUN for this fix.

@@ -228,6 +228,8 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
       r->hContext==device->KernelContext && r->CommandOffset==0 && r->NumPatchLocations==0);
   RUNTIME_REQUIRE(r && r->RenderCBSequence!=0u &&
       (r->RenderCBSequence&0x80000000u)==0u);
+  RUNTIME_REQUIRE(device && device->DrawSubmission &&
+      device->DrawSubmission->ResidencyHeld);
   if(device) for(unsigned allocation=0;allocation<r->NumAllocations;++allocation) {
     ADMISSION_UMD_SCREEN_BUFFER *buffer=NULL;
     for(unsigned slot=0;slot<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++slot)
@@ -644,6 +646,10 @@ static unsigned TestAsahiNativePoolOwner(void) {
   }
   PoolCallbacks.pfnAllocateCb=PoolAllocate; PoolCallbacks.pfnLockCb=PoolLock;
   PoolCallbacks.pfnUnlockCb=PoolUnlock; PoolCallbacks.pfnDeallocateCb=PoolDeallocate;
+  PoolCallbacks.pfnCreatePagingQueueCb=TestCreatePagingQueue;
+  PoolCallbacks.pfnDestroyPagingQueueCb=TestDestroyPagingQueue;
+  PoolCallbacks.pfnMakeResidentCb=TestMakeResident;
+  PoolCallbacks.pfnEvictCb=TestEvict;
   if(AdmissionUmdScreenInitialize(&PoolDevice)!=S_OK) return 1;
   AdmissionUmdAsahiOwnerOperations(&ops);
 #if defined(ADMISSION_UMD_NATIVE_RUNTIME_TEST)
@@ -653,6 +659,8 @@ static unsigned TestAsahiNativePoolOwner(void) {
   RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
   memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
   PoolDevice.KernelContext=(HANDLE)(UINT_PTR)0x707;
+  PoolDevice.RuntimeDevice.handle=(VOID *)(UINT_PTR)0x706;
+  PoolDevice.PagingQueue=0x601u;
   PoolDevice.CommandBuffer=RuntimeCommand;PoolDevice.CommandBufferSize=sizeof(RuntimeCommand);
   PoolDevice.AllocationList=RuntimeAllocations;PoolDevice.AllocationListSize=ARRAYSIZE(RuntimeAllocations);
   PoolDevice.PatchList=RuntimePatches;PoolDevice.PatchListSize=ARRAYSIZE(RuntimePatches);

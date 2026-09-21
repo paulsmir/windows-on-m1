@@ -2173,3 +2173,47 @@ Residency/context diagnostic implementation08c71ca7 packaged; package analysis,
 Universal/Inf2Cat/catalog PASS. Immutable archive SHA
 b214b8658dfac4f1dc643b9406e9034866b0543100c0fc714ee2604044daf927.
 Air recovery is clean. Next exact stage/Valid-signature bind and one client.
+
+## EXP703 proves explicit residency is the current mandatory boundary
+All9 submitted handles are valid (QueryResidency S_OK) and all9 are
+NOTRESIDENT immediately before sequence1 pfnRenderCb; entry8 is the write target.
+The callback then E_FAILs before a retained KMD Render receipt, exactly matching
+WDDM2+ scheduler rejection of nonresident references. No monitored event or new
+physical observation. Exact cleanup complete; ordinary recovery launched.
+
+Implement one device paging queue, MakeResident for the deduplicated sealed set
+before Render, and paired Evict only after same-fence retirement. Handle partial
+failure atomically and preserve holds. Existing KMD BuildPagingBuffer owns the
+physical page-in/out. This is required by the actual WDDM3 runtime and does not
+reopen GPUVA or change the physical patch-list architecture.
+HARDWARE ROADMAP
+[PASS] Native graph/capture/seal, unlock lifetime, RenderCBSequence; EXP703 exact
+handle validity and nonresidency proof.
+[NOW] Device residency lifecycle: paging queue + MakeResident before Render +
+paired post-fence Evict. Offline gate must cover success, partial failure,
+callback failure, retirement retry and teardown; then x64/ARM64.
+[NEXT] Exact package/sign/hash/preregister and one Air client.
+[HW] Successful KMD Render/Patch/Submit, AGX completion and DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## Explicit WDDM2 residency lifecycle offline PASS
+The UMD device now owns one normal-priority paging queue. Each sealed deduplicated
+submission set is MakeResident with a final required attempt before Render;
+partial/failure paths evict any acquired prefix and never submit. Residency is
+held across callback/fence lifetime and paired Evict occurs only after the same
+fence signals, before fence retirement and source-hold release. Paging queue is
+destroyed during device teardown. Existing physical KMD BuildPagingBuffer owns
+page movement; GPUVA and allocator/composer architecture remain unchanged.
+
+explicit-residency-20260921nn x64 execution0 and ARM64 link0; archive
+8a66826b8e3cf70fb78cb767c6ddfe7c68c294a1e8bc75100a868c54d15a31df matches
+all473 driver files. Actual Render mock requires ResidencyHeld; retirement and
+teardown prove paired Evict. Host tests PASS. Air recovery after EXP703 is clean.
+Next exact package/sign/hash/preregister and one standard-runtime Air attempt.
+HARDWARE ROADMAP
+[PASS] Native graph/capture/seal, unlock lifetime, RenderCBSequence, valid-handle
+residency proof and explicit MakeResident/Evict offline lifecycle; ARM64 link.
+[NOW] Exact package analysis/sign/hash and preregistration.
+[NEXT] One Air client; collect KMD paging/Render/Patch/Submit/completion/Present.
+[HW] Successful KMD Render/Patch/Submit, AGX completion and DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.

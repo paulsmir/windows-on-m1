@@ -15,6 +15,13 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include <stdlib.h>
 #include <string.h>
 
+static HRESULT APIENTRY TestCreatePagingQueue(
+    HANDLE, D3DDDICB_CREATEPAGINGQUEUE *);
+static HRESULT APIENTRY TestDestroyPagingQueue(
+    HANDLE, const D3DDDI_DESTROYPAGINGQUEUE *);
+static HRESULT APIENTRY TestMakeResident(HANDLE, D3DDDI_MAKERESIDENT *);
+static HRESULT APIENTRY TestEvict(HANDLE, D3DDDICB_EVICT *);
+
 #include "../src/umd.c"
 #include "umd_draw_composer_windows.c"
 #if defined(ADMISSION_UMD_NATIVE_POOL_TEST)
@@ -330,6 +337,44 @@ static HRESULT APIENTRY TestQueryResidency(
   if(!Query || Query->hResource || Query->NumAllocations!=1u ||
      !Query->HandleList || !Query->pResidencyStatus) return E_INVALIDARG;
   Query->pResidencyStatus[0]=D3DDDI_RESIDENCYSTATUS_RESIDENTINGPUMEMORY;
+  return S_OK;
+}
+
+static UINT64 TestPagingFence;
+static HRESULT APIENTRY TestCreatePagingQueue(
+    HANDLE Device,D3DDDICB_CREATEPAGINGQUEUE *Queue) {
+  CHECK(Device!=NULL && Queue!=NULL &&
+        Queue->Priority==D3DDDI_PAGINGQUEUE_PRIORITY_NORMAL &&
+        Queue->PhysicalAdapterIndex==0u);
+  if(!Queue) return E_INVALIDARG;
+  Queue->hPagingQueue=0x601u;
+  Queue->hSyncObject=0x602u;
+  Queue->FenceValueCPUVirtualAddress=&TestPagingFence;
+  return S_OK;
+}
+static HRESULT APIENTRY TestDestroyPagingQueue(
+    HANDLE Device,const D3DDDI_DESTROYPAGINGQUEUE *Queue) {
+  CHECK(Device!=NULL && Queue && Queue->hPagingQueue==0x601u);
+  return Queue && Queue->hPagingQueue==0x601u?S_OK:E_INVALIDARG;
+}
+static HRESULT APIENTRY TestMakeResident(
+    HANDLE Device,D3DDDI_MAKERESIDENT *Make) {
+  CHECK(Device!=NULL && Make && Make->hPagingQueue!=0u &&
+        Make->NumAllocations && Make->AllocationList && Make->PriorityList &&
+        Make->Flags.CantTrimFurther && Make->Flags.MustSucceed);
+  if(!Make || !Make->NumAllocations || !Make->AllocationList)
+    return E_INVALIDARG;
+  Make->PagingFenceValue=++TestPagingFence;
+  Make->NumBytesToTrim=0u;
+  return S_OK;
+}
+static HRESULT APIENTRY TestEvict(
+    HANDLE Device,D3DDDICB_EVICT *Evict) {
+  CHECK(Device!=NULL && Evict && Evict->NumAllocations &&
+        Evict->AllocationList && Evict->Flags.Value==0u);
+  if(!Evict || !Evict->NumAllocations || !Evict->AllocationList)
+    return E_INVALIDARG;
+  Evict->NumBytesToTrim=0u;
   return S_OK;
 }
 
@@ -1018,6 +1063,10 @@ static void test_mesa_d3d10_frontend_open(void) {
   callbacks.pfnSetDisplayModeCb=FrontendSetDisplayMode;
   callbacks.pfnSetPriorityCb=FrontendSetPriority;
   callbacks.pfnQueryResidencyCb=FrontendQueryResidency;
+  callbacks.pfnCreatePagingQueueCb=TestCreatePagingQueue;
+  callbacks.pfnDestroyPagingQueueCb=TestDestroyPagingQueue;
+  callbacks.pfnMakeResidentCb=TestMakeResident;
+  callbacks.pfnEvictCb=TestEvict;
   dxgiCallbacks.pfnPresentCb=FrontendPresent;
   core.pfnSetErrorCb=FrontendSetError;
   sizeArgs.Interface=D3D10_0_DDI_INTERFACE_VERSION;
@@ -3994,6 +4043,10 @@ int main(void) {
   kernelCallbacks.pfnUnlockCb = TestUnlock;
   kernelCallbacks.pfnSetPriorityCb = TestSetPriority;
   kernelCallbacks.pfnQueryResidencyCb = TestQueryResidency;
+  kernelCallbacks.pfnCreatePagingQueueCb = TestCreatePagingQueue;
+  kernelCallbacks.pfnDestroyPagingQueueCb = TestDestroyPagingQueue;
+  kernelCallbacks.pfnMakeResidentCb = TestMakeResident;
+  kernelCallbacks.pfnEvictCb = TestEvict;
   kernelCallbacks.pfnSignalSynchronizationObject2Cb =
       TestSignalSynchronizationObject2;
   memset(&userCallbacks, 0, sizeof(userCallbacks));

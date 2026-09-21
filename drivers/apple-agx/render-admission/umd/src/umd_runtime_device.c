@@ -169,6 +169,10 @@ HRESULT AdmissionUmdRuntimeDeviceInitialize(
       Args->pKTCallbacks->pfnSetPriorityCb == NULL ||
       Args->pKTCallbacks->pfnQueryResidencyCb == NULL ||
       Args->pKTCallbacks->pfnSignalSynchronizationObject2Cb == NULL ||
+      Args->pKTCallbacks->pfnMakeResidentCb == NULL ||
+      Args->pKTCallbacks->pfnEvictCb == NULL ||
+      Args->pKTCallbacks->pfnCreatePagingQueueCb == NULL ||
+      Args->pKTCallbacks->pfnDestroyPagingQueueCb == NULL ||
       Args->pKTCallbacks->pfnRenderCb == NULL ||
       Args->DXGIBaseDDI.pDXGIBaseCallbacks == NULL)
     return E_INVALIDARG;
@@ -235,9 +239,37 @@ HRESULT AdmissionUmdRuntimeDeviceInitialize(
   device->AllocationListSize = createContext.AllocationListSize;
   device->PatchList = createContext.pPatchLocationList;
   device->PatchListSize = createContext.PatchLocationListSize;
+  {
+    D3DDDICB_CREATEPAGINGQUEUE pagingQueue;
+    ZeroMemory(&pagingQueue, sizeof(pagingQueue));
+    pagingQueue.Priority = D3DDDI_PAGINGQUEUE_PRIORITY_NORMAL;
+    pagingQueue.PhysicalAdapterIndex = 0u;
+    result = device->KernelCallbacks->pfnCreatePagingQueueCb(
+        device->RuntimeDevice.handle, &pagingQueue);
+    if (FAILED(result) || pagingQueue.hPagingQueue == 0u ||
+        pagingQueue.hSyncObject == 0u ||
+        pagingQueue.FenceValueCPUVirtualAddress == NULL) {
+      D3DDDICB_DESTROYCONTEXT destroyContext;
+      ZeroMemory(&destroyContext, sizeof(destroyContext));
+      destroyContext.hContext = device->KernelContext;
+      (void)device->KernelCallbacks->pfnDestroyContextCb(
+          device->RuntimeDevice.handle, &destroyContext);
+      ZeroMemory(device, sizeof(*device));
+      return FAILED(result) ? result : E_FAIL;
+    }
+    device->PagingQueue = pagingQueue.hPagingQueue;
+    device->PagingSyncObject = pagingQueue.hSyncObject;
+    device->PagingFenceAddress =
+        (volatile UINT64 *)pagingQueue.FenceValueCPUVirtualAddress;
+  }
   result = AdmissionUmdScreenInitialize(device);
   if (FAILED(result)) {
     D3DDDICB_DESTROYCONTEXT destroyContext;
+    D3DDDI_DESTROYPAGINGQUEUE destroyQueue;
+    ZeroMemory(&destroyQueue, sizeof(destroyQueue));
+    destroyQueue.hPagingQueue = device->PagingQueue;
+    (void)device->KernelCallbacks->pfnDestroyPagingQueueCb(
+        device->RuntimeDevice.handle, &destroyQueue);
     ZeroMemory(&destroyContext, sizeof(destroyContext));
     destroyContext.hContext = device->KernelContext;
     (void)device->KernelCallbacks->pfnDestroyContextCb(
@@ -305,6 +337,17 @@ HRESULT AdmissionUmdRuntimeDeviceFinalize(ADMISSION_UMD_DEVICE *device,
     return FAILED(screenResult)?screenResult:E_FAIL;
   if(device->DrawSubmission || device->NativeBatchTransaction)
     return HRESULT_FROM_WIN32(ERROR_BUSY);
+  if(device->PagingQueue) {
+    D3DDDI_DESTROYPAGINGQUEUE destroyQueue;
+    ZeroMemory(&destroyQueue, sizeof(destroyQueue));
+    destroyQueue.hPagingQueue=device->PagingQueue;
+    screenResult=device->KernelCallbacks->pfnDestroyPagingQueueCb(
+        device->RuntimeDevice.handle,&destroyQueue);
+    if(FAILED(screenResult)) return screenResult;
+    device->PagingQueue=0u;
+    device->PagingSyncObject=0u;
+    device->PagingFenceAddress=NULL;
+  }
   device->QuiescedKernelContext=NULL;
   device->KernelContextQuiesced=FALSE;
   if (FAILED(terminalError))
