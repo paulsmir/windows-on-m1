@@ -10,6 +10,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -1044,6 +1045,65 @@ _Present('''),
       return E_NOTIMPL;
    return AgxD3d10WindowsPresentationBlt(device->windows,
       destination->presentation, source->presentation);''')])
+    # Trace the existing DXGI boundary as one unit. Return values and argument
+    # guards stay unchanged; the process-local diagnostic preserves last-error.
+    dxgi_path = 'src/gallium/frontends/d3d10umd/DxgiFns.cpp'
+    dxgi_target = out / dxgi_path
+    dxgi_text = dxgi_target.read_text()
+    dxgi_marker = 'static HRESULT\nUnsupportedDxgi'
+    if dxgi_text.count(dxgi_marker) != 1:
+        raise SystemExit('Ambiguous DXGI trace helper anchor')
+    dxgi_text = dxgi_text.replace(dxgi_marker, '''static HRESULT
+AgxDxgiTraceReturn(const char *name, HRESULT result)
+{
+   AgxD3d10WindowsDiagnostic(name, result, NULL, 0);
+   return result;
+}
+
+static HRESULT
+UnsupportedDxgi''')
+    dxgi_target.write_text(dxgi_text)
+    for name in ('_Present', '_GetGammaCaps', '_SetDisplayMode',
+                 '_SetResourcePriority', '_QueryResourceResidency',
+                 '_RotateResourceIdentities', '_Blt'):
+        text = dxgi_target.read_text()
+        marker = '\n' + name + '('
+        if text.count(marker) != 1:
+            raise SystemExit('Ambiguous DXGI trace function: ' + name)
+        start = text.index('{', text.index(marker)) + 1
+        end, depth = start, 1
+        while depth and end < len(text):
+            if text[end] == '{': depth += 1
+            elif text[end] == '}': depth -= 1
+            end += 1
+        if depth:
+            raise SystemExit('Unclosed DXGI trace function: ' + name)
+        body = text[start:end - 1]
+        body, returns = re.subn(r'\breturn\s+([^;]+);',
+            r'return AgxDxgiTraceReturn(__func__, (\1));', body)
+        if not returns:
+            raise SystemExit('Missing DXGI trace return: ' + name)
+        entry = '   AgxD3d10WindowsDiagnostic("' + name + '-entry", S_OK, NULL, 0);\n'
+        if name == '_Blt':
+            entry += '''   UINT values[11] = {
+      Blt ? Blt->DstSubresource : ~0u, Blt ? Blt->SrcSubresource : ~0u,
+      Blt ? Blt->DstLeft : ~0u, Blt ? Blt->DstTop : ~0u,
+      Blt ? Blt->DstRight : ~0u, Blt ? Blt->DstBottom : ~0u,
+      Blt ? Blt->Flags.Value : ~0u, Blt ? (UINT)Blt->Rotate : ~0u,
+      Blt && Blt->hDstResource != 0, Blt && Blt->hSrcResource != 0,
+      Blt && Blt->hDevice != 0};
+   AgxD3d10WindowsDiagnostic("dxgi-blt-args", S_OK, values, 11u);
+'''
+        elif name == '_RotateResourceIdentities':
+            entry += '''   UINT count = RotateResourceIdentities ? RotateResourceIdentities->Resources : ~0u;
+   AgxD3d10WindowsDiagnostic("dxgi-rotate-count", S_OK, &count, 1u);
+'''
+        elif name == '_QueryResourceResidency':
+            entry += '''   UINT count = QueryResourceResidency ? QueryResourceResidency->Resources : ~0u;
+   AgxD3d10WindowsDiagnostic("dxgi-residency-count", S_OK, &count, 1u);
+'''
+        replace_function_body(dxgi_path, name, entry + body)
+
     change('src/gallium/frontends/d3d10umd/Shader.cpp',
         '48a7de2a42b25abac677cd903c10f21fc91b86aef167266a32a6d7d9da21097c',[
         ('''{
