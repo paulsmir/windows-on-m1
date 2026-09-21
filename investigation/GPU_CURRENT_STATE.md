@@ -2725,6 +2725,16 @@ HARDWARE ROADMAP
 [HW] Stable correct physical picture remains pending.
 POST-HARDWARE: optimize copy cost, longer acceptance, broader D3D/OpenGL/CS1.6.
 
+## EXP724 package738 ready — first composed full-frame primary
+Package738 gates PASS; archive SHA
+ffa8f4a1ec36b1c0bcc6bf1e88702d752881c36a74539a5ad05d31e54bde1df6.
+HARDWARE ROADMAP
+[PASS] Protected POST path closed; legal full DWM source selected.
+[NOW] Reliable install and one Air full-frame initialization run.
+[NEXT] Compare logical and physical frames through Start/Alt+Tab stability.
+[HW] Stable correct Air picture remains pending.
+POST-HARDWARE: optimize full copy and longer acceptance, broader D3D/OpenGL/CS1.6.
+
 ## EXP723 package737 ready — ordinary display-memory map
 Package737 gates PASS; archive SHA
 2acd84573f9bdd8e67809b7e8d3a103211d87d6a7443bfee9398bbf84c03a050.

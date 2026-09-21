@@ -46044,3 +46044,35 @@ CATd48541fa30da9d98507fdc775739a61e4246efb9d579066c382c6faad53a37dd;
 clientcd8ca0967bb00c836e15046ca9409baa97b4e5cbf79b25caecb004a529c48f39.
 Use the previously proven recovery install and full-owner boot, one guarded
 client, logical screenshot and physical observation, then exact cleanup.
+
+### EXP723 actual — translated POST address also rejected
+Package737 used the restored reliable install sequence and returned
+STATUS_INVALID_PARAMETER at PostDisplay stage9 without bugcheck. Thus both
+direct physical and dxgkrnl mapping of inherited POST pixels are unavailable;
+all seeding code is removed. Client selected Basic Render and is excluded.
+
+## EXP724 — initialize empty primary from first full composed source
+Preregistered 2026-09-21. WHY THIS HYPOTHESIS: the first successful DWM BLT has
+full2560x1600 source and destination allocations but advertises only a66x68 dirty
+rect because it assumes destination history. Our new local primary has no such
+history. The legal full composed source is therefore the nearest complete frame.
+WINDOWS CONTRACT: dirty rectangles preserve pixels outside the rect; a new
+destination must first receive complete contents. AGX/ASAHI CONTRACT: DCP scans
+the local primary after SetVidPnSourceAddress. TRANSLATION: commit97a9d9f6, for
+a distinct exact full-size BGRA source->primary at multipass0, encodes one full
+source/destination rectangle. All prohibited POST mapping code is removed.
+WHAT IS STILL UNKNOWN: whether the full composed source already contains the
+correct wallpaper/UI on its first BLT.
+
+Package738 gates PASS0 warnings/errors. Source archive SHA
+7e7845585583bb292eda37d0068d87f4eb7d00d705d17f05e81845ce11fcdaac.
+Artifact `.local/experiments/EXP724-full-primary-738.zip` SHA
+ffa8f4a1ec36b1c0bcc6bf1e88702d752881c36a74539a5ad05d31e54bde1df6.
+INFbadbf4d227b2f7acdecc69113afd070cc6215c411bf2ef83e43d518dcf0e736c;
+SYS3d0d6827cf01305cbe01f15f0814721ee569ea02011e7e1c7565bde7e8317074;
+UMD590b11d143e8e683c352d13aede919ebdb650984113c5939e3a84f26e5f0187a;
+CATfc0ea8447d69386c5015375c51df6d8c0994a5c9e4cef0e0417d9b518a2069a6;
+client9d5e2ac176032f4941f13b150c3dbc88a419111de0f2b4201ca7bddebc1e85b2.
+Use reliable recovery install/full-owner boot, one guarded client, logical
+screenshots and operator Start/Alt+Tab observation. Expected nonblack complete
+desktop and stable updates; failure is missing/incomplete frame or copy fault.
