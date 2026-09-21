@@ -26,9 +26,9 @@ Package742 is current;741 is the preserved pre-fix reference. All artifact paths
 /Users/pavel/public_windows/.local/experiments (NOT the worktree's .local).
 Candidate: EXP730-initialized-compute-742/builder/package. Unchanged client/cert
 remain in EXP726-compute-identity-package741/{qualification,pinned.cer}.
-Manifest/provenance-final.json plus builder-all-input-summary.json record335/336
-matching files; the sole mismatch is an uncompiled host test. Original source
-archive is unavailable; recorded integration archive is explicitly post-build.
+Fresh742 source archive EXP730-initialized-compute-742/source.tar from clean
+f5adda26, SHA29be05f0700ab6c231f06a1ea1dba643f262816e07779b1714d46f3aa39de1bd.
+Build/analysis0warnings0errors; frozen native runtime props reused unchanged.
 SYS 1758a4927ce4cf322a30703404f572675115625b927da7446feacf0415dda644
 UMD bcb17e54233083500d2354db6b23d8e148a6a93fd9edcecb10567629db3ccf0e
 INF 2c26b7e5cc6a3518df4f080893e78f2136b63f83e20509101004e867b45ee6bc
@@ -76,15 +76,20 @@ Do not call this stable desktop or diagnose firmware from normal fault-snapshot.
 Evidence EXP730-initialized-compute-742/{EXP730-client.json,EXP730-client.stdout.txt}.
 Clean ordinary baseline17:59:48Z: Code28/no package/service/module/files/signer,
 8CPU; autologon0/no password. Candidate742 package remains immutable.
-Next EXP731: only process-local APPLE_AGX_UMD_TRACE_FILE for unchanged client742
-experiment. Existing diagnostic covers native dispatch, render/flush status and
-pfnPresentCb and adds read-only residency queries. Need FIRST failed user-mode
-operation after physical completion; no new semantic patch before that evidence.
-Source: mesa/winsys/agx_d3d10_windows.cpp PresentationSubmit/FlushStatus;
-umd/src/umd_runtime_device.c Diagnostic; umd_draw_composer.c dispatch/retire.
-Reuse EXP730 executed full-owner/install/autologon/capture/cleanup recipes.
-Install only in full-owner584/406 after clean ordinary; orderly exit BEFORE
-chainload; one console Interactive-token client, no direct SSH client.
+EXP731 process-local UMD trace: render-callback/native-dispatch/flush-state S_OK,
+no present-callback; make-residentE_PENDING followed by waitS_OK (not a failure).
+Source client Present(0,0) conflicts with native _Present accepting onlyONE.
+Real Mesa DDI IMMEDIATE regression RED -> GREEN with705738eedf7692e45010649b22c9014ee5974cfb.
+Native/generic guards now accept IMMEDIATE orONE; invalid intervals/other args
+remain rejected. Existing opt-in native-present-entry records live args next run.
+x64 actual producer/2placements/retirement + DDI suite exit0. Fresh x64/ARM64
+native libraries built; ONLY DxgiFns.cpp differs in prepared source comparisons.
+Candidate743 package/link/sign/hash next; no hardware verdict on interval fix.
+Evidence EXP731-present-trace/EXP731-umd-trace.txt and EXP732-immediate-present.
+Clean ordinary baseline18:18:26Z: Code28/no residues/signer,8CPU, no autologon.
+Reuse executed full-owner/install/autologon/capture/cleanup recipes; install ONLY
+in driver-absent full-owner584/406, orderly exit before chainload, one console
+Interactive-token client. Keep process-local trace to measure actual interval.
 ## Fixed execution recipe — do not rediscover
 Git: /opt/homebrew/bin/git (system Git hits unaccepted Xcode license).
 Host cwd /Users/pavel/public_windows; Python proxyenv/bin/python.
@@ -126,7 +131,7 @@ on-disk artifacts/tool exits directly. No repeated "continue" handoff loops.
 
 HARDWARE ROADMAP
 [PASS] Native stack has prior execution evidence;741 paired diagnostic/offline gates.
-[NOW] EXP731 existing UMD trace selects first failure after successful completion.
-[NEXT] Correct the measured flush/presentation owner, then repeat same console test.
+[NOW] Candidate743 immediate-Present correction package gates.
+[NEXT] Same traced console client verifies live args and reaches Present callback.
 [HW] Standard Present and stable complete physical image remain unproven.
 POST-HARDWARE: sustained correct desktop, longer acceptance; OpenGL/CS1.6 later.
