@@ -1948,6 +1948,8 @@ POST-HARDWARE: complete desktop composition and desktop acceptance.
 
 
 
+
+
 ## EXP708 resident set proven; reliable KMD entry receipt NOW
 All9 are RESIDENTINGPUMEMORY after successful wait, then pfnRenderCb EFAIL with
 no KMD slot; Evict S_OK. Residency is closed. Cleanup complete. KMD Render guard
@@ -2452,4 +2454,24 @@ client plus ARM64 package/sign/hash gates.
 [NOW] EXP712 exact Air run; read exact Present/source-address exit status.
 [NEXT] Fix the first failing Present invariant and immediately retest.
 [HW] First successful standard DXGI Present with physical result.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP712 proves backend QueueFailed before Present
+Trace arm/read S_OK with zero Present events. KMD correlation shows Render and
+Submit accepted, fence284, worker entry/exit, WorkerStatus8 QueueFailed, and no
+Notify/DPC completion. GDI receipt confirms backend stage/result8. Present then
+reports device removed because the device was already lost; no KMD Present DDI
+was entered. Exact cleanup complete.
+
+Record the already existing backend runtime phase in the qualification receipt
+when QueueFailed occurs. Phase Ready distinguishes Run3d atomic rejection;
+phase Failed distinguishes RunTa rejection after 3D staging. This is the
+smallest causal discriminator and changes no queue behavior.
+HARDWARE ROADMAP
+[PASS] Standard runtime through Render and Submit acceptance; exact queue-failure
+receipt; Present proven downstream of device removal.
+[NOW] Add backend phase to existing QueueFailed receipt; offline receipt tests
+and ARM64 package gate.
+[NEXT] One Air run selects Run3d versus RunTa; fix that exact queue invariant.
+[HW] First TA/3D queue acceptance, completion fence and successful DXGI Present.
 POST-HARDWARE: complete desktop composition and desktop acceptance.

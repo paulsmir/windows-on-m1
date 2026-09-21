@@ -45392,6 +45392,20 @@ client19c35b2b3addade147f53dc83872b0c7ff03e38ecafe751334b0c05ee9058d76.
 Immutable archive SHA0137b7ffa5e4aaea21b9f8fbf9006fabc26b5eb0a59e2914d25abbe9e3c5c3ca.
 Exact clean recovery, stage/signature/bind/quiet, one client, no replay.
 
+### EXP712 actual — pre-Present device removal caused by backend QueueFailed
+Exact package726 and one client passed all gates. StandardPresentTrace arm/read
+both returned S_OK for build726/boot333635701 but EventCount remained0: neither
+DxgkDdiPresent nor SetVidPnSourceAddress was entered. Present returned887a0005
+and device reason887a0020.
+
+The durable KMD correlation is causal: Render accepted; Submit accepted;
+fence284; worker entry/exit present; no Notify/DPC bits; WorkerStatus8 equals
+AppleAgxBackendRuntimeResultQueueFailed. Wom1GdiHardwareReceipt confirms stage4,
+BackendSubmitResult8, no completion fence/interrupt/DPC. Thus device removal
+precedes Present and belongs to queue admission. Exact cleanup completed.
+Next discriminator records the existing backend runtime phase on QueueFailed:
+Ready means Run3d rejected atomically; Failed means RunTa rejected after staging.
+
 ## EXP706 — exact package720 bind retry before paging-wait client
 UTC preregistration 2026-09-21. Reuse immutable package720 archive SHA
 f6643bf150d2ec97a9e5e1bac83d270e6f0e912e9896dbf90063f9052fb18b48,
