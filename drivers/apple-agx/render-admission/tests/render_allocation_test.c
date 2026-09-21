@@ -52,6 +52,18 @@ static void test_invalid_create_does_not_mutate(void) {
 static void test_allocation_contains_bounded_render_view(void) {
   ADMISSION_ALLOCATION_DESCRIPTION description;
 
+  /* EXP709: the standard runtime's native batch targets its full 2560x1600
+     swap-chain allocation.  A valid native view is bounded by the allocation
+     description; it is not restricted to the old 16x16 host fixture. */
+  assert(AdmissionAllocationDescribe(2560u, 1600u, 4u, 3u, 21u, 0u,
+                                     &description));
+  assert(AdmissionAllocationContainsView(
+      &description, 2560u, 1600u, 10240u, 0xfa0000u));
+  assert(!AdmissionAllocationContainsView(
+      &description, 2561u, 1600u, 10240u, 0xfa0000u));
+  assert(!AdmissionAllocationContainsView(
+      &description, 2560u, 1600u, 10256u, 0xfa0000u));
+
   assert(AdmissionAllocationDescribe(16u, 256u, 4u, 3u, 21u, 0u,
                                      &description));
   assert(description.Pitch == 64u && description.Size == 0x4000u);
