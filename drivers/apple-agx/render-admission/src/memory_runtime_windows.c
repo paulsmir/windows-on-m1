@@ -706,8 +706,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeSeedPostDisplay(
     ADMISSION_CONTEXT *Context,
     const DXGK_DISPLAY_INFORMATION *PostDisplay) {
   ADMISSION_SCANOUT_MEMORY_VIEW destination;
-  DXGKARGCB_MAPFRAMEBUFFERPOINTER map;
-  DXGKARGCB_UNMAPFRAMEBUFFERPOINTER unmap;
+  PVOID sourceAddress = NULL;
   NTSTATUS status;
   NTSTATUS unmapStatus;
   if (Context == NULL || PostDisplay == NULL ||
@@ -729,29 +728,21 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeSeedPostDisplay(
       (ULONGLONG)PostDisplay->PhysicAddress.QuadPart)
     return STATUS_SUCCESS;
   if (!Context->InterfaceValid || Context->Interface.DeviceHandle == NULL ||
-      Context->Interface.DxgkCbMapFrameBufferPointer == NULL ||
-      Context->Interface.DxgkCbUnmapFrameBufferPointer == NULL)
+      Context->Interface.DxgkCbMapMemory == NULL ||
+      Context->Interface.DxgkCbUnmapMemory == NULL)
     return STATUS_NOT_SUPPORTED;
-  RtlZeroMemory(&map, sizeof(map));
-  map.PhysicalAdapterIndex = 0u;
-  map.Size = APPLE_AGX_SCANOUT_J313_SURFACE_SIZE;
-  map.Offset = 0u;
-  status = Context->Interface.DxgkCbMapFrameBufferPointer(
-      Context->Interface.DeviceHandle, &map);
-  if (!NT_SUCCESS(status) || map.pBaseAddress == NULL ||
-      map.Offset > map.Size ||
-      APPLE_AGX_SCANOUT_J313_SURFACE_SIZE > map.Size - map.Offset)
+  status = Context->Interface.DxgkCbMapMemory(
+      Context->Interface.DeviceHandle, PostDisplay->PhysicAddress,
+      (ULONG)APPLE_AGX_SCANOUT_J313_SURFACE_SIZE,
+      FALSE, FALSE, MmNonCached, &sourceAddress);
+  if (!NT_SUCCESS(status) || sourceAddress == NULL)
     return NT_SUCCESS(status) ? STATUS_INVALID_ADDRESS : status;
   RtlCopyMemory(
-      destination.CpuAddress,
-      (const UCHAR *)map.pBaseAddress + map.Offset,
+      destination.CpuAddress, sourceAddress,
       APPLE_AGX_SCANOUT_J313_SURFACE_SIZE);
   KeMemoryBarrier();
-  RtlZeroMemory(&unmap, sizeof(unmap));
-  unmap.PhysicalAdapterIndex = 0u;
-  unmap.pBaseAddress = map.pBaseAddress;
-  unmapStatus = Context->Interface.DxgkCbUnmapFrameBufferPointer(
-      Context->Interface.DeviceHandle, &unmap);
+  unmapStatus = Context->Interface.DxgkCbUnmapMemory(
+      Context->Interface.DeviceHandle, sourceAddress);
   return NT_SUCCESS(unmapStatus) ? STATUS_SUCCESS : unmapStatus;
 }
 
