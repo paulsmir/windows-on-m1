@@ -45897,3 +45897,30 @@ were removed after evidence. Ordinary recovery is one inert APPL0002 Code28
 with8 CPUs, SSH/NVMe/xHCI/input healthy and no AppleAgx package/service/module/
 files/signer. Verdict: VALIDATED for first standard hardware Present; not full
 desktop acceptance.
+
+## EXP720 — post-Present RunTa phase/fence discriminator
+Preregistered 2026-09-21. WHY THIS HYPOTHESIS: EXP719 completed the first
+standard Present and physical D589 latch, then a later DWM job reached Run3d but
+RunTa returned aggregate guard2 at fence293. Source defines exactly two causes:
+provider phase is not 3dStaged or PendingFence differs.
+
+WINDOWS CONTRACT: ordered DWM submissions must retain one exact active fence
+until queue admission completes. AGX/ASAHI CONTRACT: Run3d atomically stages the
+same job/fence consumed immediately by RunTa. TRANSLATION: diagnostic commit
+fa1fcea87b12d846424b1338a01f9b773ea949b6 records0x100 for phase and0x101 for
+fence in the existing runtime-result receipt. WHAT IS STILL UNKNOWN: which
+condition actual DWM violates.
+
+Package734 ARM64 build/analyze and standard client gates pass with0 warnings/
+errors. Source archive SHA c32b177cc63e0c4a55f8d814dbddc7b81e669483090ba249a30032d35f5fd584.
+Artifact `.local/experiments/EXP720-phase-fence-734.zip` SHA
+1baf15039d24bfc14401d6bc52127e168101ac64a7fc6de77097f58d2854983d.
+INF03f4ef2bf1696af36a0fe1889d500719fbaebba54f0108bee8be9abbdbcfeae8;
+SYS5b71a4279c549c85baa72f3eeaf0541036664d1467a165ce47e650797111b502;
+UMD5679842d2df4a3535570e9c66c9e6104016b32b07cccb4660b29cef239d431a4;
+CAT1027c66575d59a969e5666eb5a2a203c28beed706acbcc6fcf029344ebbda442;
+client d2ad706c9f02d9d48f03c0fca7a430a5dc8a8ca86a7eac3ef8f99bc68b83f562.
+Existing signer and immutable EXP584/406/recovery artifacts unchanged. Stage
+exact hashes, run one guarded standard client, allow DWM to continue briefly,
+collect the last guard2 subcode, then exact cleanup. Expected0x100 or0x101;
+failure is missing bounded receipt. One valid client, no replay.

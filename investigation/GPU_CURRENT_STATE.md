@@ -2695,3 +2695,14 @@ HARDWARE ROADMAP
 Presents plus a stable physical desktop image.
 [HW] Stable visually correct Air display with GPU driver remains unproven.
 POST-HARDWARE: longer desktop acceptance, broader D3D, OpenGL and CS1.6.
+
+## EXP720 package734 ready — post-Present phase/fence subguard
+Package734 gates PASS; archive SHA
+1baf15039d24bfc14401d6bc52127e168101ac64a7fc6de77097f58d2854983d.
+HARDWARE ROADMAP
+[PASS] First hardware Present; exact post-Present guard2 discriminator and
+ARM64 package/sign/hash gates.
+[NOW] One EXP720 Air run reads0x100 phase or0x101 fence after DWM continuation.
+[NEXT] Fix that exact ownership violation and validate a stable physical image.
+[HW] Stable visually correct Air display with GPU driver.
+POST-HARDWARE: longer acceptance, broader D3D, OpenGL and CS1.6.
