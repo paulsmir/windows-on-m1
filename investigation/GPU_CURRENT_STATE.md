@@ -1934,6 +1934,20 @@ preflight classification. Required by runtime maskFFFF; deterministic offline.
 [HW] First physical native draw/completion and successful standard DXGI Present.
 POST-HARDWARE: complete desktop composition and desktop acceptance.
 
+## EXP706 paging wait succeeds; Render remains current boundary
+Valid package720 run: MakeResident all9 E_PENDING fence0x1b61, monitored-fence
+wait S_OK, then sequence1 pfnRenderCb E_FAIL with no retained KMD receipt; paired
+Evict S_OK. Async residency wait is hardware-validated but not sufficient.
+Exact cleanup complete. Next add one post-wait aggregate residency receipt; no
+submission change or broader inventory.
+HARDWARE ROADMAP
+[PASS] Explicit residency and async paging wait on Air; paired Evict.
+[NOW] Confirm aggregate residency after wait immediately before Render.
+[NEXT] If resident, isolate context/runtime validation before KMD; if not, fix
+the exact residency synchronization contract.
+[HW] Successful KMD Render/Patch/Submit, AGX completion and DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
 ## EXP705 INCONCLUSIVE — package720 did not bind
 Full-owner preflight showed Inf=null, no service/SYS/UMD or start stages. The
 client was launched too early and used Microsoft Basic Render Driver; discard

@@ -45184,6 +45184,16 @@ fails, do not create the client task and stop this retry path. If all pass, run
 the standard client exactly once and collect paging wait, KMD and physical
 evidence under main-root .local/experiments/EXP706-live before exact cleanup.
 
+### EXP706 actual — paging wait PASS; Render still rejected
+Exact package720 bound with all required hashes/Code0/Running/Start12/Platform14
+and clean pre-client gate. One client: all9 handles initially NOTRESIDENT;
+MakeResident accepted all9 with E_PENDING/fence0x1b61; wait on sync object
+0x40000300 returned S_OK; sequence1 pfnRenderCb still returned E_FAIL before a
+retained KMD Render receipt. Paired Evict all9 S_OK after the ordered failure
+marker. Present887a0005/reason887a0020. This validates the async wait fix but
+does not reach KMD. Exact cleanup succeeded. Next discriminator is one aggregate
+QueryResidency after the successful paging wait, before unchanged Render.
+
 ### EXP704 actual result — MakeResident accepted asynchronously
 Exact package719, signatures, Code0/Start12/Platform14 and clean pre-client gate.
 One standard client (PID9880/TID9884) queried all9 valid handles as NOTRESIDENT.
