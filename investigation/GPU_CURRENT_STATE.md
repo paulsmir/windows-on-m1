@@ -1958,6 +1958,8 @@ POST-HARDWARE: complete desktop composition and desktop acceptance.
 
 
 
+
+
 ## EXP708 resident set proven; reliable KMD entry receipt NOW
 All9 are RESIDENTINGPUMEMORY after successful wait, then pfnRenderCb EFAIL with
 no KMD slot; Evict S_OK. Residency is closed. Cleanup complete. KMD Render guard
@@ -2526,4 +2528,13 @@ HARDWARE ROADMAP
 [NOW] Package bounded RunTa guard receipt; host provider tests PASS.
 [NEXT] One Air discriminator, then fix the exact RunTa invariant.
 [HW] Stable TA submission/completion followed by successful DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP715 package729 ready — exact RunTa guard
+Package729 gates PASS; archive SHAe016f1c0fed8946fafa156b5d196307af271463c84e81436c424810e1d53f1b6.
+HARDWARE ROADMAP
+[PASS] Run3d accepted; RunTa rejection proven.
+[NOW] One EXP715 client reads exact RunTa guard/runtime result.
+[NEXT] Fix that exact branch and immediately retest.
+[HW] Stable RunTa completion followed by successful DXGI Present.
 POST-HARDWARE: complete desktop composition and desktop acceptance.

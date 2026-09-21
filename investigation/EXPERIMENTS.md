@@ -45430,6 +45430,16 @@ prove Run3d staged successfully and RunTa rejected. Exact cleanup completed.
 Next diagnostic records the bounded RunTa rejection guard and queue-runtime
 result without changing queue behavior.
 
+## EXP715 — exact RunTa guard
+Preregistered 2026-09-21. Implementation e3fa0698 records only the RunTa guard
+and queue-runtime result. Single variable; one client, no replay. Package729
+ARM64/analysis/Universal/Inf2Cat/catalog PASS. INF bb7ec671d3c737ffd40e7fc6ec2935bfecd87d85fc971091506d27bd2e72b1c9;
+SYS01fceaeaaf93d80f205b8ba385e5ac8ce2bbd468d5db946433f2bd7b64a49273;
+UMD7fa22b79885c56b0ff66f8dd914a5aa2891c108be14050cb017b6a0359c48608;
+CAT8584fef0a5bc44dda66ce923f36d00e5d47eae6416ffb69ca73b058df9e4c6f4;
+client ceac743507301553568248fac8974039bf12d4cce8e320d7bff434a9174c67d3.
+Archive SHAe016f1c0fed8946fafa156b5d196307af271463c84e81436c424810e1d53f1b6.
+
 ### EXP713 actual — physical AGX completion PASS; Present still pre-KMD
 Exact package727 and one client completed without reset. Contrary to EXP712's
 QueueFailed, the durable receipt reached stage7 with BackendSubmitResult0,
