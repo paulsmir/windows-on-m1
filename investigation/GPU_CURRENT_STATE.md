@@ -1954,6 +1954,8 @@ POST-HARDWARE: complete desktop composition and desktop acceptance.
 
 
 
+
+
 ## EXP708 resident set proven; reliable KMD entry receipt NOW
 All9 are RESIDENTINGPUMEMORY after successful wait, then pfnRenderCb EFAIL with
 no KMD slot; Evict S_OK. Residency is closed. Cleanup complete. KMD Render guard
@@ -2501,4 +2503,14 @@ HARDWARE ROADMAP
 [NOW] Exact UMD Present entry/callback receipt; offline UMD/ARM64 gate.
 [NEXT] Fix the rejected Present callback contract and immediately retest.
 [HW] First DxgkDdiPresent entry and successful standard DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP714 package728 ready — UMD Present callback
+Diagnostic-only Present entry/callback trace passed ARM64 and package gates;
+archive SHA91b2d913e89adb9ff9e1bb0f9bbf47e7f4104cf345506c47c9a6d9e165fe7f40.
+HARDWARE ROADMAP
+[PASS] Physical AGX completion, interrupt and DPC.
+[NOW] One EXP714 client records exact UMD Present callback result.
+[NEXT] Fix the rejected callback invariant and immediately retest.
+[HW] First DxgkDdiPresent entry and successful DXGI Present.
 POST-HARDWARE: complete desktop composition and desktop acceptance.

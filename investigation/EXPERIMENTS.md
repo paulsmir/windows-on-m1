@@ -45431,6 +45431,19 @@ boundary is the UMD/runtime Present callback before DxgkDdiPresent. Exact cleanu
 completed. Next diagnostic records UMD Present entry scalars and exact
 pfnPresentCb HRESULT; no KMD or render behavior change.
 
+## EXP714 — exact UMD Present callback discriminator
+Preregistered 2026-09-21. Implementation f85899ef records Present entry scalars
+and exact pfnPresentCb HRESULT only. WHY THIS HYPOTHESIS: EXP713 proves physical
+AGX completion while StandardPresentTrace remains empty, so rejection is before
+DxgkDdiPresent. Package728 ARM64/analysis/Universal/Inf2Cat/catalog PASS. INF
+56e226241c4b4f4158bad128e157cf9681e6f2ddcab04d3ee26bf2c8f14a78d1; SYS
+c255da5f06f3cd3d2e7654eed873b515ad52025642eaa8b859e40c74e84fecf4;
+UMDd1a17202a3a70e1f4a39cb52fa4aa5f85948dc3fe7590a7e84a5908b2802cf3e;
+CATef99826b1caf1a303fcfdd8de860188a2ac5d0b5939a1646c6a9ffd688a2a5d4;
+client4cd53af9d347ff173b744867da5c98c99f09d0c573b19ba4e7ae585a690ba407.
+Archive SHA91b2d913e89adb9ff9e1bb0f9bbf47e7f4104cf345506c47c9a6d9e165fe7f40.
+One exact client, no replay; evidence then exact cleanup.
+
 ## EXP706 — exact package720 bind retry before paging-wait client
 UTC preregistration 2026-09-21. Reuse immutable package720 archive SHA
 f6643bf150d2ec97a9e5e1bac83d270e6f0e912e9896dbf90063f9052fb18b48,
