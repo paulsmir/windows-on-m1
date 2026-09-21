@@ -45440,6 +45440,14 @@ CAT8584fef0a5bc44dda66ce923f36d00e5d47eae6416ffb69ca73b058df9e4c6f4;
 client ceac743507301553568248fac8974039bf12d4cce8e320d7bff434a9174c67d3.
 Archive SHAe016f1c0fed8946fafa156b5d196307af271463c84e81436c424810e1d53f1b6.
 
+### EXP715 actual — successful queues/completion; device removed before UMD Present
+Exact package729 and one client reached GDI receipt stage7: backend result0,
+fence283, NotifyInterrupt1 and NotifyDpc1. RunTa guard/runtime result are both0.
+Present still returned887a0005/reason887a0020; UMD present-entry/callback and
+KMD Present events remained absent. Exact cleanup completed. Current boundary is
+the scheduler/device-health transition after successful completion/DPC and
+before DXGI dispatches the UMD Present DDI.
+
 ### EXP713 actual — physical AGX completion PASS; Present still pre-KMD
 Exact package727 and one client completed without reset. Contrary to EXP712's
 QueueFailed, the durable receipt reached stage7 with BackendSubmitResult0,

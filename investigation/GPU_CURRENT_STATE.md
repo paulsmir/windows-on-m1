@@ -1960,6 +1960,8 @@ POST-HARDWARE: complete desktop composition and desktop acceptance.
 
 
 
+
+
 ## EXP708 resident set proven; reliable KMD entry receipt NOW
 All9 are RESIDENTINGPUMEMORY after successful wait, then pfnRenderCb EFAIL with
 no KMD slot; Evict S_OK. Residency is closed. Cleanup complete. KMD Render guard
@@ -2537,4 +2539,16 @@ HARDWARE ROADMAP
 [NOW] One EXP715 client reads exact RunTa guard/runtime result.
 [NEXT] Fix that exact branch and immediately retest.
 [HW] Stable RunTa completion followed by successful DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP715 confirms successful RunTa/completion; post-DPC health is NOW
+Backend result0, RunTa guard0, runtime result0, fence283, NotifyInterrupt1 and
+NotifyDpc1. Present remains pre-UMD/pre-KMD with device reason887a0020. Exact
+cleanup complete. Next record scheduler fault/current-fence/backend/output
+state immediately after DPC to find the owner that marks the device removed.
+HARDWARE ROADMAP
+[PASS] Render, Run3d, RunTa, physical AGX completion, interrupt and DPC.
+[NOW] Post-DPC scheduler/device-health receipt; fully offline instrumentation.
+[NEXT] Fix the exact fault transition, then standard Present entry.
+[HW] First UMD/KMD Present entry and successful DXGI Present.
 POST-HARDWARE: complete desktop composition and desktop acceptance.
