@@ -2735,6 +2735,22 @@ HARDWARE ROADMAP
 [HW] Stable correct Air picture remains pending.
 POST-HARDWARE: optimize full copy and longer acceptance, broader D3D/OpenGL/CS1.6.
 
+## EXP724 full copy succeeds; multipass completion is NOW
+Package738 reaches full Apple admission and copies exactly16384000bytes at
+2560x1600 with transfer status0, interrupt1 and DPC1. DXGI then removes the
+device because the synthetic one-rect command left MultipassOffset1 while the
+original DWM dirty list contained more entries.
+
+Implementationda84569e marks the full-primary replacement atomic and advances
+MultipassOffset to the original SubRectCnt. Two-rect callback RED observed1;
+GREEN observes2. Copy contents and physical execution are unchanged.
+HARDWARE ROADMAP
+[PASS] Full composed frame copied successfully into local primary.
+[NOW] ARM64/package gate for coherent multipass completion.
+[NEXT] Reliable Air run; verify Present success and nonblack stable screenshots.
+[HW] Stable correct Air picture remains pending.
+POST-HARDWARE: optimize copy cost and longer acceptance, broader D3D/OpenGL/CS1.6.
+
 ## EXP723 package737 ready — ordinary display-memory map
 Package737 gates PASS; archive SHA
 2acd84573f9bdd8e67809b7e8d3a103211d87d6a7443bfee9398bbf84c03a050.
