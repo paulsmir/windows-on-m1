@@ -165,17 +165,17 @@ VOID AdmissionDdiDpcRoutine(
     PVOID MiniportDeviceContext) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
   if (context != NULL) {
+    ULONG renderFence = (ULONG)InterlockedCompareExchange(
+        &context->RenderDpcFence, 0, 0);
     InterlockedIncrement(&context->DpcCount);
     AdmissionPagingDpc(context);
     if (context->InterfaceValid &&
         context->Interface.DxgkCbNotifyDpc != NULL)
       context->Interface.DxgkCbNotifyDpc(
           context->Interface.DeviceHandle);
-    AdmissionRenderCorrelationDpcWindows(
-        context,
-        (ULONG)InterlockedCompareExchange(&context->RenderDpcFence, 0, 0),
-        KeQueryInterruptTime());
     AdmissionSchedulerDpc(context);
+    AdmissionRenderCorrelationDpcWindows(
+        context, renderFence, KeQueryInterruptTime());
   }
 }
 

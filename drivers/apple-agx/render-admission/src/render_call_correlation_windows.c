@@ -47,6 +47,7 @@ Restart:
     KeReleaseSpinLock(&context->RenderCorrelationLock, oldIrql);
 
     status = AdmissionRenderCorrelationExportSnapshot(context, &snapshot);
+    AdmissionFlushGdiReceipt(context);
     KeAcquireSpinLock(&context->RenderCorrelationLock, &oldIrql);
     (void)AdmissionRenderCorrelationMarkExport(
         &context->RenderCorrelation, generation, (ULONG)status,
