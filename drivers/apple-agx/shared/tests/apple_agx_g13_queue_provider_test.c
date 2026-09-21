@@ -1,5 +1,6 @@
 #include "apple_agx_g13_queue_provider.h"
 #include <assert.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -223,7 +224,7 @@ static void TestAtomicStagingAndOrder(void) {
   assert(f.SendOrder[0]==(unsigned int)AppleAgxG13Queue3d);
   assert(f.SendOrder[1]==(unsigned int)AppleAgxG13QueueTa);
 }
-static void TestComputeRejectReportsExactInvariant(void) {
+static void TestComputeRejectCapturesOperandsAcrossRollback(void) {
   FIXTURE f;
   APPLE_AGX_BACKEND_JOB_IMAGE mismatch;
   InitMode(&f, 1);
@@ -235,6 +236,71 @@ static void TestComputeRejectReportsExactInvariant(void) {
   assert(f.Provider.LastSubmitGuard == AppleAgxG13SubmitGuardCompute);
   assert(f.Provider.LastSubmitRuntimeResult ==
          AppleAgxG13ComputeGuardEvent);
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.Valid);
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.ContextIdentity ==
+         (APPLE_AGX_BACKEND_U64)(unsigned long long)(uintptr_t)&f.Provider);
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.ProviderIdentity ==
+         (APPLE_AGX_BACKEND_U64)(unsigned long long)(uintptr_t)&f.Provider);
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.JobIdentity ==
+         (APPLE_AGX_BACKEND_U64)(unsigned long long)(uintptr_t)&mismatch);
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.Fence == 41u);
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.PendingFence == 41u);
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.ProviderPhase ==
+         AppleAgxG13QueueProvider3dStaged);
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.Guard ==
+         AppleAgxG13SubmitGuardCompute);
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.Subguard ==
+         AppleAgxG13ComputeGuardEvent);
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.HasCompute);
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.WorkAddressCount == 1u);
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.JobEvent ==
+         mismatch.ComputeEvent);
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.JobExpectedStamp ==
+         mismatch.ComputeExpectedStamp);
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.JobExpectedDonePointer ==
+         mismatch.ComputeExpectedDonePointer);
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.WorkAddress ==
+         mismatch.ComputeWorkAddresses[0]);
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.ConfigEvent ==
+         f.Config.Compute.EventNumber);
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.QueueInfoGpuAddress ==
+         f.Config.Compute.QueueInfoGpuAddress);
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.CpuWritePointer ==
+         f.ComputeWrite);
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.ExpectedNextDone == 1u);
+  assert(f.Io.Queues.Stop(f.Io.Context, 41u));
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.Valid);
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.JobIdentity ==
+         (APPLE_AGX_BACKEND_U64)(unsigned long long)(uintptr_t)&mismatch);
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.JobEvent ==
+         mismatch.ComputeEvent);
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.ConfigEvent ==
+         f.Config.Compute.EventNumber);
+}
+
+static void TestComputeSuccessDoesNotCreateFailureDiagnostic(void) {
+  FIXTURE f;
+  InitMode(&f, 1);
+  assert(f.Io.Queues.Create(f.Io.Context));
+  assert(f.Io.Queues.Run3d(f.Io.Context, &f.Job, 41u));
+  assert(f.Io.Queues.RunTa(f.Io.Context, &f.Job, 41u));
+  assert(!f.Provider.ComputeIdentityDiagnostic.RunTa.Valid);
+}
+
+static void TestComputeSuccessClearsPriorFailureDiagnostic(void) {
+  FIXTURE f;
+  APPLE_AGX_BACKEND_JOB_IMAGE mismatch;
+  InitMode(&f, 1);
+  assert(f.Io.Queues.Create(f.Io.Context));
+  assert(f.Io.Queues.Run3d(f.Io.Context, &f.Job, 41u));
+  mismatch = f.Job;
+  ++mismatch.ComputeEvent;
+  assert(!f.Io.Queues.RunTa(f.Io.Context, &mismatch, 41u));
+  assert(f.Provider.ComputeIdentityDiagnostic.RunTa.Valid);
+  assert(f.Io.Queues.Stop(f.Io.Context, 41u));
+  assert(f.Io.Queues.Run3d(f.Io.Context, &f.Job, 41u));
+  assert(f.Io.Queues.RunTa(f.Io.Context, &f.Job, 41u));
+  assert(!f.Provider.ComputeIdentityDiagnostic.RunTa.Valid);
 }
 static void TestPhaseFenceRejectReportsExactInvariant(void) {
   FIXTURE f;
@@ -485,7 +551,9 @@ static void TestComputeCompletesBeforeRenderPublication(void) {
   Complete(&f);
 }
 int main(void) {
-  TestAtomicStagingAndOrder(); TestComputeRejectReportsExactInvariant();
+  TestAtomicStagingAndOrder(); TestComputeRejectCapturesOperandsAcrossRollback();
+  TestComputeSuccessDoesNotCreateFailureDiagnostic();
+  TestComputeSuccessClearsPriorFailureDiagnostic();
   TestPhaseFenceRejectReportsExactInvariant();
   TestExactCompletion(); TestFailClosedQuiesce();
   TestIngestFailureNamesDecoderOwner();

@@ -1,4 +1,5 @@
 #include "apple_agx_g13_queue_provider.h"
+#include <stdint.h>
 
 #define APPLE_AGX_G13_PROVIDER_NULL ((void *)0)
 #define APPLE_AGX_G13_TA_WORK_ROOT_INDEX 1u
@@ -55,6 +56,50 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderExpectedDone(
                  next == Expected
              ? APPLE_AGX_BACKEND_TRUE
              : APPLE_AGX_BACKEND_FALSE;
+}
+
+static void AppleAgxG13ProviderCaptureComputeIdentity(
+    APPLE_AGX_G13_QUEUE_PROVIDER *Provider, void *Context,
+    const APPLE_AGX_BACKEND_JOB_IMAGE *Job, APPLE_AGX_BACKEND_U32 Fence,
+    APPLE_AGX_G13_COMPUTE_IDENTITY_SNAPSHOT *Snapshot) {
+  APPLE_AGX_BACKEND_U32 current = 0u;
+  APPLE_AGX_BACKEND_BOOL current_valid = APPLE_AGX_BACKEND_FALSE;
+  AppleAgxG13ProviderZero(Snapshot,
+                          (APPLE_AGX_BACKEND_U32)sizeof(*Snapshot));
+  Snapshot->ContextIdentity = (APPLE_AGX_BACKEND_U64)(unsigned long long)
+      (unsigned long long)(uintptr_t)Context;
+  Snapshot->ProviderIdentity = (APPLE_AGX_BACKEND_U64)(unsigned long long)
+      (unsigned long long)(uintptr_t)Provider;
+  Snapshot->JobIdentity = (APPLE_AGX_BACKEND_U64)(unsigned long long)
+      (unsigned long long)(uintptr_t)Job;
+  Snapshot->Fence = Fence;
+  Snapshot->PendingFence = Provider->PendingFence;
+  Snapshot->ProviderPhase = (APPLE_AGX_BACKEND_U32)Provider->Phase;
+  Snapshot->HasCompute = Provider->Config.HasCompute;
+  if (Job != APPLE_AGX_G13_PROVIDER_NULL) {
+    Snapshot->WorkAddressCount = Job->ComputeWorkAddressCount;
+    Snapshot->JobEvent = Job->ComputeEvent;
+    Snapshot->JobExpectedStamp = Job->ComputeExpectedStamp;
+    Snapshot->JobExpectedDonePointer = Job->ComputeExpectedDonePointer;
+    Snapshot->WorkAddress = Job->ComputeWorkAddresses[0];
+  }
+  Snapshot->ConfigEvent = Provider->Config.Compute.EventNumber;
+  Snapshot->QueueInfoGpuAddress = Provider->Config.Compute.QueueInfoGpuAddress;
+  if (Provider->Config.Compute.CpuWritePointer != APPLE_AGX_G13_PROVIDER_NULL &&
+      Provider->RuntimeIo.ReadU32 != APPLE_AGX_G13_PROVIDER_NULL &&
+      Provider->RuntimeIo.ReadU32(Provider->RuntimeIo.Context,
+                                  Provider->Config.Compute.CpuWritePointer,
+                                  &current)) {
+    Snapshot->CpuWritePointer = current;
+    current_valid = current < Provider->Config.Compute.RingCapacity
+                        ? APPLE_AGX_BACKEND_TRUE
+                        : APPLE_AGX_BACKEND_FALSE;
+  }
+  if (current_valid) {
+    Snapshot->ExpectedNextDone = current + 1u;
+    if (Snapshot->ExpectedNextDone >= Provider->Config.Compute.RingCapacity)
+      Snapshot->ExpectedNextDone = 0u;
+  }
 }
 
 static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderAddressesValid(
@@ -290,6 +335,9 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunTa(
   if (provider == APPLE_AGX_G13_PROVIDER_NULL) return APPLE_AGX_BACKEND_FALSE;
   provider->LastSubmitGuard=AppleAgxG13SubmitGuardNone;
   provider->LastSubmitRuntimeResult=0u;
+  AppleAgxG13ProviderZero(
+      &provider->ComputeIdentityDiagnostic.RunTa,
+      (APPLE_AGX_BACKEND_U32)sizeof(provider->ComputeIdentityDiagnostic.RunTa));
 #define SUBMIT_REJECT(g) do { provider->LastSubmitGuard=(g); return APPLE_AGX_BACKEND_FALSE; } while(0)
   if (Job == APPLE_AGX_G13_PROVIDER_NULL) SUBMIT_REJECT(AppleAgxG13SubmitGuardArguments);
   if (provider->Phase != AppleAgxG13QueueProvider3dStaged) {
@@ -304,22 +352,28 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunTa(
   if (!AppleAgxG13Provider3dValid(provider, Job)) SUBMIT_REJECT(AppleAgxG13SubmitGuardD3Valid);
   if (!AppleAgxG13ProviderTaValid(provider, Job)) SUBMIT_REJECT(AppleAgxG13SubmitGuardTaValid);
   if (Job->ComputeWorkAddressCount != 0u) {
-    if (!provider->Config.HasCompute)
-      provider->LastSubmitRuntimeResult =
-          AppleAgxG13ComputeGuardUnavailable;
-    else if (Job->ComputeWorkAddressCount != 1u)
-      provider->LastSubmitRuntimeResult = AppleAgxG13ComputeGuardCount;
-    else if (Job->ComputeEvent != provider->Config.Compute.EventNumber)
-      provider->LastSubmitRuntimeResult = AppleAgxG13ComputeGuardEvent;
-    else if (!Job->ComputeExpectedStamp)
-      provider->LastSubmitRuntimeResult = AppleAgxG13ComputeGuardStamp;
-    else if (!AppleAgxG13ProviderExpectedDone(
-                 provider, &provider->Config.Compute, 1u,
-                 Job->ComputeExpectedDonePointer))
-      provider->LastSubmitRuntimeResult =
-          AppleAgxG13ComputeGuardDonePointer;
-    if (provider->LastSubmitRuntimeResult != AppleAgxG13ComputeGuardNone)
+    APPLE_AGX_G13_COMPUTE_IDENTITY_SNAPSHOT compute;
+    APPLE_AGX_BACKEND_U32 subguard = AppleAgxG13ComputeGuardNone;
+    AppleAgxG13ProviderCaptureComputeIdentity(provider, Context, Job, Fence,
+                                               &compute);
+    if (!compute.HasCompute)
+      subguard = AppleAgxG13ComputeGuardUnavailable;
+    else if (compute.WorkAddressCount != 1u)
+      subguard = AppleAgxG13ComputeGuardCount;
+    else if (compute.JobEvent != compute.ConfigEvent)
+      subguard = AppleAgxG13ComputeGuardEvent;
+    else if (!compute.JobExpectedStamp)
+      subguard = AppleAgxG13ComputeGuardStamp;
+    else if (compute.JobExpectedDonePointer != compute.ExpectedNextDone)
+      subguard = AppleAgxG13ComputeGuardDonePointer;
+    if (subguard != AppleAgxG13ComputeGuardNone) {
+      compute.Guard = AppleAgxG13SubmitGuardCompute;
+      compute.Subguard = subguard;
+      compute.Valid = APPLE_AGX_BACKEND_TRUE;
+      provider->ComputeIdentityDiagnostic.RunTa = compute;
+      provider->LastSubmitRuntimeResult = subguard;
       SUBMIT_REJECT(AppleAgxG13SubmitGuardCompute);
+    }
   }
   AppleAgxG13ProviderZero(&submission,
                           (APPLE_AGX_BACKEND_U32)sizeof(submission));

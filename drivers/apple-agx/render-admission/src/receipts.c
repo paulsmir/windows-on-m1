@@ -619,6 +619,34 @@ _Use_decl_annotations_ VOID AdmissionRecordQueueFaultSnapshot(
   }
 }
 
+_Use_decl_annotations_ VOID AdmissionRecordComputeIdentityDiagnostic(
+    ADMISSION_CONTEXT *Context,
+    const APPLE_AGX_G13_COMPUTE_IDENTITY_DIAGNOSTIC *Diagnostic) {
+  HANDLE key = NULL;
+  OBJECT_ATTRIBUTES attributes;
+  UNICODE_STRING servicePath;
+  if (Context == NULL || Diagnostic == NULL ||
+      (!Diagnostic->Build.Valid && !Diagnostic->RunTa.Valid) ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  if (Context->PhysicalDeviceObject != NULL &&
+      NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
+    WriteBinary(key, L"Wom1ComputeIdentityDiagnostic", Diagnostic,
+                sizeof(*Diagnostic));
+    ZwClose(key);
+  }
+  RtlInitUnicodeString(&servicePath,
+      L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\AppleAgxAdmission");
+  InitializeObjectAttributes(&attributes,
+      OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+  if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
+    WriteBinary(key, L"Wom1ComputeIdentityDiagnostic", Diagnostic,
+                sizeof(*Diagnostic));
+    ZwClose(key);
+  }
+}
+
 
 #endif
 

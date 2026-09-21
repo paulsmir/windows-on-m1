@@ -816,6 +816,9 @@ VOID AdmissionRecordEventDrain(_In_opt_ ADMISSION_CONTEXT *Context,
 _IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionRecordQueueFaultSnapshot(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_QUEUE_FAULT_SNAPSHOT *Snapshot);
+_IRQL_requires_(PASSIVE_LEVEL)
+VOID AdmissionRecordComputeIdentityDiagnostic(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ const APPLE_AGX_G13_COMPUTE_IDENTITY_DIAGNOSTIC *Diagnostic);
 VOID AdmissionGdiReceiptBeginWindows(_In_ ADMISSION_CONTEXT *Context,
     ULONGLONG ContextToken, ULONG Opcode, ULONG Color, ULONG RectCount,
     ULONG DmaBytes);
@@ -1000,6 +1003,11 @@ VOID AdmissionFlushGdiReceipt(_In_ ADMISSION_CONTEXT *Context);
   do {                                                                         \
     (void)(Context);                                                           \
     (void)(Snapshot);                                                          \
+  } while (0)
+#define AdmissionRecordComputeIdentityDiagnostic(Context, Diagnostic)          \
+  do {                                                                         \
+    (void)(Context);                                                           \
+    (void)(Diagnostic);                                                        \
   } while (0)
 #define AdmissionGdiReceiptBeginWindows(Context, ContextToken, Opcode, Color, RectCount, DmaBytes) ((void)0)
 #define AdmissionGdiReceiptPatchWindows(Context, ContextToken, Fence, DestinationGpuVa, DestinationPhysical, DestinationBytes) ((void)0)

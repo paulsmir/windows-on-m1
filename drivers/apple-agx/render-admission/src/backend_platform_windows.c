@@ -2010,6 +2010,30 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     else RtlZeroMemory(&runtime->NativeBindings,sizeof(runtime->NativeBindings));
 #endif
   }
+  {
+    APPLE_AGX_G13_COMPUTE_IDENTITY_BUILD_SNAPSHOT *build =
+        &runtime->Provider.QueueProvider.ComputeIdentityDiagnostic.Build;
+    RtlZeroMemory(build, sizeof(*build));
+    build->Valid = APPLE_AGX_BACKEND_TRUE;
+    build->ContextIdentity = (APPLE_AGX_BACKEND_U64)(ULONG_PTR)runtime;
+    build->JobIdentity = (APPLE_AGX_BACKEND_U64)(ULONG_PTR)Job;
+    build->ExpectedProviderIdentity =
+        (APPLE_AGX_BACKEND_U64)(ULONG_PTR)&runtime->Provider.QueueProvider;
+    build->Fence = Submission->Submission.Fence;
+    build->CommandVersion = dynamic ? dynamicView.Bindings->CommandVersion : 0u;
+    build->MixedBranch = dynamic &&
+        dynamicView.Bindings->CommandVersion ==
+            APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH
+        ? APPLE_AGX_BACKEND_TRUE
+        : APPLE_AGX_BACKEND_FALSE;
+    build->WorkAddressCount = Job->ComputeWorkAddressCount;
+    build->JobEvent = Job->ComputeEvent;
+    build->JobExpectedStamp = Job->ComputeExpectedStamp;
+    build->JobExpectedDonePointer = Job->ComputeExpectedDonePointer;
+    build->WorkAddress = Job->ComputeWorkAddresses[0];
+    build->ConfigEvent =
+        runtime->Provider.QueueProvider.Config.Compute.EventNumber;
+  }
   return APPLE_AGX_BACKEND_TRUE;
 
 BuildFailure:
@@ -2829,6 +2853,8 @@ static VOID AdmissionPlatformWorker(
       result == AppleAgxBackendRuntimeResultOk
           ? &runtime->Backend.PendingJob : NULL);
   if (result != AppleAgxBackendRuntimeResultOk) {
+    AdmissionRecordComputeIdentityDiagnostic(
+        adapter, &runtime->Provider.QueueProvider.ComputeIdentityDiagnostic);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
     APPLE_AGX_G13_QUEUE_PROGRESS failedProgress;
     RtlZeroMemory(&failedProgress, sizeof(failedProgress));
