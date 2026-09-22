@@ -1,5 +1,6 @@
 #ifndef APPLE_AGX_RENDER_DYNAMIC_OVERLAY_H
 #define APPLE_AGX_RENDER_DYNAMIC_OVERLAY_H
+#include "apple_agx_retained_root_abi.h"
 
 #include "apple_agx_dynamic_job.h"
 #include "render_backend_image.h"
@@ -182,6 +183,26 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteEncoder(
     const ADMISSION_DYNAMIC_OVERLAY_PLAN *Plan,
     APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
     APPLE_AGX_U32 ActiveObjectCount);
+static __inline APPLE_AGX_BOOL AdmissionDynamicOverlaySurfaceValid(
+    const ADMISSION_DYNAMIC_OVERLAY_BINDINGS *Bindings) {
+  APPLE_AGX_U32 pixelBytes;
+  APPLE_AGX_U64 minimumBytes;
+  /* Pinned D3D10 axis limits; tiled padding belongs to DestinationBytes.
+   * Keep both native output binding and root routing on the same contract. */
+  if(!Bindings || !Bindings->SurfaceWidth || !Bindings->SurfaceHeight ||
+      Bindings->SurfaceWidth>8192u || Bindings->SurfaceHeight>8192u ||
+      Bindings->SurfacePitch%Bindings->SurfaceWidth)
+    return APPLE_AGX_FALSE;
+  pixelBytes=Bindings->SurfacePitch/Bindings->SurfaceWidth;
+  if(pixelBytes!=1u && pixelBytes!=2u && pixelBytes!=4u &&
+      pixelBytes!=8u && pixelBytes!=16u)
+    return APPLE_AGX_FALSE;
+  minimumBytes=(APPLE_AGX_U64)Bindings->SurfacePitch*Bindings->SurfaceHeight;
+  return Bindings->DestinationBytes>=1024u &&
+      minimumBytes<=Bindings->DestinationBytes &&
+      Bindings->DestinationBytes<=AGX_RR_SHARED_ARENA_BYTES;
+}
+
 ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteNative(
     const ADMISSION_DYNAMIC_OVERLAY_PLAN *,
     const ADMISSION_DYNAMIC_OVERLAY_BINDINGS *,

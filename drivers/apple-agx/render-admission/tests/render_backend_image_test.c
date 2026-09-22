@@ -515,6 +515,21 @@ static void test_native_binding_preserves_logical_attachment(void) {
            output.AllocationBytes==0xfa0000);
     assert(AdmissionBackendImageReleaseSubmission(&image,packet.Fence));
   }
+  packet.Fence=63;packet.DestinationBytes=0x400000;
+  native.SurfaceWidth=1024;native.SurfaceHeight=1024;
+  native.SurfacePitch=4096;native.DestinationBytes=packet.DestinationBytes;
+  assert(AdmissionBackendImageBindNativeSubmission(&image,&packet,target,&native,&binding));
+  assert(image.NativeWidth==1024 && image.NativeHeight==1024 && image.NativePitch==4096);
+  assert(AdmissionBackendImageReleaseSubmission(&image,packet.Fence));
+  native.SurfacePitch=4095;
+  assert(!AdmissionBackendImageBindNativeSubmission(&image,&packet,target,&native,&binding));
+  native.SurfacePitch=3072; /* No admitted native color format has three bytes per pixel. */
+  assert(!AdmissionBackendImageBindNativeSubmission(&image,&packet,target,&native,&binding));
+  native.SurfacePitch=4096;native.SurfaceWidth=0;
+  assert(!AdmissionBackendImageBindNativeSubmission(&image,&packet,target,&native,&binding));
+  native.SurfaceWidth=1024;native.DestinationBytes=packet.DestinationBytes=0x3fffff;
+  assert(!AdmissionBackendImageBindNativeSubmission(&image,&packet,target,&native,&binding));
+  native.DestinationBytes=0x400000;
   packet.DestinationBytes=0x2000;
   assert(!AdmissionBackendImageBindNativeSubmission(&image,&packet,target,&native,&binding));
   free(target); free(arena);

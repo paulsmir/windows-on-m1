@@ -244,22 +244,11 @@ APPLE_AGX_BOOL AdmissionBackendImageBindNativeSubmission(
   APPLE_AGX_EXP208_RELOCATION_OBJECT saved;
   APPLE_AGX_EXP208_RELOCATION_OBJECT *output;
   APPLE_AGX_EXP208_GDI_BINDING candidate;
-  APPLE_AGX_BOOL qualification;
-  APPLE_AGX_BOOL desktop;
-  if(!Native) return APPLE_AGX_FALSE;
-  qualification=Native->SurfaceWidth==16 && Native->SurfaceHeight==16 &&
-      (Native->SurfacePitch==16 || Native->SurfacePitch==32 ||
-       Native->SurfacePitch==64 || Native->SurfacePitch==128 ||
-       Native->SurfacePitch==256) &&
-      Native->DestinationBytes>=1024 &&
-      Native->DestinationBytes<=0x4000u;
-  desktop=Native->SurfaceWidth==2560 && Native->SurfaceHeight==1600 &&
-      Native->SurfacePitch==10240 && Native->DestinationBytes==0xfa0000ULL;
+  if(!AdmissionDynamicOverlaySurfaceValid(Native)) return APPLE_AGX_FALSE;
   if(!Image || !Packet || !DestinationCpuAddress || !Native || !Binding ||
       Image->Ready!=APPLE_AGX_TRUE || Image->BoundFence || Image->NativeBound ||
       !Packet->Fence || !Packet->DestinationGpuVa || !Packet->DestinationPhysical ||
       (!APPLE_AGX_WIN32_COMMAND_IS_NATIVE(Native->CommandVersion)) ||
-      (!qualification && !desktop) ||
       Native->DestinationBytes!=Packet->DestinationBytes ||
       Native->DestinationBytes>0xffffffffULL ||
       Packet->DestinationGpuVa>=(1ULL<<40) ||

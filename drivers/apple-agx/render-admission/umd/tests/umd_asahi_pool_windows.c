@@ -1,3 +1,4 @@
+#include "apple_agx_retained_root_abi.h"
 #include "umd_asahi_owner.h"
 static ADMISSION_UMD_DEVICE PoolDevice;
 static ADMISSION_UMD_ADAPTER PoolAdapter;
@@ -36,7 +37,7 @@ static HRESULT APIENTRY PoolAllocate(HANDLE h,D3DDDICB_ALLOCATE *a) {
     return S_OK;
   }
   const ADMISSION_WIN32_ALLOCATION_CREATE *desc=a->pAllocationInfo->pPrivateDriverData;
-  if(a->NumAllocations!=1 || !desc->Allocation.Size || desc->Allocation.Size>0x100000 ||
+  if(a->NumAllocations!=1 || !desc->Allocation.Size || desc->Allocation.Size>AGX_RR_SHARED_ARENA_BYTES ||
      (desc->Allocation.Size&0x3fff) || desc->ClassId<AgxWin32BufferClassGeneral ||
      desc->ClassId>AgxWin32BufferClassEncoder) return E_INVALIDARG;
   unsigned slot;
@@ -644,7 +645,8 @@ static unsigned TestAsahiNativePoolOwner(void) {
   for(unsigned i=0;i<3;++i) {
     PoolAdapter.DeviceInfo.Classes[i].ClassId=i+1;
     PoolAdapter.DeviceInfo.Classes[i].MinimumAlignment=0x4000;
-    PoolAdapter.DeviceInfo.Classes[i].MaximumBytes=0x100000;
+    PoolAdapter.DeviceInfo.Classes[i].MaximumBytes=i==2 ?
+        AGX_RR_COMMAND_ARENA_BYTES : AGX_RR_SHARED_ARENA_BYTES;
     PoolAdapter.DeviceInfo.Classes[i].Flags=i==0?0xf:0x6;
   }
   PoolCallbacks.pfnAllocateCb=PoolAllocate; PoolCallbacks.pfnLockCb=PoolLock;

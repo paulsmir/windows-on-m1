@@ -1818,11 +1818,8 @@ AgxD3d10ResourceWithinRequiredLimits(
           pCreateResource->Format == DXGI_FORMAT_R8G8B8A8_TYPELESS) &&
          pCreateResource->MipLevels == 1 && pCreateResource->ArraySize == 1 && mip &&
          mip[0].TexelWidth > 0 && mip[0].TexelHeight > 0 && mip[0].TexelDepth == 1 &&
-         mip[0].TexelWidth <= 4096 && mip[0].TexelHeight <= 4096 &&
-         ((uint64_t)mip[0].TexelWidth * mip[0].TexelHeight *
-          (pCreateResource->Format == DXGI_FORMAT_R8G8B8A8_TYPELESS ? 4u :
-           AgxD3d10ColorBytes(pCreateResource->Format))) <=
-            0x100000 &&
+         /* AgxD3d10ResourceWithinRequiredLimits already checked dimensions,
+          * complete byte size and overflow against the pinned D3D10 limits. */
          pCreateResource->SampleDesc.Count == 1 && pCreateResource->SampleDesc.Quality == 0 &&
          pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT && pCreateResource->MapFlags == 0 &&
          (pCreateResource->BindFlags == D3D10_DDI_BIND_RENDER_TARGET ||
@@ -1992,8 +1989,11 @@ AgxD3d10ResourceWithinRequiredLimits(
          (source->bind_flags&D3D10_DDI_BIND_SHADER_RESOURCE)&&
          sample!=PIPE_FORMAT_NONE&&dst->target==PIPE_TEXTURE_2D&&
          (src->target==PIPE_TEXTURE_2D||src->target==PIPE_TEXTURE_2D_ARRAY)&&
-         dst->width0==16&&dst->height0==16&&
-         sampleWidth&&sampleWidth<=16&&sampleHeight&&sampleHeight<=16&&
+         dst->width0&&dst->height0&&
+         dst->width0<=D3D10_REQ_TEXTURE2D_U_OR_V_DIMENSION&&
+         dst->height0<=D3D10_REQ_TEXTURE2D_U_OR_V_DIMENSION&&
+         sampleWidth&&sampleWidth<=D3D10_REQ_TEXTURE2D_U_OR_V_DIMENSION&&
+         sampleHeight&&sampleHeight<=D3D10_REQ_TEXTURE2D_U_OR_V_DIMENSION&&
          sampleLevel<=src->last_level&&sampleLayer<src->array_size&&
          dst->depth0==1&&src->depth0==1&&
          !dst->last_level&&dst->array_size==1&&
@@ -2006,7 +2006,8 @@ AgxD3d10ResourceWithinRequiredLimits(
       info.src.box.z=sampleLayer;info.src.box.width=sampleWidth;
       info.src.box.height=sampleHeight;info.src.box.depth=1;
       info.dst.resource=dst;info.dst.level=0;info.dst.format=dst->format;
-      info.dst.box.width=info.dst.box.height=16;info.dst.box.depth=1;
+      info.dst.box.width=dst->width0;info.dst.box.height=dst->height0;
+      info.dst.box.depth=1;
       info.mask=PIPE_MASK_RGBA;info.filter=PIPE_TEX_FILTER_NEAREST;
       device->pipe->blit(device->pipe,&info);
       device->pipe->flush(device->pipe,NULL,0);

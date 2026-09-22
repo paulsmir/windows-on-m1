@@ -2477,7 +2477,9 @@ static void test_mesa_d3d10_frontend_open(void) {
         D3D10DDIARG_CREATERENDERTARGETVIEW rgbaViewCreate={0};
         D3D10DDI_HRENDERTARGETVIEW rgbaView={0};
         D3D10DDI_HRTRENDERTARGETVIEW rgbaViewRuntime={0};
-        rgbaMip.TexelWidth=rgbaMip.TexelHeight=16;rgbaMip.TexelDepth=1;
+        rgbaMip.TexelWidth=rgbaMip.TexelHeight=
+            (combinedFamily==1u && combinedStorage==0u)?1024u:16u;
+        rgbaMip.TexelDepth=1;
         rgbaCreate.pMipInfoList=&rgbaMip;
         rgbaCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
         rgbaCreate.Usage=D3D10_DDI_USAGE_DEFAULT;
