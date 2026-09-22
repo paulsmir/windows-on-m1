@@ -2190,45 +2190,61 @@ AgxD3d10ResourceWithinRequiredLimits(
       (resource->bind_flags == D3D10_DDI_BIND_VERTEX_BUFFER ||
        resource->bind_flags == D3D10_DDI_BIND_INDEX_BUFFER ||
        resource->bind_flags == D3D10_DDI_BIND_CONSTANT_BUFFER);
-   bool stagingBuffer = resource && resource->usage == D3D10_DDI_USAGE_STAGING &&
+   bool dynamicTexture = resource && !resource->buffer &&
+      resource->usage == D3D10_DDI_USAGE_DYNAMIC &&
+      resource->bind_flags == D3D10_DDI_BIND_SHADER_RESOURCE &&
+      AgxD3d10CopyFamily(resource->Format) != 0;
+   bool stagingResource = resource && resource->usage == D3D10_DDI_USAGE_STAGING &&
       resource->bind_flags == 0;
    bool mapMode = dynamicBuffer ?
       (DDIMap == D3D10_DDI_MAP_WRITE_DISCARD ||
        DDIMap == D3D10_DDI_MAP_WRITE_NOOVERWRITE) :
-      stagingBuffer && (DDIMap == D3D10_DDI_MAP_READ ||
+      dynamicTexture ? DDIMap == D3D10_DDI_MAP_WRITE_DISCARD :
+      stagingResource && (DDIMap == D3D10_DDI_MAP_READ ||
                         DDIMap == D3D10_DDI_MAP_WRITE ||
                         DDIMap == D3D10_DDI_MAP_READWRITE);
    if (!device || !resource || resource->owner_device != device ||
-       !resource->resource || !resource->buffer || !resource->transfers ||
-       SubResource != 0 || Flags != 0 || !pMappedSubResource || !mapMode ||
-       resource->transfers[0] ||
+       !resource->resource || !resource->transfers ||
+       (!resource->buffer && !AgxD3d10CopyFamily(resource->Format)) ||
+       SubResource >= resource->NumSubResources || Flags != 0 || !pMappedSubResource || !mapMode ||
+       resource->transfers[SubResource] ||
        (resource->bind_flags == D3D10_DDI_BIND_CONSTANT_BUFFER &&
         DDIMap != D3D10_DDI_MAP_WRITE_DISCARD)) {
       SetError(hDevice, E_INVALIDARG); return;
    }
    HRESULT status = AgxD3d10WindowsFlushRetire(device->windows);
    if (FAILED(status)) { SetError(hDevice, status); return; }
-   struct pipe_box box = {0,0,0,(int)resource->resource->width0,1,1};
+   struct pipe_box box;
+   unsigned level = 0;
+   subResourceBox(resource->resource,SubResource,&level,&box);
    unsigned usage = DDIMap == D3D10_DDI_MAP_READ ? PIPE_MAP_READ :
       DDIMap == D3D10_DDI_MAP_WRITE ? PIPE_MAP_WRITE :
       DDIMap == D3D10_DDI_MAP_READWRITE ? PIPE_MAP_READ|PIPE_MAP_WRITE :
       PIPE_MAP_WRITE | (DDIMap == D3D10_DDI_MAP_WRITE_DISCARD ?
-       PIPE_MAP_DISCARD_WHOLE_RESOURCE : PIPE_MAP_UNSYNCHRONIZED);
-   void *map = device->pipe->buffer_map(device->pipe,resource->resource,0,usage,
-                                         &box,&resource->transfers[0]);
-   if (!map || !resource->transfers[0]) { SetError(hDevice,E_FAIL); return; }
+       (resource->NumSubResources == 1 ? PIPE_MAP_DISCARD_WHOLE_RESOURCE :
+        PIPE_MAP_DISCARD_RANGE) : PIPE_MAP_UNSYNCHRONIZED);
+   void *map = resource->buffer ?
+      device->pipe->buffer_map(device->pipe,resource->resource,level,usage,
+                               &box,&resource->transfers[SubResource]) :
+      device->pipe->texture_map(device->pipe,resource->resource,level,usage,
+                                &box,&resource->transfers[SubResource]);
+   if (!map || !resource->transfers[SubResource]) { SetError(hDevice,E_FAIL); return; }
    pMappedSubResource->pData=map;
-   pMappedSubResource->RowPitch=resource->transfers[0]->stride;
-   pMappedSubResource->DepthPitch=resource->transfers[0]->layer_stride;''')
+   pMappedSubResource->RowPitch=resource->transfers[SubResource]->stride;
+   pMappedSubResource->DepthPitch=resource->transfers[SubResource]->layer_stride;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceUnmap','''   Device *device = CastDevice(hDevice);
    Resource *resource = CastResource(hResource);
    if (!device || !resource || resource->owner_device != device ||
-       !resource->resource || !resource->buffer || !resource->transfers ||
-       SubResource != 0 || !resource->transfers[0]) {
+       !resource->resource || !resource->transfers ||
+       (!resource->buffer && !AgxD3d10CopyFamily(resource->Format)) ||
+       SubResource >= resource->NumSubResources || !resource->transfers[SubResource]) {
       SetError(hDevice, E_INVALIDARG); return;
    }
-   pipe_buffer_unmap(device->pipe,resource->transfers[0]);
-   resource->transfers[0]=NULL;''')
+   if (resource->buffer)
+      pipe_buffer_unmap(device->pipe,resource->transfers[SubResource]);
+   else
+      pipe_texture_unmap(device->pipe,resource->transfers[SubResource]);
+   resource->transfers[SubResource]=NULL;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceUpdateSubResourceUP','''   Device *pDevice = CastDevice(hDevice);
    Resource *resource = CastResource(hDstResource);
    ULONGLONG owner = 0;

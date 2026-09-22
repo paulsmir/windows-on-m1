@@ -1936,6 +1936,62 @@ static void test_mesa_d3d10_frontend_open(void) {
           !memcmp(mappedStaging.pData,vertices,sizeof(vertices)));
     deviceFunctions.pfnStagingResourceUnmap(device,staging,0);
     CHECK(FrontendErrors==mapErrors);
+    /* CPU-lockable extended formats must round-trip independent subresources
+     * through the real Asahi transfer implementation, including row padding. */
+    const DXGI_FORMAT mapFormats[]={DXGI_FORMAT_B8G8R8A8_TYPELESS,
+      DXGI_FORMAT_B8G8R8A8_UNORM,DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,
+      DXGI_FORMAT_B8G8R8X8_TYPELESS,DXGI_FORMAT_B8G8R8X8_UNORM,
+      DXGI_FORMAT_B8G8R8X8_UNORM_SRGB};
+    for(UINT fmt=0;fmt<6;++fmt) {
+      D3D10DDI_MIPINFO mi[2]={{0}};
+      mi[0].TexelWidth=mi[0].PhysicalWidth=17;
+      mi[0].TexelHeight=mi[0].PhysicalHeight=9;
+      mi[1].TexelWidth=mi[1].PhysicalWidth=8;
+      mi[1].TexelHeight=mi[1].PhysicalHeight=4;
+      mi[0].TexelDepth=mi[0].PhysicalDepth=1;
+      mi[1].TexelDepth=mi[1].PhysicalDepth=1;
+      D3D10DDIARG_CREATERESOURCE cr={0};
+      cr.pMipInfoList=mi;cr.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+      cr.Usage=D3D10_DDI_USAGE_STAGING;
+      cr.MapFlags=D3D10_DDI_CPU_ACCESS_READ|D3D10_DDI_CPU_ACCESS_WRITE;
+      cr.Format=mapFormats[fmt];cr.SampleDesc.Count=1;
+      cr.MipLevels=2;cr.ArraySize=2;
+      D3D10DDI_HRESOURCE tex={0};D3D10DDI_HRTRESOURCE mapRuntime={0};
+      tex.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateResourceSize(device,&cr));
+      mapRuntime.handle=(VOID *)(UINT_PTR)(0xda0u+fmt);
+      UINT before=FrontendErrors;
+      deviceFunctions.pfnCreateResource(device,&cr,tex,mapRuntime);
+      CHECK(FrontendErrors==before);
+      for(UINT sub=0;sub<4;++sub) {
+        D3D10DDI_MAPPED_SUBRESOURCE map={0};
+        UINT width=mi[sub%2].TexelWidth,height=mi[sub%2].TexelHeight;
+        deviceFunctions.pfnStagingResourceMap(device,tex,sub,D3D10_DDI_MAP_WRITE,0,&map);
+        CHECK(FrontendErrors==before && map.pData && map.RowPitch>=width*4 &&
+              map.DepthPitch>=map.RowPitch*height);
+        if(map.pData) {
+          for(UINT y=0;y<height;++y) for(UINT x=0;x<width*4;++x)
+            ((BYTE *)map.pData)[y*map.RowPitch+x]=(BYTE)(fmt*31+sub*53+y*7+x);
+          deviceFunctions.pfnStagingResourceUnmap(device,tex,sub);
+        }
+      }
+      for(UINT sub=0;sub<4;++sub) {
+        D3D10DDI_MAPPED_SUBRESOURCE map={0};
+        UINT width=mi[sub%2].TexelWidth,height=mi[sub%2].TexelHeight;
+        deviceFunctions.pfnStagingResourceMap(device,tex,sub,D3D10_DDI_MAP_READ,0,&map);
+        CHECK(FrontendErrors==before && map.pData);
+        if(map.pData) {
+          BOOL equal=TRUE;
+          for(UINT y=0;y<height;++y) for(UINT x=0;x<width*4;++x)
+            if(((BYTE *)map.pData)[y*map.RowPitch+x]!=(BYTE)(fmt*31+sub*53+y*7+x)) equal=FALSE;
+          CHECK(equal);
+          deviceFunctions.pfnStagingResourceUnmap(device,tex,sub);
+        }
+      }
+      deviceFunctions.pfnDestroyResource(device,tex);free(tex.pDrvPrivate);
+      CHECK(FrontendErrors==before);
+      /* Keep a failing map from obscuring unrelated existing producer tests. */
+      FrontendErrors=before;
+    }
     FRONTEND_STAGE("vb-resource");
     float cbValues[4]={0.9f,0.2f,0.1f,1.0f};
     cbMip.TexelWidth=sizeof(cbValues);cbMip.TexelHeight=cbMip.TexelDepth=1;
@@ -2707,6 +2763,11 @@ static void test_mesa_d3d10_frontend_open(void) {
         bgraCreate.Usage=D3D10_DDI_USAGE_DEFAULT;bgraCreate.BindFlags=D3D10_DDI_BIND_SHADER_RESOURCE;
         bgraCreate.Format=formats[family][storage];bgraCreate.SampleDesc.Count=1;
         bgraCreate.MipLevels=bgraCreate.ArraySize=1;
+        if(storage==2u) {
+          bgraCreate.Usage=D3D10_DDI_USAGE_DYNAMIC;
+          bgraCreate.MapFlags=D3D10_DDI_CPU_ACCESS_WRITE;
+          bgraCreate.pInitialDataUP=NULL;
+        }
         D3D10DDI_HRESOURCE resource={0};D3D10DDI_HRTRESOURCE runtime={0};
         resource.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateResourceSize(device,&bgraCreate));
         runtime.handle=(VOID *)(UINT_PTR)(0xe30u+family);
@@ -2716,6 +2777,17 @@ static void test_mesa_d3d10_frontend_open(void) {
             MesaD3d10FrontendContextForTest(device)));
         if(FrontendErrors!=errors || AgxWin32AsahiContextFaulted(
             MesaD3d10FrontendContextForTest(device))) return;
+        if(storage==2u) {
+          D3D10DDI_MAPPED_SUBRESOURCE uploadMap={0};
+          deviceFunctions.pfnDynamicResourceMapDiscard(device,resource,0,
+              D3D10_DDI_MAP_WRITE_DISCARD,0,&uploadMap);
+          CHECK(FrontendErrors==errors && uploadMap.pData && uploadMap.RowPitch>=64);
+          if(!uploadMap.pData) return;
+          for(UINT y=0;y<16;++y)
+            memcpy((BYTE *)uploadMap.pData+y*uploadMap.RowPitch,pixels+y*64,64);
+          deviceFunctions.pfnDynamicResourceUnmap(device,resource,0);
+          CHECK(FrontendErrors==errors);
+        }
         for(UINT viewIndex=storage?storage:1;viewIndex<3 && (!storage || viewIndex==storage);++viewIndex) {
           fprintf(stderr,"EXTENDED_BGR_CASE: family=%u storage=%u view=%u\n",family,storage,viewIndex);
           CHECK(AgxD3d10FormatViewCompatible(bgraCreate.Format,formats[family][viewIndex],FALSE,FALSE));
