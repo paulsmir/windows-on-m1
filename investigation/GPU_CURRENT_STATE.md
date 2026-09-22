@@ -17,7 +17,7 @@ KMD Render/Patch/Submit -> AGX. Do not redesign these layers or expand features.
 OpenGL/CS1.6 follow desktop acceptance. Ordinary setup errors are not GPU verdicts.
 
 ## Current source / candidate
-Current implementation056377f3; last hardware package745 remains immutable.
+Current implementation1b747986; last hardware package745 remains immutable.
 Implementation75bc5baff3b638e5d5f483686153cca523738117 accepts exact Blt1 orFlip2.
 EXP736 package745 under /Users/pavel/public_windows/.local/experiments/EXP736-blt-present/package-build/package.
 SYS d352215b5d641c527481f16bb0d985803e6a8791d3dadec3674b2f30ee6e72a5
@@ -67,22 +67,10 @@ PinnedWDK minor6/build0 is authority; older Microsoft page macro examples differ
 Microsoft extended-format-aware requirements mandate BGR families, typed backbuffer
 casting and BGRA/sRGB scanout. Must close companions before advertising0_x.
 EXP738-extended-bgra/causal-contract.json records primarysources and ownership.
-Implementation642baea78033df502947b399e39a8e8762a1d433 closes typeless BGRA/BGRX
-sampled views through actual producer. REDs: view-family rejection, compressed
-initial-upload draw, BGRX texture capture whitelist. Fix: same-family views,
-native TILED modifier via existing allocator, bounded BGRX texture reference.
-Complete source85a5c10332b16055eb6d8c0efd8ae3be711936c530c20b459d840a056afcb8df.
-Actual x64 executable suite exit0/fourUNORM+SRGB cases, initialupload/context clean,
-materializer2placements/retirementPASS; build0warnings0errors; ARM64archivePASS.
-EXE660097af5b93ab4666a7073bf5d63b2f7fcab8a7b4184ccdc109a7b2b0e37098.
-Only preparedFormat.cpp/Resource.cpp/agx_win32_graph.inc changed; no diagnostics
-left in corebatch. Evidence EXP738-extended-bgra/{complete/result.json,
-complete/test.log,projection-comparison.json,causal-contract.json}.
-EXP739 implementation57b30b555e4bbf8f0bc728c733b351803dfbb2b4 closes typedBGR targets:
-BGRA_SRGB/BGRX_UNORM/BGRX_SRGB clear/draw/flush; distinct nativeformat10/11/12,
-4byte ABI bounds; existing capture/materializer/retirement. RED creation -> GREEN.
-Source81236b2afa3b642b474ab2d0c1718a62f3669f724cdb979f59465d7b70a32a25;
-x64suite0,0warnings/errors,ARM64archivePASS,hostABI PASS; EXP739-bgr-targets/green.
+EXP738 implementation642baea7: BGR typeless sampled views, TILED initialupload,
+BGRX capture; actualproducer/materializer/retirementPASS. EXP738-extended-bgra/complete.
+EXP739 implementation57b30b55: BGRX/SRGB typed targets, distinctformat10/11/12,
+clear/draw/flush and hostABI PASS; EXP739-bgr-targets/green. BothnativearchivesPASS.
 EXP740 implementation056377f3cb88de0f0f73795e2449fef71ab42ba5 admitsBGRA_SRGB
 primary with existingBGRA byte layout, plus same-family RTV/SRV casting scoped
 to created BIND_PRESENT resources. Ordinary typed/cross-family casts stillreject.
@@ -91,8 +79,16 @@ Existing SetDisplayMode and nativeBlt/Present/retirement now exercise SRGBprimar
 Sourcee11c78b6892f63708c10d362a16eb12d8ef8af4d46a6254ef3877279893fadda;
 EXEdf59dd254cff05cdecd4a732514023039ea0573c194a1ba1ecb2fcdbb1ee6707.
 Evidence EXP740-srgb-backbuffer/{contract.json,green/result.json,green/test.log}.
-NEXT: truthful format-query and remaining mandatory BGR resource/scanout operations;
-current tests do not prove arbitrary stretch/rotation/resolve or full dimensions.
+EXP741 implementation1b747986eaf117be869a660008bf0c66990b3b7d: four typedBGR
+format queries now match render/blend/sample support and sample1 quality1.
+Samplecount>1 and MSAA bits remainzero. All8typeless/typedUNORM/SRGB sampled
+producer cases passed even inRED; exactly7queryfailures -> fullsuiteGREEN.
+Source70a02e64a4db48faccd4e0766ad04c9ed359ce77d437de1a6a61506f5fc88e41;
+x64suite0/0warnings/errors,botharchivesPASS; EXP741-bgr-format-query/green.
+NEXT: combined BGR RENDER_TARGET|SHADER_RESOURCE and render-then-sample lifetime:
+private_rt currently admits combinedbind only forRGBA_TYPELESS. Then remaining
+mandatoryresource/scanout operations; arbitraryrotation/resolve/full dimensions
+remain unproven. No new hardwarepackage until truthful companion gates.
 D3D10_0_x advertisement remainsCLOSED until all mandatory companions pass.
 Operator followup: black afterlogon; elements only appear withartifacts after
 Windows key; no spontaneous correctdesktop. Exact additional run/time unspecified.
