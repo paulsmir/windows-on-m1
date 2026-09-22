@@ -17,8 +17,7 @@ KMD Render/Patch/Submit -> AGX. Do not redesign these layers or expand features.
 OpenGL/CS1.6 follow desktop acceptance. Ordinary setup errors are not GPU verdicts.
 
 ## Current source / candidate
-Current implementationc7460e7d; last hardware package745 remains immutable.
-Implementation75bc5baff3b638e5d5f483686153cca523738117 accepts exact Blt1 orFlip2.
+Current implementationee605a52; last hardware package745 remains immutable.
 EXP736 package745 under /Users/pavel/public_windows/.local/experiments/EXP736-blt-present/package-build/package.
 SYS d352215b5d641c527481f16bb0d985803e6a8791d3dadec3674b2f30ee6e72a5
 UMD c620fad0950a6ff7e110e6df2e3a1cf245a68b79692ae01e3528be953b029528
@@ -45,8 +44,7 @@ Current Application events prove repeated dwm.exe/dwmcore.dll26100.9278 crashes,
 exception889800b0 offset27bde4 since boot; Explorer5236 remainsSession1, DWM PIDs
 change. ETW records DWM exits/restarts. Desktop acceptance remainsFAILED.
 Evidence EXP736-blt-present: dwm-state/loaded-umd-proof/physical-observation andETL.
-EXP736 historical WER dump is INVALID for current attribution; static same-version
-binary inspection only. EXP737 empty WER copies alsoINVALID.
+Historical/empty WER dumps are INVALID; use current ETW evidence.
 EXP737 passive trace completed on unchanged745, no qualification client. Direct3D11
 journal1820 reports887A0004 "Failed to find DDI to drive requested feature levels"
 in DWM5292/8580/8644 and other shell processes. DWM HWDEVICE409 identifies only
@@ -55,7 +53,6 @@ System32745 image checksum12328883/timestamp1790021801 verified. ETW60s/182698ev
 eventsLost0. This is a DWM runtime-DDI negotiation boundary, not a queue fault.
 Evidence EXP737-dwm-creation/{causal-result.json,device-events.json,
 EXP737-dwm-evidence/runtime.etl,EXP737-dwm-evidence/state.json}.
-Both attempted current WER copies were zero-length and INVALID; do not analyze.
 Source decision: current D3D11.dll ETW checksum5006223/timestamp2013979966 matches
 static inspected binary10.0.26100.9457. FillAPIVersions tests createflags bit5/BGRA:
 skips VistaDDI a0001/build4, retains a0006(D3D10_0_x) and a0009(Win7).
@@ -74,27 +71,33 @@ primary with existingBGRA byte layout, plus same-family RTV/SRV casting scoped
 to created BIND_PRESENT resources. Ordinary typed/cross-family casts stillreject.
 RED primarycreate -> fullx64suiteGREEN,0warnings/errors; bothnativearchivesPASS.
 Existing SetDisplayMode and nativeBlt/Present/retirement now exercise SRGBprimary.
-Sourcee11c78b6892f63708c10d362a16eb12d8ef8af4d46a6254ef3877279893fadda;
-EXEdf59dd254cff05cdecd4a732514023039ea0573c194a1ba1ecb2fcdbb1ee6707.
 Evidence EXP740-srgb-backbuffer/{contract.json,green/result.json,green/test.log}.
 EXP741 implementation1b747986eaf117be869a660008bf0c66990b3b7d: four typedBGR
 format queries now match render/blend/sample support and sample1 quality1.
 Samplecount>1 and MSAA bits remainzero. All8typeless/typedUNORM/SRGB sampled
 producer cases passed even inRED; exactly7queryfailures -> fullsuiteGREEN.
-Source70a02e64a4db48faccd4e0766ad04c9ed359ce77d437de1a6a61506f5fc88e41;
 x64suite0/0warnings/errors,botharchivesPASS; EXP741-bgr-format-query/green.
 EXP742 implementationc7460e7dee8657ffdc49ffb5165b709df03ccfca: combinedRT|SRV
 admitted within existingprivatecolor limits; BGRtypeless4bytes. Eight realproducer
 render-retire-sample-retire casesPASS (RGBA2/BGRA3/BGRX3). Fullx64suite0,0warnings/
-errors,bothnativearchivesPASS. Source d95e5abd8f1bd743cfc4e0097147ba87cb95232a6d80e088e113f13a19ee0507;
+errors,bothnativearchivesPASS.
 EXP742-combined-bgr/verified includes native-reuse-proof (onlytestfilechanged).
-NEXT: remaining BGR geometry/size and scanout companions. PrivateRT still1MB/4096,
-resourcecopy test path limits source<=16; arbitraryrotation/resolve/full dimensions
-unproven. No newhardwarepackage until truthful companion gates.
+EXP743 implementationee605a52490e294d18143786a4c4dc517614feb7: 1024square4MB
+native color output now passes UMD, materializer, KMD bind/root routing,retirement.
+One shared native surface validator replaces16/fullscreen whitelists;8192axis,
+1/2/4/8/16byte pixel pitch, backingfootprint and16MB arena bounds retained.
+Fixture1MBclass limit corrected to realKMD16MB. Fullx64suite0/0warnings/errors,
+3hosttestsPASS,ARM64testcrossbuildPASS; EXP743-bgr-geometry/routed evidence.
+IMPORTANT: old private ResourceCopy is a sample/conversion blit, violating copy
+same-dimensions/type-group semantics (Microsoft PFND3D10DDI_RESOURCECOPY).
+ThisPASS proves graph/geometry only, NOT standardcopyABI. NEXT: migrate sampling
+checks to actual D3D texturedshader Draw, then correct ResourceCopy beforehardware.
+Rotation can leave prehardware scope: Microsoft DXGI_DDI_BASE_FUNCTIONS exempts
+nonidentityrotation whenprimarycreation neverusesDXGI_DDI_ERR_UNSUPPORTED; our
+activecreatepath doesnot. MSAAresolve notadmitted (quality>1zero). No fakepass.
 D3D10_0_x advertisement remainsCLOSED until all mandatory companions pass.
 Operator followup: black afterlogon; elements only appear withartifacts after
 Windows key; no spontaneous correctdesktop. Exact additional run/time unspecified.
-Evidence EXP736 physical-observation-followup.json. Does not prove Flush/scanout.
 745 exactcleanup20:47:27Z succeeded. Ordinary377/392 finalbaseline20:49:20Z:
 Code28/nullINF,no package/service/module/SYS/UMD/signer,8CPU,autologon0/no password.
 Operator poweredAir off; nowRunningproxy. Recheckedproxy/vUART USB present,
