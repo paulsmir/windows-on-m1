@@ -537,7 +537,7 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
       struct agx_stage *stage = &ctx->stage[i];
       bool app_stage = i == MESA_SHADER_VERTEX || i == MESA_SHADER_FRAGMENT;
       bool blit_texture = i == MESA_SHADER_FRAGMENT &&
-         stage->texture_count == 1 && stage->sampler_count == 1 &&
+         stage->texture_count == 1 && stage->sampler_count <= 16 &&
          stage->textures[0] && stage->textures[0]->rsrc;
       /* Runtime default samplers are binding state, not texture resources.
        * Ordinary sampler descriptors contain no GPU addresses; the existing

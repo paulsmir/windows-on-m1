@@ -79,8 +79,112 @@ if args.windows_platform_declarations:
             raise SystemExit('Unclosed function: '+path+':'+name)
         target.write_text(text[:start]+'\n'+body+'\n'+text[end-1:])
         overlays[path]['after']=hashlib.sha256(target.read_bytes()).hexdigest()
+    change('src/gallium/frontends/d3d10umd/ShaderTGSI.c',
+        '375020e842babdedd9829367522297e4d6ae1288b571328d8f48ef2017b7cf81',[
+        ('''   reg = ureg_DECL_fs_input(ureg,
+                            translate_system_name(dcl_siv_name),
+                            0,
+                            TGSI_INTERPOLATE_CONSTANT);''','''   if (dcl_siv_name == D3D10_SB_NAME_POSITION) {
+      /* The selected Asahi screen exposes fragment position as a system
+       * value; an INPUT declaration violates TGSI-to-NIR's source contract. */
+      ureg_property(ureg, TGSI_PROPERTY_FS_COORD_ORIGIN,
+                    TGSI_FS_COORD_ORIGIN_UPPER_LEFT);
+      ureg_property(ureg, TGSI_PROPERTY_FS_COORD_PIXEL_CENTER,
+                    TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER);
+      reg = ureg_DECL_system_value(ureg, TGSI_SEMANTIC_POSITION, 0);
+   } else {
+      reg = ureg_DECL_fs_input(ureg, translate_system_name(dcl_siv_name),
+                              0, TGSI_INTERPOLATE_CONSTANT);
+   }'''),
+        ('''   reg = ureg_DECL_fs_input(ureg,
+                            translate_system_name(dcl_siv_name),
+                            0,
+                            translate_interpolation(dcl_in_ps_interp));''','''   if (dcl_siv_name == D3D10_SB_NAME_POSITION) {
+      /* The selected Asahi screen exposes fragment position as a system
+       * value; an INPUT declaration violates TGSI-to-NIR's source contract. */
+      ureg_property(ureg, TGSI_PROPERTY_FS_COORD_ORIGIN,
+                    TGSI_FS_COORD_ORIGIN_UPPER_LEFT);
+      ureg_property(ureg, TGSI_PROPERTY_FS_COORD_PIXEL_CENTER,
+                    TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER);
+      reg = ureg_DECL_system_value(ureg, TGSI_SEMANTIC_POSITION, 0);
+   } else {
+      reg = ureg_DECL_fs_input(ureg, translate_system_name(dcl_siv_name),
+                              0, translate_interpolation(dcl_in_ps_interp));
+   }''')])
     change('src/gallium/auxiliary/nir/tgsi_to_nir.c',
         '755f85617fa4f38923c759d1f27029c078c2bc47aead66abbb79130fea3f9b17',[
+        ('''   nir_alu_type *samp_types;''','''   nir_alu_type *samp_types;
+   unsigned *samp_targets;'''),
+        ('''         c->samp_types[decl->Range.First + i] = type;''','''         c->samp_types[decl->Range.First + i] = type;
+         c->samp_targets[decl->Range.First + i] = sview->Resource;'''),
+        ('''   c->samp_types = rzalloc_array(c, nir_alu_type, c->num_samp_types);''','''   c->samp_types = rzalloc_array(c, nir_alu_type, c->num_samp_types);
+   c->samp_targets = rzalloc_array(c, unsigned, c->num_samp_types);'''),
+        ('''   BITSET_SET32(s->info.textures_used, scan.samplers_declared);''','''   BITSET_ZERO(s->info.textures_used);'''),
+        ('''   BITSET_SET32(s->info.samplers_used, scan.samplers_declared);''','''   BITSET_ZERO(s->info.samplers_used);'''),
+        ('''static nir_def *
+ttn_tex(''','''/* D3D10 SAMPLE operands name the texture view and sampler independently. */
+static nir_def *
+ttn_d3d_sample(struct ttn_compile *c, nir_def **src)
+{
+   nir_builder *b = &c->build;
+   struct tgsi_full_instruction *ins = &c->token->FullInstruction;
+   unsigned texture = ins->Src[1].Register.Index;
+   unsigned sampler = ins->Src[2].Register.Index;
+   bool explicit_lod = ins->Instruction.Opcode == TGSI_OPCODE_SAMPLE_L;
+   assert(ins->Src[1].Register.File == TGSI_FILE_SAMPLER_VIEW);
+   assert(ins->Src[2].Register.File == TGSI_FILE_SAMPLER);
+   assert(!ins->Src[1].Register.Indirect && !ins->Src[2].Register.Indirect);
+   assert(texture < c->num_samp_types && sampler < PIPE_MAX_SAMPLERS);
+   assert(ins->Texture.NumOffsets <= 1);
+   nir_tex_instr *tex = nir_tex_instr_create(b->shader,
+      1 + explicit_lod + ins->Texture.NumOffsets);
+   tex->op = explicit_lod ? nir_texop_txl : nir_texop_tex;
+   tex->can_speculate = true;
+   get_texture_info(c->samp_targets[texture], &tex->sampler_dim,
+                    &tex->is_shadow, &tex->is_array);
+   tex->coord_components = glsl_get_sampler_dim_coordinate_components(tex->sampler_dim) + tex->is_array;
+   tex->texture_index = texture;
+   tex->sampler_index = sampler;
+   tex->dest_type = c->samp_types[texture];
+   unsigned n = 0;
+   tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_coord,
+      nir_trim_vector(b, src[0], tex->coord_components));
+   if (explicit_lod)
+      tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_lod, nir_channel(b, src[3], 0));
+   if (ins->Texture.NumOffsets) {
+      struct tgsi_texture_offset *offset = &ins->TexOffsets[0];
+      nir_src value = ttn_src_for_file_and_index(c, offset->File, offset->Index,
+                                                NULL, NULL, NULL, true);
+      unsigned count = tex->coord_components - tex->is_array;
+      nir_def *components[3] = {
+         nir_channel(b, value.ssa, offset->SwizzleX),
+         nir_channel(b, value.ssa, offset->SwizzleY),
+         nir_channel(b, value.ssa, offset->SwizzleZ)};
+      tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_offset, nir_vec(b, components, count));
+   }
+   c->num_samplers = MAX2(c->num_samplers, texture + 1);
+   BITSET_SET(b->shader->info.textures_used, texture);
+   BITSET_SET(b->shader->info.samplers_used, sampler);
+   nir_def_init(&tex->instr, &tex->def, nir_tex_instr_dest_size(tex), 32);
+   nir_builder_instr_insert(b, &tex->instr);
+   return nir_pad_vector_imm_int(b, &tex->def, 0, 4);
+}
+
+static nir_def *
+ttn_tex('''),
+        ('''      src[i] = ttn_get_src(c, &tgsi_inst->Src[i], i);''','''      if ((tgsi_op == TGSI_OPCODE_SAMPLE || tgsi_op == TGSI_OPCODE_SAMPLE_L) &&
+          (i == 1 || i == 2))
+         src[i] = NULL; /* Descriptor operands are not ALU values. */
+      else
+         src[i] = ttn_get_src(c, &tgsi_inst->Src[i], i);'''),
+        ('''   case TGSI_OPCODE_TEX:
+   case TGSI_OPCODE_TXP:''','''   case TGSI_OPCODE_SAMPLE:
+   case TGSI_OPCODE_SAMPLE_L:
+      dst = ttn_d3d_sample(c, src);
+      break;
+
+   case TGSI_OPCODE_TEX:
+   case TGSI_OPCODE_TXP:'''),
         ('''            } else {
                assert(!decl->Declaration.Semantic);
                var->data.location = VERT_ATTRIB_GENERIC0 + idx;
@@ -1581,6 +1685,26 @@ MesaD3d10FrontendSetSoOffsetForTest(D3D10DDI_HDEVICE hDevice,
 #include "agx_win32_asahi_scene.h"
 
 static unsigned
+AgxD3d10CopyFamily(DXGI_FORMAT format)
+{
+   switch (format) {
+   case DXGI_FORMAT_B8G8R8A8_TYPELESS:
+   case DXGI_FORMAT_B8G8R8A8_UNORM:
+   case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB: return 1;
+   case DXGI_FORMAT_B8G8R8X8_TYPELESS:
+   case DXGI_FORMAT_B8G8R8X8_UNORM:
+   case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB: return 2;
+   case DXGI_FORMAT_R8G8B8A8_TYPELESS:
+   case DXGI_FORMAT_R8G8B8A8_UNORM:
+   case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+   case DXGI_FORMAT_R8G8B8A8_UINT:
+   case DXGI_FORMAT_R8G8B8A8_SNORM:
+   case DXGI_FORMAT_R8G8B8A8_SINT: return 3;
+   default: return 0;
+   }
+}
+
+static unsigned
 AgxD3d10ColorBytes(DXGI_FORMAT format)
 {
    switch (format) {
@@ -1969,66 +2093,51 @@ AgxD3d10ResourceWithinRequiredLimits(
    Resource *destination = CastResource(hDstResource);
    Resource *source = CastResource(hSrcResource);
    if (!device || !destination || !source || destination == source ||
-       destination->owner_device != device || source->owner_device != device) {
+       destination->owner_device != device || source->owner_device != device ||
+       destination->usage == D3D10_DDI_USAGE_IMMUTABLE ||
+       destination->MipLevels != 1 || source->MipLevels != 1 ||
+       destination->NumSubResources != 1 || source->NumSubResources != 1 ||
+       (destination->transfers && destination->transfers[0]) ||
+       (source->transfers && source->transfers[0])) {
+      SetError(hDevice, E_NOTIMPL); return;
+   }
+   struct pipe_resource *dst=destination->resource,*src=source->resource;
+   unsigned family=AgxD3d10CopyFamily(source->Format);
+   if (!dst || !src || !family || family!=AgxD3d10CopyFamily(destination->Format) ||
+       dst->target!=PIPE_TEXTURE_2D || src->target!=PIPE_TEXTURE_2D ||
+       dst->width0!=src->width0 || dst->height0!=src->height0 ||
+       dst->depth0!=1 || src->depth0!=1 || dst->array_size!=1 || src->array_size!=1 ||
+       dst->last_level || src->last_level || dst->nr_samples>1 || src->nr_samples>1) {
       SetError(hDevice, E_NOTIMPL); return;
    }
    HRESULT result;
    if (destination->presentation && source->presentation) {
-      result = AgxD3d10WindowsPresentationBlt(device->windows,
-         destination->presentation, source->presentation);
+      result=AgxD3d10WindowsPresentationBlt(device->windows,
+         destination->presentation,source->presentation);
    } else {
-      struct pipe_resource *dst=destination->resource,*src=source->resource;
-      enum pipe_format sample=FormatTranslate(source->sample_format,false);
-      enum pipe_format lowered=AgxD3d10LoweredTextureFormat(source->sample_format);
-      if(lowered!=PIPE_FORMAT_NONE) sample=lowered;
-      unsigned sampleLevel=source->sample_level,sampleLayer=source->sample_layer;
-      unsigned sampleWidth=src?u_minify(src->width0,sampleLevel):0;
-      unsigned sampleHeight=src?u_minify(src->height0,sampleLevel):0;
-      bool valid=dst&&src&&!destination->presentation&&!source->presentation&&
-         (destination->bind_flags&D3D10_DDI_BIND_RENDER_TARGET)&&
-         (source->bind_flags&D3D10_DDI_BIND_SHADER_RESOURCE)&&
-         sample!=PIPE_FORMAT_NONE&&dst->target==PIPE_TEXTURE_2D&&
-         (src->target==PIPE_TEXTURE_2D||src->target==PIPE_TEXTURE_2D_ARRAY)&&
-         dst->width0&&dst->height0&&
-         dst->width0<=D3D10_REQ_TEXTURE2D_U_OR_V_DIMENSION&&
-         dst->height0<=D3D10_REQ_TEXTURE2D_U_OR_V_DIMENSION&&
-         sampleWidth&&sampleWidth<=D3D10_REQ_TEXTURE2D_U_OR_V_DIMENSION&&
-         sampleHeight&&sampleHeight<=D3D10_REQ_TEXTURE2D_U_OR_V_DIMENSION&&
-         sampleLevel<=src->last_level&&sampleLayer<src->array_size&&
-         dst->depth0==1&&src->depth0==1&&
-         !dst->last_level&&dst->array_size==1&&
-         dst->nr_samples<=1&&src->nr_samples<=1&&
-         (dst->format==PIPE_FORMAT_B8G8R8A8_UNORM||
-          dst->format==PIPE_FORMAT_R8G8B8A8_UNORM);
-      if(!valid) { SetError(hDevice,E_NOTIMPL);return; }
+      /* Copy the stored four bytes, independent of any bound sampling view.
+       * UNORM views avoid sRGB conversion; BGRA also preserves the X byte. */
+      enum pipe_format raw=family==3 ? PIPE_FORMAT_R8G8B8A8_UNORM : PIPE_FORMAT_B8G8R8A8_UNORM;
       struct pipe_blit_info info={};
-      info.src.resource=src;info.src.level=sampleLevel;info.src.format=sample;
-      info.src.box.z=sampleLayer;info.src.box.width=sampleWidth;
-      info.src.box.height=sampleHeight;info.src.box.depth=1;
-      info.dst.resource=dst;info.dst.level=0;info.dst.format=dst->format;
-      info.dst.box.width=dst->width0;info.dst.box.height=dst->height0;
-      info.dst.box.depth=1;
+      info.src.resource=src;info.src.format=raw;
+      info.src.box.width=src->width0;info.src.box.height=src->height0;info.src.box.depth=1;
+      info.dst.resource=dst;info.dst.format=raw;
+      info.dst.box.width=dst->width0;info.dst.box.height=dst->height0;info.dst.box.depth=1;
       info.mask=PIPE_MASK_RGBA;info.filter=PIPE_TEX_FILTER_NEAREST;
       device->pipe->blit(device->pipe,&info);
       device->pipe->flush(device->pipe,NULL,0);
       result=AgxD3d10WindowsFlushStatus(device->windows);
    }
-   if (FAILED(result)) SetError(hDevice, result);''')
-    replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceCopyRegion','''   Device *device = CastDevice(hDevice);
-   Resource *destination = CastResource(hDstResource);
-   Resource *source = CastResource(hSrcResource);
-   bool whole = !pSrcBox || (pSrcBox->left == 0 && pSrcBox->top == 0 &&
-      pSrcBox->front == 0 && pSrcBox->right == 2560 &&
-      pSrcBox->bottom == 1600 && pSrcBox->back == 1);
-   if (!device || !destination || !source || destination == source ||
-       destination->owner_device != device || source->owner_device != device ||
-       !destination->presentation || !source->presentation ||
-       DstSubResource || SrcSubResource || DstX || DstY || DstZ || !whole) {
+   if (FAILED(result)) SetError(hDevice,result);''')
+    replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceCopyRegion','''   Resource *source = CastResource(hSrcResource);
+   struct pipe_resource *src = source ? source->resource : NULL;
+   bool whole = src && (!pSrcBox || (pSrcBox->left == 0 && pSrcBox->top == 0 &&
+      pSrcBox->front == 0 && pSrcBox->right == src->width0 &&
+      pSrcBox->bottom == src->height0 && pSrcBox->back == src->depth0));
+   if (DstSubResource || SrcSubResource || DstX || DstY || DstZ || !whole) {
       SetError(hDevice, E_NOTIMPL); return;
    }
-   HRESULT result = AgxD3d10WindowsPresentationBlt(device->windows,
-      destination->presentation, source->presentation);
-   if (FAILED(result)) SetError(hDevice, result);''')
+   ResourceCopy(hDevice,hDstResource,hSrcResource);''')
     replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','OpenResource','''   Device *pDevice = CastDevice(hDevice);
    Resource *pResource = CastResource(hResource);
    if (!pDevice || !pResource || !pOpenResource || !hRTResource.handle) {

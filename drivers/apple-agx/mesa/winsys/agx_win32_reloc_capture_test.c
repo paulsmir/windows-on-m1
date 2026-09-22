@@ -575,7 +575,8 @@ int main(void) {
         APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH,
         &c.Operations,c.Context)==AgxRelocOk);
     assert(AgxWin32RelocReference(&c,1,AppleAgxWin32RoleUniform,
-        AppleAgxWin32AccessRead,0,0x1000,&destination)==AgxRelocOk);
+        AppleAgxWin32AccessRead,0,
+        (APPLE_AGX_WIN32_COMMAND_TEXTURED_MAX_RELOCATIONS+1u)*8u,&destination)==AgxRelocOk);
     assert(AgxWin32RelocReference(&c,2,AppleAgxWin32RoleConstant,
         AppleAgxWin32AccessRead,0,16,&target)==AgxRelocOk);
     for(unsigned i=0;i<APPLE_AGX_WIN32_COMMAND_TEXTURED_MAX_RELOCATIONS;++i)

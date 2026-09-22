@@ -44,7 +44,6 @@ Current Application events prove repeated dwm.exe/dwmcore.dll26100.9278 crashes,
 exception889800b0 offset27bde4 since boot; Explorer5236 remainsSession1, DWM PIDs
 change. ETW records DWM exits/restarts. Desktop acceptance remainsFAILED.
 Evidence EXP736-blt-present: dwm-state/loaded-umd-proof/physical-observation andETL.
-Historical/empty WER dumps are INVALID; use current ETW evidence.
 EXP737 passive trace completed on unchanged745, no qualification client. Direct3D11
 journal1820 reports887A0004 "Failed to find DDI to drive requested feature levels"
 in DWM5292/8580/8644 and other shell processes. DWM HWDEVICE409 identifies only
@@ -66,12 +65,8 @@ EXP738 implementation642baea7: BGR typeless sampled views, TILED initialupload,
 BGRX capture; actualproducer/materializer/retirementPASS. EXP738-extended-bgra/complete.
 EXP739 implementation57b30b55: BGRX/SRGB typed targets, distinctformat10/11/12,
 clear/draw/flush and hostABI PASS; EXP739-bgr-targets/green. BothnativearchivesPASS.
-EXP740 implementation056377f3cb88de0f0f73795e2449fef71ab42ba5 admitsBGRA_SRGB
-primary with existingBGRA byte layout, plus same-family RTV/SRV casting scoped
-to created BIND_PRESENT resources. Ordinary typed/cross-family casts stillreject.
-RED primarycreate -> fullx64suiteGREEN,0warnings/errors; bothnativearchivesPASS.
-Existing SetDisplayMode and nativeBlt/Present/retirement now exercise SRGBprimary.
-Evidence EXP740-srgb-backbuffer/{contract.json,green/result.json,green/test.log}.
+EXP740 056377f3: SRGBprimary and created-backbuffer samefamily views;
+SetDisplayMode/nativeBlt/Present/retirementGREEN; EXP740-srgb-backbuffer/green.
 EXP741 implementation1b747986eaf117be869a660008bf0c66990b3b7d: four typedBGR
 format queries now match render/blend/sample support and sample1 quality1.
 Samplecount>1 and MSAA bits remainzero. All8typeless/typedUNORM/SRGB sampled
@@ -88,14 +83,21 @@ One shared native surface validator replaces16/fullscreen whitelists;8192axis,
 1/2/4/8/16byte pixel pitch, backingfootprint and16MB arena bounds retained.
 Fixture1MBclass limit corrected to realKMD16MB. Fullx64suite0/0warnings/errors,
 3hosttestsPASS,ARM64testcrossbuildPASS; EXP743-bgr-geometry/routed evidence.
-IMPORTANT: old private ResourceCopy is a sample/conversion blit, violating copy
-same-dimensions/type-group semantics (Microsoft PFND3D10DDI_RESOURCECOPY).
-ThisPASS proves graph/geometry only, NOT standardcopyABI. NEXT: migrate sampling
-checks to actual D3D texturedshader Draw, then correct ResourceCopy beforehardware.
+EXP744 offlineGREEN: sampling tests now use actual FXC ps_4_0 Sample/SampleLevel
+Draw/Flush, notResourceCopy conversion. SV_Position is TGSI systemvalue; SAMPLE
+keeps texture0/sampler3 inNIR. Texturedcapture usesexisting760reloc boundedstorage.
+ResourceCopy now enforces equal2Dsize/castfamily and rawUNORM bytes independently
+of boundSRV; wholeCopyRegion delegates. Crossfamily/size negativecasesPASS.
+Finalsourcea90e1309f331c599cfaa24a3e862d156bc45fffc5c3b826d93a9c28c249de575.
+x64fullsuite0;ARM64testcrossbuild0;5hosttestsPASS; EXP744-copy-contract/green.
+Userresearch .local/research/DWM_DESKTOP_CONTRACT.md read beforehardware.
+It identifies sharedOpenResource/Blt limits and hypotheses forDWM usage; these
+are notautomaticproof ofcausality. Microsoft extendedformat table explicitly
+requires CPUlockableBGR; currentMap onlybuffers. Resolve truthful0_xcompanion
+coverage beforeadvertising; noexperimental0_xcandidate orhardwareclaim yet.
 Rotation can leave prehardware scope: Microsoft DXGI_DDI_BASE_FUNCTIONS exempts
 nonidentityrotation whenprimarycreation neverusesDXGI_DDI_ERR_UNSUPPORTED; our
 activecreatepath doesnot. MSAAresolve notadmitted (quality>1zero). No fakepass.
-D3D10_0_x advertisement remainsCLOSED until all mandatory companions pass.
 Operator followup: black afterlogon; elements only appear withartifacts after
 Windows key; no spontaneous correctdesktop. Exact additional run/time unspecified.
 745 exactcleanup20:47:27Z succeeded. Ordinary377/392 finalbaseline20:49:20Z:

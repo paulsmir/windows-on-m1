@@ -38,6 +38,7 @@ static HRESULT APIENTRY TestWaitPaging(
 #endif
 
 #if defined(ADMISSION_UMD_D3D10_FRONTEND_TEST)
+#include "native_sampling_tokens.h"
 EXTERN_C HRESULT APIENTRY MesaD3d10OpenAdapter10(D3D10DDIARG_OPENADAPTER *);
 EXTERN_C HRESULT APIENTRY MesaD3d10OpenAdapter10_2(D3D10DDIARG_OPENADAPTER *);
 EXTERN_C AGX_D3D10_WINDOWS_ADAPTER *APIENTRY
@@ -983,6 +984,28 @@ static VOID APIENTRY FrontendSetError(D3D10DDI_HRTCORELAYER core,HRESULT error) 
   (void)core;if(FrontendCallbacksInvalid) ++FrontendPostReturnCallbacks;
   FrontendLastError=error;++FrontendErrors;
 }
+/* Sampling coverage uses a real D3D shader and Draw, not ResourceCopy as a
+ * conversion helper. The caller observes actual submission and retirement. */
+static void FrontendSampleDraw(D3D10DDI_HDEVICE device,
+    const D3D10DDI_DEVICEFUNCS *functions,D3D10DDI_HRENDERTARGETVIEW target,
+    D3D10DDI_HSHADERRESOURCEVIEW source,D3D10DDI_HSAMPLER sampler,
+    D3D10DDI_HSHADER samplingShader,D3D10DDI_HSHADER restoreShader) {
+  D3D10_DDI_VIEWPORT viewport={0,0,16,16,0,1};
+  D3D10_DDI_RECT rect={0,0,16,16};
+  D3D10DDI_HSHADERRESOURCEVIEW empty={0};
+  functions->pfnGsSetShader(device,(D3D10DDI_HSHADER){0});
+  functions->pfnSetRenderTargets(device,&target,1,0,(D3D10DDI_HDEPTHSTENCILVIEW){0});
+  functions->pfnSetViewports(device,1,0,&viewport);
+  functions->pfnSetScissorRects(device,1,0,&rect);
+  functions->pfnPsSetShader(device,samplingShader);
+  functions->pfnPsSetShaderResources(device,0,1,&source);
+  functions->pfnPsSetSamplers(device,3,1,&sampler);
+  functions->pfnDraw(device,3,0);
+  functions->pfnFlush(device);
+  functions->pfnPsSetShaderResources(device,0,1,&empty);
+  functions->pfnPsSetShader(device,restoreShader);
+}
+
 static HRESULT APIENTRY FrontendPresent(HANDLE device,DXGIDDICB_PRESENT *present) {
   CHECK(device==(HANDLE)(UINT_PTR)0x904u && present &&
         present->hContext==(HANDLE)(UINT_PTR)0xa04u &&
@@ -2125,6 +2148,15 @@ static void test_mesa_d3d10_frontend_open(void) {
     CHECK(vsh.pDrvPrivate && psh.pDrvPrivate && gsh.pDrvPrivate);
     deviceFunctions.pfnCreateVertexShader(device,vs,vsh,vsRuntime,NULL);
     deviceFunctions.pfnCreatePixelShader(device,ps,psh,psRuntime,NULL);
+    D3D10DDI_HSHADER sampleShaders[3]={{0},{0},{0}};
+    const UINT *sampleCode[3]={NativeSample2D,NativeSampleArray,NativeSampleImplicit};
+    for(UINT i=0;i<ARRAYSIZE(sampleShaders);++i) {
+      D3D10DDI_HRTSHADER runtime={0};runtime.handle=(VOID *)(UINT_PTR)(0xe80u+i);
+      sampleShaders[i].pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateShaderSize(device,sampleCode[i],NULL));
+      CHECK(sampleShaders[i].pDrvPrivate!=NULL);
+      deviceFunctions.pfnCreatePixelShader(device,sampleCode[i],sampleShaders[i],runtime,NULL);
+      CHECK(MesaD3d10FrontendShaderValidForTest(sampleShaders[i]));
+    }
     deviceFunctions.pfnCreateGeometryShader(device,gs,gsh,gsRuntime,NULL);
     D3D10DDIARG_STREAM_OUTPUT_DECLARATION_ENTRY soDecl={0};
     soDecl.OutputSlot=0;soDecl.RegisterIndex=0;soDecl.RegisterMask=0xf;
@@ -2590,7 +2622,8 @@ static void test_mesa_d3d10_frontend_open(void) {
         RuntimeConsumerGates=RuntimeConsumerRetirements=0;
         RuntimeConsumerFence=0;memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
         RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
-        deviceFunctions.pfnResourceCopy(device,rt,rgba);
+        FrontendSampleDraw(device,&deviceFunctions,rtv,rgbaSrv,appSampler,
+            sampleShaders[combinedStorage==1u?2u:0u],psh);
         CHECK(FrontendErrors==rgbaErrors && RuntimeRenders==1u &&
               RuntimeSignals==1u && RuntimeMaterializations==2u &&
               RuntimeConsumerGates==2u && RuntimeMarker!=NULL);
@@ -2601,6 +2634,46 @@ static void test_mesa_d3d10_frontend_open(void) {
           RuntimeCheckpoint(depthOwner,5u);
         }
         RuntimeExpectedCommandVersion=0;
+        /* ResourceCopy is a raw, same-size, same-family operation. A live
+         * sampling view must not turn it into an sRGB conversion or resize. */
+        if(combinedFamily==1u && combinedStorage==2u) {
+          struct pipe_context *pipe=MesaD3d10FrontendContextForTest(device);
+          void (*savedBlit)(struct pipe_context *,const struct pipe_blit_info *)=pipe->blit;
+          FrontendCapturedBltCalls=0;pipe->blit=FrontendCaptureBlt;
+          deviceFunctions.pfnResourceCopy(device,rt,rgba);
+          pipe->blit=savedBlit;
+          CHECK(FrontendErrors==rgbaErrors && FrontendCapturedBltCalls==1u &&
+                FrontendCapturedBltSourceFormat==PIPE_FORMAT_B8G8R8A8_UNORM &&
+                FrontendCapturedBltDestinationFormat==PIPE_FORMAT_B8G8R8A8_UNORM);
+          RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;
+          RuntimeQueryMarkerCount=0;memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+          RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
+          memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+          RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
+          deviceFunctions.pfnResourceCopy(device,rt,rgba);
+          CHECK(FrontendErrors==rgbaErrors && RuntimeRenders==1u && RuntimeSignals==1u &&
+                RuntimeMaterializations==2u && RuntimeConsumerGates==2u && RuntimeMarker);
+          if(RuntimeMarker) {
+            RuntimeCheckpoint(depthOwner,1u);
+            CHECK(AgxWin32AsahiContextRetire(MesaD3d10FrontendContextForTest(device),0u));
+            RuntimeCheckpoint(depthOwner,5u);
+          }
+          RuntimeExpectedCommandVersion=0;
+        }
+        if((combinedFamily==1u && combinedStorage==0u) || combinedFamily==0u) {
+          struct pipe_context *pipe=MesaD3d10FrontendContextForTest(device);
+          void (*savedBlit)(struct pipe_context *,const struct pipe_blit_info *)=pipe->blit;
+          unsigned before=FrontendErrors;
+          FrontendCapturedBltCalls=0;pipe->blit=FrontendCaptureBlt;
+          deviceFunctions.pfnResourceCopy(device,rt,rgba);
+          pipe->blit=savedBlit;
+          CHECK(FrontendErrors==before+1u && FrontendCapturedBltCalls==0u);
+          before=FrontendErrors;pipe->blit=FrontendCaptureBlt;
+          deviceFunctions.pfnResourceCopyRegion(device,rt,0,0,0,0,rgba,0,NULL);
+          pipe->blit=savedBlit;
+          CHECK(FrontendErrors==before+1u && FrontendCapturedBltCalls==0u);
+          rgbaErrors=FrontendErrors;
+        }
         D3D10DDI_HSHADERRESOURCEVIEW nullRgbaSrv={0};
         deviceFunctions.pfnPsSetShaderResources(device,0,1,&nullRgbaSrv);
         CHECK(FrontendErrors==rgbaErrors);
@@ -2663,7 +2736,8 @@ static void test_mesa_d3d10_frontend_open(void) {
           RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
           memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
           RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
-          deviceFunctions.pfnResourceCopy(device,rt,resource);
+          FrontendSampleDraw(device,&deviceFunctions,rtv,view,appSampler,
+            sampleShaders[storage==1u?2u:0u],psh);
           CHECK(FrontendErrors==errors && RuntimeRenders==1u && RuntimeSignals==1u &&
                 RuntimeMaterializations==2u && RuntimeConsumerGates==2u && RuntimeMarker);
           if(FrontendErrors!=errors || !RuntimeMarker) return;
@@ -2718,7 +2792,8 @@ static void test_mesa_d3d10_frontend_open(void) {
         RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
         memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
         RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
-        deviceFunctions.pfnResourceCopy(device,rt,bc1);
+        FrontendSampleDraw(device,&deviceFunctions,rtv,bc1Srv,appSampler,
+            sampleShaders[0],psh);
         CHECK(FrontendErrors==bc1Errors && RuntimeRenders==1u && RuntimeSignals==1u &&
               RuntimeMaterializations==2u && RuntimeConsumerGates==2u && RuntimeMarker);
         if(RuntimeMarker) {
@@ -2771,7 +2846,8 @@ static void test_mesa_d3d10_frontend_open(void) {
         RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
         memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
         RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
-        deviceFunctions.pfnResourceCopy(device,rt,bc3);
+        FrontendSampleDraw(device,&deviceFunctions,rtv,bc3Srv,appSampler,
+            sampleShaders[0],psh);
         CHECK(FrontendErrors==bc3Errors && RuntimeRenders==1u && RuntimeSignals==1u &&
               RuntimeMaterializations==2u && RuntimeConsumerGates==2u && RuntimeMarker);
         if(RuntimeMarker) {
@@ -2824,7 +2900,8 @@ static void test_mesa_d3d10_frontend_open(void) {
         RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
         memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
         RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
-        deviceFunctions.pfnResourceCopy(device,rt,bc5);
+        FrontendSampleDraw(device,&deviceFunctions,rtv,bc5Srv,appSampler,
+            sampleShaders[0],psh);
         CHECK(FrontendErrors==bc5Errors && RuntimeRenders==1u && RuntimeSignals==1u &&
               RuntimeMaterializations==2u && RuntimeConsumerGates==2u && RuntimeMarker);
         if(RuntimeMarker) {
@@ -2877,7 +2954,8 @@ static void test_mesa_d3d10_frontend_open(void) {
         RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
         memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
         RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
-        deviceFunctions.pfnResourceCopy(device,rt,r9);
+        FrontendSampleDraw(device,&deviceFunctions,rtv,r9Srv,appSampler,
+            sampleShaders[0],psh);
         CHECK(FrontendErrors==r9Errors && RuntimeRenders==1u && RuntimeSignals==1u &&
               RuntimeMaterializations==2u && RuntimeConsumerGates==2u && RuntimeMarker);
         if(RuntimeMarker) {
@@ -2930,7 +3008,8 @@ static void test_mesa_d3d10_frontend_open(void) {
         RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
         memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
         RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
-        deviceFunctions.pfnResourceCopy(device,rt,pair0);
+        FrontendSampleDraw(device,&deviceFunctions,rtv,pair0Srv,appSampler,
+            sampleShaders[0],psh);
         CHECK(FrontendErrors==pair0Errors && RuntimeRenders==1u && RuntimeSignals==1u &&
               RuntimeMaterializations==2u && RuntimeConsumerGates==2u && RuntimeMarker);
         if(RuntimeMarker) {
@@ -2983,7 +3062,8 @@ static void test_mesa_d3d10_frontend_open(void) {
         RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
         memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
         RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
-        deviceFunctions.pfnResourceCopy(device,rt,pair1);
+        FrontendSampleDraw(device,&deviceFunctions,rtv,pair1Srv,appSampler,
+            sampleShaders[0],psh);
         CHECK(FrontendErrors==pair1Errors && RuntimeRenders==1u && RuntimeSignals==1u &&
               RuntimeMaterializations==2u && RuntimeConsumerGates==2u && RuntimeMarker);
         if(RuntimeMarker) {
@@ -3036,7 +3116,8 @@ static void test_mesa_d3d10_frontend_open(void) {
         RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
         memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
         RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
-        deviceFunctions.pfnResourceCopy(device,rt,b5551);
+        FrontendSampleDraw(device,&deviceFunctions,rtv,b5551Srv,appSampler,
+            sampleShaders[0],psh);
         CHECK(FrontendErrors==b5551Errors && RuntimeRenders==1u && RuntimeSignals==1u &&
               RuntimeMaterializations==2u && RuntimeConsumerGates==2u && RuntimeMarker);
         if(RuntimeMarker) {
@@ -3089,7 +3170,8 @@ static void test_mesa_d3d10_frontend_open(void) {
         RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
         memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
         RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
-        deviceFunctions.pfnResourceCopy(device,rt,b4444);
+        FrontendSampleDraw(device,&deviceFunctions,rtv,b4444Srv,appSampler,
+            sampleShaders[0],psh);
         CHECK(FrontendErrors==b4444Errors && RuntimeRenders==1u && RuntimeSignals==1u &&
               RuntimeMaterializations==2u && RuntimeConsumerGates==2u && RuntimeMarker);
         if(RuntimeMarker) {
@@ -3143,7 +3225,8 @@ static void test_mesa_d3d10_frontend_open(void) {
         memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
         RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
         AdmissionUmdRuntimeExpectTextureSubresource(1);
-        deviceFunctions.pfnResourceCopy(device,rt,mipResource);
+        FrontendSampleDraw(device,&deviceFunctions,rtv,mipSrv,appSampler,
+            sampleShaders[1],psh);
         AdmissionUmdRuntimeExpectTextureSubresource(0);
         CHECK(FrontendErrors==mipErrors && RuntimeRenders==1u && RuntimeSignals==1u &&
               RuntimeMaterializations==2u && RuntimeConsumerGates==2u && RuntimeMarker);
@@ -3197,7 +3280,8 @@ static void test_mesa_d3d10_frontend_open(void) {
         RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
         memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
         RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
-        deviceFunctions.pfnResourceCopy(device,rt,a8);
+        FrontendSampleDraw(device,&deviceFunctions,rtv,a8Srv,appSampler,
+            sampleShaders[0],psh);
         CHECK(FrontendErrors==a8Errors && RuntimeRenders==1u && RuntimeSignals==1u &&
               RuntimeMaterializations==2u && RuntimeConsumerGates==2u && RuntimeMarker);
         if(RuntimeMarker) {
@@ -3250,7 +3334,8 @@ static void test_mesa_d3d10_frontend_open(void) {
         RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
         memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
         RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
-        deviceFunctions.pfnResourceCopy(device,rt,rgb32);
+        FrontendSampleDraw(device,&deviceFunctions,rtv,rgb32Srv,appSampler,
+            sampleShaders[0],psh);
         CHECK(FrontendErrors==rgb32Errors && RuntimeRenders==1u && RuntimeSignals==1u &&
               RuntimeMaterializations==2u && RuntimeConsumerGates==2u && RuntimeMarker);
         if(RuntimeMarker) {
@@ -3881,6 +3966,9 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnPsSetConstantBuffers(device,0,1,&nullConstant);
     deviceFunctions.pfnDestroyDepthStencilState(device,depth);deviceFunctions.pfnDestroyRasterizerState(device,raster);
     deviceFunctions.pfnDestroyBlendState(device,blend);deviceFunctions.pfnDestroyShader(device,psh);
+    for(UINT i=0;i<ARRAYSIZE(sampleShaders);++i) {
+      deviceFunctions.pfnDestroyShader(device,sampleShaders[i]);free(sampleShaders[i].pDrvPrivate);
+    }
     deviceFunctions.pfnDestroyShader(device,gsh);
     deviceFunctions.pfnDestroyShader(device,soGsh);
     deviceFunctions.pfnDestroyShader(device,vsh);deviceFunctions.pfnDestroyElementLayout(device,layout);
