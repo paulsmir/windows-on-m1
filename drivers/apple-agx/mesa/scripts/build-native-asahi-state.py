@@ -1587,6 +1587,8 @@ AgxD3d10ColorBytes(DXGI_FORMAT format)
    case DXGI_FORMAT_R8_UNORM: return 1;
    case DXGI_FORMAT_R16_FLOAT:
    case DXGI_FORMAT_B5G6R5_UNORM: return 2;
+   case DXGI_FORMAT_B8G8R8A8_TYPELESS:
+   case DXGI_FORMAT_B8G8R8X8_TYPELESS:
    case DXGI_FORMAT_B8G8R8A8_UNORM:
    case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
    case DXGI_FORMAT_B8G8R8X8_UNORM:
@@ -1824,9 +1826,8 @@ AgxD3d10ResourceWithinRequiredLimits(
          pCreateResource->SampleDesc.Count == 1 && pCreateResource->SampleDesc.Quality == 0 &&
          pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT && pCreateResource->MapFlags == 0 &&
          (pCreateResource->BindFlags == D3D10_DDI_BIND_RENDER_TARGET ||
-          (pCreateResource->Format == DXGI_FORMAT_R8G8B8A8_TYPELESS &&
-           pCreateResource->BindFlags == (D3D10_DDI_BIND_RENDER_TARGET |
-              D3D10_DDI_BIND_SHADER_RESOURCE))) &&
+          pCreateResource->BindFlags == (D3D10_DDI_BIND_RENDER_TARGET |
+              D3D10_DDI_BIND_SHADER_RESOURCE)) &&
          pCreateResource->MiscFlags == 0 && !pCreateResource->pPrimaryDesc &&
          !pCreateResource->pInitialDataUP;
       if (!private_rt || !screen->resource_create_with_modifiers) {

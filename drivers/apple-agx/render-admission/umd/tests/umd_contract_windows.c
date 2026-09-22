@@ -1352,11 +1352,13 @@ static void test_mesa_d3d10_frontend_open(void) {
     {
       D3D10DDIARG_CREATERESOURCE rejected=rtCreate;
       D3D10DDI_HRESOURCE rejectedHandle={0};D3D10DDI_HRTRESOURCE rejectedRuntime={0};
-      rejected.BindFlags|=D3D10_DDI_BIND_SHADER_RESOURCE;
+      /* Combined color RT/SRV is now admitted; a color/depth bind mixture
+       * must still fail before allocating or submitting anything. */
+      rejected.BindFlags|=D3D10_DDI_BIND_SHADER_RESOURCE|D3D10_DDI_BIND_DEPTH_STENCIL;
       rejectedHandle.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateResourceSize(device,&rejected));
       unsigned createsBefore=PoolCreates,rendersBefore=RuntimeRenders,errorsBefore=FrontendErrors;
       deviceFunctions.pfnCreateResource(device,&rejected,rejectedHandle,rejectedRuntime);
-      CHECK(FrontendErrors==errorsBefore+1 && FrontendLastError==E_NOTIMPL &&
+      CHECK(FrontendErrors==errorsBefore+1 && FAILED(FrontendLastError) &&
             PoolCreates==createsBefore && RuntimeRenders==rendersBefore);
       deviceFunctions.pfnDestroyResource(device,rejectedHandle);free(rejectedHandle.pDrvPrivate);
     }
@@ -2462,7 +2464,13 @@ static void test_mesa_d3d10_frontend_open(void) {
         deviceFunctions.pfnSetViewports(device,1,0,&viewport);
         deviceFunctions.pfnSetScissorRects(device,1,0,&rect);
       }
-      {
+      for(UINT combinedFamily=0;combinedFamily<3;++combinedFamily) {
+        const DXGI_FORMAT combinedFormats[3][3]={
+          {DXGI_FORMAT_R8G8B8A8_TYPELESS,DXGI_FORMAT_R8G8B8A8_UNORM,DXGI_FORMAT_R8G8B8A8_UNORM_SRGB},
+          {DXGI_FORMAT_B8G8R8A8_TYPELESS,DXGI_FORMAT_B8G8R8A8_UNORM,DXGI_FORMAT_B8G8R8A8_UNORM_SRGB},
+          {DXGI_FORMAT_B8G8R8X8_TYPELESS,DXGI_FORMAT_B8G8R8X8_UNORM,DXGI_FORMAT_B8G8R8X8_UNORM_SRGB}};
+        for(UINT combinedStorage=0;combinedStorage<(combinedFamily?3u:2u);++combinedStorage) {
+        fprintf(stderr,"COMBINED_COLOR_CASE: family=%u storage=%u\n",combinedFamily,combinedStorage);
         D3D10DDI_MIPINFO rgbaMip={0};
         D3D10DDIARG_CREATERESOURCE rgbaCreate={0};
         D3D10DDI_HRESOURCE rgba={0};D3D10DDI_HRTRESOURCE rgbaRuntime={0};
@@ -2475,7 +2483,7 @@ static void test_mesa_d3d10_frontend_open(void) {
         rgbaCreate.Usage=D3D10_DDI_USAGE_DEFAULT;
         rgbaCreate.BindFlags=D3D10_DDI_BIND_RENDER_TARGET|
             D3D10_DDI_BIND_SHADER_RESOURCE;
-        rgbaCreate.Format=DXGI_FORMAT_R8G8B8A8_TYPELESS;
+        rgbaCreate.Format=combinedFormats[combinedFamily][combinedStorage];
         rgbaCreate.SampleDesc.Count=1;rgbaCreate.MipLevels=1;
         rgbaCreate.ArraySize=1;
         SIZE_T rgbaBytes=deviceFunctions.pfnCalcPrivateResourceSize(
@@ -2486,8 +2494,9 @@ static void test_mesa_d3d10_frontend_open(void) {
         unsigned rgbaErrors=FrontendErrors;
         deviceFunctions.pfnCreateResource(device,&rgbaCreate,rgba,rgbaRuntime);
         CHECK(FrontendErrors==rgbaErrors);
+        if(FrontendErrors!=rgbaErrors) return;
         rgbaViewCreate.hDrvResource=rgba;
-        rgbaViewCreate.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+        rgbaViewCreate.Format=combinedFormats[combinedFamily][combinedStorage?combinedStorage:1];
         rgbaViewCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
         rgbaViewCreate.Tex2D.MipSlice=0;
         rgbaViewCreate.Tex2D.FirstArraySlice=0;
@@ -2559,7 +2568,7 @@ static void test_mesa_d3d10_frontend_open(void) {
         D3D10DDI_HSHADERRESOURCEVIEW rgbaSrv={0};
         D3D10DDI_HRTSHADERRESOURCEVIEW rgbaSrvRuntime={0};
         rgbaSrvCreate.hDrvResource=rgba;
-        rgbaSrvCreate.Format=DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+        rgbaSrvCreate.Format=combinedFormats[combinedFamily][combinedStorage?combinedStorage:2];
         rgbaSrvCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
         rgbaSrvCreate.Tex2D.MostDetailedMip=0;rgbaSrvCreate.Tex2D.MipLevels=1;
         rgbaSrvCreate.Tex2D.FirstArraySlice=0;rgbaSrvCreate.Tex2D.ArraySize=1;
@@ -2602,6 +2611,7 @@ static void test_mesa_d3d10_frontend_open(void) {
             (D3D10DDI_HDEPTHSTENCILVIEW){0});
         deviceFunctions.pfnSetViewports(device,1,0,&viewport);
         deviceFunctions.pfnSetScissorRects(device,1,0,&rect);
+        }
       }
       /* Extended BGRA admission requires both BGR families and sRGB views.
        * Exercise the existing real producer/materializer, not a fabricated capture. */
