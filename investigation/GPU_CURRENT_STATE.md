@@ -17,7 +17,7 @@ KMD Render/Patch/Submit -> AGX. Do not redesign these layers or expand features.
 OpenGL/CS1.6 follow desktop acceptance. Ordinary setup errors are not GPU verdicts.
 
 ## Current source / candidate
-Current implementation1b747986; last hardware package745 remains immutable.
+Current implementationc7460e7d; last hardware package745 remains immutable.
 Implementation75bc5baff3b638e5d5f483686153cca523738117 accepts exact Blt1 orFlip2.
 EXP736 package745 under /Users/pavel/public_windows/.local/experiments/EXP736-blt-present/package-build/package.
 SYS d352215b5d641c527481f16bb0d985803e6a8791d3dadec3674b2f30ee6e72a5
@@ -44,9 +44,7 @@ User explicitly reports physical black/white corruption PERSISTS on745.
 Current Application events prove repeated dwm.exe/dwmcore.dll26100.9278 crashes,
 exception889800b0 offset27bde4 since boot; Explorer5236 remainsSession1, DWM PIDs
 change. ETW records DWM exits/restarts. Desktop acceptance remainsFAILED.
-Evidence EXP736-blt-present/{EXP736-dwm-state.json,dwm-etw-selected.json,
-dwm-runtime-events.json,physical-observation.json,loaded-umd-proof.json,
-EXP736-umd-trace.txt,EXP736-client.json,EXP736-runtime.etl}.
+Evidence EXP736-blt-present: dwm-state/loaded-umd-proof/physical-observation andETL.
 EXP736 historical WER dump is INVALID for current attribution; static same-version
 binary inspection only. EXP737 empty WER copies alsoINVALID.
 EXP737 passive trace completed on unchanged745, no qualification client. Direct3D11
@@ -85,10 +83,14 @@ Samplecount>1 and MSAA bits remainzero. All8typeless/typedUNORM/SRGB sampled
 producer cases passed even inRED; exactly7queryfailures -> fullsuiteGREEN.
 Source70a02e64a4db48faccd4e0766ad04c9ed359ce77d437de1a6a61506f5fc88e41;
 x64suite0/0warnings/errors,botharchivesPASS; EXP741-bgr-format-query/green.
-NEXT: combined BGR RENDER_TARGET|SHADER_RESOURCE and render-then-sample lifetime:
-private_rt currently admits combinedbind only forRGBA_TYPELESS. Then remaining
-mandatoryresource/scanout operations; arbitraryrotation/resolve/full dimensions
-remain unproven. No new hardwarepackage until truthful companion gates.
+EXP742 implementationc7460e7dee8657ffdc49ffb5165b709df03ccfca: combinedRT|SRV
+admitted within existingprivatecolor limits; BGRtypeless4bytes. Eight realproducer
+render-retire-sample-retire casesPASS (RGBA2/BGRA3/BGRX3). Fullx64suite0,0warnings/
+errors,bothnativearchivesPASS. Source d95e5abd8f1bd743cfc4e0097147ba87cb95232a6d80e088e113f13a19ee0507;
+EXP742-combined-bgr/verified includes native-reuse-proof (onlytestfilechanged).
+NEXT: remaining BGR geometry/size and scanout companions. PrivateRT still1MB/4096,
+resourcecopy test path limits source<=16; arbitraryrotation/resolve/full dimensions
+unproven. No newhardwarepackage until truthful companion gates.
 D3D10_0_x advertisement remainsCLOSED until all mandatory companions pass.
 Operator followup: black afterlogon; elements only appear withartifacts after
 Windows key; no spontaneous correctdesktop. Exact additional run/time unspecified.
