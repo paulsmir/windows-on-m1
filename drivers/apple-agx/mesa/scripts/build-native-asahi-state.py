@@ -468,7 +468,13 @@ void APIENTRY
 #endif
    }''','''   (void)hDevice;
    if (Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
-       Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
+       Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB ||
+       Format == DXGI_FORMAT_B8G8R8X8_UNORM ||
+       Format == DXGI_FORMAT_B8G8R8X8_UNORM_SRGB) {
+      *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET |
+                     D3D10_DDI_FORMAT_SUPPORT_BLENDABLE |
+                     D3D10_DDI_FORMAT_SUPPORT_SHADER_SAMPLE;
+   } else if (Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
        Format == DXGI_FORMAT_R16G16B16A16_FLOAT ||
        Format == DXGI_FORMAT_R8_UNORM || Format == DXGI_FORMAT_R16_FLOAT ||
        Format == DXGI_FORMAT_R32G32B32A32_FLOAT ||
@@ -488,6 +494,9 @@ void APIENTRY
    *pNumQualityLevels = 0;''','''   (void)hDevice;
    *pNumQualityLevels =
       (Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
+       Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB ||
+       Format == DXGI_FORMAT_B8G8R8X8_UNORM ||
+       Format == DXGI_FORMAT_B8G8R8X8_UNORM_SRGB ||
        Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
        Format == DXGI_FORMAT_D32_FLOAT ||
        Format == DXGI_FORMAT_D16_UNORM ||

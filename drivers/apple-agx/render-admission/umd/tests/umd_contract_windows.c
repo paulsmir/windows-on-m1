@@ -1131,9 +1131,18 @@ static void test_mesa_d3d10_frontend_open(void) {
           MesaD3d10FrontendFormatMappedForTest(
               DXGI_FORMAT_D32_FLOAT_S8X24_UINT) &&
           !MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT_UNKNOWN));
-    deviceFunctions.pfnCheckFormatSupport(device,DXGI_FORMAT_B8G8R8A8_UNORM,&formatCaps);
-    CHECK(formatCaps==(D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET|
-                       D3D10_DDI_FORMAT_SUPPORT_BLENDABLE));
+    const DXGI_FORMAT bgrFormats[]={DXGI_FORMAT_B8G8R8A8_UNORM,
+        DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,DXGI_FORMAT_B8G8R8X8_UNORM,
+        DXGI_FORMAT_B8G8R8X8_UNORM_SRGB};
+    for(UINT bgr=0;bgr<ARRAYSIZE(bgrFormats);++bgr) {
+      deviceFunctions.pfnCheckFormatSupport(device,bgrFormats[bgr],&formatCaps);
+      CHECK(formatCaps==(D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET|
+          D3D10_DDI_FORMAT_SUPPORT_BLENDABLE|D3D10_DDI_FORMAT_SUPPORT_SHADER_SAMPLE));
+      deviceFunctions.pfnCheckMultisampleQualityLevels(device,bgrFormats[bgr],1,&quality);
+      CHECK(quality==1u);
+      deviceFunctions.pfnCheckMultisampleQualityLevels(device,bgrFormats[bgr],2,&quality);
+      CHECK(quality==0u);
+    }
     deviceFunctions.pfnCheckFormatSupport(device,DXGI_FORMAT_D32_FLOAT,&formatCaps);
     CHECK(formatCaps==0u); /* Depth support is base-assumed by this DDI. */
     deviceFunctions.pfnCheckFormatSupport(device,DXGI_FORMAT_R32G32B32A32_FLOAT,&formatCaps);
@@ -2602,6 +2611,7 @@ static void test_mesa_d3d10_frontend_open(void) {
            DXGI_FORMAT_B8G8R8A8_UNORM_SRGB},
           {DXGI_FORMAT_B8G8R8X8_TYPELESS,DXGI_FORMAT_B8G8R8X8_UNORM,
            DXGI_FORMAT_B8G8R8X8_UNORM_SRGB}};
+        for(UINT storage=0;storage<3;++storage) {
         unsigned char pixels[16*16*4];memset(pixels,0x80,sizeof(pixels));
         D3D10DDI_MIPINFO mip={0};mip.TexelWidth=mip.TexelHeight=16;mip.TexelDepth=1;
         D3D10_DDIARG_SUBRESOURCE_UP upload={0};
@@ -2610,7 +2620,7 @@ static void test_mesa_d3d10_frontend_open(void) {
         bgraCreate.pMipInfoList=&mip;bgraCreate.pInitialDataUP=&upload;
         bgraCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
         bgraCreate.Usage=D3D10_DDI_USAGE_DEFAULT;bgraCreate.BindFlags=D3D10_DDI_BIND_SHADER_RESOURCE;
-        bgraCreate.Format=formats[family][0];bgraCreate.SampleDesc.Count=1;
+        bgraCreate.Format=formats[family][storage];bgraCreate.SampleDesc.Count=1;
         bgraCreate.MipLevels=bgraCreate.ArraySize=1;
         D3D10DDI_HRESOURCE resource={0};D3D10DDI_HRTRESOURCE runtime={0};
         resource.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateResourceSize(device,&bgraCreate));
@@ -2621,8 +2631,8 @@ static void test_mesa_d3d10_frontend_open(void) {
             MesaD3d10FrontendContextForTest(device)));
         if(FrontendErrors!=errors || AgxWin32AsahiContextFaulted(
             MesaD3d10FrontendContextForTest(device))) return;
-        for(UINT viewIndex=1;viewIndex<3;++viewIndex) {
-          fprintf(stderr,"EXTENDED_BGR_CASE: family=%u view=%u\n",family,viewIndex);
+        for(UINT viewIndex=storage?storage:1;viewIndex<3 && (!storage || viewIndex==storage);++viewIndex) {
+          fprintf(stderr,"EXTENDED_BGR_CASE: family=%u storage=%u view=%u\n",family,storage,viewIndex);
           CHECK(AgxD3d10FormatViewCompatible(bgraCreate.Format,formats[family][viewIndex],FALSE,FALSE));
           CHECK(!AgxD3d10FormatViewCompatible(bgraCreate.Format,formats[1-family][viewIndex],FALSE,FALSE));
           D3D10DDIARG_CREATESHADERRESOURCEVIEW viewCreate={0};
@@ -2654,6 +2664,7 @@ static void test_mesa_d3d10_frontend_open(void) {
           deviceFunctions.pfnDestroyShaderResourceView(device,view);free(view.pDrvPrivate);
         }
         deviceFunctions.pfnDestroyResource(device,resource);free(resource.pDrvPrivate);
+        }
       }
       {
         static unsigned char bc1Data[32]={
