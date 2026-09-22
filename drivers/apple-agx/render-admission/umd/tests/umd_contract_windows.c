@@ -49,7 +49,7 @@ EXTERN_C struct pipe_context *APIENTRY MesaD3d10FrontendContextForTest(D3D10DDI_
 EXTERN_C BOOL APIENTRY MesaD3d10FrontendShaderValidForTest(D3D10DDI_HSHADER);
 EXTERN_C BOOL APIENTRY MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT);
 EXTERN_C BOOL AgxD3d10FormatViewCompatible(
-    DXGI_FORMAT,DXGI_FORMAT,BOOL);
+    DXGI_FORMAT,DXGI_FORMAT,BOOL,BOOL);
 void AdmissionUmdRuntimeExpectTextureSubresource(int);
 EXTERN_C BOOL APIENTRY MesaD3d10FrontendSetSoOffsetForTest(
     D3D10DDI_HDEVICE,D3D10DDI_HRESOURCE,UINT);
@@ -1452,7 +1452,7 @@ static void test_mesa_d3d10_frontend_open(void) {
       createPresent.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
       createPresent.Usage=D3D10_DDI_USAGE_DEFAULT;
       createPresent.BindFlags=D3D10_DDI_BIND_PRESENT;
-      createPresent.Format=DXGI_FORMAT_B8G8R8A8_UNORM;
+      createPresent.Format=DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
       createPresent.SampleDesc.Count=1u;createPresent.MipLevels=1u;
       createPresent.ArraySize=1u;createPresent.pPrimaryDesc=&primary;
       presentRuntime.handle=(VOID *)(UINT_PTR)0x777u;
@@ -1464,6 +1464,29 @@ static void test_mesa_d3d10_frontend_open(void) {
       deviceFunctions.pfnCreateResource(device,&createPresent,
           createdPresentResource,presentRuntime);
       CHECK(FrontendErrors==createPresentErrors);
+      if(FrontendErrors!=createPresentErrors) return;
+      CHECK(AgxD3d10FormatViewCompatible(DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,
+          DXGI_FORMAT_B8G8R8A8_UNORM,FALSE,TRUE));
+      CHECK(!AgxD3d10FormatViewCompatible(DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,
+          DXGI_FORMAT_B8G8R8A8_UNORM,FALSE,FALSE));
+      CHECK(!AgxD3d10FormatViewCompatible(DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,
+          DXGI_FORMAT_R8G8B8A8_UNORM,FALSE,TRUE));
+      /* A fully typed sRGB backbuffer permits the UNORM view in its own
+       * format family. This must use the existing native presentation owner. */
+      D3D10DDIARG_CREATERENDERTARGETVIEW castDesc={0};
+      D3D10DDI_HRENDERTARGETVIEW castView={0};
+      D3D10DDI_HRTRENDERTARGETVIEW castRuntime={0};
+      castDesc.hDrvResource=createdPresentResource;
+      castDesc.Format=DXGI_FORMAT_B8G8R8A8_UNORM;
+      castDesc.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+      castDesc.Tex2D.ArraySize=1;
+      castView.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateRenderTargetViewSize(device,&castDesc));
+      castRuntime.handle=(VOID *)(UINT_PTR)0x77au;
+      CHECK(castView.pDrvPrivate!=NULL);
+      deviceFunctions.pfnCreateRenderTargetView(device,&castDesc,castView,castRuntime);
+      CHECK(FrontendErrors==createPresentErrors);
+      if(FrontendErrors!=createPresentErrors) return;
+      deviceFunctions.pfnDestroyRenderTargetView(device,castView);free(castView.pDrvPrivate);
       DXGI_DDI_ARG_SETDISPLAYMODE mode={0};
       mode.hDevice=(DXGI_DDI_HDEVICE)(UINT_PTR)device.pDrvPrivate;
       mode.hResource=(DXGI_DDI_HRESOURCE)(UINT_PTR)
@@ -2519,10 +2542,10 @@ static void test_mesa_d3d10_frontend_open(void) {
         RuntimeExpectedCommandVersion=0;
         CHECK(AgxD3d10FormatViewCompatible(
             DXGI_FORMAT_R8G8B8A8_TYPELESS,
-            DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,FALSE));
+            DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,FALSE,FALSE));
         CHECK(!AgxD3d10FormatViewCompatible(
             DXGI_FORMAT_R8G8B8A8_TYPELESS,
-            DXGI_FORMAT_R16G16_FLOAT,FALSE));
+            DXGI_FORMAT_R16G16_FLOAT,FALSE,FALSE));
         D3D10DDIARG_CREATESHADERRESOURCEVIEW rgbaSrvCreate={0};
         D3D10DDI_HSHADERRESOURCEVIEW rgbaSrv={0};
         D3D10DDI_HRTSHADERRESOURCEVIEW rgbaSrvRuntime={0};
@@ -2600,8 +2623,8 @@ static void test_mesa_d3d10_frontend_open(void) {
             MesaD3d10FrontendContextForTest(device))) return;
         for(UINT viewIndex=1;viewIndex<3;++viewIndex) {
           fprintf(stderr,"EXTENDED_BGR_CASE: family=%u view=%u\n",family,viewIndex);
-          CHECK(AgxD3d10FormatViewCompatible(bgraCreate.Format,formats[family][viewIndex],FALSE));
-          CHECK(!AgxD3d10FormatViewCompatible(bgraCreate.Format,formats[1-family][viewIndex],FALSE));
+          CHECK(AgxD3d10FormatViewCompatible(bgraCreate.Format,formats[family][viewIndex],FALSE,FALSE));
+          CHECK(!AgxD3d10FormatViewCompatible(bgraCreate.Format,formats[1-family][viewIndex],FALSE,FALSE));
           D3D10DDIARG_CREATESHADERRESOURCEVIEW viewCreate={0};
           viewCreate.hDrvResource=resource;viewCreate.Format=formats[family][viewIndex];
           viewCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;

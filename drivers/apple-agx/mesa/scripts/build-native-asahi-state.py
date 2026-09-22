@@ -523,7 +523,9 @@ void APIENTRY
       (!windowsResource->presentation&&
        !(windowsResource->bind_flags&D3D10_DDI_BIND_RENDER_TARGET))||
       !AgxD3d10FormatViewCompatible(windowsResource->Format,
-          pCreateRenderTargetView->Format,FALSE)) {
+          pCreateRenderTargetView->Format,FALSE,
+          windowsResource->presentation &&
+          (windowsResource->bind_flags & D3D10_DDI_BIND_PRESENT))) {
       SetError(hDevice,E_NOTIMPL);return;
    }
    struct pipe_resource *resource = windowsResource->resource;'''),
@@ -570,7 +572,8 @@ void APIENTRY
         resource->format != PIPE_FORMAT_R11G11B10_FLOAT &&
         resource->format != PIPE_FORMAT_B5G6R5_UNORM) ||
        resource->nr_samples != 1 || resource->array_size != 1 ||
-       resource->last_level != 0 || surface->format != resource->format ||
+       resource->last_level != 0 ||
+       util_format_linear(surface->format) != util_format_linear(resource->format) ||
        surface->level != 0 || surface->first_layer != 0 || surface->last_layer != 0 ||
        !bound || pDevice->fb.zsbuf.texture || bound->texture != resource ||
        bound->format != surface->format || bound->level != surface->level ||
@@ -625,7 +628,8 @@ void APIENTRY
         resource->format != PIPE_FORMAT_Z24_UNORM_S8_UINT &&
         resource->format != PIPE_FORMAT_Z32_FLOAT_S8X24_UINT) ||
        resource->nr_samples != 1 || resource->array_size != 1 ||
-       resource->last_level != 0 || surface->format != resource->format ||
+       resource->last_level != 0 ||
+       util_format_linear(surface->format) != util_format_linear(resource->format) ||
        surface->level != 0 || surface->first_layer != 0 ||
        surface->last_layer != 0 || bound->texture != resource ||
        bound->format != surface->format || bound->level != surface->level ||
@@ -1206,7 +1210,9 @@ UnsupportedDxgi''')
       (!windowsResource->presentation&&
        !(windowsResource->bind_flags&D3D10_DDI_BIND_SHADER_RESOURCE))||
       !AgxD3d10FormatViewCompatible(windowsResource->Format,
-          pCreateSRView->Format,FALSE)||
+          pCreateSRView->Format,FALSE,
+          windowsResource->presentation &&
+          (windowsResource->bind_flags & D3D10_DDI_BIND_PRESENT))||
       pCreateSRView->ResourceDimension!=D3D10DDIRESOURCE_TEXTURE2D||
       pCreateSRView->Tex2D.MipLevels!=1u||pCreateSRView->Tex2D.ArraySize!=1u||
       pCreateSRView->Tex2D.MostDetailedMip>=windowsResource->MipLevels||
@@ -1374,7 +1380,7 @@ FormatToName(DXGI_FORMAT Format);
 extern "C"
 #endif
 BOOL AgxD3d10FormatViewCompatible(
-   DXGI_FORMAT ResourceFormat, DXGI_FORMAT ViewFormat, BOOL Depth);
+   DXGI_FORMAT ResourceFormat, DXGI_FORMAT ViewFormat, BOOL Depth, BOOL BackBuffer);
 
 #ifdef __cplusplus
 extern "C"
@@ -1391,8 +1397,16 @@ enum pipe_format AgxD3d10LoweredTextureFormat(DXGI_FORMAT Format);''')])
         ('#include "Format.h"','''#include "Format.h"
 
 extern "C" BOOL AgxD3d10FormatViewCompatible(
-   DXGI_FORMAT resource, DXGI_FORMAT view, BOOL depth)
+   DXGI_FORMAT resource, DXGI_FORMAT view, BOOL depth, BOOL backbuffer)
 {
+   if (backbuffer && !depth) {
+      if (resource == DXGI_FORMAT_B8G8R8A8_UNORM ||
+          resource == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB)
+         resource = DXGI_FORMAT_B8G8R8A8_TYPELESS;
+      else if (resource == DXGI_FORMAT_R8G8B8A8_UNORM ||
+               resource == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB)
+         resource = DXGI_FORMAT_R8G8B8A8_TYPELESS;
+   }
    if (resource == view) return FormatTranslate(view, depth) != PIPE_FORMAT_NONE;
    if (resource == DXGI_FORMAT_B8G8R8A8_TYPELESS)
       return !depth && (view == DXGI_FORMAT_B8G8R8A8_UNORM ||

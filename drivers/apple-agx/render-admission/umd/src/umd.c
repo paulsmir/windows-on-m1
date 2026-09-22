@@ -121,6 +121,7 @@ static BOOLEAN AdmissionUmdDescribePrimary(
       CreateResource->pMipInfoList == NULL ||
       CreateResource->ResourceDimension != D3D10DDIRESOURCE_TEXTURE2D ||
       (CreateResource->Format != DXGI_FORMAT_B8G8R8A8_UNORM &&
+       CreateResource->Format != DXGI_FORMAT_B8G8R8A8_UNORM_SRGB &&
        CreateResource->Format != DXGI_FORMAT_R8G8B8A8_UNORM) ||
       (CreateResource->Format == DXGI_FORMAT_R8G8B8A8_UNORM &&
        CreateResource->pPrimaryDesc != NULL) ||
@@ -144,7 +145,8 @@ static BOOLEAN AdmissionUmdDescribePrimary(
   Description->SegmentId = 2u;
   Description->Linear = 1u;
   Description->Displayable =
-      CreateResource->Format == DXGI_FORMAT_B8G8R8A8_UNORM ? 1u : 0u;
+      (CreateResource->Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
+       CreateResource->Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB) ? 1u : 0u;
   return TRUE;
 }
 
