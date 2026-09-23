@@ -1,6 +1,30 @@
 #include "render_admission.h"
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
 #include "apple_agx_render_template_vm_slot.h"
+static BOOLEAN AdmissionB1Armed(ADMISSION_CONTEXT *context) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  NTSTATUS status;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (context == NULL || context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(
+          context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_QUERY_VALUE, &key)))
+    return FALSE;
+  RtlInitUnicodeString(&name, L"B1Armed");
+  status = ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                           value, sizeof(data.Buffer), &bytes);
+  ZwClose(key);
+  return NT_SUCCESS(status) && value->Type == REG_DWORD &&
+         value->DataLength == sizeof(ULONG) &&
+         *(ULONG *)value->Data == 1u;
+}
 #endif
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiAddDevice(
@@ -44,6 +68,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   AdmissionRecordDevice(context->PhysicalDeviceObject,
                         AdmissionReceiptStartEntered, STATUS_PENDING);
   AdmissionRecordStartStage(context, AdmissionStartEntered, STATUS_PENDING);
+#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
+  if (!AdmissionB1Armed(context)) {
+    AdmissionRecordB1Qualification(
+        context, 0u, STATUS_NOT_SUPPORTED, 0u, 0u, 0u, 0u, 0u);
+    AdmissionRecordStartStage(context, AdmissionStartEntered,
+                              STATUS_NOT_SUPPORTED);
+    return STATUS_NOT_SUPPORTED;
+  }
+#endif
   context->StartInfo = *DxgkStartInfo;
   context->Interface = *DxgkInterface;
   context->InterfaceValid = TRUE;
