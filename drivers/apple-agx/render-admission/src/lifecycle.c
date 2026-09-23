@@ -30,10 +30,10 @@ static BOOLEAN AdmissionB1Armed(ADMISSION_CONTEXT *context) {
 _Use_decl_annotations_ NTSTATUS AdmissionDdiAddDevice(
     PDEVICE_OBJECT PhysicalDeviceObject, PVOID *MiniportDeviceContext) {
   ADMISSION_CONTEXT *context;
-  if (PhysicalDeviceObject == NULL || MiniportDeviceContext == NULL)
-    return STATUS_INVALID_PARAMETER;
   AdmissionRecordDevice(PhysicalDeviceObject, AdmissionReceiptAddEntered,
                         STATUS_PENDING);
+  if (PhysicalDeviceObject == NULL || MiniportDeviceContext == NULL)
+    return STATUS_INVALID_PARAMETER;
   context = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*context),
                             ADMISSION_POOL_TAG);
   if (context == NULL)
@@ -60,14 +60,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
   NTSTATUS status;
 
+  AdmissionRecordDevice(context == NULL ? NULL : context->PhysicalDeviceObject,
+                        AdmissionReceiptStartEntered, STATUS_PENDING);
+  AdmissionRecordStartStage(context, AdmissionStartEntered, STATUS_PENDING);
   if (context == NULL || DxgkStartInfo == NULL || DxgkInterface == NULL ||
       NumberOfVideoPresentSources == NULL || NumberOfChildren == NULL)
     return STATUS_INVALID_PARAMETER;
   *NumberOfVideoPresentSources = 0;
   *NumberOfChildren = 0;
-  AdmissionRecordDevice(context->PhysicalDeviceObject,
-                        AdmissionReceiptStartEntered, STATUS_PENDING);
-  AdmissionRecordStartStage(context, AdmissionStartEntered, STATUS_PENDING);
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
   if (!AdmissionB1Armed(context)) {
     AdmissionRecordB1Qualification(

@@ -14,6 +14,7 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
   DRIVER_INITIALIZATION_DATA initialization;
   NTSTATUS status;
 
+  AdmissionRecordService(RegistryPath, L"Wom1CleanDriverEntryStage", 1);
   PAGED_CODE();
   RtlZeroMemory(&initialization, sizeof(initialization));
   initialization.Version = ADMISSION_G1B_INTERFACE_VERSION;
@@ -100,7 +101,6 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
   initialization.DxgkDdiCalibrateGpuClock = AdmissionDdiCalibrateGpuClock;
   initialization.DxgkDdiSetStablePowerState = AdmissionDdiSetStablePowerState;
 
-  AdmissionRecordService(RegistryPath, L"Wom1CleanDriverEntryStage", 1);
   status = DxgkInitialize(DriverObject, RegistryPath, &initialization);
   AdmissionRecordService(RegistryPath, L"Wom1CleanDxgkInitializeStatus", (ULONG)status);
   return status;
