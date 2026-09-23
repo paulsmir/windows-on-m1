@@ -51,9 +51,20 @@ with the x64 native frontend/runtime suite, plus pinned WDK26100 ARM64 UMD
 compile/link PASS. Evidence `.local/experiments/EXP761-rgba-primary-no-scanout/
 offline/manifest.json` SHA256
 `220185e9295ab6022e059fb43efae9dd0e6abcb9aea17d9fb0d07808456025bc`.
-The next smallest hardware checkpoint is one exact profile0 standard client
-CreateSwapChain/Draw/Present run with this UMD, then 16-KiB slab work. B1
-firmware-slot run remains separate and unperformed.
+The offline NO_SCANOUT gate did not establish the standard client's runtime
+primary inputs. B1 firmware-slot work remains separate and unperformed.
+EXP761 ran that exact profile0 UMD once: CreateDevice S_OK, CreateSwapChain
+0x887A0005/reason0x887A0020 again. `reject-primary` identifies Format28 RGBA,
+**pPrimaryDesc=NULL**, Bind PRESENT|RT, MiscFlags0x8
+(`DISCARD_ON_PRESENT`), 2560x1600/sample1. Thus NO_SCANOUT was not exercised;
+the actual UMD guard rejects a documented discard-swapchain flag. Raw ETW639168
+events lost0, no stop code, CPU8/storage/USB/SSH alive. Exact package and
+user transfer copy removed; ordinary Code28/autologon1 recovery passes.
+Evidence `.local/experiments/EXP761-rgba-primary-no-scanout/causal-result.json`
+SHA256 `34ca160081a16c2a94bec1b831f321f023565c8cd30bb0d562369ed0b2652e75`.
+Review R25 also identifies a non-optional-primary companion missing from the
+speculative NO_SCANOUT success path; do not retain that path without its full
+DXGI contract. Current target is the source-backed MiscFlags Usage/Bind rule.
 OpenGL and CS1.6 follow accelerated desktop acceptance.
 
 ## Proven hardware boundary — EXP753/package748
@@ -251,10 +262,12 @@ HARDWARE ROADMAP
        hardware run; exact cleanup and ordinary Code28 recovery.
 [PASS] Resource.cpp:452-453 buffer usage, typed SRV load/capture relocation,
        DynamicResourceMapDiscard and argument-bearing rejection pass offline.
-[NEXT] EXP760 attributes the standard-client CreateSwapChain rejection to the
-current UMD presentation resource path, independent of WDDM3.2. Package and
-preregister one exact RGBA primary/NO_SCANOUT hardware discriminator only after
-final source/build/sign/hash gates; clean its package before another trial.
+[NEXT] EXP761 measured DISCARD_ON_PRESENT with pPrimaryDesc NULL at the UMD
+CreateResource rejection. Supersede the unsupported non-optional NO_SCANOUT
+success path, implement the documented discard flag admission with meaningful
+RED/GREEN and preserve an argument-bearing rejection. Package/preregister one
+new exact client discriminator only after offline/source/build/sign/hash gates;
+clean its package before another trial.
 The 16KiB physical slab trial then requires a measurable VidMm
 placement signal before preregistration; GpuMmu caps remain zero. B1 requires a genuine
 paging/app process caller and firmware job tied to a v5 lease; an MMIO echo is

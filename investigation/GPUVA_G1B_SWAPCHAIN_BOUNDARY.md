@@ -117,3 +117,20 @@ suite. ARM64 UMD compiles/links with pinned WDK26100. Evidence manifest:
 `.local/experiments/EXP761-rgba-primary-no-scanout/offline/manifest.json`
 SHA256 `220185e9295ab6022e059fb43efae9dd0e6abcb9aea17d9fb0d07808456025bc`.
 This is offline proof of UMD admission, not a hardware Present verdict.
+
+## EXP761 correction — actual runtime input
+
+The exact same KMD/INF with the changed UMD did not pass CreateSwapChain.
+Its new `reject-primary` receipt shows Format28 RGBA, **pPrimaryDesc=NULL**,
+Bind PRESENT|RT, MiscFlags0x8, 2560×1600/sample1. The NO_SCANOUT branch was
+not exercised. `D3D10_DDI_RESOURCE_MISC_DISCARD_ON_PRESENT` is documented by
+Microsoft for `DXGI_SWAP_EFFECT_DISCARD` backbuffers; the current SHARED-only
+MiscFlags validator rejects it. See EXP761 causal result SHA256
+`34ca160081a16c2a94bec1b831f321f023565c8cd30bb0d562369ed0b2652e75`.
+
+Microsoft also limits successful NO_SCANOUT opt-out to
+`DXGI_DDI_PRIMARY_OPTIONAL`. The earlier unconditional RGBA+nonnull-primary
+success path lacks the non-optional proxy/rotation companion and must be
+superseded, not silently treated as validated. The active fix target is the
+observed DISCARD_ON_PRESENT Usage/Bind contract, with a negative case for
+invalid combinations and all other misc bits reviewed individually.
