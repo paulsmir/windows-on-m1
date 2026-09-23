@@ -22,7 +22,18 @@ design and host specification are in
 A/B on 2026-09-23; A broker v5 is implemented in m1n1 commit `138c510a` with
 real-C host tests and offline ARM64 link. Correction `1a46a86c` reserves slot63
 for active legacy/v4; v5 uses 1..62 until legacy is disabled. No GpuMmu KMD
-integration or hardware verdict exists yet. B1 precedes G3 and B2.
+integration or GPUVA hardware verdict exists yet. B1 precedes G3 and full B2.
+EXP758 now proves only WDDM3.2 **physical-mode** adapter admission: exact758
+APPL0002 Code0, WDDMDEVICECAPS0x3200 and Apple AGX client CreateDevice S_OK.
+ETW allocation descriptor stayed64KiB and does not directly measure slab
+placement. The client failed CreateSwapChain0x887A0005/reason0x887A0020; no
+render/Present. Raw ETW639494 events lost0. Exact package cleanup and ordinary
+Code28 recovery pass with autologon retained. Evidence: `.local/experiments/
+EXP758-g1b64-control/causal-result.json` SHA256
+`b8802b36ad5fce81d091d5c01639bad0ea6b0d051240c018f5ca3eeb8c9e1015`.
+Next discriminator: 16KiB physical slab with per-QAI and allocation-input
+receipts; this still cannot prove GpuMmu page tables. B1 firmware-slot run is
+unperformed and separate.
 OpenGL and CS1.6 follow accelerated desktop acceptance.
 
 ## Proven hardware boundary — EXP753/package748
@@ -220,10 +231,11 @@ HARDWARE ROADMAP
        hardware run; exact cleanup and ordinary Code28 recovery.
 [PASS] Resource.cpp:452-453 buffer usage, typed SRV load/capture relocation,
        DynamicResourceMapDiscard and argument-bearing rejection pass offline.
-[NEXT] Authorized B1 then B2, each with complete hardware preregistration and
-evidence-first rollback. B1 requires a genuine paging/app process caller and
-firmware job tied to the leased slot; an MMIO echo is insufficient. B2 requires
-the G3 KMD GpuMmu/3.2 admission path and ETW VidMm. Resolve 4-KiB logical
+[NEXT] EXP758 64KiB control is complete and rolled back. The 16KiB physical
+slab trial requires per-query/input receipts and a measurable VidMm placement
+signal before preregistration; GpuMmu caps remain zero. B1 requires a genuine
+paging/app process caller and firmware job tied to a v5 lease; an MMIO echo is
+insufficient. Full GPUVA B2 requires G3 after B1. Resolve 4-KiB logical
 PAGETABLELEVELDESC indices and system-memory scatter before advertising caps.
 Do not package or run cancelled EXP757. Keep intentional autologon enabled.
 POST-HARDWARE: native multi-draw batching, optional features, performance,
