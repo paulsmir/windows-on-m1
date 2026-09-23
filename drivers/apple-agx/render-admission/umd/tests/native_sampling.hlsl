@@ -1,3 +1,14 @@
+// Authored regression for the EXP751 runtime indexable-TEMP invariant.
+#if defined(INDEXABLE_VERTEX)
+float4 main(float4 position : POSITION) : SV_Position {
+    float4 offsets[4] = {
+        float4(0.0, 0.0, 0.0, 0.0), float4(0.1, 0.0, 0.0, 0.0),
+        float4(0.0, 0.1, 0.0, 0.0), float4(0.1, 0.1, 0.0, 0.0)
+    };
+    uint index = asuint(position.x) & 3u;
+    return position + offsets[index];
+}
+#else
 // Compiled as ps_4_0 by the pinned Windows SDK FXC for the native DDI tests.
 #if defined(SAMPLE_MSLOAD)
 Texture2DMS<float4, 1> sourceTexture : register(t0);
@@ -31,3 +42,5 @@ float4 main(float4 position : SV_Position) : SV_Target {
     return sourceTexture.SampleLevel(sourceSampler, position.xy / 16.0, 0.0);
 #endif
 }
+
+#endif

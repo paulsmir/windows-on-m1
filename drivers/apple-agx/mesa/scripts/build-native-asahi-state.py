@@ -124,7 +124,19 @@ if args.windows_platform_declarations:
    } else {
       reg = ureg_DECL_fs_input(ureg, translate_system_name(dcl_siv_name),
                               0, translate_interpolation(dcl_in_ps_interp));
-   }''')])
+   }'''),
+        ('''            for (i = 0; i < opcode.specific.dcl_indexable_temp.count; i++) {
+               sx.temps[sx.declared_temps + i] = ureg_DECL_temporary(ureg);
+            }
+            sx.declared_temps += opcode.specific.dcl_indexable_temp.count;''','''            /* DCL_INDEXABLE_TEMP is one relative-addressable TGSI array.
+             * EXP751 reached this with DirectComposition's ClearGuard VS;
+             * separate scalar declarations make TTN reject the indirect src. */
+            struct ureg_dst array = ureg_DECL_array_temporary(
+               ureg, opcode.specific.dcl_indexable_temp.count, false);
+            for (i = 0; i < opcode.specific.dcl_indexable_temp.count; i++)
+               sx.temps[sx.declared_temps + i] =
+                  ureg_dst_array_offset(array, i);
+            sx.declared_temps += opcode.specific.dcl_indexable_temp.count;''')])
     change('src/gallium/auxiliary/nir/tgsi_to_nir.c',
         '755f85617fa4f38923c759d1f27029c078c2bc47aead66abbb79130fea3f9b17',[
         ('''   nir_alu_type *samp_types;''','''   nir_alu_type *samp_types;

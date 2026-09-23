@@ -2232,7 +2232,7 @@ static void test_mesa_d3d10_frontend_open(void) {
     CHECK(layout.pDrvPrivate!=NULL);
     deviceFunctions.pfnCreateElementLayout(device,&layoutCreate,layout,layoutRuntime);
     FRONTEND_STAGE("element-layout");
-    D3D10DDI_HSHADER vsh={0},psh={0},gsh={0};D3D10DDI_HRTSHADER vsRuntime={0},psRuntime={0},gsRuntime={0};
+    D3D10DDI_HSHADER vsh={0},indexableVsh={0},psh={0},gsh={0};D3D10DDI_HRTSHADER vsRuntime={0},psRuntime={0},gsRuntime={0};
     vsh.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateShaderSize(device,vs,NULL));
     psh.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateShaderSize(device,ps,NULL));
     gsh.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateShaderSize(device,gs,NULL));
@@ -2240,6 +2240,15 @@ static void test_mesa_d3d10_frontend_open(void) {
     gsRuntime.handle=(VOID *)(UINT_PTR)0xd10u;
     CHECK(vsh.pDrvPrivate && psh.pDrvPrivate && gsh.pDrvPrivate);
     deviceFunctions.pfnCreateVertexShader(device,vs,vsh,vsRuntime,NULL);
+    /* EXP751: DirectComposition's ClearGuard vertex shader reached this same
+     * indexable-TEMP form and aborted TTN when the frontend emitted scalars. */
+    D3D10DDI_HRTSHADER indexableRuntime={(VOID *)(UINT_PTR)0xe87u};
+    indexableVsh.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateShaderSize(
+        device,NativeIndexableTempVS,NULL));
+    CHECK(indexableVsh.pDrvPrivate!=NULL);
+    deviceFunctions.pfnCreateVertexShader(device,NativeIndexableTempVS,
+        indexableVsh,indexableRuntime,NULL);
+    CHECK(MesaD3d10FrontendShaderValidForTest(indexableVsh));
     deviceFunctions.pfnCreatePixelShader(device,ps,psh,psRuntime,NULL);
     D3D10DDI_HSHADER sampleShaders[7]={{0}};
     const UINT *sampleCode[7]={NativeSample2D,NativeSampleArray,NativeSampleImplicit,
@@ -2342,6 +2351,39 @@ static void test_mesa_d3d10_frontend_open(void) {
     CHECK(!AgxWin32AsahiContextFaulted(MesaD3d10FrontendContextForTest(device)));
     FRONTEND_STAGE("viewport-scissor");
     FLOAT clear[4]={0.05f,0.05f,0.05f,1.0f};
+    {
+      /* The regression shader must survive real Asahi compilation, capture,
+       * materialization, KMD validation, and normal ordered retirement. */
+      ADMISSION_UMD_ASAHI_OWNER *indexableOwner=
+          MesaD3d10FrontendOwnerForTest(device);
+      unsigned indexableErrors=FrontendErrors;
+      RuntimeActiveDevice=MesaD3d10FrontendRuntimeForTest(device);
+      RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;
+      RuntimeMarker=NULL;RuntimeQueryMarkerCount=0;
+      memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+      RuntimeConsumerGates=RuntimeConsumerRetirements=0;
+      RuntimeConsumerFence=0;memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+      RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
+      deviceFunctions.pfnVsSetShader(device,indexableVsh);
+      deviceFunctions.pfnPsSetShader(device,psh);
+      deviceFunctions.pfnClearRenderTargetView(device,rtv,clear);
+      deviceFunctions.pfnDraw(device,3,0);
+      CHECK(FrontendErrors==indexableErrors &&
+            AgxWin32AsahiContextDrawReceipt(
+                MesaD3d10FrontendContextForTest(device)));
+      deviceFunctions.pfnFlush(device);
+      CHECK(RuntimeRenders==1u && RuntimeSignals==1u &&
+            RuntimeMaterializations==2u && RuntimeConsumerGates==2u &&
+            RuntimeMarker!=NULL);
+      if(RuntimeMarker) {
+        RuntimeCheckpoint(indexableOwner,1u);
+        CHECK(AgxWin32AsahiContextRetire(
+            MesaD3d10FrontendContextForTest(device),0u));
+        RuntimeCheckpoint(indexableOwner,5u);
+      }
+      RuntimeExpectedCommandVersion=0;
+      deviceFunctions.pfnVsSetShader(device,vsh);
+    }
     {
       unsigned depthErrors=FrontendErrors;
       RuntimeActiveDevice=MesaD3d10FrontendRuntimeForTest(device);
@@ -4319,6 +4361,7 @@ static void test_mesa_d3d10_frontend_open(void) {
     }
     deviceFunctions.pfnDestroyShader(device,gsh);
     deviceFunctions.pfnDestroyShader(device,soGsh);
+    deviceFunctions.pfnDestroyShader(device,indexableVsh);
     deviceFunctions.pfnDestroyShader(device,vsh);deviceFunctions.pfnDestroyElementLayout(device,layout);
     deviceFunctions.pfnDestroyDepthStencilView(device,depthView);
     deviceFunctions.pfnDestroyRenderTargetView(device,depthColorRtv);
@@ -4338,7 +4381,7 @@ static void test_mesa_d3d10_frontend_open(void) {
     RuntimeExpectedTargetAllocation=0;
     RuntimeExpectedTargetBytes=0;
     free(depth.pDrvPrivate);free(raster.pDrvPrivate);free(blend.pDrvPrivate);free(psh.pDrvPrivate);free(gsh.pDrvPrivate);
-    free(vsh.pDrvPrivate);free(layout.pDrvPrivate);free(rtv.pDrvPrivate);
+    free(indexableVsh.pDrvPrivate);free(vsh.pDrvPrivate);free(layout.pDrvPrivate);free(rtv.pDrvPrivate);
     free(depthColorRtv.pDrvPrivate);free(depthView.pDrvPrivate);
     free(depthResource.pDrvPrivate);free(vb.pDrvPrivate);
     free(soBuffer.pDrvPrivate);free(soGsh.pDrvPrivate);

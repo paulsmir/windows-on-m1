@@ -208,9 +208,11 @@
   },
   "post_hardware_causal_target": {
     "id": "runtime_indexable_temporary",
-    "status": "RED",
+    "status": "PASS_OFFLINE",
     "mandatory_reason": "Actual standard-runtime ClearGuard VS crashes DWM before desktop; permitted scope exception2",
     "offline_pass": "Authored indexable-temp VS reproduces assertion then native translation/emission passes with true TGSIarray declarations",
-    "hardware_dependency": "none for translator fix; next DWM consequence needs fresh preregistered hardware"
+    "hardware_dependency": "none for translator fix; next DWM consequence needs fresh preregistered hardware",
+    "evidence": "EXP752-indexable-temp/verified-contract.json",
+    "source_sha256": "01e72146c3c0cf4e12f31a189f76993a87562eeb2e685b7be6203581a5a093b3"
   }
 }

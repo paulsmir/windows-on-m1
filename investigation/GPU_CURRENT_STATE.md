@@ -14,7 +14,7 @@ KMD Render/Patch/Submit -> AGX. Do not redesign these layers or expand features.
 OpenGL/CS1.6 follow desktop acceptance. Ordinary setup errors are not GPU verdicts.
 
 ## Current source / candidate
-Current implementationEXP751 advertiseslegacy+0_x; last hardware package745 remains immutable.
+Current implementationEXP752 fixes indexableTEMP lowering; package746 remains rejected/removed.
 EXP736 package745 under /Users/pavel/public_windows/.local/experiments/EXP736-blt-present/package-build/package.
 SYS d352215b5d641c527481f16bb0d985803e6a8791d3dadec3674b2f30ee6e72a5
 UMD c620fad0950a6ff7e110e6df2e3a1cf245a68b79692ae01e3528be953b029528
@@ -44,9 +44,9 @@ Candidatehashes/launchprofiles/prereg: EXP751-dwm-extended-admission/manifest.js
 ActualboundDWM now reachesnativeCreateVertexShader, thenASSERT !indirect in
 exactgeneratedtgsi_to_nir.c574 ->ucrtbaseabortc0000409/FAST_FAIL7. Callchain:
 D3D11ClearGuard/BeginGuardRectangleSupport ->DirectComposition ->uDWMinit.
-SourceShaderTGSI.c DCL_INDEXABLE_TEMP emits scalarureg_DECL_temporary; TTN only
-permitsindirect access whenDeclaration.Array creates variable. Reproduce/fix this
-exacttranslationOFFLINE; don'tremoveassert orreinterpret0_xasinherentlyunsuitable.
+Root cause: ShaderTGSI.c DCL_INDEXABLE_TEMP emitted scalarureg_DECL_temporary;
+TTN only permitsindirect access whenDeclaration.Array creates variable. EXP752
+fix below preservesassert and doesnotreinterpret0_xasinherentlyunsuitable.
 Noactiveuser/Explorerafter45s;autologonpasswordcleared. Post-logincheckpointINCONCLUSIVE.
 403081ETWevents/lost0;1304System32UMDimageevents exact746 checksum12354734/time1790135148.
 PriorEmptyDDIintersectionmessageabsent; journals80004001/887A0020 removal remain.
@@ -66,6 +66,13 @@ TDRrequiredABI retained; softwareResetNOTfirmwarequiescence,timeoutfatal/reboot.
 GeneralBlt deferredunderunchangedNO_REDIRECTION;reopenonactualreject-blt.
 NoGPUVA orclosedlayerredesign. Newarraytranslationtask is justified only byEXP751
 actualruntimeassertion, notoptionalcompleteness or inventory expansion.
+
+EXP752 exactRED->GREEN: pinnedFXC VS declaresx0[4] and readsx0[r0.x]. Old source
+exitsc0000409 atsameTTNassert; fix usesoneureg_DECL_array_temporary and propagates
+ArrayID to elements. TGSI nowTEMP[1..4],ARRAY(1);NIRtranslation and actualAsahidraw
+throughcapture/materializer/KMD2placements/retirementPASS. x64fullsuite0;ARM64
+native/testbuild0;8hosttestsPASS. Source01e72146;seeEXP752-indexable-temp.
+Nohardwareclaim. Nextcandidate must change onlythiscausalshadertranslation over746.
 
 ## Fixed execution recipe — do not rediscover
 Git: /opt/homebrew/bin/git (system Git hits unaccepted Xcode license).
@@ -107,7 +114,7 @@ Verify on-disk artifacts/tool exits; planning/transfers are not completed work.
 
 HARDWARE ROADMAP
 [PASS] Originalmandatoryofflinegates,0_xadvertisement,ARM64package/sign/hash;EXP751hardwareattemptcompleted.
-[NOW] ActualruntimeRED: indexableTEMPdeclaredscalar ->TTNassert. Reproduce/fixoffline;noDDIversionredesign.
-[NEXT] ExactreproGREEN+existingnativegates,thenfreshpackage/preregistrationfornextcausalcheckpoint.
+[NOW] EXP752 indexableTEMP exactRED/GREEN offlinePASS; prepare freshARM64package/sign/hash.
+[NEXT] Preregister one shader-causal DWM run; no inventory expansion or DDIversion redesign.
 [HW] Nextunproven: DWMguardshadercreation ->actualdesktopdraw/completion/Present;post-loginobservation.
 POST-HARDWARE: generalBlt onlyifmeasured;stableaccelerateddesktop acceptance remainsUNPROVEN.
