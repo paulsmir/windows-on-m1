@@ -2984,6 +2984,121 @@ static void test_mesa_d3d10_frontend_open(void) {
         free(view.pDrvPrivate);free(resource.pDrvPrivate);
       }
       }
+      /* Device B receives only KMT allocation bytes/handles, never A's Resource. */
+      {
+        D3D10DDI_HDEVICE sharedDevice={0};D3D10DDI_DEVICEFUNCS sharedFunctions={0};
+        DXGI1_1_DDI_BASE_FUNCTIONS sharedDxgi={0};
+        D3D10DDIARG_CREATEDEVICE sharedDeviceCreate=create;
+        sharedDevice.pDrvPrivate=calloc(1,bytes);
+        sharedDeviceCreate.hDrvDevice=sharedDevice;
+        sharedDeviceCreate.hRTDevice.handle=(VOID *)(UINT_PTR)0xf90u;
+        sharedDeviceCreate.hRTCoreLayer.handle=(VOID *)(UINT_PTR)0xf91u;
+        sharedDeviceCreate.Interface=D3D10_0_x_DDI_INTERFACE_VERSION;
+        sharedDeviceCreate.Version=0x177au;sharedDeviceCreate.pDeviceFuncs=&sharedFunctions;
+        sharedDeviceCreate.DXGIBaseDDI.pDXGIDDIBaseFunctions2=&sharedDxgi;
+        unsigned before=FrontendErrors;
+        CHECK(SUCCEEDED(functions.pfnCreateDevice(open.hAdapter,&sharedDeviceCreate)));
+        if(FrontendErrors!=before) return;
+        ADMISSION_UMD_ASAHI_OWNER *sharedOwner=MesaD3d10FrontendOwnerForTest(sharedDevice);
+        CHECK(sharedOwner && sharedOwner!=depthOwner);
+        const UINT sizes[][2]={{1024,1024},{64,320},{1024,1088},{192,192},{256,256},{512,512},{1366,768}};
+        for(UINT si=0;si<ARRAYSIZE(sizes);++si) {
+          fprintf(stderr,"SHARED_CASE: width=%u height=%u\n",sizes[si][0],sizes[si][1]);
+          D3D10DDI_MIPINFO mi={sizes[si][0],sizes[si][1],1,sizes[si][0],sizes[si][1],1};
+          D3D10DDIARG_CREATERESOURCE cr={0};cr.pMipInfoList=&mi;
+          cr.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;cr.Usage=D3D10_DDI_USAGE_DEFAULT;
+          cr.BindFlags=D3D10_DDI_BIND_RENDER_TARGET|D3D10_DDI_BIND_SHADER_RESOURCE;
+          cr.MiscFlags=D3D10_DDI_RESOURCE_MISC_SHARED;cr.Format=DXGI_FORMAT_B8G8R8A8_UNORM;
+          cr.SampleDesc.Count=1;cr.MipLevels=cr.ArraySize=1;
+          D3D10DDI_HRESOURCE a={0},b={0},target={0};
+          D3D10DDI_HRTRESOURCE ar={(VOID *)(UINT_PTR)(0xf000u+si*2)},br={(VOID *)(UINT_PTR)(0xf001u+si*2)},tr={(VOID *)(UINT_PTR)0xf200u};
+          a.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateResourceSize(device,&cr));
+          before=FrontendErrors;deviceFunctions.pfnCreateResource(device,&cr,a,ar);
+          CHECK(FrontendErrors==before);if(FrontendErrors!=before) return;
+          ADMISSION_ALLOCATION_DESCRIPTION privateBytes=PoolSharedPrivate;
+          unsigned sourceSlot=0,aliasSlot=0;
+          for(;sourceSlot<ARRAYSIZE(PoolMemory) && PoolHandles[sourceSlot]!=PoolSharedAllocation;++sourceSlot) {}
+          for(;aliasSlot<ARRAYSIZE(PoolMemory) && PoolMemory[aliasSlot];++aliasSlot) {}
+          CHECK(sourceSlot<ARRAYSIZE(PoolMemory) && aliasSlot<ARRAYSIZE(PoolMemory));
+          if(sourceSlot==ARRAYSIZE(PoolMemory) || aliasSlot==ARRAYSIZE(PoolMemory)) return;
+          /* Mock KMT opens a new device handle to the same physical allocation. */
+          PoolMemory[aliasSlot]=PoolMemory[sourceSlot];PoolHandles[aliasSlot]=0x10000u+(++PoolNextHandle);
+          PoolSharedResources[aliasSlot]=br.handle;++PoolCreates;
+          D3DDDI_OPENALLOCATIONINFO oi={0};oi.hAllocation=PoolHandles[aliasSlot];
+          oi.pPrivateDriverData=&privateBytes;oi.PrivateDriverDataSize=sizeof(privateBytes);
+          D3D10DDIARG_OPENRESOURCE op={0};op.NumAllocations=1;op.pOpenAllocationInfo=&oi;
+          op.hKMResource.handle=PoolSharedAllocation+0x10000u;
+          b.pDrvPrivate=calloc(1,sharedFunctions.pfnCalcPrivateOpenedResourceSize(sharedDevice,&op));
+          if(si==0) for(UINT bad=0;bad<5;++bad) {
+            ADMISSION_ALLOCATION_DESCRIPTION saved=privateBytes;
+            if(bad==0) privateBytes.Magic^=1u;
+            if(bad==1) oi.PrivateDriverDataSize=sizeof(privateBytes)-1;
+            if(bad==2) privateBytes.Pitch++;
+            if(bad==3) privateBytes.Size=(UINT64)privateBytes.Pitch*privateBytes.Height-1;
+            if(bad==4) privateBytes.Format=D3DDDIFMT_D16;
+            before=FrontendErrors;unsigned allocations=PoolCreates,submits=RuntimeRenders;
+            sharedFunctions.pfnOpenResource(sharedDevice,&op,b,br);
+            CHECK(FrontendErrors==before+2 && FrontendLastError==E_INVALIDARG &&
+                  PoolCreates==allocations && RuntimeRenders==submits);
+            privateBytes=saved;oi.PrivateDriverDataSize=sizeof(privateBytes);
+          }
+          before=FrontendErrors;sharedFunctions.pfnOpenResource(sharedDevice,&op,b,br);
+          CHECK(FrontendErrors==before);if(FrontendErrors!=before) return;
+          D3D10DDIARG_CREATERENDERTARGETVIEW rv={0};rv.hDrvResource=a;rv.Format=cr.Format;
+          rv.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;rv.Tex2D.ArraySize=1;
+          D3D10DDI_HRENDERTARGETVIEW av={0};D3D10DDI_HRTRENDERTARGETVIEW avr={(VOID *)(UINT_PTR)0xf300u};
+          av.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateRenderTargetViewSize(device,&rv));
+          deviceFunctions.pfnCreateRenderTargetView(device,&rv,av,avr);
+          D3D10DDI_HSHADERRESOURCEVIEW noSrv={0};
+          deviceFunctions.pfnPsSetShaderResources(device,0,1,&noSrv);
+          deviceFunctions.pfnPsSetShader(device,psh);
+          deviceFunctions.pfnSetRenderTargets(device,&av,1,0,(D3D10DDI_HDEPTHSTENCILVIEW){0});
+          D3D10_DDI_VIEWPORT vp={0,0,(FLOAT)mi.TexelWidth,(FLOAT)mi.TexelHeight,0,1};
+          D3D10_DDI_RECT sc={0,0,(LONG)mi.TexelWidth,(LONG)mi.TexelHeight};
+          deviceFunctions.pfnSetViewports(device,1,0,&vp);deviceFunctions.pfnSetScissorRects(device,1,0,&sc);
+          RuntimeActiveDevice=depthOwner->Device;RuntimeAutoCompleteConsumers=1;
+          RuntimeRenders=RuntimeSignals=RuntimeMaterializations=RuntimeConsumerGates=RuntimeConsumerRetirements=0;
+          RuntimeMarker=NULL;RuntimeConsumerFence=0;RuntimeQueryMarkerCount=0;
+          memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+          RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
+          RuntimeExpectedColorFormat=AppleAgxWin32FormatBgra8Unorm;
+          deviceFunctions.pfnClearRenderTargetView(device,av,clear);deviceFunctions.pfnDraw(device,3,0);
+          deviceFunctions.pfnFlush(device);
+          CHECK(FrontendErrors==before && RuntimeRenders==1 && RuntimeSignals==1 && RuntimeConsumerRetirements==2);
+          if(FrontendErrors!=before) return;
+          CHECK(AgxWin32AsahiContextRetire(MesaD3d10FrontendContextForTest(device),0));
+          deviceFunctions.pfnSetRenderTargets(device,&rtv,1,0,(D3D10DDI_HDEPTHSTENCILVIEW){0});
+          deviceFunctions.pfnDestroyRenderTargetView(device,av);deviceFunctions.pfnDestroyResource(device,a);
+          free(av.pDrvPrivate);free(a.pDrvPrivate);
+          CHECK(AdmissionUmdRetirementDrain(&depthOwner->Device->Retirement));
+          CHECK(PoolMemory[aliasSlot]!=NULL); /* A lifetime ended; B still owns storage. */
+          cr.MiscFlags=0;cr.BindFlags=D3D10_DDI_BIND_RENDER_TARGET;
+          target.pDrvPrivate=calloc(1,sharedFunctions.pfnCalcPrivateResourceSize(sharedDevice,&cr));
+          sharedFunctions.pfnCreateResource(sharedDevice,&cr,target,tr);
+          RuntimeActiveDevice=sharedOwner->Device;
+          RuntimeRenders=RuntimeSignals=RuntimeMaterializations=RuntimeConsumerGates=RuntimeConsumerRetirements=0;
+          RuntimeMarker=NULL;RuntimeConsumerFence=0;RuntimeQueryMarkerCount=0;
+          memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+          RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
+          /* ResourceCopy's existing real blitter emits a sampled native draw on B. */
+          sharedFunctions.pfnResourceCopy(sharedDevice,target,b);
+          sharedFunctions.pfnFlush(sharedDevice);
+          CHECK(FrontendErrors==before && RuntimeRenders==1 && RuntimeSignals==1 && RuntimeMaterializations==2 && RuntimeConsumerRetirements==2);
+          if(FrontendErrors!=before) return;
+          CHECK(AgxWin32AsahiContextRetire(MesaD3d10FrontendContextForTest(sharedDevice),0));
+          sharedFunctions.pfnDestroyResource(sharedDevice,target);sharedFunctions.pfnDestroyResource(sharedDevice,b);
+          free(target.pDrvPrivate);free(b.pDrvPrivate);
+          CHECK(AdmissionUmdRetirementDrain(&sharedOwner->Device->Retirement));
+          CHECK(PoolMemory[aliasSlot]==NULL && PoolSharedCloses==2u*(si+1u));
+        }
+        RuntimeActiveDevice=depthOwner->Device;RuntimeAutoCompleteConsumers=0;
+        RuntimeExpectedCommandVersion=RuntimeExpectedColorFormat=0;
+        RuntimeRenders=RuntimeSignals=RuntimeMaterializations=RuntimeConsumerGates=RuntimeConsumerRetirements=0;
+        RuntimeMarker=NULL;RuntimeConsumerFence=0;RuntimeQueryMarkerCount=0;
+        sharedFunctions.pfnDestroyDevice(sharedDevice);
+        CHECK(MesaD3d10FrontendCleanupResult(sharedDevice)==S_OK);free(sharedDevice.pDrvPrivate);
+        deviceFunctions.pfnSetViewports(device,1,0,&viewport);deviceFunctions.pfnSetScissorRects(device,1,0,&rect);
+      }
       {
         static unsigned char bc1Data[32]={
           0xff,0xff,0,0,0,0,0,0, 0,0,0xff,0xff,0,0,0,0,

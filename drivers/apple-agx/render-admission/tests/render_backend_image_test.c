@@ -465,6 +465,7 @@ static void test_native_binding_preserves_logical_attachment(void) {
   packet.DestinationCpuToken=(unsigned long long)(uintptr_t)target;
   native.CommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
   native.SurfaceWidth=16; native.SurfaceHeight=16; native.SurfacePitch=64;
+  native.SurfaceBytesPerPixel=4;
   native.DestinationBytes=0x4000;
   assert(AdmissionBackendImageBindNativeSubmission(&image,&packet,target,&native,&binding));
   assert(image.NativeBound && image.Objects[40].Data==target && image.Objects[40].Size==0x4000);
@@ -515,6 +516,15 @@ static void test_native_binding_preserves_logical_attachment(void) {
            output.AllocationBytes==0xfa0000);
     assert(AdmissionBackendImageReleaseSubmission(&image,packet.Fence));
   }
+  /* Linear shared row padding is not another pixel format. */
+  native.SurfaceWidth=1366;native.SurfaceHeight=768;
+  native.SurfacePitch=5472;native.DestinationBytes=packet.DestinationBytes=5472u*768u;
+  packet.Fence=63;
+  assert(AdmissionBackendImageBindNativeSubmission(&image,&packet,target,&native,&binding));
+  assert(image.NativePitch==5472);
+  assert(AdmissionBackendImageReleaseSubmission(&image,packet.Fence));
+  native.SurfacePitch=5464+1; /* Sufficient row bytes, invalid AGX alignment. */
+  assert(!AdmissionBackendImageBindNativeSubmission(&image,&packet,target,&native,&binding));
   packet.Fence=63;packet.DestinationBytes=0x400000;
   native.SurfaceWidth=1024;native.SurfaceHeight=1024;
   native.SurfacePitch=4096;native.DestinationBytes=packet.DestinationBytes;

@@ -52,8 +52,9 @@ int AdmissionAllocationDescriptionValid(
           Description->BytesPerPixel, Description->Type,
           Description->Format, Description->CpuVisible, &expected))
     return 0;
-  return expected.Pitch == Description->Pitch &&
-         expected.Size == Description->Size;
+  return Description->Pitch >= expected.Pitch &&
+         (Description->Pitch & 15u) == 0u &&
+         Description->Size >= (unsigned long long)Description->Pitch * Description->Height;
 }
 
 int AdmissionAllocationContainsView(

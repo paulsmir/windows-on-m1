@@ -6,6 +6,10 @@ static D3DDDI_DEVICECALLBACKS PoolCallbacks;
 static void *PoolMemory[ADMISSION_UMD_SCREEN_BUFFER_LIMIT];
 static D3DKMT_HANDLE PoolHandles[ADMISSION_UMD_SCREEN_BUFFER_LIMIT];
 static unsigned PoolNextHandle;
+static HANDLE PoolSharedResources[ADMISSION_UMD_SCREEN_BUFFER_LIMIT];
+static ADMISSION_ALLOCATION_DESCRIPTION PoolSharedPrivate;
+static D3DKMT_HANDLE PoolSharedAllocation;
+static unsigned PoolSharedCloses;
 static unsigned PoolCreates,PoolMaps,PoolUnlocks,PoolDeletes,PoolErrors;
 static unsigned PoolPresentationDeletes;
 static unsigned PoolLastPresentationFormat;
@@ -21,8 +25,7 @@ static HRESULT APIENTRY PoolAllocate(HANDLE h,D3DDDICB_ALLOCATE *a) {
     const ADMISSION_ALLOCATION_DESCRIPTION *present=
         (const ADMISSION_ALLOCATION_DESCRIPTION *)a->pAllocationInfo->pPrivateDriverData;
     if(!AdmissionAllocationDescriptionValid(present) ||
-       present->Width!=2560u || present->Height!=1600u ||
-       present->Pitch!=10240u || present->Size!=0xfa0000ULL)
+       present->Size>AGX_RR_SHARED_ARENA_BYTES)
       return E_INVALIDARG;
     unsigned slot;
     for(slot=0;slot<ADMISSION_UMD_SCREEN_BUFFER_LIMIT && PoolMemory[slot];++slot) {}
@@ -34,6 +37,13 @@ static HRESULT APIENTRY PoolAllocate(HANDLE h,D3DDDICB_ALLOCATE *a) {
     PoolLastPresentationFormat=present->Format;++PoolCreates;
     a->pAllocationInfo->hAllocation=PoolHandles[slot];
     a->hKMResource=0x776u;
+    if((UINT_PTR)a->hResource>=0xf000u && (UINT_PTR)a->hResource<0xf100u) {
+      PoolHandles[slot]=0x10000u+(++PoolNextHandle);
+      PoolSharedResources[slot]=a->hResource;
+      PoolSharedPrivate=*present;PoolSharedAllocation=PoolHandles[slot];
+      a->pAllocationInfo->hAllocation=PoolHandles[slot];
+      a->hKMResource=PoolHandles[slot]+0x10000u;
+    }
     return S_OK;
   }
   const ADMISSION_WIN32_ALLOCATION_CREATE *desc=a->pAllocationInfo->pPrivateDriverData;
@@ -71,6 +81,20 @@ static HRESULT APIENTRY PoolUnlock(HANDLE h,const D3DDDICB_UNLOCK *a) {
 }
 static HRESULT APIENTRY PoolDeallocate(HANDLE h,const D3DDDICB_DEALLOCATE *a) {
   (void)h;
+  if(a->NumAllocations==0 && (UINT_PTR)a->hResource>=0xf000u &&
+     (UINT_PTR)a->hResource<0xf100u) {
+    for(unsigned slot=0;slot<ARRAYSIZE(PoolMemory);++slot) {
+      if(PoolMemory[slot] && PoolSharedResources[slot]==a->hResource) {
+        BOOL alias=FALSE;
+        for(unsigned i=0;i<ARRAYSIZE(PoolMemory);++i)
+          if(i!=slot && PoolMemory[i]==PoolMemory[slot]) alias=TRUE;
+        if(!alias) HeapFree(GetProcessHeap(),0,PoolMemory[slot]);
+        PoolMemory[slot]=NULL;PoolHandles[slot]=0;PoolSharedResources[slot]=NULL;
+        ++PoolDeletes;++PoolSharedCloses;return S_OK;
+      }
+    }
+    return E_INVALIDARG;
+  }
   if(a->NumAllocations==0 &&
      (a->hResource==(HANDLE)(UINT_PTR)0x773u ||
       a->hResource==(HANDLE)(UINT_PTR)0x777u ||

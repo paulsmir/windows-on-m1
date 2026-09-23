@@ -1,8 +1,7 @@
 # GPU current boundary — 2026-09-23
 
 ## Working mode
-One executor in the current task. Routine build/test/SSH/launch/recovery steps are
-not delegated. This supersedes the earlier mandatory Astra/Terra handoff loop at
+One executor; routine build/test/SSH/launch/recovery steps are not delegated. This supersedes the earlier mandatory Astra/Terra handoff loop at
 the user's request to reduce time and tokens. No new agents without a concrete
 independent need and user direction. Fix command/harness errors locally; they are
 not architectural REDs. Read this file first; do not load the historical ledger.
@@ -15,7 +14,7 @@ KMD Render/Patch/Submit -> AGX. Do not redesign these layers or expand features.
 OpenGL/CS1.6 follow desktop acceptance. Ordinary setup errors are not GPU verdicts.
 
 ## Current source / candidate
-Current implementationEXP749 BGR0_xcoverage; last hardware package745 remains immutable.
+Current implementationEXP750 sharedCreate/Open; last hardware package745 remains immutable.
 EXP736 package745 under /Users/pavel/public_windows/.local/experiments/EXP736-blt-present/package-build/package.
 SYS d352215b5d641c527481f16bb0d985803e6a8791d3dadec3674b2f30ee6e72a5
 UMD c620fad0950a6ff7e110e6df2e3a1cf245a68b79692ae01e3528be953b029528
@@ -74,7 +73,8 @@ EXP746 keeps measuredshared/GDI pre-DWM; verifiedNO_REDIRECTION defers generalBl
 EXP737: API0xA02=SHARED|GDI_COMPATIBLE|SHARED_NTHANDLE;0x200=GDI_COMPATIBLE.
 Same-runtime APIMiscFlagsToDDIMiscFlags:0xA02->DDI2,0x200->DDI0; NT ownedbyruntime/KMT.
 WDK permitsDXGI1_1resolve with0_x+Versionlow0x177a; these flagsdoNOTforceD3D11DDI.
-Shared/GDI pre-DWM acceptance: DWM_NEXT_GATES.json; independentA->B/private-data-only,measuredsizes;runtime-tableproof BEFOREslotwrite.
+EXP750 sharedofflinePASS:7sizes,private-onlyA->B,draw/fence/destroyA/sampleB;invalidbytes/pitch/size rejected.
+Linear stride+borrowed logicalsize; x64suite0/ARM64build0,sourceff7d4cef; DWM_NEXT_GATES.json.
 DirectFlip preregistration: DWM behavior withoutCheckDirectFlipSupport UNKNOWN; observe reject-*/ETW; retainmandatoryKMDcap.
 KernelModeCommandBuffer: CLEAR in separatecapschange unlesscoherentaperture proven; nofakeCacheCoherent.
 TDR: retainrequiredresetABI; softwareresetNOTAGXquiescence; timeoutfatal/reboot,ResetFromTimeoutfailurecanbugcheck.
@@ -140,12 +140,11 @@ Keep this file <=150 lines; replace current state instead of appending history.
 One preregistration and one actual ledger update per experiment; raw logs stay
 in artifacts. Reuse passed gates for unchanged hashes; add none without a real
 contract defect. Batch independent reads, report only first meaningful failure.
-Do not count planning, transfers or an empty output as completed work. Verify
-on-disk artifacts/tool exits directly. No repeated "continue" handoff loops.
+Verify on-disk artifacts/tool exits; planning/transfers are not completed work.
 
 HARDWARE ROADMAP
 [PASS] EXP736 standardruntimeCreate/Draw/Present;EXP744-746;EXP747Map;EXP748DXGI1_1;EXP7490_xcoverage.
-[NOW] SharedlinearCreate/Open: independentA->B/private-data-only,measuredsizes,pitchinvariants;offlinegate.
-[NEXT] Once sharedPASS: advertise0_x;ARM64package/sign/hash;preregister;directlyAir.
+[NOW] AllmandatoryfunctionalDWMgatesPASS;advertise0_x andbuildARM64package/sign/hash.
+[NEXT] Preregister exactpackage/hypothesis;checkbothcontrolplanes;directlyAir, noinventoryexpansion.
 [HW] DWM hardwaredeviceadmission/firstDDIfailure;physicaldesktop immediatelyafterlogin.
 POST-HARDWARE: generalBlt deferredbyNO_REDIRECTION;preregister reject-blt=0,reopenonreject;stabledesktoplater.

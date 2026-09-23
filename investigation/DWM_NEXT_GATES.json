@@ -18,7 +18,7 @@
     },
     {
       "id": "shared_create_open",
-      "status": "OPEN",
+      "status": "PASS_OFFLINE",
       "sizes": [
         [
           1024,
@@ -66,7 +66,10 @@
           "pitch%16==0",
           "size>=pitch*height"
         ]
-      }
+      },
+      "evidence": "EXP750-shared-resource/import-size-full.log + test-import-size-arm64.log",
+      "result": "7sizes including1366x768; createA/openB by copied allocation private bytes and separate KMT handle; native drawA/fence/destroyA; sampled native blitB; two placements/retirement; five invalid private data cases; x64exit0 ARM64build0",
+      "limits": "Selected measured shared DXGI87 RT|SRV linear1mip1sample; primary scanout eligibility remains exact mode; offline KMT aliases do not prove physical pixel values"
     },
     {
       "id": "0_x_coverage",

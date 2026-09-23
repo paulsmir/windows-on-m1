@@ -474,6 +474,7 @@ static void test_native_graph(void) {
   header.Version=4; header.Opcode=2; header.Generation=7; header.ReferenceCount=16;
   draw.VertexReference=1; draw.VertexShaderReference=2; draw.FragmentShaderReference=3;
   draw.UscPipelineReference=4; draw.EncoderReference=15; draw.ScissorReference=14; draw.DepthBiasReference=0xffffffffu;
+  draw.Format=AppleAgxWin32FormatBgra8Unorm;
   draw.SurfaceWidth=16; draw.SurfaceHeight=16; draw.SurfacePitch=64; draw.RelocationCount=1;
   native.StructBytes=sizeof(native); native.Samples=1; native.Layers=1;
   native.SampleSizeBytes=8; native.UtileWidth=32; native.UtileHeight=32;
@@ -550,6 +551,8 @@ static void test_native_graph(void) {
     refs[16].Access=AppleAgxWin32AccessRead|AppleAgxWin32AccessWrite;
     refs[16].Bytes=0x4000;
     native.DepthReference=16;
+    native.StencilReference=APPLE_AGX_WIN32_OPTIONAL_REFERENCE;
+    native.StencilCompressionReference=APPLE_AGX_WIN32_OPTIONAL_REFERENCE;
     native.DepthCompressionReference=APPLE_AGX_WIN32_OPTIONAL_REFERENCE;
     native.DepthStride=0x4001u;
     native.ZlsControl=0x80000ULL;
@@ -562,6 +565,7 @@ static void test_native_graph(void) {
            AdmissionDynamicOverlaySuccess);
     bindings.DepthGpuVirtualAddress=0x1507000000ULL;
     assert(plan.EntryCount==15 && !find_entry(&plan,16));
+    write_u64(ta_bytes+0xd0,image.Objects[37].GpuVa); /* fresh captured roots for this submission */
     assert(AdmissionDynamicOverlayRouteNative(&plan,&bindings,image.Objects,76)==
            AdmissionDynamicOverlaySuccess);
     memcpy(&pixels,store_work_bytes+0xc8,8);

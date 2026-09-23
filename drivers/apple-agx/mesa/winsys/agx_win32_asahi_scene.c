@@ -89,7 +89,8 @@ struct pipe_resource *AgxWin32AsahiImportLinearColor32(
   AGX_WIN32_ASAHI_BACKEND *backend=screen?
       agx_device(screen)->windows_private:NULL;
   if(!screen || !buffer || !width || !height ||
-     pitch!=(APPLE_AGX_U64)width*4ULL || bytes!=(APPLE_AGX_U64)pitch*height ||
+     pitch<(APPLE_AGX_U64)width*4ULL || (pitch&15u) ||
+     bytes<(APPLE_AGX_U64)pitch*height ||
      !backend || buffer->Transport.Bytes!=bytes ||
      buffer->Transport.Generation!=backend->Buffers.Generation)
     return NULL;
@@ -105,7 +106,7 @@ struct pipe_resource *AgxWin32AsahiImportLinearColor32(
   info.target=PIPE_TEXTURE_2D;info.format=pipe_format;
   info.width0=width;info.height0=height;info.depth0=1;info.array_size=1;
   info.nr_samples=1;info.nr_storage_samples=1;
-  info.bind=PIPE_BIND_RENDER_TARGET|PIPE_BIND_SAMPLER_VIEW;
+  info.bind=PIPE_BIND_RENDER_TARGET|PIPE_BIND_SAMPLER_VIEW|PIPE_BIND_SHARED;
   info.usage=PIPE_USAGE_DEFAULT;
   struct agx_resource *resource=calloc(1,sizeof(*resource));
   if(!resource) return NULL;
@@ -117,7 +118,7 @@ struct pipe_resource *AgxWin32AsahiImportLinearColor32(
       .levels=1,.renderable=true,.linear_stride_B=pitch};
   pipe_reference_init(&resource->base.reference,1);
   ail_make_miptree(&resource->layout);
-  if(resource->layout.size_B!=bytes ||
+  if(resource->layout.size_B>bytes ||
      ail_get_linear_stride_B(&resource->layout,0)!=pitch ||
      resource->layout.level_offsets_B[0]!=0) {
     free(resource);return NULL;

@@ -118,6 +118,9 @@ int AgxWin32AsahiBatchBegin(struct agx_batch *b) {
   c->Draw.SurfaceWidth=b->key.width; c->Draw.SurfaceHeight=b->key.height;
   c->Draw.SurfacePitch=b->key.width*
       AppleAgxWin32FormatBytesPerPixel(c->Draw.Format);
+  struct agx_resource *color=agx_resource(b->key.cbufs[0].texture);
+  if(color->layout.tiling==AIL_TILING_LINEAR)
+    c->Draw.SurfacePitch=ail_get_linear_stride_B(&color->layout,b->key.cbufs[0].level);
   c->Draw.Topology=AppleAgxWin32TopologyTriangleList;
   c->Draw.VertexCount=3; c->Draw.InstanceCount=1;
   c->Draw.EncoderReference=c->Root.Scope.Reference;

@@ -56,6 +56,7 @@ typedef struct _ADMISSION_DYNAMIC_OVERLAY_BINDINGS {
   APPLE_AGX_U32 CommandVersion;
   APPLE_AGX_U32 DestinationReference;
   APPLE_AGX_U32 SurfaceWidth, SurfaceHeight, SurfacePitch;
+  APPLE_AGX_U32 SurfaceBytesPerPixel;
   APPLE_AGX_U32 Reserved;
   APPLE_AGX_U64 DestinationBytes;
   APPLE_AGX_U64 DepthGpuVirtualAddress;
@@ -186,16 +187,19 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteEncoder(
 static __inline APPLE_AGX_BOOL AdmissionDynamicOverlaySurfaceValid(
     const ADMISSION_DYNAMIC_OVERLAY_BINDINGS *Bindings) {
   APPLE_AGX_U32 pixelBytes;
-  APPLE_AGX_U64 minimumBytes;
-  /* Pinned D3D10 axis limits; tiled padding belongs to DestinationBytes.
-   * Keep both native output binding and root routing on the same contract. */
+  APPLE_AGX_U64 minimumBytes, rowBytes;
+  /* SurfacePitch is logical for tiled output; linear padding must be aligned.
+   * Pixel size comes from the validated format, never pitch/width division. */
   if(!Bindings || !Bindings->SurfaceWidth || !Bindings->SurfaceHeight ||
-      Bindings->SurfaceWidth>8192u || Bindings->SurfaceHeight>8192u ||
-      Bindings->SurfacePitch%Bindings->SurfaceWidth)
+      Bindings->SurfaceWidth>8192u || Bindings->SurfaceHeight>8192u)
     return APPLE_AGX_FALSE;
-  pixelBytes=Bindings->SurfacePitch/Bindings->SurfaceWidth;
+  pixelBytes=Bindings->SurfaceBytesPerPixel;
   if(pixelBytes!=1u && pixelBytes!=2u && pixelBytes!=4u &&
       pixelBytes!=8u && pixelBytes!=16u)
+    return APPLE_AGX_FALSE;
+  rowBytes=(APPLE_AGX_U64)Bindings->SurfaceWidth*pixelBytes;
+  if(Bindings->SurfacePitch<rowBytes ||
+      (Bindings->SurfacePitch!=rowBytes && (Bindings->SurfacePitch&15u)))
     return APPLE_AGX_FALSE;
   minimumBytes=(APPLE_AGX_U64)Bindings->SurfacePitch*Bindings->SurfaceHeight;
   return Bindings->DestinationBytes>=1024u &&

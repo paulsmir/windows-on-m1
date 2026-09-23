@@ -1997,7 +1997,8 @@ AgxD3d10ResourceWithinRequiredLimits(
    bool wantsStream =
       (pCreateResource->BindFlags & D3D10_DDI_BIND_STREAM_OUTPUT) != 0;
    bool wantsPresentation = pCreateResource->pPrimaryDesc != NULL ||
-      (pCreateResource->BindFlags & D3D10_DDI_BIND_PRESENT) != 0;
+      (pCreateResource->BindFlags & D3D10_DDI_BIND_PRESENT) != 0 ||
+      (pCreateResource->MiscFlags & D3D10_DDI_RESOURCE_MISC_SHARED) != 0;
    bool validConstant = wantsConstant && pResource && resourceMip &&
       pCreateResource->ResourceDimension == D3D10DDIRESOURCE_BUFFER &&
       pCreateResource->Format == DXGI_FORMAT_UNKNOWN &&
@@ -2329,6 +2330,8 @@ AgxD3d10ResourceWithinRequiredLimits(
    }
    pResource->Format = pResource->resource->format == PIPE_FORMAT_R8G8B8A8_UNORM
       ? DXGI_FORMAT_R8G8B8A8_UNORM : DXGI_FORMAT_B8G8R8A8_UNORM;
+   pResource->usage = D3D10_DDI_USAGE_DEFAULT;
+   pResource->bind_flags = D3D10_DDI_BIND_RENDER_TARGET | D3D10_DDI_BIND_SHADER_RESOURCE;
    pResource->MipLevels = 1;
    pResource->NumSubResources = 1;''')
     resource_path=out/'src/gallium/frontends/d3d10umd/Resource.cpp'

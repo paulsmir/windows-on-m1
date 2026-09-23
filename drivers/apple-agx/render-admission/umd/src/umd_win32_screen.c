@@ -560,9 +560,10 @@ HRESULT AdmissionUmdScreenAdoptAllocation(
   if(Buffer) ZeroMemory(Buffer,sizeof(*Buffer));
   if(!Device || Device->Magic!=ADMISSION_UMD_DEVICE_MAGIC || !Buffer ||
      !KernelAllocation || !Bytes || !Alignment ||
-     (Alignment&(Alignment-1ULL))!=0ULL ||
-     (Bytes&(Device->Screen.Info.PageBytes-1ULL))!=0ULL)
+     (Alignment&(Alignment-1ULL))!=0ULL)
     return E_INVALIDARG;
+  /* Borrowed logical size need not be page-aligned. KMD owns the rounded
+   * physical allocation; expose only the private-data extent to native BOs. */
   classInfo=AdmissionUmdScreenClass(Device,ClassId);
   if(!classInfo || Bytes>classInfo->MaximumBytes ||
      Alignment<classInfo->MinimumAlignment || !Flags ||

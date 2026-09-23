@@ -450,6 +450,7 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayBindingsFromView(
   Bindings->SurfaceWidth=View->Draw->SurfaceWidth;
   Bindings->SurfaceHeight=View->Draw->SurfaceHeight;
   Bindings->SurfacePitch=View->Draw->SurfacePitch;
+  Bindings->SurfaceBytesPerPixel=AppleAgxWin32FormatBytesPerPixel(View->Draw->Format);
   if (View->References && View->Draw->DestinationReference<View->Header->ReferenceCount)
     Bindings->DestinationBytes=View->References[View->Draw->DestinationReference].Bytes;
   if (APPLE_AGX_WIN32_COMMAND_IS_NATIVE(View->Header->Version)) {

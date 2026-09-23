@@ -125,23 +125,41 @@ static BOOLEAN AdmissionUmdDescribePrimary(
        CreateResource->Format != DXGI_FORMAT_R8G8B8A8_UNORM) ||
       (CreateResource->Format == DXGI_FORMAT_R8G8B8A8_UNORM &&
        CreateResource->pPrimaryDesc != NULL) ||
-      CreateResource->pMipInfoList[0].TexelWidth != 2560u ||
-      CreateResource->pMipInfoList[0].TexelHeight != 1600u ||
+      !CreateResource->pMipInfoList[0].TexelWidth ||
+      !CreateResource->pMipInfoList[0].TexelHeight ||
+      CreateResource->pMipInfoList[0].TexelWidth > 8192u ||
+      CreateResource->pMipInfoList[0].TexelHeight > 8192u ||
+      CreateResource->pMipInfoList[0].TexelDepth != 1u ||
+      (CreateResource->pPrimaryDesc != NULL &&
+       (CreateResource->pMipInfoList[0].TexelWidth != 2560u ||
+        CreateResource->pMipInfoList[0].TexelHeight != 1600u)) ||
+      CreateResource->Usage != D3D10_DDI_USAGE_DEFAULT || CreateResource->MapFlags ||
+      (CreateResource->MiscFlags & ~D3D10_DDI_RESOURCE_MISC_SHARED) ||
+      (CreateResource->BindFlags & ~(D3D10_DDI_BIND_RENDER_TARGET |
+          D3D10_DDI_BIND_SHADER_RESOURCE | D3D10_DDI_BIND_PRESENT)) ||
       CreateResource->MipLevels != 1u || CreateResource->ArraySize != 1u ||
       CreateResource->SampleDesc.Count != 1u ||
       CreateResource->SampleDesc.Quality != 0u ||
-      (CreateResource->BindFlags & D3D10_DDI_BIND_PRESENT) == 0u ||
+      ((CreateResource->BindFlags & D3D10_DDI_BIND_PRESENT) == 0u &&
+       (CreateResource->MiscFlags != D3D10_DDI_RESOURCE_MISC_SHARED ||
+        CreateResource->Format != DXGI_FORMAT_B8G8R8A8_UNORM ||
+        CreateResource->BindFlags != (D3D10_DDI_BIND_RENDER_TARGET |
+                                     D3D10_DDI_BIND_SHADER_RESOURCE))) ||
       CreateResource->pInitialDataUP != NULL)
     return FALSE;
   ZeroMemory(Description, sizeof(*Description));
   Description->Magic = ADMISSION_UMD_DIRECT_FLIP_RESOURCE_MAGIC;
   Description->Version = ADMISSION_UMD_DIRECT_FLIP_RESOURCE_VERSION;
   if (!AdmissionAllocationDescribe(
-          2560u, 1600u, 4u, (UINT)D3DKMDT_GDISURFACE_TEXTURE,
+          CreateResource->pMipInfoList[0].TexelWidth,
+          CreateResource->pMipInfoList[0].TexelHeight,
+          4u, (UINT)D3DKMDT_GDISURFACE_TEXTURE,
           CreateResource->Format == DXGI_FORMAT_R8G8B8A8_UNORM
               ? (UINT)D3DDDIFMT_A8B8G8R8 : (UINT)D3DDDIFMT_A8R8G8B8,
           0u, &Description->Allocation))
     return FALSE;
+  /* AIL linear layers are cache-line padded; no layout metadata is implicit. */
+  Description->Allocation.Size = (Description->Allocation.Size + 127ULL) & ~127ULL;
   Description->SegmentId = 2u;
   Description->Linear = 1u;
   Description->Displayable =
@@ -496,9 +514,10 @@ VOID APIENTRY AdmissionUmdOpenResource(
       !AdmissionAllocationDescriptionValid(description) ||
       (description->Format != (UINT)D3DDDIFMT_A8R8G8B8 &&
        description->Format != (UINT)D3DDDIFMT_A8B8G8R8) ||
-      description->Width != 2560u || description->Height != 1600u ||
-      description->Pitch != 10240u || description->BytesPerPixel != 4u ||
-      description->Size != 0xfa0000ULL || info->hAllocation == 0u) {
+      description->Width > 8192u || description->Height > 8192u ||
+      description->Type != (UINT)D3DKMDT_GDISURFACE_TEXTURE ||
+      description->BytesPerPixel != 4u ||
+      description->Size > 0x1000000ULL || info->hAllocation == 0u) {
     AdmissionUmdRetirementFree(retirement);
     AdmissionUmdSetError(device, E_INVALIDARG);
     return;

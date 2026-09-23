@@ -23,6 +23,7 @@ class AppleAgxDynamicOverlayTests(unittest.TestCase):
                 str(DRIVER / "tests/render_dynamic_overlay_test.c"),
                 str(DRIVER / "src/render_dynamic_overlay.c"),
                 str(SHARED / "src/apple_agx_render_template.generated.c"),
+                str(SHARED / "src/apple_agx_win32_abi.c"),
                 "-o", str(binary),
             ], cwd=ROOT, check=True)
             subprocess.run([str(binary)], cwd=ROOT, check=True)
