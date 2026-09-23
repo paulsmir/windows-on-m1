@@ -225,12 +225,17 @@
   },
   "next_hardware_causal_target": {
     "id": "multiple_draws_per_windows_flush",
-    "status": "PASS_OFFLINE",
-    "mandatory_reason": "EXP754 DWM removes device at draw type17 after draw type16/clear; one native capsule permits one draw",
-    "offline_pass": "Two actual frontend Draw calls without intervening Windows Flush produce two ordered existing native batches, 2 Render, 4 materializations, 4 KMD gates, 4 retirements; x64 exit0 ARM64 build PASS",
-    "evidence": "EXP755-multidraw-offline/multidraw-final-source.tar",
-    "source_sha256": "a6ac85957343c454e1d7fbbf8659c814942f2844117d163bad5636f48d7c27d7",
-    "hardware_dependency": "none for fix; next DWM consequence requires exact package/preregistration"
+    "status": "HARDWARE_REJECTED_INSUFFICIENT",
+    "mandatory_reason": "EXP754 E_NOTIMPL occurs during draw type17; package750 one-draw batch split did not remove the same semantic failure",
+    "offline_pass": "Counter-level producer/capture/materializer/KMD/retirement proof only",
+    "missing_offline_proof": [
+      "second-batch color LOAD from data_valid",
+      "depth/stencil LOAD and persistence",
+      "state persistence without rebinding",
+      "both draws!=1 and draw-receipt guards"
+    ],
+    "evidence": "EXP755-multidraw-offline/causal-result.json",
+    "hardware_dependency": "No more hardware until exact SetError attribution and missing batch-split invariants pass offline"
   },
   "third_dwm_hardware": {
     "experiment": "EXP753",
@@ -249,5 +254,30 @@
     "fixed_boundary": "dynamic VB/IB/CB and 50x50 cached visual admitted; first draw and clear finish",
     "actual_boundary": "second DWM draw before Windows Flush -> UMD E_NOTIMPL device removal; 0x889800C0 CreateLegacySwapChain is cascade",
     "agx_execution": "NOT_PROVEN"
+  },
+  "fifth_dwm_hardware": {
+    "experiment": "EXP755",
+    "status": "EXECUTED_REJECTED_NO_CAUSAL_ADVANCE",
+    "evidence": "EXP755-multidraw-offline/causal-result.json",
+    "candidate": "package750 exact UMD 50089bf12bce3a8fe790fae3ecd34fe6380336182416fa1acd513feea6ca4177",
+    "fixed_boundary": "NOT_PROVEN; first DWM attempt still removes device with E_NOTIMPL during draw type17",
+    "repeat_detail": "A retry emits type17 Stop and SchedulePresent only after bad-UMD device removal, so they are not execution receipts",
+    "agx_execution": "NOT_PROVEN",
+    "physical_observation": "NOT_OBSERVED",
+    "cleanup": "PASS ordinary GPU-visible Code28 recovery"
+  },
+  "next_offline_causal_target": {
+    "id": "frontend_seterror_attribution_and_batch_split_invariants",
+    "status": "NOW",
+    "mandatory_reason": "EXP755 repeats the same E_NOTIMPL while umd-refusals.txt is empty; another hardware run without exact attribution would repeat the hypothesis loop",
+    "implementation": [
+      "route all frontend SetError through reject-seterror __func__/line/HRESULT diagnostic in refusals-only mode",
+      "verify second batch color/depth load actions and state persistence",
+      "exercise both draws!=1 and draw-receipt guards",
+      "source-first verify and admit contract-wide FL10_0 topology, instancing, constant-buffer slots and shader-resource ranges without exact trace-value filters"
+    ],
+    "offline_gate": "one line per rejection with exact args; success silent; real producer capture proves LOAD/state continuity and topology/instance/CB/SRV values reach the encoder; existing suites pass",
+    "hardware_dependency": "fully offline",
+    "scope_rule": "Only pinned-WDK mandatory FL10_0 operations or actual reached runtime prerequisites; optional completeness remains post-hardware"
   }
 }

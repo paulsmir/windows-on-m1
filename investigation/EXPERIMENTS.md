@@ -46913,3 +46913,38 @@ Manifest SHA256 3f0bae09dd45ef45d53cc3be102e0f2644fa34cf9d4847065414899ac71561d4
 One DWM-only run, no client/retry; evidence first, exact cleanup, ordinary
 recovery. Expected: draw type17 advances; reject-blt=0; DirectFlip behavior
 unknown. Result:PENDING.
+
+### EXP755 hardware actual result
+
+Executed 2026-09-23T11:58:18Z through 12:02:34Z. Native catalog membership and
+all package750 hashes matched preregistration; `pnputil` installed the package
+once as oem5.inf and the active console session contained `pavel`, Explorer and
+DWM. Exact System32 UMD SHA256 was
+50089bf12bce3a8fe790fae3ecd34fe6380336182416fa1acd513feea6ca4177.
+The 60-second ETW trace processed 632894 events with lost0.
+
+The first hardware DWM sequence (PID6496) finished draw type16 and clear, started
+draw type17 at 14:01:26.0797609, then Direct3D11 recorded bad UMD E_NOTIMPL at
+14:01:26.0797925 without a type17 Stop. Retry PID3456 also recorded E_NOTIMPL
+during type17; its later type17 Stop and SchedulePresent occur after device
+removal and therefore do not prove DDI success, AGX execution or Present.
+`umd-refusals.txt` is empty, proving that the existing five refusal diagnostics
+do not cover this SetError path. The retained present-transfer receipt did not
+change between login and final capture. No DWM-correlated native graph, KMD
+Render/Patch/Submit, physical AGX completion or standard Present is proven.
+Physical screen behavior was not observed for this experiment.
+
+Verdict: REJECTED_NO_CAUSAL_ADVANCE. The one-draw batch split is insufficient to
+remove the EXP754 boundary, and the exact rejecting frontend DDI remains unknown.
+Before another package, route every frontend SetError through refusals-only
+`reject-seterror` diagnostics; close color/depth LOAD-action, state-persistence
+and both native draw-guard checks; and source-verify contract-wide FL10_0
+topology, instancing, CB-slot and SRV-range propagation without exact-value
+filters. Causal result:
+`.local/experiments/EXP755-multidraw-offline/causal-result.json`, SHA256
+59c03763d81cd5fb67835046ecd8ce6654909c612d35c5a9654e9e3c11d28eb4.
+
+Evidence was collected before rollback. Exact oem5/package750 and hash-matched
+SYS/UMD/signer residues were removed. Ordinary GPU-visible recovery finished
+with one inert ACPI\\APPL0002 Code28/null INF, packages0, no service/module/files
+or trust residue, 8 CPUs and healthy storage/USB.

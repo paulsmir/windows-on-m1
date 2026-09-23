@@ -44,52 +44,56 @@ one inert ACPI\\APPL0002 Code28/null INF; no package/service/module/SYS/UMD or
 signer; 8 CPUs, storage/USB healthy; trace environment absent. Do not retain an
 AppleAgx package between experiments.
 
-## Current offline boundary — EXP754
-Implementation commit 4adc9c59cf4ee59948d04d1d2f75b784e10e5bb2 replaces exact
-buffer/index filters with the D3D10 contract:
-- arbitrary nonzero buffer widths within pinned D3D10 limits;
-- DEFAULT CPU0; IMMUTABLE CPU0+initial data; DYNAMIC CPU_WRITE only and no SO
-  output; STAGING bind0 with declared READ/WRITE; exclusive 16-byte CB <=64KiB;
-- VB/IB/CB/SO combinations allowed by those rules; R16/R32 index binding;
-- whole/region linear buffer copies use exact Asahi BO ranges;
-- pending WRITE_NOOVERWRITE does not retire the immutable request; consumed BO
-  maps use a resource shadow, uploaded at the next IA bind after ordered
-  completion; WRITE_DISCARD remains supported;
-- real draw payload propagates count/start; triangle-list nonzero multiples of3;
-- nonindexed StartVertex=5 and indexed StartIndex=1/BaseVertex=7 pass actual
-  producer, capture, composer, physical KMD plan/patch and retirement;
-- indexed capture validates R16/R32 encoder tags, logical used bytes, aligned
-  physical fetch span and encoded BaseVertex; KMD no longer inspects literal
-  index contents or requires offset0/exact8.
+## EXP754/EXP755 boundary and hardware verdict
+EXP754 implementation commit 4adc9c59 admits contract-wide D3D10 buffers and
+arbitrary draw offsets. Package749 proved that DWM passes dynamic
+VB144/160000/240012, dynamic IB16000, CBs, the 50x50 BGRA RT|SRV cached visual,
+draw type16 and clear. It then recorded UMD E_NOTIMPL during draw type17. No
+DWM-correlated AGX submission/completion/Present was proven.
 
-Final source archive `buffers-green25-source.tar` SHA256
-50254acd513b7ff1180800ed3cc74d22231e70de17dc672cd38615d166f596af.
-x64 full executable TestExit0, EXE SHA256
-3d5e344511622864ab4187600198970a6ce44439e85146e76ff01520edf60470.
-ARM64 native closure PASS; ARM64 UmdContractTest build PASS, EXE SHA256
-75039bf7aa8e1723bacb2d4b0abd309c891b46f3bf31adeaf526f694d60c6fe3.
-Host ABI, dynamic-job, reference-transport and reloc-capture tests PASS.
-`test_apple_agx_mesa_win32_transport.py` also fails at clean HEAD on an unchanged
-textured-v6 fixture and is recorded as pre-existing, not an EXP754 regression.
-Inventory: `.local/experiments/EXP753-vertexid-hardware/FRONTEND_CONTRACT_INVENTORY.json`.
+EXP755 implementation commit 098ddedf adds a temporary one-draw-per-native-batch
+bridge: Draw/DrawIndexed with an existing actual draw receipt invokes the
+existing FlushRetire path before the next normal Mesa draw. Its x64 and ARM64
+offline producer/capture/materializer/KMD/retirement gates pass, but the proof is
+limited to counters. Before another package it still requires color and depth
+LOAD-action plus state-persistence checks across the split; native multi-draw is
+post-hardware performance work.
 
-## EXP754 hardware result / current causal target
-Package749 installed once and was fully removed. DWM selected exact UMD749 and
-Apple AGX FL10_0. The EXP753 buffer boundary is fixed in hardware: dynamic
-VB144/160000/240012, dynamic IB16000, CBs and a 50x50 BGRA RT|SRV cached visual
-are created. DWM draw type16 and clear finish. Draw type17 then starts and the
-runtime removes the device for UMD E_NOTIMPL. Dump exception0x889800C0 means
-DWM failed to create a display swap chain in CreateLegacySwapChain, but is a
-cascade after removal. No DWM-correlated AGX submission/completion/Present is
-proven. Evidence: EXP754 causal-result.json, debug-dwm.log, etw-relevant.json.
+Package750 was installed once after native CAT/hash verification. DWM selected
+Apple AGX FL10_0 and exact System32 UMD750 SHA256
+50089bf12bce3a8fe790fae3ecd34fe6380336182416fa1acd513feea6ca4177. The
+60-second trace contains 632894 events and lost0. First DWM PID6496 finishes
+draw type16 and clear, starts type17 at 14:01:26.0797609, then records bad UMD
+E_NOTIMPL at 14:01:26.0797925 without a type17 Stop. Retry PID3456 records the
+same E_NOTIMPL during type17; a later DWM Stop/SchedulePresent occurs only after
+device removal and is not execution proof. `umd-refusals.txt` is empty. The
+retained present-transfer receipt is unchanged from login to final capture.
+There is no DWM-correlated native graph, KMD Render/Patch/Submit, physical AGX
+completion or standard Present receipt. Physical screen behavior was not
+observed for EXP755.
 
-EXP755 commit098ddedf closes that offline boundary. Draw and DrawIndexed detect
-an existing actual native draw receipt and invoke the existing FlushRetire path;
-the next Mesa draw starts a normal new capsule. Two real pre-Flush draws produce
-two Render callbacks, four materializations, four physical KMD gates and four
-retirements. x64 TestExit0; ARM64 native/test build PASS. Source SHA256
-a6ac85957343c454e1d7fbbf8659c814942f2844117d163bad5636f48d7c27d7.
-Package750 is built and preregistered: CAT f42c837a81005c78f08ce3909bf4b11c57bc36165d534c8a09a78c9798c2d555; INF d5cc77191ec08748958e3a76692a8601cdb40fbb48e82e1140e81891634ec3b7; SYS 1e30e8d938bdaef15a75ca2357c1aa5c1886410d6f3da2af002182250a9fe1eb; UMD 50089bf12bce3a8fe790fae3ecd34fe6380336182416fa1acd513feea6ca4177. Next: native Air CAT/hash, exact install and one DWM run.
+Verdict: REJECTED_NO_CAUSAL_ADVANCE. The multi-draw hypothesis is not sufficient,
+and the exact rejecting frontend DDI remains unknown because direct SetError
+paths are not instrumented. Evidence:
+`.local/experiments/EXP755-multidraw-offline/causal-result.json` SHA256
+59c03763d81cd5fb67835046ecd8ce6654909c612d35c5a9654e9e3c11d28eb4 and
+`dwm-first-failure-window.json`. Exact750 cleanup completed. Ordinary GPU-visible
+recovery is restored: one inert ACPI\APPL0002 Code28/null INF; no package,
+service, module, SYS/UMD or signer; 8 CPUs and storage/USB healthy.
+
+## Current causal target
+Before another hardware package, instrument every frontend `SetError(hDevice,
+E_*)` through one `reject-seterror` path that records `__func__`, source line and
+HRESULT only when `APPLE_AGX_UMD_REFUSALS_ONLY=1`. Add a deterministic offline
+test proving success remains silent and each rejection emits one line with exact
+arguments. In the same offline phase, close the EXP755 bridge checks required by
+R1: second-batch color/depth LOAD action from valid attachments, state persistence
+without rebinding, and both the native `draws != 1` and draw-receipt guards.
+Source-first verify and remove the remaining exact-value admissions on this
+reached FL10_0 path: D3D10 topology propagation, contract-wide instancing,
+constant-buffer slots and shader-resource ranges. Do not run Air again until
+these gates identify or exclude the exact first rejection.
+
 ## Fixed experiment procedure
 Git `/opt/homebrew/bin/git`; artifacts live under main repo `.local`, not the
 worktree. Builder `pauls@192.168.1.24`, key `~/.ssh/windows_builder`. Air
@@ -113,14 +117,16 @@ an actual reject-BltDXGI reopens it.
 
 HARDWARE ROADMAP
 [PASS] Frozen admission/shared/BGR/DXGI1.1 gates; EXP751/752/753 shader advances;
-       EXP753 exact hardware-device selection; exact748 cleanup/recovery.
-[PASS] EXP754 contract-wide buffers, append cycle, StartVertex/BaseVertex,
-       x64 execution and ARM64 closure/test build.
-[PASS] Package749 run fixed DWM dynamic-buffer admission; exact cleanup/recovery.
-[PASS] EXP755 consecutive pre-Flush draws -> ordered native batches offline.
-[PASS] Package750 build/sign/hash and preregistration.
-[NOW] Native Air CAT/hash then exact750 one-install DWM run.
-[NEXT] Evidence-first verdict and cleanup; continue from exact next boundary.
-[HW] Verify DWM draw type17 reaches native submission/completion or next boundary.
-POST-HARDWARE: optional features, performance, sustained desktop stability,
-OpenGL and CS1.6 only after first proven DWM AGX execution/Present.
+       exact hardware-device selection and ordinary recovery.
+[PASS] EXP754 contract-wide buffers and package749 hardware buffer admission.
+[PASS] EXP755 package750 exact build/sign/hash/install/evidence/cleanup cycle.
+[NOW] Exact frontend SetError attribution, honest batch-split color/depth/state
+      gates, and source-verified removal of reached FL10_0 draw/bind exact-value
+      admissions. Offline; EXP755 repeats E_NOTIMPL while reject logs are empty.
+[NEXT] Build/sign/hash and preregister one candidate containing only independently
+       offline-proven fixes exposed by the exact rejection. Offline until package.
+[HW] One standard-runtime Air run must produce the first DWM-correlated native
+     graph -> KMD Render/Patch/Submit -> physical AGX completion -> DXGI Present,
+     or name the next exact semantic RED.
+POST-HARDWARE: native multi-draw batching, optional features, performance,
+sustained desktop stability, OpenGL and CS1.6 after accelerated-desktop acceptance.
