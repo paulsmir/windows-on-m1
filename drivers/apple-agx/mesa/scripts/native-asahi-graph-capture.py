@@ -243,7 +243,7 @@ AgxWin32AsahiCaptureUniformBlock(struct agx_batch *batch, void *cpu,
          uint64_t base = u->ubo_base[i];
          uint32_t size = u->ubo_size[i];
          if (!base && !size) continue;
-         if (!app_stage || i != 0 || !base || !size ||
+         if (!app_stage || !base || !size ||
              !(native_stage->cb_mask & BITFIELD_BIT(i))) {
             scope.Failed = 1; break;
          }
@@ -346,67 +346,55 @@ windows_graph_texture_table(struct agx_batch *batch, struct agx_ptr ptr,
 {
    AGX_WIN32_ASAHI_CAPTURE *capture = windows_graph_capture(batch);
    if (!capture) return 1;
-   if (stage != MESA_SHADER_FRAGMENT || count != 1 || !ptr.cpu || !ptr.gpu) {
+   if ((stage != MESA_SHADER_VERTEX && stage != MESA_SHADER_FRAGMENT &&
+        stage != MESA_SHADER_GEOMETRY) ||
+       !count || count > PIPE_MAX_SHADER_SAMPLER_VIEWS ||
+       count > UINT32_MAX / AGX_TEXTURE_LENGTH || !ptr.cpu || !ptr.gpu) {
       windows_graph_fail(batch); return 0;
    }
-   struct agx_sampler_view *view = batch->ctx->stage[stage].textures[0];
-   struct agx_resource *rsrc = view ? view->rsrc : NULL;
    AGX_WIN32_ASAHI_PIPELINE scope = {0};
-   unsigned index;
-   unsigned level=view?view->base.u.tex.first_level:0;
-   unsigned layer=view?view->base.u.tex.first_layer:0;
-   unsigned last_layer=view?view->base.u.tex.last_layer:0;
-   unsigned last_level=view?view->base.u.tex.last_level:0;
-   unsigned layers=rsrc ? (rsrc->base.target==PIPE_TEXTURE_3D ?
-      rsrc->base.depth0 : rsrc->base.array_size) : 0;
-   int range=rsrc&&view&&level<=last_level&&last_level<=rsrc->base.last_level&&
-      layer<=last_layer&&last_layer<layers;
-   uint64_t address=range ? agx_map_texture_gpu(rsrc,layer) : 0;
-   uint64_t offset=rsrc&&rsrc->bo ? address-rsrc->bo->va->addr : 0;
-   uint64_t span=range ? (uint64_t)(last_layer-layer)*
-      rsrc->layout.layer_stride_B+ail_get_level_offset_B(&rsrc->layout,last_level)+
-      ail_get_level_size_B(&rsrc->layout,last_level) : 0;
-   if (!rsrc || (rsrc->base.target != PIPE_TEXTURE_1D &&
-                 rsrc->base.target != PIPE_TEXTURE_1D_ARRAY &&
-                 rsrc->base.target != PIPE_TEXTURE_2D &&
-                 rsrc->base.target != PIPE_TEXTURE_2D_ARRAY &&
-                 rsrc->base.target != PIPE_TEXTURE_3D &&
-                 rsrc->base.target != PIPE_TEXTURE_CUBE) ||
-       rsrc->base.nr_samples>1 ||
-       (rsrc->base.format != PIPE_FORMAT_B8G8R8A8_UNORM &&
-        rsrc->base.format != PIPE_FORMAT_B8G8R8X8_UNORM &&
-        rsrc->base.format != PIPE_FORMAT_B8G8R8A8_SRGB &&
-        rsrc->base.format != PIPE_FORMAT_B8G8R8X8_SRGB &&
-        rsrc->base.format != PIPE_FORMAT_R8G8B8A8_UNORM &&
-        rsrc->base.format != PIPE_FORMAT_R32G32B32A32_FLOAT &&
-        rsrc->base.format != PIPE_FORMAT_R32G32B32A32_UINT &&
-        rsrc->base.format != PIPE_FORMAT_R32G32B32A32_SINT &&
-        rsrc->base.format != PIPE_FORMAT_DXT1_RGBA &&
-        rsrc->base.format != PIPE_FORMAT_DXT5_RGBA &&
-        rsrc->base.format != PIPE_FORMAT_RGTC2_UNORM &&
-        rsrc->base.format != PIPE_FORMAT_R9G9B9E5_FLOAT &&
-        rsrc->base.format != PIPE_FORMAT_R8G8_B8G8_UNORM &&
-        rsrc->base.format != PIPE_FORMAT_G8R8_G8B8_UNORM &&
-        rsrc->base.format != PIPE_FORMAT_B5G5R5A1_UNORM &&
-        rsrc->base.format != PIPE_FORMAT_B4G4R4A4_UNORM) ||
-       rsrc->layout.compressed || !range || !span ||
-       offset>rsrc->bo->size || span>rsrc->bo->size-offset ||
-       !AgxWin32AsahiEmissionBegin(capture->Backend->Native, ptr.cpu, ptr.gpu,
-          AGX_TEXTURE_LENGTH, AppleAgxWin32RoleDescriptor, &scope)) {
+   if (!AgxWin32AsahiEmissionBegin(capture->Backend->Native,ptr.cpu,ptr.gpu,
+          count*AGX_TEXTURE_LENGTH,AppleAgxWin32RoleDescriptor,&scope)) {
       windows_graph_fail(batch); return 0;
    }
-   AGX_WIN32_RELOC_RESULT texture_result = AgxWin32AsahiCaptureReference(
-      capture, rsrc->bo, AppleAgxWin32RoleTexture, AppleAgxWin32AccessRead,
-      offset, span, &index);
-   if (texture_result != AgxRelocOk) {
-      scope.Failed = 1;
+   for(unsigned slot=0;slot<count;++slot) {
+      struct agx_sampler_view *view=batch->ctx->stage[stage].textures[slot];
+      if(!view) continue;
+      struct agx_resource *rsrc=view->rsrc;
+      unsigned level=view->base.u.tex.first_level;
+      unsigned layer=view->base.u.tex.first_layer;
+      unsigned last_layer=view->base.u.tex.last_layer;
+      unsigned last_level=view->base.u.tex.last_level;
+      unsigned layers=rsrc ? (rsrc->base.target==PIPE_TEXTURE_3D ?
+         rsrc->base.depth0 : rsrc->base.array_size) : 0;
+      int range=rsrc&&level<=last_level&&last_level<=rsrc->base.last_level&&
+         layer<=last_layer&&last_layer<layers;
+      uint64_t address=range ? agx_map_texture_gpu(rsrc,layer) : 0;
+      uint64_t offset=rsrc&&rsrc->bo ? address-rsrc->bo->va->addr : 0;
+      uint64_t span=range ? (uint64_t)(last_layer-layer)*
+         rsrc->layout.layer_stride_B+ail_get_level_offset_B(&rsrc->layout,last_level)+
+         ail_get_level_size_B(&rsrc->layout,last_level) : 0;
+      unsigned index=0;
+      if (!rsrc || (rsrc->base.target != PIPE_TEXTURE_1D &&
+                    rsrc->base.target != PIPE_TEXTURE_1D_ARRAY &&
+                    rsrc->base.target != PIPE_TEXTURE_2D &&
+                    rsrc->base.target != PIPE_TEXTURE_2D_ARRAY &&
+                    rsrc->base.target != PIPE_TEXTURE_3D &&
+                    rsrc->base.target != PIPE_TEXTURE_CUBE) ||
+          rsrc->base.nr_samples>1 || rsrc->layout.compressed || !range || !span ||
+          offset>rsrc->bo->size || span>rsrc->bo->size-offset ||
+          AgxWin32AsahiCaptureReference(capture,rsrc->bo,
+             AppleAgxWin32RoleTexture,AppleAgxWin32AccessRead,
+             offset,span,&index)!=AgxRelocOk) {
+         scope.Failed=1;break;
+      }
+      AgxWin32AsahiPipelineRecordRange(&scope,
+         (uint8_t *)ptr.cpu+slot*AGX_TEXTURE_LENGTH+16,
+         AppleAgxWin32RelocationTextureAddress40,address,span,
+         AppleAgxWin32RoleTexture);
    }
-   AgxWin32AsahiPipelineRecordRange(&scope, (uint8_t *)ptr.cpu + 16,
-      AppleAgxWin32RelocationTextureAddress40,
-      address, span,
-      AppleAgxWin32RoleTexture);
    if (!AgxWin32AsahiPipelineFinish(&scope,
-          (uint8_t *)ptr.cpu + AGX_TEXTURE_LENGTH)) {
+          (uint8_t *)ptr.cpu + count*AGX_TEXTURE_LENGTH)) {
       windows_graph_fail(batch); return 0;
    }
    return 1;
@@ -432,11 +420,18 @@ windows_graph_index_list(struct agx_batch *batch, uint8_t *start, uint8_t *end,
    }
    uint32_t *words = (uint32_t *)start;
    uint64_t encoded = ((uint64_t)(words[0] & 0xffu) << 32) | words[1];
-   uint32_t expected_header=info->index_size==4u ? 0x61f50900u : 0x61f20600u;
-   uint32_t expected_count=info->index_size==4u ? 4u : 3u;
+   uint32_t primitive=info->mode==MESA_PRIM_POINTS ? 0u :
+      info->mode==MESA_PRIM_LINES ? 1u :
+      info->mode==MESA_PRIM_LINE_STRIP ? 3u :
+      info->mode==MESA_PRIM_TRIANGLES ? 6u :
+      info->mode==MESA_PRIM_TRIANGLE_STRIP ? 9u : UINT32_MAX;
+   uint32_t expected_header=0x61f00000u |
+      (info->index_size==4u ? 0x00040000u : 0x00020000u) |
+      (info->primitive_restart ? 0x00010000u : 0u) | (primitive<<8);
+   uint32_t expected_count=(uint32_t)(used/info->index_size);
    uint32_t expected_size=mixed ? 0x10000u : info->index_size;
-   if ((words[0] & 0xffffff00u) != expected_header ||
-       words[2] != expected_count || words[3] != 1u ||
+   if (primitive==UINT32_MAX || (words[0] & 0xffffff00u) != expected_header ||
+       words[2] != expected_count || words[3] != info->instance_count ||
        words[4] != (uint32_t)index_bias || words[5] != expected_size ||
        encoded != address) {
       fprintf(stderr,"NATIVE_INDEX_CAPTURE_FAIL: stage=encoding size=%u address=%llx encoded=%llx words=%08x,%08x,%08x,%08x,%08x,%08x expected=%08x,%u,%u\n",
@@ -501,6 +496,24 @@ windows_graph_index_list(struct agx_batch *batch, uint8_t *start, uint8_t *end,
 }
 
 static bool
+windows_graph_topology_supported(enum mesa_prim mode,unsigned count)
+{
+   if(!count) return false;
+   switch(mode) {
+   case MESA_PRIM_POINTS:
+   case MESA_PRIM_LINES:
+   case MESA_PRIM_LINE_STRIP:
+   case MESA_PRIM_TRIANGLES:
+   case MESA_PRIM_TRIANGLE_STRIP:
+   case MESA_PRIM_LINES_ADJACENCY:
+   case MESA_PRIM_LINE_STRIP_ADJACENCY:
+   case MESA_PRIM_TRIANGLES_ADJACENCY:
+   case MESA_PRIM_TRIANGLE_STRIP_ADJACENCY: return true;
+   default: return false;
+   }
+}
+
+static bool
 windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_info *info,
                              const struct pipe_draw_indirect_info *indirect,
                              const struct pipe_draw_start_count_bias *draws,
@@ -537,9 +550,8 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
    bool indexed = info && info->index_size != 0;
    bool valid = !backend->Failed && (!ctx->batch || !ctx->batch->draws) &&
       info && draws && !indirect && num_draws == 1 &&
-      info->mode == MESA_PRIM_TRIANGLES &&
-      !info->primitive_restart && info->instance_count == 1 &&
-      !info->start_instance && draws->count && !(draws->count%3u) &&
+      info->instance_count &&
+      windows_graph_topology_supported(info->mode,draws->count) &&
       draws->count<=0x01000000u && ctx->framebuffer.nr_cbufs == 1 &&
       ctx->framebuffer.cbufs[0].texture &&
       (ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_B8G8R8A8_UNORM ||
@@ -621,19 +633,18 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
          valid = false;
    for (unsigned i = 0; i < MESA_SHADER_STAGES; ++i) {
       struct agx_stage *stage = &ctx->stage[i];
-      bool app_stage = i == MESA_SHADER_VERTEX || i == MESA_SHADER_FRAGMENT;
-      bool blit_texture = i == MESA_SHADER_FRAGMENT &&
-         stage->texture_count == 1 && stage->sampler_count <= 16 &&
-         stage->textures[0] && stage->textures[0]->rsrc;
+      bool app_stage = i == MESA_SHADER_VERTEX || i == MESA_SHADER_FRAGMENT ||
+         i == MESA_SHADER_GEOMETRY;
       /* Runtime default samplers are binding state, not texture resources.
        * Ordinary sampler descriptors contain no GPU addresses; the existing
        * USC table capture retains their complete emitted span, including txf.
        * Keep actual texture/image/SSBO and custom-border restrictions intact. */
-      if ((!blit_texture && stage->texture_count) ||
+      if ((!app_stage && stage->texture_count) ||
+          stage->texture_count > PIPE_MAX_SHADER_SAMPLER_VIEWS ||
           stage->sampler_count > 16 ||
           (stage->valid_samplers & ~BITFIELD_MASK(16)) ||
           stage->image_mask || stage->ssbo_mask ||
-          (app_stage ? (stage->cb_mask & ~BITFIELD_BIT(0)) : stage->cb_mask) ||
+          (!app_stage && stage->cb_mask) ||
           stage->custom_borders)
          valid = false;
    }

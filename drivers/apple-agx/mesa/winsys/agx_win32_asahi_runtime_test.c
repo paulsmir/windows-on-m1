@@ -4,6 +4,7 @@
 #include "util/u_inlines.h"
 #include "drm-uapi/drm_fourcc.h"
 #include "agx_win32_asahi_scene.h"
+#include "agx_win32_asahi_batch.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -68,6 +69,18 @@ unsigned AgxWin32AsahiRuntimeTest(AGX_WIN32_SCREEN *windows,
       batch!=NULL,batch?batch->draws:0,batch && batch->windows_batch,backend->Failed,native->any_faults);
   RUNTIME_CHECK(batch && batch->draws==1 && batch->windows_batch && !backend->Failed);
   if(!batch || batch->draws!=1 || !batch->windows_batch || backend->Failed) goto cleanup;
+  {
+    struct pipe_draw_info guarded={0};
+    struct pipe_draw_start_count_bias guardedDraw={0};
+    guarded.mode=MESA_PRIM_TRIANGLES;guarded.instance_count=1;
+    guardedDraw.count=3;
+    RUNTIME_CHECK(!AgxWin32AsahiBatchDrawAllowed(
+        native,&guarded,0,NULL,&guardedDraw,1));
+    batch->draws=2;
+    RUNTIME_CHECK(!AgxWin32AsahiContextDrawReceipt(ctx));
+    batch->draws=1;
+    RUNTIME_CHECK(AgxWin32AsahiContextDrawReceipt(ctx));
+  }
   RUNTIME_CHECK(AgxWin32AsahiSceneSubmit(&scene));
   AGX_WIN32_ASAHI_BATCH *held=batch->windows_batch;
   RUNTIME_CHECK(held && held->Submitted && !held->Retired);
@@ -85,7 +98,7 @@ unsigned AgxWin32AsahiRuntimeTest(AGX_WIN32_SCREEN *windows,
   /* Unsupported topology is rejected through the same real draw entry before
    * a new batch, capture or submission can exist. Positive work already retired. */
   RUNTIME_CHECK(!native->any_faults && !native->batch && !backend->ActiveCapture);
-  struct pipe_draw_info info={0};info.mode=MESA_PRIM_LINES;info.instance_count=1;
+  struct pipe_draw_info info={0};info.mode=MESA_PRIM_QUADS;info.instance_count=1;
   struct pipe_draw_start_count_bias draw={0};draw.count=3;
   ctx->draw_vbo(ctx,&info,0,NULL,&draw,1);
   RUNTIME_CHECK(native->any_faults && !native->batch && !backend->ActiveCapture && !backend->Failed);

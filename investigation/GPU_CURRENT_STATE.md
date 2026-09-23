@@ -82,23 +82,35 @@ recovery is restored: one inert ACPI\APPL0002 Code28/null INF; no package,
 service, module, SYS/UMD or signer; 8 CPUs and storage/USB healthy.
 
 ## Current causal target
-Before another hardware package, instrument every frontend `SetError(hDevice,
-E_*)` through one `reject-seterror` path that records `__func__`, source line and
-HRESULT only when `APPLE_AGX_UMD_REFUSALS_ONLY=1`. Add a deterministic offline
-test proving success remains silent and each rejection emits one line with exact
-arguments. In the same offline phase, close the EXP755 bridge checks required by
-R1: second-batch color/depth LOAD action from valid attachments, state persistence
-without rebinding, and both the native `draws != 1` and draw-receipt guards.
-Source-first verify and remove the remaining exact-value admissions on this
-reached FL10_0 path: D3D10 topology propagation, contract-wide instancing,
-constant-buffer slots and shader-resource ranges. Do not run Air again until
-these gates identify or exclude the exact first rejection.
+The post-EXP755 offline gate passes at source-diff SHA256
+`efb35c31b25f510c4da886b55df33a959bd4dac1bba090eeeae1f9f5d668d2cf`.
+Every frontend SetError now emits one refusals-only `reject-seterror` record with
+function, generated-source line and HRESULT; a successful call stays silent.
+The real producer/capture path proves second-batch color and depth LOAD, stable
+draw-state roots without rebinding, and both one-draw guards. Basic FL10_0 point,
+line-list/strip and triangle-list/strip topologies, arbitrary counts, instancing
+and nonzero StartInstance propagate into the typed encoder. CB slots 0..13 and
+SRV slots 0..127 are admitted; authored cb1/t1 shaders prove their real captured
+relocations. x64 full integrated execution and ARM64 archive/link gates pass.
+
+Adjacency topology is NOT claimed: Asahi routes it through a passthrough GS and
+the current mixed-compute capture fails at a separate graph boundary. It is
+post-hardware completeness, not part of the reached DWM basic-draw candidate;
+the frontend emits `reject-capture reason=adjacency` and fail-closes before the
+unsupported graph rather than leaving an unattributed native fault.
+The current target is one exact build/sign/hash/preregistered ARM64 package and
+one Air discriminator with the new SetError attribution.
 
 ## Fixed experiment procedure
 Git `/opt/homebrew/bin/git`; artifacts live under main repo `.local`, not the
 worktree. Builder `pauls@192.168.1.24`, key `~/.ssh/windows_builder`. Air
 `pavel@192.168.1.37`, key `~/.ssh/air`, pinned known-host file from EXP641.
 Preserve TESTSIGNING and existing signer; Smart App Control is separate.
+For local host ABI tests use `CC=/tmp/agx-clang-wrapper` (Homebrew LLVM plus the
+MacOSX15.5 SDK and `/tmp/agx-ld64-wrapper`); the older admission wrapper is
+`CC=/tmp/agx-clang PATH=/tmp/agx-cc:/opt/homebrew/bin:$PATH`. For builder
+PowerShell, use the encoded-command helper `/tmp/agx_builder.py` when an inline
+SSH command would cross quoting boundaries.
 
 Before asking the operator, probe Windows SSH and both proxy/vUART USB endpoints.
 Full owner uses EXP584 m1n1 plus EXP406 Mu; ordinary recovery uses EXP377 m1n1
@@ -120,11 +132,11 @@ HARDWARE ROADMAP
        exact hardware-device selection and ordinary recovery.
 [PASS] EXP754 contract-wide buffers and package749 hardware buffer admission.
 [PASS] EXP755 package750 exact build/sign/hash/install/evidence/cleanup cycle.
-[NOW] Exact frontend SetError attribution, honest batch-split color/depth/state
-      gates, and source-verified removal of reached FL10_0 draw/bind exact-value
-      admissions. Offline; EXP755 repeats E_NOTIMPL while reject logs are empty.
-[NEXT] Build/sign/hash and preregister one candidate containing only independently
-       offline-proven fixes exposed by the exact rejection. Offline until package.
+[PASS] Exact frontend SetError attribution, honest batch-split color/depth/state
+       gates, draw guards, basic topology/instancing and cb1/t1 capture. x64 full
+       execution and ARM64 link pass at implementation-tree hash efb35c31.
+[NOW] Build/sign/hash and preregister one candidate containing only independently
+      offline-proven fixes exposed by the exact rejection. Offline until package.
 [HW] One standard-runtime Air run must produce the first DWM-correlated native
      graph -> KMD Render/Patch/Submit -> physical AGX completion -> DXGI Present,
      or name the next exact semantic RED.

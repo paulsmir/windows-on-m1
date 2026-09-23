@@ -284,15 +284,20 @@ static void pipeline_record(AGX_WIN32_ASAHI_PIPELINE *s,const void *end,
       ((raw>>8)&0xffULL)*4==bytes; break;
   case AppleAgxWin32RelocationVdmIndexBufferAddress40:
     encoded=((raw&0xffULL)<<32)|(raw>>32);
+    {
+    APPLE_AGX_U32 primitive=(APPLE_AGX_U32)((raw>>8)&0xffULL);
+    APPLE_AGX_U32 indexSize=(APPLE_AGX_U32)((raw>>17)&7ULL);
+    int primitiveValid=primitive==0u || primitive==1u || primitive==3u ||
+        primitive==6u || primitive==9u;
     valid=APPLE_AGX_WIN32_COMMAND_HAS_INDEX(c->Capture.CommandVersion) &&
       role==(c->Capture.CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH ?
         AppleAgxWin32RoleSharedGeometry : AppleAgxWin32RoleIndex) &&
       s->Role==AppleAgxWin32RoleEncoder &&
-      (raw&0xffffff00ULL)==
-        (c->Capture.CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH ?
-          0x61f50900ULL : 0x61f20600ULL) &&
+      (raw&0xfff00000ULL)==0x61f00000ULL && primitiveValid &&
+      (indexSize==1u || indexSize==2u) &&
       bytes==(c->Capture.CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH ?
         16u : 8u); break;
+    }
   case AppleAgxWin32RelocationUniformAddress64:
     encoded=raw;
     valid=s->Role==AppleAgxWin32RoleUniform ||

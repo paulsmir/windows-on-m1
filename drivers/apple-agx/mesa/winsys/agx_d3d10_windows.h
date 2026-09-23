@@ -16,6 +16,8 @@ extern "C" {
 #endif
 VOID AgxD3d10WindowsDiagnostic(PCSTR Stage, HRESULT Status,
                               const UINT *Values, UINT Count);
+VOID AgxD3d10WindowsDiagnosticSetError(
+    PCSTR Function, UINT Line, HRESULT Status);
 BOOL AgxD3d10WindowsDiagnosticRefusal(HRESULT Status);
 VOID AgxD3d10WindowsDiagnosticState(AGX_D3D10_WINDOWS_DEVICE *, PCSTR Stage);
 VOID AgxD3d10WindowsDiagnosticResource(

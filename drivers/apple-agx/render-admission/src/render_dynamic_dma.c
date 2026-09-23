@@ -174,7 +174,7 @@ static int dma_job_valid(const APPLE_AGX_DYNAMIC_JOB *Job,
              APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH ?
                AppleAgxWin32RoleSharedGeometry : AppleAgxWin32RoleIndex) ||
          (Bindings->CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
-          target->Bytes!=8u) ||
+          target->Bytes<2u) ||
          (relocation->ResolvedAddress&3ULL)!=0ULL)
         return 0;
     }

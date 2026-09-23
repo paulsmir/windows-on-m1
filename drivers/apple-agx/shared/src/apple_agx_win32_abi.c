@@ -352,10 +352,10 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
       draw->SurfaceWidth == 0u || draw->SurfaceHeight == 0u ||
       draw->SurfaceWidth > APPLE_AGX_U32_MAX_VALUE / minimumPitch ||
       draw->SurfacePitch < draw->SurfaceWidth * minimumPitch ||
-      draw->Topology != AppleAgxWin32TopologyTriangleList ||
-      draw->VertexCount == 0u || (draw->VertexCount % 3u) != 0u ||
-      draw->VertexCount > 0x01000000u || draw->InstanceCount != 1u ||
-      draw->FirstInstance != 0u)
+      draw->Topology < AppleAgxWin32TopologyTriangleList ||
+      draw->Topology > AppleAgxWin32TopologyTriangleStripAdjacency ||
+      draw->VertexCount == 0u || draw->VertexCount > 0x01000000u ||
+      draw->InstanceCount == 0u)
     return AppleAgxWin32AbiPayload;
   if ((draw->Flags & ~APPLE_AGX_WIN32_DRAW_FLAG_EXPECTED_FOREGROUND) != 0u)
     return AppleAgxWin32AbiFlags;
@@ -394,7 +394,10 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
         native->UtileWidth == 0u || native->UtileHeight == 0u ||
         (native->RenderFlags &
          ~(APPLE_AGX_WIN32_NATIVE_RENDER_PROCESS_EMPTY_TILES |
-           APPLE_AGX_WIN32_NATIVE_RENDER_DEPTH_BIAS_IS_INT)) != 0u)
+           APPLE_AGX_WIN32_NATIVE_RENDER_DEPTH_BIAS_IS_INT |
+           APPLE_AGX_WIN32_NATIVE_RENDER_COLOR_LOAD |
+           APPLE_AGX_WIN32_NATIVE_RENDER_DEPTH_LOAD |
+           APPLE_AGX_WIN32_NATIVE_RENDER_STENCIL_LOAD)) != 0u)
       return AppleAgxWin32AbiPayload;
     for (root = 0u; root < 3u; ++root) {
       const APPLE_AGX_WIN32_NATIVE_PIPELINE_ROOT *pipeline =

@@ -1339,6 +1339,19 @@ static void test_mesa_d3d10_frontend_open(void) {
       FRONTEND_REG(D3D10_SB_OPERAND_TYPE_INPUT,D3D10_SB_OPERAND_4_COMPONENT_SWIZZLE_MODE,D3D10_SB_OPERAND_4_COMPONENT_NOSWIZZLE),0,
       FRONTEND_CB,0,0,
       FRONTEND_OP(D3D10_SB_OPCODE_RET,1)};
+    UINT vsSlot1[]={
+      ENCODE_D3D10_SB_TOKENIZED_PROGRAM_VERSION_TOKEN(D3D10_SB_VERTEX_SHADER,4,0),22,
+      FRONTEND_OP(D3D10_SB_OPCODE_DCL_INPUT,3),
+      FRONTEND_REG(D3D10_SB_OPERAND_TYPE_INPUT,D3D10_SB_OPERAND_4_COMPONENT_MASK_MODE,D3D10_SB_OPERAND_4_COMPONENT_MASK_ALL),0,
+      FRONTEND_OP(D3D10_SB_OPCODE_DCL_OUTPUT_SIV,4),
+      FRONTEND_REG(D3D10_SB_OPERAND_TYPE_OUTPUT,D3D10_SB_OPERAND_4_COMPONENT_MASK_MODE,D3D10_SB_OPERAND_4_COMPONENT_MASK_ALL),0,
+      ENCODE_D3D10_SB_NAME(D3D10_SB_NAME_POSITION),
+      FRONTEND_OP(D3D10_SB_OPCODE_DCL_CONSTANT_BUFFER,4),FRONTEND_CB,1,1,
+      FRONTEND_OP(D3D10_SB_OPCODE_ADD,8),
+      FRONTEND_REG(D3D10_SB_OPERAND_TYPE_OUTPUT,D3D10_SB_OPERAND_4_COMPONENT_MASK_MODE,D3D10_SB_OPERAND_4_COMPONENT_MASK_ALL),0,
+      FRONTEND_REG(D3D10_SB_OPERAND_TYPE_INPUT,D3D10_SB_OPERAND_4_COMPONENT_SWIZZLE_MODE,D3D10_SB_OPERAND_4_COMPONENT_NOSWIZZLE),0,
+      FRONTEND_CB,1,0,
+      FRONTEND_OP(D3D10_SB_OPCODE_RET,1)};
     UINT ps[]={
       ENCODE_D3D10_SB_TOKENIZED_PROGRAM_VERSION_TOKEN(D3D10_SB_PIXEL_SHADER,4,0),16,
       FRONTEND_OP(D3D10_SB_OPCODE_DCL_OUTPUT,3),
@@ -2294,7 +2307,7 @@ static void test_mesa_d3d10_frontend_open(void) {
     CHECK(layout.pDrvPrivate!=NULL);
     deviceFunctions.pfnCreateElementLayout(device,&layoutCreate,layout,layoutRuntime);
     FRONTEND_STAGE("element-layout");
-    D3D10DDI_HSHADER vsh={0},indexableVsh={0},psh={0},gsh={0};D3D10DDI_HRTSHADER vsRuntime={0},psRuntime={0},gsRuntime={0};
+    D3D10DDI_HSHADER vsh={0},slotVsh={0},slotPsh={0},indexableVsh={0},psh={0},gsh={0};D3D10DDI_HRTSHADER vsRuntime={0},psRuntime={0},gsRuntime={0};
     vsh.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateShaderSize(device,vs,NULL));
     psh.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateShaderSize(device,ps,NULL));
     gsh.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateShaderSize(device,gs,NULL));
@@ -2302,6 +2315,17 @@ static void test_mesa_d3d10_frontend_open(void) {
     gsRuntime.handle=(VOID *)(UINT_PTR)0xd10u;
     CHECK(vsh.pDrvPrivate && psh.pDrvPrivate && gsh.pDrvPrivate);
     deviceFunctions.pfnCreateVertexShader(device,vs,vsh,vsRuntime,NULL);
+    D3D10DDI_HRTSHADER slotVsRuntime={(VOID *)(UINT_PTR)0xe90u};
+    D3D10DDI_HRTSHADER slotPsRuntime={(VOID *)(UINT_PTR)0xe91u};
+    slotVsh.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateShaderSize(
+        device,vsSlot1,NULL));
+    slotPsh.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateShaderSize(
+        device,NativeSampleSlot1,NULL));
+    CHECK(slotVsh.pDrvPrivate && slotPsh.pDrvPrivate);
+    deviceFunctions.pfnCreateVertexShader(
+        device,vsSlot1,slotVsh,slotVsRuntime,NULL);
+    deviceFunctions.pfnCreatePixelShader(
+        device,NativeSampleSlot1,slotPsh,slotPsRuntime,NULL);
     /* EXP751: DirectComposition's ClearGuard vertex shader reached this same
      * indexable-TEMP form and aborted TTN when the frontend emitted scalars. */
     D3D10DDI_HRTSHADER indexableRuntime={(VOID *)(UINT_PTR)0xe87u};
@@ -2355,25 +2379,79 @@ static void test_mesa_d3d10_frontend_open(void) {
     rasterRuntime.handle=(VOID *)(UINT_PTR)0xd08u;
     CHECK(raster.pDrvPrivate!=NULL);deviceFunctions.pfnCreateRasterizerState(device,&rasterDesc,raster,rasterRuntime);
     D3D10_DDI_DEPTH_STENCIL_DESC depthDesc={0};D3D10DDI_HDEPTHSTENCILSTATE depth={0};D3D10DDI_HRTDEPTHSTENCILSTATE depthRuntime={0};
-    depthDesc.DepthFunc=D3D10_DDI_COMPARISON_ALWAYS;
+    depthDesc.DepthEnable=TRUE;
+    depthDesc.DepthWriteMask=D3D10_DDI_DEPTH_WRITE_MASK_ALL;
+    depthDesc.DepthFunc=D3D10_DDI_COMPARISON_LESS;
     depth.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateDepthStencilStateSize(device,&depthDesc));
     depthRuntime.handle=(VOID *)(UINT_PTR)0xd09u;
     CHECK(depth.pDrvPrivate!=NULL);deviceFunctions.pfnCreateDepthStencilState(device,&depthDesc,depth,depthRuntime);
     FRONTEND_STAGE("states");
     deviceFunctions.pfnVsSetShader(device,vsh);deviceFunctions.pfnPsSetShader(device,psh);
+    {
+      WCHAR savedTrace[MAX_PATH],savedOnly[16],tempDir[MAX_PATH],tracePath[MAX_PATH];
+      DWORD savedTraceLength=GetEnvironmentVariableW(
+          L"APPLE_AGX_UMD_TRACE_FILE",savedTrace,ARRAYSIZE(savedTrace));
+      DWORD savedOnlyLength=GetEnvironmentVariableW(
+          L"APPLE_AGX_UMD_REFUSALS_ONLY",savedOnly,ARRAYSIZE(savedOnly));
+      CHECK(GetTempPathW(ARRAYSIZE(tempDir),tempDir)>0u &&
+            GetTempFileNameW(tempDir,L"asr",0u,tracePath)!=0u);
+      SetEnvironmentVariableW(L"APPLE_AGX_UMD_TRACE_FILE",tracePath);
+      SetEnvironmentVariableW(L"APPLE_AGX_UMD_REFUSALS_ONLY",L"1");
+      deviceFunctions.pfnVsSetConstantBuffers(device,0,0,NULL);
+      HANDLE trace=CreateFileW(tracePath,GENERIC_READ,
+          FILE_SHARE_READ|FILE_SHARE_WRITE,NULL,OPEN_EXISTING,
+          FILE_ATTRIBUTE_NORMAL,NULL);
+      char refusal[512]={0};DWORD refusalBytes=0u;
+      CHECK(trace!=INVALID_HANDLE_VALUE && GetFileSize(trace,NULL)==0u);
+      if(trace!=INVALID_HANDLE_VALUE) CloseHandle(trace);
+      unsigned refusalErrors=FrontendErrors;
+      D3D10DDI_HRESOURCE rejectedConstant[1]={cb};
+      deviceFunctions.pfnVsSetConstantBuffers(
+          device,D3D10_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT,1,
+          rejectedConstant);
+      CHECK(FrontendErrors==refusalErrors+1u && FrontendLastError==E_NOTIMPL);
+      trace=CreateFileW(tracePath,GENERIC_READ,
+          FILE_SHARE_READ|FILE_SHARE_WRITE,NULL,OPEN_EXISTING,
+          FILE_ATTRIBUTE_NORMAL,NULL);
+      CHECK(trace!=INVALID_HANDLE_VALUE &&
+            ReadFile(trace,refusal,sizeof(refusal)-1u,&refusalBytes,NULL) &&
+            refusalBytes>0u);
+      if(trace!=INVALID_HANDLE_VALUE) CloseHandle(trace);
+      refusal[refusalBytes<sizeof(refusal)?refusalBytes:sizeof(refusal)-1u]='\0';
+      CHECK(strstr(refusal,"reject-seterror fn=SetConstantBuffers line=") == refusal &&
+            strstr(refusal," hr=0x80004001 ")!=NULL &&
+            strchr(refusal,'\n')!=NULL && strchr(refusal,'\n')[1]=='\0');
+      SetEnvironmentVariableW(L"APPLE_AGX_UMD_TRACE_FILE",
+          savedTraceLength?savedTrace:NULL);
+      SetEnvironmentVariableW(L"APPLE_AGX_UMD_REFUSALS_ONLY",
+          savedOnlyLength?savedOnly:NULL);
+      DeleteFileW(tracePath);
+      FrontendErrors=refusalErrors;
+    }
     unsigned cbBindErrors=FrontendErrors;
-    D3D10DDI_HRESOURCE invalidRange[2]={cb,cb};
-    deviceFunctions.pfnVsSetConstantBuffers(device,0,2,invalidRange);
-    CHECK(FrontendErrors==++cbBindErrors && FrontendLastError==E_NOTIMPL);
+    D3D10DDI_HRESOURCE fullConstantRange[14];
+    for(UINT slot=0;slot<ARRAYSIZE(fullConstantRange);++slot)
+      fullConstantRange[slot]=cb;
+    deviceFunctions.pfnVsSetConstantBuffers(device,0,
+        ARRAYSIZE(fullConstantRange),fullConstantRange);
+    UINT constantState[16],constantBindings[16];
+    AgxWin32AsahiContextDiagnostic(
+        MesaD3d10FrontendContextForTest(device),constantState,constantBindings);
+    CHECK(FrontendErrors==cbBindErrors &&
+          (constantBindings[10]&0x3fffu)==0x3fffu);
+    D3D10DDI_HRESOURCE emptyConstantRange[13]={{0}};
+    deviceFunctions.pfnVsSetConstantBuffers(device,1,
+        ARRAYSIZE(emptyConstantRange),emptyConstantRange);
     deviceFunctions.pfnGsSetConstantBuffers(device,0,1,&cb);
     CHECK(FrontendErrors==cbBindErrors);
     D3D10DDI_HRESOURCE nullGsConstant={0};
     deviceFunctions.pfnGsSetConstantBuffers(device,0,1,&nullGsConstant);
     CHECK(FrontendErrors==cbBindErrors);
     deviceFunctions.pfnPsSetConstantBuffers(device,1,1,&cb);
-    CHECK(FrontendErrors==++cbBindErrors && FrontendLastError==E_NOTIMPL);
+    CHECK(FrontendErrors==cbBindErrors);
     D3D10DDI_HRESOURCE nullConstantSlot={0};
     deviceFunctions.pfnVsSetConstantBuffers(device,1,1,&nullConstantSlot);
+    deviceFunctions.pfnPsSetConstantBuffers(device,1,1,&nullConstantSlot);
     deviceFunctions.pfnPsSetConstantBuffers(device,0,0,NULL);
     CHECK(FrontendErrors==cbBindErrors);
     deviceFunctions.pfnVsSetConstantBuffers(device,0,1,&cb);
@@ -2458,8 +2536,10 @@ static void test_mesa_d3d10_frontend_open(void) {
       RuntimeQueryMarkerCount=RuntimeConsumerGates=RuntimeConsumerRetirements=0;
       RuntimeConsumerFence=0;memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
       memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+      RuntimeDrawObservationCount=0;
       RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
       RuntimeAutoCompleteConsumers=1;
+      deviceFunctions.pfnClearRenderTargetView(device,rtv,clear);
       deviceFunctions.pfnDraw(device,3,0);
       CHECK(FrontendErrors==multiErrors && RuntimeRenders==0u &&
             AgxWin32AsahiContextDrawReceipt(
@@ -2475,6 +2555,17 @@ static void test_mesa_d3d10_frontend_open(void) {
             RuntimeSignals==2u && RuntimeMaterializations==4u &&
             RuntimeConsumerGates==4u && RuntimeConsumerRetirements==4u &&
             RuntimeMarker);
+      fprintf(stderr,"MULTIDRAW_LOAD_STATE: count=%u flags=%x,%x state=%llx,%llx\n",
+          RuntimeDrawObservationCount,
+          RuntimeDrawObservations[0].Native.RenderFlags,
+          RuntimeDrawObservations[1].Native.RenderFlags,
+          (unsigned long long)RuntimeDrawObservations[0].StateSignature,
+          (unsigned long long)RuntimeDrawObservations[1].StateSignature);
+      CHECK(RuntimeDrawObservationCount==2u &&
+            !(RuntimeDrawObservations[0].Native.RenderFlags&0x4u) &&
+            (RuntimeDrawObservations[1].Native.RenderFlags&0x4u) &&
+            RuntimeDrawObservations[0].StateSignature==
+                RuntimeDrawObservations[1].StateSignature);
       CHECK(AgxWin32AsahiContextRetire(
           MesaD3d10FrontendContextForTest(device),0u));
       CHECK(!multiOwner->Device->NativeBatchTransaction &&
@@ -2485,6 +2576,134 @@ static void test_mesa_d3d10_frontend_open(void) {
       memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
       memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
       RuntimeExpectedCommandVersion=0;
+    }
+    {
+      ADMISSION_UMD_ASAHI_OWNER *instanceOwner=
+          MesaD3d10FrontendOwnerForTest(device);
+      unsigned instanceErrors=FrontendErrors;
+      RuntimeActiveDevice=MesaD3d10FrontendRuntimeForTest(device);
+      RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;
+      RuntimeQueryMarkerCount=RuntimeConsumerGates=RuntimeConsumerRetirements=0;
+      RuntimeConsumerFence=0;memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+      memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+      RuntimeDrawObservationCount=0;
+      RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
+      D3D10DDI_HRESOURCE instanceConstant=cb;
+      D3D10DDI_HSHADERRESOURCEVIEW instanceView=appSrv;
+      deviceFunctions.pfnVsSetConstantBuffers(device,1,1,&instanceConstant);
+      deviceFunctions.pfnPsSetShaderResources(device,1,1,&instanceView);
+      deviceFunctions.pfnPsSetSamplers(device,3,1,&appSampler);
+      deviceFunctions.pfnVsSetShader(device,slotVsh);
+      deviceFunctions.pfnPsSetShader(device,slotPsh);
+      deviceFunctions.pfnIaSetTopology(
+          device,D3D10_DDI_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+      deviceFunctions.pfnDrawInstanced(device,4u,2u,0u,3u);
+      deviceFunctions.pfnFlush(device);
+      CHECK(FrontendErrors==instanceErrors && RuntimeRenders==1u &&
+            RuntimeDrawObservationCount==1u &&
+            RuntimeDrawObservations[0].Draw.Topology!=
+                AppleAgxWin32TopologyTriangleList &&
+            RuntimeDrawObservations[0].Draw.VertexCount==4u &&
+            RuntimeDrawObservations[0].Draw.InstanceCount==2u &&
+            RuntimeDrawObservations[0].Draw.FirstInstance==3u &&
+            RuntimeDrawObservations[0].UniformRelocations>=2u &&
+            RuntimeDrawObservations[0].TextureRelocations>=1u);
+      if(RuntimeMarker) {
+        RuntimeCheckpoint(instanceOwner,1u);
+        CHECK(AgxWin32AsahiContextRetire(
+            MesaD3d10FrontendContextForTest(device),0u));
+        RuntimeCheckpoint(instanceOwner,5u);
+      }
+      deviceFunctions.pfnIaSetTopology(
+          device,D3D10_DDI_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+      deviceFunctions.pfnVsSetShader(device,vsh);
+      deviceFunctions.pfnPsSetShader(device,psh);
+      D3D10DDI_HRESOURCE emptyInstanceConstant={0};
+      D3D10DDI_HSHADERRESOURCEVIEW emptyInstanceView={0};
+      D3D10DDI_HSAMPLER emptyInstanceSampler={0};
+      deviceFunctions.pfnVsSetConstantBuffers(
+          device,1,1,&emptyInstanceConstant);
+      deviceFunctions.pfnPsSetShaderResources(device,1,1,&emptyInstanceView);
+      deviceFunctions.pfnPsSetSamplers(device,3,1,&emptyInstanceSampler);
+      RuntimeExpectedCommandVersion=0;
+      {
+        static const struct {
+          D3D10_DDI_PRIMITIVE_TOPOLOGY D3d;
+          UINT Count;
+          UINT Wire;
+        } topologyCases[]={
+          {D3D10_DDI_PRIMITIVE_TOPOLOGY_POINTLIST,1u,
+           AppleAgxWin32TopologyPointList},
+          {D3D10_DDI_PRIMITIVE_TOPOLOGY_LINELIST,3u,
+           AppleAgxWin32TopologyLineList},
+          {D3D10_DDI_PRIMITIVE_TOPOLOGY_LINESTRIP,3u,
+           AppleAgxWin32TopologyLineStrip},
+          {D3D10_DDI_PRIMITIVE_TOPOLOGY_TRIANGLELIST,4u,
+           AppleAgxWin32TopologyTriangleList},
+          {D3D10_DDI_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP,4u,
+           AppleAgxWin32TopologyTriangleStrip},
+        };
+        for(UINT topology=0;topology<ARRAYSIZE(topologyCases);++topology) {
+          RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;
+          RuntimeConsumerGates=RuntimeConsumerRetirements=0;
+          RuntimeConsumerFence=0;RuntimeMarker=NULL;
+          RuntimeDrawObservationCount=0;
+          memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+          memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+          deviceFunctions.pfnIaSetTopology(device,topologyCases[topology].D3d);
+          deviceFunctions.pfnDraw(device,topologyCases[topology].Count,0u);
+          deviceFunctions.pfnFlush(device);
+          CHECK(FrontendErrors==instanceErrors && RuntimeRenders==1u &&
+                RuntimeDrawObservationCount==1u &&
+                RuntimeDrawObservations[0].Draw.Topology==
+                    topologyCases[topology].Wire &&
+                RuntimeDrawObservations[0].Draw.VertexCount==
+                    topologyCases[topology].Count);
+          if(RuntimeMarker) {
+            RuntimeCheckpoint(instanceOwner,1u);
+            CHECK(AgxWin32AsahiContextRetire(
+                MesaD3d10FrontendContextForTest(device),0u));
+            RuntimeCheckpoint(instanceOwner,5u);
+          }
+        }
+        deviceFunctions.pfnIaSetTopology(
+            device,D3D10_DDI_PRIMITIVE_TOPOLOGY_LINELIST_ADJ);
+        deviceFunctions.pfnDraw(device,4u,0u);
+        CHECK(FrontendErrors==instanceErrors+1u &&
+              FrontendLastError==E_NOTIMPL &&
+              !AgxWin32AsahiContextFaulted(
+                  MesaD3d10FrontendContextForTest(device)));
+        FrontendErrors=instanceErrors;
+        deviceFunctions.pfnIaSetTopology(
+            device,D3D10_DDI_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+        deviceFunctions.pfnIaSetIndexBuffer(
+            device,ib,DXGI_FORMAT_R16_UINT,0u);
+        RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;
+        RuntimeConsumerGates=RuntimeConsumerRetirements=0;
+        RuntimeConsumerFence=0;RuntimeMarker=NULL;
+        RuntimeDrawObservationCount=0;
+        memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+        memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+        deviceFunctions.pfnDrawIndexedInstanced(device,4u,2u,0u,0,3u);
+        deviceFunctions.pfnFlush(device);
+        CHECK(FrontendErrors==instanceErrors && RuntimeRenders==1u &&
+              RuntimeDrawObservationCount==1u &&
+              RuntimeDrawObservations[0].Draw.Topology==
+                  AppleAgxWin32TopologyTriangleStrip &&
+              RuntimeDrawObservations[0].Draw.VertexCount==4u &&
+              RuntimeDrawObservations[0].Draw.InstanceCount==2u &&
+              RuntimeDrawObservations[0].Draw.FirstInstance==3u);
+        if(RuntimeMarker) {
+          RuntimeCheckpoint(instanceOwner,1u);
+          CHECK(AgxWin32AsahiContextRetire(
+              MesaD3d10FrontendContextForTest(device),0u));
+          RuntimeCheckpoint(instanceOwner,5u);
+        }
+        deviceFunctions.pfnIaSetIndexBuffer(
+            device,(D3D10DDI_HRESOURCE){0},DXGI_FORMAT_UNKNOWN,0u);
+        deviceFunctions.pfnIaSetTopology(
+            device,D3D10_DDI_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+      }
     }
     {
       /* D3D10 dynamic append contract: submit one range, append another with
@@ -2591,6 +2810,7 @@ static void test_mesa_d3d10_frontend_open(void) {
           MesaD3d10FrontendContextForTest(device),0u));
       RuntimeCheckpoint(appendOwner,5u);
       deviceFunctions.pfnIaSetIndexBuffer(device,ib,DXGI_FORMAT_R16_UINT,0);
+      RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH;
       RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;
       RuntimeQueryMarkerCount=RuntimeConsumerGates=RuntimeConsumerRetirements=0;
       RuntimeConsumerFence=0;memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
@@ -2619,6 +2839,7 @@ static void test_mesa_d3d10_frontend_open(void) {
       RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH;
       RuntimeConsumerGates=RuntimeConsumerRetirements=0;
       RuntimeConsumerFence=0;memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+      RuntimeDrawObservationCount=0;RuntimeAutoCompleteConsumers=1;
       CHECK(RuntimeActiveDevice && depthOwner);
       deviceFunctions.pfnSetRenderTargets(device,&depthColorRtv,1,0,depthView);
       D3D10_DDI_VIEWPORT depthViewport={0,0,16,16,0,1};
@@ -2632,14 +2853,26 @@ static void test_mesa_d3d10_frontend_open(void) {
       deviceFunctions.pfnDraw(device,3,0);
       CHECK(FrontendErrors==depthErrors && AgxWin32AsahiContextDrawReceipt(
           MesaD3d10FrontendContextForTest(device)));
-      deviceFunctions.pfnFlush(device);
+      deviceFunctions.pfnDraw(device,3,0);
       CHECK(FrontendErrors==depthErrors && RuntimeRenders==1u &&
-            RuntimeSignals==1u && RuntimeMaterializations==2u &&
-            RuntimeConsumerGates==2u && RuntimeMarker!=NULL);
+            AgxWin32AsahiContextDrawReceipt(
+                MesaD3d10FrontendContextForTest(device)));
+      deviceFunctions.pfnFlush(device);
+      CHECK(FrontendErrors==depthErrors && RuntimeRenders==2u &&
+            RuntimeSignals==2u && RuntimeMaterializations==4u &&
+            RuntimeConsumerGates==4u && RuntimeConsumerRetirements==4u &&
+            RuntimeMarker!=NULL && RuntimeDrawObservationCount==2u &&
+            !(RuntimeDrawObservations[0].Native.RenderFlags&
+              APPLE_AGX_WIN32_NATIVE_RENDER_DEPTH_LOAD) &&
+            (RuntimeDrawObservations[1].Native.RenderFlags&
+              APPLE_AGX_WIN32_NATIVE_RENDER_DEPTH_LOAD) &&
+            RuntimeDrawObservations[0].StateSignature==
+              RuntimeDrawObservations[1].StateSignature);
       RuntimeCheckpoint(depthOwner,1u);
       CHECK(AgxWin32AsahiContextRetire(
           MesaD3d10FrontendContextForTest(device),0u));
       RuntimeCheckpoint(depthOwner,5u);
+      RuntimeAutoCompleteConsumers=0;
       RuntimeExpectedCommandVersion=0;
       deviceFunctions.pfnSetRenderTargets(device,&rtv,1,0,
           (D3D10DDI_HDEPTHSTENCILVIEW){0});
@@ -4247,8 +4480,6 @@ static void test_mesa_d3d10_frontend_open(void) {
       deviceFunctions.pfnIaSetIndexBuffer(device,ib,DXGI_FORMAT_R16_UINT,2);
       CHECK(FrontendErrors==indexedErrors);
       deviceFunctions.pfnIaSetIndexBuffer(device,ib,DXGI_FORMAT_R16_UINT,0);
-      deviceFunctions.pfnDrawIndexed(device,4,0,0);
-      CHECK(FrontendErrors==++indexedErrors && FrontendLastError==E_NOTIMPL);
       deviceFunctions.pfnDrawIndexedInstanced(device,3,1,0,0,0);
       CHECK(AgxWin32AsahiContextDrawReceipt(
           MesaD3d10FrontendContextForTest(device)));
@@ -4575,6 +4806,8 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnPsSetConstantBuffers(device,0,1,&nullConstant);
     deviceFunctions.pfnDestroyDepthStencilState(device,depth);deviceFunctions.pfnDestroyRasterizerState(device,raster);
     deviceFunctions.pfnDestroyBlendState(device,blend);deviceFunctions.pfnDestroyShader(device,psh);
+    deviceFunctions.pfnDestroyShader(device,slotPsh);
+    deviceFunctions.pfnDestroyShader(device,slotVsh);
     for(UINT i=0;i<ARRAYSIZE(sampleShaders);++i) {
       deviceFunctions.pfnDestroyShader(device,sampleShaders[i]);free(sampleShaders[i].pDrvPrivate);
     }
@@ -4599,7 +4832,9 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnDestroyResource(device,soBuffer);
     RuntimeExpectedTargetAllocation=0;
     RuntimeExpectedTargetBytes=0;
-    free(depth.pDrvPrivate);free(raster.pDrvPrivate);free(blend.pDrvPrivate);free(psh.pDrvPrivate);free(gsh.pDrvPrivate);
+    free(depth.pDrvPrivate);free(raster.pDrvPrivate);free(blend.pDrvPrivate);
+    free(psh.pDrvPrivate);free(slotPsh.pDrvPrivate);free(slotVsh.pDrvPrivate);
+    free(gsh.pDrvPrivate);
     free(indexableVsh.pDrvPrivate);free(vsh.pDrvPrivate);free(layout.pDrvPrivate);free(rtv.pDrvPrivate);
     free(depthColorRtv.pDrvPrivate);free(depthView.pDrvPrivate);
     free(depthResource.pDrvPrivate);free(vb.pDrvPrivate);

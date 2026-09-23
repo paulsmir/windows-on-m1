@@ -406,16 +406,17 @@ SetError(D3D10DDI_HDEVICE hDevice, HRESULT hr)
       pDevice->UMCallbacks.pfnSetErrorCb(pDevice->hRTCoreLayer, hr);
    }
 }''','''static inline void
-AgxSetErrorWithOrigin(D3D10DDI_HDEVICE hDevice, HRESULT hr, const char *origin)
+AgxSetErrorWithOrigin(D3D10DDI_HDEVICE hDevice, HRESULT hr,
+                      const char *origin, UINT line)
 {
    if (FAILED(hr)) {
-      if (!AgxD3d10WindowsDiagnosticRefusal(hr))
-         AgxD3d10WindowsDiagnostic(origin, hr, NULL, 0);
+      AgxD3d10WindowsDiagnosticSetError(origin, line, hr);
       Device *pDevice = CastDevice(hDevice);
       pDevice->UMCallbacks.pfnSetErrorCb(pDevice->hRTCoreLayer, hr);
    }
 }
-#define SetError(device, hr) AgxSetErrorWithOrigin((device), (hr), __func__)'''),
+#define SetError(device, hr) \
+   AgxSetErrorWithOrigin((device), (hr), __func__, __LINE__)'''),
         ('''struct Query
 {
    D3D10DDI_QUERY Type;
@@ -1512,20 +1513,28 @@ UnsupportedDxgi''')
    pDevice->pipe->bind_sampler_states(pDevice->pipe, shader_type, Offset,
                                      NumSamplers, states);''')
     replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','SetShaderResources','''   Device *pDevice = CastDevice(hDevice);
-   bool valid = pDevice &&
+   const UINT slots=D3D10_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT;
+   static_assert(PIPE_MAX_SHADER_SAMPLER_VIEWS>=
+                 D3D10_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT,
+                 "D3D10 SRV state must fit the native array");
+   bool valid = pDevice && pDevice->pipe &&
       (shader_type == MESA_SHADER_VERTEX || shader_type == MESA_SHADER_FRAGMENT ||
-       shader_type == MESA_SHADER_GEOMETRY) && Offset == 0 &&
-      NumViews <= 1 && (NumViews == 0 || phShaderResourceViews);
+       shader_type == MESA_SHADER_GEOMETRY) && Offset<=slots &&
+      NumViews<=slots-Offset && (NumViews == 0 || phShaderResourceViews);
+   struct pipe_sampler_view *views[D3D10_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT]={};
    for (UINT i = 0; valid && i < NumViews; ++i) {
       ShaderResourceView *view = CastShaderResourceView(phShaderResourceViews[i]);
       valid = !view || (view->owner_device == pDevice && view->owner_resource &&
          view->owner_resource->owner_device == pDevice && view->handle);
+      if(valid && view) views[i]=view->handle;
    }
    if (!valid) { SetError(hDevice, E_NOTIMPL); return; }
-   struct pipe_sampler_view *view = NumViews ?
-      CastPipeShaderResourceView(phShaderResourceViews[0]) : NULL;
-   pDevice->sampler_views[shader_type][0] = view;
-   pDevice->pipe->set_sampler_views(pDevice->pipe, shader_type, 0, 1, 0, &view);''')
+   if(!NumViews) return;
+   for(UINT i=0;i<NumViews;++i)
+      pDevice->sampler_views[shader_type][Offset+i]=views[i];
+   pDevice->pipe->set_sampler_views(
+      pDevice->pipe,shader_type,0,PIPE_MAX_SHADER_SAMPLER_VIEWS,0,
+      pDevice->sampler_views[shader_type]);''')
     replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','DestroySampler','''   Device *pDevice = CastDevice(hDevice);
    SamplerState *sampler = CastSamplerState(hSampler);
    if (!pDevice || !sampler || sampler->owner_device != pDevice || !sampler->handle) {
@@ -1618,18 +1627,21 @@ UnsupportedDxgi''')
     replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','SetConstantBuffers','''   Device *pDevice = CastDevice(hDevice);
    ULONGLONG owner = 0;
    ULONG generation = 0;
-   bool valid = pDevice && (NumBuffers == 0 || phBuffers) &&
-      StartBuffer <= PIPE_MAX_CONSTANT_BUFFERS &&
-      NumBuffers <= PIPE_MAX_CONSTANT_BUFFERS - StartBuffer &&
+   const UINT slots=D3D10_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT;
+   static_assert(PIPE_MAX_CONSTANT_BUFFERS>=
+                 D3D10_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT,
+                 "D3D10 constant buffers must fit the native array");
+   bool valid = pDevice && pDevice->pipe &&
+      (shader_type == MESA_SHADER_VERTEX ||
+       shader_type == MESA_SHADER_FRAGMENT ||
+       shader_type == MESA_SHADER_GEOMETRY) &&
+      (NumBuffers == 0 || phBuffers) && StartBuffer <= slots &&
+      NumBuffers <= slots - StartBuffer &&
       AgxD3d10WindowsIdentity(pDevice->windows, &owner, &generation);
    for (UINT i = 0; valid && i < NumBuffers; ++i) {
       Resource *resource = CastResource(phBuffers[i]);
       if (!resource) continue;
-      unsigned slot = StartBuffer + i;
-      valid = (shader_type == MESA_SHADER_VERTEX ||
-               shader_type == MESA_SHADER_FRAGMENT ||
-               shader_type == MESA_SHADER_GEOMETRY) && slot == 0 &&
-         resource->constant_buffer && resource->owner_device == pDevice &&
+      valid = resource->constant_buffer && resource->owner_device == pDevice &&
          resource->owner_cookie == owner &&
          resource->device_generation == generation && resource->resource &&
          resource->resource->target == PIPE_BUFFER &&
@@ -1765,6 +1777,11 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
    LOG_ENTRYPOINT();''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','Draw','''   LOG_ENTRYPOINT();
    Device *pDevice = CastDevice(hDevice);
+   if(pDevice->primitive>=MESA_PRIM_LINES_ADJACENCY) {
+      AgxD3d10WindowsDiagnostic("reject-capture reason=adjacency",
+          E_NOTIMPL,NULL,0);
+      SetError(hDevice,E_NOTIMPL);return;
+   }
    if (pDevice && AgxWin32AsahiContextDrawReceipt(pDevice->pipe)) {
       HRESULT status=AgxD3d10WindowsFlushRetire(pDevice->windows);
       if(FAILED(status)) { SetError(hDevice,status); return; }
@@ -1778,12 +1795,16 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
    util_draw_arrays(pDevice->pipe, pDevice->primitive, StartVertexLocation, VertexCount);
    AgxD3d10WindowsDiagnosticState(pDevice->windows, "draw-after");''')
     replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','DrawIndexed','''   Device *pDevice = CastDevice(hDevice);
-   if (!pDevice || !IndexCount || (IndexCount%3) ||
-       pDevice->primitive != MESA_PRIM_TRIANGLES ||
+   if (!pDevice || !IndexCount || pDevice->primitive >= MESA_PRIM_COUNT ||
        !pDevice->index_buffer ||
        (pDevice->index_size != 2 && pDevice->index_size != 4)) {
       SetError(hDevice, E_NOTIMPL);
       return;
+   }
+   if(pDevice->primitive>=MESA_PRIM_LINES_ADJACENCY) {
+      AgxD3d10WindowsDiagnostic("reject-capture reason=adjacency",
+          E_NOTIMPL,NULL,0);
+      SetError(hDevice,E_NOTIMPL);return;
    }
    if (AgxWin32AsahiContextDrawReceipt(pDevice->pipe)) {
       HRESULT status=AgxD3d10WindowsFlushRetire(pDevice->windows);
@@ -1794,25 +1815,58 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
    struct pipe_draw_start_count_bias draw = {};
    util_draw_init_info(&info);
    info.index_size = pDevice->index_size;
-   info.mode = MESA_PRIM_TRIANGLES;
+   info.mode = pDevice->primitive;
    info.index.resource = pDevice->index_buffer;
    info.instance_count = 1;
-   info.primitive_restart = false;
+   info.primitive_restart = true;
+   info.restart_index = pDevice->restart_index;
    draw.start = StartIndexLocation + pDevice->ib_offset/pDevice->index_size;
    draw.count = IndexCount;
    draw.index_bias = BaseVertexLocation;
    pDevice->pipe->draw_vbo(pDevice->pipe, &info, 0, NULL, &draw, 1);''')
-    replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','DrawIndexedInstanced','''   (void)IndexCountPerInstance;
-   if (InstanceCount != 1 || StartInstanceLocation != 0) {
-      SetError(hDevice, E_NOTIMPL); return;
+    replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','DrawIndexedInstanced','''   Device *pDevice=CastDevice(hDevice);
+   if(!pDevice || !pDevice->index_buffer ||
+      (pDevice->index_size!=2 && pDevice->index_size!=4) ||
+      pDevice->primitive>=MESA_PRIM_COUNT) {
+      SetError(hDevice,E_NOTIMPL);return;
    }
-   DrawIndexed(hDevice,IndexCountPerInstance,StartIndexLocation,
-               BaseVertexLocation);''')
-    replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','DrawInstanced','''   if (!VertexCountPerInstance || (VertexCountPerInstance%3) || InstanceCount != 1 ||
-       StartInstanceLocation != 0) {
-      SetError(hDevice, E_NOTIMPL); return;
+   if(pDevice->primitive>=MESA_PRIM_LINES_ADJACENCY) {
+      AgxD3d10WindowsDiagnostic("reject-capture reason=adjacency",
+          E_NOTIMPL,NULL,0);
+      SetError(hDevice,E_NOTIMPL);return;
    }
-   Draw(hDevice,VertexCountPerInstance,StartVertexLocation);''')
+   if(!InstanceCount || !IndexCountPerInstance) return;
+   if(AgxWin32AsahiContextDrawReceipt(pDevice->pipe)) {
+      HRESULT status=AgxD3d10WindowsFlushRetire(pDevice->windows);
+      if(FAILED(status)) {SetError(hDevice,status);return;}
+   }
+   ResolveState(pDevice);
+   struct pipe_draw_info info;struct pipe_draw_start_count_bias draw={};
+   util_draw_init_info(&info);info.index_size=pDevice->index_size;
+   info.mode=pDevice->primitive;info.index.resource=pDevice->index_buffer;
+   info.instance_count=InstanceCount;info.start_instance=StartInstanceLocation;
+   info.primitive_restart=true;info.restart_index=pDevice->restart_index;
+   draw.start=StartIndexLocation+pDevice->ib_offset/pDevice->index_size;
+   draw.count=IndexCountPerInstance;draw.index_bias=BaseVertexLocation;
+   pDevice->pipe->draw_vbo(pDevice->pipe,&info,0,NULL,&draw,1);''')
+    replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','DrawInstanced','''   Device *pDevice=CastDevice(hDevice);
+   if(!pDevice || pDevice->primitive>=MESA_PRIM_COUNT) {
+      SetError(hDevice,E_NOTIMPL);return;
+   }
+   if(pDevice->primitive>=MESA_PRIM_LINES_ADJACENCY) {
+      AgxD3d10WindowsDiagnostic("reject-capture reason=adjacency",
+          E_NOTIMPL,NULL,0);
+      SetError(hDevice,E_NOTIMPL);return;
+   }
+   if(!InstanceCount || !VertexCountPerInstance) return;
+   if(AgxWin32AsahiContextDrawReceipt(pDevice->pipe)) {
+      HRESULT status=AgxD3d10WindowsFlushRetire(pDevice->windows);
+      if(FAILED(status)) {SetError(hDevice,status);return;}
+   }
+   ResolveState(pDevice);
+   util_draw_arrays_instanced(pDevice->pipe,pDevice->primitive,
+      StartVertexLocation,VertexCountPerInstance,StartInstanceLocation,
+      InstanceCount);''')
     draw_path=out/'src/gallium/frontends/d3d10umd/Draw.cpp'
     draw_text=draw_path.read_text()+'''\nextern "C" BOOL APIENTRY
 MesaD3d10FrontendSetSoOffsetForTest(D3D10DDI_HDEVICE hDevice,

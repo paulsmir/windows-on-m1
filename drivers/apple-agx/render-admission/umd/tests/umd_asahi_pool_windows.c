@@ -144,6 +144,17 @@ static D3DKMT_HANDLE RuntimeExpectedTargetAllocation;
 static APPLE_AGX_U64 RuntimeExpectedTargetBytes;
 static APPLE_AGX_U32 RuntimeExpectedCommandVersion;
 static APPLE_AGX_U32 RuntimeExpectedColorFormat;
+typedef struct {
+  APPLE_AGX_WIN32_DRAW_PAYLOAD Draw;
+  APPLE_AGX_WIN32_NATIVE_BATCH_METADATA Native;
+  APPLE_AGX_U64 StateSignature;
+  APPLE_AGX_U32 UniformRelocations;
+  APPLE_AGX_U32 TextureRelocations;
+} RUNTIME_DRAW_OBSERVATION;
+#define RUNTIME_DRAW_OBSERVATION_LIMIT 64u
+static RUNTIME_DRAW_OBSERVATION
+    RuntimeDrawObservations[RUNTIME_DRAW_OBSERVATION_LIMIT];
+static unsigned RuntimeDrawObservationCount;
 static ADMISSION_UMD_DEVICE *RuntimeActiveDevice;
 static HANDLE RuntimeMarker;
 static HANDLE RuntimeQueryMarkers[ADMISSION_UMD_SCREEN_FENCE_LIMIT*2];
@@ -271,6 +282,40 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
       device->Win32Generation,r->NumAllocations,&view)!=AppleAgxWin32AbiSuccess) return E_INVALIDARG;
   RUNTIME_REQUIRE((APPLE_AGX_WIN32_COMMAND_IS_NATIVE(view.Header->Version)) &&
       view.NativeBatch);
+  if(RuntimeDrawObservationCount<RUNTIME_DRAW_OBSERVATION_LIMIT) {
+    RUNTIME_DRAW_OBSERVATION *observation=
+        &RuntimeDrawObservations[RuntimeDrawObservationCount++];
+    APPLE_AGX_U64 signature=1469598103934665603ULL;
+    memset(observation,0,sizeof(*observation));
+    observation->Draw=*view.Draw;observation->Native=*view.NativeBatch;
+    const APPLE_AGX_U32 roots[]={view.Draw->VertexReference,
+      view.Draw->IndexReference,view.Draw->ConstantReference,
+      view.Draw->VertexShaderReference,
+      view.Draw->FragmentShaderReference,view.Draw->VertexRodataReference,
+      view.Draw->FragmentRodataReference,view.Draw->DescriptorReference,
+      view.Draw->ScissorReference,view.Draw->DepthBiasReference};
+    signature^=((APPLE_AGX_U64)view.Draw->Format<<32)|view.Draw->Topology;
+    signature*=1099511628211ULL;
+    for(unsigned index=0;index<ARRAYSIZE(roots);++index) {
+      if(roots[index]==APPLE_AGX_WIN32_OPTIONAL_REFERENCE) {
+        signature^=0xffffffffffffffffULL;
+      } else {
+        RUNTIME_REQUIRE(roots[index]<view.Header->ReferenceCount);
+        if(roots[index]>=view.Header->ReferenceCount) return E_INVALIDARG;
+        signature^=((APPLE_AGX_U64)view.References[roots[index]].Role<<32)|
+            view.References[roots[index]].Access;
+      }
+      signature*=1099511628211ULL;
+    }
+    for(unsigned index=0;index<view.Draw->RelocationCount;++index) {
+      const APPLE_AGX_WIN32_RELOCATION *relocation=&view.Relocations[index];
+      if(relocation->Kind==AppleAgxWin32RelocationUniformAddress64)
+        ++observation->UniformRelocations;
+      if(relocation->Kind==AppleAgxWin32RelocationTextureAddress40)
+        ++observation->TextureRelocations;
+    }
+    observation->StateSignature=signature;
+  }
   if(RuntimeExpectedColorFormat)
     RUNTIME_REQUIRE(view.Draw->Format==RuntimeExpectedColorFormat);
   if(RuntimeExpectedCommandVersion)

@@ -157,7 +157,10 @@ APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDrawVersion(
   if (result != AppleAgxWin32AbiSuccess) {
 #if defined(ADMISSION_UMD_NATIVE_RUNTIME_TEST)
     fprintf(stderr,"NATIVE_WIRE_REJECT: result=%u bytes=%u\n",(unsigned)result,totalBytes);
-    FILE *dump=fopen("native-failed-command.bin","wb");
+    char dumpName[64];
+    _snprintf_s(dumpName,sizeof(dumpName),_TRUNCATE,
+        "native-failed-command-%u.bin",totalBytes);
+    FILE *dump=fopen(dumpName,"wb");
     if(dump) { fwrite(bytes,1,totalBytes,dump); fclose(dump); }
 #endif
     return result;

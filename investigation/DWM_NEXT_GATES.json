@@ -268,7 +268,7 @@
   },
   "next_offline_causal_target": {
     "id": "frontend_seterror_attribution_and_batch_split_invariants",
-    "status": "NOW",
+    "status": "PASS_OFFLINE",
     "mandatory_reason": "EXP755 repeats the same E_NOTIMPL while umd-refusals.txt is empty; another hardware run without exact attribution would repeat the hypothesis loop",
     "implementation": [
       "route all frontend SetError through reject-seterror __func__/line/HRESULT diagnostic in refusals-only mode",
@@ -276,7 +276,15 @@
       "exercise both draws!=1 and draw-receipt guards",
       "source-first verify and admit contract-wide FL10_0 topology, instancing, constant-buffer slots and shader-resource ranges without exact trace-value filters"
     ],
-    "offline_gate": "one line per rejection with exact args; success silent; real producer capture proves LOAD/state continuity and topology/instance/CB/SRV values reach the encoder; existing suites pass",
+    "offline_gate": "PASS: one reject-seterror line per rejection with function/line/HRESULT; success silent; real producer capture proves second-batch color/depth LOAD, state continuity, both one-draw guards, basic topology/instance values and authored cb1/t1 relocations reach the encoder; x64 full execution and ARM64 archive/link pass",
+    "evidence": {
+      "source_diff_sha256": "efb35c31b25f510c4da886b55df33a959bd4dac1bba090eeeae1f9f5d668d2cf",
+      "x64_run": "dwm-next-verified-x64",
+      "x64_executable_sha256": "b91e751da3e07e7cfd2eacd83bdde5aa3062568267e479197ebdbf6341724474",
+      "arm64_run": "dwm-next-verified-arm64",
+      "arm64_executable_sha256": "7fe81abe08b8ce5601a4faa66e78e37b9862f16244541d85dbf755fa6d29626f"
+    },
+    "limit": "Adjacency topology crosses Asahi passthrough-GS/mixed-compute capture and remains post-hardware completeness; it is not advertised as proven and fail-closes with reject-capture reason=adjacency",
     "hardware_dependency": "fully offline",
     "scope_rule": "Only pinned-WDK mandatory FL10_0 operations or actual reached runtime prerequisites; optional completeness remains post-hardware"
   }

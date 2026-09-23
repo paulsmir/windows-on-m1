@@ -31,6 +31,15 @@ VOID AgxD3d10WindowsDiagnostic(PCSTR Stage,HRESULT Status,
   AdmissionUmdDiagnostic(Stage,Status,Values,Count);
 }
 
+VOID AgxD3d10WindowsDiagnosticSetError(
+    PCSTR function,UINT line,HRESULT status) {
+  char stage[192];
+  if(!function || SUCCEEDED(status)) return;
+  if(_snprintf_s(stage,sizeof(stage),_TRUNCATE,
+      "reject-seterror fn=%s line=%u",function,line)<0) return;
+  AdmissionUmdDiagnostic(stage,status,NULL,0u);
+}
+
 VOID AgxD3d10WindowsDiagnosticResource(
     PCSTR Stage,const D3D10DDIARG_CREATERESOURCE *r) {
   UINT values[16]={0};

@@ -42,6 +42,41 @@ static APPLE_AGX_U64 dynamic_read_le(const void *Source,
   return value;
 }
 
+static int dynamic_draw_primitive(APPLE_AGX_U32 topology,
+                                  APPLE_AGX_U32 *primitive) {
+  switch (topology) {
+  case AppleAgxWin32TopologyPointList: *primitive = 0u; return 1;
+  case AppleAgxWin32TopologyLineList:
+  case AppleAgxWin32TopologyLineListAdjacency: *primitive = 1u; return 1;
+  case AppleAgxWin32TopologyLineStrip:
+  case AppleAgxWin32TopologyLineStripAdjacency: *primitive = 3u; return 1;
+  case AppleAgxWin32TopologyTriangleList:
+  case AppleAgxWin32TopologyTriangleListAdjacency: *primitive = 6u; return 1;
+  case AppleAgxWin32TopologyTriangleStrip:
+  case AppleAgxWin32TopologyTriangleStripAdjacency: *primitive = 9u; return 1;
+  default: return 0;
+  }
+}
+
+static int dynamic_index_draw_valid(
+    const APPLE_AGX_WIN32_COMMAND_VIEW *view,
+    const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *target,
+    const unsigned char *command) {
+  APPLE_AGX_U64 header = dynamic_read_le(command, 4u);
+  APPLE_AGX_U32 primitive = 0u;
+  APPLE_AGX_U32 indexSizeCode = (APPLE_AGX_U32)((header >> 17u) & 7ULL);
+  APPLE_AGX_U32 indexBytes = indexSizeCode == 1u ? 2u :
+                             indexSizeCode == 2u ? 4u : 0u;
+  return dynamic_draw_primitive(view->Draw->Topology, &primitive) && indexBytes &&
+      (header & 0xfff00000ULL) == 0x61f00000ULL &&
+      ((header >> 8u) & 0xffULL) == primitive &&
+      dynamic_read_le(command + 8u, 4u) == view->Draw->VertexCount &&
+      dynamic_read_le(command + 12u, 4u) == view->Draw->InstanceCount &&
+      dynamic_read_le(command + 20u, 4u) == indexBytes &&
+      (target->Offset % indexBytes) == 0ULL &&
+      (target->Bytes % indexBytes) == 0ULL;
+}
+
 static void dynamic_write_le(void *Destination, APPLE_AGX_U64 Value,
                              APPLE_AGX_U32 Bytes) {
   unsigned char *destination = (unsigned char *)Destination;
@@ -170,8 +205,7 @@ static int dynamic_patch(void *Destination,
         GpuAddress >= DYNAMIC_40_BIT_LIMIT)
       return 0;
     current = dynamic_read_le(Destination, 8u);
-    if ((current & 0xffffff00ULL) != 0x61f20600ULL &&
-        (current & 0xffffff00ULL) != 0x61f50900ULL)
+    if ((current & 0xfff00000ULL) != 0x61f00000ULL)
       return 0;
     encoded = (current & 0xffffff00ULL) |
               ((GpuAddress >> 32u) & 0xffULL) |
@@ -377,9 +411,6 @@ APPLE_AGX_DYNAMIC_JOB_RESULT AppleAgxDynamicJobMaterialize(
          (relocation->DestinationOffset & 3ULL) != 0ULL ||
          relocation->DestinationOffset > destination->Bytes ||
          24u > destination->Bytes - relocation->DestinationOffset ||
-         dynamic_read_le(storage + destination->StorageOffset +
-                             (APPLE_AGX_U32)relocation->DestinationOffset + 12u,
-                         4u) != 1ULL ||
          (View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH ?
            ((dynamic_read_le(storage + destination->StorageOffset +
                                 (APPLE_AGX_U32)relocation->DestinationOffset,4u) &
@@ -388,24 +419,9 @@ APPLE_AGX_DYNAMIC_JOB_RESULT AppleAgxDynamicJobMaterialize(
                                 (APPLE_AGX_U32)relocation->DestinationOffset+8u,4u) != 4ULL ||
             dynamic_read_le(storage + destination->StorageOffset +
                                 (APPLE_AGX_U32)relocation->DestinationOffset+20u,4u) != 0x10000ULL) :
-           !(((dynamic_read_le(storage + destination->StorageOffset +
-                                  (APPLE_AGX_U32)relocation->DestinationOffset,4u) &
-                    0xffffff00ULL) == 0x61f20600ULL &&
-               dynamic_read_le(storage + destination->StorageOffset +
-                                  (APPLE_AGX_U32)relocation->DestinationOffset+8u,4u) == 3ULL &&
-               dynamic_read_le(storage + destination->StorageOffset +
-                                  (APPLE_AGX_U32)relocation->DestinationOffset+20u,4u) == 2ULL &&
-               (target->Offset % 2ULL) == 0ULL &&
-               (target->Bytes % 2ULL) == 0ULL) ||
-              ((dynamic_read_le(storage + destination->StorageOffset +
-                                  (APPLE_AGX_U32)relocation->DestinationOffset,4u) &
-                    0xffffff00ULL) == 0x61f50900ULL &&
-               dynamic_read_le(storage + destination->StorageOffset +
-                                  (APPLE_AGX_U32)relocation->DestinationOffset+8u,4u) == 4ULL &&
-               dynamic_read_le(storage + destination->StorageOffset +
-                                  (APPLE_AGX_U32)relocation->DestinationOffset+20u,4u) == 4ULL &&
-               (target->Offset % 4ULL) == 0ULL &&
-               (target->Bytes % 4ULL) == 0ULL)))))
+           !dynamic_index_draw_valid(View,target,
+              storage + destination->StorageOffset +
+                 (APPLE_AGX_U32)relocation->DestinationOffset))))
       return dynamic_fail(AppleAgxDynamicJobRelocation, Storage, storageBytes,
                           Job);
     if (target->Offset > targetFact->Bytes ||

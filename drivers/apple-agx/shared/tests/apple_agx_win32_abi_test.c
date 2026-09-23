@@ -423,7 +423,7 @@ static void test_draw_graph_rejections(void) {
 
   REJECT_DRAW(Payload.StructBytes, 120u, AppleAgxWin32AbiPayload);
   REJECT_DRAW(Payload.SurfacePitch, 10239u, AppleAgxWin32AbiPayload);
-  REJECT_DRAW(Payload.VertexCount, 4u, AppleAgxWin32AbiPayload);
+  REJECT_DRAW(Payload.VertexCount, 0u, AppleAgxWin32AbiPayload);
   REJECT_DRAW(Payload.InstanceCount, 0u, AppleAgxWin32AbiPayload);
   REJECT_DRAW(Payload.IndexReference, 1u, AppleAgxWin32AbiRole);
   REJECT_DRAW(Payload.VertexShaderReference, 1u, AppleAgxWin32AbiRole);

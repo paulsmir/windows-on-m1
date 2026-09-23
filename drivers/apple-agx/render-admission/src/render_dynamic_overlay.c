@@ -720,7 +720,10 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteNative(
       n->UtileWidth!=32 || n->UtileHeight!=32 || n->PppControl!=0x202u ||
       n->PppMultisampleControl!=0x88u ||
       (n->RenderFlags&~(APPLE_AGX_WIN32_NATIVE_RENDER_PROCESS_EMPTY_TILES |
-                        APPLE_AGX_WIN32_NATIVE_RENDER_DEPTH_BIAS_IS_INT)))
+                        APPLE_AGX_WIN32_NATIVE_RENDER_DEPTH_BIAS_IS_INT |
+                        APPLE_AGX_WIN32_NATIVE_RENDER_COLOR_LOAD |
+                        APPLE_AGX_WIN32_NATIVE_RENDER_DEPTH_LOAD |
+                        APPLE_AGX_WIN32_NATIVE_RENDER_STENCIL_LOAD)))
     return AdmissionDynamicOverlayLayout;
   if(Plan->CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH) {
     if(n->DepthReference==APPLE_AGX_WIN32_OPTIONAL_REFERENCE ||

@@ -11,6 +11,35 @@ static AGX_WIN32_ASAHI_BACKEND *backend(struct agx_batch *b) {
 static AGX_WIN32_ASAHI_BATCH *capsule(struct agx_batch *b) {
   return b ? b->windows_batch : NULL;
 }
+static int draw_contract(enum mesa_prim mode,unsigned count,
+                         APPLE_AGX_U32 *topology) {
+  APPLE_AGX_U32 wire=0;
+  if(!count) return 0;
+  switch(mode) {
+  case MESA_PRIM_POINTS:
+    wire=AppleAgxWin32TopologyPointList;break;
+  case MESA_PRIM_LINES:
+    wire=AppleAgxWin32TopologyLineList;break;
+  case MESA_PRIM_LINE_STRIP:
+    wire=AppleAgxWin32TopologyLineStrip;break;
+  case MESA_PRIM_TRIANGLES:
+    wire=AppleAgxWin32TopologyTriangleList;break;
+  case MESA_PRIM_TRIANGLE_STRIP:
+    wire=AppleAgxWin32TopologyTriangleStrip;break;
+  case MESA_PRIM_LINES_ADJACENCY:
+    wire=AppleAgxWin32TopologyLineListAdjacency;break;
+  case MESA_PRIM_LINE_STRIP_ADJACENCY:
+    wire=AppleAgxWin32TopologyLineStripAdjacency;break;
+  case MESA_PRIM_TRIANGLES_ADJACENCY:
+    wire=AppleAgxWin32TopologyTriangleListAdjacency;break;
+  case MESA_PRIM_TRIANGLE_STRIP_ADJACENCY:
+    wire=AppleAgxWin32TopologyTriangleStripAdjacency;
+    break;
+  default: return 0;
+  }
+  if(topology) *topology=wire;
+  return 1;
+}
 void AgxWin32AsahiBatchTraceDraw(struct agx_context *ctx,struct agx_batch *b,
                                 unsigned phase) {
   AGX_WIN32_ASAHI_BATCH *c=capsule(b);
@@ -150,10 +179,12 @@ int AgxWin32AsahiBatchPrepareDraw(struct agx_batch *b,
     const struct pipe_draw_info *info,
     const struct pipe_draw_start_count_bias *draws) {
   AGX_WIN32_ASAHI_BATCH *c=capsule(b);
+  APPLE_AGX_U32 topology=0;
   if(!c || !info || !draws || c->Entered || c->Submitted || c->Rejected ||
-     !draws->count || draws->count>0x01000000u || (draws->count%3u) ||
-     info->instance_count!=1u || info->start_instance)
+     draws->count>0x01000000u || !info->instance_count ||
+     !draw_contract(info->mode,draws->count,&topology))
     return 0;
+  c->Draw.Topology=topology;
   c->Draw.VertexCount=draws->count;
   c->Draw.InstanceCount=info->instance_count;
   c->Draw.FirstVertex=draws->start;
@@ -215,11 +246,10 @@ int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx,
     const struct pipe_draw_indirect_info *indirect,
     const struct pipe_draw_start_count_bias *draws,unsigned count) {
   if(!ctx || ctx->any_faults || !info || !draws || count!=1 || drawid || indirect ||
-      info->mode!=MESA_PRIM_TRIANGLES ||
       (info->index_size && info->index_size!=2 && info->index_size!=4) ||
       (ctx->stage[MESA_SHADER_FRAGMENT].texture_count && info->index_size) ||
-      info->primitive_restart || info->instance_count!=1 ||
-      info->start_instance || !draws->count || (draws->count%3u) ||
+      !info->instance_count ||
+      !draw_contract(info->mode,draws->count,NULL) ||
       draws->count>0x01000000u ||
       ctx->framebuffer.nr_cbufs!=1 ||
       !ctx->framebuffer.cbufs[0].texture || (ctx->batch && ctx->batch->draws)) return 0;
@@ -389,6 +419,12 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *b,const struct drm_asahi_cmd_rend
       APPLE_AGX_WIN32_NATIVE_RENDER_PROCESS_EMPTY_TILES : 0;
   if(r->flags & DRM_ASAHI_RENDER_DBIAS_IS_INT)
     c->Render.RenderFlags|=APPLE_AGX_WIN32_NATIVE_RENDER_DEPTH_BIAS_IS_INT;
+  if((b->load&PIPE_CLEAR_COLOR0) && !(b->clear&PIPE_CLEAR_COLOR0))
+    c->Render.RenderFlags|=APPLE_AGX_WIN32_NATIVE_RENDER_COLOR_LOAD;
+  if(r->zls_ctrl&(1ULL<<15))
+    c->Render.RenderFlags|=APPLE_AGX_WIN32_NATIVE_RENDER_DEPTH_LOAD;
+  if(r->zls_ctrl&(1ULL<<14))
+    c->Render.RenderFlags|=APPLE_AGX_WIN32_NATIVE_RENDER_STENCIL_LOAD;
   /* Receipt aliases come from emitted typed edges, not pool positions. */
   for(unsigned i=0;i<c->Capture.Capture.RelocationCount;++i) {
     const APPLE_AGX_WIN32_RELOCATION *edge=&c->Capture.Capture.Relocations[i];
@@ -400,9 +436,8 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *b,const struct drm_asahi_cmd_rend
       c->Draw.IndexReference=edge->TargetReference;
     if(edge->Kind==AppleAgxWin32RelocationTextureAddress40 &&
        c->Capture.Capture.References[edge->TargetReference].Role==AppleAgxWin32RoleTexture) {
-      if(c->Draw.TextureReference!=APPLE_AGX_WIN32_OPTIONAL_REFERENCE &&
-         c->Draw.TextureReference!=edge->TargetReference) return batch_reject(c,__LINE__);
-      c->Draw.TextureReference=edge->TargetReference;
+      if(c->Draw.TextureReference==APPLE_AGX_WIN32_OPTIONAL_REFERENCE)
+        c->Draw.TextureReference=edge->TargetReference;
     }
   }
   for(unsigned i=0;i<c->Capture.Capture.RelocationCount;++i) {
