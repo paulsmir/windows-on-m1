@@ -245,7 +245,10 @@ ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32ValidateReferences(
       return AdmissionWin32TransportLookup;
     if (local[index].Generation != ExpectedGeneration)
       return AdmissionWin32TransportStaleGeneration;
-    if ((reference->Offset & 3ULL) != 0ULL ||
+    APPLE_AGX_U64 referenceAlignment =
+        reference->Role == AppleAgxWin32RoleIndex &&
+        APPLE_AGX_WIN32_COMMAND_HAS_INDEX(View->Header->Version) ? 2ULL : 4ULL;
+    if ((reference->Offset & (referenceAlignment-1ULL)) != 0ULL ||
         ((reference->Bytes & 3ULL) != 0ULL &&
          !AdmissionWin32ExactNativeSpan(View, reference)))
       return AdmissionWin32TransportAlignment;

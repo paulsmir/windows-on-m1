@@ -183,6 +183,52 @@ int AgxWin32AsahiContextRetire(struct pipe_context *ctx,APPLE_AGX_U32 timeout) {
   }
   return 1;
 }
+void *AgxWin32AsahiBufferCurrentMap(struct pipe_context *ctx,
+    struct pipe_resource *resource) {
+  if(!ctx || !resource || resource->screen!=ctx->screen ||
+     resource->target!=PIPE_BUFFER) return NULL;
+  struct agx_resource *rsrc=agx_resource(resource);
+  return rsrc->bo ? rsrc->bo->_map : NULL;
+}
+void *AgxWin32AsahiBufferWriteMap(struct pipe_context *ctx,
+    struct pipe_resource *resource) {
+  if(!ctx || !resource || resource->screen!=ctx->screen ||
+     resource->target!=PIPE_BUFFER || resource->width0>UINT32_MAX) return NULL;
+  struct agx_resource *rsrc=agx_resource(resource);
+  if(!rsrc->bo) {
+    fprintf(stderr,"NATIVE_BUFFER_WRITE_MAP: no-bo\n");
+    return NULL;
+  }
+  void *map=agx_bo_map(rsrc->bo);
+  if(!map) {
+    AGX_WIN32_ASAHI_BACKEND *backend=agx_device(ctx->screen)->windows_private;
+    fprintf(stderr,"NATIVE_BUFFER_WRITE_MAP: map-failed backend=%u ref=%d bytes=%zu\n",
+        backend?(unsigned)backend->Failed:~0u,rsrc->bo->refcnt,rsrc->bo->size);
+    return NULL;
+  }
+  util_range_add(resource,&rsrc->valid_buffer_range,0,(unsigned)resource->width0);
+  BITSET_SET(rsrc->data_valid,0);
+  return map;
+}
+int AgxWin32AsahiBufferCopy(struct pipe_context *ctx,
+    struct pipe_resource *dst,APPLE_AGX_U64 dst_offset,
+    struct pipe_resource *src,APPLE_AGX_U64 src_offset,APPLE_AGX_U64 bytes) {
+  if(!ctx || !dst || !src || dst==src || !bytes ||
+     dst->screen!=ctx->screen || src->screen!=ctx->screen ||
+     dst->target!=PIPE_BUFFER || src->target!=PIPE_BUFFER ||
+     dst_offset>dst->width0 || bytes>dst->width0-dst_offset ||
+     src_offset>src->width0 || bytes>src->width0-src_offset) return 0;
+  struct agx_resource *d=agx_resource(dst),*s=agx_resource(src);
+  if(!d->bo || !s->bo) return 0;
+  unsigned char *dm=(unsigned char *)agx_bo_map(d->bo);
+  unsigned char *sm=(unsigned char *)agx_bo_map(s->bo);
+  if(!dm || !sm) return 0;
+  memcpy(dm+dst_offset,sm+src_offset,(size_t)bytes);
+  util_range_add(dst,&d->valid_buffer_range,(unsigned)dst_offset,
+                 (unsigned)(dst_offset+bytes));
+  BITSET_SET(d->data_valid,0);
+  return 1;
+}
 int AgxWin32AsahiResourceBusy(struct pipe_context *ctx,struct pipe_resource *resource) {
   if(!ctx || !resource || resource->screen!=ctx->screen) return 1;
   struct agx_context *native=agx_context(ctx);

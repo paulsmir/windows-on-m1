@@ -415,23 +415,36 @@ windows_graph_texture_table(struct agx_batch *batch, struct agx_ptr ptr,
 static bool
 windows_graph_index_list(struct agx_batch *batch, uint8_t *start, uint8_t *end,
                          const struct pipe_draw_info *info, uint64_t address,
-                         size_t extent)
+                         size_t extent, size_t used, int32_t index_bias)
 {
    AGX_WIN32_ASAHI_CAPTURE *capture = windows_graph_capture(batch);
    bool mixed = capture && capture->Capture.CommandVersion ==
        APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH;
    if (!capture || !info || !info->index.resource ||
-       info->index_size != (mixed ? 4u : 2u) ||
-       !start || end != start + 24 ||
-       (mixed ? extent < 16 : extent != 8) || (address & 3) ||
-       address >= (1ULL << 40)) return false;
+       (info->index_size != 2u && info->index_size != 4u) ||
+       (mixed && info->index_size != 4u) || !start || end != start + 24 ||
+       !used || used > extent || (used % info->index_size) ||
+       (address & (info->index_size-1u)) || address >= (1ULL << 40)) {
+      fprintf(stderr,"NATIVE_INDEX_CAPTURE_FAIL: stage=shape size=%u extent=%zu used=%zu address=%llx emitted=%td\n",
+          info?info->index_size:0u,extent,used,(unsigned long long)address,
+          start&&end?end-start:-1);
+      return false;
+   }
    uint32_t *words = (uint32_t *)start;
    uint64_t encoded = ((uint64_t)(words[0] & 0xffu) << 32) | words[1];
-   if ((words[0] & 0xffffff00u) !=
-          (mixed ? 0x61f50900u : 0x61f20600u) ||
-       words[2] != (mixed ? 4u : 3u) || words[3] != 1u ||
-       words[4] != 0u || words[5] != (mixed ? 0x10000u : 2u) ||
-       encoded != address) return false;
+   uint32_t expected_header=info->index_size==4u ? 0x61f50900u : 0x61f20600u;
+   uint32_t expected_count=info->index_size==4u ? 4u : 3u;
+   uint32_t expected_size=mixed ? 0x10000u : info->index_size;
+   if ((words[0] & 0xffffff00u) != expected_header ||
+       words[2] != expected_count || words[3] != 1u ||
+       words[4] != (uint32_t)index_bias || words[5] != expected_size ||
+       encoded != address) {
+      fprintf(stderr,"NATIVE_INDEX_CAPTURE_FAIL: stage=encoding size=%u address=%llx encoded=%llx words=%08x,%08x,%08x,%08x,%08x,%08x expected=%08x,%u,%u\n",
+          info->index_size,(unsigned long long)address,(unsigned long long)encoded,
+          words[0],words[1],words[2],words[3],words[4],words[5],
+          expected_header,expected_count,expected_size);
+      return false;
+   }
    struct agx_resource *rsrc = agx_resource(info->index.resource);
    uint64_t resource_base = rsrc->bo ? agx_map_gpu(rsrc) : 0;
    unsigned index=0;
@@ -440,26 +453,51 @@ windows_graph_index_list(struct agx_batch *batch, uint8_t *start, uint8_t *end,
        AppleAgxWin32RoleSharedGeometry,&index,&target_offset);
    if (!rsrc->bo ||
        (mixed ? (address < resource_base ||
-                  address - resource_base > extent ||
-                  16 > extent - (address - resource_base)) :
-                address != resource_base) ||
+                  address-resource_base > extent ||
+                  16 > extent-(address-resource_base)) :
+                (address < resource_base ||
+                 address-resource_base > rsrc->base.width0 ||
+                 used > rsrc->base.width0-(address-resource_base))) ||
        (capture->Capture.CommandVersion ==
             APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
         AgxWin32RelocPromoteIndexed(&capture->Capture) != AgxRelocOk) ||
-       !APPLE_AGX_WIN32_COMMAND_HAS_INDEX(capture->Capture.CommandVersion))
+       !APPLE_AGX_WIN32_COMMAND_HAS_INDEX(capture->Capture.CommandVersion)) {
+      fprintf(stderr,"NATIVE_INDEX_CAPTURE_FAIL: stage=bounds size=%u extent=%zu used=%zu address=%llx base=%llx width=%u version=%u bo=%u\n",
+          info->index_size,extent,used,(unsigned long long)address,
+          (unsigned long long)resource_base,rsrc->base.width0,
+          capture->Capture.CommandVersion,rsrc->bo!=NULL);
       return false;
+   }
    AGX_WIN32_ASAHI_PIPELINE scope = {0};
-   if ((mixed ?
-          !shared_found :
-          AgxWin32AsahiCaptureReference(capture,rsrc->bo,
-             AppleAgxWin32RoleIndex,AppleAgxWin32AccessRead,0,8,&index) !=
-             AgxRelocOk) ||
-       !AgxWin32AsahiEncoderEmissionBeginCpu(
-          capture->Backend->Native,start,24,&scope)) return false;
+   AGX_WIN32_RELOC_RESULT reference_result=AgxRelocOk;
+   if(mixed) {
+      if(!shared_found) reference_result=AgxRelocStale;
+   } else {
+      reference_result=AgxWin32AsahiCaptureReference(capture,rsrc->bo,
+         AppleAgxWin32RoleIndex,AppleAgxWin32AccessRead,
+         address-resource_base,extent,&index);
+   }
+   if(reference_result!=AgxRelocOk) {
+      fprintf(stderr,"NATIVE_INDEX_CAPTURE_FAIL: stage=reference result=%u refs=%u relocs=%u width=%u\n",
+          reference_result,capture->Capture.ReferenceCount,
+          capture->Capture.RelocationCount,rsrc->base.width0);
+      return false;
+   }
+   if(!AgxWin32AsahiEncoderEmissionBeginCpu(
+          capture->Backend->Native,start,24,&scope)) {
+      fprintf(stderr,"NATIVE_INDEX_CAPTURE_FAIL: stage=emission refs=%u relocs=%u\n",
+          capture->Capture.ReferenceCount,capture->Capture.RelocationCount);
+      return false;
+   }
    AgxWin32AsahiPipelineRecordRange(&scope,start+8,
-       AppleAgxWin32RelocationVdmIndexBufferAddress40,address,mixed ? 16 : 8,
+       AppleAgxWin32RelocationVdmIndexBufferAddress40,address,mixed?16:extent,
        mixed ? AppleAgxWin32RoleSharedGeometry : AppleAgxWin32RoleIndex);
-   return AgxWin32AsahiPipelineFinish(&scope,end) != 0;
+   if(!AgxWin32AsahiPipelineFinish(&scope,end)) {
+      fprintf(stderr,"NATIVE_INDEX_CAPTURE_FAIL: stage=finish failed=%u\n",
+          (unsigned)scope.Failed);
+      return false;
+   }
+   return true;
 }
 
 static bool
@@ -483,8 +521,11 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
          !info->start_instance && ctx->streamout.num_targets == 0 &&
          !indirect->buffer && !indirect->indirect_draw_count &&
          !indirect->offset && !indirect->stride && !indirect->draw_count &&
-         !indirect->indirect_draw_count_offset && so && so->stride == 16 &&
-         buffer && buffer->target == PIPE_BUFFER && buffer->width0 == 256 &&
+         !indirect->indirect_draw_count_offset && so && so->stride &&
+         buffer && buffer->target == PIPE_BUFFER &&
+         so->base.buffer_offset<=buffer->width0 &&
+         so->base.buffer_size<=buffer->width0-so->base.buffer_offset &&
+         so->stride<=so->base.buffer_size &&
          (buffer->bind & (PIPE_BIND_VERTEX_BUFFER | PIPE_BIND_STREAM_OUTPUT)) ==
             (PIPE_BIND_VERTEX_BUFFER | PIPE_BIND_STREAM_OUTPUT) &&
          !(buffer->bind & ~(PIPE_BIND_VERTEX_BUFFER | PIPE_BIND_STREAM_OUTPUT |
@@ -498,8 +539,8 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
       info && draws && !indirect && num_draws == 1 &&
       info->mode == MESA_PRIM_TRIANGLES &&
       !info->primitive_restart && info->instance_count == 1 &&
-      !info->start_instance && draws->start == 0 && draws->count == 3 &&
-      !draws->index_bias && ctx->framebuffer.nr_cbufs == 1 &&
+      !info->start_instance && draws->count && !(draws->count%3u) &&
+      draws->count<=0x01000000u && ctx->framebuffer.nr_cbufs == 1 &&
       ctx->framebuffer.cbufs[0].texture &&
       (ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_B8G8R8A8_UNORM ||
        ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_B8G8R8A8_SRGB ||
@@ -523,8 +564,10 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
    if (valid && indexed) {
       struct pipe_resource *index = info->index.resource;
       struct agx_resource *rsrc = index ? agx_resource(index) : NULL;
-      valid = info->index_size == 2 && index &&
-              index->target == PIPE_BUFFER && index->width0 == 8 &&
+      uint64_t end=((uint64_t)draws->start+draws->count)*info->index_size;
+      valid = (info->index_size == 2 || info->index_size == 4) && index &&
+              index->target == PIPE_BUFFER &&
+              draws->start<=UINT32_MAX-draws->count && end<=index->width0 &&
               (index->bind & PIPE_BIND_INDEX_BUFFER) &&
               !(index->bind & ~(PIPE_BIND_INDEX_BUFFER | PIPE_BIND_SHADER_IMAGE)) &&
               rsrc->bo;
@@ -678,7 +721,8 @@ def project_sources(out, project, overlays):
    out = (void *)agx_vdm_draw((uint32_t *)out, 0 /* ignored for now */, draw,
                               agx_primitive_for_pipe(info->mode));
    if (info->index_size && !windows_graph_index_list(
-          batch,windows_index_list,out,info,ib,ib_extent)) {
+          batch,windows_index_list,out,info,ib,ib_extent,
+          (size_t)draws->count*info->index_size,draws->index_bias)) {
       windows_graph_fail(batch); return;
    }''')
     # BG/partial/EOT preserve the real native compiler and builder.

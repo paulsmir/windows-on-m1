@@ -309,6 +309,10 @@ static void test_valid_draw_graph(void) {
   assert(view.Draw == &command.Payload);
   assert(view.Relocations == command.Relocations);
   assert(view.Clear == NULL);
+  command.Payload.FirstVertex = 5u;
+  seal_draw(&command);
+  assert(validate_draw(&command, &view) == AppleAgxWin32AbiSuccess);
+  assert(view.Draw->FirstVertex == 5u);
 }
 
 static void test_v2_draw_accepts_independent_vertex_and_fragment_pipelines(

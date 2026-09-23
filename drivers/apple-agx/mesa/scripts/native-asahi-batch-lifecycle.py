@@ -156,7 +156,8 @@ def project_sources(out,project,overlays):
       ctx->any_faults = true; return;
    }
    struct agx_batch *batch = agx_get_batch(ctx);
-   if (!batch || !AgxWin32AsahiBatchEnter(batch)) {
+   if (!batch || !AgxWin32AsahiBatchPrepareDraw(batch,info,draws) ||
+       !AgxWin32AsahiBatchEnter(batch)) {
       AgxWin32AsahiBatchTraceDraw(ctx, batch, 2u);
       ctx->any_faults = true; return;
    }

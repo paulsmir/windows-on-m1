@@ -355,7 +355,7 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
       draw->Topology != AppleAgxWin32TopologyTriangleList ||
       draw->VertexCount == 0u || (draw->VertexCount % 3u) != 0u ||
       draw->VertexCount > 0x01000000u || draw->InstanceCount != 1u ||
-      draw->FirstVertex != 0u || draw->FirstInstance != 0u)
+      draw->FirstInstance != 0u)
     return AppleAgxWin32AbiPayload;
   if ((draw->Flags & ~APPLE_AGX_WIN32_DRAW_FLAG_EXPECTED_FOREGROUND) != 0u)
     return AppleAgxWin32AbiFlags;
@@ -600,8 +600,7 @@ fragment_pipeline_done:
           relocation->DestinationReference != draw->EncoderReference ||
           relocation->TargetReference != draw->IndexReference ||
           (header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
-           (references[draw->IndexReference].Offset != 0ULL ||
-            references[draw->IndexReference].Bytes != 8ULL ||
+           (references[draw->IndexReference].Bytes < 2ULL ||
             relocation->TargetOffset != 0ULL)) ||
           (header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH &&
            (relocation->TargetOffset >

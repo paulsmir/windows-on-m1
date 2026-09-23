@@ -218,7 +218,8 @@ static void indexed_list_patch(void) {
   fixture.Data[8][6]=1u;
   assert(AppleAgxDynamicJobMaterialize(&view,facts,3u,0x10000000ULL,
       read_object,resolve_object,&fixture,storage,sizeof(storage),&job)==
-      AppleAgxDynamicJobRelocation);
+      AppleAgxDynamicJobSuccess);
+  assert(!memcmp(storage+job.Objects[1].StorageOffset,fixture.Data[8],8u));
   fixture.Data[8][6]=0u;
   references[1].Bytes=7u;
   assert(AppleAgxDynamicJobMaterialize(&view,facts,3u,0x10000000ULL,

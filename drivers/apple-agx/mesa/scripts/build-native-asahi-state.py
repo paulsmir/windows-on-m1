@@ -465,6 +465,12 @@ struct Query
    UINT logical_bytes;
    UINT usage;
    UINT bind_flags;
+   UINT cpu_access;
+   void *dynamic_shadow;
+   void *active_buffer_map;
+   bool direct_buffer_map;
+   bool shadow_only_map;
+   bool shadow_dirty;
    Device *owner_device;
    ULONGLONG owner_cookie;
    ULONG device_generation;
@@ -1768,10 +1774,10 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
    util_draw_arrays(pDevice->pipe, pDevice->primitive, StartVertexLocation, VertexCount);
    AgxD3d10WindowsDiagnosticState(pDevice->windows, "draw-after");''')
     replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','DrawIndexed','''   Device *pDevice = CastDevice(hDevice);
-   if (!pDevice || IndexCount != 3 || StartIndexLocation != 0 ||
-       BaseVertexLocation != 0 || pDevice->primitive != MESA_PRIM_TRIANGLES ||
-       !pDevice->index_buffer || pDevice->index_size != 2 ||
-       pDevice->ib_offset != 0) {
+   if (!pDevice || !IndexCount || (IndexCount%3) ||
+       pDevice->primitive != MESA_PRIM_TRIANGLES ||
+       !pDevice->index_buffer ||
+       (pDevice->index_size != 2 && pDevice->index_size != 4)) {
       SetError(hDevice, E_NOTIMPL);
       return;
    }
@@ -1779,25 +1785,26 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
    struct pipe_draw_info info;
    struct pipe_draw_start_count_bias draw = {};
    util_draw_init_info(&info);
-   info.index_size = 2;
+   info.index_size = pDevice->index_size;
    info.mode = MESA_PRIM_TRIANGLES;
    info.index.resource = pDevice->index_buffer;
    info.instance_count = 1;
    info.primitive_restart = false;
-   draw.count = 3;
+   draw.start = StartIndexLocation + pDevice->ib_offset/pDevice->index_size;
+   draw.count = IndexCount;
+   draw.index_bias = BaseVertexLocation;
    pDevice->pipe->draw_vbo(pDevice->pipe, &info, 0, NULL, &draw, 1);''')
     replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','DrawIndexedInstanced','''   (void)IndexCountPerInstance;
-   if (IndexCountPerInstance != 3 || InstanceCount != 1 ||
-       StartIndexLocation != 0 || BaseVertexLocation != 0 ||
+   if (InstanceCount != 1 || StartInstanceLocation != 0) {
+      SetError(hDevice, E_NOTIMPL); return;
+   }
+   DrawIndexed(hDevice,IndexCountPerInstance,StartIndexLocation,
+               BaseVertexLocation);''')
+    replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','DrawInstanced','''   if (!VertexCountPerInstance || (VertexCountPerInstance%3) || InstanceCount != 1 ||
        StartInstanceLocation != 0) {
       SetError(hDevice, E_NOTIMPL); return;
    }
-   DrawIndexed(hDevice,3,0,0);''')
-    replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','DrawInstanced','''   if (VertexCountPerInstance != 3 || InstanceCount != 1 ||
-       StartVertexLocation != 0 || StartInstanceLocation != 0) {
-      SetError(hDevice, E_NOTIMPL); return;
-   }
-   Draw(hDevice,3,0);''')
+   Draw(hDevice,VertexCountPerInstance,StartVertexLocation);''')
     draw_path=out/'src/gallium/frontends/d3d10umd/Draw.cpp'
     draw_text=draw_path.read_text()+'''\nextern "C" BOOL APIENTRY
 MesaD3d10FrontendSetSoOffsetForTest(D3D10DDI_HDEVICE hDevice,
@@ -2003,6 +2010,10 @@ AgxD3d10ResourceWithinRequiredLimits(
    ULONGLONG resourceOwner = 0;
    ULONG resourceGeneration = 0;
    const D3D10DDI_MIPINFO *resourceMip = pCreateResource->pMipInfoList;
+   bool bufferResource = pCreateResource->ResourceDimension == D3D10DDIRESOURCE_BUFFER;
+   const UINT bufferBindMask = D3D10_DDI_BIND_VERTEX_BUFFER |
+      D3D10_DDI_BIND_INDEX_BUFFER | D3D10_DDI_BIND_CONSTANT_BUFFER |
+      D3D10_DDI_BIND_STREAM_OUTPUT;
    bool wantsConstant =
       (pCreateResource->BindFlags & D3D10_DDI_BIND_CONSTANT_BUFFER) != 0;
    bool wantsIndex =
@@ -2012,57 +2023,31 @@ AgxD3d10ResourceWithinRequiredLimits(
    bool wantsPresentation = pCreateResource->pPrimaryDesc != NULL ||
       (pCreateResource->BindFlags & D3D10_DDI_BIND_PRESENT) != 0 ||
       (pCreateResource->MiscFlags & D3D10_DDI_RESOURCE_MISC_SHARED) != 0;
-   bool validConstant = wantsConstant && pResource && resourceMip &&
-      pCreateResource->ResourceDimension == D3D10DDIRESOURCE_BUFFER &&
+   bool bufferShape = bufferResource && pResource && pDevice && resourceMip &&
       pCreateResource->Format == DXGI_FORMAT_UNKNOWN &&
-      pCreateResource->BindFlags == D3D10_DDI_BIND_CONSTANT_BUFFER &&
-      (pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT ||
-       pCreateResource->Usage == D3D10_DDI_USAGE_DYNAMIC) &&
-      pCreateResource->MapFlags == 0 && pCreateResource->MiscFlags == 0 &&
-      !pCreateResource->pPrimaryDesc && pCreateResource->MipLevels == 1 &&
-      pCreateResource->ArraySize == 1 && resourceMip[0].TexelHeight == 1 &&
-      resourceMip[0].TexelDepth == 1 && resourceMip[0].TexelWidth >= 16 &&
-      resourceMip[0].TexelWidth <= 65536 &&
-      (resourceMip[0].TexelWidth & 15) == 0 &&
-      pCreateResource->SampleDesc.Count == 1 &&
+      !(pCreateResource->BindFlags & ~bufferBindMask) &&
+      pCreateResource->MiscFlags == 0 && !pCreateResource->pPrimaryDesc &&
+      pCreateResource->MipLevels == 1 && pCreateResource->ArraySize == 1 &&
+      resourceMip[0].TexelWidth > 0 && resourceMip[0].TexelHeight == 1 &&
+      resourceMip[0].TexelDepth == 1 && pCreateResource->SampleDesc.Count == 1 &&
       pCreateResource->SampleDesc.Quality == 0 &&
-      (!pCreateResource->pInitialDataUP ||
-       pCreateResource->pInitialDataUP[0].pSysMem) && pDevice &&
-      AgxD3d10WindowsIdentity(pDevice->windows,&resourceOwner,
-                              &resourceGeneration);
-   static const unsigned char expectedIndex[8] = {0,0,1,0,2,0,0,0};
-   bool validIndex = wantsIndex && pResource && resourceMip &&
-      pCreateResource->ResourceDimension == D3D10DDIRESOURCE_BUFFER &&
-      pCreateResource->Format == DXGI_FORMAT_UNKNOWN &&
-      pCreateResource->BindFlags == D3D10_DDI_BIND_INDEX_BUFFER &&
-      pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT &&
-      pCreateResource->MapFlags == 0 && pCreateResource->MiscFlags == 0 &&
-      !pCreateResource->pPrimaryDesc && pCreateResource->MipLevels == 1 &&
-      pCreateResource->ArraySize == 1 && resourceMip[0].TexelWidth == 8 &&
-      resourceMip[0].TexelHeight == 1 && resourceMip[0].TexelDepth == 1 &&
-      pCreateResource->SampleDesc.Count == 1 &&
-      pCreateResource->SampleDesc.Quality == 0 &&
-      pCreateResource->pInitialDataUP &&
-      pCreateResource->pInitialDataUP[0].pSysMem &&
-      memcmp(pCreateResource->pInitialDataUP[0].pSysMem,expectedIndex,8)==0 &&
-      pDevice && AgxD3d10WindowsIdentity(pDevice->windows,&resourceOwner,
-                                         &resourceGeneration);
-   bool validStream=wantsStream&&pResource&&resourceMip&&
-      pCreateResource->ResourceDimension==D3D10DDIRESOURCE_BUFFER&&
-      pCreateResource->Format==DXGI_FORMAT_UNKNOWN&&
-      pCreateResource->BindFlags==
-        (D3D10_DDI_BIND_VERTEX_BUFFER|D3D10_DDI_BIND_STREAM_OUTPUT)&&
-      pCreateResource->Usage==D3D10_DDI_USAGE_DEFAULT&&
-      pCreateResource->MapFlags==0&&pCreateResource->MiscFlags==0&&
-      !pCreateResource->pPrimaryDesc&&pCreateResource->MipLevels==1&&
-      pCreateResource->ArraySize==1&&resourceMip[0].TexelWidth==256&&
-      resourceMip[0].TexelHeight==1&&resourceMip[0].TexelDepth==1&&
-      pCreateResource->SampleDesc.Count==1&&
-      pCreateResource->SampleDesc.Quality==0&&!pCreateResource->pInitialDataUP&&
-      pDevice&&AgxD3d10WindowsIdentity(pDevice->windows,&resourceOwner,
-                                       &resourceGeneration);
-   if ((wantsConstant && !validConstant) || (wantsIndex && !validIndex) ||
-       (wantsStream && !validStream)) {
+      (!pCreateResource->pInitialDataUP || pCreateResource->pInitialDataUP[0].pSysMem) &&
+      (!wantsConstant || (pCreateResource->BindFlags == D3D10_DDI_BIND_CONSTANT_BUFFER &&
+        resourceMip[0].TexelWidth <= 65536 && !(resourceMip[0].TexelWidth & 15))) &&
+      AgxD3d10WindowsIdentity(pDevice->windows,&resourceOwner,&resourceGeneration);
+   bool validBufferUsage = bufferShape &&
+      ((pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT &&
+        pCreateResource->MapFlags == 0) ||
+       (pCreateResource->Usage == D3D10_DDI_USAGE_IMMUTABLE &&
+        pCreateResource->MapFlags == 0 && !wantsStream &&
+        pCreateResource->pInitialDataUP) ||
+       (pCreateResource->Usage == D3D10_DDI_USAGE_DYNAMIC &&
+        pCreateResource->MapFlags == D3D10_DDI_CPU_ACCESS_WRITE &&
+        pCreateResource->BindFlags != 0 && !wantsStream) ||
+       (pCreateResource->Usage == D3D10_DDI_USAGE_STAGING &&
+        pCreateResource->BindFlags == 0 && pCreateResource->MapFlags != 0 &&
+        !(pCreateResource->MapFlags & ~D3D10_DDI_CPU_ACCESS_MASK)));
+   if (bufferResource && !validBufferUsage) {
       SetError(hDevice, E_NOTIMPL);
       return;
    }
@@ -2083,6 +2068,7 @@ AgxD3d10ResourceWithinRequiredLimits(
       pResource->owner_device = pDevice;
       pResource->usage = pCreateResource->Usage;
       pResource->bind_flags = pCreateResource->BindFlags;
+      pResource->cpu_access = pCreateResource->MapFlags;
       pResource->resource = AgxD3d10WindowsPresentationPipeResource(
          pResource->presentation);
       if (!pResource->resource) {
@@ -2103,7 +2089,7 @@ AgxD3d10ResourceWithinRequiredLimits(
       DebugPrintf("%s: failed to create resource\\n", __func__);
       SetError(hDevice, E_OUTOFMEMORY);
       return;
-   }''','''   if (wantsConstant || wantsIndex || wantsStream) {
+   }''','''   if (bufferResource) {
       pResource->resource = screen->resource_create(screen, &templat);
    } else if (pCreateResource->BindFlags & D3D10_DDI_BIND_RENDER_TARGET) {
       const D3D10DDI_MIPINFO *mip = pCreateResource->pMipInfoList;
@@ -2205,22 +2191,22 @@ AgxD3d10ResourceWithinRequiredLimits(
    pResource->owner_device = pDevice;
    pResource->usage = pCreateResource->Usage;
    pResource->bind_flags = pCreateResource->BindFlags;
-   if (wantsConstant) {
-      pResource->constant_buffer = true;
+   pResource->cpu_access = pCreateResource->MapFlags;
+   if (bufferResource) {
+      pResource->constant_buffer = wantsConstant;
+      pResource->index_buffer = wantsIndex;
       pResource->logical_bytes = resourceMip[0].TexelWidth;
       pResource->owner_device = pDevice;
       pResource->owner_cookie = resourceOwner;
       pResource->device_generation = resourceGeneration;
-   } else if (wantsIndex) {
-      pResource->index_buffer = true;
-      pResource->logical_bytes = 8;
-      pResource->owner_device = pDevice;
-      pResource->owner_cookie = resourceOwner;
-      pResource->device_generation = resourceGeneration;
-   } else if (wantsStream) {
-      pResource->logical_bytes = 256;
-      pResource->owner_cookie = resourceOwner;
-      pResource->device_generation = resourceGeneration;
+      if (pCreateResource->Usage == D3D10_DDI_USAGE_DYNAMIC) {
+         pResource->dynamic_shadow = calloc(1, pResource->logical_bytes);
+         if (!pResource->dynamic_shadow) {
+            pipe_resource_reference(&pResource->resource, NULL);
+            SetError(hDevice, E_OUTOFMEMORY);
+            return;
+         }
+      }
    }'''),
         ('''ResourceCopy(D3D10DDI_HDEVICE hDevice,          // IN
              D3D10DDI_HRESOURCE hDstResource,   // IN
@@ -2283,6 +2269,18 @@ AgxD3d10ResourceWithinRequiredLimits(
       SetError(hDevice, E_NOTIMPL); return;
    }
    struct pipe_resource *dst=destination->resource,*src=source->resource;
+   if (dst && src && destination->buffer && source->buffer) {
+      if (dst->target!=PIPE_BUFFER || src->target!=PIPE_BUFFER ||
+          dst->width0!=src->width0) {
+         SetError(hDevice,E_INVALIDARG);return;
+      }
+      HRESULT result=AgxD3d10WindowsFlushStatus(device->windows);
+      if(SUCCEEDED(result)) result=AgxD3d10WindowsFlushRetire(device->windows);
+      if(SUCCEEDED(result) && !AgxWin32AsahiBufferCopy(
+           device->pipe,dst,0,src,0,src->width0)) result=E_FAIL;
+      if(FAILED(result)) SetError(hDevice,result);
+      return;
+   }
    unsigned family=AgxD3d10CopyFamily(source->Format);
    if (!dst || !src || !family || family!=AgxD3d10CopyFamily(destination->Format) ||
        dst->target!=PIPE_TEXTURE_2D || src->target!=PIPE_TEXTURE_2D ||
@@ -2310,8 +2308,30 @@ AgxD3d10ResourceWithinRequiredLimits(
       result=AgxD3d10WindowsFlushStatus(device->windows);
    }
    if (FAILED(result)) SetError(hDevice,result);''')
-    replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceCopyRegion','''   Resource *source = CastResource(hSrcResource);
-   struct pipe_resource *src = source ? source->resource : NULL;
+    replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceCopyRegion','''   Device *device=CastDevice(hDevice);
+   Resource *source=CastResource(hSrcResource),*destination=CastResource(hDstResource);
+   struct pipe_resource *src=source?source->resource:NULL;
+   struct pipe_resource *dst=destination?destination->resource:NULL;
+   if(device && source && destination && source!=destination &&
+      source->owner_device==device && destination->owner_device==device &&
+      source->buffer && destination->buffer && src && dst &&
+      source->NumSubResources==1 && destination->NumSubResources==1 &&
+      destination->usage!=D3D10_DDI_USAGE_IMMUTABLE && !SrcSubResource &&
+      !DstSubResource && !DstY && !DstZ) {
+      UINT left=pSrcBox?pSrcBox->left:0,right=pSrcBox?pSrcBox->right:src->width0;
+      bool valid=left<=right && right<=src->width0 && DstX<=dst->width0 &&
+         right-left<=dst->width0-DstX &&
+         (!pSrcBox || (!pSrcBox->top && !pSrcBox->front &&
+          pSrcBox->bottom==1 && pSrcBox->back==1));
+      if(!valid){SetError(hDevice,E_INVALIDARG);return;}
+      HRESULT result=AgxD3d10WindowsFlushStatus(device->windows);
+      if(SUCCEEDED(result)) result=AgxD3d10WindowsFlushRetire(device->windows);
+      UINT bytes=right-left;
+      if(SUCCEEDED(result) && bytes && !AgxWin32AsahiBufferCopy(
+           device->pipe,dst,DstX,src,left,bytes)) result=E_FAIL;
+      if(FAILED(result)) SetError(hDevice,result);
+      return;
+   }
    bool whole = src && (!pSrcBox || (pSrcBox->left == 0 && pSrcBox->top == 0 &&
       pSrcBox->front == 0 && pSrcBox->right == src->width0 &&
       pSrcBox->bottom == src->height0 && pSrcBox->back == src->depth0));
@@ -2362,6 +2382,9 @@ AgxD3d10ResourceWithinRequiredLimits(
       return;
    }
 
+   free(pResource->dynamic_shadow);
+   pResource->dynamic_shadow = NULL;
+   pResource->active_buffer_map = NULL;
    if (pResource->so_target) {'''
     if resource_text.count(destroy_anchor)!=1:
         raise SystemExit('Ambiguous presentation DestroyResource anchor')
@@ -2369,23 +2392,30 @@ AgxD3d10ResourceWithinRequiredLimits(
     overlays['src/gallium/frontends/d3d10umd/Resource.cpp']['after']=hashlib.sha256(resource_path.read_bytes()).hexdigest()
     replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceMap','''   Device *device = CastDevice(hDevice);
    Resource *resource = CastResource(hResource);
-   bool dynamicBuffer = resource && resource->usage == D3D10_DDI_USAGE_DYNAMIC &&
-      (resource->bind_flags == D3D10_DDI_BIND_VERTEX_BUFFER ||
-       resource->bind_flags == D3D10_DDI_BIND_INDEX_BUFFER ||
-       resource->bind_flags == D3D10_DDI_BIND_CONSTANT_BUFFER);
+   bool dynamicBuffer = resource && resource->buffer &&
+      resource->usage == D3D10_DDI_USAGE_DYNAMIC;
+   bool noOverwriteBuffer = dynamicBuffer &&
+      (resource->bind_flags &
+       (D3D10_DDI_BIND_VERTEX_BUFFER|D3D10_DDI_BIND_INDEX_BUFFER));
    bool dynamicTexture = resource && !resource->buffer &&
       resource->usage == D3D10_DDI_USAGE_DYNAMIC &&
       resource->bind_flags == D3D10_DDI_BIND_SHADER_RESOURCE &&
       AgxD3d10CopyFamily(resource->Format) != 0;
    bool stagingResource = resource && resource->usage == D3D10_DDI_USAGE_STAGING &&
       resource->bind_flags == 0;
+   bool stagingAccess = stagingResource &&
+      ((DDIMap == D3D10_DDI_MAP_READ &&
+        (resource->cpu_access & D3D10_DDI_CPU_ACCESS_READ)) ||
+       (DDIMap == D3D10_DDI_MAP_WRITE &&
+        (resource->cpu_access & D3D10_DDI_CPU_ACCESS_WRITE)) ||
+       (DDIMap == D3D10_DDI_MAP_READWRITE &&
+        (resource->cpu_access & D3D10_DDI_CPU_ACCESS_MASK) ==
+          D3D10_DDI_CPU_ACCESS_MASK));
    bool mapMode = dynamicBuffer ?
       (DDIMap == D3D10_DDI_MAP_WRITE_DISCARD ||
-       DDIMap == D3D10_DDI_MAP_WRITE_NOOVERWRITE) :
+       (DDIMap == D3D10_DDI_MAP_WRITE_NOOVERWRITE && noOverwriteBuffer)) :
       dynamicTexture ? DDIMap == D3D10_DDI_MAP_WRITE_DISCARD :
-      stagingResource && (DDIMap == D3D10_DDI_MAP_READ ||
-                        DDIMap == D3D10_DDI_MAP_WRITE ||
-                        DDIMap == D3D10_DDI_MAP_READWRITE);
+      stagingAccess;
    if (!device || !resource || resource->owner_device != device ||
        !resource->resource || !resource->transfers ||
        (!resource->buffer && !AgxD3d10CopyFamily(resource->Format)) ||
@@ -2394,19 +2424,40 @@ AgxD3d10ResourceWithinRequiredLimits(
        (Flags && (DDIMap == D3D10_DDI_MAP_WRITE_DISCARD ||
                   DDIMap == D3D10_DDI_MAP_WRITE_NOOVERWRITE)) ||
        resource->transfers[SubResource] ||
-       (resource->bind_flags == D3D10_DDI_BIND_CONSTANT_BUFFER &&
-        DDIMap != D3D10_DDI_MAP_WRITE_DISCARD)) {
+       (resource->constant_buffer && DDIMap != D3D10_DDI_MAP_WRITE_DISCARD)) {
       SetError(hDevice, E_INVALIDARG); return;
    }
    pMappedSubResource->pData=NULL;
    pMappedSubResource->RowPitch=pMappedSubResource->DepthPitch=0;
-   HRESULT status = (Flags & D3D10_DDI_MAP_FLAG_DONOTWAIT) ?
-      AgxD3d10WindowsTryFlushRetire(device->windows) :
-      AgxD3d10WindowsFlushRetire(device->windows);
+   HRESULT status = DDIMap == D3D10_DDI_MAP_WRITE_NOOVERWRITE ? S_OK :
+      (Flags & D3D10_DDI_MAP_FLAG_DONOTWAIT) ?
+       AgxD3d10WindowsTryFlushRetire(device->windows) :
+       AgxD3d10WindowsFlushRetire(device->windows);
    if (FAILED(status)) { SetError(hDevice, status); return; }
    struct pipe_box box;
    unsigned level = 0;
    subResourceBox(resource->resource,SubResource,&level,&box);
+   if (DDIMap == D3D10_DDI_MAP_WRITE_NOOVERWRITE) {
+      if (!resource->dynamic_shadow || resource->logical_bytes != (UINT)box.width) {
+         SetError(hDevice, E_FAIL); return;
+      }
+      void *current = AgxWin32AsahiBufferCurrentMap(
+         device->pipe,resource->resource);
+      if (current) {
+         resource->active_buffer_map=current;
+         resource->direct_buffer_map=true;
+         pMappedSubResource->pData=current;
+         pMappedSubResource->RowPitch=resource->logical_bytes;
+         pMappedSubResource->DepthPitch=resource->logical_bytes;
+         return;
+      }
+      resource->active_buffer_map=resource->dynamic_shadow;
+      resource->shadow_only_map=true;
+      pMappedSubResource->pData=resource->dynamic_shadow;
+      pMappedSubResource->RowPitch=resource->logical_bytes;
+      pMappedSubResource->DepthPitch=resource->logical_bytes;
+      return;
+   }
    unsigned usage = DDIMap == D3D10_DDI_MAP_READ ? PIPE_MAP_READ :
       DDIMap == D3D10_DDI_MAP_WRITE ? PIPE_MAP_WRITE :
       DDIMap == D3D10_DDI_MAP_READWRITE ? PIPE_MAP_READ|PIPE_MAP_WRITE :
@@ -2420,6 +2471,7 @@ AgxD3d10ResourceWithinRequiredLimits(
                                 &box,&resource->transfers[SubResource]);
    if (!map || !resource->transfers[SubResource]) { SetError(hDevice,E_FAIL); return; }
    pMappedSubResource->pData=map;
+   if (dynamicBuffer) resource->active_buffer_map=map;
    pMappedSubResource->RowPitch=resource->transfers[SubResource]->stride;
    pMappedSubResource->DepthPitch=resource->transfers[SubResource]->layer_stride;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceUnmap','''   Device *device = CastDevice(hDevice);
@@ -2427,12 +2479,22 @@ AgxD3d10ResourceWithinRequiredLimits(
    if (!device || !resource || resource->owner_device != device ||
        !resource->resource || !resource->transfers ||
        (!resource->buffer && !AgxD3d10CopyFamily(resource->Format)) ||
-       SubResource >= resource->NumSubResources || !resource->transfers[SubResource]) {
+       SubResource >= resource->NumSubResources ||
+       (!resource->transfers[SubResource] && !resource->direct_buffer_map &&
+        !resource->shadow_only_map)) {
       SetError(hDevice, E_INVALIDARG); return;
    }
-   if (resource->buffer)
-      pipe_buffer_unmap(device->pipe,resource->transfers[SubResource]);
-   else
+   if (resource->buffer) {
+      if (resource->dynamic_shadow && resource->active_buffer_map)
+         memcpy(resource->dynamic_shadow, resource->active_buffer_map,
+                resource->logical_bytes);
+      resource->active_buffer_map = NULL;
+      if (resource->shadow_only_map) {
+         resource->shadow_only_map=false;
+         resource->shadow_dirty=true;
+      } else if (resource->direct_buffer_map) resource->direct_buffer_map = false;
+      else pipe_buffer_unmap(device->pipe,resource->transfers[SubResource]);
+   } else
       pipe_texture_unmap(device->pipe,resource->transfers[SubResource]);
    resource->transfers[SubResource]=NULL;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceIsStagingBusy','''   Device *device=CastDevice(hDevice);
@@ -2491,7 +2553,7 @@ AgxD3d10ResourceWithinRequiredLimits(
       refusalArgs[13]=r->pMipInfoList[0].TexelHeight;
       refusalArgs[14]=r->pMipInfoList[0].TexelDepth;
    }
-   AgxD3d10RefusalScope refusal(r&&r->MiscFlags?"reject-CreateResource":NULL,refusalArgs,16);
+   AgxD3d10RefusalScope refusal("reject-CreateResource",refusalArgs,16);
 """,
         'OpenResource': """   UINT refusalArgs[8]={pOpenResource?pOpenResource->NumAllocations:0,
       pOpenResource?pOpenResource->PrivateDriverDataSize:0,
@@ -2529,6 +2591,7 @@ AgxD3d10ResourceWithinRequiredLimits(
     overlays['src/gallium/frontends/d3d10umd/Resource.cpp']['after']=hashlib.sha256(resource_path.read_bytes()).hexdigest()
     change('src/gallium/frontends/d3d10umd/InputAssembly.cpp',
         '210b330c3327042d230a65ff5a7242df89ddb385d50f61bcacfc996d39c55bbd',[
+        ('#include "State.h"', '#include "State.h"\n#include "agx_win32_asahi_scene.h"'),
         ('   static const float dummy[4] = {0.0f, 0.0f, 0.0f, 0.0f};\n\n',''),
         ('''      else {
          pDevice->vertex_strides[StartBuffer + i] = 0;
@@ -2561,6 +2624,26 @@ AgxD3d10ResourceWithinRequiredLimits(
    }
 
 ''','')])
+    ia_path=out/'src/gallium/frontends/d3d10umd/InputAssembly.cpp'
+    ia_text=ia_path.read_text()
+    ia_anchor='''      if (resource) {
+         pDevice->vertex_strides[StartBuffer + i] = pStrides[i];'''
+    ia_replacement='''      if (resource) {
+         if (res && res->shadow_dirty) {
+            HRESULT status=AgxD3d10WindowsFlushRetire(pDevice->windows);
+            void *map=SUCCEEDED(status) ? AgxWin32AsahiBufferCurrentMap(
+               pDevice->pipe,res->resource) : NULL;
+            if(SUCCEEDED(status) && !map)
+               map=AgxWin32AsahiBufferWriteMap(pDevice->pipe,res->resource);
+            if(FAILED(status) || !map) {
+               SetError(hDevice,FAILED(status)?status:E_FAIL);return;
+            }
+            memcpy(map,res->dynamic_shadow,res->logical_bytes);
+            res->shadow_dirty=false;
+         }
+         pDevice->vertex_strides[StartBuffer + i] = pStrides[i];'''
+    if ia_text.count(ia_anchor)!=1: raise SystemExit('ambiguous dynamic IA upload')
+    ia_path.write_text(ia_text.replace(ia_anchor,ia_replacement))
     replace_function_body('src/gallium/frontends/d3d10umd/InputAssembly.cpp','IaSetIndexBuffer','''   Device *pDevice = CastDevice(hDevice);
    Resource *resource = CastResource(hBuffer);
    if (!resource) {
@@ -2572,14 +2655,17 @@ AgxD3d10ResourceWithinRequiredLimits(
    }
    ULONGLONG owner = 0;
    ULONG generation = 0;
-   bool valid = pDevice && Format == DXGI_FORMAT_R16_UINT && Offset == 0 &&
-      resource->index_buffer && resource->logical_bytes == 8 &&
+   UINT indexSize = Format == DXGI_FORMAT_R16_UINT ? 2u :
+      Format == DXGI_FORMAT_R32_UINT ? 4u : 0u;
+   bool valid = pDevice && indexSize && !(Offset & (indexSize-1u)) &&
+      resource->index_buffer && Offset < resource->logical_bytes &&
+      resource->logical_bytes-Offset >= indexSize &&
       resource->owner_device == pDevice && resource->resource &&
       resource->resource->target == PIPE_BUFFER &&
       (resource->resource->bind & PIPE_BIND_INDEX_BUFFER) &&
       !(resource->resource->bind &
         ~(PIPE_BIND_INDEX_BUFFER | PIPE_BIND_SHADER_IMAGE)) &&
-      resource->resource->width0 == 8 &&
+      resource->resource->width0 == resource->logical_bytes &&
       AgxD3d10WindowsIdentity(pDevice->windows,&owner,&generation) &&
       resource->owner_cookie == owner &&
       resource->device_generation == generation;
@@ -2587,8 +2673,8 @@ AgxD3d10ResourceWithinRequiredLimits(
       SetError(hDevice, E_NOTIMPL);
       return;
    }
-   pDevice->ib_offset = 0;
-   pDevice->index_size = 2;
+   pDevice->ib_offset = Offset;
+   pDevice->index_size = indexSize;
    pDevice->restart_index = 0;
    pipe_resource_reference(&pDevice->index_buffer, resource->resource);''')
     change('src/asahi/lib/agx_device.h',

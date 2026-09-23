@@ -146,6 +146,20 @@ int AgxWin32AsahiBatchEnter(struct agx_batch *b) {
        (APPLE_AGX_U32)b->vdm.bo->size,&c->Root)) return 0;
   c->Entered=1; return 1;
 }
+int AgxWin32AsahiBatchPrepareDraw(struct agx_batch *b,
+    const struct pipe_draw_info *info,
+    const struct pipe_draw_start_count_bias *draws) {
+  AGX_WIN32_ASAHI_BATCH *c=capsule(b);
+  if(!c || !info || !draws || c->Entered || c->Submitted || c->Rejected ||
+     !draws->count || draws->count>0x01000000u || (draws->count%3u) ||
+     info->instance_count!=1u || info->start_instance)
+    return 0;
+  c->Draw.VertexCount=draws->count;
+  c->Draw.InstanceCount=info->instance_count;
+  c->Draw.FirstVertex=draws->start;
+  c->Draw.FirstInstance=info->start_instance;
+  return 1;
+}
 int AgxWin32AsahiBatchLeave(struct agx_batch *b) {
   AGX_WIN32_ASAHI_BATCH *c=capsule(b);
   if(!c || !c->Entered || !AgxWin32AsahiEncoderRootLeave(&c->Root)) return 0;
@@ -201,10 +215,12 @@ int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx,
     const struct pipe_draw_indirect_info *indirect,
     const struct pipe_draw_start_count_bias *draws,unsigned count) {
   if(!ctx || ctx->any_faults || !info || !draws || count!=1 || drawid || indirect ||
-      info->mode!=MESA_PRIM_TRIANGLES || (info->index_size && info->index_size!=2) ||
+      info->mode!=MESA_PRIM_TRIANGLES ||
+      (info->index_size && info->index_size!=2 && info->index_size!=4) ||
       (ctx->stage[MESA_SHADER_FRAGMENT].texture_count && info->index_size) ||
       info->primitive_restart || info->instance_count!=1 ||
-      info->start_instance || draws->start || draws->count!=3 || draws->index_bias ||
+      info->start_instance || !draws->count || (draws->count%3u) ||
+      draws->count>0x01000000u ||
       ctx->framebuffer.nr_cbufs!=1 ||
       !ctx->framebuffer.cbufs[0].texture || (ctx->batch && ctx->batch->draws)) return 0;
   struct agx_resource *rt=agx_resource(ctx->framebuffer.cbufs[0].texture);
@@ -260,7 +276,9 @@ int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx,
   if(valid && info->index_size) {
     struct pipe_resource *resource=info->index.resource;
     struct agx_resource *index=resource?agx_resource(resource):NULL;
-    valid=resource && resource->target==PIPE_BUFFER && resource->width0==8 &&
+    uint64_t end=((uint64_t)draws->start+draws->count)*info->index_size;
+    valid=resource && resource->target==PIPE_BUFFER &&
+        draws->start<=UINT32_MAX-draws->count && end<=resource->width0 &&
         (resource->bind&PIPE_BIND_INDEX_BUFFER) && index->bo;
   }
   return valid;

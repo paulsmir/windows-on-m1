@@ -1368,6 +1368,96 @@ static void test_mesa_d3d10_frontend_open(void) {
     rtCreate.Format=DXGI_FORMAT_B8G8R8A8_UNORM;rtCreate.SampleDesc.Count=1;
     rtCreate.MipLevels=1;rtCreate.ArraySize=1;
     {
+      static unsigned char initialBuffer[240016]={0};
+      typedef struct {
+        UINT Width,Usage,Bind,Cpu;
+        BOOL Initial,Valid;
+      } BUFFER_CASE;
+      static const BUFFER_CASE cases[]={
+        {7,D3D10_DDI_USAGE_DEFAULT,D3D10_DDI_BIND_VERTEX_BUFFER,0,FALSE,TRUE},
+        {7,D3D10_DDI_USAGE_IMMUTABLE,D3D10_DDI_BIND_INDEX_BUFFER,0,TRUE,TRUE},
+        {240016,D3D10_DDI_USAGE_DYNAMIC,D3D10_DDI_BIND_VERTEX_BUFFER,
+          D3D10_DDI_CPU_ACCESS_WRITE,FALSE,TRUE},
+        {160000,D3D10_DDI_USAGE_DYNAMIC,D3D10_DDI_BIND_INDEX_BUFFER,
+          D3D10_DDI_CPU_ACCESS_WRITE,FALSE,TRUE},
+        {240012,D3D10_DDI_USAGE_DEFAULT,D3D10_DDI_BIND_STREAM_OUTPUT,0,FALSE,TRUE},
+        {7,D3D10_DDI_USAGE_STAGING,0,
+          D3D10_DDI_CPU_ACCESS_READ|D3D10_DDI_CPU_ACCESS_WRITE,FALSE,TRUE},
+        {16,D3D10_DDI_USAGE_DYNAMIC,D3D10_DDI_BIND_CONSTANT_BUFFER,
+          D3D10_DDI_CPU_ACCESS_WRITE,FALSE,TRUE},
+        {7,D3D10_DDI_USAGE_DYNAMIC,D3D10_DDI_BIND_CONSTANT_BUFFER,
+          D3D10_DDI_CPU_ACCESS_WRITE,FALSE,FALSE},
+        {240016,D3D10_DDI_USAGE_DYNAMIC,D3D10_DDI_BIND_VERTEX_BUFFER,
+          D3D10_DDI_CPU_ACCESS_READ,FALSE,FALSE},
+        {7,D3D10_DDI_USAGE_STAGING,D3D10_DDI_BIND_VERTEX_BUFFER,
+          D3D10_DDI_CPU_ACCESS_WRITE,FALSE,FALSE},
+        {7,D3D10_DDI_USAGE_IMMUTABLE,D3D10_DDI_BIND_VERTEX_BUFFER,0,FALSE,FALSE},
+        {7,D3D10_DDI_USAGE_DEFAULT,D3D10_DDI_BIND_VERTEX_BUFFER,
+          D3D10_DDI_CPU_ACCESS_WRITE,FALSE,FALSE},
+        {16,D3D10_DDI_USAGE_DEFAULT,
+          D3D10_DDI_BIND_CONSTANT_BUFFER|D3D10_DDI_BIND_VERTEX_BUFFER,
+          0,FALSE,FALSE},
+        {240012,D3D10_DDI_USAGE_DYNAMIC,D3D10_DDI_BIND_STREAM_OUTPUT,
+          D3D10_DDI_CPU_ACCESS_WRITE,FALSE,FALSE},
+        {240012,D3D10_DDI_USAGE_IMMUTABLE,D3D10_DDI_BIND_STREAM_OUTPUT,
+          0,TRUE,FALSE},
+      };
+      for(UINT ci=0;ci<ARRAYSIZE(cases);++ci) {
+        D3D10DDI_MIPINFO bmi={cases[ci].Width,1,1,cases[ci].Width,1,1};
+        D3D10_DDIARG_SUBRESOURCE_UP upload={initialBuffer,0,0};
+        D3D10DDIARG_CREATERESOURCE bc={0};
+        bc.pMipInfoList=&bmi;bc.pInitialDataUP=cases[ci].Initial?&upload:NULL;
+        bc.ResourceDimension=D3D10DDIRESOURCE_BUFFER;bc.Usage=cases[ci].Usage;
+        bc.BindFlags=cases[ci].Bind;bc.MapFlags=cases[ci].Cpu;
+        bc.Format=DXGI_FORMAT_UNKNOWN;bc.SampleDesc.Count=1;
+        bc.MipLevels=bc.ArraySize=1;
+        D3D10DDI_HRESOURCE br={0};
+        D3D10DDI_HRTRESOURCE brr={(VOID *)(UINT_PTR)(0xee00u+ci)};
+        br.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateResourceSize(device,&bc));
+        CHECK(br.pDrvPrivate!=NULL);
+        unsigned errors=FrontendErrors;
+        deviceFunctions.pfnCreateResource(device,&bc,br,brr);
+        CHECK(FrontendErrors==errors+(cases[ci].Valid?0u:1u));
+        if(cases[ci].Valid && FrontendErrors==errors)
+          deviceFunctions.pfnDestroyResource(device,br);
+        free(br.pDrvPrivate);
+      }
+      {
+        unsigned char seven[7]={1,2,3,4,5,6,7};
+        D3D10DDI_MIPINFO sm={7,1,1,7,1,1};
+        D3D10_DDIARG_SUBRESOURCE_UP su={seven,0,0};
+        D3D10DDIARG_CREATERESOURCE sc={0},dc={0};
+        sc.pMipInfoList=&sm;sc.pInitialDataUP=&su;
+        sc.ResourceDimension=D3D10DDIRESOURCE_BUFFER;
+        sc.Usage=D3D10_DDI_USAGE_IMMUTABLE;
+        sc.BindFlags=D3D10_DDI_BIND_VERTEX_BUFFER;
+        sc.Format=DXGI_FORMAT_UNKNOWN;sc.SampleDesc.Count=1;
+        sc.MipLevels=sc.ArraySize=1;
+        dc=sc;dc.pInitialDataUP=NULL;dc.Usage=D3D10_DDI_USAGE_STAGING;
+        dc.BindFlags=0;dc.MapFlags=D3D10_DDI_CPU_ACCESS_READ|
+          D3D10_DDI_CPU_ACCESS_WRITE;
+        D3D10DDI_HRESOURCE sr={0},dr={0};
+        D3D10DDI_HRTRESOURCE srr={(VOID *)(UINT_PTR)0xef50u};
+        D3D10DDI_HRTRESOURCE drr={(VOID *)(UINT_PTR)0xef51u};
+        sr.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateResourceSize(device,&sc));
+        dr.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateResourceSize(device,&dc));
+        unsigned errors=FrontendErrors;
+        deviceFunctions.pfnCreateResource(device,&sc,sr,srr);
+        deviceFunctions.pfnCreateResource(device,&dc,dr,drr);
+        CHECK(FrontendErrors==errors);
+        deviceFunctions.pfnResourceCopy(device,dr,sr);
+        CHECK(FrontendErrors==errors);
+        D3D10DDI_MAPPED_SUBRESOURCE map={0};
+        deviceFunctions.pfnStagingResourceMap(device,dr,0,
+            D3D10_DDI_MAP_READ,0,&map);
+        CHECK(FrontendErrors==errors && map.pData && !memcmp(map.pData,seven,7));
+        if(map.pData) deviceFunctions.pfnStagingResourceUnmap(device,dr,0);
+        deviceFunctions.pfnDestroyResource(device,dr);
+        deviceFunctions.pfnDestroyResource(device,sr);
+        free(dr.pDrvPrivate);free(sr.pDrvPrivate);
+      }
+    }
+    {
       D3D10DDIARG_CREATERESOURCE rejectedMsaa=rtCreate;
       D3D10DDI_HRESOURCE rejectedHandle={0};
       D3D10DDI_HRTRESOURCE rejectedRuntime={0};
@@ -1827,6 +1917,7 @@ static void test_mesa_d3d10_frontend_open(void) {
     vbCreate.pMipInfoList=&vbMip;
     vbCreate.ResourceDimension=D3D10DDIRESOURCE_BUFFER;vbCreate.Usage=D3D10_DDI_USAGE_DYNAMIC;
     vbCreate.BindFlags=D3D10_DDI_BIND_VERTEX_BUFFER;vbCreate.Format=DXGI_FORMAT_UNKNOWN;
+    vbCreate.MapFlags=D3D10_DDI_CPU_ACCESS_WRITE;
     vbCreate.SampleDesc.Count=1;vbCreate.MipLevels=1;vbCreate.ArraySize=1;
     for(unsigned limitCase=0;limitCase<6u;++limitCase) {
       D3D10DDIARG_CREATERESOURCE invalid=vbCreate;
@@ -1922,6 +2013,7 @@ static void test_mesa_d3d10_frontend_open(void) {
     stagingCreate.pMipInfoList=&stagingMip;
     stagingCreate.ResourceDimension=D3D10DDIRESOURCE_BUFFER;
     stagingCreate.Usage=D3D10_DDI_USAGE_STAGING;
+    stagingCreate.MapFlags=D3D10_DDI_CPU_ACCESS_READ|D3D10_DDI_CPU_ACCESS_WRITE;
     stagingCreate.Format=DXGI_FORMAT_UNKNOWN;
     stagingCreate.SampleDesc.Count=1;stagingCreate.MipLevels=1;
     stagingCreate.ArraySize=1;
@@ -2042,6 +2134,7 @@ static void test_mesa_d3d10_frontend_open(void) {
     CHECK(FrontendErrors==cbErrorsBefore);
     float vsCbValues[4]={0.0f,0.0f,0.0f,0.0f};
     cbCreate.Usage=D3D10_DDI_USAGE_DYNAMIC;
+    cbCreate.MapFlags=D3D10_DDI_CPU_ACCESS_WRITE;
     cbCreate.pInitialDataUP=NULL;
     vsCb.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateResourceSize(device,&cbCreate));
     vsCbRuntime.handle=(VOID *)(UINT_PTR)0xd0bu;
@@ -2074,37 +2167,6 @@ static void test_mesa_d3d10_frontend_open(void) {
     CHECK(ib.pDrvPrivate!=NULL);
     deviceFunctions.pfnCreateResource(device,&ibCreate,ib,ibRuntime);
     CHECK(FrontendErrors==cbErrorsBefore);
-    for(unsigned invalidIndex=0;invalidIndex<8u;++invalidIndex) {
-      D3D10DDIARG_CREATERESOURCE invalid=ibCreate;
-      D3D10DDI_MIPINFO mip=ibMip;
-      D3D10_DDIARG_SUBRESOURCE_UP initial=ibInitial;
-      UINT16 badPadding[4]={0u,1u,2u,1u};
-      invalid.pMipInfoList=&mip;invalid.pInitialDataUP=&initial;
-      switch(invalidIndex) {
-      case 0: mip.TexelWidth=6; break;
-      case 1: mip.TexelWidth=10; break;
-      case 2: invalid.BindFlags|=D3D10_DDI_BIND_VERTEX_BUFFER; break;
-      case 3: invalid.Usage=D3D10_DDI_USAGE_IMMUTABLE; break;
-      case 4: invalid.Format=DXGI_FORMAT_R16_UINT; break;
-      case 5: invalid.pInitialDataUP=NULL; break;
-      case 6: initial.pSysMem=NULL; break;
-      default: initial.pSysMem=badPadding; break;
-      }
-      SIZE_T privateBytes=deviceFunctions.pfnCalcPrivateResourceSize(device,&invalid);
-      D3D10DDI_HRESOURCE handle={0};D3D10DDI_HRTRESOURCE runtime={0};
-      handle.pDrvPrivate=malloc(privateBytes);runtime.handle=(VOID *)(UINT_PTR)(0xf00u+invalidIndex);
-      CHECK(handle.pDrvPrivate!=NULL);
-      if(handle.pDrvPrivate) {
-        memset(handle.pDrvPrivate,0x5a,privateBytes);
-        unsigned errors=FrontendErrors,creates=PoolCreates,renders=RuntimeRenders;
-        deviceFunctions.pfnCreateResource(device,&invalid,handle,runtime);
-        CHECK(FrontendErrors==errors+1u && FrontendLastError==E_NOTIMPL &&
-              PoolCreates==creates && RuntimeRenders==renders);
-        unsigned char *storage=handle.pDrvPrivate;
-        for(SIZE_T i=0;i<privateBytes;++i) CHECK(storage[i]==0x5a);
-        free(handle.pDrvPrivate);
-      }
-    }
     for(unsigned invalidCase=0;invalidCase<14u;++invalidCase) {
       D3D10DDIARG_CREATERESOURCE invalid=cbCreate;
       D3D10DDI_MIPINFO invalidMip=cbMip;
@@ -2115,8 +2177,8 @@ static void test_mesa_d3d10_frontend_open(void) {
       case 0: invalidMip.TexelWidth=15; break;
       case 1: invalidMip.TexelWidth=65552; break;
       case 2: invalid.BindFlags|=D3D10_DDI_BIND_VERTEX_BUFFER; break;
-      case 3: invalid.Usage=D3D10_DDI_USAGE_IMMUTABLE; break;
-      case 4: invalid.MapFlags=1; break;
+      case 3: invalid.MapFlags=D3D10_DDI_CPU_ACCESS_READ; break;
+      case 4: invalid.MapFlags=0; break;
       case 5: invalid.MiscFlags=1; break;
       case 6: invalid.MipLevels=2; break;
       case 7: invalid.ArraySize=2; break;
@@ -2383,6 +2445,127 @@ static void test_mesa_d3d10_frontend_open(void) {
       }
       RuntimeExpectedCommandVersion=0;
       deviceFunctions.pfnVsSetShader(device,vsh);
+    }
+    {
+      /* D3D10 dynamic append contract: submit one range, append another with
+       * NOOVERWRITE while the first draw is pending, then wrap with DISCARD. */
+      D3D10DDI_MIPINFO appendMip={240016,1,1,240016,1,1};
+      D3D10DDIARG_CREATERESOURCE appendCreate={0};
+      appendCreate.pMipInfoList=&appendMip;
+      appendCreate.ResourceDimension=D3D10DDIRESOURCE_BUFFER;
+      appendCreate.Usage=D3D10_DDI_USAGE_DYNAMIC;
+      appendCreate.BindFlags=D3D10_DDI_BIND_VERTEX_BUFFER;
+      appendCreate.MapFlags=D3D10_DDI_CPU_ACCESS_WRITE;
+      appendCreate.Format=DXGI_FORMAT_UNKNOWN;appendCreate.SampleDesc.Count=1;
+      appendCreate.MipLevels=appendCreate.ArraySize=1;
+      D3D10DDI_HRESOURCE append={0};
+      D3D10DDI_HRTRESOURCE appendRuntime={(VOID *)(UINT_PTR)0xef80u};
+      append.pDrvPrivate=calloc(1,
+          deviceFunctions.pfnCalcPrivateResourceSize(device,&appendCreate));
+      unsigned appendErrors=FrontendErrors;
+      deviceFunctions.pfnCreateResource(device,&appendCreate,append,appendRuntime);
+      CHECK(FrontendErrors==appendErrors && append.pDrvPrivate);
+      D3D10DDI_MAPPED_SUBRESOURCE appendMap={0};
+      deviceFunctions.pfnDynamicIABufferMapDiscard(device,append,0,
+          D3D10_DDI_MAP_WRITE_DISCARD,0,&appendMap);
+      CHECK(FrontendErrors==appendErrors && appendMap.pData);
+      if(appendMap.pData) {
+        memcpy((BYTE *)appendMap.pData,vertices,sizeof(vertices));
+        memcpy((BYTE *)appendMap.pData+sizeof(vertices),vertices,sizeof(vertices));
+      }
+      deviceFunctions.pfnDynamicIABufferUnmap(device,append,0);
+      UINT appendStride=16,appendOffset=0;
+      deviceFunctions.pfnIaSetVertexBuffers(device,0,1,&append,
+          &appendStride,&appendOffset);
+      ADMISSION_UMD_ASAHI_OWNER *appendOwner=MesaD3d10FrontendOwnerForTest(device);
+      RuntimeActiveDevice=MesaD3d10FrontendRuntimeForTest(device);
+      RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;
+      RuntimeQueryMarkerCount=RuntimeConsumerGates=RuntimeConsumerRetirements=0;
+      RuntimeConsumerFence=0;memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+      memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+      RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
+      deviceFunctions.pfnDraw(device,3,0);deviceFunctions.pfnFlush(device);
+      CHECK(FrontendErrors==appendErrors && RuntimeRenders==1u && RuntimeMarker);
+      memset(&appendMap,0,sizeof(appendMap));
+      deviceFunctions.pfnDynamicIABufferMapNoOverwrite(device,append,0,
+          D3D10_DDI_MAP_WRITE_NOOVERWRITE,0,&appendMap);
+      CHECK(FrontendErrors==appendErrors && appendMap.pData &&
+            RuntimeConsumerRetirements==0u);
+      if(appendMap.pData)
+        memcpy((BYTE *)appendMap.pData+sizeof(vertices),vertices,sizeof(vertices));
+      deviceFunctions.pfnDynamicIABufferUnmap(device,append,0);
+      RuntimeCheckpoint(appendOwner,1u);
+      CHECK(AgxWin32AsahiContextRetire(
+          MesaD3d10FrontendContextForTest(device),0u));
+      RuntimeCheckpoint(appendOwner,5u);
+      appendOffset=sizeof(vertices);
+      deviceFunctions.pfnIaSetVertexBuffers(device,0,1,&append,
+          &appendStride,&appendOffset);
+      RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;
+      RuntimeQueryMarkerCount=RuntimeConsumerGates=RuntimeConsumerRetirements=0;
+      RuntimeConsumerFence=0;memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+      memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+      deviceFunctions.pfnDraw(device,3,0);deviceFunctions.pfnFlush(device);
+      CHECK(FrontendErrors==appendErrors && RuntimeRenders==1u && RuntimeMarker);
+      RuntimeCheckpoint(appendOwner,1u);
+      CHECK(AgxWin32AsahiContextRetire(
+          MesaD3d10FrontendContextForTest(device),0u));
+      RuntimeCheckpoint(appendOwner,5u);
+      memset(&appendMap,0,sizeof(appendMap));
+      deviceFunctions.pfnDynamicIABufferMapDiscard(device,append,0,
+          D3D10_DDI_MAP_WRITE_DISCARD,0,&appendMap);
+      CHECK(FrontendErrors==appendErrors && appendMap.pData);
+      if(appendMap.pData) memcpy(appendMap.pData,vertices,sizeof(vertices));
+      deviceFunctions.pfnDynamicIABufferUnmap(device,append,0);
+      appendOffset=0;
+      deviceFunctions.pfnIaSetVertexBuffers(device,0,1,&append,
+          &appendStride,&appendOffset);
+      RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;
+      RuntimeQueryMarkerCount=RuntimeConsumerGates=RuntimeConsumerRetirements=0;
+      RuntimeConsumerFence=0;memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+      memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+      deviceFunctions.pfnDraw(device,3,0);deviceFunctions.pfnFlush(device);
+      CHECK(FrontendErrors==appendErrors && RuntimeRenders==1u && RuntimeMarker);
+      RuntimeCheckpoint(appendOwner,1u);
+      CHECK(AgxWin32AsahiContextRetire(
+          MesaD3d10FrontendContextForTest(device),0u));
+      RuntimeCheckpoint(appendOwner,5u);
+      RuntimeExpectedCommandVersion=0;
+      appendOffset=0;
+      deviceFunctions.pfnIaSetVertexBuffers(device,0,1,&append,
+          &appendStride,&appendOffset);
+      /* DirectX semantics: non-indexed SV_VertexID includes StartVertex;
+       * indexed SV_VertexID excludes BaseVertexLocation. Exercise both real
+       * draw paths with the combined system-value/indexable-TEMP shader. */
+      deviceFunctions.pfnVsSetShader(device,indexableVsh);
+      RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
+      RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;
+      RuntimeQueryMarkerCount=RuntimeConsumerGates=RuntimeConsumerRetirements=0;
+      RuntimeConsumerFence=0;memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+      memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+      deviceFunctions.pfnDraw(device,3,5);
+      deviceFunctions.pfnFlush(device);
+      CHECK(FrontendErrors==appendErrors && RuntimeRenders==1u && RuntimeMarker);
+      RuntimeCheckpoint(appendOwner,1u);
+      CHECK(AgxWin32AsahiContextRetire(
+          MesaD3d10FrontendContextForTest(device),0u));
+      RuntimeCheckpoint(appendOwner,5u);
+      deviceFunctions.pfnIaSetIndexBuffer(device,ib,DXGI_FORMAT_R16_UINT,0);
+      RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;
+      RuntimeQueryMarkerCount=RuntimeConsumerGates=RuntimeConsumerRetirements=0;
+      RuntimeConsumerFence=0;memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+      memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+      deviceFunctions.pfnDrawIndexed(device,3,1,7);
+      deviceFunctions.pfnFlush(device);
+      CHECK(FrontendErrors==appendErrors && RuntimeRenders==1u && RuntimeMarker);
+      RuntimeCheckpoint(appendOwner,1u);
+      CHECK(AgxWin32AsahiContextRetire(
+          MesaD3d10FrontendContextForTest(device),0u));
+      RuntimeCheckpoint(appendOwner,5u);
+      RuntimeExpectedCommandVersion=0;
+      deviceFunctions.pfnVsSetShader(device,vsh);
+      deviceFunctions.pfnIaSetVertexBuffers(device,0,1,&vb,&stride,&offset);
+      deviceFunctions.pfnDestroyResource(device,append);free(append.pDrvPrivate);
     }
     {
       unsigned depthErrors=FrontendErrors;
@@ -4020,15 +4203,11 @@ static void test_mesa_d3d10_frontend_open(void) {
       RuntimeExpectedCommandVersion=0;
       unsigned indexedErrors=FrontendErrors;
       deviceFunctions.pfnIaSetIndexBuffer(device,ib,DXGI_FORMAT_R32_UINT,0);
-      CHECK(FrontendErrors==++indexedErrors && FrontendLastError==E_NOTIMPL);
+      CHECK(FrontendErrors==indexedErrors);
       deviceFunctions.pfnIaSetIndexBuffer(device,ib,DXGI_FORMAT_R16_UINT,2);
-      CHECK(FrontendErrors==++indexedErrors && FrontendLastError==E_NOTIMPL);
+      CHECK(FrontendErrors==indexedErrors);
       deviceFunctions.pfnIaSetIndexBuffer(device,ib,DXGI_FORMAT_R16_UINT,0);
       deviceFunctions.pfnDrawIndexed(device,4,0,0);
-      CHECK(FrontendErrors==++indexedErrors && FrontendLastError==E_NOTIMPL);
-      deviceFunctions.pfnDrawIndexed(device,3,1,0);
-      CHECK(FrontendErrors==++indexedErrors && FrontendLastError==E_NOTIMPL);
-      deviceFunctions.pfnDrawIndexed(device,3,0,-1);
       CHECK(FrontendErrors==++indexedErrors && FrontendLastError==E_NOTIMPL);
       deviceFunctions.pfnDrawIndexedInstanced(device,3,1,0,0,0);
       CHECK(AgxWin32AsahiContextDrawReceipt(
@@ -4421,7 +4600,9 @@ static void test_mesa_d3d10_frontend_open(void) {
       D3D10DDI_HRESOURCE resolveResource={0};D3D10DDI_HRTRESOURCE resolveRuntime={0};
       resolveCreate.pMipInfoList=&resolveMip;
       resolveCreate.ResourceDimension=D3D10DDIRESOURCE_BUFFER;
-      resolveCreate.Usage=D3D10_DDI_USAGE_STAGING;resolveCreate.SampleDesc.Count=1;
+      resolveCreate.Usage=D3D10_DDI_USAGE_STAGING;
+      resolveCreate.MapFlags=D3D10_DDI_CPU_ACCESS_READ;
+      resolveCreate.SampleDesc.Count=1;
       resolveCreate.MipLevels=resolveCreate.ArraySize=1;
       resolveResource.pDrvPrivate=calloc(1,
           secondFunctions.pfnCalcPrivateResourceSize(secondDevice,&resolveCreate));

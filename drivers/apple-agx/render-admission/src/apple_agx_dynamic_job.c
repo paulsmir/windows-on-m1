@@ -369,41 +369,43 @@ APPLE_AGX_DYNAMIC_JOB_RESULT AppleAgxDynamicJobMaterialize(
                 (AppleAgxWin32AccessRead|AppleAgxWin32AccessWrite) :
                 AppleAgxWin32AccessRead) ||
          (View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
-          (target->Offset != 0ULL || target->Bytes != 8ULL ||
-           relocation->TargetOffset != 0ULL)) ||
+          (target->Bytes < 2ULL || relocation->TargetOffset != 0ULL)) ||
          (View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH &&
           (relocation->TargetOffset > target->Bytes ||
            16ULL > target->Bytes-relocation->TargetOffset)) ||
          dynamic_object(Job,relocation->TargetReference) == DYNAMIC_NULL ||
-         (View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
-          (dynamic_object(Job,relocation->TargetReference)->Bytes != 8u ||
-           dynamic_read_le(storage +
-             dynamic_object(Job,relocation->TargetReference)->StorageOffset,
-             8u) != 0x0000000200010000ULL)) ||
          (relocation->DestinationOffset & 3ULL) != 0ULL ||
          relocation->DestinationOffset > destination->Bytes ||
          24u > destination->Bytes - relocation->DestinationOffset ||
-         (dynamic_read_le(storage + destination->StorageOffset +
-                              (APPLE_AGX_U32)relocation->DestinationOffset,
-                          4u) & 0xffffff00ULL) !=
-             (View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH ?
-                0x61f50900ULL : 0x61f20600ULL) ||
-         dynamic_read_le(storage + destination->StorageOffset +
-                             (APPLE_AGX_U32)relocation->DestinationOffset + 8u,
-                         4u) !=
-             (View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH ?
-                4ULL : 3ULL) ||
          dynamic_read_le(storage + destination->StorageOffset +
                              (APPLE_AGX_U32)relocation->DestinationOffset + 12u,
                          4u) != 1ULL ||
-         dynamic_read_le(storage + destination->StorageOffset +
-                             (APPLE_AGX_U32)relocation->DestinationOffset + 16u,
-                         4u) != 0ULL ||
-         dynamic_read_le(storage + destination->StorageOffset +
-                             (APPLE_AGX_U32)relocation->DestinationOffset + 20u,
-                         4u) !=
-             (View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH ?
-                0x10000ULL : 2ULL)))
+         (View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH ?
+           ((dynamic_read_le(storage + destination->StorageOffset +
+                                (APPLE_AGX_U32)relocation->DestinationOffset,4u) &
+                 0xffffff00ULL) != 0x61f50900ULL ||
+            dynamic_read_le(storage + destination->StorageOffset +
+                                (APPLE_AGX_U32)relocation->DestinationOffset+8u,4u) != 4ULL ||
+            dynamic_read_le(storage + destination->StorageOffset +
+                                (APPLE_AGX_U32)relocation->DestinationOffset+20u,4u) != 0x10000ULL) :
+           !(((dynamic_read_le(storage + destination->StorageOffset +
+                                  (APPLE_AGX_U32)relocation->DestinationOffset,4u) &
+                    0xffffff00ULL) == 0x61f20600ULL &&
+               dynamic_read_le(storage + destination->StorageOffset +
+                                  (APPLE_AGX_U32)relocation->DestinationOffset+8u,4u) == 3ULL &&
+               dynamic_read_le(storage + destination->StorageOffset +
+                                  (APPLE_AGX_U32)relocation->DestinationOffset+20u,4u) == 2ULL &&
+               (target->Offset % 2ULL) == 0ULL &&
+               (target->Bytes % 2ULL) == 0ULL) ||
+              ((dynamic_read_le(storage + destination->StorageOffset +
+                                  (APPLE_AGX_U32)relocation->DestinationOffset,4u) &
+                    0xffffff00ULL) == 0x61f50900ULL &&
+               dynamic_read_le(storage + destination->StorageOffset +
+                                  (APPLE_AGX_U32)relocation->DestinationOffset+8u,4u) == 4ULL &&
+               dynamic_read_le(storage + destination->StorageOffset +
+                                  (APPLE_AGX_U32)relocation->DestinationOffset+20u,4u) == 4ULL &&
+               (target->Offset % 4ULL) == 0ULL &&
+               (target->Bytes % 4ULL) == 0ULL)))))
       return dynamic_fail(AppleAgxDynamicJobRelocation, Storage, storageBytes,
                           Job);
     if (target->Offset > targetFact->Bytes ||
