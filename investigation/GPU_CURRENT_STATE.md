@@ -69,6 +69,13 @@ R25 rollback is now offline verified: speculative unconditional NO_SCANOUT
 success and its active test removed; argument-bearing `reject-primary` remains.
 Full x64 frontend/native-runtime suite exit0 and pinned-WDK ARM64 UMD link
 exit0. The historical a85d1d3e offline proof is superseded, not deleted.
+The observed DISCARD_ON_PRESENT branch is now PASS_OFFLINE: pinned-WDK/Microsoft
+misc flag contract, unchanged existing frontend RTV/Blt/retirement fixture with
+Misc0x8, negative cases, final identical-source x64 RED exit8 / GREEN exit0,
+ARM64 UMD compile/link PASS. Evidence `.local/experiments/EXP762-discard-present/
+offline/manifest.json` SHA256
+`01e0cc163628e1b158953863a734b4c61db93500c18b7ce3aa80fe057b3d62f5`.
+No KMD/m1n1/Mu source or hardware changed in this offline gate.
 OpenGL and CS1.6 follow accelerated desktop acceptance.
 
 ## Proven hardware boundary — EXP753/package748
@@ -267,11 +274,10 @@ HARDWARE ROADMAP
 [PASS] Resource.cpp:452-453 buffer usage, typed SRV load/capture relocation,
        DynamicResourceMapDiscard and argument-bearing rejection pass offline.
 [NEXT] EXP761 measured DISCARD_ON_PRESENT with pPrimaryDesc NULL at the UMD
-CreateResource rejection. Supersede the unsupported non-optional NO_SCANOUT
-success path, implement the documented discard flag admission with meaningful
-RED/GREEN and preserve an argument-bearing rejection. Package/preregister one
-new exact client discriminator only after offline/source/build/sign/hash gates;
-clean its package before another trial.
+CreateResource rejection. The non-optional NO_SCANOUT success path was
+superseded and documented DISCARD flag admission passes offline. Package and
+preregister one exact profile0 client discriminator after final source/build/
+sign/hash gates; clean its package before another trial.
 The 16KiB physical slab trial then requires a measurable VidMm
 placement signal before preregistration; GpuMmu caps remain zero. B1 requires a genuine
 paging/app process caller and firmware job tied to a v5 lease; an MMIO echo is

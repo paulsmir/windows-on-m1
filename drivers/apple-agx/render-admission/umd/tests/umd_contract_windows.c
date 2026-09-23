@@ -1685,6 +1685,7 @@ static void test_mesa_d3d10_frontend_open(void) {
       desc.Usage=D3D10_DDI_USAGE_DEFAULT;
       desc.BindFlags=D3D10_DDI_BIND_PRESENT|D3D10_DDI_BIND_RENDER_TARGET;
       desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+      desc.MiscFlags=D3D10_DDI_RESOURCE_MISC_DISCARD_ON_PRESENT;
       desc.SampleDesc.Count=1;desc.MipLevels=1;desc.ArraySize=1;
       runtime.handle=(VOID *)(UINT_PTR)0x778u;
       rgba.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateResourceSize(device,&desc));
@@ -5259,6 +5260,30 @@ unsigned AgxKmtNativeBridgeResidencyContractTest(void);
 unsigned AgxKmtNativeBridgeCommandDumpContractTest(void);
 unsigned AgxKmtNativeQualificationFreshnessContractTest(void);
 #endif
+static void test_discard_present_flags(void) {
+  D3D11DDIARG_CREATERESOURCE create={0};
+  D3D10DDI_MIPINFO mip={0};
+  ADMISSION_UMD_DIRECT_FLIP_RESOURCE description={0};
+  mip.TexelWidth=2560u;mip.TexelHeight=1600u;mip.TexelDepth=1u;
+  create.pMipInfoList=&mip;
+  create.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+  create.Usage=D3D10_DDI_USAGE_DEFAULT;
+  create.BindFlags=D3D10_DDI_BIND_PRESENT|D3D10_DDI_BIND_RENDER_TARGET;
+  create.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+  create.SampleDesc.Count=1u;create.MipLevels=1u;create.ArraySize=1u;
+  create.MiscFlags=D3D10_DDI_RESOURCE_MISC_DISCARD_ON_PRESENT;
+  CHECK(AdmissionUmdDescribePrimary(&create,&description) &&
+        description.Displayable==0u &&
+        description.Allocation.Format==(UINT)D3DDDIFMT_A8B8G8R8);
+  create.BindFlags=D3D10_DDI_BIND_RENDER_TARGET;
+  CHECK(!AdmissionUmdDescribePrimary(&create,&description));
+  create.BindFlags=D3D10_DDI_BIND_PRESENT|D3D10_DDI_BIND_RENDER_TARGET;
+  create.MiscFlags=D3D10_DDI_RESOURCE_MISC_DISCARD_ON_PRESENT |
+      D3D11_DDI_RESOURCE_MISC_DRAWINDIRECT_ARGS;
+  CHECK(!AdmissionUmdDescribePrimary(&create,&description));
+  create.MiscFlags=D3D10_DDI_RESOURCE_AUTO_GEN_MIP_MAP;
+  CHECK(!AdmissionUmdDescribePrimary(&create,&description));
+}
 int main(void) {
   D3DDDI_ADAPTERCALLBACKS adapterCallbacks;
   D3D10_2DDI_ADAPTERFUNCS adapterFunctions;
@@ -5780,6 +5805,7 @@ int main(void) {
 #if defined(ADMISSION_UMD_D3D10_FRONTEND_TEST)
   test_mesa_d3d10_frontend_open();
 #endif
+  test_discard_present_flags();
 #if defined(ADMISSION_UMD_NATIVE_RUNTIME_TEST)
   State.Failures += AgxKmtNativeBridgeResidencyContractTest();
   State.Failures += AgxKmtNativeBridgeCommandDumpContractTest();

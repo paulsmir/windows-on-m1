@@ -117,6 +117,10 @@ static ADMISSION_UMD_RESOURCE *AdmissionUmdResourceFromDxgi(
 static BOOLEAN AdmissionUmdDescribePrimary(
     const D3D11DDIARG_CREATERESOURCE *CreateResource,
     ADMISSION_UMD_DIRECT_FLIP_RESOURCE *Description) {
+  /* Discard-on-present relaxes content preservation; the existing backbuffer
+   * lifetime and Blt path remain valid without a separate storage action. */
+  const UINT allowedMiscFlags = D3D10_DDI_RESOURCE_MISC_SHARED |
+      D3D10_DDI_RESOURCE_MISC_DISCARD_ON_PRESENT;
   if (CreateResource == NULL || Description == NULL ||
       CreateResource->pMipInfoList == NULL ||
       CreateResource->ResourceDimension != D3D10DDIRESOURCE_TEXTURE2D ||
@@ -134,7 +138,10 @@ static BOOLEAN AdmissionUmdDescribePrimary(
        (CreateResource->pMipInfoList[0].TexelWidth != 2560u ||
         CreateResource->pMipInfoList[0].TexelHeight != 1600u)) ||
       CreateResource->Usage != D3D10_DDI_USAGE_DEFAULT || CreateResource->MapFlags ||
-      (CreateResource->MiscFlags & ~D3D10_DDI_RESOURCE_MISC_SHARED) ||
+      (CreateResource->MiscFlags & ~allowedMiscFlags) ||
+      ((CreateResource->MiscFlags &
+        D3D10_DDI_RESOURCE_MISC_DISCARD_ON_PRESENT) != 0u &&
+       (CreateResource->BindFlags & D3D10_DDI_BIND_PRESENT) == 0u) ||
       (CreateResource->BindFlags & ~(D3D10_DDI_BIND_RENDER_TARGET |
           D3D10_DDI_BIND_SHADER_RESOURCE | D3D10_DDI_BIND_PRESENT)) ||
       CreateResource->MipLevels != 1u || CreateResource->ArraySize != 1u ||

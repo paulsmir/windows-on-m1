@@ -142,3 +142,37 @@ RGBA behavior is restored until proxy/rotation or real RGBA scanout has a
 coherent contract. The historical a85d1d3e test evidence is preserved as a
 superseded design probe. Existing full x64 frontend/native runtime tests pass;
 ARM64 UMD compiles and links. No hardware run used this rollback alone.
+
+## DISCARD_ON_PRESENT offline gate after EXP761
+
+Pinned WDK26100 `um/d3d10umddi.h` SHA256
+`61899403d94840fab282dbb7da6faf234e2954bbdb47e3455f0f0572eb4e723a`
+and Microsoft's [CreateResource DDI](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3d10umddi/nc-d3d10umddi-pfnd3d10ddi_createresource)
+state that DXGI sets `D3D10_DDI_RESOURCE_MISC_DISCARD_ON_PRESENT` (0x8) for
+discard swapchain backbuffers; the contents need not persist after Present.
+The exact EXP761 input had BIND_PRESENT, RGBA, pPrimaryDesc NULL and this one
+flag. `AdmissionUmdDescribePrimary` previously allowed only SHARED in
+MiscFlags, so it rejected a legal runtime call before any KMD/AGX operation.
+
+The correction permits SHARED|DISCARD in the UMD presentation branch and
+requires BIND_PRESENT whenever DISCARD is set. It rejects unknown bits,
+DISCARD without PRESENT and AUTO_GEN in this presentation branch. No new
+storage/zero/rename behavior is promised: the flag removes a preservation
+obligation. The separate frontend producer's buffer/private RT/depth
+`MiscFlags==0` checks remain scoped to their own non-presentation paths;
+BIND_PRESENT dispatches to `wantsPresentation` first. Existing SHARED and
+GenMips paths need their own complete lifetime/DDI proof before broadening.
+Windows UMD owns this admission; Asahi's RGBA import/Blt producer and the
+KMD, m1n1, Mu, interrupts, DMA and power contracts are unchanged.
+
+Meaningful offline checkpoint: the existing real frontend RGBA presentation
+resource fixture now carries the observed DISCARD flag and continues through
+RTV/Blt/retirement; direct negative tests reject DISCARD without PRESENT and
+unknown/AUTO_GEN bits. Final identical test source against old UMD exits8,
+first CHECK_FAIL line1696; corrected UMD exits0 with the full x64 native
+frontend/runtime suite. ARM64 UMD compiles/links with pinned WDK. Evidence
+manifest `.local/experiments/EXP762-discard-present/offline/manifest.json`
+SHA256 `01e0cc163628e1b158953863a734b4c61db93500c18b7ce3aa80fe057b3d62f5`.
+This is not yet a hardware CreateSwapChain/Present verdict. One exact profile0
+client run with unchanged KMD/SYS/INF and a changed UMD is the smallest next
+discriminator; evidence-first rollback returns the GPU-visible Code28 guest.
