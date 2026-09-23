@@ -977,6 +977,7 @@ _Use_decl_annotations_ void AdmissionRecordMemoryStop(
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
 _Use_decl_annotations_ void AdmissionRecordB1Qualification(
     ADMISSION_CONTEXT *Context, ULONG Stage, NTSTATUS Status,
+    ULONG Precheck, ULONG ProbeStatus, ULONGLONG ProbeEpoch,
     ULONG CompletedJobs, ULONG BrokerStatus, ULONG CleanupStatus,
     ULONG OutputPixelA, ULONG OutputPixelB) {
   HANDLE key = NULL;
@@ -987,6 +988,9 @@ _Use_decl_annotations_ void AdmissionRecordB1Qualification(
     return;
   WriteDword(key, L"Wom1B1Stage", Stage);
   WriteDword(key, L"Wom1B1Status", (ULONG)Status);
+  WriteDword(key, L"Wom1B1Precheck", Precheck);
+  WriteDword(key, L"Wom1B1ProbeStatus", ProbeStatus);
+  WriteQword(key, L"Wom1B1ProbeEpoch", ProbeEpoch);
   WriteDword(key, L"Wom1B1CompletedJobs", CompletedJobs);
   WriteDword(key, L"Wom1B1BrokerStatus", BrokerStatus);
   WriteDword(key, L"Wom1B1CleanupStatus", CleanupStatus);

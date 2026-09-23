@@ -71,7 +71,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
   if (!AdmissionB1Armed(context)) {
     AdmissionRecordB1Qualification(
-        context, 0u, STATUS_NOT_SUPPORTED, 0u, 0u, 0u, 0u, 0u);
+        context, 0u, STATUS_NOT_SUPPORTED, 0u, 0u, 0ULL,
+        0u, 0u, 0u, 0u, 0u);
     AdmissionRecordStartStage(context, AdmissionStartEntered,
                               STATUS_NOT_SUPPORTED);
     return STATUS_NOT_SUPPORTED;

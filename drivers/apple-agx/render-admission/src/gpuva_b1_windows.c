@@ -20,6 +20,8 @@ typedef struct _ADMISSION_B1_STATE {
   BOOLEAN JobInFlight;
   BOOLEAN Uncertain;
   ULONG Stage, CompletedJobs, BrokerStatus;
+  ULONG Precheck, ProbeStatus;
+  ULONGLONG ProbeEpoch;
 } ADMISSION_B1_STATE;
 
 /* Implemented by the platform runtime using real TA and 3D queues. */
@@ -169,16 +171,38 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaB1Qualify(
     return STATUS_INSUFFICIENT_RESOURCES;
   RtlZeroMemory(state, sizeof(*state));
   context->GpuvaB1State = state;
-  if (!NT_SUCCESS(AdmissionMemoryRuntimeBorrowIo(context, &state->Io)) ||
-      !NT_SUCCESS(AdmissionMemoryRuntimeBackendView(context, &backend)) ||
-      backend.GuestIpaAddress == 0ULL ||
-      (backend.GuestIpaAddress & (B1_OUTPUT_BYTES - 1u)) ||
-      !AdmissionGpuvaV5ClientOpen(context, &state->Client))
+  state->Precheck = 1u;
+  status = AdmissionMemoryRuntimeBorrowIo(context, &state->Io);
+  if (!NT_SUCCESS(status))
     goto Done;
+  state->Precheck = 2u;
+  status = AdmissionMemoryRuntimeBackendView(context, &backend);
+  if (!NT_SUCCESS(status))
+    goto Done;
+  state->Precheck = 3u;
+  if (backend.GuestIpaAddress == 0ULL ||
+      (backend.GuestIpaAddress & (B1_OUTPUT_BYTES - 1u))) {
+    status = STATUS_INVALID_ADDRESS;
+    goto Done;
+  }
+  state->Precheck = 4u;
+  if (!AdmissionGpuvaV5ClientOpen(context, &state->Client)) {
+    status = STATUS_INVALID_DEVICE_STATE;
+    goto Done;
+  }
+  state->Precheck = 5u;
   probe.Command = AGX_GPUVA_V5_CREATE;
-  if (!AppleAgxGpuvaV5ClientCall(&state->Client, &probe, &response) ||
-      response.Status != 2u || response.Epoch == 0ULL)
+  if (!AppleAgxGpuvaV5ClientCall(&state->Client, &probe, &response)) {
+    status = STATUS_DEVICE_HARDWARE_ERROR;
     goto Done;
+  }
+  state->ProbeStatus = response.Status;
+  state->ProbeEpoch = response.Epoch;
+  state->Precheck = 6u;
+  if (response.Status != 2u || response.Epoch == 0ULL) {
+    status = STATUS_INVALID_DEVICE_STATE;
+    goto Done;
+  }
   state->Stage = 1u;
   for (owner = 0u; owner < 2u; ++owner)
     for (page = 0u; page < B1_OWNED_PAGES; ++page) {
@@ -249,6 +273,7 @@ Done:
     BOOLEAN cleaned = AdmissionB1Cleanup(state);
     AdmissionRecordB1Qualification(
         context, state->Stage, cleaned ? status : STATUS_DEVICE_BUSY,
+        state->Precheck, state->ProbeStatus, state->ProbeEpoch,
         state->CompletedJobs, state->BrokerStatus,
         cleaned ? 0u : 1u, pixelA, pixelB);
     if (!cleaned)
