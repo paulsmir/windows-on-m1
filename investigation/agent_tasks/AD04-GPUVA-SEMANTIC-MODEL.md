@@ -17,13 +17,14 @@ uses the generated input domain: 4-KiB system memory, eviction and protection
 transitions remain a production gate. In particular, 64-KiB local allocation
 alignment alone does not establish a universal 16-KiB mapping contract.
 
-The three candidate table descriptors mirror native Asahi address geometry
-(3/11/11 index bits, 16-KiB tables and alignment, nonzero local segment ID for
-both ordinary and paging-process tables). This is a **native geometry
-projection**, not a validated `DXGK_PAGE_TABLE_LEVEL_DESC` response. Microsoft
-defines index bits using 4-KiB logical entries, so the exact leaf descriptor
-versus native 16-KiB compression needs a pinned-WDK/runtime proof before any
-KMD advertisement. Bootstrap still uses immediate CPU table initialization in
+The three candidate WDDM descriptors use 3/11/13 logical index bits, 16-KiB
+tables/alignment and nonzero local segment IDs; the leaf's 13 logical bits
+cover four 4-KiB entries per native 16-KiB AGX leaf. Native Asahi geometry
+remains 3/11/11/14. This logical projection is **not** a validated
+`DXGK_PAGE_TABLE_LEVEL_DESC` response: Microsoft describes 2^13 logical leaf
+entries while the native table stores only 2048 physical descriptors. Exact
+runtime acceptance and partial-update ordering need pinned-WDK/runtime proof
+before KMD advertisement. Bootstrap still uses immediate CPU initialization in
 the finite system process, independent of a paging job or render slot.
 
 Primary sources rechecked: pinned WDK 26100 `d3dkmddi.h` SHA256

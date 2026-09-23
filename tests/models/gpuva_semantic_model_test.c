@@ -206,7 +206,7 @@ static void segment_geometry_and_atomic_boundaries(void) {
     CHECK(gm_choose_caps(m,size)==GM_OK);
     CHECK(m->caps.segment_page==size);
     gm_level_desc desc[3]; CHECK(gm_table_levels(m,desc)==GM_OK);
-    CHECK(desc[0].index_bits==3 && desc[1].index_bits==11 && desc[2].index_bits==11);
+    CHECK(desc[0].index_bits==3 && desc[1].index_bits==11 && desc[2].index_bits==13);
     for(unsigned l=0;l<3;++l) {
       CHECK(desc[l].segment_id==GM_LOCAL_SEGMENT_ID);
       CHECK(desc[l].paging_segment_id==GM_LOCAL_SEGMENT_ID);

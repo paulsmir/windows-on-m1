@@ -46,9 +46,10 @@ enum gm_result gm_choose_caps(gm_model *m, uint64_t page) {
 }
 enum gm_result gm_table_levels(const gm_model *m, gm_level_desc out[3]) {
   if(!m || !out || m->caps.local_segment_id==0) return GM_RANGE;
-  /* Native 39-bit VA = 3 + 11 + 11 + 14. All actual UAT tables are 16 KiB
-   * in a VidMm-owned local segment; system segment 0 cannot hold them. */
-  const unsigned bits[3]={3,11,11};
+  /* Candidate WDDM logical 39-bit VA = 3 + 11 + 13 + 12. Four logical
+   * 4-KiB leaf entries compress to one native AGX 16-KiB entry, whose
+   * physical geometry is 3 + 11 + 11 + 14. Runtime acceptance is unproved. */
+  const unsigned bits[3]={3,11,13};
   for(unsigned i=0;i<3;++i)
     out[i]=(gm_level_desc){bits[i],m->caps.local_segment_id,
                            m->caps.local_segment_id,(unsigned)GM_PAGE,(unsigned)GM_PAGE};

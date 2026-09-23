@@ -70,6 +70,7 @@ operator's explicit permission is required before the run.
 
 Microsoft describes VidMm's page-table indices as 4-KiB logical entries,
 whereas native AGX's three tables index 16-KiB leaves. The G1 descriptor
-projection (3/11/11, 16-KiB local tables) is a candidate, not a proven
+projection (3/11/13 logical bits compressed into native 3/11/11, 16-KiB local
+tables) is a candidate, not a proven
 `PAGETABLELEVELDESC` response. Resolve index/coverage and partial-table update
 semantics in the pinned DDI before advertising GpuMmu or running G1b.
