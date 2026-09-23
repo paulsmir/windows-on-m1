@@ -238,7 +238,7 @@ static void test_mesa_d3d10_adapter2_contract(void) {
   D3DDDI_ADAPTERCALLBACKS callbacks={0};
   D3D10_2DDI_ADAPTERFUNCS functions={0};
   UINT32 entries=0;
-  UINT64 version=0;
+  UINT64 versions[2]={0};
   D3D10_2DDIARG_GETCAPS caps={0};
   D3D11DDI_THREADING_CAPS threading={~0u};
   D3D11DDI_3DPIPELINESUPPORT_CAPS pipeline={~0u};
@@ -249,9 +249,10 @@ static void test_mesa_d3d10_adapter2_contract(void) {
   open.pAdapterFuncs_2=&functions;
   CHECK(MesaD3d10OpenAdapter10_2(&open)==S_OK && open.hAdapter.pDrvPrivate);
   CHECK(functions.pfnGetSupportedVersions(open.hAdapter,&entries,NULL)==S_OK &&
-        entries==1u);
-  CHECK(functions.pfnGetSupportedVersions(open.hAdapter,&entries,&version)==S_OK &&
-        entries==1u && version==D3D10_0_DDI_SUPPORTED);
+        entries==2u);
+  CHECK(functions.pfnGetSupportedVersions(open.hAdapter,&entries,versions)==S_OK &&
+        entries==2u && versions[0]==D3D10_0_DDI_SUPPORTED &&
+        versions[1]==D3D10_0_x_DDI_SUPPORTED);
   caps.Type=D3D11DDICAPS_THREADING;caps.pData=&threading;caps.DataSize=sizeof(threading);
   CHECK(functions.pfnGetCaps(open.hAdapter,&caps)==S_OK && threading.Caps==0u);
   caps.DataSize=sizeof(threading)-1u;

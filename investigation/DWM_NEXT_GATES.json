@@ -189,5 +189,14 @@
     "reject-blt = 0; unexpected refusal reopens Blt gate",
     "Physical screen immediately after logon, before Windows key",
     "First reached reject-* and ETW; APPLE_AGX_UMD_REFUSALS_ONLY=1"
-  ]
+  ],
+  "advertisement": {
+    "status": "PASS_OFFLINE",
+    "versions": [
+      "D3D10_0_DDI_SUPPORTED",
+      "D3D10_0_x_DDI_SUPPORTED"
+    ],
+    "evidence": "EXP751-dwm-extended-admission/test-admission.log + test-admission-arm64.log",
+    "source_sha256": "209412e71f64b22752552c5788d88f120d190368b9ce4655829e381f5ecabe67"
+  }
 }

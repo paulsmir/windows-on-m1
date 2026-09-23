@@ -355,6 +355,7 @@ SupportedDDIInterfaceVersions[] = {
 };''','''static const UINT64
 SupportedDDIInterfaceVersions[] = {
    D3D10_0_DDI_SUPPORTED,
+   D3D10_0_x_DDI_SUPPORTED,
 };''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Adapter.cpp','GetCaps','''   Adapter *pAdapter = CastAdapter(hAdapter);
    if (!pAdapter || !pData || !pData->pData)
