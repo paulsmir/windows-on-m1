@@ -134,3 +134,11 @@ success path lacks the non-optional proxy/rotation companion and must be
 superseded, not silently treated as validated. The active fix target is the
 observed DISCARD_ON_PRESENT Usage/Bind contract, with a negative case for
 invalid combinations and all other misc bits reviewed individually.
+
+R25 correction applied offline: the speculative RGBA+nonnull-primary
+NO_SCANOUT success path and its active test were removed. The argument-bearing
+`reject-primary` receipt remains, and the previous fail-closed non-optional
+RGBA behavior is restored until proxy/rotation or real RGBA scanout has a
+coherent contract. The historical a85d1d3e test evidence is preserved as a
+superseded design probe. Existing full x64 frontend/native runtime tests pass;
+ARM64 UMD compiles and links. No hardware run used this rollback alone.

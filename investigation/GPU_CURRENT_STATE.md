@@ -65,6 +65,10 @@ SHA256 `34ca160081a16c2a94bec1b831f321f023565c8cd30bb0d562369ed0b2652e75`.
 Review R25 also identifies a non-optional-primary companion missing from the
 speculative NO_SCANOUT success path; do not retain that path without its full
 DXGI contract. Current target is the source-backed MiscFlags Usage/Bind rule.
+R25 rollback is now offline verified: speculative unconditional NO_SCANOUT
+success and its active test removed; argument-bearing `reject-primary` remains.
+Full x64 frontend/native-runtime suite exit0 and pinned-WDK ARM64 UMD link
+exit0. The historical a85d1d3e offline proof is superseded, not deleted.
 OpenGL and CS1.6 follow accelerated desktop acceptance.
 
 ## Proven hardware boundary — EXP753/package748
