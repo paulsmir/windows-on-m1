@@ -46363,3 +46363,123 @@ Source/limits contract EXP743-bgr-geometry/contract.json. 1024square BGRA combin
 Implementationee605a52490e294d18143786a4c4dc517614feb7. Routedsourcea5b3b87d399053f486e106e545c51a9cb6bf3a7fd70f5646d7a9cd43b4d85440; fullx64suite0/0warnings/errors, EXEa5169ca63e9a5f962311ff2ee2ba040d4c76d05467bd79e74673dabef95b5590. ARM64testcrossbuild0, EXE701475c8dfa535d0c689b3aa4862a9e4d6521811efe13c874bad43645c70a8c9; notexecuted. Nativefrontendarchivesfrom1c93f772df68574cb4f8c6a8f0a50b58ce7d5822e8c8a91172f1146106a98002 unchangedbylaterKMD/fixtureedits (KMDsourcescompileddirectlyintotest). Routed/{result.json,arm64-build.json,test.log,build.log,build-argv.json} andhost-shared-green.log retained. No hardware package orrun.
 
 Causal correction: Microsoft ResourceCopy docs requirematchingdimensions/resourcekind/castableformats; existingprivateResourceCopy path usedfornative sampling tests instead converts/resizes. Thus earliertexturetestPASS is nativegraph proof ONLY, notstandardcopyABI correctness. Mustcorrect before0_xadmission; move samplingproof to actualtexturedD3D shaderDraw. Reference https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3d10umddi/nc-d3d10umddi-pfnd3d10ddi_resourcecopy . Scopepruning: https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/dxgiddi/ns-dxgiddi-dxgi_ddi_base_functions explicitlyexemptsnonidentityrotation ifprimaryCreateResource neverreturnsDXGI_DDI_ERR_UNSUPPORTED (ouractivepathdoesnot); no additionalrotationworkneededforthiscandidate. MSAAresolve notadmitted withquality>1zero. Keep genuinecopycontractgate, notoptionalexpansion.
+
+## EXP751 — DWM extended-format runtime admission, package746
+
+Preregistered UTC: 2026-09-23T03:51:49.948157+00:00. No Air launch has occurred for this experiment.
+The offline package build is already complete; this entry records its actual
+build receipts and preregisters all following Air launch/install/test/recovery phases.
+
+WHY THIS HYPOTHESIS:
+- EXP737 measured DWM flags0xa9 and journal1820 empty DDI intersection; current
+  runtime removes legacy a0001 under BGRA and retains a0006. This places the
+  cause before AGX submission, rather than in firmware queues.
+- EXP748 real builder SOFTWARE runtime selected a0006/version177a; EXP747–750
+  now execute its required Map, BGR dimensions/GenMips/MS-load, DXGI1_1 resolver,
+  and measured independent-device shared paths offline.
+- EXP751 final full x64 suite and ARM64 cross-build pass with both supported
+  versions advertised. Thus testing actual DWM admission is now discriminating.
+
+WINDOWS CONTRACT:
+FULL GRAPHICS physical/patch-list WDDM3.0 KMD with selected FL10_0 / D3D10_0_x
+UMD. Pinned WDK10.0.26100.0 defines minor6/build0 and runtime-selected DXGI1_1
+macro/table. Extended-format-aware BGR companions are implemented before
+advertisement. Real builder runtime9278 differs from Air reference9457; actual
+Air selection is still a measurement. Shared observed API0xA02 translates to
+DDI2, API0x200 toDDI0; runtime/KMT owns NT handles. Primary scanout remains
+separate from shared resource dimensions. General Blt remains deferred under
+unchanged DXGI_STATUS_NO_REDIRECTION.
+
+AGX/ASAHI CONTRACT:
+Use unchanged validated full-owner584/406 firmware/launch contract. Existing
+Asahi native producer, typed capture, immutable request materialization, UMD
+composer/pfnRenderCb, KMD Render/Patch/Submit and ordered retirement remain the
+only path. Shared uses linear one-mip one-sample storage; AIL pitch16 alignment.
+No GPUVA, new allocator/composer, firmware power/IRQ/UAT changes.
+
+TRANSLATION:
+The candidate advertises0_x only after required executable gates. BGR views and
+mips use actual Asahi emission; MS_LOAD supports runtime-admitted sample1 views
+without advertising MSAA RT or quality>1. Shared import reconstructs storage from
+allocation private bytes/handles on B without creator access; sourceA can retire
+before sampledB use. Exact package is built with the existing signer/config.
+
+WHAT IS STILL UNKNOWN:
+Whether Air DWM now selects AppleAgx and which exact subsequent callback/argument
+is its first refusal; whether physical AGX output completes and reaches standard
+DWM Present; whether the immediately-after-logon black screen improves.
+DWM with DirectFlip=TRUE and no CheckDirectFlipSupport: unknown; observe reject-*/ETW.
+TDR retains required ABI but software reset is not firmware quiescence; a timeout
+may bugcheck and requires recovery. Optional KernelModeCommandBuffer decision
+remains a separate future cap correction, not an extra change in this run.
+
+Single experimental variable: replace immutable745 with the extended-format-aware
+0_x candidate746 and its offline-required implementation, with platform and
+firmware unchanged. The verdict concerns the DWM admission boundary, not an
+isolated attribution among later callback implementations. No cap probing.
+ATOMIC CONTRACT: advertising0_x is invalid without the documented BGR companion
+behavior (Microsoft Extended Format Aware Requirements / Details of Extended
+Format); DXGI1_1 callback write is conditional on the pinned Interface/Version
+macro and exact table size. MS_RT stays0, >1 quality stays0. No unrelated KMD cap changes.
+
+Source integration: 0151fa518a7ff9cfeaaa28abad20234dd5585c9a (clean before this preregistration),
+branch integration/ad04-windows-compiler. Archive SHA256 209412e71f64b22752552c5788d88f120d190368b9ce4655829e381f5ecabe67.
+Root/m1n1/Mu commits and tracked/untracked-state digests are frozen in manifest;
+all unchanged reference image hashes are verified against EXP737.
+Manifest: .local/experiments/EXP751-dwm-extended-admission/manifest.json
+SHA256 cd33015521ee3296539ac2796f33f4248894e571c2777f98b733af16a7733a93.
+
+Offline gates: EXP747 Map/busy; EXP748 runtime/table; EXP749 BGR coverage;
+EXP750 shared A->B/private bytes/7sizes/negativecases; EXP751 advertised array;
+full x64 execution0 and ARM64 executable build0. Package KMD/UMD analysis builds
+0warnings/0errors; KMD ApiValidator Universal; Inf2Cat and versions30.0.746.0 PASS;
+exact signer E9BE15BD2A184BFABA0C8035B3C620C58037A241 and catalog membership PASS.
+Builder test-root trust is absent as before; native Air catalog verification with
+the existing pinned certificate is REQUIRED before pnputil /install.
+
+Exact build command: build-package.ps1 invokes existing build-driver.ps1
+-Configuration Release -SubmitQualification -UmdAdmissionTrace -NativeFrontend
+-NativeRuntimeProps C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-arm64-dwm-admission-20260923\NativeRuntime.props
+-PackageBuild746. Build path/argv/log/signatures/hashes are in package-build.
+The EncodedCommand-only empty PSCommandPath manifest error was repaired without
+rebuilding package; original and repair script hashes are retained.
+
+Package .local/experiments/EXP751-dwm-extended-admission/package-build/package:
+- appleagxrenderadmission.cat: 6ad4e9faadc01f5ccd46f82d92268f787402a00b149fbf5303d44d37535f5180
+- AppleAgxRenderAdmission.inf: dab80c6a214248d3af8f0aee58114966f23d005226d2218f9349d7f730369a7f
+- AppleAgxRenderAdmission.sys: eaf4b54787d26611ae41f6857cbfc44f0bf70209ebc27ee905bd1d44c9fe8a5f
+- AppleAgxRenderAdmissionUmd.dll: 8fce710a1481959258fb59e3f0f76753a27c4a0d2b1a70647597cde72086a33f
+
+Execution order (same existing engineering/recovery procedure):
+1. Both control planes checked: SSH5s timeout; proxyL41/vUARTL43 present; no launcher.
+2. bash .local/experiments/EXP751-dwm-extended-admission/ordinary.sh baseline
+   verifies GPU-visible377/392 disk baseline: one inert APPL0002 Code28/nullINF,
+   no AppleAgx package/service/module/SYS/UMD/signer,8CPU,storage/input and events.
+3. Orderly shutdown, confirm launcher exit/proxy. full-owner.sh empty uses584/406
+   with no package. Hash-verify exact candidate and native certificate/catalog,
+   then install.ps1 executes pnputil /add-driver exact INF /install exactly once.
+4. Prepare experiment-only machine trace path and REFUSALS_ONLY=1; temporary
+   authorized autologon; orderly shutdown; full-owner.sh bound. Clear credentials
+   promptly after login. This prescribed installation/reboot sequence is one
+   experiment; no alternate package or repeated qualification client.
+5. Capture physical screen immediately after login BEFORE Windows key. Ask user
+   for observation without treating absence as success. Then Start/AltTab changes
+   recorded separately. trace-dwm.ps1 collects one60s DWM/D3D/DXGI/KernelProcess ETW
+   window and up to2 current WER dumps. No qualification EXE is launched.
+6. collect capture.ps1 receipts, installed/loaded identity evidence, ETW/events,
+   refusal trace and physical observation BEFORE exact-INF/hash-guarded cleanup.ps1.
+   Restore prior trace env; exact package/devnode/residue/signer removal, orderly
+   shutdown, ordinary377/392 recovery, final baseline. Emergency385 only if needed.
+
+Expected checkpoints: DWM selects AppleAgx/0_x or supplies exact first reject-*;
+reject-blt = 0; DirectFlip without CheckDirectFlipSupport unknown. Record all
+reached refusal categories/arguments, physical screen at login and after input,
+not merely the first failure. Success requires evidence, not registered callbacks.
+Failure criteria: same empty intersection, first causal refusal, device loss,
+TDR/bugcheck/hang, or persistent corruption. Missing console or exact package
+identity makes the intended DWM observation inconclusive. No retry without new
+causal evidence/preregistration. GPUVA and optional-feature expansion remain closed.
+
+Evidence root: .local/experiments/EXP751-dwm-extended-admission; remote
+C:\Users\pavel\EXP751-dwm-evidence and C:\Windows\Temp\EXP751-umd-refusals.txt.
+Result: PENDING. This is not a hardware success/readiness claim before target verification.

@@ -144,7 +144,7 @@ Verify on-disk artifacts/tool exits; planning/transfers are not completed work.
 
 HARDWARE ROADMAP
 [PASS] EXP736 standardruntimeCreate/Draw/Present;EXP744-746;EXP747Map;EXP748DXGI1_1;EXP7490_xcoverage.
-[NOW] EXP7510_xadvertisement x64suite0/ARM64build0;source209412e7. BuildARM64package/sign/hash.
-[NEXT] Preregister exactpackage/hypothesis;checkbothcontrolplanes;directlyAir, noinventoryexpansion.
+[NOW] EXP751 preregistered package746:ARM64analysis/Universal/Inf2Cat/signermembership/hashPASS;AirnativeCATcheck pending.
+[NEXT] Ordinarybaseline->fullownerempty->nativeCATverify/install746->boundDWM60s->evidence->exactcleanup.
 [HW] DWM hardwaredeviceadmission/firstDDIfailure;physicaldesktop immediatelyafterlogin.
 POST-HARDWARE: generalBlt deferredbyNO_REDIRECTION;preregister reject-blt=0,reopenonreject;stabledesktoplater.
