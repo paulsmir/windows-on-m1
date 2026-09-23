@@ -1,10 +1,22 @@
 # G1b: pinned WDK 26100 WDDM 3.2 inventory and discriminator
 
-Status: offline design and preregistered question only. No 3.2 caps, package,
-installation, m1n1 change or hardware launch is authorized by this document.
+Status: offline inventory plus a pinned-WDK 26100 **physical-mode** 3.2
+diagnostic profile. The profile selects 16 or 64 KiB in
+`include/gpuva_g1b_profile.h`; both profiles and the unchanged 3.0 profile
+compiled with incremental ARM64 MSBuild. GpuMmu caps remain zero and its
+virtual DDIs remain fail-closed. No package has been installed or launched.
+The physical-mode profile cannot by itself satisfy the authorized B2 GPUVA
+hardware gate; B1 and then G3's coherent GpuMmu contract precede that run.
 Scope is **FULL GRAPHICS**. Pinned source is builder
 `C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\shared\d3dkmddi.h`,
 SHA256 `c13cecb0ce73e7bbdb6bec8586d05eea31932a8c532bec49b3dae4a03054770e`.
+The callback-table authority is also pinned `km/dispmprt.h` 2690-3043:
+WDDM 3.1 adds ten pointer slots and 3.2 adds 21. The ARM64 initialization
+layout grows from 1296 bytes at 3.0 to 1544 bytes at 3.2; the candidate pins
+both sizes with compile-time assertions. Newly exposed callbacks cover native
+fences, doorbells, dirty tracking, live migration, debug info, context priority
+and display reset; the physical-mode trial keeps unsupported feature callbacks
+null and their caps clear.
 Asahi `pgtable.rs` provides 16-KiB native pages and 3/11/11/14 VA geometry;
 `mmu.rs` provides process VM/slot binding. Microsoft GpuMmu and paging DDIs
 remain the Windows contract.
@@ -15,6 +27,11 @@ remain the Windows contract.
 new inputs. Presence in a header is **not** evidence that every feature is
 mandatory. The driver must give a truthful answer to every query it receives
 and keep optional feature bits clear until companion DDIs exist.
+The pinned header calls `MinimumPageSize` and `RecommendedPageSize` **input**
+fields in the `Alignment` union. Writing them from CreateAllocation is a
+deliberate experimental assumption requested by the user, not a documented
+output contract. If admission or placement contradicts it, stop the profile
+and retain the exact input/output receipt before changing any field.
 
 | Surface | WDK 26100 | Required decision for this 16-KiB trial |
 |---|---|---|

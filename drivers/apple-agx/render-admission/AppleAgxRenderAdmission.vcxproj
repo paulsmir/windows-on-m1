@@ -20,10 +20,15 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <Import Project="package-version.props" />
+  <PropertyGroup>
+    <AppleAgxGpuvaG1bPageProfile Condition="'$(AppleAgxGpuvaG1bPageProfile)'==''">0</AppleAgxGpuvaG1bPageProfile>
+    <AppleAgxWddmInterface Condition="'$(AppleAgxGpuvaG1bPageProfile)'=='0'">DXGKDDI_INTERFACE_VERSION_WDDM3_0</AppleAgxWddmInterface>
+    <AppleAgxWddmInterface Condition="'$(AppleAgxGpuvaG1bPageProfile)'=='16' Or '$(AppleAgxGpuvaG1bPageProfile)'=='64'">DXGKDDI_INTERFACE_VERSION_WDDM3_2</AppleAgxWddmInterface>
+  </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
       <AdditionalIncludeDirectories>include;..\shared\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>DXGKDDI_INTERFACE_VERSION=DXGKDDI_INTERFACE_VERSION_WDDM3_0;APPLE_AGX_PLATFORM_EXTERNAL_RENDER_ONLY=1;APPLE_AGX_FULL_CONTEXT0_BROKER=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>DXGKDDI_INTERFACE_VERSION=$(AppleAgxWddmInterface);ADMISSION_GPUVA_G1B_PAGE_PROFILE=$(AppleAgxGpuvaG1bPageProfile);APPLE_AGX_PLATFORM_EXTERNAL_RENDER_ONLY=1;APPLE_AGX_FULL_CONTEXT0_BROKER=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <DisableSpecificWarnings>4127;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <TreatWarningAsError>true</TreatWarningAsError>
     </ClCompile>

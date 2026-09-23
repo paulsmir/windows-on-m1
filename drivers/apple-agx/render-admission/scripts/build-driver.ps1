@@ -12,6 +12,9 @@ param(
     [switch]$VisibleAgxQualification,
     [switch]$UmdAdmissionTrace,
     [switch]$NativeFrontend,
+    [ValidateSet(0,16,64)]
+    [int]$GpuvaG1bPageProfile = 0,
+    [switch]$Incremental,
     [string]$NativeRuntimeProps,
     [string]$MesaSourceRoot = 'C:\Users\pauls\AD04-d3d10-frontend-build\mesa',
     [string]$MesaGeneratedRoot = 'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated',
@@ -72,7 +75,8 @@ $pinnedWdkProperties = @(
     ("/p:UniversalCRT_LibraryPath_arm64={0}Lib/10.0.26100.0/ucrt/arm64" -f $pinnedWindowsSdkDir),
     ("/p:WindowsSDK_LibraryPath_ARM64={0}Lib/10.0.26100.0/um/arm64" -f $pinnedWindowsSdkDir)
 )
-& $msbuild $umdProject /m /t:Clean,Build "/p:Configuration=$Configuration" `
+$buildTarget = if ($Incremental) { '/t:Build' } else { '/t:Clean,Build' }
+& $msbuild $umdProject /m $buildTarget "/p:Configuration=$Configuration" `
     /p:Platform=ARM64 /p:RunCodeAnalysis=true "/p:AppleAgxVersionBuild=$PackageBuild" `
     "/p:AppleAgxUmdAdmissionTrace=$umdAdmissionTraceValue" `
     "/p:EnableNativeFrontend=$nativeFrontendValue" `
@@ -98,7 +102,7 @@ $backendQualificationValue = if ($BackendQualification) { "true" } else { "false
 $submitQualificationValue = if ($SubmitQualification) { "true" } else { "false" }
 $visibleScanoutQualificationValue = if ($VisibleScanoutQualification) { "true" } else { "false" }
 $visibleAgxQualificationValue = if ($VisibleAgxQualification) { "true" } else { "false" }
-& $msbuild $project /m /t:Clean,Build "/p:Configuration=$Configuration" `
+& $msbuild $project /m $buildTarget "/p:Configuration=$Configuration" `
     /p:Platform=ARM64 /p:RunCodeAnalysis=true /p:Inf2CatUseLocalTime=true `
     "/p:AppleAgxMemoryQualification=$memoryQualificationValue" "/p:AppleAgxVersionBuild=$PackageBuild" `
     "/p:AppleAgxManagementQualification=$managementQualificationValue" `
@@ -109,6 +113,7 @@ $visibleAgxQualificationValue = if ($VisibleAgxQualification) { "true" } else { 
     "/p:AppleAgxSubmitQualification=$submitQualificationValue" `
     "/p:AppleAgxVisibleScanoutQualification=$visibleScanoutQualificationValue" `
     "/p:AppleAgxVisibleAgxQualification=$visibleAgxQualificationValue" `
+    "/p:AppleAgxGpuvaG1bPageProfile=$GpuvaG1bPageProfile" `
     @pinnedWdkProperties
 if ($LASTEXITCODE -ne 0) {
     throw "Clean render-admission ARM64 WDK build failed with exit code $LASTEXITCODE"

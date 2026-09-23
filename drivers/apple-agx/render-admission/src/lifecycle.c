@@ -386,7 +386,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
       RtlZeroMemory(caps, sizeof(*caps));
       caps->HighestAcceptableAddress.QuadPart = -1;
       /* WDK 26100: must match DXGK_WDDMDEVICECAPS.WDDMVersion. */
-      caps->WDDMVersion = DXGKDDI_WDDMv3_0;
+      caps->WDDMVersion = ADMISSION_G1B_WDDM_VERSION;
       RtlZeroMemory(&featureInput, sizeof(featureInput));
       featureInput.Version = APPLE_AGX_WDDM_FEATURE_CONTRACT_VERSION;
       featureInput.Size = sizeof(featureInput);
@@ -438,7 +438,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     } else {
       caps = (DXGK_WDDMDEVICECAPS *)QueryAdapterInfo->pOutputData;
       RtlZeroMemory(caps, sizeof(*caps));
-      caps->WDDMVersion = DXGKDDI_WDDMv3_0;
+      caps->WDDMVersion = ADMISSION_G1B_WDDM_VERSION;
       status = STATUS_SUCCESS;
     }
     break;
@@ -447,6 +447,100 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
   case DXGKQAITYPE_QUERYSEGMENT4:
     status = AdmissionDdiQuerySegment4(context, QueryAdapterInfo);
     break;
+
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
+  case DXGKQAITYPE_QUERYPAGINGBUFFERINFO: {
+    const DXGK_QUERYPAGINGBUFFERINFOIN *input;
+    DXGK_QUERYPAGINGBUFFERINFOOUT *output;
+    if (QueryAdapterInfo->pInputData == NULL ||
+        QueryAdapterInfo->InputDataSize < sizeof(*input) ||
+        QueryAdapterInfo->pOutputData == NULL ||
+        QueryAdapterInfo->OutputDataSize < sizeof(*output)) {
+      status = STATUS_INVALID_PARAMETER;
+      break;
+    }
+    input = (const DXGK_QUERYPAGINGBUFFERINFOIN *)QueryAdapterInfo->pInputData;
+    output = (DXGK_QUERYPAGINGBUFFERINFOOUT *)QueryAdapterInfo->pOutputData;
+    if (input->PhysicalAdapterIndex != 0u ||
+        !AdmissionMemoryReady(&context->Memory)) {
+      status = STATUS_INVALID_PARAMETER;
+      break;
+    }
+    output->PagingBufferSize =
+        (UINT32)context->Memory.Topology.PagingBufferSize;
+    output->PagingBufferPrivateDataSize = PAGE_SIZE;
+    status = STATUS_SUCCESS;
+    break;
+  }
+  case DXGKQAITYPE_QUERYSEGMENTCOUNT: {
+    const DXGK_QUERYSEGMENTCOUNTIN *input;
+    DXGK_QUERYSEGMENTCOUNTOUT *output;
+    if (QueryAdapterInfo->pInputData == NULL ||
+        QueryAdapterInfo->InputDataSize < sizeof(*input) ||
+        QueryAdapterInfo->pOutputData == NULL ||
+        QueryAdapterInfo->OutputDataSize < sizeof(*output)) {
+      status = STATUS_INVALID_PARAMETER;
+      break;
+    }
+    input = (const DXGK_QUERYSEGMENTCOUNTIN *)QueryAdapterInfo->pInputData;
+    output = (DXGK_QUERYSEGMENTCOUNTOUT *)QueryAdapterInfo->pOutputData;
+    if (input->PhysicalAdapterIndex != 0u || input->Reserved != 0u ||
+        !AdmissionMemoryReady(&context->Memory)) {
+      status = STATUS_INVALID_PARAMETER;
+      break;
+    }
+    RtlZeroMemory(output, sizeof(*output));
+    output->SegmentCount = (UINT16)context->Memory.Topology.SegmentCount;
+    status = STATUS_SUCCESS;
+    break;
+  }
+  case DXGKQAITYPE_QUERYSEGMENT5:
+    status = AdmissionDdiQuerySegment5(context, QueryAdapterInfo);
+    break;
+  case DXGKQAITYPE_QUERYMMUCOUNT: {
+    const DXGK_QUERYMMUCOUNTIN *input;
+    DXGK_QUERYMMUCOUNTOUT *output;
+    if (QueryAdapterInfo->pInputData == NULL ||
+        QueryAdapterInfo->InputDataSize < sizeof(*input) ||
+        QueryAdapterInfo->pOutputData == NULL ||
+        QueryAdapterInfo->OutputDataSize < sizeof(*output)) {
+      status = STATUS_INVALID_PARAMETER;
+      break;
+    }
+    input = (const DXGK_QUERYMMUCOUNTIN *)QueryAdapterInfo->pInputData;
+    output = (DXGK_QUERYMMUCOUNTOUT *)QueryAdapterInfo->pOutputData;
+    if (input->PhysicalAdapterIndex != 0u || input->Reserved != 0u) {
+      status = STATUS_INVALID_PARAMETER;
+      break;
+    }
+    RtlZeroMemory(output, sizeof(*output));
+    /* Physical-mode trial advertises no VidMm-managed MMU. */
+    output->MmuCount = 0u;
+    status = STATUS_SUCCESS;
+    break;
+  }
+  case DXGKQAITYPE_QUERYMMUS: {
+    const DXGK_QUERYMMUSIN *input;
+    DXGK_QUERYMMUSOUT *output;
+    if (QueryAdapterInfo->pInputData == NULL ||
+        QueryAdapterInfo->InputDataSize < sizeof(*input) ||
+        QueryAdapterInfo->pOutputData == NULL ||
+        QueryAdapterInfo->OutputDataSize < sizeof(*output)) {
+      status = STATUS_INVALID_PARAMETER;
+      break;
+    }
+    input = (const DXGK_QUERYMMUSIN *)QueryAdapterInfo->pInputData;
+    output = (DXGK_QUERYMMUSOUT *)QueryAdapterInfo->pOutputData;
+    if (input->PhysicalAdapterIndex != 0u) {
+      status = STATUS_INVALID_PARAMETER;
+      break;
+    }
+    RtlZeroMemory(output, sizeof(*output));
+    output->DisplayMmuId = DXGK_INVALID_MMU_ID;
+    status = STATUS_SUCCESS;
+    break;
+  }
+#endif
 
   case DXGKQAITYPE_PHYSICAL_MEMORY_CAPS: {
     DXGK_PHYSICAL_MEMORY_CAPS *physicalMemoryCaps;

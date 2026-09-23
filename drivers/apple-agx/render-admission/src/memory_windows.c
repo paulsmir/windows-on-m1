@@ -6,6 +6,10 @@ static VOID AdmissionDescribeSegment(
   RtlZeroMemory(Descriptor, sizeof(*Descriptor));
   Descriptor->Flags.Aperture = Segment->Aperture != APPLE_AGX_FALSE;
   Descriptor->Flags.Use64KBPages = Segment->Use64KPages != APPLE_AGX_FALSE;
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
+  if (!Segment->Aperture)
+    Descriptor->Flags.Use64KBPages = ADMISSION_G1B_USE64K;
+#endif
   Descriptor->Flags.CpuVisible = Segment->CpuVisible != APPLE_AGX_FALSE;
   Descriptor->Flags.PopulatedFromSystemMemory =
       Segment->PopulatedFromSystemMemory != APPLE_AGX_FALSE;
@@ -13,6 +17,54 @@ static VOID AdmissionDescribeSegment(
   Descriptor->Size = (SIZE_T)Segment->Size;
   Descriptor->CommitLimit = (SIZE_T)Segment->CommitLimit;
 }
+
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
+static VOID AdmissionDescribeSegment5(
+    _In_ const APPLE_AGX_PHYSICAL_SEGMENT *Segment,
+    _Out_ DXGK_SEGMENTDESCRIPTOR5 *Descriptor) {
+  RtlZeroMemory(Descriptor, sizeof(*Descriptor));
+  Descriptor->SegmentType = Segment->Aperture ? DXGK_SEGMENTTYPE_SYSMEM :
+                                                 DXGK_SEGMENTTYPE_LOCAL;
+  Descriptor->Flags.Aperture = Segment->Aperture != APPLE_AGX_FALSE;
+  Descriptor->Flags.CpuVisible = Segment->CpuVisible != APPLE_AGX_FALSE;
+  Descriptor->Flags.PopulatedFromSystemMemory =
+      Segment->PopulatedFromSystemMemory != APPLE_AGX_FALSE;
+  Descriptor->Flags.Use64KBPages = Segment->Aperture ? 0u :
+                                                      ADMISSION_G1B_USE64K;
+  Descriptor->BaseAddress.QuadPart = (LONGLONG)Segment->Base;
+  Descriptor->Size = Segment->Size;
+  Descriptor->SlabSize = Segment->Aperture ? DXGK_PAGESIZE_4KB :
+                                             ADMISSION_G1B_SLAB_SIZE;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment5(
+    ADMISSION_CONTEXT *Context,
+    const DXGKARG_QUERYADAPTERINFO *QueryAdapterInfo) {
+  const DXGK_QUERYSEGMENTIN5 *input;
+  DXGK_QUERYSEGMENTOUT5 *output;
+  APPLE_AGX_PHYSICAL_SEGMENT local;
+  if (Context == NULL || QueryAdapterInfo == NULL ||
+      QueryAdapterInfo->pInputData == NULL ||
+      QueryAdapterInfo->InputDataSize < sizeof(*input) ||
+      QueryAdapterInfo->pOutputData == NULL ||
+      QueryAdapterInfo->OutputDataSize < sizeof(*output))
+    return STATUS_INVALID_PARAMETER;
+  input = (const DXGK_QUERYSEGMENTIN5 *)QueryAdapterInfo->pInputData;
+  output = (DXGK_QUERYSEGMENTOUT5 *)QueryAdapterInfo->pOutputData;
+  if (input->PhysicalAdapterIndex != 0u || input->Reserved != 0u ||
+      !AdmissionMemoryReady(&Context->Memory))
+    return STATUS_INVALID_PARAMETER;
+  if (output->SegmentDescriptors == NULL)
+    return STATUS_BUFFER_TOO_SMALL;
+  AdmissionDescribeSegment5(&Context->Memory.Topology.Aperture,
+                            &output->SegmentDescriptors[0]);
+  local = Context->Memory.Topology.Local;
+  local.Size = Context->Memory.LocalAllocationBytes;
+  local.CommitLimit = Context->Memory.LocalAllocationBytes;
+  AdmissionDescribeSegment5(&local, &output->SegmentDescriptors[1]);
+  return STATUS_SUCCESS;
+}
+#endif
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment4(
     ADMISSION_CONTEXT *Context,

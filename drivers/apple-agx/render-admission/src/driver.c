@@ -3,7 +3,11 @@
 DRIVER_INITIALIZE DriverEntry;
 #pragma alloc_text(INIT, DriverEntry)
 
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE == 0
 C_ASSERT(sizeof(DRIVER_INITIALIZATION_DATA) == 1296);
+#else
+C_ASSERT(sizeof(DRIVER_INITIALIZATION_DATA) == 1544);
+#endif
 
 _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
                                              PUNICODE_STRING RegistryPath) {
@@ -12,7 +16,7 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
 
   PAGED_CODE();
   RtlZeroMemory(&initialization, sizeof(initialization));
-  initialization.Version = DXGKDDI_INTERFACE_VERSION_WDDM3_0;
+  initialization.Version = ADMISSION_G1B_INTERFACE_VERSION;
   initialization.DxgkDdiAddDevice = AdmissionDdiAddDevice;
   initialization.DxgkDdiStartDevice = AdmissionDdiStartDevice;
   initialization.DxgkDdiStopDevice = AdmissionDdiStopDevice;

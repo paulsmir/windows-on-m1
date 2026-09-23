@@ -278,7 +278,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateAllocation(
   allocation->QualificationCookie = correlated
       ? ADMISSION_UMD_CORRELATION_COOKIE : 0u;
 #endif
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
+  info->MinimumPageSize = ADMISSION_G1B_MINIMUM_PAGE;
+  info->RecommendedPageSize = ADMISSION_G1B_RECOMMENDED_PAGE;
+#else
   info->Alignment = (UINT)ADMISSION_ALLOCATION_ALIGNMENT;
+#endif
   info->Size = (SIZE_T)aligned;
   info->PitchAlignedSize = (SIZE_T)aligned;
   info->HintedBank.Value = 0u;
@@ -287,6 +292,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateAllocation(
   info->SupportedReadSegmentSet = description->CpuVisible != 0u
                                       ? ADMISSION_CPU_VISIBLE_SEGMENT_SET
                                       : ADMISSION_LOCAL_SEGMENT_SET;
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
+  /* The page-size trial constrains every affected allocation to the local
+   * segment described with that slab size. System/aperture remains 4 KiB. */
+  info->SupportedReadSegmentSet = ADMISSION_LOCAL_SEGMENT_SET;
+#endif
   info->SupportedWriteSegmentSet = info->SupportedReadSegmentSet;
   info->EvictionSegmentSet = 0u;
   info->hAllocation = allocation;

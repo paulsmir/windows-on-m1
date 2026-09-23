@@ -7,6 +7,7 @@
 #include <wingdi.h>
 #include <ntddvdeo.h>
 #include <d3dkmddi.h>
+#include "gpuva_g1b_profile.h"
 #include <d3dkmthk.h>
 #include <dispmprt.h>
 #include <ntstrsafe.h>
@@ -1043,6 +1044,11 @@ NTSTATUS AdmissionInterruptStop(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionDdiQuerySegment4(
     _In_ ADMISSION_CONTEXT *Context,
     _In_ const DXGKARG_QUERYADAPTERINFO *QueryAdapterInfo);
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
+NTSTATUS AdmissionDdiQuerySegment5(
+    _In_ ADMISSION_CONTEXT *Context,
+    _In_ const DXGKARG_QUERYADAPTERINFO *QueryAdapterInfo);
+#endif
 NTSTATUS AdmissionPhysicalOwnerInitialize(
     _In_ PDXGKRNL_INTERFACE Interface, _In_ PDEVICE_OBJECT DeviceObject,
     _Out_ ADMISSION_PHYSICAL_OWNER *Owner);
