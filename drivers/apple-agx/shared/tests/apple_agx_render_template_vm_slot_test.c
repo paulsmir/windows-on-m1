@@ -13,7 +13,7 @@ int main(void)
   assert(arena && before && AppleAgxRenderTemplateMaterialize(arena,size,&roots));
   memcpy(before,arena,size);
   assert(!AppleAgxRenderTemplateSelectVmSlot(arena,size,0));
-  assert(!AppleAgxRenderTemplateSelectVmSlot(arena,size,16));
+  assert(!AppleAgxRenderTemplateSelectVmSlot(arena,size,63));
   assert(!AppleAgxRenderTemplateSelectVmSlot(arena,size-1,1));
   assert(AppleAgxRenderTemplateSelectVmSlot(arena,size,1));
   for(unsigned i=0;i<7;i++){
@@ -22,6 +22,16 @@ int main(void)
     arena[p]=63;
   }
   assert(memcmp(arena,before,size)==0); /* no unrelated 63 was patched */
+  for(unsigned choice=0;choice<2;choice++){
+    unsigned slot=choice ? 62u : 17u;
+    assert(AppleAgxRenderTemplateSelectVmSlot(arena,size,slot));
+    for(unsigned i=0;i<7;i++){
+      unsigned p=l[object[i]].ArenaOffset+offset[i];
+      assert(arena[p]==slot);
+      arena[p]=63;
+    }
+    assert(memcmp(arena,before,size)==0);
+  }
   assert(AppleAgxRenderTemplateSelectVmSlot(arena,size,2));
   assert(!AppleAgxRenderTemplateSelectVmSlot(arena,size,2)); /* no double patch */
   free(arena);free(before);return 0;

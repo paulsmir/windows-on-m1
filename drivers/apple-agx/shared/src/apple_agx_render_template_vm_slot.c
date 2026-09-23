@@ -22,7 +22,7 @@ APPLE_AGX_BOOL AppleAgxRenderTemplateSelectVmSlot(
   const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layout;
   APPLE_AGX_U32 index;
   unsigned char *bytes = Arena;
-  if (bytes == 0 || Slot == 0u || Slot >= 16u ||
+  if (bytes == 0 || Slot == 0u || Slot >= 63u ||
       ArenaBytes < AppleAgxRenderTemplateBytes())
     return APPLE_AGX_FALSE;
   layout = AppleAgxRenderTemplateObjectLayouts();
