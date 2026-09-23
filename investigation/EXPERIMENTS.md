@@ -46829,3 +46829,35 @@ Firmware, command line, package and hypothesis are unchanged. Corrected manifest
 SHA256 190522842a2bc44d1bf12455fd1cd1acb79c9086dad9d1bb992296703e57279a;
 full-owner wrapper SHA256 505571b8cc52f4572844ca9e213ca6afd6fce2305bcbcd642bb63c9c91bb1e58;
 ordinary wrapper SHA256 9cee65d74a2cb915aff55dabe760989e4cfa397a47513b96b385169a0fdebd97.
+
+### EXP754 hardware actual result
+
+Package749 installed exactly once as oem5 after native Air catalog verification.
+Autologon produced active pavel console and Explorer; the scheduled task cleared
+password/autologon successfully. 60-second ETW captured 631906 events with zero
+loss. Exact UMD749 loaded in DWM and HWDEVICE selected Apple AGX FL10_0.
+
+The EXP753 dynamic-buffer boundary is fixed in hardware: DWM creates dynamic VB
+144/160000/240012, dynamic IB16000, constant buffers, and a 50x50 BGRA RT|SRV
+named `DWM Cached Visual Image`. The first DWM draw event type16 and clear finish.
+The next draw event type17 starts, then Direct3D11 removes the device for bad UMD
+`E_NOTIMPL`. No reject-Create/Map/Copy/Blt record appeared. Current native graph
+still admits one draw per batch; DWM issues multiple draws before Windows Flush,
+so this is the strongest causal target. No dwm.exe-correlated AGX submission,
+completion or standard Present is proven.
+
+Subsequent repeated DWM fail-fast 0x889800C0 is documented by WinDbg as `DWM
+failed to create a display swap chain`, stack `CD3DDevice::CreateLegacySwapChain
+-> CLegacyRenderTarget::EnsureSwapChain`. It is a cascade after device removal,
+not the first UMD error. One later c0000005 is likewise downstream. Refusal trace
+was empty. Physical observation was not supplied for this run.
+
+Evidence was copied and hash-verified before rollback. Exact oem5 deletion
+completed; locked UMD cleanup completed after shutdown. Ordinary377/392 final
+baseline 2026-09-23T11:27:59Z: Code28/nullINF, no package/service/module/files/
+signer, 8 CPUs, storage/USB healthy, autologon0/no password. VERDICT:
+REJECTED_FOR_DWM_DESKTOP_WITH_CAUSAL_ADVANCE. Evidence:
+`.local/experiments/EXP754-dynamic-buffers-hardware/causal-result.json` SHA256
+be7aee8aa00852fc778c2c63d31b156d7d20676dc18e4d571e856035cba30b31.
+Next offline gate: two real D3D Draw calls before Windows Flush must finalize as
+two ordered existing native batches and retire correctly.

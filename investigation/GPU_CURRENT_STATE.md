@@ -73,17 +73,20 @@ Host ABI, dynamic-job, reference-transport and reloc-capture tests PASS.
 textured-v6 fixture and is recorded as pre-existing, not an EXP754 regression.
 Inventory: `.local/experiments/EXP753-vertexid-hardware/FRONTEND_CONTRACT_INVENTORY.json`.
 
-## Current causal target
-Package749 is built and preregistered for one DWM-only run. ARM64 analysis,
-Universal ApiValidator, Inf2Cat, version30.0.749.0, existing signer and catalog
-membership PASS. Hashes: CAT fbb76bbf2a779b03ce48784ed7b04488baae795727ea23c550275842a61453a8;
-INF 5dca8a825abd5029d9cd3944940daad9540e272fe84b4be02c88fca7f5804550;
-SYS 1b8ce6a25a88c0a0ea532f74cb075c7f201ce62ed6f3929db46f2b069860a9ce;
-UMD 7f383b1b12584fd8baf1bad61c95f6dfa29eb0dd2d1edb93101788b019ce6347.
-Before install, verify both control planes and native Air catalog/hash. Expected
-discriminator: DWM passes EnsureByteSpace and produces its first correlated
-native AGX graph/submission/completion, or exposes one new first failure.
+## EXP754 hardware result / current causal target
+Package749 installed once and was fully removed. DWM selected exact UMD749 and
+Apple AGX FL10_0. The EXP753 buffer boundary is fixed in hardware: dynamic
+VB144/160000/240012, dynamic IB16000, CBs and a 50x50 BGRA RT|SRV cached visual
+are created. DWM draw type16 and clear finish. Draw type17 then starts and the
+runtime removes the device for UMD E_NOTIMPL. Dump exception0x889800C0 means
+DWM failed to create a display swap chain in CreateLegacySwapChain, but is a
+cascade after removal. No DWM-correlated AGX submission/completion/Present is
+proven. Evidence: EXP754 causal-result.json, debug-dwm.log, etw-relevant.json.
 
+Strongest causal target: current native graph admits one draw per batch while DWM
+issues multiple draws before Windows Flush. Offline gate must make two consecutive
+frontend draws finalize as two ordered batches through the existing adapter,
+composer, physical KMD plans and retirement. No new allocator/composer.
 ## Fixed experiment procedure
 Git `/opt/homebrew/bin/git`; artifacts live under main repo `.local`, not the
 worktree. Builder `pauls@192.168.1.24`, key `~/.ssh/windows_builder`. Air
@@ -110,9 +113,9 @@ HARDWARE ROADMAP
        EXP753 exact hardware-device selection; exact748 cleanup/recovery.
 [PASS] EXP754 contract-wide buffers, append cycle, StartVertex/BaseVertex,
        x64 execution and ARM64 closure/test build.
-[PASS] Package749 build/sign/hash and EXP754 preregistration.
-[NOW] Verify both control planes, native Air CAT/hash, then install exact749 once.
-[NEXT] One bound DWM run; collect DWM-correlated native AGX execution evidence.
-[HW] First unperformed hardware step: exact candidate install and login-time DWM run.
+[PASS] Package749 run fixed DWM dynamic-buffer admission; exact cleanup/recovery.
+[NOW] Multiple Draw calls before Windows Flush -> ordered existing native batches.
+[NEXT] x64 executable + ARM64 package/sign/hash/preregister.
+[HW] Verify DWM draw type17 reaches native submission/completion or next boundary.
 POST-HARDWARE: optional features, performance, sustained desktop stability,
 OpenGL and CS1.6 only after first proven DWM AGX execution/Present.
