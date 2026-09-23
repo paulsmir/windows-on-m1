@@ -46948,3 +46948,67 @@ Evidence was collected before rollback. Exact oem5/package750 and hash-matched
 SYS/UMD/signer residues were removed. Ordinary GPU-visible recovery finished
 with one inert ACPI\\APPL0002 Code28/null INF, packages0, no service/module/files
 or trust residue, 8 CPUs and healthy storage/USB.
+
+## EXP756 — attributed DWM frontend/capture contract, package751
+
+Preregistered build phase 2026-09-23T13:54:49Z; no package751 build or Air run
+has occurred yet. WHY THIS HYPOTHESIS: (1) EXP755 repeats E_NOTIMPL during DWM
+draw type17 while the refusal log is empty, so exact SetError attribution is the
+closest unresolved boundary. (2) The reached frontend/capture path contained
+exact triangle/one-instance/cb0/t0 filters that the pinned WDK and standard
+Mesa D3D10 frontend do not impose. (3) Offline commit
+39a5bc7ba807bad376037d95b4d7d6c427ecc74d proves basic topology, indexed and
+nonindexed instancing, cb1/t1 relocation capture, second-batch color/depth LOAD
+and state continuity through the real producer/materializer/KMD consumer path.
+
+WINDOWS CONTRACT: FL10_0 basic topologies, arbitrary draw counts, instancing,
+StartInstance, 14 CB slots and 128 SRV slots reach the UMD without trace-derived
+exact-value filters; a void-DDI failure calls SetError and is attributable.
+AGX/ASAHI CONTRACT: upstream Asahi consumes pipe topology/instance fields,
+uploads all active UBO/texture tables, derives attachment LOAD from render-pass
+state and emits the captured encoder. TRANSLATION: preserve those values in the
+typed draw graph, materialize their relocations, and record one
+`reject-seterror fn=<function> line=<line> hr=<HRESULT>` receipt on failure.
+Adjacency remains explicit fail-closed `reject-capture reason=adjacency` because
+its passthrough-GS/mixed-compute capture is not yet proven. WHAT IS STILL
+UNKNOWN: whether standard-runtime DWM now reaches a native graph and physical
+completion, or which exact DDI/capture reason rejects next.
+
+Repository public_windows branch integration/ad04-windows-compiler HEAD
+fedcb5eb84d47dbd255a7ef5da2ff20ba20b82dc; implementation commit 39a5bc7b;
+clean status and diff SHA256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.
+Implementation-tree SHA256
+efb35c31b25f510c4da886b55df33a959bd4dac1bba090eeeae1f9f5d668d2cf.
+Pinned m1n1 c6d10e04afdad5314e8ac1e67bc3919b094ab000 and Mu
+f1ef718e08db0e4c30fdb5d8555973513ad9a004 remain unchanged. Exact build command:
+`build-driver.ps1 -Configuration Release -SubmitQualification
+-UmdAdmissionTrace -NativeFrontend -NativeRuntimeProps <verified-arm64>
+-PackageBuild 751`. Artifact target
+`.local/experiments/EXP756-dwm-frontend-contract/package-build/package`; hashes
+pending the build. Recovery remains ordinary EXP377 m1n1 plus EXP392 Mu; the
+immutable GPU-hidden EXP385 image remains emergency-only. Build failure is any
+analysis warning/error, ApiValidator failure, Inf2Cat failure, signer/catalog
+mismatch or missing exact hashes. Hardware checkpoint after successful package
+preregistration: first DWM-correlated native graph -> KMD Render/Patch/Submit ->
+physical AGX completion -> DXGI Present, or the first exact reject receipt.
+
+Build completed 2026-09-23T13:57:47Z. Package751 ARM64 code analysis and build
+reported 0 warnings/0 errors; Universal ApiValidator, Inf2Cat, signer thumbprint
+E9BE15BD2A184BFABA0C8035B3C620C58037A241 and catalog membership passed.
+Artifact hashes: CAT 3ce86663ea375e39225a50d037ac67c7342007b5ca0c79e6e739727d44310a15;
+INF 37ff68367989d38f5a56d33dddbaf15926cb3b000cc61f5ba54e573902709fe6;
+SYS d00799c143483b8c4385a8ca3c7a624a63706a5509796c9815a6684e814a41f5;
+UMD 25b62f5b5b3eea4abd669d9b5091e6e3e4ddae6f7d64613eb802e36456c1c5bb.
+Manifest SHA256 b725577ee846d2063979b82d5b99c27b6f492c3dcc2813ea102de001214d599e;
+build log SHA256 af4bab318899e3abaee5512ab780351804b5530e2d5de9b8ed1891398085bb4a.
+
+Hardware phase preregistered; no Air install or launch has occurred. Single
+variable over package750 is the independently offline-proven frontend/capture
+contract in 39a5bc7b; firmware, caps advertisement, signer and recovery stay
+unchanged. DWM with DirectFlip=TRUE and no CheckDirectFlipSupport: unknown;
+observe reject-* / ETW. Expected reject-blt=0; any reject-BltDXGI reopens that
+gate. Collect physical screen state immediately after logon before interaction.
+Install once after native Air CAT/hash verification, capture the first exact
+reject or correlated graph/submission/completion/Present, then remove the exact
+package and hash-matched residues/signer and restore ordinary377/392 Code28
+recovery. Result:PENDING.

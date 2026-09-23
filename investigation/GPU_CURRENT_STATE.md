@@ -101,6 +101,15 @@ unsupported graph rather than leaving an unattributed native fault.
 The current target is one exact build/sign/hash/preregistered ARM64 package and
 one Air discriminator with the new SetError attribution.
 
+Package751 is the preregistered candidate from implementation commit 39a5bc7b.
+ARM64 analysis reports 0 warnings/0 errors; Universal ApiValidator, Inf2Cat,
+signer thumbprint and catalog membership pass. Hashes: CAT
+3ce86663ea375e39225a50d037ac67c7342007b5ca0c79e6e739727d44310a15;
+INF 37ff68367989d38f5a56d33dddbaf15926cb3b000cc61f5ba54e573902709fe6;
+SYS d00799c143483b8c4385a8ca3c7a624a63706a5509796c9815a6684e814a41f5;
+UMD 25b62f5b5b3eea4abd669d9b5091e6e3e4ddae6f7d64613eb802e36456c1c5bb.
+No install or Air launch has occurred yet.
+
 ## Fixed experiment procedure
 Git `/opt/homebrew/bin/git`; artifacts live under main repo `.local`, not the
 worktree. Builder `pauls@192.168.1.24`, key `~/.ssh/windows_builder`. Air
@@ -135,8 +144,9 @@ HARDWARE ROADMAP
 [PASS] Exact frontend SetError attribution, honest batch-split color/depth/state
        gates, draw guards, basic topology/instancing and cb1/t1 capture. x64 full
        execution and ARM64 link pass at implementation-tree hash efb35c31.
-[NOW] Build/sign/hash and preregister one candidate containing only independently
-      offline-proven fixes exposed by the exact rejection. Offline until package.
+[PASS] Package751 exact ARM64 build/sign/hash/catalog gate and preregistration.
+[NOW] One standard-runtime Air run with refusals-only attribution and evidence
+      before exact package cleanup and ordinary GPU-visible recovery.
 [HW] One standard-runtime Air run must produce the first DWM-correlated native
      graph -> KMD Render/Patch/Submit -> physical AGX completion -> DXGI Present,
      or name the next exact semantic RED.

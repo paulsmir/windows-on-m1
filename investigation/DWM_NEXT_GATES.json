@@ -287,5 +287,16 @@
     "limit": "Adjacency topology crosses Asahi passthrough-GS/mixed-compute capture and remains post-hardware completeness; it is not advertised as proven and fail-closes with reject-capture reason=adjacency",
     "hardware_dependency": "fully offline",
     "scope_rule": "Only pinned-WDK mandatory FL10_0 operations or actual reached runtime prerequisites; optional completeness remains post-hardware"
+  },
+  "next_hardware_candidate": {
+    "experiment": "EXP756",
+    "package": 751,
+    "status": "PREREGISTERED_NO_AIR_LAUNCH_YET",
+    "implementation_commit": "39a5bc7ba807bad376037d95b4d7d6c427ecc74d",
+    "cat_sha256": "3ce86663ea375e39225a50d037ac67c7342007b5ca0c79e6e739727d44310a15",
+    "inf_sha256": "37ff68367989d38f5a56d33dddbaf15926cb3b000cc61f5ba54e573902709fe6",
+    "sys_sha256": "d00799c143483b8c4385a8ca3c7a624a63706a5509796c9815a6684e814a41f5",
+    "umd_sha256": "25b62f5b5b3eea4abd669d9b5091e6e3e4ddae6f7d64613eb802e36456c1c5bb",
+    "expected": "first DWM-correlated native graph through physical completion and DXGI Present, or exact first reject-seterror/reject-capture boundary"
   }
 }
