@@ -34,6 +34,12 @@ EXP758-g1b64-control/causal-result.json` SHA256
 Next discriminator: 16KiB physical slab with per-QAI and allocation-input
 receipts; this still cannot prove GpuMmu page tables. B1 firmware-slot run is
 unperformed and separate.
+EXP758 also exposed a new standard-client CreateSwapChain regression relative
+to EXP736. The first failing DDI is not in the captured ETW/last-QAI receipt.
+Current causal target is one unchanged64-KiB observation-only discriminator
+with per-QAI, allocation-input, first KMD failure and UMD refusal receipts,
+as scoped in `investigation/GPUVA_G1B_SWAPCHAIN_BOUNDARY.md`. Hold the16-KiB
+hardware run until that boundary is attributed.
 OpenGL and CS1.6 follow accelerated desktop acceptance.
 
 ## Proven hardware boundary — EXP753/package748
@@ -231,9 +237,10 @@ HARDWARE ROADMAP
        hardware run; exact cleanup and ordinary Code28 recovery.
 [PASS] Resource.cpp:452-453 buffer usage, typed SRV load/capture relocation,
        DynamicResourceMapDiscard and argument-bearing rejection pass offline.
-[NEXT] EXP758 64KiB control is complete and rolled back. The 16KiB physical
-slab trial requires per-query/input receipts and a measurable VidMm placement
-signal before preregistration; GpuMmu caps remain zero. B1 requires a genuine
+[NEXT] EXP758 64KiB control is complete and rolled back. Attribute the
+CreateSwapChain regression with the one observation-only64-KiB discriminator
+above. The 16KiB physical slab trial then requires a measurable VidMm
+placement signal before preregistration; GpuMmu caps remain zero. B1 requires a genuine
 paging/app process caller and firmware job tied to a v5 lease; an MMIO echo is
 insufficient. Full GPUVA B2 requires G3 after B1. Resolve 4-KiB logical
 PAGETABLELEVELDESC indices and system-memory scatter before advertising caps.

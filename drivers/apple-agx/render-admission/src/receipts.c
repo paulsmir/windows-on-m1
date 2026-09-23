@@ -91,6 +91,59 @@ static void WriteQword(HANDLE Key, PCWSTR Name, ULONGLONG Value) {
   (void)ZwSetValueKey(Key,&name,0,REG_QWORD,&Value,sizeof(Value));
 }
 
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
+static volatile LONG g1bAllocationInputCount;
+static volatile LONG g1bDdiFailureCount;
+
+_Use_decl_annotations_ void AdmissionRecordG1bDdiFailure(
+    PDEVICE_OBJECT DeviceObject, ULONG DdiId, NTSTATUS Status) {
+  static const PCWSTR names[16] = {
+      L"Wom1G1bFailure00", L"Wom1G1bFailure01", L"Wom1G1bFailure02",
+      L"Wom1G1bFailure03", L"Wom1G1bFailure04", L"Wom1G1bFailure05",
+      L"Wom1G1bFailure06", L"Wom1G1bFailure07", L"Wom1G1bFailure08",
+      L"Wom1G1bFailure09", L"Wom1G1bFailure10", L"Wom1G1bFailure11",
+      L"Wom1G1bFailure12", L"Wom1G1bFailure13", L"Wom1G1bFailure14",
+      L"Wom1G1bFailure15"};
+  struct { ULONG Sequence, DdiId, Status, Reserved; } receipt;
+  LONG index;
+  HANDLE key = NULL;
+  if (NT_SUCCESS(Status) || DeviceObject == NULL)
+    return;
+  index = InterlockedIncrement(&g1bDdiFailureCount) - 1;
+  if (index < 0 || index >= 16 ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(DeviceObject, PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  receipt.Sequence = (ULONG)index + 1u;
+  receipt.DdiId = DdiId;
+  receipt.Status = (ULONG)Status;
+  receipt.Reserved = 0u;
+  WriteBinary(key, names[index], &receipt, sizeof(receipt));
+  ZwClose(key);
+}
+
+_Use_decl_annotations_ void AdmissionRecordG1bAllocationInput(
+    PDEVICE_OBJECT DeviceObject, USHORT MinimumPageSize,
+    USHORT RecommendedPageSize) {
+  static const PCWSTR names[16] = {
+      L"Wom1G1bInput00", L"Wom1G1bInput01", L"Wom1G1bInput02",
+      L"Wom1G1bInput03", L"Wom1G1bInput04", L"Wom1G1bInput05",
+      L"Wom1G1bInput06", L"Wom1G1bInput07", L"Wom1G1bInput08",
+      L"Wom1G1bInput09", L"Wom1G1bInput10", L"Wom1G1bInput11",
+      L"Wom1G1bInput12", L"Wom1G1bInput13", L"Wom1G1bInput14",
+      L"Wom1G1bInput15"};
+  LONG index = InterlockedIncrement(&g1bAllocationInputCount) - 1;
+  HANDLE key = NULL;
+  if (DeviceObject == NULL || index < 0 || index >= 16 ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(DeviceObject, PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  WriteDword(key, names[index],
+             ((ULONG)RecommendedPageSize << 16) | MinimumPageSize);
+  ZwClose(key);
+}
+#endif
+
 #if defined(APPLE_AGX_VISIBLE_SCANOUT_QUALIFICATION)
 _Use_decl_annotations_ VOID AdmissionRecordVisibleScanout(
     ADMISSION_CONTEXT *Context,
@@ -1087,6 +1140,23 @@ _Use_decl_annotations_ void AdmissionRecordQuery(
   WriteDword(key, L"Wom1CleanQueryType", (ULONG)Type);
   WriteDword(key, L"Wom1CleanQuerySize", OutputDataSize);
   WriteDword(key, L"Wom1CleanStatus", (ULONG)Status);
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
+  if ((ULONG)Type >= 39u && (ULONG)Type <= 46u) {
+    static const PCWSTR statusNames[8] = {
+        L"Wom1G1bQ39", L"Wom1G1bQ40", L"Wom1G1bQ41",
+        L"Wom1G1bQ42", L"Wom1G1bQ43", L"Wom1G1bQ44",
+        L"Wom1G1bQ45", L"Wom1G1bQ46"};
+    WriteDword(key, statusNames[(ULONG)Type - 39u], (ULONG)Status);
+    if (Type == DXGKQAITYPE_QUERYSEGMENT5 && NT_SUCCESS(Status) &&
+        OutputData != NULL && OutputDataSize >= sizeof(DXGK_QUERYSEGMENTOUT5)) {
+      const DXGK_QUERYSEGMENTOUT5 *segments =
+          (const DXGK_QUERYSEGMENTOUT5 *)OutputData;
+      if (segments->SegmentDescriptors != NULL)
+        WriteDword(key, L"Wom1G1bLocalSlab",
+                   (ULONG)segments->SegmentDescriptors[1].SlabSize);
+    }
+  }
+#endif
   if (Type == DXGKQAITYPE_DRIVERCAPS) {
     ADMISSION_TYPE1_RECEIPT receipt;
     RtlZeroMemory(&receipt, sizeof(receipt));

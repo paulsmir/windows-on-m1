@@ -134,7 +134,7 @@ static BOOLEAN AdmissionSurfaceTypeSupported(D3DKMDT_GDISURFACETYPE Type,
   return TRUE;
 }
 
-_Use_decl_annotations_ NTSTATUS AdmissionDdiGetStandardAllocationDriverData(
+static NTSTATUS AdmissionGetStandardAllocationDriverDataImpl(
     HANDLE Adapter,
     DXGKARG_GETSTANDARDALLOCATIONDRIVERDATA *StandardAllocation) {
   D3DKMDT_GDISURFACEDATA *surface = NULL;
@@ -208,7 +208,20 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiGetStandardAllocationDriverData(
   return STATUS_SUCCESS;
 }
 
-_Use_decl_annotations_ NTSTATUS AdmissionDdiCreateAllocation(
+_Use_decl_annotations_ NTSTATUS AdmissionDdiGetStandardAllocationDriverData(
+    HANDLE Adapter,
+    DXGKARG_GETSTANDARDALLOCATIONDRIVERDATA *StandardAllocation) {
+  NTSTATUS status = AdmissionGetStandardAllocationDriverDataImpl(
+      Adapter, StandardAllocation);
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
+  AdmissionRecordG1bDdiFailure(
+      context == NULL ? NULL : context->PhysicalDeviceObject, 1u, status);
+#endif
+  return status;
+}
+
+static NTSTATUS AdmissionCreateAllocationImpl(
     HANDLE Adapter, DXGKARG_CREATEALLOCATION *Args) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
   DXGK_ALLOCATIONINFO *info;
@@ -234,6 +247,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateAllocation(
   if (!AdmissionMemoryReady(&context->Memory))
     return STATUS_NOT_SUPPORTED;
   info = &Args->pAllocationInfo[0];
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
+  AdmissionRecordG1bAllocationInput(context->PhysicalDeviceObject,
+                                    info->MinimumPageSize,
+                                    info->RecommendedPageSize);
+#endif
   if (info->pPrivateDriverData == NULL)
     return STATUS_INVALID_PARAMETER;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
@@ -310,6 +328,17 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateAllocation(
   return STATUS_SUCCESS;
 }
 
+_Use_decl_annotations_ NTSTATUS AdmissionDdiCreateAllocation(
+    HANDLE Adapter, DXGKARG_CREATEALLOCATION *Args) {
+  NTSTATUS status = AdmissionCreateAllocationImpl(Adapter, Args);
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
+  AdmissionRecordG1bDdiFailure(
+      context == NULL ? NULL : context->PhysicalDeviceObject, 2u, status);
+#endif
+  return status;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyAllocation(
     HANDLE Adapter, const DXGKARG_DESTROYALLOCATION *Args) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
@@ -349,7 +378,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyAllocation(
   return STATUS_SUCCESS;
 }
 
-_Use_decl_annotations_ NTSTATUS AdmissionDdiDescribeAllocation(
+static NTSTATUS AdmissionDescribeAllocationImpl(
     HANDLE Adapter, DXGKARG_DESCRIBEALLOCATION *Args) {
   ADMISSION_ALLOCATION_HANDLE *allocation;
   if (Adapter == NULL || Args == NULL)
@@ -370,7 +399,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDescribeAllocation(
   return STATUS_SUCCESS;
 }
 
-_Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
+_Use_decl_annotations_ NTSTATUS AdmissionDdiDescribeAllocation(
+    HANDLE Adapter, DXGKARG_DESCRIBEALLOCATION *Args) {
+  NTSTATUS status = AdmissionDescribeAllocationImpl(Adapter, Args);
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
+  AdmissionRecordG1bDdiFailure(
+      context == NULL ? NULL : context->PhysicalDeviceObject, 3u, status);
+#endif
+  return status;
+}
+
+static NTSTATUS AdmissionOpenAllocationImpl(
     HANDLE Device, const DXGKARG_OPENALLOCATION *Args) {
   ADMISSION_DEVICE *device = (ADMISSION_DEVICE *)Device;
   ADMISSION_CONTEXT *adapter;
@@ -528,6 +568,22 @@ Rollback:
   AdmissionOpenAllocationTraceResult(adapter, trace, guard, status);
   return status;
 #undef OPEN_ALLOCATION_RETURN
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
+    HANDLE Device, const DXGKARG_OPENALLOCATION *Args) {
+  NTSTATUS status = AdmissionOpenAllocationImpl(Device, Args);
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
+  ADMISSION_DEVICE *device = (ADMISSION_DEVICE *)Device;
+  ADMISSION_CONTEXT *adapter = NULL;
+  if (device != NULL && device->Object.Magic == ADMISSION_OBJECT_DEVICE_MAGIC &&
+      device->Object.Adapter != NULL)
+    adapter = CONTAINING_RECORD(device->Object.Adapter, ADMISSION_CONTEXT,
+                                ObjectAdapter);
+  AdmissionRecordG1bDdiFailure(
+      adapter == NULL ? NULL : adapter->PhysicalDeviceObject, 4u, status);
+#endif
+  return status;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiCloseAllocation(

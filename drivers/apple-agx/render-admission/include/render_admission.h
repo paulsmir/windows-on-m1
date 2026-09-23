@@ -639,6 +639,13 @@ typedef struct _ADMISSION_MEMORY_QUALIFICATION {
 
 void AdmissionRecordService(_In_ PUNICODE_STRING RegistryPath,
                             _In_ PCWSTR Name, _In_ ULONG Value);
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
+void AdmissionRecordG1bAllocationInput(_In_opt_ PDEVICE_OBJECT DeviceObject,
+                                       _In_ USHORT MinimumPageSize,
+                                       _In_ USHORT RecommendedPageSize);
+void AdmissionRecordG1bDdiFailure(_In_opt_ PDEVICE_OBJECT DeviceObject,
+                                  _In_ ULONG DdiId, _In_ NTSTATUS Status);
+#endif
 void AdmissionRecordDevice(_In_opt_ PDEVICE_OBJECT DeviceObject,
                            _In_ ADMISSION_RECEIPT Receipt,
                            _In_ NTSTATUS Status);

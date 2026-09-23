@@ -7,6 +7,11 @@ compiled with incremental ARM64 MSBuild. GpuMmu caps remain zero and its
 virtual DDIs remain fail-closed. No package has been installed or launched.
 The physical-mode profile cannot by itself satisfy the authorized B2 GPUVA
 hardware gate; B1 and then G3's coherent GpuMmu contract precede that run.
+EXP758 accepted the physical WDDM3.2 adapter with the 64-KiB slab, but its
+standard client regressed at CreateSwapChain before graphics work. The 16-KiB
+slab run is held while the first failing DXGI/UMD/KMD boundary is attributed
+with the observation-only receipts in
+`investigation/GPUVA_G1B_SWAPCHAIN_BOUNDARY.md`.
 Scope is **FULL GRAPHICS**. Pinned source is builder
 `C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\shared\d3dkmddi.h`,
 SHA256 `c13cecb0ce73e7bbdb6bec8586d05eea31932a8c532bec49b3dae4a03054770e`.
