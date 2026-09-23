@@ -94,6 +94,10 @@ selected logical 4-KiB entries into one native leaf, checks exact ownership and
 representability, publishes with sync/TLB acknowledgement and rolls back on
 failure. It taints on failed rollback or context0/TTBR1 mutation. The v5 wire is
 separate from v4 at power-broker offset `0x700` and exposes no PA to UMD.
+Correction `1a46a86c7dbe86806f601af1c111c61d95912f59`: while legacy v4
+owns its fixed context 63, v5 leases only 1..62. The v5 ABI retains slot 63
+for a future image that explicitly disables legacy ownership; exhaustion of
+1..62 fails rather than borrowing 63. Host tests cover both states.
 
 ## WHAT IS STILL UNKNOWN:
 

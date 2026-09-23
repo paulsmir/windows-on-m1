@@ -20,8 +20,9 @@ inventory and held 16-KiB hardware question are in
 design and host specification are in
 `docs/superpowers/specs/2026-09-23-gpuva-broker-v5-design.md`. User authorized
 A/B on 2026-09-23; A broker v5 is implemented in m1n1 commit `138c510a` with
-real-C host tests and offline ARM64 link. No GpuMmu KMD integration or hardware
-verdict exists yet. B1 precedes B2 to isolate broker behavior from WDDM3.2 caps.
+real-C host tests and offline ARM64 link. Correction `1a46a86c` reserves slot63
+for active legacy/v4; v5 uses 1..62 until legacy is disabled. No GpuMmu KMD
+integration or hardware verdict exists yet. B1 precedes G3 and B2.
 OpenGL and CS1.6 follow accelerated desktop acceptance.
 
 ## Proven hardware boundary — EXP753/package748
