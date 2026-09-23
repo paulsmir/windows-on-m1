@@ -46483,3 +46483,52 @@ causal evidence/preregistration. GPUVA and optional-feature expansion remain clo
 Evidence root: .local/experiments/EXP751-dwm-extended-admission; remote
 C:\Users\pavel\EXP751-dwm-evidence and C:\Windows\Temp\EXP751-umd-refusals.txt.
 Result: PENDING. This is not a hardware success/readiness claim before target verification.
+
+EXP751 phase receipt 2026-09-23T03:55:29.350863+00:00: ordinary377/392 baseline reached Windows/SSH. baseline.json UTC03:53:25Z: one APPL0002 Code28/nullINF; no package/service/module/files/signer;8CPU;ANS/USB OK; no current41/1001/129;autologon absent/no password. Read-only BCD TESTSIGNING=Yes; unchanged. Candidate files transferred only to user directory, not installed. Next preregistered phase: orderly shutdown and full-owner empty boot.
+
+EXP751 phase receipt 2026-09-23T03:59:50.555357+00:00: full-owner empty boot reached SSH; native ARM64 catalog verification PASS0warnings0errors, same pinned signer. Exact746 install once returned0, oem5.inf/APPL0002Code0 at03:58:11Z. Machine refusal-only trace configured; authorized temporary autologon armed03:59:01Z and transport removed. Orderly shutdown completed; launcher3055 exited; proxy/vUART re-enumerated. Next: single bound DWM boot.
+
+EXP751 boundary/capture amendment 2026-09-23T04:02:35.180096+00:00: bound boot reaches SSH and APPL0002Code0; after45s authorized autologon wait quser still reports no users, Explorer absent, DWM Session1 processes exist. Autologon/password cleared. Intended post-login DWM trace guard refuses before enabling ETW. No second launch/client. Collecting one passive60s trace of CURRENT prelogin DWM instead, with session state explicitly recorded; post-login desktop observation INCONCLUSIVE. trace-prelogin.ps1 SHA256 32231dd7a547c55f1eec3def9a140189747be3581dfe3f42a44b919cb8e948c4. This preserves failed precondition rather than claiming it passed.
+
+### EXP751 actual result — 2026-09-23T04:14:04.382670+00:00
+
+Candidate746 installed once/nativeCATverified/oem5Code0. Intended post-login desktop
+checkpoint was not reached: no user/Explorer after45s; autologon/password cleared.
+Same boot passive prelogin DWM60s capture completed; no qualification client/retry.
+403081 ETW events, EventsLost0. All1304 UMD image events match exact System32 746:
+checksum12354734/timestamp1790135148/imageSize0xbd2000, agreeing with package and dump.
+Journal1820 now reports80004001 badUMD /887A0020 driver removal; former empty-DDI
+intersection message absent. This does not independently prove the selected
+Interface value or successful DWM Present.
+
+Fresh current-0.dmp: c0000409 FAST_FAIL_FATAL_APP_EXIT7, ucrtbase!wassert ->
+AppleAgxRenderAdmissionUmd!tgsi_to_nir -> CreateVertexShader ->
+d3d11!CVertexShader::FinalConstruct -> ClearGuardImpl -> BeginGuardRectangleSupport
+-> DirectComposition::CDxDevice::Initialize -> uDWM desktop initialization.
+Assertion string !indirect; exact generated tgsi_to_nir.c line574 is scalar
+TGSI_FILE_TEMPORARY load. Primary ShaderTGSI.c DCL_INDEXABLE_TEMP still emits
+ureg_DECL_temporary per element, while pinned TTN requires Declaration.Array
+for indirect variable access. Next deterministic target is that translation;
+do not remove the assertion or infer0_x is fundamentally unsuitable.
+
+Refusal trace0bytes. The five instrumented callback classes are NOT proven PASS;
+reject-blt=0 is unexercised, not acceptance. No physical observation reply received;
+post-login observation unavailable. No0x advertisement success beyond actual
+native shader callback reach is claimed. No new System41/1001/129/4101 and no
+Security4625; eight CPUs/storage/SSH remained alive. RDP and physical USB input
+were not actively exercised; enumeration stayed healthy.
+
+Evidence17files copied and SHA256-verified before cleanup; package/warnings and
+module identity receipts, ETW/XML, current dumps, registry snapshots, auth/system
+state under .local/experiments/EXP751-dwm-extended-admission. Main analysis:
+causal-result.json, debug-current.log, debug-assert.log, fault-source.log,
+etw-causal-summary.json, loaded-umd-proof.json. No full historical ledger read.
+
+Exactoem5 cleanup returned0; package/service/module/files/signer removed; trace env
+restored. Bound launcher81537 exited after orderlyshutdown/proxyreenumeration.
+Ordinary377/392 final-recovery launcher14804 active; baseline2026-09-23T04:11:28.9117450Z:
+one APPL0002Code28/nullINF, no AppleAgx package/service/module/files/signer,8CPU,
+ANS/USB OK, no fresh41/1001/129,autologon0/no password,trace env absent.
+VERDICT: rejected for working DWM desktop; post-login observation inconclusive;
+causal native shader translation RED measured. Next work is OFFLINE indexable
+TEMP array reproduction/fix, justified by actual standard-runtime evidence.

@@ -198,5 +198,19 @@
     ],
     "evidence": "EXP751-dwm-extended-admission/test-admission.log + test-admission-arm64.log",
     "source_sha256": "209412e71f64b22752552c5788d88f120d190368b9ce4655829e381f5ecabe67"
+  },
+  "first_dwm_hardware": {
+    "experiment": "EXP751",
+    "status": "EXECUTED_REJECTED",
+    "evidence": "EXP751-dwm-extended-admission/causal-result.json",
+    "post_login": "INCONCLUSIVE_NO_USER_OR_EXPLORER",
+    "actual_boundary": "nativeCreateVertexShader / ClearGuard -> TTN scalar temporary indirect assertion"
+  },
+  "post_hardware_causal_target": {
+    "id": "runtime_indexable_temporary",
+    "status": "RED",
+    "mandatory_reason": "Actual standard-runtime ClearGuard VS crashes DWM before desktop; permitted scope exception2",
+    "offline_pass": "Authored indexable-temp VS reproduces assertion then native translation/emission passes with true TGSIarray declarations",
+    "hardware_dependency": "none for translator fix; next DWM consequence needs fresh preregistered hardware"
   }
 }

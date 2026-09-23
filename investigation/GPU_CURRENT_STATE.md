@@ -25,84 +25,47 @@ Signer E9BE15BD2A184BFABA0C8035B3C620C58037A241; preserve existing TESTSIGNING.
 Artifacts are rooted at main repository .local, NOT worktree .local.
 
 ## Proven boundary / current causal target
-Constructor5eaa15da hardware validated EXP730: TA3D completion, matching stamps,
-done2/2, interrupt/DPC1/1. Do not reopen spurious compute dispatch.
-EXP734 ETW exposed app-local stale741 UMD in EXP728 client directory; it was
-hash-checked and quarantined as EXP734-shadow-UMD-741.dll.saved. EXP732/733
-absence-of-new-callback conclusions invalid. Always isolate EXE without DLLs,
-System32 workingdirectory, ETW actual loaded-module path/checksum/timestamp proof.
-EXP735 coherent744 measured Blt1/interval0 rejection. Fix75bc5baf hardwarevalidated
-EXP736: exactSystem32745 checksum12328883/timestamp1790021801, client1028Session1
-STANDARD_RUNTIME_PASS create/draw/present; native render/flush/present callbacksS_OK.
-ServiceGDI fence300completed; PresentTransfer253 NOTcorrelatedtoclient1028. No replay.
-User explicitly reports physical black/white corruption PERSISTS on745.
-DWM26100.9278 repeatedlycrashes889800b0/offset27bde4;desktopacceptanceFAILED.
-Evidence EXP736-blt-present: dwm-state/loaded-umd-proof/physical-observation andETL.
-EXP737 passive trace completed on unchanged745, no qualification client. Direct3D11
-journal1820 reports887A0004 "Failed to find DDI to drive requested feature levels"
-in DWM5292/8580/8644 and other shell processes. DWM HWDEVICE409 identifies only
-Microsoft Basic Render Driver/FLc100; DWM continues crashing889800b0. Loaded
-System32745 image checksum12328883/timestamp1790021801 verified. ETW60s/182698events,
-eventsLost0. This is a DWM runtime-DDI negotiation boundary, not a queue fault.
-Evidence EXP737-dwm-creation/{causal-result.json,device-events.json,
-EXP737-dwm-evidence/runtime.etl,EXP737-dwm-evidence/state.json}.
-Source decision: current D3D11.dll ETW checksum5006223/timestamp2013979966 matches
-static inspected binary10.0.26100.9457. FillAPIVersions tests createflags bit5/BGRA:
-skips VistaDDI a0001/build4, retains a0006(D3D10_0_x) and a0009(Win7).
-Dwmcore same-version call uses0xa9(+priority1000), includesBGRA; FLlist includes10_0.
-This explains empty runtime/UMD DDI intersection; no higherFL requirement inferred.
-PinnedWDK minor6/build0 is authority; older Microsoft page macro examples differ.
-Microsoft extended-format-aware requirements mandate BGR families, typed backbuffer
-casting and BGRA/sRGB scanout. Must close companions before advertising0_x.
-EXP738-extended-bgra/causal-contract.json records primarysources and ownership.
-EXP738–742 offlinePASS BGRsampling/targets/primarycasting/formatbits/RT|SRV; referencedartifactdirs unchanged.
-EXP743 implementationee605a52490e294d18143786a4c4dc517614feb7: 1024square4MB
-native color output now passes UMD, materializer, KMD bind/root routing,retirement.
-One shared native surface validator replaces16/fullscreen whitelists;8192axis,
-1/2/4/8/16byte pixel pitch, backingfootprint and16MB arena bounds retained.
-Fixture1MBclass limit corrected to realKMD16MB. Fullx64suite0/0warnings/errors,
-3hosttestsPASS,ARM64testcrossbuildPASS; EXP743-bgr-geometry/routed evidence.
-EXP744 offlineGREEN: sampling tests now use actual FXC ps_4_0 Sample/SampleLevel
-Draw/Flush, notResourceCopy conversion. SV_Position is TGSI systemvalue; SAMPLE
-keeps texture0/sampler3 inNIR. Texturedcapture usesexisting760reloc boundedstorage.
-ResourceCopy now enforces equal2Dsize/castfamily and rawUNORM bytes independently
-of boundSRV; wholeCopyRegion delegates. Crossfamily/size negativecasesPASS.
-Finalsourcea90e1309f331c599cfaa24a3e862d156bc45fffc5c3b826d93a9c28c249de575.
-x64fullsuite0;ARM64testcrossbuild0;5hosttestsPASS; EXP744-copy-contract/green.
-EXP746 keeps measuredshared/GDI pre-DWM; verifiedNO_REDIRECTION defers generalBlt (EXP747notes).
-EXP737: API0xA02=SHARED|GDI_COMPATIBLE|SHARED_NTHANDLE;0x200=GDI_COMPATIBLE.
-Same-runtime APIMiscFlagsToDDIMiscFlags:0xA02->DDI2,0x200->DDI0; NT ownedbyruntime/KMT.
-WDK permitsDXGI1_1resolve with0_x+Versionlow0x177a; these flagsdoNOTforceD3D11DDI.
-EXP750 sharedofflinePASS:7sizes,private-onlyA->B,draw/fence/destroyA/sampleB;invalidbytes/pitch/size rejected.
-Linear stride+borrowed logicalsize; x64suite0/ARM64build0,sourceff7d4cef; DWM_NEXT_GATES.json.
-DirectFlip preregistration: DWM behavior withoutCheckDirectFlipSupport UNKNOWN; observe reject-*/ETW; retainmandatoryKMDcap.
-KernelModeCommandBuffer: CLEAR in separatecapschange unlesscoherentaperture proven; nofakeCacheCoherent.
-TDR: retainrequiredresetABI; softwareresetNOTAGXquiescence; timeoutfatal/reboot,ResetFromTimeoutfailurecanbugcheck.
-EXP745 feb7f7a1 offlinePASS: sixBGRformats x4staging mip/array subresources exact
-byteroundtrip; dynamicBGRAsRGB/BGRXsRGB Map->actualshaderDraw/Flush->retirement.
-ExistingAsahitransfers andWindowsflush/retire; no newallocator/composer.
-Sourcee72ca40b59a434694ae9cbd9af081e9217175a5bce32e213f5a551bbaba28a70;
-x64suite0,ARM64archives/testcrossbuild0; EXP745-texture-map/verified.
-EXP747 nonblockingMap+ResourceIsStagingBusy GREEN: active/no-flush,pending/timeout0,
-completion/retry/holds,unrelatedresourceidle; x64suite0/ARM64build0,EXP747-nonblocking-map/final.
-Map stayscontext-wide;WRITE_DISCARD serializes,norenameclaim. EXP748 softwareprobePASSED.
-EXP746 refusaltraceGREEN: all5DDIs observed,one recordperrejection; x64suite0/ARM64build0.
-UseTRACE_FILE+APPLE_AGX_UMD_REFUSALS_ONLY=1; skipsoptionalresidencyqueries.
-EXP748 realbuilderSOFTWAREprobe:0_x interfacea0006/version177a/DXGI1_1 true; sizes56/64,slot56.
-BuilderD3D11 26100.9278 vsAir9457; intentionalCreateFAIL,postcreateformatqueriesNOTmeasured.
-Conditionalresolver/nativebase+extendedcanaries+valid/foreign/nulltests GREEN x64/ARM64;EXP748/table-green.
-EXP749 offlinePASS:32BGRviews;16GenMipschains(1D/2D/3Ddepth5/Cube6);ld_ms->txf_ms. MS_LOADset;MS_RT0.
-Shared256registry/constructioncapacity;encoderOOMguard. x64suite0/ARM64build0;source070f6399;EXP751advertisementGREEN.
-Rotation can leave prehardware scope: Microsoft DXGI_DDI_BASE_FUNCTIONS exempts
-nonidentityrotation whenprimarycreation neverusesDXGI_DDI_ERR_UNSUPPORTED; our
-activecreatepath doesnot. MSAAresolve notadmitted (quality>1zero). No fakepass.
-Operator followup: black afterlogon; elements only appear withartifacts after
-Windows key; no spontaneous correctdesktop. Exact additional run/time unspecified.
-745 exactcleanup20:47:27Z succeeded. Ordinary377/392 finalbaseline20:49:20Z:
-Code28/nullINF,no package/service/module/SYS/UMD/signer,8CPU,autologon0/no password.
-Operator poweredAir off; nowRunningproxy. Recheckedproxy/vUART USB present,
-WindowsSSH timeout, noactive launcher. Do not relaunch stale55457. Lastcleanbaseline
-above remains lastverifieddiskstate; recheck ordinaryguest before futureinstall.
+EXP736 exact745 standardruntime client Create/Draw/Present PASS; physicaldesktop
+corruption persisted. EXP737 DWM failed before DDIdispatch (BGRA0xa9 removeslegacy).
+EXP747 Map/nonblocking/busy offlinePASS;EXP748 realSOFTWARE runtime selects0_x
+interfacea0006/version177a and conditionalDXGI1_1 table PASS (builder9278 vsAir9457).
+EXP749 BGR1D/2D/3D/Cube views,16GenMipschains,ld_ms->txf_ms offlinePASS;
+MS_LOAD set for87/88/91/93,MS_RT0,quality>1zero. Shared256registry/constructionlimit.
+EXP750 measuredsharedCreate/Open offlinePASS: private-onlyA->B,draw/fence/destroyA/
+sampleB;6measuredsizes plus1366x768;invalidbytes/pitch/size reject. Linearstride and
+borrowedlogicalsize fixed;existingallocator/capture/composer/retirement retained.
+EXP751 advertiseslegacy+0_x (ebab00e3); fullx64suite0/ARM64testbuild0.
+Original mandatory DWM inventory PASS; no broad expansion. SeeDWM_NEXT_GATES.json.
+
+EXP751 candidate746 source209412e71f64b22752552c5788d88f120d190368b9ce4655829e381f5ecabe67.
+Packagebuild/analysis0warnings0errors;KMDUniversal/Inf2Cat/signer/catalogmembershipPASS;
+AirnativeCATPASS. SameTESTSIGNING/signercfg; installedonceoem5Code0, nowremoved.
+Candidatehashes/launchprofiles/prereg: EXP751-dwm-extended-admission/manifest.json.
+ActualboundDWM now reachesnativeCreateVertexShader, thenASSERT !indirect in
+exactgeneratedtgsi_to_nir.c574 ->ucrtbaseabortc0000409/FAST_FAIL7. Callchain:
+D3D11ClearGuard/BeginGuardRectangleSupport ->DirectComposition ->uDWMinit.
+SourceShaderTGSI.c DCL_INDEXABLE_TEMP emits scalarureg_DECL_temporary; TTN only
+permitsindirect access whenDeclaration.Array creates variable. Reproduce/fix this
+exacttranslationOFFLINE; don'tremoveassert orreinterpret0_xasinherentlyunsuitable.
+Noactiveuser/Explorerafter45s;autologonpasswordcleared. Post-logincheckpointINCONCLUSIVE.
+403081ETWevents/lost0;1304System32UMDimageevents exact746 checksum12354734/time1790135148.
+PriorEmptyDDIintersectionmessageabsent; journals80004001/887A0020 removal remain.
+NoDWM Present orphysicalshaderpixelsproven. Emptyrejecttrace doesNOTprove5DDIsPASS;
+reject-blt=0unexercised. Physicalobservationnotreceived; userpreviousblack/artefacts
+remainhistoricalbaseline, notEXP751 observation. Noqualificationclient/retry.
+Evidence17fileshashverifiedbeforecleanup;freshdumps/debug-current/debug-assert/
+fault-source/etw-causal-summary/loaded-umd-proof/causal-result inEXP751artifactroot.
+
+EXP751 exactcleanup0;ordinary377/392 finalbaseline04:11:28Z Code28/nullINF,
+nopackage/service/module/SYS/UMD/signer,8CPU,ANS/USBhealthy,no41/1001/129,
+autologon0/nopassword,traceenvrestoredabsent. Ordinarylauncher14804 currentlyactive;
+WindowsSSH reachable. Don'tchainloaduntilorderlyshutdownandproxyreenumeration.
+DirectFlip retained mandatoryWDDM1.2+bit;DWMwithoutCheckDirectFlipSupportUNKNOWN.
+KernelModeCommandBuffer: separatefutureCLEAR unlesscoherentapertureproven.
+TDRrequiredABI retained; softwareResetNOTfirmwarequiescence,timeoutfatal/reboot.
+GeneralBlt deferredunderunchangedNO_REDIRECTION;reopenonactualreject-blt.
+NoGPUVA orclosedlayerredesign. Newarraytranslationtask is justified only byEXP751
+actualruntimeassertion, notoptionalcompleteness or inventory expansion.
 
 ## Fixed execution recipe — do not rediscover
 Git: /opt/homebrew/bin/git (system Git hits unaccepted Xcode license).
@@ -143,8 +106,8 @@ contract defect. Batch independent reads, report only first meaningful failure.
 Verify on-disk artifacts/tool exits; planning/transfers are not completed work.
 
 HARDWARE ROADMAP
-[PASS] EXP736 standardruntimeCreate/Draw/Present;EXP744-746;EXP747Map;EXP748DXGI1_1;EXP7490_xcoverage.
-[NOW] EXP751 preregistered package746:ARM64analysis/Universal/Inf2Cat/signermembership/hashPASS;AirnativeCATcheck pending.
-[NEXT] Ordinarybaseline->fullownerempty->nativeCATverify/install746->boundDWM60s->evidence->exactcleanup.
-[HW] DWM hardwaredeviceadmission/firstDDIfailure;physicaldesktop immediatelyafterlogin.
-POST-HARDWARE: generalBlt deferredbyNO_REDIRECTION;preregister reject-blt=0,reopenonreject;stabledesktoplater.
+[PASS] Originalmandatoryofflinegates,0_xadvertisement,ARM64package/sign/hash;EXP751hardwareattemptcompleted.
+[NOW] ActualruntimeRED: indexableTEMPdeclaredscalar ->TTNassert. Reproduce/fixoffline;noDDIversionredesign.
+[NEXT] ExactreproGREEN+existingnativegates,thenfreshpackage/preregistrationfornextcausalcheckpoint.
+[HW] Nextunproven: DWMguardshadercreation ->actualdesktopdraw/completion/Present;post-loginobservation.
+POST-HARDWARE: generalBlt onlyifmeasured;stableaccelerateddesktop acceptance remainsUNPROVEN.
