@@ -580,6 +580,9 @@ typedef struct _ADMISSION_PHYSICAL_OWNER {
   ULONG LastHvcPayloadStatus;
   ULONG HvcInvocationCount;
   ULONG TranslatedPageCount;
+  ULONGLONG LastAllocateBytes;
+  ULONG LastAllocateStep;
+  NTSTATUS LastAllocateStatus;
   BOOLEAN Initialized;
 } ADMISSION_PHYSICAL_OWNER;
 
@@ -654,6 +657,16 @@ void AdmissionRecordDevice(_In_opt_ PDEVICE_OBJECT DeviceObject,
 void AdmissionRecordStartStage(_In_ ADMISSION_CONTEXT *Context,
                                _In_ ADMISSION_START_STAGE Stage,
                                _In_ NTSTATUS Status);
+void AdmissionRecordMemoryStartFailure(
+    _In_ ADMISSION_CONTEXT *Context, _In_ ULONG Substage,
+    _In_ NTSTATUS Status, _In_ ULONGLONG RequestedBytes,
+    _In_ ULONG OperationResult, _In_ LONG OutstandingAllocations,
+    _In_ ULONG PhysicalStep, _In_ NTSTATUS PhysicalStatus,
+    _In_ ULONGLONG PhysicalBytes);
+void AdmissionRecordMemoryStop(_In_ ADMISSION_CONTEXT *Context,
+                               _In_ NTSTATUS Status,
+                               _In_ LONG OutstandingBefore,
+                               _In_ LONG OutstandingAfter);
 void AdmissionRecordPlatformStage(_In_ ADMISSION_CONTEXT *Context,
                                   _In_ ADMISSION_PLATFORM_STAGE Stage,
                                   _In_ NTSTATUS Status);

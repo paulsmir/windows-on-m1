@@ -236,6 +236,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
   APPLE_AGX_CONFIG_SNAPSHOT snapshot;
   APPLE_AGX_UAT_TTBR_PAIR pair;
   NTSTATUS status;
+  APPLE_AGX_MEMORY_RESULT memoryResult = AppleAgxMemoryResultOk;
+  ULONGLONG requestedBytes = 0ULL;
 
   AdmissionMemoryRecordStart(Context, AdmissionMemoryStartEntered,
                              STATUS_PENDING);
@@ -246,6 +248,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
       Context->Interface.DxgkCbUnmapMemory == NULL) {
     AdmissionMemoryRecordStart(Context, AdmissionMemoryStartEntered,
                                STATUS_INVALID_DEVICE_STATE);
+    AdmissionRecordMemoryStartFailure(
+        Context, AdmissionMemoryStartEntered, STATUS_INVALID_DEVICE_STATE,
+        0ULL, 0u, 0, 0u, STATUS_SUCCESS, 0ULL);
     return STATUS_INVALID_DEVICE_STATE;
   }
   AdmissionMemoryRecordStart(Context, AdmissionMemoryStartInventories,
@@ -256,6 +261,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
   {
     AdmissionMemoryRecordStart(Context, AdmissionMemoryStartInventories,
                                STATUS_INSUFFICIENT_RESOURCES);
+    AdmissionRecordMemoryStartFailure(
+        Context, AdmissionMemoryStartInventories,
+        STATUS_INSUFFICIENT_RESOURCES, sizeof(*runtime), 0u, 0,
+        0u, STATUS_SUCCESS, 0ULL);
     return STATUS_INSUFFICIENT_RESOURCES;
   }
   RtlZeroMemory(runtime, sizeof(*runtime));
@@ -306,18 +315,26 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
 
   AdmissionMemoryRecordStart(Context, AdmissionMemoryStartLocalObject,
                              STATUS_PENDING);
-  if (AppleAgxMemoryAllocateAligned(
-          &runtime->MemoryIo, ADMISSION_LOCAL_BYTES,
-          ADMISSION_ALLOCATION_ALIGNMENT,
-          &runtime->LocalObject) != AppleAgxMemoryResultOk ||
-      AppleAgxMemoryMarkCpuWritten(&runtime->LocalObject) !=
-          AppleAgxMemoryResultOk ||
-      AppleAgxMemoryMarkPrepared(&runtime->LocalObject) !=
-          AppleAgxMemoryResultOk) {
+  requestedBytes = ADMISSION_LOCAL_BYTES + ADMISSION_ALLOCATION_ALIGNMENT;
+  memoryResult = AppleAgxMemoryAllocateAligned(
+      &runtime->MemoryIo, ADMISSION_LOCAL_BYTES,
+      ADMISSION_ALLOCATION_ALIGNMENT, &runtime->LocalObject);
+  if (memoryResult != AppleAgxMemoryResultOk) {
     status = STATUS_INSUFFICIENT_RESOURCES;
     goto Fail;
   }
   runtime->LocalReady = TRUE;
+  memoryResult = AppleAgxMemoryMarkCpuWritten(&runtime->LocalObject);
+  if (memoryResult != AppleAgxMemoryResultOk) {
+    status = STATUS_INVALID_DEVICE_STATE;
+    goto Fail;
+  }
+  memoryResult = AppleAgxMemoryMarkPrepared(&runtime->LocalObject);
+  if (memoryResult != AppleAgxMemoryResultOk) {
+    status = STATUS_INVALID_DEVICE_STATE;
+    goto Fail;
+  }
+  requestedBytes = 0ULL;
   AdmissionMemoryRecordStart(Context, AdmissionMemoryStartResidency,
                              STATUS_PENDING);
   if (!AppleAgxResidencyContextCreate(
@@ -486,6 +503,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
   return STATUS_SUCCESS;
 
 Fail:
+  AdmissionRecordMemoryStartFailure(
+      Context, (ULONG)Context->MemoryStartStage, status, requestedBytes,
+      (ULONG)memoryResult, runtime->PhysicalReady ?
+          runtime->PhysicalOwner.AllocationCount : 0,
+      runtime->PhysicalOwner.LastAllocateStep,
+      runtime->PhysicalOwner.LastAllocateStatus,
+      runtime->PhysicalOwner.LastAllocateBytes);
   if (!NT_SUCCESS(AdmissionMemoryRuntimeDestroy(runtime))) {
     AdmissionMemoryRecordStart(
         Context, (ADMISSION_MEMORY_START_STAGE)Context->MemoryStartStage,
@@ -1061,14 +1085,20 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStop(
     ADMISSION_CONTEXT *Context) {
   ADMISSION_MEMORY_RUNTIME *runtime;
   NTSTATUS status;
+  LONG before;
   if (Context == NULL)
     return STATUS_INVALID_PARAMETER;
   runtime = (ADMISSION_MEMORY_RUNTIME *)Context->MemoryRuntime;
   if (runtime == NULL)
     return STATUS_SUCCESS;
+  before = runtime->PhysicalOwner.AllocationCount;
   status = AdmissionMemoryRuntimeDestroy(runtime);
-  if (!NT_SUCCESS(status))
+  if (!NT_SUCCESS(status)) {
+    AdmissionRecordMemoryStop(
+        Context, status, before, runtime->PhysicalOwner.AllocationCount);
     return status;
+  }
+  AdmissionRecordMemoryStop(Context, STATUS_SUCCESS, before, 0);
   ExFreePoolWithTag(runtime, ADMISSION_MEMORY_RUNTIME_TAG);
   Context->MemoryRuntime = NULL;
   Context->ApertureEntries = NULL;

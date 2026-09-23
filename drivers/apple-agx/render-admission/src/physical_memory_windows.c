@@ -50,8 +50,9 @@ static VOID AdmissionPhysicalReleaseRaw(
 }
 
 static NTSTATUS AdmissionPhysicalCreateRaw(
-    _In_ PDXGKRNL_INTERFACE Interface, _In_ SIZE_T Bytes,
+    _Inout_ ADMISSION_PHYSICAL_OWNER *Owner, _In_ SIZE_T Bytes,
     _Outptr_ ADMISSION_PHYSICAL_ALLOCATION **Result) {
+  PDXGKRNL_INTERFACE Interface = Owner != NULL ? Owner->Interface : NULL;
   ADMISSION_PHYSICAL_ALLOCATION *allocation;
   DXGKARGCB_CREATE_PHYSICAL_MEMORY_OBJECT createArgs;
   DXGKARGCB_ALLOCATE_ADL adlArgs;
@@ -63,13 +64,20 @@ static NTSTATUS AdmissionPhysicalCreateRaw(
   if (Result == NULL)
     return STATUS_INVALID_PARAMETER;
   *Result = NULL;
+  if (Owner != NULL) {
+    Owner->LastAllocateBytes = Bytes;
+    Owner->LastAllocateStep = 1u;
+    Owner->LastAllocateStatus = STATUS_PENDING;
+  }
   if (!AdmissionPhysicalCallbacksValid(Interface) || Bytes == 0u ||
       (Bytes & (PAGE_SIZE - 1u)) != 0u)
     return STATUS_INVALID_PARAMETER;
   allocation = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*allocation),
                                ADMISSION_PHYSICAL_TAG);
-  if (allocation == NULL)
+  if (allocation == NULL) {
+    Owner->LastAllocateStatus = STATUS_INSUFFICIENT_RESOURCES;
     return STATUS_INSUFFICIENT_RESOURCES;
+  }
   RtlZeroMemory(allocation, sizeof(*allocation));
   allocation->Interface = Interface;
   allocation->Size = Bytes;
@@ -91,6 +99,7 @@ static NTSTATUS AdmissionPhysicalCreateRaw(
   }
   allocation->PhysicalMemoryObject = createArgs.hPhysicalMemoryObject;
   allocation->AdapterMemoryObject = createArgs.hAdapterMemoryObject;
+  Owner->LastAllocateStep = 2u;
 
   RtlZeroMemory(&adlArgs, sizeof(adlArgs));
   adlArgs.hAdapterMemoryObject = allocation->AdapterMemoryObject;
@@ -114,6 +123,7 @@ static NTSTATUS AdmissionPhysicalCreateRaw(
     goto Fail;
   }
   allocation->GuestIpaBase = basePage << PAGE_SHIFT;
+  Owner->LastAllocateStep = 3u;
 
   RtlZeroMemory(&mapArgs, sizeof(mapArgs));
   mapArgs.hPhysicalMemoryObject = allocation->PhysicalMemoryObject;
@@ -128,10 +138,12 @@ static NTSTATUS AdmissionPhysicalCreateRaw(
   allocation->MappedBase = mapArgs.pMappedAddress;
   allocation->MappedSize = mapArgs.Size;
   allocation->CpuBase = (PUCHAR)mapArgs.pMappedAddress + mapArgs.Offset;
+  Owner->LastAllocateStatus = STATUS_SUCCESS;
   *Result = allocation;
   return STATUS_SUCCESS;
 
 Fail:
+  Owner->LastAllocateStatus = status;
   AdmissionPhysicalReleaseRaw(allocation);
   ExFreePoolWithTag(allocation, ADMISSION_PHYSICAL_TAG);
   return status;
@@ -236,7 +248,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPhysicalOwnerInitialize(
   Owner->DeviceObject = DeviceObject;
   ExInitializeFastMutex(&Owner->Lock);
   status = AdmissionPhysicalCreateRaw(
-      Interface, ADMISSION_PHYSICAL_SCRATCH_BYTES, &scratch);
+      Owner, ADMISSION_PHYSICAL_SCRATCH_BYTES, &scratch);
   if (!NT_SUCCESS(status))
     goto Fail;
   requestIpa = (scratch->GuestIpaBase +
@@ -260,12 +272,20 @@ _Use_decl_annotations_ NTSTATUS AdmissionPhysicalOwnerInitialize(
   return STATUS_SUCCESS;
 
 Fail:
+  {
+    ULONGLONG failedBytes = Owner->LastAllocateBytes;
+    ULONG failedStep = Owner->LastAllocateStep;
+    NTSTATUS failedStatus = Owner->LastAllocateStatus;
   if (Owner->Request != NULL)
     RtlSecureZeroMemory(Owner->Request, sizeof(*Owner->Request));
   AdmissionPhysicalReleaseRaw(scratch);
   if (scratch != NULL)
     ExFreePoolWithTag(scratch, ADMISSION_PHYSICAL_TAG);
   RtlZeroMemory(Owner, sizeof(*Owner));
+    Owner->LastAllocateBytes = failedBytes;
+    Owner->LastAllocateStep = failedStep;
+    Owner->LastAllocateStatus = failedStatus;
+  }
   return status;
 }
 
@@ -279,9 +299,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionPhysicalAllocate(
     return STATUS_INVALID_PARAMETER;
   *Allocation = NULL;
   ExAcquireFastMutex(&Owner->Lock);
-  status = AdmissionPhysicalCreateRaw(Owner->Interface, Bytes, &created);
-  if (NT_SUCCESS(status))
+  status = AdmissionPhysicalCreateRaw(Owner, Bytes, &created);
+  if (NT_SUCCESS(status)) {
+    Owner->LastAllocateStep = 4u;
+    Owner->LastAllocateStatus = STATUS_PENDING;
     status = AdmissionPhysicalTranslate(Owner, created);
+    Owner->LastAllocateStatus = status;
+  }
   if (NT_SUCCESS(status)) {
     InterlockedIncrement(&Owner->AllocationCount);
     *Allocation = created;

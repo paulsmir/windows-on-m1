@@ -934,6 +934,46 @@ _Use_decl_annotations_ void AdmissionRecordStartStage(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordMemoryStartFailure(
+    ADMISSION_CONTEXT *Context, ULONG Substage, NTSTATUS Status,
+    ULONGLONG RequestedBytes, ULONG OperationResult,
+    LONG OutstandingAllocations, ULONG PhysicalStep,
+    NTSTATUS PhysicalStatus, ULONGLONG PhysicalBytes) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key)))
+    return;
+  WriteDword(key, L"Wom1MemoryStartStage", Substage);
+  WriteDword(key, L"Wom1MemoryStartStatus", (ULONG)Status);
+  WriteQword(key, L"Wom1MemoryRequestedBytes", RequestedBytes);
+  WriteDword(key, L"Wom1MemoryOperationResult", OperationResult);
+  WriteDword(key, L"Wom1MemoryOutstandingAllocations",
+             (ULONG)OutstandingAllocations);
+  WriteDword(key, L"Wom1PhysicalAllocateStep", PhysicalStep);
+  WriteDword(key, L"Wom1PhysicalAllocateStatus", (ULONG)PhysicalStatus);
+  WriteQword(key, L"Wom1PhysicalAllocateBytes", PhysicalBytes);
+  ZwClose(key);
+}
+
+_Use_decl_annotations_ void AdmissionRecordMemoryStop(
+    ADMISSION_CONTEXT *Context, NTSTATUS Status,
+    LONG OutstandingBefore, LONG OutstandingAfter) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key)))
+    return;
+  WriteDword(key, L"Wom1MemoryStopStatus", (ULONG)Status);
+  WriteDword(key, L"Wom1MemoryStopOutstandingBefore",
+             (ULONG)OutstandingBefore);
+  WriteDword(key, L"Wom1MemoryStopOutstandingAfter",
+             (ULONG)OutstandingAfter);
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordPlatformStage(
     ADMISSION_CONTEXT *Context, ADMISSION_PLATFORM_STAGE Stage,
     NTSTATUS Status) {
