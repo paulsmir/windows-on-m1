@@ -46819,3 +46819,13 @@ Render/Patch/Submit completion and standard Present with physical desktop
 observation. Failure is the first exact reject/exception/removal boundary.
 Collect evidence before exact package cleanup, clear autologon password, and
 restore ordinary377/392 recovery. Result: PENDING.
+
+### EXP754 preregistration correction before launch
+
+Correction UTC 2026-09-23T11:13:00Z, before any EXP754 chainload or install. The
+copied launch wrappers still named the prior EXP753 artifact directory; no launch
+used them. Only experiment-local log/contract paths were corrected to EXP754.
+Firmware, command line, package and hypothesis are unchanged. Corrected manifest
+SHA256 190522842a2bc44d1bf12455fd1cd1acb79c9086dad9d1bb992296703e57279a;
+full-owner wrapper SHA256 505571b8cc52f4572844ca9e213ca6afd6fce2305bcbcd642bb63c9c91bb1e58;
+ordinary wrapper SHA256 9cee65d74a2cb915aff55dabe760989e4cfa397a47513b96b385169a0fdebd97.
