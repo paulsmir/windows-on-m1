@@ -221,10 +221,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaB1Qualify(
   if (!NT_SUCCESS(status)) goto Done;
   state->Stage = 5u;
   if (*(ULONG *)state->Owned[0][5].CpuAddress !=
-          APPLE_AGX_EXP208_GDI_COLOR ||
-      *(ULONG *)state->Owned[1][5].CpuAddress != 0x5a5a5a5au) {
+          APPLE_AGX_EXP208_GDI_COLOR) {
     status = STATUS_DEVICE_DATA_ERROR;
     goto Done;
+  }
+  {
+    ULONG *untouched = (ULONG *)state->Owned[1][5].CpuAddress;
+    ULONG i;
+    for (i = 0u; i < B1_OUTPUT_BYTES / sizeof(ULONG); ++i)
+      if (untouched[i] != 0x5a5a5a5au) {
+        status = STATUS_DEVICE_DATA_ERROR;
+        goto Done;
+      }
   }
   status = AdmissionB1LeaseJob(context, state, 1u, 2u);
   if (!NT_SUCCESS(status)) goto Done;
