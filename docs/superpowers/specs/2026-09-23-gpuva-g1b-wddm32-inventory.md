@@ -36,6 +36,11 @@ blocks at 1526, 1860, 2479, 2544, 3857, 4141, 4176, 4624, 4813,
 runtime's required-query order must be checked against the exact build before
 any candidate is packaged. In particular, header availability cannot establish
 that `QUERYSEGMENT5` or 16-KiB slabs are accepted by VidMm.
+The G1 generator assumes VidMm obeys the selected segment-page granularity;
+it does not prove this assumption. The future KMD G3 UpdatePageTable path must
+reject a noncontiguous or unaligned native 16-KiB leaf with a bounded receipt,
+not round, alias or silently map it. ETW in the held discriminator must measure
+actual placement and PTE granularity against that assumption.
 
 ## One preregistered hardware question (held, not executable)
 

@@ -1,5 +1,11 @@
 """Offline executable specification of broker-v5 transactions; no m1n1 code."""
 import unittest
+import os
+import subprocess
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class BrokerSpec:
@@ -78,6 +84,30 @@ class BrokerSpec:
 
 
 class BrokerV5ContractTests(unittest.TestCase):
+    def test_real_m1n1_broker_implementation(self):
+        with tempfile.TemporaryDirectory(prefix="gpuva-v5-") as tmp:
+            binary = Path(tmp) / "broker-test"
+            cmd = [os.environ.get("CC", "clang"), "-std=c11", "-Wall", "-Wextra",
+                   "-Werror", "-fsanitize=address,undefined", "-I",
+                   str(ROOT / "drivers/apple-agx/shared/include"),
+                   str(ROOT / "m1n1_windows/tests/hv_agx_gpuva_v5_test.c"),
+                   str(ROOT / "m1n1_windows/src/hv_agx_gpuva_v5.c"),
+                   str(ROOT / "drivers/apple-agx/shared/src/apple_agx_uat.c"),
+                   "-o", str(binary)]
+            subprocess.run(cmd, check=True)
+            subprocess.run([str(binary)], check=True, timeout=10)
+
+    def test_real_m1n1_mmio_wire(self):
+        with tempfile.TemporaryDirectory(prefix="gpuva-v5-wire-") as tmp:
+            binary = Path(tmp) / "wire-test"
+            cmd = [os.environ.get("CC", "clang"), "-std=c11", "-Wall", "-Wextra",
+                   "-Werror", "-fsanitize=address,undefined",
+                   str(ROOT / "m1n1_windows/tests/hv_agx_gpuva_v5_mmio_test.c"),
+                   str(ROOT / "m1n1_windows/src/hv_agx_gpuva_v5_mmio.c"),
+                   "-o", str(binary)]
+            subprocess.run(cmd, check=True)
+            subprocess.run([str(binary)], check=True, timeout=10)
+
     def setUp(self):
         self.b = BrokerSpec()
         self.b.create("P", 0x10000000, {0x10000000, 0x12000000, 0x20000000})

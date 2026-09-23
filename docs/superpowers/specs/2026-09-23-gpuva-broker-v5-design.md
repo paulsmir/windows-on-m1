@@ -1,8 +1,8 @@
 # G2 broker v5 contract design — offline, no m1n1 implementation
 
-Status: design plus host executable specification only. m1n1, Mu, ACPI, KMD
-caps and hardware are unchanged. User permission is required to implement this
-ABI in m1n1 or run it on Air.
+Status: user authorized A/B on 2026-09-23. Broker v5 is implemented in m1n1
+commit `138c510a87fd150f89ee0450d5d960abbadf3929` and has host tests against
+the real C implementation. Mu, ACPI, KMD GpuMmu caps and hardware are unchanged.
 
 ## WINDOWS CONTRACT:
 
@@ -81,14 +81,19 @@ firmware executes selected context and reports completion; UMD holds opaque VA
 bindings only. Recovery is fail-closed at the violated owner, then exact
 package rollback to the GPU-visible Code28 profile if hardware becomes stuck.
 
-Host design tests: `python3 -m unittest tests.test_gpuva_broker_v5_contract -q`
-executes an independent finite broker reference, not m1n1. Its cases check
+Host tests: `python3 -m unittest tests.test_gpuva_broker_v5_contract -q`
+execute both the independent finite reference and the real m1n1 C broker/MMIO
+implementation under ASan/UBSan. Their cases check
 context0 preservation, process isolation at identical VA, slot reuse blocked
 until job retirement and TLB acknowledgement, stale lease rejection, owned
 backing validation, failed update rollback without advancing mapping generation,
 and root relocation invalidating the prior lease. These tests specify behavior
 for a later m1n1 implementation; they do not prove firmware ordering or Windows
-admission.
+admission. The C implementation registers VidMm table/backing grants, merges
+selected logical 4-KiB entries into one native leaf, checks exact ownership and
+representability, publishes with sync/TLB acknowledgement and rolls back on
+failure. It taints on failed rollback or context0/TTBR1 mutation. The v5 wire is
+separate from v4 at power-broker offset `0x700` and exposes no PA to UMD.
 
 ## WHAT IS STILL UNKNOWN:
 

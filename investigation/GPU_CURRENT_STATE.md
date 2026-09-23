@@ -18,8 +18,10 @@ domain and PAGETABLELEVELDESC representation are unproven. G1b pinned-WDK
 inventory and held 16-KiB hardware question are in
 `docs/superpowers/specs/2026-09-23-gpuva-g1b-wddm32-inventory.md`. G2 broker v5
 design and host specification are in
-`docs/superpowers/specs/2026-09-23-gpuva-broker-v5-design.md`; m1n1
-implementation and hardware require explicit permission.
+`docs/superpowers/specs/2026-09-23-gpuva-broker-v5-design.md`. User authorized
+A/B on 2026-09-23; A broker v5 is implemented in m1n1 commit `138c510a` with
+real-C host tests and offline ARM64 link. No GpuMmu KMD integration or hardware
+verdict exists yet. B1 precedes B2 to isolate broker behavior from WDDM3.2 caps.
 OpenGL and CS1.6 follow accelerated desktop acceptance.
 
 ## Proven hardware boundary — EXP753/package748
@@ -217,9 +219,11 @@ HARDWARE ROADMAP
        hardware run; exact cleanup and ordinary Code28 recovery.
 [PASS] Resource.cpp:452-453 buffer usage, typed SRV load/capture relocation,
        DynamicResourceMapDiscard and argument-bearing rejection pass offline.
-[NEXT] Stop after G2 design. Resolve VidMm 4-KiB table indices versus native
-AGX 16-KiB leaf descriptors, system-memory/eviction scatter and 3.2 query
-admission before production GpuMmu. Do not package or run EXP757 on Air; do not
-implement m1n1 broker v5 or start GPUVA hardware without explicit permission.
+[NEXT] Authorized B1 then B2, each with complete hardware preregistration and
+evidence-first rollback. B1 requires a genuine paging/app process caller and
+firmware job tied to the leased slot; an MMIO echo is insufficient. B2 requires
+the G3 KMD GpuMmu/3.2 admission path and ETW VidMm. Resolve 4-KiB logical
+PAGETABLELEVELDESC indices and system-memory scatter before advertising caps.
+Do not package or run cancelled EXP757. Keep intentional autologon enabled.
 POST-HARDWARE: native multi-draw batching, optional features, performance,
 sustained desktop stability, OpenGL and CS1.6 after accelerated-desktop acceptance.

@@ -259,6 +259,7 @@ int main(void) {
   printf("{\"harness\":\"PASS\",\"checks\":%u,\"shared_uat\":true,"
          "\"representable_16k_groups\":\"PASS\",\"arbitrary_4k_groups\":\"COUNTEREXAMPLE\","
          "\"selected_segment_scatter\":\"UNREACHABLE_IN_GENERATOR\","
+         "\"vidmm_segment_granularity_assumed\":true,"
          "\"wddm_input_domain_proven\":false,"
          "\"hardware\":false}\n",checks);
   free(m); return 0;
