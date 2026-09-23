@@ -2213,13 +2213,20 @@ AgxD3d10ResourceWithinRequiredLimits(
    if (!device || !resource || resource->owner_device != device ||
        !resource->resource || !resource->transfers ||
        (!resource->buffer && !AgxD3d10CopyFamily(resource->Format)) ||
-       SubResource >= resource->NumSubResources || Flags != 0 || !pMappedSubResource || !mapMode ||
+       SubResource >= resource->NumSubResources ||
+       (Flags & ~D3D10_DDI_MAP_FLAG_DONOTWAIT) || !pMappedSubResource || !mapMode ||
+       (Flags && (DDIMap == D3D10_DDI_MAP_WRITE_DISCARD ||
+                  DDIMap == D3D10_DDI_MAP_WRITE_NOOVERWRITE)) ||
        resource->transfers[SubResource] ||
        (resource->bind_flags == D3D10_DDI_BIND_CONSTANT_BUFFER &&
         DDIMap != D3D10_DDI_MAP_WRITE_DISCARD)) {
       SetError(hDevice, E_INVALIDARG); return;
    }
-   HRESULT status = AgxD3d10WindowsFlushRetire(device->windows);
+   pMappedSubResource->pData=NULL;
+   pMappedSubResource->RowPitch=pMappedSubResource->DepthPitch=0;
+   HRESULT status = (Flags & D3D10_DDI_MAP_FLAG_DONOTWAIT) ?
+      AgxD3d10WindowsTryFlushRetire(device->windows) :
+      AgxD3d10WindowsFlushRetire(device->windows);
    if (FAILED(status)) { SetError(hDevice, status); return; }
    struct pipe_box box;
    unsigned level = 0;
@@ -2252,6 +2259,11 @@ AgxD3d10ResourceWithinRequiredLimits(
    else
       pipe_texture_unmap(device->pipe,resource->transfers[SubResource]);
    resource->transfers[SubResource]=NULL;''')
+    replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceIsStagingBusy','''   Device *device=CastDevice(hDevice);
+   Resource *resource=CastResource(hResource);
+   if(!device || !resource || resource->owner_device!=device || !resource->resource)
+      return TRUE;
+   return AgxWin32AsahiResourceBusy(device->pipe,resource->resource) ? TRUE : FALSE;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceUpdateSubResourceUP','''   Device *pDevice = CastDevice(hDevice);
    Resource *resource = CastResource(hDstResource);
    ULONGLONG owner = 0;

@@ -15,7 +15,7 @@ KMD Render/Patch/Submit -> AGX. Do not redesign these layers or expand features.
 OpenGL/CS1.6 follow desktop acceptance. Ordinary setup errors are not GPU verdicts.
 
 ## Current source / candidate
-Current implementationEXP746 diagnostics; last hardware package745 remains immutable.
+Current implementationEXP747 Map/busy; last hardware package745 remains immutable.
 EXP736 package745 under /Users/pavel/public_windows/.local/experiments/EXP736-blt-present/package-build/package.
 SYS d352215b5d641c527481f16bb0d985803e6a8791d3dadec3674b2f30ee6e72a5
 UMD c620fad0950a6ff7e110e6df2e3a1cf245a68b79692ae01e3528be953b029528
@@ -77,8 +77,8 @@ DWM_SHARED_RUNTIME_CONTRACT.md/EXP746 supersedes shared/Blt POST-HARDWARE placem
 EXP737: API0xA02=SHARED|GDI_COMPATIBLE|SHARED_NTHANDLE;0x200=GDI_COMPATIBLE.
 Same-runtime APIMiscFlagsToDDIMiscFlags:0xA02->DDI2,0x200->DDI0; NT ownedbyruntime/KMT.
 WDK permitsDXGI1_1resolve with0_x+Versionlow0x177a; these flagsdoNOTforceD3D11DDI.
-SharedCreate/Open,GetDC/ReleaseDC,resolve/copy/sync arePRE-DWM;Applebranchesunproven.
-DirectFlip: retainmandatoryWDDM1.2+ KMDcap;0_x lacksUMDcheck;notend-to-endproof,candidategate remains.
+Shared/GDI/Blt pre-DWM acceptance: DWM_NEXT_GATES.json; independentA->B/private-data-only,measuredsizes;runtime-tableproof BEFOREslotwrite.
+DirectFlip preregistration: DWM behavior withoutCheckDirectFlipSupport UNKNOWN; observe reject-*/ETW; retainmandatoryKMDcap.
 KernelModeCommandBuffer: CLEAR in separatecapschange unlesscoherentaperture proven; nofakeCacheCoherent.
 TDR: retainrequiredresetABI; softwareresetNOTAGXquiescence; timeoutfatal/reboot,ResetFromTimeoutfailurecanbugcheck.
 EXP745 feb7f7a1 offlinePASS: sixBGRformats x4staging mip/array subresources exact
@@ -86,8 +86,9 @@ byteroundtrip; dynamicBGRAsRGB/BGRXsRGB Map->actualshaderDraw/Flush->retirement.
 ExistingAsahitransfers andWindowsflush/retire; no newallocator/composer.
 Sourcee72ca40b59a434694ae9cbd9af081e9217175a5bce32e213f5a551bbaba28a70;
 x64suite0,ARM64archives/testcrossbuild0; EXP745-texture-map/verified.
-NOW Flags0map slice only: DONOTWAIT remainsrejected. Useexistingretirementwith
-zerotimeout/WASSTILLDRAWING, thenverify required0_xdimension/castingcompanions.
+EXP747 nonblockingMap+ResourceIsStagingBusy GREEN: active/no-flush,pending/timeout0,
+completion/retry/holds,unrelatedresourceidle; x64suite0/ARM64build0,EXP747-nonblocking-map/final.
+Map stayscontext-wide;WRITE_DISCARD serializes,norenameclaim. NEXT software-runtimeprobe.
 EXP746 refusaltraceGREEN: all5DDIs observed,one recordperrejection; x64suite0/ARM64build0.
 UseTRACE_FILE+APPLE_AGX_UMD_REFUSALS_ONLY=1; skipsoptionalresidencyqueries.
 No0_xadvertisement ornewhardwarecandidate; donotclaim readiness.
@@ -142,9 +143,8 @@ Do not count planning, transfers or an empty output as completed work. Verify
 on-disk artifacts/tool exits directly. No repeated "continue" handoff loops.
 
 HARDWARE ROADMAP
-[PASS] EXP736 standardruntimeCreate/Draw/Present; EXP744 shader/copy; EXP745 textureMap.
-[NOW] Truthful0_xcompanions: nonblockingMap,requiredformat/dimension/castingcoverage;
-offlineexecutablegates. Onlythenadvertise pinnedminor6/build0.
-[NEXT] Measuredshared/GDI/Blt+DXGI1_1resolve coverage,thenARM64package/sign/hash/preregistration.
+[PASS] EXP736 standardruntimeCreate/Draw/Present;EXP744-746;EXP747 Map+busy.
+[NOW] Software-runtimeprobe: actual Interface/Version/DXGI1_1 table; no slotwrite beforeproof.
+[NEXT] 0_xcoverage thenlinearshared/private-data-onlyA->B; pitch>=width*bpp and%16=0;package gates.
 [HW] DWM hardwaredeviceadmission/firstDDIfailure;physicaldesktop immediatelyafterlogin.
-POST-HARDWARE: stableaccelerateddesktop;OpenGL/CS1.6later.
+POST-HARDWARE: generalBlt deferredbyNO_REDIRECTION;preregister reject-blt=0,reopenonreject;stabledesktoplater.

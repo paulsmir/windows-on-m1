@@ -139,3 +139,59 @@ helper; no residency or submission policy change. The composer regression
 explicitly enables unrestricted tracing with a missing optional callback.
 Refusals-only mode avoids intrusive optional residency queries during the DWM
 discriminator; HRESULTs and normal error callbacks remain unchanged.
+
+## NEXT acceptance gates (operator refinement, 2026-09-23)
+
+Order stays nonblocking Map -> selected0_x coverage -> package -> Air.
+Machine-readable gate definitions: `DWM_NEXT_GATES.json`; none are PASS merely
+because their acceptance criteria are recorded.
+
+1. Shared Create/Open: create on device A, serialize allocation private data,
+   open on independent device B using only those bytes and runtime allocation
+   handles. B cannot see the creator Resource object, addresses, or a creator
+   lookup registry. Render on A, complete the same backing's fence, sample on B
+   through the actual native producer and retire; verify backing identity and
+   both lifetimes. Use EXP737 dimensions1024x1024,64x320,1024x1088,192x192,256x256,
+   512x512; format87 and bindRT|SRV. Foreign or truncated private data must fail
+   before import/submission, without crash, leaks, or aliasing unrelated memory.
+2. BltDXGI: use those source/destination sizes, including unequal pairs to force
+   stretch, with BGRA/BGRX UNORM/sRGB combinations. Verify at least bilinear
+   stretch and preservation of encoded sRGB values: no sRGB-to-linear decode
+   for the DXGI blit. One native pass; no resolve-then-convert in place. Exercise
+   the real Blt entry, producer, capture, materializer and retirement.
+3. ResolveSharedResource: before writing the extended slot, prove the selected
+   runtime and our Interface/Version choose DXGI1_1 and allocate its full table.
+   Macro evaluation alone is necessary but not sufficient for that proof. Check
+   exact structure sizes/offsets and surrounding sentinel integrity in executable
+   ABI tests, plus runtime table-selection evidence. If runtime selects only the
+   base table, reconsider interface negotiation before any callback write or DWM
+   hardware run; do not force a cast or infer size from the header's availability.
+
+Required standalone preregistration line:
+**DWM with DirectFlip=TRUE and no CheckDirectFlipSupport: unknown; observe reject-* / ETW.**
+The absence of a DirectFlip callback in the selected UMD must be an explicit
+unknown in the experiment, never a surprise or a claimed capability proof.
+
+## Updated first-run scope after implementation-notes source check
+
+Microsoft Supporting the DXGI DDI explicitly requires NO_REDIRECTION for a
+driver without a shared D3D9 implementation. Pinned Mesa Device.cpp returns that
+status and our projection preserves it. Its documented consequence is bypassing
+the shared-resource presentation redirection in favor of PresentDXGI. Therefore
+general Blt stretch/conversion is deferred past the first DWM experiment, with
+preregistered expectation **reject-blt = 0**. This supersedes the earlier blanket
+pre-DWM Blt requirement above; it is an experiment expectation, not proof that
+Windows11/DWM can never call Blt. Any rejection reopens the gate. Do not change
+NO_REDIRECTION. Explicit DWM shared/GDI resources remain mandatory and distinct
+from DXGI's redirected presentation path. Source:
+https://learn.microsoft.com/en-us/windows-hardware/drivers/display/supporting-the-dxgi-ddi
+
+The software-probe suggestion is a hypothesis to test on the builder. A stub
+that deliberately fails CreateDevice can measure negotiation but cannot prove
+which format checks would follow successful device creation. Record that limit
+and the builder/Air runtime image versions rather than infer absence of checks.
+
+Map limitation: existing WRITE_DISCARD currently synchronizes and reuses storage;
+no asynchronous storage-renaming claim is made. DONOTWAIT is not accepted with
+DISCARD/NOOVERWRITE. Nonblocking read/write staging access and resource busy
+queries use the existing batch/fence lifetime; no new allocator is introduced.

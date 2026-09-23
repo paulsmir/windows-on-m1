@@ -182,6 +182,25 @@ int AgxWin32AsahiContextRetire(struct pipe_context *ctx,APPLE_AGX_U32 timeout) {
   }
   return 1;
 }
+int AgxWin32AsahiResourceBusy(struct pipe_context *ctx,struct pipe_resource *resource) {
+  if(!ctx || !resource || resource->screen!=ctx->screen) return 1;
+  struct agx_context *native=agx_context(ctx);
+  struct agx_resource *rsrc=agx_resource(resource);
+  if(!rsrc->bo) return 1;
+  for(unsigned i=0;i<AGX_MAX_BATCHES;++i) {
+    int active=BITSET_TEST(native->batches.active,i);
+    int submitted=BITSET_TEST(native->batches.submitted,i);
+    struct agx_batch *batch=&native->batches.slots[i];
+    if((!active && !submitted) || !agx_batch_uses_bo(batch,rsrc->bo)) continue;
+    /* Do not flush a pending batch merely to answer a busy query. */
+    if(active || !AgxWin32AsahiBatchPoll(batch,0)) return 1;
+    /* Poll proved completion; the existing sync cleanup cannot wait again
+     * because the capsule is already retired. Preserve all other batches. */
+    agx_sync_batch(native,batch);
+    if(BITSET_TEST(native->batches.submitted,i)) return 1;
+  }
+  return 0;
+}
 void AgxWin32AsahiContextDiagnostic(struct pipe_context *ctx,
     APPLE_AGX_U32 state[16],APPLE_AGX_U32 bindings[16]) {
   memset(state,0,16*sizeof(*state));memset(bindings,0,16*sizeof(*bindings));

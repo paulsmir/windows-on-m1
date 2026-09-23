@@ -1,0 +1,173 @@
+{
+  "scope": "PRE-DWM hardware; measured EXP737 requirements only",
+  "order": [
+    "nonblocking_map",
+    "dxgi_1_1_table",
+    "0_x_coverage",
+    "shared_create_open",
+    "package",
+    "Air"
+  ],
+  "gates": [
+    {
+      "id": "nonblocking_map",
+      "status": "PASS_OFFLINE",
+      "evidence": "EXP747-nonblocking-map/final",
+      "proof": "Idle/pending/completed Map; ResourceIsStagingBusy active-no-flush/pending/complete/independent-resource; x64 fullsuite0 ARM64build0",
+      "limits": "Context-wide map synchronization; WRITE_DISCARD serializes without rename"
+    },
+    {
+      "id": "shared_create_open",
+      "status": "OPEN",
+      "sizes": [
+        [
+          1024,
+          1024
+        ],
+        [
+          64,
+          320
+        ],
+        [
+          1024,
+          1088
+        ],
+        [
+          192,
+          192
+        ],
+        [
+          256,
+          256
+        ],
+        [
+          512,
+          512
+        ]
+      ],
+      "format": 87,
+      "bind_flags": 40,
+      "isolation": "Device B imports only allocation private bytes and runtime handles; no creator object or pointer/registry lookup",
+      "proof": "Real producer render A -> backing fence -> sample B -> retirement; same backing identity, independent owners/lifetimes",
+      "negative": [
+        "foreign private data",
+        "truncated private data",
+        "pitch not multiple16",
+        "size below pitch*height",
+        "format outside admitted family"
+      ],
+      "negative_pass": "deterministic rejection before import/submission; no crash or leaked holds",
+      "layout": {
+        "modifier": "linear",
+        "mip_levels": 1,
+        "samples": 1,
+        "pitch_invariants": [
+          "pitch>=width*bpp",
+          "pitch%16==0",
+          "size>=pitch*height"
+        ]
+      }
+    },
+    {
+      "id": "0_x_coverage",
+      "status": "OPEN",
+      "required": [
+        "BGRA/BGRX 1D/3D/Cube create/map/sample",
+        "GenMips source/runtime decision and implementation when mandatory",
+        "MULTISAMPLE_LOAD truthful decision with pinned WDK/Microsoft evidence"
+      ],
+      "no_waiver": "No format-query absence inference from intentionally failed CreateDevice probe"
+    },
+    {
+      "id": "blt_dxgi",
+      "status": "DEFERRED_POST_FIRST_DWM_RUN",
+      "source_sizes": [
+        [
+          1024,
+          1024
+        ],
+        [
+          64,
+          320
+        ],
+        [
+          1024,
+          1088
+        ],
+        [
+          192,
+          192
+        ],
+        [
+          256,
+          256
+        ],
+        [
+          512,
+          512
+        ]
+      ],
+      "destination_sizes": [
+        [
+          1024,
+          1024
+        ],
+        [
+          64,
+          320
+        ],
+        [
+          1024,
+          1088
+        ],
+        [
+          192,
+          192
+        ],
+        [
+          256,
+          256
+        ],
+        [
+          512,
+          512
+        ]
+      ],
+      "formats": [
+        "BGRA_UNORM",
+        "BGRX_UNORM",
+        "BGRA_SRGB",
+        "BGRX_SRGB"
+      ],
+      "proof": "Real Blt -> one native pass/capture/materializer/retirement; unequal rectangles bilinear stretch; encoded sRGB values preserved",
+      "forbidden": [
+        "sRGB-to-linear conversion",
+        "resolve-then-convert in place"
+      ],
+      "reason": "Microsoft Supporting the DXGI DDI + current NO_REDIRECTION return: no shared-resource presentation redirection; unchanged return",
+      "reopen_if": "Any reject-BltDXGI in first DWM experiment",
+      "hardware_expectation": "reject-blt = 0"
+    },
+    {
+      "id": "dxgi_1_1_table",
+      "status": "OPEN",
+      "proof_before_callback_write": [
+        "runtime selects DXGI1_1 for exact Interface/Version",
+        "exact pinned table size and field offset",
+        "executable sentinel/ABI guard"
+      ],
+      "base_only_action": "revisit interface negotiation before package; no forced extended-table cast",
+      "first_attempt": "Builder real D3D11 software-driver probe, flags0xa9; record runtime version and measured Interface/Version; deliberate CreateDevice failure cannot establish post-create format-query absence"
+    }
+  ],
+  "preregistration_required_line": "DWM with DirectFlip=TRUE and no CheckDirectFlipSupport: unknown; observe reject-* / ETW.",
+  "references": [
+    ".local/research/DWM_GATES_IMPLEMENTATION_NOTES.md (verify assertions before applying)"
+  ],
+  "preregistration_expectations": [
+    "DWM with DirectFlip=TRUE and no CheckDirectFlipSupport: unknown; observe reject-* / ETW.",
+    "reject-blt = 0; unexpected refusal reopens Blt gate",
+    "Physical screen immediately after logon, before Windows key",
+    "First reached reject-* and ETW; APPLE_AGX_UMD_REFUSALS_ONLY=1"
+  ]
+}

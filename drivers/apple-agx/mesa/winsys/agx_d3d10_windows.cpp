@@ -448,17 +448,30 @@ HRESULT AgxD3d10WindowsFlushStatus(AGX_D3D10_WINDOWS_DEVICE *Device) {
       Device->Runtime.LastScreenError:E_FAIL;
 }
 
-HRESULT AgxD3d10WindowsFlushRetire(AGX_D3D10_WINDOWS_DEVICE *Device) {
+static HRESULT flush_retire(AGX_D3D10_WINDOWS_DEVICE *Device,DWORD timeout) {
   if(!Device || Device->Stage!=AgxD3d10DeviceReady || !Device->Context)
     return E_INVALIDARG;
   Device->Context->flush(Device->Context,NULL,0);
   HRESULT result=AgxD3d10WindowsFlushStatus(Device);
   if(FAILED(result)) return result;
-  if(!AgxWin32AsahiContextRetire(Device->Context,INFINITE))
-    return FAILED(Device->Runtime.LastScreenError)?
+  if(!AgxWin32AsahiContextRetire(Device->Context,timeout)) {
+    result=FAILED(Device->Runtime.LastScreenError)?
         Device->Runtime.LastScreenError:HRESULT_FROM_WIN32(ERROR_BUSY);
-  if(!collect_presentations(Device)) return HRESULT_FROM_WIN32(ERROR_BUSY);
+    /* Only an unsignalled fence in a zero-time poll is a nonblocking retry.
+     * Preserve real errors and keep all submission holds until completion. */
+    if(timeout==0 && result==HRESULT_FROM_WIN32(ERROR_TIMEOUT))
+      return DXGI_DDI_ERR_WASSTILLDRAWING;
+    return result;
+  }
+  if(!collect_presentations(Device))
+    return timeout==0 ? DXGI_DDI_ERR_WASSTILLDRAWING : HRESULT_FROM_WIN32(ERROR_BUSY);
   return S_OK;
+}
+HRESULT AgxD3d10WindowsFlushRetire(AGX_D3D10_WINDOWS_DEVICE *Device) {
+  return flush_retire(Device,INFINITE);
+}
+HRESULT AgxD3d10WindowsTryFlushRetire(AGX_D3D10_WINDOWS_DEVICE *Device) {
+  return flush_retire(Device,0);
 }
 
 HRESULT AgxD3d10WindowsQuerySignal(AGX_D3D10_WINDOWS_DEVICE *Device,

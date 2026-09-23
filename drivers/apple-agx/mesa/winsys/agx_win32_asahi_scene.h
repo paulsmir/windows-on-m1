@@ -79,6 +79,7 @@ struct pipe_resource *AgxWin32AsahiCreateUncompressedDepthStencil(
  * All contexts must be destroyed before their screen is destroyed. */
 int AgxWin32AsahiContextDestroy(struct pipe_context *);
 int AgxWin32AsahiContextRetire(struct pipe_context *, APPLE_AGX_U32 TimeoutMs);
+int AgxWin32AsahiResourceBusy(struct pipe_context *, struct pipe_resource *);
 void AgxWin32AsahiContextDiagnostic(struct pipe_context *,
     APPLE_AGX_U32 State[16], APPLE_AGX_U32 Bindings[16]);
 int AgxWin32AsahiContextDrawReceipt(struct pipe_context *);

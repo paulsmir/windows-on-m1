@@ -986,6 +986,7 @@ static VOID APIENTRY FrontendSetError(D3D10DDI_HRTCORELAYER core,HRESULT error) 
 }
 /* Sampling coverage uses a real D3D shader and Draw, not ResourceCopy as a
  * conversion helper. The caller observes actual submission and retirement. */
+static D3D10DDI_HRESOURCE FrontendBusyProbe;
 static void FrontendSampleDraw(D3D10DDI_HDEVICE device,
     const D3D10DDI_DEVICEFUNCS *functions,D3D10DDI_HRENDERTARGETVIEW target,
     D3D10DDI_HSHADERRESOURCEVIEW source,D3D10DDI_HSAMPLER sampler,
@@ -1001,6 +1002,10 @@ static void FrontendSampleDraw(D3D10DDI_HDEVICE device,
   functions->pfnPsSetShaderResources(device,0,1,&source);
   functions->pfnPsSetSamplers(device,3,1,&sampler);
   functions->pfnDraw(device,3,0);
+  if(FrontendBusyProbe.pDrvPrivate) {
+    CHECK(functions->pfnResourceIsStagingBusy(device,FrontendBusyProbe));
+    CHECK(RuntimeRenders==0u); /* Busy query must not flush active work. */
+  }
   functions->pfnFlush(device);
   functions->pfnPsSetShaderResources(device,0,1,&empty);
   functions->pfnPsSetShader(device,restoreShader);
@@ -1936,6 +1941,15 @@ static void test_mesa_d3d10_frontend_open(void) {
           !memcmp(mappedStaging.pData,vertices,sizeof(vertices)));
     deviceFunctions.pfnStagingResourceUnmap(device,staging,0);
     CHECK(FrontendErrors==mapErrors);
+    {
+      D3D10DDI_MAPPED_SUBRESOURCE idleMap={0};
+      deviceFunctions.pfnStagingResourceMap(device,staging,0,
+          D3D10_DDI_MAP_READ,D3D10_DDI_MAP_FLAG_DONOTWAIT,&idleMap);
+      CHECK(FrontendErrors==mapErrors && idleMap.pData &&
+            !memcmp(idleMap.pData,vertices,sizeof(vertices)));
+      if(idleMap.pData) deviceFunctions.pfnStagingResourceUnmap(device,staging,0);
+      FrontendErrors=mapErrors;
+    }
     /* Exercise refusal receipts at the actual void-DDI boundaries. */
     {
       D3D10DDI_MAPPED_SUBRESOURCE badMap={0};
@@ -2821,13 +2835,48 @@ static void test_mesa_d3d10_frontend_open(void) {
           RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
           memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
           RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
+          if(family==0u && storage==0u) {
+            RuntimeImmediateMarker=0;
+            FrontendBusyProbe=resource;
+          }
           FrontendSampleDraw(device,&deviceFunctions,rtv,view,appSampler,
             sampleShaders[storage==1u?2u:0u],psh);
           CHECK(FrontendErrors==errors && RuntimeRenders==1u && RuntimeSignals==1u &&
                 RuntimeMaterializations==2u && RuntimeConsumerGates==2u && RuntimeMarker);
+          FrontendBusyProbe=(D3D10DDI_HRESOURCE){0};
           if(FrontendErrors!=errors || !RuntimeMarker) return;
+          if(family==0u && storage==0u) {
+            CHECK(deviceFunctions.pfnResourceIsStagingBusy(device,resource));
+            CHECK(!deviceFunctions.pfnResourceIsStagingBusy(device,staging));
+            CHECK(RuntimeRenders==1u && RuntimeConsumerRetirements==0u);
+          }
+          if(family==0u && storage==0u && viewIndex==1u) {
+            D3D10DDI_MAPPED_SUBRESOURCE pendingMap={0};
+            /* Current Map synchronization is context-wide. Nonblocking mode
+             * must preserve the real in-flight graph and make no CPU wait. */
+            deviceFunctions.pfnStagingResourceMap(device,staging,0,
+                D3D10_DDI_MAP_READ,D3D10_DDI_MAP_FLAG_DONOTWAIT,&pendingMap);
+            CHECK(FrontendErrors==errors+1u &&
+                  FrontendLastError==DXGI_DDI_ERR_WASSTILLDRAWING &&
+                  pendingMap.pData==NULL && RuntimeConsumerRetirements==0u &&
+                  RuntimeRenders==1u && !AgxWin32AsahiContextFaulted(
+                    MesaD3d10FrontendContextForTest(device)));
+            errors=FrontendErrors;
+            RuntimeCheckpoint(depthOwner,1u);
+            deviceFunctions.pfnStagingResourceMap(device,staging,0,
+                D3D10_DDI_MAP_READ,D3D10_DDI_MAP_FLAG_DONOTWAIT,&pendingMap);
+            CHECK(FrontendErrors==errors && pendingMap.pData &&
+                  !memcmp(pendingMap.pData,vertices,sizeof(vertices)));
+            if(pendingMap.pData) {
+              deviceFunctions.pfnStagingResourceUnmap(device,staging,0);
+              CHECK(!deviceFunctions.pfnResourceIsStagingBusy(device,resource));
+              RuntimeCheckpoint(depthOwner,5u);
+            }
+          }
           if(RuntimeMarker) {
             RuntimeCheckpoint(depthOwner,1u);
+            if(family==0u && storage==0u && viewIndex==2u)
+              CHECK(!deviceFunctions.pfnResourceIsStagingBusy(device,resource));
             CHECK(AgxWin32AsahiContextRetire(MesaD3d10FrontendContextForTest(device),0u));
             RuntimeCheckpoint(depthOwner,5u);
           }
