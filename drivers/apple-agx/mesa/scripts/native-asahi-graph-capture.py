@@ -11,6 +11,34 @@ GRAPH_HELPERS = r'''
 #include "agx_win32_asahi_pipeline.h"
 #include <stdio.h>
 
+static bool
+windows_lower_vertex_id_zero_base_instr(nir_builder *b,
+                                        nir_intrinsic_instr *intr,
+                                        void *data)
+{
+   (void)data;
+   if (b->shader->info.stage != MESA_SHADER_VERTEX ||
+       intr->intrinsic != nir_intrinsic_load_vertex_id_zero_base)
+      return false;
+
+   /* D3D SV_VertexID excludes BaseVertexLocation. AGX hardware VS exposes
+    * the full vertex ID; the existing sysval pass lowers base_vertex from
+    * the authoritative draw-params table immediately after this pass. */
+   b->cursor = nir_before_instr(&intr->instr);
+   nir_def *zero_base =
+      nir_isub(b, nir_load_vertex_id(b), nir_load_base_vertex(b));
+   nir_def_rewrite_uses(&intr->def, zero_base);
+   return true;
+}
+
+static bool
+windows_lower_vertex_id_zero_base(nir_shader *nir)
+{
+   return nir_shader_intrinsics_pass(
+      nir, windows_lower_vertex_id_zero_base_instr,
+      nir_metadata_control_flow, NULL);
+}
+
 static AGX_WIN32_ASAHI_CAPTURE *
 windows_graph_capture(struct agx_batch *batch)
 {
@@ -587,6 +615,12 @@ def project_sources(out, project, overlays):
     include.write_text(GRAPH_HELPERS)
     state = replace(state, 'static void\nagx_set_shader_images(',
                     '#include "agx_win32_graph.inc"\n\nstatic void\nagx_set_shader_images(')
+    state = replace(state, '''   if (internal_kernel) {
+      key.reserved_preamble = 8;
+   } else if (!secondary) {''', '''   if (internal_kernel) {
+      key.reserved_preamble = 8;
+   } else if (!secondary) {
+      NIR_PASS(_, nir, windows_lower_vertex_id_zero_base);''')
     state = replace(state, '   struct poly_geometry_params params;\n',
                     '   struct poly_geometry_params params;\n   size_t windows_index_bytes = 0;\n')
     state = replace(state,

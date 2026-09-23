@@ -89,6 +89,13 @@ Exact747cleanup0; ordinaryfinalbaseline08:07:57Z Code28/nullINF/noresidues,8CPU,
 traceenvabsent. Nextoffline target: authoredVS combiningindexableTEMP+SV_VertexID;
 derive correcthardwareVS vertex-id mapping withoutweakeningAsahiassertion.
 
+EXP753 exactRED->GREEN: pinnedFXC VS combinesSV_VertexID andx0[4]/x0[r0.x].
+Currentcode RED atsameagx_compile.c1446 afterarrayNIR. Windows-specific Asahi shader
+prep now lowers zero-baseID to fullvertex_id-base_vertex before existing sysval
+lowering; authoritative draw-params table preserved. Assertion unchanged. Actual
+Asahidraw/capture/KMD2placements/retirementPASS; x64suite0;ARM64native/testbuild0;
+8hosttestsPASS. Sourcec7f786f5;seevertexid-verified-contract.json. Nohardwareclaim.
+
 ## Fixed execution recipe — do not rediscover
 Git: /opt/homebrew/bin/git (system Git hits unaccepted Xcode license).
 Host cwd /Users/pavel/public_windows; Python proxyenv/bin/python.
@@ -129,7 +136,7 @@ Verify on-disk artifacts/tool exits; planning/transfers are not completed work.
 
 HARDWARE ROADMAP
 [PASS] Originalgates;EXP751TTNrootcause;EXP752offlinefix+hardwareadvance;747cleaned/recovered.
-[NOW] ActualruntimeRED: zero-base vertex-id intrinsic reaches hardwareVS Asahiassert.
-[NEXT] ExactcombinedVS RED/GREEN offline; then freshsingle-variable package/preregistration.
+[NOW] EXP753 hardwareVS vertex-id exactRED/GREEN offlinePASS; commit/package gates.
+[NEXT] Freshsingle-variable package/preregistered DWM run; no inventory expansion.
 [HW] Nextunproven: ClearGuard shader compilation ->desktopdraw/completion/Present;post-loginobservation.
 POST-HARDWARE: generalBlt onlyifmeasured;stableaccelerateddesktop acceptance remainsUNPROVEN.

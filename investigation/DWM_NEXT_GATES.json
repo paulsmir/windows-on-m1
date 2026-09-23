@@ -225,9 +225,11 @@
   },
   "next_hardware_causal_target": {
     "id": "hardware_vs_vertex_id",
-    "status": "RED",
+    "status": "PASS_OFFLINE",
     "mandatory_reason": "Actual standard-runtime ClearGuard VS reaches this Asahi assertion before DWM desktop initialization",
     "offline_pass": "Authored indexable-temp plus SV_VertexID VS reproduces the assertion then compiles and emits through the actual native producer without weakening compiler assertions",
-    "hardware_dependency": "none for translation fix; next DWM consequence requires a fresh preregistered run"
+    "hardware_dependency": "none for translation fix; next DWM consequence requires a fresh preregistered run",
+    "evidence": "EXP752-indexable-temp/vertexid-verified-contract.json",
+    "source_sha256": "c7f786f59435ed8ac4ba63110537ac68275d0d6ac5bd26de9f9dc9fc0a939535"
   }
 }
