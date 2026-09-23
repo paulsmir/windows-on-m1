@@ -46613,3 +46613,37 @@ Failure: same assertion, a new semantic rejection/crash, TDR/bugcheck/hang, or
 missing login/package identity. Missing post-login session is inconclusive for
 desktop acceptance but still permits evidence-first analysis. Recovery artifacts
 and firmware hashes are unchanged and reverified in manifest. Result: PENDING.
+
+### EXP752 actual result
+
+Package747 installed once as oem5, APPL0002 Code0, after native Air catalog
+verification passed with zero warnings/errors. The EXP751 TTN `!indirect`
+assertion is absent: same D3D11 ClearGuard CreateVertexShader advances into the
+Asahi compiler. Fresh dump records c0000409/FAST_FAIL7 at agx_compile.c:1446:
+`stage == MESA_SHADER_COMPUTE && "only for SW VS"`, handling
+`nir_intrinsic_load_vertex_id_zero_base`. Stack continues through D3D11
+ClearGuard, DirectComposition and uDWM desktop initialization. Thus EXP752
+confirms its hypothesis and exposes the next shader-translation boundary; it
+does not produce an accepted desktop.
+
+No active user/Explorer appeared after 45 seconds, so post-login and physical
+screen observations are inconclusive. Refusal trace stayed empty and does not
+prove those DDIs passed; reject-blt=0 was not exercised. Passive capture contains
+407172 ETW events with zero loss and 1308 exact System32 package747 image events
+(UMD SHA256 33989795db134887dc2df9d18252919f02bdeb291d5a4617948c5a1da5de395e,
+checksum12356026,timestamp1790149475). Journal1820 repeats 80004001/887A0020
+device removal. Eleven RaidPort0 Event129 resets occurred in this bound boot;
+their temporal association is recorded without attributing them to GPU.
+
+All 18 captured files were SHA256-verified before cleanup. Main evidence:
+EXP752-indexable-temp/{causal-result.json,debug-current.log,debug-assert2.log,
+etw-causal-summary.json,EXP752-prelogin-evidence}. No qualification client or
+second retry ran.
+
+Exact oem5/package747 cleanup returned0; signer, service, module and files were
+removed; prior trace environment restored. Ordinary377/392 final baseline
+2026-09-23T08:07:57Z: one APPL0002 Code28/nullINF, no AppleAgx residues,8CPU,
+storage/USB alive,autologon0/no password,trace environment absent. VERDICT:
+REJECTED for DWM desktop with causal advance. Next offline target is a pinned-FXC
+VS combining indexable TEMP and SV_VertexID, followed by a source-derived hardware
+VS vertex-id mapping that preserves the Asahi SW-VS assertion.

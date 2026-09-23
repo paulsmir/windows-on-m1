@@ -75,7 +75,19 @@ native/testbuild0;8hosttestsPASS. Source01e72146;seeEXP752-indexable-temp.
 Nohardwareclaim. Nextcandidate must change onlythiscausalshadertranslation over746.
 Package747 ARM64analysis0warnings/errors,Universal/Inf2Cat/version30.0.747.0,
 existing signer/catalogmembership/localhashesPASS. Preregistered exact causal run
-in EXPERIMENTS andEXP752 manifest; AirnativeCATcheck/install notyetperformed.
+in EXPERIMENTS andEXP752 manifest; AirnativeCATPASS/installonce/cleanupcomplete.
+
+EXP752 hardware proves priorTTN !indirect assertion GONE and sameClearGuard VS
+advances intoAsahi compiler. Newassert agx_compile.c1446 on
+nir_intrinsic_load_vertex_id_zero_base: `stage==MESA_SHADER_COMPUTE && only for SW VS`.
+Stack iswassert->agx_compile_shader_nir->CreateVertexShader->D3D11ClearGuard->
+DirectComposition->uDWM. ExactSystem32747 identity via1308ETWimageevents;407172
+events/lost0. Journals80004001/887A0020;rejecttrace0bytes. Noactiveuser/Explorer;
+post-login/physicalobservationINCONCLUSIVE. ElevenRaidPort0Event129 occurred during
+boundboot; temporalonly, GPUcausalityNOTestablished. Evidence18fileshashverified.
+Exact747cleanup0; ordinaryfinalbaseline08:07:57Z Code28/nullINF/noresidues,8CPU,
+traceenvabsent. Nextoffline target: authoredVS combiningindexableTEMP+SV_VertexID;
+derive correcthardwareVS vertex-id mapping withoutweakeningAsahiassertion.
 
 ## Fixed execution recipe — do not rediscover
 Git: /opt/homebrew/bin/git (system Git hits unaccepted Xcode license).
@@ -116,8 +128,8 @@ contract defect. Batch independent reads, report only first meaningful failure.
 Verify on-disk artifacts/tool exits; planning/transfers are not completed work.
 
 HARDWARE ROADMAP
-[PASS] Originalmandatoryofflinegates,0_xadvertisement,ARM64package/sign/hash;EXP751hardwareattemptcompleted.
-[NOW] EXP752/package747 preregistered; verifyordinarybaseline/nativeCAT then installonce.
-[NEXT] OneboundDWMrun: ClearGuard shader -> nextcausalboundary; evidence-firstcleanup.
-[HW] Nextunproven: DWMguardshadercreation ->actualdesktopdraw/completion/Present;post-loginobservation.
+[PASS] Originalgates;EXP751TTNrootcause;EXP752offlinefix+hardwareadvance;747cleaned/recovered.
+[NOW] ActualruntimeRED: zero-base vertex-id intrinsic reaches hardwareVS Asahiassert.
+[NEXT] ExactcombinedVS RED/GREEN offline; then freshsingle-variable package/preregistration.
+[HW] Nextunproven: ClearGuard shader compilation ->desktopdraw/completion/Present;post-loginobservation.
 POST-HARDWARE: generalBlt onlyifmeasured;stableaccelerateddesktop acceptance remainsUNPROVEN.

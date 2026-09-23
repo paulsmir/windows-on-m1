@@ -214,5 +214,20 @@
     "hardware_dependency": "none for translator fix; next DWM consequence needs fresh preregistered hardware",
     "evidence": "EXP752-indexable-temp/verified-contract.json",
     "source_sha256": "01e72146c3c0cf4e12f31a189f76993a87562eeb2e685b7be6203581a5a093b3"
+  },
+  "second_dwm_hardware": {
+    "experiment": "EXP752",
+    "status": "EXECUTED_REJECTED_WITH_CAUSAL_ADVANCE",
+    "evidence": "EXP752-indexable-temp/causal-result.json",
+    "fixed_boundary": "tgsi_to_nir indirect scalar temporary assertion absent",
+    "actual_boundary": "Asahi compiler rejects load_vertex_id_zero_base in a hardware vertex shader",
+    "post_login": "INCONCLUSIVE_NO_USER_OR_EXPLORER"
+  },
+  "next_hardware_causal_target": {
+    "id": "hardware_vs_vertex_id",
+    "status": "RED",
+    "mandatory_reason": "Actual standard-runtime ClearGuard VS reaches this Asahi assertion before DWM desktop initialization",
+    "offline_pass": "Authored indexable-temp plus SV_VertexID VS reproduces the assertion then compiles and emits through the actual native producer without weakening compiler assertions",
+    "hardware_dependency": "none for translation fix; next DWM consequence requires a fresh preregistered run"
   }
 }
