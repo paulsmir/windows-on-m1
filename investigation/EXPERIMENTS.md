@@ -47012,3 +47012,48 @@ Install once after native Air CAT/hash verification, capture the first exact
 reject or correlated graph/submission/completion/Present, then remove the exact
 package and hash-matched residues/signer and restore ordinary377/392 Code28
 recovery. Result:PENDING.
+
+### EXP756 hardware actual result
+
+Executed through the standard runtime on 2026-09-23. Package751 was installed
+once as oem5.inf after native catalog verification; active System32 SYS/UMD
+hashes exactly matched preregistration. A preliminary setup boot established the
+installed package but lacked the trace environment. The instrumented boot then
+entered the `J313-WIN\\pavel` console through one-time credential transport;
+autologon was intentionally retained afterward by explicit user request.
+
+The unexpected SSH loss around installation was audited after recovery.
+SetupAPI shows package import/publication and APPL0002 configuration completed;
+the next boot bound exact oem5 and exact SYS/UMD. There are no Event
+41/1001/6008 records for the experiment interval and no newly written
+MEMORY.DMP/Minidump; the recorded 1074/6006 events are the later
+operator-issued shutdown.exe calls. Therefore a new install-time KMD bugcheck
+is NOT PROVEN; the setup boot remains inconclusive rather than a separate crash
+verdict. Audit evidence:
+`.local/experiments/EXP756-dwm-frontend-contract/install-reboot-audit.json`.
+
+The 45-second ETW capture processed 630464 events with lost0 and recorded 975
+bad-UMD removals. The refusals-only file contains 1890 identical lines:
+`reject-seterror fn=CreateResource line=453 hr=0x80004001` (SHA256
+2d24455119386ca1043da5d8f9e9b16a0b6ac24598c494fcf84a5e9014c85075).
+Generated Resource.cpp lines452-453 are exactly
+`if (bufferResource && !validBufferUsage) SetError(E_NOTIMPL)`. This proves the
+first formerly invisible semantic rejection is owned by buffer usage admission;
+it is not evidence for another multi-draw failure. ETW includes later DWM and
+Explorer device-removal cascades, so their immediately preceding resource event
+must not be substituted for the missing DDI argument receipt.
+
+No DWM-correlated native graph, KMD Render/Patch/Submit, physical completion or
+standard Present was proven. The retained Wom1PresentTransferReceipt is unchanged
+from login to final capture. Physical screen behavior was not separately
+recorded. Verdict: REJECTED_WITH_CAUSAL_ADVANCE. Next offline target is the
+pinned-WDK/Microsoft -> translation -> Asahi buffer usage contract plus an
+argument-bearing `reject-buffer-usage` receipt; never whitelist the observed
+524288-byte buffer or any trace-specific content/size.
+
+Evidence was copied before rollback. Exact oem5/package751, hash-matched SYS/UMD
+and signer were removed. Ordinary377/392 recovery passed: one inert APPL0002
+Code28/null INF, packages0, no files or signer. Autologon remains enabled with a
+password present solely because the user explicitly requested retention.
+Evidence root: `.local/experiments/EXP756-dwm-frontend-contract`; causal result
+records exact hashes for ETL, refusal log, state, login and final captures.

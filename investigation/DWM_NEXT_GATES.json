@@ -291,12 +291,26 @@
   "next_hardware_candidate": {
     "experiment": "EXP756",
     "package": 751,
-    "status": "PREREGISTERED_NO_AIR_LAUNCH_YET",
+    "status": "EXECUTED_REJECTED_WITH_CAUSAL_ADVANCE",
     "implementation_commit": "39a5bc7ba807bad376037d95b4d7d6c427ecc74d",
     "cat_sha256": "3ce86663ea375e39225a50d037ac67c7342007b5ca0c79e6e739727d44310a15",
     "inf_sha256": "37ff68367989d38f5a56d33dddbaf15926cb3b000cc61f5ba54e573902709fe6",
     "sys_sha256": "d00799c143483b8c4385a8ca3c7a624a63706a5509796c9815a6684e814a41f5",
     "umd_sha256": "25b62f5b5b3eea4abd669d9b5091e6e3e4ddae6f7d64613eb802e36456c1c5bb",
-    "expected": "first DWM-correlated native graph through physical completion and DXGI Present, or exact first reject-seterror/reject-capture boundary"
+    "expected": "first DWM-correlated native graph through physical completion and DXGI Present, or exact first reject-seterror/reject-capture boundary",
+    "actual": "1890 reject-seterror CreateResource line453 E_NOTIMPL records; 975 bad-UMD events; no new Present receipt or DWM-correlated native graph; exact cleanup and Code28 recovery pass"
+  },
+  "post_exp756_offline_target": {
+    "id": "buffer_usage_contract",
+    "status": "NOW",
+    "boundary": "generated Resource.cpp:452-453 bufferResource && !validBufferUsage",
+    "required": [
+      "argument-bearing reject-buffer-usage receipt with usage bind map misc logical size",
+      "pinned-WDK and Microsoft derivation of all FL10_0 buffer usage combinations",
+      "Asahi resource and mapping contract for each admitted combination",
+      "real frontend create/map/bind tests without observed-size whitelists"
+    ],
+    "forbidden": "Do not admit only the observed 524288-byte buffer or infer the failing DDI arguments solely from a later ETW cascade",
+    "hardware_dependency": "none until the offline contract and existing suites pass"
   }
 }

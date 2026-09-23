@@ -108,7 +108,37 @@ signer thumbprint and catalog membership pass. Hashes: CAT
 INF 37ff68367989d38f5a56d33dddbaf15926cb3b000cc61f5ba54e573902709fe6;
 SYS d00799c143483b8c4385a8ca3c7a624a63706a5509796c9815a6684e814a41f5;
 UMD 25b62f5b5b3eea4abd669d9b5091e6e3e4ddae6f7d64613eb802e36456c1c5bb.
-No install or Air launch has occurred yet.
+Those hashes identify the package later executed in EXP756 below.
+
+## EXP756 hardware verdict
+Package751 was installed once with native catalog verification and exact active
+SYS/UMD hashes. Autologon entered `J313-WIN\\pavel`; DWM selected the Apple AGX
+hardware device but repeatedly failed with 0x889800c0. The 45-second trace has
+630464 events and lost0. The new diagnostic records 1890 identical exact
+rejections: `reject-seterror fn=CreateResource line=453 hr=0x80004001`.
+Generated `Resource.cpp:452-453` is the `bufferResource && !validBufferUsage`
+branch. This is causal advance over EXP755: the invisible E_NOTIMPL is now
+owned by buffer-usage admission, not inferred from draw type17.
+
+No DWM-correlated native graph, KMD Render/Patch/Submit, physical completion or
+standard Present was proven. The retained present-transfer receipt is unchanged
+from login to final capture and remains the pre-existing value. Exact oem5 and
+package751 were removed; ordinary377/392 recovery is active with Code28, no
+package/files/signer, while autologon remains enabled by explicit user request.
+Verdict: REJECTED_WITH_CAUSAL_ADVANCE. Evidence:
+`.local/experiments/EXP756-dwm-frontend-contract/causal-result.json` and
+`hardware-evidence/umd-refusals.txt` SHA256
+2d24455119386ca1043da5d8f9e9b16a0b6ac24598c494fcf84a5e9014c85075.
+
+## Current causal target after EXP756
+Offline only: source-first derive the missing D3D10 buffer usage contract at
+generated Resource.cpp:452-453. Restore an argument-bearing
+`reject-buffer-usage` receipt (usage, bind, map, misc and logical size) alongside
+generic SetError attribution, then admit the contract-wide Windows/Asahi cases.
+Do not whitelist the observed 524288-byte buffer or another trace value.
+The strongest source hypothesis is missing typed-buffer SRV/RT bind admission,
+including DYNAMIC+SRV map-discard, but it is not accepted until exact DDI args
+and pinned-WDK/Asahi contracts confirm it.
 
 ## Fixed experiment procedure
 Git `/opt/homebrew/bin/git`; artifacts live under main repo `.local`, not the
@@ -129,6 +159,10 @@ launcher foreground with a durable log. Verify native CAT and exact hashes,
 install once, collect ETW/dumps/receipts before cleanup, remove exact package and
 hash-matched residues/signer, then restore ordinary GPU-visible recovery.
 
+Recovery baseline exception: by the user's explicit 2026-09-23 request,
+AutoAdminLogon remains `1` and DefaultPassword is present. Do not record its
+value. All GPU-cleanliness checks remain unchanged.
+
 DirectFlip remains required by the advertised WDDM contract; behavior without
 CheckDirectFlipSupport is UNKNOWN and observed through reject/ETW. Kernel-mode
 command-buffer cap remains clear until coherent aperture exists. TDR ABI remains,
@@ -144,9 +178,10 @@ HARDWARE ROADMAP
 [PASS] Exact frontend SetError attribution, honest batch-split color/depth/state
        gates, draw guards, basic topology/instancing and cb1/t1 capture. x64 full
        execution and ARM64 link pass at implementation-tree hash efb35c31.
-[PASS] Package751 exact ARM64 build/sign/hash/catalog gate and preregistration.
-[NOW] One standard-runtime Air run with refusals-only attribution and evidence
-      before exact package cleanup and ordinary GPU-visible recovery.
+[PASS] Package751 exact ARM64 build/sign/hash/catalog gate; EXP756 evidence-first
+       hardware run; exact cleanup and ordinary Code28 recovery.
+[NOW] Resource.cpp:452-453 buffer-usage contract and argument-bearing rejection.
+      Offline; no more Air until the exact Windows/Asahi contract is derived.
 [HW] One standard-runtime Air run must produce the first DWM-correlated native
      graph -> KMD Render/Patch/Submit -> physical AGX completion -> DXGI Present,
      or name the next exact semantic RED.
