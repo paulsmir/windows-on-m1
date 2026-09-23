@@ -95,6 +95,8 @@ prep now lowers zero-baseID to fullvertex_id-base_vertex before existing sysval
 lowering; authoritative draw-params table preserved. Assertion unchanged. Actual
 Asahidraw/capture/KMD2placements/retirementPASS; x64suite0;ARM64native/testbuild0;
 8hosttestsPASS. Sourcec7f786f5;seevertexid-verified-contract.json. Nohardwareclaim.
+Package748 ARM64/Universal/Inf2Cat/version30.0.748.0/signer/catalog/hashPASS.
+EXP753 exactsingle-variable hardware run preregistered; AirnativeCAT/installpending.
 
 ## Fixed execution recipe — do not rediscover
 Git: /opt/homebrew/bin/git (system Git hits unaccepted Xcode license).
@@ -136,7 +138,7 @@ Verify on-disk artifacts/tool exits; planning/transfers are not completed work.
 
 HARDWARE ROADMAP
 [PASS] Originalgates;EXP751TTNrootcause;EXP752offlinefix+hardwareadvance;747cleaned/recovered.
-[NOW] EXP753 hardwareVS vertex-id exactRED/GREEN offlinePASS; commit/package gates.
-[NEXT] Freshsingle-variable package/preregistered DWM run; no inventory expansion.
+[NOW] EXP753/package748 preregistered; verifybaseline/nativeCAT then installonce.
+[NEXT] OneboundDWMrun -> exactnextboundary; evidence-firstcleanup/recovery.
 [HW] Nextunproven: ClearGuard shader compilation ->desktopdraw/completion/Present;post-loginobservation.
 POST-HARDWARE: generalBlt onlyifmeasured;stableaccelerateddesktop acceptance remainsUNPROVEN.

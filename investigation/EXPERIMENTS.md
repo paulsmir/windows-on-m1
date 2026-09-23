@@ -46647,3 +46647,48 @@ storage/USB alive,autologon0/no password,trace environment absent. VERDICT:
 REJECTED for DWM desktop with causal advance. Next offline target is a pinned-FXC
 VS combining indexable TEMP and SV_VertexID, followed by a source-derived hardware
 VS vertex-id mapping that preserves the Asahi SW-VS assertion.
+
+## EXP753 — DWM hardware-VS zero-base VertexID retry, package748
+
+Preregistered UTC 2026-09-23T08:27:37.855572+00:00. No EXP753 Air launch has
+occurred. WHY THIS HYPOTHESIS: EXP752 proves the indexable TEMP fix and measures
+the next assertion at agx_compile.c:1446 on `load_vertex_id_zero_base` in the
+same D3D11 ClearGuard vertex shader. Pinned-FXC reproduction combining
+SV_VertexID and x0[r0.x] hits that exact assertion; package748's authored test
+then passes actual Asahi compilation/draw/capture/KMD/retirement.
+
+WINDOWS CONTRACT: DirectX SV_VertexID excludes BaseVertexLocation. The frontend
+correctly retains zero-base semantics. AGX/ASAHI CONTRACT: hardware VS provides
+full vertex_id; zero-base preload belongs only to software-VS compute. Existing
+draw-params table owns base_vertex. TRANSLATION: before existing Asahi sysval
+lowering, replace hardware-VS zero-base ID with vertex_id-base_vertex; the
+existing pass materializes base_vertex. Compiler assertion remains unchanged.
+WHAT IS STILL UNKNOWN: whether private ClearGuard now fully compiles and what
+the next DWM callback/completion/Present boundary is; post-login desktop and
+physical output remain unproven.
+
+Single variable over rejected747: commit67c79818f7920193294c09be0af061fe211356a6.
+Source archive SHA256 c7f786f59435ed8ac4ba63110537ac68275d0d6ac5bd26de9f9dc9fc0a939535.
+Current clean integration HEAD cabd968708854486e58082f8d4f6f0520361c23c.
+Full repo/m1n1/Mu state and unchanged recovery hashes are in
+`.local/experiments/EXP753-vertexid-hardware/manifest.json`, SHA256
+75474f0a0f250ea466f1124b693bd24656ace83e94280dee906239f349e12108.
+
+Offline exact RED/GREEN: old test exits c0000409 at Asahi line1446; new test
+x64 full suite0, combined shader actual native pipeline/two KMD placements/
+retirement PASS; ARM64 native/test build PASS; eight host tests PASS. Package748
+ARM64 analysis 0warnings/0errors, Universal ApiValidator, Inf2Cat, version
+30.0.748.0, existing signer/catalog membership and local hashes PASS:
+- CAT 3f459c5f2a667ffd870e78e96e5ac4175642e8766bdc29e3f1c7b39325301cab
+- INF 64138fe2a75bf7cb0f2540ae88563f5579b582b9078fa5d6892a569a04838d6a
+- SYS 306444414d80a6fdd8a3f3a7d7c4741fd7357d490176a0821e58985877ff812d
+- UMD 5bf50a9c7fd493a6848f66ad24f3ec54a64bef9828f3d9f1c99d5e1bd781519d
+
+Execution is the same evidence-first sequence: verify ordinary clean baseline;
+orderly shutdown/proxy; full-owner empty; native Air CAT verification; install
+exact748 once; REFUSALS_ONLY=1 plus authorized temporary autologon; one bound
+boot; clear password; physical screen immediately after login before Windows
+key and after Start/AltTab; one 60s DWM ETW/dump capture; evidence before exact
+cleanup; ordinary recovery. No qualification client or second retry. Expected:
+prior line1446 assertion absent, then next exact causal boundary or DWM desktop
+draw/completion/Present. Missing login remains inconclusive for desktop. Result:PENDING.
