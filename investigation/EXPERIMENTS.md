@@ -46532,3 +46532,84 @@ ANS/USB OK, no fresh41/1001/129,autologon0/no password,trace env absent.
 VERDICT: rejected for working DWM desktop; post-login observation inconclusive;
 causal native shader translation RED measured. Next work is OFFLINE indexable
 TEMP array reproduction/fix, justified by actual standard-runtime evidence.
+
+## EXP752 — DWM indexable-TEMP causal retry, package747
+
+Preregistered UTC: 2026-09-23T07:49:34.087377+00:00. No EXP752 Air launch has
+occurred. This is one retry of the exact EXP751 failure, after its package was
+removed and ordinary recovery was revalidated.
+
+WHY THIS HYPOTHESIS:
+- EXP751 fresh dump proves DWM reached package746 CreateVertexShader from
+  DirectComposition ClearGuard and terminated only at TTN `assert(!indirect)`.
+- Exact source tracing proves DCL_INDEXABLE_TEMP was emitted as separate scalar
+  TGSI TEMP declarations; TTN permits indirect TEMP only for Declaration.Array.
+- EXP752 pinned-FXC reproduction failed with the same c0000409/assertion before
+  the fix and now passes actual Asahi draw/capture/KMD/retirement offline.
+
+WINDOWS CONTRACT:
+D3D10 shader bytecode DCL_INDEXABLE_TEMP declares one register array. Relative
+source indexing such as x0[r0.x] must retain the array identity through frontend
+translation. D3D10_0_x/DXGI1_1 admission, BGR/shared/Map contracts and all caps
+are unchanged from EXP751. DirectFlip behavior without CheckDirectFlipSupport
+remains unknown. Expected reject-blt count remains zero under NO_REDIRECTION.
+
+AGX/ASAHI CONTRACT:
+The existing upstream TGSI ureg API provides ureg_DECL_array_temporary and
+ArrayID-bearing offsets; TTN converts that declaration to a shader-temp NIR
+array. Existing Asahi compilation, native construction graph, typed capture,
+immutable materialization, UMD composer, physical KMD Render/Patch/Submit and
+fence retirement are unchanged. No GPUVA, allocator, composer, firmware, UAT,
+power, IRQ or recovery change.
+
+TRANSLATION:
+DCL_INDEXABLE_TEMP now allocates one TGSI array and copies its ArrayID to each
+logical element via ureg_dst_array_offset. The assertion remains. Authored
+vs_4_0 x0[4]/x0[r0.x] now prints `TEMP[1..4], ARRAY(1)` and completes an actual
+native draw through two KMD placements and retirement.
+
+WHAT IS STILL UNKNOWN:
+The precise bytes of DWM's private ClearGuard shader were not extracted; the
+offline shader reproduces its measured indexable-temporary ABI and exact TTN
+failure. Hardware must establish that ClearGuard now succeeds and expose the
+next actual callback, completion or Present boundary. A correct post-login
+desktop and physical output remain unproven.
+
+Single variable: package747 differs from rejected746 by commit
+5cfb5d0da3636f6757c47c8f54192413433466c3, the indexable-TEMP array lowering
+and its regression test. Package source SHA256
+01e72146c3c0cf4e12f31a189f76993a87562eeb2e685b7be6203581a5a093b3.
+Current integration HEAD 4ea4ac63a44207e76f056997537e6576111886c1 is clean;
+root/m1n1/Mu commits and dirty-state hashes are frozen in
+.local/experiments/EXP752-indexable-temp/manifest.json, SHA256
+4e5dda154e3a7f6a5bb0a184387ebb84f58913fbd6eda1332da427a558685398.
+
+Offline evidence: red exit c0000409 in test-red.log; green x64 full suite exit0,
+TGSI ARRAY(1), native producer/materializer/KMD/retirement PASS; ARM64 native
+archive and test executable build PASS; eight host tests PASS. Evidence is
+`.local/experiments/EXP752-indexable-temp/verified-contract.json`.
+
+Package747 gates: pinned ARM64 analysis builds 0 warnings/0 errors; KMD
+ApiValidator Universal; Inf2Cat PASS; versions 30.0.747.0; exact existing signer
+E9BE15BD2A184BFABA0C8035B3C620C58037A241 and catalog membership PASS. Native
+Air catalog verification remains mandatory before install. Package hashes:
+- CAT 953d38ceb63dfa4ae92dc11950cf682e414d8d0c7b53aaa003b28018db73c159
+- INF 54591761625b1202b61b8e28003950c1716584325196af77a52a6445365e5b26
+- SYS 72dc470eecc3edd66be2ee3bcd711f55f9fb539b2e93ad6a51a922669ec894fd
+- UMD 33989795db134887dc2df9d18252919f02bdeb291d5a4617948c5a1da5de395e
+
+Execution/recovery order is unchanged: verify current ordinary377/392 baseline;
+orderly shutdown and proxy re-enumeration; full-owner empty boot; native CAT
+verification; install exact package747 once; REFUSALS_ONLY=1 and authorized
+temporary autologon; orderly shutdown; one bound full-owner boot; clear password;
+observe physical screen immediately after login before Windows key, then Start/
+Alt+Tab separately; one 60s DWM ETW window, first reject-* and up to two dumps;
+collect evidence before exact hash-guarded package cleanup; restore trace env and
+ordinary recovery. No qualification EXE or second hardware retry.
+
+Expected checkpoint: no TTN indirect-scalar assertion; either DWM reaches the
+next precise causal boundary or a standard desktop draw/completion/Present.
+Failure: same assertion, a new semantic rejection/crash, TDR/bugcheck/hang, or
+missing login/package identity. Missing post-login session is inconclusive for
+desktop acceptance but still permits evidence-first analysis. Recovery artifacts
+and firmware hashes are unchanged and reverified in manifest. Result: PENDING.

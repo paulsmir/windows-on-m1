@@ -14,7 +14,7 @@ KMD Render/Patch/Submit -> AGX. Do not redesign these layers or expand features.
 OpenGL/CS1.6 follow desktop acceptance. Ordinary setup errors are not GPU verdicts.
 
 ## Current source / candidate
-Current implementationEXP752 fixes indexableTEMP lowering; package746 remains rejected/removed.
+Current implementationEXP752/package747 fixes indexableTEMP; 746 remains rejected/removed.
 EXP736 package745 under /Users/pavel/public_windows/.local/experiments/EXP736-blt-present/package-build/package.
 SYS d352215b5d641c527481f16bb0d985803e6a8791d3dadec3674b2f30ee6e72a5
 UMD c620fad0950a6ff7e110e6df2e3a1cf245a68b79692ae01e3528be953b029528
@@ -73,6 +73,9 @@ ArrayID to elements. TGSI nowTEMP[1..4],ARRAY(1);NIRtranslation and actualAsahid
 throughcapture/materializer/KMD2placements/retirementPASS. x64fullsuite0;ARM64
 native/testbuild0;8hosttestsPASS. Source01e72146;seeEXP752-indexable-temp.
 Nohardwareclaim. Nextcandidate must change onlythiscausalshadertranslation over746.
+Package747 ARM64analysis0warnings/errors,Universal/Inf2Cat/version30.0.747.0,
+existing signer/catalogmembership/localhashesPASS. Preregistered exact causal run
+in EXPERIMENTS andEXP752 manifest; AirnativeCATcheck/install notyetperformed.
 
 ## Fixed execution recipe — do not rediscover
 Git: /opt/homebrew/bin/git (system Git hits unaccepted Xcode license).
@@ -114,7 +117,7 @@ Verify on-disk artifacts/tool exits; planning/transfers are not completed work.
 
 HARDWARE ROADMAP
 [PASS] Originalmandatoryofflinegates,0_xadvertisement,ARM64package/sign/hash;EXP751hardwareattemptcompleted.
-[NOW] EXP752 indexableTEMP exactRED/GREEN offlinePASS; prepare freshARM64package/sign/hash.
-[NEXT] Preregister one shader-causal DWM run; no inventory expansion or DDIversion redesign.
+[NOW] EXP752/package747 preregistered; verifyordinarybaseline/nativeCAT then installonce.
+[NEXT] OneboundDWMrun: ClearGuard shader -> nextcausalboundary; evidence-firstcleanup.
 [HW] Nextunproven: DWMguardshadercreation ->actualdesktopdraw/completion/Present;post-loginobservation.
 POST-HARDWARE: generalBlt onlyifmeasured;stableaccelerateddesktop acceptance remainsUNPROVEN.
