@@ -76,6 +76,8 @@ ARM64 UMD compile/link PASS. Evidence `.local/experiments/EXP762-discard-present
 offline/manifest.json` SHA256
 `01e0cc163628e1b158953863a734b4c61db93500c18b7ce3aa80fe057b3d62f5`.
 No KMD/m1n1/Mu source or hardware changed in this offline gate.
+EXP762 physical-mode attempt is INCONCLUSIVE for the DISCARD UMD fix: same SYS/INF as EXP761, but KMD `StartDevice` failed in `AdmissionMemoryRuntimeStart` stage4 with STATUS_INSUFFICIENT_RESOURCES (0xC000009A) before the client or UMD loaded. R28 evidence: no fresh WATCHDOG dump, System 4101/141/117, observed DWM AGX submission, or ETW TDR/reset; DxgKrnl event549 explicitly says StartAdapter_DdiStartDeviceFailed. Specific Reset DDI receipts were not instrumented, and the failing memory allocation substage is unknown. This is an unproven KMD-start nondeterminism/physical-mode debt, not demonstrated DWM progress. Exact package cleanup and ordinary GPU-visible Code28 recovery pass, CPU8/autologon1 retained. Evidence `.local/experiments/EXP762-discard-present/causal-result.json`. By user R27 decision, proceed to B1 without more physical-mode DWM experiments.
+
 OpenGL and CS1.6 follow accelerated desktop acceptance.
 
 ## Proven hardware boundary — EXP753/package748
