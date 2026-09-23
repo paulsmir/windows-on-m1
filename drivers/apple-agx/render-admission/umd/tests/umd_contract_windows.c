@@ -1936,6 +1936,19 @@ static void test_mesa_d3d10_frontend_open(void) {
           !memcmp(mappedStaging.pData,vertices,sizeof(vertices)));
     deviceFunctions.pfnStagingResourceUnmap(device,staging,0);
     CHECK(FrontendErrors==mapErrors);
+    /* Exercise refusal receipts at the actual void-DDI boundaries. */
+    {
+      D3D10DDI_MAPPED_SUBRESOURCE badMap={0};
+      deviceFunctions.pfnResourceMap(device,staging,0,D3D10_DDI_MAP_READ,~0u,&badMap);
+      CHECK(FrontendErrors==mapErrors+1u && badMap.pData==NULL);
+      D3D10DDIARG_OPENRESOURCE badOpen={0};D3D10DDI_HRESOURCE badResource={0};
+      D3D10DDI_HRTRESOURCE badRuntime={0};
+      badResource.pDrvPrivate=calloc(1,
+          deviceFunctions.pfnCalcPrivateResourceSize(device,&stagingCreate));
+      deviceFunctions.pfnOpenResource(device,&badOpen,badResource,badRuntime);
+      CHECK(FrontendErrors==mapErrors+2u);
+      free(badResource.pDrvPrivate);FrontendErrors=mapErrors;
+    }
     /* CPU-lockable extended formats must round-trip independent subresources
      * through the real Asahi transfer implementation, including row padding. */
     const DXGI_FORMAT mapFormats[]={DXGI_FORMAT_B8G8R8A8_TYPELESS,

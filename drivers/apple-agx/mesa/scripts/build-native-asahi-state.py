@@ -366,7 +366,8 @@ SetError(D3D10DDI_HDEVICE hDevice, HRESULT hr)
 AgxSetErrorWithOrigin(D3D10DDI_HDEVICE hDevice, HRESULT hr, const char *origin)
 {
    if (FAILED(hr)) {
-      AgxD3d10WindowsDiagnostic(origin, hr, NULL, 0);
+      if (!AgxD3d10WindowsDiagnosticRefusal(hr))
+         AgxD3d10WindowsDiagnostic(origin, hr, NULL, 0);
       Device *pDevice = CastDevice(hDevice);
       pDevice->UMCallbacks.pfnSetErrorCb(pDevice->hRTCoreLayer, hr);
    }
@@ -1222,6 +1223,12 @@ UnsupportedDxgi''')
             entry += '''   UINT count = QueryResourceResidency ? QueryResourceResidency->Resources : ~0u;
    AgxD3d10WindowsDiagnostic("dxgi-residency-count", S_OK, &count, 1u);
 '''
+        if name == '_Blt':
+            body = body.replace('AgxDxgiTraceReturn(__func__, (', 'rejectBlt(')
+            body = body.replace('));', ');')
+            entry = entry[entry.index('   UINT values[11]'):]
+            entry = entry.replace('   AgxD3d10WindowsDiagnostic("dxgi-blt-args", S_OK, values, 11u);',
+                '   auto rejectBlt = [&](HRESULT status) { if (FAILED(status)) AgxD3d10WindowsDiagnostic("reject-BltDXGI",status,values,11u); return status; };')
         replace_function_body(dxgi_path, name, entry + body)
 
     change('src/gallium/frontends/d3d10umd/Shader.cpp',
@@ -2283,6 +2290,55 @@ AgxD3d10ResourceWithinRequiredLimits(
    pipe_buffer_unmap(pDevice->pipe, transfer);
    (void)RowPitch;
    (void)DepthPitch;''')
+    # Observe exactly one rejection with its original arguments, including
+    # ResourceCopyRegion errors reported by the delegated ResourceCopy helper.
+    resource_scopes = {
+        'CreateResource': """   const D3D10DDIARG_CREATERESOURCE *r=pCreateResource;
+   UINT refusalArgs[16]={r?(UINT)r->Format:~0u,r?(UINT)r->ResourceDimension:~0u,
+      r?r->Usage:~0u,r?r->BindFlags:~0u,r?r->MapFlags:~0u,r?r->MiscFlags:~0u,
+      r?r->MipLevels:0,r?r->ArraySize:0,r?r->SampleDesc.Count:0,r?r->SampleDesc.Quality:0,
+      r&&r->pPrimaryDesc,r&&r->pInitialDataUP,0,0,0,r&&r->pMipInfoList};
+   if(r&&r->pMipInfoList&&r->MipLevels) {
+      refusalArgs[12]=r->pMipInfoList[0].TexelWidth;
+      refusalArgs[13]=r->pMipInfoList[0].TexelHeight;
+      refusalArgs[14]=r->pMipInfoList[0].TexelDepth;
+   }
+   AgxD3d10RefusalScope refusal(r&&r->MiscFlags?"reject-CreateResource":NULL,refusalArgs,16);
+""",
+        'OpenResource': """   UINT refusalArgs[8]={pOpenResource?pOpenResource->NumAllocations:0,
+      pOpenResource?pOpenResource->PrivateDriverDataSize:0,
+      pOpenResource&&pOpenResource->pPrivateDriverData,
+      pOpenResource&&pOpenResource->pOpenAllocationInfo,0,0,0,0};
+   if(pOpenResource&&pOpenResource->NumAllocations&&pOpenResource->pOpenAllocationInfo) {
+      refusalArgs[4]=pOpenResource->pOpenAllocationInfo[0].PrivateDriverDataSize;
+      refusalArgs[5]=pOpenResource->pOpenAllocationInfo[0].hAllocation;
+   }
+   refusalArgs[6]=(UINT)(UINT_PTR)hRTResource.handle;
+   refusalArgs[7]=(UINT)(((UINT64)(UINT_PTR)hRTResource.handle)>>32);
+   AgxD3d10RefusalScope refusal("reject-OpenResource",refusalArgs,8);
+""",
+        'ResourceMap': """   Resource *traceResource=CastResource(hResource);
+   UINT refusalArgs[8]={SubResource,(UINT)DDIMap,Flags,
+      (UINT)(UINT_PTR)hResource.pDrvPrivate,(UINT)(((UINT64)(UINT_PTR)hResource.pDrvPrivate)>>32),
+      traceResource?(UINT)traceResource->Format:~0u,
+      traceResource?traceResource->usage:~0u,traceResource?traceResource->bind_flags:~0u};
+   AgxD3d10RefusalScope refusal("reject-ResourceMap",refusalArgs,8);
+""",
+        'ResourceCopyRegion': """   UINT refusalArgs[16]={DstSubResource,DstX,DstY,DstZ,SrcSubResource,
+      pSrcBox!=NULL,pSrcBox?(UINT)pSrcBox->left:0,pSrcBox?(UINT)pSrcBox->top:0,
+      pSrcBox?(UINT)pSrcBox->front:0,pSrcBox?(UINT)pSrcBox->right:0,
+      pSrcBox?(UINT)pSrcBox->bottom:0,pSrcBox?(UINT)pSrcBox->back:0,
+      (UINT)(UINT_PTR)hDstResource.pDrvPrivate,(UINT)(((UINT64)(UINT_PTR)hDstResource.pDrvPrivate)>>32),
+      (UINT)(UINT_PTR)hSrcResource.pDrvPrivate,(UINT)(((UINT64)(UINT_PTR)hSrcResource.pDrvPrivate)>>32)};
+   AgxD3d10RefusalScope refusal("reject-ResourceCopyRegion",refusalArgs,16);
+"""}
+    for name, entry in resource_scopes.items():
+        text=resource_path.read_text()
+        marker='\n'+name+'('
+        if text.count(marker)!=1: raise SystemExit('Ambiguous refusal scope: '+name)
+        start=text.index('{',text.index(marker))+1
+        resource_path.write_text(text[:start]+'\n'+entry+text[start:])
+    overlays['src/gallium/frontends/d3d10umd/Resource.cpp']['after']=hashlib.sha256(resource_path.read_bytes()).hexdigest()
     change('src/gallium/frontends/d3d10umd/InputAssembly.cpp',
         '210b330c3327042d230a65ff5a7242df89ddb385d50f61bcacfc996d39c55bbd',[
         ('   static const float dummy[4] = {0.0f, 0.0f, 0.0f, 0.0f};\n\n',''),

@@ -29,18 +29,20 @@ static ULONG AdmissionUmdNextGeneration(VOID) {
  * change the caller's last-error state or any graphics result. */
 BOOL AdmissionUmdDiagnosticEnabled(VOID) {
   DWORD saved = GetLastError();
-  WCHAR path[MAX_PATH];
+  WCHAR path[MAX_PATH], only[2];
+  DWORD refusalOnly = GetEnvironmentVariableW(L"APPLE_AGX_UMD_REFUSALS_ONLY",only,2);
   DWORD length = GetEnvironmentVariableW(
       L"APPLE_AGX_UMD_TRACE_FILE", path, ARRAYSIZE(path));
   SetLastError(saved);
-  return length != 0u && length < ARRAYSIZE(path);
+  return length != 0u && length < ARRAYSIZE(path) &&
+      !(refusalOnly == 1u && only[0] == L'1');
 }
 
 VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
                             const UINT *Values, UINT Count) {
   static volatile LONG records;
   DWORD saved = GetLastError();
-  WCHAR path[MAX_PATH];
+  WCHAR path[MAX_PATH], only[2];
   char line[512];
   HANDLE file = INVALID_HANDLE_VALUE;
   DWORD length, written;
@@ -48,11 +50,16 @@ VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
   UINT i;
   if (Stage == NULL || Count > 16u || (Count != 0u && Values == NULL))
     goto done;
+  if (GetEnvironmentVariableW(L"APPLE_AGX_UMD_REFUSALS_ONLY",only,2)==1u &&
+      only[0]==L'1' && strncmp(Stage,"reject-",7u)!=0) goto done;
   length = GetEnvironmentVariableW(L"APPLE_AGX_UMD_TRACE_FILE", path,
                                     ARRAYSIZE(path));
+  /* Refusals must not disappear when successful startup chatter consumes
+   * the normal 128-record budget. Capture remains opt-in and run-bounded. */
   if (length == 0u || length >= ARRAYSIZE(path) ||
-      InterlockedCompareExchange(&records, 0, 0) >= 128 ||
-      InterlockedIncrement(&records) > 128)
+      (strncmp(Stage,"reject-",7u) != 0 &&
+       (InterlockedCompareExchange(&records, 0, 0) >= 128 ||
+        InterlockedIncrement(&records) > 128)))
     goto done;
   used = _snprintf_s(line, sizeof(line), _TRUNCATE,
       "%s hr=0x%08lx pid=%lu tid=%lu", Stage, (ULONG)Status,

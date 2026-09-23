@@ -16,6 +16,7 @@ extern "C" {
 #endif
 VOID AgxD3d10WindowsDiagnostic(PCSTR Stage, HRESULT Status,
                               const UINT *Values, UINT Count);
+BOOL AgxD3d10WindowsDiagnosticRefusal(HRESULT Status);
 VOID AgxD3d10WindowsDiagnosticState(AGX_D3D10_WINDOWS_DEVICE *, PCSTR Stage);
 VOID AgxD3d10WindowsDiagnosticResource(
     PCSTR Stage, const D3D10DDIARG_CREATERESOURCE *Resource);
@@ -99,5 +100,23 @@ BOOL AgxD3d10WindowsTerminalReceiptForTest(AGX_D3D10_WINDOWS_ADAPTER *,
 #endif
 #ifdef __cplusplus
 }
+/* Stack-scoped observer: nested helper errors retain the originating DDI's
+ * arguments. No callback replacement, allocation, or graphics state change. */
+class AgxD3d10RefusalScope {
+ public:
+  static thread_local AgxD3d10RefusalScope *Current;
+  PCSTR Name;
+  const UINT *Values;
+  UINT Count;
+  bool Emitted;
+  AgxD3d10RefusalScope *Previous;
+  AgxD3d10RefusalScope(PCSTR name,const UINT *values,UINT count)
+    : Name(name),Values(values),Count(count),Emitted(false),Previous(Current) {
+    Current=this;
+  }
+  ~AgxD3d10RefusalScope() { Current=Previous; }
+  AgxD3d10RefusalScope(const AgxD3d10RefusalScope &)=delete;
+  AgxD3d10RefusalScope &operator=(const AgxD3d10RefusalScope &)=delete;
+};
 #endif
 #endif

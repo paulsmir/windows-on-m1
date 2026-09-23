@@ -15,6 +15,17 @@ extern "C" {
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
 
+thread_local AgxD3d10RefusalScope *AgxD3d10RefusalScope::Current=nullptr;
+BOOL AgxD3d10WindowsDiagnosticRefusal(HRESULT status) {
+  AgxD3d10RefusalScope *scope=AgxD3d10RefusalScope::Current;
+  if(!scope || !scope->Name || SUCCEEDED(status)) return FALSE;
+  if(!scope->Emitted) {
+    scope->Emitted=true;
+    AdmissionUmdDiagnostic(scope->Name,status,scope->Values,scope->Count);
+  }
+  return TRUE;
+}
+
 VOID AgxD3d10WindowsDiagnostic(PCSTR Stage,HRESULT Status,
                                const UINT *Values,UINT Count) {
   AdmissionUmdDiagnostic(Stage,Status,Values,Count);

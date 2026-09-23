@@ -6,8 +6,6 @@ not delegated. This supersedes the earlier mandatory Astra/Terra handoff loop at
 the user's request to reduce time and tokens. No new agents without a concrete
 independent need and user direction. Fix command/harness errors locally; they are
 not architectural REDs. Read this file first; do not load the historical ledger.
-The previous 2875-line state remains in Git at f4016d36 (same path).
-Use source/logs as evidence, not an agent's completion claim.
 
 ## Objective and fixed architecture
 Stable, visibly correct accelerated Windows desktop on Air M1 remains UNPROVEN.
@@ -17,7 +15,7 @@ KMD Render/Patch/Submit -> AGX. Do not redesign these layers or expand features.
 OpenGL/CS1.6 follow desktop acceptance. Ordinary setup errors are not GPU verdicts.
 
 ## Current source / candidate
-Current implementationfeb7f7a1; last hardware package745 remains immutable.
+Current implementationEXP746 diagnostics; last hardware package745 remains immutable.
 EXP736 package745 under /Users/pavel/public_windows/.local/experiments/EXP736-blt-present/package-build/package.
 SYS d352215b5d641c527481f16bb0d985803e6a8791d3dadec3674b2f30ee6e72a5
 UMD c620fad0950a6ff7e110e6df2e3a1cf245a68b79692ae01e3528be953b029528
@@ -61,10 +59,7 @@ PinnedWDK minor6/build0 is authority; older Microsoft page macro examples differ
 Microsoft extended-format-aware requirements mandate BGR families, typed backbuffer
 casting and BGRA/sRGB scanout. Must close companions before advertising0_x.
 EXP738-extended-bgra/causal-contract.json records primarysources and ownership.
-EXP738–742 offlinePASS: BGR sampling/targets/primarycasting/formatbits/combinedRT|SRV.
-Evidence EXP738-extended-bgra/complete, EXP739-bgr-targets/green,
-EXP740-srgb-backbuffer/green, EXP741-bgr-format-query/green,
-EXP742-combined-bgr/verified. Do notrepeat unchanged gates.
+EXP738–742 offlinePASS BGRsampling/targets/primarycasting/formatbits/RT|SRV; referencedartifactdirs unchanged.
 EXP743 implementationee605a52490e294d18143786a4c4dc517614feb7: 1024square4MB
 native color output now passes UMD, materializer, KMD bind/root routing,retirement.
 One shared native surface validator replaces16/fullscreen whitelists;8192axis,
@@ -78,11 +73,14 @@ ResourceCopy now enforces equal2Dsize/castfamily and rawUNORM bytes independentl
 of boundSRV; wholeCopyRegion delegates. Crossfamily/size negativecasesPASS.
 Finalsourcea90e1309f331c599cfaa24a3e862d156bc45fffc5c3b826d93a9c28c249de575.
 x64fullsuite0;ARM64testcrossbuild0;5hosttestsPASS; EXP744-copy-contract/green.
-Userresearch .local/research/DWM_DESKTOP_CONTRACT.md read beforehardware.
-Source confirms OpenResource/fullscreenBlt limits. Existing EXP737 ETW records
-DWM BGRA RT|SRV1024square/64x320/1024x1088 andMiscFlags512/2562, inWARPfallback;
-notproof ofcorrespondingAGXDDI. NoMapflagrecords. No duplicatepassivetrace needed.
-Evidence EXP745-texture-map/etw-research-check.json.
+DWM_SHARED_RUNTIME_CONTRACT.md/EXP746 supersedes shared/Blt POST-HARDWARE placement.
+EXP737: API0xA02=SHARED|GDI_COMPATIBLE|SHARED_NTHANDLE;0x200=GDI_COMPATIBLE.
+Same-runtime APIMiscFlagsToDDIMiscFlags:0xA02->DDI2,0x200->DDI0; NT ownedbyruntime/KMT.
+WDK permitsDXGI1_1resolve with0_x+Versionlow0x177a; these flagsdoNOTforceD3D11DDI.
+SharedCreate/Open,GetDC/ReleaseDC,resolve/copy/sync arePRE-DWM;Applebranchesunproven.
+DirectFlip: retainmandatoryWDDM1.2+ KMDcap;0_x lacksUMDcheck;notend-to-endproof,candidategate remains.
+KernelModeCommandBuffer: CLEAR in separatecapschange unlesscoherentaperture proven; nofakeCacheCoherent.
+TDR: retainrequiredresetABI; softwareresetNOTAGXquiescence; timeoutfatal/reboot,ResetFromTimeoutfailurecanbugcheck.
 EXP745 feb7f7a1 offlinePASS: sixBGRformats x4staging mip/array subresources exact
 byteroundtrip; dynamicBGRAsRGB/BGRXsRGB Map->actualshaderDraw/Flush->retirement.
 ExistingAsahitransfers andWindowsflush/retire; no newallocator/composer.
@@ -90,6 +88,8 @@ Sourcee72ca40b59a434694ae9cbd9af081e9217175a5bce32e213f5a551bbaba28a70;
 x64suite0,ARM64archives/testcrossbuild0; EXP745-texture-map/verified.
 NOW Flags0map slice only: DONOTWAIT remainsrejected. Useexistingretirementwith
 zerotimeout/WASSTILLDRAWING, thenverify required0_xdimension/castingcompanions.
+EXP746 refusaltraceGREEN: all5DDIs observed,one recordperrejection; x64suite0/ARM64build0.
+UseTRACE_FILE+APPLE_AGX_UMD_REFUSALS_ONLY=1; skipsoptionalresidencyqueries.
 No0_xadvertisement ornewhardwarecandidate; donotclaim readiness.
 Rotation can leave prehardware scope: Microsoft DXGI_DDI_BASE_FUNCTIONS exempts
 nonidentityrotation whenprimarycreation neverusesDXGI_DDI_ERR_UNSUPPORTED; our
@@ -145,6 +145,6 @@ HARDWARE ROADMAP
 [PASS] EXP736 standardruntimeCreate/Draw/Present; EXP744 shader/copy; EXP745 textureMap.
 [NOW] Truthful0_xcompanions: nonblockingMap,requiredformat/dimension/castingcoverage;
 offlineexecutablegates. Onlythenadvertise pinnedminor6/build0.
-[NEXT] ARM64package/sign/hash/preregistration; proceed directlyaftergatesPASS.
+[NEXT] Measuredshared/GDI/Blt+DXGI1_1resolve coverage,thenARM64package/sign/hash/preregistration.
 [HW] DWM hardwaredeviceadmission/firstDDIfailure;physicaldesktop immediatelyafterlogin.
-POST-HARDWARE: measuredshared/Blt barriers,stableaccelerateddesktop;OpenGL/CS1.6later.
+POST-HARDWARE: stableaccelerateddesktop;OpenGL/CS1.6later.

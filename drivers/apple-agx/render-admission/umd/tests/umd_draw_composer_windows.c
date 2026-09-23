@@ -264,7 +264,22 @@ unsigned AdmissionUmdDrawComposerTests(void) {
       memcpy(savedRefs,refs,sizeof(refs)); memcpy(savedIds,ids,sizeof(ids));
       memset(refs,0,sizeof(refs)); memset(ids,0,sizeof(ids));
       Composer_mode=attempt;
-      if(attempt==0) REQUIRE(AdmissionUmdDrawDispatch(&Composer_device,&Composer_tx)==S_OK);
+      if(attempt==0) {
+        WCHAR savedTrace[32768],savedOnly[16],tempDir[MAX_PATH],tracePath[MAX_PATH];
+        DWORD traceLength=GetEnvironmentVariableW(L"APPLE_AGX_UMD_TRACE_FILE",savedTrace,32768);
+        DWORD onlyLength=GetEnvironmentVariableW(L"APPLE_AGX_UMD_REFUSALS_ONLY",savedOnly,16);
+        REQUIRE(GetTempPathW(MAX_PATH,tempDir)>0);
+        REQUIRE(GetTempFileNameW(tempDir,L"agx",0,tracePath)!=0);
+        SetEnvironmentVariableW(L"APPLE_AGX_UMD_TRACE_FILE",tracePath);
+        SetEnvironmentVariableW(L"APPLE_AGX_UMD_REFUSALS_ONLY",NULL);
+        /* Regression: residency diagnostics must tolerate absent optional
+         * callback; tracing must not turn successful submission into AV. */
+        REQUIRE(Composer_callbacks.pfnQueryResidencyCb==NULL);
+        REQUIRE(AdmissionUmdDrawDispatch(&Composer_device,&Composer_tx)==S_OK);
+        SetEnvironmentVariableW(L"APPLE_AGX_UMD_TRACE_FILE",traceLength?savedTrace:NULL);
+        SetEnvironmentVariableW(L"APPLE_AGX_UMD_REFUSALS_ONLY",onlyLength?savedOnly:NULL);
+        DeleteFileW(tracePath);
+      }
       else if(attempt<4) REQUIRE(FAILED(AdmissionUmdDrawDispatch(&Composer_device,&Composer_tx)));
       else REQUIRE(AdmissionUmdDrawDispatch(&Composer_device,&Composer_tx)==S_OK);
       REQUIRE(Composer_calls==1);
