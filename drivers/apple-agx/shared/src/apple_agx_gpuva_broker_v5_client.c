@@ -1,8 +1,8 @@
 #include "apple_agx_gpuva_broker_v5_client.h"
 #include <string.h>
 
-_Static_assert(sizeof(AGX_GPUVA_V5_REQUEST) == 128, "v5 request ABI");
-_Static_assert(sizeof(AGX_GPUVA_V5_RESPONSE) == 64, "v5 response ABI");
+typedef char gpuva_v5_request_abi_size[(sizeof(AGX_GPUVA_V5_REQUEST) == 128) ? 1 : -1];
+typedef char gpuva_v5_response_abi_size[(sizeof(AGX_GPUVA_V5_RESPONSE) == 64) ? 1 : -1];
 
 bool AppleAgxGpuvaV5ClientInit(APPLE_AGX_GPUVA_V5_CLIENT *client,
                                const APPLE_AGX_GPUVA_V5_IO *io)
@@ -20,12 +20,12 @@ bool AppleAgxGpuvaV5ClientCall(APPLE_AGX_GPUVA_V5_CLIENT *client,
 {
     AGX_GPUVA_V5_REQUEST q;
     AGX_GPUVA_V5_RESPONSE r;
-    uint64_t words[sizeof(q) / sizeof(uint64_t)];
-    uint64_t result[sizeof(r) / sizeof(uint64_t)];
+    unsigned long long words[sizeof(q) / sizeof(unsigned long long)];
+    unsigned long long result[sizeof(r) / sizeof(unsigned long long)];
     unsigned i;
     if (!client || !request || !response || !client->Io.Write64 ||
         !client->Io.Read64 || !client->Io.Write32 || !client->Io.Barrier ||
-        client->Sequence == UINT64_MAX) return false;
+        client->Sequence == ~0ULL) return false;
     q = *request;
     q.Version = AGX_GPUVA_V5_VERSION;
     q.Bytes = sizeof(q);

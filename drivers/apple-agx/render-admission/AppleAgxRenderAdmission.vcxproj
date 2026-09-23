@@ -108,6 +108,7 @@
     <ClCompile Include="src\render_hvc.c" />
     <ClCompile Include="src\physical_memory_windows.c" />
     <ClCompile Include="src\memory_runtime_windows.c" />
+    <ClCompile Include="src\gpuva_v5_windows.c" />
     <ClCompile Include="src\paging_windows.c" />
     <ClCompile Include="src\render_paging.c" />
     <ClCompile Include="src\render_gdi.c" />
@@ -142,6 +143,7 @@
     <ClCompile Include="src\scheduler_windows.c" />
     <ClCompile Include="src\receipts.c" />
     <ClCompile Include="..\shared\src\apple_agx_wddm_feature_contract.c" />
+    <ClCompile Include="..\shared\src\apple_agx_gpuva_broker_v5_client.c" />
     <ClCompile Include="..\shared\src\apple_agx_win32_abi.c" />
     <ClCompile Include="..\shared\src\apple_agx_scheduler.c" />
     <ClCompile Include="..\shared\src\apple_agx_gdi.c" />

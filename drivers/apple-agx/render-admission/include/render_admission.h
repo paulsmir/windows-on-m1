@@ -43,6 +43,7 @@
 #include "apple_agx_device_control.h"
 #include "apple_agx_initdata_memory.h"
 #include "apple_agx_context0_broker.h"
+#include "apple_agx_gpuva_broker_v5_client.h"
 #include "apple_agx_retained_root_abi.h"
 #include "apple_agx_power.h"
 #include "apple_agx_rtkit_session.h"
@@ -1293,5 +1294,7 @@ DXGKDDI_CREATEPROCESS AdmissionDdiCreateProcess;
 DXGKDDI_DESTROYPROCESS AdmissionDdiDestroyProcess;
 DXGKDDI_CALIBRATEGPUCLOCK AdmissionDdiCalibrateGpuClock;
 DXGKDDI_SETSTABLEPOWERSTATE AdmissionDdiSetStablePowerState;
+BOOLEAN AdmissionGpuvaV5ClientOpen(ADMISSION_CONTEXT *Context,
+                                   APPLE_AGX_GPUVA_V5_CLIENT *Client);
 
 #endif

@@ -1,7 +1,6 @@
 #ifndef APPLE_AGX_GPUVA_BROKER_V5_H
 #define APPLE_AGX_GPUVA_BROKER_V5_H
 
-#include <stdint.h>
 
 #define AGX_GPUVA_V5_OFFSET 0x700u
 #define AGX_GPUVA_V5_WINDOW 0x100u
@@ -27,18 +26,18 @@ enum {
 
 typedef struct _AGX_GPUVA_V5_REQUEST {
     unsigned int Version, Bytes, Command, Flags;
-    uint64_t Sequence, Epoch, ProcessId, ProcessGeneration;
-    uint64_t TableIpa, AuxIpa, AllocationGeneration;
-    uint64_t LogicalIpa[4];
-    uint64_t Token;
+    unsigned long long Sequence, Epoch, ProcessId, ProcessGeneration;
+    unsigned long long TableIpa, AuxIpa, AllocationGeneration;
+    unsigned long long LogicalIpa[4];
+    unsigned long long Token;
     unsigned int Slot, Index, ValidMask, WritableMask;
 } AGX_GPUVA_V5_REQUEST;
 
 typedef struct _AGX_GPUVA_V5_RESPONSE {
-    uint64_t Receipt;
+    unsigned long long Receipt;
     unsigned int Status, Flags;
-    uint64_t Epoch, Token, RootGeneration, MapGeneration;
-    uint64_t Reserved[2];
+    unsigned long long Epoch, Token, RootGeneration, MapGeneration;
+    unsigned long long Reserved[2];
 } AGX_GPUVA_V5_RESPONSE;
 
 #endif
