@@ -1,144 +1,113 @@
 # GPU current boundary — 2026-09-23
 
 ## Working mode
-One executor; routine build/test/SSH/launch/recovery steps are not delegated. This supersedes the earlier mandatory Astra/Terra handoff loop at
-the user's request to reduce time and tokens. No new agents without a concrete
-independent need and user direction. Fix command/harness errors locally; they are
-not architectural REDs. Read this file first; do not load the historical ledger.
+One executor; routine build/test/SSH/launch/recovery work stays in this task. No
+new agents without user direction. Read this compact file first and consult only
+experiment evidence named here. Do not load the full historical ledger.
 
 ## Objective and fixed architecture
-Stable, visibly correct accelerated Windows desktop on Air M1 remains UNPROVEN.
-Physical/patch-list WDDM is fixed; GPUVA is CLOSED/NO. Existing real Asahi graph ->
-typed capture -> request-scoped materialization -> UMD composer/pfnRenderCb ->
-KMD Render/Patch/Submit -> AGX. Do not redesign these layers or expand features.
-OpenGL/CS1.6 follow desktop acceptance. Ordinary setup errors are not GPU verdicts.
+Stable, visibly correct accelerated Windows desktop on Air M1 is UNPROVEN.
+Architecture remains: real Asahi producer -> typed capture -> immutable
+request materialization -> UMD composer/pfnRenderCb -> physical/patch-list KMD
+Render/Patch/Submit -> AGX. GPUVA is CLOSED/NO. Do not redesign these layers.
+OpenGL and CS1.6 follow accelerated desktop acceptance.
 
-## Current source / candidate
-Current implementationEXP752/package747 fixes indexableTEMP; 746 remains rejected/removed.
-EXP736 package745 under /Users/pavel/public_windows/.local/experiments/EXP736-blt-present/package-build/package.
-SYS d352215b5d641c527481f16bb0d985803e6a8791d3dadec3674b2f30ee6e72a5
-UMD c620fad0950a6ff7e110e6df2e3a1cf245a68b79692ae01e3528be953b029528
-INF fc3fb2417b29498ee9961da14ad17cb7d891447a583a81cca3282f71d46c2366
-CAT 2421a016a37e9f80b91d974a19e596759f5ff522ae115b5c19de45aaa5317c39
-Client ec0adf38e1963d9eb8ec13ec9b998e15bdb570c6add4d8087a77a05afce9bf15
-Signer E9BE15BD2A184BFABA0C8035B3C620C58037A241; preserve existing TESTSIGNING.
-Artifacts are rooted at main repository .local, NOT worktree .local.
+## Proven hardware boundary — EXP753/package748
+Package748 passed ARM64 analysis, Universal ApiValidator, Inf2Cat, signer,
+catalog membership and native Air CAT verification. Hashes: CAT
+3f459c5f2a667ffd870e78e96e5ac4175642e8766bdc29e3f1c7b39325301cab;
+INF 64138fe2a75bf7cb0f2540ae88563f5579b582b9078fa5d6892a569a04838d6a;
+SYS 306444414d80a6fdd8a3f3a7d7c4741fd7357d490176a0821e58985877ff812d;
+UMD 5bf50a9c7fd493a6848f66ad24f3ec54a64bef9828f3d9f1c99d5e1bd781519d.
 
-## Proven boundary / current causal target
-EXP736 exact745 standardruntime client Create/Draw/Present PASS; physicaldesktop
-corruption persisted. EXP737 DWM failed before DDIdispatch (BGRA0xa9 removeslegacy).
-EXP747 Map/nonblocking/busy offlinePASS;EXP748 realSOFTWARE runtime selects0_x
-interfacea0006/version177a and conditionalDXGI1_1 table PASS (builder9278 vsAir9457).
-EXP749 BGR1D/2D/3D/Cube views,16GenMipschains,ld_ms->txf_ms offlinePASS;
-MS_LOAD set for87/88/91/93,MS_RT0,quality>1zero. Shared256registry/constructionlimit.
-EXP750 measuredsharedCreate/Open offlinePASS: private-onlyA->B,draw/fence/destroyA/
-sampleB;6measuredsizes plus1366x768;invalidbytes/pitch/size reject. Linearstride and
-borrowedlogicalsize fixed;existingallocator/capture/composer/retirement retained.
-EXP751 advertiseslegacy+0_x (ebab00e3); fullx64suite0/ARM64testbuild0.
-Original mandatory DWM inventory PASS; no broad expansion. SeeDWM_NEXT_GATES.json.
+EXP753 fixed the EXP752 hardware-VS zero-base VertexID assertion. DWM PID2904
+loaded exact System32 UMD748 (checksum12390304, timestamp1790151853), and
+DXGKRNL HWDEVICE selected adapter `Apple AGX clean WDDM render-admission
+experiment`, FL10_0, Interface0xA0006, Version0x177a. Thus hardware-device
+selection is PROVEN. No dwm.exe-correlated native AGX graph, submission,
+completion or standard Present receipt exists; acceleration is NOT PROVEN.
+The old Wom1PresentTransferReceipt fence253 predates PID2904 and is excluded.
 
-EXP751 candidate746 source209412e71f64b22752552c5788d88f120d190368b9ce4655829e381f5ecabe67.
-Packagebuild/analysis0warnings0errors;KMDUniversal/Inf2Cat/signer/catalogmembershipPASS;
-AirnativeCATPASS. SameTESTSIGNING/signercfg; installedonceoem5Code0, nowremoved.
-Candidatehashes/launchprofiles/prereg: EXP751-dwm-extended-admission/manifest.json.
-ActualboundDWM now reachesnativeCreateVertexShader, thenASSERT !indirect in
-exactgeneratedtgsi_to_nir.c574 ->ucrtbaseabortc0000409/FAST_FAIL7. Callchain:
-D3D11ClearGuard/BeginGuardRectangleSupport ->DirectComposition ->uDWMinit.
-Root cause: ShaderTGSI.c DCL_INDEXABLE_TEMP emitted scalarureg_DECL_temporary;
-TTN only permitsindirect access whenDeclaration.Array creates variable. EXP752
-fix below preservesassert and doesnotreinterpret0_xasinherentlyunsuitable.
-Noactiveuser/Explorerafter45s;autologonpasswordcleared. Post-logincheckpointINCONCLUSIVE.
-403081ETWevents/lost0;1304System32UMDimageevents exact746 checksum12354734/time1790135148.
-PriorEmptyDDIintersectionmessageabsent; journals80004001/887A0020 removal remain.
-NoDWM Present orphysicalshaderpixelsproven. Emptyrejecttrace doesNOTprove5DDIsPASS;
-reject-blt=0unexercised. Physicalobservationnotreceived; userpreviousblack/artefacts
-remainhistoricalbaseline, notEXP751 observation. Noqualificationclient/retry.
-Evidence17fileshashverifiedbeforecleanup;freshdumps/debug-current/debug-assert/
-fault-source/etw-causal-summary/loaded-umd-proof/causal-result inEXP751artifactroot.
+DWM then failed 0x8898008D in dwmcore!CD3DDevice::CreateBuffer through
+CD3DDynamicAppendBuffer::EnsureByteSpace and CSharedDirect3DResources::Init.
+ETW measured dynamic VB widths144,160000,240012 with Usage DYNAMIC, Bind VB,
+CPU_WRITE. These are regression cases only, never an admission whitelist.
+Operator saw a desktop background with black taskbar and no progress. Without
+DWM AGX receipts, background is probably fallback/GDI, not our D3D Present;
+black XAML/DComp taskbar is consistent with DWM losing its D3D device.
+Evidence: `.local/experiments/EXP753-vertexid-hardware/causal-result.json`,
+`hwdevice-submit-events.json`, `debug-dwm0.log`, `etw-buffer-events.json`,
+`physical-observation.json`.
 
-EXP751 exactcleanup0;ordinary377/392 finalbaseline04:11:28Z Code28/nullINF,
-nopackage/service/module/SYS/UMD/signer,8CPU,ANS/USBhealthy,no41/1001/129,
-autologon0/nopassword,traceenvrestoredabsent. Ordinarylauncher14804 currentlyactive;
-WindowsSSH reachable. Don'tchainloaduntilorderlyshutdownandproxyreenumeration.
-DirectFlip retained mandatoryWDDM1.2+bit;DWMwithoutCheckDirectFlipSupportUNKNOWN.
-KernelModeCommandBuffer: separatefutureCLEAR unlesscoherentapertureproven.
-TDRrequiredABI retained; softwareResetNOTfirmwarequiescence,timeoutfatal/reboot.
-GeneralBlt deferredunderunchangedNO_REDIRECTION;reopenonactualreject-blt.
-NoGPUVA orclosedlayerredesign. Newarraytranslationtask is justified only byEXP751
-actualruntimeassertion, notoptionalcompleteness or inventory expansion.
+Exact748 cleanup completed. Ordinary GPU-visible recovery is active/reachable:
+one inert ACPI\\APPL0002 Code28/null INF; no package/service/module/SYS/UMD or
+signer; 8 CPUs, storage/USB healthy; trace environment absent. Do not retain an
+AppleAgx package between experiments.
 
-EXP752 exactRED->GREEN: pinnedFXC VS declaresx0[4] and readsx0[r0.x]. Old source
-exitsc0000409 atsameTTNassert; fix usesoneureg_DECL_array_temporary and propagates
-ArrayID to elements. TGSI nowTEMP[1..4],ARRAY(1);NIRtranslation and actualAsahidraw
-throughcapture/materializer/KMD2placements/retirementPASS. x64fullsuite0;ARM64
-native/testbuild0;8hosttestsPASS. Source01e72146;seeEXP752-indexable-temp.
-Nohardwareclaim. Nextcandidate must change onlythiscausalshadertranslation over746.
-Package747 ARM64analysis0warnings/errors,Universal/Inf2Cat/version30.0.747.0,
-existing signer/catalogmembership/localhashesPASS. Preregistered exact causal run
-in EXPERIMENTS andEXP752 manifest; AirnativeCATPASS/installonce/cleanupcomplete.
+## Current offline boundary — EXP754
+Implementation commit 4adc9c59cf4ee59948d04d1d2f75b784e10e5bb2 replaces exact
+buffer/index filters with the D3D10 contract:
+- arbitrary nonzero buffer widths within pinned D3D10 limits;
+- DEFAULT CPU0; IMMUTABLE CPU0+initial data; DYNAMIC CPU_WRITE only and no SO
+  output; STAGING bind0 with declared READ/WRITE; exclusive 16-byte CB <=64KiB;
+- VB/IB/CB/SO combinations allowed by those rules; R16/R32 index binding;
+- whole/region linear buffer copies use exact Asahi BO ranges;
+- pending WRITE_NOOVERWRITE does not retire the immutable request; consumed BO
+  maps use a resource shadow, uploaded at the next IA bind after ordered
+  completion; WRITE_DISCARD remains supported;
+- real draw payload propagates count/start; triangle-list nonzero multiples of3;
+- nonindexed StartVertex=5 and indexed StartIndex=1/BaseVertex=7 pass actual
+  producer, capture, composer, physical KMD plan/patch and retirement;
+- indexed capture validates R16/R32 encoder tags, logical used bytes, aligned
+  physical fetch span and encoded BaseVertex; KMD no longer inspects literal
+  index contents or requires offset0/exact8.
 
-EXP752 hardware proves priorTTN !indirect assertion GONE and sameClearGuard VS
-advances intoAsahi compiler. Newassert agx_compile.c1446 on
-nir_intrinsic_load_vertex_id_zero_base: `stage==MESA_SHADER_COMPUTE && only for SW VS`.
-Stack iswassert->agx_compile_shader_nir->CreateVertexShader->D3D11ClearGuard->
-DirectComposition->uDWM. ExactSystem32747 identity via1308ETWimageevents;407172
-events/lost0. Journals80004001/887A0020;rejecttrace0bytes. Noactiveuser/Explorer;
-post-login/physicalobservationINCONCLUSIVE. ElevenRaidPort0Event129 occurred during
-boundboot; temporalonly, GPUcausalityNOTestablished. Evidence18fileshashverified.
-Exact747cleanup0; ordinaryfinalbaseline08:07:57Z Code28/nullINF/noresidues,8CPU,
-traceenvabsent. Nextoffline target: authoredVS combiningindexableTEMP+SV_VertexID;
-derive correcthardwareVS vertex-id mapping withoutweakeningAsahiassertion.
+Final source archive `buffers-green25-source.tar` SHA256
+50254acd513b7ff1180800ed3cc74d22231e70de17dc672cd38615d166f596af.
+x64 full executable TestExit0, EXE SHA256
+3d5e344511622864ab4187600198970a6ce44439e85146e76ff01520edf60470.
+ARM64 native closure PASS; ARM64 UmdContractTest build PASS, EXE SHA256
+75039bf7aa8e1723bacb2d4b0abd309c891b46f3bf31adeaf526f694d60c6fe3.
+Host ABI, dynamic-job, reference-transport and reloc-capture tests PASS.
+`test_apple_agx_mesa_win32_transport.py` also fails at clean HEAD on an unchanged
+textured-v6 fixture and is recorded as pre-existing, not an EXP754 regression.
+Inventory: `.local/experiments/EXP753-vertexid-hardware/FRONTEND_CONTRACT_INVENTORY.json`.
 
-EXP753 exactRED->GREEN: pinnedFXC VS combinesSV_VertexID andx0[4]/x0[r0.x].
-Currentcode RED atsameagx_compile.c1446 afterarrayNIR. Windows-specific Asahi shader
-prep now lowers zero-baseID to fullvertex_id-base_vertex before existing sysval
-lowering; authoritative draw-params table preserved. Assertion unchanged. Actual
-Asahidraw/capture/KMD2placements/retirementPASS; x64suite0;ARM64native/testbuild0;
-8hosttestsPASS. Sourcec7f786f5;seevertexid-verified-contract.json. Nohardwareclaim.
-Package748 ARM64/Universal/Inf2Cat/version30.0.748.0/signer/catalog/hashPASS.
-EXP753 exactsingle-variable hardware run preregistered; AirnativeCAT/installpending.
+## Current causal target
+Build/sign/hash one ARM64 package from this clean boundary, preregister one DWM
+experiment, then run it. Expected discriminator: DWM passes EnsureByteSpace and
+produces its first correlated native AGX graph/submission/completion, or exposes
+one new first refusal/failure. Hardware readiness is not claimed until package
+and preregistration gates pass.
 
-## Fixed execution recipe — do not rediscover
-Git: /opt/homebrew/bin/git (system Git hits unaccepted Xcode license).
-Host cwd /Users/pavel/public_windows; Python proxyenv/bin/python.
-Both chainload AND run_uefi need LLDDIR=/tmp/agx-lld-dir/.
-Frozen launches need command-scoped WOM1_ALLOW_LEGACY_LAUNCH_CONTRACT=1;
-contract checkpoints unavailable is NOT PASS. Full-owner also needs
-WOM1_AGX_G2_POWER_BROKER=1; ordinary/emergency must leave it unset.
-USB /dev/cu.usbmodemC02HDNCCQ6L41 (proxy), ...L43 (vUART).
-Chainload m1n1_windows/proxyclient/tools/chainload.py with M1N1DEVICE set;
-then run_uefi.py <FD> --device <L41> --display-mode physical --debug-mode off
---low-mem --contract-output <experiment-local-path>.
-Keep foreground exec session + durable log, never a detached background PID.
-Windows shutdown must complete BEFORE chainload; confirm guest exit and proxy
-re-enumeration, not merely SSH loss. Probe SSH+USB+launcher before operator request.
-Full: EXP584-kmd-output/m1n1.macho + EXP-20260904-406-coherent-abi-admission/J313_EFI-exp406.fd.
-Ordinary: EXP-20260903-377-secondary-cpu-receipt/assisted-boot/m1n1.macho +
-EXP-20260903-392-current-gpu-mu-publication/assisted-boot/J313_EFI.fd.
-Emergency only if ordinary unreachable: same377 +
-EXP-20260903-385-hvc-single-page/recovery/J313_EFI-no-agx-autoboot.fd.
-Air pavel@192.168.1.37 key /Users/pavel/.ssh/air;
-knownhosts EXP641-standard-present/air_known_hosts. Builder pauls@192.168.1.24
-key /Users/pavel/.ssh/windows_builder. Use uploaded literal PS files, not nested
-shell quoting. Parse changed PS once; ordinary typos need no architecture review.
-Installer /add-driver requires /install for existing devnode binding.
-Enumerate actual AppleAgxRenderAdmission.inf/fullpath, not ^AppleAgx.inf$.
-CM_PROB_FAILED_INSTALL is expected Code28 when the recovery devnode is inert.
-Receipt Wom1ComputeIdentityDiagnostic: device Device Parameters and SERVICE ROOT
-HKLM:\SYSTEM\CurrentControlSet\Services\AppleAgxAdmission (not Parameters).
-Collect exact bytes + normal receipts before cleanup. Exact package cleanup,
-hash-matched residues/signer, ordinary recovery remain required after experiments.
+## Fixed experiment procedure
+Git `/opt/homebrew/bin/git`; artifacts live under main repo `.local`, not the
+worktree. Builder `pauls@192.168.1.24`, key `~/.ssh/windows_builder`. Air
+`pavel@192.168.1.37`, key `~/.ssh/air`, pinned known-host file from EXP641.
+Preserve TESTSIGNING and existing signer; Smart App Control is separate.
 
-## Context and gate budget
-Keep this file <=150 lines; replace current state instead of appending history.
-One preregistration and one actual ledger update per experiment; raw logs stay
-in artifacts. Reuse passed gates for unchanged hashes; add none without a real
-contract defect. Batch independent reads, report only first meaningful failure.
-Verify on-disk artifacts/tool exits; planning/transfers are not completed work.
+Before asking the operator, probe Windows SSH and both proxy/vUART USB endpoints.
+Full owner uses EXP584 m1n1 plus EXP406 Mu; ordinary recovery uses EXP377 m1n1
+plus EXP392 Mu. Set LLDDIR=/tmp/agx-lld-dir and the frozen-launch compatibility
+environment; full owner additionally needs WOM1_AGX_G2_POWER_BROKER=1. Keep the
+launcher foreground with a durable log. Verify native CAT and exact hashes,
+install once, collect ETW/dumps/receipts before cleanup, remove exact package and
+hash-matched residues/signer, then restore ordinary GPU-visible recovery.
+
+DirectFlip remains required by the advertised WDDM contract; behavior without
+CheckDirectFlipSupport is UNKNOWN and observed through reject/ETW. Kernel-mode
+command-buffer cap remains clear until coherent aperture exists. TDR ABI remains,
+but software ResetFromTimeout does not quiesce AGX firmware; timeout is fatal and
+requires reboot. General Blt remains post-first-DWM under NO_REDIRECTION unless
+an actual reject-BltDXGI reopens it.
 
 HARDWARE ROADMAP
-[PASS] Originalgates;EXP751TTNrootcause;EXP752offlinefix+hardwareadvance;747cleaned/recovered.
-[NOW] EXP753/package748 preregistered; verifybaseline/nativeCAT then installonce.
-[NEXT] OneboundDWMrun -> exactnextboundary; evidence-firstcleanup/recovery.
-[HW] Nextunproven: ClearGuard shader compilation ->desktopdraw/completion/Present;post-loginobservation.
-POST-HARDWARE: generalBlt onlyifmeasured;stableaccelerateddesktop acceptance remainsUNPROVEN.
+[PASS] Frozen admission/shared/BGR/DXGI1.1 gates; EXP751/752/753 shader advances;
+       EXP753 exact hardware-device selection; exact748 cleanup/recovery.
+[PASS] EXP754 contract-wide buffers, append cycle, StartVertex/BaseVertex,
+       x64 execution and ARM64 closure/test build.
+[NOW] Build/sign/hash and preregister the exact ARM64 package from commit4adc9c59.
+[NEXT] One bound DWM run; collect DWM-correlated native AGX execution evidence.
+[HW] First unperformed hardware step: exact candidate install and login-time DWM run.
+POST-HARDWARE: optional features, performance, sustained desktop stability,
+OpenGL and CS1.6 only after first proven DWM AGX execution/Present.

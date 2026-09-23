@@ -46692,3 +46692,63 @@ key and after Start/AltTab; one 60s DWM ETW/dump capture; evidence before exact
 cleanup; ordinary recovery. No qualification client or second retry. Expected:
 prior line1446 assertion absent, then next exact causal boundary or DWM desktop
 draw/completion/Present. Missing login remains inconclusive for desktop. Result:PENDING.
+
+### EXP753 actual result — corrected hardware-device versus execution verdict
+
+Executed 2026-09-23; package748 installed exactly once after native CAT/hash
+verification. The EXP752 `load_vertex_id_zero_base` hardware-VS assertion is
+absent and no exact UMD crash recurred. DWM PID2904 loaded exact System32 UMD748
+(SHA256 5bf50a9c7fd493a6848f66ad24f3ec54a64bef9828f3d9f1c99d5e1bd781519d,
+checksum12390304,timestamp1790151853). DXGKRNL HWDEVICE selected the Apple AGX
+adapter at FL10_0 with Interface0xA0006/Version0x177a. This proves hardware-device
+selection, not AGX execution.
+
+No native graph, submission, completion or standard Present receipt correlates
+with dwm.exe PID2904. The persistent Wom1PresentTransferReceipt fence253 predates
+that process and is excluded. DWM failed 0x8898008D in
+`CD3DDevice::CreateBuffer -> CD3DDynamicAppendBuffer::EnsureByteSpace ->
+CSharedDirect3DResources::Init`. ETW dynamic VB widths144/160000/240012 are
+regression cases only; the governing admission is the Microsoft D3D10 buffer
+contract.
+
+Operator observation: background visible, taskbar black, no further progress.
+Because DWM produced no AGX receipts, the background was probably fallback/GDI,
+not this driver's D3D Present; black XAML/DComp taskbar is consistent with DWM
+losing its D3D device. Exact748 cleanup completed and ordinary GPU-visible
+Code28/null-INF recovery has no package/service/module/files/signer. VERDICT:
+REJECTED_FOR_DWM_DESKTOP_WITH_CAUSAL_ADVANCE. Evidence:
+`.local/experiments/EXP753-vertexid-hardware/causal-result.json` and the 16-file
+hash-verified DWM evidence set.
+
+## EXP754 — contract-wide D3D10 buffers and draw offsets, offline gate
+
+Verified UTC 2026-09-23T11:00:19Z. WHY THIS HYPOTHESIS: EXP753 selected the exact
+hardware device and exact UMD but failed in DWM dynamic-buffer initialization
+before any DWM-correlated AGX submission. ETW measured three dynamic VB cases;
+Microsoft's D3D10 resource contract, rather than those sizes, defines admission.
+
+WINDOWS CONTRACT: arbitrary VB/IB/CB/SO widths within D3D10 limits; DEFAULT has
+no CPU access, IMMUTABLE requires initial data, DYNAMIC requires CPU_WRITE and
+cannot be SO output, STAGING has no bind and declares READ/WRITE, CB is exclusive,
+16-byte aligned and <=64KiB. WRITE_NOOVERWRITE must not overwrite in-flight data;
+SV_VertexID includes StartVertex for Draw and excludes BaseVertexLocation for
+DrawIndexed. AGX/ASAHI CONTRACT: real draw params carry start/index bias; native
+index commands encode R16/R32, selected index address and BaseVertex; aligned
+fetch may include physical padding beyond logical used bytes. TRANSLATION:
+pending immutable materialization consumes BO maps, so NOOVERWRITE writes to a
+resource shadow without retiring; the next IA bind orders completion and uploads
+it. Index capture validates logical used bytes plus the aligned physical span;
+UMD/KMD validate encoder tag, element width, address range and BaseVertex without
+examining application index contents. WHAT IS STILL UNKNOWN: whether DWM proceeds
+to a correlated physical AGX submission/completion and standard Present.
+
+Implementation commit 4adc9c59cf4ee59948d04d1d2f75b784e10e5bb2. Final source
+archive SHA256 50254acd513b7ff1180800ed3cc74d22231e70de17dc672cd38615d166f596af.
+x64 full executable TestExit0, EXE SHA256
+3d5e344511622864ab4187600198970a6ce44439e85146e76ff01520edf60470.
+ARM64 native closure PASS; ARM64 test build PASS, EXE SHA256
+75039bf7aa8e1723bacb2d4b0abd309c891b46f3bf31adeaf526f694d60c6fe3.
+Host ABI, dynamic-job, reference-transport and reloc-capture tests PASS. The
+unchanged textured-v6 host fixture fails identically at clean HEAD and is not an
+EXP754 regression. Result: PASS_OFFLINE. No hardware run or readiness claim;
+next mandatory steps are exact ARM64 package/sign/hash and preregistration.
