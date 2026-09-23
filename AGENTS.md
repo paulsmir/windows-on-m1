@@ -178,3 +178,17 @@ Keep every field single-line and valid RFC 4180 CSV.  Record artifact paths
 relative to the repository where practical, and include SHA-256 whenever an
 artifact exists.  The automated schema contract is
 `tests/test_change_ledger.py`.
+
+## DWM bring-up phase
+- A hardware candidate may bundle several fixes if each has its own offline
+  RED→GREEN, and none changes firmware, caps advertisement, signer, or recovery.
+  Attribute a new failure from the dump/stack, not by single-variable isolation.
+- Start a new Codex thread at each phase boundary (after the hardware verdict
+  commit). Handoff: GPU_CURRENT_STATE.md, DWM_NEXT_GATES.json, .local/tandem/REVIEW.md.
+- Read .local/tandem/REVIEW.md before each implementation commit, before
+  package/preregistration, after each hardware verdict, and at thread start;
+  answer each OPEN item as `REVIEW R<n>: ACCEPT|REJECT|DEFER — reason`.
+- Builder iterations: persistent tree plus changed files only; targeted test first,
+  full suite once before commit; hash the final tree.
+- Never admit by exact size, content, offset, or bind combination taken from a
+  test or a trace; traces supply regression cases only.
