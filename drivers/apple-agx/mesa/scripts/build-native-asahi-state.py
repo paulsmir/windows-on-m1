@@ -1765,6 +1765,10 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
    LOG_ENTRYPOINT();''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','Draw','''   LOG_ENTRYPOINT();
    Device *pDevice = CastDevice(hDevice);
+   if (pDevice && AgxWin32AsahiContextDrawReceipt(pDevice->pipe)) {
+      HRESULT status=AgxD3d10WindowsFlushRetire(pDevice->windows);
+      if(FAILED(status)) { SetError(hDevice,status); return; }
+   }
    AgxD3d10WindowsDiagnosticState(pDevice->windows, "resolve-before");
    ResolveState(pDevice);
    assert(pDevice->primitive < MESA_PRIM_COUNT);
@@ -1780,6 +1784,10 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
        (pDevice->index_size != 2 && pDevice->index_size != 4)) {
       SetError(hDevice, E_NOTIMPL);
       return;
+   }
+   if (AgxWin32AsahiContextDrawReceipt(pDevice->pipe)) {
+      HRESULT status=AgxD3d10WindowsFlushRetire(pDevice->windows);
+      if(FAILED(status)) { SetError(hDevice,status); return; }
    }
    ResolveState(pDevice);
    struct pipe_draw_info info;

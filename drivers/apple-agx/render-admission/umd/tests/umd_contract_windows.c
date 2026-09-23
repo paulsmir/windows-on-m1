@@ -2447,6 +2447,46 @@ static void test_mesa_d3d10_frontend_open(void) {
       deviceFunctions.pfnVsSetShader(device,vsh);
     }
     {
+      /* DWM issues multiple immediate-context draws before its explicit Flush.
+       * Keep the public Windows lifetime while splitting at the existing native
+       * one-draw capsule boundary. */
+      ADMISSION_UMD_ASAHI_OWNER *multiOwner=
+          MesaD3d10FrontendOwnerForTest(device);
+      unsigned multiErrors=FrontendErrors;
+      RuntimeActiveDevice=MesaD3d10FrontendRuntimeForTest(device);
+      RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;
+      RuntimeQueryMarkerCount=RuntimeConsumerGates=RuntimeConsumerRetirements=0;
+      RuntimeConsumerFence=0;memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+      memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+      RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
+      RuntimeAutoCompleteConsumers=1;
+      deviceFunctions.pfnDraw(device,3,0);
+      CHECK(FrontendErrors==multiErrors && RuntimeRenders==0u &&
+            AgxWin32AsahiContextDrawReceipt(
+                MesaD3d10FrontendContextForTest(device)));
+      deviceFunctions.pfnDraw(device,3,0);
+      CHECK(FrontendErrors==multiErrors && RuntimeRenders==1u &&
+            RuntimeSignals==1u && RuntimeMaterializations==2u &&
+            RuntimeConsumerGates==2u && RuntimeConsumerRetirements==2u &&
+            AgxWin32AsahiContextDrawReceipt(
+                MesaD3d10FrontendContextForTest(device)));
+      deviceFunctions.pfnFlush(device);
+      CHECK(FrontendErrors==multiErrors && RuntimeRenders==2u &&
+            RuntimeSignals==2u && RuntimeMaterializations==4u &&
+            RuntimeConsumerGates==4u && RuntimeConsumerRetirements==4u &&
+            RuntimeMarker);
+      CHECK(AgxWin32AsahiContextRetire(
+          MesaD3d10FrontendContextForTest(device),0u));
+      CHECK(!multiOwner->Device->NativeBatchTransaction &&
+            !multiOwner->Device->DrawSubmission);
+      RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;
+      RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
+      RuntimeMarker=NULL;RuntimeQueryMarkerCount=0;RuntimeAutoCompleteConsumers=0;
+      memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+      memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+      RuntimeExpectedCommandVersion=0;
+    }
+    {
       /* D3D10 dynamic append contract: submit one range, append another with
        * NOOVERWRITE while the first draw is pending, then wrap with DISCARD. */
       D3D10DDI_MIPINFO appendMip={240016,1,1,240016,1,1};
