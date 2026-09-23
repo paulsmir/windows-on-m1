@@ -74,11 +74,15 @@ textured-v6 fixture and is recorded as pre-existing, not an EXP754 regression.
 Inventory: `.local/experiments/EXP753-vertexid-hardware/FRONTEND_CONTRACT_INVENTORY.json`.
 
 ## Current causal target
-Build/sign/hash one ARM64 package from this clean boundary, preregister one DWM
-experiment, then run it. Expected discriminator: DWM passes EnsureByteSpace and
-produces its first correlated native AGX graph/submission/completion, or exposes
-one new first refusal/failure. Hardware readiness is not claimed until package
-and preregistration gates pass.
+Package749 is built and preregistered for one DWM-only run. ARM64 analysis,
+Universal ApiValidator, Inf2Cat, version30.0.749.0, existing signer and catalog
+membership PASS. Hashes: CAT fbb76bbf2a779b03ce48784ed7b04488baae795727ea23c550275842a61453a8;
+INF 5dca8a825abd5029d9cd3944940daad9540e272fe84b4be02c88fca7f5804550;
+SYS 1b8ce6a25a88c0a0ea532f74cb075c7f201ce62ed6f3929db46f2b069860a9ce;
+UMD 7f383b1b12584fd8baf1bad61c95f6dfa29eb0dd2d1edb93101788b019ce6347.
+Before install, verify both control planes and native Air catalog/hash. Expected
+discriminator: DWM passes EnsureByteSpace and produces its first correlated
+native AGX graph/submission/completion, or exposes one new first failure.
 
 ## Fixed experiment procedure
 Git `/opt/homebrew/bin/git`; artifacts live under main repo `.local`, not the
@@ -106,7 +110,8 @@ HARDWARE ROADMAP
        EXP753 exact hardware-device selection; exact748 cleanup/recovery.
 [PASS] EXP754 contract-wide buffers, append cycle, StartVertex/BaseVertex,
        x64 execution and ARM64 closure/test build.
-[NOW] Build/sign/hash and preregister the exact ARM64 package from commit4adc9c59.
+[PASS] Package749 build/sign/hash and EXP754 preregistration.
+[NOW] Verify both control planes, native Air CAT/hash, then install exact749 once.
 [NEXT] One bound DWM run; collect DWM-correlated native AGX execution evidence.
 [HW] First unperformed hardware step: exact candidate install and login-time DWM run.
 POST-HARDWARE: optional features, performance, sustained desktop stability,

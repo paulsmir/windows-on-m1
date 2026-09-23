@@ -46752,3 +46752,70 @@ Host ABI, dynamic-job, reference-transport and reloc-capture tests PASS. The
 unchanged textured-v6 host fixture fails identically at clean HEAD and is not an
 EXP754 regression. Result: PASS_OFFLINE. No hardware run or readiness claim;
 next mandatory steps are exact ARM64 package/sign/hash and preregistration.
+
+## EXP754 hardware — DWM contract-wide dynamic buffers, package749
+
+Preregistered UTC 2026-09-23T11:07:50Z. No EXP754 Air launch has occurred.
+WHY THIS HYPOTHESIS:
+1. EXP753 proves exact UMD748 and HWDEVICE FL10_0 selection, while DWM fails
+   0x8898008D specifically in `CD3DDynamicAppendBuffer::EnsureByteSpace` before
+   any dwm.exe-correlated AGX graph/submission/completion.
+2. EXP754 exact REDs reproduced invalid size/usage whitelists, pending
+   WRITE_NOOVERWRITE failure, and StartIndex/BaseVertex rejection; final x64
+   producer gate passes all of them through physical KMD planning and retirement.
+3. Package749 differs from rejected748 only by this causal frontend/index
+   contract; firmware, WDDM caps, signer and recovery artifacts are unchanged.
+
+WINDOWS CONTRACT: all D3D10-compliant VB/IB/CB/SO widths and Usage/Bind/CPUAccess
+combinations are admitted; measured widths144/160000/240012 are test cases only.
+DYNAMIC requires CPU_WRITE, STAGING has no bind, IMMUTABLE requires initial data,
+CB is exclusive/aligned16/<=64KiB. Pending WRITE_NOOVERWRITE must not retire the
+old immutable request. Nonindexed SV_VertexID includes StartVertex; indexed
+SV_VertexID excludes BaseVertexLocation.
+
+AGX/ASAHI CONTRACT: real draw params carry first vertex and index bias. Native
+R16/R32 index commands encode the selected allocation-relative address and
+BaseVertex; hardware may read an aligned physical span while logical used bytes
+remain resource-bounded. The existing immutable capture/materializer and
+physical patch-list KMD own submission and retirement.
+
+TRANSLATION: a consumed dynamic BO map redirects NOOVERWRITE to the resource
+shadow without waiting; the next IA bind orders completion and uploads the
+shadow. Native capture and KMD validate element width, encoder words, logical
+used range, aligned physical span and BaseVertex. They do not require offset0,
+exactly8 bytes, or literal application index contents.
+
+WHAT IS STILL UNKNOWN: whether this exact contract lets DWM produce its first
+correlated native AGX graph/submission/completion and standard DXGI Present. DWM
+behavior with DirectFlip=TRUE and no CheckDirectFlipSupport remains unknown and
+will be observed through first reject/ETW. Expected reject-blt=0. The physical
+screen is observed immediately after login before pressing Windows, then after
+Start/Alt+Tab only if needed.
+
+ATOMIC CONTRACT: CreateResource/Map/IA binding/native index capture/shared ABI/KMD
+index validation change together because a pending dynamic indexed draw is
+invalid unless all layers agree on the same resource range and encoded address.
+Changing only one layer deterministically rejects before submission.
+
+Single variable over748: implementation commit
+4adc9c59cf4ee59948d04d1d2f75b784e10e5bb2. Clean integration HEAD
+1e8c610de512c8bdbeed4e7ca11454b8698db29a. Source archive SHA256
+50254acd513b7ff1180800ed3cc74d22231e70de17dc672cd38615d166f596af.
+Package749 ARM64 analysis0warnings/errors, Universal ApiValidator, Inf2Cat,
+version30.0.749.0, existing signer and catalog membership PASS:
+- CAT fbb76bbf2a779b03ce48784ed7b04488baae795727ea23c550275842a61453a8
+- INF 5dca8a825abd5029d9cd3944940daad9540e272fe84b4be02c88fca7f5804550
+- SYS 1b8ce6a25a88c0a0ea532f74cb075c7f201ce62ed6f3929db46f2b069860a9ce
+- UMD 7f383b1b12584fd8baf1bad61c95f6dfa29eb0dd2d1edb93101788b019ce6347
+Manifest: `.local/experiments/EXP754-dynamic-buffers-hardware/manifest.json`,
+SHA256 c7a19e3f7bd613f2e0a31c7d241d88078c1d93c70e0c11ea56f19ef079988e2a.
+
+Execution: verify ordinary clean baseline and both control planes; orderly
+shutdown and full-owner launch; native Air CAT/hash verification; exact749
+install once; APPLE_AGX_UMD_REFUSALS_ONLY=1; authorized temporary autologon;
+one bound boot and one 60-second DWM ETW/dump capture; no qualification client
+and no retry. Success checkpoint is a dwm.exe-correlated native graph,
+Render/Patch/Submit completion and standard Present with physical desktop
+observation. Failure is the first exact reject/exception/removal boundary.
+Collect evidence before exact package cleanup, clear autologon password, and
+restore ordinary377/392 recovery. Result: PENDING.

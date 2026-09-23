@@ -231,7 +231,16 @@
     "offline_pass": "x64 full producer suite TestExit0; real append draws; StartVertex5 and StartIndex1/BaseVertex7 through capture/composer/KMD2placements/retirement; ARM64 native/test build PASS",
     "evidence": "EXP753-vertexid-hardware/FRONTEND_CONTRACT_INVENTORY.json",
     "source_sha256": "50254acd513b7ff1180800ed3cc74d22231e70de17dc672cd38615d166f596af",
-    "hardware_dependency": "none for implementation; next DWM consequence requires exact package/sign/hash/preregistration"
+    "hardware_dependency": "none for implementation; next DWM consequence requires exact package/sign/hash/preregistration",
+    "package": {
+      "build": 749,
+      "status": "PASS_PREREGISTERED",
+      "cat": "fbb76bbf2a779b03ce48784ed7b04488baae795727ea23c550275842a61453a8",
+      "inf": "5dca8a825abd5029d9cd3944940daad9540e272fe84b4be02c88fca7f5804550",
+      "sys": "1b8ce6a25a88c0a0ea532f74cb075c7f201ce62ed6f3929db46f2b069860a9ce",
+      "umd": "7f383b1b12584fd8baf1bad61c95f6dfa29eb0dd2d1edb93101788b019ce6347",
+      "manifest": "EXP754-dynamic-buffers-hardware/manifest.json"
+    }
   },
   "third_dwm_hardware": {
     "experiment": "EXP753",
