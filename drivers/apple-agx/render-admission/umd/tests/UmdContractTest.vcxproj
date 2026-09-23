@@ -13,6 +13,7 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType Condition="'$(RuntimeDdiProbeMode)' == 'Driver'">DynamicLibrary</ConfigurationType>
     <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -137,5 +138,22 @@
   <ItemGroup>
     <ClCompile Include="..\src\umd_asahi_owner.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
   </ItemGroup>
+  <!-- Opt-in diagnostic targets in this existing test project; no production
+       UMD or native runtime sources are linked into the negotiation probe. -->
+  <ItemGroup Condition="'$(RuntimeDdiProbeMode)' != ''">
+    <ClCompile Remove="@(ClCompile)" />
+    <ClCompile Include="runtime_ddi_probe.c">
+      <PreprocessorDefinitions Condition="'$(RuntimeDdiProbeMode)' == 'Driver'">AGX_RUNTIME_PROBE_DRIVER=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup Condition="'$(RuntimeDdiProbeMode)' == 'Driver' and '$(RuntimeProbeKmtSource)' != ''">
+    <ClCompile Include="$(RuntimeProbeKmtSource)">
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+  </ItemGroup>
+  <ItemDefinitionGroup Condition="'$(RuntimeDdiProbeMode)' == 'Client'">
+    <Link><AdditionalDependencies>d3d11.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
+  </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

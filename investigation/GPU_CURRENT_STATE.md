@@ -15,7 +15,7 @@ KMD Render/Patch/Submit -> AGX. Do not redesign these layers or expand features.
 OpenGL/CS1.6 follow desktop acceptance. Ordinary setup errors are not GPU verdicts.
 
 ## Current source / candidate
-Current implementationEXP747 Map/busy; last hardware package745 remains immutable.
+Current implementationEXP748 DXGI1_1; last hardware package745 remains immutable.
 EXP736 package745 under /Users/pavel/public_windows/.local/experiments/EXP736-blt-present/package-build/package.
 SYS d352215b5d641c527481f16bb0d985803e6a8791d3dadec3674b2f30ee6e72a5
 UMD c620fad0950a6ff7e110e6df2e3a1cf245a68b79692ae01e3528be953b029528
@@ -35,12 +35,9 @@ System32 workingdirectory, ETW actual loaded-module path/checksum/timestamp proo
 EXP735 coherent744 measured Blt1/interval0 rejection. Fix75bc5baf hardwarevalidated
 EXP736: exactSystem32745 checksum12328883/timestamp1790021801, client1028Session1
 STANDARD_RUNTIME_PASS create/draw/present; native render/flush/present callbacksS_OK.
-Service GDI fence300 status0 interrupt/DPC1/1; TA3D stamps/done2match. Earlier
-PresentTransfer fence253 is NOT correlated to client1028. No replay allowed.
+ServiceGDI fence300completed; PresentTransfer253 NOTcorrelatedtoclient1028. No replay.
 User explicitly reports physical black/white corruption PERSISTS on745.
-Current Application events prove repeated dwm.exe/dwmcore.dll26100.9278 crashes,
-exception889800b0 offset27bde4 since boot; Explorer5236 remainsSession1, DWM PIDs
-change. ETW records DWM exits/restarts. Desktop acceptance remainsFAILED.
+DWM26100.9278 repeatedlycrashes889800b0/offset27bde4;desktopacceptanceFAILED.
 Evidence EXP736-blt-present: dwm-state/loaded-umd-proof/physical-observation andETL.
 EXP737 passive trace completed on unchanged745, no qualification client. Direct3D11
 journal1820 reports887A0004 "Failed to find DDI to drive requested feature levels"
@@ -73,11 +70,11 @@ ResourceCopy now enforces equal2Dsize/castfamily and rawUNORM bytes independentl
 of boundSRV; wholeCopyRegion delegates. Crossfamily/size negativecasesPASS.
 Finalsourcea90e1309f331c599cfaa24a3e862d156bc45fffc5c3b826d93a9c28c249de575.
 x64fullsuite0;ARM64testcrossbuild0;5hosttestsPASS; EXP744-copy-contract/green.
-DWM_SHARED_RUNTIME_CONTRACT.md/EXP746 supersedes shared/Blt POST-HARDWARE placement.
+EXP746 keeps measuredshared/GDI pre-DWM; verifiedNO_REDIRECTION defers generalBlt (EXP747notes).
 EXP737: API0xA02=SHARED|GDI_COMPATIBLE|SHARED_NTHANDLE;0x200=GDI_COMPATIBLE.
 Same-runtime APIMiscFlagsToDDIMiscFlags:0xA02->DDI2,0x200->DDI0; NT ownedbyruntime/KMT.
 WDK permitsDXGI1_1resolve with0_x+Versionlow0x177a; these flagsdoNOTforceD3D11DDI.
-Shared/GDI/Blt pre-DWM acceptance: DWM_NEXT_GATES.json; independentA->B/private-data-only,measuredsizes;runtime-tableproof BEFOREslotwrite.
+Shared/GDI pre-DWM acceptance: DWM_NEXT_GATES.json; independentA->B/private-data-only,measuredsizes;runtime-tableproof BEFOREslotwrite.
 DirectFlip preregistration: DWM behavior withoutCheckDirectFlipSupport UNKNOWN; observe reject-*/ETW; retainmandatoryKMDcap.
 KernelModeCommandBuffer: CLEAR in separatecapschange unlesscoherentaperture proven; nofakeCacheCoherent.
 TDR: retainrequiredresetABI; softwareresetNOTAGXquiescence; timeoutfatal/reboot,ResetFromTimeoutfailurecanbugcheck.
@@ -88,10 +85,13 @@ Sourcee72ca40b59a434694ae9cbd9af081e9217175a5bce32e213f5a551bbaba28a70;
 x64suite0,ARM64archives/testcrossbuild0; EXP745-texture-map/verified.
 EXP747 nonblockingMap+ResourceIsStagingBusy GREEN: active/no-flush,pending/timeout0,
 completion/retry/holds,unrelatedresourceidle; x64suite0/ARM64build0,EXP747-nonblocking-map/final.
-Map stayscontext-wide;WRITE_DISCARD serializes,norenameclaim. NEXT software-runtimeprobe.
+Map stayscontext-wide;WRITE_DISCARD serializes,norenameclaim. EXP748 softwareprobePASSED.
 EXP746 refusaltraceGREEN: all5DDIs observed,one recordperrejection; x64suite0/ARM64build0.
 UseTRACE_FILE+APPLE_AGX_UMD_REFUSALS_ONLY=1; skipsoptionalresidencyqueries.
-No0_xadvertisement ornewhardwarecandidate; donotclaim readiness.
+EXP748 realbuilderSOFTWAREprobe:0_x interfacea0006/version177a/DXGI1_1 true; sizes56/64,slot56.
+BuilderD3D11 26100.9278 vsAir9457; intentionalCreateFAIL,postcreateformatqueriesNOTmeasured.
+Conditionalresolver/nativebase+extendedcanaries+valid/foreign/nulltests GREEN x64/ARM64;EXP748/table-green.
+No0_xadvertisement ornewhardwarecandidate;NOW0_xcoverage;donotclaim readiness.
 Rotation can leave prehardware scope: Microsoft DXGI_DDI_BASE_FUNCTIONS exempts
 nonidentityrotation whenprimarycreation neverusesDXGI_DDI_ERR_UNSUPPORTED; our
 activecreatepath doesnot. MSAAresolve notadmitted (quality>1zero). No fakepass.
@@ -143,8 +143,8 @@ Do not count planning, transfers or an empty output as completed work. Verify
 on-disk artifacts/tool exits directly. No repeated "continue" handoff loops.
 
 HARDWARE ROADMAP
-[PASS] EXP736 standardruntimeCreate/Draw/Present;EXP744-746;EXP747 Map+busy.
-[NOW] Software-runtimeprobe: actual Interface/Version/DXGI1_1 table; no slotwrite beforeproof.
+[PASS] EXP736 standardruntimeCreate/Draw/Present;EXP744-746;EXP747 Map+busy;EXP748 DXGI1_1.
+[NOW] 0_x dimensions/GenMips/MS_LOAD truthful coverage; no bit publication beforeproof.
 [NEXT] 0_xcoverage thenlinearshared/private-data-onlyA->B; pitch>=width*bpp and%16=0;package gates.
 [HW] DWM hardwaredeviceadmission/firstDDIfailure;physicaldesktop immediatelyafterlogin.
 POST-HARDWARE: generalBlt deferredbyNO_REDIRECTION;preregister reject-blt=0,reopenonreject;stabledesktoplater.

@@ -195,3 +195,27 @@ Map limitation: existing WRITE_DISCARD currently synchronizes and reuses storage
 no asynchronous storage-renaming claim is made. DONOTWAIT is not accepted with
 DISCARD/NOOVERWRITE. Nonblocking read/write staging access and resource busy
 queries use the existing batch/fence lifetime; no new allocator is introduced.
+
+## EXP748 DXGI1.1 gate result
+
+The entry-only software probe was insufficient: builder runtime returned
+0x8007007f before OpenAdapter and loader receipts showed42 software-KMT export
+lookups in the probe DLL. The corrected test links the existing pinned Mesa
+D3DKMT.cpp software thunks (MIT notice retained; hash and license review in
+EXP748 artifacts), with no renderer or production-driver registration. Original
+software KMT behavior, including its WDDM1.0 answer, was not changed to force
+negotiation. Header/log/export-only projection is isolated to the test mode.
+
+Real builder D3D11CreateDevice SOFTWARE with flags0xa9 then selected Interface
+0x000a0006 and supplied Version0x177a. The pinned macro evaluatesTRUE. Pinned
+x64/ARM64 table sizes are56/64 with resolver offset56. Builder runtime is
+26100.9278; Air reference is26100.9457. This is measured builder negotiation, not
+an assertion that Air already executed the candidate. The deliberate E_FAIL in
+probe CreateDevice means post-success format queries were NOT measured.
+
+After that measurement, production projection gained only conditional slot
+assignment and an owner-validated ResolveSharedResource wrapper around existing
+FlushRetire. Full x64 native suite and ARM64 crossbuildPASS. Tests execute base
+and extended table creation with trailing canaries, valid idle resolve and
+foreign/null-resource rejection. The initial missing-slot test wasRED exactly
+once. No new DDI version has been advertised yet.

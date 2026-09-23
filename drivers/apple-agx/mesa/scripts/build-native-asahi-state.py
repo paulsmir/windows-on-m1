@@ -452,6 +452,31 @@ struct Query
    return NULL;''')])
     change('src/gallium/frontends/d3d10umd/Device.cpp',
         'dcf950aec993d40743671e1f208655e151158a9b4647bc3581dcd134962086aa',[
+        ('#include "Format.h"', '''#include "Format.h"
+static HRESULT APIENTRY
+AgxResolveSharedResource(DXGI_DDI_ARG_RESOLVESHAREDRESOURCE *args)
+{
+   Device *device=args?CastDevice(args->hDevice):NULL;
+   Resource *resource=args?CastResource(args->hResource):NULL;
+   HRESULT result=E_INVALIDARG;
+   if(device && resource && resource->owner_device==device && resource->resource)
+      result=AgxD3d10WindowsFlushRetire(device->windows);
+   if(FAILED(result)) {
+      UINT values[3]={args?(UINT)(UINT_PTR)args->hResource:0,
+         args?(UINT)(((UINT64)(UINT_PTR)args->hResource)>>32):0,device!=NULL};
+      AgxD3d10WindowsDiagnostic("reject-ResolveSharedResource",result,values,3);
+   }
+   return result;
+}
+'''),
+        ('''   pCreateData->DXGIBaseDDI.pDXGIDDIBaseFunctions->pfnBlt =
+      _Blt;''','''   pCreateData->DXGIBaseDDI.pDXGIDDIBaseFunctions->pfnBlt =
+      _Blt;
+   /* Version is supplied by the runtime. Never write the extended slot
+    * when it supplied only the base table. EXP748 measures this negotiation. */
+   if(IS_DXGI1_1_BASE_FUNCTIONS(pCreateData->Interface,pCreateData->Version))
+      pCreateData->DXGIBaseDDI.pDXGIDDIBaseFunctions2->pfnResolveSharedResource =
+         AgxResolveSharedResource;'''),
         ('''   struct pipe_screen *screen = pAdapter->screen;
    struct pipe_context *pipe = screen->context_create(screen, NULL, 0);
    pDevice->pipe = pipe;

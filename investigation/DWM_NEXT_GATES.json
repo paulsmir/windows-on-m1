@@ -150,14 +150,27 @@
     },
     {
       "id": "dxgi_1_1_table",
-      "status": "OPEN",
+      "status": "PASS_OFFLINE",
       "proof_before_callback_write": [
         "runtime selects DXGI1_1 for exact Interface/Version",
         "exact pinned table size and field offset",
         "executable sentinel/ABI guard"
       ],
       "base_only_action": "revisit interface negotiation before package; no forced extended-table cast",
-      "first_attempt": "Builder real D3D11 software-driver probe, flags0xa9; record runtime version and measured Interface/Version; deliberate CreateDevice failure cannot establish post-create format-query absence"
+      "first_attempt": "Builder real D3D11 software-driver probe, flags0xa9; record runtime version and measured Interface/Version; deliberate CreateDevice failure cannot establish post-create format-query absence",
+      "evidence": "EXP748-runtime-probe/probe4 + table-green",
+      "measurement": {
+        "interface": "0x000a0006",
+        "version": "0x177a",
+        "macro": true,
+        "base_bytes": 56,
+        "extended_bytes": 64,
+        "slot_offset": 56,
+        "builder_d3d11": "26100.9278",
+        "Air_reference_d3d11": "26100.9457"
+      },
+      "scope": "Real builder software runtime negotiation plus native frontend guarded-table execution; not Air execution",
+      "implementation": "Conditional resolver slot, existing flush/retire; base/extended canaries and valid/foreign/null resource tests pass"
     }
   ],
   "preregistration_required_line": "DWM with DirectFlip=TRUE and no CheckDirectFlipSupport: unknown; observe reject-* / ETW.",

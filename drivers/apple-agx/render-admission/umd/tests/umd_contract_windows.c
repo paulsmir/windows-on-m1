@@ -1072,7 +1072,8 @@ static void test_mesa_d3d10_frontend_open(void) {
   D3D10DDI_CORELAYER_DEVICECALLBACKS core={0};
   D3D10DDI_DEVICEFUNCS deviceFunctions={0};
   DXGI_DDI_BASE_CALLBACKS dxgiCallbacks={0};
-  DXGI_DDI_BASE_FUNCTIONS dxgiFunctions={0};
+  struct { DXGI_DDI_BASE_FUNCTIONS Functions; UINT64 Guard; } guardedDxgi={0};
+  guardedDxgi.Guard=0xcafef00d5a5a1234ULL;
   D3D10DDIARG_CALCPRIVATEDEVICESIZE sizeArgs={0};
   D3D10DDIARG_CREATEDEVICE create={0};
   D3D10DDI_HDEVICE device={0};
@@ -1121,15 +1122,16 @@ static void test_mesa_d3d10_frontend_open(void) {
   create.pKTCallbacks=&callbacks;create.pUMCallbacks=&core;
   create.pDeviceFuncs=&deviceFunctions;
   create.DXGIBaseDDI.pDXGIBaseCallbacks=&dxgiCallbacks;
-  create.DXGIBaseDDI.pDXGIDDIBaseFunctions=&dxgiFunctions;
+  create.DXGIBaseDDI.pDXGIDDIBaseFunctions=&guardedDxgi.Functions;
   CHECK(SUCCEEDED(functions.pfnCreateDevice(open.hAdapter,&create)));
+  CHECK(guardedDxgi.Guard==0xcafef00d5a5a1234ULL);
   unsigned ordinarySlots=(unsigned)(sizeof(deviceFunctions)/sizeof(void *));
-  unsigned dxgiSlots=(unsigned)(sizeof(dxgiFunctions)/sizeof(void *));
+  unsigned dxgiSlots=(unsigned)(sizeof(guardedDxgi.Functions)/sizeof(void *));
   unsigned ordinaryPresent=0,dxgiPresent=0;
   for(unsigned i=0;i<ordinarySlots;++i)
     if(((void **)&deviceFunctions)[i]) ++ordinaryPresent;
   for(unsigned i=0;i<dxgiSlots;++i)
-    if(((void **)&dxgiFunctions)[i]) ++dxgiPresent;
+    if(((void **)&guardedDxgi.Functions)[i]) ++dxgiPresent;
   CHECK(ordinarySlots==101u && ordinaryPresent==101u &&
         dxgiSlots==7u && dxgiPresent==7u);
   CHECK(deviceFunctions.pfnDraw && deviceFunctions.pfnFlush &&
@@ -1144,7 +1146,7 @@ static void test_mesa_d3d10_frontend_open(void) {
         deviceFunctions.pfnResourceCopy && deviceFunctions.pfnResourceCopyRegion &&
         deviceFunctions.pfnResourceResolveSubresource &&
         deviceFunctions.pfnCheckFormatSupport &&
-        deviceFunctions.pfnCheckMultisampleQualityLevels && dxgiFunctions.pfnPresent);
+        deviceFunctions.pfnCheckMultisampleQualityLevels && guardedDxgi.Functions.pfnPresent);
   if(deviceFunctions.pfnDraw && deviceFunctions.pfnFlush) {
     UINT formatCaps=~0u,quality=~0u;
     CHECK(MesaD3d10FrontendFormatMappedForTest(
@@ -1458,26 +1460,26 @@ static void test_mesa_d3d10_frontend_open(void) {
       presentArgs.pDXGIContext=(PVOID)(UINT_PTR)0x774u;
       FrontendPresentCalls=0;FrontendPresentAllocation=0x771u;
       FrontendPresentContext=presentArgs.pDXGIContext;
-      CHECK(dxgiFunctions.pfnPresent(&presentArgs)==S_OK &&
+      CHECK(guardedDxgi.Functions.pfnPresent(&presentArgs)==S_OK &&
             FrontendPresentCalls==1u);
       /* The standard runtime client uses Present(0, 0), not a v-sync wait. */
       presentArgs.Flags.Value=0x1u; /* Observed windowed Blt, not Flip. */
       presentArgs.FlipInterval=DXGI_DDI_FLIP_INTERVAL_IMMEDIATE;
-      CHECK(dxgiFunctions.pfnPresent(&presentArgs)==S_OK &&
+      CHECK(guardedDxgi.Functions.pfnPresent(&presentArgs)==S_OK &&
             FrontendPresentCalls==2u);
       presentArgs.Flags.Value=0x3u;
-      CHECK(dxgiFunctions.pfnPresent(&presentArgs)==E_INVALIDARG &&
+      CHECK(guardedDxgi.Functions.pfnPresent(&presentArgs)==E_INVALIDARG &&
             FrontendPresentCalls==2u);
       presentArgs.Flags.Value=0x1u;
       presentArgs.FlipInterval=(DXGI_DDI_FLIP_INTERVAL_TYPE)0xffffffffu;
-      CHECK(dxgiFunctions.pfnPresent(&presentArgs)==E_INVALIDARG &&
+      CHECK(guardedDxgi.Functions.pfnPresent(&presentArgs)==E_INVALIDARG &&
             FrontendPresentCalls==2u);
       presentArgs.FlipInterval=DXGI_DDI_FLIP_INTERVAL_ONE;
       presentArgs.SrcSubResourceIndex=1u;
-      CHECK(dxgiFunctions.pfnPresent(&presentArgs)==E_INVALIDARG &&
+      CHECK(guardedDxgi.Functions.pfnPresent(&presentArgs)==E_INVALIDARG &&
             FrontendPresentCalls==2u);
       presentArgs.SrcSubResourceIndex=0u;presentArgs.Flags.Value=0u;
-      CHECK(dxgiFunctions.pfnPresent(&presentArgs)==E_INVALIDARG &&
+      CHECK(guardedDxgi.Functions.pfnPresent(&presentArgs)==E_INVALIDARG &&
             FrontendPresentCalls==2u);
     }
     {
@@ -1531,10 +1533,10 @@ static void test_mesa_d3d10_frontend_open(void) {
       mode.hResource=(DXGI_DDI_HRESOURCE)(UINT_PTR)
           createdPresentResource.pDrvPrivate;
       FrontendSetModeCalls=0;
-      CHECK(dxgiFunctions.pfnSetDisplayMode(&mode)==S_OK &&
+      CHECK(guardedDxgi.Functions.pfnSetDisplayMode(&mode)==S_OK &&
             FrontendSetModeCalls==1u);
       mode.SubResourceIndex=1u;
-      CHECK(dxgiFunctions.pfnSetDisplayMode(&mode)==E_INVALIDARG &&
+      CHECK(guardedDxgi.Functions.pfnSetDisplayMode(&mode)==E_INVALIDARG &&
             FrontendSetModeCalls==1u);
     }
     {
@@ -1570,7 +1572,7 @@ static void test_mesa_d3d10_frontend_open(void) {
       mode.hDevice=(DXGI_DDI_HDEVICE)(UINT_PTR)device.pDrvPrivate;
       mode.hResource=(DXGI_DDI_HRESOURCE)(UINT_PTR)rgba.pDrvPrivate;
       unsigned modeCalls=FrontendSetModeCalls;
-      CHECK(dxgiFunctions.pfnSetDisplayMode(&mode)==E_INVALIDARG &&
+      CHECK(guardedDxgi.Functions.pfnSetDisplayMode(&mode)==E_INVALIDARG &&
             FrontendSetModeCalls==modeCalls);
       {
         /* A non-primary RGBA allocation is opened through the same projected
@@ -1625,7 +1627,7 @@ static void test_mesa_d3d10_frontend_open(void) {
         blt.hSrcResource=(DXGI_DDI_HRESOURCE)(UINT_PTR)opened.pDrvPrivate;
         blt.DstRight=2560;blt.DstBottom=1600;blt.Flags.Value=0x8u;
         blt.Rotate=DXGI_DDI_MODE_ROTATION_IDENTITY;
-        HRESULT bltResult=dxgiFunctions.pfnBlt(&blt);
+        HRESULT bltResult=guardedDxgi.Functions.pfnBlt(&blt);
         if(context) context->blit=savedBlt;
         CHECK(bltResult==S_OK && FrontendCapturedBltCalls==1u &&
               FrontendCapturedBltSourceFormat==PIPE_FORMAT_R8G8B8A8_UNORM &&
@@ -1651,8 +1653,8 @@ static void test_mesa_d3d10_frontend_open(void) {
       DXGI_DDI_ARG_ROTATE_RESOURCE_IDENTITIES rotate={0};
       rotate.hDevice=(DXGI_DDI_HDEVICE)(UINT_PTR)device.pDrvPrivate;
       rotate.pResources=rotating;rotate.Resources=2;
-      CHECK(dxgiFunctions.pfnRotateResourceIdentities(&rotate)==S_OK);
-      CHECK(dxgiFunctions.pfnRotateResourceIdentities(&rotate)==S_OK);
+      CHECK(guardedDxgi.Functions.pfnRotateResourceIdentities(&rotate)==S_OK);
+      CHECK(guardedDxgi.Functions.pfnRotateResourceIdentities(&rotate)==S_OK);
     }
     {
       D3D10DDIARG_CREATESHADERRESOURCEVIEW srv={0};
@@ -1731,7 +1733,7 @@ static void test_mesa_d3d10_frontend_open(void) {
     unsupportedPresent.hSurfaceToPresent=(UINT_PTR)rt.pDrvPrivate;
     unsigned presentErrorsBefore=FrontendErrors,presentCreatesBefore=PoolCreates;
     unsigned presentRendersBefore=RuntimeRenders,presentSignalsBefore=RuntimeSignals;
-    CHECK(dxgiFunctions.pfnPresent(&unsupportedPresent)==E_INVALIDARG &&
+    CHECK(guardedDxgi.Functions.pfnPresent(&unsupportedPresent)==E_INVALIDARG &&
           FrontendErrors==presentErrorsBefore &&
           PoolCreates==presentCreatesBefore && RuntimeRenders==presentRendersBefore &&
           RuntimeSignals==presentSignalsBefore);
@@ -1746,17 +1748,17 @@ static void test_mesa_d3d10_frontend_open(void) {
     DXGI_DDI_HRESOURCE dxgiRt=(UINT_PTR)rt.pDrvPrivate;
     DXGI_DDI_ARG_SETDISPLAYMODE unsupportedMode={0};
     unsupportedMode.hDevice=(UINT_PTR)device.pDrvPrivate;unsupportedMode.hResource=dxgiRt;
-    CHECK(dxgiFunctions.pfnSetDisplayMode(&unsupportedMode)==E_INVALIDARG);
+    CHECK(guardedDxgi.Functions.pfnSetDisplayMode(&unsupportedMode)==E_INVALIDARG);
     DXGI_DDI_ARG_SETRESOURCEPRIORITY unsupportedPriority={0};
     unsupportedPriority.hDevice=(UINT_PTR)device.pDrvPrivate;unsupportedPriority.hResource=dxgiRt;
     unsupportedPriority.Priority=0x12345678u;
     FrontendPriorityCalls=0;FrontendPriorityAllocation=0;FrontendPriorityValue=0;
     FrontendPriorityResult=S_OK;
-    CHECK(dxgiFunctions.pfnSetResourcePriority(&unsupportedPriority)==S_OK &&
+    CHECK(guardedDxgi.Functions.pfnSetResourcePriority(&unsupportedPriority)==S_OK &&
           FrontendPriorityCalls==1u && FrontendPriorityAllocation!=0u &&
           FrontendPriorityValue==unsupportedPriority.Priority);
     FrontendPriorityResult=E_FAIL;
-    CHECK(dxgiFunctions.pfnSetResourcePriority(&unsupportedPriority)==E_FAIL &&
+    CHECK(guardedDxgi.Functions.pfnSetResourcePriority(&unsupportedPriority)==E_FAIL &&
           FrontendPriorityCalls==2u);
     FrontendPriorityResult=S_OK;
     DXGI_DDI_HRESOURCE residencyResources[2]={dxgiRt,
@@ -1768,14 +1770,14 @@ static void test_mesa_d3d10_frontend_open(void) {
     unsupportedResidency.pResources=residencyResources;
     unsupportedResidency.pStatus=residency;unsupportedResidency.Resources=2;
     FrontendResidencyCalls=0;FrontendResidencyFailAt=0;
-    CHECK(dxgiFunctions.pfnQueryResourceResidency(&unsupportedResidency)==
+    CHECK(guardedDxgi.Functions.pfnQueryResourceResidency(&unsupportedResidency)==
           AGX_DXGI_STATUS_RESIDENT_IN_SHARED_MEMORY &&
           FrontendResidencyCalls==2u &&
           residency[0]==DXGI_DDI_RESIDENCY_FULLY_RESIDENT &&
           residency[1]==DXGI_DDI_RESIDENCY_RESIDENT_IN_SHARED_MEMORY);
     residency[0]=residency[1]=(DXGI_DDI_RESIDENCY)0x5a;
     FrontendResidencyCalls=0;FrontendResidencyFailAt=2;
-    CHECK(dxgiFunctions.pfnQueryResourceResidency(&unsupportedResidency)==E_FAIL &&
+    CHECK(guardedDxgi.Functions.pfnQueryResourceResidency(&unsupportedResidency)==E_FAIL &&
           FrontendResidencyCalls==2u &&
           residency[0]==(DXGI_DDI_RESIDENCY)0x5a &&
           residency[1]==(DXGI_DDI_RESIDENCY)0x5a);
@@ -1783,19 +1785,19 @@ static void test_mesa_d3d10_frontend_open(void) {
     DXGI_DDI_ARG_ROTATE_RESOURCE_IDENTITIES unsupportedRotate={0};
     unsupportedRotate.hDevice=(UINT_PTR)device.pDrvPrivate;
     unsupportedRotate.pResources=&dxgiRt;unsupportedRotate.Resources=1;
-    CHECK(dxgiFunctions.pfnRotateResourceIdentities(&unsupportedRotate)==E_INVALIDARG);
+    CHECK(guardedDxgi.Functions.pfnRotateResourceIdentities(&unsupportedRotate)==E_INVALIDARG);
     DXGI_GAMMA_CONTROL_CAPABILITIES gamma;
     memset(&gamma,0x5a,sizeof(gamma));
     DXGI_DDI_ARG_GET_GAMMA_CONTROL_CAPS unsupportedGamma={0};
     unsupportedGamma.hDevice=(UINT_PTR)device.pDrvPrivate;
     unsupportedGamma.pGammaCapabilities=&gamma;
-    CHECK(dxgiFunctions.pfnGetGammaCaps(&unsupportedGamma)==S_OK);
+    CHECK(guardedDxgi.Functions.pfnGetGammaCaps(&unsupportedGamma)==S_OK);
     DXGI_GAMMA_CONTROL_CAPABILITIES zeroGamma={0};
     CHECK(memcmp(&gamma,&zeroGamma,sizeof(gamma))==0);
     DXGI_DDI_ARG_BLT unsupportedBlt={0};
     unsupportedBlt.hDevice=(UINT_PTR)device.pDrvPrivate;
     unsupportedBlt.hDstResource=dxgiRt;unsupportedBlt.hSrcResource=dxgiRt;
-    CHECK(dxgiFunctions.pfnBlt(&unsupportedBlt)==E_INVALIDARG);
+    CHECK(guardedDxgi.Functions.pfnBlt(&unsupportedBlt)==E_INVALIDARG);
 #undef FRONTEND_DXGI_REJECT
     D3D10DDIARG_CREATEGEOMETRYSHADERWITHSTREAMOUTPUT unsupportedGsSo={0};
     D3D10DDI_HSHADER unsupportedGsSoHandle={0};
@@ -3698,7 +3700,7 @@ static void test_mesa_d3d10_frontend_open(void) {
       primaryPresent.pDXGIContext=(PVOID)(UINT_PTR)0x778u;
       FrontendPresentAllocation=0x775u;
       FrontendPresentContext=primaryPresent.pDXGIContext;
-      CHECK(dxgiFunctions.pfnPresent(&primaryPresent)==S_OK &&
+      CHECK(guardedDxgi.Functions.pfnPresent(&primaryPresent)==S_OK &&
             FrontendPresentCalls==3u);
     }
     BOOL eventEndSubmitted=FrontendErrors==eventErrorsBefore &&
@@ -3964,7 +3966,7 @@ static void test_mesa_d3d10_frontend_open(void) {
       blt.hSrcResource=(DXGI_DDI_HRESOURCE)(UINT_PTR)presentResource.pDrvPrivate;
       blt.DstRight=2560;blt.DstBottom=1600;blt.Flags.Value=0x8u;
       blt.Rotate=DXGI_DDI_MODE_ROTATION_IDENTITY;
-      CHECK(dxgiFunctions.pfnBlt(&blt)==S_OK);
+      CHECK(guardedDxgi.Functions.pfnBlt(&blt)==S_OK);
       CHECK(!AgxWin32AsahiContextFaulted(
           MesaD3d10FrontendContextForTest(device)));
       CHECK(RuntimeRenders==0u && RuntimeSignals==0u &&
@@ -3977,7 +3979,7 @@ static void test_mesa_d3d10_frontend_open(void) {
       bltPresent.pDXGIContext=(PVOID)(UINT_PTR)0x779u;
       FrontendPresentAllocation=0x775u;
       FrontendPresentContext=bltPresent.pDXGIContext;
-      CHECK(dxgiFunctions.pfnPresent(&bltPresent)==S_OK &&
+      CHECK(guardedDxgi.Functions.pfnPresent(&bltPresent)==S_OK &&
             FrontendPresentCalls==4u && RuntimeRenders==1u &&
             RuntimeSignals==1u && RuntimeMaterializations==2u &&
             RuntimeConsumerGates==2u && RuntimeMarker!=NULL);
@@ -4018,7 +4020,7 @@ static void test_mesa_d3d10_frontend_open(void) {
       copyPresent.pDXGIContext=(PVOID)(UINT_PTR)0x77cu;
       FrontendPresentAllocation=0x775u;
       FrontendPresentContext=copyPresent.pDXGIContext;
-      CHECK(dxgiFunctions.pfnPresent(&copyPresent)==S_OK &&
+      CHECK(guardedDxgi.Functions.pfnPresent(&copyPresent)==S_OK &&
             FrontendPresentCalls==5u && RuntimeRenders==1u &&
             RuntimeSignals==1u && RuntimeMaterializations==2u &&
             RuntimeConsumerGates==2u && RuntimeMarker!=NULL);
@@ -4055,7 +4057,7 @@ static void test_mesa_d3d10_frontend_open(void) {
       copyRegionPresent.pDXGIContext=(PVOID)(UINT_PTR)0x77du;
       FrontendPresentAllocation=0x775u;
       FrontendPresentContext=copyRegionPresent.pDXGIContext;
-      CHECK(dxgiFunctions.pfnPresent(&copyRegionPresent)==S_OK &&
+      CHECK(guardedDxgi.Functions.pfnPresent(&copyRegionPresent)==S_OK &&
             FrontendPresentCalls==6u && RuntimeRenders==1u &&
             RuntimeSignals==1u && RuntimeMaterializations==2u &&
             RuntimeConsumerGates==2u && RuntimeMarker!=NULL);
@@ -4140,14 +4142,48 @@ static void test_mesa_d3d10_frontend_open(void) {
   }
   {
     D3D10DDI_HDEVICE secondDevice={0};D3D10DDI_DEVICEFUNCS secondFunctions={0};
-    DXGI_DDI_BASE_FUNCTIONS secondDxgi={0};D3D10DDIARG_CREATEDEVICE secondCreate=create;
+    struct { DXGI1_1_DDI_BASE_FUNCTIONS Functions; UINT64 Guard; } secondDxgi={0};
+    D3D10DDIARG_CREATEDEVICE secondCreate=create;
+    secondDxgi.Guard=0x1234567887654321ULL;
+    secondCreate.Interface=D3D10_0_x_DDI_INTERFACE_VERSION;
+    secondCreate.Version=0x177au; /* Measured by EXP748 real software runtime. */
     secondDevice.pDrvPrivate=calloc(1,bytes);secondCreate.hDrvDevice=secondDevice;
     secondCreate.hRTDevice.handle=(VOID *)(UINT_PTR)0x905u;
     secondCreate.hRTCoreLayer.handle=(VOID *)(UINT_PTR)0xb05u;
     secondCreate.pDeviceFuncs=&secondFunctions;
-    secondCreate.DXGIBaseDDI.pDXGIDDIBaseFunctions=&secondDxgi;
+    secondCreate.DXGIBaseDDI.pDXGIDDIBaseFunctions2=&secondDxgi.Functions;
     unsigned destroysBefore=BridgeDestroys;
     CHECK(SUCCEEDED(functions.pfnCreateDevice(open.hAdapter,&secondCreate)));
+    CHECK(IS_DXGI1_1_BASE_FUNCTIONS(secondCreate.Interface,secondCreate.Version) &&
+          sizeof(DXGI_DDI_BASE_FUNCTIONS)==56u &&
+          sizeof(DXGI1_1_DDI_BASE_FUNCTIONS)==64u &&
+          offsetof(DXGI1_1_DDI_BASE_FUNCTIONS,pfnResolveSharedResource)==56u &&
+          secondDxgi.Guard==0x1234567887654321ULL &&
+          secondDxgi.Functions.pfnResolveSharedResource!=NULL);
+    if(secondDxgi.Functions.pfnResolveSharedResource) {
+      D3D10DDI_MIPINFO resolveMip={16,1,1,16,1,1};
+      D3D10DDIARG_CREATERESOURCE resolveCreate={0};
+      D3D10DDI_HRESOURCE resolveResource={0};D3D10DDI_HRTRESOURCE resolveRuntime={0};
+      resolveCreate.pMipInfoList=&resolveMip;
+      resolveCreate.ResourceDimension=D3D10DDIRESOURCE_BUFFER;
+      resolveCreate.Usage=D3D10_DDI_USAGE_STAGING;resolveCreate.SampleDesc.Count=1;
+      resolveCreate.MipLevels=resolveCreate.ArraySize=1;
+      resolveResource.pDrvPrivate=calloc(1,
+          secondFunctions.pfnCalcPrivateResourceSize(secondDevice,&resolveCreate));
+      resolveRuntime.handle=(VOID *)(UINT_PTR)0xed00u;
+      unsigned resolveErrors=FrontendErrors;
+      secondFunctions.pfnCreateResource(secondDevice,&resolveCreate,resolveResource,resolveRuntime);
+      CHECK(FrontendErrors==resolveErrors);
+      DXGI_DDI_ARG_RESOLVESHAREDRESOURCE resolve={0};
+      resolve.hDevice=(DXGI_DDI_HDEVICE)secondDevice.pDrvPrivate;
+      resolve.hResource=(DXGI_DDI_HRESOURCE)resolveResource.pDrvPrivate;
+      CHECK(secondDxgi.Functions.pfnResolveSharedResource(&resolve)==S_OK);
+      resolve.hDevice=(DXGI_DDI_HDEVICE)device.pDrvPrivate;
+      CHECK(secondDxgi.Functions.pfnResolveSharedResource(&resolve)==E_INVALIDARG);
+      CHECK(secondDxgi.Functions.pfnResolveSharedResource(NULL)==E_INVALIDARG);
+      secondFunctions.pfnDestroyResource(secondDevice,resolveResource);
+      free(resolveResource.pDrvPrivate);
+    }
     CHECK(MesaD3d10FrontendContextForTest(secondDevice)!=NULL &&
           MesaD3d10FrontendContextForTest(secondDevice)!=MesaD3d10FrontendContextForTest(device));
     if(crossDeviceQueryStorage) {
