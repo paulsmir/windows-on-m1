@@ -585,6 +585,7 @@ typedef struct _ADMISSION_PHYSICAL_OWNER {
 
 typedef struct _ADMISSION_BACKEND_MEMORY_VIEW {
   PVOID CpuAddress;
+  ULONGLONG GuestIpaAddress;
   ULONGLONG HostPhysicalAddress;
   ULONGLONG GpuVirtualAddress;
   ULONGLONG Bytes;
