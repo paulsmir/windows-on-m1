@@ -14,6 +14,7 @@ param(
     [switch]$NativeFrontend,
     [ValidateSet(0,16,64)]
     [int]$GpuvaG1bPageProfile = 0,
+    [switch]$GpuvaG1bAllocationHint,
     [switch]$Incremental,
     [string]$NativeRuntimeProps,
     [string]$MesaSourceRoot = 'C:\Users\pauls\AD04-d3d10-frontend-build\mesa',
@@ -102,6 +103,7 @@ $backendQualificationValue = if ($BackendQualification) { "true" } else { "false
 $submitQualificationValue = if ($SubmitQualification) { "true" } else { "false" }
 $visibleScanoutQualificationValue = if ($VisibleScanoutQualification) { "true" } else { "false" }
 $visibleAgxQualificationValue = if ($VisibleAgxQualification) { "true" } else { "false" }
+$gpuvaG1bAllocationHintValue = if ($GpuvaG1bAllocationHint) { "1" } else { "0" }
 & $msbuild $project /m $buildTarget "/p:Configuration=$Configuration" `
     /p:Platform=ARM64 /p:RunCodeAnalysis=true /p:Inf2CatUseLocalTime=true `
     "/p:AppleAgxMemoryQualification=$memoryQualificationValue" "/p:AppleAgxVersionBuild=$PackageBuild" `
@@ -114,6 +116,7 @@ $visibleAgxQualificationValue = if ($VisibleAgxQualification) { "true" } else { 
     "/p:AppleAgxVisibleScanoutQualification=$visibleScanoutQualificationValue" `
     "/p:AppleAgxVisibleAgxQualification=$visibleAgxQualificationValue" `
     "/p:AppleAgxGpuvaG1bPageProfile=$GpuvaG1bPageProfile" `
+    "/p:AppleAgxGpuvaG1bAllocationHint=$gpuvaG1bAllocationHintValue" `
     @pinnedWdkProperties
 if ($LASTEXITCODE -ne 0) {
     throw "Clean render-admission ARM64 WDK build failed with exit code $LASTEXITCODE"

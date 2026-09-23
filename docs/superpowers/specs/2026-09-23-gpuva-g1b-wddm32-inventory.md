@@ -29,9 +29,12 @@ mandatory. The driver must give a truthful answer to every query it receives
 and keep optional feature bits clear until companion DDIs exist.
 The pinned header calls `MinimumPageSize` and `RecommendedPageSize` **input**
 fields in the `Alignment` union. Writing them from CreateAllocation is a
-deliberate experimental assumption requested by the user, not a documented
-output contract. If admission or placement contradicts it, stop the profile
-and retain the exact input/output receipt before changing any field.
+separate, disabled-by-default experimental switch
+(`AppleAgxGpuvaG1bAllocationHint`). It is not a documented output contract.
+The first 3.2 trial keeps the old 64-KiB allocation alignment; the 16-KiB
+slab trial changes only the coupled segment-page description. Enable the hint
+only as a separately preregistered discriminator if ETW shows why slab alone
+is insufficient.
 
 | Surface | WDK 26100 | Required decision for this 16-KiB trial |
 |---|---|---|
