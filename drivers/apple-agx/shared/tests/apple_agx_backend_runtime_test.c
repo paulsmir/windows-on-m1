@@ -99,8 +99,8 @@ static APPLE_AGX_FW_BOOL FwSend(void *Context, APPLE_AGX_FW_U64 Address,
 }
 
 static void FwRecord(void *Context, APPLE_AGX_FIRMWARE_PHASE Phase,
-                     APPLE_AGX_FW_U32 CompletedMask,
-                     APPLE_AGX_FIRMWARE_RESULT Result) {
+                     APPLE_AGX_FIRMWARE_RESULT Result,
+                     APPLE_AGX_FW_U32 CompletedMask) {
   (void)Context;
   (void)Phase;
   (void)CompletedMask;
