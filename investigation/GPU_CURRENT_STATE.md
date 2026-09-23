@@ -130,15 +130,40 @@ Verdict: REJECTED_WITH_CAUSAL_ADVANCE. Evidence:
 `hardware-evidence/umd-refusals.txt` SHA256
 2d24455119386ca1043da5d8f9e9b16a0b6ac24598c494fcf84a5e9014c85075.
 
-## Current causal target after EXP756
-Offline only: source-first derive the missing D3D10 buffer usage contract at
-generated Resource.cpp:452-453. Restore an argument-bearing
-`reject-buffer-usage` receipt (usage, bind, map, misc and logical size) alongside
-generic SetError attribution, then admit the contract-wide Windows/Asahi cases.
-Do not whitelist the observed 524288-byte buffer or another trace value.
-The strongest source hypothesis is missing typed-buffer SRV/RT bind admission,
-including DYNAMIC+SRV map-discard, but it is not accepted until exact DDI args
-and pinned-WDK/Asahi contracts confirm it.
+## Buffer-usage offline verdict and next architecture
+The EXP756 `Resource.cpp:452-453` boundary is PASS_OFFLINE at source-diff SHA256
+`293bd30a6d23da3ff74ae9121b882b491cb56693a1c3a0339d3acb8848f764be`.
+Pinned WDK26100 `d3d10umddi.h` (SHA256
+`61899403d94840fab282dbb7da6faf234e2954bbdb47e3455f0f0572eb4e723a`),
+Microsoft D3D10 DDI documentation and Mesa commit
+`9aa1215f878b504f66159dd2ead4c7973142126e` establish typed buffer SRV/RT
+binds, buffer view element ranges, and DynamicResourceMapDiscard for dynamic
+SRV buffers. The implementation admits contract-wide SRV/RT buffer creation
+without size or bind-combination whitelists; constant buffers remain exclusive,
+output binds remain DEFAULT-only, and dynamic SRV buffers remain WRITE_DISCARD
+without WRITE_NOOVERWRITE.
+
+The real frontend creates a `PIPE_BUFFER` view with byte offset/size, authored
+`Buffer<float4>.Load` reaches TGSI SAMPLE_I then NIR `txf`/BUF, and Asahi emits
+its native texture-buffer descriptor. Capture records the selected buffer range
+as a relocatable texture reference. The same candidate emits
+`reject-buffer-usage` with usage/bind/map/misc/logical bytes before the generic
+SetError record. x64 integrated execution passes with the typed view range
+offset32/bytes64, command v6, three texture-address relocations and two KMD
+materializations; ARM64 archive/link and UmdContractTest build pass. Those
+numbers are regression evidence only, not admission conditions.
+
+Ownership remains unchanged: the D3D10 frontend owns usage/view/map validation;
+TGSI/NIR owns shader lowering; Asahi owns descriptor emission; Windows capture
+owns relocation; KMD owns materialization/submission. m1n1/Mu continue to own
+the already-proven inherited hardware/ACPI contracts and are unchanged. The
+smallest falsifiable checkpoint was one real typed-buffer draw through capture,
+two placements and retirement; failure remains fail-closed before hardware.
+
+Later user direction recorded as REVIEW R13 selects GpuMmu/GPUVA for the next
+phase. Therefore no package752, EXP757 preregistration or Air run is authorized
+from this capture-path candidate. The frontend/shader contract carries into the
+new G0/G1 phase; recovery remains the ordinary GPU-visible EXP377/EXP392 pair.
 
 ## Fixed experiment procedure
 Git `/opt/homebrew/bin/git`; artifacts live under main repo `.local`, not the
@@ -180,10 +205,8 @@ HARDWARE ROADMAP
        execution and ARM64 link pass at implementation-tree hash efb35c31.
 [PASS] Package751 exact ARM64 build/sign/hash/catalog gate; EXP756 evidence-first
        hardware run; exact cleanup and ordinary Code28 recovery.
-[NOW] Resource.cpp:452-453 buffer-usage contract and argument-bearing rejection.
-      Offline; no more Air until the exact Windows/Asahi contract is derived.
-[HW] One standard-runtime Air run must produce the first DWM-correlated native
-     graph -> KMD Render/Patch/Submit -> physical AGX completion -> DXGI Present,
-     or name the next exact semantic RED.
+[PASS] Resource.cpp:452-453 buffer usage, typed SRV load/capture relocation,
+       DynamicResourceMapDiscard and argument-bearing rejection pass offline.
+[NEXT] New thread: GpuMmu/GPUVA G0/G1. Do not package or run EXP757 on Air.
 POST-HARDWARE: native multi-draw batching, optional features, performance,
 sustained desktop stability, OpenGL and CS1.6 after accelerated-desktop acceptance.

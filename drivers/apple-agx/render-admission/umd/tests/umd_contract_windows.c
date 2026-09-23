@@ -51,7 +51,9 @@ EXTERN_C BOOL APIENTRY MesaD3d10FrontendShaderValidForTest(D3D10DDI_HSHADER);
 EXTERN_C BOOL APIENTRY MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT);
 EXTERN_C BOOL AgxD3d10FormatViewCompatible(
     DXGI_FORMAT,DXGI_FORMAT,BOOL,BOOL);
-void AdmissionUmdRuntimeExpectTextureSubresource(int);
+void AdmissionUmdRuntimeExpectTextureSubresource(
+    int,APPLE_AGX_U64,APPLE_AGX_U64);
+void AdmissionUmdRuntimeIgnoreNextExpectedVersion(void);
 EXTERN_C BOOL APIENTRY MesaD3d10FrontendSetSoOffsetForTest(
     D3D10DDI_HDEVICE,D3D10DDI_HRESOURCE,UINT);
 EXTERN_C ULONG APIENTRY MesaD3d10FrontendEventQuerySetGenerationForTest(
@@ -1398,6 +1400,21 @@ static void test_mesa_d3d10_frontend_open(void) {
           D3D10_DDI_CPU_ACCESS_READ|D3D10_DDI_CPU_ACCESS_WRITE,FALSE,TRUE},
         {16,D3D10_DDI_USAGE_DYNAMIC,D3D10_DDI_BIND_CONSTANT_BUFFER,
           D3D10_DDI_CPU_ACCESS_WRITE,FALSE,TRUE},
+        {80,D3D10_DDI_USAGE_DEFAULT,D3D10_DDI_BIND_SHADER_RESOURCE,
+          0,FALSE,TRUE},
+        {112,D3D10_DDI_USAGE_DEFAULT,D3D10_DDI_BIND_RENDER_TARGET,
+          0,FALSE,TRUE},
+        {144,D3D10_DDI_USAGE_DEFAULT,
+          D3D10_DDI_BIND_SHADER_RESOURCE|D3D10_DDI_BIND_RENDER_TARGET,
+          0,FALSE,TRUE},
+        {176,D3D10_DDI_USAGE_IMMUTABLE,
+          D3D10_DDI_BIND_VERTEX_BUFFER|D3D10_DDI_BIND_SHADER_RESOURCE,
+          0,TRUE,TRUE},
+        {208,D3D10_DDI_USAGE_DYNAMIC,D3D10_DDI_BIND_SHADER_RESOURCE,
+          D3D10_DDI_CPU_ACCESS_WRITE,FALSE,TRUE},
+        {240,D3D10_DDI_USAGE_DYNAMIC,
+          D3D10_DDI_BIND_VERTEX_BUFFER|D3D10_DDI_BIND_SHADER_RESOURCE,
+          D3D10_DDI_CPU_ACCESS_WRITE,FALSE,TRUE},
         {7,D3D10_DDI_USAGE_DYNAMIC,D3D10_DDI_BIND_CONSTANT_BUFFER,
           D3D10_DDI_CPU_ACCESS_WRITE,FALSE,FALSE},
         {240016,D3D10_DDI_USAGE_DYNAMIC,D3D10_DDI_BIND_VERTEX_BUFFER,
@@ -1414,6 +1431,15 @@ static void test_mesa_d3d10_frontend_open(void) {
           D3D10_DDI_CPU_ACCESS_WRITE,FALSE,FALSE},
         {240012,D3D10_DDI_USAGE_IMMUTABLE,D3D10_DDI_BIND_STREAM_OUTPUT,
           0,TRUE,FALSE},
+        {64,D3D10_DDI_USAGE_DEFAULT,
+          D3D10_DDI_BIND_CONSTANT_BUFFER|D3D10_DDI_BIND_SHADER_RESOURCE,
+          0,FALSE,FALSE},
+        {64,D3D10_DDI_USAGE_DYNAMIC,D3D10_DDI_BIND_RENDER_TARGET,
+          D3D10_DDI_CPU_ACCESS_WRITE,FALSE,FALSE},
+        {64,D3D10_DDI_USAGE_IMMUTABLE,D3D10_DDI_BIND_RENDER_TARGET,
+          0,TRUE,FALSE},
+        {64,D3D10_DDI_USAGE_DEFAULT,D3D10_DDI_BIND_DEPTH_STENCIL,
+          0,FALSE,FALSE},
       };
       for(UINT ci=0;ci<ARRAYSIZE(cases);++ci) {
         D3D10DDI_MIPINFO bmi={cases[ci].Width,1,1,cases[ci].Width,1,1};
@@ -2307,7 +2333,9 @@ static void test_mesa_d3d10_frontend_open(void) {
     CHECK(layout.pDrvPrivate!=NULL);
     deviceFunctions.pfnCreateElementLayout(device,&layoutCreate,layout,layoutRuntime);
     FRONTEND_STAGE("element-layout");
-    D3D10DDI_HSHADER vsh={0},slotVsh={0},slotPsh={0},indexableVsh={0},psh={0},gsh={0};D3D10DDI_HRTSHADER vsRuntime={0},psRuntime={0},gsRuntime={0};
+    D3D10DDI_HSHADER vsh={0},slotVsh={0},slotPsh={0},indexableVsh={0},
+        bufferLoadPsh={0},psh={0},gsh={0};
+    D3D10DDI_HRTSHADER vsRuntime={0},psRuntime={0},gsRuntime={0};
     vsh.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateShaderSize(device,vs,NULL));
     psh.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateShaderSize(device,ps,NULL));
     gsh.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateShaderSize(device,gs,NULL));
@@ -2336,6 +2364,13 @@ static void test_mesa_d3d10_frontend_open(void) {
         indexableVsh,indexableRuntime,NULL);
     CHECK(MesaD3d10FrontendShaderValidForTest(indexableVsh));
     deviceFunctions.pfnCreatePixelShader(device,ps,psh,psRuntime,NULL);
+    D3D10DDI_HRTSHADER bufferLoadRuntime={(VOID *)(UINT_PTR)0xe92u};
+    bufferLoadPsh.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateShaderSize(
+        device,NativeLoadBuffer,NULL));
+    CHECK(bufferLoadPsh.pDrvPrivate!=NULL);
+    deviceFunctions.pfnCreatePixelShader(device,NativeLoadBuffer,
+        bufferLoadPsh,bufferLoadRuntime,NULL);
+    CHECK(MesaD3d10FrontendShaderValidForTest(bufferLoadPsh));
     D3D10DDI_HSHADER sampleShaders[7]={{0}};
     const UINT *sampleCode[7]={NativeSample2D,NativeSampleArray,NativeSampleImplicit,
         NativeSample1D,NativeSample3D,NativeSampleCube,NativeSampleMS1};
@@ -2421,6 +2456,43 @@ static void test_mesa_d3d10_frontend_open(void) {
       CHECK(strstr(refusal,"reject-seterror fn=SetConstantBuffers line=") == refusal &&
             strstr(refusal," hr=0x80004001 ")!=NULL &&
             strchr(refusal,'\n')!=NULL && strchr(refusal,'\n')[1]=='\0');
+      trace=CreateFileW(tracePath,GENERIC_READ|GENERIC_WRITE,
+          FILE_SHARE_READ|FILE_SHARE_WRITE,NULL,TRUNCATE_EXISTING,
+          FILE_ATTRIBUTE_NORMAL,NULL);
+      CHECK(trace!=INVALID_HANDLE_VALUE);
+      if(trace!=INVALID_HANDLE_VALUE) CloseHandle(trace);
+      D3D10DDI_MIPINFO rejectedMip={96u,1u,1u,96u,1u,1u};
+      D3D10DDIARG_CREATERESOURCE rejectedCreate={0};
+      D3D10DDI_HRESOURCE rejectedResource={0};
+      D3D10DDI_HRTRESOURCE rejectedRuntime={(VOID *)(UINT_PTR)0xe96u};
+      rejectedCreate.pMipInfoList=&rejectedMip;
+      rejectedCreate.ResourceDimension=D3D10DDIRESOURCE_BUFFER;
+      rejectedCreate.Usage=D3D10_DDI_USAGE_DYNAMIC;
+      rejectedCreate.BindFlags=D3D10_DDI_BIND_SHADER_RESOURCE;
+      rejectedCreate.MapFlags=D3D10_DDI_CPU_ACCESS_READ;
+      rejectedCreate.Format=DXGI_FORMAT_UNKNOWN;
+      rejectedCreate.SampleDesc.Count=1;
+      rejectedCreate.MipLevels=rejectedCreate.ArraySize=1;
+      rejectedResource.pDrvPrivate=calloc(1,
+          deviceFunctions.pfnCalcPrivateResourceSize(device,&rejectedCreate));
+      CHECK(rejectedResource.pDrvPrivate!=NULL);
+      deviceFunctions.pfnCreateResource(device,&rejectedCreate,
+          rejectedResource,rejectedRuntime);
+      CHECK(FrontendErrors==refusalErrors+2u &&
+            FrontendLastError==E_NOTIMPL);
+      free(rejectedResource.pDrvPrivate);
+      trace=CreateFileW(tracePath,GENERIC_READ,
+          FILE_SHARE_READ|FILE_SHARE_WRITE,NULL,OPEN_EXISTING,
+          FILE_ATTRIBUTE_NORMAL,NULL);
+      memset(refusal,0,sizeof(refusal));refusalBytes=0u;
+      CHECK(trace!=INVALID_HANDLE_VALUE &&
+            ReadFile(trace,refusal,sizeof(refusal)-1u,&refusalBytes,NULL) &&
+            refusalBytes>0u);
+      if(trace!=INVALID_HANDLE_VALUE) CloseHandle(trace);
+      refusal[refusalBytes<sizeof(refusal)?refusalBytes:sizeof(refusal)-1u]='\0';
+      CHECK(strstr(refusal,"reject-buffer-usage hr=0x80004001 ")==refusal &&
+            strstr(refusal," 00000002 00000008 00000002 00000000 00000060\n")!=NULL &&
+            strstr(refusal,"reject-seterror fn=CreateResource line=")!=NULL);
       SetEnvironmentVariableW(L"APPLE_AGX_UMD_TRACE_FILE",
           savedTraceLength?savedTrace:NULL);
       SetEnvironmentVariableW(L"APPLE_AGX_UMD_REFUSALS_ONLY",
@@ -2525,6 +2597,133 @@ static void test_mesa_d3d10_frontend_open(void) {
       deviceFunctions.pfnVsSetShader(device,vsh);
     }
     {
+      /* FL10_0 typed-buffer path: the same dynamic buffer may be consumed by
+       * IA and by a shader resource view, but WRITE_NOOVERWRITE is forbidden
+       * once SHADER_RESOURCE is present.  The draw must carry the selected
+       * element range as a real Asahi texture-buffer relocation. */
+      D3D10DDI_MIPINFO bufferMip={160u,1u,1u,160u,1u,1u};
+      D3D10DDIARG_CREATERESOURCE bufferCreate={0};
+      D3D10DDI_HRESOURCE buffer={0};
+      D3D10DDI_HRTRESOURCE bufferRuntime={(VOID *)(UINT_PTR)0xe93u};
+      bufferCreate.pMipInfoList=&bufferMip;
+      bufferCreate.ResourceDimension=D3D10DDIRESOURCE_BUFFER;
+      bufferCreate.Usage=D3D10_DDI_USAGE_DYNAMIC;
+      bufferCreate.BindFlags=D3D10_DDI_BIND_VERTEX_BUFFER|
+          D3D10_DDI_BIND_SHADER_RESOURCE;
+      bufferCreate.MapFlags=D3D10_DDI_CPU_ACCESS_WRITE;
+      bufferCreate.Format=DXGI_FORMAT_UNKNOWN;
+      bufferCreate.SampleDesc.Count=1;
+      bufferCreate.MipLevels=bufferCreate.ArraySize=1;
+      buffer.pDrvPrivate=calloc(1,
+          deviceFunctions.pfnCalcPrivateResourceSize(device,&bufferCreate));
+      CHECK(buffer.pDrvPrivate!=NULL);
+      unsigned bufferErrors=FrontendErrors;
+      deviceFunctions.pfnCreateResource(
+          device,&bufferCreate,buffer,bufferRuntime);
+      CHECK(FrontendErrors==bufferErrors);
+      if(FrontendErrors==bufferErrors) {
+        D3D10DDI_MAPPED_SUBRESOURCE mapped={0};
+        deviceFunctions.pfnDynamicResourceMapDiscard(device,buffer,0,
+            D3D10_DDI_MAP_WRITE_DISCARD,0,&mapped);
+        CHECK(FrontendErrors==bufferErrors && mapped.pData);
+        if(mapped.pData) {
+          for(UINT i=0;i<40u;++i) ((float *)mapped.pData)[i]=(float)(i+1u);
+          deviceFunctions.pfnDynamicResourceUnmap(device,buffer,0);
+        }
+        D3D10DDI_MAPPED_SUBRESOURCE forbidden={0};
+        deviceFunctions.pfnDynamicIABufferMapNoOverwrite(device,buffer,0,
+            D3D10_DDI_MAP_WRITE_NOOVERWRITE,0,&forbidden);
+        CHECK(FrontendErrors==bufferErrors+1u &&
+              FrontendLastError==E_INVALIDARG && forbidden.pData==NULL);
+        bufferErrors=FrontendErrors;
+
+        D3D10DDIARG_CREATESHADERRESOURCEVIEW viewCreate={0};
+        D3D10DDI_HSHADERRESOURCEVIEW view={0};
+        D3D10DDI_HRTSHADERRESOURCEVIEW viewRuntime={(VOID *)(UINT_PTR)0xe94u};
+        viewCreate.hDrvResource=buffer;
+        viewCreate.Format=DXGI_FORMAT_R32G32B32A32_FLOAT;
+        viewCreate.ResourceDimension=D3D10DDIRESOURCE_BUFFER;
+        viewCreate.Buffer.FirstElement=2u;
+        viewCreate.Buffer.NumElements=4u;
+        view.pDrvPrivate=calloc(1,
+            deviceFunctions.pfnCalcPrivateShaderResourceViewSize(
+                device,&viewCreate));
+        CHECK(view.pDrvPrivate!=NULL);
+        deviceFunctions.pfnCreateShaderResourceView(
+            device,&viewCreate,view,viewRuntime);
+        CHECK(FrontendErrors==bufferErrors);
+        if(FrontendErrors==bufferErrors) {
+          D3D10DDIARG_CREATESHADERRESOURCEVIEW invalidViewCreate=viewCreate;
+          D3D10DDI_HSHADERRESOURCEVIEW invalidView={0};
+          D3D10DDI_HRTSHADERRESOURCEVIEW invalidViewRuntime={
+              (VOID *)(UINT_PTR)0xe95u};
+          invalidViewCreate.Buffer.FirstElement=9u;
+          invalidViewCreate.Buffer.NumElements=2u;
+          invalidView.pDrvPrivate=calloc(1,
+              deviceFunctions.pfnCalcPrivateShaderResourceViewSize(
+                  device,&invalidViewCreate));
+          CHECK(invalidView.pDrvPrivate!=NULL);
+          deviceFunctions.pfnCreateShaderResourceView(device,
+              &invalidViewCreate,invalidView,invalidViewRuntime);
+          CHECK(FrontendErrors==bufferErrors+1u &&
+                FrontendLastError==E_NOTIMPL);
+          free(invalidView.pDrvPrivate);
+          bufferErrors=FrontendErrors;
+
+          RuntimeActiveDevice=MesaD3d10FrontendRuntimeForTest(device);
+          RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;
+          RuntimeMarker=NULL;RuntimeQueryMarkerCount=0;
+          memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+          RuntimeConsumerGates=RuntimeConsumerRetirements=0;
+          RuntimeConsumerFence=0;
+          memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+          RuntimeDrawObservationCount=0;
+          RuntimeExpectedCommandVersion=0;
+          RuntimeAutoCompleteConsumers=1;
+          AdmissionUmdRuntimeExpectTextureSubresource(1,32u,64u);
+          AdmissionUmdRuntimeIgnoreNextExpectedVersion();
+          deviceFunctions.pfnPsSetShader(device,bufferLoadPsh);
+          deviceFunctions.pfnPsSetShaderResources(device,0,1,&view);
+          deviceFunctions.pfnDraw(device,3u,0u);
+          deviceFunctions.pfnFlush(device);
+          AdmissionUmdRuntimeExpectTextureSubresource(0,0,0);
+          fprintf(stderr,"TYPED_BUFFER_RESULT: errors=%u expected=%u renders=%u "
+              "signals=%u materializations=%u gates=%u marker=%u observations=%u "
+              "texture_relocations=%u\n",FrontendErrors,bufferErrors,
+              RuntimeRenders,RuntimeSignals,RuntimeMaterializations,
+              RuntimeConsumerGates,RuntimeMarker!=NULL,
+              RuntimeDrawObservationCount,RuntimeDrawObservationCount?
+                RuntimeDrawObservations[0].TextureRelocations:0u);
+          CHECK(FrontendErrors==bufferErrors && RuntimeRenders==1u &&
+                RuntimeSignals==1u && RuntimeMaterializations==2u &&
+                RuntimeConsumerGates==2u && RuntimeMarker &&
+                RuntimeDrawObservationCount==1u &&
+                RuntimeDrawObservations[0].CommandVersion==
+                    APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH &&
+                RuntimeDrawObservations[0].TextureRelocations>=1u);
+          if(RuntimeMarker) {
+            CHECK(AgxWin32AsahiContextRetire(
+                MesaD3d10FrontendContextForTest(device),0u));
+          }
+          RuntimeAutoCompleteConsumers=0;
+          D3D10DDI_HSHADERRESOURCEVIEW emptyView={0};
+          deviceFunctions.pfnPsSetShaderResources(device,0,1,&emptyView);
+          deviceFunctions.pfnPsSetShader(device,psh);
+          UINT restoredState[16],restoredBindings[16];
+          AgxWin32AsahiContextDiagnostic(
+              MesaD3d10FrontendContextForTest(device),
+              restoredState,restoredBindings);
+          CHECK(restoredBindings[7]==0u);
+          RuntimeExpectedCommandVersion=0;
+          deviceFunctions.pfnDestroyShaderResourceView(device,view);
+        }
+        free(view.pDrvPrivate);
+        deviceFunctions.pfnDestroyResource(device,buffer);
+      }
+      free(buffer.pDrvPrivate);
+      FRONTEND_STAGE("typed-buffer-srv");
+    }
+    {
       /* DWM issues multiple immediate-context draws before its explicit Flush.
        * Keep the public Windows lifetime while splitting at the existing native
        * one-draw capsule boundary. */
@@ -2562,6 +2761,10 @@ static void test_mesa_d3d10_frontend_open(void) {
           (unsigned long long)RuntimeDrawObservations[0].StateSignature,
           (unsigned long long)RuntimeDrawObservations[1].StateSignature);
       CHECK(RuntimeDrawObservationCount==2u &&
+            RuntimeDrawObservations[0].CommandVersion==
+                APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+            RuntimeDrawObservations[1].CommandVersion==
+                APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
             !(RuntimeDrawObservations[0].Native.RenderFlags&0x4u) &&
             (RuntimeDrawObservations[1].Native.RenderFlags&0x4u) &&
             RuntimeDrawObservations[0].StateSignature==
@@ -4070,10 +4273,10 @@ static void test_mesa_d3d10_frontend_open(void) {
         RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
         memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
         RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
-        AdmissionUmdRuntimeExpectTextureSubresource(1);
+        AdmissionUmdRuntimeExpectTextureSubresource(1,0,0);
         FrontendSampleDraw(device,&deviceFunctions,rtv,mipSrv,appSampler,
             sampleShaders[1],psh);
-        AdmissionUmdRuntimeExpectTextureSubresource(0);
+        AdmissionUmdRuntimeExpectTextureSubresource(0,0,0);
         CHECK(FrontendErrors==mipErrors && RuntimeRenders==1u && RuntimeSignals==1u &&
               RuntimeMaterializations==2u && RuntimeConsumerGates==2u && RuntimeMarker);
         if(RuntimeMarker) {
@@ -4806,6 +5009,7 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnPsSetConstantBuffers(device,0,1,&nullConstant);
     deviceFunctions.pfnDestroyDepthStencilState(device,depth);deviceFunctions.pfnDestroyRasterizerState(device,raster);
     deviceFunctions.pfnDestroyBlendState(device,blend);deviceFunctions.pfnDestroyShader(device,psh);
+    deviceFunctions.pfnDestroyShader(device,bufferLoadPsh);
     deviceFunctions.pfnDestroyShader(device,slotPsh);
     deviceFunctions.pfnDestroyShader(device,slotVsh);
     for(UINT i=0;i<ARRAYSIZE(sampleShaders);++i) {
@@ -4833,7 +5037,8 @@ static void test_mesa_d3d10_frontend_open(void) {
     RuntimeExpectedTargetAllocation=0;
     RuntimeExpectedTargetBytes=0;
     free(depth.pDrvPrivate);free(raster.pDrvPrivate);free(blend.pDrvPrivate);
-    free(psh.pDrvPrivate);free(slotPsh.pDrvPrivate);free(slotVsh.pDrvPrivate);
+    free(psh.pDrvPrivate);free(bufferLoadPsh.pDrvPrivate);
+    free(slotPsh.pDrvPrivate);free(slotVsh.pDrvPrivate);
     free(gsh.pDrvPrivate);
     free(indexableVsh.pDrvPrivate);free(vsh.pDrvPrivate);free(layout.pDrvPrivate);free(rtv.pDrvPrivate);
     free(depthColorRtv.pDrvPrivate);free(depthView.pDrvPrivate);

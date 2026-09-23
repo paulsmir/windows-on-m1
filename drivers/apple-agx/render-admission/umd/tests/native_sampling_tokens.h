@@ -85,6 +85,23 @@ static const UINT NativeSampleMS1[]={
   0x00000000u,0x0100003eu,
 };
 
+/* Authored ps_4_0 equivalent:
+ *   Buffer<float4> source : register(t0);
+ *   float4 main(float4 position : SV_Position) : SV_Target {
+ *      return source.Load((int)position.x);
+ *   }
+ * The declaration is RESOURCE_BUFFER and LD becomes TGSI SAMPLE_I, then NIR
+ * txf with GLSL_SAMPLER_DIM_BUF.  The array is kept as tokenized shader code
+ * so the test exercises the real D3D10 frontend rather than a NIR fixture. */
+static const UINT NativeLoadBuffer[]={
+  0x00000040u,0x00000024u,0x04000858u,0x00107000u,0x00000000u,0x00005555u,
+  0x04002064u,0x00101032u,0x00000000u,0x00000001u,0x03000065u,0x001020f2u,
+  0x00000000u,0x02000068u,0x00000001u,0x0500001bu,0x00100032u,0x00000000u,
+  0x00101046u,0x00000000u,0x08000036u,0x001000c2u,0x00000000u,0x00004002u,
+  0x00000000u,0x00000000u,0x00000000u,0x00000000u,0x0700002du,0x001020f2u,
+  0x00000000u,0x00100e46u,0x00000000u,0x00107e46u,0x00000000u,0x0100003eu,
+};
+
 static const UINT NativeIndexableTempVS[] = {
   0x00010040u,0x0000004bu,0x04000060u,0x00101012u,0x00000000u,0x00000006u,
   0x04000067u,0x001020f2u,0x00000000u,0x00000001u,0x02000068u,0x00000001u,

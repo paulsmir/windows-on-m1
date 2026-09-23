@@ -22,6 +22,8 @@ BOOL AgxD3d10WindowsDiagnosticRefusal(HRESULT Status);
 VOID AgxD3d10WindowsDiagnosticState(AGX_D3D10_WINDOWS_DEVICE *, PCSTR Stage);
 VOID AgxD3d10WindowsDiagnosticResource(
     PCSTR Stage, const D3D10DDIARG_CREATERESOURCE *Resource);
+VOID AgxD3d10WindowsDiagnosticBufferUsage(
+    const D3D10DDIARG_CREATERESOURCE *Resource);
 HRESULT AgxD3d10WindowsOpenAdapter(const D3D10DDIARG_OPENADAPTER *Args,
                                   AGX_D3D10_WINDOWS_ADAPTER **Adapter);
 HRESULT AgxD3d10WindowsCloseAdapter(AGX_D3D10_WINDOWS_ADAPTER **Adapter);

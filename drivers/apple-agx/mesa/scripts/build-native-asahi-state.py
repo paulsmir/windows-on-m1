@@ -1431,15 +1431,32 @@ UnsupportedDxgi''')
       windowsDimOK=windowsTexture->target==PIPE_TEXTURE_CUBE && windowsTexture->array_size==6;
       windowsLevel=pCreateSRView->TexCube.MostDetailedMip;
       windowsMipCount=pCreateSRView->TexCube.MipLevels;windowsLayers=6;break;
+   case D3D10DDIRESOURCE_BUFFER: {
+      enum pipe_format bufferFormat=FormatTranslate(pCreateSRView->Format,false);
+      UINT element=util_format_get_blocksize(bufferFormat);
+      UINT64 first=pCreateSRView->Buffer.FirstElement;
+      UINT64 count=pCreateSRView->Buffer.NumElements;
+      UINT64 offset=first*element;
+      UINT64 bytes=count*element;
+      windowsDimOK=windowsTexture->target==PIPE_BUFFER &&
+         windowsResource->Format==DXGI_FORMAT_UNKNOWN &&
+         (windowsResource->bind_flags&D3D10_DDI_BIND_SHADER_RESOURCE) &&
+         bufferFormat!=PIPE_FORMAT_NONE && element && count &&
+         offset<=windowsResource->logical_bytes &&
+         bytes<=windowsResource->logical_bytes-offset;
+      windowsMipCount=windowsLayers=1;windowsLayerLimit=1;
+      break;
+   }
    default:break;
    }
    if(!windowsDevice||!windowsResource||windowsResource->owner_device!=windowsDevice||
       (!windowsResource->presentation&&
        !(windowsResource->bind_flags&D3D10_DDI_BIND_SHADER_RESOURCE))||
-      !AgxD3d10FormatViewCompatible(windowsResource->Format,
-          pCreateSRView->Format,FALSE,
-          windowsResource->presentation &&
-          (windowsResource->bind_flags & D3D10_DDI_BIND_PRESENT))||
+      (pCreateSRView->ResourceDimension!=D3D10DDIRESOURCE_BUFFER &&
+       !AgxD3d10FormatViewCompatible(windowsResource->Format,
+           pCreateSRView->Format,FALSE,
+           windowsResource->presentation &&
+           (windowsResource->bind_flags & D3D10_DDI_BIND_PRESENT)))||
       !windowsDimOK || !windowsMipCount || windowsLevel>=windowsResource->MipLevels ||
       windowsMipCount>windowsResource->MipLevels-windowsLevel || !windowsLayers ||
       windowsFirstLayer>=windowsLayerLimit || windowsLayers>windowsLayerLimit-windowsFirstLayer) {
@@ -1457,6 +1474,11 @@ UnsupportedDxgi''')
    enum pipe_format lowered=AgxD3d10LoweredTextureFormat(pCreateSRView->Format);
    if(lowered!=PIPE_FORMAT_NONE) format=lowered;
    u_sampler_view_default_template(&desc, resource, format);
+   if(pCreateSRView->ResourceDimension==D3D10DDIRESOURCE_BUFFER) {
+      UINT element=util_format_get_blocksize(format);
+      desc.u.buf.offset=pCreateSRView->Buffer.FirstElement*element;
+      desc.u.buf.size=pCreateSRView->Buffer.NumElements*element;
+   }
    if(pCreateSRView->Format==DXGI_FORMAT_A8_UNORM) {
       desc.swizzle_r=PIPE_SWIZZLE_0;desc.swizzle_g=PIPE_SWIZZLE_0;
       desc.swizzle_b=PIPE_SWIZZLE_0;desc.swizzle_a=PIPE_SWIZZLE_W;
@@ -2075,13 +2097,16 @@ AgxD3d10ResourceWithinRequiredLimits(
    bool bufferResource = pCreateResource->ResourceDimension == D3D10DDIRESOURCE_BUFFER;
    const UINT bufferBindMask = D3D10_DDI_BIND_VERTEX_BUFFER |
       D3D10_DDI_BIND_INDEX_BUFFER | D3D10_DDI_BIND_CONSTANT_BUFFER |
-      D3D10_DDI_BIND_STREAM_OUTPUT;
+      D3D10_DDI_BIND_SHADER_RESOURCE | D3D10_DDI_BIND_STREAM_OUTPUT |
+      D3D10_DDI_BIND_RENDER_TARGET;
    bool wantsConstant =
       (pCreateResource->BindFlags & D3D10_DDI_BIND_CONSTANT_BUFFER) != 0;
    bool wantsIndex =
       (pCreateResource->BindFlags & D3D10_DDI_BIND_INDEX_BUFFER) != 0;
    bool wantsStream =
       (pCreateResource->BindFlags & D3D10_DDI_BIND_STREAM_OUTPUT) != 0;
+   bool wantsRender =
+      (pCreateResource->BindFlags & D3D10_DDI_BIND_RENDER_TARGET) != 0;
    bool wantsPresentation = pCreateResource->pPrimaryDesc != NULL ||
       (pCreateResource->BindFlags & D3D10_DDI_BIND_PRESENT) != 0 ||
       (pCreateResource->MiscFlags & D3D10_DDI_RESOURCE_MISC_SHARED) != 0;
@@ -2101,15 +2126,16 @@ AgxD3d10ResourceWithinRequiredLimits(
       ((pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT &&
         pCreateResource->MapFlags == 0) ||
        (pCreateResource->Usage == D3D10_DDI_USAGE_IMMUTABLE &&
-        pCreateResource->MapFlags == 0 && !wantsStream &&
+        pCreateResource->MapFlags == 0 && !wantsStream && !wantsRender &&
         pCreateResource->pInitialDataUP) ||
        (pCreateResource->Usage == D3D10_DDI_USAGE_DYNAMIC &&
         pCreateResource->MapFlags == D3D10_DDI_CPU_ACCESS_WRITE &&
-        pCreateResource->BindFlags != 0 && !wantsStream) ||
+        pCreateResource->BindFlags != 0 && !wantsStream && !wantsRender) ||
        (pCreateResource->Usage == D3D10_DDI_USAGE_STAGING &&
         pCreateResource->BindFlags == 0 && pCreateResource->MapFlags != 0 &&
         !(pCreateResource->MapFlags & ~D3D10_DDI_CPU_ACCESS_MASK)));
    if (bufferResource && !validBufferUsage) {
+      AgxD3d10WindowsDiagnosticBufferUsage(pCreateResource);
       SetError(hDevice, E_NOTIMPL);
       return;
    }
@@ -2458,7 +2484,8 @@ AgxD3d10ResourceWithinRequiredLimits(
       resource->usage == D3D10_DDI_USAGE_DYNAMIC;
    bool noOverwriteBuffer = dynamicBuffer &&
       (resource->bind_flags &
-       (D3D10_DDI_BIND_VERTEX_BUFFER|D3D10_DDI_BIND_INDEX_BUFFER));
+       (D3D10_DDI_BIND_VERTEX_BUFFER|D3D10_DDI_BIND_INDEX_BUFFER)) &&
+      !(resource->bind_flags&D3D10_DDI_BIND_SHADER_RESOURCE);
    bool dynamicTexture = resource && !resource->buffer &&
       resource->usage == D3D10_DDI_USAGE_DYNAMIC &&
       resource->bind_flags == D3D10_DDI_BIND_SHADER_RESOURCE &&

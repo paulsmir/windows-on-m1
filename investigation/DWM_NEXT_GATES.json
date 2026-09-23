@@ -302,7 +302,7 @@
   },
   "post_exp756_offline_target": {
     "id": "buffer_usage_contract",
-    "status": "NOW",
+    "status": "PASS_OFFLINE",
     "boundary": "generated Resource.cpp:452-453 bufferResource && !validBufferUsage",
     "required": [
       "argument-bearing reject-buffer-usage receipt with usage bind map misc logical size",
@@ -311,6 +311,19 @@
       "real frontend create/map/bind tests without observed-size whitelists"
     ],
     "forbidden": "Do not admit only the observed 524288-byte buffer or infer the failing DDI arguments solely from a later ETW cascade",
-    "hardware_dependency": "none until the offline contract and existing suites pass"
+    "hardware_dependency": "none; later user direction cancels the capture-path package/Air cycle",
+    "evidence": {
+      "source_diff_sha256": "293bd30a6d23da3ff74ae9121b882b491cb56693a1c3a0339d3acb8848f764be",
+      "pinned_wdk_header_sha256": "61899403d94840fab282dbb7da6faf234e2954bbdb47e3455f0f0572eb4e723a",
+      "x64_executable_sha256": "ab672545f1a14186616f4ee8ee0db4e39225f79ae5dc276aee79dad4e41f8985",
+      "arm64_executable_sha256": "8d94f11e2b0a07316104eba72895dcbe17bba8c9c41dc8aaf01024b92e573ab6"
+    }
+  },
+  "next_architecture_phase": {
+    "id": "gpummu_gpuva_g0_g1",
+    "status": "NEXT_THREAD",
+    "decision": "User-selected path recorded by tandem REVIEW R13",
+    "carry_forward": "D3D10 buffer usage, typed view, shader ld lowering and diagnostics",
+    "supersedes": "package752 and EXP757 capture-path Air run"
   }
 }

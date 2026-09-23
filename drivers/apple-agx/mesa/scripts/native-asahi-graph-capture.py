@@ -361,26 +361,36 @@ windows_graph_texture_table(struct agx_batch *batch, struct agx_ptr ptr,
       struct agx_sampler_view *view=batch->ctx->stage[stage].textures[slot];
       if(!view) continue;
       struct agx_resource *rsrc=view->rsrc;
-      unsigned level=view->base.u.tex.first_level;
-      unsigned layer=view->base.u.tex.first_layer;
-      unsigned last_layer=view->base.u.tex.last_layer;
-      unsigned last_level=view->base.u.tex.last_level;
+      bool buffer=rsrc && rsrc->base.target==PIPE_BUFFER;
+      unsigned level=buffer ? 0 : view->base.u.tex.first_level;
+      unsigned layer=buffer ? 0 : view->base.u.tex.first_layer;
+      unsigned last_layer=buffer ? 0 : view->base.u.tex.last_layer;
+      unsigned last_level=buffer ? 0 : view->base.u.tex.last_level;
       unsigned layers=rsrc ? (rsrc->base.target==PIPE_TEXTURE_3D ?
          rsrc->base.depth0 : rsrc->base.array_size) : 0;
-      int range=rsrc&&level<=last_level&&last_level<=rsrc->base.last_level&&
-         layer<=last_layer&&last_layer<layers;
-      uint64_t address=range ? agx_map_texture_gpu(rsrc,layer) : 0;
-      uint64_t offset=rsrc&&rsrc->bo ? address-rsrc->bo->va->addr : 0;
-      uint64_t span=range ? (uint64_t)(last_layer-layer)*
-         rsrc->layout.layer_stride_B+ail_get_level_offset_B(&rsrc->layout,last_level)+
-         ail_get_level_size_B(&rsrc->layout,last_level) : 0;
+      uint64_t offset=buffer ? view->base.u.buf.offset : 0;
+      uint64_t span=buffer ? view->base.u.buf.size : 0;
+      int range=buffer ? rsrc->bo && span && offset<=rsrc->base.width0 &&
+            span<=rsrc->base.width0-offset :
+         rsrc&&level<=last_level&&last_level<=rsrc->base.last_level&&
+            layer<=last_layer&&last_layer<layers;
+      uint64_t address=buffer ? agx_map_texture_gpu(rsrc,0)+offset :
+         range ? agx_map_texture_gpu(rsrc,layer) : 0;
+      if(!buffer) {
+         offset=rsrc&&rsrc->bo ? address-rsrc->bo->va->addr : 0;
+         span=range ? (uint64_t)(last_layer-layer)*rsrc->layout.layer_stride_B+
+            ail_get_level_offset_B(&rsrc->layout,last_level)+
+            ail_get_level_size_B(&rsrc->layout,last_level) : 0;
+      }
       unsigned index=0;
-      if (!rsrc || (rsrc->base.target != PIPE_TEXTURE_1D &&
+      if (!rsrc || (rsrc->base.target != PIPE_BUFFER &&
+                    rsrc->base.target != PIPE_TEXTURE_1D &&
                     rsrc->base.target != PIPE_TEXTURE_1D_ARRAY &&
                     rsrc->base.target != PIPE_TEXTURE_2D &&
                     rsrc->base.target != PIPE_TEXTURE_2D_ARRAY &&
                     rsrc->base.target != PIPE_TEXTURE_3D &&
                     rsrc->base.target != PIPE_TEXTURE_CUBE) ||
+          !(rsrc->base.bind&PIPE_BIND_SAMPLER_VIEW) ||
           rsrc->base.nr_samples>1 || rsrc->layout.compressed || !range || !span ||
           offset>rsrc->bo->size || span>rsrc->bo->size-offset ||
           AgxWin32AsahiCaptureReference(capture,rsrc->bo,

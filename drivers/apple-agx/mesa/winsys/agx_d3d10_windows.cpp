@@ -60,6 +60,20 @@ VOID AgxD3d10WindowsDiagnosticResource(
   AdmissionUmdDiagnostic(Stage,r?S_OK:E_INVALIDARG,values,16u);
 }
 
+VOID AgxD3d10WindowsDiagnosticBufferUsage(
+    const D3D10DDIARG_CREATERESOURCE *r) {
+  UINT values[5]={0};
+  if(r) {
+    values[0]=r->Usage;
+    values[1]=r->BindFlags;
+    values[2]=r->MapFlags;
+    values[3]=r->MiscFlags;
+    if(r->pMipInfoList && r->MipLevels)
+      values[4]=r->pMipInfoList[0].TexelWidth;
+  }
+  AdmissionUmdDiagnostic("reject-buffer-usage",E_NOTIMPL,values,ARRAYSIZE(values));
+}
+
 enum AGX_D3D10_WINDOWS_DEVICE_STAGE {
   AgxD3d10DeviceAllocated,
   AgxD3d10DeviceRuntimeReady,

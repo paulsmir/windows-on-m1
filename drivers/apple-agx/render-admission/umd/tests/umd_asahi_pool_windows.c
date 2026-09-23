@@ -143,11 +143,13 @@ static unsigned RuntimeRenders,RuntimeSignals,RuntimeMaterializations;
 static D3DKMT_HANDLE RuntimeExpectedTargetAllocation;
 static APPLE_AGX_U64 RuntimeExpectedTargetBytes;
 static APPLE_AGX_U32 RuntimeExpectedCommandVersion;
+static APPLE_AGX_U32 RuntimeIgnoreExpectedVersion;
 static APPLE_AGX_U32 RuntimeExpectedColorFormat;
 typedef struct {
   APPLE_AGX_WIN32_DRAW_PAYLOAD Draw;
   APPLE_AGX_WIN32_NATIVE_BATCH_METADATA Native;
   APPLE_AGX_U64 StateSignature;
+  APPLE_AGX_U32 CommandVersion;
   APPLE_AGX_U32 UniformRelocations;
   APPLE_AGX_U32 TextureRelocations;
 } RUNTIME_DRAW_OBSERVATION;
@@ -186,8 +188,15 @@ static APPLE_AGX_U32 RuntimeConsumerFence;
 static unsigned RuntimeConsumerGates,RuntimeConsumerRetirements;
 static int RuntimeAutoCompleteConsumers;
 static int RuntimeExpectedTextureSubresource;
-void AdmissionUmdRuntimeExpectTextureSubresource(int enabled) {
+static APPLE_AGX_U64 RuntimeExpectedTextureOffset,RuntimeExpectedTextureBytes;
+void AdmissionUmdRuntimeExpectTextureSubresource(
+    int enabled,APPLE_AGX_U64 offset,APPLE_AGX_U64 bytes) {
   RuntimeExpectedTextureSubresource=enabled;
+  RuntimeExpectedTextureOffset=offset;
+  RuntimeExpectedTextureBytes=bytes;
+}
+void AdmissionUmdRuntimeIgnoreNextExpectedVersion(void) {
+  ++RuntimeIgnoreExpectedVersion;
 }
 #define RUNTIME_REQUIRE(x) do { if(!(x)) {++PoolErrors;fprintf(stderr,"RUNTIME_OWNER line=%u %s\n",(unsigned)__LINE__,#x);} } while(0)
 static ADMISSION_UMD_SCREEN_BUFFER *RuntimeBuffer(ADMISSION_UMD_DEVICE *device,APPLE_AGX_U64 token) {
@@ -288,6 +297,7 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
     APPLE_AGX_U64 signature=1469598103934665603ULL;
     memset(observation,0,sizeof(*observation));
     observation->Draw=*view.Draw;observation->Native=*view.NativeBatch;
+    observation->CommandVersion=view.Header->Version;
     const APPLE_AGX_U32 roots[]={view.Draw->VertexReference,
       view.Draw->IndexReference,view.Draw->ConstantReference,
       view.Draw->VertexShaderReference,
@@ -318,15 +328,21 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
   }
   if(RuntimeExpectedColorFormat)
     RUNTIME_REQUIRE(view.Draw->Format==RuntimeExpectedColorFormat);
-  if(RuntimeExpectedCommandVersion)
+  if(RuntimeIgnoreExpectedVersion) {
+    --RuntimeIgnoreExpectedVersion;
+  } else if(RuntimeExpectedCommandVersion) {
     RUNTIME_REQUIRE(view.Header->Version==RuntimeExpectedCommandVersion);
+  }
   if(AdmissionWin32ValidateReferences(&view,device->Win32Generation,RuntimeLookup,NULL,
       facts,ARRAYSIZE(facts))!=AdmissionWin32TransportSuccess) return E_INVALIDARG;
   if(RuntimeExpectedTextureSubresource) {
     unsigned texture=view.Draw->TextureReference;
     RUNTIME_REQUIRE(texture!=APPLE_AGX_WIN32_OPTIONAL_REFERENCE &&
         texture<view.Header->ReferenceCount && view.References[texture].Bytes>0 &&
-        view.References[texture].Bytes<facts[texture].Bytes);
+        view.References[texture].Bytes<facts[texture].Bytes &&
+        (!RuntimeExpectedTextureBytes ||
+         (view.References[texture].Offset==RuntimeExpectedTextureOffset &&
+          view.References[texture].Bytes==RuntimeExpectedTextureBytes)));
   }
   if(RuntimeExpectedTargetAllocation) {
     unsigned target=view.Draw->DestinationReference;
