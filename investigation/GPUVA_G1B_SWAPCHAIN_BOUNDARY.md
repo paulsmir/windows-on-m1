@@ -72,3 +72,17 @@ Before any run, preregister exact package hashes and recover to GPU-visible
 Code28 with no AppleAgx package, service, module, signer or staged driver;
 preserve user-requested autologon. If the receipts remain silent, stop this
 hypothesis after that one discriminator and design a different measurement.
+
+## EXP760 correction — 2026-09-23
+
+The same current UMD/INF bytes under a WDDM3.0 KMD repeated CreateSwapChain
+failure in a proven console Session1. Its sole process-local first refusal was
+`CreateResource line467 E_INVALIDARG`; line467 in the exact ARM64 native source
+propagates failure from `AgxD3d10WindowsPresentationCreate`. This rejects
+attributing EXP758's aggregate HRESULT to WDDM3.2 alone. The prior question
+about a failing KMD/UMD boundary is answered at UMD; no second unchanged64-KiB
+diagnostic is needed. The new smallest checkpoint is a valid RGBA backbuffer
+with `pPrimaryDesc`: return `NO_SCANOUT`, allocate it offscreen, then reach
+CreateSwapChain without a CreateResource rejection. Microsoft documents that
+`pPrimaryDesc` can be supplied with BIND_PRESENT and the driver can request
+Blt-style presentation through `DXGI_DDI_PRIMARY_DRIVER_FLAG_NO_SCANOUT`.

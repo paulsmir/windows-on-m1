@@ -36,10 +36,19 @@ receipts; this still cannot prove GpuMmu page tables. B1 firmware-slot run is
 unperformed and separate.
 EXP758 also exposed a new standard-client CreateSwapChain regression relative
 to EXP736. The first failing DDI is not in the captured ETW/last-QAI receipt.
-Current causal target is one unchanged64-KiB observation-only discriminator
-with per-QAI, allocation-input, first KMD failure and UMD refusal receipts,
-as scoped in `investigation/GPUVA_G1B_SWAPCHAIN_BOUNDARY.md`. Hold the16-KiB
-hardware run until that boundary is attributed.
+EXP760 isolated the current UMD byte-for-byte on physical WDDM3.0, with the
+client and runner both in console Session1. It repeated CreateSwapChain
+0x887A0005/reason0x887A0020; the process-local trace names the first refusal:
+`CreateResource line467 E_INVALIDARG` after
+`AgxD3d10WindowsPresentationCreate`. ETW639741 events lost0; three Event129
+storage resets had no established GPU cause. Exact rollback and ordinary Code28
+recovery pass, including removal of the user transfer package; autologon1
+remains. Evidence `.local/experiments/EXP760-currentumd-wddm30/causal-result.json`
+SHA256 `ab5837aae4f0dea620720e4748c3abc11c062174cf26d90c4b794763a3890cf5`.
+Current causal target is the UMD RGBA `pPrimaryDesc`/NO_SCANOUT contract;
+full x64 frontend test RED then GREEN offline is in progress. Hold the16-KiB
+hardware run until this boundary is cleared. B1 firmware-slot run remains
+separate and unperformed.
 OpenGL and CS1.6 follow accelerated desktop acceptance.
 
 ## Proven hardware boundary — EXP753/package748
@@ -237,9 +246,10 @@ HARDWARE ROADMAP
        hardware run; exact cleanup and ordinary Code28 recovery.
 [PASS] Resource.cpp:452-453 buffer usage, typed SRV load/capture relocation,
        DynamicResourceMapDiscard and argument-bearing rejection pass offline.
-[NEXT] EXP758 64KiB control is complete and rolled back. Attribute the
-CreateSwapChain regression with the one observation-only64-KiB discriminator
-above. The 16KiB physical slab trial then requires a measurable VidMm
+[NEXT] EXP760 attributes the standard-client CreateSwapChain rejection to the
+current UMD presentation resource path, independent of WDDM3.2. Complete the
+source-backed RGBA primary/NO_SCANOUT fix and exact offline/hardware gates.
+The 16KiB physical slab trial then requires a measurable VidMm
 placement signal before preregistration; GpuMmu caps remain zero. B1 requires a genuine
 paging/app process caller and firmware job tied to a v5 lease; an MMIO echo is
 insufficient. Full GPUVA B2 requires G3 after B1. Resolve 4-KiB logical
