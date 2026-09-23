@@ -6,12 +6,16 @@
 #include "umd_resource_lifetime.h"
 #include "agx_win32_transport.h"
 #include "agx_win32_screen.h"
+#include "agx_win32_construction_address.h"
 #include "umd_draw_composer.h"
 
 #define ADMISSION_UMD_ADAPTER_MAGIC 0x50414455u /* "UDAP" */
 #define ADMISSION_UMD_DEVICE_MAGIC 0x56454455u  /* "UDEV" */
 #define ADMISSION_UMD_RESOURCE_MAGIC 0x53455255u /* "URES" */
-#define ADMISSION_UMD_SCREEN_BUFFER_LIMIT 64u
+/* A single D3D10 stage can bind128 SRVs, in addition to compiled/linker BOs.
+ * EXP749 measured47 live executables plus resources reaching the old64 slots.
+ * This is the device registry, not the per-command reference/wire limit. */
+#define ADMISSION_UMD_SCREEN_BUFFER_LIMIT AGX_WIN32_CONSTRUCTION_MAX_OBJECTS
 #define ADMISSION_UMD_SCREEN_FENCE_LIMIT 64u
 #define ADMISSION_UMD_SOURCE_HOLD_LIMIT 64u
 

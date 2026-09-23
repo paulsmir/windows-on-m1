@@ -81,6 +81,20 @@ if args.windows_platform_declarations:
         overlays[path]['after']=hashlib.sha256(target.read_bytes()).hexdigest()
     change('src/gallium/frontends/d3d10umd/ShaderTGSI.c',
         '375020e842babdedd9829367522297e4d6ae1288b571328d8f48ef2017b7cf81',[
+        ('''      case D3D10_SB_OPCODE_LD_MS:
+         /* XXX: We don't support multi-sampling yet, but we need to parse
+          * this opcode regardless, so we just ignore sample index operand
+          * for now */
+      case D3D10_SB_OPCODE_LD:''','''      case D3D10_SB_OPCODE_LD_MS: {
+         struct ureg_src srcreg[3];
+         srcreg[0]=translate_src_operand(&sx,&opcode.src[0],OF_INT);
+         srcreg[1]=translate_src_operand(&sx,&opcode.src[1],OF_INT);
+         srcreg[2]=translate_src_operand(&sx,&opcode.src[2],OF_INT);
+         sample_ureg_emit(ureg,TGSI_OPCODE_SAMPLE_I_MS,3,&opcode,
+            translate_dst_operand(&sx,&opcode.dst[0],opcode.saturate),srcreg);
+         break;
+      }
+      case D3D10_SB_OPCODE_LD:'''),
         ('''   reg = ureg_DECL_fs_input(ureg,
                             translate_system_name(dcl_siv_name),
                             0,
@@ -129,19 +143,27 @@ ttn_d3d_sample(struct ttn_compile *c, nir_def **src)
    nir_builder *b = &c->build;
    struct tgsi_full_instruction *ins = &c->token->FullInstruction;
    unsigned texture = ins->Src[1].Register.Index;
-   unsigned sampler = ins->Src[2].Register.Index;
+   bool ms = ins->Instruction.Opcode == TGSI_OPCODE_SAMPLE_I_MS;
+   bool fetch = ms || ins->Instruction.Opcode == TGSI_OPCODE_SAMPLE_I;
+   unsigned sampler = fetch ? 0 : ins->Src[2].Register.Index;
    bool explicit_lod = ins->Instruction.Opcode == TGSI_OPCODE_SAMPLE_L;
    assert(ins->Src[1].Register.File == TGSI_FILE_SAMPLER_VIEW);
-   assert(ins->Src[2].Register.File == TGSI_FILE_SAMPLER);
-   assert(!ins->Src[1].Register.Indirect && !ins->Src[2].Register.Indirect);
-   assert(texture < c->num_samp_types && sampler < PIPE_MAX_SAMPLERS);
-   assert(ins->Texture.NumOffsets <= 1);
+   assert(!ins->Src[1].Register.Indirect);
+   if(!fetch) {
+      assert(ins->Src[2].Register.File == TGSI_FILE_SAMPLER);
+      assert(!ins->Src[2].Register.Indirect && sampler < PIPE_MAX_SAMPLERS);
+   }
+   assert(texture < c->num_samp_types && ins->Texture.NumOffsets <= 1);
+   enum glsl_sampler_dim dim;
+   bool shadow,array;
+   get_texture_info(c->samp_targets[texture],&dim,&shadow,&array);
+   bool fetch_lod=fetch && !ms && dim!=GLSL_SAMPLER_DIM_BUF && dim!=GLSL_SAMPLER_DIM_RECT;
    nir_tex_instr *tex = nir_tex_instr_create(b->shader,
-      1 + explicit_lod + ins->Texture.NumOffsets);
-   tex->op = explicit_lod ? nir_texop_txl : nir_texop_tex;
+      1 + explicit_lod + fetch_lod + ms + ins->Texture.NumOffsets);
+   tex->op = ms ? nir_texop_txf_ms : fetch ? nir_texop_txf :
+      explicit_lod ? nir_texop_txl : nir_texop_tex;
    tex->can_speculate = true;
-   get_texture_info(c->samp_targets[texture], &tex->sampler_dim,
-                    &tex->is_shadow, &tex->is_array);
+   tex->sampler_dim=dim;tex->is_shadow=shadow;tex->is_array=array;
    tex->coord_components = glsl_get_sampler_dim_coordinate_components(tex->sampler_dim) + tex->is_array;
    tex->texture_index = texture;
    tex->sampler_index = sampler;
@@ -151,6 +173,10 @@ ttn_d3d_sample(struct ttn_compile *c, nir_def **src)
       nir_trim_vector(b, src[0], tex->coord_components));
    if (explicit_lod)
       tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_lod, nir_channel(b, src[3], 0));
+   if(fetch_lod)
+      tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_lod,nir_channel(b,src[0],3));
+   if(ms)
+      tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_ms_index,nir_channel(b,src[2],0));
    if (ins->Texture.NumOffsets) {
       struct tgsi_texture_offset *offset = &ins->TexOffsets[0];
       nir_src value = ttn_src_for_file_and_index(c, offset->File, offset->Index,
@@ -164,7 +190,8 @@ ttn_d3d_sample(struct ttn_compile *c, nir_def **src)
    }
    c->num_samplers = MAX2(c->num_samplers, texture + 1);
    BITSET_SET(b->shader->info.textures_used, texture);
-   BITSET_SET(b->shader->info.samplers_used, sampler);
+   if(fetch) BITSET_SET(b->shader->info.textures_used_by_txf,texture);
+   else BITSET_SET(b->shader->info.samplers_used, sampler);
    nir_def_init(&tex->instr, &tex->def, nir_tex_instr_dest_size(tex), 32);
    nir_builder_instr_insert(b, &tex->instr);
    return nir_pad_vector_imm_int(b, &tex->def, 0, 4);
@@ -172,14 +199,17 @@ ttn_d3d_sample(struct ttn_compile *c, nir_def **src)
 
 static nir_def *
 ttn_tex('''),
-        ('''      src[i] = ttn_get_src(c, &tgsi_inst->Src[i], i);''','''      if ((tgsi_op == TGSI_OPCODE_SAMPLE || tgsi_op == TGSI_OPCODE_SAMPLE_L) &&
-          (i == 1 || i == 2))
+        ('''      src[i] = ttn_get_src(c, &tgsi_inst->Src[i], i);''','''      if (((tgsi_op == TGSI_OPCODE_SAMPLE || tgsi_op == TGSI_OPCODE_SAMPLE_L) &&
+           (i == 1 || i == 2)) ||
+          ((tgsi_op == TGSI_OPCODE_SAMPLE_I || tgsi_op == TGSI_OPCODE_SAMPLE_I_MS) && i == 1))
          src[i] = NULL; /* Descriptor operands are not ALU values. */
       else
          src[i] = ttn_get_src(c, &tgsi_inst->Src[i], i);'''),
         ('''   case TGSI_OPCODE_TEX:
    case TGSI_OPCODE_TXP:''','''   case TGSI_OPCODE_SAMPLE:
    case TGSI_OPCODE_SAMPLE_L:
+   case TGSI_OPCODE_SAMPLE_I:
+   case TGSI_OPCODE_SAMPLE_I_MS:
       dst = ttn_d3d_sample(c, src);
       break;
 
@@ -603,7 +633,10 @@ void APIENTRY
        Format == DXGI_FORMAT_B8G8R8X8_UNORM_SRGB) {
       *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET |
                      D3D10_DDI_FORMAT_SUPPORT_BLENDABLE |
-                     D3D10_DDI_FORMAT_SUPPORT_SHADER_SAMPLE;
+                     D3D10_DDI_FORMAT_SUPPORT_SHADER_SAMPLE |
+                     D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD;
+      /* EXP749: runtime admits a one-sample TEXTURE2DMS view; real ld2dms
+       * preserves sample index and reaches native txf_ms. No >1 sample RT. */
    } else if (Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
        Format == DXGI_FORMAT_R16G16B16A16_FLOAT ||
        Format == DXGI_FORMAT_R8_UNORM || Format == DXGI_FORMAT_R16_FLOAT ||
@@ -1258,6 +1291,7 @@ UnsupportedDxgi''')
 
     change('src/gallium/frontends/d3d10umd/Shader.cpp',
         '48a7de2a42b25abac677cd903c10f21fc91b86aef167266a32a6d7d9da21097c',[
+        ('#include "util/u_gen_mipmap.h"', '#include "util/u_gen_mipmap.h"\n#include "drm-uapi/drm_fourcc.h"'),
         ('''{
    unsigned i;
 
@@ -1351,6 +1385,34 @@ UnsupportedDxgi''')
 
    Device *windowsDevice=CastDevice(hDevice);
    Resource *windowsResource=CastResource(pCreateSRView->hDrvResource);
+   struct pipe_resource *windowsTexture=windowsResource?windowsResource->resource:NULL;
+   UINT windowsLevel=0,windowsMipCount=0,windowsFirstLayer=0,windowsLayers=0;
+   UINT windowsLayerLimit=windowsTexture?windowsTexture->array_size:0;
+   bool windowsDimOK=false;
+   if(windowsTexture) switch(pCreateSRView->ResourceDimension) {
+   case D3D10DDIRESOURCE_TEXTURE1D:
+      windowsDimOK=windowsTexture->target==PIPE_TEXTURE_1D || windowsTexture->target==PIPE_TEXTURE_1D_ARRAY;
+      windowsLevel=pCreateSRView->Tex1D.MostDetailedMip;
+      windowsMipCount=pCreateSRView->Tex1D.MipLevels;
+      windowsFirstLayer=pCreateSRView->Tex1D.FirstArraySlice;
+      windowsLayers=pCreateSRView->Tex1D.ArraySize;break;
+   case D3D10DDIRESOURCE_TEXTURE2D:
+      windowsDimOK=windowsTexture->target==PIPE_TEXTURE_2D || windowsTexture->target==PIPE_TEXTURE_2D_ARRAY;
+      windowsLevel=pCreateSRView->Tex2D.MostDetailedMip;
+      windowsMipCount=pCreateSRView->Tex2D.MipLevels;
+      windowsFirstLayer=pCreateSRView->Tex2D.FirstArraySlice;
+      windowsLayers=pCreateSRView->Tex2D.ArraySize;break;
+   case D3D10DDIRESOURCE_TEXTURE3D:
+      windowsDimOK=windowsTexture->target==PIPE_TEXTURE_3D;
+      windowsLevel=pCreateSRView->Tex3D.MostDetailedMip;
+      windowsMipCount=pCreateSRView->Tex3D.MipLevels;
+      windowsLayerLimit=windowsTexture->depth0;windowsLayers=windowsLayerLimit;break;
+   case D3D10DDIRESOURCE_TEXTURECUBE:
+      windowsDimOK=windowsTexture->target==PIPE_TEXTURE_CUBE && windowsTexture->array_size==6;
+      windowsLevel=pCreateSRView->TexCube.MostDetailedMip;
+      windowsMipCount=pCreateSRView->TexCube.MipLevels;windowsLayers=6;break;
+   default:break;
+   }
    if(!windowsDevice||!windowsResource||windowsResource->owner_device!=windowsDevice||
       (!windowsResource->presentation&&
        !(windowsResource->bind_flags&D3D10_DDI_BIND_SHADER_RESOURCE))||
@@ -1358,11 +1420,9 @@ UnsupportedDxgi''')
           pCreateSRView->Format,FALSE,
           windowsResource->presentation &&
           (windowsResource->bind_flags & D3D10_DDI_BIND_PRESENT))||
-      pCreateSRView->ResourceDimension!=D3D10DDIRESOURCE_TEXTURE2D||
-      pCreateSRView->Tex2D.MipLevels!=1u||pCreateSRView->Tex2D.ArraySize!=1u||
-      pCreateSRView->Tex2D.MostDetailedMip>=windowsResource->MipLevels||
-      pCreateSRView->Tex2D.FirstArraySlice>=
-         windowsResource->NumSubResources/windowsResource->MipLevels) {
+      !windowsDimOK || !windowsMipCount || windowsLevel>=windowsResource->MipLevels ||
+      windowsMipCount>windowsResource->MipLevels-windowsLevel || !windowsLayers ||
+      windowsFirstLayer>=windowsLayerLimit || windowsLayers>windowsLayerLimit-windowsFirstLayer) {
       SetError(hDevice,E_NOTIMPL);return;
    }
    struct pipe_context *pipe = CastPipeContext(hDevice);
@@ -1396,8 +1456,8 @@ UnsupportedDxgi''')
    pSRView->owner_device = CastDevice(hDevice);
    pSRView->owner_resource = CastResource(pCreateSRView->hDrvResource);
    pSRView->owner_resource->sample_format = pCreateSRView->Format;
-   pSRView->owner_resource->sample_level = pCreateSRView->Tex2D.MostDetailedMip;
-   pSRView->owner_resource->sample_layer = pCreateSRView->Tex2D.FirstArraySlice;
+   pSRView->owner_resource->sample_level = windowsLevel;
+   pSRView->owner_resource->sample_layer = windowsFirstLayer;
 }
 
 
@@ -1465,12 +1525,76 @@ UnsupportedDxgi''')
       view->owner_resource->sample_level = view->owner_resource->sample_layer = 0;
    }
    view->handle = NULL; view->owner_device = NULL; view->owner_resource = NULL;''')
-    replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','GenMips','''   Device *device = CastDevice(hDevice);
-   ShaderResourceView *view = CastShaderResourceView(hShaderResourceView);
-   if (!device || !view || view->owner_device != device || !view->handle ||
-       !view->owner_resource || view->owner_resource->owner_device != device ||
-       view->owner_resource->MipLevels != 1) {
-      SetError(hDevice, E_NOTIMPL); return;
+    replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','GenMips','''   Device *device=CastDevice(hDevice);
+   ShaderResourceView *view=CastShaderResourceView(hShaderResourceView);
+   if(!device || !view || view->owner_device!=device || !view->handle ||
+      !view->owner_resource || view->owner_resource->owner_device!=device) {
+      SetError(hDevice,E_INVALIDARG);return;
+   }
+   struct pipe_sampler_view *srv=view->handle;
+   struct pipe_resource *texture=srv->texture;
+   unsigned first=srv->u.tex.first_level,last=srv->u.tex.last_level;
+   if(first==last) return;
+   bool bgr=srv->format==PIPE_FORMAT_B8G8R8A8_UNORM ||
+      srv->format==PIPE_FORMAT_B8G8R8A8_SRGB || srv->format==PIPE_FORMAT_B8G8R8X8_UNORM ||
+      srv->format==PIPE_FORMAT_B8G8R8X8_SRGB;
+   bool target=texture->target==PIPE_TEXTURE_1D || texture->target==PIPE_TEXTURE_1D_ARRAY ||
+      texture->target==PIPE_TEXTURE_2D || texture->target==PIPE_TEXTURE_2D_ARRAY ||
+      texture->target==PIPE_TEXTURE_3D || texture->target==PIPE_TEXTURE_CUBE;
+   if(!bgr || !target ||
+      texture->nr_samples>1 || first>last || last>texture->last_level ||
+      !(view->owner_resource->bind_flags&D3D10_DDI_BIND_RENDER_TARGET) ||
+      !device->pipe->screen->resource_create_with_modifiers) {
+      SetError(hDevice,E_NOTIMPL);return;
+   }
+   for(unsigned level=first+1;level<=last;++level) {
+      HRESULT status=AgxD3d10WindowsFlushRetire(device->windows);
+      if(FAILED(status)) {SetError(hDevice,status);return;}
+      struct pipe_resource info={};
+      info.target=texture->target;info.format=texture->format;
+      info.width0=u_minify(texture->width0,level-1);
+      info.height0=u_minify(texture->height0,level-1);
+      info.depth0=u_minify(texture->depth0,level-1);info.array_size=texture->array_size;
+      info.nr_samples=info.nr_storage_samples=1;
+      info.bind=PIPE_BIND_SAMPLER_VIEW;info.usage=PIPE_USAGE_STAGING;
+      /* Existing capture forbids overlapping texture/output roles. Stage the
+       * source LOD with the existing allocator/transfers, not an alias waiver. */
+      const uint64_t modifier=DRM_FORMAT_MOD_APPLE_GPU_TILED;
+      struct pipe_resource *source=device->pipe->screen->resource_create_with_modifiers(
+         device->pipe->screen,&info,&modifier,1);
+      if(!source) {SetError(hDevice,E_OUTOFMEMORY);return;}
+      struct pipe_box box={};
+      box.width=info.width0;box.height=(int16_t)info.height0;
+      box.depth=(int16_t)(info.target==PIPE_TEXTURE_3D?info.depth0:info.array_size);
+      struct pipe_transfer *read=NULL,*write=NULL;
+      void *src=device->pipe->texture_map(device->pipe,texture,level-1,PIPE_MAP_READ,&box,&read);
+      void *dst=device->pipe->texture_map(device->pipe,source,0,PIPE_MAP_WRITE,&box,&write);
+      bool mapped=src&&dst&&read&&write&&read->stride>=info.width0*4&&write->stride>=info.width0*4;
+      if(mapped) for(unsigned layer=0;layer<(unsigned)box.depth;++layer)
+         for(unsigned row=0;row<info.height0;++row)
+            memcpy((uint8_t *)dst+layer*write->layer_stride+row*write->stride,
+                   (const uint8_t *)src+layer*read->layer_stride+row*read->stride,info.width0*4);
+      if(write) pipe_texture_unmap(device->pipe,write);
+      if(read) pipe_texture_unmap(device->pipe,read);
+      if(!mapped) {
+         pipe_resource_reference(&source,NULL);SetError(hDevice,E_FAIL);return;
+      }
+      struct pipe_blit_info blit={};
+      blit.src.resource=source;blit.src.format=srv->format;blit.src.box=box;
+      blit.dst.resource=texture;blit.dst.format=srv->format;blit.dst.level=level;
+      blit.dst.box.width=u_minify(texture->width0,level);
+      blit.dst.box.height=(int16_t)u_minify(texture->height0,level);
+      if(texture->target==PIPE_TEXTURE_3D) {
+         blit.dst.box.depth=(int16_t)u_minify(texture->depth0,level);
+      } else {
+         blit.src.box.z=blit.dst.box.z=(int16_t)srv->u.tex.first_layer;
+         blit.src.box.depth=blit.dst.box.depth=(int16_t)(srv->u.tex.last_layer-srv->u.tex.first_layer+1);
+      }
+      blit.mask=PIPE_MASK_RGBA;blit.filter=PIPE_TEX_FILTER_LINEAR;
+      device->pipe->blit(device->pipe,&blit);
+      status=AgxD3d10WindowsFlushStatus(device->windows);
+      pipe_resource_reference(&source,NULL);
+      if(FAILED(status)) {SetError(hDevice,status);return;}
    }''')
     replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','SetConstantBuffers','''   Device *pDevice = CastDevice(hDevice);
    ULONGLONG owner = 0;
@@ -1969,11 +2093,19 @@ AgxD3d10ResourceWithinRequiredLimits(
       pResource->resource = screen->resource_create(screen, &templat);
    } else if (pCreateResource->BindFlags & D3D10_DDI_BIND_RENDER_TARGET) {
       const D3D10DDI_MIPINFO *mip = pCreateResource->pMipInfoList;
-      bool private_rt = pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE2D &&
+      bool bgr_auto=pCreateResource->MiscFlags==D3D10_DDI_RESOURCE_AUTO_GEN_MIP_MAP &&
+         (AgxD3d10CopyFamily(pCreateResource->Format)==1 || AgxD3d10CopyFamily(pCreateResource->Format)==2) &&
+         pCreateResource->BindFlags==(D3D10_DDI_BIND_RENDER_TARGET|D3D10_DDI_BIND_SHADER_RESOURCE);
+      bool private_rt = (pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE2D ||
+         (bgr_auto && (pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE1D ||
+          pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE3D ||
+          pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURECUBE))) &&
          (AgxD3d10ColorBytes(pCreateResource->Format) != 0 ||
           pCreateResource->Format == DXGI_FORMAT_R8G8B8A8_TYPELESS) &&
-         pCreateResource->MipLevels == 1 && pCreateResource->ArraySize == 1 && mip &&
-         mip[0].TexelWidth > 0 && mip[0].TexelHeight > 0 && mip[0].TexelDepth == 1 &&
+         (pCreateResource->MipLevels == 1 || bgr_auto) &&
+         (pCreateResource->ArraySize == 1 || bgr_auto) && mip &&
+         mip[0].TexelWidth > 0 && mip[0].TexelHeight > 0 &&
+         (mip[0].TexelDepth == 1 || bgr_auto) &&
          /* AgxD3d10ResourceWithinRequiredLimits already checked dimensions,
           * complete byte size and overflow against the pinned D3D10 limits. */
          pCreateResource->SampleDesc.Count == 1 && pCreateResource->SampleDesc.Quality == 0 &&
@@ -1981,8 +2113,8 @@ AgxD3d10ResourceWithinRequiredLimits(
          (pCreateResource->BindFlags == D3D10_DDI_BIND_RENDER_TARGET ||
           pCreateResource->BindFlags == (D3D10_DDI_BIND_RENDER_TARGET |
               D3D10_DDI_BIND_SHADER_RESOURCE)) &&
-         pCreateResource->MiscFlags == 0 && !pCreateResource->pPrimaryDesc &&
-         !pCreateResource->pInitialDataUP;
+         (pCreateResource->MiscFlags == 0 || bgr_auto) && !pCreateResource->pPrimaryDesc &&
+         (!pCreateResource->pInitialDataUP || bgr_auto);
       if (!private_rt || !screen->resource_create_with_modifiers) {
          LOG_UNSUPPORTED("Only a private uncompressed admitted render target is supported");
          SetError(hDevice, E_NOTIMPL);
@@ -2027,7 +2159,10 @@ AgxD3d10ResourceWithinRequiredLimits(
          pResource->resource = screen->resource_create_with_modifiers(
             screen, &templat, &modifier, 1);
       }
-   } else if (pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE2D &&
+   } else if ((pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE1D ||
+               pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE2D ||
+               pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE3D ||
+               pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURECUBE) &&
               (pCreateResource->BindFlags & D3D10_DDI_BIND_SHADER_RESOURCE) &&
               (pCreateResource->Format == DXGI_FORMAT_B8G8R8A8_TYPELESS ||
                pCreateResource->Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
@@ -2490,7 +2625,7 @@ AgxD3d10ResourceWithinRequiredLimits(
             ('#include <xf86drm.h>', '#ifndef _WIN32\n#include <xf86drm.h>\n#endif'),
             ('#include "agx_state.h"', '#include "agx_state.h"\n#include "agx_win32_asahi_bo.h"'),
             ('struct agx_bo *bo = agx_bo_create(dev, 0x80000, 0, 0, "Encoder");',
-             'struct agx_bo *bo = AgxWin32AsahiEncoderCreate(dev, 0x80000, 0, "Encoder");'),
+             'struct agx_bo *bo = AgxWin32AsahiEncoderCreate(dev, 0x80000, 0, "Encoder");\n   if (!bo) return (struct agx_encoder){0};'),
             ('   batch->uniforms.tables[AGX_SYSVAL_TABLE_PARAMS] = 0;',
              '   memset(batch->uniforms.tables, 0, sizeof(batch->uniforms.tables));')])
         batch_source=(out/'src/gallium/drivers/asahi/agx_batch.c').read_text()

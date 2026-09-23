@@ -179,6 +179,11 @@ unsigned AgxWin32AsahiPoolTest(AGX_WIN32_SCREEN *screen,
   first=(struct agx_bo *)(uintptr_t)1;
   a=agx_pool_alloc_aligned_with_bo(&pool,64,64,&first);
   CHECK_NATIVE(!a.cpu && !a.gpu && !first && backend->Failed);
+  {
+    struct agx_batch failed_batch={0};
+    struct agx_encoder failed_encoder=AgxWin32NativeEncoderAllocateTest(&failed_batch,&native);
+    CHECK_NATIVE(!failed_encoder.bo && !failed_encoder.current && !failed_encoder.end);
+  }
   agx_pool_cleanup(&pool);
   holds(owner,3);
   CHECK_NATIVE(AgxWin32AsahiDetach(backend));

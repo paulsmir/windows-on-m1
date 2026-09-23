@@ -3,7 +3,7 @@
 
 #include "apple_agx_state.h"
 
-#define AGX_WIN32_CONSTRUCTION_MAX_OBJECTS 64u
+#define AGX_WIN32_CONSTRUCTION_MAX_OBJECTS 256u
 
 typedef struct _AGX_WIN32_CONSTRUCTION_OBJECT {
   APPLE_AGX_U64 Token;

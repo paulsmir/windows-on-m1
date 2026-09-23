@@ -149,6 +149,7 @@ typedef struct {
 static RUNTIME_CONSUMER RuntimeConsumers[2];
 static APPLE_AGX_U32 RuntimeConsumerFence;
 static unsigned RuntimeConsumerGates,RuntimeConsumerRetirements;
+static int RuntimeAutoCompleteConsumers;
 static int RuntimeExpectedTextureSubresource;
 void AdmissionUmdRuntimeExpectTextureSubresource(int enabled) {
   RuntimeExpectedTextureSubresource=enabled;
@@ -509,6 +510,32 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
   r->pNewPatchLocationList=RuntimePatches;r->NewPatchLocationListSize=ARRAYSIZE(RuntimePatches);
   return S_OK;
 }
+static void RuntimeCompleteConsumers(int freeArena) {
+    for(unsigned i=0;i<2;++i) {
+      RUNTIME_CONSUMER *consumer=&RuntimeConsumers[i];
+      if(consumer->State.Applied) {
+        RUNTIME_REQUIRE(AdmissionDynamicOverlayRelease(&consumer->Backend,&consumer->WorkerPlan,
+            consumer->Dma.Job,consumer->Dma.Storage,consumer->Dma.StorageBytes,
+            RuntimeConsumerFence+1,&consumer->State)==AdmissionDynamicOverlayState);
+        RUNTIME_REQUIRE(consumer->State.Applied && consumer->Backend.BoundFence==RuntimeConsumerFence);
+        RUNTIME_REQUIRE(AdmissionDynamicOverlayRelease(&consumer->Backend,&consumer->WorkerPlan,
+            consumer->Dma.Job,consumer->Dma.Storage,consumer->Dma.StorageBytes,
+            RuntimeConsumerFence,&consumer->State)==AdmissionDynamicOverlaySuccess);
+      }
+      if(consumer->Backend.BoundFence) {
+        RUNTIME_REQUIRE(AdmissionBackendImageReleaseSubmission(&consumer->Backend,RuntimeConsumerFence));
+        ++RuntimeConsumerRetirements;
+      }
+      RUNTIME_REQUIRE(!consumer->State.Applied && !consumer->Backend.BoundFence);
+    }
+  if(freeArena) for(unsigned i=0;i<2;++i) {
+    RUNTIME_CONSUMER *consumer=&RuntimeConsumers[i];
+    RUNTIME_REQUIRE(!consumer->State.Applied && !consumer->Backend.BoundFence);
+    if(consumer->Arena && !consumer->State.Applied && !consumer->Backend.BoundFence)
+      HeapFree(GetProcessHeap(),0,consumer->Arena);
+    memset(consumer,0,sizeof(*consumer));
+  }
+}
 static HRESULT APIENTRY RuntimeSignal(HANDLE h,const D3DDDICB_SIGNALSYNCHRONIZATIONOBJECT2 *signal) {
   ADMISSION_UMD_DEVICE *device=RuntimeActiveDevice;
   ++RuntimeSignals;
@@ -521,7 +548,11 @@ static HRESULT APIENTRY RuntimeSignal(HANDLE h,const D3DDDICB_SIGNALSYNCHRONIZAT
     RUNTIME_REQUIRE(device->NextScreenFence==
         RuntimeConsumerFence+RuntimeFailedSignalCalls);
     RuntimeMarker=signal->CpuEventHandle;
-    if(RuntimeImmediateMarker) RUNTIME_REQUIRE(SetEvent(RuntimeMarker));
+    /* Simulate actual consumer completion before the queued CPU marker, as
+     * hardware is allowed to do. The graph still came from the real producer. */
+    if(RuntimeAutoCompleteConsumers) RuntimeCompleteConsumers(1);
+    if(RuntimeImmediateMarker || RuntimeAutoCompleteConsumers)
+      RUNTIME_REQUIRE(SetEvent(RuntimeMarker));
   } else {
     RUNTIME_REQUIRE(RuntimeQueryMarkerCount<ARRAYSIZE(RuntimeQueryMarkers));
     if(RuntimeQueryMarkerCount<ARRAYSIZE(RuntimeQueryMarkers))
@@ -541,23 +572,7 @@ static void RuntimeCheckpoint(void *context,unsigned phase) {
     for(unsigned i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i) holds+=owner->Device->ScreenBuffers[i].SubmissionHolds;
     RUNTIME_REQUIRE(holds>0 && AdmissionUmdScreenBeginClose(owner->Device)==HRESULT_FROM_WIN32(ERROR_BUSY));
     RUNTIME_REQUIRE(owner->Device->DrawSubmission && owner->Device->DrawSubmission->Fence==RuntimeConsumerFence);
-    for(unsigned i=0;i<2;++i) {
-      RUNTIME_CONSUMER *consumer=&RuntimeConsumers[i];
-      if(consumer->State.Applied) {
-        RUNTIME_REQUIRE(AdmissionDynamicOverlayRelease(&consumer->Backend,&consumer->WorkerPlan,
-            consumer->Dma.Job,consumer->Dma.Storage,consumer->Dma.StorageBytes,
-            RuntimeConsumerFence+1,&consumer->State)==AdmissionDynamicOverlayState);
-        RUNTIME_REQUIRE(consumer->State.Applied && consumer->Backend.BoundFence==RuntimeConsumerFence);
-        RUNTIME_REQUIRE(AdmissionDynamicOverlayRelease(&consumer->Backend,&consumer->WorkerPlan,
-            consumer->Dma.Job,consumer->Dma.Storage,consumer->Dma.StorageBytes,
-            RuntimeConsumerFence,&consumer->State)==AdmissionDynamicOverlaySuccess);
-      }
-      if(consumer->Backend.BoundFence) {
-        RUNTIME_REQUIRE(AdmissionBackendImageReleaseSubmission(&consumer->Backend,RuntimeConsumerFence));
-        ++RuntimeConsumerRetirements;
-      }
-      RUNTIME_REQUIRE(!consumer->State.Applied && !consumer->Backend.BoundFence);
-    }
+    RuntimeCompleteConsumers(0);
     /* Windows/native source holds are still live until the same ordered marker
      * is released after the consumer's retirement, never at native call return. */
     RUNTIME_REQUIRE(AdmissionUmdScreenBeginClose(owner->Device)==HRESULT_FROM_WIN32(ERROR_BUSY));

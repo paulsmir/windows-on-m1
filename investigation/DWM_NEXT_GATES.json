@@ -70,13 +70,17 @@
     },
     {
       "id": "0_x_coverage",
-      "status": "OPEN",
+      "status": "PASS_OFFLINE",
       "required": [
         "BGRA/BGRX 1D/3D/Cube create/map/sample",
         "GenMips source/runtime decision and implementation when mandatory",
         "MULTISAMPLE_LOAD truthful decision with pinned WDK/Microsoft evidence"
       ],
-      "no_waiver": "No format-query absence inference from intentionally failed CreateDevice probe"
+      "no_waiver": "No format-query absence inference from intentionally failed CreateDevice probe",
+      "evidence": "EXP749-bgr-coverage/final-contract.json + test-final.log + test-final-arm64.log",
+      "proof": "32 native BGR dimension/view draws;16 GenMips chains including3D depth5 andCube6faces; actual ld_ms->txf_ms; capture/materializer/KMD2placements/retirement; x64suite0 ARM64build0",
+      "multisample": "MS_LOAD0x10 for87/88/91/93; real WARP admits1sample TEXTURE2DMS; native fetch verified. MS_RT0 and qualities>1zero; no MSAA claim",
+      "limits": "Offline producer/translation proof; physical filtering/fetch pixels unverified. No0_x advertisement until remaining gates."
     },
     {
       "id": "blt_dxgi",

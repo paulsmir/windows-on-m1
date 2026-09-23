@@ -4,6 +4,7 @@
 #include <wingdi.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <wchar.h>
 #include <stddef.h>
 #ifdef AGX_RUNTIME_PROBE_DRIVER
 typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
@@ -90,11 +91,38 @@ __declspec(dllexport) HRESULT APIENTRY OpenAdapter10_2(D3D10DDIARG_OPENADAPTER *
 }
 #else
 #include <d3d11.h>
+static int single_sample_ms_view(void) {
+  ID3D11Device *device=NULL;ID3D11DeviceContext *context=NULL;
+  D3D_FEATURE_LEVEL requested=D3D_FEATURE_LEVEL_10_0,chosen=(D3D_FEATURE_LEVEL)0;
+  HRESULT hr=D3D11CreateDevice(NULL,D3D_DRIVER_TYPE_WARP,NULL,0x20u,&requested,1,
+      D3D11_SDK_VERSION,&device,&chosen,&context);
+  printf("WARP_META create=%08lx fl=%08x\n",(ULONG)hr,(UINT)chosen);
+  if(FAILED(hr)) return 4;
+  const DXGI_FORMAT formats[]={DXGI_FORMAT_B8G8R8A8_UNORM,DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,
+      DXGI_FORMAT_B8G8R8X8_UNORM,DXGI_FORMAT_B8G8R8X8_UNORM_SRGB};
+  for(UINT i=0;i<4;++i) {
+    D3D11_TEXTURE2D_DESC desc={0};D3D11_SHADER_RESOURCE_VIEW_DESC view={0};
+    ID3D11Texture2D *texture=NULL;ID3D11ShaderResourceView *srv=NULL;
+    desc.Width=desc.Height=16;desc.MipLevels=desc.ArraySize=1;
+    desc.Format=formats[i];desc.SampleDesc.Count=1;
+    desc.Usage=D3D11_USAGE_DEFAULT;desc.BindFlags=D3D11_BIND_SHADER_RESOURCE;
+    HRESULT created=device->lpVtbl->CreateTexture2D(device,&desc,NULL,&texture);
+    view.Format=formats[i];view.ViewDimension=D3D11_SRV_DIMENSION_TEXTURE2DMS;
+    HRESULT viewed=FAILED(created)?created:device->lpVtbl->CreateShaderResourceView(
+        device,(ID3D11Resource *)texture,&view,&srv);
+    printf("MS_VIEW format=%u samples=1 create=%08lx view=%08lx\n",
+        (UINT)formats[i],(ULONG)created,(ULONG)viewed);
+    if(srv) srv->lpVtbl->Release(srv);
+    if(texture) texture->lpVtbl->Release(texture);
+  }
+  context->lpVtbl->Release(context);device->lpVtbl->Release(device);return 0;
+}
 int wmain(int argc,wchar_t **argv) {
   HMODULE module;ID3D11Device *device=NULL;ID3D11DeviceContext *context=NULL;
   D3D_FEATURE_LEVEL requested[]={D3D_FEATURE_LEVEL_10_0};
   D3D_FEATURE_LEVEL chosen=(D3D_FEATURE_LEVEL)0;
   if(argc!=2) return 2;
+  if(wcscmp(argv[1],L"--single-sample-ms-view")==0) return single_sample_ms_view();
   module=LoadLibraryW(argv[1]);
   if(!module) { printf("LoadLibrary error=%lu\n",GetLastError());return 3; }
   HRESULT hr=D3D11CreateDevice(NULL,D3D_DRIVER_TYPE_SOFTWARE,module,0xa9u,

@@ -1167,7 +1167,9 @@ static void test_mesa_d3d10_frontend_open(void) {
     for(UINT bgr=0;bgr<ARRAYSIZE(bgrFormats);++bgr) {
       deviceFunctions.pfnCheckFormatSupport(device,bgrFormats[bgr],&formatCaps);
       CHECK(formatCaps==(D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET|
-          D3D10_DDI_FORMAT_SUPPORT_BLENDABLE|D3D10_DDI_FORMAT_SUPPORT_SHADER_SAMPLE));
+          D3D10_DDI_FORMAT_SUPPORT_BLENDABLE|D3D10_DDI_FORMAT_SUPPORT_SHADER_SAMPLE|
+          D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD));
+      CHECK(!(formatCaps & D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET));
       deviceFunctions.pfnCheckMultisampleQualityLevels(device,bgrFormats[bgr],1,&quality);
       CHECK(quality==1u);
       deviceFunctions.pfnCheckMultisampleQualityLevels(device,bgrFormats[bgr],2,&quality);
@@ -2182,7 +2184,12 @@ static void test_mesa_d3d10_frontend_open(void) {
             device,&unsupportedSrvDesc));
     CHECK(unsupportedSrv.pDrvPrivate!=NULL);
     if(unsupportedSrv.pDrvPrivate) {
-      FRONTEND_UNSUPPORTED_REJECT(deviceFunctions.pfnGenMips(device,unsupportedSrv));
+      unsigned invalidErrors=FrontendErrors,invalidCreates=PoolCreates;
+      unsigned invalidRenders=RuntimeRenders,invalidSignals=RuntimeSignals;
+      deviceFunctions.pfnGenMips(device,unsupportedSrv);
+      CHECK(FrontendErrors==invalidErrors+1u && FrontendLastError==E_INVALIDARG &&
+            PoolCreates==invalidCreates && RuntimeRenders==invalidRenders &&
+            RuntimeSignals==invalidSignals);
       free(unsupportedSrv.pDrvPrivate);
     }
     FRONTEND_UNSUPPORTED_REJECT(deviceFunctions.pfnResourceCopy(device,rt,rt));
@@ -2233,8 +2240,9 @@ static void test_mesa_d3d10_frontend_open(void) {
     CHECK(vsh.pDrvPrivate && psh.pDrvPrivate && gsh.pDrvPrivate);
     deviceFunctions.pfnCreateVertexShader(device,vs,vsh,vsRuntime,NULL);
     deviceFunctions.pfnCreatePixelShader(device,ps,psh,psRuntime,NULL);
-    D3D10DDI_HSHADER sampleShaders[3]={{0},{0},{0}};
-    const UINT *sampleCode[3]={NativeSample2D,NativeSampleArray,NativeSampleImplicit};
+    D3D10DDI_HSHADER sampleShaders[7]={{0}};
+    const UINT *sampleCode[7]={NativeSample2D,NativeSampleArray,NativeSampleImplicit,
+        NativeSample1D,NativeSample3D,NativeSampleCube,NativeSampleMS1};
     for(UINT i=0;i<ARRAYSIZE(sampleShaders);++i) {
       D3D10DDI_HRTSHADER runtime={0};runtime.handle=(VOID *)(UINT_PTR)(0xe80u+i);
       sampleShaders[i].pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateShaderSize(device,sampleCode[i],NULL));
@@ -2775,6 +2783,9 @@ static void test_mesa_d3d10_frontend_open(void) {
       }
       /* Extended BGRA admission requires both BGR families and sRGB views.
        * Exercise the existing real producer/materializer, not a fabricated capture. */
+      for(UINT dimension=0;dimension<4;++dimension) {
+      const D3D10DDIRESOURCE_TYPE dimensions[]={D3D10DDIRESOURCE_TEXTURE2D,
+        D3D10DDIRESOURCE_TEXTURE1D,D3D10DDIRESOURCE_TEXTURE3D,D3D10DDIRESOURCE_TEXTURECUBE};
       for(UINT family=0;family<2;++family) {
         const DXGI_FORMAT formats[2][3]={
           {DXGI_FORMAT_B8G8R8A8_TYPELESS,DXGI_FORMAT_B8G8R8A8_UNORM,
@@ -2782,17 +2793,19 @@ static void test_mesa_d3d10_frontend_open(void) {
           {DXGI_FORMAT_B8G8R8X8_TYPELESS,DXGI_FORMAT_B8G8R8X8_UNORM,
            DXGI_FORMAT_B8G8R8X8_UNORM_SRGB}};
         for(UINT storage=0;storage<3;++storage) {
-        unsigned char pixels[16*16*4];memset(pixels,0x80,sizeof(pixels));
-        D3D10DDI_MIPINFO mip={0};mip.TexelWidth=mip.TexelHeight=16;mip.TexelDepth=1;
+        unsigned char pixels[16*16*4*4];memset(pixels,0x80,sizeof(pixels));
+        D3D10DDI_MIPINFO mip={0};mip.TexelWidth=mip.PhysicalWidth=16;
+        mip.TexelHeight=mip.PhysicalHeight=dimension==1u?1u:16u;
+        mip.TexelDepth=mip.PhysicalDepth=dimension==2u?4u:1u;
         D3D10_DDIARG_SUBRESOURCE_UP upload={0};
-        upload.pSysMem=pixels;upload.SysMemPitch=64;upload.SysMemSlicePitch=sizeof(pixels);
+        upload.pSysMem=pixels;upload.SysMemPitch=64;upload.SysMemSlicePitch=64*mip.TexelHeight;
         D3D10DDIARG_CREATERESOURCE bgraCreate={0};
         bgraCreate.pMipInfoList=&mip;bgraCreate.pInitialDataUP=&upload;
-        bgraCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+        bgraCreate.ResourceDimension=dimensions[dimension];
         bgraCreate.Usage=D3D10_DDI_USAGE_DEFAULT;bgraCreate.BindFlags=D3D10_DDI_BIND_SHADER_RESOURCE;
         bgraCreate.Format=formats[family][storage];bgraCreate.SampleDesc.Count=1;
-        bgraCreate.MipLevels=bgraCreate.ArraySize=1;
-        if(storage==2u) {
+        bgraCreate.MipLevels=1;bgraCreate.ArraySize=dimension==3u?6u:1u;
+        if(dimension || storage==2u) {
           bgraCreate.Usage=D3D10_DDI_USAGE_DYNAMIC;
           bgraCreate.MapFlags=D3D10_DDI_CPU_ACCESS_WRITE;
           bgraCreate.pInitialDataUP=NULL;
@@ -2806,25 +2819,30 @@ static void test_mesa_d3d10_frontend_open(void) {
             MesaD3d10FrontendContextForTest(device)));
         if(FrontendErrors!=errors || AgxWin32AsahiContextFaulted(
             MesaD3d10FrontendContextForTest(device))) return;
-        if(storage==2u) {
+        if(dimension || storage==2u) {
           D3D10DDI_MAPPED_SUBRESOURCE uploadMap={0};
           deviceFunctions.pfnDynamicResourceMapDiscard(device,resource,0,
               D3D10_DDI_MAP_WRITE_DISCARD,0,&uploadMap);
           CHECK(FrontendErrors==errors && uploadMap.pData && uploadMap.RowPitch>=64);
           if(!uploadMap.pData) return;
-          for(UINT y=0;y<16;++y)
-            memcpy((BYTE *)uploadMap.pData+y*uploadMap.RowPitch,pixels+y*64,64);
+          CHECK(uploadMap.DepthPitch>=uploadMap.RowPitch*mip.TexelHeight);
+          for(UINT z=0;z<mip.TexelDepth;++z) for(UINT y=0;y<mip.TexelHeight;++y)
+            memcpy((BYTE *)uploadMap.pData+z*uploadMap.DepthPitch+y*uploadMap.RowPitch,
+                   pixels+(z*mip.TexelHeight+y)*64,64);
           deviceFunctions.pfnDynamicResourceUnmap(device,resource,0);
           CHECK(FrontendErrors==errors);
         }
         for(UINT viewIndex=storage?storage:1;viewIndex<3 && (!storage || viewIndex==storage);++viewIndex) {
-          fprintf(stderr,"EXTENDED_BGR_CASE: family=%u storage=%u view=%u\n",family,storage,viewIndex);
+          fprintf(stderr,"EXTENDED_BGR_CASE: dimension=%u family=%u storage=%u view=%u\n",dimension,family,storage,viewIndex);
           CHECK(AgxD3d10FormatViewCompatible(bgraCreate.Format,formats[family][viewIndex],FALSE,FALSE));
           CHECK(!AgxD3d10FormatViewCompatible(bgraCreate.Format,formats[1-family][viewIndex],FALSE,FALSE));
           D3D10DDIARG_CREATESHADERRESOURCEVIEW viewCreate={0};
           viewCreate.hDrvResource=resource;viewCreate.Format=formats[family][viewIndex];
-          viewCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
-          viewCreate.Tex2D.MipLevels=viewCreate.Tex2D.ArraySize=1;
+          viewCreate.ResourceDimension=dimensions[dimension];
+          if(dimension==1u) viewCreate.Tex1D.MipLevels=viewCreate.Tex1D.ArraySize=1;
+          else if(dimension==2u) viewCreate.Tex3D.MipLevels=1;
+          else if(dimension==3u) viewCreate.TexCube.MipLevels=1;
+          else viewCreate.Tex2D.MipLevels=viewCreate.Tex2D.ArraySize=1;
           D3D10DDI_HSHADERRESOURCEVIEW view={0};D3D10DDI_HRTSHADERRESOURCEVIEW viewRuntime={0};
           view.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateShaderResourceViewSize(device,&viewCreate));
           viewRuntime.handle=(VOID *)(UINT_PTR)(0xe40u+family*2+viewIndex);
@@ -2837,22 +2855,22 @@ static void test_mesa_d3d10_frontend_open(void) {
           RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
           memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
           RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
-          if(family==0u && storage==0u) {
+          if(dimension==0u && family==0u && storage==0u) {
             RuntimeImmediateMarker=0;
             FrontendBusyProbe=resource;
           }
           FrontendSampleDraw(device,&deviceFunctions,rtv,view,appSampler,
-            sampleShaders[storage==1u?2u:0u],psh);
+            sampleShaders[dimension?dimension+2u:(storage?6u:0u)],psh);
           CHECK(FrontendErrors==errors && RuntimeRenders==1u && RuntimeSignals==1u &&
                 RuntimeMaterializations==2u && RuntimeConsumerGates==2u && RuntimeMarker);
           FrontendBusyProbe=(D3D10DDI_HRESOURCE){0};
           if(FrontendErrors!=errors || !RuntimeMarker) return;
-          if(family==0u && storage==0u) {
+          if(dimension==0u && family==0u && storage==0u) {
             CHECK(deviceFunctions.pfnResourceIsStagingBusy(device,resource));
             CHECK(!deviceFunctions.pfnResourceIsStagingBusy(device,staging));
             CHECK(RuntimeRenders==1u && RuntimeConsumerRetirements==0u);
           }
-          if(family==0u && storage==0u && viewIndex==1u) {
+          if(dimension==0u && family==0u && storage==0u && viewIndex==1u) {
             D3D10DDI_MAPPED_SUBRESOURCE pendingMap={0};
             /* Current Map synchronization is context-wide. Nonblocking mode
              * must preserve the real in-flight graph and make no CPU wait. */
@@ -2877,7 +2895,7 @@ static void test_mesa_d3d10_frontend_open(void) {
           }
           if(RuntimeMarker) {
             RuntimeCheckpoint(depthOwner,1u);
-            if(family==0u && storage==0u && viewIndex==2u)
+            if(dimension==0u && family==0u && storage==0u && viewIndex==2u)
               CHECK(!deviceFunctions.pfnResourceIsStagingBusy(device,resource));
             CHECK(AgxWin32AsahiContextRetire(MesaD3d10FrontendContextForTest(device),0u));
             RuntimeCheckpoint(depthOwner,5u);
@@ -2887,6 +2905,84 @@ static void test_mesa_d3d10_frontend_open(void) {
         }
         deviceFunctions.pfnDestroyResource(device,resource);free(resource.pDrvPrivate);
         }
+      }
+      }
+      /* GenMips must emit real filtering draws, not report success as a no-op. */
+      for(UINT genDimension=0;genDimension<4;++genDimension) {
+      for(UINT genFormat=0;genFormat<4;++genFormat) {
+        const D3D10DDIRESOURCE_TYPE dimensions[]={D3D10DDIRESOURCE_TEXTURE2D,
+          D3D10DDIRESOURCE_TEXTURE1D,D3D10DDIRESOURCE_TEXTURE3D,D3D10DDIRESOURCE_TEXTURECUBE};
+        UINT arraySize=genDimension==3u?6u:1u;
+        UINT expectedDraws=genDimension==2u?6u:5u*arraySize;
+        const DXGI_FORMAT formats[]={DXGI_FORMAT_B8G8R8A8_UNORM,
+          DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,DXGI_FORMAT_B8G8R8X8_UNORM,
+          DXGI_FORMAT_B8G8R8X8_UNORM_SRGB};
+        const UINT wireFormats[]={AppleAgxWin32FormatBgra8Unorm,
+          AppleAgxWin32FormatBgra8Srgb,AppleAgxWin32FormatBgrx8Unorm,
+          AppleAgxWin32FormatBgrx8Srgb};
+        unsigned char pixels[32*32*5*4];memset(pixels,0x80,sizeof(pixels));
+        D3D10DDI_MIPINFO mi[6]={{0}};
+        D3D10_DDIARG_SUBRESOURCE_UP initial[36]={{0}};
+        for(UINT level=0;level<6;++level) {
+          UINT axis=32u>>level;
+          mi[level].TexelWidth=mi[level].PhysicalWidth=axis;
+          mi[level].TexelHeight=mi[level].PhysicalHeight=genDimension==1u?1u:axis;
+          mi[level].TexelDepth=mi[level].PhysicalDepth=genDimension==2u?((5u>>level)?(5u>>level):1u):1u;
+          for(UINT layer=0;layer<arraySize;++layer) {
+            initial[layer*6+level].pSysMem=pixels;
+            initial[layer*6+level].SysMemPitch=axis*4;
+            initial[layer*6+level].SysMemSlicePitch=axis*mi[level].TexelHeight*4;
+          }
+        }
+        D3D10DDIARG_CREATERESOURCE cr={0};
+        cr.pMipInfoList=mi;cr.pInitialDataUP=initial;
+        cr.ResourceDimension=dimensions[genDimension];cr.Usage=D3D10_DDI_USAGE_DEFAULT;
+        cr.BindFlags=D3D10_DDI_BIND_RENDER_TARGET|D3D10_DDI_BIND_SHADER_RESOURCE;
+        cr.MiscFlags=D3D10_DDI_RESOURCE_AUTO_GEN_MIP_MAP;cr.Format=formats[genFormat];
+        cr.SampleDesc.Count=1;cr.MipLevels=6;cr.ArraySize=arraySize;
+        D3D10DDI_HRESOURCE resource={0};D3D10DDI_HRTRESOURCE resourceRuntime={0};
+        resource.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateResourceSize(device,&cr));
+        resourceRuntime.handle=(VOID *)(UINT_PTR)(0xef00u+genFormat);
+        unsigned before=FrontendErrors;
+        deviceFunctions.pfnCreateResource(device,&cr,resource,resourceRuntime);
+        CHECK(FrontendErrors==before);
+        if(FrontendErrors!=before) return;
+        D3D10DDIARG_CREATESHADERRESOURCEVIEW sv={0};
+        sv.hDrvResource=resource;sv.Format=formats[genFormat];
+        sv.ResourceDimension=dimensions[genDimension];
+        if(genDimension==1u) {sv.Tex1D.MipLevels=6;sv.Tex1D.ArraySize=1;}
+        else if(genDimension==2u) sv.Tex3D.MipLevels=6;
+        else if(genDimension==3u) sv.TexCube.MipLevels=6;
+        else {sv.Tex2D.MipLevels=6;sv.Tex2D.ArraySize=1;}
+        D3D10DDI_HSHADERRESOURCEVIEW view={0};D3D10DDI_HRTSHADERRESOURCEVIEW viewRuntime={0};
+        view.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateShaderResourceViewSize(device,&sv));
+        viewRuntime.handle=(VOID *)(UINT_PTR)(0xef10u+genFormat);
+        deviceFunctions.pfnCreateShaderResourceView(device,&sv,view,viewRuntime);
+        CHECK(FrontendErrors==before);
+        if(FrontendErrors!=before) return;
+        RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;
+        RuntimeQueryMarkerCount=RuntimeFailedSignalCalls=0;
+        memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+        RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
+        memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+        RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
+        RuntimeExpectedColorFormat=wireFormats[genFormat];RuntimeAutoCompleteConsumers=1;
+        fprintf(stderr,"GENMIPS_CASE: dimension=%u format=%u\n",genDimension,(unsigned)formats[genFormat]);
+        deviceFunctions.pfnGenMips(device,view);
+        deviceFunctions.pfnFlush(device);
+        CHECK(FrontendErrors==before && RuntimeRenders==expectedDraws && RuntimeSignals==expectedDraws &&
+              RuntimeMaterializations==2u*expectedDraws && RuntimeConsumerRetirements==2u*expectedDraws);
+        RuntimeAutoCompleteConsumers=0;
+        if(FrontendErrors!=before) return;
+        CHECK(AgxWin32AsahiContextRetire(MesaD3d10FrontendContextForTest(device),0u));
+        CHECK(!depthOwner->Device->NativeBatchTransaction && !depthOwner->Device->DrawSubmission);
+        RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;
+        RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
+        RuntimeExpectedCommandVersion=RuntimeExpectedColorFormat=0;
+        deviceFunctions.pfnDestroyShaderResourceView(device,view);
+        deviceFunctions.pfnDestroyResource(device,resource);
+        free(view.pDrvPrivate);free(resource.pDrvPrivate);
+      }
       }
       {
         static unsigned char bc1Data[32]={

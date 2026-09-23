@@ -35,6 +35,20 @@ int AgxWin32AsahiBatchConfigure(AGX_WIN32_ASAHI_BACKEND *b,
 int AgxWin32AsahiBatchBegin(struct agx_batch *b) {
   AGX_WIN32_ASAHI_BACKEND *d=backend(b);
   AGX_WIN32_RELOC_ALLOCATION id;
+  if(d && d->BatchOps && !d->Failed && b && b->ctx) {
+    /* Preserve the existing single Windows transaction per owner. Native
+     * blitter layer transitions can create another batch before explicit Flush. */
+    for(unsigned i=0;i<AGX_MAX_BATCHES;++i) {
+      struct agx_batch *old=&b->ctx->batches.slots[i];
+      AGX_WIN32_ASAHI_BATCH *prior=capsule(old);
+      if(old==b || !prior) continue;
+      if(prior->Entered || prior->ComputeEntered) return 0;
+      if(BITSET_TEST(b->ctx->batches.active,i)) agx_flush_batch(b->ctx,old);
+      if(b->ctx->any_faults || !AgxWin32AsahiBatchPoll(old,1000)) return 0;
+      agx_sync_batch(b->ctx,old);
+      if(old->windows_batch) return 0;
+    }
+  }
   if(!d || !d->BatchOps || d->Failed || d->ActiveCapture || b->windows_batch ||
       !b->vdm.bo || b->cdm.bo || !b->vdm.bo->_map ||
       !AgxWin32AsahiIdentity(d,b->vdm.bo,&id)) return 0;
@@ -191,7 +205,12 @@ int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx,
       ctx->framebuffer.nr_cbufs!=1 ||
       !ctx->framebuffer.cbufs[0].texture || (ctx->batch && ctx->batch->draws)) return 0;
   struct agx_resource *rt=agx_resource(ctx->framebuffer.cbufs[0].texture);
-  int valid=rt->base.target==PIPE_TEXTURE_2D &&
+  const struct pipe_surface *surface=&ctx->framebuffer.cbufs[0];
+  unsigned layers=rt->base.target==PIPE_TEXTURE_3D ?
+      u_minify(rt->base.depth0,surface->level) : rt->base.array_size;
+  int valid=(rt->base.target==PIPE_TEXTURE_1D || rt->base.target==PIPE_TEXTURE_1D_ARRAY ||
+      rt->base.target==PIPE_TEXTURE_2D || rt->base.target==PIPE_TEXTURE_2D_ARRAY ||
+      rt->base.target==PIPE_TEXTURE_3D || rt->base.target==PIPE_TEXTURE_CUBE) &&
       (rt->base.format==PIPE_FORMAT_B8G8R8A8_UNORM ||
        rt->base.format==PIPE_FORMAT_B8G8R8A8_SRGB ||
        rt->base.format==PIPE_FORMAT_B8G8R8X8_UNORM ||
@@ -204,8 +223,9 @@ int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx,
        rt->base.format==PIPE_FORMAT_R10G10B10A2_UNORM ||
        rt->base.format==PIPE_FORMAT_R11G11B10_FLOAT ||
        rt->base.format==PIPE_FORMAT_B5G6R5_UNORM) &&
-      !rt->layout.compressed && rt->base.last_level==0 && rt->base.depth0==1 &&
-      rt->base.array_size==1 && rt->base.nr_samples<=1;
+      !rt->layout.compressed && surface->level<=rt->base.last_level &&
+      surface->first_layer==surface->last_layer && surface->last_layer<layers &&
+      rt->base.nr_samples<=1;
   if(valid && ctx->framebuffer.zsbuf.texture) {
     struct pipe_surface *zs=&ctx->framebuffer.zsbuf;
     struct agx_resource *depth=agx_resource(zs->texture);

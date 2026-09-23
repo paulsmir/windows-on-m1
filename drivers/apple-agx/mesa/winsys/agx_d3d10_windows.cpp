@@ -71,8 +71,8 @@ typedef struct _AGX_D3D10_WINDOWS_TERMINAL {
   BOOL KernelQuiesced;
 } AGX_D3D10_WINDOWS_TERMINAL;
 enum {
-  AgxD3d10TerminalCountMask=0xffu,
-  AgxD3d10TerminalQueryShift=8u
+  AgxD3d10TerminalCountMask=0xffffu,
+  AgxD3d10TerminalQueryShift=16u
 };
 static_assert(ADMISSION_UMD_SCREEN_BUFFER_LIMIT<=AgxD3d10TerminalCountMask,
               "terminal active-buffer field is too small");

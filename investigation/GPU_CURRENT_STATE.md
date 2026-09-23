@@ -15,7 +15,7 @@ KMD Render/Patch/Submit -> AGX. Do not redesign these layers or expand features.
 OpenGL/CS1.6 follow desktop acceptance. Ordinary setup errors are not GPU verdicts.
 
 ## Current source / candidate
-Current implementationEXP748 DXGI1_1; last hardware package745 remains immutable.
+Current implementationEXP749 BGR0_xcoverage; last hardware package745 remains immutable.
 EXP736 package745 under /Users/pavel/public_windows/.local/experiments/EXP736-blt-present/package-build/package.
 SYS d352215b5d641c527481f16bb0d985803e6a8791d3dadec3674b2f30ee6e72a5
 UMD c620fad0950a6ff7e110e6df2e3a1cf245a68b79692ae01e3528be953b029528
@@ -91,7 +91,8 @@ UseTRACE_FILE+APPLE_AGX_UMD_REFUSALS_ONLY=1; skipsoptionalresidencyqueries.
 EXP748 realbuilderSOFTWAREprobe:0_x interfacea0006/version177a/DXGI1_1 true; sizes56/64,slot56.
 BuilderD3D11 26100.9278 vsAir9457; intentionalCreateFAIL,postcreateformatqueriesNOTmeasured.
 Conditionalresolver/nativebase+extendedcanaries+valid/foreign/nulltests GREEN x64/ARM64;EXP748/table-green.
-No0_xadvertisement ornewhardwarecandidate;NOW0_xcoverage;donotclaim readiness.
+EXP749 offlinePASS:32BGRviews;16GenMipschains(1D/2D/3Ddepth5/Cube6);ld_ms->txf_ms. MS_LOADset;MS_RT0.
+Shared256registry/constructioncapacity;encoderOOMguard. x64suite0/ARM64build0;source070f6399;no0_xadvertisement.
 Rotation can leave prehardware scope: Microsoft DXGI_DDI_BASE_FUNCTIONS exempts
 nonidentityrotation whenprimarycreation neverusesDXGI_DDI_ERR_UNSUPPORTED; our
 activecreatepath doesnot. MSAAresolve notadmitted (quality>1zero). No fakepass.
@@ -143,8 +144,8 @@ Do not count planning, transfers or an empty output as completed work. Verify
 on-disk artifacts/tool exits directly. No repeated "continue" handoff loops.
 
 HARDWARE ROADMAP
-[PASS] EXP736 standardruntimeCreate/Draw/Present;EXP744-746;EXP747 Map+busy;EXP748 DXGI1_1.
-[NOW] 0_x dimensions/GenMips/MS_LOAD truthful coverage; no bit publication beforeproof.
-[NEXT] 0_xcoverage thenlinearshared/private-data-onlyA->B; pitch>=width*bpp and%16=0;package gates.
+[PASS] EXP736 standardruntimeCreate/Draw/Present;EXP744-746;EXP747Map;EXP748DXGI1_1;EXP7490_xcoverage.
+[NOW] SharedlinearCreate/Open: independentA->B/private-data-only,measuredsizes,pitchinvariants;offlinegate.
+[NEXT] Once sharedPASS: advertise0_x;ARM64package/sign/hash;preregister;directlyAir.
 [HW] DWM hardwaredeviceadmission/firstDDIfailure;physicaldesktop immediatelyafterlogin.
 POST-HARDWARE: generalBlt deferredbyNO_REDIRECTION;preregister reject-blt=0,reopenonreject;stabledesktoplater.

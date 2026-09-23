@@ -289,14 +289,15 @@ windows_graph_ppp(struct agx_batch *batch, struct agx_ptr ptr, size_t bytes,
 
 static void
 windows_graph_attachment(struct agx_batch *batch, struct agx_ptr ptr,
-                         struct agx_resource *rsrc, unsigned kind)
+                         struct agx_resource *rsrc, unsigned layer, unsigned kind)
 {
    AGX_WIN32_ASAHI_CAPTURE *capture = windows_graph_capture(batch);
    if (!capture) return;
    AGX_WIN32_ASAHI_PIPELINE scope = {0};
    unsigned index;
+   uint64_t layer_offset=ail_get_layer_offset_B(&rsrc->layout,layer);
    if (rsrc->layout.compressed || rsrc->layout.level_offsets_B[0] ||
-       rsrc->base.last_level || rsrc->base.array_size != 1 ||
+       layer>=rsrc->layout.depth_px || layer_offset>=rsrc->layout.size_B ||
        !AgxWin32AsahiEmissionBegin(capture->Backend->Native, ptr.cpu, ptr.gpu,
           AGX_TEXTURE_LENGTH, AppleAgxWin32RoleDescriptor, &scope)) {
       windows_graph_fail(batch); return;
@@ -305,7 +306,8 @@ windows_graph_attachment(struct agx_batch *batch, struct agx_ptr ptr,
        AppleAgxWin32AccessRead | AppleAgxWin32AccessWrite, 0,
        rsrc->layout.size_B, &index) != AgxRelocOk) scope.Failed = 1;
    AgxWin32AsahiPipelineRecordRange(&scope, (uint8_t *)ptr.cpu + 16, kind,
-       agx_map_texture_gpu(rsrc, 0), rsrc->layout.size_B, AppleAgxWin32RoleRenderTarget);
+       agx_map_texture_gpu(rsrc, layer), rsrc->layout.size_B-layer_offset,
+      AppleAgxWin32RoleRenderTarget);
    if (!AgxWin32AsahiPipelineFinish(&scope, (uint8_t *)ptr.cpu + AGX_TEXTURE_LENGTH))
       windows_graph_fail(batch);
 }
@@ -326,16 +328,23 @@ windows_graph_texture_table(struct agx_batch *batch, struct agx_ptr ptr,
    unsigned level=view?view->base.u.tex.first_level:0;
    unsigned layer=view?view->base.u.tex.first_layer:0;
    unsigned last_layer=view?view->base.u.tex.last_layer:0;
-   int range=rsrc&&view&&level<=rsrc->base.last_level&&
-      layer<=last_layer&&last_layer<rsrc->base.array_size&&
-      view->base.u.tex.last_level==level;
+   unsigned last_level=view?view->base.u.tex.last_level:0;
+   unsigned layers=rsrc ? (rsrc->base.target==PIPE_TEXTURE_3D ?
+      rsrc->base.depth0 : rsrc->base.array_size) : 0;
+   int range=rsrc&&view&&level<=last_level&&last_level<=rsrc->base.last_level&&
+      layer<=last_layer&&last_layer<layers;
    uint64_t address=range ? agx_map_texture_gpu(rsrc,layer) : 0;
    uint64_t offset=rsrc&&rsrc->bo ? address-rsrc->bo->va->addr : 0;
    uint64_t span=range ? (uint64_t)(last_layer-layer)*
-      rsrc->layout.layer_stride_B+ail_get_level_offset_B(&rsrc->layout,level)+
-      ail_get_level_size_B(&rsrc->layout,level) : 0;
-   if (!rsrc || (rsrc->base.target != PIPE_TEXTURE_2D &&
-                 rsrc->base.target != PIPE_TEXTURE_2D_ARRAY) ||
+      rsrc->layout.layer_stride_B+ail_get_level_offset_B(&rsrc->layout,last_level)+
+      ail_get_level_size_B(&rsrc->layout,last_level) : 0;
+   if (!rsrc || (rsrc->base.target != PIPE_TEXTURE_1D &&
+                 rsrc->base.target != PIPE_TEXTURE_1D_ARRAY &&
+                 rsrc->base.target != PIPE_TEXTURE_2D &&
+                 rsrc->base.target != PIPE_TEXTURE_2D_ARRAY &&
+                 rsrc->base.target != PIPE_TEXTURE_3D &&
+                 rsrc->base.target != PIPE_TEXTURE_CUBE) ||
+       rsrc->base.nr_samples>1 ||
        (rsrc->base.format != PIPE_FORMAT_B8G8R8A8_UNORM &&
         rsrc->base.format != PIPE_FORMAT_B8G8R8X8_UNORM &&
         rsrc->base.format != PIPE_FORMAT_B8G8R8A8_SRGB &&
@@ -476,8 +485,8 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
        ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_R10G10B10A2_UNORM ||
        ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_R11G11B10_FLOAT ||
        ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_B5G6R5_UNORM) &&
-      !ctx->framebuffer.cbufs[0].level && !ctx->framebuffer.cbufs[0].first_layer &&
-      !ctx->framebuffer.cbufs[0].last_layer && ctx->streamout.num_targets<=1u &&
+      ctx->framebuffer.cbufs[0].first_layer==ctx->framebuffer.cbufs[0].last_layer &&
+      ctx->streamout.num_targets<=1u &&
       !ctx->cond_query && !ctx->occlusion_query && !ctx->time_elapsed &&
       !ctx->tf_any_overflow &&
       !ctx->stage[MESA_SHADER_TESS_CTRL].shader && !ctx->stage[MESA_SHADER_TESS_EVAL].shader &&
@@ -494,9 +503,15 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
    }
    if (valid) {
       struct agx_resource *rt = agx_resource(ctx->framebuffer.cbufs[0].texture);
-      valid = !rt->layout.compressed && rt->base.target == PIPE_TEXTURE_2D &&
-              util_res_sample_count(&rt->base) == 1 && rt->base.array_size == 1 &&
-              rt->base.last_level == 0;
+      struct pipe_surface *surface=&ctx->framebuffer.cbufs[0];
+      unsigned layers=rt->base.target==PIPE_TEXTURE_3D ?
+         u_minify(rt->base.depth0,surface->level) : rt->base.array_size;
+      valid = !rt->layout.compressed &&
+         (rt->base.target==PIPE_TEXTURE_1D || rt->base.target==PIPE_TEXTURE_1D_ARRAY ||
+          rt->base.target==PIPE_TEXTURE_2D || rt->base.target==PIPE_TEXTURE_2D_ARRAY ||
+          rt->base.target==PIPE_TEXTURE_3D || rt->base.target==PIPE_TEXTURE_CUBE) &&
+         util_res_sample_count(&rt->base)==1 && surface->level<=rt->base.last_level &&
+         surface->last_layer<layers;
    }
    if (valid && ctx->framebuffer.zsbuf.texture) {
       struct pipe_surface *zs = &ctx->framebuffer.zsbuf;
@@ -644,7 +659,7 @@ def project_sources(out, project, overlays):
    }
    struct agx_usc_builder b = agx_usc_builder(t.cpu, usc_size);''')
     bg = replace(bg, '         agx_pack_texture(texture.cpu, rsrc, surf->format, &sampler_view);', '''         agx_pack_texture(texture.cpu, rsrc, surf->format, &sampler_view);
-         windows_graph_attachment(batch, texture, rsrc, AppleAgxWin32RelocationTextureAddress40);''')
+         windows_graph_attachment(batch, texture, rsrc, sampler_view.u.tex.first_layer, AppleAgxWin32RelocationTextureAddress40);''')
     bg = replace(bg, '            cfg.buffer = texture.gpu;\n         }', '''            cfg.buffer = texture.gpu;
          }
          AgxWin32AsahiPipelineRecordRange(&capture, b.head, AppleAgxWin32RelocationUscTableAddress39,
@@ -653,7 +668,7 @@ def project_sources(out, project, overlays):
          AgxWin32AsahiPipelineRecord(&capture, b.head, AppleAgxWin32RelocationUscBufferAddress40,
             batch->uploaded_clear_color[rt], 16, AppleAgxWin32RoleConstant);''')
     bg = replace(bg, '                              no_compress);', '''                              no_compress);
-         windows_graph_attachment(batch, pbe, agx_resource(view.resource),
+         windows_graph_attachment(batch, pbe, agx_resource(view.resource),view.u.tex.first_layer,
                                    AppleAgxWin32RelocationPbeAddress40);''')
     bg = replace(bg, '            cfg.buffer = pbe.gpu;\n         }', '''            cfg.buffer = pbe.gpu;
          }
