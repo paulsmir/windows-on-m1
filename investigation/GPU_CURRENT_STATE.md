@@ -89,7 +89,7 @@ the next Mesa draw starts a normal new capsule. Two real pre-Flush draws produce
 two Render callbacks, four materializations, four physical KMD gates and four
 retirements. x64 TestExit0; ARM64 native/test build PASS. Source SHA256
 a6ac85957343c454e1d7fbbf8659c814942f2844117d163bad5636f48d7c27d7.
-Next: package/sign/hash/preregister one exact DWM retry.
+Package750 is built and preregistered: CAT f42c837a81005c78f08ce3909bf4b11c57bc36165d534c8a09a78c9798c2d555; INF d5cc77191ec08748958e3a76692a8601cdb40fbb48e82e1140e81891634ec3b7; SYS 1e30e8d938bdaef15a75ca2357c1aa5c1886410d6f3da2af002182250a9fe1eb; UMD 50089bf12bce3a8fe790fae3ecd34fe6380336182416fa1acd513feea6ca4177. Next: native Air CAT/hash, exact install and one DWM run.
 ## Fixed experiment procedure
 Git `/opt/homebrew/bin/git`; artifacts live under main repo `.local`, not the
 worktree. Builder `pauls@192.168.1.24`, key `~/.ssh/windows_builder`. Air
@@ -118,8 +118,9 @@ HARDWARE ROADMAP
        x64 execution and ARM64 closure/test build.
 [PASS] Package749 run fixed DWM dynamic-buffer admission; exact cleanup/recovery.
 [PASS] EXP755 consecutive pre-Flush draws -> ordered native batches offline.
-[NOW] ARM64 package/sign/hash/preregister exact EXP755 candidate.
-[NEXT] One DWM run: draw type17 -> native submission or next boundary.
+[PASS] Package750 build/sign/hash and preregistration.
+[NOW] Native Air CAT/hash then exact750 one-install DWM run.
+[NEXT] Evidence-first verdict and cleanup; continue from exact next boundary.
 [HW] Verify DWM draw type17 reaches native submission/completion or next boundary.
 POST-HARDWARE: optional features, performance, sustained desktop stability,
 OpenGL and CS1.6 only after first proven DWM AGX execution/Present.

@@ -46883,3 +46883,33 @@ x64 EXE SHA256 b2a5db455aa15d6874158d30f18cd42c56fb50d3102bc6223fb879201a458978.
 ARM64 native closure and test build PASS; ARM64 EXE SHA256
 0c1a29d88c477b9ed4b8acae80ed23653b6dd8bbdcb7d0b73526473cdef0b5ef.
 Result: PASS_OFFLINE. Hardware/package gates pending.
+
+## EXP755 hardware — consecutive draw retry, package750
+
+Preregistered 2026-09-23. No EXP755 Air launch has occurred. WHY THIS
+HYPOTHESIS: EXP754 proves DWM passes buffer admission, creates its cached visual,
+finishes draw type16/clear, and is removed for UMD E_NOTIMPL exactly when draw
+type17 starts. Offline EXP755 proves two real pre-Flush Draw calls as two ordered
+existing native batches. Single variable over749 is commit
+098ddedfa6e8c4a8d55e531f47473b34d4be2d3a.
+
+WINDOWS CONTRACT: immediate-context applications may issue multiple Draw calls
+before Flush; their order and resource dependencies must be preserved. AGX/ASAHI
+CONTRACT: the existing Windows native capsule truthfully owns one complete Asahi
+batch/draw. TRANSLATION: when Draw/DrawIndexed sees the existing actual draw
+receipt, invoke the existing FlushRetire path, then emit the next draw into the
+next normal capsule. No new composer, allocator, capture ABI or KMD path.
+WHAT IS STILL UNKNOWN: whether DWM draw type17 now reaches native physical
+submission/completion and which next callback is first if it does not.
+
+Package750 ARM64 analysis0warnings/errors, Universal ApiValidator, Inf2Cat,
+version30.0.750.0, existing signer/catalog membership PASS. Source SHA256
+a6ac85957343c454e1d7fbbf8659c814942f2844117d163bad5636f48d7c27d7.
+Hashes: CAT f42c837a81005c78f08ce3909bf4b11c57bc36165d534c8a09a78c9798c2d555;
+INF d5cc77191ec08748958e3a76692a8601cdb40fbb48e82e1140e81891634ec3b7;
+SYS 1e30e8d938bdaef15a75ca2357c1aa5c1886410d6f3da2af002182250a9fe1eb;
+UMD 50089bf12bce3a8fe790fae3ecd34fe6380336182416fa1acd513feea6ca4177.
+Manifest SHA256 3f0bae09dd45ef45d53cc3be102e0f2644fa34cf9d4847065414899ac71561d4.
+One DWM-only run, no client/retry; evidence first, exact cleanup, ordinary
+recovery. Expected: draw type17 advances; reject-blt=0; DirectFlip behavior
+unknown. Result:PENDING.
