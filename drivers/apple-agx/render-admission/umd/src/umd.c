@@ -123,8 +123,6 @@ static BOOLEAN AdmissionUmdDescribePrimary(
       (CreateResource->Format != DXGI_FORMAT_B8G8R8A8_UNORM &&
        CreateResource->Format != DXGI_FORMAT_B8G8R8A8_UNORM_SRGB &&
        CreateResource->Format != DXGI_FORMAT_R8G8B8A8_UNORM) ||
-      (CreateResource->Format == DXGI_FORMAT_R8G8B8A8_UNORM &&
-       CreateResource->pPrimaryDesc != NULL) ||
       !CreateResource->pMipInfoList[0].TexelWidth ||
       !CreateResource->pMipInfoList[0].TexelHeight ||
       CreateResource->pMipInfoList[0].TexelWidth > 8192u ||
@@ -165,6 +163,11 @@ static BOOLEAN AdmissionUmdDescribePrimary(
   Description->Displayable =
       (CreateResource->Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
        CreateResource->Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB) ? 1u : 0u;
+  /* DXGI may offer an RGBA primary candidate even though J313 scanout is
+   * BGRA. Opt out of flip/scanout and retain the existing Blt conversion. */
+  if (CreateResource->pPrimaryDesc != NULL && !Description->Displayable)
+    CreateResource->pPrimaryDesc->DriverFlags |=
+        DXGI_DDI_PRIMARY_DRIVER_FLAG_NO_SCANOUT;
   return TRUE;
 }
 
@@ -430,6 +433,21 @@ VOID APIENTRY AdmissionUmdCreateResource(
   if (device == NULL || resource == NULL ||
       RuntimeResource.handle == NULL ||
       !AdmissionUmdDescribePrimary(CreateResource, &description)) {
+    if (CreateResource != NULL) {
+      UINT values[8] = {
+          (UINT)CreateResource->Format,
+          CreateResource->pPrimaryDesc != NULL ? 1u : 0u,
+          CreateResource->BindFlags,
+          CreateResource->MiscFlags,
+          CreateResource->pMipInfoList != NULL
+              ? CreateResource->pMipInfoList[0].TexelWidth : 0u,
+          CreateResource->pMipInfoList != NULL
+              ? CreateResource->pMipInfoList[0].TexelHeight : 0u,
+          CreateResource->SampleDesc.Count,
+          CreateResource->ResourceDimension};
+      AdmissionUmdDiagnostic("reject-primary", E_INVALIDARG, values,
+                             ARRAYSIZE(values));
+    }
     AdmissionUmdSetError(device, E_INVALIDARG);
     return;
   }
@@ -444,7 +462,8 @@ VOID APIENTRY AdmissionUmdCreateResource(
   allocationInfo.pPrivateDriverData = &description.Allocation;
   allocationInfo.PrivateDriverDataSize = sizeof(description.Allocation);
   allocationInfo.VidPnSourceId = 0u;
-  allocationInfo.Flags.Primary = CreateResource->pPrimaryDesc != NULL;
+  allocationInfo.Flags.Primary =
+      CreateResource->pPrimaryDesc != NULL && description.Displayable != 0u;
   allocate.hResource = RuntimeResource.handle;
   allocate.NumAllocations = 1u;
   allocate.pAllocationInfo = &allocationInfo;

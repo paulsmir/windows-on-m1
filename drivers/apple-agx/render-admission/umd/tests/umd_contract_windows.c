@@ -5259,6 +5259,28 @@ unsigned AgxKmtNativeBridgeResidencyContractTest(void);
 unsigned AgxKmtNativeBridgeCommandDumpContractTest(void);
 unsigned AgxKmtNativeQualificationFreshnessContractTest(void);
 #endif
+static void test_rgba_primary_no_scanout_contract(void) {
+  D3D11DDIARG_CREATERESOURCE create={0};
+  D3D10DDI_MIPINFO mip={0};
+  DXGI_DDI_PRIMARY_DESC primary={0};
+  ADMISSION_UMD_DIRECT_FLIP_RESOURCE description={0};
+  mip.TexelWidth=2560u;mip.TexelHeight=1600u;mip.TexelDepth=1u;
+  create.pMipInfoList=&mip;
+  create.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+  create.Usage=D3D10_DDI_USAGE_DEFAULT;
+  create.BindFlags=D3D10_DDI_BIND_PRESENT|D3D10_DDI_BIND_RENDER_TARGET;
+  create.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+  create.SampleDesc.Count=1u;create.MipLevels=1u;create.ArraySize=1u;
+  create.pPrimaryDesc=&primary;
+  CHECK(AdmissionUmdDescribePrimary(&create,&description));
+  CHECK((primary.DriverFlags&DXGI_DDI_PRIMARY_DRIVER_FLAG_NO_SCANOUT)!=0u);
+  CHECK(description.Displayable==0u &&
+        description.Allocation.Format==(UINT)D3DDDIFMT_A8B8G8R8);
+  primary.DriverFlags=0u;
+  create.Format=DXGI_FORMAT_B8G8R8A8_UNORM;
+  CHECK(AdmissionUmdDescribePrimary(&create,&description));
+  CHECK(primary.DriverFlags==0u && description.Displayable==1u);
+}
 int main(void) {
   D3DDDI_ADAPTERCALLBACKS adapterCallbacks;
   D3D10_2DDI_ADAPTERFUNCS adapterFunctions;
@@ -5780,6 +5802,7 @@ int main(void) {
 #if defined(ADMISSION_UMD_D3D10_FRONTEND_TEST)
   test_mesa_d3d10_frontend_open();
 #endif
+  test_rgba_primary_no_scanout_contract();
 #if defined(ADMISSION_UMD_NATIVE_RUNTIME_TEST)
   State.Failures += AgxKmtNativeBridgeResidencyContractTest();
   State.Failures += AgxKmtNativeBridgeCommandDumpContractTest();

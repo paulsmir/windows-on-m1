@@ -86,3 +86,34 @@ with `pPrimaryDesc`: return `NO_SCANOUT`, allocate it offscreen, then reach
 CreateSwapChain without a CreateResource rejection. Microsoft documents that
 `pPrimaryDesc` can be supplied with BIND_PRESENT and the driver can request
 Blt-style presentation through `DXGI_DDI_PRIMARY_DRIVER_FLAG_NO_SCANOUT`.
+
+## Offline correction gate after EXP760
+
+The exact ARM64 native `Resource.cpp` SHA256
+`d21485faa2a7df9a9c63ee19c120141584f00e74347b3c3d828406d10a050c266`
+propagates `AgxD3d10WindowsPresentationCreate`'s HRESULT at line467.
+The repo's `umd/src/umd.c::AdmissionUmdDescribePrimary` specifically rejected
+`DXGI_FORMAT_R8G8B8A8_UNORM` whenever `pPrimaryDesc` was nonnull, while the
+same UMD already builds an offscreen RGBA allocation and the winsys imports it
+as a render target for Blt conversion. The standard client requests an RGBA
+swapchain; Microsoft documents that DXGI may pass a nonnull `pPrimaryDesc`
+with BIND_PRESENT and lets the driver set `NO_SCANOUT` to force Blt rather than
+flip. Pinned WDK26100 `um/dxgiddi.h:214-226` defines the same flag and output
+field. Asahi owns RGBA render support; the Windows UMD owns primary admission
+and choosing Blt; KMD/Scanout stays BGRA, m1n1/Mu unchanged.
+
+The focused invariant is: RGBA primary candidate is admitted, returns
+`NO_SCANOUT`, carries RGBA allocation format with `Displayable=0`, and is not
+marked as a scanout primary in `pfnAllocateCb`. BGRA primary remains scanout
+eligible. The correction removes only the RGBA+nonnull-primary rejection,
+sets the documented output flag, and keeps KMD physical-primary identity for
+displayable resources. It also adds an argument-bearing rejection receipt for
+any remaining invalid primary input. No source from Asahi was copied.
+
+Deterministic test gate: the old UMD implementation with the new isolated
+contract test exits3 (three exact CHECK_FAILs at lines5275-5278); corrected
+implementation exits0 with the existing full x64 native frontend/runtime
+suite. ARM64 UMD compiles/links with pinned WDK26100. Evidence manifest:
+`.local/experiments/EXP761-rgba-primary-no-scanout/offline/manifest.json`
+SHA256 `220185e9295ab6022e059fb43efae9dd0e6abcb9aea17d9fb0d07808456025bc`.
+This is offline proof of UMD admission, not a hardware Present verdict.

@@ -46,9 +46,14 @@ recovery pass, including removal of the user transfer package; autologon1
 remains. Evidence `.local/experiments/EXP760-currentumd-wddm30/causal-result.json`
 SHA256 `ab5837aae4f0dea620720e4748c3abc11c062174cf26d90c4b794763a3890cf5`.
 Current causal target is the UMD RGBA `pPrimaryDesc`/NO_SCANOUT contract;
-full x64 frontend test RED then GREEN offline is in progress. Hold the16-KiB
-hardware run until this boundary is cleared. B1 firmware-slot run remains
-separate and unperformed.
+the UMD correction has a focused RED exit3 on the old guard and GREEN exit0
+with the x64 native frontend/runtime suite, plus pinned WDK26100 ARM64 UMD
+compile/link PASS. Evidence `.local/experiments/EXP761-rgba-primary-no-scanout/
+offline/manifest.json` SHA256
+`220185e9295ab6022e059fb43efae9dd0e6abcb9aea17d9fb0d07808456025bc`.
+The next smallest hardware checkpoint is one exact profile0 standard client
+CreateSwapChain/Draw/Present run with this UMD, then 16-KiB slab work. B1
+firmware-slot run remains separate and unperformed.
 OpenGL and CS1.6 follow accelerated desktop acceptance.
 
 ## Proven hardware boundary — EXP753/package748
@@ -247,8 +252,9 @@ HARDWARE ROADMAP
 [PASS] Resource.cpp:452-453 buffer usage, typed SRV load/capture relocation,
        DynamicResourceMapDiscard and argument-bearing rejection pass offline.
 [NEXT] EXP760 attributes the standard-client CreateSwapChain rejection to the
-current UMD presentation resource path, independent of WDDM3.2. Complete the
-source-backed RGBA primary/NO_SCANOUT fix and exact offline/hardware gates.
+current UMD presentation resource path, independent of WDDM3.2. Package and
+preregister one exact RGBA primary/NO_SCANOUT hardware discriminator only after
+final source/build/sign/hash gates; clean its package before another trial.
 The 16KiB physical slab trial then requires a measurable VidMm
 placement signal before preregistration; GpuMmu caps remain zero. B1 requires a genuine
 paging/app process caller and firmware job tied to a v5 lease; an MMIO echo is
