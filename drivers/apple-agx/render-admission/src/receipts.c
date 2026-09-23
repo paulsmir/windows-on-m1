@@ -974,6 +974,28 @@ _Use_decl_annotations_ void AdmissionRecordMemoryStop(
   ZwClose(key);
 }
 
+#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
+_Use_decl_annotations_ void AdmissionRecordB1Qualification(
+    ADMISSION_CONTEXT *Context, ULONG Stage, NTSTATUS Status,
+    ULONG CompletedJobs, ULONG BrokerStatus, ULONG CleanupStatus,
+    ULONG OutputPixelA, ULONG OutputPixelB) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key)))
+    return;
+  WriteDword(key, L"Wom1B1Stage", Stage);
+  WriteDword(key, L"Wom1B1Status", (ULONG)Status);
+  WriteDword(key, L"Wom1B1CompletedJobs", CompletedJobs);
+  WriteDword(key, L"Wom1B1BrokerStatus", BrokerStatus);
+  WriteDword(key, L"Wom1B1CleanupStatus", CleanupStatus);
+  WriteDword(key, L"Wom1B1OutputPixelA", OutputPixelA);
+  WriteDword(key, L"Wom1B1OutputPixelB", OutputPixelB);
+  ZwClose(key);
+}
+#endif
+
 _Use_decl_annotations_ void AdmissionRecordPlatformStage(
     ADMISSION_CONTEXT *Context, ADMISSION_PLATFORM_STAGE Stage,
     NTSTATUS Status) {

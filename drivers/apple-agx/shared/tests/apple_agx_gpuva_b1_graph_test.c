@@ -16,5 +16,13 @@ int main(void){
  }
  assert(shared==301 && output==1 && aliases==17);
  assert(layout[73].OriginalGpuVa==0x1100020000ULL && layout[74].OriginalGpuVa==0x1100010000ULL);
+ const APPLE_AGX_EXP208_RELOCATION *reloc=AppleAgxRenderTemplateRelocations();
+ unsigned output_refs=0;
+ for(unsigned i=0;i<AppleAgxRenderTemplateRelocationCount();i++)
+  if(reloc[i].TargetObject==40u){
+   assert(reloc[i].AddressSpace==AppleAgxExp208RelocationGpuVa);
+   output_refs++;
+  }
+ assert(output_refs==1u);
  return 0;
 }

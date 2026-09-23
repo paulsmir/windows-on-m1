@@ -1,4 +1,7 @@
 #include "render_admission.h"
+#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
+#include "apple_agx_render_template_vm_slot.h"
+#endif
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiAddDevice(
     PDEVICE_OBJECT PhysicalDeviceObject, PVOID *MiniportDeviceContext) {
@@ -120,6 +123,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
     (void)AdmissionInterruptStop(context);
     return status;
   }
+#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
+  if (!AppleAgxRenderTemplateSelectVmSlot(
+          context->BackendImage.ArenaCpuAddress,
+          context->BackendImage.ArenaCapacity, 1u)) {
+    (void)AdmissionBackendImageStop(context);
+    (void)AdmissionMemoryRuntimeStop(context);
+    (void)AdmissionInterruptStop(context);
+    return STATUS_INVALID_IMAGE_FORMAT;
+  }
+#endif
   status = AdmissionSchedulerStart(context);
   AdmissionRecordStartStage(context, AdmissionStartScheduler, status);
   if (!NT_SUCCESS(status)) {
@@ -147,6 +160,21 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
     (void)AdmissionInterruptStop(context);
     return status;
   }
+
+#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
+  status = AdmissionGpuvaB1Qualify(context);
+  if (context->GpuvaB1State != NULL)
+    return STATUS_DEVICE_BUSY; /* Preserve pages with uncertain GPU use. */
+  if (!NT_SUCCESS(AdmissionPlatformRuntimeStop(context)))
+    return STATUS_DEVICE_BUSY;
+  if (!NT_SUCCESS(AdmissionPagingStop(context)) ||
+      !NT_SUCCESS(AdmissionSchedulerStop(context)) ||
+      !NT_SUCCESS(AdmissionBackendImageStop(context)) ||
+      !NT_SUCCESS(AdmissionMemoryRuntimeStop(context)) ||
+      !NT_SUCCESS(AdmissionInterruptStop(context)))
+    return STATUS_DEVICE_BUSY;
+  return NT_SUCCESS(status) ? STATUS_NOT_SUPPORTED : status;
+#endif
 
   if (context->Interface.DxgkCbAcquirePostDisplayOwnership == NULL) {
     AdmissionRecordStartStage(
@@ -248,6 +276,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStopDevice(PVOID MiniportDeviceConte
   NTSTATUS status;
   if (context == NULL)
     return STATUS_INVALID_PARAMETER;
+#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
+  if (context->GpuvaB1State != NULL)
+    return STATUS_DEVICE_BUSY;
+#endif
   AdmissionFlushSourceAddressReceipt(context);
   AdmissionFlushPresentTransfer(context);
   AdmissionFlushGdiReceipt(context);
@@ -299,6 +331,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRemoveDevice(PVOID MiniportDeviceCon
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
   if (context == NULL)
     return STATUS_INVALID_PARAMETER;
+#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
+  if (context->GpuvaB1State != NULL)
+    return STATUS_DEVICE_BUSY;
+#endif
   AdmissionFlushSourceAddressReceipt(context);
   AdmissionFlushPresentTransfer(context);
   AdmissionFlushGdiReceipt(context);

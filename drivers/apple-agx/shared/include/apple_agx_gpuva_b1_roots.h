@@ -20,7 +20,7 @@ typedef struct _APPLE_AGX_GPUVA_B1_ROOT {
   APPLE_AGX_GPUVA_B1_PAGE Mapped[APPLE_AGX_GPUVA_B1_GRAPH_PAGES];
   APPLE_AGX_GPUVA_B1_GRANT Grants[APPLE_AGX_GPUVA_B1_MAX_GRANTS];
   unsigned int MappedCount, GrantCount, TableCount, ParentCount;
-  unsigned int Created, LastStatus, CleanupStatus;
+  unsigned int Created, LastStatus, CleanupStatus, Uncertain;
 } APPLE_AGX_GPUVA_B1_ROOT;
 
 APPLE_AGX_BOOL AppleAgxGpuvaB1BuildRoot(

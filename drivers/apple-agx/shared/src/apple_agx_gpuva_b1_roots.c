@@ -14,9 +14,11 @@ static APPLE_AGX_BOOL request(APPLE_AGX_GPUVA_V5_CLIENT *client,
   q->ProcessGeneration=root->Input.Generation;
   if (!AppleAgxGpuvaV5ClientCall(client,q,&r)) {
     root->LastStatus=0xffffffffu;
+    root->Uncertain=1u;
     return APPLE_AGX_FALSE;
   }
   root->LastStatus=r.Status;
+  if(r.Flags!=0u || r.Status==6u)root->Uncertain=1u;
   return r.Status==0u && r.Flags==0u ? APPLE_AGX_TRUE : APPLE_AGX_FALSE;
 }
 static unsigned long long table_for(const APPLE_AGX_GPUVA_B1_ROOT *root,
@@ -96,6 +98,7 @@ APPLE_AGX_BOOL AppleAgxGpuvaB1DestroyRoot(
 {
   AGX_GPUVA_V5_REQUEST q={0};
   if(!client || !root) return APPLE_AGX_FALSE;
+  if(root->Uncertain)return APPLE_AGX_FALSE;
   while(root->MappedCount){
     if(!leaf(client,root,&root->Mapped[root->MappedCount-1u],APPLE_AGX_FALSE))
       return APPLE_AGX_FALSE;
@@ -172,7 +175,8 @@ APPLE_AGX_BOOL AppleAgxGpuvaB1BuildRoot(
 fail:
   {
     unsigned int first_status=root->LastStatus;
-    APPLE_AGX_BOOL cleaned=AppleAgxGpuvaB1DestroyRoot(client,root);
+    APPLE_AGX_BOOL cleaned=root->Uncertain ? APPLE_AGX_FALSE :
+        AppleAgxGpuvaB1DestroyRoot(client,root);
     root->CleanupStatus=cleaned ? 0u : root->LastStatus;
     root->LastStatus=first_status;
   }

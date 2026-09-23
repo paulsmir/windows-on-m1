@@ -1,4 +1,7 @@
 #include "render_admission.h"
+#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
+#include "apple_agx_gpuva_b1_submission.h"
+#endif
 #include "apple_agx_hwdata_profile.h"
 #include "apple_agx_firmware_start_receipt.h"
 
@@ -89,6 +92,11 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   APPLE_AGX_PLATFORM_PROVIDER Provider;
   APPLE_AGX_PLATFORM_PROVIDER_CONFIG ProviderConfig;
   APPLE_AGX_BACKEND_RUNTIME Backend;
+#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
+  volatile LONG B1Active;
+  volatile LONG B1Completed;
+  ULONG B1Fence;
+#endif
   APPLE_AGX_BACKEND_IO RenderIo;
   APPLE_AGX_BACKEND_IO PlatformIo;
   APPLE_AGX_BACKEND_IO RuntimeIo;
@@ -2272,6 +2280,19 @@ static VOID AdmissionOutputProcess(
     ADMISSION_PLATFORM_RUNTIME *Runtime, ULONG Fence);
 #endif
 
+#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
+static APPLE_AGX_BACKEND_BOOL AdmissionB1Complete(
+    ADMISSION_PLATFORM_RUNTIME *runtime, ADMISSION_CONTEXT *adapter,
+    APPLE_AGX_BACKEND_U32 fence) {
+  if (adapter == NULL || fence != runtime->B1Fence ||
+      !runtime->Backend.TaComplete || !runtime->Backend.D3Complete ||
+      !AdmissionBackendImageReleaseSubmission(&adapter->BackendImage, fence))
+    return APPLE_AGX_BACKEND_FALSE;
+  InterlockedExchange(&runtime->B1Completed, 1);
+  return APPLE_AGX_BACKEND_TRUE;
+}
+#endif
+
 static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
     void *Context, APPLE_AGX_BACKEND_U32 Fence,
     APPLE_AGX_BACKEND_U32 Node, APPLE_AGX_BACKEND_U32 Engine,
@@ -2291,6 +2312,10 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
       Status != AppleAgxBackendCompletionSuccess)
     return APPLE_AGX_BACKEND_FALSE;
   adapter = runtime->Adapter;
+#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
+  if (InterlockedCompareExchange(&runtime->B1Active, 0, 0) != 0)
+    return AdmissionB1Complete(runtime, adapter, Fence);
+#endif
   if (adapter == NULL || !adapter->InterfaceValid ||
       adapter->Interface.DxgkCbSynchronizeExecution == NULL ||
       adapter->Interface.DxgkCbNotifyInterrupt == NULL ||
@@ -3525,7 +3550,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
 #endif
 
   AppleAgxBackendRuntimeInitialize(
+#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
+      &runtime->Backend, 1u);
+#else
       &runtime->Backend, ADMISSION_MEMORY_UAT_CONTEXT);
+#endif
   RtlZeroMemory(&runtime->RenderIo, sizeof(runtime->RenderIo));
   runtime->RenderIo.Context = runtime;
   runtime->RenderIo.RenderContext.Publish = AdmissionRenderPublish;
@@ -3737,7 +3766,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeReset(
   }
 
   AppleAgxBackendRuntimeInitialize(
+#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
+      &runtime->Backend, 1u);
+#else
       &runtime->Backend, ADMISSION_MEMORY_UAT_CONTEXT);
+#endif
   runtime->ProviderConfig.Runtime = &runtime->Backend;
   RtlZeroMemory(&runtime->PlatformIo, sizeof(runtime->PlatformIo));
   if (!AppleAgxPlatformProviderInitialize(
@@ -3843,3 +3876,83 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeReady(
 #undef ADMISSION_DELEGATE_FENCE
 #undef ADMISSION_DELEGATE_JOB
 #undef ADMISSION_DELEGATE_ZERO
+
+#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
+_Use_decl_annotations_ NTSTATUS AdmissionGpuvaB1RunFirmware(
+    ADMISSION_CONTEXT *Context, PVOID OutputCpu,
+    ULONGLONG OutputPhysical, ULONGLONG OutputVa, ULONG Fence) {
+  ADMISSION_PLATFORM_RUNTIME *runtime;
+  APPLE_AGX_GDI_COMMAND_DESCRIPTION description;
+  APPLE_AGX_EXP208_GDI_BINDING binding;
+  ADMISSION_RENDER_PACKET_DESCRIPTION packet;
+  APPLE_AGX_BACKEND_SUBMISSION submission;
+  unsigned char shadowStorage[512];
+  unsigned char dma[sizeof(APPLE_AGX_GDI_DMA_COMMAND)];
+  APPLE_AGX_U32 written = 0u;
+  ULONGLONG deadline;
+  APPLE_AGX_BACKEND_RUNTIME_RESULT result;
+  if (Context == NULL || OutputCpu == NULL || OutputPhysical == 0ULL ||
+      OutputVa == 0ULL || Fence == 0u ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return STATUS_INVALID_PARAMETER;
+  runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
+  if (runtime == NULL || !runtime->BackendStarted ||
+      runtime->Backend.Phase != AppleAgxBackendRuntimeReady ||
+      runtime->Backend.ContextIdentity != 1u ||
+      InterlockedCompareExchange(&runtime->B1Active, 0, 0) != 0)
+    return STATUS_INVALID_DEVICE_STATE;
+  RtlZeroMemory(&description, sizeof(description));
+  RtlZeroMemory(&binding, sizeof(binding));
+  RtlZeroMemory(&packet, sizeof(packet));
+  RtlZeroMemory(&submission, sizeof(submission));
+  RtlZeroMemory(shadowStorage, sizeof(shadowStorage));
+  description.Command.Opcode = AppleAgxGdiColorFill;
+  description.Command.Destination = (APPLE_AGX_GDI_RECT){
+      0u, 0u, APPLE_AGX_EXP208_GDI_WIDTH, APPLE_AGX_EXP208_GDI_HEIGHT};
+  description.Command.DestinationAllocationIndex = 0u;
+  description.Command.DestinationGpuAddress = OutputVa;
+  description.Command.DestinationPitch = APPLE_AGX_EXP208_GDI_PITCH;
+  description.Command.Color = APPLE_AGX_EXP208_GDI_COLOR;
+  description.Command.Rop = AppleAgxGdiColorFillPatCopy;
+  if (!AppleAgxGdiEncodeDmaCommand(
+          &description, dma, sizeof(dma), &written) ||
+      written != sizeof(dma))
+    return STATUS_INVALID_PARAMETER;
+  packet.Fence = Fence;
+  packet.DestinationCpuToken = (ULONGLONG)(ULONG_PTR)OutputCpu;
+  packet.DestinationGpuVa = OutputVa;
+  packet.DestinationPhysical = OutputPhysical;
+  packet.DestinationBytes = 0x4000u;
+  if (!AdmissionBackendImageBindSubmission(
+          &Context->BackendImage, &packet, OutputCpu, dma, written,
+          &binding))
+    return STATUS_INVALID_ADDRESS;
+  if (!AppleAgxGpuvaB1PrepareSubmission(
+          shadowStorage, sizeof(shadowStorage), dma, written,
+          Fence, 1u, &submission))
+    return STATUS_INVALID_BUFFER_SIZE;
+  runtime->B1Fence = Fence;
+  InterlockedExchange(&runtime->B1Completed, 0);
+  InterlockedExchange(&runtime->B1Active, 1);
+  result = AppleAgxBackendRuntimeSubmit(&runtime->Backend, &submission);
+  if (result != AppleAgxBackendRuntimeResultOk)
+    return STATUS_DEVICE_HARDWARE_ERROR;
+  deadline = AdmissionPlatformNowMs() + 2000ULL;
+  do {
+    APPLE_AGX_BACKEND_U32 drained = 0u, completed = 0u;
+    if (!AppleAgxPlatformProviderPoll(
+            &runtime->Provider, 32u, &drained, &completed))
+      return STATUS_DEVICE_HARDWARE_ERROR;
+    if (InterlockedCompareExchange(&runtime->B1Completed, 0, 0) != 0 &&
+        runtime->Backend.Phase == AppleAgxBackendRuntimeReady) {
+      InterlockedExchange(&runtime->B1Active, 0);
+      if (!runtime->TransportIo.FlushForCpu(
+              runtime, OutputCpu, 0x4000u))
+        return STATUS_DEVICE_HARDWARE_ERROR;
+      return STATUS_SUCCESS;
+    }
+    KeStallExecutionProcessor(1000u);
+  } while (AdmissionPlatformNowMs() < deadline);
+  return STATUS_IO_TIMEOUT;
+}
+#endif

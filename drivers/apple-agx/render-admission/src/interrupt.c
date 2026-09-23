@@ -167,6 +167,7 @@ VOID AdmissionDdiDpcRoutine(
   if (context != NULL) {
     ULONG renderFence = (ULONG)InterlockedCompareExchange(
         &context->RenderDpcFence, 0, 0);
+    UNREFERENCED_PARAMETER(renderFence);
     InterlockedIncrement(&context->DpcCount);
     AdmissionPagingDpc(context);
     if (context->InterfaceValid &&

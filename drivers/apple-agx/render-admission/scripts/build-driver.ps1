@@ -8,6 +8,7 @@ param(
     [switch]$FirmwareQualification,
     [switch]$BackendQualification,
     [switch]$SubmitQualification,
+    [switch]$GpuvaB1Qualification,
     [switch]$VisibleScanoutQualification,
     [switch]$VisibleAgxQualification,
     [switch]$UmdAdmissionTrace,
@@ -24,6 +25,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+if ($GpuvaB1Qualification -and ($MemoryQualification -or $ManagementQualification -or $RetainedRootQualification -or $StopAfterEndpoints -or $FirmwareQualification -or $BackendQualification -or $SubmitQualification -or $VisibleScanoutQualification -or $VisibleAgxQualification -or $GpuvaG1bPageProfile -ne 0 -or $GpuvaG1bAllocationHint)) {
+    throw "GpuvaB1Qualification requires a standalone WDDM3.0 physical candidate"
+}
 if ($BackendQualification -and ($MemoryQualification -or $ManagementQualification -or $RetainedRootQualification -or $StopAfterEndpoints -or $FirmwareQualification)) {
     throw "BackendQualification must not be combined with an earlier terminal qualification profile"
 }
@@ -101,6 +105,7 @@ $endpointStopValue = if ($StopAfterEndpoints) { "true" } else { "false" }
 $firmwareQualificationValue = if ($FirmwareQualification) { "true" } else { "false" }
 $backendQualificationValue = if ($BackendQualification) { "true" } else { "false" }
 $submitQualificationValue = if ($SubmitQualification) { "true" } else { "false" }
+$gpuvaB1QualificationValue = if ($GpuvaB1Qualification) { "true" } else { "false" }
 $visibleScanoutQualificationValue = if ($VisibleScanoutQualification) { "true" } else { "false" }
 $visibleAgxQualificationValue = if ($VisibleAgxQualification) { "true" } else { "false" }
 $gpuvaG1bAllocationHintValue = if ($GpuvaG1bAllocationHint) { "1" } else { "0" }
@@ -113,6 +118,7 @@ $gpuvaG1bAllocationHintValue = if ($GpuvaG1bAllocationHint) { "1" } else { "0" }
     "/p:AppleAgxFirmwareQualification=$firmwareQualificationValue" `
     "/p:AppleAgxBackendQualification=$backendQualificationValue" `
     "/p:AppleAgxSubmitQualification=$submitQualificationValue" `
+    "/p:AppleAgxGpuvaB1Qualification=$gpuvaB1QualificationValue" `
     "/p:AppleAgxVisibleScanoutQualification=$visibleScanoutQualificationValue" `
     "/p:AppleAgxVisibleAgxQualification=$visibleAgxQualificationValue" `
     "/p:AppleAgxGpuvaG1bPageProfile=$GpuvaG1bPageProfile" `

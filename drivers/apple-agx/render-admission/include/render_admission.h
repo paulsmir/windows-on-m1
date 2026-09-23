@@ -372,6 +372,9 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG ScanLineStage;
   volatile LONG ScanLineStatus;
   volatile UCHAR *BrokerBase;
+#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
+  PVOID GpuvaB1State;
+#endif
   volatile LONG InterruptReady;
   volatile LONG InterruptIngressEnabled;
   volatile LONG InterruptCount;
@@ -1310,5 +1313,20 @@ DXGKDDI_CALIBRATEGPUCLOCK AdmissionDdiCalibrateGpuClock;
 DXGKDDI_SETSTABLEPOWERSTATE AdmissionDdiSetStablePowerState;
 BOOLEAN AdmissionGpuvaV5ClientOpen(ADMISSION_CONTEXT *Context,
                                    APPLE_AGX_GPUVA_V5_CLIENT *Client);
+#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
+NTSTATUS AdmissionGpuvaB1Qualify(_Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionGpuvaB1RunFirmware(_Inout_ ADMISSION_CONTEXT *Context,
+                                     _In_ PVOID OutputCpu,
+                                     _In_ ULONGLONG OutputPhysical,
+                                     _In_ ULONGLONG OutputVa,
+                                     _In_ ULONG Fence);
+void AdmissionRecordB1Qualification(_In_ ADMISSION_CONTEXT *Context,
+                                    _In_ ULONG Stage, _In_ NTSTATUS Status,
+                                    _In_ ULONG CompletedJobs,
+                                    _In_ ULONG BrokerStatus,
+                                    _In_ ULONG CleanupStatus,
+                                    _In_ ULONG OutputPixelA,
+                                    _In_ ULONG OutputPixelB);
+#endif
 
 #endif

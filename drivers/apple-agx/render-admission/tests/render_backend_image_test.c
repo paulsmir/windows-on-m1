@@ -545,6 +545,42 @@ static void test_native_binding_preserves_logical_attachment(void) {
   free(target); free(arena);
 }
 
+static void test_b1_same_va_distinct_physical_output(void) {
+  unsigned char *arena[2], *output[2];
+  ADMISSION_BACKEND_IMAGE image[2];
+  ADMISSION_LOCAL_MEMORY_VIEW view;
+  ADMISSION_RENDER_PACKET_DESCRIPTION packet;
+  APPLE_AGX_EXP208_GDI_BINDING binding;
+  APPLE_AGX_GDI_DMA_COMMAND command=exact_color_fill(0x15001d0000ULL);
+  const APPLE_AGX_EXP208_RELOCATION *reloc=AppleAgxRenderTemplateRelocations();
+  unsigned edge=~0u;
+  for(unsigned i=0;i<AppleAgxRenderTemplateRelocationCount();i++)
+    if(reloc[i].TargetObject==40u){
+      assert(reloc[i].AddressSpace==AppleAgxExp208RelocationGpuVa);
+      edge=i;break;
+    }
+  assert(edge!=~0u);
+  for(unsigned i=0;i<2;i++){
+    arena[i]=malloc(TEST_BACKEND_BYTES);output[i]=malloc(0x4000u);
+    assert(arena[i]&&output[i]);
+    memset(&view,0,sizeof(view));
+    view.CpuAddress=arena[i];view.HostPhysicalAddress=TEST_BACKEND_PHYSICAL;
+    view.GpuVirtualAddress=TEST_BACKEND_GPU;view.Bytes=TEST_BACKEND_BYTES;
+    assert(AdmissionBackendImagePrepare(&image[i],&view));
+    memset(&packet,0,sizeof(packet));packet.Fence=19u;
+    packet.DestinationCpuToken=(unsigned long long)(unsigned long)output[i];
+    packet.DestinationGpuVa=0x15001d0000ULL;
+    packet.DestinationPhysical=0x9d0040000ULL+i*0x4000ULL;
+    packet.DestinationBytes=0x4000u;
+    assert(AdmissionBackendImageBindSubmission(&image[i],&packet,output[i],
+      (const unsigned char *)&command,sizeof(command),&binding));
+    assert(read_u64(image[i].Objects[reloc[edge].SourceObject].Data+
+                    reloc[edge].SourceOffset)==0x15001d0000ULL);
+  }
+  assert(image[0].Objects[40].PhysicalAddress!=image[1].Objects[40].PhysicalAddress);
+  for(unsigned i=0;i<2;i++){free(output[i]);free(arena[i]);}
+}
+
 int main(void) {
   test_materializes_and_relocates_exact_rebased_image();
   test_rejects_invalid_tail_atomically();
@@ -553,5 +589,6 @@ int main(void) {
   test_dynamic_packet_reuses_framebuffer_owner_without_gdi_dma();
   test_fullscreen_packet_repoints_tiling_graph_and_restores_template();
   test_native_binding_preserves_logical_attachment();
+  test_b1_same_va_distinct_physical_output();
   return 0;
 }

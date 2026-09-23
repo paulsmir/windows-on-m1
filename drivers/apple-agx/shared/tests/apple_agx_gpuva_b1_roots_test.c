@@ -15,6 +15,7 @@ struct fixture {
  struct hv_agx_gpuva_v5_wire wire;
  uint64_t table[10][2048], slots[64][2];
  unsigned invalidations[64], fail_map_once;
+ unsigned drop_next_response;
 };
 static uint64_t translate(void *opaque,uint64_t ipa){(void)opaque;
  if((ipa>=BACKEND&&ipa<BACKEND+0x800000)||(ipa>=TABLES&&ipa<TABLES+10*0x4000)||ipa==OUT_A||ipa==OUT_B)return ipa;
@@ -58,7 +59,9 @@ static void execute(void *opaque,const AGX_GPUVA_V5_REQUEST *q,AGX_GPUVA_V5_RESP
  done:r->Epoch=7;r->Status=status;
 }
 static bool w64(void *opaque,unsigned off,unsigned long long v){struct fixture*f=opaque;uint64_t x=v;return hv_agx_gpuva_v5_mmio(&f->wire,off-AGX_GPUVA_V5_OFFSET,&x,true,3,execute,f);}
-static bool r64(void *opaque,unsigned off,unsigned long long *v){struct fixture*f=opaque;uint64_t x=0;bool ok=hv_agx_gpuva_v5_mmio(&f->wire,off-AGX_GPUVA_V5_OFFSET,&x,false,3,execute,f);*v=x;return ok;}
+static bool r64(void *opaque,unsigned off,unsigned long long *v){struct fixture*f=opaque;uint64_t x=0;
+ if(f->drop_next_response&&off==AGX_GPUVA_V5_OFFSET+AGX_GPUVA_V5_RESPONSE_OFFSET){f->drop_next_response=0;return false;}
+ bool ok=hv_agx_gpuva_v5_mmio(&f->wire,off-AGX_GPUVA_V5_OFFSET,&x,false,3,execute,f);*v=x;return ok;}
 static bool w32(void *opaque,unsigned off,unsigned int v){struct fixture*f=opaque;uint64_t x=v;return hv_agx_gpuva_v5_mmio(&f->wire,off-AGX_GPUVA_V5_OFFSET,&x,true,2,execute,f);}
 static void barrier(void *opaque){(void)opaque;}
 static void run(void){
@@ -95,6 +98,10 @@ static void run(void){
         a->GrantCount==0&&a->MappedCount==0);
  assert(AppleAgxGpuvaB1BuildRoot(&client,&ai,graph_a,count,a));
  assert(AppleAgxGpuvaB1DestroyRoot(&client,a));
+ f->drop_next_response=1;
+ assert(!AppleAgxGpuvaB1BuildRoot(&client,&ai,graph_a,count,a));
+ assert(a->Uncertain==1u&&f->broker.processes[0].live);
+ assert(!AppleAgxGpuvaB1DestroyRoot(&client,a));
  assert(f->slots[0][0]==0x91000001&&f->slots[0][1]==0x90000001&&f->invalidations[1]>=4);
  free(a);free(b);free(f);
 }

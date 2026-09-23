@@ -80,6 +80,12 @@
       <PreprocessorDefinitions>APPLE_AGX_SUBMIT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxGpuvaB1Qualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_GPUVA_B1_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <DisableSpecificWarnings>4702;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(AppleAgxVisibleScanoutQualification)'=='true'">
     <ClCompile>
       <PreprocessorDefinitions>APPLE_AGX_VISIBLE_SCANOUT_QUALIFICATION=1;APPLE_AGX_SUBMIT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -109,6 +115,7 @@
     <ClCompile Include="src\physical_memory_windows.c" />
     <ClCompile Include="src\memory_runtime_windows.c" />
     <ClCompile Include="src\gpuva_v5_windows.c" />
+    <ClCompile Include="src\gpuva_b1_windows.c" />
     <ClCompile Include="src\paging_windows.c" />
     <ClCompile Include="src\render_paging.c" />
     <ClCompile Include="src\render_gdi.c" />
@@ -147,6 +154,7 @@
     <ClCompile Include="..\shared\src\apple_agx_render_template_vm_slot.c" />
     <ClCompile Include="..\shared\src\apple_agx_gpuva_b1_graph.c" />
     <ClCompile Include="..\shared\src\apple_agx_gpuva_b1_roots.c" />
+    <ClCompile Include="..\shared\src\apple_agx_gpuva_b1_submission.c" />
     <ClCompile Include="..\shared\src\apple_agx_win32_abi.c" />
     <ClCompile Include="..\shared\src\apple_agx_scheduler.c" />
     <ClCompile Include="..\shared\src\apple_agx_gdi.c" />
