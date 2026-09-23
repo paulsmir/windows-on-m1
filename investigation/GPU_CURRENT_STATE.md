@@ -11,9 +11,15 @@ Primary path is WDDM GpuMmu/GPUVA by user decision 2026-09-23. This reopens
 GPUVA and supersedes the earlier CLOSED/NO verdict. The physical/patch-list
 architecture is preserved at tag `milestone/physical-patchlist-dwm-admission` and
 documented in `investigation/ARCHITECTURE_PHYSICAL_PATCHLIST.md`; no source or
-evidence is deleted. Current gate is G1 offline MMU geometry, then G1b offline
-WDDM 3.2 inventory and one preregistered but unrun hardware discriminator.
-G2 broker v5 stops at design and host-test design until explicit permission.
+evidence is deleted. G1 finite model passes 330 checks: aligned 16/64-KiB
+segment-generated pages cannot scatter 4-KiB PFNs inside one AGX leaf;
+arbitrary raw 4-KiB VidMm updates remain a counterexample. Exact WDDM input
+domain and PAGETABLELEVELDESC representation are unproven. G1b pinned-WDK
+inventory and held 16-KiB hardware question are in
+`docs/superpowers/specs/2026-09-23-gpuva-g1b-wddm32-inventory.md`. G2 broker v5
+design and host specification are in
+`docs/superpowers/specs/2026-09-23-gpuva-broker-v5-design.md`; m1n1
+implementation and hardware require explicit permission.
 OpenGL and CS1.6 follow accelerated desktop acceptance.
 
 ## Proven hardware boundary — EXP753/package748
@@ -211,8 +217,9 @@ HARDWARE ROADMAP
        hardware run; exact cleanup and ordinary Code28 recovery.
 [PASS] Resource.cpp:452-453 buffer usage, typed SRV load/capture relocation,
        DynamicResourceMapDiscard and argument-bearing rejection pass offline.
-[NEXT] GPUVA G1/G1b offline, then G2 design only. Do not package or run EXP757
-on Air; do not implement m1n1 broker v5 or start GPUVA hardware without explicit
-permission.
+[NEXT] Stop after G2 design. Resolve VidMm 4-KiB table indices versus native
+AGX 16-KiB leaf descriptors, system-memory/eviction scatter and 3.2 query
+admission before production GpuMmu. Do not package or run EXP757 on Air; do not
+implement m1n1 broker v5 or start GPUVA hardware without explicit permission.
 POST-HARDWARE: native multi-draw batching, optional features, performance,
 sustained desktop stability, OpenGL and CS1.6 after accelerated-desktop acceptance.
