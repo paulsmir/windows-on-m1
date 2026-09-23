@@ -83,10 +83,13 @@ DWM failed to create a display swap chain in CreateLegacySwapChain, but is a
 cascade after removal. No DWM-correlated AGX submission/completion/Present is
 proven. Evidence: EXP754 causal-result.json, debug-dwm.log, etw-relevant.json.
 
-Strongest causal target: current native graph admits one draw per batch while DWM
-issues multiple draws before Windows Flush. Offline gate must make two consecutive
-frontend draws finalize as two ordered batches through the existing adapter,
-composer, physical KMD plans and retirement. No new allocator/composer.
+EXP755 commit098ddedf closes that offline boundary. Draw and DrawIndexed detect
+an existing actual native draw receipt and invoke the existing FlushRetire path;
+the next Mesa draw starts a normal new capsule. Two real pre-Flush draws produce
+two Render callbacks, four materializations, four physical KMD gates and four
+retirements. x64 TestExit0; ARM64 native/test build PASS. Source SHA256
+a6ac85957343c454e1d7fbbf8659c814942f2844117d163bad5636f48d7c27d7.
+Next: package/sign/hash/preregister one exact DWM retry.
 ## Fixed experiment procedure
 Git `/opt/homebrew/bin/git`; artifacts live under main repo `.local`, not the
 worktree. Builder `pauls@192.168.1.24`, key `~/.ssh/windows_builder`. Air
@@ -114,8 +117,9 @@ HARDWARE ROADMAP
 [PASS] EXP754 contract-wide buffers, append cycle, StartVertex/BaseVertex,
        x64 execution and ARM64 closure/test build.
 [PASS] Package749 run fixed DWM dynamic-buffer admission; exact cleanup/recovery.
-[NOW] Multiple Draw calls before Windows Flush -> ordered existing native batches.
-[NEXT] x64 executable + ARM64 package/sign/hash/preregister.
+[PASS] EXP755 consecutive pre-Flush draws -> ordered native batches offline.
+[NOW] ARM64 package/sign/hash/preregister exact EXP755 candidate.
+[NEXT] One DWM run: draw type17 -> native submission or next boundary.
 [HW] Verify DWM draw type17 reaches native submission/completion or next boundary.
 POST-HARDWARE: optional features, performance, sustained desktop stability,
 OpenGL and CS1.6 only after first proven DWM AGX execution/Present.

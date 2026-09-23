@@ -225,10 +225,12 @@
   },
   "next_hardware_causal_target": {
     "id": "multiple_draws_per_windows_flush",
-    "status": "NOW_OFFLINE",
-    "mandatory_reason": "Actual DWM issues draw type16, clear, then draw type17 before Flush; current native batch guard permits one draw and device is removed at type17",
-    "offline_pass": "Two actual frontend draws without intervening Windows Flush become two ordered existing native batches; both composer/KMD placements/retirements pass; no new composer/allocator",
-    "hardware_dependency": "none for implementation; consequence needs one fresh run"
+    "status": "PASS_OFFLINE",
+    "mandatory_reason": "EXP754 DWM removes device at draw type17 after draw type16/clear; one native capsule permits one draw",
+    "offline_pass": "Two actual frontend Draw calls without intervening Windows Flush produce two ordered existing native batches, 2 Render, 4 materializations, 4 KMD gates, 4 retirements; x64 exit0 ARM64 build PASS",
+    "evidence": "EXP755-multidraw-offline/multidraw-final-source.tar",
+    "source_sha256": "a6ac85957343c454e1d7fbbf8659c814942f2844117d163bad5636f48d7c27d7",
+    "hardware_dependency": "none for fix; next DWM consequence requires exact package/preregistration"
   },
   "third_dwm_hardware": {
     "experiment": "EXP753",

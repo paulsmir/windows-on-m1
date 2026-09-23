@@ -46861,3 +46861,25 @@ REJECTED_FOR_DWM_DESKTOP_WITH_CAUSAL_ADVANCE. Evidence:
 be7aee8aa00852fc778c2c63d31b156d7d20676dc18e4d571e856035cba30b31.
 Next offline gate: two real D3D Draw calls before Windows Flush must finalize as
 two ordered existing native batches and retire correctly.
+
+## EXP755 — consecutive DWM draws before Windows Flush, offline gate
+
+Verified 2026-09-23. Hardware RED is EXP754: DWM completes draw type16 and a
+clear, then draw type17 causes UMD E_NOTIMPL device removal. Current native
+capsule owns one draw, so accumulating the second draw in that capsule is
+invalid. Fix commit 098ddedfa6e8c4a8d55e531f47473b34d4be2d3a checks the
+existing actual draw receipt at both Draw and DrawIndexed entry. If present, it
+uses the existing Windows flush/retire path to finalize and retire that batch;
+the next Mesa draw creates the next normal native capsule. No allocator,
+composer, capture format or KMD submission path was added.
+
+Executable proof calls two real `pfnDraw` operations without an intervening
+Windows Flush. The second call finalizes the first request and leaves its own
+new draw receipt; the later existing pfnFlush finalizes the second. Two Render
+callbacks, four immutable materializations, four physical KMD consumer gates and
+four retirements pass. Full x64 suite TestExit0; source archive SHA256
+a6ac85957343c454e1d7fbbf8659c814942f2844117d163bad5636f48d7c27d7;
+x64 EXE SHA256 b2a5db455aa15d6874158d30f18cd42c56fb50d3102bc6223fb879201a458978.
+ARM64 native closure and test build PASS; ARM64 EXE SHA256
+0c1a29d88c477b9ed4b8acae80ed23653b6dd8bbdcb7d0b73526473cdef0b5ef.
+Result: PASS_OFFLINE. Hardware/package gates pending.
