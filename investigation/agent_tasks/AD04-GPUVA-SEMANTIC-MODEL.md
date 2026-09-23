@@ -1,5 +1,36 @@
 # Offline GPUVA semantic model — scoped PASS, migration conditional
 
+## G1 extension — 2026-09-23
+
+The model now selects segment-page geometry at one point (`gm_choose_caps`):
+64 KiB is the documented WDDM segment fallback; 16 KiB is the WDK 26100
+experimental target for G1b. `gm_segment_ptes` generates four contiguous
+4-KiB logical entries only from one aligned, indivisible segment page. The
+exhaustive finite test covers every 16-KiB leaf in either profile, each logical
+entry, both sides of a native-leaf boundary, invalid offsets/alignment and an
+attempted PFN from another registered page. Within this **selected generated
+input domain**, the old scattered-4-KiB counterexample is unreachable.
+
+The raw `gm_coarsen` test still demonstrates why arbitrary 4-KiB VidMm/system
+memory input is not representable. The model does not prove that Windows always
+uses the generated input domain: 4-KiB system memory, eviction and protection
+transitions remain a production gate. In particular, 64-KiB local allocation
+alignment alone does not establish a universal 16-KiB mapping contract.
+
+The three candidate table descriptors mirror native Asahi address geometry
+(3/11/11 index bits, 16-KiB tables and alignment, nonzero local segment ID for
+both ordinary and paging-process tables). This is a **native geometry
+projection**, not a validated `DXGK_PAGE_TABLE_LEVEL_DESC` response. Microsoft
+defines index bits using 4-KiB logical entries, so the exact leaf descriptor
+versus native 16-KiB compression needs a pinned-WDK/runtime proof before any
+KMD advertisement. Bootstrap still uses immediate CPU table initialization in
+the finite system process, independent of a paging job or render slot.
+
+Primary sources rechecked: pinned WDK 26100 `d3dkmddi.h` SHA256
+`c13cecb0ce73e7bbdb6bec8586d05eea31932a8c532bec49b3dae4a03054770e`,
+Asahi `pgtable.rs` native UAT geometry, and Microsoft GpuMmu/UpdatePageTable/
+PageTableLevelDesc pages. No production caps, DDIs, m1n1 or hardware changed.
+
 Model source: tests/models/gpuva_semantic_model.{h,c}; executable scenarios in
 gpuva_semantic_model_test.c; host runner tests/test_gpuva_semantic_model.py.
 No production source/caps/DDIs, firmware, hardware, builder or agents changed.

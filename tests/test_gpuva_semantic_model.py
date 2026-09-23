@@ -25,6 +25,7 @@ class GpuvaSemanticModelTests(unittest.TestCase):
             observed = json.loads(result.stdout)
             self.assertEqual(observed['harness'], 'PASS')
             self.assertEqual(observed['arbitrary_4k_groups'], 'COUNTEREXAMPLE')
+            self.assertEqual(observed['selected_segment_scatter'], 'UNREACHABLE_IN_GENERATOR')
             self.assertFalse(observed['wddm_input_domain_proven'])
             print(result.stdout.strip())
             if os.environ.get('AD04_MODEL_EVIDENCE'):

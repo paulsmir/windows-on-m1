@@ -199,13 +199,66 @@ static void partial_logical_updates(void) {
   CHECK(!after[0].valid && !after[3].valid);
   CHECK(gm_merge4(before,4,1,replacement,after)==GM_RANGE);
 }
+static void segment_geometry_and_atomic_boundaries(void) {
+  for(unsigned profile=0;profile<2;++profile) {
+    reset();
+    uint64_t size=profile?GM_SEGMENT_16K:GM_SEGMENT_64K;
+    CHECK(gm_choose_caps(m,size)==GM_OK);
+    CHECK(m->caps.segment_page==size);
+    gm_level_desc desc[3]; CHECK(gm_table_levels(m,desc)==GM_OK);
+    CHECK(desc[0].index_bits==3 && desc[1].index_bits==11 && desc[2].index_bits==11);
+    for(unsigned l=0;l<3;++l) {
+      CHECK(desc[l].segment_id==GM_LOCAL_SEGMENT_ID);
+      CHECK(desc[l].paging_segment_id==GM_LOCAL_SEGMENT_ID);
+      CHECK(desc[l].table_bytes==GM_PAGE && desc[l].alignment==GM_PAGE);
+    }
+    unsigned leaf_count=(unsigned)(size/GM_PAGE);
+    for(unsigned leaf=0;leaf<leaf_count;++leaf) {
+      gm_pte4 entries[4]; uint64_t pa; unsigned write;
+      CHECK(gm_segment_ptes(m,PA_P,leaf*GM_PAGE,1,entries)==GM_OK);
+      CHECK(gm_coarsen(entries,&pa,&write)==GM_OK);
+      CHECK(pa==PA_P+leaf*GM_PAGE && write==1);
+      for(unsigned logical=0;logical<4;++logical)
+        CHECK(entries[logical].pa==pa+logical*GM_LOGICAL_PAGE);
+    }
+    gm_pte4 invalid[4];
+    CHECK(gm_segment_ptes(m,PA_P,leaf_count*GM_PAGE,1,invalid)==GM_RANGE);
+    CHECK(gm_segment_ptes(m,PA_P+GM_LOGICAL_PAGE,0,1,invalid)==GM_RANGE);
+    CHECK(gm_segment_ptes(m,PA_P,GM_LOGICAL_PAGE,1,invalid)==GM_RANGE);
+    CHECK(gm_segment_ptes(m,PA_P,0,2,invalid)==GM_RANGE);
+    /* The owner may register another segment page, but one generated leaf
+     * cannot source a 4 KiB PFN from it. */
+    gm_pte4 actual[4]; uint64_t pa; unsigned write;
+    CHECK(gm_segment_ptes(m,PA_P,0,1,actual)==GM_OK);
+    actual[1].pa=PA_Q+GM_LOGICAL_PAGE;
+    CHECK(gm_coarsen(actual,&pa,&write)==GM_UNREPRESENTABLE);
+  }
+  reset();
+  gm_pte4 before[8], after[8], updates[8];
+  ptes(before,PA_P); ptes(before+4,PA_P+GM_PAGE);
+  memcpy(after,before,sizeof(before));
+  /* StartIndex 3, count 2 crosses a native 16 KiB boundary. A no-op partial
+   * update is representable and preserves both leaves. */
+  updates[0]=before[3]; updates[1]=before[4];
+  CHECK(gm_update_span(before,3,2,updates,after)==GM_OK);
+  CHECK(memcmp(before,after,sizeof(before))==0);
+  updates[0].pa=PA_Q+3*GM_LOGICAL_PAGE;
+  CHECK(gm_update_span(before,3,2,updates,after)==GM_UNREPRESENTABLE);
+  CHECK(memcmp(before,after,sizeof(before))==0);
+  ptes(updates,PA_Q); ptes(updates+4,PA_Q+GM_PAGE);
+  CHECK(gm_update_span(before,0,8,updates,after)==GM_OK);
+  CHECK(after[0].pa==PA_Q && after[7].pa==PA_Q+7*GM_LOGICAL_PAGE);
+  CHECK(gm_choose_caps(m,GM_LOGICAL_PAGE)==GM_RANGE);
+}
 int main(void) {
   m=calloc(1,sizeof(*m)); assert(m);
   isolation_root_and_private(); physical_backing_ownership(); lifetime_and_fence_domains();
   bootstrap_without_render(); relocated_root_rejects_actual_old_lease();
   translation_domain(); partial_logical_updates(); readonly_projection();
+  segment_geometry_and_atomic_boundaries();
   printf("{\"harness\":\"PASS\",\"checks\":%u,\"shared_uat\":true,"
          "\"representable_16k_groups\":\"PASS\",\"arbitrary_4k_groups\":\"COUNTEREXAMPLE\","
+         "\"selected_segment_scatter\":\"UNREACHABLE_IN_GENERATOR\","
          "\"wddm_input_domain_proven\":false,"
          "\"hardware\":false}\n",checks);
   free(m); return 0;

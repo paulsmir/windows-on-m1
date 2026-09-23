@@ -35,8 +35,48 @@ static int owned_data_page(unsigned process,uint64_t pa) {
 }
 void gm_initialize(gm_model *m) {
   memset(m,0,sizeof(*m)); m->slot_owner=-1;
+  m->caps=(gm_caps){GM_SEGMENT_64K,GM_LOCAL_SEGMENT_ID};
   m->firmware_identity=0x90000000ULL;
   m->firmware_prefix[0]=0x12340003; m->firmware_prefix[1]=0x56780003;
+}
+enum gm_result gm_choose_caps(gm_model *m, uint64_t page) {
+  if(!m || (page!=GM_SEGMENT_16K && page!=GM_SEGMENT_64K)) return GM_RANGE;
+  m->caps.segment_page=page; m->caps.local_segment_id=GM_LOCAL_SEGMENT_ID;
+  return GM_OK;
+}
+enum gm_result gm_table_levels(const gm_model *m, gm_level_desc out[3]) {
+  if(!m || !out || m->caps.local_segment_id==0) return GM_RANGE;
+  /* Native 39-bit VA = 3 + 11 + 11 + 14. All actual UAT tables are 16 KiB
+   * in a VidMm-owned local segment; system segment 0 cannot hold them. */
+  const unsigned bits[3]={3,11,11};
+  for(unsigned i=0;i<3;++i)
+    out[i]=(gm_level_desc){bits[i],m->caps.local_segment_id,
+                           m->caps.local_segment_id,(unsigned)GM_PAGE,(unsigned)GM_PAGE};
+  return GM_OK;
+}
+enum gm_result gm_segment_ptes(const gm_model *m, uint64_t base,
+                               uint64_t offset, unsigned writable, gm_pte4 out[4]) {
+  if(!m || !out || writable>1) return GM_RANGE;
+  uint64_t size=m->caps.segment_page;
+  if((size!=GM_SEGMENT_16K && size!=GM_SEGMENT_64K) ||
+     (base&(size-1)) || (offset&(GM_PAGE-1)) || offset>size-GM_PAGE ||
+     base>=(1ULL<<40) || size>(1ULL<<40)-base) return GM_RANGE;
+  for(unsigned i=0;i<4;++i)
+    out[i]=(gm_pte4){base+offset+i*GM_LOGICAL_PAGE,1,writable};
+  return GM_OK;
+}
+enum gm_result gm_update_span(const gm_pte4 before[8], unsigned first,
+                              unsigned count, const gm_pte4 *updates, gm_pte4 after[8]) {
+  if(!before || !updates || !after || !count || first>=8 || count>8-first)
+    return GM_RANGE;
+  gm_pte4 candidate[8]; uint64_t pa; unsigned write;
+  memcpy(candidate,before,sizeof(candidate));
+  memcpy(candidate+first,updates,count*sizeof(*updates));
+  for(unsigned group=0;group<2;++group) {
+    enum gm_result r=gm_coarsen(candidate+group*4,&pa,&write);
+    if(r!=GM_OK && r!=GM_UNMAP) return r;
+  }
+  memcpy(after,candidate,sizeof(candidate)); return GM_OK;
 }
 enum gm_result gm_create(gm_model *m,unsigned id) {
   if(id>=GM_PROCESSES || m->process[id].live) return GM_STALE;
