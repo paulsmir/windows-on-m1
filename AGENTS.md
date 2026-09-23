@@ -180,6 +180,11 @@ artifact exists.  The automated schema contract is
 `tests/test_change_ledger.py`.
 
 ## DWM bring-up phase
+- User decision 2026-09-23 reopens WDDM GpuMmu/GPUVA as the primary path and
+  supersedes the earlier GPUVA CLOSED/NO decision. Preserve the physical/patch-list
+  milestone at `milestone/physical-patchlist-dwm-admission`; see
+  `investigation/ARCHITECTURE_PHYSICAL_PATCHLIST.md`. G2 m1n1 implementation and
+  hardware runs require explicit user permission.
 - A hardware candidate may bundle several fixes if each has its own offline
   RED→GREEN, and none changes firmware, caps advertisement, signer, or recovery.
   Attribute a new failure from the dump/stack, not by single-variable isolation.

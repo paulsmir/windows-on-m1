@@ -7,9 +7,13 @@ experiment evidence named here. Do not load the full historical ledger.
 
 ## Objective and fixed architecture
 Stable, visibly correct accelerated Windows desktop on Air M1 is UNPROVEN.
-Architecture remains: real Asahi producer -> typed capture -> immutable
-request materialization -> UMD composer/pfnRenderCb -> physical/patch-list KMD
-Render/Patch/Submit -> AGX. GPUVA is CLOSED/NO. Do not redesign these layers.
+Primary path is WDDM GpuMmu/GPUVA by user decision 2026-09-23. This reopens
+GPUVA and supersedes the earlier CLOSED/NO verdict. The physical/patch-list
+architecture is preserved at tag `milestone/physical-patchlist-dwm-admission` and
+documented in `investigation/ARCHITECTURE_PHYSICAL_PATCHLIST.md`; no source or
+evidence is deleted. Current gate is G1 offline MMU geometry, then G1b offline
+WDDM 3.2 inventory and one preregistered but unrun hardware discriminator.
+G2 broker v5 stops at design and host-test design until explicit permission.
 OpenGL and CS1.6 follow accelerated desktop acceptance.
 
 ## Proven hardware boundary — EXP753/package748
@@ -207,6 +211,8 @@ HARDWARE ROADMAP
        hardware run; exact cleanup and ordinary Code28 recovery.
 [PASS] Resource.cpp:452-453 buffer usage, typed SRV load/capture relocation,
        DynamicResourceMapDiscard and argument-bearing rejection pass offline.
-[NEXT] New thread: GpuMmu/GPUVA G0/G1. Do not package or run EXP757 on Air.
+[NEXT] GPUVA G1/G1b offline, then G2 design only. Do not package or run EXP757
+on Air; do not implement m1n1 broker v5 or start GPUVA hardware without explicit
+permission.
 POST-HARDWARE: native multi-draw batching, optional features, performance,
 sustained desktop stability, OpenGL and CS1.6 after accelerated-desktop acceptance.
