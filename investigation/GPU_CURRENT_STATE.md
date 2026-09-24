@@ -1,5 +1,32 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 EXP784C advances to level-0 leaf GraphUpdateLeaf failure
+
+Package787 (mixed level1 parent PTE 4K/64K child sizes independent of update
+flag) cold-booted past EXP783's `ParentFlags` index2 rejection. The next
+flushed input is `BuildPagingBuffer(UpdatePageTable)`, CPU_VIRTUAL mode0,
+**level0 Start0 Count32 Flags0**, FirstPteVA `0x2000000`, both DMA pointers.
+KMD returned `C0000483` (`STATUS_DEVICE_HARDWARE_ERROR`); Windows bugchecked
+`0x10E/0xB` in `CompleteBuildPagingBufferIteration`. This status comes from
+`AdmissionG3UpdateLeaf` when `AppleAgxGpuvaG3GraphUpdateLeaf` returns false.
+No leaf first-failure receipt exists in package787, so local graph check and
+m1n1 broker response remain open. The old host replay mocked graph too
+broadly; current tree compiles real graph/client with broker I/O mock and
+records Count32 geometry with explicitly synthetic PTEs. Next offline gate:
+flushed leaf branch/index/raw PTE/IPA/graph status receipt, RED→GREEN, then
+one diagnostic-only package. No package787 unchanged rerun.
+
+R60 same-profile disarmed recovery returned pinned SSH/CPU8, exact package787
+`oem5.inf`/Code43 and absent G3Armed. Package remains known/staged in the
+full-owner guest; AutoLogger stopped/removed. Dump SHA256
+`fa6f41290add4ebd501b45192dbdcd3cda2e9f4cd469572be2745ece41d7de12`;
+ETL `b8b56ea73b40662e0c2d1486e44b493d5ce951ed56398e015b6c670ef76f9556`;
+analysis `.local/experiments/EXP784-g3-parent-size/hardware-evidence/EXP784-analysis.json`
+SHA256 `68cc8e072a4a5c369165ef4843a2e529382403a627e3da74bd3c2dc7419b9e0e`.
+EXP784B live bind also confirmed StartDevice Stage4 `C000009A` while requesting
+67,174,400 bytes; the same package passed allocation on cold boot. R63
+firmware reservation remains design only.
+
 ## 2026-09-24 R62 offline gate after EXP783
 
 Commit `941e644f` adds a real-C host replay of the recorded EXP776–783 G3 DDI

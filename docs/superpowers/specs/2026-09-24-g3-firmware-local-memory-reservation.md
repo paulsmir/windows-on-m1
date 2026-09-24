@@ -3,6 +3,13 @@
 Status: design only. No firmware, ACPI, stage-2, or KMD memory-owner change is
 authorized by this document. The present G3 paging correction is independent.
 
+EXP784B reproduced the live-bind allocation failure with exact package787:
+StartDevice Stage4 returned `C000009A` while requesting 67,174,400 bytes,
+before any G3 paging callback. EXP784C then cold-booted the same package and
+passed this allocation boundary. The reservation design remains a separate
+implementation step; the cold-boot result does not make live PnP restart
+reliable.
+
 ## Evidence and source contract
 
 - EXP777B in `investigation/GPU_CURRENT_STATE.md`: a live repeated StartDevice
