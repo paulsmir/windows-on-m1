@@ -1,5 +1,31 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 EXP786: first leaf maps the same physical page as its table
+
+Package789 (R67 KMD zeroing and receipt) passed EXP785's level0 TableGraph
+OWNERSHIP boundary. The next flushed failure is CPU_VIRTUAL level0 Start0
+Count32 Flags0 VA `0x2000000`, branch7 LeafGraph index0: PTE flags `0x41`,
+`PageAddress=0xC`, resolved backing IPA `0x9bbffc000`, **equal to the
+registered table IPA**. The real m1n1 broker rejects a backing whose PA is
+already a table (OWNERSHIP4); KMD returned `C0000483`, Windows stopped
+`0x10E/0xB` in `CompleteBuildPagingBufferIteration`. This proves a table/
+backing identity conflict, not a leaf-size or table-content failure. The first
+nonzero index in the last receipt is MAXULONG and TableAddBranch3 means the
+table was already in the graph. Only first PTE was receipted; other Count32
+PTEs remain unknown. Analysis `.local/experiments/EXP786-g3-table-zero/
+hardware-evidence/EXP786-analysis.json` SHA256
+`8235986eea6b8db009201ba0caa517ddf3215082d510d1ddd1126deb4751cff1`.
+
+R60 same-profile disarmed reboot returned pinned J313-WIN SSH/CPU8, exact
+package789 oem5.inf Code43, staged1, arm absent; dump/ETL/receipts were
+collected before any package change. Host replay with the exact first PTE and
+synthetic adjacent PTEs is RED at C0000483 against the real broker. Next
+causal target: distinct broker-owned table storage while preserving VidMm's
+original page as a writable backing; do not weaken broker table/backing
+ownership or silently omit the Windows mapping. R64 persistent 64-MiB
+firmware reservation remains a separate memory-owner change and does not by
+itself remove this same-PA conflict.
+
 ## 2026-09-24 EXP785: level-0 TableGraph broker OWNERSHIP before leaf PTEs
 
 Package788 added only the flushed leaf-failure receipt to package787's source;
