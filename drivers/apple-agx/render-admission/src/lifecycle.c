@@ -1,4 +1,12 @@
 #include "render_admission.h"
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+#include "apple_agx_gpuva_g3_caps.h"
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 16
+#error G3 VidMm path currently implements only 16-KiB local segment pages
+#endif
+C_ASSERT(sizeof(DXGK_PTE) == 16);
+C_ASSERT(ADMISSION_MEMORY_LOCAL_SEGMENT == 2u);
+#endif
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION) || \
     defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #include "apple_agx_render_template_vm_slot.h"
@@ -543,6 +551,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
   case DXGKQAITYPE_GPUMMUCAPS: {
     const DXGK_QUERYGPUMMUCAPSIN *input;
     DXGK_GPUMMUCAPS *caps;
+    APPLE_AGX_GPUVA_G3_CAPS model = AppleAgxGpuvaG3Caps();
     if (context->GpuvaG3State == NULL) {
       status = STATUS_INVALID_DEVICE_STATE;
     } else if (QueryAdapterInfo->pInputData == NULL ||
@@ -553,7 +562,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     } else {
       input = (const DXGK_QUERYGPUMMUCAPSIN *)QueryAdapterInfo->pInputData;
       caps = (DXGK_GPUMMUCAPS *)QueryAdapterInfo->pOutputData;
-      if (input->PhysicalAdapterIndex != 0u) {
+      if (input->PhysicalAdapterIndex != 0u ||
+          !AppleAgxGpuvaG3CapsValid(&model, sizeof(DXGK_PTE), 0u, 0u)) {
         status = STATUS_INVALID_PARAMETER;
       } else {
         RtlZeroMemory(caps, sizeof(*caps));
@@ -561,8 +571,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
         caps->ExplicitPageTableInvalidation = 1u;
         caps->PageTableUpdateRequireAddressSpaceIdle = 1u;
         caps->PageTableUpdateMode = DXGK_PAGETABLEUPDATE_GPU_PHYSICAL;
-        caps->VirtualAddressBitCount = 39u;
-        caps->PageTableLevelCount = 3u;
+        caps->VirtualAddressBitCount = model.VirtualAddressBits;
+        caps->LeafPageTableSizeFor64KPagesInBytes = model.Leaf64KBytes;
+        caps->PageTableLevelCount = model.LevelCount;
         status = STATUS_SUCCESS;
       }
     }
@@ -572,6 +583,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
   case DXGKQAITYPE_PAGETABLELEVELDESC: {
     const DXGK_QUERYPAGETABLELEVELDESCIN *input;
     DXGK_PAGE_TABLE_LEVEL_DESC *level;
+    APPLE_AGX_GPUVA_G3_CAPS model = AppleAgxGpuvaG3Caps();
     if (context->GpuvaG3State == NULL) {
       status = STATUS_INVALID_DEVICE_STATE;
     } else if (QueryAdapterInfo->pInputData == NULL ||
@@ -583,18 +595,20 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
       input = (const DXGK_QUERYPAGETABLELEVELDESCIN *)
           QueryAdapterInfo->pInputData;
       level = (DXGK_PAGE_TABLE_LEVEL_DESC *)QueryAdapterInfo->pOutputData;
-      if (input->PhysicalAdapterIndex != 0u || input->LevelIndex >= 3u) {
+      if (input->PhysicalAdapterIndex != 0u ||
+          input->LevelIndex >= model.LevelCount ||
+          !AppleAgxGpuvaG3CapsValid(&model, sizeof(DXGK_PTE), 0u, 0u)) {
         status = STATUS_INVALID_PARAMETER;
       } else {
         RtlZeroMemory(level, sizeof(*level));
         level->PageTableIndexBitCount =
-            input->LevelIndex == 0u ? 13u :
-            input->LevelIndex == 1u ? 11u : 3u;
-        level->PageTableSegmentId = ADMISSION_MEMORY_LOCAL_SEGMENT;
+            model.Level[input->LevelIndex].IndexBits;
+        level->PageTableSegmentId = model.Level[input->LevelIndex].SegmentId;
         level->PagingProcessPageTableSegmentId =
-            ADMISSION_MEMORY_LOCAL_SEGMENT;
-        level->PageTableSizeInBytes = 0x4000u;
-        level->PageTableAlignmentInBytes = 0x4000u;
+            model.Level[input->LevelIndex].SegmentId;
+        level->PageTableSizeInBytes = model.Level[input->LevelIndex].SizeBytes;
+        level->PageTableAlignmentInBytes =
+            model.Level[input->LevelIndex].AlignmentBytes;
         status = STATUS_SUCCESS;
       }
     }
