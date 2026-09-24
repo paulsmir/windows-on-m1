@@ -32,3 +32,53 @@ The source-backed split is exact at object36: objects0..35 are rebound into `Ini
 ## Smallest falsifiable hardware checkpoint and recovery
 
 One hash-pinned WDDM3.0/GpuMmu0 diagnostic package plus a new hash-pinned m1n1 v5 image; one run, no DWM stimulus. Install the package on the full-owner guest while `B1Armed` is absent: `StartDevice` returns before memory/interrupt/GPU access and records stage0. Verify exact package and the disarmed receipt, write `B1Armed=1` to the APPL0002 hardware key, perform an **orderly reboot**, then test during the fresh adapter start. This separates the EXP762 post-install memory-fragmentation question from the B1 firmware result. Preregister one experiment with `WHY THIS HYPOTHESIS`, the four sections above, exact root/m1n1/Mu commits and diff hashes, build/launch commands, package manifest and recovery artifacts. Check bounded SSH, USB L41/L43 and launcher before any physical request. Success requires two distinct owned backings at one VA, sequential slot1 leases, two real TA/3D firmware completions, TLB retirement acknowledgements and byte-identical context0/TTBR1. Failure includes any earlier KMD/firmware/ownership discrepancy. Collect ETW, broker/KMD receipts and raw logs before exact package cleanup; return to one inert Code28 APPL0002 with autologon still enabled.
+
+## EXP768 cold-arrival and KD update — 2026-09-24
+
+EXP763–767 ledger records no reason to omit the KD observer; no
+`kd_wait_bugcheck.py` or `bcdedit /debug` command was preregistered in those
+experiments. EXP768 preregisters debug-on serial vUART and a bounded
+`tools/kd/kd_wait_bugcheck.py` log alongside the cold-arrival staged path from
+EXP767. The script attaches by a brief break-in/version/continue handshake
+before waiting, so its successful attachment and timing are recorded as an
+observation. Collect KD, guest and launcher evidence before rollback. The
+normal GPU-visible Code28 guest remains the cleanup destination; the
+GPU-hidden image is used only for the documented staged-arrival exception and
+exact package removal.
+
+## EXP768 cleanup contract and discriminator
+
+Sources inspected: EXP767 `state.json` and ledger verdict; Asahi
+`drivers/gpu/drm/asahi/{mmu,pgtable}.rs` (slot users, three 16-KiB table
+levels); current m1n1 `hv_agx_gpuva_v5.c`, `hv_agx_retained_root.c` and
+`hv_agx_retained_platform.c`; Mu J313 `J313AppleAgxAbiAdmission.asl.inc`
+(one APPL0002, synthetic interrupt, four resource ranges); KMD
+`gpuva_b1_windows.c`, shared B1 roots and memory owners; pinned WDK26100
+`d3dkmddi.h` SHA256 `c13cecb0ce73e7bbdb6bec8586d05eea31932a8c532bec49b3dae4a03054770e`
+and Microsoft GpuMmu/DDI documentation. EXP767 proves two user-root jobs and
+lease/job/TLB retirement, but its `CleanupStatus1` does not name the cleanup
+owner. Asahi's `VmBind` reference drop differs from the explicit m1n1 v5
+JOB_END/RELEASE order; Mu exposes only resources; Windows B1 is still a
+GpuMmu0 diagnostic path and does not hand these test roots to VidMm.
+
+At Stage7 `LeaseToken=0` and `JobInFlight=FALSE` follow the two successful
+release receipts. No successful broker call sets `state->Uncertain`; both
+roots were created without `root->Uncertain`. Source therefore makes root1
+(the second job's owner) the first remaining teardown owner, followed by
+root0 and 12 test pages; the exact failing operation is not deducible from
+EXP767. No deterministic order/count defect was demonstrated by the host
+normal-path test, so no guessed cleanup behavior change is made. Durable
+steps 0–15 record precheck, each root's remaining mapped/grant/parent/table
+counts and broker status, each page release and the first failure. A new
+read-only retained-root wire query hashes every context0 table page in m1n1
+(including inherited TTBR1 root), once before job0 and once after cleanup;
+KMD records both hash and page count and fails closed on mismatch. The hash
+excludes firmware data pages, which legitimately change during jobs.
+
+Smallest checkpoint: exactly one EXP768 cold-arrival staged run with otherwise
+EXP767 B1 semantics. Success is Stage7, two outputs/completions, all cleanup
+steps successful, zero outstanding test pages, matching nonzero context0
+hash/page count, and no new stop code. A root/page failure names the next
+owner; a hash mismatch stops G3 hardware promotion. Collect registry/KD/host
+logs first, disarm and shut down, remove the exact package in GPU-hidden
+recovery, and restore ordinary GPU-visible Code28. No G3 caps are bundled.

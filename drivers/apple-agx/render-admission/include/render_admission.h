@@ -1324,6 +1324,18 @@ typedef struct _ADMISSION_B1_RETIREMENT_RECEIPT {
   ULONGLONG BrokerReceipt, BrokerEpoch;
 } ADMISSION_B1_RETIREMENT_RECEIPT;
 
+typedef struct _ADMISSION_B1_CLEANUP_RECEIPT {
+  ULONG Version, Bytes, Step, Owner, Page, Status, FirstFailure;
+  ULONG BrokerStatus, RootMapped, RootGrants, RootParents, RootTables;
+  ULONG RootCreated, RootUncertain, StateUncertain, OwnedPages;
+  ULONG MemoryResult;
+} ADMISSION_B1_CLEANUP_RECEIPT;
+
+typedef struct _ADMISSION_B1_CONTEXT0_HASH_RECEIPT {
+  ULONG Version, Bytes, Phase, Status, PageCount;
+  ULONGLONG Hash;
+} ADMISSION_B1_CONTEXT0_HASH_RECEIPT;
+
 enum {
   AdmissionB1RetireJobBegin = 0,
   AdmissionB1RetireSubmit = 1,
@@ -1349,6 +1361,12 @@ void AdmissionGpuvaB1RecordRetirement(_In_ ADMISSION_CONTEXT *Context,
     _In_ ULONGLONG BrokerEpoch);
 void AdmissionRecordB1Retirement(_In_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_B1_RETIREMENT_RECEIPT *Receipt);
+void AdmissionRecordB1Cleanup(_In_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_B1_CLEANUP_RECEIPT *Receipt);
+BOOLEAN AdmissionGpuvaB1Context0Hash(_In_ ADMISSION_CONTEXT *Context,
+    _Out_ ULONGLONG *Hash, _Out_ ULONG *PageCount);
+void AdmissionRecordB1Context0Hash(_In_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_B1_CONTEXT0_HASH_RECEIPT *Receipt);
 void AdmissionRecordB1Qualification(_In_ ADMISSION_CONTEXT *Context,
                                     _In_ ULONG Stage, _In_ NTSTATUS Status,
                                     _In_ NTSTATUS FirstFailure,

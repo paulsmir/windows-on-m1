@@ -671,8 +671,28 @@ static void class_arenas(void)
     assert(!f.live);
 }
 
+static void table_hash_receipt(void)
+{
+    struct fixture f;
+    unsigned long long before, after, restored;
+    unsigned int pages;
+    start(&f);
+    assert(hv_agx_retained_table_hash(&f.core, 1, &before, &pages) == HV_AGX_RETAINED_OK);
+    assert(pages == f.core.Inventory.PageCount && pages >= 2);
+    assert(hv_agx_retained_table_hash(&f.core, 1, &restored, &pages) == HV_AGX_RETAINED_OK);
+    assert(before == restored);
+    f.core.Pages[0].Entries[7] ^= 1;
+    assert(hv_agx_retained_table_hash(&f.core, 1, &after, &pages) == HV_AGX_RETAINED_OK);
+    assert(after != before);
+    f.core.Pages[0].Entries[7] ^= 1;
+    assert(hv_agx_retained_table_hash(&f.core, 1, &restored, &pages) == HV_AGX_RETAINED_OK);
+    assert(restored == before);
+    assert(hv_agx_retained_close(&f.core, 1, 1) == HV_AGX_RETAINED_OK);
+}
+
 int main(void)
 {
+    table_hash_receipt();
     class_arenas();
     production_inventory();
     absent_receipt();

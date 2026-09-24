@@ -1009,6 +1009,44 @@ _Use_decl_annotations_ void AdmissionRecordB1Retirement(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordB1Cleanup(
+    ADMISSION_CONTEXT *Context,
+    const ADMISSION_B1_CLEANUP_RECEIPT *Receipt) {
+  HANDLE key = NULL;
+  WCHAR name[32];
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      Receipt == NULL || Receipt->Version != 1u ||
+      Receipt->Bytes != sizeof(*Receipt) || Receipt->Step > 15u ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      !NT_SUCCESS(RtlStringCchPrintfW(name, RTL_NUMBER_OF(name),
+                                      L"Wom1B1Cleanup%02u", Receipt->Step)) ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, name, Receipt, sizeof(*Receipt));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
+_Use_decl_annotations_ void AdmissionRecordB1Context0Hash(
+    ADMISSION_CONTEXT *Context,
+    const ADMISSION_B1_CONTEXT0_HASH_RECEIPT *Receipt) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      Receipt == NULL || Receipt->Version != 1u ||
+      Receipt->Bytes != sizeof(*Receipt) || Receipt->Phase > 1u ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, Receipt->Phase == 0u ? L"Wom1B1Context0HashBefore" :
+      L"Wom1B1Context0HashAfter", Receipt, sizeof(*Receipt));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordB1Qualification(
     ADMISSION_CONTEXT *Context, ULONG Stage, NTSTATUS Status,
     NTSTATUS FirstFailure, ULONG Precheck, ULONG ProbeStatus,

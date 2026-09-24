@@ -23,7 +23,27 @@ typedef struct _ADMISSION_B1_STATE {
   ULONG Stage, CompletedJobs, BrokerStatus;
   ULONG Precheck, ProbeStatus;
   ULONGLONG ProbeEpoch;
+  ULONGLONG Context0HashBefore;
+  ULONG Context0PageCountBefore;
+  BOOLEAN Context0HashValid;
 } ADMISSION_B1_STATE;
+
+static BOOLEAN AdmissionB1Context0Hash(ADMISSION_CONTEXT *context,
+    ULONG phase, ULONGLONG *hash, ULONG *pages) {
+  ADMISSION_B1_CONTEXT0_HASH_RECEIPT receipt;
+  BOOLEAN valid;
+  RtlZeroMemory(&receipt, sizeof(receipt));
+  receipt.Version = 1u;
+  receipt.Bytes = sizeof(receipt);
+  receipt.Phase = phase;
+  valid = AdmissionGpuvaB1Context0Hash(context, hash, pages);
+  receipt.Status = valid ? (ULONG)STATUS_SUCCESS :
+      (ULONG)STATUS_DEVICE_HARDWARE_ERROR;
+  receipt.Hash = valid ? *hash : 0ULL;
+  receipt.PageCount = valid ? *pages : 0u;
+  AdmissionRecordB1Context0Hash(context, &receipt);
+  return valid;
+}
 
 static NTSTATUS AdmissionB1AllocatePage(
     ADMISSION_B1_STATE *state, ULONG owner, ULONG index) {
@@ -153,25 +173,81 @@ static BOOLEAN AdmissionB1OutputsValid(const ADMISSION_B1_STATE *state) {
   return TRUE;
 }
 
-static BOOLEAN AdmissionB1Cleanup(ADMISSION_B1_STATE *state) {
+static void AdmissionB1RecordCleanup(ADMISSION_CONTEXT *context,
+    const ADMISSION_B1_STATE *state, ULONG step, ULONG owner, ULONG page,
+    NTSTATUS status, APPLE_AGX_MEMORY_RESULT memory_result,
+    NTSTATUS first_failure) {
+  ADMISSION_B1_CLEANUP_RECEIPT receipt;
+  ULONG i, j;
+  RtlZeroMemory(&receipt, sizeof(receipt));
+  receipt.Version = 1u;
+  receipt.Bytes = sizeof(receipt);
+  receipt.Step = step;
+  receipt.Owner = owner;
+  receipt.Page = page;
+  receipt.Status = (ULONG)status;
+  receipt.FirstFailure = (ULONG)first_failure;
+  receipt.MemoryResult = (ULONG)memory_result;
+  receipt.StateUncertain = state->Uncertain;
+  if (owner < 2u) {
+    const APPLE_AGX_GPUVA_B1_ROOT *root = &state->Roots[owner];
+    receipt.BrokerStatus = root->LastStatus;
+    receipt.RootMapped = root->MappedCount;
+    receipt.RootGrants = root->GrantCount;
+    receipt.RootParents = root->ParentCount;
+    receipt.RootTables = root->TableCount;
+    receipt.RootCreated = root->Created;
+    receipt.RootUncertain = root->Uncertain;
+  }
+  for (i = 0u; i < 2u; ++i)
+    for (j = 0u; j < B1_OWNED_PAGES; ++j)
+      if (state->Owned[i][j].AllocationHandle != NULL)
+        ++receipt.OwnedPages;
+  AdmissionRecordB1Cleanup(context, &receipt);
+}
+
+static BOOLEAN AdmissionB1Cleanup(ADMISSION_CONTEXT *context,
+                                  ADMISSION_B1_STATE *state) {
   LONG owner;
   LONG page;
-  if (state->LeaseToken || state->JobInFlight)
+  NTSTATUS first_failure = STATUS_SUCCESS;
+  if (state->LeaseToken || state->JobInFlight || state->Uncertain) {
+    first_failure = STATUS_DEVICE_BUSY;
+    AdmissionB1RecordCleanup(context, state, 0u, MAXULONG, MAXULONG,
+        first_failure, AppleAgxMemoryResultOk, first_failure);
     return FALSE;
-  if (state->Uncertain)
-    return FALSE;
+  }
+  AdmissionB1RecordCleanup(context, state, 0u, MAXULONG, MAXULONG,
+      STATUS_SUCCESS, AppleAgxMemoryResultOk, first_failure);
   for (owner = 1; owner >= 0; --owner)
     if (!AppleAgxGpuvaB1DestroyRoot(&state->Client,
-                                    &state->Roots[owner]))
+                                    &state->Roots[owner])) {
+      first_failure = STATUS_DEVICE_BUSY;
+      AdmissionB1RecordCleanup(context, state, 2u - (ULONG)owner,
+          (ULONG)owner, MAXULONG, first_failure,
+          AppleAgxMemoryResultOk, first_failure);
       return FALSE;
+    } else {
+      AdmissionB1RecordCleanup(context, state, 2u - (ULONG)owner,
+          (ULONG)owner, MAXULONG, STATUS_SUCCESS,
+          AppleAgxMemoryResultOk, first_failure);
+    }
   for (owner = 1; owner >= 0; --owner)
     for (page = B1_OWNED_PAGES - 1; page >= 0; --page) {
       APPLE_AGX_MEMORY_OBJECT *object = &state->Owned[owner][page];
-      if (object->AllocationHandle != NULL &&
-          AppleAgxMemoryRelease(&state->Io, object) !=
-              AppleAgxMemoryResultOk)
-        return FALSE;
+      APPLE_AGX_MEMORY_RESULT result = object->AllocationHandle != NULL ?
+          AppleAgxMemoryRelease(&state->Io, object) : AppleAgxMemoryResultOk;
+      NTSTATUS status = result == AppleAgxMemoryResultOk ?
+          STATUS_SUCCESS : STATUS_DEVICE_BUSY;
+      if (!NT_SUCCESS(status)) first_failure = status;
+      AdmissionB1RecordCleanup(context, state,
+          3u + (1u - (ULONG)owner) * B1_OWNED_PAGES +
+              (B1_OWNED_PAGES - 1u - (ULONG)page),
+          (ULONG)owner, (ULONG)page, status, result, first_failure);
+      if (!NT_SUCCESS(status)) return FALSE;
     }
+  AdmissionB1RecordCleanup(context, state, 15u, MAXULONG, MAXULONG,
+      STATUS_SUCCESS, AppleAgxMemoryResultOk, first_failure);
   return TRUE;
 }
 
@@ -263,6 +339,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaB1Qualify(
   }
   RtlFillMemory(state->Owned[0][5].CpuAddress, B1_OUTPUT_BYTES, 0xa5u);
   RtlFillMemory(state->Owned[1][5].CpuAddress, B1_OUTPUT_BYTES, 0x5au);
+  state->Context0HashValid = AdmissionB1Context0Hash(context, 0u,
+      &state->Context0HashBefore, &state->Context0PageCountBefore);
+  if (!state->Context0HashValid) {
+    status = STATUS_DEVICE_HARDWARE_ERROR;
+    goto Done;
+  }
   status = AdmissionB1LeaseJob(context, state, 0u, 1u);
   if (!NT_SUCCESS(status)) goto Done;
   state->Stage = 5u;
@@ -293,7 +375,20 @@ Done:
         *(ULONG *)state->Owned[0][5].CpuAddress : 0u;
     ULONG pixelB = state->Owned[1][5].CpuAddress != NULL ?
         *(ULONG *)state->Owned[1][5].CpuAddress : 0u;
-    BOOLEAN cleaned = AdmissionB1Cleanup(state);
+    BOOLEAN cleaned = AdmissionB1Cleanup(context, state);
+    if (state->Context0HashValid) {
+      ULONGLONG after_hash = 0ULL;
+      ULONG after_pages = 0u;
+      if (!AdmissionB1Context0Hash(context, 1u,
+                                   &after_hash, &after_pages)) {
+        if (cleaned && NT_SUCCESS(status))
+          status = STATUS_DEVICE_HARDWARE_ERROR;
+      } else if (after_hash != state->Context0HashBefore ||
+                 after_pages != state->Context0PageCountBefore) {
+        if (cleaned && NT_SUCCESS(status))
+          status = STATUS_DEVICE_DATA_ERROR;
+      }
+    }
     outcome = AppleAgxGpuvaB1FinalStatus((ULONG)status, cleaned,
                                            (ULONG)STATUS_DEVICE_BUSY);
     AdmissionRecordB1Qualification(

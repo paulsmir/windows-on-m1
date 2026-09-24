@@ -1372,6 +1372,29 @@ static BOOLEAN AdmissionRetainedCommand(ADMISSION_PLATFORM_RUNTIME *runtime,
   return AdmissionRetainedExchange(runtime,&request,response);
 }
 
+#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
+_Use_decl_annotations_ BOOLEAN AdmissionGpuvaB1Context0Hash(
+    ADMISSION_CONTEXT *Context, ULONGLONG *Hash, ULONG *PageCount) {
+  ADMISSION_PLATFORM_RUNTIME *runtime;
+  AGX_RR_RESPONSE response = {0};
+  if (Hash == NULL || PageCount == NULL)
+    return FALSE;
+  *Hash = 0ULL;
+  *PageCount = 0u;
+  if (Context == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return FALSE;
+  runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
+  if (runtime == NULL || !runtime->RetainedPrepared ||
+      !AdmissionRetainedCommand(runtime, AGX_RR_QUERY_TABLE_HASH, &response) ||
+      response.Status != 0u || response.Count == 0ULL ||
+      response.Count > 24ULL)
+    return FALSE;
+  *Hash = response.Pa;
+  *PageCount = (ULONG)response.Count;
+  return TRUE;
+}
+#endif
+
 static BOOLEAN AdmissionRetainedQueryArena(ADMISSION_PLATFORM_RUNTIME *runtime,
     ULONG ArenaClass, AGX_RR_ARENA_DESCRIPTOR *Arena) {
   AGX_RR_REQUEST request = {0};

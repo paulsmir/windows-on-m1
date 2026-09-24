@@ -10,6 +10,9 @@ static void execute(void *ctx, const AGX_RR_REQUEST *q, AGX_RR_RESPONSE *r) {
     r->ArenaClass = (unsigned int)q->Va;
     r->ArenaVa = 0xffffffa041000000ULL;
     r->ArenaBytes = 0x01000000ULL;
+  } else if (q->Command == AGX_RR_QUERY_TABLE_HASH) {
+    r->Pa = 0x123456789abcdef0ULL;
+    r->Count = 7;
   }
 }
 static unsigned long long rd(void *ctx,unsigned offset) {
@@ -79,6 +82,15 @@ int main(void) {
     assert(response.ArenaClass==AGX_RR_ARENA_SHARED);
     assert(response.ArenaVa==0xffffffa041000000ULL);
     assert(response.ArenaBytes==0x01000000ULL);
+  }
+  {
+    struct hv_agx_retained_mmio hash_state={0};
+    AGX_RR_IO io={&hash_state,rd,wr64,wr32};
+    AGX_RR_REQUEST request={0}; AGX_RR_RESPONSE response={0};
+    request.Command=AGX_RR_QUERY_TABLE_HASH;
+    request.Epoch=17;
+    assert(AgxRrExchange(&io,&request,&response));
+    assert(response.Pa==0x123456789abcdef0ULL && response.Count==7);
   }
   return 0;
 }
