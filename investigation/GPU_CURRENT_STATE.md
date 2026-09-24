@@ -1,5 +1,35 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 R53 / EXP775 ETW observation verdict and recovery
+
+Saved EXP771-774 Admin EVTX each contain exactly one current-boot Event549 with
+GraphicsVendorId=0x4c505041, Status=0xc000000d and FailureReason=3
+(`StartAdapter_AddAdapterFailed`), without a sub-status or check name. The
+retained DxgKrnl-Operational channel has zero records. Type16/status0 is the
+last overwritten QueryAdapterInfo receipt, but the receipts have no global
+timestamps and cannot establish the last DDI before refusal. No further caps
+candidate is justified by these logs.
+
+EXP775 reused package774 and the EXP774 full-owner 64-KiB/debug-off/no-KD boot
+bytes. Its cold boot again reached StartDevice Stage12/status0 then Code43 and
+Event549 AddAdapter INVALID_PARAMETER. One all-keyword DxgKrnl ETW trace around
+one live `pnputil /restart-device` was captured without lost buffers (ETL
+SHA256 `061d7de27d99df19c57098a489191192d3dfb8819c0bf7b9000494ef96782410`).
+The restart diverged: ETW records `DdiStartDevice` returning 0xc01e0002,
+Event549 FailureReason=1, and driver Stage9/PostDisplay. The saved receipt
+cannot distinguish failure of `DxgkCbAcquirePostDisplayOwnership` from the
+subsequent geometry check. No AddAdapter validation was reached under ETW,
+so no dxgkrnl check or documentation-backed caps fix is established. Do not
+repeat live restart. Next separate diagnostic candidate is boot-time ETW
+AutoLogger after offline verification of its startup contract.
+
+G3Armed was removed; immutable GPU-hidden cleanup deleted exact oem5.inf,
+signer and transfer. Frozen ordinary EXP377/392 returned pinned SSH and one
+inert APPL0002 Code28 with no AppleAgx residue, CPU8/storage2/USB7.
+Final baseline SHA256
+`f8c3d69fd4b8e33a8555cb76f9327e70cd85b398e03fc46d7aa48cd43869cf60`.
+G4 Mesa VA winsys still waits for AddAdapter and first VidMm DDI.
+
 ## 2026-09-24 EXP774 atomic GpuMmu declaration verdict and recovery
 
 Pinned WDK26100 offline contract and RED→GREEN host validator are in
