@@ -7,7 +7,8 @@ For IRQL_NOT_LESS_OR_EQUAL (0xA) those are: referenced address, IRQL at the time
 1=write, and the address of the instruction that did it - which is exactly what is needed
 instead of guessing.
 
-This does NOT break in: it only reads, so the target's own timing is untouched.
+Attachment uses a brief break-in/version/continue handshake. After that it
+only reads state changes until the timeout.
 """
 import os
 import serial, struct, sys, time
@@ -41,6 +42,7 @@ BUGCHECK_NAMES = {
 }
 
 timeout_s = float(sys.argv[1]) if len(sys.argv) > 1 else 300.0
+attach_retry_s = float(os.environ.get("KD_ATTACH_RETRY_SECONDS", "0"))
 ser = serial.Serial(PORT, BAUD, timeout=0.06)
 
 #
@@ -50,14 +52,25 @@ ser = serial.Serial(PORT, BAUD, timeout=0.06)
 #
 from kd_proclist import KD
 _kd = KD(ser)
-try:
-    print("[*] connecting to KD...", flush=True)
-    _kd.break_in()
-    kb, _ = _kd.get_version()
-    print(f"[*] debugger connected, KernBase=0x{kb:x}; resuming guest", flush=True)
-    _kd.continue_execution()
-except Exception as e:
-    print(f"[!] debugger attach failed: {e!r}; listening passively", flush=True)
+attach_deadline = time.time() + attach_retry_s
+while True:
+    try:
+        print("[*] connecting to KD...", flush=True)
+        _kd.break_in()
+        kb, _ = _kd.get_version()
+        print(f"[*] debugger connected, KernBase=0x{kb:x}; resuming guest", flush=True)
+        _kd.continue_execution()
+        break
+    except Exception as e:
+        try:
+            _kd.continue_execution()
+        except Exception:
+            pass
+        if time.time() >= attach_deadline:
+            print(f"[!] debugger attach failed: {e!r}; listening passively", flush=True)
+            break
+        print(f"[!] debugger not ready: {e!r}; retrying", flush=True)
+        time.sleep(1.0)
 
 ser.timeout = 0.3
 print(f"[*] waiting up to {timeout_s:.0f}s for a bugcheck", flush=True)
