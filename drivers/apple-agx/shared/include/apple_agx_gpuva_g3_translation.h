@@ -37,6 +37,14 @@ APPLE_AGX_GPUVA_G3_RESULT AppleAgxGpuvaG3PlanSpan(
     unsigned int SegmentPageBytes, APPLE_AGX_GPUVA_G3_NATIVE_LEAF *Leaves,
     unsigned int LeafCapacity, unsigned int *LeafCount);
 
+/* A 64-KiB VidMm leaf entry expands to four native 16-KiB AGX leaves. */
+APPLE_AGX_GPUVA_G3_RESULT AppleAgxGpuvaG3Plan64KSpan(
+    const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *Entries,
+    unsigned int StartIndex, unsigned int Count,
+    unsigned long long FirstGpuVa, unsigned int LocalSegmentId,
+    APPLE_AGX_GPUVA_G3_NATIVE_LEAF *Leaves,
+    unsigned int LeafCapacity, unsigned int *LeafCount);
+
 APPLE_AGX_GPUVA_G3_RESULT AppleAgxGpuvaG3ResolvePageAddress(
     unsigned int SegmentId, unsigned long long PageAddress,
     unsigned int LocalSegmentId, unsigned long long LocalGuestIpaBase,

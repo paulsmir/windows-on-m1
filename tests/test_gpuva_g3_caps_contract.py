@@ -14,7 +14,7 @@ class GpuvaG3CapsContractTests(unittest.TestCase):
         source = r'''
 #include "apple_agx_gpuva_g3_caps.h"
 int main(void) {
-  APPLE_AGX_GPUVA_G3_CAPS caps = AppleAgxGpuvaG3Caps();
+  APPLE_AGX_GPUVA_G3_CAPS caps = AppleAgxGpuvaG3Caps(0u);
   if (!AppleAgxGpuvaG3CapsValid(&caps, 16u, 0u, 0u)) return 1;
   if (caps.Level[0].IndexBits != 13u ||
       caps.Level[0].SizeBytes != 0x20000u ||
@@ -22,14 +22,21 @@ int main(void) {
       caps.Level[2].SizeBytes != 0x4000u) return 2;
   caps.Level[0].SizeBytes = 0x4000u;
   if (AppleAgxGpuvaG3CapsValid(&caps, 16u, 0u, 0u)) return 3;
-  caps = AppleAgxGpuvaG3Caps();
+  caps = AppleAgxGpuvaG3Caps(0u);
   if (AppleAgxGpuvaG3CapsValid(&caps, 16u, 1u, 0u)) return 4;
   if (AppleAgxGpuvaG3CapsValid(&caps, 16u, 0u, 1u)) return 5;
   caps.Level[1].SegmentId = 0u;
   if (AppleAgxGpuvaG3CapsValid(&caps, 16u, 0u, 0u)) return 6;
-  caps = AppleAgxGpuvaG3Caps();
+  caps = AppleAgxGpuvaG3Caps(0u);
   caps.VirtualAddressBits = 40u;
   if (AppleAgxGpuvaG3CapsValid(&caps, 16u, 0u, 0u)) return 7;
+  caps = AppleAgxGpuvaG3Caps(1u);
+  if (caps.Leaf64KBytes != 8192u ||
+      !AppleAgxGpuvaG3CapsValid(&caps, 16u, 1u, 0u)) return 8;
+  caps.Leaf64KBytes = 4096u;
+  if (AppleAgxGpuvaG3CapsValid(&caps, 16u, 1u, 0u)) return 9;
+  caps.Leaf64KBytes = 0u;
+  if (AppleAgxGpuvaG3CapsValid(&caps, 16u, 1u, 0u)) return 10;
   return 0;
 }
 '''

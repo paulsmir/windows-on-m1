@@ -100,3 +100,46 @@ APPLE_AGX_GPUVA_G3_RESULT AppleAgxGpuvaG3ResolvePageAddress(
   *guest_ipa = local_base + address;
   return AppleAgxGpuvaG3Ok;
 }
+
+APPLE_AGX_GPUVA_G3_RESULT AppleAgxGpuvaG3Plan64KSpan(
+    const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *entries,
+    unsigned int start_index, unsigned int count,
+    unsigned long long first_gpu_va, unsigned int local_segment,
+    APPLE_AGX_GPUVA_G3_NATIVE_LEAF *leaves,
+    unsigned int leaf_capacity, unsigned int *leaf_count) {
+  const unsigned long long va_limit = 1ULL << 39;
+  APPLE_AGX_GPUVA_G3_RESULT overall = AppleAgxGpuvaG3Unmap;
+  unsigned int i, j;
+  if (entries == 0 || leaves == 0 || leaf_count == 0 ||
+      local_segment == 0u || count == 0u || start_index >= 512u ||
+      count > 512u - start_index || count > leaf_capacity / 4u ||
+      (first_gpu_va & 0xffffu) || first_gpu_va >= va_limit ||
+      (unsigned long long)count * 0x10000u > va_limit - first_gpu_va)
+    return AppleAgxGpuvaG3Invalid;
+  /* Validate the entire update before changing any output. */
+  for (i = 0u; i < count; ++i) {
+    const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte = &entries[i];
+    if (pte->Flags == 0u) continue;
+    if ((pte->Flags != APPLE_AGX_GPUVA_G3_VALID &&
+         pte->Flags != (APPLE_AGX_GPUVA_G3_VALID | APPLE_AGX_GPUVA_G3_WRITE)) ||
+        pte->SegmentId != local_segment || pte->GuestIpa == 0ULL ||
+        (pte->GuestIpa & 0xffffu) || pte->GuestIpa > ~0ULL - 0xffffu)
+      return AppleAgxGpuvaG3Unrepresentable;
+    overall = AppleAgxGpuvaG3Ok;
+  }
+  for (i = 0u; i < count; ++i) {
+    const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte = &entries[i];
+    for (j = 0u; j < 4u; ++j) {
+      APPLE_AGX_GPUVA_G3_NATIVE_LEAF *leaf = &leaves[i * 4u + j];
+      leaf->GpuVa = first_gpu_va + (unsigned long long)i * 0x10000u +
+                    (unsigned long long)j * APPLE_AGX_GPUVA_G3_NATIVE_PAGE;
+      leaf->GuestIpa = pte->Flags ? pte->GuestIpa +
+          (unsigned long long)j * APPLE_AGX_GPUVA_G3_NATIVE_PAGE : 0ULL;
+      leaf->SegmentId = pte->Flags ? local_segment : 0u;
+      leaf->ValidMask = pte->Flags ? 15u : 0u;
+      leaf->WritableMask = (pte->Flags & APPLE_AGX_GPUVA_G3_WRITE) ? 15u : 0u;
+    }
+  }
+  *leaf_count = count * 4u;
+  return overall;
+}

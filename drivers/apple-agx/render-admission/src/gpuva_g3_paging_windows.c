@@ -17,7 +17,9 @@ static NTSTATUS AdmissionG3UpdateParent(
     const DXGK_PTE *pte = &update->pPageTableEntries[index - update->StartIndex];
     if (!pte->Valid) continue;
     if (pte->Flags !=
-        (1ULL | ((ULONGLONG)ADMISSION_MEMORY_LOCAL_SEGMENT << 5)))
+        (1ULL | ((ULONGLONG)ADMISSION_MEMORY_LOCAL_SEGMENT << 5) |
+         ((update->PageTableLevel == 1u && update->Flags.Use64KBPages) ?
+              (1ULL << 17) : 0ULL)))
       return STATUS_NOT_SUPPORTED;
     RtlZeroMemory(&address, sizeof(address));
     address.GpuPhysical.SegmentId = ADMISSION_MEMORY_LOCAL_SEGMENT;
@@ -57,7 +59,9 @@ static NTSTATUS AdmissionG3UpdateLeaf(
   unsigned int count = 0u, index;
   NTSTATUS status = STATUS_INVALID_PARAMETER;
   if (update->NumPageTableEntries == 0u ||
-      update->NumPageTableEntries > 8192u) return STATUS_INVALID_PARAMETER;
+      update->NumPageTableEntries >
+          (update->Flags.Use64KBPages ? 512u : 8192u))
+    return STATUS_INVALID_PARAMETER;
   if (!NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(adapter, &view)))
     return STATUS_INVALID_DEVICE_STATE;
   logical = ExAllocatePool2(POOL_FLAG_NON_PAGED,
@@ -84,21 +88,33 @@ static NTSTATUS AdmissionG3UpdateLeaf(
             pte->PageAddress, ADMISSION_MEMORY_LOCAL_SEGMENT,
             view.GuestIpaAddress, view.Bytes, &ipa) != AppleAgxGpuvaG3Ok)
       goto Done;
+    if (update->Flags.Use64KBPages &&
+        (view.Bytes < 0x10000u ||
+         (UINT)pte->Segment != ADMISSION_MEMORY_LOCAL_SEGMENT ||
+         (pte->PageAddress & 0xffffu) ||
+         pte->PageAddress > view.Bytes - 0x10000u))
+      goto Done;
     logical[index].GuestIpa = ipa;
     logical[index].SegmentId = (unsigned int)pte->Segment;
     logical[index].Flags = APPLE_AGX_GPUVA_G3_VALID |
         (pte->ReadOnly ? 0u : APPLE_AGX_GPUVA_G3_WRITE);
   }
-  plan = AppleAgxGpuvaG3PlanSpan(logical, update->StartIndex,
-      update->NumPageTableEntries, update->FirstPteVirtualAddress,
-      ADMISSION_MEMORY_LOCAL_SEGMENT,
-      ADMISSION_GPUVA_G1B_PAGE_PROFILE == 64 ? 0x10000u : 0x4000u,
-      leaves, update->NumPageTableEntries / 4u, &count);
+  if (update->Flags.Use64KBPages)
+    plan = AppleAgxGpuvaG3Plan64KSpan(logical, update->StartIndex,
+        update->NumPageTableEntries, update->FirstPteVirtualAddress,
+        ADMISSION_MEMORY_LOCAL_SEGMENT, leaves, 2048u, &count);
+  else
+    plan = AppleAgxGpuvaG3PlanSpan(logical, update->StartIndex,
+        update->NumPageTableEntries, update->FirstPteVirtualAddress,
+        ADMISSION_MEMORY_LOCAL_SEGMENT,
+        ADMISSION_GPUVA_G1B_PAGE_PROFILE == 64 ? 0x10000u : 0x4000u,
+        leaves, update->NumPageTableEntries / 4u, &count);
   if (plan != AppleAgxGpuvaG3Ok && plan != AppleAgxGpuvaG3Unmap)
     goto Done;
   for (index = 0u; index < count && index < 2048u; ++index) {
     if (!AppleAgxGpuvaG3GraphUpdateLeaf(&process->Graph, table_ipa,
-            (update->StartIndex / 4u) + index, leaves[index].GuestIpa,
+            (update->Flags.Use64KBPages ? update->StartIndex * 4u :
+                update->StartIndex / 4u) + index, leaves[index].GuestIpa,
             leaves[index].WritableMask != 0u)) {
       status = STATUS_DEVICE_HARDWARE_ERROR;
       goto Done;
@@ -142,7 +158,8 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
   if (args->Operation != DXGK_OPERATION_UPDATE_PAGE_TABLE)
     return STATUS_NOT_SUPPORTED;
   update = &args->UpdatePageTable;
-  limit = update->PageTableLevel == 0u ? 8192u :
+  limit = update->PageTableLevel == 0u ?
+              (update->Flags.Use64KBPages ? 512u : 8192u) :
           update->PageTableLevel == 1u ? 2048u :
           update->PageTableLevel == 2u ? 8u : 0u;
   if (limit == 0u || update->NumPageTableEntries == 0u ||
@@ -151,9 +168,13 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
       update->pPageTableEntries == NULL || update->pPageTableEntries64KB != NULL ||
       update->Reserved0 != 0u || update->DriverProtection != 0ULL ||
       update->Flags.Repeat || update->Flags.NotifyEviction ||
-      update->Flags.Use64KBPages || update->Flags.NativeFence ||
+      update->Flags.NativeFence ||
       update->Flags.Reserved ||
+      (update->Flags.Use64KBPages &&
+       (ADMISSION_GPUVA_G1B_PAGE_PROFILE != 64 ||
+        update->PageTableLevel == 2u)) ||
       (update->PageTableLevel == 0u &&
+       !update->Flags.Use64KBPages &&
        ((update->StartIndex | update->NumPageTableEntries) & 3u)) ||
       (update->UpdateMode != DXGK_PAGETABLEUPDATE_GPU_PHYSICAL &&
        update->UpdateMode != DXGK_PAGETABLEUPDATE_CPU_VIRTUAL) ||

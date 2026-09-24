@@ -17,8 +17,10 @@ typedef struct _APPLE_AGX_GPUVA_G3_CAPS {
   APPLE_AGX_GPUVA_G3_LEVEL_CAPS Level[3];
 } APPLE_AGX_GPUVA_G3_CAPS;
 
-static inline APPLE_AGX_GPUVA_G3_CAPS AppleAgxGpuvaG3Caps(void) {
-  APPLE_AGX_GPUVA_G3_CAPS caps = {39u, 3u, 0u,
+static inline APPLE_AGX_GPUVA_G3_CAPS AppleAgxGpuvaG3Caps(
+    unsigned int any_64k_segment) {
+  APPLE_AGX_GPUVA_G3_CAPS caps = {39u, 3u,
+      any_64k_segment ? 512u * 16u : 0u,
       {{13u, 2u, 0x20000u, 0x4000u},
        {11u, 2u, 0x8000u, 0x4000u},
        {3u, 2u, 0x4000u, 0x4000u}}};
@@ -32,7 +34,8 @@ static inline int AppleAgxGpuvaG3CapsValid(
   if (caps == 0 || caps->LevelCount != 3u || pte_bytes == 0u ||
       cpu_virtual_update ||
       (any_64k_segment &&
-       (caps->Leaf64KBytes == 0u || (caps->Leaf64KBytes & 0xfffu))) ||
+       (caps->Leaf64KBytes == 0u || (caps->Leaf64KBytes & 0xfffu) ||
+        caps->Leaf64KBytes != (1u << (13u - 4u)) * pte_bytes)) ||
       (!any_64k_segment && caps->Leaf64KBytes != 0u)) return 0;
   for (i = 0u; i < caps->LevelCount; ++i) {
     const APPLE_AGX_GPUVA_G3_LEVEL_CAPS *level = &caps->Level[i];

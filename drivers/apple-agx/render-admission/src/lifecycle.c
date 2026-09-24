@@ -1,8 +1,9 @@
 #include "render_admission.h"
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #include "apple_agx_gpuva_g3_caps.h"
-#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 16
-#error G3 VidMm path currently implements only 16-KiB local segment pages
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 16 && \
+    ADMISSION_GPUVA_G1B_PAGE_PROFILE != 64
+#error G3 VidMm path requires a 16- or 64-KiB local segment profile
 #endif
 C_ASSERT(sizeof(DXGK_PTE) == 16);
 C_ASSERT(ADMISSION_MEMORY_LOCAL_SEGMENT == 2u);
@@ -551,7 +552,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
   case DXGKQAITYPE_GPUMMUCAPS: {
     const DXGK_QUERYGPUMMUCAPSIN *input;
     DXGK_GPUMMUCAPS *caps;
-    APPLE_AGX_GPUVA_G3_CAPS model = AppleAgxGpuvaG3Caps();
+    APPLE_AGX_GPUVA_G3_CAPS model = AppleAgxGpuvaG3Caps(ADMISSION_G1B_USE64K);
     if (context->GpuvaG3State == NULL) {
       status = STATUS_INVALID_DEVICE_STATE;
     } else if (QueryAdapterInfo->pInputData == NULL ||
@@ -563,7 +564,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
       input = (const DXGK_QUERYGPUMMUCAPSIN *)QueryAdapterInfo->pInputData;
       caps = (DXGK_GPUMMUCAPS *)QueryAdapterInfo->pOutputData;
       if (input->PhysicalAdapterIndex != 0u ||
-          !AppleAgxGpuvaG3CapsValid(&model, sizeof(DXGK_PTE), 0u, 0u)) {
+          !AppleAgxGpuvaG3CapsValid(&model, sizeof(DXGK_PTE),
+                                   ADMISSION_G1B_USE64K, 0u)) {
         status = STATUS_INVALID_PARAMETER;
       } else {
         RtlZeroMemory(caps, sizeof(*caps));
@@ -583,7 +585,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
   case DXGKQAITYPE_PAGETABLELEVELDESC: {
     const DXGK_QUERYPAGETABLELEVELDESCIN *input;
     DXGK_PAGE_TABLE_LEVEL_DESC *level;
-    APPLE_AGX_GPUVA_G3_CAPS model = AppleAgxGpuvaG3Caps();
+    APPLE_AGX_GPUVA_G3_CAPS model = AppleAgxGpuvaG3Caps(ADMISSION_G1B_USE64K);
     if (context->GpuvaG3State == NULL) {
       status = STATUS_INVALID_DEVICE_STATE;
     } else if (QueryAdapterInfo->pInputData == NULL ||
@@ -597,7 +599,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
       level = (DXGK_PAGE_TABLE_LEVEL_DESC *)QueryAdapterInfo->pOutputData;
       if (input->PhysicalAdapterIndex != 0u ||
           input->LevelIndex >= model.LevelCount ||
-          !AppleAgxGpuvaG3CapsValid(&model, sizeof(DXGK_PTE), 0u, 0u)) {
+          !AppleAgxGpuvaG3CapsValid(&model, sizeof(DXGK_PTE),
+                                   ADMISSION_G1B_USE64K, 0u)) {
         status = STATUS_INVALID_PARAMETER;
       } else {
         RtlZeroMemory(level, sizeof(*level));

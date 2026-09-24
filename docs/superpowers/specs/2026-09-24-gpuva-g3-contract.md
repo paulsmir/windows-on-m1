@@ -121,3 +121,49 @@ process root and one bounded UPDATE_PAGE_TABLE group; KMD and broker report
 identical IPA/PA/VA/protection and TLB ack. Failure or partial/scattered input
 stops before GPU work. Preserve the known-good ordinary Code28 artifact and
 exact package rollback. No G3 package is installed in EXP768.
+
+## EXP773 G1b 64-KiB admission discriminator
+
+Sources checked: EXP771/EXP772 armed and recovery entries in
+`investigation/EXPERIMENTS.md`; pinned WDK26100 `d3dkmddi.h` and `d3dukmdt.h`;
+Microsoft GPU segments, GpuMmu model, `DXGK_GPUMMUCAPS`,
+`DXGK_UPDATEPAGETABLEFLAGS`, `DXGK_PTE`, `DXGK_PAGE_TABLE_LEVEL_DESC`, and
+`DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE`; the Asahi/m1n1/Mu ownership sources
+above; current `apple_agx_physical_topology.c`, `memory_windows.c`,
+`lifecycle.c`, and `gpuva_g3_paging_windows.c`. EXP772 proved natural
+StartDevice and successful QAI13/14 with 128/32/16-KiB table sizes, followed
+by AddAdapter `STATUS_INVALID_PARAMETER`. VidMm documents 4- or 64-KiB memory
+segment pages under GpuMmu, while EXP772 advertised 16 KiB. This is a
+candidate cause, not an established Windows rejection rule.
+
+The one profile change is G1b local memory pages from 16 to 64 KiB. QUERYSEGMENT4
+and QUERYSEGMENT5 already derive local `Use64KBPages` and slab size from that
+selection; topology exposes exactly one aperture (segment 1) and one local
+segment (segment 2). The three 39-bit page-table levels stay 128/32/16 KiB;
+the 64-KiB leaf view has 512 `DXGK_PTE` entries and 8192 bytes. Dual-PTE and
+64-KiB system-memory support remain zero. A 64-KiB leaf entry resolves only
+inside the contiguous local object and expands into four 16-KiB AGX leaves;
+the 4-KiB logical path remains for system memory. Unsupported, scattered or
+misaligned input fails before graph mutation. The WDK 26100 `DXGK_PTE` is 16
+bytes and its level-1 page-size enum has 4- and 64-KiB values.
+
+Ownership is unchanged: VidMm allocates and updates GPUVA/table storage;
+the KMD validates PTEs and process graph updates; m1n1 owns AGX publication,
+TLB, power and recovery; Mu exposes APPL0002 and resources. `DRIVERCAPS`
+advertises VirtualAddressingSupported/GpuMmuSupported only in armed G3, one
+execution node makes paging node 0 valid, and QAI13/14 use local segment 2.
+QUERYMMUCOUNT/QUERYMMUS still report zero/invalid; the available Microsoft
+documentation does not establish whether that WDDM 3.2 topology is an
+AddAdapter gate, so this discriminator leaves it unchanged.
+
+Smallest hardware checkpoint: one debug-off/no-KD EXP773 boot with the frozen
+EXP772 full-owner m1n1/Mu contract and only the hash-verified package773
+profile changed. Observe first QAI/VidMm receipts and AddAdapter. A Code0
+result opens G4 offline Mesa winsys work; another invalid-parameter result
+rejects the 16-KiB-only hypothesis and retains QUERYMMUCOUNT, other segment
+fields, and PnP state as separate candidates. Export GraphicsDrivers and
+AppleAgx service registry without changing boot. WPR boot trace is omitted:
+its boot instrumentation would be an additional experimental variable. Disarm
+and remove the exact package via the proven GPU-hidden recovery image, then
+verify ordinary GPU-visible Code28. No m1n1 or Mu modification is part of
+EXP773.

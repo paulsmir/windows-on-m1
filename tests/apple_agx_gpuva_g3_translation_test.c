@@ -101,5 +101,40 @@ int main(void) {
       1u, 0x2000u, out, 2u, &n) == AppleAgxGpuvaG3Invalid);
   assert(AppleAgxGpuvaG3PlanSpan(p, 0u, 4u, 0x1500000000ULL,
       1u, 0x10000u, out, 0u, &n) == AppleAgxGpuvaG3Invalid);
+  {
+    APPLE_AGX_GPUVA_G3_LOGICAL_PTE wide[2] = {
+        {0x20000000ULL, 2u, APPLE_AGX_GPUVA_G3_VALID | APPLE_AGX_GPUVA_G3_WRITE},
+        {0x20010000ULL, 2u, APPLE_AGX_GPUVA_G3_VALID}};
+    APPLE_AGX_GPUVA_G3_NATIVE_LEAF four[8];
+    assert(AppleAgxGpuvaG3Plan64KSpan(wide, 510u, 2u, 0x1fffe0000ULL,
+        2u, four, 8u, &n) == AppleAgxGpuvaG3Ok);
+    assert(n == 8u && four[0].GuestIpa == 0x20000000ULL &&
+           four[3].GuestIpa == 0x2000c000ULL &&
+           four[4].GuestIpa == 0x20010000ULL &&
+           four[0].WritableMask == 15u && four[4].WritableMask == 0u);
+    assert(four[0].GpuVa == 0x1fffe0000ULL &&
+           four[4].GpuVa == 0x1ffff0000ULL);
+    wide[1].GuestIpa = 0x20011000ULL;
+    memset(four, 0xa5, sizeof(four));
+    assert(AppleAgxGpuvaG3Plan64KSpan(wide, 510u, 2u, 0x1fffe0000ULL,
+        2u, four, 8u, &n) == AppleAgxGpuvaG3Unrepresentable);
+    for (unsigned i = 0; i < sizeof(four); ++i)
+      assert(((unsigned char *)four)[i] == 0xa5u);
+    wide[1].GuestIpa = 0x20010000ULL;
+    assert(AppleAgxGpuvaG3Plan64KSpan(wide, 511u, 2u, 0x1fffe0000ULL,
+        2u, four, 8u, &n) == AppleAgxGpuvaG3Invalid);
+    wide[0].SegmentId = 0u;
+    assert(AppleAgxGpuvaG3Plan64KSpan(wide, 510u, 2u, 0x1fffe0000ULL,
+        2u, four, 8u, &n) == AppleAgxGpuvaG3Unrepresentable);
+    wide[0].SegmentId = 2u;
+    assert(AppleAgxGpuvaG3Plan64KSpan(wide, 510u, 2u, 0x1fffe0000ULL,
+        2u, four, 7u, &n) == AppleAgxGpuvaG3Invalid);
+    wide[0].Flags = 0u;
+    wide[1].Flags = 0u;
+    assert(AppleAgxGpuvaG3Plan64KSpan(wide, 510u, 2u, 0x1fffe0000ULL,
+        2u, four, 8u, &n) == AppleAgxGpuvaG3Unmap);
+    assert(n == 8u && four[0].ValidMask == 0u &&
+           four[7].GuestIpa == 0ULL);
+  }
   return 0;
 }
