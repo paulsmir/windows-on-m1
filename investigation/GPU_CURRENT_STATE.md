@@ -1,5 +1,24 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 EXP770 pre-G3 Scanout gate and ordinary recovery
+
+The first hash-pinned G3 package770 was staged in the ordinary GPU-visible
+Code28 guest and cold-booted once with ABI6 m1n1, debug off and no KD. Air
+reached SSH/CPU8/USB7/storage2, but APPL0002 was Code43. Durable StartStage10
+returned `STATUS_NOT_SUPPORTED` in ScanoutStart before G3Start/caps/VidMm.
+The m1n1 host log says Scanout ABI v1; source shows the required proven latch
+source is compiled only with `IOMFB_FULL_OWNER=1`, omitted from the G2 macho
+build. This is an m1n1 build-profile defect and yields no G3 verdict. Evidence
+`.local/experiments/EXP770-g3-vidmm/hardware-evidence/armed/state.json`
+SHA256 `c40aad28ed28ec46d2e0d5f1f322c072d940fc3fadb65da5330cb2c27a99470c`.
+G3Armed was removed; exact `oem5.inf` and transfer/certificate were removed
+on the ordinary GPU-visible recovery guest. Final baseline SHA256
+`f363da06d85414971911b9d50b81dbd607be0df7d7a229f8095f93331dc79549`
+shows one APPL0002 Code28, package/service/files/signer/arm absent,
+CPU8/USB7/storage2 and SSH alive. Next causal step: rebuild only m1n1 with
+`IOMFB_FULL_OWNER=1`, then preregister one corrected G3 VidMm run against
+the same package/Mu/environment; do not run B1 diagnostics.
+
 ## 2026-09-24 G3b offline candidate and B1 closure
 
 The user closed B1 as a diagnostic after EXP767. No more B1 cleanup or
