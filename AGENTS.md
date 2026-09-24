@@ -79,7 +79,15 @@ compatibility review.
   series for one hypothesis. While pinned SSH is alive in the full-owner guest,
   collect evidence and replace only the next hash-verified package there; keep
   that guest and its package state between series runs. Return to ordinary
-  Code28 at series end, loss of SSH, bugcheck, or uncertain package identity.
+  Code28 at series end, unexplained loss of SSH, or uncertain package identity.
+  R60 exception: after a bugcheck, continue the series only if a durable
+  receipt or registry state confirms the one-shot `G3Armed`/`B1Armed` was
+  cleared before GPU access, the exact installed package is known, and one
+  bounded reboot of the same full-owner profile returns pinned SSH. In that
+  guest collect the dump, receipts, and ETL before replacing the package with
+  the next hash-verified candidate and rearming it. If arm consumption cannot
+  be confirmed, the reboot lacks pinned SSH, or package identity is uncertain,
+  use GPU-hidden dump-first exact cleanup and return to ordinary Code28.
   Record the series contract once and each run before and after it using
   `investigation/SERIES_RUN_TEMPLATE.md`. A full host suite is required once
   per series; within the series run the affected tests and an incremental build.
