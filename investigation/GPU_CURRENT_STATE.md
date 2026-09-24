@@ -1,5 +1,26 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 EXP780 identifies exact paging bootstrap veto
+
+Package782 booted StartDevice Stage12/status0, then bugchecked `0x10E/0xB`
+with KMD `C000000D` on the first UpdatePageTable. The durable 88-byte
+`Wom1G3PagingInput` receipt records operation11, IRQL0, CPU_VIRTUAL mode0,
+level0, Start0/Count8192, Flags3 (`Repeat|InitialUpdate`), one PTE pointer,
+no 64K dual PTE, system process, and **non-NULL DMA and private-data pointers**
+(4096 bytes each). `Wom1G3PagingStatus` is `C000000D`. In
+`gpuva_g3_paging_windows.c` the remaining explicit guard rejects CPU_VIRTUAL
+when either pointer is non-NULL, before resolving/updating a table. Microsoft
+Learn describes the usual paging-process CPU_VIRTUAL request with NULL DMA
+pointer, but this observed Windows 26100 request carries both pointers; the
+driver must perform the immediate CPU update without writing into them. This
+is the next single correction, with host RED→GREEN; package782 must not be
+rerun unchanged. No successful paging update or rendering is proven yet.
+
+R54 series ended on bugcheck. GPU-hidden exact package782 cleanup followed by
+frozen ordinary EXP377/392 returned pinned SSH/CPU8 and one inert APPL0002
+Code28, no AppleAgx residue; baseline SHA256
+`cad4578c969025fcbc3a32aaa391efcb5244290a8af3e4b55e170acf68f175dd`.
+
 ## 2026-09-24 EXP779 reaches first BuildPagingBuffer and bugchecks
 
 Package780's truthful CPU-visible local segment advanced VidMm beyond the
