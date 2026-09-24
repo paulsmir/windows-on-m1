@@ -657,7 +657,7 @@ void AdmissionRecordG1bDdiFailure(_In_opt_ PDEVICE_OBJECT DeviceObject,
 void AdmissionRecordDevice(_In_opt_ PDEVICE_OBJECT DeviceObject,
                            _In_ ADMISSION_RECEIPT Receipt,
                            _In_ NTSTATUS Status);
-void AdmissionRecordStartStage(_In_ ADMISSION_CONTEXT *Context,
+void AdmissionRecordStartStage(_In_opt_ ADMISSION_CONTEXT *Context,
                                _In_ ADMISSION_START_STAGE Stage,
                                _In_ NTSTATUS Status);
 void AdmissionRecordMemoryStartFailure(

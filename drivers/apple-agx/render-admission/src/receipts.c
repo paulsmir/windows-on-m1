@@ -905,6 +905,7 @@ _Use_decl_annotations_ void AdmissionRecordService(
   if (!NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes)))
     return;
   WriteDword(key, Name, Value);
+  (void)ZwFlushKey(key);
   ZwClose(key);
 }
 
@@ -917,6 +918,9 @@ _Use_decl_annotations_ void AdmissionRecordDevice(
     return;
   WriteDword(key, L"Wom1CleanReceipt", (ULONG)Receipt);
   WriteDword(key, L"Wom1CleanStatus", (ULONG)Status);
+  if (Receipt == AdmissionReceiptAddEntered ||
+      Receipt == AdmissionReceiptStartEntered)
+    (void)ZwFlushKey(key);
   ZwClose(key);
 }
 
@@ -931,6 +935,8 @@ _Use_decl_annotations_ void AdmissionRecordStartStage(
     return;
   WriteDword(key, L"Wom1StartStage", (ULONG)Stage);
   WriteDword(key, L"Wom1StartStatus", (ULONG)Status);
+  if (Stage == AdmissionStartEntered)
+    (void)ZwFlushKey(key);
   ZwClose(key);
 }
 
