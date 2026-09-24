@@ -75,6 +75,16 @@ hardware-validated recovery is ordinary GPU-visible Code28, as recorded in
    compute/render metadata, command BO GPUVA/length, context/process identity,
    primary writes and completion fence. It must reject the old format in VA
    mode. The UMD cannot safely send raw Asahi metadata until this is defined.
+   The proposed UMD v1 private header in `agx_win32_gpuva_batch.c` is 24 bytes:
+   little-endian `Magic=0x34584741` at offset 0, `Version=1` at 4,
+   `HeaderBytes=24` at 6, `CommandBytes` at 8, reserved zero at 12 and
+   `CommandVa` at 16. Exactly `CommandBytes` unmodified Asahi bytes follow:
+   fragment attachment header/records, then render header/payload. Those
+   bytes are also copied verbatim into the mapped command BO at `CommandVa`.
+   The KMD must bind `CommandVa` to the `SubmitCommandVirtual` DMA GPUVA,
+   validate the length and each native VA/range in the process page table,
+   and reject malformed or unsupported native command types before firmware
+   access. Private data is a CPU validation copy, not a relocation table.
 2. KMD must confirm a 39-bit range, low USC-address limit, exact executable
    protection, permitted BO classes, and 16-KiB AGX leaf grouping under the
    selected 64-KiB VidMm segment page profile. Never round an invalid mapping.
@@ -87,3 +97,25 @@ hardware-validated recovery is ordinary GPU-visible Code28, as recorded in
    minimal draw has one stable BO VA, completed map/residency fences, native
    command bytes unchanged, `SubmitCommandVirtual` admission and physical AGX
    completion. On any failure, use the existing exact-package Code28 recovery.
+
+## Offline implementation checkpoint
+
+`APPLE_AGX_GPUVA_WINSYS=1` selects a separate BO and batch path in the
+projected native runtime. BOs receive 64-KiB reservations and map the exact
+VidMm allocation in 4-KiB DDI pages; `agx_bo.va->addr` holds the returned VA.
+Native render command bytes are written directly into a mapped command BO.
+The active reference set is made resident and its paging fence awaited before
+`SubmitCommandCb`; a rendering monitored fence gates eviction and VA free.
+No capture graph or relocation pass is invoked in this profile. The existing
+physical profile is still the default. Direct CDM/compute-only submission is
+currently fail closed until the KMD accepts a native compute command contract.
+
+The host core and emulated WDK callback draw pass, the x64 native projection
+and archive build, and the ARM64 native archive and UMD DLL link complete in
+`C:\Users\pauls\AD04-g4-mesa-va\mesa-build-g4`. These are offline gates;
+there is no G4 Air execution. The repository-wide 1042-test run returned
+17 failures and 108 errors; examples include missing `m1n1_windows` source
+files and local toolchain prerequisites. That submodule was pre-existing dirty
+and is outside the authorized G4 scope. Focused GPUVA and physical UMD tests
+pass. The ARM64 DLL SHA-256 is
+`59422363304f4728fa89f21a70128920f91a3a27411016d7686e8de5eea422da`.

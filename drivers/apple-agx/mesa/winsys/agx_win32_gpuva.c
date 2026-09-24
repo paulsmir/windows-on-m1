@@ -18,11 +18,13 @@ int AgxWin32GpuvaInit(AGX_WIN32_GPUVA_SPACE *space,
 }
 
 int AgxWin32GpuvaBind(AGX_WIN32_GPUVA_SPACE *space, AGX_WIN32_GPUVA_BO *bo,
-                      uint64_t allocation, uint64_t bytes, int low_va) {
+                      uint64_t allocation, uint64_t bytes, int low_va,
+                      unsigned protection) {
   uint64_t length, va = 0, fence = 0;
   int mapped;
   const uint64_t limit = low_va ? AGX_GPUVA_LOW_LIMIT : AGX_GPUVA_LIMIT;
   if (!space || !bo || !allocation || bo->Bound || space->Terminal ||
+      (protection & ~(AGX_GPUVA_MAP_WRITE | AGX_GPUVA_MAP_EXECUTE)) ||
       !bytes || bytes > limit - AGX_GPUVA_PAGE ||
       bytes > UINT64_MAX - (AGX_GPUVA_PAGE - 1)) return 0;
   length = (bytes + AGX_GPUVA_PAGE - 1) & ~(AGX_GPUVA_PAGE - 1);
@@ -34,7 +36,13 @@ int AgxWin32GpuvaBind(AGX_WIN32_GPUVA_SPACE *space, AGX_WIN32_GPUVA_BO *bo,
       space->Terminal = 1;
     return 0;
   }
-  mapped = space->Ops.Map(space->Context, allocation, va, length >> 12, &fence);
+  mapped = space->Ops.Map(space->Context, allocation, va, length >> 12,
+                          protection, &fence);
+  if (mapped == 3) {
+    /* Callback accepted a mapping but its returned ownership is uncertain. */
+    space->Terminal = 1;
+    return 0;
+  }
   if (!mapped) {
     if (!space->Ops.Free(space->Context, va, length)) space->Terminal = 1;
     return 0;
@@ -91,6 +99,12 @@ int AgxWin32GpuvaSubmit(AGX_WIN32_GPUVA_SPACE *space,
   if (!found_command) { free(handles); return 0; }
   resident = space->Ops.MakeResident(space->Context, handles, count,
                                       &paging_fence);
+  if (resident == 3) {
+    space->Terminal = 1;
+    space->Held = handles;
+    space->HeldCount = count;
+    return 0;
+  }
   if (!resident || (resident == 2 && !paging_fence)) {
     free(handles);
     return 0;
@@ -100,9 +114,15 @@ int AgxWin32GpuvaSubmit(AGX_WIN32_GPUVA_SPACE *space,
     free(handles);
     return 0;
   }
-  if (!space->Ops.Submit(space->Context, command->Va, command_bytes,
-                         private_data, private_bytes, &render_fence) ||
-      !render_fence) {
+  int submitted = space->Ops.Submit(space->Context, command->Va,
+      command_bytes, private_data, private_bytes, &render_fence);
+  if (submitted == 2) {
+    space->Terminal = 1;
+    space->Held = handles;
+    space->HeldCount = count;
+    return 0;
+  }
+  if (!submitted || !render_fence) {
     if (!space->Ops.Evict(space->Context, handles, count)) space->Terminal = 1;
     free(handles);
     return 0;

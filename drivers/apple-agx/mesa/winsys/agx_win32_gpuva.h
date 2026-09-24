@@ -3,11 +3,20 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define AGX_GPUVA_MAP_WRITE 1u
+#define AGX_GPUVA_MAP_EXECUTE 2u
+
 /* Host-testable boundary around WDDM callbacks. Return 0 on failure, 1 for
- * completed work, 2 for work with a paging fence. All calls are serialized. */
+ * completed work, 2 for pending work. Map and MakeResident may return 3 after uncertain
+ * accepted mapping; Submit may return 2 after an accepted command whose
+ * completion signal failed. All calls are serialized. */
 typedef struct {
   int (*Reserve)(void *, uint64_t, uint64_t, uint64_t, uint64_t *);
-  int (*Map)(void *, uint64_t, uint64_t, uint64_t, uint64_t *);
+  int (*Map)(void *, uint64_t, uint64_t, uint64_t, unsigned, uint64_t *);
   int (*Free)(void *, uint64_t, uint64_t);
   int (*MakeResident)(void *, const uint64_t *, unsigned, uint64_t *);
   int (*WaitPaging)(void *, uint64_t);
@@ -34,7 +43,8 @@ typedef struct {
 
 int AgxWin32GpuvaInit(AGX_WIN32_GPUVA_SPACE *, const AGX_WIN32_GPUVA_OPS *, void *);
 int AgxWin32GpuvaBind(AGX_WIN32_GPUVA_SPACE *, AGX_WIN32_GPUVA_BO *,
-                      uint64_t Allocation, uint64_t Bytes, int LowVa);
+                      uint64_t Allocation, uint64_t Bytes, int LowVa,
+                      unsigned Protection);
 int AgxWin32GpuvaUnbind(AGX_WIN32_GPUVA_SPACE *, AGX_WIN32_GPUVA_BO *);
 int AgxWin32GpuvaSubmit(AGX_WIN32_GPUVA_SPACE *,
                         const AGX_WIN32_GPUVA_BO *const *, unsigned Count,
@@ -42,5 +52,9 @@ int AgxWin32GpuvaSubmit(AGX_WIN32_GPUVA_SPACE *,
                         const void *PrivateData, uint32_t PrivateBytes,
                         uint64_t *CompletionFence);
 int AgxWin32GpuvaRetire(AGX_WIN32_GPUVA_SPACE *, uint64_t CompletionFence);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

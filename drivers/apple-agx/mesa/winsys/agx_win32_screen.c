@@ -71,6 +71,9 @@ AGX_WIN32_SCREEN_RESULT AgxWin32ScreenInitialize(
       ScreenOperations == NULL || ScreenOperations->QueryDevice == NULL ||
       ScreenOperations->CreateClassBuffer == NULL)
     return AgxWin32ScreenArgument;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if (ScreenOperations->GpuvaOps == NULL) return AgxWin32ScreenArgument;
+#endif
   memset(&initialized, 0, sizeof(initialized));
   if (!ScreenOperations->QueryDevice(Context, &initialized.Info) ||
       !AgxWin32DeviceInfoValid(&initialized.Info))

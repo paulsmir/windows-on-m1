@@ -4,12 +4,15 @@
 #include <string.h>
 
 /* Windows replacement for the OS-dependent BO symbols used by native pool.c.
- * va.addr is construction-only. No Linux VM bind or hardware VA is allocated. */
+ * The default profile uses construction coordinates; G4 binds VidMm GPUVA. */
 struct windows_bo {
   struct agx_bo Base;
   struct agx_va Coordinate;
   AGX_WIN32_NATIVE_BO Backing;
   AGX_WIN32_ASAHI_BACKEND *Backend;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  AGX_WIN32_GPUVA_BO Gpuva;
+#endif
 };
 static void native_map(struct agx_device *,struct agx_bo *,void *);
 static int release_map(const void *key,const void *expected,int commit) {
@@ -36,9 +39,22 @@ int AgxWin32AsahiAttach(AGX_WIN32_ASAHI_BACKEND *b, struct agx_device *native,
     ops->Leave(owner);
     return 0;
   }
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if(!AgxWin32GpuvaInit(&b->Gpuva,screen->Operations.GpuvaOps,screen->Context)) {
+    ops->Leave(owner);
+    return 0;
+  }
+#endif
   b->Native=native; b->Ops=*ops; b->Owner=owner; b->LiveBos=0; b->Failed=0; b->UnpublishedBo=NULL;
   b->ActiveCapture=NULL; b->ActiveEmission=NULL; b->EncoderAllocationIntent=0;
-  native->windows_private=b; native->shader_base=base;
+  native->windows_private=b;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  /* USC-relative shader addresses use the low VA interval from zero. */
+  native->shader_base=0;
+  b->GpuvaReady=1;
+#else
+  native->shader_base=base;
+#endif
   native->ops.bo_mmap=native_map;
   return 1;
 }
@@ -53,6 +69,13 @@ static int dispose(struct windows_bo *bo) {
   /* A failed unmap/detach preserves the registered BO for later collection. */
   if(!b->Ops.Detach(b->Owner,bo->Backing.Buffer.Transport.Token,&bo->Base,
                    bo->Backing.ConstructionSerial)) return 0;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if(!AgxWin32GpuvaUnbind(&b->Gpuva,&bo->Gpuva)) {
+    if(!b->Ops.Associate(b->Owner,bo->Backing.Buffer.Transport.Token,&bo->Base,
+                        bo->Backing.ConstructionSerial,release_map)) b->Failed=1;
+    return 0;
+  }
+#endif
   if(AgxWin32NativeDeviceDestroyBo(&b->Buffers,&bo->Backing)!=AgxWin32NativeDeviceSuccess) {
     if(!b->Ops.Associate(b->Owner,bo->Backing.Buffer.Transport.Token,&bo->Base,
                         bo->Backing.ConstructionSerial,release_map)) b->Failed=1;
@@ -72,9 +95,16 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
   if(!b || b->Native!=native || b->Failed || !bytes || bytes>SIZE_MAX-0x3fff ||
      ((unsigned)flags & ~allowed) || ((flags&AGX_BO_EXEC) && !(flags&AGX_BO_LOW_VA)))
     return NULL;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if(!b->GpuvaReady || bytes>SIZE_MAX-0xffff) return NULL;
+  bytes=(bytes+0xffff)&~(size_t)0xffff;
+  if(align<0x10000) align=0x10000;
+  if(align!=0x10000) return NULL;
+#else
   bytes=(bytes+0x3fff)&~(size_t)0x3fff;
   if(align<0x4000) align=0x4000;
   if(align!=0x4000) return NULL; /* construction allocator currently guarantees 16 KiB */
+#endif
   cls=(flags&AGX_BO_EXEC)?AgxWin32BufferClassShader:
       ((flags&AGX_BO_LOW_VA || b->EncoderAllocationIntent)?AgxWin32BufferClassEncoder:AgxWin32BufferClassGeneral);
   access=AppleAgxWin32BufferCpuWrite|AppleAgxWin32BufferGpuRead;
@@ -102,7 +132,21 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
   }
   bo->Base.handle=(uint32_t)bo->Backing.Buffer.Transport.Token;
   bo->Base.align=align; bo->Base.prime_fd=-1; bo->Base.refcnt=1; bo->Base.label=label;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if(!AgxWin32GpuvaBind(&b->Gpuva,&bo->Gpuva,
+      bo->Backing.Buffer.Transport.Token,bytes,(flags&AGX_BO_LOW_VA)!=0,
+      ((flags&AGX_BO_READONLY)?0:AGX_GPUVA_MAP_WRITE)|
+      ((flags&AGX_BO_EXEC)?AGX_GPUVA_MAP_EXECUTE:0))) {
+    if(b->Gpuva.Terminal || AgxWin32NativeDeviceDestroyBo(&b->Buffers,&bo->Backing)!=
+        AgxWin32NativeDeviceSuccess) b->UnpublishedBo=bo;
+    else free(bo);
+    b->Failed=1;return NULL;
+  }
+  bo->Coordinate.addr=bo->Gpuva.Va;
+#else
   bo->Coordinate.addr=bo->Backing.ConstructionAddress; bo->Coordinate.size_B=bytes;
+#endif
+  bo->Coordinate.size_B=bytes;
   bo->Coordinate.flags=(flags&AGX_BO_LOW_VA)?AGX_VA_USC:0;
   bo->Base.va=&bo->Coordinate;
   if(!b->Ops.Associate(b->Owner,bo->Backing.Buffer.Transport.Token,&bo->Base,
@@ -145,7 +189,20 @@ struct agx_bo *AgxWin32AsahiImportBo(
   bo->Base.handle=(uint32_t)buffer->Transport.Token;
   bo->Base.align=(unsigned)buffer->Alignment;bo->Base.prime_fd=-1;
   bo->Base.refcnt=1;bo->Base.label=label;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if(!b->GpuvaReady || (buffer->Transport.Bytes&0xffff) ||
+     !AgxWin32GpuvaBind(&b->Gpuva,&bo->Gpuva,
+      buffer->Transport.Token,buffer->Transport.Bytes,0,
+      AGX_GPUVA_MAP_WRITE)) {
+    if(b->Gpuva.Terminal || AgxWin32NativeDeviceDestroyBo(&b->Buffers,&bo->Backing)!=
+        AgxWin32NativeDeviceSuccess) b->UnpublishedBo=bo;
+    else free(bo);
+    b->Failed=1;return NULL;
+  }
+  bo->Coordinate.addr=bo->Gpuva.Va;
+#else
   bo->Coordinate.addr=bo->Backing.ConstructionAddress;
+#endif
   bo->Coordinate.size_B=buffer->Transport.Bytes;bo->Base.va=&bo->Coordinate;
   if(!b->Ops.Associate(b->Owner,buffer->Transport.Token,&bo->Base,
                       bo->Backing.ConstructionSerial,release_map)) {
@@ -169,6 +226,17 @@ int AgxWin32AsahiClass(AGX_WIN32_ASAHI_BACKEND *b,struct agx_bo *base,
   *classId=bo->Backing.Buffer.ClassId;
   return 1;
 }
+#ifdef APPLE_AGX_GPUVA_WINSYS
+const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(
+    AGX_WIN32_ASAHI_BACKEND *b,struct agx_bo *base) {
+  struct windows_bo *bo=(struct windows_bo *)base;
+  if(!b || !base || bo->Backend!=b || base->dev!=b->Native ||
+     !bo->Gpuva.Bound || base->refcnt<=0 ||
+     base->va!=&bo->Coordinate || base->va->addr!=bo->Gpuva.Va)
+    return NULL;
+  return &bo->Gpuva;
+}
+#endif
 static void native_map(struct agx_device *native,struct agx_bo *base,void *fixed) {
   struct windows_bo *bo=(struct windows_bo *)base;
   void *address=NULL;
@@ -197,6 +265,10 @@ int AgxWin32AsahiCollect(AGX_WIN32_ASAHI_BACKEND *b) {
   if(!b || !b->Native) return 0;
   if(b->UnpublishedBo) {
     struct windows_bo *bo=b->UnpublishedBo;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    if(b->Gpuva.Terminal) return 0;
+    if(bo->Gpuva.Bound && !AgxWin32GpuvaUnbind(&b->Gpuva,&bo->Gpuva)) return 0;
+#endif
     int released=bo->Backing.ConstructionSerial?
       AgxWin32NativeDeviceDestroyBo(&b->Buffers,&bo->Backing)==AgxWin32NativeDeviceSuccess:
       AgxWin32NativeBoDestroy(b->Buffers.Screen,&bo->Backing)==AgxWin32NativeBoSuccess;
@@ -230,6 +302,21 @@ int AgxWin32AsahiIdentity(AGX_WIN32_ASAHI_BACKEND *b,struct agx_bo *base,
   return b->Ops.Identity(b->Owner,base,bo->Backing.ConstructionSerial,out);
 }
 
+static int resolve_bo(AGX_WIN32_ASAHI_BACKEND *b,struct windows_bo *bo,
+    APPLE_AGX_U64 offset,APPLE_AGX_U64 bytes,APPLE_AGX_U64 *address) {
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  (void)b;
+  if(!bo->Gpuva.Bound || !address || !bytes ||
+     offset>bo->Backing.Bytes || bytes>bo->Backing.Bytes-offset ||
+     bo->Gpuva.Va>UINT64_MAX-offset) return 0;
+  *address=bo->Gpuva.Va+offset;
+  return 1;
+#else
+  return AgxWin32NativeDeviceResolveBo(&b->Buffers,&bo->Backing,
+      offset,bytes,address)==AgxWin32NativeDeviceSuccess;
+#endif
+}
+
 int AgxWin32AsahiFindAddress(AGX_WIN32_ASAHI_BACKEND *b,APPLE_AGX_U64 owner,
     APPLE_AGX_U32 generation,APPLE_AGX_U64 address,APPLE_AGX_U64 bytes,
     struct agx_bo **out,APPLE_AGX_U64 *offset) {
@@ -255,14 +342,13 @@ int AgxWin32AsahiFindAddress(AGX_WIN32_ASAHI_BACKEND *b,APPLE_AGX_U64 owner,
     if(identity.Owner!=owner || identity.Generation!=generation) continue;
     struct windows_bo *bo=(struct windows_bo *)key;
     APPLE_AGX_U64 base=0,resolved=0;
-    if(AgxWin32NativeDeviceResolveBo(&b->Buffers,&bo->Backing,0,bo->Backing.Bytes,&base)
-         !=AgxWin32NativeDeviceSuccess || !bo->Base.va ||
+    if(!resolve_bo(b,bo,0,bo->Backing.Bytes,&base) || !bo->Base.va ||
        bo->Base.va->addr!=base || bo->Base.size!=identity.Bytes ||
        bo->Backing.Bytes!=identity.Bytes) return 0;
     if(address<base || address-base>=identity.Bytes || bytes>identity.Bytes-(address-base))
       continue;
-    if(found || AgxWin32NativeDeviceResolveBo(&b->Buffers,&bo->Backing,address-base,
-        bytes,&resolved)!=AgxWin32NativeDeviceSuccess || resolved!=address) return 0;
+    if(found || !resolve_bo(b,bo,address-base,bytes,&resolved) ||
+       resolved!=address) return 0;
     found=&bo->Base; found_offset=address-base;
   }
   if(!found) return 0;
@@ -296,8 +382,7 @@ int AgxWin32AsahiFindCpuAddress(AGX_WIN32_ASAHI_BACKEND *b,
     struct windows_bo *bo=(struct windows_bo *)key;
     APPLE_AGX_U64 base=0;
     if(!bo->Base._map ||
-       AgxWin32NativeDeviceResolveBo(&b->Buffers,&bo->Backing,0,
-         bo->Backing.Bytes,&base)!=AgxWin32NativeDeviceSuccess ||
+       !resolve_bo(b,bo,0,bo->Backing.Bytes,&base) ||
        bo->Base.va==NULL || bo->Base.va->addr!=base ||
        bo->Base.size!=identity.Bytes || bo->Backing.Bytes!=identity.Bytes ||
        (uintptr_t)cpu<(uintptr_t)bo->Base._map ||
