@@ -7,6 +7,12 @@
 #define APPLE_AGX_GPUVA_G3_VALID 1u
 #define APPLE_AGX_GPUVA_G3_WRITE 2u
 
+/* DXGK_UPDATEPAGETABLEFLAGS.Repeat provides one PTE for the entire span. */
+static inline unsigned int AppleAgxGpuvaG3PteInputIndex(
+    unsigned int Index, unsigned int Repeat) {
+  return Repeat ? 0u : Index;
+}
+
 typedef struct _APPLE_AGX_GPUVA_G3_LOGICAL_PTE {
   /* Already resolved and validated guest IPA, never DXGK_PTE.PageAddress. */
   unsigned long long GuestIpa;

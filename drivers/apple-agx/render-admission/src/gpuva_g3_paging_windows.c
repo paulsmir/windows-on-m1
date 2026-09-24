@@ -14,7 +14,9 @@ static NTSTATUS AdmissionG3UpdateParent(
   child_level = 2u - update->PageTableLevel + 1u;
   end = update->StartIndex + update->NumPageTableEntries;
   for (index = update->StartIndex; index < end; ++index) {
-    const DXGK_PTE *pte = &update->pPageTableEntries[index - update->StartIndex];
+    const DXGK_PTE *pte = &update->pPageTableEntries[
+        AppleAgxGpuvaG3PteInputIndex(index - update->StartIndex,
+                                     update->Flags.Repeat)];
     if (!pte->Valid) continue;
     if (pte->Flags !=
         (1ULL | ((ULONGLONG)ADMISSION_MEMORY_LOCAL_SEGMENT << 5) |
@@ -29,7 +31,9 @@ static NTSTATUS AdmissionG3UpdateParent(
       return STATUS_INVALID_ADDRESS;
   }
   for (index = update->StartIndex; index < end; ++index) {
-    const DXGK_PTE *pte = &update->pPageTableEntries[index - update->StartIndex];
+    const DXGK_PTE *pte = &update->pPageTableEntries[
+        AppleAgxGpuvaG3PteInputIndex(index - update->StartIndex,
+                                     update->Flags.Repeat)];
     if (!pte->Valid) {
       if (!AppleAgxGpuvaG3GraphUpdateParent(&process->Graph, table_ipa,
               index, 0ULL)) return STATUS_INVALID_PARAMETER;
@@ -76,7 +80,8 @@ static NTSTATUS AdmissionG3UpdateLeaf(
   RtlZeroMemory(logical, (SIZE_T)update->NumPageTableEntries * sizeof(*logical));
   for (index = 0u; index < update->NumPageTableEntries && index < 8192u;
        ++index) {
-    const DXGK_PTE *pte = &update->pPageTableEntries[index];
+    const DXGK_PTE *pte = &update->pPageTableEntries[
+        AppleAgxGpuvaG3PteInputIndex(index, update->Flags.Repeat)];
     ULONGLONG ipa;
     if (!pte->Valid) {
       continue;
@@ -167,7 +172,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
       update->NumPageTableEntries > limit - update->StartIndex ||
       update->pPageTableEntries == NULL || update->pPageTableEntries64KB != NULL ||
       update->Reserved0 != 0u || update->DriverProtection != 0ULL ||
-      update->Flags.Repeat || update->Flags.NotifyEviction ||
+      update->Flags.NotifyEviction ||
       update->Flags.NativeFence ||
       update->Flags.Reserved ||
       (update->Flags.Use64KBPages &&

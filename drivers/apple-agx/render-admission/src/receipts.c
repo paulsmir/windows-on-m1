@@ -1582,6 +1582,73 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3ContextInput(
   (void)ZwFlushKey(key);
   ZwClose(key);
 }
+
+typedef struct _ADMISSION_G3_PAGING_INPUT_RECEIPT {
+  ULONG Version, Bytes, Operation, Irql;
+  ULONG DmaSize, PrivateSize, DmaPresent, PrivatePresent;
+  ULONG UpdateMode, Level, StartIndex, Count;
+  ULONG Flags, Reserved0, PtePresent, Pte64Present;
+  ULONG ProcessPresent, AllocationPresent;
+  ULONGLONG PageTableAddress, FirstPteVirtualAddress;
+} ADMISSION_G3_PAGING_INPUT_RECEIPT;
+
+_Use_decl_annotations_ void AdmissionRecordGpuvaG3PagingInput(
+    ADMISSION_CONTEXT *Context, const DXGKARG_BUILDPAGINGBUFFER *Args,
+    ULONG CurrentIrql) {
+  ADMISSION_G3_PAGING_INPUT_RECEIPT receipt;
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      Args == NULL || CurrentIrql != PASSIVE_LEVEL ||
+      Args->Operation != DXGK_OPERATION_UPDATE_PAGE_TABLE)
+    return;
+  RtlZeroMemory(&receipt, sizeof(receipt));
+  receipt.Version = 1u;
+  receipt.Bytes = sizeof(receipt);
+  receipt.Operation = (ULONG)Args->Operation;
+  receipt.Irql = CurrentIrql;
+  receipt.DmaSize = Args->DmaSize;
+  receipt.PrivateSize = Args->DmaBufferPrivateDataSize;
+  receipt.DmaPresent = Args->pDmaBuffer != NULL;
+  receipt.PrivatePresent = Args->pDmaBufferPrivateData != NULL;
+  receipt.UpdateMode = (ULONG)Args->UpdatePageTable.UpdateMode;
+  receipt.Level = Args->UpdatePageTable.PageTableLevel;
+  receipt.StartIndex = Args->UpdatePageTable.StartIndex;
+  receipt.Count = Args->UpdatePageTable.NumPageTableEntries;
+  C_ASSERT(sizeof(Args->UpdatePageTable.Flags) == sizeof(receipt.Flags));
+  RtlCopyMemory(&receipt.Flags, &Args->UpdatePageTable.Flags,
+                sizeof(receipt.Flags));
+  receipt.Reserved0 = Args->UpdatePageTable.Reserved0;
+  receipt.PtePresent = Args->UpdatePageTable.pPageTableEntries != NULL;
+  receipt.Pte64Present = Args->UpdatePageTable.pPageTableEntries64KB != NULL;
+  receipt.ProcessPresent = Args->UpdatePageTable.hProcess != NULL;
+  receipt.AllocationPresent = Args->UpdatePageTable.hAllocation != NULL;
+  receipt.PageTableAddress =
+      (ULONGLONG)(ULONG_PTR)Args->UpdatePageTable.PageTableAddress.CpuVirtual;
+  receipt.FirstPteVirtualAddress =
+      Args->UpdatePageTable.FirstPteVirtualAddress;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, L"Wom1G3PagingInput", &receipt, sizeof(receipt));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
+_Use_decl_annotations_ void AdmissionRecordGpuvaG3PagingResult(
+    ADMISSION_CONTEXT *Context, NTSTATUS Status) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key)))
+    return;
+  WriteDword(key, L"Wom1G3PagingStatus", (ULONG)Status);
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
 #endif
 
 _Use_decl_annotations_ void AdmissionRecordPresentTransfer(

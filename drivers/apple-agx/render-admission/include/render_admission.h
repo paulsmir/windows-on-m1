@@ -760,6 +760,11 @@ void AdmissionRecordGpuvaG3CreateInput(
 void AdmissionRecordGpuvaG3ContextInput(
     _In_opt_ PDEVICE_OBJECT DeviceObject,
     _In_opt_ const DXGKARG_CREATECONTEXT *Args, KIRQL CurrentIrql);
+void AdmissionRecordGpuvaG3PagingInput(
+    _In_opt_ ADMISSION_CONTEXT *Context,
+    _In_opt_ const DXGKARG_BUILDPAGINGBUFFER *Args, ULONG CurrentIrql);
+void AdmissionRecordGpuvaG3PagingResult(
+    _In_opt_ ADMISSION_CONTEXT *Context, NTSTATUS Status);
 BOOLEAN AdmissionGpuvaG3DeclarationReady(_In_ const ADMISSION_CONTEXT *Context);
 #endif
 _IRQL_requires_(PASSIVE_LEVEL)

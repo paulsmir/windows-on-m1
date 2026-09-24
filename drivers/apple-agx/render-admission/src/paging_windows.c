@@ -169,7 +169,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiBuildPagingBuffer(
   ULONG operation = Args == NULL ? MAXULONG : (ULONG)Args->Operation;
   ULONG dmaSize = Args == NULL ? 0u : Args->DmaSize;
   ULONG privateSize = Args == NULL ? 0u : Args->DmaBufferPrivateDataSize;
-  NTSTATUS status = AdmissionBuildPagingBuffer(Adapter, Args);
+  NTSTATUS status;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionRecordGpuvaG3PagingInput(context, Args, irql);
+#endif
+  status = AdmissionBuildPagingBuffer(Adapter, Args);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionRecordGpuvaG3PagingResult(context, status);
+#endif
   AdmissionPagingBuildTrace(
       context, irql, operation, dmaSize, privateSize, status);
   return status;

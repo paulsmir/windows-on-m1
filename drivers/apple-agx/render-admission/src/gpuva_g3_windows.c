@@ -261,7 +261,8 @@ NTSTATUS AdmissionGpuvaG3ResolveTable(
     DXGK_PAGETABLEUPDATEMODE mode, ULONGLONG *table_ipa) {
   ADMISSION_SCANOUT_MEMORY_VIEW view;
   ULONGLONG offset;
-  ULONG_PTR pointer, base;
+  ULONG_PTR pointer;
+  PHYSICAL_ADDRESS physical, tail;
   if (adapter == NULL || address == NULL || table_ipa == NULL ||
       !NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(adapter, &view)))
     return STATUS_INVALID_DEVICE_STATE;
@@ -271,11 +272,21 @@ NTSTATUS AdmissionGpuvaG3ResolveTable(
       return STATUS_INVALID_PARAMETER;
     offset = address->GpuPhysical.SegmentOffset;
   } else if (mode == DXGK_PAGETABLEUPDATE_CPU_VIRTUAL) {
+    if (address->CpuVirtual == NULL)
+      return STATUS_INVALID_PARAMETER;
     pointer = (ULONG_PTR)address->CpuVirtual;
-    base = (ULONG_PTR)view.CpuAddress;
-    if (pointer < base || pointer - base > view.Bytes)
+    if (pointer > MAXULONG_PTR - 0x3fffu)
       return STATUS_INVALID_ADDRESS;
-    offset = (ULONGLONG)(pointer - base);
+    physical = MmGetPhysicalAddress(address->CpuVirtual);
+    tail = MmGetPhysicalAddress((PUCHAR)address->CpuVirtual + 0x3fffu);
+    if (physical.QuadPart <= 0 ||
+        (ULONGLONG)physical.QuadPart > MAXULONGLONG - 0x3fffULL ||
+        (ULONGLONG)tail.QuadPart !=
+            (ULONGLONG)physical.QuadPart + 0x3fffULL ||
+        (ULONGLONG)physical.QuadPart < view.GuestIpaAddress ||
+        (ULONGLONG)physical.QuadPart - view.GuestIpaAddress > view.Bytes)
+      return STATUS_INVALID_ADDRESS;
+    offset = (ULONGLONG)physical.QuadPart - view.GuestIpaAddress;
   } else {
     return STATUS_NOT_SUPPORTED;
   }
