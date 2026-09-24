@@ -102,6 +102,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
     PULONG NumberOfChildren) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
   NTSTATUS status;
+  APPLE_AGX_POST_DISPLAY_ROUTE post_display_route;
 
   AdmissionRecordDevice(context == NULL ? NULL : context->PhysicalDeviceObject,
                         AdmissionReceiptStartEntered, STATUS_PENDING);
@@ -263,6 +264,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
 #endif
 
   if (context->Interface.DxgkCbAcquirePostDisplayOwnership == NULL) {
+    AdmissionRecordPostDisplay(context, STATUS_NOT_SUPPORTED,
+                               AppleAgxPostDisplayAcquireFailed,
+                               STATUS_NOT_SUPPORTED);
     AdmissionRecordStartStage(
         context, AdmissionStartPostDisplay, STATUS_NOT_SUPPORTED);
     (void)AdmissionPlatformRuntimeStop(context);
@@ -277,10 +281,20 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
                 sizeof(context->PostDisplayInformation));
   status = context->Interface.DxgkCbAcquirePostDisplayOwnership(
       context->Interface.DeviceHandle, &context->PostDisplayInformation);
+  post_display_route = AppleAgxPostDisplayRoute(
+      NT_SUCCESS(status) ? APPLE_AGX_SCANOUT_TRUE : APPLE_AGX_SCANOUT_FALSE,
+      context->PostDisplayInformation.Width,
+      context->PostDisplayInformation.Height,
+      context->PostDisplayInformation.Pitch,
+      (ULONGLONG)context->PostDisplayInformation.PhysicAddress.QuadPart);
+  AdmissionRecordPostDisplay(
+      context, status, post_display_route,
+      post_display_route == AppleAgxPostDisplayGeometryRejected
+          ? STATUS_GRAPHICS_INVALID_DISPLAY_ADAPTER : status);
   AdmissionRecordDevice(context->PhysicalDeviceObject,
                         AdmissionReceiptStartPostDisplay, status);
   AdmissionRecordStartStage(context, AdmissionStartPostDisplay, status);
-  if (!NT_SUCCESS(status)) {
+  if (post_display_route == AppleAgxPostDisplayAcquireFailed) {
     (void)AdmissionPlatformRuntimeStop(context);
     (void)AdmissionPagingStop(context);
     (void)AdmissionSchedulerStop(context);
@@ -289,10 +303,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
     (void)AdmissionInterruptStop(context);
     return status;
   }
-  if (context->PostDisplayInformation.PhysicAddress.QuadPart == 0 ||
-      context->PostDisplayInformation.Width != 2560 ||
-      context->PostDisplayInformation.Height != 1600 ||
-      context->PostDisplayInformation.Pitch != 10240) {
+  if (post_display_route == AppleAgxPostDisplayGeometryRejected) {
     AdmissionRecordStartStage(
         context, AdmissionStartPostDisplay,
         STATUS_GRAPHICS_INVALID_DISPLAY_ADAPTER);
@@ -304,6 +315,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
     (void)AdmissionInterruptStop(context);
     return STATUS_GRAPHICS_INVALID_DISPLAY_ADAPTER;
   }
+  if (post_display_route == AppleAgxPostDisplayOwnScanout)
+    RtlZeroMemory(&context->PostDisplayInformation,
+                  sizeof(context->PostDisplayInformation));
   status = AdmissionScanoutStart(context);
   AdmissionRecordStartStage(context, AdmissionStartScanout, status);
   if (!NT_SUCCESS(status)) {
@@ -355,9 +369,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
 #endif
   context->DisplayActive = TRUE;
   context->SourceVisible = TRUE;
-  context->CommittedWidth = 2560;
-  context->CommittedHeight = 1600;
-  context->CommittedStride = 10240;
+  context->CommittedWidth = APPLE_AGX_SCANOUT_J313_WIDTH;
+  context->CommittedHeight = APPLE_AGX_SCANOUT_J313_HEIGHT;
+  context->CommittedStride = APPLE_AGX_SCANOUT_J313_STRIDE;
   context->CommittedFormat = D3DDDIFMT_A8R8G8B8;
   /* QueryAdapterInfo cannot run until StartDevice returns. Publish the complete
    * immutable implementation vector only after every runtime owner above has

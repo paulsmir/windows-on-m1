@@ -734,6 +734,8 @@ AdmissionDdiStopDeviceAndReleasePostDisplayOwnership(
 
   if (context == NULL || DisplayInfo == NULL || TargetId != 0)
     return STATUS_INVALID_PARAMETER;
+  if (context->PostDisplayInformation.Width == 0u)
+    return STATUS_NOT_SUPPORTED;
   *DisplayInfo = context->PostDisplayInformation;
   return AdmissionDdiStopDevice(context);
 }

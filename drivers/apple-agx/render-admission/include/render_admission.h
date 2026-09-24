@@ -50,6 +50,7 @@
 #include "apple_agx_power.h"
 #include "apple_agx_rtkit_session.h"
 #include "apple_agx_fixed_panel.h"
+#include "apple_agx_post_display_route.h"
 #include "j313_agx_abi_admission.generated.h"
 
 #define ADMISSION_POOL_TAG 'mRGA'
@@ -675,6 +676,10 @@ void AdmissionRecordDevice(_In_opt_ PDEVICE_OBJECT DeviceObject,
 void AdmissionRecordStartStage(_In_opt_ ADMISSION_CONTEXT *Context,
                                _In_ ADMISSION_START_STAGE Stage,
                                _In_ NTSTATUS Status);
+void AdmissionRecordPostDisplay(_In_ ADMISSION_CONTEXT *Context,
+                                _In_ NTSTATUS AcquireStatus,
+                                _In_ APPLE_AGX_POST_DISPLAY_ROUTE Route,
+                                _In_ NTSTATUS DecisionStatus);
 void AdmissionRecordMemoryStartFailure(
     _In_ ADMISSION_CONTEXT *Context, _In_ ULONG Substage,
     _In_ NTSTATUS Status, _In_ ULONGLONG RequestedBytes,

@@ -940,6 +940,42 @@ _Use_decl_annotations_ void AdmissionRecordStartStage(
   ZwClose(key);
 }
 
+typedef struct _ADMISSION_POST_DISPLAY_RECEIPT {
+  ULONG Version, Bytes, AcquireStatus, Route, DecisionStatus;
+  ULONG Width, Height, Pitch, ColorFormat, TargetId, AcpiId;
+  ULONGLONG PhysicalAddress;
+} ADMISSION_POST_DISPLAY_RECEIPT;
+
+_Use_decl_annotations_ void AdmissionRecordPostDisplay(
+    ADMISSION_CONTEXT *Context, NTSTATUS AcquireStatus,
+    APPLE_AGX_POST_DISPLAY_ROUTE Route, NTSTATUS DecisionStatus) {
+  ADMISSION_POST_DISPLAY_RECEIPT receipt;
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL)
+    return;
+  RtlZeroMemory(&receipt, sizeof(receipt));
+  receipt.Version = 1u;
+  receipt.Bytes = sizeof(receipt);
+  receipt.AcquireStatus = (ULONG)AcquireStatus;
+  receipt.Route = (ULONG)Route;
+  receipt.DecisionStatus = (ULONG)DecisionStatus;
+  receipt.Width = Context->PostDisplayInformation.Width;
+  receipt.Height = Context->PostDisplayInformation.Height;
+  receipt.Pitch = Context->PostDisplayInformation.Pitch;
+  receipt.ColorFormat = (ULONG)Context->PostDisplayInformation.ColorFormat;
+  receipt.TargetId = Context->PostDisplayInformation.TargetId;
+  receipt.AcpiId = Context->PostDisplayInformation.AcpiId;
+  receipt.PhysicalAddress =
+      (ULONGLONG)Context->PostDisplayInformation.PhysicAddress.QuadPart;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, L"Wom1PostDisplayRoute", &receipt, sizeof(receipt));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordMemoryStartFailure(
     ADMISSION_CONTEXT *Context, ULONG Substage, NTSTATUS Status,
     ULONGLONG RequestedBytes, ULONG OperationResult,
