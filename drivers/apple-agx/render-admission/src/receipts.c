@@ -1553,6 +1553,35 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3CreateInput(
   (void)ZwFlushKey(key);
   ZwClose(key);
 }
+
+typedef struct _ADMISSION_G3_CONTEXT_INPUT_RECEIPT {
+  ULONG Version, Bytes, Flags, NodeOrdinal;
+  ULONG EngineAffinity, PrivateDriverDataSize, RuntimeHandlePresent, Irql;
+} ADMISSION_G3_CONTEXT_INPUT_RECEIPT;
+
+_Use_decl_annotations_ void AdmissionRecordGpuvaG3ContextInput(
+    PDEVICE_OBJECT DeviceObject, const DXGKARG_CREATECONTEXT *Args,
+    KIRQL CurrentIrql) {
+  ADMISSION_G3_CONTEXT_INPUT_RECEIPT receipt;
+  HANDLE key = NULL;
+  if (DeviceObject == NULL || Args == NULL || CurrentIrql != PASSIVE_LEVEL)
+    return;
+  RtlZeroMemory(&receipt, sizeof(receipt));
+  receipt.Version = 1u;
+  receipt.Bytes = sizeof(receipt);
+  receipt.Flags = Args->Flags.Value;
+  receipt.NodeOrdinal = Args->NodeOrdinal;
+  receipt.EngineAffinity = Args->EngineAffinity;
+  receipt.PrivateDriverDataSize = Args->PrivateDriverDataSize;
+  receipt.RuntimeHandlePresent = Args->hContext != NULL;
+  receipt.Irql = (ULONG)CurrentIrql;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(DeviceObject, PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, L"Wom1G3ContextInput", &receipt, sizeof(receipt));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
 #endif
 
 _Use_decl_annotations_ void AdmissionRecordPresentTransfer(

@@ -136,8 +136,32 @@ static void test_paging_context_without_runtime_handle(void) {
   assert(AdmissionObjectsStopAdapter(&adapter));
 }
 
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+static void test_gpuva_paging_context_without_runtime_handle(void) {
+  ADMISSION_OBJECT_ADAPTER adapter;
+  ADMISSION_OBJECT_DEVICE device;
+  ADMISSION_OBJECT_CONTEXT context;
+  AdmissionObjectsInitializeAdapter(&adapter);
+  assert(AdmissionObjectsStartAdapter(&adapter));
+  assert(AdmissionObjectsCreateDevice(&adapter, NULL,
+                                      ADMISSION_DEVICE_SYSTEM, &device));
+  assert(AdmissionObjectsCreateContext(
+      &device, NULL, 0u, 1u,
+      ADMISSION_CONTEXT_SYSTEM | ADMISSION_CONTEXT_VIRTUAL_ADDRESSING,
+      &context));
+  assert(context.Flags == (ADMISSION_CONTEXT_SYSTEM |
+                           ADMISSION_CONTEXT_VIRTUAL_ADDRESSING));
+  assert(AdmissionObjectsDestroyContext(&context));
+  assert(AdmissionObjectsDestroyDevice(&device));
+  assert(AdmissionObjectsStopAdapter(&adapter));
+}
+#endif
+
 int main(void) {
   test_paging_context_without_runtime_handle();
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  test_gpuva_paging_context_without_runtime_handle();
+#endif
   test_system_device_without_runtime_handle();
   test_device_and_context_lifetime();
   test_invalid_inputs_do_not_mutate_storage();

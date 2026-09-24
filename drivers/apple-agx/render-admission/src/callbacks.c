@@ -284,8 +284,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
   LONG previousGeneration;
 
   if (device == NULL ||
-      device->Object.Magic != ADMISSION_OBJECT_DEVICE_MAGIC || Args == NULL)
+      device->Object.Magic != ADMISSION_OBJECT_DEVICE_MAGIC ||
+      device->Object.Adapter == NULL || Args == NULL)
     return STATUS_INVALID_PARAMETER;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  adapter = CONTAINING_RECORD(device->Object.Adapter, ADMISSION_CONTEXT,
+                              ObjectAdapter);
+  AdmissionRecordGpuvaG3ContextInput(adapter->PhysicalDeviceObject, Args,
+                                      KeGetCurrentIrql());
+#endif
   flags = Args->Flags.Value;
   if ((flags & ~ADMISSION_CONTEXT_VALID_FLAGS) != 0u)
     return STATUS_NOT_SUPPORTED;
