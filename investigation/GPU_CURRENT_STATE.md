@@ -1,5 +1,31 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 EXP774 atomic GpuMmu declaration verdict and recovery
+
+Pinned WDK26100 offline contract and RED→GREEN host validator are in
+`docs/superpowers/specs/2026-09-24-gpuva-g3-addadapter-contract.md` and
+implementation commit `1226a473`. The one EXP774 cold boot retained EXP773's
+64-KiB pages, debug-off/no-KD/no-WPR, full-owner m1n1 and Mu. It reached
+Scanout ABI v2, SSH, StartDevice Stage12/status0, QAI13/14 success. New
+GetNodeMetadata receipt proves node0 GpuMmuSupported1/IoMmuSupported0; QAI13
+proves Leaf64K8192/DualPte0. QAI45/46 were not observed. DxgKrnl Event549
+still rejected AddAdapter with STATUS_INVALID_PARAMETER and APPL0002 Code43.
+No first VidMm process/paging DDI or render was proven. Armed state SHA256
+`ad13c95e4c76a469e2c88dd245360a9c7bf047c485b3707f59f120695edace10`.
+
+G3Armed was removed. Direct immutable GPU-hidden recovery removed exact oem5.inf,
+signer and transfer; frozen ordinary EXP377/392 returned pinned SSH and one
+inert APPL0002 Code28, no AppleAgx residue, CPU8/storage2/USB7/autologon1.
+Final baseline SHA256
+`2c9858afedaa1283e3d1efa5bbf23794c855d60198786ac75616f88140ce37fa`.
+Verdict: node0's missing GpuMmu flag and zero source MMU inventory were not
+sufficient sole causes. No hardware conclusion about QAI45/46 because no calls
+were observed. Remaining AddAdapter candidates: other caps/node/segment or
+QAI15 physical-adapter interpretation, then package/PnP/persisted state;
+internal dxgkrnl validation is not documented. Next action is one offline
+comparison of exact admission inputs and exported GraphicsDrivers/service state.
+Do not repeat EXP774. G4 Mesa VA winsys waits for AddAdapter/first VidMm DDI.
+
 ## 2026-09-24 EXP773 64-KiB G1b profile verdict and recovery
 
 One preregistered G3 full-owner, debug-off/no-KD/no-WPR cold boot changed only
