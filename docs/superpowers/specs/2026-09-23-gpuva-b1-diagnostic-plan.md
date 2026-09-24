@@ -46,6 +46,17 @@ normal GPU-visible Code28 guest remains the cleanup destination; the
 GPU-hidden image is used only for the documented staged-arrival exception and
 exact package removal.
 
+EXP768 outcome supersedes KD's presumed observational neutrality: the full-owner
+boot stopped before DriverEntry/AddDevice receipts while serial debugging and
+the attached observer were enabled. The cleanup package and KD environment
+changed together, so this boot cannot attribute the stall to either one. For
+the next B1 cleanup discriminator, restore the EXP767 debug-off/no-observer
+environment and change only the cleanup package. Qualify serial KD separately
+on the ordinary GPU-visible package-free guest before using it in another GPU
+experiment. `kd_proclist.py` is not a playbook diagnostic: its fixed EPROCESS
+offsets failed on EXP768. `kd_stack.py` also has fixed structure offsets, so
+neither is a safe substitute without build-matched PDB-derived layouts.
+
 ## EXP768 cleanup contract and discriminator
 
 Sources inspected: EXP767 `state.json` and ledger verdict; Asahi

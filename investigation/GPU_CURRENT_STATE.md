@@ -1,5 +1,33 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 EXP768 pre-StartDevice verdict and recovery
+
+EXP768 was one staged cold-arrival B1 run with durable cleanup owner receipts,
+EL2 context0 table-page hashes and attached serial KD. KD obtained the Windows
+kernel base and sent continue; the full-owner guest did not reach SSH in more
+than three minutes. A source-defined m1n1 SIGTERM snapshot/reboot returned to
+Running proxy. GPU-hidden inspection found the exact package765 and B1Armed,
+but **zero new B1/start/cleanup/hash receipts**; therefore the cleanup owner
+and context0 identity remain unproven. No spontaneous bugcheck or new GPU job
+verdict was observed. The KD-enabled full-owner boot is a possible confounder,
+not an attributed cause. Verdict: `INCONCLUSIVE_PRE_START_FOR_CLEANUP`.
+
+Exact package765 removal, disarm and debug-off/local restore completed in the
+GPU-hidden recovery guest. Ordinary EXP377/392 GPU-visible recovery is active
+and reachable by pinned SSH: one inert APPL0002 Code28, no AppleAgx package,
+service, files, signer or B1Armed, CPU8/storage2/USB7/autologon1. Evidence:
+`.local/experiments/EXP768-b1-cleanup/hardware-evidence/`; final state SHA256
+`8c61256c720c76ca510b772210b720fba3a965209642ec8691f59a510e57cf15`.
+Implementation commits: m1n1 `daedb776`, root `0c138bf1` (plus test
+`e44e0577` and KD `e9e0a4bf`). R44 accepts that KD debug-on plus attached
+observer was an additional, unqualified environment variable in EXP768;
+do not use it in the next GPU cleanup run. Next causal target is a separately
+preregistered cleanup discriminator with EXP767 debug-off/no-observer baseline,
+after saved CPU0/KD/host evidence is checked. `kd_proclist.py` is excluded
+from that playbook because its hardcoded EPROCESS offsets failed. G3a offline
+translator/contract is commit `1baaa7f9`; caps and DDIs are not enabled.
+G3 remains offline; do not advertise GpuMmu or claim desktop acceleration.
+
 ## 2026-09-24 EXP767 hardware verdict and recovery
 
 EXP767 confirms the B1 GPUVA diagnostic **job path**, not full desktop: two
