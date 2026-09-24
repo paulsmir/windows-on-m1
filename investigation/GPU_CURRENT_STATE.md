@@ -1,5 +1,21 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 R62 offline gate after EXP783
+
+Commit `941e644f` adds a real-C host replay of the recorded EXP776–783 G3 DDI
+sequence and the documented leaf/root/flush/ordinary-process continuation.
+Historical PASID, context flags, Repeat/DMA, PTE page-number and EXP783
+parent-size guards fail in the replay; the current tree passes the affected
+15-test gate. The EXP783 `ParentFlags` check now treats a level1 parent's
+per-PTE 4K/64K child size independently of the update-wide leaf flag, while
+level2 still rejects that bit. This is **offline only**: package787 has not
+been built or launched, and VidMm progress beyond index2 remains unproven.
+Next checkpoint is one hash-verified package under the frozen EXP783
+firmware/caps/signing profile, after exact-package and R60 preflight. R63
+firmware-owned local-memory reservation is designed separately in
+`docs/superpowers/specs/2026-09-24-g3-firmware-local-memory-reservation.md`;
+no memory owner has changed.
+
 ## 2026-09-24 EXP783 advances past EXP782 child address; 64K parent PTE refused
 
 Package786 converted VidMm PTE page numbers to byte offsets with a checked
