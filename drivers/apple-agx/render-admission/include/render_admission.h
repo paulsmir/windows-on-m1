@@ -757,6 +757,9 @@ void AdmissionRecordGpuvaG3CreateInput(
     _In_opt_ PDEVICE_OBJECT DeviceObject,
     _In_opt_ const DXGKARG_CREATEPROCESS *Args,
     BOOLEAN AdapterStarted, KIRQL CurrentIrql);
+void AdmissionRecordGpuvaG3DeviceInput(
+    _In_opt_ PDEVICE_OBJECT DeviceObject,
+    _In_opt_ const DXGKARG_CREATEDEVICE *Args, KIRQL CurrentIrql);
 void AdmissionRecordGpuvaG3ContextInput(
     _In_opt_ PDEVICE_OBJECT DeviceObject,
     _In_opt_ const DXGKARG_CREATECONTEXT *Args, KIRQL CurrentIrql);

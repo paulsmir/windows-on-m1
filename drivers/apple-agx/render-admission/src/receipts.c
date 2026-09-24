@@ -1559,6 +1559,33 @@ typedef struct _ADMISSION_G3_CONTEXT_INPUT_RECEIPT {
   ULONG EngineAffinity, PrivateDriverDataSize, RuntimeHandlePresent, Irql;
 } ADMISSION_G3_CONTEXT_INPUT_RECEIPT;
 
+typedef struct _ADMISSION_G3_DEVICE_INPUT_RECEIPT {
+  ULONG Version, Bytes, Flags, Pasid;
+  ULONG ProcessPresent, RuntimeHandlePresent, Irql;
+} ADMISSION_G3_DEVICE_INPUT_RECEIPT;
+
+_Use_decl_annotations_ void AdmissionRecordGpuvaG3DeviceInput(
+    PDEVICE_OBJECT DeviceObject, const DXGKARG_CREATEDEVICE *Args,
+    KIRQL CurrentIrql) {
+  ADMISSION_G3_DEVICE_INPUT_RECEIPT receipt;
+  HANDLE key = NULL;
+  if (DeviceObject == NULL || Args == NULL || CurrentIrql != PASSIVE_LEVEL)
+    return;
+  RtlZeroMemory(&receipt, sizeof(receipt));
+  receipt.Version = 1u;
+  receipt.Bytes = sizeof(receipt);
+  receipt.Flags = Args->Flags.Value;
+  receipt.Pasid = Args->Pasid;
+  receipt.ProcessPresent = Args->hKmdProcess != NULL;
+  receipt.RuntimeHandlePresent = Args->hDevice != NULL;
+  receipt.Irql = (ULONG)CurrentIrql;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(DeviceObject, PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key))) return;
+  WriteBinary(key, L"Wom1G3DeviceInput", &receipt, sizeof(receipt));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordGpuvaG3ContextInput(
     PDEVICE_OBJECT DeviceObject, const DXGKARG_CREATECONTEXT *Args,
     KIRQL CurrentIrql) {
@@ -1590,6 +1617,7 @@ typedef struct _ADMISSION_G3_PAGING_INPUT_RECEIPT {
   ULONG Flags, Reserved0, PtePresent, Pte64Present;
   ULONG ProcessPresent, AllocationPresent;
   ULONGLONG PageTableAddress, FirstPteVirtualAddress;
+  ULONGLONG DriverProtection;
 } ADMISSION_G3_PAGING_INPUT_RECEIPT;
 
 _Use_decl_annotations_ void AdmissionRecordGpuvaG3PagingInput(
@@ -1602,7 +1630,7 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3PagingInput(
       Args->Operation != DXGK_OPERATION_UPDATE_PAGE_TABLE)
     return;
   RtlZeroMemory(&receipt, sizeof(receipt));
-  receipt.Version = 1u;
+  receipt.Version = 2u;
   receipt.Bytes = sizeof(receipt);
   receipt.Operation = (ULONG)Args->Operation;
   receipt.Irql = CurrentIrql;
@@ -1626,6 +1654,7 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3PagingInput(
       (ULONGLONG)(ULONG_PTR)Args->UpdatePageTable.PageTableAddress.CpuVirtual;
   receipt.FirstPteVirtualAddress =
       Args->UpdatePageTable.FirstPteVirtualAddress;
+  receipt.DriverProtection = Args->UpdatePageTable.DriverProtection;
   if (!NT_SUCCESS(IoOpenDeviceRegistryKey(
           Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
           KEY_SET_VALUE, &key)))

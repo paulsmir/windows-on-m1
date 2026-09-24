@@ -65,6 +65,15 @@ int main(void) {
         self.assertIn("AdmissionRecordGpuvaG3PagingInput(", callback)
         self.assertIn("AdmissionRecordGpuvaG3PagingResult(", callback)
 
+    def test_cpu_virtual_update_ignores_dma_pointer_presence(self):
+        paging = (RENDER / "src/gpuva_g3_paging_windows.c").read_text()
+        self.assertNotIn(
+            "args->pDmaBuffer != NULL || args->pDmaBufferPrivateData != NULL",
+            paging,
+        )
+        self.assertNotIn("args->pDmaBuffer =", paging)
+        self.assertNotIn("args->pDmaBufferPrivateData =", paging)
+
 
 if __name__ == "__main__":
     unittest.main()

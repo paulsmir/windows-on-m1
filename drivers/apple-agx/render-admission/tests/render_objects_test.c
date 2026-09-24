@@ -152,6 +152,11 @@ static void test_gpuva_paging_context_without_runtime_handle(void) {
   assert(context.Flags == (ADMISSION_CONTEXT_SYSTEM |
                            ADMISSION_CONTEXT_VIRTUAL_ADDRESSING));
   assert(AdmissionObjectsDestroyContext(&context));
+  assert(AdmissionObjectsCreateContext(
+      &device, (void *)1, 0u, 1u,
+      ADMISSION_CONTEXT_VIRTUAL_ADDRESSING | ADMISSION_CONTEXT_TEST,
+      &context));
+  assert(AdmissionObjectsDestroyContext(&context));
   assert(AdmissionObjectsDestroyDevice(&device));
   assert(AdmissionObjectsStopAdapter(&adapter));
 }

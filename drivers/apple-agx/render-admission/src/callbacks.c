@@ -39,11 +39,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateDevice(
   ADMISSION_DEVICE *device;
   ULONG flags;
 
-  if (adapter == NULL || !adapter->Started || Args == NULL ||
-      Args->Pasid != 0)
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionRecordGpuvaG3DeviceInput(
+      adapter == NULL ? NULL : adapter->PhysicalDeviceObject, Args,
+      KeGetCurrentIrql());
+#endif
+  if (adapter == NULL || !adapter->Started || Args == NULL)
     return STATUS_INVALID_PARAMETER;
 #if !defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  if (Args->hKmdProcess != NULL) return STATUS_INVALID_PARAMETER;
+  if (Args->Pasid != 0 || Args->hKmdProcess != NULL)
+    return STATUS_INVALID_PARAMETER;
+#else
+  /* PASID is OS-owned process metadata, not an SVM requirement on this GPU. */
 #endif
   flags = Args->Flags.Value;
   if ((flags & ~ADMISSION_DEVICE_VALID_FLAGS) != 0u)
@@ -297,7 +304,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
   if ((flags & ~ADMISSION_CONTEXT_VALID_FLAGS) != 0u)
     return STATUS_NOT_SUPPORTED;
   systemOrGdi = ((flags & ADMISSION_CONTEXT_SYSTEM) != 0u ||
-                 Args->Flags.GdiContext)
+                 Args->Flags.GdiContext || Args->Flags.TestContext)
                     ? APPLE_AGX_TRUE
                     : APPLE_AGX_FALSE;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)

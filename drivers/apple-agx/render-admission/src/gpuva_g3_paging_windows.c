@@ -171,8 +171,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
       update->StartIndex >= limit ||
       update->NumPageTableEntries > limit - update->StartIndex ||
       update->pPageTableEntries == NULL || update->pPageTableEntries64KB != NULL ||
-      update->Reserved0 != 0u || update->DriverProtection != 0ULL ||
-      update->Flags.NotifyEviction ||
+      update->Reserved0 != 0u ||
       update->Flags.NativeFence ||
       update->Flags.Reserved ||
       (update->Flags.Use64KBPages &&
@@ -182,10 +181,9 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
        !update->Flags.Use64KBPages &&
        ((update->StartIndex | update->NumPageTableEntries) & 3u)) ||
       (update->UpdateMode != DXGK_PAGETABLEUPDATE_GPU_PHYSICAL &&
-       update->UpdateMode != DXGK_PAGETABLEUPDATE_CPU_VIRTUAL) ||
-      (update->UpdateMode == DXGK_PAGETABLEUPDATE_CPU_VIRTUAL &&
-       (args->pDmaBuffer != NULL || args->pDmaBufferPrivateData != NULL)))
+       update->UpdateMode != DXGK_PAGETABLEUPDATE_CPU_VIRTUAL))
     return STATUS_INVALID_PARAMETER;
+  /* CPU_VIRTUAL updates complete now; supplied DMA buffers stay untouched. */
   status = AdmissionGpuvaG3ResolveTable(adapter, &update->PageTableAddress,
                                         update->UpdateMode, &table_ipa);
   if (!NT_SUCCESS(status)) return status;
