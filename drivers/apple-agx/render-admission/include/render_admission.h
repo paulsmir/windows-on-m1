@@ -740,6 +740,11 @@ void AdmissionRecordQuery(_In_opt_ PDEVICE_OBJECT DeviceObject,
                           _In_ ULONG OutputDataSize, _In_ NTSTATUS Status,
                           _In_reads_bytes_opt_(OutputDataSize)
                               const VOID *OutputData);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+void AdmissionRecordGpuvaG3Query(_In_opt_ PDEVICE_OBJECT DeviceObject,
+                                 _In_ const DXGKARG_QUERYADAPTERINFO *Query,
+                                 _In_ NTSTATUS Status);
+#endif
 _IRQL_requires_(PASSIVE_LEVEL)
 void AdmissionFlushSourceAddressReceipt(_In_ ADMISSION_CONTEXT *Context);
 _IRQL_requires_(PASSIVE_LEVEL)

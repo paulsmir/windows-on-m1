@@ -1345,6 +1345,79 @@ _Use_decl_annotations_ void AdmissionRecordQuery(
   ZwClose(key);
 }
 
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+typedef struct _ADMISSION_G3_QUERY_RECEIPT {
+  ULONG Version, Bytes, Type, Status;
+  ULONG InputBytes, OutputBytes, PhysicalAdapterIndex, LevelIndex;
+  ULONG Values[8];
+} ADMISSION_G3_QUERY_RECEIPT;
+
+_Use_decl_annotations_ void AdmissionRecordGpuvaG3Query(
+    PDEVICE_OBJECT DeviceObject, const DXGKARG_QUERYADAPTERINFO *Query,
+    NTSTATUS Status) {
+  ADMISSION_G3_QUERY_RECEIPT receipt;
+  PCWSTR name;
+  HANDLE key = NULL;
+  if (DeviceObject == NULL || Query == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL) return;
+  if (Query->Type == DXGKQAITYPE_GPUMMUCAPS) {
+    const DXGK_QUERYGPUMMUCAPSIN *input;
+    const DXGK_GPUMMUCAPS *caps;
+    name = L"Wom1G3Q13";
+    RtlZeroMemory(&receipt, sizeof(receipt));
+    if (Query->pInputData != NULL &&
+        Query->InputDataSize >= sizeof(*input)) {
+      input = (const DXGK_QUERYGPUMMUCAPSIN *)Query->pInputData;
+      receipt.PhysicalAdapterIndex = input->PhysicalAdapterIndex;
+    }
+    if (NT_SUCCESS(Status) && Query->pOutputData != NULL &&
+        Query->OutputDataSize >= sizeof(*caps)) {
+      caps = (const DXGK_GPUMMUCAPS *)Query->pOutputData;
+      receipt.Values[0] = caps->ReadOnlyMemorySupported;
+      receipt.Values[1] = caps->ExplicitPageTableInvalidation;
+      receipt.Values[2] = caps->PageTableUpdateRequireAddressSpaceIdle;
+      receipt.Values[3] = (ULONG)caps->PageTableUpdateMode;
+      receipt.Values[4] = caps->VirtualAddressBitCount;
+      receipt.Values[5] = caps->PageTableLevelCount;
+    }
+  } else if (Query->Type == DXGKQAITYPE_PAGETABLELEVELDESC) {
+    const DXGK_QUERYPAGETABLELEVELDESCIN *input;
+    const DXGK_PAGE_TABLE_LEVEL_DESC *level;
+    RtlZeroMemory(&receipt, sizeof(receipt));
+    receipt.LevelIndex = MAXULONG;
+    if (Query->pInputData != NULL &&
+        Query->InputDataSize >= sizeof(*input)) {
+      input = (const DXGK_QUERYPAGETABLELEVELDESCIN *)Query->pInputData;
+      receipt.PhysicalAdapterIndex = input->PhysicalAdapterIndex;
+      receipt.LevelIndex = input->LevelIndex;
+    }
+    name = receipt.LevelIndex == 0u ? L"Wom1G3Q14L0" :
+           receipt.LevelIndex == 1u ? L"Wom1G3Q14L1" :
+           receipt.LevelIndex == 2u ? L"Wom1G3Q14L2" : L"Wom1G3Q14Other";
+    if (NT_SUCCESS(Status) && Query->pOutputData != NULL &&
+        Query->OutputDataSize >= sizeof(*level)) {
+      level = (const DXGK_PAGE_TABLE_LEVEL_DESC *)Query->pOutputData;
+      receipt.Values[0] = level->PageTableIndexBitCount;
+      receipt.Values[1] = level->PageTableSegmentId;
+      receipt.Values[2] = level->PagingProcessPageTableSegmentId;
+      receipt.Values[3] = level->PageTableSizeInBytes;
+      receipt.Values[4] = level->PageTableAlignmentInBytes;
+    }
+  } else return;
+  receipt.Version = 1u;
+  receipt.Bytes = sizeof(receipt);
+  receipt.Type = (ULONG)Query->Type;
+  receipt.Status = (ULONG)Status;
+  receipt.InputBytes = Query->InputDataSize;
+  receipt.OutputBytes = Query->OutputDataSize;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(DeviceObject,
+      PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
+  WriteBinary(key, name, &receipt, sizeof(receipt));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+#endif
+
 _Use_decl_annotations_ void AdmissionRecordPresentTransfer(
     ADMISSION_CONTEXT *Context, UINT Fence, const VOID *Command, UINT Bytes,
     ULONGLONG BytesCopied, NTSTATUS Status) {

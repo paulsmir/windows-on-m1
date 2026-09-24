@@ -778,6 +778,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
   AdmissionRecordQuery(context->PhysicalDeviceObject, QueryAdapterInfo->Type,
                        QueryAdapterInfo->OutputDataSize, status,
                        QueryAdapterInfo->pOutputData);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionRecordGpuvaG3Query(context->PhysicalDeviceObject,
+                              QueryAdapterInfo, status);
+#endif
   return status;
 }
 
