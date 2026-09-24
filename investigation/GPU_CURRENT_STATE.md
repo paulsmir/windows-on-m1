@@ -21,10 +21,12 @@ GPU-hidden dump-first recovered pinned SSH/CPU8, APPL0002 absent, arm absent,
 exact package790 oem5.inf/SYS/UMD; dump/ETL/receipts were collected and
 hash-verified before cleanup. Analysis `.local/experiments/EXP787-g3-table-
 shadow/hardware-evidence/EXP787-analysis.json` SHA256
-`2a3230aa5f2c9cadfa4b15988055bc15fb7dd8372134351888fa5cb870c78fde`.
+`d45f34bdfce26771371a5023b98c10c5a3cd2c5299303f6d004f3b77d75eea53`.
 R69: use stage → cold Windows boot for subsequent G3 candidates; no live
-bind until the separate R64 memory-owner work. Ordinary Code28 rollback is
-in progress after exact package790 cleanup.
+bind until the separate R64 memory-owner work. Exact package790 cleanup
+followed by frozen ordinary EXP377/392 recovered pinned SSH/CPU8,
+storage2/USB7, one inert APPL0002 Code28, staged0, SYS/UMD/service/signer0,
+arm0.
 
 ## 2026-09-24 EXP786: first leaf maps the same physical page as its table
 
