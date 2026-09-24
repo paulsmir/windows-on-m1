@@ -1,5 +1,31 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 EXP787: level0 4-KiB Count1 update refused before PTE inspection
+
+Package790 used distinct KMD-owned broker pages for VidMm tables. Real-broker
+replay of EXP786's self-table backing passed, and hardware advanced beyond
+that leaf. Live bind reached StartDevice Stage12/status0 and then Windows
+`0x10E/0xB`, KMD `C000000D` in `CompleteBuildPagingBufferIteration`.
+Last paging input: CPU_VIRTUAL level0 **Start64 Count1 Flags0**,
+FirstPteVA `0x2040000`, DMA/private pointers present. The only matching
+early guard in current KMD rejects a level0 4-KiB update unless both start
+and count are multiples of four; no failure receipt or raw PTE was captured.
+The new real-broker replay Count1 geometry with an explicitly synthetic
+invalid PTE is RED at `C000000D`. The broker currently permits only complete
+16-KiB leaf groups (valid mask 0 or 15), so do not assume arbitrary 4-KiB
+mapping can be represented. Next offline discriminator: capture the actual
+Count1 PTE before the guard, then distinguish a no-op/unmap from a valid
+partial mapping before changing behavior. No unchanged package790 rerun.
+
+GPU-hidden dump-first recovered pinned SSH/CPU8, APPL0002 absent, arm absent,
+exact package790 oem5.inf/SYS/UMD; dump/ETL/receipts were collected and
+hash-verified before cleanup. Analysis `.local/experiments/EXP787-g3-table-
+shadow/hardware-evidence/EXP787-analysis.json` SHA256
+`2a3230aa5f2c9cadfa4b15988055bc15fb7dd8372134351888fa5cb870c78fde`.
+R69: use stage → cold Windows boot for subsequent G3 candidates; no live
+bind until the separate R64 memory-owner work. Ordinary Code28 rollback is
+in progress after exact package790 cleanup.
+
 ## 2026-09-24 EXP786: first leaf maps the same physical page as its table
 
 Package789 (R67 KMD zeroing and receipt) passed EXP785's level0 TableGraph
