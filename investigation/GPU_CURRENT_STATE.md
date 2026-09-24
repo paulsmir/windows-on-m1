@@ -1,5 +1,31 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 EXP773 64-KiB G1b profile verdict and recovery
+
+One preregistered G3 full-owner, debug-off/no-KD/no-WPR cold boot changed only
+the G1b local segment profile from 16 to documented 64 KiB. Pinned WDK26100
+package773 compiled with zero warnings/errors after RED→GREEN caps and real-C
+translator tests; implementation commit `567cc88a`. Air reached Scanout ABI
+v2, pinned SSH, StartDevice Stage12/status0, QAI13 and all QAI14 levels
+status0 with VA39 and 128/32/16-KiB tables. APPL0002 still became Code43;
+DxgKrnl Admin Event549 again reported `StartAdapter_AddAdapterFailed` and
+`STATUS_INVALID_PARAMETER`. The QAI13 receipt omits Leaf64K, so 8192 bytes is
+source/build-verified, not directly read back. No first VidMm process/paging
+DDI or render was proven. Armed state SHA256
+`a13b033cf49ae8241b7213e0d7db2d2c56bb6b1f3778a75ee2a4a71f9ffb3e2f`.
+
+G3Armed was removed. Direct immutable GPU-hidden recovery removed exact
+`oem5.inf`, service, signer and transfer; hidden check passed. Frozen ordinary
+EXP377/392 returned pinned SSH and exactly one inert APPL0002 Code28, no
+AppleAgx residue, CPU8/storage2/USB7/autologon1. Final baseline SHA256
+`86760b30a891142cb3c55d934819417360363b64d735d51c89a370d49fafd4ab`.
+Verdict: 16-KiB local segment pages are not the sole AddAdapter cause. Next
+offline target, by proximity: current `QUERYMMUCOUNT=0`/invalid QUERYMMUS
+against advertised GpuMmu; then other QUERYSEGMENT5/DRIVERCAPS relationships;
+then captured GraphicsDrivers/service state. No repeat 64-KiB hardware run
+without a new causal discriminator. G4 Mesa VA winsys remains offline until
+AddAdapter and first VidMm DDI are proven.
+
 ## 2026-09-24 EXP772 corrected caps hardware verdict and recovery
 
 One EXP772 debug-off/no-KD cold boot with ABI6 full-owner m1n1 and signed
