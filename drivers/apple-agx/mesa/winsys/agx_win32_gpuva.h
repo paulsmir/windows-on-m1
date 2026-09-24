@@ -20,7 +20,8 @@ typedef struct {
   int (*Free)(void *, uint64_t, uint64_t);
   int (*MakeResident)(void *, const uint64_t *, unsigned, uint64_t *);
   int (*WaitPaging)(void *, uint64_t);
-  int (*Submit)(void *, uint64_t, uint32_t, const void *, uint32_t, uint64_t *);
+  int (*Submit)(void *, const uint64_t *, unsigned, uint64_t, uint32_t,
+                const void *, uint32_t, uint64_t *);
   int (*WaitRender)(void *, uint64_t);
   int (*Evict)(void *, const uint64_t *, unsigned);
 } AGX_WIN32_GPUVA_OPS;
@@ -49,6 +50,8 @@ int AgxWin32GpuvaUnbind(AGX_WIN32_GPUVA_SPACE *, AGX_WIN32_GPUVA_BO *);
 int AgxWin32GpuvaSubmit(AGX_WIN32_GPUVA_SPACE *,
                         const AGX_WIN32_GPUVA_BO *const *, unsigned Count,
                         const AGX_WIN32_GPUVA_BO *Command, uint32_t CommandBytes,
+                        const AGX_WIN32_GPUVA_BO *const *Written,
+                        unsigned WrittenCount,
                         const void *PrivateData, uint32_t PrivateBytes,
                         uint64_t *CompletionFence);
 int AgxWin32GpuvaRetire(AGX_WIN32_GPUVA_SPACE *, uint64_t CompletionFence);

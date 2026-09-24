@@ -173,6 +173,8 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   AGX_WIN32_ASAHI_BACKEND *b=backend(batch);
   AGX_G4_BATCH *g=capsule(batch);
   const AGX_WIN32_GPUVA_BO **refs=NULL;
+  const AGX_WIN32_GPUVA_BO *written[PIPE_MAX_COLOR_BUFS]={0};
+  unsigned written_count=0;
   unsigned count=0,limit;
   AGX_G4_PRIVATE packet={0};
   unsigned char *cpu;
@@ -204,9 +206,16 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
      !add_bo(b,refs,&count,limit,agx_screen(batch->ctx->base.screen)->rodata))
     goto fail;
   for(unsigned i=0;i<batch->key.nr_cbufs;++i) {
-    if(batch->key.cbufs[i].texture &&
-       !add_bo(b,refs,&count,limit,
-           agx_resource(batch->key.cbufs[i].texture)->bo)) goto fail;
+    if(batch->key.cbufs[i].texture) {
+      struct agx_bo *color=agx_resource(batch->key.cbufs[i].texture)->bo;
+      if(!add_bo(b,refs,&count,limit,color)) goto fail;
+      const AGX_WIN32_GPUVA_BO *mapped=AgxWin32AsahiGpuvaBo(b,color);
+      if(!mapped) goto fail;
+      unsigned duplicate=0;
+      for(unsigned j=0;j<written_count;++j)
+        if(written[j]==mapped) duplicate=1;
+      if(!duplicate) written[written_count++]=mapped;
+    }
   }
   if(batch->key.zsbuf.texture) {
     struct agx_resource *depth=agx_resource(batch->key.zsbuf.texture);
@@ -223,6 +232,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   }
   if(!AgxWin32GpuvaSubmit(&b->Gpuva,refs,count,
       AgxWin32AsahiGpuvaBo(b,g->Command),packet.CommandBytes,
+      written,written_count,
       &packet,packet.HeaderBytes+packet.CommandBytes,&g->Fence)) goto fail;
   g->Submitted=1;
   free(refs);

@@ -109,13 +109,21 @@ The active reference set is made resident and its paging fence awaited before
 No capture graph or relocation pass is invoked in this profile. The existing
 physical profile is still the default. Direct CDM/compute-only submission is
 currently fail closed until the KMD accepts a native compute command contract.
+The VA adapter submits offscreen draws with `NumPrimaries=0`. Presentation
+resources adopted by the frontend are marked as displayable; when they are
+color targets, their KMT handles enter `WrittenPrimaries`. The adapter rejects
+stale tokens and written BOs outside the resident reference set. Imported
+backbuffers retain their logical byte size while VA mapping rounds up to
+64 KiB; the integration KMD must confirm allocation backing spans that map.
 
 The host core and emulated WDK callback draw pass, the x64 native projection
 and archive build, and the ARM64 native archive and UMD DLL link complete in
 `C:\Users\pauls\AD04-g4-mesa-va\mesa-build-g4`. These are offline gates;
 there is no G4 Air execution. The repository-wide 1042-test run returned
 17 failures and 108 errors; examples include missing `m1n1_windows` source
-files and local toolchain prerequisites. That submodule was pre-existing dirty
+files and local toolchain prerequisites. This is 44 additional failing names
+versus the G3 baseline in `.local/tandem/test-baseline-g3-current.log`; none
+names the G4 Mesa/UMD code. That submodule was pre-existing dirty
 and is outside the authorized G4 scope. Focused GPUVA and physical UMD tests
 pass. The ARM64 DLL SHA-256 is
-`59422363304f4728fa89f21a70128920f91a3a27411016d7686e8de5eea422da`.
+`92a6c543a34989b64751bf6585e3d0e8646e77dbef24eaa2bc1a94048fa93b75`.

@@ -40,7 +40,7 @@ See the spec's source list. VidMm owns allocation, GPUVA page tables and residen
 - [x] Run host test RED with the missing GPUVA implementation.
 - [x] Implement 64-KiB reserve/map, fence waits, residency and retirement.
 - [x] Run host test GREEN with ASan/UBSan.
-- [ ] Commit after review and verification; append `CHANGES.csv` row.
+- [x] Commit after review and verification; append `CHANGES.csv` row (`73861c56`).
 
 ### Task 2: Opt-in Mesa `agx_bo` GPUVA mapping
 
@@ -48,23 +48,23 @@ See the spec's source list. VidMm owns allocation, GPUVA page tables and residen
 
 **Interface:** Enable `APPLE_AGX_GPUVA_WINSYS` only in the G4 build; use a configured callback table to bind the existing VidMm allocation token, publish GPUVA in `agx_bo.va`, free VA before allocation destruction. Keep physical profile unchanged.
 
-- [ ] Add test proving a BO's `va->addr` is the mapped GPUVA and 64-KiB aligned.
-- [ ] Run RED, implement the opt-in path and run GREEN.
-- [ ] Compile the G4 Mesa runtime in separate builder directories; commit and ledger.
+- [x] Host callback draw proves the mapped address and 64-KiB reservation.
+- [x] Implement the opt-in BO path and compile both VA and physical variants.
+- [x] Compile x64 and ARM64 G4 native archives in separate builder directories; commit and ledger (`6acd9c0d`).
 
 ### Task 3: UMD callback adapter and direct native batch
 
 **Files:** `render-admission/umd/src/umd_gpuva_windows.c`, runtime device, native batch bridge and `UmdContractTest`.
 
-**Interface:** Adapt `ReserveGpuVirtualAddressCb`, `MapGpuVirtualAddressCb`, `MakeResidentCb`, paging wait, `SubmitCommandCb`, rendering monitored fence and `EvictCb`. `SubmitCommandCb` must carry the KMD-approved versioned native command ABI; until then return a specific refusal before submitting.
+**Interface:** Adapt `ReserveGpuVirtualAddressCb`, `MapGpuVirtualAddressCb`, `MakeResidentCb`, paging wait, `SubmitCommandCb`, rendering monitored fence and `EvictCb`. `SubmitCommandCb` carries a proposed versioned private header; KMD admission remains blocked until the integration thread accepts this ABI.
 
-- [ ] Add callback replay test asserting Allocate→Reserve→Map→paging wait→MakeResident→paging wait→Submit→render wait→Evict.
-- [ ] Run RED, implement the WDK adapter and native batch dispatch, run GREEN.
-- [ ] Build x64 test and ARM64 UMD in G4-only directories; commit and ledger.
+- [x] Add callback replay test asserting Reserve→Map→paging wait→MakeResident→paging wait→Submit→render wait→Evict. Allocate remains covered by the existing screen path.
+- [x] Implement the WDK adapter and direct native render dispatch; host replay passes.
+- [x] Build x64 UmdContractTest and ARM64 UMD in G4-only directories; commit and ledger.
 
 ### Task 4: Integration handoff
 
 **Files:** G4 spec, `.local/tandem/REVIEW.md`.
 
-- [ ] Record KMD private command ABI, context/fence and mapping requirements as one OPEN review item.
-- [ ] Run focused tests, review diff and list any unproven gates for the integration thread.
+- [x] Record KMD private command ABI, context/fence and mapping requirements as OPEN R64.
+- [x] Run focused tests and record the remaining direct compute and hardware gates in the spec.

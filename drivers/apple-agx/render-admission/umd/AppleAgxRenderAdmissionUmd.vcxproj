@@ -26,6 +26,7 @@
     <EnableNativeFrontend Condition="'$(EnableNativeFrontend)' == ''">false</EnableNativeFrontend>
     <AppleAgxUmdAdmissionTraceDefinition Condition="'$(AppleAgxUmdAdmissionTrace)' == 'true'">APPLE_AGX_UMD_ADMISSION_TRACE=1;</AppleAgxUmdAdmissionTraceDefinition>
     <AppleAgxNativeFrontendDefinition Condition="'$(EnableNativeFrontend)' == 'true'">APPLE_AGX_UMD_NATIVE_FRONTEND=1;</AppleAgxNativeFrontendDefinition>
+    <AppleAgxGpuvaDefinition Condition="'$(EnableGpuvaWinsys)' == 'true'">APPLE_AGX_GPUVA_WINSYS=1;</AppleAgxGpuvaDefinition>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ResourceCompile>
@@ -33,7 +34,7 @@
     </ResourceCompile>
     <ClCompile>
       <AdditionalIncludeDirectories>include;..\include;..\..\shared\include;..\..\mesa\winsys;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>$(AppleAgxUmdAdmissionTraceDefinition)$(AppleAgxNativeFrontendDefinition)%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>$(AppleAgxUmdAdmissionTraceDefinition)$(AppleAgxNativeFrontendDefinition)$(AppleAgxGpuvaDefinition)%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <SDLCheck>true</SDLCheck>
@@ -85,6 +86,16 @@
     <ClCompile Include="..\..\mesa\winsys\agx_win32_native_device.c" />
     <ClCompile Include="..\..\mesa\winsys\agx_win32_reloc_capture.c" />
   </ItemGroup>
+  <ItemGroup Condition="'$(EnableNativeFrontend)' == 'true' and '$(EnableGpuvaWinsys)' == 'true'">
+    <ClCompile Include="src\umd_gpuva_windows.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
+    <ClCompile Include="..\..\mesa\winsys\agx_win32_gpuva.c" />
+  </ItemGroup>
+  <ItemDefinitionGroup Condition="'$(EnableNativeFrontend)' == 'true' and '$(EnableGpuvaWinsys)' == 'true'">
+    <Link>
+      <AdditionalDependencies>msvcrt.lib;ucrt.lib;vcruntime.lib;legacy_stdio_definitions.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <IgnoreSpecificDefaultLibraries></IgnoreSpecificDefaultLibraries>
+    </Link>
+  </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="include\direct_flip_contract.h" />
     <ClInclude Include="include\umd_resource_lifetime.h" />

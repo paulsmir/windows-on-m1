@@ -190,7 +190,7 @@ struct agx_bo *AgxWin32AsahiImportBo(
   bo->Base.align=(unsigned)buffer->Alignment;bo->Base.prime_fd=-1;
   bo->Base.refcnt=1;bo->Base.label=label;
 #ifdef APPLE_AGX_GPUVA_WINSYS
-  if(!b->GpuvaReady || (buffer->Transport.Bytes&0xffff) ||
+  if(!b->GpuvaReady ||
      !AgxWin32GpuvaBind(&b->Gpuva,&bo->Gpuva,
       buffer->Transport.Token,buffer->Transport.Bytes,0,
       AGX_GPUVA_MAP_WRITE)) {

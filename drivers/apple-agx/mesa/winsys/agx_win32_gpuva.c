@@ -71,16 +71,19 @@ int AgxWin32GpuvaUnbind(AGX_WIN32_GPUVA_SPACE *space,
 int AgxWin32GpuvaSubmit(AGX_WIN32_GPUVA_SPACE *space,
                         const AGX_WIN32_GPUVA_BO *const *references,
                         unsigned count, const AGX_WIN32_GPUVA_BO *command,
-                        uint32_t command_bytes, const void *private_data,
+                        uint32_t command_bytes,
+                        const AGX_WIN32_GPUVA_BO *const *written,
+                        unsigned written_count, const void *private_data,
                         uint32_t private_bytes, uint64_t *completion) {
-  uint64_t *handles, paging_fence = 0, render_fence = 0;
+  uint64_t *handles, *written_handles = NULL, paging_fence = 0, render_fence = 0;
   int resident;
   unsigned found_command = 0;
   if (completion) *completion = 0;
   if (!space || !references || !count ||
       !command || !command->Bound || !command_bytes ||
       command_bytes > command->Bytes || !private_data || !private_bytes ||
-      !completion || space->Terminal || space->Held) return 0;
+      !completion || (written_count && !written) || written_count > count ||
+      space->Terminal || space->Held) return 0;
   handles = malloc((size_t)count * sizeof(*handles));
   if (!handles) return 0;
   for (unsigned i = 0; i < count; ++i) {
@@ -97,25 +100,46 @@ int AgxWin32GpuvaSubmit(AGX_WIN32_GPUVA_SPACE *space,
     if (bo == command) found_command = 1;
   }
   if (!found_command) { free(handles); return 0; }
+  if (written_count) {
+    written_handles = malloc((size_t)written_count * sizeof(*written_handles));
+    if (!written_handles) { free(handles); return 0; }
+    for (unsigned i = 0; i < written_count; ++i) {
+      const AGX_WIN32_GPUVA_BO *bo = written[i];
+      unsigned found = 0;
+      if (!bo || !bo->Bound) { free(written_handles); free(handles); return 0; }
+      for (unsigned j = 0; j < count; ++j)
+        if (references[j] == bo) found = 1;
+      for (unsigned j = 0; j < i; ++j)
+        if (written_handles[j] == bo->Allocation) found = 0;
+      if (!found) { free(written_handles); free(handles); return 0; }
+      written_handles[i] = bo->Allocation;
+    }
+  }
   resident = space->Ops.MakeResident(space->Context, handles, count,
                                       &paging_fence);
+  /* Submission uses the written tokens only during this call. */
   if (resident == 3) {
     space->Terminal = 1;
     space->Held = handles;
     space->HeldCount = count;
+    free(written_handles);
     return 0;
   }
   if (!resident || (resident == 2 && !paging_fence)) {
+    free(written_handles);
     free(handles);
     return 0;
   }
   if (paging_fence && !space->Ops.WaitPaging(space->Context, paging_fence)) {
     if (!space->Ops.Evict(space->Context, handles, count)) space->Terminal = 1;
+    free(written_handles);
     free(handles);
     return 0;
   }
-  int submitted = space->Ops.Submit(space->Context, command->Va,
+  int submitted = space->Ops.Submit(space->Context, written_handles,
+      written_count, command->Va,
       command_bytes, private_data, private_bytes, &render_fence);
+  free(written_handles);
   if (submitted == 2) {
     space->Terminal = 1;
     space->Held = handles;
