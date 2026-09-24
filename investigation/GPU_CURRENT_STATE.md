@@ -1,5 +1,31 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 EXP785: level-0 TableGraph broker OWNERSHIP before leaf PTEs
+
+Package788 added only the flushed leaf-failure receipt to package787's source;
+WDK26100 incremental build was clean. First full-owner boot left exact package
+staged/unbound. A live bind reached StartDevice Stage12/status0, then Windows
+bugchecked `0x10E/0xB` with KMD `C0000141` in
+`CompleteBuildPagingBufferIteration`. The first failure receipt is **branch2
+TableGraph**, not leaf: CPU_VIRTUAL level0 Start0 Count8192 Flags3
+(`Repeat|InitialUpdate`), FirstPteVA `0x2000000`, table IPA `0x90f1fc000`,
+broker LastStatus4 `OWNERSHIP`, GraphUncertain0. The captured launch contract
+places this IPA in guest RAM, but no broker subreason or table contents were
+recorded. EXP784 Count32 leaf failure was not reproduced. Do not assume a
+specific ownership check failed. Next offline discriminator: receipt of the
+first nonzero qword/index in the resolved 16-KiB table immediately before
+RegisterTable; if all zero, inspect stage-2 translation/alias checks. No
+unchanged package788 rerun. Analysis `.local/experiments/EXP785-g3-leaf-receipt/
+hardware-evidence/EXP785-analysis.json` SHA256
+`403c643a65c72a88ae6aff8366d965a66a92d76b3464439090b2e4b2b3f1dfd1`.
+
+R54/R60: SSH was lost at bugcheck without pre-reboot proof of arm consumption,
+so GPU-hidden dump-first collected the exact package788 dump/ETL/receipts and
+removed `oem5.inf`/signer. Frozen ordinary EXP377/392 is again pinned SSH,
+CPU8/storage2/USB7, one inert APPL0002 Code28, staged0 SYS/UMD/service0,
+arm0. R64 firmware reserve remains deferred until this paging boundary is
+resolved; R65 G4 contracts remain after admission.
+
 ## 2026-09-24 R66 real-broker offline verdict
 
 Host replay now compiles the actual m1n1 v5 broker, MMIO wire, platform
