@@ -1,5 +1,29 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 EXP776 boot AutoLogger names AddAdapter failure
+
+Package777 kept package774's G3 64-KiB caps and full-owner m1n1/Mu. The R54
+arm key was consumed before GPU access; R55 receipt showed successful POST
+acquisition, valid 2560×1600/10240 geometry and route2. One cold boot reached
+StartDevice Stage12/status0 and pinned SSH/CPU8/storage2/USB7, then APPL0002
+Code43/Event549 `0xc000000d` FailureReason3. Boot AutoLogger ETL SHA256
+`a8aee41f74dc61b9204aceaf2598f8bba289837d78f532462410375f59d79ac3`
+shows driver `STATUS_INVALID_PARAMETER` at −0.541 ms and DxgKrnl AzureTriage
+"Failed to create KMD process handle for system process" at −0.533 ms before
+Event549. Node metadata and segment reporting followed before teardown.
+QAI45/46 and first VidMm paging DDI remain unobserved. This names the current
+boundary: `DxgkDdiCreateProcess` for the system process. The source guard in
+`gpuva_g3_windows.c` rejects `Args->NumPasid != 0`; pinned WDK26100 and Learn
+define NumPasid/pPasid as an input array, so that guard is the primary offline
+candidate. Confirm by host RED→GREEN and a CreateProcess input receipt before
+the next hash-pinned series run; do not change caps.
+
+AutoLogger was stopped and its registry key removed after evidence collection.
+The full-owner armed guest remains reachable with exact package777 Code43 and
+no G3Armed value. Under R54, retain it for the next hash-verified package while
+SSH and package identity remain certain; recovery to ordinary Code28 occurs at
+series end or loss of control.
+
 ## 2026-09-24 R53 / EXP775 ETW observation verdict and recovery
 
 Saved EXP771-774 Admin EVTX each contain exactly one current-boot Event549 with
