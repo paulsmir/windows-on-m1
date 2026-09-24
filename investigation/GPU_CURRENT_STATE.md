@@ -1,5 +1,31 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 EXP778 reaches VidMm page-table bootstrap and bugchecks
+
+Package779 admitted the paging SystemContext. Persisted `Wom1G3ContextInput`
+is `(v1, 32, flags5, node0, affinity1, private0, runtime handle0, IRQL0)`:
+the exact WDK `SystemContext|VirtualAddressing` combination. StartDevice was
+Stage12/status0, then Windows bugchecked `0x10E` subtype `0x49` during AddAdapter.
+WER minidump SHA256
+`cc6e68c34a48b3eeb07bebc56eca5385f54877f22d295eb9459de5f19ebf0e01`
+symbolizes to `dxgmms2!VIDMM_PAGE_TABLE_BASE::GetCpuVisibleAddress` →
+`GetDriverUpdateAddress` → `UpdatePageTableInvalidate` →
+`InitPagingProcessVaSpace`. The page-table allocation is in local segment2;
+both QUERYSEGMENT4/5 currently report it with CpuVisible0 and
+CpuTranslatedAddress0, and no CPU host aperture. This is the next causal
+boundary. The local allocation is a contiguous Windows physical memory object
+with a mapped CPU address and ADL GuestIpaBase; determine offline whether its
+GPU-segment range can truthfully publish `CpuVisible` with that guest IPA as
+`CpuTranslatedAddress`. Do not advertise it without checking alignment, size,
+and ownership. No UpdatePageTable DDI or rendering is proven yet.
+
+SSH was lost on bugcheck, so R54 series ended. Immutable GPU-hidden recovery
+collected dump and receipts, deleted exact package779 and signer, then frozen
+ordinary EXP377/392 returned pinned SSH and one inert APPL0002 Code28 with no
+AppleAgx package/service/files/module/certificate. Baseline SHA256
+`4f86c7732006dec99de0bfbc3841c7d35173ba1096d46e0b1acd8de612b09d35`.
+R55 repeated StartDevice route remains untested on hardware.
+
 ## 2026-09-24 EXP777B reaches paging-context creation
 
 Package778 removed the `NumPasid != 0` CreateProcess veto. EXP777's first cold
