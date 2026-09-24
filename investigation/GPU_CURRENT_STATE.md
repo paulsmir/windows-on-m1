@@ -1,5 +1,31 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 EXP771 post-Start G3 admission verdict and recovery
+
+The corrected ABI6 m1n1 full-owner build (`IOMFB_FULL_OWNER=1`) produced
+Scanout ABI v2; frozen package770 reached natural StartDevice Complete/status0
+with Windows SSH, CPU8, USB7 and storage2. DxgKrnl then rejected AddAdapter
+with `STATUS_INVALID_PARAMETER` (Admin Event549), leaving APPL0002 Code43.
+The last generic QAI receipt was Type16/status0; current receipts do not show
+the GPUMMUCAPS/PageTableLevelDesc requests or first VidMm process/paging DDI,
+so the exact invalid contract and whether those DDIs ran remain unknown. No
+render was intentionally submitted. Evidence
+`.local/experiments/EXP771-g3-vidmm/hardware-evidence/armed/state.json`
+SHA256 `ed6505378f8f380d57faae9ca229fd9903d1acc08e540e72b1418fe969a6b087`;
+DxgKrnl Admin EVTX SHA256
+`f81e3d3cf5e3d4a30ee06283e21a259cffc755d70ad57526c5a18cf64c5c2a12`.
+
+G3Armed was removed before shutdown. Ordinary recovery with the disarmed
+package did not reach SSH in its bounded window; immutable GPU-hidden recovery
+then removed exact `oem5.inf`, signer and transfer. Final ordinary GPU-visible
+EXP377/392 returned pinned SSH and one inert APPL0002 Code28 with no AppleAgx
+package/service/files/signer/arm, CPU8/storage2/USB7/autologon1. Final baseline
+SHA256 `ae51264e063f0f71d2c66e896a042dd85e64d969f5f68a610f1d1663599d3d13`.
+The earlier prelaunch serial collision was recovered by one proxy reboot; it
+never launched an EXP771 payload. Next causal target: first-failure QAI
+13/14 descriptors/status plus first G3 DDI receipts, then one justified G3
+admission rerun. No B1 hardware runs. G4 Mesa VA winsys can proceed offline.
+
 ## 2026-09-24 EXP770 pre-G3 Scanout gate and ordinary recovery
 
 The first hash-pinned G3 package770 was staged in the ordinary GPU-visible
