@@ -58,3 +58,37 @@ causal target; determine supported combinations and table alignment before
 changing it. Dump `0x10E/0xB` parameter3 `C00000BB` confirms the R57.2
 fail-closed internal status and durable receipt before the return. R60 same
 full-owner disarmed recovery returned pinned SSH and preserved exact package786.
+
+## R62 host replay and EXP783 correction
+
+Inspected EXP776–783 receipts and `GPU_CURRENT_STATE.md`, pinned WDK26100
+`d3dukmdt.h` (`DXGK_PTE`, `DXGK_PTE_PAGE_SIZE`), `d3dkmddi.h`
+(`DXGK_UPDATEPAGETABLEFLAGS`), Microsoft [64 KB page support](https://learn.microsoft.com/en-us/windows-hardware/drivers/display/support-for-64kb-pages),
+the current G3 KMD process/context/root/paging functions, Asahi and m1n1
+ownership recorded above, and the frozen Mu APPL0002 profile. WDK and Learn
+separate the per-parent-PTE child leaf type from the update's `Use64KBPages`
+selection for the table being written. A level1 update can therefore contain
+both 4K and 64K child PTEs while its own `Use64KBPages` is clear, exactly as
+EXP783 observed. Level2 still requires `PageTablePageSize=0`; all other
+unsupported PTE bits remain fail-closed.
+
+`tests/g3_vidmm_replay.py` compiles selected actual KMD C function bodies with
+minimal WDK, memory-view and broker mocks. Its sequence includes system
+PASID1, paging-context flags5, CPU_VIRTUAL level0 Repeat|InitialUpdate 8192
+with both DMA pointers, level1 2048 with mixed `0x41` and `0x20041` parent
+PTEs at page numbers `0xC` and `0x2C`, then a 64K leaf, root binding, flush,
+destroy and ordinary-process creation. Historical pre-fix function bodies
+fail at PASID1 (`C000000D`), flags5 (`C00000BB`), and Repeat or DMA-pointer
+admission (`C000000D`). Revision 077fad3e~ fails at the child address
+(`C0000141`); package786 source fails at the parent flags (`C00000BB`);
+the candidate passes in less than one second. Mocked broker
+success does not prove hardware graph or VidMm behavior after these inputs.
+
+Owner split: VidMm owns PTE values and update order; KMD decodes/validates
+them and maintains the process graph; m1n1 executes graph/broker operations;
+Mu exposes the frozen platform. The next hardware checkpoint is one
+hash-verified package under unchanged firmware/caps/signing: level1 index2
+advances and the next durable receipt names the following boundary. On
+bugcheck, apply R60 only after durable disarm proof, known exact package and
+one bounded same-profile SSH recovery; otherwise GPU-hidden dump-first exact
+cleanup to ordinary Code28.

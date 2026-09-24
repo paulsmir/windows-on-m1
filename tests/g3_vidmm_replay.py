@@ -1,0 +1,107 @@
+"""Compile selected unmodified G3 KMD functions with a small host WDK shim.
+
+The function bodies come from the working tree at build time.  The shim owns
+only allocation, memory views, WDK objects, and broker results.
+"""
+
+from pathlib import Path
+import argparse
+import re
+import subprocess
+import sys
+import tempfile
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "drivers/apple-agx/render-admission/src"
+SHARED = ROOT / "drivers/apple-agx/shared"
+
+FUNCTIONS = {
+    "gpuva_g3_windows.c": [
+        "AdmissionG3AllocateNode", "AdmissionG3FreeNode",
+        "AdmissionGpuvaG3FindProcess", "AdmissionG3BootstrapRoot",
+        "AdmissionDdiCreateProcess", "AdmissionDdiDestroyProcess",
+        "AdmissionGpuvaG3AttachContext", "AdmissionGpuvaG3DetachContext",
+        "AdmissionGpuvaG3ResolveTable", "AdmissionDdiSetRootPageTable",
+    ],
+    "gpuva_g3_paging_windows.c": [
+        "AdmissionG3RejectPaging", "AdmissionG3UpdateParent",
+        "AdmissionG3UpdateLeaf", "AdmissionGpuvaG3BuildPagingBuffer",
+    ],
+    "callbacks.c": ["AdmissionDdiCreateContext", "AdmissionDdiDestroyContext"],
+}
+
+
+def body(source, name):
+    match = re.search(r"\b" + re.escape(name) + r"\s*\([^;]*?\)\s*\{", source, re.S)
+    if match is None:
+        raise ValueError(f"missing KMD function {name}")
+    depth = 1
+    pos = match.end()
+    while depth:
+        if source[pos] == "{":
+            depth += 1
+        elif source[pos] == "}":
+            depth -= 1
+        pos += 1
+    start = source.rfind("\n", 0, match.start()) + 1
+    # Preserve the return type and SAL annotation on the line before name.
+    while start > 0 and source[start - 2:start - 1] not in ("}", ";"):
+        previous = source.rfind("\n", 0, start - 1) + 1
+        line = source[previous:start].strip()
+        if not line or line.startswith("#"):
+            break
+        start = previous
+    result = source[start:pos]
+    if "{" not in result:
+        raise ValueError(name)
+    return result
+
+
+def generate(revision=None, function_revisions=None):
+    function_revisions = function_revisions or {}
+    parts = ['#include "g3_vidmm_replay_shim.h"\n']
+    for filename, names in FUNCTIONS.items():
+        source = ((SRC / filename).read_text() if revision is None else
+                  subprocess.check_output(
+                      ["git", "show", f"{revision}:drivers/apple-agx/render-admission/src/{filename}"],
+                      cwd=ROOT, text=True))
+        if filename == "gpuva_g3_paging_windows.c":
+            parts.append("enum { AdmissionG3PagingFailureTableAddress=1, AdmissionG3PagingFailureTableGraph=2, AdmissionG3PagingFailureParentFlags=3, AdmissionG3PagingFailureChildAddress=4, AdmissionG3PagingFailureChildGraph=5, AdmissionG3PagingFailureParentLink=6 };\n")
+        for name in names:
+            parts.append(f'#line 1 "{filename}:{name}"\n')
+            function_source = source
+            if name in function_revisions:
+                function_source = subprocess.check_output(
+                    ["git", "show", f"{function_revisions[name]}:drivers/apple-agx/render-admission/src/{filename}"],
+                    cwd=ROOT, text=True)
+            parts.append(body(function_source, name) + "\n")
+    parts.append('#include "g3_vidmm_replay_scenarios.c"\n')
+    return "\n".join(parts)
+
+
+def main(revision=None, function_revisions=None, old_context_flags=False):
+    with tempfile.TemporaryDirectory(prefix="g3-vidmm-") as directory:
+        source = Path(directory) / "replay.c"
+        binary = Path(directory) / "replay"
+        source.write_text(generate(revision, function_revisions))
+        command = ["clang", "-std=gnu11", "-O0", "-g", "-Wno-unused-function",
+                   "-Wno-multichar", "-I", str(Path(__file__).parent),
+                   "-I", str(SHARED / "include"), str(source),
+                   str(SHARED / "src/apple_agx_gpuva_g3_translation.c"),
+                   "-o", str(binary)]
+        if old_context_flags:
+            command.insert(1, "-DADMISSION_CONTEXT_VALID_FLAGS=3")
+        subprocess.run(command, check=True, cwd=ROOT)
+        subprocess.run([str(binary)], check=True, cwd=ROOT)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--revision", help="KMD revision for historical RED replay")
+    parser.add_argument("--function-revision", action="append", default=[],
+                        metavar="NAME=REV", help="replace one function body from a historical revision")
+    parser.add_argument("--old-context-flags", action="store_true",
+                        help="use pre-e4aacfd0 render_objects.h flag mask")
+    args = parser.parse_args()
+    overrides = dict(entry.split("=", 1) for entry in args.function_revision)
+    sys.exit(main(args.revision, overrides, args.old_context_flags))

@@ -1,0 +1,93 @@
+/* Receipts EXP776–783 followed by documented leaf/root/flush and a user process. */
+static void expect_ok(const char *step, NTSTATUS status) {
+  if (!NT_SUCCESS(status)) {
+    fprintf(stderr, "%s: status %08x\n", step, (unsigned)status);
+    exit(1);
+  }
+}
+static void update(ADMISSION_CONTEXT *adapter, HANDLE process, UINT level,
+                   void *table, UINT count, DXGK_UPDATEPAGETABLEFLAGS flags,
+                   DXGK_PTE *entries, const char *name) {
+  unsigned char dma[4096]={0}, private_data[4096]={0};
+  DXGKARG_BUILDPAGINGBUFFER args={0};
+  args.Operation=DXGK_OPERATION_UPDATE_PAGE_TABLE;
+  args.pDmaBuffer=dma;
+  args.pDmaBufferPrivateData=private_data;
+  args.UpdatePageTable.hProcess=process;
+  args.UpdatePageTable.PageTableAddress.CpuVirtual=table;
+  args.UpdatePageTable.UpdateMode=DXGK_PAGETABLEUPDATE_CPU_VIRTUAL;
+  args.UpdatePageTable.PageTableLevel=level;
+  args.UpdatePageTable.NumPageTableEntries=count;
+  args.UpdatePageTable.Flags=flags;
+  args.UpdatePageTable.pPageTableEntries=entries;
+  expect_ok(name,AdmissionGpuvaG3BuildPagingBuffer(adapter,&args));
+  assert(args.pDmaBuffer==dma && args.pDmaBufferPrivateData==private_data);
+}
+int main(void) {
+  ADMISSION_CONTEXT adapter={0};
+  ADMISSION_G3_STATE state={0};
+  ADMISSION_DEVICE device={0};
+  DXGKARG_CREATEPROCESS sys={0}, user={0};
+  DXGKARG_CREATECONTEXT cc={0};
+  DXGKARG_SETROOTPAGETABLE root={0};
+  DXGKARG_BUILDPAGINGBUFFER flush={0};
+  DXGK_UPDATEPAGETABLEFLAGS flags={0};
+  DXGK_PTE empty={0},parents[2048]={0},leaf={0};
+  DXGK_PTE *zeros=NULL;
+  assert(posix_memalign((void **)&local_cpu,0x4000,(size_t)local_bytes)==0);
+  memset(local_cpu,0,(size_t)local_bytes);
+  InitializeListHead(&state.Processes);
+  adapter.Started=TRUE;
+  adapter.GpuvaG3State=&state;
+  adapter.ObjectAdapter=&adapter;
+  state.Adapter=&adapter;
+  sys.Flags.SystemProcess=1;
+  sys.NumPasid=1;
+  expect_ok("EXP776 CreateProcess PASID1",AdmissionDdiCreateProcess(&adapter,&sys));
+  assert(sys.hKmdProcess);
+  device.Object.Magic=ADMISSION_OBJECT_DEVICE_MAGIC;
+  device.Object.Adapter=&adapter.ObjectAdapter;
+  device.GpuvaG3Process=sys.hKmdProcess;
+  cc.Flags.Value=5; /* SystemContext | VirtualAddressing, EXP778. */
+  cc.EngineAffinity=1;
+  expect_ok("EXP778 CreateContext flags5",AdmissionDdiCreateContext(&device,&cc));
+  assert(cc.hContext);
+  root.hContext=cc.hContext;
+  root.Address.SegmentId=ADMISSION_MEMORY_LOCAL_SEGMENT;
+  root.Address.SegmentOffset=0;
+  root.NumEntries=8;
+  AdmissionDdiSetRootPageTable(&adapter,&root);
+  assert(!((ADMISSION_RENDER_CONTEXT *)cc.hContext)->GpuvaG3Poisoned);
+  flags.Repeat=1; flags.InitialUpdate=1;
+  if (getenv("G3_REPLAY_DMA_ONLY")) {
+    zeros=calloc(8192,sizeof(*zeros));
+    assert(zeros);
+    flags.Repeat=0;
+  }
+  update(&adapter,sys.hKmdProcess,0,local_cpu+0x4000,8192,flags,
+         zeros ? zeros : &empty,
+         "EXP780 level0 Repeat InitialUpdate DMA pointers");
+  free(zeros);
+  parents[1].Flags=0x41; parents[1].PageTableAddress=0xC;
+  parents[2].Flags=0x20041; parents[2].PageTableAddress=0x2C;
+  flags.Value=0;
+  update(&adapter,sys.hKmdProcess,1,local_cpu+0x8000,2048,flags,parents,
+         "EXP783 level1 mixed 4K/64K parent PTEs");
+  leaf.Flags=0x41; leaf.PageAddress=0x10;
+  flags.Use64KBPages=1; flags.InitialUpdate=1; flags.Repeat=1;
+  update(&adapter,sys.hKmdProcess,0,local_cpu+0x2c000,512,flags,&leaf,
+         "Learn leaf 64K PTE");
+  flush.Operation=DXGK_OPERATION_FLUSH_TLB;
+  flush.FlushTlb.hProcess=sys.hKmdProcess;
+  flush.FlushTlb.RootPageTableAddress=root.Address;
+  flush.FlushTlb.StartVirtualAddress=0;
+  flush.FlushTlb.EndVirtualAddress=0x10000;
+  expect_ok("Learn FlushTlb",AdmissionGpuvaG3BuildPagingBuffer(&adapter,&flush));
+  expect_ok("DestroyContext",AdmissionDdiDestroyContext(cc.hContext));
+  expect_ok("DestroyProcess",AdmissionDdiDestroyProcess(&adapter,sys.hKmdProcess));
+  expect_ok("Learn ordinary CreateProcess",AdmissionDdiCreateProcess(&adapter,&user));
+  expect_ok("ordinary DestroyProcess",AdmissionDdiDestroyProcess(&adapter,user.hKmdProcess));
+  free(local_cpu);
+  puts("G3 VidMm host replay: all recorded and projected inputs passed");
+  return 0;
+}

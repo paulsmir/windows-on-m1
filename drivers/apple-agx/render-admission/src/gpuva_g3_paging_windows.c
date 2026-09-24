@@ -42,10 +42,11 @@ static NTSTATUS AdmissionG3UpdateParent(
         AppleAgxGpuvaG3PteInputIndex(index - update->StartIndex,
                                      update->Flags.Repeat)];
     if (!pte->Valid) continue;
-    if (pte->Flags !=
-        (1ULL | ((ULONGLONG)ADMISSION_MEMORY_LOCAL_SEGMENT << 5) |
-         ((update->PageTableLevel == 1u && update->Flags.Use64KBPages) ?
-              (1ULL << 17) : 0ULL)))
+    /* The parent PTE chooses its child leaf type independently of the
+     * current table's UpdatePageTable Use64KBPages flag. */
+    if ((pte->Flags & ~(1ULL << 17)) !=
+            (1ULL | ((ULONGLONG)ADMISSION_MEMORY_LOCAL_SEGMENT << 5)) ||
+        (update->PageTableLevel == 2u && pte->PageTablePageSize != 0u))
       return AdmissionG3RejectPaging(failure,
           AdmissionG3PagingFailureParentFlags, index, pte, 0ULL,
           STATUS_NOT_SUPPORTED);
