@@ -109,9 +109,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
   ADMISSION_G3_STATE *state;
   ADMISSION_G3_PROCESS *process;
   NTSTATUS status;
+  KIRQL irql = KeGetCurrentIrql();
+  AdmissionRecordGpuvaG3CreateInput(
+      adapter == NULL ? NULL : adapter->PhysicalDeviceObject, Args,
+      adapter != NULL && adapter->Started, irql);
   if (adapter == NULL || Args == NULL || !adapter->Started ||
-      Args->NumPasid != 0u ||
-      KeGetCurrentIrql() != PASSIVE_LEVEL)
+      irql != PASSIVE_LEVEL)
     return STATUS_INVALID_PARAMETER;
   state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
   if (state == NULL) return STATUS_INVALID_DEVICE_STATE;

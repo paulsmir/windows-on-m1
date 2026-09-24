@@ -1522,6 +1522,37 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3Node(
   (void)ZwFlushKey(key);
   ZwClose(key);
 }
+
+typedef struct _ADMISSION_G3_CREATE_INPUT_RECEIPT {
+  ULONG Version, Bytes, Flags, NumPasid;
+  ULONG PasidArrayPresent, DxgkProcessPresent, AdapterStarted, Irql;
+} ADMISSION_G3_CREATE_INPUT_RECEIPT;
+
+_Use_decl_annotations_ void AdmissionRecordGpuvaG3CreateInput(
+    PDEVICE_OBJECT DeviceObject, const DXGKARG_CREATEPROCESS *Args,
+    BOOLEAN AdapterStarted, KIRQL CurrentIrql) {
+  ADMISSION_G3_CREATE_INPUT_RECEIPT receipt;
+  HANDLE key = NULL;
+  if (DeviceObject == NULL || CurrentIrql != PASSIVE_LEVEL)
+    return;
+  RtlZeroMemory(&receipt, sizeof(receipt));
+  receipt.Version = 1u;
+  receipt.Bytes = sizeof(receipt);
+  receipt.AdapterStarted = AdapterStarted ? 1u : 0u;
+  receipt.Irql = (ULONG)CurrentIrql;
+  if (Args != NULL) {
+    receipt.Flags = Args->Flags.Value;
+    receipt.NumPasid = Args->NumPasid;
+    receipt.PasidArrayPresent = Args->pPasid != NULL;
+    receipt.DxgkProcessPresent = Args->hDxgkProcess != NULL;
+  }
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(DeviceObject, PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, L"Wom1G3CreateInput", &receipt, sizeof(receipt));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
 #endif
 
 _Use_decl_annotations_ void AdmissionRecordPresentTransfer(
