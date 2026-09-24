@@ -1,5 +1,21 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 R49/R50 offline gate for EXP772
+
+Pinned WDK26100 defines `DXGK_PTE` as two 64-bit words. The original G3
+13/11/3 logical levels required at least 128/32/16 KiB allocation sizes,
+but QAI14 returned 16 KiB at every level. Commit `489e677f` corrects the
+sizes, pins 16-KiB local pages, and passes a real-C RED→GREEN caps validator;
+QAI13/14 receipts are in `d90f1d3e`. EXP772 will test this single documented
+contract correction against EXP771 full-owner/debug-off/no-KD environment.
+
+R50's single offline pass over saved EXP770/771 armed devnode and SetupAPI
+snapshots found the same oem5 package/service; EXP771 adds only later Wom1
+receipts and fresh VideoID/AOCID GUIDs. Neither snapshot exported
+`Control\\GraphicsDrivers` or service registry, so R35's persistent-state
+owner remains unknown. EXP772 recovery goes straight to immutable GPU-hidden
+exact-package removal after armed evidence, then ordinary GPU-visible Code28.
+
 ## 2026-09-24 EXP771 post-Start G3 admission verdict and recovery
 
 The corrected ABI6 m1n1 full-owner build (`IOMFB_FULL_OWNER=1`) produced
