@@ -31,8 +31,11 @@ int main(void) {
   caps.VirtualAddressBits = 40u;
   if (AppleAgxGpuvaG3CapsValid(&caps, 16u, 0u, 0u)) return 7;
   caps = AppleAgxGpuvaG3Caps(1u);
-  if (caps.Leaf64KBytes != 8192u ||
+  if (caps.Leaf64KBytes != 0x4000u ||
       !AppleAgxGpuvaG3CapsValid(&caps, 16u, 1u, 0u)) return 8;
+  caps.Leaf64KBytes = 8192u;
+  if (AppleAgxGpuvaG3CapsValid(&caps, 16u, 1u, 0u)) return 23;
+  caps = AppleAgxGpuvaG3Caps(1u);
   caps.Leaf64KBytes = 4096u;
   if (AppleAgxGpuvaG3CapsValid(&caps, 16u, 1u, 0u)) return 9;
   caps.Leaf64KBytes = 0u;
@@ -64,6 +67,9 @@ int main(void) {
     model = AppleAgxGpuvaG3AdmissionContract(1u, 64u);
     model.Leaf64KBytes = 0u;
     if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 19;
+    model = AppleAgxGpuvaG3AdmissionContract(1u, 64u);
+    model.Leaf64KBytes = 8192u;
+    if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 24;
     model = AppleAgxGpuvaG3AdmissionContract(1u, 64u);
     model.MmuSizeBytes = 0x10000u;
     if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 20;

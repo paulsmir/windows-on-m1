@@ -1678,6 +1678,23 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3PagingResult(
   (void)ZwFlushKey(key);
   ZwClose(key);
 }
+
+_Use_decl_annotations_ void AdmissionRecordGpuvaG3PagingFailure(
+    ADMISSION_CONTEXT *Context,
+    const ADMISSION_G3_PAGING_FAILURE *Failure) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      Failure == NULL || Failure->Branch == 0u ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, L"Wom1G3PagingFailure", Failure, sizeof(*Failure));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
 #endif
 
 _Use_decl_annotations_ void AdmissionRecordPresentTransfer(

@@ -2,13 +2,37 @@
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 
+enum {
+  AdmissionG3PagingFailureTableAddress = 1u,
+  AdmissionG3PagingFailureTableGraph = 2u,
+  AdmissionG3PagingFailureParentFlags = 3u,
+  AdmissionG3PagingFailureChildAddress = 4u,
+  AdmissionG3PagingFailureChildGraph = 5u,
+  AdmissionG3PagingFailureParentLink = 6u
+};
+
+static NTSTATUS AdmissionG3RejectPaging(
+    ADMISSION_G3_PAGING_FAILURE *failure, ULONG branch,
+    UINT index, const DXGK_PTE *pte, ULONGLONG child_ipa, NTSTATUS status) {
+  failure->Branch = branch;
+  failure->Index = index;
+  failure->Status = (ULONG)status;
+  failure->ChildIpa = child_ipa;
+  if (pte != NULL) {
+    failure->PteFlags = pte->Flags;
+    failure->PageAddress = pte->PageTableAddress;
+    failure->PageTablePageSize = (ULONG)pte->PageTablePageSize;
+  }
+  return status;
+}
+
 static NTSTATUS AdmissionG3UpdateParent(
     ADMISSION_G3_PROCESS *process, ULONGLONG table_ipa,
     const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update,
-    ADMISSION_CONTEXT *adapter) {
+    ADMISSION_CONTEXT *adapter, ADMISSION_G3_PAGING_FAILURE *failure) {
   UINT index, end, child_level;
   DXGK_PAGETABLEUPDATEADDRESS address;
-  ULONGLONG child_ipa;
+  ULONGLONG child_ipa = 0ULL;
   if (update->PageTableLevel != 1u && update->PageTableLevel != 2u)
     return STATUS_INVALID_PARAMETER;
   child_level = 2u - update->PageTableLevel + 1u;
@@ -22,13 +46,17 @@ static NTSTATUS AdmissionG3UpdateParent(
         (1ULL | ((ULONGLONG)ADMISSION_MEMORY_LOCAL_SEGMENT << 5) |
          ((update->PageTableLevel == 1u && update->Flags.Use64KBPages) ?
               (1ULL << 17) : 0ULL)))
-      return STATUS_NOT_SUPPORTED;
+      return AdmissionG3RejectPaging(failure,
+          AdmissionG3PagingFailureParentFlags, index, pte, 0ULL,
+          STATUS_NOT_SUPPORTED);
     RtlZeroMemory(&address, sizeof(address));
     address.GpuPhysical.SegmentId = ADMISSION_MEMORY_LOCAL_SEGMENT;
     address.GpuPhysical.SegmentOffset = pte->PageTableAddress;
     if (!NT_SUCCESS(AdmissionGpuvaG3ResolveTable(adapter, &address,
             DXGK_PAGETABLEUPDATE_GPU_PHYSICAL, &child_ipa)))
-      return STATUS_INVALID_ADDRESS;
+      return AdmissionG3RejectPaging(failure,
+          AdmissionG3PagingFailureChildAddress, index, pte, 0ULL,
+          STATUS_INVALID_ADDRESS);
   }
   for (index = update->StartIndex; index < end; ++index) {
     const DXGK_PTE *pte = &update->pPageTableEntries[
@@ -36,18 +64,30 @@ static NTSTATUS AdmissionG3UpdateParent(
                                      update->Flags.Repeat)];
     if (!pte->Valid) {
       if (!AppleAgxGpuvaG3GraphUpdateParent(&process->Graph, table_ipa,
-              index, 0ULL)) return STATUS_INVALID_PARAMETER;
+              index, 0ULL))
+        return AdmissionG3RejectPaging(failure,
+            AdmissionG3PagingFailureParentLink, index, pte, 0ULL,
+            STATUS_INVALID_PARAMETER);
       continue;
     }
     RtlZeroMemory(&address, sizeof(address));
     address.GpuPhysical.SegmentId = ADMISSION_MEMORY_LOCAL_SEGMENT;
     address.GpuPhysical.SegmentOffset = pte->PageTableAddress;
     if (!NT_SUCCESS(AdmissionGpuvaG3ResolveTable(adapter, &address,
-            DXGK_PAGETABLEUPDATE_GPU_PHYSICAL, &child_ipa)) ||
-        !AppleAgxGpuvaG3GraphRegisterTable(&process->Graph,
-            child_ipa, child_level) ||
-        !AppleAgxGpuvaG3GraphUpdateParent(&process->Graph, table_ipa,
-            index, child_ipa)) return STATUS_INVALID_ADDRESS;
+            DXGK_PAGETABLEUPDATE_GPU_PHYSICAL, &child_ipa)))
+      return AdmissionG3RejectPaging(failure,
+          AdmissionG3PagingFailureChildAddress, index, pte, 0ULL,
+          STATUS_INVALID_ADDRESS);
+    if (!AppleAgxGpuvaG3GraphRegisterTable(&process->Graph,
+            child_ipa, child_level))
+      return AdmissionG3RejectPaging(failure,
+          AdmissionG3PagingFailureChildGraph, index, pte, child_ipa,
+          STATUS_INVALID_ADDRESS);
+    if (!AppleAgxGpuvaG3GraphUpdateParent(&process->Graph, table_ipa,
+            index, child_ipa))
+      return AdmissionG3RejectPaging(failure,
+          AdmissionG3PagingFailureParentLink, index, pte, child_ipa,
+          STATUS_INVALID_ADDRESS);
   }
   return STATUS_SUCCESS;
 }
@@ -138,7 +178,8 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
   ADMISSION_G3_PROCESS *process;
   DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update;
   DXGK_PAGETABLEUPDATEADDRESS address;
-  ULONGLONG table_ipa, root_ipa;
+  ULONGLONG table_ipa = 0ULL, root_ipa;
+  ADMISSION_G3_PAGING_FAILURE failure;
   UINT limit;
   NTSTATUS status;
   if (adapter == NULL || args == NULL ||
@@ -163,6 +204,16 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
   if (args->Operation != DXGK_OPERATION_UPDATE_PAGE_TABLE)
     return STATUS_NOT_SUPPORTED;
   update = &args->UpdatePageTable;
+  RtlZeroMemory(&failure, sizeof(failure));
+  failure.Version = 1u;
+  failure.Bytes = sizeof(failure);
+  failure.Level = update->PageTableLevel;
+  failure.UpdateMode = (ULONG)update->UpdateMode;
+  failure.Index = MAXULONG;
+  failure.TableAddress = update->UpdateMode ==
+      DXGK_PAGETABLEUPDATE_CPU_VIRTUAL ?
+      (ULONGLONG)(ULONG_PTR)update->PageTableAddress.CpuVirtual :
+      update->PageTableAddress.GpuPhysical.SegmentOffset;
   limit = update->PageTableLevel == 0u ?
               (update->Flags.Use64KBPages ? 512u : 8192u) :
           update->PageTableLevel == 1u ? 2048u :
@@ -186,22 +237,36 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
   /* CPU_VIRTUAL updates complete now; supplied DMA buffers stay untouched. */
   status = AdmissionGpuvaG3ResolveTable(adapter, &update->PageTableAddress,
                                         update->UpdateMode, &table_ipa);
-  if (!NT_SUCCESS(status)) return status;
+  if (!NT_SUCCESS(status)) {
+    (void)AdmissionG3RejectPaging(&failure,
+        AdmissionG3PagingFailureTableAddress, MAXULONG, NULL, 0ULL, status);
+    AdmissionRecordGpuvaG3PagingFailure(adapter, &failure);
+    return status;
+  }
+  failure.TableIpa = table_ipa;
   ExAcquireFastMutex(&state->Lock);
   process = AdmissionGpuvaG3FindProcess(state, update->hProcess);
   if (process == NULL || process->Poisoned || process->Graph.Uncertain) {
     status = STATUS_INVALID_DEVICE_STATE;
   } else if (!AppleAgxGpuvaG3GraphRegisterTable(&process->Graph, table_ipa,
                                                  2u - update->PageTableLevel)) {
-    status = STATUS_INVALID_ADDRESS;
+    status = AdmissionG3RejectPaging(&failure,
+        AdmissionG3PagingFailureTableGraph, MAXULONG, NULL, 0ULL,
+        STATUS_INVALID_ADDRESS);
   } else if (update->PageTableLevel == 0u) {
     status = AdmissionG3UpdateLeaf(process, table_ipa, update, adapter);
   } else {
-    status = AdmissionG3UpdateParent(process, table_ipa, update, adapter);
+    status = AdmissionG3UpdateParent(process, table_ipa, update, adapter,
+                                     &failure);
+  }
+  if (process != NULL && failure.Branch != 0u) {
+    failure.GraphLastStatus = process->Graph.LastStatus;
+    failure.GraphUncertain = process->Graph.Uncertain;
   }
   if (process != NULL && !NT_SUCCESS(status) &&
       process->Graph.Uncertain) process->Poisoned = TRUE;
   ExReleaseFastMutex(&state->Lock);
+  AdmissionRecordGpuvaG3PagingFailure(adapter, &failure);
   return status;
 }
 

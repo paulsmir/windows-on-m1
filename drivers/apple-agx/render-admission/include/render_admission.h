@@ -768,6 +768,14 @@ void AdmissionRecordGpuvaG3PagingInput(
     _In_opt_ const DXGKARG_BUILDPAGINGBUFFER *Args, ULONG CurrentIrql);
 void AdmissionRecordGpuvaG3PagingResult(
     _In_opt_ ADMISSION_CONTEXT *Context, NTSTATUS Status);
+typedef struct _ADMISSION_G3_PAGING_FAILURE {
+  ULONG Version, Bytes, Branch, Level, Index, PageTablePageSize;
+  ULONG Status, UpdateMode, GraphLastStatus, GraphUncertain;
+  ULONGLONG TableAddress, TableIpa, PteFlags, PageAddress, ChildIpa;
+} ADMISSION_G3_PAGING_FAILURE;
+void AdmissionRecordGpuvaG3PagingFailure(
+    _In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_G3_PAGING_FAILURE *Failure);
 BOOLEAN AdmissionGpuvaG3DeclarationReady(_In_ const ADMISSION_CONTEXT *Context);
 #endif
 _IRQL_requires_(PASSIVE_LEVEL)
