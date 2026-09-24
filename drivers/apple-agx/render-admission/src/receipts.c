@@ -1354,7 +1354,7 @@ typedef struct _ADMISSION_G3_QUERY_RECEIPT {
 
 _Use_decl_annotations_ void AdmissionRecordGpuvaG3Query(
     PDEVICE_OBJECT DeviceObject, const DXGKARG_QUERYADAPTERINFO *Query,
-    NTSTATUS Status) {
+    NTSTATUS Status, UINT MmuCount) {
   ADMISSION_G3_QUERY_RECEIPT receipt;
   PCWSTR name;
   HANDLE key = NULL;
@@ -1379,6 +1379,8 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3Query(
       receipt.Values[3] = (ULONG)caps->PageTableUpdateMode;
       receipt.Values[4] = caps->VirtualAddressBitCount;
       receipt.Values[5] = caps->PageTableLevelCount;
+      receipt.Values[6] = caps->LeafPageTableSizeFor64KPagesInBytes;
+      receipt.Values[7] = caps->DualPteSupported;
     }
   } else if (Query->Type == DXGKQAITYPE_PAGETABLELEVELDESC) {
     const DXGK_QUERYPAGETABLELEVELDESCIN *input;
@@ -1403,6 +1405,44 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3Query(
       receipt.Values[3] = level->PageTableSizeInBytes;
       receipt.Values[4] = level->PageTableAlignmentInBytes;
     }
+  } else if (Query->Type == DXGKQAITYPE_QUERYMMUCOUNT) {
+    const DXGK_QUERYMMUCOUNTIN *input;
+    const DXGK_QUERYMMUCOUNTOUT *output;
+    name = L"Wom1G3Q45";
+    RtlZeroMemory(&receipt, sizeof(receipt));
+    if (Query->pInputData != NULL &&
+        Query->InputDataSize >= sizeof(*input)) {
+      input = (const DXGK_QUERYMMUCOUNTIN *)Query->pInputData;
+      receipt.PhysicalAdapterIndex = input->PhysicalAdapterIndex;
+    }
+    if (NT_SUCCESS(Status) && Query->pOutputData != NULL &&
+        Query->OutputDataSize >= sizeof(*output)) {
+      output = (const DXGK_QUERYMMUCOUNTOUT *)Query->pOutputData;
+      receipt.Values[0] = output->MmuCount;
+    }
+  } else if (Query->Type == DXGKQAITYPE_QUERYMMUS) {
+    const DXGK_QUERYMMUSIN *input;
+    const DXGK_QUERYMMUSOUT *output;
+    name = L"Wom1G3Q46";
+    RtlZeroMemory(&receipt, sizeof(receipt));
+    if (Query->pInputData != NULL &&
+        Query->InputDataSize >= sizeof(*input)) {
+      input = (const DXGK_QUERYMMUSIN *)Query->pInputData;
+      receipt.PhysicalAdapterIndex = input->PhysicalAdapterIndex;
+    }
+    if (NT_SUCCESS(Status) && Query->pOutputData != NULL &&
+        Query->OutputDataSize >= sizeof(*output)) {
+      ULONGLONG size;
+      output = (const DXGK_QUERYMMUSOUT *)Query->pOutputData;
+      receipt.Values[0] = output->DisplayMmuId;
+      receipt.Values[4] = output->MmuDescriptors != NULL;
+      if (MmuCount != 0u && output->MmuDescriptors != NULL) {
+        size = output->MmuDescriptors[0].Size;
+        receipt.Values[1] = (ULONG)size;
+        receipt.Values[2] = (ULONG)(size >> 32);
+        receipt.Values[3] = output->MmuDescriptors[0].Flags.Value;
+      }
+    }
   } else return;
   receipt.Version = 1u;
   receipt.Bytes = sizeof(receipt);
@@ -1413,6 +1453,36 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3Query(
   if (!NT_SUCCESS(IoOpenDeviceRegistryKey(DeviceObject,
       PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
   WriteBinary(key, name, &receipt, sizeof(receipt));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
+typedef struct _ADMISSION_G3_NODE_RECEIPT {
+  ULONG Version, Bytes, NodeOrdinal, Status;
+  ULONG EngineType, GpuMmuSupported, IoMmuSupported, Flags;
+} ADMISSION_G3_NODE_RECEIPT;
+
+_Use_decl_annotations_ void AdmissionRecordGpuvaG3Node(
+    PDEVICE_OBJECT DeviceObject, UINT NodeOrdinal,
+    const DXGKARG_GETNODEMETADATA *Metadata, NTSTATUS Status) {
+  ADMISSION_G3_NODE_RECEIPT receipt;
+  HANDLE key = NULL;
+  if (DeviceObject == NULL || Metadata == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL) return;
+  RtlZeroMemory(&receipt, sizeof(receipt));
+  receipt.Version = 1u;
+  receipt.Bytes = sizeof(receipt);
+  receipt.NodeOrdinal = NodeOrdinal;
+  receipt.Status = (ULONG)Status;
+  if (NT_SUCCESS(Status)) {
+    receipt.EngineType = Metadata->EngineType;
+    receipt.GpuMmuSupported = Metadata->GpuMmuSupported;
+    receipt.IoMmuSupported = Metadata->IoMmuSupported;
+    receipt.Flags = Metadata->Flags.Value;
+  }
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(DeviceObject,
+      PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
+  WriteBinary(key, L"Wom1G3Node0", &receipt, sizeof(receipt));
   (void)ZwFlushKey(key);
   ZwClose(key);
 }

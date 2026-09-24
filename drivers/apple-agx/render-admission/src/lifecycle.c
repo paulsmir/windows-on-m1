@@ -7,6 +7,7 @@
 #endif
 C_ASSERT(sizeof(DXGK_PTE) == 16);
 C_ASSERT(ADMISSION_MEMORY_LOCAL_SEGMENT == 2u);
+C_ASSERT(DXGK_INVALID_MMU_ID == APPLE_AGX_GPUVA_G3_INVALID_MMU_ID);
 #endif
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION) || \
     defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
@@ -35,6 +36,31 @@ static BOOLEAN AdmissionGpuvaArmed(ADMISSION_CONTEXT *context,
   return NT_SUCCESS(status) && value->Type == REG_DWORD &&
          value->DataLength == sizeof(ULONG) &&
          *(ULONG *)value->Data == 1u;
+}
+#endif
+
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+_Use_decl_annotations_ BOOLEAN AdmissionGpuvaG3DeclarationReady(
+    const ADMISSION_CONTEXT *context) {
+  APPLE_AGX_GPUVA_G3_ADMISSION_CONTRACT model =
+      AppleAgxGpuvaG3AdmissionContract(1u, ADMISSION_GPUVA_G1B_PAGE_PROFILE);
+  APPLE_AGX_GPUVA_G3_CAPS tables =
+      AppleAgxGpuvaG3Caps(model.LocalUse64KBPages);
+  if (context == NULL || context->GpuvaG3State == NULL ||
+      !AdmissionMemoryReady(&context->Memory) ||
+      !AppleAgxGpuvaG3AdmissionContractValid(&model, sizeof(DXGK_PTE)) ||
+      !AppleAgxGpuvaG3CapsValid(&tables, sizeof(DXGK_PTE),
+                               model.LocalUse64KBPages, 0u))
+    return FALSE;
+  return context->Memory.Topology.SegmentCount == model.SegmentCount &&
+         context->Memory.Topology.Aperture.Id == model.ApertureSegmentId &&
+         context->Memory.Topology.Local.Id == model.LocalSegmentId &&
+         context->Memory.Topology.PagingBufferSegmentId ==
+             model.PagingBufferSegmentId &&
+         context->Memory.Topology.PagingBufferSize ==
+             model.PagingBufferBytes &&
+         context->Memory.Topology.Aperture.Aperture != APPLE_AGX_FALSE &&
+         context->Memory.Topology.Local.Aperture == APPLE_AGX_FALSE;
 }
 #endif
 
@@ -536,8 +562,19 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
         caps->PresentationCaps.SupportKernelModeCommandBuffer = 1u;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
         if (context->GpuvaG3State != NULL) {
-          caps->MemoryManagementCaps.VirtualAddressingSupported = 1u;
-          caps->MemoryManagementCaps.GpuMmuSupported = 1u;
+          APPLE_AGX_GPUVA_G3_ADMISSION_CONTRACT model =
+              AppleAgxGpuvaG3AdmissionContract(
+                  1u, ADMISSION_GPUVA_G1B_PAGE_PROFILE);
+          if (!AdmissionGpuvaG3DeclarationReady(context)) {
+            status = STATUS_INVALID_DEVICE_STATE;
+            break;
+          }
+          caps->MemoryManagementCaps.VirtualAddressingSupported =
+              model.VirtualAddressingSupported;
+          caps->MemoryManagementCaps.GpuMmuSupported =
+              model.AdapterGpuMmuSupported;
+          caps->MemoryManagementCaps.PagingNode = model.PagingNode;
+          caps->GpuEngineTopology.NbAsymetricProcessingNodes = model.NodeCount;
         }
 #endif
         status = STATUS_SUCCESS;
@@ -553,7 +590,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     const DXGK_QUERYGPUMMUCAPSIN *input;
     DXGK_GPUMMUCAPS *caps;
     APPLE_AGX_GPUVA_G3_CAPS model = AppleAgxGpuvaG3Caps(ADMISSION_G1B_USE64K);
-    if (context->GpuvaG3State == NULL) {
+    if (!AdmissionGpuvaG3DeclarationReady(context)) {
       status = STATUS_INVALID_DEVICE_STATE;
     } else if (QueryAdapterInfo->pInputData == NULL ||
         QueryAdapterInfo->InputDataSize < sizeof(*input) ||
@@ -586,7 +623,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     const DXGK_QUERYPAGETABLELEVELDESCIN *input;
     DXGK_PAGE_TABLE_LEVEL_DESC *level;
     APPLE_AGX_GPUVA_G3_CAPS model = AppleAgxGpuvaG3Caps(ADMISSION_G1B_USE64K);
-    if (context->GpuvaG3State == NULL) {
+    if (!AdmissionGpuvaG3DeclarationReady(context)) {
       status = STATUS_INVALID_DEVICE_STATE;
     } else if (QueryAdapterInfo->pInputData == NULL ||
         QueryAdapterInfo->InputDataSize < sizeof(*input) ||
@@ -689,6 +726,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
   case DXGKQAITYPE_QUERYMMUCOUNT: {
     const DXGK_QUERYMMUCOUNTIN *input;
     DXGK_QUERYMMUCOUNTOUT *output;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    APPLE_AGX_GPUVA_G3_ADMISSION_CONTRACT model =
+        AppleAgxGpuvaG3AdmissionContract(context->GpuvaG3State != NULL,
+                                         ADMISSION_GPUVA_G1B_PAGE_PROFILE);
+#endif
     if (QueryAdapterInfo->pInputData == NULL ||
         QueryAdapterInfo->InputDataSize < sizeof(*input) ||
         QueryAdapterInfo->pOutputData == NULL ||
@@ -702,15 +744,30 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
       status = STATUS_INVALID_PARAMETER;
       break;
     }
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    if (!AppleAgxGpuvaG3AdmissionContractValid(&model, sizeof(DXGK_PTE)) ||
+        (model.Enabled && !AdmissionGpuvaG3DeclarationReady(context))) {
+      status = STATUS_INVALID_DEVICE_STATE;
+      break;
+    }
+#endif
     RtlZeroMemory(output, sizeof(*output));
-    /* Physical-mode trial advertises no VidMm-managed MMU. */
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    output->MmuCount = (UINT16)model.MmuCount;
+#else
     output->MmuCount = 0u;
+#endif
     status = STATUS_SUCCESS;
     break;
   }
   case DXGKQAITYPE_QUERYMMUS: {
     const DXGK_QUERYMMUSIN *input;
     DXGK_QUERYMMUSOUT *output;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    APPLE_AGX_GPUVA_G3_ADMISSION_CONTRACT model =
+        AppleAgxGpuvaG3AdmissionContract(context->GpuvaG3State != NULL,
+                                         ADMISSION_GPUVA_G1B_PAGE_PROFILE);
+#endif
     if (QueryAdapterInfo->pInputData == NULL ||
         QueryAdapterInfo->InputDataSize < sizeof(*input) ||
         QueryAdapterInfo->pOutputData == NULL ||
@@ -724,8 +781,29 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
       status = STATUS_INVALID_PARAMETER;
       break;
     }
-    RtlZeroMemory(output, sizeof(*output));
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    if (!AppleAgxGpuvaG3AdmissionContractValid(&model, sizeof(DXGK_PTE)) ||
+        (model.Enabled && !AdmissionGpuvaG3DeclarationReady(context))) {
+      status = STATUS_INVALID_DEVICE_STATE;
+      break;
+    }
+    if (model.MmuCount != 0u && output->MmuDescriptors == NULL) {
+      status = STATUS_BUFFER_TOO_SMALL;
+      break;
+    }
+#endif
+    /* The caller owns MmuDescriptors; clearing the output would lose it. */
+    output->Reserved0 = 0u;
+    RtlZeroMemory(output->Reserved, sizeof(output->Reserved));
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    if (model.MmuCount != 0u) {
+      RtlZeroMemory(&output->MmuDescriptors[0], sizeof(DXGK_MMUDESCRIPTOR));
+      output->MmuDescriptors[0].Size = model.MmuSizeBytes;
+    }
+    output->DisplayMmuId = (UINT16)model.DisplayMmuId;
+#else
     output->DisplayMmuId = DXGK_INVALID_MMU_ID;
+#endif
     status = STATUS_SUCCESS;
     break;
   }
@@ -797,7 +875,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
                        QueryAdapterInfo->pOutputData);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   AdmissionRecordGpuvaG3Query(context->PhysicalDeviceObject,
-                              QueryAdapterInfo, status);
+                              QueryAdapterInfo, status,
+                              context->GpuvaG3State == NULL ? 0u : 1u);
 #endif
   return status;
 }

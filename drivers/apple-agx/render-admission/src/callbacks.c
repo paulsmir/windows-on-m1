@@ -1,4 +1,7 @@
 #include "render_admission.h"
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+#include "apple_agx_gpuva_g3_caps.h"
+#endif
 
 #define UNUSED(value) UNREFERENCED_PARAMETER(value)
 #define FAIL2(name, type1, arg1, type2, arg2)                                 \
@@ -455,11 +458,28 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiGetNodeMetadata(
 
   RtlZeroMemory(NodeMetadata, sizeof(*NodeMetadata));
   NodeMetadata->EngineType = DXGK_ENGINE_TYPE_3D;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (context->GpuvaG3State != NULL) {
+    APPLE_AGX_GPUVA_G3_ADMISSION_CONTRACT model =
+        AppleAgxGpuvaG3AdmissionContract(1u,
+                                         ADMISSION_GPUVA_G1B_PAGE_PROFILE);
+    if (!AdmissionGpuvaG3DeclarationReady(context))
+      return STATUS_INVALID_DEVICE_STATE;
+    NodeMetadata->GpuMmuSupported =
+        (model.NodeGpuMmuMask & (1u << NodeOrdinal)) != 0u;
+    NodeMetadata->IoMmuSupported =
+        (model.NodeIoMmuMask & (1u << NodeOrdinal)) != 0u;
+  }
+#endif
   status = RtlStringCchCopyW(NodeMetadata->FriendlyName,
                              RTL_NUMBER_OF(NodeMetadata->FriendlyName),
                              L"Apple AGX 3D node");
   AdmissionRecordDevice(context->PhysicalDeviceObject,
                         AdmissionReceiptNodeMetadata, status);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionRecordGpuvaG3Node(context->PhysicalDeviceObject, NodeOrdinal,
+                             NodeMetadata, status);
+#endif
   if (!NT_SUCCESS(status))
     return status;
   return STATUS_SUCCESS;

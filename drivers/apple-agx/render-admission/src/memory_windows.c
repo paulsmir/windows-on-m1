@@ -56,6 +56,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment5(
     return STATUS_INVALID_PARAMETER;
   if (output->SegmentDescriptors == NULL)
     return STATUS_BUFFER_TOO_SMALL;
+  RtlZeroMemory(output->Reserved, sizeof(output->Reserved));
   AdmissionDescribeSegment5(&Context->Memory.Topology.Aperture,
                             &output->SegmentDescriptors[0]);
   local = Context->Memory.Topology.Local;

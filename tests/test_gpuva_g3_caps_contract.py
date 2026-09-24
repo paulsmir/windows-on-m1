@@ -37,6 +37,42 @@ int main(void) {
   if (AppleAgxGpuvaG3CapsValid(&caps, 16u, 1u, 0u)) return 9;
   caps.Leaf64KBytes = 0u;
   if (AppleAgxGpuvaG3CapsValid(&caps, 16u, 1u, 0u)) return 10;
+  {
+    APPLE_AGX_GPUVA_G3_ADMISSION_CONTRACT model =
+        AppleAgxGpuvaG3AdmissionContract(1u, 64u);
+    if (!AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 11;
+    model.NodeGpuMmuMask = 0u;
+    if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 12;
+    model = AppleAgxGpuvaG3AdmissionContract(1u, 64u);
+    model.MmuCount = 0u;
+    if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 13;
+    model = AppleAgxGpuvaG3AdmissionContract(1u, 64u);
+    model.AdapterGpuMmuSupported = 0u;
+    if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 14;
+    model = AppleAgxGpuvaG3AdmissionContract(1u, 64u);
+    model.AdapterIoMmuSupported = 1u;
+    if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 15;
+    model = AppleAgxGpuvaG3AdmissionContract(1u, 64u);
+    model.PagingNode = 1u;
+    if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 16;
+    model = AppleAgxGpuvaG3AdmissionContract(1u, 64u);
+    model.ApertureCount = 2u;
+    if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 17;
+    model = AppleAgxGpuvaG3AdmissionContract(1u, 64u);
+    model.LocalUse64KBPages = 0u;
+    if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 18;
+    model = AppleAgxGpuvaG3AdmissionContract(1u, 64u);
+    model.Leaf64KBytes = 0u;
+    if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 19;
+    model = AppleAgxGpuvaG3AdmissionContract(1u, 64u);
+    model.MmuSizeBytes = 0x10000u;
+    if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 20;
+    model = AppleAgxGpuvaG3AdmissionContract(0u, 64u);
+    if (!AppleAgxGpuvaG3AdmissionContractValid(&model, 16u) ||
+        model.NodeGpuMmuMask != 0u || model.MmuCount != 0u) return 21;
+    model.NodeGpuMmuMask = 1u;
+    if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 22;
+  }
   return 0;
 }
 '''

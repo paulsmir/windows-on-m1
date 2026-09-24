@@ -51,4 +51,94 @@ static inline int AppleAgxGpuvaG3CapsValid(
   return bits == caps->VirtualAddressBits;
 }
 
+#define APPLE_AGX_GPUVA_G3_INVALID_MMU_ID 0xffffu
+
+/* One source for the adapter, execution-node, MMU and segment declarations.
+ * No Windows types are used so the exact contract runs in the host validator. */
+typedef struct _APPLE_AGX_GPUVA_G3_ADMISSION_CONTRACT {
+  unsigned int Enabled;
+  unsigned int VirtualAddressingSupported;
+  unsigned int AdapterGpuMmuSupported;
+  unsigned int AdapterIoMmuSupported;
+  unsigned int NodeCount;
+  unsigned int PagingNode;
+  unsigned int VirtualSubmissionNodeMask;
+  unsigned int NodeGpuMmuMask;
+  unsigned int NodeIoMmuMask;
+  unsigned int MmuCount;
+  unsigned long long MmuSizeBytes;
+  unsigned int DisplayMmuId;
+  unsigned int SegmentCount;
+  unsigned int ApertureCount;
+  unsigned int ApertureSegmentId;
+  unsigned int LocalSegmentId;
+  unsigned int LocalUse64KBPages;
+  unsigned int PagingBufferSegmentId;
+  unsigned int PagingBufferBytes;
+  unsigned int PagingPrivateBytes;
+  unsigned int VirtualAddressBits;
+  unsigned int Leaf64KBytes;
+} APPLE_AGX_GPUVA_G3_ADMISSION_CONTRACT;
+
+static inline APPLE_AGX_GPUVA_G3_ADMISSION_CONTRACT
+AppleAgxGpuvaG3AdmissionContract(unsigned int enabled,
+                                  unsigned int page_profile) {
+  APPLE_AGX_GPUVA_G3_CAPS tables = AppleAgxGpuvaG3Caps(
+      enabled && page_profile == 64u);
+  APPLE_AGX_GPUVA_G3_ADMISSION_CONTRACT caps = {
+      enabled ? 1u : 0u, enabled ? 1u : 0u, enabled ? 1u : 0u, 0u,
+      1u, 0u, enabled ? 1u : 0u, enabled ? 1u : 0u, 0u,
+      enabled ? 1u : 0u, enabled ? (1ULL << 39) : 0ULL,
+      APPLE_AGX_GPUVA_G3_INVALID_MMU_ID,
+      2u, 1u, 1u, 2u, page_profile == 64u ? 1u : 0u,
+      1u, 0x1000u, 0x1000u, tables.VirtualAddressBits,
+      enabled ? tables.Leaf64KBytes : 0u};
+  return caps;
+}
+
+static inline int AppleAgxGpuvaG3AdmissionContractValid(
+    const APPLE_AGX_GPUVA_G3_ADMISSION_CONTRACT *caps,
+    unsigned int pte_bytes) {
+  unsigned int nodes;
+  if (caps == 0 || pte_bytes == 0u || caps->NodeCount == 0u ||
+      caps->NodeCount >= 32u || caps->PagingNode >= caps->NodeCount ||
+      caps->SegmentCount < 2u || caps->ApertureCount != 1u ||
+      caps->ApertureSegmentId == 0u ||
+      caps->ApertureSegmentId > caps->SegmentCount ||
+      caps->LocalSegmentId == 0u ||
+      caps->LocalSegmentId > caps->SegmentCount ||
+      caps->LocalSegmentId == caps->ApertureSegmentId ||
+      caps->PagingBufferSegmentId != caps->ApertureSegmentId ||
+      caps->PagingBufferBytes == 0u ||
+      (caps->PagingBufferBytes & 0xfffu) ||
+      (caps->PagingPrivateBytes & 0xfffu) ||
+      caps->VirtualAddressBits != 39u)
+    return 0;
+  nodes = (1u << caps->NodeCount) - 1u;
+  if ((caps->VirtualSubmissionNodeMask & ~nodes) ||
+      (caps->NodeGpuMmuMask & ~nodes) ||
+      (caps->NodeIoMmuMask & ~nodes) ||
+      caps->AdapterIoMmuSupported || caps->NodeIoMmuMask)
+    return 0;
+  if (!caps->Enabled)
+    return !caps->VirtualAddressingSupported &&
+           !caps->AdapterGpuMmuSupported &&
+           !caps->VirtualSubmissionNodeMask && !caps->NodeGpuMmuMask &&
+           caps->MmuCount == 0u && caps->MmuSizeBytes == 0ULL &&
+           caps->Leaf64KBytes == 0u &&
+           caps->DisplayMmuId == APPLE_AGX_GPUVA_G3_INVALID_MMU_ID;
+  return caps->VirtualAddressingSupported &&
+         caps->AdapterGpuMmuSupported &&
+         (caps->VirtualSubmissionNodeMask & (1u << caps->PagingNode)) &&
+         (caps->NodeGpuMmuMask & caps->VirtualSubmissionNodeMask) ==
+             caps->VirtualSubmissionNodeMask &&
+         caps->MmuCount >= 1u && caps->MmuCount <= 16u &&
+         caps->MmuSizeBytes >= (1ULL << caps->VirtualAddressBits) &&
+         (caps->DisplayMmuId == APPLE_AGX_GPUVA_G3_INVALID_MMU_ID ||
+          caps->DisplayMmuId < caps->MmuCount) &&
+         caps->LocalUse64KBPages &&
+         caps->Leaf64KBytes == (1u << (13u - 4u)) * pte_bytes &&
+         (caps->Leaf64KBytes & 0xfffu) == 0u;
+}
+
 #endif

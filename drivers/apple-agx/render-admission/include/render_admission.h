@@ -743,7 +743,12 @@ void AdmissionRecordQuery(_In_opt_ PDEVICE_OBJECT DeviceObject,
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 void AdmissionRecordGpuvaG3Query(_In_opt_ PDEVICE_OBJECT DeviceObject,
                                  _In_ const DXGKARG_QUERYADAPTERINFO *Query,
-                                 _In_ NTSTATUS Status);
+                                 _In_ NTSTATUS Status, UINT MmuCount);
+void AdmissionRecordGpuvaG3Node(_In_opt_ PDEVICE_OBJECT DeviceObject,
+                                UINT NodeOrdinal,
+                                _In_ const DXGKARG_GETNODEMETADATA *Metadata,
+                                NTSTATUS Status);
+BOOLEAN AdmissionGpuvaG3DeclarationReady(_In_ const ADMISSION_CONTEXT *Context);
 #endif
 _IRQL_requires_(PASSIVE_LEVEL)
 void AdmissionFlushSourceAddressReceipt(_In_ ADMISSION_CONTEXT *Context);
