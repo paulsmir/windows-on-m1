@@ -1,5 +1,18 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 R66 real-broker offline verdict
+
+Host replay now compiles the actual m1n1 v5 broker, MMIO wire, platform
+`gpuva_execute` dispatch, UAT encoder and retained guest-RAM eligibility with
+an identity stage-2/reserve model. The EXP784 Count32 / VA `0x2000000`
+projection passes through broker; its 32 PTE values remain synthetic, so the
+hardware `C0000483` cause is not determined. A real-broker RED exposed
+`REVOKE_TABLE` using `AuxIpa` although dispatch reads `TableIpa`; graph/client
+field correction is GREEN. Next G3 step is one diagnostic-only package788
+with the existing flushed leaf branch/index/PTE/IPA/graph-status receipt,
+then EXP785 under R54/R60. R64 memory reservation stays after that verdict;
+R65 G4 KMD contract stays after G3 admission.
+
 ## 2026-09-24 EXP784C advances to level-0 leaf GraphUpdateLeaf failure
 
 Package787 (mixed level1 parent PTE 4K/64K child sizes independent of update

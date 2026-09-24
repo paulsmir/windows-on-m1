@@ -16,6 +16,7 @@ class G3VidMmReplayTests(unittest.TestCase):
                                 text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("all recorded and projected inputs passed", result.stdout)
+        self.assertIn("real m1n1 broker dispatch", result.stdout)
 
     def test_pre_pte_address_fix_is_red(self):
         result = subprocess.run([sys.executable, str(REPLAY), "--revision",

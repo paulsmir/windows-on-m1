@@ -14,6 +14,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "drivers/apple-agx/render-admission/src"
 SHARED = ROOT / "drivers/apple-agx/shared"
+M1N1 = ROOT / "m1n1_windows/src"
 
 FUNCTIONS = {
     "gpuva_g3_windows.c": [
@@ -75,6 +76,9 @@ def generate(revision=None, function_revisions=None):
                     ["git", "show", f"{function_revisions[name]}:drivers/apple-agx/render-admission/src/{filename}"],
                     cwd=ROOT, text=True)
             parts.append(body(function_source, name) + "\n")
+    platform = (M1N1 / "hv_agx_retained_platform.c").read_text()
+    parts.append('#line 1 "hv_agx_retained_platform.c:gpuva_execute"\n')
+    parts.append(body(platform, "gpuva_execute") + "\n")
     parts.append('#include "g3_vidmm_replay_scenarios.c"\n')
     return "\n".join(parts)
 
@@ -86,10 +90,15 @@ def main(revision=None, function_revisions=None, old_context_flags=False):
         source.write_text(generate(revision, function_revisions))
         command = ["clang", "-std=gnu11", "-O0", "-g", "-Wno-unused-function",
                    "-Wno-multichar", "-I", str(Path(__file__).parent),
+                   "-I", str(M1N1),
                    "-I", str(SHARED / "include"), str(source),
                    str(SHARED / "src/apple_agx_gpuva_g3_translation.c"),
                    str(SHARED / "src/apple_agx_gpuva_g3_graph.c"),
                    str(SHARED / "src/apple_agx_gpuva_broker_v5_client.c"),
+                   str(M1N1 / "hv_agx_gpuva_v5.c"),
+                   str(M1N1 / "hv_agx_gpuva_v5_mmio.c"),
+                   str(M1N1 / "hv_agx_retained_backing.c"),
+                   str(M1N1 / "hv_agx_retained_tables.c"),
                    "-o", str(binary)]
         if old_context_flags:
             command.insert(1, "-DADMISSION_CONTEXT_VALID_FLAGS=3")

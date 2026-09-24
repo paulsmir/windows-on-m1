@@ -43,8 +43,16 @@ int main(void) {
   DXGK_PTE *zeros=NULL;
   assert(posix_memalign((void **)&local_cpu,0x4000,(size_t)local_bytes)==0);
   memset(local_cpu,0,(size_t)local_bytes);
+  ReplayBrokerInit(&broker);
   InitializeListHead(&state.Processes);
   assert(AppleAgxGpuvaV5ClientInit(&state.Client,&io));
+  {
+    AGX_GPUVA_V5_REQUEST probe={0};
+    AGX_GPUVA_V5_RESPONSE response={0};
+    probe.Command=AGX_GPUVA_V5_CREATE;
+    assert(AppleAgxGpuvaV5ClientCall(&state.Client,&probe,&response));
+    assert(response.Status==HV_AGX_GPUVA_V5_STALE && response.Epoch==7);
+  }
   adapter.Started=TRUE;
   adapter.GpuvaG3State=&state;
   adapter.ObjectAdapter=&adapter;
@@ -104,7 +112,7 @@ int main(void) {
     failed.UpdatePageTable.NumPageTableEntries=4;
     failed.UpdatePageTable.FirstPteVirtualAddress=0x2008000;
     failed.UpdatePageTable.pPageTableEntries=ptes;
-    broker.fail_command=AGX_GPUVA_V5_REGISTER_BACKING;
+    broker.blocked_ipa=local_ipa+0x140000;
     assert(AdmissionGpuvaG3BuildPagingBuffer(&adapter,&failed)==
            STATUS_DEVICE_HARDWARE_ERROR);
     assert(last_paging_failure.Branch==7);
@@ -113,7 +121,7 @@ int main(void) {
     assert(last_paging_failure.PageAddress==0x140);
     assert(last_paging_failure.ChildIpa==local_ipa+0x140000);
     assert(last_paging_failure.GraphLastStatus==4);
-    broker.fail_command=0;
+    broker.blocked_ipa=0;
   }
   leaf.Flags=0x41; leaf.PageAddress=0x10;
   flags.Use64KBPages=1; flags.InitialUpdate=1; flags.Repeat=1;
@@ -130,6 +138,6 @@ int main(void) {
   expect_ok("Learn ordinary CreateProcess",AdmissionDdiCreateProcess(&adapter,&user));
   expect_ok("ordinary DestroyProcess",AdmissionDdiDestroyProcess(&adapter,user.hKmdProcess));
   free(local_cpu);
-  puts("G3 VidMm host replay: all recorded and projected inputs passed");
+  puts("G3 VidMm host replay: all recorded and projected inputs passed via real m1n1 broker dispatch");
   return 0;
 }

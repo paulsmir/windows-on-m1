@@ -416,7 +416,7 @@ bool AppleAgxGpuvaG3GraphDestroy(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
       if (item->Level != level - 1u || item->Ipa == graph->RootIpa) continue;
       request = (AGX_GPUVA_V5_REQUEST){0};
       request.Command = AGX_GPUVA_V5_REVOKE_TABLE;
-      request.AuxIpa = item->Ipa;
+      request.TableIpa = item->Ipa;
       request.Index = item->Level;
       if (!call(graph, &request)) return false;
       remove_node(graph, &graph->Tables, item);

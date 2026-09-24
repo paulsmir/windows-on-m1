@@ -9,6 +9,9 @@
 #include <stdio.h>
 #include "apple_agx_gpuva_g3_translation.h"
 #include "apple_agx_gpuva_g3_graph.h"
+#include "hv_agx_gpuva_v5.h"
+#include "hv_agx_gpuva_v5_mmio.h"
+#include "hv_agx_retained_backing.h"
 
 #define APPLE_AGX_GPUVA_G3_QUALIFICATION 1
 #define _Use_decl_annotations_
@@ -132,10 +135,76 @@ static NTSTATUS AdmissionMemoryRuntimeScanoutView(ADMISSION_CONTEXT *a,ADMISSION
 static NTSTATUS AdmissionMemoryRuntimeBorrowIo(ADMISSION_CONTEXT *a,APPLE_AGX_MEMORY_IO *io) {(void)a;(void)io;return STATUS_SUCCESS;}
 static APPLE_AGX_MEMORY_RESULT AppleAgxMemoryAllocateAligned(APPLE_AGX_MEMORY_IO *io,ULONGLONG n,ULONGLONG align,APPLE_AGX_MEMORY_OBJECT *o) {(void)io;(void)n;(void)align;static ADMISSION_PHYSICAL_ALLOCATION alloc;alloc.GuestIpaBase=local_ipa;o->AllocationHandle=&alloc;o->CpuAddress=o->AllocationCpuBase=local_cpu;o->DeviceAddress=local_ipa;return AppleAgxMemoryResultOk;}
 static APPLE_AGX_MEMORY_RESULT AppleAgxMemoryRelease(APPLE_AGX_MEMORY_IO *io,APPLE_AGX_MEMORY_OBJECT *o) {(void)io;(void)o;return AppleAgxMemoryResultOk;}
-typedef struct { AGX_GPUVA_V5_REQUEST request; AGX_GPUVA_V5_RESPONSE response; UINT fail_command, commands; } REPLAY_BROKER;
-static bool ReplayWrite64(void *opaque,unsigned offset,unsigned long long value) { REPLAY_BROKER *b=opaque; if(offset<AGX_GPUVA_V5_OFFSET||offset+8>AGX_GPUVA_V5_OFFSET+sizeof(b->request))return false;memcpy((unsigned char *)&b->request+offset-AGX_GPUVA_V5_OFFSET,&value,8);return true; }
-static bool ReplayWrite32(void *opaque,unsigned offset,unsigned value) { REPLAY_BROKER *b=opaque;if(offset!=AGX_GPUVA_V5_OFFSET+AGX_GPUVA_V5_DOORBELL||value!=1||b->request.Version!=AGX_GPUVA_V5_VERSION)return false;memset(&b->response,0,sizeof(b->response));b->response.Receipt=b->request.Sequence;b->response.Epoch=7;b->response.Status=(b->request.Command==b->fail_command)?4u:0u;++b->commands;return true; }
-static bool ReplayRead64(void *opaque,unsigned offset,unsigned long long *value) { REPLAY_BROKER *b=opaque;if(offset<AGX_GPUVA_V5_OFFSET+AGX_GPUVA_V5_RESPONSE_OFFSET||offset+8>AGX_GPUVA_V5_OFFSET+AGX_GPUVA_V5_RESPONSE_OFFSET+sizeof(b->response))return false;memcpy(value,(unsigned char *)&b->response+offset-AGX_GPUVA_V5_OFFSET-AGX_GPUVA_V5_RESPONSE_OFFSET,8);return true; }
+typedef struct {
+  struct hv_agx_gpuva_v5_wire wire;
+  struct hv_contract_snapshot memory;
+  uint64_t slots[HV_AGX_GPUVA_V5_SLOTS][2];
+  uint64_t blocked_ipa;
+  UINT commands;
+} REPLAY_BROKER;
+static struct hv_agx_gpuva_v5 gpuva_v5;
+static bool request_powered = true;
+static void gpuva_execute(void *, const AGX_GPUVA_V5_REQUEST *, AGX_GPUVA_V5_RESPONSE *);
+static uint64_t ReplayTranslate(void *opaque,uint64_t ipa) {
+  REPLAY_BROKER *b=opaque;
+  if (ipa==b->blocked_ipa || ipa<local_ipa || ipa-local_ipa>local_bytes-0x4000 ||
+      !hv_agx_retained_backing_allowed(&b->memory,ipa,0x4000,0,0)) return 0;
+  return ipa;
+}
+static uint64_t *ReplayMapPage(void *opaque,uint64_t ipa,uint64_t pa) {
+  (void)opaque;
+  return ipa==pa && pa>=local_ipa && pa-local_ipa<=local_bytes-0x4000 ?
+      (uint64_t *)(local_cpu+pa-local_ipa) : NULL;
+}
+static bool ReplayReadSlot(void *opaque,unsigned slot,uint64_t *low,uint64_t *high) {
+  REPLAY_BROKER *b=opaque;
+  if (slot>=HV_AGX_GPUVA_V5_SLOTS) return false;
+  *low=b->slots[slot][0]; *high=b->slots[slot][1]; return true;
+}
+static bool ReplayWriteSlot(void *opaque,unsigned slot,uint64_t low,uint64_t high) {
+  REPLAY_BROKER *b=opaque;
+  if (!slot || slot>=HV_AGX_GPUVA_V5_SLOTS || high) return false;
+  b->slots[slot][0]=low; b->slots[slot][1]=high; return true;
+}
+static bool ReplaySync(void *opaque) {(void)opaque;return true;}
+static bool ReplayInvalidate(void *opaque,unsigned slot) {(void)opaque;return slot>0 && slot<HV_AGX_GPUVA_V5_SLOTS;}
+static bool ReplayPrefix(void *opaque) {(void)opaque;return true;}
+static bool ReplayLegacySlot63(void *opaque) {(void)opaque;return false;}
+static void ReplayBrokerInit(REPLAY_BROKER *b) {
+  struct hv_agx_gpuva_v5_ops ops={b,ReplayTranslate,ReplayMapPage,ReplayReadSlot,
+      ReplayWriteSlot,ReplaySync,ReplayInvalidate,ReplayPrefix,ReplayLegacySlot63};
+  b->memory.boot.ram_base=local_ipa;
+  b->memory.boot.ram_size=local_bytes;
+  b->memory.region_count=1;
+  b->memory.regions[0].kind=HV_CONTRACT_REGION_GUEST_RAM;
+  b->memory.regions[0].base=local_ipa;
+  b->memory.regions[0].size=local_bytes;
+  b->slots[0][0]=0x91000001;
+  b->slots[0][1]=0x90000001;
+  assert(hv_agx_gpuva_v5_init(&gpuva_v5,7,&ops)==HV_AGX_GPUVA_V5_OK);
+}
+static bool ReplayWrite64(void *opaque,unsigned offset,unsigned long long value) {
+  REPLAY_BROKER *b=opaque; uint64_t word=value;
+  if (offset<AGX_GPUVA_V5_OFFSET) return false;
+  return hv_agx_gpuva_v5_mmio(&b->wire,offset-AGX_GPUVA_V5_OFFSET,&word,true,3,
+                              gpuva_execute,NULL);
+}
+static bool ReplayWrite32(void *opaque,unsigned offset,unsigned value) {
+  REPLAY_BROKER *b=opaque; uint64_t word=value;
+  if (offset<AGX_GPUVA_V5_OFFSET) return false;
+  bool ok=hv_agx_gpuva_v5_mmio(&b->wire,offset-AGX_GPUVA_V5_OFFSET,&word,true,2,
+                               gpuva_execute,NULL);
+  if (ok && offset==AGX_GPUVA_V5_OFFSET+AGX_GPUVA_V5_DOORBELL) ++b->commands;
+  return ok;
+}
+static bool ReplayRead64(void *opaque,unsigned offset,unsigned long long *value) {
+  REPLAY_BROKER *b=opaque; uint64_t word=0;
+  if (offset<AGX_GPUVA_V5_OFFSET) return false;
+  bool ok=hv_agx_gpuva_v5_mmio(&b->wire,offset-AGX_GPUVA_V5_OFFSET,&word,false,3,
+                               gpuva_execute,NULL);
+  if (ok) *value=word;
+  return ok;
+}
 static void ReplayBarrier(void *opaque) {(void)opaque;}
 static void AdmissionRecordGpuvaG3CreateInput(PDEVICE_OBJECT p,DXGKARG_CREATEPROCESS *a,int started,KIRQL irql) {(void)p;(void)a;(void)started;(void)irql;}
 static void AdmissionRecordGpuvaG3ContextInput(PDEVICE_OBJECT p,DXGKARG_CREATECONTEXT *a,KIRQL irql) {(void)p;(void)a;(void)irql;}
