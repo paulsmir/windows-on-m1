@@ -92,3 +92,37 @@ advances and the next durable receipt names the following boundary. On
 bugcheck, apply R60 only after durable disarm proof, known exact package and
 one bounded same-profile SSH recovery; otherwise GPU-hidden dump-first exact
 cleanup to ordinary Code28.
+
+## EXP784C leaf boundary and R62 replay correction
+
+Package787 proved the mixed parent-size change on hardware: after 624
+successful retained operations, VidMm reached `BuildPagingBuffer` level0,
+`CPU_VIRTUAL=0`, `Count=32`, `Flags=0`, `FirstPteVirtualAddress=0x2000000`,
+with both DMA pointers. KMD returned `STATUS_DEVICE_HARDWARE_ERROR`
+(`C0000483`) and Windows bugchecked `0x10E/0xB` inside
+`CompleteBuildPagingBufferIteration`. The input receipt did not include the
+PTE array; no first leaf failure receipt was flushed. This excludes the old
+level1 `ParentFlags` refusal but does not distinguish graph precheck from
+broker response. The same full-owner image rebooted disarmed under R60 and
+returned pinned SSH/CPU8 with exact package787.
+
+Inspected `gpuva_g3_paging_windows.c`, shared
+`apple_agx_gpuva_g3_graph.c`/`apple_agx_gpuva_broker_v5_client.c`,
+`m1n1_windows/src/hv_agx_gpuva_v5.c`, pinned WDK26100 update-mode enum,
+EXP784C receipt/dump/ETL, and Microsoft GPUVA and 64K-page documentation.
+The original host replay had mocked `GraphUpdateLeaf` itself; this could not
+reproduce a graph return failure. It now compiles the real graph and client,
+mocking only broker I/O and Windows platform services. The recorded Count32
+geometry is included with explicitly synthetic, contiguous PTEs because the
+exact PTE contents were not receipted. A broker-injected leaf failure is RED
+without a receipt and GREEN with branch7, logical PTE index, raw PTE address,
+resolved guest IPA and graph status flushed before return.
+
+VidMm owns the missing PTE values; KMD owns translation and graph state;
+m1n1 owns actual page-table/backing registration and GPU access; Mu remains
+frozen. The smallest next checkpoint is a diagnostic-only package with the
+new leaf failure receipt. If graph status is zero with no uncertainty, test
+local graph conditions offline. If graph status is nonzero, compare the exact
+request with m1n1 ownership/slot validation before any broker policy change.
+Recovery is the same R60 disarmed full-owner path or GPU-hidden dump-first
+exact cleanup.

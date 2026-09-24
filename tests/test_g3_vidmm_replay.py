@@ -53,6 +53,7 @@ class G3VidMmReplayTests(unittest.TestCase):
     def test_old_repeat_and_dma_guards_are_red(self):
         command = [sys.executable, str(REPLAY), "--function-revision",
                    "AdmissionG3UpdateParent=e7d9eb39~", "--function-revision",
+                   "AdmissionG3UpdateLeaf=e7d9eb39~", "--function-revision",
                    "AdmissionGpuvaG3BuildPagingBuffer=e7d9eb39~"]
         for dma_only in (False, True):
             with self.subTest(dma_only=dma_only):
@@ -64,6 +65,16 @@ class G3VidMmReplayTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("EXP780 level0", result.stderr)
                 self.assertIn("c000000d", result.stderr)
+
+    def test_pre_leaf_failure_receipt_is_red(self):
+        result = subprocess.run([sys.executable, str(REPLAY),
+                                 "--function-revision",
+                                 "AdmissionG3UpdateLeaf=941e644f",
+                                 "--function-revision",
+                                 "AdmissionGpuvaG3BuildPagingBuffer=941e644f"],
+                                cwd=ROOT, text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("last_paging_failure.Branch==7", result.stderr)
 
 
 if __name__ == "__main__":

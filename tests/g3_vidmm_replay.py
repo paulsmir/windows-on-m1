@@ -66,7 +66,7 @@ def generate(revision=None, function_revisions=None):
                       ["git", "show", f"{revision}:drivers/apple-agx/render-admission/src/{filename}"],
                       cwd=ROOT, text=True))
         if filename == "gpuva_g3_paging_windows.c":
-            parts.append("enum { AdmissionG3PagingFailureTableAddress=1, AdmissionG3PagingFailureTableGraph=2, AdmissionG3PagingFailureParentFlags=3, AdmissionG3PagingFailureChildAddress=4, AdmissionG3PagingFailureChildGraph=5, AdmissionG3PagingFailureParentLink=6 };\n")
+            parts.append("enum { AdmissionG3PagingFailureTableAddress=1, AdmissionG3PagingFailureTableGraph=2, AdmissionG3PagingFailureParentFlags=3, AdmissionG3PagingFailureChildAddress=4, AdmissionG3PagingFailureChildGraph=5, AdmissionG3PagingFailureParentLink=6, AdmissionG3PagingFailureLeafGraph=7 };\n")
         for name in names:
             parts.append(f'#line 1 "{filename}:{name}"\n')
             function_source = source
@@ -88,6 +88,8 @@ def main(revision=None, function_revisions=None, old_context_flags=False):
                    "-Wno-multichar", "-I", str(Path(__file__).parent),
                    "-I", str(SHARED / "include"), str(source),
                    str(SHARED / "src/apple_agx_gpuva_g3_translation.c"),
+                   str(SHARED / "src/apple_agx_gpuva_g3_graph.c"),
+                   str(SHARED / "src/apple_agx_gpuva_broker_v5_client.c"),
                    "-o", str(binary)]
         if old_context_flags:
             command.insert(1, "-DADMISSION_CONTEXT_VALID_FLAGS=3")

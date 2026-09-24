@@ -8,7 +8,8 @@ enum {
   AdmissionG3PagingFailureParentFlags = 3u,
   AdmissionG3PagingFailureChildAddress = 4u,
   AdmissionG3PagingFailureChildGraph = 5u,
-  AdmissionG3PagingFailureParentLink = 6u
+  AdmissionG3PagingFailureParentLink = 6u,
+  AdmissionG3PagingFailureLeafGraph = 7u
 };
 
 static NTSTATUS AdmissionG3RejectPaging(
@@ -106,7 +107,7 @@ static NTSTATUS AdmissionG3UpdateParent(
 static NTSTATUS AdmissionG3UpdateLeaf(
     ADMISSION_G3_PROCESS *process, ULONGLONG table_ipa,
     const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update,
-    ADMISSION_CONTEXT *adapter) {
+    ADMISSION_CONTEXT *adapter, ADMISSION_G3_PAGING_FAILURE *failure) {
   ADMISSION_SCANOUT_MEMORY_VIEW view;
   APPLE_AGX_GPUVA_G3_LOGICAL_PTE *logical = NULL;
   APPLE_AGX_GPUVA_G3_NATIVE_LEAF *leaves = NULL;
@@ -174,7 +175,15 @@ static NTSTATUS AdmissionG3UpdateLeaf(
             (update->Flags.Use64KBPages ? update->StartIndex * 4u :
                 update->StartIndex / 4u) + index, leaves[index].GuestIpa,
             leaves[index].WritableMask != 0u)) {
-      status = STATUS_DEVICE_HARDWARE_ERROR;
+      UINT source_index = update->Flags.Use64KBPages ? index / 4u :
+                          index * 4u;
+      const DXGK_PTE *pte = &update->pPageTableEntries[
+          AppleAgxGpuvaG3PteInputIndex(source_index,
+                                       update->Flags.Repeat)];
+      status = AdmissionG3RejectPaging(failure,
+          AdmissionG3PagingFailureLeafGraph,
+          update->StartIndex + source_index, pte, leaves[index].GuestIpa,
+          STATUS_DEVICE_HARDWARE_ERROR);
       goto Done;
     }
   }
@@ -267,7 +276,8 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
         AdmissionG3PagingFailureTableGraph, MAXULONG, NULL, 0ULL,
         STATUS_INVALID_ADDRESS);
   } else if (update->PageTableLevel == 0u) {
-    status = AdmissionG3UpdateLeaf(process, table_ipa, update, adapter);
+    status = AdmissionG3UpdateLeaf(process, table_ipa, update, adapter,
+                                   &failure);
   } else {
     status = AdmissionG3UpdateParent(process, table_ipa, update, adapter,
                                      &failure);
