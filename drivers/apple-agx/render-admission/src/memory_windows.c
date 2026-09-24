@@ -43,6 +43,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment5(
   const DXGK_QUERYSEGMENTIN5 *input;
   DXGK_QUERYSEGMENTOUT5 *output;
   APPLE_AGX_PHYSICAL_SEGMENT local;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  ADMISSION_SCANOUT_MEMORY_VIEW view;
+  ULONGLONG cpuTranslated;
+#endif
   if (Context == NULL || QueryAdapterInfo == NULL ||
       QueryAdapterInfo->pInputData == NULL ||
       QueryAdapterInfo->InputDataSize < sizeof(*input) ||
@@ -56,13 +60,28 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment5(
     return STATUS_INVALID_PARAMETER;
   if (output->SegmentDescriptors == NULL)
     return STATUS_BUFFER_TOO_SMALL;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (!NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(Context, &view)) ||
+      !AdmissionMemoryCpuVisibleLocalBase(
+          &Context->Memory, view.CpuAddress, view.GuestIpaAddress,
+          view.HostPhysicalAddress, view.GpuVirtualAddress, view.Bytes,
+          &cpuTranslated))
+    return STATUS_INVALID_DEVICE_STATE;
+#endif
   RtlZeroMemory(output->Reserved, sizeof(output->Reserved));
   AdmissionDescribeSegment5(&Context->Memory.Topology.Aperture,
                             &output->SegmentDescriptors[0]);
   local = Context->Memory.Topology.Local;
   local.Size = Context->Memory.LocalAllocationBytes;
   local.CommitLimit = Context->Memory.LocalAllocationBytes;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  local.CpuVisible = APPLE_AGX_TRUE;
+#endif
   AdmissionDescribeSegment5(&local, &output->SegmentDescriptors[1]);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  output->SegmentDescriptors[1].CpuTranslatedAddress.QuadPart =
+      (LONGLONG)cpuTranslated;
+#endif
   return STATUS_SUCCESS;
 }
 #endif
@@ -75,6 +94,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment4(
   DXGK_SEGMENTDESCRIPTOR4 *aperture;
   DXGK_SEGMENTDESCRIPTOR4 *local;
   APPLE_AGX_PHYSICAL_SEGMENT local_segment;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  ADMISSION_SCANOUT_MEMORY_VIEW view;
+  ULONGLONG cpuTranslated;
+#endif
 
   if (Context == NULL || QueryAdapterInfo == NULL ||
       QueryAdapterInfo->pInputData == NULL ||
@@ -101,11 +124,25 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment4(
   aperture = (DXGK_SEGMENTDESCRIPTOR4 *)output->pSegmentDescriptor;
   local = (DXGK_SEGMENTDESCRIPTOR4 *)(
       (PUCHAR)output->pSegmentDescriptor + output->SegmentDescriptorStride);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (!NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(Context, &view)) ||
+      !AdmissionMemoryCpuVisibleLocalBase(
+          &Context->Memory, view.CpuAddress, view.GuestIpaAddress,
+          view.HostPhysicalAddress, view.GpuVirtualAddress, view.Bytes,
+          &cpuTranslated))
+    return STATUS_INVALID_DEVICE_STATE;
+#endif
   AdmissionDescribeSegment(&Context->Memory.Topology.Aperture, aperture);
   local_segment = Context->Memory.Topology.Local;
   local_segment.Size = Context->Memory.LocalAllocationBytes;
   local_segment.CommitLimit = Context->Memory.LocalAllocationBytes;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  local_segment.CpuVisible = APPLE_AGX_TRUE;
+#endif
   AdmissionDescribeSegment(&local_segment, local);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  local->CpuTranslatedAddress.QuadPart = (LONGLONG)cpuTranslated;
+#endif
   output->NbSegment = Context->Memory.Topology.SegmentCount;
   output->PagingBufferSegmentId =
       Context->Memory.Topology.PagingBufferSegmentId;

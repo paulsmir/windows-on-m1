@@ -1,6 +1,35 @@
 #include "render_memory.h"
 
 #define ADMISSION_MEMORY_NULL ((void *)0)
+#define ADMISSION_MEMORY_U64_MAX (~(APPLE_AGX_U64)0ULL)
+
+APPLE_AGX_BOOL AdmissionMemoryCpuVisibleLocalBase(
+    const ADMISSION_MEMORY_CONTRACT *Memory, const void *CpuAddress,
+    APPLE_AGX_U64 GuestIpaAddress, APPLE_AGX_U64 HostPhysicalAddress,
+    APPLE_AGX_U64 GpuVirtualAddress, APPLE_AGX_U64 Bytes,
+    APPLE_AGX_U64 *CpuTranslatedBase) {
+  if (CpuTranslatedBase == ADMISSION_MEMORY_NULL)
+    return APPLE_AGX_FALSE;
+  *CpuTranslatedBase = 0ULL;
+  if (Memory == ADMISSION_MEMORY_NULL ||
+      Memory->Initialized != APPLE_AGX_TRUE ||
+      Memory->Topology.Local.Id != ADMISSION_MEMORY_LOCAL_SEGMENT ||
+      Memory->Topology.Local.Aperture != APPLE_AGX_FALSE ||
+      Memory->Topology.Local.Use64KPages != APPLE_AGX_TRUE ||
+      Memory->LocalAllocationBytes == 0ULL ||
+      Memory->LocalAllocationBytes > Memory->Topology.Local.Size ||
+      (Memory->LocalAllocationBytes &
+       (APPLE_AGX_WDDM_PAGE_SIZE_64K - 1ULL)) != 0ULL ||
+      CpuAddress == ADMISSION_MEMORY_NULL || GuestIpaAddress == 0ULL ||
+      HostPhysicalAddress == 0ULL ||
+      (GuestIpaAddress & (APPLE_AGX_WDDM_PAGE_SIZE_64K - 1ULL)) != 0ULL ||
+      GuestIpaAddress > ADMISSION_MEMORY_U64_MAX - Bytes ||
+      GpuVirtualAddress != Memory->Topology.Local.Base ||
+      Bytes != Memory->LocalAllocationBytes)
+    return APPLE_AGX_FALSE;
+  *CpuTranslatedBase = GuestIpaAddress;
+  return APPLE_AGX_TRUE;
+}
 
 APPLE_AGX_BOOL AdmissionMemoryInitialize(
     ADMISSION_MEMORY_CONTRACT *Memory,

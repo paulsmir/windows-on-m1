@@ -725,12 +725,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeScanoutView(
     return STATUS_INVALID_DEVICE_STATE;
   allocation = (ADMISSION_PHYSICAL_ALLOCATION *)
       runtime->LocalObject.AllocationHandle;
+  if (allocation->Adl == NULL ||
+      !allocation->Adl->Flags.Contiguous ||
+      allocation->Size < Context->Memory.LocalAllocationBytes)
+    return STATUS_INVALID_DEVICE_STATE;
   if ((PUCHAR)runtime->LocalObject.CpuAddress <
       (PUCHAR)runtime->LocalObject.AllocationCpuBase)
     return STATUS_INVALID_ADDRESS;
   offset = (ULONGLONG)((PUCHAR)runtime->LocalObject.CpuAddress -
                        (PUCHAR)runtime->LocalObject.AllocationCpuBase);
-  if (allocation->GuestIpaBase > MAXULONGLONG - offset)
+  if (offset > allocation->Size ||
+      Context->Memory.LocalAllocationBytes > allocation->Size - offset ||
+      allocation->GuestIpaBase > MAXULONGLONG - offset)
     return STATUS_INTEGER_OVERFLOW;
   View->CpuAddress = runtime->LocalObject.CpuAddress;
   View->GuestIpaAddress = allocation->GuestIpaBase + offset;

@@ -44,6 +44,11 @@ APPLE_AGX_BOOL AdmissionMemoryMarkUatReady(
 APPLE_AGX_BOOL
 AdmissionMemoryMarkPagingReady(ADMISSION_MEMORY_CONTRACT *Memory);
 APPLE_AGX_BOOL AdmissionMemoryReady(const ADMISSION_MEMORY_CONTRACT *Memory);
+APPLE_AGX_BOOL AdmissionMemoryCpuVisibleLocalBase(
+    const ADMISSION_MEMORY_CONTRACT *Memory, const void *CpuAddress,
+    APPLE_AGX_U64 GuestIpaAddress, APPLE_AGX_U64 HostPhysicalAddress,
+    APPLE_AGX_U64 GpuVirtualAddress, APPLE_AGX_U64 Bytes,
+    APPLE_AGX_U64 *CpuTranslatedBase);
 APPLE_AGX_BOOL AdmissionMemoryReserveBackendTail(
     ADMISSION_MEMORY_CONTRACT *Memory,
     APPLE_AGX_U64 AllocationBytes, APPLE_AGX_U64 BackendBytes);

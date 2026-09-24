@@ -13,6 +13,38 @@
 
 static APPLE_AGX_SOFTWARE_APERTURE_ENTRY entries[TEST_APERTURE_PAGES];
 
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+static void test_cpu_visible_local_segment_requires_exact_backing(void) {
+  ADMISSION_MEMORY_CONTRACT memory;
+  APPLE_AGX_U64 cpuBase = 0u;
+  unsigned char mapped = 0u;
+  assert(AdmissionMemoryInitialize(&memory, entries, TEST_APERTURE_PAGES,
+                                   TEST_APERTURE_BASE, TEST_APERTURE_SIZE,
+                                   TEST_LOCAL_BASE, TEST_LOCAL_SIZE));
+  assert(AdmissionMemoryReserveBackendTail(
+      &memory, TEST_ALLOCATION_SIZE, TEST_BACKEND_SIZE));
+  assert(AdmissionMemoryCpuVisibleLocalBase(
+      &memory, &mapped, 0x20000000ULL, 0x90000000ULL,
+      TEST_LOCAL_BASE, TEST_ALLOCATION_SIZE, &cpuBase));
+  assert(cpuBase == 0x20000000ULL);
+  assert(!AdmissionMemoryCpuVisibleLocalBase(
+      &memory, NULL, 0x20000000ULL, 0x90000000ULL,
+      TEST_LOCAL_BASE, TEST_ALLOCATION_SIZE, &cpuBase));
+  assert(!AdmissionMemoryCpuVisibleLocalBase(
+      &memory, &mapped, 0x20001000ULL, 0x90000000ULL,
+      TEST_LOCAL_BASE, TEST_ALLOCATION_SIZE, &cpuBase));
+  assert(!AdmissionMemoryCpuVisibleLocalBase(
+      &memory, &mapped, 0x20000000ULL, 0x90000000ULL,
+      TEST_LOCAL_BASE, TEST_ALLOCATION_SIZE - 0x10000ULL, &cpuBase));
+  assert(!AdmissionMemoryCpuVisibleLocalBase(
+      &memory, &mapped, 0x20000000ULL, 0x90000000ULL,
+      TEST_LOCAL_BASE + 0x10000ULL, TEST_ALLOCATION_SIZE, &cpuBase));
+  assert(!AdmissionMemoryCpuVisibleLocalBase(
+      &memory, &mapped, 0x20000000ULL, 0u,
+      TEST_LOCAL_BASE, TEST_ALLOCATION_SIZE, &cpuBase));
+}
+#endif
+
 static void test_exact_two_segment_contract(void) {
   ADMISSION_MEMORY_CONTRACT memory;
 
@@ -248,6 +280,9 @@ static void test_system_page_aperture_ranges_are_atomic(void) {
 }
 
 int main(void) {
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  test_cpu_visible_local_segment_requires_exact_backing();
+#endif
   test_system_page_aperture_ranges_are_atomic();
   test_exact_two_segment_contract();
   test_aperture_and_local_address_translation();
