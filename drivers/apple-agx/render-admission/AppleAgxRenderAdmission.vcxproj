@@ -155,6 +155,7 @@
     <ClCompile Include="..\shared\src\apple_agx_gpuva_b1_graph.c" />
     <ClCompile Include="..\shared\src\apple_agx_gpuva_b1_roots.c" />
     <ClCompile Include="..\shared\src\apple_agx_gpuva_b1_submission.c" />
+    <ClCompile Include="..\shared\src\apple_agx_gpuva_g3_translation.c" />
     <ClCompile Include="..\shared\src\apple_agx_win32_abi.c" />
     <ClCompile Include="..\shared\src\apple_agx_scheduler.c" />
     <ClCompile Include="..\shared\src\apple_agx_gdi.c" />
@@ -231,6 +232,7 @@
     <ClInclude Include="..\shared\include\apple_agx_wddm_feature_contract.h" />
     <ClInclude Include="..\shared\include\apple_agx_gpuva_b1_status.h" />
     <ClInclude Include="..\shared\include\apple_agx_gpuva_b1_completion.h" />
+    <ClInclude Include="..\shared\include\apple_agx_gpuva_g3_translation.h" />
     <ClInclude Include="..\shared\include\apple_agx_win32_abi.h" />
     <ClInclude Include="..\shared\include\apple_agx_scheduler.h" />
     <ClInclude Include="..\shared\include\apple_agx_gdi.h" />
