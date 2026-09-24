@@ -1,5 +1,6 @@
 #include "render_admission.h"
 #include "apple_agx_gpuva_b1_roots.h"
+#include "apple_agx_gpuva_b1_status.h"
 
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
 #define B1_TAG '1BGA'
@@ -23,13 +24,6 @@ typedef struct _ADMISSION_B1_STATE {
   ULONG Precheck, ProbeStatus;
   ULONGLONG ProbeEpoch;
 } ADMISSION_B1_STATE;
-
-/* Implemented by the platform runtime using real TA and 3D queues. */
-NTSTATUS AdmissionGpuvaB1RunFirmware(_Inout_ ADMISSION_CONTEXT *Context,
-                                     _In_ PVOID OutputCpu,
-                                     _In_ ULONGLONG OutputPhysical,
-                                     _In_ ULONGLONG OutputVa,
-                                     _In_ ULONG Fence);
 
 static NTSTATUS AdmissionB1AllocatePage(
     ADMISSION_B1_STATE *state, ULONG owner, ULONG index) {
@@ -91,24 +85,52 @@ static NTSTATUS AdmissionB1LeaseJob(ADMISSION_CONTEXT *context,
   state->LeaseOwner = owner + 1u;
   state->LeaseToken = response.Token;
   RtlZeroMemory(&request, sizeof(request));
+  RtlZeroMemory(&response, sizeof(response));
   request.Command = AGX_GPUVA_V5_JOB_BEGIN;
   request.Slot = B1_SLOT;
   request.Token = state->LeaseToken;
-  if (!AdmissionB1BrokerCall(state, &request, &response))
+  if (!AdmissionB1BrokerCall(state, &request, &response)) {
+    AdmissionGpuvaB1RecordRetirement(context, owner,
+        AdmissionB1RetireJobBegin, STATUS_DEVICE_BUSY,
+        state->BrokerStatus, response.Receipt, response.Epoch);
     return STATUS_DEVICE_BUSY;
+  }
+  AdmissionGpuvaB1RecordRetirement(context, owner,
+      AdmissionB1RetireJobBegin, STATUS_SUCCESS,
+      state->BrokerStatus, response.Receipt, response.Epoch);
   state->JobInFlight = TRUE;
   status = AdmissionGpuvaB1RunFirmware(
       context, state->Owned[owner][5].CpuAddress,
-      state->Owned[owner][5].DeviceAddress, B1_OUTPUT_VA, fence);
+      state->Owned[owner][5].DeviceAddress, B1_OUTPUT_VA, fence, owner);
   if (!NT_SUCCESS(status))
     return status; /* Submission ownership is uncertain; preserve all pages. */
   request.Command = AGX_GPUVA_V5_JOB_END;
-  if (!AdmissionB1BrokerCall(state, &request, &response))
+  RtlZeroMemory(&response, sizeof(response));
+  if (!AdmissionB1BrokerCall(state, &request, &response)) {
+    AdmissionGpuvaB1RecordRetirement(context, owner,
+        AdmissionB1RetireJobEnd, STATUS_DEVICE_BUSY,
+        state->BrokerStatus, response.Receipt, response.Epoch);
     return STATUS_DEVICE_BUSY;
+  }
+  AdmissionGpuvaB1RecordRetirement(context, owner,
+      AdmissionB1RetireJobEnd, STATUS_SUCCESS,
+      state->BrokerStatus, response.Receipt, response.Epoch);
   state->JobInFlight = FALSE;
   request.Command = AGX_GPUVA_V5_RELEASE;
-  if (!AdmissionB1BrokerCall(state, &request, &response))
+  RtlZeroMemory(&response, sizeof(response));
+  if (!AdmissionB1BrokerCall(state, &request, &response)) {
+    AdmissionGpuvaB1RecordRetirement(context, owner,
+        AdmissionB1RetireRelease, STATUS_DEVICE_BUSY,
+        state->BrokerStatus, response.Receipt, response.Epoch);
     return STATUS_DEVICE_BUSY;
+  }
+  AdmissionGpuvaB1RecordRetirement(context, owner,
+      AdmissionB1RetireRelease, STATUS_SUCCESS,
+      state->BrokerStatus, response.Receipt, response.Epoch);
+  /* A successful RELEASE response follows slot clear and TLB invalidation. */
+  AdmissionGpuvaB1RecordRetirement(context, owner,
+      AdmissionB1RetireTlbAck, STATUS_SUCCESS,
+      state->BrokerStatus, response.Receipt, response.Epoch);
   state->LeaseToken = 0ULL;
   state->LeaseOwner = 0u;
   ++state->CompletedJobs;
@@ -266,18 +288,22 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaB1Qualify(
   state->Stage = 7u;
 Done:
   {
+    APPLE_AGX_GPUVA_B1_STATUS outcome;
     ULONG pixelA = state->Owned[0][5].CpuAddress != NULL ?
         *(ULONG *)state->Owned[0][5].CpuAddress : 0u;
     ULONG pixelB = state->Owned[1][5].CpuAddress != NULL ?
         *(ULONG *)state->Owned[1][5].CpuAddress : 0u;
     BOOLEAN cleaned = AdmissionB1Cleanup(state);
+    outcome = AppleAgxGpuvaB1FinalStatus((ULONG)status, cleaned,
+                                           (ULONG)STATUS_DEVICE_BUSY);
     AdmissionRecordB1Qualification(
-        context, state->Stage, cleaned ? status : STATUS_DEVICE_BUSY,
+        context, state->Stage, (NTSTATUS)outcome.Terminal,
+        (NTSTATUS)outcome.FirstFailure,
         state->Precheck, state->ProbeStatus, state->ProbeEpoch,
         state->CompletedJobs, state->BrokerStatus,
         cleaned ? 0u : 1u, pixelA, pixelB);
     if (!cleaned)
-    return STATUS_DEVICE_BUSY; /* Preserve owned storage for recovery. */
+      return (NTSTATUS)outcome.Terminal; /* Preserve owned storage. */
   }
   context->GpuvaB1State = NULL;
   ExFreePoolWithTag(state, B1_TAG);

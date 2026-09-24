@@ -981,9 +981,38 @@ _Use_decl_annotations_ void AdmissionRecordMemoryStop(
 }
 
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
+_Use_decl_annotations_ void AdmissionRecordB1Retirement(
+    ADMISSION_CONTEXT *Context,
+    const ADMISSION_B1_RETIREMENT_RECEIPT *Receipt) {
+  static const PCWSTR names[2u * AdmissionB1RetireStepCount] = {
+      L"Wom1B1Retire00", L"Wom1B1Retire01", L"Wom1B1Retire02",
+      L"Wom1B1Retire03", L"Wom1B1Retire04", L"Wom1B1Retire05",
+      L"Wom1B1Retire06", L"Wom1B1Retire07", L"Wom1B1Retire08",
+      L"Wom1B1Retire09", L"Wom1B1Retire10", L"Wom1B1Retire11",
+      L"Wom1B1Retire12", L"Wom1B1Retire13", L"Wom1B1Retire14",
+      L"Wom1B1Retire15", L"Wom1B1Retire16", L"Wom1B1Retire17"};
+  HANDLE key = NULL;
+  ULONG index;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      Receipt == NULL || Receipt->Version != 1u ||
+      Receipt->Bytes != sizeof(*Receipt) || Receipt->Owner >= 2u ||
+      Receipt->Step >= AdmissionB1RetireStepCount ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  index = Receipt->Owner * AdmissionB1RetireStepCount + Receipt->Step;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, names[index], Receipt, sizeof(*Receipt));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordB1Qualification(
     ADMISSION_CONTEXT *Context, ULONG Stage, NTSTATUS Status,
-    ULONG Precheck, ULONG ProbeStatus, ULONGLONG ProbeEpoch,
+    NTSTATUS FirstFailure, ULONG Precheck, ULONG ProbeStatus,
+    ULONGLONG ProbeEpoch,
     ULONG CompletedJobs, ULONG BrokerStatus, ULONG CleanupStatus,
     ULONG OutputPixelA, ULONG OutputPixelB) {
   HANDLE key = NULL;
@@ -994,6 +1023,7 @@ _Use_decl_annotations_ void AdmissionRecordB1Qualification(
     return;
   WriteDword(key, L"Wom1B1Stage", Stage);
   WriteDword(key, L"Wom1B1Status", (ULONG)Status);
+  WriteDword(key, L"Wom1B1FirstFailureStatus", (ULONG)FirstFailure);
   WriteDword(key, L"Wom1B1Precheck", Precheck);
   WriteDword(key, L"Wom1B1ProbeStatus", ProbeStatus);
   WriteQword(key, L"Wom1B1ProbeEpoch", ProbeEpoch);
@@ -1002,6 +1032,7 @@ _Use_decl_annotations_ void AdmissionRecordB1Qualification(
   WriteDword(key, L"Wom1B1CleanupStatus", CleanupStatus);
   WriteDword(key, L"Wom1B1OutputPixelA", OutputPixelA);
   WriteDword(key, L"Wom1B1OutputPixelB", OutputPixelB);
+  (void)ZwFlushKey(key);
   ZwClose(key);
 }
 #endif

@@ -1314,14 +1314,44 @@ DXGKDDI_SETSTABLEPOWERSTATE AdmissionDdiSetStablePowerState;
 BOOLEAN AdmissionGpuvaV5ClientOpen(ADMISSION_CONTEXT *Context,
                                    APPLE_AGX_GPUVA_V5_CLIENT *Client);
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
+typedef struct _ADMISSION_B1_RETIREMENT_RECEIPT {
+  ULONG Version, Bytes, Owner, Step, Status;
+  ULONG TaStamp, TaExpectedStamp, TaDone, TaExpectedDone;
+  ULONG D3Stamp, D3ExpectedStamp, D3Done, D3ExpectedDone;
+  ULONG EventRead, EventWrite, PollGuard, DrainGuard, IngestGuard;
+  ULONG BackendPhase, TaComplete, D3Complete, B1Completed;
+  ULONG BrokerStatus;
+  ULONGLONG BrokerReceipt, BrokerEpoch;
+} ADMISSION_B1_RETIREMENT_RECEIPT;
+
+enum {
+  AdmissionB1RetireJobBegin = 0,
+  AdmissionB1RetireSubmit = 1,
+  AdmissionB1RetirePollBefore = 2,
+  AdmissionB1RetirePollAfter = 3,
+  AdmissionB1RetireCpuFlush = 4,
+  AdmissionB1RetireImageRelease = 5,
+  AdmissionB1RetireJobEnd = 6,
+  AdmissionB1RetireRelease = 7,
+  AdmissionB1RetireTlbAck = 8,
+  AdmissionB1RetireStepCount = 9
+};
+
 NTSTATUS AdmissionGpuvaB1Qualify(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionGpuvaB1RunFirmware(_Inout_ ADMISSION_CONTEXT *Context,
                                      _In_ PVOID OutputCpu,
                                      _In_ ULONGLONG OutputPhysical,
                                      _In_ ULONGLONG OutputVa,
-                                     _In_ ULONG Fence);
+                                     _In_ ULONG Fence, _In_ ULONG Owner);
+void AdmissionGpuvaB1RecordRetirement(_In_ ADMISSION_CONTEXT *Context,
+    _In_ ULONG Owner, _In_ ULONG Step, _In_ NTSTATUS Status,
+    _In_ ULONG BrokerStatus, _In_ ULONGLONG BrokerReceipt,
+    _In_ ULONGLONG BrokerEpoch);
+void AdmissionRecordB1Retirement(_In_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_B1_RETIREMENT_RECEIPT *Receipt);
 void AdmissionRecordB1Qualification(_In_ ADMISSION_CONTEXT *Context,
                                     _In_ ULONG Stage, _In_ NTSTATUS Status,
+                                    _In_ NTSTATUS FirstFailure,
                                     _In_ ULONG Precheck,
                                     _In_ ULONG ProbeStatus,
                                     _In_ ULONGLONG ProbeEpoch,

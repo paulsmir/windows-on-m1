@@ -1,6 +1,7 @@
 #include "render_admission.h"
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
 #include "apple_agx_gpuva_b1_submission.h"
+#include "apple_agx_gpuva_b1_completion.h"
 #endif
 #include "apple_agx_hwdata_profile.h"
 #include "apple_agx_firmware_start_receipt.h"
@@ -2285,8 +2286,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionB1Complete(
     ADMISSION_PLATFORM_RUNTIME *runtime, ADMISSION_CONTEXT *adapter,
     APPLE_AGX_BACKEND_U32 fence) {
   if (adapter == NULL || fence != runtime->B1Fence ||
-      !runtime->Backend.TaComplete || !runtime->Backend.D3Complete ||
-      !AdmissionBackendImageReleaseSubmission(&adapter->BackendImage, fence))
+      !runtime->Backend.TaComplete || !runtime->Backend.D3Complete)
     return APPLE_AGX_BACKEND_FALSE;
   InterlockedExchange(&runtime->B1Completed, 1);
   return APPLE_AGX_BACKEND_TRUE;
@@ -3878,9 +3878,103 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeReady(
 #undef ADMISSION_DELEGATE_ZERO
 
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
+_Use_decl_annotations_ void AdmissionGpuvaB1RecordRetirement(
+    ADMISSION_CONTEXT *Context, ULONG Owner, ULONG Step, NTSTATUS Status,
+    ULONG BrokerStatus, ULONGLONG BrokerReceipt, ULONGLONG BrokerEpoch) {
+  ADMISSION_PLATFORM_RUNTIME *runtime;
+  ADMISSION_B1_RETIREMENT_RECEIPT receipt;
+  const APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG *config;
+  volatile APPLE_AGX_BACKEND_U32 *eventRead;
+  volatile APPLE_AGX_BACKEND_U32 *eventWrite;
+  APPLE_AGX_BACKEND_U32 raw;
+  if (Context == NULL || Owner >= 2u ||
+      Step >= AdmissionB1RetireStepCount)
+    return;
+  RtlZeroMemory(&receipt, sizeof(receipt));
+  receipt.Version = 1u;
+  receipt.Bytes = sizeof(receipt);
+  receipt.Owner = Owner;
+  receipt.Step = Step;
+  receipt.Status = (ULONG)Status;
+  receipt.BrokerStatus = BrokerStatus;
+  receipt.BrokerReceipt = BrokerReceipt;
+  receipt.BrokerEpoch = BrokerEpoch;
+  runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
+  if (runtime != NULL) {
+    config = &runtime->Provider.QueueProvider.Config;
+    receipt.TaExpectedStamp = runtime->Backend.PendingJob.TaExpectedStamp;
+    receipt.TaExpectedDone = runtime->Backend.PendingJob.TaExpectedDonePointer;
+    receipt.D3ExpectedStamp = runtime->Backend.PendingJob.D3ExpectedStamp;
+    receipt.D3ExpectedDone = runtime->Backend.PendingJob.D3ExpectedDonePointer;
+    receipt.BackendPhase = (ULONG)runtime->Backend.Phase;
+    receipt.TaComplete = runtime->Backend.TaComplete;
+    receipt.D3Complete = runtime->Backend.D3Complete;
+    receipt.B1Completed = (ULONG)InterlockedCompareExchange(
+        &runtime->B1Completed, 0, 0);
+    receipt.PollGuard = runtime->Provider.LastPollGuard;
+    receipt.DrainGuard = runtime->Provider.LastDrainGuard;
+    receipt.IngestGuard = runtime->Provider.QueueProvider.LastIngestGuard;
+    if (config->Ta.Stamp != NULL &&
+        runtime->TransportIo.ReadU32(runtime, config->Ta.Stamp, &raw))
+      receipt.TaStamp = raw;
+    if (config->Ta.GpuDonePointer != NULL &&
+        runtime->TransportIo.ReadU32(runtime, config->Ta.GpuDonePointer, &raw))
+      receipt.TaDone = raw;
+    if (config->D3.Stamp != NULL &&
+        runtime->TransportIo.ReadU32(runtime, config->D3.Stamp, &raw))
+      receipt.D3Stamp = raw;
+    if (config->D3.GpuDonePointer != NULL &&
+        runtime->TransportIo.ReadU32(runtime, config->D3.GpuDonePointer, &raw))
+      receipt.D3Done = raw;
+    if (runtime->Provider.Channels.Event.StateCpuAddress != NULL) {
+      eventRead = (volatile APPLE_AGX_BACKEND_U32 *)(
+          runtime->Provider.Channels.Event.StateCpuAddress +
+          APPLE_AGX_PLATFORM_CHANNEL_READ_POINTER_OFFSET);
+      eventWrite = (volatile APPLE_AGX_BACKEND_U32 *)(
+          runtime->Provider.Channels.Event.StateCpuAddress +
+          APPLE_AGX_PLATFORM_CHANNEL_WRITE_POINTER_OFFSET);
+      if (runtime->TransportIo.ReadU32(runtime, eventRead, &raw))
+        receipt.EventRead = raw;
+      if (runtime->TransportIo.ReadU32(runtime, eventWrite, &raw))
+        receipt.EventWrite = raw;
+    }
+  }
+  AdmissionRecordB1Retirement(Context, &receipt);
+}
+
+typedef struct _ADMISSION_B1_COMPLETION_CONTEXT {
+  ADMISSION_CONTEXT *Adapter;
+  ADMISSION_PLATFORM_RUNTIME *Runtime;
+  ULONG Owner;
+} ADMISSION_B1_COMPLETION_CONTEXT;
+
+static unsigned int AdmissionB1FlushOutput(void *Opaque,
+                                             const void *Address,
+                                             unsigned int Bytes) {
+  ADMISSION_B1_COMPLETION_CONTEXT *context = Opaque;
+  BOOLEAN ok = context->Runtime->TransportIo.FlushForCpu(
+      context->Runtime, Address, Bytes);
+  AdmissionGpuvaB1RecordRetirement(context->Adapter, context->Owner,
+      AdmissionB1RetireCpuFlush,
+      ok ? STATUS_SUCCESS : STATUS_DEVICE_HARDWARE_ERROR, 0u, 0ULL, 0ULL);
+  return ok ? 1u : 0u;
+}
+
+static unsigned int AdmissionB1ReleaseImage(void *Opaque,
+                                              unsigned int Fence) {
+  ADMISSION_B1_COMPLETION_CONTEXT *context = Opaque;
+  BOOLEAN ok = AdmissionBackendImageReleaseSubmission(
+      &context->Adapter->BackendImage, Fence);
+  AdmissionGpuvaB1RecordRetirement(context->Adapter, context->Owner,
+      AdmissionB1RetireImageRelease,
+      ok ? STATUS_SUCCESS : STATUS_DEVICE_HARDWARE_ERROR, 0u, 0ULL, 0ULL);
+  return ok ? 1u : 0u;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionGpuvaB1RunFirmware(
     ADMISSION_CONTEXT *Context, PVOID OutputCpu,
-    ULONGLONG OutputPhysical, ULONGLONG OutputVa, ULONG Fence) {
+    ULONGLONG OutputPhysical, ULONGLONG OutputVa, ULONG Fence,
+    ULONG Owner) {
   ADMISSION_PLATFORM_RUNTIME *runtime;
   APPLE_AGX_GDI_COMMAND_DESCRIPTION description;
   APPLE_AGX_EXP208_GDI_BINDING binding;
@@ -3892,7 +3986,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaB1RunFirmware(
   ULONGLONG deadline;
   APPLE_AGX_BACKEND_RUNTIME_RESULT result;
   if (Context == NULL || OutputCpu == NULL || OutputPhysical == 0ULL ||
-      OutputVa == 0ULL || Fence == 0u ||
+      OutputVa == 0ULL || Fence == 0u || Owner >= 2u ||
       KeGetCurrentIrql() != PASSIVE_LEVEL)
     return STATUS_INVALID_PARAMETER;
   runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
@@ -3935,24 +4029,43 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaB1RunFirmware(
   InterlockedExchange(&runtime->B1Completed, 0);
   InterlockedExchange(&runtime->B1Active, 1);
   result = AppleAgxBackendRuntimeSubmit(&runtime->Backend, &submission);
+  AdmissionGpuvaB1RecordRetirement(Context, Owner, AdmissionB1RetireSubmit,
+      result == AppleAgxBackendRuntimeResultOk ? STATUS_SUCCESS :
+          STATUS_DEVICE_HARDWARE_ERROR, 0u, 0ULL, 0ULL);
   if (result != AppleAgxBackendRuntimeResultOk)
     return STATUS_DEVICE_HARDWARE_ERROR;
+  AdmissionGpuvaB1RecordRetirement(Context, Owner,
+      AdmissionB1RetirePollBefore, STATUS_PENDING, 0u, 0ULL, 0ULL);
   deadline = AdmissionPlatformNowMs() + 2000ULL;
   do {
     APPLE_AGX_BACKEND_U32 drained = 0u, completed = 0u;
     if (!AppleAgxPlatformProviderPoll(
-            &runtime->Provider, 32u, &drained, &completed))
+            &runtime->Provider, 32u, &drained, &completed)) {
+      AdmissionGpuvaB1RecordRetirement(Context, Owner,
+          AdmissionB1RetirePollAfter, STATUS_DEVICE_HARDWARE_ERROR,
+          0u, 0ULL, 0ULL);
       return STATUS_DEVICE_HARDWARE_ERROR;
+    }
     if (InterlockedCompareExchange(&runtime->B1Completed, 0, 0) != 0 &&
         runtime->Backend.Phase == AppleAgxBackendRuntimeReady) {
-      InterlockedExchange(&runtime->B1Active, 0);
-      if (!runtime->TransportIo.FlushForCpu(
-              runtime, OutputCpu, 0x4000u))
+      ADMISSION_B1_COMPLETION_CONTEXT completionContext = {
+          Context, runtime, Owner};
+      APPLE_AGX_GPUVA_B1_COMPLETION_IO completionIo = {
+          &completionContext, AdmissionB1FlushOutput,
+          AdmissionB1ReleaseImage};
+      AdmissionGpuvaB1RecordRetirement(Context, Owner,
+          AdmissionB1RetirePollAfter, STATUS_SUCCESS, 0u, 0ULL, 0ULL);
+      if (AppleAgxGpuvaB1FinishCompletion(
+              &completionIo, OutputCpu, 0x4000u, Fence) !=
+          AppleAgxGpuvaB1CompletionOk)
         return STATUS_DEVICE_HARDWARE_ERROR;
+      InterlockedExchange(&runtime->B1Active, 0);
       return STATUS_SUCCESS;
     }
     KeStallExecutionProcessor(1000u);
   } while (AdmissionPlatformNowMs() < deadline);
+  AdmissionGpuvaB1RecordRetirement(Context, Owner,
+      AdmissionB1RetirePollAfter, STATUS_IO_TIMEOUT, 0u, 0ULL, 0ULL);
   return STATUS_IO_TIMEOUT;
 }
 #endif

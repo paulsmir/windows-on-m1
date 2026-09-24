@@ -1,5 +1,26 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 EXP766 recovery and B1 retirement boundary
+
+EXP766 app TA/3D wrote `0xFF112233` through slot1 process root, proving firmware
+execution through TTBR0. Stage4→5 retirement, second job, and G3 remain unproven.
+The prior `STATUS_DEVICE_BUSY` was imposed by B1 cleanup whenever the lease or
+job stayed owned; it does not identify the original failure. Asahi and current
+KMD both place completion stamps/events in the inherited context0 kernel-half,
+not the process TTBR0. EXP766 exact emergency cleanup and ordinary EXP377/392
+Code28 recovery completed: final receipt at 2026-09-24T11:44:55Z SHA256
+`85936ffd27a4abfbc7828cf21c5612733ad68072170b6265fb01ea1ad0a0df58`.
+Current live USB L41/L43 endpoints are present with no launcher; Windows SSH on
+the old IP presents a different host key, so last verified Windows state is the
+final Code28 receipt, not a current SSH session. The B1 software correction
+preserves first failure separately and adds durable per-job submit, poll,
+flush, image-release, JOB_END, RELEASE, and TLB-ack receipts. Source tracing
+found one concrete Stage4→5 ordering defect: `AdmissionB1Complete` released the
+output binding before `RunFirmware` called `FlushForCpu`; its range guard then
+rejected the output. EXP767 is the single hardware discriminator for the
+flush-before-release correction. Firmware, ACPI, signer, and recovery are
+unchanged.
+
 ## Working mode
 One executor; routine build/test/SSH/launch/recovery work stays in this task. No
 new agents without user direction. Read this compact file first and consult only
