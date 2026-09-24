@@ -1,5 +1,9 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 EXP769 debug-off cleanup discriminator and recovery
+
+EXP769 used frozen package765 and the EXP767 debug-off/no-KD staged cold-arrival environment. Windows reached DriverEntry/StartDevice and pinned SSH with exact APPL0002 Code43; no bugcheck. The diagnostic stopped before any GPU job: B1 Stage4, CompletedJobs0, output prefill A5A5A5A5/5A5A5A5A, context0-hash-before status C0000483. Cleanup00 passed and root1 Cleanup01 was BUSY with four tables and 12 owned pages because the earlier abort left the graph intact. Source and m1n1 log identify the first defect: retained QUERY_TABLE_HASH computes page count, then platform response epilogue overwrites `Count` with MappingCount=207; KMD rejects Count>24. Context0 identity and successful cleanup remain unproven. Debug-off/no-observer progression narrows EXP768 KD confounding but does not isolate debug setting from observer timing. Evidence `.local/experiments/EXP769-b1-cleanup/hardware-evidence/state.json` SHA256 `4774202228239dc12dc940ccd58513c0e1b67e5d48a68d129f9fd1ffd92fad99`. Exact disarm, package765 removal and ordinary EXP377/392 Code28 recovery completed; final state SHA256 `f35aa5766f0f251b01899c1c6ace4a99617774d2dc4423538f770158023918c3`, debug No/Local, package/service/module/signer/arm0, CPU8/storage2/USB7/autologon1. Next offline target: RED regression on the real m1n1 response path, fix Count publication; G2 FLUSH_TLB and IPA validation follow.
+
 ## 2026-09-24 EXP768 pre-StartDevice verdict and recovery
 
 EXP768 was one staged cold-arrival B1 run with durable cleanup owner receipts,
