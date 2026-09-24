@@ -100,12 +100,16 @@ int main(void) {
     ADMISSION_G3_PROCESS *process=(ADMISSION_G3_PROCESS *)sys.hKmdProcess;
     APPLE_AGX_GPUVA_G3_NODE **link=&process->Graph.Tables;
     APPLE_AGX_GPUVA_G3_NODE *held;
-    while (*link && (*link)->Ipa!=local_ipa+0x4000) link=&(*link)->Next;
+    ULONGLONG registered_ipa=0;
+    if (AdmissionGpuvaG3BrokerTable(process,local_ipa+0x4000,
+                                    FALSE,&registered_ipa)!=STATUS_SUCCESS)
+      registered_ipa=local_ipa+0x4000;
+    while (*link && (*link)->Ipa!=registered_ipa) link=&(*link)->Next;
     assert(*link);
     held=*link;
     *link=held->Next;
     assert(!AppleAgxGpuvaG3GraphRegisterTable(&process->Graph,
-                                                local_ipa+0x4000,2));
+                                                registered_ipa,2));
     assert(process->Graph.LastStatus==HV_AGX_GPUVA_V5_OWNERSHIP);
     held->Next=*link;
     *link=held;
@@ -122,8 +126,26 @@ int main(void) {
     map32[i].Flags=0x41;
     map32[i].PageAddress=0x100+i;
   }
+  if (getenv("G3_REPLAY_SELF_TABLE_BACKING")) {
+    /* EXP786 receipted the first PTE exactly; adjacent PTEs remain a
+     * contiguous projection because their values were not captured. */
+    for (UINT i=0;i<4;i++) map32[i].PageAddress=0xc+i;
+  }
   update(&adapter,sys.hKmdProcess,0,local_cpu+0xc000,32,0x2000000,
          flags,map32,"EXP784C level0 Count32 Flags0 projection");
+  if (getenv("G3_REPLAY_SELF_TABLE_BACKING")) {
+    ADMISSION_G3_PROCESS *process=(ADMISSION_G3_PROCESS *)sys.hKmdProcess;
+    ADMISSION_G3_TABLE_SHADOW *shadow=process->TableShadows;
+    APPLE_AGX_GPUVA_G3_NODE *backing=process->Graph.Backings;
+    while (shadow && shadow->OriginalIpa!=local_ipa+0xc000)
+      shadow=shadow->Next;
+    while (backing && backing->Ipa!=local_ipa+0xc000)
+      backing=backing->Next;
+    assert(shadow && backing);
+    assert(shadow->BrokerIpa!=local_ipa+0xc000);
+    assert(shadow->BrokerIpa>=local_ipa+0x3800000ULL);
+    assert(memcmp(local_cpu+0xc000,shadow->Memory.CpuAddress,0x4000)==0);
+  }
   {
     DXGK_PTE ptes[4]={0};
     DXGKARG_BUILDPAGINGBUFFER failed={0};

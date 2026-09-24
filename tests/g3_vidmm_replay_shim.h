@@ -112,10 +112,11 @@ typedef enum { AdmissionWin32TransportSuccess=0 } ADMISSION_WIN32_TRANSPORT_RESU
 static ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32ContextCreateValidate(const void *p,UINT n,APPLE_AGX_BOOL sys,APPLE_AGX_BOOL legacy,APPLE_AGX_U32 *gen,APPLE_AGX_BOOL *transport) {(void)p;(void)n;(void)sys;(void)legacy;*gen=0;*transport=0;return AdmissionWin32TransportSuccess;}
 typedef struct { int unused; } APPLE_AGX_MEMORY_IO;
 typedef struct { void *AllocationHandle,*CpuAddress,*AllocationCpuBase; ULONGLONG DeviceAddress; } APPLE_AGX_MEMORY_OBJECT;
-typedef struct { ULONGLONG GuestIpaBase; } ADMISSION_PHYSICAL_ALLOCATION;
+typedef struct { struct { UINT Contiguous; } Flags; } REPLAY_ADL;
+typedef struct { ULONGLONG GuestIpaBase,Size; REPLAY_ADL *Adl; } ADMISSION_PHYSICAL_ALLOCATION;
 typedef enum { AppleAgxMemoryResultOk=0 } APPLE_AGX_MEMORY_RESULT;
 typedef struct { ULONGLONG GuestIpaAddress,Bytes; void *CpuAddress; } ADMISSION_SCANOUT_MEMORY_VIEW;
-typedef struct { UINT Version,Bytes,Branch,Level,Index,PageTablePageSize,Status,UpdateMode,GraphLastStatus,GraphUncertain; ULONGLONG TableAddress,TableIpa,PteFlags,PageAddress,ChildIpa; UINT TableFirstNonzeroIndex,TableAddBranch; ULONGLONG TableFirstNonzeroWord; } ADMISSION_G3_PAGING_FAILURE;
+typedef struct { UINT Version,Bytes,Branch,Level,Index,PageTablePageSize,Status,UpdateMode,GraphLastStatus,GraphUncertain; ULONGLONG TableAddress,TableIpa,PteFlags,PageAddress,ChildIpa; UINT TableFirstNonzeroIndex,TableAddBranch; ULONGLONG TableFirstNonzeroWord,BrokerTableIpa; } ADMISSION_G3_PAGING_FAILURE;
 typedef struct _ADMISSION_CONTEXT ADMISSION_CONTEXT;
 typedef struct _ADMISSION_G3_PROCESS ADMISSION_G3_PROCESS;
 typedef struct _ADMISSION_OBJECT_DEVICE { UINT Magic; void *Adapter; } ADMISSION_OBJECT_DEVICE;
@@ -125,17 +126,27 @@ typedef struct { int unused; } ADMISSION_SCHEDULER_CONTEXT;
 typedef struct { int unused; } ADMISSION_PREPATCHED_RENDER;
 typedef struct _ADMISSION_RENDER_CONTEXT { ADMISSION_OBJECT_CONTEXT Object; UINT Win32Generation; BOOLEAN Win32Transport,GpuvaG3Poisoned; ADMISSION_SCHEDULER_CONTEXT SchedulerContext; ADMISSION_PREPATCHED_RENDER PrepatchedRender; ADMISSION_G3_PROCESS *GpuvaG3Process; ULONGLONG GpuvaG3RootIpa; } ADMISSION_RENDER_CONTEXT;
 typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; } ADMISSION_G3_STATE;
-struct _ADMISSION_G3_PROCESS { LIST_ENTRY Link; ADMISSION_G3_STATE *State; APPLE_AGX_GPUVA_G3_GRAPH Graph; APPLE_AGX_MEMORY_IO Io; APPLE_AGX_MEMORY_OBJECT BootstrapRoot; ULONGLONG BootstrapIpa; ULONG Magic,DeviceRefs,ContextRefs; BOOLEAN Poisoned; };
+typedef struct _ADMISSION_G3_TABLE_SHADOW { struct _ADMISSION_G3_TABLE_SHADOW *Next; APPLE_AGX_MEMORY_OBJECT Memory; ULONGLONG OriginalIpa,BrokerIpa; } ADMISSION_G3_TABLE_SHADOW;
+struct _ADMISSION_G3_PROCESS { LIST_ENTRY Link; ADMISSION_G3_STATE *State; APPLE_AGX_GPUVA_G3_GRAPH Graph; APPLE_AGX_MEMORY_IO Io; APPLE_AGX_MEMORY_OBJECT BootstrapRoot; ADMISSION_G3_TABLE_SHADOW *TableShadows; ULONGLONG BootstrapIpa; ULONG Magic,DeviceRefs,ContextRefs; BOOLEAN Poisoned; };
 struct _ADMISSION_CONTEXT { void *GpuvaG3State; BOOLEAN Started; PDEVICE_OBJECT PhysicalDeviceObject; ADMISSION_CONTEXT *ObjectAdapter; int SchedulerLock,Scheduler; };
 
 static unsigned char *local_cpu;
 static ULONGLONG local_ipa=0x10000000ULL;
 static ULONGLONG local_bytes=0x4000000ULL;
 static PHYSICAL_ADDRESS MmGetPhysicalAddress(void *p) { PHYSICAL_ADDRESS a={0};if(local_cpu && (unsigned char *)p>=local_cpu && (unsigned char *)p<local_cpu+local_bytes) a.QuadPart=(long long)(local_ipa+((unsigned char *)p-local_cpu));return a; }
-static NTSTATUS AdmissionMemoryRuntimeScanoutView(ADMISSION_CONTEXT *a,ADMISSION_SCANOUT_MEMORY_VIEW *v) {(void)a;v->GuestIpaAddress=local_ipa;v->Bytes=local_bytes;v->CpuAddress=local_cpu;return STATUS_SUCCESS;}
+static NTSTATUS AdmissionMemoryRuntimeScanoutView(ADMISSION_CONTEXT *a,ADMISSION_SCANOUT_MEMORY_VIEW *v) {(void)a;v->GuestIpaAddress=local_ipa;v->Bytes=0x3800000ULL;v->CpuAddress=local_cpu;return STATUS_SUCCESS;}
 static NTSTATUS AdmissionMemoryRuntimeBorrowIo(ADMISSION_CONTEXT *a,APPLE_AGX_MEMORY_IO *io) {(void)a;(void)io;return STATUS_SUCCESS;}
-static APPLE_AGX_MEMORY_RESULT AppleAgxMemoryAllocateAligned(APPLE_AGX_MEMORY_IO *io,ULONGLONG n,ULONGLONG align,APPLE_AGX_MEMORY_OBJECT *o) {(void)io;(void)n;(void)align;static ADMISSION_PHYSICAL_ALLOCATION alloc;alloc.GuestIpaBase=local_ipa;o->AllocationHandle=&alloc;o->CpuAddress=o->AllocationCpuBase=local_cpu;o->DeviceAddress=local_ipa;return AppleAgxMemoryResultOk;}
-static APPLE_AGX_MEMORY_RESULT AppleAgxMemoryRelease(APPLE_AGX_MEMORY_IO *io,APPLE_AGX_MEMORY_OBJECT *o) {(void)io;(void)o;return AppleAgxMemoryResultOk;}
+static APPLE_AGX_MEMORY_RESULT AppleAgxMemoryAllocateAligned(APPLE_AGX_MEMORY_IO *io,ULONGLONG n,ULONGLONG align,APPLE_AGX_MEMORY_OBJECT *o) {
+  (void)io;assert(n==0x4000 && align==0x4000);
+  static ADMISSION_PHYSICAL_ALLOCATION alloc[512];static REPLAY_ADL adl[512];static UINT count;
+  assert(count<512);
+  ULONGLONG offset=0x3800000ULL+(ULONGLONG)count*0x4000ULL;
+  adl[count].Flags.Contiguous=1;
+  alloc[count].GuestIpaBase=local_ipa+offset;alloc[count].Size=0x4000;alloc[count].Adl=&adl[count];
+  o->AllocationHandle=&alloc[count];o->CpuAddress=o->AllocationCpuBase=local_cpu+offset;
+  o->DeviceAddress=local_ipa+offset;++count;return AppleAgxMemoryResultOk;
+}
+static APPLE_AGX_MEMORY_RESULT AppleAgxMemoryRelease(APPLE_AGX_MEMORY_IO *io,APPLE_AGX_MEMORY_OBJECT *o) {(void)io;o->AllocationHandle=NULL;return AppleAgxMemoryResultOk;}
 typedef struct {
   struct hv_agx_gpuva_v5_wire wire;
   struct hv_contract_snapshot memory;
@@ -222,6 +233,8 @@ static bool AppleAgxSchedulerDestroyContext(int *s,ADMISSION_SCHEDULER_CONTEXT *
 /* Prototypes for cross-file calls inside extracted production functions. */
 static ADMISSION_G3_PROCESS *AdmissionGpuvaG3FindProcess(ADMISSION_G3_STATE *,HANDLE);
 static NTSTATUS AdmissionGpuvaG3ResolveTable(ADMISSION_CONTEXT *,const DXGK_PAGETABLEUPDATEADDRESS *,DXGK_PAGETABLEUPDATEMODE,ULONGLONG *);
+static NTSTATUS AdmissionGpuvaG3BrokerTable(ADMISSION_G3_PROCESS *,ULONGLONG,BOOLEAN,ULONGLONG *);
+static NTSTATUS AdmissionGpuvaG3MirrorTable(ADMISSION_G3_PROCESS *,ULONGLONG,PVOID);
 static NTSTATUS AdmissionGpuvaG3AttachContext(ADMISSION_RENDER_CONTEXT *,ADMISSION_DEVICE *);
 static void AdmissionGpuvaG3DetachContext(ADMISSION_RENDER_CONTEXT *);
 #endif

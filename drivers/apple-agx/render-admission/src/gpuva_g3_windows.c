@@ -103,6 +103,78 @@ static NTSTATUS AdmissionG3BootstrapRoot(
   return STATUS_SUCCESS;
 }
 
+/* VidMm may map its own page-table page as a writable leaf.  The broker must
+ * keep the hardware table on a different physical page so that GPU writes to
+ * the VidMm allocation cannot bypass validated graph updates. */
+NTSTATUS AdmissionGpuvaG3BrokerTable(
+    ADMISSION_G3_PROCESS *process, ULONGLONG original_ipa,
+    BOOLEAN create, ULONGLONG *broker_ipa) {
+  ADMISSION_G3_TABLE_SHADOW *entry;
+  ADMISSION_PHYSICAL_ALLOCATION *allocation;
+  ULONGLONG offset;
+  if (process == NULL || broker_ipa == NULL || original_ipa == 0ULL ||
+      (original_ipa & 0x3fffULL)) return STATUS_INVALID_PARAMETER;
+  for (entry = process->TableShadows; entry != NULL; entry = entry->Next)
+    if (entry->OriginalIpa == original_ipa) {
+      *broker_ipa = entry->BrokerIpa;
+      return STATUS_SUCCESS;
+    }
+  if (!create) return STATUS_INVALID_ADDRESS;
+  entry = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*entry),
+                          ADMISSION_POOL_TAG);
+  if (entry == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+  RtlZeroMemory(entry, sizeof(*entry));
+  if (AppleAgxMemoryAllocateAligned(&process->Io, 0x4000ULL, 0x4000ULL,
+                                    &entry->Memory) != AppleAgxMemoryResultOk) {
+    ExFreePoolWithTag(entry, ADMISSION_POOL_TAG);
+    return STATUS_INSUFFICIENT_RESOURCES;
+  }
+  allocation = (ADMISSION_PHYSICAL_ALLOCATION *)entry->Memory.AllocationHandle;
+  if (allocation == NULL || allocation->Adl == NULL ||
+      !allocation->Adl->Flags.Contiguous ||
+      entry->Memory.CpuAddress == NULL ||
+      entry->Memory.AllocationCpuBase == NULL ||
+      (PUCHAR)entry->Memory.CpuAddress <
+          (PUCHAR)entry->Memory.AllocationCpuBase ||
+      entry->Memory.DeviceAddress == 0ULL ||
+      (entry->Memory.DeviceAddress & 0x3fffULL)) goto Invalid;
+  offset = (ULONGLONG)((PUCHAR)entry->Memory.CpuAddress -
+                       (PUCHAR)entry->Memory.AllocationCpuBase);
+  if (offset > allocation->Size ||
+      0x4000ULL > allocation->Size - offset ||
+      allocation->GuestIpaBase > MAXULONGLONG - offset) goto Invalid;
+  entry->BrokerIpa = allocation->GuestIpaBase + offset;
+  if (entry->BrokerIpa == original_ipa ||
+      (entry->BrokerIpa & 0x3fffULL)) goto Invalid;
+  RtlZeroMemory(entry->Memory.CpuAddress, 0x4000u);
+  KeMemoryBarrier();
+  entry->OriginalIpa = original_ipa;
+  entry->Next = process->TableShadows;
+  process->TableShadows = entry;
+  *broker_ipa = entry->BrokerIpa;
+  return STATUS_SUCCESS;
+Invalid:
+  (void)AppleAgxMemoryRelease(&process->Io, &entry->Memory);
+  ExFreePoolWithTag(entry, ADMISSION_POOL_TAG);
+  return STATUS_INVALID_ADDRESS;
+}
+
+NTSTATUS AdmissionGpuvaG3MirrorTable(
+    ADMISSION_G3_PROCESS *process, ULONGLONG original_ipa,
+    PVOID original_cpu_address) {
+  ADMISSION_G3_TABLE_SHADOW *entry;
+  if (process == NULL || original_cpu_address == NULL)
+    return STATUS_INVALID_PARAMETER;
+  for (entry = process->TableShadows; entry != NULL; entry = entry->Next)
+    if (entry->OriginalIpa == original_ipa &&
+        entry->Memory.CpuAddress != NULL) {
+      RtlCopyMemory(original_cpu_address, entry->Memory.CpuAddress, 0x4000u);
+      KeMemoryBarrier();
+      return STATUS_SUCCESS;
+    }
+  return STATUS_INVALID_ADDRESS;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
     PVOID MiniportDeviceContext, DXGKARG_CREATEPROCESS *Args) {
   ADMISSION_CONTEXT *adapter = (ADMISSION_CONTEXT *)MiniportDeviceContext;
@@ -182,6 +254,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyProcess(
        !AppleAgxGpuvaG3GraphDestroy(&process->Graph))) {
     ExReleaseFastMutex(&state->Lock);
     return STATUS_DEVICE_BUSY;
+  }
+  while (process->TableShadows != NULL) {
+    ADMISSION_G3_TABLE_SHADOW *entry = process->TableShadows;
+    if (AppleAgxMemoryRelease(&process->Io, &entry->Memory) !=
+        AppleAgxMemoryResultOk) {
+      ExReleaseFastMutex(&state->Lock);
+      return STATUS_DEVICE_BUSY;
+    }
+    process->TableShadows = entry->Next;
+    ExFreePoolWithTag(entry, ADMISSION_POOL_TAG);
   }
   if (process->BootstrapRoot.AllocationHandle != NULL &&
       AppleAgxMemoryRelease(&process->Io, &process->BootstrapRoot) !=
@@ -330,6 +412,8 @@ _Use_decl_annotations_ VOID AdmissionDdiSetRootPageTable(
   }
   ExAcquireFastMutex(&process->State->Lock);
   if (process->Poisoned || process->Graph.Uncertain ||
+      !NT_SUCCESS(AdmissionGpuvaG3BrokerTable(
+          process, root_ipa, TRUE, &root_ipa)) ||
       !AppleAgxGpuvaG3GraphRegisterTable(&process->Graph, root_ipa, 0u) ||
       !AppleAgxGpuvaG3GraphBindRoot(&process->Graph, root_ipa)) {
     context->GpuvaG3Poisoned = TRUE;

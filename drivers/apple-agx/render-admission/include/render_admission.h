@@ -774,6 +774,7 @@ typedef struct _ADMISSION_G3_PAGING_FAILURE {
   ULONGLONG TableAddress, TableIpa, PteFlags, PageAddress, ChildIpa;
   ULONG TableFirstNonzeroIndex, TableAddBranch;
   ULONGLONG TableFirstNonzeroWord;
+  ULONGLONG BrokerTableIpa;
 } ADMISSION_G3_PAGING_FAILURE;
 void AdmissionRecordGpuvaG3PagingFailure(
     _In_opt_ ADMISSION_CONTEXT *Context,

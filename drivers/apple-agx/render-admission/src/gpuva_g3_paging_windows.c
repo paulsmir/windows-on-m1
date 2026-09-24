@@ -10,7 +10,8 @@ enum {
   AdmissionG3PagingFailureChildGraph = 5u,
   AdmissionG3PagingFailureParentLink = 6u,
   AdmissionG3PagingFailureLeafGraph = 7u,
-  AdmissionG3PagingTableInitialized = 8u
+  AdmissionG3PagingTableInitialized = 8u,
+  AdmissionG3PagingFailureTableMirror = 9u
 };
 
 static NTSTATUS AdmissionG3RejectPaging(
@@ -91,6 +92,11 @@ static NTSTATUS AdmissionG3UpdateParent(
       return AdmissionG3RejectPaging(failure,
           AdmissionG3PagingFailureChildAddress, index, pte, 0ULL,
           STATUS_INVALID_ADDRESS);
+    if (!NT_SUCCESS(AdmissionGpuvaG3BrokerTable(
+            process, child_ipa, TRUE, &child_ipa)))
+      return AdmissionG3RejectPaging(failure,
+          AdmissionG3PagingFailureChildGraph, index, pte, 0ULL,
+          STATUS_INSUFFICIENT_RESOURCES);
     if (!AppleAgxGpuvaG3GraphRegisterTable(&process->Graph,
             child_ipa, child_level))
       return AdmissionG3RejectPaging(failure,
@@ -201,7 +207,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
   ADMISSION_G3_PROCESS *process;
   DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update;
   DXGK_PAGETABLEUPDATEADDRESS address;
-  ULONGLONG table_ipa = 0ULL, root_ipa;
+  ULONGLONG table_ipa = 0ULL, original_table_ipa, root_ipa;
   ADMISSION_G3_PAGING_FAILURE failure;
   ADMISSION_SCANOUT_MEMORY_VIEW view;
   APPLE_AGX_GPUVA_G3_NODE *table;
@@ -219,6 +225,9 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     address.GpuPhysical = args->FlushTlb.RootPageTableAddress;
     status = AdmissionGpuvaG3ResolveTable(adapter, &address,
         DXGK_PAGETABLEUPDATE_GPU_PHYSICAL, &root_ipa);
+    if (process != NULL && NT_SUCCESS(status))
+      status = AdmissionGpuvaG3BrokerTable(
+          process, root_ipa, FALSE, &root_ipa);
     if (process == NULL || !NT_SUCCESS(status) || process->Poisoned ||
         root_ipa != process->Graph.RootIpa ||
         !AppleAgxGpuvaG3GraphFlush(&process->Graph,
@@ -232,7 +241,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     return STATUS_NOT_SUPPORTED;
   update = &args->UpdatePageTable;
   RtlZeroMemory(&failure, sizeof(failure));
-  failure.Version = 2u;
+  failure.Version = 3u;
   failure.Bytes = sizeof(failure);
   failure.TableFirstNonzeroIndex = MAXULONG;
   failure.Level = update->PageTableLevel;
@@ -272,28 +281,37 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     return status;
   }
   failure.TableIpa = table_ipa;
+  original_table_ipa = table_ipa;
   ExAcquireFastMutex(&state->Lock);
   process = AdmissionGpuvaG3FindProcess(state, update->hProcess);
   if (process == NULL || process->Poisoned || process->Graph.Uncertain) {
     status = STATUS_INVALID_DEVICE_STATE;
   } else {
+    status = AdmissionMemoryRuntimeScanoutView(adapter, &view);
+    if (!NT_SUCCESS(status) || view.CpuAddress == NULL ||
+        original_table_ipa < view.GuestIpaAddress ||
+        view.Bytes < 0x4000ULL ||
+        original_table_ipa - view.GuestIpaAddress > view.Bytes - 0x4000ULL) {
+      status = AdmissionG3RejectPaging(&failure,
+          AdmissionG3PagingFailureTableAddress, MAXULONG, NULL, 0ULL,
+          STATUS_INVALID_ADDRESS);
+      goto PagingDone;
+    }
+    table_words = (ULONGLONG *)((PUCHAR)view.CpuAddress +
+        (SIZE_T)(original_table_ipa - view.GuestIpaAddress));
+    status = AdmissionGpuvaG3BrokerTable(
+        process, original_table_ipa, TRUE, &table_ipa);
+    if (!NT_SUCCESS(status)) {
+      status = AdmissionG3RejectPaging(&failure,
+          AdmissionG3PagingFailureTableGraph, MAXULONG, NULL, 0ULL, status);
+      goto PagingDone;
+    }
+    failure.BrokerTableIpa = table_ipa;
     /* GraphRegisterTable is idempotent for an existing page.  Clear only a
      * newly admitted page, before the broker sees its physical contents. */
     for (table = process->Graph.Tables; table != NULL; table = table->Next)
       if (table->Ipa == table_ipa) break;
     if (table == NULL) {
-      status = AdmissionMemoryRuntimeScanoutView(adapter, &view);
-      if (!NT_SUCCESS(status) || view.CpuAddress == NULL ||
-          table_ipa < view.GuestIpaAddress ||
-          view.Bytes < 0x4000ULL ||
-          table_ipa - view.GuestIpaAddress > view.Bytes - 0x4000ULL) {
-        status = AdmissionG3RejectPaging(&failure,
-            AdmissionG3PagingFailureTableAddress, MAXULONG, NULL, 0ULL,
-            STATUS_INVALID_ADDRESS);
-        goto PagingDone;
-      }
-      table_words = (ULONGLONG *)((PUCHAR)view.CpuAddress +
-          (SIZE_T)(table_ipa - view.GuestIpaAddress));
       for (word_index = 0u; word_index < 0x4000u / sizeof(*table_words);
            ++word_index) {
         if (table_words[word_index] != 0ULL) {
@@ -321,6 +339,12 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
       status = AdmissionG3UpdateParent(process, table_ipa, update, adapter,
                                        &failure);
     }
+    if (NT_SUCCESS(status) &&
+        !NT_SUCCESS(AdmissionGpuvaG3MirrorTable(
+            process, original_table_ipa, table_words)))
+      status = AdmissionG3RejectPaging(&failure,
+          AdmissionG3PagingFailureTableMirror, MAXULONG, NULL, 0ULL,
+          STATUS_DEVICE_HARDWARE_ERROR);
     if (failure.Branch == 0u &&
         failure.TableFirstNonzeroIndex != MAXULONG)
       failure.Branch = AdmissionG3PagingTableInitialized;

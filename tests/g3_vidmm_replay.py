@@ -20,6 +20,7 @@ FUNCTIONS = {
     "gpuva_g3_windows.c": [
         "AdmissionG3AllocateNode", "AdmissionG3FreeNode",
         "AdmissionGpuvaG3FindProcess", "AdmissionG3BootstrapRoot",
+        "AdmissionGpuvaG3BrokerTable", "AdmissionGpuvaG3MirrorTable",
         "AdmissionDdiCreateProcess", "AdmissionDdiDestroyProcess",
         "AdmissionGpuvaG3AttachContext", "AdmissionGpuvaG3DetachContext",
         "AdmissionGpuvaG3ResolveTable", "AdmissionDdiSetRootPageTable",
@@ -67,10 +68,14 @@ def generate(revision=None, function_revisions=None):
                       ["git", "show", f"{revision}:drivers/apple-agx/render-admission/src/{filename}"],
                       cwd=ROOT, text=True))
         if filename == "gpuva_g3_paging_windows.c":
-            parts.append("enum { AdmissionG3PagingFailureTableAddress=1, AdmissionG3PagingFailureTableGraph=2, AdmissionG3PagingFailureParentFlags=3, AdmissionG3PagingFailureChildAddress=4, AdmissionG3PagingFailureChildGraph=5, AdmissionG3PagingFailureParentLink=6, AdmissionG3PagingFailureLeafGraph=7, AdmissionG3PagingTableInitialized=8 };\n")
+            parts.append("enum { AdmissionG3PagingFailureTableAddress=1, AdmissionG3PagingFailureTableGraph=2, AdmissionG3PagingFailureParentFlags=3, AdmissionG3PagingFailureChildAddress=4, AdmissionG3PagingFailureChildGraph=5, AdmissionG3PagingFailureParentLink=6, AdmissionG3PagingFailureLeafGraph=7, AdmissionG3PagingTableInitialized=8, AdmissionG3PagingFailureTableMirror=9 };\n")
         for name in names:
             parts.append(f'#line 1 "{filename}:{name}"\n')
             function_source = source
+            if revision is not None and name in (
+                    "AdmissionGpuvaG3BrokerTable",
+                    "AdmissionGpuvaG3MirrorTable"):
+                function_source = (SRC / filename).read_text()
             if name in function_revisions:
                 function_source = subprocess.check_output(
                     ["git", "show", f"{function_revisions[name]}:drivers/apple-agx/render-admission/src/{filename}"],

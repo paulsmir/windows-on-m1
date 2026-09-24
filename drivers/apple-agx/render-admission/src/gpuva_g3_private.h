@@ -18,12 +18,19 @@ typedef struct _ADMISSION_G3_STATE {
   ULONG LastCompletedFence;
 } ADMISSION_G3_STATE;
 
+typedef struct _ADMISSION_G3_TABLE_SHADOW {
+  struct _ADMISSION_G3_TABLE_SHADOW *Next;
+  APPLE_AGX_MEMORY_OBJECT Memory;
+  ULONGLONG OriginalIpa, BrokerIpa;
+} ADMISSION_G3_TABLE_SHADOW;
+
 typedef struct _ADMISSION_G3_PROCESS {
   LIST_ENTRY Link;
   ADMISSION_G3_STATE *State;
   APPLE_AGX_GPUVA_G3_GRAPH Graph;
   APPLE_AGX_MEMORY_IO Io;
   APPLE_AGX_MEMORY_OBJECT BootstrapRoot;
+  ADMISSION_G3_TABLE_SHADOW *TableShadows;
   ULONGLONG BootstrapIpa;
   ULONG Magic, DeviceRefs, ContextRefs;
   BOOLEAN Poisoned;
@@ -34,6 +41,12 @@ ADMISSION_G3_PROCESS *AdmissionGpuvaG3FindProcess(
 NTSTATUS AdmissionGpuvaG3ResolveTable(
     ADMISSION_CONTEXT *Adapter, const DXGK_PAGETABLEUPDATEADDRESS *Address,
     DXGK_PAGETABLEUPDATEMODE Mode, ULONGLONG *TableIpa);
+NTSTATUS AdmissionGpuvaG3BrokerTable(
+    ADMISSION_G3_PROCESS *Process, ULONGLONG OriginalIpa,
+    BOOLEAN Create, ULONGLONG *BrokerIpa);
+NTSTATUS AdmissionGpuvaG3MirrorTable(
+    ADMISSION_G3_PROCESS *Process, ULONGLONG OriginalIpa,
+    PVOID OriginalCpuAddress);
 NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *Adapter,
                                            DXGKARG_BUILDPAGINGBUFFER *Args);
 NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *Adapter,
