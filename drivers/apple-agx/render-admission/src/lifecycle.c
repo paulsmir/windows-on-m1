@@ -12,8 +12,8 @@ C_ASSERT(DXGK_INVALID_MMU_ID == APPLE_AGX_GPUVA_G3_INVALID_MMU_ID);
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION) || \
     defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #include "apple_agx_render_template_vm_slot.h"
-static BOOLEAN AdmissionGpuvaArmed(ADMISSION_CONTEXT *context,
-                                   PCWSTR value_name) {
+static BOOLEAN AdmissionConsumeGpuvaArm(ADMISSION_CONTEXT *context,
+                                        PCWSTR value_name) {
   HANDLE key = NULL;
   UNICODE_STRING name;
   ULONG bytes = 0u;
@@ -27,15 +27,21 @@ static BOOLEAN AdmissionGpuvaArmed(ADMISSION_CONTEXT *context,
   if (context == NULL || context->PhysicalDeviceObject == NULL ||
       !NT_SUCCESS(IoOpenDeviceRegistryKey(
           context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
-          KEY_QUERY_VALUE, &key)))
+          KEY_QUERY_VALUE | KEY_SET_VALUE, &key)))
     return FALSE;
   RtlInitUnicodeString(&name, value_name);
   status = ZwQueryValueKey(key, &name, KeyValuePartialInformation,
                            value, sizeof(data.Buffer), &bytes);
+  if (!NT_SUCCESS(status) || value->Type != REG_DWORD ||
+      value->DataLength != sizeof(ULONG) || *(ULONG *)value->Data != 1u) {
+    ZwClose(key);
+    return FALSE;
+  }
+  status = ZwDeleteValueKey(key, &name);
+  if (NT_SUCCESS(status))
+    status = ZwFlushKey(key);
   ZwClose(key);
-  return NT_SUCCESS(status) && value->Type == REG_DWORD &&
-         value->DataLength == sizeof(ULONG) &&
-         *(ULONG *)value->Data == 1u;
+  return NT_SUCCESS(status);
 }
 #endif
 
@@ -106,7 +112,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   *NumberOfVideoPresentSources = 0;
   *NumberOfChildren = 0;
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
-  if (!AdmissionGpuvaArmed(context, L"B1Armed")) {
+  if (!AdmissionConsumeGpuvaArm(context, L"B1Armed")) {
     AdmissionRecordB1Qualification(
         context, 0u, STATUS_NOT_SUPPORTED, STATUS_NOT_SUPPORTED,
         0u, 0u, 0ULL,
@@ -117,7 +123,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   }
 #endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  if (!AdmissionGpuvaArmed(context, L"G3Armed")) {
+  if (!AdmissionConsumeGpuvaArm(context, L"G3Armed")) {
     AdmissionRecordStartStage(context, AdmissionStartEntered,
                               STATUS_NOT_SUPPORTED);
     return STATUS_NOT_SUPPORTED;

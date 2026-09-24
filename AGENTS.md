@@ -75,6 +75,14 @@ compatibility review.
   only that experiment's exact preregistered package and verify its hashes.
   Never carry an installed or staged AppleAgx package across experiments unless
   package retention is itself the single preregistered variable.
+- User decision 2026-09-24 (R54) authorizes a preregistered GPU experiment
+  series for one hypothesis. While pinned SSH is alive in the full-owner guest,
+  collect evidence and replace only the next hash-verified package there; keep
+  that guest and its package state between series runs. Return to ordinary
+  Code28 at series end, loss of SSH, bugcheck, or uncertain package identity.
+  Record the series contract once and each run before and after it using
+  `investigation/SERIES_RUN_TEMPLATE.md`. A full host suite is required once
+  per series; within the series run the affected tests and an incremental build.
 - Keep the normal GPU-development recovery profile GPU-visible: it must expose
   exactly one inert `ACPI\\APPL0002` devnode while leaving the AGX power broker
   disabled and carrying no AppleAgx package, service, module, signer, or staged
@@ -155,6 +163,10 @@ Do not overwrite or silently reinterpret an old result. Append a correction that
 references the original experiment ID. Do not call a build "working", "stable", or
 "release" without linking the hardware experiment that demonstrated that claim.
 Do not install or launch an artifact whose SHA-256 and manifest were not recorded.
+For a preregistered R54 series, the series entry carries the full fields above.
+Each run still needs a short before/after entry with its ID, UTC time, one
+variable, package/m1n1 hashes, observation, and verdict. Keep the run entry
+within roughly 600 characters using the series template.
 
 ## Machine-readable change ledger
 
