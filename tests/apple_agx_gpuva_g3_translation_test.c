@@ -15,6 +15,18 @@ int main(void) {
   APPLE_AGX_GPUVA_G3_NATIVE_LEAF out[2], sentinel[2];
   uint32_t n = 99u;
   unsigned long long resolved = 0;
+  /* EXP782: the PTE carries address bits 63:12, not a byte offset. */
+  assert(AppleAgxGpuvaG3PteAddressBytes(0xcULL, &resolved));
+  assert(resolved == 0xc000ULL);
+  assert(AppleAgxGpuvaG3ResolvePageAddress(2u, resolved,
+      2u, 0x900000000ULL, 0x4000000ULL, &resolved) == AppleAgxGpuvaG3Ok);
+  assert(resolved == 0x90000c000ULL);
+  assert(AppleAgxGpuvaG3PteAddressBytes(0x10ULL, &resolved));
+  assert(resolved == 0x10000ULL && (resolved & 0xffffULL) == 0ULL);
+  assert(AppleAgxGpuvaG3ResolvePageAddress(2u, resolved,
+      2u, 0x900000000ULL, 0x4000000ULL, &resolved) == AppleAgxGpuvaG3Ok);
+  assert(resolved == 0x900010000ULL);
+  assert(!AppleAgxGpuvaG3PteAddressBytes((~0ULL >> 12) + 1ULL, &resolved));
   assert(AppleAgxGpuvaG3ResolvePageAddress(0u, 0x850000000ULL,
       2u, 0x900000000ULL, 0x4000000ULL, &resolved) == AppleAgxGpuvaG3Ok);
   assert(resolved == 0x850000000ULL);

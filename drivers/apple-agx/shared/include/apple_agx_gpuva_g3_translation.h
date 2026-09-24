@@ -13,6 +13,14 @@ static inline unsigned int AppleAgxGpuvaG3PteInputIndex(
   return Repeat ? 0u : Index;
 }
 
+/* DXGK_PTE stores address bits 63:12; G3 segment and IPA helpers use bytes. */
+static inline int AppleAgxGpuvaG3PteAddressBytes(
+    unsigned long long PtePageNumber, unsigned long long *Bytes) {
+  if (Bytes == 0 || PtePageNumber > (~0ULL >> 12)) return 0;
+  *Bytes = PtePageNumber << 12;
+  return 1;
+}
+
 static inline int AppleAgxGpuvaG3TableSpanWithinLocal(
     unsigned long long LocalGuestIpa, unsigned long long LocalBytes,
     unsigned long long TableGuestIpa, unsigned long long TableBytes) {
