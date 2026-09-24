@@ -1,5 +1,33 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 EXP781 reaches level-1 page-table update
+
+Package784 (R58 WDK input audit plus EXP780 CPU_VIRTUAL DMA-pointer fix) booted
+StartDevice Stage12/status0 and passed the earlier level-0 metadata veto.
+The last flushed KMD receipt is `BuildPagingBuffer(UpdatePageTable)` operation11,
+CPU_VIRTUAL mode0, **level1**, Start0/Count2048, Flags2 (`InitialUpdate`),
+PTE present, dual PTE absent, non-NULL DMA/private pointers of 4096 bytes,
+DriverProtection0 and `Wom1G3PagingStatus=C0000141` (`INVALID_ADDRESS`).
+Windows bugchecked `0x10E/0xB` in
+`dxgmms2!VIDMM_GLOBAL::CompleteBuildPagingBufferIteration` while committing
+the paging-process VA range. The named KMD return is now the causal boundary;
+AddAdapter, rendering and DWM admission remain unproven. WER dump SHA256
+`078b1dc41e0338eb1b9a22bb79f55e32961740da9a91be53122cf2db88582948`;
+decoded receipt `.local/experiments/EXP781-g3-input-audit/hardware-evidence/EXP781-analysis.json`
+SHA256 `9cb2d4088e4d0b39999bc981fb722baf381e8eb5793c00b3338fb15f09da1199`.
+The exact internal INVALID_ADDRESS branch is not yet observed: possible table
+address/child-PTE range or alignment validation, or graph table registration/
+parent link failure. Next offline target is a durable per-branch receipt of
+level1 table address, first failing PTE index/flags/address and graph step;
+derive a correction only after that discrimination. Do not rerun package784.
+
+SSH was lost on the bugcheck, ending R54 series. GPU-hidden recovered the
+dump/ETL/receipts, deleted exact package784 `oem5.inf`, then frozen ordinary
+EXP377/392 returned pinned SSH, CPU8 and one inert APPL0002 Code28 with no
+AppleAgx residue; final baseline SHA256
+`6b2a3410d0494dd2f11b3eaf09e983bd0127c99c97a48e83d58ef18c11a7767d`.
+R55 repeated StartDevice path is still untested on hardware.
+
 ## 2026-09-24 EXP780 identifies exact paging bootstrap veto
 
 Package782 booted StartDevice Stage12/status0, then bugchecked `0x10E/0xB`
