@@ -67,7 +67,7 @@ def generate(revision=None, function_revisions=None):
                       ["git", "show", f"{revision}:drivers/apple-agx/render-admission/src/{filename}"],
                       cwd=ROOT, text=True))
         if filename == "gpuva_g3_paging_windows.c":
-            parts.append("enum { AdmissionG3PagingFailureTableAddress=1, AdmissionG3PagingFailureTableGraph=2, AdmissionG3PagingFailureParentFlags=3, AdmissionG3PagingFailureChildAddress=4, AdmissionG3PagingFailureChildGraph=5, AdmissionG3PagingFailureParentLink=6, AdmissionG3PagingFailureLeafGraph=7 };\n")
+            parts.append("enum { AdmissionG3PagingFailureTableAddress=1, AdmissionG3PagingFailureTableGraph=2, AdmissionG3PagingFailureParentFlags=3, AdmissionG3PagingFailureChildAddress=4, AdmissionG3PagingFailureChildGraph=5, AdmissionG3PagingFailureParentLink=6, AdmissionG3PagingFailureLeafGraph=7, AdmissionG3PagingTableInitialized=8 };\n")
         for name in names:
             parts.append(f'#line 1 "{filename}:{name}"\n')
             function_source = source

@@ -18,6 +18,13 @@ class G3VidMmReplayTests(unittest.TestCase):
         self.assertIn("all recorded and projected inputs passed", result.stdout)
         self.assertIn("real m1n1 broker dispatch", result.stdout)
 
+    def test_dirty_initial_table_is_cleared_before_real_broker(self):
+        env = dict(os.environ, G3_REPLAY_DIRTY_TABLE="1")
+        result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
+                                env=env, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("real m1n1 broker dispatch", result.stdout)
+
     def test_pre_pte_address_fix_is_red(self):
         result = subprocess.run([sys.executable, str(REPLAY), "--revision",
                                  "077fad3e~"], cwd=ROOT, text=True,

@@ -72,6 +72,7 @@ typedef const void VOID_CONST;
 #define UNREFERENCED_PARAMETER(x) (void)(x)
 #define RtlZeroMemory(p,n) memset((p),0,(n))
 #define RtlCopyMemory(d,s,n) memcpy((d),(s),(n))
+#define KeMemoryBarrier() __sync_synchronize()
 #define CONTAINING_RECORD(p,t,m) ((t *)((char *)(p)-offsetof(t,m)))
 
 typedef struct _LIST_ENTRY { struct _LIST_ENTRY *Flink, *Blink; } LIST_ENTRY, *PLIST_ENTRY;
@@ -114,7 +115,7 @@ typedef struct { void *AllocationHandle,*CpuAddress,*AllocationCpuBase; ULONGLON
 typedef struct { ULONGLONG GuestIpaBase; } ADMISSION_PHYSICAL_ALLOCATION;
 typedef enum { AppleAgxMemoryResultOk=0 } APPLE_AGX_MEMORY_RESULT;
 typedef struct { ULONGLONG GuestIpaAddress,Bytes; void *CpuAddress; } ADMISSION_SCANOUT_MEMORY_VIEW;
-typedef struct { UINT Version,Bytes,Branch,Index,Status,Level,UpdateMode,PageTablePageSize,GraphLastStatus,GraphUncertain; ULONGLONG ChildIpa,PteFlags,PageAddress,TableAddress,TableIpa; } ADMISSION_G3_PAGING_FAILURE;
+typedef struct { UINT Version,Bytes,Branch,Level,Index,PageTablePageSize,Status,UpdateMode,GraphLastStatus,GraphUncertain; ULONGLONG TableAddress,TableIpa,PteFlags,PageAddress,ChildIpa; UINT TableFirstNonzeroIndex,TableAddBranch; ULONGLONG TableFirstNonzeroWord; } ADMISSION_G3_PAGING_FAILURE;
 typedef struct _ADMISSION_CONTEXT ADMISSION_CONTEXT;
 typedef struct _ADMISSION_G3_PROCESS ADMISSION_G3_PROCESS;
 typedef struct _ADMISSION_OBJECT_DEVICE { UINT Magic; void *Adapter; } ADMISSION_OBJECT_DEVICE;

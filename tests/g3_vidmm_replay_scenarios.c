@@ -80,9 +80,36 @@ int main(void) {
     assert(zeros);
     flags.Repeat=0;
   }
+  /* EXP785: the allocator may return a dirty page before InitialUpdate. */
+  if (getenv("G3_REPLAY_DIRTY_TABLE"))
+    ((uint64_t *)(local_cpu+0x4000))[19]=0xfeed123456789abcULL;
   update(&adapter,sys.hKmdProcess,0,local_cpu+0x4000,8192,0,flags,
          zeros ? zeros : &empty,
          "EXP780 level0 Repeat InitialUpdate DMA pointers");
+  if (getenv("G3_REPLAY_DIRTY_TABLE"))
+  {
+    assert(((uint64_t *)(local_cpu+0x4000))[19]==0);
+    assert(last_paging_failure.Branch==8);
+    assert(last_paging_failure.TableAddBranch==1);
+    assert(last_paging_failure.TableFirstNonzeroIndex==19);
+    assert(last_paging_failure.TableFirstNonzeroWord==0xfeed123456789abcULL);
+  }
+  {
+    /* Model a freed graph node whose broker registration was not revoked.
+     * The page is empty, so table_add must reject duplicate ownership (d). */
+    ADMISSION_G3_PROCESS *process=(ADMISSION_G3_PROCESS *)sys.hKmdProcess;
+    APPLE_AGX_GPUVA_G3_NODE **link=&process->Graph.Tables;
+    APPLE_AGX_GPUVA_G3_NODE *held;
+    while (*link && (*link)->Ipa!=local_ipa+0x4000) link=&(*link)->Next;
+    assert(*link);
+    held=*link;
+    *link=held->Next;
+    assert(!AppleAgxGpuvaG3GraphRegisterTable(&process->Graph,
+                                                local_ipa+0x4000,2));
+    assert(process->Graph.LastStatus==HV_AGX_GPUVA_V5_OWNERSHIP);
+    held->Next=*link;
+    *link=held;
+  }
   free(zeros);
   parents[1].Flags=0x41; parents[1].PageTableAddress=0xC;
   parents[2].Flags=0x20041; parents[2].PageTableAddress=0x2C;

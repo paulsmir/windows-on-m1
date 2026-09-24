@@ -324,6 +324,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
     goto Fail;
   }
   runtime->LocalReady = TRUE;
+  /* The physical owner does not promise zero-filled contiguous pages.  VidMm
+   * may register a page table from this reserve before its InitialUpdate. */
+  if (runtime->LocalObject.CpuAddress == NULL ||
+      runtime->LocalObject.Length != ADMISSION_LOCAL_BYTES) {
+    status = STATUS_INVALID_DEVICE_STATE;
+    goto Fail;
+  }
+  RtlZeroMemory(runtime->LocalObject.CpuAddress, ADMISSION_LOCAL_BYTES);
   memoryResult = AppleAgxMemoryMarkCpuWritten(&runtime->LocalObject);
   if (memoryResult != AppleAgxMemoryResultOk) {
     status = STATUS_INVALID_DEVICE_STATE;

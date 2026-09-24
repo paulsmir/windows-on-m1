@@ -9,7 +9,8 @@ enum {
   AdmissionG3PagingFailureChildAddress = 4u,
   AdmissionG3PagingFailureChildGraph = 5u,
   AdmissionG3PagingFailureParentLink = 6u,
-  AdmissionG3PagingFailureLeafGraph = 7u
+  AdmissionG3PagingFailureLeafGraph = 7u,
+  AdmissionG3PagingTableInitialized = 8u
 };
 
 static NTSTATUS AdmissionG3RejectPaging(
@@ -202,7 +203,11 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
   DXGK_PAGETABLEUPDATEADDRESS address;
   ULONGLONG table_ipa = 0ULL, root_ipa;
   ADMISSION_G3_PAGING_FAILURE failure;
+  ADMISSION_SCANOUT_MEMORY_VIEW view;
+  APPLE_AGX_GPUVA_G3_NODE *table;
+  ULONGLONG *table_words;
   UINT limit;
+  UINT word_index;
   NTSTATUS status;
   if (adapter == NULL || args == NULL ||
       KeGetCurrentIrql() != PASSIVE_LEVEL) return STATUS_INVALID_PARAMETER;
@@ -227,8 +232,9 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     return STATUS_NOT_SUPPORTED;
   update = &args->UpdatePageTable;
   RtlZeroMemory(&failure, sizeof(failure));
-  failure.Version = 1u;
+  failure.Version = 2u;
   failure.Bytes = sizeof(failure);
+  failure.TableFirstNonzeroIndex = MAXULONG;
   failure.Level = update->PageTableLevel;
   failure.UpdateMode = (ULONG)update->UpdateMode;
   failure.Index = MAXULONG;
@@ -270,18 +276,56 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
   process = AdmissionGpuvaG3FindProcess(state, update->hProcess);
   if (process == NULL || process->Poisoned || process->Graph.Uncertain) {
     status = STATUS_INVALID_DEVICE_STATE;
-  } else if (!AppleAgxGpuvaG3GraphRegisterTable(&process->Graph, table_ipa,
-                                                 2u - update->PageTableLevel)) {
-    status = AdmissionG3RejectPaging(&failure,
-        AdmissionG3PagingFailureTableGraph, MAXULONG, NULL, 0ULL,
-        STATUS_INVALID_ADDRESS);
-  } else if (update->PageTableLevel == 0u) {
-    status = AdmissionG3UpdateLeaf(process, table_ipa, update, adapter,
-                                   &failure);
   } else {
-    status = AdmissionG3UpdateParent(process, table_ipa, update, adapter,
+    /* GraphRegisterTable is idempotent for an existing page.  Clear only a
+     * newly admitted page, before the broker sees its physical contents. */
+    for (table = process->Graph.Tables; table != NULL; table = table->Next)
+      if (table->Ipa == table_ipa) break;
+    if (table == NULL) {
+      status = AdmissionMemoryRuntimeScanoutView(adapter, &view);
+      if (!NT_SUCCESS(status) || view.CpuAddress == NULL ||
+          table_ipa < view.GuestIpaAddress ||
+          view.Bytes < 0x4000ULL ||
+          table_ipa - view.GuestIpaAddress > view.Bytes - 0x4000ULL) {
+        status = AdmissionG3RejectPaging(&failure,
+            AdmissionG3PagingFailureTableAddress, MAXULONG, NULL, 0ULL,
+            STATUS_INVALID_ADDRESS);
+        goto PagingDone;
+      }
+      table_words = (ULONGLONG *)((PUCHAR)view.CpuAddress +
+          (SIZE_T)(table_ipa - view.GuestIpaAddress));
+      for (word_index = 0u; word_index < 0x4000u / sizeof(*table_words);
+           ++word_index) {
+        if (table_words[word_index] != 0ULL) {
+          failure.TableFirstNonzeroIndex = word_index;
+          failure.TableFirstNonzeroWord = table_words[word_index];
+          break;
+        }
+      }
+      RtlZeroMemory(table_words, 0x4000u);
+      KeMemoryBarrier();
+    }
+    /* 1 = broker registration attempted, 2 = refused, 3 = graph cache.
+     * Exact broker subreason is intentionally not inferred from OWNERSHIP. */
+    failure.TableAddBranch = table == NULL ? 1u : 3u;
+    if (!AppleAgxGpuvaG3GraphRegisterTable(&process->Graph, table_ipa,
+                                            2u - update->PageTableLevel)) {
+      failure.TableAddBranch = 2u;
+      status = AdmissionG3RejectPaging(&failure,
+          AdmissionG3PagingFailureTableGraph, MAXULONG, NULL, 0ULL,
+          STATUS_INVALID_ADDRESS);
+    } else if (update->PageTableLevel == 0u) {
+      status = AdmissionG3UpdateLeaf(process, table_ipa, update, adapter,
                                      &failure);
+    } else {
+      status = AdmissionG3UpdateParent(process, table_ipa, update, adapter,
+                                       &failure);
+    }
+    if (failure.Branch == 0u &&
+        failure.TableFirstNonzeroIndex != MAXULONG)
+      failure.Branch = AdmissionG3PagingTableInitialized;
   }
+PagingDone:
   if (process != NULL && failure.Branch != 0u) {
     failure.GraphLastStatus = process->Graph.LastStatus;
     failure.GraphUncertain = process->Graph.Uncertain;
