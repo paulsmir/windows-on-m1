@@ -1,5 +1,30 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 EXP779 reaches first BuildPagingBuffer and bugchecks
+
+Package780's truthful CPU-visible local segment advanced VidMm beyond the
+`GetCpuVisibleAddress` 0x10E/0x49 boundary. StartDevice Stage12/status0,
+system CreateProcess and paging context flags5 were observed. Windows then
+bugchecked `0x10E` subtype `0xB`, parameter3 `0xC000000D`:
+`dxgmms2!VIDMM_GLOBAL::CompleteBuildPagingBufferIteration` received an
+invalid error code from our `DxgkDdiBuildPagingBuffer` while
+`UpdatePageTableInvalidate` initialized the paging process VA space. Dump
+SHA256 `fcb73c05c2ffcc0a71b1c08a7f1f5f1fecc8faa3069d3a8a9101727f23677892`.
+This is the first proven paging DDI boundary; no successful UpdatePageTable,
+FlushTlb, SetRootPageTable, rendering, or DWM admission yet.
+
+Microsoft's `DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE` contract says paging
+process initialization forces CPU_VIRTUAL mode with no DMA buffer and immediate
+updates. Its `Repeat` flag may provide one PTE to replicate. Local G3 code
+accepts the mode in its outer guard but resolves CpuVirtual only if it lies in
+the KMD's separate CPU mapping, and rejects Repeat. The actual flags/first
+failing guard were not recorded. Next offline target is a documented bootstrap
+path with first-input/guard receipt and host RED→GREEN; no caps guess or repeat
+of package780. R54 ended on bugcheck. GPU-hidden exact cleanup then frozen
+ordinary EXP377/392 recovered pinned SSH/CPU8 and one inert APPL0002 Code28,
+no AppleAgx residue; baseline SHA256
+`38e0f964cea884e17286e172838f617f70828936700e17958d25295255bbe68e`.
+
 ## 2026-09-24 EXP778 reaches VidMm page-table bootstrap and bugchecks
 
 Package779 admitted the paging SystemContext. Persisted `Wom1G3ContextInput`
