@@ -84,6 +84,17 @@ class BrokerSpec:
 
 
 class BrokerV5ContractTests(unittest.TestCase):
+    def test_real_m1n1_retained_response_count(self):
+        with tempfile.TemporaryDirectory(prefix="agx-retained-response-") as tmp:
+            binary = Path(tmp) / "response-test"
+            cmd = [os.environ.get("CC", "clang"), "-std=c11", "-Wall", "-Wextra",
+                   "-Werror", "-fsanitize=address,undefined",
+                   str(ROOT / "m1n1_windows/tests/hv_agx_retained_response_test.c"),
+                   str(ROOT / "m1n1_windows/src/hv_agx_retained_mmio.c"),
+                   "-o", str(binary)]
+            subprocess.run(cmd, check=True)
+            subprocess.run([str(binary)], check=True, timeout=10)
+
     def test_real_m1n1_broker_implementation(self):
         with tempfile.TemporaryDirectory(prefix="gpuva-v5-") as tmp:
             binary = Path(tmp) / "broker-test"
