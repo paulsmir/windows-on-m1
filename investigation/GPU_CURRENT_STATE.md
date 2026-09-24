@@ -16,10 +16,14 @@ G3Armed was removed; direct immutable GPU-hidden recovery deleted exact
 and one inert APPL0002 Code28, no AppleAgx package/service/files/arm,
 CPU8/storage2/USB7. Final baseline SHA256
 `ce4a7db03fa7a83338ea45022ea65c47ce9b1e6a0cc47afead5d91ac715ac910`.
-Next causal target: offline AddAdapter validation beyond successful QAI13/14,
-including truthful DRIVERCAPS/segment/MMU-count relationship and first-failure
-DDI instrumentation. No B1 hardware or repeat G3 candidate without a new
-source-backed discriminator. G4 Mesa VA winsys remains offline.
+Next causal target (R51): Microsoft GPU-segment and GpuMmu documentation
+describes VidMm memory-segment pages as 4 or 64 KiB; our G3 local segment
+still advertises 16 KiB. This is a source-backed candidate for the remaining
+AddAdapter rejection, not a proven cause. Implement and host-test a truthful
+64-KiB segment, `Use64KBPages` translator and 64-KiB leaf descriptor offline
+before any EXP773 preregistration. Audit DRIVERCAPS/segment/MMU-count
+relationships and preserve first-failure receipts. No B1 hardware. G4 Mesa VA
+winsys remains offline after this admission boundary.
 
 ## 2026-09-24 R49/R50 offline gate for EXP772
 
