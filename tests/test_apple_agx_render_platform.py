@@ -87,8 +87,16 @@ class AppleAgxRenderPlatformTests(unittest.TestCase):
         first_poll = worker.index("while (runtime->Backend.Phase ==", submitted)
         critical = worker[submitted:first_poll]
         receipts = (RENDER / "src" / "receipts.c").read_text()
-        render_receipts = receipts[receipts.index(
-            "VOID AdmissionRecordVisibleAgx("):]
+        render_receipts = "".join(
+            receipts[receipts.index("VOID " + name + "("):].split(
+                "_Use_decl_annotations_", 1)[0]
+            for name in (
+                "AdmissionRecordVisibleAgx",
+                "AdmissionRecordQueueSubmission",
+                "AdmissionRecordQueueInfo",
+                "AdmissionRecordBufferManager",
+            )
+        )
         correlation = (RENDER / "src" /
                        "render_call_correlation_windows.c").read_text()
 
