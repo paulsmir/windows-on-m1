@@ -44,6 +44,8 @@
 #include "apple_agx_initdata_memory.h"
 #include "apple_agx_context0_broker.h"
 #include "apple_agx_gpuva_broker_v5_client.h"
+#include "apple_agx_gpuva_g3_graph.h"
+#include "apple_agx_gpuva_g3_translation.h"
 #include "apple_agx_retained_root_abi.h"
 #include "apple_agx_power.h"
 #include "apple_agx_rtkit_session.h"
@@ -375,6 +377,9 @@ typedef struct _ADMISSION_CONTEXT {
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
   PVOID GpuvaB1State;
 #endif
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  PVOID GpuvaG3State;
+#endif
   volatile LONG InterruptReady;
   volatile LONG InterruptIngressEnabled;
   volatile LONG InterruptCount;
@@ -441,6 +446,9 @@ typedef struct _ADMISSION_CONTEXT {
 typedef struct _ADMISSION_DEVICE {
   ADMISSION_OBJECT_DEVICE Object;
   volatile LONG Win32Generation;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  PVOID GpuvaG3Process;
+#endif
 } ADMISSION_DEVICE;
 
 typedef struct _ADMISSION_RENDER_CONTEXT {
@@ -449,6 +457,13 @@ typedef struct _ADMISSION_RENDER_CONTEXT {
   ADMISSION_PREPATCHED_RENDER PrepatchedRender;
   ULONG Win32Generation;
   BOOLEAN Win32Transport;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  PVOID GpuvaG3Process;
+  ULONGLONG GpuvaG3RootIpa;
+  ULONGLONG GpuvaG3DmaBufferVa;
+  ULONG GpuvaG3DmaBufferBytes;
+  BOOLEAN GpuvaG3Poisoned;
+#endif
 } ADMISSION_RENDER_CONTEXT;
 
 typedef struct _ADMISSION_ALLOCATION_HANDLE {
@@ -1313,6 +1328,19 @@ DXGKDDI_CALIBRATEGPUCLOCK AdmissionDdiCalibrateGpuClock;
 DXGKDDI_SETSTABLEPOWERSTATE AdmissionDdiSetStablePowerState;
 BOOLEAN AdmissionGpuvaV5ClientOpen(ADMISSION_CONTEXT *Context,
                                    APPLE_AGX_GPUVA_V5_CLIENT *Client);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+NTSTATUS AdmissionGpuvaG3Start(ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionGpuvaG3Stop(ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionGpuvaG3AttachDevice(ADMISSION_CONTEXT *Adapter,
+    ADMISSION_DEVICE *Device, HANDLE ProcessHandle);
+VOID AdmissionGpuvaG3DetachDevice(ADMISSION_DEVICE *Device);
+NTSTATUS AdmissionGpuvaG3AttachContext(ADMISSION_RENDER_CONTEXT *Context,
+    ADMISSION_DEVICE *Device);
+VOID AdmissionGpuvaG3DetachContext(ADMISSION_RENDER_CONTEXT *Context);
+NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *Context,
+    DXGKARG_BUILDPAGINGBUFFER *Args);
+DXGKDDI_SETROOTPAGETABLE AdmissionDdiSetRootPageTable;
+#endif
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
 typedef struct _ADMISSION_B1_RETIREMENT_RECEIPT {
   ULONG Version, Bytes, Owner, Step, Status;

@@ -100,6 +100,9 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
   initialization.DxgkDdiDestroyProcess = AdmissionDdiDestroyProcess;
   initialization.DxgkDdiCalibrateGpuClock = AdmissionDdiCalibrateGpuClock;
   initialization.DxgkDdiSetStablePowerState = AdmissionDdiSetStablePowerState;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  initialization.DxgkDdiSetRootPageTable = AdmissionDdiSetRootPageTable;
+#endif
 
   status = DxgkInitialize(DriverObject, RegistryPath, &initialization);
   AdmissionRecordService(RegistryPath, L"Wom1CleanDxgkInitializeStatus", (ULONG)status);

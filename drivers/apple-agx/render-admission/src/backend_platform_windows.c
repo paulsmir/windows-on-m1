@@ -1,4 +1,7 @@
 #include "render_admission.h"
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+#include "gpuva_g3_private.h"
+#endif
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
 #include "apple_agx_gpuva_b1_submission.h"
 #include "apple_agx_gpuva_b1_completion.h"
@@ -2339,6 +2342,17 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
   if (InterlockedCompareExchange(&runtime->B1Active, 0, 0) != 0)
     return AdmissionB1Complete(runtime, adapter, Fence);
 #endif
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  {
+    ADMISSION_RENDER_CONTEXT *g3_context = adapter == NULL ? NULL :
+        (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
+            adapter->RenderPacket.Description.ContextToken;
+    if (adapter != NULL && g3_context != NULL &&
+        g3_context->GpuvaG3Process != NULL &&
+        !AdmissionGpuvaG3CompleteJob(adapter, Fence))
+      return APPLE_AGX_BACKEND_FALSE;
+  }
+#endif
   if (adapter == NULL || !adapter->InterfaceValid ||
       adapter->Interface.DxgkCbSynchronizeExecution == NULL ||
       adapter->Interface.DxgkCbNotifyInterrupt == NULL ||
@@ -2892,6 +2906,21 @@ static VOID AdmissionPlatformWorker(
     }
   }
   taTemporal.Fence = description.Fence;
+#endif
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  {
+    ADMISSION_RENDER_CONTEXT *g3_context =
+        (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)description.ContextToken;
+    if (g3_context != NULL && g3_context->GpuvaG3Process != NULL) {
+      submission.ContextIdentity = 1u;
+      if (!NT_SUCCESS(AdmissionGpuvaG3BeginJob(
+              adapter, g3_context, description.Fence))) {
+        InterlockedExchange(&adapter->SchedulerFaulted, 1);
+        AdmissionPlatformWorkerFinished(runtime);
+        return;
+      }
+    }
+  }
 #endif
   result = AppleAgxBackendRuntimeSubmit(&runtime->Backend, &submission);
   if (result != AppleAgxBackendRuntimeResultOk)

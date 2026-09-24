@@ -1,5 +1,27 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 G3b offline candidate and B1 closure
+
+The user closed B1 as a diagnostic after EXP767. No more B1 cleanup or
+context0-hash hardware runs. EXP769's no-job BUSY result is explained by live
+tables at DESTROY; the real broker host test now proves the required
+leaf/backing/parent/child-table/root teardown order. G2 ABI6 remains offline.
+
+G3b now has a separate WDDM3.2/16-KiB qualification profile: process-owned
+broker graphs, local/system/aperture IPA resolution, SetRootPageTable,
+UPDATE_PAGE_TABLE, FLUSH_TLB, and a bounded SubmitCommandVirtual path using
+the existing prepared GDI DMA packet and B1 lease/JOB_BEGIN/JOB_END/RELEASE
+verbs. Only this profile advertises GpuMmu caps. The default profile remains
+physical. `G3Armed=1` on the devnode is required before any G3 runtime/MMIO;
+ordinary GPU-visible recovery keeps it absent. Pinned WDK26100 ARM64 package766
+build has 0 warnings/errors; shared real-C sanitizer tests pass; the full
+1019-test host run has 0 new failing names against the recorded baseline.
+These are offline results, not a G3 hardware verdict. Next causal target is
+one hash-pinned, debug-off/no-KD G3 adapter/VidMm discriminator without render,
+then exact package removal and ordinary Code28 recovery. If VidMm rejects the
+3/11/13 table projection or supplies unsupported PTE groups, record the first
+refusal instead of running GPU jobs. Mesa winsys VA remains after that verdict.
+
 ## 2026-09-24 EXP769 debug-off cleanup discriminator and recovery
 
 EXP769 used frozen package765 and the EXP767 debug-off/no-KD staged cold-arrival environment. Windows reached DriverEntry/StartDevice and pinned SSH with exact APPL0002 Code43; no bugcheck. The diagnostic stopped before any GPU job: B1 Stage4, CompletedJobs0, output prefill A5A5A5A5/5A5A5A5A, context0-hash-before status C0000483. Cleanup00 passed and root1 Cleanup01 was BUSY with four tables and 12 owned pages because the earlier abort left the graph intact. Source and m1n1 log identify the first defect: retained QUERY_TABLE_HASH computes page count, then platform response epilogue overwrites `Count` with MappingCount=207; KMD rejects Count>24. Context0 identity and successful cleanup remain unproven. Debug-off/no-observer progression narrows EXP768 KD confounding but does not isolate debug setting from observer timing. Evidence `.local/experiments/EXP769-b1-cleanup/hardware-evidence/state.json` SHA256 `4774202228239dc12dc940ccd58513c0e1b67e5d48a68d129f9fd1ffd92fad99`. Exact disarm, package765 removal and ordinary EXP377/392 Code28 recovery completed; final state SHA256 `f35aa5766f0f251b01899c1c6ace4a99617774d2dc4423538f770158023918c3`, debug No/Local, package/service/module/signer/arm0, CPU8/storage2/USB7/autologon1.

@@ -37,8 +37,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateDevice(
   ULONG flags;
 
   if (adapter == NULL || !adapter->Started || Args == NULL ||
-      Args->Pasid != 0 || Args->hKmdProcess != NULL)
+      Args->Pasid != 0)
     return STATUS_INVALID_PARAMETER;
+#if !defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (Args->hKmdProcess != NULL) return STATUS_INVALID_PARAMETER;
+#endif
   flags = Args->Flags.Value;
   if ((flags & ~ADMISSION_DEVICE_VALID_FLAGS) != 0u)
     return STATUS_NOT_SUPPORTED;
@@ -56,6 +59,17 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateDevice(
     ExFreePoolWithTag(device, ADMISSION_POOL_TAG);
     return STATUS_INVALID_PARAMETER;
   }
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  {
+    NTSTATUS status = AdmissionGpuvaG3AttachDevice(
+        adapter, device, Args->hKmdProcess);
+    if (!NT_SUCCESS(status)) {
+      (void)AdmissionObjectsDestroyDevice(&device->Object);
+      ExFreePoolWithTag(device, ADMISSION_POOL_TAG);
+      return status;
+    }
+  }
+#endif
   Args->hDevice = device;
   return STATUS_SUCCESS;
 }
@@ -64,6 +78,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyDevice(HANDLE Device) {
   ADMISSION_DEVICE *device = (ADMISSION_DEVICE *)Device;
   if (device == NULL || !AdmissionObjectsDestroyDevice(&device->Object))
     return STATUS_DEVICE_BUSY;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionGpuvaG3DetachDevice(device);
+#endif
   ExFreePoolWithTag(device, ADMISSION_POOL_TAG);
   return STATUS_SUCCESS;
 }
@@ -341,6 +358,21 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
   }
   KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);
 
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  {
+    NTSTATUS status = AdmissionGpuvaG3AttachContext(context, device);
+    if (!NT_SUCCESS(status)) {
+      KeAcquireSpinLock(&adapter->SchedulerLock, &oldIrql);
+      (void)AppleAgxSchedulerDestroyContext(
+          &adapter->Scheduler, &context->SchedulerContext);
+      KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);
+      (void)AdmissionObjectsDestroyContext(&context->Object);
+      ExFreePoolWithTag(context, ADMISSION_POOL_TAG);
+      return status;
+    }
+  }
+#endif
+
   RtlZeroMemory(&Args->ContextInfo, sizeof(Args->ContextInfo));
   Args->ContextInfo.DmaBufferSize = ADMISSION_DMA_BUFFER_SIZE;
   Args->ContextInfo.DmaBufferSegmentSet = 0u;
@@ -380,6 +412,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyContext(HANDLE Context) {
   KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);
   if (!AdmissionObjectsDestroyContext(&context->Object))
     return STATUS_DEVICE_BUSY;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionGpuvaG3DetachContext(context);
+#endif
   ExFreePoolWithTag(context, ADMISSION_POOL_TAG);
   return STATUS_SUCCESS;
 }
@@ -430,6 +465,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiGetNodeMetadata(
   return STATUS_SUCCESS;
 }
 
+#if !defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 FAIL2(AdmissionDdiSubmitCommandVirtual, HANDLE, Adapter,
       const DXGKARG_SUBMITCOMMANDVIRTUAL *, Args)
 FAIL2(AdmissionDdiCreateProcess, PVOID, MiniportDeviceContext,
@@ -441,6 +477,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyProcess(
   UNUSED(KmdProcessHandle);
   return STATUS_SUCCESS;
 }
+#endif
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiCalibrateGpuClock(
     HANDLE Adapter, UINT32 NodeOrdinal, UINT32 EngineOrdinal,

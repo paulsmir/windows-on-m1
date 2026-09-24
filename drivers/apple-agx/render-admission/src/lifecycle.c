@@ -1,7 +1,9 @@
 #include "render_admission.h"
-#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
+#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION) || \
+    defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #include "apple_agx_render_template_vm_slot.h"
-static BOOLEAN AdmissionB1Armed(ADMISSION_CONTEXT *context) {
+static BOOLEAN AdmissionGpuvaArmed(ADMISSION_CONTEXT *context,
+                                   PCWSTR value_name) {
   HANDLE key = NULL;
   UNICODE_STRING name;
   ULONG bytes = 0u;
@@ -17,7 +19,7 @@ static BOOLEAN AdmissionB1Armed(ADMISSION_CONTEXT *context) {
           context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
           KEY_QUERY_VALUE, &key)))
     return FALSE;
-  RtlInitUnicodeString(&name, L"B1Armed");
+  RtlInitUnicodeString(&name, value_name);
   status = ZwQueryValueKey(key, &name, KeyValuePartialInformation,
                            value, sizeof(data.Buffer), &bytes);
   ZwClose(key);
@@ -69,11 +71,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   *NumberOfVideoPresentSources = 0;
   *NumberOfChildren = 0;
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
-  if (!AdmissionB1Armed(context)) {
+  if (!AdmissionGpuvaArmed(context, L"B1Armed")) {
     AdmissionRecordB1Qualification(
         context, 0u, STATUS_NOT_SUPPORTED, STATUS_NOT_SUPPORTED,
         0u, 0u, 0ULL,
         0u, 0u, 0u, 0u, 0u);
+    AdmissionRecordStartStage(context, AdmissionStartEntered,
+                              STATUS_NOT_SUPPORTED);
+    return STATUS_NOT_SUPPORTED;
+  }
+#endif
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (!AdmissionGpuvaArmed(context, L"G3Armed")) {
     AdmissionRecordStartStage(context, AdmissionStartEntered,
                               STATUS_NOT_SUPPORTED);
     return STATUS_NOT_SUPPORTED;
@@ -158,7 +167,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
     (void)AdmissionInterruptStop(context);
     return status;
   }
-#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
+#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION) || \
+    defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   if (!AppleAgxRenderTemplateSelectVmSlot(
           context->BackendImage.ArenaCpuAddress,
           context->BackendImage.ArenaCapacity, 1u)) {
@@ -287,6 +297,21 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
     return STATUS_INVALID_DEVICE_STATE;
   }
   AdmissionRecordStartStage(context, AdmissionStartObjects, STATUS_SUCCESS);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  status = AdmissionGpuvaG3Start(context);
+  if (!NT_SUCCESS(status)) {
+    (void)AdmissionObjectsStopAdapter(&context->ObjectAdapter);
+    context->Started = FALSE;
+    (void)AdmissionScanoutStop(context);
+    (void)AdmissionPlatformRuntimeStop(context);
+    (void)AdmissionPagingStop(context);
+    (void)AdmissionSchedulerStop(context);
+    (void)AdmissionBackendImageStop(context);
+    (void)AdmissionMemoryRuntimeStop(context);
+    (void)AdmissionInterruptStop(context);
+    return status;
+  }
+#endif
   context->DisplayActive = TRUE;
   context->SourceVisible = TRUE;
   context->CommittedWidth = 2560;
@@ -322,6 +347,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStopDevice(PVOID MiniportDeviceConte
                         STATUS_SUCCESS);
   if (context->ObjectAdapter.DeviceCount != 0u)
     return STATUS_DEVICE_BUSY;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  status = AdmissionGpuvaG3Stop(context);
+  if (!NT_SUCCESS(status)) return status;
+#endif
   status = AdmissionScanoutStop(context);
   if (!NT_SUCCESS(status))
     return status;
@@ -366,6 +395,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRemoveDevice(PVOID MiniportDeviceCon
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
   if (context == NULL)
     return STATUS_INVALID_PARAMETER;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (!NT_SUCCESS(AdmissionGpuvaG3Stop(context))) return STATUS_DEVICE_BUSY;
+#endif
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
   if (context->GpuvaB1State != NULL)
     return STATUS_DEVICE_BUSY;
@@ -493,6 +525,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
         caps->SupportPerEngineTDR = TRUE;
         caps->SupportDirectFlip = TRUE;
         caps->PresentationCaps.SupportKernelModeCommandBuffer = 1u;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+        if (context->GpuvaG3State != NULL) {
+          caps->MemoryManagementCaps.VirtualAddressingSupported = 1u;
+          caps->MemoryManagementCaps.GpuMmuSupported = 1u;
+        }
+#endif
         status = STATUS_SUCCESS;
       } else {
         status = STATUS_INVALID_DEVICE_STATE;
@@ -500,6 +538,69 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     }
     break;
   }
+
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  case DXGKQAITYPE_GPUMMUCAPS: {
+    const DXGK_QUERYGPUMMUCAPSIN *input;
+    DXGK_GPUMMUCAPS *caps;
+    if (context->GpuvaG3State == NULL) {
+      status = STATUS_INVALID_DEVICE_STATE;
+    } else if (QueryAdapterInfo->pInputData == NULL ||
+        QueryAdapterInfo->InputDataSize < sizeof(*input) ||
+        QueryAdapterInfo->pOutputData == NULL ||
+        QueryAdapterInfo->OutputDataSize < sizeof(*caps)) {
+      status = STATUS_BUFFER_TOO_SMALL;
+    } else {
+      input = (const DXGK_QUERYGPUMMUCAPSIN *)QueryAdapterInfo->pInputData;
+      caps = (DXGK_GPUMMUCAPS *)QueryAdapterInfo->pOutputData;
+      if (input->PhysicalAdapterIndex != 0u) {
+        status = STATUS_INVALID_PARAMETER;
+      } else {
+        RtlZeroMemory(caps, sizeof(*caps));
+        caps->ReadOnlyMemorySupported = 1u;
+        caps->ExplicitPageTableInvalidation = 1u;
+        caps->PageTableUpdateRequireAddressSpaceIdle = 1u;
+        caps->PageTableUpdateMode = DXGK_PAGETABLEUPDATE_GPU_PHYSICAL;
+        caps->VirtualAddressBitCount = 39u;
+        caps->PageTableLevelCount = 3u;
+        status = STATUS_SUCCESS;
+      }
+    }
+    break;
+  }
+
+  case DXGKQAITYPE_PAGETABLELEVELDESC: {
+    const DXGK_QUERYPAGETABLELEVELDESCIN *input;
+    DXGK_PAGE_TABLE_LEVEL_DESC *level;
+    if (context->GpuvaG3State == NULL) {
+      status = STATUS_INVALID_DEVICE_STATE;
+    } else if (QueryAdapterInfo->pInputData == NULL ||
+        QueryAdapterInfo->InputDataSize < sizeof(*input) ||
+        QueryAdapterInfo->pOutputData == NULL ||
+        QueryAdapterInfo->OutputDataSize < sizeof(*level)) {
+      status = STATUS_BUFFER_TOO_SMALL;
+    } else {
+      input = (const DXGK_QUERYPAGETABLELEVELDESCIN *)
+          QueryAdapterInfo->pInputData;
+      level = (DXGK_PAGE_TABLE_LEVEL_DESC *)QueryAdapterInfo->pOutputData;
+      if (input->PhysicalAdapterIndex != 0u || input->LevelIndex >= 3u) {
+        status = STATUS_INVALID_PARAMETER;
+      } else {
+        RtlZeroMemory(level, sizeof(*level));
+        level->PageTableIndexBitCount =
+            input->LevelIndex == 0u ? 13u :
+            input->LevelIndex == 1u ? 11u : 3u;
+        level->PageTableSegmentId = ADMISSION_MEMORY_LOCAL_SEGMENT;
+        level->PagingProcessPageTableSegmentId =
+            ADMISSION_MEMORY_LOCAL_SEGMENT;
+        level->PageTableSizeInBytes = 0x4000u;
+        level->PageTableAlignmentInBytes = 0x4000u;
+        status = STATUS_SUCCESS;
+      }
+    }
+    break;
+  }
+#endif
 
   case DXGKQAITYPE_WDDMDEVICECAPS: {
     DXGK_WDDMDEVICECAPS *caps;

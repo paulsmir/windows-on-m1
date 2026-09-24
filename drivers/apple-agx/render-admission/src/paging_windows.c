@@ -1,4 +1,7 @@
 #include "render_admission.h"
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+#include "gpuva_g3_private.h"
+#endif
 
 static NTSTATUS AdmissionEncodePaging(
     _Inout_ DXGKARG_BUILDPAGINGBUFFER *Args,
@@ -38,6 +41,11 @@ static NTSTATUS AdmissionBuildPagingBuffer(
       context->Memory.Initialized != APPLE_AGX_TRUE ||
       context->Memory.UatReady != APPLE_AGX_TRUE)
     return STATUS_INVALID_DEVICE_STATE;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (Args->Operation == DXGK_OPERATION_UPDATE_PAGE_TABLE ||
+      Args->Operation == DXGK_OPERATION_FLUSH_TLB)
+    return AdmissionGpuvaG3BuildPagingBuffer(context, Args);
+#endif
   switch (Args->Operation) {
   case DXGK_OPERATION_MAP_APERTURE_SEGMENT:
     if (Args->MapApertureSegment.SegmentId !=
