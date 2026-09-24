@@ -1,5 +1,34 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 EXP782 identifies first rejected level-1 child PTE
+
+Package785 corrected the false 64K-leaf declaration from 8192 to 16384
+bytes and added a flushed first-failure receipt. One full-owner G3 boot still
+bugchecked `0x10E/0xB`, KMD `C0000141`, during VidMm paging-process VA
+initialization. The first rejected entry is **level1 index1**, flags `0x41`
+(valid, segment2), `PageTablePageSize=0` (4K), raw `PageTableAddress=0xC`.
+Branch4 is `ChildAddress`: `AdmissionGpuvaG3ResolveTable` rejects the PTE
+before graph registration or broker execution. Current table resolved to IPA
+`0x9bbff4000`; graph status/uncertainty remain zero. The 8KB 64K-leaf cap
+was a real declaration defect, but R59 is **rejected as the cause of EXP782**:
+VidMm selected a 4K child here. Do not repeat package785.
+
+WER minidump SHA256 `f230526463fe832fb3c89052ab0b6d237a1b7a4d8458192894971330229b280a`;
+CDB confirms `CompleteBuildPagingBufferIteration -> UpdatePageTable ->
+CommitVirtualAddressRange -> InitPagingProcessVaSpace`. Decoded receipt and
+recovery are in `.local/experiments/EXP782-g3-level1/hardware-evidence/EXP782-analysis.json`
+SHA256 `665646a8fcc1bde351e286bb914a8ddf5f8c4b032d19537cd3baa9fc246aea7d`.
+R54 bugcheck recovery collected dump/ETL first, deleted exact `oem5.inf`
+package785 and signer, then frozen ordinary EXP377/392 returned pinned SSH,
+CPU8, one inert APPL0002 Code28, no AppleAgx residue, storage2/USB7.
+
+Next causal target is **offline**: reconcile raw `PageTableAddress=0xC` with
+pinned WDK/official `DXGK_PTE` address semantics (high 52 bits, low 12 zero),
+VidMm allocation geometry, and the first two PTEs. Do not guess units or
+shift the value without primary evidence. R57.2 stays fail-closed: only
+success, genuine busy allocation, and genuine insufficient DMA buffer are
+documented retry/status choices; internal refusal leaves flushed receipts.
+
 ## 2026-09-24 EXP781 reaches level-1 page-table update
 
 Package784 (R58 WDK input audit plus EXP780 CPU_VIRTUAL DMA-pointer fix) booted
