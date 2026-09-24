@@ -1,20 +1,42 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 EXP772 corrected caps hardware verdict and recovery
+
+One EXP772 debug-off/no-KD cold boot with ABI6 full-owner m1n1 and signed
+package772 reached pinned SSH, Scanout ABI v2 and KMD StartDevice Stage12/status0.
+QAI13 and QAI14 L0/L1/L2 all returned success with VA39, three levels and
+128/32/16-KiB tables. DxgKrnl Admin Event549 still rejected AddAdapter with
+`STATUS_INVALID_PARAMETER`; APPL0002 Code43, with no proven first VidMm DDI or
+render. The table-capacity correction is necessary by the pinned WDK contract
+but insufficient for adapter admission. Armed state SHA256
+`02010c1e266d92063b65ee990760b24c737bdf3da383febcfde9a095539264d3`.
+
+G3Armed was removed; direct immutable GPU-hidden recovery deleted exact
+`oem5.inf`, signer and transfer. Frozen ordinary EXP377/392 returned pinned SSH
+and one inert APPL0002 Code28, no AppleAgx package/service/files/arm,
+CPU8/storage2/USB7. Final baseline SHA256
+`ce4a7db03fa7a83338ea45022ea65c47ce9b1e6a0cc47afead5d91ac715ac910`.
+Next causal target: offline AddAdapter validation beyond successful QAI13/14,
+including truthful DRIVERCAPS/segment/MMU-count relationship and first-failure
+DDI instrumentation. No B1 hardware or repeat G3 candidate without a new
+source-backed discriminator. G4 Mesa VA winsys remains offline.
+
 ## 2026-09-24 R49/R50 offline gate for EXP772
 
 Pinned WDK26100 defines `DXGK_PTE` as two 64-bit words. The original G3
 13/11/3 logical levels required at least 128/32/16 KiB allocation sizes,
 but QAI14 returned 16 KiB at every level. Commit `489e677f` corrects the
 sizes, pins 16-KiB local pages, and passes a real-C RED→GREEN caps validator;
-QAI13/14 receipts are in `d90f1d3e`. EXP772 will test this single documented
-contract correction against EXP771 full-owner/debug-off/no-KD environment.
+QAI13/14 receipts are in `d90f1d3e`. EXP772 tested the correction under the
+EXP771 full-owner/debug-off/no-KD environment; QAI succeeded, then AddAdapter
+still failed.
 
 R50's single offline pass over saved EXP770/771 armed devnode and SetupAPI
 snapshots found the same oem5 package/service; EXP771 adds only later Wom1
 receipts and fresh VideoID/AOCID GUIDs. Neither snapshot exported
 `Control\\GraphicsDrivers` or service registry, so R35's persistent-state
-owner remains unknown. EXP772 recovery goes straight to immutable GPU-hidden
-exact-package removal after armed evidence, then ordinary GPU-visible Code28.
+owner remains unknown. EXP772 recovery used immutable GPU-hidden exact-package
+removal after armed evidence, then ordinary GPU-visible Code28.
 
 ## 2026-09-24 EXP771 post-Start G3 admission verdict and recovery
 
