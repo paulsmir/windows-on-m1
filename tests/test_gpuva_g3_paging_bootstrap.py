@@ -22,6 +22,16 @@ int main(void) {
     if (AppleAgxGpuvaG3PteInputIndex(i, 1u) != 0u) return 1;
     if (AppleAgxGpuvaG3PteInputIndex(i, 0u) != i) return 2;
   }
+  if (!AppleAgxGpuvaG3TableSpanWithinLocal(
+      0x20000000ULL, 0x10000ULL, 0x2000c000ULL, 0x4000ULL)) return 3;
+  if (AppleAgxGpuvaG3TableSpanWithinLocal(
+      0x20000000ULL, 0x10000ULL, 0x2000c001ULL, 0x4000ULL)) return 4;
+  if (AppleAgxGpuvaG3TableSpanWithinLocal(
+      0x20000000ULL, 0x10000ULL, 0x20010000ULL, 0x4000ULL)) return 5;
+  if (AppleAgxGpuvaG3TableSpanWithinLocal(
+      0x20000000ULL, 0x10000ULL, 0x1fffffffULL, 0x4000ULL)) return 6;
+  if (AppleAgxGpuvaG3TableSpanWithinLocal(
+      0x20000000ULL, 0x3fffULL, 0x20000000ULL, 0x4000ULL)) return 7;
   return 0;
 }
 '''
@@ -36,6 +46,13 @@ int main(void) {
             ], check=True, cwd=ROOT)
             subprocess.run([os.environ.get("LLI", "lli"), str(bitcode)],
                            check=True, cwd=ROOT)
+
+    def test_paging_receipts_are_flushed_at_passive_level(self):
+        receipts = (RENDER / "src/receipts.c").read_text().split(
+            "void AdmissionRecordGpuvaG3PagingInput(", 1)[1].split(
+            "#endif", 1)[0]
+        self.assertIn("CurrentIrql != PASSIVE_LEVEL", receipts)
+        self.assertEqual(receipts.count("ZwFlushKey(key)"), 2)
 
     def test_kmd_uses_repeat_and_cpu_physical_mapping(self):
         paging = (RENDER / "src/gpuva_g3_paging_windows.c").read_text()

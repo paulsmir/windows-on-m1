@@ -278,20 +278,21 @@ NTSTATUS AdmissionGpuvaG3ResolveTable(
     if (pointer > MAXULONG_PTR - 0x3fffu)
       return STATUS_INVALID_ADDRESS;
     physical = MmGetPhysicalAddress(address->CpuVirtual);
-    tail = MmGetPhysicalAddress((PUCHAR)address->CpuVirtual + 0x3fffu);
     if (physical.QuadPart <= 0 ||
-        (ULONGLONG)physical.QuadPart > MAXULONGLONG - 0x3fffULL ||
-        (ULONGLONG)tail.QuadPart !=
-            (ULONGLONG)physical.QuadPart + 0x3fffULL ||
-        (ULONGLONG)physical.QuadPart < view.GuestIpaAddress ||
-        (ULONGLONG)physical.QuadPart - view.GuestIpaAddress > view.Bytes)
+        !AppleAgxGpuvaG3TableSpanWithinLocal(
+            view.GuestIpaAddress, view.Bytes,
+            (ULONGLONG)physical.QuadPart, 0x4000ULL))
+      return STATUS_INVALID_ADDRESS;
+    tail = MmGetPhysicalAddress((PUCHAR)address->CpuVirtual + 0x3fffu);
+    if ((ULONGLONG)tail.QuadPart !=
+        (ULONGLONG)physical.QuadPart + 0x3fffULL)
       return STATUS_INVALID_ADDRESS;
     offset = (ULONGLONG)physical.QuadPart - view.GuestIpaAddress;
   } else {
     return STATUS_NOT_SUPPORTED;
   }
-  if ((offset & 0x3fffULL) || offset > view.Bytes ||
-      view.Bytes - offset < 0x4000ULL ||
+  if ((offset & 0x3fffULL) || view.Bytes < 0x4000ULL ||
+      offset > view.Bytes - 0x4000ULL ||
       AppleAgxGpuvaG3ResolvePageAddress(
           ADMISSION_MEMORY_LOCAL_SEGMENT, offset,
           ADMISSION_MEMORY_LOCAL_SEGMENT, view.GuestIpaAddress,

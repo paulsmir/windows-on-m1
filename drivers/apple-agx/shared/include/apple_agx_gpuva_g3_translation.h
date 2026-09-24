@@ -13,6 +13,15 @@ static inline unsigned int AppleAgxGpuvaG3PteInputIndex(
   return Repeat ? 0u : Index;
 }
 
+static inline int AppleAgxGpuvaG3TableSpanWithinLocal(
+    unsigned long long LocalGuestIpa, unsigned long long LocalBytes,
+    unsigned long long TableGuestIpa, unsigned long long TableBytes) {
+  return TableBytes != 0ULL && LocalBytes >= TableBytes &&
+         LocalGuestIpa <= (~0ULL) - LocalBytes &&
+         TableGuestIpa >= LocalGuestIpa &&
+         TableGuestIpa - LocalGuestIpa <= LocalBytes - TableBytes;
+}
+
 typedef struct _APPLE_AGX_GPUVA_G3_LOGICAL_PTE {
   /* Already resolved and validated guest IPA, never DXGK_PTE.PageAddress. */
   unsigned long long GuestIpa;
