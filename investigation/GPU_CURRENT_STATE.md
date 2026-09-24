@@ -1,5 +1,24 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 EXP777B reaches paging-context creation
+
+Package778 removed the `NumPasid != 0` CreateProcess veto. EXP777's first cold
+boot remained unbound after stage-only package replacement; one live bind
+reached StartDevice Stage4 but failed the 64-MB physical allocation with
+`STATUS_NO_MEMORY`. A second cold boot with the same package already bound
+reached StartDevice Stage12/status0. `Wom1G3CreateInput` records system process,
+NumPasid=1, IRQL0. DxgKrnl created a system GPU VA allocator and then failed
+to create paging context 0: ETW at −0.436 ms records KMD
+`STATUS_NOT_SUPPORTED`, at −0.412 ms "Paging context 0 creation failed", and
+Event549 returns `0xc0000001`. The current boundary is
+`DxgkDdiCreateContext` for the paging SystemContext. `render_objects.h` admits
+only SystemContext/GdiContext bits; pinned WDK26100 also defines bit2
+VirtualAddressing, expected under GpuMmu. Confirm exact input flags with a
+receipt and host RED→GREEN before changing any other contract. No first VidMm
+paging DDI or rendering yet. AutoLogger is stopped/removed, pinned SSH/CPU8
+alive, exact package778 oem5.inf Code43, G3Armed absent; R54 series remains
+active. R55 no-POST restart route is still untested on hardware.
+
 ## 2026-09-24 EXP776 boot AutoLogger names AddAdapter failure
 
 Package777 kept package774's G3 64-KiB caps and full-owner m1n1/Mu. The R54
