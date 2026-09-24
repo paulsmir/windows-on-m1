@@ -1,25 +1,34 @@
 # GPU current boundary — 2026-09-23
 
-## 2026-09-24 EXP766 recovery and B1 retirement boundary
+## 2026-09-24 EXP767 hardware verdict and recovery
 
-EXP766 app TA/3D wrote `0xFF112233` through slot1 process root, proving firmware
-execution through TTBR0. Stage4→5 retirement, second job, and G3 remain unproven.
-The prior `STATUS_DEVICE_BUSY` was imposed by B1 cleanup whenever the lease or
-job stayed owned; it does not identify the original failure. Asahi and current
-KMD both place completion stamps/events in the inherited context0 kernel-half,
-not the process TTBR0. EXP766 exact emergency cleanup and ordinary EXP377/392
-Code28 recovery completed: final receipt at 2026-09-24T11:44:55Z SHA256
-`85936ffd27a4abfbc7828cf21c5612733ad68072170b6265fb01ea1ad0a0df58`.
-Current live USB L41/L43 endpoints are present with no launcher; Windows SSH on
-the old IP presents a different host key, so last verified Windows state is the
-final Code28 receipt, not a current SSH session. The B1 software correction
-preserves first failure separately and adds durable per-job submit, poll,
-flush, image-release, JOB_END, RELEASE, and TLB-ack receipts. Source tracing
-found one concrete Stage4→5 ordering defect: `AdmissionB1Complete` released the
-output binding before `RunFirmware` called `FlushForCpu`; its range guard then
-rejected the output. EXP767 is the single hardware discriminator for the
-flush-before-release correction. Firmware, ACPI, signer, and recovery are
-unchanged.
+EXP767 confirms the B1 GPUVA diagnostic **job path**, not full desktop: two
+sequential TA/3D jobs used slot1 process roots, both wrote `0xFF112233` at the
+same VA to distinct backing, and `CompletedJobs=2`. All 18 durable step receipts
+show successful poll with matching TA/D3 stamps and done pointers, drained
+events, CPU flush, image release, JOB_END, RELEASE and TLB invalidation ack.
+The EXP766 order defect (unbind before flush) is fixed in `2dde761f` and hardware
+confirmed by EXP767. Source and Asahi place completion stamp/event objects in
+inherited context0 kernel memory, not user TTBR0.
+
+**Remaining boundary:** Stage7 still returned terminal and first-failure
+`STATUS_DEVICE_BUSY` with `CleanupStatus=1`; this status comes from final cleanup
+after both jobs, not from poll or broker JOB_END. `CompletedJobs=2` excludes a
+remaining lease/job in flight. `AdmissionB1Cleanup` next checks `Uncertain`,
+then destroys root1/root0 and releases owned pages; the failing substep is not
+recorded. Final context0 byte identity is unproven. G3 promotion remains NO-GO.
+Next causal target is durable cleanup substeps plus one context0 before/after
+byte hash; then one discriminating cleanup hardware run if justified. G3 GpuMmu
+DDI work can proceed offline in the next phase using the proven B1 components.
+
+EXP767 evidence: `.local/experiments/EXP767-b1-retirement/hardware-evidence/state.json`
+SHA256 `20fd1f7b2094a363c8ae562a2a0fa8637f04252e86081738d02b977d9671a45a`.
+Exact disarm, GPU-hidden package764 removal and ordinary EXP377/392 recovery
+completed. Final Code28 receipt at 2026-09-24T12:42:24Z SHA256
+`2c3447e94af431376ca4a6e08e4e75f767e5a3fdd52e2fe1d37454baa05f2d54`:
+one APPL0002, no AppleAgx package/service/SYS/UMD/signer or B1Armed, CPU8,
+storage2, USB7, autologon1. Air SSH is reachable using the pinned EXP641
+known-host file with strict checking; L41/L43 and ordinary launcher are active.
 
 ## Working mode
 One executor; routine build/test/SSH/launch/recovery work stays in this task. No
