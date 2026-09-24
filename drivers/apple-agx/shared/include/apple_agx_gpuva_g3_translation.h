@@ -37,4 +37,9 @@ APPLE_AGX_GPUVA_G3_RESULT AppleAgxGpuvaG3PlanSpan(
     unsigned int SegmentPageBytes, APPLE_AGX_GPUVA_G3_NATIVE_LEAF *Leaves,
     unsigned int LeafCapacity, unsigned int *LeafCount);
 
+APPLE_AGX_GPUVA_G3_RESULT AppleAgxGpuvaG3ResolvePageAddress(
+    unsigned int SegmentId, unsigned long long PageAddress,
+    unsigned int LocalSegmentId, unsigned long long LocalGuestIpaBase,
+    unsigned long long LocalBytes, unsigned long long *GuestIpa);
+
 #endif

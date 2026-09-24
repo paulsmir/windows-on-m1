@@ -14,6 +14,31 @@ int main(void) {
   APPLE_AGX_GPUVA_G3_LOGICAL_PTE p[8];
   APPLE_AGX_GPUVA_G3_NATIVE_LEAF out[2], sentinel[2];
   uint32_t n = 99u;
+  unsigned long long resolved = 0;
+  assert(AppleAgxGpuvaG3ResolvePageAddress(0u, 0x850000000ULL,
+      2u, 0x900000000ULL, 0x4000000ULL, &resolved) == AppleAgxGpuvaG3Ok);
+  assert(resolved == 0x850000000ULL);
+  assert(AppleAgxGpuvaG3ResolvePageAddress(1u, 0x850004000ULL,
+      2u, 0x900000000ULL, 0x4000000ULL, &resolved) == AppleAgxGpuvaG3Ok);
+  assert(resolved == 0x850004000ULL);
+  assert(AppleAgxGpuvaG3ResolvePageAddress(2u, 0x4000ULL,
+      2u, 0x900000000ULL, 0x4000000ULL, &resolved) == AppleAgxGpuvaG3Ok);
+  assert(resolved == 0x900004000ULL);
+  assert(AppleAgxGpuvaG3ResolvePageAddress(2u, 0ULL,
+      2u, 0x900000000ULL, 0x4000000ULL, &resolved) == AppleAgxGpuvaG3Ok);
+  assert(resolved == 0x900000000ULL);
+  assert(AppleAgxGpuvaG3ResolvePageAddress(2u, 0x4000000ULL,
+      2u, 0x900000000ULL, 0x4000000ULL, &resolved) == AppleAgxGpuvaG3Invalid);
+  assert(AppleAgxGpuvaG3ResolvePageAddress(3u, 0x4000ULL,
+      2u, 0x900000000ULL, 0x4000000ULL, &resolved) == AppleAgxGpuvaG3Invalid);
+  assert(AppleAgxGpuvaG3ResolvePageAddress(2u, 0x4001ULL,
+      2u, 0x900000000ULL, 0x4000000ULL, &resolved) == AppleAgxGpuvaG3Invalid);
+  valid_group(p, 0x850000000ULL, 0u, APPLE_AGX_GPUVA_G3_VALID);
+  assert(AppleAgxGpuvaG3PlanSpan(p, 0u, 4u, 0x4000ULL,
+      2u, 0x10000u, out, 2u, &n) == AppleAgxGpuvaG3Ok);
+  valid_group(p, 0x850004000ULL, 1u, APPLE_AGX_GPUVA_G3_VALID);
+  assert(AppleAgxGpuvaG3PlanSpan(p, 0u, 4u, 0x4000ULL,
+      2u, 0x10000u, out, 2u, &n) == AppleAgxGpuvaG3Ok);
   for (uint32_t profile = 0x4000u; profile <= 0x10000u;
        profile *= 4u) {
     valid_group(p, 0x20000000ULL, 1u,

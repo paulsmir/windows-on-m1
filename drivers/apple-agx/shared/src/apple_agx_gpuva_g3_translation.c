@@ -22,10 +22,10 @@ static APPLE_AGX_GPUVA_G3_RESULT plan_group(
   }
   if (base == 0ULL || (base & (APPLE_AGX_GPUVA_G3_NATIVE_PAGE - 1u)) ||
       base > ~0ULL - (APPLE_AGX_GPUVA_G3_NATIVE_PAGE - 1u) ||
-      p[0].SegmentId != local_segment)
+      p[0].SegmentId > local_segment)
     return AppleAgxGpuvaG3Unrepresentable;
   for (i = 0u; i < 4u; ++i)
-    if (p[i].Flags != flags || p[i].SegmentId != local_segment ||
+    if (p[i].Flags != flags || p[i].SegmentId != p[0].SegmentId ||
         p[i].GuestIpa != base + (unsigned long long)i *
             APPLE_AGX_GPUVA_G3_LOGICAL_PAGE)
       return AppleAgxGpuvaG3Unrepresentable;
@@ -77,4 +77,26 @@ APPLE_AGX_GPUVA_G3_RESULT AppleAgxGpuvaG3PlanSpan(
   }
   *leaf_count = groups;
   return overall;
+}
+
+APPLE_AGX_GPUVA_G3_RESULT AppleAgxGpuvaG3ResolvePageAddress(
+    unsigned int segment, unsigned long long address,
+    unsigned int local_segment, unsigned long long local_base,
+    unsigned long long local_bytes, unsigned long long *guest_ipa) {
+  if (guest_ipa == 0 || local_segment == 0u || segment > local_segment ||
+      (segment != local_segment && address == 0ULL) ||
+      (address & (APPLE_AGX_GPUVA_G3_LOGICAL_PAGE - 1u)))
+    return AppleAgxGpuvaG3Invalid;
+  if (segment != local_segment) {
+    *guest_ipa = address;
+    return AppleAgxGpuvaG3Ok;
+  }
+  if (local_base == 0ULL ||
+      (local_base & (APPLE_AGX_GPUVA_G3_NATIVE_PAGE - 1u)) ||
+      local_bytes < APPLE_AGX_GPUVA_G3_NATIVE_PAGE ||
+      address > local_bytes - APPLE_AGX_GPUVA_G3_LOGICAL_PAGE ||
+      local_base > ~0ULL - address)
+    return AppleAgxGpuvaG3Invalid;
+  *guest_ipa = local_base + address;
+  return AppleAgxGpuvaG3Ok;
 }
