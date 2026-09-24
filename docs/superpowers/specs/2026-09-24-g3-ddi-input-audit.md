@@ -43,3 +43,18 @@ EXP782's flushed receipt isolates level1 child PTE index1: Valid/Segment2 (`Flag
 The Windows KMD owns conversion at the DXGK_PTE boundary. `AppleAgxGpuvaG3ResolvePageAddress` and `AdmissionGpuvaG3ResolveTable` already consume byte offsets; CPU_VIRTUAL table resolution and `SetRootPageTable` do not use DXGK_PTE and stay unchanged. Convert each valid parent `PageTableAddress` in both preflight and commit passes, and each valid leaf `PageAddress`, using a checked left shift by 12. Use the PTE's Segment for the parent physical address. Apply 64-KB alignment and segment-end checks to the converted leaf byte offset. Retain raw PTE numbers in failure receipts so a later refusal remains interpretable.
 
 The offline RED→GREEN checkpoint is raw EXP782 parent `0xC` in Segment2 resolving to local IPA base plus `0xC000`, and a 64-KB leaf page number `0x10` resolving to base plus `0x10000`; overflow must fail before a truncated offset reaches the graph. Only one hash-verified G3 package may then test level1 acceptance or expose the next named DDI, with R60 recovery rules and the same frozen firmware/signing route.
+
+## EXP783 hardware follow-up — 2026-09-24
+
+Package786 RED→GREEN page-number decoding advanced beyond EXP782's level1
+`ChildAddress` rejection. The next flushed failure is level1 index2
+`ParentFlags`, `PageTablePageSize=1` / 64K, flags `0x20041`, raw child page
+number `0x2C`, status `C00000BB`. The corresponding update has `Flags=0`,
+including `Use64KBPages=0`. Pinned WDK26100 `d3dukmdt.h` defines
+`DXGK_PTE.PageTablePageSize` per PTE, while `d3dkmddi.h` defines
+`DXGK_UPDATEPAGETABLEFLAGS.Use64KBPages` for the update. The current parent
+validator ties them together. Its exact-flags rejection is the next offline
+causal target; determine supported combinations and table alignment before
+changing it. Dump `0x10E/0xB` parameter3 `C00000BB` confirms the R57.2
+fail-closed internal status and durable receipt before the return. R60 same
+full-owner disarmed recovery returned pinned SSH and preserved exact package786.

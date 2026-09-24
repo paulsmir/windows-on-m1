@@ -1,5 +1,31 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-24 EXP783 advances past EXP782 child address; 64K parent PTE refused
+
+Package786 converted VidMm PTE page numbers to byte offsets with a checked
+shift. One full-owner boot passed the EXP782 level1 index1 `ChildAddress`
+boundary and logged 624 successful retained GPU operations. The first rejected
+entry is now **level1 index2**, branch3 `ParentFlags`: raw PTE flags `0x20041`
+(valid, segment2, `PageTablePageSize=1` / 64K), raw child page number `0x2C`
+(byte offset `0x2C000`). The UpdatePageTable input has `Flags=0`, including
+`Use64KBPages=0`. Current code incorrectly requires PTE page-size bit17 to
+match the update-wide `Use64KBPages` flag and returned `C00000BB`, causing
+Windows `0x10E/0xB` in `InitPagingProcessVaSpace`. This confirms an R61 causal
+advance; full graphics desktop remains unproven. Next offline target: derive
+parent `PageTablePageSize` validation independently of the update's leaf-page
+flag from pinned WDK/observed geometry, then RED→GREEN before package787.
+Do not repeat package786 unchanged.
+
+R60 recovery worked: durable host GPU operations plus `StartDevice`'s flushed
+one-shot arm consumption proved disarm before GPU access. One bounded reboot of
+the identical full-owner profile without rearm returned pinned SSH/CPU8,
+`G3Armed` absent, exact package786 `oem5.inf`/Code43. WER dump, PTE receipts,
+ETL and CDB were collected before package changes. Package786 remains known
+and staged in the reachable full-owner guest for the next hash-verified series
+candidate. Analysis `.local/experiments/EXP783-g3-pte-units/hardware-evidence/EXP783-analysis.json`
+SHA256 `79f71d02ae3b0e62768b27ea4ec47cf19039b7f43979d88573d2fbf0e2f40b53`; dump SHA256 `2d8fefc4fa2f91721eccd108866fd4a46b2f9e453e92e47c415070932bca0b49`;
+ETL SHA256 `a7a3ffb48aed13dfa4b24d566fd58d33f7e7b636afa6f9044fa6cd5b9ca5c719`.
+
 ## 2026-09-24 EXP782 identifies first rejected level-1 child PTE
 
 Package785 corrected the false 64K-leaf declaration from 8192 to 16384
