@@ -656,6 +656,7 @@ int main(void) {
         submission.DmaBufferPrivateDataSize=
             records*sizeof(ADMISSION_PAGING_RECORD);
         submission.SubmissionFenceId=1;
+        submission.Flags.Paging=1;
         assert(records==34 && submission.DmaBufferSize==0x220 &&
                submission.DmaBufferPrivateDataSize==0xff0);
         expect_ok("EXP797 virtual paging Submit packet",
@@ -664,6 +665,11 @@ int main(void) {
         assert(replay_paging_submits==1 &&
                replay_paging_submit_bytes==0xff0 &&
                replay_paging_submit_fence==1);
+        submission.Flags.Value=0;
+        assert(AdmissionGpuvaG3SubmitVirtualPaging(&adapter,
+            (ADMISSION_RENDER_CONTEXT *)cc.hContext,&submission)==
+            STATUS_INVALID_PARAMETER);
+        submission.Flags.Paging=1;
         --submission.DmaBufferPrivateDataSize;
         assert(AdmissionGpuvaG3SubmitVirtualPaging(&adapter,
             (ADMISSION_RENDER_CONTEXT *)cc.hContext,&submission)==

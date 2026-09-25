@@ -520,7 +520,10 @@ NTSTATUS AdmissionGpuvaG3SubmitVirtualPaging(
     const DXGKARG_SUBMITCOMMANDVIRTUAL *args) {
   const ADMISSION_PAGING_RECORD *records;
   DXGKARG_SUBMITCOMMAND physical;
+  DXGK_SUBMITCOMMANDFLAGS pagingFlags;
   UINT count;
+  RtlZeroMemory(&pagingFlags, sizeof(pagingFlags));
+  pagingFlags.Paging = 1u;
   if (adapter == NULL || context == NULL || args == NULL ||
       !adapter->Started || args->hContext != (HANDLE)context ||
       context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
@@ -537,7 +540,7 @@ NTSTATUS AdmissionGpuvaG3SubmitVirtualPaging(
       args->DmaBufferUmdPrivateDataSize != 0u ||
       args->DmaBufferPrivateDataSize == 0u ||
       args->DmaBufferPrivateDataSize % sizeof(ADMISSION_PAGING_RECORD) != 0u ||
-      args->Flags.Value != 0u || args->NodeOrdinal != 0u ||
+      args->Flags.Value != pagingFlags.Value || args->NodeOrdinal != 0u ||
       args->EngineOrdinal != 0u || args->SubmissionFenceId == 0u ||
       KeGetCurrentIrql() > DISPATCH_LEVEL)
     return STATUS_INVALID_PARAMETER;

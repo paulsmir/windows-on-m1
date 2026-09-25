@@ -1,5 +1,22 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP798: paging Submit carries the WDK Paging flag
+
+Package801 (R80 virtual paging Submit route) cold-booted with durable
+`ARM_CONSUMED seq=245693852`. It again stopped at `0x119/2`,
+P2=`C000000D` in `VidSchiSubmitPagingCommand`. The P3 packet still has 34
+records (DMA `0x220`, private `0xff0`), fence1, the same `hSystemContext`.
+Pinned WDK26100 `DXGKARG_SUBMITCOMMANDVIRTUAL` places `Flags` at +0x34;
+both EXP797 and EXP798 packets have `Flags.Paging=1`. Package801's new
+helper required `Flags.Value=0`, so it rejected a legitimate paging packet.
+Replay with the observed flag is RED `C000000D` and GREEN with the
+WDK-defined paging-only check. CDD remains unproven. New dump SHA256
+`32e957a407e1f3023297e9351cd632b5cba55c0ae79d6cd2387b88577957b429`.
+R60 returned pinned SSH; exact oem5/package801, arm0, CPU8/storage2/USB7
+are known. Keep this full-owner guest for hash-verified next replacement.
+The sole next variable is acceptance of `Flags.Paging` on virtual paging
+Submit; firmware, caps, signer and recovery remain frozen.
+
 ## 2026-09-25 EXP797: Fill Build passed; virtual paging Submit is the boundary
 
 Package800 G1b16 (R80 CPU paging records; frozen caps, signer, m1n1 and Mu)
@@ -11,7 +28,8 @@ baseline. Cold full-owner boot durably printed `ARM_CONSUMED seq=340782909`.
 `0x580000`, pattern0, DMA/private capacity `0x1000` each. Build returned
 `C01E0001` (legal insufficient DMA buffer) after 34 records; this is not the
 bugcheck. The submitted virtual packet had DMA bytes `0x220`, private bytes
-`0xff0` (34 × 16-byte markers and 34 × 120-byte records), fence1, flags0.
+`0xff0` (34 × 16-byte markers and 34 × 120-byte records), fence1,
+`Flags.Paging=1` (corrected by EXP798 WDK layout inspection).
 
 Windows bugchecked `0x119/0x2`, P2=`C000000D`, in
 `dxgmms2!VidSchiSendToExecutionQueue -> VidSchiSubmitPagingCommand`:
