@@ -1,5 +1,30 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP808: selected primary remains zero 15 seconds after latch
+
+With unchanged package807/Mu and diagnostic m1n1 `0aa309d2`, the selected
+surface PA `0x9bc030000`/DCP IOVA `0x101c0000` contained 4,096,000 zero
+pixels both immediately before swap and 15 seconds after exact D589 latch of
+swap_id9. The KMD V2 receipt resolves segment2 `0x1500030000` to that same
+PA and CPU `0xffffa8f10e630000`, Status0, format21, explicit cache clean0.
+Pinned SSH, Code0, AppleAgxAdmission Running, CPU8/storage2/USB7 survived.
+Current ETL has 8 CDD Blt, 178 PresentDisplayOnly and 356 Present events,
+but none identifies an Apple execution destination. Existing one-shot
+PresentTransfer/GDI receipts were absent even after disarmed reboot; their
+persistence rules make absence suggestive rather than conclusive. EXP808
+LOOK_DONE exists without a reported panel description. Exact package cleanup
+and frozen ordinary R84 plus guarded rescan restored Code28/staged0/arm0.
+
+The immediate-next causal target is the Apple CPU Blt execution point:
+record a probe heartbeat and every executed Blt's source and destination
+CPU/PA, bytes, status and cache-clean state, then compare destination PA with
+the selected primary. Offline inspection found the physical Present route
+does copy through `AdmissionMemoryRuntimeExecutePresent`; the G3 virtual
+non-system route currently admits `Flags.Value==0` to the render queue and
+does not itself route Present Blt. No hardware receipt yet identifies which
+Apple DDI path Windows called. Do not change routing, cache or format before
+that discriminator. R86 remains saved at `wip/r86-range-grants`.
+
 ## 2026-09-25 EXP807: selected primary is zero immediately before first swap
 
 Exact package807/m1n1 `fc25385e`/frozen Mu reached pinned SSH,
