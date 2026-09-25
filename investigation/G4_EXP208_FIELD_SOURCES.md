@@ -28,6 +28,10 @@ objects 18, 19 and 63 also yields 0x10–0x14-prefixed 64-bit candidates
 outside those 207 relocations. Some are overlapping scalar fields; each must
 be classified before a generic builder can use the image. Treating them all
 as immutable constants would be a hardware guess.
+The same materialized-image scan counts 1,793 nonzero bytes in object 63,
+while G4 `prepare_process_buffers` zeros every new process BO and initializes
+only the TVB page/block lists. Its owner and initialization format are the
+first concrete data-content mismatch to resolve before replay.
 
 Current contract: UMD owns GPU-visible BO allocation, mapping, residency and
 native command bytes. VidMm owns the process VA. KMD owns context-0 firmware

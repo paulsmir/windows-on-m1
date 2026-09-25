@@ -29,6 +29,9 @@ R96 field audit (`investigation/G4_EXP208_FIELD_SOURCES.md`) identifies the
 first construction gate: EXP208's fixed process objects, shader aliases and
 16 KiB output do not yet have a complete AGX4 v2 field/suboffset mapping.
 The existing B1 color-fill job cannot be used as a generic G4 builder.
+The smallest identified data-content gap is template object 63: 1,793
+nonzero bytes in EXP208 versus G4 UMD's zeroed process BOs (aside from TVB
+lists). Its role and initialization must be source-backed before native replay.
 
 ## 2026-09-25 EXP809S: R92 DWM is associated with Apple AGX
 
