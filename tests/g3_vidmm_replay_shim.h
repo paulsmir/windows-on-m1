@@ -82,11 +82,12 @@ static void InitializeListHead(LIST_ENTRY *h) { h->Flink=h->Blink=h; }
 static void InsertTailList(LIST_ENTRY *h, LIST_ENTRY *e) { e->Flink=h; e->Blink=h->Blink; h->Blink->Flink=e; h->Blink=e; }
 static void RemoveEntryList(LIST_ENTRY *e) { e->Blink->Flink=e->Flink; e->Flink->Blink=e->Blink; }
 typedef int FAST_MUTEX;
-static void ExAcquireFastMutex(FAST_MUTEX *m) {(void)m;}
-static void ExReleaseFastMutex(FAST_MUTEX *m) {(void)m;}
+static KIRQL replay_irql;
+static void ExAcquireFastMutex(FAST_MUTEX *m) {(void)m;assert(replay_irql==PASSIVE_LEVEL);replay_irql=1;}
+static void ExReleaseFastMutex(FAST_MUTEX *m) {(void)m;assert(replay_irql==1);replay_irql=PASSIVE_LEVEL;}
 static void KeAcquireSpinLock(int *m,KIRQL *i) {(void)m;*i=0;}
 static void KeReleaseSpinLock(int *m,KIRQL i) {(void)m;(void)i;}
-static KIRQL KeGetCurrentIrql(void) { return 0; }
+static KIRQL KeGetCurrentIrql(void) { return replay_irql; }
 static void *ExAllocatePool2(int pool,SIZE_T bytes,ULONG tag) {(void)pool;(void)tag;return calloc(1,bytes);}
 static void ExFreePoolWithTag(void *p,ULONG tag) {(void)tag;free(p);}
 static LONG InterlockedCompareExchange(LONG *p,LONG n,LONG old) { LONG v=*p;if(v==old)*p=n;return v; }
@@ -236,7 +237,7 @@ static void AdmissionRecordGpuvaG3DmaContext(PDEVICE_OBJECT p,DXGKARG_CREATECONT
 static ADMISSION_G3_PAGING_FAILURE last_paging_failure;
 static void AdmissionRecordGpuvaG3PagingFailure(ADMISSION_CONTEXT *a,ADMISSION_G3_PAGING_FAILURE *f) {(void)a;if(f->Branch)last_paging_failure=*f;}
 static ADMISSION_G3_FLUSH_RECEIPT last_flush_receipt;
-static void AdmissionRecordGpuvaG3Flush(ADMISSION_CONTEXT *a,const ADMISSION_G3_FLUSH_RECEIPT *r) {(void)a;last_flush_receipt=*r;}
+static void AdmissionRecordGpuvaG3Flush(ADMISSION_CONTEXT *a,const ADMISSION_G3_FLUSH_RECEIPT *r) {(void)a;if(KeGetCurrentIrql()==PASSIVE_LEVEL)last_flush_receipt=*r;}
 static void AdmissionRecordGpuvaG3UnpublishedGroups(ADMISSION_CONTEXT *a,const ULONGLONG *counts) {(void)a;(void)counts;}
 static void AppleAgxSchedulerContextInitialize(ADMISSION_SCHEDULER_CONTEXT *c) {(void)c;}
 static void AdmissionPrepatchedInitialize(ADMISSION_PREPATCHED_RENDER *p) {(void)p;}

@@ -324,12 +324,12 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
       receipt.Branch = 4u; /* Ownership or root resolution failure. */
       status = STATUS_INVALID_PARAMETER;
     }
-    AdmissionRecordGpuvaG3Flush(adapter, &receipt);
     if (NT_SUCCESS(status) &&
         !AppleAgxGpuvaG3GraphFlush(&process->Graph, start, end)) {
       status = STATUS_DEVICE_HARDWARE_ERROR;
     }
     ExReleaseFastMutex(&state->Lock);
+    AdmissionRecordGpuvaG3Flush(adapter, &receipt);
     return status;
   }
   if (args->Operation != DXGK_OPERATION_UPDATE_PAGE_TABLE)
