@@ -51,6 +51,9 @@ try {
                 if ((Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToLowerInvariant() -ne $item.sha256) {
                     throw "source synchronization failed: $path"
                 }
+                # Archive entries use a reproducible 1980 timestamp. Mark the
+                # changed source newer than persistent MSBuild objects.
+                (Get-Item -LiteralPath $destination).LastWriteTimeUtc = [datetime]::UtcNow
             }
         }
     }
