@@ -11,21 +11,16 @@
 #error This batch path is only for APPLE_AGX_GPUVA_WINSYS
 #endif
 
-/* Versioned UMD proposal for the KMD direct-VA command parser. Native command
- * bytes are duplicated verbatim for validation at DISPATCH_LEVEL; they are not
- * relocated or interpreted by this winsys. The main G3 thread owns acceptance. */
+/* Native command bytes are duplicated verbatim for KMD validation.  VidMm
+ * process buffers accompany the v2 envelope and remain held through the
+ * render fence; the KMD still owns TA/3D firmware objects and completion. */
 typedef struct {
-  uint32_t Magic;
-  uint16_t Version;
-  uint16_t HeaderBytes;
-  uint32_t CommandBytes;
-  uint32_t Reserved;
-  uint64_t CommandVa;
+  APPLE_AGX_G4_PRIVATE_HEADER_V2 Header;
   unsigned char Native[APPLE_AGX_G4_NATIVE_MAX_BYTES];
 } AGX_G4_PRIVATE;
 _Static_assert(offsetof(AGX_G4_PRIVATE,Native)==
-               sizeof(APPLE_AGX_G4_PRIVATE_HEADER),
-               "G4 KMD private command header must be 24 bytes");
+               sizeof(APPLE_AGX_G4_PRIVATE_HEADER_V2),
+               "G4 KMD private command header must be 168 bytes");
 _Static_assert(sizeof(struct drm_asahi_cmd_header)==
                sizeof(APPLE_AGX_G4_NATIVE_HEADER), "native command header");
 _Static_assert(sizeof(struct drm_asahi_attachment)==
@@ -49,6 +44,7 @@ _Static_assert(offsetof(struct drm_asahi_cmd_render,ts_vtx)==
 
 typedef struct {
   struct agx_bo *Command;
+  struct agx_bo *Process[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
   uint64_t Fence;
   unsigned Entered, Submitted, Retired, Rejected;
 } AGX_G4_BATCH;
@@ -148,9 +144,9 @@ static int add_bo(AGX_WIN32_ASAHI_BACKEND *b,
 static int append_native(AGX_G4_PRIVATE *packet, const void *data,
                          size_t bytes) {
   if(!packet || !data || !bytes ||
-     bytes>sizeof(packet->Native)-packet->CommandBytes) return 0;
-  memcpy(packet->Native+packet->CommandBytes,data,bytes);
-  packet->CommandBytes+=(uint32_t)bytes;
+     bytes>sizeof(packet->Native)-packet->Header.Base.CommandBytes) return 0;
+  memcpy(packet->Native+packet->Header.Base.CommandBytes,data,bytes);
+  packet->Header.Base.CommandBytes+=(uint32_t)bytes;
   return 1;
 }
 
@@ -188,6 +184,43 @@ static int append_attachments(struct agx_batch *batch,AGX_G4_PRIVATE *packet) {
          append_native(packet,attachments,count*sizeof(attachments[0]));
 }
 
+static int prepare_process_buffers(AGX_WIN32_ASAHI_BACKEND *b,AGX_G4_BATCH *g,
+    const APPLE_AGX_G4_NATIVE_RENDER *render,
+    APPLE_AGX_G4_PROCESS_RANGE ranges[APPLE_AGX_G4_PROCESS_RANGE_COUNT]) {
+  unsigned required[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
+  uint32_t *page_list,*block_list;
+  uint64_t page_number;
+  unsigned blocks;
+  if(!AppleAgxG4ProcessRequiredBytes(render,required)) return 0;
+  for(unsigned i=0;i<APPLE_AGX_G4_PROCESS_RANGE_COUNT;++i) {
+    const AGX_WIN32_GPUVA_BO *mapped;
+    void *cpu;
+    g->Process[i]=agx_bo_create(b->Native,required[i],0,0,"VA render process");
+    if(!g->Process[i]) return 0;
+    mapped=AgxWin32AsahiGpuvaBo(b,g->Process[i]);
+    cpu=agx_bo_map(g->Process[i]);
+    if(!mapped || mapped->Bytes!=required[i] || !cpu) return 0;
+    memset(cpu,0,required[i]);
+    ranges[i].Va=mapped->Va;
+    ranges[i].Bytes=required[i];
+    ranges[i].Reserved=0;
+  }
+  /* Asahi's TVB page list records four 32 KiB pages per 128 KiB block;
+   * the first word of each block-list pair names the same page number. */
+  page_list=agx_bo_map(g->Process[0]);
+  block_list=agx_bo_map(g->Process[1]);
+  if(!page_list || !block_list) return 0;
+  page_number=ranges[2].Va>>15;
+  blocks=required[2]/0x20000u;
+  if(page_number+4ULL*blocks>UINT32_MAX) return 0;
+  for(unsigned i=0;i<blocks;++i) {
+    block_list[2u*i]=(uint32_t)(page_number+4ULL*i);
+    for(unsigned j=0;j<4u;++j)
+      page_list[4u*i+j]=(uint32_t)(page_number+4ULL*i+j);
+  }
+  return 1;
+}
+
 int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
                              const struct drm_asahi_cmd_render *render) {
   AGX_WIN32_ASAHI_BACKEND *b=backend(batch);
@@ -197,34 +230,39 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   unsigned written_count=0;
   unsigned count=0,limit;
   AGX_G4_PRIVATE packet={0};
+  APPLE_AGX_G4_PROCESS_RANGE ranges[APPLE_AGX_G4_PROCESS_RANGE_COUNT]={{0}};
+  APPLE_AGX_G4_NATIVE_RENDER native_render;
   unsigned char *cpu;
   struct drm_asahi_cmd_header command_header;
   if(!b || !g || !render || b->Failed || b->Gpuva.Terminal ||
      !batch->draws || batch->cdm.bo || g->Submitted || g->Rejected ||
      !batch->vdm.bo ||
-     batch->bo_list.bit_count>UINT32_MAX-(PIPE_MAX_COLOR_BUFS+8))
+     batch->bo_list.bit_count>UINT32_MAX-(PIPE_MAX_COLOR_BUFS+17))
     return 0;
-  if(g->Entered && !AgxWin32AsahiBatchLeave(batch)) return 0;
-  if(!append_attachments(batch,&packet)) return 0;
+  if(g->Entered && !AgxWin32AsahiBatchLeave(batch)) goto fail;
+  memcpy(&native_render,render,sizeof(native_render));
+  if(!prepare_process_buffers(b,g,&native_render,ranges) ||
+     !append_attachments(batch,&packet)) goto fail;
   command_header=agx_cmd_header(false,0,0);
   if(!append_native(&packet,&command_header,sizeof(command_header)) ||
-     !append_native(&packet,render,sizeof(*render))) return 0;
-  g->Command=agx_bo_create(b->Native,packet.CommandBytes,0,0,"VA command");
-  if(!g->Command) return 0;
+     !append_native(&packet,render,sizeof(*render))) goto fail;
+  g->Command=agx_bo_create(b->Native,packet.Header.Base.CommandBytes,
+                           0,0,"VA command");
+  if(!g->Command) goto fail;
   cpu=agx_bo_map(g->Command);
-  if(!cpu) return 0;
-  memcpy(cpu,packet.Native,packet.CommandBytes);
-  packet.Magic=APPLE_AGX_G4_PRIVATE_MAGIC;
-  packet.Version=APPLE_AGX_G4_PRIVATE_VERSION;
-  packet.HeaderBytes=(uint16_t)offsetof(AGX_G4_PRIVATE,Native);
-  packet.CommandVa=g->Command->va->addr;
-  limit=batch->bo_list.bit_count+PIPE_MAX_COLOR_BUFS+8;
+  if(!cpu || !AgxWin32AsahiGpuvaBo(b,g->Command)) goto fail;
+  memcpy(cpu,packet.Native,packet.Header.Base.CommandBytes);
+  if(!AppleAgxG4ComposeHeaderV2(&packet.Header,&native_render,
+      g->Command->va->addr,packet.Header.Base.CommandBytes,ranges)) goto fail;
+  limit=batch->bo_list.bit_count+PIPE_MAX_COLOR_BUFS+17;
   refs=calloc(limit,sizeof(*refs));
-  if(!refs) return 0;
+  if(!refs) goto fail;
   if(!add_bo(b,refs,&count,limit,g->Command) ||
      !add_bo(b,refs,&count,limit,batch->vdm.bo) ||
      !add_bo(b,refs,&count,limit,agx_screen(batch->ctx->base.screen)->rodata))
     goto fail;
+  for(unsigned i=0;i<APPLE_AGX_G4_PROCESS_RANGE_COUNT;++i)
+    if(!add_bo(b,refs,&count,limit,g->Process[i])) goto fail;
   for(unsigned i=0;i<batch->key.nr_cbufs;++i) {
     if(batch->key.cbufs[i].texture) {
       struct agx_bo *color=agx_resource(batch->key.cbufs[i].texture)->bo;
@@ -251,9 +289,10 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
       goto fail;
   }
   if(!AgxWin32GpuvaSubmit(&b->Gpuva,refs,count,
-      AgxWin32AsahiGpuvaBo(b,g->Command),packet.CommandBytes,
+      AgxWin32AsahiGpuvaBo(b,g->Command),packet.Header.Base.CommandBytes,
       written,written_count,
-      &packet,packet.HeaderBytes+packet.CommandBytes,&g->Fence)) goto fail;
+      &packet,packet.Header.Base.HeaderBytes+packet.Header.Base.CommandBytes,
+      &g->Fence)) goto fail;
   g->Submitted=1;
   free(refs);
   return 1;
@@ -289,6 +328,8 @@ int AgxWin32AsahiBatchRelease(struct agx_batch *batch) {
   if(!b || b->Gpuva.Terminal || (!g->Retired && !g->Rejected) || g->Entered)
     return 0;
   if(g->Command) agx_bo_unreference(b->Native,g->Command);
+  for(unsigned i=0;i<APPLE_AGX_G4_PROCESS_RANGE_COUNT;++i)
+    if(g->Process[i]) agx_bo_unreference(b->Native,g->Process[i]);
   batch->windows_batch=NULL;
   free(g);
   return 1;

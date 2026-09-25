@@ -150,6 +150,41 @@ static inline int AppleAgxG4ProcessRequiredBytes(
   return 1;
 }
 
+static inline int AppleAgxG4ComposeHeaderV2(
+    APPLE_AGX_G4_PRIVATE_HEADER_V2 *header,
+    const APPLE_AGX_G4_NATIVE_RENDER *render,
+    unsigned long long command_va, unsigned int command_bytes,
+    const APPLE_AGX_G4_PROCESS_RANGE
+        ranges[APPLE_AGX_G4_PROCESS_RANGE_COUNT]) {
+  unsigned int required[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
+  unsigned int i, j;
+  if (!header || !ranges || !AppleAgxG4ProcessRequiredBytes(render, required) ||
+      command_va < 0x10000ULL || command_va >= (1ULL << 39) ||
+      !command_bytes || command_bytes > APPLE_AGX_G4_NATIVE_MAX_BYTES ||
+      command_bytes > (1ULL << 39) - command_va) return 0;
+  for (i = 0u; i < APPLE_AGX_G4_PROCESS_RANGE_COUNT; ++i) {
+    const APPLE_AGX_G4_PROCESS_RANGE *range = &ranges[i];
+    if (range->Reserved || range->Va < 0x10000ULL ||
+        range->Va >= (1ULL << 39) || (range->Va & 0xffffULL) ||
+        (range->Bytes & 0xffffu) || range->Bytes < required[i] ||
+        range->Bytes > (1ULL << 39) - range->Va ||
+        (range->Va < command_va + command_bytes &&
+         command_va < range->Va + range->Bytes)) return 0;
+    for (j = 0u; j < i; ++j)
+      if (range->Va < ranges[j].Va + ranges[j].Bytes &&
+          ranges[j].Va < range->Va + range->Bytes) return 0;
+  }
+  header->Base.Magic = APPLE_AGX_G4_PRIVATE_MAGIC;
+  header->Base.Version = APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA;
+  header->Base.HeaderBytes = (unsigned short)sizeof(*header);
+  header->Base.CommandBytes = command_bytes;
+  header->Base.Reserved = 0u;
+  header->Base.CommandVa = command_va;
+  for (i = 0u; i < APPLE_AGX_G4_PROCESS_RANGE_COUNT; ++i)
+    header->Process[i] = ranges[i];
+  return 1;
+}
+
 typedef enum {
   AppleAgxG4ParseOk = 0,
   AppleAgxG4ParseInvalid,
