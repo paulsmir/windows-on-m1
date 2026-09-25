@@ -170,6 +170,7 @@
     <ClCompile Include="..\shared\src\apple_agx_gpuva_b1_submission.c" />
     <ClCompile Include="..\shared\src\apple_agx_gpuva_g3_translation.c" />
     <ClCompile Include="..\shared\src\apple_agx_gpuva_g3_graph.c" />
+    <ClCompile Include="..\shared\src\apple_agx_g4_submit.c" />
     <ClCompile Include="..\shared\src\apple_agx_win32_abi.c" />
     <ClCompile Include="..\shared\src\apple_agx_scheduler.c" />
     <ClCompile Include="..\shared\src\apple_agx_gdi.c" />

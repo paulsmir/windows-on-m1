@@ -1,4 +1,5 @@
 #include "gpuva_g3_private.h"
+#include "apple_agx_g4_submit.h"
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 
@@ -580,6 +581,49 @@ NTSTATUS AdmissionGpuvaG3SubmitVirtualPaging(
       args->DmaBufferPrivateDataSize);
 }
 
+static int AdmissionG4GraphAccess(void *opaque, unsigned long long va,
+                                  unsigned int bytes, int write) {
+  APPLE_AGX_GPUVA_G3_GRAPH *graph = (APPLE_AGX_GPUVA_G3_GRAPH *)opaque;
+  return AppleAgxGpuvaG3GraphContainsRangeAccess(
+      graph, va, bytes, write != 0) ? 1 : 0;
+}
+
+/* Envelope-only admission. A parsed native render command is deliberately
+ * rejected until every render VA is validated and a TA/3D completion owner
+ * exists. Returning success here would fabricate execution and fence progress. */
+static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
+    ADMISSION_CONTEXT *adapter, ADMISSION_RENDER_CONTEXT *context,
+    const DXGKARG_SUBMITCOMMANDVIRTUAL *args) {
+  ADMISSION_G3_STATE *state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  ADMISSION_G3_PROCESS *process =
+      (ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
+  APPLE_AGX_G4_SUBMIT_VIEW view;
+  APPLE_AGX_G4_PARSE_RESULT result;
+  if (KeGetCurrentIrql() != PASSIVE_LEVEL || state == NULL ||
+      process == NULL || process->State != state || process->Poisoned ||
+      context->GpuvaG3Poisoned || context->GpuvaG3RootIpa == 0ULL ||
+      !context->Win32Transport ||
+      (context->Object.Flags & ADMISSION_CONTEXT_VIRTUAL_ADDRESSING) == 0u ||
+      (context->Object.Flags & (ADMISSION_CONTEXT_SYSTEM |
+                                ADMISSION_CONTEXT_GDI)) != 0u ||
+      args->Flags.Value != 0u)
+    return STATUS_INVALID_PARAMETER;
+  ExAcquireFastMutex(&state->Lock);
+  if (context->GpuvaG3RootIpa != process->Graph.RootIpa ||
+      process->Graph.Uncertain) {
+    ExReleaseFastMutex(&state->Lock);
+    return STATUS_INVALID_DEVICE_STATE;
+  }
+  result = AppleAgxG4ParseSubmit(
+      args->pDmaBufferPrivateData, args->DmaBufferPrivateDataSize,
+      args->DmaBufferUmdPrivateDataSize, args->DmaBufferVirtualAddress,
+      args->DmaBufferSize, AdmissionG4GraphAccess, &process->Graph, &view);
+  ExReleaseFastMutex(&state->Lock);
+  if (result == AppleAgxG4ParseUnmapped) return STATUS_INVALID_ADDRESS;
+  if (result != AppleAgxG4ParseOk) return STATUS_INVALID_PARAMETER;
+  return STATUS_NOT_SUPPORTED;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommandVirtual(
     HANDLE Adapter, const DXGKARG_SUBMITCOMMANDVIRTUAL *Args) {
   ADMISSION_CONTEXT *adapter = (ADMISSION_CONTEXT *)Adapter;
@@ -590,19 +634,24 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommandVirtual(
   NTSTATUS status;
   if (adapter == NULL || Args == NULL || !adapter->Started ||
       Args->hContext == NULL || Args->DmaBufferVirtualAddress == 0ULL ||
-      Args->DmaBufferSize == 0u || Args->DmaBufferUmdPrivateDataSize != 0u ||
+      Args->DmaBufferSize == 0u ||
       Args->pDmaBufferPrivateData == NULL ||
       Args->NodeOrdinal != 0u ||
       Args->EngineOrdinal != 0u || Args->SubmissionFenceId == 0u ||
       KeGetCurrentIrql() > DISPATCH_LEVEL)
     return STATUS_INVALID_PARAMETER;
   context = (ADMISSION_RENDER_CONTEXT *)Args->hContext;
-  if (context->Object.Magic == ADMISSION_OBJECT_CONTEXT_MAGIC &&
-      (context->Object.Flags & ADMISSION_CONTEXT_SYSTEM) != 0u)
+  if (context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
+      context->Object.Device == NULL ||
+      context->Object.Device->Adapter != &adapter->ObjectAdapter)
+    return STATUS_INVALID_PARAMETER;
+  if ((context->Object.Flags & ADMISSION_CONTEXT_SYSTEM) != 0u)
     return AdmissionGpuvaG3SubmitVirtualPaging(adapter, context, Args);
 #if defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
   InterlockedIncrement((volatile LONG *)&adapter->BltProbe.VirtualSubmitCalls);
 #endif
+  if (Args->DmaBufferUmdPrivateDataSize != 0u)
+    return AdmissionG4SubmitVirtualEnvelope(adapter, context, Args);
   if (context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
       context->Object.Device == NULL ||
       context->Object.Device->Adapter != &adapter->ObjectAdapter ||
