@@ -52,6 +52,11 @@ class SocResetTest(unittest.TestCase):
                 script = (LAUNCHERS / name).read_text()
                 self.assertLess(script.index("soc-reset.py"), script.index("chainload.py"))
 
+    def test_g3_r60_launcher_selects_arm_consumption_image(self):
+        script = (LAUNCHERS / "full-owner-r60.sh").read_text()
+        self.assertIn("m1n1-g3-arm-consumed.macho", script)
+        self.assertLess(script.index("soc-reset.py"), script.index("chainload.py"))
+
 
 if __name__ == "__main__":
     unittest.main()
