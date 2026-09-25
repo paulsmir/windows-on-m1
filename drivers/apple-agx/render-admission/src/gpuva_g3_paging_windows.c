@@ -119,12 +119,19 @@ static NTSTATUS AdmissionG3UpdateLeaf(
   ADMISSION_SCANOUT_MEMORY_VIEW view;
   APPLE_AGX_GPUVA_G3_LOGICAL_PTE *logical = NULL;
   APPLE_AGX_GPUVA_G3_NATIVE_LEAF *leaves = NULL;
-  APPLE_AGX_GPUVA_G3_RESULT plan;
+  APPLE_AGX_GPUVA_G3_RESULT plan = AppleAgxGpuvaG3Invalid;
+  ADMISSION_G3_TABLE_SHADOW *shadow;
   unsigned int count = 0u, index;
   NTSTATUS status = STATUS_INVALID_PARAMETER;
   if (update->NumPageTableEntries == 0u ||
       update->NumPageTableEntries >
           (update->Flags.Use64KBPages ? 512u : 8192u))
+    return STATUS_INVALID_PARAMETER;
+  if (!update->Flags.Use64KBPages &&
+      ((update->FirstPteVirtualAddress & 0xfffULL) != 0ULL ||
+       update->FirstPteVirtualAddress >= (1ULL << 39) ||
+       (ULONGLONG)update->NumPageTableEntries * 0x1000ULL >
+           (1ULL << 39) - update->FirstPteVirtualAddress))
     return STATUS_INVALID_PARAMETER;
   if (!NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(adapter, &view)))
     return STATUS_INVALID_DEVICE_STATE;
@@ -137,7 +144,7 @@ static NTSTATUS AdmissionG3UpdateLeaf(
     status = STATUS_INSUFFICIENT_RESOURCES;
     goto Done;
   }
-  RtlZeroMemory(logical, (SIZE_T)update->NumPageTableEntries * sizeof(*logical));
+  RtlZeroMemory(logical, 8192u * sizeof(*logical));
   for (index = 0u; index < update->NumPageTableEntries && index < 8192u;
        ++index) {
     const DXGK_PTE *pte = &update->pPageTableEntries[
@@ -166,16 +173,59 @@ static NTSTATUS AdmissionG3UpdateLeaf(
     logical[index].Flags = APPLE_AGX_GPUVA_G3_VALID |
         (pte->ReadOnly ? 0u : APPLE_AGX_GPUVA_G3_WRITE);
   }
+  if (!update->Flags.Use64KBPages) {
+    UINT first_group = update->StartIndex / 4u;
+    UINT last_group = (update->StartIndex + update->NumPageTableEntries - 1u) / 4u;
+    for (shadow = process->TableShadows; shadow != NULL; shadow = shadow->Next)
+      if (shadow->BrokerIpa == table_ipa) break;
+    if (shadow == NULL) goto Done;
+    if (shadow->LogicalPtes == NULL) {
+      shadow->LogicalPtes = ExAllocatePool2(POOL_FLAG_NON_PAGED,
+          8192u * sizeof(*shadow->LogicalPtes), ADMISSION_POOL_TAG);
+      if (shadow->LogicalPtes == NULL) {
+        status = STATUS_INSUFFICIENT_RESOURCES;
+        goto Done;
+      }
+      RtlZeroMemory(shadow->LogicalPtes,
+                    8192u * sizeof(*shadow->LogicalPtes));
+    }
+    for (index = 0u; index < update->NumPageTableEntries; ++index)
+      shadow->LogicalPtes[update->StartIndex + index] = logical[index];
+    for (index = first_group; index <= last_group; ++index) {
+      const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *group =
+          &shadow->LogicalPtes[index * 4u];
+      ULONGLONG ipa = group[0].GuestIpa;
+      UINT flags = group[0].Flags, segment = group[0].SegmentId;
+      UINT sub;
+      BOOLEAN complete = (flags & APPLE_AGX_GPUVA_G3_VALID) != 0u &&
+          ipa != 0ULL && (ipa & 0x3fffULL) == 0ULL &&
+          ipa <= MAXULONGLONG - 0x3000ULL;
+      for (sub = 1u; complete && sub < 4u; ++sub)
+        if (group[sub].Flags != flags ||
+            group[sub].SegmentId != segment ||
+            group[sub].GuestIpa != ipa + (ULONGLONG)sub * 0x1000ULL)
+          complete = FALSE;
+      if (!AppleAgxGpuvaG3GraphUpdateLeaf(&process->Graph, table_ipa,
+              index, complete ? ipa : 0ULL,
+              complete && (flags & APPLE_AGX_GPUVA_G3_WRITE) != 0u)) {
+        UINT source_index = index * 4u < update->StartIndex ? 0u :
+            index * 4u - update->StartIndex;
+        const DXGK_PTE *pte = &update->pPageTableEntries[
+            AppleAgxGpuvaG3PteInputIndex(source_index,
+                                         update->Flags.Repeat)];
+        status = AdmissionG3RejectPaging(failure,
+            AdmissionG3PagingFailureLeafGraph, index * 4u, pte,
+            complete ? ipa : 0ULL, STATUS_DEVICE_HARDWARE_ERROR);
+        goto Done;
+      }
+    }
+    status = STATUS_SUCCESS;
+    goto Done;
+  }
   if (update->Flags.Use64KBPages)
     plan = AppleAgxGpuvaG3Plan64KSpan(logical, update->StartIndex,
         update->NumPageTableEntries, update->FirstPteVirtualAddress,
         ADMISSION_MEMORY_LOCAL_SEGMENT, leaves, 2048u, &count);
-  else
-    plan = AppleAgxGpuvaG3PlanSpan(logical, update->StartIndex,
-        update->NumPageTableEntries, update->FirstPteVirtualAddress,
-        ADMISSION_MEMORY_LOCAL_SEGMENT,
-        ADMISSION_GPUVA_G1B_PAGE_PROFILE == 64 ? 0x10000u : 0x4000u,
-        leaves, update->NumPageTableEntries / 4u, &count);
   if (plan != AppleAgxGpuvaG3Ok && plan != AppleAgxGpuvaG3Unmap)
     goto Done;
   for (index = 0u; index < count && index < 2048u; ++index) {
@@ -269,14 +319,6 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
       (update->UpdateMode != DXGK_PAGETABLEUPDATE_GPU_PHYSICAL &&
        update->UpdateMode != DXGK_PAGETABLEUPDATE_CPU_VIRTUAL))
     return STATUS_INVALID_PARAMETER;
-  if (update->PageTableLevel == 0u && !update->Flags.Use64KBPages &&
-      ((update->StartIndex | update->NumPageTableEntries) & 3u)) {
-    status = AdmissionG3RejectPaging(&failure,
-        AdmissionG3PagingFailureSubpage, update->StartIndex,
-        update->pPageTableEntries, 0ULL, STATUS_INVALID_PARAMETER);
-    AdmissionRecordGpuvaG3PagingFailure(adapter, &failure);
-    return status;
-  }
   /* CPU_VIRTUAL updates complete now; supplied DMA buffers stay untouched. */
   status = AdmissionGpuvaG3ResolveTable(adapter, &update->PageTableAddress,
                                         update->UpdateMode, &table_ipa);

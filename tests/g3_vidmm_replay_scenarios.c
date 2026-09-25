@@ -147,7 +147,7 @@ int main(void) {
     assert(memcmp(local_cpu+0xc000,shadow->Memory.CpuAddress,0x4000)==0);
   }
   if (getenv("G3_REPLAY_SINGLE_PTE")) {
-    /* EXP787 records only the Count1 geometry; PTE contents are synthetic. */
+    /* EXP788 exact valid RO system PTE; it must remain unpublished alone. */
     DXGK_PTE pte={0};
     DXGKARG_BUILDPAGINGBUFFER one={0};
     one.Operation=DXGK_OPERATION_UPDATE_PAGE_TABLE;
@@ -159,13 +159,53 @@ int main(void) {
     one.UpdatePageTable.NumPageTableEntries=1;
     one.UpdatePageTable.FirstPteVirtualAddress=0x2040000;
     one.UpdatePageTable.pPageTableEntries=&pte;
-    assert(AdmissionGpuvaG3BuildPagingBuffer(&adapter,&one)==
-           STATUS_INVALID_PARAMETER);
-    assert(last_paging_failure.Branch==10);
-    assert(last_paging_failure.Level==0);
-    assert(last_paging_failure.Index==64);
-    assert(last_paging_failure.PteFlags==0);
-    assert(last_paging_failure.PageAddress==0);
+    pte.Flags=0x9;
+    pte.PageAddress=0x9916a0;
+    expect_ok("EXP788 Count1 valid RO system PTE",
+              AdmissionGpuvaG3BuildPagingBuffer(&adapter,&one));
+    {
+      ADMISSION_G3_PROCESS *process=(ADMISSION_G3_PROCESS *)sys.hKmdProcess;
+      APPLE_AGX_GPUVA_G3_NODE *node=process->Graph.Leaves;
+      while (node && !(node->Index==16 &&
+              node->Ipa==local_ipa+0x3808000)) node=node->Next;
+      assert(!node);
+    }
+    pte.Flags=0;
+    pte.PageAddress=0;
+    expect_ok("Count1 unmap",AdmissionGpuvaG3BuildPagingBuffer(&adapter,&one));
+    {
+      DXGK_PTE group[4]={0};
+      for (UINT i=0;i<4;i++) {
+        group[i].Flags=0x9;
+        group[i].PageAddress=0x10180+i;
+      }
+      one.UpdatePageTable.NumPageTableEntries=3;
+      one.UpdatePageTable.pPageTableEntries=group;
+      expect_ok("partial three PTEs",AdmissionGpuvaG3BuildPagingBuffer(&adapter,&one));
+      one.UpdatePageTable.StartIndex=67;
+      one.UpdatePageTable.NumPageTableEntries=1;
+      one.UpdatePageTable.FirstPteVirtualAddress=0x2043000;
+      one.UpdatePageTable.pPageTableEntries=&group[3];
+      expect_ok("complete 16K group",AdmissionGpuvaG3BuildPagingBuffer(&adapter,&one));
+      {
+        ADMISSION_G3_PROCESS *process=(ADMISSION_G3_PROCESS *)sys.hKmdProcess;
+        APPLE_AGX_GPUVA_G3_NODE *node=process->Graph.Leaves;
+        while (node && !(node->Index==16 &&
+                node->AuxIpa==local_ipa+0x180000)) node=node->Next;
+        assert(node);
+      }
+      pte.Flags=0;
+      one.UpdatePageTable.StartIndex=66;
+      one.UpdatePageTable.FirstPteVirtualAddress=0x2042000;
+      one.UpdatePageTable.pPageTableEntries=&pte;
+      expect_ok("partial invalidate",AdmissionGpuvaG3BuildPagingBuffer(&adapter,&one));
+      {
+        ADMISSION_G3_PROCESS *process=(ADMISSION_G3_PROCESS *)sys.hKmdProcess;
+        APPLE_AGX_GPUVA_G3_NODE *node=process->Graph.Leaves;
+        while (node && node->Index!=16) node=node->Next;
+        assert(!node);
+      }
+    }
   }
   {
     DXGK_PTE ptes[4]={0};

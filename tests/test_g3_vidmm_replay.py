@@ -31,7 +31,7 @@ class G3VidMmReplayTests(unittest.TestCase):
                                 env=env, text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_exp787_single_pte_rejection_receipts_pte(self):
+    def test_exp788_valid_single_pte_stays_unpublished_until_group_complete(self):
         env = dict(os.environ, G3_REPLAY_SINGLE_PTE="1")
         result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
                                 env=env, text=True, capture_output=True)

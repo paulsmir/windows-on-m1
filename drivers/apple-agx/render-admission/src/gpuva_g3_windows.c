@@ -263,6 +263,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyProcess(
       return STATUS_DEVICE_BUSY;
     }
     process->TableShadows = entry->Next;
+    if (entry->LogicalPtes != NULL)
+      ExFreePoolWithTag(entry->LogicalPtes, ADMISSION_POOL_TAG);
     ExFreePoolWithTag(entry, ADMISSION_POOL_TAG);
   }
   if (process->BootstrapRoot.AllocationHandle != NULL &&
