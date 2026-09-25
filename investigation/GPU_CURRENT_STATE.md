@@ -1,5 +1,25 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP789: R70 clears Count1 guard; new 0x3B after paging success
+
+Package792 (R70, G1b 64 KiB) was staged from ordinary Code28 and cold-booted
+once under the frozen full-owner profile. StartDevice reached Stage12/status0.
+The last durable G3 input is level0 Start65 Count1 VA `0x2041000` with paging
+status0 and no paging-failure receipt; the EXP788 Start64 Count1 `C000000D`
+boundary was passed. Windows then stopped `0x3B` with `C0000005` and
+instruction address `0xffffbf8e1c68e268`; its causal stack is still unknown.
+Dump `.local/experiments/EXP789-g3-logical-shadow/hardware-evidence/
+092526-9031-01.dmp` SHA256
+`ffa58ebc2e598c378dc43dcf28f4941465f8346a22ff78ea3f16b2b61ff1f8a5`.
+GPU-hidden dump-first collected hash-verified dump/ETL/receipts and confirmed
+exact package792 and cleared arm; exact cleanup restored frozen ordinary
+GPU-visible SSH/CPU8, one inert APPL0002 Code28, staged0 and no SYS/UMD/arm.
+G3 admission is not yet proven. R72 next: one cold G1b 16 KiB discriminator
+against this 64 KiB package with only page profile changed; decide the main
+profile from the hardware boundary, not from EXP772/773's PASID-confounded
+AddAdapter result. R71 SysMem64KBPageSupported remains unadvertised pending
+translation and WDK contract proof.
+
 ## 2026-09-25 EXP788: Count1 is a valid read-only system 4-KiB page
 
 Diagnostic-only package791 cold-booted with the frozen full-owner profile.
