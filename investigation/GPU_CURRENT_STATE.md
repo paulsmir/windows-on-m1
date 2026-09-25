@@ -1,5 +1,28 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP810/package816 rejects physical-access cause
+
+Package816 changed only native class allocation `AccessedPhysically` from 1
+to 0; legacy/display allocations remain physical. Source policy test went
+RED→GREEN, R83 verified 523 committed inputs, WDK26100 ARM64 build passed.
+Air returned pinned SSH, APPL0002 Code0/oem5, CPU8/storage2/USB6,
+ARM_CONSUMED seq229754646 and DCP A408/D589 latch9. Exact INF/SYS/UMD
+match package816. Six guest evidence files match SHA list `5945110c` in
+`.local/experiments/EXP810-g4-package816/hardware-evidence/EXP816-evidence`.
+
+All 105 collected CreateDevice attempts still failed at the first native
+`pfnAllocateCb` with `0x80070057` and zero returned allocation handle;
+CreateContextVirtual, PagingQueue, RenderFence and ScreenInitialize passed.
+The KMD's G3 ring again contains matching one-allocation 72-byte private data
+and 64-KiB CreateAllocation status0 followed by OpenAllocation status0;
+no G1b failure receipt. Present/Blt/submit/retire/fault remain absent.
+Because Present was not expected after the live refusal, LOOK_NOW was not
+set; panel/RDP unmeasured. The physical-access flag was a source contract
+correction, but **rejected as the sole cause** of the callback error.
+One offline pass is now directed at the runtime post-DDI rejection, using
+the recorded ETL and pinned WDK26100 allocation structs/output rules; no
+unchanged hardware rerun. Package816 remains live under R54.
+
 ## 2026-09-25 EXP810/package815 native allocation boundary
 
 Exact diagnostic package815 reached pinned SSH, APPL0002 Code0/oem5,
