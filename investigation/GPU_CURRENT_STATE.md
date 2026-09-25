@@ -1,5 +1,44 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP793: virtual DMA aperture exposed an earlier paging OWNERSHIP stop
+
+Package796 changed only virtual `CreateContext.DmaBufferSegmentSet` from 0 to
+aperture segment1 mask1; G1b16, R70, firmware, caps, signer and recovery were
+frozen. Pinned WDK26100 and Microsoft Learn require an aperture segment in this
+set; local memory segment2 is disallowed. Host real-broker replay was RED→GREEN
+and all 10 targeted tests passed; the full 1052-test host suite retained 14
+failures/67 errors/2 skips outside this contract. GDI flags6 receipt confirms
+DMA `0x50000`, mask1, private `0x51000`, lists256/256. Private bytes are a
+separate nonpaged allocation, so their size exceeding DMA bytes is permitted;
+Caps and PagingCompanionNodeId remain zero.
+
+One stage→cold full-owner launch reached StartDevice Stage12/status0, CPU8,
+5000Hz and G3 retained op624/status0, then bugchecked `0x10E/0xB` with
+KMD paging `C0000483`. The flushed failure is level0 branch7 LeafGraph
+index`0x5c`, valid read-only system PTE flags`0x9`, page number`0x851000`
+(IPA`0x851000000`), GraphLastStatus4 OWNERSHIP, TableIpa`0x97f7c4000`,
+BrokerTableIpa`0x9d6a58000`. Last input was Start16 Count80 Flags2,
+UpdateMode2 (`GPU_PHYSICAL`). CDB places the `0x10E` in
+`dxgmms2!CompleteBuildPagingBufferIteration -> UpdatePageTable ->
+CommitVirtualAddressRangeSystemCommand`, before CreateCddDevice. This run
+cannot confirm or reject R75 as the cause of EXP792's CDD fault.
+
+Evidence `.local/experiments/EXP793-g3-context-dma-aperture/hardware-evidence`:
+new dump SHA256 `d035812fb6bda4d2f534bde2987e93c526e0e41727fe0cb7e9a80cf6a40dd26b`,
+ETL SHA256 `0fa6f7e2ffa3aef1eed5e462580f0a86d2921197f495aba4362993b14f81e35e`,
+state SHA256 `719eb0cfe62cd2f1fac8e57e923391bf675e6026daa4df93a6b2c5f61cde9916`.
+No durable arm consumption before SSH loss, so GPU-hidden dump-first collected
+and verified the evidence, removed exact package796/oem5, then frozen ordinary
+recovery restored pinned SSH/CPU8/storage2/USB7, one inert APPL0002 Code28,
+staged0 SYS/UMD/service/arm0.
+
+Next smallest discriminator: one diagnostic-only early broker-call receipt for
+the failing LeafGraph operation, distinguishing `REGISTER_BACKING` from
+`UPDATE_LEAF` and recording request IPA, generation, returned status and
+callback phase. Do not run the EXP792 allocation-wrapper receipt until paging
+again reaches CDD. No G4 merge plan yet because `CreateCddDevice` has not
+passed.
+
 ## 2026-09-25 EXP792: same CDD DMA-pool fault; allocation DDI attribution unresolved
 
 Diagnostic-only package795, G1b16 with R70 unchanged, was staged from ordinary
