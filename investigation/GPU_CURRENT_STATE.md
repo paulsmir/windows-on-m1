@@ -23,6 +23,14 @@ One offline pass is now directed at the runtime post-DDI rejection, using
 the recorded ETL and pinned WDK26100 allocation structs/output rules; no
 unchanged hardware rerun. Package816 remains live under R54.
 
+ETL span audit read 117337 events through 20:30:18Z and found 431 events in
+the KMD receipt window 20:30:16–18Z, but no allocation IDs33/36 there; this
+capture cannot name the post-DDI rejection. Stop equivalent ETL searches.
+The next source-backed candidate is `PitchAlignedSize`: KMD returns Size for
+every allocation, but the local segment has no PitchAlignment flag; Microsoft
+DXGK_ALLOCATIONINFO says return zero when no pitch-aligned segment is supported.
+Test that field change alone offline before considering another Air run.
+
 ## 2026-09-25 EXP810/package815 native allocation boundary
 
 Exact diagnostic package815 reached pinned SSH, APPL0002 Code0/oem5,
