@@ -28,6 +28,22 @@ the supported Windows VidMm/KMD segment contract before changing code. R86
 range-based broker grants remain required before G5; R85 ABI manifest and
 handshake remain a separate process contract.
 
+2026-09-25 R87 offline refinement: pinned WDK 26100 and Microsoft Learn agree
+that `SupportsCpuHostAperture` excludes `CpuVisible`; both KMD segment queries
+zero that flag, set local `CpuVisible`, and publish the checked 56-MiB guest-IPA
+CPU base. CDD shadow describes `CpuVisible=1`; the G1b16 build uses the default
+allocation hint 0, allowing aperture or local placement. Exact EXP802 ARM64
+disassembly shows `MapInCpuVisibleSegment` builds a non-null MDL and calls
+`Rotate` even on the direct CPU-visible path. `Rotate+0x30` reads a null pointer
+loaded from its second argument at +0xf0; the triage dump lacks that object's
+memory. Thus the four proposed causes are not proven and no segment/flag fix is
+preregistered. Next discriminator is a kernel/full memory dump of the same
+fault with the exact descriptor/allocation placement receipt, then one fix.
+Current J313-WIN.local resolves to 192.168.1.37, but its ED25519/ECDSA SSH
+fingerprints differ from the pinned known_hosts entries; L41/L43 are present
+and no launcher is active. Do not stage or launch EXP803 until guest identity
+is re-established from an independent trusted source.
+
 ## 2026-09-25 EXP801B: shared reserve passes 0xbb0; broker CAPACITY at 0xbf0
 
 Package804 G1b16 uses the 5919ef6e shared-reserve candidate, now built from
