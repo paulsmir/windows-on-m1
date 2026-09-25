@@ -1,5 +1,21 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP805: physical panel black despite Code0 and CDD presents
+
+Unchanged package804/m1n1 `be96bb5e`/Mu `c7ddcfb2` with R84 WDT reached
+pinned SSH, APPL0002 Code0, AppleAgxAdmission Running, StartStage12 and
+2560x1600 scanout. The source-address receipt queued segment2 primary
+`0x1500030000` with Status0; DCP A408/D589 latched swap_id9. ETL contains
+eight CDD `BltToPrimary` records, 178 `PresentDisplayOnly` and 358 `Present`.
+Claude recorded direct operator observation while LOOK_NOW was active:
+backlight on, panel black. Thus the current path does not display the CDD
+image. R89 targets the primary buffer bytes versus DCP address translation
+and cache visibility; exact cause is not yet established. The guest was held
+until LOOK_DONE, then exact package cleanup and frozen ordinary R84 boot
+returned one inert APPL0002 Code28, staged0/arm0, CPU8/storage2/USB7.
+R86 offline range-grant work resumes from its unchanged uncommitted tree;
+no ABI7 artifact was installed in EXP805.
+
 ## 2026-09-25 EXP804: address and DCP latch repeat; panel content unproven
 
 Unchanged package804/m1n1 `be96bb5e`/Mu `c7ddcfb2` again reached Code0,
