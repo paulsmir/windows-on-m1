@@ -1,5 +1,33 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP802: CDD presentation reached; CPU-visible Rotate AV is next
+
+Package804 G1b16 retained the 510-file verified shared-reserve KMD source.
+Only m1n1 broker backing capacity changed from 1024 to 8192 (commit
+`9835919a`, full-owner image SHA256 `be96bb5e`), with offline two-process
+56-MiB reserve replay RED→GREEN. R84 WDT reset, all eight CPUs,
+`ARM_CONSUMED`, broker init0 and retained op624/status0 were durable.
+`Wom1G3PagingStatus=0`; the prior index `0xbf0`/CAPACITY failure receipt is
+stale from EXP801B. The new Windows stop is `0x7E/C0000005` in
+`dxgmms2!VIDMM_GLOBAL::Rotate+0x30 -> MapInCpuVisibleSegment -> LockCommon ->
+dxgkrnl!PresentCddShadowBuffer -> DxgkPresentVirtualFrameBuffer ->
+cdd!BootGraphicsUpdateThread`. Active CDD presentation supports the
+inference that `CreateCddDevice` completed; its return was not separately
+receipted. Exact new dump SHA256
+`447ab3eeeaaf7fe37683eadff127ef0707887faf48faf87f7f93be8f0778c88f`,
+CDB SHA256 `b2e6615b504176da913a84fdcaa3a8271208b3ea8ab8df577e27bee672e2769b`;
+ETL/registry are in `.local/experiments/EXP802-g3-broker-capacity`.
+
+R60 returned pinned SSH, evidence was hash-verified, and exact oem5/package804
+was removed. Frozen ordinary recovery with R84 WDT plus one inert devnode
+rescan now passes pinned SSH, CPU8/storage2/USB7, exactly one APPL0002 Code28,
+staged0/arm0/SYS0/UMD0/service0/signer0. The EXP801/802 series is closed.
+Next causal target: the CPU-visible segment mapping used by CDD shadow-buffer
+presentation. Attribute the null/invalid `Rotate` operand from this dump and
+the supported Windows VidMm/KMD segment contract before changing code. R86
+range-based broker grants remain required before G5; R85 ABI manifest and
+handshake remain a separate process contract.
+
 ## 2026-09-25 EXP801B: shared reserve passes 0xbb0; broker CAPACITY at 0xbf0
 
 Package804 G1b16 uses the 5919ef6e shared-reserve candidate, now built from
