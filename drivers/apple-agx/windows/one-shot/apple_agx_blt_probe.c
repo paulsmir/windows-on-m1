@@ -41,6 +41,10 @@ int wmain(void) {
     escape.pPrivateDriverData = &probe;
     escape.PrivateDriverDataSize = sizeof(probe);
     status = D3DKMTEscape(&escape);
+    wprintf(L"BLT_ADAPTER index=%u luid=%08x:%08x sources=%u escape_status=0x%08x\n",
+            index, (UINT)adapters[index].AdapterLuid.HighPart,
+            adapters[index].AdapterLuid.LowPart,
+            adapters[index].NumOfSources, (UINT)status);
     close.hAdapter = adapters[index].hAdapter;
     (void)D3DKMTCloseAdapter(&close);
     if (status < 0 || probe.Magic != ADMISSION_BLT_PROBE_MAGIC ||

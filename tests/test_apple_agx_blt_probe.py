@@ -102,6 +102,7 @@ int main(void) {
         client = (ROOT / "drivers/apple-agx/windows/one-shot/apple_agx_blt_probe.c").read_text()
         self.assertIn("D3DKMTEnumAdapters2", client)
         self.assertIn("D3DKMTCloseAdapter", client)
+        self.assertIn("BLT_ADAPTER index=", client)
         self.assertIn("D3DKMTEscape", client)
         self.assertIn("BLT_PROBE", client)
         project = (RENDER / "AppleAgxRenderAdmission.vcxproj").read_text()
