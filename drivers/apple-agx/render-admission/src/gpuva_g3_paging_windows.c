@@ -11,7 +11,8 @@ enum {
   AdmissionG3PagingFailureParentLink = 6u,
   AdmissionG3PagingFailureLeafGraph = 7u,
   AdmissionG3PagingTableInitialized = 8u,
-  AdmissionG3PagingFailureTableMirror = 9u
+  AdmissionG3PagingFailureTableMirror = 9u,
+  AdmissionG3PagingFailureSubpage = 10u
 };
 
 static NTSTATUS AdmissionG3RejectPaging(
@@ -265,12 +266,17 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
       (update->Flags.Use64KBPages &&
        (ADMISSION_GPUVA_G1B_PAGE_PROFILE != 64 ||
         update->PageTableLevel == 2u)) ||
-      (update->PageTableLevel == 0u &&
-       !update->Flags.Use64KBPages &&
-       ((update->StartIndex | update->NumPageTableEntries) & 3u)) ||
       (update->UpdateMode != DXGK_PAGETABLEUPDATE_GPU_PHYSICAL &&
        update->UpdateMode != DXGK_PAGETABLEUPDATE_CPU_VIRTUAL))
     return STATUS_INVALID_PARAMETER;
+  if (update->PageTableLevel == 0u && !update->Flags.Use64KBPages &&
+      ((update->StartIndex | update->NumPageTableEntries) & 3u)) {
+    status = AdmissionG3RejectPaging(&failure,
+        AdmissionG3PagingFailureSubpage, update->StartIndex,
+        update->pPageTableEntries, 0ULL, STATUS_INVALID_PARAMETER);
+    AdmissionRecordGpuvaG3PagingFailure(adapter, &failure);
+    return status;
+  }
   /* CPU_VIRTUAL updates complete now; supplied DMA buffers stay untouched. */
   status = AdmissionGpuvaG3ResolveTable(adapter, &update->PageTableAddress,
                                         update->UpdateMode, &table_ipa);

@@ -146,6 +146,27 @@ int main(void) {
     assert(shadow->BrokerIpa>=local_ipa+0x3800000ULL);
     assert(memcmp(local_cpu+0xc000,shadow->Memory.CpuAddress,0x4000)==0);
   }
+  if (getenv("G3_REPLAY_SINGLE_PTE")) {
+    /* EXP787 records only the Count1 geometry; PTE contents are synthetic. */
+    DXGK_PTE pte={0};
+    DXGKARG_BUILDPAGINGBUFFER one={0};
+    one.Operation=DXGK_OPERATION_UPDATE_PAGE_TABLE;
+    one.UpdatePageTable.hProcess=sys.hKmdProcess;
+    one.UpdatePageTable.PageTableAddress.CpuVirtual=local_cpu+0xc000;
+    one.UpdatePageTable.UpdateMode=DXGK_PAGETABLEUPDATE_CPU_VIRTUAL;
+    one.UpdatePageTable.PageTableLevel=0;
+    one.UpdatePageTable.StartIndex=64;
+    one.UpdatePageTable.NumPageTableEntries=1;
+    one.UpdatePageTable.FirstPteVirtualAddress=0x2040000;
+    one.UpdatePageTable.pPageTableEntries=&pte;
+    assert(AdmissionGpuvaG3BuildPagingBuffer(&adapter,&one)==
+           STATUS_INVALID_PARAMETER);
+    assert(last_paging_failure.Branch==10);
+    assert(last_paging_failure.Level==0);
+    assert(last_paging_failure.Index==64);
+    assert(last_paging_failure.PteFlags==0);
+    assert(last_paging_failure.PageAddress==0);
+  }
   {
     DXGK_PTE ptes[4]={0};
     DXGKARG_BUILDPAGINGBUFFER failed={0};

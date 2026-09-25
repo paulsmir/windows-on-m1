@@ -31,6 +31,12 @@ class G3VidMmReplayTests(unittest.TestCase):
                                 env=env, text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_exp787_single_pte_rejection_receipts_pte(self):
+        env = dict(os.environ, G3_REPLAY_SINGLE_PTE="1")
+        result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
+                                env=env, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_pre_pte_address_fix_is_red(self):
         result = subprocess.run([sys.executable, str(REPLAY), "--revision",
                                  "077fad3e~"], cwd=ROOT, text=True,
