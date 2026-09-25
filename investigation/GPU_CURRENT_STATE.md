@@ -1,5 +1,27 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 G4 offline checkpoint before EXP810
+
+Worktree integration now carries AGX4 v2 UMD process ranges and nine VidMm
+BOs for TVB/scene memory (`f4e82b2a`), geometry-derived 64 KiB capacities
+(`852f9ed7`), and parser rejection of short ranges (`9b8e702e`). Map and
+MakeResident paging fences are awaited before `SubmitCommandCb` in the
+existing G4 GPUVA space; the new BOs join that same residency set. A valid
+native command still returns `STATUS_INVALID_PARAMETER` from
+`AdmissionG4SubmitVirtualEnvelope` (`4264a033`), the WDDM-supported
+fail-closed status. No native TA/3D firmware job or scheduler fence completion
+exists yet. The UMD v2 source has host ABI and extracted BO preparation
+replays; a pinned Windows ARM64 link has not run. No EXP810 package was built,
+installed, or launched.
+
+R94's next causal target is a source-backed ctx0 TA/3D constructor from
+`drm_asahi_cmd_render` plus exact stamp/event retirement, followed by one
+host replay against EXP208/Asahi layout. R95's combined DWM-like real-broker
+replay, native KMD path/fence audit, and cache/order proof remain open. Do not
+launch EXP810 while G4 submit still has the known fail-closed return. The
+hardware gate and recovery remain the exact R54/R60 series rules in the
+handoff plan; ordinary Code28 is the last recorded recovery state.
+
 ## 2026-09-25 EXP809S: R92 DWM is associated with Apple AGX
 
 With exact unchanged package809/m1n1/Mu, a SYSTEM startup GPU Engine receipt
