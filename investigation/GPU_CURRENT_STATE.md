@@ -1,5 +1,32 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP821/R104: G1b page-size fields rejected as sole cause
+
+Microsoft Learn/WDK26100 confirm `DXGK_ALLOCATIONINFO` overlays `Alignment`
+with `MinimumPageSize`/`RecommendedPageSize`; prior profile16 output
+`0x10000` decoded as 4/8-KiB enum hints. Commit
+`525d8bb0684567e59c93b1fead497fa3cddc1304` writes 16/16-KiB
+page-size enum values only for G1b GPUVA classes; ClassId0 still writes
+Alignment. Actual-body host test RED→GREEN; R83 package819 built from 524
+committed inputs, zero ARM64 warnings/errors.
+
+One Code0 full-owner boot returned pinned SSH, CPU8/storage2/USB6 and
+consumed arm. The direct D3DKMT control ClassId0 succeeded, but 36/36
+GPUVA rows still returned `0xC000000D`, including exact ClassId1/64-KiB
+with successful KMD Create/Open. DWM logged 90 `AllocateCb=0x80070057`
+and CreateDevice failures, no Present/Blt/submit/retire. LOOK_NOW was not
+used; panel/RDP unmeasured. Page-size union misuse is **rejected as the
+sole cause**. Stop serial allocation-output corrections; next target is a
+new discriminator within nonphysical VidMm admission after KMD Open.
+
+Evidence `.local/experiments/EXP821-g4-g1b16/evidence/` (six files hash
+verified, ETL SHA256 `af41e3a9…`, matrix SHA256 `d7cc40df…`). First exact
+package cleanup left a phantom APPL0002 and reappearing oem5/SYS/UMD, so
+two ordinary recovery boots lacked SSH. GPU-hidden emergency returned pinned
+SSH and removed exact phantom/oem5/files; final frozen ordinary EXP377/392
+boot returned one inert APPL0002 Code28, staged0/arm0/SYS0/UMD0/service0,
+signer0/logger0/trace0, CPU8/storage2/USB6 and pinned SSH.
+
 ## 2026-09-25 EXP819/R103 and EXP820/package818: nonphysical allocation still rejected
 
 R103 used one x64 D3DKMT harness on the unchanged package817 full-owner boot.
