@@ -284,6 +284,8 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
   if (state == NULL) return STATUS_INVALID_DEVICE_STATE;
   if (args->Operation == DXGK_OPERATION_FLUSH_TLB) {
     ADMISSION_G3_FLUSH_RECEIPT receipt;
+    ADMISSION_G3_TABLE_SHADOW *shadow;
+    BOOLEAN owned = FALSE;
     ULONGLONG start = args->FlushTlb.StartVirtualAddress;
     ULONGLONG end = args->FlushTlb.EndVirtualAddress;
     const ULONGLONG va_limit = 1ULL << 39;
@@ -313,19 +315,57 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     status = AdmissionGpuvaG3ResolveTable(adapter, &address,
         DXGK_PAGETABLEUPDATE_GPU_PHYSICAL, &root_ipa);
     receipt.ResolveStatus = (ULONG)status;
-    if (NT_SUCCESS(status)) receipt.ResolvedRootIpa = root_ipa;
-    if (process != NULL && NT_SUCCESS(status))
-      status = AdmissionGpuvaG3BrokerTable(
-          process, root_ipa, FALSE, &root_ipa);
-    receipt.BrokerStatus = (ULONG)status;
-    if (process != NULL) receipt.GraphRootIpa = process->Graph.RootIpa;
-    if (process == NULL || !NT_SUCCESS(status) || process->Poisoned ||
-        root_ipa != process->Graph.RootIpa) {
-      receipt.Branch = 4u; /* Ownership or root resolution failure. */
-      status = STATUS_INVALID_PARAMETER;
+    if (!NT_SUCCESS(status) && process != NULL &&
+        address.GpuPhysical.SegmentId == ADMISSION_MEMORY_LOCAL_SEGMENT &&
+        NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(adapter, &view)) &&
+        address.GpuPhysical.SegmentOffset <=
+            MAXULONGLONG - view.GuestIpaAddress) {
+      ULONGLONG candidate = view.GuestIpaAddress +
+          address.GpuPhysical.SegmentOffset;
+      if (candidate == process->BootstrapIpa) {
+        root_ipa = candidate;
+        status = STATUS_SUCCESS;
+      } else {
+        for (shadow = process->TableShadows; shadow != NULL;
+             shadow = shadow->Next)
+          if (candidate == shadow->BrokerIpa) {
+            root_ipa = candidate;
+            status = STATUS_SUCCESS;
+            break;
+          }
+      }
     }
-    if (NT_SUCCESS(status) &&
-        !AppleAgxGpuvaG3GraphFlush(&process->Graph, start, end)) {
+    if (NT_SUCCESS(status) && process != NULL) {
+      receipt.ResolvedRootIpa = root_ipa;
+      if (root_ipa == process->BootstrapIpa ||
+          root_ipa == process->Graph.RootIpa)
+        owned = TRUE;
+      for (shadow = process->TableShadows; shadow != NULL;
+           shadow = shadow->Next) {
+        if (root_ipa == shadow->OriginalIpa) {
+          root_ipa = shadow->BrokerIpa;
+          owned = TRUE;
+          break;
+        }
+        if (root_ipa == shadow->BrokerIpa) {
+          owned = TRUE;
+          break;
+        }
+      }
+    }
+    receipt.BrokerStatus = (ULONG)(owned ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER);
+    if (process != NULL) receipt.GraphRootIpa = process->Graph.RootIpa;
+    if (process == NULL || !NT_SUCCESS(status) || !owned) {
+      receipt.Branch = 4u; /* Foreign process or root. */
+      status = STATUS_INVALID_PARAMETER;
+    } else if (!process->Graph.Created || process->Graph.Slot == 0u ||
+               process->Poisoned) {
+      receipt.Branch = 5u; /* No active translation slot. */
+      status = STATUS_SUCCESS;
+    } else if (root_ipa != process->Graph.RootIpa) {
+      receipt.Branch = 6u; /* Owned root is not the active root. */
+      status = STATUS_SUCCESS;
+    } else if (!AppleAgxGpuvaG3GraphFlush(&process->Graph, start, end)) {
       status = STATUS_DEVICE_HARDWARE_ERROR;
     }
     ExReleaseFastMutex(&state->Lock);

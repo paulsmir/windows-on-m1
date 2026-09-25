@@ -6,6 +6,7 @@ only allocation, memory views, WDK objects, and broker results.
 
 from pathlib import Path
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -110,7 +111,10 @@ def main(revision=None, function_revisions=None, old_context_flags=False):
         if revision is None and "AdmissionDdiCreateContext" not in (function_revisions or {}):
             command.insert(1, "-DG3_REPLAY_CONTEXT_SEGMENT_CHECK")
         subprocess.run(command, check=True, cwd=ROOT)
-        subprocess.run([str(binary)], check=True, cwd=ROOT)
+        env = dict(os.environ)
+        if revision is not None or function_revisions or old_context_flags:
+            env["G3_REPLAY_HISTORICAL"] = "1"
+        subprocess.run([str(binary)], check=True, cwd=ROOT, env=env)
 
 
 if __name__ == "__main__":

@@ -26,6 +26,7 @@ static void update(ADMISSION_CONTEXT *adapter, HANDLE process, UINT level,
   assert(args.pDmaBuffer==dma && args.pDmaBufferPrivateData==private_data);
 }
 int main(void) {
+  const int r79=getenv("G3_REPLAY_HISTORICAL")==NULL;
   assert(DXGK_PAGETABLEUPDATE_CPU_VIRTUAL==0);
   assert(DXGK_PAGETABLEUPDATE_GPU_PHYSICAL==2);
   ADMISSION_CONTEXT adapter={0};
@@ -107,8 +108,31 @@ int main(void) {
   root.Address.SegmentId=ADMISSION_MEMORY_LOCAL_SEGMENT;
   root.Address.SegmentOffset=0;
   root.NumEntries=8;
+  if (r79) {
+    /* VidMm may own a table before setting it as the hardware root. */
+    flags.Repeat=1; flags.InitialUpdate=1;
+    update(&adapter,sys.hKmdProcess,2,local_cpu,8,0,flags,&empty,
+           "R79 prepare root before SetRootPageTable");
+    flush.Operation=DXGK_OPERATION_FLUSH_TLB;
+    flush.FlushTlb.hProcess=sys.hKmdProcess;
+    flush.FlushTlb.RootPageTableAddress=root.Address;
+    flush.FlushTlb.StartVirtualAddress=0;
+    flush.FlushTlb.EndVirtualAddress=0x10000;
+    UINT flushes=broker.flush_commands;
+    expect_ok("R79 flush before SetRootPageTable",
+        AdmissionGpuvaG3BuildPagingBuffer(&adapter,&flush));
+    assert(broker.flush_commands==flushes);
+    assert(last_flush_receipt.Branch==5);
+  }
   AdmissionDdiSetRootPageTable(&adapter,&root);
   assert(!((ADMISSION_RENDER_CONTEXT *)cc.hContext)->GpuvaG3Poisoned);
+  if (r79) {
+    UINT flushes=broker.flush_commands;
+    expect_ok("R79 current root without slot",
+        AdmissionGpuvaG3BuildPagingBuffer(&adapter,&flush));
+    assert(broker.flush_commands==flushes);
+    assert(last_flush_receipt.Branch==5);
+  }
   flags.Repeat=1; flags.InitialUpdate=1;
   if (getenv("G3_REPLAY_DMA_ONLY")) {
     zeros=calloc(8192,sizeof(*zeros));
@@ -311,6 +335,7 @@ int main(void) {
   flags.Use64KBPages=1; flags.InitialUpdate=1; flags.Repeat=1;
   update(&adapter,sys.hKmdProcess,0,local_cpu+0x2c000,512,0,flags,&leaf,
          "Learn leaf 64K PTE");
+  if (r79) ((ADMISSION_G3_PROCESS *)sys.hKmdProcess)->Graph.Slot=1u;
   flush.Operation=DXGK_OPERATION_FLUSH_TLB;
   flush.FlushTlb.hProcess=sys.hKmdProcess;
   flush.FlushTlb.RootPageTableAddress=root.Address;
@@ -345,9 +370,61 @@ int main(void) {
   flush.FlushTlb.StartVirtualAddress=0x1000;
   flush.FlushTlb.EndVirtualAddress=0x1ffff;
   flush.FlushTlb.RootPageTableAddress.SegmentOffset=0x4000;
-  assert(AdmissionGpuvaG3BuildPagingBuffer(&adapter,&flush)==STATUS_INVALID_PARAMETER);
-  assert(last_flush_receipt.Branch==4);
+  if (r79) {
+    UINT flushes=broker.flush_commands;
+    expect_ok("R79 owned noncurrent table",
+        AdmissionGpuvaG3BuildPagingBuffer(&adapter,&flush));
+    assert(broker.flush_commands==flushes);
+    assert(last_flush_receipt.Branch==6);
+  } else {
+    assert(AdmissionGpuvaG3BuildPagingBuffer(&adapter,&flush)==STATUS_INVALID_PARAMETER);
+    assert(last_flush_receipt.Branch==4);
+  }
+  if (r79) {
+    flush.FlushTlb.RootPageTableAddress.SegmentOffset=0x30000;
+    assert(AdmissionGpuvaG3BuildPagingBuffer(&adapter,&flush)==STATUS_INVALID_PARAMETER);
+    assert(last_flush_receipt.Branch==4);
+  }
   flush.FlushTlb.RootPageTableAddress=root.Address;
+  if (r79) {
+    DXGKARG_SETROOTPAGETABLE relocated=root;
+    UINT flushes=broker.flush_commands;
+    ADMISSION_G3_TABLE_SHADOW *shadow=
+        ((ADMISSION_G3_PROCESS *)sys.hKmdProcess)->TableShadows;
+    while (shadow && shadow->OriginalIpa!=local_ipa) shadow=shadow->Next;
+    assert(shadow);
+    relocated.Address.SegmentOffset=0x20000;
+    AdmissionDdiSetRootPageTable(&adapter,&relocated);
+    expect_ok("R79 flush old owned root after relocate",
+        AdmissionGpuvaG3BuildPagingBuffer(&adapter,&flush));
+    assert(broker.flush_commands==flushes);
+    assert(last_flush_receipt.Branch==6);
+    flush.FlushTlb.RootPageTableAddress.SegmentOffset=
+        shadow->BrokerIpa-local_ipa;
+    expect_ok("R79 flush old shadow root after relocate",
+        AdmissionGpuvaG3BuildPagingBuffer(&adapter,&flush));
+    assert(broker.flush_commands==flushes);
+    assert(last_flush_receipt.Branch==6);
+    flush.FlushTlb.RootPageTableAddress=relocated.Address;
+    ((ADMISSION_G3_PROCESS *)sys.hKmdProcess)->Graph.Created=0;
+    expect_ok("R79 graph not created",
+        AdmissionGpuvaG3BuildPagingBuffer(&adapter,&flush));
+    assert(broker.flush_commands==flushes);
+    assert(last_flush_receipt.Branch==5);
+    ((ADMISSION_G3_PROCESS *)sys.hKmdProcess)->Graph.Created=1;
+    AdmissionDdiSetRootPageTable(&adapter,&root);
+  }
+  if (r79) {
+    expect_ok("R79 foreign CreateProcess",AdmissionDdiCreateProcess(&adapter,&user));
+    flush.FlushTlb.hProcess=user.hKmdProcess;
+    flush.FlushTlb.RootPageTableAddress=root.Address;
+    assert(AdmissionGpuvaG3BuildPagingBuffer(&adapter,&flush)==STATUS_INVALID_PARAMETER);
+    assert(last_flush_receipt.Branch==4);
+    flush.FlushTlb.hProcess=(HANDLE)0x1234;
+    assert(AdmissionGpuvaG3BuildPagingBuffer(&adapter,&flush)==STATUS_INVALID_PARAMETER);
+    assert(last_flush_receipt.Branch==4);
+    expect_ok("R79 foreign DestroyProcess",AdmissionDdiDestroyProcess(&adapter,user.hKmdProcess));
+  }
   expect_ok("DestroyContext",AdmissionDdiDestroyContext(cc.hContext));
   expect_ok("DestroyProcess",AdmissionDdiDestroyProcess(&adapter,sys.hKmdProcess));
   expect_ok("Learn ordinary CreateProcess",AdmissionDdiCreateProcess(&adapter,&user));
