@@ -70,6 +70,15 @@ int main(void) {
     model = AppleAgxGpuvaG3AdmissionContract(1u, 64u);
     model.Leaf64KBytes = 8192u;
     if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 24;
+    model = AppleAgxGpuvaG3AdmissionContract(1u, 16u);
+    if (!AppleAgxGpuvaG3AdmissionContractValid(&model, 16u) ||
+        model.LocalUse64KBPages != 0u || model.Leaf64KBytes != 0u)
+      return 25;
+    model.Leaf64KBytes = 0x4000u;
+    if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 26;
+    model = AppleAgxGpuvaG3AdmissionContract(1u, 16u);
+    model.LocalUse64KBPages = 1u;
+    if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 27;
     model = AppleAgxGpuvaG3AdmissionContract(1u, 64u);
     model.MmuSizeBytes = 0x10000u;
     if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 20;

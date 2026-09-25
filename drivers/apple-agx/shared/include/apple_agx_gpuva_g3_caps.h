@@ -137,10 +137,11 @@ static inline int AppleAgxGpuvaG3AdmissionContractValid(
          caps->MmuSizeBytes >= (1ULL << caps->VirtualAddressBits) &&
          (caps->DisplayMmuId == APPLE_AGX_GPUVA_G3_INVALID_MMU_ID ||
           caps->DisplayMmuId < caps->MmuCount) &&
-         caps->LocalUse64KBPages &&
-         caps->Leaf64KBytes >= 0x4000u &&
-         caps->Leaf64KBytes >= (1u << (13u - 4u)) * pte_bytes &&
-         (caps->Leaf64KBytes & 0xfffu) == 0u;
+         (caps->LocalUse64KBPages ?
+          (caps->Leaf64KBytes >= 0x4000u &&
+           caps->Leaf64KBytes >= (1u << (13u - 4u)) * pte_bytes &&
+           (caps->Leaf64KBytes & 0xfffu) == 0u) :
+          caps->Leaf64KBytes == 0u);
 }
 
 #endif
