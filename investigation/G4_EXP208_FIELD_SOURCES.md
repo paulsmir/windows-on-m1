@@ -2,18 +2,18 @@
 
 2026-09-25 R97 single source pass. The EXP208 image supplies G13/V13_5
 firmware layout. Process data ownership below follows Asahi source, not bytes
-from the recorded draw. The G4 constructor is bounded by the retained image's
-16 TVB descriptors; dynamic buffer-manager expansion is still required.
+from the recorded draw. The G4 constructor seeds 32 queue-lifetime TVB
+blocks, covering the 2560×1600 primary (80×50 tiles → 32 blocks).
 
 | EXP208 object / field | Source for a native G4 job | Coverage |
 | --- | --- | --- |
 | Objects 0–8, 11–13, 20–25: context, queues, event control, buffer-manager bookkeeping | KMD context-0 shared memory and queue owner; relocate the recorded object graph | Existing EXP208/B1 path, but per-job reuse and ownership must be checked |
 | Objects 9–10, 26–35; barrier 14; microsequences 15/17: stamp addresses, event numbers, previous/current values, queue command count | KMD context-0 event lease, sequence and expected TA/3D stamps; `AppleAgxExp208PatchDynamic` supplies recorded offsets | Existing EXP208/B1 path; no G4 fence owner yet |
 | Seven `context_id` fields in objects 15–19 | Leased process VM slot (1–62), never the EXP208 value 63 | Existing `AppleAgxRenderTemplateSelectVmSlot` |
-| Object 19 encoder pointer `+0xd0` and TA VDM stream | AGX4 `VdmCtrlStreamBase` | **Gap:** native stream must replace the template encoder payload and every reference to it |
+| Object 19 encoder pointer `+0xd0` and TA VDM stream | AGX4 `VdmCtrlStreamBase` | Builder binds the native VDM VA; indirect stream references still need validation |
 | Objects 36–39: descriptor/sampler area, encoder, scissor, depth-bias streams | AGX4 `SamplerHeap`, `VdmCtrlStreamBase`, `IspScissorBase`, `IspDbiasBase`, with graph-proven process VA | **Gap:** the template has fixed packed objects; the native data is already in UMD BOs and must not be copied from EXP208 |
-| Object 40: color output and object 15 fragment attachment | AGX4 fragment attachment pointer and size; KMD validates the mapped writable range | **Gap:** EXP208 has a 16 KiB output. Arbitrary DWM target geometry, format and attachment routing are unproved |
-| Object 41 page list, 42 block list, 43–58 block heap | AGX4 v2 `Process[0..2]`; UMD prepares page/block contents from `Process[2].Va` | Addresses and capacities supplied; **gap:** all TA/3D references and page-list counts must be rebound, not merely the three bases |
+| Object 40: color output and object 15 fragment attachment | AGX4 BGRA8 single-sample pointer and size; KMD resolves contiguous writable local memory | 2560×1600 host replay passes; other formats and samples reject |
+| Object 41 page list, 42 block list, 43–58 block heap | AGX4 v2 `Process[0..2]`; UMD prepares 32 page/block entries and retains these BOs for InitBM queue lifetime | Builder patches `Info.page_list_size/page_count/max_blocks/block_count/last_page/max_pages`, `InitBuffer.block_count`, `BlockControl.total/wptr`. Recorded relocations name the first 16 blocks; UMD list names all 32. |
 | Object 59: auxiliary framebuffer | Asahi `queue/render.rs` allocates an empty private `0x8000` scene buffer; UMD owns zeroed `Process[8]` | Builder binds `Process[8].Va`; UMD clears the whole BO |
 | Objects 60–62: preemption scratch 1–3 | Asahi `buffer.rs` allocates one empty contiguous buffer, with offsets determined by adjusted cluster count and t600x sizes `0x540/0x280/0x20`; UMD owns zeroed `Process[7]` | Builder reserves the source-backed nine-cluster upper bound between subranges; actual J313 cluster count still requires a machine receipt |
 | Object 63: sampler heap | Asahi `fw/job.rs` `EncoderParams.sampler_array` receives `cmdbuf.sampler_heap`; Mesa owns and fills the descriptor BO. The two work-item relocations land on those sampler-array fields | Builder binds AGX4 `SamplerHeap` or null; UMD does not copy EXP208 sampler data |
@@ -32,8 +32,8 @@ The generated relocation table covers 207 known pointers, including 64 page
 list entries and 16 block list entries. `AppleAgxG4BindProcessObjects` now
 binds the source-backed process ranges and `AppleAgxG4ApplySceneRelocations`
 nulls unused cluster pointers. Mesa initializes the TVB page/block lists from
-the VidMm heap and clears the other process BOs. AGX4 has no format field or
-VDM stream length; those omissions remain runtime admission gaps.
+the VidMm heap and clears the other process BOs. AGX4 v2 names BGRA8 in its
+private header; VDM stream length and indirect references remain gaps.
 
 Current contract: UMD owns GPU-visible BO allocation, mapping, residency and
 native command bytes. VidMm owns the process VA. KMD owns context-0 firmware
@@ -58,10 +58,11 @@ the existing EXP208 dynamic patcher, physical native overlay, G4 UMD process
 buffer producer, B1 firmware submit path and KMD virtual submit gate. No new
 register, IRQ, power or DMA value is proposed.
 
-**Verdict:** R96 is open. Scene binding is coded and replayed for a 1280×720
-single-sample profile; the full TA/3D field constructor, real broker replay,
-and fence owner remain to be connected. EXP810 remains gated by fail-closed
-native submit.
+**Verdict:** R96 constructor and KMD/B1 submit path are wired for a 2560×1600
+single-sample BGRA8 profile. The real-C broker replay covers the mapped VA
+and lease/job lifecycle. Native Mesa stream contents, every indirect stream
+reference, and a full WDDM Present/retire replay remain unproved; EXP810 is
+still gated by those checks.
 
 ## R95 single offline pass at the same boundary
 

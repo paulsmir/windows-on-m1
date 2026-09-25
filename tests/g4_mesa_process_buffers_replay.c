@@ -16,8 +16,12 @@ struct agx_bo {
   AGX_WIN32_GPUVA_BO mapping;
   unsigned char *cpu;
   size_t size;
+  unsigned refs;
 };
-typedef struct { struct agx_device *Native; } AGX_WIN32_ASAHI_BACKEND;
+typedef struct {
+  struct agx_device *Native;
+  struct agx_bo *G4BufferManager[3];
+} AGX_WIN32_ASAHI_BACKEND;
 typedef struct {
   struct agx_bo *Process[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
 } AGX_G4_BATCH;
@@ -32,6 +36,7 @@ static struct agx_bo *agx_bo_create(struct agx_device *dev, size_t bytes,
   memset(bo->cpu, 0xa5, bytes);
   bo->dev = dev;
   bo->size = bytes;
+  bo->refs = 1u;
   bo->coordinate.addr = 0x1000000ULL + (uint64_t)allocations * 0x1000000ULL;
   bo->va = &bo->coordinate;
   bo->mapping.Va = bo->coordinate.addr;
@@ -45,12 +50,19 @@ static const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(
   return bo && bo->dev == backend->Native ? &bo->mapping : NULL;
 }
 static void *agx_bo_map(struct agx_bo *bo) { return bo->cpu; }
+static void agx_bo_reference(struct agx_bo *bo) { assert(bo); ++bo->refs; }
+static void release_bo(struct agx_bo *bo) {
+  assert(bo && bo->refs);
+  if (--bo->refs) return;
+  free(bo->cpu);
+  free(bo);
+}
 
 #include "g4_mesa_process_buffers_function.inc"
 
 int main(void) {
   struct agx_device native = {0};
-  AGX_WIN32_ASAHI_BACKEND backend = {&native};
+  AGX_WIN32_ASAHI_BACKEND backend = {.Native = &native};
   AGX_G4_BATCH batch = {0};
   APPLE_AGX_G4_NATIVE_RENDER render = {0};
   APPLE_AGX_G4_PROCESS_RANGE ranges[APPLE_AGX_G4_PROCESS_RANGE_COUNT] = {0};
@@ -74,9 +86,9 @@ int main(void) {
   for (unsigned i = 0; i < APPLE_AGX_G4_PROCESS_RANGE_COUNT; ++i) {
     assert(batch.Process[i] && !(ranges[i].Va & 0xffffULL));
     assert(batch.Process[i]->cpu[batch.Process[i]->size - 1u] == 0u);
-    free(batch.Process[i]->cpu);
-    free(batch.Process[i]);
+    release_bo(batch.Process[i]);
   }
+  for (unsigned i = 0; i < 3u; ++i) release_bo(backend.G4BufferManager[i]);
   puts("g4_mesa_process_buffers_replay: PASS");
   return 0;
 }

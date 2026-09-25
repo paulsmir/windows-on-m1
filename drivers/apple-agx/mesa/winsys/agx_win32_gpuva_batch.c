@@ -195,14 +195,26 @@ static int prepare_process_buffers(AGX_WIN32_ASAHI_BACKEND *b,AGX_G4_BATCH *g,
   for(unsigned i=0;i<APPLE_AGX_G4_PROCESS_RANGE_COUNT;++i) {
     const AGX_WIN32_GPUVA_BO *mapped;
     void *cpu;
-    g->Process[i]=agx_bo_create(b->Native,required[i],0,0,"VA render process");
+    int created=0;
+    if(i<3u && b->G4BufferManager[i]) {
+      g->Process[i]=b->G4BufferManager[i];
+      agx_bo_reference(g->Process[i]);
+    } else {
+      g->Process[i]=agx_bo_create(b->Native,required[i],0,0,
+                                  "VA render process");
+      created=1;
+      if(i<3u && g->Process[i]) {
+        b->G4BufferManager[i]=g->Process[i];
+        agx_bo_reference(g->Process[i]);
+      }
+    }
     if(!g->Process[i]) return 0;
     mapped=AgxWin32AsahiGpuvaBo(b,g->Process[i]);
     cpu=agx_bo_map(g->Process[i]);
-    if(!mapped || mapped->Bytes!=required[i] || !cpu) return 0;
-    memset(cpu,0,required[i]);
+    if(!mapped || mapped->Bytes<required[i] || !cpu) return 0;
+    if(created) memset(cpu,0,required[i]);
     ranges[i].Va=mapped->Va;
-    ranges[i].Bytes=required[i];
+    ranges[i].Bytes=(uint32_t)mapped->Bytes;
     ranges[i].Reserved=0;
   }
   /* Asahi's TVB page list records four 32 KiB pages per 128 KiB block;

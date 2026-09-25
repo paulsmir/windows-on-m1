@@ -5,6 +5,7 @@
 #include "apple_agx_g4_builder.h"
 #include "apple_agx_render_template_rebase.h"
 #include "apple_agx_render_template_vm_slot.h"
+#include "apple_agx_exp208_adapter.h"
 
 static unsigned long long get64(const unsigned char *data) {
   unsigned long long value = 0;
@@ -100,7 +101,7 @@ int main(void) {
   assert(objects[65].GpuVa == ranges[4].Va);
   assert(objects[66].GpuVa == ranges[5].Va);
   assert(objects[72].GpuVa == ranges[3].Va);
-  /* The template's object63 has no native Asahi owner. */
+  /* The sampler heap comes from Mesa once the render is bound. */
   assert(objects[63].GpuVa == 0ULL);
   {
     unsigned char *arena = malloc(AppleAgxRenderTemplateBytes());
@@ -153,6 +154,12 @@ int main(void) {
       assert(AppleAgxG4BuildTa3d(&view, arena,
           AppleAgxRenderTemplateBytes(), 1u, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      assert(get64(objects[1].Data + 0x24u) ==
+          ((32u * 16u) | ((unsigned long long)(32u * 4u) << 32)));
+      assert(get64(objects[1].Data + 0x2cu) ==
+          (32u | ((unsigned long long)32u << 32)));
+      assert(get64(objects[20].Data) ==
+          (32u | ((unsigned long long)32u << 32)));
       assert(objects[37].GpuVa == render.VdmCtrlStreamBase);
       assert(objects[38].GpuVa == render.IspScissorBase);
       assert(objects[39].GpuVa == render.IspDbiasBase);
@@ -167,6 +174,23 @@ int main(void) {
     assert(get64(objects[18].Data + 0xa0u) == render.IspScissorBase);
     assert(get64(objects[18].Data + 0x88u) == render.Bg.ResourceSpec);
     assert(get64(objects[18].Data + 0x90u) == render.Bg.Usc);
+    {
+      APPLE_AGX_EXP208_JOB_PARAMETERS parameters = {0};
+      APPLE_AGX_BACKEND_JOB_IMAGE job = {0};
+      parameters.ArenaGpuAddress = 0x1503800000ULL;
+      parameters.ArenaBytes = AppleAgxRenderTemplateBytes();
+      parameters.TaEvent = 1u;
+      parameters.D3Event = 2u;
+      parameters.TaExpectedStamp = 3u;
+      parameters.D3ExpectedStamp = 4u;
+      parameters.TaExpectedDonePointer = 5u;
+      parameters.D3ExpectedDonePointer = 6u;
+      assert(AppleAgxG4StageJob(&parameters, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT, &job));
+      assert(job.TaWorkAddresses[1] == objects[19].GpuVa);
+      assert(job.D3WorkAddresses[1] == objects[18].GpuVa);
+      assert(get64(objects[19].Data + 88u) == 0ULL);
+    }
     free(arena);
   }
   ranges[7].Bytes = 0x1000;

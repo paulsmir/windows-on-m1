@@ -23,6 +23,7 @@ class G4BuilderTest(unittest.TestCase):
                 str(ROOT / "drivers/apple-agx/shared/src/apple_agx_render_template_rebase.c"),
                 str(ROOT / "drivers/apple-agx/shared/src/apple_agx_render_template_vm_slot.c"),
                 str(ROOT / "drivers/apple-agx/shared/src/apple_agx_relocation.c"),
+                str(ROOT / "drivers/apple-agx/shared/src/apple_agx_exp208_adapter.c"),
                 "-o", str(binary),
             ], check=True)
             subprocess.run([str(binary)], check=True, timeout=10)

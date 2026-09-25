@@ -14,7 +14,7 @@ int main(void) {
   render.UtileWidthPx = render.UtileHeightPx = 16;
   assert(AppleAgxG4ProcessRequiredBytes(&render, bytes));
   assert(bytes[0] == 0x10000 && bytes[1] == 0x10000);
-  assert(bytes[2] == 0x200000 && bytes[3] == 0x20000);
+  assert(bytes[2] == 0x400000 && bytes[3] == 0x20000);
   assert(bytes[4] == 0x10000 && bytes[5] == 0x10000);
   assert(bytes[6] == 0x10000 && bytes[7] == 0x10000 &&
          bytes[8] == 0x10000);
@@ -22,6 +22,7 @@ int main(void) {
   render.HeightPx = 1600;
   assert(AppleAgxG4ProcessRequiredBytes(&render, bytes));
   assert(bytes[2] == 0x400000);
+  assert(bytes[2] / 0x20000u == 32u); /* 80x50 tiles, 32 blocks. */
   assert(bytes[4] == 0x20000);
   assert(bytes[6] == 0x140000);
   for (unsigned i = 0; i < APPLE_AGX_G4_PROCESS_RANGE_COUNT; ++i) {

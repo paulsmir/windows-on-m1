@@ -132,9 +132,9 @@ static inline int AppleAgxG4ProcessRequiredBytes(
   utiles = (32ULL / render->UtileWidthPx) *
            (32ULL / render->UtileHeightPx);
   blocks = (((tiles_x * tiles_y + 127ULL) / 128ULL + 7ULL) / 8ULL) * 8ULL;
-  /* The retained G13 buffer-manager image contains 16 block descriptors.
-   * Keep those descriptors within the VidMm-owned heap even for tiny draws. */
-  if (blocks < 16ULL) blocks = 16ULL;
+  /* One queue-lifetime G13 buffer manager owns 32 blocks. The recorded
+   * image names the first 16; the UMD page/block lists name all 32. */
+  if (blocks < 32ULL) blocks = 32ULL;
   tilemap_words = (5ULL * per_mtile * utiles + 3ULL) / 4ULL;
   tilemap = 4ULL * tilemap_words * 16ULL * render->Layers;
   tpc = 8ULL * utiles * per_mtile * 16ULL * render->Layers * 8ULL;

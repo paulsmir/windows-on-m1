@@ -37,6 +37,7 @@ class G4RealBrokerBuilderReplay(unittest.TestCase):
                 SHARED / "src/apple_agx_render_template_rebase.c",
                 SHARED / "src/apple_agx_render_template_vm_slot.c",
                 SHARED / "src/apple_agx_relocation.c",
+                SHARED / "src/apple_agx_exp208_adapter.c",
                 SHARED / "src/apple_agx_uat.c",
                 M1N1 / "src/hv_agx_gpuva_v5.c",
             ]

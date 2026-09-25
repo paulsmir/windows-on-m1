@@ -13,7 +13,7 @@
 #include "../m1n1_windows/tests/hv_agx_gpuva_v5_test.c"
 #undef main
 
-#define REPLAY_MAX_PAGES 1024u
+#define REPLAY_MAX_PAGES 4096u
 #define REPLAY_USC_BASE UINT64_C(0x1100000000)
 typedef struct {
   uint64_t Va, Ipa;
@@ -44,8 +44,12 @@ struct agx_bo {
   AGX_WIN32_GPUVA_BO mapping;
   unsigned char *cpu;
   size_t size;
+  unsigned refs;
 };
-typedef struct { struct agx_device *Native; } AGX_WIN32_ASAHI_BACKEND;
+typedef struct {
+  struct agx_device *Native;
+  struct agx_bo *G4BufferManager[3];
+} AGX_WIN32_ASAHI_BACKEND;
 typedef struct {
   struct agx_bo *Process[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
 } AGX_G4_BATCH;
@@ -60,6 +64,7 @@ static struct agx_bo *agx_bo_create(struct agx_device *dev, size_t bytes,
   memset(bo->cpu, 0xa5, bytes);
   bo->dev = dev;
   bo->size = bytes;
+  bo->refs = 1u;
   bo->coordinate.addr = process_next_va;
   bo->va = &bo->coordinate;
   bo->mapping.Va = process_next_va;
@@ -73,6 +78,13 @@ static const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(
   return bo && bo->dev == backend->Native ? &bo->mapping : NULL;
 }
 static void *agx_bo_map(struct agx_bo *bo) { return bo->cpu; }
+static void agx_bo_reference(struct agx_bo *bo) { assert(bo); ++bo->refs; }
+static void release_bo(struct agx_bo *bo) {
+  assert(bo && bo->refs);
+  if (--bo->refs) return;
+  free(bo->cpu);
+  free(bo);
+}
 #include "g4_mesa_prepare.inc"
 
 static uint64_t align16k(uint64_t value) {
@@ -206,15 +218,15 @@ int main(void) {
       objects[APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT] = {{0}};
   unsigned required[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
   struct agx_device device = {0};
-  AGX_WIN32_ASAHI_BACKEND umd = {&device};
+  AGX_WIN32_ASAHI_BACKEND umd = {.Native = &device};
   AGX_G4_BATCH batch = {0};
   unsigned char *arena;
   uint64_t next_va = 0x10000000ULL, token = 0;
   assert(graph);
   setup_broker(graph);
   packet.Render.Flags = 1u << 2;
-  packet.Render.WidthPx = 1280;
-  packet.Render.HeightPx = 720;
+  packet.Render.WidthPx = 2560;
+  packet.Render.HeightPx = 1600;
   packet.Render.Layers = 1;
   packet.Render.UtileWidthPx = packet.Render.UtileHeightPx = 32;
   packet.Render.Samples = 1;
@@ -234,6 +246,7 @@ int main(void) {
   map_range(graph, next_va, 0x10000ULL, 0);
   next_va += 0x10000ULL;
   assert(AppleAgxG4ProcessRequiredBytes(&packet.Render, required));
+  assert(required[2] / 0x20000u == 32u);
   process_next_va = next_va;
   assert(prepare_process_buffers(&umd, &batch, &packet.Render,
       packet.Header.Process));
@@ -241,6 +254,19 @@ int main(void) {
   for (unsigned i = 0; i < APPLE_AGX_G4_PROCESS_RANGE_COUNT; ++i) {
     assert(batch.Process[i] && packet.Header.Process[i].Bytes == required[i]);
     map_range(graph, packet.Header.Process[i].Va, required[i], 1);
+  }
+  {
+    AGX_G4_BATCH next = {0};
+    APPLE_AGX_G4_PROCESS_RANGE same[APPLE_AGX_G4_PROCESS_RANGE_COUNT] = {{0}};
+    assert(prepare_process_buffers(&umd, &next, &packet.Render, same));
+    for (unsigned i = 0; i < 3u; ++i) {
+      assert(next.Process[i] == batch.Process[i]);
+      assert(same[i].Va == packet.Header.Process[i].Va);
+    }
+    for (unsigned i = 3u; i < APPLE_AGX_G4_PROCESS_RANGE_COUNT; ++i)
+      assert(next.Process[i] != batch.Process[i]);
+    for (unsigned i = 0; i < APPLE_AGX_G4_PROCESS_RANGE_COUNT; ++i)
+      release_bo(next.Process[i]);
   }
   assert(((uint32_t *)batch.Process[0]->cpu)[0] ==
       (uint32_t)(packet.Header.Process[2].Va >> 15));
@@ -255,7 +281,7 @@ int main(void) {
   packet.Render.SamplerHeap = next_va;
   map_range(graph, next_va, 0x10000ULL, 0); next_va += 0x10000ULL;
   packet.Attachment.Pointer = next_va;
-  packet.Attachment.Size = 1280ULL * 720ULL * 4ULL;
+  packet.Attachment.Size = 2560ULL * 1600ULL * 4ULL;
   map_range(graph, next_va, packet.Attachment.Size, 1);
   next_va += align16k(packet.Attachment.Size);
   assert(next_va < 0x12000000ULL);
@@ -320,9 +346,9 @@ int main(void) {
   assert(graph->Broker->slots[0][1] == 0x90000001ULL);
   free(arena);
   for (unsigned i = 0; i < APPLE_AGX_G4_PROCESS_RANGE_COUNT; ++i) {
-    free(batch.Process[i]->cpu);
-    free(batch.Process[i]);
+    release_bo(batch.Process[i]);
   }
+  for (unsigned i = 0; i < 3u; ++i) release_bo(umd.G4BufferManager[i]);
   free(graph->Broker);
   free(graph);
   puts("g4_real_broker_builder_replay: PASS");

@@ -9,6 +9,7 @@
 #include "apple_agx_exp208_dynamic.h"
 #include "apple_agx_relocation.h"
 #include "apple_agx_render_template_rebase.h"
+#include "apple_agx_g4_builder.h"
 
 typedef struct _ADMISSION_BACKEND_IMAGE {
   APPLE_AGX_RENDER_TEMPLATE_ROOTS Roots;
@@ -28,6 +29,10 @@ typedef struct _ADMISSION_BACKEND_IMAGE {
   APPLE_AGX_BOOL JobReady;
   APPLE_AGX_BOOL Ready;
   APPLE_AGX_BOOL NativeBound;
+  APPLE_AGX_BOOL G4Native;
+  APPLE_AGX_G4_PRIVATE_HEADER_V2 G4Header;
+  unsigned char G4Command[APPLE_AGX_G4_NATIVE_MAX_BYTES];
+  APPLE_AGX_U32 G4CommandBytes;
   APPLE_AGX_U32 NativeWidth, NativeHeight, NativePitch;
   APPLE_AGX_EXP208_RELOCATION_OBJECT NativeOriginalOutput;
 } ADMISSION_BACKEND_IMAGE;
@@ -84,6 +89,13 @@ APPLE_AGX_BOOL AdmissionBackendImageBindNativeSubmission(
     ADMISSION_BACKEND_IMAGE *, const ADMISSION_RENDER_PACKET_DESCRIPTION *,
     void *, const struct _ADMISSION_DYNAMIC_OVERLAY_BINDINGS *,
     APPLE_AGX_EXP208_GDI_BINDING *);
+
+APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
+    ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *Packet,
+    void *DestinationCpuAddress,
+    const APPLE_AGX_G4_SUBMIT_VIEW *View,
+    APPLE_AGX_EXP208_GDI_BINDING *Binding);
 
 APPLE_AGX_BOOL AdmissionBackendImageCaptureOutput(
     const ADMISSION_BACKEND_IMAGE *Image,

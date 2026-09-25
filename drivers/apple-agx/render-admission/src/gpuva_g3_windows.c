@@ -3,6 +3,13 @@
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 
+C_ASSERT(FIELD_OFFSET(ADMISSION_BACKEND_IMAGE, G4Command) ==
+    FIELD_OFFSET(ADMISSION_BACKEND_IMAGE, G4Header) +
+    sizeof(APPLE_AGX_G4_PRIVATE_HEADER_V2));
+
+static int AdmissionG4GraphAccess(void *opaque, unsigned long long va,
+                                  unsigned int bytes, int write);
+
 static void *AdmissionG3AllocateNode(void *opaque, unsigned long long bytes) {
   UNREFERENCED_PARAMETER(opaque);
   if (bytes == 0ULL || bytes > MAXSIZE_T) return NULL;
@@ -474,6 +481,8 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
     ADMISSION_RENDER_CONTEXT *context, ULONG fence) {
   ADMISSION_G3_STATE *state;
   ADMISSION_G3_PROCESS *process;
+  APPLE_AGX_G4_SUBMIT_VIEW g4_view;
+  BOOLEAN g4_valid = TRUE;
   NTSTATUS status = STATUS_INVALID_DEVICE_STATE;
   if (adapter == NULL || context == NULL || fence == 0u ||
       KeGetCurrentIrql() != PASSIVE_LEVEL) return STATUS_INVALID_PARAMETER;
@@ -482,7 +491,21 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
   if (state == NULL || process == NULL || process->State != state)
     return STATUS_INVALID_DEVICE_STATE;
   ExAcquireFastMutex(&state->Lock);
+  if (adapter->BackendImage.G4Native) {
+    ADMISSION_BACKEND_IMAGE *image = &adapter->BackendImage;
+    if (image->BoundFence != fence ||
+        image->G4CommandBytes == 0u ||
+        image->G4CommandBytes > APPLE_AGX_G4_NATIVE_MAX_BYTES ||
+        AppleAgxG4ParseSubmit(&image->G4Header,
+            (unsigned int)sizeof(image->G4Header) + image->G4CommandBytes,
+            (unsigned int)sizeof(image->G4Header) + image->G4CommandBytes,
+            image->G4Header.Base.CommandVa, image->G4CommandBytes,
+            AdmissionG4GraphAccess, &process->Graph,
+            &g4_view) != AppleAgxG4ParseOk)
+      g4_valid = FALSE;
+  }
   if (state->ActiveProcess == NULL && !process->Poisoned &&
+      g4_valid &&
       !context->GpuvaG3Poisoned && context->GpuvaG3RootIpa != 0ULL &&
       context->GpuvaG3RootIpa == process->Graph.RootIpa &&
       AppleAgxGpuvaG3GraphContainsRange(&process->Graph,
@@ -588,9 +611,39 @@ static int AdmissionG4GraphAccess(void *opaque, unsigned long long va,
       graph, va, bytes, write != 0) ? 1 : 0;
 }
 
-/* Envelope-only admission. A parsed native render command is deliberately
- * rejected until every render VA is validated and a TA/3D completion owner
- * exists. Returning success here would fabricate execution and fence progress. */
+static BOOLEAN AdmissionG4ResolveOutput(
+    ADMISSION_G3_PROCESS *process,
+    const APPLE_AGX_G4_ATTACHMENT *attachment,
+    const ADMISSION_SCANOUT_MEMORY_VIEW *local,
+    ADMISSION_RENDER_PACKET_DESCRIPTION *packet) {
+  ULONGLONG ipa, offset, position;
+  if (process == NULL || attachment == NULL || local == NULL ||
+      packet == NULL || attachment->Pointer == 0ULL ||
+      attachment->Size == 0ULL || attachment->Size > MAXULONG ||
+      !AppleAgxGpuvaG3GraphTranslateVa(&process->Graph,
+          attachment->Pointer, &ipa) || ipa < local->GuestIpaAddress)
+    return FALSE;
+  offset = ipa - local->GuestIpaAddress;
+  if (offset > local->Bytes ||
+      attachment->Size > local->Bytes - offset ||
+      local->HostPhysicalAddress > MAXULONGLONG - offset)
+    return FALSE;
+  for (position = 0ULL; position < attachment->Size;) {
+    ULONGLONG mapped;
+    if (!AppleAgxGpuvaG3GraphTranslateVa(&process->Graph,
+            attachment->Pointer + position, &mapped) ||
+        mapped != ipa + position) return FALSE;
+    position += 0x4000ULL -
+        ((attachment->Pointer + position) & 0x3fffULL);
+  }
+  packet->DestinationCpuToken =
+      (ULONGLONG)(ULONG_PTR)((PUCHAR)local->CpuAddress + (SIZE_T)offset);
+  packet->DestinationGpuVa = attachment->Pointer;
+  packet->DestinationPhysical = local->HostPhysicalAddress + offset;
+  packet->DestinationBytes = (ULONG)attachment->Size;
+  return TRUE;
+}
+
 static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
     ADMISSION_CONTEXT *adapter, ADMISSION_RENDER_CONTEXT *context,
     const DXGKARG_SUBMITCOMMANDVIRTUAL *args) {
@@ -599,6 +652,12 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
       (ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
   APPLE_AGX_G4_SUBMIT_VIEW view;
   APPLE_AGX_G4_PARSE_RESULT result;
+  APPLE_AGX_G4_ATTACHMENT color;
+  ADMISSION_SCANOUT_MEMORY_VIEW local;
+  ADMISSION_RENDER_PACKET_DESCRIPTION packet;
+  APPLE_AGX_EXP208_GDI_BINDING binding;
+  KIRQL old_irql;
+  BOOLEAN prepared = FALSE, queued = FALSE;
   if (KeGetCurrentIrql() != PASSIVE_LEVEL || state == NULL ||
       process == NULL || process->State != state || process->Poisoned ||
       context->GpuvaG3Poisoned || context->GpuvaG3RootIpa == 0ULL ||
@@ -606,8 +665,13 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
       (context->Object.Flags & ADMISSION_CONTEXT_VIRTUAL_ADDRESSING) == 0u ||
       (context->Object.Flags & (ADMISSION_CONTEXT_SYSTEM |
                                 ADMISSION_CONTEXT_GDI)) != 0u ||
-      args->Flags.Value != 0u)
+      args->Flags.Value != 0u ||
+      !context->SchedulerContext.Active ||
+      !AdmissionPlatformRuntimeReady(adapter) ||
+      !NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(adapter, &local)))
     return STATUS_INVALID_PARAMETER;
+  RtlZeroMemory(&packet, sizeof(packet));
+  RtlZeroMemory(&binding, sizeof(binding));
   ExAcquireFastMutex(&state->Lock);
   if (context->GpuvaG3RootIpa != process->Graph.RootIpa ||
       process->Graph.Uncertain) {
@@ -618,11 +682,76 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
       args->pDmaBufferPrivateData, args->DmaBufferPrivateDataSize,
       args->DmaBufferUmdPrivateDataSize, args->DmaBufferVirtualAddress,
       args->DmaBufferSize, AdmissionG4GraphAccess, &process->Graph, &view);
+  if (result == AppleAgxG4ParseOk && view.AttachmentCount == 1u) {
+    RtlCopyMemory(&color, view.Attachments, sizeof(color));
+    packet.Fence = args->SubmissionFenceId;
+    packet.AllocationCount = 1u;
+    packet.ContextToken = (ULONGLONG)(ULONG_PTR)context;
+    /* G3 virtual submit has no allocation-list member. The graph and local
+     * reserve prove the target; this token is opaque to the G3 completion
+     * path, which does not enable the GDI output-capture qualification. */
+    packet.AllocationToken = (ULONGLONG)(ULONG_PTR)context;
+    packet.PrivateDataToken =
+        (ULONGLONG)(ULONG_PTR)&adapter->BackendImage.G4Header;
+    packet.PrivateDataBytes =
+        (ULONG)sizeof(adapter->BackendImage.G4Header) + view.CommandBytes;
+    packet.PrivateDataStart = 0u;
+    packet.PrivateDataEnd = packet.PrivateDataBytes;
+    packet.DmaStart = 0u;
+    packet.DmaEnd = view.CommandBytes;
+    packet.DestinationIndex = 0u;
+    if (!AdmissionG4ResolveOutput(process, &color, &local, &packet))
+      result = AppleAgxG4ParseUnmapped;
+  } else if (result == AppleAgxG4ParseOk) {
+    result = AppleAgxG4ParseUnsupported;
+  }
   ExReleaseFastMutex(&state->Lock);
   if (result != AppleAgxG4ParseOk) return STATUS_INVALID_PARAMETER;
-  /* DxgkDdiSubmitCommandVirtual permits only SUCCESS or INVALID_PARAMETER;
-   * native execution is still unavailable, so leave this device in error
-   * without asking the scheduler to bugcheck for an unsupported NTSTATUS. */
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  if (AdmissionRenderPacketState(&adapter->RenderPacket) ==
+          AdmissionRenderPacketEmpty &&
+      context->Object.FenceOutstanding == 0u &&
+      InterlockedCompareExchange(&adapter->SchedulerFaulted, 0, 0) == 0 &&
+      AdmissionRenderPacketPrepare(&adapter->RenderPacket, &packet)) {
+    context->Object.FenceOutstanding = args->SubmissionFenceId;
+    prepared = TRUE;
+  }
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  if (!prepared) return STATUS_INVALID_PARAMETER;
+  if (!AdmissionBackendImageBindG4Submission(&adapter->BackendImage,
+          &packet, (PVOID)(ULONG_PTR)packet.DestinationCpuToken,
+          &view, &binding)) goto Rollback;
+  context->GpuvaG3DmaBufferVa = args->DmaBufferVirtualAddress;
+  context->GpuvaG3DmaBufferBytes = args->DmaBufferSize;
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  if (AdmissionRenderPacketQueue(&adapter->RenderPacket,
+          args->SubmissionFenceId, (ULONGLONG)(ULONG_PTR)context,
+          packet.PrivateDataToken, 0u, packet.DmaEnd)) {
+    if (AppleAgxSchedulerQueueFence(&adapter->Scheduler, 0u, 0u,
+            args->SubmissionFenceId))
+      queued = TRUE;
+    else
+      (void)AdmissionRenderPacketReset(&adapter->RenderPacket,
+          args->SubmissionFenceId, 0u);
+  }
+  if (!queued) context->Object.FenceOutstanding = 0u;
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  if (!queued) goto Rollback;
+  AdmissionDispatchQueuedWork(adapter);
+  return STATUS_SUCCESS;
+Rollback:
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  if (AdmissionRenderPacketState(&adapter->RenderPacket) ==
+          AdmissionRenderPacketPrepared)
+    (void)AdmissionRenderPacketCancelPrepared(&adapter->RenderPacket,
+        (ULONGLONG)(ULONG_PTR)context);
+  context->Object.FenceOutstanding = 0u;
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  context->GpuvaG3DmaBufferVa = 0ULL;
+  context->GpuvaG3DmaBufferBytes = 0u;
+  if (adapter->BackendImage.G4Native)
+    (void)AdmissionBackendImageReleaseSubmission(&adapter->BackendImage,
+        args->SubmissionFenceId);
   return STATUS_INVALID_PARAMETER;
 }
 

@@ -3,6 +3,7 @@
 
 #include "apple_agx_g4_submit.h"
 #include "apple_agx_render_template.h"
+#include "apple_agx_exp208_adapter.h"
 
 /* Bind the source-backed scene allocations to the rebased firmware objects.
  * The caller retains ownership of all VidMm process ranges and must apply
@@ -41,5 +42,11 @@ APPLE_AGX_BOOL AppleAgxG4BuildTa3d(
     APPLE_AGX_U32 VmSlot,
     APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
     APPLE_AGX_U32 ObjectCount);
+
+APPLE_AGX_BOOL AppleAgxG4StageJob(
+    const APPLE_AGX_EXP208_JOB_PARAMETERS *Parameters,
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
+    APPLE_AGX_U32 ObjectCount,
+    APPLE_AGX_BACKEND_JOB_IMAGE *Job);
 
 #endif

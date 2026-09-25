@@ -1928,14 +1928,25 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
           Plan->IncludeInitBm, &staged) ||
       !AppleAgxInitdataMemoryGetRenderBindings(&runtime->Initdata,
                                                &bindings) ||
-      !AppleAgxRenderSharedMemoryBuildActiveJob(
-          &runtime->Initdata.RenderSharedMemory,
-          runtime->Adapter->BackendImage.ArenaCpuAddress,
-          runtime->Adapter->BackendImage.ArenaBytes,
-          runtime->Adapter->BackendImage.Objects,
-          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
-          runtime->Adapter->BackendImage.ArenaGpuAddress, Plan->IncludeInitBm,
-          &bindings, &staged, runtime->QueueObjects, Job) ||
+      !(runtime->Adapter->BackendImage.G4Native ?
+          AppleAgxRenderSharedMemoryBuildActiveG4Job(
+              &runtime->Initdata.RenderSharedMemory,
+              runtime->Adapter->BackendImage.ArenaCpuAddress,
+              runtime->Adapter->BackendImage.ArenaBytes,
+              runtime->Adapter->BackendImage.Objects,
+              APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+              runtime->Adapter->BackendImage.ArenaGpuAddress,
+              Plan->IncludeInitBm, &bindings, &staged,
+              runtime->QueueObjects, Job) :
+          AppleAgxRenderSharedMemoryBuildActiveJob(
+              &runtime->Initdata.RenderSharedMemory,
+              runtime->Adapter->BackendImage.ArenaCpuAddress,
+              runtime->Adapter->BackendImage.ArenaBytes,
+              runtime->Adapter->BackendImage.Objects,
+              APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+              runtime->Adapter->BackendImage.ArenaGpuAddress,
+              Plan->IncludeInitBm, &bindings, &staged,
+              runtime->QueueObjects, Job)) ||
       (dynamic &&
        ((APPLE_AGX_WIN32_COMMAND_IS_NATIVE(dynamicView.Bindings->CommandVersion)) ?
           AdmissionDynamicOverlayRouteNative(dynamicPlan, dynamicView.Bindings,
@@ -2167,6 +2178,21 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendResolve(
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
   APPLE_AGX_DMA_SHADOW shadow;
   APPLE_AGX_DMA_SHADOW_VIEW view;
+  ADMISSION_BACKEND_IMAGE *image = runtime == NULL ||
+      runtime->Adapter == NULL ? NULL :
+      &runtime->Adapter->BackendImage;
+  if (image != NULL && image->G4Native) {
+    if (Submission == NULL || Bytes == NULL || ByteCount == NULL ||
+        image->G4CommandBytes == 0u ||
+        image->BoundFence != Submission->Submission.Fence ||
+        Submission->PrivateData != &image->G4Header ||
+        Submission->DmaSubmissionStart != 0u ||
+        Submission->DmaSubmissionEnd != image->G4CommandBytes)
+      return APPLE_AGX_BACKEND_FALSE;
+    *Bytes = image->G4Command;
+    *ByteCount = image->G4CommandBytes;
+    return APPLE_AGX_BACKEND_TRUE;
+  }
   if (runtime == NULL || Submission == NULL || Bytes == NULL ||
       ByteCount == NULL || Submission->PrivateData == NULL ||
       !AppleAgxDmaShadowOpen(

@@ -1,5 +1,6 @@
 #include "render_backend_image.h"
 #include "render_dynamic_overlay.h"
+#include <string.h>
 
 #define ADMISSION_BACKEND_IMAGE_NULL ((void *)0)
 #define ADMISSION_BACKEND_PHYSICAL_LIMIT (1ULL << 40u)
@@ -283,6 +284,85 @@ APPLE_AGX_BOOL AdmissionBackendImageBindNativeSubmission(
   return APPLE_AGX_TRUE;
 }
 
+APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
+    ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *Packet,
+    void *DestinationCpuAddress,
+    const APPLE_AGX_G4_SUBMIT_VIEW *View,
+    APPLE_AGX_EXP208_GDI_BINDING *Binding) {
+  ADMISSION_LOCAL_MEMORY_VIEW backend;
+  APPLE_AGX_G4_NATIVE_RENDER render;
+  APPLE_AGX_G4_ATTACHMENT color;
+  APPLE_AGX_EXP208_GDI_BINDING candidate;
+  APPLE_AGX_EXP208_RELOCATION_OBJECT saved;
+  if (Image == 0 || Packet == 0 || DestinationCpuAddress == 0 ||
+      View == 0 || View->Native == 0 || View->Render == 0 ||
+      View->Attachments == 0 ||
+      Binding == 0 || Image->Ready != APPLE_AGX_TRUE ||
+      Image->BoundFence != 0u || Image->G4Native ||
+      View->RenderBytes != sizeof(render) || View->AttachmentCount != 1u ||
+      View->CommandBytes == 0u ||
+      View->CommandBytes > APPLE_AGX_G4_NATIVE_MAX_BYTES ||
+      Packet->Fence == 0u || Packet->DestinationPhysical == 0ULL ||
+      Packet->DestinationGpuVa == 0ULL || Packet->DestinationBytes == 0u)
+    return APPLE_AGX_FALSE;
+  memcpy(&render, View->Render, sizeof(render));
+  memcpy(&color, View->Attachments, sizeof(color));
+  if (color.Pointer != Packet->DestinationGpuVa ||
+      color.Size != Packet->DestinationBytes ||
+      Packet->DestinationCpuToken !=
+          (APPLE_AGX_U64)(unsigned long long)DestinationCpuAddress)
+    return APPLE_AGX_FALSE;
+  backend.CpuAddress = Image->ArenaCpuAddress;
+  backend.HostPhysicalAddress = Image->ArenaPhysicalAddress;
+  backend.GpuVirtualAddress = Image->ArenaGpuAddress;
+  backend.Bytes = Image->ArenaCapacity;
+  if (!AdmissionBackendImagePrepare(Image, &backend) ||
+      !AppleAgxG4BuildTa3d(View, Image->ArenaCpuAddress,
+          Image->ArenaBytes, 1u, Image->Objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)) {
+    Image->Ready = APPLE_AGX_FALSE;
+    return APPLE_AGX_FALSE;
+  }
+  saved = Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
+  Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT].Data =
+      (unsigned char *)DestinationCpuAddress;
+  Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT].GpuVa =
+      Packet->DestinationGpuVa;
+  Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT].PhysicalAddress =
+      Packet->DestinationPhysical;
+  Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT].Size =
+      Packet->DestinationBytes;
+  if (!AppleAgxG4ApplySceneRelocations(Image->Objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)) {
+    Image->Ready = APPLE_AGX_FALSE;
+    return APPLE_AGX_FALSE;
+  }
+  if (!AppleAgxG4ComposeHeaderV2(&Image->G4Header, &render,
+          View->CommandVa, View->CommandBytes,
+          View->ColorFormat, View->Process)) {
+    Image->Ready = APPLE_AGX_FALSE;
+    return APPLE_AGX_FALSE;
+  }
+  memcpy(Image->G4Command, View->Native, View->CommandBytes);
+  Image->G4CommandBytes = View->CommandBytes;
+  AdmissionBackendBindingZero(&candidate);
+  candidate.OutputObject = APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT;
+  candidate.DestinationGpuVa = Packet->DestinationGpuVa;
+  candidate.DestinationPhysical = Packet->DestinationPhysical;
+  candidate.DestinationBytes = Packet->DestinationBytes;
+  Image->NativeOriginalOutput = saved;
+  Image->NativeBound = APPLE_AGX_TRUE;
+  Image->G4Native = APPLE_AGX_TRUE;
+  Image->NativeWidth = render.WidthPx;
+  Image->NativeHeight = render.HeightPx;
+  Image->NativePitch = (APPLE_AGX_U32)render.WidthPx * 4u;
+  Image->Binding = candidate;
+  Image->BoundFence = Packet->Fence;
+  *Binding = candidate;
+  return APPLE_AGX_TRUE;
+}
+
 APPLE_AGX_BOOL AdmissionBackendImageCaptureOutput(
     const ADMISSION_BACKEND_IMAGE *Image,
     const ADMISSION_RENDER_PACKET_DESCRIPTION *Packet,
@@ -397,6 +477,14 @@ APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmission(
       Image->Ready != APPLE_AGX_TRUE || Fence == 0u ||
       Image->BoundFence != Fence)
     return APPLE_AGX_FALSE;
+  if (Image->G4Native) {
+    ADMISSION_LOCAL_MEMORY_VIEW backend;
+    backend.CpuAddress = Image->ArenaCpuAddress;
+    backend.HostPhysicalAddress = Image->ArenaPhysicalAddress;
+    backend.GpuVirtualAddress = Image->ArenaGpuAddress;
+    backend.Bytes = Image->ArenaCapacity;
+    return AdmissionBackendImagePrepare(Image, &backend);
+  }
   if (Image->NativeBound) {
     APPLE_AGX_EXP208_RELOCATION_OBJECT *output=&Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
     if(output->GpuVa!=Image->Binding.DestinationGpuVa ||
@@ -469,11 +557,13 @@ APPLE_AGX_BOOL AdmissionBackendImageStageJob(
   parameters.D3ExpectedStamp = dynamic.D3CurrentStamp;
   parameters.TaExpectedDonePointer = TaExpectedDonePointer;
   parameters.D3ExpectedDonePointer = D3ExpectedDonePointer;
-  if (!AppleAgxExp208BuildJob(
-          &parameters, Image->Objects,
-          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
-          AppleAgxRenderTemplateRelocations(),
-          AppleAgxRenderTemplateRelocationCount(), &candidate) ||
+  if (!(Image->G4Native ?
+          AppleAgxG4StageJob(&parameters, Image->Objects,
+              APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT, &candidate) :
+          AppleAgxExp208BuildJob(&parameters, Image->Objects,
+              APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+              AppleAgxRenderTemplateRelocations(),
+              AppleAgxRenderTemplateRelocationCount(), &candidate)) ||
       !AppleAgxExp208PatchDynamic(
           Image->ArenaCpuAddress, Image->ArenaBytes, &dynamic_input))
     return APPLE_AGX_FALSE;

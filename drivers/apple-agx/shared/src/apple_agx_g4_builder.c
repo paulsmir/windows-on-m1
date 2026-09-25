@@ -36,10 +36,11 @@ APPLE_AGX_BOOL AppleAgxG4BindProcessObjects(
           Process[j].Va < Process[i].Va + Process[i].Bytes)
         return APPLE_AGX_FALSE;
   }
-  /* The EXP208 arena has 16 TVB block descriptors. A larger heap needs a
-   * fresh buffer-manager layout; this binding cannot silently alias blocks. */
-  if (Process[2].Bytes < 16u * G4_HEAP_BLOCK ||
-      required[2] > 16u * G4_HEAP_BLOCK ||
+  /* UMD emits the complete page/block lists. The retained relocations
+   * name only the first 16 descriptors; BM Info gives firmware the full
+   * 32-block extent. */
+  if (Process[2].Bytes != 32u * G4_HEAP_BLOCK ||
+      required[2] > 32u * G4_HEAP_BLOCK ||
       Process[7].Bytes < G4_PREEMPT_CLUSTER_UPPER_BOUND *
           (0x540ULL + 0x280ULL + 0x20ULL))
     return APPLE_AGX_FALSE;
@@ -149,6 +150,35 @@ static void g4_put32(unsigned char *p, APPLE_AGX_U32 value) {
 static void g4_put64(unsigned char *p, APPLE_AGX_U64 value) {
   g4_put32(p, (APPLE_AGX_U32)value);
   g4_put32(p + 4u, (APPLE_AGX_U32)(value >> 32));
+}
+static APPLE_AGX_BOOL g4_patch_buffer_manager(
+    const APPLE_AGX_G4_PROCESS_RANGE *process,
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *objects) {
+  unsigned char *info = objects[1].Data;
+  unsigned char *init = objects[16].Data;
+  unsigned char *ctl = objects[20].Data;
+  APPLE_AGX_U32 blocks;
+  if (!info || objects[1].Size < 0x8cu ||
+      !init || objects[16].Size < 20u ||
+      !ctl || objects[20].Size < 8u ||
+      process[2].Bytes % G4_HEAP_BLOCK ||
+      process[0].Bytes < process[2].Bytes / G4_HEAP_BLOCK * 16u ||
+      process[1].Bytes < process[2].Bytes / G4_HEAP_BLOCK * 8u)
+    return APPLE_AGX_FALSE;
+  blocks = process[2].Bytes / G4_HEAP_BLOCK;
+  /* Asahi fw/buffer.rs Info (G13/V13_5), InitBuffer and BlockControl.
+   * The page and block lists themselves are written by the UMD. */
+  g4_put32(info + 0x24u, blocks * 16u);
+  g4_put32(info + 0x28u, blocks * 4u);
+  g4_put32(info + 0x2cu, blocks);
+  g4_put32(info + 0x30u, blocks);
+  g4_put32(info + 0x48u, blocks * 4u - 1u);
+  g4_put32(info + 0x84u, blocks * 4u);
+  g4_put32(info + 0x88u, blocks * 4u);
+  g4_put32(init + 0x10u, blocks);
+  g4_put32(ctl, blocks);
+  g4_put32(ctl + 4u, blocks);
+  return APPLE_AGX_TRUE;
 }
 static APPLE_AGX_U32 g4_get32(const unsigned char *p) {
   return (APPLE_AGX_U32)p[0] | ((APPLE_AGX_U32)p[1] << 8) |
@@ -281,9 +311,34 @@ APPLE_AGX_BOOL AppleAgxG4BuildTa3d(
   if (!AppleAgxG4BindProcessObjects(&render, View->Process,
           Objects, ObjectCount) ||
       !AppleAgxG4BindNativeObjects(View, Objects, ObjectCount) ||
+      !g4_patch_buffer_manager(View->Process, Objects) ||
       !AppleAgxRenderTemplateSelectVmSlot(Arena, ArenaBytes, VmSlot) ||
       !AppleAgxG4ApplySceneRelocations(Objects, ObjectCount) ||
       !AppleAgxG4PatchRenderScalars(&render, Objects, ObjectCount))
+    return APPLE_AGX_FALSE;
+  return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AppleAgxG4StageJob(
+    const APPLE_AGX_EXP208_JOB_PARAMETERS *Parameters,
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
+    APPLE_AGX_U32 ObjectCount,
+    APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
+  APPLE_AGX_EXP208_RELOCATION_OBJECT
+      candidate[APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT];
+  APPLE_AGX_U32 i;
+  if (Parameters == 0 || Objects == 0 || Job == 0 ||
+      ObjectCount < APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)
+    return APPLE_AGX_FALSE;
+  for (i = 0u; i < APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT; ++i) {
+    candidate[i] = Objects[i];
+    if (candidate[i].GpuVa == 0ULL) candidate[i].GpuVa = 0x10000ULL;
+  }
+  if (!AppleAgxExp208BuildJob(Parameters, candidate,
+      APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+      AppleAgxRenderTemplateRelocations(),
+      AppleAgxRenderTemplateRelocationCount(), Job) ||
+      !AppleAgxG4ApplySceneRelocations(Objects, ObjectCount))
     return APPLE_AGX_FALSE;
   return APPLE_AGX_TRUE;
 }

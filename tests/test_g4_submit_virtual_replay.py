@@ -1,4 +1,4 @@
-"""Replay the production G4 virtual submit gate with a host WDK shim."""
+"""Replay G4 virtual submit queueing and WDDM-compatible rejection paths."""
 from pathlib import Path
 import os
 import re
@@ -26,10 +26,11 @@ def function_body(source, name):
 
 
 class G4SubmitVirtualReplay(unittest.TestCase):
-    def test_fail_closed_status_is_a_supported_wddm_result(self):
+    def test_native_submit_queues_only_after_graph_and_image_bind(self):
         production = SOURCE.read_text()
         functions = "\n".join(function_body(production, name) for name in (
-            "AdmissionG4GraphAccess", "AdmissionG4SubmitVirtualEnvelope"))
+            "AdmissionG4GraphAccess", "AdmissionG4ResolveOutput",
+            "AdmissionG4SubmitVirtualEnvelope"))
         with tempfile.TemporaryDirectory(prefix="g4-submit-virtual-") as tmp:
             tmp = Path(tmp)
             (tmp / "g4_submit_virtual_functions.inc").write_text(functions)

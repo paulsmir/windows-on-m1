@@ -370,6 +370,18 @@ int main(void) {
   assert(active_job.D3ExpectedStamp == 0x3d000200u);
   assert(active_job.TaExpectedDonePointer == 3u);
   assert(active_job.D3ExpectedDonePointer == 4u);
+  source_objects[63].GpuVa=0ULL;
+  for(index=67u;index<=71u;++index) source_objects[index].GpuVa=0ULL;
+  assert(AppleAgxRenderSharedMemoryBuildActiveG4Job(
+      &owner, arena, APPLE_AGX_EXP208_ARENA_BYTES,
+      source_objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+      0x1500800000ULL, APPLE_AGX_FALSE, &bindings, &staged_job,
+      active_objects, &active_job));
+  assert(read_u64(active_objects[18].Data+2220u)==0ULL);
+  assert(read_u64(active_objects[19].Data+88u)==0ULL);
+  assert(read_u64(active_objects[19].Data+1352u)==0ULL);
+  assert(active_job.TaWorkAddresses[1]==
+         owner.VirtualAddresses[19]+owner.ObjectOffsets[19]);
   assert(AppleAgxRenderSharedMemoryDestroy(&owner) ==
          AppleAgxRenderSharedMemoryResultOk);
   assert(fake.Freed == APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT);

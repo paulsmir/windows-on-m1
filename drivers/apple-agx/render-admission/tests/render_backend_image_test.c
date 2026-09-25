@@ -581,6 +581,76 @@ static void test_b1_same_va_distinct_physical_output(void) {
   for(unsigned i=0;i<2;i++){free(output[i]);free(arena[i]);}
 }
 
+static void test_g4_native_scene_stages_and_releases(void) {
+  unsigned char *arena=malloc(TEST_BACKEND_BYTES);
+  unsigned char *target=malloc(1280u*720u*4u);
+  ADMISSION_BACKEND_IMAGE image;
+  ADMISSION_LOCAL_MEMORY_VIEW backend={0};
+  ADMISSION_RENDER_PACKET_DESCRIPTION packet={0};
+  APPLE_AGX_G4_SUBMIT_VIEW view={0};
+  APPLE_AGX_G4_NATIVE_RENDER render={0};
+  APPLE_AGX_G4_ATTACHMENT color={0};
+  struct {
+    APPLE_AGX_G4_NATIVE_HEADER AttachCommand;
+    APPLE_AGX_G4_ATTACHMENT Attachment;
+    APPLE_AGX_G4_NATIVE_HEADER RenderCommand;
+    APPLE_AGX_G4_NATIVE_RENDER Render;
+  } native={0};
+  APPLE_AGX_EXP208_GDI_BINDING binding;
+  APPLE_AGX_BACKEND_JOB_IMAGE job;
+  unsigned required[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
+  unsigned long long va=0x10000000ULL;
+  assert(arena && target);
+  backend.CpuAddress=arena;backend.HostPhysicalAddress=TEST_BACKEND_PHYSICAL;
+  backend.GpuVirtualAddress=TEST_BACKEND_GPU;backend.Bytes=TEST_BACKEND_BYTES;
+  assert(AdmissionBackendImagePrepare(&image,&backend));
+  render.Flags=1u<<2;render.WidthPx=1280;render.HeightPx=720;
+  render.Layers=1;render.UtileWidthPx=render.UtileHeightPx=32;
+  render.Samples=1;render.SampleSizeBytes=8;
+  render.VdmCtrlStreamBase=0x12000000ULL;
+  render.IspScissorBase=0x12100000ULL;
+  render.IspDbiasBase=0x12200000ULL;
+  render.SamplerHeap=0x12300000ULL;
+  assert(AppleAgxG4ProcessRequiredBytes(&render,required));
+  for(unsigned i=0;i<APPLE_AGX_G4_PROCESS_RANGE_COUNT;++i){
+    view.Process[i].Va=va;view.Process[i].Bytes=required[i];va+=required[i];
+  }
+  color.Pointer=0x13000000ULL;color.Size=1280ULL*720ULL*4ULL;
+  native.AttachCommand.Type=APPLE_AGX_G4_FRAGMENT_ATTACHMENTS;
+  native.AttachCommand.Size=sizeof(color);
+  native.AttachCommand.VdmBarrier=0xffffu;
+  native.AttachCommand.CdmBarrier=0xffffu;
+  native.Attachment=color;
+  native.RenderCommand.Type=APPLE_AGX_G4_RENDER;
+  native.RenderCommand.Size=sizeof(render);
+  native.Render=render;
+  view.Native=(const unsigned char *)&native;
+  view.CommandVa=0x20000ULL;view.CommandBytes=sizeof(native);
+  view.Render=(const unsigned char *)&native.Render;
+  view.RenderBytes=sizeof(render);
+  view.Attachments=&native.Attachment;view.AttachmentCount=1u;
+  view.ColorFormat=APPLE_AGX_G4_COLOR_BGRA8;
+  packet.Fence=77u;packet.DestinationGpuVa=color.Pointer;
+  packet.DestinationPhysical=0x890200000ULL;
+  packet.DestinationCpuToken=(unsigned long long)(uintptr_t)target;
+  packet.DestinationBytes=(unsigned)color.Size;
+  assert(AdmissionBackendImageBindG4Submission(
+      &image,&packet,target,&view,&binding));
+  assert(image.G4Native && image.NativeBound && image.BoundFence==77u);
+  assert(image.G4CommandBytes==sizeof(native) &&
+      image.G4Header.Base.Reserved==APPLE_AGX_G4_COLOR_BGRA8 &&
+      memcmp(image.G4Command,&native,sizeof(native))==0);
+  assert(AdmissionBackendImageStageJob(&image,77u,1u,2u,5u,6u,
+      APPLE_AGX_TRUE,&job));
+  assert(job.TaWorkAddresses[1]==image.Objects[19].GpuVa);
+  assert(read_u64(image.Objects[19].Data+88u)==0ULL);
+  assert(read_u64(image.Objects[19].Data+1352u)==render.SamplerHeap);
+  assert(AdmissionBackendImageReleaseSubmission(&image,77u));
+  assert(image.Ready && !image.G4Native && !image.NativeBound &&
+      image.BoundFence==0u);
+  free(target);free(arena);
+}
+
 int main(void) {
   test_materializes_and_relocates_exact_rebased_image();
   test_rejects_invalid_tail_atomically();
@@ -590,5 +660,6 @@ int main(void) {
   test_fullscreen_packet_repoints_tiling_graph_and_restores_template();
   test_native_binding_preserves_logical_attachment();
   test_b1_same_va_distinct_physical_output();
+  test_g4_native_scene_stages_and_releases();
   return 0;
 }
