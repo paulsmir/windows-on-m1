@@ -40,6 +40,9 @@ BRIDGES = ('agx_win32_asahi_bo.c', 'agx_win32_asahi_capture.c',
            'agx_win32_asahi_pipeline.c', 'agx_win32_asahi_batch.c',
            'agx_win32_asahi_scene.c',
            'agx_win32_asahi_runtime_test.c')
+GPUVA_BRIDGES = tuple(name for name in BRIDGES if name not in (
+    'agx_win32_asahi_batch.c', 'agx_win32_asahi_runtime_test.c')) + (
+    'agx_win32_gpuva.c', 'agx_win32_gpuva_batch.c')
 FRONTEND_CPP = ('Adapter.cpp','Debug.cpp','Device.cpp','Draw.cpp','DxgiFns.cpp',
                 'Format.cpp','InputAssembly.cpp','OutputMerger.cpp','Query.cpp',
                 'Rasterizer.cpp','Resource.cpp','Shader.cpp','ShaderDump.cpp')
@@ -118,6 +121,7 @@ def main():
     parser.add_argument('--architecture', choices=('x64', 'arm64'), default='x64')
     parser.add_argument('--native-source', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--gpuva', action='store_true')
     args = parser.parse_args()
     out = args.output
     out.mkdir(exist_ok=False)
@@ -164,6 +168,8 @@ def main():
         native_result = json.loads((native / 'result.json').read_text())
         if native_result.get('architecture') != args.architecture or native_result.get('exit') != 0:
             raise RuntimeError('Prepared native source architecture/result mismatch')
+        if bool(native_result.get('gpuva', False)) != args.gpuva:
+            raise RuntimeError('Prepared native source GPUVA profile mismatch')
         record(native / 'result.json', kind='native-projection-result')
         record(native / 'inputs.json', kind='native-projection-manifest')
         native_inputs = json.loads((native / 'inputs.json').read_text())
@@ -226,6 +232,9 @@ def main():
                                '/Dstrdup=_strdup', '/Dstricmp=_stricmp']
         c_flags += windows_crt_aliases
         cpp_flags += windows_crt_aliases
+        if args.gpuva:
+            c_flags.append('/DAPPLE_AGX_GPUVA_WINSYS=1')
+            cpp_flags.append('/DAPPLE_AGX_GPUVA_WINSYS=1')
         toolchain = Path(r'C:\VS2022Community\VC\Tools\MSVC\14.44.35207')
         sdk = Path(r'C:\Program Files (x86)\Windows Kits\10')
         env = os.environ.copy()
@@ -311,7 +320,8 @@ def main():
                     continue
                 runtime.append(native / relative / name)
         runtime.append(native / 'src/asahi/lib/agx_win32_device_key.c')
-        runtime += [args.project / 'drivers/apple-agx/mesa/winsys' / name for name in BRIDGES]
+        runtime += [args.project / 'drivers/apple-agx/mesa/winsys' / name
+                    for name in (GPUVA_BRIDGES if args.gpuva else BRIDGES)]
         runtime += [native / 'src/gallium/frontends/d3d10umd' / name
                     for name in FRONTEND_CPP + FRONTEND_C]
         generated_c = OWNER_GENERATED / 'src/asahi/lib/libagx_shaders.c'

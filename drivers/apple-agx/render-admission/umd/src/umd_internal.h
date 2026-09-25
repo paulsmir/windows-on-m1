@@ -8,6 +8,9 @@
 #include "agx_win32_screen.h"
 #include "agx_win32_construction_address.h"
 #include "umd_draw_composer.h"
+#ifdef APPLE_AGX_GPUVA_WINSYS
+#include "agx_win32_gpuva.h"
+#endif
 
 #define ADMISSION_UMD_ADAPTER_MAGIC 0x50414455u /* "UDAP" */
 #define ADMISSION_UMD_DEVICE_MAGIC 0x56454455u  /* "UDEV" */
@@ -44,6 +47,9 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   BOOL Mapped;
   BOOL Transition;
   BOOL Borrowed;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  BOOL WrittenPrimary;
+#endif
 } ADMISSION_UMD_SCREEN_BUFFER;
 
 typedef struct _ADMISSION_UMD_SCREEN_SOURCE {
@@ -115,6 +121,11 @@ typedef struct _ADMISSION_UMD_DEVICE {
   D3DKMT_HANDLE PagingQueue;
   D3DKMT_HANDLE PagingSyncObject;
   volatile UINT64 *PagingFenceAddress;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  D3DKMT_HANDLE RenderSyncObject;
+  volatile UINT64 *RenderFenceAddress;
+  UINT64 NextRenderFence;
+#endif
   AGX_WIN32_SCREEN Screen;
   ADMISSION_UMD_SCREEN_BUFFER ScreenBuffers[ADMISSION_UMD_SCREEN_BUFFER_LIMIT];
   ADMISSION_UMD_SCREEN_FENCE ScreenFences[ADMISSION_UMD_SCREEN_FENCE_LIMIT];
@@ -140,6 +151,13 @@ typedef struct _ADMISSION_UMD_DEVICE {
   SRWLOCK ScreenBufferLock;
   ADMISSION_UMD_SOURCE_HOLD_RECORD SourceHolds[ADMISSION_UMD_SOURCE_HOLD_LIMIT];
 } ADMISSION_UMD_DEVICE;
+
+#ifdef APPLE_AGX_GPUVA_WINSYS
+#ifdef __cplusplus
+extern "C"
+#endif
+const AGX_WIN32_GPUVA_OPS *AdmissionUmdGpuvaOperations(void);
+#endif
 
 typedef struct _ADMISSION_UMD_RESOURCE {
   ULONG Magic;
@@ -220,6 +238,9 @@ HRESULT AdmissionUmdScreenAdoptAllocation(
     ADMISSION_UMD_DEVICE *Device, D3DKMT_HANDLE KernelAllocation,
     APPLE_AGX_U64 Bytes, APPLE_AGX_U64 Alignment,
     APPLE_AGX_U32 ClassId, APPLE_AGX_U32 Flags,
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    BOOL WrittenPrimary,
+#endif
     AGX_WIN32_SCREEN_BUFFER *Buffer);
 BOOL AdmissionUmdScreenAllocationRegistered(
     ADMISSION_UMD_DEVICE *Device, D3DKMT_HANDLE KernelAllocation);

@@ -161,13 +161,28 @@ HRESULT AdmissionUmdRuntimeDeviceInitialize(
     ADMISSION_UMD_DEVICE *device, ADMISSION_UMD_ADAPTER *adapter,
     const D3D10DDIARG_CREATEDEVICE *Args) {
   ADMISSION_WIN32_CONTEXT_CREATE win32Context;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  D3DDDICB_CREATECONTEXTVIRTUAL createContext;
+#else
   D3DDDICB_CREATECONTEXT createContext;
+#endif
   PFND3D10DDI_SETERROR_CB errorCallback;
   HRESULT result;
   if (device == NULL || adapter == NULL ||
       adapter->Magic != ADMISSION_UMD_ADAPTER_MAGIC || Args == NULL ||
       Args->pKTCallbacks == NULL ||
+#ifdef APPLE_AGX_GPUVA_WINSYS
+      Args->pKTCallbacks->pfnCreateContextVirtualCb == NULL ||
+      Args->pKTCallbacks->pfnCreateSynchronizationObject2Cb == NULL ||
+      Args->pKTCallbacks->pfnDestroySynchronizationObjectCb == NULL ||
+      Args->pKTCallbacks->pfnReserveGpuVirtualAddressCb == NULL ||
+      Args->pKTCallbacks->pfnMapGpuVirtualAddressCb == NULL ||
+      Args->pKTCallbacks->pfnFreeGpuVirtualAddressCb == NULL ||
+      Args->pKTCallbacks->pfnSubmitCommandCb == NULL ||
+      Args->pKTCallbacks->pfnSignalSynchronizationObjectFromGpu2Cb == NULL ||
+#else
       Args->pKTCallbacks->pfnCreateContextCb == NULL ||
+#endif
       Args->pKTCallbacks->pfnDestroyContextCb == NULL ||
       Args->pKTCallbacks->pfnAllocateCb == NULL ||
       Args->pKTCallbacks->pfnDeallocateCb == NULL ||
@@ -181,7 +196,9 @@ HRESULT AdmissionUmdRuntimeDeviceInitialize(
       Args->pKTCallbacks->pfnWaitForSynchronizationObjectFromCpuCb == NULL ||
       Args->pKTCallbacks->pfnCreatePagingQueueCb == NULL ||
       Args->pKTCallbacks->pfnDestroyPagingQueueCb == NULL ||
+#ifndef APPLE_AGX_GPUVA_WINSYS
       Args->pKTCallbacks->pfnRenderCb == NULL ||
+#endif
       Args->DXGIBaseDDI.pDXGIBaseCallbacks == NULL)
     return E_INVALIDARG;
   if (Args->Interface == D3D10_0_DDI_INTERFACE_VERSION ||
@@ -219,19 +236,28 @@ HRESULT AdmissionUmdRuntimeDeviceInitialize(
   createContext.EngineAffinity = 1u;
   createContext.pPrivateDriverData = &win32Context;
   createContext.PrivateDriverDataSize = sizeof(win32Context);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  result = device->KernelCallbacks->pfnCreateContextVirtualCb(
+      device->RuntimeDevice.handle, &createContext);
+#else
   result = device->KernelCallbacks->pfnCreateContextCb(
       device->RuntimeDevice.handle, &createContext);
+#endif
   if (FAILED(result)) {
     ZeroMemory(device, sizeof(*device));
     return result;
   }
   device->KernelContext = createContext.hContext;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if (device->KernelContext == NULL) {
+#else
   if (device->KernelContext == NULL || createContext.pCommandBuffer == NULL ||
       createContext.CommandBufferSize == 0u ||
       createContext.pAllocationList == NULL ||
       createContext.AllocationListSize == 0u ||
       createContext.pPatchLocationList == NULL ||
       createContext.PatchLocationListSize == 0u) {
+#endif
     D3DDDICB_DESTROYCONTEXT destroyContext;
     ZeroMemory(&destroyContext, sizeof(destroyContext));
     destroyContext.hContext = device->KernelContext;
@@ -241,12 +267,14 @@ HRESULT AdmissionUmdRuntimeDeviceInitialize(
     ZeroMemory(device, sizeof(*device));
     return E_FAIL;
   }
+#ifndef APPLE_AGX_GPUVA_WINSYS
   device->CommandBuffer = createContext.pCommandBuffer;
   device->CommandBufferSize = createContext.CommandBufferSize;
   device->AllocationList = createContext.pAllocationList;
   device->AllocationListSize = createContext.AllocationListSize;
   device->PatchList = createContext.pPatchLocationList;
   device->PatchListSize = createContext.PatchLocationListSize;
+#endif
   {
     D3DDDICB_CREATEPAGINGQUEUE pagingQueue;
     ZeroMemory(&pagingQueue, sizeof(pagingQueue));
@@ -270,6 +298,33 @@ HRESULT AdmissionUmdRuntimeDeviceInitialize(
     device->PagingFenceAddress =
         (volatile UINT64 *)pagingQueue.FenceValueCPUVirtualAddress;
   }
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  {
+    D3DDDICB_CREATESYNCHRONIZATIONOBJECT2 renderFence;
+    ZeroMemory(&renderFence, sizeof(renderFence));
+    renderFence.Info.Type = D3DDDI_MONITORED_FENCE;
+    renderFence.Info.MonitoredFence.InitialFenceValue = 0;
+    renderFence.Info.MonitoredFence.EngineAffinity = 1;
+    result = device->KernelCallbacks->pfnCreateSynchronizationObject2Cb(
+        device->RuntimeDevice.handle, &renderFence);
+    if (FAILED(result) || !renderFence.hSyncObject ||
+        !renderFence.Info.MonitoredFence.FenceValueCPUVirtualAddress) {
+      D3DDDI_DESTROYPAGINGQUEUE destroyQueue = {};
+      D3DDDICB_DESTROYCONTEXT destroyContext = {};
+      destroyQueue.hPagingQueue = device->PagingQueue;
+      destroyContext.hContext = device->KernelContext;
+      (void)device->KernelCallbacks->pfnDestroyPagingQueueCb(
+          device->RuntimeDevice.handle, &destroyQueue);
+      (void)device->KernelCallbacks->pfnDestroyContextCb(
+          device->RuntimeDevice.handle, &destroyContext);
+      ZeroMemory(device, sizeof(*device));
+      return FAILED(result) ? result : E_FAIL;
+    }
+    device->RenderSyncObject = renderFence.hSyncObject;
+    device->RenderFenceAddress =
+        (volatile UINT64 *)renderFence.Info.MonitoredFence.FenceValueCPUVirtualAddress;
+  }
+#endif
   result = AdmissionUmdScreenInitialize(device);
   if (FAILED(result)) {
     D3DDDICB_DESTROYCONTEXT destroyContext;
@@ -278,6 +333,12 @@ HRESULT AdmissionUmdRuntimeDeviceInitialize(
     destroyQueue.hPagingQueue = device->PagingQueue;
     (void)device->KernelCallbacks->pfnDestroyPagingQueueCb(
         device->RuntimeDevice.handle, &destroyQueue);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    D3DDDICB_DESTROYSYNCHRONIZATIONOBJECT destroyFence = {};
+    destroyFence.hSyncObject = device->RenderSyncObject;
+    (void)device->KernelCallbacks->pfnDestroySynchronizationObjectCb(
+        device->RuntimeDevice.handle, &destroyFence);
+#endif
     ZeroMemory(&destroyContext, sizeof(destroyContext));
     destroyContext.hContext = device->KernelContext;
     (void)device->KernelCallbacks->pfnDestroyContextCb(
@@ -345,6 +406,17 @@ HRESULT AdmissionUmdRuntimeDeviceFinalize(ADMISSION_UMD_DEVICE *device,
     return FAILED(screenResult)?screenResult:E_FAIL;
   if(device->DrawSubmission || device->NativeBatchTransaction)
     return HRESULT_FROM_WIN32(ERROR_BUSY);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if(device->RenderSyncObject) {
+    D3DDDICB_DESTROYSYNCHRONIZATIONOBJECT destroyFence = {};
+    destroyFence.hSyncObject = device->RenderSyncObject;
+    screenResult = device->KernelCallbacks->pfnDestroySynchronizationObjectCb(
+        device->RuntimeDevice.handle, &destroyFence);
+    if(FAILED(screenResult)) return screenResult;
+    device->RenderSyncObject = 0;
+    device->RenderFenceAddress = NULL;
+  }
+#endif
   if(device->PagingQueue) {
     D3DDDI_DESTROYPAGINGQUEUE destroyQueue;
     ZeroMemory(&destroyQueue, sizeof(destroyQueue));

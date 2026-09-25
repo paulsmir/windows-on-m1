@@ -201,7 +201,11 @@ static HRESULT attach_presentation_render_resource(
       AppleAgxWin32BufferGpuWrite;
   HRESULT result=AdmissionUmdScreenAdoptAllocation(&device->Runtime,
       record->Resource.KernelAllocation,desc->Size,device->Runtime.Screen.Info.PageBytes,
-      AgxWin32BufferClassGeneral,access,&record->RenderBuffer);
+      AgxWin32BufferClassGeneral,access,
+#ifdef APPLE_AGX_GPUVA_WINSYS
+      TRUE,
+#endif
+      &record->RenderBuffer);
   if(FAILED(result)) return result;
   record->RenderResource=AgxWin32AsahiImportLinearColor32(device->Screen,
       &record->RenderBuffer,desc->Width,desc->Height,desc->Pitch,desc->Size,format);

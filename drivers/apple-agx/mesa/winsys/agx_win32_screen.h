@@ -2,6 +2,9 @@
 #define APPLE_AGX_MESA_WIN32_SCREEN_H
 
 #include "agx_win32_transport.h"
+#ifdef APPLE_AGX_GPUVA_WINSYS
+#include "agx_win32_gpuva.h"
+#endif
 
 typedef struct _AGX_WIN32_SCREEN_OPERATIONS {
   int (*QueryDevice)(void *Context, AGX_WIN32_DEVICE_INFO *Info);
@@ -9,6 +12,9 @@ typedef struct _AGX_WIN32_SCREEN_OPERATIONS {
       void *Context, APPLE_AGX_U32 ClassId, APPLE_AGX_U64 Bytes,
       APPLE_AGX_U64 Alignment, APPLE_AGX_U32 Flags,
       APPLE_AGX_U64 *Token);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  const AGX_WIN32_GPUVA_OPS *GpuvaOps;
+#endif
 } AGX_WIN32_SCREEN_OPERATIONS;
 
 typedef enum _AGX_WIN32_SCREEN_RESULT {

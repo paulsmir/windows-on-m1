@@ -146,6 +146,18 @@
       <PreprocessorDefinitions Condition="'$(RuntimeDdiProbeMode)' == 'Driver'">AGX_RUNTIME_PROBE_DRIVER=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup Condition="'$(GpuvaContractMode)' == 'true'">
+    <ClCompile Remove="@(ClCompile)" />
+    <ClCompile Include="umd_gpuva_contract_windows.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
+    <ClCompile Include="..\src\umd_gpuva_windows.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
+    <ClCompile Include="..\..\..\mesa\winsys\agx_win32_gpuva.c" />
+  </ItemGroup>
+  <ItemDefinitionGroup Condition="'$(GpuvaContractMode)' == 'true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_GPUVA_WINSYS=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <UndefinePreprocessorDefinitions>NDEBUG;%(UndefinePreprocessorDefinitions)</UndefinePreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <ItemGroup Condition="'$(RuntimeDdiProbeMode)' == 'Driver' and '$(RuntimeProbeKmtSource)' != ''">
     <ClCompile Include="$(RuntimeProbeKmtSource)">
       <WarningLevel>TurnOffAllWarnings</WarningLevel>

@@ -3,6 +3,10 @@
 
 #include "agx_win32_native_device.h"
 #include "agx_win32_reloc_capture.h"
+#include <stdint.h>
+#ifdef APPLE_AGX_GPUVA_WINSYS
+#include "agx_win32_gpuva.h"
+#endif
 
 struct agx_device;
 struct agx_bo;
@@ -40,7 +44,12 @@ typedef struct {
   void (*ContextDestroy)(struct pipe_context *);
   APPLE_AGX_U32 ContextCount;
   int Closing;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  AGX_WIN32_GPUVA_SPACE Gpuva;
+  int GpuvaReady;
+#endif
 } AGX_WIN32_ASAHI_BACKEND;
+
 
 int AgxWin32AsahiAttach(AGX_WIN32_ASAHI_BACKEND *, struct agx_device *,
     AGX_WIN32_SCREEN *, const AGX_WIN32_ASAHI_OWNER_OPS *, void *, APPLE_AGX_U64);
@@ -67,5 +76,10 @@ int AgxWin32AsahiClass(AGX_WIN32_ASAHI_BACKEND *, struct agx_bo *,
 struct agx_bo *AgxWin32AsahiImportBo(
     AGX_WIN32_ASAHI_BACKEND *, const AGX_WIN32_SCREEN_BUFFER *,
     const char *Label);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(
+    AGX_WIN32_ASAHI_BACKEND *, struct agx_bo *);
+#endif
+struct agx_bo *AgxWin32AsahiLookupBo(struct agx_device *, uint32_t);
 
 #endif

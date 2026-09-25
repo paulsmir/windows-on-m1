@@ -553,6 +553,9 @@ HRESULT AdmissionUmdScreenAdoptAllocation(
     ADMISSION_UMD_DEVICE *Device, D3DKMT_HANDLE KernelAllocation,
     APPLE_AGX_U64 Bytes, APPLE_AGX_U64 Alignment,
     APPLE_AGX_U32 ClassId, APPLE_AGX_U32 Flags,
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    BOOL WrittenPrimary,
+#endif
     AGX_WIN32_SCREEN_BUFFER *Buffer) {
   const AGX_WIN32_BUFFER_CLASS_INFO *classInfo;
   ADMISSION_UMD_SCREEN_BUFFER *slot;
@@ -586,6 +589,9 @@ HRESULT AdmissionUmdScreenAdoptAllocation(
   slot->KernelAllocation=KernelAllocation;slot->Bytes=Bytes;
   slot->Alignment=Alignment;slot->ClassId=ClassId;slot->Flags=Flags;
   slot->Active=TRUE;slot->Borrowed=TRUE;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  slot->WrittenPrimary=WrittenPrimary;
+#endif
   Buffer->Transport.Token=token;Buffer->Transport.Bytes=Bytes;
   Buffer->Transport.Generation=Device->Win32Generation;
   Buffer->Transport.Flags=Flags;Buffer->ClassId=ClassId;
@@ -879,6 +885,9 @@ HRESULT AdmissionUmdScreenInitialize(ADMISSION_UMD_DEVICE *Device) {
   ZeroMemory(&screen, sizeof(screen));
   screen.QueryDevice = AdmissionUmdScreenQueryDevice;
   screen.CreateClassBuffer = AdmissionUmdScreenCreateClassBuffer;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  screen.GpuvaOps = AdmissionUmdGpuvaOperations();
+#endif
   Device->NextScreenToken = 0ULL;
   Device->NextScreenSerial = 0ULL;
   InitializeSRWLock(&Device->ScreenBufferLock);

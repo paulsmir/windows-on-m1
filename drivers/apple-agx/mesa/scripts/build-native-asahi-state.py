@@ -20,12 +20,15 @@ parser.add_argument('--output', required=True, type=Path)
 parser.add_argument('--windows-platform-declarations', action='store_true')
 parser.add_argument('--native-state-test', action='store_true')
 parser.add_argument('--native-batch-lifecycle', action='store_true')
+parser.add_argument('--gpuva', action='store_true')
 parser.add_argument('--prepare-only', action='store_true')
 parser.add_argument('--architecture', choices=('x64','arm64'), default='x64')
 parser.add_argument('--project',type=Path)
 args = parser.parse_args()
 if (args.native_batch_lifecycle or args.prepare_only) and not (args.windows_platform_declarations and args.project):
     parser.error('Native lifecycle/prepare requires --windows-platform-declarations and --project')
+if args.gpuva and not args.native_batch_lifecycle:
+    parser.error('GPUVA requires native batch lifecycle projection')
 out = args.output
 out.mkdir(exist_ok=False)
 mesa = Path(r'C:\Users\pauls\AD04-d3d10-frontend-build\mesa')
@@ -3156,7 +3159,9 @@ uint8_t *AgxWin32NativeEncodeStateTest(struct agx_batch *batch, uint8_t *out) {
             '#include "gallium/drivers/asahi/agx_win32_pipeline.inc"\n')
 
         if args.native_batch_lifecycle:
-            for module_name in ('native-asahi-graph-capture', 'native-asahi-batch-lifecycle'):
+            modules = ('native-asahi-batch-lifecycle',) if args.gpuva else (
+                'native-asahi-graph-capture', 'native-asahi-batch-lifecycle')
+            for module_name in modules:
                 module_path = args.project/'drivers/apple-agx/mesa/scripts'/(module_name+'.py')
                 spec = importlib.util.spec_from_file_location(module_name.replace('-', '_'), module_path)
                 module = importlib.util.module_from_spec(spec)
@@ -3169,7 +3174,9 @@ uint8_t *AgxWin32NativeEncodeStateTest(struct agx_batch *batch, uint8_t *out) {
                     record['final_sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
 
 if args.prepare_only:
-    prepared = {'exit': 0, 'prepared_only': True, 'native_batch_lifecycle': args.native_batch_lifecycle,
+    prepared = {'exit': 0, 'prepared_only': True,
+                'gpuva': args.gpuva,
+                'native_batch_lifecycle': args.native_batch_lifecycle,
                 'native_draw_executed': False, 'architecture': args.architecture,
                 'native_source': str(out), 'overlays': overlays}
     (out/'inputs.json').write_text(json.dumps(prepared, indent=2)+'\n')
