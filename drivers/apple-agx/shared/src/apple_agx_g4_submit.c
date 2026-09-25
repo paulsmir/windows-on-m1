@@ -81,7 +81,7 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmit(
     unsigned int dma_bytes, APPLE_AGX_G4_ACCESS access, void *access_context,
     APPLE_AGX_G4_SUBMIT_VIEW *view) {
   APPLE_AGX_G4_PRIVATE_HEADER header;
-  APPLE_AGX_G4_PRIVATE_HEADER_V2 header_v2;
+  APPLE_AGX_G4_PRIVATE_HEADER_V2 header_v2 = {0};
   APPLE_AGX_G4_NATIVE_HEADER native_header;
   const unsigned char *bytes = (const unsigned char *)private_data;
   unsigned int position = 0u, index, attachments = 0u;
