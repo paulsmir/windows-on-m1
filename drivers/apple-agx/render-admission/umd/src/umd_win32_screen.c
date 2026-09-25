@@ -528,6 +528,12 @@ static int AdmissionUmdScreenCreateClassBuffer(
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   result = device->KernelCallbacks->pfnAllocateCb(
       device->RuntimeDevice.handle, &allocate);
+  {
+    UINT values[4] = {ClassId, (UINT)Bytes, (UINT)Alignment,
+                      allocationInfo.hAllocation != 0u};
+    AdmissionUmdDiagnostic("g4-native-allocate-cb", result, values,
+                           ARRAYSIZE(values));
+  }
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
   if (FAILED(result) || allocationInfo.hAllocation == 0u) {
     ZeroMemory(slot,sizeof(*slot));
@@ -672,6 +678,11 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
       lock.Flags.WriteOnly = 1u;
     result = device->KernelCallbacks->pfnLockCb(
         device->RuntimeDevice.handle, &lock);
+    {
+      UINT values[2] = {allocation != 0u, lock.pData != NULL};
+      AdmissionUmdDiagnostic("g4-native-lock-cb", result, values,
+                             ARRAYSIZE(values));
+    }
     AcquireSRWLockExclusive(&device->ScreenBufferLock);
     buffer = AdmissionUmdScreenFind(device, Token);
     if (buffer == NULL || buffer->KernelAllocation != allocation) {

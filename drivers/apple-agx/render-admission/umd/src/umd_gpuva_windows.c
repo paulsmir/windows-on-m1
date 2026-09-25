@@ -38,6 +38,13 @@ static int reserve_va(void *context, uint64_t bytes, uint64_t minimum,
   request.Size = bytes;
   HRESULT hr = device->KernelCallbacks->pfnReserveGpuVirtualAddressCb(
       device->RuntimeDevice.handle, &request);
+  {
+    UINT values[5] = {(UINT)(bytes >> 16), (UINT)(minimum >> 16),
+                      (UINT)(maximum >> 32), request.hAdapter != 0u,
+                      request.VirtualAddress != 0u};
+    AdmissionUmdDiagnostic("g4-native-reserve-va-cb", hr, values,
+                           ARRAYSIZE(values));
+  }
   if (FAILED(hr) || !request.VirtualAddress) return 0;
   *va = request.VirtualAddress;
   return 1;
@@ -60,6 +67,14 @@ static int map_va(void *context, uint64_t token, uint64_t va,
   request.Protection.Execute = (protection & AGX_GPUVA_MAP_EXECUTE) != 0;
   HRESULT hr = device->KernelCallbacks->pfnMapGpuVirtualAddressCb(
       device->RuntimeDevice.handle, &request);
+  {
+    UINT values[5] = {request.hAllocation != 0u,
+                      request.hPagingQueue != 0u, (UINT)pages,
+                      request.VirtualAddress == va,
+                      request.PagingFenceValue != 0u};
+    AdmissionUmdDiagnostic("g4-native-map-va-cb", hr, values,
+                           ARRAYSIZE(values));
+  }
   if (FAILED(hr) && hr != E_PENDING) return 0;
   if (request.VirtualAddress != va) return 3;
   *fence = request.PagingFenceValue;
