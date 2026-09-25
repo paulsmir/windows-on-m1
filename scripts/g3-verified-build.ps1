@@ -9,7 +9,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repository = 'C:\Users\pauls\AD04-persistent-dwm-next'
 $driver = Join-Path $repository 'drivers\apple-agx\render-admission'
-$verify = Join-Path $driver 'scripts\verify-committed-sources.ps1'
+$verify = Join-Path $PSScriptRoot 'verify-committed-sources.ps1'
 & $verify -ManifestPath $SourceManifestPath -RepositoryRoot $repository `
     -SourceArchivePath $SourceArchivePath -SyncOnMismatch
 if ($VerifyOnly) { return }
