@@ -18,6 +18,7 @@ param(
     [int]$GpuvaG1bPageProfile = 0,
     [switch]$GpuvaG1bAllocationHint,
     [switch]$Incremental,
+    [string]$SourceManifestPath,
     [string]$NativeRuntimeProps,
     [string]$MesaSourceRoot = 'C:\Users\pauls\AD04-d3d10-frontend-build\mesa',
     [string]$MesaGeneratedRoot = 'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated',
@@ -48,6 +49,13 @@ if ($VisibleAgxQualification -and ($MemoryQualification -or $ManagementQualifica
     throw "VisibleAgxQualification must be the only qualification profile"
 }
 $root = Split-Path -Parent $PSScriptRoot
+if ($GpuvaG3Qualification) {
+    if ([string]::IsNullOrWhiteSpace($SourceManifestPath)) {
+        throw 'GpuvaG3Qualification requires a committed source manifest'
+    }
+    & (Join-Path $PSScriptRoot 'verify-committed-sources.ps1') `
+        -ManifestPath $SourceManifestPath -RepositoryRoot (Resolve-Path (Join-Path $root '..\..\..')).Path
+}
 $project = Join-Path $root "AppleAgxRenderAdmission.vcxproj"
 $umdProject = Join-Path $root "umd\AppleAgxRenderAdmissionUmd.vcxproj"
 $msbuildCommand = Get-Command msbuild -ErrorAction SilentlyContinue
