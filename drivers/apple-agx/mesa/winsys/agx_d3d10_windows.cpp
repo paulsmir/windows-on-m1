@@ -377,8 +377,10 @@ HRESULT AgxD3d10WindowsCreateDevice(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
   owner->Screen=AgxWin32AsahiScreenCreateForWindows(&owner->Backend,&owner->Runtime.Screen,
       &owner->OwnerOperations,&owner->Owner,AdmissionUmdAsahiBatchOperations());
   {
-    UINT values[4]={owner->Screen!=NULL,owner->Backend.Native!=NULL,
-                    owner->Backend.Failed,owner->Backend.GpuvaReady};
+    UINT values[4]={owner->Screen!=NULL ? 1u : 0u,
+                    owner->Backend.Native!=NULL ? 1u : 0u,
+                    owner->Backend.Failed ? 1u : 0u,
+                    owner->Backend.GpuvaReady ? 1u : 0u};
     AdmissionUmdDiagnostic("g4-native-screen-create",owner->Runtime.LastScreenError,
                            values,ARRAYSIZE(values));
   }
