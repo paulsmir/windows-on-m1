@@ -125,8 +125,11 @@ APPLE_AGX_BOOL AppleAgxG4BindNativeObjects(
       (render.Flags & (1u << 2)) == 0u ||
       (render.Flags & ~((1u << 1) | (1u << 2) | (1u << 18))) != 0u ||
       !render.VdmCtrlStreamBase || !render.IspScissorBase ||
-      !render.IspDbiasBase || render.Depth.Base || render.Depth.CompBase ||
-      render.Stencil.Base || render.Stencil.CompBase || render.ZlsCtrl ||
+      !render.IspDbiasBase || render.IspOclQryBase ||
+      render.Depth.Base || render.Depth.CompBase ||
+      render.Depth.Stride || render.Depth.CompStride ||
+      render.Stencil.Base || render.Stencil.CompBase ||
+      render.Stencil.Stride || render.Stencil.CompStride || render.ZlsCtrl ||
       render.IspZlsPixels || color.Pad || color.Flags ||
       color.Pointer < 0x10000ULL || color.Size < minimum ||
       color.Size > 0xffffffffULL)
@@ -231,6 +234,9 @@ APPLE_AGX_BOOL AppleAgxG4PatchRenderScalars(
   g4_put32(ta + 0x88u, utile);
   g4_put64(work + 0x88u, Render->Bg.ResourceSpec);
   g4_put64(work + 0x90u, Render->Bg.Usc);
+  g4_put64(work + 0x170u, ((APPLE_AGX_U64)4u * rgn_size) << 24);
+  g4_put64(work + 0x1c0u, 0x1100000000ULL);
+  g4_put64(ta + 0x120u, 0x1100000000ULL);
   g4_put32(work + 0x3c8u, Render->Eot.ResourceSpec);
   g4_put32(work + 0x3ccu, Render->Eot.Usc);
   g4_put64(work + 0x610u, Render->PartialBg.ResourceSpec);
@@ -288,10 +294,12 @@ APPLE_AGX_BOOL AppleAgxG4PatchRenderScalars(
   g4_put32(ta + 0xe8u, g4_get32(ta + 0xe8u) | 1u);
   g4_put32(ta + 0x140u, Render->VertexHelper.Binary);
   g4_put64(ta + 0x148u, Render->VertexHelper.Data);
-  g4_put32(work + 0x1c8u, Render->FragmentHelper.Binary);
-  g4_put64(work + 0x1d0u, Render->FragmentHelper.Data);
+  g4_put32(work + 0x1d0u, Render->FragmentHelper.Binary);
+  g4_put64(work + 0x1d8u, Render->FragmentHelper.Data);
+  g4_put32(work + 0x408u, Render->FragmentHelper.Cfg);
   g4_put32(work + 0x8b4u, Render->SamplerCount);
   g4_put32(work + 0x8b8u, (APPLE_AGX_U32)Render->SamplerCount + 1u);
+  g4_put32(work + 0x8bcu, (Render->Flags & (1u << 1)) ? 1u : 0u);
   g4_put32(ta + 0x550u, Render->SamplerCount);
   g4_put32(ta + 0x554u, (APPLE_AGX_U32)Render->SamplerCount + 1u);
   return APPLE_AGX_TRUE;

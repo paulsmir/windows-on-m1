@@ -42,6 +42,7 @@ static int graph_access(void *opaque, unsigned long long va,
     const unsigned long long native[] = {
       packet->Render.VdmCtrlStreamBase, packet->Render.IspScissorBase,
       packet->Render.IspDbiasBase, packet->Render.SamplerHeap,
+      packet->Render.FragmentHelper.Data, 0x1100060000ULL,
       0x1100020000ULL, 0x1100030000ULL,
       0x1100040000ULL, 0x1100050000ULL
     };
@@ -77,6 +78,9 @@ int main(void) {
   render.Eot.ResourceSpec = 0x456u;
   render.PartialBg.Usc = 0x40004u;
   render.PartialEot.Usc = 0x50004u;
+  render.FragmentHelper.Binary = 0x60004u;
+  render.FragmentHelper.Data = 0x35000000ULL;
+  render.FragmentHelper.Cfg = 0x1234u;
   assert(AppleAgxG4ProcessRequiredBytes(&render, required));
   for (i = 0; i < APPLE_AGX_G4_PROCESS_RANGE_COUNT; ++i) {
     ranges[i].Va = 0x10000000ULL + (unsigned long long)i * 0x1000000ULL;
@@ -147,6 +151,10 @@ int main(void) {
       assert(!AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
       packet.Render.SampleSizeBytes = 8u;
+      packet.Render.IspOclQryBase = 0x36000000ULL;
+      assert(!AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Render.IspOclQryBase = 0ULL;
       packet.Attachment.Size = 1024u;
       assert(!AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
@@ -174,6 +182,15 @@ int main(void) {
     assert(get64(objects[18].Data + 0xa0u) == render.IspScissorBase);
     assert(get64(objects[18].Data + 0x88u) == render.Bg.ResourceSpec);
     assert(get64(objects[18].Data + 0x90u) == render.Bg.Usc);
+    assert(get64(objects[18].Data + 0x170u) == (480ULL << 24));
+    assert(get64(objects[18].Data + 0x1c0u) == 0x1100000000ULL);
+    assert(get64(objects[19].Data + 0x120u) == 0x1100000000ULL);
+    assert((get64(objects[18].Data + 0x1d0u) & 0xffffffffULL) ==
+        render.FragmentHelper.Binary);
+    assert(get64(objects[18].Data + 0x1d8u) ==
+        render.FragmentHelper.Data);
+    assert((get64(objects[18].Data + 0x408u) & 0xffffffffULL) ==
+        render.FragmentHelper.Cfg);
     {
       APPLE_AGX_EXP208_JOB_PARAMETERS parameters = {0};
       APPLE_AGX_BACKEND_JOB_IMAGE job = {0};
