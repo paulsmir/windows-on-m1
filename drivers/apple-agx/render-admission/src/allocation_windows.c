@@ -310,6 +310,11 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   info->SupportedReadSegmentSet = description->CpuVisible != 0u
                                       ? ADMISSION_CPU_VISIBLE_SEGMENT_SET
                                       : ADMISSION_LOCAL_SEGMENT_SET;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* GPU-readable native class allocations cannot move into the aperture. */
+  if (classId != 0u)
+    info->SupportedReadSegmentSet = ADMISSION_LOCAL_SEGMENT_SET;
+#endif
 #if ADMISSION_GPUVA_G1B_ALLOCATION_HINT != 0
   /* The page-size trial constrains every affected allocation to the local
    * segment described with that slab size. System/aperture remains 4 KiB. */
