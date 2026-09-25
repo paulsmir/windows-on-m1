@@ -412,7 +412,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
       : 0u;
   Args->ContextInfo.DmaBufferPrivateDataSize =
       ADMISSION_GDI_DMA_PRIVATE_SIZE;
-  if (Args->Flags.GdiContext) {
+  if (Args->Flags.VirtualAddressing && !systemOrGdi) {
+    /* WDDM GPUVA packet scheduling retains only written-primary references. */
+    Args->ContextInfo.Caps.NoPatchingRequired = 1u;
+    Args->ContextInfo.AllocationListSize = 16u;
+    Args->ContextInfo.PatchLocationListSize = 0u;
+  } else if (Args->Flags.GdiContext) {
     Args->ContextInfo.AllocationListSize =
         ADMISSION_GDI_ALLOCATION_LIST_SIZE;
     Args->ContextInfo.PatchLocationListSize =

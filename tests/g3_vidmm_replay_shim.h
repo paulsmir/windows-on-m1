@@ -160,7 +160,8 @@ typedef union { struct { UINT SystemProcess:1; UINT Reserved:31; }; UINT Value; 
 typedef struct { DXGK_CREATEPROCESSFLAGS Flags; UINT NumPasid; void *pPasid,*pProcessName; HANDLE hKmdProcess; } DXGKARG_CREATEPROCESS;
 typedef struct { HANDLE hContext; D3DGPU_PHYSICAL_ADDRESS Address; UINT NumEntries; } DXGKARG_SETROOTPAGETABLE;
 typedef union { struct { UINT SystemContext:1,GdiContext:1,VirtualAddressing:1,SystemProtected:1,HwQueueSupported:1,TestContext:1; }; UINT Value; } DXGK_CREATECONTEXTFLAGS;
-typedef struct { UINT Value; } DXGK_CONTEXTINFO_CAPS;
+typedef union { struct { UINT NoPatchingRequired:1,DriverManagesResidency:1,
+  UseIoMmu:1,Reserved:29; }; UINT Value; } DXGK_CONTEXTINFO_CAPS;
 typedef struct { UINT DmaBufferSize,DmaBufferSegmentSet,DmaBufferPrivateDataSize,AllocationListSize,PatchLocationListSize,Reserved; DXGK_CONTEXTINFO_CAPS Caps; UINT PagingCompanionNodeId; } DXGK_CONTEXTINFO;
 typedef struct { DXGK_CREATECONTEXTFLAGS Flags; void *pPrivateDriverData; UINT PrivateDriverDataSize; HANDLE hContext; UINT NodeOrdinal,EngineAffinity; DXGK_CONTEXTINFO ContextInfo; } DXGKARG_CREATECONTEXT;
 

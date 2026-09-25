@@ -81,7 +81,7 @@ int main(void) {
   assert(cc.ContextInfo.Caps.Value==0u);
   assert(cc.ContextInfo.PagingCompanionNodeId==0u);
   {
-    DXGKARG_CREATECONTEXT gdi={0}, paging={0};
+    DXGKARG_CREATECONTEXT gdi={0}, paging={0}, render={0};
     gdi.Flags.Value=6; /* GdiContext | VirtualAddressing, EXP792. */
     gdi.hContext=(HANDLE)1;
     gdi.EngineAffinity=1;
@@ -93,6 +93,15 @@ int main(void) {
     assert(gdi.ContextInfo.PatchLocationListSize==256u);
     assert(gdi.ContextInfo.Caps.Value==0u);
     assert(gdi.ContextInfo.PagingCompanionNodeId==0u);
+    render.Flags.Value=4; /* G4 UMD CreateContextVirtual render context. */
+    render.hContext=(HANDLE)2;
+    render.EngineAffinity=1;
+    expect_ok("G4 render virtual context",AdmissionDdiCreateContext(&device,&render));
+    assert(render.ContextInfo.DmaBufferSegmentSet==1u);
+    assert(render.ContextInfo.DmaBufferPrivateDataSize==0x51000u);
+    assert(render.ContextInfo.AllocationListSize==16u);
+    assert(render.ContextInfo.PatchLocationListSize==0u);
+    assert(render.ContextInfo.Caps.Value==1u); /* NoPatchingRequired. */
     paging.Flags.Value=1; /* Nonvirtual paging SystemContext. */
     paging.EngineAffinity=1;
     expect_ok("nonvirtual paging context",AdmissionDdiCreateContext(&device,&paging));
@@ -104,6 +113,7 @@ int main(void) {
     assert(paging.ContextInfo.Caps.Value==0u);
     assert(paging.ContextInfo.PagingCompanionNodeId==0u);
     expect_ok("destroy GDI virtual context",AdmissionDdiDestroyContext(gdi.hContext));
+    expect_ok("destroy G4 render context",AdmissionDdiDestroyContext(render.hContext));
     expect_ok("destroy nonvirtual paging context",AdmissionDdiDestroyContext(paging.hContext));
   }
 #endif
