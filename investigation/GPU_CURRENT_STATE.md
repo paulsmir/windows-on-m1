@@ -1,5 +1,30 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP810/package815 native allocation boundary
+
+Exact diagnostic package815 reached pinned SSH, APPL0002 Code0/oem5,
+CPU8/storage2/USB6, ARM_CONSUMED seq236019594 and DCP A408/D589 latch9.
+The six guest evidence files match SHA list `2fe98120` under
+`.local/experiments/EXP810-g4-package815/hardware-evidence/EXP815-evidence`.
+In 141/141 collected CreateDevice attempts, CreateContextVirtual,
+CreatePagingQueue, CreateSynchronizationObject2 and ScreenInitialize passed,
+then native `pfnAllocateCb` returned `0x80070057` for ClassId1, 64 KiB;
+`hAllocation` remained zero. Reserve/Map/Lock were never called; outer
+CreateDevice returned the same error. No Present, Blt, submit, retirement or
+firmware fault was observed. LOOK_NOW was not set; panel/RDP unmeasured.
+
+The first failing boundary is the Direct3D runtime's allocation callback.
+`Wom1G1bFailure*` is absent from collected registry receipts. The KMD's
+`Wom1G3DmaOp` ring contains CreateAllocation status0 records with one
+allocation, 72 bytes of private data and 64 KiB output; this matches the
+native class request shape, but the ring does not identify its UMD caller.
+The runtime may reject KMD output after a successful DDI. Microsoft Learn permits
+device-associated `hResource=NULL`; WDK26100 defines
+`D3DDDI_ID_NOTAPPLICABLE` as zero, so native `VidPnSourceId=0` is not a
+demonstrated defect. Next target: prove runtime-versus-KMD rejection and
+identify the rejected field before changing allocation behavior. Package815
+remains live under R54. No unchanged Air rerun is justified.
+
 ## 2026-09-25 EXP810/package814 diagnostic checkpoint
 
 Exact package814 reached pinned J313-WIN SSH, APPL0002 Code0/oem5,
