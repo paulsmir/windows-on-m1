@@ -1,5 +1,43 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP819/R103 and EXP820/package818: nonphysical allocation still rejected
+
+R103 used one x64 D3DKMT harness on the unchanged package817 full-owner boot.
+`OpenAdapterFromLuid` and `CreateDevice` succeeded. The final harness used
+the same 16-byte Win32 context private data as the UMD, and
+`CreateContextVirtual` succeeded. The G3/CDD-like ClassId0/64-KiB positive
+control returned `STATUS_SUCCESS`. All 36 native ClassId1-3 rows returned
+`STATUS_INVALID_PARAMETER (0xC000000D)`. For exact ClassId1/64-KiB,
+CpuVisible1, hResource0, KMD Create/Open both returned status0 with 72-byte
+private data and 64-KiB output, then KMT returned no allocation handle.
+Thus the rejection reproduces without the UMD AllocateCb or early
+CreateDevice timing. Class0 and native KMD allocation output differ in
+`AccessedPhysically`; the virtual path also interprets the read-set union
+as `MmuSet`. A 16-KiB size or CpuVisible0 is rejected earlier by KMD.
+
+Implementation commit `989b3868cb691157925a227b6185a399b8cc4f87` sets
+`MmuSet=1` for GPUVA class allocations (one advertised MMU, index0) while
+keeping local `SupportedWriteSegmentSet=2` and `AccessedPhysically=0`.
+The actual KMD replay went RED→GREEN. R83 package818 was built from 524
+committed inputs with zero ARM64 warnings/errors and exact CAT/INF/SYS/UMD
+hashes `150e6f2a`/`eb05b99a`/`b8b31d6d`/`75c36ff2`.
+EXP820 reached Code0, pinned SSH, CPU8/storage2/USB6 and ARM_CONSUMED
+seq232880554. UMD still returned `0x80070057` at native ClassId1/64-KiB
+AllocateCb and CreateDevice. The same valid-context direct harness still
+returned 36/36 native `0xC000000D` with KMD Create/Open status0.
+No Present/Blt/submit/retire or first DWM frame was observed; LOOK_NOW was
+not used and panel/RDP remain unmeasured. **MMU mask is rejected as the sole
+cause**; keep it as an unvalidated source contract correction, and stop
+serial allocation-output trials. Next causal target is a direct discriminator
+inside nonphysical GpuMmu/VidMm allocation admission.
+
+Evidence: `.local/experiments/EXP819-r103/evidence/` (R103 matrix) and
+`.local/experiments/EXP820-g4-mmuset/evidence/` (package818 matrix, UMD,
+registry, ETL SHA256 `91785858…`, six collected files hash verified).
+R54 cleanup completed: exact818 removed after a disarmed Code43 boot; frozen
+ordinary EXP377/392 returned one inert APPL0002 Code28, staged0/arm0,
+SYS0/UMD0/service0/signer0/trace0, CPU8/storage2/USB6 and pinned SSH.
+
 ## 2026-09-25 EXP818/R102: native allocation fails before VidMm global allocation
 
 One source-first `DXGK_ALLOCATIONINFO` audit found no documented single-field
