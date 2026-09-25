@@ -30,6 +30,16 @@ fence retirement. Hardware EXP810 remains gated by that replay. Ordinary
 GPU-visible Code28 is the last recorded recovery state; R54/R60 series rules
 and frozen m1n1/Mu apply to any later Air run.
 
+EXP810-R95-VDM-OFFLINE checked the remaining deterministic boundary in one
+step. Mesa's VDM may link to continuation BOs; AGX4 v2 has only a base VA,
+the KMD checks one byte there, and the passing 2560×1600 host replay uses no
+actual VDM bytes. Its stream length and indirect references versus graph
+grants are therefore unproved; this is not a firmware-only unknown. R98's
+geometry calculation is 80×50 tiles → 32 TVB blocks → 128 page and 64 block
+entries, supported by the current UMD/builder. Package813 stays build-only;
+no EXP810 Air install/arm/LOOK_NOW was attempted. See the bounded result in
+`G4_EXP208_FIELD_SOURCES.md` and `EXP810-R95-VDM-OFFLINE` ledger entry.
+
 ## 2026-09-25 EXP809S: R92 DWM is associated with Apple AGX
 
 With exact unchanged package809/m1n1/Mu, a SYSTEM startup GPU Engine receipt

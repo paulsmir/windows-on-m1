@@ -77,3 +77,26 @@ still gated by those checks.
 This pass found no source-backed correction that can safely turn on native
 execution. The unverified steps above remain gates, rather than inferred
 success from the existing individual replays.
+
+## EXP810-R95-VDM-OFFLINE — one bounded discriminator, 2026-09-25
+
+The existing 2560×1600 BGRA8 replay computes 80×50=4000 tiles and
+`round_up(ceil(4000/128),8)=32` TVB blocks: 128 page entries, 64 block-list
+entries, and a 4 MiB heap. The builder patches the 32-block counts and the
+production UMD initializer writes all 128/64 entries. Both affected host
+replays pass. This resolves R98's 16-descriptor capacity objection for this
+geometry, but those tests still construct a synthetic render packet.
+
+| Boundary | Deterministic observation |
+| --- | --- |
+| WINDOWS | `AgxWin32GpuvaSubmit` waits the MakeResident paging fence and retains the BO handles through completion. G4 UMD includes `batch->vdm.bo`, process BOs, the output and batch BO list. No combined CreateDevice→Present/retire replay or DWM UMD receipt exists for package813. |
+| AGX | Mesa allocates an initial 0x80000-byte encoder BO and may emit `VDM_STREAM_LINK` to a 0x10000-byte continuation when space runs low. Its decoder follows links and parses PPP state, shader pipelines, index/indirect buffers and stream termination. AGX4 v2 carries `VdmCtrlStreamBase` but no stream byte count; the host packet has no actual VDM bytes. |
+| TRANSLATION | The KMD graph callback validates only `(VdmCtrlStreamBase, 1, read)`; the builder binds that VA. The synthetic broker replay validates known firmware relocations and mapped BO ranges, but cannot enumerate a real stream's link targets or indirect references. Residency of a BO is not proof that each decoded reference falls inside its published grant. |
+| WHAT IS STILL UNKNOWN | The exact end of a real 2560×1600 textured-quad VDM stream, its continuation/link targets, and every indirect byte range versus a grant are deterministic gaps. DWM's actual resource/primary/Present sequence is also unobserved. Firmware execution and visible output remain hardware unknowns only after these input checks pass. |
+
+Verdict: **R95 incomplete, EXP810 hardware not launched.** The next smallest
+offline proof is one actual Mesa draw (or a captured native draw from the exact
+UMD), decode its VDM chain to terminate, validate every indirect byte range
+against the published VA graph, then replay the same packet through the KMD
+builder, real C broker and Present/fence retire path. Package813 remains
+build-only until that proof or a narrower source-backed hardware hypothesis.
