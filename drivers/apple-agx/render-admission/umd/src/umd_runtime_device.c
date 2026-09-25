@@ -283,6 +283,16 @@ HRESULT AdmissionUmdRuntimeDeviceInitialize(
     pagingQueue.PhysicalAdapterIndex = 0u;
     result = device->KernelCallbacks->pfnCreatePagingQueueCb(
         device->RuntimeDevice.handle, &pagingQueue);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    {
+      UINT values[5] = { (UINT)pagingQueue.Priority,
+          pagingQueue.PhysicalAdapterIndex, pagingQueue.hPagingQueue != 0u,
+          pagingQueue.hSyncObject != 0u,
+          pagingQueue.FenceValueCPUVirtualAddress != NULL };
+      AdmissionUmdDiagnostic("g4-create-paging-queue-cb", result,
+                             values, ARRAYSIZE(values));
+    }
+#endif
     if (FAILED(result) || pagingQueue.hPagingQueue == 0u ||
         pagingQueue.hSyncObject == 0u ||
         pagingQueue.FenceValueCPUVirtualAddress == NULL) {
@@ -308,6 +318,14 @@ HRESULT AdmissionUmdRuntimeDeviceInitialize(
     renderFence.Info.MonitoredFence.EngineAffinity = 1;
     result = device->KernelCallbacks->pfnCreateSynchronizationObject2Cb(
         device->RuntimeDevice.handle, &renderFence);
+    {
+      UINT values[4] = { (UINT)renderFence.Info.Type,
+          renderFence.Info.MonitoredFence.EngineAffinity,
+          renderFence.hSyncObject != 0u,
+          renderFence.Info.MonitoredFence.FenceValueCPUVirtualAddress != NULL };
+      AdmissionUmdDiagnostic("g4-create-render-fence-cb", result,
+                             values, ARRAYSIZE(values));
+    }
     if (FAILED(result) || !renderFence.hSyncObject ||
         !renderFence.Info.MonitoredFence.FenceValueCPUVirtualAddress) {
       D3DDDI_DESTROYPAGINGQUEUE destroyQueue = {};
@@ -327,6 +345,9 @@ HRESULT AdmissionUmdRuntimeDeviceInitialize(
   }
 #endif
   result = AdmissionUmdScreenInitialize(device);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  AdmissionUmdDiagnostic("g4-screen-initialize", result, NULL, 0u);
+#endif
   if (FAILED(result)) {
     D3DDDICB_DESTROYCONTEXT destroyContext;
     D3DDDI_DESTROYPAGINGQUEUE destroyQueue;
