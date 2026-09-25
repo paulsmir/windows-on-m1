@@ -105,6 +105,51 @@ typedef struct {
   APPLE_AGX_G4_TIMESTAMPS TimestampsVertex, TimestampsFragment;
 } APPLE_AGX_G4_NATIVE_RENDER;
 
+/* The TVB and per-scene capacities follow Asahi buffer.rs/render.rs.  The
+ * TPC reserves the t600x maximum of eight GPU clusters, so the UMD can
+ * allocate before the KMD supplies a measured cluster count.  All returned
+ * allocation extents are 64 KiB multiples for the G1b16 Windows profile. */
+static inline int AppleAgxG4ProcessRequiredBytes(
+    const APPLE_AGX_G4_NATIVE_RENDER *render,
+    unsigned int bytes[APPLE_AGX_G4_PROCESS_RANGE_COUNT]) {
+  unsigned long long tiles_x, tiles_y, mtiles_x, mtiles_y, per_mtile;
+  unsigned long long utiles, blocks, tilemap_words, tilemap, tpc;
+  unsigned long long raw[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
+  unsigned int i;
+  if (!render || !bytes || !render->WidthPx || !render->HeightPx ||
+      !render->Layers || render->WidthPx > 16384u ||
+      render->HeightPx > 16384u || render->Layers > 2048u ||
+      !((render->UtileWidthPx == 32u && render->UtileHeightPx == 32u) ||
+        (render->UtileWidthPx == 32u && render->UtileHeightPx == 16u) ||
+        (render->UtileWidthPx == 16u && render->UtileHeightPx == 16u)))
+    return 0;
+  tiles_x = ((unsigned long long)render->WidthPx + 31ULL) / 32ULL;
+  tiles_y = ((unsigned long long)render->HeightPx + 31ULL) / 32ULL;
+  mtiles_x = ((((tiles_x + 3ULL) / 4ULL) + 3ULL) / 4ULL) * 4ULL;
+  mtiles_y = ((((tiles_y + 3ULL) / 4ULL) + 3ULL) / 4ULL) * 4ULL;
+  per_mtile = mtiles_x * mtiles_y;
+  utiles = (32ULL / render->UtileWidthPx) *
+           (32ULL / render->UtileHeightPx);
+  blocks = (((tiles_x * tiles_y + 127ULL) / 128ULL + 7ULL) / 8ULL) * 8ULL;
+  tilemap_words = (5ULL * per_mtile * utiles + 3ULL) / 4ULL;
+  tilemap = 4ULL * tilemap_words * 16ULL * render->Layers;
+  tpc = 8ULL * utiles * per_mtile * 16ULL * render->Layers * 8ULL;
+  raw[0] = blocks * 4ULL * 4ULL; /* page numbers, four per block */
+  raw[1] = blocks * 2ULL * 4ULL; /* two words per block */
+  raw[2] = blocks * 0x20000ULL;
+  raw[3] = 0x10080ULL;           /* upper bound for clustered user buffer */
+  raw[4] = tilemap;
+  raw[5] = 0x200ULL + (render->Layers > 1u ? 0x100ULL : 0ULL);
+  raw[6] = tpc;
+  raw[7] = 9ULL * (0x540ULL + 0x280ULL + 0x20ULL);
+  raw[8] = 0x8000ULL;
+  for (i = 0u; i < APPLE_AGX_G4_PROCESS_RANGE_COUNT; ++i) {
+    if (!raw[i] || raw[i] > 0xffff0000ULL) return 0;
+    bytes[i] = (unsigned int)((raw[i] + 0xffffULL) & ~0xffffULL);
+  }
+  return 1;
+}
+
 typedef enum {
   AppleAgxG4ParseOk = 0,
   AppleAgxG4ParseInvalid,

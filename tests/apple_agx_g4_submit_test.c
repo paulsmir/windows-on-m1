@@ -25,7 +25,8 @@ static int mapped(void *opaque, unsigned long long va,
     return (va == 0x30000ULL && bytes == 0x4000u) ||
       (va >= 0x100000ULL && va <= 0x900000ULL &&
        (va & 0xffffULL) == 0 &&
-       (bytes == 0x10000u || bytes == 0x100000u));
+       (bytes == 0x10000u || bytes == 0x20000u ||
+        bytes == 0x100000u));
   return (va == 0x20000ULL && bytes ==
       sizeof(PACKET) - sizeof(APPLE_AGX_G4_PRIVATE_HEADER)) ||
       (va == 0x40000ULL && bytes == 1u) ||
@@ -118,6 +119,7 @@ int main(void) {
       native.header.Process[i].Bytes = 0x10000u;
     }
     native.header.Process[2].Bytes = 0x100000u;
+    native.header.Process[3].Bytes = 0x20000u;
     assert(AppleAgxG4ParseSubmit(&native, sizeof(native), sizeof(native),
         0x50000ULL, native.header.Base.CommandBytes, mapped, &calls,
         &view) == AppleAgxG4ParseOk);
@@ -126,6 +128,11 @@ int main(void) {
     changed = native;
     changed.render_payload.WidthPx = 2560u;
     changed.render_payload.HeightPx = 1600u;
+    assert(AppleAgxG4ParseSubmit(&changed, sizeof(changed), sizeof(changed),
+        0x50000ULL, changed.header.Base.CommandBytes, mapped, &calls,
+        &view) == AppleAgxG4ParseInvalid);
+    changed = native;
+    changed.header.Process[3].Bytes = 0x10000u;
     assert(AppleAgxG4ParseSubmit(&changed, sizeof(changed), sizeof(changed),
         0x50000ULL, changed.header.Base.CommandBytes, mapped, &calls,
         &view) == AppleAgxG4ParseInvalid);

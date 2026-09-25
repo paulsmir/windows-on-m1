@@ -172,17 +172,13 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmit(
   }
   if (header.Version == APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA) {
     APPLE_AGX_G4_NATIVE_RENDER render;
-    unsigned long long tiles_x, tiles_y, blocks, minimum_heap;
+    unsigned int required[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
     memcpy(&render, bytes + position + sizeof(native_header), sizeof(render));
-    /* Asahi buffer.rs uses 128 KiB blocks and at least eight blocks per
-     * scene; render.rs derives the minimum from the 32x32 tile grid.  This
-     * checks a capacity contract, not one particular captured frame size. */
-    tiles_x = ((unsigned long long)render.WidthPx + 31ULL) / 32ULL;
-    tiles_y = ((unsigned long long)render.HeightPx + 31ULL) / 32ULL;
-    blocks = ((tiles_x * tiles_y + 127ULL) / 128ULL + 7ULL) & ~7ULL;
-    minimum_heap = blocks * 0x20000ULL;
-    if (header_v2.Process[2].Bytes < minimum_heap)
+    if (!AppleAgxG4ProcessRequiredBytes(&render, required))
       return AppleAgxG4ParseInvalid;
+    for (index = 0u; index < APPLE_AGX_G4_PROCESS_RANGE_COUNT; ++index)
+      if (header_v2.Process[index].Bytes < required[index])
+        return AppleAgxG4ParseInvalid;
   }
   view->Native = bytes;
   view->Render = bytes + position + sizeof(native_header);
