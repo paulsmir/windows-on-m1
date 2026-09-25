@@ -1,18 +1,28 @@
 # GPU current boundary — 2026-09-23
 
-## 2026-09-25 EXP800 candidate: shared local reserve backing
+## 2026-09-25 EXP800: pre-guest CPU startup; G3 verdict inconclusive
 
-EXP799's `0xbb0`/`0x9bcb20000` leaf and `OWNERSHIP` are still the last
-hardware verdict. A host replay of that index and IPA through the real KMD
-BuildPagingBuffer and m1n1 broker distinguishes a translated, aligned page
-from a broker table collision and demonstrates the same rejection when a
-second process maps a page registered exclusively by the first. The recorded
-receipt does not include the local reserve base or broker subreason, so this
-is a falsifiable **cross-process backing hypothesis**, not a hardware-proven
-cause. Candidate KMD grants the single contiguous local reserve as shared
-with a stable reserve identity; m1n1 ownership checks are unchanged. EXP800's
-first checkpoint is whether this leaf passes; CDD is the subsequent target.
-R81 operation matrix and R82 fence-offset bound are in the candidate.
+Package803 (commit `5919ef6e`, 16 KiB) built with pinned WDK26100, staged
+from Code28 and armed. Two full-owner launches stopped in m1n1 `hv_init`
+before Mu/Windows/GPU; the second reported CPU1–7 `Failed!`. Immutable
+GPU-hidden recovery also failed CPU1–7 with PMGR `sys=0 start=0`. A proxy
+`P_REBOOT` WDT SoC reset detached/re-enumerated L41/L43, after which the same
+GPU-hidden image reached Windows CPU8/pinned SSH. Evidence was copied before
+exact oem5/package803 cleanup. A second WDT reset before frozen ordinary
+launch returned pinned SSH, CPU8/storage2/USB7, one inert APPL0002 Code28,
+staged0/arm0 and no AppleAgx binary/service/signer. Logs and manifests are
+in `.local/experiments/EXP800-g3-shared-reserve`; no new dump was produced.
+
+**The last G3 hardware boundary remains EXP799**: local leaf index `0xbb0`,
+`ChildIpa=0x9bcb20000`, broker `OWNERSHIP`. The host replay of that index/IPA
+through the real KMD and broker shows a translated, aligned page, no table
+collision, and a second-process exclusive backing collision. It uses a
+synthetic local-reserve base because EXP799 did not receipt the real base or
+broker subreason. Shared reserve registration is therefore a falsifiable
+candidate, not a hardware-proven fix. m1n1 ownership checks are unchanged.
+Before another G launch, preregister one exact package and a source-backed
+SoC reset/start-state discriminator; do not carry package803 across runs.
+CDD remains unproven. R81 matrix and R82 fence bound are implemented.
 
 ## 2026-09-25 EXP799: Submit passed; local leaf OWNERSHIP is the boundary
 
