@@ -1,5 +1,28 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP799: Submit passed; local leaf OWNERSHIP is the boundary
+
+Package802 accepted the WDK `Flags.Paging=1` virtual Submit: Windows advanced
+beyond EXP797/798 `0x119/2` and wrote DMA receipts through 05. The next stop
+is `0x10E/0xB`, P3=`C0000483`, in `UpdatePageTable` during
+`CommitVirtualAddressRangeSystemCommand`. Durable `Wom1G3PagingFailure` is
+branch7 `LeafGraph`, level0, logical PTE index `0xbb0`, table IPA
+`0x9bf7c4000`, candidate local `ChildIpa=0x9bcb20000`, broker
+`LastStatus=4` (`OWNERSHIP`), `Uncertain=0`. The last WorkInput is a later
+FillVirtual multipass offset `0x48a000`. CDD remains unproven. Dump SHA256
+`8663372d3d5543ebdf41c525293bf90a8d01fb145b60d558d7cd8667da46386e`;
+ETL, registry, and CDB are in `.local/experiments/EXP799-g3-paging-flag/hardware-evidence`.
+
+R60 returned pinned SSH. Exact oem5/package802 was removed after evidence;
+the frozen ordinary GPU-visible profile now passes pinned SSH, CPU8, two
+disks, seven USB devices, one inert APPL0002 Code28, staged0, arm0 and no
+AppleAgx binary/service/signer. The EXP797–799 series is closed. Next causal
+decision: replay this local leaf and broker `OWNERSHIP` in the current R70
+graph, distinguishing IPA translation/backing identity from an existing
+descriptor before editing KMD or running hardware. Do not assume CPU Fill
+caused the broker rejection without a discriminating result. No G4/G5 merge
+plan yet because `CreateCddDevice` is not established.
+
 ## 2026-09-25 EXP798: paging Submit carries the WDK Paging flag
 
 Package801 (R80 virtual paging Submit route) cold-booted with durable
