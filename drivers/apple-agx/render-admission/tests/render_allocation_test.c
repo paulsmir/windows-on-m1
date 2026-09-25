@@ -14,6 +14,8 @@ static void test_surface_and_64k_contract(void) {
   assert(AdmissionAllocationDescriptionValid(&description));
   assert(AdmissionAllocationAlign64K(description.Size, &aligned));
   assert(aligned == 0xfa0000ULL);
+  assert(AdmissionAllocationPitchAlignedSize(description.Size, 0u) == 0ULL);
+  assert(AdmissionAllocationPitchAlignedSize(0x10001ULL, 1u) == 0x20000ULL);
   /* Shared allocations may use a larger aligned pitch and padded backing. */
   description.Pitch += 16u;
   description.Size = (unsigned long long)description.Pitch * description.Height + 128u;

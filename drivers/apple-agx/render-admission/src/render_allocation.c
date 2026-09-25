@@ -86,6 +86,15 @@ int AdmissionAllocationAlign64K(unsigned long long Size,
   return *AlignedSize != 0ULL;
 }
 
+unsigned long long AdmissionAllocationPitchAlignedSize(
+    unsigned long long Size, unsigned int PitchAlignedSegmentSupported) {
+  unsigned long long aligned = 0ULL;
+  return PitchAlignedSegmentSupported != 0u &&
+                 AdmissionAllocationAlign64K(Size, &aligned)
+             ? aligned
+             : 0ULL;
+}
+
 int AdmissionAllocationCreate(
     const ADMISSION_ALLOCATION_DESCRIPTION *Description,
     ADMISSION_ALLOCATION_OBJECT *Allocation) {

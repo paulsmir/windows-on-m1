@@ -307,7 +307,9 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   info->Alignment = (UINT)ADMISSION_ALLOCATION_ALIGNMENT;
 #endif
   info->Size = (SIZE_T)aligned;
-  info->PitchAlignedSize = (SIZE_T)aligned;
+  /* Neither reported segment advertises PitchAlignment. */
+  info->PitchAlignedSize = (SIZE_T)AdmissionAllocationPitchAlignedSize(
+      aligned, 0u);
   info->HintedBank.Value = 0u;
   info->PreferredSegment.Value = 0u;
   info->PreferredSegment.SegmentId0 = ADMISSION_MEMORY_LOCAL_SEGMENT;

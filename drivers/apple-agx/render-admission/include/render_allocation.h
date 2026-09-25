@@ -39,6 +39,8 @@ int AdmissionAllocationContainsView(
     unsigned long long ReferencedBytes);
 int AdmissionAllocationAlign64K(unsigned long long Size,
                                 unsigned long long *AlignedSize);
+unsigned long long AdmissionAllocationPitchAlignedSize(
+    unsigned long long Size, unsigned int PitchAlignedSegmentSupported);
 int AdmissionAllocationCreate(
     const ADMISSION_ALLOCATION_DESCRIPTION *Description,
     ADMISSION_ALLOCATION_OBJECT *Allocation);
