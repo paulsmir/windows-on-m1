@@ -28,8 +28,17 @@ Sources: package817 `build-receipt.json` and `EXP817-evidence/state.json` in
 and [allocation priorities](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3dkmthk/ns-d3dkmthk-_d3dkmt_setallocationpriority).
 
 Verdict: no one output-field difference has a documented rejection rule that
-explains this `E_INVALIDARG`. Do not change another field by guess. The next
-discriminator is the exact unchanged package817 with Microsoft-Windows-DxgKrnl
-all-keywords/verbose ETW and DxgKrnl Admin/Operational logs covering the
-Allocate callback. Success is a named VidMm rejection or proof those channels
-contain none; no LOOK_NOW while CreateDevice is still failing.
+explains this `E_INVALIDARG`. Do not change another field by guess.
+
+EXP818 ran the exact unchanged package817 with DxgKrnl all-keywords/verbose
+ETW and Admin/Operational export. The byte-verified ETL contains 127040
+events, with no lost buffers. DWM PID1224 has 87 VidMm global allocation
+events (ID33), but none for the 64-KiB native BO; 262 UMD native Allocate
+attempts returned `0x80070057`. There is no named invalid-parameter payload
+or warning/error level among 32762 events for that PID. This places the
+refusal before the global allocation event without exposing its exact check.
+The ETL is `a9493a03`, UMD log `04288ee7`, targeted audit `c838753a` under
+`.local/experiments/EXP818-r102/evidence/`. Exact package817 was removed and
+the guest returned to ordinary GPU-visible Code28. Next discriminator is a
+single D3DKMT user-mode harness with an exact ClassId1/64-KiB request and a
+known-good allocation control, collecting NTSTATUS in one boot (REVIEW R103).

@@ -1,5 +1,29 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP818/R102: native allocation fails before VidMm global allocation
+
+One source-first `DXGK_ALLOCATIONINFO` audit found no documented single-field
+rejection. Exact unchanged package817 with full-keyword/verbose DxgKrnl ETW
+returned Code0/pinned SSH, CPU8/storage2/USB6, ARM_CONSUMED seq236846991.
+UMD recorded 262/262 ClassId1/64-KiB `pfnAllocateCb` and CreateDevice
+`0x80070057`; KMD Create/Open returned success. No Present/Blt/submit/retire
+or firmware fault, so no LOOK_NOW. Operator panel/RDP unmeasured. ETL
+`a9493a03` (127040 events, no lost buffers) contains VidMm global allocation
+events 33/36, including 87 event33 for DWM PID1224, but no native 64-KiB
+allocation. The 32762 PID1224 events contain no named invalid-parameter
+payload or warning/error level. This narrows the boundary before the VidMm
+global allocation event but does not identify the rejecting check. Stop
+equivalent ETL/output-field passes.
+
+R54/R60 recovery is complete: disarmed full-owner Code43/arm0, exact
+package817 cleanup, frozen ordinary EXP377/392 boot, guarded rescan to one
+inert APPL0002 Code28; staged0/arm0/SYS0/UMD0/service0/signer0/trace0,
+CPU8/storage2/USB6, pinned SSH. Next causal discriminator (REVIEW R103):
+one D3DKMT user-mode harness with exact native 72-byte request and known-good
+control to read NTSTATUS in the same boot; do not launch another flag trial.
+Evidence `.local/experiments/EXP818-r102/evidence/` and
+`investigation/G4_EXP810_ALLOCATION_R102.md`.
+
 ## 2026-09-25 EXP810/package817 closes allocation-output trial
 
 Package817 changed only KMD `PitchAlignedSize` to zero for the reported
