@@ -1,5 +1,28 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP788: Count1 is a valid read-only system 4-KiB page
+
+Diagnostic-only package791 cold-booted with the frozen full-owner profile.
+StartDevice reached Stage12/status0, then Windows stopped `0x10E/0xB` with
+KMD `C000000D` in `CompleteBuildPagingBufferIteration`. The new flushed
+branch10 receipt proves level0 CPU_VIRTUAL Start64 Count1 Flags0,
+FirstPteVA `0x2040000`, **PTE Flags `0x9` (valid, read-only, segment0),
+PageAddress `0x9916a0`** (byte address `0x9916a0000`). This is a single
+system-memory mapping, not an unmap. The KMD guard rejects it before graph
+work. The real broker accepts only complete 16-KiB leaf groups, so a single
+4-KiB mapping cannot be published directly. Next offline target: a logical
+4-KiB PTE shadow with native leaves published only for complete contiguous
+16-KiB groups, plus fail-closed GPU access to incomplete groups; add actual
+Count1 input and completion/invalidation cases to real-broker replay. Do not
+repeat package791 unchanged. Analysis `.local/experiments/EXP788-g3-count1-
+receipt/hardware-evidence/EXP788-analysis.json` SHA256
+`43e01905189592d3e68d6f35007a53538df02e2dd5f3283b862ff286665b661c`.
+
+GPU-hidden dump-first returned pinned SSH/CPU8, APPL0002 absent, arm absent,
+exact package791 oem5.inf/SYS/UMD; dump/ETL/receipts were collected and
+hash-verified before cleanup. R69 stage → cold boot was followed. Exact
+package cleanup and ordinary Code28 rollback are in progress.
+
 ## 2026-09-24 EXP787: level0 4-KiB Count1 update refused before PTE inspection
 
 Package790 used distinct KMD-owned broker pages for VidMm tables. Real-broker
