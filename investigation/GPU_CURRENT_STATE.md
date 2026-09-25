@@ -1,23 +1,35 @@
 # GPU current boundary — 2026-09-23
 
-## 2026-09-25 EXP796 preregistered: R79 owned inactive-root FlushTlb
+## 2026-09-25 EXP796: R79 FlushTlb passed; VidMm Fill is the next boundary
 
-EXP795 still stops in `FlushGpuVaTlb` after R78 range normalization; its
-FlushInput receipt was absent because the writer ran under the fast mutex.
-Commit `16eaf6e2` moves the receipt to PASSIVE_LEVEL. R79 implementation
-`d945ed96` returns success with branch 5 for an owned root without a graph or
-slot, branch 6 for an owned noncurrent original/shadow root, and preserves
-branch 4 rejection for foreign process/root. Real-broker replay was RED
-`C000000D` before SetRootPageTable and GREEN with no broker call after R79;
-the 10 affected tests pass. Full host suite: 1054 tests, 15 failures,
-67 errors, 2 skips from the known dependency/source-layout baseline.
+Package799 G1b16 (R79 plus PASSIVE receipt correction `16eaf6e2`; frozen
+R70/R75/R76/R77/R78, caps, signer, m1n1 and Mu) cold-booted once. Host vUART
+printed `ARM_CONSUMED version=1 seq=340148747` before AGX power/broker. The
+durable `Wom1G3FlushInput` has branch 5, process-owned original root
+`0x9b8050000`, graph root `0x9dddf8000`, VA `0x2030000..0x25b0000`,
+ResolveStatus0 and BrokerStatus0: R79's inactive-root no-op occurred on
+hardware. This input is replayed by test commit `b4128e2b`; real-broker
+replay was RED `C000000D` before R79 and GREEN after it (10/10 affected).
+The full host suite was run once: 1054 tests, 15 failures, 67 errors,
+2 skips from the known baseline. WDK26100 package799 built 0 warnings/errors.
 
-Package799 G1b16 built with 0 warnings/errors; its exact hashes and frozen
-m1n1/Mu are in `.local/experiments/EXP796-g3-flush-owned/hardware-manifest.json`.
-Next gate is one cold run with durable FlushInput branch and host ARM_CONSUMED,
-then CreateCddDevice or a named new stop. On bugcheck, R60 requires durable
-host arm proof, exact package and one bounded same-profile SSH reboot before
-dump/ETL collection; otherwise use GPU-hidden dump-first exact cleanup.
+Windows advanced beyond the EXP795 `FlushGpuVaTlb` stop, then bugchecked
+`0x10E/0xB`, P3=`C00000BB`, in `dxgmms2!FillAllocationUsingGpuVa ->
+FillAllocationInternal -> CommitResource` on a System VidMm worker. Last
+`Wom1G3PagingStatus` is `C00000BB`; exact Fill input fields were not captured.
+`CreateCddDevice` is still unproven. New dump SHA256
+`6f5cad789e074ec4fc41e45d0592cac3ebc8f7f06b27ce78404c6127a310e7ad`,
+CDB `ca1a0dd6592114ac835711dadee10fd1dc5c4e73dbd6ddfa1e81efb5d2bdf31f`,
+ETL `68850beeaa307f376fc991e6a23e74522bd223d5d139cba0314fe17448169f8a`
+in `.local/experiments/EXP796-g3-flush-owned/hardware-evidence`.
+
+R60 same-profile reboot returned pinned SSH; dump, receipts and ETL were
+hash-verified before exact oem5/package799 cleanup. Frozen ordinary recovery
+now passes pinned SSH/CPU8/storage2/USB7 with one inert APPL0002 Code28,
+staged0 and no arm, SYS/UMD/service or signer. Next phase: capture the exact
+VidMm Fill BuildPagingBuffer input, replay it RED, then fix only the owning
+KMD operation if the input confirms the `STATUS_NOT_SUPPORTED` path. Do not
+infer Fill arguments from the stack or change firmware/caps/recovery.
 
 ## 2026-09-25 EXP795: R77 host proof works; FlushGpuVaTlb remains the boundary
 
