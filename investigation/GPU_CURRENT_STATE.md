@@ -22,6 +22,11 @@ launch EXP810 while G4 submit still has the known fail-closed return. The
 hardware gate and recovery remain the exact R54/R60 series rules in the
 handoff plan; ordinary Code28 is the last recorded recovery state.
 
+R96 field audit (`investigation/G4_EXP208_FIELD_SOURCES.md`) identifies the
+first construction gate: EXP208's fixed process objects, shader aliases and
+16 KiB output do not yet have a complete AGX4 v2 field/suboffset mapping.
+The existing B1 color-fill job cannot be used as a generic G4 builder.
+
 ## 2026-09-25 EXP809S: R92 DWM is associated with Apple AGX
 
 With exact unchanged package809/m1n1/Mu, a SYSTEM startup GPU Engine receipt
