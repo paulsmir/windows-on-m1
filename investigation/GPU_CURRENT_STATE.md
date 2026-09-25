@@ -1,5 +1,26 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP810/package817 closes allocation-output trial
+
+Package817 changed only KMD `PitchAlignedSize` to zero for the reported
+non-pitch segments. The host allocation test went RED→GREEN; R83/WDK26100
+build and signatures passed. Air reached pinned SSH, APPL0002 Code0/oem5,
+CPU8/storage2/USB6, ARM_CONSUMED seq236449529 and DCP A408/D589 latch10;
+exact INF/SYS/UMD hashes match the package. Six guest files match SHA list
+`e77919b9` in `.local/experiments/EXP810-g4-package817/hardware-evidence/
+EXP817-evidence`.
+
+All 96 collected CreateDevice attempts still failed at the first native
+`pfnAllocateCb` with `0x80070057`; initial callbacks passed. No Reserve,
+Map, Lock, Present, Blt, submit, retire or firmware fault was observed.
+LOOK_NOW was not set because Present was not reached; panel/RDP unmeasured.
+The WDK pitch-size correction is **rejected as the sole cause**. Together
+with package816's unchanged result, this stops serial KMD output guesses.
+The causal boundary is Direct3D's allocation callback after successful KMD
+Create/Open; identifying its post-DDI validation needs a new discriminator,
+not another equivalent Air retry. Exact package817 is live only until R54
+disarmed cleanup and ordinary GPU-visible Code28 recovery.
+
 ## 2026-09-25 EXP810/package816 rejects physical-access cause
 
 Package816 changed only native class allocation `AccessedPhysically` from 1
