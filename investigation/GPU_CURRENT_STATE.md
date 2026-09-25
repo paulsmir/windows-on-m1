@@ -1,5 +1,26 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP807: selected primary is zero immediately before first swap
+
+Exact package807/m1n1 `fc25385e`/frozen Mu reached pinned SSH,
+`APPL0002` Code0 and AppleAgxAdmission Running. A read-only m1n1 snapshot
+immediately before DCP swap_id10 saw all 4,096,000 pixels zero at validated
+PA `0x9bc020000`/IOVA `0x101c0000`; DCP A408/D589 latched. KMD source receipt
+V2 identifies allocation `0xffff9589bbbeb0d0`, segment2 address
+`0x1500030000`, CPU `0xffffdf7035430000`, the same PA/IPA, offset `0x30000`,
+format21 and no explicit cache clean. ETL has 8 CDD Blt, 142 PresentDisplayOnly
+and 268 Present events around the second boot marker; their destination and
+order relative to the host snapshot are not proven. One pre-swap zero sample
+does not distinguish a CDD shadow copy from a late write or cache visibility.
+R90a operator correction attributes EXP806 photo texture to water damage;
+the photo proves only physical scanout routing. EXP807 LOOK_DONE was recorded,
+but no panel description was supplied. Package807 was removed exactly, and
+frozen ordinary R84 plus one guarded rescan restored Code28, staged0/arm0,
+CPU8/storage2/USB7. Next smallest discriminator is a read-only delayed sample
+of that same PA after latch and CDD activity. Do not change format or add a
+cache clean until a same-buffer content transition is observed. R86 remains
+saved at `wip/r86-range-grants`.
+
 ## 2026-09-25 EXP806: physical scanout address proven; content is next
 
 A single diagnostic full-owner m1n1 `95ec1725`/SHA `58b75a8b` with the
