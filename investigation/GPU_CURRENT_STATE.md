@@ -11,8 +11,11 @@ native command still returns `STATUS_INVALID_PARAMETER` from
 `AdmissionG4SubmitVirtualEnvelope` (`4264a033`), the WDDM-supported
 fail-closed status. No native TA/3D firmware job or scheduler fence completion
 exists yet. The UMD v2 source has host ABI and extracted BO preparation
-replays; a pinned Windows ARM64 link has not run. No EXP810 package was built,
-installed, or launched.
+replays. An R83-verified pinned WDK26100 ARM64 **build-only** package810 now
+links UMD/KMD with 0 warnings/errors from 521 committed Apple AGX files at
+`03c65f9b`; build receipt is `.local/experiments/EXP810-r96-offline-build/build-receipt.json`.
+No EXP810 package was installed or launched, and no UMD/KMD runtime receipt or
+LOOK_NOW observation exists.
 
 R94's next causal target is a source-backed ctx0 TA/3D constructor from
 `drm_asahi_cmd_render` plus exact stamp/event retirement, followed by one
