@@ -1,5 +1,44 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP809S: R92 DWM is associated with Apple AGX
+
+With exact unchanged package809/m1n1/Mu, a SYSTEM startup GPU Engine receipt
+at 13:57:03Z recorded DWM PID1220/session1 on LUID `0x0004cc44` while
+APPL0002 was Code0. Same-boot read-only escape identified `0x0004cc44` as
+Apple (build809/boot token319319345) and `0x00005ccc` as the second adapter;
+the DWM process had `AppleAgxRenderAdmissionUmd.dll` loaded. Apple's KMD
+Present/Blt/virtual/physical submit counters were all zero, and the selected
+primary PA stayed zero before DCP latch. This rejects R92's exclusive
+foreign-adapter explanation at the measured checkpoint. It does not yet show
+a completed D3D device, GPU execution, or presentation; later performance
+counter samples were invalid. Nine evidence files are byte-verified in
+`.local/experiments/EXP809S-r92/EXP809S-evidence`.
+
+R65's conditional G4 merge is not triggered by this verdict. The next causal
+target is DWM's UMD device/presentation admission: find whether its CreateDevice
+and present path succeeds, fails, or falls back before changing KMD rendering.
+Exact package and diagnostic task cleanup followed by frozen R84 ordinary boot
+restored pinned Code28/staged0/arm0, CPU8/storage2/USB6, without Apple binary,
+service, or signer. R86 remains parked.
+
+## 2026-09-25 EXP809R: R92 DWM adapter still unresolved
+
+Exact package809/m1n1/Mu was reused to sample DWM's GPU Engine PID/LUID.
+The guest briefly returned pinned SSH after `ARM_CONSUMED` and DCP latch,
+then bugchecked before the counter query. New minidump
+`092526-32656-01.dmp` SHA `b11d7167` is `0x7E/C0000005` at
+`dxgmms2!VIDMM_GLOBAL::Rotate+0x30` via `MapInCpuVisibleSegment`,
+`DxgkCddPresentOnScreen`, and `cdd!PresentWorkerThread`, the same intermittent
+Microsoft CDD boundary as EXP803B. One disarmed full-owner reboot returned
+Code43/arm0; dump, receipts, ETL, and EVTX were byte-verified in
+`.local/experiments/EXP809R-r92`. Exact package cleanup and frozen ordinary
+R84 boot restored pinned Code28/staged0/arm0, CPU8/storage2/USB6, with no
+Apple binary, service, or signer. R92 has no DWM LUID verdict; therefore the
+conditional G4 merge gate is still open. The next smallest discriminator is a
+boot-time, read-only DWM GPU Engine PID/LUID receipt that survives another
+short-lived SSH window. Do not repeat a manual SSH-timed query or alter the
+Apple KMD for the CDD Rotate stack.
+
 ## 2026-09-25 EXP809: no Apple Present/submit in Code0 boot
 
 Exact G3 package809 added a read-only Blt execution probe. The Apple adapter
@@ -18,8 +57,10 @@ The [Microsoft KMDOD DriverEntry contract](https://learn.microsoft.com/en-us/win
 limits `DxgkDdiPresentDisplayOnly` to KMDOD;
 do not add it to this full WDDM miniport as a guessed fix.
 
-LOOK_NOW 12:42:32Z and LOOK_DONE 12:43:06Z were recorded; operator's panel
-description is pending. All current evidence is in
+LOOK_NOW 12:42:32Z and LOOK_DONE 12:43:06Z were recorded; the operator
+reported a backlit black panel during EXP809. The operator also reported a
+backlit black panel in EXP808; EXP805 and EXP807 black-panel observations were
+already recorded. All current evidence is in
 `.local/experiments/EXP809-r91-blt`. Exact package cleanup and frozen ordinary
 R84 plus guarded rescan restored pinned Code28/staged0/arm0, CPU8/storage2/USB6
 with no AppleAgx binary, service or signer. Next causal target is the Windows
