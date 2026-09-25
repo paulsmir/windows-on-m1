@@ -13,6 +13,12 @@ static int valid_va(unsigned long long va, unsigned long long bytes) {
          bytes <= (1ULL << 39) - va;
 }
 
+/* The firmware's 32-bit USC fields are offsets from the process USC
+ * execution base. Low six bits carry pipeline flags, not address bits. */
+static unsigned long long usc_va(unsigned int packed) {
+  return packed ? 0x1100000000ULL + (packed & ~63u) : 0ULL;
+}
+
 static APPLE_AGX_G4_PARSE_RESULT validate_render(
     const unsigned char *data, APPLE_AGX_G4_ACCESS access, void *context) {
   APPLE_AGX_G4_NATIVE_RENDER render;
@@ -44,9 +50,9 @@ static APPLE_AGX_G4_PARSE_RESULT validate_render(
       render.TimestampsFragment.EndOffset)
     return AppleAgxG4ParseInvalid;
   AGX4_ADDRESS(render.VdmCtrlStreamBase, 0);
-  AGX4_ADDRESS(render.VertexHelper.Binary, 0);
+  AGX4_ADDRESS(usc_va(render.VertexHelper.Binary), 0);
   AGX4_ADDRESS(render.VertexHelper.Data, 0);
-  AGX4_ADDRESS(render.FragmentHelper.Binary, 0);
+  AGX4_ADDRESS(usc_va(render.FragmentHelper.Binary), 0);
   AGX4_ADDRESS(render.FragmentHelper.Data, 0);
   AGX4_ADDRESS(render.IspScissorBase, 0);
   AGX4_ADDRESS(render.IspDbiasBase, 0);
@@ -56,10 +62,10 @@ static APPLE_AGX_G4_PARSE_RESULT validate_render(
   AGX4_ADDRESS(render.Stencil.Base, 1);
   AGX4_ADDRESS(render.Stencil.CompBase, 1);
   AGX4_ADDRESS(render.SamplerHeap, 0);
-  AGX4_ADDRESS(render.Bg.Usc, 0);
-  AGX4_ADDRESS(render.Eot.Usc, 0);
-  AGX4_ADDRESS(render.PartialBg.Usc, 0);
-  AGX4_ADDRESS(render.PartialEot.Usc, 0);
+  AGX4_ADDRESS(usc_va(render.Bg.Usc), 0);
+  AGX4_ADDRESS(usc_va(render.Eot.Usc), 0);
+  AGX4_ADDRESS(usc_va(render.PartialBg.Usc), 0);
+  AGX4_ADDRESS(usc_va(render.PartialEot.Usc), 0);
 #undef AGX4_ADDRESS
   for (index = 0u; index < count; ++index) {
     if (!addresses[index].Va) {

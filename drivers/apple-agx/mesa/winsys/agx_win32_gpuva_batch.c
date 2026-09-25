@@ -241,11 +241,14 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
     return 0;
   if(g->Entered && !AgxWin32AsahiBatchLeave(batch)) goto fail;
   memcpy(&native_render,render,sizeof(native_render));
+  /* The first G13 scene constructor uses one cluster. Asahi selects this
+   * firmware path with the UAPI NO_VERTEX_CLUSTERING bit. */
+  native_render.Flags|=1u<<2;
   if(!prepare_process_buffers(b,g,&native_render,ranges) ||
      !append_attachments(batch,&packet)) goto fail;
   command_header=agx_cmd_header(false,0,0);
   if(!append_native(&packet,&command_header,sizeof(command_header)) ||
-     !append_native(&packet,render,sizeof(*render))) goto fail;
+     !append_native(&packet,&native_render,sizeof(native_render))) goto fail;
   g->Command=agx_bo_create(b->Native,packet.Header.Base.CommandBytes,
                            0,0,"VA command");
   if(!g->Command) goto fail;

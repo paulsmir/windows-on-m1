@@ -14,7 +14,7 @@ int main(void) {
   render.UtileWidthPx = render.UtileHeightPx = 16;
   assert(AppleAgxG4ProcessRequiredBytes(&render, bytes));
   assert(bytes[0] == 0x10000 && bytes[1] == 0x10000);
-  assert(bytes[2] == 0x100000 && bytes[3] == 0x20000);
+  assert(bytes[2] == 0x200000 && bytes[3] == 0x20000);
   assert(bytes[4] == 0x10000 && bytes[5] == 0x10000);
   assert(bytes[6] == 0x10000 && bytes[7] == 0x10000 &&
          bytes[8] == 0x10000);

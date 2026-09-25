@@ -1,10 +1,9 @@
 # R96: EXP208 template field provenance for AGX4 v2
 
-2026-09-25 offline audit. This is a construction gate, not an EXP810 package.
-The EXP208 image is one 16×16 color-fill draw. Its 75 objects and 207 recorded
-relocations are not a generic `drm_asahi_cmd_render` serializer. The comparison
-requested by R96 requires a G4 producer of that *same* draw, then a byte
-comparison after normalizing only relocated GPU VAs and job-owned stamps.
+2026-09-25 R97 single source pass. The EXP208 image supplies G13/V13_5
+firmware layout. Process data ownership below follows Asahi source, not bytes
+from the recorded draw. The G4 constructor is bounded by the retained image's
+16 TVB descriptors; dynamic buffer-manager expansion is still required.
 
 | EXP208 object / field | Source for a native G4 job | Coverage |
 | --- | --- | --- |
@@ -15,23 +14,26 @@ comparison after normalizing only relocated GPU VAs and job-owned stamps.
 | Objects 36–39: descriptor/sampler area, encoder, scissor, depth-bias streams | AGX4 `SamplerHeap`, `VdmCtrlStreamBase`, `IspScissorBase`, `IspDbiasBase`, with graph-proven process VA | **Gap:** the template has fixed packed objects; the native data is already in UMD BOs and must not be copied from EXP208 |
 | Object 40: color output and object 15 fragment attachment | AGX4 fragment attachment pointer and size; KMD validates the mapped writable range | **Gap:** EXP208 has a 16 KiB output. Arbitrary DWM target geometry, format and attachment routing are unproved |
 | Object 41 page list, 42 block list, 43–58 block heap | AGX4 v2 `Process[0..2]`; UMD prepares page/block contents from `Process[2].Va` | Addresses and capacities supplied; **gap:** all TA/3D references and page-list counts must be rebound, not merely the three bases |
-| Objects 59, 60–63, 64–66, 67–72: aux FB, scratch/user buffer, TPC, tilemap, heap metadata and other tile buffers | Candidate AGX4 v2 `Process[8]`, `[7]/[3]`, `[6]/[4]/[5]`, `[7]` respectively | **Gap:** several object-to-range suboffsets and native initialization contents have no verified mapping; an object name is not proof of an offset |
-| Objects 73–74: shader/pipeline and constant input aliases | AGX4 vertex/fragment helpers and BG/EOT/partial USC fields, with UMD-owned process VAs | **Gap:** template shader bytes and alias layout belong to EXP208; AGX4 v2 does not carry an explicit shader-object layout |
+| Object 59: auxiliary framebuffer | Asahi `queue/render.rs` allocates an empty private `0x8000` scene buffer; UMD owns zeroed `Process[8]` | Builder binds `Process[8].Va`; UMD clears the whole BO |
+| Objects 60–62: preemption scratch 1–3 | Asahi `buffer.rs` allocates one empty contiguous buffer, with offsets determined by adjusted cluster count and t600x sizes `0x540/0x280/0x20`; UMD owns zeroed `Process[7]` | Builder reserves the source-backed nine-cluster upper bound between subranges; actual J313 cluster count still requires a machine receipt |
+| Object 63: sampler heap | Asahi `fw/job.rs` `EncoderParams.sampler_array` receives `cmdbuf.sampler_heap`; Mesa owns and fills the descriptor BO. The two work-item relocations land on those sampler-array fields | Builder binds AGX4 `SamplerHeap` or null; UMD does not copy EXP208 sampler data |
+| Object 64: tail-pointer cache | Asahi `buffer.rs` allocates an empty scene TPC; UMD owns zeroed `Process[6]` sized from render geometry | Builder binds `Process[6].Va` |
+| Object 65: TVB tilemap | Asahi `buffer.rs` allocates an empty scene tilemap; UMD owns zeroed `Process[4]` | Builder binds `Process[4].Va` |
+| Object 66: TVB heap metadata | Asahi `buffer.rs` allocates empty scene heap metadata; UMD owns zeroed `Process[5]` | Builder binds `Process[5].Va` |
+| Objects 67–71: cluster tilemaps and metadata | Asahi `buffer.rs` allocates these only with vertex clustering; `queue/render.rs` uses optional null pointers when clustering is disabled | UMD sets `NO_VERTEX_CLUSTERING`; builder nulls all five references. Core mask and tiling control still need source-backed patching before runtime admission |
+| Object 72: scene user buffer | Asahi `fw/buffer.rs` `Scene.user_buffer`, allocated empty in `buffer.rs`; UMD owns zeroed `Process[3]` | Builder binds `Process[3].Va`; object13 relocation at `+24` points here |
+| Objects 73–74: recorded shader aliases | Mesa `agx_batch.c` / `hk_cmd_buffer.c` emit USC pipeline and shader data in process BOs; AGX4 render carries relative BG/EOT/partial USC offsets and helper binaries | Template shader payload is not reused as native program. Parser reconstructs USC VA from the process execution base; builder must replace every program field before runtime admission |
+| VDM, scissor and depth-bias streams | Mesa batch encoder and scissor/depth-bias BO writers; Asahi `queue/render.rs` copies `vdm_ctrl_stream_base`, `isp_scissor_base`, `isp_dbias_base` from the render command | KMD validates graph access and binds the process VAs; stream lengths and all indirect references still need proof |
 | 3D work 18: BG/EOT pipelines, ISP/ZLS, scissor, depth bias, sample/utile/geometry scalars | AGX4 render fields (`Bg`, `Eot`, `PartialBg`, `PartialEot`, `Depth`, `Stencil`, `Ppp*`, `Isp*`, dimensions and samples) | Some corresponding physical-path offsets exist in `AdmissionDynamicOverlayRouteNative`; **gap:** complete AGX4-to-G13 field map, including duplicates and flags, has not been replayed |
 | TA work 19: tile/scene pointers, encoder, sample/geometry and TVB state | AGX4 render scalars plus nine process ranges; KMD context-0 work item | **Gap:** complete pointer/suboffset and derived-capacity map is absent |
 | Firmware ABI constants and reserved zero fields in work items and microsequences | G13/V13_5 template constants only after a field-by-field comparison with the same draw | **Gap:** unchanged EXP208 bytes cannot be assumed constant for arbitrary native render |
 
 The generated relocation table covers 207 known pointers, including 64 page
-list entries and 16 block list entries, but cannot bind an arbitrary process
-range by itself: its targets are fixed template objects. A scan of materialized
-objects 18, 19 and 63 also yields 0x10–0x14-prefixed 64-bit candidates
-outside those 207 relocations. Some are overlapping scalar fields; each must
-be classified before a generic builder can use the image. Treating them all
-as immutable constants would be a hardware guess.
-The same materialized-image scan counts 1,793 nonzero bytes in object 63,
-while G4 `prepare_process_buffers` zeros every new process BO and initializes
-only the TVB page/block lists. Its owner and initialization format are the
-first concrete data-content mismatch to resolve before replay.
+list entries and 16 block list entries. `AppleAgxG4BindProcessObjects` now
+binds the source-backed process ranges and `AppleAgxG4ApplySceneRelocations`
+nulls unused cluster pointers. Mesa initializes the TVB page/block lists from
+the VidMm heap and clears the other process BOs. AGX4 has no format field or
+VDM stream length; those omissions remain runtime admission gaps.
 
 Current contract: UMD owns GPU-visible BO allocation, mapping, residency and
 native command bytes. VidMm owns the process VA. KMD owns context-0 firmware
@@ -56,8 +58,10 @@ the existing EXP208 dynamic patcher, physical native overlay, G4 UMD process
 buffer producer, B1 firmware submit path and KMD virtual submit gate. No new
 register, IRQ, power or DMA value is proposed.
 
-**Verdict:** R96 is open. The constructor and host replay have explicit
-unmapped fields. EXP810 remains gated by the current fail-closed native submit.
+**Verdict:** R96 is open. Scene binding is coded and replayed for a 1280×720
+single-sample profile; the full TA/3D field constructor, real broker replay,
+and fence owner remain to be connected. EXP810 remains gated by fail-closed
+native submit.
 
 ## R95 single offline pass at the same boundary
 
