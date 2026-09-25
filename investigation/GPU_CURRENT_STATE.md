@@ -1,5 +1,48 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP791: 16 KiB is the main G3 profile; CDD DMA pool is next
+
+Package794 corrected only the EXP790 16 KiB G3 contract self-veto. One staged
+then cold full-owner boot passed DRIVERCAPS, Q13/Q14, G3 process/context and
+level0 4 KiB Count1 paging (last Start33/status0). It then reached the **same**
+`0x3B/C0000005` in `dxgmms2!AddDmaBufferToPool+0x304` during
+`VidMmInitDmaPool -> DXGCONTEXT::Initialize -> CreateCddDevice` as EXP789's
+64 KiB profile. This satisfies R72's same-boundary rule: **G1b 16 KiB is the
+main profile**, superseding EXP790's provisional 64 KiB decision. It proves
+VidMm progressed with the 16 KiB/GpuMmu declaration, not G3 admission. New
+dump `.local/experiments/EXP791-g3-16k-validator/hardware-evidence/
+092526-14968-01.dmp` SHA256
+`4b35aca88816362c0dc2ffab63cacc2b16eb5b97013ab6f3cf09cd52b3bff5a8`;
+CDB SHA256 `9c5b5bade38a1a30042bd089a0af10b1f45c5168d4f4cc1887b5e0b1fe714b7b`.
+GPU-hidden dump-first confirmed exact package794/arm0; exact cleanup and frozen
+ordinary recovery restored pinned SSH/CPU8 and one inert APPL0002 Code28,
+staged0 SYS/UMD0 arm0. Do not rerun page-size comparison.
+
+R71 decision: **defer both `SysMem64KBPageSupported` and
+`OpportunisticSysMem64KBPageSupported`**. In the selected 16 KiB profile,
+`gpuva_g3_paging_windows.c` rejects `Use64KBPages`, the G3 caps declare no
+64 KiB leaf table, and allocation hints are 16 KiB. Advertising 64 KiB system
+pages would claim translation the current driver does not implement. Microsoft
+documents 64 KiB leaf-table/`Use64KBPages` conversion and notes that system
+memory uses 4 KiB GPUVA granularity; see
+https://learn.microsoft.com/en-us/windows-hardware/drivers/display/support-for-64kb-pages
+and https://learn.microsoft.com/en-us/windows-hardware/drivers/display/gpu-virtual-address.
+R70's logical 4 KiB shadow remains required. `BuildPagingBuffer` encodes
+Transfer/Fill for CPU execution in `AdmissionMemoryRuntimeExecutePaging`;
+the paging process does not need AGX access to incomplete logical groups.
+
+Next causal target: the common CDD privileged DMA-pool access violation. In
+both dumps `dxgmms2!AddDmaBufferToPool+0x304` reads `[x8+8]` with `x8=0`;
+`x8` came from its new pool object's field `+0x38`. Disassembly shows this
+field is the output of `VIDMM_GLOBAL::OpenOneAllocation`, which returned
+success, and the ordinary success path writes a nonnull `VIDMM_ALLOC` there.
+The dump cannot show whether a later OS call cleared it. ETL has no nearby
+DDI failure, but does not capture KMD output handles. One diagnostic package
+should receipt `CreateContext` DMA settings and `Create/OpenAllocation`
+status and nonnull outputs, with no mapping or caps change. If those are
+correct, investigate the OS-private DMA-pool path; do not guess a KMD fix.
+Keep 16 KiB and all firmware/caps/recovery frozen.
+
 ## 2026-09-25 EXP790: 16-KiB probe stopped by our DRIVERCAPS self-veto
 
 Package793 changed only G1b 64→16 behavior (plus package version metadata)
