@@ -1,5 +1,40 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP794: system leaf passed; FlushGpuVaTlb is next
+
+Package797 (R76, G1b16; R70/R75 and firmware/caps/signer frozen) cold-booted
+once. R76 keeps VidMm's logical 4-KiB system PTEs but publishes a native
+leaf only for an aligned, contiguous group in the KMD-owned local reserve;
+`GraphUpdateLeaf` registers that process/generation's backing before broker
+`UPDATE_LEAF`. No aperture/system backing grant exists in this path. Real-broker
+replay was RED `C0000483` for a contiguous unregistered system group, then
+GREEN with no broker call; scattered groups and local publishing also pass.
+WDK26100 package797 built with 0 warnings/errors. Affected 25 host tests pass;
+the full 1052-test suite had 15 failures/67 errors/2 skips, including one
+source-layout assertion repaired and retested.
+
+Hardware advanced past EXP793's level0 system leaf: durable
+`Wom1G3UnpublishedGroups[0]=22`, no new leaf failure receipt. It then
+bugchecked `0x10E/0xB`, P3=`C000000D`, in
+`dxgmms2!CompleteBuildPagingBufferIteration -> FlushGpuVaTlb ->
+CommitVirtualAddressRangeSystemCommand`; CDD was not reached. Last receipted
+update was level2 Start0 Count8/status not the failing FlushTlb input.
+New dump SHA256 `33b172accc8ba9616ab5ca20b555411fc2ad5375ba028f53244bd8f0f8a425bf`,
+CDB SHA256 `b8d35a39ff83b5c1412c3d6e726b7a404201eda97060f5de921d33f9806f1629`,
+ETL SHA256 `a0937c4d45588809afa7a9b8750ad093e310dea45929e11c635bfea12193d0e9`
+in `.local/experiments/EXP794-g3-unpublished-system/hardware-evidence`.
+Arm consumption was not durable at SSH loss, so GPU-hidden dump-first captured
+hash-verified evidence and removed exact oem5/package797 before frozen
+ordinary recovery. Pinned SSH/CPU8/storage2/USB7, one inert APPL0002 Code28,
+staged0 SYS/UMD/service/arm0 are restored.
+
+Next causal discriminator: receipt the exact FlushTlb process/root address,
+resolved root IPA, graph root IPA, VA bounds and graph/broker result, then
+replay that observed input. Do not revisit leaf geometry or CDD allocation
+until FlushTlb succeeds. R71 remains deferred: there is no GPU access to an
+unpublished non-DMA system page, and the 16-KiB path rejects system
+`Use64KBPages`; do not advertise unsupported SysMem64KB caps.
+
 ## 2026-09-25 EXP793: virtual DMA aperture exposed an earlier paging OWNERSHIP stop
 
 Package796 changed only virtual `CreateContext.DmaBufferSegmentSet` from 0 to
