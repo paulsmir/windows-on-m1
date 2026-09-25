@@ -612,16 +612,18 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   if (context->GpuvaG3RootIpa != process->Graph.RootIpa ||
       process->Graph.Uncertain) {
     ExReleaseFastMutex(&state->Lock);
-    return STATUS_INVALID_DEVICE_STATE;
+    return STATUS_INVALID_PARAMETER;
   }
   result = AppleAgxG4ParseSubmit(
       args->pDmaBufferPrivateData, args->DmaBufferPrivateDataSize,
       args->DmaBufferUmdPrivateDataSize, args->DmaBufferVirtualAddress,
       args->DmaBufferSize, AdmissionG4GraphAccess, &process->Graph, &view);
   ExReleaseFastMutex(&state->Lock);
-  if (result == AppleAgxG4ParseUnmapped) return STATUS_INVALID_ADDRESS;
   if (result != AppleAgxG4ParseOk) return STATUS_INVALID_PARAMETER;
-  return STATUS_NOT_SUPPORTED;
+  /* DxgkDdiSubmitCommandVirtual permits only SUCCESS or INVALID_PARAMETER;
+   * native execution is still unavailable, so leave this device in error
+   * without asking the scheduler to bugcheck for an unsupported NTSTATUS. */
+  return STATUS_INVALID_PARAMETER;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommandVirtual(
