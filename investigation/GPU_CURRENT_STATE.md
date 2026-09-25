@@ -1,5 +1,33 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP801B: shared reserve passes 0xbb0; broker CAPACITY at 0xbf0
+
+Package804 G1b16 uses the 5919ef6e shared-reserve candidate, now built from
+510 hash-verified committed Apple AGX files. R84 WDT reset restored all eight
+CPUs. The first launch used an older m1n1 image without arm HVC `0x4d32` and
+stopped at StartDevice Stage1; this run supplied no G3 verdict. With the
+hash-verified R60 image `237f5e3c`, EXP801B durably reported `ARM_CONSUMED`,
+AGX broker init0 and retained op624/status0. Windows then bugchecked
+`0x10E/0xB`, P3=`C0000483`, in VidMm `UpdatePageTable` before CDD.
+
+The flushed leaf failure is branch7, level0 index `0xbf0`, local
+`ChildIpa=0x9bcb60000`, `GraphLastStatus=7` (`CAPACITY`), `Uncertain=0`.
+EXP799's index `0xbb0`/`OWNERSHIP` was passed. Exact new dump SHA256
+`9b7bc060d425c8b2c8e244b459b835cd1fc27fe5b74a1691792e9cd6c8e0e3cf`;
+registry, ETL and CDB are in `.local/experiments/EXP801-g3-shared-reserve`.
+One bounded R60 same-profile reboot returned pinned SSH, CPU8/storage2/USB7,
+exact oem5/package804, arm0. Package804 remains in that guest for the
+preregistered series; CDD is not proven.
+
+The next causal target is m1n1's fixed 1024 backing-grant slots: its shared
+registration still consumes one entry per process and page, while the 56-MiB
+local reserve has 3584 native 16-KiB pages. EXP802's capacity-only broker
+change has an offline RED→GREEN two-process reserve replay. Build one exact
+R60 m1n1 image, rearm only after exact package/early-stop checks, then one
+R84-reset launch. On bugcheck use R60 only with durable arm consumption and
+exact package; otherwise hidden dump-first cleanup. Return to ordinary Code28
+at series end.
+
 ## 2026-09-25 EXP800: pre-guest CPU startup; G3 verdict inconclusive
 
 Package803 (commit `5919ef6e`, 16 KiB) built with pinned WDK26100, staged
