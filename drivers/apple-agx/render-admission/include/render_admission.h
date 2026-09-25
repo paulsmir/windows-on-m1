@@ -775,6 +775,9 @@ void AdmissionRecordGpuvaG3DmaOpen(
 void AdmissionRecordGpuvaG3PagingInput(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_opt_ const DXGKARG_BUILDPAGINGBUFFER *Args, ULONG CurrentIrql);
+void AdmissionRecordGpuvaG3WorkInput(
+    _In_opt_ ADMISSION_CONTEXT *Context,
+    _In_opt_ const DXGKARG_BUILDPAGINGBUFFER *Args, ULONG CurrentIrql);
 void AdmissionRecordGpuvaG3PagingResult(
     _In_opt_ ADMISSION_CONTEXT *Context, NTSTATUS Status);
 typedef struct _ADMISSION_G3_FLUSH_RECEIPT {

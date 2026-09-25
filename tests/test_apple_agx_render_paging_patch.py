@@ -87,12 +87,12 @@ int main(void) {
  DXGKARG_BUILDPAGINGBUFFER encode={dma,4096,priv,4096};
  assert(AdmissionEncodePaging(&encode,&plan,NULL)==0);
  assert((UCHAR *)encode.pDmaBuffer-dma==16);
- assert((UCHAR *)encode.pDmaBufferPrivateData-priv==72);
+ assert((UCHAR *)encode.pDmaBufferPrivateData-priv==sizeof(ADMISSION_PAGING_RECORD));
  DXGKARG_PATCH a={0};a.hContext=&context;a.DmaBufferSegmentId=1;
  a.DmaBufferPhysicalAddress.QuadPart=0x160fffe000LL;
  a.pDmaBuffer=dma;a.DmaBufferSize=4096;a.DmaBufferSubmissionEndOffset=16;
  a.pDmaBufferPrivateData=priv;a.DmaBufferPrivateDataSize=4096;
- a.DmaBufferPrivateDataSubmissionEndOffset=72;a.SubmissionFenceId=1;a.Flags.Value=1;
+ a.DmaBufferPrivateDataSubmissionEndOffset=sizeof(ADMISSION_PAGING_RECORD);a.SubmissionFenceId=1;a.Flags.Value=1;
  memcpy(dmaBefore,dma,4096);memcpy(privBefore,priv,4096);
  assert(dispatch(&adapter,&a)==0);
  assert(dispatch(&adapter,&a)==0);
@@ -112,12 +112,12 @@ int main(void) {
  /* A later independent submission may start inside both buffers. */
  assert(AdmissionEncodePaging(&encode,&plan,NULL)==0);
  a.DmaBufferSubmissionStartOffset=16;a.DmaBufferSubmissionEndOffset=32;
- a.DmaBufferPrivateDataSubmissionStartOffset=72;
- a.DmaBufferPrivateDataSubmissionEndOffset=144;
+ a.DmaBufferPrivateDataSubmissionStartOffset=sizeof(ADMISSION_PAGING_RECORD);
+ a.DmaBufferPrivateDataSubmissionEndOffset=2*sizeof(ADMISSION_PAGING_RECORD);
  memcpy(dmaBefore,dma,4096);memcpy(privBefore,priv,4096);
  assert(dispatch(&adapter,&a)==0);
  assert(memcmp(dmaBefore,dma,4096)==0 && memcmp(privBefore,priv,4096)==0);
- a.DmaBufferPrivateDataSubmissionEndOffset=145;assert(dispatch(&adapter,&a)!=0);
+ a.DmaBufferPrivateDataSubmissionEndOffset=2*sizeof(ADMISSION_PAGING_RECORD)+1;assert(dispatch(&adapter,&a)!=0);
  a.Flags.Value=0;assert(dispatch(&adapter,&a)!=0); /* no GDI guard weakening */
  return 0;
 }

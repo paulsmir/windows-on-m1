@@ -67,6 +67,7 @@ int main(void) {
 
     def test_cpu_virtual_update_ignores_dma_pointer_presence(self):
         paging = (RENDER / "src/gpuva_g3_paging_windows.c").read_text()
+        paging = paging.split("  update = &args->UpdatePageTable;", 1)[1]
         self.assertNotIn(
             "args->pDmaBuffer != NULL || args->pDmaBufferPrivateData != NULL",
             paging,

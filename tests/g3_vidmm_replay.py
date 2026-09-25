@@ -28,9 +28,14 @@ FUNCTIONS = {
     ],
     "gpuva_g3_paging_windows.c": [
         "AdmissionG3RejectPaging", "AdmissionG3UpdateParent",
-        "AdmissionG3UpdateLeaf", "AdmissionGpuvaG3BuildPagingBuffer",
+        "AdmissionG3UpdateLeaf", "AdmissionG3FindPagingEdge",
+        "AdmissionG3ResolveLogicalVa", "AdmissionG3SnapshotAperture",
+        "AdmissionG3EncodeVirtualPaging",
+        "AdmissionG3MapPagingIpa", "AdmissionG3ExecuteVirtualPaging",
+        "AdmissionGpuvaG3BuildPagingBuffer",
     ],
     "callbacks.c": ["AdmissionDdiCreateContext", "AdmissionDdiDestroyContext"],
+    "render_paging.c": ["AdmissionPagingRecordsValid"],
 }
 
 
@@ -75,7 +80,13 @@ def generate(revision=None, function_revisions=None):
             function_source = source
             if revision is not None and name in (
                     "AdmissionGpuvaG3BrokerTable",
-                    "AdmissionGpuvaG3MirrorTable"):
+                    "AdmissionGpuvaG3MirrorTable",
+                    "AdmissionG3FindPagingEdge",
+                    "AdmissionG3ResolveLogicalVa",
+                    "AdmissionG3SnapshotAperture",
+                    "AdmissionG3EncodeVirtualPaging",
+                    "AdmissionG3MapPagingIpa",
+                    "AdmissionG3ExecuteVirtualPaging"):
                 function_source = (SRC / filename).read_text()
             if name in function_revisions:
                 function_source = subprocess.check_output(

@@ -1788,6 +1788,70 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3PagingInput(
   ZwClose(key);
 }
 
+typedef struct _ADMISSION_G3_WORK_INPUT_RECEIPT {
+  ULONG Version, Bytes, Operation, Irql;
+  ULONG DmaSize, PrivateSize, MultipassOffset, DmaBufferWriteOffset;
+  ULONG Direction, Flags, Pattern, Reserved;
+  ULONGLONG SystemContext, Allocation, AllocationOffset;
+  ULONGLONG SourceVa, DestinationVa, WorkBytes;
+  ULONGLONG SourcePageTable, DestinationPageTable;
+} ADMISSION_G3_WORK_INPUT_RECEIPT;
+
+_Use_decl_annotations_ void AdmissionRecordGpuvaG3WorkInput(
+    ADMISSION_CONTEXT *Context, const DXGKARG_BUILDPAGINGBUFFER *Args,
+    ULONG CurrentIrql) {
+  ADMISSION_G3_WORK_INPUT_RECEIPT receipt;
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      Args == NULL || CurrentIrql != PASSIVE_LEVEL ||
+      (Args->Operation != DXGK_OPERATION_VIRTUAL_FILL &&
+       Args->Operation != DXGK_OPERATION_VIRTUAL_TRANSFER &&
+       Args->Operation != DXGK_OPERATION_SIGNAL_MONITORED_FENCE))
+    return;
+  RtlZeroMemory(&receipt, sizeof(receipt));
+  receipt.Version = 1u;
+  receipt.Bytes = sizeof(receipt);
+  receipt.Operation = (ULONG)Args->Operation;
+  receipt.Irql = CurrentIrql;
+  receipt.DmaSize = Args->DmaSize;
+  receipt.PrivateSize = Args->DmaBufferPrivateDataSize;
+  receipt.MultipassOffset = Args->MultipassOffset;
+  receipt.DmaBufferWriteOffset = Args->DmaBufferWriteOffset;
+  receipt.SystemContext = (ULONGLONG)(ULONG_PTR)Args->hSystemContext;
+  if (Args->Operation == DXGK_OPERATION_VIRTUAL_FILL) {
+    receipt.Allocation = (ULONGLONG)(ULONG_PTR)Args->FillVirtual.hAllocation;
+    receipt.AllocationOffset = Args->FillVirtual.AllocationOffsetInBytes;
+    receipt.DestinationVa = Args->FillVirtual.DestinationVirtualAddress;
+    receipt.WorkBytes = Args->FillVirtual.FillSizeInBytes;
+    receipt.Pattern = Args->FillVirtual.FillPattern;
+  } else if (Args->Operation == DXGK_OPERATION_VIRTUAL_TRANSFER) {
+    receipt.Allocation =
+        (ULONGLONG)(ULONG_PTR)Args->TransferVirtual.hAllocation;
+    receipt.AllocationOffset =
+        Args->TransferVirtual.AllocationOffsetInBytes;
+    receipt.SourceVa = Args->TransferVirtual.SourceVirtualAddress;
+    receipt.DestinationVa =
+        Args->TransferVirtual.DestinationVirtualAddress;
+    receipt.WorkBytes = Args->TransferVirtual.TransferSizeInBytes;
+    receipt.SourcePageTable = Args->TransferVirtual.SourcePageTable;
+    receipt.DestinationPageTable =
+        Args->TransferVirtual.DestinationPageTable;
+    receipt.Direction = (ULONG)Args->TransferVirtual.TransferDirection;
+    receipt.Flags = Args->TransferVirtual.Flags.Flags;
+  } else {
+    receipt.DestinationVa =
+        Args->SignalMonitoredFence.MonitoredFenceGpuVa;
+    receipt.WorkBytes = sizeof(Args->SignalMonitoredFence.MonitoredFenceValue);
+  }
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, L"Wom1G3WorkInput", &receipt, sizeof(receipt));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordGpuvaG3PagingResult(
     ADMISSION_CONTEXT *Context, NTSTATUS Status) {
   HANDLE key = NULL;

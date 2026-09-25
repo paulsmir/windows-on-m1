@@ -43,7 +43,10 @@ static NTSTATUS AdmissionBuildPagingBuffer(
     return STATUS_INVALID_DEVICE_STATE;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   if (Args->Operation == DXGK_OPERATION_UPDATE_PAGE_TABLE ||
-      Args->Operation == DXGK_OPERATION_FLUSH_TLB)
+      Args->Operation == DXGK_OPERATION_FLUSH_TLB ||
+      Args->Operation == DXGK_OPERATION_VIRTUAL_FILL ||
+      Args->Operation == DXGK_OPERATION_VIRTUAL_TRANSFER ||
+      Args->Operation == DXGK_OPERATION_SIGNAL_MONITORED_FENCE)
     return AdmissionGpuvaG3BuildPagingBuffer(context, Args);
 #endif
   switch (Args->Operation) {
@@ -172,6 +175,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiBuildPagingBuffer(
   NTSTATUS status;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   AdmissionRecordGpuvaG3PagingInput(context, Args, irql);
+  AdmissionRecordGpuvaG3WorkInput(context, Args, irql);
 #endif
   status = AdmissionBuildPagingBuffer(Adapter, Args);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
@@ -244,6 +248,12 @@ static VOID AdmissionPagingWorker(_In_ PDEVICE_OBJECT DeviceObject,
     status = AdmissionMemoryRuntimeExecutePresent(context,
         context->PresentCopyCommand, context->PresentCopyBytes, &copiedBytes);
   for (index = 0u; NT_SUCCESS(status) && index < context->PagingRecordCount; ++index) {
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    if (context->PagingRecords[index].Kind != AdmissionPagingPhysical)
+      status = AdmissionG3ExecuteVirtualPaging(
+          context, &context->PagingRecords[index]);
+    else
+#endif
     status = AdmissionMemoryRuntimeExecutePaging(
         context, &context->PagingRecords[index]);
     if (!NT_SUCCESS(status))

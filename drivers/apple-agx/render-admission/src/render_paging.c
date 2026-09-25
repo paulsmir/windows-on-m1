@@ -29,8 +29,25 @@ int AdmissionPagingRecordsValid(const ADMISSION_PAGING_RECORD *Records,
         Records[index].Header.Version != ADMISSION_PAGING_VERSION ||
         Records[index].Header.RecordBytes != sizeof(Records[index]) ||
         Records[index].Header.Reserved != 0u ||
-        Records[index].Plan.Kind < AppleAgxPhysicalPagingUpload ||
-        Records[index].Plan.Kind > AppleAgxPhysicalPagingDiscard)
+        Records[index].Kind > AdmissionPagingMonitoredFence)
+      return 0;
+    if (Records[index].Kind == AdmissionPagingPhysical) {
+      if (Records[index].Plan.Kind < AppleAgxPhysicalPagingUpload ||
+          Records[index].Plan.Kind > AppleAgxPhysicalPagingDiscard)
+        return 0;
+    } else if (Records[index].Bytes == 0u ||
+               Records[index].Bytes > 0x1000u ||
+               (Records[index].Kind == AdmissionPagingVirtualTransfer &&
+                (Records[index].SourceIpa & 0xfffu) +
+                    Records[index].Bytes > 0x1000u) ||
+               (Records[index].DestinationIpa & 0xfffu) +
+                   Records[index].Bytes > 0x1000u ||
+               (Records[index].Kind == AdmissionPagingMonitoredFence ?
+                    Records[index].PatternOffset + Records[index].Bytes >
+                        sizeof(Records[index].FenceValue) :
+                    Records[index].PatternOffset > 3u) ||
+               Records[index].DestinationSegment > 2u ||
+               Records[index].SourceSegment > 2u)
       return 0;
   }
   return 1;

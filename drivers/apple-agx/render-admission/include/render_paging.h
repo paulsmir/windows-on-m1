@@ -6,6 +6,13 @@
 #define ADMISSION_PAGING_MAGIC 0x504d4152u /* "RAMP" */
 #define ADMISSION_PAGING_VERSION 1u
 
+enum {
+  AdmissionPagingPhysical = 0u,
+  AdmissionPagingVirtualFill = 1u,
+  AdmissionPagingVirtualTransfer = 2u,
+  AdmissionPagingMonitoredFence = 3u
+};
+
 typedef struct _ADMISSION_PAGING_MARKER {
   unsigned int Magic;
   unsigned int Version;
@@ -17,6 +24,15 @@ typedef struct _ADMISSION_PAGING_RECORD {
   ADMISSION_PAGING_MARKER Header;
   APPLE_AGX_PHYSICAL_PAGING_PLAN Plan;
   void *SystemMdl;
+  unsigned int Kind;
+  unsigned int SourceSegment;
+  unsigned int DestinationSegment;
+  unsigned int PatternOffset;
+  unsigned long long SourceIpa;
+  unsigned long long DestinationIpa;
+  unsigned int Bytes;
+  unsigned int FillPattern;
+  unsigned long long FenceValue;
 } ADMISSION_PAGING_RECORD;
 
 int AdmissionPagingFenceCanSubmit(unsigned int LastSubmitted,

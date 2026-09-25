@@ -262,6 +262,268 @@ Done:
   return status;
 }
 
+static APPLE_AGX_GPUVA_G3_NODE *AdmissionG3FindPagingEdge(
+    APPLE_AGX_GPUVA_G3_NODE *nodes, ULONGLONG table_ipa, UINT index) {
+  for (; nodes != NULL; nodes = nodes->Next)
+    if (nodes->Ipa == table_ipa && nodes->Index == index)
+      return nodes;
+  return NULL;
+}
+
+static NTSTATUS AdmissionG3ResolveLogicalVa(
+    ADMISSION_G3_PROCESS *process, ULONGLONG root_ipa, ULONGLONG va,
+    BOOLEAN writable,
+    ULONGLONG *ipa, UINT *segment) {
+  APPLE_AGX_GPUVA_G3_NODE *edge;
+  ADMISSION_G3_TABLE_SHADOW *shadow;
+  const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte;
+  ULONGLONG table_ipa;
+  if (process == NULL || ipa == NULL || segment == NULL ||
+      !process->Graph.Created || process->Graph.Uncertain ||
+      root_ipa == 0ULL || va >= (1ULL << 39))
+    return STATUS_INVALID_ADDRESS;
+  edge = AdmissionG3FindPagingEdge(process->Graph.Parents,
+      root_ipa, (UINT)((va >> 36) & 7u));
+  if (edge == NULL) return STATUS_INVALID_ADDRESS;
+  edge = AdmissionG3FindPagingEdge(process->Graph.Parents,
+      edge->AuxIpa, (UINT)((va >> 25) & 2047u));
+  if (edge == NULL) return STATUS_INVALID_ADDRESS;
+  table_ipa = edge->AuxIpa;
+  for (shadow = process->TableShadows; shadow != NULL; shadow = shadow->Next)
+    if (shadow->BrokerIpa == table_ipa) break;
+  if (shadow == NULL || shadow->LogicalPtes == NULL)
+    return STATUS_INVALID_ADDRESS;
+  pte = &shadow->LogicalPtes[(UINT)((va >> 12) & 8191u)];
+  if ((pte->Flags & APPLE_AGX_GPUVA_G3_VALID) == 0u ||
+      (writable && (pte->Flags & APPLE_AGX_GPUVA_G3_WRITE) == 0u) ||
+      pte->GuestIpa == 0ULL || pte->GuestIpa > MAXULONGLONG - (va & 0xfffu))
+    return STATUS_INVALID_ADDRESS;
+  *ipa = pte->GuestIpa + (va & 0xfffu);
+  *segment = pte->SegmentId;
+  return STATUS_SUCCESS;
+}
+
+static NTSTATUS AdmissionG3SnapshotAperture(
+    ADMISSION_CONTEXT *adapter, ULONGLONG *ipa, UINT *segment) {
+  ULONGLONG physical;
+  if (adapter == NULL || ipa == NULL || segment == NULL)
+    return STATUS_INVALID_PARAMETER;
+  if (*segment != ADMISSION_MEMORY_APERTURE_SEGMENT)
+    return STATUS_SUCCESS;
+  if (AppleAgxSoftwareApertureResolve(
+          &adapter->Memory.Aperture, *ipa, &physical) !=
+      AppleAgxSoftwareApertureOk)
+    return STATUS_INVALID_ADDRESS;
+  *ipa = physical;
+  *segment = 0u;
+  return STATUS_SUCCESS;
+}
+
+static NTSTATUS AdmissionG3EncodeVirtualPaging(
+    ADMISSION_CONTEXT *adapter, DXGKARG_BUILDPAGINGBUFFER *args) {
+  ADMISSION_G3_STATE *state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  ADMISSION_RENDER_CONTEXT *context =
+      (ADMISSION_RENDER_CONTEXT *)args->hSystemContext;
+  ADMISSION_G3_PROCESS *process;
+  ADMISSION_PAGING_RECORD record;
+  ADMISSION_PAGING_MARKER marker;
+  ULONGLONG source_va = 0ULL, destination_va, total, offset;
+  UINT remaining, slots, produced = 0u;
+  NTSTATUS status;
+  if (state == NULL || context == NULL ||
+      context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
+      context->Object.Device == NULL ||
+      context->Object.Device->Adapter != &adapter->ObjectAdapter ||
+      context->GpuvaG3Process == NULL || context->GpuvaG3Poisoned)
+    return STATUS_INVALID_PARAMETER;
+  process = context->GpuvaG3Process;
+  if (args->Operation == DXGK_OPERATION_VIRTUAL_FILL) {
+    destination_va = args->FillVirtual.DestinationVirtualAddress;
+    total = args->FillVirtual.FillSizeInBytes;
+  } else if (args->Operation == DXGK_OPERATION_SIGNAL_MONITORED_FENCE) {
+    destination_va = args->SignalMonitoredFence.MonitoredFenceGpuVa;
+    total = sizeof(args->SignalMonitoredFence.MonitoredFenceValue);
+  } else {
+    source_va = args->TransferVirtual.SourceVirtualAddress;
+    destination_va = args->TransferVirtual.DestinationVirtualAddress;
+    total = args->TransferVirtual.TransferSizeInBytes;
+    if (args->TransferVirtual.Flags.Flags != 0u ||
+        args->TransferVirtual.TransferDirection >
+            DXGK_MEMORY_TRANSFER_LOCAL_TO_LOCAL)
+      return STATUS_INVALID_PARAMETER;
+  }
+  if (total == 0ULL || total > MAXULONG ||
+      destination_va >= (1ULL << 39) ||
+      total > (1ULL << 39) - destination_va ||
+      (args->Operation == DXGK_OPERATION_VIRTUAL_TRANSFER &&
+       (source_va >= (1ULL << 39) ||
+        total > (1ULL << 39) - source_va)) ||
+      args->MultipassOffset > total)
+    return STATUS_INVALID_PARAMETER;
+  offset = args->MultipassOffset;
+  remaining = args->DmaSize / sizeof(marker);
+  if (args->DmaBufferPrivateDataSize / sizeof(record) < remaining)
+    remaining = args->DmaBufferPrivateDataSize / sizeof(record);
+  slots = args->DmaBufferWriteOffset / sizeof(marker);
+  if (slots >= ADMISSION_MAX_PAGING_RECORDS) remaining = 0u;
+  else if (remaining > ADMISSION_MAX_PAGING_RECORDS - slots)
+    remaining = ADMISSION_MAX_PAGING_RECORDS - slots;
+  if (remaining == 0u || args->pDmaBuffer == NULL ||
+      args->pDmaBufferPrivateData == NULL)
+    return STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
+  RtlZeroMemory(&marker, sizeof(marker));
+  marker.Magic = ADMISSION_PAGING_MAGIC;
+  marker.Version = ADMISSION_PAGING_VERSION;
+  marker.RecordBytes = sizeof(record);
+  while (offset < total && produced < remaining) {
+    ULONGLONG dst = destination_va + offset;
+    ULONGLONG src = source_va + offset;
+    UINT bytes = (UINT)(total - offset);
+    UINT boundary = 0x1000u - (UINT)(dst & 0xfffu);
+    if (bytes > boundary) bytes = boundary;
+    if (args->Operation == DXGK_OPERATION_VIRTUAL_TRANSFER) {
+      boundary = 0x1000u - (UINT)(src & 0xfffu);
+      if (bytes > boundary) bytes = boundary;
+    }
+    RtlZeroMemory(&record, sizeof(record));
+    record.Header = marker;
+    record.Kind = args->Operation == DXGK_OPERATION_VIRTUAL_FILL ?
+        AdmissionPagingVirtualFill :
+        args->Operation == DXGK_OPERATION_SIGNAL_MONITORED_FENCE ?
+        AdmissionPagingMonitoredFence : AdmissionPagingVirtualTransfer;
+    record.Bytes = bytes;
+    record.PatternOffset = (UINT)(offset & 3u);
+    if (record.Kind == AdmissionPagingVirtualFill)
+      record.FillPattern = args->FillVirtual.FillPattern;
+    if (record.Kind == AdmissionPagingMonitoredFence) {
+      record.PatternOffset = (UINT)offset;
+      record.FenceValue = args->SignalMonitoredFence.MonitoredFenceValue;
+    }
+    ExAcquireFastMutex(&state->Lock);
+    status = AdmissionG3ResolveLogicalVa(process, context->GpuvaG3RootIpa,
+        dst, TRUE,
+        &record.DestinationIpa, &record.DestinationSegment);
+    if (NT_SUCCESS(status) &&
+        args->Operation == DXGK_OPERATION_VIRTUAL_TRANSFER)
+      status = AdmissionG3ResolveLogicalVa(process,
+          context->GpuvaG3RootIpa, src, FALSE,
+          &record.SourceIpa, &record.SourceSegment);
+    ExReleaseFastMutex(&state->Lock);
+    if (!NT_SUCCESS(status)) return status;
+    if (record.Kind == AdmissionPagingVirtualTransfer) {
+      BOOLEAN source_local =
+          record.SourceSegment == ADMISSION_MEMORY_LOCAL_SEGMENT;
+      BOOLEAN destination_local =
+          record.DestinationSegment == ADMISSION_MEMORY_LOCAL_SEGMENT;
+      if ((args->TransferVirtual.TransferDirection ==
+               DXGK_MEMORY_TRANSFER_LOCAL_TO_SYSTEM &&
+           (!source_local || destination_local)) ||
+          (args->TransferVirtual.TransferDirection ==
+               DXGK_MEMORY_TRANSFER_SYSTEM_TO_LOCAL &&
+           (source_local || !destination_local)) ||
+          (args->TransferVirtual.TransferDirection ==
+               DXGK_MEMORY_TRANSFER_LOCAL_TO_LOCAL &&
+           (!source_local || !destination_local)))
+        return STATUS_INVALID_PARAMETER;
+    }
+    status = AdmissionG3SnapshotAperture(adapter,
+        &record.DestinationIpa, &record.DestinationSegment);
+    if (!NT_SUCCESS(status)) return status;
+    if (record.Kind == AdmissionPagingVirtualTransfer) {
+      status = AdmissionG3SnapshotAperture(adapter,
+          &record.SourceIpa, &record.SourceSegment);
+      if (!NT_SUCCESS(status)) return status;
+    }
+    RtlCopyMemory(args->pDmaBuffer, &marker, sizeof(marker));
+    RtlCopyMemory(args->pDmaBufferPrivateData, &record, sizeof(record));
+    args->pDmaBuffer = (PUCHAR)args->pDmaBuffer + sizeof(marker);
+    args->DmaSize -= sizeof(marker);
+    args->pDmaBufferPrivateData =
+        (PUCHAR)args->pDmaBufferPrivateData + sizeof(record);
+    args->DmaBufferPrivateDataSize -= sizeof(record);
+    offset += bytes;
+    ++produced;
+  }
+  args->MultipassOffset = (UINT)offset;
+  return offset == total ? STATUS_SUCCESS :
+      STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
+}
+
+static NTSTATUS AdmissionG3MapPagingIpa(
+    ADMISSION_CONTEXT *adapter, const ADMISSION_SCANOUT_MEMORY_VIEW *view,
+    ULONGLONG ipa, UINT segment, UINT bytes, PUCHAR *address,
+    PVOID *system_mapping) {
+  PHYSICAL_ADDRESS physical;
+  ULONGLONG page = ipa & ~0xfffULL;
+  if (address == NULL || system_mapping == NULL || bytes == 0u ||
+      bytes > 0x1000u - (UINT)(ipa & 0xfffu))
+    return STATUS_INVALID_PARAMETER;
+  *address = NULL;
+  *system_mapping = NULL;
+  if (segment == ADMISSION_MEMORY_LOCAL_SEGMENT) {
+    if (view == NULL || view->CpuAddress == NULL ||
+        ipa < view->GuestIpaAddress || bytes > view->Bytes ||
+        ipa - view->GuestIpaAddress > view->Bytes - bytes)
+      return STATUS_INVALID_ADDRESS;
+    *address = (PUCHAR)view->CpuAddress +
+        (SIZE_T)(ipa - view->GuestIpaAddress);
+    return STATUS_SUCCESS;
+  }
+  if (segment != 0u && segment != ADMISSION_MEMORY_APERTURE_SEGMENT)
+    return STATUS_INVALID_PARAMETER;
+  if (page > 0x7fffffffffffffffULL) return STATUS_INVALID_ADDRESS;
+  physical.QuadPart = (LONGLONG)page;
+  *system_mapping = MmMapIoSpace(physical, 0x1000u, MmCached);
+  if (*system_mapping == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+  *address = (PUCHAR)*system_mapping + (SIZE_T)(ipa & 0xfffu);
+  UNREFERENCED_PARAMETER(adapter);
+  return STATUS_SUCCESS;
+}
+
+NTSTATUS AdmissionG3ExecuteVirtualPaging(
+    ADMISSION_CONTEXT *adapter, const ADMISSION_PAGING_RECORD *record) {
+  ADMISSION_SCANOUT_MEMORY_VIEW view;
+  PUCHAR destination = NULL, source = NULL;
+  PVOID destination_mapping = NULL, source_mapping = NULL;
+  NTSTATUS status;
+  UINT index;
+  if (adapter == NULL || record == NULL ||
+      (record->Kind != AdmissionPagingVirtualFill &&
+       record->Kind != AdmissionPagingVirtualTransfer &&
+       record->Kind != AdmissionPagingMonitoredFence) ||
+      record->Bytes == 0u || record->Bytes > 0x1000u ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return STATUS_INVALID_PARAMETER;
+  status = AdmissionMemoryRuntimeScanoutView(adapter, &view);
+  if (!NT_SUCCESS(status)) return status;
+  status = AdmissionG3MapPagingIpa(adapter, &view,
+      record->DestinationIpa, record->DestinationSegment, record->Bytes,
+      &destination, &destination_mapping);
+  if (!NT_SUCCESS(status)) return status;
+  if (record->Kind == AdmissionPagingVirtualTransfer) {
+    status = AdmissionG3MapPagingIpa(adapter, &view,
+        record->SourceIpa, record->SourceSegment, record->Bytes,
+        &source, &source_mapping);
+    if (NT_SUCCESS(status)) RtlMoveMemory(destination, source, record->Bytes);
+  } else if (record->Kind == AdmissionPagingVirtualFill) {
+    const UCHAR *pattern = (const UCHAR *)&record->FillPattern;
+    for (index = 0u; index < record->Bytes; ++index)
+      destination[index] = pattern[(record->PatternOffset + index) & 3u];
+  } else {
+    const UCHAR *value = (const UCHAR *)&record->FenceValue;
+    if (record->PatternOffset + record->Bytes > sizeof(record->FenceValue))
+      status = STATUS_INVALID_PARAMETER;
+    else
+      for (index = 0u; index < record->Bytes; ++index)
+        destination[index] = value[record->PatternOffset + index];
+  }
+  KeMemoryBarrier();
+  if (source_mapping != NULL) MmUnmapIoSpace(source_mapping, 0x1000u);
+  if (destination_mapping != NULL)
+    MmUnmapIoSpace(destination_mapping, 0x1000u);
+  return status;
+}
+
 NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
                                             DXGKARG_BUILDPAGINGBUFFER *args) {
   ADMISSION_G3_STATE *state;
@@ -282,6 +544,10 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
       KeGetCurrentIrql() != PASSIVE_LEVEL) return STATUS_INVALID_PARAMETER;
   state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
   if (state == NULL) return STATUS_INVALID_DEVICE_STATE;
+  if (args->Operation == DXGK_OPERATION_VIRTUAL_FILL ||
+      args->Operation == DXGK_OPERATION_VIRTUAL_TRANSFER ||
+      args->Operation == DXGK_OPERATION_SIGNAL_MONITORED_FENCE)
+    return AdmissionG3EncodeVirtualPaging(adapter, args);
   if (args->Operation == DXGK_OPERATION_FLUSH_TLB) {
     ADMISSION_G3_FLUSH_RECEIPT receipt;
     ADMISSION_G3_TABLE_SHADOW *shadow;

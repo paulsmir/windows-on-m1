@@ -22,10 +22,11 @@ typedef void VOID;
 typedef void *PVOID;
 typedef void *HANDLE;
 typedef void *PDEVICE_OBJECT;
-typedef unsigned char BOOLEAN, KIRQL, PUCHAR_BYTE;
+typedef unsigned char BOOLEAN, KIRQL, PUCHAR_BYTE, UCHAR;
 typedef unsigned int UINT, ULONG;
 typedef int LONG, NTSTATUS;
 typedef unsigned long long ULONGLONG, UINT64;
+typedef long long LONGLONG;
 typedef uintptr_t ULONG_PTR;
 typedef size_t SIZE_T;
 typedef unsigned char *PUCHAR;
@@ -39,6 +40,7 @@ typedef const void VOID_CONST;
 #define STATUS_INVALID_ADDRESS ((NTSTATUS)0xC0000141)
 #define STATUS_INVALID_DEVICE_STATE ((NTSTATUS)0xC0000184)
 #define STATUS_NOT_SUPPORTED ((NTSTATUS)0xC00000BB)
+#define STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER ((NTSTATUS)0xC01E0003)
 #define STATUS_INSUFFICIENT_RESOURCES ((NTSTATUS)0xC000009A)
 #define STATUS_DEVICE_HARDWARE_ERROR ((NTSTATUS)0xC0000483)
 #define STATUS_INTEGER_OVERFLOW ((NTSTATUS)0xC0000095)
@@ -48,6 +50,7 @@ typedef const void VOID_CONST;
 #define NT_SUCCESS(x) ((x) >= 0)
 #define MAXSIZE_T SIZE_MAX
 #define MAXULONGLONG UINT64_MAX
+#define MAXLONGLONG INT64_MAX
 #define MAXULONG UINT32_MAX
 #define MAXULONG_PTR UINTPTR_MAX
 #define POOL_FLAG_NON_PAGED 0
@@ -63,6 +66,7 @@ typedef const void VOID_CONST;
 #define ADMISSION_CONTEXT_VALID_FLAGS 0x27u
 #endif
 #define ADMISSION_DMA_BUFFER_SIZE 0x50000u
+#define ADMISSION_MAX_PAGING_RECORDS 64u
 #define ADMISSION_GDI_DMA_PRIVATE_SIZE 0x51000u
 #define ADMISSION_GDI_ALLOCATION_LIST_SIZE 256u
 #define ADMISSION_GDI_PATCH_LIST_SIZE 256u
@@ -73,6 +77,7 @@ typedef const void VOID_CONST;
 #define UNREFERENCED_PARAMETER(x) (void)(x)
 #define RtlZeroMemory(p,n) memset((p),0,(n))
 #define RtlCopyMemory(d,s,n) memcpy((d),(s),(n))
+#define RtlMoveMemory(d,s,n) memmove((d),(s),(n))
 #define RtlCompareMemory(a,b,n) ((SIZE_T)(memcmp((a),(b),(n))==0 ? (n) : 0))
 #define KeMemoryBarrier() __sync_synchronize()
 #define CONTAINING_RECORD(p,t,m) ((t *)((char *)(p)-offsetof(t,m)))
@@ -100,8 +105,47 @@ typedef struct { union { struct { ULONGLONG Valid:1,Zero:1,CacheCoherent:1,ReadO
 typedef union { struct { UINT Repeat:1,InitialUpdate:1,NotifyEviction:1,Use64KBPages:1,NativeFence:1,Reserved:27; }; UINT Value; } DXGK_UPDATEPAGETABLEFLAGS;
 typedef struct { HANDLE hProcess; DXGK_PAGETABLEUPDATEADDRESS PageTableAddress; DXGK_PAGETABLEUPDATEMODE UpdateMode; UINT PageTableLevel,StartIndex,NumPageTableEntries; DXGK_UPDATEPAGETABLEFLAGS Flags; DXGK_PTE *pPageTableEntries,*pPageTableEntries64KB; UINT Reserved0,DriverProtection; ULONGLONG FirstPteVirtualAddress; } DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE;
 typedef struct { HANDLE hProcess; D3DGPU_PHYSICAL_ADDRESS RootPageTableAddress; ULONGLONG StartVirtualAddress,EndVirtualAddress; } DXGK_BUILDPAGINGBUFFER_FLUSHTLB;
-enum { DXGK_OPERATION_UPDATE_PAGE_TABLE=11, DXGK_OPERATION_FLUSH_TLB=12 };
-typedef struct { UINT Operation; void *pDmaBuffer,*pDmaBufferPrivateData; union { DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE UpdatePageTable; DXGK_BUILDPAGINGBUFFER_FLUSHTLB FlushTlb; }; } DXGKARG_BUILDPAGINGBUFFER;
+enum { DXGK_OPERATION_VIRTUAL_TRANSFER=8, DXGK_OPERATION_VIRTUAL_FILL=9,
+       DXGK_OPERATION_UPDATE_PAGE_TABLE=11, DXGK_OPERATION_FLUSH_TLB=12,
+       DXGK_OPERATION_SIGNAL_MONITORED_FENCE=16 };
+enum { DXGK_MEMORY_TRANSFER_LOCAL_TO_SYSTEM=0,
+       DXGK_MEMORY_TRANSFER_SYSTEM_TO_LOCAL=1,
+       DXGK_MEMORY_TRANSFER_LOCAL_TO_LOCAL=2 };
+typedef struct { HANDLE hAllocation; ULONGLONG AllocationOffsetInBytes,
+  FillSizeInBytes; UINT FillPattern; ULONGLONG DestinationVirtualAddress;
+} DXGK_BUILDPAGINGBUFFER_FILLVIRTUAL;
+typedef struct { HANDLE hAllocation; ULONGLONG AllocationOffsetInBytes,
+  TransferSizeInBytes, SourceVirtualAddress, DestinationVirtualAddress,
+  SourcePageTable; UINT TransferDirection; union { struct {
+  UINT Src64KBPages:1,Dst64KBPages:1,Reserved:30; }; UINT Flags; } Flags;
+  ULONGLONG DestinationPageTable;
+} DXGK_BUILDPAGINGBUFFER_TRANSFERVIRTUAL;
+typedef struct { ULONGLONG MonitoredFenceGpuVa,MonitoredFenceValue; }
+  DXGK_BUILDPAGINGBUFFER_SIGNALMONITOREDFENCE;
+typedef struct { UINT Operation, DmaSize, DmaBufferPrivateDataSize,
+  MultipassOffset,DmaBufferWriteOffset; void *pDmaBuffer,*pDmaBufferPrivateData;
+  HANDLE hSystemContext;
+  union { DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE UpdatePageTable;
+    DXGK_BUILDPAGINGBUFFER_FLUSHTLB FlushTlb;
+    DXGK_BUILDPAGINGBUFFER_FILLVIRTUAL FillVirtual;
+    DXGK_BUILDPAGINGBUFFER_TRANSFERVIRTUAL TransferVirtual;
+    DXGK_BUILDPAGINGBUFFER_SIGNALMONITOREDFENCE SignalMonitoredFence; };
+} DXGKARG_BUILDPAGINGBUFFER;
+enum { AdmissionPagingPhysical=0, AdmissionPagingVirtualFill=1,
+       AdmissionPagingVirtualTransfer=2, AdmissionPagingMonitoredFence=3 };
+typedef struct { UINT Magic,Version,RecordBytes,Reserved; } ADMISSION_PAGING_MARKER;
+enum { AppleAgxPhysicalPagingUpload=1, AppleAgxPhysicalPagingDownload=2,
+       AppleAgxPhysicalPagingLocalCopy=3, AppleAgxPhysicalPagingFill=4,
+       AppleAgxPhysicalPagingDiscard=5 };
+typedef struct { UINT Kind; ULONGLONG LocalOffset,SecondLocalOffset,
+  SystemOffset,Bytes; UINT FillPattern; } APPLE_AGX_PHYSICAL_PAGING_PLAN;
+typedef struct { ADMISSION_PAGING_MARKER Header; APPLE_AGX_PHYSICAL_PAGING_PLAN Plan;
+  void *SystemMdl; UINT Kind,SourceSegment,DestinationSegment,PatternOffset;
+  ULONGLONG SourceIpa,DestinationIpa; UINT Bytes,FillPattern;
+  ULONGLONG FenceValue;
+} ADMISSION_PAGING_RECORD;
+#define ADMISSION_PAGING_MAGIC 0x504d4152u
+#define ADMISSION_PAGING_VERSION 1u
 typedef union { struct { UINT SystemProcess:1; UINT Reserved:31; }; UINT Value; } DXGK_CREATEPROCESSFLAGS;
 typedef struct { DXGK_CREATEPROCESSFLAGS Flags; UINT NumPasid; void *pPasid,*pProcessName; HANDLE hKmdProcess; } DXGKARG_CREATEPROCESS;
 typedef struct { HANDLE hContext; D3DGPU_PHYSICAL_ADDRESS Address; UINT NumEntries; } DXGKARG_SETROOTPAGETABLE;
@@ -133,11 +177,37 @@ typedef struct _ADMISSION_RENDER_CONTEXT { ADMISSION_OBJECT_CONTEXT Object; UINT
 typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONGLONG UnpublishedGroups[32]; } ADMISSION_G3_STATE;
 typedef struct _ADMISSION_G3_TABLE_SHADOW { struct _ADMISSION_G3_TABLE_SHADOW *Next; APPLE_AGX_MEMORY_OBJECT Memory; ULONGLONG OriginalIpa,BrokerIpa; APPLE_AGX_GPUVA_G3_LOGICAL_PTE *LogicalPtes; } ADMISSION_G3_TABLE_SHADOW;
 struct _ADMISSION_G3_PROCESS { LIST_ENTRY Link; ADMISSION_G3_STATE *State; APPLE_AGX_GPUVA_G3_GRAPH Graph; APPLE_AGX_MEMORY_IO Io; APPLE_AGX_MEMORY_OBJECT BootstrapRoot; ADMISSION_G3_TABLE_SHADOW *TableShadows; ULONGLONG BootstrapIpa; ULONG Magic,DeviceRefs,ContextRefs; BOOLEAN Poisoned; };
-struct _ADMISSION_CONTEXT { void *GpuvaG3State; BOOLEAN Started; PDEVICE_OBJECT PhysicalDeviceObject; ADMISSION_CONTEXT *ObjectAdapter; int SchedulerLock,Scheduler; };
+typedef struct { int unused; } REPLAY_APERTURE;
+struct _ADMISSION_CONTEXT { void *GpuvaG3State; BOOLEAN Started;
+  PDEVICE_OBJECT PhysicalDeviceObject; ADMISSION_CONTEXT *ObjectAdapter;
+  int SchedulerLock,Scheduler;
+  struct { REPLAY_APERTURE Aperture; } Memory;
+};
 
 static unsigned char *local_cpu;
 static ULONGLONG local_ipa=0x10000000ULL;
 static ULONGLONG local_bytes=0x4000000ULL;
+static unsigned char system_cpu[0x4000];
+static ULONGLONG system_ipa=0x851000000ULL;
+enum { AppleAgxSoftwareApertureOk=0, AppleAgxSoftwareApertureOutOfRange=1 };
+static int AppleAgxSoftwareApertureResolve(REPLAY_APERTURE *a,
+    ULONGLONG offset,ULONGLONG *physical) {
+  (void)a;
+  if (offset<0x1000 || offset>=0x2000) return AppleAgxSoftwareApertureOutOfRange;
+  *physical=system_ipa+offset;
+  return AppleAgxSoftwareApertureOk;
+}
+static void *MmMapIoSpace(PHYSICAL_ADDRESS pa,SIZE_T bytes,int cache) {
+  (void)cache;
+  return pa.QuadPart>=0 && (ULONGLONG)pa.QuadPart>=system_ipa &&
+      (ULONGLONG)pa.QuadPart-system_ipa<=sizeof(system_cpu)-bytes ?
+      system_cpu+((ULONGLONG)pa.QuadPart-system_ipa) : NULL;
+}
+static void MmUnmapIoSpace(void *p,SIZE_T bytes) {(void)p;(void)bytes;}
+#define MmCached 1
+NTSTATUS AdmissionG3ExecuteVirtualPaging(ADMISSION_CONTEXT *,
+    const ADMISSION_PAGING_RECORD *);
+int AdmissionPagingRecordsValid(const ADMISSION_PAGING_RECORD *,UINT,UINT,UINT);
 static PHYSICAL_ADDRESS MmGetPhysicalAddress(void *p) { PHYSICAL_ADDRESS a={0};if(local_cpu && (unsigned char *)p>=local_cpu && (unsigned char *)p<local_cpu+local_bytes) a.QuadPart=(long long)(local_ipa+((unsigned char *)p-local_cpu));return a; }
 static NTSTATUS AdmissionMemoryRuntimeScanoutView(ADMISSION_CONTEXT *a,ADMISSION_SCANOUT_MEMORY_VIEW *v) {(void)a;v->GuestIpaAddress=local_ipa;v->Bytes=0x3800000ULL;v->CpuAddress=local_cpu;return STATUS_SUCCESS;}
 static NTSTATUS AdmissionMemoryRuntimeBorrowIo(ADMISSION_CONTEXT *a,APPLE_AGX_MEMORY_IO *io) {(void)a;(void)io;return STATUS_SUCCESS;}

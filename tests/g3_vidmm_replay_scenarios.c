@@ -196,6 +196,176 @@ int main(void) {
   }
   update(&adapter,sys.hKmdProcess,0,local_cpu+0xc000,32,0x2000000,
          flags,map32,"EXP784C level0 Count32 Flags0 projection");
+  if (r79 && getenv("G3_REPLAY_SELF_TABLE_BACKING")==NULL) {
+  {
+    DXGK_PTE root_link={0};
+    root_link.Flags=0x41;
+    root_link.PageTableAddress=0x8;
+    update(&adapter,sys.hKmdProcess,2,local_cpu,1,0,flags,&root_link,
+           "R80 paging root links the scratch-area table");
+  }
+  {
+    unsigned char dma[256]={0}, private_data[512]={0};
+    DXGKARG_BUILDPAGINGBUFFER fill={0};
+    fill.Operation=DXGK_OPERATION_VIRTUAL_FILL;
+    fill.hSystemContext=cc.hContext;
+    fill.pDmaBuffer=dma;
+    fill.DmaSize=sizeof(dma);
+    fill.pDmaBufferPrivateData=private_data;
+    fill.DmaBufferPrivateDataSize=sizeof(private_data);
+    fill.FillVirtual.DestinationVirtualAddress=0x2000000;
+    fill.FillVirtual.FillSizeInBytes=0x1000;
+    fill.FillVirtual.FillPattern=0x7f81a2c3;
+    expect_ok("R80 FillVirtual builds a paging packet",
+              AdmissionGpuvaG3BuildPagingBuffer(&adapter,&fill));
+    assert(fill.pDmaBuffer>=(void *)dma+16);
+    ADMISSION_PAGING_RECORD *record=(ADMISSION_PAGING_RECORD *)private_data;
+    assert(record->Kind==AdmissionPagingVirtualFill);
+    assert(AdmissionPagingRecordsValid(record,1,64,
+                                      sizeof(ADMISSION_PAGING_MARKER)));
+    expect_ok("R80 FillVirtual CPU execution",
+              AdmissionG3ExecuteVirtualPaging(&adapter,record));
+    for (UINT i=0;i<0x1000;i++)
+      assert(local_cpu[0x100000+i]==((unsigned char *)&record->FillPattern)[i&3u]);
+    memset(dma,0,sizeof(dma));
+    memset(private_data,0,sizeof(private_data));
+    DXGKARG_BUILDPAGINGBUFFER fence={0};
+    fence.Operation=DXGK_OPERATION_SIGNAL_MONITORED_FENCE;
+    fence.hSystemContext=cc.hContext;
+    fence.pDmaBuffer=dma;
+    fence.DmaSize=sizeof(dma);
+    fence.pDmaBufferPrivateData=private_data;
+    fence.DmaBufferPrivateDataSize=sizeof(private_data);
+    fence.SignalMonitoredFence.MonitoredFenceGpuVa=0x2000010;
+    fence.SignalMonitoredFence.MonitoredFenceValue=0x718293a4b5c6d7e8ULL;
+    expect_ok("R80 monitored fence build",
+              AdmissionGpuvaG3BuildPagingBuffer(&adapter,&fence));
+    assert(AdmissionPagingRecordsValid(
+        (ADMISSION_PAGING_RECORD *)private_data,1,64,
+        sizeof(ADMISSION_PAGING_MARKER)));
+    expect_ok("R80 monitored fence CPU execution",
+              AdmissionG3ExecuteVirtualPaging(&adapter,
+                  (ADMISSION_PAGING_RECORD *)private_data));
+    assert(*(ULONGLONG *)(local_cpu+0x100010)==
+           0x718293a4b5c6d7e8ULL);
+    memset(dma,0,sizeof(dma));
+    memset(private_data,0,sizeof(private_data));
+    fence.pDmaBuffer=dma;
+    fence.DmaSize=sizeof(dma);
+    fence.pDmaBufferPrivateData=private_data;
+    fence.DmaBufferPrivateDataSize=sizeof(private_data);
+    fence.MultipassOffset=0;
+    fence.SignalMonitoredFence.MonitoredFenceGpuVa=0x2000ffc;
+    expect_ok("R80 monitored fence split across logical PTEs",
+              AdmissionGpuvaG3BuildPagingBuffer(&adapter,&fence));
+    assert(AdmissionPagingRecordsValid(
+        (ADMISSION_PAGING_RECORD *)private_data,2,64,
+        2*sizeof(ADMISSION_PAGING_MARKER)));
+    for (UINT i=0;i<2;i++)
+      expect_ok("R80 split fence CPU execution",
+          AdmissionG3ExecuteVirtualPaging(&adapter,
+              &((ADMISSION_PAGING_RECORD *)private_data)[i]));
+    assert(*(ULONGLONG *)(local_cpu+0x100ffc)==
+           0x718293a4b5c6d7e8ULL);
+  }
+  {
+    DXGK_PTE system_page={0};
+    DXGKARG_BUILDPAGINGBUFFER system_update={0};
+    unsigned char dma[256]={0}, private_data[512]={0};
+    DXGKARG_BUILDPAGINGBUFFER transfer={0};
+    system_page.Flags=0x1;
+    system_page.PageAddress=system_ipa>>12;
+    system_update.Operation=DXGK_OPERATION_UPDATE_PAGE_TABLE;
+    system_update.UpdatePageTable.hProcess=sys.hKmdProcess;
+    system_update.UpdatePageTable.PageTableAddress.CpuVirtual=local_cpu+0xc000;
+    system_update.UpdatePageTable.UpdateMode=DXGK_PAGETABLEUPDATE_CPU_VIRTUAL;
+    system_update.UpdatePageTable.PageTableLevel=0;
+    system_update.UpdatePageTable.StartIndex=4;
+    system_update.UpdatePageTable.NumPageTableEntries=1;
+    system_update.UpdatePageTable.FirstPteVirtualAddress=0x2004000;
+    system_update.UpdatePageTable.pPageTableEntries=&system_page;
+    expect_ok("R80 system destination logical PTE",
+              AdmissionGpuvaG3BuildPagingBuffer(&adapter,&system_update));
+    transfer.Operation=DXGK_OPERATION_VIRTUAL_TRANSFER;
+    transfer.hSystemContext=cc.hContext;
+    transfer.pDmaBuffer=dma;
+    transfer.DmaSize=sizeof(dma);
+    transfer.pDmaBufferPrivateData=private_data;
+    transfer.DmaBufferPrivateDataSize=sizeof(private_data);
+    transfer.TransferVirtual.SourceVirtualAddress=0x2000000;
+    transfer.TransferVirtual.DestinationVirtualAddress=0x2004000;
+    transfer.TransferVirtual.TransferSizeInBytes=0x1000;
+    transfer.TransferVirtual.TransferDirection=
+        DXGK_MEMORY_TRANSFER_LOCAL_TO_SYSTEM;
+    expect_ok("R80 TransferVirtual local to system build",
+              AdmissionGpuvaG3BuildPagingBuffer(&adapter,&transfer));
+    assert(AdmissionPagingRecordsValid(
+        (ADMISSION_PAGING_RECORD *)private_data,1,64,
+        sizeof(ADMISSION_PAGING_MARKER)));
+    expect_ok("R80 TransferVirtual local to system CPU execution",
+              AdmissionG3ExecuteVirtualPaging(&adapter,
+                  (ADMISSION_PAGING_RECORD *)private_data));
+    assert(memcmp(system_cpu,local_cpu+0x100000,0x1000)==0);
+    {
+      DXGKARG_BUILDPAGINGBUFFER wrong=transfer;
+      wrong.TransferVirtual.TransferDirection=
+          DXGK_MEMORY_TRANSFER_SYSTEM_TO_LOCAL;
+      wrong.MultipassOffset=0;
+      wrong.pDmaBuffer=dma;
+      wrong.DmaSize=sizeof(dma);
+      wrong.pDmaBufferPrivateData=private_data;
+      wrong.DmaBufferPrivateDataSize=sizeof(private_data);
+      assert(AdmissionGpuvaG3BuildPagingBuffer(&adapter,&wrong)==
+             STATUS_INVALID_PARAMETER);
+    }
+    memset(local_cpu+0x108000,0,0x1000);
+    memset(dma,0,sizeof(dma));
+    memset(private_data,0,sizeof(private_data));
+    transfer.pDmaBuffer=dma;
+    transfer.DmaSize=sizeof(dma);
+    transfer.pDmaBufferPrivateData=private_data;
+    transfer.DmaBufferPrivateDataSize=sizeof(private_data);
+    transfer.MultipassOffset=0;
+    transfer.TransferVirtual.SourceVirtualAddress=0x2004000;
+    transfer.TransferVirtual.DestinationVirtualAddress=0x2008000;
+    transfer.TransferVirtual.TransferDirection=
+        DXGK_MEMORY_TRANSFER_SYSTEM_TO_LOCAL;
+    expect_ok("R80 TransferVirtual system to local build",
+              AdmissionGpuvaG3BuildPagingBuffer(&adapter,&transfer));
+    expect_ok("R80 TransferVirtual system to local CPU execution",
+              AdmissionG3ExecuteVirtualPaging(&adapter,
+                  (ADMISSION_PAGING_RECORD *)private_data));
+    assert(memcmp(local_cpu+0x108000,system_cpu,0x1000)==0);
+    {
+      DXGK_PTE aperture_page={0};
+      DXGKARG_BUILDPAGINGBUFFER aperture_update=system_update;
+      aperture_page.Flags=0x21; /* valid writable segment1 */
+      aperture_page.PageAddress=0x1; /* aperture offset 0x1000 */
+      aperture_update.UpdatePageTable.StartIndex=5;
+      aperture_update.UpdatePageTable.FirstPteVirtualAddress=0x2005000;
+      aperture_update.UpdatePageTable.pPageTableEntries=&aperture_page;
+      expect_ok("R80 aperture destination logical PTE",
+          AdmissionGpuvaG3BuildPagingBuffer(&adapter,&aperture_update));
+      memset(dma,0,sizeof(dma));
+      memset(private_data,0,sizeof(private_data));
+      transfer.pDmaBuffer=dma;
+      transfer.DmaSize=sizeof(dma);
+      transfer.pDmaBufferPrivateData=private_data;
+      transfer.DmaBufferPrivateDataSize=sizeof(private_data);
+      transfer.MultipassOffset=0;
+      transfer.TransferVirtual.SourceVirtualAddress=0x2000000;
+      transfer.TransferVirtual.DestinationVirtualAddress=0x2005000;
+      transfer.TransferVirtual.TransferDirection=
+          DXGK_MEMORY_TRANSFER_LOCAL_TO_SYSTEM;
+      expect_ok("R80 aperture transfer build",
+          AdmissionGpuvaG3BuildPagingBuffer(&adapter,&transfer));
+      expect_ok("R80 aperture transfer CPU execution",
+          AdmissionG3ExecuteVirtualPaging(&adapter,
+              (ADMISSION_PAGING_RECORD *)private_data));
+      assert(memcmp(system_cpu+0x1000,local_cpu+0x100000,0x1000)==0);
+    }
+  }
+  }
   if (getenv("G3_REPLAY_SELF_TABLE_BACKING")) {
     ADMISSION_G3_PROCESS *process=(ADMISSION_G3_PROCESS *)sys.hKmdProcess;
     ADMISSION_G3_TABLE_SHADOW *shadow=process->TableShadows;
@@ -428,6 +598,68 @@ int main(void) {
     assert(AdmissionGpuvaG3BuildPagingBuffer(&adapter,&flush)==STATUS_INVALID_PARAMETER);
     assert(last_flush_receipt.Branch==4);
     expect_ok("R79 foreign DestroyProcess",AdmissionDdiDestroyProcess(&adapter,user.hKmdProcess));
+  }
+  if (r79 && getenv("G3_REPLAY_SELF_TABLE_BACKING")==NULL) {
+  {
+    /* EXP796 FlushTlb interval is a projection, not the uncaptured Fill input. */
+    const UINT page_count=0x580000u/0x1000u;
+    DXGK_PTE *span=calloc(page_count,sizeof(*span));
+    DXGKARG_BUILDPAGINGBUFFER mapping={0}, fill={0};
+    UINT passes=0;
+    assert(span);
+    for (UINT i=0;i<page_count;i++) {
+      span[i].Flags=0x41;
+      span[i].PageAddress=0x200+i;
+    }
+    mapping.Operation=DXGK_OPERATION_UPDATE_PAGE_TABLE;
+    mapping.UpdatePageTable.hProcess=sys.hKmdProcess;
+    mapping.UpdatePageTable.PageTableAddress.CpuVirtual=local_cpu+0xc000;
+    mapping.UpdatePageTable.UpdateMode=DXGK_PAGETABLEUPDATE_CPU_VIRTUAL;
+    mapping.UpdatePageTable.PageTableLevel=0;
+    mapping.UpdatePageTable.StartIndex=0x30;
+    mapping.UpdatePageTable.NumPageTableEntries=page_count;
+    mapping.UpdatePageTable.FirstPteVirtualAddress=0x2030000;
+    mapping.UpdatePageTable.pPageTableEntries=span;
+    expect_ok("R80 projected EXP796 scratch range",
+              AdmissionGpuvaG3BuildPagingBuffer(&adapter,&mapping));
+    free(span);
+    fill.Operation=DXGK_OPERATION_VIRTUAL_FILL;
+    fill.hSystemContext=cc.hContext;
+    fill.FillVirtual.DestinationVirtualAddress=0x2030000;
+    fill.FillVirtual.FillSizeInBytes=0x580000;
+    fill.FillVirtual.FillPattern=0x3198b746;
+    do {
+      unsigned char dma[64*sizeof(ADMISSION_PAGING_MARKER)]={0};
+      unsigned char private_data[64*sizeof(ADMISSION_PAGING_RECORD)]={0};
+      NTSTATUS status;
+      UINT records;
+      fill.pDmaBuffer=dma;
+      fill.DmaSize=sizeof(dma);
+      fill.pDmaBufferPrivateData=private_data;
+      fill.DmaBufferPrivateDataSize=sizeof(private_data);
+      fill.DmaBufferWriteOffset=0;
+      status=AdmissionGpuvaG3BuildPagingBuffer(&adapter,&fill);
+      assert(status==STATUS_SUCCESS ||
+             status==STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER);
+      records=((unsigned char *)fill.pDmaBufferPrivateData-private_data)/
+          sizeof(ADMISSION_PAGING_RECORD);
+      assert(records>0 && records<=64);
+      assert(AdmissionPagingRecordsValid(
+          (ADMISSION_PAGING_RECORD *)private_data,records,64,
+          records*sizeof(ADMISSION_PAGING_MARKER)));
+      for (UINT i=0;i<records;i++)
+        expect_ok("R80 projected EXP796 Fill CPU execution",
+            AdmissionG3ExecuteVirtualPaging(&adapter,
+                &((ADMISSION_PAGING_RECORD *)private_data)[i]));
+      ++passes;
+      if (status==STATUS_SUCCESS) break;
+      assert(passes<64);
+    } while (1);
+    assert(passes>1 && fill.MultipassOffset==0x580000u);
+    for (UINT i=0;i<0x580000u;i++)
+      assert(local_cpu[0x200000+i]==
+          ((unsigned char *)&fill.FillVirtual.FillPattern)[i&3u]);
+  }
   }
   expect_ok("DestroyContext",AdmissionDdiDestroyContext(cc.hContext));
   expect_ok("DestroyProcess",AdmissionDdiDestroyProcess(&adapter,sys.hKmdProcess));
