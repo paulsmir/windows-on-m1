@@ -2,39 +2,33 @@
 
 ## 2026-09-25 G4 offline checkpoint before EXP810
 
-Worktree integration now carries AGX4 v2 UMD process ranges and nine VidMm
-BOs for TVB/scene memory (`f4e82b2a`), geometry-derived 64 KiB capacities
-(`852f9ed7`), and parser rejection of short ranges (`9b8e702e`). Map and
-MakeResident paging fences are awaited before `SubmitCommandCb` in the
-existing G4 GPUVA space; the new BOs join that same residency set. A valid
-native command still returns `STATUS_INVALID_PARAMETER` from
-`AdmissionG4SubmitVirtualEnvelope` (`4264a033`), the WDDM-supported
-fail-closed status. No native TA/3D firmware job or scheduler fence completion
-exists yet. The UMD v2 source has host ABI and extracted BO preparation
-replays. `5a8c9848` adds a source-backed G13 TA/3D image constructor and a
-1280×720 AGX4 v2 parser→builder host replay; it has not been connected to
-the KMD queue or m1n1 broker. An R83-verified pinned WDK26100 ARM64
-**build-only** package810 now
-links UMD/KMD with 0 warnings/errors from 521 committed Apple AGX files at
-`03c65f9b`; build receipt is `.local/experiments/EXP810-r96-offline-build/build-receipt.json`.
-No EXP810 package was installed or launched, and no UMD/KMD runtime receipt or
-LOOK_NOW observation exists.
+AGX4 v2 now carries nine VidMm process ranges, a BGRA8 format tag and native
+render fields. Commit `71315c30` connects SubmitCommandVirtual to the
+source-backed TA/3D constructor, ctx0 shared-memory staging, G3/B1 broker
+lease/job lifecycle and the existing Windows fence completion path. UMD
+retains the three TVB/BM BOs for the queue lifetime and initializes 32 blocks;
+2560×1600 requires exactly 32 blocks. The 2560×1600 host replay checks
+mapped ranges and known firmware references with the real m1n1 v5 C broker;
+ten targeted tests pass. Unsupported formats/samples reject with
+`STATUS_INVALID_PARAMETER` at the WDDM callback boundary.
 
-R94's next causal target is KMD staging of this image into retained ctx0
-shared memory, B1 JOB_BEGIN/END/RELEASE, and Windows fence retirement. R95's
-combined DWM-like real-broker replay, native KMD path/fence audit, and
-cache/order proof remain open. Do not
-launch EXP810 while G4 submit still has the known fail-closed return. The
-hardware gate and recovery remain the exact R54/R60 series rules in the
-handoff plan; ordinary Code28 is the last recorded recovery state.
+R83 verified all 523 committed Apple AGX files; the ARM64 native projection
+records the changed `agx_win32_gpuva_batch.c` hash, and package812 links the
+new archive. Pinned WDK26100 UMD/KMD builds, ApiValidator and Inf2Cat pass with
+zero warnings/errors. Receipt: `.local/experiments/EXP810-r96-package812/build-receipt.json`;
+source commit `1115afa8`, native archive SHA256 `60c81fd2`, package UMD
+`6f9e2507`, KMD `4351f422`. Earlier package811 linked a stale native archive
+and must not be installed. No EXP810 package has been installed or launched;
+no UMD/KMD runtime receipt or LOOK_NOW observation exists.
 
-R97 source pass (`investigation/G4_EXP208_FIELD_SOURCES.md`) resolves object63
-as Mesa's sampler heap, bound through AGX4 `SamplerHeap`; EXP208 bytes are not
-copied. UMD clears and prepares the nine process BOs and requests Asahi's
-single-cluster mode. The retained template has 16 TVB descriptors, so the
-constructor rejects larger scenes pending dynamic buffer-manager layout.
-Native format identity, stream extents, active ctx0 relocation, real broker
-replay and completion receipts are still unproved.
+R95 is not GREEN: the current broker replay uses a synthetic render payload,
+so real Mesa VDM/ISP indirect references and an end-to-end
+CreateDevice→Map/MakeResident→Submit→Present→retire path remain unproved. The
+next causal target is one actual native host draw captured through AGX4 v2,
+then the same packet through KMD builder and broker with primary selection and
+fence retirement. Hardware EXP810 remains gated by that replay. Ordinary
+GPU-visible Code28 is the last recorded recovery state; R54/R60 series rules
+and frozen m1n1/Mu apply to any later Air run.
 
 ## 2026-09-25 EXP809S: R92 DWM is associated with Apple AGX
 
