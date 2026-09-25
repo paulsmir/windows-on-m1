@@ -199,8 +199,13 @@ static HRESULT attach_presentation_render_resource(
   const APPLE_AGX_U32 access=AppleAgxWin32BufferCpuRead|
       AppleAgxWin32BufferCpuWrite|AppleAgxWin32BufferGpuRead|
       AppleAgxWin32BufferGpuWrite;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  const APPLE_AGX_U64 alignment=0x10000ULL;
+#else
+  const APPLE_AGX_U64 alignment=device->Runtime.Screen.Info.PageBytes;
+#endif
   HRESULT result=AdmissionUmdScreenAdoptAllocation(&device->Runtime,
-      record->Resource.KernelAllocation,desc->Size,device->Runtime.Screen.Info.PageBytes,
+      record->Resource.KernelAllocation,desc->Size,alignment,
       AgxWin32BufferClassGeneral,access,
 #ifdef APPLE_AGX_GPUVA_WINSYS
       TRUE,
