@@ -1,5 +1,22 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP806: physical scanout address proven; content is next
+
+A single diagnostic full-owner m1n1 `95ec1725`/SHA `58b75a8b` with the
+unchanged package804/Mu wrote BGRA red, green, blue, white stripes into
+validated primary PA `0x9bc020000` before DCP present, cleaned to PoC, and
+logged DCP IOVA `0x101c0000`. DCP A408/D589 latched swap_id9; pinned SSH,
+APPL0002 Code0 and AppleAgxAdmission Running returned. Claude's direct
+operator photo SHA `a320e4a7` shows four full-panel stripes (white appears
+pink). This proves the m1n1 IPA→PA→DART IOVA→DCP path can display bytes from
+the selected surface and rejects R89's wrong-address hypothesis. Faint
+texture in red/green has no established cause. The normal EXP805 black
+panel now points to producer contents or visibility/timing. R90's next
+smallest discriminator is a read-only pre-swap primary histogram/hash before
+selecting a fix. Exact package cleanup and frozen ordinary R84 boot restored
+one APPL0002 Code28, staged0/arm0, CPU8/storage2/USB7. R86 remains saved at
+`wip/r86-range-grants` commit `6fe64627` until this boundary is resolved.
+
 ## 2026-09-25 EXP805: physical panel black despite Code0 and CDD presents
 
 Unchanged package804/m1n1 `be96bb5e`/Mu `c7ddcfb2` with R84 WDT reached
