@@ -1,5 +1,30 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP810/package813 first Air checkpoint
+
+Exact package813 reached pinned SSH, one APPL0002 Code0, eight CPUs, two
+disks, six USB devices, AppleAgxAdmission Running, `ARM_CONSUMED`
+seq332418822, broker v5 init0/epoch1 and DCP A408/D589 latch10 with frozen
+full-owner m1n1/Mu. Exact active SYS/UMD match package813. DWM PID1236 loaded
+the UMD but repeatedly returned `CreateDevice 0x80070057` after a successful
+`CreateContextVirtualCb`: 125/125 attempts in the byte-verified collection,
+135/135 in a later read-only trace. No UMD Present, G4 submit or fence record
+exists in that trace, and no KMD queue fault snapshot was recorded. The
+first-frame checkpoint is rejected **before native submit**; this run cannot
+judge VDM, AGX firmware or PTE fault behavior. Guest ETL, EVTX, registry and
+UMD log were collected and verified in `.local/experiments/EXP810-g4-package813/
+hardware-evidence`. LOOK_NOW started 19:15:30Z and passed 90 seconds;
+physical panel observation and LOOK_DONE remain pending. The exact package813
+guest is still live under R54, so no cleanup/package swap has occurred.
+
+Next causal target is the first failing UMD initialization callback after
+CreateContextVirtual. Diagnostic-only source commit `6329ddb9` records
+CreatePagingQueueCb, CreateSynchronizationObject2Cb and screen-init results
+without changing their branches. Source-matched package814 is built and
+hash-verified but not installed. Once LOOK_DONE arrives, use the R54 exact
+identity/evidence guard before a single package814 diagnostic run; R60 applies
+if pinned SSH is lost. Frozen ordinary GPU-visible Code28 remains recovery.
+
 ## 2026-09-25 R95 hardware-gate decision for EXP810
 
 Claude accepted exact package813 for one Air discriminator. The earlier R95
