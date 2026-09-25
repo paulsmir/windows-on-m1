@@ -37,6 +37,17 @@ if ($GpuvaG3Qualification -and ($GpuvaB1Qualification -or $MemoryQualification -
 if ($GpuvaG3Qualification -and -not $NativeFrontend) {
     throw "GpuvaG3Qualification requires the native GPUVA UMD frontend"
 }
+if ($GpuvaG3Qualification) {
+    if ([string]::IsNullOrWhiteSpace($NativeRuntimeProps) -or
+        -not (Test-Path -LiteralPath $NativeRuntimeProps -PathType Leaf)) {
+        throw 'GpuvaG3Qualification requires a GPUVA native runtime props file'
+    }
+    [xml]$nativeProperties = Get-Content -LiteralPath $NativeRuntimeProps -Raw
+    $gpuvaMode = $nativeProperties.SelectSingleNode("//*[local-name()='NativeRuntimeGpuva']")
+    if ($null -eq $gpuvaMode -or $gpuvaMode.InnerText -ne 'true') {
+        throw 'GpuvaG3Qualification requires a GPUVA native runtime archive'
+    }
+}
 if ($BltProbeQualification -and -not $GpuvaG3Qualification) {
     throw "BltProbeQualification requires GpuvaG3Qualification"
 }

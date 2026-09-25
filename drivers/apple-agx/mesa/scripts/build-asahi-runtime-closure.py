@@ -91,13 +91,14 @@ def meson_sources(path, variable):
     return re.findall(r"'([^']+\.(?:c|cc|cpp))'", match.group(1))
 
 
-def write_props(path, architecture, native, library, dependencies):
+def write_props(path, architecture, native, library, dependencies, gpuva):
     namespace = 'http://schemas.microsoft.com/developer/msbuild/2003'
     ET.register_namespace('', namespace)
     tag = lambda name: '{' + namespace + '}' + name
     project = ET.Element(tag('Project'))
     group = ET.SubElement(project, tag('PropertyGroup'))
     for key, value in {'NativeRuntimeArchitecture': architecture,
+                       'NativeRuntimeGpuva': 'true' if gpuva else 'false',
                        'NativeRuntimeNativeSource': str(native),
                        'NativeRuntimeLibrary': str(library)}.items():
         ET.SubElement(group, tag(key)).text = value
@@ -111,6 +112,9 @@ def write_props(path, architecture, native, library, dependencies):
         'Condition': "('$(Platform)' == 'ARM64' and '$(NativeRuntimeArchitecture)' != 'arm64') or "
                      "('$(Platform)' == 'x64' and '$(NativeRuntimeArchitecture)' != 'x64')",
         'Text': 'Native runtime library architecture does not match the executable.'})
+    ET.SubElement(target, tag('Error'), {
+        'Condition': "'$(EnableGpuvaWinsys)' == 'true' and '$(NativeRuntimeGpuva)' != 'true'",
+        'Text': 'GPUVA UMD requires a GPUVA native runtime archive.'})
     ET.indent(project)
     ET.ElementTree(project).write(path, encoding='utf-8', xml_declaration=True)
 
@@ -388,7 +392,7 @@ def main():
         response.write_text('\n'.join(subprocess.list2cmdline([str(p)]) for p in objects) + '\n')
         run('archive', [CLANG / 'llvm-lib.exe', '/nologo', '/out:' + str(library), '@' + str(response)])
         manifest['library'] = {'path': str(library), 'sha256': sha256(library)}
-        write_props(out / 'NativeRuntime.props', args.architecture, native, library, libraries)
+        write_props(out / 'NativeRuntime.props', args.architecture, native, library, libraries, args.gpuva)
         manifest['props'] = {'path': str(out / 'NativeRuntime.props'), 'sha256': sha256(out / 'NativeRuntime.props')}
         manifest['executable_link'] = 'NOT_RUN'
         manifest['exit'] = 0
