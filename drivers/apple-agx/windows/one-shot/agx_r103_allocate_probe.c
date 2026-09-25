@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include "render_allocation.h"
 #include "render_win32_transport.h"
+#include "render_allocation_probe.h"
 
 #ifndef NT_SUCCESS
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
@@ -10,6 +11,8 @@
 
 #define ADAPTER_LIMIT 16u
 #define DEVICE_PARAMETERS L"SYSTEM\\CurrentControlSet\\Enum\\ACPI\\APPL0002\\0\\Device Parameters"
+
+static UINT gFirstGpuvaPassToken;
 
 typedef struct _G3_ALLOCATION_RECEIPT {
   ULONG Version, Bytes, Sequence, Kind, Status, Count, Flags;
@@ -51,6 +54,37 @@ static ULONG ReadRing(ULONG after) {
   return latest;
 }
 
+static BOOL ReadR105Echo(UINT token, UINT classId) {
+  HKEY key = NULL;
+  ADMISSION_R105_ECHO echo = {0};
+  DWORD type = 0, bytes = sizeof(echo);
+  if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, DEVICE_PARAMETERS, 0, KEY_READ,
+                    &key) != ERROR_SUCCESS) {
+    wprintf(L"ECHO token=%u unavailable\n", token);
+    return FALSE;
+  }
+  LONG result = RegQueryValueExW(key, L"Wom1R105Echo", NULL, &type,
+                                 (BYTE *)&echo, &bytes);
+  RegCloseKey(key);
+  if (result != ERROR_SUCCESS || type != REG_BINARY || bytes != sizeof(echo) ||
+      echo.Version != 1u || echo.Bytes != sizeof(echo) ||
+      echo.Token != token || echo.ClassId != classId) {
+    wprintf(L"ECHO token=%u mismatch result=%ld bytes=%lu actual=%lu/%lu\n",
+            token, result, bytes, echo.Token, echo.ClassId);
+    return FALSE;
+  }
+  wprintf(L"ECHO token=%u class=%u bits=0x%08lx union=0x%08lx size=%llu pitch=%llu "
+          L"preferred=0x%08lx hinted=0x%08lx readmmu=0x%08lx write=0x%08lx "
+          L"evict=0x%08lx flags=0x%08lx priority=%lu flags2=0x%08lx "
+          L"physicaladapter=%lu output=%lu\n",
+          token, classId, echo.RequestBits, echo.AlignmentOrPages,
+          echo.Size, echo.PitchAlignedSize, echo.PreferredSegment,
+          echo.HintedBank, echo.ReadOrMmuSet, echo.WriteSegmentSet,
+          echo.EvictionSegmentSet, echo.FlagsWddm2, echo.AllocationPriority,
+          echo.Flags2, echo.PhysicalAdapterIndex, echo.OutputPresent);
+  return TRUE;
+}
+
 static BOOL Describe(ADMISSION_WIN32_ALLOCATION_CREATE *native,
                      ADMISSION_ALLOCATION_DESCRIPTION *control,
                      UINT classId, UINT bytes, UINT cpuVisible) {
@@ -71,7 +105,8 @@ static BOOL Describe(ADMISSION_WIN32_ALLOCATION_CREATE *native,
 }
 
 static ULONG Probe(D3DKMT_HANDLE device, ULONG sequence, UINT classId,
-                   UINT bytes, UINT cpuVisible, BOOL resource) {
+                   UINT bytes, UINT cpuVisible, BOOL resource,
+                   UINT overrideBits, UINT token) {
   ADMISSION_WIN32_ALLOCATION_CREATE native;
   ADMISSION_ALLOCATION_DESCRIPTION control;
   D3DDDI_ALLOCATIONINFO2 info = {0};
@@ -79,18 +114,35 @@ static ULONG Probe(D3DKMT_HANDLE device, ULONG sequence, UINT classId,
   D3DKMT_DESTROYALLOCATION2 destroy = {0};
   D3DKMT_HANDLE handle = 0;
   NTSTATUS status;
+  BOOL echoValid = TRUE;
   if (!Describe(&native, &control, classId, bytes, cpuVisible)) return sequence;
-  info.pPrivateDriverData = classId ? (void *)&native : (void *)&control;
-  info.PrivateDriverDataSize = classId ? sizeof(native) : sizeof(control);
+  if (token) {
+    if (!classId) {
+      native.Magic = ADMISSION_WIN32_ALLOCATION_MAGIC;
+      native.Version = ADMISSION_WIN32_ALLOCATION_VERSION;
+      native.Bytes = sizeof(native);
+      native.Allocation = control;
+    }
+    native.Reserved[0] = ADMISSION_R105_MAGIC;
+    native.Reserved[1] = overrideBits | (token << 8);
+  }
+  info.pPrivateDriverData = classId || token ? (void *)&native : (void *)&control;
+  info.PrivateDriverDataSize = classId || token ? sizeof(native) : sizeof(control);
   create.hDevice = device;
   create.NumAllocations = 1u;
   create.pAllocationInfo2 = &info;
   create.Flags.CreateResource = resource ? 1u : 0u;
   status = D3DKMTCreateAllocation2(&create);
-  wprintf(L"ROW class=%u bytes=%u cpu=%u resource=%u status=0x%08lx allocation=%u hResource=%u\n",
-          classId, bytes, cpuVisible, resource, (ULONG)status,
+  wprintf(L"ROW token=%u class=%u bits=0x%02x bytes=%u cpu=%u resource=%u status=0x%08lx allocation=%u hResource=%u\n",
+          token, classId, overrideBits, bytes, cpuVisible, resource, (ULONG)status,
           info.hAllocation, create.hResource);
   fflush(stdout);
+  if (token) echoValid = ReadR105Echo(token, classId);
+  if (!echoValid)
+    wprintf(L"ROW_ECHO_INVALID token=%u\n", token);
+  if (classId != 0u && token != 0u && echoValid && NT_SUCCESS(status) &&
+      info.hAllocation != 0u && gFirstGpuvaPassToken == 0u)
+    gFirstGpuvaPassToken = token;
   sequence = ReadRing(sequence);
   if (NT_SUCCESS(status) && info.hAllocation) {
     handle = info.hAllocation;
@@ -119,8 +171,7 @@ int wmain(void) {
   HMODULE gdi = GetModuleHandleW(L"gdi32.dll");
   ULONG selected = ADAPTER_LIMIT, matches = 0, sequence = 0;
   NTSTATUS status;
-  UINT index, classId, sizeIndex, cpu, resource;
-  const UINT sizes[] = {0x4000u, 0x10000u, 0x100000u};
+  UINT index, classId, readMode, physical, pageMode, token = 1u;
   if (!gdi || !(enumerate = (PFND3DKMT_ENUMADAPTERS3)GetProcAddress(gdi, "D3DKMTEnumAdapters3"))) return 2;
   enumeration.NumAdapters = ADAPTER_LIMIT;
   enumeration.pAdapters = adapters;
@@ -167,12 +218,24 @@ int wmain(void) {
   status = D3DKMTCreateContextVirtual(&context);
   wprintf(L"VIRTUAL_CONTEXT status=0x%08lx context=%u\n", (ULONG)status, context.hContext);
   sequence = ReadRing(0);
-  sequence = Probe(device.hDevice, sequence, 0u, 0x10000u, 1u, FALSE);
-  for (classId = AgxWin32BufferClassGeneral; classId <= AgxWin32BufferClassEncoder; ++classId)
-    for (sizeIndex = 0; sizeIndex < ARRAYSIZE(sizes); ++sizeIndex)
-      for (cpu = 0; cpu <= 1u; ++cpu)
-        for (resource = 0; resource <= 1u; ++resource)
-          sequence = Probe(device.hDevice, sequence, classId, sizes[sizeIndex], cpu, resource != 0u);
+  sequence = Probe(device.hDevice, sequence, 0u, 0x10000u, 1u, FALSE,
+                   0u, token++);
+  for (classId = AgxWin32BufferClassGeneral;
+       classId <= AgxWin32BufferClassEncoder; ++classId) {
+    for (readMode = 0u; readMode < 3u; ++readMode)
+      for (physical = 0u; physical < 2u; ++physical)
+        for (pageMode = 0u; pageMode < 3u; ++pageMode) {
+          UINT bits = readMode | (physical << 2) | (pageMode << 3);
+          sequence = Probe(device.hDevice, sequence, classId, 0x10000u,
+                           1u, FALSE, bits, token);
+          /* The first GPUVA PASS is printed as a durable matrix verdict. */
+          ++token;
+        }
+    sequence = Probe(device.hDevice, sequence, classId, 0x10000u,
+                     1u, FALSE, 1u << 5, token++);
+  }
+  wprintf(L"MATRIX rows=%u first_gpuva_pass_token=%u\n", token - 1u,
+          gFirstGpuvaPassToken);
   if (context.hContext) {
     destroyContext.hContext = context.hContext;
     (void)D3DKMTDestroyContext(&destroyContext);

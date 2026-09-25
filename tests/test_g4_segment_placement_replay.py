@@ -82,6 +82,29 @@ typedef struct {
   unsigned ClassId, CpuVisible;
   uint64_t Size;
 } INPUT;
+typedef int BOOLEAN;
+#define TRUE 1
+#define FALSE 0
+typedef struct { unsigned Token, ReadMode, AccessedPhysically,
+                 PageMode, CloneClass0; } ADMISSION_R105_OVERRIDE;
+typedef struct { unsigned Magic, Version, Bytes, ClassId, Flags;
+                 unsigned Reserved[2];
+                 ADMISSION_ALLOCATION_DESCRIPTION Allocation;
+} ADMISSION_WIN32_ALLOCATION_CREATE;
+static int AdmissionR105Decode(const void *data, unsigned bytes, int enabled,
+                                ADMISSION_R105_OVERRIDE *result) {
+  (void)data; (void)bytes; (void)enabled; (void)result; return 0;
+}
+static void AdmissionR105Apply(DXGK_ALLOCATIONINFO *info,
+                               const ADMISSION_R105_OVERRIDE *override) {
+  (void)info; (void)override;
+}
+static void AdmissionR105RecordEcho(void *device,
+                                    const ADMISSION_R105_OVERRIDE *override,
+                                    unsigned class_id, unsigned bits,
+                                    const DXGK_ALLOCATIONINFO *info) {
+  (void)device; (void)override; (void)class_id; (void)bits; (void)info;
+}
 static int AdmissionMemoryReady(int *memory) { return *memory != 0; }
 static ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32AllocationCreateValidate(
     const void *data, unsigned bytes, ADMISSION_ALLOCATION_DESCRIPTION *desc,

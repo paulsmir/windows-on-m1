@@ -1,4 +1,7 @@
 #include "render_admission.h"
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+#include "render_allocation_probe.h"
+#endif
 
 #define ADMISSION_LOCAL_SEGMENT_SET \
   (1u << (ADMISSION_MEMORY_LOCAL_SEGMENT - 1u))
@@ -6,6 +9,69 @@
   (1u << (ADMISSION_MEMORY_APERTURE_SEGMENT - 1u))
 #define ADMISSION_CPU_VISIBLE_SEGMENT_SET \
   (ADMISSION_APERTURE_SEGMENT_SET | ADMISSION_LOCAL_SEGMENT_SET)
+
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+static VOID AdmissionR105Apply(DXGK_ALLOCATIONINFO *Info,
+                               const ADMISSION_R105_OVERRIDE *Override) {
+  if (Override->CloneClass0) {
+    Info->Alignment = (UINT)ADMISSION_ALLOCATION_ALIGNMENT;
+    Info->SupportedReadSegmentSet = ADMISSION_CPU_VISIBLE_SEGMENT_SET;
+    Info->SupportedWriteSegmentSet = ADMISSION_CPU_VISIBLE_SEGMENT_SET;
+    Info->FlagsWddm2.AccessedPhysically = 1u;
+    return;
+  }
+  switch (Override->ReadMode) {
+  case 0u: Info->SupportedReadSegmentSet = ADMISSION_LOCAL_SEGMENT_SET; break;
+  case 1u: Info->SupportedReadSegmentSet = ADMISSION_CPU_VISIBLE_SEGMENT_SET; break;
+  default: Info->MmuSet = 1u; break;
+  }
+  Info->FlagsWddm2.AccessedPhysically = Override->AccessedPhysically;
+  if (Override->PageMode == 0u)
+    Info->Alignment = (UINT)ADMISSION_ALLOCATION_ALIGNMENT;
+  else {
+    Info->MinimumPageSize = Override->PageMode == 1u
+                                ? DXGK_PAGESIZE_16KB : DXGK_PAGESIZE_4KB;
+    Info->RecommendedPageSize = Info->MinimumPageSize;
+  }
+}
+
+static VOID AdmissionR105RecordEcho(PDEVICE_OBJECT DeviceObject,
+                                    const ADMISSION_R105_OVERRIDE *Override,
+                                    APPLE_AGX_U32 ClassId,
+                                    APPLE_AGX_U32 RequestBits,
+                                    const DXGK_ALLOCATIONINFO *Info) {
+  ADMISSION_R105_ECHO echo = {0};
+  UNICODE_STRING name;
+  HANDLE key;
+  if (DeviceObject == NULL || Info == NULL || Override == NULL)
+    return;
+  echo.Version = 1u;
+  echo.Bytes = sizeof(echo);
+  echo.Token = Override->Token;
+  echo.ClassId = ClassId;
+  echo.RequestBits = RequestBits;
+  echo.AlignmentOrPages = Info->Alignment;
+  echo.Size = (APPLE_AGX_U64)Info->Size;
+  echo.PitchAlignedSize = (APPLE_AGX_U64)Info->PitchAlignedSize;
+  echo.PreferredSegment = Info->PreferredSegment.Value;
+  echo.HintedBank = Info->HintedBank.Value;
+  echo.ReadOrMmuSet = Info->SupportedReadSegmentSet;
+  echo.WriteSegmentSet = Info->SupportedWriteSegmentSet;
+  echo.EvictionSegmentSet = Info->EvictionSegmentSet;
+  echo.FlagsWddm2 = Info->FlagsWddm2.Value;
+  echo.AllocationPriority = Info->AllocationPriority;
+  echo.Flags2 = Info->Flags2.Value;
+  echo.PhysicalAdapterIndex = Info->PhysicalAdapterIndex;
+  echo.OutputPresent = Info->hAllocation != NULL;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(DeviceObject, PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  RtlInitUnicodeString(&name, L"Wom1R105Echo");
+  (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &echo, sizeof(echo));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+#endif
 
 C_ASSERT(D3DKMDT_GDISURFACE_STAGING_CPUVISIBLE ==
          ADMISSION_WIN32_ALLOCATION_STAGING_CPUVISIBLE);
@@ -232,6 +298,11 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   ULONGLONG aligned;
   APPLE_AGX_U32 classId = 0u;
   APPLE_AGX_U32 flags = 0u;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  ADMISSION_R105_OVERRIDE r105 = {0};
+  ADMISSION_WIN32_ALLOCATION_CREATE r105Normalized;
+  BOOLEAN r105Enabled = FALSE;
+#endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   ADMISSION_ALLOCATION_DESCRIPTION normalized;
   BOOLEAN correlated = FALSE;
@@ -254,6 +325,25 @@ static NTSTATUS AdmissionCreateAllocationImpl(
 #endif
   if (info->pPrivateDriverData == NULL)
     return STATUS_INVALID_PARAMETER;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  r105Enabled = AdmissionR105Decode(
+      info->pPrivateDriverData, info->PrivateDriverDataSize,
+      TRUE, &r105);
+  if (r105Enabled) {
+    r105Normalized = *(const ADMISSION_WIN32_ALLOCATION_CREATE *)
+        info->pPrivateDriverData;
+    r105Normalized.Reserved[0] = 0u;
+    r105Normalized.Reserved[1] = 0u;
+    if (r105Normalized.ClassId == 0u)
+      parseResult = AdmissionWin32AllocationCreateValidate(
+          &r105Normalized.Allocation, sizeof(r105Normalized.Allocation),
+          &parsedDescription, &classId, &flags);
+    else
+      parseResult = AdmissionWin32AllocationCreateValidate(
+          &r105Normalized, sizeof(r105Normalized),
+          &parsedDescription, &classId, &flags);
+  } else
+#endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   if (info->PrivateDriverDataSize == sizeof(normalized) &&
       ((const ADMISSION_ALLOCATION_DESCRIPTION *)
@@ -346,6 +436,14 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   info->AllocationPriority = D3DDDI_ALLOCATIONPRIORITY_NORMAL;
   info->Flags2.Value = 0u;
   info->PhysicalAdapterIndex = 0u;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (r105Enabled) {
+    AdmissionR105Apply(info, &r105);
+    AdmissionR105RecordEcho(context->PhysicalDeviceObject, &r105, classId,
+                            ((const ADMISSION_WIN32_ALLOCATION_CREATE *)
+                                 info->pPrivateDriverData)->Reserved[1], info);
+  }
+#endif
   return STATUS_SUCCESS;
 }
 
