@@ -18,8 +18,15 @@ The WDK pitch-size correction is **rejected as the sole cause**. Together
 with package816's unchanged result, this stops serial KMD output guesses.
 The causal boundary is Direct3D's allocation callback after successful KMD
 Create/Open; identifying its post-DDI validation needs a new discriminator,
-not another equivalent Air retry. Exact package817 is live only until R54
-disarmed cleanup and ordinary GPU-visible Code28 recovery.
+not another equivalent Air retry. R54 recovery then completed: disarmed
+full-owner returned Code43/arm0 with exact package817, identity-gated cleanup
+deleted `oem5.inf` and signer, and frozen ordinary EXP377/392 boot returned
+pinned SSH and guarded rescan to one inert APPL0002 Code28. Independent
+baseline: staged0/arm0/SYS0/UMD0/service0, Root/TrustedPublisher signer
+absent, trace env absent, CPU8/storage2/USB6. EXP810 G4 series is closed.
+REVIEW R102 is accepted: compare actual `DXGK_ALLOCATIONINFO` output once
+against WDK26100/Learn and proven G3/CDD allocations, then choose one direct
+runtime diagnostic if no strong difference.
 
 ## 2026-09-25 EXP810/package816 rejects physical-access cause
 
