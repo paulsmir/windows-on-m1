@@ -1,5 +1,24 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP796 preregistered: R79 owned inactive-root FlushTlb
+
+EXP795 still stops in `FlushGpuVaTlb` after R78 range normalization; its
+FlushInput receipt was absent because the writer ran under the fast mutex.
+Commit `16eaf6e2` moves the receipt to PASSIVE_LEVEL. R79 implementation
+`d945ed96` returns success with branch 5 for an owned root without a graph or
+slot, branch 6 for an owned noncurrent original/shadow root, and preserves
+branch 4 rejection for foreign process/root. Real-broker replay was RED
+`C000000D` before SetRootPageTable and GREEN with no broker call after R79;
+the 10 affected tests pass. Full host suite: 1054 tests, 15 failures,
+67 errors, 2 skips from the known dependency/source-layout baseline.
+
+Package799 G1b16 built with 0 warnings/errors; its exact hashes and frozen
+m1n1/Mu are in `.local/experiments/EXP796-g3-flush-owned/hardware-manifest.json`.
+Next gate is one cold run with durable FlushInput branch and host ARM_CONSUMED,
+then CreateCddDevice or a named new stop. On bugcheck, R60 requires durable
+host arm proof, exact package and one bounded same-profile SSH reboot before
+dump/ETL collection; otherwise use GPU-hidden dump-first exact cleanup.
+
 ## 2026-09-25 EXP795: R77 host proof works; FlushGpuVaTlb remains the boundary
 
 Package798 (G1b16; R78 range normalization, R77 observational HVC; R70/R75/R76,
