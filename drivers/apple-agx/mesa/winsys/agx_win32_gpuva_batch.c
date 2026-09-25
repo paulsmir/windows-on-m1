@@ -2,6 +2,7 @@
 #include "agx_win32_asahi_batch.h"
 #include "agx_win32_asahi_bo.h"
 #include "agx_device.h"
+#include "apple_agx_g4_submit.h"
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,8 +10,6 @@
 #ifndef APPLE_AGX_GPUVA_WINSYS
 #error This batch path is only for APPLE_AGX_GPUVA_WINSYS
 #endif
-
-#define AGX_G4_PRIVATE_MAGIC 0x34584741u
 
 /* Versioned UMD proposal for the KMD direct-VA command parser. Native command
  * bytes are duplicated verbatim for validation at DISPATCH_LEVEL; they are not
@@ -22,10 +21,31 @@ typedef struct {
   uint32_t CommandBytes;
   uint32_t Reserved;
   uint64_t CommandVa;
-  unsigned char Native[4096];
+  unsigned char Native[APPLE_AGX_G4_NATIVE_MAX_BYTES];
 } AGX_G4_PRIVATE;
-_Static_assert(offsetof(AGX_G4_PRIVATE,Native)==24,
+_Static_assert(offsetof(AGX_G4_PRIVATE,Native)==
+               sizeof(APPLE_AGX_G4_PRIVATE_HEADER),
                "G4 KMD private command header must be 24 bytes");
+_Static_assert(sizeof(struct drm_asahi_cmd_header)==
+               sizeof(APPLE_AGX_G4_NATIVE_HEADER), "native command header");
+_Static_assert(sizeof(struct drm_asahi_attachment)==
+               sizeof(APPLE_AGX_G4_ATTACHMENT), "native attachment");
+_Static_assert(sizeof(struct drm_asahi_cmd_render)==
+               sizeof(APPLE_AGX_G4_NATIVE_RENDER), "native render layout");
+_Static_assert(offsetof(struct drm_asahi_cmd_render,vdm_ctrl_stream_base)==
+               offsetof(APPLE_AGX_G4_NATIVE_RENDER,VdmCtrlStreamBase), "VDM VA");
+_Static_assert(offsetof(struct drm_asahi_cmd_render,vertex_helper)==
+               offsetof(APPLE_AGX_G4_NATIVE_RENDER,VertexHelper), "vertex helper");
+_Static_assert(offsetof(struct drm_asahi_cmd_render,isp_scissor_base)==
+               offsetof(APPLE_AGX_G4_NATIVE_RENDER,IspScissorBase), "ISP VA");
+_Static_assert(offsetof(struct drm_asahi_cmd_render,depth)==
+               offsetof(APPLE_AGX_G4_NATIVE_RENDER,Depth), "ZLS VA");
+_Static_assert(offsetof(struct drm_asahi_cmd_render,sampler_heap)==
+               offsetof(APPLE_AGX_G4_NATIVE_RENDER,SamplerHeap), "sampler VA");
+_Static_assert(offsetof(struct drm_asahi_cmd_render,bg)==
+               offsetof(APPLE_AGX_G4_NATIVE_RENDER,Bg), "background USC");
+_Static_assert(offsetof(struct drm_asahi_cmd_render,ts_vtx)==
+               offsetof(APPLE_AGX_G4_NATIVE_RENDER,TimestampsVertex), "timestamps");
 
 typedef struct {
   struct agx_bo *Command;
@@ -194,8 +214,8 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   cpu=agx_bo_map(g->Command);
   if(!cpu) return 0;
   memcpy(cpu,packet.Native,packet.CommandBytes);
-  packet.Magic=AGX_G4_PRIVATE_MAGIC;
-  packet.Version=1;
+  packet.Magic=APPLE_AGX_G4_PRIVATE_MAGIC;
+  packet.Version=APPLE_AGX_G4_PRIVATE_VERSION;
   packet.HeaderBytes=(uint16_t)offsetof(AGX_G4_PRIVATE,Native);
   packet.CommandVa=g->Command->va->addr;
   limit=batch->bo_list.bit_count+PIPE_MAX_COLOR_BUFS+8;

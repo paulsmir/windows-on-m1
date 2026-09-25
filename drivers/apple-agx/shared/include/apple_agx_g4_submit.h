@@ -52,6 +52,42 @@ typedef struct {
   unsigned int Flags;
 } APPLE_AGX_G4_ATTACHMENT;
 
+typedef struct {
+  unsigned int Binary, Cfg;
+  unsigned long long Data;
+} APPLE_AGX_G4_HELPER;
+
+typedef struct {
+  unsigned long long Base, CompBase;
+  unsigned int Stride, CompStride;
+} APPLE_AGX_G4_ZLS;
+
+typedef struct {
+  unsigned int Usc, ResourceSpec;
+} APPLE_AGX_G4_BG_EOT;
+
+typedef struct {
+  unsigned int StartHandle, StartOffset, EndHandle, EndOffset;
+} APPLE_AGX_G4_TIMESTAMPS;
+
+/* The current MIT Asahi UAPI render payload. Offset and size assertions in
+ * the production parser and native Mesa build gate future layout changes. */
+typedef struct {
+  unsigned int Flags, IspZlsPixels;
+  unsigned long long VdmCtrlStreamBase;
+  APPLE_AGX_G4_HELPER VertexHelper, FragmentHelper;
+  unsigned long long IspScissorBase, IspDbiasBase, IspOclQryBase;
+  APPLE_AGX_G4_ZLS Depth, Stencil;
+  unsigned long long ZlsCtrl, PppMultisampleCtrl, SamplerHeap;
+  unsigned int PppCtrl;
+  unsigned short WidthPx, HeightPx, Layers, SamplerCount;
+  unsigned char UtileWidthPx, UtileHeightPx, Samples, SampleSizeBytes;
+  unsigned int IspMergeUpperX, IspMergeUpperY;
+  APPLE_AGX_G4_BG_EOT Bg, Eot, PartialBg, PartialEot;
+  unsigned int IspBgObjDepth, IspBgObjVals;
+  APPLE_AGX_G4_TIMESTAMPS TimestampsVertex, TimestampsFragment;
+} APPLE_AGX_G4_NATIVE_RENDER;
+
 typedef enum {
   AppleAgxG4ParseOk = 0,
   AppleAgxG4ParseInvalid,
