@@ -1,5 +1,41 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP795: R77 host proof works; FlushGpuVaTlb remains the boundary
+
+Package798 (G1b16; R78 range normalization, R77 observational HVC; R70/R75/R76,
+caps, signer and Mu frozen) cold-booted once. Host vUART printed
+`ARM_CONSUMED version=1 seq=238631669` before AGX power or broker use.
+Windows then bugchecked `0x10E/0xB`, P3=`C000000D`, again in
+`dxgmms2!CompleteBuildPagingBufferIteration -> FlushGpuVaTlb ->
+CommitVirtualAddressRangeSystemCommand`, before CDD. The same-profile R60
+reboot returned pinned SSH without rearming. Exact oem5/package798 and dump,
+ETL, registry were collected and hash-verified before package cleanup.
+The new dump SHA256 is
+`70af90a16269fa37ca89b28771ce42859a5c4cc283d806340bc012f4ad4cd2b3`;
+CDB `886d6097ea4ad71556918613678e54f156d5fcbcab414c9f18d90a8447a783f5`;
+ETL `2b746379be06441767b11e3223299a6b527d52809233b5f16de489862ddd86c4`
+in `.local/experiments/EXP795-g3-flush-arm/hardware-evidence`.
+
+`Wom1G3FlushInput` was absent because `AdmissionRecordGpuvaG3Flush` ran
+inside `ExAcquireFastMutex` at APC_LEVEL while its registry writer requires
+PASSIVE_LEVEL. Host replay reproduced that missing receipt, then passed after
+commit `16eaf6e2` moved the write after mutex release. **R78 range cause is
+unresolved**: the exact root and VA bounds were not captured. Do not infer
+an inclusive End from this run. R77 is hardware-proven; R60 avoided hidden
+recovery. The ordinary GPU-visible profile is restored with pinned SSH,
+CPU8, storage2/USB7, one inert APPL0002 Code28, staged0 and no arm,
+SYS/UMD/service or signer.
+
+Next causal discriminator: one diagnostic package with the PASSIVE receipt
+fix, preserving package798 behavior. Capture hProcess, raw/resolved root,
+graph root, raw/normalized VA bounds and branch. Replay the **observed** input
+before changing root ownership or range policy. Windows VidMm supplies the
+flush request; KMD owns normalization and process/root validation; m1n1
+owns ASID invalidation and host arm receipt; Mu is unchanged. Smallest
+checkpoint is a durable FlushInput receipt followed by the same or advanced
+VidMm boundary; on bugcheck use R60 only with durable host arm proof and exact
+package, otherwise GPU-hidden dump-first exact cleanup.
+
 ## 2026-09-25 EXP794: system leaf passed; FlushGpuVaTlb is next
 
 Package797 (R76, G1b16; R70/R75 and firmware/caps/signer frozen) cold-booted
