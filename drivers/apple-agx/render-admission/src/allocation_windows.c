@@ -329,7 +329,10 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   info->hAllocation = allocation;
   info->FlagsWddm2.Value = 0u;
   info->FlagsWddm2.CpuVisible = description->CpuVisible != 0u;
-  info->FlagsWddm2.AccessedPhysically = 1u;
+  /* Native class BOs are addressed through process GPUVA. Preserve physical
+   * access only for the legacy/display allocation path. */
+  info->FlagsWddm2.AccessedPhysically =
+      AdmissionWin32AllocationUsesGpuVa(classId) ? 0u : 1u;
   info->pAllocationUsageHint = NULL;
   info->AllocationPriority = D3DDDI_ALLOCATIONPRIORITY_NORMAL;
   info->Flags2.Value = 0u;

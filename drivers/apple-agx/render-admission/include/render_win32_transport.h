@@ -73,6 +73,8 @@ ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32AllocationCreateValidate(
     ADMISSION_ALLOCATION_DESCRIPTION *Description,
     APPLE_AGX_U32 *ClassId, APPLE_AGX_U32 *Flags);
 
+APPLE_AGX_BOOL AdmissionWin32AllocationUsesGpuVa(APPLE_AGX_U32 ClassId);
+
 ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32ContextCreateValidate(
     const void *PrivateData, APPLE_AGX_U32 PrivateDataBytes,
     APPLE_AGX_BOOL SystemOrGdi, APPLE_AGX_BOOL LegacyQualificationAllowed,

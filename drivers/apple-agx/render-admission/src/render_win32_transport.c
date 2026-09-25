@@ -11,6 +11,13 @@
    (APPLE_AGX_U32)AppleAgxWin32BufferGpuRead |                              \
    (APPLE_AGX_U32)AppleAgxWin32BufferGpuWrite)
 
+APPLE_AGX_BOOL AdmissionWin32AllocationUsesGpuVa(APPLE_AGX_U32 ClassId) {
+  return ClassId >= AgxWin32BufferClassGeneral &&
+         ClassId <= AgxWin32BufferClassEncoder
+             ? APPLE_AGX_TRUE
+             : APPLE_AGX_FALSE;
+}
+
 ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32AllocationCreateValidate(
     const void *PrivateData, APPLE_AGX_U32 PrivateDataBytes,
     ADMISSION_ALLOCATION_DESCRIPTION *Description,

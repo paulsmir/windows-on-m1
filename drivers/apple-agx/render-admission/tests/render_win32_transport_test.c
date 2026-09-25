@@ -366,6 +366,10 @@ static void test_class_allocation_contract(void) {
   ADMISSION_ALLOCATION_DESCRIPTION description;
   APPLE_AGX_U32 classId = 0u;
   APPLE_AGX_U32 flags = 0u;
+  assert(!AdmissionWin32AllocationUsesGpuVa(0u));
+  assert(AdmissionWin32AllocationUsesGpuVa(AgxWin32BufferClassGeneral));
+  assert(AdmissionWin32AllocationUsesGpuVa(AgxWin32BufferClassShader));
+  assert(AdmissionWin32AllocationUsesGpuVa(AgxWin32BufferClassEncoder));
   assert(AdmissionWin32AllocationCreateValidate(
       &create, sizeof(create), &description, &classId, &flags) ==
       AdmissionWin32TransportSuccess);
