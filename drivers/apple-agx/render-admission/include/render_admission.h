@@ -429,6 +429,9 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG StandardPresentTraceOverflow;
   ADMISSION_STANDARD_PRESENT_TRACE StandardPresentTrace;
 #endif
+#if defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
+  ADMISSION_BLT_PROBE BltProbe;
+#endif
   UINT PagingFence;
   UINT PagingLastSubmittedFence;
   UINT PagingLastCompletedFence;
@@ -505,6 +508,14 @@ NTSTATUS AdmissionStandardPresentTraceQueryWindows(
 VOID AdmissionStandardPresentTraceRecordWindows(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_STANDARD_PRESENT_EVENT *Event);
+#endif
+#if defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
+NTSTATUS AdmissionBltProbeQueryWindows(
+    _In_ ADMISSION_CONTEXT *Context, _Inout_ ADMISSION_BLT_PROBE *Query);
+VOID AdmissionBltProbeRecordWindows(
+    _In_ ADMISSION_CONTEXT *Context, _In_ const ADMISSION_BLT_EXECUTION *Event);
+#endif
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
 VOID AdmissionUmdRenderTraceArm(_In_ ADMISSION_CONTEXT *Context);
 VOID AdmissionUmdRenderTraceDisarm(_In_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionRenderCorrelationStartWindows(

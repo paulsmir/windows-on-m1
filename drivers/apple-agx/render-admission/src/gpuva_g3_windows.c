@@ -600,6 +600,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommandVirtual(
   if (context->Object.Magic == ADMISSION_OBJECT_CONTEXT_MAGIC &&
       (context->Object.Flags & ADMISSION_CONTEXT_SYSTEM) != 0u)
     return AdmissionGpuvaG3SubmitVirtualPaging(adapter, context, Args);
+#if defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
+  InterlockedIncrement((volatile LONG *)&adapter->BltProbe.VirtualSubmitCalls);
+#endif
   if (context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
       context->Object.Device == NULL ||
       context->Object.Device->Adapter != &adapter->ObjectAdapter ||

@@ -435,6 +435,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommand(
       privateStage == AdmissionPresentPrivateValid ? &presentCommand : NULL);
   if (!Args->Flags.Paging && Args->Flags.Present &&
       privateStage == AdmissionPresentPrivateValid) {
+#if defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
+    InterlockedIncrement(
+        (volatile LONG *)&context->BltProbe.PhysicalPresentSubmits);
+#endif
     route = AdmissionSubmitRoutePresent;
     AdmissionSubmitTraceValueWindows(context, trace,
         AdmissionSubmitTraceRoute, route);

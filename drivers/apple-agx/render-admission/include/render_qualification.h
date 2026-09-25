@@ -9,6 +9,27 @@
 #define ADMISSION_STANDARD_PRESENT_TRACE_MAGIC 0x54504741u /* AGPT */
 #define ADMISSION_STANDARD_PRESENT_TRACE_VERSION 1u
 #define ADMISSION_STANDARD_PRESENT_TRACE_CAPACITY 16u
+#define ADMISSION_BLT_PROBE_MAGIC 0x50424741u /* AGBP */
+#define ADMISSION_BLT_PROBE_VERSION 1u
+#define ADMISSION_BLT_PROBE_CAPACITY 32u
+
+typedef struct _ADMISSION_BLT_EXECUTION {
+  unsigned int Valid, Sequence, Status, SourceSegment;
+  unsigned int DestinationSegment, CacheCleanPerformed, Reserved0, Reserved1;
+  unsigned long long SourceAddress, DestinationAddress, BytesCopied;
+  unsigned long long SourceCpuAddress, DestinationCpuAddress;
+  unsigned long long SourceHostPa, DestinationHostPa;
+  unsigned long long SourceGuestIpa, DestinationGuestIpa;
+  unsigned long long SourceLocalGpuVa, DestinationLocalGpuVa;
+} ADMISSION_BLT_EXECUTION;
+
+typedef struct _ADMISSION_BLT_PROBE {
+  unsigned int Magic, Version, Bytes, CandidateBuild;
+  unsigned int BootGeneration, PresentCalls, PresentBltCalls, VirtualSubmitCalls;
+  unsigned int PhysicalPresentSubmits, CpuBltExecutions, EventCount, Overflow;
+  unsigned long long AdapterToken;
+  ADMISSION_BLT_EXECUTION Events[ADMISSION_BLT_PROBE_CAPACITY];
+} ADMISSION_BLT_PROBE;
 
 typedef enum _ADMISSION_STANDARD_PRESENT_TRACE_COMMAND {
   AdmissionStandardPresentTraceArm = 1u,

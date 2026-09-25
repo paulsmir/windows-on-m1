@@ -984,6 +984,9 @@ typedef struct _ADMISSION_PRESENT_MEMORY_IO {
   ADMISSION_CONTEXT *Adapter;
   ADMISSION_LOCAL_MEMORY_VIEW Source, Destination;
   ULONGLONG ApertureOffset, SourceBytes;
+#if defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
+  ULONGLONG FirstSourceGuestIpa;
+#endif
   UINT SourceSegment;
   NTSTATUS Status;
 } ADMISSION_PRESENT_MEMORY_IO;
@@ -1008,6 +1011,10 @@ static int AdmissionPresentReadMemory(void *Opaque, unsigned long long Offset,
       io->Status = STATUS_INVALID_ADDRESS;
       return 0;
     }
+#if defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
+    if (io->FirstSourceGuestIpa == 0ULL)
+      io->FirstSourceGuestIpa = physical;
+#endif
     chunk = (UINT)PAGE_SIZE - (UINT)(position & (PAGE_SIZE - 1ULL));
     if (chunk > ByteCount)
       chunk = ByteCount;
@@ -1046,6 +1053,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeExecutePresent(
   PVOID scratch;
   NTSTATUS status;
   int completed;
+#if defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
+  ADMISSION_BLT_EXECUTION probe;
+  ADMISSION_SCANOUT_MEMORY_VIEW scanout;
+#endif
   if (runtime == NULL || BytesCopied == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL ||
       !AdmissionPresentBltValidate(Command, Bytes, 1, &command) ||
       !AdmissionPresentBltScratchBytes(&command, &scratchBytes))
@@ -1091,8 +1102,42 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeExecutePresent(
   KeMemoryBarrier();
   ExReleaseFastMutex(&runtime->PagingLock);
   ExFreePoolWithTag(scratch, ADMISSION_MEMORY_RUNTIME_TAG);
-  return completed ? STATUS_SUCCESS :
+  status = completed ? STATUS_SUCCESS :
       NT_SUCCESS(io.Status) ? STATUS_INVALID_PARAMETER : io.Status;
+#if defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
+  RtlZeroMemory(&probe, sizeof(probe));
+  probe.Status = (ULONG)status;
+  probe.SourceSegment = io.SourceSegment;
+  probe.DestinationSegment = destinationSegment;
+  probe.SourceAddress = sourceAddress;
+  probe.DestinationAddress = destinationAddress;
+  probe.BytesCopied = *BytesCopied;
+  probe.DestinationCpuAddress = (ULONGLONG)(ULONG_PTR)io.Destination.CpuAddress;
+  probe.DestinationHostPa = io.Destination.HostPhysicalAddress;
+  probe.DestinationLocalGpuVa = io.Destination.GpuVirtualAddress;
+  if (io.SourceSegment == 2u) {
+    probe.SourceCpuAddress = (ULONGLONG)(ULONG_PTR)io.Source.CpuAddress;
+    probe.SourceHostPa = io.Source.HostPhysicalAddress;
+    probe.SourceLocalGpuVa = io.Source.GpuVirtualAddress;
+  } else {
+    /* Software aperture resolves Windows physical addresses (guest IPAs).
+     * Their host PAs are not known to this CPU copy path. */
+    probe.SourceGuestIpa = io.FirstSourceGuestIpa;
+  }
+  if (NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(Context, &scanout))) {
+    if (destinationAddress >= Context->Memory.Topology.Local.Base)
+      probe.DestinationGuestIpa = scanout.GuestIpaAddress +
+          destinationAddress - Context->Memory.Topology.Local.Base;
+    if (io.SourceSegment == 2u &&
+        sourceAddress >= Context->Memory.Topology.Local.Base)
+      probe.SourceGuestIpa = scanout.GuestIpaAddress +
+          sourceAddress - Context->Memory.Topology.Local.Base;
+  }
+  /* This CPU copy has a memory barrier but no explicit clean to PoC. */
+  probe.CacheCleanPerformed = 0u;
+  AdmissionBltProbeRecordWindows(Context, &probe);
+#endif
+  return status;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStop(

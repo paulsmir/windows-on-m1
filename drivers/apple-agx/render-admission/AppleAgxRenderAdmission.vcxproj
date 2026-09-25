@@ -91,6 +91,11 @@
       <PreprocessorDefinitions>APPLE_AGX_GPUVA_G3_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxBltProbeQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_BLT_PROBE_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(AppleAgxVisibleScanoutQualification)'=='true'">
     <ClCompile>
       <PreprocessorDefinitions>APPLE_AGX_VISIBLE_SCANOUT_QUALIFICATION=1;APPLE_AGX_SUBMIT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -150,6 +155,7 @@
     <ClCompile Include="src\render_completed_output.c" />
     <ClCompile Include="src\render_qualification.c" />
     <ClCompile Include="src\standard_present_windows.c" />
+    <ClCompile Include="src\blt_probe_windows.c" />
     <ClCompile Include="src\render_output_queue.c" />
     <ClCompile Include="src\backend_image_windows.c" />
     <ClCompile Include="src\backend_platform_windows.c" />

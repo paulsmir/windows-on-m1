@@ -133,6 +133,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
       device->Object.Adapter->Magic == ADMISSION_OBJECT_ADAPTER_MAGIC)
     adapter = CONTAINING_RECORD(device->Object.Adapter,
                                 ADMISSION_CONTEXT, ObjectAdapter);
+#if defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
+  if (adapter != NULL) {
+    InterlockedIncrement((volatile LONG *)&adapter->BltProbe.PresentCalls);
+    if (Present != NULL && Present->Flags.Value == 1u)
+      InterlockedIncrement((volatile LONG *)&adapter->BltProbe.PresentBltCalls);
+  }
+#endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   AdmissionStandardPresentTraceRecordWindows(adapter, &traceEvent);
 #endif
@@ -239,7 +246,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyOverlay(HANDLE Overlay) {
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiEscape(
     HANDLE Adapter, const DXGKARG_ESCAPE *Args) {
-#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
   ULONG magic;
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
@@ -249,10 +256,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEscape(
       Args->pPrivateDriverData == NULL || Args->PrivateDriverDataSize < sizeof(magic))
     return STATUS_INVALID_PARAMETER;
   magic = *(const ULONG *)Args->pPrivateDriverData;
+#if defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
+  if (magic == ADMISSION_BLT_PROBE_MAGIC &&
+      Args->PrivateDriverDataSize == sizeof(ADMISSION_BLT_PROBE))
+    return AdmissionBltProbeQueryWindows(
+        context, (ADMISSION_BLT_PROBE *)Args->pPrivateDriverData);
+#endif
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   if (magic == ADMISSION_STANDARD_PRESENT_TRACE_MAGIC &&
       Args->PrivateDriverDataSize == sizeof(ADMISSION_STANDARD_PRESENT_TRACE))
     return AdmissionStandardPresentTraceQueryWindows(
         context, (ADMISSION_STANDARD_PRESENT_TRACE *)Args->pPrivateDriverData);
+#endif
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   if (magic == ADMISSION_RETIREMENT_QUERY_MAGIC &&
       Args->PrivateDriverDataSize == sizeof(ADMISSION_RETIREMENT_QUERY))
