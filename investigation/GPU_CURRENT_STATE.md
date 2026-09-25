@@ -1,5 +1,18 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP804: address and DCP latch repeat; panel content unproven
+
+Unchanged package804/m1n1 `be96bb5e`/Mu `c7ddcfb2` again reached Code0,
+StartDevice12, 2560x1600@59Hz and pinned SSH. ETL has eight CDD
+`BltToPrimary` start/stop records, 158 `DdiPresentDisplayOnly` and 304
+`DxgkPresent` records. `SetVidPnSourceAddress` queued segment2 primary
+`0x1500030000` with Status0; DCP A408/D589 latched swap_id10. The active
+launcher owns the proxy and no safe simultaneous host framebuffer reader was
+available. No panel observation exists, so R88's content/pixel gate remains
+open. Exact package rollback and frozen ordinary boot restored one APPL0002
+Code28, staged0/arm0, CPU8/storage2/USB7. Next implementation target: R86
+range grants and R85 ABI handshake before G5; do not claim first visible frame.
+
 ## 2026-09-25 EXP803/803B: CDD present can complete; intermittent Rotate AV is pre-Apple
 
 Exact package804/m1n1 `be96bb5e`/Mu `c7ddcfb2` and R84 WDT were reused.
