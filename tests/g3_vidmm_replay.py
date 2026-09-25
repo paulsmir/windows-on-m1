@@ -25,6 +25,7 @@ FUNCTIONS = {
         "AdmissionDdiCreateProcess", "AdmissionDdiDestroyProcess",
         "AdmissionGpuvaG3AttachContext", "AdmissionGpuvaG3DetachContext",
         "AdmissionGpuvaG3ResolveTable", "AdmissionDdiSetRootPageTable",
+        "AdmissionGpuvaG3SubmitVirtualPaging",
     ],
     "gpuva_g3_paging_windows.c": [
         "AdmissionG3RejectPaging", "AdmissionG3UpdateParent",
@@ -81,6 +82,7 @@ def generate(revision=None, function_revisions=None):
             if revision is not None and name in (
                     "AdmissionGpuvaG3BrokerTable",
                     "AdmissionGpuvaG3MirrorTable",
+                    "AdmissionGpuvaG3SubmitVirtualPaging",
                     "AdmissionG3FindPagingEdge",
                     "AdmissionG3ResolveLogicalVa",
                     "AdmissionG3SnapshotAperture",

@@ -40,7 +40,7 @@ typedef const void VOID_CONST;
 #define STATUS_INVALID_ADDRESS ((NTSTATUS)0xC0000141)
 #define STATUS_INVALID_DEVICE_STATE ((NTSTATUS)0xC0000184)
 #define STATUS_NOT_SUPPORTED ((NTSTATUS)0xC00000BB)
-#define STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER ((NTSTATUS)0xC01E0003)
+#define STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER ((NTSTATUS)0xC01E0001)
 #define STATUS_INSUFFICIENT_RESOURCES ((NTSTATUS)0xC000009A)
 #define STATUS_DEVICE_HARDWARE_ERROR ((NTSTATUS)0xC0000483)
 #define STATUS_INTEGER_OVERFLOW ((NTSTATUS)0xC0000095)
@@ -62,6 +62,7 @@ typedef const void VOID_CONST;
 #define ADMISSION_OBJECT_CONTEXT_MAGIC 0x434F4E54u
 #define ADMISSION_OBJECT_DEVICE_MAGIC 0x44455643u
 #define ADMISSION_CONTEXT_SYSTEM 1u
+#define ADMISSION_CPU_PACKET_PAGING 1u
 #ifndef ADMISSION_CONTEXT_VALID_FLAGS
 #define ADMISSION_CONTEXT_VALID_FLAGS 0x27u
 #endif
@@ -146,6 +147,15 @@ typedef struct { ADMISSION_PAGING_MARKER Header; APPLE_AGX_PHYSICAL_PAGING_PLAN 
 } ADMISSION_PAGING_RECORD;
 #define ADMISSION_PAGING_MAGIC 0x504d4152u
 #define ADMISSION_PAGING_VERSION 1u
+typedef union { struct { UINT Paging:1,Reserved:31; }; UINT Value; }
+  DXGK_SUBMITCOMMANDFLAGS;
+typedef struct { HANDLE hContext; UINT SubmissionFenceId,NodeOrdinal,EngineOrdinal;
+  DXGK_SUBMITCOMMANDFLAGS Flags; } DXGKARG_SUBMITCOMMAND;
+typedef struct { HANDLE hContext; ULONGLONG DmaBufferVirtualAddress;
+  UINT DmaBufferSize; void *pDmaBufferPrivateData;
+  UINT DmaBufferPrivateDataSize,DmaBufferUmdPrivateDataSize,SubmissionFenceId;
+  DXGK_SUBMITCOMMANDFLAGS Flags; UINT NodeOrdinal,EngineOrdinal;
+} DXGKARG_SUBMITCOMMANDVIRTUAL;
 typedef union { struct { UINT SystemProcess:1; UINT Reserved:31; }; UINT Value; } DXGK_CREATEPROCESSFLAGS;
 typedef struct { DXGK_CREATEPROCESSFLAGS Flags; UINT NumPasid; void *pPasid,*pProcessName; HANDLE hKmdProcess; } DXGKARG_CREATEPROCESS;
 typedef struct { HANDLE hContext; D3DGPU_PHYSICAL_ADDRESS Address; UINT NumEntries; } DXGKARG_SETROOTPAGETABLE;
@@ -169,7 +179,8 @@ typedef struct { UINT Version,Bytes,Branch,RootSegment,ResolveStatus,BrokerStatu
 typedef struct _ADMISSION_CONTEXT ADMISSION_CONTEXT;
 typedef struct _ADMISSION_G3_PROCESS ADMISSION_G3_PROCESS;
 typedef struct _ADMISSION_OBJECT_DEVICE { UINT Magic; void *Adapter; } ADMISSION_OBJECT_DEVICE;
-typedef struct { UINT Magic; ADMISSION_OBJECT_DEVICE *Device; UINT FenceOutstanding; } ADMISSION_OBJECT_CONTEXT;
+typedef struct { UINT Magic,Flags; ADMISSION_OBJECT_DEVICE *Device;
+  UINT FenceOutstanding; } ADMISSION_OBJECT_CONTEXT;
 typedef struct _ADMISSION_DEVICE { ADMISSION_OBJECT_DEVICE Object; LONG Win32Generation; ADMISSION_G3_PROCESS *GpuvaG3Process; } ADMISSION_DEVICE;
 typedef struct { int unused; } ADMISSION_SCHEDULER_CONTEXT;
 typedef struct { int unused; } ADMISSION_PREPATCHED_RENDER;
@@ -183,6 +194,24 @@ struct _ADMISSION_CONTEXT { void *GpuvaG3State; BOOLEAN Started;
   int SchedulerLock,Scheduler;
   struct { REPLAY_APERTURE Aperture; } Memory;
 };
+int AdmissionPagingRecordsValid(const ADMISSION_PAGING_RECORD *,UINT,UINT,UINT);
+static UINT replay_paging_submits,replay_paging_submit_bytes,replay_paging_submit_fence;
+static NTSTATUS AdmissionCpuQueueSubmit(ADMISSION_CONTEXT *adapter,
+    const DXGKARG_SUBMITCOMMAND *args,ULONG kind,const VOID *data,UINT bytes) {
+  (void)adapter;
+  if (!args || kind!=ADMISSION_CPU_PACKET_PAGING || !args->Flags.Paging ||
+      !data || !bytes || bytes%sizeof(ADMISSION_PAGING_RECORD) ||
+      !AdmissionPagingRecordsValid(data,bytes/sizeof(ADMISSION_PAGING_RECORD),
+          ADMISSION_MAX_PAGING_RECORDS,
+          bytes/sizeof(ADMISSION_PAGING_RECORD)*sizeof(ADMISSION_PAGING_MARKER)))
+    return STATUS_INVALID_PARAMETER;
+  ++replay_paging_submits;
+  replay_paging_submit_bytes=bytes;
+  replay_paging_submit_fence=args->SubmissionFenceId;
+  return STATUS_SUCCESS;
+}
+NTSTATUS AdmissionGpuvaG3SubmitVirtualPaging(ADMISSION_CONTEXT *,
+    ADMISSION_RENDER_CONTEXT *,const DXGKARG_SUBMITCOMMANDVIRTUAL *);
 
 static unsigned char *local_cpu;
 static ULONGLONG local_ipa=0x10000000ULL;
@@ -207,7 +236,6 @@ static void MmUnmapIoSpace(void *p,SIZE_T bytes) {(void)p;(void)bytes;}
 #define MmCached 1
 NTSTATUS AdmissionG3ExecuteVirtualPaging(ADMISSION_CONTEXT *,
     const ADMISSION_PAGING_RECORD *);
-int AdmissionPagingRecordsValid(const ADMISSION_PAGING_RECORD *,UINT,UINT,UINT);
 static PHYSICAL_ADDRESS MmGetPhysicalAddress(void *p) { PHYSICAL_ADDRESS a={0};if(local_cpu && (unsigned char *)p>=local_cpu && (unsigned char *)p<local_cpu+local_bytes) a.QuadPart=(long long)(local_ipa+((unsigned char *)p-local_cpu));return a; }
 static NTSTATUS AdmissionMemoryRuntimeScanoutView(ADMISSION_CONTEXT *a,ADMISSION_SCANOUT_MEMORY_VIEW *v) {(void)a;v->GuestIpaAddress=local_ipa;v->Bytes=0x3800000ULL;v->CpuAddress=local_cpu;return STATUS_SUCCESS;}
 static NTSTATUS AdmissionMemoryRuntimeBorrowIo(ADMISSION_CONTEXT *a,APPLE_AGX_MEMORY_IO *io) {(void)a;(void)io;return STATUS_SUCCESS;}
@@ -312,7 +340,7 @@ static void AdmissionRecordGpuvaG3UnpublishedGroups(ADMISSION_CONTEXT *a,const U
 static void AppleAgxSchedulerContextInitialize(ADMISSION_SCHEDULER_CONTEXT *c) {(void)c;}
 static void AdmissionPrepatchedInitialize(ADMISSION_PREPATCHED_RENDER *p) {(void)p;}
 static bool AdmissionPrepatchedActive(ADMISSION_PREPATCHED_RENDER *p) {(void)p;return false;}
-static bool AdmissionObjectsCreateContext(ADMISSION_OBJECT_DEVICE *device,HANDLE runtime,UINT node,UINT affinity,UINT flags,ADMISSION_OBJECT_CONTEXT *context) {(void)runtime;(void)flags;if(node!=0||affinity!=1)return false;context->Magic=ADMISSION_OBJECT_CONTEXT_MAGIC;context->Device=device;return true;}
+static bool AdmissionObjectsCreateContext(ADMISSION_OBJECT_DEVICE *device,HANDLE runtime,UINT node,UINT affinity,UINT flags,ADMISSION_OBJECT_CONTEXT *context) {(void)runtime;if(node!=0||affinity!=1)return false;context->Magic=ADMISSION_OBJECT_CONTEXT_MAGIC;context->Flags=flags;context->Device=device;return true;}
 static bool AdmissionObjectsDestroyContext(ADMISSION_OBJECT_CONTEXT *c) {(void)c;return true;}
 static bool AppleAgxSchedulerCreateContext(int *s,ADMISSION_SCHEDULER_CONTEXT *c,UINT node,UINT affinity) {(void)s;(void)c;return node==0&&affinity==1;}
 static bool AppleAgxSchedulerDestroyContext(int *s,ADMISSION_SCHEDULER_CONTEXT *c) {(void)s;(void)c;return true;}

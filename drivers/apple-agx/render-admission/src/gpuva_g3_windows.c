@@ -515,6 +515,53 @@ BOOLEAN AdmissionGpuvaG3CompleteJob(ADMISSION_CONTEXT *adapter, ULONG fence) {
   return complete;
 }
 
+NTSTATUS AdmissionGpuvaG3SubmitVirtualPaging(
+    ADMISSION_CONTEXT *adapter, ADMISSION_RENDER_CONTEXT *context,
+    const DXGKARG_SUBMITCOMMANDVIRTUAL *args) {
+  const ADMISSION_PAGING_RECORD *records;
+  DXGKARG_SUBMITCOMMAND physical;
+  UINT count;
+  if (adapter == NULL || context == NULL || args == NULL ||
+      !adapter->Started || args->hContext != (HANDLE)context ||
+      context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
+      context->Object.Device == NULL ||
+      context->Object.Device->Adapter != &adapter->ObjectAdapter ||
+      (context->Object.Flags & ADMISSION_CONTEXT_SYSTEM) == 0u ||
+      context->GpuvaG3Process == NULL || context->GpuvaG3Poisoned ||
+      context->GpuvaG3RootIpa == 0ULL ||
+      args->DmaBufferVirtualAddress == 0ULL ||
+      args->DmaBufferVirtualAddress >= (1ULL << 39) ||
+      args->DmaBufferSize == 0u ||
+      args->DmaBufferSize > (1ULL << 39) - args->DmaBufferVirtualAddress ||
+      args->pDmaBufferPrivateData == NULL ||
+      args->DmaBufferUmdPrivateDataSize != 0u ||
+      args->DmaBufferPrivateDataSize == 0u ||
+      args->DmaBufferPrivateDataSize % sizeof(ADMISSION_PAGING_RECORD) != 0u ||
+      args->Flags.Value != 0u || args->NodeOrdinal != 0u ||
+      args->EngineOrdinal != 0u || args->SubmissionFenceId == 0u ||
+      KeGetCurrentIrql() > DISPATCH_LEVEL)
+    return STATUS_INVALID_PARAMETER;
+  count = args->DmaBufferPrivateDataSize / sizeof(ADMISSION_PAGING_RECORD);
+  if (count == 0u || count > ADMISSION_MAX_PAGING_RECORDS ||
+      count > MAXULONG / sizeof(ADMISSION_PAGING_MARKER) ||
+      args->DmaBufferSize != count * sizeof(ADMISSION_PAGING_MARKER))
+    return STATUS_INVALID_PARAMETER;
+  records = (const ADMISSION_PAGING_RECORD *)args->pDmaBufferPrivateData;
+  if (!AdmissionPagingRecordsValid(records, count,
+                                   ADMISSION_MAX_PAGING_RECORDS,
+                                   args->DmaBufferSize))
+    return STATUS_INVALID_PARAMETER;
+  RtlZeroMemory(&physical, sizeof(physical));
+  physical.hContext = args->hContext;
+  physical.SubmissionFenceId = args->SubmissionFenceId;
+  physical.NodeOrdinal = args->NodeOrdinal;
+  physical.EngineOrdinal = args->EngineOrdinal;
+  physical.Flags.Paging = 1u;
+  return AdmissionCpuQueueSubmit(adapter, &physical,
+      ADMISSION_CPU_PACKET_PAGING, records,
+      args->DmaBufferPrivateDataSize);
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommandVirtual(
     HANDLE Adapter, const DXGKARG_SUBMITCOMMANDVIRTUAL *Args) {
   ADMISSION_CONTEXT *adapter = (ADMISSION_CONTEXT *)Adapter;
@@ -527,15 +574,19 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommandVirtual(
       Args->hContext == NULL || Args->DmaBufferVirtualAddress == 0ULL ||
       Args->DmaBufferSize == 0u || Args->DmaBufferUmdPrivateDataSize != 0u ||
       Args->pDmaBufferPrivateData == NULL ||
-      Args->DmaBufferPrivateDataSize != ADMISSION_GDI_DMA_PRIVATE_SIZE ||
-      Args->Flags.Value != 0u || Args->NodeOrdinal != 0u ||
+      Args->NodeOrdinal != 0u ||
       Args->EngineOrdinal != 0u || Args->SubmissionFenceId == 0u ||
       KeGetCurrentIrql() > DISPATCH_LEVEL)
     return STATUS_INVALID_PARAMETER;
   context = (ADMISSION_RENDER_CONTEXT *)Args->hContext;
+  if (context->Object.Magic == ADMISSION_OBJECT_CONTEXT_MAGIC &&
+      (context->Object.Flags & ADMISSION_CONTEXT_SYSTEM) != 0u)
+    return AdmissionGpuvaG3SubmitVirtualPaging(adapter, context, Args);
   if (context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
       context->Object.Device == NULL ||
       context->Object.Device->Adapter != &adapter->ObjectAdapter ||
+      Args->DmaBufferPrivateDataSize != ADMISSION_GDI_DMA_PRIVATE_SIZE ||
+      Args->Flags.Value != 0u ||
       context->GpuvaG3Process == NULL || context->GpuvaG3Poisoned ||
       context->GpuvaG3RootIpa == 0ULL ||
       Args->DmaBufferVirtualAddress >= (1ULL << 39) ||

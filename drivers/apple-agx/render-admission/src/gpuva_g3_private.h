@@ -53,6 +53,9 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *Adapter,
                                            DXGKARG_BUILDPAGINGBUFFER *Args);
 NTSTATUS AdmissionG3ExecuteVirtualPaging(
     ADMISSION_CONTEXT *Adapter, const ADMISSION_PAGING_RECORD *Record);
+NTSTATUS AdmissionGpuvaG3SubmitVirtualPaging(
+    ADMISSION_CONTEXT *Adapter, ADMISSION_RENDER_CONTEXT *Context,
+    const DXGKARG_SUBMITCOMMANDVIRTUAL *Args);
 NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *Adapter,
                                   ADMISSION_RENDER_CONTEXT *Context,
                                   ULONG Fence);

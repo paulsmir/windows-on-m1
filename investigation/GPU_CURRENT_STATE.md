@@ -1,5 +1,34 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP797: Fill Build passed; virtual paging Submit is the boundary
+
+Package800 G1b16 (R80 CPU paging records; frozen caps, signer, m1n1 and Mu)
+built with pinned WDK26100, 0 warnings/errors. Host replay was RED `C00000BB`
+then GREEN for FillVirtual, TransferVirtual local↔system/aperture, monitored
+fence, and multipass; 1054 host tests retain the 15 failures/67 errors/2 skips
+baseline. Cold full-owner boot durably printed `ARM_CONSUMED seq=340782909`.
+`Wom1G3WorkInput` captured the exact first Fill: op9, VA `0x2030000`, size
+`0x580000`, pattern0, DMA/private capacity `0x1000` each. Build returned
+`C01E0001` (legal insufficient DMA buffer) after 34 records; this is not the
+bugcheck. The submitted virtual packet had DMA bytes `0x220`, private bytes
+`0xff0` (34 × 16-byte markers and 34 × 120-byte records), fence1, flags0.
+
+Windows bugchecked `0x119/0x2`, P2=`C000000D`, in
+`dxgmms2!VidSchiSendToExecutionQueue -> VidSchiSubmitPagingCommand`:
+`AdmissionDdiSubmitCommandVirtual` still admits only GDI private size
+`0x51000` and rejects the real paging packet. `CreateCddDevice` remains
+unproven. Dump SHA256 `5b2f7f4754221c72b6f8d36c9b01de55490a21b9bea1c6bb`
+`e6171d4f44013288`, CDB `f0994a755a324fdf048bda4f47cd072211b1bbe34dd4bfcce`
+`015ae856409afaf`, args `9bceb301d3ea3a17b1da2db3b285d26d3663d358885a6b08a0e`
+`28b2bdda06847` in `.local/experiments/EXP797-g3-cpu-paging/hardware-evidence`.
+
+R60 same-profile reboot returned pinned SSH; exact oem5/package800 and arm0
+are known, CPU8/storage2/USB7 alive. Per R54, retain this full-owner guest
+for hash-verified replacement with the next package. Next causal target:
+admit this exact SystemContext `DXGKARG_SUBMITCOMMANDVIRTUAL` packet into the
+existing ordered CPU paging queue and report fence only after execution.
+No firmware, caps, signer or recovery change.
+
 ## 2026-09-25 EXP796: R79 FlushTlb passed; VidMm Fill is the next boundary
 
 Package799 G1b16 (R79 plus PASSIVE receipt correction `16eaf6e2`; frozen

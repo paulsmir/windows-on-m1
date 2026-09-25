@@ -629,8 +629,8 @@ int main(void) {
     fill.FillVirtual.FillSizeInBytes=0x580000;
     fill.FillVirtual.FillPattern=0x3198b746;
     do {
-      unsigned char dma[64*sizeof(ADMISSION_PAGING_MARKER)]={0};
-      unsigned char private_data[64*sizeof(ADMISSION_PAGING_RECORD)]={0};
+      unsigned char dma[0x1000]={0};
+      unsigned char private_data[0x1000]={0};
       NTSTATUS status;
       UINT records;
       fill.pDmaBuffer=dma;
@@ -647,6 +647,28 @@ int main(void) {
       assert(AdmissionPagingRecordsValid(
           (ADMISSION_PAGING_RECORD *)private_data,records,64,
           records*sizeof(ADMISSION_PAGING_MARKER)));
+      if (passes==0) {
+        DXGKARG_SUBMITCOMMANDVIRTUAL submission={0};
+        submission.hContext=cc.hContext;
+        submission.DmaBufferVirtualAddress=0x2021000;
+        submission.DmaBufferSize=records*sizeof(ADMISSION_PAGING_MARKER);
+        submission.pDmaBufferPrivateData=private_data;
+        submission.DmaBufferPrivateDataSize=
+            records*sizeof(ADMISSION_PAGING_RECORD);
+        submission.SubmissionFenceId=1;
+        assert(records==34 && submission.DmaBufferSize==0x220 &&
+               submission.DmaBufferPrivateDataSize==0xff0);
+        expect_ok("EXP797 virtual paging Submit packet",
+            AdmissionGpuvaG3SubmitVirtualPaging(&adapter,
+                (ADMISSION_RENDER_CONTEXT *)cc.hContext,&submission));
+        assert(replay_paging_submits==1 &&
+               replay_paging_submit_bytes==0xff0 &&
+               replay_paging_submit_fence==1);
+        --submission.DmaBufferPrivateDataSize;
+        assert(AdmissionGpuvaG3SubmitVirtualPaging(&adapter,
+            (ADMISSION_RENDER_CONTEXT *)cc.hContext,&submission)==
+            STATUS_INVALID_PARAMETER);
+      }
       for (UINT i=0;i<records;i++)
         expect_ok("R80 projected EXP796 Fill CPU execution",
             AdmissionG3ExecuteVirtualPaging(&adapter,
