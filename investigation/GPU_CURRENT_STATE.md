@@ -1,5 +1,37 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP803/803B: CDD present can complete; intermittent Rotate AV is pre-Apple
+
+Exact package804/m1n1 `be96bb5e`/Mu `c7ddcfb2` and R84 WDT were reused.
+EXP803 (kernel-dump setting with absent dedicated backing) had pinned SSH,
+APPL0002 Code0, driver30.0.804.0, and ETL with four completed
+`DxgkCddBltToPrimary` pairs, 78 `DdiPresentDisplayOnly` pairs, and 159
+`DxgkPresent` pairs. Apple source-address receipt reports segment2,
+2560x1600/stride10240, Status0 and active scanout; DCP latched swap_id10.
+These prove CDD present admission and scanout setup, but do not independently
+prove the first rendered Apple frame or its screen content.
+
+EXP803B used a reboot-verified 6144-MB pagefile and kernel dump2, and
+reproduced EXP802's 0x7E/C0000005 at `dxgmms2!VIDMM_GLOBAL::Rotate+0x30`.
+Kernel dump SHA256 `c1212fac47f9ce20d8437a16fad355820228d3b32a63ee8aff1466b6d979afe0`:
+`VIDMM_GLOBAL_ALLOC` pool tag Vi01 has a null +0xf0/+0xf8 pair consumed by
+Rotate's heap virtual call. Failing ETL associates the 16,384,000-byte
+`CpuVisible|Cached|SectionSupplied|DoDPrimary|Shareable` CDD shadow with a
+Microsoft software display adapter; its CPU-visible 5.608-GB segment is
+enumerated before Apple AGX. The AV precedes Apple display-adapter
+registration. Thus the proposed Apple segment/host-aperture/translation fix
+is rejected; no owner-backed KMD fix is known. EXP803 and EXP803B differ only
+in dump backing but the same CDD allocation succeeds once and fails once.
+
+R60 returned pinned SSH and all dump/ETL/registry evidence was hash-verified.
+Exact oem5 cleanup, dump/pagefile restoration, R84 ordinary boot and one
+guarded inert rescan returned one APPL0002 Code28, staged0/arm0 and no
+AppleAgx binary/service/signer, CPU8/storage2/USB7. The series is closed.
+Next causal target is pre-Apple software-adapter CDD heap initialization or
+ordering; do not alter Apple KMD segment flags without new evidence. R65 G4
+merge can be planned from proven G3/CDD admission. R86 range grants remain a
+separate mandatory step before G5's first GPUVA frame.
+
 ## 2026-09-25 EXP802: CDD presentation reached; CPU-visible Rotate AV is next
 
 Package804 G1b16 retained the 510-file verified shared-reserve KMD source.
@@ -22,27 +54,6 @@ R60 returned pinned SSH, evidence was hash-verified, and exact oem5/package804
 was removed. Frozen ordinary recovery with R84 WDT plus one inert devnode
 rescan now passes pinned SSH, CPU8/storage2/USB7, exactly one APPL0002 Code28,
 staged0/arm0/SYS0/UMD0/service0/signer0. The EXP801/802 series is closed.
-Next causal target: the CPU-visible segment mapping used by CDD shadow-buffer
-presentation. Attribute the null/invalid `Rotate` operand from this dump and
-the supported Windows VidMm/KMD segment contract before changing code. R86
-range-based broker grants remain required before G5; R85 ABI manifest and
-handshake remain a separate process contract.
-
-2026-09-25 R87 offline refinement: pinned WDK 26100 and Microsoft Learn agree
-that `SupportsCpuHostAperture` excludes `CpuVisible`; both KMD segment queries
-zero that flag, set local `CpuVisible`, and publish the checked 56-MiB guest-IPA
-CPU base. CDD shadow describes `CpuVisible=1`; the G1b16 build uses the default
-allocation hint 0, allowing aperture or local placement. Exact EXP802 ARM64
-disassembly shows `MapInCpuVisibleSegment` builds a non-null MDL and calls
-`Rotate` even on the direct CPU-visible path. `Rotate+0x30` reads a null pointer
-loaded from its second argument at +0xf0; the triage dump lacks that object's
-memory. Thus the four proposed causes are not proven and no segment/flag fix is
-preregistered. Next discriminator is a kernel/full memory dump of the same
-fault with the exact descriptor/allocation placement receipt, then one fix.
-Current J313-WIN.local resolves to 192.168.1.37, but its ED25519/ECDSA SSH
-fingerprints differ from the pinned known_hosts entries; L41/L43 are present
-and no launcher is active. Do not stage or launch EXP803 until guest identity
-is re-established from an independent trusted source.
 
 ## 2026-09-25 EXP801B: shared reserve passes 0xbb0; broker CAPACITY at 0xbf0
 
