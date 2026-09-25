@@ -112,6 +112,7 @@ APPLE_AGX_BOOL AppleAgxG4BindNativeObjects(
   if (View == 0 || Objects == 0 || View->Render == 0 ||
       View->RenderBytes != sizeof(render) || View->Attachments == 0 ||
       View->AttachmentCount != 1u ||
+      View->ColorFormat != APPLE_AGX_G4_COLOR_BGRA8 ||
       ObjectCount < APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)
     return APPLE_AGX_FALSE;
   memcpy(&render, View->Render, sizeof(render));

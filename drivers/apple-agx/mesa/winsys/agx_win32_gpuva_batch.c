@@ -237,6 +237,10 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   if(!b || !g || !render || b->Failed || b->Gpuva.Terminal ||
      !batch->draws || batch->cdm.bo || g->Submitted || g->Rejected ||
      !batch->vdm.bo ||
+     batch->key.nr_cbufs!=1 || !batch->key.cbufs[0].texture ||
+     batch->key.cbufs[0].format!=PIPE_FORMAT_B8G8R8A8_UNORM ||
+     batch->key.zsbuf.texture || render->samples!=1 ||
+     (render->sample_size_B!=8 && render->sample_size_B!=16) ||
      batch->bo_list.bit_count>UINT32_MAX-(PIPE_MAX_COLOR_BUFS+17))
     return 0;
   if(g->Entered && !AgxWin32AsahiBatchLeave(batch)) goto fail;
@@ -256,7 +260,8 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   if(!cpu || !AgxWin32AsahiGpuvaBo(b,g->Command)) goto fail;
   memcpy(cpu,packet.Native,packet.Header.Base.CommandBytes);
   if(!AppleAgxG4ComposeHeaderV2(&packet.Header,&native_render,
-      g->Command->va->addr,packet.Header.Base.CommandBytes,ranges)) goto fail;
+      g->Command->va->addr,packet.Header.Base.CommandBytes,
+      APPLE_AGX_G4_COLOR_BGRA8,ranges)) goto fail;
   limit=batch->bo_list.bit_count+PIPE_MAX_COLOR_BUFS+17;
   refs=calloc(limit,sizeof(*refs));
   if(!refs) goto fail;

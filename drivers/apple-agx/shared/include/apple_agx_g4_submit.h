@@ -30,6 +30,7 @@
 #define APPLE_AGX_G4_RENDER 0u
 #define APPLE_AGX_G4_COMPUTE 1u
 #define APPLE_AGX_G4_FRAGMENT_ATTACHMENTS 3u
+#define APPLE_AGX_G4_COLOR_BGRA8 1u
 
 typedef struct {
   unsigned int Magic;
@@ -157,11 +158,13 @@ static inline int AppleAgxG4ComposeHeaderV2(
     APPLE_AGX_G4_PRIVATE_HEADER_V2 *header,
     const APPLE_AGX_G4_NATIVE_RENDER *render,
     unsigned long long command_va, unsigned int command_bytes,
+    unsigned int color_format,
     const APPLE_AGX_G4_PROCESS_RANGE
         ranges[APPLE_AGX_G4_PROCESS_RANGE_COUNT]) {
   unsigned int required[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
   unsigned int i, j;
   if (!header || !ranges || !AppleAgxG4ProcessRequiredBytes(render, required) ||
+      color_format != APPLE_AGX_G4_COLOR_BGRA8 ||
       command_va < 0x10000ULL || command_va >= (1ULL << 39) ||
       !command_bytes || command_bytes > APPLE_AGX_G4_NATIVE_MAX_BYTES ||
       command_bytes > (1ULL << 39) - command_va) return 0;
@@ -181,7 +184,9 @@ static inline int AppleAgxG4ComposeHeaderV2(
   header->Base.Version = APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA;
   header->Base.HeaderBytes = (unsigned short)sizeof(*header);
   header->Base.CommandBytes = command_bytes;
-  header->Base.Reserved = 0u;
+  /* In the private v2 envelope this word identifies the sole color target
+   * format. Native Asahi command bytes remain unchanged. */
+  header->Base.Reserved = color_format;
   header->Base.CommandVa = command_va;
   for (i = 0u; i < APPLE_AGX_G4_PROCESS_RANGE_COUNT; ++i)
     header->Process[i] = ranges[i];
@@ -209,6 +214,7 @@ typedef struct {
   unsigned int RenderBytes;
   unsigned int AttachmentCount;
   unsigned long long CommandVa;
+  unsigned int ColorFormat;
   APPLE_AGX_G4_PROCESS_RANGE Process[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
 } APPLE_AGX_G4_SUBMIT_VIEW;
 

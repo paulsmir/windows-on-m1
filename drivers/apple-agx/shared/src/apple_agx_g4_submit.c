@@ -106,11 +106,14 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmit(
       header.HeaderBytes != (header.Version ==
           APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA ?
           sizeof(header_v2) : sizeof(header)) ||
-      header.Reserved != 0u ||
+      (header.Version == APPLE_AGX_G4_PRIVATE_VERSION &&
+       header.Reserved != 0u) ||
       header.CommandVa != dma_va || header.CommandBytes != dma_bytes ||
       umd_private_bytes != (unsigned int)header.HeaderBytes + dma_bytes)
     return AppleAgxG4ParseInvalid;
   if (header.Version == APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA) {
+    if (header.Reserved != APPLE_AGX_G4_COLOR_BGRA8)
+      return AppleAgxG4ParseUnsupported;
     if (umd_private_bytes < sizeof(header_v2))
       return AppleAgxG4ParseInvalid;
     memcpy(&header_v2, bytes, sizeof(header_v2));
@@ -193,6 +196,8 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmit(
   view->RenderBytes = native_header.Size;
   view->AttachmentCount = attachments;
   view->CommandVa = dma_va;
+  view->ColorFormat = header.Version ==
+      APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA ? header.Reserved : 0u;
   if (header.Version == APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA)
     memcpy(view->Process, header_v2.Process, sizeof(view->Process));
   return AppleAgxG4ParseOk;

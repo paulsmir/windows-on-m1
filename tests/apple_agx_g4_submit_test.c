@@ -113,6 +113,7 @@ int main(void) {
     native.header.Base.HeaderBytes = sizeof(native.header);
     native.header.Base.CommandBytes = sizeof(native) - sizeof(native.header);
     native.header.Base.CommandVa = 0x50000ULL;
+    native.header.Base.Reserved = APPLE_AGX_G4_COLOR_BGRA8;
     native.render.Type = APPLE_AGX_G4_RENDER;
     native.render.Size = sizeof(native.render_payload);
     native.render_payload = packet.render_payload;
@@ -128,7 +129,13 @@ int main(void) {
         0x50000ULL, native.header.Base.CommandBytes, mapped, &calls,
         &view) == AppleAgxG4ParseOk);
     assert(view.Process[0].Va == 0x100000ULL &&
-           view.Process[8].Va == 0x2100000ULL);
+           view.Process[8].Va == 0x2100000ULL &&
+           view.ColorFormat == APPLE_AGX_G4_COLOR_BGRA8);
+    changed = native;
+    changed.header.Base.Reserved = 0u;
+    assert(AppleAgxG4ParseSubmit(&changed, sizeof(changed), sizeof(changed),
+        0x50000ULL, changed.header.Base.CommandBytes, mapped, &calls,
+        &view) == AppleAgxG4ParseUnsupported);
     changed = native;
     changed.render_payload.WidthPx = 2560u;
     changed.render_payload.HeightPx = 1600u;

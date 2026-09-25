@@ -122,6 +122,7 @@ int main(void) {
       packet.Header.Base.HeaderBytes = sizeof(packet.Header);
       packet.Header.Base.CommandBytes = sizeof(packet) - sizeof(packet.Header);
       packet.Header.Base.CommandVa = 0x20000ULL;
+      packet.Header.Base.Reserved = APPLE_AGX_G4_COLOR_BGRA8;
       memcpy(packet.Header.Process, ranges, sizeof(ranges));
       packet.AttachCommand.Type = APPLE_AGX_G4_FRAGMENT_ATTACHMENTS;
       packet.AttachCommand.Size = sizeof(packet.Attachment);

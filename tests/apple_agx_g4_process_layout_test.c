@@ -29,14 +29,14 @@ int main(void) {
     ranges[i].Bytes = bytes[i];
   }
   assert(AppleAgxG4ComposeHeaderV2(&header, &render, 0x20000ULL,
-                                    248u, ranges));
+                                    248u, APPLE_AGX_G4_COLOR_BGRA8, ranges));
   assert(header.Base.Version == APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA &&
          header.Base.HeaderBytes == sizeof(header) &&
          header.Base.CommandVa == 0x20000ULL &&
          header.Process[2].Bytes == 0x400000u);
   ranges[4].Va = ranges[2].Va;
   assert(!AppleAgxG4ComposeHeaderV2(&header, &render, 0x20000ULL,
-                                     248u, ranges));
+                                     248u, APPLE_AGX_G4_COLOR_BGRA8, ranges));
   ranges[4].Va = 0x1000000ULL + 4ULL * 0x1000000ULL;
   render.WidthPx = 0;
   assert(!AppleAgxG4ProcessRequiredBytes(&render, bytes));
