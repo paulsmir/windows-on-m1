@@ -51,13 +51,14 @@ typedef struct { uint64_t Size; unsigned CpuVisible, Reserved; } ADMISSION_ALLOC
 typedef struct { ADMISSION_ALLOCATION_DESCRIPTION Description; } ALLOCATION_OBJECT;
 typedef struct { ALLOCATION_OBJECT Object; unsigned Win32ClassId, Win32Flags; }
     ADMISSION_ALLOCATION_HANDLE;
-typedef struct { int Memory; } ADMISSION_CONTEXT;
+typedef struct { int Memory; void *PhysicalDeviceObject; } ADMISSION_CONTEXT;
 typedef struct { unsigned Value, SegmentId0; } SEGMENT_HINT;
 typedef struct { unsigned Value, CpuVisible, AccessedPhysically; } WDDM_FLAGS;
 typedef struct {
   void *pPrivateDriverData;
   unsigned PrivateDriverDataSize;
-  unsigned Alignment;
+  union { unsigned Alignment; struct { uint16_t MinimumPageSize,
+                                     RecommendedPageSize; }; };
   size_t Size, PitchAlignedSize;
   SEGMENT_HINT HintedBank, PreferredSegment;
   union { unsigned SupportedReadSegmentSet, MmuSet; };
@@ -107,6 +108,13 @@ static uint64_t AdmissionAllocationPitchAlignedSize(uint64_t size,
 static int AdmissionWin32AllocationUsesGpuVa(unsigned class_id) {
   return class_id != 0u;
 }
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
+static void AdmissionRecordG1bAllocationInput(void *device,
+                                               unsigned minimum,
+                                               unsigned recommended) {
+  (void)device; (void)minimum; (void)recommended;
+}
+#endif
 static void *ExAllocatePool2(unsigned flags, size_t bytes, unsigned tag) {
   (void)flags; (void)tag;
   return malloc(bytes);
@@ -125,7 +133,7 @@ static int AdmissionAllocationCreate(const ADMISSION_ALLOCATION_DESCRIPTION *des
 
 MAIN = r"""
 int main(void) {
-  ADMISSION_CONTEXT context = {1};
+  ADMISSION_CONTEXT context = {1, NULL};
   INPUT native = {1, 1, 0x10000};
   DXGK_ALLOCATIONINFO info = {0};
   DXGKARG_CREATEALLOCATION args = {0};
@@ -164,6 +172,28 @@ class G4SegmentPlacementReplay(unittest.TestCase):
             source = Path(directory) / "allocation.c"
             binary = Path(directory) / "allocation"
             source.write_text(SHIM + allocation_body() + MAIN)
+            subprocess.run([os.environ.get("CC", "clang"), "-std=c11",
+                            "-Wall", "-Wextra", "-Werror", str(source),
+                            "-o", str(binary)], check=True)
+            subprocess.run([str(binary)], check=True)
+
+    def test_g1b_16kb_gpuva_page_sizes_leave_legacy_alignment(self):
+        shim = SHIM.replace("#define ADMISSION_GPUVA_G1B_PAGE_PROFILE 0",
+                            "#define ADMISSION_GPUVA_G1B_PAGE_PROFILE 16")
+        shim += ("\n#define DXGK_PAGESIZE_16KB 2u\n"
+                 "#define ADMISSION_G1B_MINIMUM_PAGE DXGK_PAGESIZE_16KB\n"
+                 "#define ADMISSION_G1B_RECOMMENDED_PAGE DXGK_PAGESIZE_16KB\n")
+        main = MAIN.replace("info.Size == 0x10000 && info.Alignment == 0x10000",
+                            "info.Size == 0x10000 && info.Alignment != 0x10000 "
+                            "&& info.MinimumPageSize == DXGK_PAGESIZE_16KB "
+                            "&& info.RecommendedPageSize == DXGK_PAGESIZE_16KB")
+        main = main.replace("assert(info.SupportedReadSegmentSet == ADMISSION_CPU_VISIBLE_SEGMENT_SET);",
+                            "assert(info.SupportedReadSegmentSet == ADMISSION_CPU_VISIBLE_SEGMENT_SET);\n"
+                            "  assert(info.Alignment == ADMISSION_ALLOCATION_ALIGNMENT);")
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "allocation.c"
+            binary = Path(directory) / "allocation"
+            source.write_text(shim + allocation_body() + main)
             subprocess.run([os.environ.get("CC", "clang"), "-std=c11",
                             "-Wall", "-Wextra", "-Werror", str(source),
                             "-o", str(binary)], check=True)

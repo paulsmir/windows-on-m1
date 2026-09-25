@@ -300,12 +300,13 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   allocation->QualificationCookie = correlated
       ? ADMISSION_UMD_CORRELATION_COOKIE : 0u;
 #endif
-#if ADMISSION_GPUVA_G1B_ALLOCATION_HINT != 0
-  info->MinimumPageSize = ADMISSION_G1B_MINIMUM_PAGE;
-  info->RecommendedPageSize = ADMISSION_G1B_RECOMMENDED_PAGE;
-#else
-  info->Alignment = (UINT)ADMISSION_ALLOCATION_ALIGNMENT;
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
+  if (AdmissionWin32AllocationUsesGpuVa(classId)) {
+    info->MinimumPageSize = ADMISSION_G1B_MINIMUM_PAGE;
+    info->RecommendedPageSize = ADMISSION_G1B_RECOMMENDED_PAGE;
+  } else
 #endif
+    info->Alignment = (UINT)ADMISSION_ALLOCATION_ALIGNMENT;
   info->Size = (SIZE_T)aligned;
   /* Neither reported segment advertises PitchAlignment. */
   info->PitchAlignedSize = (SIZE_T)AdmissionAllocationPitchAlignedSize(
