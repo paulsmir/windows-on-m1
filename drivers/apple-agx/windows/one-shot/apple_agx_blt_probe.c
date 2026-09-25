@@ -5,49 +5,53 @@
 #include "render_qualification.h"
 
 int wmain(void) {
-  DWORD index;
-  for (index = 0u; index < 32u; ++index) {
-    DISPLAY_DEVICEW display = {0};
-    D3DKMT_OPENADAPTERFROMHDC open = {0};
+  D3DKMT_ENUMADAPTERS2 enumeration = {0};
+  D3DKMT_ADAPTERINFO *adapters;
+  NTSTATUS status;
+  UINT index;
+  BOOL found = FALSE;
+  status = D3DKMTEnumAdapters2(&enumeration);
+  if (status < 0 || enumeration.NumAdapters == 0u ||
+      enumeration.NumAdapters > 64u) {
+    fprintf(stderr, "BLT_PROBE enumeration status=0x%08lx capacity=%lu\n",
+            (ULONG)status, enumeration.NumAdapters);
+    return 1;
+  }
+  adapters = (D3DKMT_ADAPTERINFO *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
+      enumeration.NumAdapters * sizeof(*adapters));
+  if (adapters == NULL)
+    return 1;
+  enumeration.pAdapters = adapters;
+  status = D3DKMTEnumAdapters2(&enumeration);
+  if (status < 0) {
+    fprintf(stderr, "BLT_PROBE enumeration fill status=0x%08lx\n", (ULONG)status);
+    HeapFree(GetProcessHeap(), 0, adapters);
+    return 1;
+  }
+  for (index = 0u; index < enumeration.NumAdapters; ++index) {
     D3DKMT_CLOSEADAPTER close = {0};
     D3DKMT_ESCAPE escape = {0};
     ADMISSION_BLT_PROBE probe = {0};
-    HDC dc;
-    NTSTATUS status;
     UINT eventIndex;
-    display.cb = sizeof(display);
-    if (!EnumDisplayDevicesW(NULL, index, &display, 0))
-      break;
-    if ((display.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP) == 0 ||
-        (display.StateFlags & DISPLAY_DEVICE_MIRRORING_DRIVER) != 0)
-      continue;
-    dc = CreateDCW(display.DeviceName, display.DeviceName, NULL, NULL);
-    if (dc == NULL)
-      continue;
-    open.hDc = dc;
-    status = D3DKMTOpenAdapterFromHdc(&open);
-    if (status < 0 || open.hAdapter == 0u) {
-      DeleteDC(dc);
-      continue;
-    }
     probe.Magic = ADMISSION_BLT_PROBE_MAGIC;
     probe.Version = ADMISSION_BLT_PROBE_VERSION;
     probe.Bytes = sizeof(probe);
-    escape.hAdapter = open.hAdapter;
+    escape.hAdapter = adapters[index].hAdapter;
     escape.Type = D3DKMT_ESCAPE_DRIVERPRIVATE;
     escape.pPrivateDriverData = &probe;
     escape.PrivateDriverDataSize = sizeof(probe);
     status = D3DKMTEscape(&escape);
-    close.hAdapter = open.hAdapter;
+    close.hAdapter = adapters[index].hAdapter;
     (void)D3DKMTCloseAdapter(&close);
-    DeleteDC(dc);
     if (status < 0 || probe.Magic != ADMISSION_BLT_PROBE_MAGIC ||
         probe.Version != ADMISSION_BLT_PROBE_VERSION ||
         probe.Bytes != sizeof(probe))
       continue;
-    wprintf(L"BLT_PROBE display=%ls build=%u boot=%u adapter=0x%llx present=%u present_blt=%u virtual_submit=%u physical_present_submit=%u cpu_blt=%u events=%u overflow=%u\n",
-            display.DeviceName, probe.CandidateBuild, probe.BootGeneration,
-            probe.AdapterToken,
+    found = TRUE;
+    wprintf(L"BLT_PROBE luid=%08x:%08x build=%u boot=%u adapter=0x%llx present=%u present_blt=%u virtual_submit=%u physical_present_submit=%u cpu_blt=%u events=%u overflow=%u\n",
+            (UINT)adapters[index].AdapterLuid.HighPart,
+            adapters[index].AdapterLuid.LowPart,
+            probe.CandidateBuild, probe.BootGeneration, probe.AdapterToken,
             probe.PresentCalls, probe.PresentBltCalls, probe.VirtualSubmitCalls,
             probe.PhysicalPresentSubmits, probe.CpuBltExecutions,
             probe.EventCount, probe.Overflow);
@@ -65,9 +69,10 @@ int wmain(void) {
              event->SourceLocalGpuVa, event->DestinationLocalGpuVa,
              event->BytesCopied, event->CacheCleanPerformed);
     }
-    return 0;
   }
-  fputs("BLT_PROBE no Apple display adapter answered the read-only escape\n",
-        stderr);
+  HeapFree(GetProcessHeap(), 0, adapters);
+  if (found)
+    return 0;
+  fputs("BLT_PROBE no Apple adapter answered the read-only escape\n", stderr);
   return 1;
 }
