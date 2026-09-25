@@ -317,6 +317,37 @@ int main(void) {
   flush.FlushTlb.StartVirtualAddress=0;
   flush.FlushTlb.EndVirtualAddress=0x10000;
   expect_ok("Learn FlushTlb",AdmissionGpuvaG3BuildPagingBuffer(&adapter,&flush));
+  flush.FlushTlb.StartVirtualAddress=0x12345;
+  flush.FlushTlb.EndVirtualAddress=0x1ffff;
+  expect_ok("R78 inclusive unaligned FlushTlb",AdmissionGpuvaG3BuildPagingBuffer(&adapter,&flush));
+  assert(broker.last_flush_start==0x10000 && broker.last_flush_end==0x20000);
+  assert(last_flush_receipt.Branch==1 &&
+         last_flush_receipt.InputStart==0x12345 &&
+         last_flush_receipt.InputEnd==0x1ffff &&
+         last_flush_receipt.GraphRootIpa==
+             ((ADMISSION_G3_PROCESS *)sys.hKmdProcess)->Graph.RootIpa &&
+         last_flush_receipt.RootOffset==root.Address.SegmentOffset);
+  flush.FlushTlb.StartVirtualAddress=0;
+  flush.FlushTlb.EndVirtualAddress=0;
+  expect_ok("R78 full FlushTlb",AdmissionGpuvaG3BuildPagingBuffer(&adapter,&flush));
+  assert(broker.last_flush_start==0 && broker.last_flush_end==0);
+  assert(last_flush_receipt.Branch==2);
+  flush.FlushTlb.StartVirtualAddress=0x30000;
+  flush.FlushTlb.EndVirtualAddress=0x20000;
+  expect_ok("R78 reversed FlushTlb fallback",AdmissionGpuvaG3BuildPagingBuffer(&adapter,&flush));
+  assert(broker.last_flush_start==0 && broker.last_flush_end==0);
+  assert(last_flush_receipt.Branch==3);
+  flush.FlushTlb.StartVirtualAddress=(1ULL<<39)-0x4000;
+  flush.FlushTlb.EndVirtualAddress=(1ULL<<39)+0x1000;
+  expect_ok("R78 upper bound clamp",AdmissionGpuvaG3BuildPagingBuffer(&adapter,&flush));
+  assert(broker.last_flush_start==(1ULL<<39)-0x4000 &&
+         broker.last_flush_end==(1ULL<<39));
+  flush.FlushTlb.StartVirtualAddress=0x1000;
+  flush.FlushTlb.EndVirtualAddress=0x1ffff;
+  flush.FlushTlb.RootPageTableAddress.SegmentOffset=0x4000;
+  assert(AdmissionGpuvaG3BuildPagingBuffer(&adapter,&flush)==STATUS_INVALID_PARAMETER);
+  assert(last_flush_receipt.Branch==4);
+  flush.FlushTlb.RootPageTableAddress=root.Address;
   expect_ok("DestroyContext",AdmissionDdiDestroyContext(cc.hContext));
   expect_ok("DestroyProcess",AdmissionDdiDestroyProcess(&adapter,sys.hKmdProcess));
   expect_ok("Learn ordinary CreateProcess",AdmissionDdiCreateProcess(&adapter,&user));

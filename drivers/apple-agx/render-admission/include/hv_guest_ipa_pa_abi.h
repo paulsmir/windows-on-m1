@@ -5,6 +5,8 @@ typedef unsigned int hv_guest_ipa_pa_u32;
 typedef unsigned long long hv_guest_ipa_pa_u64;
 
 #define HV_GUEST_IPA_PA_HVC_IMMEDIATE 0x4d31u
+#define HV_GPUVA_ARM_CONSUMED_HVC_IMMEDIATE 0x4d32u
+#define HV_GPUVA_ARM_CONSUMED_VERSION 1u
 #define HV_GUEST_IPA_PA_VERSION 1u
 #define HV_GUEST_IPA_PA_TRANSLATE 1u
 #define HV_GUEST_IPA_PA_MAX_PAGES 64u

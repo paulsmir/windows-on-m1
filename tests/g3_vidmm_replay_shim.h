@@ -120,6 +120,7 @@ typedef struct { ULONGLONG GuestIpaBase,Size; REPLAY_ADL *Adl; } ADMISSION_PHYSI
 typedef enum { AppleAgxMemoryResultOk=0 } APPLE_AGX_MEMORY_RESULT;
 typedef struct { ULONGLONG GuestIpaAddress,Bytes; void *CpuAddress; } ADMISSION_SCANOUT_MEMORY_VIEW;
 typedef struct { UINT Version,Bytes,Branch,Level,Index,PageTablePageSize,Status,UpdateMode,GraphLastStatus,GraphUncertain; ULONGLONG TableAddress,TableIpa,PteFlags,PageAddress,ChildIpa; UINT TableFirstNonzeroIndex,TableAddBranch; ULONGLONG TableFirstNonzeroWord,BrokerTableIpa; } ADMISSION_G3_PAGING_FAILURE;
+typedef struct { UINT Version,Bytes,Branch,RootSegment,ResolveStatus,BrokerStatus; ULONGLONG Process,RootOffset,ResolvedRootIpa,GraphRootIpa,InputStart,InputEnd,FlushStart,FlushEnd; } ADMISSION_G3_FLUSH_RECEIPT;
 typedef struct _ADMISSION_CONTEXT ADMISSION_CONTEXT;
 typedef struct _ADMISSION_G3_PROCESS ADMISSION_G3_PROCESS;
 typedef struct _ADMISSION_OBJECT_DEVICE { UINT Magic; void *Adapter; } ADMISSION_OBJECT_DEVICE;
@@ -156,6 +157,8 @@ typedef struct {
   uint64_t slots[HV_AGX_GPUVA_V5_SLOTS][2];
   uint64_t blocked_ipa;
   UINT commands;
+  uint64_t last_flush_start, last_flush_end;
+  UINT flush_commands;
 } REPLAY_BROKER;
 static struct hv_agx_gpuva_v5 gpuva_v5;
 static bool request_powered = true;
@@ -210,6 +213,12 @@ static bool ReplayWrite32(void *opaque,unsigned offset,unsigned value) {
   bool ok=hv_agx_gpuva_v5_mmio(&b->wire,offset-AGX_GPUVA_V5_OFFSET,&word,true,2,
                                gpuva_execute,NULL);
   if (ok && offset==AGX_GPUVA_V5_OFFSET+AGX_GPUVA_V5_DOORBELL) ++b->commands;
+  if (ok && offset==AGX_GPUVA_V5_OFFSET+AGX_GPUVA_V5_DOORBELL &&
+      b->wire.request.Command==AGX_GPUVA_V5_FLUSH_TLB) {
+    b->last_flush_start=b->wire.request.LogicalIpa[0];
+    b->last_flush_end=b->wire.request.LogicalIpa[1];
+    ++b->flush_commands;
+  }
   return ok;
 }
 static bool ReplayRead64(void *opaque,unsigned offset,unsigned long long *value) {
@@ -226,6 +235,8 @@ static void AdmissionRecordGpuvaG3ContextInput(PDEVICE_OBJECT p,DXGKARG_CREATECO
 static void AdmissionRecordGpuvaG3DmaContext(PDEVICE_OBJECT p,DXGKARG_CREATECONTEXT *a) {(void)p;(void)a;}
 static ADMISSION_G3_PAGING_FAILURE last_paging_failure;
 static void AdmissionRecordGpuvaG3PagingFailure(ADMISSION_CONTEXT *a,ADMISSION_G3_PAGING_FAILURE *f) {(void)a;if(f->Branch)last_paging_failure=*f;}
+static ADMISSION_G3_FLUSH_RECEIPT last_flush_receipt;
+static void AdmissionRecordGpuvaG3Flush(ADMISSION_CONTEXT *a,const ADMISSION_G3_FLUSH_RECEIPT *r) {(void)a;last_flush_receipt=*r;}
 static void AdmissionRecordGpuvaG3UnpublishedGroups(ADMISSION_CONTEXT *a,const ULONGLONG *counts) {(void)a;(void)counts;}
 static void AppleAgxSchedulerContextInitialize(ADMISSION_SCHEDULER_CONTEXT *c) {(void)c;}
 static void AdmissionPrepatchedInitialize(ADMISSION_PREPATCHED_RENDER *p) {(void)p;}

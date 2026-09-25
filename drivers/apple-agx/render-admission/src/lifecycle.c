@@ -1,6 +1,9 @@
 #include "render_admission.h"
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #include "apple_agx_gpuva_g3_caps.h"
+#include "hv_guest_ipa_pa_abi.h"
+#include <intrin.h>
+#pragma intrinsic(__hvc)
 #if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 16 && \
     ADMISSION_GPUVA_G1B_PAGE_PROFILE != 64
 #error G3 VidMm path requires a 16- or 64-KiB local segment profile
@@ -12,8 +15,21 @@ C_ASSERT(DXGK_INVALID_MMU_ID == APPLE_AGX_GPUVA_G3_INVALID_MMU_ID);
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION) || \
     defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #include "apple_agx_render_template_vm_slot.h"
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+static BOOLEAN AdmissionReportGpuvaArmConsumed(ADMISSION_CONTEXT *context) {
+  ULONGLONG payload;
+  if (context == NULL || context->Win32BootGeneration == 0u)
+    return FALSE;
+  payload = ((ULONGLONG)HV_GPUVA_ARM_CONSUMED_VERSION << 32) |
+            context->Win32BootGeneration;
+  KeMemoryBarrier();
+  return __hvc(HV_GPUVA_ARM_CONSUMED_HVC_IMMEDIATE, payload) ==
+         HV_GUEST_IPA_PA_STATUS_SUCCESS;
+}
+#endif
 static BOOLEAN AdmissionConsumeGpuvaArm(ADMISSION_CONTEXT *context,
-                                        PCWSTR value_name) {
+                                        PCWSTR value_name,
+                                        BOOLEAN report_consumption) {
   HANDLE key = NULL;
   UNICODE_STRING name;
   ULONG bytes = 0u;
@@ -41,6 +57,13 @@ static BOOLEAN AdmissionConsumeGpuvaArm(ADMISSION_CONTEXT *context,
   if (NT_SUCCESS(status))
     status = ZwFlushKey(key);
   ZwClose(key);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (NT_SUCCESS(status) && report_consumption &&
+      !AdmissionReportGpuvaArmConsumed(context))
+    return FALSE;
+#else
+  UNREFERENCED_PARAMETER(report_consumption);
+#endif
   return NT_SUCCESS(status);
 }
 #endif
@@ -113,7 +136,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   *NumberOfVideoPresentSources = 0;
   *NumberOfChildren = 0;
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
-  if (!AdmissionConsumeGpuvaArm(context, L"B1Armed")) {
+  if (!AdmissionConsumeGpuvaArm(context, L"B1Armed", FALSE)) {
     AdmissionRecordB1Qualification(
         context, 0u, STATUS_NOT_SUPPORTED, STATUS_NOT_SUPPORTED,
         0u, 0u, 0ULL,
@@ -124,7 +147,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   }
 #endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  if (!AdmissionConsumeGpuvaArm(context, L"G3Armed")) {
+  if (!AdmissionConsumeGpuvaArm(context, L"G3Armed", TRUE)) {
     AdmissionRecordStartStage(context, AdmissionStartEntered,
                               STATUS_NOT_SUPPORTED);
     return STATUS_NOT_SUPPORTED;

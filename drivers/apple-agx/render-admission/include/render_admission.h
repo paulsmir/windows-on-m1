@@ -777,6 +777,14 @@ void AdmissionRecordGpuvaG3PagingInput(
     _In_opt_ const DXGKARG_BUILDPAGINGBUFFER *Args, ULONG CurrentIrql);
 void AdmissionRecordGpuvaG3PagingResult(
     _In_opt_ ADMISSION_CONTEXT *Context, NTSTATUS Status);
+typedef struct _ADMISSION_G3_FLUSH_RECEIPT {
+  ULONG Version, Bytes, Branch, RootSegment, ResolveStatus, BrokerStatus;
+  ULONGLONG Process, RootOffset, ResolvedRootIpa, GraphRootIpa;
+  ULONGLONG InputStart, InputEnd, FlushStart, FlushEnd;
+} ADMISSION_G3_FLUSH_RECEIPT;
+void AdmissionRecordGpuvaG3Flush(
+    _In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_G3_FLUSH_RECEIPT *Receipt);
 typedef struct _ADMISSION_G3_PAGING_FAILURE {
   ULONG Version, Bytes, Branch, Level, Index, PageTablePageSize;
   ULONG Status, UpdateMode, GraphLastStatus, GraphUncertain;

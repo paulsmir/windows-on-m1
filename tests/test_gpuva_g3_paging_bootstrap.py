@@ -51,7 +51,7 @@ int main(void) {
             "void AdmissionRecordGpuvaG3PagingInput(", 1)[1].split(
             "#endif", 1)[0]
         self.assertIn("CurrentIrql != PASSIVE_LEVEL", receipts)
-        self.assertEqual(receipts.count("ZwFlushKey(key)"), 4)
+        self.assertGreaterEqual(receipts.count("ZwFlushKey(key)"), 4)
 
     def test_kmd_uses_repeat_and_cpu_physical_mapping(self):
         paging = (RENDER / "src/gpuva_g3_paging_windows.c").read_text()

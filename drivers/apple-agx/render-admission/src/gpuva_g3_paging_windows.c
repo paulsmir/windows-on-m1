@@ -283,20 +283,52 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
   state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
   if (state == NULL) return STATUS_INVALID_DEVICE_STATE;
   if (args->Operation == DXGK_OPERATION_FLUSH_TLB) {
+    ADMISSION_G3_FLUSH_RECEIPT receipt;
+    ULONGLONG start = args->FlushTlb.StartVirtualAddress;
+    ULONGLONG end = args->FlushTlb.EndVirtualAddress;
+    const ULONGLONG va_limit = 1ULL << 39;
+    RtlZeroMemory(&receipt, sizeof(receipt));
+    receipt.Version = 1u;
+    receipt.Bytes = sizeof(receipt);
+    receipt.Process = (ULONGLONG)(ULONG_PTR)args->FlushTlb.hProcess;
+    receipt.RootSegment = args->FlushTlb.RootPageTableAddress.SegmentId;
+    receipt.RootOffset = args->FlushTlb.RootPageTableAddress.SegmentOffset;
+    receipt.InputStart = start;
+    receipt.InputEnd = end;
+    if (start == 0ULL && end == 0ULL) {
+      receipt.Branch = 2u; /* Explicit full-ASID flush. */
+    } else if (start >= end || start >= va_limit) {
+      receipt.Branch = 3u; /* Anomalous range: full-ASID flush. */
+      start = end = 0ULL;
+    } else {
+      receipt.Branch = 1u;
+      start &= ~0x3fffULL;
+      end = end >= va_limit ? va_limit : (end + 0x3fffULL) & ~0x3fffULL;
+    }
+    receipt.FlushStart = start;
+    receipt.FlushEnd = end;
     ExAcquireFastMutex(&state->Lock);
     process = AdmissionGpuvaG3FindProcess(state, args->FlushTlb.hProcess);
     address.GpuPhysical = args->FlushTlb.RootPageTableAddress;
     status = AdmissionGpuvaG3ResolveTable(adapter, &address,
         DXGK_PAGETABLEUPDATE_GPU_PHYSICAL, &root_ipa);
+    receipt.ResolveStatus = (ULONG)status;
+    if (NT_SUCCESS(status)) receipt.ResolvedRootIpa = root_ipa;
     if (process != NULL && NT_SUCCESS(status))
       status = AdmissionGpuvaG3BrokerTable(
           process, root_ipa, FALSE, &root_ipa);
+    receipt.BrokerStatus = (ULONG)status;
+    if (process != NULL) receipt.GraphRootIpa = process->Graph.RootIpa;
     if (process == NULL || !NT_SUCCESS(status) || process->Poisoned ||
-        root_ipa != process->Graph.RootIpa ||
-        !AppleAgxGpuvaG3GraphFlush(&process->Graph,
-            args->FlushTlb.StartVirtualAddress,
-            args->FlushTlb.EndVirtualAddress)) status = STATUS_INVALID_PARAMETER;
-    else status = STATUS_SUCCESS;
+        root_ipa != process->Graph.RootIpa) {
+      receipt.Branch = 4u; /* Ownership or root resolution failure. */
+      status = STATUS_INVALID_PARAMETER;
+    }
+    AdmissionRecordGpuvaG3Flush(adapter, &receipt);
+    if (NT_SUCCESS(status) &&
+        !AppleAgxGpuvaG3GraphFlush(&process->Graph, start, end)) {
+      status = STATUS_DEVICE_HARDWARE_ERROR;
+    }
     ExReleaseFastMutex(&state->Lock);
     return status;
   }
