@@ -1,5 +1,18 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 R95 hardware-gate decision for EXP810
+
+Claude accepted exact package813 for one Air discriminator. The earlier R95
+gate requiring full VDM indirect-reference decoding before hardware is
+superseded: Microsoft's GpuMmu model isolates process mappings with GPU page
+tables and handles invalid VA as a GPU fault; Asahi's `gpu.rs` fault handler
+reads fault info and recovers. The broker replay proves the mapping mechanism,
+while the exact Mesa stream remains unobserved. EXP810 uses unchanged
+package813, frozen full-owner m1n1/Mu, R84 WDT and R54/R60 recovery; collect
+UMD Present/submit and KMD fault/retire receipts, hold LOOK_NOW at least 90 s,
+then decode any captured stream against grants offline. See
+`G4_EXP208_FIELD_SOURCES.md` for the correction and retained limits.
+
 ## 2026-09-25 G4 offline checkpoint before EXP810
 
 AGX4 v2 now carries nine VidMm process ranges, a BGRA8 format tag and native

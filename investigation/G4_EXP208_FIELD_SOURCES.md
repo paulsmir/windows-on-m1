@@ -100,3 +100,16 @@ UMD), decode its VDM chain to terminate, validate every indirect byte range
 against the published VA graph, then replay the same packet through the KMD
 builder, real C broker and Present/fence retire path. Package813 remains
 build-only until that proof or a narrower source-backed hardware hypothesis.
+
+## R95 hardware-gate correction — 2026-09-25
+
+Claude's R95 decision accepts EXP810 with exact package813 before an offline
+decode of every VDM indirect reference. Microsoft's [GpuMmu model](https://learn.microsoft.com/en-us/windows-hardware/drivers/display/gpummu-model)
+assigns process VA mapping to VidMm/UMD and treats an invalid GPU VA access as a
+GPU fault; it does not require the KMD to parse a UMD command stream. Asahi
+`drivers/gpu/drm/asahi/gpu.rs` `handle_fault` reads fault info, marks pending
+events and invokes recovery. The real-C broker replay establishes that its
+model creates PTEs only for registered mappings, not that the exact Mesa draw
+was decoded. Therefore the exact VDM bytes and firmware response are measured
+in EXP810, with post-run offline stream/grant analysis. This correction does
+not reinterpret the earlier synthetic replay as an actual draw.
