@@ -1,5 +1,27 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP810/package814 diagnostic checkpoint
+
+Exact package814 reached pinned J313-WIN SSH, APPL0002 Code0/oem5,
+CPU8/storage2/USB6, ARM_CONSUMED seq328848970, broker init0/epoch1 and
+DCP A408/D589 latch9. SYS/UMD/INF hashes match the preregistered manifest.
+All 133 collected CreateDevice attempts reached CreateContextVirtualCb,
+CreatePagingQueueCb, CreateSynchronizationObject2Cb and ScreenInitialize with
+S_OK, yet returned outer `0x80070057`. No UMD Present, G4 submit, fence
+retirement or firmware fault was observed. LOOK_NOW was intentionally absent
+for this diagnostic run; panel and RDP were not measured. Six guest evidence
+files match their SHA-256 list in `.local/experiments/EXP810-g4-package814/
+hardware-evidence/EXP814-evidence` (list SHA256 7a2301f7).
+
+REVIEW R99's exclusive two-callback hypothesis is rejected by this receipt;
+R99a's withdrawal of the nonexistent `hContext` field remains accepted.
+Source path `agx_d3d10_windows.cpp` shows that after ScreenInitialize the
+outer E_INVALIDARG is propagated from `Runtime.LastScreenError` when native
+Asahi screen creation fails. The next discriminator is a diagnostic receipt
+for its allocation/VA callbacks, especially Allocate, Reserve, Map and Lock;
+the exact failing callback is not yet identified. Do not run another package
+unchanged. The package814 guest remains live under R54 with pinned SSH.
+
 ## 2026-09-25 EXP810/package813 first Air checkpoint
 
 Exact package813 reached pinned SSH, one APPL0002 Code0, eight CPUs, two
