@@ -327,6 +327,12 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   info->SupportedReadSegmentSet = ADMISSION_LOCAL_SEGMENT_SET;
 #endif
   info->SupportedWriteSegmentSet = info->SupportedReadSegmentSet;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* Virtual allocations use this union as an MMU mask. The G3 contract
+   * advertises one GPU MMU at index 0; placement remains in the local segment. */
+  if (AdmissionWin32AllocationUsesGpuVa(classId))
+    info->MmuSet = 1u;
+#endif
   info->EvictionSegmentSet = 0u;
   info->hAllocation = allocation;
   info->FlagsWddm2.Value = 0u;

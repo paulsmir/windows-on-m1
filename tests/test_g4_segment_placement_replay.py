@@ -60,7 +60,8 @@ typedef struct {
   unsigned Alignment;
   size_t Size, PitchAlignedSize;
   SEGMENT_HINT HintedBank, PreferredSegment;
-  unsigned SupportedReadSegmentSet, SupportedWriteSegmentSet;
+  union { unsigned SupportedReadSegmentSet, MmuSet; };
+  unsigned SupportedWriteSegmentSet;
   unsigned EvictionSegmentSet;
   void *hAllocation;
   WDDM_FLAGS FlagsWddm2;
@@ -97,6 +98,15 @@ static int AdmissionAllocationAlign64K(uint64_t size, uint64_t *aligned) {
   *aligned = (size + 0xffffu) & ~0xffffULL;
   return size && *aligned;
 }
+static uint64_t AdmissionAllocationPitchAlignedSize(uint64_t size,
+                                                    unsigned supported) {
+  (void)size;
+  assert(!supported);
+  return 0;
+}
+static int AdmissionWin32AllocationUsesGpuVa(unsigned class_id) {
+  return class_id != 0u;
+}
 static void *ExAllocatePool2(unsigned flags, size_t bytes, unsigned tag) {
   (void)flags; (void)tag;
   return malloc(bytes);
@@ -127,7 +137,7 @@ int main(void) {
   assert(info.PreferredSegment.SegmentId0 == 2);
   assert(info.Size == 0x10000 && info.Alignment == 0x10000);
   assert(info.FlagsWddm2.CpuVisible == 1);
-  assert(info.SupportedReadSegmentSet == ADMISSION_LOCAL_SEGMENT_SET);
+  assert(info.MmuSet == 1u);
   assert(info.SupportedWriteSegmentSet == ADMISSION_LOCAL_SEGMENT_SET);
   ExFreePoolWithTag(info.hAllocation, ADMISSION_POOL_TAG);
   native.Size = 0x4000;
