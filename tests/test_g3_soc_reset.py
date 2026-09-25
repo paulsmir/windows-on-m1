@@ -53,7 +53,9 @@ class SocResetTest(unittest.TestCase):
                 self.assertLess(script.index("soc-reset.py"), script.index("chainload.py"))
 
     def test_g3_r60_launcher_selects_arm_consumption_image(self):
-        script = (LAUNCHERS / "full-owner-r60.sh").read_text()
+        path = LAUNCHERS / "full-owner-r60.sh"
+        self.assertTrue(os.access(path, os.X_OK), "serial guard executes the launcher directly")
+        script = path.read_text()
         self.assertIn("m1n1-g3-arm-consumed.macho", script)
         self.assertLess(script.index("soc-reset.py"), script.index("chainload.py"))
 
