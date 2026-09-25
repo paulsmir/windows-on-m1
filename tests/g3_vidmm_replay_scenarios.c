@@ -116,13 +116,17 @@ int main(void) {
     flush.Operation=DXGK_OPERATION_FLUSH_TLB;
     flush.FlushTlb.hProcess=sys.hKmdProcess;
     flush.FlushTlb.RootPageTableAddress=root.Address;
-    flush.FlushTlb.StartVirtualAddress=0;
-    flush.FlushTlb.EndVirtualAddress=0x10000;
+    /* EXP796 receipts the actual pre-root VidMm interval. */
+    flush.FlushTlb.StartVirtualAddress=0x2030000;
+    flush.FlushTlb.EndVirtualAddress=0x25b0000;
     UINT flushes=broker.flush_commands;
     expect_ok("R79 flush before SetRootPageTable",
         AdmissionGpuvaG3BuildPagingBuffer(&adapter,&flush));
     assert(broker.flush_commands==flushes);
     assert(last_flush_receipt.Branch==5);
+    assert(last_flush_receipt.RootOffset==0 &&
+           last_flush_receipt.InputStart==0x2030000 &&
+           last_flush_receipt.InputEnd==0x25b0000);
   }
   AdmissionDdiSetRootPageTable(&adapter,&root);
   assert(!((ADMISSION_RENDER_CONTEXT *)cc.hContext)->GpuvaG3Poisoned);
