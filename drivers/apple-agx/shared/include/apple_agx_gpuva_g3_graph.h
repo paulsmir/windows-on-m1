@@ -44,6 +44,8 @@ bool AppleAgxGpuvaG3GraphFlush(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long StartVa, unsigned long long EndVa);
 bool AppleAgxGpuvaG3GraphContainsRange(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long StartVa, unsigned int Bytes);
+bool AppleAgxGpuvaG3GraphContainsRangeAccess(APPLE_AGX_GPUVA_G3_GRAPH *,
+    unsigned long long StartVa, unsigned int Bytes, bool Write);
 bool AppleAgxGpuvaG3GraphTranslateVa(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long GpuVa, unsigned long long *GuestIpa);
 bool AppleAgxGpuvaG3GraphBeginJob(APPLE_AGX_GPUVA_G3_GRAPH *,

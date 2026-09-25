@@ -329,12 +329,30 @@ bool AppleAgxGpuvaG3GraphTranslateVa(APPLE_AGX_GPUVA_G3_GRAPH *graph,
 
 bool AppleAgxGpuvaG3GraphContainsRange(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     unsigned long long start_va, unsigned int bytes) {
-  unsigned long long va, end, ignored;
+  return AppleAgxGpuvaG3GraphContainsRangeAccess(
+      graph, start_va, bytes, false);
+}
+
+bool AppleAgxGpuvaG3GraphContainsRangeAccess(
+    APPLE_AGX_GPUVA_G3_GRAPH *graph, unsigned long long start_va,
+    unsigned int bytes, bool write) {
+  unsigned long long va, end;
+  APPLE_AGX_GPUVA_G3_NODE *root_edge, *middle_edge, *leaf;
   if (!bytes || start_va >= (1ULL << 39) ||
-      bytes > (1ULL << 39) - start_va) return false;
+      bytes > (1ULL << 39) - start_va || !graph || !graph->Created ||
+      graph->Uncertain) return false;
   end = start_va + bytes;
-  for (va = start_va & ~(G3_PAGE - 1u); va < end; va += G3_PAGE)
-    if (!AppleAgxGpuvaG3GraphTranslateVa(graph, va, &ignored)) return false;
+  for (va = start_va & ~(G3_PAGE - 1u); va < end; va += G3_PAGE) {
+    root_edge = find_edge(graph->Parents, graph->RootIpa,
+                          (unsigned int)((va >> 36) & 7u));
+    if (!root_edge) return false;
+    middle_edge = find_edge(graph->Parents, root_edge->AuxIpa,
+                            (unsigned int)((va >> 25) & 2047u));
+    if (!middle_edge) return false;
+    leaf = find_edge(graph->Leaves, middle_edge->AuxIpa,
+                     (unsigned int)((va >> 14) & 2047u));
+    if (!leaf || !leaf->AuxIpa || (write && !leaf->Writable)) return false;
+  }
   return true;
 }
 

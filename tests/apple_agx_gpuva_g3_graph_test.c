@@ -80,8 +80,18 @@ int main(void) {
                                         0x20000000ULL,true));
   assert(AppleAgxGpuvaG3GraphUpdateLeaf(&graph,0x10008000ULL,8u,
                                         0x20004000ULL,false));
+  assert(AppleAgxGpuvaG3GraphContainsRangeAccess(
+      &graph, 0x20000u, 0x4000u, false));
+  assert(!AppleAgxGpuvaG3GraphContainsRangeAccess(
+      &graph, 0x20000u, 0x4000u, true));
   assert(AppleAgxGpuvaG3GraphUpdateLeaf(&graph,0x10008000ULL,8u,
                                         0x20000000ULL,true));
+  assert(AppleAgxGpuvaG3GraphContainsRangeAccess(
+      &graph, 0x20000u, 0x4000u, true));
+  assert(!AppleAgxGpuvaG3GraphContainsRangeAccess(
+      &graph, 0x23fffu, 2u, true));
+  assert(!AppleAgxGpuvaG3GraphContainsRangeAccess(
+      &graph, (1ULL << 39) - 1u, 2u, false));
   assert(AppleAgxGpuvaG3GraphFlush(&graph,0u,0u));
   assert(AppleAgxGpuvaG3GraphContainsRange(&graph, 0x20000u, 0x1000u));
   assert(!AppleAgxGpuvaG3GraphContainsRange(&graph, 0x24000u, 0x1000u));
