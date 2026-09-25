@@ -1,5 +1,32 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP809: no Apple Present/submit in Code0 boot
+
+Exact G3 package809 added a read-only Blt execution probe. The Apple adapter
+answered its escape with build809/boot token233385636 after Code0 and DCP
+swap_id10 latch: Present0, PresentBlt0, non-system virtual submit0, physical
+Present submit0, CPU Blt0. `SetVidPnSourceAddress` V2 selected segment2
+`0x1500030000`/offset `0x30000`, CPU `0xffffe6f184030000`, PA and IPA
+`0x9bc030000`, Status0; m1n1 measured 4,096,000 zero pixels at that PA before
+swap and 15s after latch. Thus this boot has no Apple CPU Blt destination to
+compare or flush. A second DXG adapter LUID `00005cf9` refused the Apple
+escape; its identity and the CDD producer's adapter remain unproven. DWM and
+Explorer run in active console session1. ETL names 8 CDD Blt, 126
+PresentDisplayOnly and 250 Present records, but Windows wall-clock/CIM boot
+timestamps conflict, so their boot and adapter attribution is unresolved.
+The [Microsoft KMDOD DriverEntry contract](https://learn.microsoft.com/en-us/windows-hardware/drivers/display/driverentry-of-display-miniport-driver)
+limits `DxgkDdiPresentDisplayOnly` to KMDOD;
+do not add it to this full WDDM miniport as a guessed fix.
+
+LOOK_NOW 12:42:32Z and LOOK_DONE 12:43:06Z were recorded; operator's panel
+description is pending. All current evidence is in
+`.local/experiments/EXP809-r91-blt`. Exact package cleanup and frozen ordinary
+R84 plus guarded rescan restored pinned Code28/staged0/arm0, CPU8/storage2/USB6
+with no AppleAgx binary, service or signer. Next causal target is the Windows
+producer: identify DWM/CDD adapter binding and compare any CPU-visible primary
+bytes with the selected host PA before changing routing or cache behavior.
+R86 remains saved at `wip/r86-range-grants`.
+
 ## 2026-09-25 EXP808: selected primary remains zero 15 seconds after latch
 
 With unchanged package807/Mu and diagnostic m1n1 `0aa309d2`, the selected
