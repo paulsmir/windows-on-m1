@@ -13,15 +13,16 @@ exists in that trace, and no KMD queue fault snapshot was recorded. The
 first-frame checkpoint is rejected **before native submit**; this run cannot
 judge VDM, AGX firmware or PTE fault behavior. Guest ETL, EVTX, registry and
 UMD log were collected and verified in `.local/experiments/EXP810-g4-package813/
-hardware-evidence`. LOOK_NOW started 19:15:30Z and passed 90 seconds;
-physical panel observation and LOOK_DONE remain pending. The exact package813
-guest is still live under R54, so no cleanup/package swap has occurred.
+hardware-evidence`. LOOK_NOW started 19:15:30Z and LOOK_DONE was written
+19:40:50Z as `no-operator-report`: **operator panel observation absent**.
+No pixel verdict is inferred. The exact package813 guest is still live under
+R54, so no cleanup/package swap has occurred.
 
 Next causal target is the first failing UMD initialization callback after
 CreateContextVirtual. Diagnostic-only source commit `6329ddb9` records
 CreatePagingQueueCb, CreateSynchronizationObject2Cb and screen-init results
 without changing their branches. Source-matched package814 is built and
-hash-verified but not installed. Once LOOK_DONE arrives, use the R54 exact
+hash-verified but not installed. LOOK_DONE is now present; use the R54 exact
 identity/evidence guard before a single package814 diagnostic run; R60 applies
 if pinned SSH is lost. Frozen ordinary GPU-visible Code28 remains recovery.
 
