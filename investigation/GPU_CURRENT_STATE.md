@@ -16,12 +16,14 @@ work. The real broker accepts only complete 16-KiB leaf groups, so a single
 Count1 input and completion/invalidation cases to real-broker replay. Do not
 repeat package791 unchanged. Analysis `.local/experiments/EXP788-g3-count1-
 receipt/hardware-evidence/EXP788-analysis.json` SHA256
-`43e01905189592d3e68d6f35007a53538df02e2dd5f3283b862ff286665b661c`.
+`960ef6979f191e63023ebcbba2e245bd0934b8c38730f08b7f240dec1aa1efe9`.
 
 GPU-hidden dump-first returned pinned SSH/CPU8, APPL0002 absent, arm absent,
 exact package791 oem5.inf/SYS/UMD; dump/ETL/receipts were collected and
 hash-verified before cleanup. R69 stage → cold boot was followed. Exact
-package cleanup and ordinary Code28 rollback are in progress.
+package791 cleanup and frozen ordinary EXP377/392 recovered pinned SSH/CPU8,
+storage2/USB7, one inert APPL0002 Code28, staged0, SYS/UMD/service/signer0,
+arm0.
 
 ## 2026-09-24 EXP787: level0 4-KiB Count1 update refused before PTE inspection
 
