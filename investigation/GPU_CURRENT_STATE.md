@@ -13,8 +13,9 @@ and 268 Present events around the second boot marker; their destination and
 order relative to the host snapshot are not proven. One pre-swap zero sample
 does not distinguish a CDD shadow copy from a late write or cache visibility.
 R90a operator correction attributes EXP806 photo texture to water damage;
-the photo proves only physical scanout routing. EXP807 LOOK_DONE was recorded,
-but no panel description was supplied. Package807 was removed exactly, and
+the photo proves only physical scanout routing. R91 records the operator's
+EXP807 observation: the panel was black during LOOK_NOW, before LOOK_DONE.
+Package807 was removed exactly, and
 frozen ordinary R84 plus one guarded rescan restored Code28, staged0/arm0,
 CPU8/storage2/USB7. Next smallest discriminator is a read-only delayed sample
 of that same PA after latch and CDD activity. Do not change format or add a
