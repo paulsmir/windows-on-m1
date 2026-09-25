@@ -652,6 +652,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceAddress(
     CONST DXGKARG_SETVIDPNSOURCEADDRESS *SetVidPnSourceAddress) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
   ADMISSION_SOURCE_ADDRESS_RECEIPT *receipt = NULL;
+  ADMISSION_LOCAL_MEMORY_VIEW selectedMemory;
+  ADMISSION_SCANOUT_MEMORY_VIEW scanoutMemory;
   NTSTATUS status = STATUS_INVALID_PARAMETER;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   ADMISSION_STANDARD_PRESENT_EVENT traceEvent;
@@ -679,7 +681,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceAddress(
    * call or deferred work is introduced into this potentially DIRQL path. */
   if (InterlockedCompareExchange(&context->SourceAddressReceiptState, 1, 0) == 0) {
     receipt = &context->SourceAddressReceipt;
-    receipt->Version = 1u;
+    receipt->Version = 2u;
     receipt->Bytes = sizeof(*receipt);
     receipt->Irql = KeGetCurrentIrql();
     receipt->ArgsPresent = SetVidPnSourceAddress != NULL;
@@ -699,6 +701,37 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceAddress(
     receipt->DisplayActive = context->DisplayActive;
     receipt->SourceVisible = context->SourceVisible;
     receipt->ScanoutState = AdmissionScanoutReceiptState(context);
+    receipt->SelectedMapStatus = (ULONG)STATUS_INVALID_ADDRESS;
+    receipt->CacheCleanPerformed = 0u;
+    if (SetVidPnSourceAddress != NULL &&
+        SetVidPnSourceAddress->PrimarySegment ==
+            ADMISSION_MEMORY_LOCAL_SEGMENT &&
+        SetVidPnSourceAddress->PrimaryAddress.QuadPart > 0 &&
+        NT_SUCCESS(AdmissionMemoryRuntimeResolveLocal(
+            context,
+            (ULONGLONG)SetVidPnSourceAddress->PrimaryAddress.QuadPart,
+            APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, 0ULL,
+            &selectedMemory)) &&
+        NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(context,
+                                                      &scanoutMemory)) &&
+        (ULONGLONG)SetVidPnSourceAddress->PrimaryAddress.QuadPart >=
+            context->Memory.Topology.Local.Base) {
+      ULONGLONG offset =
+          (ULONGLONG)SetVidPnSourceAddress->PrimaryAddress.QuadPart -
+          context->Memory.Topology.Local.Base;
+      if (offset <= scanoutMemory.Bytes &&
+          APPLE_AGX_SCANOUT_J313_SURFACE_SIZE <=
+              scanoutMemory.Bytes - offset) {
+        receipt->SelectedCpuAddress =
+            (ULONGLONG)(ULONG_PTR)selectedMemory.CpuAddress;
+        receipt->SelectedHostPhysicalAddress =
+            selectedMemory.HostPhysicalAddress;
+        receipt->SelectedGuestIpaAddress =
+            scanoutMemory.GuestIpaAddress + offset;
+        receipt->SelectedSurfaceOffset = offset;
+        receipt->SelectedMapStatus = (ULONG)STATUS_SUCCESS;
+      }
+    }
   }
   InterlockedExchange(&context->SourceAddressStage, 1);
   InterlockedExchange(&context->SourceAddressStatus, (LONG)STATUS_PENDING);

@@ -153,6 +153,13 @@ typedef struct _ADMISSION_SOURCE_ADDRESS_RECEIPT {
   ULONG DisplayActive;
   ULONG SourceVisible;
   ULONG ScanoutState; /* bit0 runtime exists; bit1 IRQ enabled */
+  /* EXP807: selected primary identity. This is not a CDD write receipt. */
+  ULONGLONG SelectedCpuAddress;
+  ULONGLONG SelectedHostPhysicalAddress;
+  ULONGLONG SelectedGuestIpaAddress;
+  ULONGLONG SelectedSurfaceOffset;
+  ULONG SelectedMapStatus;
+  ULONG CacheCleanPerformed;
 } ADMISSION_SOURCE_ADDRESS_RECEIPT;
 
 typedef struct _ADMISSION_PRESENT_TRANSFER_RECEIPT {
