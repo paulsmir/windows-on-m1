@@ -728,20 +728,20 @@ HRESULT AgxD3d10WindowsPresentationRotate(
     }
   }
   D3DKMT_HANDLE saved=Resources[0]->Resource.KernelAllocation;
+  AGX_WIN32_SCREEN_BUFFER savedBuffer=Resources[0]->RenderBuffer;
+  struct pipe_resource *savedTarget=Resources[0]->RenderResource;
   for(UINT i=0;i+1u<Count;++i) {
     Resources[i]->Resource.KernelAllocation=
         Resources[i+1u]->Resource.KernelAllocation;
     Resources[i]->Resource.Retirement->KernelAllocation=
         Resources[i+1u]->Resource.KernelAllocation;
+    Resources[i]->RenderBuffer=Resources[i+1u]->RenderBuffer;
+    Resources[i]->RenderResource=Resources[i+1u]->RenderResource;
   }
   Resources[Count-1u]->Resource.KernelAllocation=saved;
   Resources[Count-1u]->Resource.Retirement->KernelAllocation=saved;
-  for(UINT i=0;i<Count;++i)
-    for(UINT j=0;j<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++j)
-      if(Device->Runtime.ScreenBuffers[j].Active &&
-         Device->Runtime.ScreenBuffers[j].Token==Resources[i]->RenderBuffer.Transport.Token)
-        Device->Runtime.ScreenBuffers[j].KernelAllocation=
-            Resources[i]->Resource.KernelAllocation;
+  Resources[Count-1u]->RenderBuffer=savedBuffer;
+  Resources[Count-1u]->RenderResource=savedTarget;
   ReleaseSRWLockExclusive(&Device->Runtime.ScreenBufferLock);
   return S_OK;
 }

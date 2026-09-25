@@ -482,6 +482,8 @@ struct Query
    UINT sample_level;
    UINT sample_layer;
    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *presentation;
+   struct ShaderResourceView *first_presentation_srv;
+   struct RenderTargetView *first_presentation_rtv;
 };'''),
         ('''struct SamplerState
 {
@@ -499,6 +501,18 @@ struct Query
    struct pipe_sampler_view *handle;
    Device *owner_device;
    Resource *owner_resource;
+   ShaderResourceView *next_presentation;
+};'''),
+        ('''struct RenderTargetView
+{
+   struct pipe_surface surface;
+   D3D10DDI_HRTRENDERTARGETVIEW hRTRenderTargetView;
+};''','''struct RenderTargetView
+{
+   struct pipe_surface surface;
+   D3D10DDI_HRTRENDERTARGETVIEW hRTRenderTargetView;
+   Resource *owner_resource;
+   RenderTargetView *next_presentation;
 };'''),
         ('''   Query *pQuery = CastQuery(hQuery);
    return pQuery ? pQuery->handle : NULL;''','''   (void)hQuery;
@@ -729,6 +743,26 @@ void APIENTRY
    enum pipe_format lowered=AgxD3d10LoweredTextureFormat(
       pCreateRenderTargetView->Format);
    if(lowered!=PIPE_FORMAT_NONE) desc.format=lowered;'''),
+        ('''   pRTView->surface = desc;
+}''','''   pRTView->surface = desc;
+   pRTView->owner_resource=NULL;
+   pRTView->next_presentation=NULL;
+   if(windowsResource->presentation && desc.texture) {
+      pRTView->owner_resource=windowsResource;
+      pRTView->next_presentation=windowsResource->first_presentation_rtv;
+      windowsResource->first_presentation_rtv=pRTView;
+   }
+}'''),
+        ('''   pipe_resource_reference(&pRTView->surface.texture, NULL);
+}''','''   if(pRTView->owner_resource) {
+      RenderTargetView **link=&pRTView->owner_resource->first_presentation_rtv;
+      while(*link && *link!=pRTView) link=&(*link)->next_presentation;
+      if(*link==pRTView) *link=pRTView->next_presentation;
+      pRTView->owner_resource=NULL;
+      pRTView->next_presentation=NULL;
+   }
+   pipe_resource_reference(&pRTView->surface.texture, NULL);
+}'''),
         ('''   pipe->clear_render_target(pipe,
                              surface,
                              &clear_color,
@@ -1207,24 +1241,111 @@ _Present('''),
        !RotateResourceIdentities->pResources)
       return E_INVALIDARG;
    Device *device = CastDevice(RotateResourceIdentities->hDevice);
-   if (!device) return E_INVALIDARG;
+   if (!device || !device->pipe || !device->windows)
+      return E_INVALIDARG;
    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE **records =
       (AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE **)HeapAlloc(
-         GetProcessHeap(), HEAP_ZERO_MEMORY,
-         sizeof(*records) * RotateResourceIdentities->Resources);
+         GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*records) * count);
    if (!records) return E_OUTOFMEMORY;
    HRESULT result = S_OK;
-   for (UINT i = 0; i < RotateResourceIdentities->Resources; ++i) {
+   UINT viewCount=0;
+   for (UINT i = 0; i < count; ++i) {
       Resource *resource = CastResource(RotateResourceIdentities->pResources[i]);
       if (!resource || resource->owner_device != device ||
-          !resource->presentation) {
+          !resource->presentation || !resource->resource) {
          result = E_INVALIDARG;
          break;
       }
+      for(UINT j=0;j<i;++j)
+         if(RotateResourceIdentities->pResources[j]==
+            RotateResourceIdentities->pResources[i]) result=E_INVALIDARG;
+      if(FAILED(result)) break;
       records[i] = resource->presentation;
+      for(RenderTargetView *view=resource->first_presentation_rtv;
+          view;view=view->next_presentation)
+         if(view->owner_resource!=resource ||
+            view->surface.texture!=resource->resource) result=E_INVALIDARG;
+      for(ShaderResourceView *view=resource->first_presentation_srv;
+          view;view=view->next_presentation) {
+         if(view->owner_resource!=resource || view->owner_device!=device ||
+            !view->handle || view->handle->texture!=resource->resource ||
+            viewCount==~0u) result=E_INVALIDARG;
+         else ++viewCount;
+      }
+      if(FAILED(result)) break;
    }
-   if (SUCCEEDED(result)) result = AgxD3d10WindowsPresentationRotate(
-      device->windows, records, RotateResourceIdentities->Resources);
+   struct PreparedView {
+      ShaderResourceView *View;
+      struct pipe_sampler_view *Old;
+      struct pipe_sampler_view *New;
+   };
+   PreparedView *prepared=NULL;
+   UINT preparedCount=0;
+   if(SUCCEEDED(result) && viewCount) {
+      prepared=(PreparedView *)HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,
+                                        (SIZE_T)viewCount*sizeof(*prepared));
+      if(!prepared) result=E_OUTOFMEMORY;
+   }
+   for(UINT i=0;SUCCEEDED(result) && i<count;++i) {
+      Resource *resource=CastResource(RotateResourceIdentities->pResources[i]);
+      Resource *next=CastResource(RotateResourceIdentities->pResources[(i+1u)%count]);
+      for(ShaderResourceView *view=resource->first_presentation_srv;
+          view;view=view->next_presentation) {
+         struct pipe_sampler_view *candidate=device->pipe->create_sampler_view(
+            device->pipe,next->resource,view->handle);
+         if(!candidate) { result=E_OUTOFMEMORY;break; }
+         prepared[preparedCount++]={view,view->handle,candidate};
+      }
+   }
+   if(SUCCEEDED(result)) result=AgxD3d10WindowsPresentationRotate(
+      device->windows,records,count);
+   if (SUCCEEDED(result)) {
+      bool framebufferChanged=false;
+      for(UINT slot=0;slot<device->fb.nr_cbufs;++slot) {
+         struct pipe_resource *old=device->fb.cbufs[slot].texture;
+         for(UINT i=0;i<count;++i) {
+            Resource *resource=CastResource(RotateResourceIdentities->pResources[i]);
+            if(old==resource->resource) {
+               pipe_resource_reference(&device->fb.cbufs[slot].texture,
+                  AgxD3d10WindowsPresentationPipeResource(records[i]));
+               framebufferChanged=true;
+               break;
+            }
+         }
+      }
+      for(UINT i=0;i<count;++i) {
+         Resource *resource=CastResource(RotateResourceIdentities->pResources[i]);
+         struct pipe_resource *target=
+            AgxD3d10WindowsPresentationPipeResource(records[i]);
+         for(RenderTargetView *view=resource->first_presentation_rtv;
+             view;view=view->next_presentation)
+            pipe_resource_reference(&view->surface.texture,target);
+         resource->resource=target;
+      }
+      if(framebufferChanged)
+         device->pipe->set_framebuffer_state(device->pipe,&device->fb);
+      bool samplerChanged[MESA_SHADER_STAGES]={};
+      for(UINT i=0;i<preparedCount;++i) {
+         for(UINT stage=0;stage<MESA_SHADER_STAGES;++stage)
+            for(UINT slot=0;slot<PIPE_MAX_SHADER_SAMPLER_VIEWS;++slot)
+               if(device->sampler_views[stage][slot]==prepared[i].Old) {
+                  device->sampler_views[stage][slot]=prepared[i].New;
+                  samplerChanged[stage]=true;
+               }
+         prepared[i].View->handle=prepared[i].New;
+      }
+      for(UINT stage=0;stage<MESA_SHADER_STAGES;++stage)
+         if(samplerChanged[stage])
+            device->pipe->set_sampler_views(device->pipe,
+               (enum mesa_shader_stage)stage,0,
+               PIPE_MAX_SHADER_SAMPLER_VIEWS,0,device->sampler_views[stage]);
+      for(UINT i=0;i<preparedCount;++i)
+         device->pipe->sampler_view_release(device->pipe,prepared[i].Old);
+   } else {
+      for(UINT i=0;i<preparedCount;++i)
+         device->pipe->sampler_view_release(device->pipe,prepared[i].New);
+   }
+   if(prepared) HeapFree(GetProcessHeap(),0,prepared);
    HeapFree(GetProcessHeap(), 0, records);
    return result;'''),
         ('''_Blt(DXGI_DDI_ARG_BLT *Blt)
@@ -1503,13 +1624,53 @@ UnsupportedDxgi''')
    pSRView->owner_resource->sample_format = pCreateSRView->Format;
    pSRView->owner_resource->sample_level = windowsLevel;
    pSRView->owner_resource->sample_layer = windowsFirstLayer;
+   pSRView->next_presentation=NULL;
+   if(pSRView->handle && pSRView->owner_resource->presentation) {
+      pSRView->next_presentation=pSRView->owner_resource->first_presentation_srv;
+      pSRView->owner_resource->first_presentation_srv=pSRView;
+   }
 }
 
 
 /*
  * ----------------------------------------------------------------------
  *
- * CreateShaderResourceView1 --''')])
+ * CreateShaderResourceView1 --'''),
+        ('''   pSRView->handle = pipe->create_sampler_view(pipe, resource, &desc);
+}
+
+
+/*
+ * ----------------------------------------------------------------------
+ *
+ * DestroyShaderResourceView --''','''   pSRView->handle = pipe->create_sampler_view(pipe, resource, &desc);
+   pSRView->owner_device=CastDevice(hDevice);
+   pSRView->owner_resource=CastResource(pCreateSRView->hDrvResource);
+   pSRView->next_presentation=NULL;
+   if(pSRView->handle && pSRView->owner_resource &&
+      pSRView->owner_resource->presentation) {
+      pSRView->next_presentation=pSRView->owner_resource->first_presentation_srv;
+      pSRView->owner_resource->first_presentation_srv=pSRView;
+   }
+}
+
+
+/*
+ * ----------------------------------------------------------------------
+ *
+ * DestroyShaderResourceView --'''),
+        ('''   pipe->sampler_view_release(pipe, pSRView->handle);
+   pSRView->handle = NULL;
+}''','''   if(pSRView->owner_resource && pSRView->owner_resource->presentation) {
+      ShaderResourceView **link=&pSRView->owner_resource->first_presentation_srv;
+      while(*link && *link!=pSRView) link=&(*link)->next_presentation;
+      if(*link==pSRView) *link=pSRView->next_presentation;
+   }
+   pSRView->owner_resource=NULL;
+   pSRView->next_presentation=NULL;
+   pipe->sampler_view_release(pipe, pSRView->handle);
+   pSRView->handle = NULL;
+}''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','SetSamplers','''   Device *pDevice = CastDevice(hDevice);
    const UINT slots = D3D10_COMMONSHADER_SAMPLER_SLOT_COUNT;
    static_assert(PIPE_MAX_SAMPLERS >= D3D10_COMMONSHADER_SAMPLER_SLOT_COUNT,
