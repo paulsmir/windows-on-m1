@@ -1,5 +1,39 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP792: same CDD DMA-pool fault; allocation DDI attribution unresolved
+
+Diagnostic-only package795, G1b16 with R70 unchanged, was staged from ordinary
+Code28 and cold-booted once. G3 paging again returned status0. Durable GDI
+`CreateContext` receipt recorded flags6 (GdiContext+VirtualAddressing), node0,
+engine1, DMA size `0x50000`, `DmaBufferSegmentSet=0`, private bytes `0x51000`,
+allocation/patch lists 256/256. [Microsoft DXGK_CONTEXTINFO](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3dkmddi/ns-d3dkmddi-_dxgk_contextinfo)
+permits segment set 0 (contiguous locked memory) and requires GDI allocation
+list 256; no offline proof supports changing these values. REVIEW R74: DEFER —
+no named context-info violation; use hardware evidence to choose the next field.
+
+Windows again stopped `0x3B/C0000005` in
+`dxgmms2!AddDmaBufferToPool+0x304 -> VidMmInitDmaPool ->
+DXGCONTEXT::Initialize -> CreateCddDevice` (csrss). New dump SHA256
+`1f9187aa056e62df99e54b346aac95e86a8c3cdff078e52407a878af7e5d6103`;
+CDB SHA256 `580432802376066a4e8d8ee1ac6ce33c22553082600a8ebc9a7384384ed20142`.
+No `Wom1G3DmaOp*` registry receipt survived. ETL has generic
+`DdiCreate/OpenAllocation` events after the GDI receipt, but does not identify
+whether they belong to AppleAgx; exact package PDB confirms the diagnostic
+calls are compiled into its wrappers. The minidump omits the diagnostic
+globals. **Verdict: inconclusive on KMD output handles; G3 admission remains
+unproven.** Evidence `.local/experiments/EXP792-g3-dma-receipt/hardware-evidence`
+(`state.json` SHA256 `ed667b62f264300f30137d012835e0b810497e93d8c5cafe7f65fdbf182b7380`,
+ETL SHA256 `0f120ae1588362a02e6397c8df2ade652f31b34462952474bb2fac0720529a02`).
+Exact package795/arm0 cleanup restored pinned SSH/CPU8, one inert APPL0002
+Code28, staged0 SYS/UMD0 arm0.
+
+Next smallest discriminator: prove whether AppleAgx `Create/OpenAllocation`
+wrappers execute at all in the CDD interval, independently of the GDI arm and
+registry-write guard. Capture a bounded early-call receipt with callback IRQL,
+registry-open status and timestamp, then correlate with the GDI receipt. Do
+not change `DmaBufferSegmentSet`, page size, firmware, or mappings from this
+inconclusive run. Start a new thread for that phase.
+
 ## 2026-09-25 EXP791: 16 KiB is the main G3 profile; CDD DMA pool is next
 
 Package794 corrected only the EXP790 16 KiB G3 contract self-veto. One staged
