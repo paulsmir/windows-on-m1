@@ -405,6 +405,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
     Args->ContextInfo.PatchLocationListSize = ADMISSION_PATCH_LIST_SIZE;
   }
   Args->hContext = context;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionRecordGpuvaG3DmaContext(adapter->PhysicalDeviceObject, Args);
+#endif
   return STATUS_SUCCESS;
 }
 

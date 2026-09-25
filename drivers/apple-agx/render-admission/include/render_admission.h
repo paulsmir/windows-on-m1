@@ -763,6 +763,15 @@ void AdmissionRecordGpuvaG3DeviceInput(
 void AdmissionRecordGpuvaG3ContextInput(
     _In_opt_ PDEVICE_OBJECT DeviceObject,
     _In_opt_ const DXGKARG_CREATECONTEXT *Args, KIRQL CurrentIrql);
+void AdmissionRecordGpuvaG3DmaContext(
+    _In_opt_ PDEVICE_OBJECT DeviceObject,
+    _In_opt_ const DXGKARG_CREATECONTEXT *Args);
+void AdmissionRecordGpuvaG3DmaCreate(
+    _In_opt_ PDEVICE_OBJECT DeviceObject,
+    _In_opt_ const DXGKARG_CREATEALLOCATION *Args, NTSTATUS Status);
+void AdmissionRecordGpuvaG3DmaOpen(
+    _In_opt_ PDEVICE_OBJECT DeviceObject,
+    _In_opt_ const DXGKARG_OPENALLOCATION *Args, NTSTATUS Status);
 void AdmissionRecordGpuvaG3PagingInput(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_opt_ const DXGKARG_BUILDPAGINGBUFFER *Args, ULONG CurrentIrql);

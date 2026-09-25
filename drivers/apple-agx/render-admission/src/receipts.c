@@ -1382,6 +1382,130 @@ _Use_decl_annotations_ void AdmissionRecordQuery(
 }
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+typedef struct _ADMISSION_G3_DMA_CONTEXT_RECEIPT {
+  ULONG Version, Bytes, Flags, NodeOrdinal, EngineAffinity;
+  ULONG DmaBufferSize, DmaBufferSegmentSet, DmaPrivateBytes;
+  ULONG AllocationListSize, PatchListSize;
+  ULONGLONG SystemTime;
+} ADMISSION_G3_DMA_CONTEXT_RECEIPT;
+
+typedef struct _ADMISSION_G3_DMA_ALLOCATION_RECEIPT {
+  ULONG Version, Bytes, Sequence, Kind, Status, Count;
+  ULONG Flags, PrivateBytes, FirstPrivateBytes;
+  ULONG InputPresent, OutputPresent, Reserved;
+  ULONGLONG FirstSize, SystemTime;
+} ADMISSION_G3_DMA_ALLOCATION_RECEIPT;
+
+static volatile LONG g3DmaPoolArmed;
+static volatile LONG g3DmaPoolSequence;
+
+_Use_decl_annotations_ void AdmissionRecordGpuvaG3DmaContext(
+    PDEVICE_OBJECT DeviceObject, const DXGKARG_CREATECONTEXT *Args) {
+  ADMISSION_G3_DMA_CONTEXT_RECEIPT receipt;
+  LARGE_INTEGER now;
+  HANDLE key = NULL;
+  if (DeviceObject == NULL || Args == NULL || !Args->Flags.GdiContext ||
+      Args->hContext == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  RtlZeroMemory(&receipt, sizeof(receipt));
+  receipt.Version = 1u;
+  receipt.Bytes = sizeof(receipt);
+  receipt.Flags = Args->Flags.Value;
+  receipt.NodeOrdinal = Args->NodeOrdinal;
+  receipt.EngineAffinity = Args->EngineAffinity;
+  receipt.DmaBufferSize = Args->ContextInfo.DmaBufferSize;
+  receipt.DmaBufferSegmentSet = Args->ContextInfo.DmaBufferSegmentSet;
+  receipt.DmaPrivateBytes = Args->ContextInfo.DmaBufferPrivateDataSize;
+  receipt.AllocationListSize = Args->ContextInfo.AllocationListSize;
+  receipt.PatchListSize = Args->ContextInfo.PatchLocationListSize;
+  KeQuerySystemTime(&now);
+  receipt.SystemTime = (ULONGLONG)now.QuadPart;
+  InterlockedExchange(&g3DmaPoolSequence, 0);
+  InterlockedExchange(&g3DmaPoolArmed, 1);
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(DeviceObject, PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, L"Wom1G3DmaContext", &receipt, sizeof(receipt));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
+static void AdmissionRecordGpuvaG3DmaAllocation(
+    PDEVICE_OBJECT DeviceObject, ULONG Kind, ULONG Count, ULONG Flags,
+    ULONG PrivateBytes, ULONG FirstPrivateBytes, ULONG InputPresent,
+    ULONG OutputPresent, ULONGLONG FirstSize, NTSTATUS Status) {
+  static const PCWSTR names[16] = {
+      L"Wom1G3DmaOp00", L"Wom1G3DmaOp01", L"Wom1G3DmaOp02",
+      L"Wom1G3DmaOp03", L"Wom1G3DmaOp04", L"Wom1G3DmaOp05",
+      L"Wom1G3DmaOp06", L"Wom1G3DmaOp07", L"Wom1G3DmaOp08",
+      L"Wom1G3DmaOp09", L"Wom1G3DmaOp10", L"Wom1G3DmaOp11",
+      L"Wom1G3DmaOp12", L"Wom1G3DmaOp13", L"Wom1G3DmaOp14",
+      L"Wom1G3DmaOp15"};
+  ADMISSION_G3_DMA_ALLOCATION_RECEIPT receipt;
+  LARGE_INTEGER now;
+  LONG sequence;
+  HANDLE key = NULL;
+  if (DeviceObject == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      InterlockedCompareExchange(&g3DmaPoolArmed, 0, 0) == 0)
+    return;
+  sequence = InterlockedIncrement(&g3DmaPoolSequence);
+  if (sequence <= 0 || sequence > 512)
+    return;
+  RtlZeroMemory(&receipt, sizeof(receipt));
+  receipt.Version = 1u;
+  receipt.Bytes = sizeof(receipt);
+  receipt.Sequence = (ULONG)sequence;
+  receipt.Kind = Kind;
+  receipt.Status = (ULONG)Status;
+  receipt.Count = Count;
+  receipt.Flags = Flags;
+  receipt.PrivateBytes = PrivateBytes;
+  receipt.FirstPrivateBytes = FirstPrivateBytes;
+  receipt.InputPresent = InputPresent;
+  receipt.OutputPresent = OutputPresent;
+  receipt.FirstSize = FirstSize;
+  KeQuerySystemTime(&now);
+  receipt.SystemTime = (ULONGLONG)now.QuadPart;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(DeviceObject, PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, names[(sequence - 1) & 15], &receipt, sizeof(receipt));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
+_Use_decl_annotations_ void AdmissionRecordGpuvaG3DmaCreate(
+    PDEVICE_OBJECT DeviceObject, const DXGKARG_CREATEALLOCATION *Args,
+    NTSTATUS Status) {
+  const DXGK_ALLOCATIONINFO *first =
+      Args != NULL && Args->NumAllocations != 0u &&
+      Args->pAllocationInfo != NULL ? Args->pAllocationInfo : NULL;
+  AdmissionRecordGpuvaG3DmaAllocation(DeviceObject, 2u,
+      Args == NULL ? 0u : Args->NumAllocations, 0u,
+      Args == NULL ? 0u : Args->PrivateDriverDataSize,
+      first == NULL ? 0u : first->PrivateDriverDataSize,
+      first != NULL && first->pPrivateDriverData != NULL,
+      first != NULL && first->hAllocation != NULL,
+      first == NULL ? 0ULL : (ULONGLONG)first->Size, Status);
+}
+
+_Use_decl_annotations_ void AdmissionRecordGpuvaG3DmaOpen(
+    PDEVICE_OBJECT DeviceObject, const DXGKARG_OPENALLOCATION *Args,
+    NTSTATUS Status) {
+  const DXGK_OPENALLOCATIONINFO *first =
+      Args != NULL && Args->NumAllocations != 0u &&
+      Args->pOpenAllocation != NULL ? Args->pOpenAllocation : NULL;
+  AdmissionRecordGpuvaG3DmaAllocation(DeviceObject, 3u,
+      Args == NULL ? 0u : Args->NumAllocations,
+      Args == NULL ? 0u : Args->Flags.Value,
+      Args == NULL ? 0u : Args->PrivateDriverSize,
+      first == NULL ? 0u : first->PrivateDriverDataSize,
+      first != NULL && first->hAllocation != 0u,
+      first != NULL && first->hDeviceSpecificAllocation != NULL,
+      0ULL, Status);
+}
+
 typedef struct _ADMISSION_G3_QUERY_RECEIPT {
   ULONG Version, Bytes, Type, Status;
   ULONG InputBytes, OutputBytes, PhysicalAdapterIndex, LevelIndex;

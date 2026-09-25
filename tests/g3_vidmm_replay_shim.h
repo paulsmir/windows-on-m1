@@ -220,6 +220,7 @@ static bool ReplayRead64(void *opaque,unsigned offset,unsigned long long *value)
 static void ReplayBarrier(void *opaque) {(void)opaque;}
 static void AdmissionRecordGpuvaG3CreateInput(PDEVICE_OBJECT p,DXGKARG_CREATEPROCESS *a,int started,KIRQL irql) {(void)p;(void)a;(void)started;(void)irql;}
 static void AdmissionRecordGpuvaG3ContextInput(PDEVICE_OBJECT p,DXGKARG_CREATECONTEXT *a,KIRQL irql) {(void)p;(void)a;(void)irql;}
+static void AdmissionRecordGpuvaG3DmaContext(PDEVICE_OBJECT p,DXGKARG_CREATECONTEXT *a) {(void)p;(void)a;}
 static ADMISSION_G3_PAGING_FAILURE last_paging_failure;
 static void AdmissionRecordGpuvaG3PagingFailure(ADMISSION_CONTEXT *a,ADMISSION_G3_PAGING_FAILURE *f) {(void)a;if(f->Branch)last_paging_failure=*f;}
 static void AppleAgxSchedulerContextInitialize(ADMISSION_SCHEDULER_CONTEXT *c) {(void)c;}

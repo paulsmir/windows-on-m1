@@ -331,10 +331,16 @@ static NTSTATUS AdmissionCreateAllocationImpl(
 _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateAllocation(
     HANDLE Adapter, DXGKARG_CREATEALLOCATION *Args) {
   NTSTATUS status = AdmissionCreateAllocationImpl(Adapter, Args);
-#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0 || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
+#endif
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
   AdmissionRecordG1bDdiFailure(
       context == NULL ? NULL : context->PhysicalDeviceObject, 2u, status);
+#endif
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionRecordGpuvaG3DmaCreate(
+      context == NULL ? NULL : context->PhysicalDeviceObject, Args, status);
 #endif
   return status;
 }
@@ -573,15 +579,21 @@ Rollback:
 _Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
     HANDLE Device, const DXGKARG_OPENALLOCATION *Args) {
   NTSTATUS status = AdmissionOpenAllocationImpl(Device, Args);
-#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0 || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   ADMISSION_DEVICE *device = (ADMISSION_DEVICE *)Device;
   ADMISSION_CONTEXT *adapter = NULL;
   if (device != NULL && device->Object.Magic == ADMISSION_OBJECT_DEVICE_MAGIC &&
       device->Object.Adapter != NULL)
     adapter = CONTAINING_RECORD(device->Object.Adapter, ADMISSION_CONTEXT,
                                 ObjectAdapter);
+#endif
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
   AdmissionRecordG1bDdiFailure(
       adapter == NULL ? NULL : adapter->PhysicalDeviceObject, 4u, status);
+#endif
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionRecordGpuvaG3DmaOpen(
+      adapter == NULL ? NULL : adapter->PhysicalDeviceObject, Args, status);
 #endif
   return status;
 }
