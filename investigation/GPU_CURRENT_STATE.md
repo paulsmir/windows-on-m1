@@ -13,11 +13,11 @@ ten targeted tests pass. Unsupported formats/samples reject with
 `STATUS_INVALID_PARAMETER` at the WDDM callback boundary.
 
 R83 verified all 523 committed Apple AGX files; the ARM64 native projection
-records the changed `agx_win32_gpuva_batch.c` hash, and package812 links the
-new archive. Pinned WDK26100 UMD/KMD builds, ApiValidator and Inf2Cat pass with
-zero warnings/errors. Receipt: `.local/experiments/EXP810-r96-package812/build-receipt.json`;
+records the changed `agx_win32_gpuva_batch.c` hash, and package813 links the
+new archive and the corrected fragment helper/USC builder fields. Pinned WDK26100 UMD/KMD builds, ApiValidator and Inf2Cat pass with
+zero warnings/errors. Receipt: `.local/experiments/EXP810-r96-package813/build-receipt.json`;
 source commit `1115afa8`, native archive SHA256 `60c81fd2`, package UMD
-`6f9e2507`, KMD `4351f422`. Earlier package811 linked a stale native archive
+`89330053`, KMD `3c97c3cc`. Earlier package811 linked a stale native archive
 and must not be installed. No EXP810 package has been installed or launched;
 no UMD/KMD runtime receipt or LOOK_NOW observation exists.
 
