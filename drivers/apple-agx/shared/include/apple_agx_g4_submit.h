@@ -24,6 +24,8 @@
 
 #define APPLE_AGX_G4_PRIVATE_MAGIC 0x34584741u /* "AGX4" */
 #define APPLE_AGX_G4_PRIVATE_VERSION 1u
+#define APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA 2u
+#define APPLE_AGX_G4_PROCESS_RANGE_COUNT 9u
 #define APPLE_AGX_G4_NATIVE_MAX_BYTES 4096u
 #define APPLE_AGX_G4_RENDER 0u
 #define APPLE_AGX_G4_COMPUTE 1u
@@ -37,6 +39,21 @@ typedef struct {
   unsigned int Reserved;
   unsigned long long CommandVa;
 } APPLE_AGX_G4_PRIVATE_HEADER;
+
+/* Version 2 passes VidMm-owned process mappings to the KMD constructor.
+ * Order: TVB page list, block list, block heap, user buffer, tilemap,
+ * heap metadata, tail-pointer cache, preemption scratch, auxiliary FB.
+ * Bytes describe the whole GPU-visible allocation, not a logical subrange. */
+typedef struct {
+  unsigned long long Va;
+  unsigned int Bytes;
+  unsigned int Reserved;
+} APPLE_AGX_G4_PROCESS_RANGE;
+
+typedef struct {
+  APPLE_AGX_G4_PRIVATE_HEADER Base;
+  APPLE_AGX_G4_PROCESS_RANGE Process[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
+} APPLE_AGX_G4_PRIVATE_HEADER_V2;
 
 typedef struct {
   unsigned short Type;
@@ -109,6 +126,7 @@ typedef struct {
   unsigned int RenderBytes;
   unsigned int AttachmentCount;
   unsigned long long CommandVa;
+  APPLE_AGX_G4_PROCESS_RANGE Process[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
 } APPLE_AGX_G4_SUBMIT_VIEW;
 
 APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmit(

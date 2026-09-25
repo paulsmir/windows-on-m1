@@ -5,6 +5,8 @@ typedef char agx4_header_size[(sizeof(APPLE_AGX_G4_PRIVATE_HEADER) == 24u) ? 1 :
 typedef char agx4_native_header_size[(sizeof(APPLE_AGX_G4_NATIVE_HEADER) == 8u) ? 1 : -1];
 typedef char agx4_attachment_size[(sizeof(APPLE_AGX_G4_ATTACHMENT) == 24u) ? 1 : -1];
 typedef char agx4_render_size[(sizeof(APPLE_AGX_G4_NATIVE_RENDER) == 240u) ? 1 : -1];
+typedef char agx4_process_range_size[(sizeof(APPLE_AGX_G4_PROCESS_RANGE) == 16u) ? 1 : -1];
+typedef char agx4_private_v2_size[(sizeof(APPLE_AGX_G4_PRIVATE_HEADER_V2) == 168u) ? 1 : -1];
 
 static int valid_va(unsigned long long va, unsigned long long bytes) {
   return va >= 0x10000ULL && va < (1ULL << 39) && bytes &&
@@ -79,6 +81,7 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmit(
     unsigned int dma_bytes, APPLE_AGX_G4_ACCESS access, void *access_context,
     APPLE_AGX_G4_SUBMIT_VIEW *view) {
   APPLE_AGX_G4_PRIVATE_HEADER header;
+  APPLE_AGX_G4_PRIVATE_HEADER_V2 header_v2;
   APPLE_AGX_G4_NATIVE_HEADER native_header;
   const unsigned char *bytes = (const unsigned char *)private_data;
   unsigned int position = 0u, index, attachments = 0u;
@@ -92,14 +95,42 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmit(
       !valid_va(dma_va, dma_bytes)) return AppleAgxG4ParseInvalid;
   memcpy(&header, bytes, sizeof(header));
   if (header.Magic != APPLE_AGX_G4_PRIVATE_MAGIC ||
-      header.Version != APPLE_AGX_G4_PRIVATE_VERSION ||
-      header.HeaderBytes != sizeof(header) || header.Reserved != 0u ||
+      (header.Version != APPLE_AGX_G4_PRIVATE_VERSION &&
+       header.Version != APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA) ||
+      header.HeaderBytes != (header.Version ==
+          APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA ?
+          sizeof(header_v2) : sizeof(header)) ||
+      header.Reserved != 0u ||
       header.CommandVa != dma_va || header.CommandBytes != dma_bytes ||
-      umd_private_bytes != sizeof(header) + dma_bytes)
+      umd_private_bytes != (unsigned int)header.HeaderBytes + dma_bytes)
     return AppleAgxG4ParseInvalid;
+  if (header.Version == APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA) {
+    if (umd_private_bytes < sizeof(header_v2))
+      return AppleAgxG4ParseInvalid;
+    memcpy(&header_v2, bytes, sizeof(header_v2));
+    for (index = 0u; index < APPLE_AGX_G4_PROCESS_RANGE_COUNT; ++index) {
+      const APPLE_AGX_G4_PROCESS_RANGE *range = &header_v2.Process[index];
+      if (range->Reserved || !range->Bytes ||
+          (range->Va & 0xffffULL) || (range->Bytes & 0xffffu) ||
+          !valid_va(range->Va, range->Bytes))
+        return AppleAgxG4ParseInvalid;
+      if (range->Va < dma_va + dma_bytes &&
+          dma_va < range->Va + range->Bytes)
+        return AppleAgxG4ParseInvalid;
+      for (unsigned int earlier = 0u; earlier < index; ++earlier) {
+        const APPLE_AGX_G4_PROCESS_RANGE *other =
+            &header_v2.Process[earlier];
+        if (range->Va < other->Va + other->Bytes &&
+            other->Va < range->Va + range->Bytes)
+          return AppleAgxG4ParseInvalid;
+      }
+      if (!access(access_context, range->Va, range->Bytes, 1))
+        return AppleAgxG4ParseUnmapped;
+    }
+  }
   if (!access(access_context, dma_va, dma_bytes, 0))
     return AppleAgxG4ParseUnmapped;
-  bytes += sizeof(header);
+  bytes += header.HeaderBytes;
   if (dma_bytes < sizeof(native_header)) return AppleAgxG4ParseInvalid;
   memcpy(&native_header, bytes, sizeof(native_header));
   if (native_header.Type == APPLE_AGX_G4_FRAGMENT_ATTACHMENTS) {
@@ -146,5 +177,7 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmit(
   view->RenderBytes = native_header.Size;
   view->AttachmentCount = attachments;
   view->CommandVa = dma_va;
+  if (header.Version == APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA)
+    memcpy(view->Process, header_v2.Process, sizeof(view->Process));
   return AppleAgxG4ParseOk;
 }
