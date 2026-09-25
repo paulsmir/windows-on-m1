@@ -203,8 +203,14 @@ static int submit(void *context, const uint64_t *written,
   request.pPrivateDriverData = (void *)private_data;
   request.PrivateDriverDataSize = private_bytes;
   request.RenderCBSequence = (UINT)InterlockedIncrement(&device->RenderCbSequence);
-  if (FAILED(device->KernelCallbacks->pfnSubmitCommandCb(
-      device->RuntimeDevice.handle, &request))) return 0;
+  HRESULT submit_result = device->KernelCallbacks->pfnSubmitCommandCb(
+      device->RuntimeDevice.handle, &request);
+  UINT submit_values[4] = {request.CommandLength,
+      request.PrivateDriverDataSize, request.NumPrimaries,
+      request.RenderCBSequence};
+  AdmissionUmdDiagnostic("g4-submit-command-cb", submit_result,
+                         submit_values, ARRAYSIZE(submit_values));
+  if (FAILED(submit_result)) return 0;
   uint64_t next = device->NextRenderFence + 1;
   D3DKMT_HANDLE object = device->RenderSyncObject;
   HANDLE context_handle = device->KernelContext;
@@ -213,8 +219,11 @@ static int submit(void *context, const uint64_t *written,
   signal.BroadcastContextCount = 1;
   signal.BroadcastContextArray = &context_handle;
   signal.MonitoredFenceValueArray = &next;
-  if (FAILED(device->KernelCallbacks->pfnSignalSynchronizationObjectFromGpu2Cb(
-      device->RuntimeDevice.handle, &signal))) {
+  HRESULT signal_result =
+      device->KernelCallbacks->pfnSignalSynchronizationObjectFromGpu2Cb(
+          device->RuntimeDevice.handle, &signal);
+  AdmissionUmdDiagnostic("g4-signal-render-fence", signal_result, NULL, 0u);
+  if (FAILED(signal_result)) {
     device->DrawTerminal = TRUE;
     return 2; /* accepted submit, completion owner uncertain */
   }

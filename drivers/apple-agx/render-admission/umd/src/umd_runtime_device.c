@@ -239,6 +239,7 @@ HRESULT AdmissionUmdRuntimeDeviceInitialize(
 #ifdef APPLE_AGX_GPUVA_WINSYS
   result = device->KernelCallbacks->pfnCreateContextVirtualCb(
       device->RuntimeDevice.handle, &createContext);
+  AdmissionUmdDiagnostic("g4-create-context-virtual-cb", result, NULL, 0u);
 #else
   result = device->KernelCallbacks->pfnCreateContextCb(
       device->RuntimeDevice.handle, &createContext);

@@ -91,6 +91,9 @@
     <ClCompile Include="..\..\mesa\winsys\agx_win32_gpuva.c" />
   </ItemGroup>
   <ItemDefinitionGroup Condition="'$(EnableNativeFrontend)' == 'true' and '$(EnableGpuvaWinsys)' == 'true'">
+    <ClCompile>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+    </ClCompile>
     <Link>
       <AdditionalDependencies>msvcrt.lib;ucrt.lib;vcruntime.lib;legacy_stdio_definitions.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <IgnoreSpecificDefaultLibraries></IgnoreSpecificDefaultLibraries>

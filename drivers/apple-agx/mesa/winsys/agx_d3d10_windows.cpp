@@ -288,15 +288,26 @@ static HRESULT close_device(AGX_D3D10_WINDOWS_DEVICE **inout) {
 
 HRESULT AgxD3d10WindowsOpenAdapter(const D3D10DDIARG_OPENADAPTER *Args,
                                   AGX_D3D10_WINDOWS_ADAPTER **Adapter) {
-  if (Adapter == NULL || *Adapter != NULL) return E_INVALIDARG;
+  AdmissionUmdDiagnostic("g4-open-adapter-enter",S_OK,NULL,0u);
+  if (Adapter == NULL || *Adapter != NULL) {
+    AdmissionUmdDiagnostic("g4-open-adapter-exit",E_INVALIDARG,NULL,0u);
+    return E_INVALIDARG;
+  }
   AGX_D3D10_WINDOWS_ADAPTER *owner =
       (AGX_D3D10_WINDOWS_ADAPTER *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
                                            sizeof(*owner));
-  if (owner == NULL) return E_OUTOFMEMORY;
+  if (owner == NULL) {
+    AdmissionUmdDiagnostic("g4-open-adapter-exit",E_OUTOFMEMORY,NULL,0u);
+    return E_OUTOFMEMORY;
+  }
   HRESULT result = AdmissionUmdRuntimeAdapterInitialize(&owner->Runtime, Args);
-  if (FAILED(result)) { HeapFree(GetProcessHeap(), 0, owner); return result; }
+  if (FAILED(result)) {
+    AdmissionUmdDiagnostic("g4-open-adapter-exit",result,NULL,0u);
+    HeapFree(GetProcessHeap(), 0, owner); return result;
+  }
   InitializeSRWLock(&owner->Lock);
   *Adapter = owner;
+  AdmissionUmdDiagnostic("g4-open-adapter-exit",S_OK,NULL,0u);
   return S_OK;
 }
 
@@ -324,11 +335,18 @@ HRESULT AgxD3d10WindowsCloseAdapter(AGX_D3D10_WINDOWS_ADAPTER **Adapter) {
 HRESULT AgxD3d10WindowsCreateDevice(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
                                    const D3D10DDIARG_CREATEDEVICE *Args,
                                    AGX_D3D10_WINDOWS_DEVICE **Device) {
-  if (Adapter == NULL || Device == NULL || *Device != NULL) return E_INVALIDARG;
+  AdmissionUmdDiagnostic("g4-create-device-enter",S_OK,NULL,0u);
+  if (Adapter == NULL || Device == NULL || *Device != NULL) {
+    AdmissionUmdDiagnostic("g4-create-device-exit",E_INVALIDARG,NULL,0u);
+    return E_INVALIDARG;
+  }
   AGX_D3D10_WINDOWS_DEVICE *owner =
       (AGX_D3D10_WINDOWS_DEVICE *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
                                           sizeof(*owner));
-  if (owner == NULL) return E_OUTOFMEMORY;
+  if (owner == NULL) {
+    AdmissionUmdDiagnostic("g4-create-device-exit",E_OUTOFMEMORY,NULL,0u);
+    return E_OUTOFMEMORY;
+  }
   owner->Adapter=Adapter;
   owner->Stage=AgxD3d10DeviceAllocated;
   owner->InitialFailure=S_OK;
@@ -337,6 +355,7 @@ HRESULT AgxD3d10WindowsCreateDevice(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
   if (Adapter->Devices == ~(ULONG)0u) {
     ReleaseSRWLockExclusive(&Adapter->Lock);
     HeapFree(GetProcessHeap(), 0, owner);
+    AdmissionUmdDiagnostic("g4-create-device-exit",E_OUTOFMEMORY,NULL,0u);
     return E_OUTOFMEMORY;
   }
   ++Adapter->Devices;
@@ -364,9 +383,11 @@ HRESULT AgxD3d10WindowsCreateDevice(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
   owner->Stage=AgxD3d10DeviceNativeContextReady;
   owner->Stage=AgxD3d10DeviceReady;
   *Device = owner;
+  AdmissionUmdDiagnostic("g4-create-device-exit",S_OK,NULL,0u);
   return S_OK;
 failed:
   owner->InitialFailure=result;
+  AdmissionUmdDiagnostic("g4-create-device-exit",result,NULL,0u);
   {
     AGX_D3D10_WINDOWS_DEVICE *cleanup=owner;
     HRESULT cleanupResult=close_device(&cleanup);
@@ -571,12 +592,19 @@ HRESULT AgxD3d10WindowsPresentationCreate(
     const D3D10DDIARG_CREATERESOURCE *CreateResource,
     D3D10DDI_HRTRESOURCE RuntimeResource,
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE **Resource) {
+  AdmissionUmdDiagnostic("g4-create-resource-enter",S_OK,NULL,0u);
   if(!Device || Device->Stage!=AgxD3d10DeviceReady || !CreateResource ||
-     !Resource || *Resource || !RuntimeResource.handle) return E_INVALIDARG;
+     !Resource || *Resource || !RuntimeResource.handle) {
+    AdmissionUmdDiagnostic("g4-create-resource-exit",E_INVALIDARG,NULL,0u);
+    return E_INVALIDARG;
+  }
   AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *record=
       (AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *)HeapAlloc(
           GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(*record));
-  if(!record) return E_OUTOFMEMORY;
+  if(!record) {
+    AdmissionUmdDiagnostic("g4-create-resource-exit",E_OUTOFMEMORY,NULL,0u);
+    return E_OUTOFMEMORY;
+  }
   D3D11DDIARG_CREATERESOURCE create={0};
   create.pMipInfoList=CreateResource->pMipInfoList;
   create.pInitialDataUP=CreateResource->pInitialDataUP;
@@ -592,15 +620,19 @@ HRESULT AgxD3d10WindowsPresentationCreate(
   if(record->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC ||
      !record->Resource.Retirement) {
     HeapFree(GetProcessHeap(),0,record);
+    AdmissionUmdDiagnostic("g4-create-resource-exit",E_INVALIDARG,NULL,0u);
     return E_INVALIDARG;
   }
   HRESULT result=attach_presentation_render_resource(Device,record);
   AdmissionUmdDiagnostic("presentation-import",result,NULL,0u);
   if(FAILED(result)) {
+    AdmissionUmdDiagnostic("g4-create-resource-exit",result,NULL,0u);
     AdmissionUmdDestroyResource(deviceHandle,resourceHandle);
     HeapFree(GetProcessHeap(),0,record);return result;
   }
-  record->Device=Device;*Resource=record;return S_OK;
+  record->Device=Device;*Resource=record;
+  AdmissionUmdDiagnostic("g4-create-resource-exit",S_OK,NULL,0u);
+  return S_OK;
 }
 
 HRESULT AgxD3d10WindowsPresentationDestroy(
@@ -623,14 +655,22 @@ HRESULT AgxD3d10WindowsPresentationSubmit(
     AGX_D3D10_WINDOWS_DEVICE *Device,
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource,
     PVOID DxgiContext) {
+  AdmissionUmdDiagnostic("g4-present-enter",S_OK,NULL,0u);
   if(!Device || Device->Stage!=AgxD3d10DeviceReady || !Resource ||
      Resource->Device!=Device ||
-     Resource->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC)
+     Resource->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC) {
+    AdmissionUmdDiagnostic("g4-present-exit",E_INVALIDARG,NULL,0u);
     return E_INVALIDARG;
-  if(!AgxWin32AsahiContextFlushForPresent(Device->Context)) return E_FAIL;
+  }
+  if(!AgxWin32AsahiContextFlushForPresent(Device->Context)) {
+    AdmissionUmdDiagnostic("g4-present-exit",E_FAIL,NULL,0u);
+    return E_FAIL;
+  }
   HRESULT result=AgxD3d10WindowsFlushStatus(Device);
-  if(FAILED(result)) return result;
-  return AdmissionUmdSubmitPresent(&Device->Runtime,&Resource->Resource,DxgiContext);
+  if(SUCCEEDED(result))
+    result=AdmissionUmdSubmitPresent(&Device->Runtime,&Resource->Resource,DxgiContext);
+  AdmissionUmdDiagnostic("g4-present-exit",result,NULL,0u);
+  return result;
 }
 
 HRESULT AgxD3d10WindowsPresentationSetDisplayMode(

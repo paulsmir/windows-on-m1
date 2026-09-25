@@ -34,6 +34,9 @@ if ($GpuvaB1Qualification -and ($MemoryQualification -or $ManagementQualificatio
 if ($GpuvaG3Qualification -and ($GpuvaB1Qualification -or $MemoryQualification -or $ManagementQualification -or $RetainedRootQualification -or $StopAfterEndpoints -or $FirmwareQualification -or $BackendQualification -or $SubmitQualification -or $VisibleScanoutQualification -or $VisibleAgxQualification -or $GpuvaG1bPageProfile -eq 0)) {
     throw "GpuvaG3Qualification requires a standalone WDDM3.2 GpuMmu candidate"
 }
+if ($GpuvaG3Qualification -and -not $NativeFrontend) {
+    throw "GpuvaG3Qualification requires the native GPUVA UMD frontend"
+}
 if ($BltProbeQualification -and -not $GpuvaG3Qualification) {
     throw "BltProbeQualification requires GpuvaG3Qualification"
 }
@@ -79,6 +82,7 @@ if ($null -ne $msbuildCommand) {
 
 $umdAdmissionTraceValue = if ($UmdAdmissionTrace) { "true" } else { "false" }
 $nativeFrontendValue = if ($NativeFrontend) { "true" } else { "false" }
+$gpuvaWinsysValue = if ($GpuvaG3Qualification) { "true" } else { "false" }
 if ($NativeFrontend -and
     ([string]::IsNullOrWhiteSpace($NativeRuntimeProps) -or
      -not (Test-Path -LiteralPath $NativeRuntimeProps) -or
@@ -96,14 +100,36 @@ $pinnedWdkProperties = @(
     ("/p:UniversalCRT_LibraryPath_arm64={0}Lib/10.0.26100.0/ucrt/arm64" -f $pinnedWindowsSdkDir),
     ("/p:WindowsSDK_LibraryPath_ARM64={0}Lib/10.0.26100.0/um/arm64" -f $pinnedWindowsSdkDir)
 )
+$g4UmdProperties = @()
+$umdWdkProperties = $pinnedWdkProperties
+$umdCodeAnalysisValue = 'true'
+if ($GpuvaG3Qualification) {
+    # The native Mesa archive uses /MD. The WDK driver property set above
+    # selects /MT for this UMD project, so use the pinned 26100 user-mode
+    # include and library paths from the verified G4 link recipe.
+    $toolchain = 'C:/VS2022Community/VC/Tools/MSVC/14.44.35207'
+    $kit = 'C:/Program Files (x86)/Windows Kits/10'
+    $includePath = "$toolchain/include%3B$kit/Include/10.0.26100.0/ucrt%3B$kit/Include/10.0.26100.0/shared%3B$kit/Include/10.0.26100.0/um%3B$kit/Include/10.0.26100.0/km"
+    $libraryPath = "$toolchain/lib/arm64%3B$kit/Lib/10.0.26100.0/ucrt/arm64%3B$kit/Lib/10.0.26100.0/um/arm64"
+    $env:PATH = "$kit/bin/10.0.26100.0/x64;" + $env:PATH
+    $g4UmdProperties = @(
+        '/p:WindowsTargetPlatformVersion=10.0.26100.0',
+        '/p:SignMode=Off',
+        "/p:IncludePath=$includePath",
+        "/p:LibraryPath=$libraryPath"
+    )
+    $umdWdkProperties = $g4UmdProperties
+    $umdCodeAnalysisValue = 'false'
+}
 $buildTarget = if ($Incremental) { '/t:Build' } else { '/t:Clean,Build' }
 & $msbuild $umdProject /m $buildTarget "/p:Configuration=$Configuration" `
-    /p:Platform=ARM64 /p:RunCodeAnalysis=true "/p:AppleAgxVersionBuild=$PackageBuild" `
+    /p:Platform=ARM64 "/p:RunCodeAnalysis=$umdCodeAnalysisValue" "/p:AppleAgxVersionBuild=$PackageBuild" `
     "/p:AppleAgxUmdAdmissionTrace=$umdAdmissionTraceValue" `
     "/p:EnableNativeFrontend=$nativeFrontendValue" `
+    "/p:EnableGpuvaWinsys=$gpuvaWinsysValue" `
     "/p:NativeRuntimeProps=$NativeRuntimeProps" `
     "/p:MesaSourceRoot=$MesaSourceRoot" "/p:MesaGeneratedRoot=$MesaGeneratedRoot" `
-    @pinnedWdkProperties
+    @umdWdkProperties
 if ($LASTEXITCODE -ne 0) {
     throw "Clean render-admission ARM64 UMD build failed with exit code $LASTEXITCODE"
 }

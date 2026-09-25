@@ -8,6 +8,19 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include "../src/umd_internal.h"
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
+
+static UINT submit_diagnostics, signal_diagnostics;
+VOID AdmissionUmdDiagnostic(PCSTR stage, HRESULT status,
+                            const UINT *values, UINT count) {
+  if (strcmp(stage, "g4-submit-command-cb") == 0) {
+    assert(status == S_OK && values != NULL && count == 4u);
+    ++submit_diagnostics;
+  } else if (strcmp(stage, "g4-signal-render-fence") == 0) {
+    assert(status == S_OK && values == NULL && count == 0u);
+    ++signal_diagnostics;
+  }
+}
 
 typedef struct {
   UINT reserve, map, wait_map, resident, wait_resident;
@@ -149,6 +162,7 @@ int main(void) {
       fixture.wait_resident == 1 && fixture.submit == 1 &&
       fixture.signal == 1 && fixture.wait_render == 1 &&
       fixture.evict == 1 && fixture.free_va == 2);
+  assert(submit_diagnostics == 1 && signal_diagnostics == 1);
   HeapFree(GetProcessHeap(),0,device);
   puts("umd_gpuva_contract_windows: PASS");
   return 0;
