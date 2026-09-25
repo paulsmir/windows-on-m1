@@ -26,7 +26,7 @@ class AppleAgxWin32PipeScreenTests(unittest.TestCase):
             self.assertNotIn(forbidden, source)
         with tempfile.TemporaryDirectory() as directory:
             binary = Path(directory) / "agx_win32_pipe_screen_test"
-            subprocess.run([
+            command = [
                 os.environ.get("CC", "clang"), "-std=c11", "-Wall",
                 "-Wextra", "-Werror", "-fsanitize=address,undefined",
                 "-I", str(BUILD / "src"), "-I", str(BUILD),
@@ -43,8 +43,15 @@ class AppleAgxWin32PipeScreenTests(unittest.TestCase):
                 str(WINSYS / "agx_win32_transport.c"),
                 str(SHARED / "src/apple_agx_win32_abi.c"),
                 "-o", str(binary),
-            ], check=True, cwd=ROOT)
+            ]
+            subprocess.run(command, check=True, cwd=ROOT)
             subprocess.run([str(binary)], check=True, cwd=ROOT)
+            gpuva_binary = Path(directory) / "agx_win32_pipe_screen_gpuva_test"
+            gpuva_command = command.copy()
+            gpuva_command.insert(1, "-DAPPLE_AGX_GPUVA_WINSYS")
+            gpuva_command[-1] = str(gpuva_binary)
+            subprocess.run(gpuva_command, check=True, cwd=ROOT)
+            subprocess.run([str(gpuva_binary)], check=True, cwd=ROOT)
 
 
 if __name__ == "__main__":

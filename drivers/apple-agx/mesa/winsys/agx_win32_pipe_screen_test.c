@@ -10,7 +10,7 @@
 typedef struct _FAKE_PIPE {
   AGX_WIN32_DEVICE_INFO Info;
   unsigned Creates, Maps, Unmaps, Destroys;
-  unsigned char Storage[2][0x8000];
+  unsigned char Storage[2][0x10000];
   unsigned long long Tokens[2];
 } FAKE_PIPE;
 
@@ -27,7 +27,11 @@ static int create_class(void *Context, unsigned ClassId,
   FAKE_PIPE *fake = Context;
   unsigned index = fake->Creates;
   assert(index < 2u && ClassId == AgxWin32BufferClassGeneral);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  assert(Bytes == 0x10000ULL && Alignment == 0x10000ULL);
+#else
   assert(Bytes != 0ULL && Bytes <= 0x8000ULL && Alignment == 0x4000ULL);
+#endif
   assert(Flags == (AppleAgxWin32BufferCpuRead |
                    AppleAgxWin32BufferCpuWrite |
                    AppleAgxWin32BufferGpuRead |
@@ -49,7 +53,7 @@ static int map(void *Context, unsigned long long Token,
                unsigned Access, void **Address) {
   FAKE_PIPE *fake = Context;
   unsigned index = Token == fake->Tokens[0] ? 0u : 1u;
-  assert(Token == fake->Tokens[index] && Offset + Bytes <= 0x8000ULL);
+  assert(Token == fake->Tokens[index] && Offset + Bytes <= 0x10000ULL);
   assert((Access & ~(AppleAgxWin32BufferCpuRead |
                      AppleAgxWin32BufferCpuWrite)) == 0u);
   *Address = fake->Storage[index] + (size_t)Offset;
@@ -108,7 +112,7 @@ int main(void) {
   static FAKE_PIPE fake;
   AGX_WIN32_SCREEN screen;
   AGX_WIN32_PIPE_DEVICE device = {0};
-  AGX_WIN32_SCREEN_OPERATIONS screenOps = {query, create_class};
+  AGX_WIN32_SCREEN_OPERATIONS screenOps = {0};
   AGX_WIN32_WINSYS_OPERATIONS transportOps = {
       create_general, map, unmap, destroy, fail_submit, fail_wait, retire, NULL};
   struct pipe_screen *pipe;
@@ -123,6 +127,12 @@ int main(void) {
   unsigned char *address;
 
   memset(&fake, 0, sizeof(fake));
+  screenOps.QueryDevice = query;
+  screenOps.CreateClassBuffer = create_class;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  static const AGX_WIN32_GPUVA_OPS gpuvaOps = {0};
+  screenOps.GpuvaOps = &gpuvaOps;
+#endif
   fake.Info = device_info();
   {
     AGX_WIN32_BUFFER_CLASS_INFO swap = fake.Info.Classes[0];

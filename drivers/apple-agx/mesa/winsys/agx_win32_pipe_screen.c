@@ -80,6 +80,15 @@ static int checked_align(uint64_t Value, uint64_t Alignment,
   return *Aligned != 0ULL;
 }
 
+static uint64_t pipe_allocation_granule(const AGX_WIN32_SCREEN *Screen) {
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  (void)Screen;
+  return 0x10000ULL;
+#else
+  return Screen->Info.PageBytes;
+#endif
+}
+
 static const char *pipe_get_name(struct pipe_screen *Base) {
   return pipe_screen_cast(Base) != NULL ? "Apple AGX G13G (Windows)" : NULL;
 }
@@ -163,7 +172,7 @@ static bool pipe_can_create_resource(struct pipe_screen *Base,
   const AGX_WIN32_BUFFER_CLASS_INFO *classInfo = screen == NULL
       ? NULL : pipe_buffer_class(screen->Screen, AgxWin32BufferClassGeneral);
   return screen != NULL && classInfo != NULL &&
-         pipe_resource_layout(Template, screen->Screen->Info.PageBytes,
+         pipe_resource_layout(Template, pipe_allocation_granule(screen->Screen),
                               &pitch, &bpp, &allocationBytes) &&
          allocationBytes <= classInfo->MaximumBytes;
 }
@@ -179,7 +188,7 @@ static struct pipe_resource *pipe_resource_create(
   const AGX_WIN32_BUFFER_CLASS_INFO *classInfo = screen == NULL
       ? NULL : pipe_buffer_class(screen->Screen, AgxWin32BufferClassGeneral);
   if (screen == NULL || classInfo == NULL ||
-      !pipe_resource_layout(Template, screen->Screen->Info.PageBytes,
+      !pipe_resource_layout(Template, pipe_allocation_granule(screen->Screen),
                             &pitch, &bpp, &allocationBytes))
     return NULL;
   resource = (AGX_WIN32_PIPE_RESOURCE *)calloc(1u, sizeof(*resource));
@@ -188,7 +197,7 @@ static struct pipe_resource *pipe_resource_create(
   if (screen->Native != NULL) {
     if (AgxWin32NativeDeviceCreateBo(
             screen->Native, AgxWin32BufferClassGeneral, allocationBytes,
-            classInfo->MinimumAlignment,
+            pipe_allocation_granule(screen->Screen),
             AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite |
                 AppleAgxWin32BufferGpuRead | AppleAgxWin32BufferGpuWrite,
             &resource->NativeBo) != AgxWin32NativeDeviceSuccess) {
@@ -200,7 +209,7 @@ static struct pipe_resource *pipe_resource_create(
   } else {
     result = AgxWin32ScreenCreateBuffer(
         screen->Screen, AgxWin32BufferClassGeneral, allocationBytes,
-        classInfo->MinimumAlignment,
+        pipe_allocation_granule(screen->Screen),
         AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite |
             AppleAgxWin32BufferGpuRead | AppleAgxWin32BufferGpuWrite,
         &resource->Buffer);
