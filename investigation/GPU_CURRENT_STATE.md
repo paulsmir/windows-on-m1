@@ -1,5 +1,27 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP790: 16-KiB probe stopped by our DRIVERCAPS self-veto
+
+Package793 changed only G1b 64→16 behavior (plus package version metadata)
+from EXP789. Cold full-owner boot reached StartDevice Stage12/status0, then
+APPL0002 Code43 with pinned SSH/CPU8 alive. No G3 paging input was recorded.
+DxgKrnl ETL names `DdiQueryAdapterInfo(DXGKQAITYPE_DRIVERCAPS)` returning
+`C0000184` from the miniport, followed by `StartAdapter_AddAdapterFailed`.
+Current `AppleAgxGpuvaG3AdmissionContractValid` unconditionally requires
+`LocalUse64KBPages` and nonzero `Leaf64KBytes` even when the selected G1b
+profile is 16 KiB. This is a KMD self-veto before VidMm evaluates the segment;
+EXP790 therefore cannot answer whether VidMm accepts 16 KiB with GpuMmu.
+Evidence `.local/experiments/EXP790-g3-g1b16/hardware-evidence/EXP790-trace.csv`
+SHA256 `2df93942a3463e34c52381fcc6bf924073ca41871afa0e65765aa110896a4f38`.
+
+R72 p.4 decision: retain 64 KiB as the provisional main profile. Add a
+regression for the 16 KiB admission contract, remove only this self-veto, and
+run one new cold 16 KiB discriminator with R70 and all other layers frozen.
+Select 16 KiB only if it reaches at least EXP789's CDD DMA-pool boundary;
+select 64 KiB plus R71 evaluation only after a named dxgkrnl rejection of
+the corrected 16 KiB declaration. Do not interpret EXP790 Code43 as such a
+rejection. R71 remains unadvertised.
+
 ## 2026-09-25 EXP789: R70 clears Count1 guard; new 0x3B after paging success
 
 Package792 (R70, G1b 64 KiB) was staged from ordinary Code28 and cold-booted
@@ -7,7 +29,11 @@ once under the frozen full-owner profile. StartDevice reached Stage12/status0.
 The last durable G3 input is level0 Start65 Count1 VA `0x2041000` with paging
 status0 and no paging-failure receipt; the EXP788 Start64 Count1 `C000000D`
 boundary was passed. Windows then stopped `0x3B` with `C0000005` and
-instruction address `0xffffbf8e1c68e268`; its causal stack is still unknown.
+instruction address `0xffffbf8e1c68e268`. CDB places the fault in
+`dxgmms2!AddDmaBufferToPool+0x304` during
+`VidMmInitDmaPool -> DXGCONTEXT::Initialize -> CreateCddDevice` in csrss
+`SetDisplayConfig`. The reason for the access violation remains unproven;
+this is the next lifecycle boundary after successful Count1 paging.
 Dump `.local/experiments/EXP789-g3-logical-shadow/hardware-evidence/
 092526-9031-01.dmp` SHA256
 `ffa58ebc2e598c378dc43dcf28f4941465f8346a22ff78ea3f16b2b61ff1f8a5`.
