@@ -23,7 +23,9 @@ class LevelOneFailureReceiptTests(unittest.TestCase):
         receipts = (SRC / "receipts.c").read_text()
         self.assertIn("pte->PageTablePageSize", paging)
         self.assertIn("pte->PageTableAddress", paging)
-        self.assertIn("ExReleaseFastMutex(&state->Lock);\n  AdmissionRecordGpuvaG3PagingFailure", paging)
+        self.assertLess(
+            paging.rindex("ExReleaseFastMutex(&state->Lock);"),
+            paging.rindex("AdmissionRecordGpuvaG3PagingFailure(adapter, &failure)"))
         self.assertIn('L"Wom1G3PagingFailure"', receipts)
         self.assertIn("ZwFlushKey(key)", receipts.split("void AdmissionRecordGpuvaG3PagingFailure(", 1)[1])
 

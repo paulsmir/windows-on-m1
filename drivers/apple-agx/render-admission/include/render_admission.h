@@ -788,6 +788,9 @@ typedef struct _ADMISSION_G3_PAGING_FAILURE {
 void AdmissionRecordGpuvaG3PagingFailure(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_G3_PAGING_FAILURE *Failure);
+void AdmissionRecordGpuvaG3UnpublishedGroups(
+    _In_opt_ ADMISSION_CONTEXT *Context,
+    _In_reads_(32) const ULONGLONG *Counts);
 BOOLEAN AdmissionGpuvaG3DeclarationReady(_In_ const ADMISSION_CONTEXT *Context);
 #endif
 _IRQL_requires_(PASSIVE_LEVEL)

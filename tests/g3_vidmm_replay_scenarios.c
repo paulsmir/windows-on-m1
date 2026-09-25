@@ -221,13 +221,13 @@ int main(void) {
       one.UpdatePageTable.NumPageTableEntries=1;
       one.UpdatePageTable.FirstPteVirtualAddress=0x2043000;
       one.UpdatePageTable.pPageTableEntries=&group[3];
-      expect_ok("complete 16K group",AdmissionGpuvaG3BuildPagingBuffer(&adapter,&one));
+      expect_ok("complete logical system group",AdmissionGpuvaG3BuildPagingBuffer(&adapter,&one));
       {
         ADMISSION_G3_PROCESS *process=(ADMISSION_G3_PROCESS *)sys.hKmdProcess;
         APPLE_AGX_GPUVA_G3_NODE *node=process->Graph.Leaves;
         while (node && !(node->Index==16 &&
                 node->AuxIpa==local_ipa+0x180000)) node=node->Next;
-        assert(node);
+        assert(!node); /* No system-memory backing grant for this process. */
       }
       pte.Flags=0;
       one.UpdatePageTable.StartIndex=66;
@@ -267,6 +267,45 @@ int main(void) {
     assert(last_paging_failure.ChildIpa==local_ipa+0x140000);
     assert(last_paging_failure.GraphLastStatus==4);
     broker.blocked_ipa=0;
+  }
+  {
+    /* EXP793: four valid 4K system pages can occupy one logical group
+     * without forming an AGX 16K backing.  Keep the shadow, publish none. */
+    DXGK_PTE scattered[4]={0};
+    DXGKARG_BUILDPAGINGBUFFER system_update={0};
+    UINT calls=broker.commands;
+    ULONGLONG unpublished_before=state.UnpublishedGroups[0];
+    for (UINT i=0;i<4;i++) {
+      scattered[i].Flags=0x9;
+      scattered[i].PageAddress=0x851000+i*0x20;
+    }
+    system_update.Operation=DXGK_OPERATION_UPDATE_PAGE_TABLE;
+    system_update.UpdatePageTable.hProcess=sys.hKmdProcess;
+    system_update.UpdatePageTable.PageTableAddress.CpuVirtual=local_cpu+0xc000;
+    system_update.UpdatePageTable.UpdateMode=DXGK_PAGETABLEUPDATE_CPU_VIRTUAL;
+    system_update.UpdatePageTable.PageTableLevel=0;
+    system_update.UpdatePageTable.StartIndex=0x5c;
+    system_update.UpdatePageTable.NumPageTableEntries=4;
+    system_update.UpdatePageTable.FirstPteVirtualAddress=0x205c000;
+    system_update.UpdatePageTable.pPageTableEntries=scattered;
+    expect_ok("EXP793 scattered system 4K group",
+        AdmissionGpuvaG3BuildPagingBuffer(&adapter,&system_update));
+    assert(broker.commands==calls);
+    assert(state.UnpublishedGroups[0]==unpublished_before+1u);
+    for (UINT i=0;i<4;i++) scattered[i].PageAddress=0x851000+i;
+    calls=broker.commands;
+    expect_ok("EXP793 unregistered system 16K group",
+        AdmissionGpuvaG3BuildPagingBuffer(&adapter,&system_update));
+    assert(broker.commands==calls);
+    assert(state.UnpublishedGroups[0]==unpublished_before+2u);
+    {
+      ADMISSION_G3_PROCESS *process=(ADMISSION_G3_PROCESS *)sys.hKmdProcess;
+      ADMISSION_G3_TABLE_SHADOW *shadow=process->TableShadows;
+      while (shadow && shadow->OriginalIpa!=local_ipa+0xc000)
+        shadow=shadow->Next;
+      assert(shadow && shadow->LogicalPtes[0x5c].GuestIpa==
+             0x851000000ULL);
+    }
   }
   leaf.Flags=0x41; leaf.PageAddress=0x10;
   flags.Use64KBPages=1; flags.InitialUpdate=1; flags.Repeat=1;

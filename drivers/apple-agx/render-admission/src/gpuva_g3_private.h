@@ -16,6 +16,7 @@ typedef struct _ADMISSION_G3_STATE {
   struct _ADMISSION_G3_PROCESS *ActiveProcess;
   ULONG ActiveFence;
   ULONG LastCompletedFence;
+  ULONGLONG UnpublishedGroups[32];
 } ADMISSION_G3_STATE;
 
 typedef struct _ADMISSION_G3_TABLE_SHADOW {

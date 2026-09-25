@@ -1819,6 +1819,22 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3PagingFailure(
   (void)ZwFlushKey(key);
   ZwClose(key);
 }
+
+_Use_decl_annotations_ void AdmissionRecordGpuvaG3UnpublishedGroups(
+    ADMISSION_CONTEXT *Context, const ULONGLONG *Counts) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      Counts == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, L"Wom1G3UnpublishedGroups", Counts,
+              32u * sizeof(*Counts));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
 #endif
 
 _Use_decl_annotations_ void AdmissionRecordPresentTransfer(

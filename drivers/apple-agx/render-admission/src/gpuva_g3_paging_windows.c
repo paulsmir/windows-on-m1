@@ -205,6 +205,16 @@ static NTSTATUS AdmissionG3UpdateLeaf(
             group[sub].SegmentId != segment ||
             group[sub].GuestIpa != ipa + (ULONGLONG)sub * 0x1000ULL)
           complete = FALSE;
+      /* Only the KMD-owned local reserve can be granted to this graph.
+       * VidMm's aperture/system pages have no process backing grant. */
+      if (complete && (segment != ADMISSION_MEMORY_LOCAL_SEGMENT ||
+          ipa < view.GuestIpaAddress || view.Bytes < 0x4000ULL ||
+          ipa - view.GuestIpaAddress > view.Bytes - 0x4000ULL))
+        complete = FALSE;
+      if (!complete && (flags & APPLE_AGX_GPUVA_G3_VALID) != 0u &&
+          segment < 32u &&
+          process->State->UnpublishedGroups[segment] != MAXULONGLONG)
+        ++process->State->UnpublishedGroups[segment];
       if (!AppleAgxGpuvaG3GraphUpdateLeaf(&process->Graph, table_ipa,
               index, complete ? ipa : 0ULL,
               complete && (flags & APPLE_AGX_GPUVA_G3_WRITE) != 0u)) {
@@ -260,6 +270,8 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
   DXGK_PAGETABLEUPDATEADDRESS address;
   ULONGLONG table_ipa = 0ULL, original_table_ipa, root_ipa;
   ADMISSION_G3_PAGING_FAILURE failure;
+  ULONGLONG unpublished_before[32], unpublished_after[32];
+  BOOLEAN unpublished_changed = FALSE;
   ADMISSION_SCANOUT_MEMORY_VIEW view;
   APPLE_AGX_GPUVA_G3_NODE *table;
   ULONGLONG *table_words;
@@ -331,6 +343,8 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
   failure.TableIpa = table_ipa;
   original_table_ipa = table_ipa;
   ExAcquireFastMutex(&state->Lock);
+  RtlCopyMemory(unpublished_before, state->UnpublishedGroups,
+                sizeof(unpublished_before));
   process = AdmissionGpuvaG3FindProcess(state, update->hProcess);
   if (process == NULL || process->Poisoned || process->Graph.Uncertain) {
     status = STATUS_INVALID_DEVICE_STATE;
@@ -398,6 +412,11 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
       failure.Branch = AdmissionG3PagingTableInitialized;
   }
 PagingDone:
+  RtlCopyMemory(unpublished_after, state->UnpublishedGroups,
+                sizeof(unpublished_after));
+  unpublished_changed = RtlCompareMemory(unpublished_before,
+      unpublished_after, sizeof(unpublished_before)) !=
+      sizeof(unpublished_before);
   if (process != NULL && failure.Branch != 0u) {
     failure.GraphLastStatus = process->Graph.LastStatus;
     failure.GraphUncertain = process->Graph.Uncertain;
@@ -405,6 +424,8 @@ PagingDone:
   if (process != NULL && !NT_SUCCESS(status) &&
       process->Graph.Uncertain) process->Poisoned = TRUE;
   ExReleaseFastMutex(&state->Lock);
+  if (unpublished_changed)
+    AdmissionRecordGpuvaG3UnpublishedGroups(adapter, unpublished_after);
   AdmissionRecordGpuvaG3PagingFailure(adapter, &failure);
   return status;
 }

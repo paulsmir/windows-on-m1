@@ -73,6 +73,7 @@ typedef const void VOID_CONST;
 #define UNREFERENCED_PARAMETER(x) (void)(x)
 #define RtlZeroMemory(p,n) memset((p),0,(n))
 #define RtlCopyMemory(d,s,n) memcpy((d),(s),(n))
+#define RtlCompareMemory(a,b,n) ((SIZE_T)(memcmp((a),(b),(n))==0 ? (n) : 0))
 #define KeMemoryBarrier() __sync_synchronize()
 #define CONTAINING_RECORD(p,t,m) ((t *)((char *)(p)-offsetof(t,m)))
 
@@ -127,7 +128,7 @@ typedef struct _ADMISSION_DEVICE { ADMISSION_OBJECT_DEVICE Object; LONG Win32Gen
 typedef struct { int unused; } ADMISSION_SCHEDULER_CONTEXT;
 typedef struct { int unused; } ADMISSION_PREPATCHED_RENDER;
 typedef struct _ADMISSION_RENDER_CONTEXT { ADMISSION_OBJECT_CONTEXT Object; UINT Win32Generation; BOOLEAN Win32Transport,GpuvaG3Poisoned; ADMISSION_SCHEDULER_CONTEXT SchedulerContext; ADMISSION_PREPATCHED_RENDER PrepatchedRender; ADMISSION_G3_PROCESS *GpuvaG3Process; ULONGLONG GpuvaG3RootIpa; } ADMISSION_RENDER_CONTEXT;
-typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; } ADMISSION_G3_STATE;
+typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONGLONG UnpublishedGroups[32]; } ADMISSION_G3_STATE;
 typedef struct _ADMISSION_G3_TABLE_SHADOW { struct _ADMISSION_G3_TABLE_SHADOW *Next; APPLE_AGX_MEMORY_OBJECT Memory; ULONGLONG OriginalIpa,BrokerIpa; APPLE_AGX_GPUVA_G3_LOGICAL_PTE *LogicalPtes; } ADMISSION_G3_TABLE_SHADOW;
 struct _ADMISSION_G3_PROCESS { LIST_ENTRY Link; ADMISSION_G3_STATE *State; APPLE_AGX_GPUVA_G3_GRAPH Graph; APPLE_AGX_MEMORY_IO Io; APPLE_AGX_MEMORY_OBJECT BootstrapRoot; ADMISSION_G3_TABLE_SHADOW *TableShadows; ULONGLONG BootstrapIpa; ULONG Magic,DeviceRefs,ContextRefs; BOOLEAN Poisoned; };
 struct _ADMISSION_CONTEXT { void *GpuvaG3State; BOOLEAN Started; PDEVICE_OBJECT PhysicalDeviceObject; ADMISSION_CONTEXT *ObjectAdapter; int SchedulerLock,Scheduler; };
@@ -225,6 +226,7 @@ static void AdmissionRecordGpuvaG3ContextInput(PDEVICE_OBJECT p,DXGKARG_CREATECO
 static void AdmissionRecordGpuvaG3DmaContext(PDEVICE_OBJECT p,DXGKARG_CREATECONTEXT *a) {(void)p;(void)a;}
 static ADMISSION_G3_PAGING_FAILURE last_paging_failure;
 static void AdmissionRecordGpuvaG3PagingFailure(ADMISSION_CONTEXT *a,ADMISSION_G3_PAGING_FAILURE *f) {(void)a;if(f->Branch)last_paging_failure=*f;}
+static void AdmissionRecordGpuvaG3UnpublishedGroups(ADMISSION_CONTEXT *a,const ULONGLONG *counts) {(void)a;(void)counts;}
 static void AppleAgxSchedulerContextInitialize(ADMISSION_SCHEDULER_CONTEXT *c) {(void)c;}
 static void AdmissionPrepatchedInitialize(ADMISSION_PREPATCHED_RENDER *p) {(void)p;}
 static bool AdmissionPrepatchedActive(ADMISSION_PREPATCHED_RENDER *p) {(void)p;return false;}
