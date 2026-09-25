@@ -278,6 +278,10 @@ static NTSTATUS AdmissionCreateAllocationImpl(
 #endif
   description = &parsedDescription;
   if (parseResult != AdmissionWin32TransportSuccess ||
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+      (classId != 0u &&
+       (description->Size & (ADMISSION_ALLOCATION_ALIGNMENT - 1u)) != 0ULL) ||
+#endif
       !AdmissionAllocationAlign64K(description->Size, &aligned) ||
       aligned > MAXSIZE_T)
     return STATUS_INVALID_PARAMETER;

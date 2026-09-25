@@ -130,6 +130,12 @@ int main(void) {
   assert(info.SupportedReadSegmentSet == ADMISSION_LOCAL_SEGMENT_SET);
   assert(info.SupportedWriteSegmentSet == ADMISSION_LOCAL_SEGMENT_SET);
   ExFreePoolWithTag(info.hAllocation, ADMISSION_POOL_TAG);
+  native.Size = 0x4000;
+  memset(&info, 0, sizeof(info));
+  info.pPrivateDriverData = &native;
+  info.PrivateDriverDataSize = sizeof(native);
+  assert(AdmissionCreateAllocationImpl(&context, &args) == STATUS_INVALID_PARAMETER);
+  assert(info.hAllocation == NULL);
   INPUT legacy = {0, 1, 0x10000};
   memset(&info, 0, sizeof(info));
   info.pPrivateDriverData = &legacy;
