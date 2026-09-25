@@ -511,7 +511,8 @@ NTSTATUS AdmissionG3ExecuteVirtualPaging(
       destination[index] = pattern[(record->PatternOffset + index) & 3u];
   } else {
     const UCHAR *value = (const UCHAR *)&record->FenceValue;
-    if (record->PatternOffset + record->Bytes > sizeof(record->FenceValue))
+    if (record->PatternOffset >= sizeof(record->FenceValue) ||
+        record->Bytes > sizeof(record->FenceValue) - record->PatternOffset)
       status = STATUS_INVALID_PARAMETER;
     else
       for (index = 0u; index < record->Bytes; ++index)

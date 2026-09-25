@@ -11,6 +11,13 @@ REPLAY = ROOT / "tests/g3_vidmm_replay.py"
 
 
 class G3VidMmReplayTests(unittest.TestCase):
+    def test_exp799_shared_local_leaf_with_real_broker(self):
+        env = dict(os.environ, G3_REPLAY_EXP799="1")
+        result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
+                                env=env, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("EXP799 local leaf", result.stdout)
+
     def test_recorded_and_projected_sequence(self):
         result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
                                 text=True, capture_output=True)

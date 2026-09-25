@@ -1,5 +1,19 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-25 EXP800 candidate: shared local reserve backing
+
+EXP799's `0xbb0`/`0x9bcb20000` leaf and `OWNERSHIP` are still the last
+hardware verdict. A host replay of that index and IPA through the real KMD
+BuildPagingBuffer and m1n1 broker distinguishes a translated, aligned page
+from a broker table collision and demonstrates the same rejection when a
+second process maps a page registered exclusively by the first. The recorded
+receipt does not include the local reserve base or broker subreason, so this
+is a falsifiable **cross-process backing hypothesis**, not a hardware-proven
+cause. Candidate KMD grants the single contiguous local reserve as shared
+with a stable reserve identity; m1n1 ownership checks are unchanged. EXP800's
+first checkpoint is whether this leaf passes; CDD is the subsequent target.
+R81 operation matrix and R82 fence-offset bound are in the candidate.
+
 ## 2026-09-25 EXP799: Submit passed; local leaf OWNERSHIP is the boundary
 
 Package802 accepted the WDK `Flags.Paging=1` virtual Submit: Windows advanced

@@ -228,8 +228,11 @@ bool AppleAgxGpuvaG3GraphUpdateLeaf(APPLE_AGX_GPUVA_G3_GRAPH *graph,
         return false;
       }
       backing->Ipa = guest_ipa;
-      backing->Generation = ++graph->NextGeneration;
-      grant.Command = AGX_GPUVA_V5_REGISTER_BACKING;
+      backing->Generation = graph->SharedBackingGeneration ?
+          graph->SharedBackingGeneration : ++graph->NextGeneration;
+      grant.Command = graph->SharedBackingGeneration ?
+          AGX_GPUVA_V5_REGISTER_SHARED_BACKING :
+          AGX_GPUVA_V5_REGISTER_BACKING;
       grant.AuxIpa = guest_ipa;
       grant.AllocationGeneration = backing->Generation;
       if (!call(graph, &grant)) {

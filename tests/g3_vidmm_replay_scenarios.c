@@ -27,6 +27,9 @@ static void update(ADMISSION_CONTEXT *adapter, HANDLE process, UINT level,
 }
 int main(void) {
   const int r79=getenv("G3_REPLAY_HISTORICAL")==NULL;
+  /* EXP799 receipted the child IPA, not the reserve base.  This synthetic
+   * base keeps that exact IPA inside the modelled 56 MiB local segment. */
+  if (getenv("G3_REPLAY_EXP799")) local_ipa=0x9bc000000ULL;
   assert(DXGK_PAGETABLEUPDATE_CPU_VIRTUAL==0);
   assert(DXGK_PAGETABLEUPDATE_GPU_PHYSICAL==2);
   ADMISSION_CONTEXT adapter={0};
@@ -196,6 +199,65 @@ int main(void) {
   }
   update(&adapter,sys.hKmdProcess,0,local_cpu+0xc000,32,0x2000000,
          flags,map32,"EXP784C level0 Count32 Flags0 projection");
+  if (getenv("G3_REPLAY_EXP799")) {
+    ADMISSION_G3_PROCESS *first=(ADMISSION_G3_PROCESS *)sys.hKmdProcess;
+    ADMISSION_G3_PROCESS *second;
+    DXGK_PTE ptes[4]={0};
+    DXGKARG_BUILDPAGINGBUFFER observed={0};
+    ULONGLONG target=0x9bcb20000ULL;
+    int first_owner=-1, table_collision=0;
+    assert(target>=local_ipa && target-local_ipa<0x3800000ULL);
+    assert(ReplayTranslate(&broker,target)==target);
+    for (unsigned i=0;i<HV_AGX_GPUVA_V5_TABLES;i++)
+      if (gpuva_v5.tables[i].live && gpuva_v5.tables[i].pa==target)
+        table_collision=1;
+    assert(!table_collision);
+    for (UINT i=0;i<4;i++) {
+      ptes[i].Flags=0x41;
+      ptes[i].PageAddress=(target-local_ipa)/0x1000ULL+i;
+    }
+    observed.Operation=DXGK_OPERATION_UPDATE_PAGE_TABLE;
+    observed.UpdatePageTable.UpdateMode=DXGK_PAGETABLEUPDATE_CPU_VIRTUAL;
+    observed.UpdatePageTable.PageTableLevel=0;
+    observed.UpdatePageTable.StartIndex=0xbb0u;
+    observed.UpdatePageTable.NumPageTableEntries=4;
+    observed.UpdatePageTable.FirstPteVirtualAddress=0x2bb0000ULL;
+    observed.UpdatePageTable.pPageTableEntries=ptes;
+    observed.UpdatePageTable.PageTableAddress.CpuVirtual=local_cpu+0xc000;
+    observed.UpdatePageTable.hProcess=sys.hKmdProcess;
+    expect_ok("EXP799 first process local leaf",
+        AdmissionGpuvaG3BuildPagingBuffer(&adapter,&observed));
+    for (unsigned i=0;i<HV_AGX_GPUVA_V5_BACKINGS;i++)
+      if (gpuva_v5.backings[i].live && gpuva_v5.backings[i].pa==target)
+        first_owner=(int)gpuva_v5.backings[i].owner;
+    assert(first_owner>=0);
+    expect_ok("EXP799 second process create",
+        AdmissionDdiCreateProcess(&adapter,&user));
+    second=(ADMISSION_G3_PROCESS *)user.hKmdProcess;
+    assert(second);
+    assert(first->Graph.ProcessId!=second->Graph.ProcessId);
+    assert(first->Graph.SharedBackingGeneration==
+        second->Graph.SharedBackingGeneration);
+    assert(hv_agx_gpuva_v5_register_shared_backing(&gpuva_v5,
+        second->Graph.ProcessId,second->Graph.ProcessGeneration,
+        second->Graph.SharedBackingGeneration+1u,target)==
+        HV_AGX_GPUVA_V5_OWNERSHIP); /* existing backing, wrong generation */
+    assert(hv_agx_gpuva_v5_register_shared_backing(&gpuva_v5,
+        second->Graph.ProcessId,second->Graph.ProcessGeneration,
+        second->Graph.SharedBackingGeneration,first->Graph.RootIpa)==
+        HV_AGX_GPUVA_V5_OWNERSHIP); /* table page is not backing */
+    broker.blocked_ipa=target;
+    assert(hv_agx_gpuva_v5_register_shared_backing(&gpuva_v5,
+        second->Graph.ProcessId,second->Graph.ProcessGeneration,
+        second->Graph.SharedBackingGeneration,target)==
+        HV_AGX_GPUVA_V5_OWNERSHIP); /* translation failure */
+    broker.blocked_ipa=0;
+    observed.UpdatePageTable.PageTableAddress.CpuVirtual=local_cpu+0x20000;
+    observed.UpdatePageTable.hProcess=user.hKmdProcess;
+    expect_ok("EXP799 second process index/IPA local leaf",
+        AdmissionGpuvaG3BuildPagingBuffer(&adapter,&observed));
+    puts("EXP799 local leaf: translation/alignment and table isolation pass; shared reserve backing passes");
+  }
   if (r79 && getenv("G3_REPLAY_SELF_TABLE_BACKING")==NULL) {
   {
     DXGK_PTE root_link={0};
@@ -243,6 +305,13 @@ int main(void) {
     assert(AdmissionPagingRecordsValid(
         (ADMISSION_PAGING_RECORD *)private_data,1,64,
         sizeof(ADMISSION_PAGING_MARKER)));
+    {
+      ADMISSION_PAGING_RECORD malformed=
+          *(ADMISSION_PAGING_RECORD *)private_data;
+      malformed.PatternOffset=MAXULONG;
+      assert(!AdmissionPagingRecordsValid(&malformed,1,64,
+          sizeof(ADMISSION_PAGING_MARKER)));
+    }
     expect_ok("R80 monitored fence CPU execution",
               AdmissionG3ExecuteVirtualPaging(&adapter,
                   (ADMISSION_PAGING_RECORD *)private_data));

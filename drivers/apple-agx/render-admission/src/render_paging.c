@@ -43,8 +43,11 @@ int AdmissionPagingRecordsValid(const ADMISSION_PAGING_RECORD *Records,
                (Records[index].DestinationIpa & 0xfffu) +
                    Records[index].Bytes > 0x1000u ||
                (Records[index].Kind == AdmissionPagingMonitoredFence ?
-                    Records[index].PatternOffset + Records[index].Bytes >
-                        sizeof(Records[index].FenceValue) :
+                    Records[index].PatternOffset >=
+                        sizeof(Records[index].FenceValue) ||
+                    Records[index].Bytes >
+                        sizeof(Records[index].FenceValue) -
+                            Records[index].PatternOffset :
                     Records[index].PatternOffset > 3u) ||
                Records[index].DestinationSegment > 2u ||
                Records[index].SourceSegment > 2u)

@@ -180,6 +180,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
   ADMISSION_CONTEXT *adapter = (ADMISSION_CONTEXT *)MiniportDeviceContext;
   ADMISSION_G3_STATE *state;
   ADMISSION_G3_PROCESS *process;
+  ADMISSION_SCANOUT_MEMORY_VIEW local_view;
   NTSTATUS status;
   KIRQL irql = KeGetCurrentIrql();
   AdmissionRecordGpuvaG3CreateInput(
@@ -198,6 +199,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
   process->Magic = ADMISSION_G3_PROCESS_MAGIC;
   status = AdmissionG3BootstrapRoot(process);
   if (!NT_SUCCESS(status)) goto Fail;
+  status = AdmissionMemoryRuntimeScanoutView(adapter, &local_view);
+  if (!NT_SUCCESS(status)) goto Fail;
+  if (local_view.GuestIpaAddress == 0ULL ||
+      local_view.Bytes < 0x4000ULL) {
+    status = STATUS_INVALID_DEVICE_STATE;
+    goto Fail;
+  }
   ExAcquireFastMutex(&state->Lock);
   if (state->NextProcessId == MAXULONGLONG) {
     ExReleaseFastMutex(&state->Lock);
@@ -207,8 +215,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
   ++state->NextProcessId;
   if (!AppleAgxGpuvaG3GraphInit(&process->Graph, &state->Client,
       state->NextProcessId, 1ULL, AdmissionG3AllocateNode,
-      AdmissionG3FreeNode, NULL) ||
-      !AppleAgxGpuvaG3GraphCreate(&process->Graph, process->BootstrapIpa,
+      AdmissionG3FreeNode, NULL)) {
+    ExReleaseFastMutex(&state->Lock);
+    status = STATUS_INVALID_DEVICE_STATE;
+    goto Fail;
+  }
+  /* All VidMm local pages belong to this one contiguous reservation.  Its
+   * IPA base is stable for the broker epoch and common to every process. */
+  process->Graph.SharedBackingGeneration = local_view.GuestIpaAddress;
+  if (!AppleAgxGpuvaG3GraphCreate(&process->Graph, process->BootstrapIpa,
                                   Args->Flags.SystemProcess != 0u)) {
     if (process->Graph.Uncertain) {
       process->Poisoned = TRUE;

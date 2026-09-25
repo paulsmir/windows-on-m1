@@ -18,6 +18,7 @@ typedef struct _APPLE_AGX_GPUVA_G3_GRAPH {
   APPLE_AGX_GPUVA_G3_FREE Free;
   void *MemoryContext;
   unsigned long long ProcessId, ProcessGeneration, RootIpa, NextGeneration;
+  unsigned long long SharedBackingGeneration;
   unsigned long long LeaseToken;
   APPLE_AGX_GPUVA_G3_NODE *Tables, *Parents, *Leaves, *Backings;
   unsigned int LastStatus, Created, Uncertain, JobInFlight, Slot;
