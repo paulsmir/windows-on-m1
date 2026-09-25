@@ -107,6 +107,8 @@ def main(revision=None, function_revisions=None, old_context_flags=False):
                    "-o", str(binary)]
         if old_context_flags:
             command.insert(1, "-DADMISSION_CONTEXT_VALID_FLAGS=3")
+        if revision is None and "AdmissionDdiCreateContext" not in (function_revisions or {}):
+            command.insert(1, "-DG3_REPLAY_CONTEXT_SEGMENT_CHECK")
         subprocess.run(command, check=True, cwd=ROOT)
         subprocess.run([str(binary)], check=True, cwd=ROOT)
 

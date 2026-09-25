@@ -392,7 +392,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
 
   RtlZeroMemory(&Args->ContextInfo, sizeof(Args->ContextInfo));
   Args->ContextInfo.DmaBufferSize = ADMISSION_DMA_BUFFER_SIZE;
-  Args->ContextInfo.DmaBufferSegmentSet = 0u;
+  Args->ContextInfo.DmaBufferSegmentSet = Args->Flags.VirtualAddressing
+      ? (1u << (ADMISSION_MEMORY_APERTURE_SEGMENT - 1u))
+      : 0u;
   Args->ContextInfo.DmaBufferPrivateDataSize =
       ADMISSION_GDI_DMA_PRIVATE_SIZE;
   if (Args->Flags.GdiContext) {

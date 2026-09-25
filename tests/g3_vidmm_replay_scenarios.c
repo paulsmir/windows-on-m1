@@ -68,6 +68,41 @@ int main(void) {
   cc.EngineAffinity=1;
   expect_ok("EXP778 CreateContext flags5",AdmissionDdiCreateContext(&device,&cc));
   assert(cc.hContext);
+#ifdef G3_REPLAY_CONTEXT_SEGMENT_CHECK
+  assert(cc.ContextInfo.DmaBufferSegmentSet==1u);
+  assert(cc.ContextInfo.DmaBufferSize==0x50000u);
+  assert(cc.ContextInfo.DmaBufferPrivateDataSize==0x51000u);
+  assert(cc.ContextInfo.AllocationListSize==64u);
+  assert(cc.ContextInfo.PatchLocationListSize==64u);
+  assert(cc.ContextInfo.Caps.Value==0u);
+  assert(cc.ContextInfo.PagingCompanionNodeId==0u);
+  {
+    DXGKARG_CREATECONTEXT gdi={0}, paging={0};
+    gdi.Flags.Value=6; /* GdiContext | VirtualAddressing, EXP792. */
+    gdi.hContext=(HANDLE)1;
+    gdi.EngineAffinity=1;
+    expect_ok("EXP792 GDI virtual context",AdmissionDdiCreateContext(&device,&gdi));
+    assert(gdi.ContextInfo.DmaBufferSegmentSet==1u);
+    assert(gdi.ContextInfo.DmaBufferSize==0x50000u);
+    assert(gdi.ContextInfo.DmaBufferPrivateDataSize==0x51000u);
+    assert(gdi.ContextInfo.AllocationListSize==256u);
+    assert(gdi.ContextInfo.PatchLocationListSize==256u);
+    assert(gdi.ContextInfo.Caps.Value==0u);
+    assert(gdi.ContextInfo.PagingCompanionNodeId==0u);
+    paging.Flags.Value=1; /* Nonvirtual paging SystemContext. */
+    paging.EngineAffinity=1;
+    expect_ok("nonvirtual paging context",AdmissionDdiCreateContext(&device,&paging));
+    assert(paging.ContextInfo.DmaBufferSegmentSet==0u);
+    assert(paging.ContextInfo.DmaBufferSize==0x50000u);
+    assert(paging.ContextInfo.DmaBufferPrivateDataSize==0x51000u);
+    assert(paging.ContextInfo.AllocationListSize==64u);
+    assert(paging.ContextInfo.PatchLocationListSize==64u);
+    assert(paging.ContextInfo.Caps.Value==0u);
+    assert(paging.ContextInfo.PagingCompanionNodeId==0u);
+    expect_ok("destroy GDI virtual context",AdmissionDdiDestroyContext(gdi.hContext));
+    expect_ok("destroy nonvirtual paging context",AdmissionDdiDestroyContext(paging.hContext));
+  }
+#endif
   root.hContext=cc.hContext;
   root.Address.SegmentId=ADMISSION_MEMORY_LOCAL_SEGMENT;
   root.Address.SegmentOffset=0;

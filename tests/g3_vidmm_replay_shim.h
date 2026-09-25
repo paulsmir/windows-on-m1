@@ -52,6 +52,7 @@ typedef const void VOID_CONST;
 #define MAXULONG_PTR UINTPTR_MAX
 #define POOL_FLAG_NON_PAGED 0
 #define ADMISSION_POOL_TAG 0x47335453u
+#define ADMISSION_MEMORY_APERTURE_SEGMENT 1u
 #define ADMISSION_MEMORY_LOCAL_SEGMENT 2u
 #define ADMISSION_GPUVA_G1B_PAGE_PROFILE 64
 #define ADMISSION_G3_PROCESS_MAGIC 0x47335052u
@@ -61,12 +62,12 @@ typedef const void VOID_CONST;
 #ifndef ADMISSION_CONTEXT_VALID_FLAGS
 #define ADMISSION_CONTEXT_VALID_FLAGS 0x27u
 #endif
-#define ADMISSION_DMA_BUFFER_SIZE 0x10000u
-#define ADMISSION_GDI_DMA_PRIVATE_SIZE 0x1000u
-#define ADMISSION_GDI_ALLOCATION_LIST_SIZE 1u
-#define ADMISSION_GDI_PATCH_LIST_SIZE 1u
-#define ADMISSION_ALLOCATION_LIST_SIZE 1u
-#define ADMISSION_PATCH_LIST_SIZE 1u
+#define ADMISSION_DMA_BUFFER_SIZE 0x50000u
+#define ADMISSION_GDI_DMA_PRIVATE_SIZE 0x51000u
+#define ADMISSION_GDI_ALLOCATION_LIST_SIZE 256u
+#define ADMISSION_GDI_PATCH_LIST_SIZE 256u
+#define ADMISSION_ALLOCATION_LIST_SIZE 64u
+#define ADMISSION_PATCH_LIST_SIZE 64u
 #define APPLE_AGX_TRUE 1
 #define APPLE_AGX_FALSE 0
 #define UNREFERENCED_PARAMETER(x) (void)(x)
@@ -103,7 +104,8 @@ typedef union { struct { UINT SystemProcess:1; UINT Reserved:31; }; UINT Value; 
 typedef struct { DXGK_CREATEPROCESSFLAGS Flags; UINT NumPasid; void *pPasid,*pProcessName; HANDLE hKmdProcess; } DXGKARG_CREATEPROCESS;
 typedef struct { HANDLE hContext; D3DGPU_PHYSICAL_ADDRESS Address; UINT NumEntries; } DXGKARG_SETROOTPAGETABLE;
 typedef union { struct { UINT SystemContext:1,GdiContext:1,VirtualAddressing:1,SystemProtected:1,HwQueueSupported:1,TestContext:1; }; UINT Value; } DXGK_CREATECONTEXTFLAGS;
-typedef struct { UINT DmaBufferSize,DmaBufferSegmentSet,DmaBufferPrivateDataSize,AllocationListSize,PatchLocationListSize; } DXGK_CONTEXTINFO;
+typedef struct { UINT Value; } DXGK_CONTEXTINFO_CAPS;
+typedef struct { UINT DmaBufferSize,DmaBufferSegmentSet,DmaBufferPrivateDataSize,AllocationListSize,PatchLocationListSize,Reserved; DXGK_CONTEXTINFO_CAPS Caps; UINT PagingCompanionNodeId; } DXGK_CONTEXTINFO;
 typedef struct { DXGK_CREATECONTEXTFLAGS Flags; void *pPrivateDriverData; UINT PrivateDriverDataSize; HANDLE hContext; UINT NodeOrdinal,EngineAffinity; DXGK_CONTEXTINFO ContextInfo; } DXGKARG_CREATECONTEXT;
 
 typedef unsigned int APPLE_AGX_U32,APPLE_AGX_BOOL;
