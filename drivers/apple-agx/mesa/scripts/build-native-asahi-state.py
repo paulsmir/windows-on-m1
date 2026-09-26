@@ -3368,6 +3368,41 @@ uint8_t *AgxWin32NativeEncodeStateTest(struct agx_batch *batch, uint8_t *out) {
       windows_draw_backend->Failed = 1;
       return;
    }''',1)
+        # EXP843: D3D SV_VertexID excludes the base vertex, so tgsi_to_nir emits
+        # load_vertex_id_zero_base.  The AGX compiler accepts that intrinsic only
+        # in software (compute) vertex shaders and asserts in a hardware VS
+        # (agx_compile.c "only for SW VS").  Lower it for vertex shaders to
+        # load_vertex_id - load_first_vertex before sysval lowering; Gallium
+        # Asahi already supplies load_first_vertex as a sysval.
+        zero_base_pass = """
+static bool
+agx_win32_lower_vertex_id_zero_base(nir_builder *b, nir_intrinsic_instr *intr,
+                                    void *data)
+{
+   if (intr->intrinsic != nir_intrinsic_load_vertex_id_zero_base)
+      return false;
+   b->cursor = nir_before_instr(&intr->instr);
+   nir_def *id = nir_isub(b, nir_load_vertex_id(b), nir_load_first_vertex(b));
+   nir_def_replace(&intr->def, id);
+   return true;
+}
+
+static void
+agx_shader_initialize("""
+        if state_text.count('\nstatic void\nagx_shader_initialize(')!=1:
+            raise SystemExit('Ambiguous agx_shader_initialize anchor')
+        state_text=state_text.replace('\nstatic void\nagx_shader_initialize(',zero_base_pass,1)
+        preprocess='\n   agx_preprocess_nir(nir);\n'
+        if state_text.count(preprocess)!=1:
+            raise SystemExit('Ambiguous agx_preprocess_nir anchor')
+        state_text=state_text.replace(preprocess,'''
+   if (nir->info.stage == MESA_SHADER_VERTEX)
+      NIR_PASS(_, nir, nir_shader_intrinsics_pass,
+               agx_win32_lower_vertex_id_zero_base,
+               nir_metadata_control_flow, NULL);
+
+   agx_preprocess_nir(nir);
+''',1)
         state_target.write_text(state_text)
         overlays['src/gallium/drivers/asahi/agx_state.c']['after_state_capture']=hashlib.sha256(state_target.read_bytes()).hexdigest()
         (out/'native_pipeline_contract.c').write_text(
