@@ -120,6 +120,8 @@ static NTSTATUS AdmissionPhysicalTranslate(
 
 /* PRODUCTION_BORROW */
 
+/* PRODUCTION_G3_GATE */
+
 /* PRODUCTION_VALIDATOR */
 
 static void memory(CM_PARTIAL_RESOURCE_DESCRIPTOR *entry,
@@ -305,6 +307,28 @@ int main(void) {
   memory(&entry[2], J313_AGX_G2_GPU_BASE, J313_AGX_G2_GPU_SIZE);
   memory(&entry[3], J313_AGX_G2_HANDOFF_BASE, J313_AGX_G2_HANDOFF_SIZE);
   memory(&entry[4], J313_AGX_G2_POWER_BROKER_BASE, J313_AGX_G2_POWER_BROKER_SIZE);
+  memory(&entry[5], UINT64_C(0x8e0000000), UINT32_C(0x4000000));
+  if (!AdmissionG3FirmwareResourcesPresent(&context)) {
+    fprintf(stderr, "EXP831 G3 preflight rejected valid resources\n");
+    return 1;
+  }
+  list.List[0].PartialResourceList.Count = 5;
+  if (AdmissionG3FirmwareResourcesPresent(&context)) {
+    fprintf(stderr, "G3 preflight admitted ordinary four-resource profile\n");
+    return 1;
+  }
+  list.List[0].PartialResourceList.Count = 6;
+  memory(&entry[4], UINT64_C(0x300010000), UINT32_C(0x1000));
+  if (AdmissionG3FirmwareResourcesPresent(&context)) {
+    fprintf(stderr, "G3 preflight admitted absent broker\n");
+    return 1;
+  }
+  memory(&entry[4], J313_AGX_G2_POWER_BROKER_BASE, J313_AGX_G2_POWER_BROKER_SIZE);
+  memory(&entry[5], UINT64_C(0x8e0004000), UINT32_C(0x4000000));
+  if (AdmissionG3FirmwareResourcesPresent(&context)) {
+    fprintf(stderr, "G3 preflight admitted misaligned local range\n");
+    return 1;
+  }
   memory(&entry[5], UINT64_C(0x8e0000000), UINT32_C(0x4000000));
   borrow_status = AdmissionPhysicalBorrowLocal(&owner, &context.DeviceInformation,
                                                  &allocation, &context.LocalReserveReceipt);

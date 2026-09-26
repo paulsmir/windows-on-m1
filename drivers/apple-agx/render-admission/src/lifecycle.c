@@ -69,6 +69,60 @@ static BOOLEAN AdmissionConsumeGpuvaArm(ADMISSION_CONTEXT *context,
 #endif
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+/* _CRS publishes the dynamic local range only when Mu read a valid R64
+ * receipt. Check that resource shape before consuming the one-shot arm or
+ * touching any GPU/broker register. Borrow later verifies the live receipt. */
+static BOOLEAN AdmissionG3FirmwareResourcesPresent(
+    const ADMISSION_CONTEXT *context) {
+  PCM_RESOURCE_LIST resources;
+  PCM_FULL_RESOURCE_DESCRIPTOR full;
+  ULONG index;
+  ULONG seen = 0u;
+  ULONG interrupts = 0u;
+  if (context == NULL)
+    return FALSE;
+  resources = context->DeviceInformation.TranslatedResourceList;
+  if (resources == NULL || resources->Count != 1u)
+    return FALSE;
+  full = &resources->List[0];
+  for (index = 0u; index < full->PartialResourceList.Count; ++index) {
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR descriptor =
+        &full->PartialResourceList.PartialDescriptors[index];
+    ULONG bit = 0u;
+    if (descriptor->Type == CmResourceTypeMemory) {
+      ULONGLONG start = (ULONGLONG)descriptor->u.Memory.Start.QuadPart;
+      ULONG length = descriptor->u.Memory.Length;
+      if (start == J313_AGX_G2_SGX_MMIO_BASE &&
+          length == J313_AGX_G2_SGX_MMIO_SIZE)
+        bit = 1u << 0;
+      else if (start == J313_AGX_G2_GPU_BASE &&
+               length == J313_AGX_G2_GPU_SIZE)
+        bit = 1u << 1;
+      else if (start == J313_AGX_G2_HANDOFF_BASE &&
+               length == J313_AGX_G2_HANDOFF_SIZE)
+        bit = 1u << 2;
+      else if (start == J313_AGX_G2_POWER_BROKER_BASE &&
+               length == J313_AGX_G2_POWER_BROKER_SIZE)
+        bit = 1u << 3;
+      else if (start != 0ULL &&
+               (start & (APPLE_AGX_LOCAL_RESERVE_BYTES - 1ULL)) == 0ULL &&
+               length == APPLE_AGX_LOCAL_RESERVE_BYTES)
+        bit = 1u << 4;
+      if (bit == 0u || (seen & bit) != 0u)
+        return FALSE;
+      seen |= bit;
+    } else if (descriptor->Type == CmResourceTypeInterrupt &&
+               descriptor->ShareDisposition == CmResourceShareDeviceExclusive &&
+               descriptor->Flags == CM_RESOURCE_INTERRUPT_LATCHED &&
+               descriptor->u.Interrupt.Vector != 0u) {
+      ++interrupts;
+    } else {
+      return FALSE;
+    }
+  }
+  return seen == 0x1fu && interrupts == 1u;
+}
+
 _Use_decl_annotations_ BOOLEAN AdmissionGpuvaG3DeclarationReady(
     const ADMISSION_CONTEXT *context) {
   APPLE_AGX_GPUVA_G3_ADMISSION_CONTRACT model =
@@ -147,12 +201,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   }
 #endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  if (!AdmissionConsumeGpuvaArm(context, L"G3Armed", TRUE)) {
-    AdmissionRecordStartStage(context, AdmissionStartEntered,
-                              STATUS_NOT_SUPPORTED);
-    return STATUS_NOT_SUPPORTED;
-  }
-#endif
   context->StartInfo = *DxgkStartInfo;
   context->Interface = *DxgkInterface;
   context->InterfaceValid = TRUE;
@@ -165,6 +213,31 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   AdmissionRecordStartStage(context, AdmissionStartDeviceInfo, status);
   if (!NT_SUCCESS(status))
     return status;
+  if (!AdmissionG3FirmwareResourcesPresent(context)) {
+    AdmissionRecordStartStage(context, AdmissionStartDeviceInfo,
+                              STATUS_DEVICE_NOT_READY);
+    return STATUS_DEVICE_NOT_READY;
+  }
+  if (!AdmissionConsumeGpuvaArm(context, L"G3Armed", TRUE)) {
+    AdmissionRecordStartStage(context, AdmissionStartEntered,
+                              STATUS_NOT_SUPPORTED);
+    return STATUS_NOT_SUPPORTED;
+  }
+#endif
+#if !defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  context->StartInfo = *DxgkStartInfo;
+  context->Interface = *DxgkInterface;
+  context->InterfaceValid = TRUE;
+  RtlZeroMemory(&context->DeviceInformation,
+                sizeof(context->DeviceInformation));
+  status = context->Interface.DxgkCbGetDeviceInformation(
+      context->Interface.DeviceHandle, &context->DeviceInformation);
+  AdmissionRecordDevice(context->PhysicalDeviceObject,
+                        AdmissionReceiptStartDeviceInfo, status);
+  AdmissionRecordStartStage(context, AdmissionStartDeviceInfo, status);
+  if (!NT_SUCCESS(status))
+    return status;
+#endif
 
   status = AdmissionInterruptStart(context);
   AdmissionRecordDevice(context->PhysicalDeviceObject,
