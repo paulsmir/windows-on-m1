@@ -11,6 +11,11 @@ SCRIPT = ROOT / "scripts/g3-launchers/cold-after-arm.py"
 
 
 class ColdAfterArmTest(unittest.TestCase):
+    def test_host_receipt_binds_experiment_manifest(self):
+        source = SCRIPT.read_text()
+        self.assertIn('receipt.get("ExperimentManifestSha256"', source)
+        self.assertNotIn('receipt.get("ManifestSha256", "").lower() != sha256(args.manifest)', source)
+
     def test_transition_rejects_ordinary_and_unverified_launch(self):
         spec = importlib.util.spec_from_file_location("cold_after_arm", SCRIPT)
         module = importlib.util.module_from_spec(spec)

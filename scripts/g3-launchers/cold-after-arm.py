@@ -78,8 +78,8 @@ def main():
     root = args.manifest.parent
     if manifest.get("launch_profile") != "cold-full-owner":
         raise ValueError("manifest launch profile mismatch")
-    if receipt.get("ManifestSha256", "").lower() != sha256(args.manifest):
-        raise ValueError("stage manifest identity mismatch")
+    if receipt.get("ExperimentManifestSha256", "").lower() != sha256(args.manifest):
+        raise ValueError("experiment manifest identity mismatch")
     artifacts = manifest["artifact_sha256"]
     launcher_name = manifest["launcher"]
     if launcher_name not in artifacts or Path(launcher_name).name != "full-owner-direct.sh":
