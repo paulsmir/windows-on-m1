@@ -1,5 +1,24 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-26 EXP822/R105 prepared; boot unavailable
+
+R105 qualification-only allocation-output matrix and exact cleanup were
+committed (`c3d1ce75`, `d5253697`). Host targeted 47 tests pass; full suite
+1078 retains 15 failures/67 errors. R83 package820 built from 526 verified
+committed sources with zero ARM64 warnings/errors; x64 harness `/W4 /WX`
+passes. Manifest `.local/experiments/EXP822-g4-r105/hardware-manifest.json`
+SHA256 `ecfc6439…`; CAT/SYS/UMD `1feaa8a9…`/`e9dc2ff3…`/`a11154bd…`.
+
+Pinned Air SSH showed ordinary Code28 while L41/L43 proxy endpoints and
+launcher were absent. Exact package820 was staged and armed, then removed
+without a boot: full-owner launcher requires both endpoints before reset.
+Final pinned SSH recovery verified one inert APPL0002 Code28, staged0/arm0,
+SYS0/UMD0/service0/signer0/logger0, CPU8/disks2/USB6. EXP822 is
+**inconclusive before hardware**; there is no matrix or DWM verdict. Continue
+the same one-boot R105 experiment only after `Running proxy` is confirmed;
+reverify package hashes and restage. Do not start KD analysis unless all
+GPUVA rows fail, including the class0-output clone.
+
 ## 2026-09-25 EXP821/R104: G1b page-size fields rejected as sole cause
 
 Microsoft Learn/WDK26100 confirm `DXGK_ALLOCATIONINFO` overlays `Alignment`
