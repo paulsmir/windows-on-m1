@@ -744,10 +744,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeScanoutView(
     return STATUS_INVALID_DEVICE_STATE;
   allocation = (ADMISSION_PHYSICAL_ALLOCATION *)
       runtime->LocalObject.AllocationHandle;
-  if (allocation->Adl == NULL ||
-      !allocation->Adl->Flags.Contiguous ||
-      allocation->Size < Context->Memory.LocalAllocationBytes)
+  if (allocation->Size < Context->Memory.LocalAllocationBytes)
     return STATUS_INVALID_DEVICE_STATE;
+  if (allocation->BorrowedFirmwareReserve) {
+    if (!AppleAgxLocalReserveMatchesResource(
+            &Context->LocalReserveReceipt, allocation->GuestIpaBase,
+            allocation->Size) ||
+        allocation->HostPhysicalBase != Context->LocalReserveReceipt.HostPa)
+      return STATUS_INVALID_DEVICE_STATE;
+  } else if (allocation->Adl == NULL ||
+             !allocation->Adl->Flags.Contiguous) {
+    return STATUS_INVALID_DEVICE_STATE;
+  }
   if ((PUCHAR)runtime->LocalObject.CpuAddress <
       (PUCHAR)runtime->LocalObject.AllocationCpuBase)
     return STATUS_INVALID_ADDRESS;
@@ -755,8 +763,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeScanoutView(
                        (PUCHAR)runtime->LocalObject.AllocationCpuBase);
   if (offset > allocation->Size ||
       Context->Memory.LocalAllocationBytes > allocation->Size - offset ||
-      allocation->GuestIpaBase > MAXULONGLONG - offset)
+      allocation->GuestIpaBase > MAXULONGLONG - offset ||
+      allocation->HostPhysicalBase > MAXULONGLONG - offset)
     return STATUS_INTEGER_OVERFLOW;
+  if (runtime->LocalObject.DeviceAddress !=
+      allocation->HostPhysicalBase + offset)
+    return STATUS_INVALID_ADDRESS;
   View->CpuAddress = runtime->LocalObject.CpuAddress;
   View->GuestIpaAddress = allocation->GuestIpaBase + offset;
   View->HostPhysicalAddress = runtime->LocalObject.DeviceAddress;

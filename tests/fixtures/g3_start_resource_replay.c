@@ -28,7 +28,15 @@ enum { CmResourceTypeMemory = 3, CmResourceTypeInterrupt = 2,
 #define STATUS_INVALID_DEVICE_STATE ((NTSTATUS)0xc0000184)
 #define STATUS_INSUFFICIENT_RESOURCES ((NTSTATUS)0xc000009a)
 #define STATUS_INVALID_ADDRESS ((NTSTATUS)0xc0000141)
+#define STATUS_INTEGER_OVERFLOW ((NTSTATUS)0xc0000095)
 #define STATUS_PENDING ((NTSTATUS)0x00000103)
+#define MAXULONGLONG UINT64_MAX
+#define _In_
+#define _Inout_
+#define _Use_decl_annotations_
+#define VOID void
+#define ADMISSION_LOCAL_GPU_VA UINT64_C(0x1500000000)
+#define ADMISSION_LOCAL_ALLOCATION_BYTES UINT64_C(0x3800000)
 #define NT_SUCCESS(status) ((status) >= 0)
 #define TRUE 1
 #define FALSE 0
@@ -42,6 +50,22 @@ enum { CmResourceTypeMemory = 3, CmResourceTypeInterrupt = 2,
 #define READ_REGISTER_ULONG(address) (*(address))
 #define READ_REGISTER_ULONG64(address) (*(address))
 #define InterlockedIncrement(address) (++*(address))
+#define InterlockedDecrement(address) (--*(address))
+#define ExAcquireFastMutex(address) ((void)(address))
+#define ExReleaseFastMutex(address) ((void)(address))
+#define RtlSecureZeroMemory(pointer, bytes) memset((pointer), 0, (bytes))
+
+typedef struct { void *hPhysicalMemoryObject, *pBaseAddress; SIZE_T Size; }
+    DXGKARGCB_UNMAP_PHYSICAL_MEMORY;
+typedef struct { void *hAdapterMemoryObject, *pAdl; } DXGKARGCB_FREE_ADL;
+typedef struct { void *hPhysicalMemoryObject, *hAdapterMemoryObject; }
+    DXGKARGCB_DESTROY_PHYSICAL_MEMORY_OBJECT;
+typedef struct {
+  void (*DxgkCbUnmapPhysicalMemory)(DXGKARGCB_UNMAP_PHYSICAL_MEMORY *);
+  void (*DxgkCbFreeAdl)(DXGKARGCB_FREE_ADL *);
+  void (*DxgkCbDestroyPhysicalMemoryObject)(
+      DXGKARGCB_DESTROY_PHYSICAL_MEMORY_OBJECT *);
+} DXGKRNL_INTERFACE, *PDXGKRNL_INTERFACE;
 
 typedef struct {
   UCHAR Type, ShareDisposition;
@@ -71,7 +95,9 @@ typedef struct {
   ADMISSION_RESOURCE_ENTRY Entries[32];
 } ADMISSION_RESOURCE_LIST_RECEIPT;
 typedef struct {
-  void *Interface;
+  PDXGKRNL_INTERFACE Interface;
+  void *PhysicalMemoryObject, *AdapterMemoryObject;
+  struct { struct { unsigned Contiguous; } Flags; } *Adl;
   PVOID MappedBase;
   SIZE_T MappedSize;
   PUCHAR CpuBase;
@@ -81,20 +107,50 @@ typedef struct {
   BOOLEAN BorrowedFirmwareReserve;
 } ADMISSION_PHYSICAL_ALLOCATION;
 typedef struct {
-  void *Interface;
+  PDXGKRNL_INTERFACE Interface;
   ULONG LastAllocateStep;
   ULONGLONG LastAllocateBytes;
   NTSTATUS LastAllocateStatus;
   int AllocationCount;
   BOOLEAN Initialized;
+  int Lock;
+  ADMISSION_PHYSICAL_ALLOCATION *Scratch;
 } ADMISSION_PHYSICAL_OWNER;
 typedef struct {
   DXGK_DEVICE_INFO DeviceInformation;
   APPLE_AGX_LOCAL_RESERVE_RECEIPT LocalReserveReceipt;
+  void *MemoryRuntime;
+  struct { int Initialized, UatReady; ULONGLONG LocalAllocationBytes; } Memory;
 } ADMISSION_CONTEXT;
+typedef struct {
+  PVOID CpuAddress;
+  ULONGLONG GuestIpaAddress, HostPhysicalAddress, GpuVirtualAddress, Bytes;
+} ADMISSION_SCANOUT_MEMORY_VIEW;
+typedef struct {
+  APPLE_AGX_MEMORY_OBJECT LocalObject;
+  BOOLEAN PhysicalReady, LocalReady, ResidencyReady, MappingReady, PublicationReady;
+} ADMISSION_MEMORY_RUNTIME;
+
+/* PRODUCTION_MEMORY_GET_RUNTIME */
+/* PRODUCTION_SCANOUT_VIEW */
 
 static UCHAR broker_registers[J313_AGX_G2_POWER_BROKER_SIZE];
 static UCHAR *local_mapping;
+static unsigned local_unmaps;
+static unsigned dxgk_unmaps, dxgk_adl_frees, dxgk_destroys;
+
+static void dxgk_unmap(DXGKARGCB_UNMAP_PHYSICAL_MEMORY *args) {
+  ++dxgk_unmaps;
+  free(args->pBaseAddress);
+}
+static void dxgk_free_adl(DXGKARGCB_FREE_ADL *args) {
+  ++dxgk_adl_frees;
+  free(args->pAdl);
+}
+static void dxgk_destroy(DXGKARGCB_DESTROY_PHYSICAL_MEMORY_OBJECT *args) {
+  (void)args;
+  ++dxgk_destroys;
+}
 
 static PVOID MmMapIoSpaceEx(PHYSICAL_ADDRESS address, SIZE_T bytes, ULONG protection) {
   if ((ULONGLONG)address.QuadPart == J313_AGX_G2_POWER_BROKER_BASE &&
@@ -110,7 +166,12 @@ static PVOID MmMapIoSpaceEx(PHYSICAL_ADDRESS address, SIZE_T bytes, ULONG protec
   return NULL;
 }
 static void MmUnmapIoSpace(PVOID address, SIZE_T bytes) {
-  (void)address; (void)bytes;
+  (void)bytes;
+  if (address == local_mapping) {
+    ++local_unmaps;
+    free(local_mapping);
+    local_mapping = NULL;
+  }
 }
 static PVOID ExAllocatePool2(ULONG flags, SIZE_T bytes, ULONG tag) {
   (void)flags; (void)tag;
@@ -120,9 +181,8 @@ static void ExFreePoolWithTag(PVOID pointer, ULONG tag) {
   (void)tag;
   free(pointer);
 }
-static void AdmissionPhysicalReleaseRaw(ADMISSION_PHYSICAL_ALLOCATION *allocation) {
-  if (allocation->MappedBase != NULL) free(allocation->MappedBase);
-}
+/* PRODUCTION_RELEASE_RAW */
+/* PRODUCTION_PHYSICAL_FREE */
 static NTSTATUS AdmissionPhysicalTranslate(
     ADMISSION_PHYSICAL_OWNER *owner, ADMISSION_PHYSICAL_ALLOCATION *allocation) {
   (void)owner;
@@ -298,9 +358,15 @@ int main(void) {
   CM_PARTIAL_RESOURCE_DESCRIPTOR *entry = list.List[0].PartialResourceList.PartialDescriptors;
   int failures = 0;
   ADMISSION_PHYSICAL_OWNER owner = { .Initialized = TRUE };
+  DXGKRNL_INTERFACE interface = {
+      dxgk_unmap, dxgk_free_adl, dxgk_destroy };
   ADMISSION_PHYSICAL_ALLOCATION *allocation = NULL;
+  ADMISSION_PHYSICAL_ALLOCATION *old_allocation = NULL;
   ADMISSION_RESOURCE_LIST_RECEIPT resource_receipt = {0};
+  ADMISSION_MEMORY_RUNTIME scanout_runtime = {0};
+  ADMISSION_SCANOUT_MEMORY_VIEW scanout_view = {0};
   NTSTATUS borrow_status;
+  owner.Interface = &interface;
   context.DeviceInformation.TranslatedResourceList = &list;
   memcpy(broker_registers + APPLE_AGX_LOCAL_RESERVE_OFFSET + APPLE_AGX_LOCAL_REG_MAGIC,
          &(uint32_t){APPLE_AGX_LOCAL_RESERVE_MAGIC}, sizeof(uint32_t));
@@ -333,7 +399,7 @@ int main(void) {
   entry[10].ShareDisposition = CmResourceShareDeviceExclusive;
   entry[10].Flags = CM_RESOURCE_INTERRUPT_LATCHED;
   entry[10].u.Interrupt.Level = 889;
-  entry[10].u.Interrupt.Vector = 889;
+  entry[10].u.Interrupt.Vector = 2304;
   entry[10].u.Interrupt.Affinity = UINT64_MAX;
   AdmissionFillTranslatedResources(&list, &resource_receipt);
   if (resource_receipt.Version != 1 || resource_receipt.FullCount != 1 ||
@@ -345,7 +411,7 @@ int main(void) {
       resource_receipt.Entries[1].Type != 129 ||
       resource_receipt.Entries[1].Address != 0 ||
       resource_receipt.Entries[10].Type != 2 ||
-      resource_receipt.Entries[10].Vector != 889) {
+      resource_receipt.Entries[10].Vector != 2304) {
     fprintf(stderr, "EXP833 resource receipt lost translated descriptors\n");
     return 1;
   }
@@ -378,6 +444,59 @@ int main(void) {
     fprintf(stderr, "EXP831 production borrow failed: %08x\n", (unsigned)borrow_status);
     return 1;
   }
+  if (!allocation->BorrowedFirmwareReserve || allocation->Adl != NULL ||
+      allocation->PhysicalMemoryObject != NULL ||
+      allocation->AdapterMemoryObject != NULL ||
+      allocation->CpuBase != local_mapping ||
+      allocation->MappedSize != APPLE_AGX_LOCAL_RESERVE_BYTES) {
+    fprintf(stderr, "borrowed allocation impersonated a Dxgk-owned object\n");
+    return 1;
+  }
+  scanout_runtime.LocalObject.AllocationCpuBase = allocation->CpuBase;
+  scanout_runtime.LocalObject.CpuAddress = allocation->CpuBase;
+  scanout_runtime.LocalObject.AllocationHandle = allocation;
+  scanout_runtime.LocalObject.DeviceAddress = allocation->HostPhysicalBase;
+  scanout_runtime.LocalObject.GpuVirtualAddress = ADMISSION_LOCAL_GPU_VA;
+  scanout_runtime.PhysicalReady = scanout_runtime.LocalReady =
+      scanout_runtime.ResidencyReady = scanout_runtime.MappingReady =
+      scanout_runtime.PublicationReady = TRUE;
+  context.MemoryRuntime = &scanout_runtime;
+  context.Memory.Initialized = context.Memory.UatReady = APPLE_AGX_TRUE;
+  context.Memory.LocalAllocationBytes = ADMISSION_LOCAL_ALLOCATION_BYTES;
+  if (AdmissionMemoryRuntimeScanoutView(&context, &scanout_view) !=
+          STATUS_SUCCESS ||
+      scanout_view.GuestIpaAddress != UINT64_C(0x8e0000000) ||
+      scanout_view.HostPhysicalAddress != UINT64_C(0x8e0000000) ||
+      scanout_view.Bytes != ADMISSION_LOCAL_ALLOCATION_BYTES) {
+    fprintf(stderr, "EXP834 borrowed scanout view failed: %08x\n",
+            (unsigned)AdmissionMemoryRuntimeScanoutView(&context, &scanout_view));
+    return 1;
+  }
+  context.LocalReserveReceipt.HostPa += UINT64_C(0x4000);
+  if (AdmissionMemoryRuntimeScanoutView(&context, &scanout_view) !=
+      STATUS_INVALID_DEVICE_STATE) {
+    fprintf(stderr, "scanout admitted mismatched reserve PA\n");
+    return 1;
+  }
+  context.LocalReserveReceipt.HostPa -= UINT64_C(0x4000);
+  scanout_runtime.LocalObject.DeviceAddress += UINT64_C(0x4000);
+  if (AdmissionMemoryRuntimeScanoutView(&context, &scanout_view) !=
+      STATUS_INVALID_ADDRESS) {
+    fprintf(stderr, "scanout admitted mismatched device address\n");
+    return 1;
+  }
+  scanout_runtime.LocalObject.DeviceAddress -= UINT64_C(0x4000);
+  scanout_runtime.LocalObject.CpuAddress = allocation->CpuBase + 0x4000;
+  scanout_runtime.LocalObject.DeviceAddress += UINT64_C(0x4000);
+  if (AdmissionMemoryRuntimeScanoutView(&context, &scanout_view) !=
+          STATUS_SUCCESS ||
+      scanout_view.GuestIpaAddress != UINT64_C(0x8e0004000) ||
+      scanout_view.HostPhysicalAddress != UINT64_C(0x8e0004000)) {
+    fprintf(stderr, "scanout view lost matched contiguous offset\n");
+    return 1;
+  }
+  scanout_runtime.LocalObject.CpuAddress = allocation->CpuBase;
+  scanout_runtime.LocalObject.DeviceAddress = allocation->HostPhysicalBase;
   failures += replay_memory_stages(allocation);
   failures += expect(&context, STATUS_SUCCESS, "EXP831 exact resources");
   memory(&entry[8], UINT64_C(0x8e0004000), UINT32_C(0x4000000));
@@ -397,15 +516,51 @@ int main(void) {
   memory(&entry[2], J313_AGX_G2_GPU_BASE, J313_AGX_G2_GPU_SIZE);
   entry[10].u.Interrupt.Vector = 0;
   failures += expect(&context, STATUS_DEVICE_CONFIGURATION_ERROR, "invalid IRQ");
-  entry[10].u.Interrupt.Vector = 889;
+  entry[10].u.Interrupt.Vector = 2304;
   list.List[0].PartialResourceList.Count = 12;
   entry[11].Type = CmResourceTypeDevicePrivate;
   failures += expect(&context, STATUS_SUCCESS, "system private resource");
   entry[11].Type = 77;
   failures += expect(&context, STATUS_DEVICE_CONFIGURATION_ERROR, "unexpected resource type");
   if (failures) return 1;
-  AdmissionPhysicalReleaseRaw(allocation);
-  ExFreePoolWithTag(allocation, ADMISSION_PHYSICAL_TAG);
+  if (AdmissionPhysicalFree(&owner, allocation) != STATUS_SUCCESS ||
+      owner.AllocationCount != 0 || local_unmaps != 1 ||
+      dxgk_unmaps != 0 || dxgk_adl_frees != 0 || dxgk_destroys != 0) {
+    fprintf(stderr, "borrowed StopDevice released an owned object or leaked mapping\n");
+    return 1;
+  }
+  old_allocation = calloc(1, sizeof(*old_allocation));
+  if (old_allocation == NULL) return 1;
+  old_allocation->Interface = &interface;
+  old_allocation->PhysicalMemoryObject = (void *)0x1;
+  old_allocation->AdapterMemoryObject = (void *)0x2;
+  old_allocation->Adl = calloc(1, sizeof(*old_allocation->Adl));
+  old_allocation->MappedBase = malloc(APPLE_AGX_LOCAL_RESERVE_BYTES);
+  old_allocation->MappedSize = APPLE_AGX_LOCAL_RESERVE_BYTES;
+  old_allocation->CpuBase = old_allocation->MappedBase;
+  old_allocation->Size = APPLE_AGX_LOCAL_RESERVE_BYTES;
+  old_allocation->GuestIpaBase = UINT64_C(0x8f0000000);
+  old_allocation->HostPhysicalBase = UINT64_C(0x8f0000000);
+  if (old_allocation->Adl != NULL)
+    old_allocation->Adl->Flags.Contiguous = 1;
+  scanout_runtime.LocalObject.AllocationCpuBase = old_allocation->CpuBase;
+  scanout_runtime.LocalObject.CpuAddress = old_allocation->CpuBase;
+  scanout_runtime.LocalObject.AllocationHandle = old_allocation;
+  scanout_runtime.LocalObject.DeviceAddress = old_allocation->HostPhysicalBase;
+  if (AdmissionMemoryRuntimeScanoutView(&context, &scanout_view) !=
+          STATUS_SUCCESS ||
+      scanout_view.GuestIpaAddress != UINT64_C(0x8f0000000)) {
+    fprintf(stderr, "Dxgk-owned contiguous ADL scanout view regressed\n");
+    return 1;
+  }
+  owner.AllocationCount = 1;
+  if (old_allocation->Adl == NULL || old_allocation->MappedBase == NULL ||
+      AdmissionPhysicalFree(&owner, old_allocation) != STATUS_SUCCESS ||
+      owner.AllocationCount != 0 || local_unmaps != 1 ||
+      dxgk_unmaps != 1 || dxgk_adl_frees != 1 || dxgk_destroys != 1) {
+    fprintf(stderr, "Dxgk-owned allocation did not release all callbacks\n");
+    return 1;
+  }
   puts("EXP831 exact resources PASS; malformed cases rejected");
   return 0;
 }
