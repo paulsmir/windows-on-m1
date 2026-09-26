@@ -1,5 +1,31 @@
 # GPU current boundary — 2026-09-26
 
+## 2026-09-26 EXP832 — R64 validator fixed offline; stage-only ordinary boot lost SSH
+
+REVIEW R105: ACCEPT unchanged matrix after Code0. REVIEW R85: ACCEPT exact
+source/package/firmware hashes. Commit `01c0d7da` passes RED→GREEN real-C
+borrow/resource validation for the EXP831 list (four fixed ranges plus one
+receipt-matched 64-MiB local range), then host UAT/TTBR publication. R85
+package832 built at root `449cec29`, signed SYS `217fce70`, CAT `53e3afbe`,
+0 warnings/errors; m1n1/Mu R110 unchanged.
+
+EXP832 staged exact `oem5.inf`, armed G3 and performed an ordered restart.
+Windows logged a normal boot at 12:20:31Z and a DNS warning at 12:20:50Z,
+but pinned SSH did not return. One immutable GPU-visible ordinary launch
+reached CPU8 and xHCI/IRQ, then stayed silent without SSH. **No full-owner
+boot, Code0, R105 row or DWM frame occurred.** GPU-hidden dump-first recovery
+found the arm still set, exact package staged, and no bound driver or module;
+the copied minidump matched old EXP831, so there is no proven new bugcheck.
+Nine evidence files were host SHA-verified (`artifact-hashes.json`
+`0a595c22e4012e23c7db6da9dc92e449a4c7c4c061825b0680609bdd187d9903`).
+Exact staged-only cleanup and ordered reboot restored pinned SSH, one inert
+Code28 APPL0002, staged/arm/SYS/UMD/service/signer absent, CPU8, disks2,
+USB6, keyboard/mouse and RDP; cleanup durable Preflight passed. Verdict:
+inconclusive for the validator. Next causal target is the staged-only ordinary
+boot loss of SSH; compare its System/ETL startup with the known-good ordinary
+baseline once before designing another hardware experiment. EXP832 evidence
+and scripts are under `.local/experiments/EXP832-r64-platform/`.
+
 ## 2026-09-26 EXP831 — borrowed 64 MiB reached; Code43 at KMD platform resource validation
 
 REVIEW R111: ACCEPT the KMD memory-type hypothesis, with one qualification:
