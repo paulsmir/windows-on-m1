@@ -32,6 +32,13 @@ class G3VidMmReplayTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("real m1n1 broker dispatch", result.stdout)
 
+    def test_exp846_freed_leaf_page_reused_as_level1(self):
+        env = dict(os.environ, G3_REPLAY_LEVEL_REUSE="1")
+        result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
+                                env=env, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("EXP846 level reuse", result.stdout)
+
     def test_exp786_table_page_as_leaf_backing(self):
         env = dict(os.environ, G3_REPLAY_SELF_TABLE_BACKING="1")
         result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,

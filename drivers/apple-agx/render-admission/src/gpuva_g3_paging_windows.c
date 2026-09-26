@@ -709,9 +709,11 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     }
     failure.BrokerTableIpa = table_ipa;
     /* GraphRegisterTable is idempotent for an existing page.  Clear only a
-     * newly admitted page, before the broker sees its physical contents. */
+     * newly admitted page, before the broker sees its physical contents.  A
+     * page VidMm reuses at another level (EXP846) is new at that level. */
     for (table = process->Graph.Tables; table != NULL; table = table->Next)
-      if (table->Ipa == table_ipa) break;
+      if (table->Ipa == table_ipa &&
+          table->Level == 2u - update->PageTableLevel) break;
     if (table == NULL) {
       for (word_index = 0u; word_index < 0x4000u / sizeof(*table_words);
            ++word_index) {

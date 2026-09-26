@@ -209,6 +209,35 @@ int main(void) {
   }
   update(&adapter,sys.hKmdProcess,0,local_cpu+0xc000,32,0x2000000,
          flags,map32,"EXP784C level0 Count32 Flags0 projection");
+  if (getenv("G3_REPLAY_LEVEL_REUSE")) {
+    /* EXP846 0x10E/0xB: VidMm unlinks and frees a leaf page-table page, then
+     * reuses the same page as a level-1 table (receipt Branch 2, Level 1). */
+    DXGKARG_BUILDPAGINGBUFFER unlink={0}, reuse={0};
+    unsigned char dma[4096]={0}, private_data[4096]={0};
+    DXGK_PTE invalid={0};
+    unlink.Operation=DXGK_OPERATION_UPDATE_PAGE_TABLE;
+    unlink.pDmaBuffer=dma;
+    unlink.pDmaBufferPrivateData=private_data;
+    unlink.UpdatePageTable.hProcess=sys.hKmdProcess;
+    unlink.UpdatePageTable.UpdateMode=DXGK_PAGETABLEUPDATE_CPU_VIRTUAL;
+    unlink.UpdatePageTable.PageTableAddress.CpuVirtual=local_cpu+0x8000;
+    unlink.UpdatePageTable.PageTableLevel=1;
+    unlink.UpdatePageTable.StartIndex=1;
+    unlink.UpdatePageTable.NumPageTableEntries=1;
+    unlink.UpdatePageTable.pPageTableEntries=&invalid;
+    expect_ok("EXP846 unlink freed leaf table",
+        AdmissionGpuvaG3BuildPagingBuffer(&adapter,&unlink));
+    reuse=unlink;
+    reuse.UpdatePageTable.PageTableAddress.CpuVirtual=local_cpu+0xc000;
+    reuse.UpdatePageTable.StartIndex=0;
+    reuse.UpdatePageTable.NumPageTableEntries=1;
+    expect_ok("EXP846 level1 reuse of a freed leaf page",
+        AdmissionGpuvaG3BuildPagingBuffer(&adapter,&reuse));
+    for (UINT i=0;i<0x4000/8;i++)
+      assert(((uint64_t *)(local_cpu+0xc000))[i]==0);
+    puts("EXP846 level reuse: freed leaf page re-registered as level 1");
+    return 0;
+  }
   if (getenv("G3_REPLAY_EXP799")) {
     ADMISSION_G3_PROCESS *first=(ADMISSION_G3_PROCESS *)sys.hKmdProcess;
     ADMISSION_G3_PROCESS *second;

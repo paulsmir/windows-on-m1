@@ -123,6 +123,36 @@ bool AppleAgxGpuvaG3GraphCreate(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   return true;
 }
 
+static bool retire_table(APPLE_AGX_GPUVA_G3_GRAPH *graph,
+    APPLE_AGX_GPUVA_G3_NODE *table) {
+  AGX_GPUVA_V5_REQUEST request = {0};
+  APPLE_AGX_GPUVA_G3_NODE *edge;
+  if (table->Ipa == graph->RootIpa) return false;
+  for (edge = graph->Parents; edge; edge = edge->Next)
+    if (edge->AuxIpa == table->Ipa) return false;
+  if (table->Level == 2u) {
+    while ((edge = graph->Leaves) != 0) {
+      for (; edge && edge->Ipa != table->Ipa; edge = edge->Next) {}
+      if (!edge) break;
+      if (!AppleAgxGpuvaG3GraphUpdateLeaf(graph, table->Ipa, edge->Index,
+                                          0ULL, false)) return false;
+    }
+  } else {
+    while ((edge = graph->Parents) != 0) {
+      for (; edge && edge->Ipa != table->Ipa; edge = edge->Next) {}
+      if (!edge) break;
+      if (!AppleAgxGpuvaG3GraphUpdateParent(graph, table->Ipa, edge->Index,
+                                            0ULL)) return false;
+    }
+  }
+  request.Command = AGX_GPUVA_V5_REVOKE_TABLE;
+  request.TableIpa = table->Ipa;
+  request.Index = table->Level;
+  if (!call(graph, &request)) return false;
+  remove_node(graph, &graph->Tables, table);
+  return true;
+}
+
 bool AppleAgxGpuvaG3GraphRegisterTable(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     unsigned long long ipa, unsigned int level) {
   AGX_GPUVA_V5_REQUEST request = {0};
@@ -130,7 +160,12 @@ bool AppleAgxGpuvaG3GraphRegisterTable(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   if (!graph || !graph->Created || graph->Uncertain || !ipa ||
       (ipa & (G3_PAGE - 1u)) || level > 2u) return false;
   for (existing = graph->Tables; existing; existing = existing->Next)
-    if (existing->Ipa == ipa) return existing->Level == level;
+    if (existing->Ipa == ipa) break;
+  if (existing && existing->Level == level) return true;
+  /* VidMm reuses a freed page-table page at another level (EXP846 0x10E/0xB).
+   * Retire the old table only when no parent still links it: clear its own
+   * entries, revoke it, then register the page at the new level. */
+  if (existing && !retire_table(graph, existing)) return false;
   item = node(graph);
   if (!item) return false;
   request.Command = AGX_GPUVA_V5_REGISTER_TABLE;

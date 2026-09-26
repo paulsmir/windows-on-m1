@@ -45,6 +45,46 @@ static void *allocate(void *opaque, unsigned long long bytes) {
 }
 static void release(void *opaque, void *ptr) { (void)opaque; free(ptr); }
 
+static void level_reuse(void) {
+  struct fixture f = {0};
+  APPLE_AGX_GPUVA_V5_CLIENT client;
+  APPLE_AGX_GPUVA_V5_IO io = {&f, write64, read64, write32, barrier};
+  APPLE_AGX_GPUVA_G3_GRAPH graph;
+  unsigned int before;
+  static const unsigned int retire[] = {
+      AGX_GPUVA_V5_UPDATE_LEAF, AGX_GPUVA_V5_REVOKE_BACKING,
+      AGX_GPUVA_V5_REVOKE_TABLE, AGX_GPUVA_V5_REGISTER_TABLE};
+  assert(AppleAgxGpuvaV5ClientInit(&client, &io));
+  assert(AppleAgxGpuvaG3GraphInit(&graph, &client, 1u, 1u,
+                                  allocate, release, 0));
+  assert(AppleAgxGpuvaG3GraphCreate(&graph, 0x10000000ULL, false));
+  assert(AppleAgxGpuvaG3GraphRegisterTable(&graph,0x10004000ULL,1u));
+  assert(AppleAgxGpuvaG3GraphRegisterTable(&graph,0x10008000ULL,2u));
+  assert(AppleAgxGpuvaG3GraphUpdateParent(&graph,0x10000000ULL,0u,
+                                          0x10004000ULL));
+  assert(AppleAgxGpuvaG3GraphUpdateParent(&graph,0x10004000ULL,0u,
+                                          0x10008000ULL));
+  assert(AppleAgxGpuvaG3GraphUpdateLeaf(&graph,0x10008000ULL,8u,
+                                        0x20000000ULL,true));
+  /* Still linked by a parent: a level change is a real conflict. */
+  before = f.count;
+  assert(!AppleAgxGpuvaG3GraphRegisterTable(&graph,0x10008000ULL,1u));
+  assert(f.count == before);
+  /* VidMm unlinks and frees the leaf page, then reuses it as level 1. */
+  assert(AppleAgxGpuvaG3GraphUpdateParent(&graph,0x10004000ULL,0u,0ULL));
+  before = f.count;
+  assert(AppleAgxGpuvaG3GraphRegisterTable(&graph,0x10008000ULL,1u));
+  assert(f.count - before == sizeof(retire)/sizeof(retire[0]));
+  for (unsigned i = 0; i < f.count - before; i++)
+    assert(f.commands[before + i] == retire[i]);
+  assert(f.request.Index == 1u);
+  /* The reused page is now a level-1 table the root may link. */
+  assert(AppleAgxGpuvaG3GraphUpdateParent(&graph,0x10000000ULL,1u,
+                                          0x10008000ULL));
+  /* The root is never retired. */
+  assert(!AppleAgxGpuvaG3GraphRegisterTable(&graph,0x10000000ULL,1u));
+}
+
 int main(void) {
   struct fixture f = {0};
   APPLE_AGX_GPUVA_V5_CLIENT client;
@@ -106,5 +146,6 @@ int main(void) {
   assert(AppleAgxGpuvaG3GraphDestroy(&graph));
   assert(f.count == sizeof(order)/sizeof(order[0]));
   for (unsigned i=0;i<f.count;i++) assert(f.commands[i] == order[i]);
+  level_reuse();
   return 0;
 }
