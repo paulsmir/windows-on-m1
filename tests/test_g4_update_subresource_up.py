@@ -37,5 +37,20 @@ class UpdateSubresourceUpOverlay(unittest.TestCase):
         self.assertIn("AgxD3d10WindowsFlushRetire", body)
 
 
+class CreateResourceOwnership(unittest.TestCase):
+    def test_every_resource_records_device_identity(self):
+        """EXP841: textures kept owner_cookie 0, so UpdateSubresourceUP rejected them."""
+        source = SCRIPT.read_text()
+        end = source.index("   if (bufferResource) {\n      pResource->constant_buffer")
+        start = source.rindex("pResource->owner_device = pDevice;", 0, end)
+        common = source[start:end]
+        self.assertIn("pResource->owner_cookie = resourceOwner;", common)
+        self.assertIn("pResource->device_generation = resourceGeneration;", common)
+        self.assertIn("AgxD3d10WindowsIdentity", common)
+        create = source.index("HRESULT result = AgxD3d10WindowsPresentationCreate(")
+        presentation = source[create:create + 1200]
+        self.assertIn("pResource->owner_cookie = resourceOwner;", presentation)
+
+
 if __name__ == "__main__":
     unittest.main()

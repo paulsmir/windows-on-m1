@@ -2318,6 +2318,14 @@ AgxD3d10ResourceWithinRequiredLimits(
          return;
       }
       pResource->owner_device = pDevice;
+      if (!AgxD3d10WindowsIdentity(pDevice->windows,&resourceOwner,&resourceGeneration)) {
+         AgxD3d10WindowsPresentationDestroy(
+            pDevice->windows, &pResource->presentation);
+         SetError(hDevice, E_FAIL);
+         return;
+      }
+      pResource->owner_cookie = resourceOwner;
+      pResource->device_generation = resourceGeneration;
       pResource->usage = pCreateResource->Usage;
       pResource->bind_flags = pCreateResource->BindFlags;
       pResource->cpu_access = pCreateResource->MapFlags;
@@ -2441,6 +2449,17 @@ AgxD3d10ResourceWithinRequiredLimits(
       return;
    }
    pResource->owner_device = pDevice;
+   /* EXP841: textures need the same device identity as buffers so later DDIs
+    * (UpdateSubresourceUP) can validate ownership; the buffer path already
+    * fetched it while validating the buffer shape. */
+   if (!bufferResource &&
+       !AgxD3d10WindowsIdentity(pDevice->windows,&resourceOwner,&resourceGeneration)) {
+      pipe_resource_reference(&pResource->resource, NULL);
+      SetError(hDevice, E_FAIL);
+      return;
+   }
+   pResource->owner_cookie = resourceOwner;
+   pResource->device_generation = resourceGeneration;
    pResource->usage = pCreateResource->Usage;
    pResource->bind_flags = pCreateResource->BindFlags;
    pResource->cpu_access = pCreateResource->MapFlags;
