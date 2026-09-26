@@ -66,14 +66,17 @@ static void level_reuse(void) {
                                           0x10008000ULL));
   assert(AppleAgxGpuvaG3GraphUpdateLeaf(&graph,0x10008000ULL,8u,
                                         0x20000000ULL,true));
-  /* Still linked by a parent: a level change is a real conflict. */
+  /* Still reachable from the root: a level change is a real conflict. */
   before = f.count;
   assert(!AppleAgxGpuvaG3GraphRegisterTable(&graph,0x10008000ULL,1u));
   assert(f.count == before);
-  /* VidMm unlinks and frees the leaf page, then reuses it as level 1. */
-  assert(AppleAgxGpuvaG3GraphUpdateParent(&graph,0x10004000ULL,0u,0ULL));
+  /* EXP847: VidMm frees the subtree by clearing only the root link; the
+   * freed level-1 table still holds its stale link to the leaf page. */
+  assert(AppleAgxGpuvaG3GraphUpdateParent(&graph,0x10000000ULL,0u,0ULL));
   before = f.count;
   assert(AppleAgxGpuvaG3GraphRegisterTable(&graph,0x10008000ULL,1u));
+  assert(f.commands[before] == AGX_GPUVA_V5_UPDATE_PARENT);
+  before++;
   assert(f.count - before == sizeof(retire)/sizeof(retire[0]));
   for (unsigned i = 0; i < f.count - before; i++)
     assert(f.commands[before + i] == retire[i]);

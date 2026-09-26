@@ -33,7 +33,14 @@ class G3VidMmReplayTests(unittest.TestCase):
         self.assertIn("real m1n1 broker dispatch", result.stdout)
 
     def test_exp846_freed_leaf_page_reused_as_level1(self):
-        env = dict(os.environ, G3_REPLAY_LEVEL_REUSE="1")
+        env = dict(os.environ, G3_REPLAY_LEVEL_REUSE="unlinked")
+        result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
+                                env=env, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("EXP846 level reuse", result.stdout)
+
+    def test_exp847_reuse_with_stale_link_from_freed_parent(self):
+        env = dict(os.environ, G3_REPLAY_LEVEL_REUSE="stale")
         result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
                                 env=env, text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

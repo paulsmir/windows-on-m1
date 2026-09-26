@@ -123,13 +123,33 @@ bool AppleAgxGpuvaG3GraphCreate(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   return true;
 }
 
+static bool reachable(APPLE_AGX_GPUVA_G3_GRAPH *graph,
+    unsigned long long ipa, unsigned int depth) {
+  APPLE_AGX_GPUVA_G3_NODE *edge;
+  if (ipa == graph->RootIpa) return true;
+  if (depth > 3u) return false;
+  for (edge = graph->Parents; edge; edge = edge->Next)
+    if (edge->AuxIpa == ipa && reachable(graph, edge->Ipa, depth + 1u))
+      return true;
+  return false;
+}
+
 static bool retire_table(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     APPLE_AGX_GPUVA_G3_NODE *table) {
   AGX_GPUVA_V5_REQUEST request = {0};
   APPLE_AGX_GPUVA_G3_NODE *edge;
   if (table->Ipa == graph->RootIpa) return false;
-  for (edge = graph->Parents; edge; edge = edge->Next)
-    if (edge->AuxIpa == table->Ipa) return false;
+  /* VidMm frees a subtree by clearing only its top link, so links held by
+   * an unreachable (freed) parent are stale: clear them.  A link from a
+   * table still reachable from the root is a real conflict. */
+  for (;;) {
+    for (edge = graph->Parents; edge; edge = edge->Next)
+      if (edge->AuxIpa == table->Ipa) break;
+    if (!edge) break;
+    if (reachable(graph, edge->Ipa, 0u)) return false;
+    if (!AppleAgxGpuvaG3GraphUpdateParent(graph, edge->Ipa, edge->Index,
+                                          0ULL)) return false;
+  }
   if (table->Level == 2u) {
     while ((edge = graph->Leaves) != 0) {
       for (; edge && edge->Ipa != table->Ipa; edge = edge->Next) {}

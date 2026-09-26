@@ -225,8 +225,11 @@ int main(void) {
     unlink.UpdatePageTable.StartIndex=1;
     unlink.UpdatePageTable.NumPageTableEntries=1;
     unlink.UpdatePageTable.pPageTableEntries=&invalid;
-    expect_ok("EXP846 unlink freed leaf table",
-        AdmissionGpuvaG3BuildPagingBuffer(&adapter,&unlink));
+    /* EXP847: the freed level-1 table keeps its stale link; only
+     * G3_REPLAY_LEVEL_REUSE=unlinked models an explicit unlink. */
+    if (strcmp(getenv("G3_REPLAY_LEVEL_REUSE"),"unlinked")==0)
+      expect_ok("EXP846 unlink freed leaf table",
+          AdmissionGpuvaG3BuildPagingBuffer(&adapter,&unlink));
     reuse=unlink;
     reuse.UpdatePageTable.PageTableAddress.CpuVirtual=local_cpu+0xc000;
     reuse.UpdatePageTable.StartIndex=0;
