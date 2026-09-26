@@ -1,5 +1,35 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-26 EXP823/R106/R64: staged transition hit 0x101; R105 not run
+
+R106.1 scripts, R64 m1n1/Mu/KMD implementation, host tests, R83 Mu and R85
+signed package823 builds are committed. Exact firmware/package/harness hashes are
+in `.local/experiments/EXP823-r64-reserve/hardware-manifest.json` (corrected
+pre-run SHA256 `441d3a3f...`). REVIEW R106: ACCEPT offline implementation,
+DEFER hardware admission. REVIEW R64: ACCEPT offline reserve implementation,
+DEFER hardware verdict. REVIEW R69: ACCEPT; no live bind occurred.
+
+Package823 staged as oem5, Code28 unbound, G3Armed=1. R106 ordered Windows
+`shutdown /r` flushed transition receipt, but 02:10:08Z boot produced 0x101
+CLOCK_WATCHDOG_TIMEOUT (0x18, 0, fffff80008e40980, 0), CPU0,
+`nt!KeAccumulateTicks`. Immutable ordinary EXP377/392 direct boot reached
+CPU8/NVMe/USB then PSCI reset without pinned SSH; staged post-reboot preflight
+never passed. GPU-hidden EXP377/385 boot recovered SSH: phantom Code45,
+package exact, G3Armed still 1, no R64 reserve receipt. Dump/ETL/events were
+copied and SHA-verified before exact cleanup. Hidden post-clean reboot passed
+durable preflight (manifest `AB76B08B...`, package/signer/arm/files absent,
+CPU8). Full-owner was **not launched**; R105 ran **zero rows**. R64 on-hardware
+verdict remains unknown.
+
+Final control state at 02:25Z: pinned SSH times out; L41/L43 USB present,
+no active launcher; direct proxy NOP and emergency R84 `reboot.py` both time
+out, so no WDT was issued. Ordinary Code28 is not yet reverified. The exact
+cleanup is durable, but the machine needs an external SoC reset to `Running
+proxy` before hash-verified `.local/experiments/EXP823-r64-reserve/ordinary-direct-final.sh`
+can launch immutable EXP377/392 and verify Code28/package0. No further package
+stage or R105 run until this recovery and the 0x101 boundary are resolved.
+Cycle from preregistration to final controls: about 17 minutes.
+
 ## 2026-09-26 EXP822/R105: matrix not reached; durable Code28 restored
 
 One package820 full-owner boot reached pinned SSH, CPU8/disks2/USB6 but
