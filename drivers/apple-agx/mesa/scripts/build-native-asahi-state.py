@@ -3488,6 +3488,20 @@ agx_shader_initialize("""
 ''',1)
         state_target.write_text(state_text)
         overlays['src/gallium/drivers/asahi/agx_state.c']['after_state_capture']=hashlib.sha256(state_target.read_bytes()).hexdigest()
+        # EXP844/845: StartMenuExperienceHost and Explorer faulted in
+        # agx2_disassemble_instr.  Debug (non-NDEBUG) builds disassemble every
+        # binary to fopen("/dev/null") as a smoke test; on Windows that path
+        # does not exist and the decoder reads 16-byte windows past the end of
+        # the binary.  The self-test is diagnostics only: disable it on Win32.
+        compile_target=out/'src/asahi/compiler/agx_compile.c'
+        compile_text=compile_target.read_text()
+        selftest='#ifndef NDEBUG\n   bool selftest = !dump_shaders;\n'
+        if compile_text.count(selftest)!=1:
+            raise SystemExit('Ambiguous agx_compile disassembler self-test anchor')
+        compile_text=compile_text.replace(selftest,
+            '#if !defined(NDEBUG) && !defined(_WIN32)\n   bool selftest = !dump_shaders;\n',1)
+        compile_target.write_text(compile_text)
+        overlays.setdefault('src/asahi/compiler/agx_compile.c',{})['after_win32_selftest']=hashlib.sha256(compile_target.read_bytes()).hexdigest()
         (out/'native_pipeline_contract.c').write_text(
             '#include "gallium/drivers/asahi/agx_state.h"\n'
             '#include "agx_usc.h"\n#include "agx_linker.h"\n'
