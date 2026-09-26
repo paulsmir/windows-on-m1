@@ -2205,3 +2205,14 @@ Commit `3c26262b` (shared R105 Create/Open normalization, host RED→GREEN) buil
 ## 2026-09-26 EXP837–840 — DWM runs on the G4 path without a bugcheck
 
 EXP837 (Mesa class BOs in the EXP836-admitted aperture+local shape) let DWM cross CreateDevice for the first time; the next boundary was a VidMm bugcheck 0x7E in VIDMM_GLOBAL::Rotate. EXP838 rejected the PopulatedByReservedDDRByFirmware hypothesis. EXP839's kernel dump identified the locked allocation as a section-backed 2560×1600 CDD surface placed in CPU-visible memory segment 2 (NULL interface at global alloc +0xF0). Commit 8c9c58f6 keeps CPU-visible class0 surfaces in the aperture. EXP840: Code0, no bugcheck, DWM CreateDevice/Allocate/Reserve/Map/Lock all succeed repeatedly; DWM restarts because the UMD overlay ResourceUpdateSubResourceUP only accepts whole constant-buffer updates (525 E_INVALIDARG). Next target: general UpdateSubresourceUP (buffers with box, textures via texture_subdata) — first path that may require GPU work.
+
+## 2026-09-26 EXP844 — DWM stable on G4; boundary = UMD ResourceCopy coverage
+
+EXP844 (89b00621, VS zero-based vertex-ID lowering) removed the EXP843 DWM
+abort: one DWM PID for the whole run, no kernel fault, Draw and the first
+presentation-import/allocate observed. Remaining UMD refusal: 892
+ResourceCopy E_NOTIMPL (overlay single-level/single-layer copy-family gate)
+on BGRA Tex2D resources. Next causal target: EXP845 (8e74818a) generalized
+ResourceCopy; any remaining refusal logs `reject-resource-copy` arguments.
+Side note (not current boundary): one StartMenuExperienceHost AV in the UMD
+compiler disassembler path (agx2_disassemble_instr).
