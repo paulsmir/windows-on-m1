@@ -697,6 +697,7 @@ void AdmissionRecordDevice(_In_opt_ PDEVICE_OBJECT DeviceObject,
 void AdmissionRecordStartStage(_In_opt_ ADMISSION_CONTEXT *Context,
                                _In_ ADMISSION_START_STAGE Stage,
                                _In_ NTSTATUS Status);
+void AdmissionRecordTranslatedResources(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordPostDisplay(_In_ ADMISSION_CONTEXT *Context,
                                 _In_ NTSTATUS AcquireStatus,
                                 _In_ APPLE_AGX_POST_DISPLAY_ROUTE Route,

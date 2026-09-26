@@ -111,6 +111,9 @@ static BOOLEAN AdmissionG3FirmwareResourcesPresent(
       if (bit == 0u || (seen & bit) != 0u)
         return FALSE;
       seen |= bit;
+    } else if (descriptor->Type == CmResourceTypeDevicePrivate) {
+      /* PnP owns this reserved payload; it is not an address range. */
+      continue;
     } else if (descriptor->Type == CmResourceTypeInterrupt &&
                descriptor->ShareDisposition == CmResourceShareDeviceExclusive &&
                descriptor->Flags == CM_RESOURCE_INTERRUPT_LATCHED &&
@@ -213,6 +216,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   AdmissionRecordStartStage(context, AdmissionStartDeviceInfo, status);
   if (!NT_SUCCESS(status))
     return status;
+  AdmissionRecordTranslatedResources(context);
   if (!AdmissionG3FirmwareResourcesPresent(context)) {
     AdmissionRecordStartStage(context, AdmissionStartDeviceInfo,
                               STATUS_DEVICE_NOT_READY);

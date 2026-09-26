@@ -940,6 +940,70 @@ _Use_decl_annotations_ void AdmissionRecordStartStage(
   ZwClose(key);
 }
 
+typedef struct _ADMISSION_RESOURCE_ENTRY {
+  ULONG Type, ShareDisposition, Flags, Length;
+  ULONGLONG Address;
+  ULONG Vector, Reserved;
+} ADMISSION_RESOURCE_ENTRY;
+
+typedef struct _ADMISSION_RESOURCE_LIST_RECEIPT {
+  ULONG Version, Bytes, FullCount, PartialCount, CapturedCount, Truncated;
+  ADMISSION_RESOURCE_ENTRY Entries[32];
+} ADMISSION_RESOURCE_LIST_RECEIPT;
+
+static void AdmissionFillTranslatedResources(
+    PCM_RESOURCE_LIST Resources, ADMISSION_RESOURCE_LIST_RECEIPT *Receipt) {
+  ULONG full_index;
+  RtlZeroMemory(Receipt, sizeof(*Receipt));
+  Receipt->Version = 1u;
+  Receipt->Bytes = sizeof(*Receipt);
+  if (Resources == NULL)
+    return;
+  Receipt->FullCount = Resources->Count;
+  for (full_index = 0u; full_index < Resources->Count; ++full_index) {
+    PCM_FULL_RESOURCE_DESCRIPTOR full = &Resources->List[full_index];
+    ULONG partial_index;
+    for (partial_index = 0u;
+         partial_index < full->PartialResourceList.Count; ++partial_index) {
+      PCM_PARTIAL_RESOURCE_DESCRIPTOR descriptor =
+          &full->PartialResourceList.PartialDescriptors[partial_index];
+      ADMISSION_RESOURCE_ENTRY *entry;
+      ++Receipt->PartialCount;
+      if (Receipt->CapturedCount == RTL_NUMBER_OF(Receipt->Entries)) {
+        Receipt->Truncated = 1u;
+        continue;
+      }
+      entry = &Receipt->Entries[Receipt->CapturedCount++];
+      entry->Type = descriptor->Type;
+      entry->ShareDisposition = descriptor->ShareDisposition;
+      entry->Flags = descriptor->Flags;
+      if (descriptor->Type == CmResourceTypeMemory) {
+        entry->Address = (ULONGLONG)descriptor->u.Memory.Start.QuadPart;
+        entry->Length = descriptor->u.Memory.Length;
+      } else if (descriptor->Type == CmResourceTypeInterrupt) {
+        entry->Vector = descriptor->u.Interrupt.Vector;
+      }
+    }
+  }
+}
+
+_Use_decl_annotations_ void AdmissionRecordTranslatedResources(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_RESOURCE_LIST_RECEIPT receipt;
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL)
+    return;
+  AdmissionFillTranslatedResources(
+      Context->DeviceInformation.TranslatedResourceList, &receipt);
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, L"Wom1TranslatedResources", &receipt, sizeof(receipt));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
 typedef struct _ADMISSION_POST_DISPLAY_RECEIPT {
   ULONG Version, Bytes, AcquireStatus, Route, DecisionStatus;
   ULONG Width, Height, Pitch, ColorFormat, TargetId, AcpiId;

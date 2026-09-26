@@ -13,13 +13,14 @@ typedef uint64_t ULONGLONG;
 typedef uint64_t ULONG64;
 typedef int64_t LONGLONG;
 typedef uint8_t UCHAR, *PUCHAR;
+typedef uint16_t USHORT;
 typedef size_t SIZE_T;
 typedef void *PVOID;
 typedef int BOOLEAN;
 typedef int32_t NTSTATUS;
 typedef struct { int64_t QuadPart; } PHYSICAL_ADDRESS;
 enum { CmResourceTypeMemory = 3, CmResourceTypeInterrupt = 2,
-       CmResourceTypeDevicePrivate = 5, CmResourceShareDeviceExclusive = 1,
+       CmResourceTypeDevicePrivate = 129, CmResourceShareDeviceExclusive = 1,
        CM_RESOURCE_INTERRUPT_LATCHED = 1 };
 #define STATUS_SUCCESS ((NTSTATUS)0)
 #define STATUS_INVALID_PARAMETER ((NTSTATUS)0xc000000d)
@@ -37,26 +38,38 @@ enum { CmResourceTypeMemory = 3, CmResourceTypeInterrupt = 2,
 #define PAGE_NOCACHE 2
 #define PAGE_WRITECOMBINE 4
 #define RtlZeroMemory(pointer, bytes) memset((pointer), 0, (bytes))
+#define RTL_NUMBER_OF(array) (sizeof(array) / sizeof((array)[0]))
 #define READ_REGISTER_ULONG(address) (*(address))
 #define READ_REGISTER_ULONG64(address) (*(address))
 #define InterlockedIncrement(address) (++*(address))
 
 typedef struct {
-  ULONG Type, ShareDisposition, Flags;
+  UCHAR Type, ShareDisposition;
+  USHORT Flags;
   union {
     struct { PHYSICAL_ADDRESS Start; ULONG Length; } Memory;
-    struct { ULONG Vector; } Interrupt;
+    struct { ULONG Level, Vector; ULONGLONG Affinity; } Interrupt;
+    struct { ULONG Data[3]; } DevicePrivate;
   } u;
 } CM_PARTIAL_RESOURCE_DESCRIPTOR, *PCM_PARTIAL_RESOURCE_DESCRIPTOR;
 typedef struct {
   ULONG Count;
-  CM_PARTIAL_RESOURCE_DESCRIPTOR PartialDescriptors[8];
+  CM_PARTIAL_RESOURCE_DESCRIPTOR PartialDescriptors[16];
 } CM_PARTIAL_RESOURCE_LIST;
 typedef struct { CM_PARTIAL_RESOURCE_LIST PartialResourceList; }
     CM_FULL_RESOURCE_DESCRIPTOR, *PCM_FULL_RESOURCE_DESCRIPTOR;
 typedef struct { ULONG Count; CM_FULL_RESOURCE_DESCRIPTOR List[1]; }
     CM_RESOURCE_LIST, *PCM_RESOURCE_LIST;
 typedef struct { PCM_RESOURCE_LIST TranslatedResourceList; } DXGK_DEVICE_INFO;
+typedef struct {
+  ULONG Type, ShareDisposition, Flags, Length;
+  ULONGLONG Address;
+  ULONG Vector, Reserved;
+} ADMISSION_RESOURCE_ENTRY;
+typedef struct {
+  ULONG Version, Bytes, FullCount, PartialCount, CapturedCount, Truncated;
+  ADMISSION_RESOURCE_ENTRY Entries[32];
+} ADMISSION_RESOURCE_LIST_RECEIPT;
 typedef struct {
   void *Interface;
   PVOID MappedBase;
@@ -124,10 +137,13 @@ static NTSTATUS AdmissionPhysicalTranslate(
 
 /* PRODUCTION_VALIDATOR */
 
+/* PRODUCTION_RESOURCE_CAPTURE */
+
 static void memory(CM_PARTIAL_RESOURCE_DESCRIPTOR *entry,
                    ULONGLONG base, ULONG size) {
   memset(entry, 0, sizeof(*entry));
   entry->Type = CmResourceTypeMemory;
+  entry->ShareDisposition = CmResourceShareDeviceExclusive;
   entry->u.Memory.Start.QuadPart = (int64_t)base;
   entry->u.Memory.Length = size;
 }
@@ -283,6 +299,7 @@ int main(void) {
   int failures = 0;
   ADMISSION_PHYSICAL_OWNER owner = { .Initialized = TRUE };
   ADMISSION_PHYSICAL_ALLOCATION *allocation = NULL;
+  ADMISSION_RESOURCE_LIST_RECEIPT resource_receipt = {0};
   NTSTATUS borrow_status;
   context.DeviceInformation.TranslatedResourceList = &list;
   memcpy(broker_registers + APPLE_AGX_LOCAL_RESERVE_OFFSET + APPLE_AGX_LOCAL_REG_MAGIC,
@@ -298,38 +315,62 @@ int main(void) {
   memcpy(broker_registers + APPLE_AGX_LOCAL_RESERVE_OFFSET + APPLE_AGX_LOCAL_REG_BYTES,
          &(uint64_t){APPLE_AGX_LOCAL_RESERVE_BYTES}, sizeof(uint64_t));
   list.Count = 1;
-  list.List[0].PartialResourceList.Count = 6;
-  entry[0].Type = CmResourceTypeInterrupt;
-  entry[0].ShareDisposition = CmResourceShareDeviceExclusive;
-  entry[0].Flags = CM_RESOURCE_INTERRUPT_LATCHED;
-  entry[0].u.Interrupt.Vector = 889;
-  memory(&entry[1], J313_AGX_G2_SGX_MMIO_BASE, J313_AGX_G2_SGX_MMIO_SIZE);
+  list.List[0].PartialResourceList.Count = 11;
+  memory(&entry[0], J313_AGX_G2_SGX_MMIO_BASE, J313_AGX_G2_SGX_MMIO_SIZE);
   memory(&entry[2], J313_AGX_G2_GPU_BASE, J313_AGX_G2_GPU_SIZE);
-  memory(&entry[3], J313_AGX_G2_HANDOFF_BASE, J313_AGX_G2_HANDOFF_SIZE);
-  memory(&entry[4], J313_AGX_G2_POWER_BROKER_BASE, J313_AGX_G2_POWER_BROKER_SIZE);
-  memory(&entry[5], UINT64_C(0x8e0000000), UINT32_C(0x4000000));
-  if (!AdmissionG3FirmwareResourcesPresent(&context)) {
-    fprintf(stderr, "EXP831 G3 preflight rejected valid resources\n");
+  memory(&entry[4], J313_AGX_G2_HANDOFF_BASE, J313_AGX_G2_HANDOFF_SIZE);
+  memory(&entry[6], J313_AGX_G2_POWER_BROKER_BASE, J313_AGX_G2_POWER_BROKER_SIZE);
+  memory(&entry[8], UINT64_C(0x8e0000000), UINT32_C(0x4000000));
+  for (unsigned index = 1; index < 10; index += 2) {
+    entry[index].Type = CmResourceTypeDevicePrivate;
+    entry[index].Flags = 24576;
+    entry[index].u.DevicePrivate.Data[0] = 3;
+    entry[index].u.DevicePrivate.Data[1] = (ULONG)entry[index - 1].u.Memory.Start.QuadPart;
+    entry[index].u.DevicePrivate.Data[2] =
+        (ULONG)((ULONGLONG)entry[index - 1].u.Memory.Start.QuadPart >> 32);
+  }
+  entry[10].Type = CmResourceTypeInterrupt;
+  entry[10].ShareDisposition = CmResourceShareDeviceExclusive;
+  entry[10].Flags = CM_RESOURCE_INTERRUPT_LATCHED;
+  entry[10].u.Interrupt.Level = 889;
+  entry[10].u.Interrupt.Vector = 889;
+  entry[10].u.Interrupt.Affinity = UINT64_MAX;
+  AdmissionFillTranslatedResources(&list, &resource_receipt);
+  if (resource_receipt.Version != 1 || resource_receipt.FullCount != 1 ||
+      resource_receipt.PartialCount != 11 || resource_receipt.CapturedCount != 11 ||
+      resource_receipt.Truncated != 0 ||
+      resource_receipt.Entries[0].Type != 3 ||
+      resource_receipt.Entries[0].Address != J313_AGX_G2_SGX_MMIO_BASE ||
+      resource_receipt.Entries[0].Length != J313_AGX_G2_SGX_MMIO_SIZE ||
+      resource_receipt.Entries[1].Type != 129 ||
+      resource_receipt.Entries[1].Address != 0 ||
+      resource_receipt.Entries[10].Type != 2 ||
+      resource_receipt.Entries[10].Vector != 889) {
+    fprintf(stderr, "EXP833 resource receipt lost translated descriptors\n");
     return 1;
   }
-  list.List[0].PartialResourceList.Count = 5;
+  if (!AdmissionG3FirmwareResourcesPresent(&context)) {
+    fprintf(stderr, "EXP833 G3 preflight rejected valid resources\n");
+    return 1;
+  }
+  list.List[0].PartialResourceList.Count = 10;
   if (AdmissionG3FirmwareResourcesPresent(&context)) {
     fprintf(stderr, "G3 preflight admitted ordinary four-resource profile\n");
     return 1;
   }
-  list.List[0].PartialResourceList.Count = 6;
-  memory(&entry[4], UINT64_C(0x300010000), UINT32_C(0x1000));
+  list.List[0].PartialResourceList.Count = 11;
+  memory(&entry[6], UINT64_C(0x300010000), UINT32_C(0x1000));
   if (AdmissionG3FirmwareResourcesPresent(&context)) {
     fprintf(stderr, "G3 preflight admitted absent broker\n");
     return 1;
   }
-  memory(&entry[4], J313_AGX_G2_POWER_BROKER_BASE, J313_AGX_G2_POWER_BROKER_SIZE);
-  memory(&entry[5], UINT64_C(0x8e0004000), UINT32_C(0x4000000));
+  memory(&entry[6], J313_AGX_G2_POWER_BROKER_BASE, J313_AGX_G2_POWER_BROKER_SIZE);
+  memory(&entry[8], UINT64_C(0x8e0004000), UINT32_C(0x4000000));
   if (AdmissionG3FirmwareResourcesPresent(&context)) {
     fprintf(stderr, "G3 preflight admitted misaligned local range\n");
     return 1;
   }
-  memory(&entry[5], UINT64_C(0x8e0000000), UINT32_C(0x4000000));
+  memory(&entry[8], UINT64_C(0x8e0000000), UINT32_C(0x4000000));
   borrow_status = AdmissionPhysicalBorrowLocal(&owner, &context.DeviceInformation,
                                                  &allocation, &context.LocalReserveReceipt);
   if (borrow_status != STATUS_SUCCESS || allocation == NULL ||
@@ -339,27 +380,29 @@ int main(void) {
   }
   failures += replay_memory_stages(allocation);
   failures += expect(&context, STATUS_SUCCESS, "EXP831 exact resources");
-  memory(&entry[5], UINT64_C(0x8e0004000), UINT32_C(0x4000000));
+  memory(&entry[8], UINT64_C(0x8e0004000), UINT32_C(0x4000000));
   failures += expect(&context, STATUS_DEVICE_CONFIGURATION_ERROR, "wrong local IPA");
-  memory(&entry[5], UINT64_C(0x8e0000000), UINT32_C(0x2000000));
+  memory(&entry[8], UINT64_C(0x8e0000000), UINT32_C(0x2000000));
   failures += expect(&context, STATUS_DEVICE_CONFIGURATION_ERROR, "short local resource");
-  memory(&entry[5], UINT64_C(0x8e0000000), UINT32_C(0x4000000));
+  memory(&entry[8], UINT64_C(0x8e0000000), UINT32_C(0x4000000));
   context.LocalReserveReceipt.Valid = 0;
   failures += expect(&context, STATUS_DEVICE_CONFIGURATION_ERROR, "invalid receipt");
   context.LocalReserveReceipt.Valid = 1;
-  list.List[0].PartialResourceList.Count = 7;
-  memory(&entry[6], UINT64_C(0x8e0000000), UINT32_C(0x4000000));
+  list.List[0].PartialResourceList.Count = 12;
+  memory(&entry[11], UINT64_C(0x8e0000000), UINT32_C(0x4000000));
   failures += expect(&context, STATUS_DEVICE_CONFIGURATION_ERROR, "duplicate local");
-  list.List[0].PartialResourceList.Count = 6;
+  list.List[0].PartialResourceList.Count = 11;
   memory(&entry[2], UINT64_C(0x8e0000000), UINT32_C(0x4000000));
   failures += expect(&context, STATUS_DEVICE_CONFIGURATION_ERROR, "missing GPU resource");
   memory(&entry[2], J313_AGX_G2_GPU_BASE, J313_AGX_G2_GPU_SIZE);
-  entry[0].u.Interrupt.Vector = 0;
+  entry[10].u.Interrupt.Vector = 0;
   failures += expect(&context, STATUS_DEVICE_CONFIGURATION_ERROR, "invalid IRQ");
-  entry[0].u.Interrupt.Vector = 889;
-  list.List[0].PartialResourceList.Count = 7;
-  entry[6].Type = CmResourceTypeDevicePrivate;
-  failures += expect(&context, STATUS_DEVICE_CONFIGURATION_ERROR, "unexpected private resource");
+  entry[10].u.Interrupt.Vector = 889;
+  list.List[0].PartialResourceList.Count = 12;
+  entry[11].Type = CmResourceTypeDevicePrivate;
+  failures += expect(&context, STATUS_SUCCESS, "system private resource");
+  entry[11].Type = 77;
+  failures += expect(&context, STATUS_DEVICE_CONFIGURATION_ERROR, "unexpected resource type");
   if (failures) return 1;
   AdmissionPhysicalReleaseRaw(allocation);
   ExFreePoolWithTag(allocation, ADMISSION_PHYSICAL_TAG);

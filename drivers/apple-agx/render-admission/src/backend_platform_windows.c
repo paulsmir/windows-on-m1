@@ -1050,6 +1050,9 @@ static NTSTATUS AdmissionPlatformValidateResources(
           return STATUS_DEVICE_CONFIGURATION_ERROR;
         seen |= bit;
         ++memory_count;
+      } else if (descriptor->Type == CmResourceTypeDevicePrivate) {
+        /* PnP owns the reserved payload; only memory and IRQ are ours. */
+        continue;
       } else if (descriptor->Type == CmResourceTypeInterrupt) {
         if (descriptor->ShareDisposition != CmResourceShareDeviceExclusive ||
             descriptor->Flags != CM_RESOURCE_INTERRUPT_LATCHED ||
