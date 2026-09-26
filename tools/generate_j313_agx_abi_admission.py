@@ -198,9 +198,9 @@ Device (AGX0)
     Name (_STA, 0x0F)
     OperationRegion (LREG, SystemMemory, 0x{broker + 0xD00:016X}, 0x28)
     Field (LREG, DWordAcc, NoLock, Preserve)
-    {{ LMAG, 32, LVER, 32, LVAL, 32 }}
-    Field (LREG, QWordAcc, NoLock, Preserve)
-    {{ Offset (0x10), LIPA, 64, LHPA, 64, LBYT, 64 }}
+    {{ LMAG, 32, LVER, 32, LVAL, 32,
+      Offset (0x10), LIPL, 32, LIPH, 32, LHPL, 32, LHPH, 32,
+      LBYL, 32, LBYH, 32 }}
     Name (BAS0, ResourceTemplate ()
     {{
 {base_resources}
@@ -217,14 +217,16 @@ Device (AGX0)
     }})
     Method (_CRS, 0, Serialized)
     {{
+        Store (Or (ShiftLeft (LIPH, 0x20), And (LIPL, 0xFFFFFFFF)), Local0)
+        Store (Or (ShiftLeft (LHPH, 0x20), And (LHPL, 0xFFFFFFFF)), Local1)
         If ((LMAG == 0x4C584741) && (LVER == One) &&
-            (LVAL == One) && (LBYT == 0x4000000) &&
-            (LIPA != Zero) && (LHPA != Zero))
+            (LVAL == One) && (LBYL == 0x4000000) &&
+            (LBYH == Zero) && (Local0 != Zero) && (Local1 != Zero))
         {{
             CreateQWordField (LOCR, ^LRNG._MIN, MMIN)
             CreateQWordField (LOCR, ^LRNG._MAX, MMAX)
-            Store (LIPA, MMIN)
-            Store (Subtract (Add (LIPA, LBYT), One), MMAX)
+            Store (Local0, MMIN)
+            Store (Subtract (Add (Local0, LBYL), One), MMAX)
             Return (LOCR)
         }}
         Return (BAS0)

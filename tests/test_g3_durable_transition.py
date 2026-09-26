@@ -26,6 +26,12 @@ class DurableTransitionContract(unittest.TestCase):
                 self.assertIn("durable-transition.ps1", source)
                 self.assertIn("-Mode Commit", source)
 
+    def test_boot_comparison_normalizes_both_timestamps_to_utc(self):
+        source = (SCRIPTS / "durable-transition.ps1").read_text()
+        self.assertIn("[DateTimeOffset]::Parse($transition.BeforeBoot).UtcDateTime", source)
+        self.assertIn("[DateTimeOffset]::Parse($transition.Utc).UtcDateTime", source)
+        self.assertNotIn("[DateTime]$transition.BeforeBoot", source)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -99,7 +99,10 @@ if (!(Test-Path -LiteralPath $transitionFile -PathType Leaf)) { throw 'transitio
 $transition = Get-Content -LiteralPath $transitionFile -Raw | ConvertFrom-Json
 if ($transition.ManifestSha256 -ne $manifestHash) { throw 'manifest changed across reboot' }
 $afterBoot = Get-BootUtc
-if ([DateTime]$afterBoot -le [DateTime]$transition.BeforeBoot) { throw 'ordered reboot not observed' }
-if ([DateTime]$transition.Utc -lt [DateTime]$transition.BeforeBoot) { throw 'invalid transition chronology' }
+$beforeUtc = [DateTimeOffset]::Parse($transition.BeforeBoot).UtcDateTime
+$afterUtc = [DateTimeOffset]::Parse($afterBoot).UtcDateTime
+$transitionUtc = [DateTimeOffset]::Parse($transition.Utc).UtcDateTime
+if ($afterUtc -le $beforeUtc) { throw 'ordered reboot not observed' }
+if ($transitionUtc -lt $beforeUtc) { throw 'invalid transition chronology' }
 [ordered]@{ Verdict='PASS'; BeforeBoot=$transition.BeforeBoot; AfterBoot=$afterBoot;
     ManifestSha256=$manifestHash; Package=$manifest.Package.State } | ConvertTo-Json -Compress
