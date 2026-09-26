@@ -2759,40 +2759,77 @@ AgxD3d10ResourceWithinRequiredLimits(
    Resource *resource = CastResource(hDstResource);
    ULONGLONG owner = 0;
    ULONG generation = 0;
+   /* EXP840: DWM updates textures and boxed buffer ranges, not only whole
+    * constant buffers. Follow upstream Mesa (level/layer from the subresource,
+    * box or full extent, map and util_copy_rect) with explicit bounds and
+    * ownership checks instead of assert. An empty box is a D3D no-op. */
    bool identity = pDevice && AgxD3d10WindowsIdentity(
       pDevice->windows, &owner, &generation);
-   bool valid = pDevice && resource && resource->constant_buffer &&
-      resource->owner_device == pDevice && DstSubResource == 0 && !pDstBox &&
-      pSysMemUP && resource->resource && resource->resource->target == PIPE_BUFFER &&
-      (resource->resource->bind & PIPE_BIND_CONSTANT_BUFFER) &&
-      !(resource->resource->bind &
-        ~(PIPE_BIND_CONSTANT_BUFFER | PIPE_BIND_SHADER_IMAGE)) &&
-      resource->logical_bytes >= 16 && resource->logical_bytes <= 65536 &&
-      (resource->logical_bytes & 15) == 0 &&
-      resource->resource->width0 == resource->logical_bytes &&
-      identity &&
-      resource->owner_cookie == owner && resource->device_generation == generation;
-   if (!valid) {
+   struct pipe_resource *dst = resource ? resource->resource : NULL;
+   if (!pDevice || !resource || !dst || !pSysMemUP || !identity ||
+       resource->owner_device != pDevice ||
+       resource->owner_cookie != owner || resource->device_generation != generation) {
       SetError(hDevice, E_INVALIDARG);
       return;
+   }
+   unsigned mip_levels = dst->last_level + 1;
+   unsigned level = DstSubResource % mip_levels;
+   unsigned layer = DstSubResource / mip_levels;
+   unsigned layers = dst->target == PIPE_TEXTURE_3D ? 1 : dst->array_size;
+   if (layer >= layers) {
+      SetError(hDevice, E_INVALIDARG);
+      return;
+   }
+   unsigned width = u_minify(dst->width0, level);
+   unsigned height = u_minify(dst->height0, level);
+   unsigned depth = dst->target == PIPE_TEXTURE_3D ? u_minify(dst->depth0, level) : 1;
+   struct pipe_box box;
+   if (pDstBox) {
+      if (pDstBox->right <= pDstBox->left || pDstBox->bottom <= pDstBox->top ||
+          pDstBox->back <= pDstBox->front)
+         return;
+      if (pDstBox->right > width || pDstBox->bottom > height || pDstBox->back > depth) {
+         SetError(hDevice, E_INVALIDARG);
+         return;
+      }
+      box.x = pDstBox->left;
+      box.y = pDstBox->top;
+      box.z = pDstBox->front + layer;
+      box.width = pDstBox->right - pDstBox->left;
+      box.height = pDstBox->bottom - pDstBox->top;
+      box.depth = pDstBox->back - pDstBox->front;
+   } else {
+      box.x = 0;
+      box.y = 0;
+      box.z = layer;
+      box.width = width;
+      box.height = height;
+      box.depth = depth;
    }
    HRESULT result = AgxD3d10WindowsFlushRetire(pDevice->windows);
    if (FAILED(result)) {
       SetError(hDevice, result);
       return;
    }
-   struct pipe_box box = {0, 0, 0, (int)resource->logical_bytes, 1, 1};
    struct pipe_transfer *transfer = NULL;
-   void *map = pDevice->pipe->buffer_map(pDevice->pipe, resource->resource, 0,
-                                          PIPE_MAP_WRITE, &box, &transfer);
+   void *map = dst->target == PIPE_BUFFER ?
+      pDevice->pipe->buffer_map(pDevice->pipe, dst, level,
+                                PIPE_MAP_WRITE | PIPE_MAP_DISCARD_RANGE, &box, &transfer) :
+      pDevice->pipe->texture_map(pDevice->pipe, dst, level,
+                                 PIPE_MAP_WRITE | PIPE_MAP_DISCARD_RANGE, &box, &transfer);
    if (!map || !transfer) {
       SetError(hDevice, E_OUTOFMEMORY);
       return;
    }
-   memcpy(map, pSysMemUP, resource->logical_bytes);
-   pipe_buffer_unmap(pDevice->pipe, transfer);
-   (void)RowPitch;
-   (void)DepthPitch;''')
+   for (int z = 0; z < box.depth; ++z) {
+      util_copy_rect((uint8_t *)map + z * transfer->layer_stride, dst->format,
+                     transfer->stride, 0, 0, box.width, box.height,
+                     (const uint8_t *)pSysMemUP + z * DepthPitch, RowPitch, 0, 0);
+   }
+   if (dst->target == PIPE_BUFFER)
+      pipe_buffer_unmap(pDevice->pipe, transfer);
+   else
+      pipe_texture_unmap(pDevice->pipe, transfer);''')
     # Observe exactly one rejection with its original arguments, including
     # ResourceCopyRegion errors reported by the delegated ResourceCopy helper.
     resource_scopes = {
