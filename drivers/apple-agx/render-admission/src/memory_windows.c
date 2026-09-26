@@ -81,6 +81,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment5(
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   output->SegmentDescriptors[1].CpuTranslatedAddress.QuadPart =
       (LONGLONG)cpuTranslated;
+  /* R64: segment 2 is the firmware-reserved DDR slab, not memory the driver
+   * allocated at initialization. DXGK_SEGMENTFLAGS: do not set
+   * PopulatedFromSystemMemory for BIOS/firmware-reserved memory; report
+   * PopulatedByReservedDDRByFirmware (WDDM 2.9+). EXP837 bugchecked in
+   * VIDMM_GLOBAL::Rotate on the first CPU-visible lock of this segment. */
+  output->SegmentDescriptors[1].Flags.PopulatedFromSystemMemory = 0u;
+  output->SegmentDescriptors[1].Flags.PopulatedByReservedDDRByFirmware = 1u;
 #endif
   return STATUS_SUCCESS;
 }
