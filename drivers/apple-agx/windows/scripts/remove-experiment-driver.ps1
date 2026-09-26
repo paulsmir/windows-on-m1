@@ -75,7 +75,9 @@ foreach ($store in @('Root', 'TrustedPublisher')) {
 [Environment]::SetEnvironmentVariable('APPLE_AGX_UMD_TRACE_FILE', $null, 'Machine')
 $result = [ordered]@{ Utc = [DateTime]::UtcNow.ToString('o'); DeviceId = $id;
     PublishedName = $ExpectedPublishedName; Remove = $remove; Delete = $delete;
-    Staged = 0; Arm = $null; Sys = (Test-Path $sys); Umd = (Test-Path $umd) }
+    Staged = 0; Arm = $null; Sys = (Test-Path $sys); Umd = (Test-Path $umd);
+    CleanupComplete = $false; Durability = 'PendingOrderedGuestRestart';
+    NextRequiredAction = 'Restart Windows orderly, verify package and phantom absent in GPU-hidden guest, then boot ordinary Code28' }
 $result | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $ReceiptPath -Encoding UTF8
 if ($result.Sys -or $result.Umd) { throw 'exact driver files remain' }
 Get-Content -LiteralPath $ReceiptPath

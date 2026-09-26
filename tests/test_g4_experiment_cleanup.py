@@ -23,6 +23,8 @@ class ExperimentCleanupContract(unittest.TestCase):
         self.assertIn("$remaining = Get-PnpDevice", source)
         self.assertIn("[int]$remaining.Problem -eq 45", source)
         self.assertIn("/remove-device $id", source)
+        self.assertIn("CleanupComplete = $false", source)
+        self.assertIn("PendingOrderedGuestRestart", source)
 
 
 if __name__ == "__main__":
