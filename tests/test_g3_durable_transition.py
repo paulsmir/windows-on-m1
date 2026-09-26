@@ -16,6 +16,7 @@ class DurableTransitionContract(unittest.TestCase):
         self.assertLess(source.index("BeforeBoot"), source.index("shutdown.exe /r"))
         self.assertIn("LastBootUpTime", source)
         self.assertIn("Flush($true)", source)
+        self.assertIn("unexpected live bind after ordered reboot", source)
 
     def test_package_and_arm_entry_points_require_ordered_transition(self):
         for name in ("stage-driver.ps1", "remove-staged-driver.ps1",

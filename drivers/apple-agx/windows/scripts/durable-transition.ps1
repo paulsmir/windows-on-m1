@@ -53,6 +53,13 @@ function Assert-PackageState {
     $arm = (Get-ItemProperty -Path $key -Name G3Armed -ErrorAction SilentlyContinue).G3Armed
     if ([int]$arm -ne [int]$manifest.Package.G3Armed) { throw 'G3Armed state mismatch' }
     $device = Get-PnpDevice -InstanceId 'ACPI\APPL0002\0' -ErrorAction SilentlyContinue
+    if ($manifest.Package.State -eq 'Staged') {
+        $inf = if ($device) { (Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName DEVPKEY_Device_DriverInfPath -ErrorAction SilentlyContinue).Data } else { $null }
+        $service = if ($device) { (Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName DEVPKEY_Device_Service -ErrorAction SilentlyContinue).Data } else { $null }
+        if (!$device -or [int]$device.Problem -ne 28 -or $inf -or $service) {
+            throw 'unexpected live bind after ordered reboot'
+        }
+    }
     if ($manifest.Package.State -eq 'Absent' -and $device -and [int]$device.Problem -eq 45) {
         throw 'phantom APPL0002 remains'
     }
