@@ -2193,3 +2193,7 @@ PAGETABLELEVELDESC indices and system-memory scatter before advertising caps.
 Do not package or run cancelled EXP757. Keep intentional autologon enabled.
 POST-HARDWARE: native multi-draw batching, optional features, performance,
 sustained desktop stability, OpenGL and CS1.6 after accelerated-desktop acceptance.
+
+## 2026-09-26 EXP835 — first Code0 on the R64 reserve; R105 matrix invalidated by Open normalization
+
+Commit `5d9ffc21` (borrowed-reserve scanout view, host replay RED 0xC0000184 → GREEN) built as package835 (0/0). One cold full-owner boot reached **APPL0002 Code0, StartStage 12 Complete, status 0**, borrow present, platform 14. The scanout primary now lives in the reserve (PA 0x8e0030000; pixels zero). DWM still fails `pfnAllocateCb` 0x80070057 for native 64-KiB BOs although KMD CreateAllocation and OpenAllocation both return 0 for them. The R105 matrix in the same boot is invalid: every row failed in our own OpenAllocation because Open does not strip the R105 override `Reserved[0..1]` that Create strips. Next causal step: fix Open normalization (host RED→GREEN), one cold boot for the real matrix. Cleanup of a live Code0 device hung the guest; clean Code0 runs from the GPU-hidden profile. Evidence `.local/experiments/EXP835-r115-scanout/`.
