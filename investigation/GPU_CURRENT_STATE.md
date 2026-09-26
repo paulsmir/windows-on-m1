@@ -1,5 +1,27 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-26 EXP825 ordinary reboot PASS — stage transaction is next boundary
+
+From verified immutable EXP377/392 ordinary Code28 (package/signer/G3/B1 arm
+absent, CPU8/disks2/USB6), one guest `shutdown.exe /r /t 0` returned success.
+Passive L41 captured PSCI SYSTEM_RESET, USB detach/re-enumeration at 08:01:19–20Z
+and stage1 `Running proxy`; L43 was empty. Hash-verified EXP377/392 direct
+reentry booted Windows at 08:02:29Z and returned pinned SSH. APPL0002 remains
+one inert Code28, package/arm/signer/files/service absent, CPU8/disks2/USB6;
+no new dump after EXP823. Verdict: ordinary package-free reboot completed;
+0x101 did not reproduce in this single run. Cycle ~2m13s. Evidence
+`.local/experiments/EXP823-r64-reserve/exp825/` and EXPERIMENTS EXP825.
+
+Next discriminator is **offline design only; not run**: same ordinary profile
+and exact `/r /t 0`, stage only exact package823 in driver store with no
+`/install`, no signer trust import, no G3/B1 arm. First establish offline
+whether Windows permits this package to stage without imported signer; if
+staging fails, abort before reboot. If possible, verify oemNN INF hash and
+Code28 unbound, make writes durable, reboot once, then verify hashes/package.
+0x101 would implicate driver-store staging/PnP; a clean boot would narrow
+EXP823 to signer/arm transaction. Keep immutable recovery and no live bind.
+R64 full-owner and R105 remain untested.
+
 ## 2026-09-26 EXP824 recovery PASS; EXP823 0x101 offline boundary
 
 External SoC reset reached `Running proxy`. Hash-verified immutable EXP377/392
