@@ -1,5 +1,36 @@
 # GPU current boundary — 2026-09-26
 
+## 2026-09-26 EXP834 — G3 gate/borrow/platform crossed; Scanout blocks Code0
+
+REVIEW R105: DEFER unchanged matrix until Code0. Package834 from source
+`22956a8f` passed real-C RED→GREEN on the EXP833 11-descriptor list and a
+0-warning/0-error R85 build (SYS `db385cfe`, INF `265c5a80`); m1n1/Mu R110,
+signer and R105 EXE `46b20903` were unchanged. One ordered-power-off cold
+full-owner boot returned pinned SSH. Durable `Wom1TranslatedResources` captured
+five memory, five DevicePrivate type129 and one IRQ (translated vector 2304;
+BootConfig raw 889). G3 arm cleared, `Wom1LocalReserve` owner1/status0 borrowed
+IPA=PA `0x8e0000000`+64 MiB, and PlatformStage14/status0. The prior stage2
+false rejection is crossed.
+
+APPL0002 then reported Code43 at StartStage10 Scanout, `0xC0000141`. Code0,
+R105 rows and a DWM frame did not occur; no new bugcheck. Source-backed next
+target: `AdmissionPhysicalBorrowLocal` leaves `Adl=NULL` for the R64 borrow;
+`AdmissionMemoryRuntimeScanoutView` requires non-null contiguous ADL and
+returns failure; `AdmissionScanoutStart` folds a failing view to
+`STATUS_INVALID_ADDRESS`. That path explains the observed stage/status, but
+the inner return was not captured directly. Next phase: host RED with borrowed
+allocation through the real scanout-view path, then a fix respecting the
+firmware-owned contiguous reserve and one falsifiable StartDevice checkpoint.
+Do not run another hardware experiment from this thread.
+
+Nine dump-first artifacts were host SHA-verified before exact oem5 cleanup.
+Ordered immutable EXP377/392 recovery returned pinned SSH, one present Code28,
+staged/arm/SYS/UMD/service/signer absent, CPU8/disks2, durable Preflight PASS.
+USB5/keyboard1/mouse0 were already the ordinary baseline before EXP834 and
+persisted through recovery; monitor1 and RDP Running. Causal report
+`.local/experiments/EXP834-r114-private/causal-result.json` SHA256
+`dc74e050a95567be4cf7b2a0fcf452157bbe1810b696781f2047c8f430258a90`.
+
 ## 2026-09-26 EXP833 — cold full-owner reached SSH; pre-arm gate falsely rejected resource list
 
 REVIEW R113: ACCEPT the staged+armed ordinary-boot risk and direct cold
