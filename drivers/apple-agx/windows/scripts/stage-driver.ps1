@@ -1,4 +1,5 @@
-param([Parameter(Mandatory=$true)][string]$InfPath)
+param([Parameter(Mandatory=$true)][string]$InfPath,
+      [Parameter(Mandatory=$true)][string]$DurabilityManifestPath)
 
 $ErrorActionPreference = "Stop"
 $principal = New-Object Security.Principal.WindowsPrincipal(
@@ -28,3 +29,4 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "Package staged only; APPL0002 was not installed or restarted."
 Write-Host "Record the Published Name (oemNN.inf) printed above for rollback."
+& (Join-Path $PSScriptRoot 'durable-transition.ps1') -Mode Commit -ManifestPath $DurabilityManifestPath

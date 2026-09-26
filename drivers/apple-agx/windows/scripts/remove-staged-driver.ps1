@@ -1,4 +1,5 @@
-param([Parameter(Mandatory=$true)][string]$PublishedName)
+param([Parameter(Mandatory=$true)][string]$PublishedName,
+      [Parameter(Mandatory=$true)][string]$DurabilityManifestPath)
 
 $ErrorActionPreference = "Stop"
 $principal = New-Object Security.Principal.WindowsPrincipal(
@@ -14,3 +15,4 @@ pnputil /delete-driver $PublishedName
 if ($LASTEXITCODE -ne 0) {
     throw "pnputil failed with exit code $LASTEXITCODE"
 }
+& (Join-Path $PSScriptRoot 'durable-transition.ps1') -Mode Commit -ManifestPath $DurabilityManifestPath

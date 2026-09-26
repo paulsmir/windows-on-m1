@@ -6,6 +6,7 @@ param(
     [Parameter(Mandatory=$true)][string]$ExpectedUmdSha256,
     [Parameter(Mandatory=$true)][string]$ExpectedSignerThumbprint,
     [Parameter(Mandatory=$true)][string]$ReceiptPath,
+    [Parameter(Mandatory=$true)][string]$DurabilityManifestPath,
     [int]$ExpectedProblemCode = 43
 )
 
@@ -77,7 +78,8 @@ $result = [ordered]@{ Utc = [DateTime]::UtcNow.ToString('o'); DeviceId = $id;
     PublishedName = $ExpectedPublishedName; Remove = $remove; Delete = $delete;
     Staged = 0; Arm = $null; Sys = (Test-Path $sys); Umd = (Test-Path $umd);
     CleanupComplete = $false; Durability = 'PendingOrderedGuestRestart';
-    NextRequiredAction = 'Restart Windows orderly, verify package and phantom absent in GPU-hidden guest, then boot ordinary Code28' }
+    NextRequiredAction = 'Ordered Windows restart scheduled; run durable preflight after reboot before any SoC reset' }
 $result | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $ReceiptPath -Encoding UTF8
 if ($result.Sys -or $result.Umd) { throw 'exact driver files remain' }
 Get-Content -LiteralPath $ReceiptPath
+& (Join-Path $PSScriptRoot 'durable-transition.ps1') -Mode Commit -ManifestPath $DurabilityManifestPath

@@ -12,7 +12,7 @@ LAUNCHERS = ROOT / "scripts/g3-launchers"
 
 
 class SocResetTest(unittest.TestCase):
-    def run_reset(self, action):
+    def run_reset(self, action, preflight=True):
         with tempfile.TemporaryDirectory() as directory:
             ports = [Path(directory) / "L41", Path(directory) / "L43"]
             for port in ports:
@@ -23,10 +23,20 @@ class SocResetTest(unittest.TestCase):
                 "--timeout", "2",
                 "--port", str(ports[0]),
                 "--port", str(ports[1]),
+            ]
+            marker = Path(directory) / "preflight"
+            if preflight:
+                command += ["--preflight-command-json", __import__("json").dumps([
+                    sys.executable, "-c",
+                    "import pathlib,sys,json; pathlib.Path(sys.argv[1]).write_text('verified'); print(json.dumps({'Verdict':'PASS','AfterBoot':'2026-09-26T00:00:00Z','ManifestSha256':'a'*64}))",
+                    str(marker),
+                ])]
+            command += [
                 "--",
                 sys.executable,
                 "-c",
-                action,
+                "import pathlib,sys; assert pathlib.Path(sys.argv[1]).read_text() == 'verified'; " + action,
+                str(marker),
                 str(ports[0]),
                 str(ports[1]),
             ]
@@ -34,7 +44,7 @@ class SocResetTest(unittest.TestCase):
 
     def test_reset_requires_detach_and_reenumeration(self):
         result = self.run_reset(
-            "import pathlib,sys,time; p=[pathlib.Path(x) for x in sys.argv[1:]];"
+            "import pathlib,sys,time; p=[pathlib.Path(x) for x in sys.argv[2:]];"
             "time.sleep(.1); [x.unlink() for x in p]; time.sleep(.1);"
             "[x.touch() for x in p]"
         )
@@ -45,6 +55,11 @@ class SocResetTest(unittest.TestCase):
         result = self.run_reset("pass")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("detach", result.stderr)
+
+    def test_reset_requires_durable_preflight_before_reboot_command(self):
+        result = self.run_reset("pass", preflight=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("durable preflight", result.stderr)
 
     def test_each_launcher_resets_before_chainload(self):
         for name in ("full-owner.sh", "emergency.sh", "ordinary.sh"):
