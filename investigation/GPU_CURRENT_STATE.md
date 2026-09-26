@@ -1,5 +1,41 @@
 # GPU current boundary — 2026-09-26
 
+## 2026-09-26 EXP830 — R110 receipt reads crossed Code12; StartDevice crashed before borrow
+
+REVIEW R110: ACCEPT the split-DWORD AML remedy and direct ESR measurement.
+The EXP829 serial had no per-access ACPI.sys ESR; a host test of the actual
+m1n1 decoder showed that LDR X preserves the full 64-bit value and LDRSW
+sign-extends a 32-bit value. The old QWordAcc AML reproduced the bad
+`_MIN=0xffffffffe0000000`; DWordAcc low/high plus
+`Or(ShiftLeft(high, 32), And(low, 0xffffffff))` yielded
+`_MIN=0x8e0000000` in acpiexec. m1n1 DWORD receipt and AML regressions
+were RED→GREEN; the postboot local/UTC comparison was corrected.
+
+One x86 Mu FD `3a76857c` and m1n1 `14872dba` build, one staged+armed
+package823 cold full-owner EXP830. m1n1/Mu published and reserved
+`0x8e0000000+0x4000000`; DXE dispatched PcdDxe once. Serial measured
+Mu 8-byte D10 ESR `0x93c08007` (SAS3/SSE0/SF1/SRT0), then Windows
+DWORD D14/D10/D1C/D18/D20/D24 ESR `0x93880007`
+(SAS2/SSE0/SF0/SRT8), all handled with expected halves. Windows consumed
+G3Armed and entered StartDevice (`Wom1StartStage=1`), crossing EXP829
+Code12. It bugchecked before the borrow receipt: 0x7E, P1
+`0xffffffff80000002` data misaligned, PC
+`AppleAgxRenderAdmission.sys+0x376b4` at `DC ZVA, x3` during the
+64-MiB `RtlZeroMemory`. No `Wom1LocalReserve`, Code0 proof, R105
+rows or DWM frame. The cause of the DC ZVA fault is not yet proven.
+
+GPU-hidden dump-first collection verified nine guest artifacts, then exact
+oem5/arm/signer cleanup and ordinary recovery restored pinned SSH, one
+inert Code28 APPL0002, staged/arm/SYS/UMD/service/signer absent, CPU8.
+Tracked durable UTC Preflight passed; EXP830 postboot preflight did not run
+because full-owner reset before SSH. Next causal target: offline inspect
+m1n1 DC ZVA trap address, alignment and cache-line emulation against the
+KMD zeroing call; require RED→GREEN before another hardware run.
+Evidence `.local/experiments/EXP823-r64-reserve/exp830/causal-result.json`
+SHA-256 `04412a10384583fe5a3813f827b41383fb84dd2bf331e09cd320d79f6acee077`;
+serial `16853111486eafd983f357d93579da4bd048c354a1cb98df0cdfb90b3fc1be7d`;
+dump `50185f97c15304e3f935402b367ab9f1a75a46806ac3f4c51e21472ba69376c9`.
+
 ## 2026-09-26 EXP829 — DXE fixed; R64 stopped at Windows PnP Code12
 
 REVIEW R109: REJECT both reserve-overlap and VirtualMemoryTable overflow.
