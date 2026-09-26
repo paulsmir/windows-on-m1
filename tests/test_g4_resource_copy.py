@@ -42,5 +42,33 @@ class ResourceCopyOverlay(unittest.TestCase):
         self.assertIn("destination->transfers[i]", b)
 
 
+def region_body():
+    source = SCRIPT.read_text()
+    marker = "'ResourceCopyRegion','''"
+    start = source.index(marker) + len(marker)
+    return source[start:source.index("''')", start)]
+
+
+class ResourceCopyRegionOverlay(unittest.TestCase):
+    """EXP845: 349 refusals copied a 1x1 texture into a 1024x1024 shared
+    surface; CopyRegion forwarded to whole-resource ResourceCopy, which
+    requires identical shapes. CopyRegion must place the box at DstX/DstY."""
+
+    def test_region_does_not_forward_to_whole_copy(self):
+        b = region_body()
+        self.assertNotIn("ResourceCopy(hDevice,hDstResource,hSrcResource)", b)
+        self.assertIn("info.dst.box.x=(int)DstX", b)
+        self.assertIn("info.dst.box.y=(int)DstY", b)
+        self.assertIn("SrcSubResource % source->MipLevels", b)
+        self.assertIn("DstSubResource / destination->MipLevels", b)
+
+    def test_region_bounds_and_empty_box(self):
+        b = region_body()
+        self.assertIn("right - left <= dstW - DstX", b)
+        self.assertIn("bottom - top <= dstH - DstY", b)
+        self.assertIn("right <= left || bottom <= top || back <= front", b)
+        self.assertIn('"reject-resource-copy-region"', b)
+
+
 if __name__ == "__main__":
     unittest.main()

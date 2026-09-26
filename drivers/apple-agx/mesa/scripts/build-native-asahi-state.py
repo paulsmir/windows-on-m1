@@ -2630,13 +2630,69 @@ AgxD3d10ResourceWithinRequiredLimits(
       if(FAILED(result)) SetError(hDevice,result);
       return;
    }
-   bool whole = src && (!pSrcBox || (pSrcBox->left == 0 && pSrcBox->top == 0 &&
-      pSrcBox->front == 0 && pSrcBox->right == src->width0 &&
-      pSrcBox->bottom == src->height0 && pSrcBox->back == src->depth0));
-   if (DstSubResource || SrcSubResource || DstX || DstY || DstZ || !whole) {
+   /* D3D10 ResourceCopyRegion for textures: copy the source box of one
+    * subresource to (DstX,DstY,DstZ) of another; shapes may differ. */
+   if (!device || !source || !destination || !src || !dst ||
+       source->owner_device != device || destination->owner_device != device ||
+       source->buffer || destination->buffer ||
+       destination->usage == D3D10_DDI_USAGE_IMMUTABLE ||
+       !source->MipLevels || !destination->MipLevels ||
+       SrcSubResource >= source->NumSubResources ||
+       DstSubResource >= destination->NumSubResources) {
       SetError(hDevice, E_NOTIMPL); return;
    }
-   ResourceCopy(hDevice,hDstResource,hSrcResource);''')
+   if ((destination->transfers && destination->transfers[DstSubResource]) ||
+       (source->transfers && source->transfers[SrcSubResource])) {
+      SetError(hDevice, E_NOTIMPL); return;
+   }
+   unsigned srcLevel = SrcSubResource % source->MipLevels;
+   unsigned srcLayer = SrcSubResource / source->MipLevels;
+   unsigned dstLevel = DstSubResource % destination->MipLevels;
+   unsigned dstLayer = DstSubResource / destination->MipLevels;
+   unsigned family = AgxD3d10CopyFamily(source->Format);
+   enum pipe_format raw = PIPE_FORMAT_NONE;
+   if (family && family == AgxD3d10CopyFamily(destination->Format))
+      raw = family == 3 ? PIPE_FORMAT_R8G8B8A8_UNORM : PIPE_FORMAT_B8G8R8A8_UNORM;
+   else if (src->format == dst->format && !util_format_is_compressed(src->format))
+      raw = util_format_linear(src->format);
+   unsigned srcW = u_minify(src->width0, srcLevel), srcH = u_minify(src->height0, srcLevel);
+   unsigned srcD = src->target == PIPE_TEXTURE_3D ? u_minify(src->depth0, srcLevel) : 1;
+   unsigned dstW = u_minify(dst->width0, dstLevel), dstH = u_minify(dst->height0, dstLevel);
+   unsigned dstD = dst->target == PIPE_TEXTURE_3D ? u_minify(dst->depth0, dstLevel) : 1;
+   UINT left = pSrcBox ? pSrcBox->left : 0, right = pSrcBox ? pSrcBox->right : srcW;
+   UINT top = pSrcBox ? pSrcBox->top : 0, bottom = pSrcBox ? pSrcBox->bottom : srcH;
+   UINT front = pSrcBox ? pSrcBox->front : 0, back = pSrcBox ? pSrcBox->back : srcD;
+   if (pSrcBox && (right <= left || bottom <= top || back <= front))
+      return; /* empty box: D3D no-op */
+   bool valid = raw != PIPE_FORMAT_NONE && src->target == dst->target &&
+      src->nr_samples <= 1 && dst->nr_samples <= 1 &&
+      right <= srcW && bottom <= srcH && back <= srcD &&
+      DstX <= dstW && right - left <= dstW - DstX &&
+      DstY <= dstH && bottom - top <= dstH - DstY &&
+      DstZ <= dstD && back - front <= dstD - DstZ &&
+      srcLayer < src->array_size && dstLayer < dst->array_size;
+   if (!valid) {
+      UINT values[14]={(UINT)source->Format,(UINT)destination->Format,
+         (UINT)src->target,(UINT)dst->target,srcW,srcH,dstW,dstH,
+         SrcSubResource,DstSubResource,right-left,bottom-top,DstX,DstY};
+      AgxD3d10WindowsDiagnostic("reject-resource-copy-region",E_NOTIMPL,values,14u);
+      SetError(hDevice, E_NOTIMPL); return;
+   }
+   struct pipe_blit_info info={};
+   info.src.resource=src;info.src.format=raw;info.src.level=srcLevel;
+   info.dst.resource=dst;info.dst.format=raw;info.dst.level=dstLevel;
+   info.src.box.x=(int)left;info.src.box.y=(int)top;
+   info.src.box.z=(int)(src->target==PIPE_TEXTURE_3D ? front : srcLayer);
+   info.dst.box.x=(int)DstX;info.dst.box.y=(int)DstY;
+   info.dst.box.z=(int)(dst->target==PIPE_TEXTURE_3D ? DstZ : dstLayer);
+   info.src.box.width=info.dst.box.width=(int)(right-left);
+   info.src.box.height=info.dst.box.height=(int)(bottom-top);
+   info.src.box.depth=info.dst.box.depth=(int)(back-front);
+   info.mask=util_format_get_mask(raw);info.filter=PIPE_TEX_FILTER_NEAREST;
+   device->pipe->blit(device->pipe,&info);
+   device->pipe->flush(device->pipe,NULL,0);
+   HRESULT result=AgxD3d10WindowsFlushStatus(device->windows);
+   if (FAILED(result)) SetError(hDevice,result);''')
     replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','OpenResource','''   Device *pDevice = CastDevice(hDevice);
    Resource *pResource = CastResource(hResource);
    if (!pDevice || !pResource || !pOpenResource || !hRTResource.handle) {
