@@ -1,5 +1,44 @@
 # GPU current boundary — 2026-09-26
 
+## 2026-09-26 EXP831 — borrowed 64 MiB reached; Code43 at KMD platform resource validation
+
+REVIEW R111: ACCEPT the KMD memory-type hypothesis, with one qualification:
+Microsoft documents `PAGE_WRITECOMBINE` as uncached combined writes but
+defines DXGK `NON_CACHED` and `WRITE_COMBINED` separately, so their exact
+equivalence is not asserted. EXP830's 0x7E/P1 `0x80000002` occurred on
+`DC ZVA` inside `RtlZeroMemory` of firmware-reserved RAM mapped with
+`PAGE_NOCACHE`. Arm ARM says DC ZVA on Device memory raises an alignment
+fault and applies to Normal memory at any cacheability. Asahi's AGX notes
+describe Normal CPU mappings for GPU buffers. Only the borrowed KMD mapping
+changed to `PAGE_WRITECOMBINE`; the MMIO broker remained `PAGE_NOCACHE`.
+Host test RED→GREEN, seven affected tests PASS; full host suite added no
+failing names beyond the prior 15 failures/41 errors.
+
+One R85 incremental package823 build (SYS `d293a904`, CAT `2a36a650`,
+signed with the pinned thumbprint); m1n1 and Mu R110 unchanged. One cold
+full-owner EXP831 boot reached pinned SSH, consumed G3Armed and recorded
+`Wom1LocalReserve` version1/owner1/status0, IPA=PA
+`0x8e0000000`, 64 MiB. The EXP830 DC ZVA bugcheck did not recur.
+APPL0002 then reported Code43, StartStage8/PlatformStage2,
+`0xC0000182`: PnP assigned the fifth local range
+`0x8e0000000..0x8e3ffffff`, but
+`AdmissionPlatformValidateResources` in
+`backend_platform_windows.c:1019..1063` requires exactly four memory
+resources and rejects any fifth. Code0, R105 rows and DWM frame were not
+reached; the R105 harness remained unchanged and gated.
+
+Nine full-owner evidence files were host SHA-verified before exact package
+cleanup. R106.1 ordered reboot and immutable ordinary EXP377/392 restored
+pinned SSH, one inert Code28 APPL0002, staged/arm/SYS/UMD/service/signer
+absent, CPU8; UTC durable Preflight passed. Next causal target:
+host RED→GREEN for KMD platform validation requiring the four fixed
+resources plus exactly one dynamic local resource matched to the R64
+receipt, without admitting other descriptors. New hardware run requires
+a new phase/thread. Causal report
+`.local/experiments/EXP823-r64-reserve/exp831/causal-result.json`
+SHA-256 `b4cc72f0eb37d3a92796354257a1191c09ef273b92de4916d0b5e561c5914733`;
+full serial `68330d1e9e639443535d00d583d04af80dfcb458dfed4af4d41ec1d1c4a2b2a9`.
+
 ## 2026-09-26 EXP830 — R110 receipt reads crossed Code12; StartDevice crashed before borrow
 
 REVIEW R110: ACCEPT the split-DWORD AML remedy and direct ESR measurement.
