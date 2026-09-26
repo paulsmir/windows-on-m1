@@ -10,8 +10,8 @@ class AppleAgxRenderUatTests(unittest.TestCase):
     def test_runtime_uses_physical_owner_context63_and_16k_uat(self):
         source = (RENDER / "src" / "memory_runtime_windows.c").read_text()
         self.assertIn("AdmissionPhysicalOwnerInitialize", source)
-        self.assertIn("AppleAgxMemoryAllocateAligned", source)
-        self.assertIn("ADMISSION_ALLOCATION_ALIGNMENT", source)
+        self.assertIn("AdmissionPhysicalBorrowLocal", source)
+        self.assertIn("AdmissionRecordLocalReserve", source)
         self.assertIn("AppleAgxResidencyContextCreate", source)
         self.assertIn("ADMISSION_MEMORY_UAT_CONTEXT", source)
         self.assertIn("AppleAgxResidencyMap64K", source)

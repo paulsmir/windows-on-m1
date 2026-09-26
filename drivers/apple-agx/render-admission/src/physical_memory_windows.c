@@ -1,4 +1,5 @@
 #include "render_admission.h"
+#include "apple_agx_local_reserve_abi.h"
 #include <intrin.h>
 
 #pragma intrinsic(__hvc)
@@ -21,6 +22,13 @@ static VOID AdmissionPhysicalReleaseRaw(
     _Inout_ ADMISSION_PHYSICAL_ALLOCATION *Allocation) {
   if (Allocation == NULL)
     return;
+  if (Allocation->BorrowedFirmwareReserve) {
+    if (Allocation->MappedBase != NULL) {
+      MmUnmapIoSpace(Allocation->MappedBase, Allocation->MappedSize);
+      Allocation->MappedBase = NULL;
+    }
+    return;
+  }
   if (Allocation->MappedBase != NULL) {
     DXGKARGCB_UNMAP_PHYSICAL_MEMORY args;
     RtlZeroMemory(&args, sizeof(args));
@@ -314,6 +322,135 @@ _Use_decl_annotations_ NTSTATUS AdmissionPhysicalAllocate(
     ExFreePoolWithTag(created, ADMISSION_PHYSICAL_TAG);
   }
   ExReleaseFastMutex(&Owner->Lock);
+  return status;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionPhysicalBorrowLocal(
+    ADMISSION_PHYSICAL_OWNER *Owner,
+    const DXGK_DEVICE_INFO *DeviceInformation,
+    ADMISSION_PHYSICAL_ALLOCATION **Allocation) {
+  APPLE_AGX_LOCAL_RESERVE_RECEIPT receipt;
+  PCM_RESOURCE_LIST resources;
+  PHYSICAL_ADDRESS brokerAddress;
+  PHYSICAL_ADDRESS localAddress;
+  volatile UCHAR *broker = NULL;
+  ADMISSION_PHYSICAL_ALLOCATION *borrowed = NULL;
+  ULONG fullIndex;
+  ULONG matches = 0u;
+  BOOLEAN brokerAssigned = FALSE;
+  NTSTATUS status = STATUS_INVALID_DEVICE_STATE;
+
+  if (Owner == NULL || !Owner->Initialized || DeviceInformation == NULL ||
+      Allocation == NULL || DeviceInformation->TranslatedResourceList == NULL)
+    return STATUS_INVALID_PARAMETER;
+  *Allocation = NULL;
+  resources = DeviceInformation->TranslatedResourceList;
+  Owner->LastAllocateBytes = APPLE_AGX_LOCAL_RESERVE_BYTES;
+  Owner->LastAllocateStep = 5u;
+  Owner->LastAllocateStatus = STATUS_PENDING;
+  for (fullIndex = 0u; fullIndex < resources->Count; ++fullIndex) {
+    PCM_FULL_RESOURCE_DESCRIPTOR full = &resources->List[fullIndex];
+    ULONG partialIndex;
+    for (partialIndex = 0u; partialIndex < full->PartialResourceList.Count;
+         ++partialIndex) {
+      PCM_PARTIAL_RESOURCE_DESCRIPTOR descriptor =
+          &full->PartialResourceList.PartialDescriptors[partialIndex];
+      if (descriptor->Type == CmResourceTypeMemory &&
+          (ULONGLONG)descriptor->u.Memory.Start.QuadPart ==
+              J313_AGX_G2_POWER_BROKER_BASE &&
+          descriptor->u.Memory.Length == J313_AGX_G2_POWER_BROKER_SIZE)
+        brokerAssigned = TRUE;
+    }
+  }
+  if (!brokerAssigned)
+    goto Done;
+  brokerAddress.QuadPart = (LONGLONG)J313_AGX_G2_POWER_BROKER_BASE;
+  broker = (volatile UCHAR *)MmMapIoSpaceEx(
+      brokerAddress, (SIZE_T)J313_AGX_G2_POWER_BROKER_SIZE,
+      PAGE_READWRITE | PAGE_NOCACHE);
+  if (broker == NULL) {
+    status = STATUS_INSUFFICIENT_RESOURCES;
+    goto Done;
+  }
+  RtlZeroMemory(&receipt, sizeof(receipt));
+  receipt.Magic = READ_REGISTER_ULONG(
+      (volatile ULONG *)(broker + APPLE_AGX_LOCAL_RESERVE_OFFSET +
+                         APPLE_AGX_LOCAL_REG_MAGIC));
+  receipt.Version = READ_REGISTER_ULONG(
+      (volatile ULONG *)(broker + APPLE_AGX_LOCAL_RESERVE_OFFSET +
+                         APPLE_AGX_LOCAL_REG_VERSION));
+  receipt.Valid = READ_REGISTER_ULONG(
+      (volatile ULONG *)(broker + APPLE_AGX_LOCAL_RESERVE_OFFSET +
+                         APPLE_AGX_LOCAL_REG_VALID));
+  receipt.GuestIpa = READ_REGISTER_ULONG64(
+      (volatile ULONG64 *)(broker + APPLE_AGX_LOCAL_RESERVE_OFFSET +
+                           APPLE_AGX_LOCAL_REG_GUEST_IPA));
+  receipt.HostPa = READ_REGISTER_ULONG64(
+      (volatile ULONG64 *)(broker + APPLE_AGX_LOCAL_RESERVE_OFFSET +
+                           APPLE_AGX_LOCAL_REG_HOST_PA));
+  receipt.Bytes = READ_REGISTER_ULONG64(
+      (volatile ULONG64 *)(broker + APPLE_AGX_LOCAL_RESERVE_OFFSET +
+                           APPLE_AGX_LOCAL_REG_BYTES));
+  MmUnmapIoSpace((PVOID)broker, (SIZE_T)J313_AGX_G2_POWER_BROKER_SIZE);
+  broker = NULL;
+
+  for (fullIndex = 0u; fullIndex < resources->Count; ++fullIndex) {
+    PCM_FULL_RESOURCE_DESCRIPTOR full = &resources->List[fullIndex];
+    ULONG partialIndex;
+    for (partialIndex = 0u; partialIndex < full->PartialResourceList.Count;
+         ++partialIndex) {
+      PCM_PARTIAL_RESOURCE_DESCRIPTOR descriptor =
+          &full->PartialResourceList.PartialDescriptors[partialIndex];
+      if (descriptor->Type == CmResourceTypeMemory &&
+          AppleAgxLocalReserveMatchesResource(
+              &receipt, (ULONGLONG)descriptor->u.Memory.Start.QuadPart,
+              descriptor->u.Memory.Length)) {
+        localAddress = descriptor->u.Memory.Start;
+        ++matches;
+      }
+    }
+  }
+  if (matches != 1u)
+    goto Done;
+  borrowed = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*borrowed),
+                             ADMISSION_PHYSICAL_TAG);
+  if (borrowed == NULL) {
+    status = STATUS_INSUFFICIENT_RESOURCES;
+    goto Done;
+  }
+  RtlZeroMemory(borrowed, sizeof(*borrowed));
+  borrowed->Interface = Owner->Interface;
+  borrowed->BorrowedFirmwareReserve = TRUE;
+  borrowed->Size = (SIZE_T)receipt.Bytes;
+  borrowed->GuestIpaBase = receipt.GuestIpa;
+  borrowed->MappedBase = MmMapIoSpaceEx(
+      localAddress, borrowed->Size, PAGE_READWRITE | PAGE_NOCACHE);
+  if (borrowed->MappedBase == NULL) {
+    status = STATUS_INSUFFICIENT_RESOURCES;
+    goto Done;
+  }
+  borrowed->MappedSize = borrowed->Size;
+  borrowed->CpuBase = (PUCHAR)borrowed->MappedBase;
+  Owner->LastAllocateStep = 6u;
+  status = AdmissionPhysicalTranslate(Owner, borrowed);
+  if (!NT_SUCCESS(status) || borrowed->HostPhysicalBase != receipt.HostPa) {
+    status = NT_SUCCESS(status) ? STATUS_INVALID_ADDRESS : status;
+    goto Done;
+  }
+  InterlockedIncrement(&Owner->AllocationCount);
+  Owner->LastAllocateStep = 7u;
+  *Allocation = borrowed;
+  borrowed = NULL;
+  status = STATUS_SUCCESS;
+
+Done:
+  if (broker != NULL)
+    MmUnmapIoSpace((PVOID)broker, (SIZE_T)J313_AGX_G2_POWER_BROKER_SIZE);
+  if (borrowed != NULL) {
+    AdmissionPhysicalReleaseRaw(borrowed);
+    ExFreePoolWithTag(borrowed, ADMISSION_PHYSICAL_TAG);
+  }
+  Owner->LastAllocateStatus = status;
   return status;
 }
 

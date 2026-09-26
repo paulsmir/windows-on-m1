@@ -237,6 +237,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
   APPLE_AGX_UAT_TTBR_PAIR pair;
   NTSTATUS status;
   APPLE_AGX_MEMORY_RESULT memoryResult = AppleAgxMemoryResultOk;
+  ADMISSION_PHYSICAL_ALLOCATION *localBorrowed = NULL;
   ULONGLONG requestedBytes = 0ULL;
 
   AdmissionMemoryRecordStart(Context, AdmissionMemoryStartEntered,
@@ -315,17 +316,23 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
 
   AdmissionMemoryRecordStart(Context, AdmissionMemoryStartLocalObject,
                              STATUS_PENDING);
-  requestedBytes = ADMISSION_LOCAL_BYTES + ADMISSION_ALLOCATION_ALIGNMENT;
-  memoryResult = AppleAgxMemoryAllocateAligned(
-      &runtime->MemoryIo, ADMISSION_LOCAL_BYTES,
-      ADMISSION_ALLOCATION_ALIGNMENT, &runtime->LocalObject);
-  if (memoryResult != AppleAgxMemoryResultOk) {
-    status = STATUS_INSUFFICIENT_RESOURCES;
+  requestedBytes = ADMISSION_LOCAL_BYTES;
+  status = AdmissionPhysicalBorrowLocal(
+      &runtime->PhysicalOwner, &Context->DeviceInformation, &localBorrowed);
+  if (!NT_SUCCESS(status)) {
     goto Fail;
   }
+  runtime->LocalObject.AllocationCpuBase = localBorrowed->CpuBase;
+  runtime->LocalObject.CpuAddress = localBorrowed->CpuBase;
+  runtime->LocalObject.AllocationHandle = localBorrowed;
+  runtime->LocalObject.AllocationDeviceBase = localBorrowed->HostPhysicalBase;
+  runtime->LocalObject.DeviceAddress = localBorrowed->HostPhysicalBase;
+  runtime->LocalObject.AllocationLength = ADMISSION_LOCAL_BYTES;
+  runtime->LocalObject.Length = ADMISSION_LOCAL_BYTES;
+  runtime->LocalObject.State = AppleAgxMemoryCpuOwned;
   runtime->LocalReady = TRUE;
-  /* The physical owner does not promise zero-filled contiguous pages.  VidMm
-   * may register a page table from this reserve before its InitialUpdate. */
+  /* Firmware reserves the pages but does not guarantee their contents.
+   * Clear the entire borrowed slab before any UAT or VidMm page-table use. */
   if (runtime->LocalObject.CpuAddress == NULL ||
       runtime->LocalObject.Length != ADMISSION_LOCAL_BYTES) {
     status = STATUS_INVALID_DEVICE_STATE;
@@ -342,6 +349,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
     status = STATUS_INVALID_DEVICE_STATE;
     goto Fail;
   }
+  status = AdmissionRecordLocalReserve(Context, localBorrowed);
+  if (!NT_SUCCESS(status))
+    goto Fail;
   requestedBytes = 0ULL;
   AdmissionMemoryRecordStart(Context, AdmissionMemoryStartResidency,
                              STATUS_PENDING);

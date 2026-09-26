@@ -74,7 +74,9 @@ class J313AgxAbiAdmissionContractTests(unittest.TestCase):
 
     def test_admission_asl_has_one_edge_irq_and_no_physical_agx_irq(self):
         rendered = render_asl_include(load_admission_contract(CONTRACT, G2))
-        self.assertEqual(rendered.count("QWordMemory ("), 4)
+        self.assertEqual(rendered.count("QWordMemory ("), 9)
+        self.assertIn("Method (_CRS, 0, Serialized)", rendered)
+        self.assertIn('"agx-local-reserve-version", 0x01', rendered)
         self.assertEqual(
             rendered.count(
                 "Interrupt (ResourceConsumer, Edge, ActiveHigh, Exclusive)"

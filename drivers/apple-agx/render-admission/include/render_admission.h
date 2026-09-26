@@ -603,6 +603,7 @@ typedef struct _ADMISSION_PHYSICAL_ALLOCATION {
   SIZE_T Size;
   ULONGLONG GuestIpaBase;
   ULONGLONG HostPhysicalBase;
+  BOOLEAN BorrowedFirmwareReserve;
 } ADMISSION_PHYSICAL_ALLOCATION;
 
 typedef struct _ADMISSION_PHYSICAL_OWNER {
@@ -1179,6 +1180,13 @@ NTSTATUS AdmissionPhysicalOwnerDestroy(
 NTSTATUS AdmissionPhysicalAllocate(
     _Inout_ ADMISSION_PHYSICAL_OWNER *Owner, _In_ SIZE_T Bytes,
     _Outptr_ ADMISSION_PHYSICAL_ALLOCATION **Allocation);
+NTSTATUS AdmissionPhysicalBorrowLocal(
+    _Inout_ ADMISSION_PHYSICAL_OWNER *Owner,
+    _In_ const DXGK_DEVICE_INFO *DeviceInformation,
+    _Outptr_ ADMISSION_PHYSICAL_ALLOCATION **Allocation);
+NTSTATUS AdmissionRecordLocalReserve(
+    _In_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_PHYSICAL_ALLOCATION *Allocation);
 NTSTATUS AdmissionPhysicalFree(
     _Inout_ ADMISSION_PHYSICAL_OWNER *Owner,
     _Inout_ ADMISSION_PHYSICAL_ALLOCATION *Allocation);

@@ -999,6 +999,47 @@ _Use_decl_annotations_ void AdmissionRecordMemoryStartFailure(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ NTSTATUS AdmissionRecordLocalReserve(
+    ADMISSION_CONTEXT *Context,
+    const ADMISSION_PHYSICAL_ALLOCATION *Allocation) {
+  struct {
+    ULONG Version;
+    ULONG Bytes;
+    ULONG Owner;
+    ULONG Status;
+    ULONGLONG GuestIpa;
+    ULONGLONG HostPa;
+    ULONGLONG LocalBytes;
+  } receipt;
+  UNICODE_STRING name;
+  HANDLE key = NULL;
+  NTSTATUS status;
+
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      Allocation == NULL || !Allocation->BorrowedFirmwareReserve ||
+      Allocation->CpuBase == NULL)
+    return STATUS_INVALID_PARAMETER;
+  receipt.Version = 1u;
+  receipt.Bytes = sizeof(receipt);
+  receipt.Owner = 1u; /* Firmware-reserved pages, KMD-borrowed CPU view. */
+  receipt.Status = STATUS_SUCCESS;
+  receipt.GuestIpa = Allocation->GuestIpaBase;
+  receipt.HostPa = Allocation->HostPhysicalBase;
+  receipt.LocalBytes = Allocation->Size;
+  status = IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+                                   PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE,
+                                   &key);
+  if (!NT_SUCCESS(status))
+    return status;
+  RtlInitUnicodeString(&name, L"Wom1LocalReserve");
+  status = ZwSetValueKey(key, &name, 0, REG_BINARY, &receipt,
+                         sizeof(receipt));
+  if (NT_SUCCESS(status))
+    status = ZwFlushKey(key);
+  ZwClose(key);
+  return status;
+}
+
 _Use_decl_annotations_ void AdmissionRecordMemoryStop(
     ADMISSION_CONTEXT *Context, NTSTATUS Status,
     LONG OutstandingBefore, LONG OutstandingAfter) {
