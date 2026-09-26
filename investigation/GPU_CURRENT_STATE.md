@@ -1,5 +1,38 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-26 EXP824 recovery PASS; EXP823 0x101 offline boundary
+
+External SoC reset reached `Running proxy`. Hash-verified immutable EXP377/392
+`ordinary-direct-final.sh` direct chainload (no Windows restart or WDT)
+returned pinned SSH. APPL0002 is exactly one present inert Code28 devnode,
+INF/service null; staged AppleAgx0, G3/B1 arm0, SYS/UMD/service/signer absent,
+CPU8/disks2/USB6. EXP824 recovery **confirmed**; evidence under
+`.local/experiments/EXP823-r64-reserve/exp824-*.log`.
+
+CDB on the SHA-verified EXP823 minidump: 0x101 parameters
+`18/0/fffff80008e40980/0` identify **CPU0 missing clock ticks**. The dump
+contains reporter CPU4 only; its stack is `KiIdleLoop -> clock interrupt ->
+KeAccumulateTicks -> KeBugCheck2`. `!running -it` cannot read processor info,
+`~*k` fails, and `~0s` reports single-processor kernel triage dump. Thus the
+CPU0 PC/stack is unavailable: HVC, PSCI, WFI, driver execution are UNKNOWN.
+No AppleAgx frame is present on the captured CPU4 stack. Blackbox PnP has
+`DISPLAY\Default_Monitor` code24 at 02:10:00.67Z; BSD says no shutdown in
+progress at capture. Stage precheck was Code28/unbound; after crash arm was
+still 1 and there was no R64 receipt, so direct KMD StartDevice involvement
+is unsupported, not excluded.
+
+EXP822G's successful `shutdown /r` followed exact cleanup in a GPU-hidden
+profile with package/arm absent. EXP823's failed restart followed stage/sign/arm
+in a GPU-visible ordinary profile. The strongest proximal difference is
+staged package state, but the profile also changed; attribution remains
+UNKNOWN. Next **offline-designed, not run** discriminator: one preregistered
+`shutdown /r` from the now recovered immutable ordinary EXP377/392 Code28,
+package0/arm0 guest, with unchanged firmware and serial evidence. A repeated
+0x101 implicates ordinary timer/vGIC/PSCI reboot behavior; a clean reboot
+narrows the cause to the stage/package transaction. Preserve immutable hidden
+recovery. Do not stage another package, live bind, or run R105 before this
+boundary is resolved.
+
 ## 2026-09-26 EXP823/R106/R64: staged transition hit 0x101; R105 not run
 
 R106.1 scripts, R64 m1n1/Mu/KMD implementation, host tests, R83 Mu and R85
