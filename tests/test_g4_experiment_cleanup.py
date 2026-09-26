@@ -20,6 +20,9 @@ class ExperimentCleanupContract(unittest.TestCase):
         self.assertIn("/uninstall", source)
         self.assertIn("staged package remains", source)
         self.assertIn("phantom devnode remains", source)
+        self.assertIn("$remaining = Get-PnpDevice", source)
+        self.assertIn("[int]$remaining.Problem -eq 45", source)
+        self.assertIn("/remove-device $id", source)
 
 
 if __name__ == "__main__":

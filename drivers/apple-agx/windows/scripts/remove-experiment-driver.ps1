@@ -48,7 +48,17 @@ if ($service -and $service.State -eq 'Running') { throw 'service still running' 
 # devnode that rebound oem5 on the next two ordinary boots.
 $remove = @(& pnputil.exe /remove-device $id 2>&1 | ForEach-Object { "$_" })
 if ($LASTEXITCODE -ne 0) { throw "remove-device failed: $remove" }
-if (Get-PnpDevice -InstanceId $id -ErrorAction SilentlyContinue) { throw 'phantom devnode remains' }
+$remaining = Get-PnpDevice -InstanceId $id -ErrorAction SilentlyContinue
+if ($remaining -and [int]$remaining.Problem -eq 45) {
+    # PnP can retain the just-removed instance as a non-present phantom.
+    # EXP821 demonstrated that deleting the package while it exists allows
+    # that phantom to rebind on a later ordinary boot.
+    $phantomRemove = @(& pnputil.exe /remove-device $id 2>&1 | ForEach-Object { "$_" })
+    if ($LASTEXITCODE -ne 0) { throw "phantom remove-device failed: $phantomRemove" }
+    $remove += $phantomRemove
+    $remaining = Get-PnpDevice -InstanceId $id -ErrorAction SilentlyContinue
+}
+if ($remaining) { throw 'phantom devnode remains' }
 $delete = @(& pnputil.exe /delete-driver $ExpectedPublishedName /uninstall 2>&1 | ForEach-Object { "$_" })
 if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 3010) { throw "delete-driver failed: $delete" }
 if (@(Get-WindowsDriver -Online -All | Where-Object OriginalFileName -match 'AppleAgxRenderAdmission\.inf$').Count -ne 0) {
