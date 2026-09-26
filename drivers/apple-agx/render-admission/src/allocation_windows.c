@@ -71,6 +71,30 @@ static VOID AdmissionR105RecordEcho(PDEVICE_OBJECT DeviceObject,
   (void)ZwFlushKey(key);
   ZwClose(key);
 }
+
+/* Create and Open both receive the same 72-byte R105 request. Normalize it
+ * identically in both DDIs so the stored and reopened descriptions match. */
+static BOOLEAN AdmissionR105ParsePrivate(
+    const VOID *PrivateData, UINT PrivateBytes,
+    ADMISSION_R105_OVERRIDE *Override,
+    ADMISSION_ALLOCATION_DESCRIPTION *Description,
+    APPLE_AGX_U32 *ClassId, APPLE_AGX_U32 *Flags,
+    ADMISSION_WIN32_TRANSPORT_RESULT *ParseResult) {
+  ADMISSION_WIN32_ALLOCATION_CREATE normalized;
+  if (!AdmissionR105Decode(PrivateData, PrivateBytes, TRUE, Override))
+    return FALSE;
+  normalized = *(const ADMISSION_WIN32_ALLOCATION_CREATE *)PrivateData;
+  normalized.Reserved[0] = 0u;
+  normalized.Reserved[1] = 0u;
+  if (normalized.ClassId == 0u)
+    *ParseResult = AdmissionWin32AllocationCreateValidate(
+        &normalized.Allocation, sizeof(normalized.Allocation),
+        Description, ClassId, Flags);
+  else
+    *ParseResult = AdmissionWin32AllocationCreateValidate(
+        &normalized, sizeof(normalized), Description, ClassId, Flags);
+  return TRUE;
+}
 #endif
 
 C_ASSERT(D3DKMDT_GDISURFACE_STAGING_CPUVISIBLE ==
@@ -300,7 +324,6 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   APPLE_AGX_U32 flags = 0u;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   ADMISSION_R105_OVERRIDE r105 = {0};
-  ADMISSION_WIN32_ALLOCATION_CREATE r105Normalized;
   BOOLEAN r105Enabled = FALSE;
 #endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
@@ -326,23 +349,10 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   if (info->pPrivateDriverData == NULL)
     return STATUS_INVALID_PARAMETER;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  r105Enabled = AdmissionR105Decode(
-      info->pPrivateDriverData, info->PrivateDriverDataSize,
-      TRUE, &r105);
-  if (r105Enabled) {
-    r105Normalized = *(const ADMISSION_WIN32_ALLOCATION_CREATE *)
-        info->pPrivateDriverData;
-    r105Normalized.Reserved[0] = 0u;
-    r105Normalized.Reserved[1] = 0u;
-    if (r105Normalized.ClassId == 0u)
-      parseResult = AdmissionWin32AllocationCreateValidate(
-          &r105Normalized.Allocation, sizeof(r105Normalized.Allocation),
-          &parsedDescription, &classId, &flags);
-    else
-      parseResult = AdmissionWin32AllocationCreateValidate(
-          &r105Normalized, sizeof(r105Normalized),
-          &parsedDescription, &classId, &flags);
-  } else
+  r105Enabled = AdmissionR105ParsePrivate(
+      info->pPrivateDriverData, info->PrivateDriverDataSize, &r105,
+      &parsedDescription, &classId, &flags, &parseResult);
+  if (!r105Enabled)
 #endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   if (info->PrivateDriverDataSize == sizeof(normalized) &&
@@ -578,6 +588,9 @@ static NTSTATUS AdmissionOpenAllocationImpl(
     ADMISSION_WIN32_TRANSPORT_RESULT parseResult;
     APPLE_AGX_U32 classId = 0u;
     APPLE_AGX_U32 flags = 0u;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    ADMISSION_R105_OVERRIDE openR105;
+#endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
     const ADMISSION_ALLOCATION_DESCRIPTION *submittedDescription;
     ADMISSION_ALLOCATION_DESCRIPTION normalized;
@@ -589,6 +602,15 @@ static NTSTATUS AdmissionOpenAllocationImpl(
       guard = AdmissionOpenAllocationGuardPrivate;
       goto Rollback;
     }
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    submittedDescription = NULL;
+#endif
+    if (!AdmissionR105ParsePrivate(
+            info->pPrivateDriverData, info->PrivateDriverDataSize,
+            &openR105, &parsedDescription, &classId, &flags, &parseResult))
+#endif
+    {
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
     submittedDescription = info->PrivateDriverDataSize ==
         sizeof(ADMISSION_ALLOCATION_DESCRIPTION)
@@ -611,6 +633,7 @@ static NTSTATUS AdmissionOpenAllocationImpl(
         info->pPrivateDriverData, info->PrivateDriverDataSize,
         &parsedDescription, &classId, &flags);
 #endif
+    }
     if (parseResult != AdmissionWin32TransportSuccess) {
       guard = AdmissionOpenAllocationGuardPrivate;
       goto Rollback;

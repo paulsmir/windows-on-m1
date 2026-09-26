@@ -91,10 +91,6 @@ typedef struct { unsigned Magic, Version, Bytes, ClassId, Flags;
                  unsigned Reserved[2];
                  ADMISSION_ALLOCATION_DESCRIPTION Allocation;
 } ADMISSION_WIN32_ALLOCATION_CREATE;
-static int AdmissionR105Decode(const void *data, unsigned bytes, int enabled,
-                                ADMISSION_R105_OVERRIDE *result) {
-  (void)data; (void)bytes; (void)enabled; (void)result; return 0;
-}
 static void AdmissionR105Apply(DXGK_ALLOCATIONINFO *info,
                                const ADMISSION_R105_OVERRIDE *override) {
   (void)info; (void)override;
@@ -104,6 +100,14 @@ static void AdmissionR105RecordEcho(void *device,
                                     unsigned class_id, unsigned bits,
                                     const DXGK_ALLOCATIONINFO *info) {
   (void)device; (void)override; (void)class_id; (void)bits; (void)info;
+}
+static int AdmissionR105ParsePrivate(const void *data, unsigned bytes,
+                                     ADMISSION_R105_OVERRIDE *override,
+                                     ADMISSION_ALLOCATION_DESCRIPTION *desc,
+                                     unsigned *class_id, unsigned *flags,
+                                     ADMISSION_WIN32_TRANSPORT_RESULT *result) {
+  (void)data; (void)bytes; (void)override; (void)desc; (void)class_id;
+  (void)flags; (void)result; return 0;
 }
 static int AdmissionMemoryReady(int *memory) { return *memory != 0; }
 static ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32AllocationCreateValidate(
