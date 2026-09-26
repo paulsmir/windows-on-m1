@@ -1,5 +1,27 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-26 EXP822/R105: matrix not reached; durable Code28 restored
+
+One package820 full-owner boot reached pinned SSH, CPU8/disks2/USB6 but
+stage-only arrival left APPL0002 Code28/unbound. A hash-gated live bind in
+that guest installed exact oem5 and consumed `G3Armed` (host seq3703725362),
+then failed StartStage4 `0xC000009A`: physical allocation of 67,174,400
+bytes failed `0xC0000017`. APPL0002 was Code43; no KMD Create/Open or
+D3DKMT R105 matrix row ran. R105 DXGK field hypothesis remains **untested**;
+do not start KD or alter output fields from this result.
+
+Immediate cleanup-v2 reported staged0 but was not durable across an abrupt
+SoC reset: GPU-hidden inspection twice found phantom APPL0002 Code45 plus
+oem5/SYS/UMD/signer restored, and a copied script became all NUL bytes.
+GPU-hidden exact phantom/package cleanup followed by guest-initiated orderly
+`shutdown.exe /r /t 0` preserved the deletion and script hashes. Final frozen
+ordinary EXP377/392 boot returned pinned SSH with exactly one inert APPL0002
+Code28, staged0/arm0/logger0/SYS0/UMD0/service0/signer0, CPU8/disks2/USB6
+at 00:54:25Z. Evidence `.local/experiments/EXP822-g4-r105/evidence/`;
+full hardware cycle 39m15s. Next causal target: preregister a cold full-owner
+bind that both preserves signer/arm through an orderly transition and obtains
+the 64-MiB physical reserve before running the unchanged R105 matrix.
+
 ## 2026-09-26 EXP822/R105 prepared; boot unavailable
 
 R105 qualification-only allocation-output matrix and exact cleanup were
