@@ -1,5 +1,31 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-26 R108 offline correction after EXP827
+
+REVIEW R108: ACCEPT. The assisted proxy calls `map_agx_power_broker()` in
+`map_essential()` before `pt_update()` installs guest RAM stage-2 mappings.
+The first selector call therefore cannot translate the J313 candidate, and
+`resources_mapped` previously suppressed a retry. A launch-order host test
+was RED then GREEN; the selector host test uses EXP827 candidate
+`0x8e0000000`, RAM end `0x9df708000`, and SGX shared
+`0x9fff78000+0x40000`, exercising unmapped then identity-mapped stage 2.
+Commit `274245fe` pins m1n1 `6edb1d11`: retry after `pt_update()` and report
+the exact selector failure in serial. Full-owner m1n1 build and targeted
+host tests pass; hardware receipt is pending. REVIEW R105: DEFER until a
+borrowed StartDevice receipt exists in the same boot.
+
+For Mu, successful FD `c7ddcfb2` used gitlink `f1ef718e08` and x86 Linux
+BaseTools. Local ARM64-container rebuild of that gitlink produced FD
+`2f815fdc`; its FV and R64 local FV both contain one PcdDxe in the same
+module order. The builder workspace was still on `5acdb4a745`; the first x86
+R64 overlay moved only three files and omitted four `f1ef718e08` ABI profile
+files. Its clean build had no ABI AML, so it was rejected offline. After all
+seven changed files were SHA-verified into that workspace, clean x86 build
+produced FD `dbcc9983` and 951-byte R64 AML `a283d3a4`; the FV lists one
+PcdDxe. The x86 artifact has not yet shown a serial dispatch; EXP828 will
+distinguish build environment from any remaining Mu runtime defect. No FD
+was launched during these offline corrections.
+
 ## 2026-09-26 EXP826/827 — R64 firmware gate failed, ordinary Code28 restored
 
 REVIEW R107: ACCEPT. The prior successful stage+sign+arm reboots make an
