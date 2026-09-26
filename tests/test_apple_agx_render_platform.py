@@ -116,7 +116,7 @@ class AppleAgxRenderPlatformTests(unittest.TestCase):
 
     def test_bootstrap_profile_excludes_physical_agx_irq_routes(self):
         source = (RENDER / "src" / "backend_platform_windows.c").read_text()
-        self.assertIn("memory_count == 4u", source)
+        self.assertIn("memory_count == 5u", source)
         self.assertIn("interrupt_count == 1u", source)
         self.assertIn(
             "J313_AGX_ABI_ADMISSION_SYNTHETIC_SCANOUT_GUEST_INTID", source)

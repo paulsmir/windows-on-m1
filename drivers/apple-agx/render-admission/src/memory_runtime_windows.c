@@ -318,7 +318,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
                              STATUS_PENDING);
   requestedBytes = ADMISSION_LOCAL_BYTES;
   status = AdmissionPhysicalBorrowLocal(
-      &runtime->PhysicalOwner, &Context->DeviceInformation, &localBorrowed);
+      &runtime->PhysicalOwner, &Context->DeviceInformation, &localBorrowed,
+      &Context->LocalReserveReceipt);
   if (!NT_SUCCESS(status)) {
     goto Fail;
   }

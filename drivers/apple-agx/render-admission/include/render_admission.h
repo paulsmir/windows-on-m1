@@ -16,6 +16,7 @@
 #include "render_allocation.h"
 #include "render_hvc.h"
 #include "apple_agx_memory.h"
+#include "apple_agx_local_reserve_abi.h"
 #include "apple_agx_residency.h"
 #include "apple_agx_uat_publication.h"
 #include "render_paging.h"
@@ -365,6 +366,7 @@ typedef struct _ADMISSION_CONTEXT {
   DXGK_START_INFO StartInfo;
   DXGKRNL_INTERFACE Interface;
   DXGK_DEVICE_INFO DeviceInformation;
+  APPLE_AGX_LOCAL_RESERVE_RECEIPT LocalReserveReceipt;
   DXGK_DISPLAY_INFORMATION PostDisplayInformation;
   BOOLEAN InterfaceValid;
   BOOLEAN Started;
@@ -1183,7 +1185,8 @@ NTSTATUS AdmissionPhysicalAllocate(
 NTSTATUS AdmissionPhysicalBorrowLocal(
     _Inout_ ADMISSION_PHYSICAL_OWNER *Owner,
     _In_ const DXGK_DEVICE_INFO *DeviceInformation,
-    _Outptr_ ADMISSION_PHYSICAL_ALLOCATION **Allocation);
+    _Outptr_ ADMISSION_PHYSICAL_ALLOCATION **Allocation,
+    _Out_ APPLE_AGX_LOCAL_RESERVE_RECEIPT *Receipt);
 NTSTATUS AdmissionRecordLocalReserve(
     _In_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_PHYSICAL_ALLOCATION *Allocation);

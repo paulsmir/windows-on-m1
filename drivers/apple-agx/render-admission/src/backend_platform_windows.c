@@ -1041,6 +1041,9 @@ static NTSTATUS AdmissionPlatformValidateResources(
         else if (start == J313_AGX_G2_POWER_BROKER_BASE &&
                  length == J313_AGX_G2_POWER_BROKER_SIZE)
           bit = 1u << 3;
+        else if (AppleAgxLocalReserveMatchesResource(
+                     &Context->LocalReserveReceipt, start, length))
+          bit = 1u << 4;
         else
           return STATUS_DEVICE_CONFIGURATION_ERROR;
         if ((seen & bit) != 0u)
@@ -1053,12 +1056,12 @@ static NTSTATUS AdmissionPlatformValidateResources(
             descriptor->u.Interrupt.Vector == 0u)
           return STATUS_DEVICE_CONFIGURATION_ERROR;
         ++interrupt_count;
-      } else if (descriptor->Type != CmResourceTypeDevicePrivate) {
+      } else {
         return STATUS_DEVICE_CONFIGURATION_ERROR;
       }
     }
   }
-  return memory_count == 4u && seen == 0x0fu && interrupt_count == 1u
+  return memory_count == 5u && seen == 0x1fu && interrupt_count == 1u
              ? STATUS_SUCCESS
              : STATUS_DEVICE_CONFIGURATION_ERROR;
 }

@@ -328,7 +328,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPhysicalAllocate(
 _Use_decl_annotations_ NTSTATUS AdmissionPhysicalBorrowLocal(
     ADMISSION_PHYSICAL_OWNER *Owner,
     const DXGK_DEVICE_INFO *DeviceInformation,
-    ADMISSION_PHYSICAL_ALLOCATION **Allocation) {
+    ADMISSION_PHYSICAL_ALLOCATION **Allocation,
+    APPLE_AGX_LOCAL_RESERVE_RECEIPT *Receipt) {
   APPLE_AGX_LOCAL_RESERVE_RECEIPT receipt;
   PCM_RESOURCE_LIST resources;
   PHYSICAL_ADDRESS brokerAddress;
@@ -341,9 +342,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionPhysicalBorrowLocal(
   NTSTATUS status = STATUS_INVALID_DEVICE_STATE;
 
   if (Owner == NULL || !Owner->Initialized || DeviceInformation == NULL ||
-      Allocation == NULL || DeviceInformation->TranslatedResourceList == NULL)
+      Allocation == NULL || Receipt == NULL ||
+      DeviceInformation->TranslatedResourceList == NULL)
     return STATUS_INVALID_PARAMETER;
   *Allocation = NULL;
+  RtlZeroMemory(Receipt, sizeof(*Receipt));
   resources = DeviceInformation->TranslatedResourceList;
   localAddress.QuadPart = 0;
   Owner->LastAllocateBytes = APPLE_AGX_LOCAL_RESERVE_BYTES;
@@ -441,6 +444,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPhysicalBorrowLocal(
   InterlockedIncrement(&Owner->AllocationCount);
   Owner->LastAllocateStep = 7u;
   *Allocation = borrowed;
+  *Receipt = receipt;
   borrowed = NULL;
   status = STATUS_SUCCESS;
 
