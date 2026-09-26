@@ -400,13 +400,9 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   allocation->QualificationCookie = correlated
       ? ADMISSION_UMD_CORRELATION_COOKIE : 0u;
 #endif
-#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
-  if (AdmissionWin32AllocationUsesGpuVa(classId)) {
-    info->MinimumPageSize = ADMISSION_G1B_MINIMUM_PAGE;
-    info->RecommendedPageSize = ADMISSION_G1B_RECOMMENDED_PAGE;
-  } else
-#endif
-    info->Alignment = (UINT)ADMISSION_ALLOCATION_ALIGNMENT;
+  /* EXP836: dxgkrnl admitted Mesa class BOs only with the class0 output
+   * shape; page-size hints, MMU set and local-only placement were refused. */
+  info->Alignment = (UINT)ADMISSION_ALLOCATION_ALIGNMENT;
   info->Size = (SIZE_T)aligned;
   /* Neither reported segment advertises PitchAlignment. */
   info->PitchAlignedSize = (SIZE_T)AdmissionAllocationPitchAlignedSize(
@@ -417,31 +413,18 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   info->SupportedReadSegmentSet = description->CpuVisible != 0u
                                       ? ADMISSION_CPU_VISIBLE_SEGMENT_SET
                                       : ADMISSION_LOCAL_SEGMENT_SET;
-#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  /* GPU-readable native class allocations cannot move into the aperture. */
-  if (classId != 0u)
-    info->SupportedReadSegmentSet = ADMISSION_LOCAL_SEGMENT_SET;
-#endif
 #if ADMISSION_GPUVA_G1B_ALLOCATION_HINT != 0
   /* The page-size trial constrains every affected allocation to the local
    * segment described with that slab size. System/aperture remains 4 KiB. */
   info->SupportedReadSegmentSet = ADMISSION_LOCAL_SEGMENT_SET;
 #endif
   info->SupportedWriteSegmentSet = info->SupportedReadSegmentSet;
-#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  /* Virtual allocations use this union as an MMU mask. The G3 contract
-   * advertises one GPU MMU at index 0; placement remains in the local segment. */
-  if (AdmissionWin32AllocationUsesGpuVa(classId))
-    info->MmuSet = 1u;
-#endif
   info->EvictionSegmentSet = 0u;
   info->hAllocation = allocation;
   info->FlagsWddm2.Value = 0u;
   info->FlagsWddm2.CpuVisible = description->CpuVisible != 0u;
-  /* Native class BOs are addressed through process GPUVA. Preserve physical
-   * access only for the legacy/display allocation path. */
-  info->FlagsWddm2.AccessedPhysically =
-      AdmissionWin32AllocationUsesGpuVa(classId) ? 0u : 1u;
+  /* EXP836: the only admitted Mesa class shape keeps AccessedPhysically. */
+  info->FlagsWddm2.AccessedPhysically = 1u;
   info->pAllocationUsageHint = NULL;
   info->AllocationPriority = D3DDDI_ALLOCATIONPRIORITY_NORMAL;
   info->Flags2.Value = 0u;

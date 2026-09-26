@@ -132,9 +132,6 @@ static uint64_t AdmissionAllocationPitchAlignedSize(uint64_t size,
   assert(!supported);
   return 0;
 }
-static int AdmissionWin32AllocationUsesGpuVa(unsigned class_id) {
-  return class_id != 0u;
-}
 #if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
 static void AdmissionRecordG1bAllocationInput(void *device,
                                                unsigned minimum,
@@ -172,8 +169,11 @@ int main(void) {
   assert(info.PreferredSegment.SegmentId0 == 2);
   assert(info.Size == 0x10000 && info.Alignment == 0x10000);
   assert(info.FlagsWddm2.CpuVisible == 1);
-  assert(info.MmuSet == 1u);
-  assert(info.SupportedWriteSegmentSet == ADMISSION_LOCAL_SEGMENT_SET);
+  /* EXP836: a local-only write set is refused by dxgkrnl; the admitted
+   * shape for Mesa class BOs is the class0 shape. */
+  assert(info.SupportedReadSegmentSet == ADMISSION_CPU_VISIBLE_SEGMENT_SET);
+  assert(info.SupportedWriteSegmentSet == ADMISSION_CPU_VISIBLE_SEGMENT_SET);
+  assert(info.FlagsWddm2.AccessedPhysically == 1u);
   ExFreePoolWithTag(info.hAllocation, ADMISSION_POOL_TAG);
   native.Size = 0x4000;
   memset(&info, 0, sizeof(info));
@@ -204,23 +204,15 @@ class G4SegmentPlacementReplay(unittest.TestCase):
                             "-o", str(binary)], check=True)
             subprocess.run([str(binary)], check=True)
 
-    def test_g1b_16kb_gpuva_page_sizes_leave_legacy_alignment(self):
+    def test_g1b_16kb_profile_keeps_the_exp836_admitted_shape(self):
+        """EXP836: page-size hints were not what dxgkrnl required; the admitted
+        Mesa class shape is identical in the 16-KiB G1b profile."""
         shim = SHIM.replace("#define ADMISSION_GPUVA_G1B_PAGE_PROFILE 0",
                             "#define ADMISSION_GPUVA_G1B_PAGE_PROFILE 16")
-        shim += ("\n#define DXGK_PAGESIZE_16KB 2u\n"
-                 "#define ADMISSION_G1B_MINIMUM_PAGE DXGK_PAGESIZE_16KB\n"
-                 "#define ADMISSION_G1B_RECOMMENDED_PAGE DXGK_PAGESIZE_16KB\n")
-        main = MAIN.replace("info.Size == 0x10000 && info.Alignment == 0x10000",
-                            "info.Size == 0x10000 && info.Alignment != 0x10000 "
-                            "&& info.MinimumPageSize == DXGK_PAGESIZE_16KB "
-                            "&& info.RecommendedPageSize == DXGK_PAGESIZE_16KB")
-        main = main.replace("assert(info.SupportedReadSegmentSet == ADMISSION_CPU_VISIBLE_SEGMENT_SET);",
-                            "assert(info.SupportedReadSegmentSet == ADMISSION_CPU_VISIBLE_SEGMENT_SET);\n"
-                            "  assert(info.Alignment == ADMISSION_ALLOCATION_ALIGNMENT);")
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "allocation.c"
             binary = Path(directory) / "allocation"
-            source.write_text(shim + allocation_body() + main)
+            source.write_text(shim + allocation_body() + MAIN)
             subprocess.run([os.environ.get("CC", "clang"), "-std=c11",
                             "-Wall", "-Wextra", "-Werror", str(source),
                             "-o", str(binary)], check=True)
