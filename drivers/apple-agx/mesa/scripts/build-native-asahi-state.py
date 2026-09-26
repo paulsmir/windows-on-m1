@@ -2105,6 +2105,7 @@ MesaD3d10FrontendSetSoOffsetForTest(D3D10DDI_HDEVICE hDevice,
                   }'''),
         ('#include "util/u_surface.h"',
          '''#include "util/u_surface.h"
+#include "util/format/u_format.h"
 #include "drm-uapi/drm_fourcc.h"
 #include "agx_win32_asahi_scene.h"
 
@@ -2533,11 +2534,15 @@ AgxD3d10ResourceWithinRequiredLimits(
    if (!device || !destination || !source || destination == source ||
        destination->owner_device != device || source->owner_device != device ||
        destination->usage == D3D10_DDI_USAGE_IMMUTABLE ||
-       destination->MipLevels != 1 || source->MipLevels != 1 ||
-       destination->NumSubResources != 1 || source->NumSubResources != 1 ||
-       (destination->transfers && destination->transfers[0]) ||
-       (source->transfers && source->transfers[0])) {
+       destination->MipLevels != source->MipLevels ||
+       destination->NumSubResources != source->NumSubResources) {
       SetError(hDevice, E_NOTIMPL); return;
+   }
+   for (unsigned i = 0; i < destination->NumSubResources; ++i) {
+      if ((destination->transfers && destination->transfers[i]) ||
+          (source->transfers && source->transfers[i])) {
+         SetError(hDevice, E_NOTIMPL); return;
+      }
    }
    struct pipe_resource *dst=destination->resource,*src=source->resource;
    if (dst && src && destination->buffer && source->buffer) {
@@ -2552,12 +2557,27 @@ AgxD3d10ResourceWithinRequiredLimits(
       if(FAILED(result)) SetError(hDevice,result);
       return;
    }
+   /* D3D10 ResourceCopy: identical type, dimensions, mip count, array size
+    * and sample count; formats of one copy group. Copy every subresource. */
    unsigned family=AgxD3d10CopyFamily(source->Format);
-   if (!dst || !src || !family || family!=AgxD3d10CopyFamily(destination->Format) ||
-       dst->target!=PIPE_TEXTURE_2D || src->target!=PIPE_TEXTURE_2D ||
+   enum pipe_format raw=PIPE_FORMAT_NONE;
+   if (dst && src && family && family==AgxD3d10CopyFamily(destination->Format))
+      raw=family==3 ? PIPE_FORMAT_R8G8B8A8_UNORM : PIPE_FORMAT_B8G8R8A8_UNORM;
+   else if (dst && src && src->format==dst->format &&
+            !util_format_is_compressed(src->format))
+      raw=util_format_linear(src->format);
+   if (!dst || !src || raw==PIPE_FORMAT_NONE ||
+       dst->target!=src->target || dst->target==PIPE_BUFFER ||
        dst->width0!=src->width0 || dst->height0!=src->height0 ||
-       dst->depth0!=1 || src->depth0!=1 || dst->array_size!=1 || src->array_size!=1 ||
-       dst->last_level || src->last_level || dst->nr_samples>1 || src->nr_samples>1) {
+       dst->depth0!=src->depth0 || dst->array_size!=src->array_size ||
+       dst->last_level!=src->last_level || dst->nr_samples>1 || src->nr_samples>1) {
+      UINT values[14]={(UINT)source->Format,(UINT)destination->Format,
+         src?(UINT)src->target:~0u,dst?(UINT)dst->target:~0u,
+         src?src->width0:0u,src?src->height0:0u,dst?dst->width0:0u,dst?dst->height0:0u,
+         src?(UINT)src->last_level:0u,src?(UINT)src->array_size:0u,
+         src?(UINT)src->nr_samples:0u,dst?(UINT)dst->nr_samples:0u,
+         (UINT)(source->presentation!=NULL),(UINT)(destination->presentation!=NULL)};
+      AgxD3d10WindowsDiagnostic("reject-resource-copy",E_NOTIMPL,values,14u);
       SetError(hDevice, E_NOTIMPL); return;
    }
    HRESULT result;
@@ -2565,16 +2585,23 @@ AgxD3d10ResourceWithinRequiredLimits(
       result=AgxD3d10WindowsPresentationBlt(device->windows,
          destination->presentation,source->presentation);
    } else {
-      /* Copy the stored four bytes, independent of any bound sampling view.
-       * UNORM views avoid sRGB conversion; BGRA also preserves the X byte. */
-      enum pipe_format raw=family==3 ? PIPE_FORMAT_R8G8B8A8_UNORM : PIPE_FORMAT_B8G8R8A8_UNORM;
-      struct pipe_blit_info info={};
-      info.src.resource=src;info.src.format=raw;
-      info.src.box.width=src->width0;info.src.box.height=src->height0;info.src.box.depth=1;
-      info.dst.resource=dst;info.dst.format=raw;
-      info.dst.box.width=dst->width0;info.dst.box.height=dst->height0;info.dst.box.depth=1;
-      info.mask=PIPE_MASK_RGBA;info.filter=PIPE_TEX_FILTER_NEAREST;
-      device->pipe->blit(device->pipe,&info);
+      /* Copy stored bits independent of any bound view: linear (non-sRGB)
+       * views avoid conversion; BGRA also preserves the X byte. */
+      unsigned layers=dst->target==PIPE_TEXTURE_3D ? 1u : dst->array_size;
+      for (unsigned layer=0; layer<layers; ++layer) {
+         for (unsigned level=0; level<=dst->last_level; ++level) {
+            struct pipe_blit_info info={};
+            info.src.resource=src;info.src.format=raw;info.src.level=level;
+            info.dst.resource=dst;info.dst.format=raw;info.dst.level=level;
+            info.src.box.z=info.dst.box.z=(int)layer;
+            info.src.box.width=info.dst.box.width=u_minify(src->width0,level);
+            info.src.box.height=info.dst.box.height=u_minify(src->height0,level);
+            info.src.box.depth=info.dst.box.depth=
+               dst->target==PIPE_TEXTURE_3D ? u_minify(src->depth0,level) : 1;
+            info.mask=util_format_get_mask(raw);info.filter=PIPE_TEX_FILTER_NEAREST;
+            device->pipe->blit(device->pipe,&info);
+         }
+      }
       device->pipe->flush(device->pipe,NULL,0);
       result=AgxD3d10WindowsFlushStatus(device->windows);
    }
