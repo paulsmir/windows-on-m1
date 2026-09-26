@@ -1,5 +1,40 @@
 # GPU current boundary — 2026-09-26
 
+## 2026-09-26 EXP833 — cold full-owner reached SSH; pre-arm gate falsely rejected resource list
+
+REVIEW R113: ACCEPT the staged+armed ordinary-boot risk and direct cold
+transition, with causation limited by evidence. EXP823's 0x101 dump lists
+`AppleAgxRenderAdmission.sys` loaded, but CPU0 was in `nt!KiIdleLoop`;
+EXP832 ordinary ETL/System did not identify an AppleAgx StartDevice, and its
+later hidden state retained G3Armed with no StartStage. R85 package833 from
+root `820f3008` (process correction `17483436`), SYS `169ac7bd`, INF
+`9175089d`, m1n1/Mu R110 unchanged, passed host RED→GREEN and 0-warning
+build. Stage+arm used ordered power-off and hash-bound direct cold full-owner,
+with no intervening ordinary boot. Pinned SSH returned with CPU8.
+
+EXP833 then reported Code43, `Wom1StartStage=2`, `Wom1StartStatus=0xC00000A3`
+from the new pre-arm resource gate. G3Armed stayed 1, so no GPU access,
+R64 borrow receipt, Code0, R105 matrix row, or DWM frame occurred; no
+bugcheck. Host verified nine dump-first evidence files before exact cleanup.
+Disarm under exact package/status/evidence checks, APPL0002/oem5 cleanup,
+ordered restart, and immutable EXP377/392 ordinary recovery restored pinned
+SSH, one present Code28, staged/arm/SYS/UMD/service/signer absent, CPU8,
+disks2/USB6, RDP and input; durable Preflight PASS. Causal report
+`.local/experiments/EXP833-r113-cold/causal-result.json` SHA256
+`56a2b5d65860975819f018d06a3ee94cc1af5e0aafa824eebce0db4b001d8d2e`.
+Verdict: **rejected for Code0**, fail-closed safety observed.
+
+Next causal target: EXP831 and EXP833 `BootConfig` each contain 11 partial
+descriptors: five memory type3, five interleaved DevicePrivate type129, one
+IRQ type2. The host replay modeled only six descriptors and its DevicePrivate
+stub used the wrong value 5. The actual DXGK translated list was not captured,
+so the five private descriptors are a strong, not final, explanation of the
+gate rejection. Offline RED with the 11-descriptor list, then validate
+principled handling of PnP private descriptors in the pre-arm gate and
+platform validator before another hardware phase. Decode evidence
+`.local/experiments/EXP833-r113-cold/bootconfig-analysis.json` SHA256
+`26ef1dc1081c0c70812aff748b3d0b2fe5e0994e35fe7f3307f604768ea6afb4`.
+
 ## 2026-09-26 EXP832 — R64 validator fixed offline; stage-only ordinary boot lost SSH
 
 REVIEW R105: ACCEPT unchanged matrix after Code0. REVIEW R85: ACCEPT exact
