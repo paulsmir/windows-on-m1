@@ -1,4 +1,28 @@
-# GPU current boundary — 2026-09-23
+# GPU current boundary — 2026-09-26
+
+## 2026-09-26 EXP829 — DXE fixed; R64 stopped at Windows PnP Code12
+
+REVIEW R109: REJECT both reserve-overlap and VirtualMemoryTable overflow.
+EXP828 HOB/PHIT/stack/FV allocations lie outside `0x8e0000000..0x8e4000000`;
+the PEI table uses 19/20 slots including its terminator. The actual duplicate
+FV path was an unnamed `FVMAIN_COMPACT`: PrePi copied an uninitialized parent
+name into FV2 HOB, so DXE extracted `FVMAIN` again. Mu `1854bb8b06` gives
+the compact and main FV distinct names; root `4051af73` carries RED→GREEN
+regressions. x86 FD `28be8544` has the expected FV GUIDs and one PcdDxe FFS.
+
+One staged+armed package823 cold full-owner EXP829 reached Windows with one
+PcdDxe dispatch, m1n1/Mu 64-MiB receipt at IPA=PA `0x8e0000000`, and pinned
+SSH. APPL0002 failed resource arbitration before StartDevice: Code12,
+`CM_PROB_NORMAL_CONFLICT`, status `0xC0000018`, `G3Armed=1`, no borrow
+receipt. Windows `pnputil /resources` reports the dynamic fifth 64-MiB range
+as `0xFFFFFFFFE0000000..0xFFFFFFFFE3FFFFFF`; this differs from the published
+IPA and is the next offline ACPI `_CRS`/PnP target, not yet a proven cause.
+R105 ran zero rows by the StartDevice receipt gate; no DWM frame. Host-verified
+ETL/SetupAPI/PnP evidence is under `exp829/hardware-evidence`. GPU-hidden
+dump-first exact cleanup and ordered ordinary recovery restored pinned SSH,
+one inert Code28 APPL0002, staged/arm/signer/SYS/UMD/service absent, CPU8,
+disks2, USB6. The EXP829 postboot script also has a local/UTC DateTime
+comparison error; its hashes matched and the reboot was observed independently.
 
 ## 2026-09-26 EXP828 — R64 m1n1/Mu reserve reached; Mu DXE gate still fails
 
