@@ -255,7 +255,13 @@ void AgxWin32AsahiContextDiagnostic(struct pipe_context *ctx,
   struct agx_context *n=agx_context(ctx);
   AGX_WIN32_ASAHI_BACKEND *d=agx_device(ctx->screen)->windows_private;
   struct agx_batch *b=n->batch;
+#if defined(APPLE_AGX_GPUVA_WINSYS)
+  /* EXP842: in GPUVA builds windows_batch is an AGX_WIN32_GPUVA_BATCH; reading
+   * it as the capture batch overran the object and crashed Explorer. */
+  AGX_WIN32_ASAHI_BATCH *c=NULL;
+#else
   AGX_WIN32_ASAHI_BATCH *c=b?b->windows_batch:NULL;
+#endif
   state[0]=n->any_faults;state[1]=d?d->Failed:0;state[2]=b!=NULL;
   state[3]=b?b->draws:0;state[4]=b?b->initialized:0;
   state[5]=c?c->Capture.Capture.State:0;state[6]=c?c->Root.Scope.Failed:0;
