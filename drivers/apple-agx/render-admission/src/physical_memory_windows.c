@@ -345,6 +345,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPhysicalBorrowLocal(
     return STATUS_INVALID_PARAMETER;
   *Allocation = NULL;
   resources = DeviceInformation->TranslatedResourceList;
+  localAddress.QuadPart = 0;
   Owner->LastAllocateBytes = APPLE_AGX_LOCAL_RESERVE_BYTES;
   Owner->LastAllocateStep = 5u;
   Owner->LastAllocateStatus = STATUS_PENDING;
