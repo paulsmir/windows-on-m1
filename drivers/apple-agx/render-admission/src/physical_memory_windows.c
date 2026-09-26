@@ -425,7 +425,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPhysicalBorrowLocal(
   borrowed->Size = (SIZE_T)receipt.Bytes;
   borrowed->GuestIpaBase = receipt.GuestIpa;
   borrowed->MappedBase = MmMapIoSpaceEx(
-      localAddress, borrowed->Size, PAGE_READWRITE | PAGE_NOCACHE);
+      localAddress, borrowed->Size, PAGE_READWRITE | PAGE_WRITECOMBINE);
   if (borrowed->MappedBase == NULL) {
     status = STATUS_INSUFFICIENT_RESOURCES;
     goto Done;

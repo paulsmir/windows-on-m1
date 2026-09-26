@@ -14,6 +14,14 @@ RECEIPTS = ROOT / "drivers/apple-agx/render-admission/src/receipts.c"
 
 
 class KmdLocalReserveTest(unittest.TestCase):
+    def test_borrowed_dram_uses_write_combined_mapping_but_broker_remains_device(self):
+        physical = PHYSICAL.read_text()
+        borrowed_map = physical.split("borrowed->MappedBase = MmMapIoSpaceEx(", 1)[1].split(");", 1)[0]
+        broker_map = physical.split("broker = (volatile UCHAR *)MmMapIoSpaceEx(", 1)[1].split(");", 1)[0]
+        self.assertIn("PAGE_READWRITE | PAGE_WRITECOMBINE", borrowed_map)
+        self.assertNotIn("PAGE_NOCACHE", borrowed_map)
+        self.assertIn("PAGE_READWRITE | PAGE_NOCACHE", broker_map)
+
     def test_start_device_borrows_local_range_while_scratch_keeps_dxgk_allocation(self):
         physical = PHYSICAL.read_text()
         runtime = RUNTIME.read_text()
