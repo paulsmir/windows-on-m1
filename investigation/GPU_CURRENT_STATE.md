@@ -1,5 +1,45 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-26 EXP826/827 — R64 firmware gate failed, ordinary Code28 restored
+
+REVIEW R107: ACCEPT. The prior successful stage+sign+arm reboots make an
+intermittent EXP823 0x101 possible; one clean run does not exclude it. Offline
+package817→823 INF diff changes only DriverVer. Install directives, HWID,
+services and resource directives are unchanged; CAT has the same signer and
+member names, with new file hashes. Report:
+`.local/experiments/EXP823-r64-reserve/exp826/offline-package-diff.json`.
+
+EXP826 stage-only package823, signer/arm absent at reboot, completed an ordered
+`shutdown /r` without 0x101. Windows naturally bound staged oem5 in ordinary
+and failed Code43 without the R64 reserve; evidence-first exact cleanup and
+another ordered reboot returned pinned SSH/Code28. This single result rejects
+a deterministic stage-only 0x101 cause, while R107's intermittent concern
+remains. EXPERIMENTS EXP826 has the before/after receipts.
+
+EXP827 staged and armed exact package823 while ordinary was still Code28,
+then ordered shutdown logged PSCI SYSTEM_RESET. Direct cold full-owner boot
+with hash-verified R64 m1n1/Mu failed **before Windows**: m1n1 printed
+`AGX local reserve unavailable`; Mu loaded PcdDxe GUID 80CF7257 twice
+(serial lines 294 and 465) and asserted on duplicate gPcdProtocolGuid.
+No SSH/StartDevice/borrow receipt or R105 matrix row occurred; no new dump.
+GPU-hidden evidence was collected first. G3Armed was still 1, package exact
+and unbound. Exact hidden cleanup plus ordered shutdown and immutable
+EXP377/392 reentry passed durable preflight; fresh 08:49:20Z receipt: one
+present APPL0002 Code28, package/arm/signer/SYS/UMD/service absent, CPU8,
+disks2/USB6, pinned SSH. EXPERIMENTS EXP827 and
+`.local/experiments/EXP823-r64-reserve/exp827/full.log` contain exact hashes.
+
+Current causal boundary is firmware. Live J313 ADT gives SGX shared range
+0x9fff78000+0x40000; layout low backing ends at 0x8e0000000, making the
+first aligned 64MiB candidate 0x8e0000000, within the observed RAM end
+0x9df708000 and outside the shared range. The selector did not report why
+validation failed. Current FV text contains one PcdDxe FFS, while serial
+shows two dispatches; the earlier EXP822 full-owner serial shows one.
+Neither cause is yet assigned. Next offline discriminator: instrument the
+selector's exact rejection condition and compare DXE FV discovery/dispatch
+against the last successful full-owner FD, then add regression tests and
+rebuild before any newly preregistered hardware run. No live bind.
+
 ## 2026-09-26 EXP825 ordinary reboot PASS — stage transaction is next boundary
 
 From verified immutable EXP377/392 ordinary Code28 (package/signer/G3/B1 arm
