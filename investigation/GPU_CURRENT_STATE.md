@@ -1,5 +1,27 @@
 # GPU current boundary — 2026-09-23
 
+## 2026-09-26 EXP828 — R64 m1n1/Mu reserve reached; Mu DXE gate still fails
+
+REVIEW R108: ACCEPT m1n1 timing cause, REJECT environment-only explanation
+for Mu double PcdDxe. Hash-gated x86 full-source FD `dbcc9983` and m1n1
+`f5bc3aaf` cold-booted with unchanged staged/armed package823. m1n1 serial
+first showed `unmapped` for `0x8e0000000` before `pt_update`, then published
+IPA=PA=`0x8e0000000`, 64 MiB, after the retry. Mu PEI reserved that exact
+slab. The FV lists one PcdDxe FFS, yet DXE dispatched GUID `80CF7257` twice
+and asserted on duplicate `gPcdProtocolGuid` before Windows. No SSH,
+StartDevice borrow receipt, R105 row or DWM frame occurred in full-owner.
+
+GPU-hidden dump-first collected five SHA-verified guest artifacts while exact
+oem5 was staged and G3Armed=1. Exact cleanup and R106.1 ordered reboot
+restored pinned SSH ordinary Code28: staged/arm/signer/SYS/UMD/service absent,
+CPU8/disks2/USB6, keyboard2/mouse1, RDP reachable. Physical display was not
+observed. Evidence `.local/experiments/EXP823-r64-reserve/exp828/causal-result.json`
+SHA-256 `1408c0747892f8635fbc1e7ab5d8c1f368e0679cedc00dff783b9e616506d805`;
+full serial SHA-256 `6273e14477630cfad4d3ceb10e7dc99cfa12db46533f77c17760de6298dbb549`.
+REVIEW R105: DEFER until a borrowed StartDevice receipt exists. Next causal
+target: identify both DXE FV/file/driver handles for PcdDxe despite one FFS;
+do not launch the unchanged FD/package again.
+
 ## 2026-09-26 R108 offline correction after EXP827
 
 REVIEW R108: ACCEPT. The assisted proxy calls `map_agx_power_broker()` in
