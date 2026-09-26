@@ -419,6 +419,18 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   info->SupportedReadSegmentSet = ADMISSION_LOCAL_SEGMENT_SET;
 #endif
   info->SupportedWriteSegmentSet = info->SupportedReadSegmentSet;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* EXP837-839: dxgkrnl backs CPU-visible class0 surfaces (CDD shadow/GDI
+   * staging) with a section; VidMm bugchecked in VIDMM_GLOBAL::Rotate when
+   * such an allocation was CPU-locked inside the CPU-visible memory segment
+   * (kernel dump: section at global alloc +0xE0, NULL interface at +0xF0).
+   * Keep them in the aperture, where section-backed surfaces are supported. */
+  if (classId == 0u && description->CpuVisible != 0u) {
+    info->PreferredSegment.SegmentId0 = ADMISSION_MEMORY_APERTURE_SEGMENT;
+    info->SupportedReadSegmentSet = ADMISSION_APERTURE_SEGMENT_SET;
+    info->SupportedWriteSegmentSet = ADMISSION_APERTURE_SEGMENT_SET;
+  }
+#endif
   info->EvictionSegmentSet = 0u;
   info->hAllocation = allocation;
   info->FlagsWddm2.Value = 0u;

@@ -34,6 +34,8 @@ SHIM = r"""
 #define ADMISSION_MEMORY_LOCAL_SEGMENT 2u
 #define ADMISSION_LOCAL_SEGMENT_SET 2u
 #define ADMISSION_CPU_VISIBLE_SEGMENT_SET 3u
+#define ADMISSION_APERTURE_SEGMENT_SET 1u
+#define ADMISSION_MEMORY_APERTURE_SEGMENT 1u
 #define ADMISSION_ALLOCATION_ALIGNMENT 0x10000u
 #define ADMISSION_POOL_TAG 0u
 #define POOL_FLAG_NON_PAGED 0u
@@ -186,7 +188,10 @@ int main(void) {
   info.pPrivateDriverData = &legacy;
   info.PrivateDriverDataSize = sizeof(legacy);
   assert(AdmissionCreateAllocationImpl(&context, &args) == STATUS_SUCCESS);
-  assert(info.SupportedReadSegmentSet == ADMISSION_CPU_VISIBLE_SEGMENT_SET);
+  /* EXP839: section-backed CPU-visible class0 surfaces stay in the aperture. */
+  assert(info.SupportedReadSegmentSet == ADMISSION_APERTURE_SEGMENT_SET);
+  assert(info.SupportedWriteSegmentSet == ADMISSION_APERTURE_SEGMENT_SET);
+  assert(info.PreferredSegment.SegmentId0 == ADMISSION_MEMORY_APERTURE_SEGMENT);
   ExFreePoolWithTag(info.hAllocation, ADMISSION_POOL_TAG);
   return 0;
 }
