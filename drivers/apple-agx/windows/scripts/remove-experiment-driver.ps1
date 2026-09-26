@@ -43,7 +43,6 @@ Assert-Hash (Join-Path $env:windir "INF\$ExpectedPublishedName") $ExpectedInfSha
 Assert-Hash $sys $ExpectedSysSha256
 Assert-Hash $umd $ExpectedUmdSha256
 $service = Get-CimInstance Win32_SystemDriver -Filter "Name='AppleAgxAdmission'" -ErrorAction SilentlyContinue
-if ($service -and $service.State -eq 'Running') { throw 'service still running' }
 
 # EXP821: deleting the package while APPL0002 still existed left a phantom
 # devnode that rebound oem5 on the next two ordinary boots.
@@ -60,6 +59,12 @@ if ($remaining -and [int]$remaining.Problem -eq 45) {
     $remaining = Get-PnpDevice -InstanceId $id -ErrorAction SilentlyContinue
 }
 if ($remaining) { throw 'phantom devnode remains' }
+for ($attempt = 0; $attempt -lt 10; ++$attempt) {
+    $service = Get-CimInstance Win32_SystemDriver -Filter "Name='AppleAgxAdmission'" -ErrorAction SilentlyContinue
+    if (!$service -or $service.State -ne 'Running') { break }
+    Start-Sleep -Milliseconds 500
+}
+if ($service -and $service.State -eq 'Running') { throw 'service still running' }
 $delete = @(& pnputil.exe /delete-driver $ExpectedPublishedName /uninstall 2>&1 | ForEach-Object { "$_" })
 if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 3010) { throw "delete-driver failed: $delete" }
 if (@(Get-WindowsDriver -Online -All | Where-Object OriginalFileName -match 'AppleAgxRenderAdmission\.inf$').Count -ne 0) {

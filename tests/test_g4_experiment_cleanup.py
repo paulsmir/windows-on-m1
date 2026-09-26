@@ -25,6 +25,10 @@ class ExperimentCleanupContract(unittest.TestCase):
         self.assertIn("/remove-device $id", source)
         self.assertIn("CleanupComplete = $false", source)
         self.assertIn("PendingOrderedGuestRestart", source)
+        self.assertLess(source.index("/remove-device"),
+                        source.index("service still running"))
+        self.assertLess(source.index("service still running"),
+                        source.index("/delete-driver"))
 
 
 if __name__ == "__main__":
