@@ -1,5 +1,9 @@
 # GPU current boundary — 2026-09-27
 
+## EXP854B preregistered — current UMD provenance restored
+
+EXP854 stale-runtime attribution is confirmed. Source `4dcf6aa9` builds package854B with exact UMD `874124db`, native archive `9c790e66`, and compiled `Resource.cpp` source `24fc4310` (same general UpdateSubresourceUP overlay as EXP853). The provenance gate rejects a foreign archive before link; clean ARM64 build is 0/0. Manifest `.local/experiments/EXP854B-r134-provenance/hardware-manifest.json` SHA256 `fa9ee005c516091b20d9504f516a1adb53c911ab3e66eed12968203f9bdaca64`; GO_EXP854B exists. Hardware remains NOT_RUN. Next checkpoint: one cold R110 full-owner run, measure UMD refusals and accepted G4 submission/fence evidence, then exact cleanup and ordinary Code28 recovery.
+
 ## 2026-09-27 EXP854 — system64 declaration survived; UMD refusal precedes G4; ordinary recovered
 
 Package854 from `15a4e5fa` (SYS `cc226287`) built with 0 warnings/errors and
