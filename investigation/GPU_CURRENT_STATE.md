@@ -1,5 +1,27 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-27 EXP853 — R133 avoids measured 0x10E; G4 boundary unchanged; ordinary recovered
+
+Package853 from `5ca5e68d` (SYS `aa644cdf`) passed 529-file builder source
+verification and ARM64 0-warning/0-error build with exact package hashes. One
+cold R110 full-owner boot crossed ARM_CONSUMED and held pinned SSH, APPL0002
+Code0, CPU8 for 618 seconds. No new System1001 or G3 paging-failure receipt;
+`Wom1G3UnpublishedGroups` segment0 count was 338909, other segments zero.
+The G4 v2 first failure remained branch9 Parse/Unmapped at Process write
+64 KiB VA `0x3b0000`, `GraphPresent=0`, four segment0 valid/write PTEs;
+recorded total failures1360. Thus R133 prevented the EXP852 `LeafGraph`
+0x10E in this measured window, but did not move the first GPU access.
+One dwm.exe/dwmcore.dll AV occurred; scanout nonzero0, no DWM frame proven.
+
+Evidence and decoded receipts: `.local/experiments/EXP853-r133-unpublished/hardware-evidence/` (18-file host manifest SHA256
+`fc737b2a986d2ed0d635ba3af58b5f82317d561d2c2d8165803801d4c03081d1`).
+Evidence-first ordered restart, immutable hidden exact oem5 cleanup and
+ordinary EXP377/392 durable Preflight PASS restored pinned SSH, one present
+Code28, staged/arm/SYS/UMD/service/signer absent, CPU8/disks2/USB5, RDP Running.
+Do not reuse package853. Next causal target is offline attribution of the
+persisting Process VA `0x3b0000` graph absence under deliberate unpublication;
+no new hardware without a distinct falsifiable cause.
+
 ## 2026-09-27 EXP852 — R132 segment0 publication fails on hardware; ordinary Code28 recovered
 
 Final package852 from `7b616cde` (SYS `d30ed426`) built with 0 warnings/0
