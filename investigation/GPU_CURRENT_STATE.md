@@ -1,5 +1,22 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-27 R136 offline no-go — process BO backing unresolved
+
+All nine AGX4 v2 UMD Process BOs already have 64-KiB size and VA alignment;
+EXP854B still measured segment-0 discontiguous 4-KiB PFNs for Process[0]
+VA `0x3b0000`. Pinned WDK26100 marks `MinimumPageSize` and
+`RecommendedPageSize` as **input** fields sharing `Alignment`; a KMD write
+would corrupt the 64-KiB alignment. EXP836 rejected all CPU-visible
+local-only write-set rows; the admitted aperture+local set with local
+preference did not place Process[0] in R64. An attempted page-field policy
+was rejected at review and fully reverted before commit. No package855,
+preregistration, Air run or change to ordinary EXP377/392 Code28.
+
+Next causal target: establish a supported deterministic UMD/VidMm contract
+for 64-KiB contiguous system backing or CPU-initialized local-only R64 BOs
+offline, then replay it before proposing an Air experiment. Analysis:
+`investigation/analysis/R136-process-bo-pages.md`. `GO_EXP855` absent.
+
 ## 2026-09-27 R135 offline — EXP854B empty current-root reuse attributed and corrected
 
 Matching-PDB CDB proves the refused broker table9df240000 is processF's
