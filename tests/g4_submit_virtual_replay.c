@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "apple_agx_g4_submit.h"
+#include "apple_agx_g3_private_pool.h"
 #include "apple_agx_gpuva_g3_translation.h"
 
 typedef int NTSTATUS;
@@ -61,6 +62,7 @@ typedef struct _ADMISSION_G3_STATE {
   unsigned ActiveFence;
 } ADMISSION_G3_STATE;
 typedef struct _ADMISSION_G3_PROCESS {
+  ULONGLONG PrivateVa;
   ADMISSION_G3_STATE *State;
   APPLE_AGX_GPUVA_G3_GRAPH Graph;
   ADMISSION_G3_TABLE_SHADOW *TableShadows;
@@ -305,6 +307,7 @@ int main(void) {
   static APPLE_AGX_GPUVA_G3_LOGICAL_PTE logical[8192];
   unsigned required[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
   process.State = &state;
+  process.PrivateVa = 1ULL << 36;
   process.Graph.RootIpa = 0x9bf000000ULL;
   process.Graph.Created = 1u;
   process.Graph.ProcessId = 17u;

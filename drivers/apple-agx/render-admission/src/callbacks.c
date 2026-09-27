@@ -246,6 +246,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyOverlay(HANDLE Overlay) {
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiEscape(
     HANDLE Adapter, const DXGKARG_ESCAPE *Args) {
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (Args != NULL && Args->pPrivateDriverData != NULL &&
+      Args->PrivateDriverDataSize >= sizeof(ULONG)) {
+    ULONG private_magic;
+    RtlCopyMemory(&private_magic, Args->pPrivateDriverData, sizeof(private_magic));
+    if (private_magic == 0x33565041u)
+      return AdmissionGpuvaG3PrivateEscape((ADMISSION_CONTEXT *)Adapter, Args);
+  }
+#endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
   ULONG magic;

@@ -10,6 +10,8 @@
 #include "apple_agx_gpuva_g3_translation.h"
 #include "apple_agx_gpuva_g3_graph.h"
 #include "apple_agx_g4_submit.h"
+#include "apple_agx_g3_private_abi.h"
+#include "apple_agx_g3_private_storage.h"
 #include "hv_agx_gpuva_v5.h"
 #include "hv_agx_gpuva_v5_mmio.h"
 #include "hv_agx_retained_backing.h"
@@ -22,9 +24,11 @@
 typedef void VOID;
 typedef void *PVOID;
 typedef void *HANDLE;
+typedef struct { HANDLE hDevice,hContext,hKmdProcessHandle; struct { unsigned Value; } Flags; void *pPrivateDriverData; unsigned PrivateDriverDataSize; } DXGKARG_ESCAPE;
 typedef void *PDEVICE_OBJECT;
 typedef unsigned char BOOLEAN, KIRQL, PUCHAR_BYTE, UCHAR;
 typedef unsigned int UINT, ULONG;
+typedef unsigned short USHORT;
 typedef int LONG, NTSTATUS;
 typedef unsigned long long ULONGLONG, UINT64;
 typedef long long LONGLONG;
@@ -207,10 +211,36 @@ typedef struct { UINT Magic,Flags; ADMISSION_OBJECT_DEVICE *Device;
 typedef struct _ADMISSION_DEVICE { ADMISSION_OBJECT_DEVICE Object; LONG Win32Generation; ADMISSION_G3_PROCESS *GpuvaG3Process; } ADMISSION_DEVICE;
 typedef struct { int unused; } ADMISSION_SCHEDULER_CONTEXT;
 typedef struct { int unused; } ADMISSION_PREPATCHED_RENDER;
-typedef struct _ADMISSION_RENDER_CONTEXT { ADMISSION_OBJECT_CONTEXT Object; UINT Win32Generation; BOOLEAN Win32Transport,GpuvaG3Poisoned; ADMISSION_SCHEDULER_CONTEXT SchedulerContext; ADMISSION_PREPATCHED_RENDER PrepatchedRender; ADMISSION_G3_PROCESS *GpuvaG3Process; ULONGLONG GpuvaG3RootIpa,GpuvaG3DmaBufferVa,GpuvaG3MappingGeneration; ULONG GpuvaG3DmaBufferBytes; } ADMISSION_RENDER_CONTEXT;
-typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence,LastCompletedFence; ULONGLONG UnpublishedGroups[32]; } ADMISSION_G3_STATE;
+typedef struct _ADMISSION_RENDER_CONTEXT { ADMISSION_OBJECT_CONTEXT Object; UINT Win32Generation; BOOLEAN Win32Transport,GpuvaG3Poisoned; ADMISSION_SCHEDULER_CONTEXT SchedulerContext; ADMISSION_PREPATCHED_RENDER PrepatchedRender; ADMISSION_G3_PROCESS *GpuvaG3Process; struct _ADMISSION_RENDER_CONTEXT *GpuvaG3NextContext; ULONGLONG GpuvaG3PrivateManagerGeneration; ULONGLONG GpuvaG3RootIpa,GpuvaG3DmaBufferVa,GpuvaG3MappingGeneration; ULONG GpuvaG3DmaBufferBytes; } ADMISSION_RENDER_CONTEXT;
+typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; APPLE_AGX_G3_PRIVATE_POOL PrivatePool; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence,LastCompletedFence; ULONGLONG UnpublishedGroups[32]; } ADMISSION_G3_STATE;
 typedef struct _ADMISSION_G3_TABLE_SHADOW { struct _ADMISSION_G3_TABLE_SHADOW *Next; APPLE_AGX_MEMORY_OBJECT Memory; ULONGLONG OriginalIpa,BrokerIpa; APPLE_AGX_GPUVA_G3_LOGICAL_PTE *LogicalPtes,*ResidentPtes,*PendingPtes; } ADMISSION_G3_TABLE_SHADOW;
-struct _ADMISSION_G3_PROCESS { LIST_ENTRY Link; ADMISSION_G3_STATE *State; APPLE_AGX_GPUVA_G3_GRAPH Graph; APPLE_AGX_MEMORY_IO Io; APPLE_AGX_MEMORY_OBJECT BootstrapRoot; ADMISSION_G3_TABLE_SHADOW *TableShadows; ULONGLONG BootstrapIpa,PrivateVa,PrivateMiddleIpa,PrivateLeafIpa; HANDLE DxgkProcess; ULONG Magic,DeviceRefs,ContextRefs; BOOLEAN Poisoned; };
+typedef struct _ADMISSION_G3_PRIVATE_SCENE {
+  struct _ADMISSION_G3_PRIVATE_SCENE *Next;
+  ADMISSION_RENDER_CONTEXT *Context;
+  APPLE_AGX_G3_PRIVATE_SCENE Storage;
+  APPLE_AGX_G4_NATIVE_RENDER Geometry;
+  ULONG Fence, Queued, Started, GpuDone, Reported, ReleaseRequested, Quarantined;
+} ADMISSION_G3_PRIVATE_SCENE;
+
+struct _ADMISSION_G3_PROCESS {
+  LIST_ENTRY Link;
+  ADMISSION_G3_STATE *State;
+  APPLE_AGX_GPUVA_G3_GRAPH Graph;
+  APPLE_AGX_MEMORY_IO Io;
+  APPLE_AGX_MEMORY_OBJECT BootstrapRoot;
+  ADMISSION_G3_TABLE_SHADOW *TableShadows;
+  ULONGLONG BootstrapIpa;
+  ULONGLONG PrivateVa;
+  ULONGLONG PrivateMiddleIpa, PrivateLeafIpa;
+  APPLE_AGX_G3_PRIVATE_EXTENT PrivateTables[2];
+  APPLE_AGX_G3_PRIVATE_MANAGER PrivateManager;
+  ADMISSION_G3_PRIVATE_SCENE *PrivateScenes;
+  ADMISSION_RENDER_CONTEXT *Contexts;
+  HANDLE DxgkProcess;
+  ULONG Magic, DeviceRefs, ContextRefs;
+  BOOLEAN Poisoned;
+};
+
 typedef struct { int unused; } REPLAY_APERTURE;
 typedef struct {
   UINT G4Native,BoundFence,G4CommandBytes;
@@ -257,6 +287,7 @@ static NTSTATUS AdmissionG4SubmitReject(ADMISSION_CONTEXT *a,
  * suite separately covers output resolution. No queue or graph is mocked. */
 static BOOLEAN AdmissionG3OutputMatchesLocal(ADMISSION_CONTEXT *a,
     APPLE_AGX_GPUVA_G3_GRAPH *g) {(void)a;(void)g;return TRUE;}
+typedef ADMISSION_SCANOUT_MEMORY_VIEW ADMISSION_BACKEND_MEMORY_VIEW;
 static unsigned char *local_cpu;
 static ULONGLONG local_ipa=0x10000000ULL;
 static ULONGLONG local_bytes=0x4000000ULL;
@@ -281,7 +312,8 @@ static void MmUnmapIoSpace(void *p,SIZE_T bytes) {(void)p;(void)bytes;}
 NTSTATUS AdmissionG3ExecuteVirtualPaging(ADMISSION_CONTEXT *,
     const ADMISSION_PAGING_RECORD *);
 static PHYSICAL_ADDRESS MmGetPhysicalAddress(void *p) { PHYSICAL_ADDRESS a={0};if(local_cpu && (unsigned char *)p>=local_cpu && (unsigned char *)p<local_cpu+local_bytes) a.QuadPart=(long long)(local_ipa+((unsigned char *)p-local_cpu));return a; }
-static NTSTATUS AdmissionMemoryRuntimeScanoutView(ADMISSION_CONTEXT *a,ADMISSION_SCANOUT_MEMORY_VIEW *v) {(void)a;v->GuestIpaAddress=local_ipa;v->Bytes=0x3800000ULL;v->CpuAddress=local_cpu;return STATUS_SUCCESS;}
+static NTSTATUS AdmissionMemoryRuntimePrivateView(ADMISSION_CONTEXT *a,ADMISSION_BACKEND_MEMORY_VIEW *v) {(void)a;v->GuestIpaAddress=local_ipa+(40ULL<<20);v->Bytes=16ULL<<20;v->CpuAddress=local_cpu+(40u<<20);return STATUS_SUCCESS;}
+static NTSTATUS AdmissionMemoryRuntimeScanoutView(ADMISSION_CONTEXT *a,ADMISSION_SCANOUT_MEMORY_VIEW *v) {(void)a;v->GuestIpaAddress=local_ipa;v->Bytes=0x2800000ULL;v->CpuAddress=local_cpu;return STATUS_SUCCESS;}
 static NTSTATUS AdmissionMemoryRuntimeBorrowIo(ADMISSION_CONTEXT *a,APPLE_AGX_MEMORY_IO *io) {(void)a;(void)io;return STATUS_SUCCESS;}
 static APPLE_AGX_MEMORY_RESULT AppleAgxMemoryAllocateAligned(APPLE_AGX_MEMORY_IO *io,ULONGLONG n,ULONGLONG align,APPLE_AGX_MEMORY_OBJECT *o) {
   (void)io;assert(n==0x4000 && align==0x4000);

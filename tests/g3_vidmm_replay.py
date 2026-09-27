@@ -22,6 +22,7 @@ FUNCTIONS = {
         "AdmissionG3AllocateNode", "AdmissionG3FreeNode",
         "AdmissionGpuvaG3FindProcess", "AdmissionG3BootstrapRoot",
         "AdmissionGpuvaG3BrokerTable", "AdmissionGpuvaG3MirrorTable",
+        "AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionG3PrivateDestroyStorage","AdmissionGpuvaG3PrivateEscape",
         "AdmissionDdiCreateProcess", "AdmissionDdiDestroyProcess",
         "AdmissionGpuvaG3AttachContext", "AdmissionGpuvaG3DetachContext",
         "AdmissionGpuvaG3ResolveTable", "AdmissionDdiSetRootPageTable",
@@ -39,7 +40,7 @@ FUNCTIONS = {
         "AdmissionG3MapPagingIpa", "AdmissionG3ExecuteVirtualPaging",
         "AdmissionGpuvaG3BuildPagingBuffer",
     ],
-    "callbacks.c": ["AdmissionDdiCreateContext", "AdmissionDdiDestroyContext"],
+    "callbacks.c": ["AdmissionDdiEscape", "AdmissionDdiCreateContext", "AdmissionDdiDestroyContext"],
     "render_paging.c": ["AdmissionPagingRecordsValid"],
 }
 
@@ -87,6 +88,7 @@ def generate(revision=None, function_revisions=None):
             parts.append(f'#line 1 "{filename}:{name}"\n')
             function_source = source
             if revision is not None and name in (
+                    "AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionG3PrivateDestroyStorage","AdmissionGpuvaG3PrivateEscape", "AdmissionDdiEscape",
                     "AdmissionGpuvaG3BrokerTable",
                     "AdmissionG3RetireSystemSubtree", "AdmissionG3ActivateSystemSubtree",
                     "AdmissionG3ResetTableShadow", "AdmissionG3RegisterTable", "AdmissionG3PrepareTableReuse",
@@ -135,7 +137,7 @@ def main(revision=None, function_revisions=None, old_context_flags=False):
                    "-o", str(binary)]
         if os.environ.get("G3_REPLAY_R132") or os.environ.get("G3_REPLAY_R133"):
             command[1:1] = ["-fsanitize=address,undefined"]
-        if os.environ.get("G3_REPLAY_R134") or os.environ.get("G3_REPLAY_R135"):
+        if any(os.environ.get(k) for k in ("G3_REPLAY_R134", "G3_REPLAY_R135", "G3_REPLAY_R137")):
             command[1:1] = ["-DADMISSION_GPUVA_G1B_PAGE_PROFILE=" + os.environ.get("G3_REPLAY_PROFILE", "16"),
                             "-fsanitize=address,undefined"]
         if old_context_flags:

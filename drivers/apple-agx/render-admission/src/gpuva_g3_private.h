@@ -3,6 +3,7 @@
 
 #include "render_admission.h"
 #include "apple_agx_g3_private_storage.h"
+#include "apple_agx_g3_private_abi.h"
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #define ADMISSION_G3_PROCESS_MAGIC 0x47335052u
@@ -31,6 +32,14 @@ typedef struct _ADMISSION_G3_TABLE_SHADOW {
   APPLE_AGX_GPUVA_G3_LOGICAL_PTE *PendingPtes;
 } ADMISSION_G3_TABLE_SHADOW;
 
+typedef struct _ADMISSION_G3_PRIVATE_SCENE {
+  struct _ADMISSION_G3_PRIVATE_SCENE *Next;
+  ADMISSION_RENDER_CONTEXT *Context;
+  APPLE_AGX_G3_PRIVATE_SCENE Storage;
+  APPLE_AGX_G4_NATIVE_RENDER Geometry;
+  ULONG Fence, Queued, Started, GpuDone, Reported, ReleaseRequested, Quarantined;
+} ADMISSION_G3_PRIVATE_SCENE;
+
 typedef struct _ADMISSION_G3_PROCESS {
   LIST_ENTRY Link;
   ADMISSION_G3_STATE *State;
@@ -42,6 +51,9 @@ typedef struct _ADMISSION_G3_PROCESS {
   ULONGLONG PrivateVa;
   ULONGLONG PrivateMiddleIpa, PrivateLeafIpa;
   APPLE_AGX_G3_PRIVATE_EXTENT PrivateTables[2];
+  APPLE_AGX_G3_PRIVATE_MANAGER PrivateManager;
+  ADMISSION_G3_PRIVATE_SCENE *PrivateScenes;
+  ADMISSION_RENDER_CONTEXT *Contexts;
   HANDLE DxgkProcess;
   ULONG Magic, DeviceRefs, ContextRefs;
   BOOLEAN Poisoned;

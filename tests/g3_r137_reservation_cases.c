@@ -18,6 +18,62 @@ static void r137_reservation_cases(void) {
     assert(reserve_calls==calls+1 && reserve_process==args.hDxgkProcess);
     ADMISSION_G3_PROCESS *p=args.hKmdProcess;
     assert(p->PrivateVa==reserve_base && p->DxgkProcess==args.hDxgkProcess);
+    if(getenv("G3_REPLAY_R137_ESCAPE") && !system) {
+      ADMISSION_DEVICE device={0}; ADMISSION_RENDER_CONTEXT context={0};
+      device.Object.Magic=ADMISSION_OBJECT_DEVICE_MAGIC;
+      device.Object.Adapter=&a.ObjectAdapter; device.GpuvaG3Process=p;
+      context.Object.Magic=ADMISSION_OBJECT_CONTEXT_MAGIC;
+      context.Object.Device=&device.Object; context.Win32Transport=TRUE;
+      expect_ok("R137 attach escape context",AdmissionGpuvaG3AttachContext(&context,&device));
+      APPLE_AGX_G3_PRIVATE_REQUEST q={0};
+      q.Magic=APPLE_AGX_G3_PRIVATE_MAGIC;q.Version=1;q.Bytes=sizeof(q);
+      q.Operation=APPLE_AGX_G3_PRIVATE_ACQUIRE;
+      q.Width=2560;q.Height=1600;q.UtileWidth=q.UtileHeight=16;q.Layers=q.Samples=1;
+      DXGKARG_ESCAPE e={0}; e.hDevice=&device;e.hContext=&context;
+      e.hKmdProcessHandle=p;e.pPrivateDriverData=&q;e.PrivateDriverDataSize=sizeof(q);
+      assert(!NT_SUCCESS(AdmissionDdiEscape(&a,&e))); /* HardwareAccess is required. */
+      e.Flags.Value=1u;
+      expect_ok("R137 production acquire",AdmissionDdiEscape(&a,&e));
+      assert(q.ManagerId && q.ManagerGeneration && q.SceneId && q.SceneGeneration);
+      for(unsigned i=0;i<9;++i)
+        assert(AppleAgxGpuvaG3GraphContainsRangeAccess(&p->Graph,q.Ranges[i].Va,q.Ranges[i].Bytes,true));
+      APPLE_AGX_G3_PRIVATE_REQUEST saved=q, second;
+      assert(!AdmissionG4GraphAccessTyped(p,q.Ranges[0].Va,16,1,AppleAgxG4AccessProcess,0));
+      memset(q.Ranges,0,sizeof(q.Ranges));q.SceneId=q.SceneGeneration=0;
+      q.Operation=APPLE_AGX_G3_PRIVATE_PREPARE;
+      expect_ok("R137 second scene",AdmissionDdiEscape(&a,&e));second=q;
+      assert(q.ManagerGeneration==saved.ManagerGeneration && q.SceneId!=saved.SceneId);
+      for(unsigned i=3;i<9;++i) assert(q.Ranges[i].Va!=saved.Ranges[i].Va);
+      memset(q.Ranges,0,sizeof(q.Ranges));q.SceneId=q.SceneGeneration=0;
+      assert(AdmissionDdiEscape(&a,&e)==STATUS_INSUFFICIENT_RESOURCES);
+      assert(!q.SceneId && !p->Graph.Uncertain);
+      memset(&q,0,sizeof(q));q.Magic=APPLE_AGX_G3_PRIVATE_MAGIC;q.Version=1;q.Bytes=sizeof(q);
+      q.Operation=APPLE_AGX_G3_PRIVATE_RELEASE;
+      q.ManagerId=saved.ManagerId;q.ManagerGeneration=saved.ManagerGeneration;
+      q.SceneId=saved.SceneId;q.SceneGeneration=saved.SceneGeneration;
+      e.hContext=(HANDLE)0xdead;
+      assert(!NT_SUCCESS(AdmissionDdiEscape(&a,&e)));
+      e.hContext=&context;e.hDevice=(HANDLE)0xbeef;
+      assert(!NT_SUCCESS(AdmissionDdiEscape(&a,&e)));
+      e.hDevice=&device;e.hKmdProcessHandle=NULL;
+      assert(!NT_SUCCESS(AdmissionDdiEscape(&a,&e)));
+      e.hKmdProcessHandle=p;q.SceneGeneration++;
+      assert(!NT_SUCCESS(AdmissionDdiEscape(&a,&e)));q.SceneGeneration--;
+      q.Reserved[0]=1;assert(!NT_SUCCESS(AdmissionDdiEscape(&a,&e)));q.Reserved[0]=0;
+      --e.PrivateDriverDataSize;assert(!NT_SUCCESS(AdmissionDdiEscape(&a,&e)));++e.PrivateDriverDataSize;
+      expect_ok("R137 production release",AdmissionDdiEscape(&a,&e));
+      assert(!NT_SUCCESS(AdmissionDdiEscape(&a,&e))); /* Stale release. */
+      assert(!AppleAgxGpuvaG3GraphContainsRange(&p->Graph,saved.Ranges[3].Va,1));
+      q.SceneId=second.SceneId;q.SceneGeneration=second.SceneGeneration;
+      expect_ok("R137 second release",AdmissionDdiEscape(&a,&e));
+      /* A different supported geometry uses arithmetic capacities, not a trace whitelist. */
+      memset(&q,0,sizeof(q));q.Magic=APPLE_AGX_G3_PRIVATE_MAGIC;q.Version=1;q.Bytes=sizeof(q);
+      q.Operation=APPLE_AGX_G3_PRIVATE_PREPARE;q.ManagerId=saved.ManagerId;
+      q.ManagerGeneration=saved.ManagerGeneration;
+      q.Width=1919;q.Height=1079;q.UtileWidth=32;q.UtileHeight=16;q.Layers=q.Samples=1;
+      expect_ok("R137 varied geometry",AdmissionDdiEscape(&a,&e));
+      AdmissionGpuvaG3DetachContext(&context);
+    }
     if(getenv("G3_REPLAY_R137_PRIVATE")) {
       ULONGLONG middle=local_ipa+(40ULL<<20), leaf=middle+0x4000, data=middle+0x10000;
       memset(local_cpu+(40u<<20),0,0x8000);
@@ -60,6 +116,7 @@ static void r137_reservation_cases(void) {
     }
     expect_ok("R137 cleanup",AdmissionDdiDestroyProcess(&a,args.hKmdProcess));
     assert(state.ProcessCount==0);
+    for(unsigned i=0;i<APPLE_AGX_G3_PRIVATE_UNITS;++i) assert(!state.PrivatePool.Blocks[i].Owner);
   }
   DXGKARG_CREATEPROCESS fail={0};
   reserve_status=STATUS_INSUFFICIENT_RESOURCES;

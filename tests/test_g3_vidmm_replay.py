@@ -11,6 +11,13 @@ REPLAY = ROOT / "tests/g3_vidmm_replay.py"
 
 
 class G3VidMmReplayTests(unittest.TestCase):
+    def test_r137_production_escape_ownership_and_quota(self):
+        for profile in ("16", "64"):
+            r = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
+                env=dict(os.environ, G3_REPLAY_R137="1", G3_REPLAY_R137_ESCAPE="1",
+                         G3_REPLAY_PROFILE=profile), text=True, capture_output=True)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
     def test_r137_private_grants_and_parent_lifecycle(self):
         cases = [dict(G3_REPLAY_R137="1")]
         for profile in ("16", "64"):

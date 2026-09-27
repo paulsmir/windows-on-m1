@@ -165,3 +165,36 @@ SHA256 `8104ee6e37c6ce6dbc661fff5d895aa2ffbb891249854fb20cb4b3020c4ccbe7`.
 Full-suite comparison is recorded in step4-full.log before the commit.
 REVIEW.md SHA256 remains 753bdfe638d6171954875a5fc9a58c09761999ffcab89b9d216f566c7e1300c5;
 section 4 R136 dispositions stand. No hardware validation is claimed.
+
+## Step 5 — production private escape
+
+Version 1, fixed-size acquire/prepare/release payload accepts geometry and opaque
+identities only. The runtime-supplied KMD process, device and context handles
+must match attached objects; missing handles, unrecognized flags, input ranges,
+reserved words, stale identities and cross-context release fail closed. Payload
+is copied once. HardwareAccess (and no other flag) is mandatory because this
+operation publishes broker tables. See pinned WDK26100 d3dkmddi.h and Microsoft's
+[D3DDDI_ESCAPEFLAGS](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3dukmdt/ns-d3dukmdt-_d3dddi_escapeflags)
+and [DXGKARG_ESCAPE](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3dkmddi/ns-d3dkmddi-_dxgkarg_escape).
+
+The first valid request charges two 64-KiB private table extents, constructs
+manager/scene data and publishes exclusive 16-KiB leaves into the reserved
+subtree. Empty tables are a process cache charged until DestroyProcess; ordinary
+OOM leaves no public scene token. Known publication failures unlink/revoke new
+scene and manager storage; uncertain failures retain charged records and poison
+the process. Release of an unqueued scene unlinks/revokes before zero/free.
+GraphDestroy acknowledgement precedes release of remaining process extents.
+Manager/context retirement and accepted submissions are completed in steps 6–7.
+Legacy AGX4 access to private VA is rejected for all resource kinds, so the new
+escape does not enable unowned native jobs before the versioned submit step.
+
+RED: real AdmissionDdiEscape returned C00000BB for production acquisition.
+Additional RED: missing HardwareAccess incorrectly admitted acquisition.
+GREEN: 20 G3 tests, both page profiles, real broker publication, authenticated
+handles, stale release, exact payload size, two disjoint full-primary scenes,
+third-scene quota failure, varied 1919x1079 geometry and process cleanup.
+Standalone pinned WDK ARM64 compile/link: zero warnings/errors, SYS SHA256
+`ba31d205c242016d172cf84e3c7896e87d1f4295fa3b0ec11eed0cc3a1e290c4`,
+`.local/experiments/R137-offline/step5.sys`. Full-suite final comparison is in
+step5-final-full.log; no hardware/package. REVIEW.md unchanged; R136 recorded
+dispositions remain applicable.

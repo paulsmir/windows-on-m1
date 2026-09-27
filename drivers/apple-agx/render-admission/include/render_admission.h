@@ -489,6 +489,8 @@ typedef struct _ADMISSION_RENDER_CONTEXT {
   BOOLEAN Win32Transport;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   PVOID GpuvaG3Process;
+  struct _ADMISSION_RENDER_CONTEXT *GpuvaG3NextContext;
+  ULONGLONG GpuvaG3PrivateManagerGeneration;
   ULONGLONG GpuvaG3RootIpa;
   ULONGLONG GpuvaG3DmaBufferVa;
   ULONGLONG GpuvaG3MappingGeneration;
@@ -1432,6 +1434,9 @@ DXGKDDI_DESTROYOVERLAY AdmissionDdiDestroyOverlay;
 DXGKDDI_RESETFROMTIMEOUT AdmissionDdiResetFromTimeout;
 DXGKDDI_RESTARTFROMTIMEOUT AdmissionDdiRestartFromTimeout;
 DXGKDDI_ESCAPE AdmissionDdiEscape;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *, const DXGKARG_ESCAPE *);
+#endif
 DXGKDDI_COLLECTDBGINFO AdmissionDdiCollectDbgInfo;
 DXGKDDI_QUERYCURRENTFENCE AdmissionDdiQueryCurrentFence;
 DXGKDDI_CONTROLINTERRUPT AdmissionDdiControlInterrupt;
