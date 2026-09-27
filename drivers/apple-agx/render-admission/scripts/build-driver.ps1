@@ -21,6 +21,7 @@ param(
     [switch]$Incremental,
     [string]$SourceManifestPath,
     [string]$NativeRuntimeProps,
+    [string]$NativeProvenancePython,
     [string]$MesaSourceRoot = 'C:\Users\pauls\AD04-d3d10-frontend-build\mesa',
     [string]$MesaGeneratedRoot = 'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated',
     [ValidateRange(0,65535)]
@@ -73,6 +74,17 @@ if ($GpuvaG3Qualification) {
     }
     & (Join-Path $PSScriptRoot 'verify-committed-sources.ps1') `
         -ManifestPath $SourceManifestPath -RepositoryRoot (Resolve-Path (Join-Path $root '..\..\..')).Path
+    if ([string]::IsNullOrWhiteSpace($NativeProvenancePython) -or
+        -not (Test-Path -LiteralPath $NativeProvenancePython -PathType Leaf)) {
+        throw 'GpuvaG3Qualification requires the pinned native provenance Python'
+    }
+    $nativeRoot = Split-Path -Parent $NativeRuntimeProps
+    $nativeSource = [string]$nativeProperties.SelectSingleNode("//*[local-name()='NativeRuntimeNativeSource']").InnerText
+    & $NativeProvenancePython (Join-Path $PSScriptRoot 'verify-native-runtime-provenance.py') `
+        --source-manifest $SourceManifestPath --props $NativeRuntimeProps `
+        --result (Join-Path $nativeRoot 'result.json') `
+        --prepared-result (Join-Path $nativeSource 'result.json')
+    if ($LASTEXITCODE -ne 0) { throw 'Native runtime provenance verification failed' }
 }
 $project = Join-Path $root "AppleAgxRenderAdmission.vcxproj"
 $umdProject = Join-Path $root "umd\AppleAgxRenderAdmissionUmd.vcxproj"

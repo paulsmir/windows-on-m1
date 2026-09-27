@@ -128,7 +128,7 @@ def archive_response(objects):
     return '\n'.join(subprocess.list2cmdline([str(p)]) for p in objects) + '\n'
 
 
-def write_props(path, architecture, native, library, dependencies, gpuva):
+def write_props(path, architecture, native, library, dependencies, gpuva, provenance=None):
     namespace = 'http://schemas.microsoft.com/developer/msbuild/2003'
     ET.register_namespace('', namespace)
     tag = lambda name: '{' + namespace + '}' + name
@@ -137,7 +137,8 @@ def write_props(path, architecture, native, library, dependencies, gpuva):
     for key, value in {'NativeRuntimeArchitecture': architecture,
                        'NativeRuntimeGpuva': 'true' if gpuva else 'false',
                        'NativeRuntimeNativeSource': str(native),
-                       'NativeRuntimeLibrary': str(library)}.items():
+                       'NativeRuntimeLibrary': str(library),
+                       **(provenance or {})}.items():
         ET.SubElement(group, tag(key)).text = value
     link = ET.SubElement(ET.SubElement(project, tag('ItemDefinitionGroup')), tag('Link'))
     ET.SubElement(link, tag('AdditionalDependencies')).text = ';'.join(
@@ -163,7 +164,10 @@ def main():
     parser.add_argument('--native-source', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--gpuva', action='store_true')
+    parser.add_argument('--source-manifest', type=Path)
     args = parser.parse_args()
+    if args.gpuva and args.source_manifest is None:
+        parser.error('--gpuva requires --source-manifest')
     out = args.output
     out.mkdir(exist_ok=False)
     native = args.native_source
@@ -174,6 +178,20 @@ def main():
                 'scope': 'Real native runtime/compiler archive; executable link and execution required',
                 'native_draw_executed': False, 'hardware': 'NOT_RUN',
                 'inputs': [], 'units': [], 'libraries': [], 'exit': None}
+    if args.source_manifest:
+        source_manifest = json.loads(args.source_manifest.read_text(encoding='utf-8-sig'))
+        indexed = {item['path']: item['sha256'] for item in source_manifest['files']}
+        for name in ('build-asahi-runtime-closure.py', 'build-native-asahi-state.py'):
+            relative = 'drivers/apple-agx/mesa/scripts/' + name
+            if sha256(args.project / relative) != indexed[relative]:
+                raise RuntimeError('Native builder differs from package source: ' + relative)
+        manifest['source_commit'] = source_manifest['repository_commit']
+        manifest['source_manifest_sha256'] = sha256(args.source_manifest)
+        prepared_path = native / 'result.json'
+        prepared = json.loads(prepared_path.read_text(encoding='utf-8-sig'))
+        if prepared.get('exit') != 0 or not prepared.get('prepared_only') or not prepared.get('gpuva'):
+            raise RuntimeError('Native source projection receipt is not GPUVA prepare-only')
+        manifest['prepared_result_sha256'] = sha256(prepared_path)
 
     def save():
         (out / 'result.json').write_text(json.dumps(manifest, indent=2) + '\n')
@@ -418,6 +436,11 @@ def main():
         object_dir.mkdir()
         for number, (group, source) in enumerate(units):
             source_hash = record(source)
+            if args.source_manifest and source.name == 'Resource.cpp' and 'frontends/d3d10umd' in source.as_posix():
+                expected_resource = prepared['overlays']['src/gallium/frontends/d3d10umd/Resource.cpp']['final_sha256']
+                if source_hash != expected_resource:
+                    raise RuntimeError('Projected Resource.cpp changed after preparation')
+                manifest['resource_source'] = {'path': str(source), 'sha256': source_hash}
             name = '%03d-%s-%s' % (number, group, source.stem)
             obj = object_dir / (name + '.obj')
             flags = cpp_flags if source.suffix in ('.cpp', '.cc') else c_flags
@@ -438,7 +461,12 @@ def main():
         response.write_text(archive_response(objects))
         run('archive', [CLANG / 'llvm-lib.exe', '/nologo', '/out:' + str(library), '@' + str(response)])
         manifest['library'] = {'path': str(library), 'sha256': sha256(library)}
-        write_props(out / 'NativeRuntime.props', args.architecture, native, library, libraries, args.gpuva)
+        provenance = None
+        if args.source_manifest:
+            provenance = {'NativeRuntimeSourceCommit': manifest['source_commit'],
+                          'NativeRuntimeSourceManifestSha256': manifest['source_manifest_sha256'],
+                          'NativeRuntimeLibrarySha256': manifest['library']['sha256']}
+        write_props(out / 'NativeRuntime.props', args.architecture, native, library, libraries, args.gpuva, provenance)
         manifest['props'] = {'path': str(out / 'NativeRuntime.props'), 'sha256': sha256(out / 'NativeRuntime.props')}
         manifest['executable_link'] = 'NOT_RUN'
         manifest['exit'] = 0
