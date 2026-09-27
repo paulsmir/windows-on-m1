@@ -2,7 +2,7 @@
 #define ADMISSION_GPUVA_G3_PRIVATE_H
 
 #include "render_admission.h"
-#include "apple_agx_g3_private_pool.h"
+#include "apple_agx_g3_private_storage.h"
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #define ADMISSION_G3_PROCESS_MAGIC 0x47335052u
@@ -44,6 +44,10 @@ typedef struct _ADMISSION_G3_PROCESS {
   ULONG Magic, DeviceRefs, ContextRefs;
   BOOLEAN Poisoned;
 } ADMISSION_G3_PROCESS;
+
+NTSTATUS AdmissionG3PreparePrivateStorage(
+    ADMISSION_G3_PROCESS *Process, const APPLE_AGX_G4_NATIVE_RENDER *Render,
+    APPLE_AGX_G3_PRIVATE_MANAGER *Manager, APPLE_AGX_G3_PRIVATE_SCENE *Scene);
 
 ADMISSION_G3_PROCESS *AdmissionGpuvaG3FindProcess(
     ADMISSION_G3_STATE *State, HANDLE ProcessHandle);

@@ -1232,6 +1232,9 @@ NTSTATUS AdmissionMemoryRuntimeMapAperture(
 NTSTATUS AdmissionMemoryRuntimeUnmapAperture(
     _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONGLONG ApertureByteOffset,
     _In_ UINT PageCount, _In_ ULONGLONG DummyPage);
+NTSTATUS AdmissionMemoryRuntimePrivateView(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _Out_ ADMISSION_BACKEND_MEMORY_VIEW *View);
 NTSTATUS AdmissionMemoryRuntimeBackendView(
     _Inout_ ADMISSION_CONTEXT *Context,
     _Out_ ADMISSION_BACKEND_MEMORY_VIEW *View);

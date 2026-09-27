@@ -68,3 +68,26 @@ that stale file before the final compile; final source hashes are recorded in
 C:/Users/pauls/R137-offline/R137-kmd.sys,
 SHA256 d2191db887c4ff172e5c6cd197f7629454456c585604b5a20f01d34f424a7758.
 This is no package or launch candidate. Logs: step2-manifest.json.
+
+## Step 3 — kernel construction primitives
+
+The kernel-only private view derives CPU/IPA/PA from the borrowed receipt and
+checks both the partition and allocation bounds. It exposes no user mapping or
+shared fixed GPUVA. PreparePrivateStorage uses that view under the caller's
+state lock, rejects poisoned/leased/in-flight state and orders CPU stores before
+later publication. The shared construction primitive zeroes every charged byte,
+writes TVB list words from the reserved heap VA, preserves an existing manager,
+and gives each scene distinct scratch. OOM before publication rolls back all
+new extents and zeroes them before reuse. Current builder limits (32 blocks,
+one layer/sample) are preserved.
+
+Primitive tests pass under ASan/UBSan: all nine poisoned extents/padding, page
+and block words, unchanged firmware-owned manager, simultaneous scratch and
+third-scene OOM, plus budget failure at every construction stage. Initial RED
+was the missing construction API. The OOM test's endpoint was corrected from
+94 to 93 units: 93 units is exactly a complete set, not an allocation failure.
+Full suite: 1133 tests with the same 15 failures/41 errors/two skips. Pinned
+WDK26100 ARM64 compile/link passes. Compile-only SYS SHA256
+ af5b3d1e34ed0c28224eea89f807b1591c456928d99fe283ab879b42b821e208.
+The section-4 producer/handoff gate remains pending steps 5–6; these are kernel
+construction primitives, not proof that UMD has stopped allocating its BOs.

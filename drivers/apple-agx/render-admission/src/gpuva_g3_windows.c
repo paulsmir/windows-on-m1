@@ -250,6 +250,26 @@ NTSTATUS AdmissionGpuvaG3MirrorTable(
   return STATUS_INVALID_ADDRESS;
 }
 
+/* State lock and object ownership are supplied by the typed escape caller. */
+NTSTATUS AdmissionG3PreparePrivateStorage(ADMISSION_G3_PROCESS *process,
+    const APPLE_AGX_G4_NATIVE_RENDER *render,
+    APPLE_AGX_G3_PRIVATE_MANAGER *manager, APPLE_AGX_G3_PRIVATE_SCENE *scene) {
+  ADMISSION_BACKEND_MEMORY_VIEW view;
+  NTSTATUS status;
+  if (process == NULL || process->Poisoned || process->Graph.Uncertain ||
+      process->Graph.JobInFlight || process->Graph.LeaseToken)
+    return STATUS_INVALID_DEVICE_STATE;
+  status = AdmissionMemoryRuntimePrivateView(process->State->Adapter, &view);
+  if (!NT_SUCCESS(status)) return status;
+  if (view.CpuAddress == NULL || view.Bytes != (16ULL << 20) ||
+      (view.GuestIpaAddress & 0xffffULL)) return STATUS_INVALID_ADDRESS;
+  if (!AppleAgxG3PrivatePrepare(&process->State->PrivatePool,
+      process->Graph.ProcessId, view.CpuAddress, process->PrivateVa, render,
+      manager, scene)) return STATUS_INSUFFICIENT_RESOURCES;
+  KeMemoryBarrier();
+  return STATUS_SUCCESS;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
     PVOID MiniportDeviceContext, DXGKARG_CREATEPROCESS *Args) {
   ADMISSION_CONTEXT *adapter = (ADMISSION_CONTEXT *)MiniportDeviceContext;

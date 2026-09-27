@@ -561,6 +561,44 @@ static ADMISSION_MEMORY_RUNTIME *AdmissionMemoryGetRuntime(
              : NULL;
 }
 
+/* Kernel-only view of the pool excluded from every ordinary segment view.
+ * GPUVA is process-specific and is assigned only by the reservation callback. */
+_Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimePrivateView(
+    ADMISSION_CONTEXT *Context, ADMISSION_BACKEND_MEMORY_VIEW *View) {
+  ADMISSION_MEMORY_RUNTIME *runtime = AdmissionMemoryGetRuntime(Context);
+  ADMISSION_PHYSICAL_ALLOCATION *allocation;
+  ULONGLONG offset, bytes, allocation_offset;
+  if (View == NULL) return STATUS_INVALID_PARAMETER;
+  RtlZeroMemory(View, sizeof(*View));
+  if (runtime == NULL || runtime->LocalObject.AllocationHandle == NULL ||
+      runtime->LocalObject.CpuAddress == NULL ||
+      runtime->LocalObject.AllocationCpuBase == NULL)
+    return STATUS_INVALID_DEVICE_STATE;
+  offset = Context->Memory.PrivateOffset;
+  bytes = Context->Memory.PrivateBytes;
+  if (!bytes || offset != Context->Memory.LocalAllocationBytes ||
+      offset > runtime->LocalObject.Length ||
+      bytes > runtime->LocalObject.Length - offset ||
+      offset + bytes != Context->Memory.BackendOffset ||
+      runtime->LocalObject.DeviceAddress > MAXULONGLONG - offset ||
+      (PUCHAR)runtime->LocalObject.CpuAddress <
+          (PUCHAR)runtime->LocalObject.AllocationCpuBase)
+    return STATUS_INVALID_ADDRESS;
+  allocation = runtime->LocalObject.AllocationHandle;
+  allocation_offset = (ULONGLONG)((PUCHAR)runtime->LocalObject.CpuAddress -
+      (PUCHAR)runtime->LocalObject.AllocationCpuBase);
+  if (allocation_offset > allocation->Size ||
+      offset > allocation->Size - allocation_offset ||
+      bytes > allocation->Size - allocation_offset - offset ||
+      allocation->GuestIpaBase > MAXULONGLONG - allocation_offset - offset)
+    return STATUS_INVALID_ADDRESS;
+  View->CpuAddress = (PUCHAR)runtime->LocalObject.CpuAddress + offset;
+  View->GuestIpaAddress = allocation->GuestIpaBase + allocation_offset + offset;
+  View->HostPhysicalAddress = runtime->LocalObject.DeviceAddress + offset;
+  View->Bytes = bytes;
+  return STATUS_SUCCESS;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeBackendView(
     ADMISSION_CONTEXT *Context,
     ADMISSION_BACKEND_MEMORY_VIEW *View) {
