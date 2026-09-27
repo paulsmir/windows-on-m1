@@ -780,11 +780,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeScanoutView(
       runtime->LocalObject.DeviceAddress == 0ULL ||
       runtime->LocalObject.GpuVirtualAddress != ADMISSION_LOCAL_GPU_VA ||
       Context->Memory.LocalAllocationBytes !=
-          ADMISSION_LOCAL_ALLOCATION_BYTES)
+          ADMISSION_LOCAL_ALLOCATION_BYTES ||
+      runtime->LocalObject.AllocationCpuBase == NULL ||
+      runtime->LocalObject.Length < APPLE_AGX_SCANOUT_J313_POOL_SIZE ||
+      Context->Memory.BackendOffset != APPLE_AGX_SCANOUT_J313_POOL_SIZE ||
+      Context->Memory.LocalAllocationBytes > Context->Memory.BackendOffset ||
+      Context->Memory.PrivateOffset != Context->Memory.LocalAllocationBytes ||
+      Context->Memory.PrivateBytes != Context->Memory.BackendOffset -
+                                          Context->Memory.LocalAllocationBytes)
     return STATUS_INVALID_DEVICE_STATE;
   allocation = (ADMISSION_PHYSICAL_ALLOCATION *)
       runtime->LocalObject.AllocationHandle;
-  if (allocation->Size < Context->Memory.LocalAllocationBytes)
+  if (allocation->Size < APPLE_AGX_SCANOUT_J313_POOL_SIZE)
     return STATUS_INVALID_DEVICE_STATE;
   if (allocation->BorrowedFirmwareReserve) {
     if (!AppleAgxLocalReserveMatchesResource(
@@ -802,9 +809,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeScanoutView(
   offset = (ULONGLONG)((PUCHAR)runtime->LocalObject.CpuAddress -
                        (PUCHAR)runtime->LocalObject.AllocationCpuBase);
   if (offset > allocation->Size ||
-      Context->Memory.LocalAllocationBytes > allocation->Size - offset ||
+      APPLE_AGX_SCANOUT_J313_POOL_SIZE > allocation->Size - offset ||
       allocation->GuestIpaBase > MAXULONGLONG - offset ||
-      allocation->HostPhysicalBase > MAXULONGLONG - offset)
+      allocation->HostPhysicalBase > MAXULONGLONG - offset ||
+      allocation->GuestIpaBase + offset >
+          MAXULONGLONG - APPLE_AGX_SCANOUT_J313_POOL_SIZE ||
+      allocation->HostPhysicalBase + offset >
+          MAXULONGLONG - APPLE_AGX_SCANOUT_J313_POOL_SIZE)
     return STATUS_INTEGER_OVERFLOW;
   if (runtime->LocalObject.DeviceAddress !=
       allocation->HostPhysicalBase + offset)
@@ -814,6 +825,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeScanoutView(
   View->HostPhysicalAddress = runtime->LocalObject.DeviceAddress;
   View->GpuVirtualAddress = runtime->LocalObject.GpuVirtualAddress;
   View->Bytes = Context->Memory.LocalAllocationBytes;
+  /* The broker maps through the private pool, but KMD surface consumers must
+   * remain bounded by Bytes. The backend begins exactly after this window. */
+  View->PoolBytes = APPLE_AGX_SCANOUT_J313_POOL_SIZE;
   return STATUS_SUCCESS;
 }
 

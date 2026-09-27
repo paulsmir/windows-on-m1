@@ -1,5 +1,26 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-27 R138 — EXP855 Stage10 mismatch corrected offline
+
+The real borrowed-memory/ScanoutStart replay reproduces C0000141 before MMIO:
+R137 returns a 40-MiB surface view, but Start checks it against the unchanged
+56-MiB broker window. KMD now exposes separately validated PoolBytes56 and
+surface Bytes40; private16/backend8 stay excluded from VidMm/primary surfaces.
+Full-span backing, offset/overflow and private/backend boundary checks remain
+fail-closed. Real client/broker Start/Stop and ABI-v1 refusal pass offline.
+
+53 focused tests pass (including G3 profiles16/64); full1137 preserves exactly
+baseline15 failures/41 errors/2 skips, no new names. Independent review found
+no findings. Details: investigation/analysis/R138-scanout-pool.md.
+No Air, package or Windows build; no hardware-validation claim. Ordinary
+EXP377/392 recovered by EXP855 remains accepted. Next causal checkpoint is
+Stage10/StartDevice progression with this fix in a separately authorized exact
+package; R137 private G4 behavior remains untested.
+
+WHY CONTINUE COMPARISON: no further historical comparison is needed; EXP855's
+exact size guard was reproduced RED→GREEN with current sources. Await a
+separately authorized hardware checkpoint, do not infer Code0 from host tests.
+
 ## 2026-09-27 EXP855 — StartDevice Code43; ordinary Code28 recovered
 
 Package855 source `27e30ad5` passed 534 source hashes, self-built native

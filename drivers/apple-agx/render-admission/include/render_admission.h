@@ -668,6 +668,8 @@ typedef struct _ADMISSION_SCANOUT_MEMORY_VIEW {
   ULONGLONG HostPhysicalAddress;
   ULONGLONG GpuVirtualAddress;
   ULONGLONG Bytes;
+  /* Fixed broker DMA window; Bytes alone bounds VidMm/scanout surfaces. */
+  ULONGLONG PoolBytes;
 } ADMISSION_SCANOUT_MEMORY_VIEW;
 
 #define ADMISSION_MEMORY_QUALIFICATION_VERSION 1u

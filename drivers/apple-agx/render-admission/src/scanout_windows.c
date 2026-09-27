@@ -511,7 +511,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(
       Context->BrokerBase == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
     return STATUS_INVALID_DEVICE_STATE;
   if (!NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(Context, &memory)) ||
-      memory.Bytes != APPLE_AGX_SCANOUT_J313_POOL_SIZE ||
+      memory.PoolBytes != APPLE_AGX_SCANOUT_J313_POOL_SIZE ||
       (memory.GuestIpaAddress &
        (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) != 0ULL)
     return STATUS_INVALID_ADDRESS;

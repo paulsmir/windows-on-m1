@@ -1,4 +1,8 @@
 #include <stdint.h>
+#include <assert.h>
+#include "render_memory.h"
+#include "apple_agx_fixed_panel.h"
+#include "hv_agx_scanout_broker.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,8 +39,7 @@ enum { CmResourceTypeMemory = 3, CmResourceTypeInterrupt = 2,
 #define _Inout_
 #define _Use_decl_annotations_
 #define VOID void
-#define ADMISSION_LOCAL_GPU_VA UINT64_C(0x1500000000)
-#define ADMISSION_LOCAL_ALLOCATION_BYTES UINT64_C(0x3800000)
+/* PRODUCTION_MEMORY_CONSTANTS */
 #define NT_SUCCESS(status) ((status) >= 0)
 #define TRUE 1
 #define FALSE 0
@@ -120,12 +123,14 @@ typedef struct {
   DXGK_DEVICE_INFO DeviceInformation;
   APPLE_AGX_LOCAL_RESERVE_RECEIPT LocalReserveReceipt;
   void *MemoryRuntime;
-  struct { int Initialized, UatReady; ULONGLONG LocalAllocationBytes; } Memory;
+  ADMISSION_MEMORY_CONTRACT Memory;
+  void *ScanoutRuntime, *BrokerBase;
 } ADMISSION_CONTEXT;
+/* PRODUCTION_VIEW_TYPE */
 typedef struct {
   PVOID CpuAddress;
   ULONGLONG GuestIpaAddress, HostPhysicalAddress, GpuVirtualAddress, Bytes;
-} ADMISSION_SCANOUT_MEMORY_VIEW;
+} ADMISSION_BACKEND_MEMORY_VIEW;
 typedef struct {
   APPLE_AGX_MEMORY_OBJECT LocalObject;
   BOOLEAN PhysicalReady, LocalReady, ResidencyReady, MappingReady, PublicationReady;
@@ -133,6 +138,7 @@ typedef struct {
 
 /* PRODUCTION_MEMORY_GET_RUNTIME */
 /* PRODUCTION_SCANOUT_VIEW */
+/* PRODUCTION_BACKEND_VIEW */
 
 static UCHAR broker_registers[J313_AGX_G2_POWER_BROKER_SIZE];
 static UCHAR *local_mapping;
@@ -352,6 +358,155 @@ static int expect(ADMISSION_CONTEXT *context, NTSTATUS expected,
   return 1;
 }
 
+/* Real Start/Stop and fixed-panel client talk to the real broker state machine.
+ * Only Windows services and the hardware service completion are simulated. */
+#define STATUS_NOT_SUPPORTED ((NTSTATUS)0xc00000bb)
+#define STATUS_DEVICE_BUSY ((NTSTATUS)0x80000011)
+#define STATUS_DEVICE_HARDWARE_ERROR ((NTSTATUS)0xc0000483)
+#define PASSIVE_LEVEL 0
+#define KeGetCurrentIrql() PASSIVE_LEVEL
+#define ADMISSION_SCANOUT_TAG 0
+#define ADMISSION_SCANOUT_TIMEOUT_MS 2000ULL
+#define ADMISSION_SCANOUT_MAX_POLLS 40000u
+typedef struct {
+  ADMISSION_CONTEXT *Adapter;
+  APPLE_AGX_FIXED_PANEL Panel;
+  int IrqEnabled, PresentGate, PendingValid;
+} ADMISSION_SCANOUT_RUNTIME;
+static int InterlockedExchange(int *value, int next) {
+  int previous = *value; *value = next; return previous;
+}
+static int InterlockedCompareExchange(int *value, int next, int expected) {
+  int previous = *value;
+  if (previous == expected) *value = next;
+  return previous;
+}
+static struct hv_agx_scanout_broker scanout_broker;
+static unsigned broker_accesses;
+static APPLE_AGX_SCANOUT_U64 AdmissionScanoutNow(void *opaque) {
+  (void)opaque; return 0;
+}
+static APPLE_AGX_SCANOUT_BOOL AdmissionScanoutPause(void *opaque) {
+  struct hv_agx_scanout_request request;
+  (void)opaque;
+  if (hv_agx_scanout_broker_take_pending(&scanout_broker, &request)) {
+    if (request.Command == HV_AGX_SCANOUT_CMD_REGISTER_POOL)
+      assert(hv_agx_scanout_broker_complete_register(&scanout_broker,
+          request.Sequence, HV_AGX_SCANOUT_RESULT_OK, request.PoolIpa, 0x10000000));
+    else if (request.Command == HV_AGX_SCANOUT_CMD_RELEASE)
+      assert(hv_agx_scanout_broker_complete_release(&scanout_broker,
+          request.Sequence, HV_AGX_SCANOUT_RESULT_OK, true));
+    else assert(0);
+  }
+  return 1;
+}
+static APPLE_AGX_SCANOUT_BOOL AdmissionScanoutRead64(
+    void *opaque, APPLE_AGX_SCANOUT_U32 offset, APPLE_AGX_SCANOUT_U64 *value) {
+  uint64_t wire = 0; (void)opaque; ++broker_accesses;
+  int ok = hv_agx_scanout_broker_mmio(&scanout_broker,
+      offset - APPLE_AGX_SCANOUT_MMIO_OFFSET, &wire, false, 3);
+  *value = wire; return ok;
+}
+static APPLE_AGX_SCANOUT_BOOL AdmissionScanoutRead32(
+    void *opaque, APPLE_AGX_SCANOUT_U32 offset, APPLE_AGX_SCANOUT_U32 *value) {
+  uint64_t wire = 0; (void)opaque; ++broker_accesses;
+  int ok = hv_agx_scanout_broker_mmio(&scanout_broker,
+      offset - APPLE_AGX_SCANOUT_MMIO_OFFSET, &wire, false, 2);
+  *value = (APPLE_AGX_SCANOUT_U32)wire; return ok;
+}
+static APPLE_AGX_SCANOUT_BOOL AdmissionScanoutWrite64(
+    void *opaque, APPLE_AGX_SCANOUT_U32 offset, APPLE_AGX_SCANOUT_U64 value) {
+  uint64_t wire = value; (void)opaque; ++broker_accesses;
+  return hv_agx_scanout_broker_mmio(&scanout_broker,
+      offset - APPLE_AGX_SCANOUT_MMIO_OFFSET, &wire, true, 3);
+}
+static APPLE_AGX_SCANOUT_BOOL AdmissionScanoutWrite32(
+    void *opaque, APPLE_AGX_SCANOUT_U32 offset, APPLE_AGX_SCANOUT_U32 value) {
+  uint64_t wire = value; (void)opaque; ++broker_accesses;
+  return hv_agx_scanout_broker_mmio(&scanout_broker,
+      offset - APPLE_AGX_SCANOUT_MMIO_OFFSET, &wire, true, 2);
+}
+/* PRODUCTION_SCANOUT_START */
+/* PRODUCTION_SCANOUT_STOP */
+
+static int replay_scanout_start(ADMISSION_CONTEXT *context) {
+  ADMISSION_BACKEND_MEMORY_VIEW backend;
+  ADMISSION_SCANOUT_MEMORY_VIEW view;
+  ADMISSION_LOCAL_MEMORY_VIEW local;
+  ADMISSION_MEMORY_RUNTIME *memory_runtime = context->MemoryRuntime;
+  ADMISSION_PHYSICAL_ALLOCATION *allocation =
+      memory_runtime->LocalObject.AllocationHandle;
+  APPLE_AGX_U64 surface;
+  NTSTATUS status;
+  context->BrokerBase = &scanout_broker;
+  hv_agx_scanout_broker_init_v2(&scanout_broker, true);
+  status = AdmissionScanoutStart(context);
+  if (status != STATUS_SUCCESS) {
+    fprintf(stderr, "EXP855 real ScanoutStart 40/16/8 failed: %08x (MMIO %u)\n",
+            (unsigned)status, broker_accesses);
+    return 1;
+  }
+  assert(scanout_broker.registered_pool_size == 0x3800000ULL);
+  assert(scanout_broker.pool_pa == context->LocalReserveReceipt.HostPa);
+  assert(context->Memory.LocalAllocationBytes == 0x2800000ULL);
+  assert(context->Memory.PrivateOffset == 0x2800000ULL);
+  assert(context->Memory.PrivateBytes == 0x1000000ULL);
+  assert(AdmissionMemoryRuntimeScanoutView(context, &view) == STATUS_SUCCESS);
+  assert(view.Bytes == 0x2800000ULL && view.PoolBytes == 0x3800000ULL);
+  assert(AdmissionMemoryRuntimeBackendView(context, &backend) == STATUS_SUCCESS);
+  assert(backend.GuestIpaAddress == context->LocalReserveReceipt.GuestIpa + 0x3800000ULL);
+  assert(backend.HostPhysicalAddress == view.HostPhysicalAddress + view.PoolBytes);
+  assert(backend.GpuVirtualAddress == view.GpuVirtualAddress + view.PoolBytes);
+  assert(backend.CpuAddress == (PUCHAR)view.CpuAddress + view.PoolBytes);
+  assert(backend.Bytes == 0x800000ULL);
+  assert(AdmissionScanoutStop(context) == STATUS_SUCCESS);
+  assert(context->ScanoutRuntime == NULL);
+  assert(scanout_broker.registered_pool_size == 0);
+  /* Same real bounds used by QueuePresent and local CPU/paging consumers:
+   * exact end succeeds; crossing into private/backend storage fails. */
+  const ULONGLONG last = view.Bytes - APPLE_AGX_SCANOUT_J313_SURFACE_SIZE;
+  assert(AppleAgxLocalSegmentAddressToGpuVa(2, 2,
+      context->Memory.Topology.Local.Base, view.Bytes, 0, context->Memory.Topology.Local.Base + last,
+      APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, 0, &surface) == AppleAgxLocalSegmentAddressOk);
+  const ULONGLONG invalid[] = {last + 0x10000, view.Bytes, view.PoolBytes};
+  for (unsigned i = 0; i < RTL_NUMBER_OF(invalid); ++i) {
+    assert(AppleAgxLocalSegmentAddressToGpuVa(2, 2,
+        context->Memory.Topology.Local.Base, view.Bytes, 0, context->Memory.Topology.Local.Base + invalid[i],
+        APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, 0, &surface) != AppleAgxLocalSegmentAddressOk);
+    assert(!AdmissionMemoryResolveLocalView(&context->Memory, context->Memory.Topology.Local.Base + invalid[i],
+        APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, 0, view.CpuAddress,
+        view.HostPhysicalAddress, &local));
+  }
+  unsigned accesses = broker_accesses;
+  memory_runtime->LocalObject.Length = view.Bytes;
+  assert(AdmissionScanoutStart(context) == STATUS_INVALID_ADDRESS);
+  memory_runtime->LocalObject.Length = ADMISSION_LOCAL_BYTES;
+  context->Memory.BackendOffset -= 0x10000;
+  assert(AdmissionScanoutStart(context) == STATUS_INVALID_ADDRESS);
+  context->Memory.BackendOffset += 0x10000;
+  context->Memory.PrivateOffset += 0x10000;
+  assert(AdmissionScanoutStart(context) == STATUS_INVALID_ADDRESS);
+  context->Memory.PrivateOffset -= 0x10000;
+  context->Memory.PrivateBytes -= 0x10000;
+  assert(AdmissionScanoutStart(context) == STATUS_INVALID_ADDRESS);
+  context->Memory.PrivateBytes += 0x10000;
+  /* The old 40-MiB check would allow this offset, but 56 MiB cannot fit. */
+  memory_runtime->LocalObject.CpuAddress = allocation->CpuBase + 0x1000000;
+  memory_runtime->LocalObject.DeviceAddress = allocation->HostPhysicalBase + 0x1000000;
+  assert(AdmissionScanoutStart(context) == STATUS_INVALID_ADDRESS);
+  memory_runtime->LocalObject.CpuAddress = allocation->CpuBase;
+  memory_runtime->LocalObject.DeviceAddress = allocation->HostPhysicalBase;
+  assert(broker_accesses == accesses && context->ScanoutRuntime == NULL);
+  /* Recovery ABI v1 must still be refused before REGISTER. */
+  hv_agx_scanout_broker_init(&scanout_broker);
+  assert(AdmissionScanoutStart(context) == STATUS_NOT_SUPPORTED);
+  assert(scanout_broker.accepted_requests == 0 && context->ScanoutRuntime == NULL);
+  hv_agx_scanout_broker_init_v2(&scanout_broker, true);
+  assert(AdmissionScanoutStart(context) == STATUS_SUCCESS);
+  assert(AdmissionScanoutStop(context) == STATUS_SUCCESS);
+  return 0;
+}
+
 int main(void) {
   CM_RESOURCE_LIST list = {0};
   ADMISSION_CONTEXT context = {0};
@@ -461,8 +616,13 @@ int main(void) {
       scanout_runtime.ResidencyReady = scanout_runtime.MappingReady =
       scanout_runtime.PublicationReady = TRUE;
   context.MemoryRuntime = &scanout_runtime;
-  context.Memory.Initialized = context.Memory.UatReady = APPLE_AGX_TRUE;
-  context.Memory.LocalAllocationBytes = ADMISSION_LOCAL_ALLOCATION_BYTES;
+  APPLE_AGX_SOFTWARE_APERTURE_ENTRY aperture[16] = {{0}};
+  assert(AdmissionMemoryInitialize(&context.Memory, aperture, 16,
+      0x1600000000ULL, 0x10000ULL, ADMISSION_LOCAL_GPU_VA, ADMISSION_LOCAL_BYTES));
+  assert(AdmissionMemoryPartitionLocal(&context.Memory,
+      ADMISSION_LOCAL_ALLOCATION_BYTES, ADMISSION_PRIVATE_BYTES, ADMISSION_BACKEND_BYTES));
+  context.Memory.UatReady = APPLE_AGX_TRUE;
+  scanout_runtime.LocalObject.Length = ADMISSION_LOCAL_BYTES;
   if (AdmissionMemoryRuntimeScanoutView(&context, &scanout_view) !=
           STATUS_SUCCESS ||
       scanout_view.GuestIpaAddress != UINT64_C(0x8e0000000) ||
@@ -472,6 +632,7 @@ int main(void) {
             (unsigned)AdmissionMemoryRuntimeScanoutView(&context, &scanout_view));
     return 1;
   }
+  if (replay_scanout_start(&context)) return 1;
   context.LocalReserveReceipt.HostPa += UINT64_C(0x4000);
   if (AdmissionMemoryRuntimeScanoutView(&context, &scanout_view) !=
       STATUS_INVALID_DEVICE_STATE) {
@@ -553,6 +714,19 @@ int main(void) {
     fprintf(stderr, "Dxgk-owned contiguous ADL scanout view regressed\n");
     return 1;
   }
+  old_allocation->Size = ADMISSION_LOCAL_ALLOCATION_BYTES;
+  assert(AdmissionScanoutStart(&context) == STATUS_INVALID_ADDRESS);
+  old_allocation->Size = ADMISSION_LOCAL_BYTES;
+  ULONGLONG saved_ipa = old_allocation->GuestIpaBase;
+  old_allocation->GuestIpaBase = MAXULONGLONG - APPLE_AGX_SCANOUT_J313_POOL_SIZE + 1;
+  assert(AdmissionMemoryRuntimeScanoutView(&context, &scanout_view) == STATUS_INTEGER_OVERFLOW);
+  old_allocation->GuestIpaBase = saved_ipa;
+  ULONGLONG saved_pa = old_allocation->HostPhysicalBase;
+  old_allocation->HostPhysicalBase = MAXULONGLONG - APPLE_AGX_SCANOUT_J313_POOL_SIZE + 1;
+  scanout_runtime.LocalObject.DeviceAddress = old_allocation->HostPhysicalBase;
+  assert(AdmissionMemoryRuntimeScanoutView(&context, &scanout_view) == STATUS_INTEGER_OVERFLOW);
+  old_allocation->HostPhysicalBase = saved_pa;
+  scanout_runtime.LocalObject.DeviceAddress = saved_pa;
   owner.AllocationCount = 1;
   if (old_allocation->Adl == NULL || old_allocation->MappedBase == NULL ||
       AdmissionPhysicalFree(&owner, old_allocation) != STATUS_SUCCESS ||
