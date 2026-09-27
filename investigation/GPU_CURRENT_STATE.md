@@ -1,8 +1,10 @@
 # GPU current boundary — 2026-09-27
 
-## EXP854B preregistered — current UMD provenance restored
+## EXP854B — current UMD cleared refusal; G3 TableGraph bugcheck; ordinary recovered
 
-EXP854 stale-runtime attribution is confirmed. Source `4dcf6aa9` builds package854B with exact UMD `874124db`, native archive `9c790e66`, and compiled `Resource.cpp` source `24fc4310` (same general UpdateSubresourceUP overlay as EXP853). The provenance gate rejects a foreign archive before link; clean ARM64 build is 0/0. Manifest `.local/experiments/EXP854B-r134-provenance/hardware-manifest.json` SHA256 `fa9ee005c516091b20d9504f516a1adb53c911ab3e66eed12968203f9bdaca64`; GO_EXP854B exists. Hardware remains NOT_RUN. Next checkpoint: one cold R110 full-owner run, measure UMD refusals and accepted G4 submission/fence evidence, then exact cleanup and ordinary Code28 recovery.
+Package854B source `4dcf6aa9` passed 531-file verification, provenance gate and clean ARM64 0/0 build. Native archive SHA `9c790e66`, compiled `Resource.cpp` SHA `24fc4310` (EXP853 general UpdateSubresourceUP overlay), UMD SHA `874124db`. GO_EXP854B preceded staging. One R110 full-owner crossed ARM_CONSUMED, Code0 and pinned SSH, then reset before the ten-minute window. System1001 confirms **0x10E (0xB, 0xfffff509919792b8, 0xffffffffc0000141, 0xffffa30e6dcf0000)**; G3 receipt v3 branch2 TableGraph level1 returned `0xC0000141`. G4 first failure remains branch9 Parse/Unmapped Process write64KiB VA `0x3b0000`, GraphPresent0, total failures902. Segment0 unpublished count200506.
+
+UMD UpdateSubresourceUP refusals **0** (EXP854: 6043); draw-before467. One dwm.exe/AppleAgx UMD AV occurred. No accepted G4 submission, fence completion or DWM frame is proven. Evidence `.local/experiments/EXP854B-r134-provenance/hardware-evidence/`, 21-file host manifest SHA256 `80bbdb0a56421ad09ab058d04070de79b6d45ffe262c623718f27218052a0811`. GPU-hidden dump-first exact oem5 cleanup and immutable ordinary EXP377/392 durable Preflight PASS restored pinned SSH, one present Code28, staged/arm/files/service/signer absent, CPU8/disks2/USB5, RDP Running. Do not reuse package854B. Next causal target: offline attribution of G3 TableGraph `0xC0000141` and 0x10E stack; no further hardware without a new falsifiable cause.
 
 ## 2026-09-27 EXP854 — system64 declaration survived; UMD refusal precedes G4; ordinary recovered
 
