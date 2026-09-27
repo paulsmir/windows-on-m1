@@ -135,6 +135,33 @@ static BOOLEAN AdmissionG3RegisterTable(ADMISSION_G3_PROCESS *process,
   return ok;
 }
 
+/* InitialUpdate is VidMm's new-residency boundary. An empty former root
+ * can be reused at another level before SetRootPageTable names the next root
+ * (EXP854B). Park the broker on our private bootstrap root first; neither
+ * GraphRegisterTable nor the broker may revoke a current root. */
+static BOOLEAN AdmissionG3PrepareTableReuse(ADMISSION_G3_PROCESS *process,
+    ULONGLONG table_ipa, UINT level, BOOLEAN initial_update) {
+  APPLE_AGX_GPUVA_G3_GRAPH *graph = &process->Graph;
+  APPLE_AGX_GPUVA_G3_NODE *entry;
+  BOOLEAN bootstrap_found = FALSE;
+  if (table_ipa != graph->RootIpa || level == 0u) return TRUE;
+  if (!initial_update || table_ipa == process->BootstrapIpa ||
+      graph->JobInFlight || graph->LeaseToken || graph->Slot ||
+      graph->Uncertain) return FALSE;
+  /* A populated root is still a real conflict. The parking root must also
+   * remain empty; never switch a process onto an unrelated mapping. */
+  for (entry = graph->Parents; entry; entry = entry->Next)
+    if (entry->Ipa == table_ipa || entry->Ipa == process->BootstrapIpa)
+      return FALSE;
+  for (entry = graph->Tables; entry; entry = entry->Next)
+    if (entry->Ipa == process->BootstrapIpa && entry->Level == 0u)
+      bootstrap_found = TRUE;
+  if (!bootstrap_found) return FALSE;
+  /* BindRoot advances MappingGeneration. Queued contexts naming the former
+   * root cannot BeginJob until the real SetRootPageTable rebinds them. */
+  return AppleAgxGpuvaG3GraphBindRoot(graph, process->BootstrapIpa);
+}
+
 static NTSTATUS AdmissionG3UpdateParent(
     ADMISSION_G3_PROCESS *process, ULONGLONG table_ipa,
     const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update,
@@ -895,6 +922,14 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
       goto PagingDone;
     }
     failure.BrokerTableIpa = table_ipa;
+    if (!AdmissionG3PrepareTableReuse(process, table_ipa,
+            2u - update->PageTableLevel, update->Flags.InitialUpdate)) {
+      failure.TableAddBranch = 2u;
+      status = AdmissionG3RejectPaging(&failure,
+          AdmissionG3PagingFailureTableGraph, MAXULONG, NULL, 0ULL,
+          STATUS_INVALID_ADDRESS);
+      goto PagingDone;
+    }
     /* GraphRegisterTable is idempotent for an existing page.  Clear only a
      * newly admitted page, before the broker sees its physical contents.  A
      * page VidMm reuses at another level (EXP846) is new at that level. */

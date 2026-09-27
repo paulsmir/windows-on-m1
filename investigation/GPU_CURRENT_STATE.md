@@ -1,5 +1,28 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-27 R135 offline — EXP854B empty current-root reuse attributed and corrected
+
+Matching-PDB CDB proves the refused broker table9df240000 is processF's
+current Level0 root, with Parents/Leaves NULL and Job/Lease/Slot0. VidMm
+initializes the same original page as level1 (InitialUpdate1, count2048,
+Use64KBPages0). Graph retirement rejects its still-current root before broker
+registration. KMD now parks only an empty unleased root on its empty private
+bootstrap at that new-residency boundary, then retains normal retirement and
+conflict checks. Real-DDI/broker replay RED C0000141 -> GREEN, profiles16/64,
+4K/64K leaf transitions, broker conflict and allocation-failure retry pass.
+No package or Air run; hardware fix remains unvalidated. Ordinary EXP377/392
+Code28 from EXP854B remains the latest recovery.
+
+WHY CONTINUE COMPARISON: the current dump directly identifies root identity;
+no old-reference archaeology or admission reconstruction is needed. Completed
+attribution: `investigation/analysis/R135-root-reuse.md` and hash-bound logs in
+`.local/experiments/R135-offline/`. Next causal target: Process[0] TVB page-list
+BO at VA3b0000, whose saved normalized4K PFNs are misaligned/discontiguous
+and cannot publish a16KiB leaf despite SysMem64KB. It is the UMD's own native
+BO, not the presentation-import path; exact section-object identity is absent
+from receipt/minidump, and saved ETL has no matching VA mapping events. Analyze
+that BO's residency/allocation contract offline; no hardware authorized here.
+
 ## EXP854B — current UMD cleared refusal; G3 TableGraph bugcheck; ordinary recovered
 
 Package854B source `4dcf6aa9` passed 531-file verification, provenance gate and clean ARM64 0/0 build. Native archive SHA `9c790e66`, compiled `Resource.cpp` SHA `24fc4310` (EXP853 general UpdateSubresourceUP overlay), UMD SHA `874124db`. GO_EXP854B preceded staging. One R110 full-owner crossed ARM_CONSUMED, Code0 and pinned SSH, then reset before the ten-minute window. System1001 confirms **0x10E (0xB, 0xfffff509919792b8, 0xffffffffc0000141, 0xffffa30e6dcf0000)**; G3 receipt v3 branch2 TableGraph level1 returned `0xC0000141`. G4 first failure remains branch9 Parse/Unmapped Process write64KiB VA `0x3b0000`, GraphPresent0, total failures902. Segment0 unpublished count200506.

@@ -32,7 +32,7 @@ FUNCTIONS = {
     ],
     "gpuva_g3_paging_windows.c": [
         "AdmissionG3RejectPaging", "AdmissionG3RetireSystemSubtree",
-        "AdmissionG3ActivateSystemSubtree", "AdmissionG3ResetTableShadow", "AdmissionG3RegisterTable", "AdmissionG3UpdateParent",
+        "AdmissionG3ActivateSystemSubtree", "AdmissionG3ResetTableShadow", "AdmissionG3RegisterTable", "AdmissionG3PrepareTableReuse", "AdmissionG3UpdateParent",
         "AdmissionG3UpdateLeaf", "AdmissionG3FindPagingEdge",
         "AdmissionG3ResolveLogicalVa", "AdmissionG3SnapshotAperture",
         "AdmissionG3EncodeVirtualPaging",
@@ -89,7 +89,7 @@ def generate(revision=None, function_revisions=None):
             if revision is not None and name in (
                     "AdmissionGpuvaG3BrokerTable",
                     "AdmissionG3RetireSystemSubtree", "AdmissionG3ActivateSystemSubtree",
-                    "AdmissionG3ResetTableShadow", "AdmissionG3RegisterTable",
+                    "AdmissionG3ResetTableShadow", "AdmissionG3RegisterTable", "AdmissionG3PrepareTableReuse",
                     "AdmissionGpuvaG3MirrorTable",
                     "AdmissionGpuvaG3SubmitVirtualPaging",
                     "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
@@ -135,8 +135,8 @@ def main(revision=None, function_revisions=None, old_context_flags=False):
                    "-o", str(binary)]
         if os.environ.get("G3_REPLAY_R132") or os.environ.get("G3_REPLAY_R133"):
             command[1:1] = ["-fsanitize=address,undefined"]
-        if os.environ.get("G3_REPLAY_R134"):
-            command[1:1] = ["-DADMISSION_GPUVA_G1B_PAGE_PROFILE=16",
+        if os.environ.get("G3_REPLAY_R134") or os.environ.get("G3_REPLAY_R135"):
+            command[1:1] = ["-DADMISSION_GPUVA_G1B_PAGE_PROFILE=" + os.environ.get("G3_REPLAY_PROFILE", "16"),
                             "-fsanitize=address,undefined"]
         if old_context_flags:
             command.insert(1, "-DADMISSION_CONTEXT_VALID_FLAGS=3")

@@ -27,7 +27,9 @@ static void update(ADMISSION_CONTEXT *adapter, HANDLE process, UINT level,
 }
 #include "g3_system_lifetime_cases.c"
 #include "g3_r133_publication_cases.c"
+#include "g3_r135_root_reuse_cases.c"
 int main(void) {
+  if (getenv("G3_REPLAY_R135")) {r135_root_reuse_cases();return 0;}
   if (getenv("G3_REPLAY_R134")) {r134_system_64k_cases();return 0;}
   if (getenv("G3_REPLAY_R133")) {r133_publication_cases();return 0;}
   if (getenv("G3_REPLAY_R132")) {system_lifetime_cases();return 0;}

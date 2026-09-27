@@ -11,6 +11,18 @@ REPLAY = ROOT / "tests/g3_vidmm_replay.py"
 
 
 class G3VidMmReplayTests(unittest.TestCase):
+    def test_exp854b_empty_current_root_reuse(self):
+        for profile, allocation_fault in (("16", ""), ("64", ""), ("16", "1")):
+            with self.subTest(profile=profile, allocation_fault=allocation_fault):
+                env = dict(os.environ, G3_REPLAY_R135="1", G3_REPLAY_PROFILE=profile,
+                           G3_REPLAY_R135_ALLOC=allocation_fault)
+                if not allocation_fault:
+                    env.pop("G3_REPLAY_R135_ALLOC", None)
+                result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
+                                        env=env, text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("R135 empty root reuse: PASS", result.stdout)
+
     def test_r134_system_64k_outer_ddi_with_real_broker(self):
         env = dict(os.environ, G3_REPLAY_R134="1")
         result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
