@@ -38,6 +38,25 @@ typedef struct _APPLE_AGX_GPUVA_G3_LOGICAL_PTE {
   unsigned int Flags;
 } APPLE_AGX_GPUVA_G3_LOGICAL_PTE;
 
+/* A 64-KiB leaf update replaces sixteen 4-KiB logical slots. Until that
+ * mapping has an explicit CPU-envelope representation, invalidate any old
+ * 4-KiB shadow before publishing the new native leaves. */
+static inline int AppleAgxGpuvaG3InvalidateLogical64K(
+    APPLE_AGX_GPUVA_G3_LOGICAL_PTE *entries,
+    unsigned int start_index, unsigned int count) {
+  unsigned int i, first, end;
+  if (entries == 0 || count == 0u || start_index >= 512u ||
+      count > 512u - start_index) return 0;
+  first = start_index * 16u;
+  end = (start_index + count) * 16u;
+  for (i = first; i < end; ++i) {
+    entries[i].GuestIpa = 0ULL;
+    entries[i].SegmentId = 0u;
+    entries[i].Flags = 0u;
+  }
+  return 1;
+}
+
 typedef struct _APPLE_AGX_GPUVA_G3_NATIVE_LEAF {
   unsigned long long GpuVa;
   unsigned long long GuestIpa;

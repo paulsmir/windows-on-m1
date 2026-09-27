@@ -8,6 +8,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "drivers/apple-agx/render-admission/src/gpuva_g3_windows.c"
+PAGING = ROOT / "drivers/apple-agx/render-admission/src/gpuva_g3_paging_windows.c"
 
 
 def function_body(source, name):
@@ -30,6 +31,10 @@ def function_body(source, name):
 
 
 class G4SubmitVirtualReplay(unittest.TestCase):
+    def test_64k_replacement_retires_old_cpu_shadow(self):
+        update = function_body(PAGING.read_text(), "AdmissionG3UpdateLeaf")
+        self.assertIn("AppleAgxGpuvaG3InvalidateLogical64K(shadow->LogicalPtes", update)
+
     def test_native_submit_queues_only_after_graph_and_image_bind(self):
         production = SOURCE.read_text()
         branches = production.split("/* Branch IDs are a stable diagnostic ABI", 1)[1]

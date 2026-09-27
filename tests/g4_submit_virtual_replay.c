@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "apple_agx_g4_submit.h"
+#include "apple_agx_gpuva_g3_translation.h"
 
 typedef int NTSTATUS;
 typedef unsigned char BOOLEAN;
@@ -34,8 +35,6 @@ typedef struct { unsigned Value; } REPLAY_FLAGS;
 #define ADMISSION_CONTEXT_VIRTUAL_ADDRESSING 4u
 #define ADMISSION_CONTEXT_SYSTEM 1u
 #define ADMISSION_CONTEXT_GDI 2u
-#define APPLE_AGX_GPUVA_G3_VALID 1u
-#define APPLE_AGX_GPUVA_G3_WRITE 2u
 #define ADMISSION_MEMORY_LOCAL_SEGMENT 2u
 
 typedef struct _APPLE_AGX_GPUVA_G3_NODE {
@@ -43,8 +42,6 @@ typedef struct _APPLE_AGX_GPUVA_G3_NODE {
   ULONGLONG Ipa, AuxIpa;
   unsigned Index;
 } APPLE_AGX_GPUVA_G3_NODE;
-typedef struct { ULONGLONG GuestIpa; unsigned SegmentId, Flags; }
-    APPLE_AGX_GPUVA_G3_LOGICAL_PTE;
 typedef struct _ADMISSION_G3_TABLE_SHADOW {
   struct _ADMISSION_G3_TABLE_SHADOW *Next;
   ULONGLONG BrokerIpa;
@@ -442,6 +439,11 @@ int main(void) {
   for (unsigned n = 0; n < 129u; ++n)
     assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
            STATUS_INVALID_PARAMETER);
+  args.hContext = NULL;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  args.hContext = &context;
+  assert(adapter.G4SubmitFailure.Branch == 9u);
   assert(adapter.G4SubmitFailure.Subsite == AppleAgxG4FailureAccess);
   assert(adapter.G4SubmitFailure.Kind == AppleAgxG4AccessProcess);
   assert(adapter.G4SubmitFailure.Ordinal == 0u);
@@ -457,7 +459,7 @@ int main(void) {
     assert(adapter.G4SubmitFailure.LogicalSegment[i] == 0u);
     assert(adapter.G4SubmitFailure.LogicalFlags[i] == 3u);
   }
-  assert(adapter.G4SubmitFailureCount == 130);
+  assert(adapter.G4SubmitFailureCount == 131);
   process.Graph.AllowProcessRanges = 1;
   adapter.G4SubmitFailureClaim = 0;
   output_mapped = 0;
@@ -498,6 +500,15 @@ int main(void) {
   assert(AdmissionGpuvaG3BeginJob(&adapter, &context, 13u) == STATUS_SUCCESS);
   assert(graph_begin_calls == 1);
   state.ActiveProcess = NULL;
+  assert(AppleAgxGpuvaG3InvalidateLogical64K(logical, 2u, 1u));
+  assert(logical[0x20u].Flags == 0u && logical[0x21u].Flags == 0u);
+  assert(logical[0x100u].Flags == 3u);
+  assert(AdmissionGpuvaG3BeginJob(&adapter, &context, 13u) != STATUS_SUCCESS);
+  assert(graph_begin_calls == 1);
+  logical[0x20u].GuestIpa = 0x81000000ULL;
+  logical[0x20u].Flags = 1u;
+  logical[0x21u].GuestIpa = 0x91003000ULL;
+  logical[0x21u].Flags = 1u;
   logical[0x21u].Flags = 0u;
   assert(AdmissionGpuvaG3BeginJob(&adapter, &context, 13u) != STATUS_SUCCESS);
   assert(graph_begin_calls == 1);

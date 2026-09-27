@@ -238,6 +238,14 @@ static NTSTATUS AdmissionG3UpdateLeaf(
         ADMISSION_MEMORY_LOCAL_SEGMENT, leaves, 2048u, &count);
   if (plan != AppleAgxGpuvaG3Ok && plan != AppleAgxGpuvaG3Unmap)
     goto Done;
+  /* The 64-KiB path does not publish 4-KiB logical PTEs. Retire any
+   * prior 4-KiB shadow before its native leaf replacement/unmap. */
+  for (shadow = process->TableShadows; shadow != NULL; shadow = shadow->Next)
+    if (shadow->BrokerIpa == table_ipa) break;
+  if (shadow != NULL && shadow->LogicalPtes != NULL &&
+      !AppleAgxGpuvaG3InvalidateLogical64K(shadow->LogicalPtes,
+          update->StartIndex, update->NumPageTableEntries))
+    goto Done;
   for (index = 0u; index < count && index < 2048u; ++index) {
     if (!AppleAgxGpuvaG3GraphUpdateLeaf(&process->Graph, table_ipa,
             (update->Flags.Use64KBPages ? update->StartIndex * 4u :
