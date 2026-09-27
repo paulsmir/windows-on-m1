@@ -1,5 +1,30 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-27 EXP851 — first GPU-consumed system-memory range identified; ordinary recovered
+
+Final package851 (`47e0651f`, SYS `dded1148`) crossed ARM_CONSUMED, pinned
+SSH and APPL0002 Code0 for 607 seconds. The 192-byte `Wom1G4SubmitFailure`
+v2 records branch9/Parse/Unmapped, `0xC000000D`, subsite Access, kind Process,
+ordinal0, **write 64 KiB at VA `0x3b0000`**. `GraphPresent=0`, while four
+logical PTEs are segment0, flags3 (valid/write). Owner PID5, root IPA
+`0x9dcd88000`, process generation1. The CPU envelope at `0x840000` passed;
+the first rejection moved to a GPU-consumed system-memory process range whose
+graph mapping is absent. This is a measured access failure, not proof that
+segment0 can be published safely or that a DWM frame occurred. No new System
+1001, minidump, G3 paging failure or Application 1000 in the window; scanout
+nonzero0. Postboot-preflight's USB>=6 check failed against the unchanged USB5
+baseline; separate package/Code0 and health checks passed.
+
+Raw/decoded receipt, unpublished-groups bytes, ETL, UMD log, events and host
+hashes: `.local/experiments/EXP851-r131-envelope/hardware-evidence/` (18-file
+manifest SHA256 `95e652f3ab64381a09a76bce19b2b45eb4973cc321df2110f9d365576bc2d184`).
+Evidence-first exact oem5 cleanup via GPU-hidden and immutable ordinary
+EXP377/392 restored durable pinned SSH, one present Code28, staged/arm/files/
+service/signer absent, CPU8/disks2/USB5. Next causal target: source-first
+ownership and publication rules for the writable segment0 GPU range, followed
+by a minimal offline replay before any new hardware run.
+
+
 ## 2026-09-27 EXP851 R131 offline — receipt v2 and CPU envelope built, no Air
 
 The EXP850R branch9/Unmapped subsite remains unmeasured on hardware. R131
