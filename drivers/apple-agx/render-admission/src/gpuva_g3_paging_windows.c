@@ -1,4 +1,5 @@
 #include "gpuva_g3_private.h"
+#include "apple_agx_gpuva_g3_caps.h"
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 
