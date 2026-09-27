@@ -1,5 +1,28 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-27 EXP852 — R132 segment0 publication fails on hardware; ordinary Code28 recovered
+
+Final package852 from `7b616cde` (SYS `d30ed426`) built with 0 warnings/0
+errors and exact hashes. Reviewer GO preceded staging. First cold full-owner
+crossed ARM_CONSUMED, then reset before SSH. System 1001 and minidump confirm
+**0x10E (0xB, 0xfffff880ab7546b8, 0xffffffffc0000483,
+0xffffa5098abdc000)**. The one allowed same-profile retry returned pinned
+SSH with exact oem5 but Code43 and arm cleared; no Code0 ten-minute window.
+
+G3 paging failure v3/104: branch7 `LeafGraph`, index1584, update mode2,
+`STATUS_DEVICE_HARDWARE_ERROR` (`0xC0000483`), child IPA `0x851420000`.
+G4 first failure v2/192 still branch9 Parse/Unmapped, process write 64KiB
+at VA `0x3b0000`, four segment0 valid/write logical PTEs, `GraphPresent=0`;
+mapping generation408 (EXP851 was 0). Thus the expected first-access advance
+was **rejected**; source and dump analysis must distinguish why leaf publication
+failed before another hardware run. No DWM frame: scanout nonzero0. One
+Application1000 count0; System1001 count1. Evidence and decoded receipts:
+`.local/experiments/EXP852-r132-sysframes/hardware-evidence/` (21-file host
+manifest SHA256 `f32fa68ae4194521b4ffd090018bfcda9a724bf4f9e987b10eebee75cce5201c`).
+GPU-hidden dump-first exact oem5 cleanup followed by immutable ordinary
+EXP377/392 durable Preflight PASS: pinned SSH, one present Code28,
+package/arm/SYS/UMD/service/signer absent, CPU8. Do not rearm package852.
+
 ## 2026-09-27 R132 offline — bounded system-frame publication and lifetime implemented
 
 Commits `5996c2b0` (segment identity/provenance) and `f53f4f98` (pager/graph
