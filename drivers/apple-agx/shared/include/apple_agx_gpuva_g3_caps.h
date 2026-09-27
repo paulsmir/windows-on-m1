@@ -74,6 +74,7 @@ typedef struct _APPLE_AGX_GPUVA_G3_ADMISSION_CONTRACT {
   unsigned int ApertureSegmentId;
   unsigned int LocalSegmentId;
   unsigned int LocalUse64KBPages;
+  unsigned int SysMem64KBPageSupported;
   unsigned int PagingBufferSegmentId;
   unsigned int PagingBufferBytes;
   unsigned int PagingPrivateBytes;
@@ -84,14 +85,16 @@ typedef struct _APPLE_AGX_GPUVA_G3_ADMISSION_CONTRACT {
 static inline APPLE_AGX_GPUVA_G3_ADMISSION_CONTRACT
 AppleAgxGpuvaG3AdmissionContract(unsigned int enabled,
                                   unsigned int page_profile) {
+  unsigned int local_64k = page_profile == 64u ? 1u : 0u;
+  unsigned int system_64k = enabled ? 1u : 0u;
   APPLE_AGX_GPUVA_G3_CAPS tables = AppleAgxGpuvaG3Caps(
-      enabled && page_profile == 64u);
+      enabled && (local_64k || system_64k));
   APPLE_AGX_GPUVA_G3_ADMISSION_CONTRACT caps = {
       enabled ? 1u : 0u, enabled ? 1u : 0u, enabled ? 1u : 0u, 0u,
       1u, 0u, enabled ? 1u : 0u, enabled ? 1u : 0u, 0u,
       enabled ? 1u : 0u, enabled ? (1ULL << 39) : 0ULL,
       APPLE_AGX_GPUVA_G3_INVALID_MMU_ID,
-      2u, 1u, 1u, 2u, page_profile == 64u ? 1u : 0u,
+      2u, 1u, 1u, 2u, local_64k, system_64k,
       1u, 0x1000u, 0x1000u, tables.VirtualAddressBits,
       enabled ? tables.Leaf64KBytes : 0u};
   return caps;
@@ -115,6 +118,8 @@ static inline int AppleAgxGpuvaG3AdmissionContractValid(
       (caps->PagingPrivateBytes & 0xfffu) ||
       caps->VirtualAddressBits != 39u)
     return 0;
+  if (caps->LocalUse64KBPages > 1u ||
+      caps->SysMem64KBPageSupported > 1u) return 0;
   nodes = (1u << caps->NodeCount) - 1u;
   if ((caps->VirtualSubmissionNodeMask & ~nodes) ||
       (caps->NodeGpuMmuMask & ~nodes) ||
@@ -126,6 +131,7 @@ static inline int AppleAgxGpuvaG3AdmissionContractValid(
            !caps->AdapterGpuMmuSupported &&
            !caps->VirtualSubmissionNodeMask && !caps->NodeGpuMmuMask &&
            caps->MmuCount == 0u && caps->MmuSizeBytes == 0ULL &&
+           caps->SysMem64KBPageSupported == 0u &&
            caps->Leaf64KBytes == 0u &&
            caps->DisplayMmuId == APPLE_AGX_GPUVA_G3_INVALID_MMU_ID;
   return caps->VirtualAddressingSupported &&
@@ -137,7 +143,7 @@ static inline int AppleAgxGpuvaG3AdmissionContractValid(
          caps->MmuSizeBytes >= (1ULL << caps->VirtualAddressBits) &&
          (caps->DisplayMmuId == APPLE_AGX_GPUVA_G3_INVALID_MMU_ID ||
           caps->DisplayMmuId < caps->MmuCount) &&
-         (caps->LocalUse64KBPages ?
+         ((caps->LocalUse64KBPages || caps->SysMem64KBPageSupported) ?
           (caps->Leaf64KBytes >= 0x4000u &&
            caps->Leaf64KBytes >= (1u << (13u - 4u)) * pte_bytes &&
            (caps->Leaf64KBytes & 0xfffu) == 0u) :

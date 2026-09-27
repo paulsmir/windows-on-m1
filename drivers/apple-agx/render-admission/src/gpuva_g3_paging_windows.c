@@ -313,10 +313,10 @@ static NTSTATUS AdmissionG3UpdateLeaf(
             view.Bytes, &ipa) != AppleAgxGpuvaG3Ok ||
         ipa > MAXULONGLONG - (step - 1ULL) ||
         (update->Flags.Use64KBPages &&
-         ((ipa & 0xffffULL) ||
-          (pte->Segment != 0u && pte->Segment != ADMISSION_MEMORY_LOCAL_SEGMENT) ||
+         ((pte->Segment != 0u && pte->Segment != ADMISSION_MEMORY_LOCAL_SEGMENT) ||
           (pte->Segment == ADMISSION_MEMORY_LOCAL_SEGMENT &&
-           (view.Bytes < step || offset > view.Bytes - step)))) ||
+           ((ipa & 0xffffULL) || view.Bytes < step ||
+            offset > view.Bytes - step)))) ||
         update->AllocationOffsetInBytes > MAXULONGLONG - (ULONGLONG)i * step)
       goto Done;
     allocation_offset = update->AllocationOffsetInBytes + (ULONGLONG)i * step;
@@ -848,7 +848,8 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
       update->Flags.NativeFence ||
       update->Flags.Reserved ||
       (update->Flags.Use64KBPages &&
-       (ADMISSION_GPUVA_G1B_PAGE_PROFILE != 64 ||
+       (AppleAgxGpuvaG3AdmissionContract(
+            1u, ADMISSION_GPUVA_G1B_PAGE_PROFILE).Leaf64KBytes == 0u ||
         update->PageTableLevel == 2u)) ||
       (update->UpdateMode != DXGK_PAGETABLEUPDATE_GPU_PHYSICAL &&
        update->UpdateMode != DXGK_PAGETABLEUPDATE_CPU_VIRTUAL))

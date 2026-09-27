@@ -39,6 +39,52 @@ static APPLE_AGX_GPUVA_G3_FRAME *sys_frame(ADMISSION_G3_STATE *s,ULONGLONG ipa) 
   while(f && f->Ipa!=ipa) f=f->Next;
   return f;
 }
+static void r134_system_64k_cases(void) {
+  ADMISSION_CONTEXT a={0}; ADMISSION_G3_STATE state={0}; REPLAY_BROKER b={0};
+  APPLE_AGX_GPUVA_V5_IO io={&b,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier};
+  DXGK_PTE pte={0}, four[4]={0}, zero={0};
+  assert(ADMISSION_GPUVA_G1B_PAGE_PROFILE==16);
+  assert(posix_memalign((void **)&local_cpu,0x4000,(size_t)local_bytes)==0);
+  memset(local_cpu,0,(size_t)local_bytes);
+  ReplayBrokerInit(&b); InitializeListHead(&state.Processes);
+  assert(AppleAgxGpuvaV5ClientInit(&state.Client,&io));
+  { AGX_GPUVA_V5_REQUEST r={0}; AGX_GPUVA_V5_RESPONSE reply={0};
+    r.Command=AGX_GPUVA_V5_CREATE;
+    assert(AppleAgxGpuvaV5ClientCall(&state.Client,&r,&reply)); }
+  a.Started=TRUE;a.GpuvaG3State=&state;state.Adapter=&a;
+  ADMISSION_G3_PROCESS *p=sys_process(&a,0x10000,0);
+  void *leaf=local_cpu+0x18000;
+  pte.Flags=1; pte.PageAddress=system_ipa>>12;
+  expect_ok("R134 system 64K",sys_update(&a,p,leaf,0,1,1,&pte,1,0));
+  for(UINT i=0;i<4;++i) {
+    ULONGLONG va=0x10000ULL+(ULONGLONG)i*0x4000ULL;
+    assert(AppleAgxGpuvaG3GraphContainsRangeAccess(&p->Graph,va,0x4000,true));
+    assert(sys_frame(&state,system_ipa+(ULONGLONG)i*0x4000ULL));
+  }
+  /* A malformed backing base stays logical but never becomes a GPU leaf. */
+  pte.PageAddress=(system_ipa+0x1000ULL)>>12;
+  expect_ok("R134 misaligned system base",sys_update(&a,p,leaf,0,1,1,&pte,1,0));
+  assert(!AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0x10000,0x10000));
+  pte.PageAddress=system_ipa>>12;
+  b.bad_subpage=system_ipa+0x4000ULL;
+  expect_ok("R134 protected system frame",sys_update(&a,p,leaf,0,1,1,&pte,1,0));
+  assert(!AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0x14000,0x4000));
+  b.bad_subpage=0;
+  for(UINT i=0;i<4;++i) {four[i].Flags=1;four[i].PageAddress=(system_ipa>>12)+i;}
+  four[2].ReadOnly=1;
+  expect_ok("R134 mixed 4K rights",sys_update(&a,p,leaf,0,16,4,four,0,0));
+  assert(!AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0x10000,0x4000));
+  four[2].ReadOnly=0;
+  expect_ok("R134 4K after 64K",sys_update(&a,p,leaf,0,16,4,four,0,0));
+  assert(AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0x10000,0x4000));
+  expect_ok("R134 64K after 4K",sys_update(&a,p,leaf,0,1,1,&pte,1,0));
+  assert(AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0x10000,0x10000));
+  expect_ok("R134 unmap",sys_update(&a,p,leaf,0,1,1,&zero,1,0));
+  assert(!AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0x10000,0x10000));
+  expect_ok("R134 destroy",AdmissionDdiDestroyProcess(&a,p));
+  free(local_cpu);local_cpu=NULL;
+  puts("R134 system 64K outer DDI: PASS");
+}
 static void system_lifetime_cases(void) {
   ADMISSION_CONTEXT a={0}; ADMISSION_G3_STATE state={0}; REPLAY_BROKER b={0};
   APPLE_AGX_GPUVA_V5_IO io={&b,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier};

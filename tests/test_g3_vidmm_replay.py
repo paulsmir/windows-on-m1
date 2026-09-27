@@ -11,6 +11,13 @@ REPLAY = ROOT / "tests/g3_vidmm_replay.py"
 
 
 class G3VidMmReplayTests(unittest.TestCase):
+    def test_r134_system_64k_outer_ddi_with_real_broker(self):
+        env = dict(os.environ, G3_REPLAY_R134="1")
+        result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
+                                env=env, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("R134 system 64K outer DDI: PASS", result.stdout)
+
     def test_exp852_protected_system_group_stays_unpublished(self):
         env = dict(os.environ, G3_REPLAY_R133="1")
         result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,

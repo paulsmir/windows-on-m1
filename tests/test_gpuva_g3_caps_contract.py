@@ -63,7 +63,7 @@ int main(void) {
     if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 17;
     model = AppleAgxGpuvaG3AdmissionContract(1u, 64u);
     model.LocalUse64KBPages = 0u;
-    if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 18;
+    if (!AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 18;
     model = AppleAgxGpuvaG3AdmissionContract(1u, 64u);
     model.Leaf64KBytes = 0u;
     if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 19;
@@ -72,13 +72,23 @@ int main(void) {
     if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 24;
     model = AppleAgxGpuvaG3AdmissionContract(1u, 16u);
     if (!AppleAgxGpuvaG3AdmissionContractValid(&model, 16u) ||
-        model.LocalUse64KBPages != 0u || model.Leaf64KBytes != 0u)
+        model.LocalUse64KBPages != 0u ||
+        model.SysMem64KBPageSupported != 1u ||
+        model.Leaf64KBytes != 0x4000u)
       return 25;
-    model.Leaf64KBytes = 0x4000u;
+    model.Leaf64KBytes = 0u;
     if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 26;
     model = AppleAgxGpuvaG3AdmissionContract(1u, 16u);
     model.LocalUse64KBPages = 1u;
-    if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 27;
+    if (!AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 27;
+    model = AppleAgxGpuvaG3AdmissionContract(1u, 16u);
+    model.SysMem64KBPageSupported = 0u;
+    model.Leaf64KBytes = 0u;
+    if (!AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 28;
+    model.Leaf64KBytes = 0x4000u;
+    if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 29;
+    model.SysMem64KBPageSupported = 2u;
+    if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 30;
     model = AppleAgxGpuvaG3AdmissionContract(1u, 64u);
     model.MmuSizeBytes = 0x10000u;
     if (AppleAgxGpuvaG3AdmissionContractValid(&model, 16u)) return 20;

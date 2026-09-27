@@ -132,6 +132,9 @@ def main(revision=None, function_revisions=None, old_context_flags=False):
                    "-o", str(binary)]
         if os.environ.get("G3_REPLAY_R132") or os.environ.get("G3_REPLAY_R133"):
             command[1:1] = ["-fsanitize=address,undefined"]
+        if os.environ.get("G3_REPLAY_R134"):
+            command[1:1] = ["-DADMISSION_GPUVA_G1B_PAGE_PROFILE=16",
+                            "-fsanitize=address,undefined"]
         if old_context_flags:
             command.insert(1, "-DADMISSION_CONTEXT_VALID_FLAGS=3")
         if revision is None and "AdmissionDdiCreateContext" not in (function_revisions or {}):
