@@ -1,6 +1,6 @@
 # GPU current boundary — 2026-09-27
 
-## 2026-09-27 EXP855D — R140 crossed EscapeCb; Code0 recovery pending
+## 2026-09-27 EXP855D — R140 crossed EscapeCb; ordinary Code28 recovered
 
 GO_EXP855D preceded transfer and one cold R110 full-owner boot. Package source
 `1b649b44` passed 534 hashes, native archive/Resource.cpp provenance, ARM64
@@ -17,21 +17,21 @@ Windows.UI.Xaml.dll. Evidence: `.local/experiments/EXP855D-r140-escape-identity/
 Preflight again failed only USB>=6 with USB5; SSH, CPU8/disks2 and RDP lived.
 Physical display, input and scanout pixels were not measured.
 
-**Recovery is incomplete.** Evidence was saved, AutoLogger and the two WER
-LocalDumps keys were removed, and ordered Windows `/r` wrote a durable receipt.
-System Event1074 confirms restart initiation, but after more than four minutes
-Windows remained reachable in the same Code0 boot with the full-owner launcher.
-`/r /f /t 0` and `/a` both returned 1115, shutdown in progress. No live driver
-removal, GPU-hidden launch or ordinary Code28 recovery occurred. Exact oem5 is
-still installed; arm0. User directed a stop if physical action is needed.
-After Air is returned to Running proxy, check both control planes, boot immutable
-GPU-hidden EXP377/385, clean exact package with ExpectedProblemCode45, then boot
-immutable ordinary EXP377/392 and prove durable Code28. Do not boot ordinary
-with the package or remove the live Code0 device.
+Evidence was saved and AutoLogger and both WER LocalDumps keys removed before
+ordered Windows `/r`. System Event1074 confirmed restart initiation; Windows
+remained reachable in the same Code0 boot for over four minutes, and `/r /f`
+and `/a` returned 1115. The original shutdown then completed without physical
+action. Immutable GPU-hidden EXP377/385 booted with APPL0002 non-present Code45;
+exact oem5 cleanup used ExpectedProblemCode45, then an ordered restart entered
+immutable ordinary EXP377/392. Durable Preflight passed at boot22:27:12Z; one
+present APPL0002 is Code28, staged0, arm0, SYS/UMD/service/signer absent,
+AutoLogger and WER keys absent, CPU8/disks2/USB5, RDP Running. No live Code0
+driver removal occurred. Final 120-file artifact manifest SHA256
+`d48ee0fb8ab700fc01dd4f083a31e6c349aed3cc098b671ea631ef52a10c6bfc`.
 
 WHY CONTINUE COMPARISON: use the saved UMD dump and G4 branch9 receipt to locate
-the new user-mode AV and parse rejection after recovery. No historical pass or
-new hardware variable is justified while the package remains installed.
+the new user-mode AV and parse rejection offline. No historical pass or new
+hardware variable is justified by the current evidence.
 
 
 ## 2026-09-27 R140 — EXP855C EscapeCb AV attributed and corrected offline
