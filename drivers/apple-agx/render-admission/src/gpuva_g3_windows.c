@@ -71,6 +71,11 @@ C_ASSERT(FIELD_OFFSET(ADMISSION_BACKEND_IMAGE, G4Command) ==
 
 static int AdmissionG4GraphAccess(void *opaque, unsigned long long va,
                                   unsigned int bytes, int write);
+static int AdmissionG4GraphAccessTyped(void *opaque, unsigned long long va,
+    unsigned int bytes, int write, APPLE_AGX_G4_ACCESS_KIND kind,
+    unsigned int ordinal);
+static int AdmissionG4LogicalEnvelopeAccess(ADMISSION_G3_PROCESS *process,
+    unsigned long long va, unsigned int bytes);
 
 static void *AdmissionG3AllocateNode(void *opaque, unsigned long long bytes) {
   UNREFERENCED_PARAMETER(opaque);
@@ -558,21 +563,27 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
     if (image->BoundFence != fence ||
         image->G4CommandBytes == 0u ||
         image->G4CommandBytes > APPLE_AGX_G4_NATIVE_MAX_BYTES ||
-        AppleAgxG4ParseSubmit(&image->G4Header,
+        AppleAgxG4ParseSubmitEx(&image->G4Header,
             (unsigned int)sizeof(image->G4Header) + image->G4CommandBytes,
             (unsigned int)sizeof(image->G4Header) + image->G4CommandBytes,
             image->G4Header.Base.CommandVa, image->G4CommandBytes,
-            AdmissionG4GraphAccess, &process->Graph,
-            &g4_view) != AppleAgxG4ParseOk)
+            AdmissionG4GraphAccessTyped, process,
+            &g4_view, NULL) != AppleAgxG4ParseOk ||
+        image->G4Header.Base.CommandVa != context->GpuvaG3DmaBufferVa ||
+        image->G4CommandBytes != context->GpuvaG3DmaBufferBytes)
       g4_valid = FALSE;
   }
   if (state->ActiveProcess == NULL && !process->Poisoned &&
       g4_valid &&
       !context->GpuvaG3Poisoned && context->GpuvaG3RootIpa != 0ULL &&
       context->GpuvaG3RootIpa == process->Graph.RootIpa &&
-      AppleAgxGpuvaG3GraphContainsRange(&process->Graph,
-          context->GpuvaG3DmaBufferVa,
-          context->GpuvaG3DmaBufferBytes) &&
+      (adapter->BackendImage.G4Native ?
+          AdmissionG4LogicalEnvelopeAccess(process,
+              context->GpuvaG3DmaBufferVa,
+              context->GpuvaG3DmaBufferBytes) :
+          AppleAgxGpuvaG3GraphContainsRange(&process->Graph,
+              context->GpuvaG3DmaBufferVa,
+              context->GpuvaG3DmaBufferBytes)) &&
       AdmissionG3OutputMatchesLocal(adapter, &process->Graph) &&
       AppleAgxGpuvaG3GraphBeginJob(&process->Graph, 1u)) {
     state->ActiveProcess = process;
@@ -683,9 +694,49 @@ static int AdmissionG4GraphAccess(void *opaque, unsigned long long va,
 static int AdmissionG4GraphAccessTyped(void *opaque, unsigned long long va,
     unsigned int bytes, int write, APPLE_AGX_G4_ACCESS_KIND kind,
     unsigned int ordinal) {
-  UNREFERENCED_PARAMETER(kind);
+  ADMISSION_G3_PROCESS *process = (ADMISSION_G3_PROCESS *)opaque;
   UNREFERENCED_PARAMETER(ordinal);
-  return AdmissionG4GraphAccess(opaque, va, bytes, write);
+  if (process == NULL) return 0;
+  if (kind == AppleAgxG4AccessCpuEnvelope)
+    return !write && AdmissionG4LogicalEnvelopeAccess(process, va, bytes);
+  return AdmissionG4GraphAccess(&process->Graph, va, bytes, write);
+}
+
+static int AdmissionG4LogicalEnvelopeAccess(ADMISSION_G3_PROCESS *process,
+    unsigned long long va, unsigned int bytes) {
+  unsigned long long end, page;
+  APPLE_AGX_GPUVA_G3_NODE *edge;
+  ADMISSION_G3_TABLE_SHADOW *shadow;
+  const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte;
+  if (process == NULL || !process->Graph.Created ||
+      process->Graph.Uncertain || process->Graph.RootIpa == 0ULL ||
+      !bytes || va < 0x10000ULL || va >= (1ULL << 39) ||
+      bytes > (1ULL << 39) - va) return 0;
+  end = va + bytes;
+  for (page = va & ~0xfffULL; page < end; page += 0x1000ULL) {
+    for (edge = process->Graph.Parents; edge != NULL; edge = edge->Next)
+      if (edge->Ipa == process->Graph.RootIpa &&
+          edge->Index == (ULONG)((page >> 36) & 7u)) break;
+    if (edge == NULL) return 0;
+    {
+      unsigned long long middle = edge->AuxIpa;
+      for (edge = process->Graph.Parents; edge != NULL; edge = edge->Next)
+        if (edge->Ipa == middle &&
+            edge->Index == (ULONG)((page >> 25) & 2047u)) break;
+    }
+    if (edge == NULL) return 0;
+    for (shadow = process->TableShadows; shadow != NULL;
+         shadow = shadow->Next)
+      if (shadow->BrokerIpa == edge->AuxIpa) break;
+    if (shadow == NULL || shadow->LogicalPtes == NULL) return 0;
+    pte = &shadow->LogicalPtes[(ULONG)((page >> 12) & 8191u)];
+    if ((pte->Flags & APPLE_AGX_GPUVA_G3_VALID) == 0u ||
+        (pte->Flags & ~(APPLE_AGX_GPUVA_G3_VALID |
+                        APPLE_AGX_GPUVA_G3_WRITE)) != 0u ||
+        pte->GuestIpa == 0ULL ||
+        pte->SegmentId > ADMISSION_MEMORY_LOCAL_SEGMENT) return 0;
+  }
+  return 1;
 }
 
 static void AdmissionG4SnapshotFailure(
@@ -809,7 +860,7 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   result = AppleAgxG4ParseSubmitEx(
       args->pDmaBufferPrivateData, args->DmaBufferPrivateDataSize,
       args->DmaBufferUmdPrivateDataSize, args->DmaBufferVirtualAddress,
-      args->DmaBufferSize, AdmissionG4GraphAccessTyped, &process->Graph,
+      args->DmaBufferSize, AdmissionG4GraphAccessTyped, process,
       &view, &failure);
   if (result == AppleAgxG4ParseOk && view.AttachmentCount == 1u) {
     RtlCopyMemory(&color, view.Attachments, sizeof(color));

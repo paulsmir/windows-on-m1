@@ -29,10 +29,14 @@ typedef struct { unsigned Value; } REPLAY_FLAGS;
 #define STATUS_INVALID_PARAMETER ((NTSTATUS)0xC000000D)
 #define STATUS_INVALID_ADDRESS ((NTSTATUS)0xC0000141)
 #define STATUS_INVALID_DEVICE_STATE ((NTSTATUS)0xC0000184)
+#define STATUS_DEVICE_HARDWARE_ERROR ((NTSTATUS)0xC0000185)
 #define STATUS_NOT_SUPPORTED ((NTSTATUS)0xC00000BB)
 #define ADMISSION_CONTEXT_VIRTUAL_ADDRESSING 4u
 #define ADMISSION_CONTEXT_SYSTEM 1u
 #define ADMISSION_CONTEXT_GDI 2u
+#define APPLE_AGX_GPUVA_G3_VALID 1u
+#define APPLE_AGX_GPUVA_G3_WRITE 2u
+#define ADMISSION_MEMORY_LOCAL_SEGMENT 2u
 
 typedef struct _APPLE_AGX_GPUVA_G3_NODE {
   struct _APPLE_AGX_GPUVA_G3_NODE *Next;
@@ -50,11 +54,13 @@ typedef struct {
   ULONGLONG RootIpa;
   ULONGLONG ProcessId, ProcessGeneration, NextGeneration;
   APPLE_AGX_GPUVA_G3_NODE *Parents;
-  unsigned Uncertain;
+  unsigned Created, Uncertain;
   unsigned AllowProcessRanges;
 } APPLE_AGX_GPUVA_G3_GRAPH;
 typedef struct _ADMISSION_G3_STATE {
   int Lock;
+  struct _ADMISSION_G3_PROCESS *ActiveProcess;
+  unsigned ActiveFence;
 } ADMISSION_G3_STATE;
 typedef struct _ADMISSION_G3_PROCESS {
   ADMISSION_G3_STATE *State;
@@ -84,7 +90,8 @@ enum { AdmissionRenderPacketEmpty, AdmissionRenderPacketPrepared,
        AdmissionRenderPacketQueued };
 typedef struct {
   APPLE_AGX_G4_PRIVATE_HEADER_V2 G4Header;
-  unsigned G4Native, BoundFence;
+  unsigned char G4Command[APPLE_AGX_G4_NATIVE_MAX_BYTES];
+  unsigned G4CommandBytes, G4Native, BoundFence;
 } ADMISSION_BACKEND_IMAGE;
 typedef struct { unsigned DestinationBytes; } APPLE_AGX_EXP208_GDI_BINDING;
 typedef struct {
@@ -161,6 +168,7 @@ static NTSTATUS AdmissionDdiSubmitRender(ADMISSION_CONTEXT *a,
 }
 
 static int replay_irql, dispatches, bind_ok=1;
+static int graph_begin_calls;
 static int output_mapped=1;
 static NTSTATUS scanout_status = STATUS_SUCCESS;
 static int receipt_queues;
@@ -236,10 +244,25 @@ static int AdmissionBackendImageBindG4Submission(ADMISSION_BACKEND_IMAGE *image,
     const ADMISSION_RENDER_PACKET_DESCRIPTION *packet, void *cpu,
     const APPLE_AGX_G4_SUBMIT_VIEW *view,
     APPLE_AGX_EXP208_GDI_BINDING *binding) {
-  (void)cpu;(void)view;(void)binding;
+  (void)cpu;(void)binding;
   if(!bind_ok)return 0;
+  memcpy(&image->G4Header, view->Native - sizeof(image->G4Header),
+         sizeof(image->G4Header));
+  memcpy(image->G4Command, view->Native, view->CommandBytes);
+  image->G4CommandBytes=view->CommandBytes;
   image->G4Native=1;image->BoundFence=packet->Fence;return 1;
 }
+static int AppleAgxGpuvaG3GraphContainsRangeAccess(
+    APPLE_AGX_GPUVA_G3_GRAPH *graph, ULONGLONG va, unsigned bytes,
+    int write);
+static int AppleAgxGpuvaG3GraphContainsRange(
+    APPLE_AGX_GPUVA_G3_GRAPH *graph, ULONGLONG va, unsigned bytes) {
+  return AppleAgxGpuvaG3GraphContainsRangeAccess(graph, va, bytes, 0);
+}
+static int AdmissionG3OutputMatchesLocal(ADMISSION_CONTEXT *adapter,
+    APPLE_AGX_GPUVA_G3_GRAPH *graph) { (void)adapter;(void)graph;return 1; }
+static int AppleAgxGpuvaG3GraphBeginJob(APPLE_AGX_GPUVA_G3_GRAPH *graph,
+    unsigned slot) { (void)graph;(void)slot;++graph_begin_calls;return 1; }
 static int AdmissionBackendImageReleaseSubmission(
     ADMISSION_BACKEND_IMAGE *image, unsigned fence) {
   (void)fence;image->G4Native=0;return 1;
@@ -285,6 +308,7 @@ int main(void) {
   unsigned required[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
   process.State = &state;
   process.Graph.RootIpa = 0x9bf000000ULL;
+  process.Graph.Created = 1u;
   process.Graph.ProcessId = 17u;
   process.Graph.ProcessGeneration = 23u;
   process.Graph.NextGeneration = 31u;
@@ -302,6 +326,10 @@ int main(void) {
     logical[0x100u + i].SegmentId = 0u;
     logical[0x100u + i].Flags = 3u;
   }
+  logical[0x20u].GuestIpa = 0x81000000ULL;
+  logical[0x20u].Flags = 1u;
+  logical[0x21u].GuestIpa = 0x91003000ULL;
+  logical[0x21u].Flags = 1u;
   process.Graph.AllowProcessRanges = 1;
   adapter.GpuvaG3State = &state;
   adapter.RuntimeReady=1;
@@ -457,6 +485,59 @@ int main(void) {
   assert(adapter.G4SubmitFailure.DownstreamStatus ==
          (unsigned)STATUS_INVALID_DEVICE_STATE);
   assert(state.Lock == 0);
+  scanout_status = STATUS_SUCCESS;
+  adapter.G4SubmitFailureClaim = 0;
+  adapter.RenderPacket.State = AdmissionRenderPacketEmpty;
+  context.Object.FenceOutstanding = 0u;
+  adapter.BackendImage.G4Native = 0u;
+  packet.Header.Base.CommandVa = 0x20f80ULL;
+  args.DmaBufferVirtualAddress = 0x20f80ULL;
+  args.SubmissionFenceId = 13u;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) == STATUS_SUCCESS);
+  assert(context.GpuvaG3DmaBufferVa == 0x20f80ULL);
+  assert(AdmissionGpuvaG3BeginJob(&adapter, &context, 13u) == STATUS_SUCCESS);
+  assert(graph_begin_calls == 1);
+  state.ActiveProcess = NULL;
+  logical[0x21u].Flags = 0u;
+  assert(AdmissionGpuvaG3BeginJob(&adapter, &context, 13u) != STATUS_SUCCESS);
+  assert(graph_begin_calls == 1);
+  logical[0x21u].Flags = 1u;
+  context.GpuvaG3DmaBufferVa++;
+  assert(AdmissionGpuvaG3BeginJob(&adapter, &context, 13u) != STATUS_SUCCESS);
+  assert(graph_begin_calls == 1);
+  context.GpuvaG3DmaBufferVa--;
+  adapter.RenderPacket.State = AdmissionRenderPacketEmpty;
+  context.Object.FenceOutstanding = 0u;
+  adapter.BackendImage.G4Native = 0u;
+  logical[0x21u].Flags = 0u;
+  args.SubmissionFenceId = 14u;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  assert(adapter.G4SubmitFailureClaim == 2);
+  logical[0x21u].Flags = 1u;
+  context.GpuvaG3RootIpa++;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  context.GpuvaG3RootIpa--;
+  args.DmaBufferSize--;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  args.DmaBufferSize++;
+  packet.Header.Base.CommandBytes--;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  packet.Header.Base.CommandBytes++;
+  packet.Render.VdmCtrlStreamBase = args.DmaBufferVirtualAddress;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  packet.Render.VdmCtrlStreamBase = 0x30000ULL;
+  packet.Attachment.Pointer = args.DmaBufferVirtualAddress;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  packet.Attachment.Pointer = 0x40000000ULL;
+  packet.Render.Bg.Usc = 0x20040u;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
   puts("g4_submit_virtual_replay: PASS");
   return 0;
 }

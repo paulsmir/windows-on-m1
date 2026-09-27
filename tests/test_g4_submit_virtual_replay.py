@@ -11,9 +11,13 @@ SOURCE = ROOT / "drivers/apple-agx/render-admission/src/gpuva_g3_windows.c"
 
 
 def function_body(source, name):
-    match = re.search(r"\b" + name + r"\s*\([^;]*?\)\s*\{", source, re.S)
-    if match is None:
+    matches = list(re.finditer(
+        r"(?m)^(?:_Use_decl_annotations_\s+)?(?:static\s+)?"
+        r"(?:NTSTATUS|BOOLEAN|int|void)\s+" + name +
+        r"\s*\([^;]*?\)\s*\{", source, re.S))
+    if not matches:
         raise AssertionError(f"missing production function {name}")
+    match = matches[-1]
     depth = 1
     pos = match.end()
     while depth:
@@ -32,9 +36,11 @@ class G4SubmitVirtualReplay(unittest.TestCase):
         branches = "enum {" + branches.split("enum {", 1)[1].split("};", 1)[0] + "};"
         functions = branches + "\n" + "\n".join(function_body(production, name) for name in (
             "AdmissionG4SubmitReject",
-            "AdmissionG4GraphAccess", "AdmissionG4GraphAccessTyped",
+            "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
+            "AdmissionG4GraphAccessTyped",
             "AdmissionG4SnapshotFailure", "AdmissionG4ResolveOutput",
             "AdmissionG4SubmitVirtualEnvelope",
+            "AdmissionGpuvaG3BeginJob",
             "AdmissionDdiSubmitCommandVirtual"))
         functions = function_body(production, "AdmissionG4SubmitRejectDetail") + "\n" + functions
         with tempfile.TemporaryDirectory(prefix="g4-submit-virtual-") as tmp:
