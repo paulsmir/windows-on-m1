@@ -368,10 +368,21 @@ static NTSTATUS AdmissionG3UpdateLeaf(
         (segment != ADMISSION_MEMORY_LOCAL_SEGMENT ||
          !AppleAgxGpuvaG3TableSpanWithinLocal(view.GuestIpaAddress, view.Bytes,
                                               ipa, 0x4000ULL))) complete = FALSE;
-    if (!AppleAgxGpuvaG3GraphUpdateLeafBacking(&process->Graph, table_ipa,
-            first_group + i, complete ? ipa : 0ULL,
-            complete && (flags & APPLE_AGX_GPUVA_G3_WRITE),
-            segment == 0u ? AppleAgxGpuvaG3SystemBacking : AppleAgxGpuvaG3LocalBacking)) {
+    bool unavailable = false;
+    BOOLEAN updated = AppleAgxGpuvaG3GraphTryLeafBacking(&process->Graph, table_ipa,
+        first_group + i, complete ? ipa : 0ULL,
+        complete && (flags & APPLE_AGX_GPUVA_G3_WRITE),
+        segment == 0u ? AppleAgxGpuvaG3SystemBacking : AppleAgxGpuvaG3LocalBacking,
+        &unavailable);
+    if (!updated && unavailable) {
+      /* VidMm's logical mapping may be CPU-only under the retained broker
+       * contract. Retire any previous GPU leaf before acknowledging it. */
+      complete = FALSE;
+      updated = AppleAgxGpuvaG3GraphUpdateLeafBacking(&process->Graph, table_ipa,
+          first_group + i, 0ULL, false, AppleAgxGpuvaG3SystemBacking);
+    }
+    if (!updated) {
+      UINT rejected_broker_status = process->Graph.LastStatus;
       UINT input = (first_group + i) * 4u < first ? 0u :
           ((first_group + i) * 4u - first) / scale;
       status = AdmissionG3RejectPaging(failure, AdmissionG3PagingFailureLeafGraph,
@@ -389,6 +400,8 @@ static NTSTATUS AdmissionG3UpdateLeaf(
                                                    AppleAgxGpuvaG3LocalBacking))
           process->Graph.Uncertain = 1u;
       }
+      /* Successful rollback calls must not erase the original refusal. */
+      process->Graph.LastStatus = rejected_broker_status;
       if (process->Graph.Uncertain) {
         /* Only the updated range acquired new references. */
         RtlZeroMemory(candidate, first * sizeof(*candidate));

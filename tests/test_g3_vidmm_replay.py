@@ -11,6 +11,13 @@ REPLAY = ROOT / "tests/g3_vidmm_replay.py"
 
 
 class G3VidMmReplayTests(unittest.TestCase):
+    def test_exp852_protected_system_group_stays_unpublished(self):
+        env = dict(os.environ, G3_REPLAY_R133="1")
+        result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
+                                env=env, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("R133 protected publication: PASS", result.stdout)
+
     def test_r132_system_frame_lifetime_and_broker(self):
         for fault in ("G3_REPLAY_R132", "G3_REPLAY_R132_SYNC_ONCE", "G3_REPLAY_R132_TLB"):
             with self.subTest(fault=fault):

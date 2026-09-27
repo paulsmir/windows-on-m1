@@ -333,10 +333,19 @@ bool AppleAgxGpuvaG3GraphUpdateLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     unsigned long long table_ipa, unsigned int index,
     unsigned long long guest_ipa, bool writable,
     APPLE_AGX_GPUVA_G3_BACKING_KIND kind) {
+  return AppleAgxGpuvaG3GraphTryLeafBacking(graph, table_ipa, index,
+      guest_ipa, writable, kind, 0);
+}
+
+bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
+    unsigned long long table_ipa, unsigned int index,
+    unsigned long long guest_ipa, bool writable,
+    APPLE_AGX_GPUVA_G3_BACKING_KIND kind, bool *unavailable) {
   AGX_GPUVA_V5_REQUEST request = {0};
   APPLE_AGX_GPUVA_G3_NODE *leaf, *new_leaf = 0, *backing = 0;
   APPLE_AGX_GPUVA_G3_NODE *old_backing = 0;
   bool new_backing = false;
+  if (unavailable) *unavailable = false;
   if (!graph || !graph->Created || graph->Uncertain || graph->JobInFlight ||
       graph->MappingGeneration == ~0ULL ||
       (kind != AppleAgxGpuvaG3LocalBacking && kind != AppleAgxGpuvaG3SystemBacking) ||
@@ -386,6 +395,13 @@ bool AppleAgxGpuvaG3GraphUpdateLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
       grant.AuxIpa = guest_ipa;
       grant.AllocationGeneration = backing->Generation;
       if (!call(graph, &grant)) {
+        /* v5 OWNERSHIP=4 / CAPACITY=7 are acknowledged registration
+         * refusals, with no grant or leaf store. Do not infer this from a
+         * stale LastStatus at any other failure site. */
+        if (unavailable && kind == AppleAgxGpuvaG3SystemBacking &&
+            !graph->Uncertain &&
+            (graph->LastStatus == 4u || graph->LastStatus == 7u))
+          *unavailable = true;
         graph->Free(graph->MemoryContext, backing);
         if (new_leaf) graph->Free(graph->MemoryContext, new_leaf);
         return false;
@@ -411,6 +427,7 @@ bool AppleAgxGpuvaG3GraphUpdateLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
       request.LogicalIpa[i] = guest_ipa + i * 0x1000ULL;
   }
   if (!call(graph, &request)) {
+    unsigned int rejected_status = graph->LastStatus;
     if (new_backing) {
       AGX_GPUVA_V5_REQUEST revoke = {0};
       revoke.Command = AGX_GPUVA_V5_REVOKE_BACKING;
@@ -419,6 +436,7 @@ bool AppleAgxGpuvaG3GraphUpdateLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
       if (graph->Uncertain || !call(graph, &revoke)) graph->Uncertain = 1u;
       else release_grant(graph, backing);
     }
+    graph->LastStatus = rejected_status;
     if (new_leaf) graph->Free(graph->MemoryContext, new_leaf);
     return false;
   }

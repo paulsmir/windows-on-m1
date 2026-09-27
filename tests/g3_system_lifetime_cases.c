@@ -145,6 +145,8 @@ static void system_lifetime_cases(void) {
   assert(ReplayTranslate(&b,system_ipa)==system_ipa+0x10000000ULL);
   for(UINT sub=0;sub<4;++sub) {
     b.bad_subpage=system_ipa+sub*0x1000ULL;
+    /* This frame already has a grant: changed stage-2 translation during
+     * its lifetime is a genuine inconsistency, not an optional grant refusal. */
     assert(!NT_SUCCESS(sys_update(&a,p,leaf,0,32,4,pte,0,0)));
     assert(!AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0x20000,1));
     b.bad_subpage=0;
@@ -164,7 +166,11 @@ static void system_lifetime_cases(void) {
   /* A table cannot be registered as backing; this reaches real ownership checks. */
   DXGK_PTE conflict[4]={0};
   for(UINT i=0;i<4;++i){conflict[i].Flags=1;conflict[i].PageAddress=(s->BrokerIpa>>12)+i;}
-  assert(!NT_SUCCESS(sys_update(&a,p,leaf,0,32,4,conflict,0,0)));
+  expect_ok("R133 table backing stays unpublished",sys_update(&a,p,leaf,0,32,4,conflict,0,0));
+  assert(sys_frame(&state,s->BrokerIpa)->Mappings==4);
+  assert(!sys_frame(&state,s->BrokerIpa)->Grants);
+  assert(!AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0x20000,1));
+  expect_ok("R133 ungrantable retirement",sys_update(&a,p,leaf,0,32,4,&zero,0,1));
   assert(!sys_frame(&state,s->BrokerIpa));
   /* Moving a child link within one parent update keeps its live backing. */
   DXGK_PTE moved[2]={0};moved[1].Flags=0x41;moved[1].PageAddress=0x18;
@@ -272,18 +278,26 @@ static void system_lifetime_cases(void) {
   expect_ok("R132 allocation retry new level",sys_update(&a,p,leaf,1,0,1,&zero,0,0));
   assert(!state.Registry.Frames);
   expect_ok("R132 allocation retry cleanup",AdmissionDdiDestroyProcess(&a,p));
-  /* Capacity failure after the first leaf is published rolls the batch back. */
+  /* Capacity refusal preserves preceding leaves and logical-only residency. */
   p=sys_process(&a,0x40000,0);leaf=local_cpu+0x48000;
   q=sys_process(&a,0x50000,1);
   for(UINT i=0;i<HV_AGX_GPUVA_V5_BACKINGS-1;++i)
     assert(hv_agx_gpuva_v5_register_shared_backing(&gpuva_v5,q->Graph.ProcessId,
         q->Graph.ProcessGeneration,777,system_ipa+0x100000+i*0x4000ULL)==HV_AGX_GPUVA_V5_OK);
-  assert(!NT_SUCCESS(sys_update(&a,p,leaf,0,4,8,pte,0,0)));
-  assert(!p->Graph.Leaves && !p->Graph.Backings && !state.Registry.Frames);
+  expect_ok("R133 capacity stays unpublished",sys_update(&a,p,leaf,0,4,8,pte,0,0));
+  assert(AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0x4000,0x4000));
+  assert(!AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0x8000,1));
+  assert(sys_frame(&state,system_ipa)->Grants==1);
+  assert(sys_frame(&state,system_ipa+0x4000)->Mappings==4);
+  assert(sys_frame(&state,system_ipa+0x4000)->Grants==0);
   assert(!p->Graph.Uncertain);
   for(UINT i=0;i<HV_AGX_GPUVA_V5_BACKINGS-1;++i)
     assert(hv_agx_gpuva_v5_revoke_backing(&gpuva_v5,q->Graph.ProcessId,
         q->Graph.ProcessGeneration,777,system_ipa+0x100000+i*0x4000ULL)==HV_AGX_GPUVA_V5_OK);
+  expect_ok("R133 capacity retry",sys_update(&a,p,leaf,0,8,4,pte+4,0,0));
+  assert(AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0x8000,0x4000));
+  expect_ok("R133 capacity retirement",sys_update(&a,p,leaf,0,4,8,&zero,0,1));
+  assert(!state.Registry.Frames);
   expect_ok("R132 capacity q cleanup",AdmissionDdiDestroyProcess(&a,q));
   /* Wire epoch/process/backing generations and shared/exclusive collisions. */
   expect_ok("R132 post-capacity map",sys_update(&a,p,leaf,0,4,4,pte,0,0));

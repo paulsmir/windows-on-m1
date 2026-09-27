@@ -130,7 +130,7 @@ def main(revision=None, function_revisions=None, old_context_flags=False):
                    str(M1N1 / "hv_agx_retained_backing.c"),
                    str(M1N1 / "hv_agx_retained_tables.c"),
                    "-o", str(binary)]
-        if os.environ.get("G3_REPLAY_R132"):
+        if os.environ.get("G3_REPLAY_R132") or os.environ.get("G3_REPLAY_R133"):
             command[1:1] = ["-fsanitize=address,undefined"]
         if old_context_flags:
             command.insert(1, "-DADMISSION_CONTEXT_VALID_FLAGS=3")

@@ -64,6 +64,12 @@ bool AppleAgxGpuvaG3GraphUpdateLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long TableIpa, unsigned int Index,
     unsigned long long GuestIpa, bool Writable,
     APPLE_AGX_GPUVA_G3_BACKING_KIND Kind);
+/* Unavailable is set only for an acknowledged system grant refusal before
+ * any UAT mutation. Other failures, including uncertain stores, remain fatal. */
+bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *,
+    unsigned long long TableIpa, unsigned int Index,
+    unsigned long long GuestIpa, bool Writable,
+    APPLE_AGX_GPUVA_G3_BACKING_KIND Kind, bool *Unavailable);
 bool AppleAgxGpuvaG3MappingAcquire(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long GuestIpa);
 void AppleAgxGpuvaG3MappingRelease(APPLE_AGX_GPUVA_G3_GRAPH *,

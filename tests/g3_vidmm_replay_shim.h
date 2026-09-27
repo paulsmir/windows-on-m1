@@ -292,6 +292,7 @@ typedef uint64_t u64;
 static struct {u64 phys_base,mem_size;} cur_boot_args;
 static struct {u64 ramdisk_base,ramdisk_max_size;} J313_AUTONOMOUS_LAYOUT;
 static u64 root_base,root_length;
+static bool replay_identity_ram;
 static bool launch_memory_valid;
 static struct hv_contract_snapshot launch_memory;
 static REPLAY_BROKER *translation_broker;
@@ -299,6 +300,7 @@ static u64 hv_ipa_to_pa(u64 ipa) {
   REPLAY_BROKER *b=translation_broker;
   if ((b->blocked_ipa && (ipa & ~0x3fffULL)==b->blocked_ipa) ||
       (b->bad_subpage && (ipa & ~0xfffULL)==b->bad_subpage)) return 0;
+  if (replay_identity_ram && ipa>=0x850000000ULL && ipa<0x9df708000ULL) return ipa;
   if (ipa>=local_ipa && ipa-local_ipa<local_bytes) return ipa;
   if (ipa>=system_ipa && ipa-system_ipa<0x10000000ULL) return ipa+0x10000000ULL;
   return 0; /* MMIO/software/protected stage-2 slot */
