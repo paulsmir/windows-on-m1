@@ -348,7 +348,8 @@ bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   if (unavailable) *unavailable = false;
   if (!graph || !graph->Created || graph->Uncertain || graph->JobInFlight ||
       graph->MappingGeneration == ~0ULL ||
-      (kind != AppleAgxGpuvaG3LocalBacking && kind != AppleAgxGpuvaG3SystemBacking) ||
+      (kind != AppleAgxGpuvaG3LocalBacking && kind != AppleAgxGpuvaG3SystemBacking &&
+       kind != AppleAgxGpuvaG3PrivateBacking) ||
       !find_table(graph, table_ipa, 2u) || index >= 2048u ||
       (guest_ipa && (guest_ipa & (G3_PAGE - 1u)))) return false;
   leaf = find_edge(graph->Leaves, table_ipa, index);
@@ -386,10 +387,17 @@ bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
           return false;
         }
       }
-      backing->Generation = graph->SharedBackingGeneration ?
+      if (kind == AppleAgxGpuvaG3PrivateBacking && graph->NextGeneration == ~0ULL) {
+        graph->Free(graph->MemoryContext, backing);
+        if (new_leaf) graph->Free(graph->MemoryContext, new_leaf);
+        return false;
+      }
+      backing->Generation = kind != AppleAgxGpuvaG3PrivateBacking &&
+          graph->SharedBackingGeneration ?
           graph->SharedBackingGeneration : ++graph->NextGeneration;
       if (backing->Frame) backing->Generation = backing->Frame->Generation;
-      grant.Command = (backing->Frame || graph->SharedBackingGeneration) ?
+      grant.Command = kind != AppleAgxGpuvaG3PrivateBacking &&
+          (backing->Frame || graph->SharedBackingGeneration) ?
           AGX_GPUVA_V5_REGISTER_SHARED_BACKING :
           AGX_GPUVA_V5_REGISTER_BACKING;
       grant.AuxIpa = guest_ipa;
@@ -528,6 +536,59 @@ bool AppleAgxGpuvaG3GraphContainsRangeAccess(
     if (!leaf || !leaf->AuxIpa || (write && !leaf->Writable)) return false;
   }
   return true;
+}
+
+/* A private leaf is grafted into the actual current shadow root. VidMm may
+ * supply the middle table; only the reserved leaf slot belongs to the KMD. */
+bool AppleAgxGpuvaG3GraphAttachPrivate(APPLE_AGX_GPUVA_G3_GRAPH *g,
+    unsigned long long va, unsigned long long middle, unsigned long long leaf) {
+  APPLE_AGX_GPUVA_G3_NODE *root_edge, *leaf_edge;
+  unsigned ri=(unsigned)(va>>36), mi=(unsigned)((va>>25)&2047u);
+  bool new_leaf;
+  if (!g || !g->Created || g->Uncertain || g->JobInFlight || g->LeaseToken ||
+      va<(1ULL<<36) || va>=(1ULL<<39) || (va&0x1ffffffULL) ||
+      !find_table(g,middle,1u) || !find_table(g,leaf,2u)) return false;
+  root_edge=find_edge(g->Parents,g->RootIpa,ri);
+  if (root_edge) middle=root_edge->AuxIpa;
+  leaf_edge=find_edge(g->Parents,middle,mi);
+  if (leaf_edge && leaf_edge->AuxIpa!=leaf) return false;
+  new_leaf=leaf_edge==0;
+  if (!AppleAgxGpuvaG3GraphUpdateParent(g,middle,mi,leaf)) return false;
+  if (!root_edge && !AppleAgxGpuvaG3GraphUpdateParent(g,g->RootIpa,ri,middle)) {
+    if (new_leaf && !g->Uncertain &&
+        !AppleAgxGpuvaG3GraphUpdateParent(g,middle,mi,0)) g->Uncertain=1u;
+    return false;
+  }
+  return true;
+}
+
+/* Root parking must ignore only our own private branch, and must preserve
+ * every ordinary mapping as a real nonempty-root conflict. */
+bool AppleAgxGpuvaG3GraphCanDetachPrivateRoot(APPLE_AGX_GPUVA_G3_GRAPH *g,
+    unsigned long long va, unsigned long long root, unsigned long long leaf) {
+  APPLE_AGX_GPUVA_G3_NODE *edge, *private_edge;
+  unsigned ri=(unsigned)(va>>36), mi=(unsigned)((va>>25)&2047u);
+  if (!g || g->Uncertain || g->JobInFlight || g->LeaseToken ||
+      va<(1ULL<<36) || va>=(1ULL<<39) || (va&0x1ffffffULL)) return false;
+  private_edge=find_edge(g->Parents,root,ri);
+  if (!private_edge) {
+    for (edge=g->Parents;edge;edge=edge->Next)
+      if (edge->Ipa==root) return false;
+    return true;
+  }
+  for (edge=g->Parents;edge;edge=edge->Next)
+    if ((edge->Ipa==root && edge!=private_edge) ||
+        (edge->Ipa==private_edge->AuxIpa &&
+         (edge->Index!=mi || edge->AuxIpa!=leaf))) return false;
+  edge=find_edge(g->Parents,private_edge->AuxIpa,mi);
+  if (!edge || edge->AuxIpa!=leaf) return false;
+  return true;
+}
+
+bool AppleAgxGpuvaG3GraphDetachPrivateRoot(APPLE_AGX_GPUVA_G3_GRAPH *g,
+    unsigned long long va, unsigned long long root, unsigned long long leaf) {
+  if (!AppleAgxGpuvaG3GraphCanDetachPrivateRoot(g,va,root,leaf)) return false;
+  return AppleAgxGpuvaG3GraphUpdateParent(g,root,(unsigned)(va>>36),0);
 }
 
 bool AppleAgxGpuvaG3GraphBeginJob(APPLE_AGX_GPUVA_G3_GRAPH *graph,

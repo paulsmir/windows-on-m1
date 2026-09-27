@@ -148,17 +148,48 @@ static BOOLEAN AdmissionG3PrepareTableReuse(ADMISSION_G3_PROCESS *process,
   if (!initial_update || table_ipa == process->BootstrapIpa ||
       graph->JobInFlight || graph->LeaseToken || graph->Slot ||
       graph->Uncertain) return FALSE;
-  /* A populated root is still a real conflict. The parking root must also
-   * remain empty; never switch a process onto an unrelated mapping. */
-  for (entry = graph->Parents; entry; entry = entry->Next)
-    if (entry->Ipa == table_ipa || entry->Ipa == process->BootstrapIpa)
-      return FALSE;
   for (entry = graph->Tables; entry; entry = entry->Next)
     if (entry->Ipa == process->BootstrapIpa && entry->Level == 0u)
       bootstrap_found = TRUE;
   if (!bootstrap_found) return FALSE;
-  /* BindRoot advances MappingGeneration. Queued contexts naming the former
-   * root cannot BeginJob until the real SetRootPageTable rebinds them. */
+  if (process->PrivateLeafIpa) {
+    ULONGLONG roots[2] = { table_ipa, process->BootstrapIpa };
+    ULONGLONG middles[2] = { 0ULL, 0ULL };
+    UINT i, rejected;
+    /* Inspect BOTH roots before detaching either. Refusal must preserve the
+     * private mapping and MappingGeneration, including an ordinary parking
+     * root whose reserved edge is absent. */
+    for (i = 0u; i < 2u; ++i) {
+      if (!AppleAgxGpuvaG3GraphCanDetachPrivateRoot(graph, process->PrivateVa,
+              roots[i], process->PrivateLeafIpa)) return FALSE;
+      for (entry = graph->Parents; entry; entry = entry->Next)
+        if (entry->Ipa == roots[i] &&
+            entry->Index == (UINT)(process->PrivateVa >> 36))
+          middles[i] = entry->AuxIpa;
+    }
+    for (i = 0u; i < 2u; ++i)
+      if (!AppleAgxGpuvaG3GraphDetachPrivateRoot(graph, process->PrivateVa,
+              roots[i], process->PrivateLeafIpa)) break;
+    if (i == 2u && AppleAgxGpuvaG3GraphBindRoot(graph, process->BootstrapIpa)) {
+      if (AppleAgxGpuvaG3GraphAttachPrivate(graph, process->PrivateVa,
+              process->PrivateMiddleIpa, process->PrivateLeafIpa)) return TRUE;
+      /* The root was relocated; failure to restore private reachability is
+       * an incomplete transaction and must not permit a clean retry. */
+      graph->Uncertain = 1u;
+      return FALSE;
+    }
+    rejected = graph->LastStatus;
+    for (i = 0u; i < 2u && !graph->Uncertain; ++i)
+      if (middles[i] && !AppleAgxGpuvaG3GraphUpdateParent(graph, roots[i],
+              (UINT)(process->PrivateVa >> 36), middles[i]))
+        graph->Uncertain = 1u;
+    graph->LastStatus = rejected;
+    return FALSE;
+  }
+  for (entry = graph->Parents; entry; entry = entry->Next)
+    if (entry->Ipa == table_ipa || entry->Ipa == process->BootstrapIpa)
+      return FALSE;
+  /* BindRoot advances MappingGeneration; queued former-root jobs stay stale. */
   return AppleAgxGpuvaG3GraphBindRoot(graph, process->BootstrapIpa);
 }
 
@@ -966,6 +997,12 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
         status = AdmissionG3UpdateParent(process, table_ipa, update, adapter,
                                          &failure);
       }
+    }
+    if (NT_SUCCESS(status) && process->PrivateLeafIpa &&
+        !AppleAgxGpuvaG3GraphAttachPrivate(&process->Graph, process->PrivateVa,
+            process->PrivateMiddleIpa, process->PrivateLeafIpa)) {
+      process->Poisoned = TRUE;
+      status = STATUS_DEVICE_HARDWARE_ERROR;
     }
     if (NT_SUCCESS(status) &&
         !NT_SUCCESS(AdmissionGpuvaG3MirrorTable(

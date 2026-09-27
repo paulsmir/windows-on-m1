@@ -11,6 +11,16 @@ REPLAY = ROOT / "tests/g3_vidmm_replay.py"
 
 
 class G3VidMmReplayTests(unittest.TestCase):
+    def test_r137_private_grants_and_parent_lifecycle(self):
+        cases = [dict(G3_REPLAY_R137="1")]
+        for profile in ("16", "64"):
+            cases.append(dict(G3_REPLAY_R135="1", G3_REPLAY_PROFILE=profile))
+        for case in cases:
+            result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
+                env=dict(os.environ, G3_REPLAY_R137_PRIVATE="1", **case),
+                text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_r137_reservation_lifetime_and_failures(self):
         result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
             env=dict(os.environ, G3_REPLAY_R137="1"), text=True, capture_output=True)

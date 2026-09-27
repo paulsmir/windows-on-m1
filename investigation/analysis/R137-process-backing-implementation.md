@@ -141,3 +141,27 @@ m1n1 and Mu HEADs/diff hashes still exactly equal the pre-existing values in
 R136 section 1. No Air control plane, USB/proxy endpoint, install, hardware
 experiment or recovery action was used. No EXPERIMENTS entry or hardware
 validation is claimed for this offline source task.
+
+
+## Authorized continuation: step 4 — private graph ownership
+
+R136 section 6 supersedes the prior scope stop. The withdrawn prototype was
+restored as a reference implementation and its reviewed bootstrap-conflict
+regression failed at the private ContainsRange assertion (step4-review-red.log).
+The final implementation preflights both roots before detaching either; failed
+broker relocation restores both previous links or poisons the graph. Successful
+parking reattaches private access immediately. Existing populated-root and
+job/lease restrictions remain. Explicit PrivateBacking uses exclusive grants
+without changing SharedBackingGeneration; data/table collisions, cross-owner
+shared registration and generation exhaustion fail closed. Private access is
+restored after parent updates and SetRootPageTable, through the actual root.
+
+Verification: G3 replay 19 tests pass including profiles16/64, ordinary 4K/64K
+transitions, private reattachment, rejected-bootstrap mapping/generation
+preservation, broker-busy restoration, exclusive grants and teardown. Pinned
+WDK26100 standalone ARM64 ClCompile/link passes with zero warnings/errors;
+no INF/CAT/signing/package targets. SYS `.local/experiments/R137-offline/step4.sys`
+SHA256 `8104ee6e37c6ce6dbc661fff5d895aa2ffbb891249854fb20cb4b3020c4ccbe7`.
+Full-suite comparison is recorded in step4-full.log before the commit.
+REVIEW.md SHA256 remains 753bdfe638d6171954875a5fc9a58c09761999ffcab89b9d216f566c7e1300c5;
+section 4 R136 dispositions stand. No hardware validation is claimed.

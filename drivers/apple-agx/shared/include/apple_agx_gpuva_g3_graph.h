@@ -18,7 +18,8 @@ typedef struct _APPLE_AGX_GPUVA_G3_REGISTRY {
 } APPLE_AGX_GPUVA_G3_REGISTRY;
 typedef enum _APPLE_AGX_GPUVA_G3_BACKING_KIND {
   AppleAgxGpuvaG3LocalBacking = 0,
-  AppleAgxGpuvaG3SystemBacking = 1
+  AppleAgxGpuvaG3SystemBacking = 1,
+  AppleAgxGpuvaG3PrivateBacking = 2
 } APPLE_AGX_GPUVA_G3_BACKING_KIND;
 
 typedef struct _APPLE_AGX_GPUVA_G3_NODE {
@@ -82,6 +83,15 @@ bool AppleAgxGpuvaG3GraphContainsRangeAccess(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long StartVa, unsigned int Bytes, bool Write);
 bool AppleAgxGpuvaG3GraphTranslateVa(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long GpuVa, unsigned long long *GuestIpa);
+bool AppleAgxGpuvaG3GraphAttachPrivate(APPLE_AGX_GPUVA_G3_GRAPH *,
+    unsigned long long ReservedVa, unsigned long long MiddleIpa,
+    unsigned long long LeafIpa);
+bool AppleAgxGpuvaG3GraphCanDetachPrivateRoot(APPLE_AGX_GPUVA_G3_GRAPH *,
+    unsigned long long ReservedVa, unsigned long long RootIpa,
+    unsigned long long LeafIpa);
+bool AppleAgxGpuvaG3GraphDetachPrivateRoot(APPLE_AGX_GPUVA_G3_GRAPH *,
+    unsigned long long ReservedVa, unsigned long long RootIpa,
+    unsigned long long LeafIpa);
 bool AppleAgxGpuvaG3GraphBeginJob(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned int Slot);
 bool AppleAgxGpuvaG3GraphEndJob(APPLE_AGX_GPUVA_G3_GRAPH *);

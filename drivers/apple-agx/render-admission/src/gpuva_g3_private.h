@@ -40,6 +40,8 @@ typedef struct _ADMISSION_G3_PROCESS {
   ADMISSION_G3_TABLE_SHADOW *TableShadows;
   ULONGLONG BootstrapIpa;
   ULONGLONG PrivateVa;
+  ULONGLONG PrivateMiddleIpa, PrivateLeafIpa;
+  APPLE_AGX_G3_PRIVATE_EXTENT PrivateTables[2];
   HANDLE DxgkProcess;
   ULONG Magic, DeviceRefs, ContextRefs;
   BOOLEAN Poisoned;

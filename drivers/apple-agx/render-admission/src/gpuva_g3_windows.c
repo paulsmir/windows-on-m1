@@ -561,7 +561,10 @@ _Use_decl_annotations_ VOID AdmissionDdiSetRootPageTable(
       !NT_SUCCESS(AdmissionGpuvaG3BrokerTable(
           process, root_ipa, TRUE, &root_ipa)) ||
       !AppleAgxGpuvaG3GraphRegisterTable(&process->Graph, root_ipa, 0u) ||
-      !AppleAgxGpuvaG3GraphBindRoot(&process->Graph, root_ipa)) {
+      !AppleAgxGpuvaG3GraphBindRoot(&process->Graph, root_ipa) ||
+      (process->PrivateLeafIpa &&
+       !AppleAgxGpuvaG3GraphAttachPrivate(&process->Graph, process->PrivateVa,
+           process->PrivateMiddleIpa, process->PrivateLeafIpa))) {
     context->GpuvaG3Poisoned = TRUE;
     process->Poisoned = TRUE;
   } else {
