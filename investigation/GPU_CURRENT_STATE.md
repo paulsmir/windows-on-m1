@@ -1,5 +1,32 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-27 EXP850 retry — first G4 virtual-submit failure attributed; ordinary recovered
+
+The reviewer-authorized single retry reused the exact package850 from
+`7058f145` and unchanged R110 firmware. An experiment-label mismatch stopped
+the first stage attempt before shutdown; correcting the retry manifest alone
+let the already-staged package enter the one cold full-owner launch. ARM_CONSUMED,
+pinned SSH and Code0 held for 618 seconds. `Wom1G4SubmitFailure` v1/64 bytes
+records branch9 `AdmissionG4RejectParse`, NTSTATUS `0xC000000D`, downstream3
+`AppleAgxG4ParseUnmapped`, DMA VA `0x840000`/280 bytes, private capacity
+331776, UMD private448, flags0, virtual-addressing context4, PID4 and
+reported count1706. `Unmapped` can arise from parser graph access or output
+resolution; the receipt does not separate them. No G3 paging failure, System
+1001 or new minidump. One Application 1000 was DWM/udwm.dll AV
+`0xC0000005+0x11bc8`; none named AppleAgx UMD, so R129 had no shell AV in
+this window. UMD trace had 564 create-device pairs and 558 draw-before records;
+scanout snapshots remained nonzero0 and no accelerated DWM frame was proven.
+
+Evidence and decoded raw receipt are under
+`.local/experiments/retry-exp850-r130/hardware-evidence/` (15-file host manifest
+SHA256 `f290e5dd31d77e1a71b56b059eb6b937d80ab1d92d9d65c84a4504505a661bab`).
+Exact GPU-hidden cleanup and ordinary EXP377/392 durable Preflight restored
+pinned SSH, one present Code28, staged/arm/files/service/signer absent, CPU8.
+Next causal target: distinguish which `Unmapped` check fails at the virtual
+submit boundary, using the current source and saved ETL/receipt before another
+hardware experiment. Do not infer a specific missing VA mapping from branch9
+alone.
+
 ## 2026-09-27 EXP850 — pre-StartDevice reset, receipt not reached; ordinary recovered
 
 Package850 from `7058f145` was staged as exact `oem5.inf`, G3Armed=1,
