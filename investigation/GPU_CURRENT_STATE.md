@@ -1,5 +1,26 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-27 R132 offline — bounded system-frame publication and lifetime implemented
+
+Commits `5996c2b0` (segment identity/provenance) and `f53f4f98` (pager/graph
+lifetime) implement EXP850 design step 3 and the bounded step 4 broker gates.
+Real-C RED→GREEN covers shared system-frame generations, partial/64K updates,
+alias/detach/level-reuse retirement, rollback and allocation-failure retry,
+capacity/TLB faults, and queued-generation revalidation at production BeginJob.
+Final 33 affected tests PASS with ASan/UBSan replay. Full host suite remains
+not green: 1121 tests, 15 failures, 41 errors, 2 skipped; exact names and timing
+limits are in `investigation/analysis/R132-frame-lifetime.md` and its hash-bound
+verification manifest. No Air access or package build in R132; R131 CPU-envelope
+semantics, local R64 policy and broker ownership checks are preserved.
+
+Next offline gate: step 5 generation-bound GPU output views for noncontiguous
+16-KiB frames, explicit optional CPU scatter access, and real backend
+bind/BeginJob/completion/copy-fence tests. System-backed render targets,
+arbitrary 4-KiB scatter and a DWM frame are not established. Hardware still
+needs a separately authorized resident-frame read/write/completion followed by
+invalidation and stale-access rejection. EXP851 below remains the latest
+hardware evidence and ordinary Code28 recovery; R132 changes are unbuilt.
+
 ## 2026-09-27 EXP851 — first GPU-consumed system-memory range identified; ordinary recovered
 
 Final package851 (`47e0651f`, SYS `dded1148`) crossed ARM_CONSUMED, pinned
