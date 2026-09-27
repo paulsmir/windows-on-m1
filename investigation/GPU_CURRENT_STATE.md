@@ -1,5 +1,28 @@
 # GPU current boundary — 2026-09-27
 
+
+## 2026-09-27 R140 — EXP855C EscapeCb AV attributed and corrected offline
+
+Exact Air d3d11.dll10.0.26100.9457 +8f240 is SetPriorityCB+30. Existing
+Explorer8428 minidump (21:18:38Z) proves private_escape -> EscapeCB -> wrong
+indirect SetPriorityCB; ASCII "Escape" is misread as hResource. R137 passed
+hRTDevice where EscapeCb requires hRTAdapter and left request.hDevice NULL
+with hContext present. UMD now supplies adapter plus owning device/context;
+real-wrapper Windows x64 RED→GREEN, ARM64 compile/link, G3 55/G4 30 pass.
+Full1140 preserves exactly baseline15 failures/41 errors/2 skips. Independent
+review: no findings. Analysis: investigation/analysis/R140-escape-callback.md.
+Saved Application1000 has51 matching d3d11 AVs and1 unknown-module event.
+
+Only read-only pinned Air copies/state queries; Code28 confirmed. No package,
+Air GPU execution, WER change or new hardware verdict. Ordinary EXP377/392
+recovered by EXP855C remains accepted. Next separately authorized checkpoint:
+private acquire crosses runtime EscapeCB into KMD; then attribute its result
+and later submission/completion boundary. DWM recovery is not yet proven.
+
+WHY CONTINUE COMPARISON: no historical archaeology is needed; exact runtime
+symbols, the retained crash stack and wrapper RED→GREEN identify the current
+owner. No further Air experiment is authorized in R140.
+
 ## 2026-09-27 EXP855C — R139 reached Code0; ordinary Code28 recovered
 
 Package855C source `56cb61c2` passed 534 source hashes, self-built native

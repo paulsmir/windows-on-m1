@@ -256,12 +256,18 @@ static int private_escape(void *context, APPLE_AGX_G3_PRIVATE_REQUEST *payload) 
   ADMISSION_UMD_DEVICE *device=(ADMISSION_UMD_DEVICE *)context;
   D3DDDICB_ESCAPE request={};
   if(!device || device->Magic!=ADMISSION_UMD_DEVICE_MAGIC || !payload ||
+     !device->Adapter || device->Adapter->Magic!=ADMISSION_UMD_ADAPTER_MAGIC ||
+     !device->Adapter->RuntimeAdapter.handle || !device->RuntimeDevice.handle ||
      !device->KernelContext || !device->KernelCallbacks ||
      !device->KernelCallbacks->pfnEscapeCb || device->ScreenClosing) return 0;
+  /* Unlike the other device callbacks, EscapeCb takes hRTAdapter. The
+   * optional context must be paired with its owning hRTDevice in the request. */
+  request.hDevice=device->RuntimeDevice.handle;
   request.Flags.HardwareAccess=1;
   request.hContext=device->KernelContext;
   request.pPrivateDriverData=payload;request.PrivateDriverDataSize=sizeof(*payload);
-  return SUCCEEDED(device->KernelCallbacks->pfnEscapeCb(device->RuntimeDevice.handle,&request));
+  return SUCCEEDED(device->KernelCallbacks->pfnEscapeCb(
+      device->Adapter->RuntimeAdapter.handle,&request));
 }
 
 #ifdef __cplusplus

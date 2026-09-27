@@ -111,6 +111,90 @@ static HRESULT APIENTRY TestEvict(HANDLE handle,D3DDDICB_EVICT *request) {
   return S_OK;
 }
 
+/* EscapeCb is adapter-scoped even though it is in DEVICECALLBACKS.
+ * EXP855C passed the device as adapter and left request.hDevice NULL. */
+static unsigned EscapeCalls;
+static HRESULT EscapeResult;
+static APPLE_AGX_G3_PRIVATE_REQUEST *EscapePayload;
+static HANDLE EscapeAdapter, EscapeDevice, EscapeContext;
+static HRESULT APIENTRY TestEscape(HANDLE adapter,
+    const D3DDDICB_ESCAPE *request) {
+  ++EscapeCalls;
+  if(adapter != EscapeAdapter || !request ||
+     request->hDevice != EscapeDevice || request->hContext != EscapeContext ||
+     request->Flags.Value != 1u || request->pPrivateDriverData != EscapePayload ||
+     request->PrivateDriverDataSize != sizeof(*EscapePayload)) {
+    fprintf(stderr,"R140 escape adapter/device/context contract violation\n");
+    return E_INVALIDARG;
+  }
+  EscapePayload->SceneId = 73;
+  return EscapeResult;
+}
+
+static int test_private_escape(ADMISSION_UMD_DEVICE *device) {
+  ADMISSION_UMD_ADAPTER adapter = {};
+  D3DDDI_DEVICECALLBACKS callbacks = {};
+  APPLE_AGX_G3_PRIVATE_REQUEST payload = {};
+  const AGX_WIN32_GPUVA_OPS *ops = AdmissionUmdGpuvaOperations();
+  int adapterIdentity, deviceIdentity, contextIdentity;
+  EscapeAdapter = &adapterIdentity;
+  EscapeDevice = &deviceIdentity;
+  EscapeContext = &contextIdentity;
+  EscapePayload = &payload;
+  EscapeResult = S_OK;
+  adapter.Magic = ADMISSION_UMD_ADAPTER_MAGIC;
+  adapter.RuntimeAdapter.handle = EscapeAdapter;
+  device->Magic = ADMISSION_UMD_DEVICE_MAGIC;
+  device->Adapter = &adapter;
+  device->RuntimeDevice.handle = EscapeDevice;
+  device->KernelContext = EscapeContext;
+  device->KernelCallbacks = &callbacks;
+  callbacks.pfnEscapeCb = TestEscape;
+  payload.Magic = APPLE_AGX_G3_PRIVATE_MAGIC;
+  payload.Version = APPLE_AGX_G3_PRIVATE_VERSION;
+  payload.Bytes = sizeof(payload);
+  payload.Operation = APPLE_AGX_G3_PRIVATE_ACQUIRE;
+  if(!ops->PrivateEscape(device,&payload) || EscapeCalls != 1 ||
+     payload.SceneId != 73) return 0;
+  payload.Operation = APPLE_AGX_G3_PRIVATE_RELEASE;
+  assert(ops->PrivateEscape(device,&payload) && EscapeCalls == 2);
+  EscapeResult = E_FAIL;
+  assert(!ops->PrivateEscape(device,&payload) && EscapeCalls == 3);
+  EscapeResult = S_OK;
+  assert(!ops->PrivateEscape(NULL,&payload));
+  assert(!ops->PrivateEscape(device,NULL));
+  device->Magic = 0;
+  assert(!ops->PrivateEscape(device,&payload));
+  device->Magic = ADMISSION_UMD_DEVICE_MAGIC;
+  device->Adapter = NULL;
+  assert(!ops->PrivateEscape(device,&payload));
+  device->Adapter = &adapter;
+  adapter.Magic = 0;
+  assert(!ops->PrivateEscape(device,&payload));
+  adapter.Magic = ADMISSION_UMD_ADAPTER_MAGIC;
+  adapter.RuntimeAdapter.handle = NULL;
+  assert(!ops->PrivateEscape(device,&payload));
+  adapter.RuntimeAdapter.handle = EscapeAdapter;
+  device->RuntimeDevice.handle = NULL;
+  assert(!ops->PrivateEscape(device,&payload));
+  device->RuntimeDevice.handle = EscapeDevice;
+  device->KernelContext = NULL;
+  assert(!ops->PrivateEscape(device,&payload));
+  device->KernelContext = EscapeContext;
+  device->KernelCallbacks = NULL;
+  assert(!ops->PrivateEscape(device,&payload));
+  device->KernelCallbacks = &callbacks;
+  callbacks.pfnEscapeCb = NULL;
+  assert(!ops->PrivateEscape(device,&payload));
+  callbacks.pfnEscapeCb = TestEscape;
+  device->ScreenClosing = TRUE;
+  assert(!ops->PrivateEscape(device,&payload));
+  assert(EscapeCalls == 3);
+  ZeroMemory(device,sizeof(*device));
+  puts("R140 escape identity/round-trip/failure/guards: PASS");
+  return 1;
+}
+
 int main(void) {
   G4_FIXTURE fixture = {};
   D3DDDI_DEVICECALLBACKS callbacks = {};
@@ -123,6 +207,7 @@ int main(void) {
   const BYTE native_command[4] = {0xa1, 0xb2, 0xc3, 0xd4};
   UINT64 fence = 0;
   assert(device != NULL);
+  if(!test_private_escape(device)) return 1;
   callbacks.pfnReserveGpuVirtualAddressCb = TestReserve;
   callbacks.pfnMapGpuVirtualAddressCb = TestMap;
   callbacks.pfnFreeGpuVirtualAddressCb = TestFree;
