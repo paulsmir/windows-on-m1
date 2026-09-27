@@ -1,5 +1,23 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-27 EXP850 — pre-StartDevice reset, receipt not reached; ordinary recovered
+
+Package850 from `7058f145` was staged as exact `oem5.inf`, G3Armed=1,
+and cold booted on unchanged R110 full-owner. Windows entered BOOTAA64.EFI then
+PSCI RESET before pinned SSH, ARM_CONSUMED, Code0 or KMD receipts. GPU-hidden
+dump-first state had G3Armed still 1, nonpresent Code45, staged exact package,
+no active SYS/UMD, no new System 1001/minidump, and no Wom1G4SubmitFailure
+bytes. Application export had four old EXP848 Event1000 records and none after
+EXP850 staging. Thus R129 AV suppression and R130 first-failure attribution
+remain untested; a decoded receipt does not exist. The first ordinary recovery
+boot also reset pre-SSH; one identical retry reached pinned SSH. Durable
+Preflight PASS confirms one present Code28, staged/arm/files/service/signer
+absent, CPU8/disks2 and baseline USB5. Evidence under
+`.local/experiments/EXP850-r130-submitrx/hardware-evidence/`; ledger RUN EXP850
+BEFORE/AFTER and RECOVERY entries. Next causal target is the early Windows
+reset before GPU arm consumption; do not infer virtual-submit behavior from
+this run or rearm package850 without a new discriminator.
+
 ## 2026-09-27 EXP850 R130 — SubmitCommandVirtual first-failure candidate built offline
 
 Commit `7058f145` records the first KMD virtual-submit rejection with branch,
