@@ -340,6 +340,135 @@ static BOOLEAN AdmissionG3PrivateReleaseScene(ADMISSION_G3_PROCESS *p,
   return TRUE;
 }
 
+/* Interrupt/DPC owners hold SchedulerLock and publish only a cancellation
+ * marker. The matching scene reference pins Context until PASSIVE reaping. */
+VOID AdmissionGpuvaG3PrivateCancel(ADMISSION_RENDER_CONTEXT *context,
+    ULONG fence, BOOLEAN uncertain) {
+  if (!context || !fence ||
+      (ULONG)InterlockedCompareExchange(&context->GpuvaG3PrivateFence,0,0)!=fence)
+    return;
+  if (uncertain) InterlockedExchange(&context->GpuvaG3CancelUncertain,1);
+  InterlockedExchange(&context->GpuvaG3CancelFence,(LONG)fence);
+}
+
+static BOOLEAN AdmissionG3PrivateReap(ADMISSION_G3_PROCESS *p) {
+  ADMISSION_G3_PRIVATE_SCENE *s,*next;
+  ADMISSION_BACKEND_MEMORY_VIEW view;
+  if (!p->PrivateScenes) return TRUE;
+  if (!NT_SUCCESS(AdmissionMemoryRuntimePrivateView(p->State->Adapter,&view))) return FALSE;
+  for (s=p->PrivateScenes;s;s=next) {
+    next=s->Next;
+    if (s->Submitting) continue; /* Submit retains a local pointer through rollback. */
+    if (s->Queued && (ULONG)InterlockedCompareExchange(
+            &s->Context->GpuvaG3CancelFence,0,0)==s->Fence) {
+      if (s->Started || InterlockedCompareExchange(
+              &s->Context->GpuvaG3CancelUncertain,0,0)) {
+        s->Quarantined=1u;p->Poisoned=TRUE;
+      } else {
+        s->Queued=0u;
+        InterlockedExchange(&s->Context->GpuvaG3PrivateFence,0);
+      }
+    }
+    if (s->Quarantined || p->Graph.Uncertain) continue;
+    if (s->ReleaseRequested && !s->Queued &&
+        !p->Graph.JobInFlight && !p->Graph.LeaseToken &&
+        !AdmissionG3PrivateReleaseScene(p,s,&view)) return FALSE;
+  }
+  return !p->Poisoned && !p->Graph.Uncertain;
+}
+
+BOOLEAN AdmissionGpuvaG3PrivateReset(ADMISSION_CONTEXT *adapter) {
+  ADMISSION_G3_STATE *state;
+  PLIST_ENTRY link;
+  BOOLEAN safe=TRUE;
+  if (!adapter || KeGetCurrentIrql()!=PASSIVE_LEVEL) return FALSE;
+  state=(ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  if (!state) return TRUE;
+  ExAcquireFastMutex(&state->Lock);
+  for (link=state->Processes.Flink;link!=&state->Processes;link=link->Flink) {
+    ADMISSION_G3_PROCESS *p=CONTAINING_RECORD(link,ADMISSION_G3_PROCESS,Link);
+    ADMISSION_G3_PRIVATE_SCENE *s;
+    for (s=p->PrivateScenes;s;s=s->Next)
+      if (s->Queued && s->Started) {
+        s->Quarantined=1u;p->Poisoned=TRUE;safe=FALSE;
+      }
+  }
+  ExReleaseFastMutex(&state->Lock);
+  return safe; /* No GPU stop/TLB proof exists for an active private reset. */
+}
+
+BOOLEAN AdmissionGpuvaG3PrivateReported(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context, ULONG fence) {
+  ADMISSION_G3_PROCESS *p;
+  ADMISSION_G3_PRIVATE_SCENE *s;
+  BOOLEAN ok=FALSE;
+  if (!context || !context->GpuvaG3Process) return TRUE;
+  if (!adapter || !fence || KeGetCurrentIrql()!=PASSIVE_LEVEL) return FALSE;
+  p=(ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
+  if (p->State->Adapter!=adapter) return FALSE;
+  ExAcquireFastMutex(&p->State->Lock);
+  if (!AdmissionG3PrivateReap(p)) goto Done;
+  if (!InterlockedCompareExchange(&context->GpuvaG3PrivateFence,0,0)) {
+    ok=TRUE;goto Done; /* Legacy job, or an already reported exact transaction. */
+  }
+  for (s=p->PrivateScenes;s;s=s->Next)
+    if (s->Context==context && s->Fence==fence && s->Queued) break;
+  if (!s || !s->Started || !s->GpuDone || s->Quarantined) goto Done;
+  s->Reported=1u;s->Queued=0u;
+  if (p->State->PrivateCompletionFence==fence) p->State->PrivateCompletionFence=0u;
+  InterlockedExchange(&context->GpuvaG3PrivateFence,0);
+  /* Failed reclaim must quarantine, but cannot undo a fence already reported
+   * to Windows. The retained process record prevents reuse and destruction. */
+  (void)AdmissionG3PrivateReap(p);
+  ok=TRUE;
+Done:
+  ExReleaseFastMutex(&p->State->Lock);
+  return ok;
+}
+
+BOOLEAN AdmissionGpuvaG3PrivateRetireContext(ADMISSION_RENDER_CONTEXT *context) {
+  ADMISSION_G3_PROCESS *p;
+  ADMISSION_G3_PRIVATE_SCENE *s,*next;
+  ADMISSION_RENDER_CONTEXT *c;
+  ADMISSION_BACKEND_MEMORY_VIEW view;
+  BOOLEAN ok=FALSE,manager_used=FALSE;
+  UINT i;
+  if (!context || !context->GpuvaG3Process) return TRUE;
+  if (KeGetCurrentIrql()!=PASSIVE_LEVEL) return FALSE;
+  p=(ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
+  ExAcquireFastMutex(&p->State->Lock);
+  context->GpuvaG3Closing=TRUE;
+  if (!AdmissionG3PrivateReap(p)) goto Done;
+  for (s=p->PrivateScenes;s;s=s->Next)
+    if (s->Context==context && (s->Queued || s->Quarantined)) goto Done;
+  if (!p->PrivateManager.Generation) {ok=TRUE;goto Done;}
+  if (p->Graph.JobInFlight || p->Graph.LeaseToken ||
+      !NT_SUCCESS(AdmissionMemoryRuntimePrivateView(p->State->Adapter,&view))) goto Done;
+  for (s=p->PrivateScenes;s;s=next) {
+    next=s->Next;
+    if (s->Context==context && !AdmissionG3PrivateReleaseScene(p,s,&view)) goto Done;
+  }
+  context->GpuvaG3PrivateManagerGeneration=0ULL;
+  for (c=p->Contexts;c;c=c->GpuvaG3NextContext)
+    if (c!=context && c->GpuvaG3PrivateManagerGeneration==p->PrivateManager.Generation)
+      manager_used=TRUE;
+  if (!manager_used && !p->PrivateScenes) {
+    for (i=0;i<3;++i)
+      if (!AdmissionG3PrivateMapExtent(p,&view,&p->PrivateManager.Extents[i],FALSE)) {
+        p->Poisoned=TRUE;goto Done;
+      }
+    for (i=0;i<3;++i)
+      if (!AdmissionG3PrivateFreeExtent(p,&view,&p->PrivateManager.Extents[i])) {
+        p->Poisoned=TRUE;goto Done;
+      }
+    RtlZeroMemory(&p->PrivateManager,sizeof(p->PrivateManager));
+  }
+  ok=TRUE;
+Done:
+  ExReleaseFastMutex(&p->State->Lock);
+  return ok;
+}
+
 static BOOLEAN AdmissionG3PrivateDestroyStorage(ADMISSION_G3_PROCESS *p) {
   ADMISSION_BACKEND_MEMORY_VIEW view;
   UINT i;
@@ -392,11 +521,12 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
   /* Compare handles against attached objects before dereferencing them. */
   for (context=p->Contexts;context && (HANDLE)context!=args->hContext;
        context=context->GpuvaG3NextContext) {}
-  if (!context || !context->Win32Transport || context->GpuvaG3Poisoned ||
+  if (!context || context->GpuvaG3Closing || !context->Win32Transport || context->GpuvaG3Poisoned ||
       context->Object.Magic!=ADMISSION_OBJECT_CONTEXT_MAGIC ||
       context->Object.Device==NULL ||
       (HANDLE)CONTAINING_RECORD(context->Object.Device,ADMISSION_DEVICE,Object)!=args->hDevice ||
       context->Object.Device->Adapter!=&adapter->ObjectAdapter) goto Done;
+  if (!AdmissionG3PrivateReap(p)) {status=STATUS_DEVICE_HARDWARE_ERROR;goto Done;}
   status=AdmissionMemoryRuntimePrivateView(adapter,&view);
   if (!NT_SUCCESS(status)) goto Done;
   status=STATUS_INVALID_PARAMETER;
@@ -581,6 +711,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyProcess(
   if (process == NULL) {
     ExReleaseFastMutex(&state->Lock);
     return STATUS_INVALID_HANDLE;
+  }
+  {
+    ADMISSION_G3_PRIVATE_SCENE *s;
+    for (s=process->PrivateScenes;s;s=s->Next)
+      if (s->Queued || s->Quarantined) {
+        ExReleaseFastMutex(&state->Lock);return STATUS_DEVICE_BUSY;
+      }
   }
   if (process->DeviceRefs || process->ContextRefs ||
       process->Graph.Uncertain ||
@@ -815,7 +952,7 @@ static ADMISSION_G3_PRIVATE_SCENE *AdmissionG4FindPrivateScene(
     ADMISSION_G3_PROCESS *p, ADMISSION_RENDER_CONTEXT *context,
     const APPLE_AGX_G4_PRIVATE_LEASE *lease, ULONG fence, BOOLEAN begin) {
   ADMISSION_G3_PRIVATE_SCENE *s;
-  if (!lease || !lease->ManagerId || lease->ManagerId!=p->Graph.ProcessId ||
+  if ((context->GpuvaG3Closing && !begin) || !lease || !lease->ManagerId || lease->ManagerId!=p->Graph.ProcessId ||
       lease->ManagerGeneration!=p->PrivateManager.Generation ||
       context->GpuvaG3PrivateManagerGeneration!=lease->ManagerGeneration)
     return NULL;
@@ -823,7 +960,9 @@ static ADMISSION_G3_PRIVATE_SCENE *AdmissionG4FindPrivateScene(
     if (s->Storage.Generation==lease->SceneId) break;
   if (!s || s->Context!=context || s->Storage.Generation!=lease->SceneGeneration ||
       s->Quarantined || (!begin && s->ReleaseRequested) || s->Started ||
-      (begin ? (!s->Queued || s->Fence!=fence) : s->Queued)) return NULL;
+      (begin ? (!s->Queued || s->Fence!=fence ||
+          (ULONG)InterlockedCompareExchange(&context->GpuvaG3CancelFence,0,0)==fence) :
+          (s->Queued || InterlockedCompareExchange(&context->GpuvaG3PrivateFence,0,0)))) return NULL;
   return s;
 }
 
@@ -857,7 +996,8 @@ static VOID AdmissionG4PrivateUnqueue(ADMISSION_G3_PROCESS *p,
   if (!scene) return;
   ExAcquireFastMutex(&p->State->Lock);
   if (scene->Queued && scene->Fence==fence && !scene->Started) {
-    scene->Queued=0;scene->Fence=0;
+    scene->Submitting=0;scene->Queued=0;scene->Fence=0;
+    InterlockedExchange(&scene->Context->GpuvaG3PrivateFence,0);
   }
   ExReleaseFastMutex(&p->State->Lock);
 }
@@ -870,6 +1010,7 @@ BOOLEAN AdmissionGpuvaG3PrivateContextBusy(ADMISSION_RENDER_CONTEXT *context) {
   if (KeGetCurrentIrql()!=PASSIVE_LEVEL) return TRUE;
   p=(ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
   ExAcquireFastMutex(&p->State->Lock);
+  (void)AdmissionG3PrivateReap(p);
   for (s=p->PrivateScenes;s;s=s->Next)
     if (s->Context==context && (s->Queued || s->Quarantined)) {busy=TRUE;break;}
   ExReleaseFastMutex(&p->State->Lock);
@@ -910,7 +1051,7 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
         image->G4CommandBytes != context->GpuvaG3DmaBufferBytes)
       g4_valid = FALSE;
   }
-  if (state->ActiveProcess == NULL && !process->Poisoned &&
+  if (state->ActiveProcess == NULL && !state->PrivateCompletionFence && !process->Poisoned &&
       g4_valid &&
       (!adapter->BackendImage.G4Native ||
        context->GpuvaG3MappingGeneration == process->Graph.MappingGeneration) &&
@@ -957,6 +1098,11 @@ BOOLEAN AdmissionGpuvaG3CompleteJob(ADMISSION_CONTEXT *adapter, ULONG fence) {
   }
   complete = AppleAgxGpuvaG3GraphEndJob(&process->Graph) ? TRUE : FALSE;
   if (complete) {
+    ADMISSION_G3_PRIVATE_SCENE *s;
+    for (s=process->PrivateScenes;s;s=s->Next)
+      if (s->Queued && s->Started && s->Fence==fence) {
+        s->GpuDone=1u;state->PrivateCompletionFence=fence;
+      }
     state->ActiveProcess = NULL;
     state->ActiveFence = 0u;
     state->LastCompletedFence = fence;
@@ -1198,7 +1344,7 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   RtlZeroMemory(&binding, sizeof(binding));
   ExAcquireFastMutex(&state->Lock);
   if (context->GpuvaG3RootIpa != process->Graph.RootIpa ||
-      process->Graph.Uncertain) {
+      process->Graph.Uncertain || state->PrivateCompletionFence) {
     ExReleaseFastMutex(&state->Lock);
     return AdmissionG4SubmitReject(adapter, context, args,
         AdmissionG4RejectRoot, STATUS_INVALID_PARAMETER, 0u, TRUE);
@@ -1263,7 +1409,11 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   if (result != AppleAgxG4ParseOk)
     AdmissionG4SnapshotFailure(process, &failure, &detail);
   if (result==AppleAgxG4ParseOk && private_scene) {
-    private_scene->Queued=1u;private_scene->Fence=args->SubmissionFenceId;
+    private_scene->Submitting=1u;private_scene->Queued=1u;
+    private_scene->Fence=args->SubmissionFenceId;
+    InterlockedExchange(&context->GpuvaG3CancelFence,0);
+    InterlockedExchange(&context->GpuvaG3CancelUncertain,0);
+    InterlockedExchange(&context->GpuvaG3PrivateFence,(LONG)args->SubmissionFenceId);
   }
   ExReleaseFastMutex(&state->Lock);
   if (result != AppleAgxG4ParseOk)
@@ -1292,6 +1442,7 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   context->GpuvaG3DmaBufferVa = args->DmaBufferVirtualAddress;
   context->GpuvaG3DmaBufferBytes = args->DmaBufferSize;
   rollbackBranch = AdmissionG4RejectQueue;
+  ExAcquireFastMutex(&state->Lock);
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   if (AdmissionRenderPacketQueue(&adapter->RenderPacket,
           args->SubmissionFenceId, (ULONGLONG)(ULONG_PTR)context,
@@ -1305,6 +1456,8 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   }
   if (!queued) context->Object.FenceOutstanding = 0u;
   KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  if (queued && private_scene) private_scene->Submitting=0u;
+  ExReleaseFastMutex(&state->Lock);
   if (!queued) goto Rollback;
   AdmissionDispatchQueuedWork(adapter);
   return STATUS_SUCCESS;

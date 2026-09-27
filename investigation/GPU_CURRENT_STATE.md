@@ -1,5 +1,27 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-27 R137 implemented offline — private scene ownership complete
+
+Steps1–7 now implement the R136 option2 40/16/8-MiB split, reserved process VA,
+bounded private storage, exclusive v5 graph, production escape, AGX4 v3 scene
+identity and completion-owned reclamation. Root-reuse refusal preserves private
+reachability. Scene reuse requires TA+3D, broker lease/TLB release and Reported
+Windows notification; never-started cancellation reaps at PASSIVE, uncertain
+reset/revoke quarantines. Pending notification and Submit construction retain
+separate ownership holds. No new hardware reset/TDR-success claim.
+
+Offline: G3 22 + G4 7 pass; full1137 has unchanged baseline15 failures/41 errors/
+2 skips. ARM64 KMD compile/link, UMD and affected Mesa compile pass. Independent
+review has no Critical/Important findings. Details/hashes:
+investigation/analysis/R137-process-backing-implementation.md, R136 section6.
+
+Next causal target is the separately approved EXP855 bounded native-render
+checkpoint: actual private root/backing, native completion/fence, then safe
+reclaim/reuse. VidMm admission, 40-MiB DWM capacity and live callback timing remain
+unvalidated. No package, Air, staging or GO_EXP855; Mu/m1n1 unchanged. Ordinary
+EXP377/392 Code28 remains the accepted recovery.
+
+
 ## 2026-09-27 R137 authorized continuation — completion ownership
 
 User authorizes completion/cancel/reset owners in the same KMD layer. R136

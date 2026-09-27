@@ -22,7 +22,7 @@ FUNCTIONS = {
         "AdmissionG3AllocateNode", "AdmissionG3FreeNode",
         "AdmissionGpuvaG3FindProcess", "AdmissionG3BootstrapRoot",
         "AdmissionGpuvaG3BrokerTable", "AdmissionGpuvaG3MirrorTable",
-        "AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionG3PrivateDestroyStorage","AdmissionGpuvaG3PrivateEscape",
+        "AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionGpuvaG3PrivateCancel","AdmissionG3PrivateReap","AdmissionGpuvaG3PrivateReset","AdmissionGpuvaG3PrivateReported","AdmissionGpuvaG3PrivateRetireContext","AdmissionG3PrivateDestroyStorage","AdmissionGpuvaG3PrivateEscape",
         "AdmissionDdiCreateProcess", "AdmissionDdiDestroyProcess",
         "AdmissionGpuvaG3AttachContext", "AdmissionGpuvaG3DetachContext",
         "AdmissionGpuvaG3ResolveTable", "AdmissionDdiSetRootPageTable",
@@ -88,7 +88,7 @@ def generate(revision=None, function_revisions=None):
             parts.append(f'#line 1 "{filename}:{name}"\n')
             function_source = source
             if revision is not None and name in (
-                    "AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionG3PrivateDestroyStorage","AdmissionGpuvaG3PrivateEscape", "AdmissionDdiEscape",
+                    "AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionGpuvaG3PrivateCancel","AdmissionG3PrivateReap","AdmissionGpuvaG3PrivateReset","AdmissionGpuvaG3PrivateReported","AdmissionGpuvaG3PrivateRetireContext","AdmissionG3PrivateDestroyStorage","AdmissionGpuvaG3PrivateEscape", "AdmissionDdiEscape",
                     "AdmissionGpuvaG3BrokerTable",
                     "AdmissionG3RetireSystemSubtree", "AdmissionG3ActivateSystemSubtree",
                     "AdmissionG3ResetTableShadow", "AdmissionG3RegisterTable", "AdmissionG3PrepareTableReuse",
@@ -113,6 +113,16 @@ def generate(revision=None, function_revisions=None):
     parts.append('#line 1 "hv_agx_retained_platform.c:gpuva_execute"\n')
     parts.append(body(platform, "translate_guest") + "\n")
     parts.append(body(platform, "gpuva_execute") + "\n")
+    parts.append("#if defined(G3_PRIVATE_COMBINED)\n")
+    completion = (SHARED / "src/apple_agx_submission.c").read_text()
+    parts.append("#define APPLE_AGX_SUBMISSION_NULL ((void *)0)\n")
+    parts.append(body(completion,"AppleAgxCompletionTransitionValid"))
+    for name in ("Initialize", "Begin", "Matches", "Advance", "CanReport", "MarkReported", "Finish"):
+        parts.append(body(completion,"AppleAgxCompletionTransaction"+name))
+    backend = (SRC / "backend_platform_windows.c").read_text()
+    for name in ("AdmissionNotifyCompletionAtInterrupt", "AdmissionBackendComplete"):
+        parts.append(body(backend,name))
+    parts.append("#endif\n")
     parts.append('#include "g3_vidmm_replay_scenarios.c"\n')
     return "\n".join(parts)
 

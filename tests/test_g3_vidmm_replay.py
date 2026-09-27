@@ -11,6 +11,13 @@ REPLAY = ROOT / "tests/g3_vidmm_replay.py"
 
 
 class G3VidMmReplayTests(unittest.TestCase):
+    def test_r137_uncertain_reset_and_revoke_quarantine(self):
+        for fault in ("reset", "revoke"):
+            r = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
+                env=dict(os.environ, G3_REPLAY_R137="1", G3_REPLAY_R137_COMBINED="1",
+                         G3_REPLAY_R137_QUARANTINE=fault), text=True, capture_output=True)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
     def test_r137_private_producer_kmd_broker_and_builder(self):
         for profile in ("16", "64"):
             r = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,

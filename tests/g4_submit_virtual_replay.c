@@ -7,6 +7,7 @@
 #include "apple_agx_gpuva_g3_translation.h"
 
 typedef int NTSTATUS;
+typedef int LONG;
 typedef void VOID;
 typedef unsigned char BOOLEAN;
 typedef unsigned long long ULONGLONG;
@@ -61,7 +62,7 @@ typedef struct {
 typedef struct _ADMISSION_G3_STATE {
   int Lock;
   struct _ADMISSION_G3_PROCESS *ActiveProcess;
-  unsigned ActiveFence;
+  unsigned ActiveFence,PrivateCompletionFence;
 } ADMISSION_G3_STATE;
 typedef struct _ADMISSION_RENDER_CONTEXT ADMISSION_RENDER_CONTEXT;
 typedef struct _ADMISSION_G3_PRIVATE_SCENE {
@@ -69,7 +70,7 @@ typedef struct _ADMISSION_G3_PRIVATE_SCENE {
   ADMISSION_RENDER_CONTEXT *Context;
   APPLE_AGX_G3_PRIVATE_SCENE Storage;
   APPLE_AGX_G4_NATIVE_RENDER Geometry;
-  ULONG Fence, Queued, Started, GpuDone, Reported, ReleaseRequested, Quarantined;
+  ULONG Fence, Submitting, Queued, Started, GpuDone, Reported, ReleaseRequested, Quarantined;
 } ADMISSION_G3_PRIVATE_SCENE;
 
 typedef struct _ADMISSION_G3_PROCESS {
@@ -134,6 +135,7 @@ typedef struct {
   ADMISSION_BACKEND_IMAGE BackendImage;
 } ADMISSION_CONTEXT;
 struct _ADMISSION_RENDER_CONTEXT {
+  volatile LONG GpuvaG3PrivateFence,GpuvaG3CancelFence,GpuvaG3CancelUncertain; BOOLEAN GpuvaG3Closing;
   ULONGLONG GpuvaG3PrivateManagerGeneration;
   ADMISSION_G3_PROCESS *GpuvaG3Process;
   unsigned GpuvaG3Poisoned;
@@ -302,6 +304,7 @@ static int AppleAgxGpuvaG3GraphContainsRangeAccess(
   return 0;
 }
 
+static BOOLEAN AdmissionG3PrivateReap(ADMISSION_G3_PROCESS *p) {(void)p;return TRUE;}
 /* The Python driver inserts the unmodified production KMD functions here. */
 #include "g4_submit_virtual_functions.inc"
 

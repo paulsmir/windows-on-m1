@@ -323,6 +323,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
            &context->BackendImage, queuedFence))) {
     InterlockedExchange(&context->SchedulerFaulted, 1);
   } else if (queuedContext != NULL) {
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    AdmissionGpuvaG3PrivateCancel(queuedContext,queuedFence,FALSE);
+#endif
     queuedContext->Object.FenceOutstanding = 0u;
   }
   notifyNow = AppleAgxSchedulerPreemptionPhase(&context->Scheduler) ==
@@ -384,6 +387,9 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
       ResetEngine->EngineOrdinal != ADMISSION_SCHEDULER_ENGINE ||
       InterlockedCompareExchange(&context->SchedulerInitialized, 0, 0) == 0)
     return STATUS_INVALID_PARAMETER;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (!AdmissionGpuvaG3PrivateReset(context)) return STATUS_DEVICE_HARDWARE_ERROR;
+#endif
   KeAcquireSpinLock(&context->PagingLock, &oldIrql);
   if (InterlockedCompareExchange(&context->PagingPending, 0, 0) != 0 ||
       InterlockedCompareExchange(&context->PagingWorkersActive, 0, 0) != 0 ||
@@ -394,6 +400,19 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
   KeAcquireSpinLockAtDpcLevel(&context->SchedulerLock);
   packetState = AdmissionRenderPacketState(&context->RenderPacket);
   if (packetState == AdmissionRenderPacketActive) {
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    packetContext=(ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
+        context->RenderPacket.Description.ContextToken;
+    packetFence=context->RenderPacket.Description.Fence;
+    if (packetContext != NULL &&
+        (ULONG)InterlockedCompareExchange(&packetContext->GpuvaG3PrivateFence,0,0)==packetFence) {
+      AdmissionGpuvaG3PrivateCancel(packetContext,packetFence,TRUE);
+      InterlockedExchange(&context->SchedulerFaulted,1);
+      KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
+      KeReleaseSpinLock(&context->PagingLock,oldIrql);
+      return STATUS_DEVICE_HARDWARE_ERROR;
+    }
+#endif
     InterlockedExchange(&context->SchedulerFaulted, 1);
     KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
     KeReleaseSpinLock(&context->PagingLock, oldIrql);
@@ -445,8 +464,12 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
     return STATUS_INVALID_DEVICE_STATE;
   ResetEngine->LastAbortedFenceId = lastAborted;
   if (packetContext != NULL &&
-      packetContext->Object.FenceOutstanding == packetFence)
+      packetContext->Object.FenceOutstanding == packetFence) {
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    AdmissionGpuvaG3PrivateCancel(packetContext,packetFence,FALSE);
+#endif
     packetContext->Object.FenceOutstanding = 0u;
+  }
   InterlockedExchange(&context->SchedulerFaulted, 0);
   return STATUS_SUCCESS;
 }

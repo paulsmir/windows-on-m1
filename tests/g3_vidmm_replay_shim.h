@@ -102,7 +102,8 @@ static void KeReleaseSpinLock(int *m,KIRQL i) {(void)m;(void)i;}
 static KIRQL KeGetCurrentIrql(void) { return replay_irql; }
 static void *ExAllocatePool2(int pool,SIZE_T bytes,ULONG tag) {(void)pool;(void)tag;return calloc(1,bytes);}
 static void ExFreePoolWithTag(void *p,ULONG tag) {(void)tag;free(p);}
-static LONG InterlockedCompareExchange(LONG *p,LONG n,LONG old) { LONG v=*p;if(v==old)*p=n;return v; }
+static LONG InterlockedExchange(volatile LONG *p,LONG n) {LONG old=*p;*p=n;return old;}
+static LONG InterlockedCompareExchange(volatile LONG *p,LONG n,LONG old) { LONG v=*p;if(v==old)*p=n;return v; }
 
 typedef struct { long long QuadPart; } PHYSICAL_ADDRESS;
 typedef struct { UINT SegmentId, Padding; UINT64 SegmentOffset; } D3DGPU_PHYSICAL_ADDRESS;
@@ -180,8 +181,12 @@ static NTSTATUS ReplayReserveVa(HANDLE adapter, DXGKARGCB_RESERVEGPUVIRTUALADDRE
   args->StartVirtualAddress=reserve_base;
   return reserve_status;
 }
+typedef struct { ULONG InterruptType; struct { ULONG SubmissionFenceId,NodeOrdinal,EngineOrdinal; } DmaCompleted; } DXGKARGCB_NOTIFY_INTERRUPT_DATA;
 typedef struct { HANDLE DeviceHandle;
  NTSTATUS (*DxgkCbReserveGpuVirtualAddressRange)(HANDLE, DXGKARGCB_RESERVEGPUVIRTUALADDRESSRANGE *);
+ NTSTATUS (*DxgkCbSynchronizeExecution)(HANDLE,BOOLEAN (*)(PVOID),PVOID,ULONG,BOOLEAN *);
+ VOID (*DxgkCbNotifyInterrupt)(HANDLE,const DXGKARGCB_NOTIFY_INTERRUPT_DATA *);
+ BOOLEAN (*DxgkCbQueueDpc)(HANDLE);
 } DXGKRNL_INTERFACE;
 typedef struct { HANDLE hContext; D3DGPU_PHYSICAL_ADDRESS Address; UINT NumEntries; } DXGKARG_SETROOTPAGETABLE;
 typedef union { struct { UINT SystemContext:1,GdiContext:1,VirtualAddressing:1,SystemProtected:1,HwQueueSupported:1,TestContext:1; }; UINT Value; } DXGK_CREATECONTEXTFLAGS;
@@ -210,15 +215,15 @@ typedef struct { UINT Magic,Flags; ADMISSION_OBJECT_DEVICE *Device;
 typedef struct _ADMISSION_DEVICE { ADMISSION_OBJECT_DEVICE Object; LONG Win32Generation; ADMISSION_G3_PROCESS *GpuvaG3Process; } ADMISSION_DEVICE;
 typedef struct { int unused; } ADMISSION_SCHEDULER_CONTEXT;
 typedef struct { int unused; } ADMISSION_PREPATCHED_RENDER;
-typedef struct _ADMISSION_RENDER_CONTEXT { ADMISSION_OBJECT_CONTEXT Object; UINT Win32Generation; BOOLEAN Win32Transport,GpuvaG3Poisoned; ADMISSION_SCHEDULER_CONTEXT SchedulerContext; ADMISSION_PREPATCHED_RENDER PrepatchedRender; ADMISSION_G3_PROCESS *GpuvaG3Process; struct _ADMISSION_RENDER_CONTEXT *GpuvaG3NextContext; ULONGLONG GpuvaG3PrivateManagerGeneration; ULONGLONG GpuvaG3RootIpa,GpuvaG3DmaBufferVa,GpuvaG3MappingGeneration; ULONG GpuvaG3DmaBufferBytes; } ADMISSION_RENDER_CONTEXT;
-typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; APPLE_AGX_G3_PRIVATE_POOL PrivatePool; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence,LastCompletedFence; ULONGLONG UnpublishedGroups[32]; } ADMISSION_G3_STATE;
+typedef struct _ADMISSION_RENDER_CONTEXT { ADMISSION_OBJECT_CONTEXT Object; UINT Win32Generation; BOOLEAN Win32Transport,GpuvaG3Poisoned; ADMISSION_SCHEDULER_CONTEXT SchedulerContext; ADMISSION_PREPATCHED_RENDER PrepatchedRender; ADMISSION_G3_PROCESS *GpuvaG3Process; struct _ADMISSION_RENDER_CONTEXT *GpuvaG3NextContext; volatile LONG GpuvaG3PrivateFence,GpuvaG3CancelFence,GpuvaG3CancelUncertain; BOOLEAN GpuvaG3Closing; ULONGLONG GpuvaG3PrivateManagerGeneration; ULONGLONG GpuvaG3RootIpa,GpuvaG3DmaBufferVa,GpuvaG3MappingGeneration; ULONG GpuvaG3DmaBufferBytes; } ADMISSION_RENDER_CONTEXT;
+typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; APPLE_AGX_G3_PRIVATE_POOL PrivatePool; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence,LastCompletedFence,PrivateCompletionFence; ULONGLONG UnpublishedGroups[32]; } ADMISSION_G3_STATE;
 typedef struct _ADMISSION_G3_TABLE_SHADOW { struct _ADMISSION_G3_TABLE_SHADOW *Next; APPLE_AGX_MEMORY_OBJECT Memory; ULONGLONG OriginalIpa,BrokerIpa; APPLE_AGX_GPUVA_G3_LOGICAL_PTE *LogicalPtes,*ResidentPtes,*PendingPtes; } ADMISSION_G3_TABLE_SHADOW;
 typedef struct _ADMISSION_G3_PRIVATE_SCENE {
   struct _ADMISSION_G3_PRIVATE_SCENE *Next;
   ADMISSION_RENDER_CONTEXT *Context;
   APPLE_AGX_G3_PRIVATE_SCENE Storage;
   APPLE_AGX_G4_NATIVE_RENDER Geometry;
-  ULONG Fence, Queued, Started, GpuDone, Reported, ReleaseRequested, Quarantined;
+  ULONG Fence, Submitting, Queued, Started, GpuDone, Reported, ReleaseRequested, Quarantined;
 } ADMISSION_G3_PRIVATE_SCENE;
 
 struct _ADMISSION_G3_PROCESS {
@@ -247,7 +252,8 @@ typedef struct {
   unsigned char Commands[APPLE_AGX_G4_NATIVE_MAX_BYTES];
   APPLE_AGX_G4_PRIVATE_LEASE G4Lease;
 } ADMISSION_BACKEND_IMAGE;
-struct _ADMISSION_CONTEXT { DXGKRNL_INTERFACE Interface; void *GpuvaG3State; BOOLEAN Started;
+typedef struct { unsigned State; struct { ULONG Fence; ULONGLONG ContextToken; } Description; } REPLAY_PACKET;
+struct _ADMISSION_CONTEXT { REPLAY_PACKET RenderPacket; BOOLEAN InterfaceValid; LONG RenderDpcFence,SchedulerDpcPending; DXGKRNL_INTERFACE Interface; void *GpuvaG3State; BOOLEAN Started;
   PDEVICE_OBJECT PhysicalDeviceObject; ADMISSION_CONTEXT *ObjectAdapter;
   int SchedulerLock,Scheduler;
   ADMISSION_BACKEND_IMAGE BackendImage;
@@ -455,4 +461,7 @@ static NTSTATUS AdmissionGpuvaG3BrokerTable(ADMISSION_G3_PROCESS *,ULONGLONG,BOO
 static NTSTATUS AdmissionGpuvaG3MirrorTable(ADMISSION_G3_PROCESS *,ULONGLONG,PVOID);
 static NTSTATUS AdmissionGpuvaG3AttachContext(ADMISSION_RENDER_CONTEXT *,ADMISSION_DEVICE *);
 static void AdmissionGpuvaG3DetachContext(ADMISSION_RENDER_CONTEXT *);
+#if defined(G3_PRIVATE_COMBINED)
+#include "g3_r137_completion_shim.h"
+#endif
 #endif

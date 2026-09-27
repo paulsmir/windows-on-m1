@@ -1,4 +1,7 @@
 #include "apple_agx_g4_builder.h"
+#if __has_feature(address_sanitizer)
+#include <sanitizer/lsan_interface.h>
+#endif
 #include "apple_agx_render_template_rebase.h"
 typedef struct {
   struct { struct { int (*PrivateEscape)(void *,APPLE_AGX_G3_PRIVATE_REQUEST *); } Ops; void *Context; } Gpuva;
@@ -79,7 +82,7 @@ static void r137_private_combined(void) {
   }
   /* Queue owner is exercised by the outer-DDI replay. Model its exact hold
    * here, retaining the real BeginJob/parser/graph/wire/firmware builder. */
-  scene->Queued=1;scene->Fence=41;
+  scene->Queued=1;scene->Fence=41;context.GpuvaG3PrivateFence=41;
   a.BackendImage.G4Native=1;a.BackendImage.BoundFence=41;
   a.BackendImage.G4CommandBytes=bytes;a.BackendImage.G4Lease=batch.Lease;
   assert(AppleAgxG4ComposeHeaderV2(&a.BackendImage.G4Header,r,0x10000,bytes,
@@ -92,13 +95,98 @@ static void r137_private_combined(void) {
   --a.BackendImage.G4Lease.SceneGeneration;
   expect_ok("R137 private BeginJob",AdmissionGpuvaG3BeginJob(&a,&context,41));
   assert(scene->Started && p->Graph.JobInFlight);
-  assert(AdmissionGpuvaG3CompleteJob(&a,41));
-  assert(scene->Queued && AdmissionGpuvaG3PrivateContextBusy(&context));
-  /* Step 6 retains the queue hold; only fixture teardown bypasses the future
-   * OS-notification owner. Step 7 replaces this with its real retirement hook. */
-  scene->Queued=0;
+  ADMISSION_PLATFORM_RUNTIME runtime={.Adapter=&a};
+  a.InterfaceValid=TRUE;a.Interface.DxgkCbSynchronizeExecution=replay_sync;
+  a.Interface.DxgkCbNotifyInterrupt=replay_notify;a.Interface.DxgkCbQueueDpc=replay_queue_dpc;
+  a.RenderPacket.State=AdmissionRenderPacketActive;
+  a.RenderPacket.Description.Fence=41;a.RenderPacket.Description.ContextToken=(ULONGLONG)(ULONG_PTR)&context;
+  context.Object.FenceOutstanding=41;replay_active_fence=41;replay_sync_fail=1;
+  APPLE_AGX_G3_PRIVATE_REQUEST release={0};
+  release.Magic=APPLE_AGX_G3_PRIVATE_MAGIC;release.Version=1;release.Bytes=sizeof(release);
+  release.Operation=APPLE_AGX_G3_PRIVATE_RELEASE;
+  release.ManagerId=batch.Lease.ManagerId;release.ManagerGeneration=batch.Lease.ManagerGeneration;
+  release.SceneId=batch.Lease.SceneId;release.SceneGeneration=batch.Lease.SceneGeneration;
+  unsigned scratch_offset=scene->Storage.Extents[0].Offset,scratch_bytes=scene->Storage.Extents[0].Bytes;
+  unsigned char *scratch=local_cpu+(40u<<20)+scratch_offset;
+  memset(scratch,0x5a,scratch_bytes); /* Model completed GPU writes. */
+  assert(r137_escape_transport(&t,&release));
+  assert(scene->Queued && scene->ReleaseRequested && scratch[0]==0x5a);
+  assert(!AdmissionGpuvaG3PrivateReported(&a,&context,41));
+  runtime.Backend.TaComplete=1;
+  assert(!AdmissionBackendComplete(&runtime,41,0,0,AppleAgxBackendCompletionSuccess));
+  assert(p->Graph.JobInFlight && scene->Queued);
+  runtime.Backend.D3Complete=1;
+  assert(!AdmissionBackendComplete(&runtime,41,0,0,AppleAgxBackendCompletionSuccess));
+  assert(!p->Graph.JobInFlight && scene->Queued && !replay_notify_count);
+  assert(context.Object.FenceOutstanding==41 && AdmissionGpuvaG3PrivateContextBusy(&context));
+  assert(!NT_SUCCESS(AdmissionGpuvaG3BeginJob(&a,&context,99)));
+  assert(!p->Graph.JobInFlight); /* Notify retry owns the adapter boundary. */
+  assert(scratch[0]==0x5a && state.PrivatePool.Blocks[scratch_offset>>16].Owner);
+  const char *fault=getenv("G3_REPLAY_R137_QUARANTINE");
+  if(fault && !strcmp(fault,"revoke")) broker.sync_failures=2;
+  replay_sync_fail=0;
+  assert(AdmissionBackendComplete(&runtime,41,0,0,AppleAgxBackendCompletionSuccess));
+  assert(replay_notify_count==1 && !context.Object.FenceOutstanding);
+  if(fault && !strcmp(fault,"revoke")) {
+    assert(p->Poisoned && p->Graph.Uncertain && scene->Quarantined);
+    assert(state.PrivatePool.Blocks[scratch_offset>>16].Owner && scratch[0]==0x5a);
+    assert(!AdmissionGpuvaG3PrivateRetireContext(&context));
+    goto Quarantine;
+  }
+  assert(!p->PrivateScenes && !context.GpuvaG3PrivateFence);
+  assert(!state.PrivatePool.Blocks[scratch_offset>>16].Owner);
+  for(unsigned i=0;i<scratch_bytes;++i) assert(!scratch[i]);
+  AGX_G4_BATCH next={0};
+  assert(prepare_process_buffers(&umd,&next,r,ranges));
+  assert(next.Lease.SceneGeneration!=batch.Lease.SceneGeneration);
+  assert(!r137_escape_transport(&t,&release)); /* Old generation cannot release reused bytes. */
+  scene=p->PrivateScenes;assert(scene && scene->Storage.Ranges[3].Va==(1ULL<<36)+scratch_offset);
+  scene->Queued=1;scene->Submitting=1;scene->Fence=42;context.GpuvaG3PrivateFence=42;
+  release.SceneId=next.Lease.SceneId;release.SceneGeneration=next.Lease.SceneGeneration;
+  assert(r137_escape_transport(&t,&release));
+  replay_irql=DISPATCH_LEVEL;
+  AdmissionGpuvaG3PrivateCancel(&context,999,FALSE);assert(!context.GpuvaG3CancelFence);
+  AdmissionGpuvaG3PrivateCancel(&context,42,FALSE);
+  assert(replay_irql==DISPATCH_LEVEL && scene->Queued);
+  replay_irql=PASSIVE_LEVEL;
+  assert(AdmissionGpuvaG3PrivateContextBusy(&context)); /* Submit still owns its local pointer. */
+  AdmissionG4PrivateUnqueue(p,scene,42);
+  assert(!AdmissionGpuvaG3PrivateContextBusy(&context));
+  assert(!p->PrivateScenes && !state.PrivatePool.Blocks[scratch_offset>>16].Owner);
+  if(fault && !strcmp(fault,"reset")) {
+    next=(AGX_G4_BATCH){0};assert(prepare_process_buffers(&umd,&next,r,ranges));
+    scene=p->PrivateScenes;scene->Queued=1;scene->Fence=43;
+    context.GpuvaG3PrivateFence=43;context.GpuvaG3CancelFence=0;
+    a.BackendImage.G4Native=1;a.BackendImage.BoundFence=43;
+    a.BackendImage.G4Lease=next.Lease;a.BackendImage.G4CommandBytes=bytes;
+    assert(AppleAgxG4ComposeHeaderV2(&a.BackendImage.G4Header,r,0x10000,bytes,
+        APPLE_AGX_G4_COLOR_BGRA8,ranges));
+    memcpy(a.BackendImage.Commands,view.Native,bytes);
+    context.GpuvaG3MappingGeneration=p->Graph.MappingGeneration;
+    expect_ok("R137 job before uncertain reset",AdmissionGpuvaG3BeginJob(&a,&context,43));
+    assert(!AdmissionGpuvaG3PrivateReset(&a));
+    replay_irql=DISPATCH_LEVEL;AdmissionGpuvaG3PrivateCancel(&context,43,TRUE);replay_irql=0;
+    context.Object.FenceOutstanding=0; /* Software reset does not authorize release. */
+    assert(AdmissionGpuvaG3PrivateContextBusy(&context));
+    assert(scene->Quarantined && p->Poisoned && p->Graph.JobInFlight);
+    assert(!AdmissionGpuvaG3PrivateRetireContext(&context));
+    goto Quarantine;
+  }
+  assert(AdmissionGpuvaG3PrivateRetireContext(&context));
+  assert(!p->PrivateManager.Generation); /* Last context drops manager ownership. */
   AdmissionGpuvaG3DetachContext(&context);
   expect_ok("R137 combined destroy",AdmissionDdiDestroyProcess(&a,p));
   free(arena);free(local_cpu);local_cpu=NULL;
   puts("R137 private combined: PASS");
+  return;
+Quarantine:
+  assert(AdmissionDdiDestroyProcess(&a,p)==STATUS_DEVICE_BUSY);
+  assert(!r137_escape_transport(&t,&release));
+  /* Intentional adapter-lifetime retention has no quiescence proof. Do not
+   * invent a successful reset just to satisfy the host leak checker. */
+#if __has_feature(address_sanitizer)
+  __lsan_ignore_object(p);
+#endif
+  free(arena);
+  puts("R137 private quarantine: PASS");
 }

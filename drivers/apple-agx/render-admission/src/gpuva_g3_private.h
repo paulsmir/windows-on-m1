@@ -20,6 +20,7 @@ typedef struct _ADMISSION_G3_STATE {
   struct _ADMISSION_G3_PROCESS *ActiveProcess;
   ULONG ActiveFence;
   ULONG LastCompletedFence;
+  ULONG PrivateCompletionFence;
   ULONGLONG UnpublishedGroups[32];
 } ADMISSION_G3_STATE;
 
@@ -37,7 +38,7 @@ typedef struct _ADMISSION_G3_PRIVATE_SCENE {
   ADMISSION_RENDER_CONTEXT *Context;
   APPLE_AGX_G3_PRIVATE_SCENE Storage;
   APPLE_AGX_G4_NATIVE_RENDER Geometry;
-  ULONG Fence, Queued, Started, GpuDone, Reported, ReleaseRequested, Quarantined;
+  ULONG Fence, Submitting, Queued, Started, GpuDone, Reported, ReleaseRequested, Quarantined;
 } ADMISSION_G3_PRIVATE_SCENE;
 
 typedef struct _ADMISSION_G3_PROCESS {

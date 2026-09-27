@@ -278,6 +278,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCancelCommand(
   if (AdmissionRenderPacketCancelPrepared(
           &adapter->RenderPacket,
           (ULONGLONG)(ULONG_PTR)context)) {
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    AdmissionGpuvaG3PrivateCancel(context,context->Object.FenceOutstanding,FALSE);
+#endif
     context->Object.FenceOutstanding = 0u;
     cancelled = TRUE;
   } else if (AdmissionPrepatchedCancel(

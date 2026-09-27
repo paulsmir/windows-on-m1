@@ -491,6 +491,8 @@ typedef struct _ADMISSION_RENDER_CONTEXT {
   PVOID GpuvaG3Process;
   struct _ADMISSION_RENDER_CONTEXT *GpuvaG3NextContext;
   ULONGLONG GpuvaG3PrivateManagerGeneration;
+  volatile LONG GpuvaG3PrivateFence, GpuvaG3CancelFence, GpuvaG3CancelUncertain;
+  BOOLEAN GpuvaG3Closing;
   ULONGLONG GpuvaG3RootIpa;
   ULONGLONG GpuvaG3DmaBufferVa;
   ULONGLONG GpuvaG3MappingGeneration;
@@ -1436,6 +1438,10 @@ DXGKDDI_RESTARTFROMTIMEOUT AdmissionDdiRestartFromTimeout;
 DXGKDDI_ESCAPE AdmissionDdiEscape;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 BOOLEAN AdmissionGpuvaG3PrivateContextBusy(ADMISSION_RENDER_CONTEXT *);
+BOOLEAN AdmissionGpuvaG3PrivateRetireContext(ADMISSION_RENDER_CONTEXT *);
+BOOLEAN AdmissionGpuvaG3PrivateReset(ADMISSION_CONTEXT *);
+VOID AdmissionGpuvaG3PrivateCancel(ADMISSION_RENDER_CONTEXT *, ULONG, BOOLEAN);
+BOOLEAN AdmissionGpuvaG3PrivateReported(ADMISSION_CONTEXT *, ADMISSION_RENDER_CONTEXT *, ULONG);
 NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *, const DXGKARG_ESCAPE *);
 #endif
 DXGKDDI_COLLECTDBGINFO AdmissionDdiCollectDbgInfo;

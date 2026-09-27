@@ -1,7 +1,9 @@
 # R137 offline process-backing implementation
 
-Status: stopped for the retirement-owner scope correction in R136 section 5.
-Committed prerequisites 1–3 only; step 4 withdrawn; steps 4–7 remain incomplete.
+Status: steps 1–7 implemented and verified offline after the user-authorized
+completion-owner amendment in R136 section 6. The historical stop and withdrawn
+prototype below remain evidence; they are superseded by the continuation.
+No hardware/package readiness or GO_EXP855 is claimed.
 
 Plan: R136-process-backing-decision.md section 3, steps 1–7. Starting HEAD
 871fb22602c390e94f398aeebbe875a7887521da. No hardware or package build;
@@ -234,3 +236,76 @@ WDK26100 ARM64 KMD compile/link passes; standalone SYS step6.sys SHA256
 UMD ClCompile and six affected native Mesa bridge translation units compile for
 ARM64; no DLL/package/signing/hardware claim. Logs are step6-*.log under
 `.local/experiments/R137-offline`. REVIEW.md unchanged; R136 dispositions stand.
+
+
+## Step 7 — completion, cancellation and reclamation
+
+The real backend completion owner now requires exact TA+3D before EndJob and
+keeps the context's fence outstanding until Windows notification is Reported.
+It retains CompletionContext across notification retry even after packet/image
+release. PrivateCompletionFence prevents another job from crossing this pending
+adapter boundary. Scene queue references clear only after broker EndJob/release
+and the reported notification; release remains a request until then. Reclaim
+unlinks/revokes exclusive leaves, zeroes complete extents, then returns them to
+the pool. Context retirement first closes new acquisitions, drains or refuses
+retained scenes, and drops its manager reference; the last reference releases
+manager storage. Process destruction releases tables only after GraphDestroy.
+
+Cancellation/preemption/reset owners publish matching cancellation markers at
+raised IRQL. PASSIVE reaping returns only proven never-started work. The separate
+Submitting reference prevents a cancellation from freeing the pointer still held
+by Submit's construction/rollback path; queue publication drops it under the G3
+lock. Active or pending private reset has no new quiescence/TLB proof: it fails
+closed and quarantines charged storage. Uncertain broker revoke similarly
+retains ownership and refuses context/process destruction; there is no software
+queue-reset shortcut to reuse and no new TDR-success claim.
+
+Observed RED→GREEN gates:
+
+- Real AdmissionBackendComplete previously ended the broker job after TA alone.
+  It now requires both completions. Failed synchronized notify retains scene,
+  context and pool charge; a retry after packet/image release completes safely.
+- BeginJob previously crossed the notify-retry boundary after EndJob. The
+  adapter completion hold now rejects it until the exact Reported event.
+- A cancellation could reap a scene while Submit still held its local pointer.
+  Submitting now pins it through publication/rollback; the DPC marker itself
+  never acquires the G3 fast mutex or reclaims memory.
+- The combined replay verifies release-pending data survives failed notify,
+  zero-before-return after successful notify, reused-VA/new-generation stale
+  token rejection, never-started cancellation, last-context manager release,
+  and real-broker uncertain-revoke/active-reset quarantine. Intentional
+  quarantine is retained in the host fixture rather than inventing reset proof.
+
+Verification: G3 22 tests and G4 replay 7 tests pass; full suite1137 preserves
+exactly the baseline15 failures/41 errors/2 skips. Pinned WDK26100 standalone
+ARM64 KMD compile/link has zero warnings/errors. Compile-only step7.sys SHA256
+`4839dc5960fb3295c3e4a7e745146dc724ebc48480e388806a2725dda2af1383`.
+All 534 tracked driver files match the persistent Windows builder; source hash
+manifest `final-r137-source-hashes.json` SHA256
+`a85159bf1b54a9dc5968b148f829cdf03c83fbd050031407dd278a69eec5e2bc`.
+Evidence is under `.local/experiments/R137-offline/step7-*.log` and
+`final-r137-source-verify.log`. REVIEW.md unchanged; R136 dispositions stand.
+
+Independent final whole-branch review of base871fb226 through step6 plus the
+final step7 diff found no Critical/Important issues; its five focused replays
+passed independently. Review was done before the step7 commit to preserve the
+user's one implementation commit per step. It did not independently repeat the
+full suite/Windows compile. No minor fixes were deferred. Live VidMm admission,
+firmware execution, DWM progress, real concurrent WDDM timing, hardware reset
+success and package readiness remain unproven. Existing framework shims model
+scheduler/OS boundaries, and the combined replay models queue acceptance while
+the separate outer-DDI replay executes its real owner.
+
+## Next hardware checkpoint — EXP855, separately authorized only
+
+No Air, package, install or launch occurred. Mu and m1n1 commit IDs and dirty
+hashes are unchanged from the start of R137. Before any candidate, a separate
+hash-bound package gate must rebuild/link all current production sources. The
+first approved bounded native job must record the 40/16/8-MiB partition and VA
+reservation, nine exclusive private ranges in the actual process root, successful
+BeginJob, exact TA/3D and Windows fence notification, then unlink/revoke/zero and
+safe reuse with a new generation. Ordinary command/attachment checks remain
+active. A 40-MiB VidMm segment's DWM capacity/admission and all live timing remain
+risks; unknown reset/revoke deliberately consumes quota until a proven recovery.
+Recovery remains ordinary EXP377/392 Code28, with GPU-hidden only for emergency
+rollback. This offline implementation does not authorize EXP855 or set GO_EXP855.

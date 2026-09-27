@@ -2376,12 +2376,14 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
 #endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   {
-    ADMISSION_RENDER_CONTEXT *g3_context = adapter == NULL ? NULL :
-        (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
-            adapter->RenderPacket.Description.ContextToken;
+    ADMISSION_RENDER_CONTEXT *g3_context = runtime->CompletionContext;
+    if (g3_context == NULL && adapter != NULL)
+      g3_context = (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
+          adapter->RenderPacket.Description.ContextToken;
     if (adapter != NULL && g3_context != NULL &&
         g3_context->GpuvaG3Process != NULL &&
-        !AdmissionGpuvaG3CompleteJob(adapter, Fence))
+        (!runtime->Backend.TaComplete || !runtime->Backend.D3Complete ||
+         !AdmissionGpuvaG3CompleteJob(adapter, Fence)))
       return APPLE_AGX_BACKEND_FALSE;
   }
 #endif
@@ -2499,7 +2501,6 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
       return APPLE_AGX_BACKEND_FALSE;
     }
 #endif
-    runtime->CompletionContext->Object.FenceOutstanding = 0u;
     if (!AppleAgxCompletionTransactionAdvance(
             &runtime->Completion, Fence, Node, Engine,
             AppleAgxCompletionSchedulerCommitted,
@@ -2547,11 +2548,21 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
     AdmissionGdiReceiptCompleteWindows(adapter, Fence,
         (ULONG)Status, TRUE);
   }
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (runtime->Completion.Phase != AppleAgxCompletionReported ||
+      !AdmissionGpuvaG3PrivateReported(adapter,runtime->CompletionContext,Fence))
+    return APPLE_AGX_BACKEND_FALSE;
+#endif
   if (runtime->Completion.Phase != AppleAgxCompletionReported ||
       !AppleAgxCompletionTransactionFinish(
           &runtime->Completion, Fence, Node, Engine))
     return APPLE_AGX_BACKEND_FALSE;
+  KeAcquireSpinLock(&adapter->SchedulerLock,&old_irql);
+  if (runtime->CompletionContext != NULL &&
+      runtime->CompletionContext->Object.FenceOutstanding == Fence)
+    runtime->CompletionContext->Object.FenceOutstanding = 0u;
   runtime->CompletionContext = NULL;
+  KeReleaseSpinLock(&adapter->SchedulerLock,old_irql);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   if (!AdmissionCompletedOutputMarkNotified(
           &runtime->CompletedOutput, Fence) ||
@@ -2780,6 +2791,10 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendRetire(
             state == AdmissionRenderPacketActive ? 1u : 0u) &&
         AppleAgxSchedulerResetEngine(
             &adapter->Scheduler, Node, Engine, &ignored)) {
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+      AdmissionGpuvaG3PrivateCancel(render_context,Fence,
+          state == AdmissionRenderPacketActive ? TRUE : FALSE);
+#endif
       render_context->Object.FenceOutstanding = 0u;
       retired = TRUE;
     }
