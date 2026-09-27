@@ -1,5 +1,19 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-27 EXP850 R130 — SubmitCommandVirtual first-failure candidate built offline
+
+Commit `7058f145` records the first KMD virtual-submit rejection with branch,
+returned/original status, scalar Args, PID and adapter-wide failure count.
+The existing PASSIVE correlation worker publishes `Wom1G4SubmitFailure`.
+Real-C outer/native replay was RED→GREEN, including first-record retention;
+package850 from this HEAD passed 529-file source verification and two ARM64
+0-warning/0-error builds. SYS SHA256 `e9f8b336f2644468935cb7e8ab1402366a5892c01906b927232bf60dcfb98764`;
+all four member hashes and the build receipt are in
+`.local/experiments/EXP850-r130-submitrx/`. EXP850A and B are preserved
+superseded offline builds. No Air, install or hardware verdict. The next
+causal checkpoint remains a package-bound first-failure branch/status/Args
+receipt correlated with Reason19. Ordinary Code28 is the last proven recovery.
+
 ## 2026-09-27 EXP848 Reason19 offline — virtual-submit rejection attributed
 
 All 84 saved ID467 Reason19 events have the same 16-frame stack, including
