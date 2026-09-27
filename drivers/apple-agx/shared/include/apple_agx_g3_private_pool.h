@@ -58,6 +58,8 @@ static inline int AppleAgxG3PrivateFree(APPLE_AGX_G3_PRIVATE_POOL *p,
       e->Offset >= (16u<<20) || e->Bytes > (16u<<20)-e->Offset) return 0;
   first=e->Offset/APPLE_AGX_G3_PRIVATE_UNIT;
   count=e->Bytes/APPLE_AGX_G3_PRIVATE_UNIT;
+  if (first >= APPLE_AGX_G3_PRIVATE_UNITS ||
+      count > APPLE_AGX_G3_PRIVATE_UNITS-first) return 0;
   for (unsigned i=first; i<first+count; ++i)
     if (p->Blocks[i].Owner!=owner || p->Blocks[i].Generation!=e->Generation ||
         p->Blocks[i].First!=first || p->Blocks[i].Count!=count) return 0;
