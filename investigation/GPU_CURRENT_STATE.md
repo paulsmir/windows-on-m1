@@ -1,4 +1,11 @@
-# GPU current boundary — 2026-09-26
+# GPU current boundary — 2026-09-27
+
+## 2026-09-27 EXP848 — stale-edge fix survived 10 minutes; UMD AV blocks DWM
+
+Package848 from c72395d4 (0-warning/0-error build; m1n1/Mu R110 unchanged) cold-booted full-owner with ARM_CONSUMED and Code0. From Windows boot 09:40:09Z through 09:50:21Z, pinned SSH and Code0 remained; no new bugcheck/System 1001/minidump or Wom1G3PagingFailure. This confirms the EXP847 0x10E did not recur in the measured window, not that the graph fix is universally sufficient. UMD evidence has 1370 create-device, 677 draw-before, zero g4-present/reject-*; DWM/dwmcore.dll and StartMenu/Explorer/UMD produced Application 1000 AVs. Scanout snapshot remained all-zero. Next causal target is the UMD AV at +0xf0ad0 and DWM crash, using the collected dump/event/ETL evidence before new hardware.
+
+Nine evidence files host SHA-verified under `.local/experiments/EXP848-r127-stale/hardware-evidence/` (artifact manifest SHA256 `b394e2a502e9db40ee9725ca560b2cea132ec9ffd71bd30e4e2b08b87741cd69`). Ordered reboot, hidden exact oem5 cleanup, and immutable ordinary reentry restored pinned SSH, one present Code28, staged/arm/SYS/UMD/service/signer absent, CPU8; durable Preflight PASS. USB5/keyboard1/mouse0 is the pre-existing baseline.
+
 
 ## 2026-09-26 EXP834 — G3 gate/borrow/platform crossed; Scanout blocks Code0
 
