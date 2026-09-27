@@ -1,5 +1,26 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-27 EXP848 Reason19 offline — virtual-submit rejection attributed
+
+All 84 saved ID467 Reason19 events have the same 16-frame stack, including
+DWM at 09:40:08.1272898Z. Public-symbol/call-site reconstruction identifies
+VidSchiSubmitRenderVirtualCommand → VidSchiSendToExecutionQueue →
+VidSchMarkDeviceAsError(0x13), immediately after the dxgkrnl virtual-submit
+profiler pair (Function0x13c7). Immediate boundary: nonzero return from
+AdmissionDdiSubmitCommandVirtual/callee, not an unidentified residency/IRQ
+error. STATUS_INVALID_PARAMETER is source/WDK-backed, not a saved return
+register; exact rejection predicate and Args remain unmeasured. Module bases
+are reconstructed, not an EXP848 captured image list. ETL reports five lost
+buffers; do not infer absent callbacks from missing records.
+
+WHY CONTINUE COMPARISON: one same-ETL stack/public-symbol call-site pass now
+discriminates virtual submission. Pass complete; no older-reference search.
+Next causal target is the KMD outer/native submit rejection stage: bounded
+first-failure and lifecycle receipt plus real-C >128-callback host mock,
+designed only in `investigation/analysis/EXP848-reason19.md`. No product edit,
+package/build or Air access in this task; ordinary Code28 remains the last
+recorded recovery. Compiler-source repair remains a separate causal track.
+
 ## 2026-09-27 EXP848 offline — compiler projection not selected; churn attribution open
 
 Exact DLL848/PDB/CDB and closure argv prove c410ade6 exists in the projected
