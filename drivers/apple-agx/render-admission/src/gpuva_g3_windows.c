@@ -298,6 +298,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
   /* All VidMm local pages belong to this one contiguous reservation.  Its
    * IPA base is stable for the broker epoch and common to every process. */
   process->Graph.SharedBackingGeneration = local_view.GuestIpaAddress;
+  process->Graph.Registry = &state->Registry;
   if (!AppleAgxGpuvaG3GraphCreate(&process->Graph, process->BootstrapIpa,
                                   Args->Flags.SystemProcess != 0u)) {
     if (process->Graph.Uncertain) {
@@ -353,6 +354,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyProcess(
       return STATUS_DEVICE_BUSY;
     }
     process->TableShadows = entry->Next;
+    if (entry->ResidentPtes != NULL) {
+      for (UINT i = 0u; i < 8192u; ++i)
+        if (entry->ResidentPtes[i].Flags &&
+            entry->ResidentPtes[i].SegmentId == 0u)
+          AppleAgxGpuvaG3MappingRelease(&process->Graph,
+              entry->ResidentPtes[i].GuestIpa);
+      ExFreePoolWithTag(entry->ResidentPtes, ADMISSION_POOL_TAG);
+    }
     if (entry->LogicalPtes != NULL)
       ExFreePoolWithTag(entry->LogicalPtes, ADMISSION_POOL_TAG);
     ExFreePoolWithTag(entry, ADMISSION_POOL_TAG);
@@ -575,6 +584,8 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
   }
   if (state->ActiveProcess == NULL && !process->Poisoned &&
       g4_valid &&
+      (!adapter->BackendImage.G4Native ||
+       context->GpuvaG3MappingGeneration == process->Graph.MappingGeneration) &&
       !context->GpuvaG3Poisoned && context->GpuvaG3RootIpa != 0ULL &&
       context->GpuvaG3RootIpa == process->Graph.RootIpa &&
       (adapter->BackendImage.G4Native ?
@@ -756,7 +767,7 @@ static void AdmissionG4SnapshotFailure(
   snapshot->OwnerProcessId = process->Graph.ProcessId;
   snapshot->RootIpa = process->Graph.RootIpa;
   snapshot->ProcessGeneration = process->Graph.ProcessGeneration;
-  snapshot->MappingGeneration = process->Graph.NextGeneration;
+  snapshot->MappingGeneration = process->Graph.MappingGeneration;
   snapshot->GraphPresent = AppleAgxGpuvaG3GraphContainsRangeAccess(
       &process->Graph, failure->Va, failure->Bytes, failure->Write != 0);
   if (failure->Va >= (1ULL << 39)) return;
@@ -821,6 +832,7 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   ADMISSION_G3_STATE *state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
   ADMISSION_G3_PROCESS *process =
       (ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
+  ULONGLONG mapping_generation;
   APPLE_AGX_G4_SUBMIT_VIEW view;
   APPLE_AGX_G4_PARSE_RESULT result;
   APPLE_AGX_G4_FAILURE failure = {0};
@@ -892,6 +904,7 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   } else if (result == AppleAgxG4ParseOk) {
     result = AppleAgxG4ParseUnsupported;
   }
+  mapping_generation = process->Graph.MappingGeneration;
   if (result != AppleAgxG4ParseOk)
     AdmissionG4SnapshotFailure(process, &failure, &detail);
   ExReleaseFastMutex(&state->Lock);
@@ -915,6 +928,7 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   if (!AdmissionBackendImageBindG4Submission(&adapter->BackendImage,
           &packet, (PVOID)(ULONG_PTR)packet.DestinationCpuToken,
           &view, &binding)) goto Rollback;
+  context->GpuvaG3MappingGeneration = mapping_generation;
   context->GpuvaG3DmaBufferVa = args->DmaBufferVirtualAddress;
   context->GpuvaG3DmaBufferBytes = args->DmaBufferSize;
   rollbackBranch = AdmissionG4RejectQueue;

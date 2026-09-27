@@ -26,9 +26,13 @@ FUNCTIONS = {
         "AdmissionGpuvaG3AttachContext", "AdmissionGpuvaG3DetachContext",
         "AdmissionGpuvaG3ResolveTable", "AdmissionDdiSetRootPageTable",
         "AdmissionGpuvaG3SubmitVirtualPaging",
+        "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
+        "AdmissionG4GraphAccessTyped", "AdmissionGpuvaG3BeginJob",
+        "AdmissionGpuvaG3CompleteJob",
     ],
     "gpuva_g3_paging_windows.c": [
-        "AdmissionG3RejectPaging", "AdmissionG3UpdateParent",
+        "AdmissionG3RejectPaging", "AdmissionG3RetireSystemSubtree",
+        "AdmissionG3ActivateSystemSubtree", "AdmissionG3ResetTableShadow", "AdmissionG3RegisterTable", "AdmissionG3UpdateParent",
         "AdmissionG3UpdateLeaf", "AdmissionG3FindPagingEdge",
         "AdmissionG3ResolveLogicalVa", "AdmissionG3SnapshotAperture",
         "AdmissionG3EncodeVirtualPaging",
@@ -41,7 +45,7 @@ FUNCTIONS = {
 
 
 def body(source, name):
-    match = re.search(r"\b" + re.escape(name) + r"\s*\([^;]*?\)\s*\{", source, re.S)
+    match = re.search(r"(?m)^(?:_Use_decl_annotations_\s+)?(?:static\s+)?(?:unsigned long long|[A-Za-z_][A-Za-z_0-9]*)(?:\s+|\s*\*+\s*)" + re.escape(name) + r"\s*\([^;]*?\)\s*\{", source, re.S)
     if match is None:
         raise ValueError(f"missing KMD function {name}")
     depth = 1
@@ -81,8 +85,13 @@ def generate(revision=None, function_revisions=None):
             function_source = source
             if revision is not None and name in (
                     "AdmissionGpuvaG3BrokerTable",
+                    "AdmissionG3RetireSystemSubtree", "AdmissionG3ActivateSystemSubtree",
+                    "AdmissionG3ResetTableShadow", "AdmissionG3RegisterTable",
                     "AdmissionGpuvaG3MirrorTable",
                     "AdmissionGpuvaG3SubmitVirtualPaging",
+                    "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
+                    "AdmissionG4GraphAccessTyped", "AdmissionGpuvaG3BeginJob",
+                    "AdmissionGpuvaG3CompleteJob",
                     "AdmissionG3FindPagingEdge",
                     "AdmissionG3ResolveLogicalVa",
                     "AdmissionG3SnapshotAperture",
@@ -97,6 +106,7 @@ def generate(revision=None, function_revisions=None):
             parts.append(body(function_source, name) + "\n")
     platform = (M1N1 / "hv_agx_retained_platform.c").read_text()
     parts.append('#line 1 "hv_agx_retained_platform.c:gpuva_execute"\n')
+    parts.append(body(platform, "translate_guest") + "\n")
     parts.append(body(platform, "gpuva_execute") + "\n")
     parts.append('#include "g3_vidmm_replay_scenarios.c"\n')
     return "\n".join(parts)
@@ -107,11 +117,12 @@ def main(revision=None, function_revisions=None, old_context_flags=False):
         source = Path(directory) / "replay.c"
         binary = Path(directory) / "replay"
         source.write_text(generate(revision, function_revisions))
-        command = ["clang", "-std=gnu11", "-O0", "-g", "-Wno-unused-function",
+        command = [os.environ.get("CC", "clang"), "-std=gnu11", "-O0", "-g", "-Wno-unused-function",
                    "-Wno-multichar", "-I", str(Path(__file__).parent),
                    "-I", str(M1N1),
                    "-I", str(SHARED / "include"), str(source),
                    str(SHARED / "src/apple_agx_gpuva_g3_translation.c"),
+                   str(SHARED / "src/apple_agx_g4_submit.c"),
                    str(SHARED / "src/apple_agx_gpuva_g3_graph.c"),
                    str(SHARED / "src/apple_agx_gpuva_broker_v5_client.c"),
                    str(M1N1 / "hv_agx_gpuva_v5.c"),
@@ -119,6 +130,8 @@ def main(revision=None, function_revisions=None, old_context_flags=False):
                    str(M1N1 / "hv_agx_retained_backing.c"),
                    str(M1N1 / "hv_agx_retained_tables.c"),
                    "-o", str(binary)]
+        if os.environ.get("G3_REPLAY_R132"):
+            command[1:1] = ["-fsanitize=address,undefined"]
         if old_context_flags:
             command.insert(1, "-DADMISSION_CONTEXT_VALID_FLAGS=3")
         if revision is None and "AdmissionDdiCreateContext" not in (function_revisions or {}):

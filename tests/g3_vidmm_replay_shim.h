@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include "apple_agx_gpuva_g3_translation.h"
 #include "apple_agx_gpuva_g3_graph.h"
+#include "apple_agx_g4_submit.h"
 #include "hv_agx_gpuva_v5.h"
 #include "hv_agx_gpuva_v5_mmio.h"
 #include "hv_agx_retained_backing.h"
@@ -104,7 +105,7 @@ typedef union { D3DGPU_PHYSICAL_ADDRESS GpuPhysical; void *CpuVirtual; } DXGK_PA
 typedef enum { DXGK_PAGETABLEUPDATE_CPU_VIRTUAL=0, DXGK_PAGETABLEUPDATE_GPU_VIRTUAL=1, DXGK_PAGETABLEUPDATE_GPU_PHYSICAL=2 } DXGK_PAGETABLEUPDATEMODE;
 typedef struct { union { struct { ULONGLONG Valid:1,Zero:1,CacheCoherent:1,ReadOnly:1,NoExecute:1,Segment:5,LargePage:1,PhysicalAdapterIndex:6,PageTablePageSize:2,SystemReserved0:1,Reserved:44; }; ULONGLONG Flags; }; union { ULONGLONG PageAddress,PageTableAddress; }; } DXGK_PTE;
 typedef union { struct { UINT Repeat:1,InitialUpdate:1,NotifyEviction:1,Use64KBPages:1,NativeFence:1,Reserved:27; }; UINT Value; } DXGK_UPDATEPAGETABLEFLAGS;
-typedef struct { HANDLE hProcess; DXGK_PAGETABLEUPDATEADDRESS PageTableAddress; DXGK_PAGETABLEUPDATEMODE UpdateMode; UINT PageTableLevel,StartIndex,NumPageTableEntries; DXGK_UPDATEPAGETABLEFLAGS Flags; DXGK_PTE *pPageTableEntries,*pPageTableEntries64KB; UINT Reserved0,DriverProtection; ULONGLONG FirstPteVirtualAddress; } DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE;
+typedef struct { HANDLE hProcess,hAllocation; ULONGLONG AllocationOffsetInBytes; DXGK_PAGETABLEUPDATEADDRESS PageTableAddress; DXGK_PAGETABLEUPDATEMODE UpdateMode; UINT PageTableLevel,StartIndex,NumPageTableEntries; DXGK_UPDATEPAGETABLEFLAGS Flags; DXGK_PTE *pPageTableEntries,*pPageTableEntries64KB; UINT Reserved0,DriverProtection; ULONGLONG FirstPteVirtualAddress; } DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE;
 typedef struct { HANDLE hProcess; D3DGPU_PHYSICAL_ADDRESS RootPageTableAddress; ULONGLONG StartVirtualAddress,EndVirtualAddress; } DXGK_BUILDPAGINGBUFFER_FLUSHTLB;
 enum { DXGK_OPERATION_VIRTUAL_TRANSFER=8, DXGK_OPERATION_VIRTUAL_FILL=9,
        DXGK_OPERATION_UPDATE_PAGE_TABLE=11, DXGK_OPERATION_FLUSH_TLB=12,
@@ -185,14 +186,20 @@ typedef struct { UINT Magic,Flags; ADMISSION_OBJECT_DEVICE *Device;
 typedef struct _ADMISSION_DEVICE { ADMISSION_OBJECT_DEVICE Object; LONG Win32Generation; ADMISSION_G3_PROCESS *GpuvaG3Process; } ADMISSION_DEVICE;
 typedef struct { int unused; } ADMISSION_SCHEDULER_CONTEXT;
 typedef struct { int unused; } ADMISSION_PREPATCHED_RENDER;
-typedef struct _ADMISSION_RENDER_CONTEXT { ADMISSION_OBJECT_CONTEXT Object; UINT Win32Generation; BOOLEAN Win32Transport,GpuvaG3Poisoned; ADMISSION_SCHEDULER_CONTEXT SchedulerContext; ADMISSION_PREPATCHED_RENDER PrepatchedRender; ADMISSION_G3_PROCESS *GpuvaG3Process; ULONGLONG GpuvaG3RootIpa; } ADMISSION_RENDER_CONTEXT;
-typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONGLONG UnpublishedGroups[32]; } ADMISSION_G3_STATE;
-typedef struct _ADMISSION_G3_TABLE_SHADOW { struct _ADMISSION_G3_TABLE_SHADOW *Next; APPLE_AGX_MEMORY_OBJECT Memory; ULONGLONG OriginalIpa,BrokerIpa; APPLE_AGX_GPUVA_G3_LOGICAL_PTE *LogicalPtes; } ADMISSION_G3_TABLE_SHADOW;
+typedef struct _ADMISSION_RENDER_CONTEXT { ADMISSION_OBJECT_CONTEXT Object; UINT Win32Generation; BOOLEAN Win32Transport,GpuvaG3Poisoned; ADMISSION_SCHEDULER_CONTEXT SchedulerContext; ADMISSION_PREPATCHED_RENDER PrepatchedRender; ADMISSION_G3_PROCESS *GpuvaG3Process; ULONGLONG GpuvaG3RootIpa,GpuvaG3DmaBufferVa,GpuvaG3MappingGeneration; ULONG GpuvaG3DmaBufferBytes; } ADMISSION_RENDER_CONTEXT;
+typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence,LastCompletedFence; ULONGLONG UnpublishedGroups[32]; } ADMISSION_G3_STATE;
+typedef struct _ADMISSION_G3_TABLE_SHADOW { struct _ADMISSION_G3_TABLE_SHADOW *Next; APPLE_AGX_MEMORY_OBJECT Memory; ULONGLONG OriginalIpa,BrokerIpa; APPLE_AGX_GPUVA_G3_LOGICAL_PTE *LogicalPtes,*ResidentPtes,*PendingPtes; } ADMISSION_G3_TABLE_SHADOW;
 struct _ADMISSION_G3_PROCESS { LIST_ENTRY Link; ADMISSION_G3_STATE *State; APPLE_AGX_GPUVA_G3_GRAPH Graph; APPLE_AGX_MEMORY_IO Io; APPLE_AGX_MEMORY_OBJECT BootstrapRoot; ADMISSION_G3_TABLE_SHADOW *TableShadows; ULONGLONG BootstrapIpa; ULONG Magic,DeviceRefs,ContextRefs; BOOLEAN Poisoned; };
 typedef struct { int unused; } REPLAY_APERTURE;
+typedef struct {
+  UINT G4Native,BoundFence,G4CommandBytes;
+  APPLE_AGX_G4_PRIVATE_HEADER_V2 G4Header;
+  unsigned char Commands[APPLE_AGX_G4_NATIVE_MAX_BYTES];
+} ADMISSION_BACKEND_IMAGE;
 struct _ADMISSION_CONTEXT { void *GpuvaG3State; BOOLEAN Started;
   PDEVICE_OBJECT PhysicalDeviceObject; ADMISSION_CONTEXT *ObjectAdapter;
   int SchedulerLock,Scheduler;
+  ADMISSION_BACKEND_IMAGE BackendImage;
   struct { REPLAY_APERTURE Aperture; } Memory;
 };
 int AdmissionPagingRecordsValid(const ADMISSION_PAGING_RECORD *,UINT,UINT,UINT);
@@ -214,6 +221,21 @@ static NTSTATUS AdmissionCpuQueueSubmit(ADMISSION_CONTEXT *adapter,
 NTSTATUS AdmissionGpuvaG3SubmitVirtualPaging(ADMISSION_CONTEXT *,
     ADMISSION_RENDER_CONTEXT *,const DXGKARG_SUBMITCOMMANDVIRTUAL *);
 
+enum { AdmissionG4RejectPagingInput=2, AdmissionG4RejectPagingShape,
+  AdmissionG4RejectPagingRecords, AdmissionG4RejectPagingQueue };
+/* Receipt sink only; keep the paging return status and poison side effect. */
+static NTSTATUS AdmissionG4SubmitReject(ADMISSION_CONTEXT *a,
+    ADMISSION_RENDER_CONTEXT *c, const DXGKARG_SUBMITCOMMANDVIRTUAL *v,
+    ULONG branch, NTSTATUS status, ULONG downstream, BOOLEAN poison) {
+  (void)a; (void)v; (void)branch; (void)downstream;
+  if (poison && c) c->GpuvaG3Poisoned=TRUE;
+  return status;
+}
+
+/* Step-5 output view is outside this lifetime replay; the real G4 submit
+ * suite separately covers output resolution. No queue or graph is mocked. */
+static BOOLEAN AdmissionG3OutputMatchesLocal(ADMISSION_CONTEXT *a,
+    APPLE_AGX_GPUVA_G3_GRAPH *g) {(void)a;(void)g;return TRUE;}
 static unsigned char *local_cpu;
 static ULONGLONG local_ipa=0x10000000ULL;
 static ULONGLONG local_bytes=0x4000000ULL;
@@ -255,7 +277,8 @@ typedef struct {
   struct hv_agx_gpuva_v5_wire wire;
   struct hv_contract_snapshot memory;
   uint64_t slots[HV_AGX_GPUVA_V5_SLOTS][2];
-  uint64_t blocked_ipa;
+  uint64_t blocked_ipa, bad_subpage;
+  UINT sync_failures, invalidate_failures;
   UINT commands;
   uint64_t last_flush_start, last_flush_end;
   UINT flush_commands;
@@ -263,11 +286,30 @@ typedef struct {
 static struct hv_agx_gpuva_v5 gpuva_v5;
 static bool request_powered = true;
 static void gpuva_execute(void *, const AGX_GPUVA_V5_REQUEST *, AGX_GPUVA_V5_RESPONSE *);
+/* Feed the production translate_guest implementation an explicit stage-2
+ * model. System payload is nonidentity; tables remain in the local reserve. */
+typedef uint64_t u64;
+static struct {u64 phys_base,mem_size;} cur_boot_args;
+static struct {u64 ramdisk_base,ramdisk_max_size;} J313_AUTONOMOUS_LAYOUT;
+static u64 root_base,root_length;
+static bool launch_memory_valid;
+static struct hv_contract_snapshot launch_memory;
+static REPLAY_BROKER *translation_broker;
+static u64 hv_ipa_to_pa(u64 ipa) {
+  REPLAY_BROKER *b=translation_broker;
+  if ((b->blocked_ipa && (ipa & ~0x3fffULL)==b->blocked_ipa) ||
+      (b->bad_subpage && (ipa & ~0xfffULL)==b->bad_subpage)) return 0;
+  if (ipa>=local_ipa && ipa-local_ipa<local_bytes) return ipa;
+  if (ipa>=system_ipa && ipa-system_ipa<0x10000000ULL) return ipa+0x10000000ULL;
+  return 0; /* MMIO/software/protected stage-2 slot */
+}
+static u64 translate_guest(void *,u64);
 static uint64_t ReplayTranslate(void *opaque,uint64_t ipa) {
   REPLAY_BROKER *b=opaque;
-  if (ipa==b->blocked_ipa || ipa<local_ipa || ipa-local_ipa>local_bytes-0x4000 ||
-      !hv_agx_retained_backing_allowed(&b->memory,ipa,0x4000,0,0)) return 0;
-  return ipa;
+  translation_broker=b;launch_memory=b->memory;launch_memory_valid=true;
+  cur_boot_args.phys_base=b->memory.boot.ram_base;
+  cur_boot_args.mem_size=b->memory.boot.ram_size;
+  return translate_guest(opaque,ipa);
 }
 static uint64_t *ReplayMapPage(void *opaque,uint64_t ipa,uint64_t pa) {
   (void)opaque;
@@ -284,16 +326,21 @@ static bool ReplayWriteSlot(void *opaque,unsigned slot,uint64_t low,uint64_t hig
   if (!slot || slot>=HV_AGX_GPUVA_V5_SLOTS || high) return false;
   b->slots[slot][0]=low; b->slots[slot][1]=high; return true;
 }
-static bool ReplaySync(void *opaque) {(void)opaque;return true;}
-static bool ReplayInvalidate(void *opaque,unsigned slot) {(void)opaque;return slot>0 && slot<HV_AGX_GPUVA_V5_SLOTS;}
+static bool ReplaySync(void *opaque) {REPLAY_BROKER *b=opaque;if(b->sync_failures){--b->sync_failures;return false;}return true;}
+static bool ReplayInvalidate(void *opaque,unsigned slot) {REPLAY_BROKER *b=opaque;if(b->invalidate_failures){--b->invalidate_failures;return false;}return slot>0 && slot<HV_AGX_GPUVA_V5_SLOTS;}
 static bool ReplayPrefix(void *opaque) {(void)opaque;return true;}
 static bool ReplayLegacySlot63(void *opaque) {(void)opaque;return false;}
 static void ReplayBrokerInit(REPLAY_BROKER *b) {
   struct hv_agx_gpuva_v5_ops ops={b,ReplayTranslate,ReplayMapPage,ReplayReadSlot,
       ReplayWriteSlot,ReplaySync,ReplayInvalidate,ReplayPrefix,ReplayLegacySlot63};
-  b->memory.boot.ram_base=local_ipa;
-  b->memory.boot.ram_size=local_bytes;
-  b->memory.region_count=1;
+  b->memory.boot.ram_base=local_ipa<system_ipa+0x10000000ULL ? local_ipa : system_ipa+0x10000000ULL;
+  ULONGLONG ram_end=local_ipa+local_bytes>system_ipa+0x20000000ULL ?
+      local_ipa+local_bytes : system_ipa+0x20000000ULL;
+  b->memory.boot.ram_size=ram_end-b->memory.boot.ram_base;
+  b->memory.region_count=2;
+  b->memory.regions[1].kind=HV_CONTRACT_REGION_GUEST_RAM;
+  b->memory.regions[1].base=system_ipa+0x10000000ULL;
+  b->memory.regions[1].size=0x10000000ULL;
   b->memory.regions[0].kind=HV_CONTRACT_REGION_GUEST_RAM;
   b->memory.regions[0].base=local_ipa;
   b->memory.regions[0].size=local_bytes;

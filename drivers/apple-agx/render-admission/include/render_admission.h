@@ -491,6 +491,7 @@ typedef struct _ADMISSION_RENDER_CONTEXT {
   PVOID GpuvaG3Process;
   ULONGLONG GpuvaG3RootIpa;
   ULONGLONG GpuvaG3DmaBufferVa;
+  ULONGLONG GpuvaG3MappingGeneration;
   ULONG GpuvaG3DmaBufferBytes;
   BOOLEAN GpuvaG3Poisoned;
 #endif

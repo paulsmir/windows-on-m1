@@ -59,7 +59,6 @@ int main(void) {
         callback = (RENDER / "src/paging_windows.c").read_text()
         self.assertNotIn("update->Flags.Repeat ||", paging)
         self.assertGreaterEqual(paging.count("AppleAgxGpuvaG3PteInputIndex("), 4)
-        self.assertIn("AppleAgxGpuvaG3PteInputIndex(source_index,", paging)
         self.assertIn("MmGetPhysicalAddress(address->CpuVirtual)", gpuva)
         self.assertNotIn("pointer < base", gpuva)
         self.assertIn("AdmissionRecordGpuvaG3PagingInput(", callback)

@@ -6,10 +6,28 @@
 typedef void *(*APPLE_AGX_GPUVA_G3_ALLOC)(void *, unsigned long long);
 typedef void (*APPLE_AGX_GPUVA_G3_FREE)(void *, void *);
 
+/* Serialized by the adapter lock, shared across all process roots. A grant
+ * is not an OS pin: mapping references come only from ordered VidMm PTEs. */
+typedef struct _APPLE_AGX_GPUVA_G3_FRAME {
+  struct _APPLE_AGX_GPUVA_G3_FRAME *Next;
+  unsigned long long Ipa, Generation, Mappings, Grants;
+} APPLE_AGX_GPUVA_G3_FRAME;
+typedef struct _APPLE_AGX_GPUVA_G3_REGISTRY {
+  APPLE_AGX_GPUVA_G3_FRAME *Frames;
+  unsigned long long NextGeneration;
+} APPLE_AGX_GPUVA_G3_REGISTRY;
+typedef enum _APPLE_AGX_GPUVA_G3_BACKING_KIND {
+  AppleAgxGpuvaG3LocalBacking = 0,
+  AppleAgxGpuvaG3SystemBacking = 1
+} APPLE_AGX_GPUVA_G3_BACKING_KIND;
+
 typedef struct _APPLE_AGX_GPUVA_G3_NODE {
   struct _APPLE_AGX_GPUVA_G3_NODE *Next;
   unsigned long long Ipa, AuxIpa, Generation;
   unsigned int Index, Level, References, Writable;
+  unsigned int SystemRetired;
+  APPLE_AGX_GPUVA_G3_FRAME *Frame;
+  APPLE_AGX_GPUVA_G3_BACKING_KIND Kind;
 } APPLE_AGX_GPUVA_G3_NODE;
 
 typedef struct _APPLE_AGX_GPUVA_G3_GRAPH {
@@ -19,6 +37,8 @@ typedef struct _APPLE_AGX_GPUVA_G3_GRAPH {
   void *MemoryContext;
   unsigned long long ProcessId, ProcessGeneration, RootIpa, NextGeneration;
   unsigned long long SharedBackingGeneration;
+  APPLE_AGX_GPUVA_G3_REGISTRY *Registry;
+  unsigned long long MappingGeneration;
   unsigned long long LeaseToken;
   APPLE_AGX_GPUVA_G3_NODE *Tables, *Parents, *Leaves, *Backings;
   unsigned int LastStatus, Created, Uncertain, JobInFlight, Slot;
@@ -40,6 +60,14 @@ bool AppleAgxGpuvaG3GraphUpdateParent(APPLE_AGX_GPUVA_G3_GRAPH *,
 bool AppleAgxGpuvaG3GraphUpdateLeaf(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long TableIpa, unsigned int Index,
     unsigned long long GuestIpa, bool Writable);
+bool AppleAgxGpuvaG3GraphUpdateLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *,
+    unsigned long long TableIpa, unsigned int Index,
+    unsigned long long GuestIpa, bool Writable,
+    APPLE_AGX_GPUVA_G3_BACKING_KIND Kind);
+bool AppleAgxGpuvaG3MappingAcquire(APPLE_AGX_GPUVA_G3_GRAPH *,
+    unsigned long long GuestIpa);
+void AppleAgxGpuvaG3MappingRelease(APPLE_AGX_GPUVA_G3_GRAPH *,
+    unsigned long long GuestIpa);
 bool AppleAgxGpuvaG3GraphFlush(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long StartVa, unsigned long long EndVa);
 bool AppleAgxGpuvaG3GraphContainsRange(APPLE_AGX_GPUVA_G3_GRAPH *,

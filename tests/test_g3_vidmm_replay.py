@@ -11,6 +11,16 @@ REPLAY = ROOT / "tests/g3_vidmm_replay.py"
 
 
 class G3VidMmReplayTests(unittest.TestCase):
+    def test_r132_system_frame_lifetime_and_broker(self):
+        for fault in ("G3_REPLAY_R132", "G3_REPLAY_R132_SYNC_ONCE", "G3_REPLAY_R132_TLB"):
+            with self.subTest(fault=fault):
+                env=dict(os.environ, G3_REPLAY_R132="1")
+                env[fault]="1"
+                result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
+                    env=env, text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("R132 system lifetime: PASS", result.stdout)
+
     def test_exp799_shared_local_leaf_with_real_broker(self):
         env = dict(os.environ, G3_REPLAY_EXP799="1")
         result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,

@@ -25,7 +25,9 @@ static void update(ADMISSION_CONTEXT *adapter, HANDLE process, UINT level,
   expect_ok(name,AdmissionGpuvaG3BuildPagingBuffer(adapter,&args));
   assert(args.pDmaBuffer==dma && args.pDmaBufferPrivateData==private_data);
 }
+#include "g3_system_lifetime_cases.c"
 int main(void) {
+  if (getenv("G3_REPLAY_R132")) {system_lifetime_cases();return 0;}
   const int r79=getenv("G3_REPLAY_HISTORICAL")==NULL;
   /* EXP799 receipted the child IPA, not the reserve base.  This synthetic
    * base keeps that exact IPA inside the modelled 56 MiB local segment. */
@@ -521,7 +523,7 @@ int main(void) {
       DXGK_PTE group[4]={0};
       for (UINT i=0;i<4;i++) {
         group[i].Flags=0x9;
-        group[i].PageAddress=0x10180+i;
+        group[i].PageAddress=(system_ipa>>12)+i;
       }
       one.UpdatePageTable.NumPageTableEntries=3;
       one.UpdatePageTable.pPageTableEntries=group;
@@ -535,8 +537,8 @@ int main(void) {
         ADMISSION_G3_PROCESS *process=(ADMISSION_G3_PROCESS *)sys.hKmdProcess;
         APPLE_AGX_GPUVA_G3_NODE *node=process->Graph.Leaves;
         while (node && !(node->Index==16 &&
-                node->AuxIpa==local_ipa+0x180000)) node=node->Next;
-        assert(!node); /* No system-memory backing grant for this process. */
+                node->AuxIpa==system_ipa)) node=node->Next;
+        assert(node && node->AuxIpa == 0x851000000ULL); /* R132 direct system leaf. */
       }
       pte.Flags=0;
       one.UpdatePageTable.StartIndex=66;
@@ -603,10 +605,10 @@ int main(void) {
     assert(state.UnpublishedGroups[0]==unpublished_before+1u);
     for (UINT i=0;i<4;i++) scattered[i].PageAddress=0x851000+i;
     calls=broker.commands;
-    expect_ok("EXP793 unregistered system 16K group",
+    expect_ok("R132 registered system 16K group",
         AdmissionGpuvaG3BuildPagingBuffer(&adapter,&system_update));
-    assert(broker.commands==calls);
-    assert(state.UnpublishedGroups[0]==unpublished_before+2u);
+    assert(broker.commands>calls);
+    assert(state.UnpublishedGroups[0]==unpublished_before+1u);
     {
       ADMISSION_G3_PROCESS *process=(ADMISSION_G3_PROCESS *)sys.hKmdProcess;
       ADMISSION_G3_TABLE_SHADOW *shadow=process->TableShadows;

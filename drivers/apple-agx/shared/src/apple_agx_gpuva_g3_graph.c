@@ -69,6 +69,66 @@ static void remove_node(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   }
 }
 
+static APPLE_AGX_GPUVA_G3_FRAME *find_frame(APPLE_AGX_GPUVA_G3_GRAPH *g,
+    unsigned long long ipa) {
+  APPLE_AGX_GPUVA_G3_FRAME *f;
+  if (!g->Registry) return 0;
+  for (f = g->Registry->Frames; f; f = f->Next)
+    if (f->Ipa == ipa) return f;
+  return 0;
+}
+
+static void release_frame(APPLE_AGX_GPUVA_G3_GRAPH *g,
+    APPLE_AGX_GPUVA_G3_FRAME *f) {
+  APPLE_AGX_GPUVA_G3_FRAME **link;
+  if (!f || f->Mappings || f->Grants) return;
+  for (link = &g->Registry->Frames; *link && *link != f;
+       link = &(*link)->Next) {}
+  if (*link) {
+    *link = f->Next;
+    g->Free(g->MemoryContext, f);
+  }
+}
+
+bool AppleAgxGpuvaG3MappingAcquire(APPLE_AGX_GPUVA_G3_GRAPH *g,
+    unsigned long long ipa) {
+  APPLE_AGX_GPUVA_G3_FRAME *f;
+  if (!g || !g->Registry || !ipa || (ipa & 0xfffULL) ||
+      ipa > ~0ULL - 0xfffULL || g->Uncertain) return false;
+  ipa &= ~(G3_PAGE - 1u);
+  f = find_frame(g, ipa);
+  if (!f) {
+    if (g->Registry->NextGeneration == ~0ULL) return false;
+    f = g->Allocate(g->MemoryContext, sizeof(*f));
+    if (!f) return false;
+    memset(f, 0, sizeof(*f));
+    f->Ipa = ipa;
+    f->Generation = ++g->Registry->NextGeneration;
+    f->Next = g->Registry->Frames;
+    g->Registry->Frames = f;
+  }
+  if (f->Mappings == ~0ULL) return false;
+  ++f->Mappings;
+  return true;
+}
+
+void AppleAgxGpuvaG3MappingRelease(APPLE_AGX_GPUVA_G3_GRAPH *g,
+    unsigned long long ipa) {
+  APPLE_AGX_GPUVA_G3_FRAME *f = find_frame(g, ipa & ~(G3_PAGE - 1u));
+  if (!f || !f->Mappings) { g->Uncertain = 1u; return; }
+  --f->Mappings;
+  release_frame(g, f);
+}
+
+static void release_grant(APPLE_AGX_GPUVA_G3_GRAPH *g,
+    APPLE_AGX_GPUVA_G3_NODE *backing) {
+  if (backing->Frame) {
+    --backing->Frame->Grants;
+    release_frame(g, backing->Frame);
+  }
+  remove_node(g, &g->Backings, backing);
+}
+
 static bool revoke_unused_backing(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     APPLE_AGX_GPUVA_G3_NODE *backing) {
   AGX_GPUVA_V5_REQUEST revoke = {0};
@@ -80,7 +140,7 @@ static bool revoke_unused_backing(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     graph->Uncertain = 1u;
     return false;
   }
-  remove_node(graph, &graph->Backings, backing);
+  release_grant(graph, backing);
   return true;
 }
 
@@ -185,13 +245,20 @@ bool AppleAgxGpuvaG3GraphRegisterTable(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   /* VidMm reuses a freed page-table page at another level (EXP846 0x10E/0xB).
    * Retire the old table only when no parent still links it: clear its own
    * entries, revoke it, then register the page at the new level. */
-  if (existing && !retire_table(graph, existing)) return false;
+  /* Reserve replacement metadata before destructive retirement. */
   item = node(graph);
   if (!item) return false;
+  if (existing && !retire_table(graph, existing)) {
+    graph->Free(graph->MemoryContext, item);
+    return false;
+  }
   request.Command = AGX_GPUVA_V5_REGISTER_TABLE;
   request.AuxIpa = ipa;
   request.Index = level;
   if (!call(graph, &request)) {
+    /* A replaced table is already retired. Retain KMD lifetime records and
+     * forbid retry from treating the old shadow as a fresh table. */
+    if (existing) graph->Uncertain = 1u;
     graph->Free(graph->MemoryContext, item);
     return false;
   }
@@ -206,12 +273,13 @@ bool AppleAgxGpuvaG3GraphBindRoot(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     unsigned long long ipa) {
   AGX_GPUVA_V5_REQUEST request = {0};
   if (!graph || !graph->Created || graph->Uncertain ||
-      !find_table(graph, ipa, 0u)) return false;
+      !find_table(graph, ipa, 0u) || graph->MappingGeneration == ~0ULL) return false;
   if (graph->RootIpa == ipa) return true;
   request.Command = AGX_GPUVA_V5_RELOCATE_ROOT;
   request.TableIpa = ipa;
   if (!call(graph, &request)) return false;
   graph->RootIpa = ipa;
+  ++graph->MappingGeneration;
   return true;
 }
 
@@ -221,6 +289,7 @@ bool AppleAgxGpuvaG3GraphUpdateParent(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   AGX_GPUVA_V5_REQUEST request = {0};
   APPLE_AGX_GPUVA_G3_NODE *parent, *edge, *new_edge = 0;
   if (!graph || !graph->Created || graph->Uncertain) return false;
+  if (graph->JobInFlight || graph->MappingGeneration == ~0ULL) return false;
   parent = find_table(graph, table_ipa, 0u);
   if (!parent) parent = find_table(graph, table_ipa, 1u);
   if (!parent || index >= (parent->Level == 0u ? 8u : 2048u) ||
@@ -249,22 +318,33 @@ bool AppleAgxGpuvaG3GraphUpdateParent(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   } else {
     remove_node(graph, &graph->Parents, edge);
   }
+  ++graph->MappingGeneration;
   return true;
 }
 
 bool AppleAgxGpuvaG3GraphUpdateLeaf(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     unsigned long long table_ipa, unsigned int index,
     unsigned long long guest_ipa, bool writable) {
+  return AppleAgxGpuvaG3GraphUpdateLeafBacking(graph, table_ipa, index,
+      guest_ipa, writable, AppleAgxGpuvaG3LocalBacking);
+}
+
+bool AppleAgxGpuvaG3GraphUpdateLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
+    unsigned long long table_ipa, unsigned int index,
+    unsigned long long guest_ipa, bool writable,
+    APPLE_AGX_GPUVA_G3_BACKING_KIND kind) {
   AGX_GPUVA_V5_REQUEST request = {0};
   APPLE_AGX_GPUVA_G3_NODE *leaf, *new_leaf = 0, *backing = 0;
   APPLE_AGX_GPUVA_G3_NODE *old_backing = 0;
   bool new_backing = false;
-  if (!graph || !graph->Created || graph->Uncertain ||
+  if (!graph || !graph->Created || graph->Uncertain || graph->JobInFlight ||
+      graph->MappingGeneration == ~0ULL ||
+      (kind != AppleAgxGpuvaG3LocalBacking && kind != AppleAgxGpuvaG3SystemBacking) ||
       !find_table(graph, table_ipa, 2u) || index >= 2048u ||
       (guest_ipa && (guest_ipa & (G3_PAGE - 1u)))) return false;
   leaf = find_edge(graph->Leaves, table_ipa, index);
   if (guest_ipa && leaf && leaf->AuxIpa == guest_ipa &&
-      leaf->Writable == (unsigned)writable) return true;
+      leaf->Writable == (unsigned)writable && leaf->Kind == kind) return true;
   if (!guest_ipa && !leaf) return true;
   if (guest_ipa) {
     if (!leaf) {
@@ -275,6 +355,10 @@ bool AppleAgxGpuvaG3GraphUpdateLeaf(APPLE_AGX_GPUVA_G3_GRAPH *graph,
       if (!old_backing || !old_backing->References) return false;
     }
     backing = find_backing(graph, guest_ipa);
+    if (backing && backing->Kind != kind) {
+      if (new_leaf) graph->Free(graph->MemoryContext, new_leaf);
+      return false;
+    }
     if (!backing) {
       AGX_GPUVA_V5_REQUEST grant = {0};
       backing = node(graph);
@@ -283,9 +367,20 @@ bool AppleAgxGpuvaG3GraphUpdateLeaf(APPLE_AGX_GPUVA_G3_GRAPH *graph,
         return false;
       }
       backing->Ipa = guest_ipa;
+      backing->Kind = kind;
+      if (kind == AppleAgxGpuvaG3SystemBacking) {
+        backing->Frame = find_frame(graph, guest_ipa);
+        if (!backing->Frame || !backing->Frame->Mappings ||
+            backing->Frame->Grants == ~0ULL) {
+          graph->Free(graph->MemoryContext, backing);
+          if (new_leaf) graph->Free(graph->MemoryContext, new_leaf);
+          return false;
+        }
+      }
       backing->Generation = graph->SharedBackingGeneration ?
           graph->SharedBackingGeneration : ++graph->NextGeneration;
-      grant.Command = graph->SharedBackingGeneration ?
+      if (backing->Frame) backing->Generation = backing->Frame->Generation;
+      grant.Command = (backing->Frame || graph->SharedBackingGeneration) ?
           AGX_GPUVA_V5_REGISTER_SHARED_BACKING :
           AGX_GPUVA_V5_REGISTER_BACKING;
       grant.AuxIpa = guest_ipa;
@@ -296,6 +391,7 @@ bool AppleAgxGpuvaG3GraphUpdateLeaf(APPLE_AGX_GPUVA_G3_GRAPH *graph,
         return false;
       }
       new_backing = true;
+      if (backing->Frame) ++backing->Frame->Grants;
       backing->Next = graph->Backings;
       graph->Backings = backing;
     }
@@ -321,7 +417,7 @@ bool AppleAgxGpuvaG3GraphUpdateLeaf(APPLE_AGX_GPUVA_G3_GRAPH *graph,
       revoke.AuxIpa = guest_ipa;
       revoke.AllocationGeneration = backing->Generation;
       if (graph->Uncertain || !call(graph, &revoke)) graph->Uncertain = 1u;
-      else remove_node(graph, &graph->Backings, backing);
+      else release_grant(graph, backing);
     }
     if (new_leaf) graph->Free(graph->MemoryContext, new_leaf);
     return false;
@@ -333,12 +429,16 @@ bool AppleAgxGpuvaG3GraphUpdateLeaf(APPLE_AGX_GPUVA_G3_GRAPH *graph,
         ++backing->References;
       }
       leaf->AuxIpa = guest_ipa;
+      leaf->Kind = kind;
+      leaf->Generation = backing->Generation;
       leaf->Writable = writable ? 1u : 0u;
       if (old_backing != backing &&
           !revoke_unused_backing(graph, old_backing)) return false;
     } else {
       new_leaf->Ipa = table_ipa;
       new_leaf->AuxIpa = guest_ipa;
+      new_leaf->Kind = kind;
+      new_leaf->Generation = backing->Generation;
       new_leaf->Index = index;
       new_leaf->Writable = writable ? 1u : 0u;
       new_leaf->Next = graph->Leaves;
@@ -350,6 +450,7 @@ bool AppleAgxGpuvaG3GraphUpdateLeaf(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     --backing->References;
     if (!revoke_unused_backing(graph, backing)) return false;
   }
+  ++graph->MappingGeneration;
   return true;
 }
 
@@ -478,7 +579,7 @@ bool AppleAgxGpuvaG3GraphDestroy(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
     request.AuxIpa = item->Ipa;
     request.AllocationGeneration = item->Generation;
     if (!call(graph, &request)) return false;
-    remove_node(graph, &graph->Backings, item);
+    release_grant(graph, item);
   }
   while (graph->Parents) {
     item = graph->Parents;

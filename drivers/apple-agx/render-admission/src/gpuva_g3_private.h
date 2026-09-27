@@ -11,6 +11,7 @@ typedef struct _ADMISSION_G3_STATE {
   FAST_MUTEX Lock;
   LIST_ENTRY Processes;
   APPLE_AGX_GPUVA_V5_CLIENT Client;
+  APPLE_AGX_GPUVA_G3_REGISTRY Registry;
   ULONGLONG NextProcessId;
   ULONG ProcessCount;
   struct _ADMISSION_G3_PROCESS *ActiveProcess;
@@ -24,6 +25,8 @@ typedef struct _ADMISSION_G3_TABLE_SHADOW {
   APPLE_AGX_MEMORY_OBJECT Memory;
   ULONGLONG OriginalIpa, BrokerIpa;
   APPLE_AGX_GPUVA_G3_LOGICAL_PTE *LogicalPtes;
+  APPLE_AGX_GPUVA_G3_LOGICAL_PTE *ResidentPtes;
+  APPLE_AGX_GPUVA_G3_LOGICAL_PTE *PendingPtes;
 } ADMISSION_G3_TABLE_SHADOW;
 
 typedef struct _ADMISSION_G3_PROCESS {

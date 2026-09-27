@@ -52,6 +52,7 @@ typedef struct {
   ULONGLONG ProcessId, ProcessGeneration, NextGeneration;
   APPLE_AGX_GPUVA_G3_NODE *Parents;
   unsigned Created, Uncertain;
+  ULONGLONG MappingGeneration;
   unsigned AllowProcessRanges;
 } APPLE_AGX_GPUVA_G3_GRAPH;
 typedef struct _ADMISSION_G3_STATE {
@@ -120,7 +121,7 @@ typedef struct {
   ADMISSION_G3_PROCESS *GpuvaG3Process;
   unsigned GpuvaG3Poisoned;
   ULONGLONG GpuvaG3RootIpa;
-  ULONGLONG GpuvaG3DmaBufferVa;
+  ULONGLONG GpuvaG3DmaBufferVa, GpuvaG3MappingGeneration;
   unsigned GpuvaG3DmaBufferBytes;
   unsigned Win32Transport;
   ADMISSION_OBJECT_CONTEXT Object;
@@ -309,6 +310,7 @@ int main(void) {
   process.Graph.ProcessId = 17u;
   process.Graph.ProcessGeneration = 23u;
   process.Graph.NextGeneration = 31u;
+  process.Graph.MappingGeneration = 31u;
   root_edge.Ipa = process.Graph.RootIpa;
   root_edge.AuxIpa = 0x9bf004000ULL;
   root_edge.Next = &middle;
@@ -497,6 +499,10 @@ int main(void) {
   args.SubmissionFenceId = 13u;
   assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) == STATUS_SUCCESS);
   assert(context.GpuvaG3DmaBufferVa == 0x20f80ULL);
+  ++process.Graph.MappingGeneration; /* invalidate/remap, even the same PFN */
+  assert(AdmissionGpuvaG3BeginJob(&adapter, &context, 13u) != STATUS_SUCCESS);
+  assert(graph_begin_calls == 0);
+  --process.Graph.MappingGeneration;
   assert(AdmissionGpuvaG3BeginJob(&adapter, &context, 13u) == STATUS_SUCCESS);
   assert(graph_begin_calls == 1);
   state.ActiveProcess = NULL;
