@@ -1,5 +1,29 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-27 EXP848 offline — compiler projection not selected; churn attribution open
+
+Exact DLL848/PDB/CDB and closure argv prove c410ade6 exists in the projected
+agx_compile.c but the closure compiles the older pinned compiler-evidence file.
+The final DLL still has the automatic disassembler self-test; +0xf0ad0 is the
+real agx2_disassemble_instr 16-byte code load, with no observed COMDAT alias.
+Actual crash X0/LR and stack were not saved; short-tail overread is a strong
+source-backed hypothesis, not a measured crash argument. Next offline fix target:
+selected-source/object provenance in build-asahi-runtime-closure.py, with an
+actual compiler regression rather than the existing generator-string test.
+
+WHY CONTINUE COMPARISON: one exact EXP848 projected-source/compile-argv/PE
+comparison directly discriminates the source-selection defect; no old-reference
+archaeology or WDDM admission reconstruction is needed. UMD create-device1370
+means 685 S_OK entry/exit pairs. Ordinary diagnostics stop at 128 per DLL
+lifetime, so zero logged Present/DestroyDevice is not absence proof. Early ETL
+has 156 successful Presents on Microsoft software adapter ...460df000 and
+84 kernel-origin Reason19 device errors on Apple ...4b18c000, including DWM.
+Next churn discriminator: attribute the first Reason19 caller from saved ETL
+stacks, or a bounded uncapped lifecycle/first-failure receipt if unavailable.
+No Air access or product edit in this analysis; ordinary Code28 remains the
+last recorded recovery. Evidence and limits:
+`investigation/analysis/EXP848-next-boundary.md` and its 685-row sequence CSV.
+
 ## 2026-09-27 EXP848 — stale-edge fix survived 10 minutes; UMD AV blocks DWM
 
 Package848 from c72395d4 (0-warning/0-error build; m1n1/Mu R110 unchanged) cold-booted full-owner with ARM_CONSUMED and Code0. From Windows boot 09:40:09Z through 09:50:21Z, pinned SSH and Code0 remained; no new bugcheck/System 1001/minidump or Wom1G3PagingFailure. This confirms the EXP847 0x10E did not recur in the measured window, not that the graph fix is universally sufficient. UMD evidence has 1370 create-device, 677 draw-before, zero g4-present/reject-*; DWM/dwmcore.dll and StartMenu/Explorer/UMD produced Application 1000 AVs. Scanout snapshot remained all-zero. Next causal target is the UMD AV at +0xf0ad0 and DWM crash, using the collected dump/event/ETL evidence before new hardware.
