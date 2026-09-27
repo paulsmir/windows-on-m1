@@ -113,8 +113,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionSchedulerStart(
   AdmissionGdiReceiptInitialize(&Context->GdiReceipt);
   InterlockedExchange(&Context->GdiReceiptClaimed, 0);
   InterlockedExchange(&Context->GdiSubmitTraceClaimed, 0);
+#endif
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   if (!NT_SUCCESS(AdmissionRenderCorrelationStartWindows(Context)))
     return STATUS_INSUFFICIENT_RESOURCES;
+#elif defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* A diagnostic collector must not change StartDevice's result. */
+  (void)AdmissionRenderCorrelationStartWindows(Context);
 #endif
   AppleAgxSchedulerInitialize(&Context->Scheduler);
   AdmissionRenderPacketInitialize(&Context->RenderPacket);
@@ -145,7 +150,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionSchedulerStop(
       InterlockedCompareExchange(&Context->PagingDpcsActive, 0, 0) != 0 ||
       InterlockedCompareExchange(&Context->SchedulerDpcPending, 0, 0) != 0)
     return STATUS_DEVICE_BUSY;
-#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   if (!NT_SUCCESS(AdmissionRenderCorrelationStopWindows(Context)))
     return STATUS_DEVICE_BUSY;
 #endif

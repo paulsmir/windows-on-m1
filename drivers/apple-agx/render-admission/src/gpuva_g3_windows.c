@@ -3,6 +3,57 @@
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 
+/* Branch IDs are a stable diagnostic ABI for Wom1G4SubmitFailure. */
+enum {
+  AdmissionG4RejectOuter = 1,
+  AdmissionG4RejectContext = 2,
+  AdmissionG4RejectPagingInput = 3,
+  AdmissionG4RejectPagingShape = 4,
+  AdmissionG4RejectPagingRecords = 5,
+  AdmissionG4RejectPagingQueue = 6,
+  AdmissionG4RejectEnvelopeState = 7,
+  AdmissionG4RejectRoot = 8,
+  AdmissionG4RejectParse = 9,
+  AdmissionG4RejectPrepare = 10,
+  AdmissionG4RejectBind = 11,
+  AdmissionG4RejectQueue = 12,
+  AdmissionG4RejectLegacyShape = 13,
+  AdmissionG4RejectLegacyPacket = 14,
+  AdmissionG4RejectLegacySubmit = 15
+};
+
+static NTSTATUS AdmissionG4SubmitReject(
+    ADMISSION_CONTEXT *adapter, const ADMISSION_RENDER_CONTEXT *context,
+    const DXGKARG_SUBMITCOMMANDVIRTUAL *args, ULONG branch,
+    NTSTATUS status, ULONG downstream, BOOLEAN validContext) {
+  if (adapter != NULL) {
+    (void)InterlockedIncrement(&adapter->G4SubmitFailureCount);
+    if (InterlockedCompareExchange(&adapter->G4SubmitFailureClaim, 1, 0) == 0) {
+      struct _ADMISSION_G4_SUBMIT_FAILURE *first =
+          &adapter->G4SubmitFailure;
+      first->Version = 1u;
+      first->Bytes = sizeof(*first);
+      first->Branch = branch;
+      first->Status = (ULONG)status;
+      first->DownstreamStatus = downstream;
+      if (args != NULL) {
+        first->DmaBufferVirtualAddress = args->DmaBufferVirtualAddress;
+        first->DmaBufferSize = args->DmaBufferSize;
+        first->PrivateDataSize = args->DmaBufferPrivateDataSize;
+        first->UmdPrivateDataSize = args->DmaBufferUmdPrivateDataSize;
+        first->Flags = args->Flags.Value;
+      }
+      first->ContextFlags = validContext ? context->Object.Flags : 0u;
+      first->Pid = HandleToULong(PsGetCurrentProcessId());
+      first->TotalFailures = 1u;
+      KeMemoryBarrier();
+      InterlockedExchange(&adapter->G4SubmitFailureClaim, 2);
+    }
+    AdmissionRenderCorrelationSubmitFailureWindows(adapter);
+  }
+  return status;
+}
+
 C_ASSERT(FIELD_OFFSET(ADMISSION_BACKEND_IMAGE, G4Command) ==
     FIELD_OFFSET(ADMISSION_BACKEND_IMAGE, G4Header) +
     sizeof(APPLE_AGX_G4_PRIVATE_HEADER_V2));
@@ -561,6 +612,7 @@ NTSTATUS AdmissionGpuvaG3SubmitVirtualPaging(
   DXGKARG_SUBMITCOMMAND physical;
   DXGK_SUBMITCOMMANDFLAGS pagingFlags;
   UINT count;
+  NTSTATUS status;
   RtlZeroMemory(&pagingFlags, sizeof(pagingFlags));
   pagingFlags.Paging = 1u;
   if (adapter == NULL || context == NULL || args == NULL ||
@@ -582,26 +634,32 @@ NTSTATUS AdmissionGpuvaG3SubmitVirtualPaging(
       args->Flags.Value != pagingFlags.Value || args->NodeOrdinal != 0u ||
       args->EngineOrdinal != 0u || args->SubmissionFenceId == 0u ||
       KeGetCurrentIrql() > DISPATCH_LEVEL)
-    return STATUS_INVALID_PARAMETER;
+    return AdmissionG4SubmitReject(adapter, context, args,
+        AdmissionG4RejectPagingInput, STATUS_INVALID_PARAMETER, 0u, FALSE);
   count = args->DmaBufferPrivateDataSize / sizeof(ADMISSION_PAGING_RECORD);
   if (count == 0u || count > ADMISSION_MAX_PAGING_RECORDS ||
       count > MAXULONG / sizeof(ADMISSION_PAGING_MARKER) ||
       args->DmaBufferSize != count * sizeof(ADMISSION_PAGING_MARKER))
-    return STATUS_INVALID_PARAMETER;
+    return AdmissionG4SubmitReject(adapter, context, args,
+        AdmissionG4RejectPagingShape, STATUS_INVALID_PARAMETER, 0u, TRUE);
   records = (const ADMISSION_PAGING_RECORD *)args->pDmaBufferPrivateData;
   if (!AdmissionPagingRecordsValid(records, count,
                                    ADMISSION_MAX_PAGING_RECORDS,
                                    args->DmaBufferSize))
-    return STATUS_INVALID_PARAMETER;
+    return AdmissionG4SubmitReject(adapter, context, args,
+        AdmissionG4RejectPagingRecords, STATUS_INVALID_PARAMETER, 0u, TRUE);
   RtlZeroMemory(&physical, sizeof(physical));
   physical.hContext = args->hContext;
   physical.SubmissionFenceId = args->SubmissionFenceId;
   physical.NodeOrdinal = args->NodeOrdinal;
   physical.EngineOrdinal = args->EngineOrdinal;
   physical.Flags.Paging = 1u;
-  return AdmissionCpuQueueSubmit(adapter, &physical,
+  status = AdmissionCpuQueueSubmit(adapter, &physical,
       ADMISSION_CPU_PACKET_PAGING, records,
       args->DmaBufferPrivateDataSize);
+  return NT_SUCCESS(status) ? status : AdmissionG4SubmitReject(
+      adapter, context, args, AdmissionG4RejectPagingQueue,
+      status, (ULONG)status, TRUE);
 }
 
 static int AdmissionG4GraphAccess(void *opaque, unsigned long long va,
@@ -657,7 +715,9 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   ADMISSION_RENDER_PACKET_DESCRIPTION packet;
   APPLE_AGX_EXP208_GDI_BINDING binding;
   KIRQL old_irql;
+  NTSTATUS viewStatus = STATUS_SUCCESS;
   BOOLEAN prepared = FALSE, queued = FALSE;
+  ULONG rollbackBranch = AdmissionG4RejectBind;
   if (KeGetCurrentIrql() != PASSIVE_LEVEL || state == NULL ||
       process == NULL || process->State != state || process->Poisoned ||
       context->GpuvaG3Poisoned || context->GpuvaG3RootIpa == 0ULL ||
@@ -668,15 +728,19 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
       args->Flags.Value != 0u ||
       !context->SchedulerContext.Active ||
       !AdmissionPlatformRuntimeReady(adapter) ||
-      !NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(adapter, &local)))
-    return STATUS_INVALID_PARAMETER;
+      !NT_SUCCESS(viewStatus =
+          AdmissionMemoryRuntimeScanoutView(adapter, &local)))
+    return AdmissionG4SubmitReject(adapter, context, args,
+        AdmissionG4RejectEnvelopeState, STATUS_INVALID_PARAMETER,
+        (ULONG)viewStatus, TRUE);
   RtlZeroMemory(&packet, sizeof(packet));
   RtlZeroMemory(&binding, sizeof(binding));
   ExAcquireFastMutex(&state->Lock);
   if (context->GpuvaG3RootIpa != process->Graph.RootIpa ||
       process->Graph.Uncertain) {
     ExReleaseFastMutex(&state->Lock);
-    return STATUS_INVALID_PARAMETER;
+    return AdmissionG4SubmitReject(adapter, context, args,
+        AdmissionG4RejectRoot, STATUS_INVALID_PARAMETER, 0u, TRUE);
   }
   result = AppleAgxG4ParseSubmit(
       args->pDmaBufferPrivateData, args->DmaBufferPrivateDataSize,
@@ -706,7 +770,9 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
     result = AppleAgxG4ParseUnsupported;
   }
   ExReleaseFastMutex(&state->Lock);
-  if (result != AppleAgxG4ParseOk) return STATUS_INVALID_PARAMETER;
+  if (result != AppleAgxG4ParseOk)
+    return AdmissionG4SubmitReject(adapter, context, args,
+        AdmissionG4RejectParse, STATUS_INVALID_PARAMETER, (ULONG)result, TRUE);
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   if (AdmissionRenderPacketState(&adapter->RenderPacket) ==
           AdmissionRenderPacketEmpty &&
@@ -717,12 +783,15 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
     prepared = TRUE;
   }
   KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
-  if (!prepared) return STATUS_INVALID_PARAMETER;
+  if (!prepared)
+    return AdmissionG4SubmitReject(adapter, context, args,
+        AdmissionG4RejectPrepare, STATUS_INVALID_PARAMETER, 0u, TRUE);
   if (!AdmissionBackendImageBindG4Submission(&adapter->BackendImage,
           &packet, (PVOID)(ULONG_PTR)packet.DestinationCpuToken,
           &view, &binding)) goto Rollback;
   context->GpuvaG3DmaBufferVa = args->DmaBufferVirtualAddress;
   context->GpuvaG3DmaBufferBytes = args->DmaBufferSize;
+  rollbackBranch = AdmissionG4RejectQueue;
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   if (AdmissionRenderPacketQueue(&adapter->RenderPacket,
           args->SubmissionFenceId, (ULONGLONG)(ULONG_PTR)context,
@@ -752,7 +821,8 @@ Rollback:
   if (adapter->BackendImage.G4Native)
     (void)AdmissionBackendImageReleaseSubmission(&adapter->BackendImage,
         args->SubmissionFenceId);
-  return STATUS_INVALID_PARAMETER;
+  return AdmissionG4SubmitReject(adapter, context, args,
+      rollbackBranch, STATUS_INVALID_PARAMETER, 0u, TRUE);
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommandVirtual(
@@ -770,12 +840,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommandVirtual(
       Args->NodeOrdinal != 0u ||
       Args->EngineOrdinal != 0u || Args->SubmissionFenceId == 0u ||
       KeGetCurrentIrql() > DISPATCH_LEVEL)
-    return STATUS_INVALID_PARAMETER;
+    return AdmissionG4SubmitReject(adapter, NULL, Args,
+        AdmissionG4RejectOuter, STATUS_INVALID_PARAMETER, 0u, FALSE);
   context = (ADMISSION_RENDER_CONTEXT *)Args->hContext;
   if (context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
       context->Object.Device == NULL ||
       context->Object.Device->Adapter != &adapter->ObjectAdapter)
-    return STATUS_INVALID_PARAMETER;
+    return AdmissionG4SubmitReject(adapter, NULL, Args,
+        AdmissionG4RejectContext, STATUS_INVALID_PARAMETER, 0u, FALSE);
   if ((context->Object.Flags & ADMISSION_CONTEXT_SYSTEM) != 0u)
     return AdmissionGpuvaG3SubmitVirtualPaging(adapter, context, Args);
 #if defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
@@ -795,7 +867,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommandVirtual(
           Args->DmaBufferVirtualAddress ||
       !AppleAgxDmaShadowOpen(&shadow, Args->pDmaBufferPrivateData,
                              Args->DmaBufferPrivateDataSize))
-    return STATUS_INVALID_PARAMETER;
+    return AdmissionG4SubmitReject(adapter, context, Args,
+        AdmissionG4RejectLegacyShape, STATUS_INVALID_PARAMETER, 0u, TRUE);
   packet = adapter->RenderPacket.Description;
   if (packet.ContextToken != (ULONGLONG)(ULONG_PTR)context ||
       packet.Fence != Args->SubmissionFenceId ||
@@ -804,7 +877,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommandVirtual(
       packet.PrivateDataToken !=
           (ULONGLONG)(ULONG_PTR)Args->pDmaBufferPrivateData ||
       packet.PrivateDataEnd != shadow.BytesUsed)
-    return STATUS_INVALID_PARAMETER;
+    return AdmissionG4SubmitReject(adapter, context, Args,
+        AdmissionG4RejectLegacyPacket, STATUS_INVALID_PARAMETER, 0u, TRUE);
   RtlZeroMemory(&physical, sizeof(physical));
   physical.hContext = Args->hContext;
   physical.DmaBufferVirtualAddress = Args->DmaBufferVirtualAddress;
@@ -829,7 +903,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommandVirtual(
   if (!NT_SUCCESS(status)) {
     context->GpuvaG3DmaBufferVa = 0ULL;
     context->GpuvaG3DmaBufferBytes = 0u;
-    return STATUS_INVALID_PARAMETER;
+    return AdmissionG4SubmitReject(adapter, context, Args,
+        AdmissionG4RejectLegacySubmit, STATUS_INVALID_PARAMETER,
+        (ULONG)status, TRUE);
   }
   return STATUS_SUCCESS;
 }

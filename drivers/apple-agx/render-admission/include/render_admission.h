@@ -389,6 +389,14 @@ typedef struct _ADMISSION_CONTEXT {
 #endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   PVOID GpuvaG3State;
+  volatile LONG G4SubmitFailureClaim;
+  volatile LONG G4SubmitFailureCount;
+  struct _ADMISSION_G4_SUBMIT_FAILURE {
+    ULONG Version, Bytes, Branch, Status, DownstreamStatus;
+    ULONGLONG DmaBufferVirtualAddress;
+    ULONG DmaBufferSize, PrivateDataSize, UmdPrivateDataSize;
+    ULONG Flags, ContextFlags, Pid, TotalFailures;
+  } G4SubmitFailure;
 #endif
   volatile LONG InterruptReady;
   volatile LONG InterruptIngressEnabled;
@@ -419,6 +427,8 @@ typedef struct _ADMISSION_CONTEXT {
   ADMISSION_GDI_HW_RECEIPT GdiReceipt;
   volatile LONG PostDpcHealthValid;
   ADMISSION_POST_DPC_HEALTH_RECEIPT PostDpcHealth;
+#endif
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   KSPIN_LOCK RenderCorrelationLock;
   PIO_WORKITEM RenderCorrelationWorkItem;
   KEVENT RenderCorrelationIdle;
@@ -426,6 +436,8 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG RenderCorrelationWorkerQueued;
   volatile LONG RenderCorrelationStopping;
   ADMISSION_RENDER_CORRELATION_STATE RenderCorrelation;
+#endif
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   volatile LONG StandardPresentTraceArmed;
   volatile LONG StandardPresentTraceNext;
   volatile LONG StandardPresentTraceOverflow;
@@ -520,10 +532,14 @@ VOID AdmissionBltProbeRecordWindows(
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
 VOID AdmissionUmdRenderTraceArm(_In_ ADMISSION_CONTEXT *Context);
 VOID AdmissionUmdRenderTraceDisarm(_In_ ADMISSION_CONTEXT *Context);
+#endif
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 NTSTATUS AdmissionRenderCorrelationStartWindows(
     _Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionRenderCorrelationStopWindows(
     _Inout_ ADMISSION_CONTEXT *Context);
+#endif
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
 ULONG AdmissionRenderCorrelationBeginWindows(
     _Inout_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_RENDER_CONTEXT *RenderContext,
@@ -562,8 +578,10 @@ VOID AdmissionRenderCorrelationDpcWindows(
 VOID AdmissionRenderCorrelationQueryFenceWindows(
     _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONG Fence);
 #else
+#if !defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #define AdmissionRenderCorrelationStartWindows(Context) STATUS_SUCCESS
 #define AdmissionRenderCorrelationStopWindows(Context) STATUS_SUCCESS
+#endif
 #define AdmissionRenderCorrelationBeginWindows(Context, RenderContext, Args) \
   (0u)
 #define AdmissionRenderCorrelationValidatedWindows(                          \
@@ -821,6 +839,9 @@ typedef struct _ADMISSION_G3_PAGING_FAILURE {
 void AdmissionRecordGpuvaG3PagingFailure(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_G3_PAGING_FAILURE *Failure);
+void AdmissionRenderCorrelationSubmitFailureWindows(
+    _In_opt_ ADMISSION_CONTEXT *Context);
+void AdmissionRecordG4SubmitFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordGpuvaG3UnpublishedGroups(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_reads_(32) const ULONGLONG *Counts);

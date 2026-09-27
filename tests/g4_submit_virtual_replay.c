@@ -7,12 +7,16 @@
 typedef int NTSTATUS;
 typedef unsigned char BOOLEAN;
 typedef unsigned long long ULONGLONG;
-typedef unsigned long ULONG;
-typedef unsigned long long ULONG_PTR;
-typedef unsigned long long SIZE_T;
+typedef uint32_t ULONG;
+typedef uintptr_t ULONG_PTR;
+typedef size_t SIZE_T;
 typedef unsigned char *PUCHAR;
 typedef void *PVOID;
 typedef int KIRQL;
+#define _Use_decl_annotations_
+#define DISPATCH_LEVEL 2
+typedef void *HANDLE;
+typedef struct { unsigned Value; } REPLAY_FLAGS;
 #define PASSIVE_LEVEL 0
 #define TRUE 1
 #define FALSE 0
@@ -43,10 +47,13 @@ typedef struct _ADMISSION_G3_PROCESS {
   APPLE_AGX_GPUVA_G3_GRAPH Graph;
   unsigned Poisoned;
 } ADMISSION_G3_PROCESS;
+typedef struct { void *Adapter; } REPLAY_DEVICE;
 typedef struct {
-  unsigned Flags;
+  unsigned Flags, Magic;
+  REPLAY_DEVICE *Device;
   unsigned FenceOutstanding;
 } ADMISSION_OBJECT_CONTEXT;
+#define ADMISSION_OBJECT_CONTEXT_MAGIC 0x47444358u
 typedef struct {
   unsigned Fence, AllocationCount;
   ULONGLONG ContextToken, AllocationToken, PrivateDataToken;
@@ -71,6 +78,16 @@ typedef struct {
 } ADMISSION_SCANOUT_MEMORY_VIEW;
 typedef struct {
   void *GpuvaG3State;
+  int Started;
+  int ObjectAdapter;
+  volatile int G4SubmitFailureClaim;
+  volatile int G4SubmitFailureCount;
+  struct _ADMISSION_G4_SUBMIT_FAILURE {
+    unsigned Version, Bytes, Branch, Status, DownstreamStatus;
+    ULONGLONG DmaBufferVirtualAddress;
+    unsigned DmaBufferSize, PrivateDataSize, UmdPrivateDataSize;
+    unsigned Flags, ContextFlags, Pid, TotalFailures;
+  } G4SubmitFailure;
   int SchedulerLock, SchedulerFaulted, Scheduler, RuntimeReady;
   ADMISSION_RENDER_PACKET RenderPacket;
   ADMISSION_BACKEND_IMAGE BackendImage;
@@ -86,7 +103,9 @@ typedef struct {
   struct { unsigned Active; } SchedulerContext;
 } ADMISSION_RENDER_CONTEXT;
 typedef struct {
-  struct { unsigned Value; } Flags;
+  REPLAY_FLAGS Flags;
+  void *hContext;
+  unsigned NodeOrdinal, EngineOrdinal, VidPnSourceId, FlipInterval;
   const void *pDmaBufferPrivateData;
   unsigned DmaBufferPrivateDataSize;
   unsigned DmaBufferUmdPrivateDataSize;
@@ -94,8 +113,39 @@ typedef struct {
   unsigned DmaBufferSize;
   unsigned SubmissionFenceId;
 } DXGKARG_SUBMITCOMMANDVIRTUAL;
+typedef struct { unsigned BytesUsed; } APPLE_AGX_DMA_SHADOW;
+typedef struct {
+  void *hContext;
+  ULONGLONG DmaBufferVirtualAddress;
+  unsigned DmaBufferSize, DmaBufferSubmissionStartOffset;
+  unsigned DmaBufferSubmissionEndOffset;
+  const void *pDmaBufferPrivateData;
+  unsigned DmaBufferPrivateDataSize;
+  unsigned DmaBufferPrivateDataSubmissionStartOffset;
+  unsigned DmaBufferPrivateDataSubmissionEndOffset;
+  unsigned SubmissionFenceId, VidPnSourceId, FlipInterval;
+  REPLAY_FLAGS Flags;
+  unsigned EngineOrdinal, NodeOrdinal;
+} DXGKARG_SUBMITCOMMAND;
+#define ADMISSION_GDI_DMA_PRIVATE_SIZE 64u
+static NTSTATUS AdmissionGpuvaG3SubmitVirtualPaging(
+    ADMISSION_CONTEXT *a, ADMISSION_RENDER_CONTEXT *c,
+    const DXGKARG_SUBMITCOMMANDVIRTUAL *v) {
+  (void)a;(void)c;(void)v;return STATUS_INVALID_PARAMETER;
+}
+static int AppleAgxDmaShadowOpen(APPLE_AGX_DMA_SHADOW *s,
+    const void *p, unsigned n) { (void)s;(void)p;(void)n;return 0; }
+static NTSTATUS AdmissionDdiSubmitRender(ADMISSION_CONTEXT *a,
+    const DXGKARG_SUBMITCOMMAND *p) {
+  (void)a;(void)p;return STATUS_INVALID_PARAMETER;
+}
 
 static int replay_irql, dispatches, bind_ok=1;
+static NTSTATUS scanout_status = STATUS_SUCCESS;
+static int receipt_queues;
+static void __attribute__((unused)) AdmissionRenderCorrelationSubmitFailureWindows(
+    ADMISSION_CONTEXT *a) { (void)a; ++receipt_queues; }
+static void *__attribute__((unused)) PsGetCurrentProcessId(void) { return (void *)(uintptr_t)1234; }
 static APPLE_AGX_G4_PROCESS_RANGE ranges[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
 static int KeGetCurrentIrql(void) { return replay_irql; }
 static void ExAcquireFastMutex(int *lock) { assert(!*lock); *lock = 1; }
@@ -106,15 +156,22 @@ static void KeAcquireSpinLock(int *lock, KIRQL *irql) {
 static void KeReleaseSpinLock(int *lock, KIRQL irql) {
   (void)irql;assert(*lock);*lock=0;
 }
-static int InterlockedCompareExchange(int *value, int exchange, int compare) {
+static int InterlockedCompareExchange(volatile int *value, int exchange, int compare) {
   int old=*value;if(old==compare)*value=exchange;return old;
 }
+static int InterlockedIncrement(volatile int *value) { return ++*value; }
+static int InterlockedExchange(volatile int *value, int exchange) {
+  int old=*value;*value=exchange;return old;
+}
+#define KeMemoryBarrier() __sync_synchronize()
+#define HandleToULong(x) ((unsigned)(uintptr_t)(x))
 static int AdmissionPlatformRuntimeReady(ADMISSION_CONTEXT *adapter) {
   return adapter->RuntimeReady;
 }
 static NTSTATUS AdmissionMemoryRuntimeScanoutView(
     ADMISSION_CONTEXT *adapter, ADMISSION_SCANOUT_MEMORY_VIEW *view) {
   (void)adapter;
+  if (!NT_SUCCESS(scanout_status)) return scanout_status;
   static unsigned char memory[0x4000];
   view->CpuAddress=memory;view->GuestIpaAddress=0x90000000ULL;
   view->HostPhysicalAddress=0x80000000ULL;view->Bytes=sizeof(memory);
@@ -209,6 +266,12 @@ int main(void) {
   context.GpuvaG3RootIpa = process.Graph.RootIpa;
   context.Win32Transport = 1;
   context.Object.Flags = ADMISSION_CONTEXT_VIRTUAL_ADDRESSING;
+  context.Object.Magic = ADMISSION_OBJECT_CONTEXT_MAGIC;
+  static REPLAY_DEVICE device;
+  device.Adapter = &adapter.ObjectAdapter;
+  context.Object.Device = &device;
+  adapter.Started = 1;
+  args.hContext = &context;
   context.SchedulerContext.Active=1;
   packet.Header.Base.Magic = APPLE_AGX_G4_PRIVATE_MAGIC;
   packet.Header.Base.Version = APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA;
@@ -269,6 +332,57 @@ int main(void) {
   process.Graph.Uncertain = 1;
   assert(AdmissionG4SubmitVirtualEnvelope(&adapter, &context, &args) ==
          STATUS_INVALID_PARAMETER);
+  adapter.G4SubmitFailureClaim = 0;
+  adapter.G4SubmitFailureCount = 0;
+  memset(&adapter.G4SubmitFailure, 0, sizeof(adapter.G4SubmitFailure));
+  receipt_queues = 0;
+  args.hContext = NULL;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  assert(adapter.G4SubmitFailure.Branch == 1u);
+  assert(adapter.G4SubmitFailure.Status == (unsigned)STATUS_INVALID_PARAMETER);
+  assert(adapter.G4SubmitFailureCount == 1 && receipt_queues == 1);
+  args.hContext = &context;
+  process.Graph.Uncertain = 0;
+  packet.Header.Base.Magic = 0;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  assert(adapter.G4SubmitFailure.Branch == 1u);
+  assert(adapter.G4SubmitFailureCount == 2);
+  assert(adapter.G4SubmitFailure.DmaBufferVirtualAddress == args.DmaBufferVirtualAddress);
+  assert(adapter.G4SubmitFailure.Pid == 1234u);
+  assert(adapter.G4SubmitFailureClaim == 2 && receipt_queues == 2);
+  adapter.G4SubmitFailureClaim = 0;
+  adapter.G4SubmitFailureCount = 0;
+  memset(&adapter.G4SubmitFailure, 0, sizeof(adapter.G4SubmitFailure));
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  assert(adapter.G4SubmitFailure.Branch == 9u);
+  assert(adapter.G4SubmitFailure.DownstreamStatus != 0u);
+  assert(adapter.G4SubmitFailure.PrivateDataSize == sizeof(packet));
+  assert(adapter.G4SubmitFailure.UmdPrivateDataSize == sizeof(packet));
+  assert(adapter.G4SubmitFailure.DmaBufferSize == args.DmaBufferSize);
+  assert(adapter.G4SubmitFailure.Flags == args.Flags.Value);
+  assert(adapter.G4SubmitFailure.ContextFlags == context.Object.Flags);
+  packet.Header.Base.Magic = APPLE_AGX_G4_PRIVATE_MAGIC;
+  adapter.G4SubmitFailureClaim = 0;
+  adapter.G4SubmitFailureCount = 0;
+  memset(&adapter.G4SubmitFailure, 0, sizeof(adapter.G4SubmitFailure));
+  context.Object.Magic = 0;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  assert(adapter.G4SubmitFailure.Branch == 2u);
+  assert(adapter.G4SubmitFailure.Status == (unsigned)STATUS_INVALID_PARAMETER);
+  context.Object.Magic = ADMISSION_OBJECT_CONTEXT_MAGIC;
+  adapter.G4SubmitFailureClaim = 0;
+  adapter.G4SubmitFailureCount = 0;
+  memset(&adapter.G4SubmitFailure, 0, sizeof(adapter.G4SubmitFailure));
+  scanout_status = STATUS_INVALID_DEVICE_STATE;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  assert(adapter.G4SubmitFailure.Branch == 7u);
+  assert(adapter.G4SubmitFailure.DownstreamStatus ==
+         (unsigned)STATUS_INVALID_DEVICE_STATE);
   assert(state.Lock == 0);
   puts("g4_submit_virtual_replay: PASS");
   return 0;

@@ -2004,6 +2004,26 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3PagingFailure(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordG4SubmitFailure(
+    ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  struct _ADMISSION_G4_SUBMIT_FAILURE snapshot;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      InterlockedCompareExchange(&Context->G4SubmitFailureClaim, 0, 0) != 2)
+    return;
+  snapshot = Context->G4SubmitFailure;
+  snapshot.TotalFailures = (ULONG)InterlockedCompareExchange(
+      &Context->G4SubmitFailureCount, 0, 0);
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, L"Wom1G4SubmitFailure", &snapshot, sizeof(snapshot));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordGpuvaG3UnpublishedGroups(
     ADMISSION_CONTEXT *Context, const ULONGLONG *Counts) {
   HANDLE key = NULL;

@@ -28,9 +28,13 @@ def function_body(source, name):
 class G4SubmitVirtualReplay(unittest.TestCase):
     def test_native_submit_queues_only_after_graph_and_image_bind(self):
         production = SOURCE.read_text()
-        functions = "\n".join(function_body(production, name) for name in (
+        branches = production.split("/* Branch IDs are a stable diagnostic ABI", 1)[1]
+        branches = "enum {" + branches.split("enum {", 1)[1].split("};", 1)[0] + "};"
+        functions = branches + "\n" + "\n".join(function_body(production, name) for name in (
+            "AdmissionG4SubmitReject",
             "AdmissionG4GraphAccess", "AdmissionG4ResolveOutput",
-            "AdmissionG4SubmitVirtualEnvelope"))
+            "AdmissionG4SubmitVirtualEnvelope",
+            "AdmissionDdiSubmitCommandVirtual"))
         with tempfile.TemporaryDirectory(prefix="g4-submit-virtual-") as tmp:
             tmp = Path(tmp)
             (tmp / "g4_submit_virtual_functions.inc").write_text(functions)

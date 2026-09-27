@@ -1,6 +1,6 @@
 #include "render_admission.h"
 
-#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 
 static NTSTATUS AdmissionRenderCorrelationExportSnapshot(
     ADMISSION_CONTEXT *Context,
@@ -47,7 +47,12 @@ Restart:
     KeReleaseSpinLock(&context->RenderCorrelationLock, oldIrql);
 
     status = AdmissionRenderCorrelationExportSnapshot(context, &snapshot);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    AdmissionRecordG4SubmitFailure(context);
+#endif
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
     AdmissionFlushGdiReceipt(context);
+#endif
     KeAcquireSpinLock(&context->RenderCorrelationLock, &oldIrql);
     (void)AdmissionRenderCorrelationMarkExport(
         &context->RenderCorrelation, generation, (ULONG)status,
@@ -89,6 +94,15 @@ static VOID AdmissionRenderCorrelationQueueExport(
       AdmissionRenderCorrelationExportWorker, DelayedWorkQueue, Context);
 }
 
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+_Use_decl_annotations_ void AdmissionRenderCorrelationSubmitFailureWindows(
+    ADMISSION_CONTEXT *Context) {
+  if (KeGetCurrentIrql() <= DISPATCH_LEVEL)
+    AdmissionRenderCorrelationQueueExport(Context);
+}
+#endif
+
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
 static ADMISSION_RENDER_CORRELATION_SLOT *
 AdmissionRenderCorrelationFindFenceWindows(
     ADMISSION_CONTEXT *Context, ULONG Fence) {
@@ -103,7 +117,9 @@ AdmissionRenderCorrelationFindFenceWindows(
   }
   return NULL;
 }
+#endif
 
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
 _Use_decl_annotations_ VOID AdmissionRenderCorrelationOutputWindows(
     ADMISSION_CONTEXT *Context, ULONG Fence, ULONG Stage, ULONG Status) {
   KIRQL oldIrql;
@@ -122,6 +138,7 @@ _Use_decl_annotations_ VOID AdmissionRenderCorrelationOutputWindows(
   if (captured)
     AdmissionRenderCorrelationQueueExport(Context);
 }
+#endif
 
 _Use_decl_annotations_ NTSTATUS AdmissionRenderCorrelationStartWindows(
     ADMISSION_CONTEXT *Context) {
@@ -166,6 +183,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionRenderCorrelationStopWindows(
   return STATUS_SUCCESS;
 }
 
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
 _Use_decl_annotations_ ULONG AdmissionRenderCorrelationBeginWindows(
     ADMISSION_CONTEXT *Context,
     const ADMISSION_RENDER_CONTEXT *RenderContext,
@@ -318,4 +336,5 @@ _Use_decl_annotations_ VOID AdmissionRenderCorrelationQueryFenceWindows(
   AdmissionRenderCorrelationQueueExport(Context);
 }
 
+#endif
 #endif
