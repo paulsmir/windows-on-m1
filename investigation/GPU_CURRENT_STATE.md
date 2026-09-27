@@ -1,5 +1,38 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-27 EXP855D — R140 crossed EscapeCb; Code0 recovery pending
+
+GO_EXP855D preceded transfer and one cold R110 full-owner boot. Package source
+`1b649b44` passed 534 hashes, native archive/Resource.cpp provenance, ARM64
+UMD/KMD 0/0 and guest CAT/SYS/UMD membership. APPL0002 reached Code0,
+StartStage12/Status0, arm0. The full 10-minute window from Windows boot
+21:55:47Z elapsed before collection. No new d3d11 SetPriorityCB+8f240 AV or
+System1001/0x10E was captured. G4 SubmitCommandVirtual reached KMD but failed
+at branch9 ParseInvalid, status C000000D/result1; no accepted TA+3D, fence or
+DWM frame proof. At 22:11:12Z Explorer instead faulted in the new UMD +0x2da30.
+Its 2.23-GB full dump was copied and SHA-verified. SearchHost also faulted in
+Windows.UI.Xaml.dll. Evidence: `.local/experiments/EXP855D-r140-escape-identity/`,
+`host-evidence-hashes.json` SHA256
+`b4a4d33dab87d6210a8f643851c6b619b42efd509b969bab0219d93ab4c31907`.
+Preflight again failed only USB>=6 with USB5; SSH, CPU8/disks2 and RDP lived.
+Physical display, input and scanout pixels were not measured.
+
+**Recovery is incomplete.** Evidence was saved, AutoLogger and the two WER
+LocalDumps keys were removed, and ordered Windows `/r` wrote a durable receipt.
+System Event1074 confirms restart initiation, but after more than four minutes
+Windows remained reachable in the same Code0 boot with the full-owner launcher.
+`/r /f /t 0` and `/a` both returned 1115, shutdown in progress. No live driver
+removal, GPU-hidden launch or ordinary Code28 recovery occurred. Exact oem5 is
+still installed; arm0. User directed a stop if physical action is needed.
+After Air is returned to Running proxy, check both control planes, boot immutable
+GPU-hidden EXP377/385, clean exact package with ExpectedProblemCode45, then boot
+immutable ordinary EXP377/392 and prove durable Code28. Do not boot ordinary
+with the package or remove the live Code0 device.
+
+WHY CONTINUE COMPARISON: use the saved UMD dump and G4 branch9 receipt to locate
+the new user-mode AV and parse rejection after recovery. No historical pass or
+new hardware variable is justified while the package remains installed.
+
 
 ## 2026-09-27 R140 — EXP855C EscapeCb AV attributed and corrected offline
 
