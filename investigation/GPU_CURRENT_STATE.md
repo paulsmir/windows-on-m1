@@ -1,5 +1,34 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-27 EXP855C — R139 reached Code0; ordinary Code28 recovered
+
+Package855C source `56cb61c2` passed 534 source hashes, self-built native
+archive/Resource.cpp provenance, ARM64 UMD/KMD 0/0 and native guest CAT/member
+checks. GO_EXP855C preceded staging. One cold R110 full-owner crossed
+ARM_CONSUMED and returned pinned SSH. APPL0002 reached Code0 with
+`Wom1StartStage=12`, `Wom1StartStatus=0`; UMD opened the adapter and created
+devices. The EXP855B system CreateProcess/low reserved-VA barrier did not recur.
+No new 0x10E/System1001 or G3/G4 failure receipt was captured. There is no
+accepted native submission, TA+3D completion, Windows fence or DWM frame proof.
+One dwm.exe Application1000 was captured at 21:13:07Z, faulting in d3d11.dll;
+other applications also faulted there. Preflight passed exact identity/arm/R64
+checks but failed its final USB>=6 gate with USB5; SSH, CPU8, disks2 and RDP
+remained alive. Evidence: `.local/experiments/EXP855C-r139-reserved-va/`, final
+92-file SHA256 manifest `1fc29f423081c4e27d59167c61e4b3256f52c61a723b69e62411c9871718a655`.
+
+Recovery process deviation: live Code0 cleanup was invoked before the reviewer
+stop arrived and completed exact oem5 removal before cancellation. This was not
+the instructed hidden Code45 cleanup. Subsequent durable ordered Restart and
+immutable ordinary EXP377/392 returned pinned SSH, one present Code28, staged0,
+arm0, SYS/UMD/service/signer absent, CPU8/disks2/USB5, RDP Running. Hidden
+emergency image was not used. Next causal target: offline attribution of the
+DWM/UMD boundary from saved ETL and crash evidence; no repeat Air without a new
+falsifiable cause. Full record and correction: investigation/EXPERIMENTS.md.
+
+WHY CONTINUE COMPARISON: no historical comparison is needed. EXP855C crossed
+the exact EXP855B post-Start CreateProcess boundary. Inspect the new ETL and
+first DWM crash before proposing another hardware variable.
+
 ## 2026-09-27 R139 — EXP855B system CreateProcess refusal corrected offline
 
 Saved ETL thread4952 proves StartDevice success, OS reservation
