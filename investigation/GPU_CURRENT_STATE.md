@@ -1,5 +1,28 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-27 EXP855B — Stage10 crossed, post-Start Code43; ordinary recovered
+
+Package855B source `fa209a2d` passed 534 hashes, self-built native archive/
+Resource.cpp provenance and ARM64 UMD/KMD 0/0. `GO_EXP855B` preceded staging.
+One cold R110 full-owner crossed ARM_CONSUMED and returned pinned SSH. APPL0002
+was Code43, but `Wom1StartStage=12` and `Wom1StartStatus=0`: R138 removed the
+EXP855 Stage10/C0000141 barrier. `Wom1MemoryStopStatus=0x80000011` and five
+outstanding allocations show a later Stop attempt; its cause is not yet
+attributed. No new System1001, Application1000, G3/G4 failure receipt,
+accepted submission, fence completion or DWM frame was observed.
+
+Evidence and 33-file SHA-verified final manifest:
+`.local/experiments/EXP855B-r138-scanout-pool/final-artifact-hashes.json`
+(SHA256 `fd653619fcff158e11a5e9e2f20a1d3fcee7b5ac723b9a3be665fa62976562c0`).
+Exact oem5 cleanup after evidence, ordered restart and immutable EXP377/392
+restored pinned SSH, one present Code28, staged/arm/SYS/UMD/service/signer
+absent, CPU8/disks2/USB5 and RDP Running. Hidden emergency image was not used.
+
+WHY CONTINUE COMPARISON: no historical comparison is needed. The current
+boundary is PnP Code43 after successful StartDevice. Attribute its post-Start
+callback/Stop ordering from the saved ETL and registry before proposing another
+hardware run. G4 private Process behavior remains untested.
+
 ## 2026-09-27 R138 — EXP855 Stage10 mismatch corrected offline
 
 The real borrowed-memory/ScanoutStart replay reproduces C0000141 before MMIO:
