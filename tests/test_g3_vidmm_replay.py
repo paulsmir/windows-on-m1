@@ -11,6 +11,12 @@ REPLAY = ROOT / "tests/g3_vidmm_replay.py"
 
 
 class G3VidMmReplayTests(unittest.TestCase):
+    def test_r137_reservation_lifetime_and_failures(self):
+        result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
+            env=dict(os.environ, G3_REPLAY_R137="1"), text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("R137 reservation: PASS", result.stdout)
+
     def test_exp854b_empty_current_root_reuse(self):
         for profile, allocation_fault in (("16", ""), ("64", ""), ("16", "1")):
             with self.subTest(profile=profile, allocation_fault=allocation_fault):

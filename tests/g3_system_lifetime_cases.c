@@ -21,6 +21,7 @@ static NTSTATUS sys_update(ADMISSION_CONTEXT *a, ADMISSION_G3_PROCESS *p,
 static ADMISSION_G3_PROCESS *sys_process(ADMISSION_CONTEXT *a, UINT offset,
                                         UINT paging) {
   DXGKARG_CREATEPROCESS create={0}; DXGK_PTE pte={0};
+  a->Interface=(DXGKRNL_INTERFACE){(HANDLE)0x1234,ReplayReserveVa};
   create.Flags.SystemProcess=paging;
   expect_ok("R132 create",AdmissionDdiCreateProcess(a,&create));
   ADMISSION_G3_PROCESS *p=create.hKmdProcess;

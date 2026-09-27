@@ -923,7 +923,8 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     }
     failure.BrokerTableIpa = table_ipa;
     if (!AdmissionG3PrepareTableReuse(process, table_ipa,
-            2u - update->PageTableLevel, update->Flags.InitialUpdate)) {
+            2u - update->PageTableLevel,
+            (BOOLEAN)(update->Flags.InitialUpdate != 0u))) {
       failure.TableAddBranch = 2u;
       status = AdmissionG3RejectPaging(&failure,
           AdmissionG3PagingFailureTableGraph, MAXULONG, NULL, 0ULL,

@@ -37,3 +37,34 @@ Remaining steps: bounded pool/reservation, initialization, private subtree
 lifecycle, production escape, submission binding, retirement/recovery.
 First hardware checkpoint remains the separately authorized EXP855 checkpoint
 in the decision document; capacity reduction and CPU checks prove no GPU work.
+
+## Step 2 — reservation and bounded allocator
+
+CreateProcess now calls the pinned callback at PASSIVE_LEVEL before taking the
+state mutex, passing hDxgkProcess, size/alignment 32 MiB and zero flags/base.
+System processes follow the same path. Returned addresses must fit the 39-bit
+space outside root entry zero and respect leaf coverage. Callback failure
+frees unpublished metadata. No manager/data allocation occurs in CreateProcess.
+The adapter owns a 256-unit (16-MiB) allocator, with a 128-unit per-process quota,
+64-KiB charged extents and monotonically increasing nonzero generations.
+Exact owner/extent/generation is required for release; table/data callers will
+share this one allocator. Free requires prior unlink/TLB/revoke and zeroing;
+the primitive does not itself claim those later steps.
+
+RED→GREEN: real outer CreateProcess/v5 replay first failed its callback-count
+assertion, then passed system/user/failure/invalid-address paths. Allocator
+ASan/UBSan replay covers two full-quota owners, exhaustion, stale/forged free,
+rounding, invalid requests and generation wrap. All 18 G3 tests pass.
+Full suite: 1132 tests, identical 15 failures/41 errors/two skips vs baseline.
+
+Pinned WDK26100 ARM64 compilation exposed a pre-existing R135 C4242 in the
+InitialUpdate argument; explicit BOOLEAN normalization fixes that warning,
+with unchanged R135 replay behavior. Isolated compile and direct link succeed;
+no INF/CAT/package/signing target ran. Intermediate missing include/library
+paths and the initial stale builder paging file are preserved in the logs.
+Changed-file synchronization and a full driver-source hash comparison identify
+that stale file before the final compile; final source hashes are recorded in
+.local/experiments/R137-offline/source-hashes.json. Unsigned compile-only SYS:
+C:/Users/pauls/R137-offline/R137-kmd.sys,
+SHA256 d2191db887c4ff172e5c6cd197f7629454456c585604b5a20f01d34f424a7758.
+This is no package or launch candidate. Logs: step2-manifest.json.

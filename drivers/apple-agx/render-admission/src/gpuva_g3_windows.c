@@ -272,6 +272,31 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
   RtlZeroMemory(process, sizeof(*process));
   process->State = state;
   process->Magic = ADMISSION_G3_PROCESS_MAGIC;
+  /* VidMm permits this callback only inside CreateProcess at PASSIVE_LEVEL.
+   * Reserve VA/metadata now; private data is committed lazily by native render.
+   * The OS releases the reservation with the process, including failed create. */
+  if (adapter->Interface.DxgkCbReserveGpuVirtualAddressRange == NULL) {
+    status = STATUS_NOT_SUPPORTED;
+    goto Fail;
+  }
+  {
+    DXGKARGCB_RESERVEGPUVIRTUALADDRESSRANGE reserve = {0};
+    reserve.hDxgkProcess = Args->hDxgkProcess;
+    reserve.SizeInBytes = 0x02000000ULL;
+    reserve.Alignment = 0x02000000u;
+    status = adapter->Interface.DxgkCbReserveGpuVirtualAddressRange(
+        adapter->Interface.DeviceHandle, &reserve);
+    if (!NT_SUCCESS(status)) goto Fail;
+    if (reserve.StartVirtualAddress < (1ULL << 36) ||
+        reserve.StartVirtualAddress >= (1ULL << 39) ||
+        (reserve.StartVirtualAddress & (0x02000000ULL - 1ULL)) ||
+        reserve.SizeInBytes > (1ULL << 39) - reserve.StartVirtualAddress) {
+      status = STATUS_INVALID_ADDRESS;
+      goto Fail;
+    }
+    process->PrivateVa = reserve.StartVirtualAddress;
+    process->DxgkProcess = Args->hDxgkProcess;
+  }
   status = AdmissionG3BootstrapRoot(process);
   if (!NT_SUCCESS(status)) goto Fail;
   status = AdmissionMemoryRuntimeScanoutView(adapter, &local_view);

@@ -160,7 +160,26 @@ typedef struct { HANDLE hContext; ULONGLONG DmaBufferVirtualAddress;
   DXGK_SUBMITCOMMANDFLAGS Flags; UINT NodeOrdinal,EngineOrdinal;
 } DXGKARG_SUBMITCOMMANDVIRTUAL;
 typedef union { struct { UINT SystemProcess:1; UINT Reserved:31; }; UINT Value; } DXGK_CREATEPROCESSFLAGS;
-typedef struct { DXGK_CREATEPROCESSFLAGS Flags; UINT NumPasid; void *pPasid,*pProcessName; HANDLE hKmdProcess; } DXGKARG_CREATEPROCESS;
+typedef struct { DXGK_CREATEPROCESSFLAGS Flags; UINT NumPasid; void *pPasid,*pProcessName; HANDLE hKmdProcess,hDxgkProcess; } DXGKARG_CREATEPROCESS;
+typedef struct { HANDLE hDxgkProcess; ULONGLONG SizeInBytes; UINT Alignment;
+  ULONGLONG StartVirtualAddress,BaseAddress;
+  union { struct { UINT AllowUserModeMapping:1; }; UINT Flags; };
+} DXGKARGCB_RESERVEGPUVIRTUALADDRESSRANGE;
+static UINT reserve_calls;
+static NTSTATUS reserve_status;
+static HANDLE reserve_process;
+static ULONGLONG reserve_base=1ULL<<36;
+static NTSTATUS ReplayReserveVa(HANDLE adapter, DXGKARGCB_RESERVEGPUVIRTUALADDRESSRANGE *args) {
+  assert(KeGetCurrentIrql()==PASSIVE_LEVEL && adapter==(HANDLE)0x1234);
+  assert(args->SizeInBytes==0x02000000ULL && args->Alignment==0x02000000u);
+  assert(!args->Flags && !args->BaseAddress);
+  reserve_process=args->hDxgkProcess; ++reserve_calls;
+  args->StartVirtualAddress=reserve_base;
+  return reserve_status;
+}
+typedef struct { HANDLE DeviceHandle;
+ NTSTATUS (*DxgkCbReserveGpuVirtualAddressRange)(HANDLE, DXGKARGCB_RESERVEGPUVIRTUALADDRESSRANGE *);
+} DXGKRNL_INTERFACE;
 typedef struct { HANDLE hContext; D3DGPU_PHYSICAL_ADDRESS Address; UINT NumEntries; } DXGKARG_SETROOTPAGETABLE;
 typedef union { struct { UINT SystemContext:1,GdiContext:1,VirtualAddressing:1,SystemProtected:1,HwQueueSupported:1,TestContext:1; }; UINT Value; } DXGK_CREATECONTEXTFLAGS;
 typedef union { struct { UINT NoPatchingRequired:1,DriverManagesResidency:1,
@@ -191,14 +210,14 @@ typedef struct { int unused; } ADMISSION_PREPATCHED_RENDER;
 typedef struct _ADMISSION_RENDER_CONTEXT { ADMISSION_OBJECT_CONTEXT Object; UINT Win32Generation; BOOLEAN Win32Transport,GpuvaG3Poisoned; ADMISSION_SCHEDULER_CONTEXT SchedulerContext; ADMISSION_PREPATCHED_RENDER PrepatchedRender; ADMISSION_G3_PROCESS *GpuvaG3Process; ULONGLONG GpuvaG3RootIpa,GpuvaG3DmaBufferVa,GpuvaG3MappingGeneration; ULONG GpuvaG3DmaBufferBytes; } ADMISSION_RENDER_CONTEXT;
 typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence,LastCompletedFence; ULONGLONG UnpublishedGroups[32]; } ADMISSION_G3_STATE;
 typedef struct _ADMISSION_G3_TABLE_SHADOW { struct _ADMISSION_G3_TABLE_SHADOW *Next; APPLE_AGX_MEMORY_OBJECT Memory; ULONGLONG OriginalIpa,BrokerIpa; APPLE_AGX_GPUVA_G3_LOGICAL_PTE *LogicalPtes,*ResidentPtes,*PendingPtes; } ADMISSION_G3_TABLE_SHADOW;
-struct _ADMISSION_G3_PROCESS { LIST_ENTRY Link; ADMISSION_G3_STATE *State; APPLE_AGX_GPUVA_G3_GRAPH Graph; APPLE_AGX_MEMORY_IO Io; APPLE_AGX_MEMORY_OBJECT BootstrapRoot; ADMISSION_G3_TABLE_SHADOW *TableShadows; ULONGLONG BootstrapIpa; ULONG Magic,DeviceRefs,ContextRefs; BOOLEAN Poisoned; };
+struct _ADMISSION_G3_PROCESS { LIST_ENTRY Link; ADMISSION_G3_STATE *State; APPLE_AGX_GPUVA_G3_GRAPH Graph; APPLE_AGX_MEMORY_IO Io; APPLE_AGX_MEMORY_OBJECT BootstrapRoot; ADMISSION_G3_TABLE_SHADOW *TableShadows; ULONGLONG BootstrapIpa,PrivateVa; HANDLE DxgkProcess; ULONG Magic,DeviceRefs,ContextRefs; BOOLEAN Poisoned; };
 typedef struct { int unused; } REPLAY_APERTURE;
 typedef struct {
   UINT G4Native,BoundFence,G4CommandBytes;
   APPLE_AGX_G4_PRIVATE_HEADER_V2 G4Header;
   unsigned char Commands[APPLE_AGX_G4_NATIVE_MAX_BYTES];
 } ADMISSION_BACKEND_IMAGE;
-struct _ADMISSION_CONTEXT { void *GpuvaG3State; BOOLEAN Started;
+struct _ADMISSION_CONTEXT { DXGKRNL_INTERFACE Interface; void *GpuvaG3State; BOOLEAN Started;
   PDEVICE_OBJECT PhysicalDeviceObject; ADMISSION_CONTEXT *ObjectAdapter;
   int SchedulerLock,Scheduler;
   ADMISSION_BACKEND_IMAGE BackendImage;

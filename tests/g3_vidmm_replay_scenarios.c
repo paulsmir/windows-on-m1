@@ -28,7 +28,9 @@ static void update(ADMISSION_CONTEXT *adapter, HANDLE process, UINT level,
 #include "g3_system_lifetime_cases.c"
 #include "g3_r133_publication_cases.c"
 #include "g3_r135_root_reuse_cases.c"
+#include "g3_r137_reservation_cases.c"
 int main(void) {
+  if(getenv("G3_REPLAY_R137")) {r137_reservation_cases();return 0;}
   if (getenv("G3_REPLAY_R135")) {r135_root_reuse_cases();return 0;}
   if (getenv("G3_REPLAY_R134")) {r134_system_64k_cases();return 0;}
   if (getenv("G3_REPLAY_R133")) {r133_publication_cases();return 0;}
@@ -64,6 +66,7 @@ int main(void) {
     assert(AppleAgxGpuvaV5ClientCall(&state.Client,&probe,&response));
     assert(response.Status==HV_AGX_GPUVA_V5_STALE && response.Epoch==7);
   }
+  adapter.Interface=(DXGKRNL_INTERFACE){(HANDLE)0x1234,ReplayReserveVa};
   adapter.Started=TRUE;
   adapter.GpuvaG3State=&state;
   adapter.ObjectAdapter=&adapter;

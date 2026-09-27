@@ -2,6 +2,7 @@
 #define ADMISSION_GPUVA_G3_PRIVATE_H
 
 #include "render_admission.h"
+#include "apple_agx_g3_private_pool.h"
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #define ADMISSION_G3_PROCESS_MAGIC 0x47335052u
@@ -12,6 +13,7 @@ typedef struct _ADMISSION_G3_STATE {
   LIST_ENTRY Processes;
   APPLE_AGX_GPUVA_V5_CLIENT Client;
   APPLE_AGX_GPUVA_G3_REGISTRY Registry;
+  APPLE_AGX_G3_PRIVATE_POOL PrivatePool;
   ULONGLONG NextProcessId;
   ULONG ProcessCount;
   struct _ADMISSION_G3_PROCESS *ActiveProcess;
@@ -37,6 +39,8 @@ typedef struct _ADMISSION_G3_PROCESS {
   APPLE_AGX_MEMORY_OBJECT BootstrapRoot;
   ADMISSION_G3_TABLE_SHADOW *TableShadows;
   ULONGLONG BootstrapIpa;
+  ULONGLONG PrivateVa;
+  HANDLE DxgkProcess;
   ULONG Magic, DeviceRefs, ContextRefs;
   BOOLEAN Poisoned;
 } ADMISSION_G3_PROCESS;
