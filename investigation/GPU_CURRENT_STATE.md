@@ -1,5 +1,31 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-27 EXP854 — system64 declaration survived; UMD refusal precedes G4; ordinary recovered
+
+Package854 from `15a4e5fa` (SYS `cc226287`) built with 0 warnings/errors and
+exact source/package hashes. GO_EXP854 preceded Air staging. One cold R110
+full-owner crossed ARM_CONSUMED and returned pinned SSH; APPL0002 Code0 was
+sampled at 15:36:57Z and at 15:42:41Z, 653 seconds after Windows boot. No
+System1001, new minidump or G3 paging-failure receipt appeared. Segment0
+unpublished-groups count was 9474, versus EXP853's 338909 in a different
+workload. The captured receipts did not expose a count of segment0
+Use64KBPages updates or the first access's actual backing, so 64K placement
+and G4 admission remain unproven.
+
+The G4 first-failure receipt was absent, but the UMD log had 6043 identical
+`ResourceUpdateSubResourceUP` line1332 E_INVALIDARG refusals, no draw-before,
+and 132 dwm.exe/ucrtbase.dll Application1000 crashes (0xc0000409). The
+scanout snapshots remained all zero. This is an earlier UMD boundary, not
+proof of accepted GPU submission or a DWM frame. Evidence and host hashes:
+`.local/experiments/EXP854-r134-sysmem64k/hardware-evidence/`, manifest
+SHA256 `479f56ac38c0417759cf2eed67e51a2ebb65a5203adfa98b92041ac4d8b1e206`.
+
+Evidence-first ordered restart, hidden exact oem5 removal and ordinary
+EXP377/392 durable Preflight PASS restored pinned SSH, one present Code28,
+staged/arm/files/service/signer absent, CPU8/disks2/USB5 and RDP Running.
+Do not reuse package854. Next causal target: offline attribution of the UMD
+`ResourceUpdateSubResourceUP` refusal before any new hardware run.
+
 ## 2026-09-27 EXP853 — R133 avoids measured 0x10E; G4 boundary unchanged; ordinary recovered
 
 Package853 from `5ca5e68d` (SYS `aa644cdf`) passed 529-file builder source
