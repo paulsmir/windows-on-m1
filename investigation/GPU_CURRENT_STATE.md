@@ -1,5 +1,14 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-27 R137 authorized continuation — completion ownership
+
+User authorizes completion/cancel/reset owners in the same KMD layer. R136
+section 6 now distinguishes TA/3D completion, broker lease/TLB release and
+successful Windows notification. Resume steps 4–7 with separate RED→GREEN
+commits, starting with transactional root reuse regression. Previous stop and
+withdrawn prototype remain historical evidence. No Air, package or Mu/m1n1
+changes; no GO_EXP855. Ordinary EXP377/392 recovery remains unchanged.
+
 ## 2026-09-27 R137 offline stop — retirement owner missing from exact scope
 
 Commits 0658e80f/a4f918d7/fe9ce325 provide the 40/16/8-MiB split, process

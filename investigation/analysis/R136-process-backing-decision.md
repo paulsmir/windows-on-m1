@@ -503,3 +503,84 @@ publication/teardown or hardware. Execution evidence and exact full-suite
 failure names are in `R137-process-backing-implementation.md` and its local logs.
 No Air, package, install, preregistration or GO_EXP855. The saved ordinary
 EXP377/392 Code28 recovery remains the last accepted recovery contract.
+
+
+## 6. completion ownership contract — authorized continuation, 2026-09-27
+
+The user explicitly expands R137 to completion/cancel/reset and their KMD
+owners. This supersedes the section 5 scope stop, without changing its recorded
+finding. Steps 4–7 remain separate implementation commits with RED→GREEN;
+Mu/m1n1, hardware and package builds remain excluded.
+
+**Proof and owner.** Successful Windows fence notification is an OS retirement
+boundary, not proof of hardware quiescence by itself. For an executed scene,
+private storage remains charged and immutable until all of these hold for the
+same process, context, manager generation, scene generation and submission:
+
+1. The backend observes both TA and 3D completion for the exact job. The
+   backend worker owns this evidence, not the UMD or scheduler fence counter.
+2. `AdmissionGpuvaG3CompleteJob` successfully ends the v5 job and releases its
+   slot/lease. The graph/broker owns the ordered TLB invalidation acknowledgement.
+   Failure or uncertain broker state poisons and quarantines the extents.
+3. `AdmissionNotifyCompletionAtInterrupt` calls `DxgkCbNotifyInterrupt` for that
+   fence and marks the completion transaction Reported. Its PASSIVE caller
+   records retirement only after synchronized notification succeeds. Notification
+   failure/retry retains the identity and references even after packet/image
+   release; `FenceOutstanding == 0`, `CompletedFence`, and EndJob alone are
+   insufficient. Duplicate/late notifications cannot retire another generation.
+
+`backend_platform_windows.c` owns TA/3D completion, synchronized notification,
+completion retry and backend stop/reset retirement. `gpuva_g3_windows.c` and
+`gpuva_g3_private.h` own the process graph, private identities and job/lease
+references. `scheduler_windows.c`, `submission_windows.c` and `callbacks.c` own
+preemption, reset, cancellation, and context/device destruction, respectively.
+Their headers, shared ownership helpers and real-code replay shims are included
+in the authorized file scope. `backend_image` storage must not be the sole owner
+of private identity because its release precedes successful fence notification.
+
+**Cancellation/reset.** A never-started submission may relinquish its queue
+reference only when the scheduler/packet owner proves that exact submission was
+removed before BeginJob could lease/publish it. An active or uncertain submission
+is quarantined; software queue reset, cleared FenceOutstanding, and
+QueuesQuiesced alone do not establish the v5 TLB/lease proof. No new hardware
+reset or TDR-success claim is made. Reuse after reset requires an independently
+proven GPU stop and acknowledged broker invalidation/revocation; otherwise the
+allocation remains charged for the adapter lifetime. DPC/interrupt paths may
+mark a protected reference only; pool/graph reclamation occurs at PASSIVE under
+the G3 lock, never by acquiring its fast mutex from a spinlock or interrupt.
+
+**Release.** UMD release is a request. Context destruction must check retained
+private references before freeing the context, even when FenceOutstanding was
+cleared. Once never-started cancellation or all executed retirement proofs
+hold, unlink leaves, acknowledge invalidation, revoke exclusive grants, zero
+full charged extents, then return them to the pool. Keep managers until their
+last context/scene reference, and private tables until process graph teardown.
+Any partial/uncertain revoke retains ownership and poisons reuse. Acquisition,
+publication and queue rollback must be transactional or explicitly quarantined.
+
+**Root reuse.** Review identified a partial-mutation bug in the withdrawn step 4
+prototype: it detached the current private link before discovering ordinary
+mappings on the bootstrap. Preflight both roots before mutation. A rejected
+preflight must preserve the private link and mapping generation; broker failure
+must restore the old link or poison the graph, never silently report a clean
+refusal after losing access.
+
+**Inspected current implementations:** AdmissionBackendComplete,
+AdmissionNotifyCompletionAtInterrupt and AdmissionBackendRetire in
+`render-admission/src/backend_platform_windows.c`; AdmissionGpuvaG3CompleteJob
+and BeginJob in `gpuva_g3_windows.c`; AdmissionG3PrepareTableReuse in
+`gpuva_g3_paging_windows.c`; scheduler preemption/reset, CancelCommand and
+DestroyContext owners listed above; current v5 EndJob/Release/publication
+ordering already inspected for section 3. Asahi queue-owned job resources and
+per-VM allocations remain the source model. Existing R64/ACPI and launch
+contracts remain unchanged. No new live-state claim is needed for this offline
+ownership correction.
+
+**Offline discriminators:** rejected root reuse preserves private reachability;
+notification failure after EndJob/local commit cannot enable reacquire/reuse;
+exact TA/3D plus successful notification can retire; never-started cancellation
+cannot race BeginJob; active cancellation/reset and revoke timeout quarantine;
+stale/cross-context generations fail at submit and BeginJob. The later EXP855
+checkpoint must bind the same identities to all three completion proofs before
+showing zero/reuse. Its recovery remains ordinary EXP377/392 Code28, with the
+immutable GPU-hidden image only for emergency rollback. No hardware authorized.
