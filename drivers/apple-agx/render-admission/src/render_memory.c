@@ -72,18 +72,29 @@ APPLE_AGX_BOOL AdmissionMemoryInitialize(
 APPLE_AGX_BOOL AdmissionMemoryReserveBackendTail(
     ADMISSION_MEMORY_CONTRACT *Memory,
     APPLE_AGX_U64 AllocationBytes, APPLE_AGX_U64 BackendBytes) {
+  return AdmissionMemoryPartitionLocal(Memory, AllocationBytes, 0ULL,
+                                        BackendBytes);
+}
+
+APPLE_AGX_BOOL AdmissionMemoryPartitionLocal(
+    ADMISSION_MEMORY_CONTRACT *Memory, APPLE_AGX_U64 AllocationBytes,
+    APPLE_AGX_U64 PrivateBytes, APPLE_AGX_U64 BackendBytes) {
   if (Memory == ADMISSION_MEMORY_NULL ||
-      Memory->Initialized != APPLE_AGX_TRUE ||
+      Memory->Initialized != APPLE_AGX_TRUE || Memory->UatReady ||
+      Memory->PagingReady ||
       Memory->LocalAllocationBytes != Memory->LocalBytes ||
-      Memory->BackendBytes != 0ULL ||
+      Memory->BackendBytes != 0ULL || Memory->PrivateBytes != 0ULL ||
       AllocationBytes == 0ULL || BackendBytes == 0ULL ||
-      (AllocationBytes & (APPLE_AGX_WDDM_PAGE_SIZE_64K - 1ULL)) != 0ULL ||
-      (BackendBytes & (APPLE_AGX_WDDM_PAGE_SIZE_64K - 1ULL)) != 0ULL ||
+      ((AllocationBytes | PrivateBytes | BackendBytes) &
+       (APPLE_AGX_WDDM_PAGE_SIZE_64K - 1ULL)) != 0ULL ||
       AllocationBytes > Memory->LocalBytes ||
-      BackendBytes != Memory->LocalBytes - AllocationBytes)
+      PrivateBytes > Memory->LocalBytes - AllocationBytes ||
+      BackendBytes != Memory->LocalBytes - AllocationBytes - PrivateBytes)
     return APPLE_AGX_FALSE;
   Memory->LocalAllocationBytes = AllocationBytes;
-  Memory->BackendOffset = AllocationBytes;
+  Memory->PrivateOffset = PrivateBytes ? AllocationBytes : 0ULL;
+  Memory->PrivateBytes = PrivateBytes;
+  Memory->BackendOffset = AllocationBytes + PrivateBytes;
   Memory->BackendBytes = BackendBytes;
   return APPLE_AGX_TRUE;
 }

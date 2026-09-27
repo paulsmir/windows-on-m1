@@ -70,7 +70,7 @@ class AppleAgxRenderMemoryTests(unittest.TestCase):
         runtime = (RENDER / "src" / "memory_runtime_windows.c").read_text()
         self.assertIn("#define ADMISSION_LOCAL_BYTES 0x04000000ULL", runtime)
         self.assertIn(
-            "#define ADMISSION_LOCAL_ALLOCATION_BYTES 0x03800000ULL", runtime
+            "#define ADMISSION_LOCAL_ALLOCATION_BYTES 0x02800000ULL", runtime
         )
         self.assertIn("#define ADMISSION_BACKEND_BYTES 0x00800000ULL", runtime)
 

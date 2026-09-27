@@ -17,6 +17,8 @@ typedef struct _ADMISSION_MEMORY_CONTRACT {
   APPLE_AGX_U64 LocalGpuVaBase;
   APPLE_AGX_U64 LocalBytes;
   APPLE_AGX_U64 LocalAllocationBytes;
+  APPLE_AGX_U64 PrivateOffset;
+  APPLE_AGX_U64 PrivateBytes;
   APPLE_AGX_U64 BackendOffset;
   APPLE_AGX_U64 BackendBytes;
   APPLE_AGX_BOOL Initialized;
@@ -49,6 +51,9 @@ APPLE_AGX_BOOL AdmissionMemoryCpuVisibleLocalBase(
     APPLE_AGX_U64 GuestIpaAddress, APPLE_AGX_U64 HostPhysicalAddress,
     APPLE_AGX_U64 GpuVirtualAddress, APPLE_AGX_U64 Bytes,
     APPLE_AGX_U64 *CpuTranslatedBase);
+APPLE_AGX_BOOL AdmissionMemoryPartitionLocal(
+    ADMISSION_MEMORY_CONTRACT *Memory, APPLE_AGX_U64 AllocationBytes,
+    APPLE_AGX_U64 PrivateBytes, APPLE_AGX_U64 BackendBytes);
 APPLE_AGX_BOOL AdmissionMemoryReserveBackendTail(
     ADMISSION_MEMORY_CONTRACT *Memory,
     APPLE_AGX_U64 AllocationBytes, APPLE_AGX_U64 BackendBytes);

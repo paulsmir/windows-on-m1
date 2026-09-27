@@ -45,6 +45,39 @@ static void test_cpu_visible_local_segment_requires_exact_backing(void) {
 }
 #endif
 
+/* R137: private storage must never be addressable as an ordinary allocation. */
+static void test_private_partition_is_disjoint_and_atomic(void) {
+  ADMISSION_MEMORY_CONTRACT memory, before;
+  ADMISSION_LOCAL_MEMORY_VIEW view;
+  APPLE_AGX_U64 va, bytes;
+  const APPLE_AGX_U64 local = 40ULL << 20, pool = 16ULL << 20;
+  assert(AdmissionMemoryInitialize(&memory, entries, TEST_APERTURE_PAGES,
+      TEST_APERTURE_BASE, TEST_APERTURE_SIZE, TEST_LOCAL_BASE, TEST_LOCAL_SIZE));
+  before = memory;
+  assert(!AdmissionMemoryPartitionLocal(&memory, local + 1, pool, TEST_BACKEND_SIZE));
+  assert(memcmp(&before, &memory, sizeof(memory)) == 0);
+  assert(!AdmissionMemoryPartitionLocal(&memory, local, pool + 0x10000, TEST_BACKEND_SIZE));
+  assert(!AdmissionMemoryPartitionLocal(&memory, ~0ULL - 0xffff, pool, TEST_BACKEND_SIZE));
+  assert(memcmp(&before, &memory, sizeof(memory)) == 0);
+  assert(AdmissionMemoryPartitionLocal(&memory, local, pool, TEST_BACKEND_SIZE));
+  assert(memory.LocalAllocationBytes == local);
+  assert(memory.PrivateOffset == local && memory.PrivateBytes == pool);
+  assert(memory.BackendOffset == 56ULL << 20);
+  assert(AdmissionMemoryBackendRange(&memory, &va, &bytes));
+  assert(va == TEST_LOCAL_BASE + (56ULL << 20) && bytes == TEST_BACKEND_SIZE);
+  assert(AdmissionMemoryResolveLocalView(&memory, TEST_LOCAL_BASE + local - 0x10000,
+      0x10000, 0, (void *)0x10000000ULL, 0x9d0000000ULL, &view));
+  assert(!AdmissionMemoryResolveLocalView(&memory, TEST_LOCAL_BASE + local,
+      0x10000, 0, (void *)0x10000000ULL, 0x9d0000000ULL, &view));
+  assert(!AdmissionMemoryResolveLocalView(&memory, TEST_LOCAL_BASE + (56ULL << 20),
+      0x10000, 0, (void *)0x10000000ULL, 0x9d0000000ULL, &view));
+  before = memory;
+  assert(!AdmissionMemoryPartitionLocal(&memory, local, pool, TEST_BACKEND_SIZE));
+  assert(memcmp(&before, &memory, sizeof(memory)) == 0);
+  assert(AdmissionMemoryMarkUatReady(&memory, 63u, 0x4000ULL,
+      TEST_LOCAL_BASE, TEST_LOCAL_SIZE));
+}
+
 static void test_exact_two_segment_contract(void) {
   ADMISSION_MEMORY_CONTRACT memory;
 
@@ -280,6 +313,7 @@ static void test_system_page_aperture_ranges_are_atomic(void) {
 }
 
 int main(void) {
+  test_private_partition_is_disjoint_and_atomic();
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   test_cpu_visible_local_segment_requires_exact_backing();
 #endif

@@ -3,7 +3,9 @@
 #define ADMISSION_MEMORY_RUNTIME_TAG 'uRGA'
 #define ADMISSION_LOCAL_GPU_VA 0x1500000000ULL
 #define ADMISSION_LOCAL_BYTES 0x04000000ULL
-#define ADMISSION_LOCAL_ALLOCATION_BYTES 0x03800000ULL
+#define ADMISSION_LOCAL_ALLOCATION_BYTES 0x02800000ULL
+#define ADMISSION_PRIVATE_BYTES 0x01000000ULL
+#define ADMISSION_BACKEND_OFFSET 0x03800000ULL
 #define ADMISSION_BACKEND_BYTES 0x00800000ULL
 #define ADMISSION_APERTURE_GPU_VA 0x1600000000ULL
 #define ADMISSION_APERTURE_BYTES 0x10000000ULL
@@ -403,13 +405,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
           fixedInput->Size >
               ADMISSION_BACKEND_BYTES - fixedInput->ArenaOffset ||
           runtime->LocalObject.DeviceAddress >
-              MAXULONGLONG - ADMISSION_LOCAL_ALLOCATION_BYTES -
+              MAXULONGLONG - ADMISSION_BACKEND_OFFSET -
                   fixedInput->ArenaOffset) {
         status = STATUS_INVALID_IMAGE_FORMAT;
         goto Fail;
       }
       fixedPhysical = runtime->LocalObject.DeviceAddress +
-                      ADMISSION_LOCAL_ALLOCATION_BYTES +
+                      ADMISSION_BACKEND_OFFSET +
                       fixedInput->ArenaOffset;
       if (AppleAgxUatMap(
               ADMISSION_MEMORY_UAT_CONTEXT, &runtime->Residency.Roots,
@@ -451,13 +453,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
                                fixedInput->ArenaOffset -
                                alias->ObjectOffset ||
             runtime->LocalObject.DeviceAddress >
-                MAXULONGLONG - ADMISSION_LOCAL_ALLOCATION_BYTES -
+                MAXULONGLONG - ADMISSION_BACKEND_OFFSET -
                     fixedInput->ArenaOffset - alias->ObjectOffset) {
           status = STATUS_INVALID_IMAGE_FORMAT;
           goto Fail;
         }
         aliasPhysical = runtime->LocalObject.DeviceAddress +
-                        ADMISSION_LOCAL_ALLOCATION_BYTES +
+                        ADMISSION_BACKEND_OFFSET +
                         fixedInput->ArenaOffset + alias->ObjectOffset;
         if (AppleAgxUatMap(
                 ADMISSION_MEMORY_UAT_CONTEXT, &runtime->Residency.Roots,
@@ -507,9 +509,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
           (APPLE_AGX_U32)ADMISSION_APERTURE_PAGE_COUNT,
           ADMISSION_APERTURE_GPU_VA, ADMISSION_APERTURE_BYTES,
           ADMISSION_LOCAL_GPU_VA, ADMISSION_LOCAL_BYTES) ||
-      !AdmissionMemoryReserveBackendTail(
+      !AdmissionMemoryPartitionLocal(
           &Context->Memory, ADMISSION_LOCAL_ALLOCATION_BYTES,
-          ADMISSION_BACKEND_BYTES) ||
+          ADMISSION_PRIVATE_BYTES, ADMISSION_BACKEND_BYTES) ||
       !AdmissionMemoryMarkUatReady(
           &Context->Memory, ADMISSION_MEMORY_UAT_CONTEXT,
           APPLE_AGX_UAT_PAGE_SIZE_16K, ADMISSION_LOCAL_GPU_VA,
