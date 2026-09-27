@@ -19,8 +19,32 @@ static unsigned long long usc_va(unsigned int packed) {
   return packed ? 0x1100000000ULL + (packed & ~63u) : 0ULL;
 }
 
+typedef struct {
+  APPLE_AGX_G4_ACCESS Old;
+  APPLE_AGX_G4_ACCESS_EX Typed;
+  void *Context;
+  APPLE_AGX_G4_FAILURE *Failure;
+  unsigned int Ordinal;
+} AGX4_ACCESS_STATE;
+
+static int check_access(AGX4_ACCESS_STATE *state, unsigned long long va,
+    unsigned int bytes, int write, APPLE_AGX_G4_ACCESS_KIND kind) {
+  unsigned int ordinal = state->Ordinal++;
+  int accepted = state->Typed ? state->Typed(state->Context, va, bytes,
+      write, kind, ordinal) : state->Old(state->Context, va, bytes, write);
+  if (!accepted && state->Failure) {
+    state->Failure->Subsite = AppleAgxG4FailureAccess;
+    state->Failure->Kind = kind;
+    state->Failure->Ordinal = ordinal;
+    state->Failure->Va = va;
+    state->Failure->Bytes = bytes;
+    state->Failure->Write = write != 0;
+  }
+  return accepted;
+}
+
 static APPLE_AGX_G4_PARSE_RESULT validate_render(
-    const unsigned char *data, APPLE_AGX_G4_ACCESS access, void *context) {
+    const unsigned char *data, AGX4_ACCESS_STATE *access) {
   APPLE_AGX_G4_NATIVE_RENDER render;
   struct address { unsigned long long Va; int Write; } addresses[19];
   unsigned int index, count = 0u;
@@ -74,17 +98,17 @@ static APPLE_AGX_G4_PARSE_RESULT validate_render(
     }
     if (!valid_va(addresses[index].Va, 1u))
       return AppleAgxG4ParseInvalid;
-    if (!access(context, addresses[index].Va, 1u,
-                addresses[index].Write))
+    if (!check_access(access, addresses[index].Va, 1u,
+                addresses[index].Write, AppleAgxG4AccessRender))
       return AppleAgxG4ParseUnmapped;
   }
   return AppleAgxG4ParseOk;
 }
 
-APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmit(
+static APPLE_AGX_G4_PARSE_RESULT parse_submit(
     const void *private_data, unsigned int private_capacity,
     unsigned int umd_private_bytes, unsigned long long dma_va,
-    unsigned int dma_bytes, APPLE_AGX_G4_ACCESS access, void *access_context,
+    unsigned int dma_bytes, AGX4_ACCESS_STATE *access,
     APPLE_AGX_G4_SUBMIT_VIEW *view) {
   APPLE_AGX_G4_PRIVATE_HEADER header;
   APPLE_AGX_G4_PRIVATE_HEADER_V2 header_v2 = {0};
@@ -93,7 +117,8 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmit(
   unsigned int position = 0u, index, attachments = 0u;
   const APPLE_AGX_G4_ATTACHMENT *attachment_base = 0;
   if (view != 0) memset(view, 0, sizeof(*view));
-  if (!private_data || !view || !access ||
+  if (access && access->Failure) memset(access->Failure, 0, sizeof(*access->Failure));
+  if (!private_data || !view || !access || (!access->Old && !access->Typed) ||
       private_capacity < sizeof(header) ||
       umd_private_bytes < sizeof(header) ||
       umd_private_bytes > private_capacity ||
@@ -133,11 +158,13 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmit(
             other->Va < range->Va + range->Bytes)
           return AppleAgxG4ParseInvalid;
       }
-      if (!access(access_context, range->Va, range->Bytes, 1))
+      if (!check_access(access, range->Va, range->Bytes, 1,
+              AppleAgxG4AccessProcess))
         return AppleAgxG4ParseUnmapped;
     }
   }
-  if (!access(access_context, dma_va, dma_bytes, 0))
+  if (!check_access(access, dma_va, dma_bytes, 0,
+          AppleAgxG4AccessCpuEnvelope))
     return AppleAgxG4ParseUnmapped;
   bytes += header.HeaderBytes;
   if (dma_bytes < sizeof(native_header)) return AppleAgxG4ParseInvalid;
@@ -158,8 +185,8 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmit(
           attachment.Size > 0xffffffffULL ||
           !valid_va(attachment.Pointer, attachment.Size))
         return AppleAgxG4ParseInvalid;
-      if (!access(access_context, attachment.Pointer,
-                  (unsigned int)attachment.Size, 1))
+      if (!check_access(access, attachment.Pointer,
+                  (unsigned int)attachment.Size, 1, AppleAgxG4AccessAttachment))
         return AppleAgxG4ParseUnmapped;
     }
     position = sizeof(native_header) + native_header.Size;
@@ -176,7 +203,7 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmit(
     return AppleAgxG4ParseInvalid;
   {
     APPLE_AGX_G4_PARSE_RESULT render_result = validate_render(
-        bytes + position + sizeof(native_header), access, access_context);
+        bytes + position + sizeof(native_header), access);
     if (render_result != AppleAgxG4ParseOk) return render_result;
   }
   if (header.Version == APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA) {
@@ -201,4 +228,29 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmit(
   if (header.Version == APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA)
     memcpy(view->Process, header_v2.Process, sizeof(view->Process));
   return AppleAgxG4ParseOk;
+}
+
+APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmit(
+    const void *private_data, unsigned int private_capacity,
+    unsigned int umd_private_bytes, unsigned long long dma_va,
+    unsigned int dma_bytes, APPLE_AGX_G4_ACCESS access, void *context,
+    APPLE_AGX_G4_SUBMIT_VIEW *view) {
+  AGX4_ACCESS_STATE state = {0};
+  state.Old = access;
+  state.Context = context;
+  return parse_submit(private_data, private_capacity, umd_private_bytes,
+      dma_va, dma_bytes, &state, view);
+}
+
+APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmitEx(
+    const void *private_data, unsigned int private_capacity,
+    unsigned int umd_private_bytes, unsigned long long dma_va,
+    unsigned int dma_bytes, APPLE_AGX_G4_ACCESS_EX access, void *context,
+    APPLE_AGX_G4_SUBMIT_VIEW *view, APPLE_AGX_G4_FAILURE *failure) {
+  AGX4_ACCESS_STATE state = {0};
+  state.Typed = access;
+  state.Context = context;
+  state.Failure = failure;
+  return parse_submit(private_data, private_capacity, umd_private_bytes,
+      dma_va, dma_bytes, &state, view);
 }

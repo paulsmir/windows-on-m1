@@ -43,6 +43,15 @@ static APPLE_AGX_G4_PARSE_RESULT parse(PACKET *packet, unsigned *calls,
       mapped, calls, view);
 }
 
+typedef struct { unsigned FailAt, Calls; } DIAGNOSTIC_ACCESS;
+static int diagnostic_access(void *opaque, unsigned long long va,
+    unsigned int bytes, int write, APPLE_AGX_G4_ACCESS_KIND kind,
+    unsigned int ordinal) {
+  DIAGNOSTIC_ACCESS *state = opaque;
+  (void)va; (void)bytes; (void)write; (void)kind; (void)ordinal;
+  return ++state->Calls != state->FailAt;
+}
+
 int main(void) {
   PACKET packet = {0}, bad;
   APPLE_AGX_G4_SUBMIT_VIEW view = {0};
@@ -132,6 +141,19 @@ int main(void) {
     assert(view.Process[0].Va == 0x100000ULL &&
            view.Process[8].Va == 0x2100000ULL &&
            view.ColorFormat == APPLE_AGX_G4_COLOR_BGRA8);
+    for (unsigned fail = 1u; fail <= 11u; ++fail) {
+      DIAGNOSTIC_ACCESS state = {fail, 0u};
+      APPLE_AGX_G4_FAILURE failure = {0};
+      assert(AppleAgxG4ParseSubmitEx(&native, sizeof(native), sizeof(native),
+          0x50000ULL, native.header.Base.CommandBytes, diagnostic_access,
+          &state, &view, &failure) == AppleAgxG4ParseUnmapped);
+      assert(failure.Subsite == AppleAgxG4FailureAccess);
+      assert(failure.Ordinal == fail - 1u);
+      assert(failure.Va != 0ULL && failure.Bytes != 0u);
+      assert(failure.Kind == (fail <= 9u ? AppleAgxG4AccessProcess :
+          fail == 10u ? AppleAgxG4AccessCpuEnvelope :
+          AppleAgxG4AccessRender));
+    }
     changed = native;
     changed.header.Base.Reserved = 0u;
     assert(AppleAgxG4ParseSubmit(&changed, sizeof(changed), sizeof(changed),
@@ -173,6 +195,40 @@ int main(void) {
     assert(AppleAgxG4ParseSubmit(&changed, sizeof(changed), sizeof(changed),
         0x50000ULL, changed.header.Base.CommandBytes, mapped, &calls,
         &view) == AppleAgxG4ParseInvalid);
+  }
+  {
+    PACKET full = packet;
+    APPLE_AGX_G4_NATIVE_RENDER *r = &full.render_payload;
+    r->VdmCtrlStreamBase = 0x10000ULL;
+    r->VertexHelper.Binary = 0x20040u;
+    r->VertexHelper.Data = 0x12000ULL;
+    r->FragmentHelper.Binary = 0x30040u;
+    r->FragmentHelper.Data = 0x14000ULL;
+    r->IspScissorBase = 0x15000ULL;
+    r->IspDbiasBase = 0x16000ULL;
+    r->IspOclQryBase = 0x17000ULL;
+    r->Depth.Base = 0x18000ULL;
+    r->Depth.CompBase = 0x19000ULL;
+    r->Stencil.Base = 0x1a000ULL;
+    r->Stencil.CompBase = 0x1b000ULL;
+    r->SamplerHeap = 0x1c000ULL;
+    r->Bg.Usc = 0x40040u;
+    r->Eot.Usc = 0x50040u;
+    r->PartialBg.Usc = 0x60040u;
+    r->PartialEot.Usc = 0x70040u;
+    for (unsigned fail = 1u; fail <= 19u; ++fail) {
+      DIAGNOSTIC_ACCESS state = {fail, 0u};
+      APPLE_AGX_G4_FAILURE failure = {0};
+      assert(AppleAgxG4ParseSubmitEx(&full, sizeof(full), sizeof(full),
+          0x20000ULL, full.header.CommandBytes, diagnostic_access,
+          &state, &view, &failure) == AppleAgxG4ParseUnmapped);
+      assert(failure.Subsite == AppleAgxG4FailureAccess &&
+             failure.Ordinal == fail - 1u && failure.Va != 0ULL);
+      assert(failure.Kind == (fail == 1u ? AppleAgxG4AccessCpuEnvelope :
+          fail == 2u ? AppleAgxG4AccessAttachment : AppleAgxG4AccessRender));
+      assert(failure.Write == (fail == 2u || fail == 10u ||
+          (fail >= 11u && fail <= 14u)));
+    }
   }
   return 0;
 }

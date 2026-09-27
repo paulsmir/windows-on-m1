@@ -22,16 +22,19 @@ enum {
   AdmissionG4RejectLegacySubmit = 15
 };
 
-static NTSTATUS AdmissionG4SubmitReject(
+static NTSTATUS AdmissionG4SubmitRejectDetail(
     ADMISSION_CONTEXT *adapter, const ADMISSION_RENDER_CONTEXT *context,
     const DXGKARG_SUBMITCOMMANDVIRTUAL *args, ULONG branch,
-    NTSTATUS status, ULONG downstream, BOOLEAN validContext) {
+    NTSTATUS status, ULONG downstream, BOOLEAN validContext,
+    const struct _ADMISSION_G4_SUBMIT_FAILURE *detail) {
   if (adapter != NULL) {
     (void)InterlockedIncrement(&adapter->G4SubmitFailureCount);
     if (InterlockedCompareExchange(&adapter->G4SubmitFailureClaim, 1, 0) == 0) {
       struct _ADMISSION_G4_SUBMIT_FAILURE *first =
           &adapter->G4SubmitFailure;
-      first->Version = 1u;
+      RtlZeroMemory(first, sizeof(*first));
+      if (detail != NULL) *first = *detail;
+      first->Version = 2u;
       first->Bytes = sizeof(*first);
       first->Branch = branch;
       first->Status = (ULONG)status;
@@ -52,6 +55,14 @@ static NTSTATUS AdmissionG4SubmitReject(
     AdmissionRenderCorrelationSubmitFailureWindows(adapter);
   }
   return status;
+}
+
+static NTSTATUS AdmissionG4SubmitReject(
+    ADMISSION_CONTEXT *adapter, const ADMISSION_RENDER_CONTEXT *context,
+    const DXGKARG_SUBMITCOMMANDVIRTUAL *args, ULONG branch,
+    NTSTATUS status, ULONG downstream, BOOLEAN validContext) {
+  return AdmissionG4SubmitRejectDetail(adapter, context, args, branch,
+      status, downstream, validContext, NULL);
 }
 
 C_ASSERT(FIELD_OFFSET(ADMISSION_BACKEND_IMAGE, G4Command) ==
@@ -669,6 +680,57 @@ static int AdmissionG4GraphAccess(void *opaque, unsigned long long va,
       graph, va, bytes, write != 0) ? 1 : 0;
 }
 
+static int AdmissionG4GraphAccessTyped(void *opaque, unsigned long long va,
+    unsigned int bytes, int write, APPLE_AGX_G4_ACCESS_KIND kind,
+    unsigned int ordinal) {
+  UNREFERENCED_PARAMETER(kind);
+  UNREFERENCED_PARAMETER(ordinal);
+  return AdmissionG4GraphAccess(opaque, va, bytes, write);
+}
+
+static void AdmissionG4SnapshotFailure(
+    ADMISSION_G3_PROCESS *process, const APPLE_AGX_G4_FAILURE *failure,
+    struct _ADMISSION_G4_SUBMIT_FAILURE *snapshot) {
+  ULONGLONG group, table_ipa;
+  APPLE_AGX_GPUVA_G3_NODE *edge;
+  ADMISSION_G3_TABLE_SHADOW *shadow;
+  ULONG i;
+  if (process == NULL || failure == NULL || snapshot == NULL) return;
+  snapshot->Subsite = failure->Subsite;
+  snapshot->Kind = failure->Kind;
+  snapshot->Ordinal = failure->Ordinal;
+  snapshot->Va = failure->Va;
+  snapshot->AccessBytes = failure->Bytes;
+  snapshot->Write = failure->Write;
+  snapshot->OwnerProcessId = process->Graph.ProcessId;
+  snapshot->RootIpa = process->Graph.RootIpa;
+  snapshot->ProcessGeneration = process->Graph.ProcessGeneration;
+  snapshot->MappingGeneration = process->Graph.NextGeneration;
+  snapshot->GraphPresent = AppleAgxGpuvaG3GraphContainsRangeAccess(
+      &process->Graph, failure->Va, failure->Bytes, failure->Write != 0);
+  if (failure->Va >= (1ULL << 39)) return;
+  group = failure->Va & ~0x3fffULL;
+  for (edge = process->Graph.Parents; edge != NULL; edge = edge->Next)
+    if (edge->Ipa == process->Graph.RootIpa &&
+        edge->Index == (ULONG)((group >> 36) & 7u)) break;
+  if (edge == NULL) return;
+  table_ipa = edge->AuxIpa;
+  for (edge = process->Graph.Parents; edge != NULL; edge = edge->Next)
+    if (edge->Ipa == table_ipa &&
+        edge->Index == (ULONG)((group >> 25) & 2047u)) break;
+  if (edge == NULL) return;
+  for (shadow = process->TableShadows; shadow != NULL; shadow = shadow->Next)
+    if (shadow->BrokerIpa == edge->AuxIpa) break;
+  if (shadow == NULL || shadow->LogicalPtes == NULL) return;
+  for (i = 0u; i < 4u; ++i) {
+    const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte =
+        &shadow->LogicalPtes[((ULONG)(group >> 12) & 8191u) + i];
+    snapshot->LogicalIpa[i] = pte->GuestIpa;
+    snapshot->LogicalSegment[i] = pte->SegmentId;
+    snapshot->LogicalFlags[i] = pte->Flags;
+  }
+}
+
 static BOOLEAN AdmissionG4ResolveOutput(
     ADMISSION_G3_PROCESS *process,
     const APPLE_AGX_G4_ATTACHMENT *attachment,
@@ -710,6 +772,8 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
       (ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
   APPLE_AGX_G4_SUBMIT_VIEW view;
   APPLE_AGX_G4_PARSE_RESULT result;
+  APPLE_AGX_G4_FAILURE failure = {0};
+  struct _ADMISSION_G4_SUBMIT_FAILURE detail = {0};
   APPLE_AGX_G4_ATTACHMENT color;
   ADMISSION_SCANOUT_MEMORY_VIEW local;
   ADMISSION_RENDER_PACKET_DESCRIPTION packet;
@@ -742,10 +806,11 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
     return AdmissionG4SubmitReject(adapter, context, args,
         AdmissionG4RejectRoot, STATUS_INVALID_PARAMETER, 0u, TRUE);
   }
-  result = AppleAgxG4ParseSubmit(
+  result = AppleAgxG4ParseSubmitEx(
       args->pDmaBufferPrivateData, args->DmaBufferPrivateDataSize,
       args->DmaBufferUmdPrivateDataSize, args->DmaBufferVirtualAddress,
-      args->DmaBufferSize, AdmissionG4GraphAccess, &process->Graph, &view);
+      args->DmaBufferSize, AdmissionG4GraphAccessTyped, &process->Graph,
+      &view, &failure);
   if (result == AppleAgxG4ParseOk && view.AttachmentCount == 1u) {
     RtlCopyMemory(&color, view.Attachments, sizeof(color));
     packet.Fence = args->SubmissionFenceId;
@@ -764,15 +829,25 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
     packet.DmaStart = 0u;
     packet.DmaEnd = view.CommandBytes;
     packet.DestinationIndex = 0u;
-    if (!AdmissionG4ResolveOutput(process, &color, &local, &packet))
+    if (!AdmissionG4ResolveOutput(process, &color, &local, &packet)) {
       result = AppleAgxG4ParseUnmapped;
+      failure.Subsite = AppleAgxG4FailureOutput;
+      failure.Kind = AppleAgxG4AccessAttachment;
+      failure.Ordinal = 0u;
+      failure.Va = color.Pointer;
+      failure.Bytes = (ULONG)color.Size;
+      failure.Write = 1u;
+    }
   } else if (result == AppleAgxG4ParseOk) {
     result = AppleAgxG4ParseUnsupported;
   }
+  if (result != AppleAgxG4ParseOk)
+    AdmissionG4SnapshotFailure(process, &failure, &detail);
   ExReleaseFastMutex(&state->Lock);
   if (result != AppleAgxG4ParseOk)
-    return AdmissionG4SubmitReject(adapter, context, args,
-        AdmissionG4RejectParse, STATUS_INVALID_PARAMETER, (ULONG)result, TRUE);
+    return AdmissionG4SubmitRejectDetail(adapter, context, args,
+        AdmissionG4RejectParse, STATUS_INVALID_PARAMETER, (ULONG)result,
+        TRUE, &detail);
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   if (AdmissionRenderPacketState(&adapter->RenderPacket) ==
           AdmissionRenderPacketEmpty &&

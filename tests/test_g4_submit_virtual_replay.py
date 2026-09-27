@@ -32,9 +32,11 @@ class G4SubmitVirtualReplay(unittest.TestCase):
         branches = "enum {" + branches.split("enum {", 1)[1].split("};", 1)[0] + "};"
         functions = branches + "\n" + "\n".join(function_body(production, name) for name in (
             "AdmissionG4SubmitReject",
-            "AdmissionG4GraphAccess", "AdmissionG4ResolveOutput",
+            "AdmissionG4GraphAccess", "AdmissionG4GraphAccessTyped",
+            "AdmissionG4SnapshotFailure", "AdmissionG4ResolveOutput",
             "AdmissionG4SubmitVirtualEnvelope",
             "AdmissionDdiSubmitCommandVirtual"))
+        functions = function_body(production, "AdmissionG4SubmitRejectDetail") + "\n" + functions
         with tempfile.TemporaryDirectory(prefix="g4-submit-virtual-") as tmp:
             tmp = Path(tmp)
             (tmp / "g4_submit_virtual_functions.inc").write_text(functions)

@@ -34,8 +34,22 @@ typedef struct { unsigned Value; } REPLAY_FLAGS;
 #define ADMISSION_CONTEXT_SYSTEM 1u
 #define ADMISSION_CONTEXT_GDI 2u
 
+typedef struct _APPLE_AGX_GPUVA_G3_NODE {
+  struct _APPLE_AGX_GPUVA_G3_NODE *Next;
+  ULONGLONG Ipa, AuxIpa;
+  unsigned Index;
+} APPLE_AGX_GPUVA_G3_NODE;
+typedef struct { ULONGLONG GuestIpa; unsigned SegmentId, Flags; }
+    APPLE_AGX_GPUVA_G3_LOGICAL_PTE;
+typedef struct _ADMISSION_G3_TABLE_SHADOW {
+  struct _ADMISSION_G3_TABLE_SHADOW *Next;
+  ULONGLONG BrokerIpa;
+  APPLE_AGX_GPUVA_G3_LOGICAL_PTE *LogicalPtes;
+} ADMISSION_G3_TABLE_SHADOW;
 typedef struct {
   ULONGLONG RootIpa;
+  ULONGLONG ProcessId, ProcessGeneration, NextGeneration;
+  APPLE_AGX_GPUVA_G3_NODE *Parents;
   unsigned Uncertain;
   unsigned AllowProcessRanges;
 } APPLE_AGX_GPUVA_G3_GRAPH;
@@ -45,6 +59,7 @@ typedef struct _ADMISSION_G3_STATE {
 typedef struct _ADMISSION_G3_PROCESS {
   ADMISSION_G3_STATE *State;
   APPLE_AGX_GPUVA_G3_GRAPH Graph;
+  ADMISSION_G3_TABLE_SHADOW *TableShadows;
   unsigned Poisoned;
 } ADMISSION_G3_PROCESS;
 typedef struct { void *Adapter; } REPLAY_DEVICE;
@@ -87,6 +102,11 @@ typedef struct {
     ULONGLONG DmaBufferVirtualAddress;
     unsigned DmaBufferSize, PrivateDataSize, UmdPrivateDataSize;
     unsigned Flags, ContextFlags, Pid, TotalFailures;
+    unsigned Subsite, Kind, Ordinal, AccessBytes, Write, GraphPresent;
+    ULONGLONG Va, OwnerProcessId, RootIpa, ProcessGeneration,
+        MappingGeneration;
+    ULONGLONG LogicalIpa[4];
+    unsigned LogicalSegment[4], LogicalFlags[4];
   } G4SubmitFailure;
   int SchedulerLock, SchedulerFaulted, Scheduler, RuntimeReady;
   ADMISSION_RENDER_PACKET RenderPacket;
@@ -141,6 +161,7 @@ static NTSTATUS AdmissionDdiSubmitRender(ADMISSION_CONTEXT *a,
 }
 
 static int replay_irql, dispatches, bind_ok=1;
+static int output_mapped=1;
 static NTSTATUS scanout_status = STATUS_SUCCESS;
 static int receipt_queues;
 static void __attribute__((unused)) AdmissionRenderCorrelationSubmitFailureWindows(
@@ -165,6 +186,7 @@ static int InterlockedExchange(volatile int *value, int exchange) {
 }
 #define KeMemoryBarrier() __sync_synchronize()
 #define HandleToULong(x) ((unsigned)(uintptr_t)(x))
+#define UNREFERENCED_PARAMETER(x) ((void)(x))
 static int AdmissionPlatformRuntimeReady(ADMISSION_CONTEXT *adapter) {
   return adapter->RuntimeReady;
 }
@@ -180,6 +202,7 @@ static NTSTATUS AdmissionMemoryRuntimeScanoutView(
 static int AppleAgxGpuvaG3GraphTranslateVa(
     APPLE_AGX_GPUVA_G3_GRAPH *graph, ULONGLONG va, ULONGLONG *ipa) {
   (void)graph;
+  if (!output_mapped) return 0;
   if(va<0x40000000ULL || va>=0x40001000ULL)return 0;
   *ipa=0x90001000ULL+(va-0x40000000ULL);return 1;
 }
@@ -256,9 +279,29 @@ int main(void) {
   ADMISSION_CONTEXT adapter = {0};
   ADMISSION_RENDER_CONTEXT context = {0};
   DXGKARG_SUBMITCOMMANDVIRTUAL args = {0};
+  APPLE_AGX_GPUVA_G3_NODE middle = {0}, root_edge = {0};
+  ADMISSION_G3_TABLE_SHADOW shadow = {0};
+  static APPLE_AGX_GPUVA_G3_LOGICAL_PTE logical[8192];
   unsigned required[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
   process.State = &state;
   process.Graph.RootIpa = 0x9bf000000ULL;
+  process.Graph.ProcessId = 17u;
+  process.Graph.ProcessGeneration = 23u;
+  process.Graph.NextGeneration = 31u;
+  root_edge.Ipa = process.Graph.RootIpa;
+  root_edge.AuxIpa = 0x9bf004000ULL;
+  root_edge.Next = &middle;
+  middle.Ipa = root_edge.AuxIpa;
+  middle.AuxIpa = 0x9bf008000ULL;
+  process.Graph.Parents = &root_edge;
+  shadow.BrokerIpa = middle.AuxIpa;
+  shadow.LogicalPtes = logical;
+  process.TableShadows = &shadow;
+  for (unsigned i = 0u; i < 4u; ++i) {
+    logical[0x100u + i].GuestIpa = 0x90000000ULL + i * 0x1000ULL;
+    logical[0x100u + i].SegmentId = 0u;
+    logical[0x100u + i].Flags = 3u;
+  }
   process.Graph.AllowProcessRanges = 1;
   adapter.GpuvaG3State = &state;
   adapter.RuntimeReady=1;
@@ -358,12 +401,42 @@ int main(void) {
   assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
          STATUS_INVALID_PARAMETER);
   assert(adapter.G4SubmitFailure.Branch == 9u);
+  assert(adapter.G4SubmitFailure.Version == 2u);
   assert(adapter.G4SubmitFailure.DownstreamStatus != 0u);
   assert(adapter.G4SubmitFailure.PrivateDataSize == sizeof(packet));
   assert(adapter.G4SubmitFailure.UmdPrivateDataSize == sizeof(packet));
   assert(adapter.G4SubmitFailure.DmaBufferSize == args.DmaBufferSize);
   assert(adapter.G4SubmitFailure.Flags == args.Flags.Value);
   assert(adapter.G4SubmitFailure.ContextFlags == context.Object.Flags);
+  adapter.G4SubmitFailureClaim = 0;
+  process.Graph.AllowProcessRanges = 0;
+  packet.Header.Base.Magic = APPLE_AGX_G4_PRIVATE_MAGIC;
+  for (unsigned n = 0; n < 129u; ++n)
+    assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+           STATUS_INVALID_PARAMETER);
+  assert(adapter.G4SubmitFailure.Subsite == AppleAgxG4FailureAccess);
+  assert(adapter.G4SubmitFailure.Kind == AppleAgxG4AccessProcess);
+  assert(adapter.G4SubmitFailure.Ordinal == 0u);
+  assert(adapter.G4SubmitFailure.Va == ranges[0].Va);
+  assert(adapter.G4SubmitFailure.OwnerProcessId == 17u);
+  assert(adapter.G4SubmitFailure.RootIpa == process.Graph.RootIpa);
+  assert(adapter.G4SubmitFailure.ProcessGeneration == 23u);
+  assert(adapter.G4SubmitFailure.MappingGeneration == 31u);
+  assert(adapter.G4SubmitFailure.GraphPresent == 0u);
+  for (unsigned i = 0u; i < 4u; ++i) {
+    assert(adapter.G4SubmitFailure.LogicalIpa[i] ==
+           0x90000000ULL + i * 0x1000ULL);
+    assert(adapter.G4SubmitFailure.LogicalSegment[i] == 0u);
+    assert(adapter.G4SubmitFailure.LogicalFlags[i] == 3u);
+  }
+  assert(adapter.G4SubmitFailureCount == 130);
+  process.Graph.AllowProcessRanges = 1;
+  adapter.G4SubmitFailureClaim = 0;
+  output_mapped = 0;
+  assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
+         STATUS_INVALID_PARAMETER);
+  assert(adapter.G4SubmitFailure.Subsite == AppleAgxG4FailureOutput);
+  output_mapped = 1;
   packet.Header.Base.Magic = APPLE_AGX_G4_PRIVATE_MAGIC;
   adapter.G4SubmitFailureClaim = 0;
   adapter.G4SubmitFailureCount = 0;

@@ -396,6 +396,11 @@ typedef struct _ADMISSION_CONTEXT {
     ULONGLONG DmaBufferVirtualAddress;
     ULONG DmaBufferSize, PrivateDataSize, UmdPrivateDataSize;
     ULONG Flags, ContextFlags, Pid, TotalFailures;
+    ULONG Subsite, Kind, Ordinal, AccessBytes, Write, GraphPresent;
+    ULONGLONG Va, OwnerProcessId, RootIpa, ProcessGeneration,
+        MappingGeneration;
+    ULONGLONG LogicalIpa[4];
+    ULONG LogicalSegment[4], LogicalFlags[4];
   } G4SubmitFailure;
 #endif
   volatile LONG InterruptReady;

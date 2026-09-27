@@ -203,6 +203,26 @@ typedef enum {
 typedef int (*APPLE_AGX_G4_ACCESS)(void *Context, unsigned long long GpuVa,
                                    unsigned int Bytes, int Write);
 
+typedef enum {
+  AppleAgxG4AccessProcess = 1,
+  AppleAgxG4AccessCpuEnvelope = 2,
+  AppleAgxG4AccessAttachment = 3,
+  AppleAgxG4AccessRender = 4
+} APPLE_AGX_G4_ACCESS_KIND;
+typedef enum {
+  AppleAgxG4FailureNone = 0,
+  AppleAgxG4FailureAccess = 1,
+  AppleAgxG4FailureOutput = 2
+} APPLE_AGX_G4_FAILURE_SUBSITE;
+typedef struct {
+  unsigned int Subsite, Kind, Ordinal;
+  unsigned long long Va;
+  unsigned int Bytes, Write;
+} APPLE_AGX_G4_FAILURE;
+typedef int (*APPLE_AGX_G4_ACCESS_EX)(void *Context,
+    unsigned long long GpuVa, unsigned int Bytes, int Write,
+    APPLE_AGX_G4_ACCESS_KIND Kind, unsigned int Ordinal);
+
 /* Parsing proves envelope framing and attachment access only. The render
  * payload's native VA fields still need a separate validator before any GPU
  * access or success return from SubmitCommandVirtual. */
@@ -223,5 +243,11 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmit(
     unsigned int UmdPrivateBytes, unsigned long long DmaVa,
     unsigned int DmaBytes, APPLE_AGX_G4_ACCESS Access, void *AccessContext,
     APPLE_AGX_G4_SUBMIT_VIEW *View);
+APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmitEx(
+    const void *PrivateData, unsigned int PrivateCapacity,
+    unsigned int UmdPrivateBytes, unsigned long long DmaVa,
+    unsigned int DmaBytes, APPLE_AGX_G4_ACCESS_EX Access,
+    void *AccessContext, APPLE_AGX_G4_SUBMIT_VIEW *View,
+    APPLE_AGX_G4_FAILURE *Failure);
 
 #endif
