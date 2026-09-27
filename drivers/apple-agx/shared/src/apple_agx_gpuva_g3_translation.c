@@ -31,7 +31,7 @@ static APPLE_AGX_GPUVA_G3_RESULT plan_group(
       return AppleAgxGpuvaG3Unrepresentable;
   if (leaf != 0) {
     leaf->GuestIpa = base;
-    leaf->SegmentId = local_segment;
+    leaf->SegmentId = p[0].SegmentId;
     leaf->ValidMask = 15u;
     leaf->WritableMask = (flags & APPLE_AGX_GPUVA_G3_WRITE) ? 15u : 0u;
   }
@@ -122,7 +122,7 @@ APPLE_AGX_GPUVA_G3_RESULT AppleAgxGpuvaG3Plan64KSpan(
     if (pte->Flags == 0u) continue;
     if ((pte->Flags != APPLE_AGX_GPUVA_G3_VALID &&
          pte->Flags != (APPLE_AGX_GPUVA_G3_VALID | APPLE_AGX_GPUVA_G3_WRITE)) ||
-        pte->SegmentId != local_segment || pte->GuestIpa == 0ULL ||
+        (pte->SegmentId != 0u && pte->SegmentId != local_segment) || pte->GuestIpa == 0ULL ||
         (pte->GuestIpa & 0xffffu) || pte->GuestIpa > ~0ULL - 0xffffu)
       return AppleAgxGpuvaG3Unrepresentable;
     overall = AppleAgxGpuvaG3Ok;
@@ -135,7 +135,7 @@ APPLE_AGX_GPUVA_G3_RESULT AppleAgxGpuvaG3Plan64KSpan(
                     (unsigned long long)j * APPLE_AGX_GPUVA_G3_NATIVE_PAGE;
       leaf->GuestIpa = pte->Flags ? pte->GuestIpa +
           (unsigned long long)j * APPLE_AGX_GPUVA_G3_NATIVE_PAGE : 0ULL;
-      leaf->SegmentId = pte->Flags ? local_segment : 0u;
+      leaf->SegmentId = pte->Flags ? pte->SegmentId : 0u;
       leaf->ValidMask = pte->Flags ? 15u : 0u;
       leaf->WritableMask = (pte->Flags & APPLE_AGX_GPUVA_G3_WRITE) ? 15u : 0u;
     }

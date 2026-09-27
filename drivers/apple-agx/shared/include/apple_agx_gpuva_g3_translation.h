@@ -36,6 +36,8 @@ typedef struct _APPLE_AGX_GPUVA_G3_LOGICAL_PTE {
   unsigned int SegmentId;
   /* Only VALID and WRITE are representable by the current v5 leaf wire. */
   unsigned int Flags;
+  /* Optional VidMm allocation provenance; never a registration authority. */
+  unsigned long long Allocation, AllocationOffset;
 } APPLE_AGX_GPUVA_G3_LOGICAL_PTE;
 
 /* A 64-KiB leaf update replaces sixteen 4-KiB logical slots. Until that

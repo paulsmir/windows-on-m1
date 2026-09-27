@@ -7,7 +7,7 @@ static void valid_group(APPLE_AGX_GPUVA_G3_LOGICAL_PTE p[4],
                         uint64_t base, uint32_t segment, uint32_t flags) {
   for (unsigned i = 0; i < 4; ++i)
     p[i] = (APPLE_AGX_GPUVA_G3_LOGICAL_PTE){base + i * 0x1000u,
-                                             segment, flags};
+                                             segment, flags, 0, 0};
 }
 
 int main(void) {
@@ -115,8 +115,8 @@ int main(void) {
       1u, 0x10000u, out, 0u, &n) == AppleAgxGpuvaG3Invalid);
   {
     APPLE_AGX_GPUVA_G3_LOGICAL_PTE wide[2] = {
-        {0x20000000ULL, 2u, APPLE_AGX_GPUVA_G3_VALID | APPLE_AGX_GPUVA_G3_WRITE},
-        {0x20010000ULL, 2u, APPLE_AGX_GPUVA_G3_VALID}};
+        {0x20000000ULL, 2u, APPLE_AGX_GPUVA_G3_VALID | APPLE_AGX_GPUVA_G3_WRITE, 0, 0},
+        {0x20010000ULL, 2u, APPLE_AGX_GPUVA_G3_VALID, 0, 0}};
     APPLE_AGX_GPUVA_G3_NATIVE_LEAF four[8];
     assert(AppleAgxGpuvaG3Plan64KSpan(wide, 510u, 2u, 0x1fffe0000ULL,
         2u, four, 8u, &n) == AppleAgxGpuvaG3Ok);
@@ -135,7 +135,7 @@ int main(void) {
     wide[1].GuestIpa = 0x20010000ULL;
     assert(AppleAgxGpuvaG3Plan64KSpan(wide, 511u, 2u, 0x1fffe0000ULL,
         2u, four, 8u, &n) == AppleAgxGpuvaG3Invalid);
-    wide[0].SegmentId = 0u;
+    wide[0].SegmentId = 1u; /* aperture offset is not a system PFN */
     assert(AppleAgxGpuvaG3Plan64KSpan(wide, 510u, 2u, 0x1fffe0000ULL,
         2u, four, 8u, &n) == AppleAgxGpuvaG3Unrepresentable);
     wide[0].SegmentId = 2u;
@@ -147,6 +147,13 @@ int main(void) {
         2u, four, 8u, &n) == AppleAgxGpuvaG3Unmap);
     assert(n == 8u && four[0].ValidMask == 0u &&
            four[7].GuestIpa == 0ULL);
+  }
+  valid_group(p, 0x851000000ULL, 0u, 3u);
+  assert(AppleAgxGpuvaG3PlanSpan(p,0,4,0x10000,2,0x4000,out,2,&n)==AppleAgxGpuvaG3Ok);
+  assert(out[0].SegmentId==0u);
+  { APPLE_AGX_GPUVA_G3_NATIVE_LEAF sys[4];
+    assert(AppleAgxGpuvaG3Plan64KSpan(p,0,1,0x10000,2,sys,4,&n)==AppleAgxGpuvaG3Ok);
+    assert(n==4 && sys[3].SegmentId==0 && sys[3].GuestIpa==0x85100c000ULL);
   }
   return 0;
 }
