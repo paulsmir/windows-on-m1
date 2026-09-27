@@ -1,5 +1,23 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-27 EXP851 R131 offline — receipt v2 and CPU envelope built, no Air
+
+The EXP850R branch9/Unmapped subsite remains unmeasured on hardware. R131
+commits `9d4ce442` (typed first-failure receipt v2), `dde43f4a` (logical
+CPU-envelope validation at Submit and BeginJob), and `f7c300d6` (retire stale
+4-KiB logical shadow on 64-KiB updates) pass real-C RED→GREEN replay. GPU
+stream, USC, attachments and render roots still require the native graph.
+Final package851 source `47e0651f` passed 529-file builder verification and
+two 0-warning/0-error ARM64 builds. SYS SHA256 `dded1148b555e80b13dfa0e4c4ad217098ea13944a303f7d8dce78f57f41ee7f`;
+all four member hashes and build receipt are in
+`.local/experiments/EXP851-r131-envelope/`. BEFORE-ready hardware manifest
+SHA256 `fba6abe1a364a63fd3e9c3fed1aaa8199d15cf6173963ad228801e7a3198be14`.
+An earlier build is preserved as superseded in `...-prereview/`. No Air,
+staging, install or hardware run; ordinary Code28 remains the last proven
+recovery. Next causal target is a v2 first-failure subsite/access/PTE receipt
+from a separately authorized hardware run. CPU-envelope acceptance alone
+does not establish system-memory GPU mapping or a DWM frame.
+
 ## 2026-09-27 EXP850 retry — first G4 virtual-submit failure attributed; ordinary recovered
 
 The reviewer-authorized single retry reused the exact package850 from
