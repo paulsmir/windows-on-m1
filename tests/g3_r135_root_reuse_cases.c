@@ -90,9 +90,10 @@ static void r135_root_reuse_cases(void) {
   /* Populating the parking root is an ownership conflict, not permission to
    * redirect the process onto that unrelated graph. */
   { ULONGLONG middle=0;
+    UINT ordinary_root_index=(p->PrivateVa>>36)==0 ? 1u : 0u;
     expect_ok("R135 middle identity",AdmissionGpuvaG3BrokerTable(p,
         local_ipa+0x14000,FALSE,&middle));
-    assert(AppleAgxGpuvaG3GraphUpdateParent(&p->Graph,p->BootstrapIpa,0,middle));
+    assert(AppleAgxGpuvaG3GraphUpdateParent(&p->Graph,p->BootstrapIpa,ordinary_root_index,middle));
     ULONGLONG before_generation=p->Graph.MappingGeneration;
     assert(!NT_SUCCESS(AdmissionGpuvaG3BuildPagingBuffer(&a,&reuse)));
     assert(p->Graph.RootIpa==former_root);
@@ -100,7 +101,7 @@ static void r135_root_reuse_cases(void) {
       assert(AppleAgxGpuvaG3GraphContainsRange(&p->Graph,p->PrivateVa,0x4000));
       assert(p->Graph.MappingGeneration==before_generation);
     }
-    assert(AppleAgxGpuvaG3GraphUpdateParent(&p->Graph,p->BootstrapIpa,0,0));
+    assert(AppleAgxGpuvaG3GraphUpdateParent(&p->Graph,p->BootstrapIpa,ordinary_root_index,0));
   }
   if(getenv("G3_REPLAY_R135_ALLOC")) {
     void *(*allocate)(void *,unsigned long long)=p->Graph.Allocate;

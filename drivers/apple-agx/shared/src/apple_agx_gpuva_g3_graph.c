@@ -546,7 +546,7 @@ bool AppleAgxGpuvaG3GraphAttachPrivate(APPLE_AGX_GPUVA_G3_GRAPH *g,
   unsigned ri=(unsigned)(va>>36), mi=(unsigned)((va>>25)&2047u);
   bool new_leaf;
   if (!g || !g->Created || g->Uncertain || g->JobInFlight || g->LeaseToken ||
-      va<(1ULL<<36) || va>=(1ULL<<39) || (va&0x1ffffffULL) ||
+      va<(1ULL<<25) || va>=(1ULL<<39) || (va&0x1ffffffULL) ||
       !find_table(g,middle,1u) || !find_table(g,leaf,2u)) return false;
   root_edge=find_edge(g->Parents,g->RootIpa,ri);
   if (root_edge) middle=root_edge->AuxIpa;
@@ -569,7 +569,7 @@ bool AppleAgxGpuvaG3GraphCanDetachPrivateRoot(APPLE_AGX_GPUVA_G3_GRAPH *g,
   APPLE_AGX_GPUVA_G3_NODE *edge, *private_edge;
   unsigned ri=(unsigned)(va>>36), mi=(unsigned)((va>>25)&2047u);
   if (!g || g->Uncertain || g->JobInFlight || g->LeaseToken ||
-      va<(1ULL<<36) || va>=(1ULL<<39) || (va&0x1ffffffULL)) return false;
+      va<(1ULL<<25) || va>=(1ULL<<39) || (va&0x1ffffffULL)) return false;
   private_edge=find_edge(g->Parents,root,ri);
   if (!private_edge) {
     for (edge=g->Parents;edge;edge=edge->Next)

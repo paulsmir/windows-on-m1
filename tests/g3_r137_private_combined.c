@@ -140,7 +140,7 @@ static void r137_private_combined(void) {
   assert(prepare_process_buffers(&umd,&next,r,ranges));
   assert(next.Lease.SceneGeneration!=batch.Lease.SceneGeneration);
   assert(!r137_escape_transport(&t,&release)); /* Old generation cannot release reused bytes. */
-  scene=p->PrivateScenes;assert(scene && scene->Storage.Ranges[3].Va==(1ULL<<36)+scratch_offset);
+  scene=p->PrivateScenes;assert(scene && scene->Storage.Ranges[3].Va==p->PrivateVa+scratch_offset);
   scene->Queued=1;scene->Submitting=1;scene->Fence=42;context.GpuvaG3PrivateFence=42;
   release.SceneId=next.Lease.SceneId;release.SceneGeneration=next.Lease.SceneGeneration;
   assert(r137_escape_transport(&t,&release));

@@ -27,7 +27,7 @@ static inline int AppleAgxG3PrivatePrepare(APPLE_AGX_G3_PRIVATE_POOL *pool,
   unsigned required[9], managers=0, scratch=0;
   int fresh;
   if (!pool || !owner || !cpu || !manager || !scene || scene->Generation ||
-      va < (1ULL<<36) || va >= (1ULL<<39) || (va&0x01ffffffULL) ||
+      va < (1ULL<<25) || va >= (1ULL<<39) || (va&0x01ffffffULL) ||
       !AppleAgxG4ProcessRequiredBytes(render,required) ||
       render->Layers!=1 || render->Samples!=1 || required[2]!=(32u*0x20000u))
     return 0;

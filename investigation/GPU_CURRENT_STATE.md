@@ -1,5 +1,26 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-27 R139 — EXP855B system CreateProcess refusal corrected offline
+
+Saved ETL thread4952 proves StartDevice success, OS reservation
+[0x02000000,0x04000000), then failed KMD system-process creation and
+C0000141/FailureReason3. Stop/80000011 follows the adapter failure.
+R137 incorrectly required reserved VA >=64GiB; KMD admission, private storage
+and graph attachment now accept nonzero32MiB leaf spans within39bits,
+retaining alignment, ownership/collision and lifetime checks.
+
+Real-C RED C0000141 -> GREEN; low-root shared-middle/re-residency, private
+escape/completion and profiles16/64 pass. Focused34 PASS; full1140 has exactly
+the unchanged15 failures/41 errors/2 skips, no new names. Independent review:
+no findings. No Air, package or Windows build. Ordinary EXP377/392 recovery
+from EXP855B remains accepted; hardware Code0/G4/DWM remain unvalidated.
+Analysis: investigation/analysis/R139-post-start-code43.md.
+
+WHY CONTINUE COMPARISON: no historical comparison is needed; the current ETL
+identifies the system-process VA guard and the real KMD replay proves it.
+Next separately authorized checkpoint: system CreateProcess/adapter admission
+past this guard, then attribute any later failure from fresh evidence.
+
 ## 2026-09-27 EXP855B — Stage10 crossed, post-Start Code43; ordinary recovered
 
 Package855B source `fa209a2d` passed 534 hashes, self-built native archive/

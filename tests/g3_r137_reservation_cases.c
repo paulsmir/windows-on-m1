@@ -122,7 +122,15 @@ static void r137_reservation_cases(void) {
   reserve_status=STATUS_INSUFFICIENT_RESOURCES;
   assert(AdmissionDdiCreateProcess(&a,&fail)==reserve_status);
   assert(!fail.hKmdProcess && state.ProcessCount==0);
-  reserve_status=0; reserve_base=(1ULL<<36)+1;
+  reserve_status=0;
+  const ULONGLONG invalid_bases[]={0,1,0x01ffffffULL,0x02000001ULL,
+      (1ULL<<39)-1,(1ULL<<39),~0ULL};
+  for(unsigned i=0;i<sizeof(invalid_bases)/sizeof(invalid_bases[0]);++i) {
+    reserve_base=invalid_bases[i];
+    assert(AdmissionDdiCreateProcess(&a,&fail)==STATUS_INVALID_ADDRESS);
+    assert(!fail.hKmdProcess && state.ProcessCount==0);
+  }
+  reserve_base=(1ULL<<36)+1;
   assert(!NT_SUCCESS(AdmissionDdiCreateProcess(&a,&fail)));
   assert(!fail.hKmdProcess && state.ProcessCount==0);
   reserve_base=1ULL<<39;

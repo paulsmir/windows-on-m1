@@ -635,7 +635,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
     status = adapter->Interface.DxgkCbReserveGpuVirtualAddressRange(
         adapter->Interface.DeviceHandle, &reserve);
     if (!NT_SUCCESS(status)) goto Fail;
-    if (reserve.StartVirtualAddress < (1ULL << 36) ||
+    /* Validate the OS-owned reservation in leaf-table spans (32 MiB).
+     * VidMm may return a slot within native root entry zero; requiring a
+     * whole root-entry span (64 GiB) rejects its successful reservation. */
+    if (reserve.StartVirtualAddress < (1ULL << 25) ||
         reserve.StartVirtualAddress >= (1ULL << 39) ||
         (reserve.StartVirtualAddress & (0x02000000ULL - 1ULL)) ||
         reserve.SizeInBytes > (1ULL << 39) - reserve.StartVirtualAddress) {
