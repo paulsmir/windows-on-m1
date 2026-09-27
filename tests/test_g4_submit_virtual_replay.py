@@ -14,7 +14,7 @@ PAGING = ROOT / "drivers/apple-agx/render-admission/src/gpuva_g3_paging_windows.
 def function_body(source, name):
     matches = list(re.finditer(
         r"(?m)^(?:_Use_decl_annotations_\s+)?(?:static\s+)?"
-        r"(?:NTSTATUS|BOOLEAN|int|void)\s+" + name +
+        r"(?:NTSTATUS|BOOLEAN|int|void|VOID|ADMISSION_G3_PRIVATE_SCENE \*)\s*" + name +
         r"\s*\([^;]*?\)\s*\{", source, re.S))
     if not matches:
         raise AssertionError(f"missing production function {name}")
@@ -42,7 +42,7 @@ class G4SubmitVirtualReplay(unittest.TestCase):
         functions = branches + "\n" + "\n".join(function_body(production, name) for name in (
             "AdmissionG4SubmitReject",
             "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
-            "AdmissionG4GraphAccessTyped",
+            "AdmissionG4GraphAccessTyped", "AdmissionG4FindPrivateScene","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy",
             "AdmissionG4SnapshotFailure", "AdmissionG4ResolveOutput",
             "AdmissionG4SubmitVirtualEnvelope",
             "AdmissionGpuvaG3BeginJob",

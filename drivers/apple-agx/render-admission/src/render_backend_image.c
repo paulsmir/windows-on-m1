@@ -346,6 +346,7 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
   }
   memcpy(Image->G4Command, View->Native, View->CommandBytes);
   Image->G4CommandBytes = View->CommandBytes;
+  Image->G4Lease = View->Lease;
   AdmissionBackendBindingZero(&candidate);
   candidate.OutputObject = APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT;
   candidate.DestinationGpuVa = Packet->DestinationGpuVa;

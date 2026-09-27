@@ -33,60 +33,6 @@ typedef struct {
   APPLE_AGX_G4_NATIVE_RENDER Render;
 } FRAME_PACKET;
 
-struct agx_device { int unused; };
-typedef struct {
-  uint64_t Allocation, Va, Bytes;
-  unsigned Bound;
-} AGX_WIN32_GPUVA_BO;
-struct agx_bo {
-  struct agx_device *dev;
-  struct { uint64_t addr; } coordinate, *va;
-  AGX_WIN32_GPUVA_BO mapping;
-  unsigned char *cpu;
-  size_t size;
-  unsigned refs;
-};
-typedef struct {
-  struct agx_device *Native;
-  struct agx_bo *G4BufferManager[3];
-} AGX_WIN32_ASAHI_BACKEND;
-typedef struct {
-  struct agx_bo *Process[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
-} AGX_G4_BATCH;
-static uint64_t process_next_va;
-static struct agx_bo *agx_bo_create(struct agx_device *dev, size_t bytes,
-    unsigned align, unsigned flags, const char *label) {
-  struct agx_bo *bo = calloc(1, sizeof(*bo));
-  (void)align; (void)flags; (void)label;
-  assert(bo && bytes && !(bytes & 0xffffu));
-  bo->cpu = malloc(bytes);
-  assert(bo->cpu);
-  memset(bo->cpu, 0xa5, bytes);
-  bo->dev = dev;
-  bo->size = bytes;
-  bo->refs = 1u;
-  bo->coordinate.addr = process_next_va;
-  bo->va = &bo->coordinate;
-  bo->mapping.Va = process_next_va;
-  bo->mapping.Bytes = bytes;
-  bo->mapping.Bound = 1u;
-  process_next_va += bytes;
-  return bo;
-}
-static const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(
-    AGX_WIN32_ASAHI_BACKEND *backend, struct agx_bo *bo) {
-  return bo && bo->dev == backend->Native ? &bo->mapping : NULL;
-}
-static void *agx_bo_map(struct agx_bo *bo) { return bo->cpu; }
-static void agx_bo_reference(struct agx_bo *bo) { assert(bo); ++bo->refs; }
-static void release_bo(struct agx_bo *bo) {
-  assert(bo && bo->refs);
-  if (--bo->refs) return;
-  free(bo->cpu);
-  free(bo);
-}
-#include "g4_mesa_prepare.inc"
-
 static uint64_t align16k(uint64_t value) {
   return (value + 0x3fffULL) & ~0x3fffULL;
 }
@@ -217,9 +163,6 @@ int main(void) {
   APPLE_AGX_EXP208_RELOCATION_OBJECT
       objects[APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT] = {{0}};
   unsigned required[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
-  struct agx_device device = {0};
-  AGX_WIN32_ASAHI_BACKEND umd = {.Native = &device};
-  AGX_G4_BATCH batch = {0};
   unsigned char *arena;
   uint64_t next_va = 0x10000000ULL, token = 0;
   assert(graph);
@@ -247,31 +190,12 @@ int main(void) {
   next_va += 0x10000ULL;
   assert(AppleAgxG4ProcessRequiredBytes(&packet.Render, required));
   assert(required[2] / 0x20000u == 32u);
-  process_next_va = next_va;
-  assert(prepare_process_buffers(&umd, &batch, &packet.Render,
-      packet.Header.Process));
-  next_va = process_next_va;
-  for (unsigned i = 0; i < APPLE_AGX_G4_PROCESS_RANGE_COUNT; ++i) {
-    assert(batch.Process[i] && packet.Header.Process[i].Bytes == required[i]);
-    map_range(graph, packet.Header.Process[i].Va, required[i], 1);
+  /* Legacy v2 builder coverage. R137's separate combined replay exercises
+   * the production UMD escape and exclusive private KMD graph. */
+  for (unsigned i=0;i<9;++i) {
+    packet.Header.Process[i]=(APPLE_AGX_G4_PROCESS_RANGE){next_va,required[i],0};
+    map_range(graph,next_va,required[i],1);next_va+=required[i];
   }
-  {
-    AGX_G4_BATCH next = {0};
-    APPLE_AGX_G4_PROCESS_RANGE same[APPLE_AGX_G4_PROCESS_RANGE_COUNT] = {{0}};
-    assert(prepare_process_buffers(&umd, &next, &packet.Render, same));
-    for (unsigned i = 0; i < 3u; ++i) {
-      assert(next.Process[i] == batch.Process[i]);
-      assert(same[i].Va == packet.Header.Process[i].Va);
-    }
-    for (unsigned i = 3u; i < APPLE_AGX_G4_PROCESS_RANGE_COUNT; ++i)
-      assert(next.Process[i] != batch.Process[i]);
-    for (unsigned i = 0; i < APPLE_AGX_G4_PROCESS_RANGE_COUNT; ++i)
-      release_bo(next.Process[i]);
-  }
-  assert(((uint32_t *)batch.Process[0]->cpu)[0] ==
-      (uint32_t)(packet.Header.Process[2].Va >> 15));
-  assert(((uint32_t *)batch.Process[1]->cpu)[0] ==
-      (uint32_t)(packet.Header.Process[2].Va >> 15));
   packet.Render.VdmCtrlStreamBase = next_va;
   map_range(graph, next_va, 0x10000ULL, 0); next_va += 0x10000ULL;
   packet.Render.IspScissorBase = next_va;
@@ -345,10 +269,6 @@ int main(void) {
   assert(graph->Broker->broker.slots[1].occupied == false);
   assert(graph->Broker->slots[0][1] == 0x90000001ULL);
   free(arena);
-  for (unsigned i = 0; i < APPLE_AGX_G4_PROCESS_RANGE_COUNT; ++i) {
-    release_bo(batch.Process[i]);
-  }
-  for (unsigned i = 0; i < 3u; ++i) release_bo(umd.G4BufferManager[i]);
   free(graph->Broker);
   free(graph);
   puts("g4_real_broker_builder_replay: PASS");

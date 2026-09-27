@@ -2,6 +2,7 @@
 #define AGX_WIN32_GPUVA_H
 
 #include <stdint.h>
+#include "apple_agx_g3_private_abi.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,6 +25,7 @@ typedef struct {
                 const void *, uint32_t, uint64_t *);
   int (*WaitRender)(void *, uint64_t);
   int (*Evict)(void *, const uint64_t *, unsigned);
+  int (*PrivateEscape)(void *, APPLE_AGX_G3_PRIVATE_REQUEST *);
 } AGX_WIN32_GPUVA_OPS;
 
 typedef struct {

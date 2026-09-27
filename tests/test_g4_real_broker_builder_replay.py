@@ -15,19 +15,6 @@ class G4RealBrokerBuilderReplay(unittest.TestCase):
     def test_dwm_sized_native_frame_uses_published_process_ranges(self):
         with tempfile.TemporaryDirectory(prefix="g4-broker-builder-") as tmp:
             tmp = Path(tmp)
-            source = (ROOT / "drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c").read_text()
-            match = re.search(r"static int prepare_process_buffers\s*\([^;]*?\)\s*\{",
-                              source, re.S)
-            self.assertIsNotNone(match)
-            depth = 1
-            end = match.end()
-            while depth:
-                if source[end] == "{":
-                    depth += 1
-                elif source[end] == "}":
-                    depth -= 1
-                end += 1
-            (tmp / "g4_mesa_prepare.inc").write_text(source[match.start():end])
             binary = tmp / "replay"
             sources = [
                 ROOT / "tests/g4_real_broker_builder_replay.c",

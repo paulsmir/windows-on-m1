@@ -52,7 +52,6 @@ int AgxWin32AsahiAttach(AGX_WIN32_ASAHI_BACKEND *b, struct agx_device *native,
   /* USC-relative shader addresses use the low VA interval from zero. */
   native->shader_base=0;
   b->GpuvaReady=1;
-  memset(b->G4BufferManager,0,sizeof(b->G4BufferManager));
 #else
   native->shader_base=base;
 #endif
@@ -283,13 +282,6 @@ int AgxWin32AsahiCollect(AGX_WIN32_ASAHI_BACKEND *b) {
 }
 int AgxWin32AsahiDetach(AGX_WIN32_ASAHI_BACKEND *b) {
   if(!b || !b->Native || b->ActiveCapture || b->ActiveEmission) return 0;
-#ifdef APPLE_AGX_GPUVA_WINSYS
-  for(unsigned i=0;i<3;++i) {
-    struct agx_bo *bo=b->G4BufferManager[i];
-    b->G4BufferManager[i]=NULL;
-    if(bo) agx_bo_unreference(b->Native,bo);
-  }
-#endif
   if(!AgxWin32AsahiCollect(b)) return 0;
   b->Native->windows_private=NULL;
   b->Native->ops.bo_mmap=NULL;

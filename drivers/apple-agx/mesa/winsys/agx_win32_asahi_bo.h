@@ -48,7 +48,6 @@ typedef struct {
   AGX_WIN32_GPUVA_SPACE Gpuva;
   int GpuvaReady;
   /* InitBM owns these TVB lists and blocks for the queue lifetime. */
-  struct agx_bo *G4BufferManager[3];
 #endif
 } AGX_WIN32_ASAHI_BACKEND;
 

@@ -11,7 +11,7 @@ SOURCE = ROOT / "drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c"
 
 
 class G4MesaProcessBuffersReplay(unittest.TestCase):
-    def test_tvb_page_and_block_lists_reference_vidmm_heap(self):
+    def test_private_handoff_uses_kernel_initialized_ranges(self):
         source = SOURCE.read_text()
         match = re.search(r"static int prepare_process_buffers\s*\([^;]*?\)\s*\{",
                           source, re.S)

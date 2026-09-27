@@ -28,7 +28,7 @@ FUNCTIONS = {
         "AdmissionGpuvaG3ResolveTable", "AdmissionDdiSetRootPageTable",
         "AdmissionGpuvaG3SubmitVirtualPaging",
         "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
-        "AdmissionG4GraphAccessTyped", "AdmissionGpuvaG3BeginJob",
+        "AdmissionG4GraphAccessTyped", "AdmissionG4FindPrivateScene","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy", "AdmissionGpuvaG3BeginJob",
         "AdmissionGpuvaG3CompleteJob",
     ],
     "gpuva_g3_paging_windows.c": [
@@ -95,7 +95,7 @@ def generate(revision=None, function_revisions=None):
                     "AdmissionGpuvaG3MirrorTable",
                     "AdmissionGpuvaG3SubmitVirtualPaging",
                     "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
-                    "AdmissionG4GraphAccessTyped", "AdmissionGpuvaG3BeginJob",
+                    "AdmissionG4GraphAccessTyped", "AdmissionG4FindPrivateScene","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy", "AdmissionGpuvaG3BeginJob",
                     "AdmissionGpuvaG3CompleteJob",
                     "AdmissionG3FindPagingEdge",
                     "AdmissionG3ResolveLogicalVa",
@@ -135,6 +135,14 @@ def main(revision=None, function_revisions=None, old_context_flags=False):
                    str(M1N1 / "hv_agx_retained_backing.c"),
                    str(M1N1 / "hv_agx_retained_tables.c"),
                    "-o", str(binary)]
+        if os.environ.get("G3_REPLAY_R137_COMBINED"):
+            mesa = (ROOT / "drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c").read_text()
+            (Path(directory) / "g3_r137_mesa_prepare.inc").write_text(body(mesa,"prepare_process_buffers"))
+            command[1:1] = ["-DG3_PRIVATE_COMBINED=1", "-I", directory]
+            command += [str(SHARED / "src" / n) for n in (
+                "apple_agx_g4_builder.c", "apple_agx_render_template.generated.c",
+                "apple_agx_render_template_rebase.c", "apple_agx_render_template_vm_slot.c",
+                "apple_agx_relocation.c", "apple_agx_exp208_adapter.c")]
         if os.environ.get("G3_REPLAY_R132") or os.environ.get("G3_REPLAY_R133"):
             command[1:1] = ["-fsanitize=address,undefined"]
         if any(os.environ.get(k) for k in ("G3_REPLAY_R134", "G3_REPLAY_R135", "G3_REPLAY_R137")):

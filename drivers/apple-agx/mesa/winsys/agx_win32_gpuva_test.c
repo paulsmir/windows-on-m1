@@ -90,7 +90,7 @@ static int evict(void *ctx, const uint64_t *allocations, unsigned count) {
   return !f->bad_order;
 }
 static AGX_WIN32_GPUVA_OPS ops = {reserve_va, map_va, free_va, make_resident,
-                                  wait_paging, submit, wait_render, evict};
+                                  wait_paging, submit, wait_render, evict, NULL};
 
 static int resident_immediate(void *ctx, const uint64_t *handles,
                               unsigned count, uint64_t *fence) {

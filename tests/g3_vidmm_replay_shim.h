@@ -10,6 +10,7 @@
 #include "apple_agx_gpuva_g3_translation.h"
 #include "apple_agx_gpuva_g3_graph.h"
 #include "apple_agx_g4_submit.h"
+#include "apple_agx_state.h"
 #include "apple_agx_g3_private_abi.h"
 #include "apple_agx_g3_private_storage.h"
 #include "hv_agx_gpuva_v5.h"
@@ -80,8 +81,6 @@ typedef const void VOID_CONST;
 #define ADMISSION_GDI_PATCH_LIST_SIZE 256u
 #define ADMISSION_ALLOCATION_LIST_SIZE 64u
 #define ADMISSION_PATCH_LIST_SIZE 64u
-#define APPLE_AGX_TRUE 1
-#define APPLE_AGX_FALSE 0
 #define UNREFERENCED_PARAMETER(x) (void)(x)
 #define RtlZeroMemory(p,n) memset((p),0,(n))
 #define RtlCopyMemory(d,s,n) memcpy((d),(s),(n))
@@ -191,7 +190,7 @@ typedef union { struct { UINT NoPatchingRequired:1,DriverManagesResidency:1,
 typedef struct { UINT DmaBufferSize,DmaBufferSegmentSet,DmaBufferPrivateDataSize,AllocationListSize,PatchLocationListSize,Reserved; DXGK_CONTEXTINFO_CAPS Caps; UINT PagingCompanionNodeId; } DXGK_CONTEXTINFO;
 typedef struct { DXGK_CREATECONTEXTFLAGS Flags; void *pPrivateDriverData; UINT PrivateDriverDataSize; HANDLE hContext; UINT NodeOrdinal,EngineAffinity; DXGK_CONTEXTINFO ContextInfo; } DXGKARG_CREATECONTEXT;
 
-typedef unsigned int APPLE_AGX_U32,APPLE_AGX_BOOL;
+
 typedef struct { int unused; } ADMISSION_WIN32_CONTEXT_CREATE;
 typedef enum { AdmissionWin32TransportSuccess=0 } ADMISSION_WIN32_TRANSPORT_RESULT;
 static ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32ContextCreateValidate(const void *p,UINT n,APPLE_AGX_BOOL sys,APPLE_AGX_BOOL legacy,APPLE_AGX_U32 *gen,APPLE_AGX_BOOL *transport) {(void)p;(void)n;(void)sys;(void)legacy;*gen=0;*transport=0;return AdmissionWin32TransportSuccess;}
@@ -246,6 +245,7 @@ typedef struct {
   UINT G4Native,BoundFence,G4CommandBytes;
   APPLE_AGX_G4_PRIVATE_HEADER_V2 G4Header;
   unsigned char Commands[APPLE_AGX_G4_NATIVE_MAX_BYTES];
+  APPLE_AGX_G4_PRIVATE_LEASE G4Lease;
 } ADMISSION_BACKEND_IMAGE;
 struct _ADMISSION_CONTEXT { DXGKRNL_INTERFACE Interface; void *GpuvaG3State; BOOLEAN Started;
   PDEVICE_OBJECT PhysicalDeviceObject; ADMISSION_CONTEXT *ObjectAdapter;

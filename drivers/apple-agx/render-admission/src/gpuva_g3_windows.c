@@ -811,12 +811,78 @@ static BOOLEAN AdmissionG3OutputMatchesLocal(
   return TRUE;
 }
 
+static ADMISSION_G3_PRIVATE_SCENE *AdmissionG4FindPrivateScene(
+    ADMISSION_G3_PROCESS *p, ADMISSION_RENDER_CONTEXT *context,
+    const APPLE_AGX_G4_PRIVATE_LEASE *lease, ULONG fence, BOOLEAN begin) {
+  ADMISSION_G3_PRIVATE_SCENE *s;
+  if (!lease || !lease->ManagerId || lease->ManagerId!=p->Graph.ProcessId ||
+      lease->ManagerGeneration!=p->PrivateManager.Generation ||
+      context->GpuvaG3PrivateManagerGeneration!=lease->ManagerGeneration)
+    return NULL;
+  for (s=p->PrivateScenes;s;s=s->Next)
+    if (s->Storage.Generation==lease->SceneId) break;
+  if (!s || s->Context!=context || s->Storage.Generation!=lease->SceneGeneration ||
+      s->Quarantined || (!begin && s->ReleaseRequested) || s->Started ||
+      (begin ? (!s->Queued || s->Fence!=fence) : s->Queued)) return NULL;
+  return s;
+}
+
+static int AdmissionG4PrivateGraphAccess(void *opaque, unsigned long long va,
+    unsigned int bytes, int write, APPLE_AGX_G4_ACCESS_KIND kind,
+    unsigned int ordinal) {
+  ADMISSION_G3_PRIVATE_SCENE *scene=(ADMISSION_G3_PRIVATE_SCENE *)opaque;
+  ADMISSION_G3_PROCESS *p=(ADMISSION_G3_PROCESS *)scene->Context->GpuvaG3Process;
+  if (kind==AppleAgxG4AccessProcess) {
+    if (ordinal>=9u || va!=scene->Storage.Ranges[ordinal].Va ||
+        bytes!=scene->Storage.Ranges[ordinal].Bytes || !write) return 0;
+    return AdmissionG4GraphAccess(&p->Graph,va,bytes,write);
+  }
+  return AdmissionG4GraphAccessTyped(p,va,bytes,write,kind,ordinal);
+}
+
+static BOOLEAN AdmissionG4PrivateGeometry(ADMISSION_G3_PRIVATE_SCENE *scene,
+    const APPLE_AGX_G4_SUBMIT_VIEW *view) {
+  APPLE_AGX_G4_NATIVE_RENDER r;
+  if (!scene || !view->Render || view->RenderBytes!=sizeof(r)) return FALSE;
+  RtlCopyMemory(&r,view->Render,sizeof(r));
+  return r.WidthPx==scene->Geometry.WidthPx && r.HeightPx==scene->Geometry.HeightPx &&
+      r.UtileWidthPx==scene->Geometry.UtileWidthPx &&
+      r.UtileHeightPx==scene->Geometry.UtileHeightPx &&
+      r.Layers==scene->Geometry.Layers && r.Samples==scene->Geometry.Samples &&
+      RtlCompareMemory(view->Process,scene->Storage.Ranges,sizeof(view->Process))==sizeof(view->Process);
+}
+
+static VOID AdmissionG4PrivateUnqueue(ADMISSION_G3_PROCESS *p,
+    ADMISSION_G3_PRIVATE_SCENE *scene, ULONG fence) {
+  if (!scene) return;
+  ExAcquireFastMutex(&p->State->Lock);
+  if (scene->Queued && scene->Fence==fence && !scene->Started) {
+    scene->Queued=0;scene->Fence=0;
+  }
+  ExReleaseFastMutex(&p->State->Lock);
+}
+
+BOOLEAN AdmissionGpuvaG3PrivateContextBusy(ADMISSION_RENDER_CONTEXT *context) {
+  ADMISSION_G3_PROCESS *p;
+  ADMISSION_G3_PRIVATE_SCENE *s;
+  BOOLEAN busy=FALSE;
+  if (!context || !context->GpuvaG3Process) return FALSE;
+  if (KeGetCurrentIrql()!=PASSIVE_LEVEL) return TRUE;
+  p=(ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
+  ExAcquireFastMutex(&p->State->Lock);
+  for (s=p->PrivateScenes;s;s=s->Next)
+    if (s->Context==context && (s->Queued || s->Quarantined)) {busy=TRUE;break;}
+  ExReleaseFastMutex(&p->State->Lock);
+  return busy;
+}
+
 NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
     ADMISSION_RENDER_CONTEXT *context, ULONG fence) {
   ADMISSION_G3_STATE *state;
   ADMISSION_G3_PROCESS *process;
   APPLE_AGX_G4_SUBMIT_VIEW g4_view;
   BOOLEAN g4_valid = TRUE;
+  ADMISSION_G3_PRIVATE_SCENE *private_scene = NULL;
   NTSTATUS status = STATUS_INVALID_DEVICE_STATE;
   if (adapter == NULL || context == NULL || fence == 0u ||
       KeGetCurrentIrql() != PASSIVE_LEVEL) return STATUS_INVALID_PARAMETER;
@@ -827,15 +893,19 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
   ExAcquireFastMutex(&state->Lock);
   if (adapter->BackendImage.G4Native) {
     ADMISSION_BACKEND_IMAGE *image = &adapter->BackendImage;
-    if (image->BoundFence != fence ||
+    if (image->G4Lease.SceneId)
+      private_scene=AdmissionG4FindPrivateScene(process,context,&image->G4Lease,fence,TRUE);
+    if ((image->G4Lease.SceneId && !private_scene) || image->BoundFence != fence ||
         image->G4CommandBytes == 0u ||
         image->G4CommandBytes > APPLE_AGX_G4_NATIVE_MAX_BYTES ||
         AppleAgxG4ParseSubmitEx(&image->G4Header,
             (unsigned int)sizeof(image->G4Header) + image->G4CommandBytes,
             (unsigned int)sizeof(image->G4Header) + image->G4CommandBytes,
             image->G4Header.Base.CommandVa, image->G4CommandBytes,
-            AdmissionG4GraphAccessTyped, process,
+            private_scene ? AdmissionG4PrivateGraphAccess : AdmissionG4GraphAccessTyped,
+            private_scene ? (void *)private_scene : (void *)process,
             &g4_view, NULL) != AppleAgxG4ParseOk ||
+        (private_scene && !AdmissionG4PrivateGeometry(private_scene,&g4_view)) ||
         image->G4Header.Base.CommandVa != context->GpuvaG3DmaBufferVa ||
         image->G4CommandBytes != context->GpuvaG3DmaBufferBytes)
       g4_valid = FALSE;
@@ -855,6 +925,7 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
               context->GpuvaG3DmaBufferBytes)) &&
       AdmissionG3OutputMatchesLocal(adapter, &process->Graph) &&
       AppleAgxGpuvaG3GraphBeginJob(&process->Graph, 1u)) {
+    if (private_scene) private_scene->Started=1u;
     state->ActiveProcess = process;
     state->ActiveFence = fence;
     status = STATUS_SUCCESS;
@@ -1093,6 +1164,9 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   ADMISSION_G3_PROCESS *process =
       (ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
   ULONGLONG mapping_generation;
+  ADMISSION_G3_PRIVATE_SCENE *private_scene=NULL;
+  APPLE_AGX_G4_PRIVATE_HEADER private_header;
+  APPLE_AGX_G4_PRIVATE_HEADER_V3 private_v3;
   APPLE_AGX_G4_SUBMIT_VIEW view;
   APPLE_AGX_G4_PARSE_RESULT result;
   APPLE_AGX_G4_FAILURE failure = {0};
@@ -1129,11 +1203,32 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
     return AdmissionG4SubmitReject(adapter, context, args,
         AdmissionG4RejectRoot, STATUS_INVALID_PARAMETER, 0u, TRUE);
   }
+  if (args->pDmaBufferPrivateData && args->DmaBufferUmdPrivateDataSize>=sizeof(private_header) &&
+      args->DmaBufferPrivateDataSize>=args->DmaBufferUmdPrivateDataSize) {
+    RtlCopyMemory(&private_header,args->pDmaBufferPrivateData,sizeof(private_header));
+    if (private_header.Version==APPLE_AGX_G4_PRIVATE_VERSION_PRIVATE_VA &&
+        args->DmaBufferUmdPrivateDataSize>=sizeof(private_v3)) {
+      RtlCopyMemory(&private_v3,args->pDmaBufferPrivateData,sizeof(private_v3));
+      private_scene=AdmissionG4FindPrivateScene(process,context,&private_v3.Lease,
+                                               args->SubmissionFenceId,FALSE);
+      if (!private_scene) {
+        ExReleaseFastMutex(&state->Lock);
+        return AdmissionG4SubmitReject(adapter,context,args,
+            AdmissionG4RejectEnvelopeState,STATUS_INVALID_PARAMETER,0u,TRUE);
+      }
+    }
+  }
   result = AppleAgxG4ParseSubmitEx(
       args->pDmaBufferPrivateData, args->DmaBufferPrivateDataSize,
       args->DmaBufferUmdPrivateDataSize, args->DmaBufferVirtualAddress,
-      args->DmaBufferSize, AdmissionG4GraphAccessTyped, process,
-      &view, &failure);
+      args->DmaBufferSize,
+      private_scene ? AdmissionG4PrivateGraphAccess : AdmissionG4GraphAccessTyped,
+      private_scene ? (void *)private_scene : (void *)process, &view, &failure);
+  if (result==AppleAgxG4ParseOk &&
+      ((view.Lease.SceneId && !private_scene) ||
+       (private_scene && (!AdmissionG4PrivateGeometry(private_scene,&view) ||
+        RtlCompareMemory(&view.Lease,&private_v3.Lease,sizeof(view.Lease))!=sizeof(view.Lease)))))
+    result=AppleAgxG4ParseInvalid;
   if (result == AppleAgxG4ParseOk && view.AttachmentCount == 1u) {
     RtlCopyMemory(&color, view.Attachments, sizeof(color));
     packet.Fence = args->SubmissionFenceId;
@@ -1167,6 +1262,9 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   mapping_generation = process->Graph.MappingGeneration;
   if (result != AppleAgxG4ParseOk)
     AdmissionG4SnapshotFailure(process, &failure, &detail);
+  if (result==AppleAgxG4ParseOk && private_scene) {
+    private_scene->Queued=1u;private_scene->Fence=args->SubmissionFenceId;
+  }
   ExReleaseFastMutex(&state->Lock);
   if (result != AppleAgxG4ParseOk)
     return AdmissionG4SubmitRejectDetail(adapter, context, args,
@@ -1182,9 +1280,11 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
     prepared = TRUE;
   }
   KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
-  if (!prepared)
+  if (!prepared) {
+    AdmissionG4PrivateUnqueue(process,private_scene,args->SubmissionFenceId);
     return AdmissionG4SubmitReject(adapter, context, args,
         AdmissionG4RejectPrepare, STATUS_INVALID_PARAMETER, 0u, TRUE);
+  }
   if (!AdmissionBackendImageBindG4Submission(&adapter->BackendImage,
           &packet, (PVOID)(ULONG_PTR)packet.DestinationCpuToken,
           &view, &binding)) goto Rollback;
@@ -1221,6 +1321,7 @@ Rollback:
   if (adapter->BackendImage.G4Native)
     (void)AdmissionBackendImageReleaseSubmission(&adapter->BackendImage,
         args->SubmissionFenceId);
+  AdmissionG4PrivateUnqueue(process,private_scene,args->SubmissionFenceId);
   return AdmissionG4SubmitReject(adapter, context, args,
       rollbackBranch, STATUS_INVALID_PARAMETER, 0u, TRUE);
 }

@@ -25,6 +25,7 @@
 #define APPLE_AGX_G4_PRIVATE_MAGIC 0x34584741u /* "AGX4" */
 #define APPLE_AGX_G4_PRIVATE_VERSION 1u
 #define APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA 2u
+#define APPLE_AGX_G4_PRIVATE_VERSION_PRIVATE_VA 3u
 #define APPLE_AGX_G4_PROCESS_RANGE_COUNT 9u
 #define APPLE_AGX_G4_NATIVE_MAX_BYTES 4096u
 #define APPLE_AGX_G4_RENDER 0u
@@ -55,6 +56,15 @@ typedef struct {
   APPLE_AGX_G4_PRIVATE_HEADER Base;
   APPLE_AGX_G4_PROCESS_RANGE Process[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
 } APPLE_AGX_G4_PRIVATE_HEADER_V2;
+
+typedef struct {
+  unsigned long long ManagerId, ManagerGeneration, SceneId, SceneGeneration;
+} APPLE_AGX_G4_PRIVATE_LEASE;
+typedef struct {
+  APPLE_AGX_G4_PRIVATE_HEADER_V2 V2;
+  APPLE_AGX_G4_PRIVATE_LEASE Lease;
+} APPLE_AGX_G4_PRIVATE_HEADER_V3;
+
 
 typedef struct {
   unsigned short Type;
@@ -193,6 +203,21 @@ static inline int AppleAgxG4ComposeHeaderV2(
   return 1;
 }
 
+static inline int AppleAgxG4ComposeHeaderV3(APPLE_AGX_G4_PRIVATE_HEADER_V3 *header,
+    const APPLE_AGX_G4_NATIVE_RENDER *render, unsigned long long command_va,
+    unsigned command_bytes, unsigned color_format,
+    const APPLE_AGX_G4_PROCESS_RANGE ranges[9],
+    const APPLE_AGX_G4_PRIVATE_LEASE *lease) {
+  if (!header || !lease || !lease->ManagerId || !lease->ManagerGeneration ||
+      !lease->SceneId || !lease->SceneGeneration ||
+      !AppleAgxG4ComposeHeaderV2(&header->V2,render,command_va,command_bytes,
+                               color_format,ranges)) return 0;
+  header->V2.Base.Version=APPLE_AGX_G4_PRIVATE_VERSION_PRIVATE_VA;
+  header->V2.Base.HeaderBytes=(unsigned short)sizeof(*header);
+  header->Lease=*lease;
+  return 1;
+}
+
 typedef enum {
   AppleAgxG4ParseOk = 0,
   AppleAgxG4ParseInvalid,
@@ -236,6 +261,7 @@ typedef struct {
   unsigned long long CommandVa;
   unsigned int ColorFormat;
   APPLE_AGX_G4_PROCESS_RANGE Process[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
+  APPLE_AGX_G4_PRIVATE_LEASE Lease;
 } APPLE_AGX_G4_SUBMIT_VIEW;
 
 APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmit(

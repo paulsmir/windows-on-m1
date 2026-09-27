@@ -3,13 +3,14 @@
 #include <stdio.h>
 #include <string.h>
 #include "apple_agx_g4_submit.h"
-#include "apple_agx_g3_private_pool.h"
+#include "apple_agx_g3_private_storage.h"
 #include "apple_agx_gpuva_g3_translation.h"
 
 typedef int NTSTATUS;
+typedef void VOID;
 typedef unsigned char BOOLEAN;
 typedef unsigned long long ULONGLONG;
-typedef uint32_t ULONG;
+typedef uint32_t ULONG, UINT;
 typedef uintptr_t ULONG_PTR;
 typedef size_t SIZE_T;
 typedef unsigned char *PUCHAR;
@@ -28,6 +29,7 @@ typedef struct { unsigned Value; } REPLAY_FLAGS;
 #define NT_SUCCESS(s) ((s)>=0)
 #define RtlZeroMemory(p,n) memset((p),0,(n))
 #define RtlCopyMemory(d,s,n) memcpy((d),(s),(n))
+#define RtlCompareMemory(a,b,n) (memcmp((a),(b),(n))==0 ? (n) : 0)
 #define STATUS_INVALID_PARAMETER ((NTSTATUS)0xC000000D)
 #define STATUS_INVALID_ADDRESS ((NTSTATUS)0xC0000141)
 #define STATUS_INVALID_DEVICE_STATE ((NTSTATUS)0xC0000184)
@@ -61,8 +63,19 @@ typedef struct _ADMISSION_G3_STATE {
   struct _ADMISSION_G3_PROCESS *ActiveProcess;
   unsigned ActiveFence;
 } ADMISSION_G3_STATE;
+typedef struct _ADMISSION_RENDER_CONTEXT ADMISSION_RENDER_CONTEXT;
+typedef struct _ADMISSION_G3_PRIVATE_SCENE {
+  struct _ADMISSION_G3_PRIVATE_SCENE *Next;
+  ADMISSION_RENDER_CONTEXT *Context;
+  APPLE_AGX_G3_PRIVATE_SCENE Storage;
+  APPLE_AGX_G4_NATIVE_RENDER Geometry;
+  ULONG Fence, Queued, Started, GpuDone, Reported, ReleaseRequested, Quarantined;
+} ADMISSION_G3_PRIVATE_SCENE;
+
 typedef struct _ADMISSION_G3_PROCESS {
   ULONGLONG PrivateVa;
+  APPLE_AGX_G3_PRIVATE_MANAGER PrivateManager;
+  ADMISSION_G3_PRIVATE_SCENE *PrivateScenes;
   ADMISSION_G3_STATE *State;
   APPLE_AGX_GPUVA_G3_GRAPH Graph;
   ADMISSION_G3_TABLE_SHADOW *TableShadows;
@@ -92,6 +105,7 @@ typedef struct {
   APPLE_AGX_G4_PRIVATE_HEADER_V2 G4Header;
   unsigned char G4Command[APPLE_AGX_G4_NATIVE_MAX_BYTES];
   unsigned G4CommandBytes, G4Native, BoundFence;
+  APPLE_AGX_G4_PRIVATE_LEASE G4Lease;
 } ADMISSION_BACKEND_IMAGE;
 typedef struct { unsigned DestinationBytes; } APPLE_AGX_EXP208_GDI_BINDING;
 typedef struct {
@@ -119,7 +133,8 @@ typedef struct {
   ADMISSION_RENDER_PACKET RenderPacket;
   ADMISSION_BACKEND_IMAGE BackendImage;
 } ADMISSION_CONTEXT;
-typedef struct {
+struct _ADMISSION_RENDER_CONTEXT {
+  ULONGLONG GpuvaG3PrivateManagerGeneration;
   ADMISSION_G3_PROCESS *GpuvaG3Process;
   unsigned GpuvaG3Poisoned;
   ULONGLONG GpuvaG3RootIpa;
@@ -128,7 +143,7 @@ typedef struct {
   unsigned Win32Transport;
   ADMISSION_OBJECT_CONTEXT Object;
   struct { unsigned Active; } SchedulerContext;
-} ADMISSION_RENDER_CONTEXT;
+};
 typedef struct {
   REPLAY_FLAGS Flags;
   void *hContext;
@@ -246,8 +261,11 @@ static int AdmissionBackendImageBindG4Submission(ADMISSION_BACKEND_IMAGE *image,
     APPLE_AGX_EXP208_GDI_BINDING *binding) {
   (void)cpu;(void)binding;
   if(!bind_ok)return 0;
-  memcpy(&image->G4Header, view->Native - sizeof(image->G4Header),
-         sizeof(image->G4Header));
+  APPLE_AGX_G4_NATIVE_RENDER render;
+  memcpy(&render,view->Render,sizeof(render));
+  if (!AppleAgxG4ComposeHeaderV2(&image->G4Header,&render,view->CommandVa,
+          view->CommandBytes,view->ColorFormat,view->Process)) return 0;
+  image->G4Lease=view->Lease;
   memcpy(image->G4Command, view->Native, view->CommandBytes);
   image->G4CommandBytes=view->CommandBytes;
   image->G4Native=1;image->BoundFence=packet->Fence;return 1;
@@ -558,6 +576,46 @@ int main(void) {
   packet.Render.Bg.Usc = 0x20040u;
   assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
          STATUS_INVALID_PARAMETER);
+  packet.Render.Bg.Usc=0;
+  struct { APPLE_AGX_G4_PRIVATE_HEADER_V3 Header; unsigned char Native[280]; } v3={0};
+  ADMISSION_G3_PRIVATE_SCENE scene={0};
+  scene.Context=&context;scene.Geometry=packet.Render;scene.Storage.Generation=9;
+  process.PrivateManager.Generation=5;context.GpuvaG3PrivateManagerGeneration=5;
+  process.PrivateScenes=&scene;
+  ULONGLONG private_va=process.PrivateVa;
+  for(unsigned i=0;i<9;++i) {
+    ranges[i]=(APPLE_AGX_G4_PROCESS_RANGE){private_va,required[i],0};
+    scene.Storage.Ranges[i]=ranges[i];private_va+=required[i];
+  }
+  APPLE_AGX_G4_PRIVATE_LEASE lease={17,5,9,9};
+  memcpy(v3.Native,&packet.AttachCommand,sizeof(v3.Native));
+  assert(AppleAgxG4ComposeHeaderV3(&v3.Header,&packet.Render,args.DmaBufferVirtualAddress,
+      sizeof(v3.Native),APPLE_AGX_G4_COLOR_BGRA8,ranges,&lease));
+  args.pDmaBufferPrivateData=&v3;
+  args.DmaBufferPrivateDataSize=args.DmaBufferUmdPrivateDataSize=sizeof(v3);
+  args.SubmissionFenceId=21;
+  ++v3.Header.Lease.SceneGeneration;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  --v3.Header.Lease.SceneGeneration;
+  ADMISSION_RENDER_CONTEXT other=context;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&other,&args)!=STATUS_SUCCESS);
+  ++scene.Geometry.WidthPx;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  --scene.Geometry.WidthPx;
+  bind_ok=0;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  assert(!scene.Queued && !scene.Started);
+  bind_ok=1;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)==STATUS_SUCCESS);
+  assert(scene.Queued && scene.Fence==21 && AdmissionGpuvaG3PrivateContextBusy(&context));
+  ++adapter.BackendImage.G4Lease.SceneGeneration;
+  assert(AdmissionGpuvaG3BeginJob(&adapter,&context,21)!=STATUS_SUCCESS);
+  --adapter.BackendImage.G4Lease.SceneGeneration;
+  ++process.Graph.MappingGeneration;
+  assert(AdmissionGpuvaG3BeginJob(&adapter,&context,21)!=STATUS_SUCCESS);
+  --process.Graph.MappingGeneration;
+  assert(AdmissionGpuvaG3BeginJob(&adapter,&context,21)==STATUS_SUCCESS);
+  assert(scene.Started);
   puts("g4_submit_virtual_replay: PASS");
   return 0;
 }

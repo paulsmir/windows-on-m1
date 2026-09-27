@@ -452,6 +452,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyContext(HANDLE Context) {
       context->Object.FenceOutstanding != 0u ||
       AdmissionPrepatchedActive(&context->PrepatchedRender))
     return STATUS_DEVICE_BUSY;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (AdmissionGpuvaG3PrivateContextBusy(context)) return STATUS_DEVICE_BUSY;
+#endif
   adapter = CONTAINING_RECORD(context->Object.Device->Adapter,
                               ADMISSION_CONTEXT, ObjectAdapter);
   KeAcquireSpinLock(&adapter->SchedulerLock, &oldIrql);

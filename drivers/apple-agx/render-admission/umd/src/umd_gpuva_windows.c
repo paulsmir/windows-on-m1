@@ -252,13 +252,25 @@ static int wait_render(void *context, uint64_t fence) {
   return wait_object(device, device ? device->RenderSyncObject : 0, fence);
 }
 
+static int private_escape(void *context, APPLE_AGX_G3_PRIVATE_REQUEST *payload) {
+  ADMISSION_UMD_DEVICE *device=(ADMISSION_UMD_DEVICE *)context;
+  D3DDDICB_ESCAPE request={};
+  if(!device || device->Magic!=ADMISSION_UMD_DEVICE_MAGIC || !payload ||
+     !device->KernelContext || !device->KernelCallbacks ||
+     !device->KernelCallbacks->pfnEscapeCb || device->ScreenClosing) return 0;
+  request.Flags.HardwareAccess=1;
+  request.hContext=device->KernelContext;
+  request.pPrivateDriverData=payload;request.PrivateDriverDataSize=sizeof(*payload);
+  return SUCCEEDED(device->KernelCallbacks->pfnEscapeCb(device->RuntimeDevice.handle,&request));
+}
+
 #ifdef __cplusplus
 extern "C"
 #endif
 const AGX_WIN32_GPUVA_OPS *AdmissionUmdGpuvaOperations(void) {
   static const AGX_WIN32_GPUVA_OPS operations = {
       reserve_va, map_va, free_va, make_resident, wait_paging,
-      submit, wait_render, evict};
+      submit, wait_render, evict, private_escape};
   return &operations;
 }
 #endif

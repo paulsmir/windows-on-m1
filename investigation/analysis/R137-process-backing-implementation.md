@@ -198,3 +198,39 @@ Standalone pinned WDK ARM64 compile/link: zero warnings/errors, SYS SHA256
 `.local/experiments/R137-offline/step5.sys`. Full-suite final comparison is in
 step5-final-full.log; no hardware/package. REVIEW.md unchanged; R136 recorded
 dispositions remain applicable.
+
+## Step 6 — AGX4 v3 production scene identity
+
+The Mesa producer now acquires the nine KMD ranges through the real UMD escape
+callback and sends manager/scene IDs and generations in AGX4 v3. Those ranges
+have no ordinary BO allocation, CPU Lock/map, residency-list entry or UMD list
+initialization. Normal command/resource BOs retain their existing path. UMD
+release requests are sent after a known retired or rejected batch; uncertain
+accepted submissions keep the terminal owner. Kernel submit authenticates the
+attached context, exact lease/ranges/geometry and graph; queue acceptance holds
+the scene, failed prepare/bind/queue rolls it back. BeginJob checks the lease,
+root, mapping generation, geometry and access again. Internal backend image
+retains a trusted lease beside its normalized v2 command bytes; image release
+is not scene retirement. Context destruction refuses a retained private hold.
+Step 7 supplies the OS completion owner which clears that hold.
+
+RED: the real Mesa producer allocated nine ordinary BOs. GREEN: production
+prepare + real storage-constructor sanitizer replay uses only the private escape,
+preserves firmware-owned manager lists and refuses quota overflow. The combined
+G3 test uses actual UMD prepare -> actual KMD escape -> real graph/wire/v5 ->
+AGX4 v3 parser -> TA/3D builder -> actual BeginJob/CompleteJob in profiles16/64.
+Its ordinary CPU envelope uses logical 4-KiB entries (existing CPU contract),
+while its full-primary local target uses 64-KiB entries. Queue hold is retained
+after CompleteJob; its temporary fixture teardown is replaced by the actual
+notification owner in step 7. The legacy v2 real-broker builder test now supplies
+ordinary ranges directly; private producer coverage lives in the combined test.
+Outer SubmitCommandVirtual replay rejects stale/foreign leases, geometry drift,
+failed image bind and stale BeginJob mapping generation.
+
+Verification: G3 21 tests; G4 replay 7 tests; full suite1136 with exactly the
+baseline 15 failures/41 errors/2 skips, no added/removed failure names. Pinned
+WDK26100 ARM64 KMD compile/link passes; standalone SYS step6.sys SHA256
+`44fa1031cc19f4a31f41483bbf56db619f5ddaa87786f05e7a71eba53c82e44a`.
+UMD ClCompile and six affected native Mesa bridge translation units compile for
+ARM64; no DLL/package/signing/hardware claim. Logs are step6-*.log under
+`.local/experiments/R137-offline`. REVIEW.md unchanged; R136 dispositions stand.

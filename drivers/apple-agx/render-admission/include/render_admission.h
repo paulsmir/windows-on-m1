@@ -1435,6 +1435,7 @@ DXGKDDI_RESETFROMTIMEOUT AdmissionDdiResetFromTimeout;
 DXGKDDI_RESTARTFROMTIMEOUT AdmissionDdiRestartFromTimeout;
 DXGKDDI_ESCAPE AdmissionDdiEscape;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+BOOLEAN AdmissionGpuvaG3PrivateContextBusy(ADMISSION_RENDER_CONTEXT *);
 NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *, const DXGKARG_ESCAPE *);
 #endif
 DXGKDDI_COLLECTDBGINFO AdmissionDdiCollectDbgInfo;

@@ -112,6 +112,7 @@ static APPLE_AGX_G4_PARSE_RESULT parse_submit(
     APPLE_AGX_G4_SUBMIT_VIEW *view) {
   APPLE_AGX_G4_PRIVATE_HEADER header;
   APPLE_AGX_G4_PRIVATE_HEADER_V2 header_v2 = {0};
+  APPLE_AGX_G4_PRIVATE_HEADER_V3 header_v3 = {0};
   APPLE_AGX_G4_NATIVE_HEADER native_header;
   const unsigned char *bytes = (const unsigned char *)private_data;
   unsigned int position = 0u, index, attachments = 0u;
@@ -127,8 +128,10 @@ static APPLE_AGX_G4_PARSE_RESULT parse_submit(
   memcpy(&header, bytes, sizeof(header));
   if (header.Magic != APPLE_AGX_G4_PRIVATE_MAGIC ||
       (header.Version != APPLE_AGX_G4_PRIVATE_VERSION &&
-       header.Version != APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA) ||
-      header.HeaderBytes != (header.Version ==
+       header.Version != APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA &&
+       header.Version != APPLE_AGX_G4_PRIVATE_VERSION_PRIVATE_VA) ||
+      header.HeaderBytes != (header.Version == APPLE_AGX_G4_PRIVATE_VERSION_PRIVATE_VA ?
+          sizeof(header_v3) : header.Version ==
           APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA ?
           sizeof(header_v2) : sizeof(header)) ||
       (header.Version == APPLE_AGX_G4_PRIVATE_VERSION &&
@@ -136,12 +139,19 @@ static APPLE_AGX_G4_PARSE_RESULT parse_submit(
       header.CommandVa != dma_va || header.CommandBytes != dma_bytes ||
       umd_private_bytes != (unsigned int)header.HeaderBytes + dma_bytes)
     return AppleAgxG4ParseInvalid;
-  if (header.Version == APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA) {
+  if (header.Version >= APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA) {
     if (header.Reserved != APPLE_AGX_G4_COLOR_BGRA8)
       return AppleAgxG4ParseUnsupported;
     if (umd_private_bytes < sizeof(header_v2))
       return AppleAgxG4ParseInvalid;
     memcpy(&header_v2, bytes, sizeof(header_v2));
+    if (header.Version == APPLE_AGX_G4_PRIVATE_VERSION_PRIVATE_VA) {
+      if (umd_private_bytes < sizeof(header_v3)) return AppleAgxG4ParseInvalid;
+      memcpy(&header_v3,bytes,sizeof(header_v3));
+      if (!header_v3.Lease.ManagerId || !header_v3.Lease.ManagerGeneration ||
+          !header_v3.Lease.SceneId || !header_v3.Lease.SceneGeneration)
+        return AppleAgxG4ParseInvalid;
+    }
     for (index = 0u; index < APPLE_AGX_G4_PROCESS_RANGE_COUNT; ++index) {
       const APPLE_AGX_G4_PROCESS_RANGE *range = &header_v2.Process[index];
       if (range->Reserved || !range->Bytes ||
@@ -206,7 +216,7 @@ static APPLE_AGX_G4_PARSE_RESULT parse_submit(
         bytes + position + sizeof(native_header), access);
     if (render_result != AppleAgxG4ParseOk) return render_result;
   }
-  if (header.Version == APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA) {
+  if (header.Version >= APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA) {
     APPLE_AGX_G4_NATIVE_RENDER render;
     unsigned int required[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
     memcpy(&render, bytes + position + sizeof(native_header), sizeof(render));
@@ -216,6 +226,7 @@ static APPLE_AGX_G4_PARSE_RESULT parse_submit(
       if (header_v2.Process[index].Bytes < required[index])
         return AppleAgxG4ParseInvalid;
   }
+  view->Lease = header_v3.Lease;
   view->Native = bytes;
   view->Render = bytes + position + sizeof(native_header);
   view->Attachments = attachment_base;
@@ -223,9 +234,9 @@ static APPLE_AGX_G4_PARSE_RESULT parse_submit(
   view->RenderBytes = native_header.Size;
   view->AttachmentCount = attachments;
   view->CommandVa = dma_va;
-  view->ColorFormat = header.Version ==
+  view->ColorFormat = header.Version >=
       APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA ? header.Reserved : 0u;
-  if (header.Version == APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA)
+  if (header.Version >= APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA)
     memcpy(view->Process, header_v2.Process, sizeof(view->Process));
   return AppleAgxG4ParseOk;
 }

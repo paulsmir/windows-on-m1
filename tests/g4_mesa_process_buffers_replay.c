@@ -1,94 +1,55 @@
-#include "apple_agx_g4_submit.h"
+#include "apple_agx_g3_private_abi.h"
+#include "apple_agx_g3_private_storage.h"
 #include <assert.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-struct agx_device { int unused; };
+/* OS callback boundary only. The producer body and kernel storage constructor
+ * are real; no ordinary Allocate/Lock operation is available in this fixture. */
 typedef struct {
-  uint64_t Allocation, Va, Bytes;
-  unsigned Bound;
-} AGX_WIN32_GPUVA_BO;
-struct agx_bo {
-  struct agx_device *dev;
-  struct { uint64_t addr; } coordinate, *va;
-  AGX_WIN32_GPUVA_BO mapping;
-  unsigned char *cpu;
-  size_t size;
-  unsigned refs;
-};
-typedef struct {
-  struct agx_device *Native;
-  struct agx_bo *G4BufferManager[3];
+  struct { struct { int (*PrivateEscape)(void *,APPLE_AGX_G3_PRIVATE_REQUEST *); } Ops; void *Context; } Gpuva;
 } AGX_WIN32_ASAHI_BACKEND;
+typedef struct { APPLE_AGX_G4_PRIVATE_LEASE Lease; } AGX_G4_BATCH;
 typedef struct {
-  struct agx_bo *Process[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
-} AGX_G4_BATCH;
-static unsigned allocations;
-static struct agx_bo *agx_bo_create(struct agx_device *dev, size_t bytes,
-    unsigned align, unsigned flags, const char *label) {
-  struct agx_bo *bo = calloc(1, sizeof(*bo));
-  (void)align; (void)flags; (void)label;
-  assert(bo && !(bytes & 0xffffu));
-  bo->cpu = malloc(bytes);
-  assert(bo->cpu);
-  memset(bo->cpu, 0xa5, bytes);
-  bo->dev = dev;
-  bo->size = bytes;
-  bo->refs = 1u;
-  bo->coordinate.addr = 0x1000000ULL + (uint64_t)allocations * 0x1000000ULL;
-  bo->va = &bo->coordinate;
-  bo->mapping.Va = bo->coordinate.addr;
-  bo->mapping.Bytes = bytes;
-  bo->mapping.Bound = 1;
-  ++allocations;
-  return bo;
+  APPLE_AGX_G3_PRIVATE_POOL Pool;
+  APPLE_AGX_G3_PRIVATE_MANAGER Manager;
+  APPLE_AGX_G3_PRIVATE_SCENE Scenes[3];
+  unsigned Count, Calls;
+  unsigned char *Cpu;
+} KERNEL;
+static int escape(void *opaque, APPLE_AGX_G3_PRIVATE_REQUEST *q) {
+  KERNEL *k=opaque; APPLE_AGX_G4_NATIVE_RENDER r={0};
+  assert(q->Magic==APPLE_AGX_G3_PRIVATE_MAGIC && q->Version==1 && q->Bytes==sizeof(*q));
+  assert(q->Operation==APPLE_AGX_G3_PRIVATE_ACQUIRE && k->Count<3);
+  ++k->Calls;r.WidthPx=q->Width;r.HeightPx=q->Height;r.Layers=q->Layers;
+  r.UtileWidthPx=q->UtileWidth;r.UtileHeightPx=q->UtileHeight;r.Samples=q->Samples;
+  APPLE_AGX_G3_PRIVATE_SCENE *s=&k->Scenes[k->Count];
+  if(!AppleAgxG3PrivatePrepare(&k->Pool,17,k->Cpu,1ULL<<36,&r,&k->Manager,s)) return 0;
+  ++k->Count;q->ManagerId=17;q->ManagerGeneration=k->Manager.Generation;
+  q->SceneId=q->SceneGeneration=s->Generation;memcpy(q->Ranges,s->Ranges,sizeof(q->Ranges));
+  return 1;
 }
-static const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(
-    AGX_WIN32_ASAHI_BACKEND *backend, struct agx_bo *bo) {
-  return bo && bo->dev == backend->Native ? &bo->mapping : NULL;
-}
-static void *agx_bo_map(struct agx_bo *bo) { return bo->cpu; }
-static void agx_bo_reference(struct agx_bo *bo) { assert(bo); ++bo->refs; }
-static void release_bo(struct agx_bo *bo) {
-  assert(bo && bo->refs);
-  if (--bo->refs) return;
-  free(bo->cpu);
-  free(bo);
-}
-
 #include "g4_mesa_process_buffers_function.inc"
-
 int main(void) {
-  struct agx_device native = {0};
-  AGX_WIN32_ASAHI_BACKEND backend = {.Native = &native};
-  AGX_G4_BATCH batch = {0};
-  APPLE_AGX_G4_NATIVE_RENDER render = {0};
-  APPLE_AGX_G4_PROCESS_RANGE ranges[APPLE_AGX_G4_PROCESS_RANGE_COUNT] = {0};
-  render.WidthPx = 2560;
-  render.HeightPx = 1600;
-  render.Layers = 1;
-  render.UtileWidthPx = render.UtileHeightPx = 16;
-  assert(prepare_process_buffers(&backend, &batch, &render, ranges));
-  assert(allocations == APPLE_AGX_G4_PROCESS_RANGE_COUNT);
-  assert(ranges[2].Bytes == 0x400000u && ranges[3].Bytes == 0x20000u &&
-         ranges[4].Bytes == 0x20000u && ranges[6].Bytes == 0x140000u);
-  {
-    const uint32_t *pages = (const uint32_t *)batch.Process[0]->cpu;
-    const uint32_t *blocks = (const uint32_t *)batch.Process[1]->cpu;
-    uint32_t first = (uint32_t)(ranges[2].Va >> 15);
-    assert(pages[0] == first && pages[1] == first + 1u &&
-           pages[127] == first + 127u);
-    assert(blocks[0] == first && blocks[1] == 0u &&
-           blocks[62] == first + 124u && blocks[63] == 0u);
+  KERNEL k={0};k.Cpu=malloc(16u<<20);assert(k.Cpu);memset(k.Cpu,0xa5,16u<<20);
+  AGX_WIN32_ASAHI_BACKEND b={.Gpuva={.Ops={escape},.Context=&k}};
+  AGX_G4_BATCH one={0},two={0},three={0};
+  APPLE_AGX_G4_NATIVE_RENDER r={0};APPLE_AGX_G4_PROCESS_RANGE a[9],c[9];
+  r.WidthPx=2560;r.HeightPx=1600;r.UtileWidthPx=r.UtileHeightPx=16;r.Layers=r.Samples=1;
+  assert(prepare_process_buffers(&b,&one,&r,a));
+  unsigned *pages=(unsigned *)(k.Cpu+k.Manager.Extents[0].Offset);
+  unsigned *blocks=(unsigned *)(k.Cpu+k.Manager.Extents[1].Offset);
+  for(unsigned i=0;i<32;++i) {
+    assert(blocks[2*i]==(a[2].Va>>15)+4*i);
+    for(unsigned j=0;j<4;++j) assert(pages[4*i+j]==(a[2].Va>>15)+4*i+j);
   }
-  for (unsigned i = 0; i < APPLE_AGX_G4_PROCESS_RANGE_COUNT; ++i) {
-    assert(batch.Process[i] && !(ranges[i].Va & 0xffffULL));
-    assert(batch.Process[i]->cpu[batch.Process[i]->size - 1u] == 0u);
-    release_bo(batch.Process[i]);
-  }
-  for (unsigned i = 0; i < 3u; ++i) release_bo(backend.G4BufferManager[i]);
-  puts("g4_mesa_process_buffers_replay: PASS");
-  return 0;
+  pages[0]=0xdecafbad;
+  assert(prepare_process_buffers(&b,&two,&r,c));
+  assert(pages[0]==0xdecafbad && one.Lease.ManagerGeneration==two.Lease.ManagerGeneration);
+  for(unsigned i=0;i<3;++i) assert(a[i].Va==c[i].Va);
+  for(unsigned i=3;i<9;++i) assert(a[i].Va!=c[i].Va);
+  assert(!prepare_process_buffers(&b,&three,&r,c));
+  assert(!three.Lease.SceneId && k.Calls==3);
+  assert(!prepare_process_buffers(&b,&one,&r,c));
+  free(k.Cpu);puts("g4_mesa_process_buffers_replay: PASS");return 0;
 }
