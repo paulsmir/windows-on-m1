@@ -1,4 +1,41 @@
-# GPU current boundary — 2026-09-27
+# GPU current boundary — 2026-09-28
+
+## 2026-09-28 EXP855E — R141 crossed attachment parsing; ordinary Code28 recovered
+
+GO_EXP855E preceded transfer and one cold R110 full-owner boot. Source
+`fa8a66a2` passed 534 hashes, native archive/Resource.cpp provenance, ARM64
+UMD/KMD 0/0 and guest CAT/SYS/UMD verification. APPL0002 reached Code0,
+StartStage12/Status0, arm0; the full 600-second window from Windows boot
+23:01:31Z elapsed before collection. No new Application1000, System1001,
+0x10E or dwm/explorer WER dump appeared in that window.
+
+The first G4 rejection advanced from EXP855D ParseInvalid/result1 to
+ParseUnmapped/result3 at access subsite1, Render kind4 ordinal11
+(`Stencil.CompBase`), read1 at VA `0x2f0000`, graph-present0; branch9/status
+`C000000D` remain. `TotalFailures=1696` is a refreshed count, not proof of
+identical packets. No accepted TA+3D, Windows fence, DWM frame or scanout
+pixel is proven. The remaining cause is the render VA mapping/access owner,
+to be narrowed offline from this receipt and current producer/graph code.
+
+Evidence: `.local/experiments/EXP855E-r141-attachment-envelope/`;
+13 guest originals SHA-verified, `host-evidence-hashes.json` SHA256
+`c6e68779f3b0a942cfd1ce61e4dda35ead7d10e562c3b72da4fc77b254b1715e`;
+final 115-file manifest SHA256
+`77b4d6b9adabce091e6e833d5495f88562b77cf16c54e08cc6472d795a740bd7`.
+Preflight failed only USB>=6 with USB5; SSH, CPU8/disks2 and RDP lived.
+Physical display/input and IRQ/timer state were not measured.
+
+After evidence, AutoLogger and both LocalDumps keys were removed. Ordered
+`/r` completed without physical action; immutable GPU-hidden EXP377/385
+booted non-present Code45, exact oem5 was removed only there, and immutable
+ordinary EXP377/392 returned durable Preflight PASS: one present Code28,
+staged0/arm0/SYS/UMD/service/signer/diagnostic keys absent. No live Code0
+removal occurred.
+
+WHY CONTINUE COMPARISON: compare only the saved Render ordinal11 VA and the
+current graph/private scene mapping offline; the reached ParseUnmapped access
+is the precise next boundary. No historical archaeology or further Air run is
+justified without a new falsifiable cause.
 
 ## 2026-09-28 R141 — EXP855D attachment serialization corrected offline
 
