@@ -428,3 +428,78 @@ REVIEW R47: ACCEPT — preserve frozen profile/ABI identification; no firmware b
 REVIEW R45: ACCEPT — revoke/unlink/table/root teardown order is required in real-broker replay.
 REVIEW R40: DEFER — EL2 timing does not explain the recorded synchronous missing native leaf.
 REVIEW R37: DEFER — old disarmed-start losses are outside this decision; recovery remains unchanged.
+
+
+## 5. R137 implementation stop — missing retirement owner in the exact scope
+
+2026-09-27. This is an appended correction to the proposed implementation
+contract above, not a reinterpretation of EXP854B or a rejection of option 2.
+User task NEXT_TASK_R137.md requires stopping and documenting a design problem
+instead of improvising. **Stop after the committed steps 1–3 prerequisites.**
+The private backing path is incomplete and EXP855 is not ready.
+
+Inspection while preparing the combined lifecycle gate found a conflict between
+step 7 and the exact implementation file list in section 3:
+
+- `render-admission/src/backend_platform_windows.c:2384` calls
+  `AdmissionGpuvaG3CompleteJob` before the completion transaction and Windows
+  notification. The G3 function ends the v5 job and advances LastCompletedFence;
+  that is a broker/hardware retirement observation, not a reported render fence.
+- The same backend clears `CompletionContext->Object.FenceOutstanding` at
+  line 2502, before DxgkCbSynchronizeExecution and the successful Reported phase
+  around lines 2540–2554. Notification can still fail. QueryCurrentFence reads
+  the scheduler's CompletedFence, which also advances before notification.
+- `scheduler_windows.c:326,449` and `submission_windows.c:281` clear an
+  outstanding fence on preemption/reset/prepared-cancellation paths too. Zero
+  is therefore not evidence of exact native completion and fence notification.
+
+These completion/cancellation/reset owners are outside the decision's literal
+"exactly" list. The planned GPUVA, callbacks and graph interfaces provide no
+existing scene-generation-bound post-notification retirement event. Using their
+earlier fields would violate step 7; trusting an UMD release claim would not
+repair it. Retaining every scene forever would avoid premature reuse but would
+not implement the bounded reusable-storage contract. This is a missing owner
+interface in this plan, not evidence that v5 exclusive grants are insufficient.
+
+**Required design revision before continuing:** explicitly include the existing
+backend completion, scheduler preemption/reset and prepared-cancellation owners.
+Specify a submission identity tied to process/context, manager/scene generation
+and exact fence. Distinguish TA/3D completion, successful OS notification,
+proven never-started cancellation and uncertain access requiring quarantine.
+Define deferred reclamation for elevated-IRQL notifications; do not acquire the
+passive G3 mutex from an interrupt/spin-lock callback. Add a real-code failure
+replay where notification fails after broker EndJob and local fence clear:
+private bytes must remain charged and unavailable to a second owner. Also test
+notification retry, queued cancellation, reset uncertainty and destruction.
+This paragraph describes the missing contract; it does not silently authorize
+or implement a new architecture. No Mu/m1n1 change is indicated by the evidence.
+
+Committed prerequisites: `0658e80f` (40/16/8-MiB partition), `a4f918d7`
+(reservation and quotas, plus pinned-WDK R135 BOOLEAN normalization), `fe9ce325`
+(kernel construction primitives). Their CHANGES rows are implemented only.
+The first two change reachable behavior (segment capacity and CreateProcess
+reservation prerequisite); they are not an inert or deployable placeholder.
+The step-3 producer/handoff acceptance gate is still pending: production UMD
+continues to create/Lock its ordinary nine BOs. No full fix is claimed.
+
+For this R137 correction only, .local evidence paths refer to the worktree
+/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler,
+not the main repository paths used by the original analysis.
+
+The uncommitted step-4 prototype passed 19 G3 replay tests and ARM64 compile/link,
+but independent read-only review found a transactional defect: detaching the
+current private root before checking an ordinary bootstrap mapping can lose the
+private mapping on rejection. The conflict replay checked root identity only.
+**The entire step-4 diff was withdrawn, not fixed or accepted.** Its diagnostic
+patch is `.local/experiments/R137-offline/step4-withdrawn.patch`, SHA256
+`13ad61ce02659553f27b6e28f1d9cef3289a490404af763bb75cea2665b70cdc`.
+Future replay must assert retained private access on every rejected reuse path,
+including the bootstrap conflict and allocation failures, before reusing code.
+
+Independent review found no additional must-fix issue in the currently reachable
+committed prerequisites. It did not independently rerun tests/builds or validate
+Windows acceptance, DWM capacity, production escape/security, complete private
+publication/teardown or hardware. Execution evidence and exact full-suite
+failure names are in `R137-process-backing-implementation.md` and its local logs.
+No Air, package, install, preregistration or GO_EXP855. The saved ordinary
+EXP377/392 Code28 recovery remains the last accepted recovery contract.

@@ -1,5 +1,8 @@
 # R137 offline process-backing implementation
 
+Status: stopped for the retirement-owner scope correction in R136 section 5.
+Committed prerequisites 1–3 only; step 4 withdrawn; steps 4–7 remain incomplete.
+
 Plan: R136-process-backing-decision.md section 3, steps 1–7. Starting HEAD
 871fb22602c390e94f398aeebbe875a7887521da. No hardware or package build;
 Mu/m1n1 are read-only, with pre-existing dirty submodules.
@@ -91,3 +94,50 @@ WDK26100 ARM64 compile/link passes. Compile-only SYS SHA256
  af5b3d1e34ed0c28224eea89f807b1591c456928d99fe283ab879b42b821e208.
 The section-4 producer/handoff gate remains pending steps 5–6; these are kernel
 construction primitives, not proof that UMD has stopped allocating its BOs.
+
+## Stopping verdict and review
+
+The exact-scope retirement conflict and the withdrawn step-4 root-detach defect
+are recorded in R136-process-backing-decision.md section 5. Step4's 19 passing
+G3 tests did not cover retained mapping on the bootstrap conflict. Its full
+suite ran 1134 tests with unchanged baseline failure names; those results do
+not establish a safe private lifecycle. No step-4 implementation is retained.
+
+Final review dispositions: ACCEPT the missing owner interface as the task's
+explicit stop condition; WITHDRAW the complete uncommitted root/grant prototype
+including its important transactional defect. Do not reinterpret the latter as
+fixed. The committed primitives have no reviewer-identified must-fix defect.
+Windows admission/capacity, private publication/teardown, escape/UMD/submission
+binding, and GPU/EXP855 readiness remain unproven because those gates were not
+implemented or run. The reviewer did not independently rerun test/build logs;
+the verification reported here was executed by the implementer.
+
+Final artifact policy: the unsigned standalone SYS files are compile/link
+checks only; no INF/CAT/package/signing target ran. Earlier generic builder
+output paths were overwritten by later checks; their historical hashes remain
+in the logs/CHANGES rows. A final immutable host copy is recorded below.
+
+## Final verification of retained prerequisites
+
+Evidence paths in this R137 report are relative to this worktree, not the main
+repository's .local: /Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler.
+Final focused command (CC=clang) loads test_apple_agx_render_memory,
+test_g3_kmd_local_reserve, test_gpuva_g3_caps_contract, test_g3_vidmm_replay,
+test_g3_private_pool, test_g3_private_storage, test_g4*replay and test_change_ledger:
+**38 tests PASS**. Final `python3 -m unittest discover -s tests -v`:
+**1133 tests, 15 failures, 41 errors, two skips**. Exact failure/error names match
+the initial 1130-test HEAD baseline; final-failure-comparison.json lists all 56.
+The full suite is not green and is not reported as such.
+
+Final pinned WDK26100 ARM64 compile/link of the retained source: zero warnings
+and errors, with 533 driver-source hashes verified against the persistent
+builder (mismatch0). Immutable host copy:
+.local/experiments/R137-offline/final-steps1-3.sys, SHA256 `1a7b7f2a83f0345daa813314fd9ccf571461ddf9b180ed686f2da2ddce843c6d`.
+Exact commands are in compile.ps1; source hashes, logs, rejected attempts,
+withdrawn patch and review dispositions are bound by final-manifest.json,
+SHA256 `adba478c95f1d543c39013ec141d0f7c149afa421b2d9a2e6dbc4f5d2ddea78e`. This unsigned standalone link check is not a package.
+
+m1n1 and Mu HEADs/diff hashes still exactly equal the pre-existing values in
+R136 section 1. No Air control plane, USB/proxy endpoint, install, hardware
+experiment or recovery action was used. No EXPERIMENTS entry or hardware
+validation is claimed for this offline source task.

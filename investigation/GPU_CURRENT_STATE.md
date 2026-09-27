@@ -1,5 +1,23 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-27 R137 offline stop — retirement owner missing from exact scope
+
+Commits 0658e80f/a4f918d7/fe9ce325 provide the 40/16/8-MiB split, process
+GPUVA reservation/quota and kernel initialization primitives. Production UMD
+still allocates its nine ordinary BOs; private handoff and lifetime are absent.
+The private subtree prototype was withdrawn after review found mapping loss
+on rejected bootstrap/root reuse. No package, Air, staging or GO_EXP855.
+
+Next causal target: amend R136's exact file scope and retirement contract to
+include backend notification and cancellation/preemption/reset owners. Current
+G3 CompleteJob, scheduler CompletedFence and cleared FenceOutstanding precede
+or bypass successful OS fence notification; they cannot authorize scene reuse.
+Option 2/v5 is not rejected. See R136-process-backing-decision.md section 5 and
+R137-process-backing-implementation.md under investigation/analysis. Ordinary
+EXP377/392 Code28 remains the accepted recovery; capacity/admission changes
+are offline prerequisites only, not a hardware-ready candidate.
+
+
 ## 2026-09-27 R136 offline no-go — process BO backing unresolved
 
 All nine AGX4 v2 UMD Process BOs already have 64-KiB size and VA alignment;
