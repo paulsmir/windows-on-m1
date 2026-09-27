@@ -1,5 +1,33 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-27 EXP855 — StartDevice Code43; ordinary Code28 recovered
+
+Package855 source `27e30ad5` passed 534 source hashes, self-built native
+archive/Resource.cpp provenance, and ARM64 UMD/KMD 0 warnings/0 errors. Reviewer
+`GO_EXP855` preceded staging. One cold R110 full-owner crossed ARM_CONSUMED and
+returned pinned SSH, but APPL0002 was Code43: `Wom1StartStage=10`,
+`Wom1StartStatus=0xC0000141`. Platform stage14/status0 and backend start result0
+were recorded. No new System1001, Application1000, G3/G4 failure receipt,
+UMD log, accepted submission, fence notification or DWM frame was reached;
+absence of a 0x10E in this early failure is not a G4 verdict. Evidence is
+`.local/experiments/EXP855-r137-private-process/hardware-evidence/`, with 9
+guest originals and 13 host files SHA-verified; host manifest SHA256
+`163bcf98b053c941f6eaf11ceb32957b501ae29e3779a0f85d54710ed20129ab`.
+
+Exact oem5 cleanup in the live guest followed evidence collection. Ordered
+restart and immutable EXP377/392 restored pinned SSH, one present Code28, no
+package/arm/SYS/UMD/service/signer, CPU8/disks2/USB5 and RDP Running. Hidden
+emergency image was not used. Package855 is not retained.
+
+WHY CONTINUE COMPARISON: current source gives a direct Stage10 contract mismatch.
+`AdmissionStartScanout=10`; `AdmissionScanoutStart` requires a 56-MiB view, while
+R137 `AdmissionMemoryRuntimeScanoutView` reports the new 40-MiB VidMm partition.
+That guard returns the observed `STATUS_INVALID_ADDRESS` before private process
+initialization. Next causal target: validate the scanout broker's required pool
+size and ownership across KMD/m1n1, then write a host RED→GREEN test for a
+compatible 40/16/8 layout. Do not change the 56-MiB constant or repeat Air by
+guess. R137 private G4 checkpoint remains untested.
+
 ## 2026-09-27 R137 implemented offline — private scene ownership complete
 
 Steps1–7 now implement the R136 option2 40/16/8-MiB split, reserved process VA,
