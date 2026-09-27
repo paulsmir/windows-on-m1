@@ -151,7 +151,7 @@ static int append_native(AGX_G4_PRIVATE *packet, const void *data,
 }
 
 static int append_attachments(struct agx_batch *batch,AGX_G4_PRIVATE *packet) {
-  struct drm_asahi_attachment attachments[PIPE_MAX_COLOR_BUFS+2];
+  struct drm_asahi_attachment attachments[PIPE_MAX_COLOR_BUFS+2]={0};
   unsigned count=0;
   for(unsigned i=0;i<batch->key.nr_cbufs;++i) {
     if(!batch->key.cbufs[i].texture) continue;
@@ -180,6 +180,8 @@ static int append_attachments(struct agx_batch *batch,AGX_G4_PRIVATE *packet) {
   struct drm_asahi_cmd_header header={0};
   header.cmd_type=DRM_ASAHI_SET_FRAGMENT_ATTACHMENTS;
   header.size=count*sizeof(attachments[0]);
+  header.vdm_barrier=DRM_ASAHI_BARRIER_NONE;
+  header.cdm_barrier=DRM_ASAHI_BARRIER_NONE;
   return append_native(packet,&header,sizeof(header)) &&
          append_native(packet,attachments,count*sizeof(attachments[0]));
 }

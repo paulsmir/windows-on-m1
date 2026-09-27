@@ -13,6 +13,7 @@ static int r137_escape_transport(void *opaque,APPLE_AGX_G3_PRIVATE_REQUEST *q) {
   t->Escape.pPrivateDriverData=q;t->Escape.PrivateDriverDataSize=sizeof(*q);
   return NT_SUCCESS(AdmissionDdiEscape(t->Adapter,&t->Escape));
 }
+#include "g4_mesa_attachment_shim.h"
 #include "g3_r137_mesa_prepare.inc"
 static void r137_private_combined(void) {
   ADMISSION_CONTEXT a={0};ADMISSION_G3_STATE state={0};REPLAY_BROKER broker={0};
@@ -38,29 +39,28 @@ static void r137_private_combined(void) {
   R137_TRANSPORT t={.Adapter=&a,.Escape={.hDevice=&device,.hContext=&context,.hKmdProcessHandle=p,.Flags={1}}};
   AGX_WIN32_ASAHI_BACKEND umd={.Gpuva={.Ops={r137_escape_transport},.Context=&t}};
   AGX_G4_BATCH batch={0};
-  struct {
-    APPLE_AGX_G4_PRIVATE_HEADER_V3 Header;
-    APPLE_AGX_G4_NATIVE_HEADER AttachmentCommand;
-    APPLE_AGX_G4_ATTACHMENT Attachment;
-    APPLE_AGX_G4_NATIVE_HEADER RenderCommand;
-    APPLE_AGX_G4_NATIVE_RENDER Render;
-  } packet={0};
-  APPLE_AGX_G4_NATIVE_RENDER *r=&packet.Render;
+  AGX_G4_PRIVATE packet={0};
+  APPLE_AGX_G4_NATIVE_RENDER render={0}, *r=&render;
   r->WidthPx=2560;r->HeightPx=1600;r->Layers=r->Samples=1;r->SampleSizeBytes=8;
   r->UtileWidthPx=r->UtileHeightPx=16;r->Flags=1u<<2;
   r->VdmCtrlStreamBase=r->IspScissorBase=r->IspDbiasBase=0x10000;
   APPLE_AGX_G4_PROCESS_RANGE ranges[9];
   assert(prepare_process_buffers(&umd,&batch,r,ranges));
-  packet.AttachmentCommand=(APPLE_AGX_G4_NATIVE_HEADER){.Type=APPLE_AGX_G4_FRAGMENT_ATTACHMENTS,.Size=sizeof(packet.Attachment),.VdmBarrier=0xffff,.CdmBarrier=0xffff};
-  packet.Attachment=(APPLE_AGX_G4_ATTACHMENT){0x20000,2560ULL*1600*4,0,0};
-  packet.RenderCommand=(APPLE_AGX_G4_NATIVE_HEADER){.Type=APPLE_AGX_G4_RENDER,.Size=sizeof(*r)};
-  unsigned bytes=sizeof(packet)-sizeof(packet.Header);
+  struct agx_resource target={.bo=&target,.va=0x20000,
+      .layout={.size_B=2560ULL*1600*4}};
+  struct agx_batch mesa_batch={.key={.nr_cbufs=1,
+      .cbufs={{.texture=&target}}}};
+  assert(append_attachments(&mesa_batch,&packet));
+  APPLE_AGX_G4_NATIVE_HEADER render_header={.Type=APPLE_AGX_G4_RENDER,.Size=sizeof(*r)};
+  assert(append_native(&packet,&render_header,sizeof(render_header)));
+  assert(append_native(&packet,r,sizeof(*r)));
+  unsigned bytes=packet.Header.V2.Base.CommandBytes;
   assert(AppleAgxG4ComposeHeaderV3(&packet.Header,r,0x10000,bytes,APPLE_AGX_G4_COLOR_BGRA8,ranges,&batch.Lease));
   ADMISSION_G3_PRIVATE_SCENE *scene=AdmissionG4FindPrivateScene(p,&context,&batch.Lease,41,FALSE);
   assert(scene);
   APPLE_AGX_G4_SUBMIT_VIEW view={0};
   APPLE_AGX_G4_FAILURE failure={0};
-  APPLE_AGX_G4_PARSE_RESULT parsed=AppleAgxG4ParseSubmitEx(&packet,sizeof(packet),sizeof(packet),0x10000,bytes,
+  APPLE_AGX_G4_PARSE_RESULT parsed=AppleAgxG4ParseSubmitEx(&packet,sizeof(packet),sizeof(packet.Header)+bytes,0x10000,bytes,
       AdmissionG4PrivateGraphAccess,scene,&view,&failure);
   if(parsed!=AppleAgxG4ParseOk) fprintf(stderr,"private parse=%u subsite=%u kind=%u ordinal=%u va=%llx bytes=%u\n",
       parsed,failure.Subsite,failure.Kind,failure.Ordinal,failure.Va,failure.Bytes);

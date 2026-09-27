@@ -597,6 +597,18 @@ int main(void) {
   args.pDmaBufferPrivateData=&v3;
   args.DmaBufferPrivateDataSize=args.DmaBufferUmdPrivateDataSize=sizeof(v3);
   args.SubmissionFenceId=21;
+  /* R141: synthetic barriers from EXP855D fail before any job/fence owner. */
+  APPLE_AGX_G4_NATIVE_HEADER *attachment_header=(void *)v3.Native;
+  int begin_before=graph_begin_calls;
+  attachment_header->VdmBarrier=attachment_header->CdmBarrier=0;
+  adapter.G4SubmitFailureClaim=adapter.G4SubmitFailureCount=0;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)==STATUS_INVALID_PARAMETER);
+  assert(adapter.G4SubmitFailure.Branch==9 && adapter.G4SubmitFailure.DownstreamStatus==AppleAgxG4ParseInvalid);
+  assert(!adapter.G4SubmitFailure.Subsite && !adapter.G4SubmitFailure.Kind);
+  assert(!scene.Submitting && !scene.Queued && !scene.Started && !scene.Fence);
+  assert(graph_begin_calls==begin_before);
+  assert(!context.Object.FenceOutstanding && !context.GpuvaG3PrivateFence);
+  attachment_header->VdmBarrier=attachment_header->CdmBarrier=0xffff;
   ++v3.Header.Lease.SceneGeneration;
   assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
   --v3.Header.Lease.SceneGeneration;

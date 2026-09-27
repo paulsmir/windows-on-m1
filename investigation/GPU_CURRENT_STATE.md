@@ -1,5 +1,29 @@
 # GPU current boundary — 2026-09-27
 
+## 2026-09-28 R141 — EXP855D attachment serialization corrected offline
+
+Real producer→parser RED reproduces ParseInvalid with VA0x3b0000, DMA280,
+UMD480/capacity331776. UMD synthetic attachment barriers were0 instead of
+0xffff, and Pad/Flags uninitialized; both corrected, parser unchanged.
+Prior joined replay hand-authored the attachment packet; it now executes
+production serialization with real private escape/graph/broker/builder.
+G3 55/G4 31 PASS (profiles16/64); full1141 preserves baseline15 failures/
+41 errors/2 skips, exact names unchanged. Changed ARM64 TU compiles; no package.
+
+Matching855D PDB/full Explorer dump attributes +2da30 to unchecked NULL
+executable BO mapping in agx_compile_nir during CreateEmptyShader/CreateDevice.
+Same-process earlier submit rejection does not establish causation; separate
+shader allocation-failure replay is the next offline target. Parse rejection
+creates no queued scene/job/fence in the outer-DDI test. Stop has unbounded
+worker-event waits, but no evidence ties them to EXP855D restart delay; no fix.
+Analysis: investigation/analysis/R141-submit-envelope.md.
+
+WHY CONTINUE COMPARISON: no archaeology or Air run is needed. Current producer
+and deterministic RED→GREEN prove the serialization defect. The receipt lacks
+raw packet bytes, so later hardware gates remain unvalidated. Ordinary
+EXP377/392 recovered in EXP855D remains accepted. No Air access or firmware
+change in R141; a new hardware checkpoint requires separate authorization.
+
 ## 2026-09-27 EXP855D — R140 crossed EscapeCb; ordinary Code28 recovered
 
 GO_EXP855D preceded transfer and one cold R110 full-owner boot. Package source

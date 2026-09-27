@@ -147,8 +147,10 @@ def main(revision=None, function_revisions=None, old_context_flags=False):
                    "-o", str(binary)]
         if os.environ.get("G3_REPLAY_R137_COMBINED"):
             mesa = (ROOT / "drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c").read_text()
-            (Path(directory) / "g3_r137_mesa_prepare.inc").write_text(body(mesa,"prepare_process_buffers"))
-            command[1:1] = ["-DG3_PRIVATE_COMBINED=1", "-I", directory]
+            (Path(directory) / "g3_r137_mesa_prepare.inc").write_text("\n".join(
+                body(mesa, name) for name in ("append_native", "append_attachments",
+                                              "prepare_process_buffers")))
+            command[1:1] = ["-DG3_PRIVATE_COMBINED=1", "-ftrivial-auto-var-init=pattern", "-I", directory]
             command += [str(SHARED / "src" / n) for n in (
                 "apple_agx_g4_builder.c", "apple_agx_render_template.generated.c",
                 "apple_agx_render_template_rebase.c", "apple_agx_render_template_vm_slot.c",
