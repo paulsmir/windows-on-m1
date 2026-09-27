@@ -91,6 +91,43 @@ def meson_sources(path, variable):
     return re.findall(r"'([^']+\.(?:c|cc|cpp))'", match.group(1))
 
 
+def prepare_compiler_selftest_source(source, out):
+    """Guard the pinned compiler self-test without changing its ABI headers."""
+    anchor_line = b'#ifndef NDEBUG'
+    guarded_line = b'#if !defined(NDEBUG) && !defined(_WIN32)'
+    suffix = b'   bool selftest = !dump_shaders;'
+    original = source.read_bytes()
+    candidates = [(anchor_line + ending + suffix, guarded_line + ending + suffix)
+                  for ending in (b'\n', b'\r\n')]
+    matches = [(anchor, replacement) for anchor, replacement in candidates
+               if original.count(anchor)]
+    if len(matches) != 1 or original.count(matches[0][0]) != 1:
+        raise RuntimeError('Ambiguous pinned compiler self-test anchor: ' + str(source))
+    anchor, replacement = matches[0]
+    destination = out / 'compiler-evidence' / source.name
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    headers = {}
+    for header in sorted(source.parent.glob('*.h')):
+        target = destination.parent / header.name
+        shutil.copy2(header, target)
+        headers[header.name] = sha256(target)
+    destination.write_bytes(original.replace(anchor, replacement, 1))
+    provenance = {'baseline': str(source), 'before_sha256': hashlib.sha256(original).hexdigest(),
+                  'selected': str(destination), 'after_sha256': sha256(destination),
+                  'headers_sha256': headers}
+    return destination, provenance
+
+
+def compile_command(compiler, flags, includes, source, obj):
+    command = [compiler, *flags, *('/I' + str(p) for p in includes),
+               '/c', source, '/Fo' + str(obj)]
+    return command, sha256(source)
+
+
+def archive_response(objects):
+    return '\n'.join(subprocess.list2cmdline([str(p)]) for p in objects) + '\n'
+
+
 def write_props(path, architecture, native, library, dependencies, gpuva):
     namespace = 'http://schemas.microsoft.com/developer/msbuild/2003'
     ET.register_namespace('', namespace)
@@ -215,6 +252,12 @@ def main():
             compiler_units.append(source)
         if len(compiler_units) != 44 or {p.name for p in compiler_units} != expected_names:
             raise RuntimeError('Nonfixture compiler closure is incomplete')
+        compile_matches = [p for p in compiler_units if p.name == 'agx_compile.c']
+        if len(compile_matches) != 1:
+            raise RuntimeError('Ambiguous compiler evidence agx_compile.c selection')
+        selected_compile, transform = prepare_compiler_selftest_source(compile_matches[0], out)
+        manifest['compiler_selftest_transform'] = transform
+        compiler_units = [selected_compile if p == compile_matches[0] else p for p in compiler_units]
         libraries = []
         for relative in LIBRARIES:
             library = build / relative
@@ -383,13 +426,16 @@ def main():
             exports = ['/DAGX_WIN32_NATIVE_PIPELINE_TEST=1'] if source.name == 'agx_state.c' else []
             if 'frontends/d3d10umd' in source.as_posix():
                 exports.append('/DADMISSION_UMD_PIPE_FACTORY_TEST=1')
-            run(name, [CLANG / 'clang-cl.exe', *flags, *exports,
-                       *('/I' + str(p) for p in includes), '/c', source, '/Fo' + str(obj)])
+            command, command_hash = compile_command(CLANG / 'clang-cl.exe',
+                [*flags, *exports], includes, source, obj)
+            if command_hash != source_hash:
+                raise RuntimeError('Compiler source changed during command construction: ' + str(source))
+            run(name, command)
             manifest['units'][-1].update(source_sha256=source_hash, object=str(obj), object_sha256=sha256(obj))
             objects.append(obj)
         library = out / 'native_runtime.lib'
         response = out / 'archive.rsp'
-        response.write_text('\n'.join(subprocess.list2cmdline([str(p)]) for p in objects) + '\n')
+        response.write_text(archive_response(objects))
         run('archive', [CLANG / 'llvm-lib.exe', '/nologo', '/out:' + str(library), '@' + str(response)])
         manifest['library'] = {'path': str(library), 'sha256': sha256(library)}
         write_props(out / 'NativeRuntime.props', args.architecture, native, library, libraries, args.gpuva)
