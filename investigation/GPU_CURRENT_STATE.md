@@ -1,5 +1,30 @@
 # GPU current boundary — 2026-09-28
 
+## 2026-09-28 R147 — paging selects root before COPY; implemented offline
+
+EXP860 bootstrap/SetRoot0/0 receipt identifies ordering. Microsoft UpdatePageTable
+names the process and root-level target; SetRoot is guaranteed before context
+execution, not private CPU-copy Escape. Successful non-eviction root update now
+selects its validated shadow using the same broker relocation/generation path
+as SetRoot, then attaches private storage. All61 COPY guards and v2 unchanged.
+Context execution still requires SetRoot. No bind inside Escape.
+
+Real-body RED C000000D -> GREEN16/64 QUERY/upload without SetRoot; invalid update,
+root relocation, old-root eviction and stale-generation cases pass. Replay27,
+receipt2 and ARM64 paging TU W4/WX/analyze pass; full1157 retains exact baseline
+15F/38E/2S. Independent review accepted. Only1 file sent after536 builder input
+hashes verified. DWM/Explorer read AVs confirmed; consequence of copy failure
+unproven, not pursued. No package or Air. EXP860 ordinary Code28 remains accepted.
+
+Report `investigation/analysis/R147-root-ordering.md`; evidence and input hashes
+`investigation/evidence/R147-root-ordering/summary.json`. Proposed EXP861 single
+variable: paging-time root selection on identical R143 firmware. Separate exact
+package/hash/preregistration and run authorization required; v2 retained.
+
+WHY CONTINUE COMPARISON: the isolated ordering defect passes real offline tests;
+next causal checkpoint is first COPY QUERY/upload with the corrected paging root
+in a separately authorized run. No further offline historical comparison needed.
+
 ## 2026-09-28 EXP860 — first QUERY uses bootstrap root; Code28 recovered
 
 Package860/source53e7b038 (implementation6460ffae), same R143 firmware, one

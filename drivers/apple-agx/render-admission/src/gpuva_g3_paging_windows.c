@@ -998,18 +998,29 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
                                          &failure);
       }
     }
-    if (NT_SUCCESS(status) && process->PrivateLeafIpa &&
-        !AppleAgxGpuvaG3GraphAttachPrivate(&process->Graph, process->PrivateVa,
-            process->PrivateMiddleIpa, process->PrivateLeafIpa)) {
-      process->Poisoned = TRUE;
-      status = STATUS_DEVICE_HARDWARE_ERROR;
-    }
     if (NT_SUCCESS(status) &&
         !NT_SUCCESS(AdmissionGpuvaG3MirrorTable(
             process, original_table_ipa, table_words)))
       status = AdmissionG3RejectPaging(&failure,
           AdmissionG3PagingFailureTableMirror, MAXULONG, NULL, 0ULL,
           STATUS_DEVICE_HARDWARE_ERROR);
+    /* UpdatePageTable names both the owning process and the target table.
+     * WDDM level2 is our native root (level0). Select its acknowledged shadow
+     * here: CPU staging can precede the context's SetRootPageTable callback.
+     * An eviction of a former root must not select it again. BindRoot uses
+     * the same inactive broker relocation/generation contract as SetRoot. */
+    if (NT_SUCCESS(status) && update->PageTableLevel == 2u &&
+        !update->Flags.NotifyEviction &&
+        !AppleAgxGpuvaG3GraphBindRoot(&process->Graph, table_ipa)) {
+      process->Poisoned = TRUE;
+      status = STATUS_DEVICE_HARDWARE_ERROR;
+    }
+    if (NT_SUCCESS(status) && process->PrivateLeafIpa &&
+        !AppleAgxGpuvaG3GraphAttachPrivate(&process->Graph, process->PrivateVa,
+            process->PrivateMiddleIpa, process->PrivateLeafIpa)) {
+      process->Poisoned = TRUE;
+      status = STATUS_DEVICE_HARDWARE_ERROR;
+    }
     if (failure.Branch == 0u &&
         failure.TableFirstNonzeroIndex != MAXULONG)
       failure.Branch = AdmissionG3PagingTableInitialized;

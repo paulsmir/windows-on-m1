@@ -335,7 +335,15 @@
     "execution": "No logged submit or fence signal; no G4 failure; GPU execution unproven",
     "crashes": "DWM dwmcore+11c020 and Explorer d2d1+8388 AVs; full dumps retained; cause unattributed",
     "recovery": "Hidden Code45 exact cleanup then durable ordinary Code28",
-    "next": "New thread: offline root selection and SetRoot notification contract before COPY QUERY; retain safety guards",
+    "next": "R147 paging-time root selection implemented offline; proposed EXP861 requires separate exact-package build/hash/preregistration and run authorization",
     "hardware_authorization": "EXP860 completed; no subsequent run authorized"
+  },
+  "r147_offline_root_ordering": {
+    "status": "implemented",
+    "report": "investigation/analysis/R147-root-ordering.md",
+    "evidence": "investigation/evidence/R147-root-ordering/summary.json",
+    "single_variable": "Bind the process graph to successful non-eviction root-level paging target before COPY QUERY",
+    "preserved": "All copy guards and v2 receipt; execution still requires context SetRoot; R143 firmware and EXP860 ordinary Code28",
+    "hardware_authorization": "No package or Air in R147; EXP861 proposal only"
   }
 }

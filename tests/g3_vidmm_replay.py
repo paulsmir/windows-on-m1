@@ -130,7 +130,7 @@ def generate(revision=None, function_revisions=None):
     for name in ("AdmissionNotifyCompletionAtInterrupt", "AdmissionBackendComplete"):
         parts.append(body(backend,name))
     parts.append("#endif\n")
-    if os.environ.get("G3_REPLAY_QUERY_V2"):
+    if os.environ.get("G3_REPLAY_QUERY_V2") or os.environ.get("G3_REPLAY_R147"):
         scenarios = (ROOT / "tests/g3_vidmm_replay_scenarios.c").read_text()
         system = (ROOT / "tests/g3_system_lifetime_cases.c").read_text()
         bind = "  assert(AppleAgxGpuvaG3GraphBindRoot(&p->Graph,s->BrokerIpa));"
@@ -140,7 +140,8 @@ def generate(revision=None, function_revisions=None):
         marker = "  escape.pPrivateDriverData=q;escape.PrivateDriverDataSize=sizeof(*q);"
         assert copy.count(marker) == 1
         copy = copy.replace(marker, marker + "\n" +
-            (ROOT / "tests/g3_copy_query_v2_cases.c").read_text())
+            (ROOT / ("tests/g3_r147_root_cases.c" if os.environ.get("G3_REPLAY_R147") else
+                     "tests/g3_copy_query_v2_cases.c")).read_text())
         scenarios = scenarios.replace('#include "g3_system_lifetime_cases.c"', system)
         parts.append(scenarios.replace('#include "g3_r145_copy_cases.c"', copy))
     else:

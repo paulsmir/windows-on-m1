@@ -1,6 +1,9 @@
 /* Inserted into real R145 setup after local publication, before any QUERY.
  * Catch missing v2 snapshot, root selection hidden by fixtures, tail loss,
  * overwritten first evidence, and per-process/context count confusion. */
+  /* Diagnostic counterexample: explicitly park on bootstrap. Production
+   * paging now selects its root; the R147 replay tests that real ordering. */
+  assert(AppleAgxGpuvaG3GraphBindRoot(&p->Graph,p->BootstrapIpa));
   assert(p->Graph.RootIpa==p->BootstrapIpa);
   replay_query_claim_watch=&a.G3CopyQueryFailureClaim;
   UINT pools_before=replay_pool_calls;
