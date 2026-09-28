@@ -1,3 +1,39 @@
+# EXP867 — 81 native completions across process managers; later TDR; clean Code28
+
+One package867/source33503176 (R153 code only on exact866 base17ee8894),
+unchanged R143, no retry/rearm, Flush excluded. Matched private-PDB dump:
+Sequence81; TA done/write125; D3 done/write162; stamps7a005100/3d005100;
+queue completion36174Success and G3LastCompleted36174. Persistent D3 pairs
+support81 completed native jobs; no per-job owner ledger. Distinct process
+owners8 and13 retain valid joined-completion snapshots, SavedFence1031/36174,
+PendingFence0. The >5/across>=2-process checkpoint is supported.
+
+Later live141 at288.516s then kernel116 at288.630s CPU1. Last originalCode0
+sample264.209s; five samples135.804..264.209, CPU8/DWM1224/Explorer536,
+Stage12/status0/armconsumed. Two scanoutseq2 snapshots nonzero0. 600s and
+visible-frame gates FAILED; physical display/input unobserved.
+
+At dump: scheduler/RenderPacket active36357, completed36356; imageBound36357
+but JobFence0/JobReady0; native backend/queue Ready, pending0, G3Active none.
+FirstG4 failure branch7 EnvelopeState/C000000D count1; QUERYv3 predicate53,
+VA0x1100410000/64KiB, NoRoot reason1, mappinggeneration35122. Their causal
+relation to active36357 is unproven; post-TDR state may reflect failed reset.
+
+OriginalETL not preserved before spontaneous reset. Retained ETL native header
+matches hidden boot Event12 exactly; clock changes explain WMI timestamp drift.
+Recovery trace excluded.27guestfiles839273286B hostSHA-verified before cleanup.
+Mandatory hiddenCode45 exactoem5/867 removal then ordinaryCode28 passed twice;
+final guest15:02:14.828Z package/arms/files/service/signer/diagnostics0,
+CPU8/disks2OK/USB5/RDP, intentional autologon retained.
+
+WHY CONTINUE COMPARISON: completed native queues and two saved manager owners
+close the stale-first-manager boundary; active36357 with idle backend selects
+the packet/scene/BeginJob/materialization/retirement boundary for one offline
+pass. Do not attribute this later TDR to GPU execution or the first rejection
+without correlation. No new package, firmware change or hardware run authorized.
+Result investigation/evidence/EXP867/hardware-result.json SHA256 42672c57184c64c80e07fa8e5fc7548aeebf9c8806fea1b41cfac7bb027d4434.
+Raw evidence .local/experiments/EXP867-r153-bm; next thread after verdict commit.
+
 # R153 — per-manager binding correction implemented offline
 
 R152 receipt-only EXP867 proposal rejected by user. Asahi logical Queue owns

@@ -1,0 +1,18 @@
+{
+  "file": "hardware-evidence/recovery-EXP801DxgBoot.etl",
+  "sha256": "8abda006e48301ce2a1ebc1842e0daf27541643b7eb82381ea38f45591a71840",
+  "scope": "HIDDEN_RECOVERY_ONLY",
+  "native_header_boot_filetime": 134350803557619839,
+  "native_header_boot_utc": "2026-09-28T14:45:55.7619839Z",
+  "matching_KernelGeneral12_StartTime": "2026-09-28T14:45:55.7619839Z",
+  "recovery_clock_correction_ms": 477899,
+  "recovery_WMI_boot": "2026-09-28T14:53:53.6631230Z",
+  "original_KernelGeneral12_StartTime": "2026-09-28T14:45:24.2575742Z",
+  "original_clock_correction_ms": 60890,
+  "original_WMI_boot": "2026-09-28T14:46:25.1494030Z",
+  "native_events": 187750,
+  "events_lost": 0,
+  "buffers_lost": 0,
+  "original_etl_available": false,
+  "reason": "Original trace not copied before spontaneous reset; retained file native header exactly matches subsequent hidden boot event12. Clock corrections explain raw header versus WMI boot timestamps; recovery events excluded from original attribution."
+}

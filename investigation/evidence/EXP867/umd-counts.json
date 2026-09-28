@@ -1,0 +1,20 @@
+{
+  "lines": 17986,
+  "seterror_total": 546,
+  "by_function_hresult": {
+    "ResourceCopyRegion 0x80004005": 210,
+    "DrawIndexedInstanced 0x80004005": 335,
+    "DrawIndexed 0x80004005": 1
+  },
+  "by_pid": {
+    "1216": 23,
+    "536": 261,
+    "6616": 105,
+    "4408": 1,
+    "5444": 1,
+    "1224": 43,
+    "8536": 1,
+    "5996": 111
+  },
+  "no_submission_count_inferred_from_errors": true
+}

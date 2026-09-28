@@ -327,17 +327,17 @@
     "supersedes": "package752 and EXP757 capture-path Air run"
   },
   "current_hardware_handoff": {
-    "experiment": "EXP866",
-    "result": ".local/experiments/EXP866-r151-stamp/hardware-result.json",
-    "result_sha256": "b0e9a3d9a31bca8452c3cf3a20bf007f2f673823ee9d50a5895fffb1f82a75f0",
-    "source": "exp/866-stamp17ee8894 = EXP86526cbd7e6 plus091eae6c source/test only; Flush absent",
-    "admission": "Stage12/status0/armconsumed/8CPUentries; originalCode0 unsampled",
-    "execution": "native completion760Success; inferred4completed from persistent queue history; activeExplorer955Sequence5 fresh0x500 expects both queues, consumers stalled atTA5/D38",
-    "stability": "FAIL live14143.540s +11643.603s; originalSSH0; scanout0",
-    "recovery": "mandatory hiddenCode45 exact866/oem5 cleanup then durableordinaryCode28 clean13:28:11Z",
-    "next": "offline exact Explorer955 sequence5 queue-consumer stall; no new run",
-    "hardware_authorization": "EXP866 completed; no retry/rearm/new package or run authorized",
-    "etl": "original unavailable before spontaneous reset/noSSH; recovery trace excluded"
+    "experiment": "EXP867",
+    "result": ".local/experiments/EXP867-r153-bm/hardware-result.json",
+    "result_sha256": "42672c57184c64c80e07fa8e5fc7548aeebf9c8806fea1b41cfac7bb027d4434",
+    "source": "exp/867-bm33503176 = exact86617ee8894 plus R153 source/test only; Flush absent",
+    "admission": "Stage12/status0/armconsumed/CPU8; five originalCode0 SSH samples135.804..264.209s",
+    "execution": "Sequence81, D3done162, finalnative36174Success; saved manager owners8/13 fences1031/36174; >5 and >=2 process owners supported",
+    "stability": "FAIL live141288.516s +116288.630s; scanout0; no600s",
+    "recovery": "hiddenCode45 exact867/oem5 cleanup then durableordinaryCode28 twice; finalguest15:02:14.828Z",
+    "next": "Offline active render packet/scheduler fence36357 versus idle native backend and completed36174; correlate scene/lease admission, BeginJob/materialization failure and retirement. Do not assume first EnvelopeState/QUERY receipt caused TDR without correlation.",
+    "hardware_authorization": "EXP867 completed; no retry/rearm/new run authorized",
+    "etl": "Original unavailable; retained header matches hidden Event12 after clock correction; recovery excluded"
   },
   "r147_offline_root_ordering": {
     "status": "implemented",
@@ -413,17 +413,18 @@
     "Air": "NOT_AUTHORIZED"
   },
   "r153_manager_binding": {
-    "status": "IMPLEMENTED_OFFLINE",
+    "status": "HARDWARE_MANAGER_PROGRESS_CONFIRMED_LATER_TDR",
     "report": "investigation/analysis/R153-manager-contract.md",
     "evidence": "investigation/evidence/R153/summary.json",
     "ownership": "R137 process manager snapshot, separate scene and queue lifetimes",
     "atomic_contract": "selection + snapshot + pointers/scene + InitBM + extra TA entry; preserve queue sequence/state; save only after joined completion before lease release",
-    "next_proposed": "EXP867 correction only on exact866 base17ee8894, R143 unchanged, Flush excluded",
-    "authorization": "No package or Air authorized",
+    "next_proposed": "Offline active render packet/scheduler fence36357 versus idle native backend and completed36174; correlate scene/lease admission, BeginJob/materialization failure and retirement. Do not assume first EnvelopeState/QUERY receipt caused TDR without correlation.",
+    "authorization": "EXP867 one-shot complete and recovered; next work offline",
     "supersedes": "R152 receipt-only proposal",
     "hardware_unknowns": [
-      "Timeout removed across manager switch",
+      "Later active fence36357 versus idle backend cause",
       "600s DWM and nonzero scanout"
-    ]
+    ],
+    "hardware_result": "investigation/evidence/EXP867/hardware-result.json"
   }
 }
