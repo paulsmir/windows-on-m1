@@ -1,5 +1,36 @@
 # GPU current boundary — 2026-09-28
 
+## 2026-09-28 EXP857 — R144 crosses high paging table; ordinary Code28 recovered
+
+GO_EXP857 ran package857/source c7ac4d79 with exact EXP856 R143 m1n1/Mu hashes.
+One armed cold boot reached Code0/StartStage12/Status0 with arm consumed,
+Windows 4,534,439,936 physical bytes, CPU8/disks2/USB5 and pinned SSH on the
+same boot for 615 seconds; no new System1001 or bugcheck. This validates the
+R144 full-local paging correction at the observed boot boundary. G3 receipt
+branch8/status0 records initialization of a level1 table at local offset
+0x3e764000 (IPA0x91e764000), above the fixed56MiB scanout window. G4's first
+failure is again branch9/ParseUnmapped, Render ordinal11 read1 VA0x2f0000,
+the EXP855E/R142 system-backed VdmCtrlStreamBase boundary. Refreshed failure
+count1546 is not a count of identical packets. DWM faulted in dxgi.dll and
+SearchHost in d3d11.dll; a new DWM full dump was saved. Early serial scanout
+was zero; no later pixel, TA+3D, fence or DWM frame is proven.
+
+Evidence: main `.local/experiments/EXP857-r144-localview/hardware-result.json`
+SHA256 e0e32431ac4b2a7e3b4448cb73d603796905c0f8be646af4cd771a6b21bb5c0d;
+supplement `g3-high-table-success.json` SHA256
+31b140414570f3844db46a91437dc4f0f4de3827a64a26df448b3947c011b110;
+13 guest originals SHA-verified. Diagnostics removed after evidence; ordered
+restart to immutable EXP377/385 GPU-hidden Code45 removed exact oem5, then
+immutable EXP377/392 ordinary returned durable present Code28, staged0/arm0,
+no SYS/UMD/service/signer/diagnostics, CPU8/disks2/USB5/RDP Running. No
+physical action or second armed boot. Next causal work is offline attribution
+of the saved DWM crash and the R142 Render backing contract; no new Air run
+is justified by this verdict.
+
+WHY CONTINUE COMPARISON: current receipts point to the already isolated Render
+backing boundary, not another historical package difference. Compare only
+that backing contract and the saved DWM dump before proposing a new experiment.
+
 ## 2026-09-28 R144 — EXP856 high local page-table bounds fixed offline
 
 Exact856 PDB/full dump confirms UPDATE_PAGE_TABLE level0/segment2,
