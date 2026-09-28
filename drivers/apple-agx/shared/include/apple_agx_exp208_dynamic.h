@@ -12,7 +12,7 @@ typedef struct _APPLE_AGX_EXP208_DYNAMIC_INPUT {
   APPLE_AGX_U32 Sequence;
   APPLE_AGX_U32 TaEventNumber;
   APPLE_AGX_U32 D3EventNumber;
-  /* InitBM is valid only for the first submission of a buffer manager. */
+  /* InitBM binds a manager; it may recur without restarting the queue sequence. */
   APPLE_AGX_BOOL IncludeInitBm;
 } APPLE_AGX_EXP208_DYNAMIC_INPUT;
 

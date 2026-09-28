@@ -1,5 +1,7 @@
 #ifndef G3_VIDMM_REPLAY_SHIM_H
 #define G3_VIDMM_REPLAY_SHIM_H
+/* Shared-memory retirement boundary is exercised by R153 callback replay. */
+#define AdmissionSaveG4Manager(r,f) ((void)(r),(void)(f),1)
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -15,6 +17,7 @@
 #include "apple_agx_state.h"
 #include "apple_agx_g3_private_abi.h"
 #include "apple_agx_g3_private_storage.h"
+#include "apple_agx_render_manager.h"
 #include "hv_agx_gpuva_v5.h"
 #include "hv_agx_gpuva_v5_mmio.h"
 #include "hv_agx_retained_backing.h"
@@ -259,6 +262,7 @@ struct _ADMISSION_G3_PROCESS {
   ULONGLONG PrivateMiddleIpa, PrivateLeafIpa;
   APPLE_AGX_G3_PRIVATE_EXTENT PrivateTables[2];
   APPLE_AGX_G3_PRIVATE_MANAGER PrivateManager;
+  APPLE_AGX_RENDER_MANAGER_STATE FirmwareManager;
   ADMISSION_G3_PRIVATE_SCENE *PrivateScenes;
   ADMISSION_RENDER_CONTEXT *Contexts;
   HANDLE DxgkProcess;
@@ -272,6 +276,8 @@ typedef struct {
   APPLE_AGX_G4_PRIVATE_HEADER_V2 G4Header;
   unsigned char Commands[APPLE_AGX_G4_NATIVE_MAX_BYTES];
   APPLE_AGX_G4_PRIVATE_LEASE G4Lease;
+  APPLE_AGX_RENDER_MANAGER_STATE *G4Manager;
+  APPLE_AGX_RENDER_MANAGER_KEY G4ManagerKey;
 } ADMISSION_BACKEND_IMAGE;
 typedef struct { unsigned State; struct { ULONG Fence; ULONGLONG ContextToken; } Description; } REPLAY_PACKET;
 struct _ADMISSION_CONTEXT { REPLAY_PACKET RenderPacket; BOOLEAN InterfaceValid; LONG RenderDpcFence,SchedulerDpcPending; DXGKRNL_INTERFACE Interface; void *GpuvaG3State; BOOLEAN Started;

@@ -6,6 +6,7 @@
 #include "apple_agx_render_template.h"
 #include "apple_agx_retained_root_abi.h"
 #include "apple_agx_g13_compute_work.h"
+#include "apple_agx_render_manager.h"
 
 #define APPLE_AGX_RENDER_SHARED_MEMORY_TEMPLATE_OBJECT_COUNT 36u
 #define APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_QUEUE_INFO 36u
@@ -62,7 +63,32 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
   APPLE_AGX_BOOL Built;
   APPLE_AGX_BOOL ClassArenasApplied;
   APPLE_AGX_RENDER_SHARED_MEMORY_RESULT LastResult;
+  APPLE_AGX_RENDER_MANAGER_KEY ManagerKey;
+  APPLE_AGX_U32 ManagerFence;
 } APPLE_AGX_RENDER_SHARED_MEMORY_OWNER;
+
+APPLE_AGX_BOOL AppleAgxRenderManagerNeedsBind(
+    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    const APPLE_AGX_RENDER_MANAGER_KEY *Key);
+/* Caller has observed joined completion and synchronized these shared objects
+ * for CPU access. A failure cannot be treated as successful retirement. */
+APPLE_AGX_BOOL AppleAgxRenderManagerSave(
+    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    APPLE_AGX_RENDER_MANAGER_STATE *State, APPLE_AGX_U32 Fence,
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects);
+APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildManagedG4Job(
+    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    APPLE_AGX_RENDER_MANAGER_STATE *Manager,
+    const APPLE_AGX_RENDER_MANAGER_KEY *Key, APPLE_AGX_U32 Fence,
+    APPLE_AGX_BOOL InitializeQueues,
+    const void *TemplateArena, APPLE_AGX_U32 TemplateArenaBytes,
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *SourceObjects,
+    APPLE_AGX_U32 SourceObjectCount, APPLE_AGX_U64 ArenaGpuAddress,
+    APPLE_AGX_BOOL IncludeInitBm,
+    const APPLE_AGX_RENDER_RUNTIME_BINDINGS *RuntimeBindings,
+    const APPLE_AGX_BACKEND_JOB_IMAGE *StagedJob,
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
+    APPLE_AGX_BACKEND_JOB_IMAGE *ActiveJob);
 
 APPLE_AGX_RENDER_SHARED_MEMORY_RESULT AppleAgxRenderSharedMemoryBuild(
     APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,

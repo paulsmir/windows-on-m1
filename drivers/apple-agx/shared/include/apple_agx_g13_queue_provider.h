@@ -45,7 +45,15 @@ typedef struct _APPLE_AGX_G13_QUEUE_JOB_PLAN {
   APPLE_AGX_BACKEND_U32 D3ExpectedDonePointer;
   APPLE_AGX_BACKEND_U32 ComputeExpectedDonePointer;
   APPLE_AGX_BACKEND_BOOL IncludeInitBm;
+  APPLE_AGX_BACKEND_BOOL InitializeQueues;
 } APPLE_AGX_G13_QUEUE_JOB_PLAN;
+
+struct _APPLE_AGX_G13_QUEUE_PROVIDER;
+
+/* Idle binding change only: queue pointers, event ownership and NewQueue state
+ * survive. The next plan includes InitBM and accounts for its TA ring entry. */
+APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderRequireInitBm(
+    struct _APPLE_AGX_G13_QUEUE_PROVIDER *Provider);
 
 /* A side-effect-free sample of the exact fence currently submitted to AGX. */
 typedef struct _APPLE_AGX_G13_QUEUE_PROGRESS {

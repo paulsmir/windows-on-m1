@@ -463,6 +463,7 @@ BOOLEAN AdmissionGpuvaG3PrivateRetireContext(ADMISSION_RENDER_CONTEXT *context) 
         p->Poisoned=TRUE;goto Done;
       }
     RtlZeroMemory(&p->PrivateManager,sizeof(p->PrivateManager));
+    RtlZeroMemory(&p->FirmwareManager,sizeof(p->FirmwareManager));
   }
   ok=TRUE;
 Done:
@@ -856,6 +857,7 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
       }
     for (i=0;i<3;++i) (void)AdmissionG3PrivateFreeExtent(p,&view,&p->PrivateManager.Extents[i]);
     RtlZeroMemory(&p->PrivateManager,sizeof(p->PrivateManager));
+    RtlZeroMemory(&p->FirmwareManager,sizeof(p->FirmwareManager));
   }
 Done:
   if (p && p->Graph.Uncertain) p->Poisoned=TRUE;
@@ -1354,7 +1356,17 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
               context->GpuvaG3DmaBufferBytes)) &&
       AdmissionG3OutputMatchesLocal(adapter, &process->Graph) &&
       AppleAgxGpuvaG3GraphBeginJob(&process->Graph, 1u)) {
-    if (private_scene) private_scene->Started=1u;
+    if (private_scene) {
+      ADMISSION_BACKEND_IMAGE *image=&adapter->BackendImage;
+      private_scene->Started=1u;
+      /* The exact scene hold pins this snapshot through joined completion. */
+      image->G4Manager=&process->FirmwareManager;
+      image->G4ManagerKey.Owner=process->Graph.ProcessId;
+      image->G4ManagerKey.Generation=process->PrivateManager.Generation;
+      image->G4ManagerKey.RootIpa=process->Graph.RootIpa;
+      RtlCopyMemory(image->G4ManagerKey.Backing,private_scene->Storage.Ranges,
+          sizeof(image->G4ManagerKey.Backing));
+    }
     state->ActiveProcess = process;
     state->ActiveFence = fence;
     status = STATUS_SUCCESS;

@@ -153,6 +153,17 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderTaValid(
              Job->TaExpectedDonePointer);
 }
 
+APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderRequireInitBm(
+    APPLE_AGX_G13_QUEUE_PROVIDER *Provider) {
+  if (!Provider || Provider->Phase!=AppleAgxG13QueueProviderCreated ||
+      Provider->PendingFence || Provider->Runtime.PendingFence ||
+      Provider->Runtime.Phase!=AppleAgxG13QueueRuntimeReady ||
+      Provider->Runtime.CompletionAvailable)
+    return APPLE_AGX_BACKEND_FALSE;
+  Provider->Runtime.BufferManagerInitialized=APPLE_AGX_BACKEND_FALSE;
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
 APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderPlanJob(
     APPLE_AGX_G13_QUEUE_PROVIDER *Provider,
     APPLE_AGX_G13_QUEUE_JOB_PLAN *Plan) {
@@ -163,6 +174,7 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderPlanJob(
       Provider->Phase != AppleAgxG13QueueProviderCreated ||
       Provider->PendingFence != 0u)
     return APPLE_AGX_BACKEND_FALSE;
+  candidate.InitializeQueues = Provider->Runtime.TaFirstRun;
   candidate.IncludeInitBm =
       Provider->Runtime.BufferManagerInitialized
           ? APPLE_AGX_BACKEND_FALSE
@@ -385,7 +397,7 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunTa(
   submission.D3.GpuAddressCount = provider->Staged3d.WorkAddressCount;
   submission.D3.ExpectedStamp = provider->Staged3d.ExpectedStamp;
   if (provider->Runtime.BufferManagerInitialized) {
-    /* The persistent InitBM root is queue-lifetime state, not per-job work. */
+    /* Omit InitBM only while the selected manager binding remains valid. */
     submission.Ta.GpuAddresses[0] =
         Job->TaWorkAddresses[APPLE_AGX_G13_TA_WORK_ROOT_INDEX];
     submission.Ta.GpuAddressCount = 1u;

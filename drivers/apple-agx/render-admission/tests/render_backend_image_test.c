@@ -657,9 +657,11 @@ static void test_g4_native_scene_stages_and_releases(void) {
   assert(AdmissionBackendImageBindG4Submission(
       &image,&packet,target,&view,&binding));
   assert(image.Sequence == 1u);
-  assert(AdmissionBackendImageStageJob(&image,220u,1u,2u,6u,8u,
-      APPLE_AGX_FALSE,&job));
+  assert(AdmissionBackendImageStageJob(&image,220u,1u,2u,7u,8u,
+      APPLE_AGX_TRUE,&job));
   assert(image.Sequence == 2u);
+  assert(job.TaWorkAddresses[0] == image.Objects[APPLE_AGX_EXP208_TA_INITBM_OBJECT].GpuVa);
+  assert(job.TaWorkAddresses[1] == image.Objects[19].GpuVa);
   assert(job.TaExpectedStamp == 0x7a000200u);
   assert(job.D3ExpectedStamp == 0x3d000200u);
   assert(image.Dynamic.TaPreviousStamp == 0x7a000100u);
@@ -678,11 +680,11 @@ static void test_g4_native_scene_stages_and_releases(void) {
     }
     event.Kind=AppleAgxG13EventFlag;event.Firing[0]=(1ULL<<1)|(1ULL<<2);
     assert(!AppleAgxG13CompletionSatisfied(&event,1u,0x7a000100u,
-        job.TaExpectedStamp,6u,job.TaExpectedDonePointer));
+        job.TaExpectedStamp,7u,job.TaExpectedDonePointer));
     assert(!AppleAgxG13CompletionSatisfied(&event,2u,0x3d000100u,
         job.D3ExpectedStamp,8u,job.D3ExpectedDonePointer));
     assert(AppleAgxG13CompletionSatisfied(&event,1u,0x7a000200u,
-        job.TaExpectedStamp,6u,job.TaExpectedDonePointer));
+        job.TaExpectedStamp,7u,job.TaExpectedDonePointer));
     assert(AppleAgxG13CompletionSatisfied(&event,2u,0x3d000200u,
         job.D3ExpectedStamp,8u,job.D3ExpectedDonePointer));
   }

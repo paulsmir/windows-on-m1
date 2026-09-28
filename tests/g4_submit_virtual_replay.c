@@ -4,6 +4,7 @@
 #include <string.h>
 #include "apple_agx_g4_submit.h"
 #include "apple_agx_g3_private_storage.h"
+#include "apple_agx_render_manager.h"
 #include "apple_agx_gpuva_g3_translation.h"
 
 typedef int NTSTATUS;
@@ -76,6 +77,7 @@ typedef struct _ADMISSION_G3_PRIVATE_SCENE {
 typedef struct _ADMISSION_G3_PROCESS {
   ULONGLONG PrivateVa;
   APPLE_AGX_G3_PRIVATE_MANAGER PrivateManager;
+  APPLE_AGX_RENDER_MANAGER_STATE FirmwareManager;
   ADMISSION_G3_PRIVATE_SCENE *PrivateScenes;
   ADMISSION_G3_STATE *State;
   APPLE_AGX_GPUVA_G3_GRAPH Graph;
@@ -107,6 +109,8 @@ typedef struct {
   unsigned char G4Command[APPLE_AGX_G4_NATIVE_MAX_BYTES];
   unsigned G4CommandBytes, G4Native, BoundFence;
   APPLE_AGX_G4_PRIVATE_LEASE G4Lease;
+  APPLE_AGX_RENDER_MANAGER_STATE *G4Manager;
+  APPLE_AGX_RENDER_MANAGER_KEY G4ManagerKey;
 } ADMISSION_BACKEND_IMAGE;
 typedef struct { unsigned DestinationBytes; } APPLE_AGX_EXP208_GDI_BINDING;
 typedef struct {
@@ -631,6 +635,12 @@ int main(void) {
   --process.Graph.MappingGeneration;
   assert(AdmissionGpuvaG3BeginJob(&adapter,&context,21)==STATUS_SUCCESS);
   assert(scene.Started);
+  assert(adapter.BackendImage.G4Manager==&process.FirmwareManager);
+  assert(adapter.BackendImage.G4ManagerKey.Owner==process.Graph.ProcessId);
+  assert(adapter.BackendImage.G4ManagerKey.Generation==process.PrivateManager.Generation);
+  assert(adapter.BackendImage.G4ManagerKey.RootIpa==process.Graph.RootIpa);
+  assert(memcmp(adapter.BackendImage.G4ManagerKey.Backing,scene.Storage.Ranges,
+      sizeof(adapter.BackendImage.G4ManagerKey.Backing))==0);
   puts("g4_submit_virtual_replay: PASS");
   return 0;
 }

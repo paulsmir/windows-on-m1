@@ -112,6 +112,12 @@ static void test_reused_job_derives_sequence_and_does_not_touch_init_bm(void) {
   assert(U32_AT(image, 0x70014u) == 0x3d000300u);
   assert(read_u64(image, 0x78060u) == 0x003d0002ULL);
   assert(U32_AT(image, 0x8001cu) == 0x11223344u);
+  /* Manager rebind does not restart the queue sequence. */
+  input.IncludeInitBm = APPLE_AGX_TRUE;
+  assert(AppleAgxExp208PatchDynamic(image, APPLE_AGX_EXP208_IMAGE_BYTES,
+                                    &input));
+  assert(U32_AT(image, 0x8001cu) == 0x7a000300u);
+  assert(U32_AT(image, 0x60000u) == 6u);
   free(image);
 }
 
@@ -132,8 +138,6 @@ static void test_invalid_inputs_are_rejected_atomically(void) {
   APPLE_AGX_EXP208_DYNAMIC_INPUT same_event = {1u, 4u, 4u, APPLE_AGX_TRUE};
   APPLE_AGX_EXP208_DYNAMIC_INPUT event_out_of_range = {1u, 127u, 128u,
                                                        APPLE_AGX_TRUE};
-  APPLE_AGX_EXP208_DYNAMIC_INPUT init_after_first = {2u, 0u, 1u,
-                                                     APPLE_AGX_TRUE};
   APPLE_AGX_EXP208_DYNAMIC_INPUT event_count_overflow = {
       0x80000000u, 0u, 1u, APPLE_AGX_FALSE};
   APPLE_AGX_EXP208_DYNAMIC_INPUT stamp_overflow = {
@@ -143,8 +147,6 @@ static void test_invalid_inputs_are_rejected_atomically(void) {
   assert_rejected_without_mutation(&zero_sequence, APPLE_AGX_EXP208_IMAGE_BYTES);
   assert_rejected_without_mutation(&same_event, APPLE_AGX_EXP208_IMAGE_BYTES);
   assert_rejected_without_mutation(&event_out_of_range,
-                                   APPLE_AGX_EXP208_IMAGE_BYTES);
-  assert_rejected_without_mutation(&init_after_first,
                                    APPLE_AGX_EXP208_IMAGE_BYTES);
   assert_rejected_without_mutation(&event_count_overflow,
                                    APPLE_AGX_EXP208_IMAGE_BYTES);

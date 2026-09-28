@@ -70,8 +70,7 @@ APPLE_AGX_BOOL AppleAgxExp208DeriveDynamic(
   if (sequence == 0u ||
       Input->TaEventNumber >= APPLE_AGX_EXP208_EVENT_COUNT ||
       Input->D3EventNumber >= APPLE_AGX_EXP208_EVENT_COUNT ||
-      Input->TaEventNumber == Input->D3EventNumber ||
-      (Input->IncludeInitBm && sequence != 1u))
+      Input->TaEventNumber == Input->D3EventNumber)
     return APPLE_AGX_FALSE;
 
   /* Validate every derived scalar before mutating the caller's image. */
