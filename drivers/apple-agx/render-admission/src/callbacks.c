@@ -253,6 +253,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEscape(
     RtlCopyMemory(&private_magic, Args->pPrivateDriverData, sizeof(private_magic));
     if (private_magic == 0x33565041u)
       return AdmissionGpuvaG3PrivateEscape((ADMISSION_CONTEXT *)Adapter, Args);
+    if (private_magic == 0x43565041u)
+      return AdmissionGpuvaG3CopyEscape((ADMISSION_CONTEXT *)Adapter, Args);
   }
 #endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)

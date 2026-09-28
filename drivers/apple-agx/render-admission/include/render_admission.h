@@ -509,6 +509,8 @@ typedef struct _ADMISSION_ALLOCATION_HANDLE {
 } ADMISSION_ALLOCATION_HANDLE;
 
 #define ADMISSION_OPEN_ALLOCATION_MAGIC 0x4f504152u
+NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *Adapter,
+                                  const DXGKARG_ESCAPE *Args);
 typedef struct _ADMISSION_OPEN_ALLOCATION {
   ULONG Magic;
   ADMISSION_DEVICE *Device;

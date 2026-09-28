@@ -730,7 +730,13 @@ HRESULT AgxD3d10WindowsPresentationRotate(
          Device->Runtime.ScreenBuffers[j].Token==r->RenderBuffer.Transport.Token)
         slot=&Device->Runtime.ScreenBuffers[j];
     if(!slot || !slot->Borrowed || slot->Transition || slot->SubmissionHolds ||
-       slot->SourceHolds || slot->KernelAllocation!=r->Resource.KernelAllocation) {
+       slot->SourceHolds ||
+#ifdef APPLE_AGX_GPUVA_WINSYS
+       slot->StagingAllocation!=r->Resource.KernelAllocation
+#else
+       slot->KernelAllocation!=r->Resource.KernelAllocation
+#endif
+       ) {
       ReleaseSRWLockExclusive(&Device->Runtime.ScreenBufferLock);
       return HRESULT_FROM_WIN32(ERROR_BUSY);
     }

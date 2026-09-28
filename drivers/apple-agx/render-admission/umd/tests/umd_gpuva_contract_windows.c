@@ -6,6 +6,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include <d3d10umddi.h>
 #pragma warning(pop)
 #include "../src/umd_internal.h"
+#include "apple_agx_g3_copy_abi.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -27,12 +28,15 @@ typedef struct {
   UINT submit, signal, wait_render, evict, free_va;
   UINT64 next_va;
   UINT failed;
+  UINT uploads, downloads, locks, unlocks;
+  UINT Failure, Persistent, Uncached, Round;
+  BYTE staging[2][131072], canonical[2][131072];
 } G4_FIXTURE;
 
 static HRESULT APIENTRY TestReserve(HANDLE handle,
     D3DDDI_RESERVEGPUVIRTUALADDRESS *request) {
   G4_FIXTURE *f = (G4_FIXTURE *)handle;
-  if(request->Size != 0x10000 || request->MinimumAddress != 0x10000 ||
+  if(request->Size != 0x20000 || request->MinimumAddress != 0x10000 ||
      request->MaximumAddress != (1ULL << 39)) f->failed = 1;
   request->VirtualAddress = f->next_va;
   f->next_va += 0x20000;
@@ -42,7 +46,7 @@ static HRESULT APIENTRY TestReserve(HANDLE handle,
 static HRESULT APIENTRY TestMap(HANDLE handle,
     D3DDDI_MAPGPUVIRTUALADDRESS *request) {
   G4_FIXTURE *f = (G4_FIXTURE *)handle;
-  if(request->hPagingQueue != 1 || request->SizeInPages != 16 ||
+  if(request->hPagingQueue != 1 || request->SizeInPages != 32 ||
      request->OffsetInPages != 0 || request->Protection.Write != 1 ||
      request->hAllocation != (f->map ? 100u : 99u)) f->failed = 1;
   request->VirtualAddress = request->BaseAddress;
@@ -53,7 +57,7 @@ static HRESULT APIENTRY TestMap(HANDLE handle,
 static HRESULT APIENTRY TestFree(HANDLE handle,
     const D3DDDICB_FREEGPUVIRTUALADDRESS *request) {
   G4_FIXTURE *f = (G4_FIXTURE *)handle;
-  if(request->Size != 0x10000 || f->evict != 1) f->failed = 1;
+  if(request->Size != 0x20000 || f->evict != 2) f->failed = 1;
   ++f->free_va;
   return S_OK;
 }
@@ -76,39 +80,87 @@ static HRESULT APIENTRY TestWait(HANDLE handle,
   else if(request->ObjectHandleArray[0] == 2 &&
           request->FenceValueArray[0] == 5) ++f->wait_resident;
   else if(request->ObjectHandleArray[0] == 4 &&
-          request->FenceValueArray[0] == 1) ++f->wait_render;
+          (request->FenceValueArray[0] == 2*f->Round+1 || request->FenceValueArray[0] == 2*f->Round+2)) ++f->wait_render;
   else f->failed = 1;
+  if(f->Failure==1 && f->wait_render) return E_FAIL;
   return S_OK;
 }
 static HRESULT APIENTRY TestSubmit(HANDLE handle,
     const D3DDDICB_SUBMITCOMMAND *request) {
   G4_FIXTURE *f = (G4_FIXTURE *)handle;
   const BYTE *data = (const BYTE *)request->pPrivateDriverData;
-  if(f->wait_resident != 1 || request->Commands != 0x20000 ||
+  if(f->wait_resident != f->Round+1 || request->Commands != 0x20000 ||
      request->CommandLength != 64 || request->BroadcastContextCount != 1 ||
      request->BroadcastContext[0] != (HANDLE)3 ||
-     request->NumPrimaries != 1 || request->WrittenPrimaries[0] != 100 ||
+     request->NumPrimaries != 0 || f->uploads != 4*(f->Round+1) || f->downloads != 2*f->Round ||
      request->PrivateDriverDataSize != 4 ||
      data[0] != 0xa1 || data[3] != 0xd4) f->failed = 1;
+  assert(f->canonical[0][19] == 0x71 && f->canonical[1][53] == (f->Round ? 0xa5 : 0x29));
+  if(f->Round) assert(f->canonical[1][54]==0xf3 && f->canonical[1][55]==0x78 && f->canonical[1][98316]==0x58);
+  f->canonical[1][53]=0xa5; f->canonical[1][54]=0xf3; f->canonical[1][98316]=0x58;
   ++f->submit;
   return S_OK;
 }
 static HRESULT APIENTRY TestSignal(HANDLE handle,
     const D3DDDICB_SIGNALSYNCHRONIZATIONOBJECTFROMGPU2 *request) {
   G4_FIXTURE *f = (G4_FIXTURE *)handle;
-  if(f->submit != 1 || request->ObjectCount != 1 ||
+  if(f->submit != f->Round+1 || request->ObjectCount != 1 ||
      request->ObjectHandleArray[0] != 4 ||
-     request->MonitoredFenceValueArray[0] != 1) f->failed = 1;
+     request->MonitoredFenceValueArray[0] != f->signal + 1) f->failed = 1;
+  if(f->signal%2) assert(f->downloads == 2*(f->Round+1) && f->unlocks == (f->Persistent ? 2u : 3u)*(f->Round+1) && f->staging[1][53] == 0xa5);
   ++f->signal;
   return S_OK;
 }
 static HRESULT APIENTRY TestEvict(HANDLE handle,D3DDDICB_EVICT *request) {
   G4_FIXTURE *f = (G4_FIXTURE *)handle;
-  if(f->wait_render != 1 || request->NumAllocations != 2 ||
+  if(f->wait_render != 2*(f->Round+1) || request->NumAllocations != 2 ||
      request->AllocationList[0] != 99 || request->AllocationList[1] != 100)
     f->failed = 1;
   ++f->evict;
   return S_OK;
+}
+
+static HRESULT APIENTRY CopyLock(HANDLE handle,D3DDDICB_LOCK *q) {
+  G4_FIXTURE *f=(G4_FIXTURE *)handle;
+  assert(q->hAllocation == 199 || q->hAllocation == 200);
+  q->pData=f->staging[q->hAllocation-199]; ++f->locks; return S_OK;
+}
+static HRESULT APIENTRY CopyUnlock(HANDLE handle,const D3DDDICB_UNLOCK *q) {
+  G4_FIXTURE *f=(G4_FIXTURE *)handle;
+  assert(q->NumAllocations == 1 && (q->phAllocations[0] == 199 || q->phAllocations[0] == 200));
+  if(f->Failure==3 && f->downloads) return E_FAIL;
+  ++f->unlocks; return S_OK;
+}
+static HRESULT APIENTRY CopyEscape(HANDLE adapter,const D3DDDICB_ESCAPE *q) {
+  G4_FIXTURE *f=(G4_FIXTURE *)adapter;
+  assert(q->hDevice==adapter && q->hContext==(HANDLE)3 && q->Flags.Value==1);
+  auto *p=(APPLE_AGX_G3_COPY_REQUEST *)q->pPrivateDriverData;
+  assert(q->PrivateDriverDataSize==sizeof(*p) && p->Magic==APPLE_AGX_G3_COPY_MAGIC);
+  assert(p->Allocation==99 || p->Allocation==100);
+  UINT i=p->Allocation-99;
+  assert(p->GpuVa==(i ? 0x40000ULL : 0x20000ULL));
+  assert(f->wait_resident==f->Round+1);
+  if(p->Operation==APPLE_AGX_G3_COPY_QUERY) {
+    assert(!p->Offset && !p->TransferBytes && !p->ProcessGeneration && !p->MappingGeneration);
+    p->ProcessGeneration=13; p->MappingGeneration=27; return S_OK;
+  }
+  assert(p->ProcessGeneration==13 && p->MappingGeneration==27);
+  assert((p->Offset==0 && p->TransferBytes==65536) || (p->Offset==65536 && p->TransferBytes==32781));
+  if(p->Operation==APPLE_AGX_G3_COPY_UPLOAD) {
+    assert(f->submit==f->Round);memcpy(f->canonical[i]+p->Offset,p->Data,p->TransferBytes);++f->uploads;
+  } else {
+    assert(p->Operation==APPLE_AGX_G3_COPY_DOWNLOAD && f->wait_render==2*f->Round+1 && f->signal==2*f->Round+1);
+    if(f->Failure==2) return E_FAIL;
+    memcpy(p->Data,f->canonical[i]+p->Offset,p->TransferBytes);++f->downloads;
+  }
+  return S_OK;
+}
+
+static int ReleaseNativeMap(const void *key,const void *address,int commit) {
+  auto *f=(G4_FIXTURE *)key;
+  assert(address==f->staging[1]);
+  if(commit) ++f->Uncached;
+  return 1;
 }
 
 /* EscapeCb is adapter-scoped even though it is in DEVICECALLBACKS.
@@ -137,6 +189,7 @@ static int test_private_escape(ADMISSION_UMD_DEVICE *device) {
   APPLE_AGX_G3_PRIVATE_REQUEST payload = {};
   const AGX_WIN32_GPUVA_OPS *ops = AdmissionUmdGpuvaOperations();
   int adapterIdentity, deviceIdentity, contextIdentity;
+  EscapeCalls=0;
   EscapeAdapter = &adapterIdentity;
   EscapeDevice = &deviceIdentity;
   EscapeContext = &contextIdentity;
@@ -195,8 +248,9 @@ static int test_private_escape(ADMISSION_UMD_DEVICE *device) {
   return 1;
 }
 
-int main(void) {
+static void run_copy_scenario(UINT failure,UINT persistent) {
   G4_FIXTURE fixture = {};
+  ADMISSION_UMD_ADAPTER adapter = {};
   D3DDDI_DEVICECALLBACKS callbacks = {};
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)HeapAlloc(
       GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*device));
@@ -207,7 +261,9 @@ int main(void) {
   const BYTE native_command[4] = {0xa1, 0xb2, 0xc3, 0xd4};
   UINT64 fence = 0;
   assert(device != NULL);
-  if(!test_private_escape(device)) return 1;
+  assert(test_private_escape(device));
+  submit_diagnostics=0;signal_diagnostics=0;
+  fixture.Failure=failure;fixture.Persistent=persistent;
   callbacks.pfnReserveGpuVirtualAddressCb = TestReserve;
   callbacks.pfnMapGpuVirtualAddressCb = TestMap;
   callbacks.pfnFreeGpuVirtualAddressCb = TestFree;
@@ -216,6 +272,9 @@ int main(void) {
   callbacks.pfnSubmitCommandCb = TestSubmit;
   callbacks.pfnSignalSynchronizationObjectFromGpu2Cb = TestSignal;
   callbacks.pfnEvictCb = TestEvict;
+  callbacks.pfnLockCb=CopyLock; callbacks.pfnUnlockCb=CopyUnlock; callbacks.pfnEscapeCb=CopyEscape;
+  adapter.Magic=ADMISSION_UMD_ADAPTER_MAGIC;adapter.RuntimeAdapter.handle=&fixture;device->Adapter=&adapter;
+  fixture.staging[0][19]=0x71; fixture.staging[1][53]=0x29;
   fixture.next_va = 0x20000;
   device->Magic = ADMISSION_UMD_DEVICE_MAGIC;
   device->RuntimeDevice.handle = (HANDLE)&fixture;
@@ -231,24 +290,48 @@ int main(void) {
   device->ScreenBuffers[1].Token = 19;
   device->ScreenBuffers[1].KernelAllocation = 100;
   device->ScreenBuffers[1].WrittenPrimary = TRUE;
+  for(UINT i=0;i<2;++i) {device->ScreenBuffers[i].StagingAllocation=199+i;device->ScreenBuffers[i].Bytes=98317;device->ScreenBuffers[i].Flags=i ? 15 : 7;}
+  device->ScreenBuffers[1].Borrowed=TRUE;
+  if(persistent) for(UINT i=0;i<2;++i) {
+    device->ScreenBuffers[i].Mapped=TRUE;device->ScreenBuffers[i].LockedBase=fixture.staging[i];
+    device->ScreenBuffers[i].NativeBo=&fixture;device->ScreenBuffers[i].NativeMapRelease=ReleaseNativeMap;
+  }
   InitializeSRWLock(&device->ScreenBufferLock);
   assert(AgxWin32GpuvaInit(&space,AdmissionUmdGpuvaOperations(),device));
-  assert(AgxWin32GpuvaBind(&space,&command,17,0x4000,0,AGX_GPUVA_MAP_WRITE));
-  assert(AgxWin32GpuvaBind(&space,&color,19,0x4000,0,AGX_GPUVA_MAP_WRITE));
+  assert(AgxWin32GpuvaBind(&space,&command,17,98317,0,AGX_GPUVA_MAP_WRITE));
+  assert(AgxWin32GpuvaBind(&space,&color,19,98317,0,AGX_GPUVA_MAP_WRITE));
+  if(failure) {
+    assert(!AgxWin32GpuvaSubmit(&space,references,2,&command,64,
+        written,1,native_command,sizeof(native_command),&fence));
+    assert(!fence && device->DrawTerminal && space.Terminal && space.Held);
+    assert(fixture.signal==1 && !fixture.evict);
+    for(UINT i=0;i<2;++i) assert(device->ScreenBuffers[i].CopyHeld && device->ScreenBuffers[i].SubmissionHolds==1);
+    assert(!AgxWin32GpuvaUnbind(&space,&color));
+    free(space.Held);HeapFree(GetProcessHeap(),0,device);return;
+  }
+  for(fixture.Round=0;fixture.Round<2;++fixture.Round) {
   assert(AgxWin32GpuvaSubmit(&space,references,2,&command,64,
       written,1,
       native_command,sizeof(native_command),&fence));
-  assert(fence == 1 && command.Va == 0x20000 && color.Va == 0x40000);
+  if(persistent) assert(fixture.Uncached==1 && device->ScreenBuffers[0].Mapped && !device->ScreenBuffers[1].Mapped);
+  assert(fixture.staging[1][53]==0xa5 && fixture.staging[1][54]==0xf3);
+  assert(fence == 2*(fixture.Round+1) && command.Va == 0x20000 && color.Va == 0x40000);
   assert(AgxWin32GpuvaRetire(&space,fence));
+  fixture.staging[1][55]=0x78;
+  }
   assert(AgxWin32GpuvaUnbind(&space,&command));
   assert(AgxWin32GpuvaUnbind(&space,&color));
   assert(!fixture.failed && fixture.reserve == 2 && fixture.map == 2 &&
-      fixture.wait_map == 2 && fixture.resident == 1 &&
-      fixture.wait_resident == 1 && fixture.submit == 1 &&
-      fixture.signal == 1 && fixture.wait_render == 1 &&
-      fixture.evict == 1 && fixture.free_va == 2);
-  assert(submit_diagnostics == 1 && signal_diagnostics == 1);
+      fixture.wait_map == 2 && fixture.resident == 2 &&
+      fixture.wait_resident == 2 && fixture.submit == 2 &&
+      fixture.signal == 4 && fixture.wait_render == 4 &&
+      fixture.evict == 2 && fixture.free_va == 2);
+  assert(submit_diagnostics == 2 && signal_diagnostics == 4);
   HeapFree(GetProcessHeap(),0,device);
-  puts("umd_gpuva_contract_windows: PASS");
+}
+int main(void) {
+  run_copy_scenario(0,0);run_copy_scenario(0,1);
+  run_copy_scenario(1,0);run_copy_scenario(2,0);run_copy_scenario(3,0);
+  puts("umd_gpuva_contract_windows: PASS (temporary/persistent/import, internal wait/readback/unlock failure retention)");
   return 0;
 }

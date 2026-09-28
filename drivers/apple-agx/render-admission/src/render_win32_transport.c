@@ -37,7 +37,8 @@ ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32AllocationCreateValidate(
   } else {
     if (PrivateDataBytes != sizeof(*create) ||
         create->Magic != ADMISSION_WIN32_ALLOCATION_MAGIC ||
-        create->Version != ADMISSION_WIN32_ALLOCATION_VERSION ||
+        (create->Version != ADMISSION_WIN32_ALLOCATION_VERSION &&
+         create->Version != ADMISSION_WIN32_ALLOCATION_VERSION_LOCAL) ||
         create->Bytes != sizeof(*create) || create->Reserved[0] != 0u ||
         create->Reserved[1] != 0u ||
         create->ClassId < AgxWin32BufferClassGeneral ||
@@ -59,9 +60,14 @@ ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32AllocationCreateValidate(
     classId = create->ClassId;
     flags = create->Flags;
     if (!AdmissionAllocationDescriptionValid(allocation) ||
-        allocation->Type != ADMISSION_WIN32_ALLOCATION_STAGING_CPUVISIBLE ||
+        allocation->Type !=
+            (create->Version == ADMISSION_WIN32_ALLOCATION_VERSION_LOCAL ?
+             ADMISSION_WIN32_ALLOCATION_GPU_LOCAL :
+             ADMISSION_WIN32_ALLOCATION_STAGING_CPUVISIBLE) ||
         allocation->Format != ADMISSION_WIN32_ALLOCATION_FORMAT_A8 ||
-        allocation->CpuVisible != 1u || allocation->Height != 1u ||
+        allocation->CpuVisible !=
+            (create->Version == ADMISSION_WIN32_ALLOCATION_VERSION_LOCAL ? 0u : 1u) ||
+        allocation->Height != 1u ||
         allocation->Width != allocation->Pitch ||
         allocation->Size != allocation->Width ||
         allocation->Size > 0x01000000ULL ||

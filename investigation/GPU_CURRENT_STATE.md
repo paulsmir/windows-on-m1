@@ -1,5 +1,28 @@
 # GPU current boundary — 2026-09-28
 
+## 2026-09-28 R145 — canonical local BO and CPU staging implemented offline
+
+EXP857 remains the last hardware verdict. Saved receipts reconfirm system-backed
+VDM rejection; the saved DWM exception is in DXGI factory destruction during
+device-construction unwind, without a proven causal link. R145 separates all
+native canonical GPU BOs from CPU staging, validates bounded local copies against
+live allocation/PTE provenance, and waits for GPU completion then reads back
+GPU-written storage before publishing completion. Imported presentation surfaces
+retain their original CPU/display handles; rotation preserves the split identity.
+Shader executable BO allocation/map failure propagates safely through callers.
+
+Offline RED/GREEN, Windows callback executables and ARM64 TU compiles pass.
+Final full suite1154 preserves exactly baseline15 failures/38 errors/2 skips;
+no new failure/error identities. Status is implemented, not hardware validated.
+Evidence: `investigation/evidence/R145-offline-staging.json`; ownership, sources,
+unknowns and proposed EXP858: `investigation/analysis/R145-local-staging.md`.
+No package or Air operation. Existing ordinary Code28 recovery is unchanged.
+
+WHY CONTINUE COMPARISON: saved EXP857 confirms the isolated backing contract;
+offline implementation now permits a separately authorized EXP858 to test that
+contract on identical R143 firmware. Real VidMm placement, imported CPU
+publication, AGX completion and DWM output remain unproven.
+
 ## 2026-09-28 EXP857 — R144 crosses high paging table; ordinary Code28 recovered
 
 GO_EXP857 ran package857/source c7ac4d79 with exact EXP856 R143 m1n1/Mu hashes.

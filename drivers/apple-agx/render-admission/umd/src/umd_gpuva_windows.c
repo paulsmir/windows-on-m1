@@ -6,8 +6,27 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include <d3d10umddi.h>
 #pragma warning(pop)
 #include "umd_internal.h"
+#include "apple_agx_g3_copy_abi.h"
 
 #ifdef APPLE_AGX_GPUVA_WINSYS
+
+static ADMISSION_UMD_SCREEN_BUFFER *find_slot(ADMISSION_UMD_DEVICE *device,
+                                             uint64_t token) {
+  for (UINT i=0; i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT; ++i)
+    if (device->ScreenBuffers[i].Active && device->ScreenBuffers[i].Token==token)
+      return &device->ScreenBuffers[i];
+  return NULL;
+}
+
+static void release_copies(ADMISSION_UMD_DEVICE *device,
+                           const uint64_t *tokens,unsigned count) {
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  for(unsigned i=0;i<count;++i) {
+    auto *slot=find_slot(device,tokens[i]);
+    if(slot && slot->CopyHeld) {slot->CopyHeld=FALSE;--slot->SubmissionHolds;}
+  }
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+}
 
 static D3DKMT_HANDLE allocation_handle(ADMISSION_UMD_DEVICE *device,
                                        uint64_t token) {
@@ -77,6 +96,10 @@ static int map_va(void *context, uint64_t token, uint64_t va,
   }
   if (FAILED(hr) && hr != E_PENDING) return 0;
   if (request.VirtualAddress != va) return 3;
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  auto *slot=find_slot(device,token);
+  if(slot) slot->CanonicalGpuVa=va;
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   *fence = request.PagingFenceValue;
   return hr == E_PENDING ? 2 : 1;
 }
@@ -121,6 +144,7 @@ static int evict(void *context, const uint64_t *tokens, unsigned count) {
   HRESULT hr = device->KernelCallbacks->pfnEvictCb(
       device->RuntimeDevice.handle, &request);
   HeapFree(GetProcessHeap(), 0, handles);
+  if(SUCCEEDED(hr)) release_copies(device,tokens,count);
   return SUCCEEDED(hr);
 }
 
@@ -140,6 +164,25 @@ static int make_resident(void *context, const uint64_t *tokens,
   }
   for (unsigned i = 0; i < count; ++i)
     priorities[i] = D3DDDI_ALLOCATIONPRIORITY_NORMAL;
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  bool valid=!device->DrawTerminal && !device->ScreenClosing;
+  for(UINT i=0;valid && i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i)
+    if(device->ScreenBuffers[i].CopyHeld) valid=false;
+  for(unsigned i=0;valid && i<count;++i) {
+    auto *slot=find_slot(device,tokens[i]);
+    valid=slot && !slot->Transition && !slot->CopyHeld &&
+        !slot->SourceHolds && !slot->SubmissionHolds &&
+        slot->StagingAllocation && slot->CanonicalGpuVa &&
+        (!slot->Mapped || (slot->NativeBo && slot->NativeMapRelease));
+  }
+  if(valid) for(unsigned i=0;i<count;++i) {
+    auto *slot=find_slot(device,tokens[i]);slot->CopyHeld=TRUE;++slot->SubmissionHolds;
+  }
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  if(!valid) {
+    HeapFree(GetProcessHeap(),0,priorities);HeapFree(GetProcessHeap(),0,handles);
+    return 0;
+  }
   D3DDDI_MAKERESIDENT request = {};
   request.hPagingQueue = device->PagingQueue;
   request.NumAllocations = count;
@@ -156,8 +199,12 @@ static int make_resident(void *context, const uint64_t *tokens,
     device->DrawTerminal = TRUE;
     return 3;
   }
-  if ((FAILED(hr) && hr != E_PENDING) || request.NumAllocations != count)
-    return 0;
+  if ((FAILED(hr) && hr != E_PENDING) || request.NumAllocations != count) {
+    release_copies(device,tokens,count);return 0;
+  }
+  if(hr==E_PENDING && !request.PagingFenceValue) {
+    device->DrawTerminal=TRUE;return 3;
+  }
   *fence = request.PagingFenceValue;
   return hr == E_PENDING ? 2 : 1;
 }
@@ -180,18 +227,117 @@ static int wait_paging(void *context, uint64_t fence) {
   return wait_object(device, device ? device->PagingSyncObject : 0, fence);
 }
 
+static int copy_escape(ADMISSION_UMD_DEVICE *device,
+                        APPLE_AGX_G3_COPY_REQUEST *payload) {
+  D3DDDICB_ESCAPE request={};
+  if(!device->Adapter || device->Adapter->Magic!=ADMISSION_UMD_ADAPTER_MAGIC ||
+     !device->Adapter->RuntimeAdapter.handle || !device->RuntimeDevice.handle ||
+     !device->KernelContext || !device->KernelCallbacks->pfnEscapeCb) return 0;
+  request.hDevice=device->RuntimeDevice.handle;
+  request.hContext=device->KernelContext;request.Flags.HardwareAccess=1;
+  request.pPrivateDriverData=payload;request.PrivateDriverDataSize=sizeof(*payload);
+  return SUCCEEDED(device->KernelCallbacks->pfnEscapeCb(
+      device->Adapter->RuntimeAdapter.handle,&request));
+}
+
+static int transfer_slot(ADMISSION_UMD_DEVICE *device,
+                          ADMISSION_UMD_SCREEN_BUFFER *slot,bool download) {
+  auto *payload=(APPLE_AGX_G3_COPY_REQUEST *)HeapAlloc(
+      GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(APPLE_AGX_G3_COPY_REQUEST));
+  if(!payload) return 0;
+  payload->Magic=APPLE_AGX_G3_COPY_MAGIC;payload->Version=APPLE_AGX_G3_COPY_VERSION;
+  payload->Bytes=sizeof(*payload);payload->Allocation=slot->KernelAllocation;
+  payload->GpuVa=slot->CanonicalGpuVa;payload->Operation=APPLE_AGX_G3_COPY_QUERY;
+  int success=copy_escape(device,payload) && payload->ProcessGeneration && payload->MappingGeneration;
+  BYTE *address=(BYTE *)slot->LockedBase;
+  bool temporary=!slot->Mapped, locked=false;
+  if(success && temporary) {
+    D3DDDICB_LOCK lock={};lock.hAllocation=slot->StagingAllocation;
+    lock.Flags.LockEntire=1;
+    locked=SUCCEEDED(device->KernelCallbacks->pfnLockCb(
+        device->RuntimeDevice.handle,&lock));
+    if(locked) address=(BYTE *)lock.pData;
+    success=locked && address && lock.hAllocation==slot->StagingAllocation;
+    if(locked && lock.hAllocation!=slot->StagingAllocation) {
+      /* No Discard was requested: renaming violates the callback contract. */
+      device->DrawTerminal=TRUE;success=0;
+    }
+  }
+  if(success && (!address || !payload->ProcessGeneration || !payload->MappingGeneration)) success=0;
+  if(success) for(uint64_t offset=0;offset<slot->Bytes;) {
+    UINT count=(UINT)((slot->Bytes-offset)>APPLE_AGX_G3_COPY_CAPACITY ?
+        APPLE_AGX_G3_COPY_CAPACITY : slot->Bytes-offset);
+    payload->Operation=download ? APPLE_AGX_G3_COPY_DOWNLOAD : APPLE_AGX_G3_COPY_UPLOAD;
+    payload->Offset=offset;payload->TransferBytes=count;
+    if(!download) CopyMemory(payload->Data,address+offset,count);
+    if(!copy_escape(device,payload)) {success=0;break;}
+    if(download) CopyMemory(address+offset,payload->Data,count);
+    offset+=count;
+  }
+  /* Borrowed/imported storage must be unlocked before publication. Native
+   * persistent maps can be uncached only through the native BO owner. */
+  bool uncache=slot->Borrowed && slot->Mapped;
+  if(uncache && !slot->NativeMapRelease(slot->NativeBo,address,FALSE)) {
+    device->DrawTerminal=TRUE;success=0;uncache=false;
+  }
+  if(locked || (address && uncache)) {
+    D3DDDICB_UNLOCK unlock={};unlock.NumAllocations=1;
+    unlock.phAllocations=&slot->StagingAllocation;
+    if(FAILED(device->KernelCallbacks->pfnUnlockCb(device->RuntimeDevice.handle,&unlock))) {
+      /* Keep the lock and both allocation owners; teardown is uncertain. */
+      if(temporary) {
+        AcquireSRWLockExclusive(&device->ScreenBufferLock);
+        slot->LockedBase=address;slot->Mapped=TRUE;
+        ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+      }
+      device->DrawTerminal=TRUE;success=0;
+    } else if(uncache) {
+      if(!slot->NativeMapRelease(slot->NativeBo,address,TRUE)) {
+        device->DrawTerminal=TRUE;success=0;
+      }
+      AcquireSRWLockExclusive(&device->ScreenBufferLock);
+      slot->LockedBase=NULL;slot->Mapped=FALSE;slot->LockedAccess=0;
+      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    }
+  }
+  HeapFree(GetProcessHeap(),0,payload);return success;
+}
+
+static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
+  if(!device->KernelCallbacks->pfnLockCb || !device->KernelCallbacks->pfnUnlockCb)
+    return 0;
+  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i) {
+    auto *slot=&device->ScreenBuffers[i];
+    if(!slot->CopyHeld || (download && !(slot->Flags & AppleAgxWin32BufferGpuWrite))) continue;
+    if(!transfer_slot(device,slot,download)) return 0;
+  }
+  return 1;
+}
+
+static int signal_render(ADMISSION_UMD_DEVICE *device,uint64_t next) {
+  D3DDDICB_SIGNALSYNCHRONIZATIONOBJECTFROMGPU2 signal={};
+  D3DKMT_HANDLE object=device->RenderSyncObject;
+  HANDLE context_handle=device->KernelContext;
+  signal.ObjectCount=1;signal.ObjectHandleArray=&object;
+  signal.BroadcastContextCount=1;signal.BroadcastContextArray=&context_handle;
+  signal.MonitoredFenceValueArray=&next;
+  HRESULT result=device->KernelCallbacks->pfnSignalSynchronizationObjectFromGpu2Cb(
+      device->RuntimeDevice.handle,&signal);
+  AdmissionUmdDiagnostic("g4-signal-render-fence",result,NULL,0u);
+  return SUCCEEDED(result);
+}
+
 static int submit(void *context, const uint64_t *written,
                   unsigned written_count, uint64_t va, uint32_t bytes,
                   const void *private_data, uint32_t private_bytes,
                   uint64_t *fence) {
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;
   D3DDDICB_SUBMITCOMMAND request = {};
-  D3DDDICB_SIGNALSYNCHRONIZATIONOBJECTFROMGPU2 signal = {};
   if (!device || !fence || !device->KernelContext ||
       !device->RenderSyncObject || !device->KernelCallbacks ||
       !device->KernelCallbacks->pfnSubmitCommandCb ||
       !device->KernelCallbacks->pfnSignalSynchronizationObjectFromGpu2Cb ||
-      device->NextRenderFence == UINT64_MAX ||
+      device->NextRenderFence > UINT64_MAX - 2 ||
       written_count > D3DDDI_MAX_WRITTEN_PRIMARIES ||
       (written_count && !written)) return 0;
   AcquireSRWLockShared(&device->ScreenBufferLock);
@@ -203,14 +349,15 @@ static int submit(void *context, const uint64_t *written,
         slot = &device->ScreenBuffers[j];
         break;
       }
-    if (!slot || slot->Transition || !slot->KernelAllocation) {
+    if (!slot || slot->Transition || !slot->CopyHeld || !slot->KernelAllocation) {
       ReleaseSRWLockShared(&device->ScreenBufferLock);
       return 0;
     }
-    if (slot->WrittenPrimary)
-      request.WrittenPrimaries[request.NumPrimaries++] = slot->KernelAllocation;
+    /* Submitted commands write only nondisplayable canonical allocations.
+     * The original primary is published by synchronized CPU copy below. */
   }
   ReleaseSRWLockShared(&device->ScreenBufferLock);
+  if(!transfer_held(device,false)) return device->DrawTerminal ? 2 : 0;
   request.Commands = va;
   request.CommandLength = bytes;
   request.BroadcastContextCount = 1;
@@ -226,24 +373,14 @@ static int submit(void *context, const uint64_t *written,
   AdmissionUmdDiagnostic("g4-submit-command-cb", submit_result,
                          submit_values, ARRAYSIZE(submit_values));
   if (FAILED(submit_result)) return 0;
-  uint64_t next = device->NextRenderFence + 1;
-  D3DKMT_HANDLE object = device->RenderSyncObject;
-  HANDLE context_handle = device->KernelContext;
-  signal.ObjectCount = 1;
-  signal.ObjectHandleArray = &object;
-  signal.BroadcastContextCount = 1;
-  signal.BroadcastContextArray = &context_handle;
-  signal.MonitoredFenceValueArray = &next;
-  HRESULT signal_result =
-      device->KernelCallbacks->pfnSignalSynchronizationObjectFromGpu2Cb(
-          device->RuntimeDevice.handle, &signal);
-  AdmissionUmdDiagnostic("g4-signal-render-fence", signal_result, NULL, 0u);
-  if (FAILED(signal_result)) {
-    device->DrawTerminal = TRUE;
-    return 2; /* accepted submit, completion owner uncertain */
+  uint64_t internal = device->NextRenderFence + 1;
+  if(!signal_render(device,internal) ||
+     !wait_object(device,device->RenderSyncObject,internal) ||
+     !transfer_held(device,true) || !signal_render(device,internal+1)) {
+    device->DrawTerminal=TRUE;return 2;
   }
-  device->NextRenderFence = next;
-  *fence = next;
+  device->NextRenderFence=internal+1;
+  *fence=internal+1;
   return 1;
 }
 

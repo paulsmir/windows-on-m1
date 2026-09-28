@@ -49,6 +49,9 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   BOOL Borrowed;
 #ifdef APPLE_AGX_GPUVA_WINSYS
   BOOL WrittenPrimary;
+  D3DKMT_HANDLE StagingAllocation;
+  APPLE_AGX_U64 CanonicalGpuVa;
+  BOOL CopyHeld;
 #endif
 } ADMISSION_UMD_SCREEN_BUFFER;
 

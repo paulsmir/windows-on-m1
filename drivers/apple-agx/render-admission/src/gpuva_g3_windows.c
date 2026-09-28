@@ -1,4 +1,5 @@
 #include "gpuva_g3_private.h"
+#include "apple_agx_g3_copy_abi.h"
 #include "apple_agx_g4_submit.h"
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
@@ -490,6 +491,139 @@ static BOOLEAN AdmissionG3PrivateDestroyStorage(ADMISSION_G3_PROCESS *p) {
     p->PrivateScenes=scene->Next;ExFreePoolWithTag(scene,ADMISSION_POOL_TAG);
   }
   return TRUE;
+}
+
+/* Resolve only current VidMm provenance. ResidentPtes covers both logical
+ * page formats; LogicalPtes deliberately excludes the 64K CPU-envelope case. */
+static const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *AdmissionG3CopyPte(
+    ADMISSION_G3_PROCESS *p, ULONGLONG va) {
+  APPLE_AGX_GPUVA_G3_NODE *edge;
+  ADMISSION_G3_TABLE_SHADOW *shadow;
+  ULONGLONG middle, leaf;
+  for(edge=p->Graph.Parents;edge;edge=edge->Next)
+    if(edge->Ipa==p->Graph.RootIpa && edge->Index==(UINT)(va>>36)) break;
+  if(!edge) return NULL;
+  middle=edge->AuxIpa;
+  for(edge=p->Graph.Parents;edge;edge=edge->Next)
+    if(edge->Ipa==middle && edge->Index==(UINT)((va>>25)&2047u)) break;
+  if(!edge) return NULL;
+  leaf=edge->AuxIpa;
+  for(shadow=p->TableShadows;shadow;shadow=shadow->Next)
+    if(shadow->BrokerIpa==leaf) break;
+  if(!shadow || !shadow->ResidentPtes) return NULL;
+  return &shadow->ResidentPtes[(UINT)((va>>12)&8191u)];
+}
+
+NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
+    const DXGKARG_ESCAPE *args) {
+  APPLE_AGX_G3_COPY_REQUEST *q;
+  ADMISSION_G3_STATE *state;
+  ADMISSION_G3_PROCESS *p;
+  ADMISSION_RENDER_CONTEXT *context;
+  ADMISSION_OPEN_ALLOCATION *opened;
+  ADMISSION_ALLOCATION_HANDLE *allocation;
+  ADMISSION_SCANOUT_MEMORY_VIEW view;
+  DXGKARGCB_GETHANDLEDATA lookup={0};
+  DXGKARGCB_RELEASEHANDLEDATA reference={0};
+  ULONGLONG length, offset, end, page, first;
+  NTSTATUS status=STATUS_INVALID_PARAMETER;
+  if(!adapter || !adapter->Started || !args ||
+     KeGetCurrentIrql()!=PASSIVE_LEVEL || args->Flags.Value!=1u ||
+     args->PrivateDriverDataSize!=sizeof(*q) || !args->pPrivateDriverData ||
+     !adapter->Interface.DxgkCbAcquireHandleData ||
+     !adapter->Interface.DxgkCbReleaseHandleData) return status;
+  state=(ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  if(!state) return STATUS_INVALID_DEVICE_STATE;
+  q=ExAllocatePool2(POOL_FLAG_NON_PAGED,sizeof(*q),ADMISSION_POOL_TAG);
+  if(!q) return STATUS_INSUFFICIENT_RESOURCES;
+  RtlCopyMemory(q,args->pPrivateDriverData,sizeof(*q));
+  if(q->Magic!=APPLE_AGX_G3_COPY_MAGIC || q->Version!=1u ||
+     q->Bytes!=sizeof(*q) || q->Reserved || q->Reserved2 ||
+     q->Operation>APPLE_AGX_G3_COPY_DOWNLOAD || !q->Allocation ||
+     !q->GpuVa || (q->GpuVa&0xffffULL) || q->GpuVa>=(1ULL<<39) ||
+     q->TransferBytes>APPLE_AGX_G3_COPY_CAPACITY) goto Free;
+  if(q->Operation==APPLE_AGX_G3_COPY_QUERY ?
+     (q->Offset || q->TransferBytes || q->MappingGeneration || q->ProcessGeneration) :
+     (!q->TransferBytes || !q->MappingGeneration || !q->ProcessGeneration)) goto Free;
+  lookup.hObject=q->Allocation;lookup.Type=DXGK_HANDLE_ALLOCATION;
+  lookup.Flags.DeviceSpecific=1u;reference.Type=DXGK_HANDLE_ALLOCATION;
+  opened=(ADMISSION_OPEN_ALLOCATION *)adapter->Interface.DxgkCbAcquireHandleData(
+      &lookup,&reference.ReleaseHandle);
+  if(!opened || !reference.ReleaseHandle) {status=STATUS_INVALID_HANDLE;goto Release;}
+  ExAcquireFastMutex(&state->Lock);
+  p=AdmissionGpuvaG3FindProcess(state,args->hKmdProcessHandle);
+  if(!p || p->Poisoned || p->Graph.Uncertain || !p->Graph.Created) goto Unlock;
+  for(context=p->Contexts;context && (HANDLE)context!=args->hContext;
+      context=context->GpuvaG3NextContext) {}
+  if(!context || !context->Win32Transport || context->GpuvaG3Closing ||
+     context->GpuvaG3Poisoned || !context->Object.Device ||
+     (HANDLE)CONTAINING_RECORD(context->Object.Device,ADMISSION_DEVICE,Object)!=args->hDevice ||
+     context->Object.Device->Adapter!=&adapter->ObjectAdapter ||
+     opened->Magic!=ADMISSION_OPEN_ALLOCATION_MAGIC ||
+     (HANDLE)opened->Device!=args->hDevice || !opened->Allocation ||
+     opened->RuntimeAllocation!=q->Allocation ||
+     opened->Allocation->Magic!=ADMISSION_ALLOCATION_OBJECT_MAGIC) goto Unlock;
+  allocation=CONTAINING_RECORD(opened->Allocation,ADMISSION_ALLOCATION_HANDLE,Object);
+  if(!allocation->Win32ClassId || allocation->Object.Description.CpuVisible ||
+     allocation->Object.Description.Type!=ADMISSION_WIN32_ALLOCATION_GPU_LOCAL) goto Unlock;
+  if(state->ActiveProcess || p->Graph.JobInFlight || p->Graph.LeaseToken) {
+    status=STATUS_DEVICE_BUSY;goto Unlock;
+  }
+  if(q->Operation!=APPLE_AGX_G3_COPY_QUERY &&
+     (q->ProcessGeneration!=p->Graph.ProcessGeneration ||
+      q->MappingGeneration!=p->Graph.MappingGeneration)) goto Unlock;
+  if(q->Operation==APPLE_AGX_G3_COPY_UPLOAD &&
+     (opened->ReadOnly || !(opened->Win32Flags&AppleAgxWin32BufferCpuWrite))) goto Unlock;
+  if(q->Operation==APPLE_AGX_G3_COPY_DOWNLOAD &&
+     !(opened->Win32Flags&AppleAgxWin32BufferCpuRead)) goto Unlock;
+  length=q->Operation==APPLE_AGX_G3_COPY_QUERY ?
+      allocation->Object.Description.Size : q->TransferBytes;
+  if(!length || length>MAXULONG || q->Offset>allocation->Object.Description.Size ||
+     length>allocation->Object.Description.Size-q->Offset ||
+     q->Offset>=(1ULL<<39)-q->GpuVa || length>(1ULL<<39)-q->GpuVa-q->Offset)
+    goto Unlock;
+  first=q->GpuVa+q->Offset;end=first+length;
+  if(!AppleAgxGpuvaG3GraphContainsRangeAccess(&p->Graph,first,(UINT)length,FALSE)) goto Unlock;
+  status=AdmissionMemoryRuntimeLocalView(adapter,&view);
+  if(!NT_SUCCESS(status)) goto Unlock;
+  status=STATUS_INVALID_PARAMETER;
+  if(!view.CpuAddress) goto Unlock;
+  /* Validate every page before the first store: a malformed tail cannot
+   * partially overwrite canonical data. Table/private storage has no matching
+   * allocation provenance and cannot pass this join. */
+  for(page=first&~0xfffULL;page<end;page+=0x1000ULL) {
+    const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte=AdmissionG3CopyPte(p,page);
+    if(!pte || !(pte->Flags&APPLE_AGX_GPUVA_G3_VALID) ||
+       pte->SegmentId!=ADMISSION_MEMORY_LOCAL_SEGMENT ||
+       pte->Allocation!=(ULONGLONG)(ULONG_PTR)allocation ||
+       pte->AllocationOffset!=page-q->GpuVa ||
+       !AppleAgxGpuvaG3TableSpanWithinLocal(view.GuestIpaAddress,view.Bytes,
+           pte->GuestIpa,0x1000ULL)) goto Unlock;
+  }
+  if(q->Operation==APPLE_AGX_G3_COPY_QUERY) {
+    q->ProcessGeneration=p->Graph.ProcessGeneration;
+    q->MappingGeneration=p->Graph.MappingGeneration;
+  } else {
+    KeMemoryBarrier();
+    for(offset=0;offset<length;) {
+      ULONGLONG va=first+offset, part=0x1000ULL-(va&0xfffULL);
+      const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte=AdmissionG3CopyPte(p,va);
+      PUCHAR cpu=(PUCHAR)view.CpuAddress+(SIZE_T)(pte->GuestIpa-view.GuestIpaAddress)+(SIZE_T)(va&0xfffULL);
+      if(part>length-offset) part=length-offset;
+      if(q->Operation==APPLE_AGX_G3_COPY_UPLOAD)
+        RtlCopyMemory(cpu,q->Data+(SIZE_T)offset,(SIZE_T)part);
+      else RtlCopyMemory(q->Data+(SIZE_T)offset,cpu,(SIZE_T)part);
+      offset+=part;
+    }
+    KeMemoryBarrier();
+  }
+  RtlCopyMemory(args->pPrivateDriverData,q,sizeof(*q));status=STATUS_SUCCESS;
+Unlock:
+  ExReleaseFastMutex(&state->Lock);
+Release:
+  if(reference.ReleaseHandle) adapter->Interface.DxgkCbReleaseHandleData(reference);
+Free:
+  ExFreePoolWithTag(q,ADMISSION_POOL_TAG);return status;
 }
 
 NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,

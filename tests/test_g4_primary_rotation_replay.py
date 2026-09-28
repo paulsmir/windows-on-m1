@@ -68,7 +68,7 @@ using AGX_WIN32_SCREEN_BUFFER = RenderBuffer;
 struct ADMISSION_UMD_SCREEN_BUFFER {
   BOOL Active, Borrowed, Transition, SubmissionHolds, SourceHolds;
   uint64_t Token;
-  D3DKMT_HANDLE KernelAllocation;
+  D3DKMT_HANDLE KernelAllocation, StagingAllocation;
 };
 constexpr UINT ADMISSION_UMD_SCREEN_BUFFER_LIMIT = 4;
 constexpr UINT ADMISSION_UMD_RESOURCE_MAGIC = 0x1234;
@@ -184,7 +184,12 @@ int main() {
     auto &slot = device.Runtime.ScreenBuffers[i];
     slot.Active = slot.Borrowed = 1;
     slot.Token = i + 1;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    slot.KernelAllocation = 201 + i;
+    slot.StagingAllocation = 101 + i;
+#else
     slot.KernelAllocation = 101 + i;
+#endif
   }
   pipe_resource targets[2]{{PIPE_FORMAT_BGRA}, {PIPE_FORMAT_BGRA}};
   Retirement retirements[2]{{101}, {102}};
@@ -206,8 +211,15 @@ int main() {
   assert(records[1].Resource.KernelAllocation == 101);
   assert(records[1].RenderBuffer.Transport.Token == 1);
   assert(records[1].RenderResource == &targets[0]);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  assert(device.Runtime.ScreenBuffers[0].KernelAllocation == 201);
+  assert(device.Runtime.ScreenBuffers[1].KernelAllocation == 202);
+  assert(device.Runtime.ScreenBuffers[0].StagingAllocation == 101);
+  assert(device.Runtime.ScreenBuffers[1].StagingAllocation == 102);
+#else
   assert(device.Runtime.ScreenBuffers[0].KernelAllocation == 101);
   assert(device.Runtime.ScreenBuffers[1].KernelAllocation == 102);
+#endif
   pipe_context pipe{create_view, release_view, bind_views, bind_framebuffer};
   Device frontendDevice{};
   frontendDevice.windows = &device;
@@ -250,10 +262,17 @@ int main() {
 
 class G4PrimaryRotationReplay(unittest.TestCase):
     def test_rotation_keeps_render_target_with_presented_allocation(self):
+        self.replay(False)
+
+    def test_gpuva_rotation_preserves_split_canonical_and_original_identity(self):
+        self.replay(True)
+
+    def replay(self, gpuva):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "rotation.cpp"
             binary = Path(directory) / "rotation"
-            source.write_text(SHIM + rotation_body() +
+            source.write_text(("#define APPLE_AGX_GPUVA_WINSYS 1\n" if gpuva else "") +
+                              SHIM + rotation_body() +
                               frontend_rotation_body() + MAIN)
             subprocess.run([os.environ.get("CXX", "clang++"), "-std=c++17",
                             "-Wall", "-Wextra", "-Werror", str(source),

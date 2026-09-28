@@ -16,6 +16,10 @@
 #include "hv_agx_gpuva_v5.h"
 #include "hv_agx_gpuva_v5_mmio.h"
 #include "hv_agx_retained_backing.h"
+#include "apple_agx_g3_copy_abi.h"
+#include "apple_agx_win32_device_info.h"
+#include "../drivers/apple-agx/render-admission/include/render_allocation.h"
+#define ADMISSION_WIN32_ALLOCATION_GPU_LOCAL 0x100u
 
 #define APPLE_AGX_GPUVA_G3_QUALIFICATION 1
 #define _Use_decl_annotations_
@@ -182,11 +186,16 @@ static NTSTATUS ReplayReserveVa(HANDLE adapter, DXGKARGCB_RESERVEGPUVIRTUALADDRE
   return reserve_status;
 }
 typedef struct { ULONG InterruptType; struct { ULONG SubmissionFenceId,NodeOrdinal,EngineOrdinal; } DmaCompleted; } DXGKARGCB_NOTIFY_INTERRUPT_DATA;
+typedef struct { UINT hObject,Type; struct { UINT DeviceSpecific; } Flags; } DXGKARGCB_GETHANDLEDATA;
+typedef struct { HANDLE ReleaseHandle; UINT Type; } DXGKARGCB_RELEASEHANDLEDATA;
+#define DXGK_HANDLE_ALLOCATION 1u
 typedef struct { HANDLE DeviceHandle;
  NTSTATUS (*DxgkCbReserveGpuVirtualAddressRange)(HANDLE, DXGKARGCB_RESERVEGPUVIRTUALADDRESSRANGE *);
  NTSTATUS (*DxgkCbSynchronizeExecution)(HANDLE,BOOLEAN (*)(PVOID),PVOID,ULONG,BOOLEAN *);
  VOID (*DxgkCbNotifyInterrupt)(HANDLE,const DXGKARGCB_NOTIFY_INTERRUPT_DATA *);
  BOOLEAN (*DxgkCbQueueDpc)(HANDLE);
+ PVOID (*DxgkCbAcquireHandleData)(const DXGKARGCB_GETHANDLEDATA *,HANDLE *);
+ VOID (*DxgkCbReleaseHandleData)(DXGKARGCB_RELEASEHANDLEDATA);
 } DXGKRNL_INTERFACE;
 typedef struct { HANDLE hContext; D3DGPU_PHYSICAL_ADDRESS Address; UINT NumEntries; } DXGKARG_SETROOTPAGETABLE;
 typedef union { struct { UINT SystemContext:1,GdiContext:1,VirtualAddressing:1,SystemProtected:1,HwQueueSupported:1,TestContext:1; }; UINT Value; } DXGK_CREATECONTEXTFLAGS;
@@ -213,6 +222,11 @@ typedef struct _ADMISSION_OBJECT_DEVICE { UINT Magic; void *Adapter; } ADMISSION
 typedef struct { UINT Magic,Flags; ADMISSION_OBJECT_DEVICE *Device;
   UINT FenceOutstanding; } ADMISSION_OBJECT_CONTEXT;
 typedef struct _ADMISSION_DEVICE { ADMISSION_OBJECT_DEVICE Object; LONG Win32Generation; ADMISSION_G3_PROCESS *GpuvaG3Process; } ADMISSION_DEVICE;
+typedef struct { ADMISSION_ALLOCATION_OBJECT Object; ULONG QualificationCookie,Win32ClassId,Win32Flags; } ADMISSION_ALLOCATION_HANDLE;
+#define ADMISSION_OPEN_ALLOCATION_MAGIC 0x4f504152u
+typedef struct { ULONG Magic; ADMISSION_DEVICE *Device; UINT RuntimeAllocation;
+ ADMISSION_ALLOCATION_OBJECT *Allocation; BOOLEAN ReadOnly;
+ ULONG Win32Generation,Win32ClassId,Win32Flags; } ADMISSION_OPEN_ALLOCATION;
 typedef struct { int unused; } ADMISSION_SCHEDULER_CONTEXT;
 typedef struct { int unused; } ADMISSION_PREPATCHED_RENDER;
 typedef struct _ADMISSION_RENDER_CONTEXT { ADMISSION_OBJECT_CONTEXT Object; UINT Win32Generation; BOOLEAN Win32Transport,GpuvaG3Poisoned; ADMISSION_SCHEDULER_CONTEXT SchedulerContext; ADMISSION_PREPATCHED_RENDER PrepatchedRender; ADMISSION_G3_PROCESS *GpuvaG3Process; struct _ADMISSION_RENDER_CONTEXT *GpuvaG3NextContext; volatile LONG GpuvaG3PrivateFence,GpuvaG3CancelFence,GpuvaG3CancelUncertain; BOOLEAN GpuvaG3Closing; ULONGLONG GpuvaG3PrivateManagerGeneration; ULONGLONG GpuvaG3RootIpa,GpuvaG3DmaBufferVa,GpuvaG3MappingGeneration; ULONG GpuvaG3DmaBufferBytes; } ADMISSION_RENDER_CONTEXT;

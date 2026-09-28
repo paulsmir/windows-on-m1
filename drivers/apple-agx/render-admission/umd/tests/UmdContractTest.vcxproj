@@ -158,6 +158,18 @@
       <UndefinePreprocessorDefinitions>NDEBUG;%(UndefinePreprocessorDefinitions)</UndefinePreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
+  <ItemGroup Condition="'$(R145ScreenMode)' == 'true'">
+    <ClCompile Remove="@(ClCompile)" />
+    <ClCompile Include="..\..\..\..\..\tests\r145_screen_replay_windows.cpp" />
+    <ClCompile Include="..\..\src\render_allocation.c" />
+  </ItemGroup>
+  <ItemDefinitionGroup Condition="'$(R145ScreenMode)' == 'true'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>..\src;$(R145ReplayIncludeDirectory);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>APPLE_AGX_GPUVA_WINSYS=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <UndefinePreprocessorDefinitions>NDEBUG;%(UndefinePreprocessorDefinitions)</UndefinePreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <ItemGroup Condition="'$(RuntimeDdiProbeMode)' == 'Driver' and '$(RuntimeProbeKmtSource)' != ''">
     <ClCompile Include="$(RuntimeProbeKmtSource)">
       <WarningLevel>TurnOffAllWarnings</WarningLevel>

@@ -183,6 +183,23 @@ int main(void) {
   info.PrivateDriverDataSize = sizeof(native);
   assert(AdmissionCreateAllocationImpl(&context, &args) == STATUS_INVALID_PARAMETER);
   assert(info.hAllocation == NULL);
+  /* R145 decoder v2 supplies CpuVisible0. Check the real KMD output for
+   * every native class: CPU staging is separate, local execution is mandatory. */
+  for (unsigned cls = 1; cls <= 3; ++cls) {
+    native.ClassId = cls;
+    native.CpuVisible = 0;
+    native.Size = (1u + 3u * cls) * 0x10000u;
+    memset(&info, 0, sizeof(info));
+    info.pPrivateDriverData = &native;
+    info.PrivateDriverDataSize = sizeof(native);
+    assert(AdmissionCreateAllocationImpl(&context, &args) == STATUS_SUCCESS);
+    assert(info.FlagsWddm2.CpuVisible == 0);
+    assert(info.FlagsWddm2.AccessedPhysically == 1);
+    assert(info.SupportedWriteSegmentSet == ADMISSION_LOCAL_SEGMENT_SET);
+    assert(info.PreferredSegment.SegmentId0 == ADMISSION_MEMORY_LOCAL_SEGMENT);
+    assert(info.EvictionSegmentSet == 0);
+    ExFreePoolWithTag(info.hAllocation, ADMISSION_POOL_TAG);
+  }
   INPUT legacy = {0, 1, 0x10000};
   memset(&info, 0, sizeof(info));
   info.pPrivateDriverData = &legacy;

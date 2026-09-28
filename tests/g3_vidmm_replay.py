@@ -22,6 +22,7 @@ FUNCTIONS = {
         "AdmissionG3AllocateNode", "AdmissionG3FreeNode",
         "AdmissionGpuvaG3FindProcess", "AdmissionG3BootstrapRoot",
         "AdmissionGpuvaG3BrokerTable", "AdmissionGpuvaG3MirrorTable",
+        "AdmissionG3CopyPte", "AdmissionGpuvaG3CopyEscape",
         "AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionGpuvaG3PrivateCancel","AdmissionG3PrivateReap","AdmissionGpuvaG3PrivateReset","AdmissionGpuvaG3PrivateReported","AdmissionGpuvaG3PrivateRetireContext","AdmissionG3PrivateDestroyStorage","AdmissionGpuvaG3PrivateEscape",
         "AdmissionDdiCreateProcess", "AdmissionDdiDestroyProcess",
         "AdmissionGpuvaG3AttachContext", "AdmissionGpuvaG3DetachContext",
@@ -46,7 +47,7 @@ FUNCTIONS = {
 
 
 def body(source, name):
-    match = re.search(r"(?m)^(?:_Use_decl_annotations_\s+)?(?:static\s+)?(?:unsigned long long|[A-Za-z_][A-Za-z_0-9]*)(?:\s+|\s*\*+\s*)" + re.escape(name) + r"\s*\([^;]*?\)\s*\{", source, re.S)
+    match = re.search(r"(?m)^(?:_Use_decl_annotations_\s+)?(?:static\s+)?(?:const\s+)?(?:unsigned long long|[A-Za-z_][A-Za-z_0-9]*)(?:\s+|\s*\*+\s*)" + re.escape(name) + r"\s*\([^;]*?\)\s*\{", source, re.S)
     if match is None:
         raise ValueError(f"missing KMD function {name}")
     depth = 1
@@ -96,6 +97,7 @@ def generate(revision=None, function_revisions=None):
                     "AdmissionG3RetireSystemSubtree", "AdmissionG3ActivateSystemSubtree",
                     "AdmissionG3ResetTableShadow", "AdmissionG3RegisterTable", "AdmissionG3PrepareTableReuse",
                     "AdmissionGpuvaG3MirrorTable",
+                    "AdmissionG3CopyPte", "AdmissionGpuvaG3CopyEscape",
                     "AdmissionGpuvaG3SubmitVirtualPaging",
                     "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
                     "AdmissionG4GraphAccessTyped", "AdmissionG4FindPrivateScene","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy", "AdmissionGpuvaG3BeginJob",
@@ -160,7 +162,7 @@ def main(revision=None, function_revisions=None, old_context_flags=False):
                 "apple_agx_relocation.c", "apple_agx_exp208_adapter.c")]
         if os.environ.get("G3_REPLAY_R132") or os.environ.get("G3_REPLAY_R133"):
             command[1:1] = ["-fsanitize=address,undefined"]
-        if any(os.environ.get(k) for k in ("G3_REPLAY_R134", "G3_REPLAY_R135", "G3_REPLAY_R137")):
+        if any(os.environ.get(k) for k in ("G3_REPLAY_R134", "G3_REPLAY_R135", "G3_REPLAY_R137", "G3_REPLAY_R145")):
             command[1:1] = ["-DADMISSION_GPUVA_G1B_PAGE_PROFILE=" + os.environ.get("G3_REPLAY_PROFILE", "16"),
                             "-fsanitize=address,undefined"]
         if os.environ.get("G3_REPLAY_R144"):

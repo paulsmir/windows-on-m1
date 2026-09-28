@@ -30,10 +30,12 @@ static void update(ADMISSION_CONTEXT *adapter, HANDLE process, UINT level,
 #include "g3_r135_root_reuse_cases.c"
 #include "g3_r137_reservation_cases.c"
 #include "g3_r144_local_bounds_cases.c"
+#include "g3_r145_copy_cases.c"
 #if defined(G3_PRIVATE_COMBINED)
 #include "g3_r137_private_combined.c"
 #endif
 int main(void) {
+  if (getenv("G3_REPLAY_R145")) { r145_copy_cases(); return 0; }
   if (getenv("G3_REPLAY_R144")) { r144_local_bounds_cases(); return 0; }
   if (getenv("G3_REPLAY_RESERVE_BASE"))
     reserve_base=strtoull(getenv("G3_REPLAY_RESERVE_BASE"),NULL,0);
