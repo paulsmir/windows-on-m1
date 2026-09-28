@@ -1,5 +1,28 @@
 # GPU current boundary — 2026-09-28
 
+## 2026-09-28 EXP860 diagnostic v2 — implemented offline, no package/Air
+
+User-approved Wom1G3CopyQueryFailure v2 is fixed144 bytes: roots/bootstrap flag,
+process/context SetRoot history, range/access and first missing native component.
+First claim snapshots under QUERY mutex into adapter storage, then persists after
+unlock/reference release; no added allocation or admission/status change. Legacy
+early failures mark graph details unavailable. Host decoder accepts bin/state/reg.
+Real16/64 RED→GREEN distinguishes bootstrap, absent VA, short tail and incomplete
+logical group; review's unpublished-leaf classification gap repaired and accepted.
+ARM64 three changed TUs W4/WX/analyze pass; full1156 has exact baseline15F/38E/2S.
+Two initial historical-harness failures repaired; final VidMm26 pass. All61 guard
+conditions/statuses/targets preserved; only7 changed production files sent after
+535 builder baseline hashes verified. No linked/signed package or hardware run.
+
+Collector value unchanged: Wom1G3CopyQueryFailure; raw export
+Wom1G3CopyQueryFailure.bin. Report `investigation/analysis/EXP860-query-v2.md`;
+evidence `investigation/evidence/EXP860-query-v2/summary.json`. EXP859 ordinary
+Code28 remains accepted. Next requires separate exact-package/run authorization.
+
+WHY CONTINUE COMPARISON: the approved discriminator is implemented; actual QUERY
+root/missing component still needs a hardware receipt. Do not repeat offline
+archaeology or bind a root inside Escape; preserve the graph safety guard.
+
 ## 2026-09-28 R146 — QUERY53 audit stops without a unique hardware cause
 
 EXP859 receipt is exactly16 bytes {1,16,53,C000000D}; no VA/size/root/generations.

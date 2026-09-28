@@ -49,6 +49,8 @@ typedef struct _ADMISSION_G3_PROCESS {
   APPLE_AGX_MEMORY_OBJECT BootstrapRoot;
   ADMISSION_G3_TABLE_SHADOW *TableShadows;
   ULONGLONG BootstrapIpa;
+  ULONGLONG LastSetRootIpa;
+  ULONG SetRootCount;
   ULONGLONG PrivateVa;
   ULONGLONG PrivateMiddleIpa, PrivateLeafIpa;
   APPLE_AGX_G3_PRIVATE_EXTENT PrivateTables[2];

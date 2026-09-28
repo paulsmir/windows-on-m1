@@ -60,7 +60,7 @@ static void r145_copy_cases(void) {
   assert(a.G3CopyQueryFailureClaim==2 && a.G3CopyQueryFailurePredicate==4 &&
          a.G3CopyQueryFailureStatus==(ULONG)STATUS_INVALID_PARAMETER);
   assert(query_registry_writes==1 && query_registry_flushes==1 &&
-         query_registry_receipt[0]==1 && query_registry_receipt[1]==16 &&
+         query_registry_receipt[0]==2 && query_registry_receipt[1]==144 &&
          query_registry_receipt[2]==4 &&
          query_registry_receipt[3]==(ULONG)STATUS_INVALID_PARAMETER);
   escape.Flags.Value=1;

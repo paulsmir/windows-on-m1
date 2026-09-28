@@ -2,6 +2,7 @@
 #define APPLE_AGX_GPUVA_G3_GRAPH_H
 
 #include "apple_agx_gpuva_broker_v5_client.h"
+#include "apple_agx_g3_copy_query_receipt.h"
 
 typedef void *(*APPLE_AGX_GPUVA_G3_ALLOC)(void *, unsigned long long);
 typedef void (*APPLE_AGX_GPUVA_G3_FREE)(void *, void *);
@@ -83,6 +84,9 @@ bool AppleAgxGpuvaG3GraphContainsRangeAccess(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long StartVa, unsigned int Bytes, bool Write);
 bool AppleAgxGpuvaG3GraphTranslateVa(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long GpuVa, unsigned long long *GuestIpa);
+bool AppleAgxGpuvaG3GraphInspectRangeAccess(APPLE_AGX_GPUVA_G3_GRAPH *,
+    unsigned long long StartVa, unsigned int Bytes, bool Write,
+    APPLE_AGX_GPUVA_G3_WALK_FAILURE *Failure);
 bool AppleAgxGpuvaG3GraphAttachPrivate(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long ReservedVa, unsigned long long MiddleIpa,
     unsigned long long LeafIpa);

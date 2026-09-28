@@ -107,10 +107,13 @@ static void KeAcquireSpinLock(int *m,KIRQL *i) {(void)m;*i=0;}
 static void KeReleaseSpinLock(int *m,KIRQL i) {(void)m;(void)i;}
 static KIRQL KeGetCurrentIrql(void) { return replay_irql; }
 static BOOLEAN replay_pool_fail;
-static void *ExAllocatePool2(int pool,SIZE_T bytes,ULONG tag) {(void)pool;(void)tag;return replay_pool_fail?NULL:calloc(1,bytes);}
+static UINT replay_pool_calls;
+static volatile LONG *replay_query_claim_watch;
+static KIRQL replay_query_claim_irql;
+static void *ExAllocatePool2(int pool,SIZE_T bytes,ULONG tag) {(void)pool;(void)tag;++replay_pool_calls;return replay_pool_fail?NULL:calloc(1,bytes);}
 static void ExFreePoolWithTag(void *p,ULONG tag) {(void)tag;free(p);}
 static LONG InterlockedExchange(volatile LONG *p,LONG n) {LONG old=*p;*p=n;return old;}
-static LONG InterlockedCompareExchange(volatile LONG *p,LONG n,LONG old) { LONG v=*p;if(v==old)*p=n;return v; }
+static LONG InterlockedCompareExchange(volatile LONG *p,LONG n,LONG old) { LONG v=*p;if(v==old){if(p==replay_query_claim_watch && n==1)replay_query_claim_irql=replay_irql;*p=n;}return v; }
 
 typedef struct { long long QuadPart; } PHYSICAL_ADDRESS;
 typedef struct { UINT SegmentId, Padding; UINT64 SegmentOffset; } D3DGPU_PHYSICAL_ADDRESS;
@@ -232,7 +235,7 @@ typedef struct { ULONG Magic; ADMISSION_DEVICE *Device; UINT RuntimeAllocation;
  ULONG Win32Generation,Win32ClassId,Win32Flags; } ADMISSION_OPEN_ALLOCATION;
 typedef struct { int unused; } ADMISSION_SCHEDULER_CONTEXT;
 typedef struct { int unused; } ADMISSION_PREPATCHED_RENDER;
-typedef struct _ADMISSION_RENDER_CONTEXT { ADMISSION_OBJECT_CONTEXT Object; UINT Win32Generation; BOOLEAN Win32Transport,GpuvaG3Poisoned; ADMISSION_SCHEDULER_CONTEXT SchedulerContext; ADMISSION_PREPATCHED_RENDER PrepatchedRender; ADMISSION_G3_PROCESS *GpuvaG3Process; struct _ADMISSION_RENDER_CONTEXT *GpuvaG3NextContext; volatile LONG GpuvaG3PrivateFence,GpuvaG3CancelFence,GpuvaG3CancelUncertain; BOOLEAN GpuvaG3Closing; ULONGLONG GpuvaG3PrivateManagerGeneration; ULONGLONG GpuvaG3RootIpa,GpuvaG3DmaBufferVa,GpuvaG3MappingGeneration; ULONG GpuvaG3DmaBufferBytes; } ADMISSION_RENDER_CONTEXT;
+typedef struct _ADMISSION_RENDER_CONTEXT { ADMISSION_OBJECT_CONTEXT Object; UINT Win32Generation; BOOLEAN Win32Transport,GpuvaG3Poisoned; ADMISSION_SCHEDULER_CONTEXT SchedulerContext; ADMISSION_PREPATCHED_RENDER PrepatchedRender; ADMISSION_G3_PROCESS *GpuvaG3Process; struct _ADMISSION_RENDER_CONTEXT *GpuvaG3NextContext; volatile LONG GpuvaG3PrivateFence,GpuvaG3CancelFence,GpuvaG3CancelUncertain; BOOLEAN GpuvaG3Closing; ULONGLONG GpuvaG3PrivateManagerGeneration; ULONGLONG GpuvaG3LastSetRootIpa; ULONG GpuvaG3SetRootCount; ULONGLONG GpuvaG3RootIpa,GpuvaG3DmaBufferVa,GpuvaG3MappingGeneration; ULONG GpuvaG3DmaBufferBytes; } ADMISSION_RENDER_CONTEXT;
 typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; APPLE_AGX_G3_PRIVATE_POOL PrivatePool; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence,LastCompletedFence,PrivateCompletionFence; ULONGLONG UnpublishedGroups[32]; } ADMISSION_G3_STATE;
 typedef struct _ADMISSION_G3_TABLE_SHADOW { struct _ADMISSION_G3_TABLE_SHADOW *Next; APPLE_AGX_MEMORY_OBJECT Memory; ULONGLONG OriginalIpa,BrokerIpa; APPLE_AGX_GPUVA_G3_LOGICAL_PTE *LogicalPtes,*ResidentPtes,*PendingPtes; } ADMISSION_G3_TABLE_SHADOW;
 typedef struct _ADMISSION_G3_PRIVATE_SCENE {
@@ -250,7 +253,8 @@ struct _ADMISSION_G3_PROCESS {
   APPLE_AGX_MEMORY_IO Io;
   APPLE_AGX_MEMORY_OBJECT BootstrapRoot;
   ADMISSION_G3_TABLE_SHADOW *TableShadows;
-  ULONGLONG BootstrapIpa;
+  ULONGLONG BootstrapIpa,LastSetRootIpa;
+  ULONG SetRootCount;
   ULONGLONG PrivateVa;
   ULONGLONG PrivateMiddleIpa, PrivateLeafIpa;
   APPLE_AGX_G3_PRIVATE_EXTENT PrivateTables[2];
@@ -274,6 +278,7 @@ struct _ADMISSION_CONTEXT { REPLAY_PACKET RenderPacket; BOOLEAN InterfaceValid; 
   PDEVICE_OBJECT PhysicalDeviceObject; ADMISSION_CONTEXT *ObjectAdapter;
   volatile LONG G3CopyQueryFailureClaim;
   ULONG G3CopyQueryFailurePredicate,G3CopyQueryFailureStatus;
+  APPLE_AGX_G3_COPY_QUERY_RECEIPT G3CopyQueryFailure;
   int SchedulerLock,Scheduler;
   ADMISSION_BACKEND_IMAGE BackendImage;
   struct { REPLAY_APERTURE Aperture; } Memory;
@@ -281,14 +286,14 @@ struct _ADMISSION_CONTEXT { REPLAY_PACKET RenderPacket; BOOLEAN InterfaceValid; 
 #define PLUGPLAY_REGKEY_DEVICE 1u
 #define KEY_SET_VALUE 2u
 static UINT r145_references;
-static ULONG query_registry_writes,query_registry_flushes,query_registry_receipt[4];
+static ULONG query_registry_writes,query_registry_flushes,query_registry_receipt[36];
 static NTSTATUS IoOpenDeviceRegistryKey(PDEVICE_OBJECT device,ULONG kind,ULONG access,HANDLE *key) {
   assert(device && kind==1 && access==2 && replay_irql==PASSIVE_LEVEL && !r145_references);
   *key=(HANDLE)0x5588;return STATUS_SUCCESS;
 }
 static void WriteBinary(HANDLE key,const wchar_t *name,const VOID *data,ULONG bytes) {
   assert(key==(HANDLE)0x5588 && !wcscmp(name,L"Wom1G3CopyQueryFailure"));
-  assert(bytes==16 && replay_irql==PASSIVE_LEVEL);
+  assert((bytes==16 || bytes==144) && replay_irql==PASSIVE_LEVEL);
   memcpy(query_registry_receipt,data,bytes);++query_registry_writes;
 }
 static NTSTATUS ZwFlushKey(HANDLE key) {assert(key==(HANDLE)0x5588);++query_registry_flushes;return STATUS_SUCCESS;}

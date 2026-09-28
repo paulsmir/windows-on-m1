@@ -23,11 +23,11 @@ FUNCTIONS = {
         "AdmissionG3AllocateNode", "AdmissionG3FreeNode",
         "AdmissionGpuvaG3FindProcess", "AdmissionG3BootstrapRoot",
         "AdmissionGpuvaG3BrokerTable", "AdmissionGpuvaG3MirrorTable",
-        "AdmissionG3CopyPte", "AdmissionGpuvaG3CopyEscape",
+        "AdmissionG3CopyPte", "AdmissionG3CaptureCopyQueryFailure", "AdmissionGpuvaG3CopyEscape",
         "AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionGpuvaG3PrivateCancel","AdmissionG3PrivateReap","AdmissionGpuvaG3PrivateReset","AdmissionGpuvaG3PrivateReported","AdmissionGpuvaG3PrivateRetireContext","AdmissionG3PrivateDestroyStorage","AdmissionGpuvaG3PrivateEscape",
         "AdmissionDdiCreateProcess", "AdmissionDdiDestroyProcess",
         "AdmissionGpuvaG3AttachContext", "AdmissionGpuvaG3DetachContext",
-        "AdmissionGpuvaG3ResolveTable", "AdmissionDdiSetRootPageTable",
+        "AdmissionGpuvaG3ResolveTable", "AdmissionG3RecordSetRootSeen", "AdmissionDdiSetRootPageTable",
         "AdmissionGpuvaG3SubmitVirtualPaging",
         "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
         "AdmissionG4GraphAccessTyped", "AdmissionG4FindPrivateScene","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy", "AdmissionGpuvaG3BeginJob",
@@ -98,7 +98,8 @@ def generate(revision=None, function_revisions=None):
                     "AdmissionG3RetireSystemSubtree", "AdmissionG3ActivateSystemSubtree",
                     "AdmissionG3ResetTableShadow", "AdmissionG3RegisterTable", "AdmissionG3PrepareTableReuse",
                     "AdmissionGpuvaG3MirrorTable",
-                    "AdmissionG3CopyPte", "AdmissionGpuvaG3CopyEscape",
+                    "AdmissionG3CopyPte", "AdmissionG3CaptureCopyQueryFailure", "AdmissionGpuvaG3CopyEscape",
+                    "AdmissionG3RecordSetRootSeen",
                     "AdmissionGpuvaG3SubmitVirtualPaging",
                     "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
                     "AdmissionG4GraphAccessTyped", "AdmissionG4FindPrivateScene","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy", "AdmissionGpuvaG3BeginJob",
@@ -129,7 +130,21 @@ def generate(revision=None, function_revisions=None):
     for name in ("AdmissionNotifyCompletionAtInterrupt", "AdmissionBackendComplete"):
         parts.append(body(backend,name))
     parts.append("#endif\n")
-    parts.append('#include "g3_vidmm_replay_scenarios.c"\n')
+    if os.environ.get("G3_REPLAY_QUERY_V2"):
+        scenarios = (ROOT / "tests/g3_vidmm_replay_scenarios.c").read_text()
+        system = (ROOT / "tests/g3_system_lifetime_cases.c").read_text()
+        bind = "  assert(AppleAgxGpuvaG3GraphBindRoot(&p->Graph,s->BrokerIpa));"
+        assert system.count(bind) == 1
+        system = system.replace(bind, "  /* QUERY v2: leave OS root unselected. */")
+        copy = (ROOT / "tests/g3_r145_copy_cases.c").read_text()
+        marker = "  escape.pPrivateDriverData=q;escape.PrivateDriverDataSize=sizeof(*q);"
+        assert copy.count(marker) == 1
+        copy = copy.replace(marker, marker + "\n" +
+            (ROOT / "tests/g3_copy_query_v2_cases.c").read_text())
+        scenarios = scenarios.replace('#include "g3_system_lifetime_cases.c"', system)
+        parts.append(scenarios.replace('#include "g3_r145_copy_cases.c"', copy))
+    else:
+        parts.append('#include "g3_vidmm_replay_scenarios.c"\n')
     return "\n".join(parts)
 
 

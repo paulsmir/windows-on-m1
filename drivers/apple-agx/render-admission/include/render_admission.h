@@ -17,6 +17,7 @@
 #include "render_hvc.h"
 #include "apple_agx_memory.h"
 #include "apple_agx_local_reserve_abi.h"
+#include "apple_agx_g3_copy_query_receipt.h"
 #include "apple_agx_residency.h"
 #include "apple_agx_uat_publication.h"
 #include "render_paging.h"
@@ -391,6 +392,7 @@ typedef struct _ADMISSION_CONTEXT {
   PVOID GpuvaG3State;
   volatile LONG G3CopyQueryFailureClaim;
   ULONG G3CopyQueryFailurePredicate, G3CopyQueryFailureStatus;
+  APPLE_AGX_G3_COPY_QUERY_RECEIPT G3CopyQueryFailure;
   volatile LONG G4SubmitFailureClaim;
   volatile LONG G4SubmitFailureCount;
   struct _ADMISSION_G4_SUBMIT_FAILURE {
@@ -496,6 +498,8 @@ typedef struct _ADMISSION_RENDER_CONTEXT {
   volatile LONG GpuvaG3PrivateFence, GpuvaG3CancelFence, GpuvaG3CancelUncertain;
   BOOLEAN GpuvaG3Closing;
   ULONGLONG GpuvaG3RootIpa;
+  ULONGLONG GpuvaG3LastSetRootIpa;
+  ULONG GpuvaG3SetRootCount;
   ULONGLONG GpuvaG3DmaBufferVa;
   ULONGLONG GpuvaG3MappingGeneration;
   ULONG GpuvaG3DmaBufferBytes;
@@ -858,8 +862,7 @@ void AdmissionRecordGpuvaG3PagingFailure(
 void AdmissionRenderCorrelationSubmitFailureWindows(
     _In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG4SubmitFailure(_In_opt_ ADMISSION_CONTEXT *Context);
-void AdmissionRecordG3CopyQueryFailure(_In_opt_ ADMISSION_CONTEXT *Context,
-    _In_ ULONG Predicate, _In_ NTSTATUS Status);
+void AdmissionRecordG3CopyQueryFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordGpuvaG3UnpublishedGroups(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_reads_(32) const ULONGLONG *Counts);

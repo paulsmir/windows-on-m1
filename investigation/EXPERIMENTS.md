@@ -49543,3 +49543,45 @@ report `investigation/analysis/R146-query53.md`. Next proposed EXP860 variable i
 a bounded first53 root/walk diagnostic; minimum leading field RootIsBootstrap
 at QUERY, with VA/length/missing-level/provenance for decisive attribution.
 No hardware preregistration or execution; EXP859 ordinary Code28 unchanged.
+
+
+## EXP860-OFFLINE-QUERY-V2 — preregistered 2026-09-28T06:53:58.845614+00:00
+
+User approved diagnostic-only v2 implementation; no package or Air. Base
+2f737526de48142272f95bfc6a3265a1b7bdd400. Real16/64 QUERY replay RED on missing
+v2; GREEN distinguishes bootstrap root, absent VA and short tail. Review exposed
+logical-but-unpublished groups: real partial4K unmap RED, bounded ResidentPtes
+diagnostic refinement GREEN. No admission/status change. Before commit: three
+whole ARM64 C TUs W4/WX/analyze with pinned WDK26100/MSVC14.44, full suite once
+against15F/38E/2S identities, decoder/ledger checks. Builder persistent tree
+AD04-persistent-dwm-next verifies535 inputs before applying changed files only.
+Command: Windows python C:\Users\pauls\EXP860-query-v2-offline\compile-kmd.py.
+Local records/scripts/hashes: main `.local/experiments/EXP860-query-v2-offline/`.
+No hardware artifact, launch, signer, firmware or recovery change; prior EXP859
+ordinary Code28 remains accepted. Registry value stays Wom1G3CopyQueryFailure;
+future collector export Wom1G3CopyQueryFailure.bin.
+
+### EXP860-OFFLINE-QUERY-V2 result — 2026-09-28T07:02:20.922193+00:00
+
+Verdict: IMPLEMENTED_OFFLINE_DIAGNOSTIC_ONLY. First144-byte v2 capture is under
+QUERY mutex, no diagnostic allocation, registry after unlock/reference release,
+first claim retained. All61 guard conditions/statuses/targets preserved. Real
+16/64 RED→GREEN and host decoding distinguish bootstrap/no-root, absent VA,
+short tail and logical-but-unpublished leaf. Per-process/context SetRoot counts
+are separate/saturating. Independent review finding repaired with real partial4K
+unmap RED→GREEN; follow-up no substantive findings.
+
+Three changed C TUs compile ARM64 /W4 /WX /analyze on pinned WDK26100 and
+MSVC14.44;535 builder baseline hashes verified, only7 changed files applied.
+Initial1156 suite17F38E2S exposed two historical-helper extraction fixture issues;
+corrected harness passes VidMm26 and final1156/133.434s has exact baseline
+15F38E2S with no new/removed failure identities. Ledger schema2PASS/diff check.
+All production hashes still match compiled inputs; nested dirty diffs unchanged.
+
+Evidence `investigation/evidence/EXP860-query-v2/summary.json` SHA256
+`8a1c7b0af3cc2bbf0ea15245f43d1769e47c8aee0d3ccfbde461ce3bc3bc20bd`. Report `investigation/analysis/EXP860-query-v2.md`. Registry value
+Wom1G3CopyQueryFailure, recommended raw file Wom1G3CopyQueryFailure.bin; decoder
+`tools/decode_g3_copy_query_failure.py` also reads state.json/devnode.reg and v1.
+No package build/signing, firmware change, Air access or hardware verdict.
+EXP859 ordinary Code28 recovery remains accepted. Next is a separately authorized
+exact-package discriminator; no speculative QUERY/root fix.

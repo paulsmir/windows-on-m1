@@ -515,27 +515,58 @@ bool AppleAgxGpuvaG3GraphContainsRange(APPLE_AGX_GPUVA_G3_GRAPH *graph,
       graph, start_va, bytes, false);
 }
 
-bool AppleAgxGpuvaG3GraphContainsRangeAccess(
+/* Optional evidence follows the same walk and never influences acceptance. */
+static bool missing_range(APPLE_AGX_GPUVA_G3_WALK_FAILURE *failure,
+    unsigned long long start, unsigned long long page, unsigned int level,
+    unsigned int index, unsigned int reason) {
+  if (failure) {
+    failure->Level = level;
+    failure->Index = index;
+    failure->Va = page < start ? start : page;
+    failure->ComponentReason = reason;
+    failure->Reason = page > (start & ~(G3_PAGE - 1u)) ?
+        AppleAgxG3WalkTailShort : reason;
+  }
+  return false;
+}
+
+bool AppleAgxGpuvaG3GraphInspectRangeAccess(
     APPLE_AGX_GPUVA_G3_GRAPH *graph, unsigned long long start_va,
-    unsigned int bytes, bool write) {
+    unsigned int bytes, bool write, APPLE_AGX_GPUVA_G3_WALK_FAILURE *failure) {
   unsigned long long va, end;
   APPLE_AGX_GPUVA_G3_NODE *root_edge, *middle_edge, *leaf;
+  if (failure) {
+    memset(failure, 0, sizeof(*failure));
+    failure->Level = failure->Index = ~0u;
+  }
   if (!bytes || start_va >= (1ULL << 39) ||
       bytes > (1ULL << 39) - start_va || !graph || !graph->Created ||
       graph->Uncertain) return false;
   end = start_va + bytes;
   for (va = start_va & ~(G3_PAGE - 1u); va < end; va += G3_PAGE) {
-    root_edge = find_edge(graph->Parents, graph->RootIpa,
-                          (unsigned int)((va >> 36) & 7u));
-    if (!root_edge) return false;
-    middle_edge = find_edge(graph->Parents, root_edge->AuxIpa,
-                            (unsigned int)((va >> 25) & 2047u));
-    if (!middle_edge) return false;
-    leaf = find_edge(graph->Leaves, middle_edge->AuxIpa,
-                     (unsigned int)((va >> 14) & 2047u));
-    if (!leaf || !leaf->AuxIpa || (write && !leaf->Writable)) return false;
+    unsigned int ri = (unsigned int)((va >> 36) & 7u);
+    unsigned int mi = (unsigned int)((va >> 25) & 2047u);
+    unsigned int li = (unsigned int)((va >> 14) & 2047u);
+    root_edge = find_edge(graph->Parents, graph->RootIpa, ri);
+    if (!root_edge) return missing_range(failure, start_va, va, 0u, ri,
+                                         AppleAgxG3WalkNoRoot);
+    middle_edge = find_edge(graph->Parents, root_edge->AuxIpa, mi);
+    if (!middle_edge) return missing_range(failure, start_va, va, 1u, mi,
+                                           AppleAgxG3WalkNoTable);
+    leaf = find_edge(graph->Leaves, middle_edge->AuxIpa, li);
+    if (!leaf) return missing_range(failure, start_va, va, 2u, li,
+                                    AppleAgxG3WalkLeafAbsent);
+    if (!leaf->AuxIpa || (write && !leaf->Writable))
+      return missing_range(failure, start_va, va, 2u, li,
+                           AppleAgxG3WalkLeafNotPublished);
   }
   return true;
+}
+
+bool AppleAgxGpuvaG3GraphContainsRangeAccess(
+    APPLE_AGX_GPUVA_G3_GRAPH *graph, unsigned long long start_va,
+    unsigned int bytes, bool write) {
+  return AppleAgxGpuvaG3GraphInspectRangeAccess(graph, start_va, bytes, write, NULL);
 }
 
 /* A private leaf is grafted into the actual current shadow root. VidMm may

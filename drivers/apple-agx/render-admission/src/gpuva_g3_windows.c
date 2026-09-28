@@ -496,7 +496,7 @@ static BOOLEAN AdmissionG3PrivateDestroyStorage(ADMISSION_G3_PROCESS *p) {
 /* Resolve only current VidMm provenance. ResidentPtes covers both logical
  * page formats; LogicalPtes deliberately excludes the 64K CPU-envelope case. */
 static const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *AdmissionG3CopyPte(
-    ADMISSION_G3_PROCESS *p, ULONGLONG va) {
+    const ADMISSION_G3_PROCESS *p, ULONGLONG va) {
   APPLE_AGX_GPUVA_G3_NODE *edge;
   ADMISSION_G3_TABLE_SHADOW *shadow;
   ULONGLONG middle, leaf;
@@ -514,18 +514,95 @@ static const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *AdmissionG3CopyPte(
   return &shadow->ResidentPtes[(UINT)((va>>12)&8191u)];
 }
 
+/* Caller holds the QUERY mutex when process/context are supplied. Claim and
+ * fixed adapter storage precede unlock; only the winning caller persists it. */
+static BOOLEAN AdmissionG3CaptureCopyQueryFailure(ADMISSION_CONTEXT *adapter,
+    const ADMISSION_G3_PROCESS *p, const ADMISSION_RENDER_CONTEXT *context,
+    const APPLE_AGX_G3_COPY_REQUEST *q, ULONG predicate, NTSTATUS status,
+    BOOLEAN locked, ULONGLONG first, ULONGLONG length,
+    const APPLE_AGX_GPUVA_G3_WALK_FAILURE *walk) {
+  APPLE_AGX_G3_COPY_QUERY_RECEIPT *r;
+  if (!adapter || !predicate || NT_SUCCESS(status) ||
+      InterlockedCompareExchange(&adapter->G3CopyQueryFailureClaim, 1, 0) != 0)
+    return FALSE;
+  r = &adapter->G3CopyQueryFailure;
+  RtlZeroMemory(r, sizeof(*r));
+  r->Version = 2u; r->Bytes = sizeof(*r);
+  r->Predicate = predicate; r->Status = (ULONG)status;
+  r->MissingLevel = r->MissingIndex = MAXULONG;
+  if (locked) r->Flags |= AppleAgxG3QueryLocked;
+  if (q) {
+    r->Flags |= AppleAgxG3QueryRequest;
+    r->QueryVa = q->GpuVa;
+  }
+  if (p) {
+    r->Flags |= AppleAgxG3QueryProcess;
+    r->GraphRootIpa = p->Graph.RootIpa;
+    r->BootstrapIpa = p->BootstrapIpa;
+    if (p->Graph.RootIpa == p->BootstrapIpa)
+      r->Flags |= AppleAgxG3QueryRootIsBootstrap;
+    r->ProcessLastSetRootIpa = p->LastSetRootIpa;
+    r->ProcessSetRootCount = p->SetRootCount;
+    r->ProcessGeneration = p->Graph.ProcessGeneration;
+    r->MappingGeneration = p->Graph.MappingGeneration;
+    r->ProcessId = p->Graph.ProcessId;
+  }
+  if (context) {
+    r->Flags |= AppleAgxG3QueryContext;
+    r->ContextLastSetRootIpa = context->GpuvaG3LastSetRootIpa;
+    r->ContextSetRootCount = context->GpuvaG3SetRootCount;
+    r->ContextRootIpa = context->GpuvaG3RootIpa;
+    r->ContextToken = (ULONGLONG)(ULONG_PTR)context;
+  }
+  /* Earlier guards have not established a bounded allocation range. */
+  if (predicate >= 53u && locked) {
+    r->Flags |= AppleAgxG3QueryRange;
+    r->QueryVa = first; r->QueryBytes = length;
+    if (walk) {
+      r->MissingLevel = walk->Level; r->MissingIndex = walk->Index;
+      r->MissingReason = walk->Reason; r->ComponentReason = walk->ComponentReason;
+      r->MissingVa = walk->Va;
+      /* Incomplete logical groups remove the native leaf node. Distinguish
+       * that state from an entirely unmapped group using existing provenance,
+       * without publishing, allocating or changing the failed predicate. */
+      if (p && walk->Level == 2u &&
+          walk->ComponentReason == AppleAgxG3WalkLeafAbsent) {
+        const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *group =
+            AdmissionG3CopyPte(p, walk->Va & ~0x3fffULL);
+        UINT i;
+        for (i=0u; group && i<4u; ++i) {
+          if (!(group[i].Flags & APPLE_AGX_GPUVA_G3_VALID)) continue;
+          r->ComponentReason = AppleAgxG3WalkLeafNotPublished;
+          if (r->MissingReason != AppleAgxG3WalkTailShort)
+            r->MissingReason = AppleAgxG3WalkLeafNotPublished;
+          break;
+        }
+      }
+    }
+  }
+  /* QUERY's existing walk requests read access (write=FALSE). */
+  r->Write = 0u;
+  adapter->G3CopyQueryFailurePredicate = predicate;
+  adapter->G3CopyQueryFailureStatus = (ULONG)status;
+  KeMemoryBarrier();
+  InterlockedExchange(&adapter->G3CopyQueryFailureClaim, 2);
+  return TRUE;
+}
+
 NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
     const DXGKARG_ESCAPE *args) {
   APPLE_AGX_G3_COPY_REQUEST *q=NULL;
   ADMISSION_G3_STATE *state;
-  ADMISSION_G3_PROCESS *p;
-  ADMISSION_RENDER_CONTEXT *context;
+  ADMISSION_G3_PROCESS *p=NULL;
+  ADMISSION_RENDER_CONTEXT *context=NULL;
   ADMISSION_OPEN_ALLOCATION *opened;
   ADMISSION_ALLOCATION_HANDLE *allocation;
   ADMISSION_SCANOUT_MEMORY_VIEW view;
   DXGKARGCB_GETHANDLEDATA lookup={0};
   DXGKARGCB_RELEASEHANDLEDATA reference={0};
-  ULONGLONG length, offset, end, page, first;
+  ULONGLONG length=0, offset, end, page, first=0;
+  APPLE_AGX_GPUVA_G3_WALK_FAILURE walk={0};
+  BOOLEAN captured=FALSE, captureAttempted=FALSE;
   ULONG predicate=0u, operation=MAXULONG;
   BOOLEAN isQuery=FALSE;
   NTSTATUS status=STATUS_INVALID_PARAMETER;
@@ -616,7 +693,8 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   COPY_REJECT_IF(length>allocation->Object.Description.Size-q->Offset, 51u, STATUS_INVALID_PARAMETER, Unlock);
   COPY_REJECT_IF(q->Offset>=(1ULL<<39)-q->GpuVa || length>(1ULL<<39)-q->GpuVa-q->Offset, 52u, STATUS_INVALID_PARAMETER, Unlock);
   first=q->GpuVa+q->Offset;end=first+length;
-  COPY_REJECT_IF(!AppleAgxGpuvaG3GraphContainsRangeAccess(&p->Graph,first,(UINT)length,FALSE), 53u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(!AppleAgxGpuvaG3GraphInspectRangeAccess(&p->Graph,first,(UINT)length,FALSE,
+      adapter->G3CopyQueryFailureClaim==0 ? &walk : NULL), 53u, STATUS_INVALID_PARAMETER, Unlock);
   status=AdmissionMemoryRuntimeLocalView(adapter,&view);
   COPY_REJECT_IF(!NT_SUCCESS(status), 54u, status, Unlock);
   COPY_REJECT_IF(!view.CpuAddress, 55u, STATUS_INVALID_PARAMETER, Unlock);
@@ -650,12 +728,20 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   }
   RtlCopyMemory(args->pPrivateDriverData,q,sizeof(*q));status=STATUS_SUCCESS;
 Unlock:
+  if(isQuery && predicate) {
+    captureAttempted=TRUE;
+    captured=AdmissionG3CaptureCopyQueryFailure(adapter,p,context,q,predicate,status,
+        TRUE,first,length,&walk);
+  }
   ExReleaseFastMutex(&state->Lock);
 Release:
   if(reference.ReleaseHandle) adapter->Interface.DxgkCbReleaseHandleData(reference);
 Free:
+  if(isQuery && predicate && !captureAttempted)
+    captured=AdmissionG3CaptureCopyQueryFailure(adapter,NULL,NULL,q,predicate,status,
+        FALSE,0,0,NULL);
   if(q) ExFreePoolWithTag(q,ADMISSION_POOL_TAG);
-  if(isQuery && predicate) AdmissionRecordG3CopyQueryFailure(adapter,predicate,status);
+  if(captured) AdmissionRecordG3CopyQueryFailure(adapter);
 #undef COPY_REJECT_IF
   return status;
 }
@@ -1049,6 +1135,15 @@ NTSTATUS AdmissionGpuvaG3ResolveTable(
   return STATUS_SUCCESS;
 }
 
+/* Diagnostic history only; all updates use the process mutex. A zero IPA
+ * denotes a call that failed before address resolution. Counts saturate. */
+static void AdmissionG3RecordSetRootSeen(ADMISSION_G3_PROCESS *process,
+    ADMISSION_RENDER_CONTEXT *context, ULONGLONG ipa) {
+  if (process->SetRootCount != MAXULONG) ++process->SetRootCount;
+  if (context->GpuvaG3SetRootCount != MAXULONG) ++context->GpuvaG3SetRootCount;
+  process->LastSetRootIpa = context->GpuvaG3LastSetRootIpa = ipa;
+}
+
 _Use_decl_annotations_ VOID AdmissionDdiSetRootPageTable(
     HANDLE Adapter, const DXGKARG_SETROOTPAGETABLE *Args) {
   ADMISSION_CONTEXT *adapter = (ADMISSION_CONTEXT *)Adapter;
@@ -1065,6 +1160,11 @@ _Use_decl_annotations_ VOID AdmissionDdiSetRootPageTable(
   context->GpuvaG3RootIpa = 0ULL;
   if (process == NULL || Args->NumEntries != 8u ||
       KeGetCurrentIrql() != PASSIVE_LEVEL) {
+    if (process != NULL && KeGetCurrentIrql() == PASSIVE_LEVEL) {
+      ExAcquireFastMutex(&process->State->Lock);
+      AdmissionG3RecordSetRootSeen(process, context, 0ULL);
+      ExReleaseFastMutex(&process->State->Lock);
+    }
     context->GpuvaG3Poisoned = TRUE;
     return;
   }
@@ -1073,6 +1173,9 @@ _Use_decl_annotations_ VOID AdmissionDdiSetRootPageTable(
   if (!NT_SUCCESS(AdmissionGpuvaG3ResolveTable(
           adapter, &address, DXGK_PAGETABLEUPDATE_GPU_PHYSICAL,
           &root_ipa))) {
+    ExAcquireFastMutex(&process->State->Lock);
+    AdmissionG3RecordSetRootSeen(process, context, 0ULL);
+    ExReleaseFastMutex(&process->State->Lock);
     context->GpuvaG3Poisoned = TRUE;
     return;
   }
@@ -1090,6 +1193,7 @@ _Use_decl_annotations_ VOID AdmissionDdiSetRootPageTable(
   } else {
     context->GpuvaG3RootIpa = root_ipa;
   }
+  AdmissionG3RecordSetRootSeen(process, context, root_ipa);
   ExReleaseFastMutex(&process->State->Lock);
 }
 

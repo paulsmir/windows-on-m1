@@ -2006,25 +2006,17 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3PagingFailure(
 
 /* One 16-byte receipt per adapter instance; never overwrite the first cause. */
 _Use_decl_annotations_ void AdmissionRecordG3CopyQueryFailure(
-    ADMISSION_CONTEXT *Context, ULONG Predicate, NTSTATUS Status) {
+    ADMISSION_CONTEXT *Context) {
   HANDLE key = NULL;
-  ULONG receipt[4];
-  if (Context == NULL || Predicate == 0u || NT_SUCCESS(Status) ||
-      InterlockedCompareExchange(&Context->G3CopyQueryFailureClaim, 1, 0) != 0)
+  /* Only the successful first-claim owner calls this, after unlocking and
+   * releasing the allocation reference. The completed snapshot is immutable. */
+  if (Context == NULL || Context->G3CopyQueryFailureClaim != 2 ||
+      Context->PhysicalDeviceObject == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
     return;
-  Context->G3CopyQueryFailurePredicate = Predicate;
-  Context->G3CopyQueryFailureStatus = (ULONG)Status;
-  KeMemoryBarrier();
-  InterlockedExchange(&Context->G3CopyQueryFailureClaim, 2);
-  if (Context->PhysicalDeviceObject == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
-    return;
-  receipt[0] = 1u;
-  receipt[1] = sizeof(receipt);
-  receipt[2] = Predicate;
-  receipt[3] = (ULONG)Status;
   if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
           PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
-  WriteBinary(key, L"Wom1G3CopyQueryFailure", receipt, sizeof(receipt));
+  WriteBinary(key, L"Wom1G3CopyQueryFailure", &Context->G3CopyQueryFailure,
+      sizeof(Context->G3CopyQueryFailure));
   (void)ZwFlushKey(key);
   ZwClose(key);
 }
