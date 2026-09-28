@@ -1,3 +1,28 @@
+# R152 — fifth job fetched; stale manager lists in Explorer graph (offline)
+
+EXP866 Run channels consumed5; work readTA6/D310, doneTA5/D38. Event ring
+retains four D3/TA flag pairs then firmware Timeout4/event0. Current work
+VMslot1 and broker lease5/root9d6014000/gen1400; first-Explorer/process-switch
+claim UNPROVEN because prior owners were not retained. GPU start/UAT fault
+registers unknown; timeout quiesce failed. No event wrap or missing notification.
+
+Active BufferManagerInfo still lists2020000/2030000; accepted manager20/scene61
+requires24d0000/24e0000. Old leaves absent in current software graph; new leaves
+map private91ecd0000/91ece0000. Native16x16/TVB4MiB; no GrowTVB evidence.
+Real materializer probe reproduces stale pointers (desired invariant RED).
+Naive IncludeInitBm=true updates pointers but erases live queue-pointer bytes.
+No runtime fix/GREEN claim: per-manager context0 mutable state must survive
+A->B->A independently of persistent queue/event state. R152 chose the task's
+receipt-proposal outcome; no package, ARM64 driver build, full suite or Air.
+
+WHY CONTINUE COMPARISON: a measured final-object/process-graph mismatch now
+selects manager lifetime over notification/TLB speculation. Close it offline;
+if unresolved, proposed EXP867 adds only bounded final-materialization/owner
+history before publication and first terminal-event capture before quiesce.
+Do not run simply to rediscover known stale pointers. Report
+investigation/analysis/R152-next-boundary.md; evidence/R152/summary.json.
+EXP866 durable ordinaryCode28 remains recovery; no retry/rearm authorized.
+
 # EXP866 — sequence progress confirmed; fifth native job stalls; clean Code28
 
 One package866/source17ee8894 (R151 only on exact EXP86526cbd7e6), unchanged

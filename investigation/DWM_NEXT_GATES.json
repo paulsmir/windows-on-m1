@@ -401,5 +401,15 @@
       "No Present/nonzero scanout/originalETL or originalSSH",
       "Reset remains fail-closed; cleanCode28 recovery complete"
     ]
+  },
+  "r152_current_boundary": {
+    "status": "OFFLINE_DIAGNOSIS",
+    "evidence": "investigation/evidence/R152/summary.json",
+    "report": "investigation/analysis/R152-next-boundary.md",
+    "confirmed": "Firmware fetched fifth job; active BM pointers absent in Explorer software graph",
+    "next": "Separate per-manager firmware lifetime from queue lifetime offline; passive receipt proposal if unresolved",
+    "runtime_fix": "not implemented",
+    "EXP867": "PROPOSED_ONLY_DIAGNOSTIC_SINGLE_VARIABLE",
+    "Air": "NOT_AUTHORIZED"
   }
 }

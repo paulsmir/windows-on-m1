@@ -1,0 +1,29 @@
+0: kd> cdb: Reading initial command 'dd ffffcc03f556ffa0 L18; dd ffffcc03f5567fa0 L18; .for (r @$t0=poi(ffffe20519be67e0+18+68); @$t0 != 0; r @$t0=poi(@$t0)) { dt AppleAgxRenderAdmission!_APPLE_AGX_GPUVA_G3_NODE @$t0 Ipa AuxIpa Index; }; .for (r @$t0=poi(ffffe20519be67e0+18+70); @$t0 != 0; r @$t0=poi(@$t0)) { .if ((dwo(@$t0+20)>=8 && dwo(@$t0+20)<10) || (dwo(@$t0+20)>=134 && dwo(@$t0+20)<13c)) { dt AppleAgxRenderAdmission!_APPLE_AGX_GPUVA_G3_NODE @$t0 Ipa AuxIpa Index Kind; } }; q'
+ffffcc03`f556ffa0  00000005 00000000 00000000 00000000
+ffffcc03`f556ffb0  00000000 00000000 00000000 00000000
+ffffcc03`f556ffc0  00000000 00000000 00000000 00000000
+ffffcc03`f556ffd0  00000006 00000000 00000000 00000000
+ffffcc03`f556ffe0  00000006 00000000 00000000 00000000
+ffffcc03`f556fff0  00000500 00000000 00000000 00000000
+ffffcc03`f5567fa0  00000008 00000000 00000000 00000000
+ffffcc03`f5567fb0  00000000 00000000 00000000 00000000
+ffffcc03`f5567fc0  00000000 00000000 00000000 00000000
+ffffcc03`f5567fd0  0000000a 00000000 00000000 00000000
+ffffcc03`f5567fe0  0000000a 00000000 00000000 00000000
+ffffcc03`f5567ff0  00000500 00000000 00000000 00000000
+   +0x008 Ipa    : 0x00000009`d6014000
+   +0x010 AuxIpa : 0x00000009`d8b00000
+   +0x020 Index  : 1
+   +0x008 Ipa    : 0x00000009`d8b00000
+   +0x010 AuxIpa : 0x00000009`d8b08000
+   +0x020 Index  : 0x80
+   +0x008 Ipa    : 0x00000009`d601c000
+   +0x010 AuxIpa : 0x00000009`1ecc0000
+   +0x020 Index  : 1
+   +0x008 Ipa    : 0x00000009`d6014000
+   +0x010 AuxIpa : 0x00000009`d601c000
+   +0x020 Index  : 0
+   +0x008 Ipa    : 0x00000009`d601c000
+   +0x010 AuxIpa : 0x00000009`d6024000
+   +0x020 Index  : 0
+Numeric expression missing from '& dwo(@$t0+20)<10) || (dwo(@$t0+20)>=134 && dwo(@$t0+20)<13c)) { dt AppleAgxRenderAdmission!_APPLE_AGX_GPUVA_G3_NODE @$t0 Ipa AuxIpa Index Kind; } '
