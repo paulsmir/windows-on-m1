@@ -1,5 +1,9 @@
 # GPU current boundary — 2026-09-28
 
+## EXP861 — package ready, hardware WAIT_GO
+
+Package861 from source/native HEAD 8f337257, one R147 paging TU difference from EXP860, builder0/0 and exact signed hashes verified. Same R143 firmware. Preregistration and one-shot600s checkpoint in `investigation/EXPERIMENTS.md`; artifact manifest `.local/experiments/EXP861-r147-pagingroot/hardware-manifest.json` SHA256 4a5b4cdf7f3d19aac9ccdc2bf83520c42b5dc848050c06ecc9b001453fa06f1f. `GO_EXP861` absent; no install, arm or Air launch. Active hypothesis and recovery unchanged from R147.
+
 ## 2026-09-28 R147 — paging selects root before COPY; implemented offline
 
 EXP860 bootstrap/SetRoot0/0 receipt identifies ordering. Microsoft UpdatePageTable
