@@ -220,7 +220,7 @@ static HRESULT attach_presentation_render_resource(
       record->Resource.KernelAllocation,desc->Size,alignment,
       AgxWin32BufferClassGeneral,access,
 #ifdef APPLE_AGX_GPUVA_WINSYS
-      TRUE,
+      TRUE,desc->CpuVisible==0u,
 #endif
       &record->RenderBuffer);
   if(FAILED(result)) return result;

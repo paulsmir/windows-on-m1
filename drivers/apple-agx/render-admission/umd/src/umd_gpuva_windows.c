@@ -172,7 +172,7 @@ static int make_resident(void *context, const uint64_t *tokens,
     auto *slot=find_slot(device,tokens[i]);
     valid=slot && !slot->Transition && !slot->CopyHeld &&
         !slot->SourceHolds && !slot->SubmissionHolds &&
-        slot->StagingAllocation && slot->CanonicalGpuVa &&
+        (slot->StagingAllocation || slot->Direct) && slot->CanonicalGpuVa &&
         (!slot->Mapped || (slot->NativeBo && slot->NativeMapRelease));
   }
   if(valid) for(unsigned i=0;i<count;++i) {
@@ -322,7 +322,8 @@ static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
     return 0;
   for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i) {
     auto *slot=&device->ScreenBuffers[i];
-    if(!slot->CopyHeld || (download && !(slot->Flags & AppleAgxWin32BufferGpuWrite))) continue;
+    if(!slot->CopyHeld || slot->Direct ||
+       (download && !(slot->Flags & AppleAgxWin32BufferGpuWrite))) continue;
     if(!transfer_slot(device,slot,download)) return 0;
   }
   return 1;

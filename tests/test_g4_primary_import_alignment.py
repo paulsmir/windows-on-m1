@@ -41,6 +41,7 @@ enum AGX_WIN32_ASAHI_LINEAR_FORMAT { AgxWin32AsahiLinearFormatBgra8Unorm };
 struct ADMISSION_ALLOCATION_DESCRIPTION {
   uint32_t Width, Height, Pitch, Format;
   uint64_t Size;
+  uint32_t CpuVisible;
 };
 struct AGX_WIN32_SCREEN_BUFFER { uint64_t Token; };
 struct pipe_resource { int marker; };
@@ -60,6 +61,7 @@ struct AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE {
   pipe_resource *RenderResource;
 };
 static uint64_t capturedAlignment;
+static int capturedDirect = -1;
 inline bool presentation_linear_format(D3DDDIFORMAT format,
                                        AGX_WIN32_ASAHI_LINEAR_FORMAT *out) {
   if (format != D3DDDIFMT_A8R8G8B8) return false;
@@ -73,8 +75,9 @@ constexpr UINT AppleAgxWin32BufferGpuRead = 4;
 constexpr UINT AppleAgxWin32BufferGpuWrite = 8;
 inline HRESULT AdmissionUmdScreenAdoptAllocation(
     void *, uint64_t, uint64_t, uint64_t alignment, UINT, UINT,
-    int, AGX_WIN32_SCREEN_BUFFER *buffer) {
+    int, int direct, AGX_WIN32_SCREEN_BUFFER *buffer) {
   capturedAlignment = alignment;
+  capturedDirect = direct;
   buffer->Token = 1;
   return S_OK;
 }
@@ -104,6 +107,7 @@ int main() {
   assert(attach_presentation_render_resource(&device, &record) == S_OK);
   assert(record.RenderResource == &target);
   assert(capturedAlignment == 0x10000);
+  assert(capturedDirect == 1); /* R158: CpuVisible=0 presentation renders directly */
   return 0;
 }
 """

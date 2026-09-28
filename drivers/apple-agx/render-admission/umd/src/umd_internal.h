@@ -52,6 +52,10 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   D3DKMT_HANDLE StagingAllocation;
   APPLE_AGX_U64 CanonicalGpuVa;
   BOOL CopyHeld;
+  /* R158: presentation allocation used directly as the GPU-local render
+   * target (CpuVisible=0, local segment, 64 KiB aligned): no staging, no
+   * copy, never deallocated by the UMD. */
+  BOOL Direct;
 #endif
 } ADMISSION_UMD_SCREEN_BUFFER;
 
@@ -242,7 +246,7 @@ HRESULT AdmissionUmdScreenAdoptAllocation(
     APPLE_AGX_U64 Bytes, APPLE_AGX_U64 Alignment,
     APPLE_AGX_U32 ClassId, APPLE_AGX_U32 Flags,
 #ifdef APPLE_AGX_GPUVA_WINSYS
-    BOOL WrittenPrimary,
+    BOOL WrittenPrimary, BOOL Direct,
 #endif
     AGX_WIN32_SCREEN_BUFFER *Buffer);
 BOOL AdmissionUmdScreenAllocationRegistered(

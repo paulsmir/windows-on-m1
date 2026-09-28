@@ -81,16 +81,27 @@ int main(void) {
   /* Imported CPU storage is borrowed; only the local execution handle is owned. */
   UINT imported=++NextHandle;Allocations[imported]={1,(BYTE *)calloc(1,65536),true};
   AGX_WIN32_SCREEN_BUFFER buffer={};before=NextHandle;
-  assert(SUCCEEDED(AdmissionUmdScreenAdoptAllocation(d,imported,65024,65536,1,15,TRUE,&buffer)));
+  assert(SUCCEEDED(AdmissionUmdScreenAdoptAllocation(d,imported,65024,65536,1,15,TRUE,FALSE,&buffer)));
   assert(NextHandle==before+1 && Allocations[before+1].CpuVisible==0);
   AGX_WIN32_SCREEN_BUFFER alias={};
-  assert(FAILED(AdmissionUmdScreenAdoptAllocation(d,imported,65024,65536,1,15,TRUE,&alias)));
+  assert(FAILED(AdmissionUmdScreenAdoptAllocation(d,imported,65024,65536,1,15,TRUE,FALSE,&alias)));
   assert(!alias.Transport.Token && NextHandle==before+1);
   void *mapped=NULL;assert(AdmissionUmdScreenMapBuffer(d,buffer.Transport.Token,0,65024,3,&mapped));
   assert(mapped==Allocations[imported].Data);
   assert(AdmissionUmdScreenUnmapBuffer(d,buffer.Transport.Token));
   assert(AdmissionUmdScreenDestroyBuffer(d,buffer.Transport.Token));
   assert(Allocations[imported].Live && !Allocations[before+1].Live);
+  /* R158: a non-CPU-visible presentation allocation is rendered directly:
+   * no new allocation, no CPU map, and destroy never frees the borrowed one. */
+  { AGX_WIN32_SCREEN_BUFFER direct={},direct_alias={}; UINT prior=NextHandle;
+    assert(SUCCEEDED(AdmissionUmdScreenAdoptAllocation(d,imported,65024,65536,1,15,TRUE,TRUE,&direct)));
+    assert(NextHandle==prior);
+    auto *ds=AdmissionUmdScreenFind(d,direct.Transport.Token);
+    assert(ds && ds->Direct && ds->Borrowed && ds->KernelAllocation==imported && !ds->StagingAllocation);
+    assert(FAILED(AdmissionUmdScreenAdoptAllocation(d,imported,65024,65536,1,15,TRUE,TRUE,&direct_alias)));
+    void *m=NULL; assert(!AdmissionUmdScreenMapBuffer(d,direct.Transport.Token,0,16,3,&m));
+    assert(AdmissionUmdScreenDestroyBuffer(d,direct.Transport.Token));
+    assert(Allocations[imported].Live && !AdmissionUmdScreenFind(d,direct.Transport.Token)); }
   free(Allocations[imported].Data);
   /* A failed second release retains its exact ownership; retry only that handle. */
   before=NextHandle;assert(AdmissionUmdScreenCreateClassBuffer(d,1,65536,65536,15,&token));
