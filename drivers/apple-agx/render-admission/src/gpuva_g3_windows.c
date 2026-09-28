@@ -520,20 +520,30 @@ static BOOLEAN AdmissionG3CaptureCopyQueryFailure(ADMISSION_CONTEXT *adapter,
     const ADMISSION_G3_PROCESS *p, const ADMISSION_RENDER_CONTEXT *context,
     const APPLE_AGX_G3_COPY_REQUEST *q, ULONG predicate, NTSTATUS status,
     BOOLEAN locked, ULONGLONG first, ULONGLONG length,
-    const APPLE_AGX_GPUVA_G3_WALK_FAILURE *walk) {
+    const APPLE_AGX_GPUVA_G3_WALK_FAILURE *walk,
+    const ADMISSION_ALLOCATION_HANDLE *allocation) {
   APPLE_AGX_G3_COPY_QUERY_RECEIPT *r;
   if (!adapter || !predicate || NT_SUCCESS(status) ||
       InterlockedCompareExchange(&adapter->G3CopyQueryFailureClaim, 1, 0) != 0)
     return FALSE;
   r = &adapter->G3CopyQueryFailure;
   RtlZeroMemory(r, sizeof(*r));
-  r->Version = 2u; r->Bytes = sizeof(*r);
+  r->Version = 3u; r->Bytes = sizeof(*r);
   r->Predicate = predicate; r->Status = (ULONG)status;
   r->MissingLevel = r->MissingIndex = MAXULONG;
   if (locked) r->Flags |= AppleAgxG3QueryLocked;
   if (q) {
     r->Flags |= AppleAgxG3QueryRequest;
     r->QueryVa = q->GpuVa;
+    r->RequestAllocationHandle = q->Allocation;
+  }
+  /* The acquisition reference still protects the allocation. Guards 34-41
+   * established its owner, identity, class and GPU-local non-CPU-visible type.
+   * No object is dereferenced after handle release or without the mutex. */
+  if (locked && allocation && predicate >= 42u) {
+    r->Flags |= AppleAgxG3QueryCanonicalAllocationAvailable;
+    r->CanonicalAllocationIdentity = (ULONGLONG)(ULONG_PTR)allocation;
+    r->CanonicalAllocationBytes = allocation->Object.Description.Size;
   }
   if (p) {
     r->Flags |= AppleAgxG3QueryProcess;
@@ -570,6 +580,7 @@ static BOOLEAN AdmissionG3CaptureCopyQueryFailure(ADMISSION_CONTEXT *adapter,
         const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *group =
             AdmissionG3CopyPte(p, walk->Va & ~0x3fffULL);
         UINT i;
+        if (group) r->Flags |= AppleAgxG3QueryResidentGroupAvailable;
         for (i=0u; group && i<4u; ++i) {
           if (!(group[i].Flags & APPLE_AGX_GPUVA_G3_VALID)) continue;
           r->ComponentReason = AppleAgxG3WalkLeafNotPublished;
@@ -596,7 +607,7 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   ADMISSION_G3_PROCESS *p=NULL;
   ADMISSION_RENDER_CONTEXT *context=NULL;
   ADMISSION_OPEN_ALLOCATION *opened;
-  ADMISSION_ALLOCATION_HANDLE *allocation;
+  ADMISSION_ALLOCATION_HANDLE *allocation=NULL;
   ADMISSION_SCANOUT_MEMORY_VIEW view;
   DXGKARGCB_GETHANDLEDATA lookup={0};
   DXGKARGCB_RELEASEHANDLEDATA reference={0};
@@ -731,7 +742,7 @@ Unlock:
   if(isQuery && predicate) {
     captureAttempted=TRUE;
     captured=AdmissionG3CaptureCopyQueryFailure(adapter,p,context,q,predicate,status,
-        TRUE,first,length,&walk);
+        TRUE,first,length,&walk,allocation);
   }
   ExReleaseFastMutex(&state->Lock);
 Release:
@@ -739,7 +750,7 @@ Release:
 Free:
   if(isQuery && predicate && !captureAttempted)
     captured=AdmissionG3CaptureCopyQueryFailure(adapter,NULL,NULL,q,predicate,status,
-        FALSE,0,0,NULL);
+        FALSE,0,0,NULL,NULL);
   if(q) ExFreePoolWithTag(q,ADMISSION_POOL_TAG);
   if(captured) AdmissionRecordG3CopyQueryFailure(adapter);
 #undef COPY_REJECT_IF

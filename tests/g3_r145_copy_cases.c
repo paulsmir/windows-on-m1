@@ -60,9 +60,15 @@ static void r145_copy_cases(void) {
   assert(a.G3CopyQueryFailureClaim==2 && a.G3CopyQueryFailurePredicate==4 &&
          a.G3CopyQueryFailureStatus==(ULONG)STATUS_INVALID_PARAMETER);
   assert(query_registry_writes==1 && query_registry_flushes==1 &&
-         query_registry_receipt[0]==2 && query_registry_receipt[1]==144 &&
+         query_registry_receipt[0]==3 && query_registry_receipt[1]==168 &&
          query_registry_receipt[2]==4 &&
          query_registry_receipt[3]==(ULONG)STATUS_INVALID_PARAMETER);
+  /* Guard 4 precedes request copy and handle acquisition: v3 must not invent
+   * a request identity or inspect allocation storage on this early path. */
+  assert(!(a.G3CopyQueryFailure.Flags & AppleAgxG3QueryCanonicalAllocationAvailable));
+  assert(!a.G3CopyQueryFailure.RequestAllocationHandle &&
+         !a.G3CopyQueryFailure.CanonicalAllocationIdentity &&
+         !a.G3CopyQueryFailure.CanonicalAllocationBytes);
   escape.Flags.Value=1;
   q->Allocation=0x81234072u;
   assert(AdmissionDdiEscape(&a,&escape)==STATUS_INVALID_HANDLE);
