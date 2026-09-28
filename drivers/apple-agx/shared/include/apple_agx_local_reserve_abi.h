@@ -6,8 +6,9 @@
 #define APPLE_AGX_LOCAL_RESERVE_OFFSET 0xD00ULL
 #define APPLE_AGX_LOCAL_RESERVE_WINDOW_BYTES 0x28ULL
 #define APPLE_AGX_LOCAL_RESERVE_MAGIC 0x4C584741U
-#define APPLE_AGX_LOCAL_RESERVE_VERSION 1U
-#define APPLE_AGX_LOCAL_RESERVE_BYTES 0x04000000ULL
+#define APPLE_AGX_LOCAL_RESERVE_VERSION 2U
+#define APPLE_AGX_LOCAL_RESERVE_BYTES 0x40000000ULL
+#define APPLE_AGX_LOCAL_RESERVE_ALIGNMENT 0x10000ULL
 #define APPLE_AGX_LOCAL_RESERVE_PHYSICAL_LIMIT (1ULL << 40)
 
 #define APPLE_AGX_LOCAL_REG_MAGIC 0x00ULL
@@ -34,9 +35,9 @@ static inline unsigned char AppleAgxLocalReserveMatchesResource(
          Receipt->Valid == 1U &&
          Receipt->Bytes == APPLE_AGX_LOCAL_RESERVE_BYTES &&
          ResourceBytes == APPLE_AGX_LOCAL_RESERVE_BYTES &&
-         Receipt->GuestIpa == ResourceIpa &&
-         (ResourceIpa & (APPLE_AGX_LOCAL_RESERVE_BYTES - 1ULL)) == 0ULL &&
-         (Receipt->HostPa & (APPLE_AGX_LOCAL_RESERVE_BYTES - 1ULL)) == 0ULL &&
+         Receipt->GuestIpa == ResourceIpa && Receipt->HostPa == ResourceIpa &&
+         (ResourceIpa & (APPLE_AGX_LOCAL_RESERVE_ALIGNMENT - 1ULL)) == 0ULL &&
+         (Receipt->HostPa & (APPLE_AGX_LOCAL_RESERVE_ALIGNMENT - 1ULL)) == 0ULL &&
          ResourceIpa != 0ULL && Receipt->HostPa != 0ULL &&
          Receipt->HostPa < APPLE_AGX_LOCAL_RESERVE_PHYSICAL_LIMIT &&
          APPLE_AGX_LOCAL_RESERVE_BYTES <=

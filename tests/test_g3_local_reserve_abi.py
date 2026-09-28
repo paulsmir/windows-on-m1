@@ -11,7 +11,7 @@ KMD = ROOT / "drivers/apple-agx/shared/include/apple_agx_local_reserve_abi.h"
 
 
 def define(path, name):
-    source = subprocess.check_output(["cc", "-E", "-dM", "-x", "c", str(path)], text=True) if path == M1N1 else path.read_text()
+    source = subprocess.check_output(["cc", "-E", "-dM", "-x", "c", "-DAGX_LOCAL_RESERVE_V2", str(path)], text=True) if path == M1N1 else path.read_text()
     line = next(line for line in source.splitlines()
                 if line.startswith(f"#define {name} "))
     value = line.split(name, 1)[1]

@@ -31,7 +31,7 @@ class MuLocalReserveTest(unittest.TestCase):
                             "#define IN\n#define CONST const\n")
             binary = Path(directory) / "mu-validator"
             build = subprocess.run([os.environ.get("CC", "cc"), "-std=c11", "-Wall",
-                                    "-Wextra", "-Werror", "-I", directory,
+                                    "-Wextra", "-Werror", "-DAGX_LOCAL_RESERVE_V2", "-I", directory,
                                     "-I", str(HEADER_DIR), str(TEST), "-o", str(binary)],
                                    capture_output=True, text=True)
             self.assertEqual(build.returncode, 0, build.stderr)

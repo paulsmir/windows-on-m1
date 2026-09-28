@@ -47,6 +47,15 @@ class LocalReserveAmlTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_dynamic_crs_reconstructs_ipa_from_dword_halves(self):
+        self.check_crs(False)
+
+    def test_v2_crs_full_length_and_mixed_receipt_refusal(self):
+        self.check_crs(True)
+        self.check_crs(True, receipt_version=1)
+        self.check_crs(True, valid=0)
+        self.check_crs(True, alias=True)
+
+    def check_crs(self, v2, receipt_version=None, valid=1, alias=False):
         iasl = shutil.which("iasl")
         acpiexec = shutil.which("acpiexec")
         if not iasl or not acpiexec:
@@ -68,13 +77,20 @@ class LocalReserveAmlTest(unittest.TestCase):
     Name (LBYL, 0x4000000)
     Name (LBYH, Zero)
 """
+        version = (2 if v2 else 1) if receipt_version is None else receipt_version
+        names = names.replace("Name (LVER, One)", f"Name (LVER, {version})")
+        names = names.replace("Name (LVAL, One)", f"Name (LVAL, {valid})")
+        if v2:
+            names = names.replace("0x4000000)", "0x40000000)")
+        if alias:
+            names = names.replace("Name (LHPL, 0xE0000000)", "Name (LHPL, 0xE0010000)")
         rendered, count = region.subn(names, rendered)
         self.assertEqual(count, 1)
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "agx.asl"
             source.write_text('DefinitionBlock ("", "SSDT", 2, "APPL", "AGXLOCAL", 1)\n{\n' +
                               rendered + '\n}\n')
-            build = subprocess.run([iasl, "-tc", str(source)], capture_output=True,
+            build = subprocess.run([iasl] + (["-D", "AGX_LOCAL_RESERVE_V2"] if v2 else []) + ["-tc", str(source)], capture_output=True,
                                    text=True, cwd=directory)
             self.assertEqual(build.returncode, 0, build.stderr)
             execution = subprocess.run(
@@ -92,11 +108,16 @@ class LocalReserveAmlTest(unittest.TestCase):
             for _ in range(4):
                 self.assertEqual(data[offset], 0x8A)
                 offset += int.from_bytes(data[offset + 1:offset + 3], "little") + 3
+            if v2 and (version != 2 or not valid or alias):
+                self.assertNotEqual(data[offset], 0x8A)
+                return
             self.assertEqual(data[offset], 0x8A)
             minimum = int.from_bytes(data[offset + 14:offset + 22], "little")
             maximum = int.from_bytes(data[offset + 22:offset + 30], "little")
             self.assertEqual(minimum, 0x8E0000000)
-            self.assertEqual(maximum, 0x8E3FFFFFF)
+            self.assertEqual(maximum, 0x91FFFFFFF if v2 else 0x8E3FFFFFF)
+            length = int.from_bytes(data[offset + 38:offset + 46], "little")
+            self.assertEqual(length, 0x40000000 if v2 else 0x4000000)
 
 
 if __name__ == "__main__":

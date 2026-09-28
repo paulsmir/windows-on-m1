@@ -81,7 +81,7 @@ class J313AgxAbiAdmissionContractTests(unittest.TestCase):
             rendered.count(
                 "Interrupt (ResourceConsumer, Edge, ActiveHigh, Exclusive)"
             ),
-            1,
+            2,  # BAS0 and LOCR each return the same single interrupt.
         )
         self.assertIn("{ 889 }", rendered)
         for guest in range(880, 889):

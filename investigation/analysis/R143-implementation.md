@@ -60,3 +60,29 @@ one new ABI test failure was its textual first-define parser choosing inactive
 v2. Changed that test to preprocess the actual default profile; affected test
 passes. No hidden suite-green claim. Logs: worktree `.local/r143/`.
 Review SHA remains 753bdfe638d6171954875a5fc9a58c09761999ffcab89b9d216f566c7e1300c5.
+
+## Step 2 verified offline
+
+Mu explicit `J313_AGX_RESERVE_V2_PROFILE=TRUE` selects receipt2/1GiB/64KiB;
+default stays64MiB. New profile refuses missing/old/unpublished receipt before
+DXE. Identity, PEI arena/PHIT, allocation HOB and FV/FV2/FV3 overlap are checked.
+Ruling: publish the real Stack HOB before MemoryPeim instead of extending every
+platform's MemoryPeim signature; the same explicit live stack range is then
+validated by the allocation-HOB walker. A wrong ordering would defeat overlap
+protection; its regression test enforces the order.
+
+Ruling: the pre-existing admission generator referenced a stale G2 digest and
+incorrectly required handoff in G2 enumeration. Resolve handoff from the G1
+contract authenticated by G2, update the digest, preserve all four admission
+resources/IRQs. This repairs the required generation gate without changing G2.
+Resource regression and generated-file check pass. Risk: source provenance
+must include both authenticated contracts; the tests enforce their geometry.
+
+Mu234 tracked input hashes verified on persistent builder (224 differing files
+synchronized; primarily checkout byte differences). CLANGPDB RELEASE build PASS,
+actual FV contains the collected AML. acpiexec on that emitted AML passes v2
+min8e0000000/max91fffffff/length40000000; old version, unpublished receipt and
+PA alias expose four baseline resources only. Firmware/artifact hashes in
+EXP856-r143-reserve1g/mu-artifact-sha256.txt. No EBS/live memory map proof.
+Full1146 after KMD integration:15 failures/38 errors/2 skips; exact old names
+preserved except three generator errors now repaired; no new failure names.
