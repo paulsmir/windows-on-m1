@@ -327,18 +327,18 @@
     "supersedes": "package752 and EXP757 capture-path Air run"
   },
   "current_hardware_handoff": {
-    "experiment": "EXP863",
-    "result": ".local/experiments/EXP863-r149-errprop/hardware-result.json",
-    "result_sha256": "58a2fc80f7db392c8eb32830f48ca4a018b494ab703df5eb95aa1d88f4afeddf",
-    "source": "exp/863-errprop f62317a6 = fd603f30 + error-publication38308fa4 only; USC and Flush retirement absent",
-    "admission": "Code0/StartStage12/status0/arm consumed/CPU8; one armed boot",
-    "diagnostic": "QUERYv3 guard53 leaf-absent VA0x20000/65536 generation690 unchanged",
-    "execution": "FirstG4 ordinal14/0x11002b0140 generation474 unchanged;481 failures at live collection,804 after shutdown; no GPU completion proved; scanout0",
-    "frontend": "3092 E_FAIL draw/copy callbacks live,4714 after shutdown; no explicit publicFlush tag or direct same-device correlation",
-    "stability": "PASS19 SSH samples through621.028357s same boot; same DWM PID; GPU committed76.7..114MB",
-    "recovery": "Code0 ordered restart stalled; snapshot/reset to hiddenCode45 exact cleanup; ordinaryCode28 durable twice with no residue",
-    "next": "Independent USC window candidate with error publication retained, under separate authorization; keep Flush retirement independent",
-    "hardware_authorization": "EXP863 completed; no additional package/run authorized"
+    "experiment": "EXP864",
+    "result": ".local/experiments/EXP864-r149-usc/hardware-result.json",
+    "result_sha256": "ba5a63eafe3119ef587c8c3017aa336c28637f6d41f4cac343a7e5f782e9959c",
+    "source": "exp/864-usc a9ecd3ea = EXP863 f62317a6 + USC3a7b6cc9 only; Flush retirement absent",
+    "admission": "durableStartStage12/status0/arm consumed; all8CPU entries; originalCode0 unobserved",
+    "diagnostic": "QUERYv3 guard24 context unavailable VA0x20000/bytes0/generation469; no durable G4 rejection",
+    "execution": "No accepted submit/fence/TA/3D proven; scanout0; USC hypothesis inconclusive",
+    "frontend": "445 UMD lines; no reject-seterror before early TDR",
+    "stability": "FAIL live141 at28.920s, kernel116 at29.063s; original SSH absent",
+    "recovery": "hiddenCode45 exact package864/oem5 cleanup; ordinaryCode28 clean durable",
+    "next": "Saved kernel/watchdog dump: preemption completion wait and first lost-progress boundary; establish accepted work offline",
+    "hardware_authorization": "EXP864 completed; no further package/run authorized"
   },
   "r147_offline_root_ordering": {
     "status": "implemented",
@@ -349,12 +349,12 @@
     "hardware_authorization": "No package or Air in R147; EXP861 proposal only"
   },
   "r149_boundary": {
-    "status": "ERROR_PUBLICATION_BOUNDED_HARDWARE_CHECKPOINT",
+    "status": "USC_CANDIDATE_EARLY_TDR_INCONCLUSIVE",
     "report": "investigation/analysis/R149-next-boundary.md",
-    "last_hardware": "EXP863",
-    "next_proposed": "Separately authorized USC-window candidate retaining error publication; no further package/run authorized",
+    "last_hardware": "EXP864",
+    "next_proposed": "Offline dump analysis of first engine/preemption timeout; no new package or run",
     "independent_pending": [
-      "USC window placement",
+      "USC hardware acceptance unproven",
       "R148 Flush retirement"
     ],
     "unresolved": [

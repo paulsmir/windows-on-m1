@@ -1,3 +1,34 @@
+# EXP864 — early engine timeout/TDR; clean Code28 recovery
+
+One package864/sourcea9ecd3ea = EXP863f62317a6 + USC3a7b6cc9 only;
+Flush-retire0f51f3f5 absent, R143 unchanged. No retry/rearm.
+Ten-minute checkpoint FAILED: original SSH never sampled, live0x141 at28.920s
+then0x116 at29.063s. Durable StartStage12/status0/arm consumed; all8CPU entries.
+Kernel stop parameters(ffff998fcc15e010,fffff802f6ef6cb0,ffffffffc0000483,3).
+Watchdog stack waits for preemption completion while switching suspended devices;
+package864 ResetFromTimeout is TDR owner, not proof of the lost-progress cause.
+
+No durable G4 rejection receipt. This does not prove ordinal14 admission or
+accepted GPU work; USC hardware hypothesis remains INCONCLUSIVE. No fence/TA/3D
+completion, both scanout snapshotsnonzero0. QUERYv3 now guard24/context unavailable,
+VA0x20000/bytes0/nonbootstrap root0x9d8600000/generation469; G3 flush branch5
+resolve0/broker0. UMD445lines/no reject-seterror. DWM/committed-memory trend and
+original RDP/USB/input unobserved. HiddenCode45 sample excluded from runtime.
+
+22 evidence files754536374B SHA-verified including kernel/minidump and live141
+watchdog recovered from WER queue. ETL begins in original boot; full coverage
+unknown. Exact hiddenCode45/oem5/package864 cleanup then ordinaryCode28 durable
+11:17:06.9103102Z: present1/package0/arms0/files0/service0/signer0/diagnostics0/
+CPU8/disks2OK/USB5/RDP; intentional autologon retained. Clock corrections explain
+absolute-time offsets; dump uptime is the failure duration.
+Result `.local/experiments/EXP864-r149-usc/hardware-result.json`
+SHA256 `ba5a63eafe3119ef587c8c3017aa336c28637f6d41f4cac343a7e5f782e9959c`.
+
+WHY CONTINUE COMPARISON: a new live141 preemption-wait stack and full kernel dump
+can distinguish the first lost-progress boundary offline. Next thread inspects
+scheduler/preemption state and establishes accepted work/completion evidence;
+no speculative timer/QUERY fix, new package, or hardware run authorized.
+
 # EXP863 — error publication checkpoint passed; clean Code28 recovery
 
 One package863/sourcef62317a6 (fd603f30 + 38308fa4 only) on unchanged R143.
