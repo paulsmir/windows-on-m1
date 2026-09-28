@@ -121,9 +121,9 @@ typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME {
   APPLE_AGX_BACKEND_U32 PendingFence;
   APPLE_AGX_BACKEND_U64 DeadlineTicks;
   /*
-   * InitBM is a queue-lifetime command.  It is published once after queue
-   * creation, remains initialized across successful jobs, and becomes false
-   * again only when the queue runtime is reset/recreated.
+   * InitBM describes the current buffer-manager binding. It is published on
+   * queue creation and after an idle manager rebind. Clearing this flag does
+   * not reset ring pointers, event ownership or the FirstRun flags.
    */
   APPLE_AGX_BACKEND_BOOL BufferManagerInitialized;
   APPLE_AGX_BACKEND_BOOL TaFirstRun;

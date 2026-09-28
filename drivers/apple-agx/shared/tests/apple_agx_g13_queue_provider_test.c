@@ -211,6 +211,31 @@ static void TestReadOnlyJobPlanTracksQueueLifetime(void) {
   assert(plan.D3ExpectedDonePointer == 4u);
   assert(f.TaWrite == 2u && f.D3Write == 2u);
 }
+static void TestIdleManagerRebindPreservesQueueLifetime(void) {
+  FIXTURE f;
+  APPLE_AGX_G13_QUEUE_JOB_PLAN plan;
+  Init(&f);
+  assert(!AppleAgxG13QueueProviderRequireInitBm(&f.Provider));
+  Submit(&f);
+  assert(!AppleAgxG13QueueProviderRequireInitBm(&f.Provider));
+  Complete(&f);
+  assert(AppleAgxG13QueueProviderRequireInitBm(&f.Provider));
+  assert(AppleAgxG13QueueProviderPlanJob(&f.Provider,&plan));
+  assert(plan.IncludeInitBm && !plan.InitializeQueues);
+  assert(plan.TaExpectedDonePointer==4u && plan.D3ExpectedDonePointer==4u);
+  assert(f.TaWrite==2u && f.D3Write==2u);
+  f.Job.TaExpectedDonePointer=4u;f.Job.D3ExpectedDonePointer=4u;
+  f.Job.TaExpectedStamp+=0x100u;f.Job.D3ExpectedStamp+=0x100u;
+  f.Sends=0u;
+  assert(f.Io.Queues.Run3d(f.Io.Context,&f.Job,41u));
+  assert(!AppleAgxG13QueueProviderRequireInitBm(&f.Provider));
+  assert(f.Io.Queues.RunTa(f.Io.Context,&f.Job,41u));
+  assert(f.TaRing[2]==f.Job.TaWorkAddresses[0]);
+  assert(f.TaRing[3]==f.Job.TaWorkAddresses[1]);
+  assert(f.TaWrite==4u && f.D3Write==4u);
+  assert(!f.Provider.Runtime.TaFirstRun && !f.Provider.Runtime.D3FirstRun);
+  Complete(&f);
+}
 static void TestAtomicStagingAndOrder(void) {
   FIXTURE f; APPLE_AGX_BACKEND_JOB_IMAGE mismatch;
   Init(&f); assert(f.Io.Queues.Create(f.Io.Context));
@@ -581,6 +606,7 @@ int main(void) {
   TestExactCompletion(); TestFailClosedQuiesce();
   TestIngestFailureNamesDecoderOwner();
   TestReadOnlyJobPlanTracksQueueLifetime();
+  TestIdleManagerRebindPreservesQueueLifetime();
   TestSecondSubmitPublishesOnlyWorkTa();
   TestSuccessfulStopAndResetAreSynchronous();
   TestReadyStopWithoutPendingFenceIsNoOp();

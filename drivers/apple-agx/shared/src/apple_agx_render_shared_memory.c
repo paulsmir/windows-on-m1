@@ -12,6 +12,7 @@
 #define RENDER_SHARED_NATIVE_COMMAND_BASE 0xffffffa020000000ULL
 #define RENDER_SHARED_NATIVE_COMMAND_END 0xffffffa040000000ULL
 
+
 static APPLE_AGX_BOOL queue_object_valid(
     const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *,APPLE_AGX_U32,
     APPLE_AGX_U64,APPLE_AGX_BOOL);
@@ -567,7 +568,7 @@ static APPLE_AGX_BOOL build_active_job(
     const APPLE_AGX_BACKEND_JOB_IMAGE *StagedJob,
     APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
     APPLE_AGX_BACKEND_JOB_IMAGE *ActiveJob,
-    APPLE_AGX_BOOL G4Native) {
+    APPLE_AGX_BOOL G4Native, APPLE_AGX_BOOL InitializeQueues) {
   APPLE_AGX_BACKEND_JOB_IMAGE candidate;
   APPLE_AGX_U32 index;
   APPLE_AGX_BOOL initialize_persistent;
@@ -589,7 +590,7 @@ static APPLE_AGX_BOOL build_active_job(
     return APPLE_AGX_FALSE;
   for (index = 0u; index < SourceObjectCount; ++index)
     ActiveObjects[index] = SourceObjects[index];
-  initialize_persistent = IncludeInitBm;
+  initialize_persistent = InitializeQueues;
   if (!bind_relocation_objects(
           Owner, TemplateArena, TemplateArenaBytes, ActiveObjects,
           SourceObjectCount, initialize_persistent, IncludeInitBm))
@@ -657,7 +658,7 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildActiveJob(
     APPLE_AGX_BACKEND_JOB_IMAGE *ActiveJob) {
   return build_active_job(Owner, TemplateArena, TemplateArenaBytes,
       SourceObjects, SourceObjectCount, ArenaGpuAddress, IncludeInitBm,
-      RuntimeBindings, StagedJob, ActiveObjects, ActiveJob, APPLE_AGX_FALSE);
+      RuntimeBindings, StagedJob, ActiveObjects, ActiveJob, APPLE_AGX_FALSE, IncludeInitBm);
 }
 
 APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildActiveG4Job(
@@ -672,7 +673,137 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildActiveG4Job(
     APPLE_AGX_BACKEND_JOB_IMAGE *ActiveJob) {
   return build_active_job(Owner, TemplateArena, TemplateArenaBytes,
       SourceObjects, SourceObjectCount, ArenaGpuAddress, IncludeInitBm,
-      RuntimeBindings, StagedJob, ActiveObjects, ActiveJob, APPLE_AGX_TRUE);
+      RuntimeBindings, StagedJob, ActiveObjects, ActiveJob, APPLE_AGX_TRUE, IncludeInitBm);
+}
+
+static void copy_bytes(unsigned char *Destination, const unsigned char *Source,
+                       APPLE_AGX_U32 Bytes) {
+  APPLE_AGX_U32 i;
+  for (i=0u;i<Bytes;++i) Destination[i]=Source[i];
+}
+
+static APPLE_AGX_BOOL manager_key_equal(
+    const APPLE_AGX_RENDER_MANAGER_KEY *a,
+    const APPLE_AGX_RENDER_MANAGER_KEY *b, APPLE_AGX_BOOL Root) {
+  APPLE_AGX_U32 i;
+  if (a->Owner != b->Owner || a->Generation != b->Generation ||
+      (Root && a->RootIpa != b->RootIpa)) return APPLE_AGX_FALSE;
+  for (i=0u;i<3u;++i)
+    if (a->Backing[i].Va != b->Backing[i].Va ||
+        a->Backing[i].Bytes != b->Backing[i].Bytes ||
+        a->Backing[i].Reserved != b->Backing[i].Reserved)
+      return APPLE_AGX_FALSE;
+  return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AppleAgxRenderManagerNeedsBind(
+    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    const APPLE_AGX_RENDER_MANAGER_KEY *Key) {
+  return !Owner || !Key || !Key->Owner || !Key->Generation ||
+      !manager_key_equal(&Owner->ManagerKey,Key,APPLE_AGX_TRUE);
+}
+
+static APPLE_AGX_BOOL manager_objects_valid(
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects) {
+  return Objects && Objects[1].Data && Objects[1].Size==188u &&
+      Objects[20].Data && Objects[20].Size==64u &&
+      Objects[21].Data && Objects[21].Size==64u &&
+      Objects[22].Data && Objects[22].Size==64u;
+}
+
+APPLE_AGX_BOOL AppleAgxRenderManagerSave(
+    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    APPLE_AGX_RENDER_MANAGER_STATE *State, APPLE_AGX_U32 Fence,
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects) {
+  if (!Owner || !State || !Fence || !manager_objects_valid(Objects))
+    return APPLE_AGX_FALSE;
+  if (!Owner->ManagerFence && !State->PendingFence && State->Valid &&
+      State->SavedFence==Fence &&
+      manager_key_equal(&Owner->ManagerKey,&State->Key,APPLE_AGX_TRUE))
+    return APPLE_AGX_TRUE;
+  if (Owner->ManagerFence!=Fence || State->PendingFence!=Fence)
+    return APPLE_AGX_FALSE;
+  copy_bytes(State->Info,Objects[1].Data,sizeof(State->Info));
+  copy_bytes(State->BlockControl,Objects[20].Data,sizeof(State->BlockControl));
+  copy_bytes(State->Counter,Objects[21].Data,sizeof(State->Counter));
+  copy_bytes(State->Stats,Objects[22].Data,sizeof(State->Stats));
+  State->Key=Owner->ManagerKey;
+  State->Valid=APPLE_AGX_TRUE;
+  State->SavedFence=Fence;
+  State->PendingFence=0u;
+  Owner->ManagerFence=0u;
+  return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildManagedG4Job(
+    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    APPLE_AGX_RENDER_MANAGER_STATE *Manager,
+    const APPLE_AGX_RENDER_MANAGER_KEY *Key, APPLE_AGX_U32 Fence,
+    APPLE_AGX_BOOL InitializeQueues,
+    const void *TemplateArena, APPLE_AGX_U32 TemplateArenaBytes,
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *SourceObjects,
+    APPLE_AGX_U32 SourceObjectCount, APPLE_AGX_U64 ArenaGpuAddress,
+    APPLE_AGX_BOOL IncludeInitBm,
+    const APPLE_AGX_RENDER_RUNTIME_BINDINGS *RuntimeBindings,
+    const APPLE_AGX_BACKEND_JOB_IMAGE *StagedJob,
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
+    APPLE_AGX_BACKEND_JOB_IMAGE *ActiveJob) {
+  APPLE_AGX_BOOL restore;
+  APPLE_AGX_U32 i,count;
+  const APPLE_AGX_EXP208_RELOCATION *relocations;
+  static const APPLE_AGX_U32 objects[]={1u,20u,21u,22u,13u};
+  if (!Owner || !Manager || !Key || !Fence || Owner->ManagerFence ||
+      Manager->PendingFence || !Key->Owner || !Key->Generation || !Key->RootIpa ||
+      SourceObjectCount!=APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT ||
+      !manager_objects_valid(SourceObjects) || !ActiveObjects ||
+      !SourceObjects[13].Data || SourceObjects[13].Size!=72u ||
+      (AppleAgxRenderManagerNeedsBind(Owner,Key) && !IncludeInitBm))
+    return APPLE_AGX_FALSE;
+  for (i=0u;i<3u;++i) {
+    APPLE_AGX_U32 object=i==0u?41u:(i==1u?42u:43u);
+    if (!Key->Backing[i].Bytes || Key->Backing[i].Reserved ||
+        Key->Backing[i].Va!=SourceObjects[object].GpuVa)
+      return APPLE_AGX_FALSE;
+  }
+  restore=Manager->Valid && manager_key_equal(&Manager->Key,Key,APPLE_AGX_FALSE);
+  if (!build_active_job(Owner,TemplateArena,TemplateArenaBytes,SourceObjects,
+      SourceObjectCount,ArenaGpuAddress,IncludeInitBm,RuntimeBindings,
+      StagedJob,ActiveObjects,ActiveJob,APPLE_AGX_TRUE,InitializeQueues))
+    return APPLE_AGX_FALSE;
+  /* Restore manager-owned mutable state, never queue-owned bytes. Scene13 is
+   * a new render pass even when the same buffer manager stays bound. */
+  for (i=0u;i<sizeof(objects)/sizeof(objects[0]);++i) {
+    APPLE_AGX_U32 n=objects[i];
+    const unsigned char *source=SourceObjects[n].Data;
+    if (restore) {
+      if(n==1u) source=Manager->Info;
+      if(n==20u) source=Manager->BlockControl;
+      if(n==21u) source=Manager->Counter;
+      if(n==22u) source=Manager->Stats;
+    }
+    copy_bytes(ActiveObjects[n].Data,source,ActiveObjects[n].Size);
+  }
+  if (!restore) {
+    /* The pinned first-job template counter includes its first commit. */
+    put_u32(ActiveObjects[21].Data,0u);
+    put_u32(ActiveObjects[20].Data+4u,Key->Backing[2].Bytes/0x20000u);
+  }
+  count=(APPLE_AGX_U32)ActiveObjects[21].Data[0] |
+      ((APPLE_AGX_U32)ActiveObjects[21].Data[1]<<8u) |
+      ((APPLE_AGX_U32)ActiveObjects[21].Data[2]<<16u) |
+      ((APPLE_AGX_U32)ActiveObjects[21].Data[3]<<24u);
+  put_u32(ActiveObjects[21].Data,count+1u);
+  /* Only refreshed Info/Scene require new relocations. Other work fields were
+   * already relocated above; snapshot addresses stay in this context0 slot. */
+  relocations=AppleAgxRenderTemplateRelocations();
+  for (i=0u;i<AppleAgxRenderTemplateRelocationCount();++i)
+    if ((relocations[i].SourceObject==1u || relocations[i].SourceObject==13u) &&
+        !AppleAgxApplyRelocations(ActiveObjects,SourceObjectCount,&relocations[i],1u))
+      return APPLE_AGX_FALSE;
+  Owner->ManagerKey=*Key;
+  Owner->ManagerFence=Fence;
+  Manager->PendingFence=Fence;
+  return APPLE_AGX_TRUE;
 }
 
 static APPLE_AGX_BOOL queue_object_valid(
