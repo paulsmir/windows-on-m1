@@ -61,7 +61,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment5(
   if (output->SegmentDescriptors == NULL)
     return STATUS_BUFFER_TOO_SMALL;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  if (!NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(Context, &view)) ||
+  if (!NT_SUCCESS(AdmissionMemoryRuntimeLocalView(Context, &view)) ||
       !AdmissionMemoryCpuVisibleLocalBase(
           &Context->Memory, view.CpuAddress, view.GuestIpaAddress,
           view.HostPhysicalAddress, view.GpuVirtualAddress, view.Bytes,
@@ -132,7 +132,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment4(
   local = (DXGK_SEGMENTDESCRIPTOR4 *)(
       (PUCHAR)output->pSegmentDescriptor + output->SegmentDescriptorStride);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  if (!NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(Context, &view)) ||
+  if (!NT_SUCCESS(AdmissionMemoryRuntimeLocalView(Context, &view)) ||
       !AdmissionMemoryCpuVisibleLocalBase(
           &Context->Memory, view.CpuAddress, view.GuestIpaAddress,
           view.HostPhysicalAddress, view.GpuVirtualAddress, view.Bytes,
@@ -149,6 +149,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment4(
   AdmissionDescribeSegment(&local_segment, local);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   local->CpuTranslatedAddress.QuadPart = (LONGLONG)cpuTranslated;
+  local->Flags.PopulatedFromSystemMemory = 0u;
+  local->Flags.PopulatedByReservedDDRByFirmware = 1u;
 #endif
   output->NbSegment = Context->Memory.Topology.SegmentCount;
   output->PagingBufferSegmentId =

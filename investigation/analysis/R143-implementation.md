@@ -86,3 +86,36 @@ PA alias expose four baseline resources only. Firmware/artifact hashes in
 EXP856-r143-reserve1g/mu-artifact-sha256.txt. No EBS/live memory map proof.
 Full1146 after KMD integration:15 failures/38 errors/2 skips; exact old names
 preserved except three generator errors now repaired; no new failure names.
+
+## Step 3 verified offline
+
+KMD now borrows1GiB, reports1000MiB in QuerySegment4/5, keeps private16/backend8
+at1000/1016MiB, including fixed backend/shader aliases. Full-local and initial
+W=0 scanout56 views are separate; high primary returns INVALID_ADDRESS before
+broker I/O. Both descriptors declare reserved DDR, no host aperture. Real-C
+borrow checks all262144 translations and rolls back map/interior/final-page
+failures; UAT inventory is36 pages with fixed aliases and last native leaf.
+
+Fresh reviewer found a real coverage gap: the old replay reconstructed memory
+Start instead of calling it. ACCEPT. Extended replay now executes production
+MemoryRuntimeStart/Destroy/Stop plus real memory/residency/UAT/publication,
+with only OS allocation/HVC/register services simulated. Nonzero backing proves
+full zero-before-publication; deliberately removing production zeroing fails.
+Faults after borrow, during table allocation, alias allocation, publication and
+post-publication contract setup unwind every table and unmap borrowed RAM once.
+Unpublication is asserted before any backing/table release.
+
+This replay exposed a pre-existing teardown defect: fixed aliases remained
+registered after local unmap; ContextDestroy returned BUSY. RED→GREEN fix removes
+owned aliases before table release and marks local mapping ownership immediately
+so later alias failures also unwind. This is in KMD, the violated lifetime owner.
+No successful hardware restart is inferred.
+
+v5 retains8192 backing records; real8192+1 test proves CAPACITY and byte-identical
+state on refusal. Real scanout service suite covers two-DART unwind/in-flight
+release. G3 replay25 PASS (includes16/64 subcases), G4 suite31 PASS,
+reserve-focused16 PASS. Final full1146:15 failures/38 errors/2 skips; no new
+failure/error names, three repaired admission-generator errors removed from the
+baseline56. Complete names: EXP856-r143-reserve1g/host-test-comparison.json.
+Review R45/R47: ACCEPT — this offline lifetime evidence now covers alias cleanup
+and partial initialization; prior hardware results remain unchanged.

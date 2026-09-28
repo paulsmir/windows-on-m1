@@ -2,10 +2,10 @@
 
 #define ADMISSION_MEMORY_RUNTIME_TAG 'uRGA'
 #define ADMISSION_LOCAL_GPU_VA 0x1500000000ULL
-#define ADMISSION_LOCAL_BYTES 0x04000000ULL
-#define ADMISSION_LOCAL_ALLOCATION_BYTES 0x02800000ULL
+#define ADMISSION_LOCAL_BYTES 0x40000000ULL
+#define ADMISSION_LOCAL_ALLOCATION_BYTES 0x3e800000ULL
 #define ADMISSION_PRIVATE_BYTES 0x01000000ULL
-#define ADMISSION_BACKEND_OFFSET 0x03800000ULL
+#define ADMISSION_BACKEND_OFFSET 0x3f800000ULL
 #define ADMISSION_BACKEND_BYTES 0x00800000ULL
 #define ADMISSION_APERTURE_GPU_VA 0x1600000000ULL
 #define ADMISSION_APERTURE_BYTES 0x10000000ULL
@@ -208,6 +208,17 @@ static NTSTATUS AdmissionMemoryRuntimeDestroy(
     Runtime->MappingReady = FALSE;
   }
   if (Runtime->ResidencyReady) {
+    /* Fixed backend/shader aliases share this owner but are not part of the
+     * LocalObject mapping. Remove every remaining alias before table release. */
+    APPLE_AGX_UAT_INVENTORY *inventory = &Runtime->Residency.Inventory;
+    while (inventory->MappingCount != 0u) {
+      const APPLE_AGX_UAT_MAPPING *mapping =
+          &inventory->Mappings[inventory->MappingCount - 1u];
+      if (AppleAgxUatUnmap(mapping->Context, &Runtime->Residency.Roots,
+              mapping->VirtualAddress, mapping->Length,
+              &Runtime->Residency.Allocator, inventory) != AppleAgxUatResultOk)
+        return STATUS_DEVICE_BUSY;
+    }
     if (!AppleAgxResidencyContextDestroy(&Runtime->Residency,
                                          &residencyStatus))
       return STATUS_DEVICE_BUSY;
@@ -378,6 +389,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
     status = STATUS_INVALID_ADDRESS;
     goto Fail;
   }
+  /* Own the completed mapping immediately so failures in later alias setup
+   * still unmap the memory object before freeing its backing. */
+  runtime->MappingReady = TRUE;
   {
     static const ULONGLONG fixedGpuVa[
         APPLE_AGX_RENDER_TEMPLATE_FIXED_INPUT_COUNT] = {
@@ -473,7 +487,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
       }
     }
   }
-  runtime->MappingReady = TRUE;
   AdmissionMemoryRecordStart(Context, AdmissionMemoryStartTtbr,
                              STATUS_PENDING);
   if (AppleAgxUatEncodeTtbrPair(
@@ -767,7 +780,7 @@ _Use_decl_annotations_ BOOLEAN AdmissionMemoryRuntimeContextPublished(
              : FALSE;
 }
 
-_Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeScanoutView(
+_Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeLocalView(
     ADMISSION_CONTEXT *Context, ADMISSION_SCANOUT_MEMORY_VIEW *View) {
   ADMISSION_MEMORY_RUNTIME *runtime = AdmissionMemoryGetRuntime(Context);
   ADMISSION_PHYSICAL_ALLOCATION *allocation;
@@ -782,8 +795,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeScanoutView(
       Context->Memory.LocalAllocationBytes !=
           ADMISSION_LOCAL_ALLOCATION_BYTES ||
       runtime->LocalObject.AllocationCpuBase == NULL ||
-      runtime->LocalObject.Length < APPLE_AGX_SCANOUT_J313_POOL_SIZE ||
-      Context->Memory.BackendOffset != APPLE_AGX_SCANOUT_J313_POOL_SIZE ||
+      runtime->LocalObject.Length < ADMISSION_LOCAL_BYTES ||
+      Context->Memory.BackendOffset !=
+          ADMISSION_LOCAL_ALLOCATION_BYTES + ADMISSION_PRIVATE_BYTES ||
       Context->Memory.LocalAllocationBytes > Context->Memory.BackendOffset ||
       Context->Memory.PrivateOffset != Context->Memory.LocalAllocationBytes ||
       Context->Memory.PrivateBytes != Context->Memory.BackendOffset -
@@ -791,7 +805,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeScanoutView(
     return STATUS_INVALID_DEVICE_STATE;
   allocation = (ADMISSION_PHYSICAL_ALLOCATION *)
       runtime->LocalObject.AllocationHandle;
-  if (allocation->Size < APPLE_AGX_SCANOUT_J313_POOL_SIZE)
+  if (allocation->Size < ADMISSION_LOCAL_BYTES)
     return STATUS_INVALID_DEVICE_STATE;
   if (allocation->BorrowedFirmwareReserve) {
     if (!AppleAgxLocalReserveMatchesResource(
@@ -809,13 +823,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeScanoutView(
   offset = (ULONGLONG)((PUCHAR)runtime->LocalObject.CpuAddress -
                        (PUCHAR)runtime->LocalObject.AllocationCpuBase);
   if (offset > allocation->Size ||
-      APPLE_AGX_SCANOUT_J313_POOL_SIZE > allocation->Size - offset ||
+      ADMISSION_LOCAL_BYTES > allocation->Size - offset ||
       allocation->GuestIpaBase > MAXULONGLONG - offset ||
       allocation->HostPhysicalBase > MAXULONGLONG - offset ||
       allocation->GuestIpaBase + offset >
-          MAXULONGLONG - APPLE_AGX_SCANOUT_J313_POOL_SIZE ||
+          MAXULONGLONG - ADMISSION_LOCAL_BYTES ||
       allocation->HostPhysicalBase + offset >
-          MAXULONGLONG - APPLE_AGX_SCANOUT_J313_POOL_SIZE)
+          MAXULONGLONG - ADMISSION_LOCAL_BYTES)
     return STATUS_INTEGER_OVERFLOW;
   if (runtime->LocalObject.DeviceAddress !=
       allocation->HostPhysicalBase + offset)
@@ -825,8 +839,21 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeScanoutView(
   View->HostPhysicalAddress = runtime->LocalObject.DeviceAddress;
   View->GpuVirtualAddress = runtime->LocalObject.GpuVirtualAddress;
   View->Bytes = Context->Memory.LocalAllocationBytes;
-  /* The broker maps through the private pool, but KMD surface consumers must
-   * remain bounded by Bytes. The backend begins exactly after this window. */
+  View->PoolBytes = 0; /* This CPU-local view is not a DCP registration. */
+  return STATUS_SUCCESS;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeScanoutView(
+    ADMISSION_CONTEXT *Context, ADMISSION_SCANOUT_MEMORY_VIEW *View) {
+  NTSTATUS status = AdmissionMemoryRuntimeLocalView(Context, View);
+  if (!NT_SUCCESS(status)) return status;
+  if (View->Bytes < APPLE_AGX_SCANOUT_J313_POOL_SIZE) {
+    RtlZeroMemory(View, sizeof(*View));
+    return STATUS_INVALID_DEVICE_STATE;
+  }
+  /* R143 admission registers W=0 only. A high primary must fail before MMIO;
+   * relocation needs a separately proven quiesce/re-register lifecycle. */
+  View->Bytes = APPLE_AGX_SCANOUT_J313_POOL_SIZE;
   View->PoolBytes = APPLE_AGX_SCANOUT_J313_POOL_SIZE;
   return STATUS_SUCCESS;
 }
@@ -1201,7 +1228,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeExecutePresent(
      * Their host PAs are not known to this CPU copy path. */
     probe.SourceGuestIpa = io.FirstSourceGuestIpa;
   }
-  if (NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(Context, &scanout))) {
+  if (NT_SUCCESS(AdmissionMemoryRuntimeLocalView(Context, &scanout))) {
     if (destinationAddress >= Context->Memory.Topology.Local.Base)
       probe.DestinationGuestIpa = scanout.GuestIpaAddress +
           destinationAddress - Context->Memory.Topology.Local.Base;

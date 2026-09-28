@@ -44,5 +44,12 @@ int main(void) {
     assert(hv_agx_local_carveout_allows(0x880000000ULL, 0x890000000ULL + 0x40000000, 0x4000, false));
     assert(!hv_agx_local_carveout_allows(0x880000000ULL, 0x800000000ULL, 0x80000000, true));
     assert(!hv_agx_local_carveout_allows(0x880000000ULL, UINT64_MAX-1, 0x4000, false));
+    r = (struct hv_agx_local_receipt){0x8e0000000ULL,0x8e0000000ULL,0x40000000ULL};
+    assert(hv_agx_local_scanout_allows(&r,r.host_pa,0x3800000));
+    assert(hv_agx_local_scanout_allows(&r,r.host_pa+0x3e7fc000,0x4000));
+    assert(!hv_agx_local_scanout_allows(&r,r.host_pa+0x3e800000,0x4000));
+    assert(!hv_agx_local_scanout_allows(&r,r.host_pa+0x3e7fc000,0x8000));
+    assert(!hv_agx_local_scanout_allows(&r,UINT64_MAX-1,0x4000));
+    r.bytes=0; assert(!hv_agx_local_scanout_allows(&r,r.host_pa,0x4000));
     return 0;
 }

@@ -838,6 +838,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
   const ADMISSION_ALLOCATION_DESCRIPTION *description;
   APPLE_AGX_LOCAL_SEGMENT_ADDRESS_RESULT address_result;
   APPLE_AGX_FIXED_PANEL_RESULT result;
+  ADMISSION_SCANOUT_MEMORY_VIEW window;
   APPLE_AGX_U64 surface_offset = 0ULL;
   APPLE_AGX_U64 sequence = 0ULL;
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
@@ -870,10 +871,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
       description->Size != APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
       description->Format != (UINT)D3DDDIFMT_A8R8G8B8)
     return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
+  if (!NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(Context, &window)) ||
+      window.GuestIpaAddress != runtime->Panel.PoolIpa)
+    return STATUS_INVALID_ADDRESS;
   address_result = AppleAgxLocalSegmentAddressToGpuVa(
       ADMISSION_MEMORY_LOCAL_SEGMENT, Args->PrimarySegment,
       Context->Memory.Topology.Local.Base,
-      Context->Memory.LocalAllocationBytes, 0ULL,
+      window.Bytes, 0ULL,
       (APPLE_AGX_U64)Args->PrimaryAddress.QuadPart,
       APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, 0ULL, &surface_offset);
   if (address_result != AppleAgxLocalSegmentAddressOk)

@@ -1263,6 +1263,10 @@ NTSTATUS AdmissionMemoryRuntimeBorrowIo(
     _Out_ APPLE_AGX_MEMORY_IO *Io);
 BOOLEAN AdmissionMemoryRuntimeContextPublished(
     _Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionMemoryRuntimeLocalView(
+    _In_ ADMISSION_CONTEXT *Context,
+    _Out_ ADMISSION_SCANOUT_MEMORY_VIEW *View);
+
 NTSTATUS AdmissionMemoryRuntimeScanoutView(
     _Inout_ ADMISSION_CONTEXT *Context,
     _Out_ ADMISSION_SCANOUT_MEMORY_VIEW *View);

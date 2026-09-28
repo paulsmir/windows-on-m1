@@ -105,7 +105,7 @@ static BOOLEAN AdmissionG3FirmwareResourcesPresent(
                length == J313_AGX_G2_POWER_BROKER_SIZE)
         bit = 1u << 3;
       else if (start != 0ULL &&
-               (start & (APPLE_AGX_LOCAL_RESERVE_BYTES - 1ULL)) == 0ULL &&
+               (start & (APPLE_AGX_LOCAL_RESERVE_ALIGNMENT - 1ULL)) == 0ULL &&
                length == APPLE_AGX_LOCAL_RESERVE_BYTES)
         bit = 1u << 4;
       if (bit == 0u || (seen & bit) != 0u)

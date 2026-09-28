@@ -64,6 +64,7 @@ typedef struct { void *hAdapterMemoryObject, *pAdl; } DXGKARGCB_FREE_ADL;
 typedef struct { void *hPhysicalMemoryObject, *hAdapterMemoryObject; }
     DXGKARGCB_DESTROY_PHYSICAL_MEMORY_OBJECT;
 typedef struct {
+  void *DxgkCbMapMemory, *DxgkCbUnmapMemory;
   void (*DxgkCbUnmapPhysicalMemory)(DXGKARGCB_UNMAP_PHYSICAL_MEMORY *);
   void (*DxgkCbFreeAdl)(DXGKARGCB_FREE_ADL *);
   void (*DxgkCbDestroyPhysicalMemoryObject)(
@@ -118,6 +119,7 @@ typedef struct {
   BOOLEAN Initialized;
   int Lock;
   ADMISSION_PHYSICAL_ALLOCATION *Scratch;
+  void *Request; ULONGLONG RequestIpa;
 } ADMISSION_PHYSICAL_OWNER;
 typedef struct {
   DXGK_DEVICE_INFO DeviceInformation;
@@ -125,27 +127,48 @@ typedef struct {
   void *MemoryRuntime;
   ADMISSION_MEMORY_CONTRACT Memory;
   void *ScanoutRuntime, *BrokerBase;
+  BOOLEAN DisplayActive, SourceVisible;
+  DXGKRNL_INTERFACE Interface;
+  BOOLEAN InterfaceValid; void *PhysicalDeviceObject;
+  int MemoryStartStage,MemoryStartStatus;
+  APPLE_AGX_SOFTWARE_APERTURE_ENTRY *ApertureEntries;
 } ADMISSION_CONTEXT;
 /* PRODUCTION_VIEW_TYPE */
 typedef struct {
   PVOID CpuAddress;
   ULONGLONG GuestIpaAddress, HostPhysicalAddress, GpuVirtualAddress, Bytes;
 } ADMISSION_BACKEND_MEMORY_VIEW;
+typedef struct { PDXGKRNL_INTERFACE Interface; } ADMISSION_UAT_WINDOWS_IO;
 typedef struct {
+  ADMISSION_PHYSICAL_OWNER PhysicalOwner;
+  APPLE_AGX_MEMORY_IO MemoryIo;
+  APPLE_AGX_RESIDENCY_CONTEXT Residency;
+  APPLE_AGX_MEMORY_OBJECT *UatObjects;
+  APPLE_AGX_UAT_PAGE *UatPages;
+  APPLE_AGX_UAT_MAPPING *UatMappings;
+  APPLE_AGX_SOFTWARE_APERTURE_ENTRY *ApertureEntries;
+  ADMISSION_UAT_WINDOWS_IO Publication;
+  APPLE_AGX_UAT_PUBLICATION_IO PublicationIo;
+  APPLE_AGX_UAT_PUBLICATION_STATE Published;
+  int PagingLock;
   APPLE_AGX_MEMORY_OBJECT LocalObject;
   BOOLEAN PhysicalReady, LocalReady, ResidencyReady, MappingReady, PublicationReady;
 } ADMISSION_MEMORY_RUNTIME;
 
 /* PRODUCTION_MEMORY_GET_RUNTIME */
+/* PRODUCTION_LOCAL_VIEW */
 /* PRODUCTION_SCANOUT_VIEW */
 /* PRODUCTION_BACKEND_VIEW */
 
 static UCHAR broker_registers[J313_AGX_G2_POWER_BROKER_SIZE];
 static UCHAR *local_mapping;
 static unsigned local_unmaps;
+static bool fail_local_map,fill_borrowed;
+static unsigned char publication_registers[0x4000];
 static unsigned dxgk_unmaps, dxgk_adl_frees, dxgk_destroys;
 
 static void dxgk_unmap(DXGKARGCB_UNMAP_PHYSICAL_MEMORY *args) {
+  if(fill_borrowed) for(unsigned i=0;i<16;++i) assert(publication_registers[63*16+i]==0);
   ++dxgk_unmaps;
   free(args->pBaseAddress);
 }
@@ -166,7 +189,9 @@ static PVOID MmMapIoSpaceEx(PHYSICAL_ADDRESS address, SIZE_T bytes, ULONG protec
   if ((ULONGLONG)address.QuadPart == UINT64_C(0x8e0000000) &&
       bytes == APPLE_AGX_LOCAL_RESERVE_BYTES &&
       protection == (PAGE_READWRITE | PAGE_WRITECOMBINE)) {
+    if (fail_local_map) return NULL;
     local_mapping = calloc(1, bytes);
+    if(fill_borrowed && local_mapping) memset(local_mapping,0xa5,bytes);
     return local_mapping;
   }
   return NULL;
@@ -174,6 +199,7 @@ static PVOID MmMapIoSpaceEx(PHYSICAL_ADDRESS address, SIZE_T bytes, ULONG protec
 static void MmUnmapIoSpace(PVOID address, SIZE_T bytes) {
   (void)bytes;
   if (address == local_mapping) {
+    if(fill_borrowed) for(unsigned i=0;i<16;++i) assert(publication_registers[63*16+i]==0);
     ++local_unmaps;
     free(local_mapping);
     local_mapping = NULL;
@@ -189,13 +215,24 @@ static void ExFreePoolWithTag(PVOID pointer, ULONG tag) {
 }
 /* PRODUCTION_RELEASE_RAW */
 /* PRODUCTION_PHYSICAL_FREE */
-static NTSTATUS AdmissionPhysicalTranslate(
-    ADMISSION_PHYSICAL_OWNER *owner, ADMISSION_PHYSICAL_ALLOCATION *allocation) {
-  (void)owner;
-  allocation->HostPhysicalBase = UINT64_C(0x8e0000000);
-  allocation->GuestIpaBase = UINT64_C(0x8e0000000);
-  return STATUS_SUCCESS;
+#define PAGE_SIZE 4096
+#define MAXULONG UINT32_MAX
+#define MAXSIZE_T SIZE_MAX
+#define ADMISSION_HVC_PHYSICAL_LIMIT (1ULL << 40)
+#define STATUS_DEVICE_HARDWARE_ERROR ((NTSTATUS)0xc0000483)
+typedef unsigned UINT;
+typedef struct { void *Context; void (*Invoke)(void); } ADMISSION_HVC_IO;
+static void AdmissionPhysicalInvokeHvc(void) {}
+static UINT translated_pages;
+static UINT broken_translation=UINT32_MAX;
+static bool AdmissionHvcTranslatePages(ADMISSION_HVC_IO *io, void *request,
+    ULONGLONG request_ipa, ULONGLONG *ipas, UINT count, ULONGLONG *pas) {
+  (void)io; (void)request; (void)request_ipa;
+  translated_pages=count;
+  for(UINT i=0;i<count;++i) pas[i]=ipas[i]+(i==broken_translation ? 0x1000 : 0);
+  return true;
 }
+/* PRODUCTION_PHYSICAL_TRANSLATE */
 
 /* PRODUCTION_BORROW */
 
@@ -308,12 +345,12 @@ static int replay_memory_stages(ADMISSION_PHYSICAL_ALLOCATION *borrowed) {
                                &status))
     goto done;
   if (AppleAgxUatMap(63u, &residency.Roots, UINT64_C(0x1100020000),
-                     borrowed->HostPhysicalBase + UINT64_C(0x3800000),
+                     borrowed->HostPhysicalBase + ADMISSION_BACKEND_OFFSET,
                      0x40000u, AppleAgxUatGpuPipelineShared,
                      &residency.Allocator, &residency.Inventory) !=
           AppleAgxUatResultOk ||
       AppleAgxUatMap(63u, &residency.Roots, UINT64_C(0x1100010000),
-                     borrowed->HostPhysicalBase + UINT64_C(0x3840000),
+                     borrowed->HostPhysicalBase + (ADMISSION_BACKEND_OFFSET + 0x40000),
                      0x4000u, AppleAgxUatGpuPipelineShared,
                      &residency.Allocator, &residency.Inventory) !=
           AppleAgxUatResultOk)
@@ -323,6 +360,12 @@ static int replay_memory_stages(ADMISSION_PHYSICAL_ALLOCATION *borrowed) {
                              &physical, &descriptor) != AppleAgxUatResultOk ||
       physical != borrowed->HostPhysicalBase)
     goto done;
+  assert(residency.Inventory.PageCount == 36); /* 32 local leaves + two roots + middle + alias leaf */
+  assert(AppleAgxUatResolvePage(63u, &residency.Roots,
+      UINT64_C(0x1500000000) + 0x3fffc000, &residency.Inventory,
+      &physical, &descriptor) == AppleAgxUatResultOk);
+  assert(physical == borrowed->HostPhysicalBase + 0x3fffc000);
+  assert(UINT64_C(0x1500000000) + local.Length <= UINT64_C(0x1600000000));
   if (AppleAgxUatEncodeTtbrPair(63u, &residency.Roots, &pair) !=
       AppleAgxUatResultOk)
     goto done;
@@ -372,6 +415,7 @@ typedef struct {
   ADMISSION_CONTEXT *Adapter;
   APPLE_AGX_FIXED_PANEL Panel;
   int IrqEnabled, PresentGate, PendingValid;
+  int64_t PendingPhysicalAddress, PendingSequence;
 } ADMISSION_SCANOUT_RUNTIME;
 static int InterlockedExchange(int *value, int next) {
   int previous = *value; *value = next; return previous;
@@ -429,6 +473,20 @@ static APPLE_AGX_SCANOUT_BOOL AdmissionScanoutWrite32(
 /* PRODUCTION_SCANOUT_START */
 /* PRODUCTION_SCANOUT_STOP */
 
+#define STATUS_INVALID_HANDLE ((NTSTATUS)0xc0000008)
+#define STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE ((NTSTATUS)0xc01e0304)
+#define D3DDDIFMT_A8R8G8B8 21
+#define ADMISSION_ALLOCATION_OBJECT_MAGIC 123
+#define InterlockedExchange64(p,v) (*(p)=(v))
+typedef int64_t LONG64;
+typedef unsigned UINT;
+typedef struct { unsigned Width,Height,Pitch,BytesPerPixel,Format; ULONGLONG Size; } ADMISSION_ALLOCATION_DESCRIPTION;
+typedef struct { struct { unsigned Magic; ADMISSION_ALLOCATION_DESCRIPTION Description; } Object; } ADMISSION_ALLOCATION_HANDLE;
+typedef struct { unsigned VidPnSourceId; void *hAllocation; unsigned PrimarySegment; PHYSICAL_ADDRESS PrimaryAddress; } DXGKARG_SETVIDPNSOURCEADDRESS;
+static bool AdmissionAllocationDescriptionValid(const ADMISSION_ALLOCATION_DESCRIPTION *d) { return d->Size != 0; }
+/* PRODUCTION_QUEUE_PRESENT */
+/* SEGMENT_QUERY_REPLAY */
+
 static int replay_scanout_start(ADMISSION_CONTEXT *context) {
   ADMISSION_BACKEND_MEMORY_VIEW backend;
   ADMISSION_SCANOUT_MEMORY_VIEW view;
@@ -448,17 +506,26 @@ static int replay_scanout_start(ADMISSION_CONTEXT *context) {
   }
   assert(scanout_broker.registered_pool_size == 0x3800000ULL);
   assert(scanout_broker.pool_pa == context->LocalReserveReceipt.HostPa);
-  assert(context->Memory.LocalAllocationBytes == 0x2800000ULL);
-  assert(context->Memory.PrivateOffset == 0x2800000ULL);
+  ADMISSION_ALLOCATION_HANDLE primary={.Object={ADMISSION_ALLOCATION_OBJECT_MAGIC,
+    {2560,1600,10240,4,D3DDDIFMT_A8R8G8B8,APPLE_AGX_SCANOUT_J313_SURFACE_SIZE}}};
+  DXGKARG_SETVIDPNSOURCEADDRESS args={0,&primary,2,{context->Memory.Topology.Local.Base+0x8000000}};
+  context->DisplayActive=context->SourceVisible=TRUE;
+  unsigned before_present=broker_accesses;
+  assert(AdmissionScanoutQueuePresent(context,&args)==STATUS_INVALID_ADDRESS);
+  assert(broker_accesses==before_present);
+
+  assert(context->Memory.LocalAllocationBytes == 0x3e800000ULL);
+  assert(context->Memory.PrivateOffset == 0x3e800000ULL);
   assert(context->Memory.PrivateBytes == 0x1000000ULL);
   assert(AdmissionMemoryRuntimeScanoutView(context, &view) == STATUS_SUCCESS);
-  assert(view.Bytes == 0x2800000ULL && view.PoolBytes == 0x3800000ULL);
+  assert(view.Bytes == 0x3800000ULL && view.PoolBytes == 0x3800000ULL);
   assert(AdmissionMemoryRuntimeBackendView(context, &backend) == STATUS_SUCCESS);
-  assert(backend.GuestIpaAddress == context->LocalReserveReceipt.GuestIpa + 0x3800000ULL);
-  assert(backend.HostPhysicalAddress == view.HostPhysicalAddress + view.PoolBytes);
-  assert(backend.GpuVirtualAddress == view.GpuVirtualAddress + view.PoolBytes);
-  assert(backend.CpuAddress == (PUCHAR)view.CpuAddress + view.PoolBytes);
+  assert(backend.GuestIpaAddress == context->LocalReserveReceipt.GuestIpa + 0x3f800000ULL);
+  assert(backend.HostPhysicalAddress == view.HostPhysicalAddress + 0x3f800000ULL);
+  assert(backend.GpuVirtualAddress == view.GpuVirtualAddress + 0x3f800000ULL);
+  assert(backend.CpuAddress == (PUCHAR)view.CpuAddress + 0x3f800000ULL);
   assert(backend.Bytes == 0x800000ULL);
+  assert(ADMISSION_BACKEND_OFFSET == context->Memory.BackendOffset);
   assert(AdmissionScanoutStop(context) == STATUS_SUCCESS);
   assert(context->ScanoutRuntime == NULL);
   assert(scanout_broker.registered_pool_size == 0);
@@ -473,10 +540,22 @@ static int replay_scanout_start(ADMISSION_CONTEXT *context) {
     assert(AppleAgxLocalSegmentAddressToGpuVa(2, 2,
         context->Memory.Topology.Local.Base, view.Bytes, 0, context->Memory.Topology.Local.Base + invalid[i],
         APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, 0, &surface) != AppleAgxLocalSegmentAddressOk);
-    assert(!AdmissionMemoryResolveLocalView(&context->Memory, context->Memory.Topology.Local.Base + invalid[i],
+    assert(AdmissionMemoryResolveLocalView(&context->Memory, context->Memory.Topology.Local.Base + invalid[i],
         APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, 0, view.CpuAddress,
         view.HostPhysicalAddress, &local));
   }
+  assert(AdmissionMemoryRuntimeLocalView(context, &view) == STATUS_SUCCESS);
+  assert(view.Bytes == 0x3e800000ULL);
+  const ULONGLONG offsets[] = {0, 0x4000000, 0x8000000, 0x3e7f0000};
+  for(unsigned i=0;i<RTL_NUMBER_OF(offsets);++i) {
+    assert(AdmissionMemoryResolveLocalView(&context->Memory,
+      context->Memory.Topology.Local.Base + offsets[i], 0x10000, 0xffff,
+      view.CpuAddress, view.HostPhysicalAddress, &local));
+    assert(local.HostPhysicalAddress == view.HostPhysicalAddress + offsets[i] + 0xffff);
+  }
+  assert(!AdmissionMemoryResolveLocalView(&context->Memory,
+      context->Memory.Topology.Local.Base + 0x3e7fffff, 2, 0,
+      view.CpuAddress, view.HostPhysicalAddress, &local));
   unsigned accesses = broker_accesses;
   memory_runtime->LocalObject.Length = view.Bytes;
   assert(AdmissionScanoutStart(context) == STATUS_INVALID_ADDRESS);
@@ -507,6 +586,8 @@ static int replay_scanout_start(ADMISSION_CONTEXT *context) {
   return 0;
 }
 
+/* MEMORY_LIFECYCLE_REPLAY */
+
 int main(void) {
   CM_RESOURCE_LIST list = {0};
   ADMISSION_CONTEXT context = {0};
@@ -514,7 +595,7 @@ int main(void) {
   int failures = 0;
   ADMISSION_PHYSICAL_OWNER owner = { .Initialized = TRUE };
   DXGKRNL_INTERFACE interface = {
-      dxgk_unmap, dxgk_free_adl, dxgk_destroy };
+      .DxgkCbUnmapPhysicalMemory=dxgk_unmap, .DxgkCbFreeAdl=dxgk_free_adl, .DxgkCbDestroyPhysicalMemoryObject=dxgk_destroy };
   ADMISSION_PHYSICAL_ALLOCATION *allocation = NULL;
   ADMISSION_PHYSICAL_ALLOCATION *old_allocation = NULL;
   ADMISSION_RESOURCE_LIST_RECEIPT resource_receipt = {0};
@@ -541,7 +622,7 @@ int main(void) {
   memory(&entry[2], J313_AGX_G2_GPU_BASE, J313_AGX_G2_GPU_SIZE);
   memory(&entry[4], J313_AGX_G2_HANDOFF_BASE, J313_AGX_G2_HANDOFF_SIZE);
   memory(&entry[6], J313_AGX_G2_POWER_BROKER_BASE, J313_AGX_G2_POWER_BROKER_SIZE);
-  memory(&entry[8], UINT64_C(0x8e0000000), UINT32_C(0x4000000));
+  memory(&entry[8], UINT64_C(0x8e0000000), UINT32_C(0x40000000));
   for (unsigned index = 1; index < 10; index += 2) {
     entry[index].Type = CmResourceTypeDevicePrivate;
     entry[index].Flags = 24576;
@@ -586,12 +667,34 @@ int main(void) {
     return 1;
   }
   memory(&entry[6], J313_AGX_G2_POWER_BROKER_BASE, J313_AGX_G2_POWER_BROKER_SIZE);
-  memory(&entry[8], UINT64_C(0x8e0004000), UINT32_C(0x4000000));
+  memory(&entry[8], UINT64_C(0x8e0004000), UINT32_C(0x40000000));
   if (AdmissionG3FirmwareResourcesPresent(&context)) {
     fprintf(stderr, "G3 preflight admitted misaligned local range\n");
     return 1;
   }
-  memory(&entry[8], UINT64_C(0x8e0000000), UINT32_C(0x4000000));
+  memory(&entry[8], UINT64_C(0x8e0000000), UINT32_C(0x40000000));
+  fail_local_map = true;
+  assert(AdmissionPhysicalBorrowLocal(&owner, &context.DeviceInformation,
+      &allocation, &context.LocalReserveReceipt) == STATUS_INSUFFICIENT_RESOURCES);
+  assert(allocation == NULL && owner.AllocationCount == 0 && local_mapping == NULL);
+  fail_local_map = false;
+  CM_PARTIAL_RESOURCE_DESCRIPTOR saved_private = entry[9];
+  entry[9] = entry[8];
+  assert(AdmissionPhysicalBorrowLocal(&owner, &context.DeviceInformation,
+      &allocation, &context.LocalReserveReceipt) == STATUS_INVALID_DEVICE_STATE);
+  assert(allocation == NULL && owner.AllocationCount == 0);
+  entry[9] = saved_private;
+  const UINT bad_pages[]={1,262143};
+  for(unsigned i=0;i<RTL_NUMBER_OF(bad_pages);++i) {
+    broken_translation=bad_pages[i];
+    assert(!NT_SUCCESS(AdmissionPhysicalBorrowLocal(&owner, &context.DeviceInformation,
+      &allocation, &context.LocalReserveReceipt)));
+    assert(allocation==NULL && local_mapping==NULL && owner.AllocationCount==0);
+    assert(translated_pages==262144);
+  }
+  assert(local_unmaps==2);
+  local_unmaps=0;
+  broken_translation=UINT32_MAX;
   borrow_status = AdmissionPhysicalBorrowLocal(&owner, &context.DeviceInformation,
                                                  &allocation, &context.LocalReserveReceipt);
   if (borrow_status != STATUS_SUCCESS || allocation == NULL ||
@@ -627,11 +730,12 @@ int main(void) {
           STATUS_SUCCESS ||
       scanout_view.GuestIpaAddress != UINT64_C(0x8e0000000) ||
       scanout_view.HostPhysicalAddress != UINT64_C(0x8e0000000) ||
-      scanout_view.Bytes != ADMISSION_LOCAL_ALLOCATION_BYTES) {
+      scanout_view.Bytes != APPLE_AGX_SCANOUT_J313_POOL_SIZE) {
     fprintf(stderr, "EXP834 borrowed scanout view failed: %08x\n",
             (unsigned)AdmissionMemoryRuntimeScanoutView(&context, &scanout_view));
     return 1;
   }
+  replay_segment_queries(&context);
   if (replay_scanout_start(&context)) return 1;
   context.LocalReserveReceipt.HostPa += UINT64_C(0x4000);
   if (AdmissionMemoryRuntimeScanoutView(&context, &scanout_view) !=
@@ -649,30 +753,24 @@ int main(void) {
   scanout_runtime.LocalObject.DeviceAddress -= UINT64_C(0x4000);
   scanout_runtime.LocalObject.CpuAddress = allocation->CpuBase + 0x4000;
   scanout_runtime.LocalObject.DeviceAddress += UINT64_C(0x4000);
-  if (AdmissionMemoryRuntimeScanoutView(&context, &scanout_view) !=
-          STATUS_SUCCESS ||
-      scanout_view.GuestIpaAddress != UINT64_C(0x8e0004000) ||
-      scanout_view.HostPhysicalAddress != UINT64_C(0x8e0004000)) {
-    fprintf(stderr, "scanout view lost matched contiguous offset\n");
-    return 1;
-  }
+  assert(AdmissionMemoryRuntimeScanoutView(&context, &scanout_view) == STATUS_INTEGER_OVERFLOW);
   scanout_runtime.LocalObject.CpuAddress = allocation->CpuBase;
   scanout_runtime.LocalObject.DeviceAddress = allocation->HostPhysicalBase;
   failures += replay_memory_stages(allocation);
   failures += expect(&context, STATUS_SUCCESS, "EXP831 exact resources");
-  memory(&entry[8], UINT64_C(0x8e0004000), UINT32_C(0x4000000));
+  memory(&entry[8], UINT64_C(0x8e0004000), UINT32_C(0x40000000));
   failures += expect(&context, STATUS_DEVICE_CONFIGURATION_ERROR, "wrong local IPA");
   memory(&entry[8], UINT64_C(0x8e0000000), UINT32_C(0x2000000));
   failures += expect(&context, STATUS_DEVICE_CONFIGURATION_ERROR, "short local resource");
-  memory(&entry[8], UINT64_C(0x8e0000000), UINT32_C(0x4000000));
+  memory(&entry[8], UINT64_C(0x8e0000000), UINT32_C(0x40000000));
   context.LocalReserveReceipt.Valid = 0;
   failures += expect(&context, STATUS_DEVICE_CONFIGURATION_ERROR, "invalid receipt");
   context.LocalReserveReceipt.Valid = 1;
   list.List[0].PartialResourceList.Count = 12;
-  memory(&entry[11], UINT64_C(0x8e0000000), UINT32_C(0x4000000));
+  memory(&entry[11], UINT64_C(0x8e0000000), UINT32_C(0x40000000));
   failures += expect(&context, STATUS_DEVICE_CONFIGURATION_ERROR, "duplicate local");
   list.List[0].PartialResourceList.Count = 11;
-  memory(&entry[2], UINT64_C(0x8e0000000), UINT32_C(0x4000000));
+  memory(&entry[2], UINT64_C(0x8e0000000), UINT32_C(0x40000000));
   failures += expect(&context, STATUS_DEVICE_CONFIGURATION_ERROR, "missing GPU resource");
   memory(&entry[2], J313_AGX_G2_GPU_BASE, J313_AGX_G2_GPU_SIZE);
   entry[10].u.Interrupt.Vector = 0;
@@ -735,6 +833,7 @@ int main(void) {
     fprintf(stderr, "Dxgk-owned allocation did not release all callbacks\n");
     return 1;
   }
+  replay_memory_lifecycle(&context);
   puts("EXP831 exact resources PASS; malformed cases rejected");
   return 0;
 }
