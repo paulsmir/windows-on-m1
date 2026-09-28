@@ -727,9 +727,12 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   COPY_REJECT_IF(state->ActiveProcess, 42u, STATUS_DEVICE_BUSY, Unlock);
   COPY_REJECT_IF(p->Graph.JobInFlight, 43u, STATUS_DEVICE_BUSY, Unlock);
   COPY_REJECT_IF(p->Graph.LeaseToken, 44u, STATUS_DEVICE_BUSY, Unlock);
+  /* R159: only a different process instance invalidates the QUERY. An
+   * unrelated mapping update advances MappingGeneration constantly; the
+   * per-page range validation below (53, 56-61) re-proves this exact range
+   * under the lock, as R154 did for BeginJob. */
   COPY_REJECT_IF(q->Operation!=APPLE_AGX_G3_COPY_QUERY &&
-      (q->ProcessGeneration!=p->Graph.ProcessGeneration ||
-       q->MappingGeneration!=p->Graph.MappingGeneration), 45u, STATUS_INVALID_PARAMETER, Unlock);
+      q->ProcessGeneration!=p->Graph.ProcessGeneration, 45u, STATUS_INVALID_PARAMETER, Unlock);
   COPY_REJECT_IF(q->Operation==APPLE_AGX_G3_COPY_UPLOAD &&
       (opened->ReadOnly || !(opened->Win32Flags&AppleAgxWin32BufferCpuWrite)), 46u, STATUS_INVALID_PARAMETER, Unlock);
   COPY_REJECT_IF(q->Operation==APPLE_AGX_G3_COPY_DOWNLOAD &&
