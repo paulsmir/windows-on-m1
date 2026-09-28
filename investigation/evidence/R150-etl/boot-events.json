@@ -1,0 +1,26 @@
+[
+  {
+    "TimeCreated": "/Date(1790593804249)/",
+    "Id": 1,
+    "ProviderName": "Microsoft-Windows-Kernel-General",
+    "Message": "The system time has changed to ?2026?-?09?-?28T11:10:04.249641900Z from ?2026?-?09?-?28T11:07:04.244951700Z.\r\nTime Delta: 180004 ms\r\n\r\nChange Reason: An application or system component changed the time.\r\nProcess: '\\Device\\HarddiskVolume7\\Windows\\System32\\svchost.exe' (PID 5032).\r\n\r\nRTC time: ?2026?-?09?-?28T13:10:04.249641900Z\r\nCurrent time zone bias: -120\r\nRTC time is in UTC: false\r\nSystem time was based on RTC time: false"
+  },
+  {
+    "TimeCreated": "/Date(1790593603065)/",
+    "Id": 12,
+    "ProviderName": "Microsoft-Windows-Kernel-General",
+    "Message": "The operating system started at system time ?2026?-?09?-?28T11:06:42.748236900Z."
+  },
+  {
+    "TimeCreated": "/Date(1790593582331)/",
+    "Id": 12,
+    "ProviderName": "Microsoft-Windows-Kernel-General",
+    "Message": "The operating system started at system time ?2026?-?09?-?28T11:06:22.018750000Z."
+  },
+  {
+    "TimeCreated": "/Date(1790593580832)/",
+    "Id": 13,
+    "ProviderName": "Microsoft-Windows-Kernel-General",
+    "Message": "The operating system is shutting down at system time ?2026?-?09?-?28T11:06:20.832795000Z."
+  }
+]

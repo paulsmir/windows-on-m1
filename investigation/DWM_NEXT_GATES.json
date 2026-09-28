@@ -332,13 +332,14 @@
     "result_sha256": "ba5a63eafe3119ef587c8c3017aa336c28637f6d41f4cac343a7e5f782e9959c",
     "source": "exp/864-usc a9ecd3ea = EXP863 f62317a6 + USC3a7b6cc9 only; Flush retirement absent",
     "admission": "durableStartStage12/status0/arm consumed; all8CPU entries; originalCode0 unobserved",
-    "diagnostic": "QUERYv3 guard24 context unavailable VA0x20000/bytes0/generation469; no durable G4 rejection",
-    "execution": "No accepted submit/fence/TA/3D proven; scanout0; USC hypothesis inconclusive",
+    "diagnostic": "R150 decode: QUERY24 process poisoned; context lookup/range unvisited; same graph5/root9d8600000/generation469 as stranded render",
+    "execution": "R150 full dump: KMD active149 completed148 preempt1; broker job lease held; backend owner mismatch rejects before firmware publication; no TA/3D execution",
     "frontend": "445 UMD lines; no reject-seterror before early TDR",
     "stability": "FAIL live141 at28.920s, kernel116 at29.063s; original SSH absent",
     "recovery": "hiddenCode45 exact package864/oem5 cleanup; ordinaryCode28 clean durable",
-    "next": "Saved kernel/watchdog dump: preemption completion wait and first lost-progress boundary; establish accepted work offline",
-    "hardware_authorization": "EXP864 completed; no further package/run authorized"
+    "next": "R150 owner correction passes offline; propose EXP865 fix only atop a9ecd3ea, excluding Flush0f51f3f5; no package/run authorized",
+    "hardware_authorization": "EXP864 completed; no further package/run authorized",
+    "etl_correction": "Saved ETL is hidden recovery with only Microsoft adapters; original DMA timeline unavailable; append-only EXP864 correction in EXPERIMENTS.md"
   },
   "r147_offline_root_ordering": {
     "status": "implemented",
@@ -363,6 +364,20 @@
       "General SSH-stall causality",
       "Accepted-work Poll(0) wait contract",
       "Code0 ordered restart lifecycle"
+    ]
+  },
+  "r150_boundary": {
+    "status": "IMPLEMENTED_OFFLINE",
+    "report": "investigation/analysis/R150-next-boundary.md",
+    "evidence": "investigation/evidence/R150/summary.json",
+    "single_variable": "Preserve backend owner63 in G3 worker; independently selected hardware VM slot1 unchanged",
+    "last_hardware": "EXP864",
+    "next_proposed": "EXP865 exact EXP864 plus R150 owner correction only; separate package/run authorization",
+    "limits": [
+      "No hardware validation of fix",
+      "No true GPU hang recovery implemented",
+      "Original ETL overwritten by hidden recovery",
+      "General safe pre-publication lease rollback and monitored-fence atomicity deferred"
     ]
   }
 }

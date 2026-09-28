@@ -1,0 +1,114 @@
+[
+  {
+    "start": {
+      "t": "2026-09-28T11:06:54.5121537Z",
+      "provider": "Microsoft-Windows-DxgKrnl",
+      "id": 175,
+      "version": 1,
+      "op": 1,
+      "pid": 4,
+      "tid": 744,
+      "data": {
+        "hContext": "0xffffcf8feaf38050",
+        "hQueuePacketContext": "0x0",
+        "PacketType": "0",
+        "uliSubmissionId": "1",
+        "ulQueueSubmitSequence": "1",
+        "pDmaBuffer": "0x0",
+        "QuantumStatus": "1"
+      }
+    },
+    "completion_info": {
+      "t": "2026-09-28T11:06:54.5123176Z",
+      "provider": "Microsoft-Windows-DxgKrnl",
+      "id": 177,
+      "version": 1,
+      "op": 0,
+      "pid": 4,
+      "tid": 740,
+      "data": {
+        "hContext": "0xffffcf8feaf38050",
+        "PacketType": "0",
+        "uliCompletionId": "1",
+        "ulQueueSubmitSequence": "1",
+        "InterruptType": "1",
+        "QuantumStatus": "1",
+        "FaultedVirtualAddress": "0",
+        "PageFaultFlags": "0",
+        "FaultedProcessHandle": "0x0"
+      }
+    },
+    "stop": {
+      "t": "2026-09-28T11:06:54.5123296Z",
+      "provider": "Microsoft-Windows-DxgKrnl",
+      "id": 176,
+      "version": 0,
+      "op": 2,
+      "pid": 4,
+      "tid": 740,
+      "data": {
+        "hContext": "0xffffcf8feaf38050",
+        "PacketType": "0",
+        "uliCompletionId": "1",
+        "ulQueueSubmitSequence": "1",
+        "bPreempted": "false"
+      }
+    }
+  },
+  {
+    "start": {
+      "t": "2026-09-28T11:08:05.4648436Z",
+      "provider": "Microsoft-Windows-DxgKrnl",
+      "id": 175,
+      "version": 1,
+      "op": 1,
+      "pid": 4,
+      "tid": 744,
+      "data": {
+        "hContext": "0xffffcf8feaf38050",
+        "hQueuePacketContext": "0x0",
+        "PacketType": "0",
+        "uliSubmissionId": "566",
+        "ulQueueSubmitSequence": "1440",
+        "pDmaBuffer": "0x0",
+        "QuantumStatus": "3"
+      }
+    },
+    "completion_info": {
+      "t": "2026-09-28T11:08:05.4790977Z",
+      "provider": "Microsoft-Windows-DxgKrnl",
+      "id": 177,
+      "version": 1,
+      "op": 0,
+      "pid": 4,
+      "tid": 740,
+      "data": {
+        "hContext": "0xffffcf8feaf38050",
+        "PacketType": "0",
+        "uliCompletionId": "566",
+        "ulQueueSubmitSequence": "1440",
+        "InterruptType": "1",
+        "QuantumStatus": "3",
+        "FaultedVirtualAddress": "0",
+        "PageFaultFlags": "0",
+        "FaultedProcessHandle": "0x0"
+      }
+    },
+    "stop": {
+      "t": "2026-09-28T11:08:05.4791058Z",
+      "provider": "Microsoft-Windows-DxgKrnl",
+      "id": 176,
+      "version": 0,
+      "op": 2,
+      "pid": 4,
+      "tid": 740,
+      "data": {
+        "hContext": "0xffffcf8feaf38050",
+        "PacketType": "0",
+        "uliCompletionId": "566",
+        "ulQueueSubmitSequence": "1440",
+        "bPreempted": "false"
+      }
+    }
+  }
+]

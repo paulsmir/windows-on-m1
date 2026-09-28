@@ -2959,7 +2959,8 @@ static VOID AdmissionPlatformWorker(
     ADMISSION_RENDER_CONTEXT *g3_context =
         (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)description.ContextToken;
     if (g3_context != NULL && g3_context->GpuvaG3Process != NULL) {
-      submission.ContextIdentity = 1u;
+      /* Keep the backend owner identity. BeginJob and the G4 materializer
+       * select the process VM slot independently of this envelope. */
       if (!NT_SUCCESS(AdmissionGpuvaG3BeginJob(
               adapter, g3_context, description.Fence))) {
         InterlockedExchange(&adapter->SchedulerFaulted, 1);

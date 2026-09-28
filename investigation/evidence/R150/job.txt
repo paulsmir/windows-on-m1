@@ -1,0 +1,139 @@
+
+************* Preparing the environment for Debugger Extensions Gallery repositories **************
+   ExtensionRepository : Implicit
+   UseExperimentalFeatureForNugetShare : true
+   AllowNugetExeUpdate : true
+   NonInteractiveNuget : true
+   AllowNugetMSCredentialProviderInstall : true
+   AllowParallelInitializationOfLocalRepositories : true
+
+   EnableRedirectToV8JsProvider : false
+
+   -- Configuring repositories
+      ----> Repository : LocalInstalled, Enabled: true
+      ----> Repository : UserExtensions, Enabled: true
+
+>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.000 seconds
+
+************* Waiting for Debugger Extensions Gallery to Initialize **************
+
+>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.000 seconds
+   ----> Repository : UserExtensions, Enabled: true, Packages count: 0
+   ----> Repository : LocalInstalled, Enabled: true, Packages count: 29
+
+Microsoft (R) Windows Debugger Version 10.0.26100.6584 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+
+Loading Dump File [C:\agx\r150-dump\Kernel-MEMORY.DMP]
+Kernel Bitmap Dump File: Kernel address space is available, User address space may not be available.
+
+Dump failed with error code (0x0), and reports completion of: 97%
+
+Last line in dump stack log: Dump completed successfully.
+
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*C:\Symbols*https://msdl.microsoft.com/download/symbols
+OK                                             C:\Users\pauls\AD04-persistent-dwm-next\drivers\apple-agx\render-admission\ARM64\Release
+Symbol search path is: srv*C:\Symbols*https://msdl.microsoft.com/download/symbols;C:\Users\pauls\AD04-persistent-dwm-next\drivers\apple-agx\render-admission\ARM64\Release
+Executable search path is:
+Windows 10 Kernel Version 26100 MP (8 procs) Free ARM 64-bit (AArch64)
+Product: WinNt, suite: TerminalServer SingleUserTS
+Edition build lab: 26100.1.arm64fre.ge_release.240331-1435
+Kernel base = 0xfffff802`f8000000 PsLoadedModuleList = 0xfffff802`f8d6ac50
+Debug session time: Mon Sep 28 13:06:50.548 2026 (UTC + 2:00)
+System Uptime: 0 days 0:00:29.063
+Loading Kernel Symbols
+...............................................................
+.........................................................Page 958782 not present in the dump file. Type ".hh dbgerr004" for details
+.......
+...................................
+Loading User Symbols
+
+Loading unloaded module list
+........
+For analysis of this file, run !analyze -v
+0: kd> cdb: Reading initial command 'dt AppleAgxRenderAdmission!_ADMISSION_G3_PROCESS ffff998fca48c5f0; dt -r2 AppleAgxRenderAdmission!_ADMISSION_RENDER_PACKET ffff998fcaaebcb8; dt -r2 AppleAgxRenderAdmission!_APPLE_AGX_GPUVA_V5_CLIENT ffff998fcac2d050; lmvm AppleAgxRenderAdmission; !error c0000483; q'
+   +0x000 Link             : _LIST_ENTRY [ 0xffff998f`ca366270 - 0xffff998f`c61dcdd0 ]
+   +0x010 State            : 0xffff998f`cac2d000 _ADMISSION_G3_STATE
+   +0x018 Graph            : _APPLE_AGX_GPUVA_G3_GRAPH
+   +0x0b0 Io               : _APPLE_AGX_MEMORY_IO
+   +0x0d8 BootstrapRoot    : _APPLE_AGX_MEMORY_OBJECT
+   +0x138 TableShadows     : 0xffff998f`cb829f40 _ADMISSION_G3_TABLE_SHADOW
+   +0x140 BootstrapIpa     : 0x00000009`d8648000
+   +0x148 LastSetRootIpa   : 0x00000009`d8600000
+   +0x150 SetRootCount     : 1
+   +0x158 PrivateVa        : 0x2000000
+   +0x160 PrivateMiddleIpa : 0x00000009`1e800000
+   +0x168 PrivateLeafIpa   : 0x00000009`1e810000
+   +0x170 PrivateTables    : [2] APPLE_AGX_G3_PRIVATE_EXTENT
+   +0x190 PrivateManager   : APPLE_AGX_G3_PRIVATE_MANAGER
+   +0x1d8 PrivateScenes    : 0xffff998f`c8734db0 _ADMISSION_G3_PRIVATE_SCENE
+   +0x1e0 Contexts         : 0xffff998f`caff7970 _ADMISSION_RENDER_CONTEXT
+   +0x1e8 DxgkProcess      : 0xffff998f`c8789670 Void
+   +0x1f0 Magic            : 0x47335052
+   +0x1f4 DeviceRefs       : 1
+   +0x1f8 ContextRefs      : 1
+   +0x1fc Poisoned         : 0x1 ''
+   +0x000 Magic            : 0x4b505252
+   +0x004 State            : 3 ( AdmissionRenderPacketActive )
+   +0x008 Description      : _ADMISSION_RENDER_PACKET_DESCRIPTION
+      +0x000 Fence            : 0x95
+      +0x004 AllocationCount  : 1
+      +0x008 ContextToken     : 0xffff998f`caff7970
+      +0x010 AllocationToken  : 0xffff998f`caff7970
+      +0x018 PrivateDataToken : 0xffff998f`caaec8e0
+      +0x020 PrivateDataBytes : 0x1c0
+      +0x024 PrivateDataStart : 0
+      +0x028 PrivateDataEnd   : 0x1c0
+      +0x02c DmaStart         : 0
+      +0x030 DmaEnd           : 0x118
+      +0x034 PatchOffset      : 0
+      +0x038 DestinationCpuToken : 0xffff8af0`01170000
+      +0x040 DestinationGpuVa : 0xb0000
+      +0x048 DestinationPhysical : 0x00000008`e1170000
+      +0x050 DestinationBytes : 0x4000
+      +0x054 DestinationIndex : 0
+      +0x058 VisibleDestinationCpuToken : 0
+      +0x060 VisibleDestinationGpuVa : 0
+      +0x068 VisibleDestinationPhysical : 0
+      +0x070 VisibleDestinationAllocationToken : 0
+      +0x078 VisibleDestinationBytes : 0
+   +0x000 Io               : _APPLE_AGX_GPUVA_V5_IO
+      +0x000 Context          : 0xffff998f`caa70000 Void
+      +0x008 Write64          : 0xfffff802`f6edc060        bool  AppleAgxRenderAdmission!AdmissionGpuvaWrite64+0
+      +0x010 Read64           : 0xfffff802`f6edc0b0        bool  AppleAgxRenderAdmission!AdmissionGpuvaRead64+0
+      +0x018 Write32          : 0xfffff802`f6edc100        bool  AppleAgxRenderAdmission!AdmissionGpuvaWrite32+0
+      +0x020 Barrier          : 0xfffff802`f6edab20        void  AppleAgxRenderAdmission!AdmissionUatBarrier+0
+   +0x028 Sequence         : 0x20ce
+   +0x030 Epoch            : 1
+Browse full module list
+start             end                 module name
+fffff802`f6ed0000 fffff802`f6f2b000   AppleAgxRenderAdmission   (private pdb symbols)  c:\users\pauls\ad04-persistent-dwm-next\drivers\apple-agx\render-admission\arm64\release\AppleAgxRenderAdmission.pdb
+    Loaded symbol image file: AppleAgxRenderAdmission.sys
+    Mapped memory image file: c:\users\pauls\ad04-persistent-dwm-next\drivers\apple-agx\render-admission\arm64\release\AppleAgxRenderAdmission.sys
+    Image path: \SystemRoot\System32\drivers\AppleAgxRenderAdmission.sys
+    Image name: AppleAgxRenderAdmission.sys
+    Browse all global symbols  functions  data
+    Timestamp:        Mon Sep 28 12:55:38 2026 (6ABA47AA)
+    CheckSum:         000607B8
+    ImageSize:        0005B000
+    Translations:     0000.04b0 0000.04e4 0409.04b0 0409.04e4
+    Information from resource tables:
+Error code: (NTSTATUS) 0xc0000483 (3221226627) - The request failed due to a fatal device hardware error.
+quit:
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\atlmfc.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\ObjectiveC.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\concurrency.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\cpp_rest.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Kernel.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\stl.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Data.Json.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Media.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\windows.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\winrt.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Usb4Kd.natvis'

@@ -1,0 +1,37 @@
+
+Algorithm       Hash                                                                   Path
+---------       ----                                                                   ----
+SHA256          939C81E8168FC2E27D5C4072B4D056C0F08D8A49961D3F4BF2AB036D9305179B       C:\Users\pauls\AD04-persisten...
+SHA256          B890BC5DA04E6B0493682EFAE5B61E67E647BDD4A115740410F6C6312C4F32E3       C:\Users\pauls\AD04-persisten...
+
+PSPath            : Microsoft.PowerShell.Core\FileSystem::C:\Users\pauls\AD04-persistent-dwm-next\drivers\apple-agx\ren
+                    der-admission\ARM64\Release\AppleAgx.C62B1A75.tlog
+PSParentPath      : Microsoft.PowerShell.Core\FileSystem::C:\Users\pauls\AD04-persistent-dwm-next\drivers\apple-agx\ren
+                    der-admission\ARM64\Release
+PSChildName       : AppleAgx.C62B1A75.tlog
+PSDrive           : C
+PSProvider        : Microsoft.PowerShell.Core\FileSystem
+PSIsContainer     : True
+Name              : AppleAgx.C62B1A75.tlog
+FullName          : C:\Users\pauls\AD04-persistent-dwm-next\drivers\apple-agx\render-admission\ARM64\Release\AppleAgx.C
+                    62B1A75.tlog
+Parent            : Release
+Exists            : True
+Root              : C:\
+Extension         : .tlog
+CreationTime      : 9/23/2026 2:24:49 PM
+CreationTimeUtc   : 9/23/2026 12:24:49 PM
+LastAccessTime    : 9/28/2026 12:55:40 PM
+LastAccessTimeUtc : 9/28/2026 10:55:40 AM
+LastWriteTime     : 9/28/2026 12:55:40 PM
+LastWriteTimeUtc  : 9/28/2026 10:55:40 AM
+Attributes        : Directory
+Mode              : d-----
+BaseName          : AppleAgx.C62B1A75.tlog
+Target            : {}
+LinkType          :
+
+
+LastWriteTime : 9/28/2026 12:55:40 PM
+Length        : 80
+Name          : NativeCodeAnalysis.read.1.tlog

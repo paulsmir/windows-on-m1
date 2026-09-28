@@ -1,3 +1,33 @@
+# R150 — EXP864 backend owner mismatch fixed offline
+
+Original full kernel dump proves KMD active render149/node0/engine0, completed148,
+preempt1 WaitCurrentBoundary. LogonUI PID1220 is corroborated by EPROCESS,
+Win32Generation04c40001 and UMD log; graph ProcessId5 is driver-local.
+Broker slot1/lease1/job-in-flight, private sceneStarted1/GpuDone0; backendReady
+owner63/pending0, firmware queuefirst-run1. G3 worker overwrote owner1 and real
+validator rejected before Resolve/materialization/Run3d/RunTa. Preserve owner63;
+G4 hardware slot1 remains independently selected. No TA/3D execution proven.
+Reset privateQueued+Started deliberately returnsC0000483: no safe hardware-stop
+contract. Fix does not implement recovery from a real GPU hang or alter caps.
+
+QUERY24 is process.Poisoned for same graph5/root9d8600000/generation469;
+context/token/bytes unvisited, not missing mapping. Reset poisoning consistent,
+receipt has no timestamp to prove order. Saved ETL is GPU-HIDDEN RECOVERY:
+BootTime11:06:42.7482369Z matches recoveryEvent12; only Microsoft adapters;
+all767 DMA packets are Basic Render. Prior original-boot claim corrected by
+append-only EXP864 ledger entry; original evidence/result files preserved.
+
+Real worker/initializer/backend RED63vs1 -> GREEN owner63; foreign owner fails
+closed, legacy/B1 preserved. Verification and limits in
+investigation/analysis/R150-next-boundary.md, evidence/R150/summary.json.
+No package/Air/firmware edits. EXP864 ordinaryCode28 remains recovery baseline.
+
+WHY CONTINUE COMPARISON: deterministic pre-firmware ownership defect now has a
+precise offline replay. Proposed EXP865 is R150 owner fix ONLY atop EXP864
+sourcea9ecd3ea, retaining USC/error publication but excluding Flush0f51f3f5;
+unchanged R143. Next checkpoint is materialization/queue admission then actual
+TA+3D completion or next exact failure. Separate package/run authorization needed.
+
 # EXP864 — early engine timeout/TDR; clean Code28 recovery
 
 One package864/sourcea9ecd3ea = EXP863f62317a6 + USC3a7b6cc9 only;
