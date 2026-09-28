@@ -1,0 +1,11 @@
+R149 rejected=1 terminal=0 frontend_errors=1 status=80004005
+R149 rejected=1 terminal=0 frontend_errors=1 status=80004005
+R149 rejected=1 terminal=0 frontend_errors=1 status=80004005
+R149 rejected=1 terminal=0 frontend_errors=1 status=80004005
+R149 rejected=1 terminal=0 frontend_errors=1 status=80004005
+R148 production batch pool residency/upload/rollback: PASS
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.415s
+
+OK

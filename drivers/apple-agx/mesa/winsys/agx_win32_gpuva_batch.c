@@ -306,7 +306,10 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
 fail:
   free(refs);
   g->Rejected=1;
-  if(b->Gpuva.Terminal) b->Failed=1;
+  /* Native submission also marks the context faulted. Publish that failure
+   * to Windows FlushStatus even when residency rollback completed safely.
+   * Keep Gpuva.Terminal separate: a rejected batch can still be released. */
+  b->Failed=1;
   return 0;
 }
 
