@@ -332,7 +332,7 @@ static NTSTATUS AdmissionG3UpdateLeaf(
       (ULONGLONG)update->NumPageTableEntries * step >
           (1ULL << 39) - update->FirstPteVirtualAddress)
     return STATUS_INVALID_PARAMETER;
-  if (!NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(adapter, &view)))
+  if (!NT_SUCCESS(AdmissionMemoryRuntimeLocalView(adapter, &view)))
     return STATUS_INVALID_DEVICE_STATE;
   first = update->StartIndex * scale;
   count = update->NumPageTableEntries * scale;
@@ -736,7 +736,7 @@ NTSTATUS AdmissionG3ExecuteVirtualPaging(
       record->Bytes == 0u || record->Bytes > 0x1000u ||
       KeGetCurrentIrql() != PASSIVE_LEVEL)
     return STATUS_INVALID_PARAMETER;
-  status = AdmissionMemoryRuntimeScanoutView(adapter, &view);
+  status = AdmissionMemoryRuntimeLocalView(adapter, &view);
   if (!NT_SUCCESS(status)) return status;
   status = AdmissionG3MapPagingIpa(adapter, &view,
       record->DestinationIpa, record->DestinationSegment, record->Bytes,
@@ -826,7 +826,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     receipt.ResolveStatus = (ULONG)status;
     if (!NT_SUCCESS(status) && process != NULL &&
         address.GpuPhysical.SegmentId == ADMISSION_MEMORY_LOCAL_SEGMENT &&
-        NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(adapter, &view)) &&
+        NT_SUCCESS(AdmissionMemoryRuntimeLocalView(adapter, &view)) &&
         address.GpuPhysical.SegmentOffset <=
             MAXULONGLONG - view.GuestIpaAddress) {
       ULONGLONG candidate = view.GuestIpaAddress +
@@ -933,7 +933,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
   } else if (process->Graph.JobInFlight || process->Graph.LeaseToken) {
     status = STATUS_DEVICE_BUSY;
   } else {
-    status = AdmissionMemoryRuntimeScanoutView(adapter, &view);
+    status = AdmissionMemoryRuntimeLocalView(adapter, &view);
     if (!NT_SUCCESS(status) || view.CpuAddress == NULL ||
         original_table_ipa < view.GuestIpaAddress ||
         view.Bytes < 0x4000ULL ||

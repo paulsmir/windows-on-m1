@@ -11,6 +11,15 @@ REPLAY = ROOT / "tests/g3_vidmm_replay.py"
 
 
 class G3VidMmReplayTests(unittest.TestCase):
+    def test_exp856_full_local_paging_bounds(self):
+        for profile in ("16", "64"):
+            with self.subTest(profile=profile):
+                r = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
+                    env=dict(os.environ, G3_REPLAY_R144="1", G3_REPLAY_PROFILE=profile),
+                    text=True, capture_output=True)
+                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+                self.assertIn("R144 full-local paging: PASS", r.stdout)
+
     def test_r139_os_reserved_leaf_spans(self):
         # EXP855B returned 32 MiB; neighbors/high slots prevent a trace allowlist.
         for base in ("0x2000000", "0x6000000", "0xffe000000", "0x7ffe000000"):

@@ -650,7 +650,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
   }
   status = AdmissionG3BootstrapRoot(process);
   if (!NT_SUCCESS(status)) goto Fail;
-  status = AdmissionMemoryRuntimeScanoutView(adapter, &local_view);
+  status = AdmissionMemoryRuntimeLocalView(adapter, &local_view);
   if (!NT_SUCCESS(status)) goto Fail;
   if (local_view.GuestIpaAddress == 0ULL ||
       local_view.Bytes < 0x4000ULL) {
@@ -841,8 +841,10 @@ NTSTATUS AdmissionGpuvaG3ResolveTable(
   ULONGLONG offset;
   ULONG_PTR pointer;
   PHYSICAL_ADDRESS physical, tail;
+  /* VidMm owns tables throughout the local segment, independently of the
+   * fixed DCP scanout window. Keep private/backend storage excluded. */
   if (adapter == NULL || address == NULL || table_ipa == NULL ||
-      !NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(adapter, &view)))
+      !NT_SUCCESS(AdmissionMemoryRuntimeLocalView(adapter, &view)))
     return STATUS_INVALID_DEVICE_STATE;
   if (mode == DXGK_PAGETABLEUPDATE_GPU_PHYSICAL) {
     if (address->GpuPhysical.SegmentId != ADMISSION_MEMORY_LOCAL_SEGMENT ||

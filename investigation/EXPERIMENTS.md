@@ -49314,3 +49314,37 @@ First armed boot: m1n1 local reserve v2 IPA=PA 0x8e0000000/0x40000000; Mu PEI sa
 Evidence: main `.local/experiments/EXP856-r143-reserve1g/hardware-result.json` SHA256 f37096bd6b6f6417d4f93df1d4c223e76c542352499dfb6b1af890b4ca5d460a, with individual hashes/paths. First serial `attempt1-full.log` SHA256 44d90ddf3d1a3f18c255222f0e704fa597471db618c3e0d3a4852a6e134ee5bd; retry `full.log` SHA256 0a79a24fe9789e70b7468a061e1d6115287b1f1a5ff96a130854b50d51b59aa7. Nine guest originals (System/DxgKrnl/ETL/minidump/receipts) passed SHA-256 against `hardware-evidence/artifact-hashes.json` SHA256 9fac540f9075fab8718f7d02229fbdb70da98509d599a4a3d38cb5f894fe2fb0. Full MEMORY.DMP passed independent guest/host SHA. Builder WinDbg transcript `kd-analysis.txt` SHA256 7e876edcbb93e3494201a6c1fb1f2cb56dafea70043b2759141242a419c5bba7. No WER user-mode dump or UMD trace was produced before the bugcheck; ETL was collected on the unarmed retry.
 
 Recovery: evidence first; AutoLogger and both WER LocalDumps keys removed in Code43; ordered `/r` to immutable EXP377/385 GPU-hidden boot, APPL0002 non-present Code45/arm0; exact oem5.inf and matching SYS/UMD removed only there, signer and service removed. Ordered restart to immutable EXP377/392 ordinary. Durable checks at 02:16:29Z and 02:20:09Z: one present APPL0002 Code28, staged0/arm0, SYS/UMD/service/signer/diagnostics absent, SSH alive, CPU8/disks2/USB5 and RDP Running. Cleanup receipt `cleanup.json` SHA256 85e798649ee17a8f2b9d36bc3c6a1f2fad4736bbbbed41316c1e01a3cdd536f4. Verdict: REJECTED_WITH_CAUSAL_ADVANCE for 1GiB Code0 stability; CONFIRMED firmware/ACPI memory reservation. Next offline: regression that places a valid GPUVA table above 56MiB in the 1000MiB local segment, then fix table resolution in full-local owner while keeping DCP W0 admission at 56MiB. No new hardware run is justified before that fix and preregistration.
+
+
+## EXP857-OFFLINE R144 — BEFORE 2026-09-28T02:36:01.812586+00:00
+
+No hardware authorization. WHY THIS HYPOTHESIS: EXP856 branch1/mode2 rejects
+offset0x3e7d4000 within local1000MiB but outside scanout56MiB; real replay
+reproduces C0000141, and full-local view replacement passes16/64. Single
+variable: KMD G3 uses full-local bounds. Root baseline57c680e4; nested commits
+and dirty hashes in main `.local/experiments/EXP857-r144-paging-bounds/source-before.json`.
+Offline compiler check only: persistent builder,534 input hashes verified,
+copy two changed C files, replay package856 pinned ARM64 WDK26100 compiler
+commands with outputs redirected to EXP857 directory. Exact script
+`compile.ps1`, invocation `python3 .../builder-ps.py .../compile.ps1 .../compile-host.log`.
+No package, firmware build, sign, install, arm or launch. Expected both TUs
+compile with /W4 /WX /analyze; failure is compiler error or input mismatch.
+Recovery artifacts immutable; hashes checked against EXP856 immutable list.
+Full source inputs/hash manifest `compile-inputs.json`; object hashes collected
+after compilation. No display/SSH/IRQ/CPU hardware observation in this run.
+
+EXP857-OFFLINE compiler attempt1:534 source inputs passed; direct cl lacked
+WDK km/crt INCLUDE inherited by MSBuild, failed C1083 ntddk.h before source
+compilation. Attempt2 adds pinned26100 km/crt paths to INCLUDE, same source
+and options; preserves attempt1 script/log, outputs stay in EXP857.
+
+EXP857-OFFLINE R144 — AFTER: compiler attempt2 PASS, both changed ARM64 TUs,
+534 source inputs matched, /W4 /WX /analyze without diagnostics. Object hashes
+in `compile-receipt.json`; no linked SYS or package created. Real G3 RED matches
+EXP856 C0000141; GREEN16/64 and four old-function mutations distinguish bounds.
+G3 replay26/G4 31/reserve3/production views1 PASS. Full1147 preserves all53
+baseline failure/error names (15 failures38 errors2skips); exact lists in
+`host-test-comparison.json`. Verdict CONFIRMED_OFFLINE; hardware NOT_RUN.
+Independent review no findings. Air untouched; five immutable artifact hashes
+and nested dirty diffs unchanged. Next only with separate authorization:
+new KMD+CAT package, unchanged EXP856 R143 firmware, high-table admission.

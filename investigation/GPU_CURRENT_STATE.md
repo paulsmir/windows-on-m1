@@ -1,5 +1,28 @@
 # GPU current boundary — 2026-09-28
 
+## 2026-09-28 R144 — EXP856 high local page-table bounds fixed offline
+
+Exact856 PDB/full dump confirms UPDATE_PAGE_TABLE level0/segment2,
+offset0x3e7d4000,count16,Repeat|InitialUpdate,zero PTE. Derived IPA0x91e7d4000;
+branch1 rejected before child/graph access. KMD used fixed DCP56MiB view for
+VidMm1000MiB paging. Resolver, table writes, leaf backing, CPU paging and
+process/flush views now use full LocalView; scanout/output gates stay56MiB.
+Real G3 replay RED reproduces C0000141; GREEN16/64 plus four old-function
+mutations prove the repair. G3 replay26/G4 31/reserve3/real views1 pass;
+full1147 has exactly baseline15 failures/38 errors/2skips. Both changed ARM64
+TUs compile /W4 /WX /analyze with534 verified inputs. No linked/signed package.
+
+Next: rebuild KMD SYS/PDB+CAT/package for separately authorized EXP857; retain
+exact EXP856 R143 m1n1/Mu, no firmware rebuild. No Air access/hardware verdict;
+immutable recovery artifacts and nested dirty diffs unchanged. Ordinary Code28
+from EXP856 remains accepted. Details: investigation/analysis/R144-paging-bounds.md
+and investigation/evidence/R144-offline-paging.json.
+
+WHY CONTINUE COMPARISON: no historical comparison needed; exact dump and real
+replay isolate the owner. Next causal test is the corrected high-table update
+in a separately authorized full-owner run, then any newly reached boundary.
+
+
 ## 2026-09-28 EXP856 — 1 GiB firmware proven; paging-table resolver rejected
 
 GO_EXP856 ran package856/source0400dd32 with R143 m1n1/Mu. m1n1, Mu PEI and

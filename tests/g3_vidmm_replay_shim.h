@@ -204,7 +204,7 @@ typedef struct { void *AllocationHandle,*CpuAddress,*AllocationCpuBase; ULONGLON
 typedef struct { struct { UINT Contiguous; } Flags; } REPLAY_ADL;
 typedef struct { ULONGLONG GuestIpaBase,Size; REPLAY_ADL *Adl; } ADMISSION_PHYSICAL_ALLOCATION;
 typedef enum { AppleAgxMemoryResultOk=0 } APPLE_AGX_MEMORY_RESULT;
-typedef struct { ULONGLONG GuestIpaAddress,Bytes; void *CpuAddress; } ADMISSION_SCANOUT_MEMORY_VIEW;
+typedef struct { ULONGLONG GuestIpaAddress,Bytes,PoolBytes; void *CpuAddress; } ADMISSION_SCANOUT_MEMORY_VIEW;
 typedef struct { UINT Version,Bytes,Branch,Level,Index,PageTablePageSize,Status,UpdateMode,GraphLastStatus,GraphUncertain; ULONGLONG TableAddress,TableIpa,PteFlags,PageAddress,ChildIpa; UINT TableFirstNonzeroIndex,TableAddBranch; ULONGLONG TableFirstNonzeroWord,BrokerTableIpa; } ADMISSION_G3_PAGING_FAILURE;
 typedef struct { UINT Version,Bytes,Branch,RootSegment,ResolveStatus,BrokerStatus; ULONGLONG Process,RootOffset,ResolvedRootIpa,GraphRootIpa,InputStart,InputEnd,FlushStart,FlushEnd; } ADMISSION_G3_FLUSH_RECEIPT;
 typedef struct _ADMISSION_CONTEXT ADMISSION_CONTEXT;
@@ -297,6 +297,7 @@ typedef ADMISSION_SCANOUT_MEMORY_VIEW ADMISSION_BACKEND_MEMORY_VIEW;
 static unsigned char *local_cpu;
 static ULONGLONG local_ipa=0x10000000ULL;
 static ULONGLONG local_bytes=0x4000000ULL;
+static ULONGLONG vidmm_local_bytes=40ULL<<20;
 static unsigned char system_cpu[0x4000];
 static ULONGLONG system_ipa=0x851000000ULL;
 enum { AppleAgxSoftwareApertureOk=0, AppleAgxSoftwareApertureOutOfRange=1 };
@@ -318,14 +319,20 @@ static void MmUnmapIoSpace(void *p,SIZE_T bytes) {(void)p;(void)bytes;}
 NTSTATUS AdmissionG3ExecuteVirtualPaging(ADMISSION_CONTEXT *,
     const ADMISSION_PAGING_RECORD *);
 static PHYSICAL_ADDRESS MmGetPhysicalAddress(void *p) { PHYSICAL_ADDRESS a={0};if(local_cpu && (unsigned char *)p>=local_cpu && (unsigned char *)p<local_cpu+local_bytes) a.QuadPart=(long long)(local_ipa+((unsigned char *)p-local_cpu));return a; }
-static NTSTATUS AdmissionMemoryRuntimePrivateView(ADMISSION_CONTEXT *a,ADMISSION_BACKEND_MEMORY_VIEW *v) {(void)a;v->GuestIpaAddress=local_ipa+(40ULL<<20);v->Bytes=16ULL<<20;v->CpuAddress=local_cpu+(40u<<20);return STATUS_SUCCESS;}
-static NTSTATUS AdmissionMemoryRuntimeScanoutView(ADMISSION_CONTEXT *a,ADMISSION_SCANOUT_MEMORY_VIEW *v) {(void)a;v->GuestIpaAddress=local_ipa;v->Bytes=0x2800000ULL;v->CpuAddress=local_cpu;return STATUS_SUCCESS;}
+static NTSTATUS AdmissionMemoryRuntimePrivateView(ADMISSION_CONTEXT *a,ADMISSION_BACKEND_MEMORY_VIEW *v) {(void)a;v->GuestIpaAddress=local_ipa+vidmm_local_bytes;v->Bytes=16ULL<<20;v->CpuAddress=local_cpu+vidmm_local_bytes;return STATUS_SUCCESS;}
+static NTSTATUS AdmissionMemoryRuntimeLocalView(ADMISSION_CONTEXT *a,ADMISSION_SCANOUT_MEMORY_VIEW *v) {(void)a;memset(v,0,sizeof(*v));v->GuestIpaAddress=local_ipa;v->Bytes=vidmm_local_bytes;v->CpuAddress=local_cpu;return STATUS_SUCCESS;}
+#ifdef G3_REPLAY_FULL_LOCAL
+#define APPLE_AGX_SCANOUT_J313_POOL_SIZE (56ULL<<20)
+NTSTATUS AdmissionMemoryRuntimeScanoutView(ADMISSION_CONTEXT *,ADMISSION_SCANOUT_MEMORY_VIEW *);
+#else
+static NTSTATUS AdmissionMemoryRuntimeScanoutView(ADMISSION_CONTEXT *a,ADMISSION_SCANOUT_MEMORY_VIEW *v) {return AdmissionMemoryRuntimeLocalView(a,v);}
+#endif
 static NTSTATUS AdmissionMemoryRuntimeBorrowIo(ADMISSION_CONTEXT *a,APPLE_AGX_MEMORY_IO *io) {(void)a;(void)io;return STATUS_SUCCESS;}
 static APPLE_AGX_MEMORY_RESULT AppleAgxMemoryAllocateAligned(APPLE_AGX_MEMORY_IO *io,ULONGLONG n,ULONGLONG align,APPLE_AGX_MEMORY_OBJECT *o) {
   (void)io;assert(n==0x4000 && align==0x4000);
   static ADMISSION_PHYSICAL_ALLOCATION alloc[512];static REPLAY_ADL adl[512];static UINT count;
   assert(count<512);
-  ULONGLONG offset=0x3800000ULL+(ULONGLONG)count*0x4000ULL;
+  ULONGLONG offset=vidmm_local_bytes+(16ULL<<20)+(ULONGLONG)count*0x4000ULL;
   adl[count].Flags.Contiguous=1;
   alloc[count].GuestIpaBase=local_ipa+offset;alloc[count].Size=0x4000;alloc[count].Adl=&adl[count];
   o->AllocationHandle=&alloc[count];o->CpuAddress=o->AllocationCpuBase=local_cpu+offset;
