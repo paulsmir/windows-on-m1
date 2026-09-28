@@ -347,5 +347,20 @@
     "single_variable": "Bind the process graph to successful non-eviction root-level paging target before COPY QUERY",
     "preserved": "All copy guards and v2 receipt; execution still requires context SetRoot; R143 firmware and EXP860 ordinary Code28",
     "hardware_authorization": "No package or Air in R147; EXP861 proposal only"
+  },
+  "r149_boundary": {
+    "status": "IMPLEMENTED_OFFLINE",
+    "report": "investigation/analysis/R149-next-boundary.md",
+    "last_hardware": "EXP862",
+    "next_proposed": "EXP863 error-publication-only on fd603f30; no package or run authorized",
+    "independent_pending": [
+      "USC window placement",
+      "R148 Flush retirement"
+    ],
+    "unresolved": [
+      "QUERY generation690 last leaf lifecycle",
+      "CPU0 process/module and SSH loss",
+      "accepted-work Poll(0) wait contract"
+    ]
   }
 }

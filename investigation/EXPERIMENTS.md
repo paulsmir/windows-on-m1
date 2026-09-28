@@ -49683,3 +49683,26 @@ EXP862 ORDINARY RECOVERY BEFORE 2026-09-28T09:44:33.746950+00:00: hidden ordered
 EXP862-HW FINAL / RECOVERY AFTER 2026-09-28T09:49:06.514473+00:00: CONFIRMED first rejection advances, FAILED SSH checkpoint, GPU execution unproven. Single package862 fd603f30 pool+QUERYv3 on unchangedR143; Flush0f51f3f5 absent. StartStage12/status0 persisted; original Code0 unobserved.19 SSH errors over630.731187s host observation; zero live memory samples. SIGINT and recoverySIGTERM snapshots all8 CPUs: sameCPU0 userPC0x7ff8eb98f104, HV tick_fire630974->3288160, IAR121307 unchanged; stall cause unknown. FirstG4 v2 branch9/C000000D/ParseUnmapped3 Render ordinal14/read1 VA0x11002b0140 GraphPresent0 root0x9d6aa0000 generation474, failures8; oldordinal12/0x270e40 crossed numerically. USC-expanded field; Bg.Usc candidate by reference producer shape, exact native field unrecorded. QUERYv3 guard53/C000000D/nonbootstrap root0x9d6aa0000/SetRoot1-1 VA0x20000 bytes65536 nativelevel2/index8 leaf-absent generation690; residentgroup/canonical available, request0x40000fc0 canonical0xffff9388623cf3a0 bytes65536. CorrelationCount0; UMD no submit/fence-signal/completion tags; no accepted submit/TA/3D/fence proof. Two scanout snapshotsnonzero0, physical display/input unobserved. No new System1001/Application1000/kernel or WER dump; old queued WER replay excluded.18 originals175579555B SHA-verified; ETL86507520B firstevents09:25:31 identify original startup, completeness unknown; UMD191612B includes NUL tail. Exact hiddenCode45 dump-first oem5 cleanup then ordinaryCode28 durable09:46:47.9433379Z: present1/package0/arms0/files0/service0/signer0/diagnostics0 CPU8/disks2/USB5/RDP, autologon preserved. Full index .local/experiments/EXP862-r148-pools/hardware-result.json SHA256 b677a1fa07c44193b766b5f637b09ba5e66f76276256991e4a175c135171f7ef; raw/decoded QUERY/G4, cpu-diagnostics, hardware-evidence ETL/UMD/events, cleanup and ordinary-durable explicit. REVIEW unchanged753bdfe6,38 dispositions review-exp862-after.txt. Next thread: USC address ownership/normalization for ordinal14 generation474, separate QUERY690; no guard bypass or new hardware authorized.
 
 EXP862 FINAL INDEX CORRECTION 2026-09-28T09:51:27.974336+00:00: freeze the still-running ordinary recovery serial log as ordinary-recovery-full-snapshot.log SHA256 7e4fc7484bbcc9df6b0a757338f11bfd24b9d4f5bae2cefb1735f06abc5968a5. Previous result indexb677a1fa07c44193b766b5f637b09ba5e66f76276256991e4a175c135171f7ef is preserved at .local/experiments/EXP862-r148-pools/hardware-result-before-log-freeze.json. Final hardware-result.json SHA256 de182b8caace46719d36ad60fb56d2ebf60815e2cdf758cf142321c1a6889c6f references the frozen log; verdict and all observations unchanged.
+
+
+## R149-OFFLINE — correction to EXP862 evidence interpretation (no hardware run)
+
+UTC 2026-09-28T10:09:13.519046+00:00. Integration base318e3fc9; task NEXT_TASK_R149.md, offline only.
+This appends a clarification to EXP862-HW and does not overwrite its verdict.
+The CPU snapshot `iar` field counts SGIs; unchanged121307 does not prove all
+guest interrupt delivery stopped. Separate INTID18 acknowledgement timestamps
+advance. CPU0 PID/module and SSH-loss cause remain unknown. ETL actual decoded
+events end09:26:56.5446902Z; header end09:39:15.9195558Z is not full-window
+coverage. QUERYv3 resident-group availability is array availability: all4 VALID
+bits for0x20000..0x23fff are clear. The ETL token matches are12KiB software
+allocations and cannot identify its64KiB canonical allocation.
+
+Two software defects independently reproduce RED->GREEN: UMD USC window versus
+fixed execution-base mismatch, and native rejected-work status hidden from
+Windows Flush. No hardware stall cure or QUERY mapping fix is established.
+Full1161 retains exact15F/38E/2S baseline; ARM64 portable MSVC W4/WX/analyze and
+native Clang compile/analysis pass with baseline exceptions; independent review
+accepts both. Report investigation/analysis/R149-next-boundary.md; verification
+investigation/evidence/R149/summary.json. No package/Air/launch/recovery attempt.
+Propose EXP863 error-publication only on exact fd603f30, before independent USC
+and Flush candidates; this is not preregistration or authorization.

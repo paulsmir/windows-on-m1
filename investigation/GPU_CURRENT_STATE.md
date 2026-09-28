@@ -1,3 +1,36 @@
+# R149 — USC placement and rejected-work error publication fixed offline
+
+EXP862 remains the hardware verdict and ordinary Code28 recovery. On the
+integration branch, real Attach/Bind/native USC/parser replay confirms zero-base
+UMD low VA versus KMD/firmware USC base0x1100000000 mismatch. Place USC BOs in
+[base+64KiB,base+4GiB), use the same native shader_base; retain all bounds/guards.
+Ordinal14 Bg.Usc is pinned-producer inference, a nonEXEC pipeline-pool slab;
+actual hardware packet/token/base unknown. R137 backing is a distinct reservation.
+
+Separate real frontend replay: rejected submit with safe rollback left Flush
+S_OK. Existing BatchFinish fail label now publishes Backend.Failed; uncertain
+ownership remains Gpuva.Terminal and safe cleanup is preserved. This is an error
+propagation fix, not a proven SSH-stall cure. Accepted-work Poll(0) synchronous
+wait is a separate untested causal candidate; no timeout change made.
+
+QUERYv3 canonicalffff9388623cf3a0/token40000fc0/64KiB has available PTE array
+but all4 VALID bits clear at0x20000/generation690. No unique leaf-history cause.
+ETL token matches are12KiB software allocations and excluded. CPU0 module/PID
+unidentified: no same-boot image base or matching stack; iar is SGI-only and
+INTID18 timestamps advance. ETL actual events end09:26:56; header end is not
+coverage. Do not attribute a UMD spin, IRQ freeze, exhaustion, or SSH cause.
+
+Reports investigation/analysis/R149-next-boundary.md and R149-{submit,query,stall}.md;
+verification investigation/evidence/R149/summary.json. No package or Air.
+Proposed EXP863: error publication ONLY on exact EXP862 fd603f30; preserve old
+USC rejection and observe same-device frontend error. USC correction and R148
+Flush0f51f3f5 remain separate candidates. Combined HEAD is not that experiment.
+
+WHY CONTINUE COMPARISON: current-source replays prove two independent contracts;
+first test error publication without enabling new accepted GPU work. No further
+archaeology or speculative QUERY/timer fix; separate package/run authorization
+is required. No hardware validation of either R149 fix is claimed.
+
 # GPU current boundary — 2026-09-28
 
 ## EXP862 — pool candidate advances to ordinal14; SSH checkpoint failed; Code28 recovered

@@ -1,0 +1,15 @@
+{
+  "dll": "/Users/pavel/public_windows/.local/experiments/EXP862-r148-pools/AppleAgxRenderAdmissionUmd.dll",
+  "dll_sha256": "817348ae8cce47e8685a301f30c48a3f7dc9da81c92d43108468893eed369849",
+  "pdb_sha256": "4b7883515840bd62c9336fdb11b336a3d8734e233d79bac5ecb27df67f8b433d",
+  "preferred_base": "0x180000000",
+  "size_of_image": "0xbc9000",
+  "rsds_offset": 12032168,
+  "rsds_guid_raw": "f88281fc1913544caca262440e4d9b97",
+  "rsds_age": 1,
+  "pdb_path": "C:\\Users\\pauls\\AD04-persistent-dwm-next\\drivers\\apple-agx\\render-admission\\umd\\ARM64\\Release\\AppleAgxRenderAdmissionUmd.pdb",
+  "sample_pc": "0x7ff8eb98f104",
+  "actual_load_base": "not captured",
+  "etl_header_start": "2026-09-28 09:25:31.269005+00:00",
+  "etl_header_end": "2026-09-28 09:39:15.919555+00:00"
+}
