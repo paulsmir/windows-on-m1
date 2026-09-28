@@ -389,6 +389,8 @@ typedef struct _ADMISSION_CONTEXT {
 #endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   PVOID GpuvaG3State;
+  volatile LONG G3CopyQueryFailureClaim;
+  ULONG G3CopyQueryFailurePredicate, G3CopyQueryFailureStatus;
   volatile LONG G4SubmitFailureClaim;
   volatile LONG G4SubmitFailureCount;
   struct _ADMISSION_G4_SUBMIT_FAILURE {
@@ -856,6 +858,8 @@ void AdmissionRecordGpuvaG3PagingFailure(
 void AdmissionRenderCorrelationSubmitFailureWindows(
     _In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG4SubmitFailure(_In_opt_ ADMISSION_CONTEXT *Context);
+void AdmissionRecordG3CopyQueryFailure(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ ULONG Predicate, _In_ NTSTATUS Status);
 void AdmissionRecordGpuvaG3UnpublishedGroups(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_reads_(32) const ULONGLONG *Counts);

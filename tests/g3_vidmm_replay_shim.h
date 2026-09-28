@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <wchar.h>
+#define FIELD_OFFSET(t, m) offsetof(t, m)
 #include "apple_agx_gpuva_g3_translation.h"
 #include "apple_agx_gpuva_g3_graph.h"
 #include "apple_agx_g4_submit.h"
@@ -104,7 +106,8 @@ static void ExReleaseFastMutex(FAST_MUTEX *m) {(void)m;assert(replay_irql==1);re
 static void KeAcquireSpinLock(int *m,KIRQL *i) {(void)m;*i=0;}
 static void KeReleaseSpinLock(int *m,KIRQL i) {(void)m;(void)i;}
 static KIRQL KeGetCurrentIrql(void) { return replay_irql; }
-static void *ExAllocatePool2(int pool,SIZE_T bytes,ULONG tag) {(void)pool;(void)tag;return calloc(1,bytes);}
+static BOOLEAN replay_pool_fail;
+static void *ExAllocatePool2(int pool,SIZE_T bytes,ULONG tag) {(void)pool;(void)tag;return replay_pool_fail?NULL:calloc(1,bytes);}
 static void ExFreePoolWithTag(void *p,ULONG tag) {(void)tag;free(p);}
 static LONG InterlockedExchange(volatile LONG *p,LONG n) {LONG old=*p;*p=n;return old;}
 static LONG InterlockedCompareExchange(volatile LONG *p,LONG n,LONG old) { LONG v=*p;if(v==old)*p=n;return v; }
@@ -269,10 +272,27 @@ typedef struct {
 typedef struct { unsigned State; struct { ULONG Fence; ULONGLONG ContextToken; } Description; } REPLAY_PACKET;
 struct _ADMISSION_CONTEXT { REPLAY_PACKET RenderPacket; BOOLEAN InterfaceValid; LONG RenderDpcFence,SchedulerDpcPending; DXGKRNL_INTERFACE Interface; void *GpuvaG3State; BOOLEAN Started;
   PDEVICE_OBJECT PhysicalDeviceObject; ADMISSION_CONTEXT *ObjectAdapter;
+  volatile LONG G3CopyQueryFailureClaim;
+  ULONG G3CopyQueryFailurePredicate,G3CopyQueryFailureStatus;
   int SchedulerLock,Scheduler;
   ADMISSION_BACKEND_IMAGE BackendImage;
   struct { REPLAY_APERTURE Aperture; } Memory;
 };
+#define PLUGPLAY_REGKEY_DEVICE 1u
+#define KEY_SET_VALUE 2u
+static UINT r145_references;
+static ULONG query_registry_writes,query_registry_flushes,query_registry_receipt[4];
+static NTSTATUS IoOpenDeviceRegistryKey(PDEVICE_OBJECT device,ULONG kind,ULONG access,HANDLE *key) {
+  assert(device && kind==1 && access==2 && replay_irql==PASSIVE_LEVEL && !r145_references);
+  *key=(HANDLE)0x5588;return STATUS_SUCCESS;
+}
+static void WriteBinary(HANDLE key,const wchar_t *name,const VOID *data,ULONG bytes) {
+  assert(key==(HANDLE)0x5588 && !wcscmp(name,L"Wom1G3CopyQueryFailure"));
+  assert(bytes==16 && replay_irql==PASSIVE_LEVEL);
+  memcpy(query_registry_receipt,data,bytes);++query_registry_writes;
+}
+static NTSTATUS ZwFlushKey(HANDLE key) {assert(key==(HANDLE)0x5588);++query_registry_flushes;return STATUS_SUCCESS;}
+static void ZwClose(HANDLE key) {assert(key==(HANDLE)0x5588);}
 int AdmissionPagingRecordsValid(const ADMISSION_PAGING_RECORD *,UINT,UINT,UINT);
 static UINT replay_paging_submits,replay_paging_submit_bytes,replay_paging_submit_fence;
 static NTSTATUS AdmissionCpuQueueSubmit(ADMISSION_CONTEXT *adapter,
@@ -334,7 +354,8 @@ NTSTATUS AdmissionG3ExecuteVirtualPaging(ADMISSION_CONTEXT *,
     const ADMISSION_PAGING_RECORD *);
 static PHYSICAL_ADDRESS MmGetPhysicalAddress(void *p) { PHYSICAL_ADDRESS a={0};if(local_cpu && (unsigned char *)p>=local_cpu && (unsigned char *)p<local_cpu+local_bytes) a.QuadPart=(long long)(local_ipa+((unsigned char *)p-local_cpu));return a; }
 static NTSTATUS AdmissionMemoryRuntimePrivateView(ADMISSION_CONTEXT *a,ADMISSION_BACKEND_MEMORY_VIEW *v) {(void)a;v->GuestIpaAddress=local_ipa+vidmm_local_bytes;v->Bytes=16ULL<<20;v->CpuAddress=local_cpu+vidmm_local_bytes;return STATUS_SUCCESS;}
-static NTSTATUS AdmissionMemoryRuntimeLocalView(ADMISSION_CONTEXT *a,ADMISSION_SCANOUT_MEMORY_VIEW *v) {(void)a;memset(v,0,sizeof(*v));v->GuestIpaAddress=local_ipa;v->Bytes=vidmm_local_bytes;v->CpuAddress=local_cpu;return STATUS_SUCCESS;}
+static NTSTATUS replay_local_view_status;
+static NTSTATUS AdmissionMemoryRuntimeLocalView(ADMISSION_CONTEXT *a,ADMISSION_SCANOUT_MEMORY_VIEW *v) {(void)a;memset(v,0,sizeof(*v));v->GuestIpaAddress=local_ipa;v->Bytes=vidmm_local_bytes;v->CpuAddress=local_cpu;return replay_local_view_status;}
 #ifdef G3_REPLAY_FULL_LOCAL
 #define APPLE_AGX_SCANOUT_J313_POOL_SIZE (56ULL<<20)
 NTSTATUS AdmissionMemoryRuntimeScanoutView(ADMISSION_CONTEXT *,ADMISSION_SCANOUT_MEMORY_VIEW *);

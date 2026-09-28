@@ -2004,6 +2004,31 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3PagingFailure(
   ZwClose(key);
 }
 
+/* One 16-byte receipt per adapter instance; never overwrite the first cause. */
+_Use_decl_annotations_ void AdmissionRecordG3CopyQueryFailure(
+    ADMISSION_CONTEXT *Context, ULONG Predicate, NTSTATUS Status) {
+  HANDLE key = NULL;
+  ULONG receipt[4];
+  if (Context == NULL || Predicate == 0u || NT_SUCCESS(Status) ||
+      InterlockedCompareExchange(&Context->G3CopyQueryFailureClaim, 1, 0) != 0)
+    return;
+  Context->G3CopyQueryFailurePredicate = Predicate;
+  Context->G3CopyQueryFailureStatus = (ULONG)Status;
+  KeMemoryBarrier();
+  InterlockedExchange(&Context->G3CopyQueryFailureClaim, 2);
+  if (Context->PhysicalDeviceObject == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  receipt[0] = 1u;
+  receipt[1] = sizeof(receipt);
+  receipt[2] = Predicate;
+  receipt[3] = (ULONG)Status;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
+  WriteBinary(key, L"Wom1G3CopyQueryFailure", receipt, sizeof(receipt));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordG4SubmitFailure(
     ADMISSION_CONTEXT *Context) {
   HANDLE key = NULL;

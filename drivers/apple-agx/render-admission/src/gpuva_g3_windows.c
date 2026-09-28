@@ -516,7 +516,7 @@ static const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *AdmissionG3CopyPte(
 
 NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
     const DXGKARG_ESCAPE *args) {
-  APPLE_AGX_G3_COPY_REQUEST *q;
+  APPLE_AGX_G3_COPY_REQUEST *q=NULL;
   ADMISSION_G3_STATE *state;
   ADMISSION_G3_PROCESS *p;
   ADMISSION_RENDER_CONTEXT *context;
@@ -526,79 +526,110 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   DXGKARGCB_GETHANDLEDATA lookup={0};
   DXGKARGCB_RELEASEHANDLEDATA reference={0};
   ULONGLONG length, offset, end, page, first;
+  ULONG predicate=0u, operation=MAXULONG;
+  BOOLEAN isQuery=FALSE;
   NTSTATUS status=STATUS_INVALID_PARAMETER;
-  if(!adapter || !adapter->Started || !args ||
-     KeGetCurrentIrql()!=PASSIVE_LEVEL || args->Flags.Value!=1u ||
-     args->PrivateDriverDataSize!=sizeof(*q) || !args->pPrivateDriverData ||
-     !adapter->Interface.DxgkCbAcquireHandleData ||
-     !adapter->Interface.DxgkCbReleaseHandleData) return status;
+  /* Read only the operation tag when the OS-buffered envelope covers it.
+   * An absent/truncated tag is not guessed to be a QUERY. */
+  if(args && KeGetCurrentIrql()==PASSIVE_LEVEL && args->pPrivateDriverData &&
+     args->PrivateDriverDataSize>=(ULONG)FIELD_OFFSET(APPLE_AGX_G3_COPY_REQUEST,Allocation)) {
+    RtlCopyMemory(&operation,(PUCHAR)args->pPrivateDriverData+
+        FIELD_OFFSET(APPLE_AGX_G3_COPY_REQUEST,Operation),sizeof(operation));
+    isQuery=operation==APPLE_AGX_G3_COPY_QUERY;
+  }
+  /* Stable predicate IDs: investigation/analysis/EXP858-query-contract.md.
+   * All returns and admission conditions are preserved; emit after unlocking. */
+#define COPY_REJECT_IF(condition, id, code, target) do { \
+  if(condition) { predicate=(id); status=(code); goto target; } \
+} while(0)
+  COPY_REJECT_IF(!adapter || !adapter->Started, 1u, STATUS_INVALID_PARAMETER, Free);
+  COPY_REJECT_IF(!args, 2u, STATUS_INVALID_PARAMETER, Free);
+  COPY_REJECT_IF(KeGetCurrentIrql()!=PASSIVE_LEVEL, 3u, STATUS_INVALID_PARAMETER, Free);
+  COPY_REJECT_IF(args->Flags.Value!=1u, 4u, STATUS_INVALID_PARAMETER, Free);
+  COPY_REJECT_IF(args->PrivateDriverDataSize!=sizeof(*q), 5u, STATUS_INVALID_PARAMETER, Free);
+  COPY_REJECT_IF(!args->pPrivateDriverData, 6u, STATUS_INVALID_PARAMETER, Free);
+  COPY_REJECT_IF(!adapter->Interface.DxgkCbAcquireHandleData ||
+      !adapter->Interface.DxgkCbReleaseHandleData, 7u, STATUS_INVALID_PARAMETER, Free);
   state=(ADMISSION_G3_STATE *)adapter->GpuvaG3State;
-  if(!state) return STATUS_INVALID_DEVICE_STATE;
+  COPY_REJECT_IF(!state, 8u, STATUS_INVALID_DEVICE_STATE, Free);
   q=ExAllocatePool2(POOL_FLAG_NON_PAGED,sizeof(*q),ADMISSION_POOL_TAG);
-  if(!q) return STATUS_INSUFFICIENT_RESOURCES;
+  COPY_REJECT_IF(!q, 9u, STATUS_INSUFFICIENT_RESOURCES, Free);
   RtlCopyMemory(q,args->pPrivateDriverData,sizeof(*q));
-  if(q->Magic!=APPLE_AGX_G3_COPY_MAGIC || q->Version!=1u ||
-     q->Bytes!=sizeof(*q) || q->Reserved || q->Reserved2 ||
-     q->Operation>APPLE_AGX_G3_COPY_DOWNLOAD || !q->Allocation ||
-     !q->GpuVa || (q->GpuVa&0xffffULL) || q->GpuVa>=(1ULL<<39) ||
-     q->TransferBytes>APPLE_AGX_G3_COPY_CAPACITY) goto Free;
-  if(q->Operation==APPLE_AGX_G3_COPY_QUERY ?
-     (q->Offset || q->TransferBytes || q->MappingGeneration || q->ProcessGeneration) :
-     (!q->TransferBytes || !q->MappingGeneration || !q->ProcessGeneration)) goto Free;
+  COPY_REJECT_IF(q->Magic!=APPLE_AGX_G3_COPY_MAGIC, 10u, STATUS_INVALID_PARAMETER, Free);
+  COPY_REJECT_IF(q->Version!=1u, 11u, STATUS_INVALID_PARAMETER, Free);
+  COPY_REJECT_IF(q->Bytes!=sizeof(*q), 12u, STATUS_INVALID_PARAMETER, Free);
+  COPY_REJECT_IF(q->Reserved || q->Reserved2, 13u, STATUS_INVALID_PARAMETER, Free);
+  COPY_REJECT_IF(q->Operation>APPLE_AGX_G3_COPY_DOWNLOAD, 14u, STATUS_INVALID_PARAMETER, Free);
+  COPY_REJECT_IF(!q->Allocation, 15u, STATUS_INVALID_PARAMETER, Free);
+  COPY_REJECT_IF(!q->GpuVa, 16u, STATUS_INVALID_PARAMETER, Free);
+  COPY_REJECT_IF((q->GpuVa&0xffffULL), 17u, STATUS_INVALID_PARAMETER, Free);
+  COPY_REJECT_IF(q->GpuVa>=(1ULL<<39), 18u, STATUS_INVALID_PARAMETER, Free);
+  COPY_REJECT_IF(q->TransferBytes>APPLE_AGX_G3_COPY_CAPACITY, 19u, STATUS_INVALID_PARAMETER, Free);
+  COPY_REJECT_IF(q->Operation==APPLE_AGX_G3_COPY_QUERY &&
+      (q->Offset || q->TransferBytes || q->MappingGeneration || q->ProcessGeneration), 20u, STATUS_INVALID_PARAMETER, Free);
+  COPY_REJECT_IF(q->Operation!=APPLE_AGX_G3_COPY_QUERY &&
+      (!q->TransferBytes || !q->MappingGeneration || !q->ProcessGeneration), 21u, STATUS_INVALID_PARAMETER, Free);
   lookup.hObject=q->Allocation;lookup.Type=DXGK_HANDLE_ALLOCATION;
   lookup.Flags.DeviceSpecific=1u;reference.Type=DXGK_HANDLE_ALLOCATION;
   opened=(ADMISSION_OPEN_ALLOCATION *)adapter->Interface.DxgkCbAcquireHandleData(
       &lookup,&reference.ReleaseHandle);
-  if(!opened || !reference.ReleaseHandle) {status=STATUS_INVALID_HANDLE;goto Release;}
+  COPY_REJECT_IF(!opened || !reference.ReleaseHandle, 22u, STATUS_INVALID_HANDLE, Release);
   ExAcquireFastMutex(&state->Lock);
   p=AdmissionGpuvaG3FindProcess(state,args->hKmdProcessHandle);
-  if(!p || p->Poisoned || p->Graph.Uncertain || !p->Graph.Created) goto Unlock;
+  COPY_REJECT_IF(!p, 23u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(p->Poisoned, 24u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(p->Graph.Uncertain, 25u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(!p->Graph.Created, 26u, STATUS_INVALID_PARAMETER, Unlock);
   for(context=p->Contexts;context && (HANDLE)context!=args->hContext;
       context=context->GpuvaG3NextContext) {}
-  if(!context || !context->Win32Transport || context->GpuvaG3Closing ||
-     context->GpuvaG3Poisoned || !context->Object.Device ||
-     (HANDLE)CONTAINING_RECORD(context->Object.Device,ADMISSION_DEVICE,Object)!=args->hDevice ||
-     context->Object.Device->Adapter!=&adapter->ObjectAdapter ||
-     opened->Magic!=ADMISSION_OPEN_ALLOCATION_MAGIC ||
-     (HANDLE)opened->Device!=args->hDevice || !opened->Allocation ||
-     opened->RuntimeAllocation!=q->Allocation ||
-     opened->Allocation->Magic!=ADMISSION_ALLOCATION_OBJECT_MAGIC) goto Unlock;
+  COPY_REJECT_IF(!context, 27u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(!context->Win32Transport, 28u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(context->GpuvaG3Closing, 29u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(context->GpuvaG3Poisoned, 30u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(!context->Object.Device, 31u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF((HANDLE)CONTAINING_RECORD(context->Object.Device,ADMISSION_DEVICE,Object)!=args->hDevice, 32u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(context->Object.Device->Adapter!=&adapter->ObjectAdapter, 33u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(opened->Magic!=ADMISSION_OPEN_ALLOCATION_MAGIC, 34u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF((HANDLE)opened->Device!=args->hDevice, 35u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(!opened->Allocation, 36u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(opened->RuntimeAllocation!=q->Allocation, 37u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(opened->Allocation->Magic!=ADMISSION_ALLOCATION_OBJECT_MAGIC, 38u, STATUS_INVALID_PARAMETER, Unlock);
   allocation=CONTAINING_RECORD(opened->Allocation,ADMISSION_ALLOCATION_HANDLE,Object);
-  if(!allocation->Win32ClassId || allocation->Object.Description.CpuVisible ||
-     allocation->Object.Description.Type!=ADMISSION_WIN32_ALLOCATION_GPU_LOCAL) goto Unlock;
-  if(state->ActiveProcess || p->Graph.JobInFlight || p->Graph.LeaseToken) {
-    status=STATUS_DEVICE_BUSY;goto Unlock;
-  }
-  if(q->Operation!=APPLE_AGX_G3_COPY_QUERY &&
-     (q->ProcessGeneration!=p->Graph.ProcessGeneration ||
-      q->MappingGeneration!=p->Graph.MappingGeneration)) goto Unlock;
-  if(q->Operation==APPLE_AGX_G3_COPY_UPLOAD &&
-     (opened->ReadOnly || !(opened->Win32Flags&AppleAgxWin32BufferCpuWrite))) goto Unlock;
-  if(q->Operation==APPLE_AGX_G3_COPY_DOWNLOAD &&
-     !(opened->Win32Flags&AppleAgxWin32BufferCpuRead)) goto Unlock;
+  COPY_REJECT_IF(!allocation->Win32ClassId, 39u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(allocation->Object.Description.CpuVisible, 40u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(allocation->Object.Description.Type!=ADMISSION_WIN32_ALLOCATION_GPU_LOCAL, 41u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(state->ActiveProcess, 42u, STATUS_DEVICE_BUSY, Unlock);
+  COPY_REJECT_IF(p->Graph.JobInFlight, 43u, STATUS_DEVICE_BUSY, Unlock);
+  COPY_REJECT_IF(p->Graph.LeaseToken, 44u, STATUS_DEVICE_BUSY, Unlock);
+  COPY_REJECT_IF(q->Operation!=APPLE_AGX_G3_COPY_QUERY &&
+      (q->ProcessGeneration!=p->Graph.ProcessGeneration ||
+       q->MappingGeneration!=p->Graph.MappingGeneration), 45u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(q->Operation==APPLE_AGX_G3_COPY_UPLOAD &&
+      (opened->ReadOnly || !(opened->Win32Flags&AppleAgxWin32BufferCpuWrite)), 46u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(q->Operation==APPLE_AGX_G3_COPY_DOWNLOAD &&
+      !(opened->Win32Flags&AppleAgxWin32BufferCpuRead), 47u, STATUS_INVALID_PARAMETER, Unlock);
   length=q->Operation==APPLE_AGX_G3_COPY_QUERY ?
       allocation->Object.Description.Size : q->TransferBytes;
-  if(!length || length>MAXULONG || q->Offset>allocation->Object.Description.Size ||
-     length>allocation->Object.Description.Size-q->Offset ||
-     q->Offset>=(1ULL<<39)-q->GpuVa || length>(1ULL<<39)-q->GpuVa-q->Offset)
-    goto Unlock;
+  COPY_REJECT_IF(!length, 48u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(length>MAXULONG, 49u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(q->Offset>allocation->Object.Description.Size, 50u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(length>allocation->Object.Description.Size-q->Offset, 51u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(q->Offset>=(1ULL<<39)-q->GpuVa || length>(1ULL<<39)-q->GpuVa-q->Offset, 52u, STATUS_INVALID_PARAMETER, Unlock);
   first=q->GpuVa+q->Offset;end=first+length;
-  if(!AppleAgxGpuvaG3GraphContainsRangeAccess(&p->Graph,first,(UINT)length,FALSE)) goto Unlock;
+  COPY_REJECT_IF(!AppleAgxGpuvaG3GraphContainsRangeAccess(&p->Graph,first,(UINT)length,FALSE), 53u, STATUS_INVALID_PARAMETER, Unlock);
   status=AdmissionMemoryRuntimeLocalView(adapter,&view);
-  if(!NT_SUCCESS(status)) goto Unlock;
-  status=STATUS_INVALID_PARAMETER;
-  if(!view.CpuAddress) goto Unlock;
-  /* Validate every page before the first store: a malformed tail cannot
-   * partially overwrite canonical data. Table/private storage has no matching
-   * allocation provenance and cannot pass this join. */
+  COPY_REJECT_IF(!NT_SUCCESS(status), 54u, status, Unlock);
+  COPY_REJECT_IF(!view.CpuAddress, 55u, STATUS_INVALID_PARAMETER, Unlock);
+  /* Prevalidate the entire range before any copy, unchanged from R145. */
   for(page=first&~0xfffULL;page<end;page+=0x1000ULL) {
     const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte=AdmissionG3CopyPte(p,page);
-    if(!pte || !(pte->Flags&APPLE_AGX_GPUVA_G3_VALID) ||
-       pte->SegmentId!=ADMISSION_MEMORY_LOCAL_SEGMENT ||
-       pte->Allocation!=(ULONGLONG)(ULONG_PTR)allocation ||
-       pte->AllocationOffset!=page-q->GpuVa ||
-       !AppleAgxGpuvaG3TableSpanWithinLocal(view.GuestIpaAddress,view.Bytes,
-           pte->GuestIpa,0x1000ULL)) goto Unlock;
+    COPY_REJECT_IF(!pte, 56u, STATUS_INVALID_PARAMETER, Unlock);
+    COPY_REJECT_IF(!(pte->Flags&APPLE_AGX_GPUVA_G3_VALID), 57u, STATUS_INVALID_PARAMETER, Unlock);
+    COPY_REJECT_IF(pte->SegmentId!=ADMISSION_MEMORY_LOCAL_SEGMENT, 58u, STATUS_INVALID_PARAMETER, Unlock);
+    COPY_REJECT_IF(pte->Allocation!=(ULONGLONG)(ULONG_PTR)allocation, 59u, STATUS_INVALID_PARAMETER, Unlock);
+    COPY_REJECT_IF(pte->AllocationOffset!=page-q->GpuVa, 60u, STATUS_INVALID_PARAMETER, Unlock);
+    COPY_REJECT_IF(!AppleAgxGpuvaG3TableSpanWithinLocal(view.GuestIpaAddress,view.Bytes,
+          pte->GuestIpa,0x1000ULL), 61u, STATUS_INVALID_PARAMETER, Unlock);
   }
   if(q->Operation==APPLE_AGX_G3_COPY_QUERY) {
     q->ProcessGeneration=p->Graph.ProcessGeneration;
@@ -623,7 +654,10 @@ Unlock:
 Release:
   if(reference.ReleaseHandle) adapter->Interface.DxgkCbReleaseHandleData(reference);
 Free:
-  ExFreePoolWithTag(q,ADMISSION_POOL_TAG);return status;
+  if(q) ExFreePoolWithTag(q,ADMISSION_POOL_TAG);
+  if(isQuery && predicate) AdmissionRecordG3CopyQueryFailure(adapter,predicate,status);
+#undef COPY_REJECT_IF
+  return status;
 }
 
 NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,

@@ -49442,3 +49442,30 @@ Next target is bounded copy-preflight HRESULT/generation/guard diagnostics and
 real callback replay, not a behavioral fix or new Air run. Ordinary Code28
 recovery and R143 firmware remain unchanged. Full analysis/review dispositions
 are in `investigation/analysis/EXP858-next-boundary.md` and its linked files.
+
+
+### EXP858 offline QUERY contract/receipt supplement — 2026-09-28T05:44:30.568655+00:00
+
+Scope: requested one complete offline pass over the current KMD local-copy QUERY
+path, against real UMD/WDK producers and R145 replay. No new hardware experiment,
+package, installation or Air access. Base5b5f291412586cb273e079b52d400f1c382aa27d,
+branch integration/ad04-windows-compiler. Pre-change intent and ownership are in
+`docs/superpowers/plans/2026-09-28-exp858-query-receipt.md`.
+
+Observed: no guard must fail on all real calls. Runtime allocation token and KMD
+pointer have distinct documented namespaces, bridged by device-specific lookup.
+Rank remaining candidates: lookup/process/context ownership; live graph/PTE full
+extent provenance; busy/OS-added flags. Full61-ID dictionary and producer/replay
+comparison: `investigation/analysis/EXP858-query-contract.md`.
+
+Diagnostic implementation only: one16-byte first-failed-QUERY predicate/NTSTATUS
+receipt after reference/mutex release. All admission/statuses preserved. Real-body
+RED at missing receipt assertion; GREEN16/64, then29 affected tests PASS after
+review. ARM64 gpuva_g3_windows.c/receipts.c whole TUs /W4 /WX /analyze PASS, no link.
+Full host1154 retains exact baseline15F/38E/2S. Commands, source/object/log hashes,
+base/submodule commits and dirty hashes: `investigation/evidence/EXP858-query-audit/summary.json`.
+
+Verdict: implementation verified offline; hardware cause remains undetermined.
+Next: identify the first predicate or prove successful QUERY in a separately
+authorized package/run, not another equivalent offline pass. No such run done.
+EXP858 ordinary Code28 recovery and all hardware observations remain unchanged.

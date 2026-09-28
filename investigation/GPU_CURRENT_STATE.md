@@ -1,5 +1,25 @@
 # GPU current boundary — 2026-09-28
 
+## 2026-09-28 EXP858 QUERY audit — no universal predicate failure proved
+
+One complete current-source/WDK/UMD/replay pass enumerates61 guard IDs. Runtime
+D3DKMT token and KMD allocation pointer are intentionally bridged by device-specific
+AcquireHandleData; no namespace rewrite is justified. Ranked unknowns: actual
+open/process/context resolution, live full-range graph/PTE provenance, then GPU
+busy/OS flags. QUERY success followed by UMD generation/staging failure remains.
+
+Diagnostic only: first KMD QUERY failure claims adapter RAM and writes16-byte
+Wom1G3CopyQueryFailure {1,16,predicate,NTSTATUS}, after unlock/reference release.
+Acceptance/statuses unchanged. Truncated/unidentifiable QUERY or pre-KMD rejection
+has no receipt; absent receipt cannot prove success. No package or hardware run.
+RED→GREEN real-body16/64 replay; ARM64 two-TU /W4 /WX /analyze pass;1154-test suite
+retains exact baseline15F/38E/2S. Evidence: EXP858-query-audit/summary.json.
+Audit: investigation/analysis/EXP858-query-contract.md. Ordinary Code28 remains.
+
+WHY CONTINUE COMPARISON: the one offline pass is complete; do not repeat it.
+Next causal target is the first failed guard or proof QUERY succeeded, using the
+bounded receipt only in a separately authorized package/run. No semantic fix.
+
 ## 2026-09-28 EXP858 offline — first COPY QUERY followed by pre-upload rollback
 
 Exact858 PDB/ETL stacks locate93 copy escapes at the first QUERY callsite,

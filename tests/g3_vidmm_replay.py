@@ -18,6 +18,7 @@ SHARED = ROOT / "drivers/apple-agx/shared"
 M1N1 = ROOT / "m1n1_windows/src"
 
 FUNCTIONS = {
+    "receipts.c": ["AdmissionRecordG3CopyQueryFailure"],
     "gpuva_g3_windows.c": [
         "AdmissionG3AllocateNode", "AdmissionG3FreeNode",
         "AdmissionGpuvaG3FindProcess", "AdmissionG3BootstrapRoot",
@@ -79,7 +80,7 @@ def generate(revision=None, function_revisions=None):
         parts.append(body((SRC / "memory_runtime_windows.c").read_text(),
                           "AdmissionMemoryRuntimeScanoutView") + "\n")
     for filename, names in FUNCTIONS.items():
-        source = ((SRC / filename).read_text() if revision is None else
+        source = ((SRC / filename).read_text() if revision is None or filename == "receipts.c" else
                   subprocess.check_output(
                       ["git", "show", f"{revision}:drivers/apple-agx/render-admission/src/{filename}"],
                       cwd=ROOT, text=True))

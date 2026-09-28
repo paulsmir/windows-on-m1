@@ -46,3 +46,13 @@ REVIEW R40: DEFER — the completed paging wait and first-copy rollback supply n
 REVIEW R37: DEFER — historical disarmed-start recovery does not justify a new run.
 
 REVIEW R14: ACCEPT — use targeted saved-evidence extraction and persistent builder tools; no driver rebuild or suite loop for an analysis-only change.
+
+
+QUERY diagnostic implementation supplement: canonical review re-read unchanged
+before commit. The above OPEN dispositions remain applicable. REVIEW R14: ACCEPT
+— use changed-file persistent builder compilation and targeted replay first;
+one full suite for the authorized diagnostic implementation, no package/run.
+Fresh implementation review found no predicate/status/lifetime regression. Added
+truncated-tag, pool/local-view, acquired-token mismatch, missing-PTE and
+reference-release-before-registry coverage. Replay interlocked stubs do not prove
+concurrent arbitration; production uses the actual Windows atomic primitive.
