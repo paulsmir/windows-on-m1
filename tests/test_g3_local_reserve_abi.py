@@ -1,5 +1,6 @@
 from pathlib import Path
 import re
+import subprocess
 import unittest
 
 
@@ -10,7 +11,8 @@ KMD = ROOT / "drivers/apple-agx/shared/include/apple_agx_local_reserve_abi.h"
 
 
 def define(path, name):
-    line = next(line for line in path.read_text().splitlines()
+    source = subprocess.check_output(["cc", "-E", "-dM", "-x", "c", str(path)], text=True) if path == M1N1 else path.read_text()
+    line = next(line for line in source.splitlines()
                 if line.startswith(f"#define {name} "))
     value = line.split(name, 1)[1]
     hexa = re.search(r"0x[0-9a-fA-F]+", value)

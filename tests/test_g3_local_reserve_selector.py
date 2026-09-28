@@ -21,6 +21,18 @@ class LocalReserveSelectorTest(unittest.TestCase):
             result = subprocess.run([str(binary)], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_v2_identity_full_span_and_no_candidate_drift(self):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "selector-v2"
+            build = subprocess.run([os.environ.get("CC", "cc"), "-std=c11", "-Wall",
+                                    "-Wextra", "-Werror", "-DAGX_LOCAL_RESERVE_V2=1",
+                                    "-I", str(SOURCE.parent),
+                                    str(ROOT / "tests/fixtures/agx_local_reserve_v2_test.c"),
+                                    str(SOURCE), "-o", str(binary)], capture_output=True, text=True)
+            self.assertEqual(build.returncode, 0, build.stderr)
+            result = subprocess.run([str(binary)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
