@@ -1,5 +1,31 @@
 # GPU current boundary — 2026-09-28
 
+## 2026-09-28 EXP859 — first QUERY guard 53; ordinary Code28 recovered
+
+Package 859/source c5f6ec88 on unchanged R143 firmware emitted
+Wom1G3CopyQueryFailure={1,16,53,0xC000000D}. AdmissionGpuvaG3CopyEscape
+at gpuva_g3_windows.c:619 rejects !AppleAgxGpuvaG3GraphContainsRangeAccess
+for the full canonical allocation read range. Earlier handle/ownership guards
+passed for this first request; exact missing range/publication reason is absent.
+
+One armed boot reached 626.6s Code0/StartStage12/status0/arm consumed, no
+bugcheck. Early SSH interruption recovered on same boot after a non-destructive
+CPU snapshot; no crash inferred from serial NVMe reinitialization. Committed
+GPU memory 232923136→3486687232 bytes; dedicated peak 26263552 (25.05MiB).
+Two SearchHost d3d11.dll AVs, no DWM/Explorer crash; no new dump available.
+No UMD submit/fence-signal records or G4 failure receipt; GPU work unproven.
+
+10 guest originals SHA-verified. Mandatory hidden Code45 exact oem5 cleanup
+then ordinary Code28 durable 06:22:09Z: present1/staged0/arms0/SYS0/UMD0/
+service0/signer0/diagnostics0, CPU8/disks2/USB5/RDP Running. No armed retry.
+Result main `.local/experiments/EXP859-r145-queryreceipt/hardware-result.json`
+SHA256 a5233bfe25a5066622fd05d6500cc9b5e74d70f48350f5f4e556d10d9958387a.
+
+WHY CONTINUE COMPARISON: the first failed guard now identifies live full-range
+graph read coverage as the causal target. Inspect its publication/range contract
+offline using this exact source/evidence; no admission relaxation or hardware
+repeat is justified by the receipt alone.
+
 ## 2026-09-28 EXP858 QUERY audit — no universal predicate failure proved
 
 One complete current-source/WDK/UMD/replay pass enumerates61 guard IDs. Runtime
