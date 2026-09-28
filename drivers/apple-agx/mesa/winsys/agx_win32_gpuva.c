@@ -4,7 +4,6 @@
 
 #define AGX_GPUVA_PAGE 0x10000ULL
 #define AGX_GPUVA_LIMIT (1ULL << 39)
-#define AGX_GPUVA_LOW_LIMIT (1ULL << 32)
 
 int AgxWin32GpuvaInit(AGX_WIN32_GPUVA_SPACE *space,
                       const AGX_WIN32_GPUVA_OPS *ops, void *context) {
@@ -22,15 +21,20 @@ int AgxWin32GpuvaBind(AGX_WIN32_GPUVA_SPACE *space, AGX_WIN32_GPUVA_BO *bo,
                       unsigned protection) {
   uint64_t length, va = 0, fence = 0;
   int mapped;
-  const uint64_t limit = low_va ? AGX_GPUVA_LOW_LIMIT : AGX_GPUVA_LIMIT;
+  /* LOW_VA means a 32-bit USC offset, not an absolute VA below 4 GiB.
+   * Keep offset zero unused, as native USC fields use zero as absent. */
+  const uint64_t minimum = low_va ?
+      APPLE_AGX_G4_USC_EXECUTION_BASE + AGX_GPUVA_PAGE : AGX_GPUVA_PAGE;
+  const uint64_t limit = low_va ? APPLE_AGX_G4_USC_EXECUTION_BASE +
+      APPLE_AGX_G4_USC_WINDOW_BYTES : AGX_GPUVA_LIMIT;
   if (!space || !bo || !allocation || bo->Bound || space->Terminal ||
       (protection & ~(AGX_GPUVA_MAP_WRITE | AGX_GPUVA_MAP_EXECUTE)) ||
-      !bytes || bytes > limit - AGX_GPUVA_PAGE ||
+      !bytes || bytes > limit - minimum ||
       bytes > UINT64_MAX - (AGX_GPUVA_PAGE - 1)) return 0;
   length = (bytes + AGX_GPUVA_PAGE - 1) & ~(AGX_GPUVA_PAGE - 1);
-  if (!space->Ops.Reserve(space->Context, length, AGX_GPUVA_PAGE, limit, &va))
+  if (!space->Ops.Reserve(space->Context, length, minimum, limit, &va))
     return 0;
-  if (!va || (va & (AGX_GPUVA_PAGE - 1)) || va >= limit ||
+  if (va < minimum || (va & (AGX_GPUVA_PAGE - 1)) || va >= limit ||
       length > limit - va) {
     if (va && !space->Ops.Free(space->Context, va, length))
       space->Terminal = 1;
