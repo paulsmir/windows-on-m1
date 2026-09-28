@@ -34,6 +34,9 @@ int AgxWin32AsahiAttach(AGX_WIN32_ASAHI_BACKEND *b, struct agx_device *native,
   if(!b || !native || !screen || !ops || !owner || b->Native || native->windows_private ||
      !ops->Enter || !ops->Leave || !ops->Associate || !ops->Detach || !ops->Identity || !ops->NextBo)
     return 0;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if(base!=APPLE_AGX_G4_USC_EXECUTION_BASE) return 0;
+#endif
   if(!ops->Enter(owner,screen)) return 0;
   if(AgxWin32NativeDeviceInitialize(&b->Buffers,screen,base,screen->Generation)!=AgxWin32NativeDeviceSuccess) {
     ops->Leave(owner);
@@ -48,12 +51,9 @@ int AgxWin32AsahiAttach(AGX_WIN32_ASAHI_BACKEND *b, struct agx_device *native,
   b->Native=native; b->Ops=*ops; b->Owner=owner; b->LiveBos=0; b->Failed=0; b->UnpublishedBo=NULL;
   b->ActiveCapture=NULL; b->ActiveEmission=NULL; b->EncoderAllocationIntent=0;
   native->windows_private=b;
-#ifdef APPLE_AGX_GPUVA_WINSYS
-  /* USC-relative shader addresses use the low VA interval from zero. */
-  native->shader_base=0;
-  b->GpuvaReady=1;
-#else
   native->shader_base=base;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  b->GpuvaReady=1;
 #endif
   native->ops.bo_mmap=native_map;
   return 1;

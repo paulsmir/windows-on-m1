@@ -16,7 +16,7 @@ static int valid_va(unsigned long long va, unsigned long long bytes) {
 /* The firmware's 32-bit USC fields are offsets from the process USC
  * execution base. Low six bits carry pipeline flags, not address bits. */
 static unsigned long long usc_va(unsigned int packed) {
-  return packed ? 0x1100000000ULL + (packed & ~63u) : 0ULL;
+  return packed ? APPLE_AGX_G4_USC_EXECUTION_BASE + (packed & ~63u) : 0ULL;
 }
 
 typedef struct {

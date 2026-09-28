@@ -235,8 +235,8 @@ APPLE_AGX_BOOL AppleAgxG4PatchRenderScalars(
   g4_put64(work + 0x88u, Render->Bg.ResourceSpec);
   g4_put64(work + 0x90u, Render->Bg.Usc);
   g4_put64(work + 0x170u, ((APPLE_AGX_U64)4u * rgn_size) << 24);
-  g4_put64(work + 0x1c0u, 0x1100000000ULL);
-  g4_put64(ta + 0x120u, 0x1100000000ULL);
+  g4_put64(work + 0x1c0u, APPLE_AGX_G4_USC_EXECUTION_BASE);
+  g4_put64(ta + 0x120u, APPLE_AGX_G4_USC_EXECUTION_BASE);
   g4_put32(work + 0x3c8u, Render->Eot.ResourceSpec);
   g4_put32(work + 0x3ccu, Render->Eot.Usc);
   g4_put64(work + 0x610u, Render->PartialBg.ResourceSpec);

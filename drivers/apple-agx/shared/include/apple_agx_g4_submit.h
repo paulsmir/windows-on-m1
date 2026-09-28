@@ -32,6 +32,10 @@
 #define APPLE_AGX_G4_COMPUTE 1u
 #define APPLE_AGX_G4_FRAGMENT_ATTACHMENTS 3u
 #define APPLE_AGX_G4_COLOR_BGRA8 1u
+/* Native USC fields are 32-bit offsets within this process execution window.
+ * UMD placement, native encoding, parser and firmware work must agree. */
+#define APPLE_AGX_G4_USC_EXECUTION_BASE 0x1100000000ULL
+#define APPLE_AGX_G4_USC_WINDOW_BYTES 0x100000000ULL
 
 typedef struct {
   unsigned int Magic;
