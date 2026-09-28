@@ -1,5 +1,9 @@
 /* EXP854B: measured empty current root reused as a level-1 table.
  * The earlier 4K/64K transitions are coverage, not a claimed captured trace. */
+static APPLE_AGX_GPUVA_G3_GRAPH *r155_graph;
+static void r155_end_job(void) {
+  if(r155_graph && r155_graph->JobInFlight) assert(AppleAgxGpuvaG3GraphEndJob(r155_graph));
+}
 static void r135_root_reuse_cases(void) {
   ADMISSION_CONTEXT a={0}; ADMISSION_G3_STATE state={0}; REPLAY_BROKER b={0};
   APPLE_AGX_GPUVA_V5_IO io={&b,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier};
@@ -72,9 +76,23 @@ static void r135_root_reuse_cases(void) {
   assert(p->Graph.RootIpa==former_root);
   reuse.UpdatePageTable.Flags.InitialUpdate=1;
   assert(AppleAgxGpuvaG3GraphBeginJob(&p->Graph,1));
+  /* R155: a job that never completes still bounds the wait (TDR owns hangs). */
+  replay_delay_calls=0;
   assert(AdmissionGpuvaG3BuildPagingBuffer(&a,&reuse)==STATUS_DEVICE_BUSY);
+  assert(replay_delay_calls>=1);
   assert(p->Graph.RootIpa==former_root);
   assert(AppleAgxGpuvaG3GraphEndJob(&p->Graph));
+  /* R155 (EXP868 0x10E/0xB): VidMm updates a leaf of a process whose native
+   * job is in flight. Paging executes only after that job's fence, so the
+   * build waits (lock released) for joined completion instead of returning
+   * STATUS_DEVICE_BUSY, which DxgkDdiBuildPagingBuffer may never return. */
+  r155_graph=&p->Graph; replay_delay_hook=r155_end_job; replay_delay_calls=0;
+  assert(AppleAgxGpuvaG3GraphBeginJob(&p->Graph,1));
+  { DXGK_PTE leaf={0}; leaf.Flags=1; leaf.PageAddress=system_ipa>>12;
+    expect_ok("R155 update during in-flight job",
+        sys_update(&a,p,local_cpu+0x18000,0,0,16,&leaf,0,1)); }
+  assert(replay_delay_calls>=1 && !p->Graph.JobInFlight && !p->Graph.LeaseToken);
+  replay_delay_hook=NULL; r155_graph=NULL;
   /* Broker-owned slot exclusion remains effective even if local slot metadata
    * is stale. Failure is returned, not hidden as a successful paging update. */
   { uint64_t token=0;

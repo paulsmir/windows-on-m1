@@ -109,6 +109,14 @@ static void ExReleaseFastMutex(FAST_MUTEX *m) {(void)m;assert(replay_irql==1);re
 static void KeAcquireSpinLock(int *m,KIRQL *i) {(void)m;*i=0;}
 static void KeReleaseSpinLock(int *m,KIRQL i) {(void)m;(void)i;}
 static KIRQL KeGetCurrentIrql(void) { return replay_irql; }
+/* R155: bounded paging wait for an in-flight job. The hook simulates the
+ * concurrent joined completion; sleeping with the G3 lock held is a bug. */
+typedef union { struct { unsigned int LowPart; int HighPart; }; long long QuadPart; } LARGE_INTEGER;
+typedef enum { KernelMode, UserMode } KPROCESSOR_MODE;
+static unsigned replay_delay_calls; static void (*replay_delay_hook)(void);
+static NTSTATUS KeDelayExecutionThread(KPROCESSOR_MODE m, BOOLEAN a, LARGE_INTEGER *i) {
+  (void)m;(void)a;assert(i && i->QuadPart<0);assert(replay_irql==PASSIVE_LEVEL);
+  ++replay_delay_calls; if(replay_delay_hook) replay_delay_hook(); return 0; }
 static BOOLEAN replay_pool_fail;
 static UINT replay_pool_calls;
 static volatile LONG *replay_query_claim_watch;

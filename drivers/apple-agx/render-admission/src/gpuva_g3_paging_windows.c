@@ -782,6 +782,9 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
   ULONGLONG *table_words;
   UINT limit;
   UINT word_index;
+  UINT wait_ms;
+  const UINT job_wait_limit_ms = 3000u; /* > TdrDelay (2 s) */
+  LARGE_INTEGER delay;
   NTSTATUS status;
   if (adapter == NULL || args == NULL ||
       KeGetCurrentIrql() != PASSIVE_LEVEL) return STATUS_INVALID_PARAMETER;
@@ -924,10 +927,25 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
   }
   failure.TableIpa = table_ipa;
   original_table_ipa = table_ipa;
-  ExAcquireFastMutex(&state->Lock);
+  /* R155: VidMm may build a GPU_PHYSICAL update for a process whose native
+   * job is in flight. This paging buffer executes on node 0 only after that
+   * job's fence (joined completion ends the job and releases the lease before
+   * the fence completes), and DxgkDdiBuildPagingBuffer may not return a busy
+   * status for UpdatePageTable. Wait, with the G3 lock released, for the job
+   * to finish; the bound exceeds TdrDelay so a genuine hang stays a TDR. */
+  for (wait_ms = 0u;; ++wait_ms) {
+    ExAcquireFastMutex(&state->Lock);
+    process = AdmissionGpuvaG3FindProcess(state, update->hProcess);
+    if (process == NULL || process->Poisoned || process->Graph.Uncertain ||
+        (!process->Graph.JobInFlight && !process->Graph.LeaseToken) ||
+        wait_ms >= job_wait_limit_ms)
+      break;
+    ExReleaseFastMutex(&state->Lock);
+    delay.QuadPart = -10000LL; /* 1 ms */
+    (void)KeDelayExecutionThread(KernelMode, FALSE, &delay);
+  }
   RtlCopyMemory(unpublished_before, state->UnpublishedGroups,
                 sizeof(unpublished_before));
-  process = AdmissionGpuvaG3FindProcess(state, update->hProcess);
   if (process == NULL || process->Poisoned || process->Graph.Uncertain) {
     status = STATUS_INVALID_DEVICE_STATE;
   } else if (process->Graph.JobInFlight || process->Graph.LeaseToken) {
