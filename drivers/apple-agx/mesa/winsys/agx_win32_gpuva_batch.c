@@ -262,8 +262,8 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   /* The first G13 scene constructor uses one cluster. Asahi selects this
    * firmware path with the UAPI NO_VERTEX_CLUSTERING bit. */
   native_render.Flags|=1u<<2;
-  if(!prepare_process_buffers(b,g,&native_render,ranges) ||
-     !append_attachments(batch,&packet)) { fail_site=__LINE__; goto fail; }
+  if(!prepare_process_buffers(b,g,&native_render,ranges)) { fail_site=__LINE__; goto fail; }
+  if(!append_attachments(batch,&packet)) { fail_site=__LINE__; goto fail; }
   command_header=agx_cmd_header(false,0,0);
   if(!append_native(&packet,&command_header,sizeof(command_header)) ||
      !append_native(&packet,&native_render,sizeof(native_render))) { fail_site=__LINE__; goto fail; }

@@ -249,6 +249,7 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
   payload->Bytes=sizeof(*payload);payload->Allocation=slot->KernelAllocation;
   payload->GpuVa=slot->CanonicalGpuVa;payload->Operation=APPLE_AGX_G3_COPY_QUERY;
   UINT step=1u; /* EXP870 diagnostic: 1 query 2 lock 3 transfer 4 unmap 5 unlock */
+  HRESULT lock_hr=S_OK;
   int success=copy_escape(device,payload) && payload->ProcessGeneration && payload->MappingGeneration;
   if(success) step=2u;
   BYTE *address=(BYTE *)slot->LockedBase;
@@ -256,8 +257,9 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
   if(success && temporary) {
     D3DDDICB_LOCK lock={};lock.hAllocation=slot->StagingAllocation;
     lock.Flags.LockEntire=1;
-    locked=SUCCEEDED(device->KernelCallbacks->pfnLockCb(
-        device->RuntimeDevice.handle,&lock));
+    lock_hr=device->KernelCallbacks->pfnLockCb(
+        device->RuntimeDevice.handle,&lock);
+    locked=SUCCEEDED(lock_hr);
     if(locked) address=(BYTE *)lock.pData;
     success=locked && address && lock.hAllocation==slot->StagingAllocation;
     if(locked && lock.hAllocation!=slot->StagingAllocation) {
@@ -305,8 +307,11 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
     }
   }
   if(!success) {
-    UINT values[5]={step,(UINT)download,(UINT)(slot->CanonicalGpuVa>>32),
-        (UINT)slot->CanonicalGpuVa,(UINT)slot->Bytes};
+    UINT values[9]={step,(UINT)download,(UINT)(slot->CanonicalGpuVa>>32),
+        (UINT)slot->CanonicalGpuVa,(UINT)slot->Bytes,(UINT)lock_hr,
+        (UINT)temporary | ((UINT)locked<<1) | ((UINT)(address!=NULL)<<2) |
+        ((UINT)slot->Mapped<<3) | ((UINT)slot->Borrowed<<4),
+        (UINT)payload->ProcessGeneration,(UINT)payload->MappingGeneration};
     AdmissionUmdDiagnostic("reject-copy-slot",E_FAIL,values,ARRAYSIZE(values));
   }
   HeapFree(GetProcessHeap(),0,payload);return success;
