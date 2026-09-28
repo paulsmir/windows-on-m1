@@ -258,7 +258,7 @@ static void system_lifetime_cases(void) {
   assert(!state.Registry.Frames);
   expect_ok("R132 destroy",AdmissionDdiDestroyProcess(&a,p));
   assert(!state.Registry.Frames && !state.ProcessCount);
-  /* Real BeginJob reparses the GPU ranges and checks the submit snapshot
+  /* Real BeginJob reparses the current GPU ranges and pins the graph
    * under the same lock. Queue admission itself is covered by the production
    * SubmitCommandVirtual replay; here no graph/lease operation is mocked. */
   p=sys_process(&a,0x80000,0);leaf=local_cpu+0x88000;
@@ -290,7 +290,11 @@ static void system_lifetime_cases(void) {
   context.GpuvaG3RootIpa=p->Graph.RootIpa;context.GpuvaG3DmaBufferVa=0x10000;
   context.GpuvaG3DmaBufferBytes=sizeof(command);
   context.GpuvaG3MappingGeneration=p->Graph.MappingGeneration;
-  expect_ok("R132 real BeginJob",AdmissionGpuvaG3BeginJob(&a,&context,91));
+  assert(cursor < 4000ULL * 4096ULL);
+  expect_ok("R154 unrelated queued unmap",sys_update(&a,p,leaf,0,4000,1,&zero,0,0));
+  assert(context.GpuvaG3MappingGeneration < p->Graph.MappingGeneration);
+  expect_ok("R154 revalidate after unrelated unmap",AdmissionGpuvaG3BeginJob(&a,&context,91));
+  assert(context.GpuvaG3MappingGeneration == p->Graph.MappingGeneration);
   assert(state.ActiveProcess==p && p->Graph.JobInFlight);
   assert(AdmissionDdiDestroyProcess(&a,p)==STATUS_DEVICE_BUSY);
   assert(sys_update(&a,p,leaf,0,24,1,&zero,0,0)==STATUS_DEVICE_BUSY);
@@ -298,16 +302,15 @@ static void system_lifetime_cases(void) {
   expect_ok("R132 queued invalidate",sys_update(&a,p,leaf,0,24,1,&zero,0,0));
   assert(!NT_SUCCESS(AdmissionGpuvaG3BeginJob(&a,&context,91)));
   expect_ok("R132 queued same-PFN remap",sys_update(&a,p,leaf,0,24,1,&large[8],0,0));
-  assert(!NT_SUCCESS(AdmissionGpuvaG3BeginJob(&a,&context,91)));
-  context.GpuvaG3MappingGeneration=p->Graph.MappingGeneration;
-  expect_ok("R132 fresh snapshot",AdmissionGpuvaG3BeginJob(&a,&context,91));
+  expect_ok("R154 restored mapping revalidated",AdmissionGpuvaG3BeginJob(&a,&context,91));
+  assert(context.GpuvaG3MappingGeneration == p->Graph.MappingGeneration);
   assert(AdmissionGpuvaG3CompleteJob(&a,91));
   ULONGLONG old_root=p->Graph.RootIpa;
   assert(AppleAgxGpuvaG3GraphBindRoot(&p->Graph,p->BootstrapIpa));
-  assert(AppleAgxGpuvaG3GraphBindRoot(&p->Graph,old_root));
   assert(!NT_SUCCESS(AdmissionGpuvaG3BeginJob(&a,&context,91)));
-  context.GpuvaG3MappingGeneration=p->Graph.MappingGeneration;
-  expect_ok("R132 root ABA fresh snapshot",AdmissionGpuvaG3BeginJob(&a,&context,91));
+  assert(AppleAgxGpuvaG3GraphBindRoot(&p->Graph,old_root));
+  expect_ok("R154 restored root revalidated",AdmissionGpuvaG3BeginJob(&a,&context,91));
+  assert(context.GpuvaG3MappingGeneration == p->Graph.MappingGeneration);
   assert(AdmissionGpuvaG3CompleteJob(&a,91));
   a.BackendImage.G4Native=0;
   expect_ok("R132 BeginJob cleanup",AdmissionDdiDestroyProcess(&a,p));free(large);
