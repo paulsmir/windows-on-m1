@@ -1,3 +1,21 @@
+# EXP868 — R154 mapping-validation package prepared; STOP at GO
+
+Source `exp/868-mapgen` e210d8be97174ba43f9b0fa5be406cd201229477
+is exact EXP867 base33503176 plus only the four source/test paths from
+599fca20 (byte-identical diff). Resubmission4ab20a46 and Flush0f51f3f5
+are excluded. Package30.0.868.0 built with native/source provenance0/0,
+signed CAT membership PASS, unchanged R143 firmware and recovery. Host G4
+and G3 replays pass; full1163 retains exact EXP867 baseline18F40E2S.
+Preparation hash audit656/656 and guest payload38/38 pass. Readiness
+`.local/experiments/EXP868-r154-mapgen/readiness-manifest.json` SHA256
+ae65ad7d16a3480ce411cda66ae19194c4dfa64407b4bbc83a65978204a58640.
+Periodic original-boot ETL/UMD/receipt host copy starts on first pinned Code0
+SSH sample. No Air transfer, stage, arm or launch; ordinary Code28 remains
+durable. Hardware effectiveness and scanout are unproven. Wait for
+`/Users/pavel/public_windows/.local/tandem/GO_EXP868`, then preregister the
+run, test 600s/no0x141/0x116 with progressing native completions, and use
+dump-first hiddenCode45 exact cleanup then ordinaryCode28 recovery.
+
 # R154 — pre-firmware epoch veto and queued resubmission corrected offline
 
 EXP867 saved native queues prove81 joined jobs,44 InitBM publications and
