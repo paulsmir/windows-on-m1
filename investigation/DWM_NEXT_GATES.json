@@ -327,17 +327,18 @@
     "supersedes": "package752 and EXP757 capture-path Air run"
   },
   "current_hardware_handoff": {
-    "experiment": "EXP861",
-    "result": ".local/experiments/EXP861-r147-pagingroot/hardware-result.json",
-    "result_sha256": "a23530e7d20e0e8401b84111a498bc275845a80d64a49be1a19b7667eff4e890",
-    "admission": "Code0/StartStage12/627.550139s/one armed boot; no recorded kernel bugcheck",
-    "diagnostic": "QUERY53 now non-bootstrap root SetRoot1/1 leaf-absent level2/index8 VA0x20000 bytes65536 generation623",
-    "execution": "KMD submit reached: G4 branch9 ParseUnmapped Render ordinal12 VA0x270e40 read1 GraphPresent0 generation440;17 failures; no proven fence/TA/3D completion; scanout0",
-    "crashes": "SearchHost edgehtml+4247e0 AV181s; Explorer Windows.UI.Xaml+73130c AV683s after checkpoint; full Explorer dump retained; no DWM crash recorded",
-    "stability": "Post-checkpoint collector180s timeout and unexplained SSH loss; emergency hidden recovery",
-    "recovery": "HiddenCode45 dump-first exactoem5/package861 cleanup then durable ordinaryCode28; all residue absent",
-    "next": "Offline current-source first G4 Render ordinal12 mapping/walk ownership atgeneration440; distinguish later QUERY leaf-absent623; preserve all guards",
-    "hardware_authorization": "EXP861 completed; no subsequent run authorized"
+    "experiment": "EXP862",
+    "result": ".local/experiments/EXP862-r148-pools/hardware-result.json",
+    "result_sha256": "de182b8caace46719d36ad60fb56d2ebf60815e2cdf758cf142321c1a6889c6f",
+    "source": "exp/862-pool fd603f30; pool plus QUERYv3 only; Flush excluded",
+    "admission": "StartStage12/status0 persisted; original Code0 unobserved; one armed boot",
+    "diagnostic": "QUERYv3 guard53/nonbootstrap/SetRoot1-1/VA0x20000 bytes65536/leaf-absent nativelevel2-index8/generation690; resident group and canonical allocation available",
+    "execution": "FirstG4 ParseUnmapped Render ordinal14 VA0x11002b0140/read1/root0x9d6aa0000/generation474;8 failures. USC-expanded field; Bg.Usc provisional. No accepted submit/fence/TA/3D proven; scanout0",
+    "crashes": "No new System1001/Application1000/kernel/WER dump; queued older WER reports excluded",
+    "stability": "FAILED SSH checkpoint:19 failures over630.731s host observation; no live memory trend; CPU0 same userPC across two snapshots, cause unknown",
+    "recovery": "HiddenCode45 dump-first exactoem5/package862 removal; ordinaryCode28 verified twice through09:46:47Z with no residue,CPU8/disks2/USB5/RDP/autologon",
+    "next": "Current-source USC address normalization/producer mapping atordinal14/generation474; keep later QUERY690 separate; independent Flush remains hardware-untested",
+    "hardware_authorization": "EXP862 completed; no further run authorized"
   },
   "r147_offline_root_ordering": {
     "status": "implemented",

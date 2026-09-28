@@ -1,5 +1,42 @@
 # GPU current boundary — 2026-09-28
 
+## EXP862 — pool candidate advances to ordinal14; SSH checkpoint failed; Code28 recovered
+
+One package862 armed boot on identical R143. Source branch exp/862-pool
+fd603f30 = pool ac4731fe + QUERYv3 c239965f cherry-pick; Flush0f51f3f5 absent.
+Build0/0, exact SourceCommit=NativeArchiveCommit,536 source hashes verified.
+First G4 v2 branch9/C000000D/ParseUnmapped3 now Render ordinal14/read1,
+VA0x11002b0140,GraphPresent0,root0x9d6aa0000,generation474;8 failures.
+Old first rejection was ordinal12/0x270e40. USC-expanded field; Bg.Usc is a
+provisional producer-order candidate, not a captured field tag/native packet.
+
+QUERYv3 guard53 remains separate: VA0x20000/65536,leaf-absent nativelevel2/
+index8,generation690,nonbootstrap same root,SetRoot1/1. Resident group and
+canonical allocation available; request0x40000fc0,canonical0xffff9388623cf3a0,
+bytes65536. No mapping relaxation follows from that receipt.
+
+StartStage12/status0 persisted; original Code0 was not sampled.19 SSH failures
+across630.731s host observation, no live memory trend. Two CPU snapshots show
+all8 CPUs; CPU0 same userPC0x7ff8eb98f104 with HV tick_fire630974->3288160,
+guestIAR121307 unchanged. Stall cause unproved. CorrelationCount0 and UMD has
+no submit/signal/completion tags; no accepted submit/fence/TA/3D proof.
+Both scanout snapshotsnonzero0; physical display/input unobserved. No new
+System1001/Application1000 or kernel/WER dump; old queued WER reports excluded.
+
+18 originals175579555B SHA-verified. ETL86507520B begins original09:25:31;
+full-window completeness unknown. UMD191612B has a NUL tail. HiddenCode45
+consumedarm/exactoem5/dump-first collection then exact removal succeeded.
+OrdinaryCode28 durable09:46:47.9433379Z: present1/package0/arms0/files0/service0/
+signer0/diagnostics0,CPU8/disks2/USB5/RDP; intentional autologon preserved.
+Result `.local/experiments/EXP862-r148-pools/hardware-result.json`
+SHA256 `de182b8caace46719d36ad60fb56d2ebf60815e2cdf758cf142321c1a6889c6f`.
+
+WHY CONTINUE COMPARISON: this isolated pool candidate moves the first rejected
+access and yields a precise USC-range target. Next thread: current-source USC
+address normalization/producer mapping for ordinal14 atgeneration474; keep
+later QUERY690 separate. No guard bypass, new package or hardware run authorized.
+The independent Flush fix remains untested on hardware.
+
 ## R148 — pool residency and shared Flush retirement fixed offline
 
 EXP861 remains the last hardware verdict. First submit ordinal12 is scissor
