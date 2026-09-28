@@ -72,6 +72,12 @@ int AgxWin32GpuvaUnbind(AGX_WIN32_GPUVA_SPACE *space,
   return 1;
 }
 
+/* Diagnostic only: record which check refused, never changes the result. */
+static int gpuva_refuse(AGX_WIN32_GPUVA_SPACE *space, unsigned line) {
+  if (space) space->LastFailure = line;
+  return 0;
+}
+
 int AgxWin32GpuvaSubmit(AGX_WIN32_GPUVA_SPACE *space,
                         const AGX_WIN32_GPUVA_BO *const *references,
                         unsigned count, const AGX_WIN32_GPUVA_BO *command,
@@ -87,73 +93,75 @@ int AgxWin32GpuvaSubmit(AGX_WIN32_GPUVA_SPACE *space,
       !command || !command->Bound || !command_bytes ||
       command_bytes > command->Bytes || !private_data || !private_bytes ||
       !completion || (written_count && !written) || written_count > count ||
-      space->Terminal || space->Held) return 0;
+      space->Terminal || space->Held) return gpuva_refuse(space, __LINE__);
   handles = malloc((size_t)count * sizeof(*handles));
-  if (!handles) return 0;
+  if (!handles) return gpuva_refuse(space, __LINE__);
   for (unsigned i = 0; i < count; ++i) {
     const AGX_WIN32_GPUVA_BO *bo = references[i];
     if (!bo || !bo->Bound || !bo->Allocation || !bo->Va ||
         bo->Va >= AGX_GPUVA_LIMIT || bo->Bytes > AGX_GPUVA_LIMIT - bo->Va) {
       free(handles);
-      return 0;
+      return gpuva_refuse(space, __LINE__);
     }
     for (unsigned j = 0; j < i; ++j) {
-      if (handles[j] == bo->Allocation) { free(handles); return 0; }
+      if (handles[j] == bo->Allocation) { free(handles); return gpuva_refuse(space, __LINE__); }
     }
     handles[i] = bo->Allocation;
     if (bo == command) found_command = 1;
   }
-  if (!found_command) { free(handles); return 0; }
+  if (!found_command) { free(handles); return gpuva_refuse(space, __LINE__); }
   if (written_count) {
     written_handles = malloc((size_t)written_count * sizeof(*written_handles));
-    if (!written_handles) { free(handles); return 0; }
+    if (!written_handles) { free(handles); return gpuva_refuse(space, __LINE__); }
     for (unsigned i = 0; i < written_count; ++i) {
       const AGX_WIN32_GPUVA_BO *bo = written[i];
       unsigned found = 0;
-      if (!bo || !bo->Bound) { free(written_handles); free(handles); return 0; }
+      if (!bo || !bo->Bound) { free(written_handles); free(handles); return gpuva_refuse(space, __LINE__); }
       for (unsigned j = 0; j < count; ++j)
         if (references[j] == bo) found = 1;
       for (unsigned j = 0; j < i; ++j)
         if (written_handles[j] == bo->Allocation) found = 0;
-      if (!found) { free(written_handles); free(handles); return 0; }
+      if (!found) { free(written_handles); free(handles); return gpuva_refuse(space, __LINE__); }
       written_handles[i] = bo->Allocation;
     }
   }
   resident = space->Ops.MakeResident(space->Context, handles, count,
                                       &paging_fence);
+  space->LastDetail = (unsigned)resident;
   /* Submission uses the written tokens only during this call. */
   if (resident == 3) {
     space->Terminal = 1;
     space->Held = handles;
     space->HeldCount = count;
     free(written_handles);
-    return 0;
+    return gpuva_refuse(space, __LINE__);
   }
   if (!resident || (resident == 2 && !paging_fence)) {
     free(written_handles);
     free(handles);
-    return 0;
+    return gpuva_refuse(space, __LINE__);
   }
   if (paging_fence && !space->Ops.WaitPaging(space->Context, paging_fence)) {
     if (!space->Ops.Evict(space->Context, handles, count)) space->Terminal = 1;
     free(written_handles);
     free(handles);
-    return 0;
+    return gpuva_refuse(space, __LINE__);
   }
   int submitted = space->Ops.Submit(space->Context, written_handles,
       written_count, command->Va,
       command_bytes, private_data, private_bytes, &render_fence);
+  space->LastDetail = 0x100u | (unsigned)submitted;
   free(written_handles);
   if (submitted == 2) {
     space->Terminal = 1;
     space->Held = handles;
     space->HeldCount = count;
-    return 0;
+    return gpuva_refuse(space, __LINE__);
   }
   if (!submitted || !render_fence) {
     if (!space->Ops.Evict(space->Context, handles, count)) space->Terminal = 1;
     free(handles);
-    return 0;
+    return gpuva_refuse(space, __LINE__);
   }
   space->Held = handles;
   space->HeldCount = count;

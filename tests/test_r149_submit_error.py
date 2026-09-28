@@ -76,12 +76,12 @@ static void FrontendFlush(Device *hDevice) {
     assert(AgxWin32AsahiBatchPoll(&batch,0));
   } else { assert(!frontend_errors); }
 """)
-        names = ("add_bo", "append_native", "append_attachments", "prepare_process_buffers",
+        names = ("batch_refuse", "add_bo", "append_native", "append_attachments", "prepare_process_buffers",
                  "AgxWin32AsahiBatchFinish", "AgxWin32AsahiBatchPoll",
                  "AgxWin32AsahiBatchAbort", "AgxWin32AsahiBatchRelease")
         with tempfile.TemporaryDirectory(prefix="r149-submit-error-") as directory:
             tmp = Path(directory)
-            (tmp / "g4_mesa_pool_functions.inc").write_text("\n".join(body(batch, n) for n in names))
+            (tmp / "g4_mesa_pool_functions.inc").write_text("void (*AgxWin32BatchRefusalHook)(unsigned, unsigned, unsigned, unsigned);\n" + "\n".join(body(batch, n) for n in names))
             (tmp / "replay.c").write_text(source)
             binary = tmp / "replay"
             subprocess.run([os.environ.get("CC", "clang"), "-std=c11", "-Wall", "-Wextra",
