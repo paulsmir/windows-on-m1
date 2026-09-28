@@ -1,0 +1,69 @@
+{
+  "experiment": "EXP866",
+  "status": "PREPARED_WAIT_GO",
+  "profile": {
+    "reserve_version": 2,
+    "reserve_bytes": 1073741824,
+    "local_bytes": 1048576000,
+    "private_bytes": 16777216,
+    "backend_bytes": 8388608,
+    "scanout_bytes": 58720256,
+    "scanout_abi_version": 2,
+    "gpuva_broker_version": 5
+  },
+  "package_source_commit": "17ee8894e26224db16bfdb6836fd2fc205e1679c",
+  "immutable_reference_sha256": {
+    "EXP855E-r141-attachment-envelope/firmware/m1n1-r110.macho": "14872dba0a6ecab9d4e49e42237298b44909126f0d5f7267cc5deaed587372b1",
+    "EXP855E-r141-attachment-envelope/firmware/J313_EFI-r110.fd": "3a76857cb650cae6b8d7c5d22250debeec437cd28c2dfd032ebecb1cbd0f6eca",
+    "EXP810-g4-package817/recovery/m1n1-exp377.macho": "fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a",
+    "EXP810-g4-package817/recovery/J313_EFI-exp392.fd": "16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06",
+    "EXP-20260903-385-hvc-single-page/recovery/J313_EFI-no-agx-autoboot.fd": "279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c"
+  },
+  "recovery": "evidence first; ordered restart to immutable EXP377/385 hiddenCode45; exact package cleanup; immutable EXP377/392 ordinaryCode28; no live Code0 removal",
+  "signing": {
+    "catalog_membership_SYS_UMD": "PASS (builder native signtool)",
+    "signer_thumbprint": "E9BE15BD2A184BFABA0C8035B3C620C58037A241",
+    "same_as_EXP855E": true,
+    "builder_chain_trust": "UnknownError / untrusted test root; no trust-store change; native catalog membership and unchanged signer verified",
+    "guest_signing_verification": "NOT_RUN"
+  },
+  "build_command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\pauls\\EXP866-r151-stamp\\build-kmd.ps1",
+  "launch_command": "R145_AIR_AUTHORIZATION=GO_EXP866 .local/experiments/EXP866-r151-stamp/full-owner-direct.sh",
+  "operator": "Codex direct execution",
+  "build_result": "ARM64 KMD/UMD 0 warnings/0 errors; SourceCommit=NativeArchiveCommit=tip; package 30.0.866.0",
+  "source_manifest_sha256": "a398222c4075ff255e4f71c92fa82757998b60fde67c04c1ea33ca143304acf2",
+  "inf_sha256": "b2c7e2993d6d92eabf301d9db6bf640fa4c1ffe3cea145c47a3e8bc3c587ce21",
+  "build_receipt_sha256": "13db5700f0cfae8d3c93e6af1447bdf75e777c43eaf64333c2e989cdc96516bc",
+  "utc_prepared": "2026-09-28T12:55:15.749779+00:00",
+  "hardware_checkpoint": [
+    "one GO_EXP866-authorized first armed cold R143 full-owner boot; no retry/rearm",
+    "no 0x141/0x116; completed private jobs >1 with fresh TA and 3D completion stamps",
+    "DWM/LogonUI progress, nonzero scanout, bounded original-boot SSH"
+  ],
+  "limitations": [
+    "Preparation only: STOP before GO_EXP866; no Air transfer/stage/launch",
+    "Only R151 source/test change vs EXP865; Flush 0f51f3f5 excluded",
+    "TDR requires dump-first hidden Code45 exact cleanup then ordinary Code28",
+    "Original ETL may be unavailable after early loss; retain original/recovery provenance separately"
+  ],
+  "artifact_sha256": {
+    "firmware/m1n1-r143.macho": "5fe13d19c5ca4d21327c44934613ae0f5109b8de096590db69f455e439e61a01",
+    "firmware/J313_EFI-r143.fd": "e54c009847e64a4b2b327f54385eedb94f5a9e5fd3b459fd6101b07af4c023fc",
+    "firmware/J313AppleAgxAbiAdmissionSsdt.aml": "3bdb28edb9def16f147f00947d9a2368f1f99036d601c86ead8b0ff46ccbab7f",
+    "source-manifest.json": "a398222c4075ff255e4f71c92fa82757998b60fde67c04c1ea33ca143304acf2",
+    "source.zip": "518a56fd0c4ac8483d0962924ac9c95e4cb879e7a732491c50db812ab892c5cb",
+    "AppleAgxRenderAdmission.inf": "b2c7e2993d6d92eabf301d9db6bf640fa4c1ffe3cea145c47a3e8bc3c587ce21",
+    "AppleAgxRenderAdmission.sys": "813a0c746cb200c79a96ead7571bec10768fd3dd7123da40448d4a5f9b426cd1",
+    "AppleAgxRenderAdmissionUmd.dll": "1010eb9b13ee7e58f623fb7dd10ccba780b2b71b0b1558d948a68d86444def50",
+    "appleagxrenderadmission.cat": "3833fd3953072c84fbed4f49ba4e563d6eac325e80a80adcdd3460eb31d65827",
+    "kmd-build-receipt.json": "13db5700f0cfae8d3c93e6af1447bdf75e777c43eaf64333c2e989cdc96516bc",
+    "build-kmd.ps1": "4d67108e41b1fed2b62434fab0b12816c67725c9f1ebd1d2cd114b833a9a24e8",
+    "arm64-build.log": "4f296738385fb061a11e9fa974529db25f4f1868a44c5a238127dd5f04b7a114",
+    "launch-configuration.json": "1d083bb60909dc166b5718958b353927e57bb961574eb632c02a8438515f762e",
+    "guest-transfer-manifest.json": "d732416e8845a251a81753a91caeddfded837899444996677b6eb71efcbae6d9",
+    "full-owner-direct.sh": "d5a72ecfd34de18bd30a6320eae40057bfd89d23d51897c8169543253533c8a4",
+    "emergency-hidden.sh": "360927977e1fa8c8a62e3f05abc990bcfbac9f6111f431fa9c20ec1d6a246f3e",
+    "ordinary-direct-final.sh": "f9d7da3d467d79bfad6b8585e72f61ba421f24b32fbf0ea9de52e5c4273b5a23",
+    "source-proof.json": "2f3f27dbf9d1fb796e62d7ef7ef0ab19ca9279f3f26ab8b55bf5d9679fe5ac4b"
+  }
+}

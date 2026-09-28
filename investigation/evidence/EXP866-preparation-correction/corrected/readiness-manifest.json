@@ -1,0 +1,25 @@
+{
+  "experiment": "EXP866",
+  "status": "STOP_AT_GO",
+  "source_commit": "17ee8894e26224db16bfdb6836fd2fc205e1679c",
+  "source_diff_sha256": "0929325d6184d2ab44362ee3a46335909ef9ca1f99e67f01435bf57b53ca0a31",
+  "Flush_ancestor": false,
+  "package_version": "30.0.866.0",
+  "provenance_0_0": true,
+  "package_sha256": {
+    "appleagxrenderadmission.cat": "3833fd3953072c84fbed4f49ba4e563d6eac325e80a80adcdd3460eb31d65827",
+    "AppleAgxRenderAdmission.inf": "b2c7e2993d6d92eabf301d9db6bf640fa4c1ffe3cea145c47a3e8bc3c587ce21",
+    "AppleAgxRenderAdmission.sys": "813a0c746cb200c79a96ead7571bec10768fd3dd7123da40448d4a5f9b426cd1",
+    "AppleAgxRenderAdmissionUmd.dll": "1010eb9b13ee7e58f623fb7dd10ccba780b2b71b0b1558d948a68d86444def50"
+  },
+  "firmware_sha256": {
+    "J313_EFI-r143.fd": "e54c009847e64a4b2b327f54385eedb94f5a9e5fd3b459fd6101b07af4c023fc",
+    "m1n1-r143.macho": "5fe13d19c5ca4d21327c44934613ae0f5109b8de096590db69f455e439e61a01",
+    "J313AppleAgxAbiAdmissionSsdt.aml": "3bdb28edb9def16f147f00947d9a2368f1f99036d601c86ead8b0ff46ccbab7f"
+  },
+  "hardware_manifest_sha256": "0a2268bdafa69116ab1c7b057f41ca2292455711a698392bbb71659c313534a7",
+  "guest_transfer_manifest_sha256": "d732416e8845a251a81753a91caeddfded837899444996677b6eb71efcbae6d9",
+  "payload_sha256": "adf57fbf9a7fb5c58bbcfa250c475bf454dbc11e6e49eec4160280df5f8b1f53",
+  "GO_gate": "/Users/pavel/public_windows/.local/tandem/GO_EXP866",
+  "hardware": "NOT_RUN"
+}
