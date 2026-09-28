@@ -191,6 +191,7 @@ static NTSTATUS AdmissionDdiSubmitRender(ADMISSION_CONTEXT *a,
 static int replay_irql, dispatches, bind_ok=1;
 static int graph_begin_calls;
 static int output_mapped=1;
+static ULONGLONG output_ipa=0x90001000ULL;
 static NTSTATUS scanout_status = STATUS_SUCCESS;
 static int receipt_queues;
 static void __attribute__((unused)) AdmissionRenderCorrelationSubmitFailureWindows(
@@ -233,7 +234,7 @@ static int AppleAgxGpuvaG3GraphTranslateVa(
   (void)graph;
   if (!output_mapped) return 0;
   if(va<0x40000000ULL || va>=0x40001000ULL)return 0;
-  *ipa=0x90001000ULL+(va-0x40000000ULL);return 1;
+  *ipa=output_ipa+(va-0x40000000ULL);return 1;
 }
 static unsigned AdmissionRenderPacketState(ADMISSION_RENDER_PACKET *packet) {
   return packet->State;
@@ -283,8 +284,6 @@ static int AppleAgxGpuvaG3GraphContainsRange(
     APPLE_AGX_GPUVA_G3_GRAPH *graph, ULONGLONG va, unsigned bytes) {
   return AppleAgxGpuvaG3GraphContainsRangeAccess(graph, va, bytes, 0);
 }
-static int AdmissionG3OutputMatchesLocal(ADMISSION_CONTEXT *adapter,
-    APPLE_AGX_GPUVA_G3_GRAPH *graph) { (void)adapter;(void)graph;return 1; }
 static int AppleAgxGpuvaG3GraphBeginJob(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     unsigned slot) { (void)graph;(void)slot;++graph_begin_calls;return 1; }
 static int AdmissionBackendImageReleaseSubmission(
@@ -527,12 +526,16 @@ int main(void) {
   args.SubmissionFenceId = 13u;
   assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) == STATUS_SUCCESS);
   assert(context.GpuvaG3DmaBufferVa == 0x20f80ULL);
-  ++process.Graph.MappingGeneration; /* invalidate/remap, even the same PFN */
+  /* An unrelated process mapping update must not strand this accepted job.
+   * Referenced command bytes/ranges and cached output are still validated. */
+  ++process.Graph.MappingGeneration;
+  output_ipa += 0x1000ULL; /* same VA, different output backing is unsafe */
   assert(AdmissionGpuvaG3BeginJob(&adapter, &context, 13u) != STATUS_SUCCESS);
   assert(graph_begin_calls == 0);
-  --process.Graph.MappingGeneration;
+  output_ipa -= 0x1000ULL;
   assert(AdmissionGpuvaG3BeginJob(&adapter, &context, 13u) == STATUS_SUCCESS);
   assert(graph_begin_calls == 1);
+  assert(context.GpuvaG3MappingGeneration == process.Graph.MappingGeneration);
   state.ActiveProcess = NULL;
   assert(AppleAgxGpuvaG3InvalidateLogical64K(logical, 2u, 1u));
   assert(logical[0x20u].Flags == 0u && logical[0x21u].Flags == 0u);
@@ -630,10 +633,15 @@ int main(void) {
   ++adapter.BackendImage.G4Lease.SceneGeneration;
   assert(AdmissionGpuvaG3BeginJob(&adapter,&context,21)!=STATUS_SUCCESS);
   --adapter.BackendImage.G4Lease.SceneGeneration;
-  ++process.Graph.MappingGeneration;
+  ++process.Graph.MappingGeneration; /* another scene may map/unmap meanwhile */
+  process.Graph.AllowProcessRanges=0;
   assert(AdmissionGpuvaG3BeginJob(&adapter,&context,21)!=STATUS_SUCCESS);
-  --process.Graph.MappingGeneration;
+  process.Graph.AllowProcessRanges=1;
+  context.GpuvaG3CancelFence=21;
+  assert(AdmissionGpuvaG3BeginJob(&adapter,&context,21)!=STATUS_SUCCESS);
+  context.GpuvaG3CancelFence=0;
   assert(AdmissionGpuvaG3BeginJob(&adapter,&context,21)==STATUS_SUCCESS);
+  assert(context.GpuvaG3MappingGeneration==process.Graph.MappingGeneration);
   assert(scene.Started);
   assert(adapter.BackendImage.G4Manager==&process.FirmwareManager);
   assert(adapter.BackendImage.G4ManagerKey.Owner==process.Graph.ProcessId);

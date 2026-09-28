@@ -1343,8 +1343,6 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
   }
   if (state->ActiveProcess == NULL && !state->PrivateCompletionFence && !process->Poisoned &&
       g4_valid &&
-      (!adapter->BackendImage.G4Native ||
-       context->GpuvaG3MappingGeneration == process->Graph.MappingGeneration) &&
       !context->GpuvaG3Poisoned && context->GpuvaG3RootIpa != 0ULL &&
       context->GpuvaG3RootIpa == process->Graph.RootIpa &&
       (adapter->BackendImage.G4Native ?
@@ -1367,6 +1365,10 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
       RtlCopyMemory(image->G4ManagerKey.Backing,private_scene->Storage.Ranges,
           sizeof(image->G4ManagerKey.Backing));
     }
+    /* The graph lock covers fresh range/output validation and JOB_BEGIN.
+     * A process-wide epoch also changes for unrelated mappings; it cannot
+     * invalidate an otherwise valid job. JOB_BEGIN pins the validated graph. */
+    context->GpuvaG3MappingGeneration = process->Graph.MappingGeneration;
     state->ActiveProcess = process;
     state->ActiveFence = fence;
     status = STATUS_SUCCESS;
