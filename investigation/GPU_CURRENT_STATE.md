@@ -1,5 +1,29 @@
 # GPU current boundary — 2026-09-28
 
+## 2026-09-28 EXP858 — R145 admission601s; no logged G4 submission; ordinary Code28 recovered
+
+One GO_EXP858 armed boot of package858/source f031ef2a on identical R143
+firmware reached Code0/StartStage12/status0, arm consumed and pinned SSH on
+the same Windows boot for601.3s, CPU8/disks2/USB5/RDP Running, no bugcheck.
+G4SubmitFailure is absent and UMD has no SubmitCommandCb/fence-signal records:
+this does not prove the old ParseUnmapped VA0x2f0000 boundary was crossed.
+520 CreateDevice entry/exit lines span9 PIDs; DWM1232 has only2 and no crash.
+513 draw-before lines,2 presentation imports; Present/staging-copy totals are
+uninstrumented. Sampled dedicated usage peak25.609MiB; total committed3.02GiB
+is not resident local usage. Early scanout snapshots remain zero. Explorer2788
+crashed in msvcp_win.dll+0xa614; full dump is saved, cause not yet attributed.
+
+13 guest originals SHA-verified. Evidence/result: main
+`.local/experiments/EXP858-r145-staging/hardware-result.json` SHA256
+587f88c5b4aaefe8184191a45f16dc002544b32a9e95128a8b1581ef9978869f. Mandatory immutable
+hidden Code45 exact oem5 cleanup then ordinary Code28 completed; durable
+04:54:50Z check: present1/staged0/arms0/SYS0/UMD0/service0/signer0/diagnostics0,
+CPU8/disks2/USB5/RDP Running. No retry, live Code0 removal or physical action.
+
+WHY CONTINUE COMPARISON: saved trace places the remaining boundary before the
+logged SubmitCommandCb; inspect this exact R145 UMD/ETL/source and Explorer
+dump offline. No old-reference archaeology or next hardware run is justified.
+
 ## 2026-09-28 R145 — canonical local BO and CPU staging implemented offline
 
 EXP857 remains the last hardware verdict. Saved receipts reconfirm system-backed

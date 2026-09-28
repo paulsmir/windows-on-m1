@@ -325,5 +325,15 @@
     "decision": "User-selected path recorded by tandem REVIEW R13",
     "carry_forward": "D3D10 buffer usage, typed view, shader ld lowering and diagnostics",
     "supersedes": "package752 and EXP757 capture-path Air run"
+  },
+  "current_hardware_handoff": {
+    "experiment": "EXP858",
+    "result": ".local/experiments/EXP858-r145-staging/hardware-result.json",
+    "result_sha256": "587f88c5b4aaefe8184191a45f16dc002544b32a9e95128a8b1581ef9978869f",
+    "admission": "Code0/StartStage12/601s/no bugcheck",
+    "execution": "No logged SubmitCommandCb or G4 failure; old parser advance unproven",
+    "recovery": "Hidden Code45 exact cleanup then durable ordinary Code28",
+    "next": "New thread: offline pre-submit refusal and saved Explorer dump attribution",
+    "hardware_authorization": "EXP858 completed; no subsequent run authorized"
   }
 }
