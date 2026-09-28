@@ -31,6 +31,18 @@ VOID AgxD3d10WindowsDiagnostic(PCSTR Stage,HRESULT Status,
   AdmissionUmdDiagnostic(Stage,Status,Values,Count);
 }
 
+extern "C" void (*AgxWin32BatchRefusalHook)(unsigned kind, unsigned site,
+                                            unsigned detail0, unsigned detail1);
+
+/* EXP870 diagnostic: every refused native batch, always logged ("reject-"
+ * bypasses the record budget). kind 1=Begin 2=Finish precondition 3=Finish
+ * fail site (detail0=GPUVA submit refusal line, detail1=callback result). */
+static void AgxD3d10BatchRefusal(unsigned kind, unsigned site,
+                                 unsigned detail0, unsigned detail1) {
+  UINT values[4]={kind,site,detail0,detail1};
+  AdmissionUmdDiagnostic("reject-batch",E_FAIL,values,4u);
+}
+
 VOID AgxD3d10WindowsDiagnosticSetError(
     PCSTR function,UINT line,HRESULT status) {
   char stage[192];
@@ -394,6 +406,7 @@ HRESULT AgxD3d10WindowsCreateDevice(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
   owner->Context=AgxWin32AsahiContextCreate(owner->Screen,&owner->Owner);
   if(!owner->Context) { result=E_OUTOFMEMORY;goto failed; }
   owner->Stage=AgxD3d10DeviceNativeContextReady;
+  AgxWin32BatchRefusalHook=AgxD3d10BatchRefusal;
   owner->Stage=AgxD3d10DeviceReady;
   *Device = owner;
   AdmissionUmdDiagnostic("g4-create-device-exit",S_OK,NULL,0u);

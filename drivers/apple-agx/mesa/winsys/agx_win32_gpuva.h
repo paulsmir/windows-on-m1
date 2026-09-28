@@ -42,6 +42,8 @@ typedef struct {
   uint64_t RenderFence;
   unsigned HeldCount;
   unsigned Terminal;
+  unsigned LastFailure; /* diagnostic: source line of the last refused call */
+  unsigned LastDetail;  /* diagnostic: MakeResident/Submit callback result */
 } AGX_WIN32_GPUVA_SPACE;
 
 int AgxWin32GpuvaInit(AGX_WIN32_GPUVA_SPACE *, const AGX_WIN32_GPUVA_OPS *, void *);
