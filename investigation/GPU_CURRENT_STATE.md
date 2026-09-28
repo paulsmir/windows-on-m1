@@ -1,5 +1,27 @@
 # GPU current boundary — 2026-09-28
 
+## 2026-09-28 R146 — QUERY53 audit stops without a unique hardware cause
+
+EXP859 receipt is exactly16 bytes {1,16,53,C000000D}; no VA/size/root/generations.
+All10 guest hashes and535 package source hashes verified. Local unpublished
+groups0, system139562; last flush branch5 is not joined to the first QUERY.
+Root selection leads: R145 fixture explicitly binds a root before QUERY.
+Real-body16/64 replay with that fixture bind omitted reproduces53 after local
+publication and successful flush; real SetRoot makes identical QUERY succeed.
+Read-only groups pass; selected-root absent-VA and tail cases also produce53.
+Thus EXP859 cannot uniquely distinguish root/ancestry/range; no semantic fix.
+
+Full1154 suite retains exact baseline15F/38E/2S. No production TU change,
+package, builder or Air access; EXP859 ordinary Code28 remains accepted.
+Report: `investigation/analysis/R146-query53.md`; reproducible decode/replay:
+`investigation/evidence/R146-query53/summary.json`. Proposed EXP860 is diagnostic
+only: first53 root/walk snapshot, minimum leading bit RootIsBootstrap, plus
+query range and missing edge/PTE provenance for decisive attribution.
+
+WHY CONTINUE COMPARISON: one current-source pass is complete; do not repeat it.
+Next causal target is the root identity and first missing walk component at the
+actual QUERY. Keep the safety guard; no speculative root bind inside Escape.
+
 ## 2026-09-28 EXP859 — first QUERY guard 53; ordinary Code28 recovered
 
 Package 859/source c5f6ec88 on unchanged R143 firmware emitted

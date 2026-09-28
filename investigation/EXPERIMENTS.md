@@ -49502,3 +49502,44 @@ EXP859 RECOVERY ORDINARY BEFORE 2026-09-28T06:19:57.309299+00:00: hidden ordered
 EXP859-HW FINAL / RECOVERY AFTER 2026-09-28T06:24:21.913986+00:00: CONFIRMED first QUERY predicate53 STATUS_INVALID_PARAMETER(0xC000000D), AdmissionGpuvaG3CopyEscape drivers/apple-agx/render-admission/src/gpuva_g3_windows.c:619, !AppleAgxGpuvaG3GraphContainsRangeAccess(full allocation,read). Earlier handle/ownership guards passed for that request; missing range/publication reason remains unknown. One armed boot626.618462s/Code0/Stage12/status0/arm consumed, no bugcheck/System1001,2 SearchHost d3d11.dll AVs,0 DWM/Explorer crashes; no new dump (MEMORY.DMP02:03 predates run), no SearchHost WER files available. Early transient SSH loss and diagnostic SIGINT preserved; same boot recovered. Committed232923136→3486687232 bytes; dedicated peak26263552. UMD740 create pairs/736 draw-before/1 import/no submit or fence-signal records; G4 failure absent; no successful GPU work proven. PlatformCPU8/disks2/USB5/RDP Running; display/input unmeasured; early scanout zero.10 originals593428143 bytes SHA-verified. Mandatory hidden Code45 exact oem5 cleanup and ordered ordinary recovery completed: ordinary-durable.json06:22:09.8510691Z same boot as initial confirms present1/Code28/staged0/arms0/SYS0/UMD0/service0/signer0/diagnostics0/CPU8/disks2/USB5/RDP; autologon preserved without password disclosure. No retry, live Code0 removal or physical action. Exact result main .local/experiments/EXP859-r145-queryreceipt/hardware-result.json SHA256 a5233bfe25a5066622fd05d6500cc9b5e74d70f48350f5f4e556d10d9958387a; all evidence/receipt hashes inside, QUERY raw16 bytes in query-receipt.bin and decoded mapping query-decoded.json. REVIEW38/38 OPEN dispositions in review-exp859-after.txt against753bdfe6. Next phase offline graph-range provenance at guard53; no additional hardware.
 
 EXP859 preparation correction 2026-09-28T06:25:50.531888+00:00: final all-changed-artifact hash audit found inherited EXP858 autologger SHAa63d5cab in unused resume-stage.ps1; corrected to exact EXP859dc74e649. Earlier stale-value checks covered package/source/manifest identities and literal EXP858 but missed this auxiliary script hash. resume-stage.ps1 was neither transferred nor executed; normal stage.ps1 ran once, so hardware variable/verdict unchanged. Audit now finds0 old changed-artifact hashes across31 scripts; .local/experiments/EXP859-r145-queryreceipt/stale-reference-check-final.json preserves before/after hashes. No hardware rerun.
+
+
+## R146-OFFLINE-QUERY53 — preregistered 2026-09-28T06:31:39Z
+
+Authority: main `.local/tandem/NEXT_TASK_R146.md`; base
+`3e6744a21cdb5367f3ede01c13cc96fc6056f32a`. Offline source/evidence audit only;
+no Air, package, firmware build or hardware run. EXP859 receipt is exactly
+16 bytes and lacks queried VA/size/root. Local unpublished counter is zero.
+Hypothesis: a populated inactive VidMm root can produce guard53 before SetRoot;
+R145 replay preselects the root. One controlled scenario change removes that
+fixture bind; compare QUERY before/after real SetRoot, with successful inactive
+root FlushTlb. Separate absent-VA/tail cases test diagnostic ambiguity; read-only
+local pages test the proposed read-bit explanation. Production functions stay
+unmodified. Command: `CC=/tmp/agx-clang-wrapper G3_REPLAY_R145=1
+G3_REPLAY_PROFILE=<16|64> python3 investigation/evidence/R146-query53/replay.py`.
+Expected: guard53 before root selection; success after SetRoot; distinct absent
+VA/tail also guard53. Save logs and hash summary in
+`investigation/evidence/R146-query53/`. Stop without a semantic fix if the saved
+hardware evidence cannot select one cause. No recovery transition needed; last
+accepted recovery remains EXP859 ordinary Code28.
+
+### R146-OFFLINE-QUERY53 result — 2026-09-28T06:38:37.589328+00:00
+
+Verdict: STOP_CAUSE_NOT_UNIQUELY_DETERMINED. Both16/64 ASan/UBSan real-body
+replays produce QUERY53 for fully published local backing before root selection,
+including after successful no-slot FlushTlb branch5; real SetRoot makes the same
+QUERY succeed. Read-only full local groups pass. A selected-root missing VA or
+unpublished tail independently gives identical53/C000000D. No production fix.
+Initial audit-fixture issues (flush-counter reset and branch6 expectation where
+branch5 precedes it) were corrected; neither changed production code.
+
+Both saved receipt copies decode exactly16 bytes with no range/root fields. All
+10 guest-original SHA256 and535 packaged source hashes match. Segment2 unpublished
+count0 weakens generic local grouping failure; last flush branch5 is not correlated
+to the first QUERY. Full suite1154/145.144s retains exact baseline15F/38E/2S;
+no new/removed failure identities. No changed TU, ARM64 build, package or Air.
+Evidence `investigation/evidence/R146-query53/summary.json` SHA256 `b287d5f2e13db3e22b84a1078d9cd8516010980e57957ab9b9693f7e49569016`;
+report `investigation/analysis/R146-query53.md`. Next proposed EXP860 variable is
+a bounded first53 root/walk diagnostic; minimum leading field RootIsBootstrap
+at QUERY, with VA/length/missing-level/provenance for decisive attribution.
+No hardware preregistration or execution; EXP859 ordinary Code28 unchanged.
