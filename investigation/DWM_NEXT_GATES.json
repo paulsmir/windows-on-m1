@@ -327,19 +327,17 @@
     "supersedes": "package752 and EXP757 capture-path Air run"
   },
   "current_hardware_handoff": {
-    "experiment": "EXP864",
-    "result": ".local/experiments/EXP864-r149-usc/hardware-result.json",
-    "result_sha256": "ba5a63eafe3119ef587c8c3017aa336c28637f6d41f4cac343a7e5f782e9959c",
-    "source": "exp/864-usc a9ecd3ea = EXP863 f62317a6 + USC3a7b6cc9 only; Flush retirement absent",
-    "admission": "durableStartStage12/status0/arm consumed; all8CPU entries; originalCode0 unobserved",
-    "diagnostic": "R150 decode: QUERY24 process poisoned; context lookup/range unvisited; same graph5/root9d8600000/generation469 as stranded render",
-    "execution": "R150 full dump: KMD active149 completed148 preempt1; broker job lease held; backend owner mismatch rejects before firmware publication; no TA/3D execution",
-    "frontend": "445 UMD lines; no reject-seterror before early TDR",
-    "stability": "FAIL live141 at28.920s, kernel116 at29.063s; original SSH absent",
-    "recovery": "hiddenCode45 exact package864/oem5 cleanup; ordinaryCode28 clean durable",
-    "next": "EXP865 package865 prepared from26cbd7e6 owner-only on a9ecd3ea; STOP at GO_EXP865",
-    "hardware_authorization": "Preparation authorized and completed; latest user requires stop at GO gate; no EXP865 Air action yet",
-    "etl_correction": "Saved ETL is hidden recovery with only Microsoft adapters; original DMA timeline unavailable; append-only EXP864 correction in EXPERIMENTS.md"
+    "experiment": "EXP865",
+    "result": ".local/experiments/EXP865-r150-owner/hardware-result.json",
+    "result_sha256": "a84a247f33998570b640b47546daf8627f375bd21cf1c5c4ccad84a341489542",
+    "source": "exp/865-owner26cbd7e6 = a9ecd3ea +6b7f8c79 source/test only; Flush absent",
+    "admission": "Stage12/status0/armconsumed/8CPUentries; originalCode0 unsampled",
+    "execution": "owner63 matches; backendSubmitted220, priorG3/queuecompletion149Success; laterTA missing stamp/event, D3markedcomplete",
+    "stability": "FAIL live14139.160s +11639.288s; no originalSSH; scanout0",
+    "recovery": "hiddenCode45 exact865/oem5 cleanup then ordinaryCode28 clean",
+    "next": "offline fence220 TA event/stamp and completion freshness boundary",
+    "hardware_authorization": "EXP865 completed; no further package/run authorized",
+    "etl": "original unavailable before spontaneous reset/noSSH; recovery trace excluded"
   },
   "r147_offline_root_ordering": {
     "status": "implemented",
@@ -367,26 +365,26 @@
     ]
   },
   "r150_boundary": {
-    "status": "IMPLEMENTED_OFFLINE",
+    "status": "OWNER_CHECKPOINT_HARDWARE_CONFIRMED_LATER_TA_FAILURE",
     "report": "investigation/analysis/R150-next-boundary.md",
     "evidence": "investigation/evidence/R150/summary.json",
     "single_variable": "Preserve backend owner63 in G3 worker; independently selected hardware VM slot1 unchanged",
-    "last_hardware": "EXP864",
-    "next_proposed": "EXP865 prepared with source/test-only26cbd7e6 and unchanged R143; STOP at GO_EXP865",
+    "last_hardware": "EXP865",
+    "next_proposed": "offline accepted220 TA completion boundary",
     "limits": [
-      "No hardware validation of fix",
-      "No true GPU hang recovery implemented",
-      "Original ETL overwritten by hidden recovery",
-      "General safe pre-publication lease rollback and monitored-fence atomicity deferred"
+      "Ten-minute/visible-frame checkpoints failed with0x116",
+      "Current220 D3 mark does not prove second complete frame; TA absent",
+      "True GPU-hang recovery remains fail-closed",
+      "Original ETL unavailable before spontaneous reset"
     ]
   },
   "exp865_preparation": {
-    "status": "PREPARED_STOP_AT_GO",
+    "status": "EXECUTED",
     "source_commit": "26cbd7e6ed728a7be6e1302f0b6ca4c2a2edb917",
     "result": "investigation/evidence/EXP865-preparation/preparation-result.json",
     "result_sha256": "24c93a4631a001635fb86e84002f2de7561c9a26cf46bc03765f2605e7b690d2",
     "hardware_manifest_sha256": "7ca944a67db38d4a85672c2c1399c42270e69abe9deded96a80b02b944d1bd86",
     "guest_payload_sha256": "cce217e994909d01e6689d3eec0538a9af79ecb28a109ef797f39f4427410bbc",
-    "hardware": "NOT_RUN"
+    "hardware": "EXP865 verdict in current_hardware_handoff"
   }
 }

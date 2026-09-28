@@ -1,0 +1,287 @@
+{
+  "experiment": "EXP865",
+  "utc": "2026-09-28T12:32:04.251878+00:00",
+  "artifact_root": "/Users/pavel/public_windows/.local/experiments/EXP865-r150-owner",
+  "files": {
+    "chainload.log": {
+      "bytes": 10354,
+      "sha256": "9566c299e06c1bd5e111222d85331b5860f5e616246beed66a96f313fecd923e"
+    },
+    "checkpoint-metrics.json": {
+      "bytes": 400,
+      "sha256": "c4412ac4ebc77ce8a2212be2f371b6245797d06de595eebb4f60b50ebba9bd33"
+    },
+    "cleanup-transition.json": {
+      "bytes": 301,
+      "sha256": "f56470cc06e284b5a8f78d98599d9c687f4b3056076a2e2de894666a2c51db87"
+    },
+    "cleanup.json": {
+      "bytes": 873,
+      "sha256": "b6958c5dbe572fb4d8e9fae8c685a1757eb56bfafd67724be31e83441ecc2168"
+    },
+    "collect-current-watchdogs.ps1": {
+      "bytes": 1769,
+      "sha256": "d93126b8f4d9f6a4e04cb3d2d73353dd31df29877f96ee8343c4676f4d134def"
+    },
+    "collect-hidden-supplement.log": {
+      "bytes": 32,
+      "sha256": "599a392d83c23a1de72a2d4a2c3b5d602032eb03d59d1c4767987cdd44e87d80"
+    },
+    "collect-hidden.log": {
+      "bytes": 31762,
+      "sha256": "47f580ad332a554f596685ed9e59109cd95cba7275753e72cf7fd509d6cd2f91"
+    },
+    "collected-state.json": {
+      "bytes": 25025,
+      "sha256": "2334daba58999780a810b265ea849fcda580dc5f960ae77dee78379aa06dd932"
+    },
+    "contract.bin": {
+      "bytes": 14048,
+      "sha256": "b4002621fe9ec1c2e7ef43b7eb44e268b61afa5f9488169265184080fcb1218a"
+    },
+    "current-watchdog-receipts.json": {
+      "bytes": 418,
+      "sha256": "29d6b11f31a885b0515f4ad6974c37d83e4c851f1fa318c0dd8fa7a68f3bd213"
+    },
+    "current-watchdog-receipts.json.err": {
+      "bytes": 1998,
+      "sha256": "c9bf583ce5140aa53baf9dcf16443aa6d2d55822f03ad22f1519a9b941ce5dfe"
+    },
+    "diagnostics-clean.json": {
+      "bytes": 266,
+      "sha256": "af4cd8da5f47a814db6abc0de03f64aaa0db480d810edc73b4edf72e1563b517"
+    },
+    "dump-backend.txt": {
+      "bytes": 40733,
+      "sha256": "b2e88dc31ff7ec7275518e120c5ec6068bc4343a83952965666d0841bd64080a"
+    },
+    "dump-boundary.json": {
+      "bytes": 2165,
+      "sha256": "ee0a99e75ffac946978e79dedb5446fbf59a1169ff87b54fafa2d8c0da298212"
+    },
+    "dump-discover.txt": {
+      "bytes": 7934,
+      "sha256": "9a66c0d7405e83785a7ab7cc0ba5a751a2ad6243e65f39dfd9a1f8d64216f5c0"
+    },
+    "dump-pool.txt": {
+      "bytes": 9562,
+      "sha256": "e48cbdb1b49d96d10476874f3d1c26a51e66169faa882ef45c9599eab22619cd"
+    },
+    "dump-scene.txt": {
+      "bytes": 12938,
+      "sha256": "b96e7c880504bd28f0a02ac5bb5c32d74c25ca9b01836db0055b15ea1aa54890"
+    },
+    "dump-state.txt": {
+      "bytes": 13055,
+      "sha256": "2f175bfeff58ef6ebcc189eaa30109f5f0b2edf792ad4490083a72e627f17d23"
+    },
+    "early-reset-observation.json": {
+      "bytes": 278,
+      "sha256": "64a967081ee5739a4b432e017ce5cc04fb16ac1e8584a230bcc4cde30819cbcb"
+    },
+    "evidence-verified.json": {
+      "bytes": 289,
+      "sha256": "5e6230d94e6d5533dc9720d059725c4ee81d065f6b04a4d79e41d0651e31fdb8"
+    },
+    "full.log": {
+      "bytes": 173964,
+      "sha256": "5d7097ae44225dce103443831cd8c8fba731cea0ac39c44d8f4535d771f688e3"
+    },
+    "g3-flush-decoded.json": {
+      "bytes": 352,
+      "sha256": "ddf11bc04d03e984a9600bb0de8a6e74cc0a01d89a67232a37f6f1254b3d62f8"
+    },
+    "g3-work-decoded.json": {
+      "bytes": 457,
+      "sha256": "cc4e182462dabc94201c09cf158cebd31658fe2c15667ba455dd4ef09d82f071"
+    },
+    "hardware-entry-state.json": {
+      "bytes": 959,
+      "sha256": "7c5a68b817a364edaa4e99ac47cd6f0b59a33b944c9ea82303b2778832110376"
+    },
+    "hardware-evidence/092826-14000-01.dmp": {
+      "bytes": 1042700,
+      "sha256": "fbfe88525808ce3ba98184cdf2ab170ebbc3d41f3f2a2c6a0b49bf75c41d77da"
+    },
+    "hardware-evidence/092826-14265-01.dmp": {
+      "bytes": 1063852,
+      "sha256": "3c23e144ed9d1f2323413c177b1731874449cbc1d771a7e0295fa5c433a910eb"
+    },
+    "hardware-evidence/AppleAgxAdmission.reg": {
+      "bytes": 3358,
+      "sha256": "f7b2bca54db3e1ad81f493063bd77fa2207ab2b52c4bbdc2614eb43de678e093"
+    },
+    "hardware-evidence/Application.evtx": {
+      "bytes": 21041152,
+      "sha256": "6c0482dd5e1b737ea954d22d05337f82d49363cf0305068b85237bbf557cbf47"
+    },
+    "hardware-evidence/DxgKrnl-Admin.evtx": {
+      "bytes": 69632,
+      "sha256": "58c5ccbd43e6a8b65e33b88b353dc3ee30eba55ff2e37e4a8bd7eff596bf3064"
+    },
+    "hardware-evidence/GraphicsDrivers.reg": {
+      "bytes": 59246,
+      "sha256": "c6d2fa8942493a6114dd0f0d5307e0708e584194838b4d4e1b44d3eeee67aed6"
+    },
+    "hardware-evidence/Kernel-092826-14265-01.dmp": {
+      "bytes": 1063852,
+      "sha256": "3c23e144ed9d1f2323413c177b1731874449cbc1d771a7e0295fa5c433a910eb"
+    },
+    "hardware-evidence/Kernel-MEMORY.DMP": {
+      "bytes": 557639939,
+      "sha256": "03d421e1c00558795220a10f0ff8e790a6d3dea868a31520dfb0bb34a3193b20"
+    },
+    "hardware-evidence/Live-WATCHDOG-20260928-1411.dmp": {
+      "bytes": 283965,
+      "sha256": "fc24e893ccb463da304562597fb14624dbe5650367e86c4895bd0b1e818a2b89"
+    },
+    "hardware-evidence/Live-WATCHDOG-20260928-1411.dmp.Report.wer": {
+      "bytes": 37950,
+      "sha256": "35978e32e65b97df250c2a1b72af4ee7e140a348b5bc77f200979b4e8d2ab411"
+    },
+    "hardware-evidence/System.evtx": {
+      "bytes": 21041152,
+      "sha256": "71d86f88e99b5c595c136083e1fea94cbba307a424475315531f8c6b5f538495"
+    },
+    "hardware-evidence/Wom1G3CopyQueryFailure.bin": {
+      "bytes": 168,
+      "sha256": "5e26e455622bc345d7a4c07af573feaa451bf5a56ec17136b0ead8220d2749c6"
+    },
+    "hardware-evidence/artifact-hashes.json": {
+      "bytes": 4642,
+      "sha256": "9ffd84b31e56b58499687f8a63b188562b994c5709da5b7773e0c058dd5fee26"
+    },
+    "hardware-evidence/current-watchdog-receipts.json": {
+      "bytes": 418,
+      "sha256": "29d6b11f31a885b0515f4ad6974c37d83e4c851f1fa318c0dd8fa7a68f3bd213"
+    },
+    "hardware-evidence/devnode.reg": {
+      "bytes": 108004,
+      "sha256": "004bb7ad48f111d10d6ad5ea8bcf7995a02b6a6cc157c98f6b40ff68e72e9452"
+    },
+    "hardware-evidence/hidden-state.json": {
+      "bytes": 26363,
+      "sha256": "2c89e5d1451d343a9108bebc5bbd27eaf4b2879a6c100314caaa91e5436365c8"
+    },
+    "hardware-evidence/kernel-dumps.json": {
+      "bytes": 581,
+      "sha256": "8fcfdd3689369756e4517230905ee91de3218748ea297007a5fc8f2f10ae4a81"
+    },
+    "hardware-evidence/pnp-properties.txt": {
+      "bytes": 46584,
+      "sha256": "7f50a6d05a9a9bdaeff2037c29d60c83982c425ad522c23ad4e68c219338959e"
+    },
+    "hardware-evidence/pnputil-resources.txt": {
+      "bytes": 796,
+      "sha256": "c9eed3efb9171b68e89bca4fb8400554c7ef4db1abf94eb53fd7d7daaf27d8f0"
+    },
+    "hardware-evidence/post-recovery-Application.evtx": {
+      "bytes": 21041152,
+      "sha256": "4f894a85372a4121ed962cfb03e43d500e00b050d496d35b03310d51188924ca"
+    },
+    "hardware-evidence/post-recovery-System.evtx": {
+      "bytes": 21041152,
+      "sha256": "7b16eb0c233ce92ce9ef56e2aac2da3603ffeba6e697847182cb1ca43388112f"
+    },
+    "hardware-evidence/post-recovery-events.json": {
+      "bytes": 863172,
+      "sha256": "51adb060060275e17d70f29ab44619300fda6061a3c79b25d6864a2c8e818d51"
+    },
+    "hardware-evidence/recovery-EXP801DxgBoot.etl": {
+      "bytes": 104857600,
+      "sha256": "6672e65ec2991dadee2802ef41d1ae0b2f8a95d6a6e9b2cbfa02701f7e045137"
+    },
+    "hardware-evidence/recovery-etl-receipt.json": {
+      "bytes": 799,
+      "sha256": "b0dddd3838f35705824c2bb32361bc0b7b1a6a142458dcc0994027b4e988b260"
+    },
+    "hardware-evidence/setupapi.dev.log": {
+      "bytes": 3436213,
+      "sha256": "adb041de13479b7ae77a9ac789a220034ad89c97fd549c073ea4ab741c082f74"
+    },
+    "hardware-evidence/state.json": {
+      "bytes": 28550,
+      "sha256": "27203740e10c2ae0ee4c984ae2af130fcd2987562d6f0b681b25b9b7214c39e7"
+    },
+    "hardware-evidence/umd-final-after-loss.log": {
+      "bytes": 44416,
+      "sha256": "d9063c24c84d1128a9283105f52f6f34e2147e91ac70de95d11d9086ee6bf670"
+    },
+    "hardware-evidence/umd.log": {
+      "bytes": 44416,
+      "sha256": "d9063c24c84d1128a9283105f52f6f34e2147e91ac70de95d11d9086ee6bf670"
+    },
+    "heartbeat.jsonl": {
+      "bytes": 207,
+      "sha256": "a1b05d84a16f62b95b847130aef60585ad005ebae3416927a899a78a1b5b28b8"
+    },
+    "hidden-before-cleanup.json": {
+      "bytes": 685,
+      "sha256": "f2b396f8386d285e97206066ec3bc6fc9f11142db007400fe570500dc0bcff08"
+    },
+    "hidden-cleanup.log": {
+      "bytes": 1171,
+      "sha256": "93c83233a282fe167d139b4fef67ae5be6bf1477c8e619dac2417b5bbebb3d56"
+    },
+    "hidden-inventory.json": {
+      "bytes": 2779,
+      "sha256": "d919595ed62754cd8ce718f5481ed04b542d64b47111fb9de10ff0bc56b68aab"
+    },
+    "launch-time.json": {
+      "bytes": 86,
+      "sha256": "bc8b8e2b2e39313438b24b87f1286cd73708e1f954c9a8cdd84877b558633acc"
+    },
+    "minidump-analysis.txt": {
+      "bytes": 12089,
+      "sha256": "6640d427b2569401060d06b186a20c67d9d2e0155490edbe8d5b43eb83436ecc"
+    },
+    "monitor.log": {
+      "bytes": 207,
+      "sha256": "a1b05d84a16f62b95b847130aef60585ad005ebae3416927a899a78a1b5b28b8"
+    },
+    "ordinary-durable.json": {
+      "bytes": 508,
+      "sha256": "8cf90b343820abb199159a523dd202a83560687491b0c78e46408177bca00e6d"
+    },
+    "ordinary-final-log-snapshot.txt": {
+      "bytes": 104479,
+      "sha256": "63518cde5d8aa0700eb452d25f09d37a2d6b34f40108aa9f47daca22f78f14b9"
+    },
+    "preflight-ordinary-durable.json": {
+      "bytes": 508,
+      "sha256": "c7f89abba8b89b1fe210c7e1558796d1cfc58edeb5a787ce1c975188005606eb"
+    },
+    "query-decoded.json": {
+      "bytes": 1048,
+      "sha256": "e1da05bdc3be1a62eea9194a721969566cb6368ebc563c65180bfe7d09043268"
+    },
+    "recovery-boot-events.json": {
+      "bytes": 9486,
+      "sha256": "641d2c9c8805e962458f054919472e1b83ad6838293f4b3fe89184690734aeeb"
+    },
+    "review-exp865-after.txt": {
+      "bytes": 3903,
+      "sha256": "0b343e96dd95f1e472780ec13bd29b66710e38c57e212355b8cd4ce8c57de1dc"
+    },
+    "stage-output-host.log": {
+      "bytes": 808,
+      "sha256": "12554d490e527e2c91d92a1d8350b326633fe23ac323e08a99ef85b65ef4c0d5"
+    },
+    "stage-receipt.json": {
+      "bytes": 311,
+      "sha256": "8c4235832e170eb680e354143e271b85c0510ba59fb9f4695d01a2b0f8c738a9"
+    },
+    "transfer-verified.log": {
+      "bytes": 211,
+      "sha256": "c2591af2598a0850e2d41fc34c414b8c3f279aee099b5f48b36be0802d702ffb"
+    },
+    "umd-counts.json": {
+      "bytes": 1161,
+      "sha256": "bf911771fa91f0594013b99cf814d3eba762ddf90253d747b74c99fa29de1958"
+    },
+    "watchdog-analysis.txt": {
+      "bytes": 11343,
+      "sha256": "681976efc454ce2900eb62177e5f1da5a10b96744d1bb71baeb6efaed78fa017"
+    }
+  }
+}

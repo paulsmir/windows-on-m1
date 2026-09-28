@@ -1,3 +1,31 @@
+# EXP865 — first private completion advances; later TA stall; clean Code28
+
+One865/source26cbd7e6 owner-only-on-a9ecd3ea, unchangedR143, Flushexcluded.
+Kernel116 at39.288s(CPU1), live141 at39.160s(CPU3); no originalSSH/Code0 sample.
+Dump: backendSubmitted and pendingowner63/fence220; G3LastCompleted149 and
+queue149Success corroborate first TA/D3 completion. Scheduler219 includes CPU
+work, not219GPUrenders. Current220: TAptr3expected3 but stamp7a000000 versus
+7a000100, event0unseen/complete0; D3ptr4/stamp3d000100/event1seen/complete1.
+Private220GpuDone0/quarantined; graph6/root9d6490000/gen895/lease2/jobinflight1.
+QUERY24 is processPoisoned before context/range lookup. No durable queue-fault
+receipt; MMIO pages missing, firmware/UAT fault remains unknown.
+
+600s stability/visible-frame checkpoints failed. Single scanoutseq2nonzero0;
+UMD445lines/0reject-seterror. Original ETL unavailable: spontaneous reset before
+SSH prevented copy. Recovery trace is labeled/excluded; no original DMA claim.
+27files754887182B copied/hashed, kernel+minidump+watchdog and matchingPDB retained.
+Mandatory hiddenCode45 exactoem5/package865 cleanup then ordinaryCode28 durable
+12:23:35.3742925Z: present1/package0/arms0/files0/service0/signer0/diagnostics0,
+CPU8/disks2OK/USB5/RDP; intentional autologon retained. No retry/rearm.
+Result .local/experiments/EXP865-r150-owner/hardware-result.json
+SHA256 a84a247f33998570b640b47546daf8627f375bd21cf1c5c4ccad84a341489542.
+Report investigation/analysis/EXP865-verdict.md; evidence investigation/evidence/EXP865.
+
+WHY CONTINUE COMPARISON: owner correction crosses submission and first private
+completion. Next causal target is accepted220 missing TA event/stamp while D3
+is marked complete; inspect that boundary and completion freshness offline.
+No new package, firmware change, rearm or hardware run authorized by this result.
+
 # EXP865 — package865 prepared; STOP at GO
 
 Source branch exp/865-owner26cbd7e6 = EXP864a9ecd3ea plus ONLY source/test

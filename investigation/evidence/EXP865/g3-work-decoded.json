@@ -1,0 +1,22 @@
+{
+  "Version": 1,
+  "Bytes": 112,
+  "Operation": 9,
+  "Irql": 0,
+  "DmaSize": 4096,
+  "PrivateSize": 4096,
+  "MultipassOffset": 221184,
+  "DmaBufferWriteOffset": 0,
+  "Direction": 0,
+  "Flags": 0,
+  "Pattern": 0,
+  "Reserved": 0,
+  "SystemContext": 18446691362128239872,
+  "Allocation": 18446691362129507712,
+  "AllocationOffset": 0,
+  "SourceVa": 0,
+  "DestinationVa": 68354048,
+  "WorkBytes": 262144,
+  "SourcePageTable": 0,
+  "DestinationPageTable": 0
+}

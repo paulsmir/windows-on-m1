@@ -1,0 +1,285 @@
+
+************* Preparing the environment for Debugger Extensions Gallery repositories **************
+   ExtensionRepository : Implicit
+   UseExperimentalFeatureForNugetShare : true
+   AllowNugetExeUpdate : true
+   NonInteractiveNuget : true
+   AllowNugetMSCredentialProviderInstall : true
+   AllowParallelInitializationOfLocalRepositories : true
+
+   EnableRedirectToV8JsProvider : false
+
+   -- Configuring repositories
+      ----> Repository : LocalInstalled, Enabled: true
+      ----> Repository : UserExtensions, Enabled: true
+
+>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.000 seconds
+
+************* Waiting for Debugger Extensions Gallery to Initialize **************
+
+>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.016 seconds
+   ----> Repository : UserExtensions, Enabled: true, Packages count: 0
+   ----> Repository : LocalInstalled, Enabled: true, Packages count: 29
+
+Microsoft (R) Windows Debugger Version 10.0.26100.6584 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+
+Loading Dump File [C:\Users\pauls\EXP865-r150-owner\Kernel-092826-14265-01.dmp]
+Mini Kernel Dump File: Only registers and stack trace are available
+
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*C:\Symbols*https://msdl.microsoft.com/download/symbols
+OK                                             C:\Users\pauls\EXP865-r150-owner
+Symbol search path is: srv*C:\Symbols*https://msdl.microsoft.com/download/symbols;C:\Users\pauls\EXP865-r150-owner
+Executable search path is:
+Windows 10 Kernel Version 26100 MP (8 procs) Free ARM 64-bit (AArch64)
+Product: WinNt, suite: TerminalServer SingleUserTS
+Edition build lab: 26100.1.arm64fre.ge_release.240331-1435
+Kernel base = 0xfffff800`d3a00000 PsLoadedModuleList = 0xfffff800`d476ac50
+Debug session time: Mon Sep 28 14:11:33.745 2026 (UTC + 2:00)
+System Uptime: 0 days 0:00:39.288
+Loading Kernel Symbols
+...............................................................
+................................................................
+...................................
+Loading User Symbols
+
+Loading unloaded module list
+........
+For analysis of this file, run !analyze -v
+1: kd> cdb: Reading initial command '.bugcheck; !analyze -v; lmvm AppleAgxRenderAdmission; kv; q'
+Bugcheck code 00000116
+Arguments ffffd00f`21f42030 fffff800`d1fa6cb0 ffffffff`c0000483 00000000`00000003
+*******************************************************************************
+*                                                                             *
+*                        Bugcheck Analysis                                    *
+*                                                                             *
+*******************************************************************************
+
+VIDEO_TDR_FAILURE (116)
+Attempt to reset the display driver and recover from timeout failed.
+Arguments:
+Arg1: ffffd00f21f42030, Optional pointer to internal TDR recovery context (TDR_RECOVERY_CONTEXT).
+Arg2: fffff800d1fa6cb0, The pointer into responsible device driver module (e.g. owner tag).
+Arg3: ffffffffc0000483, Optional error code (NTSTATUS) of the last failed operation.
+Arg4: 0000000000000003, Optional internal context dependent data.
+
+Debugging Details:
+------------------
+
+
+KEY_VALUES_STRING: 1
+
+    Key  : Analysis.CPU.mSec
+    Value: 1499
+
+    Key  : Analysis.Elapsed.mSec
+    Value: 4102
+
+    Key  : Analysis.IO.Other.Mb
+    Value: 0
+
+    Key  : Analysis.IO.Read.Mb
+    Value: 0
+
+    Key  : Analysis.IO.Write.Mb
+    Value: 0
+
+    Key  : Analysis.Init.CPU.mSec
+    Value: 203
+
+    Key  : Analysis.Init.Elapsed.mSec
+    Value: 287
+
+    Key  : Analysis.Memory.CommitPeak.Mb
+    Value: 101
+
+    Key  : Bugcheck.Code.KiBugCheckData
+    Value: 0x116
+
+    Key  : Bugcheck.Code.LegacyAPI
+    Value: 0x116
+
+    Key  : Failure.Bucket
+    Value: 0x116_IMAGE_AppleAgxRenderAdmission.sys
+
+    Key  : Failure.Hash
+    Value: {fdf7eac1-3a4f-82ab-6fec-09e2a3edd913}
+
+    Key  : Hypervisor.RootFlags.AccessStats
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.CrashdumpEnlightened
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.CreateVirtualProcessor
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.DisableHyperthreading
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.HostTimelineSync
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.HypervisorDebuggingEnabled
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.IsHyperV
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.LivedumpEnlightened
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.MapDeviceInterrupt
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.MceEnlightened
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.Nested
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.StartLogicalProcessor
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.Value
+    Value: 0
+
+    Key  : Hypervisor.RootFlags.ValueHex
+    Value: 0
+
+    Key  : WER.OS.Branch
+    Value: ge_release
+
+    Key  : WER.OS.Version
+    Value: 10.0.26100.1
+
+
+BUGCHECK_CODE:  116
+
+BUGCHECK_P1: ffffd00f21f42030
+
+BUGCHECK_P2: fffff800d1fa6cb0
+
+BUGCHECK_P3: ffffffffc0000483
+
+BUGCHECK_P4: 3
+
+FILE_IN_CAB:  Kernel-092826-14265-01.dmp
+
+VIDEO_TDR_CONTEXT: dt dxgkrnl!_TDR_RECOVERY_CONTEXT ffffd00f21f42030
+Symbol dxgkrnl!_TDR_RECOVERY_CONTEXT not found.
+
+PROCESS_OBJECT: 0000000000000003
+
+BLACKBOXBSD: 1 (!blackboxbsd)
+
+
+BLACKBOXNTFS: 1 (!blackboxntfs)
+
+
+BLACKBOXPNP: 1 (!blackboxpnp)
+
+
+BLACKBOXWINLOGON: 1
+
+CUSTOMER_CRASH_COUNT:  1
+
+PROCESS_NAME:  System
+
+STACK_TEXT:
+ffffe100`be8aa3a0 fffff800`d3c5b8f4     : fffff5fa`fd7ebf00 fffff800`d464ab80 ffffe100`be8aa9c0 fffff800`d3c5b8f4 : nt!KeBugCheck2+0x32c
+ffffe100`be8aa9c0 fffff800`cd8d449c     : ffffe100`be8aa9d0 fffff800`cd8d449c ffffe100`be8aaa30 fffff800`cd88a030 : nt!KeBugCheckEx+0x14
+ffffe100`be8aa9d0 fffff800`cd88a030     : ffffe100`be8aaa30 fffff800`cd88a030 fffff800`d1fa6cb0 00000000`00000000 : dxgkrnl!TdrBugcheckOnTimeout+0x104
+ffffe100`be8aaa20 fffff800`cd88bb0c     : ffffa680`7b3d1980 00000000`00000000 ffffe100`be8aaa90 fffff800`cd88bb0c : dxgkrnl!DXGADAPTER::PrepareToReset+0x230
+ffffe100`be8aaa80 fffff800`cd8d39d0     : 00000000`00000000 ffff8b8e`575381f5 ffffe100`be8aab10 fffff800`cd8d39d0 : dxgkrnl!DXGADAPTER::Reset+0x2c4
+ffffe100`be8aab10 fffff800`cd8d3b48     : ffffe100`be8aab30 fffff800`cd8d3b48 ffffd00f`21f42030 ffffd00f`21d90f20 : dxgkrnl!TdrResetFromTimeout+0x20
+ffffe100`be8aab30 fffff800`d3d76690     : ffffe100`be8aacd0 fffff800`d3d76690 ffffd00f`179af080 fffff800`cd8d3b20 : dxgkrnl!TdrResetFromTimeoutWorkItem+0x28
+ffffe100`be8aab60 fffff800`d3cf13b4     : fffff800`d4814300 00000000`00000000 ffffd00f`1667e9a0 00000000`00000000 : nt!ExpWorkerThread+0x180
+ffffe100`be8aad30 fffff800`d402dcd4     : 00000000`00000000 fffff800`d402dcd4 fffff800`d4809ab8 00000000`01440b96 : nt!PspSystemThreadStartup+0x54
+ffffe100`be8aad90 00000000`00000000     : ffffd00f`166eace0 fffff800`d3d76510 fffff800`d3cf1360 00000000`00000000 : nt!KiStartSystemThread+0x24
+
+
+FAULTING_SOURCE_LINE:  C:\Users\pauls\AD04-persistent-dwm-next\drivers\apple-agx\render-admission\src\scheduler_windows.c
+
+FAULTING_SOURCE_FILE:  C:\Users\pauls\AD04-persistent-dwm-next\drivers\apple-agx\render-admission\src\scheduler_windows.c
+
+FAULTING_SOURCE_LINE_NUMBER:  491
+
+SYMBOL_NAME:  AppleAgxRenderAdmission!AdmissionDdiResetFromTimeout+0
+
+MODULE_NAME: AppleAgxRenderAdmission
+
+IMAGE_NAME:  AppleAgxRenderAdmission.sys
+
+IMAGE_VERSION:  30.0.865.0
+
+STACK_COMMAND:  .cxr; .ecxr ; kb
+
+FAILURE_BUCKET_ID:  0x116_IMAGE_AppleAgxRenderAdmission.sys
+
+OS_VERSION:  10.0.26100.1
+
+BUILDLAB_STR:  ge_release
+
+OSPLATFORM_TYPE:  arm64
+
+OSNAME:  Windows 10
+
+FAILURE_ID_HASH:  {fdf7eac1-3a4f-82ab-6fec-09e2a3edd913}
+
+Followup:     MachineOwner
+---------
+
+Browse full module list
+start             end                 module name
+fffff800`d1f80000 fffff800`d1fdb000   AppleAgxRenderAdmission   (private pdb symbols)  c:\users\pauls\exp865-r150-owner\AppleAgxRenderAdmission.pdb
+    Loaded symbol image file: AppleAgxRenderAdmission.sys
+    Mapped memory image file: c:\users\pauls\exp865-r150-owner\AppleAgxRenderAdmission.sys
+    Image path: \SystemRoot\System32\drivers\AppleAgxRenderAdmission.sys
+    Image name: AppleAgxRenderAdmission.sys
+    Browse all global symbols  functions  data
+    Timestamp:        Mon Sep 28 13:55:37 2026 (6ABA55B9)
+    CheckSum:         0005D8A2
+    ImageSize:        0005B000
+    File version:     30.0.865.0
+    Product version:  30.0.865.0
+    File flags:       0 (Mask 3F)
+    File OS:          40004 NT Win32
+    File type:        3.4 Driver
+    File date:        00000000.00000000
+    Translations:     0409.04b0
+    Information from resource tables:
+        CompanyName:      Windows on Apple Silicon Project
+        ProductName:      Apple AGX render admission
+        ProductVersion:   30.0.865.0
+        FileVersion:      30.0.865.0
+        FileDescription:  Apple AGX render admission
+ # Child-SP          RetAddr               : Args to Child                                                           : Call Site
+00 ffffe100`be8aa3a0 fffff800`d3c5b8f4     : fffff5fa`fd7ebf00 fffff800`d464ab80 ffffe100`be8aa9c0 fffff800`d3c5b8f4 : nt!KeBugCheck2+0x32c
+01 ffffe100`be8aa9c0 fffff800`cd8d449c     : ffffe100`be8aa9d0 fffff800`cd8d449c ffffe100`be8aaa30 fffff800`cd88a030 : nt!KeBugCheckEx+0x14
+02 ffffe100`be8aa9d0 fffff800`cd88a030     : ffffe100`be8aaa30 fffff800`cd88a030 fffff800`d1fa6cb0 00000000`00000000 : dxgkrnl!TdrBugcheckOnTimeout+0x104
+03 ffffe100`be8aaa20 fffff800`cd88bb0c     : ffffa680`7b3d1980 00000000`00000000 ffffe100`be8aaa90 fffff800`cd88bb0c : dxgkrnl!DXGADAPTER::PrepareToReset+0x230
+04 ffffe100`be8aaa80 fffff800`cd8d39d0     : 00000000`00000000 ffff8b8e`575381f5 ffffe100`be8aab10 fffff800`cd8d39d0 : dxgkrnl!DXGADAPTER::Reset+0x2c4
+05 ffffe100`be8aab10 fffff800`cd8d3b48     : ffffe100`be8aab30 fffff800`cd8d3b48 ffffd00f`21f42030 ffffd00f`21d90f20 : dxgkrnl!TdrResetFromTimeout+0x20
+06 ffffe100`be8aab30 fffff800`d3d76690     : ffffe100`be8aacd0 fffff800`d3d76690 ffffd00f`179af080 fffff800`cd8d3b20 : dxgkrnl!TdrResetFromTimeoutWorkItem+0x28
+07 ffffe100`be8aab60 fffff800`d3cf13b4     : fffff800`d4814300 00000000`00000000 ffffd00f`1667e9a0 00000000`00000000 : nt!ExpWorkerThread+0x180
+08 ffffe100`be8aad30 fffff800`d402dcd4     : 00000000`00000000 fffff800`d402dcd4 fffff800`d4809ab8 00000000`01440b96 : nt!PspSystemThreadStartup+0x54
+09 ffffe100`be8aad90 00000000`00000000     : ffffd00f`166eace0 fffff800`d3d76510 fffff800`d3cf1360 00000000`00000000 : nt!KiStartSystemThread+0x24
+quit:
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\atlmfc.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\ObjectiveC.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\concurrency.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\cpp_rest.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Kernel.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\stl.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Data.Json.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Media.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\windows.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\winrt.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Usb4Kd.natvis'

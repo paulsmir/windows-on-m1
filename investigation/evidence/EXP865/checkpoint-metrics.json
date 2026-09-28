@@ -1,0 +1,12 @@
+{
+  "original_code0_samples": 0,
+  "ssh_failures": 3,
+  "original_boot_stability": "FAILED_EARLY_0x116",
+  "uptime_bugcheck_seconds": 39.288,
+  "uptime_live141_seconds": 39.16,
+  "ten_minute_checkpoint": "FAILED",
+  "visible_frame_checkpoint": "FAILED_NONZERO_0",
+  "physical_display_and_input": "NOT_OBSERVED",
+  "runtime_DWM_and_memory_trend": "NOT_OBSERVED",
+  "recovery_samples_excluded": true
+}

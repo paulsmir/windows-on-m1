@@ -1,0 +1,65 @@
+{
+  "matching_private_symbols": "AppleAgxRenderAdmission.pdb package865",
+  "kernel_dump_sha256": "03d421e1c00558795220a10f0ff8e790a6d3dea868a31520dfb0bb34a3193b20",
+  "adapter": "0xffffd00f20b02000",
+  "adapter_physical_device": "0xffffd00f179f48f0",
+  "backend_phase": "Submitted",
+  "backend_owner": 63,
+  "pending_submission_owner": 63,
+  "scheduler_completed_fence": 219,
+  "scheduler_active_fence": 220,
+  "preemption_fence": 1,
+  "preemption_phase": "WaitCurrentBoundary",
+  "g3_last_completed_fence": 149,
+  "queue_last_completion": {
+    "fence": 149,
+    "status": "Success"
+  },
+  "current_fence": 220,
+  "current_node": 0,
+  "current_engine": 0,
+  "queue_provider_phase": "Faulted",
+  "queue_runtime_phase": "Faulted",
+  "ta": {
+    "event": 0,
+    "done_pointer": 3,
+    "expected_done_pointer": 3,
+    "stamp": "0x7a000000",
+    "expected_stamp": "0x7a000100",
+    "event_seen": false,
+    "complete": false
+  },
+  "d3": {
+    "event": 1,
+    "done_pointer": 4,
+    "expected_done_pointer": 4,
+    "stamp": "0x3d000100",
+    "expected_stamp": "0x3d000100",
+    "event_seen": true,
+    "complete": true
+  },
+  "process": {
+    "driver_id": 6,
+    "root": "0x9d6490000",
+    "mapping_generation": 895,
+    "lease_token": 2,
+    "job_in_flight": true,
+    "poisoned": true
+  },
+  "private_scene": {
+    "fence": 220,
+    "queued": 1,
+    "started": 1,
+    "gpu_done": 0,
+    "reported": 0,
+    "quarantined": 1
+  },
+  "first_completion_interpretation": "Queue success149 + G3 LastCompletedFence149 + scheduler219 corroborate earlier completion. AdmissionBackendComplete checks both TA/D3 before G3CompleteJob. Scheduler219 includes CPU work, not219 GPU renders.",
+  "current_completion_limit": "D3 complete is the saved software event/stamp observation; no second full TA+3D completion or pixel correctness claim.",
+  "fault_receipts": {
+    "Wom1QueueFaultSnapshot": "ABSENT",
+    "Wom1G4SubmitFailure": "ABSENT",
+    "SGX_MMIO_dump_pages": "NOT_PRESENT"
+  },
+  "next_boundary": "Determine why submitted fence220 lacks TA event0/stamp0x7a000100; preserve distinction between execution fault and reuse/completion identity. No new hardware authorized."
+}
