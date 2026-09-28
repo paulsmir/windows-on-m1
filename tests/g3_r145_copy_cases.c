@@ -10,6 +10,12 @@ static PVOID r145_acquire(const DXGKARGCB_GETHANDLEDATA *q,HANDLE *ref) {
 static VOID r145_release(DXGKARGCB_RELEASEHANDLEDATA ref) {
   assert(ref.ReleaseHandle==r145_open && r145_references==1);--r145_references;
 }
+static ADMISSION_G3_STATE *r157_state;
+static ADMISSION_G3_PROCESS *r157_process;
+static void r157_complete(void) {
+  if (r157_state) r157_state->ActiveProcess=NULL;
+  if (r157_process) { r157_process->Graph.JobInFlight=0; r157_process->Graph.LeaseToken=0; }
+}
 static void r145_copy_cases(void) {
   ADMISSION_CONTEXT a={0};ADMISSION_G3_STATE state={0};REPLAY_BROKER b={0};
   APPLE_AGX_GPUVA_V5_IO io={&b,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier};
@@ -131,6 +137,18 @@ static void r145_copy_cases(void) {
   QUERY_REJECT(state.ActiveProcess=p,state.ActiveProcess=NULL,42,STATUS_DEVICE_BUSY);
   QUERY_REJECT(p->Graph.JobInFlight=1,p->Graph.JobInFlight=0,43,STATUS_DEVICE_BUSY);
   QUERY_REJECT(p->Graph.LeaseToken=1,p->Graph.LeaseToken=0,44,STATUS_DEVICE_BUSY);
+  /* R157 (EXP871): copies arriving while a native job runs are waited out
+   * (lock released) instead of refused with busy; the hook plays the
+   * concurrent joined completion. The bounded path above still refuses. */
+  r157_state=&state; r157_process=p; replay_delay_hook=r157_complete; replay_delay_calls=0;
+  state.ActiveProcess=p; p->Graph.JobInFlight=1; p->Graph.LeaseToken=1;
+  a.G3CopyQueryFailureClaim=0; a.G3CopyQueryFailurePredicate=0;
+  { NTSTATUS got=AdmissionDdiEscape(&a,&escape);
+    assert(got==STATUS_SUCCESS && replay_delay_calls>=1);
+    assert(!state.ActiveProcess && !p->Graph.JobInFlight && !p->Graph.LeaseToken &&
+        replay_irql==PASSIVE_LEVEL && !r145_references); }
+  replay_delay_hook=NULL; r157_state=NULL; r157_process=NULL;
+  q->ProcessGeneration=0; q->MappingGeneration=0;
   QUERY_REJECT(allocation.Object.Description.Size=0,allocation.Object.Description.Size=0x10000,48,STATUS_INVALID_PARAMETER);
   QUERY_REJECT(allocation.Object.Description.Size=1ULL<<32,allocation.Object.Description.Size=0x10000,49,STATUS_INVALID_PARAMETER);
   QUERY_REJECT((q->GpuVa=(1ULL<<39)-65536,allocation.Object.Description.Size=131072),(q->GpuVa=65536,allocation.Object.Description.Size=65536),52,STATUS_INVALID_PARAMETER);

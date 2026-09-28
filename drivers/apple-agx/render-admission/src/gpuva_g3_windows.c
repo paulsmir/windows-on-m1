@@ -618,6 +618,8 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   ULONG predicate=0u, operation=MAXULONG;
   BOOLEAN isQuery=FALSE;
   NTSTATUS status=STATUS_INVALID_PARAMETER;
+  UINT wait_ms;
+  LARGE_INTEGER delay;
   /* Read only the operation tag when the OS-buffered envelope covers it.
    * An absent/truncated tag is not guessed to be a QUERY. */
   if(args && KeGetCurrentIrql()==PASSIVE_LEVEL && args->pPrivateDriverData &&
@@ -663,8 +665,20 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   opened=(ADMISSION_OPEN_ALLOCATION *)adapter->Interface.DxgkCbAcquireHandleData(
       &lookup,&reference.ReleaseHandle);
   COPY_REJECT_IF(!opened || !reference.ReleaseHandle, 22u, STATUS_INVALID_HANDLE, Release);
-  ExAcquireFastMutex(&state->Lock);
-  p=AdmissionGpuvaG3FindProcess(state,args->hKmdProcessHandle);
+  /* R157 (EXP871): a native job (any process, node 0 is serialized) is
+   * normally milliseconds from joined completion. Wait for it with the G3
+   * lock released rather than refusing the copy: a refused copy rejects the
+   * UMD batch and the D3D device never presents. The bound exceeds TdrDelay;
+   * predicates 42-44 still refuse if the job does not finish. */
+  for(wait_ms=0u;;++wait_ms) {
+    ExAcquireFastMutex(&state->Lock);
+    p=AdmissionGpuvaG3FindProcess(state,args->hKmdProcessHandle);
+    if(!p || (!state->ActiveProcess && !p->Graph.JobInFlight && !p->Graph.LeaseToken) ||
+       wait_ms>=3000u) break;
+    ExReleaseFastMutex(&state->Lock);
+    delay.QuadPart=-10000LL;
+    (void)KeDelayExecutionThread(KernelMode,FALSE,&delay);
+  }
   COPY_REJECT_IF(!p, 23u, STATUS_INVALID_PARAMETER, Unlock);
   COPY_REJECT_IF(p->Poisoned, 24u, STATUS_INVALID_PARAMETER, Unlock);
   COPY_REJECT_IF(p->Graph.Uncertain, 25u, STATUS_INVALID_PARAMETER, Unlock);
@@ -770,6 +784,8 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
   NTSTATUS status=STATUS_INVALID_PARAMETER;
   BOOLEAN fresh;
   UINT i;
+  UINT wait_ms;
+  LARGE_INTEGER delay;
   if (!adapter || !adapter->Started || !args ||
       KeGetCurrentIrql()!=PASSIVE_LEVEL || args->Flags.Value!=1u ||
       args->PrivateDriverDataSize!=sizeof(q) || !args->pPrivateDriverData)
@@ -781,8 +797,18 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
     if (q.Ranges[i].Va || q.Ranges[i].Bytes || q.Ranges[i].Reserved) return status;
   state=(ADMISSION_G3_STATE *)adapter->GpuvaG3State;
   if (!state) return STATUS_INVALID_DEVICE_STATE;
-  ExAcquireFastMutex(&state->Lock);
-  p=AdmissionGpuvaG3FindProcess(state,args->hKmdProcessHandle);
+  /* R157: ACQUIRE/PREPARE map private tables, which is not allowed while this
+   * process has a native job in flight. Wait (lock released, bounded above
+   * TdrDelay) for joined completion instead of refusing with busy. */
+  for (wait_ms=0u;;++wait_ms) {
+    ExAcquireFastMutex(&state->Lock);
+    p=AdmissionGpuvaG3FindProcess(state,args->hKmdProcessHandle);
+    if (!p || q.Operation==APPLE_AGX_G3_PRIVATE_RELEASE ||
+        (!p->Graph.JobInFlight && !p->Graph.LeaseToken) || wait_ms>=3000u) break;
+    ExReleaseFastMutex(&state->Lock);
+    delay.QuadPart=-10000LL;
+    (void)KeDelayExecutionThread(KernelMode,FALSE,&delay);
+  }
   if (!p || p->Poisoned || p->Graph.Uncertain) goto Done;
   /* Compare handles against attached objects before dereferencing them. */
   for (context=p->Contexts;context && (HANDLE)context!=args->hContext;
