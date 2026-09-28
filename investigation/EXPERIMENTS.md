@@ -49180,3 +49180,21 @@ REVIEW R47: DEFER — outside the measured Render ordinal11 VA access boundary; 
 REVIEW R45: DEFER — outside the measured Render ordinal11 VA access boundary; no unrelated change.
 REVIEW R40: DEFER — outside the measured Render ordinal11 VA access boundary; no unrelated change.
 REVIEW R37: DEFER — outside the measured Render ordinal11 VA access boundary; no unrelated change.
+
+
+### 2026-09-28 R142 offline correction to EXP855E (no new hardware run)
+
+The EXP855E RUN AFTER and RECOVERY AFTER entries labelled Render ordinal11
+`Stencil.CompBase`. That attribution is incorrect: the access counter is global;
+v3 Process[0..8], CPU envelope9 and the single attachment10 precede
+`VdmCtrlStreamBase` at11. Receipt read1 agrees; Stencil.CompBase is a write root.
+Original results above remain unchanged. Four captured logical segment0 PFNs
+97627d/97638a/976389/976388 cannot form a native16KiB leaf. Current production
+serializer/parser replay verifies the corrected attribution; no GPU-backing fix
+is claimed. Saved ETL was decoded on the builder only, no Air/package/build.
+Local40MiB is used, but exact VA-to-Windows-allocation and eviction causality
+are absent from saved diagnostics. Decision and evidence limits:
+`investigation/analysis/R142-render-backing.md`; derived counts/hash provenance:
+`investigation/analysis/R142-render-backing-evidence.json`. Next design is GPU-only
+local canonical BOs with CPU staging/readback, not a CPU-visible local-only tweak.
+Accepted recovery and EXP855E structural-advance verdict are unchanged.

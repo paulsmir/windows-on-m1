@@ -8,6 +8,14 @@
 static int mapped(void *ctx,unsigned long long va,unsigned bytes,int write) {
   (void)ctx;(void)write;return va && bytes;
 }
+/* R142: ordinal counts all access kinds, not render structure fields. */
+static int reject_vdm(void *ctx,unsigned long long va,unsigned bytes,int write,
+    APPLE_AGX_G4_ACCESS_KIND kind,unsigned ordinal) {
+  (void)ctx;
+  if(kind!=AppleAgxG4AccessRender) return 1;
+  assert(ordinal==11 && bytes==1 && !write && va==0x900000);
+  return 0;
+}
 static APPLE_AGX_G4_PARSE_RESULT parse(AGX_G4_PRIVATE *p,unsigned capacity,
     unsigned bytes,APPLE_AGX_G4_SUBMIT_VIEW *v) {
   return AppleAgxG4ParseSubmit(p,capacity,sizeof(p->Header)+bytes,
@@ -42,6 +50,13 @@ static void envelope(unsigned width,unsigned height,unsigned long long va) {
   assert(view.AttachmentCount==1 && view.Attachments[0].Pointer==color.va);
   assert(view.Attachments[0].Size==(uint64_t)width*height*4);
   assert(!view.Attachments[0].Pad && !view.Attachments[0].Flags);
+  APPLE_AGX_G4_FAILURE failure={0};
+  assert(AppleAgxG4ParseSubmitEx(&p,capacity,sizeof(p.Header)+bytes,
+      va,bytes,reject_vdm,NULL,&view,&failure)==AppleAgxG4ParseUnmapped);
+  assert(failure.Kind==AppleAgxG4AccessRender && failure.Ordinal==11 &&
+      failure.Va==r.VdmCtrlStreamBase && failure.Bytes==1 && !failure.Write);
+  /* The old field-index reading would incorrectly name Stencil.CompBase. */
+  assert(failure.Va!=r.Stencil.CompBase);
   AGX_G4_PRIVATE bad=p;
   /* Each bad field is independently refused, not hidden by a different fault. */
   ((APPLE_AGX_G4_NATIVE_HEADER *)bad.Native)->VdmBarrier=0;

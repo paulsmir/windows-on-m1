@@ -1,5 +1,33 @@
 # GPU current boundary — 2026-09-28
 
+
+## 2026-09-28 R142 — VDM system backing attributed offline; split-storage decision
+
+Correction to EXP855E's earlier ordinal label: Render ordinal11 is
+VdmCtrlStreamBase, not Stencil.CompBase. Global counter = nine Process +
+CPU envelope + one attachment; read1 at0x2f0000 matches the first Render root.
+Four logical PTEs are valid/write segment0: PFNs97627d/97638a/976389/976388,
+misaligned/scattered4K, so no native16K leaf can be published. Source identifies
+Encoder class3/512KiB; saved diagnostics lack the exact VA-to-allocation-handle join.
+ETL proves local40MiB is used (peak33.171875MiB, including tables/primary);
+all152 recorded512KiB native-shaped page-ins use aperture. It cannot prove the
+exact failed BO's eviction/budget reason. Preferred2/system64 were already set.
+
+Decision: next design uses VidMm GPU-only local canonical BOs plus CPU staging/
+readback for every GPU-accessed class. Microsoft WDDM3.0 requires CPU-visible
+system fallback; a local-only flag tweak cannot retain current CPU Lock behavior.
+Copy ABI, synchronization, imports and40MiB working-set admission need design
+before implementation. No driver/firmware change or package/Air access in R142.
+Production serializer/parser attribution regression passes; G4 31PASS; full1141
+matches baseline15 failures/41errors/2skips, exact names unchanged.
+Details: investigation/analysis/R142-render-backing.md and derived evidence JSON.
+
+WHY CONTINUE COMPARISON: no historical pass is needed. Current receipt and
+sources isolate the VDM backing contract; next causal work is the bounded
+GPU-only local/staging design and its offline lifetime/copy/residency gates.
+No new Air run authorized. Ordinary EXP377/392 recovered by EXP855E remains
+accepted; no TA+3D/fence/DWM-frame claim.
+
 ## 2026-09-28 EXP855E — R141 crossed attachment parsing; ordinary Code28 recovered
 
 GO_EXP855E preceded transfer and one cold R110 full-owner boot. Source
