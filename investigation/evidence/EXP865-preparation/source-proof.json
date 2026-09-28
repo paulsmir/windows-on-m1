@@ -1,0 +1,12 @@
+{
+  "SourceCommit": "26cbd7e6ed728a7be6e1302f0b6ca4c2a2edb917",
+  "base": "a9ecd3eac75cc4058979bdfd8fd97052d8831fb2",
+  "paths": [
+    "drivers/apple-agx/render-admission/src/backend_platform_windows.c",
+    "tests/test_r150_backend_identity.py"
+  ],
+  "byte_equal": true,
+  "diff_sha256": "f5595c3c8d0e7d5bd0afa0ffeb283db1ba4e0627014d1430ccd22d5a6bb2ba85",
+  "FlushAncestor": false,
+  "git_tree": "144d370574f37d462cff4cbac802161dd2209552"
+}

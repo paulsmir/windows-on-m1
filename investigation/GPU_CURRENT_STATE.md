@@ -1,3 +1,28 @@
+# EXP865 — package865 prepared; STOP at GO
+
+Source branch exp/865-owner26cbd7e6 = EXP864a9ecd3ea plus ONLY source/test
+paths of6b7f8c79. Byte diff matches original; Flush0f51f3f5 excluded.
+Backend owner63 preserved, hardware VM slot1 unchanged; R143 firmware bytes
+unchanged.536 source hashes and SourceCommit=NativeArchiveCommit=tip verified.
+ARM64 KMD/UMD0warnings0errors; native CAT membership and unchanged signer pass.
+Guest trust check pending staging. Targeted identity legacy/B1/G3 PASS; full
+host1161 tests18F40E2S with baseline/environment/source-scope limits recorded.
+
+Main .local/experiments/EXP865-r150-owner/preparation-result.json
+SHA256 24c93a4631a001635fb86e84002f2de7561c9a26cf46bc03765f2605e7b690d2.
+Hardware manifest 7ca944a67db38d4a85672c2c1399c42270e69abe9deded96a80b02b944d1bd86.
+Collector saves kernel/minidumps and original ETL before ordered reboot;
+restart requires same-boot hash receipt. Early loss records original ETL
+unavailable and keeps recovery ETL distinct. Native header BootTime remains
+a required attribution check. Mandatory hiddenCode45 exact cleanup then
+ordinaryCode28. No Air transfer/stage/launch occurred; EXP864 ordinaryCode28
+remains the last verified recovery. Latest task stops at GO_EXP865.
+
+WHY CONTINUE COMPARISON: dump+real-worker replay isolate one pre-firmware
+ownership defect. Next authorized checkpoint is first accepted materialization
+and actual TA/3D completion/fence advancement, no0x116, nonzero scanout and
+SSH/DWM stability. True GPU-hang recovery remains fail-closed.
+
 # R150 — EXP864 backend owner mismatch fixed offline
 
 Original full kernel dump proves KMD active render149/node0/engine0, completed148,

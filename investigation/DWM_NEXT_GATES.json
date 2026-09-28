@@ -337,8 +337,8 @@
     "frontend": "445 UMD lines; no reject-seterror before early TDR",
     "stability": "FAIL live141 at28.920s, kernel116 at29.063s; original SSH absent",
     "recovery": "hiddenCode45 exact package864/oem5 cleanup; ordinaryCode28 clean durable",
-    "next": "R150 owner correction passes offline; propose EXP865 fix only atop a9ecd3ea, excluding Flush0f51f3f5; no package/run authorized",
-    "hardware_authorization": "EXP864 completed; no further package/run authorized",
+    "next": "EXP865 package865 prepared from26cbd7e6 owner-only on a9ecd3ea; STOP at GO_EXP865",
+    "hardware_authorization": "Preparation authorized and completed; latest user requires stop at GO gate; no EXP865 Air action yet",
     "etl_correction": "Saved ETL is hidden recovery with only Microsoft adapters; original DMA timeline unavailable; append-only EXP864 correction in EXPERIMENTS.md"
   },
   "r147_offline_root_ordering": {
@@ -372,12 +372,21 @@
     "evidence": "investigation/evidence/R150/summary.json",
     "single_variable": "Preserve backend owner63 in G3 worker; independently selected hardware VM slot1 unchanged",
     "last_hardware": "EXP864",
-    "next_proposed": "EXP865 exact EXP864 plus R150 owner correction only; separate package/run authorization",
+    "next_proposed": "EXP865 prepared with source/test-only26cbd7e6 and unchanged R143; STOP at GO_EXP865",
     "limits": [
       "No hardware validation of fix",
       "No true GPU hang recovery implemented",
       "Original ETL overwritten by hidden recovery",
       "General safe pre-publication lease rollback and monitored-fence atomicity deferred"
     ]
+  },
+  "exp865_preparation": {
+    "status": "PREPARED_STOP_AT_GO",
+    "source_commit": "26cbd7e6ed728a7be6e1302f0b6ca4c2a2edb917",
+    "result": "investigation/evidence/EXP865-preparation/preparation-result.json",
+    "result_sha256": "24c93a4631a001635fb86e84002f2de7561c9a26cf46bc03765f2605e7b690d2",
+    "hardware_manifest_sha256": "7ca944a67db38d4a85672c2c1399c42270e69abe9deded96a80b02b944d1bd86",
+    "guest_payload_sha256": "cce217e994909d01e6689d3eec0538a9af79ecb28a109ef797f39f4427410bbc",
+    "hardware": "NOT_RUN"
   }
 }
