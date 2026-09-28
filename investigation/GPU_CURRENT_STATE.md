@@ -1,3 +1,7 @@
+# EXP866 — R151 package prepared; STOP at GO
+
+Source exp/866-stamp 17ee8894 on EXP865 26cbd7e6 applies only R151 source/tests; byte-identical to 091eae6c, Flush excluded. Package30.0.866.0 built 0/0 with SourceCommit=NativeArchiveCommit=tip, signed catalog membership pass. R143 firmware byte-identical; 42-member payload and 39 transfer members hash-verified, PowerShell42 syntax0 and ETL contract pass. Full host1161 has 15F39E2S, no new failure identities versus EXP865. Manifest/payload SHA256 20e66eef5b2ce315976d5ae39661d892d44b8c037e07b2be6eb6035e245c66d3/70de18dd45a7df81cee5831fbcded75bb2a9ce8a0c893ccbd322baf1d142797f. No Air transfer/stage/launch. GO_EXP866 required before run; dump-first hiddenCode45 then ordinaryCode28 mandatory recovery.
+
 # R151 — G4 queue sequence reuse fixed offline; EXP866 proposed only
 
 EXP865 proves one native TA+D3 completion149 and submitted220, not70GPU jobs.
