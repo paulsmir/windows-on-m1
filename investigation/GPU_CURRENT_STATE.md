@@ -1,5 +1,35 @@
 # GPU current boundary — 2026-09-28
 
+## 2026-09-28 EXP856 — 1 GiB firmware proven; paging-table resolver rejected
+
+GO_EXP856 ran package856/source0400dd32 with R143 m1n1/Mu. m1n1, Mu PEI and
+Windows ACPI resources exposed IPA=PA 0x8e0000000, length1GiB; Windows reported
+4,534,439,936 physical bytes, CPU8/disks2/USB5. First armed boot consumed G3 arm,
+entered KMD/VidMm and bugchecked after34.8s: 0x10E/B, Arg3 C0000141. Full
+dump stack is `dxgmms2!VIDMM_GLOBAL::CompleteBuildPagingBufferIteration` during
+GPUVA page-table commit; VidMm says the driver returned an invalid error code
+from BuildPagingBuffer. The saved KMD receipt is branch1/TableAddress,
+level0, GPU_PHYSICAL mode2, offset0x3e7d4000, status C0000141. Current
+`AdmissionGpuvaG3ResolveTable` uses `AdmissionMemoryRuntimeScanoutView`;
+R143 clips that view to DCP W0/56MiB, so the valid table offset in the
+1000MiB local segment is refused. This is the next causal target: separate
+full-local table access from fixed DCP scanout admission, add a failing host
+regression at a high segment offset before the fix. No G4 verdict or 600s
+stable Code0 window was obtained.
+
+The authorized identical retry booted with arm already consumed, reached SSH
+but Code43/StartStage1/STATUS_NOT_SUPPORTED; it is not an independent R143
+start test. Full dump, minidump, ETL and logs are in main
+`.local/experiments/EXP856-r143-reserve1g/`; exact paths/hashes and correction
+to attempt1 are in `investigation/EXPERIMENTS.md`. After evidence and diagnostics
+cleanup, immutable EXP377/385 hidden Code45 removed exact oem5, then immutable
+EXP377/392 ordinary reached durable present Code28, staged0/arm0, no SYS/UMD/
+service/signer, CPU8/disks2/USB5, RDP Running. No further Air run authorized.
+
+REVIEW R113: ACCEPT — staged+armed package went only to cold full-owner; the
+ordinary boot followed hidden exact cleanup. REVIEW R111: DEFER — this
+experiment failed at paging table resolution, not DC ZVA mapping.
+
 ## 2026-09-28 R143 — reserve v2 implemented and EXP856 prepared offline
 
 Explicit reserve-v2 firmware profile provides1GiB identity backing, with
