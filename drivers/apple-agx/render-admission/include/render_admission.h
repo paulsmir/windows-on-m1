@@ -495,7 +495,7 @@ typedef struct _ADMISSION_RENDER_CONTEXT {
   PVOID GpuvaG3Process;
   struct _ADMISSION_RENDER_CONTEXT *GpuvaG3NextContext;
   ULONGLONG GpuvaG3PrivateManagerGeneration;
-  volatile LONG GpuvaG3PrivateFence, GpuvaG3CancelFence, GpuvaG3CancelUncertain;
+  volatile LONG GpuvaG3PrivateFence, GpuvaG3CancelFence, GpuvaG3CancelUncertain, GpuvaG3PreemptFence;
   BOOLEAN GpuvaG3Closing;
   ULONGLONG GpuvaG3RootIpa;
   ULONGLONG GpuvaG3LastSetRootIpa;
@@ -1456,6 +1456,7 @@ BOOLEAN AdmissionGpuvaG3PrivateContextBusy(ADMISSION_RENDER_CONTEXT *);
 BOOLEAN AdmissionGpuvaG3PrivateRetireContext(ADMISSION_RENDER_CONTEXT *);
 BOOLEAN AdmissionGpuvaG3PrivateReset(ADMISSION_CONTEXT *);
 VOID AdmissionGpuvaG3PrivateCancel(ADMISSION_RENDER_CONTEXT *, ULONG, BOOLEAN);
+VOID AdmissionGpuvaG3PrivatePreempt(ADMISSION_RENDER_CONTEXT *, ULONG);
 BOOLEAN AdmissionGpuvaG3PrivateReported(ADMISSION_CONTEXT *, ADMISSION_RENDER_CONTEXT *, ULONG);
 NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *, const DXGKARG_ESCAPE *);
 #endif

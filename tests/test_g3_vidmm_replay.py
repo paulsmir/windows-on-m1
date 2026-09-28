@@ -11,6 +11,15 @@ REPLAY = ROOT / "tests/g3_vidmm_replay.py"
 
 
 class G3VidMmReplayTests(unittest.TestCase):
+    def test_r154_preempted_private_scene_survives_deferred_release(self):
+        for mode in ("teardown", "late-release", "cancel", "uncertain"):
+            with self.subTest(mode=mode):
+                r = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
+                    env=dict(os.environ, G3_REPLAY_R137="1", G3_REPLAY_R137_COMBINED="1",
+                             G3_REPLAY_R154_RESUBMIT=mode), text=True, capture_output=True)
+                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+                self.assertIn("PASS", r.stdout)
+
     def test_exp856_full_local_paging_bounds(self):
         for profile in ("16", "64"):
             with self.subTest(profile=profile):

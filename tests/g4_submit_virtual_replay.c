@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "apple_agx_g4_submit.h"
+#include "apple_agx_scheduler.h"
 #include "apple_agx_g3_private_storage.h"
 #include "apple_agx_render_manager.h"
 #include "apple_agx_gpuva_g3_translation.h"
@@ -21,7 +22,8 @@ typedef int KIRQL;
 #define _Use_decl_annotations_
 #define DISPATCH_LEVEL 2
 typedef void *HANDLE;
-typedef struct { unsigned Value; } REPLAY_FLAGS;
+typedef union { unsigned Value; struct { unsigned Other:7, Resubmission:1, Reserved:24; }; } REPLAY_FLAGS;
+typedef REPLAY_FLAGS DXGK_SUBMITCOMMANDFLAGS;
 #define PASSIVE_LEVEL 0
 #define TRUE 1
 #define FALSE 0
@@ -71,7 +73,7 @@ typedef struct _ADMISSION_G3_PRIVATE_SCENE {
   ADMISSION_RENDER_CONTEXT *Context;
   APPLE_AGX_G3_PRIVATE_SCENE Storage;
   APPLE_AGX_G4_NATIVE_RENDER Geometry;
-  ULONG Fence, Submitting, Queued, Started, GpuDone, Reported, ReleaseRequested, Quarantined;
+  ULONG Fence, ResumeFence, Submitting, Queued, Started, GpuDone, Reported, ReleaseRequested, Quarantined;
 } ADMISSION_G3_PRIVATE_SCENE;
 
 typedef struct _ADMISSION_G3_PROCESS {
@@ -134,12 +136,13 @@ typedef struct {
     ULONGLONG LogicalIpa[4];
     unsigned LogicalSegment[4], LogicalFlags[4];
   } G4SubmitFailure;
-  int SchedulerLock, SchedulerFaulted, Scheduler, RuntimeReady;
+  int SchedulerLock, SchedulerFaulted, RuntimeReady;
+  APPLE_AGX_SCHEDULER Scheduler;
   ADMISSION_RENDER_PACKET RenderPacket;
   ADMISSION_BACKEND_IMAGE BackendImage;
 } ADMISSION_CONTEXT;
 struct _ADMISSION_RENDER_CONTEXT {
-  volatile LONG GpuvaG3PrivateFence,GpuvaG3CancelFence,GpuvaG3CancelUncertain; BOOLEAN GpuvaG3Closing;
+  volatile LONG GpuvaG3PrivateFence,GpuvaG3CancelFence,GpuvaG3CancelUncertain, GpuvaG3PreemptFence; BOOLEAN GpuvaG3Closing;
   ULONGLONG GpuvaG3PrivateManagerGeneration;
   ADMISSION_G3_PROCESS *GpuvaG3Process;
   unsigned GpuvaG3Poisoned;
@@ -258,10 +261,6 @@ static int AdmissionRenderPacketReset(ADMISSION_RENDER_PACKET *packet,
     unsigned fence, unsigned quiesced) {
   (void)fence;(void)quiesced;packet->State=AdmissionRenderPacketEmpty;return 1;
 }
-static int AppleAgxSchedulerQueueFence(int *scheduler, unsigned node,
-    unsigned engine, unsigned fence) {
-  (void)scheduler;(void)node;(void)engine;return fence!=0u;
-}
 static int AdmissionBackendImageBindG4Submission(ADMISSION_BACKEND_IMAGE *image,
     const ADMISSION_RENDER_PACKET_DESCRIPTION *packet, void *cpu,
     const APPLE_AGX_G4_SUBMIT_VIEW *view,
@@ -330,6 +329,7 @@ int main(void) {
   ADMISSION_G3_TABLE_SHADOW shadow = {0};
   static APPLE_AGX_GPUVA_G3_LOGICAL_PTE logical[8192];
   unsigned required[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
+  AppleAgxSchedulerInitialize(&adapter.Scheduler);
   process.State = &state;
   process.PrivateVa = 1ULL << 36;
   process.Graph.RootIpa = 0x9bf000000ULL;
@@ -405,8 +405,10 @@ int main(void) {
   args.DmaBufferVirtualAddress = 0x20000;
   args.DmaBufferSize = packet.Header.Base.CommandBytes;
   args.SubmissionFenceId=7u;
+  args.Flags.Value=0x80u; /* A documented nonpaging resubmission flag. */
   assert(AdmissionG4SubmitVirtualEnvelope(&adapter, &context, &args) ==
          STATUS_SUCCESS);
+  args.Flags.Value=0u;
   assert(dispatches==1 && adapter.RenderPacket.State==
          AdmissionRenderPacketQueued);
   assert(context.Object.FenceOutstanding==7u &&
@@ -603,6 +605,7 @@ int main(void) {
       sizeof(v3.Native),APPLE_AGX_G4_COLOR_BGRA8,ranges,&lease));
   args.pDmaBufferPrivateData=&v3;
   args.DmaBufferPrivateDataSize=args.DmaBufferUmdPrivateDataSize=sizeof(v3);
+  AppleAgxSchedulerInitialize(&adapter.Scheduler);
   args.SubmissionFenceId=21;
   /* R141: synthetic barriers from EXP855D fail before any job/fence owner. */
   APPLE_AGX_G4_NATIVE_HEADER *attachment_header=(void *)v3.Native;
@@ -630,17 +633,81 @@ int main(void) {
   bind_ok=1;
   assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)==STATUS_SUCCESS);
   assert(scene.Queued && scene.Fence==21 && AdmissionGpuvaG3PrivateContextBusy(&context));
-  ++adapter.BackendImage.G4Lease.SceneGeneration;
+  /* Real scheduler boundary + production private publisher/submit transfer. */
+  APPLE_AGX_PREEMPTION preempt={0};
+  assert(AppleAgxSchedulerBeginBoundaryPreemption(&adapter.Scheduler,0,0,91,21,0));
+  adapter.RenderPacket.State=AdmissionRenderPacketEmpty;
+  assert(AdmissionBackendImageReleaseSubmission(&adapter.BackendImage,21));
+  context.Object.FenceOutstanding=0;
+  AdmissionGpuvaG3PrivatePreempt(&context,21);
+  assert(!AdmissionG4FindPrivateScene(&process,&context,&lease,21,TRUE));
+  assert(AppleAgxSchedulerClaimBoundaryPreemption(&adapter.Scheduler,&preempt));
+  assert(preempt.LastCompletedFence==0);
+  assert(AppleAgxSchedulerCommitBoundaryPreemption(&adapter.Scheduler,91));
   assert(AdmissionGpuvaG3BeginJob(&adapter,&context,21)!=STATUS_SUCCESS);
+  scene.ReleaseRequested=1; /* Deferred release cannot invalidate the suspended owner. */
+  args.SubmissionFenceId=22;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  args.Flags.Value=0x80;
+  for (unsigned bit=0;bit<32;++bit) {
+    if(bit==7) continue;
+    args.Flags.Value=0x80u|(1u<<bit);
+    assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  }
+  args.Flags.Value=0x80;
+  ++v3.Header.Lease.SceneGeneration;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  --v3.Header.Lease.SceneGeneration;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&other,&args)!=STATUS_SUCCESS);
+  context.GpuvaG3CancelUncertain=1;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  context.GpuvaG3CancelUncertain=0;
+  context.GpuvaG3CancelFence=21;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  context.GpuvaG3CancelFence=0;
+  scene.Started=1;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  scene.Started=0;
+  context.GpuvaG3PreemptFence=0;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  context.GpuvaG3PreemptFence=21;
+  args.SubmissionFenceId=21;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  args.SubmissionFenceId=20; /* Real scheduler rejects backwards new fences. */
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  assert(scene.Queued && scene.Fence==21 && !scene.Submitting && !scene.ResumeFence);
+  assert(context.GpuvaG3PreemptFence==21 && context.GpuvaG3PrivateFence==21);
+  args.SubmissionFenceId=22;
+  ++scene.Geometry.WidthPx;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  --scene.Geometry.WidthPx;
+  assert(scene.Queued && scene.Fence==21 && context.GpuvaG3PreemptFence==21);
+  adapter.RenderPacket.State=AdmissionRenderPacketQueued; /* Another packet owns preparation. */
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  adapter.RenderPacket.State=AdmissionRenderPacketEmpty;
+  assert(scene.Queued && scene.Fence==21 && !scene.Submitting && !scene.ResumeFence);
+  assert(context.GpuvaG3PreemptFence==21 && context.GpuvaG3PrivateFence==21);
+  bind_ok=0;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  assert(scene.Queued && scene.Fence==21 && !scene.Submitting && !scene.ResumeFence);
+  assert(context.GpuvaG3PreemptFence==21 && context.GpuvaG3PrivateFence==21);
+  bind_ok=1;
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)==STATUS_SUCCESS);
+  assert(scene.Queued && scene.Fence==22 && !scene.ResumeFence && !scene.Submitting);
+  assert(context.GpuvaG3PrivateFence==22 && !context.GpuvaG3PreemptFence);
+  assert(adapter.Scheduler.LastSubmittedFence==22 && !adapter.Scheduler.CompletedFence);
+  assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  ++adapter.BackendImage.G4Lease.SceneGeneration;
+  assert(AdmissionGpuvaG3BeginJob(&adapter,&context,22)!=STATUS_SUCCESS);
   --adapter.BackendImage.G4Lease.SceneGeneration;
   ++process.Graph.MappingGeneration; /* another scene may map/unmap meanwhile */
   process.Graph.AllowProcessRanges=0;
-  assert(AdmissionGpuvaG3BeginJob(&adapter,&context,21)!=STATUS_SUCCESS);
+  assert(AdmissionGpuvaG3BeginJob(&adapter,&context,22)!=STATUS_SUCCESS);
   process.Graph.AllowProcessRanges=1;
-  context.GpuvaG3CancelFence=21;
-  assert(AdmissionGpuvaG3BeginJob(&adapter,&context,21)!=STATUS_SUCCESS);
+  context.GpuvaG3CancelFence=22;
+  assert(AdmissionGpuvaG3BeginJob(&adapter,&context,22)!=STATUS_SUCCESS);
   context.GpuvaG3CancelFence=0;
-  assert(AdmissionGpuvaG3BeginJob(&adapter,&context,21)==STATUS_SUCCESS);
+  assert(AdmissionGpuvaG3BeginJob(&adapter,&context,22)==STATUS_SUCCESS);
   assert(context.GpuvaG3MappingGeneration==process.Graph.MappingGeneration);
   assert(scene.Started);
   assert(adapter.BackendImage.G4Manager==&process.FirmwareManager);

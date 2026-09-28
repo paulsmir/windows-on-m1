@@ -324,7 +324,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
     InterlockedExchange(&context->SchedulerFaulted, 1);
   } else if (queuedContext != NULL) {
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-    AdmissionGpuvaG3PrivateCancel(queuedContext,queuedFence,FALSE);
+    AdmissionGpuvaG3PrivatePreempt(queuedContext,queuedFence);
 #endif
     queuedContext->Object.FenceOutstanding = 0u;
   }
