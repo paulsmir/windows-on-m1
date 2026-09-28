@@ -327,16 +327,17 @@
     "supersedes": "package752 and EXP757 capture-path Air run"
   },
   "current_hardware_handoff": {
-    "experiment": "EXP860",
-    "result": ".local/experiments/EXP860-queryreceipt-v2/hardware-result.json",
-    "result_sha256": "24b4f5b0d0fa6f873f04159b109643a644e700b88c1a6900c3aabdd691954ba2",
-    "admission": "Code0/StartStage12/615.337415s/no kernel bugcheck",
-    "diagnostic": "QUERY53/C000000D; RootIsBootstrap=true; SetRoot0/0; VA0x20000/65536; missing native level1/index0 no-table",
-    "execution": "No logged submit or fence signal; no G4 failure; GPU execution unproven",
-    "crashes": "DWM dwmcore+11c020 and Explorer d2d1+8388 AVs; full dumps retained; cause unattributed",
-    "recovery": "Hidden Code45 exact cleanup then durable ordinary Code28",
-    "next": "R147 paging-time root selection implemented offline; proposed EXP861 requires separate exact-package build/hash/preregistration and run authorization",
-    "hardware_authorization": "EXP860 completed; no subsequent run authorized"
+    "experiment": "EXP861",
+    "result": ".local/experiments/EXP861-r147-pagingroot/hardware-result.json",
+    "result_sha256": "a23530e7d20e0e8401b84111a498bc275845a80d64a49be1a19b7667eff4e890",
+    "admission": "Code0/StartStage12/627.550139s/one armed boot; no recorded kernel bugcheck",
+    "diagnostic": "QUERY53 now non-bootstrap root SetRoot1/1 leaf-absent level2/index8 VA0x20000 bytes65536 generation623",
+    "execution": "KMD submit reached: G4 branch9 ParseUnmapped Render ordinal12 VA0x270e40 read1 GraphPresent0 generation440;17 failures; no proven fence/TA/3D completion; scanout0",
+    "crashes": "SearchHost edgehtml+4247e0 AV181s; Explorer Windows.UI.Xaml+73130c AV683s after checkpoint; full Explorer dump retained; no DWM crash recorded",
+    "stability": "Post-checkpoint collector180s timeout and unexplained SSH loss; emergency hidden recovery",
+    "recovery": "HiddenCode45 dump-first exactoem5/package861 cleanup then durable ordinaryCode28; all residue absent",
+    "next": "Offline current-source first G4 Render ordinal12 mapping/walk ownership atgeneration440; distinguish later QUERY leaf-absent623; preserve all guards",
+    "hardware_authorization": "EXP861 completed; no subsequent run authorized"
   },
   "r147_offline_root_ordering": {
     "status": "implemented",

@@ -1,8 +1,33 @@
 # GPU current boundary — 2026-09-28
 
-## EXP861 — package ready, hardware WAIT_GO
+## EXP861 — KMD submit reached; new mapping failure; Code28 recovered
 
-Package861 from source/native HEAD 8f337257, one R147 paging TU difference from EXP860, builder0/0 and exact signed hashes verified. Same R143 firmware. Preregistration and one-shot600s checkpoint in `investigation/EXPERIMENTS.md`; artifact manifest `.local/experiments/EXP861-r147-pagingroot/hardware-manifest.json` SHA256 4a5b4cdf7f3d19aac9ccdc2bf83520c42b5dc848050c06ecc9b001453fa06f1f. `GO_EXP861` absent; no install, arm or Air launch. Active hypothesis and recovery unchanged from R147.
+R147 package861/source8f337257 on identical R143 firmware advances to KMD
+SubmitCommandVirtual. First G4 v2: branch9/C000000D/ParseUnmapped3, Render
+ordinal12 VA0x270e40/read1, GraphPresent0, root0x9d1d50000,generation440;
+17 persisted failures. QUERY v2 still53 but RootIsBootstrap=false,SetRoot1/1,
+root/context0x9d1d50000,bootstrap0x9d2f58000; VA0x20000/65536 now missing
+nativelevel2/index8 leaf-absent,generation623. Do not conflate these snapshots.
+
+Original boot627.550139s Code0/Stage12/status0/arm consumed/CPU8. Initial SSH
+delay resolved on same boot after one diagnostic snapshot. Commitment668442624
+->4464254976,dedicated peak27033600. No recorded kernel bugcheck/0x10E or DWM
+crash; SearchHost AV181s, Explorer Windows.UI.Xaml+73130c AV683s after checkpoint.
+Collector then lost SSH; snapshot and emergency hidden recovery. No GPU fence/
+TA/3D completion proven; two scanout snapshotsnonzero0. Physical input/display
+unobserved. One armed boot only; no retry.
+
+18 originals1509189366 bytes SHA-verified, ETL/UMD/receipts and Explorer dump.
+HiddenCode45 dump-first/exactoem5 cleanup, then ordinaryCode28 durable08:39:48Z:
+present1/package0/arms0/files0/service0/signer0/diagnostics0,CPU8/disks2/USB5/RDP.
+Autologon preserved. Recovery clock correction52.443s was not an extra reboot.
+Result main `.local/experiments/EXP861-r147-pagingroot/hardware-result.json`
+SHA256 a23530e7d20e0e8401b84111a498bc275845a80d64a49be1a19b7667eff4e890.
+
+WHY CONTINUE COMPARISON: the isolated root-ordering change crosses the previous
+barrier and yields a precise first KMD parse failure. Next thread: current-source
+ownership/walk of Render ordinal12 VA0x270e40 atgeneration440; keep later QUERY
+leaf-absent623 separate. No guard bypass, speculative mapping or hardware rerun.
 
 ## 2026-09-28 R147 — paging selects root before COPY; implemented offline
 
