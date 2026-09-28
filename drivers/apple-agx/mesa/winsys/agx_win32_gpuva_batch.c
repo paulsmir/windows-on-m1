@@ -214,6 +214,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   const AGX_WIN32_GPUVA_BO *written[PIPE_MAX_COLOR_BUFS]={0};
   unsigned written_count=0;
   unsigned count=0,limit;
+  size_t pool_count, pipeline_count;
   AGX_G4_PRIVATE packet={0};
   APPLE_AGX_G4_PROCESS_RANGE ranges[APPLE_AGX_G4_PROCESS_RANGE_COUNT]={{0}};
   APPLE_AGX_G4_NATIVE_RENDER native_render;
@@ -229,6 +230,16 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
      batch->bo_list.bit_count>UINT32_MAX-(PIPE_MAX_COLOR_BUFS+17))
     return 0;
   if(g->Entered && !AgxWin32AsahiBatchLeave(batch)) goto fail;
+  /* Mesa pools own their slabs separately from the batch handle bitset.
+   * Every slab must join the canonical residency/copy transaction, including
+   * earlier slabs after rollover and the low-VA pipeline pool. */
+  pool_count=util_dynarray_num_elements(&batch->pool.bos,struct agx_bo *);
+  pipeline_count=util_dynarray_num_elements(&batch->pipeline_pool.bos,struct agx_bo *);
+  limit=batch->bo_list.bit_count+PIPE_MAX_COLOR_BUFS+17;
+  if(pool_count>UINT32_MAX-limit) goto fail;
+  limit+=(unsigned)pool_count;
+  if(pipeline_count>UINT32_MAX-limit) goto fail;
+  limit+=(unsigned)pipeline_count;
   memcpy(&native_render,render,sizeof(native_render));
   /* The first G13 scene constructor uses one cluster. Asahi selects this
    * firmware path with the UAPI NO_VERTEX_CLUSTERING bit. */
@@ -247,7 +258,6 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   if(!AppleAgxG4ComposeHeaderV3(&packet.Header,&native_render,
       g->Command->va->addr,packet.Header.V2.Base.CommandBytes,
       APPLE_AGX_G4_COLOR_BGRA8,ranges,&g->Lease)) goto fail;
-  limit=batch->bo_list.bit_count+PIPE_MAX_COLOR_BUFS+17;
   refs=calloc(limit,sizeof(*refs));
   if(!refs) goto fail;
   if(!add_bo(b,refs,&count,limit,g->Command) ||
@@ -278,6 +288,12 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
     struct agx_bo *referenced=AgxWin32AsahiLookupBo(b->Native,handle);
     if(!referenced || !add_bo(b,refs,&count,limit,referenced))
       goto fail;
+  }
+  util_dynarray_foreach(&batch->pool.bos,struct agx_bo *,bo) {
+    if(!*bo || !add_bo(b,refs,&count,limit,*bo)) goto fail;
+  }
+  util_dynarray_foreach(&batch->pipeline_pool.bos,struct agx_bo *,bo) {
+    if(!*bo || !add_bo(b,refs,&count,limit,*bo)) goto fail;
   }
   if(!AgxWin32GpuvaSubmit(&b->Gpuva,refs,count,
       AgxWin32AsahiGpuvaBo(b,g->Command),packet.Header.V2.Base.CommandBytes,
