@@ -327,13 +327,15 @@
     "supersedes": "package752 and EXP757 capture-path Air run"
   },
   "current_hardware_handoff": {
-    "experiment": "EXP858",
-    "result": ".local/experiments/EXP858-r145-staging/hardware-result.json",
-    "result_sha256": "587f88c5b4aaefe8184191a45f16dc002544b32a9e95128a8b1581ef9978869f",
-    "admission": "Code0/StartStage12/601s/no bugcheck",
-    "execution": "No logged SubmitCommandCb or G4 failure; old parser advance unproven",
+    "experiment": "EXP860",
+    "result": ".local/experiments/EXP860-queryreceipt-v2/hardware-result.json",
+    "result_sha256": "24b4f5b0d0fa6f873f04159b109643a644e700b88c1a6900c3aabdd691954ba2",
+    "admission": "Code0/StartStage12/615.337415s/no kernel bugcheck",
+    "diagnostic": "QUERY53/C000000D; RootIsBootstrap=true; SetRoot0/0; VA0x20000/65536; missing native level1/index0 no-table",
+    "execution": "No logged submit or fence signal; no G4 failure; GPU execution unproven",
+    "crashes": "DWM dwmcore+11c020 and Explorer d2d1+8388 AVs; full dumps retained; cause unattributed",
     "recovery": "Hidden Code45 exact cleanup then durable ordinary Code28",
-    "next": "New thread: offline pre-submit refusal and saved Explorer dump attribution",
-    "hardware_authorization": "EXP858 completed; no subsequent run authorized"
+    "next": "New thread: offline root selection and SetRoot notification contract before COPY QUERY; retain safety guards",
+    "hardware_authorization": "EXP860 completed; no subsequent run authorized"
   }
 }

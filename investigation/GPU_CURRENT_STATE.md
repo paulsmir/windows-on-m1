@@ -1,5 +1,34 @@
 # GPU current boundary — 2026-09-28
 
+## 2026-09-28 EXP860 — first QUERY uses bootstrap root; Code28 recovered
+
+Package860/source53e7b038 (implementation6460ffae), same R143 firmware, one
+armed boot. First immutable v2 receipt: guard53/C000000D, RootIsBootstrap=true,
+GraphRoot=Bootstrap=0x9d8b28000, process/context SetRoot counts0/0 and last roots0,
+ContextRoot0. Query VA0x20000/65536 bytes fails at VA0x20000, native level1/index0,
+reason no-table. ProcessGeneration1/MappingGeneration440. This confirms the
+selected bootstrap root at first failed QUERY; it does not select a safe fix.
+
+615.337415s same boot Code0/StartStage12/status0/arm consumed/CPU8; one early
+SSH sample timeout recovered without intervention. No kernel bugcheck event.
+DWM dwmcore.dll+0x11c020 AV and Explorer d2d1.dll+0x8388 AV; both full user dumps
+preserved, cause unattributed. Sampled GPU commitment315727872→1039982592 bytes,
+dedicated peak27361280. No logged submit/fence-signal or G4 failure receipt;
+GPU execution unproven. Display/physical input unobserved.
+
+14 guest originals1737439702 bytes SHA-verified. Mandatory hiddenCode45 exact
+oem5 cleanup then ordinaryCode28 durable07:42:45Z: present1/package0/arms0/
+SYS0/UMD0/service0/signer0/diagnostics0,CPU8/disks2/USB5/RDP Running. Autologon
+preserved. No armed retry. Main `.local/experiments/EXP860-queryreceipt-v2/`
+contains query-decoded.json, hardware-evidence/Wom1G3CopyQueryFailure.bin,
+hardware-evidence/EXP801DxgBoot.etl, both WER dumps and hardware-result.json
+SHA256 `24b4f5b0d0fa6f873f04159b109643a644e700b88c1a6900c3aabdd691954ba2`.
+
+WHY CONTINUE COMPARISON: v2 resolves the root identity missing from EXP859.
+Next thread: current-source ownership and ordering of root selection/SetRoot
+before first COPY QUERY. Preserve authorization guards; no speculative root
+bind inside Escape and no new hardware run authorized by this verdict.
+
 ## 2026-09-28 EXP860 diagnostic v2 — implemented offline, no package/Air
 
 User-approved Wom1G3CopyQueryFailure v2 is fixed144 bytes: roots/bootstrap flag,
