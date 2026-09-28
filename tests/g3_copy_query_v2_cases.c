@@ -1,5 +1,5 @@
 /* Inserted into real R145 setup after local publication, before any QUERY.
- * Catch missing v2 snapshot, root selection hidden by fixtures, tail loss,
+ * Catch missing v3 snapshot, root selection hidden by fixtures, tail loss,
  * overwritten first evidence, and per-process/context count confusion. */
   /* Diagnostic counterexample: explicitly park on bootstrap. Production
    * paging now selects its root; the R147 replay tests that real ordering. */
@@ -9,18 +9,21 @@
   UINT pools_before=replay_pool_calls;
   assert(AdmissionDdiEscape(&a,&escape)==STATUS_INVALID_PARAMETER);
   assert(replay_pool_calls==pools_before+1 && replay_query_claim_irql==1);
-  assert(query_registry_receipt[0]==2 && query_registry_receipt[1]==144);
+  assert(query_registry_receipt[0]==3 && query_registry_receipt[1]==168);
 #define SAVE_QUERY(name) do { \
     char path[1024]; \
     assert(snprintf(path,sizeof(path),"%s/%s.bin",getenv("G3_QUERY_OUTPUT"),name)>0); \
     FILE *out=fopen(path,"wb");assert(out); \
-    assert(fwrite(query_registry_receipt,1,144,out)==144);assert(!fclose(out)); \
+    assert(fwrite(query_registry_receipt,1,168,out)==168);assert(!fclose(out)); \
   } while(0)
   assert(query_registry_receipt[2]==53 && query_registry_receipt[3]==0xc000000d);
+  assert(a.G3CopyQueryFailure.RequestAllocationHandle==opened.RuntimeAllocation);
+  assert(a.G3CopyQueryFailure.CanonicalAllocationIdentity==(ULONGLONG)(ULONG_PTR)&allocation);
+  assert(a.G3CopyQueryFailure.CanonicalAllocationBytes==allocation.Object.Description.Size);
   assert((query_registry_receipt[4]&33)==33);
   assert(query_registry_receipt[6]==0 && query_registry_receipt[8]==1);
   SAVE_QUERY("bootstrap-root");
-  ULONG first_receipt[36];memcpy(first_receipt,query_registry_receipt,sizeof(first_receipt));
+  ULONG first_receipt[42];memcpy(first_receipt,query_registry_receipt,sizeof(first_receipt));
   DXGKARG_SETROOTPAGETABLE r={0};r.hContext=&c;r.NumEntries=8;
   r.Address.SegmentId=ADMISSION_MEMORY_LOCAL_SEGMENT;r.Address.SegmentOffset=0x10000;
   AdmissionDdiSetRootPageTable(&a,&r);
@@ -36,6 +39,20 @@
   assert(query_registry_receipt[8]==3 && query_registry_receipt[9]==3);
   assert(query_registry_receipt[10]==1 && query_registry_receipt[11]==1);
   SAVE_QUERY("absent-va");
+  /* Same graph failure and allocation, but unavailable resident provenance
+   * must not be confused with a resolved all-invalid group. */
+  ADMISSION_G3_TABLE_SHADOW *query_shadow=p->TableShadows;
+  while(query_shadow && query_shadow->OriginalIpa!=local_ipa+0x18000)
+    query_shadow=query_shadow->Next;
+  assert(query_shadow && query_shadow->ResidentPtes);
+  APPLE_AGX_GPUVA_G3_LOGICAL_PTE *query_saved=query_shadow->ResidentPtes;
+  query_shadow->ResidentPtes=NULL;a.G3CopyQueryFailureClaim=0;
+  assert(AdmissionDdiEscape(&a,&escape)==STATUS_INVALID_PARAMETER);
+  SAVE_QUERY("absent-shadow");query_shadow->ResidentPtes=query_saved;
+  /* A copied request exists, but handle acquisition did not validate it. */
+  q->Allocation=0x81234072u;a.G3CopyQueryFailureClaim=0;
+  assert(AdmissionDdiEscape(&a,&escape)==STATUS_INVALID_HANDLE);
+  SAVE_QUERY("early-request");q->Allocation=0x81234071u;
   ADMISSION_RENDER_CONTEXT c2={0};c2.Object=c.Object;c2.GpuvaG3Process=p;
   r.hContext=&c2;AdmissionDdiSetRootPageTable(&a,&r);
   a.G3CopyQueryFailureClaim=0;q->GpuVa=0x10000;

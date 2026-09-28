@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Decode Wom1G3CopyQueryFailure REG_BINARY (v1/16 or v2/144 bytes).
+"""Decode Wom1G3CopyQueryFailure REG_BINARY (v1/16, v2/144, v3/168 bytes).
 
 Input: raw .bin, a collector state.json containing Receipts, or devnode.reg.
 Suggested collector export: Wom1G3CopyQueryFailure.bin. No live registry access.
@@ -20,13 +20,13 @@ def decode(data):
     if len(data) < 16:
         raise ValueError('truncated receipt header')
     version, size, predicate, status = struct.unpack_from('<4I', data)
-    if version not in (1, 2) or size != {1: 16, 2: 144}[version] or len(data) != size:
+    if version not in (1, 2, 3) or size != {1: 16, 2: 144, 3: 168}[version] or len(data) != size:
         raise ValueError('unsupported version or incorrect receipt length')
     result = dict(version=version, bytes=size, predicate=predicate, status=hex(status))
     if version == 1:
         result['graph_details_available'] = False
         return result
-    values = struct.unpack('<12I12Q', data)
+    values = struct.unpack_from('<12I12Q', data)
     keys = ('flags', 'write', 'missing_level', 'missing_index', 'missing_reason',
             'component_reason', 'process_set_root_count', 'context_set_root_count',
             'graph_root_ipa', 'bootstrap_ipa', 'process_last_set_root_ipa',
@@ -34,7 +34,7 @@ def decode(data):
             'process_generation', 'mapping_generation', 'context_root_ipa',
             'process_id', 'context_token')
     result.update(zip(keys, values[4:]))
-    if result['flags'] & ~63 or result['write'] not in (0, 1):
+    if result['flags'] & ~(255 if version == 3 else 63) or result['write'] not in (0, 1):
         raise ValueError('unknown flags/access value')
     for key in ('missing_reason', 'component_reason'):
         if result[key] >= len(REASONS):
@@ -45,6 +45,13 @@ def decode(data):
                      ('range_validated', 16), ('root_is_bootstrap', 32)):
         result[key] = bool(result['flags'] & bit)
     result['graph_details_available'] = result['captured_under_lock'] and result['process_available']
+    if version == 3:
+        handle, identity, allocation_bytes = struct.unpack_from('<3Q', data, 144)
+        result.update(request_allocation_handle=hex(handle),
+                      canonical_allocation_identity=hex(identity),
+                      canonical_allocation_bytes=allocation_bytes,
+                      resident_group_available=bool(result['flags'] & 64),
+                      canonical_allocation_available=bool(result['flags'] & 128))
     result['write'] = bool(result['write'])
     for key in ('missing_level', 'missing_index'):
         if result[key] == 0xffffffff:

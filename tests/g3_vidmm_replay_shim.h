@@ -286,14 +286,14 @@ struct _ADMISSION_CONTEXT { REPLAY_PACKET RenderPacket; BOOLEAN InterfaceValid; 
 #define PLUGPLAY_REGKEY_DEVICE 1u
 #define KEY_SET_VALUE 2u
 static UINT r145_references;
-static ULONG query_registry_writes,query_registry_flushes,query_registry_receipt[36];
+static ULONG query_registry_writes,query_registry_flushes,query_registry_receipt[42];
 static NTSTATUS IoOpenDeviceRegistryKey(PDEVICE_OBJECT device,ULONG kind,ULONG access,HANDLE *key) {
   assert(device && kind==1 && access==2 && replay_irql==PASSIVE_LEVEL && !r145_references);
   *key=(HANDLE)0x5588;return STATUS_SUCCESS;
 }
 static void WriteBinary(HANDLE key,const wchar_t *name,const VOID *data,ULONG bytes) {
   assert(key==(HANDLE)0x5588 && !wcscmp(name,L"Wom1G3CopyQueryFailure"));
-  assert((bytes==16 || bytes==144) && replay_irql==PASSIVE_LEVEL);
+  assert((bytes==16 || bytes==144 || bytes==168) && replay_irql==PASSIVE_LEVEL);
   memcpy(query_registry_receipt,data,bytes);++query_registry_writes;
 }
 static NTSTATUS ZwFlushKey(HANDLE key) {assert(key==(HANDLE)0x5588);++query_registry_flushes;return STATUS_SUCCESS;}
