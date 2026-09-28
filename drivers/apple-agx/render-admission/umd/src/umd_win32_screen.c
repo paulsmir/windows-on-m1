@@ -635,7 +635,7 @@ HRESULT AdmissionUmdScreenAdoptAllocation(
     APPLE_AGX_U64 Bytes, APPLE_AGX_U64 Alignment,
     APPLE_AGX_U32 ClassId, APPLE_AGX_U32 Flags,
 #ifdef APPLE_AGX_GPUVA_WINSYS
-    BOOL WrittenPrimary,
+    BOOL WrittenPrimary, BOOL Direct,
 #endif
     AGX_WIN32_SCREEN_BUFFER *Buffer) {
   const AGX_WIN32_BUFFER_CLASS_INFO *classInfo;
@@ -654,11 +654,41 @@ HRESULT AdmissionUmdScreenAdoptAllocation(
      (Flags&~classInfo->Flags)!=0u)
     return E_INVALIDARG;
 #ifdef APPLE_AGX_GPUVA_WINSYS
+  if (Direct) {
+    /* R158: a presentation allocation is GPU-local (CpuVisible=0, local
+     * segment, 64 KiB aligned) and therefore UAT-representable. Render into it
+     * directly, as WDDM expects of a presentation surface. Pairing it as the
+     * CPU staging of a separate canonical BO failed: LockCb returns
+     * E_INVALIDARG on a non-CPU-visible allocation (EXP871), so no frame ever
+     * reached the surface. One registration per handle; aliases share it. */
+    AcquireSRWLockExclusive(&Device->ScreenBufferLock);
+    slot=AdmissionUmdScreenFreeSlot(Device);
+    for (UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i)
+      if (Device->ScreenBuffers[i].Active &&
+          (Device->ScreenBuffers[i].StagingAllocation==KernelAllocation ||
+           Device->ScreenBuffers[i].KernelAllocation==KernelAllocation))
+        slot=NULL;
+    if (!slot || Device->ScreenClosing || Device->DrawTerminal ||
+        Device->NextScreenToken==~0ULL || Device->NextScreenSerial==~0ULL) {
+      ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+      return HRESULT_FROM_WIN32(ERROR_BUSY);
+    }
+    token=++Device->NextScreenToken;
+    ZeroMemory(slot,sizeof(*slot));
+    slot->Token=token;slot->Serial=++Device->NextScreenSerial;
+    slot->KernelAllocation=KernelAllocation;slot->Bytes=Bytes;
+    slot->Alignment=Alignment;slot->ClassId=ClassId;slot->Flags=Flags;
+    slot->Active=TRUE;slot->Borrowed=TRUE;slot->Direct=TRUE;
+    slot->WrittenPrimary=WrittenPrimary;
+  } else {
+  /* CPU-visible imports live in the aperture (system memory, not UAT
+   * representable): keep the canonical local BO paired with CPU staging. */
   /* One canonical owner per borrowed handle; aliases must share that owner. */
   AcquireSRWLockExclusive(&Device->ScreenBufferLock);
   for (UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i)
     if (Device->ScreenBuffers[i].Active &&
-        Device->ScreenBuffers[i].StagingAllocation==KernelAllocation) {
+        (Device->ScreenBuffers[i].StagingAllocation==KernelAllocation ||
+         Device->ScreenBuffers[i].KernelAllocation==KernelAllocation)) {
       ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
       return HRESULT_FROM_WIN32(ERROR_BUSY);
     }
@@ -671,6 +701,7 @@ HRESULT AdmissionUmdScreenAdoptAllocation(
   slot=AdmissionUmdScreenFind(Device,token);
   slot->Bytes=Bytes;
   slot->WrittenPrimary=WrittenPrimary;
+  }
 #else
   AcquireSRWLockExclusive(&Device->ScreenBufferLock);
   slot=AdmissionUmdScreenFreeSlot(Device);
@@ -711,6 +742,7 @@ BOOL AdmissionUmdScreenAllocationRegistered(
     if(Device->ScreenBuffers[i].Active &&
        (
 #ifdef APPLE_AGX_GPUVA_WINSYS
+       Device->ScreenBuffers[i].Direct ? Device->ScreenBuffers[i].KernelAllocation :
        Device->ScreenBuffers[i].StagingAllocation
 #else
        Device->ScreenBuffers[i].KernelAllocation
@@ -890,7 +922,7 @@ static int AdmissionUmdScreenDestroyBuffer(void *Context,
   buffer->Transition = TRUE;
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   for (UINT i=0; i<2; ++i) {
-    allocation = i == 0 ? buffer->KernelAllocation :
+    allocation = i == 0 ? (buffer->Direct ? 0 : buffer->KernelAllocation) :
         (buffer->Borrowed ? 0 : buffer->StagingAllocation);
     if (!allocation) continue;
     ZeroMemory(&deallocate,sizeof(deallocate));
