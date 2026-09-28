@@ -1,3 +1,30 @@
+# R151 — G4 queue sequence reuse fixed offline; EXP866 proposed only
+
+EXP865 proves one native TA+D3 completion149 and submitted220, not70GPU jobs.
+Current220 is LogonUI PID1216/node0/engine0; prior149 scene/owner freed and
+unrecoverable. TA/D3 ring3/4 and lease2 support two native jobs.16x16 native
+command/4MiB TVB fits capacity; no recorded overflow. No Present proof;
+scanoutseq2zero. Original ETL/MMIO unavailable; firmware/UAT fault unknown.
+
+G4 Bind+Release called Prepare, resetting Image.Sequence while firmware queues
+and event ownership persisted. Current220 thus repeats Sequence1/first stamps.
+Preserve sequence through both template rebuilds; only initial setup/explicit
+queue restart resets it. Real image RED->GREEN, mixed legacy/G4 and active
+shared-memory tests; fresh second stamps+0x200 reject stale+0x100. Hardware
+causation of TA silence remains unproven. No DMA_FAULTED shortcut: unpublished
+abort needs separate atomic disposition; genuine active reset stays fail-closed.
+
+Reports investigation/analysis/R151-next-boundary.md, R151-dump.md and
+R151-prequeue-contract.md; verification investigation/evidence/R151/summary.json.
+ARM64 affected TU /W4 /WX /analyze0warnings0errors; full1162 baseline15F38E2S
+identities unchanged. No package/Air/firmware change; ordinaryCode28 unchanged.
+
+WHY CONTINUE COMPARISON: deterministic scene/queue lifetime mismatch explains
+reused completion identity. Proposed EXP866 is sequence correction ONLY atop
+exact EXP86526cbd7e6, unchanged R143, Flush excluded. Second private job must
+use Sequence2 and prove both fresh completions; otherwise capture next fault.
+Separate package/run authorization required. No retry/rearm authorized here.
+
 # EXP865 — first private completion advances; later TA stall; clean Code28
 
 One865/source26cbd7e6 owner-only-on-a9ecd3ea, unchangedR143, Flushexcluded.

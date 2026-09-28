@@ -1,6 +1,7 @@
 #include "render_backend_image.h"
 #include "render_dynamic_overlay.h"
 #include "render_completed_output.h"
+#include "apple_agx_g13_codec.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -648,6 +649,84 @@ static void test_g4_native_scene_stages_and_releases(void) {
   assert(AdmissionBackendImageReleaseSubmission(&image,77u));
   assert(image.Ready && !image.G4Native && !image.NativeBound &&
       image.BoundFence==0u);
+  /* R151: image refresh must not restart a live queue's stamp lifetime.
+   * The stale event is deliberately paired with the NEW ring done pointer:
+   * event identity and pointer alone cannot qualify the second completion. */
+  assert(image.Sequence == 1u);
+  packet.Fence=220u;
+  assert(AdmissionBackendImageBindG4Submission(
+      &image,&packet,target,&view,&binding));
+  assert(image.Sequence == 1u);
+  assert(AdmissionBackendImageStageJob(&image,220u,1u,2u,6u,8u,
+      APPLE_AGX_FALSE,&job));
+  assert(image.Sequence == 2u);
+  assert(job.TaExpectedStamp == 0x7a000200u);
+  assert(job.D3ExpectedStamp == 0x3d000200u);
+  assert(image.Dynamic.TaPreviousStamp == 0x7a000100u);
+  assert(image.Dynamic.D3PreviousStamp == 0x3d000100u);
+  assert(image.Dynamic.EventCount == 4u);
+  assert(image.Dynamic.Start3dQueueCommandCount == 0x3d0001u);
+  /* Check the serialized barrier/finalizers, independently of job metadata. */
+  {
+    const unsigned offsets[] = {0x7000cu,0x70014u,0x7823cu,0x8824cu,
+                                0x98484u,0x98580u,0x60000u};
+    const unsigned values[] = {0x7a000200u,0x3d000200u,0x3d000200u,
+                               0x7a000200u,0x7a000200u,0x7a000200u,4u};
+    APPLE_AGX_G13_EVENT event={0};
+    for(unsigned i=0;i<sizeof(offsets)/sizeof(offsets[0]);++i) {
+      unsigned v;memcpy(&v,arena+offsets[i],sizeof(v));assert(v==values[i]);
+    }
+    event.Kind=AppleAgxG13EventFlag;event.Firing[0]=(1ULL<<1)|(1ULL<<2);
+    assert(!AppleAgxG13CompletionSatisfied(&event,1u,0x7a000100u,
+        job.TaExpectedStamp,6u,job.TaExpectedDonePointer));
+    assert(!AppleAgxG13CompletionSatisfied(&event,2u,0x3d000100u,
+        job.D3ExpectedStamp,8u,job.D3ExpectedDonePointer));
+    assert(AppleAgxG13CompletionSatisfied(&event,1u,0x7a000200u,
+        job.TaExpectedStamp,6u,job.TaExpectedDonePointer));
+    assert(AppleAgxG13CompletionSatisfied(&event,2u,0x3d000200u,
+        job.D3ExpectedStamp,8u,job.D3ExpectedDonePointer));
+  }
+  assert(!AdmissionBackendImageRestartQueueLifetime(&image));
+  assert(!AdmissionBackendImageReleaseSubmission(&image,219u));
+  assert(image.Sequence==2u && image.BoundFence==220u);
+  assert(AdmissionBackendImageReleaseSubmission(&image,220u));
+  assert(image.Sequence==2u);
+  /* Legacy and G4 use the same live firmware queues and stamp lifetime. */
+  {
+    APPLE_AGX_GDI_DMA_COMMAND command=exact_color_fill(packet.DestinationGpuVa);
+    packet.Fence=240u;packet.DestinationBytes=0x4000u;
+    assert(AdmissionBackendImageBindSubmission(&image,&packet,target,
+        (const unsigned char *)&command,sizeof(command),&binding));
+    assert(AdmissionBackendImageStageJob(&image,240u,1u,2u,7u,10u,
+        APPLE_AGX_FALSE,&job));
+    assert(image.Sequence==3u && job.TaExpectedStamp==0x7a000300u);
+    assert(AdmissionBackendImageReleaseSubmission(&image,240u));
+    packet.Fence=270u;packet.DestinationBytes=(unsigned)color.Size;
+    assert(AdmissionBackendImageBindG4Submission(
+        &image,&packet,target,&view,&binding));
+    assert(image.Sequence==3u);
+    assert(AdmissionBackendImageStageJob(&image,270u,1u,2u,8u,12u,
+        APPLE_AGX_FALSE,&job));
+    assert(image.Sequence==4u && job.D3ExpectedStamp==0x3d000400u);
+    assert(AdmissionBackendImageReleaseSubmission(&image,270u));
+  }
+  /* Only a real queue-lifetime restart permits first-job values again. */
+  assert(AdmissionBackendImageRestartQueueLifetime(&image));
+  packet.Fence=301u;
+  assert(AdmissionBackendImageBindG4Submission(
+      &image,&packet,target,&view,&binding));
+  assert(AdmissionBackendImageStageJob(&image,301u,1u,2u,2u,2u,
+      APPLE_AGX_TRUE,&job));
+  assert(image.Sequence==1u && job.TaExpectedStamp==0x7a000100u);
+  assert(AdmissionBackendImageReleaseSubmission(&image,301u));
+  /* Refresh cannot evade the existing stamp-overflow refusal. */
+  image.Sequence=0xffffffffu;packet.Fence=302u;
+  assert(AdmissionBackendImageBindG4Submission(
+      &image,&packet,target,&view,&binding));
+  assert(!AdmissionBackendImageStageJob(&image,302u,1u,2u,3u,4u,
+      APPLE_AGX_FALSE,&job));
+  assert(image.Sequence==0xffffffffu && !image.JobReady);
+  assert(AdmissionBackendImageReleaseSubmission(&image,302u));
   free(target);free(arena);
 }
 

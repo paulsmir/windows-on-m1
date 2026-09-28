@@ -1,0 +1,8 @@
+test_completion_uses_bound_output_snapshot_after_release (test_apple_agx_render_backend_image.AppleAgxRenderBackendImageTests.test_completion_uses_bound_output_snapshot_after_release) ... ok
+test_exact_exp208_image_is_materialized_rebased_and_relocated (test_apple_agx_render_backend_image.AppleAgxRenderBackendImageTests.test_exact_exp208_image_is_materialized_rebased_and_relocated) ... ok
+test_production_lifecycle_borrows_the_memory_owner_tail (test_apple_agx_render_backend_image.AppleAgxRenderBackendImageTests.test_production_lifecycle_borrows_the_memory_owner_tail) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 1.221s
+
+OK

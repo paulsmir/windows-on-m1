@@ -1,0 +1,7 @@
+test_provider_contract (test_apple_agx_g13_queue_provider.AppleAgxG13QueueProviderHostTest.test_provider_contract) ... ok
+test_g13_queue_runtime_strict_and_sanitized (test_apple_agx_g13_queue_runtime.AppleAgxG13QueueRuntimeTests.test_g13_queue_runtime_strict_and_sanitized) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.926s
+
+OK

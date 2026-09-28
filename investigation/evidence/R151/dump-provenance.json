@@ -1,0 +1,27 @@
+{
+  "kernel_sha256": "03d421e1c00558795220a10f0ff8e790a6d3dea868a31520dfb0bb34a3193b20",
+  "debugger": "10.0.26100.6584 AMD64",
+  "symbols": "package865 private PDB, no forced loading",
+  "operations": "Read-only saved kernel dump on Windows builder 192.168.1.24; no Air access",
+  "outputs": [
+    {
+      "source": "/Users/pavel/public_windows/.local/experiments/R151-dump/correlate.txt",
+      "sha256": "23bc38fcd66fded2179ef50a3a717679ce2e343595ff98bdbd1ff35455fa189c",
+      "excerpt": "dump-correlate-excerpt.txt",
+      "commands": "/Users/pavel/public_windows/.local/experiments/R151-dump/correlate.ps1"
+    },
+    {
+      "source": "/Users/pavel/public_windows/.local/experiments/R151-dump/contexts.txt",
+      "sha256": "51e3cba9749ec01a57b0ccae9ab161a85a64741594b915397b9bacf3477f82c3",
+      "excerpt": "dump-contexts-excerpt.txt",
+      "commands": "/Users/pavel/public_windows/.local/experiments/R151-dump/contexts.ps1"
+    },
+    {
+      "source": "/Users/pavel/public_windows/.local/experiments/R151-dump/detail.txt",
+      "sha256": "8c0bfee699879b442e39f2426efc103badaca372573263e140eca27d10bb2b3a",
+      "excerpt": "dump-detail-excerpt.txt",
+      "commands": "/Users/pavel/public_windows/.local/experiments/R151-dump/detail.ps1"
+    }
+  ],
+  "failed_query": "summary command quotation failure retained locally; no result used"
+}

@@ -295,6 +295,7 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
   APPLE_AGX_G4_ATTACHMENT color;
   APPLE_AGX_EXP208_GDI_BINDING candidate;
   APPLE_AGX_EXP208_RELOCATION_OBJECT saved;
+  APPLE_AGX_U32 sequence;
   if (Image == 0 || Packet == 0 || DestinationCpuAddress == 0 ||
       View == 0 || View->Native == 0 || View->Render == 0 ||
       View->Attachments == 0 ||
@@ -317,6 +318,7 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
   backend.HostPhysicalAddress = Image->ArenaPhysicalAddress;
   backend.GpuVirtualAddress = Image->ArenaGpuAddress;
   backend.Bytes = Image->ArenaCapacity;
+  sequence = Image->Sequence;
   if (!AdmissionBackendImagePrepare(Image, &backend) ||
       !AppleAgxG4BuildTa3d(View, Image->ArenaCpuAddress,
           Image->ArenaBytes, 1u, Image->Objects,
@@ -324,6 +326,8 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
     Image->Ready = APPLE_AGX_FALSE;
     return APPLE_AGX_FALSE;
   }
+  /* Template reconstruction is not a firmware queue restart. */
+  Image->Sequence = sequence;
   saved = Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
   Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT].Data =
       (unsigned char *)DestinationCpuAddress;
@@ -480,11 +484,16 @@ APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmission(
     return APPLE_AGX_FALSE;
   if (Image->G4Native) {
     ADMISSION_LOCAL_MEMORY_VIEW backend;
+    APPLE_AGX_U32 sequence = Image->Sequence;
     backend.CpuAddress = Image->ArenaCpuAddress;
     backend.HostPhysicalAddress = Image->ArenaPhysicalAddress;
     backend.GpuVirtualAddress = Image->ArenaGpuAddress;
     backend.Bytes = Image->ArenaCapacity;
-    return AdmissionBackendImagePrepare(Image, &backend);
+    if (!AdmissionBackendImagePrepare(Image, &backend))
+      return APPLE_AGX_FALSE;
+    /* Event slots and queues outlive this scene; preserve their stamp epoch. */
+    Image->Sequence = sequence;
+    return APPLE_AGX_TRUE;
   }
   if (Image->NativeBound) {
     APPLE_AGX_EXP208_RELOCATION_OBJECT *output=&Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];

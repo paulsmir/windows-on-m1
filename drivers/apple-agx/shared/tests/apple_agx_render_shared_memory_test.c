@@ -1,3 +1,4 @@
+#include "apple_agx_exp208_dynamic.h"
 #include "apple_agx_render_shared_memory.h"
 #include "apple_agx_exp208_adapter.h"
 #include "apple_agx_exp208_gdi.h"
@@ -382,6 +383,34 @@ int main(void) {
   assert(read_u64(active_objects[19].Data+1352u)==0ULL);
   assert(active_job.TaWorkAddresses[1]==
          owner.VirtualAddresses[19]+owner.ObjectOffsets[19]);
+  /* R151: publish the second dynamic epoch into real active G4 objects.
+   * Runtime-owned event-control state survives while event_count and all
+   * firmware/CPU stamp words use the new previous/current pair. */
+  {
+    APPLE_AGX_EXP208_DYNAMIC_INPUT dynamic={2u,1u,2u,APPLE_AGX_FALSE};
+    unsigned char event_control;
+    active_objects[11].Data[0] ^= 0x80u;
+    event_control=active_objects[11].Data[0];
+    assert(AppleAgxExp208PatchDynamic(arena,APPLE_AGX_EXP208_ARENA_BYTES,
+        &dynamic));
+    assert(AppleAgxRenderSharedMemoryBuildActiveG4Job(
+        &owner,arena,APPLE_AGX_EXP208_ARENA_BYTES,source_objects,
+        APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,0x1500800000ULL,
+        APPLE_AGX_FALSE,&bindings,&staged_job,active_objects,&active_job));
+    assert(active_objects[11].Data[0]==event_control);
+    assert(read_u32(active_objects[12].Data)==4u);
+    assert(read_u32(active_objects[9].Data)==0x7a000100u);
+    assert(read_u32(active_objects[10].Data)==0x3d000100u);
+    assert(read_u32(active_objects[26].Data)==0x7a000100u);
+    assert(read_u32(active_objects[27].Data)==0x3d000100u);
+    assert(read_u32(active_objects[14].Data+12u)==0x7a000200u);
+    assert(read_u32(active_objects[15].Data+0x23cu)==0x3d000200u);
+    assert(read_u32(active_objects[17].Data+0x24cu)==0x7a000200u);
+    assert(active_job.TaExpectedStamp==0x7a000200u);
+    assert(active_job.D3ExpectedStamp==0x3d000200u);
+    assert(memcmp(active_objects[24].Data,persistent_queue_pointers,
+                  sizeof(persistent_queue_pointers))==0);
+  }
   assert(AppleAgxRenderSharedMemoryDestroy(&owner) ==
          AppleAgxRenderSharedMemoryResultOk);
   assert(fake.Freed == APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT);

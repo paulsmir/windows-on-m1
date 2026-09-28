@@ -1,0 +1,42 @@
+{
+  "task": "R151",
+  "status": "implemented_offline",
+  "branch": "integration/ad04-windows-compiler",
+  "base_commit": "387bbb01cab28f7e79b1a739b23d70ceed23b4f9",
+  "production_paths": [
+    "drivers/apple-agx/render-admission/src/render_backend_image.c"
+  ],
+  "red": "sequence-red.txt",
+  "green": [
+    "sequence-green.txt",
+    "queue-tests.txt",
+    "shared-tests.txt"
+  ],
+  "compile": "compile-result.json",
+  "compile_exit": 0,
+  "full_suite": "full-suite-result.json",
+  "final_builder_inputs": "final-inputs-verified.json",
+  "source_tree_sha256": "32b94b98fe598151e1fe1b0ac202abaf55f4149595ac2d213d156c9bc0ff63ca",
+  "hardware": "none; EXP865 retained reference only",
+  "next": "EXP866 sequence-only correction on26cbd7e6 proposed; no package/authorization",
+  "review": "investigation/analysis/R151-independent-review.md",
+  "prequeue": "deferred per R151-prequeue-contract.md; no truthful existing abort transaction",
+  "files": {
+    "compile-result.json": "4c844953435574d3b89cac9cdfdf0176b2ff3c7f871c3516fbfb88ab95c208bd",
+    "compile.py": "baad17bf9f692d04f21f8721a4a1a20347255c47e1cef6a6287b0d216220f75e",
+    "dump-contexts-excerpt.txt": "bb45fa9f5d86538fdda1eea1a31fe8558c0e412d90a5b0c8e3c88a74417381a0",
+    "dump-correlate-excerpt.txt": "a35de77f871035db242444ddcf8a8c132e938c2b643ceac668147e3be4cda6e1",
+    "dump-detail-excerpt.txt": "70a78f6cfa56e7a3cd9488b3a4f04b75a2f7ecd5d7db7311d4e473db77178a34",
+    "dump-provenance.json": "cb3639ed5a46555538c7ada53b5ca7f4514b6c9319ceccb7ba2eae924c6f493c",
+    "final-inputs-verified.json": "032e57b9f17b657e5eeeaaabe7a5bbb8e7e8cca02b95832b2acba7eb862c710d",
+    "final-source-hashes.json": "32b94b98fe598151e1fe1b0ac202abaf55f4149595ac2d213d156c9bc0ff63ca",
+    "full-suite-result.json": "ccf2c98973f0bc005401191834d7726ca56daab66c64385262f3799d1f12b0e7",
+    "original-compile-command.txt": "eaacaf4098cd196669b6325ccdb688b7cbbc9948bc80f299e41d0ca6cd7580a5",
+    "queue-tests.txt": "ea25067f27faac3f45d576ec7271de7bef2c4a1f7dafa1643c04ef1facd58f52",
+    "render_backend_image.c.log": "22f890e424c5344af7e5d56c7f5d7637e59b84f579ea827b6aec9e418b9712d4",
+    "sequence-green.txt": "b43170350ecd5435f481a999d282a4c2ab3533210d5ba9d154e2bca3e0aec7c7",
+    "sequence-red.txt": "f934a033f0c1905f0dea7224d2a1876ed53c6ffc5db4f00d9049a1a741c7e150",
+    "shared-tests.txt": "0fc6fb45ab7e9e07d4b881c7d24c94b40ff6f7c57441c135388a50e30aa48425",
+    "source-hashes.json": "5ebe706feaf061c3ff1295727e319a71b2e0e999d5a53d1cf0ec140f9ed3c0d9"
+  }
+}

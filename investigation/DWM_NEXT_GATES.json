@@ -335,7 +335,7 @@
     "execution": "owner63 matches; backendSubmitted220, priorG3/queuecompletion149Success; laterTA missing stamp/event, D3markedcomplete",
     "stability": "FAIL live14139.160s +11639.288s; no originalSSH; scanout0",
     "recovery": "hiddenCode45 exact865/oem5 cleanup then ordinaryCode28 clean",
-    "next": "offline fence220 TA event/stamp and completion freshness boundary",
+    "next": "EXP866 proposed only: exact865 plus offline R151 queue-sequence preservation; separate package/run authorization",
     "hardware_authorization": "EXP865 completed; no further package/run authorized",
     "etl": "original unavailable before spontaneous reset/noSSH; recovery trace excluded"
   },
@@ -386,5 +386,21 @@
     "hardware_manifest_sha256": "7ca944a67db38d4a85672c2c1399c42270e69abe9deded96a80b02b944d1bd86",
     "guest_payload_sha256": "cce217e994909d01e6689d3eec0538a9af79ecb28a109ef797f39f4427410bbc",
     "hardware": "EXP865 verdict in current_hardware_handoff"
+  },
+  "r151_boundary": {
+    "status": "IMPLEMENTED_OFFLINE_HARDWARE_CAUSATION_UNPROVEN",
+    "report": "investigation/analysis/R151-next-boundary.md",
+    "evidence": "investigation/evidence/R151/summary.json",
+    "single_variable": "Preserve live queue Sequence across G4 Bind/Release template rebuilds",
+    "last_hardware": "EXP865",
+    "next_proposed": "EXP866 on exact26cbd7e6 plus R151 sequence correction only; unchanged R143; Flush excluded",
+    "checkpoint": "Second native job Sequence2 expected TA7a000200/D3 3d000200; fresh joined completion and correct OS fence retirement",
+    "limits": [
+      "One proven native completion149; its process no longer retained",
+      "Current220 LogonUI1216 node0/engine0; D3 freshness unproven under duplicate stamps",
+      "No scanout/present proof; original ETL and fault MMIO absent",
+      "Prequeue failure transaction deferred; genuine in-flight reset fail-closed",
+      "No package or Air authorized"
+    ]
   }
 }

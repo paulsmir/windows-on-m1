@@ -4,3 +4,6 @@ scripts/*.cmd text eol=crlf
 investigation/evidence/R148/** -text -whitespace
 investigation/evidence/R148-memory/** -text -whitespace
 investigation/evidence/R148-submit/** -text -whitespace
+
+# R151 preserves exact debugger/compiler evidence bytes and their SHA-256.
+investigation/evidence/R151/** -text -whitespace
