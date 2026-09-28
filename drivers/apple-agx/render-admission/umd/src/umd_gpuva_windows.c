@@ -248,14 +248,18 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
   payload->Magic=APPLE_AGX_G3_COPY_MAGIC;payload->Version=APPLE_AGX_G3_COPY_VERSION;
   payload->Bytes=sizeof(*payload);payload->Allocation=slot->KernelAllocation;
   payload->GpuVa=slot->CanonicalGpuVa;payload->Operation=APPLE_AGX_G3_COPY_QUERY;
+  UINT step=1u; /* EXP870 diagnostic: 1 query 2 lock 3 transfer 4 unmap 5 unlock */
+  HRESULT lock_hr=S_OK;
   int success=copy_escape(device,payload) && payload->ProcessGeneration && payload->MappingGeneration;
+  if(success) step=2u;
   BYTE *address=(BYTE *)slot->LockedBase;
   bool temporary=!slot->Mapped, locked=false;
   if(success && temporary) {
     D3DDDICB_LOCK lock={};lock.hAllocation=slot->StagingAllocation;
     lock.Flags.LockEntire=1;
-    locked=SUCCEEDED(device->KernelCallbacks->pfnLockCb(
-        device->RuntimeDevice.handle,&lock));
+    lock_hr=device->KernelCallbacks->pfnLockCb(
+        device->RuntimeDevice.handle,&lock);
+    locked=SUCCEEDED(lock_hr);
     if(locked) address=(BYTE *)lock.pData;
     success=locked && address && lock.hAllocation==slot->StagingAllocation;
     if(locked && lock.hAllocation!=slot->StagingAllocation) {
@@ -264,6 +268,7 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
     }
   }
   if(success && (!address || !payload->ProcessGeneration || !payload->MappingGeneration)) success=0;
+  if(success) step=3u;
   if(success) for(uint64_t offset=0;offset<slot->Bytes;) {
     UINT count=(UINT)((slot->Bytes-offset)>APPLE_AGX_G3_COPY_CAPACITY ?
         APPLE_AGX_G3_COPY_CAPACITY : slot->Bytes-offset);
@@ -276,6 +281,7 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
   }
   /* Borrowed/imported storage must be unlocked before publication. Native
    * persistent maps can be uncached only through the native BO owner. */
+  if(success) step=4u;
   bool uncache=slot->Borrowed && slot->Mapped;
   if(uncache && !slot->NativeMapRelease(slot->NativeBo,address,FALSE)) {
     device->DrawTerminal=TRUE;success=0;uncache=false;
@@ -299,6 +305,14 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
       slot->LockedBase=NULL;slot->Mapped=FALSE;slot->LockedAccess=0;
       ReleaseSRWLockExclusive(&device->ScreenBufferLock);
     }
+  }
+  if(!success) {
+    UINT values[9]={step,(UINT)download,(UINT)(slot->CanonicalGpuVa>>32),
+        (UINT)slot->CanonicalGpuVa,(UINT)slot->Bytes,(UINT)lock_hr,
+        (UINT)temporary | ((UINT)locked<<1) | ((UINT)(address!=NULL)<<2) |
+        ((UINT)slot->Mapped<<3) | ((UINT)slot->Borrowed<<4),
+        (UINT)payload->ProcessGeneration,(UINT)payload->MappingGeneration};
+    AdmissionUmdDiagnostic("reject-copy-slot",E_FAIL,values,ARRAYSIZE(values));
   }
   HeapFree(GetProcessHeap(),0,payload);return success;
 }

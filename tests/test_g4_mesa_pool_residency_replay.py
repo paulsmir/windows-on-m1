@@ -17,13 +17,13 @@ ROOT = Path(__file__).resolve().parents[1]
 class G4MesaPoolResidencyReplay(unittest.TestCase):
     def test_all_pool_slabs_are_resident_uploaded_and_retired(self):
         source = (ROOT / "drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c").read_text()
-        names = ("add_bo", "append_native", "append_attachments",
+        names = ("batch_refuse", "add_bo", "append_native", "append_attachments",
                  "prepare_process_buffers", "AgxWin32AsahiBatchFinish",
                  "AgxWin32AsahiBatchPoll", "AgxWin32AsahiBatchAbort",
                  "AgxWin32AsahiBatchRelease")
         with tempfile.TemporaryDirectory(prefix="r148-pool-residency-") as directory:
             tmp = Path(directory)
-            (tmp / "g4_mesa_pool_functions.inc").write_text("\n".join(
+            (tmp / "g4_mesa_pool_functions.inc").write_text("void (*AgxWin32BatchRefusalHook)(unsigned, unsigned, unsigned, unsigned);\n" + "\n".join(
                 body(source, name) for name in names))
             binary = tmp / "replay"
             subprocess.run([os.environ.get("CC", "clang"), "-std=c11", "-Wall",

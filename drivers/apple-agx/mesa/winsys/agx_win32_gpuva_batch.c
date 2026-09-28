@@ -67,10 +67,21 @@ void AgxWin32AsahiBatchTraceDraw(struct agx_context *ctx,
     struct agx_batch *batch,unsigned phase) {
   (void)ctx; (void)batch; (void)phase;
 }
+/* Diagnostic only (EXP870): report which check refused a batch. The hook is
+ * installed by the D3D10 Windows layer and never changes the result. */
+void (*AgxWin32BatchRefusalHook)(unsigned kind, unsigned site,
+                                 unsigned detail0, unsigned detail1);
+static int batch_refuse(unsigned kind, unsigned site,
+                        unsigned detail0, unsigned detail1) {
+  if (AgxWin32BatchRefusalHook)
+    AgxWin32BatchRefusalHook(kind, site, detail0, detail1);
+  return 0;
+}
+
 int AgxWin32AsahiBatchBegin(struct agx_batch *batch) {
   AGX_WIN32_ASAHI_BACKEND *b=backend(batch);
   if(!b || !b->GpuvaReady || b->Failed || batch->windows_batch ||
-     !batch->vdm.bo) return 0;
+     !batch->vdm.bo) return batch_refuse(1u, __LINE__, 0u, 0u);
   /* One monitored submission owns this process residency set. Drain earlier
    * active and submitted batches before opening another transaction. */
   for(unsigned i=0;i<AGX_MAX_BATCHES;++i) {
@@ -78,13 +89,13 @@ int AgxWin32AsahiBatchBegin(struct agx_batch *batch) {
     if(old==batch || !old->windows_batch) continue;
     if(BITSET_TEST(batch->ctx->batches.active,i))
       agx_flush_batch(batch->ctx,old);
-    if(batch->ctx->any_faults || !AgxWin32AsahiBatchPoll(old,1000)) return 0;
+    if(batch->ctx->any_faults || !AgxWin32AsahiBatchPoll(old,1000)) return batch_refuse(1u, __LINE__, 0u, 0u);
     agx_sync_batch(batch->ctx,old);
-    if(old->windows_batch) return 0;
+    if(old->windows_batch) return batch_refuse(1u, __LINE__, 0u, 0u);
   }
-  if(b->Gpuva.Held) return 0;
+  if(b->Gpuva.Held) return batch_refuse(1u, __LINE__, 0u, 0u);
   AGX_G4_BATCH *g=calloc(1,sizeof(*g));
-  if(!g) return 0;
+  if(!g) return batch_refuse(1u, __LINE__, 0u, 0u);
   batch->windows_batch=g;
   return 1;
 }
@@ -220,6 +231,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   APPLE_AGX_G4_NATIVE_RENDER native_render;
   unsigned char *cpu;
   struct drm_asahi_cmd_header command_header;
+  unsigned fail_site=0u;
   if(!b || !g || !render || b->Failed || b->Gpuva.Terminal ||
      !batch->draws || batch->cdm.bo || g->Submitted || g->Rejected ||
      !batch->vdm.bo ||
@@ -228,48 +240,54 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
      batch->key.zsbuf.texture || render->samples!=1 ||
      (render->sample_size_B!=8 && render->sample_size_B!=16) ||
      batch->bo_list.bit_count>UINT32_MAX-(PIPE_MAX_COLOR_BUFS+17))
-    return 0;
-  if(g->Entered && !AgxWin32AsahiBatchLeave(batch)) goto fail;
+    return batch_refuse(2u, __LINE__,
+        (batch->key.nr_cbufs & 0xffu) | ((unsigned)(batch->key.zsbuf.texture!=NULL) << 8) |
+        ((unsigned)(batch->cdm.bo!=NULL) << 9) | ((unsigned)(batch->draws==0) << 10) |
+        ((unsigned)(b && b->Failed) << 11) | ((unsigned)(b && b->Gpuva.Terminal) << 12) |
+        ((unsigned)(render ? render->samples : 0) << 16),
+        (unsigned)(batch->key.cbufs[0].texture ? batch->key.cbufs[0].format : 0xffffu) |
+        ((render ? render->sample_size_B : 0u) << 16));
+  if(g->Entered && !AgxWin32AsahiBatchLeave(batch)) { fail_site=__LINE__; goto fail; }
   /* Mesa pools own their slabs separately from the batch handle bitset.
    * Every slab must join the canonical residency/copy transaction, including
    * earlier slabs after rollover and the low-VA pipeline pool. */
   pool_count=util_dynarray_num_elements(&batch->pool.bos,struct agx_bo *);
   pipeline_count=util_dynarray_num_elements(&batch->pipeline_pool.bos,struct agx_bo *);
   limit=batch->bo_list.bit_count+PIPE_MAX_COLOR_BUFS+17;
-  if(pool_count>UINT32_MAX-limit) goto fail;
+  if(pool_count>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
   limit+=(unsigned)pool_count;
-  if(pipeline_count>UINT32_MAX-limit) goto fail;
+  if(pipeline_count>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
   limit+=(unsigned)pipeline_count;
   memcpy(&native_render,render,sizeof(native_render));
   /* The first G13 scene constructor uses one cluster. Asahi selects this
    * firmware path with the UAPI NO_VERTEX_CLUSTERING bit. */
   native_render.Flags|=1u<<2;
-  if(!prepare_process_buffers(b,g,&native_render,ranges) ||
-     !append_attachments(batch,&packet)) goto fail;
+  if(!prepare_process_buffers(b,g,&native_render,ranges)) { fail_site=__LINE__; goto fail; }
+  if(!append_attachments(batch,&packet)) { fail_site=__LINE__; goto fail; }
   command_header=agx_cmd_header(false,0,0);
   if(!append_native(&packet,&command_header,sizeof(command_header)) ||
-     !append_native(&packet,&native_render,sizeof(native_render))) goto fail;
+     !append_native(&packet,&native_render,sizeof(native_render))) { fail_site=__LINE__; goto fail; }
   g->Command=agx_bo_create(b->Native,packet.Header.V2.Base.CommandBytes,
                            0,0,"VA command");
-  if(!g->Command) goto fail;
+  if(!g->Command) { fail_site=__LINE__; goto fail; }
   cpu=agx_bo_map(g->Command);
-  if(!cpu || !AgxWin32AsahiGpuvaBo(b,g->Command)) goto fail;
+  if(!cpu || !AgxWin32AsahiGpuvaBo(b,g->Command)) { fail_site=__LINE__; goto fail; }
   memcpy(cpu,packet.Native,packet.Header.V2.Base.CommandBytes);
   if(!AppleAgxG4ComposeHeaderV3(&packet.Header,&native_render,
       g->Command->va->addr,packet.Header.V2.Base.CommandBytes,
-      APPLE_AGX_G4_COLOR_BGRA8,ranges,&g->Lease)) goto fail;
+      APPLE_AGX_G4_COLOR_BGRA8,ranges,&g->Lease)) { fail_site=__LINE__; goto fail; }
   refs=calloc(limit,sizeof(*refs));
-  if(!refs) goto fail;
+  if(!refs) { fail_site=__LINE__; goto fail; }
   if(!add_bo(b,refs,&count,limit,g->Command) ||
      !add_bo(b,refs,&count,limit,batch->vdm.bo) ||
      !add_bo(b,refs,&count,limit,agx_screen(batch->ctx->base.screen)->rodata))
-    goto fail;
+    { fail_site=__LINE__; goto fail; }
   for(unsigned i=0;i<batch->key.nr_cbufs;++i) {
     if(batch->key.cbufs[i].texture) {
       struct agx_bo *color=agx_resource(batch->key.cbufs[i].texture)->bo;
-      if(!add_bo(b,refs,&count,limit,color)) goto fail;
+      if(!add_bo(b,refs,&count,limit,color)) { fail_site=__LINE__; goto fail; }
       const AGX_WIN32_GPUVA_BO *mapped=AgxWin32AsahiGpuvaBo(b,color);
-      if(!mapped) goto fail;
+      if(!mapped) { fail_site=__LINE__; goto fail; }
       unsigned duplicate=0;
       for(unsigned j=0;j<written_count;++j)
         if(written[j]==mapped) duplicate=1;
@@ -281,30 +299,31 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
     if(!add_bo(b,refs,&count,limit,depth->bo) ||
        (depth->separate_stencil &&
         !add_bo(b,refs,&count,limit,
-          agx_resource(depth->separate_stencil)->bo))) goto fail;
+          agx_resource(depth->separate_stencil)->bo))) { fail_site=__LINE__; goto fail; }
   }
   int handle;
   AGX_BATCH_FOREACH_BO_HANDLE(batch,handle) {
     struct agx_bo *referenced=AgxWin32AsahiLookupBo(b->Native,handle);
     if(!referenced || !add_bo(b,refs,&count,limit,referenced))
-      goto fail;
+      { fail_site=__LINE__; goto fail; }
   }
   util_dynarray_foreach(&batch->pool.bos,struct agx_bo *,bo) {
-    if(!*bo || !add_bo(b,refs,&count,limit,*bo)) goto fail;
+    if(!*bo || !add_bo(b,refs,&count,limit,*bo)) { fail_site=__LINE__; goto fail; }
   }
   util_dynarray_foreach(&batch->pipeline_pool.bos,struct agx_bo *,bo) {
-    if(!*bo || !add_bo(b,refs,&count,limit,*bo)) goto fail;
+    if(!*bo || !add_bo(b,refs,&count,limit,*bo)) { fail_site=__LINE__; goto fail; }
   }
   if(!AgxWin32GpuvaSubmit(&b->Gpuva,refs,count,
       AgxWin32AsahiGpuvaBo(b,g->Command),packet.Header.V2.Base.CommandBytes,
       written,written_count,
       &packet,packet.Header.V2.Base.HeaderBytes+packet.Header.V2.Base.CommandBytes,
-      &g->Fence)) goto fail;
+      &g->Fence)) { fail_site=__LINE__; goto fail; }
   g->Submitted=1;
   free(refs);
   return 1;
 fail:
   free(refs);
+  (void)batch_refuse(3u, fail_site, b->Gpuva.LastFailure, b->Gpuva.LastDetail);
   g->Rejected=1;
   /* Native submission also marks the context faulted. Publish that failure
    * to Windows FlushStatus even when residency rollback completed safely.
