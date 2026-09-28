@@ -1,3 +1,37 @@
+# EXP863 — error publication checkpoint passed; clean Code28 recovery
+
+One package863/sourcef62317a6 (fd603f30 + 38308fa4 only) on unchanged R143.
+USC3a7b6cc9 and Flush-retire0f51f3f5 absent.19 pinned SSH samples from44.384s
+through621.028s, same boot Code0/StartStage12/status0/arm consumed/CPU8.
+DWM PID1240 persisted; GPU committed76.7–114.0MB. This is one bounded run,
+not proof of a universal SSH-stall cure or accelerated desktop.
+
+FirstG4 ParseUnmapped remains ordinal14/VA0x11002b0140/read1/generation474,
+root0x9d7250000;481 failures at live collection,804 after shutdown. QUERYv3 remains guard53/leaf-absent
+VA0x20000/65536/generation690, resident-group/canonical available.
+UMD3092 frontend E_FAIL callbacks at live collection,4714 after shutdown;
+draw/copy paths, explicit fn=Flush0.
+Exact same-device submit-to-public-Flush causality remains unlogged.
+No accepted submit/fence/TA/3D proof; both scanout snapshotsnonzero0.
+No new bugcheck/application-crash event/current-run dump; queued old WER
+excluded. Physical display/input unobserved; live storage/USB/RDP healthy.
+
+18 total evidence files665307462B hash-verified,13 from the original boot;
+ETL stopped before recovery.
+Code0 ordered restart stalled; recoverySIGTERM captured8 CPUs then reset.
+That snapshot is shutdown evidence, not a runtime stall. HiddenCode45 exact
+package863/oem5 cleanup then ordinaryCode28 verified twice; final guestUTC
+2026-09-28T10:46:38.9276994Z: present1/package0/arms0/files0/service0/signer0/
+diagnostics0/CPU8/disks2/USB5/RDP, intentional autologon retained.
+Result `.local/experiments/EXP863-r149-errprop/hardware-result.json`
+SHA256 `58a2fc80f7db392c8eb32830f48ca4a018b494ab703df5eb95aa1d88f4afeddf`.
+
+WHY CONTINUE COMPARISON: error-publication-only candidate keeps the prior
+rejection while satisfying the SSH window; next precise independent target is
+the offline-proven USC window mismatch. Next thread may prepare a separately
+authorized candidate preserving error publication. Flush retirement remains
+independent; no further package or hardware run authorized by EXP863.
+
 # R149 — USC placement and rejected-work error publication fixed offline
 
 EXP862 remains the hardware verdict and ordinary Code28 recovery. On the
