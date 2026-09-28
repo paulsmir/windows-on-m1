@@ -1,3 +1,32 @@
+# EXP866 — sequence progress confirmed; fifth native job stalls; clean Code28
+
+One package866/source17ee8894 (R151 only on exact EXP86526cbd7e6), unchanged
+R143; Flush excluded. Fresh sequence5/expectedTA7a000500,D33d000500 at active
+Explorer5272 fence955. Prior queue760Success and G3LastCompleted760; persistent
+TA consumed5 (initBM+4jobs), D3 consumed8 (4barrier/workpairs) support four prior
+native completions. Count4 is inferred queue history, not scheduler954 or
+previous stamp words alone; no preserved list of all four fence owners.
+Current TA5of6/D38of10, stamps+0x400, both event/complete0; scene61/GpuDone0/
+quarantined/root9d6014000/gen1400. R151 fresh identity checkpoint passed; the
+later cause remains unknown. Kernel11643.603s CPU0, live14143.540s CPU3.
+
+600s stability and visible-frame checkpoints FAILED. OriginalSSH0; all8CPU
+entries; single scanoutseq2nonzero0. No originalETL before spontaneous reset;
+recoveryETL excluded. QUERY/G4 failure receipts absent; UMD942lines contains
+3ResourceCopyRegion+1DrawIndexedInstanced SetError, causal relation unproven.
+27guestfiles861605328B copied/hashed before cleanup; final48files874646503B
+includes raw recoveryreceipts, serial, analyses and matchingPDBs. Mandatory
+hiddenCode45 exactoem5/package866 cleanup then ordinaryCode28 durable
+13:28:11.7369170Z: present1/package0/arms0/files0/service0/signer0/diagnostics0/
+CPU8/disks2OK/USB5/RDP. Intentional autologon retained. No retry/rearm.
+Result .local/experiments/EXP866-r151-stamp/hardware-result.json SHA256
+b0e9a3d9a31bca8452c3cf3a20bf007f2f673823ee9d50a5895fffb1f82a75f0.
+Report investigation/analysis/EXP866-verdict.md; evidence investigation/evidence/EXP866.
+
+WHY CONTINUE COMPARISON: prior joined completion760 and freshsequence5 move the
+boundary to Explorer955 with neither queue consumer advancing. Next thread
+inspects this exact stalled job offline; no further hardware authorization.
+
 # EXP866 — R151 package prepared; STOP at GO
 
 Source exp/866-stamp 17ee8894 on EXP865 26cbd7e6 applies only R151 source/tests; byte-identical to 091eae6c, Flush excluded. Package30.0.866.0 built 0/0 with SourceCommit=NativeArchiveCommit=tip, signed catalog membership pass. R143 firmware byte-identical; 42-member payload and 39 transfer members hash-verified, PowerShell42 syntax0 and ETL contract pass. Full host1161 has 15F39E2S, no new failure identities versus EXP865. Manifest/payload SHA256 0a2268bdafa69116ab1c7b057f41ca2292455711a698392bbb71659c313534a7/adf57fbf9a7fb5c58bbcfa250c475bf454dbc11e6e49eec4160280df5f8b1f53. Preparation correction: stale resume autologger pin fixed; exhaustive55file/682literal semantic audit now682match/0unresolved. See investigation/evidence/EXP866-preparation-correction/. No Air transfer/stage/launch. GO_EXP866 required before run; dump-first hiddenCode45 then ordinaryCode28 mandatory recovery.

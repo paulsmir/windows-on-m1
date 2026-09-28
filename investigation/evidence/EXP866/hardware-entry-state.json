@@ -1,0 +1,30 @@
+{
+  "utc": "2026-09-28T13:08:10.816077+00:00",
+  "state": {
+    ".": {
+      "commit": "553f91e118988ace6c1881b805bb5cc35cc233ee",
+      "diff_sha256": "9348fbb4dc4b3e3b1b5ecad2892c133135160930861ba8bec5ffae75ddc5f36c"
+    },
+    "m1n1_windows": {
+      "commit": "20d55f4c9532df4bcd6bdb8a04ad01089c453672",
+      "diff_sha256": "68387a2e4a778333004ae9e8e035304dfd70c5d83c8e1ec4dcff4c949427f0e7"
+    },
+    "mu": {
+      "commit": "0dac68712f3bc520d46f88af84a430cfb916dfc4",
+      "diff_sha256": "2e654da05fbcd83288511c5161cc749c8b87d69e222cfc3f6fed3fceaea79a7d"
+    }
+  },
+  "GO_sha256": "c63f5c7e0bf625d58f50566018feaf89027cf685c4a6daf0b2ece834162ffecd",
+  "hardware_manifest_sha256": "0a2268bdafa69116ab1c7b057f41ca2292455711a698392bbb71659c313534a7",
+  "payload_sha256": "adf57fbf9a7fb5c58bbcfa250c475bf454dbc11e6e49eec4160280df5f8b1f53",
+  "stage_sha256": "0496aaf47c4bfb6c9c0d17505b20e0716a1221204f0e4faece69cef0b784dda7",
+  "extract_verify_sha256": "647e487a576588f73a7e1465c9f06e355b9ec0ce697923f7edba2d1eee974ec5",
+  "preflight_sha256": "58b7d5b3380f78c8d954f46cc65f6097d76b6c5827dcf81d41e7e671c2ff997a",
+  "control_planes": {
+    "WindowsSSH": "PASS clean ordinaryCode28",
+    "USB": "L41/L43 present",
+    "active_launcher": "none"
+  },
+  "authorization": "one cold full-owner armed boot; no retry/rearm",
+  "status": "BEFORE_STAGE"
+}
