@@ -15,6 +15,304 @@ from pathlib import Path
 import shutil
 import subprocess
 
+
+def project_shader_failure(state, shader, device):
+    """Project checked executable allocation through shader/device creation.
+
+    This changes only the copied Windows build inputs. Every anchor is pinned
+    to one occurrence so a Mesa revision cannot silently drop a failure edge.
+    """
+    def replace_once(source, old, new):
+        if source.count(old) != 1:
+            raise ValueError('Ambiguous shader failure anchor: ' + old[:72])
+        return source.replace(old, new, 1)
+
+    state = replace_once(state, '#include "agx_state.h"',
+        '#include "agx_state.h"\n#include "agx_win32_asahi_bo.h"')
+    state = replace_once(state,
+        '   struct agx_compiled_shader *compiled = CALLOC_STRUCT(agx_compiled_shader);\n   compiled->stage = stage;',
+        '   struct agx_compiled_shader *compiled = CALLOC_STRUCT(agx_compiled_shader);\n'
+        '   if (!compiled)\n      return NULL;\n   compiled->stage = stage;')
+    state = replace_once(state, '''      memcpy(agx_bo_map(compiled->bo), compiled->b.binary,
+             compiled->b.info.binary_size);''', '''      if (!compiled->bo) {
+         free(compiled->b.binary);
+         FREE(compiled);
+         return NULL;
+      }
+      void *mapped = agx_bo_map(compiled->bo);
+      if (!mapped) {
+         agx_bo_unreference(dev, compiled->bo);
+         free(compiled->b.binary);
+         FREE(compiled);
+         return NULL;
+      }
+      memcpy(mapped, compiled->b.binary, compiled->b.info.binary_size);''')
+    state = replace_once(state,
+        'static struct agx_compiled_shader *\nagx_compile_variant(',
+        'static void agx_delete_compiled_shader(struct agx_device *dev,\n'
+        '                                       struct agx_compiled_shader *so);\n\n'
+        'static struct agx_compiled_shader *\nagx_compile_variant(')
+    state = replace_once(state, '''      false, 0, attrib_components_read);
+
+   if (so->type == MESA_SHADER_FRAGMENT) {''', '''      false, 0, attrib_components_read);
+   if (!compiled)
+      goto fail;
+
+   if (so->type == MESA_SHADER_FRAGMENT) {''')
+    state = replace_once(state, '''      compiled->gs_count->so = so;''', '''      if (!compiled->gs_count)
+         goto fail;
+      compiled->gs_count->so = so;''')
+    state = replace_once(state, '''                         true, false, 0, NULL);
+   }
+
+   if (gs_copy) {''', '''                         true, false, 0, NULL);
+      if (!compiled->pre_gs)
+         goto fail;
+   }
+
+   if (gs_copy) {''')
+    state = replace_once(state, '''      compiled->gs_copy->so = so;''', '''      if (!compiled->gs_copy)
+         goto fail;
+      compiled->gs_copy->so = so;''')
+    state = replace_once(state, '''   ralloc_free(gs_count);
+   return compiled;
+}
+
+static struct agx_compiled_shader *
+agx_get_shader_variant''', '''   ralloc_free(gs_count);
+   return compiled;
+
+fail:
+   ralloc_free(nir);
+   ralloc_free(pre_gs);
+   ralloc_free(gs_count);
+   ralloc_free(gs_copy);
+   if (compiled)
+      agx_delete_compiled_shader(dev, compiled);
+   return NULL;
+}
+
+static struct agx_compiled_shader *
+agx_get_shader_variant''')
+    state = replace_once(state, '''      compiled = agx_compile_variant(&screen->dev, pctx, so, key);
+      agx_disk_cache_store(screen->disk_cache, so, key, compiled);''', '''      compiled = agx_compile_variant(&screen->dev, pctx, so, key);
+      if (!compiled)
+         return NULL;
+      agx_disk_cache_store(screen->disk_cache, so, key, compiled);''')
+    state = replace_once(state, '''   union asahi_shader_key *cloned_key =
+      rzalloc(so->variants, union asahi_shader_key);
+
+   if (so->type''', '''   union asahi_shader_key *cloned_key =
+      rzalloc(so->variants, union asahi_shader_key);
+   if (!cloned_key) {
+      agx_delete_compiled_shader(&screen->dev, compiled);
+      return NULL;
+   }
+
+   if (so->type''')
+    state = replace_once(state,
+        'static void *\nagx_create_shader_state(',
+        'static void agx_delete_uncompiled_shader(struct agx_device *dev,\n'
+        '                                         struct agx_uncompiled_shader *so);\n\n'
+        'static void *\nagx_create_shader_state(')
+    state = replace_once(state, '''      agx_get_shader_variant(agx_screen(pctx->screen), pctx, so, &key);
+   } else if (so->type == MESA_SHADER_VERTEX) {''', '''      if (!agx_get_shader_variant(agx_screen(pctx->screen), pctx, so, &key)) {
+         agx_delete_uncompiled_shader(dev, so);
+         return NULL;
+      }
+   } else if (so->type == MESA_SHADER_VERTEX) {''')
+    state = replace_once(state, '''      agx_get_shader_variant(agx_screen(pctx->screen), pctx, so, &key);
+
+      if (next_stage == MESA_SHADER_NONE) {''', '''      if (!agx_get_shader_variant(agx_screen(pctx->screen), pctx, so, &key)) {
+         agx_delete_uncompiled_shader(dev, so);
+         return NULL;
+      }
+
+      if (next_stage == MESA_SHADER_NONE) {''')
+    state = replace_once(state, '''         agx_get_shader_variant(agx_screen(pctx->screen), pctx, so, &key);
+      }
+   } else if (dev->debug & AGX_DBG_PRECOMPILE)''', '''         if (!agx_get_shader_variant(agx_screen(pctx->screen), pctx, so, &key)) {
+            agx_delete_uncompiled_shader(dev, so);
+            return NULL;
+         }
+      }
+   } else if (dev->debug & AGX_DBG_PRECOMPILE)''')
+
+    state = replace_once(state, '''      agx_compile_variant(dev, pctx, so, &key);
+   }
+
+   return so;''', '''      if (!agx_compile_variant(dev, pctx, so, &key)) {
+         agx_delete_uncompiled_shader(dev, so);
+         return NULL;
+      }
+   }
+
+   return so;''')
+
+    state = replace_once(state, 'static void *\nagx_create_compute_state(',
+        'static void agx_win32_shader_failed(struct agx_context *ctx);\n\n'
+        'static void *\nagx_create_compute_state(')
+    state = replace_once(state, '''   agx_get_shader_variant(agx_screen(pctx->screen), pctx, so, &key);
+
+   /* We're done with the NIR, throw it away */''', '''   if (!agx_get_shader_variant(agx_screen(pctx->screen), pctx, so, &key)) {
+      ralloc_free(nir);
+      agx_delete_uncompiled_shader(dev, so);
+      return NULL;
+   }
+
+   /* We're done with the NIR, throw it away */''')
+    state = replace_once(state, '''      agx_get_shader_variant(agx_screen(pctx->screen), pctx, cso, &key);
+
+   info->max_threads =''', '''      agx_get_shader_variant(agx_screen(pctx->screen), pctx, cso, &key);
+   if (!so) {
+      memset(info, 0, sizeof(*info));
+      agx_win32_shader_failed(agx_context(pctx));
+      return;
+   }
+
+   info->max_threads =''')
+
+    # A later shader key can compile at draw time. Keep that failure out of
+    # the cache and stop the Windows draw before it reads the missing variant.
+    state = replace_once(state, '''static bool
+agx_update_shader(''', '''static void
+agx_win32_shader_failed(struct agx_context *ctx)
+{
+   ctx->any_faults = true;
+   struct agx_device *dev = agx_device(ctx->base.screen);
+   AGX_WIN32_ASAHI_BACKEND *backend = dev->windows_private;
+   if (backend)
+      backend->Failed = 1;
+}
+
+static bool
+agx_update_shader(''')
+    state = replace_once(state, '''   *out = agx_get_shader_variant(screen, &ctx->base, so, key);
+   return true;''', '''   *out = agx_get_shader_variant(screen, &ctx->base, so, key);
+   if (!*out) {
+      agx_win32_shader_failed(ctx);
+      return false;
+   }
+   return true;''')
+    state = replace_once(state, '''   agx_update_shader(ctx, &ctx->vs, MESA_SHADER_VERTEX,
+                     (union asahi_shader_key *)&key);
+
+   struct agx_device''', '''   agx_update_shader(ctx, &ctx->vs, MESA_SHADER_VERTEX,
+                     (union asahi_shader_key *)&key);
+   if (!ctx->vs)
+      return false;
+
+   struct agx_device''')
+    state = replace_once(state, '''   agx_update_shader(ctx, &ctx->fs, MESA_SHADER_FRAGMENT,
+                     (union asahi_shader_key *)&key);
+
+   /* Fast link''', '''   agx_update_shader(ctx, &ctx->fs, MESA_SHADER_FRAGMENT,
+                     (union asahi_shader_key *)&key);
+   if (!ctx->fs)
+      return false;
+
+   /* Fast link''')
+    state = replace_once(state, '''   ralloc_free(b.shader);
+
+   /* ..and cache it before we return.''', '''   ralloc_free(b.shader);
+   if (!shader)
+      return NULL;
+
+   /* ..and cache it before we return.''')
+    state = replace_once(state, '''   struct agx_linked_shader *linked =
+      rzalloc(so->linked_shaders, struct agx_linked_shader);
+   agx_fast_link''', '''   if ((so->type == MESA_SHADER_FRAGMENT && (!prolog || !epilog)) ||
+       (so->type == MESA_SHADER_VERTEX && !prolog)) {
+      agx_win32_shader_failed(ctx);
+      return NULL;
+   }
+   struct agx_linked_shader *linked =
+      rzalloc(so->linked_shaders, struct agx_linked_shader);
+   if (!linked) {
+      agx_win32_shader_failed(ctx);
+      return NULL;
+   }
+   agx_fast_link''')
+    state = replace_once(state, '''   ctx->linked.vs =
+      asahi_fast_link(ctx, ctx->stage[MESA_SHADER_VERTEX].shader, &link_key);
+
+   agx_batch_add_bo''', '''   ctx->linked.vs =
+      asahi_fast_link(ctx, ctx->stage[MESA_SHADER_VERTEX].shader, &link_key);
+   if (!ctx->linked.vs) {
+      agx_win32_shader_failed(ctx);
+      return false;
+   }
+
+   agx_batch_add_bo''')
+    state = replace_once(state, '''   ctx->linked.fs =
+      asahi_fast_link(ctx, ctx->stage[MESA_SHADER_FRAGMENT].shader, &link_key);
+
+   if (ctx->fs->bo)''', '''   ctx->linked.fs =
+      asahi_fast_link(ctx, ctx->stage[MESA_SHADER_FRAGMENT].shader, &link_key);
+   if (!ctx->linked.fs) {
+      agx_win32_shader_failed(ctx);
+      return false;
+   }
+
+   if (ctx->fs->bo)''')
+    state = replace_once(state, '''   agx_update_vs(batch, info->index_size);
+   agx_update_tcs(ctx, info);''', '''   agx_update_vs(batch, info->index_size);
+   if (ctx->any_faults)
+      return;
+   agx_update_tcs(ctx, info);''')
+    state = replace_once(state, '''   /* This is subtle. But agx_update_vs will be true at least once per batch. */
+   assert(agx_batch_uses_bo''', '''   if (ctx->any_faults)
+      return;
+   /* This is subtle. But agx_update_vs will be true at least once per batch. */
+   assert(agx_batch_uses_bo''')
+    state = replace_once(state, '''   /* This is subtle. But agx_update_fs will be true at least once per batch. */
+   assert(!ctx->fs->bo''', '''   if (ctx->any_faults)
+      return;
+   /* This is subtle. But agx_update_fs will be true at least once per batch. */
+   assert(!ctx->fs->bo''')
+
+    shader = replace_once(shader, '''   if (!tokens)
+      return NULL;
+
+   ureg_destroy(ureg);''', '''   if (!tokens) {
+      ureg_destroy(ureg);
+      return NULL;
+   }
+
+   ureg_destroy(ureg);''')
+    shader = replace_once(shader, '''   assert(handle);
+
+   ureg_free_tokens(tokens);''', '''   ureg_free_tokens(tokens);''')
+
+    device = replace_once(device, '''   pDevice->empty_vs = CreateEmptyShader(pDevice, MESA_SHADER_VERTEX);
+   pDevice->empty_fs = CreateEmptyShader(pDevice, MESA_SHADER_FRAGMENT);
+
+   pipe->bind_vs_state''', '''   pDevice->empty_vs = CreateEmptyShader(pDevice, MESA_SHADER_VERTEX);
+   if (!pDevice->empty_vs) {
+      cso_destroy_context(pDevice->cso);
+      pDevice->cso = NULL;
+      BOOL consumed = FALSE;
+      pDevice->cleanup_result = AgxD3d10WindowsDestroyDeviceDdi(
+         &pDevice->windows, &consumed);
+      pDevice->pipe = NULL;
+      return E_OUTOFMEMORY;
+   }
+   pDevice->empty_fs = CreateEmptyShader(pDevice, MESA_SHADER_FRAGMENT);
+   if (!pDevice->empty_fs) {
+      DeleteEmptyShader(pDevice, MESA_SHADER_VERTEX, pDevice->empty_vs);
+      pDevice->empty_vs = NULL;
+      cso_destroy_context(pDevice->cso);
+      pDevice->cso = NULL;
+      BOOL consumed = FALSE;
+      pDevice->cleanup_result = AgxD3d10WindowsDestroyDeviceDdi(
+         &pDevice->windows, &consumed);
+      pDevice->pipe = NULL;
+      return E_OUTOFMEMORY;
+   }
+
+   pipe->bind_vs_state''')
+    return state, shader, device
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--output', required=True, type=Path)
 parser.add_argument('--windows-platform-declarations', action='store_true')
@@ -3516,6 +3814,17 @@ agx_shader_initialize("""
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
                 module.project_sources(out, args.project, overlays)
+            shader_paths = (
+                'src/gallium/drivers/asahi/agx_state.c',
+                'src/gallium/frontends/d3d10umd/Shader.cpp',
+                'src/gallium/frontends/d3d10umd/Device.cpp')
+            projected = project_shader_failure(*((out/path).read_text()
+                                                for path in shader_paths))
+            for path, content in zip(shader_paths, projected):
+                target = out/path
+                target.write_text(content)
+                overlays.setdefault(path, {})['after_shader_failure'] = (
+                    hashlib.sha256(target.read_bytes()).hexdigest())
             # The last source transform is authoritative for runtime compilation.
             for key, record in overlays.items():
                 path = out/key
