@@ -509,6 +509,18 @@ HRESULT AgxD3d10WindowsFlushStatus(AGX_D3D10_WINDOWS_DEVICE *Device) {
       Device->Runtime.LastScreenError:E_FAIL;
 }
 
+HRESULT AgxD3d10WindowsFlushDeferredResources(AGX_D3D10_WINDOWS_DEVICE *Device) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady) return E_INVALIDARG;
+  /* Flush must release eligible shared resources even with no new commands.
+   * A registered native BO still owns source/submission references: collection
+   * leaves it pending, and only fully retired resources reach this queue. */
+  (void)collect_presentations(Device);
+  if(!AdmissionUmdRetirementDrain(&Device->Runtime.Retirement))
+    return FAILED(Device->Runtime.LastRetirementError) ?
+        Device->Runtime.LastRetirementError : E_FAIL;
+  return S_OK;
+}
+
 static HRESULT flush_retire(AGX_D3D10_WINDOWS_DEVICE *Device,DWORD timeout) {
   if(!Device || Device->Stage!=AgxD3d10DeviceReady || !Device->Context)
     return E_INVALIDARG;

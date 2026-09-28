@@ -3773,7 +3773,8 @@ static void test_mesa_d3d10_frontend_open(void) {
           deviceFunctions.pfnSetRenderTargets(device,&rtv,1,0,(D3D10DDI_HDEPTHSTENCILVIEW){0});
           deviceFunctions.pfnDestroyRenderTargetView(device,av);deviceFunctions.pfnDestroyResource(device,a);
           free(av.pDrvPrivate);free(a.pDrvPrivate);
-          CHECK(AdmissionUmdRetirementDrain(&depthOwner->Device->Retirement));
+          deviceFunctions.pfnFlush(device);
+          CHECK(depthOwner->Device->Retirement.Count==0);
           CHECK(PoolMemory[aliasSlot]!=NULL); /* A lifetime ended; B still owns storage. */
           cr.MiscFlags=0;cr.BindFlags=D3D10_DDI_BIND_RENDER_TARGET;
           target.pDrvPrivate=calloc(1,sharedFunctions.pfnCalcPrivateResourceSize(sharedDevice,&cr));
@@ -3791,7 +3792,8 @@ static void test_mesa_d3d10_frontend_open(void) {
           CHECK(AgxWin32AsahiContextRetire(MesaD3d10FrontendContextForTest(sharedDevice),0));
           sharedFunctions.pfnDestroyResource(sharedDevice,target);sharedFunctions.pfnDestroyResource(sharedDevice,b);
           free(target.pDrvPrivate);free(b.pDrvPrivate);
-          CHECK(AdmissionUmdRetirementDrain(&sharedOwner->Device->Retirement));
+          sharedFunctions.pfnFlush(sharedDevice);
+          CHECK(sharedOwner->Device->Retirement.Count==0);
           CHECK(PoolMemory[aliasSlot]==NULL && PoolSharedCloses==2u*(si+1u));
         }
         RuntimeActiveDevice=depthOwner->Device;RuntimeAutoCompleteConsumers=0;

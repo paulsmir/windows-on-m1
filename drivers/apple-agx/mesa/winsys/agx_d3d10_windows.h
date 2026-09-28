@@ -43,6 +43,7 @@ BOOL AgxD3d10WindowsIdentity(AGX_D3D10_WINDOWS_DEVICE *Device,
                              ULONGLONG *OwnerCookie,
                              ULONG *DeviceGeneration);
 HRESULT AgxD3d10WindowsFlushStatus(AGX_D3D10_WINDOWS_DEVICE *Device);
+HRESULT AgxD3d10WindowsFlushDeferredResources(AGX_D3D10_WINDOWS_DEVICE *Device);
 HRESULT AgxD3d10WindowsFlushRetire(AGX_D3D10_WINDOWS_DEVICE *Device);
 HRESULT AgxD3d10WindowsTryFlushRetire(AGX_D3D10_WINDOWS_DEVICE *Device);
 HRESULT AgxD3d10WindowsQuerySignal(AGX_D3D10_WINDOWS_DEVICE *Device,

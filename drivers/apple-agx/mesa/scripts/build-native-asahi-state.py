@@ -1015,6 +1015,7 @@ void APIENTRY
       pDevice->pipe->flush(pDevice->pipe, NULL, 0);
       result = AgxD3d10WindowsFlushStatus(pDevice->windows);
    }
+   if (SUCCEEDED(result)) result = AgxD3d10WindowsFlushDeferredResources(pDevice->windows);
    if (SUCCEEDED(result)) result = AgxD3d10WindowsQueryCollect(pDevice->windows);
    if (FAILED(result)) SetError(hDevice, result);''')
     change('src/gallium/frontends/d3d10umd/OutputMerger.cpp',
