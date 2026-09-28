@@ -29,6 +29,7 @@ class AppleAgxRenderSharedMemoryTests(unittest.TestCase):
                 str(SHARED / "src" / "apple_agx_gdi.c"),
                 str(SHARED / "src" / "apple_agx_relocation.c"),
                 str(SHARED / "src" / "apple_agx_memory.c"),
+                str(SHARED / "src" / "apple_agx_exp208_dynamic.c"),
                 "-o", str(binary),
             ]
             subprocess.run(command, check=True, cwd=ROOT)
