@@ -352,6 +352,18 @@ VOID AdmissionGpuvaG3PrivateCancel(ADMISSION_RENDER_CONTEXT *context,
   InterlockedExchange(&context->GpuvaG3CancelFence,(LONG)fence);
 }
 
+/* Queued preemption transfers ownership back to VidSch, which can resubmit
+ * this same scene with a new fence. Keep the queued hold until that transfer
+ * or context teardown; an ordinary cancellation has different lifetime rules. */
+VOID AdmissionGpuvaG3PrivatePreempt(ADMISSION_RENDER_CONTEXT *context,
+    ULONG fence) {
+  if (!context || !fence ||
+      (ULONG)InterlockedCompareExchange(&context->GpuvaG3PrivateFence,0,0)!=fence ||
+      InterlockedCompareExchange(&context->GpuvaG3CancelFence,0,0) ||
+      InterlockedCompareExchange(&context->GpuvaG3CancelUncertain,0,0)) return;
+  InterlockedExchange(&context->GpuvaG3PreemptFence,(LONG)fence);
+}
+
 static BOOLEAN AdmissionG3PrivateReap(ADMISSION_G3_PROCESS *p) {
   ADMISSION_G3_PRIVATE_SCENE *s,*next;
   ADMISSION_BACKEND_MEMORY_VIEW view;
@@ -367,6 +379,7 @@ static BOOLEAN AdmissionG3PrivateReap(ADMISSION_G3_PROCESS *p) {
         s->Quarantined=1u;p->Poisoned=TRUE;
       } else {
         s->Queued=0u;
+        InterlockedExchange(&s->Context->GpuvaG3PreemptFence,0);
         InterlockedExchange(&s->Context->GpuvaG3PrivateFence,0);
       }
     }
@@ -440,8 +453,18 @@ BOOLEAN AdmissionGpuvaG3PrivateRetireContext(ADMISSION_RENDER_CONTEXT *context) 
   ExAcquireFastMutex(&p->State->Lock);
   context->GpuvaG3Closing=TRUE;
   if (!AdmissionG3PrivateReap(p)) goto Done;
-  for (s=p->PrivateScenes;s;s=s->Next)
-    if (s->Context==context && (s->Queued || s->Quarantined)) goto Done;
+  for (s=p->PrivateScenes;s;s=s->Next) {
+    if (s->Context!=context) continue;
+    if (s->Queued && !s->Submitting && !s->Started && !s->Quarantined &&
+        !InterlockedCompareExchange(&context->GpuvaG3CancelUncertain,0,0) &&
+        (ULONG)InterlockedCompareExchange(&context->GpuvaG3PrivateFence,0,0)==s->Fence &&
+        (ULONG)InterlockedCompareExchange(&context->GpuvaG3PreemptFence,0,0)==s->Fence) {
+      s->Queued=0u;
+      InterlockedExchange(&context->GpuvaG3PreemptFence,0);
+      InterlockedExchange(&context->GpuvaG3PrivateFence,0);
+    }
+    if (s->Queued || s->Quarantined) goto Done;
+  }
   if (!p->PrivateManager.Generation) {ok=TRUE;goto Done;}
   if (p->Graph.JobInFlight || p->Graph.LeaseToken ||
       !NT_SUCCESS(AdmissionMemoryRuntimePrivateView(p->State->Adapter,&view))) goto Done;
@@ -1251,8 +1274,30 @@ static ADMISSION_G3_PRIVATE_SCENE *AdmissionG4FindPrivateScene(
   if (!s || s->Context!=context || s->Storage.Generation!=lease->SceneGeneration ||
       s->Quarantined || (!begin && s->ReleaseRequested) || s->Started ||
       (begin ? (!s->Queued || s->Fence!=fence ||
+          (ULONG)InterlockedCompareExchange(&context->GpuvaG3PreemptFence,0,0)==fence ||
           (ULONG)InterlockedCompareExchange(&context->GpuvaG3CancelFence,0,0)==fence) :
           (s->Queued || InterlockedCompareExchange(&context->GpuvaG3PrivateFence,0,0)))) return NULL;
+  return s;
+}
+
+static ADMISSION_G3_PRIVATE_SCENE *AdmissionG4FindPrivateResubmission(
+    ADMISSION_G3_PROCESS *p, ADMISSION_RENDER_CONTEXT *context,
+    const APPLE_AGX_G4_PRIVATE_LEASE *lease, ULONG fence) {
+  ADMISSION_G3_PRIVATE_SCENE *s;
+  if (context->GpuvaG3Closing || !lease || !lease->ManagerId ||
+      lease->ManagerId!=p->Graph.ProcessId ||
+      lease->ManagerGeneration!=p->PrivateManager.Generation ||
+      context->GpuvaG3PrivateManagerGeneration!=lease->ManagerGeneration ||
+      InterlockedCompareExchange(&context->GpuvaG3CancelFence,0,0) ||
+      InterlockedCompareExchange(&context->GpuvaG3CancelUncertain,0,0)) return NULL;
+  for (s=p->PrivateScenes;s;s=s->Next)
+    if (s->Storage.Generation==lease->SceneId) break;
+  if (!s || s->Context!=context || s->Storage.Generation!=lease->SceneGeneration ||
+      !s->Queued || s->Submitting || s->Started || s->Quarantined || !fence ||
+      !s->Fence || fence==s->Fence ||
+      (ULONG)InterlockedCompareExchange(&context->GpuvaG3PrivateFence,0,0)!=s->Fence ||
+      (ULONG)InterlockedCompareExchange(&context->GpuvaG3PreemptFence,0,0)!=s->Fence)
+    return NULL;
   return s;
 }
 
@@ -1286,8 +1331,16 @@ static VOID AdmissionG4PrivateUnqueue(ADMISSION_G3_PROCESS *p,
   if (!scene) return;
   ExAcquireFastMutex(&p->State->Lock);
   if (scene->Queued && scene->Fence==fence && !scene->Started) {
-    scene->Submitting=0;scene->Queued=0;scene->Fence=0;
-    InterlockedExchange(&scene->Context->GpuvaG3PrivateFence,0);
+    scene->Submitting=0;
+    if (scene->ResumeFence) {
+      /* Failed admission did not consume VidSch's suspended transaction. */
+      scene->Fence=scene->ResumeFence;scene->ResumeFence=0;
+      InterlockedExchange(&scene->Context->GpuvaG3PrivateFence,(LONG)scene->Fence);
+      InterlockedExchange(&scene->Context->GpuvaG3PreemptFence,(LONG)scene->Fence);
+    } else {
+      scene->Queued=0;scene->Fence=0;
+      InterlockedExchange(&scene->Context->GpuvaG3PrivateFence,0);
+    }
   }
   ExReleaseFastMutex(&p->State->Lock);
 }
@@ -1627,6 +1680,8 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   NTSTATUS viewStatus = STATUS_SUCCESS;
   BOOLEAN prepared = FALSE, queued = FALSE;
   ULONG rollbackBranch = AdmissionG4RejectBind;
+  DXGK_SUBMITCOMMANDFLAGS unsupportedFlags=args->Flags;
+  unsupportedFlags.Resubmission=0;
   if (KeGetCurrentIrql() != PASSIVE_LEVEL || state == NULL ||
       process == NULL || process->State != state || process->Poisoned ||
       context->GpuvaG3Poisoned || context->GpuvaG3RootIpa == 0ULL ||
@@ -1634,7 +1689,7 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
       (context->Object.Flags & ADMISSION_CONTEXT_VIRTUAL_ADDRESSING) == 0u ||
       (context->Object.Flags & (ADMISSION_CONTEXT_SYSTEM |
                                 ADMISSION_CONTEXT_GDI)) != 0u ||
-      args->Flags.Value != 0u ||
+      unsupportedFlags.Value != 0u ||
       !context->SchedulerContext.Active ||
       !AdmissionPlatformRuntimeReady(adapter) ||
       !NT_SUCCESS(viewStatus =
@@ -1657,8 +1712,11 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
     if (private_header.Version==APPLE_AGX_G4_PRIVATE_VERSION_PRIVATE_VA &&
         args->DmaBufferUmdPrivateDataSize>=sizeof(private_v3)) {
       RtlCopyMemory(&private_v3,args->pDmaBufferPrivateData,sizeof(private_v3));
-      private_scene=AdmissionG4FindPrivateScene(process,context,&private_v3.Lease,
-                                               args->SubmissionFenceId,FALSE);
+      private_scene=args->Flags.Resubmission ?
+          AdmissionG4FindPrivateResubmission(process,context,&private_v3.Lease,
+                                             args->SubmissionFenceId) :
+          AdmissionG4FindPrivateScene(process,context,&private_v3.Lease,
+                                      args->SubmissionFenceId,FALSE);
       if (!private_scene) {
         ExReleaseFastMutex(&state->Lock);
         return AdmissionG4SubmitReject(adapter,context,args,
@@ -1711,8 +1769,10 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   if (result != AppleAgxG4ParseOk)
     AdmissionG4SnapshotFailure(process, &failure, &detail);
   if (result==AppleAgxG4ParseOk && private_scene) {
+    private_scene->ResumeFence=args->Flags.Resubmission ? private_scene->Fence : 0u;
     private_scene->Submitting=1u;private_scene->Queued=1u;
     private_scene->Fence=args->SubmissionFenceId;
+    InterlockedExchange(&context->GpuvaG3PreemptFence,0);
     InterlockedExchange(&context->GpuvaG3CancelFence,0);
     InterlockedExchange(&context->GpuvaG3CancelUncertain,0);
     InterlockedExchange(&context->GpuvaG3PrivateFence,(LONG)args->SubmissionFenceId);
@@ -1758,7 +1818,9 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   }
   if (!queued) context->Object.FenceOutstanding = 0u;
   KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
-  if (queued && private_scene) private_scene->Submitting=0u;
+  if (queued && private_scene) {
+    private_scene->ResumeFence=0u;private_scene->Submitting=0u;
+  }
   ExReleaseFastMutex(&state->Lock);
   if (!queued) goto Rollback;
   AdmissionDispatchQueuedWork(adapter);

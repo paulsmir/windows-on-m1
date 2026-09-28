@@ -1,0 +1,12 @@
+R154 revalidate after unrelated unmap: status c0000184
+Traceback (most recent call last):
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/g3_vidmm_replay.py", line 209, in <module>
+    sys.exit(main(args.revision, overrides, args.old_context_flags))
+             ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/g3_vidmm_replay.py", line 197, in main
+    subprocess.run([str(binary)], check=True, cwd=ROOT, env=env)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/var/folders/s5/sgnkc7ws7cs5ctyqdwh_6qm40000gp/T/g3-vidmm-te7qbqcq/replay']' returned non-zero exit status 1.

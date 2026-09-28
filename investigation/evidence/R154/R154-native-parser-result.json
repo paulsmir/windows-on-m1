@@ -1,0 +1,162 @@
+{
+  "source_commit": "335031768e44505d33fcbc91b4899fdf13b8fb60",
+  "parse_result": 0,
+  "parse_ok": true,
+  "access_checks": [
+    {
+      "va": "0x24d0000",
+      "bytes": 65536,
+      "write": 1,
+      "kind": 1,
+      "ordinal": 0,
+      "valid": true
+    },
+    {
+      "va": "0x24e0000",
+      "bytes": 65536,
+      "write": 1,
+      "kind": 1,
+      "ordinal": 1,
+      "valid": true
+    },
+    {
+      "va": "0x24f0000",
+      "bytes": 4194304,
+      "write": 1,
+      "kind": 1,
+      "ordinal": 2,
+      "valid": true
+    },
+    {
+      "va": "0x21b0000",
+      "bytes": 131072,
+      "write": 1,
+      "kind": 1,
+      "ordinal": 3,
+      "valid": true
+    },
+    {
+      "va": "0x21d0000",
+      "bytes": 65536,
+      "write": 1,
+      "kind": 1,
+      "ordinal": 4,
+      "valid": true
+    },
+    {
+      "va": "0x21e0000",
+      "bytes": 65536,
+      "write": 1,
+      "kind": 1,
+      "ordinal": 5,
+      "valid": true
+    },
+    {
+      "va": "0x21f0000",
+      "bytes": 65536,
+      "write": 1,
+      "kind": 1,
+      "ordinal": 6,
+      "valid": true
+    },
+    {
+      "va": "0x2200000",
+      "bytes": 65536,
+      "write": 1,
+      "kind": 1,
+      "ordinal": 7,
+      "valid": true
+    },
+    {
+      "va": "0x2210000",
+      "bytes": 65536,
+      "write": 1,
+      "kind": 1,
+      "ordinal": 8,
+      "valid": true
+    },
+    {
+      "va": "0x3d950000",
+      "bytes": 280,
+      "write": 0,
+      "kind": 2,
+      "ordinal": 9,
+      "valid": true
+    },
+    {
+      "va": "0x110cea0000",
+      "bytes": 16384,
+      "write": 1,
+      "kind": 3,
+      "ordinal": 10,
+      "valid": true
+    },
+    {
+      "va": "0x3d2f0000",
+      "bytes": 1,
+      "write": 0,
+      "kind": 4,
+      "ordinal": 11,
+      "valid": true
+    },
+    {
+      "va": "0x3d2b0e40",
+      "bytes": 1,
+      "write": 0,
+      "kind": 4,
+      "ordinal": 12,
+      "valid": true
+    },
+    {
+      "va": "0x3d2b0e80",
+      "bytes": 1,
+      "write": 0,
+      "kind": 4,
+      "ordinal": 13,
+      "valid": true
+    },
+    {
+      "va": "0x110d190140",
+      "bytes": 1,
+      "write": 0,
+      "kind": 4,
+      "ordinal": 14,
+      "valid": true
+    },
+    {
+      "va": "0x110d190240",
+      "bytes": 1,
+      "write": 0,
+      "kind": 4,
+      "ordinal": 15,
+      "valid": true
+    },
+    {
+      "va": "0x110d1901c0",
+      "bytes": 1,
+      "write": 0,
+      "kind": 4,
+      "ordinal": 16,
+      "valid": true
+    },
+    {
+      "va": "0x110d190240",
+      "bytes": 1,
+      "write": 0,
+      "kind": 4,
+      "ordinal": 17,
+      "valid": true
+    }
+  ],
+  "limitation": "Offline exact production parser with dump graph callback; excludes live lease/firmware operation and pre-TDR timing.",
+  "sha256": {
+    "apple_agx_g4_submit.c": "f3331443e1f5a10e8e356ef6776d5f0e2e10d80ba9550ad1bf3fba09491ef343",
+    "apple_agx_g4_submit.h": "eb374aba69bf390905f4b4dee8d53c6823a618708280cce3cbce31371fae8174",
+    "R154-native-command.bin": "179714a47eb7af7d106ca63a692357f8a2fcf0fb1b12a9eed0edd9bf7eb9e9b1",
+    "R154-native-graph.txt": "3c8a92a6f24456e5524a1342362506dc1ad7f496801b80ca209838110fba328f",
+    "R154-native-graph-decoded.json": "d853ba4d212491703f12754827ba5a1414aca3fdb83b687d3a297abe5272ffc6",
+    "R154-native-envelope.txt": "888bbd1d201e11700e4bae55121b355b255d369a5c8e22d03d0af94208d2ec4f",
+    "R154-native-replay.py": "a8c707dc894f94fdbc81669454d64f38c82674bc38fcdae38f08c1ccb1b50eee",
+    "R154-native-parser.dylib": "aabcdd1b2b17176a322032931a94495f954d290e2fd99d33437c88403cef3d61"
+  }
+}

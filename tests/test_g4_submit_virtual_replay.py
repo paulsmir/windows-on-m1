@@ -40,9 +40,9 @@ class G4SubmitVirtualReplay(unittest.TestCase):
         branches = production.split("/* Branch IDs are a stable diagnostic ABI", 1)[1]
         branches = "enum {" + branches.split("enum {", 1)[1].split("};", 1)[0] + "};"
         functions = branches + "\n" + "\n".join(function_body(production, name) for name in (
-            "AdmissionG4SubmitReject",
+            "AdmissionG4SubmitReject", "AdmissionGpuvaG3PrivatePreempt",
             "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
-            "AdmissionG4GraphAccessTyped", "AdmissionG4FindPrivateScene","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy",
+            "AdmissionG4GraphAccessTyped", "AdmissionG4FindPrivateScene","AdmissionG4FindPrivateResubmission","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy",
             "AdmissionG4SnapshotFailure", "AdmissionG4ResolveOutput",
             "AdmissionG4SubmitVirtualEnvelope",
             "AdmissionG3OutputMatchesLocal", "AdmissionGpuvaG3BeginJob",
@@ -58,6 +58,7 @@ class G4SubmitVirtualReplay(unittest.TestCase):
                 "-I", str(ROOT / "drivers/apple-agx/shared/include"),
                 str(ROOT / "tests/g4_submit_virtual_replay.c"),
                 str(ROOT / "drivers/apple-agx/shared/src/apple_agx_g4_submit.c"),
+                str(ROOT / "drivers/apple-agx/shared/src/apple_agx_scheduler.c"),
                 "-o", str(binary),
             ], check=True)
             subprocess.run([str(binary)], check=True, timeout=10)

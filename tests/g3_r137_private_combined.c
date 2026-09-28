@@ -83,6 +83,26 @@ static void r137_private_combined(void) {
   /* Queue owner is exercised by the outer-DDI replay. Model its exact hold
    * here, retaining the real BeginJob/parser/graph/wire/firmware builder. */
   scene->Queued=1;scene->Fence=41;context.GpuvaG3PrivateFence=41;
+  if (getenv("G3_REPLAY_R154_RESUBMIT")) {
+    /* Submit transfer is tested by the real envelope/scheduler replay. Here
+     * drive real private storage through suspension, transfer and completion. */
+    scene->Fence=40;context.GpuvaG3PrivateFence=40;
+    APPLE_AGX_G3_PRIVATE_REQUEST early={0};
+    early.Magic=APPLE_AGX_G3_PRIVATE_MAGIC;early.Version=1;early.Bytes=sizeof(early);
+    early.Operation=APPLE_AGX_G3_PRIVATE_RELEASE;
+    early.ManagerId=batch.Lease.ManagerId;early.ManagerGeneration=batch.Lease.ManagerGeneration;
+    early.SceneId=batch.Lease.SceneId;early.SceneGeneration=batch.Lease.SceneGeneration;
+    assert(r137_escape_transport(&t,&early));
+    replay_irql=DISPATCH_LEVEL;
+    AdmissionGpuvaG3PrivatePreempt(&context,999); /* Wrong fence cannot publish. */
+    assert(!context.GpuvaG3PreemptFence);
+    AdmissionGpuvaG3PrivatePreempt(&context,40);
+    replay_irql=PASSIVE_LEVEL;
+    assert(AdmissionG3PrivateReap(p) && p->PrivateScenes==scene && scene->Queued);
+    assert(!AdmissionG4FindPrivateScene(p,&context,&batch.Lease,41,FALSE));
+    assert(AdmissionG4FindPrivateResubmission(p,&context,&batch.Lease,41)==scene);
+    scene->Fence=41;context.GpuvaG3PrivateFence=41;context.GpuvaG3PreemptFence=0;
+  }
   a.BackendImage.G4Native=1;a.BackendImage.BoundFence=41;
   a.BackendImage.G4CommandBytes=bytes;a.BackendImage.G4Lease=batch.Lease;
   assert(AppleAgxG4ComposeHeaderV2(&a.BackendImage.G4Header,r,0x10000,bytes,
@@ -141,6 +161,44 @@ static void r137_private_combined(void) {
   assert(next.Lease.SceneGeneration!=batch.Lease.SceneGeneration);
   assert(!r137_escape_transport(&t,&release)); /* Old generation cannot release reused bytes. */
   scene=p->PrivateScenes;assert(scene && scene->Storage.Ranges[3].Va==p->PrivateVa+scratch_offset);
+  if (getenv("G3_REPLAY_R154_RESUBMIT")) {
+    const char *mode=getenv("G3_REPLAY_R154_RESUBMIT");
+    scene->Queued=1;scene->Fence=42;context.GpuvaG3PrivateFence=42;
+    release.SceneId=next.Lease.SceneId;release.SceneGeneration=next.Lease.SceneGeneration;
+    if (strcmp(mode,"late-release")) assert(r137_escape_transport(&t,&release));
+    replay_irql=DISPATCH_LEVEL;
+    AdmissionGpuvaG3PrivatePreempt(&context,42);
+    replay_irql=PASSIVE_LEVEL;
+    assert(AdmissionG3PrivateReap(p));
+    if (!strcmp(mode,"late-release")) assert(r137_escape_transport(&t,&release));
+    assert(p->PrivateScenes==scene); /* A deferred UMD release cannot free a suspended packet. */
+    assert(scene->Queued && !scene->Started && scene->ReleaseRequested);
+    if (!strcmp(mode,"uncertain")) {
+      replay_irql=DISPATCH_LEVEL;
+      AdmissionGpuvaG3PrivateCancel(&context,42,TRUE);
+      replay_irql=PASSIVE_LEVEL;
+      assert(!AdmissionG3PrivateReap(p));
+      assert(scene->Quarantined && p->PrivateScenes==scene && scene->Queued);
+      assert(!AdmissionG4FindPrivateResubmission(p,&context,&next.Lease,43));
+      assert(!AdmissionGpuvaG3PrivateRetireContext(&context));
+      goto Quarantine;
+    }
+    if (!strcmp(mode,"cancel")) {
+      replay_irql=DISPATCH_LEVEL;
+      AdmissionGpuvaG3PrivateCancel(&context,42,FALSE);
+      replay_irql=PASSIVE_LEVEL;
+      assert(AdmissionG3PrivateReap(p) && !p->PrivateScenes);
+      assert(!context.GpuvaG3PreemptFence && !context.GpuvaG3PrivateFence);
+      assert(!AdmissionG4FindPrivateResubmission(p,&context,&next.Lease,43));
+    }
+    assert(AdmissionGpuvaG3PrivateRetireContext(&context));
+    assert(!p->PrivateScenes && !context.GpuvaG3PrivateFence);
+    AdmissionGpuvaG3DetachContext(&context);
+    expect_ok("R154 suspended teardown",AdmissionDdiDestroyProcess(&a,p));
+    free(arena);free(local_cpu);local_cpu=NULL;
+    puts("R154 suspended private lifetime: PASS");
+    return;
+  }
   scene->Queued=1;scene->Submitting=1;scene->Fence=42;context.GpuvaG3PrivateFence=42;
   release.SceneId=next.Lease.SceneId;release.SceneGeneration=next.Lease.SceneGeneration;
   assert(r137_escape_transport(&t,&release));

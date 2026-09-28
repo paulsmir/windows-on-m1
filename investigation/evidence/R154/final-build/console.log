@@ -1,0 +1,114 @@
+ ** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+#< CLIXML
+<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04"><Obj S="progress" RefId="0"><TN RefId="0"><T>System.Management.Automation.PSCustomObject</T><T>System.Object</T></TN><MS><I64 N="SourceId">1</I64><PR N="Record"><AV>Preparing modules for first use.</AV><AI>0</AI><Nil /><PI>-1</PI><PC>-1</PC><T>Completed</T><SR>-1</SR><SD> </SD></PR></MS></Obj></Objs>
+Verified source hashes and applied changed integration files only
+DRIVER.C
+
+LIFECYCLE.C
+
+CALLBACKS.C
+
+DISPLAY.C
+
+INTERRUPT.C
+
+OBJECTS.C
+
+RENDER_MEMORY.C
+
+MEMORY_WINDOWS.C
+
+RENDER_ALLOCATION.C
+
+ALLOCATION_WINDOWS.C
+
+RENDER_HVC.C
+
+PHYSICAL_MEMORY_WINDOWS.C
+
+MEMORY_RUNTIME_WINDOWS.C
+
+GPUVA_V5_WINDOWS.C
+
+GPUVA_G3_WINDOWS.C
+
+GPUVA_G3_PAGING_WINDOWS.C
+
+GPUVA_B1_WINDOWS.C
+
+PAGING_WINDOWS.C
+
+RENDER_PAGING.C
+
+RENDER_GDI.C
+
+RENDER_UMD_COMMAND.C
+
+RENDER_WIN32_TRANSPORT.C
+
+APPLE_AGX_DYNAMIC_JOB.C
+
+RENDER_DYNAMIC_OVERLAY.C
+
+RENDER_DYNAMIC_DMA.C
+
+RENDER_DYNAMIC_WINDOWS.C
+
+RENDER_DYNAMIC_OUTPUT.C
+
+UMD_RENDER_WINDOWS.C
+
+RENDER_PRESENT.C
+
+RENDER_VISIBLE_SCANOUT.C
+
+PRESENT_WINDOWS.C
+
+WORK_QUEUE_WINDOWS.C
+
+GDI_WINDOWS.C
+
+RENDER_SUBMISSION.C
+
+RENDER_GDI_RECEIPT.C
+
+RENDER_CALL_CORRELATION.C
+
+RENDER_CALL_CORRELATION_WINDOWS.C
+
+GDI_RECEIPT_WINDOWS.C
+
+SUBMISSION_WINDOWS.C
+
+SUBMIT_TRACE_WINDOWS.C
+
+RENDER_BACKEND_IMAGE.C
+
+RENDER_COMPLETED_OUTPUT.C
+
+RENDER_QUALIFICATION.C
+
+STANDARD_PRESENT_WINDOWS.C
+
+BLT_PROBE_WINDOWS.C
+
+RENDER_OUTPUT_QUEUE.C
+
+BACKEND_IMAGE_WINDOWS.C
+
+BACKEND_PLATFORM_WINDOWS.C
+
+SCANOUT_WINDOWS.C
+
+SCHEDULER_WINDOWS.C
+
+RECEIPTS.C
+
+ ** WARNING: connection is not using a post-quantum key exchange algorithm.
+** This session may be vulnerable to "store now, decrypt later" attacks.
+** The server may need to be upgraded. See https://openssh.com/pq.html
+C:\agx\r154-final\compile.py:12: DeprecationWarning: Python 3.14 will, by default, filter extracted tar archives and reject files or modify their metadata. Use the filter argument to control this behavior.
+  if before.get(n)!=final[n]:t.extract(n,root)
+

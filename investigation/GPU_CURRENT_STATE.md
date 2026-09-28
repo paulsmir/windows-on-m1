@@ -1,3 +1,37 @@
+# R154 — pre-firmware epoch veto and queued resubmission corrected offline
+
+EXP867 saved native queues prove81 joined jobs,44 InitBM publications and
+completed managers for Explorer536/owner8 and M365Copilot5996/owner13.
+All162 retained events are TA/D3 flags; no timeout/fault/GrowTVB. Exact fifth
+owner unknown. R153 crosses the previous boundary; no stale active BM shown.
+
+Blocked36357 is Explorer G4 native node0/engine0, scene0xbd2 queued/notstarted,
+no lease/materialized job, backendidle; native36174 is last complete. Context
+epoch0x2ba36 vs graph0x2ba37; exact867 parser passes18/18 saved access checks.
+Remove coarse epoch veto; revalidate ranges/root/output under lock and pin
+before refreshing epoch. Real graph/broker unrelated-unmap RED→GREEN. First
+EnvelopeState flags0x80 and QUERYowner9 are distinct evidence, not36357 links.
+Separately preserve exact private scene across queued preemption/resubmission
+with new fence, deferred release, rollback and certain teardown. No fake GPU
+completion or general active-hang recovery. Hardware causation remains unproven.
+
+UMD546 E_FAIL:336 indexed prior-batch drains,210 texture-copy flushes; no fence
+correlation/rate denominator. DCP seq2 black surface swap10 latched; useful
+render-to-primary unproven, missing budgeted Present logs not absence proof.
+
+Offline gates:51 ARM64 TUs /W4 /WX /analyze0warnings0errors; focused PASS;
+full1165 vs frozenbase1164, same17F42E2S/no new identities. Main-path prior
+baseline differs by6 path-dependent identities; exact lists in summary.
+Independent review0Critical/Important; component replay coverage limits recorded.
+No package/Air/firmware edits. EXP867 ordinaryCode28 remains hardware recovery.
+Report investigation/analysis/R154-next-boundary.md; evidence/R154/summary.json.
+
+WHY CONTINUE COMPARISON: the exact active envelope passes range validation while
+the old epoch gate rejects it; smallest proposed EXP868 is epoch fix only atop
+exact86733503176, unchangedR143 and UMD, Flush excluded. Separate resubmission
+fix is independently implemented, not an inseparable hardware variable.
+Package/preregistration/run need separate authorization; no retry/rearm.
+
 # EXP867 — 81 native completions across process managers; later TDR; clean Code28
 
 One package867/source33503176 (R153 code only on exact866 base17ee8894),

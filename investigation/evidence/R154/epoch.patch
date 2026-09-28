@@ -1,0 +1,144 @@
+--- a/drivers/apple-agx/render-admission/src/gpuva_g3_windows.c
++++ b/drivers/apple-agx/render-admission/src/gpuva_g3_windows.c
+@@ -1343,8 +1343,6 @@
+   }
+   if (state->ActiveProcess == NULL && !state->PrivateCompletionFence && !process->Poisoned &&
+       g4_valid &&
+-      (!adapter->BackendImage.G4Native ||
+-       context->GpuvaG3MappingGeneration == process->Graph.MappingGeneration) &&
+       !context->GpuvaG3Poisoned && context->GpuvaG3RootIpa != 0ULL &&
+       context->GpuvaG3RootIpa == process->Graph.RootIpa &&
+       (adapter->BackendImage.G4Native ?
+@@ -1367,6 +1365,10 @@
+       RtlCopyMemory(image->G4ManagerKey.Backing,private_scene->Storage.Ranges,
+           sizeof(image->G4ManagerKey.Backing));
+     }
++    /* The graph lock covers fresh range/output validation and JOB_BEGIN.
++     * A process-wide epoch also changes for unrelated mappings; it cannot
++     * invalidate an otherwise valid job. JOB_BEGIN pins the validated graph. */
++    context->GpuvaG3MappingGeneration = process->Graph.MappingGeneration;
+     state->ActiveProcess = process;
+     state->ActiveFence = fence;
+     status = STATUS_SUCCESS;
+--- a/tests/g3_system_lifetime_cases.c
++++ b/tests/g3_system_lifetime_cases.c
+@@ -258,7 +258,7 @@
+   assert(!state.Registry.Frames);
+   expect_ok("R132 destroy",AdmissionDdiDestroyProcess(&a,p));
+   assert(!state.Registry.Frames && !state.ProcessCount);
+-  /* Real BeginJob reparses the GPU ranges and checks the submit snapshot
++  /* Real BeginJob reparses the current GPU ranges and pins the graph
+    * under the same lock. Queue admission itself is covered by the production
+    * SubmitCommandVirtual replay; here no graph/lease operation is mocked. */
+   p=sys_process(&a,0x80000,0);leaf=local_cpu+0x88000;
+@@ -290,7 +290,11 @@
+   context.GpuvaG3RootIpa=p->Graph.RootIpa;context.GpuvaG3DmaBufferVa=0x10000;
+   context.GpuvaG3DmaBufferBytes=sizeof(command);
+   context.GpuvaG3MappingGeneration=p->Graph.MappingGeneration;
+-  expect_ok("R132 real BeginJob",AdmissionGpuvaG3BeginJob(&a,&context,91));
++  assert(cursor < 4000ULL * 4096ULL);
++  expect_ok("R154 unrelated queued unmap",sys_update(&a,p,leaf,0,4000,1,&zero,0,0));
++  assert(context.GpuvaG3MappingGeneration < p->Graph.MappingGeneration);
++  expect_ok("R154 revalidate after unrelated unmap",AdmissionGpuvaG3BeginJob(&a,&context,91));
++  assert(context.GpuvaG3MappingGeneration == p->Graph.MappingGeneration);
+   assert(state.ActiveProcess==p && p->Graph.JobInFlight);
+   assert(AdmissionDdiDestroyProcess(&a,p)==STATUS_DEVICE_BUSY);
+   assert(sys_update(&a,p,leaf,0,24,1,&zero,0,0)==STATUS_DEVICE_BUSY);
+@@ -298,16 +302,15 @@
+   expect_ok("R132 queued invalidate",sys_update(&a,p,leaf,0,24,1,&zero,0,0));
+   assert(!NT_SUCCESS(AdmissionGpuvaG3BeginJob(&a,&context,91)));
+   expect_ok("R132 queued same-PFN remap",sys_update(&a,p,leaf,0,24,1,&large[8],0,0));
+-  assert(!NT_SUCCESS(AdmissionGpuvaG3BeginJob(&a,&context,91)));
+-  context.GpuvaG3MappingGeneration=p->Graph.MappingGeneration;
+-  expect_ok("R132 fresh snapshot",AdmissionGpuvaG3BeginJob(&a,&context,91));
++  expect_ok("R154 restored mapping revalidated",AdmissionGpuvaG3BeginJob(&a,&context,91));
++  assert(context.GpuvaG3MappingGeneration == p->Graph.MappingGeneration);
+   assert(AdmissionGpuvaG3CompleteJob(&a,91));
+   ULONGLONG old_root=p->Graph.RootIpa;
+   assert(AppleAgxGpuvaG3GraphBindRoot(&p->Graph,p->BootstrapIpa));
++  assert(!NT_SUCCESS(AdmissionGpuvaG3BeginJob(&a,&context,91)));
+   assert(AppleAgxGpuvaG3GraphBindRoot(&p->Graph,old_root));
+-  assert(!NT_SUCCESS(AdmissionGpuvaG3BeginJob(&a,&context,91)));
+-  context.GpuvaG3MappingGeneration=p->Graph.MappingGeneration;
+-  expect_ok("R132 root ABA fresh snapshot",AdmissionGpuvaG3BeginJob(&a,&context,91));
++  expect_ok("R154 restored root revalidated",AdmissionGpuvaG3BeginJob(&a,&context,91));
++  assert(context.GpuvaG3MappingGeneration == p->Graph.MappingGeneration);
+   assert(AdmissionGpuvaG3CompleteJob(&a,91));
+   a.BackendImage.G4Native=0;
+   expect_ok("R132 BeginJob cleanup",AdmissionDdiDestroyProcess(&a,p));free(large);
+--- a/tests/g4_submit_virtual_replay.c
++++ b/tests/g4_submit_virtual_replay.c
+@@ -191,6 +191,7 @@
+ static int replay_irql, dispatches, bind_ok=1;
+ static int graph_begin_calls;
+ static int output_mapped=1;
++static ULONGLONG output_ipa=0x90001000ULL;
+ static NTSTATUS scanout_status = STATUS_SUCCESS;
+ static int receipt_queues;
+ static void __attribute__((unused)) AdmissionRenderCorrelationSubmitFailureWindows(
+@@ -233,7 +234,7 @@
+   (void)graph;
+   if (!output_mapped) return 0;
+   if(va<0x40000000ULL || va>=0x40001000ULL)return 0;
+-  *ipa=0x90001000ULL+(va-0x40000000ULL);return 1;
++  *ipa=output_ipa+(va-0x40000000ULL);return 1;
+ }
+ static unsigned AdmissionRenderPacketState(ADMISSION_RENDER_PACKET *packet) {
+   return packet->State;
+@@ -283,8 +284,6 @@
+     APPLE_AGX_GPUVA_G3_GRAPH *graph, ULONGLONG va, unsigned bytes) {
+   return AppleAgxGpuvaG3GraphContainsRangeAccess(graph, va, bytes, 0);
+ }
+-static int AdmissionG3OutputMatchesLocal(ADMISSION_CONTEXT *adapter,
+-    APPLE_AGX_GPUVA_G3_GRAPH *graph) { (void)adapter;(void)graph;return 1; }
+ static int AppleAgxGpuvaG3GraphBeginJob(APPLE_AGX_GPUVA_G3_GRAPH *graph,
+     unsigned slot) { (void)graph;(void)slot;++graph_begin_calls;return 1; }
+ static int AdmissionBackendImageReleaseSubmission(
+@@ -527,12 +526,16 @@
+   args.SubmissionFenceId = 13u;
+   assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) == STATUS_SUCCESS);
+   assert(context.GpuvaG3DmaBufferVa == 0x20f80ULL);
+-  ++process.Graph.MappingGeneration; /* invalidate/remap, even the same PFN */
++  /* An unrelated process mapping update must not strand this accepted job.
++   * Referenced command bytes/ranges and cached output are still validated. */
++  ++process.Graph.MappingGeneration;
++  output_ipa += 0x1000ULL; /* same VA, different output backing is unsafe */
+   assert(AdmissionGpuvaG3BeginJob(&adapter, &context, 13u) != STATUS_SUCCESS);
+   assert(graph_begin_calls == 0);
+-  --process.Graph.MappingGeneration;
++  output_ipa -= 0x1000ULL;
+   assert(AdmissionGpuvaG3BeginJob(&adapter, &context, 13u) == STATUS_SUCCESS);
+   assert(graph_begin_calls == 1);
++  assert(context.GpuvaG3MappingGeneration == process.Graph.MappingGeneration);
+   state.ActiveProcess = NULL;
+   assert(AppleAgxGpuvaG3InvalidateLogical64K(logical, 2u, 1u));
+   assert(logical[0x20u].Flags == 0u && logical[0x21u].Flags == 0u);
+@@ -630,10 +633,15 @@
+   ++adapter.BackendImage.G4Lease.SceneGeneration;
+   assert(AdmissionGpuvaG3BeginJob(&adapter,&context,21)!=STATUS_SUCCESS);
+   --adapter.BackendImage.G4Lease.SceneGeneration;
+-  ++process.Graph.MappingGeneration;
++  ++process.Graph.MappingGeneration; /* another scene may map/unmap meanwhile */
++  process.Graph.AllowProcessRanges=0;
+   assert(AdmissionGpuvaG3BeginJob(&adapter,&context,21)!=STATUS_SUCCESS);
+-  --process.Graph.MappingGeneration;
++  process.Graph.AllowProcessRanges=1;
++  context.GpuvaG3CancelFence=21;
++  assert(AdmissionGpuvaG3BeginJob(&adapter,&context,21)!=STATUS_SUCCESS);
++  context.GpuvaG3CancelFence=0;
+   assert(AdmissionGpuvaG3BeginJob(&adapter,&context,21)==STATUS_SUCCESS);
++  assert(context.GpuvaG3MappingGeneration==process.Graph.MappingGeneration);
+   assert(scene.Started);
+   assert(adapter.BackendImage.G4Manager==&process.FirmwareManager);
+   assert(adapter.BackendImage.G4ManagerKey.Owner==process.Graph.ProcessId);
+--- a/tests/test_g4_submit_virtual_replay.py
++++ b/tests/test_g4_submit_virtual_replay.py
+@@ -45,7 +45,7 @@
+             "AdmissionG4GraphAccessTyped", "AdmissionG4FindPrivateScene","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy",
+             "AdmissionG4SnapshotFailure", "AdmissionG4ResolveOutput",
+             "AdmissionG4SubmitVirtualEnvelope",
+-            "AdmissionGpuvaG3BeginJob",
++            "AdmissionG3OutputMatchesLocal", "AdmissionGpuvaG3BeginJob",
+             "AdmissionDdiSubmitCommandVirtual"))
+         functions = function_body(production, "AdmissionG4SubmitRejectDetail") + "\n" + functions
+         with tempfile.TemporaryDirectory(prefix="g4-submit-virtual-") as tmp:

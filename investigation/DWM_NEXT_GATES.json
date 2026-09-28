@@ -426,5 +426,23 @@
       "600s DWM and nonzero scanout"
     ],
     "hardware_result": "investigation/evidence/EXP867/hardware-result.json"
+  },
+  "r154_prepublication": {
+    "status": "IMPLEMENTED_OFFLINE",
+    "report": "investigation/analysis/R154-next-boundary.md",
+    "evidence": "investigation/evidence/R154/summary.json",
+    "native_boundary": "81 joined completions,44 InitBM publications; current36357 Explorer node0/engine0 never began private job",
+    "changes": [
+      "Fresh graph validation replaces coarse epoch veto",
+      "Exact queued-preemption private-scene ownership across new-fence resubmission"
+    ],
+    "verification": "51 ARM64 TUs0/0; final1165 baseline1164 same17F42E2S/no new failure identities",
+    "next_proposed": "EXP868 epoch correction ONLY atop exact86733503176; unchangedR143, UMD, signer,caps,recovery; Flush excluded",
+    "authorization": "Offline fixes only; no package/Air",
+    "unknowns": [
+      "Exact epoch mutation timing in original boot",
+      "Hardware removal of36357-class TDR",
+      "600s stability and useful primary content"
+    ]
   }
 }
