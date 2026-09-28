@@ -1,5 +1,28 @@
 # GPU current boundary — 2026-09-28
 
+## 2026-09-28 R143 — reserve v2 implemented and EXP856 prepared offline
+
+Explicit reserve-v2 firmware profile provides1GiB identity backing, with
+VidMm1000/private16/backend8MiB and fixed initial DCP56MiB. Shared receipt,
+PEI/HOB/ACPI and KMD ownership updated; old firmware profiles remain64MiB.
+Real production memory Start/Stop replay exposed and fixed retained fixed-UAT
+aliases during cleanup, including partial alias initialization rollback.
+Full1146 has baseline15 failures/38 errors/2skips (three generator errors fixed,
+no new names); G3/G4 and emitted AML gates pass. ARM64 package856 source0400dd32,
+KMD/UMD0 warnings/0 errors, native provenance534 inputs verified. Builder signer
+unchanged; catalog membership passes, test-root trust is not configured there.
+
+No Air access, launch, installation or new hardware verdict. R110 and immutable
+ordinary/hidden recovery hashes unchanged; nested pre-existing diffs preserved
+byte-for-byte. Artifacts/scripts: main `.local/experiments/EXP856-r143-reserve1g/`.
+Details/hashes: `investigation/evidence/R143-offline-build.json` and
+`investigation/analysis/R143-implementation.md`. v5 capacity8192, high-offset
+scanout relocation and R142 canonical/staging BO path remain separate gates.
+Next only after separate authorization: exact EXP856 cold full-owner,
+receipt2/1GiB across all layers, segment1000MiB, Code0/Start12/arm consumed,
+600-second pinned-SSH window; no execution/frame claim from admission alone.
+
+
 
 ## 2026-09-28 R142 — VDM system backing attributed offline; split-storage decision
 

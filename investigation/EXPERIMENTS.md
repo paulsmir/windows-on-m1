@@ -49198,3 +49198,101 @@ are absent from saved diagnostics. Decision and evidence limits:
 `investigation/analysis/R142-render-backing-evidence.json`. Next design is GPU-only
 local canonical BOs with CPU staging/readback, not a CPU-visible local-only tweak.
 Accepted recovery and EXP855E structural-advance verdict are unchanged.
+
+## EXP856-OFFLINE — R143 reserve-v2 firmware/package preparation (before)
+
+UTC 2026-09-28T01:25Z. Authorized implementation/build only; NO Air access,
+installation, arm, launch or recovery run. Single intended hardware variable:
+firmware reserve64MiB/v1 ->1GiB/v2, partition1000/16/8; DCP56 and v5 unchanged.
+WHY THIS HYPOTHESIS: R143 design cites local40MiB below three raw panel surfaces;
+archived RAM places the conditional candidate after low backing; EXP855E validates
+R110 ownership path. This entry does not authorize a hardware test.
+Repository/worktree integration/ad04-windows-compiler. Exact root/m1n1/Mu commits
+and dirty diff hashes: main `.local/experiments/EXP856-r143-reserve1g/firmware-source-state.json`.
+Mu source manifest includes every tracked non-submodule file; builder dependency
+checkout identity/container are collected separately. Builder persistent tree
+`C:\Users\pauls\mu-g2-exp164`; sync only differing manifest files, verify all hashes.
+Mu command: `wsl -d Ubuntu -- bash /mnt/c/Users/pauls/EXP856-r143-reserve1g/build-mu.sh`;
+script fixes CLANGPDB RELEASE, AIC=FALSE, G2=FALSE, ABI_ADMISSION=TRUE, RESERVE_V2=TRUE.
+m1n1 command: `LLDDIR=/tmp/agx-lld-dir/ make -C m1n1_windows IOMFB_FULL_OWNER=1 EXP808_SCANOUT_DELAYED=1 AGX_LOCAL_RESERVE_V2=1`.
+New outputs only under EXP856-r143-reserve1g/firmware; final SHA256 pending build.
+Recovery/R110 SHA256 frozen in immutable-artifacts.json; no writes to those paths.
+Expected offline checkpoint: compiled v2 Mu/AML and m1n1, exact resource geometry,
+full source hashes, no recovery changes. A build/AML/source mismatch fails this gate.
+Logs/manifests/scripts and later package856 evidence are collected in the same
+new directory. No Windows stop/CPU/IRQ/device state applies to this offline build.
+
+EXP856-OFFLINE m1n1 build attempt1 result: compiler rejected missing string.h
+for the new ADT classifier (strncmp/memcpy/strcmp). No artifact copied and no
+hardware run. Correct the include, retain flags, rerun the same command; save
+attempt1 log separately. Mu build remains independently pending.
+
+EXP856-OFFLINE m1n1 attempt2: C compilation crossed the new selector/caller;
+build stopped because cargo was absent from PATH. Existing Rust toolchain was
+located under `/Users/pavel/.rustup/toolchains/stable-aarch64-apple-darwin/bin`.
+Attempt3 preregistration: same command with that directory prepended to PATH;
+no source or hardware variable changed. Preserve attempt2 log.
+
+EXP856-OFFLINE m1n1 attempt3 result: compile/link PASS after using the existing
+Rust toolchain PATH; generic build/m1n1.macho produced but not installed/copied
+as final. Existing compiler warnings retained in m1n1-build.log. Later step3 adds
+reserve-local scanout bounds; final firmware rebuild is preregistered with the
+same flags/PATH and new dirty source hash, artifact output remains new EXP856.
+
+EXP856-OFFLINE package856 before: root0400dd32 (full identity/diff hashes in
+package-source-state.json);534 exact committed AGX inputs in source-manifest.json
+and source.zip. Pinned Windows builder pauls@192.168.1.24 via windows_builder key;
+persistent `AD04-persistent-dwm-next`, differing files only synchronized then all
+hashes checked. Exact command: `powershell -NoProfile -ExecutionPolicy Bypass -File
+C:\Users\pauls\EXP856-r143-reserve1g\build-kmd.ps1`. Script copied from EXP855E,
+updated only source/archive identities, experiment output and PackageBuild856;
+Release/GpuvaG3Qualification/UmdAdmissionTrace/NativeFrontend/G1b16 and pinned WDK
+26100 unchanged. Native archive rebuilt with manifest provenance gate, then
+ARM64 KMD/UMD/package build. Output exclusively EXP856; no transfer to Air.
+Expected: provenance534 hashes and ARM64 compile/link/sign package checks pass;
+otherwise no installation eligibility. Final hardware manifest/launch scripts
+are preparation only and require separate GO_EXP856; recovery images unchanged.
+Final m1n1 rebuild uses committed20d55f4c, same preregistered flags/PATH, preserves
+precommit candidate under a new filename before copying final m1n1-r143.macho.
+
+EXP856-OFFLINE package attempt1 result: outer encoded PowerShell session refused
+to load build-kmd.ps1 under its default execution policy, before build execution.
+No source sync/package output occurred. Attempt2 uses the preregistered command
+verbatim with process-local `-ExecutionPolicy Bypass -File`; no machine policy
+change. Source/package/profile identities unchanged.
+
+## EXP856-OFFLINE — after (2026-09-28T01:53Z)
+
+Mu CLANGPDB RELEASE reserve-v2 build PASS (4m11s builder-reported). Emitted AML
+is present in actual FV; direct acpiexec proves min8e0000000/max91fffffff/
+length40000000 and old-version/unpublished/alias refusal. No EBS/live map proof.
+Final committed m1n1 profile build PASS; SHA256
+5fe13d19c5ca4d21327c44934613ae0f5109b8de096590db69f455e439e61a01.
+Mu FD SHA256 e54c009847e64a4b2b327f54385eedb94f5a9e5fd3b459fd6101b07af4c023fc.
+Package856 source0400dd3209702d502ce0b7e9780d6b95cf1e6db1;534 source hashes,
+native archive and Resource.cpp provenance PASS; ARM64 UMD/KMD0 warnings0errors,
+version30.0.856.0. SYS0ea8251bc34ca99a1f711dd15e4cc70623442d0a9e468c1d85530488af56178a;
+UMD73f265498e57ab90b75409eb549e58937dca922ed47c2e5d85a3fbf66fca351c.
+Both members found by native signtool in CAT. SignerE9BE15BD2A184BFABA0C8035B3C620C58037A241
+matches EXP855E; /pa verification returns untrusted test-root, not a membership
+mismatch. Trust stores unchanged; no guest signing/installation verification.
+
+Full1146:15 failures38errors2skips; no added failure/error names, three existing
+generator errors fixed. G3 replay25 and G4 suite31 PASS; production memory
+lifecycle and five rollback stages pass, omission-of-zeroing mutation fails.
+One independent review finding (missing production lifecycle coverage) addressed;
+its replay also exposed/fixed retained-alias Stop BUSY. No other findings.
+
+New artifact manifest: main `.local/experiments/EXP856-r143-reserve1g/hardware-manifest.json`,
+SHA256 ecd1f20e3ceb4715f79c2b325c15046b0711d7737f302a4b46d47efc1a1dc4cc.
+Exact inputs, logs, native archive, matching PDBs, firmware/FVs and receipts are
+in that directory. Launch and both immutable-image recovery scripts prepared;
+three verify-only executions and two negative version/hash gates PASS without
+serial access. R110/recovery five hashes unchanged; pre-existing m1n1/Mu dirty
+diffs match initial snapshots byte-for-byte. No Air boot phases/stop code/CPU,
+IRQ/timer/display/input/SSH/RDP/storage observations exist for this build.
+Verdict: OFFLINE IMPLEMENTED; hardware NOT_RUN. Next: separately authorize one
+exact EXP856 cold full-owner checkpoint described in R143 design;600s from boot,
+reservev2/1GiB, segment1000MiB, Code0/Start12 and arm consumed, pinnedSSH/no bugcheck.
+Evidence/dump-first hiddenCode45 exact cleanup then immutable ordinaryCode28;
+no live Code0 removal. No TA+3D/fence/DWM/pixel or full1GiB execution claim.

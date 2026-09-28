@@ -119,3 +119,21 @@ failure/error names, three repaired admission-generator errors removed from the
 baseline56. Complete names: EXP856-r143-reserve1g/host-test-comparison.json.
 Review R45/R47: ACCEPT — this offline lifetime evidence now covers alias cleanup
 and partial initialization; prior hardware results remain unchanged.
+
+## Step 4 completed: build-only handoff
+
+Package856 from0400dd3209702d502ce0b7e9780d6b95cf1e6db1 passed534 source hashes,
+native archive/Resource.cpp provenance and ARM64 UMD/KMD0 warnings0errors.
+Mu and m1n1 built; actual emitted AML and fixed profile manifest checked.
+New artifacts and all hashes are indexed in investigation/evidence/R143-offline-build.json.
+Full-owner/hidden/ordinary scripts were prepared and verify-only tested; bad
+version and mixed-artifact hashes reject before serial. No Air access.
+
+Signer is unchanged from EXP855E. Native CAT membership passes for SYS/UMD;
+builder chain trust rejects its test root. No certificate stores were changed;
+guest signing/trust verification remains a later authorized preparation gate.
+Pre-existing nested dirty diffs are byte-identical to the initial snapshots.
+No standalone artifact was selected or built; no EBS memory map or hardware
+admission is claimed. All R143 code remains in this worktree with step commits;
+no merge/push is requested. The user's recorded baseline policy governs the
+53 pre-existing test failures/errors, rather than treating this as a green suite.
