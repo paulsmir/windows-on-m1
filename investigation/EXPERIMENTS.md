@@ -49409,3 +49409,36 @@ Explorer2788 AV in msvcp_win.dll+0xa614/0xc0000005 produced full dump `hardware-
 Mandatory recovery completed: exact oem5 cleanup only in immutable hidden Code45; ordered restart then immutable ordinary boot04:52:04.5378340Z. `ordinary-durable.json` at04:54:50.1158437Z SHA256c5dac3607fa0dee892ae84f7934f61c204f492d13be7aed23eb4b40842df94a5 independently reconfirms same boot as initial04:53:35 check, exactly one present Code28, no INF/staged package/G3 or B1 arm/SYS/UMD/service/signer/AutoLogger/WER keys, CPU8/disks2/USB5/RDP Running; intentional autologon preserved without recording password. No physical action, live Code0 removal or armed retry. Final result main `.local/experiments/EXP858-r145-staging/hardware-result.json` SHA256 587f88c5b4aaefe8184191a45f16dc002544b32a9e95128a8b1581ef9978869f; all exact paths/hashes included. `review-exp858-after.txt` SHA256cd0846297e2a5daf39a9e3177eb651e659e30824f760d6aeb04eae3e3022c25a answers all OPEN items against unchanged REVIEW hash753bdfe6. Next phase: offline first pre-SubmitCommandCb refusal from saved UMD/ETL/source and separate exact Explorer dump attribution; no further Air run justified yet.
 
 EXP858 final verification: hardware-result30 evidence hashes and package manifest19 hashes PASS; host-evidence-hashes.json SHA25680e5b3a003640131b9ad60d83378048c4e78eb5e84028a465d78853394cce6a2. Change-ledger schema2/2 PASS; git diff --check PASS. Nested m1n1/Mu dirty diff hashes unchanged from preregistration. Handoff updated in GPU_CURRENT_STATE.md and DWM_NEXT_GATES.json; no new source implementation or further hardware experiment.
+
+
+## EXP858-OFFLINE-NEXT-BOUNDARY — 2026-09-28T05:22:08Z
+
+Offline supplement to EXP858-HW; no new hardware run/build/launch/recovery.
+Task: `.local/tandem/NEXT_TASK_ANALYSIS_858.md`; root baseline d84c9590,
+package858 source f031ef2a527e55ee0bdb76c79e7e7b1801e51e3e. Intended discriminator:
+saved ETL/PDB stacks separate Draw/Map failure, pre-submit staging refusal and
+GPU submission; replay allocation lifetimes and attribute Explorer's saved dump.
+All535 source hashes and13 guest-original hashes match. Builder used only CDB,
+Get-WinEvent and a native offline ETL decoder; no Air operation. Commands and
+outputs: main `.local/experiments/EXP858-offline-analysis/`; reproduction:
+`python3 investigation/evidence/EXP858-next-boundary/analyze.py /Users/pavel/public_windows/.local/experiments --output investigation/evidence/EXP858-next-boundary/summary.json`.
+
+Observed:128-record DLL diagnostic cap explains apparent last Draw/Map records.
+93 exact858 copy-escape stacks all at first QUERY, none at upload; representative
+1224/5908 completes paging wait7037, calls QUERY, then failed-submit Evict and
+batch release. No exact HRESULT/NTSTATUS retained. Apple context join yields
+paging only in captured interval;223 render DMA starts are on software adapter.
+ETL1,471,211 events, lost0/bufferslost6; selected end04:32:01Z, not600s coverage.
+14,043 allocation destruction pairs;333.75MiB retained after observed termination
+and device stop. Deferred destruction is demonstrated, full3.02GiB growth/leak
+cause remains undetermined. Explorer c0000005 at msvcp_win+0xa614 is CloudStore
+TLS locale cleanup through truncated facet vptr; original writer unknown.
+
+Verdict: CONFIRMED new first-copy preflight boundary for captured attempts;
+INCONCLUSIVE exact rejecting guard, full-window memory cause and corrupting writer.
+Correction to causal interpretation, not overwrite of prior hardware verdict:
+no logged submit does not imply no Draw completion; logger censoring is proven.
+Next target is bounded copy-preflight HRESULT/generation/guard diagnostics and
+real callback replay, not a behavioral fix or new Air run. Ordinary Code28
+recovery and R143 firmware remain unchanged. Full analysis/review dispositions
+are in `investigation/analysis/EXP858-next-boundary.md` and its linked files.

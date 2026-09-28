@@ -1,5 +1,35 @@
 # GPU current boundary — 2026-09-28
 
+## 2026-09-28 EXP858 offline — first COPY QUERY followed by pre-upload rollback
+
+Exact858 PDB/ETL stacks locate93 copy escapes at the first QUERY callsite,
+including25 DWM/49 Explorer; no upload callsite. Representative1224/5908:
+MakeResident13/pending259 → paging fence7037 wait returns → COPY QUERY →
+failed-submit Evict → batch release/unlock/termination. Exact HRESULT and
+first KMD/UMD predicate are absent: copy_escape erases HRESULT into bool.
+QUERY refusal leads; generation/CPU-preparation failure remains possible.
+The missing later UMD records were also censored by128-record DLL budget
+(8148 has405 exact128-line blocks); they do not prove a Draw/Map failure.
+
+Captured ETL has Apple paging only;223 render DMA starts belong to software.
+Six buffers lost; selected events end04:32:01Z, before600s counter. Of469.883MiB
+last-observed live Apple allocations,333.75MiB already have termination and
+device-stop events: deferred global destruction, not proof of a staging leak.
+Explorer AV is CloudStore TLS locale destruction through truncated facet vptr;
+original writer/UMD causation unknown. Other threads' paging targets already
+equal CPU fence values; no missing-wakeup claim from a single dump.
+
+Next: bounded first-copy receipt retaining HRESULT, returned generations,
+staging state and KMD first failed guard; deterministic diagnostic replay
+before any separately authorized package/run. No runtime changes or Air access.
+Analysis: `investigation/analysis/EXP858-next-boundary.md`; reproducible counts
+and hashes: `investigation/evidence/EXP858-next-boundary/summary.json`.
+EXP858 ordinary Code28 recovery remains accepted.
+
+WHY CONTINUE COMPARISON: exact current ETL and binary identify the new COPY
+preflight boundary; record its erased result instead of revisiting old images
+or changing firmware/placement without a failed-guard identity.
+
 ## 2026-09-28 EXP858 — R145 admission601s; no logged G4 submission; ordinary Code28 recovered
 
 One GO_EXP858 armed boot of package858/source f031ef2a on identical R143

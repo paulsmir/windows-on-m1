@@ -1,0 +1,2531 @@
+{
+  "apple_allocation_replay": {
+    "closed_flags_counts": {
+      "32768": 7030,
+      "32769": 6728,
+      "536903680": 135,
+      "64": 150
+    },
+    "closed_max_seconds": 22.132963,
+    "closed_median_seconds": 0.870784,
+    "closed_pairs": 14043,
+    "limitations": "Pointer-plus-lifetime joins, not PID totals: destruction often runs on PID4. ETL reports six lost buffers; seven overwritten starts and no unmatched stops bound the census, so it is not a complete accounting of the 600-second counters.",
+    "live_bytes": 492707840,
+    "live_count": 528,
+    "live_shapes": {
+      "flags=0x10000040,stopped=False,termination=False": {
+        "bytes": 8192,
+        "count": 2,
+        "samples": [
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "268435520",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "0",
+                "Priority": "2684354560",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "4096",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "1",
+                "hDevice": "0x0",
+                "hDxgGlobalAlloc": "0x0",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4",
+                "hVidMmGlobalAlloc": "0xffffa2857ec766c0",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0xffffa2857e89c740",
+                "ulAlignment": "4096"
+              },
+              "id": 33,
+              "pid": 4,
+              "record": 35447,
+              "t": "2026-09-28T04:30:42.2830980Z",
+              "tid": 1088
+            },
+            "device_stop": null,
+            "terminate": null
+          },
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "268435520",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "0",
+                "Priority": "2684354560",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "4096",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "1",
+                "hDevice": "0x0",
+                "hDxgGlobalAlloc": "0x0",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4",
+                "hVidMmGlobalAlloc": "0xffffa2857ec71a60",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0xffffa2857e89ca40",
+                "ulAlignment": "4096"
+              },
+              "id": 33,
+              "pid": 4,
+              "record": 35470,
+              "t": "2026-09-28T04:30:42.2832380Z",
+              "tid": 1088
+            },
+            "device_stop": null,
+            "terminate": null
+          }
+        ]
+      },
+      "flags=0x20008000,stopped=False,termination=False": {
+        "bytes": 12582912,
+        "count": 3,
+        "samples": [
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "536903680",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "2",
+                "Priority": "2013265920",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "4194304",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "2",
+                "hDevice": "0xffffa28582fea010",
+                "hDxgGlobalAlloc": "0xffffa28580796e10",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0xae4",
+                "hVidMmGlobalAlloc": "0xffffa28580e64ae0",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0xffffa285831a4770",
+                "ulAlignment": "65536"
+              },
+              "id": 33,
+              "pid": 2788,
+              "record": 1433535,
+              "t": "2026-09-28T04:31:59.8858755Z",
+              "tid": 7208
+            },
+            "device_stop": null,
+            "terminate": null
+          },
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "536903680",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "2",
+                "Priority": "2013265920",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "4194304",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "2",
+                "hDevice": "0xffffa2858256c010",
+                "hDxgGlobalAlloc": "0xffffa28580a9a920",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4d0",
+                "hVidMmGlobalAlloc": "0xffffa285825273e0",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0xffffa285828873b0",
+                "ulAlignment": "65536"
+              },
+              "id": 33,
+              "pid": 1232,
+              "record": 1470652,
+              "t": "2026-09-28T04:32:01.3456349Z",
+              "tid": 1712
+            },
+            "device_stop": null,
+            "terminate": null
+          }
+        ]
+      },
+      "flags=0x20008000,stopped=False,termination=True": {
+        "bytes": 4194304,
+        "count": 1,
+        "samples": [
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "536903680",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "2",
+                "Priority": "2013265920",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "4194304",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "2",
+                "hDevice": "0xffffa285805e9050",
+                "hDxgGlobalAlloc": "0xffffa28580a908d0",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x16f8",
+                "hVidMmGlobalAlloc": "0xffffa28582503300",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0xffffa285831b97b0",
+                "ulAlignment": "65536"
+              },
+              "id": 33,
+              "pid": 5880,
+              "record": 1443199,
+              "t": "2026-09-28T04:32:00.1446238Z",
+              "tid": 6212
+            },
+            "device_stop": null,
+            "terminate": {
+              "data": {
+                "hVidMmAlloc": "0xffffdc0897074630"
+              },
+              "id": 39,
+              "pid": 5880,
+              "record": 1466783,
+              "t": "2026-09-28T04:32:01.1597830Z",
+              "tid": 6212
+            }
+          }
+        ]
+      },
+      "flags=0x20008000,stopped=True,termination=False": {
+        "bytes": 4194304,
+        "count": 1,
+        "samples": [
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "536903680",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "2",
+                "Priority": "2013265920",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "4194304",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "2",
+                "hDevice": "0xffffa285830e8010",
+                "hDxgGlobalAlloc": "0xffffa28580a9b910",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4d0",
+                "hVidMmGlobalAlloc": "0xffffa2858250a320",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0xffffa285828850b0",
+                "ulAlignment": "65536"
+              },
+              "id": 33,
+              "pid": 1232,
+              "record": 1446633,
+              "t": "2026-09-28T04:32:00.2832817Z",
+              "tid": 1712
+            },
+            "device_stop": {
+              "data": {
+                "ClientType": "1",
+                "DisableGpuTimeout": "false",
+                "DxgProcess": "0x0",
+                "HostDeviceHandle": "0",
+                "RequestVSync": "true",
+                "VirtualGpu": "0x0",
+                "hDevice": "0xffffa285830e8010",
+                "hProcessId": "0x4d0",
+                "hThunkHandle": "3221245824",
+                "pDxgAdapter": "0xffffdc0895be0000"
+              },
+              "id": 28,
+              "pid": 1232,
+              "record": 1470636,
+              "t": "2026-09-28T04:32:01.3450829Z",
+              "tid": 1712
+            },
+            "terminate": null
+          }
+        ]
+      },
+      "flags=0x20008000,stopped=True,termination=True": {
+        "bytes": 349962240,
+        "count": 80,
+        "samples": [
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "536903680",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "2",
+                "Priority": "2013265920",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "4194304",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "2",
+                "hDevice": "0xffffa2857f1072b0",
+                "hDxgGlobalAlloc": "0xffffa2857eae5a60",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0xae4",
+                "hVidMmGlobalAlloc": "0xffffa28580f5e0c0",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0xffffa2857ef7d1d0",
+                "ulAlignment": "65536"
+              },
+              "id": 33,
+              "pid": 2788,
+              "record": 62502,
+              "t": "2026-09-28T04:30:44.0795802Z",
+              "tid": 5200
+            },
+            "device_stop": {
+              "data": {
+                "ClientType": "1",
+                "DisableGpuTimeout": "false",
+                "DxgProcess": "0x0",
+                "HostDeviceHandle": "0",
+                "RequestVSync": "true",
+                "VirtualGpu": "0x0",
+                "hDevice": "0xffffa2857f1072b0",
+                "hProcessId": "0xae4",
+                "hThunkHandle": "1073742848",
+                "pDxgAdapter": "0xffffdc0895be0000"
+              },
+              "id": 28,
+              "pid": 2788,
+              "record": 91902,
+              "t": "2026-09-28T04:30:45.8499673Z",
+              "tid": 5200
+            },
+            "terminate": {
+              "data": {
+                "hVidMmAlloc": "0xffffdc08939f59f0"
+              },
+              "id": 39,
+              "pid": 2788,
+              "record": 88024,
+              "t": "2026-09-28T04:30:45.5588915Z",
+              "tid": 5200
+            }
+          },
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "536903680",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "2",
+                "Priority": "2013265920",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "4194304",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "2",
+                "hDevice": "0xffffa2857f0717e0",
+                "hDxgGlobalAlloc": "0xffffa2857f923d20",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0xae4",
+                "hVidMmGlobalAlloc": "0xffffa2857f945d40",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0xffffa2857ef6e1d0",
+                "ulAlignment": "65536"
+              },
+              "id": 33,
+              "pid": 2788,
+              "record": 80152,
+              "t": "2026-09-28T04:30:45.1558933Z",
+              "tid": 5200
+            },
+            "device_stop": {
+              "data": {
+                "ClientType": "1",
+                "DisableGpuTimeout": "false",
+                "DxgProcess": "0x0",
+                "HostDeviceHandle": "0",
+                "RequestVSync": "true",
+                "VirtualGpu": "0x0",
+                "hDevice": "0xffffa2857f0717e0",
+                "hProcessId": "0xae4",
+                "hThunkHandle": "1073747200",
+                "pDxgAdapter": "0xffffdc0895be0000"
+              },
+              "id": 28,
+              "pid": 2788,
+              "record": 112969,
+              "t": "2026-09-28T04:30:47.0923685Z",
+              "tid": 6660
+            },
+            "terminate": {
+              "data": {
+                "hVidMmAlloc": "0xffffdc0896ad40e0"
+              },
+              "id": 39,
+              "pid": 2788,
+              "record": 109356,
+              "t": "2026-09-28T04:30:46.8567952Z",
+              "tid": 6660
+            }
+          }
+        ]
+      },
+      "flags=0x40,stopped=False,termination=False": {
+        "bytes": 1458176,
+        "count": 25,
+        "samples": [
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "64",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "true",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "0",
+                "Priority": "2684354560",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "16384",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "2",
+                "hDevice": "0x0",
+                "hDxgGlobalAlloc": "0x0",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4",
+                "hVidMmGlobalAlloc": "0xffffa2857ec814a0",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0x0",
+                "ulAlignment": "16384"
+              },
+              "id": 33,
+              "pid": 4,
+              "record": 36915,
+              "t": "2026-09-28T04:30:42.4914933Z",
+              "tid": 5356
+            },
+            "device_stop": null,
+            "terminate": null
+          },
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "64",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "true",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "0",
+                "Priority": "2684354560",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "32768",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "2",
+                "hDevice": "0x0",
+                "hDxgGlobalAlloc": "0x0",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4",
+                "hVidMmGlobalAlloc": "0xffffa2857ec7f0e0",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0x0",
+                "ulAlignment": "16384"
+              },
+              "id": 33,
+              "pid": 4,
+              "record": 36933,
+              "t": "2026-09-28T04:30:42.4915488Z",
+              "tid": 5356
+            },
+            "device_stop": null,
+            "terminate": null
+          }
+        ]
+      },
+      "flags=0x40008000,stopped=False,termination=False": {
+        "bytes": 16384000,
+        "count": 1,
+        "samples": [
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "1073774592",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "2",
+                "Priority": "2013265920",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "16384000",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "2",
+                "hDevice": "0xffffa2857ccb3010",
+                "hDxgGlobalAlloc": "0xffffa2857eadea30",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4d0",
+                "hVidMmGlobalAlloc": "0xffffa2857ec7ec00",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0xffffa2857ef70890",
+                "ulAlignment": "65536"
+              },
+              "id": 33,
+              "pid": 1232,
+              "record": 37701,
+              "t": "2026-09-28T04:30:42.5407270Z",
+              "tid": 1968
+            },
+            "device_stop": null,
+            "terminate": null
+          }
+        ]
+      },
+      "flags=0x4008009,stopped=False,termination=False": {
+        "bytes": 16384000,
+        "count": 1,
+        "samples": [
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "67141641",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "1",
+                "Priority": "2013265920",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "16384000",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "1",
+                "hDevice": "0xffffa2857ccb3010",
+                "hDxgGlobalAlloc": "0xffffa2857eae9430",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4d0",
+                "hVidMmGlobalAlloc": "0xffffa2857ec86c60",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0xffffa2857ef87590",
+                "ulAlignment": "65536"
+              },
+              "id": 33,
+              "pid": 1232,
+              "record": 42780,
+              "t": "2026-09-28T04:30:42.8863949Z",
+              "tid": 1968
+            },
+            "device_stop": null,
+            "terminate": null
+          }
+        ]
+      },
+      "flags=0x41,stopped=False,termination=False": {
+        "bytes": 1228800,
+        "count": 11,
+        "samples": [
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "65",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "true",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "0",
+                "Priority": "2684354560",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "16384",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "2",
+                "hDevice": "0x0",
+                "hDxgGlobalAlloc": "0x0",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4",
+                "hVidMmGlobalAlloc": "0xffffa2857ec77d80",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0x0",
+                "ulAlignment": "16384"
+              },
+              "id": 33,
+              "pid": 4,
+              "record": 35505,
+              "t": "2026-09-28T04:30:42.2833621Z",
+              "tid": 5356
+            },
+            "device_stop": null,
+            "terminate": null
+          },
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "65",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "true",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "0",
+                "Priority": "2684354560",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "32768",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "2",
+                "hDevice": "0x0",
+                "hDxgGlobalAlloc": "0x0",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4",
+                "hVidMmGlobalAlloc": "0xffffa2857ec76a00",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0x0",
+                "ulAlignment": "16384"
+              },
+              "id": 33,
+              "pid": 4,
+              "record": 35523,
+              "t": "2026-09-28T04:30:42.2834424Z",
+              "tid": 5356
+            },
+            "device_stop": null,
+            "terminate": null
+          }
+        ]
+      },
+      "flags=0x48,stopped=False,termination=False": {
+        "bytes": 655360,
+        "count": 2,
+        "samples": [
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "72",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "0",
+                "Priority": "2684354560",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "327680",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "1",
+                "hDevice": "0xffffa2857ccb3010",
+                "hDxgGlobalAlloc": "0x0",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4d0",
+                "hVidMmGlobalAlloc": "0xffffa2857ec785a0",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0xffffa2857ef68910",
+                "ulAlignment": "4096"
+              },
+              "id": 33,
+              "pid": 1232,
+              "record": 36881,
+              "t": "2026-09-28T04:30:42.4908543Z",
+              "tid": 1968
+            },
+            "device_stop": null,
+            "terminate": null
+          },
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "72",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "0",
+                "Priority": "2684354560",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "327680",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "1",
+                "hDevice": "0xffffa2857ccb3010",
+                "hDxgGlobalAlloc": "0x0",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4d0",
+                "hVidMmGlobalAlloc": "0xffffa2857ec821a0",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0xffffa2857ef6a170",
+                "ulAlignment": "4096"
+              },
+              "id": 33,
+              "pid": 1232,
+              "record": 37094,
+              "t": "2026-09-28T04:30:42.5020609Z",
+              "tid": 1968
+            },
+            "device_stop": null,
+            "terminate": null
+          }
+        ]
+      },
+      "flags=0x8000,stopped=False,termination=False": {
+        "bytes": 57278464,
+        "count": 190,
+        "samples": [
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "32768",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "2",
+                "Priority": "2013265920",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "65536",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "2",
+                "hDevice": "0xffffa2857f0aa7e0",
+                "hDxgGlobalAlloc": "0xffffa2857ead8c70",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4d0",
+                "hVidMmGlobalAlloc": "0xffffa2857e459a80",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0x0",
+                "ulAlignment": "65536"
+              },
+              "id": 33,
+              "pid": 1232,
+              "record": 47151,
+              "t": "2026-09-28T04:30:43.1803096Z",
+              "tid": 1396
+            },
+            "device_stop": null,
+            "terminate": null
+          },
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "32768",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "2",
+                "Priority": "2013265920",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "262144",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "2",
+                "hDevice": "0xffffa2857f0aa7e0",
+                "hDxgGlobalAlloc": "0xffffa2857eae0f60",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4d0",
+                "hVidMmGlobalAlloc": "0xffffa2857e48a340",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0x0",
+                "ulAlignment": "65536"
+              },
+              "id": 33,
+              "pid": 1232,
+              "record": 47478,
+              "t": "2026-09-28T04:30:43.1902558Z",
+              "tid": 1396
+            },
+            "device_stop": null,
+            "terminate": null
+          }
+        ]
+      },
+      "flags=0x8000,stopped=False,termination=True": {
+        "bytes": 65536,
+        "count": 1,
+        "samples": [
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "32768",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "2",
+                "Priority": "2013265920",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "65536",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "2",
+                "hDevice": "0xffffa285805e9050",
+                "hDxgGlobalAlloc": "0xffffa28580a98030",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x16f8",
+                "hVidMmGlobalAlloc": "0xffffa28580462240",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0x0",
+                "ulAlignment": "65536"
+              },
+              "id": 33,
+              "pid": 5880,
+              "record": 1432189,
+              "t": "2026-09-28T04:31:59.8551334Z",
+              "tid": 2444
+            },
+            "device_stop": null,
+            "terminate": {
+              "data": {
+                "hVidMmAlloc": "0xffffdc0896acb7d0"
+              },
+              "id": 39,
+              "pid": 5880,
+              "record": 1466163,
+              "t": "2026-09-28T04:32:01.1396673Z",
+              "tid": 6212
+            }
+          }
+        ]
+      },
+      "flags=0x8000,stopped=True,termination=False": {
+        "bytes": 65536,
+        "count": 1,
+        "samples": [
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "32768",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "2",
+                "Priority": "2013265920",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "65536",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "2",
+                "hDevice": "0xffffa285830e8010",
+                "hDxgGlobalAlloc": "0xffffa2857f92f7b0",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4d0",
+                "hVidMmGlobalAlloc": "0xffffa28580e6b7c0",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0x0",
+                "ulAlignment": "65536"
+              },
+              "id": 33,
+              "pid": 1232,
+              "record": 1437012,
+              "t": "2026-09-28T04:32:00.0040361Z",
+              "tid": 1712
+            },
+            "device_stop": {
+              "data": {
+                "ClientType": "1",
+                "DisableGpuTimeout": "false",
+                "DxgProcess": "0x0",
+                "HostDeviceHandle": "0",
+                "RequestVSync": "true",
+                "VirtualGpu": "0x0",
+                "hDevice": "0xffffa285830e8010",
+                "hProcessId": "0x4d0",
+                "hThunkHandle": "3221245824",
+                "pDxgAdapter": "0xffffdc0895be0000"
+              },
+              "id": 28,
+              "pid": 1232,
+              "record": 1470636,
+              "t": "2026-09-28T04:32:01.3450829Z",
+              "tid": 1712
+            },
+            "terminate": null
+          }
+        ]
+      },
+      "flags=0x8000,stopped=True,termination=True": {
+        "bytes": 589824,
+        "count": 6,
+        "samples": [
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "32768",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "2",
+                "Priority": "2013265920",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "262144",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "2",
+                "hDevice": "0xffffa285830e8010",
+                "hDxgGlobalAlloc": "0xffffa28580aa2da0",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4d0",
+                "hVidMmGlobalAlloc": "0xffffa28580f674a0",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0x0",
+                "ulAlignment": "65536"
+              },
+              "id": 33,
+              "pid": 1232,
+              "record": 1438073,
+              "t": "2026-09-28T04:32:00.0204727Z",
+              "tid": 1712
+            },
+            "device_stop": {
+              "data": {
+                "ClientType": "1",
+                "DisableGpuTimeout": "false",
+                "DxgProcess": "0x0",
+                "HostDeviceHandle": "0",
+                "RequestVSync": "true",
+                "VirtualGpu": "0x0",
+                "hDevice": "0xffffa285830e8010",
+                "hProcessId": "0x4d0",
+                "hThunkHandle": "3221245824",
+                "pDxgAdapter": "0xffffdc0895be0000"
+              },
+              "id": 28,
+              "pid": 1232,
+              "record": 1470636,
+              "t": "2026-09-28T04:32:01.3450829Z",
+              "tid": 1712
+            },
+            "terminate": {
+              "data": {
+                "hVidMmAlloc": "0xffffdc0896ad6940"
+              },
+              "id": 39,
+              "pid": 1232,
+              "record": 1466117,
+              "t": "2026-09-28T04:32:01.1382973Z",
+              "tid": 1712
+            }
+          },
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "32768",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "2",
+                "Priority": "2013265920",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "65536",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "2",
+                "hDevice": "0xffffa285830e8010",
+                "hDxgGlobalAlloc": "0xffffa28580a9d7b0",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4d0",
+                "hVidMmGlobalAlloc": "0xffffa285825119c0",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0x0",
+                "ulAlignment": "65536"
+              },
+              "id": 33,
+              "pid": 1232,
+              "record": 1447840,
+              "t": "2026-09-28T04:32:00.3178949Z",
+              "tid": 1712
+            },
+            "device_stop": {
+              "data": {
+                "ClientType": "1",
+                "DisableGpuTimeout": "false",
+                "DxgProcess": "0x0",
+                "HostDeviceHandle": "0",
+                "RequestVSync": "true",
+                "VirtualGpu": "0x0",
+                "hDevice": "0xffffa285830e8010",
+                "hProcessId": "0x4d0",
+                "hThunkHandle": "3221245824",
+                "pDxgAdapter": "0xffffdc0895be0000"
+              },
+              "id": 28,
+              "pid": 1232,
+              "record": 1470636,
+              "t": "2026-09-28T04:32:01.3450829Z",
+              "tid": 1712
+            },
+            "terminate": {
+              "data": {
+                "hVidMmAlloc": "0xffffdc089706a8f0"
+              },
+              "id": 39,
+              "pid": 1232,
+              "record": 1470131,
+              "t": "2026-09-28T04:32:01.3240701Z",
+              "tid": 1712
+            }
+          }
+        ]
+      },
+      "flags=0x8001,stopped=False,termination=False": {
+        "bytes": 24510464,
+        "count": 184,
+        "samples": [
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "32769",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "1",
+                "Priority": "2013265920",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "65536",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "1",
+                "hDevice": "0xffffa2857f0aa7e0",
+                "hDxgGlobalAlloc": "0xffffa2857eadaca0",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4d0",
+                "hVidMmGlobalAlloc": "0xffffa2857e4588a0",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0x0",
+                "ulAlignment": "65536"
+              },
+              "id": 33,
+              "pid": 1232,
+              "record": 47181,
+              "t": "2026-09-28T04:30:43.1830546Z",
+              "tid": 1396
+            },
+            "device_stop": null,
+            "terminate": null
+          },
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "32769",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "1",
+                "Priority": "2013265920",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "262144",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "1",
+                "hDevice": "0xffffa2857f0aa7e0",
+                "hDxgGlobalAlloc": "0xffffa2857eae33a0",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4d0",
+                "hVidMmGlobalAlloc": "0xffffa2857c74e0e0",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0x0",
+                "ulAlignment": "65536"
+              },
+              "id": 33,
+              "pid": 1232,
+              "record": 47534,
+              "t": "2026-09-28T04:30:43.1928456Z",
+              "tid": 1396
+            },
+            "device_stop": null,
+            "terminate": null
+          }
+        ]
+      },
+      "flags=0x8001,stopped=False,termination=True": {
+        "bytes": 2031616,
+        "count": 6,
+        "samples": [
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "32769",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "1",
+                "Priority": "2013265920",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "65536",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "1",
+                "hDevice": "0xffffa285805e9050",
+                "hDxgGlobalAlloc": "0xffffa28580a9a290",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x16f8",
+                "hVidMmGlobalAlloc": "0xffffa285804606a0",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0x0",
+                "ulAlignment": "65536"
+              },
+              "id": 33,
+              "pid": 5880,
+              "record": 1432205,
+              "t": "2026-09-28T04:31:59.8553282Z",
+              "tid": 2444
+            },
+            "device_stop": null,
+            "terminate": {
+              "data": {
+                "hVidMmAlloc": "0xffffdc0896acb8e0"
+              },
+              "id": 39,
+              "pid": 5880,
+              "record": 1466171,
+              "t": "2026-09-28T04:32:01.1396799Z",
+              "tid": 6212
+            }
+          },
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "32769",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "1",
+                "Priority": "2013265920",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "262144",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "1",
+                "hDevice": "0xffffa28582fea010",
+                "hDxgGlobalAlloc": "0xffffa28580a8b380",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0xae4",
+                "hVidMmGlobalAlloc": "0xffffa2857fe90740",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0x0",
+                "ulAlignment": "65536"
+              },
+              "id": 33,
+              "pid": 2788,
+              "record": 1438503,
+              "t": "2026-09-28T04:32:00.0266672Z",
+              "tid": 7208
+            },
+            "device_stop": null,
+            "terminate": {
+              "data": {
+                "hVidMmAlloc": "0xffffdc0896ad0780"
+              },
+              "id": 39,
+              "pid": 2788,
+              "record": 1470237,
+              "t": "2026-09-28T04:32:01.3280077Z",
+              "tid": 2244
+            }
+          }
+        ]
+      },
+      "flags=0x8001,stopped=True,termination=False": {
+        "bytes": 393216,
+        "count": 6,
+        "samples": [
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "32769",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "1",
+                "Priority": "2013265920",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "65536",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "1",
+                "hDevice": "0xffffa285830e8010",
+                "hDxgGlobalAlloc": "0xffffa2857f92fa80",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4d0",
+                "hVidMmGlobalAlloc": "0xffffa28580e88d60",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0x0",
+                "ulAlignment": "65536"
+              },
+              "id": 33,
+              "pid": 1232,
+              "record": 1437023,
+              "t": "2026-09-28T04:32:00.0040657Z",
+              "tid": 1712
+            },
+            "device_stop": {
+              "data": {
+                "ClientType": "1",
+                "DisableGpuTimeout": "false",
+                "DxgProcess": "0x0",
+                "HostDeviceHandle": "0",
+                "RequestVSync": "true",
+                "VirtualGpu": "0x0",
+                "hDevice": "0xffffa285830e8010",
+                "hProcessId": "0x4d0",
+                "hThunkHandle": "3221245824",
+                "pDxgAdapter": "0xffffdc0895be0000"
+              },
+              "id": 28,
+              "pid": 1232,
+              "record": 1470636,
+              "t": "2026-09-28T04:32:01.3450829Z",
+              "tid": 1712
+            },
+            "terminate": null
+          },
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "32769",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "1",
+                "Priority": "2013265920",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "65536",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "1",
+                "hDevice": "0xffffa285830e8010",
+                "hDxgGlobalAlloc": "0xffffa2857f936510",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4d0",
+                "hVidMmGlobalAlloc": "0xffffa2857ec87b00",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0x0",
+                "ulAlignment": "65536"
+              },
+              "id": 33,
+              "pid": 1232,
+              "record": 1437271,
+              "t": "2026-09-28T04:32:00.0078170Z",
+              "tid": 1712
+            },
+            "device_stop": {
+              "data": {
+                "ClientType": "1",
+                "DisableGpuTimeout": "false",
+                "DxgProcess": "0x0",
+                "HostDeviceHandle": "0",
+                "RequestVSync": "true",
+                "VirtualGpu": "0x0",
+                "hDevice": "0xffffa285830e8010",
+                "hProcessId": "0x4d0",
+                "hThunkHandle": "3221245824",
+                "pDxgAdapter": "0xffffdc0895be0000"
+              },
+              "id": 28,
+              "pid": 1232,
+              "record": 1470636,
+              "t": "2026-09-28T04:32:01.3450829Z",
+              "tid": 1712
+            },
+            "terminate": null
+          }
+        ]
+      },
+      "flags=0x8001,stopped=True,termination=True": {
+        "bytes": 720896,
+        "count": 7,
+        "samples": [
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "32769",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "1",
+                "Priority": "2013265920",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "262144",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "1",
+                "hDevice": "0xffffa285830e8010",
+                "hDxgGlobalAlloc": "0xffffa28580aa5f00",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4d0",
+                "hVidMmGlobalAlloc": "0xffffa28580f65de0",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0x0",
+                "ulAlignment": "65536"
+              },
+              "id": 33,
+              "pid": 1232,
+              "record": 1438087,
+              "t": "2026-09-28T04:32:00.0205105Z",
+              "tid": 1712
+            },
+            "device_stop": {
+              "data": {
+                "ClientType": "1",
+                "DisableGpuTimeout": "false",
+                "DxgProcess": "0x0",
+                "HostDeviceHandle": "0",
+                "RequestVSync": "true",
+                "VirtualGpu": "0x0",
+                "hDevice": "0xffffa285830e8010",
+                "hProcessId": "0x4d0",
+                "hThunkHandle": "3221245824",
+                "pDxgAdapter": "0xffffdc0895be0000"
+              },
+              "id": 28,
+              "pid": 1232,
+              "record": 1470636,
+              "t": "2026-09-28T04:32:01.3450829Z",
+              "tid": 1712
+            },
+            "terminate": {
+              "data": {
+                "hVidMmAlloc": "0xffffdc0896ad5a60"
+              },
+              "id": 39,
+              "pid": 1232,
+              "record": 1466127,
+              "t": "2026-09-28T04:32:01.1383100Z",
+              "tid": 1712
+            }
+          },
+          {
+            "create": {
+              "data": {
+                "BackingStoreWasPinned": "false",
+                "ByteOffset": "0",
+                "Depth": "0",
+                "Flags": "32769",
+                "Format": "0",
+                "Height": "0",
+                "HintedBank": "0",
+                "PageTableOrDirectory": "false",
+                "PhysicalAdapterIndex": "0",
+                "Pitch": "0",
+                "PreferredSegment": "1",
+                "Priority": "2013265920",
+                "SlicePitch": "0",
+                "SwizzledFormat": "0",
+                "UsageFlags": "0",
+                "UsageVersion": "0",
+                "Width": "0",
+                "allocSize": "65536",
+                "dwEvictionSegment": "0",
+                "dwReadSegment": "0",
+                "dwWriteSegment": "1",
+                "hDevice": "0xffffa285830e8010",
+                "hDxgGlobalAlloc": "0xffffa2857f9408d0",
+                "hDxgSharedResource": "0x0",
+                "hProcessId": "0x4d0",
+                "hVidMmGlobalAlloc": "0xffffa28582513be0",
+                "pDxgAdapter": "0xffffdc0895be0000",
+                "pSectionObject": "0x0",
+                "ulAlignment": "65536"
+              },
+              "id": 33,
+              "pid": 1232,
+              "record": 1446964,
+              "t": "2026-09-28T04:32:00.2939420Z",
+              "tid": 1712
+            },
+            "device_stop": {
+              "data": {
+                "ClientType": "1",
+                "DisableGpuTimeout": "false",
+                "DxgProcess": "0x0",
+                "HostDeviceHandle": "0",
+                "RequestVSync": "true",
+                "VirtualGpu": "0x0",
+                "hDevice": "0xffffa285830e8010",
+                "hProcessId": "0x4d0",
+                "hThunkHandle": "3221245824",
+                "pDxgAdapter": "0xffffdc0895be0000"
+              },
+              "id": 28,
+              "pid": 1232,
+              "record": 1470636,
+              "t": "2026-09-28T04:32:01.3450829Z",
+              "tid": 1712
+            },
+            "terminate": {
+              "data": {
+                "hVidMmAlloc": "0xffffdc0897083430"
+              },
+              "id": 39,
+              "pid": 1232,
+              "record": 1469922,
+              "t": "2026-09-28T04:32:01.3173744Z",
+              "tid": 1712
+            }
+          }
+        ]
+      }
+    },
+    "overwritten_starts": 7,
+    "unmatched_stops": 0
+  },
+  "copy_call_parent_sites": {
+    "00007ffd7200be04": 93
+  },
+  "copy_calls_by_pid": {
+    "1224": 11,
+    "1232": 25,
+    "2788": 49,
+    "4720": 1,
+    "5680": 2,
+    "5880": 5
+  },
+  "device_error_events": [
+    {
+      "data": {
+        "DxgDevice": "0xffffa2857cc9f010",
+        "FromUserMode": "true",
+        "Reason": "6"
+      },
+      "id": 467,
+      "pid": 1232,
+      "record": 34836,
+      "t": "2026-09-28T04:30:41.4443515Z",
+      "tid": 1396
+    },
+    {
+      "data": {
+        "DxgDevice": "0xffffa2857ff8a7e0",
+        "FromUserMode": "false",
+        "Reason": "14"
+      },
+      "id": 467,
+      "pid": 7616,
+      "record": 207829,
+      "t": "2026-09-28T04:30:51.5176366Z",
+      "tid": 8056
+    },
+    {
+      "data": {
+        "DxgDevice": "0xffffa2857ec07010",
+        "FromUserMode": "false",
+        "Reason": "14"
+      },
+      "id": 467,
+      "pid": 7728,
+      "record": 245867,
+      "t": "2026-09-28T04:30:53.3453447Z",
+      "tid": 6856
+    }
+  ],
+  "etl_header": "HEADER lost=0 bufferslost=6 start=134350434083122715 end=134350435533085310 pointer=8 build=1",
+  "etl_native_summary": "SUMMARY status=0 events=1471211 extended=1471209 stacks=1471209 reason_events=3",
+  "make_resident_statuses": {
+    "259": 93
+  },
+  "manifest": {
+    "EXP858-offline-analysis/allocation-events.json": {
+      "bytes": 47361184,
+      "sha256": "31f09be59338597a4b6ef8cbee36088661822906717c66303d028bd6b02d746c"
+    },
+    "EXP858-offline-analysis/boundary-stacks.txt": {
+      "bytes": 62582,
+      "sha256": "333f7c783631882738ff7cc7375db21eda5d77cd6c59ad1fe99ecac0e8e7de1e"
+    },
+    "EXP858-offline-analysis/context-events.json": {
+      "bytes": 742162,
+      "sha256": "d6565a73e9931c25073c057b157b0acf2f4972cc09495b53476c7c28aa614ad0"
+    },
+    "EXP858-offline-analysis/context-events.xml": {
+      "bytes": 2357124,
+      "sha256": "d1589e7f4076afe3388d61e416dd2a4d7de03af866565d222019e487fc0e0c3e"
+    },
+    "EXP858-offline-analysis/copy-call-stacks.txt": {
+      "bytes": 44560,
+      "sha256": "10fad90786ee7e9d014437e430614b8561242ab0f97fb8e105d4a222e1a809c2"
+    },
+    "EXP858-offline-analysis/dump-boundary.txt": {
+      "bytes": 11537,
+      "sha256": "9e9193fab9b49218bb6906a1431065a7c3fc80da232c9f00a9dca91d80c3f96e"
+    },
+    "EXP858-offline-analysis/dump-detail.txt": {
+      "bytes": 178300,
+      "sha256": "8014711033b2aa3290346e7ec28115e810cf484502a1ee33eada221fdb0c1a2d"
+    },
+    "EXP858-offline-analysis/dump-owners.txt": {
+      "bytes": 6749,
+      "sha256": "9097d55fbe05ed7e0649c0c91b1e295ef9b99ed7bf35a8aae2f80b0eff0362f2"
+    },
+    "EXP858-offline-analysis/dump-runtime.txt": {
+      "bytes": 8287,
+      "sha256": "3b6fb9698acc20ca4783c747df626e9388db93016724ab4bc059ab689a133ccb"
+    },
+    "EXP858-offline-analysis/dump.txt": {
+      "bytes": 53439,
+      "sha256": "5e766fc8119933f5033ecde6be93884ed41c6253eb6663b1802bc037577e621e"
+    },
+    "EXP858-offline-analysis/etl-context.ps1": {
+      "bytes": 453,
+      "sha256": "4ea50a7c6a518a448f0fc13a95cab631794b591213af04b4c6a9f3a24185f850"
+    },
+    "EXP858-offline-analysis/etl-focused0.ps1": {
+      "bytes": 509,
+      "sha256": "29197d76218631f1fba4d78cca965e6ce4c6268243defc05dc8f58cf4bc06401"
+    },
+    "EXP858-offline-analysis/etl-focused1.ps1": {
+      "bytes": 516,
+      "sha256": "7c1424ee8549baeb992620e4cd938092158f15726fbc32c6f090cb6b938944a9"
+    },
+    "EXP858-offline-analysis/etl-paging.ps1": {
+      "bytes": 495,
+      "sha256": "e9829728ceb8e0898dae6a9148aed525d255a851d2f71a44f56a94f9afb76222"
+    },
+    "EXP858-offline-analysis/focused-events0.xml": {
+      "bytes": 106286220,
+      "sha256": "a8763f6535e0a9b08cea849740a991539e2461f94df5b21efb9c8d5748192eb3"
+    },
+    "EXP858-offline-analysis/focused-events1.xml": {
+      "bytes": 5765260,
+      "sha256": "0f144a8801fe582ba020d4919d1d898c3347432780de179c708636cbbecd1720"
+    },
+    "EXP858-offline-analysis/paging-events.json": {
+      "bytes": 21364167,
+      "sha256": "1f1a1d546e1e9cb9e789c77806f06b5510c7c89d17087d11c3dc2dfd7d879650"
+    },
+    "EXP858-offline-analysis/paging-events.xml": {
+      "bytes": 63127661,
+      "sha256": "7047aa3b52fcda520bd305658fda9657d078033b8db42887c0162a05b560d12c"
+    },
+    "EXP858-offline-analysis/parse_etl.py": {
+      "bytes": 1145,
+      "sha256": "ea9bf5873911400d98fd75641291923d766235cd1e4415ecac25d55f1e2da91f"
+    },
+    "EXP858-offline-analysis/raw-stacks.txt": {
+      "bytes": 77057,
+      "sha256": "f4b747612ef2a4c8ad03cf853f88440bb08833ee5bb0f58464713985801d898b"
+    },
+    "EXP858-offline-analysis/read-boundary.cpp": {
+      "bytes": 3089,
+      "sha256": "777806ad9efad14925bb83192a980dc4c87ab285a8be8cbb7e84cc534dfff99d"
+    },
+    "EXP858-offline-analysis/read-copy-calls.cpp": {
+      "bytes": 3305,
+      "sha256": "1e56c7a264a7460eccd26a67b0ad4f2920ce7f39f69fbb21503bb133d0ffe258"
+    },
+    "EXP858-offline-analysis/readetl.cpp": {
+      "bytes": 3005,
+      "sha256": "25bcbb2d87d0d529be04e5b14ed921cc4e490c3903554da690a16c5f7759d607"
+    },
+    "EXP858-r145-staging/AppleAgxRenderAdmissionUmd.dll": {
+      "bytes": 12179456,
+      "sha256": "aac1dcf484901637b5596e89ae44de35be1cc1828a3bd4f3cc17c0707ea008f9"
+    },
+    "EXP858-r145-staging/AppleAgxRenderAdmissionUmd.pdb": {
+      "bytes": 9981952,
+      "sha256": "d737daac9711044742dfcd304767d16022c21fc8d6bf34d2fb59508e567839cf"
+    },
+    "EXP858-r145-staging/hardware-evidence/EXP801DxgBoot.etl": {
+      "bytes": 536870912,
+      "sha256": "084bebc306fad0a731204f5f4470e2b3302fc80847debd0e52cfa2108dd44a9a"
+    },
+    "EXP858-r145-staging/hardware-evidence/WER-explorer.exe.2788.dmp": {
+      "bytes": 888718095,
+      "sha256": "c6fe70d6be8bd77be924360de4662ddc170c3512c95ef29e5e4aa196c918d8db"
+    },
+    "EXP858-r145-staging/hardware-evidence/umd.log": {
+      "bytes": 7613752,
+      "sha256": "1fc89a4e1046f2d00324985c4b5357168e3c06bae20d36425b60679037a8cec8"
+    },
+    "EXP858-r145-staging/source-manifest.json": {
+      "bytes": 122092,
+      "sha256": "0c6952c991750b6d98a929bee00a90073a085113a8dc67ef18aa04689deb5339"
+    }
+  },
+  "packet_counts": [
+    {
+      "adapter": "0xffffdc0893143000",
+      "count": 223,
+      "id": 175,
+      "packet_type": "0"
+    },
+    {
+      "adapter": "0xffffdc0893143000",
+      "count": 1,
+      "id": 175,
+      "packet_type": "3"
+    },
+    {
+      "adapter": "0xffffdc0895be0000",
+      "count": 8106,
+      "id": 175,
+      "packet_type": "1"
+    },
+    {
+      "adapter": "0xffffdc0893143000",
+      "count": 223,
+      "id": 178,
+      "packet_type": "0"
+    },
+    {
+      "adapter": "0xffffdc0893143000",
+      "count": 78,
+      "id": 178,
+      "packet_type": "7"
+    },
+    {
+      "adapter": "0xffffdc0895be0000",
+      "count": 8109,
+      "id": 178,
+      "packet_type": "8"
+    },
+    {
+      "adapter": "unknown",
+      "count": 68,
+      "id": 178,
+      "packet_type": "6"
+    }
+  ],
+  "pid8148_blocks": {
+    "blocks": 405,
+    "lines_each": 128
+  },
+  "representative_boundary_events": [
+    {
+      "data": {
+        "Flags": "0",
+        "NumAllocations": "13",
+        "pPagingQueue": "0xffffa2857da1cea0",
+        "pSyncObject": "0xffffdc08939706e0"
+      },
+      "id": 338,
+      "pid": 1224,
+      "record": 50549,
+      "t": "2026-09-28T04:30:43.3429545Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "MemorySegmentGroup": "2",
+        "NewUsage": "1703936",
+        "OldUsage": "0",
+        "PhysicalAdapterIndex": "0",
+        "ProcessId": "1224",
+        "pDxgAdapter": "0xffffdc0895be0000"
+      },
+      "id": 367,
+      "pid": 1224,
+      "record": 50550,
+      "t": "2026-09-28T04:30:43.3429608Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "NumBytesToTrim": "0",
+        "PagingFenceValue": "7037",
+        "Status": "259"
+      },
+      "id": 339,
+      "pid": 1224,
+      "record": 50585,
+      "t": "2026-09-28T04:30:43.3430044Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "Flags": "0",
+        "MonitoredFenceValue": "7037",
+        "ObjectArray": "0xffffdc0893134410",
+        "ObjectCount": "1",
+        "hAsyncEvent": "0x0",
+        "hDevice": "0xffffa2857d21f7e0"
+      },
+      "id": 297,
+      "pid": 1224,
+      "record": 50594,
+      "t": "2026-09-28T04:30:43.3430178Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "MemorySegmentGroup": "2",
+        "NewUsage": "1638400",
+        "OldUsage": "1703936",
+        "PhysicalAdapterIndex": "0",
+        "ProcessId": "1224",
+        "pDxgAdapter": "0xffffdc0895be0000"
+      },
+      "id": 367,
+      "pid": 1224,
+      "record": 53593,
+      "t": "2026-09-28T04:30:43.5275827Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "MemorySegmentGroup": "2",
+        "NewUsage": "1114112",
+        "OldUsage": "1638400",
+        "PhysicalAdapterIndex": "0",
+        "ProcessId": "1224",
+        "pDxgAdapter": "0xffffdc0895be0000"
+      },
+      "id": 367,
+      "pid": 1224,
+      "record": 53596,
+      "t": "2026-09-28T04:30:43.5275910Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "MemorySegmentGroup": "2",
+        "NewUsage": "1048576",
+        "OldUsage": "1114112",
+        "PhysicalAdapterIndex": "0",
+        "ProcessId": "1224",
+        "pDxgAdapter": "0xffffdc0895be0000"
+      },
+      "id": 367,
+      "pid": 1224,
+      "record": 53599,
+      "t": "2026-09-28T04:30:43.5275957Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "MemorySegmentGroup": "2",
+        "NewUsage": "983040",
+        "OldUsage": "1048576",
+        "PhysicalAdapterIndex": "0",
+        "ProcessId": "1224",
+        "pDxgAdapter": "0xffffdc0895be0000"
+      },
+      "id": 367,
+      "pid": 1224,
+      "record": 53607,
+      "t": "2026-09-28T04:30:43.5276037Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "MemorySegmentGroup": "2",
+        "NewUsage": "720896",
+        "OldUsage": "983040",
+        "PhysicalAdapterIndex": "0",
+        "ProcessId": "1224",
+        "pDxgAdapter": "0xffffdc0895be0000"
+      },
+      "id": 367,
+      "pid": 1224,
+      "record": 53611,
+      "t": "2026-09-28T04:30:43.5276081Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "MemorySegmentGroup": "2",
+        "NewUsage": "655360",
+        "OldUsage": "720896",
+        "PhysicalAdapterIndex": "0",
+        "ProcessId": "1224",
+        "pDxgAdapter": "0xffffdc0895be0000"
+      },
+      "id": 367,
+      "pid": 1224,
+      "record": 53614,
+      "t": "2026-09-28T04:30:43.5276124Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "MemorySegmentGroup": "2",
+        "NewUsage": "589824",
+        "OldUsage": "655360",
+        "PhysicalAdapterIndex": "0",
+        "ProcessId": "1224",
+        "pDxgAdapter": "0xffffdc0895be0000"
+      },
+      "id": 367,
+      "pid": 1224,
+      "record": 53618,
+      "t": "2026-09-28T04:30:43.5276167Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "MemorySegmentGroup": "2",
+        "NewUsage": "524288",
+        "OldUsage": "589824",
+        "PhysicalAdapterIndex": "0",
+        "ProcessId": "1224",
+        "pDxgAdapter": "0xffffdc0895be0000"
+      },
+      "id": 367,
+      "pid": 1224,
+      "record": 53621,
+      "t": "2026-09-28T04:30:43.5276212Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "MemorySegmentGroup": "2",
+        "NewUsage": "262144",
+        "OldUsage": "524288",
+        "PhysicalAdapterIndex": "0",
+        "ProcessId": "1224",
+        "pDxgAdapter": "0xffffdc0895be0000"
+      },
+      "id": 367,
+      "pid": 1224,
+      "record": 53624,
+      "t": "2026-09-28T04:30:43.5276254Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "MemorySegmentGroup": "2",
+        "NewUsage": "196608",
+        "OldUsage": "262144",
+        "PhysicalAdapterIndex": "0",
+        "ProcessId": "1224",
+        "pDxgAdapter": "0xffffdc0895be0000"
+      },
+      "id": 367,
+      "pid": 1224,
+      "record": 53627,
+      "t": "2026-09-28T04:30:43.5276296Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "MemorySegmentGroup": "2",
+        "NewUsage": "131072",
+        "OldUsage": "196608",
+        "PhysicalAdapterIndex": "0",
+        "ProcessId": "1224",
+        "pDxgAdapter": "0xffffdc0895be0000"
+      },
+      "id": 367,
+      "pid": 1224,
+      "record": 53630,
+      "t": "2026-09-28T04:30:43.5276339Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "MemorySegmentGroup": "2",
+        "NewUsage": "65536",
+        "OldUsage": "131072",
+        "PhysicalAdapterIndex": "0",
+        "ProcessId": "1224",
+        "pDxgAdapter": "0xffffdc0895be0000"
+      },
+      "id": 367,
+      "pid": 1224,
+      "record": 53633,
+      "t": "2026-09-28T04:30:43.5276382Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "MemorySegmentGroup": "2",
+        "NewUsage": "0",
+        "OldUsage": "65536",
+        "PhysicalAdapterIndex": "0",
+        "ProcessId": "1224",
+        "pDxgAdapter": "0xffffdc0895be0000"
+      },
+      "id": 367,
+      "pid": 1224,
+      "record": 53636,
+      "t": "2026-09-28T04:30:43.5276427Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "dwFlags": "0",
+        "hAllocationHandle": "0xffffdc08960c59f0",
+        "hDevice": "0xffffa2857d21f7e0"
+      },
+      "id": 42,
+      "pid": 1224,
+      "record": 53850,
+      "t": "2026-09-28T04:30:43.5383896Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "hVidMmAlloc": "0xffffdc08960c44b0"
+      },
+      "id": 39,
+      "pid": 1224,
+      "record": 54258,
+      "t": "2026-09-28T04:30:43.5727760Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "hVidMmAlloc": "0xffffdc08960c59f0"
+      },
+      "id": 39,
+      "pid": 1224,
+      "record": 54261,
+      "t": "2026-09-28T04:30:43.5727877Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "dwFlags": "0",
+        "hAllocationHandle": "0xffffdc08960cb550",
+        "hDevice": "0xffffa2857d21f7e0"
+      },
+      "id": 42,
+      "pid": 1224,
+      "record": 54264,
+      "t": "2026-09-28T04:30:43.5728171Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "hVidMmAlloc": "0xffffdc08960cd750"
+      },
+      "id": 39,
+      "pid": 1224,
+      "record": 54354,
+      "t": "2026-09-28T04:30:43.5783377Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "hVidMmAlloc": "0xffffdc08960cb550"
+      },
+      "id": 39,
+      "pid": 1224,
+      "record": 54357,
+      "t": "2026-09-28T04:30:43.5783481Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "dwFlags": "0",
+        "hAllocationHandle": "0xffffdc08960cc980",
+        "hDevice": "0xffffa2857d21f7e0"
+      },
+      "id": 42,
+      "pid": 1224,
+      "record": 54360,
+      "t": "2026-09-28T04:30:43.5783612Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "hVidMmAlloc": "0xffffdc08960cced0"
+      },
+      "id": 39,
+      "pid": 1224,
+      "record": 54548,
+      "t": "2026-09-28T04:30:43.5919101Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "hVidMmAlloc": "0xffffdc08960cc980"
+      },
+      "id": 39,
+      "pid": 1224,
+      "record": 54551,
+      "t": "2026-09-28T04:30:43.5919200Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "dwFlags": "0",
+        "hAllocationHandle": "0xffffdc08960cb770",
+        "hDevice": "0xffffa2857d21f7e0"
+      },
+      "id": 42,
+      "pid": 1224,
+      "record": 54554,
+      "t": "2026-09-28T04:30:43.5919346Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "hVidMmAlloc": "0xffffdc08960ccba0"
+      },
+      "id": 39,
+      "pid": 1224,
+      "record": 54645,
+      "t": "2026-09-28T04:30:43.5969439Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "hVidMmAlloc": "0xffffdc08960cb770"
+      },
+      "id": 39,
+      "pid": 1224,
+      "record": 54648,
+      "t": "2026-09-28T04:30:43.5969544Z",
+      "tid": 5908
+    },
+    {
+      "data": {
+        "DeviceState": "1",
+        "hDevice": "0xffffa2857d21f7e0"
+      },
+      "id": 182,
+      "pid": 1224,
+      "record": 54651,
+      "t": "2026-09-28T04:30:43.5971778Z",
+      "tid": 5908
+    }
+  ],
+  "reserve_resource_statuses": {
+    "0": 1368
+  },
+  "scope": "Offline saved EXP858 evidence; no driver edits, package or Air operation",
+  "selected_event_counts": {
+    "24": 3,
+    "27": 199,
+    "28": 177,
+    "30": 206,
+    "31": 179,
+    "33": 14884,
+    "34": 14316,
+    "36": 15101,
+    "37": 14530,
+    "39": 14277,
+    "41": 6550,
+    "42": 6365,
+    "67": 1368,
+    "68": 1368,
+    "78": 5,
+    "171": 76,
+    "173": 78,
+    "175": 8330,
+    "176": 8330,
+    "178": 8478,
+    "179": 18002,
+    "180": 18004,
+    "182": 7086,
+    "184": 150,
+    "225": 90,
+    "226": 44,
+    "244": 1,
+    "245": 9531,
+    "288": 1064,
+    "289": 796,
+    "294": 1249,
+    "297": 7328,
+    "320": 1108,
+    "338": 93,
+    "339": 93,
+    "364": 819,
+    "365": 275,
+    "367": 1224,
+    "371": 2712,
+    "467": 3,
+    "469": 78,
+    "470": 78,
+    "471": 167,
+    "473": 60,
+    "532": 584
+  },
+  "selected_first_utc": "2026-09-28T04:30:37.2612426Z",
+  "selected_last_utc": "2026-09-28T04:32:01.3688337Z",
+  "trace_counts_by_pid": {
+    "1224": {
+      "draw-args": 62,
+      "draw-before": 62,
+      "flush-state": 434,
+      "frontend-create": 689,
+      "g4-create-context-virtual-cb": 64,
+      "g4-create-device-enter": 64,
+      "g4-create-device-exit": 64,
+      "g4-create-paging-queue-cb": 64,
+      "g4-create-render-fence-cb": 64,
+      "g4-native-allocate-cb": 1255,
+      "g4-native-lock-cb": 936,
+      "g4-native-map-va-cb": 1193,
+      "g4-native-reserve-va-cb": 1255,
+      "g4-native-screen-create": 64,
+      "g4-open-adapter-enter": 128,
+      "g4-open-adapter-exit": 128,
+      "g4-screen-initialize": 64,
+      "native-bindings": 558,
+      "native-runtime": 558,
+      "resolve-before": 62,
+      "sampler-range": 258
+    },
+    "1232": {
+      "frontend-create": 11,
+      "g4-create-context-virtual-cb": 2,
+      "g4-create-device-enter": 2,
+      "g4-create-device-exit": 2,
+      "g4-create-paging-queue-cb": 2,
+      "g4-create-render-fence-cb": 2,
+      "g4-native-allocate-cb": 25,
+      "g4-native-lock-cb": 11,
+      "g4-native-map-va-cb": 24,
+      "g4-native-reserve-va-cb": 25,
+      "g4-native-screen-create": 2,
+      "g4-open-adapter-enter": 6,
+      "g4-open-adapter-exit": 6,
+      "g4-screen-initialize": 2,
+      "sampler-range": 6
+    },
+    "2112": {
+      "flush-state": 2,
+      "frontend-create": 9,
+      "g4-create-context-virtual-cb": 1,
+      "g4-create-device-enter": 1,
+      "g4-create-device-exit": 1,
+      "g4-create-paging-queue-cb": 1,
+      "g4-create-render-fence-cb": 1,
+      "g4-create-resource-enter": 1,
+      "g4-create-resource-exit": 1,
+      "g4-native-allocate-cb": 25,
+      "g4-native-lock-cb": 19,
+      "g4-native-map-va-cb": 25,
+      "g4-native-reserve-va-cb": 25,
+      "g4-native-screen-create": 1,
+      "g4-open-adapter-enter": 2,
+      "g4-open-adapter-exit": 2,
+      "g4-screen-initialize": 1,
+      "native-bindings": 2,
+      "native-runtime": 2,
+      "presentation-allocate": 1,
+      "presentation-import": 1,
+      "sampler-range": 4
+    },
+    "2456": {
+      "g4-open-adapter-enter": 2,
+      "g4-open-adapter-exit": 2
+    },
+    "2788": {
+      "flush-state": 2,
+      "frontend-create": 9,
+      "g4-create-context-virtual-cb": 1,
+      "g4-create-device-enter": 1,
+      "g4-create-device-exit": 1,
+      "g4-create-paging-queue-cb": 1,
+      "g4-create-render-fence-cb": 1,
+      "g4-create-resource-enter": 1,
+      "g4-create-resource-exit": 1,
+      "g4-native-allocate-cb": 25,
+      "g4-native-lock-cb": 19,
+      "g4-native-map-va-cb": 25,
+      "g4-native-reserve-va-cb": 25,
+      "g4-native-screen-create": 1,
+      "g4-open-adapter-enter": 2,
+      "g4-open-adapter-exit": 2,
+      "g4-screen-initialize": 1,
+      "native-bindings": 2,
+      "native-runtime": 2,
+      "presentation-allocate": 1,
+      "presentation-import": 1,
+      "sampler-range": 4
+    },
+    "4720": {
+      "draw-args": 1,
+      "draw-before": 1,
+      "flush-state": 7,
+      "frontend-create": 11,
+      "g4-create-context-virtual-cb": 1,
+      "g4-create-device-enter": 1,
+      "g4-create-device-exit": 1,
+      "g4-create-paging-queue-cb": 1,
+      "g4-create-render-fence-cb": 1,
+      "g4-native-allocate-cb": 20,
+      "g4-native-lock-cb": 15,
+      "g4-native-map-va-cb": 19,
+      "g4-native-reserve-va-cb": 20,
+      "g4-native-screen-create": 1,
+      "g4-open-adapter-enter": 2,
+      "g4-open-adapter-exit": 2,
+      "g4-screen-initialize": 1,
+      "native-bindings": 9,
+      "native-runtime": 9,
+      "resolve-before": 1,
+      "sampler-range": 4
+    },
+    "5680": {
+      "draw-args": 43,
+      "draw-before": 43,
+      "flush-state": 307,
+      "frontend-create": 484,
+      "g4-create-context-virtual-cb": 44,
+      "g4-create-device-enter": 44,
+      "g4-create-device-exit": 44,
+      "g4-create-paging-queue-cb": 44,
+      "g4-create-render-fence-cb": 44,
+      "g4-native-allocate-cb": 876,
+      "g4-native-lock-cb": 656,
+      "g4-native-map-va-cb": 833,
+      "g4-native-reserve-va-cb": 876,
+      "g4-native-screen-create": 44,
+      "g4-open-adapter-enter": 88,
+      "g4-open-adapter-exit": 88,
+      "g4-screen-initialize": 44,
+      "native-bindings": 392,
+      "native-runtime": 392,
+      "resolve-before": 43,
+      "sampler-range": 176
+    },
+    "5756": {
+      "draw-args": 1,
+      "draw-before": 1,
+      "flush-state": 7,
+      "frontend-create": 11,
+      "g4-create-context-virtual-cb": 1,
+      "g4-create-device-enter": 1,
+      "g4-create-device-exit": 1,
+      "g4-create-paging-queue-cb": 1,
+      "g4-create-render-fence-cb": 1,
+      "g4-native-allocate-cb": 20,
+      "g4-native-lock-cb": 15,
+      "g4-native-map-va-cb": 19,
+      "g4-native-reserve-va-cb": 20,
+      "g4-native-screen-create": 1,
+      "g4-open-adapter-enter": 2,
+      "g4-open-adapter-exit": 2,
+      "g4-screen-initialize": 1,
+      "native-bindings": 9,
+      "native-runtime": 9,
+      "resolve-before": 1,
+      "sampler-range": 4
+    },
+    "7780": {
+      "draw-args": 1,
+      "draw-before": 1,
+      "flush-state": 7,
+      "frontend-create": 11,
+      "g4-create-context-virtual-cb": 1,
+      "g4-create-device-enter": 1,
+      "g4-create-device-exit": 1,
+      "g4-create-paging-queue-cb": 1,
+      "g4-create-render-fence-cb": 1,
+      "g4-native-allocate-cb": 20,
+      "g4-native-lock-cb": 15,
+      "g4-native-map-va-cb": 19,
+      "g4-native-reserve-va-cb": 20,
+      "g4-native-screen-create": 1,
+      "g4-open-adapter-enter": 2,
+      "g4-open-adapter-exit": 2,
+      "g4-screen-initialize": 1,
+      "native-bindings": 9,
+      "native-runtime": 9,
+      "resolve-before": 1,
+      "sampler-range": 4
+    },
+    "8148": {
+      "draw-args": 405,
+      "draw-before": 405,
+      "flush-state": 2835,
+      "frontend-create": 4455,
+      "g4-create-context-virtual-cb": 405,
+      "g4-create-device-enter": 405,
+      "g4-create-device-exit": 405,
+      "g4-create-paging-queue-cb": 405,
+      "g4-create-render-fence-cb": 405,
+      "g4-native-allocate-cb": 8100,
+      "g4-native-lock-cb": 6075,
+      "g4-native-map-va-cb": 7695,
+      "g4-native-reserve-va-cb": 8100,
+      "g4-native-screen-create": 405,
+      "g4-open-adapter-enter": 810,
+      "g4-open-adapter-exit": 810,
+      "g4-screen-initialize": 405,
+      "native-bindings": 3645,
+      "native-runtime": 3645,
+      "resolve-before": 405,
+      "sampler-range": 1620
+    }
+  }
+}
