@@ -1,0 +1,17 @@
+{
+  "drivers/apple-agx/mesa/scripts/build-native-asahi-state.py": "d83e2e918a5d823009e2ea8b86c46c41b565ca7bebfcf9e87e2477e359e2a801",
+  "drivers/apple-agx/mesa/winsys/agx_d3d10_windows.cpp": "05d756a3017a3f01de35ebed7bf3461646aa52a0989e6802b31516ea08aeaab0",
+  "drivers/apple-agx/mesa/winsys/agx_d3d10_windows.h": "733c1ce004ad435fa7f096bba9d4c5092cacb4f1ad9699e1b8a0d0f00812baf1",
+  "drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c": "568f6c06ac677ffdf50ca91f1ef6936902ddc5ec0aae1bab4122cd0299a66add",
+  "drivers/apple-agx/render-admission/src/gpuva_g3_windows.c": "b93a2d3057c0d5b8aa7d05ae42af339e0c2626fb0b60b56553cd2d537f989e50",
+  "drivers/apple-agx/render-admission/umd/tests/umd_contract_windows.c": "a1ecbd2154400d03d1d2aefd35ab794c9c7511d29efeab562150cd485f3223f2",
+  "drivers/apple-agx/shared/include/apple_agx_g3_copy_query_receipt.h": "014b5b2d56c990e412d8cafff81d2a847fec22367961ba087b99adb4a4580273",
+  "tests/g3_copy_query_v2_cases.c": "6fbfdb26a48ffe6fc545127707ffbb6f46336dc7c096122ac5b90afc401a7693",
+  "tests/g3_r145_copy_cases.c": "38a0721fecc7a74696158a135c0d8f5cf52cea4e5acfd7a6cde585a0c0aa035b",
+  "tests/g3_vidmm_replay_shim.h": "49cf8db5c41176be9dac61ec92ad93ee9b5a94fceb369f5fb40c9bec884c360e",
+  "tests/g4_mesa_pool_residency_replay.c": "82989349d2f0e9bcd6fb90489b44e832f9538fa70c823e4cba3ccbe0a051b1dc",
+  "tests/test_g3_copy_query_receipt.py": "f3fb3e700a123eb55a2dba144a033d816448c66da1994292ce64adefcf0b732c",
+  "tests/test_g4_mesa_pool_residency_replay.py": "9405aec8ef1bcab890009ad9676ec0d7b3a5efcf07f795b9a34b6717429aee29",
+  "tests/test_r148_shared_retirement.py": "6e80f5dc99f6405dd4650c29c23709f1e8b62c08815e7abd9bcb8e5101aa6a85",
+  "tools/decode_g3_copy_query_failure.py": "dcba0e0e8c75bf62c6800755b6a12256c04f4029d9c1e30f77790fb64415136e"
+}

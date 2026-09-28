@@ -1,1 +1,6 @@
 scripts/*.cmd text eol=crlf
+
+# R148 evidence hashes describe the exact archived bytes.
+investigation/evidence/R148/** -text -whitespace
+investigation/evidence/R148-memory/** -text -whitespace
+investigation/evidence/R148-submit/** -text -whitespace

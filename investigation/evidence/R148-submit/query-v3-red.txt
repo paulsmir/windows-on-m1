@@ -1,0 +1,57 @@
+EFF
+======================================================================
+ERROR: test_decoder_rejects_truncation_versions_and_unknown_reason (tests.test_g3_copy_query_receipt.QueryReceiptTests.test_decoder_rejects_truncation_versions_and_unknown_reason)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/test_g3_copy_query_receipt.py", line 29, in test_decoder_rejects_truncation_versions_and_unknown_reason
+    decoded = decoder.decode(current)
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tools/decode_g3_copy_query_failure.py", line 24, in decode
+    raise ValueError('unsupported version or incorrect receipt length')
+ValueError: unsupported version or incorrect receipt length
+
+======================================================================
+FAIL: test_real_rejections_decode_distinctly_in_both_page_profiles (tests.test_g3_copy_query_receipt.QueryReceiptTests.test_real_rejections_decode_distinctly_in_both_page_profiles) (profile='16')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/test_g3_copy_query_receipt.py", line 53, in test_real_rejections_decode_distinctly_in_both_page_profiles
+    self.assertEqual(run.returncode, 0, run.stdout+run.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 0 : Assertion failed: (query_registry_receipt[0]==3 && query_registry_receipt[1]==168), function r145_copy_cases, file hv_agx_retained_platform.c:gpuva_execute, line 990.
+Traceback (most recent call last):
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/g3_vidmm_replay.py", line 209, in <module>
+    sys.exit(main(args.revision, overrides, args.old_context_flags))
+             ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/g3_vidmm_replay.py", line 197, in main
+    subprocess.run([str(binary)], check=True, cwd=ROOT, env=env)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/var/folders/s5/sgnkc7ws7cs5ctyqdwh_6qm40000gp/T/g3-vidmm-7_ek0nd9/replay']' died with <Signals.SIGABRT: 6>.
+
+
+======================================================================
+FAIL: test_real_rejections_decode_distinctly_in_both_page_profiles (tests.test_g3_copy_query_receipt.QueryReceiptTests.test_real_rejections_decode_distinctly_in_both_page_profiles) (profile='64')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/test_g3_copy_query_receipt.py", line 53, in test_real_rejections_decode_distinctly_in_both_page_profiles
+    self.assertEqual(run.returncode, 0, run.stdout+run.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 0 : Assertion failed: (query_registry_receipt[0]==3 && query_registry_receipt[1]==168), function r145_copy_cases, file hv_agx_retained_platform.c:gpuva_execute, line 990.
+Traceback (most recent call last):
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/g3_vidmm_replay.py", line 209, in <module>
+    sys.exit(main(args.revision, overrides, args.old_context_flags))
+             ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/g3_vidmm_replay.py", line 197, in main
+    subprocess.run([str(binary)], check=True, cwd=ROOT, env=env)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/var/folders/s5/sgnkc7ws7cs5ctyqdwh_6qm40000gp/T/g3-vidmm-ykou8zl2/replay']' died with <Signals.SIGABRT: 6>.
+
+
+----------------------------------------------------------------------
+Ran 2 tests in 2.118s
+
+FAILED (failures=2, errors=1)

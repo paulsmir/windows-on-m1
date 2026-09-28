@@ -1,0 +1,20 @@
+R148 parse=3 ordinal=12 VA=270e40 resident_count=4
+R148 missing batch-pool residency/upload (expected admitted submit)
+Assertion failed: (result==!fail), function run, file g4_mesa_pool_residency_replay.c, line 194.
+E
+======================================================================
+ERROR: test_all_pool_slabs_are_resident_uploaded_and_retired (tests.test_g4_mesa_pool_residency_replay.G4MesaPoolResidencyReplay.test_all_pool_slabs_are_resident_uploaded_and_retired)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/test_g4_mesa_pool_residency_replay.py", line 38, in test_all_pool_slabs_are_resident_uploaded_and_retired
+    subprocess.run([str(binary)], check=True, timeout=10)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/var/folders/s5/sgnkc7ws7cs5ctyqdwh_6qm40000gp/T/r148-pool-residency-zifarrs7/replay']' died with <Signals.SIGABRT: 6>.
+
+----------------------------------------------------------------------
+Ran 1 test in 0.340s
+
+FAILED (errors=1)

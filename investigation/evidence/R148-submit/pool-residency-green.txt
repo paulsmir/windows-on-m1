@@ -1,0 +1,6 @@
+R148 production batch pool residency/upload/rollback: PASS
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.443s
+
+OK

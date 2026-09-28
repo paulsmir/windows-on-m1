@@ -1,5 +1,37 @@
 # GPU current boundary — 2026-09-28
 
+## R148 — pool residency and shared Flush retirement fixed offline
+
+EXP861 remains the last hardware verdict. First submit ordinal12 is scissor
+by pinned producer inference; exact hardware slab token/base unknown. UMD
+omitted both batch/pipeline pool BO arrays from MakeResident and staging upload.
+Real BatchFinish/GpuvaSubmit/parser RED ordinal12/0x270e40 -> GREEN; enumerate
+all slabs via existing dedup, checked capacity, same hold/retire/rollback.
+
+Early ETL: DWM consumer retains89 shared globals/376045568B after creator-device
+teardown. Mesa public Flush never drained deferred shared retirement; fixed
+eligible collection+drain, preserving native/pending/failure holds. Real public
+Flush RED->GREEN, Windows DDI ABI replay PASS; full two-device closure unrun.
+This does not attribute all4.46GB: trace ends before first149s sample; saved
+~700s state still1925180KiB free physical. Exhaustion/SSH cause unproved.
+
+QUERY623 VA0x20000/65536 remains separate from submit440. First-failure v3/168
+adds canonical/request identity, size and resident-group availability. All61
+guards unchanged; no mapping fix. v1/v2 decode retained; real16/64 replay PASS.
+All114 KMD TUs and UMD bridge ARM64 W4/WX/analyze pass; native Clang compile/
+analysis pass with documented baseline warning exceptions. Full1159 has exact
+15F/38E/2S baseline. Independent review accepted. No package or Air.
+
+Report `investigation/analysis/R148-next-boundary.md`; verification/source hashes
+`investigation/evidence/R148/summary.json`. Commits ac4731fe (pool),0f51f3f5 (Flush),c239965f (QUERY).
+Three independently reviewable changes; proposed EXP862 is pool membership ONLY on EXP861/R143, not combined
+branch or false ATOMIC CONTRACT. Separate memory/diagnostic candidates remain.
+
+WHY CONTINUE COMPARISON: current-source defects now have falsifiable offline
+replays. Next is separately authorized hash-gated pool candidate crossing old
+scissor access, with precise next receipt; no historical archaeology or guard
+bypass. EXP861 ordinary Code28 remains accepted and unchanged.
+
 ## EXP861 — KMD submit reached; new mapping failure; Code28 recovered
 
 R147 package861/source8f337257 on identical R143 firmware advances to KMD

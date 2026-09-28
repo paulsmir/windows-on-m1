@@ -1,0 +1,448 @@
+{
+  "inputs": {
+    "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/heartbeat.jsonl": {
+      "bytes": 10981,
+      "sha256": "16b3531b43fea8cd4d5c5091ab0fd4305a8effbd0cadf3174999423d82ebbd1c"
+    },
+    "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/state.json": {
+      "bytes": 29663,
+      "sha256": "d8bd4dd9b47ab2f3e72bd2c569fd87ed6f5fc074ebe93c7adf38477ed304323a"
+    },
+    "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/umd-final-after-loss.log": {
+      "bytes": 13799902,
+      "sha256": "5260e420d40b800b78ed7f79dab5bffa5337669c7a57e19592a4e0ed27015b97"
+    },
+    "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/post-recovery-events.json": {
+      "bytes": 849945,
+      "sha256": "8b642fb824f17c8f46080c27fd9a41daed4505a812fd0f0bce819045bf9929ca"
+    },
+    "investigation/evidence/R148-memory/lifetime-events.jsonl": {
+      "bytes": 44277127,
+      "sha256": "dde97dbb091ae48360101784bffc05890ec1939148dd90bd0231d331a16fc15f"
+    }
+  },
+  "caveats": [
+    "UMD normal trace is capped at128 records per loaded module instance; log lacks time/device ID and no destroy receipt exists. Counts are observed lower bounds, not live allocation counts.",
+    "ETL ending without destroy does not establish a leak; pair identities and report trace window."
+  ],
+  "umd_per_pid": {
+    "1252": {
+      "devices_observed": 560,
+      "canonical_allocates_observed": 11183,
+      "canonical_requested_bytes_observed": 1978662912,
+      "canonical_size_classes": {
+        "class1/bytes65536": 4473,
+        "class2/bytes262144": 560,
+        "class2/bytes65536": 2237,
+        "class1/bytes262144": 1118,
+        "class1/bytes524288": 1118,
+        "class1/bytes131072": 559,
+        "class3/bytes262144": 559,
+        "class3/bytes524288": 559
+      }
+    },
+    "1260": {
+      "devices_observed": 2,
+      "canonical_allocates_observed": 25,
+      "canonical_requested_bytes_observed": 2424832,
+      "canonical_size_classes": {
+        "class1/bytes65536": 11,
+        "class2/bytes262144": 2,
+        "class2/bytes65536": 10,
+        "class1/bytes262144": 2
+      }
+    },
+    "5300": {
+      "devices_observed": 1,
+      "canonical_allocates_observed": 25,
+      "canonical_requested_bytes_observed": 24313856,
+      "canonical_size_classes": {
+        "class1/bytes65536": 8,
+        "class2/bytes262144": 1,
+        "class2/bytes65536": 9,
+        "class1/bytes262144": 2,
+        "class1/bytes16384000": 1,
+        "class1/bytes4194304": 1,
+        "class1/bytes1048576": 1,
+        "class3/bytes262144": 1,
+        "class3/bytes524288": 1
+      }
+    },
+    "5412": {
+      "devices_observed": 1,
+      "canonical_allocates_observed": 20,
+      "canonical_requested_bytes_observed": 3538944,
+      "canonical_size_classes": {
+        "class1/bytes65536": 8,
+        "class2/bytes262144": 1,
+        "class2/bytes65536": 4,
+        "class1/bytes262144": 2,
+        "class1/bytes524288": 2,
+        "class1/bytes131072": 1,
+        "class3/bytes262144": 1,
+        "class3/bytes524288": 1
+      }
+    },
+    "6012": {
+      "devices_observed": 360,
+      "canonical_allocates_observed": 7200,
+      "canonical_requested_bytes_observed": 1274019840,
+      "canonical_size_classes": {
+        "class1/bytes65536": 2880,
+        "class2/bytes262144": 360,
+        "class2/bytes65536": 1440,
+        "class1/bytes262144": 720,
+        "class1/bytes524288": 720,
+        "class1/bytes131072": 360,
+        "class3/bytes262144": 360,
+        "class3/bytes524288": 360
+      }
+    },
+    "1892": {
+      "devices_observed": 1,
+      "canonical_allocates_observed": 20,
+      "canonical_requested_bytes_observed": 3538944,
+      "canonical_size_classes": {
+        "class1/bytes65536": 8,
+        "class2/bytes262144": 1,
+        "class2/bytes65536": 4,
+        "class1/bytes262144": 2,
+        "class1/bytes524288": 2,
+        "class1/bytes131072": 1,
+        "class3/bytes262144": 1,
+        "class3/bytes524288": 1
+      }
+    },
+    "7060": {
+      "devices_observed": 0,
+      "canonical_allocates_observed": 0,
+      "canonical_requested_bytes_observed": 0,
+      "canonical_size_classes": {}
+    },
+    "9120": {
+      "devices_observed": 1,
+      "canonical_allocates_observed": 20,
+      "canonical_requested_bytes_observed": 3538944,
+      "canonical_size_classes": {
+        "class1/bytes65536": 8,
+        "class2/bytes262144": 1,
+        "class2/bytes65536": 4,
+        "class1/bytes262144": 2,
+        "class1/bytes524288": 2,
+        "class1/bytes131072": 1,
+        "class3/bytes262144": 1,
+        "class3/bytes524288": 1
+      }
+    },
+    "4196": {
+      "devices_observed": 1,
+      "canonical_allocates_observed": 24,
+      "canonical_requested_bytes_observed": 24248320,
+      "canonical_size_classes": {
+        "class1/bytes65536": 7,
+        "class2/bytes262144": 1,
+        "class2/bytes65536": 9,
+        "class1/bytes262144": 2,
+        "class1/bytes16384000": 1,
+        "class1/bytes4194304": 1,
+        "class1/bytes1048576": 1,
+        "class3/bytes262144": 1,
+        "class3/bytes524288": 1
+      }
+    },
+    "1000": {
+      "devices_observed": 12,
+      "canonical_allocates_observed": 240,
+      "canonical_requested_bytes_observed": 42467328,
+      "canonical_size_classes": {
+        "class1/bytes65536": 96,
+        "class2/bytes262144": 12,
+        "class2/bytes65536": 48,
+        "class1/bytes262144": 24,
+        "class1/bytes524288": 24,
+        "class1/bytes131072": 12,
+        "class3/bytes262144": 12,
+        "class3/bytes524288": 12
+      }
+    }
+  },
+  "physical_snapshot": {
+    "UTC": "2026-09-28T08:25:25.8375242Z",
+    "TotalPhysicalMemory": 4534439936,
+    "FreePhysicalMemoryKB": 1925180
+  },
+  "resource2004": [],
+  "etl": {
+    "window": {
+      "first": "2026-09-28T08:13:38.4776783Z",
+      "last": "2026-09-28T08:15:19.0215881Z"
+    },
+    "counts": {
+      "27": 225,
+      "33": 16897,
+      "36": 17131,
+      "37": 16539,
+      "34": 16306,
+      "28": 208
+    },
+    "unmatched": {},
+    "per_pid": {
+      "744": {
+        "created_bytes": 8192,
+        "creates": 2,
+        "end_unretired_bytes": 8192,
+        "end_unretired_count": 2
+      },
+      "832": {
+        "created_bytes": 17047552,
+        "creates": 4,
+        "destroyed_bytes": 17047552,
+        "destroys": 4
+      },
+      "1260": {
+        "created_bytes": 1986826240,
+        "creates": 6296,
+        "destroyed_bytes": 1664847872,
+        "destroys": 6128,
+        "end_unretired_bytes": 321978368,
+        "end_unretired_count": 168
+      },
+      "1252": {
+        "created_bytes": 2665541632,
+        "creates": 2548,
+        "destroyed_bytes": 2617978880,
+        "destroys": 2522,
+        "end_unretired_bytes": 47562752,
+        "end_unretired_count": 26
+      },
+      "4": {
+        "created_bytes": 17162240,
+        "creates": 217,
+        "destroyed_bytes": 14467072,
+        "destroys": 179,
+        "end_unretired_bytes": 2695168,
+        "end_unretired_count": 38
+      },
+      "5300": {
+        "created_bytes": 2130968576,
+        "creates": 3608,
+        "destroyed_bytes": 1969291264,
+        "destroys": 3483,
+        "end_unretired_bytes": 161677312,
+        "end_unretired_count": 125
+      },
+      "5412": {
+        "created_bytes": 9961472,
+        "creates": 58,
+        "destroyed_bytes": 2228224,
+        "destroys": 8,
+        "end_unretired_bytes": 7733248,
+        "end_unretired_count": 50
+      },
+      "6012": {
+        "created_bytes": 490602496,
+        "creates": 2064,
+        "destroyed_bytes": 473432064,
+        "destroys": 2000,
+        "end_unretired_bytes": 17170432,
+        "end_unretired_count": 64
+      },
+      "4968": {
+        "created_bytes": 528547840,
+        "creates": 1980,
+        "destroyed_bytes": 522334208,
+        "destroys": 1952,
+        "end_unretired_bytes": 6213632,
+        "end_unretired_count": 28
+      },
+      "1892": {
+        "created_bytes": 9961472,
+        "creates": 58,
+        "destroyed_bytes": 2228224,
+        "destroys": 8,
+        "end_unretired_bytes": 7733248,
+        "end_unretired_count": 50
+      },
+      "8088": {
+        "created_bytes": 2883584,
+        "creates": 8,
+        "destroyed_bytes": 2883584,
+        "destroys": 8
+      },
+      "9120": {
+        "created_bytes": 7471104,
+        "creates": 46,
+        "destroyed_bytes": 2097152,
+        "destroys": 6,
+        "end_unretired_bytes": 5373952,
+        "end_unretired_count": 40
+      },
+      "1484": {
+        "created_bytes": 2883584,
+        "creates": 8,
+        "destroyed_bytes": 2883584,
+        "destroys": 8
+      }
+    },
+    "devices_per_pid": {
+      "744": {
+        "creates": 2
+      },
+      "832": {
+        "creates": 2,
+        "destroys": 1
+      },
+      "1260": {
+        "creates": 68,
+        "destroys": 65
+      },
+      "1252": {
+        "creates": 37,
+        "destroys": 37
+      },
+      "4": {
+        "creates": 2
+      },
+      "5300": {
+        "creates": 56,
+        "destroys": 53
+      },
+      "5412": {
+        "creates": 1
+      },
+      "6012": {
+        "creates": 24,
+        "destroys": 23
+      },
+      "4968": {
+        "creates": 29,
+        "destroys": 27
+      },
+      "1892": {
+        "creates": 1
+      },
+      "8088": {
+        "creates": 1,
+        "destroys": 1
+      },
+      "9120": {
+        "creates": 1
+      },
+      "1484": {
+        "creates": 1,
+        "destroys": 1
+      }
+    },
+    "end_unretired_shapes": {
+      "744": {
+        "0xffff9b0c5eec5000/bytes4096/read0/write1/flags268468292/ptfalse": 2
+      },
+      "1252": {
+        "0xffff9b0c5eec5000/bytes4096/read0/write1/flags536870917/ptfalse": 1,
+        "0xffff9b0c5eec5000/bytes4194304/read0/write1/flags536870917/ptfalse": 1,
+        "0xffff9b0c5eec5000/bytes495616/read0/write1/flags536870917/ptfalse": 1,
+        "0xffff9b0c5eec5000/bytes16588800/read0/write1/flags536870917/ptfalse": 1,
+        "0xffff9b0c60be9000/bytes65536/read0/write2/flags32768/ptfalse": 10,
+        "0xffff9b0c60be9000/bytes65536/read0/write1/flags32769/ptfalse": 9,
+        "0xffff9b0c60be9000/bytes4194304/read0/write2/flags536903680/ptfalse": 1,
+        "0xffff9b0c60be9000/bytes4194304/read0/write2/flags32768/ptfalse": 1,
+        "0xffff9b0c60be9000/bytes16646144/read0/write2/flags536903680/ptfalse": 1
+      },
+      "4": {
+        "0xffff9b0c60be9000/bytes4096/read0/write1/flags268435520/ptfalse": 2,
+        "0xffff9b0c60be9000/bytes16384/read0/write2/flags65/pttrue": 1,
+        "0xffff9b0c60be9000/bytes32768/read0/write2/flags65/pttrue": 1,
+        "0xffff9b0c60be9000/bytes131072/read0/write2/flags65/pttrue": 9,
+        "0xffff9b0c60be9000/bytes16384/read0/write2/flags64/pttrue": 9,
+        "0xffff9b0c60be9000/bytes32768/read0/write2/flags64/pttrue": 8,
+        "0xffff9b0c60be9000/bytes131072/read0/write2/flags64/pttrue": 8
+      },
+      "1260": {
+        "0xffff9b0c60be9000/bytes327680/read0/write1/flags72/ptfalse": 2,
+        "0xffff9b0c60be9000/bytes16384000/read0/write2/flags1073774592/ptfalse": 1,
+        "0xffff9b0c60be9000/bytes16384000/read0/write1/flags67141641/ptfalse": 1,
+        "0xffff9b0c60be9000/bytes65536/read0/write2/flags32768/ptfalse": 41,
+        "0xffff9b0c60be9000/bytes65536/read0/write1/flags32769/ptfalse": 41,
+        "0xffff9b0c60be9000/bytes262144/read0/write2/flags32768/ptfalse": 5,
+        "0xffff9b0c60be9000/bytes262144/read0/write1/flags32769/ptfalse": 5,
+        "0xffff9b0c60be9000/bytes196608/read0/write2/flags32768/ptfalse": 1,
+        "0xffff9b0c60be9000/bytes196608/read0/write1/flags32769/ptfalse": 1,
+        "0xffff9b0c60be9000/bytes4194304/read0/write2/flags536903680/ptfalse": 63,
+        "0xffff9b0c60be9000/bytes4390912/read0/write2/flags32768/ptfalse": 1,
+        "0xffff9b0c60be9000/bytes4194304/read0/write2/flags32768/ptfalse": 2,
+        "0xffff9b0c60be9000/bytes1048576/read0/write2/flags32768/ptfalse": 1,
+        "0xffff9b0c60be9000/bytes1048576/read0/write1/flags32769/ptfalse": 1,
+        "0xffff9b0c60be9000/bytes524288/read0/write2/flags32768/ptfalse": 1,
+        "0xffff9b0c60be9000/bytes524288/read0/write1/flags32769/ptfalse": 1
+      },
+      "5412": {
+        "0xffff9b0c60be9000/bytes65536/read0/write2/flags32768/ptfalse": 17,
+        "0xffff9b0c60be9000/bytes65536/read0/write1/flags32769/ptfalse": 17,
+        "0xffff9b0c60be9000/bytes262144/read0/write2/flags32768/ptfalse": 4,
+        "0xffff9b0c60be9000/bytes262144/read0/write1/flags32769/ptfalse": 4,
+        "0xffff9b0c60be9000/bytes524288/read0/write2/flags32768/ptfalse": 3,
+        "0xffff9b0c60be9000/bytes524288/read0/write1/flags32769/ptfalse": 3,
+        "0xffff9b0c60be9000/bytes131072/read0/write2/flags32768/ptfalse": 1,
+        "0xffff9b0c60be9000/bytes131072/read0/write1/flags32769/ptfalse": 1
+      },
+      "5300": {
+        "0xffff9b0c60be9000/bytes4194304/read0/write2/flags536903680/ptfalse": 16,
+        "0xffff9b0c60be9000/bytes4390912/read0/write2/flags536903680/ptfalse": 15,
+        "0xffff9b0c60be9000/bytes65536/read0/write2/flags32768/ptfalse": 36,
+        "0xffff9b0c60be9000/bytes65536/read0/write1/flags32769/ptfalse": 39,
+        "0xffff9b0c60be9000/bytes262144/read0/write2/flags32768/ptfalse": 5,
+        "0xffff9b0c60be9000/bytes262144/read0/write1/flags32769/ptfalse": 4,
+        "0xffff9b0c60be9000/bytes4194304/read0/write2/flags32768/ptfalse": 3,
+        "0xffff9b0c60be9000/bytes1048576/read0/write2/flags32768/ptfalse": 2,
+        "0xffff9b0c60be9000/bytes1048576/read0/write1/flags32769/ptfalse": 2,
+        "0xffff9b0c60be9000/bytes4390912/read0/write2/flags32768/ptfalse": 1,
+        "0xffff9b0c60be9000/bytes131072/read0/write2/flags32768/ptfalse": 1,
+        "0xffff9b0c60be9000/bytes131072/read0/write1/flags32769/ptfalse": 1
+      },
+      "1892": {
+        "0xffff9b0c60be9000/bytes65536/read0/write2/flags32768/ptfalse": 17,
+        "0xffff9b0c60be9000/bytes65536/read0/write1/flags32769/ptfalse": 17,
+        "0xffff9b0c60be9000/bytes262144/read0/write2/flags32768/ptfalse": 4,
+        "0xffff9b0c60be9000/bytes262144/read0/write1/flags32769/ptfalse": 4,
+        "0xffff9b0c60be9000/bytes524288/read0/write2/flags32768/ptfalse": 3,
+        "0xffff9b0c60be9000/bytes524288/read0/write1/flags32769/ptfalse": 3,
+        "0xffff9b0c60be9000/bytes131072/read0/write2/flags32768/ptfalse": 1,
+        "0xffff9b0c60be9000/bytes131072/read0/write1/flags32769/ptfalse": 1
+      },
+      "4968": {
+        "0xffff9b0c5eec5000/bytes4096/read0/write1/flags5/ptfalse": 7,
+        "0xffff9b0c5eec5000/bytes12288/read0/write1/flags5/ptfalse": 2,
+        "0xffff9b0c60be9000/bytes4194304/read0/write2/flags536903680/ptfalse": 1,
+        "0xffff9b0c60be9000/bytes65536/read0/write2/flags32768/ptfalse": 7,
+        "0xffff9b0c60be9000/bytes65536/read0/write1/flags32769/ptfalse": 7,
+        "0xffff9b0c60be9000/bytes262144/read0/write2/flags32768/ptfalse": 2,
+        "0xffff9b0c60be9000/bytes262144/read0/write1/flags32769/ptfalse": 2
+      },
+      "9120": {
+        "0xffff9b0c60be9000/bytes65536/read0/write2/flags32768/ptfalse": 15,
+        "0xffff9b0c60be9000/bytes65536/read0/write1/flags32769/ptfalse": 15,
+        "0xffff9b0c60be9000/bytes262144/read0/write2/flags32768/ptfalse": 2,
+        "0xffff9b0c60be9000/bytes262144/read0/write1/flags32769/ptfalse": 2,
+        "0xffff9b0c60be9000/bytes524288/read0/write2/flags32768/ptfalse": 2,
+        "0xffff9b0c60be9000/bytes524288/read0/write1/flags32769/ptfalse": 2,
+        "0xffff9b0c60be9000/bytes131072/read0/write2/flags32768/ptfalse": 1,
+        "0xffff9b0c60be9000/bytes131072/read0/write1/flags32769/ptfalse": 1
+      },
+      "6012": {
+        "0xffff9b0c60be9000/bytes65536/read0/write2/flags32768/ptfalse": 25,
+        "0xffff9b0c60be9000/bytes65536/read0/write1/flags32769/ptfalse": 25,
+        "0xffff9b0c60be9000/bytes262144/read0/write2/flags32768/ptfalse": 2,
+        "0xffff9b0c60be9000/bytes262144/read0/write1/flags32769/ptfalse": 2,
+        "0xffff9b0c60be9000/bytes524288/read0/write2/flags32768/ptfalse": 2,
+        "0xffff9b0c60be9000/bytes524288/read0/write1/flags32769/ptfalse": 2,
+        "0xffff9b0c60be9000/bytes131072/read0/write2/flags32768/ptfalse": 1,
+        "0xffff9b0c60be9000/bytes131072/read0/write1/flags32769/ptfalse": 1,
+        "0xffff9b0c60be9000/bytes4194304/read0/write2/flags536903680/ptfalse": 1,
+        "0xffff9b0c60be9000/bytes4194304/read0/write2/flags32768/ptfalse": 1,
+        "0xffff9b0c60be9000/bytes1048576/read0/write2/flags32768/ptfalse": 1,
+        "0xffff9b0c60be9000/bytes1048576/read0/write1/flags32769/ptfalse": 1
+      }
+    },
+    "end_unretired_device_count": 17
+  }
+}
