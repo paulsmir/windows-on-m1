@@ -10,6 +10,7 @@
 #include "apple_agx_relocation.h"
 #include "apple_agx_render_template_rebase.h"
 #include "apple_agx_g4_builder.h"
+#include "apple_agx_render_manager.h"
 
 typedef struct _ADMISSION_BACKEND_IMAGE {
   APPLE_AGX_RENDER_TEMPLATE_ROOTS Roots;
@@ -34,6 +35,8 @@ typedef struct _ADMISSION_BACKEND_IMAGE {
   unsigned char G4Command[APPLE_AGX_G4_NATIVE_MAX_BYTES];
   APPLE_AGX_U32 G4CommandBytes;
   APPLE_AGX_G4_PRIVATE_LEASE G4Lease;
+  APPLE_AGX_RENDER_MANAGER_STATE *G4Manager;
+  APPLE_AGX_RENDER_MANAGER_KEY G4ManagerKey;
   APPLE_AGX_U32 NativeWidth, NativeHeight, NativePitch;
   APPLE_AGX_EXP208_RELOCATION_OBJECT NativeOriginalOutput;
 } ADMISSION_BACKEND_IMAGE;

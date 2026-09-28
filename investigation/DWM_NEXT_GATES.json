@@ -411,5 +411,19 @@
     "runtime_fix": "not implemented",
     "EXP867": "PROPOSED_ONLY_DIAGNOSTIC_SINGLE_VARIABLE",
     "Air": "NOT_AUTHORIZED"
+  },
+  "r153_manager_binding": {
+    "status": "IMPLEMENTED_OFFLINE",
+    "report": "investigation/analysis/R153-manager-contract.md",
+    "evidence": "investigation/evidence/R153/summary.json",
+    "ownership": "R137 process manager snapshot, separate scene and queue lifetimes",
+    "atomic_contract": "selection + snapshot + pointers/scene + InitBM + extra TA entry; preserve queue sequence/state; save only after joined completion before lease release",
+    "next_proposed": "EXP867 correction only on exact866 base17ee8894, R143 unchanged, Flush excluded",
+    "authorization": "No package or Air authorized",
+    "supersedes": "R152 receipt-only proposal",
+    "hardware_unknowns": [
+      "Timeout removed across manager switch",
+      "600s DWM and nonzero scanout"
+    ]
   }
 }

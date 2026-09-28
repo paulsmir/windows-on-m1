@@ -3,6 +3,7 @@
 
 #include "render_admission.h"
 #include "apple_agx_g3_private_storage.h"
+#include "apple_agx_render_manager.h"
 #include "apple_agx_g3_private_abi.h"
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
@@ -55,6 +56,7 @@ typedef struct _ADMISSION_G3_PROCESS {
   ULONGLONG PrivateMiddleIpa, PrivateLeafIpa;
   APPLE_AGX_G3_PRIVATE_EXTENT PrivateTables[2];
   APPLE_AGX_G3_PRIVATE_MANAGER PrivateManager;
+  APPLE_AGX_RENDER_MANAGER_STATE FirmwareManager;
   ADMISSION_G3_PRIVATE_SCENE *PrivateScenes;
   ADMISSION_RENDER_CONTEXT *Contexts;
   HANDLE DxgkProcess;

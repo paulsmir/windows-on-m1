@@ -1,3 +1,25 @@
+# R153 — per-manager binding correction implemented offline
+
+R152 receipt-only EXP867 proposal rejected by user. Asahi logical Queue owns
+VM-backed Buffer; manager Info/control/counter/stats persist independently of
+scene and workqueue lifetimes. Windows R137 process owns the corresponding
+snapshot; serialized context0 slot is saved after joined TA+D3 completion and
+restored before the next selected manager, with fresh scene state every job.
+Owner/generation/root/backing changes force InitBM without queue reset. Dynamic
+staging accepts rebind at later queue sequences; fresh stamps and extra TA
+entry are preserved. A->B->A replay and real StageJob RED->GREEN.
+
+No package, firmware change or Air access. EXP866 durable ordinaryCode28 remains
+last hardware recovery. Hardware effectiveness/pixels/600s remain unproven.
+Report investigation/analysis/R153-manager-contract.md; exact verification and
+source hashes investigation/evidence/R153/summary.json. Status implemented only.
+
+WHY CONTINUE COMPARISON: EXP866's absent active manager list mappings and the
+real materializer RED select this ownership fix. Proposed EXP867 single variable
+is the complete R153 binding transaction on exact866 source17ee8894, unchanged
+R143, Flush excluded. Receipt-only run superseded. Future package/preregistration
+and explicit hardware authorization are separate; no retry/rearm performed.
+
 # R152 — fifth job fetched; stale manager lists in Explorer graph (offline)
 
 EXP866 Run channels consumed5; work readTA6/D310, doneTA5/D38. Event ring

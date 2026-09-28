@@ -1,0 +1,7 @@
+test_production_idle_and_completion_callbacks (test_r153_manager_lifetime.ManagerLifetimeTests.test_production_idle_and_completion_callbacks) ... ok
+test_real_materializer_manager_switch (test_r153_manager_lifetime.ManagerLifetimeTests.test_real_materializer_manager_switch) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 1.772s
+
+OK

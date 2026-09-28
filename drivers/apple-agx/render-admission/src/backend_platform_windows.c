@@ -1875,6 +1875,42 @@ static APPLE_AGX_BACKEND_BOOL AdmissionRenderUnpublish(void *Context) {
   return APPLE_AGX_BACKEND_TRUE;
 }
 
+static APPLE_AGX_BACKEND_BOOL AdmissionPrepareG4Manager(
+    ADMISSION_PLATFORM_RUNTIME *runtime) {
+  ADMISSION_BACKEND_IMAGE *image=&runtime->Adapter->BackendImage;
+  if (!image->G4Manager) return APPLE_AGX_BACKEND_TRUE;
+  if (!image->G4Native || image->G4Manager->PendingFence ||
+      runtime->Initdata.RenderSharedMemory.ManagerFence ||
+      runtime->Provider.QueueProvider.Phase!=AppleAgxG13QueueProviderCreated ||
+      runtime->Provider.QueueProvider.Runtime.Phase!=AppleAgxG13QueueRuntimeReady ||
+      runtime->Provider.QueueProvider.PendingFence)
+    return APPLE_AGX_BACKEND_FALSE;
+  return !AppleAgxRenderManagerNeedsBind(
+      &runtime->Initdata.RenderSharedMemory,&image->G4ManagerKey) ||
+      AppleAgxG13QueueProviderRequireInitBm(&runtime->Provider.QueueProvider);
+}
+
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+static APPLE_AGX_BACKEND_BOOL AdmissionSaveG4Manager(
+    ADMISSION_PLATFORM_RUNTIME *runtime, APPLE_AGX_U32 Fence) {
+  ADMISSION_BACKEND_IMAGE *image=&runtime->Adapter->BackendImage;
+  static const APPLE_AGX_U32 objects[]={1u,20u,21u,22u};
+  APPLE_AGX_U32 i;
+  if (!image->G4Manager) return APPLE_AGX_BACKEND_TRUE;
+  if (!image->G4Native || image->BoundFence!=Fence ||
+      !runtime->Backend.TaComplete || !runtime->Backend.D3Complete)
+    return APPLE_AGX_BACKEND_FALSE;
+  for (i=0u;i<RTL_NUMBER_OF(objects);++i) {
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *object=&runtime->QueueObjects[objects[i]];
+    if (!runtime->TransportIo.FlushForCpu(runtime,object->Data,object->Size))
+      return APPLE_AGX_BACKEND_FALSE;
+  }
+  runtime->TransportIo.MemoryBarrier(runtime);
+  return AppleAgxRenderManagerSave(&runtime->Initdata.RenderSharedMemory,
+      image->G4Manager,Fence,runtime->QueueObjects);
+}
+#endif
+
 static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     void *Context, const unsigned char *SubmissionBytes,
     APPLE_AGX_BACKEND_U32 SubmissionByteCount,
@@ -1934,7 +1970,20 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
           Plan->IncludeInitBm, &staged) ||
       !AppleAgxInitdataMemoryGetRenderBindings(&runtime->Initdata,
                                                &bindings) ||
-      !(runtime->Adapter->BackendImage.G4Native ?
+      !(runtime->Adapter->BackendImage.G4Manager ?
+          AppleAgxRenderSharedMemoryBuildManagedG4Job(
+              &runtime->Initdata.RenderSharedMemory,
+              runtime->Adapter->BackendImage.G4Manager,
+              &runtime->Adapter->BackendImage.G4ManagerKey,
+              Submission->Submission.Fence, Plan->InitializeQueues,
+              runtime->Adapter->BackendImage.ArenaCpuAddress,
+              runtime->Adapter->BackendImage.ArenaBytes,
+              runtime->Adapter->BackendImage.Objects,
+              APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+              runtime->Adapter->BackendImage.ArenaGpuAddress,
+              Plan->IncludeInitBm, &bindings, &staged,
+              runtime->QueueObjects, Job) :
+          runtime->Adapter->BackendImage.G4Native ?
           AppleAgxRenderSharedMemoryBuildActiveG4Job(
               &runtime->Initdata.RenderSharedMemory,
               runtime->Adapter->BackendImage.ArenaCpuAddress,
@@ -2383,6 +2432,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
     if (adapter != NULL && g3_context != NULL &&
         g3_context->GpuvaG3Process != NULL &&
         (!runtime->Backend.TaComplete || !runtime->Backend.D3Complete ||
+         !AdmissionSaveG4Manager(runtime, Fence) ||
          !AdmissionGpuvaG3CompleteJob(adapter, Fence)))
       return APPLE_AGX_BACKEND_FALSE;
   }
@@ -2970,6 +3020,11 @@ static VOID AdmissionPlatformWorker(
     }
   }
 #endif
+  if (!AdmissionPrepareG4Manager(runtime)) {
+    InterlockedExchange(&adapter->SchedulerFaulted, 1);
+    AdmissionPlatformWorkerFinished(runtime);
+    return;
+  }
   result = AppleAgxBackendRuntimeSubmit(&runtime->Backend, &submission);
   if (result != AppleAgxBackendRuntimeResultOk)
     AdmissionBackendSubmitResultWindows(

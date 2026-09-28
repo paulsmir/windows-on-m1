@@ -1,0 +1,8 @@
+test_64k_replacement_retires_old_cpu_shadow (test_g4_submit_virtual_replay.G4SubmitVirtualReplay.test_64k_replacement_retires_old_cpu_shadow) ... ok
+test_native_submit_queues_only_after_graph_and_image_bind (test_g4_submit_virtual_replay.G4SubmitVirtualReplay.test_native_submit_queues_only_after_graph_and_image_bind) ... g4_submit_virtual_replay: PASS
+ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.754s
+
+OK

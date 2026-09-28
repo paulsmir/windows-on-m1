@@ -58,6 +58,7 @@ typedef struct { void *GpuvaG3Process; } ADMISSION_RENDER_CONTEXT;
 #define AdmissionFlushGdiReceipt(a) ((void)(a))
 #define AdmissionRenderCorrelationWorkerWindows(...) ((void)0)
 #define AdmissionPlatformWorkerFinished(r) ((void)(r))
+#define AdmissionPrepareG4Manager(r) ((void)(r), 1)
 static unsigned int begin_count, resolve_count;
 int AdmissionGpuvaG3BeginJob(ADAPTER *a, ADMISSION_RENDER_CONTEXT *c, ULONG f) {
   assert(a && c && c->GpuvaG3Process && f == 77u);

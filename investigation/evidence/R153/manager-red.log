@@ -1,0 +1,19 @@
+test_real_materializer_manager_switch (test_r153_manager_lifetime.ManagerLifetimeTests.test_real_materializer_manager_switch) ... Assertion failed: (read_u64(active_objects[1].Data+28u)==source_objects[41].GpuVa), function main, file probe.c, line 431.
+ERROR
+
+======================================================================
+ERROR: test_real_materializer_manager_switch (test_r153_manager_lifetime.ManagerLifetimeTests.test_real_materializer_manager_switch)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/test_r153_manager_lifetime.py", line 27, in test_real_materializer_manager_switch
+    subprocess.run([str(tmp / 'probe')], check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/var/folders/s5/sgnkc7ws7cs5ctyqdwh_6qm40000gp/T/tmpyzypkecl/probe']' died with <Signals.SIGABRT: 6>.
+
+----------------------------------------------------------------------
+Ran 1 test in 0.817s
+
+FAILED (errors=1)
