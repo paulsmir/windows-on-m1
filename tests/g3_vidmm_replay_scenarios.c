@@ -34,6 +34,10 @@ static void update(ADMISSION_CONTEXT *adapter, HANDLE process, UINT level,
 #if defined(G3_PRIVATE_COMBINED)
 #include "g3_r137_private_combined.c"
 #endif
+static APPLE_AGX_GPUVA_G3_GRAPH *r165_graph;
+static void r165_end_job(void) {
+  if(r165_graph && r165_graph->JobInFlight) assert(AppleAgxGpuvaG3GraphEndJob(r165_graph));
+}
 int main(void) {
   if (getenv("G3_REPLAY_R145")) { r145_copy_cases(); return 0; }
   if (getenv("G3_REPLAY_R144")) { r144_local_bounds_cases(); return 0; }
@@ -659,6 +663,20 @@ int main(void) {
          last_flush_receipt.GraphRootIpa==
              ((ADMISSION_G3_PROCESS *)sys.hKmdProcess)->Graph.RootIpa &&
          last_flush_receipt.RootOffset==root.Address.SegmentOffset);
+  if (r79) {
+    /* R165 (EXP884 0x10E/0xB, FLUSH_TLB C0000483): VidMm flushes the TLB of a
+     * process whose native job is in flight while freeing its VA; the broker
+     * refuses the flush with BUSY. As for R155, the build waits (lock
+     * released, bounded) for joined completion instead of failing. */
+    ADMISSION_G3_PROCESS *fp=(ADMISSION_G3_PROCESS *)sys.hKmdProcess;
+    r165_graph=&fp->Graph; replay_delay_hook=r165_end_job; replay_delay_calls=0;
+    assert(AppleAgxGpuvaG3GraphBeginJob(&fp->Graph,1));
+    expect_ok("R165 FlushTlb during in-flight job",
+        AdmissionGpuvaG3BuildPagingBuffer(&adapter,&flush));
+    assert(replay_delay_calls>=1 && !fp->Graph.JobInFlight);
+    replay_delay_hook=NULL; r165_graph=NULL;
+    fp->Graph.Slot=1u; /* the scenario's modelled active slot, as above */
+  }
   flush.FlushTlb.StartVirtualAddress=0;
   flush.FlushTlb.EndVirtualAddress=0;
   expect_ok("R78 full FlushTlb",AdmissionGpuvaG3BuildPagingBuffer(&adapter,&flush));
