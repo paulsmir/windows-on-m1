@@ -155,6 +155,8 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   BOOLEAN QueueImageReady;
   BOOLEAN ProviderReady;
   BOOLEAN BackendStarted;
+  PVOID JobSnapshots; /* EXP883 diagnostic ring, kernel-dump evidence */
+  ULONG JobSnapshotNext;
 } ADMISSION_PLATFORM_RUNTIME;
 
 typedef struct _ADMISSION_COMPLETION_NOTIFICATION {
@@ -1911,6 +1913,67 @@ static APPLE_AGX_BACKEND_BOOL AdmissionSaveG4Manager(
 }
 #endif
 
+/* EXP883 diagnostic: copy the small firmware objects of each staged job into a
+ * nonpaged ring so a kernel dump shows completed and hung jobs side by side.
+ * Evidence only; the job and its objects are not modified. */
+#define ADMISSION_JOB_SNAPSHOT_COUNT 8u
+#define ADMISSION_JOB_SNAPSHOT_BYTES 0x30000u
+#define ADMISSION_JOB_SNAPSHOT_OBJECT_MAX 0x4000u
+typedef struct _ADMISSION_JOB_SNAPSHOT_OBJECT {
+  ULONGLONG GpuVa;
+  ULONG Size, Offset;
+} ADMISSION_JOB_SNAPSHOT_OBJECT;
+typedef struct _ADMISSION_JOB_SNAPSHOT {
+  ULONG Magic, Fence, Serial, Bytes, IncludeInitBm, Truncated;
+  APPLE_AGX_BACKEND_JOB_IMAGE Job;
+  APPLE_AGX_RENDER_MANAGER_KEY ManagerKey;
+  ADMISSION_JOB_SNAPSHOT_OBJECT Image[APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT];
+  ADMISSION_JOB_SNAPSHOT_OBJECT Queue[APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT];
+  UCHAR Data[ADMISSION_JOB_SNAPSHOT_BYTES];
+} ADMISSION_JOB_SNAPSHOT;
+
+static VOID AdmissionSnapshotObjects(ADMISSION_JOB_SNAPSHOT *snap,
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *objects,
+    ADMISSION_JOB_SNAPSHOT_OBJECT *out) {
+  ULONG i;
+  for (i = 0u; i < APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT; ++i) {
+    out[i].GpuVa = objects[i].GpuVa;
+    out[i].Size = objects[i].Size;
+    out[i].Offset = MAXULONG;
+    if (objects[i].Data == NULL || objects[i].Size == 0u ||
+        objects[i].Size > ADMISSION_JOB_SNAPSHOT_OBJECT_MAX) continue;
+    if (objects[i].Size > ADMISSION_JOB_SNAPSHOT_BYTES - snap->Bytes) {
+      snap->Truncated = 1u; continue;
+    }
+    RtlCopyMemory(snap->Data + snap->Bytes, objects[i].Data, objects[i].Size);
+    out[i].Offset = snap->Bytes;
+    snap->Bytes += (objects[i].Size + 15u) & ~15u;
+  }
+}
+
+static VOID AdmissionSnapshotJob(ADMISSION_PLATFORM_RUNTIME *runtime,
+    ULONG fence, APPLE_AGX_BOOL includeInitBm,
+    const APPLE_AGX_BACKEND_JOB_IMAGE *job) {
+  ADMISSION_JOB_SNAPSHOT *ring, *snap;
+  if (runtime->JobSnapshots == NULL)
+    runtime->JobSnapshots = ExAllocatePool2(POOL_FLAG_NON_PAGED,
+        sizeof(ADMISSION_JOB_SNAPSHOT) * ADMISSION_JOB_SNAPSHOT_COUNT,
+        ADMISSION_POOL_TAG);
+  ring = (ADMISSION_JOB_SNAPSHOT *)runtime->JobSnapshots;
+  if (ring == NULL) return;
+  snap = &ring[runtime->JobSnapshotNext % ADMISSION_JOB_SNAPSHOT_COUNT];
+  RtlZeroMemory(snap, FIELD_OFFSET(ADMISSION_JOB_SNAPSHOT, Data));
+  snap->Magic = 0x504e534au; /* 'JSNP' */
+  snap->Fence = fence;
+  snap->Serial = ++runtime->JobSnapshotNext;
+  snap->IncludeInitBm = includeInitBm ? 1u : 0u;
+  snap->Job = *job;
+  snap->ManagerKey = runtime->Adapter->BackendImage.G4ManagerKey;
+  AdmissionSnapshotObjects(snap, runtime->Adapter->BackendImage.Objects,
+                           snap->Image);
+  AdmissionSnapshotObjects(snap, runtime->QueueObjects, snap->Queue);
+}
+
 static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     void *Context, const unsigned char *SubmissionBytes,
     APPLE_AGX_BACKEND_U32 SubmissionByteCount,
@@ -2040,6 +2103,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     Job->ComputeExpectedStamp=input.StampValue;
     Job->ComputeExpectedDonePointer=Plan->ComputeExpectedDonePointer;
   }
+  AdmissionSnapshotJob(runtime, Submission->Submission.Fence,
+                       Plan->IncludeInitBm, Job);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   if (dynamic && !APPLE_AGX_WIN32_COMMAND_IS_NATIVE(dynamicView.Bindings->CommandVersion))
     (void)AdmissionDynamicOverlayCaptureStoreGraph(
