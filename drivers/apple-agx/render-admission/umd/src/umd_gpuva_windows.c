@@ -287,7 +287,8 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
       if(!copy_escape(device,payload)) verify_hr=1u;
       else for(UINT i=0;i<count;++i)
         if(payload->Data[i]!=address[offset+i]) {mismatch=i;break;}
-      if(verify_hr || mismatch!=~0u) {
+      static volatile LONG verify_records;
+      if((verify_hr || mismatch!=~0u) && InterlockedIncrement(&verify_records)<=64) {
         UINT values[8]={verify_hr,(UINT)(slot->CanonicalGpuVa>>32),
             (UINT)slot->CanonicalGpuVa,(UINT)slot->Bytes,(UINT)offset,count,
             mismatch,mismatch==~0u?0u:(UINT)address[offset+mismatch] |
