@@ -262,7 +262,7 @@ NTSTATUS AdmissionG3PreparePrivateStorage(ADMISSION_G3_PROCESS *process,
     return STATUS_INVALID_DEVICE_STATE;
   status = AdmissionMemoryRuntimePrivateView(process->State->Adapter, &view);
   if (!NT_SUCCESS(status)) return status;
-  if (view.CpuAddress == NULL || view.Bytes != (16ULL << 20) ||
+  if (view.CpuAddress == NULL || view.Bytes != (ULONGLONG)APPLE_AGX_G3_PRIVATE_UNITS * APPLE_AGX_G3_PRIVATE_UNIT ||
       (view.GuestIpaAddress & 0xffffULL)) return STATUS_INVALID_ADDRESS;
   if (!AppleAgxG3PrivatePrepare(&process->State->PrivatePool,
       process->Graph.ProcessId, view.CpuAddress, process->PrivateVa, render,
