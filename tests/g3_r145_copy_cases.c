@@ -12,6 +12,7 @@ static VOID r145_release(DXGKARGCB_RELEASEHANDLEDATA ref) {
 }
 static ADMISSION_G3_STATE *r157_state;
 static ADMISSION_G3_PROCESS *r157_process;
+static void r161_drain(void) { replay_paging_pending=0; }
 static void r157_complete(void) {
   if (r157_state) r157_state->ActiveProcess=NULL;
   if (r157_process) { r157_process->Graph.JobInFlight=0; r157_process->Graph.LeaseToken=0; }
@@ -235,6 +236,25 @@ static void r145_copy_cases(void) {
   for(UINT i=0;i<q->TransferBytes;++i) q->Data[i]=(unsigned char)(i*37+9);
   expect_ok("R159 transfer after re-residency",AdmissionDdiEscape(&a,&escape));
   assert(!memcmp(local_cpu+0x200000+q->Offset,q->Data,q->TransferBytes));
+  /* R161 (EXP874): UPDATE_PAGE_TABLE is applied at build time but the
+   * FILL/TRANSFER that populates the new placement still waits in the paging
+   * worker. An UPLOAD must wait for it, or the transfer overwrites the data. */
+  replay_paging_pending=1; replay_delay_hook=r161_drain; replay_delay_calls=0;
+  for(UINT i=0;i<q->TransferBytes;++i) q->Data[i]=(unsigned char)(i*11+3);
+  expect_ok("R161 upload waits for pending paging",AdmissionDdiEscape(&a,&escape));
+  assert(replay_delay_calls>=1 && !replay_paging_pending);
+  assert(!memcmp(local_cpu+0x200000+q->Offset,q->Data,q->TransferBytes));
+  replay_paging_pending=1; replay_delay_hook=NULL; replay_delay_calls=0;
+  memset(q->Data,0xcd,sizeof(q->Data));
+  assert(AdmissionDdiEscape(&a,&escape)==STATUS_DEVICE_BUSY && replay_delay_calls==3000u);
+  assert(local_cpu[0x200000+q->Offset]==3 && !r145_references);
+  q->Operation=APPLE_AGX_G3_COPY_DOWNLOAD; replay_delay_calls=0;
+  assert(AdmissionDdiEscape(&a,&escape)==STATUS_DEVICE_BUSY && q->Data[0]==0xcd);
+  q->Operation=APPLE_AGX_G3_COPY_QUERY;q->Offset=0;q->TransferBytes=0;
+  q->MappingGeneration=q->ProcessGeneration=0; replay_delay_calls=0;
+  expect_ok("R161 query does not wait for paging",AdmissionDdiEscape(&a,&escape));
+  assert(replay_delay_calls==0); replay_paging_pending=0;
+  for(UINT i=0;i<0x4009u;++i) local_cpu[0x200000+0xff9+i]=(unsigned char)(i*37+9);
   q->Operation=APPLE_AGX_G3_COPY_QUERY;q->Offset=0;q->TransferBytes=0;
   q->MappingGeneration=q->ProcessGeneration=0;
   expect_ok("R145 new generation",AdmissionDdiEscape(&a,&escape));
