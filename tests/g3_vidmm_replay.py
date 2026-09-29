@@ -23,6 +23,7 @@ FUNCTIONS = {
         "AdmissionG3AllocateNode", "AdmissionG3FreeNode",
         "AdmissionGpuvaG3FindProcess", "AdmissionG3BootstrapRoot",
         "AdmissionGpuvaG3BrokerTable", "AdmissionGpuvaG3MirrorTable",
+        "AdmissionG3Fnv", "AdmissionG3UscVa", "AdmissionG3TraceUpload", "AdmissionG3VerifyUploads",
         "AdmissionG3CopyPte", "AdmissionG3CaptureCopyQueryFailure", "AdmissionGpuvaG3CopyEscape",
         "AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionGpuvaG3PrivateCancel","AdmissionGpuvaG3PrivatePreempt","AdmissionG3PrivateReap","AdmissionGpuvaG3PrivateReset","AdmissionGpuvaG3PrivateReported","AdmissionGpuvaG3PrivateRetireContext","AdmissionG3PrivateDestroyStorage","AdmissionGpuvaG3PrivateEscape",
         "AdmissionDdiCreateProcess", "AdmissionDdiDestroyProcess",

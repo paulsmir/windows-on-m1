@@ -519,6 +519,67 @@ static BOOLEAN AdmissionG3PrivateDestroyStorage(ADMISSION_G3_PROCESS *p) {
 
 /* Resolve only current VidMm provenance. ResidentPtes covers both logical
  * page formats; LogicalPtes deliberately excludes the 64K CPU-envelope case. */
+static ULONG AdmissionG3Fnv(ULONG hash, const UCHAR *data, SIZE_T bytes) {
+  SIZE_T i;
+  for (i=0;i<bytes;++i) hash=(hash^data[i])*16777619u;
+  return hash;
+}
+
+static BOOLEAN AdmissionG3UscVa(ULONGLONG va, ULONGLONG bytes) {
+  return va>=APPLE_AGX_G4_USC_EXECUTION_BASE &&
+      bytes<=APPLE_AGX_G4_USC_WINDOW_BYTES &&
+      va-APPLE_AGX_G4_USC_EXECUTION_BASE<=APPLE_AGX_G4_USC_WINDOW_BYTES-bytes;
+}
+
+/* R162 diagnostic: remember the bytes a USC-window upload wrote. */
+static VOID AdmissionG3TraceUpload(ADMISSION_G3_STATE *state,
+    ADMISSION_G3_PROCESS *p, ULONGLONG va, ULONG bytes, const UCHAR *data) {
+  ADMISSION_G3_UPLOAD_TRACE *t;
+  UINT i;
+  if (!AdmissionG3UscVa(va,bytes)) return;
+  for (i=0;i<ADMISSION_G3_UPLOAD_TRACE_COUNT;++i) {
+    t=&state->UploadTrace[i];
+    if (t->Bytes && t->ProcessId==p->Graph.ProcessId &&
+        t->Va<va+bytes && va<t->Va+t->Bytes) RtlZeroMemory(t,sizeof(*t));
+  }
+  t=&state->UploadTrace[state->UploadTraceNext++ % ADMISSION_G3_UPLOAD_TRACE_COUNT];
+  t->ProcessId=p->Graph.ProcessId;t->Va=va;t->Bytes=bytes;
+  t->Hash=AdmissionG3Fnv(2166136261u,data,bytes);t->GpuHash=0u;t->Checks=0u;
+}
+
+/* Re-hash each traced upload through the published graph (the GPU view). */
+static VOID AdmissionG3VerifyUploads(ADMISSION_CONTEXT *adapter,
+    ADMISSION_G3_STATE *state, ADMISSION_G3_PROCESS *p) {
+  ADMISSION_SCANOUT_MEMORY_VIEW view;
+  UINT i;
+  if (!NT_SUCCESS(AdmissionMemoryRuntimeLocalView(adapter,&view)) ||
+      !view.CpuAddress) return;
+  for (i=0;i<ADMISSION_G3_UPLOAD_TRACE_COUNT;++i) {
+    ADMISSION_G3_UPLOAD_TRACE *t=&state->UploadTrace[i];
+    ULONG hash=2166136261u;
+    ULONGLONG offset;
+    BOOLEAN mapped=TRUE;
+    if (!t->Bytes || t->ProcessId!=p->Graph.ProcessId) continue;
+    for (offset=0;offset<t->Bytes;) {
+      ULONGLONG va=t->Va+offset, ipa, part=0x4000ULL-(va&0x3fffULL);
+      if (part>t->Bytes-offset) part=t->Bytes-offset;
+      if (!AppleAgxGpuvaG3GraphTranslateVa(&p->Graph,va,&ipa) ||
+          ipa<view.GuestIpaAddress || view.Bytes<part ||
+          ipa-view.GuestIpaAddress>view.Bytes-part) {mapped=FALSE;break;}
+      hash=AdmissionG3Fnv(hash,(const UCHAR *)view.CpuAddress+
+          (SIZE_T)(ipa-view.GuestIpaAddress),(SIZE_T)part);
+      offset+=part;
+    }
+    ++state->UploadVerifyChecks;++t->Checks;
+    if (!mapped) {++state->UploadVerifyUnmapped;continue;}
+    t->GpuHash=hash;
+    if (hash!=t->Hash) {
+      if (!state->UploadVerifyMismatch) state->UploadFirstMismatch=*t;
+      ++state->UploadVerifyMismatch;
+    }
+  }
+}
+
 static const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *AdmissionG3CopyPte(
     const ADMISSION_G3_PROCESS *p, ULONGLONG va) {
   APPLE_AGX_GPUVA_G3_NODE *edge;
@@ -783,6 +844,8 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
       offset+=part;
     }
     KeMemoryBarrier();
+    if(q->Operation==APPLE_AGX_G3_COPY_UPLOAD)
+      AdmissionG3TraceUpload(state,p,first,(ULONG)length,q->Data);
   }
   RtlCopyMemory(args->pPrivateDriverData,q,sizeof(*q));status=STATUS_SUCCESS;
 Unlock:
@@ -1410,6 +1473,7 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
   if (state == NULL || process == NULL || process->State != state)
     return STATUS_INVALID_DEVICE_STATE;
   ExAcquireFastMutex(&state->Lock);
+  AdmissionG3VerifyUploads(adapter,state,process);
   if (adapter->BackendImage.G4Native) {
     ADMISSION_BACKEND_IMAGE *image = &adapter->BackendImage;
     if (image->G4Lease.SceneId)
