@@ -28,6 +28,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionCpuQueueSubmit(
   packet->Bytes = Bytes;
   RtlCopyMemory(&packet->Data, Data, Bytes);
   ++Context->CpuQueueCount;
+  if (Kind == ADMISSION_CPU_PACKET_PAGING) {
+    LONG records = (LONG)(Bytes / sizeof(ADMISSION_PAGING_RECORD));
+    LONG before, after;
+    do {
+      before = Context->PagingRecordsUnsubmitted;
+      after = before > records ? before - records : 0;
+    } while (InterlockedCompareExchange(&Context->PagingRecordsUnsubmitted,
+                                        after, before) != before);
+  }
   KeClearEvent(&Context->PagingIdle);
   KeReleaseSpinLockFromDpcLevel(&Context->SchedulerLock);
   KeReleaseSpinLock(&Context->PagingLock, oldIrql);
@@ -96,4 +105,25 @@ Retry:
       goto Retry;
     }
   }
+}
+
+_Use_decl_annotations_ void AdmissionPagingNoteEncoded(ADMISSION_CONTEXT *Context,
+                                                       UINT Records) {
+  if (Context != NULL && Records != 0u)
+    InterlockedExchangeAdd(&Context->PagingRecordsUnsubmitted, (LONG)Records);
+}
+
+/* R161: UPDATE_PAGE_TABLE changes the logical mapping when it is built, while
+ * FILL/TRANSFER records run later in the paging worker. A CPU copy through the
+ * logical mapping is ordered only after every built paging record ran. */
+_Use_decl_annotations_ BOOLEAN AdmissionPagingQuiescent(ADMISSION_CONTEXT *Context) {
+  BOOLEAN quiescent;
+  KIRQL oldIrql;
+  KeAcquireSpinLock(&Context->PagingLock, &oldIrql);
+  quiescent = Context->PagingRecordsUnsubmitted == 0 &&
+      Context->CpuQueueCount == 0u &&
+      InterlockedCompareExchange(&Context->PagingPending, 0, 0) == 0 &&
+      InterlockedCompareExchange(&Context->PagingWorkersActive, 0, 0) == 0;
+  KeReleaseSpinLock(&Context->PagingLock, oldIrql);
+  return quiescent;
 }

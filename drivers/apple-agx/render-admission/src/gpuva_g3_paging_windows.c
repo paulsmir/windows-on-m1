@@ -687,6 +687,7 @@ static NTSTATUS AdmissionG3EncodeVirtualPaging(
     ++produced;
   }
   args->MultipassOffset = (UINT)offset;
+  AdmissionPagingNoteEncoded(adapter, produced);
   return offset == total ? STATUS_SUCCESS :
       STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
 }
