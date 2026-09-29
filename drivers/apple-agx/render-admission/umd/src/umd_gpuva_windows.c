@@ -277,6 +277,24 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
     if(!download) CopyMemory(payload->Data,address+offset,count);
     if(!copy_escape(device,payload)) {success=0;break;}
     if(download) CopyMemory(address+offset,payload->Data,count);
+    else {
+      /* EXP878 diagnostic: read the chunk back through the same escape and
+       * compare with the staging source. Mismatch or failed readback is
+       * logged; the transfer result is unchanged. */
+      UINT verify_hr=0u,mismatch=~0u;
+      payload->Operation=APPLE_AGX_G3_COPY_DOWNLOAD;
+      ZeroMemory(payload->Data,count);
+      if(!copy_escape(device,payload)) verify_hr=1u;
+      else for(UINT i=0;i<count;++i)
+        if(payload->Data[i]!=address[offset+i]) {mismatch=i;break;}
+      if(verify_hr || mismatch!=~0u) {
+        UINT values[8]={verify_hr,(UINT)(slot->CanonicalGpuVa>>32),
+            (UINT)slot->CanonicalGpuVa,(UINT)slot->Bytes,(UINT)offset,count,
+            mismatch,mismatch==~0u?0u:(UINT)address[offset+mismatch] |
+                ((UINT)payload->Data[mismatch]<<8)};
+        AdmissionUmdDiagnostic("reject-verify-upload",E_FAIL,values,ARRAYSIZE(values));
+      }
+    }
     offset+=count;
   }
   /* Borrowed/imported storage must be unlocked before publication. Native
