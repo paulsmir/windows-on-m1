@@ -37,6 +37,7 @@ static NTSTATUS AdmissionBuildPagingBuffer(
   APPLE_AGX_PHYSICAL_PAGING_RESULT result;
   PMDL mdl;
   ULONGLONG systemOffset;
+  NTSTATUS status;
   if (context == NULL || Args == NULL ||
       context->Memory.Initialized != APPLE_AGX_TRUE ||
       context->Memory.UatReady != APPLE_AGX_TRUE)
@@ -122,7 +123,9 @@ static NTSTATUS AdmissionBuildPagingBuffer(
     return STATUS_NOT_SUPPORTED;
   if (result != AppleAgxPhysicalPagingOk)
     return STATUS_INVALID_PARAMETER;
-  return AdmissionEncodePaging(Args, &plan, mdl);
+  status = AdmissionEncodePaging(Args, &plan, mdl);
+  if (NT_SUCCESS(status)) AdmissionPagingNoteEncoded(context, 1u);
+  return status;
 }
 
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)

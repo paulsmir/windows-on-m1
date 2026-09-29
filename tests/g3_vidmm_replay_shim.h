@@ -117,6 +117,8 @@ static unsigned replay_delay_calls; static void (*replay_delay_hook)(void);
 static NTSTATUS KeDelayExecutionThread(KPROCESSOR_MODE m, BOOLEAN a, LARGE_INTEGER *i) {
   (void)m;(void)a;assert(i && i->QuadPart<0);assert(replay_irql==PASSIVE_LEVEL);
   ++replay_delay_calls; if(replay_delay_hook) replay_delay_hook(); return 0; }
+/* R161: paging-worker quiescence and encoded-record accounting. */
+static int replay_paging_pending; static UINT replay_encoded_records;
 static BOOLEAN replay_pool_fail;
 static UINT replay_pool_calls;
 static volatile LONG *replay_query_claim_watch;
@@ -312,6 +314,8 @@ static void WriteBinary(HANDLE key,const wchar_t *name,const VOID *data,ULONG by
 }
 static NTSTATUS ZwFlushKey(HANDLE key) {assert(key==(HANDLE)0x5588);++query_registry_flushes;return STATUS_SUCCESS;}
 static void ZwClose(HANDLE key) {assert(key==(HANDLE)0x5588);}
+static BOOLEAN AdmissionPagingQuiescent(ADMISSION_CONTEXT *a) {(void)a;return replay_paging_pending==0;}
+static void AdmissionPagingNoteEncoded(ADMISSION_CONTEXT *a,UINT n) {(void)a;replay_encoded_records+=n;}
 int AdmissionPagingRecordsValid(const ADMISSION_PAGING_RECORD *,UINT,UINT,UINT);
 static UINT replay_paging_submits,replay_paging_submit_bytes,replay_paging_submit_fence;
 static NTSTATUS AdmissionCpuQueueSubmit(ADMISSION_CONTEXT *adapter,

@@ -416,6 +416,9 @@ typedef struct _ADMISSION_CONTEXT {
   KSPIN_LOCK PagingLock;
   PIO_WORKITEM PagingWorkItem;
   KEVENT PagingIdle;
+  /* R161: records encoded by BuildPagingBuffer but not yet handed to
+   * SubmitCommand; their memory effects are still pending. */
+  volatile LONG PagingRecordsUnsubmitted;
   ADMISSION_PAGING_RECORD PagingRecords[ADMISSION_MAX_PAGING_RECORDS];
   ULONG PagingRecordCount;
   ULONG PresentCopyBytes;
@@ -1198,6 +1201,8 @@ void AdmissionDispatchQueuedWork(_In_ ADMISSION_CONTEXT *Context);
 void AdmissionPagingQueueActive(_In_ ADMISSION_CONTEXT *Context);
 /* Caller holds PagingLock. */
 void AdmissionPagingUpdateIdleLocked(_In_ ADMISSION_CONTEXT *Context);
+void AdmissionPagingNoteEncoded(_In_ ADMISSION_CONTEXT *Context, _In_ UINT Records);
+BOOLEAN AdmissionPagingQuiescent(_In_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionMemoryRuntimeExecutePresent(_In_ ADMISSION_CONTEXT *Context,
     _In_reads_bytes_(Bytes) const VOID *Command, UINT Bytes,
     _Out_ ULONGLONG *BytesCopied);

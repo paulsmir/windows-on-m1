@@ -696,7 +696,11 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   for(wait_ms=0u;;++wait_ms) {
     ExAcquireFastMutex(&state->Lock);
     p=AdmissionGpuvaG3FindProcess(state,args->hKmdProcessHandle);
-    if(!p || (!state->ActiveProcess && !p->Graph.JobInFlight && !p->Graph.LeaseToken) ||
+    /* R161 (EXP874): an UPLOAD/DOWNLOAD also waits until every built paging
+     * FILL/TRANSFER ran; otherwise it writes the new placement and a later
+     * transfer overwrites it (or it reads the placement before the move). */
+    if(!p || (!state->ActiveProcess && !p->Graph.JobInFlight && !p->Graph.LeaseToken &&
+        (q->Operation==APPLE_AGX_G3_COPY_QUERY || AdmissionPagingQuiescent(adapter))) ||
        wait_ms>=3000u) break;
     ExReleaseFastMutex(&state->Lock);
     delay.QuadPart=-10000LL;
@@ -727,6 +731,8 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   COPY_REJECT_IF(state->ActiveProcess, 42u, STATUS_DEVICE_BUSY, Unlock);
   COPY_REJECT_IF(p->Graph.JobInFlight, 43u, STATUS_DEVICE_BUSY, Unlock);
   COPY_REJECT_IF(p->Graph.LeaseToken, 44u, STATUS_DEVICE_BUSY, Unlock);
+  COPY_REJECT_IF(q->Operation!=APPLE_AGX_G3_COPY_QUERY &&
+      !AdmissionPagingQuiescent(adapter), 62u, STATUS_DEVICE_BUSY, Unlock);
   /* R159: only a different process instance invalidates the QUERY. An
    * unrelated mapping update advances MappingGeneration constantly; the
    * per-page range validation below (53, 56-61) re-proves this exact range
