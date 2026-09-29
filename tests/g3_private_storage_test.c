@@ -37,6 +37,20 @@ int main(void) {
   assert(!AppleAgxG3PrivatePrepare(&pool,1,cpu,1ULL<<36,&r,&manager,&scenes[2]));
   for(unsigned i=0;i<APPLE_AGX_G3_PRIVATE_UNITS;++i) assert(!memcmp(&before.Blocks[i],&pool.Blocks[i],sizeof(pool.Blocks[i])));
   assert(!scenes[2].Generation);
+  /* The existing quota refusal must be observed before its partial allocations
+   * are rolled back; observing it must not change the restored pool. */
+  {
+    APPLE_AGX_G3_PRIVATE_PREPARE_DIAGNOSTIC diagnostic={0};
+    APPLE_AGX_G3_PRIVATE_POOL_STATS restored;
+    assert(!AppleAgxG3PrivatePrepareObserved(&pool,1,cpu,1ULL<<36,&r,
+        &manager,&scenes[2],&diagnostic));
+    assert(diagnostic.Predicate==3u && diagnostic.FailedRange<9u);
+    AppleAgxG3PrivatePoolStats(&pool,1,&restored);
+    assert(diagnostic.Stats.OwnerUnits>restored.OwnerUnits);
+    assert(diagnostic.Stats.GlobalUnits>restored.GlobalUnits);
+    for(unsigned i=0;i<APPLE_AGX_G3_PRIVATE_UNITS;++i)
+      assert(!memcmp(&before.Blocks[i],&pool.Blocks[i],sizeof(pool.Blocks[i])));
+  }
   /* Failed construction of a new manager rolls back every extent. */
   for(unsigned free_units=1;free_units<93;++free_units) {
     APPLE_AGX_G3_PRIVATE_POOL q={0};

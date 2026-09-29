@@ -24,6 +24,29 @@ typedef struct {
   unsigned Offset, Bytes;
 } APPLE_AGX_G3_PRIVATE_EXTENT;
 
+typedef struct {
+  unsigned GlobalUnits, OwnerUnits, LargestFreeUnits;
+} APPLE_AGX_G3_PRIVATE_POOL_STATS;
+
+/* Observational only; caller holds the same serialization as allocation. */
+static inline void AppleAgxG3PrivatePoolStats(
+    const APPLE_AGX_G3_PRIVATE_POOL *p, unsigned long long owner,
+    APPLE_AGX_G3_PRIVATE_POOL_STATS *out) {
+  unsigned run=0;
+  out->GlobalUnits=out->OwnerUnits=out->LargestFreeUnits=0;
+  if (!p) return;
+  for (unsigned i=0;i<APPLE_AGX_G3_PRIVATE_UNITS;++i) {
+    if (p->Blocks[i].Owner) {
+      ++out->GlobalUnits;
+      if (owner && p->Blocks[i].Owner==owner) ++out->OwnerUnits;
+      run=0;
+    } else {
+      ++run;
+      if (run>out->LargestFreeUnits) out->LargestFreeUnits=run;
+    }
+  }
+}
+
 static inline int AppleAgxG3PrivateAllocate(APPLE_AGX_G3_PRIVATE_POOL *p,
     unsigned long long owner, unsigned bytes, APPLE_AGX_G3_PRIVATE_EXTENT *out) {
   unsigned count, used=0, run=0, first=0;

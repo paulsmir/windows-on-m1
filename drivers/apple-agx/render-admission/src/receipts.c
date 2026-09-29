@@ -2021,6 +2021,21 @@ _Use_decl_annotations_ void AdmissionRecordG3CopyQueryFailure(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordG3PrivateFailure(
+    ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      InterlockedCompareExchange(&Context->G3PrivateFailureClaim,0,0) != 2)
+    return;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE,KEY_SET_VALUE,&key))) return;
+  WriteBinary(key,L"Wom1G3PrivateAcquireFailure",&Context->G3PrivateFailure,
+      sizeof(Context->G3PrivateFailure));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordG4SubmitFailure(
     ADMISSION_CONTEXT *Context) {
   HANDLE key = NULL;

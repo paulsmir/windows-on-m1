@@ -16,6 +16,7 @@
 #include "apple_agx_g4_submit.h"
 #include "apple_agx_state.h"
 #include "apple_agx_g3_private_abi.h"
+#include "apple_agx_g3_private_failure.h"
 #include "apple_agx_g3_private_storage.h"
 #include "apple_agx_render_manager.h"
 #include "hv_agx_gpuva_v5.h"
@@ -297,6 +298,8 @@ struct _ADMISSION_CONTEXT { REPLAY_PACKET RenderPacket; BOOLEAN InterfaceValid; 
   volatile LONG G3CopyQueryFailureClaim;
   ULONG G3CopyQueryFailurePredicate,G3CopyQueryFailureStatus;
   APPLE_AGX_G3_COPY_QUERY_RECEIPT G3CopyQueryFailure;
+  volatile LONG G3PrivateFailureClaim;
+  APPLE_AGX_G3_PRIVATE_FAILURE G3PrivateFailure;
   int SchedulerLock,Scheduler;
   ADMISSION_BACKEND_IMAGE BackendImage;
   struct { REPLAY_APERTURE Aperture; } Memory;
@@ -305,11 +308,19 @@ struct _ADMISSION_CONTEXT { REPLAY_PACKET RenderPacket; BOOLEAN InterfaceValid; 
 #define KEY_SET_VALUE 2u
 static UINT r145_references;
 static ULONG query_registry_writes,query_registry_flushes,query_registry_receipt[42];
+static ULONG private_registry_writes;
+static APPLE_AGX_G3_PRIVATE_FAILURE private_registry_receipt;
+#define HandleToULong(h) ((ULONG)(uintptr_t)(h))
+static HANDLE PsGetCurrentProcessId(void) {return (HANDLE)0x887;}
 static NTSTATUS IoOpenDeviceRegistryKey(PDEVICE_OBJECT device,ULONG kind,ULONG access,HANDLE *key) {
   assert(device && kind==1 && access==2 && replay_irql==PASSIVE_LEVEL && !r145_references);
   *key=(HANDLE)0x5588;return STATUS_SUCCESS;
 }
 static void WriteBinary(HANDLE key,const wchar_t *name,const VOID *data,ULONG bytes) {
+  if (!wcscmp(name,L"Wom1G3PrivateAcquireFailure")) {
+    assert(key==(HANDLE)0x5588 && bytes==sizeof(private_registry_receipt) && replay_irql==PASSIVE_LEVEL);
+    memcpy(&private_registry_receipt,data,bytes);++private_registry_writes;return;
+  }
   assert(key==(HANDLE)0x5588 && !wcscmp(name,L"Wom1G3CopyQueryFailure"));
   assert((bytes==16 || bytes==144 || bytes==168) && replay_irql==PASSIVE_LEVEL);
   memcpy(query_registry_receipt,data,bytes);++query_registry_writes;

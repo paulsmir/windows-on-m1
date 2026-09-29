@@ -252,9 +252,10 @@ NTSTATUS AdmissionGpuvaG3MirrorTable(
 }
 
 /* State lock and object ownership are supplied by the typed escape caller. */
-NTSTATUS AdmissionG3PreparePrivateStorage(ADMISSION_G3_PROCESS *process,
+static NTSTATUS AdmissionG3PreparePrivateStorageObserved(ADMISSION_G3_PROCESS *process,
     const APPLE_AGX_G4_NATIVE_RENDER *render,
-    APPLE_AGX_G3_PRIVATE_MANAGER *manager, APPLE_AGX_G3_PRIVATE_SCENE *scene) {
+    APPLE_AGX_G3_PRIVATE_MANAGER *manager, APPLE_AGX_G3_PRIVATE_SCENE *scene,
+    APPLE_AGX_G3_PRIVATE_PREPARE_DIAGNOSTIC *diagnostic) {
   ADMISSION_BACKEND_MEMORY_VIEW view;
   NTSTATUS status;
   if (process == NULL || process->Poisoned || process->Graph.Uncertain ||
@@ -264,11 +265,17 @@ NTSTATUS AdmissionG3PreparePrivateStorage(ADMISSION_G3_PROCESS *process,
   if (!NT_SUCCESS(status)) return status;
   if (view.CpuAddress == NULL || view.Bytes != (ULONGLONG)APPLE_AGX_G3_PRIVATE_UNITS * APPLE_AGX_G3_PRIVATE_UNIT ||
       (view.GuestIpaAddress & 0xffffULL)) return STATUS_INVALID_ADDRESS;
-  if (!AppleAgxG3PrivatePrepare(&process->State->PrivatePool,
+  if (!AppleAgxG3PrivatePrepareObserved(&process->State->PrivatePool,
       process->Graph.ProcessId, view.CpuAddress, process->PrivateVa, render,
-      manager, scene)) return STATUS_INSUFFICIENT_RESOURCES;
+      manager, scene, diagnostic)) return STATUS_INSUFFICIENT_RESOURCES;
   KeMemoryBarrier();
   return STATUS_SUCCESS;
+}
+
+NTSTATUS AdmissionG3PreparePrivateStorage(ADMISSION_G3_PROCESS *process,
+    const APPLE_AGX_G4_NATIVE_RENDER *render,
+    APPLE_AGX_G3_PRIVATE_MANAGER *manager, APPLE_AGX_G3_PRIVATE_SCENE *scene) {
+  return AdmissionG3PreparePrivateStorageObserved(process,render,manager,scene,NULL);
 }
 
 /* All private graph/pool operations below run at PASSIVE with State->Lock. */
@@ -283,25 +290,37 @@ static BOOLEAN AdmissionG3PrivateFreeExtent(ADMISSION_G3_PROCESS *p,
   return TRUE;
 }
 
-static BOOLEAN AdmissionG3PrivateMapExtent(ADMISSION_G3_PROCESS *p,
+static BOOLEAN AdmissionG3PrivateMapExtentObserved(ADMISSION_G3_PROCESS *p,
     ADMISSION_BACKEND_MEMORY_VIEW *view, const APPLE_AGX_G3_PRIVATE_EXTENT *e,
-    BOOLEAN publish) {
+    BOOLEAN publish, UINT *failedOffset) {
   UINT offset;
   for (offset=0; offset<e->Bytes; offset+=0x4000u)
     if (!AppleAgxGpuvaG3GraphUpdateLeafBacking(&p->Graph,p->PrivateLeafIpa,
             (e->Offset+offset)>>14,
             publish ? view->GuestIpaAddress+e->Offset+offset : 0ULL,
-            publish != FALSE,AppleAgxGpuvaG3PrivateBacking)) return FALSE;
+            publish != FALSE,AppleAgxGpuvaG3PrivateBacking)) {
+      if (failedOffset) *failedOffset=offset;
+      return FALSE;
+    }
   return TRUE;
 }
 
+static BOOLEAN AdmissionG3PrivateMapExtent(ADMISSION_G3_PROCESS *p,
+    ADMISSION_BACKEND_MEMORY_VIEW *view, const APPLE_AGX_G3_PRIVATE_EXTENT *e,
+    BOOLEAN publish) {
+  return AdmissionG3PrivateMapExtentObserved(p,view,e,publish,NULL);
+}
+
 static NTSTATUS AdmissionG3PrivateTables(ADMISSION_G3_PROCESS *p,
-    ADMISSION_BACKEND_MEMORY_VIEW *view) {
+    ADMISSION_BACKEND_MEMORY_VIEW *view, UINT *predicate,
+    APPLE_AGX_G3_PRIVATE_POOL_STATS *stats) {
   UINT i;
   if (!p->PrivateMiddleIpa) {
     for (i=0;i<2;++i) {
       if (!AppleAgxG3PrivateAllocate(&p->State->PrivatePool,p->Graph.ProcessId,
               0x10000u,&p->PrivateTables[i])) {
+        *predicate=1u+i;
+        AppleAgxG3PrivatePoolStats(&p->State->PrivatePool,p->Graph.ProcessId,stats);
         while (i) (void)AdmissionG3PrivateFreeExtent(p,view,&p->PrivateTables[--i]);
         return STATUS_INSUFFICIENT_RESOURCES;
       }
@@ -313,12 +332,16 @@ static NTSTATUS AdmissionG3PrivateTables(ADMISSION_G3_PROCESS *p,
   }
   /* Cached empty private tables remain charged until process destruction.
    * Retry registration is idempotent; uncertain results quarantine the pool. */
-  if (!AppleAgxGpuvaG3GraphRegisterTable(&p->Graph,p->PrivateMiddleIpa,1u) ||
-      !AppleAgxGpuvaG3GraphRegisterTable(&p->Graph,p->PrivateLeafIpa,2u) ||
-      !AppleAgxGpuvaG3GraphAttachPrivate(&p->Graph,p->PrivateVa,
+  if (!AppleAgxGpuvaG3GraphRegisterTable(&p->Graph,p->PrivateMiddleIpa,1u))
+    *predicate=3u;
+  else if (!AppleAgxGpuvaG3GraphRegisterTable(&p->Graph,p->PrivateLeafIpa,2u))
+    *predicate=4u;
+  else if (!AppleAgxGpuvaG3GraphAttachPrivate(&p->Graph,p->PrivateVa,
           p->PrivateMiddleIpa,p->PrivateLeafIpa))
-    return p->Graph.Uncertain ? STATUS_DEVICE_HARDWARE_ERROR : STATUS_INSUFFICIENT_RESOURCES;
-  return STATUS_SUCCESS;
+    *predicate=5u;
+  else return STATUS_SUCCESS;
+  AppleAgxG3PrivatePoolStats(&p->State->PrivatePool,p->Graph.ProcessId,stats);
+  return p->Graph.Uncertain ? STATUS_DEVICE_HARDWARE_ERROR : STATUS_INSUFFICIENT_RESOURCES;
 }
 
 static BOOLEAN AdmissionG3PrivateReleaseScene(ADMISSION_G3_PROCESS *p,
@@ -867,6 +890,63 @@ Free:
   return status;
 }
 
+/* Caller holds State->Lock. Capture before cleanup/rollback can erase a cause. */
+static BOOLEAN AdmissionG3CapturePrivateFailure(ADMISSION_CONTEXT *adapter,
+    ADMISSION_G3_STATE *state, ADMISSION_G3_PROCESS *p,
+    const DXGKARG_ESCAPE *args, const APPLE_AGX_G3_PRIVATE_REQUEST *q,
+    const UINT required[9], UINT branch, NTSTATUS status, UINT tablePredicate,
+    UINT mapOffset, UINT range,
+    const APPLE_AGX_G3_PRIVATE_PREPARE_DIAGNOSTIC *prepare,
+    const APPLE_AGX_G3_PRIVATE_POOL_STATS *observed) {
+  APPLE_AGX_G3_PRIVATE_FAILURE *r;
+  APPLE_AGX_G3_PRIVATE_POOL_STATS stats;
+  ADMISSION_G3_PRIVATE_SCENE *scene;
+  if (q->Operation!=APPLE_AGX_G3_PRIVATE_ACQUIRE || NT_SUCCESS(status) ||
+      InterlockedCompareExchange(&adapter->G3PrivateFailureClaim,1,0)!=0)
+    return FALSE;
+  r=&adapter->G3PrivateFailure;
+  RtlZeroMemory(r,sizeof(*r));
+  r->Version=1u;r->Bytes=sizeof(*r);r->Branch=branch;r->Status=(UINT)status;
+  r->Pid=HandleToULong(PsGetCurrentProcessId());r->Operation=q->Operation;
+  r->ProcessHandle=(ULONGLONG)(ULONG_PTR)args->hKmdProcessHandle;
+  r->ContextHandle=(ULONGLONG)(ULONG_PTR)args->hContext;
+  r->DeviceHandle=(ULONGLONG)(ULONG_PTR)args->hDevice;
+  r->Width=q->Width;r->Height=q->Height;r->UtileWidth=q->UtileWidth;
+  r->UtileHeight=q->UtileHeight;r->Layers=q->Layers;r->Samples=q->Samples;
+  RtlCopyMemory(r->RequiredBytes,required,sizeof(r->RequiredBytes));
+  r->TablePredicate=tablePredicate;r->MapLeafOffset=mapOffset;
+  r->MapPredicate=(branch==12u || branch==13u) ? 1u : 0u;
+  r->FailedRange=range;
+  r->PoolUnits=APPLE_AGX_G3_PRIVATE_UNITS;
+  r->OwnerLimitUnits=APPLE_AGX_G3_PROCESS_UNITS;
+  AppleAgxG3PrivatePoolStats(&state->PrivatePool,p ? p->Graph.ProcessId : 0,&stats);
+  if (observed) stats=*observed;
+  if (prepare && prepare->Predicate) {
+    r->PreparePredicate=prepare->Predicate;r->FailedRange=prepare->FailedRange;
+    stats=prepare->Stats;
+  }
+  r->GlobalUnits=stats.GlobalUnits;r->OwnerUnits=stats.OwnerUnits;
+  r->LargestFreeUnits=stats.LargestFreeUnits;
+  if (p) {
+    r->ProcessId=p->Graph.ProcessId;r->PrivateVa=p->PrivateVa;
+    r->RootIpa=p->Graph.RootIpa;r->LeaseToken=p->Graph.LeaseToken;
+    r->ManagerGeneration=p->PrivateManager.Generation;
+    r->ManagerPresent=p->PrivateManager.Generation!=0;
+    r->FreshManager=!r->ManagerPresent;r->Poisoned=p->Poisoned;
+    r->GraphUncertain=p->Graph.Uncertain;r->JobInFlight=p->Graph.JobInFlight;
+    for (scene=p->PrivateScenes;scene;scene=scene->Next) {
+      ++r->SceneCount;
+      if ((HANDLE)scene->Context==args->hContext) ++r->ContextSceneCount;
+      if (scene->Queued) ++r->QueuedScenes;
+      if (scene->ReleaseRequested) ++r->ReleaseRequestedScenes;
+      if (scene->Quarantined) ++r->QuarantinedScenes;
+    }
+  }
+  KeMemoryBarrier();
+  InterlockedExchange(&adapter->G3PrivateFailureClaim,2);
+  return TRUE;
+}
+
 NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
     const DXGKARG_ESCAPE *args) {
   APPLE_AGX_G3_PRIVATE_REQUEST q;
@@ -881,6 +961,14 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
   UINT i;
   UINT wait_ms;
   LARGE_INTEGER delay;
+  UINT required[9]={0}, tablePredicate=0u, mapOffset=0u;
+  APPLE_AGX_G3_PRIVATE_POOL_STATS observed={0};
+  APPLE_AGX_G3_PRIVATE_PREPARE_DIAGNOSTIC prepare={0};
+  BOOLEAN captured=FALSE;
+#define PRIVATE_CAPTURE(b,t,o) do { \
+  if (AdmissionG3CapturePrivateFailure(adapter,state,p,args,&q,required,b, \
+      status,tablePredicate,mapOffset,t,&prepare,o)) captured=TRUE; \
+} while (0)
   if (!adapter || !adapter->Started || !args ||
       KeGetCurrentIrql()!=PASSIVE_LEVEL || args->Flags.Value!=1u ||
       args->PrivateDriverDataSize!=sizeof(q) || !args->pPrivateDriverData)
@@ -904,7 +992,7 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
     delay.QuadPart=-10000LL;
     (void)KeDelayExecutionThread(KernelMode,FALSE,&delay);
   }
-  if (!p || p->Poisoned || p->Graph.Uncertain) goto Done;
+  if (!p || p->Poisoned || p->Graph.Uncertain) {PRIVATE_CAPTURE(1u,~0u,NULL);goto Done;}
   /* Compare handles against attached objects before dereferencing them. */
   for (context=p->Contexts;context && (HANDLE)context!=args->hContext;
        context=context->GpuvaG3NextContext) {}
@@ -912,10 +1000,10 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
       context->Object.Magic!=ADMISSION_OBJECT_CONTEXT_MAGIC ||
       context->Object.Device==NULL ||
       (HANDLE)CONTAINING_RECORD(context->Object.Device,ADMISSION_DEVICE,Object)!=args->hDevice ||
-      context->Object.Device->Adapter!=&adapter->ObjectAdapter) goto Done;
-  if (!AdmissionG3PrivateReap(p)) {status=STATUS_DEVICE_HARDWARE_ERROR;goto Done;}
+      context->Object.Device->Adapter!=&adapter->ObjectAdapter) {PRIVATE_CAPTURE(2u,~0u,NULL);goto Done;}
+  if (!AdmissionG3PrivateReap(p)) {status=STATUS_DEVICE_HARDWARE_ERROR;PRIVATE_CAPTURE(3u,~0u,NULL);goto Done;}
   status=AdmissionMemoryRuntimePrivateView(adapter,&view);
-  if (!NT_SUCCESS(status)) goto Done;
+  if (!NT_SUCCESS(status)) {PRIVATE_CAPTURE(4u,~0u,NULL);goto Done;}
   status=STATUS_INVALID_PARAMETER;
   if (q.Operation==APPLE_AGX_G3_PRIVATE_RELEASE) {
     if (q.Width || q.Height || q.UtileWidth || q.UtileHeight || q.Layers || q.Samples)
@@ -932,35 +1020,39 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
   }
   if (q.SceneId || q.SceneGeneration || q.Width>16384u || q.Height>16384u ||
       q.Layers!=1u || q.Samples!=1u || q.UtileWidth>32u || q.UtileHeight>32u)
-    goto Done;
+    {PRIVATE_CAPTURE(5u,~0u,NULL);goto Done;}
   if (q.Operation==APPLE_AGX_G3_PRIVATE_ACQUIRE) {
-    if (q.ManagerId || q.ManagerGeneration) goto Done;
+    if (q.ManagerId || q.ManagerGeneration) {PRIVATE_CAPTURE(6u,~0u,NULL);goto Done;}
   } else if (q.Operation==APPLE_AGX_G3_PRIVATE_PREPARE) {
     if (!q.ManagerGeneration || q.ManagerId!=p->Graph.ProcessId ||
         q.ManagerGeneration!=p->PrivateManager.Generation ||
         context->GpuvaG3PrivateManagerGeneration!=q.ManagerGeneration) goto Done;
   } else goto Done;
-  if (p->Graph.JobInFlight || p->Graph.LeaseToken) {status=STATUS_DEVICE_BUSY;goto Done;}
+  if (p->Graph.JobInFlight || p->Graph.LeaseToken) {status=STATUS_DEVICE_BUSY;PRIVATE_CAPTURE(7u,~0u,NULL);goto Done;}
   RtlZeroMemory(&render,sizeof(render));
   render.WidthPx=(USHORT)q.Width;render.HeightPx=(USHORT)q.Height;
   render.UtileWidthPx=(UCHAR)q.UtileWidth;render.UtileHeightPx=(UCHAR)q.UtileHeight;
   render.Layers=1;render.Samples=1;
-  { UINT required[9]; if (!AppleAgxG4ProcessRequiredBytes(&render,required)) goto Done; }
-  status=AdmissionG3PrivateTables(p,&view);
-  if (!NT_SUCCESS(status)) goto Done;
+  if (!AppleAgxG4ProcessRequiredBytes(&render,required)) {PRIVATE_CAPTURE(8u,~0u,NULL);goto Done;}
+  status=AdmissionG3PrivateTables(p,&view,&tablePredicate,&observed);
+  if (!NT_SUCCESS(status)) {PRIVATE_CAPTURE(9u,~0u,&observed);goto Done;}
   scene=ExAllocatePool2(POOL_FLAG_NON_PAGED,sizeof(*scene),ADMISSION_POOL_TAG);
-  if (!scene) {status=STATUS_INSUFFICIENT_RESOURCES;goto Done;}
+  if (!scene) {status=STATUS_INSUFFICIENT_RESOURCES;PRIVATE_CAPTURE(10u,~0u,NULL);goto Done;}
   RtlZeroMemory(scene,sizeof(*scene));scene->Context=context;scene->Geometry=render;
   fresh=p->PrivateManager.Generation==0;
-  status=AdmissionG3PreparePrivateStorage(p,&render,&p->PrivateManager,&scene->Storage);
-  if (!NT_SUCCESS(status)) {ExFreePoolWithTag(scene,ADMISSION_POOL_TAG);goto Done;}
+  status=AdmissionG3PreparePrivateStorageObserved(p,&render,&p->PrivateManager,&scene->Storage,&prepare);
+  if (!NT_SUCCESS(status)) {PRIVATE_CAPTURE(11u,~0u,NULL);ExFreePoolWithTag(scene,ADMISSION_POOL_TAG);goto Done;}
   scene->Next=p->PrivateScenes;p->PrivateScenes=scene;
   if (fresh)
     for (i=0;i<3;++i)
-      if (!AdmissionG3PrivateMapExtent(p,&view,&p->PrivateManager.Extents[i],TRUE)) break;
+      if (!AdmissionG3PrivateMapExtentObserved(p,&view,&p->PrivateManager.Extents[i],TRUE,&mapOffset)) {
+        status=STATUS_INSUFFICIENT_RESOURCES;PRIVATE_CAPTURE(12u,i,NULL);break;
+      }
   if (!fresh || i==3u) {
     for (i=0;i<6;++i)
-      if (!AdmissionG3PrivateMapExtent(p,&view,&scene->Storage.Extents[i],TRUE)) break;
+      if (!AdmissionG3PrivateMapExtentObserved(p,&view,&scene->Storage.Extents[i],TRUE,&mapOffset)) {
+        status=STATUS_INSUFFICIENT_RESOURCES;PRIVATE_CAPTURE(13u,i+3u,NULL);break;
+      }
     if (i==6u) {
       q.ManagerId=p->Graph.ProcessId;q.ManagerGeneration=p->PrivateManager.Generation;
       q.SceneId=q.SceneGeneration=scene->Storage.Generation;
@@ -983,6 +1075,8 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
 Done:
   if (p && p->Graph.Uncertain) p->Poisoned=TRUE;
   ExReleaseFastMutex(&state->Lock);
+  if (captured) AdmissionRecordG3PrivateFailure(adapter);
+#undef PRIVATE_CAPTURE
   return status;
 }
 

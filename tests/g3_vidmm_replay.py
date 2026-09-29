@@ -18,14 +18,14 @@ SHARED = ROOT / "drivers/apple-agx/shared"
 M1N1 = ROOT / "m1n1_windows/src"
 
 FUNCTIONS = {
-    "receipts.c": ["AdmissionRecordG3CopyQueryFailure"],
+    "receipts.c": ["AdmissionRecordG3CopyQueryFailure", "AdmissionRecordG3PrivateFailure"],
     "gpuva_g3_windows.c": [
         "AdmissionG3AllocateNode", "AdmissionG3FreeNode",
         "AdmissionGpuvaG3FindProcess", "AdmissionG3BootstrapRoot",
         "AdmissionGpuvaG3BrokerTable", "AdmissionGpuvaG3MirrorTable",
         "AdmissionG3Fnv", "AdmissionG3UscVa", "AdmissionG3TraceUpload", "AdmissionG3VerifyUploads",
         "AdmissionG3CopyPte", "AdmissionG3CaptureCopyQueryFailure", "AdmissionGpuvaG3CopyEscape",
-        "AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionGpuvaG3PrivateCancel","AdmissionGpuvaG3PrivatePreempt","AdmissionG3PrivateReap","AdmissionGpuvaG3PrivateReset","AdmissionGpuvaG3PrivateReported","AdmissionGpuvaG3PrivateRetireContext","AdmissionG3PrivateDestroyStorage","AdmissionGpuvaG3PrivateEscape",
+        "AdmissionG3PreparePrivateStorageObserved","AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtentObserved","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionGpuvaG3PrivateCancel","AdmissionGpuvaG3PrivatePreempt","AdmissionG3PrivateReap","AdmissionGpuvaG3PrivateReset","AdmissionGpuvaG3PrivateReported","AdmissionGpuvaG3PrivateRetireContext","AdmissionG3PrivateDestroyStorage","AdmissionG3CapturePrivateFailure","AdmissionGpuvaG3PrivateEscape",
         "AdmissionDdiCreateProcess", "AdmissionDdiDestroyProcess",
         "AdmissionGpuvaG3AttachContext", "AdmissionGpuvaG3DetachContext",
         "AdmissionGpuvaG3ResolveTable", "AdmissionG3RecordSetRootSeen", "AdmissionDdiSetRootPageTable",
@@ -94,6 +94,7 @@ def generate(revision=None, function_revisions=None):
             parts.append(f'#line 1 "{filename}:{name}"\n')
             function_source = source
             if revision is not None and name in (
+                    "AdmissionG3PreparePrivateStorageObserved", "AdmissionG3PrivateMapExtentObserved", "AdmissionG3CapturePrivateFailure",
                     "AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionGpuvaG3PrivateCancel","AdmissionGpuvaG3PrivatePreempt","AdmissionG3PrivateReap","AdmissionGpuvaG3PrivateReset","AdmissionGpuvaG3PrivateReported","AdmissionGpuvaG3PrivateRetireContext","AdmissionG3PrivateDestroyStorage","AdmissionGpuvaG3PrivateEscape", "AdmissionDdiEscape",
                     "AdmissionGpuvaG3BrokerTable",
                     "AdmissionG3RetireSystemSubtree", "AdmissionG3ActivateSystemSubtree",

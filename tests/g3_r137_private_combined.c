@@ -46,6 +46,33 @@ static void r137_private_combined(void) {
   r->VdmCtrlStreamBase=r->IspScissorBase=r->IspDbiasBase=0x10000;
   APPLE_AGX_G4_PROCESS_RANGE ranges[9];
   assert(prepare_process_buffers(&umd,&batch,r,ranges));
+  /* Exercise the existing per-owner refusal through the actual typed escape.
+   * A later failure must not overwrite its pre-rollback first-cause receipt. */
+  {
+    AGX_G4_BATCH second={0}, refused={0};
+    APPLE_AGX_G4_PROCESS_RANGE scratch[9];
+    APPLE_AGX_G3_PRIVATE_REQUEST drop={0};
+    a.PhysicalDeviceObject=(PDEVICE_OBJECT)1;
+    ULONG writes=private_registry_writes;
+    assert(prepare_process_buffers(&umd,&second,r,scratch));
+    assert(!prepare_process_buffers(&umd,&refused,r,scratch));
+    assert(a.G3PrivateFailureClaim==2 && private_registry_writes==writes+1);
+    APPLE_AGX_G3_PRIVATE_FAILURE first=a.G3PrivateFailure;
+    assert(first.Version==1 && first.Bytes==sizeof(first));
+    assert(first.Branch==11 && first.Status==(UINT)STATUS_INSUFFICIENT_RESOURCES);
+    assert(first.PreparePredicate==3 && first.FailedRange<9);
+    assert(first.ProcessId==p->Graph.ProcessId && first.ContextHandle==(uintptr_t)&context);
+    assert(first.SceneCount==2 && first.ContextSceneCount==2 && first.ManagerPresent);
+    assert(!memcmp(&first,&private_registry_receipt,sizeof(first)));
+    assert(!prepare_process_buffers(&umd,&refused,r,scratch));
+    assert(!memcmp(&first,&a.G3PrivateFailure,sizeof(first)));
+    assert(private_registry_writes==writes+1);
+    drop.Magic=APPLE_AGX_G3_PRIVATE_MAGIC;drop.Version=1;drop.Bytes=sizeof(drop);
+    drop.Operation=APPLE_AGX_G3_PRIVATE_RELEASE;
+    drop.ManagerId=second.Lease.ManagerId;drop.ManagerGeneration=second.Lease.ManagerGeneration;
+    drop.SceneId=second.Lease.SceneId;drop.SceneGeneration=second.Lease.SceneGeneration;
+    assert(r137_escape_transport(&t,&drop));
+  }
   struct agx_resource target={.bo=&target,.va=0x20000,
       .layout={.size_B=2560ULL*1600*4}};
   struct agx_batch mesa_batch={.key={.nr_cbufs=1,
