@@ -296,7 +296,7 @@ static BOOLEAN AdmissionG3PrivateMapExtentObserved(ADMISSION_G3_PROCESS *p,
   UINT offset;
   for (offset=0; offset<e->Bytes; offset+=0x4000u)
     if (!AppleAgxGpuvaG3GraphUpdateLeafBacking(&p->Graph,p->PrivateLeafIpa,
-            (e->Offset+offset)>>14,
+            (e->VaOffset+offset)>>14,
             publish ? view->GuestIpaAddress+e->Offset+offset : 0ULL,
             publish != FALSE,AppleAgxGpuvaG3PrivateBacking)) {
       if (failedOffset) *failedOffset=offset;
@@ -506,7 +506,8 @@ static BOOLEAN AdmissionG3PrivateDestroyStorage(ADMISSION_G3_PROCESS *p) {
     APPLE_AGX_G3_PRIVATE_BLOCK *block=&p->State->PrivatePool.Blocks[i];
     if (block->Owner==p->Graph.ProcessId) {
       APPLE_AGX_G3_PRIVATE_EXTENT e={block->Generation,
-          block->First*APPLE_AGX_G3_PRIVATE_UNIT,block->Count*APPLE_AGX_G3_PRIVATE_UNIT};
+          block->First*APPLE_AGX_G3_PRIVATE_UNIT,block->Count*APPLE_AGX_G3_PRIVATE_UNIT,
+          block->VaFirst*APPLE_AGX_G3_PRIVATE_UNIT};
       if (!AdmissionG3PrivateFreeExtent(p,&view,&e)) return FALSE;
     }
   }
