@@ -385,6 +385,8 @@ def main():
                     continue
                 runtime.append(native / relative / name)
         runtime.append(native / 'src/asahi/lib/agx_win32_device_key.c')
+        # EXP880 diagnostic: the command-stream decoder (projected on Windows).
+        runtime.append(native / 'src/asahi/lib/decode.c')
         runtime += [args.project / 'drivers/apple-agx/mesa/winsys' / name
                     for name in (GPUVA_BRIDGES if args.gpuva else BRIDGES)]
         runtime += [native / 'src/gallium/frontends/d3d10umd' / name
