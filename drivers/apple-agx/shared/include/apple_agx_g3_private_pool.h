@@ -58,13 +58,15 @@ static inline int AppleAgxG3PrivateAllocate(APPLE_AGX_G3_PRIVATE_POOL *p,
   for (unsigned i=0; i<APPLE_AGX_G3_PRIVATE_UNITS; ++i)
     if (p->Blocks[i].Owner==owner) {
       const APPLE_AGX_G3_PRIVATE_BLOCK *b=&p->Blocks[i];
-      unsigned delta;
+      unsigned delta, va_index;
       if(i<b->First || i-b->First>=b->Count) return 0;
       delta=i-b->First;
       if(b->VaFirst>=APPLE_AGX_G3_PRIVATE_VA_UNITS ||
-          delta>=APPLE_AGX_G3_PRIVATE_VA_UNITS-b->VaFirst ||
-          va_used[b->VaFirst+delta]) return 0;
-      va_used[b->VaFirst+delta]=1;
+          delta>=APPLE_AGX_G3_PRIVATE_VA_UNITS-b->VaFirst) return 0;
+      va_index=b->VaFirst+delta;
+      if(va_index>=APPLE_AGX_G3_PRIVATE_VA_UNITS) return 0;
+      if(va_used[va_index]) return 0;
+      va_used[va_index]=1;
       ++used;
     }
   if(used>APPLE_AGX_G3_PROCESS_UNITS) return 0;
