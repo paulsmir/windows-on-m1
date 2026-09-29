@@ -262,9 +262,27 @@ BOOL WINAPI DllMain(HINSTANCE Instance, DWORD Reason, LPVOID Reserved) {
   return TRUE;
 }
 
+#if defined(APPLE_AGX_UMD_NATIVE_FRONTEND)
+/* EXP877 discriminator: only dwm.exe renders natively, so the single firmware
+ * buffer manager is never rebound to another process. Other processes get
+ * DXGI_ERROR_UNSUPPORTED and use the D3D runtime's software fallback. */
+static BOOL AdmissionUmdNativeProcessAllowed(void) {
+  WCHAR path[MAX_PATH];
+  DWORD length = GetModuleFileNameW(NULL, path, MAX_PATH);
+  static const WCHAR suffix[] = L"\\dwm.exe";
+  const DWORD suffixLength = (DWORD)(sizeof(suffix) / sizeof(suffix[0]) - 1u);
+  if (length == 0u || length >= MAX_PATH || length < suffixLength)
+    return FALSE;
+  return CompareStringOrdinal(path + length - suffixLength, (int)suffixLength,
+                              suffix, (int)suffixLength, TRUE) == CSTR_EQUAL;
+}
+#endif
+
 HRESULT APIENTRY OpenAdapter10_2(
     D3D10DDIARG_OPENADAPTER *OpenAdapter) {
 #if defined(APPLE_AGX_UMD_NATIVE_FRONTEND)
+  if (!AdmissionUmdNativeProcessAllowed())
+    return (HRESULT)0x887A0004L; /* DXGI_ERROR_UNSUPPORTED */
   return MesaD3d10OpenAdapter10_2(OpenAdapter);
 #else
   ADMISSION_UMD_ADAPTER *adapter;
