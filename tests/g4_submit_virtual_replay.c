@@ -308,6 +308,11 @@ static int AppleAgxGpuvaG3GraphContainsRangeAccess(
 
 static BOOLEAN AdmissionG3PrivateReap(ADMISSION_G3_PROCESS *p) {(void)p;return TRUE;}
 /* The Python driver inserts the unmodified production KMD functions here. */
+/* R162 upload re-hash is evidence-only; it does not affect BeginJob. */
+static void AdmissionG3VerifyUploads(ADMISSION_CONTEXT *adapter,
+    ADMISSION_G3_STATE *state, ADMISSION_G3_PROCESS *process) {
+  (void)adapter; (void)state; (void)process;
+}
 #include "g4_submit_virtual_functions.inc"
 
 typedef struct {

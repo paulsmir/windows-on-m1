@@ -99,6 +99,7 @@ def generate(revision=None, function_revisions=None):
                     "AdmissionG3RetireSystemSubtree", "AdmissionG3ActivateSystemSubtree",
                     "AdmissionG3ResetTableShadow", "AdmissionG3RegisterTable", "AdmissionG3PrepareTableReuse",
                     "AdmissionGpuvaG3MirrorTable",
+                    "AdmissionG3Fnv", "AdmissionG3UscVa", "AdmissionG3TraceUpload", "AdmissionG3VerifyUploads",
                     "AdmissionG3CopyPte", "AdmissionG3CaptureCopyQueryFailure", "AdmissionGpuvaG3CopyEscape",
                     "AdmissionG3RecordSetRootSeen",
                     "AdmissionGpuvaG3SubmitVirtualPaging",
