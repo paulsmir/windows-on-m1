@@ -97,7 +97,42 @@ def project_sources(out,project,overlays):
    return -1;''')
     a,b=function(s,'agx_get_in_sync');start=s.rfind('static int',0,a)
     s=s[:start]+'#ifndef _WIN32\n'+s[start:b]+'\n#endif\n'+s[b:]
-    s=body(s,'agx_batch_submit','''   bool entered = render &&
+    # EXP880 diagnostic: decode the first native render commands per process.
+    a,b=function(s,'agx_batch_submit');start=s.rfind('void',0,a)
+    s=s[:start]+'''#ifdef _WIN32
+#include <stdio.h>
+#include "util/os_misc.h"
+#include "util/u_atomic.h"
+extern void agxdecode_win32_render(struct agxdecode_ctx *, struct agx_device *,
+   struct drm_asahi_params_global *, struct drm_asahi_cmd_render *, FILE *);
+__declspec(dllimport) unsigned long __stdcall GetCurrentProcessId(void);
+static void
+agx_win32_decode_render(struct agx_context *ctx,
+                        struct drm_asahi_cmd_render *render)
+{
+   static int count;
+   char path[768];
+   const char *base = os_get_option("APPLE_AGX_UMD_TRACE_FILE");
+   struct agx_device *dev = agx_device(ctx->base.screen);
+   int n = p_atomic_inc_return(&count);
+   if (!render || !base || !dev->agxdecode || n > 6)
+      return;
+   snprintf(path, sizeof(path), "%s.agxdecode-%lu-%d.txt", base,
+            GetCurrentProcessId(), n);
+   FILE *f = fopen(path, "w");
+   if (!f)
+      return;
+   setvbuf(f, NULL, _IONBF, 0);
+   agxdecode_win32_render(dev->agxdecode, dev, &dev->params, render, f);
+   fclose(f);
+}
+#endif
+
+'''+s[start:]
+    s=body(s,'agx_batch_submit','''#ifdef _WIN32
+   agx_win32_decode_render(ctx, render);
+#endif
+   bool entered = render &&
       ((compute != NULL) == (batch->cdm.bo != NULL)) &&
       AgxWin32AsahiBatchFinish(batch, render);
    if (!entered && !AgxWin32AsahiBatchAbort(batch)) { ctx->any_faults = true; return; }
@@ -137,6 +172,44 @@ def project_sources(out,project,overlays):
     save(qp,query[:a]+part+query[b:])
     # Real draw entrypoint is wrapped so every native early return unwinds the
     # stable root. No manually constructed command/capture substitutes this call.
+    dcp='src/asahi/lib/decode.c';decode=(out/dcp).read_text()
+    decode=replace(decode,'''   if (lib_config.read_gpu_mem)
+      UNREACHABLE("you'll have to figure it out.");''','''   if (lib_config.read_gpu_mem) {
+      static uint8_t agxdecode_win32_grab[65536];
+      size_t got = lib_config.read_gpu_mem(gpu_va, sizeof(agxdecode_win32_grab),
+                                           agxdecode_win32_grab);
+      *buf = agxdecode_win32_grab;
+      return got;
+   }''')
+    decode+='''
+#ifdef _WIN32
+/* EXP880 diagnostic: decode one render command through a safe reader. */
+struct agx_device;
+extern size_t AgxWin32AsahiDiagnosticRead(struct agx_device *, uint64_t,
+                                          size_t, void *);
+static struct agx_device *agxdecode_win32_dev;
+static size_t
+agxdecode_win32_read(uint64_t va, size_t size, void *data)
+{
+   return AgxWin32AsahiDiagnosticRead(agxdecode_win32_dev, va, size, data);
+}
+void
+agxdecode_win32_render(struct agxdecode_ctx *ctx, struct agx_device *dev,
+                       struct drm_asahi_params_global *params,
+                       struct drm_asahi_cmd_render *render, FILE *out)
+{
+   agxdecode_win32_dev = dev;
+   lib_config.read_gpu_mem = agxdecode_win32_read;
+   agxdecode_dump_stream = out;
+   agxdecode_drm_cmd_render(ctx, params, render, true);
+   fflush(out);
+   agxdecode_dump_stream = NULL;
+   lib_config.read_gpu_mem = NULL;
+   agxdecode_win32_dev = NULL;
+}
+#endif
+'''
+    save(dcp,decode)
     sp='src/gallium/drivers/asahi/agx_state.c';s=(out/sp).read_text()
     s=replace(s,'#include "agx_win32_pipeline.inc"','#include "agx_win32_pipeline.inc"\n#include "agx_win32_asahi_batch.h"')
     a,b=function(s,'agx_draw_vbo');decl=s.rfind('static void',0,a);signature=s[decl:a]

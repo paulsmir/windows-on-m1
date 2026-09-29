@@ -418,3 +418,26 @@ struct agx_bo *AgxWin32AsahiLookupBo(struct agx_device *native,uint32_t handle) 
   }
   b->Failed=1;return NULL;
 }
+
+/* EXP880 diagnostic reader: copy from the CPU map of a live BO containing va.
+ * Unknown or unmapped addresses read as zero. Never used for GPU submission. */
+size_t AgxWin32AsahiDiagnosticRead(struct agx_device *native,uint64_t va,
+    size_t size,void *out) {
+  AGX_WIN32_ASAHI_BACKEND *b=native?native->windows_private:NULL;
+  APPLE_AGX_U32 cursor=0,seen=0;
+  const void *key;
+  if(!out || !size) return 0;
+  memset(out,0,size);
+  if(!b) return 0;
+  while((key=b->Ops.NextBo(b->Owner,&cursor))!=NULL && ++seen<=b->LiveBos+1u) {
+    struct agx_bo *bo=(struct agx_bo *)key;
+    AGX_WIN32_RELOC_ALLOCATION id;
+    if(bo->dev!=native || bo->refcnt<=0 || !AgxWin32AsahiIdentity(b,bo,&id) ||
+       !bo->va || !bo->_map || va<bo->va->addr || va-bo->va->addr>=bo->size)
+      continue;
+    if(size>bo->size-(va-bo->va->addr)) size=(size_t)(bo->size-(va-bo->va->addr));
+    memcpy(out,(const uint8_t *)bo->_map+(va-bo->va->addr),size);
+    return size;
+  }
+  return 0;
+}
