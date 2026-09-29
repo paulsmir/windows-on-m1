@@ -185,6 +185,11 @@ int main(void) {
     assert(get64(objects[18].Data + 0x170u) == (480ULL << 24));
     assert(get64(objects[18].Data + 0x1c0u) == 0x1100000000ULL);
     assert(get64(objects[19].Data + 0x120u) == 0x1100000000ULL);
+    /* R163 (EXP883): TilingParameters size2/size3 are the macro-tile stride
+     * and twice it (m1n1 render.py, EXP208 full-screen template), not a
+     * packed x/y pair. 1280x720: 12x8 tiles per macro tile. */
+    assert((get64(objects[19].Data + 0x3e0u) & 0xffffffffULL) == 96ULL);
+    assert((get64(objects[19].Data + 0x3e4u) & 0xffffffffULL) == 192ULL);
     assert((get64(objects[18].Data + 0x1d0u) & 0xffffffffULL) ==
         render.FragmentHelper.Binary);
     assert(get64(objects[18].Data + 0x1d8u) ==
