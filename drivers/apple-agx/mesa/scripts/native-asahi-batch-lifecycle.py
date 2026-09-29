@@ -173,6 +173,7 @@ agx_win32_decode_render(struct agx_context *ctx,
     # Real draw entrypoint is wrapped so every native early return unwinds the
     # stable root. No manually constructed command/capture substitutes this call.
     dcp='src/asahi/lib/decode.c';decode=(out/dcp).read_text()
+    decode=replace(decode,'#include <sys/mman.h>\n','')
     decode=replace(decode,'''   if (lib_config.read_gpu_mem)
       UNREACHABLE("you'll have to figure it out.");''','''   if (lib_config.read_gpu_mem) {
       static uint8_t agxdecode_win32_grab[65536];
