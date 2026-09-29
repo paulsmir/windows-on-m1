@@ -9,6 +9,14 @@
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #define ADMISSION_G3_PROCESS_MAGIC 0x47335052u
 
+/* R162 diagnostic: USC-window uploads re-hashed through the published graph
+ * before each native job of the owning process. Evidence only (kernel dump). */
+#define ADMISSION_G3_UPLOAD_TRACE_COUNT 64u
+typedef struct _ADMISSION_G3_UPLOAD_TRACE {
+  ULONGLONG ProcessId, Va;
+  ULONG Bytes, Hash, GpuHash, Checks;
+} ADMISSION_G3_UPLOAD_TRACE;
+
 typedef struct _ADMISSION_G3_STATE {
   ADMISSION_CONTEXT *Adapter;
   FAST_MUTEX Lock;
@@ -23,6 +31,10 @@ typedef struct _ADMISSION_G3_STATE {
   ULONG LastCompletedFence;
   ULONG PrivateCompletionFence;
   ULONGLONG UnpublishedGroups[32];
+  ADMISSION_G3_UPLOAD_TRACE UploadTrace[ADMISSION_G3_UPLOAD_TRACE_COUNT];
+  ULONG UploadTraceNext, UploadVerifyChecks, UploadVerifyMismatch,
+      UploadVerifyUnmapped;
+  ADMISSION_G3_UPLOAD_TRACE UploadFirstMismatch;
 } ADMISSION_G3_STATE;
 
 typedef struct _ADMISSION_G3_TABLE_SHADOW {
