@@ -106,16 +106,20 @@ def project_sources(out,project,overlays):
 extern void agxdecode_win32_render(struct agxdecode_ctx *, struct agx_device *,
    struct drm_asahi_params_global *, struct drm_asahi_cmd_render *, FILE *);
 __declspec(dllimport) unsigned long __stdcall GetCurrentProcessId(void);
+__declspec(dllimport) unsigned long __stdcall GetEnvironmentVariableA(const char *,
+   char *, unsigned long);
 static void
 agx_win32_decode_render(struct agx_context *ctx,
                         struct drm_asahi_cmd_render *render)
 {
    static int count;
-   char path[768];
-   const char *base = os_get_option("APPLE_AGX_UMD_TRACE_FILE");
+   char path[768], base[512];
+   unsigned long length = GetEnvironmentVariableA("APPLE_AGX_UMD_TRACE_FILE",
+                                                  base, sizeof(base));
    struct agx_device *dev = agx_device(ctx->base.screen);
    int n = p_atomic_inc_return(&count);
-   if (!render || !base || !dev->agxdecode || n > 6)
+   if (!render || !length || length >= sizeof(base) || !dev->agxdecode ||
+       n > 6)
       return;
    snprintf(path, sizeof(path), "%s.agxdecode-%lu-%d.txt", base,
             GetCurrentProcessId(), n);
