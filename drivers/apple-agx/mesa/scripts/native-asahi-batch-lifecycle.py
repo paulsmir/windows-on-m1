@@ -103,6 +103,7 @@ def project_sources(out,project,overlays):
 #include <stdio.h>
 #include "util/os_misc.h"
 #include "util/u_atomic.h"
+extern struct agxdecode_ctx *agxdecode_new_context(uint64_t);
 extern void agxdecode_win32_render(struct agxdecode_ctx *, struct agx_device *,
    struct drm_asahi_params_global *, struct drm_asahi_cmd_render *, FILE *);
 __declspec(dllimport) unsigned long __stdcall GetCurrentProcessId(void);
@@ -118,8 +119,13 @@ agx_win32_decode_render(struct agx_context *ctx,
                                                   base, sizeof(base));
    struct agx_device *dev = agx_device(ctx->base.screen);
    int n = p_atomic_inc_return(&count);
-   if (!render || !length || length >= sizeof(base) || !dev->agxdecode ||
-       n > 6)
+   static struct agxdecode_ctx *decoder;
+   if (!render || !length || length >= sizeof(base) || n > 6)
+      return;
+   /* The Windows device owner does not run agx_device.c's decoder setup. */
+   if (!decoder)
+      decoder = agxdecode_new_context(dev->shader_base);
+   if (!decoder)
       return;
    snprintf(path, sizeof(path), "%s.agxdecode-%lu-%d.txt", base,
             GetCurrentProcessId(), n);
@@ -127,7 +133,7 @@ agx_win32_decode_render(struct agx_context *ctx,
    if (!f)
       return;
    setvbuf(f, NULL, _IONBF, 0);
-   agxdecode_win32_render(dev->agxdecode, dev, &dev->params, render, f);
+   agxdecode_win32_render(decoder, dev, &dev->params, render, f);
    fclose(f);
 }
 #endif
