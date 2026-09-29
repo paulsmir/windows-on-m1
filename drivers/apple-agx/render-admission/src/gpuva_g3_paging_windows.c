@@ -822,8 +822,21 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     }
     receipt.FlushStart = start;
     receipt.FlushEnd = end;
-    ExAcquireFastMutex(&state->Lock);
-    process = AdmissionGpuvaG3FindProcess(state, args->FlushTlb.hProcess);
+    /* R165 (EXP884): VidMm may flush the TLB of a process whose native job is
+     * in flight (VA free during rendering); the broker refuses that flush with
+     * BUSY and FLUSH_TLB may not fail. Like R155, wait with the G3 lock
+     * released for joined completion; the bound exceeds TdrDelay. */
+    for (wait_ms = 0u;; ++wait_ms) {
+      ExAcquireFastMutex(&state->Lock);
+      process = AdmissionGpuvaG3FindProcess(state, args->FlushTlb.hProcess);
+      if (process == NULL || process->Poisoned || process->Graph.Uncertain ||
+          (!process->Graph.JobInFlight && !process->Graph.LeaseToken) ||
+          wait_ms >= job_wait_limit_ms)
+        break;
+      ExReleaseFastMutex(&state->Lock);
+      delay.QuadPart = -10000LL; /* 1 ms */
+      (void)KeDelayExecutionThread(KernelMode, FALSE, &delay);
+    }
     address.GpuPhysical = args->FlushTlb.RootPageTableAddress;
     status = AdmissionGpuvaG3ResolveTable(adapter, &address,
         DXGK_PAGETABLEUPDATE_GPU_PHYSICAL, &root_ipa);
