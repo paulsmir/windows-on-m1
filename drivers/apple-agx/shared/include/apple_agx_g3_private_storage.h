@@ -77,7 +77,7 @@ static inline int AppleAgxG3PrivatePrepareObserved(APPLE_AGX_G3_PRIVATE_POOL *po
       ++scratch;
     }
     if (fresh || i>=3) memset(cpu+e->Offset,0,e->Bytes);
-    s.Ranges[i]=(APPLE_AGX_G4_PROCESS_RANGE){va+e->Offset,e->Bytes,0};
+    s.Ranges[i]=(APPLE_AGX_G4_PROCESS_RANGE){va+e->VaOffset,e->Bytes,0};
   }
   if (fresh) {
     unsigned long long number=s.Ranges[2].Va>>15;

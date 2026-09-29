@@ -82,6 +82,37 @@ int main(void) {
       assert(AppleAgxG3PrivatePrepare(&q,owner,cpu,owner<<36,&small,&m,&sc));
     }
   }
+  /* EXP887: the eighth concurrent manager is refused by the global pool,
+   * although its own quota is empty. Global backing must grow without using
+   * its physical offset as an offset beyond a process's 32 MiB reservation. */
+  {
+    APPLE_AGX_G3_PRIVATE_POOL q={0};
+    APPLE_AGX_G3_PRIVATE_MANAGER managers[9]={{0}};
+    APPLE_AGX_G3_PRIVATE_SCENE sc[9]={{0}};
+    APPLE_AGX_G4_NATIVE_RENDER small={0};
+    const unsigned long long base=APPLE_AGX_G3_PRIVATE_VA_BYTES;
+    unsigned high_backing=0;
+    small.WidthPx=small.HeightPx=16;small.Layers=small.Samples=1;
+    small.UtileWidthPx=small.UtileHeightPx=32;
+    for(unsigned owner=1;owner<=9;++owner) {
+      assert(AppleAgxG3PrivatePrepare(&q,owner,cpu,base,&small,
+          &managers[owner-1],&sc[owner-1]));
+      for(unsigned i=0;i<9;++i) {
+        APPLE_AGX_G4_PROCESS_RANGE range=sc[owner-1].Ranges[i];
+        assert(range.Va>=base && range.Va+range.Bytes<=base+APPLE_AGX_G3_PRIVATE_VA_BYTES);
+        const APPLE_AGX_G3_PRIVATE_EXTENT *e=i<3 ?
+            &managers[owner-1].Extents[i] : &sc[owner-1].Extents[i-3];
+        if(e->Offset>=32u<<20) high_backing=1;
+        for(unsigned prior=1;prior<owner;++prior)
+          for(unsigned j=0;j<9;++j) {
+            const APPLE_AGX_G3_PRIVATE_EXTENT *other=j<3 ?
+                &managers[prior-1].Extents[j] : &sc[prior-1].Extents[j-3];
+            assert(e->Offset+e->Bytes<=other->Offset || other->Offset+other->Bytes<=e->Offset);
+          }
+      }
+    }
+    assert(high_backing);
+  }
   free(cpu);
   return 0;
 }

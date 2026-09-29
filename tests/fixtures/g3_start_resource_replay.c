@@ -514,9 +514,9 @@ static int replay_scanout_start(ADMISSION_CONTEXT *context) {
   assert(AdmissionScanoutQueuePresent(context,&args)==STATUS_INVALID_ADDRESS);
   assert(broker_accesses==before_present);
 
-  assert(context->Memory.LocalAllocationBytes == 0x3d800000ULL);
-  assert(context->Memory.PrivateOffset == 0x3d800000ULL);
-  assert(context->Memory.PrivateBytes == 0x2000000ULL);
+  assert(context->Memory.LocalAllocationBytes == 0x3b800000ULL);
+  assert(context->Memory.PrivateOffset == 0x3b800000ULL);
+  assert(context->Memory.PrivateBytes == 0x4000000ULL);
   assert(AdmissionMemoryRuntimeScanoutView(context, &view) == STATUS_SUCCESS);
   assert(view.Bytes == 0x3800000ULL && view.PoolBytes == 0x3800000ULL);
   assert(AdmissionMemoryRuntimeBackendView(context, &backend) == STATUS_SUCCESS);
@@ -545,8 +545,8 @@ static int replay_scanout_start(ADMISSION_CONTEXT *context) {
         view.HostPhysicalAddress, &local));
   }
   assert(AdmissionMemoryRuntimeLocalView(context, &view) == STATUS_SUCCESS);
-  assert(view.Bytes == 0x3d800000ULL);
-  const ULONGLONG offsets[] = {0, 0x4000000, 0x8000000, 0x3d7f0000};
+  assert(view.Bytes == 0x3b800000ULL);
+  const ULONGLONG offsets[] = {0, 0x4000000, 0x8000000, 0x3b7f0000};
   for(unsigned i=0;i<RTL_NUMBER_OF(offsets);++i) {
     assert(AdmissionMemoryResolveLocalView(&context->Memory,
       context->Memory.Topology.Local.Base + offsets[i], 0x10000, 0xffff,
@@ -554,7 +554,7 @@ static int replay_scanout_start(ADMISSION_CONTEXT *context) {
     assert(local.HostPhysicalAddress == view.HostPhysicalAddress + offsets[i] + 0xffff);
   }
   assert(!AdmissionMemoryResolveLocalView(&context->Memory,
-      context->Memory.Topology.Local.Base + 0x3d7fffff, 2, 0,
+      context->Memory.Topology.Local.Base + 0x3b7fffff, 2, 0,
       view.CpuAddress, view.HostPhysicalAddress, &local));
   unsigned accesses = broker_accesses;
   memory_runtime->LocalObject.Length = view.Bytes;

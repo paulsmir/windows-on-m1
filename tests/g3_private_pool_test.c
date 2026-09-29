@@ -12,6 +12,9 @@ int main(void) {
   assert(memcmp(&p,&before,sizeof(p))==0);
   assert(AppleAgxG3PrivateAllocate(&p, 2, 8u<<20, &b));
   assert(b.Offset==8u<<20 && b.Generation!=a.Generation);
+  assert(a.VaOffset==0 && b.VaOffset==0); /* Independent process namespaces. */
+  c=b;c.VaOffset=0x10000;before=p;
+  assert(!AppleAgxG3PrivateFree(&p,2,&c) && !memcmp(&p,&before,sizeof(p)));
   /* Fill the remaining pool with further full quotas. */
   APPLE_AGX_G3_PRIVATE_EXTENT fill[APPLE_AGX_G3_PRIVATE_UNITS/128u];
   unsigned fills=0;

@@ -36,6 +36,11 @@ static void r137_private_combined(void) {
   context.Object.Magic=ADMISSION_OBJECT_CONTEXT_MAGIC;context.Object.Device=&device.Object;
   context.Win32Transport=TRUE;context.GpuvaG3RootIpa=p->Graph.RootIpa;
   expect_ok("R137 combined attach",AdmissionGpuvaG3AttachContext(&context,&device));
+  /* Force this process's real private leaf maps to backing above physical
+   * offset32MiB while its reserved GPUVA still spans exactly32MiB. */
+  APPLE_AGX_G3_PRIVATE_EXTENT high_backing_fill[4]={{0}};
+  for(unsigned i=0;i<4;++i)
+    assert(AppleAgxG3PrivateAllocate(&state.PrivatePool,100+i,8u<<20,&high_backing_fill[i]));
   R137_TRANSPORT t={.Adapter=&a,.Escape={.hDevice=&device,.hContext=&context,.hKmdProcessHandle=p,.Flags={1}}};
   AGX_WIN32_ASAHI_BACKEND umd={.Gpuva={.Ops={r137_escape_transport},.Context=&t}};
   AGX_G4_BATCH batch={0};
@@ -105,7 +110,8 @@ static void r137_private_combined(void) {
   for(unsigned i=0;i<9;++i) {
     ULONGLONG ipa=0;
     assert(AppleAgxGpuvaG3GraphTranslateVa(&p->Graph,ranges[i].Va,&ipa));
-    assert(ipa>=local_ipa+(40ULL<<20) && ipa<local_ipa+(56ULL<<20));
+    const APPLE_AGX_G3_PRIVATE_EXTENT *extent=i<3 ? &p->PrivateManager.Extents[i] : &scene->Storage.Extents[i-3];
+    assert(ipa==local_ipa+vidmm_local_bytes+extent->Offset);
   }
   /* Queue owner is exercised by the outer-DDI replay. Model its exact hold
    * here, retaining the real BeginJob/parser/graph/wire/firmware builder. */
@@ -154,6 +160,7 @@ static void r137_private_combined(void) {
   release.ManagerId=batch.Lease.ManagerId;release.ManagerGeneration=batch.Lease.ManagerGeneration;
   release.SceneId=batch.Lease.SceneId;release.SceneGeneration=batch.Lease.SceneGeneration;
   unsigned scratch_offset=scene->Storage.Extents[0].Offset,scratch_bytes=scene->Storage.Extents[0].Bytes;
+  unsigned scratch_va_offset=scene->Storage.Extents[0].VaOffset;
   unsigned char *scratch=local_cpu+(40u<<20)+scratch_offset;
   memset(scratch,0x5a,scratch_bytes); /* Model completed GPU writes. */
   assert(r137_escape_transport(&t,&release));
@@ -187,7 +194,7 @@ static void r137_private_combined(void) {
   assert(prepare_process_buffers(&umd,&next,r,ranges));
   assert(next.Lease.SceneGeneration!=batch.Lease.SceneGeneration);
   assert(!r137_escape_transport(&t,&release)); /* Old generation cannot release reused bytes. */
-  scene=p->PrivateScenes;assert(scene && scene->Storage.Ranges[3].Va==p->PrivateVa+scratch_offset);
+  scene=p->PrivateScenes;assert(scene && scene->Storage.Ranges[3].Va==p->PrivateVa+scratch_va_offset);
   if (getenv("G3_REPLAY_R154_RESUBMIT")) {
     const char *mode=getenv("G3_REPLAY_R154_RESUBMIT");
     scene->Queued=1;scene->Fence=42;context.GpuvaG3PrivateFence=42;
@@ -261,6 +268,8 @@ static void r137_private_combined(void) {
   assert(!p->PrivateManager.Generation); /* Last context drops manager ownership. */
   AdmissionGpuvaG3DetachContext(&context);
   expect_ok("R137 combined destroy",AdmissionDdiDestroyProcess(&a,p));
+  for(unsigned i=0;i<4;++i)
+    assert(AppleAgxG3PrivateFree(&state.PrivatePool,100+i,&high_backing_fill[i]));
   free(arena);free(local_cpu);local_cpu=NULL;
   puts("R137 private combined: PASS");
   return;

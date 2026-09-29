@@ -28,7 +28,7 @@ static void replay_segment_queries(ADMISSION_CONTEXT *context) {
  context->Memory.PagingReady=APPLE_AGX_TRUE;
  assert(AdmissionDdiQuerySegment4(context,&q4)==STATUS_SUCCESS);
  assert(AdmissionDdiQuerySegment5(context,&q5)==STATUS_SUCCESS);
- assert(d4[1].Size==0x3d800000 && d4[1].CommitLimit==0x3d800000 && d5[1].Size==0x3d800000);
+ assert(d4[1].Size==0x3b800000 && d4[1].CommitLimit==0x3b800000 && d5[1].Size==0x3b800000);
  assert(d4[1].CpuTranslatedAddress.QuadPart==(LONGLONG)context->LocalReserveReceipt.GuestIpa);
  assert(d5[1].CpuTranslatedAddress.QuadPart==d4[1].CpuTranslatedAddress.QuadPart);
  assert(d4[1].Flags.CpuVisible && d5[1].Flags.CpuVisible);
