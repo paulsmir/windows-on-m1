@@ -6,7 +6,8 @@
  * Quarantined extents deliberately remain allocated. No physical addresses
  * or user pointers are accepted here. */
 #define APPLE_AGX_G3_PRIVATE_UNIT 0x10000u
-#define APPLE_AGX_G3_PRIVATE_UNITS 256u
+/* 32 MiB: exactly the per-process private VA reservation (R164). */
+#define APPLE_AGX_G3_PRIVATE_UNITS 512u
 #define APPLE_AGX_G3_PROCESS_UNITS 128u
 #define APPLE_AGX_G3_PRIVATE_VA_BYTES 0x02000000ULL
 
@@ -55,7 +56,8 @@ static inline int AppleAgxG3PrivateFree(APPLE_AGX_G3_PRIVATE_POOL *p,
   unsigned first, count;
   if (!p || !e || !owner || !e->Generation || !e->Bytes ||
       ((e->Offset|e->Bytes)&(APPLE_AGX_G3_PRIVATE_UNIT-1)) ||
-      e->Offset >= (16u<<20) || e->Bytes > (16u<<20)-e->Offset) return 0;
+      e->Offset >= APPLE_AGX_G3_PRIVATE_UNITS*APPLE_AGX_G3_PRIVATE_UNIT ||
+      e->Bytes > APPLE_AGX_G3_PRIVATE_UNITS*APPLE_AGX_G3_PRIVATE_UNIT-e->Offset) return 0;
   first=e->Offset/APPLE_AGX_G3_PRIVATE_UNIT;
   count=e->Bytes/APPLE_AGX_G3_PRIVATE_UNIT;
   if (first >= APPLE_AGX_G3_PRIVATE_UNITS ||

@@ -75,7 +75,7 @@ static void replay_memory_lifecycle(ADMISSION_CONTEXT *context) {
    assert(status==STATUS_SUCCESS);
    ADMISSION_MEMORY_RUNTIME *r=context->MemoryRuntime;
    assert(r->Residency.Inventory.PageCount==36);
-   assert(context->Memory.LocalAllocationBytes==0x3e800000);
+   assert(context->Memory.LocalAllocationBytes==0x3d800000);
    assert(AdmissionMemoryRuntimeStop(context)==STATUS_SUCCESS);
   } else {
    if(NT_SUCCESS(status) || status==STATUS_DEVICE_BUSY)

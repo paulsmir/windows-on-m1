@@ -355,7 +355,7 @@ static BOOLEAN AdmissionG3OutputMatchesLocal(ADMISSION_CONTEXT *a,
 typedef ADMISSION_SCANOUT_MEMORY_VIEW ADMISSION_BACKEND_MEMORY_VIEW;
 static unsigned char *local_cpu;
 static ULONGLONG local_ipa=0x10000000ULL;
-static ULONGLONG local_bytes=0x4000000ULL;
+static ULONGLONG local_bytes=0x6000000ULL;
 static ULONGLONG vidmm_local_bytes=40ULL<<20;
 static unsigned char system_cpu[0x4000];
 static ULONGLONG system_ipa=0x851000000ULL;
@@ -378,7 +378,7 @@ static void MmUnmapIoSpace(void *p,SIZE_T bytes) {(void)p;(void)bytes;}
 NTSTATUS AdmissionG3ExecuteVirtualPaging(ADMISSION_CONTEXT *,
     const ADMISSION_PAGING_RECORD *);
 static PHYSICAL_ADDRESS MmGetPhysicalAddress(void *p) { PHYSICAL_ADDRESS a={0};if(local_cpu && (unsigned char *)p>=local_cpu && (unsigned char *)p<local_cpu+local_bytes) a.QuadPart=(long long)(local_ipa+((unsigned char *)p-local_cpu));return a; }
-static NTSTATUS AdmissionMemoryRuntimePrivateView(ADMISSION_CONTEXT *a,ADMISSION_BACKEND_MEMORY_VIEW *v) {(void)a;v->GuestIpaAddress=local_ipa+vidmm_local_bytes;v->Bytes=16ULL<<20;v->CpuAddress=local_cpu+vidmm_local_bytes;return STATUS_SUCCESS;}
+static NTSTATUS AdmissionMemoryRuntimePrivateView(ADMISSION_CONTEXT *a,ADMISSION_BACKEND_MEMORY_VIEW *v) {(void)a;v->GuestIpaAddress=local_ipa+vidmm_local_bytes;v->Bytes=32ULL<<20;v->CpuAddress=local_cpu+vidmm_local_bytes;return STATUS_SUCCESS;}
 static NTSTATUS replay_local_view_status;
 static NTSTATUS AdmissionMemoryRuntimeLocalView(ADMISSION_CONTEXT *a,ADMISSION_SCANOUT_MEMORY_VIEW *v) {(void)a;memset(v,0,sizeof(*v));v->GuestIpaAddress=local_ipa;v->Bytes=vidmm_local_bytes;v->CpuAddress=local_cpu;return replay_local_view_status;}
 #ifdef G3_REPLAY_FULL_LOCAL
@@ -392,7 +392,7 @@ static APPLE_AGX_MEMORY_RESULT AppleAgxMemoryAllocateAligned(APPLE_AGX_MEMORY_IO
   (void)io;assert(n==0x4000 && align==0x4000);
   static ADMISSION_PHYSICAL_ALLOCATION alloc[512];static REPLAY_ADL adl[512];static UINT count;
   assert(count<512);
-  ULONGLONG offset=vidmm_local_bytes+(16ULL<<20)+(ULONGLONG)count*0x4000ULL;
+  ULONGLONG offset=vidmm_local_bytes+(32ULL<<20)+(ULONGLONG)count*0x4000ULL;
   adl[count].Flags.Contiguous=1;
   alloc[count].GuestIpaBase=local_ipa+offset;alloc[count].Size=0x4000;alloc[count].Adl=&adl[count];
   o->AllocationHandle=&alloc[count];o->CpuAddress=o->AllocationCpuBase=local_cpu+offset;

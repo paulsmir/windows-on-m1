@@ -12,6 +12,11 @@ int main(void) {
   assert(memcmp(&p,&before,sizeof(p))==0);
   assert(AppleAgxG3PrivateAllocate(&p, 2, 8u<<20, &b));
   assert(b.Offset==8u<<20 && b.Generation!=a.Generation);
+  /* Fill the remaining pool with further full quotas. */
+  APPLE_AGX_G3_PRIVATE_EXTENT fill[APPLE_AGX_G3_PRIVATE_UNITS/128u];
+  unsigned fills=0;
+  for(unsigned owner=10;owner<8u+APPLE_AGX_G3_PRIVATE_UNITS/128u;++owner)
+    assert(AppleAgxG3PrivateAllocate(&p, owner, 8u<<20, &fill[fills++]));
   /* A caller-supplied extent may not walk beyond the final pool block. */
   c=b; c.Bytes+=APPLE_AGX_G3_PRIVATE_UNIT;
   before=p; assert(!AppleAgxG3PrivateFree(&p, 2, &c));
@@ -27,6 +32,7 @@ int main(void) {
   assert(memcmp(&p,&before,sizeof(p))==0);
   assert(AppleAgxG3PrivateFree(&p, 3, &c));
   assert(AppleAgxG3PrivateFree(&p, 2, &b));
+  for(unsigned i=0;i<fills;++i) assert(AppleAgxG3PrivateFree(&p, 10+i, &fill[i]));
   for(unsigned n=1;n<0x30000;n+=113) {
     assert(AppleAgxG3PrivateAllocate(&p, 4, n, &c));
     assert(c.Bytes>=n && c.Bytes-n<0x10000 && !(c.Bytes&0xffff));

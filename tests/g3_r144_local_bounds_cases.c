@@ -6,10 +6,10 @@ static void r144_local_bounds_cases(void) {
   DXGKARG_CREATEPROCESS create={0}; DXGKARG_BUILDPAGINGBUFFER args={0};
   DXGK_PTE zero={0}, ptes[16]={0}, parent={0};
   ADMISSION_SCANOUT_MEMORY_VIEW scanout={0};
-  const ULONGLONG leaf=0x3e7d4000ULL, middle=0x18000000ULL, root=0x08000000ULL;
-  const ULONGLONG payload=0x3e7f0000ULL;
+  const ULONGLONG leaf=0x3d7d4000ULL, middle=0x18000000ULL, root=0x08000000ULL;
+  const ULONGLONG payload=0x3d7f0000ULL;
   local_ipa=0x8e0000000ULL; local_bytes=0x40000000ULL;
-  vidmm_local_bytes=0x3e800000ULL;
+  vidmm_local_bytes=0x3d800000ULL;
   assert(posix_memalign((void **)&local_cpu,0x4000,(size_t)local_bytes)==0);
   memset(local_cpu,0,(size_t)local_bytes);
   ReplayBrokerInit(&b); InitializeListHead(&state.Processes);
@@ -45,18 +45,18 @@ static void r144_local_bounds_cases(void) {
     assert(last_paging_failure.TableAddress==leaf && !last_paging_failure.ChildIpa);
   }
   expect_ok("EXP856 full-local UpdatePageTable",status);
-  assert(p->TableShadows && p->TableShadows->OriginalIpa==0x91e7d4000ULL);
+  assert(p->TableShadows && p->TableShadows->OriginalIpa==0x91d7d4000ULL);
 
   /* Neighbors and the final native table: no trace-address allowlist. */
   const ULONGLONG offsets[]={0x03800000ULL,0x04000000ULL,0x20000000ULL,
-                            0x3e7d0000ULL,0x3e7d8000ULL,0x3e7fc000ULL};
+                            0x3d7d0000ULL,0x3d7d8000ULL,0x3d7fc000ULL};
   for (UINT i=0;i<sizeof(offsets)/sizeof(offsets[0]);++i) {
     args.UpdatePageTable.PageTableAddress.GpuPhysical.SegmentOffset=offsets[i];
     expect_ok("R144 high GPU table",AdmissionGpuvaG3BuildPagingBuffer(&a,&args));
     expect_ok("R144 high CPU table",sys_update(&a,p,local_cpu+offsets[i],0,0,16,&zero,0,1));
   }
   /* Private/backend and out-of-reserve addresses must never reach broker I/O. */
-  const ULONGLONG invalid[]={0x3e7ff000ULL,0x3e800000ULL,0x3f800000ULL,
+  const ULONGLONG invalid[]={0x3d7ff000ULL,0x3d800000ULL,0x3f800000ULL,
                             0x40000000ULL,0xffffffffffffc000ULL};
   for (UINT i=0;i<sizeof(invalid)/sizeof(invalid[0]);++i) {
     UINT commands=b.commands;
@@ -81,17 +81,17 @@ static void r144_local_bounds_cases(void) {
   expect_ok("R144 root shadow",AdmissionGpuvaG3BrokerTable(p,local_ipa+root,FALSE,&broker_root));
   assert(AppleAgxGpuvaG3GraphBindRoot(&p->Graph,broker_root));
   assert(AppleAgxGpuvaG3GraphTranslateVa(&p->Graph,0x1000,&mapped));
-  assert(mapped==0x91e7f1000ULL);
+  assert(mapped==0x91d7f1000ULL);
   if (ADMISSION_GPUVA_G1B_PAGE_PROFILE==64) {
     expect_ok("R144 high64K leaf",sys_update(&a,p,local_cpu+leaf,0,0,1,ptes,1,0));
     assert(AppleAgxGpuvaG3GraphTranslateVa(&p->Graph,0xf000,&mapped));
-    assert(mapped==0x91e7ff000ULL);
+    assert(mapped==0x91d7ff000ULL);
   }
   /* Local payload at the segment end is refused without losing old mappings. */
-  ptes[0].PageAddress=0x3e800000ULL>>12;
+  ptes[0].PageAddress=0x3d800000ULL>>12;
   assert(!NT_SUCCESS(sys_update(&a,p,local_cpu+leaf,0,0,1,ptes,0,0)));
   assert(AppleAgxGpuvaG3GraphTranslateVa(&p->Graph,0x1000,&mapped));
-  assert(mapped==0x91e7f1000ULL);
+  assert(mapped==0x91d7f1000ULL);
 
   DXGKARG_BUILDPAGINGBUFFER flush={0};
   flush.Operation=DXGK_OPERATION_FLUSH_TLB;
@@ -117,9 +117,9 @@ static void r144_local_bounds_cases(void) {
   record.DestinationIpa+=0x1000;
   expect_ok("R144 high paging copy",AdmissionG3ExecuteVirtualPaging(&a,&record));
   assert(memcmp(local_cpu+payload,local_cpu+payload+0x1000,0x1000)==0);
-  record.DestinationIpa=local_ipa+0x3e800000ULL;
+  record.DestinationIpa=local_ipa+0x3d800000ULL;
   assert(AdmissionG3ExecuteVirtualPaging(&a,&record)==STATUS_INVALID_ADDRESS);
-  assert(*(UINT *)(local_cpu+0x3e800000ULL)==0);
+  assert(*(UINT *)(local_cpu+0x3d800000ULL)==0);
 
   expect_ok("R144 cleanup",AdmissionDdiDestroyProcess(&a,p));
   assert(!state.Registry.Frames);
