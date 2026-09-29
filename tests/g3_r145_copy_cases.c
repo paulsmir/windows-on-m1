@@ -192,7 +192,14 @@ static void r145_copy_cases(void) {
   expect_ok("R145 readback",AdmissionDdiEscape(&a,&escape));
   for(UINT i=0;i<q->TransferBytes;++i) assert(q->Data[i]==(unsigned char)(i*37+9));
   q->Operation=APPLE_AGX_G3_COPY_UPLOAD;memset(q->Data,0xab,sizeof(q->Data));
-  ++q->MappingGeneration;assert(!NT_SUCCESS(AdmissionDdiEscape(&a,&escape)));--q->MappingGeneration;
+  /* R159 (EXP871/872): an unrelated mapping update advances the process
+   * mapping generation between QUERY and UPLOAD; the per-page validation
+   * under the lock (53, 56-61) still proves this range, so the copy proceeds. */
+  ++p->Graph.MappingGeneration;
+  for(UINT i=0;i<q->TransferBytes;++i) q->Data[i]=(unsigned char)(i*37+9);
+  expect_ok("R159 upload after unrelated mapping change",AdmissionDdiEscape(&a,&escape));
+  assert(!memcmp(local_cpu+0x100000+q->Offset,q->Data,q->TransferBytes));
+  --p->Graph.MappingGeneration;memset(q->Data,0xab,sizeof(q->Data));
   ++q->ProcessGeneration;assert(!NT_SUCCESS(AdmissionDdiEscape(&a,&escape)));--q->ProcessGeneration;
   p->Graph.JobInFlight=1;assert(!NT_SUCCESS(AdmissionDdiEscape(&a,&escape)));p->Graph.JobInFlight=0;
   q->Allocation=0x81234072u;assert(!NT_SUCCESS(AdmissionDdiEscape(&a,&escape)));q->Allocation=0x81234071u;
@@ -223,7 +230,11 @@ static void r145_copy_cases(void) {
   memcpy(local_cpu+0x200000,local_cpu+0x100000,0x10000);
   for(UINT i=0;i<16;++i){ptes[i].Flags=0x41;ptes[i].PageAddress=0x200+i;}
   expect_ok("R145 re-residency",AdmissionGpuvaG3BuildPagingBuffer(&a,&x));
-  assert(!NT_SUCCESS(AdmissionDdiEscape(&a,&escape)));
+  /* R159: the range is re-resolved under the lock, so a transfer after
+   * migration targets the allocation's current local backing. */
+  for(UINT i=0;i<q->TransferBytes;++i) q->Data[i]=(unsigned char)(i*37+9);
+  expect_ok("R159 transfer after re-residency",AdmissionDdiEscape(&a,&escape));
+  assert(!memcmp(local_cpu+0x200000+q->Offset,q->Data,q->TransferBytes));
   q->Operation=APPLE_AGX_G3_COPY_QUERY;q->Offset=0;q->TransferBytes=0;
   q->MappingGeneration=q->ProcessGeneration=0;
   expect_ok("R145 new generation",AdmissionDdiEscape(&a,&escape));

@@ -21,7 +21,8 @@
   expect_ok("R147 moved root QUERY",AdmissionDdiEscape(&a,&escape));
   q->Operation=APPLE_AGX_G3_COPY_UPLOAD;q->TransferBytes=1;
   q->MappingGeneration=generation;
-  assert(AdmissionDdiEscape(&a,&escape)==STATUS_INVALID_PARAMETER);
+  /* R159: the range is re-resolved through the current (moved) root. */
+  expect_ok("R159 upload after root move",AdmissionDdiEscape(&a,&escape));
   q->Operation=APPLE_AGX_G3_COPY_QUERY;q->TransferBytes=0;
   q->MappingGeneration=q->ProcessGeneration=0;
   /* Eviction of the old root must not select it again. */

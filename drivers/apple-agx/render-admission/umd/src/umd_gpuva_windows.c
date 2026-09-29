@@ -417,8 +417,17 @@ static int private_escape(void *context, APPLE_AGX_G3_PRIVATE_REQUEST *payload) 
   request.Flags.HardwareAccess=1;
   request.hContext=device->KernelContext;
   request.pPrivateDriverData=payload;request.PrivateDriverDataSize=sizeof(*payload);
-  return SUCCEEDED(device->KernelCallbacks->pfnEscapeCb(
-      device->Adapter->RuntimeAdapter.handle,&request));
+  UINT operation=payload->Operation,width=payload->Width,height=payload->Height,
+      utile=(payload->UtileWidth<<8)|payload->UtileHeight,layers=payload->Layers,
+      samples=payload->Samples;
+  HRESULT hr=device->KernelCallbacks->pfnEscapeCb(
+      device->Adapter->RuntimeAdapter.handle,&request);
+  if(FAILED(hr)) {
+    /* EXP873 diagnostic: which private scene request the KMD refused. */
+    UINT values[7]={operation,(UINT)hr,width,height,utile,layers,samples};
+    AdmissionUmdDiagnostic("reject-private-escape",hr,values,ARRAYSIZE(values));
+  }
+  return SUCCEEDED(hr);
 }
 
 #ifdef __cplusplus
