@@ -1728,7 +1728,20 @@ UnsupportedDxgi''')
             raise SystemExit('Missing DXGI trace return: ' + name)
         entry = '   AgxD3d10WindowsDiagnostic("' + name + '-entry", S_OK, NULL, 0);\n'
         if name == '_Present':
-            entry += '   AgxD3d10WindowsPresentMeasure(AdmissionUmdMeasureNativePresentEntry,S_OK,NULL,0u);\n'
+            entry += '''   UINT presentMeasure[10] = {
+      pPresentData ? pPresentData->Flags.Value : ~0u,
+      pPresentData ? (UINT)pPresentData->FlipInterval : ~0u,
+      pPresentData ? pPresentData->SrcSubResourceIndex : ~0u,
+      pPresentData && pPresentData->hDstResource != 0,
+      pPresentData ? (UINT)(UINT_PTR)pPresentData->hSurfaceToPresent : 0u,
+      pPresentData ? (UINT)((UINT64)(UINT_PTR)pPresentData->hSurfaceToPresent>>32) : 0u,
+      pPresentData ? (UINT)(UINT_PTR)pPresentData->hDevice : 0u,
+      pPresentData ? (UINT)((UINT64)(UINT_PTR)pPresentData->hDevice>>32) : 0u,
+      pPresentData ? (UINT)(UINT_PTR)pPresentData->pDXGIContext : 0u,
+      pPresentData ? (UINT)((UINT64)(UINT_PTR)pPresentData->pDXGIContext>>32) : 0u};
+   AgxD3d10WindowsPresentMeasure(AdmissionUmdMeasureNativePresentEntry,
+      pPresentData?S_OK:E_INVALIDARG,presentMeasure,10u);
+'''
         if name == '_Blt':
             entry += '''   UINT values[11] = {
       Blt ? Blt->DstSubresource : ~0u, Blt ? Blt->SrcSubresource : ~0u,

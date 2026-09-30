@@ -99,7 +99,8 @@ VOID AdmissionUmdPresentMeasure(UINT Kind, HRESULT Status,
     "measure-native-submit-entry", "measure-native-submit-return",
     "measure-present-callback-enter", "measure-present-callback-return",
     "measure-legacy-present-entry", "measure-legacy-present1-entry",
-    "measure-native-context-flush", "measure-native-flush-status"
+    "measure-native-context-flush", "measure-native-flush-status",
+    "measure-present-guard"
   };
   UINT receipt[16];
   ULONG seen;

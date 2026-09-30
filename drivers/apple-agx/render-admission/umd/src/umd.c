@@ -652,6 +652,41 @@ HRESULT AdmissionUmdSubmitPresent(ADMISSION_UMD_DEVICE *Device,
       Device->DxgiCallbacks == NULL ||
       Device->DxgiCallbacks->pfnPresentCb == NULL ||
       Device->KernelContext == NULL) {
+    const ADMISSION_UMD_RESOURCE *resource=Device?Source:NULL;
+    const ADMISSION_UMD_DIRECT_FLIP_RESOURCE *flip=
+        resource?&resource->DirectFlip:NULL;
+    const ADMISSION_ALLOCATION_DESCRIPTION *allocation=
+        flip?&flip->Allocation:NULL;
+    UINT mask=(Device!=NULL) |
+        ((UINT)(resource!=NULL)<<1) |
+        ((UINT)(resource && resource->Magic==ADMISSION_UMD_RESOURCE_MAGIC)<<2) |
+        ((UINT)(resource && resource->KernelAllocation!=0u)<<3) |
+        ((UINT)(flip && flip->Magic==ADMISSION_UMD_DIRECT_FLIP_RESOURCE_MAGIC)<<4) |
+        ((UINT)(flip && flip->Version==ADMISSION_UMD_DIRECT_FLIP_RESOURCE_VERSION)<<5) |
+        ((UINT)(flip && flip->SegmentId==2u)<<6) |
+        ((UINT)(flip && flip->Linear==1u)<<7) |
+        ((UINT)(flip && flip->Reserved==0u)<<8) |
+        ((UINT)(allocation && AdmissionAllocationDescriptionValid(allocation))<<9) |
+        ((UINT)(allocation && allocation->Width==2560u && allocation->Height==1600u)<<10) |
+        ((UINT)(allocation && allocation->Pitch==10240u &&
+                allocation->BytesPerPixel==4u && allocation->Size==0xfa0000ULL)<<11) |
+        ((UINT)(allocation && allocation->CpuVisible==0u)<<12) |
+        ((UINT)(allocation &&
+            ((allocation->Format==(UINT)D3DDDIFMT_A8R8G8B8 && flip->Displayable==1u) ||
+             (allocation->Format==(UINT)D3DDDIFMT_A8B8G8R8 && flip->Displayable==0u)))<<13) |
+        ((UINT)(Device && Device->DxgiCallbacks &&
+                Device->DxgiCallbacks->pfnPresentCb)<<14) |
+        ((UINT)(Device && Device->KernelContext)<<15);
+    UINT guard[14]={mask,resource?(UINT)resource->KernelAllocation:0u,
+        flip?flip->Magic:0u,flip?flip->Version:0u,
+        flip?flip->SegmentId:0u,flip?flip->Linear:0u,
+        flip?flip->Displayable:0u,allocation?allocation->Format:0u,
+        allocation?allocation->Width:0u,allocation?allocation->Height:0u,
+        allocation?allocation->Pitch:0u,allocation?(UINT)allocation->Size:0u,
+        (UINT)(ULONG_PTR)DxgiContext,
+        (UINT)((ULONGLONG)(ULONG_PTR)DxgiContext>>32)};
+    AdmissionUmdPresentMeasure(AdmissionUmdMeasurePresentGuard,E_INVALIDARG,
+                               guard,ARRAYSIZE(guard));
     AdmissionUmdPresentMeasure(AdmissionUmdMeasurePresentCallbackReturn,E_INVALIDARG,NULL,0u);
     return E_INVALIDARG;
   }

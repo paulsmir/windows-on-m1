@@ -214,6 +214,7 @@ typedef enum ADMISSION_UMD_PRESENT_MEASURE_KIND {
   AdmissionUmdMeasureLegacyPresent1Entry,
   AdmissionUmdMeasureNativeContextFlush,
   AdmissionUmdMeasureNativeFlushStatus,
+  AdmissionUmdMeasurePresentGuard,
   AdmissionUmdMeasureCount
 } ADMISSION_UMD_PRESENT_MEASURE_KIND;
 #endif
