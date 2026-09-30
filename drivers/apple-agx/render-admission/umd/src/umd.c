@@ -199,8 +199,7 @@ static BOOLEAN AdmissionUmdResourceIsPresentable(
       r->Version == ADMISSION_UMD_DIRECT_FLIP_RESOURCE_VERSION &&
       r->SegmentId == 2u && r->Linear == 1u && r->Reserved == 0u &&
       AdmissionAllocationDescriptionValid(a) &&
-      a->Width == 2560u && a->Height == 1600u && a->Pitch == 10240u &&
-      a->BytesPerPixel == 4u && a->Size == 0xfa0000ULL && a->CpuVisible == 0u &&
+      a->BytesPerPixel == 4u && a->CpuVisible == 0u &&
       ((a->Format == (UINT)D3DDDIFMT_A8R8G8B8 && r->Displayable == 1u) ||
        (a->Format == (UINT)D3DDDIFMT_A8B8G8R8 && r->Displayable == 0u));
 }
