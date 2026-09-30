@@ -38,13 +38,16 @@ VOID AgxD3d10WindowsPresentMeasure(UINT Kind,HRESULT Status,
 
 extern "C" void (*AgxWin32BatchRefusalHook)(unsigned kind, unsigned site,
                                             unsigned detail0, unsigned detail1);
-extern "C" void (*AgxWin32FirstFaultHook)(unsigned site,uintptr_t context);
+extern "C" void (*AgxWin32FirstFaultHook)(unsigned site,uintptr_t context,
+                                          unsigned flags,unsigned draws);
 
-static void AgxD3d10FirstFault(unsigned site,uintptr_t context) {
+static void AgxD3d10FirstFault(unsigned site,uintptr_t context,
+                              unsigned flags,unsigned draws) {
   static volatile LONG records;
   LONG count=InterlockedIncrement(&records);
   if(count>128) return;
-  UINT values[4]={site,(UINT)context,(UINT)((uint64_t)context>>32),(UINT)count};
+  UINT values[6]={site,(UINT)context,(UINT)((uint64_t)context>>32),
+      flags,draws,(UINT)count};
   AdmissionUmdDiagnostic("measure-native-first-fault",S_OK,values,ARRAYSIZE(values));
 }
 

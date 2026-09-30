@@ -3868,6 +3868,15 @@ agx_shader_initialize("""
                         + declaration, 1)
                 content = content.replace(marker,
                     f'AgxWin32AsahiMarkContextFault(ctx, ({kind}u << 16) | __LINE__);')
+                if kind == 2:
+                    guard = ('if (ctx->any_faults || !batch->vdm.bo || '
+                             '!batch->initialized || !batch->draws) {\n'
+                             '      AgxWin32AsahiMarkContextFault(ctx, '
+                             '(2u << 16) | __LINE__);')
+                    if content.count(guard) != 1:
+                        raise SystemExit('Missing exact native flush guard')
+                    content = content.replace(guard, guard.replace(
+                        'MarkContextFault(ctx,', 'MarkBatchFault(ctx, batch,'), 1)
                 target.write_text(content)
                 overlays.setdefault(path, {})['after_first_fault_receipt'] = (
                     hashlib.sha256(target.read_bytes()).hexdigest())

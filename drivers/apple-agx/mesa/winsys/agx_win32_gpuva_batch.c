@@ -71,13 +71,27 @@ void AgxWin32AsahiBatchTraceDraw(struct agx_context *ctx,
  * installed by the D3D10 Windows layer and never changes the result. */
 void (*AgxWin32BatchRefusalHook)(unsigned kind, unsigned site,
                                  unsigned detail0, unsigned detail1);
-void (*AgxWin32FirstFaultHook)(unsigned site, uintptr_t context);
-void AgxWin32AsahiMarkContextFault(struct agx_context *ctx,unsigned site) {
+void (*AgxWin32FirstFaultHook)(unsigned site, uintptr_t context,
+                              unsigned flags,unsigned draws);
+void AgxWin32AsahiMarkBatchFault(struct agx_context *ctx,
+                                struct agx_batch *batch,unsigned site) {
   if(!ctx) return;
   int first=!ctx->any_faults;
+  unsigned flags=(unsigned)ctx->any_faults |
+      ((unsigned)(batch!=NULL)<<1) |
+      ((unsigned)(batch && batch->vdm.bo!=NULL)<<2) |
+      ((unsigned)(batch && batch->initialized)<<3) |
+      ((unsigned)(batch && batch->draws!=0)<<4) |
+      ((unsigned)(batch && batch->cdm.bo!=NULL)<<5) |
+      ((unsigned)(batch && batch->clear)<<6) |
+      ((unsigned)(batch && ctx->batch==batch)<<7);
+  unsigned draws=batch?batch->draws:0u;
   ctx->any_faults=true;
   if(first && AgxWin32FirstFaultHook)
-    AgxWin32FirstFaultHook(site,(uintptr_t)&ctx->base);
+    AgxWin32FirstFaultHook(site,(uintptr_t)&ctx->base,flags,draws);
+}
+void AgxWin32AsahiMarkContextFault(struct agx_context *ctx,unsigned site) {
+  AgxWin32AsahiMarkBatchFault(ctx,ctx?ctx->batch:NULL,site);
 }
 static int batch_refuse(unsigned kind, unsigned site,
                         unsigned detail0, unsigned detail1) {
