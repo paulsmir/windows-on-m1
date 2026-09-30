@@ -1775,7 +1775,7 @@ static int AdmissionG3PresentWrite(void *Opaque, unsigned long long GuestIpa,
   return 1;
 }
 
-NTSTATUS AdmissionGpuvaG3ExecutePresentVirtual(
+_Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3ExecutePresentVirtual(
     ADMISSION_CONTEXT *Adapter, ADMISSION_RENDER_CONTEXT *Context,
     const VOID *Command, UINT Bytes, ULONGLONG *BytesCopied) {
   ADMISSION_PRESENT_BLT_COMMAND command;

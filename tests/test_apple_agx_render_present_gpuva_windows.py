@@ -22,7 +22,7 @@ class GpuvaPresentWindowsTests(unittest.TestCase):
             "AdmissionGpuvaG3ExecutePresentVirtual",
         ):
             match = re.search(
-                rf"(?:static int|NTSTATUS) {name}\(.*?^}}", source, re.S | re.M
+                rf"(?:static int|_Use_decl_annotations_ NTSTATUS) {name}\(.*?^}}", source, re.S | re.M
             )
             self.assertIsNotNone(match, name)
             extracted.append(match.group(0))
@@ -38,6 +38,7 @@ class GpuvaPresentWindowsTests(unittest.TestCase):
 #include <stdlib.h>
 #include <string.h>
 #include "render_present.h"
+#define _Use_decl_annotations_
 #define FALSE 0
 #define TRUE 1
 #define PASSIVE_LEVEL 0
