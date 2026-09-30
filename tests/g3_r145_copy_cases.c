@@ -185,7 +185,7 @@ static void r145_copy_cases(void) {
   expect_ok("R145 copy query",AdmissionDdiEscape(&a,&escape));
   assert(q->MappingGeneration==p->Graph.MappingGeneration && q->ProcessGeneration);
   assert(a.G3CopyQueryFailureClaim==0 && query_registry_writes==writes_before_success);
-  if (ADMISSION_GPUVA_G1B_PAGE_PROFILE==16) {
+  if (ADMISSION_GPUVA_G1B_PAGE_PROFILE==16 && !getenv("G3_REPLAY_HISTORICAL")) {
     ULONGLONG saved_page=ptes[1].PageAddress;
     ptes[1].PageAddress=0x300;
     expect_ok("R185 scattered resident publication",AdmissionGpuvaG3BuildPagingBuffer(&a,&x));

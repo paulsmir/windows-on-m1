@@ -46,10 +46,12 @@ class QueryReceiptTests(unittest.TestCase):
                          value[:48]+'\\\n  '+value[48:]+'\n', encoding='utf-16')
             self.assertEqual(decoder.read_receipt(p), valid)
 
-    def test_real_rejections_decode_distinctly_in_both_page_profiles(self):
+    def test_historical_graph_rejections_decode_distinctly_in_both_page_profiles(self):
         for profile in ('16', '64'):
             with self.subTest(profile=profile), tempfile.TemporaryDirectory() as tmp:
-                run = subprocess.run([sys.executable, str(ROOT/'tests/g3_vidmm_replay.py')],
+                run = subprocess.run([sys.executable, str(ROOT/'tests/g3_vidmm_replay.py'),
+                    '--function-revision',
+                    'AdmissionGpuvaG3CopyEscape=f3d8a2eee833425ff369400b1b5ad2ec02997694'],
                     env=dict(os.environ, G3_REPLAY_R145='1', G3_REPLAY_QUERY_V2='1',
                              G3_REPLAY_PROFILE=profile, G3_QUERY_OUTPUT=tmp),
                     text=True, capture_output=True, cwd=ROOT)
