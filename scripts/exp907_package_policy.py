@@ -140,4 +140,13 @@ if(Test-Path $root){throw 'snapshot cleanup residue'}
                  '"payload_sha256": "guest-payload.tar",',
                  '"payload_sha256": "guest-payload.tar",\n'
                  '    "launch_gate_sha256": "verify_guest_disk_launch.py",')
-    return ['staged-disk-policy.ps1', 'verify_guest_disk_launch.py']
+    for name in ('AppleAgxBltProbe.exe', 'query-frame.ps1', 'poll-frame.py'):
+        if not (base / name).is_file():
+            raise FileNotFoundError(name)
+    replace_once(monitor, "    (b/'periodic-copy.pid').write_text(str(periodic.pid)+'\\n')",
+                 "    (b/'periodic-copy.pid').write_text(str(periodic.pid)+'\\n')\n"
+                 "    with (b/'frame-poll-launch.log').open('a') as frame_log:\n"
+                 "     frame_poll=subprocess.Popen([sys.executable,str(b/'poll-frame.py'),first],stdin=subprocess.DEVNULL,stdout=frame_log,stderr=subprocess.STDOUT,start_new_session=True)\n"
+                 "    (b/'frame-poll.pid').write_text(str(frame_poll.pid)+'\\n')")
+    return ['staged-disk-policy.ps1', 'verify_guest_disk_launch.py',
+            'AppleAgxBltProbe.exe', 'query-frame.ps1', 'poll-frame.py']
