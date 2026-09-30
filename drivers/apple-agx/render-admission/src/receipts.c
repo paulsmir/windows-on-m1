@@ -26,8 +26,12 @@ typedef struct _ADMISSION_PRESENT_OPEN_FAILURE_RECEIPT {
   ULONG ContextFlags, Pid, Irql;
   ULONGLONG ContextToken, DeviceToken, AllocationListToken, DmaGpuVirtualAddress;
   ADMISSION_PRESENT_OPEN_ENDPOINT Source, Destination;
+  ULONG RawCopyStatus, RawBytes;
+  ULONG SourceMagicCopyStatus, SourceMagicBytes, SourceMagic;
+  ULONG DestinationMagicCopyStatus, DestinationMagicBytes, DestinationMagic;
+  UCHAR RawList[96];
 } ADMISSION_PRESENT_OPEN_FAILURE_RECEIPT;
-C_ASSERT(sizeof(ADMISSION_PRESENT_OPEN_FAILURE_RECEIPT) == 200);
+C_ASSERT(sizeof(ADMISSION_PRESENT_OPEN_FAILURE_RECEIPT) == 328);
 static volatile LONG AdmissionPresentOpenFailureClaimed;
 
 typedef struct _ADMISSION_PRESENT_RECEIPT {
@@ -2204,6 +2208,9 @@ _Use_decl_annotations_ void AdmissionRecordPresentOpenFailure(
     const ADMISSION_PRESENT_OPEN_ENDPOINT *Destination) {
   ADMISSION_PRESENT_OPEN_FAILURE_RECEIPT receipt;
   ADMISSION_CONTEXT *adapter;
+  MM_COPY_ADDRESS copySource;
+  SIZE_T copied;
+  ULONGLONG candidate;
   HANDLE key = NULL;
   OBJECT_ATTRIBUTES attributes;
   UNICODE_STRING servicePath;
@@ -2216,7 +2223,7 @@ _Use_decl_annotations_ void AdmissionRecordPresentOpenFailure(
   adapter = CONTAINING_RECORD(Device->Object.Adapter,
                              ADMISSION_CONTEXT, ObjectAdapter);
   RtlZeroMemory(&receipt, sizeof(receipt));
-  receipt.Version = 1u;
+  receipt.Version = 2u;
   receipt.Bytes = sizeof(receipt);
   receipt.Status = (ULONG)STATUS_INVALID_HANDLE;
   receipt.Flags = Present->Flags.Value;
@@ -2237,6 +2244,34 @@ _Use_decl_annotations_ void AdmissionRecordPresentOpenFailure(
         ((ADMISSION_RENDER_CONTEXT *)Context)->Object.Flags;
   receipt.Source = *Source;
   receipt.Destination = *Destination;
+  if (Present->pAllocationList != NULL) {
+    RtlZeroMemory(&copySource, sizeof(copySource));
+    copySource.VirtualAddress = Present->pAllocationList;
+    copied = 0u;
+    receipt.RawCopyStatus = (ULONG)MmCopyMemory(receipt.RawList, copySource,
+        sizeof(receipt.RawList), MM_COPY_MEMORY_VIRTUAL, &copied);
+    receipt.RawBytes = (ULONG)copied;
+    if (copied >= 72u) {
+      RtlCopyMemory(&candidate, receipt.RawList + 32u, sizeof(candidate));
+      if (candidate != 0ULL) {
+        copySource.VirtualAddress = (PVOID)(ULONG_PTR)candidate;
+        copied = 0u;
+        receipt.SourceMagicCopyStatus = (ULONG)MmCopyMemory(
+            &receipt.SourceMagic, copySource, sizeof(receipt.SourceMagic),
+            MM_COPY_MEMORY_VIRTUAL, &copied);
+        receipt.SourceMagicBytes = (ULONG)copied;
+      }
+      RtlCopyMemory(&candidate, receipt.RawList + 64u, sizeof(candidate));
+      if (candidate != 0ULL) {
+        copySource.VirtualAddress = (PVOID)(ULONG_PTR)candidate;
+        copied = 0u;
+        receipt.DestinationMagicCopyStatus = (ULONG)MmCopyMemory(
+            &receipt.DestinationMagic, copySource,
+            sizeof(receipt.DestinationMagic), MM_COPY_MEMORY_VIRTUAL, &copied);
+        receipt.DestinationMagicBytes = (ULONG)copied;
+      }
+    }
+  }
   if (adapter->PhysicalDeviceObject != NULL &&
       NT_SUCCESS(IoOpenDeviceRegistryKey(adapter->PhysicalDeviceObject,
           PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
