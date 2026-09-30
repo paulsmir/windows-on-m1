@@ -165,7 +165,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
     adapter = CONTAINING_RECORD(device->Object.Adapter,
                                 ADMISSION_CONTEXT, ObjectAdapter);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
-  AdmissionDwmFrameRecordPresent(adapter, Context, STATUS_PENDING, TRUE);
+  if (adapter != NULL)
+    AdmissionDwmFrameRecordPresent(adapter, Context, STATUS_PENDING, TRUE);
 #endif
 #if defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
   if (adapter != NULL) {

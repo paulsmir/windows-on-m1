@@ -628,7 +628,7 @@ static const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *AdmissionG3CopyPte(
 }
 
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
-NTSTATUS AdmissionGpuvaG3FrameArmEscape(ADMISSION_CONTEXT *adapter,
+_Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3FrameArmEscape(ADMISSION_CONTEXT *adapter,
     const DXGKARG_ESCAPE *args) {
   ADMISSION_DWM_FRAME_ARM request;
   ADMISSION_G3_STATE *state;
