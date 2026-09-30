@@ -2386,7 +2386,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommandVirtual(
   if (Args != NULL)
     AdmissionDwmFrameRecordSubmit((ADMISSION_CONTEXT *)Adapter,
         Args->hContext, Args->DmaBufferVirtualAddress,
-        Args->SubmissionFenceId, 0u, status, Args->Flags.Present);
+        Args->SubmissionFenceId, 0u, status,
+        Args->Flags.Present ? TRUE : FALSE);
 #endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   ADMISSION_DWM_DDI_EVENT event;
