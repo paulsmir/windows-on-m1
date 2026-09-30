@@ -45,6 +45,7 @@ typedef unsigned long long ULONGLONG, UINT64;
 typedef long long LONGLONG;
 typedef uintptr_t ULONG_PTR;
 typedef size_t SIZE_T;
+#include "../drivers/apple-agx/render-admission/include/render_qualification.h"
 typedef unsigned char *PUCHAR;
 typedef const void VOID_CONST;
 #define TRUE 1
@@ -305,6 +306,10 @@ struct _ADMISSION_CONTEXT { REPLAY_PACKET RenderPacket; BOOLEAN InterfaceValid; 
   ADMISSION_BACKEND_IMAGE BackendImage;
   struct { REPLAY_APERTURE Aperture; } Memory;
 };
+static NTSTATUS AdmissionDwmDdiProbeQueryWindows(ADMISSION_CONTEXT *context,
+    ADMISSION_DWM_DDI_PROBE *query) {
+  (void)context;(void)query;return STATUS_NOT_SUPPORTED;
+}
 #define PLUGPLAY_REGKEY_DEVICE 1u
 #define KEY_SET_VALUE 2u
 static UINT r145_references;
