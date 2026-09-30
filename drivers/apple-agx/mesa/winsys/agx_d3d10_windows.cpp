@@ -707,12 +707,28 @@ HRESULT AgxD3d10WindowsPresentationSubmit(
     AdmissionUmdDiagnostic("g4-present-exit",E_INVALIDARG,NULL,0u);
     return E_INVALIDARG;
   }
-  if(!AgxWin32AsahiContextFlushForPresent(Device->Context)) {
+  APPLE_AGX_U32 before[16],after[16],bindings[16];
+  AgxWin32AsahiContextDiagnostic(Device->Context,before,bindings);
+  int flushed=AgxWin32AsahiContextFlushForPresent(Device->Context);
+  AgxWin32AsahiContextDiagnostic(Device->Context,after,bindings);
+  UINT contextState[10]={before[0],before[1],before[2],before[3],
+      after[0],after[1],after[2],after[3],
+      (UINT)Device->Runtime.LastScreenError,(UINT)Device->Runtime.DrawTerminal};
+  AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeContextFlush,
+      flushed?S_OK:E_FAIL,contextState,ARRAYSIZE(contextState));
+  if(!flushed) {
     AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeSubmitReturn,E_FAIL,NULL,0u);
     AdmissionUmdDiagnostic("g4-present-exit",E_FAIL,NULL,0u);
     return E_FAIL;
   }
   HRESULT result=AgxD3d10WindowsFlushStatus(Device);
+  ADMISSION_UMD_ASAHI_BATCH *activeBatch=
+      (ADMISSION_UMD_ASAHI_BATCH *)Device->Runtime.NativeBatchTransaction;
+  UINT flushState[6]={after[0],after[1],after[2],after[3],
+      activeBatch?(UINT)activeBatch->Submission.RenderStatus:0u,
+      activeBatch?(UINT)activeBatch->Submission.PostStatus:0u};
+  AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeFlushStatus,
+      result,flushState,ARRAYSIZE(flushState));
   if(SUCCEEDED(result))
     result=AdmissionUmdSubmitPresent(&Device->Runtime,&Resource->Resource,DxgiContext);
   AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeSubmitReturn,result,NULL,0u);
