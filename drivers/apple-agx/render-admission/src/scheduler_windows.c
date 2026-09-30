@@ -271,6 +271,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryCurrentFence(
   return STATUS_SUCCESS;
 }
 
+static VOID AdmissionCpuQueueReleaseContextsLocked(ADMISSION_CONTEXT *Context) {
+  ULONG index;
+  for (index = 0u; index < Context->CpuQueueCount; ++index) {
+    ADMISSION_CPU_PACKET *packet = &Context->CpuQueue[
+        (Context->CpuQueueHead + index) % APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
+    if (packet->PresentContext != NULL &&
+        packet->PresentContext->Object.FenceOutstanding == packet->Fence)
+      packet->PresentContext->Object.FenceOutstanding = 0u;
+    packet->PresentContext = NULL;
+  }
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
     HANDLE Adapter, const DXGKARG_PREEMPTCOMMAND *PreemptCommand) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
@@ -310,6 +322,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
     KeReleaseSpinLockFromDpcLevel(&context->PagingLock);
     return STATUS_SUCCESS;
   }
+  AdmissionCpuQueueReleaseContextsLocked(context);
   context->CpuQueueHead = context->CpuQueueCount = 0u;
   if (activeFence == 0u && queuedFence != 0u && context->DispatchedFence == queuedFence)
     context->DispatchedFence = 0u;
@@ -421,6 +434,7 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
       return STATUS_DEVICE_HARDWARE_ERROR;
     KeAcquireSpinLock(&context->PagingLock, &oldIrql);
     KeAcquireSpinLockAtDpcLevel(&context->SchedulerLock);
+    AdmissionCpuQueueReleaseContextsLocked(context);
     context->CpuQueueHead = context->CpuQueueCount = context->DispatchedFence = 0u;
     InterlockedExchange(&context->RenderDpcFence, 0);
     InterlockedExchange(&context->SchedulerFaulted, 0);
@@ -454,6 +468,7 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
               ? TRUE
               : FALSE;
   if (reset) {
+    AdmissionCpuQueueReleaseContextsLocked(context);
     context->CpuQueueHead = context->CpuQueueCount = context->DispatchedFence = 0u;
     InterlockedExchange(&context->RenderDpcFence, 0);
     AdmissionPagingUpdateIdleLocked(context);

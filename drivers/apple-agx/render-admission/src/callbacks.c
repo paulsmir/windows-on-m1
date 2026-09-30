@@ -460,6 +460,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyContext(HANDLE Context) {
   adapter = CONTAINING_RECORD(context->Object.Device->Adapter,
                               ADMISSION_CONTEXT, ObjectAdapter);
   KeAcquireSpinLock(&adapter->SchedulerLock, &oldIrql);
+  if (context->Object.FenceOutstanding != 0u) {
+    KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);
+    return STATUS_DEVICE_BUSY;
+  }
   if (!AppleAgxSchedulerDestroyContext(
           &adapter->Scheduler, &context->SchedulerContext)) {
     KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);

@@ -1166,6 +1166,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeExecutePresent(
       !AdmissionPresentBltScratchBytes(&command, &scratchBytes))
     return STATUS_INVALID_PARAMETER;
   *BytesCopied = 0;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (command.Version == ADMISSION_PRESENT_BLT_GPUVA_VERSION)
+    return AdmissionGpuvaG3ExecutePresentVirtual(Context,
+        Context->PresentCopyContext, Command, Bytes, BytesCopied);
+#endif
   RtlZeroMemory(&io, sizeof(io));
   io.Adapter = Context;
   io.Status = STATUS_SUCCESS;

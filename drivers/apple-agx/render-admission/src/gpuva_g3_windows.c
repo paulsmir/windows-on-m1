@@ -1726,6 +1726,106 @@ static int AdmissionG4GraphAccess(void *opaque, unsigned long long va,
       graph, va, bytes, write != 0) ? 1 : 0;
 }
 
+typedef struct _ADMISSION_G3_PRESENT_COPY {
+  ADMISSION_G3_PROCESS *Process;
+  ADMISSION_SCANOUT_MEMORY_VIEW Local;
+  NTSTATUS Status;
+} ADMISSION_G3_PRESENT_COPY;
+
+static int AdmissionG3PresentTranslate(void *Opaque,
+    unsigned long long GpuVa, unsigned long long *GuestIpa) {
+  ADMISSION_G3_PRESENT_COPY *copy = Opaque;
+  return AppleAgxGpuvaG3GraphTranslateVa(&copy->Process->Graph,
+      GpuVa, GuestIpa) ? 1 : 0;
+}
+
+static int AdmissionG3PresentRead(void *Opaque, unsigned long long GuestIpa,
+    void *Bytes, unsigned int ByteCount) {
+  ADMISSION_G3_PRESENT_COPY *copy = Opaque;
+  MM_COPY_ADDRESS address;
+  SIZE_T copied = 0u;
+  if (GuestIpa >= copy->Local.GuestIpaAddress &&
+      GuestIpa - copy->Local.GuestIpaAddress <= copy->Local.Bytes &&
+      ByteCount <= copy->Local.Bytes -
+          (GuestIpa - copy->Local.GuestIpaAddress)) {
+    RtlCopyMemory(Bytes, (PUCHAR)copy->Local.CpuAddress +
+        (SIZE_T)(GuestIpa - copy->Local.GuestIpaAddress), ByteCount);
+    return 1;
+  }
+  address.PhysicalAddress.QuadPart = (LONGLONG)GuestIpa;
+  copy->Status = MmCopyMemory(Bytes, address, ByteCount,
+      MM_COPY_MEMORY_PHYSICAL, &copied);
+  if (NT_SUCCESS(copy->Status) && copied != ByteCount)
+    copy->Status = STATUS_PARTIAL_COPY;
+  return NT_SUCCESS(copy->Status) ? 1 : 0;
+}
+
+static int AdmissionG3PresentWrite(void *Opaque, unsigned long long GuestIpa,
+    const void *Bytes, unsigned int ByteCount, int Commit) {
+  ADMISSION_G3_PRESENT_COPY *copy = Opaque;
+  ULONGLONG offset;
+  if (GuestIpa < copy->Local.GuestIpaAddress)
+    return 0;
+  offset = GuestIpa - copy->Local.GuestIpaAddress;
+  if (offset > copy->Local.Bytes || ByteCount > copy->Local.Bytes - offset)
+    return 0;
+  if (Commit)
+    RtlCopyMemory((PUCHAR)copy->Local.CpuAddress + (SIZE_T)offset,
+        Bytes, ByteCount);
+  return 1;
+}
+
+NTSTATUS AdmissionGpuvaG3ExecutePresentVirtual(
+    ADMISSION_CONTEXT *Adapter, ADMISSION_RENDER_CONTEXT *Context,
+    const VOID *Command, UINT Bytes, ULONGLONG *BytesCopied) {
+  ADMISSION_PRESENT_BLT_COMMAND command;
+  ADMISSION_G3_PRESENT_COPY copy;
+  ADMISSION_G3_PROCESS *process;
+  UINT scratchBytes;
+  PVOID scratch;
+  int completed;
+  if (Adapter == NULL || Context == NULL || Command == NULL ||
+      BytesCopied == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      !AdmissionPresentBltValidate(Command, Bytes, 1, &command) ||
+      command.Version != ADMISSION_PRESENT_BLT_GPUVA_VERSION ||
+      command.ContextToken != (ULONGLONG)(ULONG_PTR)Context ||
+      !AdmissionPresentBltScratchBytes(&command, &scratchBytes) ||
+      Context->GpuvaG3Process == NULL || Context->GpuvaG3Poisoned)
+    return STATUS_INVALID_PARAMETER;
+  *BytesCopied = 0ULL;
+  process = (ADMISSION_G3_PROCESS *)Context->GpuvaG3Process;
+  if (process->State == NULL || process->State->Adapter != Adapter)
+    return STATUS_INVALID_HANDLE;
+  RtlZeroMemory(&copy, sizeof(copy));
+  copy.Process = process;
+  copy.Status = STATUS_SUCCESS;
+  copy.Status = AdmissionMemoryRuntimeLocalView(Adapter, &copy.Local);
+  if (!NT_SUCCESS(copy.Status))
+    return copy.Status;
+  scratch = ExAllocatePool2(POOL_FLAG_NON_PAGED, scratchBytes,
+      ADMISSION_POOL_TAG);
+  if (scratch == NULL)
+    return STATUS_INSUFFICIENT_RESOURCES;
+  ExAcquireFastMutex(&process->State->Lock);
+  completed = !process->Poisoned && !process->Graph.Uncertain &&
+      Context->GpuvaG3RootIpa != 0ULL &&
+      Context->GpuvaG3RootIpa == process->Graph.RootIpa &&
+      command.SourceDescription.Size <= MAXUINT &&
+      command.DestinationDescription.Size <= MAXUINT &&
+      AppleAgxGpuvaG3GraphContainsRangeAccess(&process->Graph,
+          command.SourceLocation, (UINT)command.SourceDescription.Size, FALSE) &&
+      AppleAgxGpuvaG3GraphContainsRangeAccess(&process->Graph,
+          command.DestinationLocation, (UINT)command.DestinationDescription.Size, TRUE) &&
+      AdmissionPresentBltExecuteGpuva(Command, Bytes,
+          AdmissionG3PresentTranslate, AdmissionG3PresentRead,
+          AdmissionG3PresentWrite, &copy, scratch, scratchBytes, BytesCopied);
+  KeMemoryBarrier();
+  ExReleaseFastMutex(&process->State->Lock);
+  ExFreePoolWithTag(scratch, ADMISSION_POOL_TAG);
+  return completed ? STATUS_SUCCESS :
+      NT_SUCCESS(copy.Status) ? STATUS_INVALID_ADDRESS : copy.Status;
+}
+
 static int AdmissionG4GraphAccessTyped(void *opaque, unsigned long long va,
     unsigned int bytes, int write, APPLE_AGX_G4_ACCESS_KIND kind,
     unsigned int ordinal) {
@@ -2062,6 +2162,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommandVirtual(
         AdmissionG4RejectContext, STATUS_INVALID_PARAMETER, 0u, FALSE);
   if ((context->Object.Flags & ADMISSION_CONTEXT_SYSTEM) != 0u)
     return AdmissionGpuvaG3SubmitVirtualPaging(adapter, context, Args);
+  if (Args->Flags.Present)
+    return AdmissionPresentSubmitVirtual(adapter, context, Args);
 #if defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
   InterlockedIncrement((volatile LONG *)&adapter->BltProbe.VirtualSubmitCalls);
 #endif

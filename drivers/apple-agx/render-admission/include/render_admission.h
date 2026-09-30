@@ -344,6 +344,7 @@ typedef struct _ADMISSION_QUEUE_FAULT_SNAPSHOT {
 #define ADMISSION_CPU_PACKET_PRESENT 2u
 typedef struct _ADMISSION_CPU_PACKET {
   ULONG Fence, Kind, Bytes;
+  struct _ADMISSION_RENDER_CONTEXT *PresentContext;
   union {
     ADMISSION_PAGING_RECORD Paging[ADMISSION_MAX_PAGING_RECORDS];
     UCHAR Present[ADMISSION_PRESENT_BLT_DMA_MAX];
@@ -425,6 +426,7 @@ typedef struct _ADMISSION_CONTEXT {
   ADMISSION_PAGING_RECORD PagingRecords[ADMISSION_MAX_PAGING_RECORDS];
   ULONG PagingRecordCount;
   ULONG PresentCopyBytes;
+  struct _ADMISSION_RENDER_CONTEXT *PresentCopyContext;
   ULONG CpuQueueHead, CpuQueueCount, DispatchedFence;
   ADMISSION_CPU_PACKET CpuQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
   UCHAR PresentCopyCommand[ADMISSION_PRESENT_BLT_DMA_MAX];
@@ -898,6 +900,11 @@ NTSTATUS AdmissionPresentSubmit(_In_ ADMISSION_CONTEXT *Context,
                                 _In_ const DXGKARG_SUBMITCOMMAND *Args);
 NTSTATUS AdmissionPresentSubmitTraced(_In_ ADMISSION_CONTEXT *Context,
     _In_ const DXGKARG_SUBMITCOMMAND *Args, BOOLEAN Trace);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+NTSTATUS AdmissionPresentSubmitVirtual(_In_ ADMISSION_CONTEXT *Adapter,
+    _In_ ADMISSION_RENDER_CONTEXT *Context,
+    _In_ const DXGKARG_SUBMITCOMMANDVIRTUAL *Args);
+#endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
 BOOLEAN AdmissionSubmitTraceBegin(_In_ ADMISSION_CONTEXT *Context,
     _In_ const DXGKARG_SUBMITCOMMAND *Args, ULONG PrivateStage,
@@ -1210,6 +1217,12 @@ BOOLEAN AdmissionPagingQuiescent(_In_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionMemoryRuntimeExecutePresent(_In_ ADMISSION_CONTEXT *Context,
     _In_reads_bytes_(Bytes) const VOID *Command, UINT Bytes,
     _Out_ ULONGLONG *BytesCopied);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+NTSTATUS AdmissionGpuvaG3ExecutePresentVirtual(_In_ ADMISSION_CONTEXT *Adapter,
+    _In_ ADMISSION_RENDER_CONTEXT *Context,
+    _In_reads_bytes_(Bytes) const VOID *Command, UINT Bytes,
+    _Out_ ULONGLONG *BytesCopied);
+#endif
 void AdmissionRecordDisplayDdi(_In_opt_ PDEVICE_OBJECT DeviceObject,
                                _In_ ULONG DdiId, _In_ ULONG Phase,
                                _In_ NTSTATUS Status);

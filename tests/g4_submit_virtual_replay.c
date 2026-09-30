@@ -22,7 +22,7 @@ typedef int KIRQL;
 #define _Use_decl_annotations_
 #define DISPATCH_LEVEL 2
 typedef void *HANDLE;
-typedef union { unsigned Value; struct { unsigned Other:7, Resubmission:1, Reserved:24; }; } REPLAY_FLAGS;
+typedef union { unsigned Value; struct { unsigned Other:1, Present:1, Other2:5, Resubmission:1, Reserved:24; }; } REPLAY_FLAGS;
 typedef REPLAY_FLAGS DXGK_SUBMITCOMMANDFLAGS;
 #define PASSIVE_LEVEL 0
 #define TRUE 1
@@ -180,6 +180,11 @@ typedef struct {
 } DXGKARG_SUBMITCOMMAND;
 #define ADMISSION_GDI_DMA_PRIVATE_SIZE 64u
 static NTSTATUS AdmissionGpuvaG3SubmitVirtualPaging(
+    ADMISSION_CONTEXT *a, ADMISSION_RENDER_CONTEXT *c,
+    const DXGKARG_SUBMITCOMMANDVIRTUAL *v) {
+  (void)a;(void)c;(void)v;return STATUS_INVALID_PARAMETER;
+}
+static NTSTATUS AdmissionPresentSubmitVirtual(
     ADMISSION_CONTEXT *a, ADMISSION_RENDER_CONTEXT *c,
     const DXGKARG_SUBMITCOMMANDVIRTUAL *v) {
   (void)a;(void)c;(void)v;return STATUS_INVALID_PARAMETER;

@@ -6,6 +6,7 @@
 
 #define ADMISSION_PRESENT_BLT_MAGIC 0x42504152u /* RAPB */
 #define ADMISSION_PRESENT_BLT_VERSION 1u
+#define ADMISSION_PRESENT_BLT_GPUVA_VERSION 2u
 #define ADMISSION_PRESENT_BLT_DMA_MAX 4096u
 
 typedef struct _ADMISSION_PRESENT_BLT_COMMAND {
@@ -26,6 +27,13 @@ typedef struct _ADMISSION_PRESENT_BLT_INPUT {
 
 typedef int (*ADMISSION_PRESENT_COPY_IO)(void *Context,
     unsigned long long Offset, void *Bytes, unsigned int ByteCount);
+typedef int (*ADMISSION_PRESENT_GPUVA_TRANSLATE)(void *Context,
+    unsigned long long GpuVa, unsigned long long *GuestIpa);
+typedef int (*ADMISSION_PRESENT_GPUVA_READ)(void *Context,
+    unsigned long long GuestIpa, void *Bytes, unsigned int ByteCount);
+typedef int (*ADMISSION_PRESENT_GPUVA_WRITE)(void *Context,
+    unsigned long long GuestIpa, const void *Bytes, unsigned int ByteCount,
+    int Commit);
 
 int AdmissionPresentLocationEncode(unsigned int Segment,
     unsigned long long Address, unsigned long long *Location);
@@ -42,5 +50,10 @@ int AdmissionPresentBltExecute(const void *Buffer, unsigned int Bytes,
     ADMISSION_PRESENT_COPY_IO ReadSource, ADMISSION_PRESENT_COPY_IO WriteDestination,
     void *IoContext, void *Scratch, unsigned int ScratchBytes,
     unsigned long long *BytesCopied);
+int AdmissionPresentBltExecuteGpuva(const void *Buffer, unsigned int Bytes,
+    ADMISSION_PRESENT_GPUVA_TRANSLATE Translate,
+    ADMISSION_PRESENT_GPUVA_READ Read,
+    ADMISSION_PRESENT_GPUVA_WRITE Write, void *Context, void *Scratch,
+    unsigned int ScratchBytes, unsigned long long *BytesCopied);
 
 #endif

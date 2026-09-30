@@ -27,6 +27,7 @@ class WorkQueueTests(unittest.TestCase):
 #include "apple_agx_scheduler.h"
 #include "render_submission.h"
 #include "render_paging.h"
+#include "render_present.h"
 #define _Use_decl_annotations_
 #define __declspec(x)
 #define ADMISSION_MAX_PAGING_RECORDS 64u
@@ -51,10 +52,12 @@ class WorkQueueTests(unittest.TestCase):
 typedef void VOID;
 typedef void *PVOID;
 typedef uint32_t UINT,ULONG;
+typedef unsigned long long ULONGLONG;
 typedef uintptr_t ULONG_PTR;
 typedef int32_t LONG,NTSTATUS;
 typedef int BOOLEAN,KIRQL;
 typedef unsigned char UCHAR;
+typedef struct _ADMISSION_RENDER_CONTEXT {struct {unsigned FenceOutstanding;} Object;} ADMISSION_RENDER_CONTEXT;
 /*PACKET*/
 typedef struct _ADMISSION_CONTEXT ADMISSION_CONTEXT;
 struct _ADMISSION_CONTEXT {
@@ -62,8 +65,10 @@ struct _ADMISSION_CONTEXT {
  volatile LONG SchedulerInitialized,SchedulerFaulted,SchedulerDpcPending,RenderDpcFence;
  volatile LONG PagingStopping,PagingPending,PagingDpcPending,PresentTransferState;
  volatile LONG PagingWorkersActive,PagingDpcsActive;
+ volatile LONG PagingRecordsUnsubmitted;
  void *PagingWorkItem;
  ULONG CpuQueueHead,CpuQueueCount,DispatchedFence,PresentCopyBytes,PagingRecordCount;
+ ADMISSION_RENDER_CONTEXT *PresentCopyContext;
  ULONG PagingFence,PagingLastSubmittedFence,PagingLastCompletedFence;
  NTSTATUS PagingCompletionStatus;
  struct {ULONG Fence,NotifyDpc;} PresentTransferReceipt;
@@ -74,16 +79,16 @@ struct _ADMISSION_CONTEXT {
  UCHAR PresentCopyCommand[4096];ADMISSION_PAGING_RECORD PagingRecords[64];
  struct {void *DeviceHandle;void (*DxgkCbNotifyDpc)(void *);} Interface;
 };
-typedef struct {unsigned SubmissionFenceId;} DXGKARG_SUBMITCOMMAND;
+typedef struct {unsigned SubmissionFenceId;void *hContext;} DXGKARG_SUBMITCOMMAND;
 typedef struct {unsigned PreemptionFenceId,NodeOrdinal,EngineOrdinal;union {unsigned Value;} Flags;} DXGKARG_PREEMPTCOMMAND;
 typedef struct {unsigned NodeOrdinal,EngineOrdinal,LastAbortedFenceId;} DXGKARG_RESETENGINE;
 typedef void *HANDLE;
-typedef struct {struct {unsigned FenceOutstanding;} Object;} ADMISSION_RENDER_CONTEXT;
 static int lock_depth,cpu_launches,render_launches,platform_busy,inject_submission,finish_during_attempt;
 static int InterlockedCompareExchange(volatile LONG *p,LONG value,LONG expected){LONG old=*p;if(old==expected)*p=value;return old;}
 static int InterlockedExchange(volatile LONG *p,LONG value){LONG old=*p;*p=value;return old;}
 static int InterlockedIncrement(volatile LONG *p){return ++*p;}
 static int InterlockedDecrement(volatile LONG *p){return --*p;}
+static int InterlockedExchangeAdd(volatile LONG *p,LONG value){LONG old=*p;*p+=value;return old;}
 static void KeAcquireSpinLock(int *p,KIRQL *irql){(void)p;*irql=2;++lock_depth;}
 static void KeReleaseSpinLock(int *p,KIRQL irql){(void)p;(void)irql;--lock_depth;}
 static void KeAcquireSpinLockAtDpcLevel(int *p){(void)p;++lock_depth;}
@@ -94,6 +99,7 @@ static void AdmissionPagingQueueActive(ADMISSION_CONTEXT *c){assert(!lock_depth)
 static int AdmissionPlatformRuntimeSubmit(ADMISSION_CONTEXT *c){(void)c;assert(!lock_depth);
  if(platform_busy){if(finish_during_attempt){platform_busy=0;finish_during_attempt=0;}return 0;}++render_launches;return 1;}
 static int AdmissionPlatformRuntimeReady(ADMISSION_CONTEXT *c){(void)c;return !platform_busy;}
+static void AdmissionPlatformRecordPostDpcHealth(ADMISSION_CONTEXT *c,unsigned fence){(void)c;(void)fence;}
 static unsigned preemption_notified,preemption_completed,released_backend;
 static int AdmissionSchedulerTryNotifyPreemption(ADMISSION_CONTEXT *c){
  APPLE_AGX_PREEMPTION p;assert(!lock_depth);
@@ -111,7 +117,7 @@ void AdmissionDispatchQueuedWork(ADMISSION_CONTEXT *Context);
 '''.replace('/*PACKET*/',packet)
         cases=r'''
 static void notify_dpc(void *opaque){
- ADMISSION_CONTEXT *c=opaque;DXGKARG_SUBMITCOMMAND a={13};unsigned char data[4]={0xd1};
+ ADMISSION_CONTEXT *c=opaque;DXGKARG_SUBMITCOMMAND a={13,NULL};unsigned char data[4]={0xd1};
  assert(lock_depth==0);
  assert(c->PagingPending==0 && c->PresentCopyBytes==0 && c->PagingRecordCount==0);
  if(inject_submission){inject_submission=0;assert(AdmissionPagingSubmitPresent(c,&a,data,4)==0);}
@@ -119,7 +125,12 @@ static void notify_dpc(void *opaque){
 #define RUN_PAGING_DPC(c) do { AdmissionPagingDpc(c); notify_dpc(c); } while(0)
 int main(void){
  ADMISSION_CONTEXT *c=calloc(1,sizeof(*c));assert(c);
- DXGKARG_SUBMITCOMMAND a={11};unsigned char b[4]={0xb1},d[4]={0xc1};
+ DXGKARG_SUBMITCOMMAND a={11,NULL};unsigned char b[4]={0xb1},d[4]={0xc1};
+ ADMISSION_RENDER_CONTEXT presentContext={{0}};
+ ADMISSION_PRESENT_BLT_COMMAND gpuvaPresent={0};
+ gpuvaPresent.Magic=ADMISSION_PRESENT_BLT_MAGIC;
+ gpuvaPresent.Version=ADMISSION_PRESENT_BLT_GPUVA_VERSION;
+ gpuvaPresent.ContextToken=(unsigned long long)(uintptr_t)&presentContext;
  c->Started=c->InterfaceValid=c->SchedulerInitialized=1;c->PagingWorkItem=c;
  c->Interface.DeviceHandle=c;c->Interface.DxgkCbNotifyDpc=notify_dpc;
  AppleAgxSchedulerInitialize(&c->Scheduler);AdmissionRenderPacketInitialize(&c->RenderPacket);
@@ -152,9 +163,12 @@ int main(void){
  platform_busy=0;AdmissionDispatchQueuedWork(c);AdmissionDispatchQueuedWork(c);
  assert(render_launches==1 && c->DispatchedFence==14 && c->CpuQueueCount==0);
  assert(AppleAgxSchedulerActivateFence(&c->Scheduler,0,0,14));c->RenderPacket.State=AdmissionRenderPacketActive;
- a.SubmissionFenceId=15;assert(AdmissionPagingSubmitPresent(c,&a,b,4)==0);
+ a.SubmissionFenceId=15;a.hContext=&presentContext;
+ assert(AdmissionPagingSubmitPresent(c,&a,&gpuvaPresent,sizeof(gpuvaPresent))==0);
+ assert(presentContext.Object.FenceOutstanding==15);
  DXGKARG_PREEMPTCOMMAND preempt={100,0,0,{0}};
  assert(AdmissionDdiPreemptCommand(c,&preempt)==0);
+ assert(presentContext.Object.FenceOutstanding==0);
  assert(c->CpuQueueCount==0 && c->Scheduler.QueuedFence==0 && c->Scheduler.ActiveFence==14);
  assert(!c->SchedulerFaulted && !preemption_notified);
  assert(AppleAgxSchedulerCompleteActiveFence(&c->Scheduler,0,0,14));
@@ -168,8 +182,11 @@ int main(void){
  ADMISSION_RENDER_CONTEXT renderContext={{17}};
  assert(AppleAgxSchedulerQueueFence(&c->Scheduler,0,0,17));c->RenderPacket.State=AdmissionRenderPacketQueued;
  c->RenderPacket.Description.Fence=17;c->RenderPacket.Description.ContextToken=(unsigned long long)(uintptr_t)&renderContext;
- platform_busy=1;a.SubmissionFenceId=18;assert(AdmissionPagingSubmitPresent(c,&a,b,4)==0);
+ platform_busy=1;a.SubmissionFenceId=18;
+ assert(AdmissionPagingSubmitPresent(c,&a,&gpuvaPresent,sizeof(gpuvaPresent))==0);
+ assert(presentContext.Object.FenceOutstanding==18);
  DXGKARG_RESETENGINE reset={0};assert(AdmissionDdiResetEngine(c,&reset)==0);
+ assert(presentContext.Object.FenceOutstanding==0);
  assert(c->CpuQueueCount==0 && c->Scheduler.QueuedFence==0 && c->DispatchedFence==0);
  assert(reset.LastAbortedFenceId==16 && released_backend==17 && renderContext.Object.FenceOutstanding==0);
  assert(AppleAgxSchedulerQueueFence(&c->Scheduler,0,0,19));c->RenderPacket.State=AdmissionRenderPacketQueued;
@@ -193,16 +210,28 @@ int main(void){
  c->RenderDpcFence=1;c->SchedulerDpcPending=1;AdmissionSchedulerDpc(c);
  assert(preemption_notified==200 && preemption_completed==1 && c->DispatchedFence==0);
  a.SubmissionFenceId=2;assert(AdmissionPagingSubmitPresent(c,&a,b,4)==0);assert(c->Scheduler.ActiveFence==2);
+ a.hContext=&presentContext;a.SubmissionFenceId=3;
+ assert(AdmissionPagingSubmitPresent(c,&a,&gpuvaPresent,sizeof(gpuvaPresent))==0);
+ assert(presentContext.Object.FenceOutstanding==3);
+ a.SubmissionFenceId=4;
+ assert(AdmissionPagingSubmitPresent(c,&a,&gpuvaPresent,sizeof(gpuvaPresent))==STATUS_DEVICE_BUSY);
+ assert(AdmissionSchedulerRecordCompletion(c,2));c->PagingDpcPending=1;c->PagingCompletionStatus=0;
+ RUN_PAGING_DPC(c);AdmissionDispatchQueuedWork(c);
+ assert(c->PresentCopyContext==&presentContext && c->PagingFence==3);
+ assert(AdmissionSchedulerRecordCompletion(c,3));c->PagingDpcPending=1;c->PagingCompletionStatus=0;
+ RUN_PAGING_DPC(c);
+ assert(presentContext.Object.FenceOutstanding==0 && c->PresentCopyContext==NULL);
  free(c);return 0;
 }
 '''
         queue=(RENDER/'src/work_queue_windows.c').read_text().replace('#include "render_admission.h"','')
         reset_helper=re.search(r'static __declspec\(noinline\) NTSTATUS AdmissionResetEngineInternal\(.*?^}',scheduler,re.S|re.M).group(0)
+        release_helper=re.search(r'static VOID AdmissionCpuQueueReleaseContextsLocked\(.*?^}',scheduler,re.S|re.M).group(0)
         body=(shim+function(scheduler,'AdmissionSchedulerRecordCompletion')+
               function(scheduler,'AdmissionSchedulerSubmitFence')+queue+
               function(paging,'AdmissionPagingSubmitPresent')+
               function(paging,'AdmissionPagingUpdateIdleLocked')+
-              function(paging,'AdmissionPagingDpc')+
+              function(paging,'AdmissionPagingDpc')+release_helper+
               function(scheduler,'AdmissionDdiPreemptCommand')+
               function(scheduler,'AdmissionSchedulerDpc')+
               reset_helper+function(scheduler,'AdmissionDdiResetEngine')+cases)

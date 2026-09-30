@@ -25,11 +25,19 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentBlt(
   APPLE_AGX_DMA_SHADOW shadow;
   D3DDDI_PATCHLOCATIONLIST *patch;
   BOOLEAN fullPrimary = FALSE;
+  BOOLEAN virtualAddressing;
   UINT capacity, bytes, next;
+  virtualAddressing = Context != NULL &&
+      ((ADMISSION_RENDER_CONTEXT *)Context)->Object.Magic ==
+          ADMISSION_OBJECT_CONTEXT_MAGIC &&
+      (((ADMISSION_RENDER_CONTEXT *)Context)->Object.Flags &
+       ADMISSION_CONTEXT_VIRTUAL_ADDRESSING) != 0u;
   if (Device == NULL || Context == NULL || Present == NULL ||
       Present->Flags.Value != 1u || Present->pDmaBuffer == NULL ||
       Present->pDmaBufferPrivateData == NULL || Present->pAllocationList == NULL ||
-      Present->pPatchLocationListOut == NULL || Present->PatchLocationListOutSize < 2u ||
+      (!virtualAddressing &&
+       (Present->pPatchLocationListOut == NULL ||
+        Present->PatchLocationListOutSize < 2u)) ||
       Present->pPrivateDriverData != NULL || Present->PrivateDriverDataSize != 0u ||
       Present->pDstSubRects == NULL || Present->SubRectCnt == 0u ||
       Present->DmaBufferPrivateDataSize <=
@@ -44,6 +52,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentBlt(
   input.Command.SourceDescription = source->Allocation->Description;
   input.Command.DestinationDescription = destination->Allocation->Description;
   input.Command.ContextToken = (ULONGLONG)(ULONG_PTR)Context;
+  if (virtualAddressing) {
+    input.Command.Version = ADMISSION_PRESENT_BLT_GPUVA_VERSION;
+    input.Command.SourceLocation =
+        Present->pAllocationList[DXGK_PRESENT_SOURCE_INDEX].VirtualAddress;
+    input.Command.DestinationLocation =
+        Present->pAllocationList[DXGK_PRESENT_DESTINATION_INDEX].VirtualAddress;
+    if (Present->pAllocationList[DXGK_PRESENT_SOURCE_INDEX].SegmentId != 0u ||
+        Present->pAllocationList[DXGK_PRESENT_DESTINATION_INDEX].SegmentId != 0u)
+      return STATUS_INVALID_PARAMETER;
+  }
   input.SameAllocation = source->Allocation == destination->Allocation;
   if (!input.SameAllocation && Present->MultipassOffset == 0u &&
       source->Allocation->Description.Width == 2560u &&
@@ -78,12 +96,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentBlt(
     input.RectCount = Present->SubRectCnt;
     input.MultipassOffset = Present->MultipassOffset;
   }
-  if (Present->pAllocationList[1].SegmentId != 0u &&
+  if (!virtualAddressing && Present->pAllocationList[1].SegmentId != 0u &&
       !AdmissionPresentLocationEncode(Present->pAllocationList[1].SegmentId,
           (ULONGLONG)Present->pAllocationList[1].PhysicalAddress.QuadPart,
           &input.Command.SourceLocation))
     return STATUS_INVALID_ADDRESS;
-  if (Present->pAllocationList[2].SegmentId != 0u &&
+  if (!virtualAddressing && Present->pAllocationList[2].SegmentId != 0u &&
       (Present->pAllocationList[2].SegmentId != 2u ||
        !AdmissionPresentLocationEncode(2u,
           (ULONGLONG)Present->pAllocationList[2].PhysicalAddress.QuadPart,
@@ -101,17 +119,19 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentBlt(
                              Present->DmaBufferPrivateDataSize);
   if (!AppleAgxDmaShadowAppend(&shadow, 0u, Present->pDmaBuffer, bytes))
     return STATUS_INVALID_USER_BUFFER;
-  patch = Present->pPatchLocationListOut;
-  RtlZeroMemory(patch, 2u * sizeof(*patch));
-  patch[0].AllocationIndex = 1u;
-  patch[0].SlotId = 0u;
-  patch[0].PatchOffset = FIELD_OFFSET(ADMISSION_PRESENT_BLT_COMMAND, SourceLocation);
-  patch[1].AllocationIndex = 2u;
-  patch[1].SlotId = 1u;
-  patch[1].PatchOffset = FIELD_OFFSET(ADMISSION_PRESENT_BLT_COMMAND, DestinationLocation);
+  if (!virtualAddressing) {
+    patch = Present->pPatchLocationListOut;
+    RtlZeroMemory(patch, 2u * sizeof(*patch));
+    patch[0].AllocationIndex = 1u;
+    patch[0].SlotId = 0u;
+    patch[0].PatchOffset = FIELD_OFFSET(ADMISSION_PRESENT_BLT_COMMAND, SourceLocation);
+    patch[1].AllocationIndex = 2u;
+    patch[1].SlotId = 1u;
+    patch[1].PatchOffset = FIELD_OFFSET(ADMISSION_PRESENT_BLT_COMMAND, DestinationLocation);
+    Present->pPatchLocationListOut += 2u;
+    Present->PatchLocationListOutSize -= 2u;
+  }
   Present->pDmaBuffer = (PUCHAR)Present->pDmaBuffer + bytes;
-  Present->pPatchLocationListOut += 2u;
-  Present->PatchLocationListOutSize -= 2u;
   Present->MultipassOffset = fullPrimary ? Present->SubRectCnt : next;
   return fullPrimary || next == input.RectCount
              ? STATUS_SUCCESS
@@ -187,6 +207,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentPatch(
       2u > Args->PatchLocationListSize - Args->PatchLocationListSubmissionStart ||
       !AdmissionPresentPrivateView(Args->pDmaBufferPrivateData,
           Args->DmaBufferPrivateDataSize, &shadow, &view, &command, NULL) ||
+      command.Version != ADMISSION_PRESENT_BLT_VERSION ||
       command.ContextToken != (ULONGLONG)(ULONG_PTR)Args->hContext ||
       Args->DmaBufferSubmissionStartOffset != 0u ||
       Args->DmaBufferSubmissionEndOffset != view.DmaBytes ||
@@ -310,3 +331,37 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentSubmit(
     ADMISSION_CONTEXT *Context, const DXGKARG_SUBMITCOMMAND *Args) {
   return AdmissionPresentSubmitTraced(Context, Args, FALSE);
 }
+
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+_Use_decl_annotations_ NTSTATUS AdmissionPresentSubmitVirtual(
+    ADMISSION_CONTEXT *Adapter, ADMISSION_RENDER_CONTEXT *Context,
+    const DXGKARG_SUBMITCOMMANDVIRTUAL *Args) {
+  APPLE_AGX_DMA_SHADOW shadow;
+  APPLE_AGX_DMA_SHADOW_VIEW view;
+  ADMISSION_PRESENT_BLT_COMMAND command;
+  DXGKARG_SUBMITCOMMAND submit;
+  if (Adapter == NULL || Context == NULL || Args == NULL ||
+      (Context->Object.Flags & ADMISSION_CONTEXT_VIRTUAL_ADDRESSING) == 0u ||
+      Context->GpuvaG3Process == NULL || Context->GpuvaG3Poisoned ||
+      (Args->Flags.Value & ~0x82u) != 0u || !Args->Flags.Present ||
+      Args->DmaBufferUmdPrivateDataSize != 0u ||
+      Args->DmaBufferVirtualAddress < 0x4000ULL ||
+      Args->DmaBufferVirtualAddress >= (1ULL << 39) ||
+      !AdmissionPresentPrivateView(Args->pDmaBufferPrivateData,
+          Args->DmaBufferPrivateDataSize, &shadow, &view, &command, NULL) ||
+      command.Version != ADMISSION_PRESENT_BLT_GPUVA_VERSION)
+    return STATUS_INVALID_PARAMETER;
+  RtlZeroMemory(&submit, sizeof(submit));
+  submit.hContext = Args->hContext;
+  submit.Flags.Value = Args->Flags.Value;
+  submit.NodeOrdinal = Args->NodeOrdinal;
+  submit.EngineOrdinal = Args->EngineOrdinal;
+  submit.SubmissionFenceId = Args->SubmissionFenceId;
+  submit.pDmaBufferPrivateData = Args->pDmaBufferPrivateData;
+  submit.DmaBufferPrivateDataSize = Args->DmaBufferPrivateDataSize;
+  submit.DmaBufferSize = Args->DmaBufferSize;
+  submit.DmaBufferSubmissionEndOffset = view.DmaBytes;
+  submit.DmaBufferPrivateDataSubmissionEndOffset = shadow.BytesUsed;
+  return AdmissionPresentSubmit(Adapter, &submit);
+}
+#endif

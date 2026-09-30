@@ -389,6 +389,13 @@ _Use_decl_annotations_ VOID AdmissionPagingDpc(
   completedFence = Context->PagingFence;
   if (NT_SUCCESS(Context->PagingCompletionStatus))
     Context->PagingLastCompletedFence = completedFence;
+  if (Context->PresentCopyContext != NULL) {
+    KeAcquireSpinLockAtDpcLevel(&Context->SchedulerLock);
+    if (Context->PresentCopyContext->Object.FenceOutstanding == completedFence)
+      Context->PresentCopyContext->Object.FenceOutstanding = 0u;
+    KeReleaseSpinLockFromDpcLevel(&Context->SchedulerLock);
+    Context->PresentCopyContext = NULL;
+  }
   Context->PagingRecordCount = 0u;
   Context->PresentCopyBytes = 0u;
   InterlockedExchange(&Context->PagingPending, 0);

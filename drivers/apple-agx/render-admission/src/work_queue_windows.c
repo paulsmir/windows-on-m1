@@ -4,6 +4,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionCpuQueueSubmit(
     ADMISSION_CONTEXT *Context, const DXGKARG_SUBMITCOMMAND *Args,
     ULONG Kind, const VOID *Data, UINT Bytes) {
   ADMISSION_CPU_PACKET *packet;
+  ADMISSION_RENDER_CONTEXT *presentContext = NULL;
+  ADMISSION_PRESENT_BLT_COMMAND presentCommand;
   KIRQL oldIrql;
   if (Context == NULL || Args == NULL || Data == NULL || Bytes == 0u ||
       (Kind != ADMISSION_CPU_PACKET_PAGING && Kind != ADMISSION_CPU_PACKET_PRESENT) ||
@@ -11,10 +13,22 @@ _Use_decl_annotations_ NTSTATUS AdmissionCpuQueueSubmit(
       (Kind == ADMISSION_CPU_PACKET_PAGING && Bytes % sizeof(ADMISSION_PAGING_RECORD) != 0u) ||
       Bytes > sizeof(Context->CpuQueue[0].Data) || Context->PagingWorkItem == NULL)
     return STATUS_INVALID_PARAMETER;
+  if (Kind == ADMISSION_CPU_PACKET_PRESENT &&
+      Bytes >= sizeof(presentCommand)) {
+    RtlCopyMemory(&presentCommand, Data, sizeof(presentCommand));
+    if (presentCommand.Magic == ADMISSION_PRESENT_BLT_MAGIC &&
+        presentCommand.Version == ADMISSION_PRESENT_BLT_GPUVA_VERSION) {
+      presentContext = (ADMISSION_RENDER_CONTEXT *)Args->hContext;
+      if (presentContext == NULL ||
+          presentCommand.ContextToken != (ULONGLONG)(ULONG_PTR)presentContext)
+        return STATUS_INVALID_PARAMETER;
+    }
+  }
   KeAcquireSpinLock(&Context->PagingLock, &oldIrql);
   KeAcquireSpinLockAtDpcLevel(&Context->SchedulerLock);
   if (InterlockedCompareExchange(&Context->PagingStopping, 0, 0) != 0 ||
       InterlockedCompareExchange(&Context->SchedulerFaulted, 0, 0) != 0 ||
+      (presentContext != NULL && presentContext->Object.FenceOutstanding != 0u) ||
       Context->CpuQueueCount >= APPLE_AGX_SCHEDULER_QUEUE_CAPACITY ||
       !AppleAgxSchedulerQueueFence(&Context->Scheduler, 0u, 0u, Args->SubmissionFenceId)) {
     KeReleaseSpinLockFromDpcLevel(&Context->SchedulerLock);
@@ -26,6 +40,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionCpuQueueSubmit(
   packet->Fence = Args->SubmissionFenceId;
   packet->Kind = Kind;
   packet->Bytes = Bytes;
+  packet->PresentContext = presentContext;
+  if (presentContext != NULL)
+    presentContext->Object.FenceOutstanding = Args->SubmissionFenceId;
   RtlCopyMemory(&packet->Data, Data, Bytes);
   ++Context->CpuQueueCount;
   if (Kind == ADMISSION_CPU_PACKET_PAGING) {
@@ -67,9 +84,11 @@ Retry:
         AppleAgxSchedulerActivateFence(&Context->Scheduler, 0u, 0u, fence)) {
       Context->PagingRecordCount = 0u;
       Context->PresentCopyBytes = 0u;
+      Context->PresentCopyContext = NULL;
       if (packet->Kind == ADMISSION_CPU_PACKET_PRESENT) {
         RtlCopyMemory(Context->PresentCopyCommand, packet->Data.Present, packet->Bytes);
         Context->PresentCopyBytes = packet->Bytes;
+        Context->PresentCopyContext = packet->PresentContext;
       } else {
         RtlCopyMemory(Context->PagingRecords, packet->Data.Paging, packet->Bytes);
         Context->PagingRecordCount = packet->Bytes / sizeof(ADMISSION_PAGING_RECORD);

@@ -80,7 +80,9 @@ int AdmissionPresentBltEncode(const ADMISSION_PRESENT_BLT_INPUT *Input,
     return 0;
   c = Input->Command;
   c.Magic = ADMISSION_PRESENT_BLT_MAGIC;
-  c.Version = ADMISSION_PRESENT_BLT_VERSION;
+  c.Version = Input->Command.Version == ADMISSION_PRESENT_BLT_GPUVA_VERSION ?
+                  ADMISSION_PRESENT_BLT_GPUVA_VERSION :
+                  ADMISSION_PRESENT_BLT_VERSION;
   c.RectCount = count;
   c.Bytes = (unsigned int)sizeof(c) + count * (unsigned int)sizeof(*Input->Rects);
   memcpy(Buffer, &c, sizeof(c));
@@ -100,17 +102,29 @@ int AdmissionPresentBltValidate(const void *Buffer, unsigned int Bytes,
   if (!Buffer || !Command || Bytes < sizeof(c) || Bytes > ADMISSION_PRESENT_BLT_DMA_MAX)
     return 0;
   memcpy(&c, Buffer, sizeof(c));
-  if (c.Magic != ADMISSION_PRESENT_BLT_MAGIC || c.Version != ADMISSION_PRESENT_BLT_VERSION ||
+  if (c.Magic != ADMISSION_PRESENT_BLT_MAGIC ||
+      (c.Version != ADMISSION_PRESENT_BLT_VERSION &&
+       c.Version != ADMISSION_PRESENT_BLT_GPUVA_VERSION) ||
       c.Bytes != Bytes || !c.RectCount ||
       c.RectCount > (Bytes - sizeof(c)) / sizeof(rect) ||
       Bytes != sizeof(c) + c.RectCount * sizeof(rect) || !GeometryValid(&c))
     return 0;
-  if ((RequireResidency || c.SourceLocation) &&
-      !AdmissionPresentLocationDecode(c.SourceLocation, &segment, &address))
-    return 0;
-  if ((RequireResidency || c.DestinationLocation) &&
-      (!AdmissionPresentLocationDecode(c.DestinationLocation, &segment, &address) || segment != 2u))
-    return 0;
+  if (c.Version == ADMISSION_PRESENT_BLT_GPUVA_VERSION) {
+    if (c.SourceLocation < 0x4000ULL ||
+        c.DestinationLocation < 0x4000ULL ||
+        c.SourceLocation >= (1ULL << 39) ||
+        c.DestinationLocation >= (1ULL << 39) ||
+        c.SourceDescription.Size > (1ULL << 39) - c.SourceLocation ||
+        c.DestinationDescription.Size > (1ULL << 39) - c.DestinationLocation)
+      return 0;
+  } else {
+    if ((RequireResidency || c.SourceLocation) &&
+        !AdmissionPresentLocationDecode(c.SourceLocation, &segment, &address))
+      return 0;
+    if ((RequireResidency || c.DestinationLocation) &&
+        (!AdmissionPresentLocationDecode(c.DestinationLocation, &segment, &address) || segment != 2u))
+      return 0;
+  }
   for (index = 0; index < c.RectCount; ++index) {
     memcpy(&rect, (const unsigned char *)Buffer + sizeof(c) + index * sizeof(rect), sizeof(rect));
     if (!RectContains(&c.DestinationRect, &rect))
@@ -172,4 +186,88 @@ int AdmissionPresentBltExecute(const void *Buffer, unsigned int Bytes,
     }
   }
   return 1;
+}
+
+typedef struct {
+  ADMISSION_PRESENT_GPUVA_TRANSLATE Translate;
+  ADMISSION_PRESENT_GPUVA_READ Read;
+  ADMISSION_PRESENT_GPUVA_WRITE Write;
+  void *Context;
+  unsigned long long SourceVa, DestinationVa, SourceBytes, DestinationBytes;
+} ADMISSION_PRESENT_GPUVA_COPY;
+
+static int PresentGpuvaRead(void *Opaque, unsigned long long Offset,
+    void *Bytes, unsigned int ByteCount) {
+  ADMISSION_PRESENT_GPUVA_COPY *copy = Opaque;
+  unsigned long long va, ipa;
+  unsigned int chunk;
+  if (Offset > copy->SourceBytes || ByteCount > copy->SourceBytes - Offset)
+    return 0;
+  while (ByteCount != 0u) {
+    va = copy->SourceVa + Offset;
+    chunk = 0x4000u - (unsigned int)(va & 0x3fffULL);
+    if (chunk > ByteCount) chunk = ByteCount;
+    if (!copy->Translate(copy->Context, va, &ipa) ||
+        !copy->Read(copy->Context, ipa, Bytes, chunk))
+      return 0;
+    Offset += chunk;
+    Bytes = (unsigned char *)Bytes + chunk;
+    ByteCount -= chunk;
+  }
+  return 1;
+}
+
+static int PresentGpuvaWrite(void *Opaque, unsigned long long Offset,
+    void *Bytes, unsigned int ByteCount) {
+  ADMISSION_PRESENT_GPUVA_COPY *copy = Opaque;
+  unsigned long long va, ipa;
+  unsigned int chunk;
+  if (Offset > copy->DestinationBytes ||
+      ByteCount > copy->DestinationBytes - Offset)
+    return 0;
+  while (ByteCount != 0u) {
+    va = copy->DestinationVa + Offset;
+    chunk = 0x4000u - (unsigned int)(va & 0x3fffULL);
+    if (chunk > ByteCount) chunk = ByteCount;
+    if (!copy->Translate(copy->Context, va, &ipa) ||
+        !copy->Write(copy->Context, ipa, Bytes, chunk, 1))
+      return 0;
+    Offset += chunk;
+    Bytes = (unsigned char *)Bytes + chunk;
+    ByteCount -= chunk;
+  }
+  return 1;
+}
+
+int AdmissionPresentBltExecuteGpuva(const void *Buffer, unsigned int Bytes,
+    ADMISSION_PRESENT_GPUVA_TRANSLATE Translate,
+    ADMISSION_PRESENT_GPUVA_READ Read,
+    ADMISSION_PRESENT_GPUVA_WRITE Write, void *Context, void *Scratch,
+    unsigned int ScratchBytes, unsigned long long *BytesCopied) {
+  ADMISSION_PRESENT_BLT_COMMAND command;
+  ADMISSION_PRESENT_GPUVA_COPY copy;
+  unsigned long long offset, va, ipa;
+  unsigned int chunk;
+  if (!Translate || !Read || !Write || !Context || !Scratch || !BytesCopied ||
+      !AdmissionPresentBltValidate(Buffer, Bytes, 1, &command) ||
+      command.Version != ADMISSION_PRESENT_BLT_GPUVA_VERSION)
+    return 0;
+  copy.Translate = Translate;
+  copy.Read = Read;
+  copy.Write = Write;
+  copy.Context = Context;
+  copy.SourceVa = command.SourceLocation;
+  copy.DestinationVa = command.DestinationLocation;
+  copy.SourceBytes = command.SourceDescription.Size;
+  copy.DestinationBytes = command.DestinationDescription.Size;
+  for (offset = 0ULL; offset < copy.DestinationBytes; offset += chunk) {
+    va = copy.DestinationVa + offset;
+    chunk = 0x4000u - (unsigned int)(va & 0x3fffULL);
+    if (chunk > copy.DestinationBytes - offset)
+      chunk = (unsigned int)(copy.DestinationBytes - offset);
+    if (!Translate(Context, va, &ipa) || !Write(Context, ipa, NULL, chunk, 0))
+      return 0;
+  }
+  return AdmissionPresentBltExecute(Buffer, Bytes, PresentGpuvaRead,
+      PresentGpuvaWrite, &copy, Scratch, ScratchBytes, BytesCopied);
 }

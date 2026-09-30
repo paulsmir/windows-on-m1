@@ -98,6 +98,9 @@ NTSTATUS AdmissionG3ExecuteVirtualPaging(
 NTSTATUS AdmissionGpuvaG3SubmitVirtualPaging(
     ADMISSION_CONTEXT *Adapter, ADMISSION_RENDER_CONTEXT *Context,
     const DXGKARG_SUBMITCOMMANDVIRTUAL *Args);
+NTSTATUS AdmissionGpuvaG3ExecutePresentVirtual(
+    ADMISSION_CONTEXT *Adapter, ADMISSION_RENDER_CONTEXT *Context,
+    const VOID *Command, UINT Bytes, ULONGLONG *BytesCopied);
 NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *Adapter,
                                   ADMISSION_RENDER_CONTEXT *Context,
                                   ULONG Fence);
