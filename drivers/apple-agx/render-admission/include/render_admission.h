@@ -395,6 +395,9 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG G3CopyQueryFailureClaim;
   ULONG G3CopyQueryFailurePredicate, G3CopyQueryFailureStatus;
   APPLE_AGX_G3_COPY_QUERY_RECEIPT G3CopyQueryFailure;
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  ADMISSION_DWM_FRAME_PROBE DwmFrameProbe;
+#endif
   volatile LONG G3PrivateFailureClaim;
   APPLE_AGX_G3_PRIVATE_FAILURE G3PrivateFailure;
   volatile LONG G4SubmitFailureClaim;
@@ -883,6 +886,38 @@ void AdmissionRenderCorrelationSubmitFailureWindows(
     _In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG4SubmitFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3CopyQueryFailure(_In_opt_ ADMISSION_CONTEXT *Context);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+NTSTATUS AdmissionGpuvaG3FrameArmEscape(_In_ ADMISSION_CONTEXT *Adapter,
+    _In_ const DXGKARG_ESCAPE *Args);
+NTSTATUS AdmissionDwmFrameProbeQueryWindows(_In_ ADMISSION_CONTEXT *Adapter,
+    _Inout_ ADMISSION_DWM_FRAME_PROBE *Probe);
+BOOLEAN AdmissionDwmFrameArmWindows(_In_ ADMISSION_CONTEXT *Adapter,
+    _In_ PVOID Context, _In_ ULONG OsPid, _In_ ULONGLONG GraphPid,
+    _In_ ULONGLONG Allocation, _In_ ULONGLONG CanonicalVa);
+VOID AdmissionDwmFrameRecordQuery(_In_ ADMISSION_CONTEXT *Adapter,
+    _In_ PVOID Context, _In_ ULONG Predicate, _In_ NTSTATUS Status,
+    _In_ ULONG ResidentPages);
+VOID AdmissionDwmFrameRecordSubmit(_In_ ADMISSION_CONTEXT *Adapter,
+    _In_ PVOID Context, _In_ ULONGLONG CommandVa, _In_ ULONGLONG Fence,
+    _In_ ULONG Branch, _In_ NTSTATUS Status, _In_ BOOLEAN Present);
+VOID AdmissionDwmFrameRecordReject(_In_ ADMISSION_CONTEXT *Adapter,
+    _In_ PVOID Context, _In_ ULONG Branch, _In_ NTSTATUS Status);
+VOID AdmissionDwmFrameRecordCompletion(_In_ ADMISSION_CONTEXT *Adapter,
+    _In_ PVOID Context, _In_ ULONGLONG Fence);
+VOID AdmissionDwmFrameRecordPresent(_In_ ADMISSION_CONTEXT *Adapter,
+    _In_ PVOID Context, _In_ NTSTATUS Status, _In_ BOOLEAN Count);
+VOID AdmissionDwmFrameRecordBlt(_In_ ADMISSION_CONTEXT *Adapter,
+    _In_ PVOID Context, _In_ ULONGLONG SourceAllocation,
+    _In_ ULONGLONG DestinationAllocation, _In_ ULONGLONG SourceVa,
+    _In_ ULONGLONG DestinationVa);
+VOID AdmissionDwmFrameRecordCopy(_In_ ADMISSION_CONTEXT *Adapter,
+    _In_ PVOID Context, _In_ ULONGLONG DestinationIpa,
+    _In_ ULONGLONG BytesCopied, _In_ NTSTATUS Status);
+VOID AdmissionDwmFrameRecordTdr(_In_ ADMISSION_CONTEXT *Adapter,
+    _In_ NTSTATUS Status, _In_ BOOLEAN AfterReset);
+VOID AdmissionDwmFrameRecordPrivateReset(_In_ ADMISSION_CONTEXT *Adapter,
+    _In_ BOOLEAN Succeeded);
+#endif
 void AdmissionRecordG3PrivateFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordGpuvaG3UnpublishedGroups(
     _In_opt_ ADMISSION_CONTEXT *Context,

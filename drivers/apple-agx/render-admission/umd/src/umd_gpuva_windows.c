@@ -7,8 +7,91 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #pragma warning(pop)
 #include "umd_internal.h"
 #include "apple_agx_g3_copy_abi.h"
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+#include "render_qualification.h"
+#endif
 
 #ifdef APPLE_AGX_GPUVA_WINSYS
+
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+static BOOL frame_process_is_dwm(void) {
+  static volatile LONG cached = -1;
+  LONG observed = InterlockedCompareExchange(&cached, 0, 0);
+  if (observed < 0) {
+    WCHAR executable[MAX_PATH];
+    WCHAR *base = executable;
+    DWORD length = GetModuleFileNameW(NULL, executable, ARRAYSIZE(executable));
+    BOOL isDwm = FALSE;
+    if (length != 0u && length < ARRAYSIZE(executable)) {
+      for (DWORD index = 0u; index < length; ++index)
+        if (executable[index] == L'\\' || executable[index] == L'/')
+          base = &executable[index + 1u];
+      isDwm = lstrcmpiW(base, L"dwm.exe") == 0;
+    }
+    observed = isDwm ? 1 : 0;
+    InterlockedExchange(&cached, observed);
+  }
+  return observed == 1;
+}
+
+ULONGLONG AdmissionUmdGpuvaFrameArm(ADMISSION_UMD_DEVICE *device,
+    D3DKMT_HANDLE allocation, ULONGLONG canonicalVa) {
+  ADMISSION_DWM_FRAME_ARM arm = {};
+  D3DDDICB_ESCAPE request = {};
+  HRESULT status;
+  if (device == NULL || allocation == 0u || !frame_process_is_dwm())
+    return canonicalVa;
+  if (canonicalVa == 0ULL) {
+    AcquireSRWLockShared(&device->ScreenBufferLock);
+    for (UINT index = 0u; index < ADMISSION_UMD_SCREEN_BUFFER_LIMIT; ++index)
+      if (device->ScreenBuffers[index].Active &&
+          device->ScreenBuffers[index].KernelAllocation == allocation) {
+        canonicalVa = device->ScreenBuffers[index].CanonicalGpuVa;
+        break;
+      }
+    ReleaseSRWLockShared(&device->ScreenBufferLock);
+  }
+  if (device->DwmFrameArmAttempted &&
+      device->DwmFrameLastAllocation == allocation &&
+      device->DwmFrameLastVa == canonicalVa)
+    return canonicalVa;
+  if (device->DwmFrameArmAttempts >= 8u)
+    return canonicalVa;
+  ++device->DwmFrameArmAttempts;
+  if (device->KernelCallbacks == NULL ||
+      device->KernelCallbacks->pfnEscapeCb == NULL ||
+      device->Adapter == NULL || !device->Adapter->RuntimeAdapter.handle ||
+      !device->RuntimeDevice.handle || !device->KernelContext)
+    return canonicalVa;
+  arm.Magic = ADMISSION_DWM_FRAME_ARM_MAGIC;
+  arm.Version = ADMISSION_DWM_FRAME_VERSION;
+  arm.Bytes = sizeof(arm);
+  arm.OsProcessId = GetCurrentProcessId();
+  arm.Allocation = allocation;
+  arm.CanonicalGpuVa = canonicalVa;
+  request.hDevice = device->RuntimeDevice.handle;
+  request.hContext = device->KernelContext;
+  request.Flags.HardwareAccess = 1;
+  request.pPrivateDriverData = &arm;
+  request.PrivateDriverDataSize = sizeof(arm);
+  status = device->KernelCallbacks->pfnEscapeCb(
+      device->Adapter->RuntimeAdapter.handle, &request);
+  if (SUCCEEDED(status)) {
+    device->DwmFrameArmAttempts = 0u;
+    device->DwmFrameArmAttempted = TRUE;
+    device->DwmFrameLastAllocation = allocation;
+    device->DwmFrameLastVa = canonicalVa;
+  }
+  {
+    UINT values[6] = {(UINT)allocation, (UINT)canonicalVa,
+        (UINT)(canonicalVa >> 32), (UINT)(ULONG_PTR)device->KernelContext,
+        (UINT)((ULONGLONG)(ULONG_PTR)device->KernelContext >> 32),
+        (UINT)arm.OsProcessId};
+    AdmissionUmdDiagnostic("measure-frame-arm", status, values, ARRAYSIZE(values));
+  }
+  return canonicalVa;
+}
+#endif
 
 static ADMISSION_UMD_SCREEN_BUFFER *find_slot(ADMISSION_UMD_DEVICE *device,
                                              uint64_t token) {
@@ -236,8 +319,23 @@ static int copy_escape(ADMISSION_UMD_DEVICE *device,
   request.hDevice=device->RuntimeDevice.handle;
   request.hContext=device->KernelContext;request.Flags.HardwareAccess=1;
   request.pPrivateDriverData=payload;request.PrivateDriverDataSize=sizeof(*payload);
-  return SUCCEEDED(device->KernelCallbacks->pfnEscapeCb(
-      device->Adapter->RuntimeAdapter.handle,&request));
+  HRESULT status = device->KernelCallbacks->pfnEscapeCb(
+      device->Adapter->RuntimeAdapter.handle,&request);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  if (FAILED(status) && frame_process_is_dwm()) {
+    static volatile LONG failures;
+    if (InterlockedIncrement(&failures) <= 16) {
+      UINT values[7] = {(UINT)payload->Allocation, (UINT)payload->GpuVa,
+          (UINT)(payload->GpuVa >> 32), payload->Operation,
+          (UINT)(ULONG_PTR)device->KernelContext,
+          (UINT)((ULONGLONG)(ULONG_PTR)device->KernelContext >> 32),
+          (UINT)payload->TransferBytes};
+      AdmissionUmdDiagnostic("reject-copy-escape", status, values,
+                             ARRAYSIZE(values));
+    }
+  }
+#endif
+  return SUCCEEDED(status);
 }
 
 static int transfer_slot(ADMISSION_UMD_DEVICE *device,
@@ -248,6 +346,10 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
   payload->Magic=APPLE_AGX_G3_COPY_MAGIC;payload->Version=APPLE_AGX_G3_COPY_VERSION;
   payload->Bytes=sizeof(*payload);payload->Allocation=slot->KernelAllocation;
   payload->GpuVa=slot->CanonicalGpuVa;payload->Operation=APPLE_AGX_G3_COPY_QUERY;
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  (void)AdmissionUmdGpuvaFrameArm(device, slot->KernelAllocation,
+                                   slot->CanonicalGpuVa);
+#endif
   UINT step=1u; /* EXP870 diagnostic: 1 query 2 lock 3 transfer 4 unmap 5 unlock */
   HRESULT lock_hr=S_OK;
   int success=copy_escape(device,payload) && payload->ProcessGeneration && payload->MappingGeneration;
@@ -348,6 +450,10 @@ static int submit(void *context, const uint64_t *written,
                   uint64_t *fence) {
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;
   D3DDDICB_SUBMITCOMMAND request = {};
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  D3DKMT_HANDLE trackedAllocation = 0u;
+  ULONGLONG trackedVa = 0ULL;
+#endif
   if (!device || !fence || !device->KernelContext ||
       !device->RenderSyncObject || !device->KernelCallbacks ||
       !device->KernelCallbacks->pfnSubmitCommandCb ||
@@ -368,11 +474,26 @@ static int submit(void *context, const uint64_t *written,
       ReleaseSRWLockShared(&device->ScreenBufferLock);
       return 0;
     }
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+    if (i == 0u) {
+      trackedAllocation = slot->KernelAllocation;
+      trackedVa = slot->CanonicalGpuVa;
+    }
+#endif
     /* Submitted commands write only nondisplayable canonical allocations.
      * The original primary is published by synchronized CPU copy below. */
   }
   ReleaseSRWLockShared(&device->ScreenBufferLock);
-  if(!transfer_held(device,false)) return device->DrawTerminal ? 2 : 0;
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  if (trackedAllocation != 0u)
+    (void)AdmissionUmdGpuvaFrameArm(device, trackedAllocation, trackedVa);
+#endif
+  if(!transfer_held(device,false)) {
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+    device->FrameSubmitStatus = E_FAIL;
+#endif
+    return device->DrawTerminal ? 2 : 0;
+  }
   request.Commands = va;
   request.CommandLength = bytes;
   request.BroadcastContextCount = 1;
@@ -387,21 +508,50 @@ static int submit(void *context, const uint64_t *written,
       request.RenderCBSequence};
   AdmissionUmdDiagnostic("g4-submit-command-cb", submit_result,
                          submit_values, ARRAYSIZE(submit_values));
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  device->FrameSubmitStatus = submit_result;
+#endif
   if (FAILED(submit_result)) return 0;
   uint64_t internal = device->NextRenderFence + 1;
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  device->FrameSubmittedFence = internal;
+#endif
   if(!signal_render(device,internal) ||
      !wait_object(device,device->RenderSyncObject,internal) ||
      !transfer_held(device,true) || !signal_render(device,internal+1)) {
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+    device->FrameSubmitStatus = E_FAIL;
+#endif
     device->DrawTerminal=TRUE;return 2;
   }
   device->NextRenderFence=internal+1;
   *fence=internal+1;
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  device->FrameCompletedFence = internal;
+  {
+    static volatile LONG receipts;
+    if (InterlockedIncrement(&receipts) <= 16) {
+      UINT values[9] = {(UINT)(ULONG_PTR)device->KernelContext,
+          (UINT)((ULONGLONG)(ULONG_PTR)device->KernelContext >> 32),
+          (UINT)va, (UINT)(va >> 32), (UINT)internal,
+          (UINT)(internal >> 32), (UINT)*fence, (UINT)(*fence >> 32),
+          request.RenderCBSequence};
+      AdmissionUmdDiagnostic("measure-render-fence", S_OK, values,
+                             ARRAYSIZE(values));
+    }
+  }
+#endif
   return 1;
 }
 
 static int wait_render(void *context, uint64_t fence) {
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;
-  return wait_object(device, device ? device->RenderSyncObject : 0, fence);
+  int waited = wait_object(device, device ? device->RenderSyncObject : 0, fence);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  if (waited && device != NULL && device->FrameCompletedFence < fence)
+    device->FrameCompletedFence = fence;
+#endif
+  return waited;
 }
 
 static int private_escape(void *context, APPLE_AGX_G3_PRIVATE_REQUEST *payload) {

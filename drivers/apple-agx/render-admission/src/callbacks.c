@@ -115,6 +115,9 @@ static VOID AdmissionDwmRecordPresent(
     event.DestinationCount = Present->NumDstAllocations;
   }
   AdmissionDwmDdiProbeRecordWindows(Adapter, &event);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  AdmissionDwmFrameRecordPresent(Adapter, Context, Status, FALSE);
+#endif
 #else
   UNREFERENCED_PARAMETER(Adapter);
   UNREFERENCED_PARAMETER(Context);
@@ -161,6 +164,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
       device->Object.Adapter->Magic == ADMISSION_OBJECT_ADAPTER_MAGIC)
     adapter = CONTAINING_RECORD(device->Object.Adapter,
                                 ADMISSION_CONTEXT, ObjectAdapter);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  AdmissionDwmFrameRecordPresent(adapter, Context, STATUS_PENDING, TRUE);
+#endif
 #if defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
   if (adapter != NULL) {
     InterlockedIncrement((volatile LONG *)&adapter->BltProbe.PresentCalls);
@@ -295,6 +301,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEscape(
       return AdmissionGpuvaG3PrivateEscape((ADMISSION_CONTEXT *)Adapter, Args);
     if (private_magic == 0x43565041u)
       return AdmissionGpuvaG3CopyEscape((ADMISSION_CONTEXT *)Adapter, Args);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+    if (private_magic == ADMISSION_DWM_FRAME_ARM_MAGIC)
+      return AdmissionGpuvaG3FrameArmEscape((ADMISSION_CONTEXT *)Adapter, Args);
+#endif
   }
 #endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_BLT_PROBE_QUALIFICATION) || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
@@ -318,6 +328,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEscape(
       Args->PrivateDriverDataSize == sizeof(ADMISSION_DWM_DDI_PROBE))
     return AdmissionDwmDdiProbeQueryWindows(
         context, (ADMISSION_DWM_DDI_PROBE *)Args->pPrivateDriverData);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  if (magic == ADMISSION_DWM_FRAME_PROBE_MAGIC &&
+      Args->PrivateDriverDataSize == sizeof(ADMISSION_DWM_FRAME_PROBE))
+    return AdmissionDwmFrameProbeQueryWindows(
+        context, (ADMISSION_DWM_FRAME_PROBE *)Args->pPrivateDriverData);
+#endif
 #endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   if (magic == ADMISSION_STANDARD_PRESENT_TRACE_MAGIC &&

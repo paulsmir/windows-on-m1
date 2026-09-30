@@ -132,6 +132,15 @@ typedef struct _ADMISSION_UMD_DEVICE {
   D3DKMT_HANDLE RenderSyncObject;
   volatile UINT64 *RenderFenceAddress;
   UINT64 NextRenderFence;
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  BOOL DwmFrameArmAttempted;
+  UINT DwmFrameArmAttempts;
+  ULONGLONG DwmFrameLastAllocation;
+  ULONGLONG DwmFrameLastVa;
+  HRESULT FrameSubmitStatus;
+  UINT64 FrameSubmittedFence;
+  UINT64 FrameCompletedFence;
+#endif
 #endif
   AGX_WIN32_SCREEN Screen;
   ADMISSION_UMD_SCREEN_BUFFER ScreenBuffers[ADMISSION_UMD_SCREEN_BUFFER_LIMIT];
@@ -164,6 +173,10 @@ typedef struct _ADMISSION_UMD_DEVICE {
 extern "C"
 #endif
 const AGX_WIN32_GPUVA_OPS *AdmissionUmdGpuvaOperations(void);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+ULONGLONG AdmissionUmdGpuvaFrameArm(ADMISSION_UMD_DEVICE *Device,
+    D3DKMT_HANDLE Allocation, ULONGLONG CanonicalVa);
+#endif
 #endif
 
 typedef struct _ADMISSION_UMD_RESOURCE {

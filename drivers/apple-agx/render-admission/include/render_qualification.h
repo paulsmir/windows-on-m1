@@ -14,6 +14,43 @@
 #define ADMISSION_BLT_PROBE_CAPACITY 32u
 #define ADMISSION_DWM_DDI_PROBE_MAGIC 0x50445741u
 #define ADMISSION_DWM_DDI_PROBE_VERSION 1u
+#define ADMISSION_DWM_FRAME_ARM_MAGIC 0x41465741u
+#define ADMISSION_DWM_FRAME_PROBE_MAGIC 0x50465741u
+#define ADMISSION_DWM_FRAME_VERSION 1u
+#define ADMISSION_DWM_FRAME_CAPACITY 8u
+
+typedef struct _ADMISSION_DWM_FRAME_ARM {
+  unsigned int Magic, Version, Bytes, OsProcessId;
+  unsigned long long Allocation, CanonicalGpuVa;
+} ADMISSION_DWM_FRAME_ARM;
+
+typedef struct _ADMISSION_DWM_FRAME_ENTRY {
+  volatile long Sequence, Dropped;
+  unsigned int OsProcessId, ReservedProcess;
+  unsigned long long GraphProcessId, Context, Allocation, CanonicalGpuVa;
+  unsigned int QueryCount, QueryPredicate, QueryStatus, QueryResidentPages;
+  unsigned int SubmitCount, SubmitStatus, SubmitBranch, CompleteCount;
+  unsigned long long CommandGpuVa, SubmittedFence, CompletedFence;
+  unsigned int PresentCount, PresentStatus, VirtualPresentCount, VirtualPresentStatus;
+  unsigned long long SourceAllocation, DestinationAllocation;
+  unsigned long long SourceGpuVa, DestinationGpuVa, DestinationGuestIpa;
+  unsigned long long PresentFence, CopiedBytes;
+  unsigned int CopyStatus, Reserved;
+} ADMISSION_DWM_FRAME_ENTRY;
+
+typedef struct _ADMISSION_DWM_FRAME_TDR {
+  unsigned int Captured, PacketState, SchedulerCompletedFence, SchedulerLastSubmittedFence;
+  unsigned int SchedulerActiveFence, PagingPending, ResetStatus, PrivateResetStatus;
+  unsigned long long PacketContext, PacketFence;
+} ADMISSION_DWM_FRAME_TDR;
+
+typedef struct _ADMISSION_DWM_FRAME_PROBE {
+  unsigned int Magic, Version, Bytes, CandidateBuild;
+  unsigned int BootGeneration, ArmedCount, Incomplete, Dropped;
+  volatile long WriteClaim, Sequence;
+  ADMISSION_DWM_FRAME_ENTRY Entries[ADMISSION_DWM_FRAME_CAPACITY];
+  ADMISSION_DWM_FRAME_TDR Tdr;
+} ADMISSION_DWM_FRAME_PROBE;
 
 typedef enum _ADMISSION_DWM_DDI_KIND {
   AdmissionDwmDdiPresentBlt = 0,

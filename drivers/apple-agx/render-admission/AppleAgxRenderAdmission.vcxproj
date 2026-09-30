@@ -88,7 +88,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(AppleAgxGpuvaG3Qualification)'=='true'">
     <ClCompile>
-      <PreprocessorDefinitions>APPLE_AGX_GPUVA_G3_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>APPLE_AGX_GPUVA_G3_QUALIFICATION=1;APPLE_AGX_EXP907_FRAME_RECEIPT=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(AppleAgxBltProbeQualification)'=='true'">

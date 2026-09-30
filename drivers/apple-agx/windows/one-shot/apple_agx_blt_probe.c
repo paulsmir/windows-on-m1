@@ -33,6 +33,7 @@ int wmain(void) {
     D3DKMT_ESCAPE escape = {0};
     ADMISSION_BLT_PROBE probe = {0};
     ADMISSION_DWM_DDI_PROBE dwm = {0};
+    ADMISSION_DWM_FRAME_PROBE frame = {0};
     UINT eventIndex;
     probe.Magic = ADMISSION_BLT_PROBE_MAGIC;
     probe.Version = ADMISSION_BLT_PROBE_VERSION;
@@ -70,6 +71,49 @@ int wmain(void) {
                   entry->Last.DestinationCount, entry->Last.Allocation,
                   entry->Last.Address, entry->Last.Context, entry->Last.Fence);
         }
+      }
+    }
+    frame.Magic = ADMISSION_DWM_FRAME_PROBE_MAGIC;
+    frame.Version = ADMISSION_DWM_FRAME_VERSION;
+    frame.Bytes = sizeof(frame);
+    escape.pPrivateDriverData = &frame;
+    escape.PrivateDriverDataSize = sizeof(frame);
+    {
+      NTSTATUS frameStatus = D3DKMTEscape(&escape);
+      wprintf(L"DWM_FRAME_QUERY adapter=%u status=0x%08x\n",
+              index, (UINT)frameStatus);
+      if (frameStatus >= 0 && frame.Magic == ADMISSION_DWM_FRAME_PROBE_MAGIC &&
+          frame.Version == ADMISSION_DWM_FRAME_VERSION &&
+          frame.Bytes == sizeof(frame)) {
+        found = TRUE;
+        wprintf(L"DWM_FRAME build=%u boot=%u armed=%u dropped=%u incomplete=%u\n",
+                frame.CandidateBuild, frame.BootGeneration, frame.ArmedCount,
+                frame.Dropped, frame.Incomplete);
+        for (UINT frameIndex = 0u; frameIndex < ADMISSION_DWM_FRAME_CAPACITY;
+             ++frameIndex) {
+          const ADMISSION_DWM_FRAME_ENTRY *entry = &frame.Entries[frameIndex];
+          if (entry->Context == 0ULL) continue;
+          wprintf(L"DWM_FRAME_ENTRY index=%u pid=%u graph=%llu context=0x%llx alloc=0x%llx va=0x%llx query=%u predicate=%u query_status=0x%x resident_pages=%u submit=%u submit_status=0x%x branch=%u command_va=0x%llx submitted_fence=%llu complete=%u completed_fence=%llu present=%u present_status=0x%x virtual_present=%u virtual_status=0x%x src_alloc=0x%llx dst_alloc=0x%llx src_va=0x%llx dst_va=0x%llx dst_ipa=0x%llx present_fence=%llu copied=%llu copy_status=0x%x\n",
+                  frameIndex, entry->OsProcessId, entry->GraphProcessId,
+                  entry->Context, entry->Allocation, entry->CanonicalGpuVa,
+                  entry->QueryCount, entry->QueryPredicate, entry->QueryStatus,
+                  entry->QueryResidentPages, entry->SubmitCount,
+                  entry->SubmitStatus, entry->SubmitBranch, entry->CommandGpuVa,
+                  entry->SubmittedFence, entry->CompleteCount,
+                  entry->CompletedFence, entry->PresentCount,
+                  entry->PresentStatus, entry->VirtualPresentCount,
+                  entry->VirtualPresentStatus, entry->SourceAllocation,
+                  entry->DestinationAllocation, entry->SourceGpuVa,
+                  entry->DestinationGpuVa, entry->DestinationGuestIpa,
+                  entry->PresentFence, entry->CopiedBytes, entry->CopyStatus);
+        }
+        wprintf(L"DWM_FRAME_TDR captured=%u packet_state=%u context=0x%llx fence=%llu completed=%u submitted=%u active=%u paging=%u private_reset=0x%x reset=0x%x\n",
+                frame.Tdr.Captured, frame.Tdr.PacketState,
+                frame.Tdr.PacketContext, frame.Tdr.PacketFence,
+                frame.Tdr.SchedulerCompletedFence,
+                frame.Tdr.SchedulerLastSubmittedFence,
+                frame.Tdr.SchedulerActiveFence, frame.Tdr.PagingPending,
+                frame.Tdr.PrivateResetStatus, frame.Tdr.ResetStatus);
       }
     }
     (void)D3DKMTCloseAdapter(&close);

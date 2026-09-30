@@ -2607,6 +2607,9 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
       !AppleAgxCompletionTransactionFinish(
           &runtime->Completion, Fence, Node, Engine))
     return APPLE_AGX_BACKEND_FALSE;
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  AdmissionDwmFrameRecordCompletion(adapter, runtime->CompletionContext, Fence);
+#endif
   KeAcquireSpinLock(&adapter->SchedulerLock,&old_irql);
   if (runtime->CompletionContext != NULL &&
       runtime->CompletionContext->Object.FenceOutstanding == Fence)

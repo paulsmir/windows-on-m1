@@ -131,6 +131,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentBlt(
   input.Rects = (const APPLE_AGX_GDI_RECT *)Present->pDstSubRects;
   input.RectCount = Present->SubRectCnt;
   input.MultipassOffset = Present->MultipassOffset;
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  AdmissionDwmFrameRecordBlt(CONTAINING_RECORD(Device->Object.Adapter,
+      ADMISSION_CONTEXT, ObjectAdapter), Context,
+      (ULONGLONG)source->RuntimeAllocation,
+      (ULONGLONG)destination->RuntimeAllocation,
+      input.Command.SourceLocation, input.Command.DestinationLocation);
+#endif
   if (!virtualAddressing && Present->pAllocationList[1].SegmentId != 0u &&
       !AdmissionPresentLocationEncode(Present->pAllocationList[1].SegmentId,
           (ULONGLONG)Present->pAllocationList[1].PhysicalAddress.QuadPart,

@@ -27,6 +27,7 @@
     <AppleAgxUmdAdmissionTraceDefinition Condition="'$(AppleAgxUmdAdmissionTrace)' == 'true'">APPLE_AGX_UMD_ADMISSION_TRACE=1;</AppleAgxUmdAdmissionTraceDefinition>
     <AppleAgxNativeFrontendDefinition Condition="'$(EnableNativeFrontend)' == 'true'">APPLE_AGX_UMD_NATIVE_FRONTEND=1;</AppleAgxNativeFrontendDefinition>
     <AppleAgxGpuvaDefinition Condition="'$(EnableGpuvaWinsys)' == 'true'">APPLE_AGX_GPUVA_WINSYS=1;</AppleAgxGpuvaDefinition>
+    <AppleAgxFrameReceiptDefinition Condition="'$(EnableGpuvaWinsys)' == 'true'">APPLE_AGX_EXP907_FRAME_RECEIPT=1;</AppleAgxFrameReceiptDefinition>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ResourceCompile>
@@ -34,7 +35,7 @@
     </ResourceCompile>
     <ClCompile>
       <AdditionalIncludeDirectories>include;..\include;..\..\shared\include;..\..\mesa\winsys;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>$(AppleAgxUmdAdmissionTraceDefinition)$(AppleAgxNativeFrontendDefinition)$(AppleAgxGpuvaDefinition)%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>$(AppleAgxUmdAdmissionTraceDefinition)$(AppleAgxNativeFrontendDefinition)$(AppleAgxGpuvaDefinition)$(AppleAgxFrameReceiptDefinition)%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <SDLCheck>true</SDLCheck>

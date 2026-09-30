@@ -693,9 +693,36 @@ HRESULT AdmissionUmdSubmitPresent(ADMISSION_UMD_DEVICE *Device,
   present.hSrcAllocation = Source->KernelAllocation;
   present.pDXGIContext = DxgiContext;
   present.hContext = Device->KernelContext;
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  ULONGLONG canonicalVa = AdmissionUmdGpuvaFrameArm(Device,
+      Source->KernelAllocation, 0ULL);
+  static volatile LONG presentReceipts;
+  LONG ordinal = InterlockedIncrement(&presentReceipts);
+  UINT ticket[16] = {(UINT)ordinal, (UINT)present.hSrcAllocation,
+      (UINT)(ULONG_PTR)present.hContext,
+      (UINT)((ULONGLONG)(ULONG_PTR)present.hContext >> 32),
+      (UINT)canonicalVa, (UINT)(canonicalVa >> 32),
+      (UINT)Device->FrameSubmittedFence,
+      (UINT)(Device->FrameSubmittedFence >> 32),
+      (UINT)Device->FrameCompletedFence,
+      (UINT)(Device->FrameCompletedFence >> 32),
+      (UINT)Device->FrameSubmitStatus,
+      (UINT)Device->NextRenderFence,
+      (UINT)(ULONG_PTR)present.pDXGIContext,
+      (UINT)((ULONGLONG)(ULONG_PTR)present.pDXGIContext >> 32),
+      (UINT)Device->DrawTerminal, (UINT)Device->RenderSyncObject};
+  if (ordinal <= 16)
+    AdmissionUmdDiagnostic("measure-present-before", S_OK, ticket,
+                           ARRAYSIZE(ticket));
+#endif
   AdmissionUmdPresentMeasure(AdmissionUmdMeasurePresentCallbackEnter,S_OK,NULL,0u);
   HRESULT result=Device->DxgiCallbacks->pfnPresentCb(
       Device->RuntimeDevice.handle, &present);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  if (ordinal <= 16)
+    AdmissionUmdDiagnostic("measure-present-after", result, ticket,
+                           ARRAYSIZE(ticket));
+#endif
   UINT values[4]={(UINT)present.hSrcAllocation,
       (UINT)(ULONG_PTR)present.hContext,
       (UINT)(ULONG_PTR)present.pDXGIContext,

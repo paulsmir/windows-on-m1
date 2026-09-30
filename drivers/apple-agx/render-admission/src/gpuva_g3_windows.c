@@ -54,6 +54,10 @@ static NTSTATUS AdmissionG4SubmitRejectDetail(
       InterlockedExchange(&adapter->G4SubmitFailureClaim, 2);
     }
     AdmissionRenderCorrelationSubmitFailureWindows(adapter);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+    if (validContext && context != NULL && args != NULL)
+      AdmissionDwmFrameRecordReject(adapter, (PVOID)context, branch, status);
+#endif
   }
   return status;
 }
@@ -623,6 +627,48 @@ static const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *AdmissionG3CopyPte(
   return &shadow->ResidentPtes[(UINT)((va>>12)&8191u)];
 }
 
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+NTSTATUS AdmissionGpuvaG3FrameArmEscape(ADMISSION_CONTEXT *adapter,
+    const DXGKARG_ESCAPE *args) {
+  ADMISSION_DWM_FRAME_ARM request;
+  ADMISSION_G3_STATE *state;
+  ADMISSION_G3_PROCESS *process;
+  ADMISSION_RENDER_CONTEXT *context;
+  BOOLEAN valid = FALSE;
+  if (adapter == NULL || args == NULL || !adapter->Started ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL || args->Flags.Value != 1u ||
+      args->pPrivateDriverData == NULL ||
+      args->PrivateDriverDataSize != sizeof(request))
+    return STATUS_INVALID_PARAMETER;
+  RtlCopyMemory(&request, args->pPrivateDriverData, sizeof(request));
+  if (request.Magic != ADMISSION_DWM_FRAME_ARM_MAGIC ||
+      request.Version != ADMISSION_DWM_FRAME_VERSION ||
+      request.Bytes != sizeof(request) ||
+      request.OsProcessId != HandleToULong(PsGetCurrentProcessId()) ||
+      request.Allocation == 0ULL ||
+      request.CanonicalGpuVa >= (1ULL << 39) ||
+      (request.CanonicalGpuVa & 0xffffULL) != 0ULL)
+    return STATUS_INVALID_PARAMETER;
+  state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  if (state == NULL) return STATUS_INVALID_DEVICE_STATE;
+  ExAcquireFastMutex(&state->Lock);
+  process = AdmissionGpuvaG3FindProcess(state, args->hKmdProcessHandle);
+  for (context = process ? process->Contexts : NULL;
+       context != NULL && (HANDLE)context != args->hContext;
+       context = context->GpuvaG3NextContext) {}
+  if (context != NULL && context->Win32Transport &&
+      context->Object.Device != NULL &&
+      context->Object.Device->Adapter == &adapter->ObjectAdapter &&
+      (HANDLE)CONTAINING_RECORD(context->Object.Device, ADMISSION_DEVICE, Object) ==
+          args->hDevice)
+    valid = AdmissionDwmFrameArmWindows(adapter, context,
+        request.OsProcessId, process->Graph.ProcessId,
+        request.Allocation, request.CanonicalGpuVa);
+  ExReleaseFastMutex(&state->Lock);
+  return valid ? STATUS_SUCCESS : STATUS_INVALID_HANDLE;
+}
+#endif
+
 /* Caller holds the QUERY mutex when process/context are supplied. Claim and
  * fixed adapter storage precede unlock; only the winning caller persists it. */
 static BOOLEAN AdmissionG3CaptureCopyQueryFailure(ADMISSION_CONTEXT *adapter,
@@ -876,6 +922,23 @@ Unlock:
     captured=AdmissionG3CaptureCopyQueryFailure(adapter,p,context,q,predicate,status,
         TRUE,first,length,&walk,allocation);
   }
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  if (isQuery && q != NULL && context != NULL) {
+    ULONG residentPages = 0u;
+    if (p != NULL && allocation != NULL && length != 0ULL &&
+        (predicate == 0u || predicate >= 53u))
+      for (page = first & ~0xfffULL; page < end; page += 0x1000ULL) {
+        const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte = AdmissionG3CopyPte(p, page);
+        if (pte != NULL && (pte->Flags & APPLE_AGX_GPUVA_G3_VALID) != 0u &&
+            pte->SegmentId == ADMISSION_MEMORY_LOCAL_SEGMENT &&
+            pte->Allocation == (ULONGLONG)(ULONG_PTR)allocation &&
+            pte->AllocationOffset == page - q->GpuVa)
+          ++residentPages;
+      }
+    AdmissionDwmFrameRecordQuery(adapter, context, predicate, status,
+        residentPages);
+  }
+#endif
   ExReleaseFastMutex(&state->Lock);
 Release:
   if(reference.ReleaseHandle) adapter->Interface.DxgkCbReleaseHandleData(reference);
@@ -1899,6 +1962,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3ExecutePresentVirtual(
     Adapter->PresentCopyFaultVa = copy.FaultVa;
     Adapter->PresentCopyFaultWrite = copy.FaultWrite;
   }
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  {
+    const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *destinationPte =
+        AdmissionG3CopyPte(process, command.DestinationLocation);
+    AdmissionDwmFrameRecordCopy(Adapter, Context,
+        destinationPte != NULL &&
+            (destinationPte->Flags & APPLE_AGX_GPUVA_G3_VALID) != 0u
+                ? destinationPte->GuestIpa : 0ULL,
+        *BytesCopied, completed ? STATUS_SUCCESS :
+            NT_SUCCESS(copy.Status) ? STATUS_INVALID_ADDRESS : copy.Status);
+  }
+#endif
   KeMemoryBarrier();
   ExReleaseFastMutex(&process->State->Lock);
   ExFreePoolWithTag(scratch, ADMISSION_POOL_TAG);
@@ -2307,6 +2382,12 @@ static NTSTATUS AdmissionDdiSubmitCommandVirtualInner(
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommandVirtual(
     HANDLE Adapter, const DXGKARG_SUBMITCOMMANDVIRTUAL *Args) {
   NTSTATUS status = AdmissionDdiSubmitCommandVirtualInner(Adapter, Args);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  if (Args != NULL)
+    AdmissionDwmFrameRecordSubmit((ADMISSION_CONTEXT *)Adapter,
+        Args->hContext, Args->DmaBufferVirtualAddress,
+        Args->SubmissionFenceId, 0u, status, Args->Flags.Present);
+#endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   ADMISSION_DWM_DDI_EVENT event;
   RtlZeroMemory(&event, sizeof(event));

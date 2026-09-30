@@ -401,7 +401,13 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
       InterlockedCompareExchange(&context->SchedulerInitialized, 0, 0) == 0)
     return STATUS_INVALID_PARAMETER;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  if (!AdmissionGpuvaG3PrivateReset(context)) return STATUS_DEVICE_HARDWARE_ERROR;
+  {
+    BOOLEAN privateReset = AdmissionGpuvaG3PrivateReset(context);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+    AdmissionDwmFrameRecordPrivateReset(context, privateReset);
+#endif
+    if (!privateReset) return STATUS_DEVICE_HARDWARE_ERROR;
+  }
 #endif
   KeAcquireSpinLock(&context->PagingLock, &oldIrql);
   if (InterlockedCompareExchange(&context->PagingPending, 0, 0) != 0 ||
@@ -506,10 +512,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiResetEngine(
 _Use_decl_annotations_ NTSTATUS AdmissionDdiResetFromTimeout(HANDLE Adapter) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
   DXGKARG_RESETENGINE reset;
+  NTSTATUS status;
   if (context == NULL)
     return STATUS_INVALID_PARAMETER;
   RtlZeroMemory(&reset, sizeof(reset));
-  return AdmissionDdiResetEngine(context, &reset);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  AdmissionDwmFrameRecordTdr(context, STATUS_PENDING, FALSE);
+#endif
+  status = AdmissionDdiResetEngine(context, &reset);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  AdmissionDwmFrameRecordTdr(context, status, TRUE);
+#endif
+  return status;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiRestartFromTimeout(HANDLE Adapter) {
