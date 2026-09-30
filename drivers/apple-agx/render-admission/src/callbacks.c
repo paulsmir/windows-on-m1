@@ -155,8 +155,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
     if (NT_SUCCESS(status) && Present->pAllocationList != NULL) {
       source = (ADMISSION_OPEN_ALLOCATION *)
-          Present->pAllocationList[DXGK_PRESENT_SOURCE_INDEX]
-              .hDeviceSpecificAllocation;
+          ((renderContext->Object.Magic == ADMISSION_OBJECT_CONTEXT_MAGIC &&
+            (renderContext->Object.Flags & ADMISSION_CONTEXT_VIRTUAL_ADDRESSING) != 0u)
+               ? Present->pAllocationInfo[DXGK_PRESENT_SOURCE_INDEX]
+                     .hDeviceSpecificAllocation
+               : Present->pAllocationList[DXGK_PRESENT_SOURCE_INDEX]
+                     .hDeviceSpecificAllocation);
       if (source != NULL &&
           source->Magic == ADMISSION_OPEN_ALLOCATION_MAGIC &&
           source->Device == device && source->Allocation != NULL &&

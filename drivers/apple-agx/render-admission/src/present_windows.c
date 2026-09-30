@@ -2,6 +2,8 @@
 
 C_ASSERT(sizeof(ADMISSION_PRESENT_BLT_COMMAND) == 168);
 C_ASSERT(sizeof(RECT) == sizeof(APPLE_AGX_GDI_RECT));
+C_ASSERT(sizeof(DXGK_PRESENTALLOCATIONINFO) == 32);
+C_ASSERT(FIELD_OFFSET(DXGK_PRESENTALLOCATIONINFO, AllocationVirtualAddress) == 8);
 
 static ADMISSION_OPEN_ALLOCATION *AdmissionPresentOpen(
     ADMISSION_DEVICE *Device, const DXGK_ALLOCATIONLIST *List,
@@ -62,6 +64,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentBlt(
   APPLE_AGX_GDI_RECT fullPrimaryRect;
   ADMISSION_OPEN_ALLOCATION *source, *destination;
   ADMISSION_PRESENT_OPEN_ENDPOINT sourceEvidence, destinationEvidence;
+  DXGK_ALLOCATIONLIST virtualList[3];
+  const DXGK_ALLOCATIONLIST *allocationList;
   APPLE_AGX_DMA_SHADOW shadow;
   D3DDDI_PATCHLOCATIONLIST *patch;
   BOOLEAN fullPrimary = FALSE;
@@ -83,9 +87,28 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentBlt(
       Present->DmaBufferPrivateDataSize <=
           sizeof(APPLE_AGX_DMA_SHADOW_HEADER) + sizeof(APPLE_AGX_DMA_SHADOW_RECORD))
     return STATUS_INVALID_PARAMETER;
-  source = AdmissionPresentOpen(Device, Present->pAllocationList, 1u, FALSE,
+  allocationList = Present->pAllocationList;
+  if (virtualAddressing) {
+    if (Present->pAllocationInfo[DXGK_PRESENT_SOURCE_INDEX].SegmentId != 0u ||
+        Present->pAllocationInfo[DXGK_PRESENT_DESTINATION_INDEX].SegmentId != 0u ||
+        Present->pAllocationInfo[DXGK_PRESENT_SOURCE_INDEX].PhysicalAdapterIndex != 0u ||
+        Present->pAllocationInfo[DXGK_PRESENT_DESTINATION_INDEX].PhysicalAdapterIndex != 0u)
+      return STATUS_INVALID_PARAMETER;
+    RtlZeroMemory(virtualList, sizeof(virtualList));
+    virtualList[DXGK_PRESENT_SOURCE_INDEX].hDeviceSpecificAllocation =
+        Present->pAllocationInfo[DXGK_PRESENT_SOURCE_INDEX].hDeviceSpecificAllocation;
+    virtualList[DXGK_PRESENT_SOURCE_INDEX].VirtualAddress =
+        Present->pAllocationInfo[DXGK_PRESENT_SOURCE_INDEX].AllocationVirtualAddress;
+    virtualList[DXGK_PRESENT_DESTINATION_INDEX].hDeviceSpecificAllocation =
+        Present->pAllocationInfo[DXGK_PRESENT_DESTINATION_INDEX].hDeviceSpecificAllocation;
+    virtualList[DXGK_PRESENT_DESTINATION_INDEX].VirtualAddress =
+        Present->pAllocationInfo[DXGK_PRESENT_DESTINATION_INDEX].AllocationVirtualAddress;
+    virtualList[DXGK_PRESENT_DESTINATION_INDEX].WriteOperation = 1u;
+    allocationList = virtualList;
+  }
+  source = AdmissionPresentOpen(Device, allocationList, 1u, FALSE,
                                 &sourceEvidence);
-  destination = AdmissionPresentOpen(Device, Present->pAllocationList, 2u, TRUE,
+  destination = AdmissionPresentOpen(Device, allocationList, 2u, TRUE,
                                      &destinationEvidence);
   if (source == NULL || destination == NULL) {
     AdmissionRecordPresentOpenFailure(Device, Context, Present,
@@ -100,12 +123,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentBlt(
   if (virtualAddressing) {
     input.Command.Version = ADMISSION_PRESENT_BLT_GPUVA_VERSION;
     input.Command.SourceLocation =
-        Present->pAllocationList[DXGK_PRESENT_SOURCE_INDEX].VirtualAddress;
+        allocationList[DXGK_PRESENT_SOURCE_INDEX].VirtualAddress;
     input.Command.DestinationLocation =
-        Present->pAllocationList[DXGK_PRESENT_DESTINATION_INDEX].VirtualAddress;
-    if (Present->pAllocationList[DXGK_PRESENT_SOURCE_INDEX].SegmentId != 0u ||
-        Present->pAllocationList[DXGK_PRESENT_DESTINATION_INDEX].SegmentId != 0u)
-      return STATUS_INVALID_PARAMETER;
+        allocationList[DXGK_PRESENT_DESTINATION_INDEX].VirtualAddress;
   }
   input.SameAllocation = source->Allocation == destination->Allocation;
   if (!input.SameAllocation && Present->MultipassOffset == 0u &&

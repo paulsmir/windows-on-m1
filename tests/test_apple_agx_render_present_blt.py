@@ -71,6 +71,8 @@ typedef struct {int32_t left,top,right,bottom;} RECT;
 typedef struct {int64_t QuadPart;} PHYSICAL_ADDRESS;
 typedef struct {HANDLE hDeviceSpecificAllocation; unsigned WriteOperation:1,SegmentId:5,Reserved:26;
  union {PHYSICAL_ADDRESS PhysicalAddress;uint64_t VirtualAddress;};} DXGK_ALLOCATIONLIST;
+typedef struct {HANDLE hDeviceSpecificAllocation;uint64_t AllocationVirtualAddress;
+ PHYSICAL_ADDRESS PhysicalAddress;uint16_t SegmentId,PhysicalAdapterIndex;} DXGK_PRESENTALLOCATIONINFO;
 typedef struct {unsigned AllocationIndex,SlotId,DriverId,AllocationOffset,PatchOffset,SplitOffset;} D3DDDI_PATCHLOCATIONLIST;
 typedef struct {ADMISSION_OBJECT_DEVICE Object;} ADMISSION_DEVICE;
 typedef struct {ADMISSION_OBJECT_CONTEXT Object;struct {int Active;} SchedulerContext;
@@ -80,7 +82,7 @@ typedef struct {unsigned Magic;ADMISSION_DEVICE *Device;unsigned RuntimeAllocati
  ADMISSION_ALLOCATION_OBJECT *Allocation;int ReadOnly;} ADMISSION_OPEN_ALLOCATION;
 typedef struct {void *pDmaBuffer;unsigned DmaSize;void *pDmaBufferPrivateData;
  unsigned DmaBufferPrivateDataSize;
- union {DXGK_ALLOCATIONLIST *pAllocationList;DXGK_ALLOCATIONLIST *pAllocationInfo;};
+ union {DXGK_ALLOCATIONLIST *pAllocationList;DXGK_PRESENTALLOCATIONINFO *pAllocationInfo;};
  D3DDDI_PATCHLOCATIONLIST *pPatchLocationListOut;unsigned PatchLocationListOutSize;
  unsigned MultipassOffset,Color;RECT DstRect,SrcRect;unsigned SubRectCnt;
  const RECT *pDstSubRects;unsigned FlipInterval;union {unsigned Value;} Flags;
@@ -132,6 +134,8 @@ static void AdmissionFlushGdiReceipt(ADMISSION_CONTEXT *c){(void)c;}
         cases = r'''
 int main(void){
  assert(sizeof(ADMISSION_PRESENT_OPEN_ENDPOINT)==64);
+ assert(sizeof(DXGK_ALLOCATIONLIST)==24 && sizeof(DXGK_PRESENTALLOCATIONINFO)==32);
+ assert(offsetof(DXGK_PRESENTALLOCATIONINFO,AllocationVirtualAddress)==8);
  ADMISSION_CONTEXT adapter={{ADMISSION_OBJECT_ADAPTER_MAGIC,1,1},1};
  ADMISSION_DEVICE device={{ADMISSION_OBJECT_DEVICE_MAGIC,2,&adapter.ObjectAdapter,0,1,2}};
  ADMISSION_RENDER_CONTEXT context={{ADMISSION_OBJECT_CONTEXT_MAGIC,2,&device.Object,0,0,1,0},{1},NULL,0};
@@ -208,8 +212,12 @@ int main(void){
  assert(traced_value==AdmissionPresentSubmitDmaStart);
  context.Object.Flags=ADMISSION_CONTEXT_VIRTUAL_ADDRESSING;
  context.GpuvaG3Process=&context;
- a[1].SegmentId=a[2].SegmentId=0;
- a[1].VirtualAddress=0x100000ULL;a[2].VirtualAddress=0x200000ULL;
+ DXGK_PRESENTALLOCATIONINFO virtual_allocations[3]={0};
+ virtual_allocations[1].hDeviceSpecificAllocation=&os;
+ virtual_allocations[1].AllocationVirtualAddress=0x100000ULL;
+ virtual_allocations[2].hDeviceSpecificAllocation=&od;
+ virtual_allocations[2].AllocationVirtualAddress=0x200000ULL;
+ p.pAllocationInfo=virtual_allocations;
  memset(dma,0,sizeof(dma));memset(private_data,0,sizeof(private_data));
  p.pDmaBuffer=dma;p.DmaSize=4096;p.pDmaBufferPrivateData=private_data;
  p.DmaBufferPrivateDataSize=8192;p.pPatchLocationListOut=NULL;
@@ -229,16 +237,22 @@ int main(void){
  virtual_submit.Flags.Value=2;
  assert(AdmissionPresentSubmitVirtual(&adapter,&context,&virtual_submit)==STATUS_SUCCESS);
  assert(queue_calls==4 && queued_fence==40 && queued_bytes==184);
- a[1].hDeviceSpecificAllocation=NULL;
  p.pDmaBuffer=dma;p.DmaSize=4096;p.pDmaBufferPrivateData=private_data;
  p.DmaBufferPrivateDataSize=8192;p.MultipassOffset=0;
+ virtual_allocations[1].SegmentId=1;
+ assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_PARAMETER);
+ virtual_allocations[1].SegmentId=0;
+ virtual_allocations[2].PhysicalAdapterIndex=1;
+ assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_PARAMETER);
+ virtual_allocations[2].PhysicalAdapterIndex=0;
+ virtual_allocations[1].hDeviceSpecificAllocation=NULL;
  assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_HANDLE);
  assert(open_receipt_calls==1);
  assert(recorded_source.Index==1 && recorded_source.Reason==ADMISSION_PRESENT_OPEN_NULL_HANDLE);
  assert(recorded_source.Handle==0 && recorded_source.GpuVirtualAddress==0x100000ULL);
  assert(recorded_destination.Index==2 && recorded_destination.Reason==ADMISSION_PRESENT_OPEN_OK);
  assert(recorded_destination.Handle==(unsigned long long)(uintptr_t)&od);
- a[1].hDeviceSpecificAllocation=&os;od.ReadOnly=1;
+ virtual_allocations[1].hDeviceSpecificAllocation=&os;od.ReadOnly=1;
  assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_HANDLE);
  assert(open_receipt_calls==2);
  assert(recorded_source.Reason==ADMISSION_PRESENT_OPEN_OK);
