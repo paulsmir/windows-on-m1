@@ -3870,7 +3870,8 @@ agx_shader_initialize("""
                     f'AgxWin32AsahiMarkContextFault(ctx, ({kind}u << 16) | __LINE__);')
                 if kind == 2:
                     guard = ('if (ctx->any_faults || !batch->vdm.bo || '
-                             '!batch->initialized || !batch->draws) {\n'
+                             '!batch->initialized ||\n'
+                             '       (!batch->draws && !batch->clear)) {\n'
                              '      AgxWin32AsahiMarkContextFault(ctx, '
                              '(2u << 16) | __LINE__);')
                     if content.count(guard) != 1:
