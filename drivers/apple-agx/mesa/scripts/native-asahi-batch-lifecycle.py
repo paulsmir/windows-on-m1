@@ -213,6 +213,12 @@ def project_sources(out,project,overlays):
     # Flush still calls the original native render finalization and cmdbuf
     # constructor. The internal DRM-named value is never sent to Linux APIs.
     s=body(s,'agx_flush_batch','''   if (!agx_batch_is_active(batch) || agx_batch_is_submitted(batch)) return;
+   if (!batch->draws && !batch->cdm.bo &&
+       !(batch->vdm.bo && (batch->clear || batch->initialized))) {
+      if (!AgxWin32AsahiBatchAbort(batch)) { ctx->any_faults = true; return; }
+      agx_batch_reset(ctx, batch);
+      return;
+   }
    if (ctx->any_faults || !batch->vdm.bo || !batch->initialized || !batch->draws) {
       ctx->any_faults = true;
       if (AgxWin32AsahiBatchAbort(batch)) agx_batch_reset(ctx, batch);
