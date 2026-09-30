@@ -766,7 +766,7 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   ADMISSION_SCANOUT_MEMORY_VIEW view;
   DXGKARGCB_GETHANDLEDATA lookup={0};
   DXGKARGCB_RELEASEHANDLEDATA reference={0};
-  ULONGLONG length=0, offset, end, page, first=0;
+  ULONGLONG length=0, offset, end=0, page, first=0;
   APPLE_AGX_GPUVA_G3_WALK_FAILURE walk={0};
   BOOLEAN captured=FALSE, captureAttempted=FALSE;
   ULONG predicate=0u, operation=MAXULONG;

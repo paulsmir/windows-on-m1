@@ -217,7 +217,7 @@ _Use_decl_annotations_ VOID AdmissionDwmFrameRecordCopy(
 
 _Use_decl_annotations_ VOID AdmissionDwmFrameRecordTdr(
     ADMISSION_CONTEXT *adapter, NTSTATUS status, BOOLEAN afterReset) {
-  ADMISSION_DWM_FRAME_TDR snapshot;
+  ADMISSION_DWM_FRAME_TDR snapshot = {0};
   KIRQL oldIrql;
   if (adapter == NULL) return;
   if (!afterReset) {
