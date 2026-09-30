@@ -3859,6 +3859,13 @@ agx_shader_initialize("""
                 marker = 'ctx->any_faults = true;'
                 if content.count(marker) < 2:
                     raise SystemExit('Missing native fault sites: ' + path)
+                if kind == 3:
+                    declaration = 'static void agx_win32_shader_failed(struct agx_context *ctx);'
+                    if content.count(declaration) != 1:
+                        raise SystemExit('Missing early native state declaration')
+                    content = content.replace(declaration,
+                        'void AgxWin32AsahiMarkContextFault(struct agx_context *,unsigned);\n'
+                        + declaration, 1)
                 content = content.replace(marker,
                     f'AgxWin32AsahiMarkContextFault(ctx, ({kind}u << 16) | __LINE__);')
                 target.write_text(content)
