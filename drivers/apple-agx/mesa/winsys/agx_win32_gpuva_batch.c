@@ -239,6 +239,10 @@ static int prepare_process_buffers(AGX_WIN32_ASAHI_BACKEND *b,AGX_G4_BATCH *g,
       g->Lease.SceneId && g->Lease.SceneGeneration;
 }
 
+static int batch_has_render_work(const struct agx_batch *batch) {
+  return batch && (batch->draws || batch->clear);
+}
+
 int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
                              const struct drm_asahi_cmd_render *render) {
   AGX_WIN32_ASAHI_BACKEND *b=backend(batch);
@@ -255,7 +259,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   struct drm_asahi_cmd_header command_header;
   unsigned fail_site=0u;
   if(!b || !g || !render || b->Failed || b->Gpuva.Terminal ||
-     !batch->draws || batch->cdm.bo || g->Submitted || g->Rejected ||
+     !batch_has_render_work(batch) || batch->cdm.bo || g->Submitted || g->Rejected ||
      !batch->vdm.bo ||
      batch->key.nr_cbufs!=1 || !batch->key.cbufs[0].texture ||
      batch->key.cbufs[0].format!=PIPE_FORMAT_B8G8R8A8_UNORM ||

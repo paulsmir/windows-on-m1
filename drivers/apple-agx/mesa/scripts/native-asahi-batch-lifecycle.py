@@ -219,7 +219,8 @@ def project_sources(out,project,overlays):
       agx_batch_reset(ctx, batch);
       return;
    }
-   if (ctx->any_faults || !batch->vdm.bo || !batch->initialized || !batch->draws) {
+   if (ctx->any_faults || !batch->vdm.bo || !batch->initialized ||
+       (!batch->draws && !batch->clear)) {
       ctx->any_faults = true;
       if (AgxWin32AsahiBatchAbort(batch)) agx_batch_reset(ctx, batch);
       return;

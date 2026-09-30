@@ -49,6 +49,10 @@ int main(void) {
   context.any_faults=false; batch.active=true; batch.draws=0; batch.initialized=false; abort_allowed=false;
   agx_flush_batch(&context,&batch);
   assert(context.any_faults && batch.active && aborts==5 && resets==4 && submissions==0);
+  context.any_faults=false; batch.active=true; batch.draws=0; batch.initialized=true;
+  batch.clear=true; batch.vdm.bo=(void*)1; abort_allowed=true;
+  agx_flush_batch(&context,&batch);
+  assert(!context.any_faults && batch.active && aborts==5 && resets==4 && submissions==0);
   return 0;
 }
 '''

@@ -49,7 +49,7 @@ struct agx_batch {
   struct agx_context *ctx;
   void *windows_batch;
   struct { struct agx_bo *bo; } vdm,cdm;
-  unsigned draws;
+  unsigned draws,clear;
   struct { unsigned bit_count, count; unsigned handles[8]; } bo_list;
   struct agx_pool pool,pipeline_pool;
   struct {

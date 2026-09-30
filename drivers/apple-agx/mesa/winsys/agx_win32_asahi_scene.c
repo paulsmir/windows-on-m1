@@ -320,7 +320,7 @@ int AgxWin32AsahiContextFlushForPresent(struct pipe_context *ctx) {
   int drawn=0;
   for(unsigned i=0;i<AGX_MAX_BATCHES;++i) {
     struct agx_batch *slot=&native->batches.slots[i];
-    if(slot->windows_batch && slot->draws) { drawn=1; break; }
+    if(slot->windows_batch && (slot->draws || slot->clear)) { drawn=1; break; }
   }
   if(drawn) {
     ctx->flush(ctx,NULL,0);

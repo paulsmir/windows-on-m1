@@ -81,7 +81,7 @@ static void FrontendFlush(Device *hDevice) {
     assert(AgxWin32AsahiBatchPoll(&batch,0));
   } else { assert(!frontend_errors); }
 """)
-        names = ("batch_refuse", "add_bo", "append_native", "append_attachments", "prepare_process_buffers",
+        names = ("batch_refuse", "batch_has_render_work", "add_bo", "append_native", "append_attachments", "prepare_process_buffers",
                  "AgxWin32AsahiBatchFinish", "AgxWin32AsahiBatchPoll",
                  "AgxWin32AsahiBatchAbort", "AgxWin32AsahiBatchRelease")
         with tempfile.TemporaryDirectory(prefix="r149-submit-error-") as directory:
