@@ -30,6 +30,7 @@ static void update(ADMISSION_CONTEXT *adapter, HANDLE process, UINT level,
 #include "g3_r135_root_reuse_cases.c"
 #include "g3_r137_reservation_cases.c"
 #include "g3_r144_local_bounds_cases.c"
+#include "g3_r168_capacity_cases.c"
 #include "g3_r145_copy_cases.c"
 #if defined(G3_PRIVATE_COMBINED)
 #include "g3_r137_private_combined.c"
@@ -39,6 +40,7 @@ static void r165_end_job(void) {
   if(r165_graph && r165_graph->JobInFlight) assert(AppleAgxGpuvaG3GraphEndJob(r165_graph));
 }
 int main(void) {
+  if(getenv("G3_REPLAY_R168")) {r168_capacity_cases();return 0;}
   if (getenv("G3_REPLAY_R145")) { r145_copy_cases(); return 0; }
   if (getenv("G3_REPLAY_R144")) { r144_local_bounds_cases(); return 0; }
   if (getenv("G3_REPLAY_RESERVE_BASE"))
@@ -594,7 +596,8 @@ int main(void) {
     failed.UpdatePageTable.pPageTableEntries=ptes;
     broker.blocked_ipa=local_ipa+0x140000;
     assert(AdmissionGpuvaG3BuildPagingBuffer(&adapter,&failed)==
-           STATUS_DEVICE_HARDWARE_ERROR);
+           (getenv("G3_REPLAY_HISTORICAL") ? STATUS_DEVICE_HARDWARE_ERROR :
+            STATUS_GRAPHICS_ALLOCATION_BUSY));
     assert(last_paging_failure.Branch==7);
     assert(last_paging_failure.Level==0);
     assert(last_paging_failure.Index==0);

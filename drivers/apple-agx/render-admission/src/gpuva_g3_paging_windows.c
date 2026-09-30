@@ -892,10 +892,14 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
       receipt.Branch = 6u; /* Owned root is not the active root. */
       status = STATUS_SUCCESS;
     } else if (!AppleAgxGpuvaG3GraphFlush(&process->Graph, start, end)) {
+      receipt.BrokerStatus = process->Graph.LastStatus;
       status = STATUS_DEVICE_HARDWARE_ERROR;
     }
     ExReleaseFastMutex(&state->Lock);
     AdmissionRecordGpuvaG3Flush(adapter, &receipt);
+    if (!NT_SUCCESS(status) && receipt.BrokerStatus != 0u &&
+        receipt.Branch != 4u)
+      return STATUS_GRAPHICS_ALLOCATION_BUSY;
     return status;
   }
   if (args->Operation != DXGK_OPERATION_UPDATE_PAGE_TABLE)
@@ -1045,13 +1049,17 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
         !update->Flags.NotifyEviction &&
         !AppleAgxGpuvaG3GraphBindRoot(&process->Graph, table_ipa)) {
       process->Poisoned = TRUE;
-      status = STATUS_DEVICE_HARDWARE_ERROR;
+      status = AdmissionG3RejectPaging(&failure,
+          AdmissionG3PagingFailureTableGraph, MAXULONG, NULL, 0ULL,
+          STATUS_DEVICE_HARDWARE_ERROR);
     }
     if (NT_SUCCESS(status) && process->PrivateLeafIpa &&
         !AppleAgxGpuvaG3GraphAttachPrivate(&process->Graph, process->PrivateVa,
             process->PrivateMiddleIpa, process->PrivateLeafIpa)) {
       process->Poisoned = TRUE;
-      status = STATUS_DEVICE_HARDWARE_ERROR;
+      status = AdmissionG3RejectPaging(&failure,
+          AdmissionG3PagingFailureTableGraph, MAXULONG, NULL, 0ULL,
+          STATUS_DEVICE_HARDWARE_ERROR);
     }
     if (failure.Branch == 0u &&
         failure.TableFirstNonzeroIndex != MAXULONG)
@@ -1073,6 +1081,9 @@ PagingDone:
   if (unpublished_changed)
     AdmissionRecordGpuvaG3UnpublishedGroups(adapter, unpublished_after);
   AdmissionRecordGpuvaG3PagingFailure(adapter, &failure);
+  if (!NT_SUCCESS(status) && failure.Branch != 0u &&
+      failure.GraphLastStatus != 0u)
+    return STATUS_GRAPHICS_ALLOCATION_BUSY;
   return status;
 }
 

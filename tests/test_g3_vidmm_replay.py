@@ -11,6 +11,28 @@ REPLAY = ROOT / "tests/g3_vidmm_replay.py"
 
 
 class G3VidMmReplayTests(unittest.TestCase):
+    def test_local_backing_map_unmap_releases_grants(self):
+        result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
+            env=dict(os.environ, G3_REPLAY_R144="1", G3_REPLAY_R168="1",
+                     G3_REPLAY_R168_LIFETIME="1"), text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("zero retained grants", result.stdout)
+
+    def test_local_capacity_matches_advertised_residency(self):
+        result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
+            env=dict(os.environ, G3_REPLAY_R144="1", G3_REPLAY_R168="1"),
+            text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("R168 local capacity: PASS", result.stdout)
+
+    def test_broker_refusal_uses_supported_paging_status(self):
+        result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
+            env=dict(os.environ, G3_REPLAY_R144="1", G3_REPLAY_R168="1",
+                     G3_REPLAY_R168_BROKER_REFUSAL="1"),
+            text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("supported busy without publication", result.stdout)
+
     def test_r154_preempted_private_scene_survives_deferred_release(self):
         for mode in ("teardown", "late-release", "cancel", "uncertain"):
             with self.subTest(mode=mode):
