@@ -1,4 +1,12 @@
-# J313 GPU current state — 2026-09-29
+# J313 GPU current state — 2026-09-30
+
+LATEST EXP888 CLOSED: build2 KMD/UMD0/0, exactefb76f3d3e2800f29c1b266c278e39322572bdb6. Originalboot00:12:40Z Code0/CPU8 through182.411s; dumpuptime189.635s CPU1/System0x10E/B/fffff60c2627cf78/ffffffffc0000483/ffff888ff4105000. UPDATE_PAGE_TABLE notFLUSH_TLB; retainedpagingfailureBranch7LeafGraph/index122c/localIPA8e569c000/GraphLastStatus7CAPACITY/Uncertain0. Scanoutseq2zero; noPrivateAcquireFailure receipt. GoalFAIL; R167not600svalidated.
+
+Evidence27/27files868000737Bhostsize/SHAverified BEFORECode45exact888cleanup, manifestd26f0d71f965643938ba76b6e23e77aa593176b8ce6487af237e1b9664b22c69. Earlyoriginal3/3snapshotalsoverified; finalstoppedoriginalETL unavailable afterspontaneousguestPSCIreset; recoveryETLnotoriginal. Exact888PDBs preserved/debug-dumpanalysis complete. No hostreset/no retry/rearm/no liveCode0removal.
+
+Machine latest00:26:46Z boot00:24:35Z ordinaryGPUvisibleCode28/exactlyoneAPPL0002/package0/arms0/modules0/service0/signer0/diagnostics0/CPU8/disks2OK/USB5/RDPserviceRunning/autologon1/passwordpresent. .local/experiments/EXP888-private-capacity-va/ordinary-durable-final.log proves recovery.
+
+Nextcausaltarget: localbrokerbackingCAPACITY/lifecycle plus truthfulsupportedpaging/backpressure; do notblindlyincreasepool/array oracknowledgeunmappedlocalGPUmemory. Source/R143treehashes+dump+receiptcorrelated, grantoccupancy/lifetimecause stillUNKNOWN. No productionfix/newhardware. Claude review: investigation/analysis/EXP888-paging-capacity-verdict.md and .local/tandem/REVIEW-REQUEST-EXP888.md. Historical notes below superseded where conflicting.
 
 Goal600s without kernelbugcheck AND nonzero scanout/Present remains unmet.
 
@@ -29,3 +37,7 @@ OwningfixR167design: expandphysicalprivatepool32->64MiB withinunchanged1GiBfirmw
 EXP887 confirmedglobalcapacity, original610.388sCode0/no kernelbugcheck/scanoutzero; final19/19hostsize/SHAverified BEFOREdiagnostics/exactpackagecleanup. Receiptvalue removedonlyafterCode45/hashverifiedevidence. Ordinarydurable23:07:34Z boot23:02:36Z Code28/present1/package0/arms0/modules0/service0/signer0/diagnostics0/CPU8/disks2OK/USB5/RDPservice/autologon1/passwordpresent.
 
 R167 implementedfab81e92eed4c45186f866eec27311819b9373fd: physicalprivate64MiB, publiclocal952MiB, stableowner-localVaOffset; physicalOffset usedonlyCPU/GPA, VaOffsetusedGPUrange/leaf,freevalidatesboth; reservation32MiB/ownerquota8MiB/backend8MiB/firmware1GiB unchanged. RealRED old9managercapacity; ASan/KMDhigh-backingmap/retire/reuse/teardown/boundsGREEN. Fullbaselineonly afteridle-guard rerun2/2PASS. EXP888exact887+R167 candidate/build next, notstaged. DWMwriterseparate.
+
+## EXP888 build gate in progress
+
+R167capacity/VAfixfab81e92 +explicitindexboundsproofca5b7632b945122a3d695136bbc1dc83c00a485c; exactEXP887candidate nowefb76f3d3e2800f29c1b266c278e39322572bdb6. Build1(100b75d2) had2WDKanalysiswarningsC6385/C6386, fullartifactsarchivedEXP888-build1-warning andNEVERstaged/run. Build2inprogress; explicitva_indexbound policy-equivalent, ASan2/2andrealhighbackingKMDreplayPASS. EXP888notstaged; ordinarydurableCode28clean23:07:34Z/autologonretained. Need0/0build/preservePDB/audit/profileupdateprivate64M/windowspublic952M(firmwarelocal1000Munchanged), preregister/dualcontrol/stage-separatedreceipt/one600srun. IfPrivatefailureabsent, collectscriptBytes0isvalid; diagnostic remainsR166Version1/232B andoldvaluewasremovedafter887verifiedCode45evidence. Goalnonzeroscanoutnotyetmet.
