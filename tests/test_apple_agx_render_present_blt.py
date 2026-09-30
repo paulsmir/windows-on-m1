@@ -118,11 +118,20 @@ static NTSTATUS AdmissionPagingSubmitPresent(ADMISSION_CONTEXT *c,const DXGKARG_
  queued_fence=a->SubmissionFenceId;queued_bytes=bytes;memcpy(queued_copy,data,bytes);return 0;}
 static size_t RtlCompareMemory(const void *a,const void *b,size_t n){return memcmp(a,b,n)==0?n:0;}
 static void AdmissionRecordPresent(ADMISSION_DEVICE *d,const DXGKARG_PRESENT *p,unsigned b,NTSTATUS s){(void)d;(void)p;(void)b;(void)s;}
+static unsigned open_receipt_calls;
+static ADMISSION_PRESENT_OPEN_ENDPOINT recorded_source,recorded_destination;
+static void AdmissionRecordPresentOpenFailure(ADMISSION_DEVICE *device,HANDLE context,
+ const DXGKARG_PRESENT *present,const ADMISSION_PRESENT_OPEN_ENDPOINT *source,
+ const ADMISSION_PRESENT_OPEN_ENDPOINT *destination){
+ assert(device!=NULL && context!=NULL && present->Flags.Value==1u);
+ ++open_receipt_calls;recorded_source=*source;recorded_destination=*destination;
+}
 static void AdmissionFlushPresentTransfer(ADMISSION_CONTEXT *c){(void)c;}
 static void AdmissionFlushGdiReceipt(ADMISSION_CONTEXT *c){(void)c;}
 '''
         cases = r'''
 int main(void){
+ assert(sizeof(ADMISSION_PRESENT_OPEN_ENDPOINT)==64);
  ADMISSION_CONTEXT adapter={{ADMISSION_OBJECT_ADAPTER_MAGIC,1,1},1};
  ADMISSION_DEVICE device={{ADMISSION_OBJECT_DEVICE_MAGIC,2,&adapter.ObjectAdapter,0,1,2}};
  ADMISSION_RENDER_CONTEXT context={{ADMISSION_OBJECT_CONTEXT_MAGIC,2,&device.Object,0,0,1,0},{1},NULL,0};
@@ -220,6 +229,42 @@ int main(void){
  virtual_submit.Flags.Value=2;
  assert(AdmissionPresentSubmitVirtual(&adapter,&context,&virtual_submit)==STATUS_SUCCESS);
  assert(queue_calls==4 && queued_fence==40 && queued_bytes==184);
+ a[1].hDeviceSpecificAllocation=NULL;
+ p.pDmaBuffer=dma;p.DmaSize=4096;p.pDmaBufferPrivateData=private_data;
+ p.DmaBufferPrivateDataSize=8192;p.MultipassOffset=0;
+ assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_HANDLE);
+ assert(open_receipt_calls==1);
+ assert(recorded_source.Index==1 && recorded_source.Reason==ADMISSION_PRESENT_OPEN_NULL_HANDLE);
+ assert(recorded_source.Handle==0 && recorded_source.GpuVirtualAddress==0x100000ULL);
+ assert(recorded_destination.Index==2 && recorded_destination.Reason==ADMISSION_PRESENT_OPEN_OK);
+ assert(recorded_destination.Handle==(unsigned long long)(uintptr_t)&od);
+ a[1].hDeviceSpecificAllocation=&os;od.ReadOnly=1;
+ assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_HANDLE);
+ assert(open_receipt_calls==2);
+ assert(recorded_source.Reason==ADMISSION_PRESENT_OPEN_OK);
+ assert(recorded_destination.Reason==ADMISSION_PRESENT_OPEN_READ_ONLY);
+ od.ReadOnly=0;
+ os.Magic=0;
+ assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_HANDLE);
+ assert(recorded_source.Reason==ADMISSION_PRESENT_OPEN_BAD_MAGIC);
+ os.Magic=ADMISSION_OPEN_ALLOCATION_MAGIC;
+ ADMISSION_DEVICE foreign_device={{ADMISSION_OBJECT_DEVICE_MAGIC,2,&adapter.ObjectAdapter,0,1,2}};
+ os.Device=&foreign_device;
+ assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_HANDLE);
+ assert(recorded_source.Reason==ADMISSION_PRESENT_OPEN_FOREIGN_DEVICE);
+ os.Device=&device;
+ os.Allocation=NULL;
+ assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_HANDLE);
+ assert(recorded_source.Reason==ADMISSION_PRESENT_OPEN_NULL_ALLOCATION);
+ os.Allocation=&src;
+ src.Magic=0;
+ assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_HANDLE);
+ assert(recorded_source.Reason==ADMISSION_PRESENT_OPEN_BAD_ALLOCATION_MAGIC);
+ src.Magic=ADMISSION_ALLOCATION_OBJECT_MAGIC;
+ src.Description.Magic=0;
+ assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_HANDLE);
+ assert(recorded_source.Reason==ADMISSION_PRESENT_OPEN_BAD_DESCRIPTION);
+ assert(recorded_destination.Reason==ADMISSION_PRESENT_OPEN_OK);
  return 0;
 }
 '''

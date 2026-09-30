@@ -883,6 +883,11 @@ _IRQL_requires_(PASSIVE_LEVEL)
 void AdmissionRecordPresent(_In_opt_ ADMISSION_DEVICE *Device,
                             _In_opt_ const DXGKARG_PRESENT *Present,
                             ULONG Branch, NTSTATUS Status);
+_IRQL_requires_(PASSIVE_LEVEL)
+void AdmissionRecordPresentOpenFailure(_In_ ADMISSION_DEVICE *Device,
+    HANDLE Context, _In_ const DXGKARG_PRESENT *Present,
+    _In_ const ADMISSION_PRESENT_OPEN_ENDPOINT *Source,
+    _In_ const ADMISSION_PRESENT_OPEN_ENDPOINT *Destination);
 void AdmissionRecordPresentTransfer(_In_ ADMISSION_CONTEXT *Context,
     UINT Fence, _In_reads_bytes_(Bytes) const VOID *Command, UINT Bytes,
     ULONGLONG BytesCopied, NTSTATUS Status);

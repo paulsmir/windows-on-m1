@@ -5,15 +5,54 @@ C_ASSERT(sizeof(RECT) == sizeof(APPLE_AGX_GDI_RECT));
 
 static ADMISSION_OPEN_ALLOCATION *AdmissionPresentOpen(
     ADMISSION_DEVICE *Device, const DXGK_ALLOCATIONLIST *List,
-    UINT Index, BOOLEAN Write) {
+    UINT Index, BOOLEAN Write, ADMISSION_PRESENT_OPEN_ENDPOINT *Evidence) {
   ADMISSION_OPEN_ALLOCATION *opened =
       (ADMISSION_OPEN_ALLOCATION *)List[Index].hDeviceSpecificAllocation;
-  if (opened == NULL || opened->Magic != ADMISSION_OPEN_ALLOCATION_MAGIC ||
-      opened->Device != Device || opened->Allocation == NULL ||
-      opened->Allocation->Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC ||
-      !AdmissionAllocationDescriptionValid(&opened->Allocation->Description) ||
-      (Write && opened->ReadOnly))
+  if (Evidence != NULL) {
+    RtlZeroMemory(Evidence, sizeof(*Evidence));
+    Evidence->Index = Index;
+    Evidence->Handle = (unsigned long long)(ULONG_PTR)opened;
+    Evidence->Segment = List[Index].SegmentId;
+    Evidence->WriteOperation = List[Index].WriteOperation;
+    Evidence->GpuVirtualAddress = List[Index].VirtualAddress;
+  }
+  if (opened == NULL) {
+    if (Evidence != NULL) Evidence->Reason = ADMISSION_PRESENT_OPEN_NULL_HANDLE;
     return NULL;
+  }
+  if (Evidence != NULL) Evidence->OpenedMagic = opened->Magic;
+  if (opened->Magic != ADMISSION_OPEN_ALLOCATION_MAGIC) {
+    if (Evidence != NULL) Evidence->Reason = ADMISSION_PRESENT_OPEN_BAD_MAGIC;
+    return NULL;
+  }
+  if (Evidence != NULL)
+    Evidence->OpenedDevice = (unsigned long long)(ULONG_PTR)opened->Device;
+  if (opened->Device != Device) {
+    if (Evidence != NULL) Evidence->Reason = ADMISSION_PRESENT_OPEN_FOREIGN_DEVICE;
+    return NULL;
+  }
+  if (Evidence != NULL)
+    Evidence->Allocation = (unsigned long long)(ULONG_PTR)opened->Allocation;
+  if (opened->Allocation == NULL) {
+    if (Evidence != NULL) Evidence->Reason = ADMISSION_PRESENT_OPEN_NULL_ALLOCATION;
+    return NULL;
+  }
+  if (Evidence != NULL) Evidence->AllocationMagic = opened->Allocation->Magic;
+  if (opened->Allocation->Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC) {
+    if (Evidence != NULL) Evidence->Reason = ADMISSION_PRESENT_OPEN_BAD_ALLOCATION_MAGIC;
+    return NULL;
+  }
+  if (Evidence != NULL)
+    Evidence->DescriptionMagic = opened->Allocation->Description.Magic;
+  if (!AdmissionAllocationDescriptionValid(&opened->Allocation->Description)) {
+    if (Evidence != NULL) Evidence->Reason = ADMISSION_PRESENT_OPEN_BAD_DESCRIPTION;
+    return NULL;
+  }
+  if (Evidence != NULL) Evidence->ReadOnly = opened->ReadOnly ? 1u : 0u;
+  if (Write && opened->ReadOnly) {
+    if (Evidence != NULL) Evidence->Reason = ADMISSION_PRESENT_OPEN_READ_ONLY;
+    return NULL;
+  }
   return opened;
 }
 
@@ -22,6 +61,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentBlt(
   ADMISSION_PRESENT_BLT_INPUT input;
   APPLE_AGX_GDI_RECT fullPrimaryRect;
   ADMISSION_OPEN_ALLOCATION *source, *destination;
+  ADMISSION_PRESENT_OPEN_ENDPOINT sourceEvidence, destinationEvidence;
   APPLE_AGX_DMA_SHADOW shadow;
   D3DDDI_PATCHLOCATIONLIST *patch;
   BOOLEAN fullPrimary = FALSE;
@@ -43,10 +83,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentBlt(
       Present->DmaBufferPrivateDataSize <=
           sizeof(APPLE_AGX_DMA_SHADOW_HEADER) + sizeof(APPLE_AGX_DMA_SHADOW_RECORD))
     return STATUS_INVALID_PARAMETER;
-  source = AdmissionPresentOpen(Device, Present->pAllocationList, 1u, FALSE);
-  destination = AdmissionPresentOpen(Device, Present->pAllocationList, 2u, TRUE);
-  if (source == NULL || destination == NULL)
+  source = AdmissionPresentOpen(Device, Present->pAllocationList, 1u, FALSE,
+                                &sourceEvidence);
+  destination = AdmissionPresentOpen(Device, Present->pAllocationList, 2u, TRUE,
+                                     &destinationEvidence);
+  if (source == NULL || destination == NULL) {
+    AdmissionRecordPresentOpenFailure(Device, Context, Present,
+                                      &sourceEvidence, &destinationEvidence);
     return STATUS_INVALID_HANDLE;
+  }
   RtlZeroMemory(&input, sizeof(input));
   RtlZeroMemory(&fullPrimaryRect, sizeof(fullPrimaryRect));
   input.Command.SourceDescription = source->Allocation->Description;
@@ -226,7 +271,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentPatch(
     patch = &Args->pPatchLocationList[Args->PatchLocationListSubmissionStart + index];
     offset = index == 0u ? FIELD_OFFSET(ADMISSION_PRESENT_BLT_COMMAND, SourceLocation) :
                            FIELD_OFFSET(ADMISSION_PRESENT_BLT_COMMAND, DestinationLocation);
-    opened = AdmissionPresentOpen(device, Args->pAllocationList, index + 1u, index != 0u);
+    opened = AdmissionPresentOpen(device, Args->pAllocationList, index + 1u,
+                                  index != 0u, NULL);
     if (opened == NULL || patch->AllocationIndex != index + 1u || patch->SlotId != index ||
         patch->AllocationOffset != 0u || patch->PatchOffset != offset || patch->SplitOffset != 0u ||
         RtlCompareMemory(&opened->Allocation->Description,

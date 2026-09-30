@@ -19,6 +19,16 @@ C_ASSERT(sizeof(ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT) == 1096);
 C_ASSERT(sizeof(ADMISSION_VISIBLE_PATTERN_RECEIPT) == 112);
 C_ASSERT(sizeof(ADMISSION_VISIBLE_SCANOUT_RECEIPT) == 216);
 C_ASSERT(sizeof(ADMISSION_VISIBLE_AGX_RECEIPT) == 248);
+C_ASSERT(sizeof(ADMISSION_PRESENT_OPEN_ENDPOINT) == 64);
+
+typedef struct _ADMISSION_PRESENT_OPEN_FAILURE_RECEIPT {
+  ULONG Version, Bytes, Status, Flags, NumSrc, NumDst, PatchListSize;
+  ULONG ContextFlags, Pid, Irql;
+  ULONGLONG ContextToken, DeviceToken, AllocationListToken, DmaGpuVirtualAddress;
+  ADMISSION_PRESENT_OPEN_ENDPOINT Source, Destination;
+} ADMISSION_PRESENT_OPEN_FAILURE_RECEIPT;
+C_ASSERT(sizeof(ADMISSION_PRESENT_OPEN_FAILURE_RECEIPT) == 200);
+static volatile LONG AdmissionPresentOpenFailureClaimed;
 
 typedef struct _ADMISSION_PRESENT_RECEIPT {
   ULONG Version, Bytes, Branch, Status, Irql, DevicePresent, ArgsPresent, Flags;
@@ -2184,6 +2194,61 @@ _Use_decl_annotations_ void AdmissionRecordPresent(
       OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
   if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
     WriteBinary(key, L"Wom1PresentReceipt", &receipt, sizeof(receipt));
+    ZwClose(key);
+  }
+}
+
+_Use_decl_annotations_ void AdmissionRecordPresentOpenFailure(
+    ADMISSION_DEVICE *Device, HANDLE Context, const DXGKARG_PRESENT *Present,
+    const ADMISSION_PRESENT_OPEN_ENDPOINT *Source,
+    const ADMISSION_PRESENT_OPEN_ENDPOINT *Destination) {
+  ADMISSION_PRESENT_OPEN_FAILURE_RECEIPT receipt;
+  ADMISSION_CONTEXT *adapter;
+  HANDLE key = NULL;
+  OBJECT_ATTRIBUTES attributes;
+  UNICODE_STRING servicePath;
+  if (Device == NULL || Present == NULL || Source == NULL ||
+      Destination == NULL || Device->Object.Adapter == NULL ||
+      Device->Object.Adapter->Magic != ADMISSION_OBJECT_ADAPTER_MAGIC ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      InterlockedCompareExchange(&AdmissionPresentOpenFailureClaimed, 1, 0) != 0)
+    return;
+  adapter = CONTAINING_RECORD(Device->Object.Adapter,
+                             ADMISSION_CONTEXT, ObjectAdapter);
+  RtlZeroMemory(&receipt, sizeof(receipt));
+  receipt.Version = 1u;
+  receipt.Bytes = sizeof(receipt);
+  receipt.Status = (ULONG)STATUS_INVALID_HANDLE;
+  receipt.Flags = Present->Flags.Value;
+  receipt.NumSrc = Present->NumSrcAllocations;
+  receipt.NumDst = Present->NumDstAllocations;
+  receipt.PatchListSize = Present->PatchLocationListOutSize;
+  receipt.ContextToken = (ULONGLONG)(ULONG_PTR)Context;
+  receipt.DeviceToken = (ULONGLONG)(ULONG_PTR)Device;
+  receipt.AllocationListToken =
+      (ULONGLONG)(ULONG_PTR)Present->pAllocationList;
+  receipt.DmaGpuVirtualAddress = Present->DmaBufferGpuVirtualAddress;
+  receipt.Pid = HandleToULong(PsGetCurrentProcessId());
+  receipt.Irql = KeGetCurrentIrql();
+  if (Context != NULL &&
+      ((ADMISSION_RENDER_CONTEXT *)Context)->Object.Magic ==
+          ADMISSION_OBJECT_CONTEXT_MAGIC)
+    receipt.ContextFlags =
+        ((ADMISSION_RENDER_CONTEXT *)Context)->Object.Flags;
+  receipt.Source = *Source;
+  receipt.Destination = *Destination;
+  if (adapter->PhysicalDeviceObject != NULL &&
+      NT_SUCCESS(IoOpenDeviceRegistryKey(adapter->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
+    WriteBinary(key, L"Wom1PresentOpenFailure", &receipt, sizeof(receipt));
+    ZwClose(key);
+  }
+  RtlInitUnicodeString(&servicePath,
+      L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\AppleAgxAdmission");
+  InitializeObjectAttributes(&attributes, &servicePath,
+      OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+  if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
+    WriteBinary(key, L"Wom1PresentOpenFailure", &receipt, sizeof(receipt));
     ZwClose(key);
   }
 }

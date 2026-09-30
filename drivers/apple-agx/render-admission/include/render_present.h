@@ -9,6 +9,21 @@
 #define ADMISSION_PRESENT_BLT_GPUVA_VERSION 2u
 #define ADMISSION_PRESENT_BLT_DMA_MAX 4096u
 
+#define ADMISSION_PRESENT_OPEN_OK 0u
+#define ADMISSION_PRESENT_OPEN_NULL_HANDLE 1u
+#define ADMISSION_PRESENT_OPEN_BAD_MAGIC 2u
+#define ADMISSION_PRESENT_OPEN_FOREIGN_DEVICE 3u
+#define ADMISSION_PRESENT_OPEN_NULL_ALLOCATION 4u
+#define ADMISSION_PRESENT_OPEN_BAD_ALLOCATION_MAGIC 5u
+#define ADMISSION_PRESENT_OPEN_BAD_DESCRIPTION 6u
+#define ADMISSION_PRESENT_OPEN_READ_ONLY 7u
+
+typedef struct _ADMISSION_PRESENT_OPEN_ENDPOINT {
+  unsigned int Index, Reason, Segment, WriteOperation;
+  unsigned long long Handle, GpuVirtualAddress, OpenedDevice, Allocation;
+  unsigned int OpenedMagic, AllocationMagic, ReadOnly, DescriptionMagic;
+} ADMISSION_PRESENT_OPEN_ENDPOINT;
+
 typedef struct _ADMISSION_PRESENT_BLT_COMMAND {
   unsigned int Magic, Version, Bytes, RectCount;
   ADMISSION_ALLOCATION_DESCRIPTION SourceDescription;
