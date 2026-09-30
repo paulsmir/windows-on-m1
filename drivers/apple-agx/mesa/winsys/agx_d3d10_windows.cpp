@@ -31,6 +31,11 @@ VOID AgxD3d10WindowsDiagnostic(PCSTR Stage,HRESULT Status,
   AdmissionUmdDiagnostic(Stage,Status,Values,Count);
 }
 
+VOID AgxD3d10WindowsPresentMeasure(UINT Kind,HRESULT Status,
+                                   const UINT *Values,UINT Count) {
+  AdmissionUmdPresentMeasure(Kind,Status,Values,Count);
+}
+
 extern "C" void (*AgxWin32BatchRefusalHook)(unsigned kind, unsigned site,
                                             unsigned detail0, unsigned detail1);
 
@@ -693,20 +698,24 @@ HRESULT AgxD3d10WindowsPresentationSubmit(
     AGX_D3D10_WINDOWS_DEVICE *Device,
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource,
     PVOID DxgiContext) {
+  AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeSubmitEntry,S_OK,NULL,0u);
   AdmissionUmdDiagnostic("g4-present-enter",S_OK,NULL,0u);
   if(!Device || Device->Stage!=AgxD3d10DeviceReady || !Resource ||
      Resource->Device!=Device ||
      Resource->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC) {
+    AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeSubmitReturn,E_INVALIDARG,NULL,0u);
     AdmissionUmdDiagnostic("g4-present-exit",E_INVALIDARG,NULL,0u);
     return E_INVALIDARG;
   }
   if(!AgxWin32AsahiContextFlushForPresent(Device->Context)) {
+    AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeSubmitReturn,E_FAIL,NULL,0u);
     AdmissionUmdDiagnostic("g4-present-exit",E_FAIL,NULL,0u);
     return E_FAIL;
   }
   HRESULT result=AgxD3d10WindowsFlushStatus(Device);
   if(SUCCEEDED(result))
     result=AdmissionUmdSubmitPresent(&Device->Runtime,&Resource->Resource,DxgiContext);
+  AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeSubmitReturn,result,NULL,0u);
   AdmissionUmdDiagnostic("g4-present-exit",result,NULL,0u);
   return result;
 }

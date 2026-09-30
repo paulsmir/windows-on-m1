@@ -841,7 +841,12 @@ AgxResolveSharedResource(DXGI_DDI_ARG_RESOLVESHAREDRESOURCE *args)
     * when it supplied only the base table. EXP748 measures this negotiation. */
    if(IS_DXGI1_1_BASE_FUNCTIONS(pCreateData->Interface,pCreateData->Version))
       pCreateData->DXGIBaseDDI.pDXGIDDIBaseFunctions2->pfnResolveSharedResource =
-         AgxResolveSharedResource;'''),
+         AgxResolveSharedResource;
+   UINT present_contract[3] = { (UINT)pCreateData->Interface,
+      (UINT)pCreateData->Version,
+      IS_DXGI1_3_BASE_FUNCTIONS(pCreateData->Interface,pCreateData->Version) };
+   AgxD3d10WindowsPresentMeasure(AdmissionUmdMeasureNativeDevice,
+      DXGI_STATUS_NO_REDIRECTION,present_contract,3u);'''),
         ('''   struct pipe_screen *screen = pAdapter->screen;
    struct pipe_context *pipe = screen->context_create(screen, NULL, 0);
    pDevice->pipe = pipe;
@@ -1011,12 +1016,24 @@ void APIENTRY
        Format == DXGI_FORMAT_R16_UINT) && SampleCount == 1 ? 1 : 0;''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Device.cpp','Flush','''   Device *pDevice = CastDevice(hDevice);
    HRESULT result = AgxD3d10WindowsQueryCollect(pDevice->windows);
+   UINT stage[1] = {1u};
+   AgxD3d10WindowsPresentMeasure(AdmissionUmdMeasureNativeFlushStage,result,stage,1u);
    if (SUCCEEDED(result)) {
       pDevice->pipe->flush(pDevice->pipe, NULL, 0);
       result = AgxD3d10WindowsFlushStatus(pDevice->windows);
+      stage[0] = 2u;
+      AgxD3d10WindowsPresentMeasure(AdmissionUmdMeasureNativeFlushStage,result,stage,1u);
    }
-   if (SUCCEEDED(result)) result = AgxD3d10WindowsFlushDeferredResources(pDevice->windows);
-   if (SUCCEEDED(result)) result = AgxD3d10WindowsQueryCollect(pDevice->windows);
+   if (SUCCEEDED(result)) {
+      result = AgxD3d10WindowsFlushDeferredResources(pDevice->windows);
+      stage[0] = 3u;
+      AgxD3d10WindowsPresentMeasure(AdmissionUmdMeasureNativeFlushStage,result,stage,1u);
+   }
+   if (SUCCEEDED(result)) {
+      result = AgxD3d10WindowsQueryCollect(pDevice->windows);
+      stage[0] = 4u;
+      AgxD3d10WindowsPresentMeasure(AdmissionUmdMeasureNativeFlushStage,result,stage,1u);
+   }
    if (FAILED(result)) SetError(hDevice, result);''')
     change('src/gallium/frontends/d3d10umd/OutputMerger.cpp',
         'fefcbe8754fd1042b7bf091feab767844cc71a8fe4cbe9f0b41d76dc9dd4fd04',[
@@ -1675,9 +1692,13 @@ _Present('''),
     dxgi_marker = 'static HRESULT\nUnsupportedDxgi'
     if dxgi_text.count(dxgi_marker) != 1:
         raise SystemExit('Ambiguous DXGI trace helper anchor')
-    dxgi_text = dxgi_text.replace(dxgi_marker, '''static HRESULT
+    dxgi_text = dxgi_text.replace(dxgi_marker, '''#include <string.h>
+
+static HRESULT
 AgxDxgiTraceReturn(const char *name, HRESULT result)
 {
+   if (!strcmp(name,"_Present"))
+      AgxD3d10WindowsPresentMeasure(AdmissionUmdMeasureNativePresentReturn,result,NULL,0u);
    AgxD3d10WindowsDiagnostic(name, result, NULL, 0);
    return result;
 }
@@ -1706,6 +1727,8 @@ UnsupportedDxgi''')
         if not returns:
             raise SystemExit('Missing DXGI trace return: ' + name)
         entry = '   AgxD3d10WindowsDiagnostic("' + name + '-entry", S_OK, NULL, 0);\n'
+        if name == '_Present':
+            entry += '   AgxD3d10WindowsPresentMeasure(AdmissionUmdMeasureNativePresentEntry,S_OK,NULL,0u);\n'
         if name == '_Blt':
             entry += '''   UINT values[11] = {
       Blt ? Blt->DstSubresource : ~0u, Blt ? Blt->SrcSubresource : ~0u,
@@ -1728,8 +1751,9 @@ UnsupportedDxgi''')
             body = body.replace('AgxDxgiTraceReturn(__func__, (', 'rejectBlt(')
             body = body.replace('));', ');')
             entry = entry[entry.index('   UINT values[11]'):]
+            entry = '   AgxD3d10WindowsPresentMeasure(AdmissionUmdMeasureNativeBltEntry,S_OK,NULL,0u);\n' + entry
             entry = entry.replace('   AgxD3d10WindowsDiagnostic("dxgi-blt-args", S_OK, values, 11u);',
-                '   auto rejectBlt = [&](HRESULT status) { if (FAILED(status)) AgxD3d10WindowsDiagnostic("reject-BltDXGI",status,values,11u); return status; };')
+                '   auto rejectBlt = [&](HRESULT status) { AgxD3d10WindowsPresentMeasure(AdmissionUmdMeasureNativeBltReturn,status,values,11u); if (FAILED(status)) AgxD3d10WindowsDiagnostic("reject-BltDXGI",status,values,11u); return status; };')
         replace_function_body(dxgi_path, name, entry + body)
 
     change('src/gallium/frontends/d3d10umd/Shader.cpp',

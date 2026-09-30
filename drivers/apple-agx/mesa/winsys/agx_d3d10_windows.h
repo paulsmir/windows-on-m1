@@ -7,6 +7,24 @@ struct pipe_context;
 struct pipe_resource;
 #define AGX_DXGI_STATUS_NOT_RESIDENT ((HRESULT)0x08760875L)
 #define AGX_DXGI_STATUS_RESIDENT_IN_SHARED_MEMORY ((HRESULT)0x08760876L)
+#ifndef ADMISSION_UMD_PRESENT_MEASURE_KIND_DEFINED
+#define ADMISSION_UMD_PRESENT_MEASURE_KIND_DEFINED
+typedef enum ADMISSION_UMD_PRESENT_MEASURE_KIND {
+  AdmissionUmdMeasureNativeDevice,
+  AdmissionUmdMeasureNativePresentEntry,
+  AdmissionUmdMeasureNativePresentReturn,
+  AdmissionUmdMeasureNativeBltEntry,
+  AdmissionUmdMeasureNativeBltReturn,
+  AdmissionUmdMeasureNativeFlushStage,
+  AdmissionUmdMeasureNativeSubmitEntry,
+  AdmissionUmdMeasureNativeSubmitReturn,
+  AdmissionUmdMeasurePresentCallbackEnter,
+  AdmissionUmdMeasurePresentCallbackReturn,
+  AdmissionUmdMeasureLegacyPresentEntry,
+  AdmissionUmdMeasureLegacyPresent1Entry,
+  AdmissionUmdMeasureCount
+} ADMISSION_UMD_PRESENT_MEASURE_KIND;
+#endif
 typedef struct AGX_D3D10_WINDOWS_ADAPTER AGX_D3D10_WINDOWS_ADAPTER;
 typedef struct AGX_D3D10_WINDOWS_DEVICE AGX_D3D10_WINDOWS_DEVICE;
 typedef struct AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE
@@ -16,6 +34,8 @@ extern "C" {
 #endif
 VOID AgxD3d10WindowsDiagnostic(PCSTR Stage, HRESULT Status,
                               const UINT *Values, UINT Count);
+VOID AgxD3d10WindowsPresentMeasure(UINT Kind, HRESULT Status,
+                                  const UINT *Values, UINT Count);
 VOID AgxD3d10WindowsDiagnosticSetError(
     PCSTR Function, UINT Line, HRESULT Status);
 BOOL AgxD3d10WindowsDiagnosticRefusal(HRESULT Status);

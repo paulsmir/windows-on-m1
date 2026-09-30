@@ -51,13 +51,15 @@ VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
   if (Stage == NULL || Count > 16u || (Count != 0u && Values == NULL))
     goto done;
   if (GetEnvironmentVariableW(L"APPLE_AGX_UMD_REFUSALS_ONLY",only,2)==1u &&
-      only[0]==L'1' && strncmp(Stage,"reject-",7u)!=0) goto done;
+      only[0]==L'1' && strncmp(Stage,"reject-",7u)!=0 &&
+      strncmp(Stage,"measure-",8u)!=0) goto done;
   length = GetEnvironmentVariableW(L"APPLE_AGX_UMD_TRACE_FILE", path,
                                     ARRAYSIZE(path));
   /* Refusals must not disappear when successful startup chatter consumes
    * the normal 128-record budget. Capture remains opt-in and run-bounded. */
   if (length == 0u || length >= ARRAYSIZE(path) ||
       (strncmp(Stage,"reject-",7u) != 0 &&
+       strncmp(Stage,"measure-",8u) != 0 &&
        (InterlockedCompareExchange(&records, 0, 0) >= 128 ||
         InterlockedIncrement(&records) > 128)))
     goto done;
@@ -80,6 +82,37 @@ VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
  done:
   if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
   SetLastError(saved);
+}
+
+static BOOL AdmissionUmdPresentMeasureSample(ULONG Count) {
+  return Count != 0u && (Count & (Count - 1u)) == 0u;
+}
+
+VOID AdmissionUmdPresentMeasure(UINT Kind, HRESULT Status,
+                                const UINT *Values, UINT Count) {
+  static volatile LONG counts[AdmissionUmdMeasureCount];
+  static volatile LONG failures[AdmissionUmdMeasureCount];
+  static const char *const names[AdmissionUmdMeasureCount] = {
+    "measure-native-device", "measure-native-present-entry",
+    "measure-native-present-return", "measure-native-blt-entry",
+    "measure-native-blt-return", "measure-native-flush-stage",
+    "measure-native-submit-entry", "measure-native-submit-return",
+    "measure-present-callback-enter", "measure-present-callback-return",
+    "measure-legacy-present-entry", "measure-legacy-present1-entry"
+  };
+  UINT receipt[16];
+  ULONG seen;
+  UINT index;
+  if (Kind >= AdmissionUmdMeasureCount || Count > 14u ||
+      (Count != 0u && Values == NULL)) return;
+  seen = (ULONG)InterlockedIncrement(&counts[Kind]);
+  if (!AdmissionUmdPresentMeasureSample(seen) &&
+      !(FAILED(Status) &&
+        InterlockedCompareExchange(&failures[Kind], 1, 0) == 0)) return;
+  receipt[0] = Kind;
+  receipt[1] = seen;
+  for (index = 0u; index < Count; ++index) receipt[index + 2u] = Values[index];
+  AdmissionUmdDiagnostic(names[Kind], Status, receipt, Count + 2u);
 }
 
 VOID AdmissionUmdSetError(ADMISSION_UMD_DEVICE *Device, HRESULT Error) {

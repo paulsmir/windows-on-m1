@@ -197,6 +197,26 @@ extern "C" {
 #endif
 VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
                             const UINT *Values, UINT Count);
+#ifndef ADMISSION_UMD_PRESENT_MEASURE_KIND_DEFINED
+#define ADMISSION_UMD_PRESENT_MEASURE_KIND_DEFINED
+typedef enum ADMISSION_UMD_PRESENT_MEASURE_KIND {
+  AdmissionUmdMeasureNativeDevice,
+  AdmissionUmdMeasureNativePresentEntry,
+  AdmissionUmdMeasureNativePresentReturn,
+  AdmissionUmdMeasureNativeBltEntry,
+  AdmissionUmdMeasureNativeBltReturn,
+  AdmissionUmdMeasureNativeFlushStage,
+  AdmissionUmdMeasureNativeSubmitEntry,
+  AdmissionUmdMeasureNativeSubmitReturn,
+  AdmissionUmdMeasurePresentCallbackEnter,
+  AdmissionUmdMeasurePresentCallbackReturn,
+  AdmissionUmdMeasureLegacyPresentEntry,
+  AdmissionUmdMeasureLegacyPresent1Entry,
+  AdmissionUmdMeasureCount
+} ADMISSION_UMD_PRESENT_MEASURE_KIND;
+#endif
+VOID AdmissionUmdPresentMeasure(UINT Kind, HRESULT Status,
+                                const UINT *Values, UINT Count);
 BOOL AdmissionUmdDiagnosticEnabled(VOID);
 VOID AdmissionUmdSetError(ADMISSION_UMD_DEVICE *Device, HRESULT Error);
 BOOL AdmissionUmdNextRenderSequence(

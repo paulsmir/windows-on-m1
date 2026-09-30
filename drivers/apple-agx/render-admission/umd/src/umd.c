@@ -651,12 +651,15 @@ HRESULT AdmissionUmdSubmitPresent(ADMISSION_UMD_DEVICE *Device,
   if (Device == NULL || !AdmissionUmdResourceIsPresentable(Source) ||
       Device->DxgiCallbacks == NULL ||
       Device->DxgiCallbacks->pfnPresentCb == NULL ||
-      Device->KernelContext == NULL)
+      Device->KernelContext == NULL) {
+    AdmissionUmdPresentMeasure(AdmissionUmdMeasurePresentCallbackReturn,E_INVALIDARG,NULL,0u);
     return E_INVALIDARG;
+  }
   ZeroMemory(&present, sizeof(present));
   present.hSrcAllocation = Source->KernelAllocation;
   present.pDXGIContext = DxgiContext;
   present.hContext = Device->KernelContext;
+  AdmissionUmdPresentMeasure(AdmissionUmdMeasurePresentCallbackEnter,S_OK,NULL,0u);
   HRESULT result=Device->DxgiCallbacks->pfnPresentCb(
       Device->RuntimeDevice.handle, &present);
   UINT values[4]={(UINT)present.hSrcAllocation,
@@ -664,12 +667,15 @@ HRESULT AdmissionUmdSubmitPresent(ADMISSION_UMD_DEVICE *Device,
       (UINT)(ULONG_PTR)present.pDXGIContext,
       (UINT)((ULONGLONG)(ULONG_PTR)present.pDXGIContext>>32)};
   AdmissionUmdDiagnostic("present-callback",result,values,ARRAYSIZE(values));
+  AdmissionUmdPresentMeasure(AdmissionUmdMeasurePresentCallbackReturn,result,
+                             values,ARRAYSIZE(values));
   return result;
 }
 
 static HRESULT APIENTRY AdmissionUmdPresent(DXGI_DDI_ARG_PRESENT *Args) {
   ADMISSION_UMD_DEVICE *device;
   ADMISSION_UMD_RESOURCE *source;
+  AdmissionUmdPresentMeasure(AdmissionUmdMeasureLegacyPresentEntry,S_OK,NULL,0u);
   if (Args == NULL) return E_INVALIDARG;
   UINT values[4]={(UINT)Args->Flags.Value,(UINT)Args->FlipInterval,
       (UINT)Args->SrcSubResourceIndex,(UINT)(ULONG_PTR)Args->hDstResource};
@@ -688,6 +694,7 @@ static HRESULT APIENTRY AdmissionUmdPresent(DXGI_DDI_ARG_PRESENT *Args) {
 static HRESULT APIENTRY AdmissionUmdPresent1(DXGI_DDI_ARG_PRESENT1 *Args) {
   ADMISSION_UMD_DEVICE *device;
   ADMISSION_UMD_RESOURCE *source;
+  AdmissionUmdPresentMeasure(AdmissionUmdMeasureLegacyPresent1Entry,S_OK,NULL,0u);
   if (Args == NULL || Args->hDstResource != 0u ||
       Args->SurfacesToPresent != 1u || Args->phSurfacesToPresent == NULL ||
       Args->phSurfacesToPresent[0].SubResourceIndex != 0u ||
