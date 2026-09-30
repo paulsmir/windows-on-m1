@@ -2227,7 +2227,7 @@ static NTSTATUS AdmissionDdiSubmitCommandVirtualInner(
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommandVirtual(
     HANDLE Adapter, const DXGKARG_SUBMITCOMMANDVIRTUAL *Args) {
   NTSTATUS status = AdmissionDdiSubmitCommandVirtualInner(Adapter, Args);
-#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   ADMISSION_DWM_DDI_EVENT event;
   RtlZeroMemory(&event, sizeof(event));
   event.Kind = Args != NULL && Args->Flags.Present

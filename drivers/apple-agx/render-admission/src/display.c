@@ -747,7 +747,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceAddress(
   }
   InterlockedExchange(&context->SourceAddressStatus, (LONG)status);
   InterlockedExchange(&context->SourceAddressStage, 2);
-#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   {
     ADMISSION_DWM_DDI_EVENT event;
     RtlZeroMemory(&event, sizeof(event));
@@ -794,7 +794,7 @@ AdmissionDdiStopDeviceAndReleasePostDisplayOwnership(
 static VOID AdmissionDwmRecordCommit(
     ADMISSION_CONTEXT *Context, ADMISSION_DISPLAY_DDI_TRACE_ID DdiId,
     const VOID *Args, NTSTATUS Status) {
-#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   ADMISSION_DWM_DDI_EVENT event;
   const DXGKARG_COMMITVIDPN *commit;
   if (Context == NULL || DdiId != AdmissionDisplayDdiCommitVidPn)

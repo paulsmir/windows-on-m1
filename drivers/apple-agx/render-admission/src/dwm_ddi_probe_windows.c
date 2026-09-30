@@ -1,6 +1,6 @@
 #include "render_admission.h"
 
-#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 
 _Use_decl_annotations_ VOID AdmissionDwmDdiProbeRecordWindows(
     ADMISSION_CONTEXT *Context, const ADMISSION_DWM_DDI_EVENT *Event) {

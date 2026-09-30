@@ -98,7 +98,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyDevice(HANDLE Device) {
 static VOID AdmissionDwmRecordPresent(
     ADMISSION_CONTEXT *Adapter, HANDLE Context,
     const DXGKARG_PRESENT *Present, NTSTATUS Status) {
-#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   ADMISSION_DWM_DDI_EVENT event;
   if (Adapter == NULL)
     return;
@@ -297,7 +297,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEscape(
       return AdmissionGpuvaG3CopyEscape((ADMISSION_CONTEXT *)Adapter, Args);
   }
 #endif
-#if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_BLT_PROBE_QUALIFICATION) || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
   ULONG magic;
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
@@ -313,11 +313,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEscape(
     return AdmissionBltProbeQueryWindows(
         context, (ADMISSION_BLT_PROBE *)Args->pPrivateDriverData);
 #endif
-#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   if (magic == ADMISSION_DWM_DDI_PROBE_MAGIC &&
       Args->PrivateDriverDataSize == sizeof(ADMISSION_DWM_DDI_PROBE))
     return AdmissionDwmDdiProbeQueryWindows(
         context, (ADMISSION_DWM_DDI_PROBE *)Args->pPrivateDriverData);
+#endif
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   if (magic == ADMISSION_STANDARD_PRESENT_TRACE_MAGIC &&
       Args->PrivateDriverDataSize == sizeof(ADMISSION_STANDARD_PRESENT_TRACE))
     return AdmissionStandardPresentTraceQueryWindows(

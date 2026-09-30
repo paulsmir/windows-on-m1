@@ -27,6 +27,17 @@ class DwmDdiProbeTests(unittest.TestCase):
         self.assertNotIn("DxgkDdiPresentDisplayOnly =", driver)
         self.assertNotIn("DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay =", driver)
 
+    def test_probe_compiles_in_the_gpuva_g3_package_profile(self):
+        header = (RENDER / "include/render_admission.h").read_text()
+        probe = (RENDER / "src/dwm_ddi_probe_windows.c").read_text()
+        callbacks = (RENDER / "src/callbacks.c").read_text()
+        display = (RENDER / "src/display.c").read_text()
+        virtual = (RENDER / "src/gpuva_g3_windows.c").read_text()
+        for source in (header, probe, callbacks, display, virtual):
+            self.assertIn("defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)", source)
+        self.assertIn("defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)",
+                      callbacks[callbacks.index("AdmissionDdiEscape("):])
+
     def test_counter_and_last_value_replay(self):
         source = (RENDER / "src/dwm_ddi_probe_windows.c").read_text()
         source = source.replace('#include "render_admission.h"', '')
