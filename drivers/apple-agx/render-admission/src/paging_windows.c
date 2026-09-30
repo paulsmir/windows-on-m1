@@ -219,10 +219,10 @@ static BOOLEAN AdmissionPagingNotifyAtInterrupt(PVOID Opaque) {
     data.InterruptType = DXGK_INTERRUPT_DMA_PAGE_FAULTED;
     data.DmaPageFaulted.FaultedFenceId = notification->Fence;
     data.DmaPageFaulted.FaultedPrimitiveAPISequenceNumber =
-        DXGK_PRIMITIVE_API_SEQUENCE_NUMBER_UNKNOWN;
+        MAXULONGLONG;
     data.DmaPageFaulted.FaultedPipelineStage =
         DXGK_RENDER_PIPELINE_STAGE_UNKNOWN;
-    data.DmaPageFaulted.FaultedBindTableEntry = DXGK_BIND_TABLE_ENTRY_UNKNOWN;
+    data.DmaPageFaulted.FaultedBindTableEntry = MAXUINT;
     data.DmaPageFaulted.PageFaultFlags = notification->FaultWrite
         ? DXGK_PAGE_FAULT_WRITE : (DXGK_PAGE_FAULT_FLAGS)0;
     data.DmaPageFaulted.FaultedVirtualAddress = notification->FaultVa;

@@ -47,6 +47,8 @@ class PresentFaultNotificationTests(unittest.TestCase):
 #define DXGK_RENDER_PIPELINE_STAGE_UNKNOWN 0
 #define DXGK_BIND_TABLE_ENTRY_UNKNOWN 0xffffffffu
 #define DXGK_PRIMITIVE_API_SEQUENCE_NUMBER_UNKNOWN (~0ULL)
+#define MAXULONGLONG (~0ULL)
+#define MAXUINT 0xffffffffu
 #define RtlZeroMemory(pointer,bytes) memset(pointer,0,bytes)
 typedef int NTSTATUS,BOOLEAN,LONG;
 typedef unsigned int UINT,ULONG,DXGK_PAGE_FAULT_FLAGS;
@@ -91,6 +93,8 @@ int main(void){
   assert(observed.DmaPageFaulted.FaultedFenceId==0x6c54);
   assert(observed.DmaPageFaulted.FaultedVirtualAddress==0x1054000ULL);
   assert(observed.DmaPageFaulted.PageFaultFlags==0);
+  assert(observed.DmaPageFaulted.FaultedPrimitiveAPISequenceNumber==MAXULONGLONG);
+  assert(observed.DmaPageFaulted.FaultedBindTableEntry==MAXUINT);
   notification.FaultWrite=1;notification.FaultVa=0xb4000ULL;
   assert(AdmissionPagingNotifyAtInterrupt(&notification));
   assert(observed.InterruptType==DXGK_INTERRUPT_DMA_PAGE_FAULTED);
