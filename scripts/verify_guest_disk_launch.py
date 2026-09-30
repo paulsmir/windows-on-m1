@@ -37,6 +37,9 @@ def verify(readiness_path, receipt_path, stage_path, now):
     receipt = json.loads(receipt_bytes)
     stage = json.loads(stage_path.read_text())
     require(readiness.get("status") == "STOP_AT_GO", "readiness status")
+    require(readiness.get("launch_gate_sha256") ==
+            hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            "launch gate source hash")
     experiment = readiness.get("experiment")
     require(isinstance(experiment, str) and re.fullmatch(r"EXP[0-9]+", experiment),
             "experiment identity")

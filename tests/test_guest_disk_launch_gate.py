@@ -24,6 +24,7 @@ class GuestDiskLaunchGateTests(unittest.TestCase):
             "package_version": "30.0.907.0",
             "hardware_manifest_sha256": "a" * 64,
             "package_sha256": {"AppleAgxRenderAdmission.inf": "b" * 64},
+            "launch_gate_sha256": hashlib.sha256(GATE.read_bytes()).hexdigest(),
         }
         self.receipt = {
             "Experiment": "EXP907",
@@ -90,6 +91,10 @@ class GuestDiskLaunchGateTests(unittest.TestCase):
         self.stage["PreflightSha256"] = "c" * 64
         result = self.run_gate()
         self.assertNotEqual(result.returncode, 0)
+
+    def test_changed_launch_gate_hash_refuses(self):
+        self.readiness["launch_gate_sha256"] = "d" * 64
+        self.assertNotEqual(self.run_gate().returncode, 0)
 
     def test_unsafe_trace_or_dump_policy_refuses(self):
         self.receipt["EtlMaxFileSizeMB"] = 512
