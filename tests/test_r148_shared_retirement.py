@@ -30,7 +30,9 @@ class SharedRetirement(unittest.TestCase):
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
-using BOOL=int;using VOID=void;using ULONG=unsigned;using HRESULT=int32_t;using HANDLE=void*;using SRWLOCK=int;
+using BOOL=int;using VOID=void;using ULONG=unsigned;using UINT=unsigned;using HRESULT=int32_t;using HANDLE=void*;using SRWLOCK=int;
+#define AdmissionUmdMeasureNativeFlushStage 5u
+static void AgxD3d10WindowsPresentMeasure(UINT,HRESULT,const UINT*,UINT){}
 #define APIENTRY
 #define TRUE 1
 #define FALSE 0

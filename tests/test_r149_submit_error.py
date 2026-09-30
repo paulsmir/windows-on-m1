@@ -24,6 +24,11 @@ class SubmitError(unittest.TestCase):
         source = (ROOT / "tests/g4_mesa_pool_residency_replay.c").read_text()
         declarations = r'''
 typedef int32_t HRESULT;
+typedef unsigned UINT;
+#define AdmissionUmdMeasureNativeFlushStage 5u
+static void AgxD3d10WindowsPresentMeasure(unsigned kind,HRESULT status,const unsigned *values,unsigned count) {
+  (void)kind;(void)status;(void)values;(void)count;
+}
 #define S_OK 0
 #define E_FAIL ((HRESULT)0x80004005u)
 #define E_INVALIDARG ((HRESULT)0x80070057u)
