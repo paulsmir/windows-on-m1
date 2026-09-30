@@ -38,6 +38,15 @@ VOID AgxD3d10WindowsPresentMeasure(UINT Kind,HRESULT Status,
 
 extern "C" void (*AgxWin32BatchRefusalHook)(unsigned kind, unsigned site,
                                             unsigned detail0, unsigned detail1);
+extern "C" void (*AgxWin32FirstFaultHook)(unsigned site,uintptr_t context);
+
+static void AgxD3d10FirstFault(unsigned site,uintptr_t context) {
+  static volatile LONG records;
+  LONG count=InterlockedIncrement(&records);
+  if(count>128) return;
+  UINT values[4]={site,(UINT)context,(UINT)((uint64_t)context>>32),(UINT)count};
+  AdmissionUmdDiagnostic("measure-native-first-fault",S_OK,values,ARRAYSIZE(values));
+}
 
 /* EXP870 diagnostic: every refused native batch, always logged ("reject-"
  * bypasses the record budget). kind 1=Begin 2=Finish precondition 3=Finish
@@ -412,6 +421,7 @@ HRESULT AgxD3d10WindowsCreateDevice(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
   if(!owner->Context) { result=E_OUTOFMEMORY;goto failed; }
   owner->Stage=AgxD3d10DeviceNativeContextReady;
   AgxWin32BatchRefusalHook=AgxD3d10BatchRefusal;
+  AgxWin32FirstFaultHook=AgxD3d10FirstFault;
   owner->Stage=AgxD3d10DeviceReady;
   *Device = owner;
   AdmissionUmdDiagnostic("g4-create-device-exit",S_OK,NULL,0u);
@@ -711,9 +721,11 @@ HRESULT AgxD3d10WindowsPresentationSubmit(
   AgxWin32AsahiContextDiagnostic(Device->Context,before,bindings);
   int flushed=AgxWin32AsahiContextFlushForPresent(Device->Context);
   AgxWin32AsahiContextDiagnostic(Device->Context,after,bindings);
-  UINT contextState[10]={before[0],before[1],before[2],before[3],
+  UINT contextState[12]={before[0],before[1],before[2],before[3],
       after[0],after[1],after[2],after[3],
-      (UINT)Device->Runtime.LastScreenError,(UINT)Device->Runtime.DrawTerminal};
+      (UINT)Device->Runtime.LastScreenError,(UINT)Device->Runtime.DrawTerminal,
+      (UINT)(uintptr_t)Device->Context,
+      (UINT)((uint64_t)(uintptr_t)Device->Context>>32)};
   AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeContextFlush,
       flushed?S_OK:E_FAIL,contextState,ARRAYSIZE(contextState));
   if(!flushed) {

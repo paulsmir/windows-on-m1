@@ -71,6 +71,14 @@ void AgxWin32AsahiBatchTraceDraw(struct agx_context *ctx,
  * installed by the D3D10 Windows layer and never changes the result. */
 void (*AgxWin32BatchRefusalHook)(unsigned kind, unsigned site,
                                  unsigned detail0, unsigned detail1);
+void (*AgxWin32FirstFaultHook)(unsigned site, uintptr_t context);
+void AgxWin32AsahiMarkContextFault(struct agx_context *ctx,unsigned site) {
+  if(!ctx) return;
+  int first=!ctx->any_faults;
+  ctx->any_faults=true;
+  if(first && AgxWin32FirstFaultHook)
+    AgxWin32FirstFaultHook(site,(uintptr_t)&ctx->base);
+}
 static int batch_refuse(unsigned kind, unsigned site,
                         unsigned detail0, unsigned detail1) {
   if (AgxWin32BatchRefusalHook)

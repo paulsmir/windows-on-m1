@@ -3850,6 +3850,20 @@ agx_shader_initialize("""
                 target.write_text(content)
                 overlays.setdefault(path, {})['after_shader_failure'] = (
                     hashlib.sha256(target.read_bytes()).hexdigest())
+            for kind, path in enumerate((
+                    'src/gallium/drivers/asahi/agx_batch.c',
+                    'src/gallium/drivers/asahi/agx_pipe.c',
+                    'src/gallium/drivers/asahi/agx_state.c'), 1):
+                target = out/path
+                content = target.read_text()
+                marker = 'ctx->any_faults = true;'
+                if content.count(marker) < 2:
+                    raise SystemExit('Missing native fault sites: ' + path)
+                content = content.replace(marker,
+                    f'AgxWin32AsahiMarkContextFault(ctx, ({kind}u << 16) | __LINE__);')
+                target.write_text(content)
+                overlays.setdefault(path, {})['after_first_fault_receipt'] = (
+                    hashlib.sha256(target.read_bytes()).hexdigest())
             # The last source transform is authoritative for runtime compilation.
             for key, record in overlays.items():
                 path = out/key

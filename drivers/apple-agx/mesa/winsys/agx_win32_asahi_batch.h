@@ -49,4 +49,5 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *,const struct drm_asahi_cmd_rende
 int AgxWin32AsahiBatchPoll(struct agx_batch *,APPLE_AGX_U32);
 int AgxWin32AsahiBatchAbort(struct agx_batch *);
 int AgxWin32AsahiBatchRelease(struct agx_batch *);
+void AgxWin32AsahiMarkContextFault(struct agx_context *,unsigned);
 #endif
