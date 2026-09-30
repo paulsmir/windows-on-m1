@@ -34,6 +34,9 @@ static BOOL frame_process_is_dwm(void) {
   return observed == 1;
 }
 
+#ifdef __cplusplus
+extern "C"
+#endif
 ULONGLONG AdmissionUmdGpuvaFrameArm(ADMISSION_UMD_DEVICE *device,
     D3DKMT_HANDLE allocation, ULONGLONG canonicalVa) {
   ADMISSION_DWM_FRAME_ARM arm = {};

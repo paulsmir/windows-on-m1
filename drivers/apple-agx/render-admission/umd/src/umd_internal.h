@@ -174,6 +174,9 @@ extern "C"
 #endif
 const AGX_WIN32_GPUVA_OPS *AdmissionUmdGpuvaOperations(void);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+#ifdef __cplusplus
+extern "C"
+#endif
 ULONGLONG AdmissionUmdGpuvaFrameArm(ADMISSION_UMD_DEVICE *Device,
     D3DKMT_HANDLE Allocation, ULONGLONG CanonicalVa);
 #endif
