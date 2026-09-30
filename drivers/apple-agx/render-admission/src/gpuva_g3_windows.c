@@ -1730,13 +1730,48 @@ typedef struct _ADMISSION_G3_PRESENT_COPY {
   ADMISSION_G3_PROCESS *Process;
   ADMISSION_SCANOUT_MEMORY_VIEW Local;
   NTSTATUS Status;
+  ULONGLONG SourceVa, SourceAllocation;
+  ULONGLONG CurrentVa, FaultVa;
+  ULONG FaultWrite;
 } ADMISSION_G3_PRESENT_COPY;
+
+static int AdmissionG3PresentTranslateSource(void *Opaque,
+    unsigned long long GpuVa, unsigned long long *GuestIpa) {
+  ADMISSION_G3_PRESENT_COPY *copy = Opaque;
+  const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte;
+  ULONGLONG offset;
+  if (copy == NULL || GuestIpa == NULL ||
+      GpuVa < copy->SourceVa || copy->SourceAllocation == 0ULL)
+    return 0;
+  copy->CurrentVa = GpuVa;
+  offset = GpuVa - copy->SourceVa;
+  pte = AdmissionG3CopyPte(copy->Process, GpuVa);
+  if (pte == NULL || pte->GuestIpa == 0ULL ||
+      (pte->Flags & APPLE_AGX_GPUVA_G3_VALID) == 0u ||
+      (pte->Flags & ~(APPLE_AGX_GPUVA_G3_VALID |
+                      APPLE_AGX_GPUVA_G3_WRITE)) != 0u ||
+      pte->SegmentId > ADMISSION_MEMORY_LOCAL_SEGMENT ||
+      pte->Allocation != copy->SourceAllocation ||
+      pte->AllocationOffset != (offset & ~0xfffULL)) {
+    copy->FaultVa = GpuVa;
+    copy->FaultWrite = 0u;
+    return 0;
+  }
+  *GuestIpa = pte->GuestIpa + (GpuVa & 0xfffULL);
+  return 1;
+}
 
 static int AdmissionG3PresentTranslate(void *Opaque,
     unsigned long long GpuVa, unsigned long long *GuestIpa) {
   ADMISSION_G3_PRESENT_COPY *copy = Opaque;
-  return AppleAgxGpuvaG3GraphTranslateVa(&copy->Process->Graph,
-      GpuVa, GuestIpa) ? 1 : 0;
+  copy->CurrentVa = GpuVa;
+  if (!AppleAgxGpuvaG3GraphTranslateVa(&copy->Process->Graph,
+      GpuVa, GuestIpa)) {
+    copy->FaultVa = GpuVa;
+    copy->FaultWrite = 1u;
+    return 0;
+  }
+  return 1;
 }
 
 static int AdmissionG3PresentRead(void *Opaque, unsigned long long GuestIpa,
@@ -1757,6 +1792,10 @@ static int AdmissionG3PresentRead(void *Opaque, unsigned long long GuestIpa,
       MM_COPY_MEMORY_PHYSICAL, &copied);
   if (NT_SUCCESS(copy->Status) && copied != ByteCount)
     copy->Status = STATUS_PARTIAL_COPY;
+  if (!NT_SUCCESS(copy->Status)) {
+    copy->FaultVa = copy->CurrentVa;
+    copy->FaultWrite = 0u;
+  }
   return NT_SUCCESS(copy->Status) ? 1 : 0;
 }
 
@@ -1764,11 +1803,17 @@ static int AdmissionG3PresentWrite(void *Opaque, unsigned long long GuestIpa,
     const void *Bytes, unsigned int ByteCount, int Commit) {
   ADMISSION_G3_PRESENT_COPY *copy = Opaque;
   ULONGLONG offset;
-  if (GuestIpa < copy->Local.GuestIpaAddress)
+  if (GuestIpa < copy->Local.GuestIpaAddress) {
+    copy->FaultVa = copy->CurrentVa;
+    copy->FaultWrite = 1u;
     return 0;
+  }
   offset = GuestIpa - copy->Local.GuestIpaAddress;
-  if (offset > copy->Local.Bytes || ByteCount > copy->Local.Bytes - offset)
+  if (offset > copy->Local.Bytes || ByteCount > copy->Local.Bytes - offset) {
+    copy->FaultVa = copy->CurrentVa;
+    copy->FaultWrite = 1u;
     return 0;
+  }
   if (Commit)
     RtlCopyMemory((PUCHAR)copy->Local.CpuAddress + (SIZE_T)offset,
         Bytes, ByteCount);
@@ -1781,6 +1826,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3ExecutePresentVirtual(
   ADMISSION_PRESENT_BLT_COMMAND command;
   ADMISSION_G3_PRESENT_COPY copy;
   ADMISSION_G3_PROCESS *process;
+  const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *sourcePte;
+  ULONGLONG offset;
+  APPLE_AGX_GPUVA_G3_WALK_FAILURE destinationWalk;
   UINT scratchBytes;
   PVOID scratch;
   int completed;
@@ -1793,6 +1841,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3ExecutePresentVirtual(
       Context->GpuvaG3Process == NULL || Context->GpuvaG3Poisoned)
     return STATUS_INVALID_PARAMETER;
   *BytesCopied = 0ULL;
+  Adapter->PresentCopyFaultVa = 0ULL;
+  Adapter->PresentCopyFaultWrite = 0u;
   process = (ADMISSION_G3_PROCESS *)Context->GpuvaG3Process;
   if (process->State == NULL || process->State->Adapter != Adapter)
     return STATUS_INVALID_HANDLE;
@@ -1807,18 +1857,50 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3ExecutePresentVirtual(
   if (scratch == NULL)
     return STATUS_INSUFFICIENT_RESOURCES;
   ExAcquireFastMutex(&process->State->Lock);
+  RtlZeroMemory(&destinationWalk, sizeof(destinationWalk));
   completed = !process->Poisoned && !process->Graph.Uncertain &&
       Context->GpuvaG3RootIpa != 0ULL &&
       Context->GpuvaG3RootIpa == process->Graph.RootIpa &&
       command.SourceDescription.Size <= MAXUINT &&
+      (command.SourceLocation & 0xfffULL) == 0ULL &&
       command.DestinationDescription.Size <= MAXUINT &&
-      AppleAgxGpuvaG3GraphContainsRangeAccess(&process->Graph,
-          command.SourceLocation, (UINT)command.SourceDescription.Size, FALSE) &&
-      AppleAgxGpuvaG3GraphContainsRangeAccess(&process->Graph,
-          command.DestinationLocation, (UINT)command.DestinationDescription.Size, TRUE) &&
-      AdmissionPresentBltExecuteGpuva(Command, Bytes,
-          AdmissionG3PresentTranslate, AdmissionG3PresentRead,
-          AdmissionG3PresentWrite, &copy, scratch, scratchBytes, BytesCopied);
+      AppleAgxGpuvaG3GraphInspectRangeAccess(&process->Graph,
+          command.DestinationLocation,
+          (UINT)command.DestinationDescription.Size, TRUE,
+          &destinationWalk);
+  if (!completed && destinationWalk.Va != 0ULL) {
+    copy.FaultVa = destinationWalk.Va;
+    copy.FaultWrite = 1u;
+  }
+  copy.SourceVa = command.SourceLocation;
+  for (offset = 0ULL; completed &&
+       offset < command.SourceDescription.Size; offset += 0x1000ULL) {
+    sourcePte = AdmissionG3CopyPte(process, command.SourceLocation + offset);
+    if (sourcePte == NULL || sourcePte->GuestIpa == 0ULL ||
+        (sourcePte->Flags & APPLE_AGX_GPUVA_G3_VALID) == 0u ||
+        (sourcePte->Flags & ~(APPLE_AGX_GPUVA_G3_VALID |
+                              APPLE_AGX_GPUVA_G3_WRITE)) != 0u ||
+        sourcePte->SegmentId > ADMISSION_MEMORY_LOCAL_SEGMENT ||
+        sourcePte->Allocation == 0ULL ||
+        sourcePte->AllocationOffset != offset ||
+        (copy.SourceAllocation != 0ULL &&
+         sourcePte->Allocation != copy.SourceAllocation)) {
+      copy.FaultVa = command.SourceLocation + offset;
+      copy.FaultWrite = 0u;
+      completed = 0;
+      break;
+    }
+    copy.SourceAllocation = sourcePte->Allocation;
+  }
+  if (completed)
+    completed = AdmissionPresentBltExecuteGpuvaSeparate(Command, Bytes,
+        AdmissionG3PresentTranslateSource, AdmissionG3PresentTranslate,
+        AdmissionG3PresentRead, AdmissionG3PresentWrite, &copy, scratch,
+        scratchBytes, BytesCopied);
+  if (!completed) {
+    Adapter->PresentCopyFaultVa = copy.FaultVa;
+    Adapter->PresentCopyFaultWrite = copy.FaultWrite;
+  }
   KeMemoryBarrier();
   ExReleaseFastMutex(&process->State->Lock);
   ExFreePoolWithTag(scratch, ADMISSION_POOL_TAG);

@@ -189,7 +189,8 @@ int AdmissionPresentBltExecute(const void *Buffer, unsigned int Bytes,
 }
 
 typedef struct {
-  ADMISSION_PRESENT_GPUVA_TRANSLATE Translate;
+  ADMISSION_PRESENT_GPUVA_TRANSLATE SourceTranslate;
+  ADMISSION_PRESENT_GPUVA_TRANSLATE DestinationTranslate;
   ADMISSION_PRESENT_GPUVA_READ Read;
   ADMISSION_PRESENT_GPUVA_WRITE Write;
   void *Context;
@@ -205,9 +206,9 @@ static int PresentGpuvaRead(void *Opaque, unsigned long long Offset,
     return 0;
   while (ByteCount != 0u) {
     va = copy->SourceVa + Offset;
-    chunk = 0x4000u - (unsigned int)(va & 0x3fffULL);
+    chunk = 0x1000u - (unsigned int)(va & 0xfffULL);
     if (chunk > ByteCount) chunk = ByteCount;
-    if (!copy->Translate(copy->Context, va, &ipa) ||
+    if (!copy->SourceTranslate(copy->Context, va, &ipa) ||
         !copy->Read(copy->Context, ipa, Bytes, chunk))
       return 0;
     Offset += chunk;
@@ -229,7 +230,7 @@ static int PresentGpuvaWrite(void *Opaque, unsigned long long Offset,
     va = copy->DestinationVa + Offset;
     chunk = 0x4000u - (unsigned int)(va & 0x3fffULL);
     if (chunk > ByteCount) chunk = ByteCount;
-    if (!copy->Translate(copy->Context, va, &ipa) ||
+    if (!copy->DestinationTranslate(copy->Context, va, &ipa) ||
         !copy->Write(copy->Context, ipa, Bytes, chunk, 1))
       return 0;
     Offset += chunk;
@@ -239,8 +240,9 @@ static int PresentGpuvaWrite(void *Opaque, unsigned long long Offset,
   return 1;
 }
 
-int AdmissionPresentBltExecuteGpuva(const void *Buffer, unsigned int Bytes,
-    ADMISSION_PRESENT_GPUVA_TRANSLATE Translate,
+int AdmissionPresentBltExecuteGpuvaSeparate(const void *Buffer,
+    unsigned int Bytes, ADMISSION_PRESENT_GPUVA_TRANSLATE SourceTranslate,
+    ADMISSION_PRESENT_GPUVA_TRANSLATE DestinationTranslate,
     ADMISSION_PRESENT_GPUVA_READ Read,
     ADMISSION_PRESENT_GPUVA_WRITE Write, void *Context, void *Scratch,
     unsigned int ScratchBytes, unsigned long long *BytesCopied) {
@@ -248,11 +250,13 @@ int AdmissionPresentBltExecuteGpuva(const void *Buffer, unsigned int Bytes,
   ADMISSION_PRESENT_GPUVA_COPY copy;
   unsigned long long offset, va, ipa;
   unsigned int chunk;
-  if (!Translate || !Read || !Write || !Context || !Scratch || !BytesCopied ||
+  if (!SourceTranslate || !DestinationTranslate || !Read || !Write ||
+      !Context || !Scratch || !BytesCopied ||
       !AdmissionPresentBltValidate(Buffer, Bytes, 1, &command) ||
       command.Version != ADMISSION_PRESENT_BLT_GPUVA_VERSION)
     return 0;
-  copy.Translate = Translate;
+  copy.SourceTranslate = SourceTranslate;
+  copy.DestinationTranslate = DestinationTranslate;
   copy.Read = Read;
   copy.Write = Write;
   copy.Context = Context;
@@ -265,9 +269,20 @@ int AdmissionPresentBltExecuteGpuva(const void *Buffer, unsigned int Bytes,
     chunk = 0x4000u - (unsigned int)(va & 0x3fffULL);
     if (chunk > copy.DestinationBytes - offset)
       chunk = (unsigned int)(copy.DestinationBytes - offset);
-    if (!Translate(Context, va, &ipa) || !Write(Context, ipa, NULL, chunk, 0))
+    if (!DestinationTranslate(Context, va, &ipa) ||
+        !Write(Context, ipa, NULL, chunk, 0))
       return 0;
   }
   return AdmissionPresentBltExecute(Buffer, Bytes, PresentGpuvaRead,
       PresentGpuvaWrite, &copy, Scratch, ScratchBytes, BytesCopied);
+}
+
+int AdmissionPresentBltExecuteGpuva(const void *Buffer, unsigned int Bytes,
+    ADMISSION_PRESENT_GPUVA_TRANSLATE Translate,
+    ADMISSION_PRESENT_GPUVA_READ Read,
+    ADMISSION_PRESENT_GPUVA_WRITE Write, void *Context, void *Scratch,
+    unsigned int ScratchBytes, unsigned long long *BytesCopied) {
+  return AdmissionPresentBltExecuteGpuvaSeparate(Buffer, Bytes,
+      Translate, Translate, Read, Write, Context, Scratch, ScratchBytes,
+      BytesCopied);
 }

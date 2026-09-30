@@ -193,6 +193,8 @@ typedef struct _ADMISSION_PAGING_NOTIFICATION {
   ADMISSION_CONTEXT *Context;
   UINT Fence;
   NTSTATUS Status;
+  ULONGLONG FaultVa;
+  ULONG FaultWrite;
 } ADMISSION_PAGING_NOTIFICATION;
 
 static BOOLEAN AdmissionPagingNotifyAtInterrupt(PVOID Opaque) {
@@ -213,6 +215,20 @@ static BOOLEAN AdmissionPagingNotifyAtInterrupt(PVOID Opaque) {
     data.DmaCompleted.SubmissionFenceId = notification->Fence;
     data.DmaCompleted.NodeOrdinal = 0u;
     data.DmaCompleted.EngineOrdinal = 0u;
+  } else if (notification->FaultVa != 0ULL) {
+    data.InterruptType = DXGK_INTERRUPT_DMA_PAGE_FAULTED;
+    data.DmaPageFaulted.FaultedFenceId = notification->Fence;
+    data.DmaPageFaulted.FaultedPrimitiveAPISequenceNumber =
+        DXGK_PRIMITIVE_API_SEQUENCE_NUMBER_UNKNOWN;
+    data.DmaPageFaulted.FaultedPipelineStage =
+        DXGK_RENDER_PIPELINE_STAGE_UNKNOWN;
+    data.DmaPageFaulted.FaultedBindTableEntry = DXGK_BIND_TABLE_ENTRY_UNKNOWN;
+    data.DmaPageFaulted.PageFaultFlags = notification->FaultWrite
+        ? DXGK_PAGE_FAULT_WRITE : (DXGK_PAGE_FAULT_FLAGS)0;
+    data.DmaPageFaulted.FaultedVirtualAddress = notification->FaultVa;
+    data.DmaPageFaulted.NodeOrdinal = 0u;
+    data.DmaPageFaulted.EngineOrdinal = 0u;
+    data.DmaPageFaulted.PageTableLevel = 0u;
   } else {
     data.InterruptType = DXGK_INTERRUPT_DMA_FAULTED;
     data.DmaFaulted.FaultedFenceId = notification->Fence;
@@ -247,6 +263,8 @@ static VOID AdmissionPagingWorker(_In_ PDEVICE_OBJECT DeviceObject,
   if (context == NULL)
     return;
   InterlockedIncrement(&context->PagingWorkersActive);
+  context->PresentCopyFaultVa = 0ULL;
+  context->PresentCopyFaultWrite = 0u;
   if (context->PresentCopyBytes != 0u)
     status = AdmissionMemoryRuntimeExecutePresent(context,
         context->PresentCopyCommand, context->PresentCopyBytes, &copiedBytes);
@@ -272,6 +290,9 @@ static VOID AdmissionPagingWorker(_In_ PDEVICE_OBJECT DeviceObject,
   notification.Context = context;
   notification.Fence = context->PagingFence;
   notification.Status = status;
+  notification.FaultVa = context->PresentCopyBytes != 0u &&
+      !NT_SUCCESS(status) ? context->PresentCopyFaultVa : 0ULL;
+  notification.FaultWrite = context->PresentCopyFaultWrite;
   status = context->Interface.DxgkCbSynchronizeExecution(
       context->Interface.DeviceHandle, AdmissionPagingNotifyAtInterrupt,
       &notification, 0u, &synchronized);

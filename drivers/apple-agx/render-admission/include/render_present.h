@@ -70,5 +70,11 @@ int AdmissionPresentBltExecuteGpuva(const void *Buffer, unsigned int Bytes,
     ADMISSION_PRESENT_GPUVA_READ Read,
     ADMISSION_PRESENT_GPUVA_WRITE Write, void *Context, void *Scratch,
     unsigned int ScratchBytes, unsigned long long *BytesCopied);
+int AdmissionPresentBltExecuteGpuvaSeparate(const void *Buffer,
+    unsigned int Bytes, ADMISSION_PRESENT_GPUVA_TRANSLATE SourceTranslate,
+    ADMISSION_PRESENT_GPUVA_TRANSLATE DestinationTranslate,
+    ADMISSION_PRESENT_GPUVA_READ Read, ADMISSION_PRESENT_GPUVA_WRITE Write,
+    void *Context, void *Scratch, unsigned int ScratchBytes,
+    unsigned long long *BytesCopied);
 
 #endif

@@ -430,6 +430,8 @@ typedef struct _ADMISSION_CONTEXT {
   ULONG CpuQueueHead, CpuQueueCount, DispatchedFence;
   ADMISSION_CPU_PACKET CpuQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
   UCHAR PresentCopyCommand[ADMISSION_PRESENT_BLT_DMA_MAX];
+  ULONGLONG PresentCopyFaultVa;
+  ULONG PresentCopyFaultWrite;
   volatile LONG PresentTransferState;
   ADMISSION_PRESENT_TRANSFER_RECEIPT PresentTransferReceipt;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
