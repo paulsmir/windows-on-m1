@@ -61,14 +61,12 @@ static ADMISSION_OPEN_ALLOCATION *AdmissionPresentOpen(
 _Use_decl_annotations_ NTSTATUS AdmissionPresentBlt(
     ADMISSION_DEVICE *Device, HANDLE Context, DXGKARG_PRESENT *Present) {
   ADMISSION_PRESENT_BLT_INPUT input;
-  APPLE_AGX_GDI_RECT fullPrimaryRect;
   ADMISSION_OPEN_ALLOCATION *source, *destination;
   ADMISSION_PRESENT_OPEN_ENDPOINT sourceEvidence, destinationEvidence;
   DXGK_ALLOCATIONLIST virtualList[3];
   const DXGK_ALLOCATIONLIST *allocationList;
   APPLE_AGX_DMA_SHADOW shadow;
   D3DDDI_PATCHLOCATIONLIST *patch;
-  BOOLEAN fullPrimary = FALSE;
   BOOLEAN virtualAddressing;
   UINT capacity, bytes, next;
   virtualAddressing = Context != NULL &&
@@ -116,7 +114,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentBlt(
     return STATUS_INVALID_HANDLE;
   }
   RtlZeroMemory(&input, sizeof(input));
-  RtlZeroMemory(&fullPrimaryRect, sizeof(fullPrimaryRect));
   input.Command.SourceDescription = source->Allocation->Description;
   input.Command.DestinationDescription = destination->Allocation->Description;
   input.Command.ContextToken = (ULONGLONG)(ULONG_PTR)Context;
@@ -128,39 +125,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentBlt(
         allocationList[DXGK_PRESENT_DESTINATION_INDEX].VirtualAddress;
   }
   input.SameAllocation = source->Allocation == destination->Allocation;
-  if (!input.SameAllocation && Present->MultipassOffset == 0u &&
-      source->Allocation->Description.Width == 2560u &&
-      source->Allocation->Description.Height == 1600u &&
-      source->Allocation->Description.Pitch == 10240u &&
-      source->Allocation->Description.BytesPerPixel == 4u &&
-      source->Allocation->Description.Size ==
-          APPLE_AGX_SCANOUT_J313_SURFACE_SIZE &&
-      source->Allocation->Description.Format ==
-          (UINT)D3DDDIFMT_A8R8G8B8 &&
-      destination->Allocation->Description.Width == 2560u &&
-      destination->Allocation->Description.Height == 1600u &&
-      destination->Allocation->Description.Pitch == 10240u &&
-      destination->Allocation->Description.BytesPerPixel == 4u &&
-      destination->Allocation->Description.Size ==
-          APPLE_AGX_SCANOUT_J313_SURFACE_SIZE &&
-      destination->Allocation->Description.Format ==
-          (UINT)D3DDDIFMT_A8R8G8B8) {
-    fullPrimaryRect.Right = 2560;
-    fullPrimaryRect.Bottom = 1600;
-    input.Command.SourceRect = fullPrimaryRect;
-    input.Command.DestinationRect = fullPrimaryRect;
-    input.Rects = &fullPrimaryRect;
-    input.RectCount = 1u;
-    input.MultipassOffset = 0u;
-    fullPrimary = TRUE;
-  } else {
-    RtlCopyMemory(&input.Command.SourceRect, &Present->SrcRect, sizeof(RECT));
-    RtlCopyMemory(&input.Command.DestinationRect, &Present->DstRect,
-                  sizeof(RECT));
-    input.Rects = (const APPLE_AGX_GDI_RECT *)Present->pDstSubRects;
-    input.RectCount = Present->SubRectCnt;
-    input.MultipassOffset = Present->MultipassOffset;
-  }
+  RtlCopyMemory(&input.Command.SourceRect, &Present->SrcRect, sizeof(RECT));
+  RtlCopyMemory(&input.Command.DestinationRect, &Present->DstRect,
+                sizeof(RECT));
+  input.Rects = (const APPLE_AGX_GDI_RECT *)Present->pDstSubRects;
+  input.RectCount = Present->SubRectCnt;
+  input.MultipassOffset = Present->MultipassOffset;
   if (!virtualAddressing && Present->pAllocationList[1].SegmentId != 0u &&
       !AdmissionPresentLocationEncode(Present->pAllocationList[1].SegmentId,
           (ULONGLONG)Present->pAllocationList[1].PhysicalAddress.QuadPart,
@@ -197,8 +167,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentBlt(
     Present->PatchLocationListOutSize -= 2u;
   }
   Present->pDmaBuffer = (PUCHAR)Present->pDmaBuffer + bytes;
-  Present->MultipassOffset = fullPrimary ? Present->SubRectCnt : next;
-  return fullPrimary || next == input.RectCount
+  Present->MultipassOffset = next;
+  return next == input.RectCount
              ? STATUS_SUCCESS
              : STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
 }

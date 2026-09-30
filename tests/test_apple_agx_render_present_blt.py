@@ -120,6 +120,8 @@ static NTSTATUS AdmissionPagingSubmitPresent(ADMISSION_CONTEXT *c,const DXGKARG_
  queued_fence=a->SubmissionFenceId;queued_bytes=bytes;memcpy(queued_copy,data,bytes);return 0;}
 static size_t RtlCompareMemory(const void *a,const void *b,size_t n){return memcmp(a,b,n)==0?n:0;}
 static void AdmissionRecordPresent(ADMISSION_DEVICE *d,const DXGKARG_PRESENT *p,unsigned b,NTSTATUS s){(void)d;(void)p;(void)b;(void)s;}
+static void AdmissionDwmRecordPresent(ADMISSION_CONTEXT *a,HANDLE c,
+ const DXGKARG_PRESENT *p,NTSTATUS s){(void)a;(void)c;(void)p;(void)s;}
 static unsigned open_receipt_calls;
 static ADMISSION_PRESENT_OPEN_ENDPOINT recorded_source,recorded_destination;
 static void AdmissionRecordPresentOpenFailure(ADMISSION_DEVICE *device,HANDLE context,
@@ -152,7 +154,7 @@ int main(void){
  RECT rects[2]={{10,20,76,88},{100,120,140,160}};DXGKARG_PRESENT p={0};
  p.pDmaBuffer=dma;p.DmaSize=4096;p.pDmaBufferPrivateData=private_data;p.DmaBufferPrivateDataSize=8192;
  p.pAllocationList=a;p.pPatchLocationListOut=patches;p.PatchLocationListOutSize=256;
- p.SrcRect=p.DstRect=rects[0];p.SubRectCnt=2;p.pDstSubRects=rects;p.Flags.Value=1;
+ p.SrcRect=p.DstRect=(RECT){10,20,140,160};p.SubRectCnt=2;p.pDstSubRects=rects;p.Flags.Value=1;
  assert(AdmissionDdiPresent(&context,&p)==STATUS_SUCCESS);
  assert((unsigned char *)p.pDmaBuffer>dma && (unsigned char *)p.pDmaBuffer<=dma+4096);
  assert(p.pPatchLocationListOut==patches+2);
@@ -161,22 +163,22 @@ int main(void){
  assert(p.MultipassOffset==2);
  APPLE_AGX_DMA_SHADOW shadow;APPLE_AGX_DMA_SHADOW_VIEW view;ADMISSION_PRESENT_BLT_COMMAND command;
  assert(AppleAgxDmaShadowOpen(&shadow,private_data,8192));
- assert(AppleAgxDmaShadowFind(private_data,shadow.BytesUsed,0,184,&view));
- assert(AdmissionPresentBltValidate(view.Bytes,184,1,&command));
- assert(command.RectCount==1);
- assert(command.SourceRect.Left==0 && command.SourceRect.Top==0 &&
-        command.SourceRect.Right==2560 && command.SourceRect.Bottom==1600);
- assert(command.DestinationRect.Left==0 && command.DestinationRect.Top==0 &&
-        command.DestinationRect.Right==2560 && command.DestinationRect.Bottom==1600);
+ assert(AppleAgxDmaShadowFind(private_data,shadow.BytesUsed,0,200,&view));
+ assert(AdmissionPresentBltValidate(view.Bytes,200,1,&command));
+ assert(command.RectCount==2);
+ assert(command.SourceRect.Left==10 && command.SourceRect.Top==20 &&
+        command.SourceRect.Right==140 && command.SourceRect.Bottom==160);
+ assert(command.DestinationRect.Left==10 && command.DestinationRect.Top==20 &&
+        command.DestinationRect.Right==140 && command.DestinationRect.Bottom==160);
  assert(command.SourceLocation==0x0200001501000000ULL && command.DestinationLocation==0x0200001500000000ULL);
  DXGKARG_SUBMITCOMMAND submit={0};submit.hContext=&context;submit.Flags.Value=2;submit.SubmissionFenceId=37;
  submit.pDmaBufferPrivateData=private_data;submit.DmaBufferPrivateDataSize=8192;submit.DmaBufferSize=4096;
- submit.DmaBufferSubmissionEndOffset=184;submit.DmaBufferPrivateDataSubmissionEndOffset=shadow.BytesUsed;
+ submit.DmaBufferSubmissionEndOffset=200;submit.DmaBufferPrivateDataSubmissionEndOffset=shadow.BytesUsed;
  assert(AdmissionPresentSubmit(&adapter,&submit)==0); /* no Patch call */
- assert(queue_calls==1 && queued_fence==37 && queued_bytes==184);
+ assert(queue_calls==1 && queued_fence==37 && queued_bytes==200);
  submit.SubmissionFenceId=38;submit.DmaBufferPrivateDataSubmissionEndOffset=0;
  assert(AdmissionPresentSubmit(&adapter,&submit)==0); /* nonpaging zero private subrange */
- assert(queue_calls==2 && queued_fence==38 && queued_bytes==184);
+ assert(queue_calls==2 && queued_fence==38 && queued_bytes==200);
  submit.DmaBufferPrivateDataSubmissionEndOffset=shadow.BytesUsed-1;
  traced_field=traced_value=0;
  assert(AdmissionPresentSubmitTraced(&adapter,&submit,TRUE)==STATUS_INVALID_PARAMETER);
@@ -188,11 +190,11 @@ int main(void){
  patch.pDmaBuffer=dma;patch.DmaBufferSize=4096;patch.pDmaBufferPrivateData=private_data;
  patch.DmaBufferPrivateDataSize=8192;patch.pAllocationList=a;patch.AllocationListSize=3;
  patch.pPatchLocationList=patches;patch.PatchLocationListSize=2;patch.PatchLocationListSubmissionLength=2;
- patch.DmaBufferSubmissionEndOffset=184;patch.DmaBufferPrivateDataSubmissionEndOffset=shadow.BytesUsed;
+ patch.DmaBufferSubmissionEndOffset=200;patch.DmaBufferPrivateDataSubmissionEndOffset=shadow.BytesUsed;
  patch.SubmissionFenceId=39;a[1].PhysicalAddress.QuadPart=0x1501800000LL;
  assert(AdmissionPresentPatch(&adapter,&patch)==0);
  assert(AdmissionPresentPatch(&adapter,&patch)==0); /* idempotent relocation */
- assert(AdmissionPresentBltValidate(view.Bytes,184,1,&command));
+ assert(AdmissionPresentBltValidate(view.Bytes,200,1,&command));
  assert(command.SourceLocation==0x0200001501800000ULL);
  assert(AdmissionPresentBltValidate(queued_copy,queued_bytes,1,&command));
  assert(command.SourceLocation==0x0200001501000000ULL); /* prior queued snapshot immutable */
@@ -224,7 +226,7 @@ int main(void){
  p.PatchLocationListOutSize=0;p.MultipassOffset=0;
  assert(AdmissionDdiPresent(&context,&p)==STATUS_SUCCESS);
  assert(AppleAgxDmaShadowOpen(&shadow,private_data,8192));
- assert(AppleAgxDmaShadowFind(private_data,shadow.BytesUsed,0,184,&view));
+ assert(AppleAgxDmaShadowFind(private_data,shadow.BytesUsed,0,200,&view));
  assert(AdmissionPresentBltValidate(view.Bytes,view.DmaBytes,1,&command));
  assert(command.Version==ADMISSION_PRESENT_BLT_GPUVA_VERSION);
  assert(command.SourceLocation==0x100000ULL && command.DestinationLocation==0x200000ULL);
@@ -236,7 +238,7 @@ int main(void){
  virtual_submit.DmaBufferPrivateDataSize=8192;virtual_submit.SubmissionFenceId=40;
  virtual_submit.Flags.Value=2;
  assert(AdmissionPresentSubmitVirtual(&adapter,&context,&virtual_submit)==STATUS_SUCCESS);
- assert(queue_calls==4 && queued_fence==40 && queued_bytes==184);
+ assert(queue_calls==4 && queued_fence==40 && queued_bytes==200);
  p.pDmaBuffer=dma;p.DmaSize=4096;p.pDmaBufferPrivateData=private_data;
  p.DmaBufferPrivateDataSize=8192;p.MultipassOffset=0;
  virtual_allocations[1].SegmentId=1;
