@@ -153,7 +153,8 @@ static void r145_copy_cases(void) {
   QUERY_REJECT(allocation.Object.Description.Size=0,allocation.Object.Description.Size=0x10000,48,STATUS_INVALID_PARAMETER);
   QUERY_REJECT(allocation.Object.Description.Size=1ULL<<32,allocation.Object.Description.Size=0x10000,49,STATUS_INVALID_PARAMETER);
   QUERY_REJECT((q->GpuVa=(1ULL<<39)-65536,allocation.Object.Description.Size=131072),(q->GpuVa=65536,allocation.Object.Description.Size=65536),52,STATUS_INVALID_PARAMETER);
-  QUERY_REJECT(q->GpuVa=0x4000000,q->GpuVa=0x10000,53,STATUS_INVALID_PARAMETER);
+  QUERY_REJECT(q->GpuVa=0x4000000,q->GpuVa=0x10000,
+      getenv("G3_REPLAY_HISTORICAL") ? 53 : 56,STATUS_INVALID_PARAMETER);
   QUERY_REJECT(replay_local_view_status=STATUS_INVALID_DEVICE_STATE,replay_local_view_status=STATUS_SUCCESS,54,STATUS_INVALID_DEVICE_STATE);
   unsigned char *saved_local_cpu=local_cpu;
   /* local_cpu is also checked by the macro, after restore. */
@@ -184,6 +185,25 @@ static void r145_copy_cases(void) {
   expect_ok("R145 copy query",AdmissionDdiEscape(&a,&escape));
   assert(q->MappingGeneration==p->Graph.MappingGeneration && q->ProcessGeneration);
   assert(a.G3CopyQueryFailureClaim==0 && query_registry_writes==writes_before_success);
+  if (ADMISSION_GPUVA_G1B_PAGE_PROFILE==16) {
+    ULONGLONG saved_page=ptes[1].PageAddress;
+    ptes[1].PageAddress=0x300;
+    expect_ok("R185 scattered resident publication",AdmissionGpuvaG3BuildPagingBuffer(&a,&x));
+    assert(!AppleAgxGpuvaG3GraphContainsRangeAccess(&p->Graph,q->GpuVa,
+        (UINT)allocation.Object.Description.Size,FALSE));
+    assert(AdmissionG3CopyPte(p,q->GpuVa+0x1000ULL)->Flags&APPLE_AGX_GPUVA_G3_VALID);
+    q->ProcessGeneration=0;q->MappingGeneration=0;
+    expect_ok("R185 scattered resident copy query",AdmissionDdiEscape(&a,&escape));
+    q->Operation=APPLE_AGX_G3_COPY_UPLOAD;q->Offset=0x1000;q->TransferBytes=0x1000;
+    memset(q->Data,0x85,q->TransferBytes);
+    expect_ok("R185 scattered resident upload",AdmissionDdiEscape(&a,&escape));
+    assert(local_cpu[0x300000]==0x85 && local_cpu[0x101000]!=0x85);
+    q->Operation=APPLE_AGX_G3_COPY_QUERY;q->Offset=0;q->TransferBytes=0;
+    ptes[1].PageAddress=saved_page;
+    expect_ok("R185 contiguous restore",AdmissionGpuvaG3BuildPagingBuffer(&a,&x));
+    q->ProcessGeneration=0;q->MappingGeneration=0;
+    expect_ok("R185 restored copy query",AdmissionDdiEscape(&a,&escape));
+  }
   q->Operation=APPLE_AGX_G3_COPY_UPLOAD;q->Offset=0xff9;q->TransferBytes=0x4009;
   for(UINT i=0;i<q->TransferBytes;++i) q->Data[i]=(unsigned char)(i*37+9);
   expect_ok("R145 partial upload",AdmissionDdiEscape(&a,&escape));

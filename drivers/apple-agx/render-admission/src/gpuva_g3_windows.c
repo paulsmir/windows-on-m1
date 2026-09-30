@@ -820,7 +820,7 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
       !AdmissionPagingQuiescent(adapter), 62u, STATUS_DEVICE_BUSY, Unlock);
   /* R159: only a different process instance invalidates the QUERY. An
    * unrelated mapping update advances MappingGeneration constantly; the
-   * per-page range validation below (53, 56-61) re-proves this exact range
+   * per-page range validation below (56-61) re-proves this exact range
    * under the lock, as R154 did for BeginJob. */
   COPY_REJECT_IF(q->Operation!=APPLE_AGX_G3_COPY_QUERY &&
       q->ProcessGeneration!=p->Graph.ProcessGeneration, 45u, STATUS_INVALID_PARAMETER, Unlock);
@@ -836,8 +836,6 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   COPY_REJECT_IF(length>allocation->Object.Description.Size-q->Offset, 51u, STATUS_INVALID_PARAMETER, Unlock);
   COPY_REJECT_IF(q->Offset>=(1ULL<<39)-q->GpuVa || length>(1ULL<<39)-q->GpuVa-q->Offset, 52u, STATUS_INVALID_PARAMETER, Unlock);
   first=q->GpuVa+q->Offset;end=first+length;
-  COPY_REJECT_IF(!AppleAgxGpuvaG3GraphInspectRangeAccess(&p->Graph,first,(UINT)length,FALSE,
-      adapter->G3CopyQueryFailureClaim==0 ? &walk : NULL), 53u, STATUS_INVALID_PARAMETER, Unlock);
   status=AdmissionMemoryRuntimeLocalView(adapter,&view);
   COPY_REJECT_IF(!NT_SUCCESS(status), 54u, status, Unlock);
   COPY_REJECT_IF(!view.CpuAddress, 55u, STATUS_INVALID_PARAMETER, Unlock);
