@@ -32,6 +32,7 @@ int wmain(void) {
     D3DKMT_CLOSEADAPTER close = {0};
     D3DKMT_ESCAPE escape = {0};
     ADMISSION_BLT_PROBE probe = {0};
+    ADMISSION_DWM_DDI_PROBE dwm = {0};
     UINT eventIndex;
     probe.Magic = ADMISSION_BLT_PROBE_MAGIC;
     probe.Version = ADMISSION_BLT_PROBE_VERSION;
@@ -46,6 +47,31 @@ int wmain(void) {
             adapters[index].AdapterLuid.LowPart,
             adapters[index].NumOfSources, (UINT)status);
     close.hAdapter = adapters[index].hAdapter;
+    dwm.Magic = ADMISSION_DWM_DDI_PROBE_MAGIC;
+    dwm.Version = ADMISSION_DWM_DDI_PROBE_VERSION;
+    dwm.Bytes = sizeof(dwm);
+    escape.pPrivateDriverData = &dwm;
+    escape.PrivateDriverDataSize = sizeof(dwm);
+    {
+      NTSTATUS dwmStatus = D3DKMTEscape(&escape);
+      if (dwmStatus >= 0 && dwm.Magic == ADMISSION_DWM_DDI_PROBE_MAGIC &&
+          dwm.Version == ADMISSION_DWM_DDI_PROBE_VERSION &&
+          dwm.Bytes == sizeof(dwm)) {
+        UINT kind;
+        found = TRUE;
+        wprintf(L"DWM_DDI build=%u boot=%u incomplete=%u adapter=%u\n",
+                dwm.CandidateBuild, dwm.BootGeneration, dwm.Incomplete, index);
+        for (kind = 0u; kind < AdmissionDwmDdiCount; ++kind) {
+          const ADMISSION_DWM_DDI_ENTRY *entry = &dwm.Entries[kind];
+          wprintf(L"DWM_DDI_ENTRY kind=%u count=%ld dropped=%ld seq=%ld status=0x%08x flags=0x%x source=%u segment=%u src_count=%u dst_count=%u allocation=0x%llx address=0x%llx context=0x%llx fence=%llu\n",
+                  kind, entry->Count, entry->Dropped, entry->Sequence,
+                  entry->Last.Status, entry->Last.Flags, entry->Last.SourceId,
+                  entry->Last.Segment, entry->Last.SourceCount,
+                  entry->Last.DestinationCount, entry->Last.Allocation,
+                  entry->Last.Address, entry->Last.Context, entry->Last.Fence);
+        }
+      }
+    }
     (void)D3DKMTCloseAdapter(&close);
     if (status < 0 || probe.Magic != ADMISSION_BLT_PROBE_MAGIC ||
         probe.Version != ADMISSION_BLT_PROBE_VERSION ||

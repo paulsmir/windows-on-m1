@@ -95,6 +95,34 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyDevice(HANDLE Device) {
   return STATUS_SUCCESS;
 }
 
+static VOID AdmissionDwmRecordPresent(
+    ADMISSION_CONTEXT *Adapter, HANDLE Context,
+    const DXGKARG_PRESENT *Present, NTSTATUS Status) {
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  ADMISSION_DWM_DDI_EVENT event;
+  if (Adapter == NULL)
+    return;
+  RtlZeroMemory(&event, sizeof(event));
+  event.Kind = Present == NULL ? AdmissionDwmDdiPresentOther :
+      Present->Flags.Blt ? AdmissionDwmDdiPresentBlt :
+      Present->Flags.Flip ? AdmissionDwmDdiPresentFlip :
+      AdmissionDwmDdiPresentOther;
+  event.Status = (ULONG)Status;
+  event.Context = (ULONGLONG)(ULONG_PTR)Context;
+  if (Present != NULL) {
+    event.Flags = Present->Flags.Value;
+    event.SourceCount = Present->NumSrcAllocations;
+    event.DestinationCount = Present->NumDstAllocations;
+  }
+  AdmissionDwmDdiProbeRecordWindows(Adapter, &event);
+#else
+  UNREFERENCED_PARAMETER(Adapter);
+  UNREFERENCED_PARAMETER(Context);
+  UNREFERENCED_PARAMETER(Present);
+  UNREFERENCED_PARAMETER(Status);
+#endif
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
     HANDLE Context, DXGKARG_PRESENT *Present) {
   ADMISSION_DEVICE *device = NULL;
@@ -172,6 +200,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
     traceEvent.Status = (ULONG)status;
     AdmissionStandardPresentTraceRecordWindows(adapter, &traceEvent);
 #endif
+    AdmissionDwmRecordPresent(adapter, Context, Present, status);
     return status;
   }
 
@@ -188,6 +217,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
     traceEvent.Status = (ULONG)STATUS_INVALID_PARAMETER;
     AdmissionStandardPresentTraceRecordWindows(adapter, &traceEvent);
 #endif
+    AdmissionDwmRecordPresent(adapter, Context, Present,
+                              STATUS_INVALID_PARAMETER);
     return STATUS_INVALID_PARAMETER;
   }
   source = (ADMISSION_OPEN_ALLOCATION *)
@@ -202,6 +233,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
     traceEvent.Status = (ULONG)STATUS_INVALID_HANDLE;
     AdmissionStandardPresentTraceRecordWindows(adapter, &traceEvent);
 #endif
+    AdmissionDwmRecordPresent(adapter, Context, Present,
+                              STATUS_INVALID_HANDLE);
     return STATUS_INVALID_HANDLE;
   }
   description = &source->Allocation->Description;
@@ -218,6 +251,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
         (ULONG)STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
     AdmissionStandardPresentTraceRecordWindows(adapter, &traceEvent);
 #endif
+    AdmissionDwmRecordPresent(adapter, Context, Present,
+                              STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE);
     return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
   }
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
@@ -226,6 +261,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
   traceEvent.AllocationToken = (ULONGLONG)(ULONG_PTR)source->Allocation;
   AdmissionStandardPresentTraceRecordWindows(adapter, &traceEvent);
 #endif
+  AdmissionDwmRecordPresent(adapter, Context, Present, STATUS_SUCCESS);
   return STATUS_SUCCESS;
 }
 
@@ -278,6 +314,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEscape(
         context, (ADMISSION_BLT_PROBE *)Args->pPrivateDriverData);
 #endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  if (magic == ADMISSION_DWM_DDI_PROBE_MAGIC &&
+      Args->PrivateDriverDataSize == sizeof(ADMISSION_DWM_DDI_PROBE))
+    return AdmissionDwmDdiProbeQueryWindows(
+        context, (ADMISSION_DWM_DDI_PROBE *)Args->pPrivateDriverData);
   if (magic == ADMISSION_STANDARD_PRESENT_TRACE_MAGIC &&
       Args->PrivateDriverDataSize == sizeof(ADMISSION_STANDARD_PRESENT_TRACE))
     return AdmissionStandardPresentTraceQueryWindows(

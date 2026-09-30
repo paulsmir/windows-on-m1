@@ -747,6 +747,24 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceAddress(
   }
   InterlockedExchange(&context->SourceAddressStatus, (LONG)status);
   InterlockedExchange(&context->SourceAddressStage, 2);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  {
+    ADMISSION_DWM_DDI_EVENT event;
+    RtlZeroMemory(&event, sizeof(event));
+    event.Kind = AdmissionDwmDdiSourceAddress;
+    event.Status = (ULONG)status;
+    if (SetVidPnSourceAddress != NULL) {
+      event.Flags = SetVidPnSourceAddress->Flags.Value;
+      event.SourceId = SetVidPnSourceAddress->VidPnSourceId;
+      event.Segment = SetVidPnSourceAddress->PrimarySegment;
+      event.Address = (ULONGLONG)
+          SetVidPnSourceAddress->PrimaryAddress.QuadPart;
+      event.Allocation = (ULONGLONG)(ULONG_PTR)
+          SetVidPnSourceAddress->hAllocation;
+    }
+    AdmissionDwmDdiProbeRecordWindows(context, &event);
+  }
+#endif
   if (receipt != NULL) {
     receipt->Status = (ULONG)status;
     InterlockedExchange(&context->SourceAddressReceiptState, 2);
@@ -773,6 +791,31 @@ AdmissionDdiStopDeviceAndReleasePostDisplayOwnership(
   return AdmissionDdiStopDevice(context);
 }
 
+static VOID AdmissionDwmRecordCommit(
+    ADMISSION_CONTEXT *Context, ADMISSION_DISPLAY_DDI_TRACE_ID DdiId,
+    const VOID *Args, NTSTATUS Status) {
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  ADMISSION_DWM_DDI_EVENT event;
+  const DXGKARG_COMMITVIDPN *commit;
+  if (Context == NULL || DdiId != AdmissionDisplayDdiCommitVidPn)
+    return;
+  commit = (const DXGKARG_COMMITVIDPN *)Args;
+  RtlZeroMemory(&event, sizeof(event));
+  event.Kind = AdmissionDwmDdiCommitVidPn;
+  event.Status = (ULONG)Status;
+  if (commit != NULL) {
+    event.SourceId = commit->AffectedVidPnSourceId;
+    event.Flags = commit->Flags.PathPoweredOff;
+  }
+  AdmissionDwmDdiProbeRecordWindows(Context, &event);
+#else
+  UNREFERENCED_PARAMETER(Context);
+  UNREFERENCED_PARAMETER(DdiId);
+  UNREFERENCED_PARAMETER(Args);
+  UNREFERENCED_PARAMETER(Status);
+#endif
+}
+
 #define ADMISSION_TRACE_DISPLAY_DDI(Name, Implementation, DdiId, ArgType)     \
   _Use_decl_annotations_ NTSTATUS Name(CONST HANDLE MiniportDeviceContext,   \
                                         ArgType Args) {                       \
@@ -785,6 +828,7 @@ AdmissionDdiStopDeviceAndReleasePostDisplayOwnership(
       AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, DdiId, 1u,    \
                                 STATUS_PENDING);                              \
     status = Implementation(MiniportDeviceContext, Args);                     \
+    AdmissionDwmRecordCommit(context, DdiId, Args, status);                  \
     if (context != NULL)                                                      \
       AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, DdiId, 2u,    \
                                 status);                                      \

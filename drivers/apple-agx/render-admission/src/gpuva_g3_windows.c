@@ -2137,7 +2137,7 @@ Rollback:
       rollbackBranch, STATUS_INVALID_PARAMETER, 0u, TRUE);
 }
 
-_Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommandVirtual(
+static NTSTATUS AdmissionDdiSubmitCommandVirtualInner(
     HANDLE Adapter, const DXGKARG_SUBMITCOMMANDVIRTUAL *Args) {
   ADMISSION_CONTEXT *adapter = (ADMISSION_CONTEXT *)Adapter;
   ADMISSION_RENDER_CONTEXT *context;
@@ -2222,6 +2222,27 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommandVirtual(
         (ULONG)status, TRUE);
   }
   return STATUS_SUCCESS;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommandVirtual(
+    HANDLE Adapter, const DXGKARG_SUBMITCOMMANDVIRTUAL *Args) {
+  NTSTATUS status = AdmissionDdiSubmitCommandVirtualInner(Adapter, Args);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  ADMISSION_DWM_DDI_EVENT event;
+  RtlZeroMemory(&event, sizeof(event));
+  event.Kind = Args != NULL && Args->Flags.Present
+      ? AdmissionDwmDdiSubmitPresent : AdmissionDwmDdiSubmitOther;
+  event.Status = (ULONG)status;
+  if (Args != NULL) {
+    event.Flags = Args->Flags.Value;
+    event.SourceId = Args->VidPnSourceId;
+    event.Address = Args->DmaBufferVirtualAddress;
+    event.Context = (ULONGLONG)(ULONG_PTR)Args->hContext;
+    event.Fence = Args->SubmissionFenceId;
+  }
+  AdmissionDwmDdiProbeRecordWindows((ADMISSION_CONTEXT *)Adapter, &event);
+#endif
+  return status;
 }
 
 #endif

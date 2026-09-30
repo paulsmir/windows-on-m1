@@ -12,6 +12,38 @@
 #define ADMISSION_BLT_PROBE_MAGIC 0x50424741u /* AGBP */
 #define ADMISSION_BLT_PROBE_VERSION 1u
 #define ADMISSION_BLT_PROBE_CAPACITY 32u
+#define ADMISSION_DWM_DDI_PROBE_MAGIC 0x50445741u
+#define ADMISSION_DWM_DDI_PROBE_VERSION 1u
+
+typedef enum _ADMISSION_DWM_DDI_KIND {
+  AdmissionDwmDdiPresentBlt = 0,
+  AdmissionDwmDdiPresentFlip = 1,
+  AdmissionDwmDdiPresentOther = 2,
+  AdmissionDwmDdiSourceAddress = 3,
+  AdmissionDwmDdiCommitVidPn = 4,
+  AdmissionDwmDdiSubmitPresent = 5,
+  AdmissionDwmDdiSubmitOther = 6,
+  AdmissionDwmDdiMpo = 7,
+  AdmissionDwmDdiDisplayOnly = 8,
+  AdmissionDwmDdiCount = 9
+} ADMISSION_DWM_DDI_KIND;
+
+typedef struct _ADMISSION_DWM_DDI_EVENT {
+  unsigned int Kind, Status, Flags, SourceId;
+  unsigned int Segment, SourceCount, DestinationCount, Reserved;
+  unsigned long long Allocation, Address, Context, Fence;
+} ADMISSION_DWM_DDI_EVENT;
+
+typedef struct _ADMISSION_DWM_DDI_ENTRY {
+  volatile long Sequence, Count, Dropped, Reserved;
+  ADMISSION_DWM_DDI_EVENT Last;
+} ADMISSION_DWM_DDI_ENTRY;
+
+typedef struct _ADMISSION_DWM_DDI_PROBE {
+  unsigned int Magic, Version, Bytes, CandidateBuild;
+  unsigned int BootGeneration, Incomplete, Reserved0, Reserved1;
+  ADMISSION_DWM_DDI_ENTRY Entries[AdmissionDwmDdiCount];
+} ADMISSION_DWM_DDI_PROBE;
 
 typedef struct _ADMISSION_BLT_EXECUTION {
   unsigned int Valid, Sequence, Status, SourceSegment;
