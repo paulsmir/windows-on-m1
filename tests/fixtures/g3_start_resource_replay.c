@@ -64,6 +64,8 @@ typedef struct { void *hAdapterMemoryObject, *pAdl; } DXGKARGCB_FREE_ADL;
 typedef struct { void *hPhysicalMemoryObject, *hAdapterMemoryObject; }
     DXGKARGCB_DESTROY_PHYSICAL_MEMORY_OBJECT;
 typedef struct {
+  void *DeviceHandle;
+  NTSTATUS (*DxgkCbSynchronizeExecution)(void *, BOOLEAN (*)(void *), void *, ULONG, BOOLEAN *);
   void *DxgkCbMapMemory, *DxgkCbUnmapMemory;
   void (*DxgkCbUnmapPhysicalMemory)(DXGKARGCB_UNMAP_PHYSICAL_MEMORY *);
   void (*DxgkCbFreeAdl)(DXGKARGCB_FREE_ADL *);
@@ -129,6 +131,7 @@ typedef struct {
   void *ScanoutRuntime, *BrokerBase;
   BOOLEAN DisplayActive, SourceVisible;
   DXGKRNL_INTERFACE Interface;
+  ULONG Win32BootGeneration;
   BOOLEAN InterfaceValid; void *PhysicalDeviceObject;
   int MemoryStartStage,MemoryStartStatus;
   APPLE_AGX_SOFTWARE_APERTURE_ENTRY *ApertureEntries;
@@ -406,25 +409,38 @@ static int expect(ADMISSION_CONTEXT *context, NTSTATUS expected,
 #define STATUS_NOT_SUPPORTED ((NTSTATUS)0xc00000bb)
 #define STATUS_DEVICE_BUSY ((NTSTATUS)0x80000011)
 #define STATUS_DEVICE_HARDWARE_ERROR ((NTSTATUS)0xc0000483)
+#include "apple_agx_vsync.h"
 #define PASSIVE_LEVEL 0
 #define KeGetCurrentIrql() PASSIVE_LEVEL
 #define ADMISSION_SCANOUT_TAG 0
 #define ADMISSION_SCANOUT_TIMEOUT_MS 2000ULL
 #define ADMISSION_SCANOUT_MAX_POLLS 40000u
-typedef struct {
-  ADMISSION_CONTEXT *Adapter;
-  APPLE_AGX_FIXED_PANEL Panel;
-  int IrqEnabled, PresentGate, PendingValid;
-  int64_t PendingPhysicalAddress, PendingSequence;
-} ADMISSION_SCANOUT_RUNTIME;
-static int InterlockedExchange(int *value, int next) {
+typedef int32_t LONG;
+typedef int64_t LONG64;
+typedef unsigned KIRQL;
+typedef int KTIMER, KDPC, KSPIN_LOCK;
+#define KeInitializeSpinLock(p) (*(p)=0)
+#define KeInitializeTimer(p) (*(p)=0)
+#define KeInitializeDpc(p,f,c) ((void)(p),(void)(f),(void)(c))
+#define KeAcquireSpinLock(p,o) ((void)(p),*(o)=0)
+#define KeReleaseSpinLock(p,o) ((void)(p),(void)(o))
+#define KeCancelTimer(p) ((void)(p),1)
+#define KeRemoveQueueDpc(p) ((void)(p),1)
+#define KeFlushQueuedDpcs() ((void)0)
+/* PRODUCTION_SCANOUT_RUNTIME */
+static void AdmissionScanoutTimerDpc(void) {}
+static void AdmissionScanoutVsyncRecord(ADMISSION_SCANOUT_RUNTIME *r, ULONG k, NTSTATUS s) {(void)r;(void)k;(void)s;}
+static NTSTATUS replay_sync(void *d,BOOLEAN (*f)(void *),void *c,ULONG n,BOOLEAN *out) {(void)d;(void)n;*out=f(c);return 0;}
+
+static int InterlockedExchange(volatile int *value, int next) {
   int previous = *value; *value = next; return previous;
 }
-static int InterlockedCompareExchange(int *value, int next, int expected) {
+static int InterlockedCompareExchange(volatile int *value, int next, int expected) {
   int previous = *value;
   if (previous == expected) *value = next;
   return previous;
 }
+/* PRODUCTION_VSYNC_CONTROL */
 static struct hv_agx_scanout_broker scanout_broker;
 static unsigned broker_accesses;
 static APPLE_AGX_SCANOUT_U64 AdmissionScanoutNow(void *opaque) {
@@ -591,6 +607,8 @@ static int replay_scanout_start(ADMISSION_CONTEXT *context) {
 int main(void) {
   CM_RESOURCE_LIST list = {0};
   ADMISSION_CONTEXT context = {0};
+  context.InterfaceValid=TRUE;
+  context.Interface.DxgkCbSynchronizeExecution=replay_sync;
   CM_PARTIAL_RESOURCE_DESCRIPTOR *entry = list.List[0].PartialResourceList.PartialDescriptors;
   int failures = 0;
   ADMISSION_PHYSICAL_OWNER owner = { .Initialized = TRUE };

@@ -373,11 +373,13 @@ APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutConsumeInterrupt(
   *IrqStatus = status;
   *LatchedSequence = latched;
   if ((status & APPLE_AGX_SCANOUT_IRQ_LATCHED) != 0u) {
-    if (!Client->PresentPending || latched == 0ULL ||
-        latched != Client->PendingPresentSequence)
+    if (latched == 0ULL)
       return AppleAgxScanoutInconsistentReceipt;
-    Client->PresentPending = APPLE_AGX_SCANOUT_FALSE;
-    Client->PendingPresentSequence = 0ULL;
+    if (Client->PresentPending && latched != 0ULL &&
+        latched == Client->PendingPresentSequence) {
+      Client->PresentPending = APPLE_AGX_SCANOUT_FALSE;
+      Client->PendingPresentSequence = 0ULL;
+    }
   }
   return AppleAgxScanoutOk;
 }

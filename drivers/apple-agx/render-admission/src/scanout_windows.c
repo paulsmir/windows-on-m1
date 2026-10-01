@@ -1,8 +1,12 @@
 #include "render_admission.h"
+#include "apple_agx_vsync.h"
 
 #define ADMISSION_SCANOUT_TAG 'sRGA'
 #define ADMISSION_SCANOUT_TIMEOUT_MS 2000ULL
 #define ADMISSION_SCANOUT_MAX_POLLS 40000u
+
+static KDEFERRED_ROUTINE AdmissionScanoutTimerDpc;
+static KSYNCHRONIZE_ROUTINE AdmissionScanoutVsyncControl;
 
 typedef struct _ADMISSION_SCANOUT_RUNTIME {
   ADMISSION_CONTEXT *Adapter;
@@ -15,6 +19,15 @@ typedef struct _ADMISSION_SCANOUT_RUNTIME {
   volatile LONG64 PendingPhysicalAddress;
   volatile LONG64 PendingSequence;
   volatile LONG64 LastNotifiedSequence;
+  APPLE_AGX_VSYNC_TIMELINE Timeline;
+  KTIMER VsyncTimer;
+  KDPC VsyncDpc;
+  KSPIN_LOCK TimerLock;
+  volatile LONG Stopping, TimelinePaused;
+  ULONGLONG TimerDeadline;
+  BOOLEAN TimerDeadlineValid;
+  BOOLEAN TimerArmed;
+  APPLE_AGX_VSYNC_QUERY VsyncReceipt;
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   KSPIN_LOCK LeaseLock;
   ADMISSION_DISPLAY_OUTPUT_LEASE ActiveLease;
@@ -507,7 +520,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(
   APPLE_AGX_SCANOUT_IO io;
   APPLE_AGX_SCANOUT_RESULT scanout_result;
   APPLE_AGX_FIXED_PANEL_RESULT result;
-  if (Context == NULL || Context->ScanoutRuntime != NULL ||
+  if (Context == NULL || !Context->InterfaceValid ||
+      Context->Interface.DxgkCbSynchronizeExecution == NULL ||
+      Context->ScanoutRuntime != NULL ||
       Context->BrokerBase == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
     return STATUS_INVALID_DEVICE_STATE;
   if (!NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(Context, &memory)) ||
@@ -521,6 +536,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(
     return STATUS_INSUFFICIENT_RESOURCES;
   RtlZeroMemory(runtime, sizeof(*runtime));
   runtime->Adapter = Context;
+  KeInitializeSpinLock(&runtime->TimerLock);
+  KeInitializeTimer(&runtime->VsyncTimer);
+  KeInitializeDpc(&runtime->VsyncDpc, AdmissionScanoutTimerDpc, runtime);
+  runtime->Timeline.Running = APPLE_AGX_SCANOUT_TRUE;
+  runtime->Timeline.Enabled = APPLE_AGX_SCANOUT_TRUE;
+  runtime->VsyncNotifyEnabled = 1;
+  runtime->VsyncReceipt.Magic = APPLE_AGX_VSYNC_QUERY_MAGIC;
+  runtime->VsyncReceipt.Version = 1u;
+  runtime->VsyncReceipt.Bytes = sizeof(runtime->VsyncReceipt);
+  runtime->VsyncReceipt.Generation = Context->Win32BootGeneration;
+  runtime->VsyncReceipt.RateNumerator = APPLE_AGX_VSYNC_RATE_NUMERATOR;
+  runtime->VsyncReceipt.RateDenominator = APPLE_AGX_VSYNC_RATE_DENOMINATOR;
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   KeInitializeSpinLock(&runtime->LeaseLock);
   AdmissionDisplayOutputLeaseInitialize(&runtime->ActiveLease);
@@ -587,11 +614,30 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStop(
   ADMISSION_SCANOUT_RUNTIME *runtime;
   APPLE_AGX_SCANOUT_RESULT scanout_result;
   APPLE_AGX_FIXED_PANEL_RESULT result;
-  if (Context == NULL)
+  if (Context == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
     return STATUS_INVALID_PARAMETER;
   runtime = (ADMISSION_SCANOUT_RUNTIME *)Context->ScanoutRuntime;
   if (runtime == NULL)
     return STATUS_SUCCESS;
+  {
+    KIRQL oldIrql;
+    BOOLEAN done = FALSE;
+    NTSTATUS status;
+    KeAcquireSpinLock(&runtime->TimerLock, &oldIrql);
+    InterlockedExchange(&runtime->Stopping, 1);
+    InterlockedExchange(&runtime->VsyncNotifyEnabled, 0);
+    status = Context->Interface.DxgkCbSynchronizeExecution(
+        Context->Interface.DeviceHandle, AdmissionScanoutVsyncControl,
+        runtime, 0u, &done);
+    (void)KeCancelTimer(&runtime->VsyncTimer);
+    runtime->TimerArmed = FALSE;
+    (void)KeRemoveQueueDpc(&runtime->VsyncDpc);
+    KeReleaseSpinLock(&runtime->TimerLock, oldIrql);
+    /* No rearm is possible once Stopping is published under TimerLock. */
+    KeFlushQueuedDpcs();
+    if (!NT_SUCCESS(status) || !done)
+      return STATUS_DEVICE_BUSY;
+  }
   InterlockedExchange(&runtime->PresentGate, 1);
   if (InterlockedCompareExchange(&runtime->PendingValid, 0, 0) != 0)
     return STATUS_DEVICE_BUSY;
@@ -599,6 +645,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStop(
       AppleAgxScanoutDisableInterrupts(&runtime->Panel.Scanout) !=
           AppleAgxScanoutOk)
     return STATUS_DEVICE_BUSY;
+  {
+    BOOLEAN done = FALSE;
+    if (!NT_SUCCESS(Context->Interface.DxgkCbSynchronizeExecution(
+            Context->Interface.DeviceHandle, AdmissionScanoutVsyncControl,
+            runtime, 0u, &done)) || !done)
+      return STATUS_DEVICE_BUSY;
+  }
   if (runtime->Panel.Ownership == AppleAgxFixedPanelRegistered) {
     result = AppleAgxFixedPanelStop(
         &runtime->Panel,
@@ -857,7 +910,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
       Args->PrimarySegment != ADMISSION_MEMORY_LOCAL_SEGMENT ||
       Args->PrimaryAddress.QuadPart <= 0 ||
       !Context->DisplayActive || !Context->SourceVisible ||
-      InterlockedCompareExchange(&runtime->IrqEnabled, 0, 0) == 0)
+      InterlockedCompareExchange(&runtime->IrqEnabled, 0, 0) == 0 ||
+      InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0)
     return STATUS_INVALID_PARAMETER;
   allocation = (ADMISSION_ALLOCATION_HANDLE *)Args->hAllocation;
   if (allocation->Object.Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC)
@@ -969,16 +1023,45 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
   return STATUS_SUCCESS;
 }
 
-_Use_decl_annotations_ BOOLEAN AdmissionScanoutInterrupt(
-    ADMISSION_CONTEXT *Context) {
+/* All timeline and receipt writes are serialized at the adapter's DIRQL.
+ * TimerLock only serializes PASSIVE/DPC timer scheduling and teardown;
+ * the ISR never acquires it. First32 receipts are immutable, last32 roll. */
+static VOID AdmissionScanoutVsyncRecord(ADMISSION_SCANOUT_RUNTIME *Runtime,
+                                      ULONG Kind, NTSTATUS Status) {
+  APPLE_AGX_VSYNC_QUERY *q = &Runtime->VsyncReceipt;
+  APPLE_AGX_VSYNC_EVENT *e;
+  ULONGLONG n = q->EventCount;
+  if (n == APPLE_AGX_VSYNC_MAX)
+    return;
+  e = &q->Events[n < 32ULL ? (ULONG)n : 32u + (ULONG)((n - 32ULL) % 32ULL)];
+  RtlZeroMemory(e, sizeof(*e));
+  e->Sequence = n + 1ULL;
+  e->Time100ns = KeQueryInterruptTimePrecise(NULL);
+  e->Period = Runtime->Timeline.LastPeriod;
+  e->PendingSequence = (ULONGLONG)InterlockedCompareExchange64(
+      &Runtime->PendingSequence, 0, 0);
+  e->PendingAddress = (ULONGLONG)InterlockedCompareExchange64(
+      &Runtime->PendingPhysicalAddress, 0, 0);
+  e->ActiveSequence = Runtime->Timeline.ActiveSequence;
+  e->ActiveAddress = Runtime->Timeline.ActiveAddress;
+  e->NotifyOrdinal = q->NotifyCount;
+  e->Kind = Kind;
+  e->Enabled = Runtime->Timeline.Enabled;
+  e->Status = (ULONG)Status;
+  e->Irql = KeGetCurrentIrql();
+  q->EventCount = n + 1ULL;
+}
+
+static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
+                                               BOOLEAN VerticalTick) {
   ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
   APPLE_AGX_SCANOUT_U32 irq_status = 0u;
   APPLE_AGX_SCANOUT_U64 latched_sequence = 0ULL;
   APPLE_AGX_SCANOUT_RESULT result;
   DXGKARGCB_NOTIFY_INTERRUPT_DATA data;
   LONG64 pending_sequence;
-  LONG64 physical_address;
-  BOOLEAN notify_vsync;
+  BOOLEAN matched = FALSE, notify_vsync = FALSE;
+  ULONGLONG now;
   if (runtime == NULL ||
       InterlockedCompareExchange(&runtime->IrqEnabled, 0, 0) == 0 ||
       !Context->InterfaceValid ||
@@ -987,57 +1070,270 @@ _Use_decl_annotations_ BOOLEAN AdmissionScanoutInterrupt(
     return FALSE;
   result = AppleAgxScanoutConsumeInterrupt(
       &runtime->Panel.Scanout, &irq_status, &latched_sequence);
-  if (result == AppleAgxScanoutNoInterrupt)
+  if (result == AppleAgxScanoutNoInterrupt && !VerticalTick)
     return FALSE;
-  InterlockedExchange(&Context->LastInterruptStatus, (LONG)irq_status);
-  InterlockedIncrement(&Context->InterruptCount);
-  InterlockedIncrement(&Context->InterruptAckCount);
-  pending_sequence = InterlockedCompareExchange64(
-      &runtime->PendingSequence, 0, 0);
-  physical_address = InterlockedCompareExchange64(
-      &runtime->PendingPhysicalAddress, 0, 0);
-  if (result != AppleAgxScanoutOk ||
-      (irq_status & APPLE_AGX_SCANOUT_IRQ_ERROR) != 0u ||
-      (irq_status & APPLE_AGX_SCANOUT_IRQ_LATCHED) == 0u ||
-      InterlockedCompareExchange(&runtime->PendingValid, 0, 0) == 0 ||
-      latched_sequence != (APPLE_AGX_SCANOUT_U64)pending_sequence ||
-      latched_sequence <= (APPLE_AGX_SCANOUT_U64)
-          InterlockedCompareExchange64(
-              &runtime->LastNotifiedSequence, 0, 0)) {
-    InterlockedExchange(&runtime->Faulted, 1);
-    return TRUE;
+  now = KeQueryInterruptTimePrecise(NULL);
+  if (result != AppleAgxScanoutNoInterrupt) {
+    InterlockedExchange(&Context->LastInterruptStatus, (LONG)irq_status);
+    InterlockedIncrement(&Context->InterruptCount);
+    InterlockedIncrement(&Context->InterruptAckCount);
+    if (result != AppleAgxScanoutOk ||
+        (irq_status & APPLE_AGX_SCANOUT_IRQ_ERROR) != 0u) {
+      InterlockedExchange(&runtime->Faulted, 1);
+      runtime->Timeline.Running = APPLE_AGX_SCANOUT_FALSE;
+      AdmissionScanoutVsyncRecord(runtime, 7u, STATUS_DEVICE_HARDWARE_ERROR);
+      return TRUE;
+    }
+    pending_sequence = InterlockedCompareExchange64(
+        &runtime->PendingSequence, 0, 0);
+    if ((irq_status & APPLE_AGX_SCANOUT_IRQ_LATCHED) != 0u &&
+        InterlockedCompareExchange(&runtime->PendingValid, 0, 0) != 0 &&
+        latched_sequence == (ULONGLONG)pending_sequence &&
+        latched_sequence > (ULONGLONG)InterlockedCompareExchange64(
+            &runtime->LastNotifiedSequence, 0, 0)) {
+      matched = AppleAgxVsyncLatch(&runtime->Timeline, latched_sequence,
+          (ULONGLONG)InterlockedCompareExchange64(
+              &runtime->PendingPhysicalAddress, 0, 0), now) != 0;
+      if (matched) {
+        AdmissionScanoutVsyncRecord(runtime, 3u, STATUS_SUCCESS);
+        InterlockedExchange64(&runtime->LastNotifiedSequence,
+                              (LONG64)latched_sequence);
+        InterlockedExchange(&runtime->PendingValid, 0);
+        InterlockedExchange64(&runtime->PendingSequence, 0);
+        InterlockedExchange64(&runtime->PendingPhysicalAddress, 0);
+        InterlockedExchange(&runtime->PresentGate, 0);
+      }
+    } else if ((irq_status & APPLE_AGX_SCANOUT_IRQ_LATCHED) != 0u) {
+      AdmissionScanoutVsyncRecord(runtime, 4u, STATUS_SUCCESS);
+    }
   }
-  notify_vsync = InterlockedCompareExchange(
-      &runtime->VsyncNotifyEnabled, 0, 0) != 0;
-  if (notify_vsync) {
+  if (VerticalTick) {
+    notify_vsync = AppleAgxVsyncAdvance(&runtime->Timeline, now) != 0;
+    AdmissionScanoutVsyncRecord(runtime, 5u, STATUS_SUCCESS);
+  }
+  if (matched && runtime->Timeline.Enabled)
+    notify_vsync = TRUE;
+  if (notify_vsync && runtime->Timeline.Running &&
+      InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0) {
     RtlZeroMemory(&data, sizeof(data));
     data.InterruptType = DXGK_INTERRUPT_CRTC_VSYNC;
     data.CrtcVsync.VidPnTargetId = 0u;
-    data.CrtcVsync.PhysicalAddress.QuadPart = physical_address;
+    data.CrtcVsync.PhysicalAddress.QuadPart =
+        (LONGLONG)runtime->Timeline.ActiveAddress;
     Context->Interface.DxgkCbNotifyInterrupt(
         Context->Interface.DeviceHandle, &data);
-  }
-  /* This sequence also guards internal completions while reporting is off. */
-  InterlockedExchange64(
-      &runtime->LastNotifiedSequence, (LONG64)latched_sequence);
-  InterlockedExchange(&runtime->PendingValid, 0);
-  InterlockedExchange64(&runtime->PendingSequence, 0);
-  InterlockedExchange64(&runtime->PendingPhysicalAddress, 0);
-  InterlockedExchange(&runtime->PresentGate, 0);
-  if (notify_vsync) {
+    if (runtime->VsyncReceipt.NotifyCount != APPLE_AGX_VSYNC_MAX)
+      runtime->VsyncReceipt.NotifyCount++;
+    AdmissionScanoutVsyncRecord(runtime, 6u, STATUS_SUCCESS);
     InterlockedExchange(&Context->SchedulerDpcPending, 1);
     (void)Context->Interface.DxgkCbQueueDpc(Context->Interface.DeviceHandle);
+  } else if (matched && runtime->Timeline.Running) {
+    /* Arm the source from DPC even when the first latch preceded OS enable. */
+    (void)Context->Interface.DxgkCbQueueDpc(Context->Interface.DeviceHandle);
   }
+  return result != AppleAgxScanoutNoInterrupt || VerticalTick;
+}
+
+_Use_decl_annotations_ BOOLEAN AdmissionScanoutInterrupt(
+    ADMISSION_CONTEXT *Context) {
+  return AdmissionScanoutProcessInterrupt(Context, FALSE);
+}
+
+static BOOLEAN AdmissionScanoutVsyncTick(PVOID Opaque) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = Opaque;
+  if (InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0)
+    return TRUE;
+  (void)AdmissionScanoutProcessInterrupt(runtime->Adapter, TRUE);
   return TRUE;
+}
+
+static BOOLEAN AdmissionScanoutVsyncDpcReceipt(PVOID Opaque) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = Opaque;
+  if (runtime->VsyncReceipt.DpcCount != APPLE_AGX_VSYNC_MAX)
+    runtime->VsyncReceipt.DpcCount++;
+  runtime->VsyncReceipt.AcknowledgedNotifyCount =
+      runtime->VsyncReceipt.NotifyCount;
+  AdmissionScanoutVsyncRecord(runtime, 8u, STATUS_SUCCESS);
+  return TRUE;
+}
+
+_Use_decl_annotations_ static BOOLEAN AdmissionScanoutVsyncControl(PVOID Opaque) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = Opaque;
+  runtime->Timeline.Enabled = InterlockedCompareExchange(
+      &runtime->VsyncNotifyEnabled, 0, 0) != 0
+          ? APPLE_AGX_SCANOUT_TRUE : APPLE_AGX_SCANOUT_FALSE;
+  if (InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0)
+    runtime->Timeline.Running = APPLE_AGX_SCANOUT_FALSE;
+  AdmissionScanoutVsyncRecord(runtime, 2u, STATUS_SUCCESS);
+  return TRUE;
+}
+
+static BOOLEAN AdmissionScanoutVsyncNext(PVOID Opaque) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = Opaque;
+  runtime->TimerDeadlineValid = AppleAgxVsyncDeadline(
+      &runtime->Timeline, &runtime->TimerDeadline) != 0;
+  return TRUE;
+}
+
+static VOID AdmissionScanoutScheduleTimer(ADMISSION_SCANOUT_RUNTIME *Runtime) {
+  ULONGLONG next, now;
+  LARGE_INTEGER due;
+  BOOLEAN done = FALSE;
+  /* Timer scheduling is <=DISPATCH. State/deadline sampling is at DIRQL. */
+  if (Runtime->TimerArmed ||
+      InterlockedCompareExchange(&Runtime->Stopping, 0, 0) != 0 ||
+      !NT_SUCCESS(Runtime->Adapter->Interface.DxgkCbSynchronizeExecution(
+          Runtime->Adapter->Interface.DeviceHandle, AdmissionScanoutVsyncNext,
+          Runtime, 0u, &done)) || !done || !Runtime->TimerDeadlineValid)
+    return;
+  next = Runtime->TimerDeadline;
+  now = KeQueryInterruptTimePrecise(NULL);
+  due.QuadPart = next > now && next - now <= (ULONGLONG)MAXLONGLONG
+                    ? -(LONGLONG)(next - now) : -1LL;
+  (void)KeSetTimer(&Runtime->VsyncTimer, due, &Runtime->VsyncDpc);
+  Runtime->TimerArmed = TRUE;
+}
+
+_Use_decl_annotations_ static VOID AdmissionScanoutTimerDpc(KDPC *Dpc, PVOID Opaque,
+                                   PVOID Arg1, PVOID Arg2) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = Opaque;
+  KIRQL oldIrql;
+  BOOLEAN done = FALSE;
+  NTSTATUS status;
+  UNREFERENCED_PARAMETER(Dpc);
+  UNREFERENCED_PARAMETER(Arg1);
+  UNREFERENCED_PARAMETER(Arg2);
+  KeAcquireSpinLock(&runtime->TimerLock, &oldIrql);
+  runtime->TimerArmed = FALSE;
+  if (InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0) {
+    status = runtime->Adapter->Interface.DxgkCbSynchronizeExecution(
+        runtime->Adapter->Interface.DeviceHandle, AdmissionScanoutVsyncTick,
+        runtime, 0u, &done);
+    if (NT_SUCCESS(status) && done)
+      AdmissionScanoutScheduleTimer(runtime);
+  }
+  KeReleaseSpinLock(&runtime->TimerLock, oldIrql);
+}
+
+_Use_decl_annotations_ VOID AdmissionScanoutDpc(ADMISSION_CONTEXT *Context) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
+  KIRQL oldIrql;
+  BOOLEAN done = FALSE;
+  if (runtime == NULL || !Context->InterfaceValid ||
+      Context->Interface.DxgkCbNotifyDpc == NULL)
+    return;
+  KeAcquireSpinLock(&runtime->TimerLock, &oldIrql);
+  if (InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 &&
+      NT_SUCCESS(Context->Interface.DxgkCbSynchronizeExecution(
+          Context->Interface.DeviceHandle, AdmissionScanoutVsyncDpcReceipt,
+          runtime, 0u, &done)) && done)
+    AdmissionScanoutScheduleTimer(runtime);
+  KeReleaseSpinLock(&runtime->TimerLock, oldIrql);
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionScanoutControlInterrupt(
     ADMISSION_CONTEXT *Context, BOOLEAN Enable) {
   ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
-  if (runtime == NULL)
+  KIRQL oldIrql;
+  BOOLEAN done = FALSE;
+  NTSTATUS status;
+  if (runtime == NULL ||
+      InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0)
     return STATUS_DEVICE_NOT_READY;
-  /* WDDM permits keeping an interrupt enabled for an internal purpose.
-   * Disable only the OS reporting subscription, never pending latch ingress. */
+  KeAcquireSpinLock(&runtime->TimerLock, &oldIrql);
   InterlockedExchange(&runtime->VsyncNotifyEnabled, Enable ? 1 : 0);
-  return STATUS_SUCCESS;
+  status = Context->Interface.DxgkCbSynchronizeExecution(
+      Context->Interface.DeviceHandle, AdmissionScanoutVsyncControl,
+      runtime, 0u, &done);
+  if (NT_SUCCESS(status) && done) {
+    if (Enable)
+      AdmissionScanoutScheduleTimer(runtime);
+    else {
+      (void)KeCancelTimer(&runtime->VsyncTimer);
+      runtime->TimerArmed = FALSE;
+    }
+  }
+  KeReleaseSpinLock(&runtime->TimerLock, oldIrql);
+  return NT_SUCCESS(status) && !done ? STATUS_UNSUCCESSFUL : status;
+}
+
+static BOOLEAN AdmissionScanoutVsyncPauseControl(PVOID Opaque) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = Opaque;
+  runtime->Timeline.Running =
+      InterlockedCompareExchange(&runtime->TimelinePaused, 0, 0) == 0 &&
+      InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 &&
+      InterlockedCompareExchange(&runtime->Faulted, 0, 0) == 0
+          ? APPLE_AGX_SCANOUT_TRUE : APPLE_AGX_SCANOUT_FALSE;
+  AdmissionScanoutVsyncRecord(runtime, 9u, STATUS_SUCCESS);
+  return TRUE;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionScanoutSetTimelinePaused(
+    ADMISSION_CONTEXT *Context, BOOLEAN Paused) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
+  KIRQL oldIrql;
+  BOOLEAN done = FALSE;
+  NTSTATUS status;
+  if (KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return STATUS_INVALID_DEVICE_STATE;
+  if (runtime == NULL)
+    return STATUS_SUCCESS;
+  KeAcquireSpinLock(&runtime->TimerLock, &oldIrql);
+  InterlockedExchange(&runtime->TimelinePaused, Paused ? 1 : 0);
+  status = Context->Interface.DxgkCbSynchronizeExecution(
+      Context->Interface.DeviceHandle, AdmissionScanoutVsyncPauseControl,
+      runtime, 0u, &done);
+  if (Paused) {
+    (void)KeCancelTimer(&runtime->VsyncTimer);
+    (void)KeRemoveQueueDpc(&runtime->VsyncDpc);
+    runtime->TimerArmed = FALSE;
+  } else if (NT_SUCCESS(status) && done) {
+    if (runtime->Timeline.Running)
+      AdmissionScanoutScheduleTimer(runtime);
+    else
+      status = STATUS_DEVICE_NOT_READY;
+  }
+  KeReleaseSpinLock(&runtime->TimerLock, oldIrql);
+  if (Paused)
+    KeFlushQueuedDpcs();
+  return NT_SUCCESS(status) && !done ? STATUS_UNSUCCESSFUL : status;
+}
+
+typedef struct _ADMISSION_VSYNC_SNAPSHOT_ARGS {
+  ADMISSION_SCANOUT_RUNTIME *Runtime;
+  APPLE_AGX_VSYNC_QUERY *Query;
+} ADMISSION_VSYNC_SNAPSHOT_ARGS;
+
+static BOOLEAN AdmissionScanoutVsyncSnapshot(PVOID Opaque) {
+  ADMISSION_VSYNC_SNAPSHOT_ARGS *args = Opaque;
+  ADMISSION_SCANOUT_RUNTIME *runtime = args->Runtime;
+  APPLE_AGX_VSYNC_QUERY *q = &runtime->VsyncReceipt;
+  q->Phase100ns = runtime->Timeline.Phase100ns;
+  q->ActiveSequence = runtime->Timeline.ActiveSequence;
+  q->ActiveAddress = runtime->Timeline.ActiveAddress;
+  q->LastPeriod = runtime->Timeline.LastPeriod;
+  q->Enabled = runtime->Timeline.Enabled;
+  q->Running = runtime->Timeline.Running;
+  q->Paused = (ULONG)InterlockedCompareExchange(&runtime->TimelinePaused, 0, 0);
+  q->Stopping = (ULONG)InterlockedCompareExchange(&runtime->Stopping, 0, 0);
+  RtlCopyMemory(args->Query, q, sizeof(*q));
+  return TRUE;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionScanoutQueryTimeline(
+    ADMISSION_CONTEXT *Context, APPLE_AGX_VSYNC_QUERY *Query) {
+  ADMISSION_VSYNC_SNAPSHOT_ARGS args;
+  BOOLEAN done = FALSE;
+  NTSTATUS status;
+  if (Query == NULL || Query->Magic != APPLE_AGX_VSYNC_QUERY_MAGIC ||
+      Query->Version != 1u || Query->Bytes != sizeof(*Query))
+    return STATUS_INVALID_PARAMETER;
+  args.Runtime = AdmissionScanoutGet(Context);
+  args.Query = Query;
+  if (args.Runtime == NULL)
+    return STATUS_DEVICE_NOT_READY;
+  status = Context->Interface.DxgkCbSynchronizeExecution(
+      Context->Interface.DeviceHandle, AdmissionScanoutVsyncSnapshot,
+      &args, 0u, &done);
+  return NT_SUCCESS(status) && !done ? STATUS_UNSUCCESSFUL : status;
 }

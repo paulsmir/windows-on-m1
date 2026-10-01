@@ -67,7 +67,7 @@ class AppleAgxRenderScanoutTests(unittest.TestCase):
     def test_dirql_enqueue_and_isr_are_bounded(self):
         scanout = (RENDER / "src" / "scanout_windows.c").read_text()
         enqueue = function_body(scanout, "AdmissionScanoutQueuePresent")
-        interrupt = function_body(scanout, "AdmissionScanoutInterrupt")
+        interrupt = function_body(scanout, "AdmissionScanoutProcessInterrupt")
         forbidden = (
             "KeWaitForSingleObject",
             "KeDelayExecutionThread",

@@ -318,6 +318,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEscape(
       Args->pPrivateDriverData == NULL || Args->PrivateDriverDataSize < sizeof(magic))
     return STATUS_INVALID_PARAMETER;
   magic = *(const ULONG *)Args->pPrivateDriverData;
+  if (magic == APPLE_AGX_VSYNC_QUERY_MAGIC &&
+      Args->PrivateDriverDataSize == sizeof(APPLE_AGX_VSYNC_QUERY))
+    return AdmissionScanoutQueryTimeline(
+        context, (APPLE_AGX_VSYNC_QUERY *)Args->pPrivateDriverData);
 #if defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
   if (magic == ADMISSION_BLT_PROBE_MAGIC &&
       Args->PrivateDriverDataSize == sizeof(ADMISSION_BLT_PROBE))

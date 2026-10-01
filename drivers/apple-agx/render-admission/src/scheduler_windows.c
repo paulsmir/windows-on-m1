@@ -519,7 +519,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiResetFromTimeout(HANDLE Adapter) {
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   AdmissionDwmFrameRecordTdr(context, STATUS_PENDING, FALSE);
 #endif
-  status = AdmissionDdiResetEngine(context, &reset);
+  /* Adapter-wide reset quiesces the software source; DCP/scanout reserve
+   * remain owned by the retained display layer. Restart resumes that phase. */
+  status = AdmissionScanoutSetTimelinePaused(context, TRUE);
+  if (NT_SUCCESS(status))
+    status = AdmissionDdiResetEngine(context, &reset);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   AdmissionDwmFrameRecordTdr(context, status, TRUE);
 #endif
@@ -532,7 +536,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRestartFromTimeout(HANDLE Adapter) {
       InterlockedCompareExchange(&context->SchedulerInitialized, 0, 0) == 0 ||
       InterlockedCompareExchange(&context->SchedulerFaulted, 0, 0) != 0)
     return STATUS_DEVICE_NOT_READY;
-  return STATUS_SUCCESS;
+  return AdmissionScanoutSetTimelinePaused(context, FALSE);
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiCollectDbgInfo(

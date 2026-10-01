@@ -174,6 +174,7 @@ VOID AdmissionDdiDpcRoutine(
         context->Interface.DxgkCbNotifyDpc != NULL)
       context->Interface.DxgkCbNotifyDpc(
           context->Interface.DeviceHandle);
+    AdmissionScanoutDpc(context);
     AdmissionSchedulerDpc(context);
     AdmissionRenderCorrelationDpcWindows(
         context, renderFence, KeQueryInterruptTime());

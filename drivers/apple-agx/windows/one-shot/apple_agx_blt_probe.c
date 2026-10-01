@@ -3,6 +3,7 @@
 #include <stdio.h>
 
 #include "render_qualification.h"
+#include "../../shared/include/apple_agx_vsync.h"
 
 int wmain(void) {
   D3DKMT_ENUMADAPTERS2 enumeration = {0};
@@ -34,6 +35,7 @@ int wmain(void) {
     ADMISSION_BLT_PROBE probe = {0};
     ADMISSION_DWM_DDI_PROBE dwm = {0};
     ADMISSION_DWM_FRAME_PROBE frame = {0};
+    APPLE_AGX_VSYNC_QUERY vsync = {0};
     UINT eventIndex;
     probe.Magic = ADMISSION_BLT_PROBE_MAGIC;
     probe.Version = ADMISSION_BLT_PROBE_VERSION;
@@ -70,6 +72,33 @@ int wmain(void) {
                   entry->Last.Segment, entry->Last.SourceCount,
                   entry->Last.DestinationCount, entry->Last.Allocation,
                   entry->Last.Address, entry->Last.Context, entry->Last.Fence);
+        }
+      }
+    }
+    vsync.Magic = APPLE_AGX_VSYNC_QUERY_MAGIC;
+    vsync.Version = 1u;
+    vsync.Bytes = sizeof(vsync);
+    escape.pPrivateDriverData = &vsync;
+    escape.PrivateDriverDataSize = sizeof(vsync);
+    {
+      NTSTATUS vsyncStatus = D3DKMTEscape(&escape);
+      wprintf(L"VSYNC_QUERY adapter=%u status=0x%x bytes=%u\n",
+              index, (UINT)vsyncStatus, (UINT)sizeof(vsync));
+      if (vsyncStatus >= 0 && vsync.Magic == APPLE_AGX_VSYNC_QUERY_MAGIC &&
+          vsync.Version == 1u && vsync.Bytes == sizeof(vsync)) {
+        wprintf(L"VSYNC_TIMELINE generation=%u events=%llu notified=%llu dpc=%llu ack_notify=%llu phase100ns=%llu active_seq=%llu active=0x%llx period_index=%llu rate=%u/%u enabled=%u stopping=%u running=%u paused=%u overwritten=%llu\n",
+                vsync.Generation, vsync.EventCount, vsync.NotifyCount,
+                vsync.DpcCount, vsync.AcknowledgedNotifyCount, vsync.Phase100ns, vsync.ActiveSequence,
+                vsync.ActiveAddress, vsync.LastPeriod, vsync.RateNumerator,
+                vsync.RateDenominator, vsync.Enabled, vsync.Stopping, vsync.Running, vsync.Paused,
+                vsync.EventCount > 64ULL ? vsync.EventCount - 64ULL : 0ULL);
+        for (UINT n = 0; n < APPLE_AGX_VSYNC_RECEIPT_CAPACITY; ++n) {
+          const APPLE_AGX_VSYNC_EVENT *e = &vsync.Events[n];
+          if (!e->Sequence) continue;
+          wprintf(L"VSYNC_EVENT slot=%u seq=%llu time100ns=%llu kind=%u enabled=%u status=0x%x irql=%u period=%llu notify_ordinal=%llu pending_seq=%llu pending=0x%llx active_seq=%llu active=0x%llx\n",
+                  n, e->Sequence, e->Time100ns, e->Kind, e->Enabled,
+                  e->Status, e->Irql, e->Period, e->NotifyOrdinal, e->PendingSequence,
+                  e->PendingAddress, e->ActiveSequence, e->ActiveAddress);
         }
       }
     }

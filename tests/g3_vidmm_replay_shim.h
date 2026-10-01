@@ -15,6 +15,7 @@
 #include "apple_agx_gpuva_g3_graph.h"
 #include "apple_agx_g4_submit.h"
 #include "apple_agx_state.h"
+#include "apple_agx_vsync.h"
 #include "apple_agx_g3_private_abi.h"
 #include "apple_agx_g3_private_failure.h"
 #include "apple_agx_g3_private_storage.h"
@@ -549,3 +550,6 @@ static void AdmissionGpuvaG3DetachContext(ADMISSION_RENDER_CONTEXT *);
 #include "g3_r137_completion_shim.h"
 #endif
 #endif
+
+/* Read-only display diagnostic is outside the VidMm replay boundary. */
+static NTSTATUS AdmissionScanoutQueryTimeline(ADMISSION_CONTEXT *c, APPLE_AGX_VSYNC_QUERY *q) { (void)c; (void)q; return STATUS_INVALID_PARAMETER; }

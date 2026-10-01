@@ -71,6 +71,10 @@ class G3StartResourceReplay(unittest.TestCase):
         lifecycle=lifecycle.replace("/* PRODUCTION_ALIAS_TYPES */",alias_types)
         lifecycle=lifecycle.replace("/* PRODUCTION_STAGE_ENUM */",stage_enum).replace("/* PRODUCTION_ALIAS_DATA */",alias_source).replace("/* PRODUCTION_MEMORY_LIFECYCLE */",lifecycle_functions)
         shim = (ROOT / "tests/fixtures/g3_start_resource_replay.c").read_text()
+        scanout_source=(RENDER / "src/scanout_windows.c").read_text()
+        runtime=re.search(r'typedef struct _ADMISSION_SCANOUT_RUNTIME.*?} ADMISSION_SCANOUT_RUNTIME;',scanout_source,re.S).group()
+        control=re.search(r'_Use_decl_annotations_ static BOOLEAN AdmissionScanoutVsyncControl\(.*?^}',scanout_source,re.S|re.M).group()
+        shim=shim.replace("/* PRODUCTION_SCANOUT_RUNTIME */",runtime).replace("/* PRODUCTION_VSYNC_CONTROL */",control)
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "replay.c"
             binary = Path(directory) / "replay"
