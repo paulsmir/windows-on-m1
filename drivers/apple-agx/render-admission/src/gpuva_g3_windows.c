@@ -1495,7 +1495,9 @@ static BOOLEAN AdmissionG3OutputMatchesLocal(
   ULONGLONG ipa, offset, position;
   if (packet->DestinationGpuVa == 0ULL ||
       packet->DestinationBytes == 0u ||
-      !NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(adapter, &view)) ||
+      !NT_SUCCESS(adapter->BackendImage.G4Native
+          ? AdmissionMemoryRuntimeLocalView(adapter, &view)
+          : AdmissionMemoryRuntimeScanoutView(adapter, &view)) ||
       !AppleAgxGpuvaG3GraphTranslateVa(
           graph, packet->DestinationGpuVa, &ipa) ||
       ipa < view.GuestIpaAddress) return FALSE;

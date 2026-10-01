@@ -13,7 +13,8 @@ class G4RenderLocalViewReplay(unittest.TestCase):
           'AdmissionG4GraphAccess','AdmissionG4LogicalEnvelopeAccess','AdmissionG4GraphAccessTyped',
           'AdmissionG4FindPrivateScene','AdmissionG4FindPrivateResubmission',
           'AdmissionG4PrivateGraphAccess','AdmissionG4PrivateGeometry','AdmissionG4PrivateUnqueue',
-          'AdmissionG4SnapshotFailure','AdmissionG4ResolveOutput','AdmissionG4SubmitVirtualEnvelope')
+          'AdmissionG4SnapshotFailure','AdmissionG4ResolveOutput','AdmissionG4SubmitVirtualEnvelope',
+          'AdmissionG3OutputMatchesLocal','AdmissionGpuvaG3BeginJob')
         functions+='\n'.join(function_body(source,n) for n in names)
         shim=(ROOT/'tests/g4_submit_virtual_replay.c').read_text()
         prefix=shim.split('int main(void) {',1)[0]
@@ -30,8 +31,8 @@ class G4RenderLocalViewReplay(unittest.TestCase):
         prefix=prefix.replace('HostPhysicalAddress, Bytes;', 'HostPhysicalAddress, Bytes, PoolBytes;')
         prefix=prefix.replace('static ULONGLONG output_ipa=0x90001000ULL;',
             'static ULONGLONG output_ipa=0x8e4040000ULL;')
-        prefix=prefix.replace('static int output_mapped=1;', 'static int output_mapped=1, output_split=0;')
-        prefix=prefix.replace('va>=0x40001000ULL', 'va>=0x40008000ULL').replace('*ipa=output_ipa+(va-0x40000000ULL);', '*ipa=output_ipa+(va-0x40000000ULL)+(output_split && va>=0x40004000ULL ? 0x1000ULL : 0ULL);')
+        prefix=prefix.replace('static int output_mapped=1;', 'static int output_mapped=1, output_split=0; static ULONGLONG output_va=0x40000000ULL, output_bytes=0x8000ULL;')
+        prefix=prefix.replace('va<0x40000000ULL || va>=0x40001000ULL', 'va<output_va || va-output_va>=output_bytes').replace('*ipa=output_ipa+(va-0x40000000ULL);', '*ipa=output_ipa+(va-output_va)+(output_split && va>=output_va+0x4000ULL ? 0x1000ULL : 0ULL);')
         prefix='#define APPLE_AGX_SCANOUT_J313_POOL_SIZE 0x3800000ULL\n'+prefix
         setup=shim.split('int main(void) {',1)[1].split('  assert(AdmissionG4SubmitVirtualEnvelope',1)[0]
         ending="""
@@ -41,6 +42,18 @@ class G4RenderLocalViewReplay(unittest.TestCase):
           assert(status==STATUS_SUCCESS);
           assert(dispatches==1 && adapter.RenderPacket.State==AdmissionRenderPacketQueued);
           assert(adapter.RenderPacket.Description.DestinationPhysical==output_ipa);
+          adapter.RenderPacket.State=3; /* Actual worker activation precedes BeginJob. */
+          NTSTATUS begin=AdmissionGpuvaG3BeginJob(&adapter,&context,args.SubmissionFenceId);
+          fprintf(stderr,"begin=%08x GPU_JOB_BEGIN_calls=%d\\n",(unsigned)begin,graph_begin_calls);
+          assert(begin==STATUS_SUCCESS && graph_begin_calls==1);
+          assert(state.ActiveProcess==&process && state.ActiveFence==args.SubmissionFenceId);
+          state.ActiveProcess=NULL;state.ActiveFence=0;
+          output_ipa+=0x4000ULL;
+          assert(AdmissionGpuvaG3BeginJob(&adapter,&context,args.SubmissionFenceId)!=STATUS_SUCCESS);
+          assert(graph_begin_calls==1);output_ipa-=0x4000ULL;
+          adapter.BackendImage.G4Native=0;
+          assert(!AdmissionG3OutputMatchesLocal(&adapter,&process.Graph));
+          adapter.BackendImage.G4Native=1;
           ADMISSION_SCANOUT_MEMORY_VIEW scanout={0};
           assert(AdmissionMemoryRuntimeScanoutView(&adapter,&scanout)==STATUS_SUCCESS);
           assert(scanout.Bytes==0x3800000ULL && scanout.PoolBytes==scanout.Bytes);
@@ -59,7 +72,14 @@ class G4RenderLocalViewReplay(unittest.TestCase):
           assert(!AdmissionG4ResolveOutput(&process,&packet.Attachment,&local,&out));
           output_mapped=0;
           assert(!AdmissionG4ResolveOutput(&process,&packet.Attachment,&local,&out));
-          puts("high local render admitted; direct scanout and invalid bounds fail closed");return 0;
+          output_mapped=1;output_va=0x860000ULL;output_bytes=0xfd2000ULL;output_ipa=0x8e2d10000ULL;
+          adapter.RenderPacket.Description.DestinationGpuVa=output_va;
+          adapter.RenderPacket.Description.DestinationPhysical=output_ipa;
+          adapter.RenderPacket.Description.DestinationBytes=(ULONG)output_bytes;
+          assert(AdmissionG3OutputMatchesLocal(&adapter,&process.Graph));
+          adapter.BackendImage.G4Native=0;
+          assert(!AdmissionG3OutputMatchesLocal(&adapter,&process.Graph));
+          puts("high local render admitted through BeginJob; exact935 span and legacy scanout guards checked");return 0;
         }"""
         with tempfile.TemporaryDirectory(prefix='g4-render-local-') as d:
             d=Path(d);(d/'g4_submit_virtual_functions.inc').write_text(functions)
