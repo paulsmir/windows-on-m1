@@ -5262,6 +5262,33 @@ unsigned AgxKmtNativeBridgeResidencyContractTest(void);
 unsigned AgxKmtNativeBridgeCommandDumpContractTest(void);
 unsigned AgxKmtNativeQualificationFreshnessContractTest(void);
 #endif
+static void test_displayable_composition_buffer(void) {
+  D3D11DDIARG_CREATERESOURCE create={0};
+  D3D10DDI_MIPINFO mip={0};
+  ADMISSION_UMD_DIRECT_FLIP_RESOURCE observed={0},reference={0};
+  mip.TexelWidth=2560u;mip.TexelHeight=1600u;mip.TexelDepth=1u;
+  create.pMipInfoList=&mip;create.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+  create.Usage=D3D10_DDI_USAGE_DEFAULT;create.Format=DXGI_FORMAT_B8G8R8A8_UNORM;
+  create.BindFlags=D3D10_DDI_BIND_PRESENT|D3D10_DDI_BIND_RENDER_TARGET|
+      D3D10_DDI_BIND_SHADER_RESOURCE;
+  create.MipLevels=1u;create.ArraySize=1u;create.SampleDesc.Count=1u;
+  create.MiscFlags=D3D10_DDI_RESOURCE_MISC_SHARED|
+      D3DWDDM2_0DDI_RESOURCE_MISC_DISPLAYABLE_SURFACE;
+  CHECK(create.BindFlags==0xa8u && create.MiscFlags==0x20002u);
+  CHECK(AdmissionUmdDescribePrimary(&create,&observed));
+  CHECK(observed.Linear==1u && observed.Displayable==1u && observed.SegmentId==2u);
+  CHECK(observed.Allocation.Pitch==10240u && observed.Allocation.Size==16384000ULL);
+  create.MiscFlags=D3D10_DDI_RESOURCE_MISC_SHARED;
+  CHECK(AdmissionUmdDescribePrimary(&create,&reference));
+  CHECK(memcmp(&observed,&reference,sizeof(observed))==0);
+  create.MiscFlags|=D3DWDDM2_0DDI_RESOURCE_MISC_DISPLAYABLE_SURFACE;
+  create.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+  CHECK(!AdmissionUmdDescribePrimary(&create,&observed));
+  create.Format=DXGI_FORMAT_B8G8R8A8_UNORM;
+  create.MiscFlags|=D3DWDDM2_0DDI_RESOURCE_MISC_HW_PROTECTED;
+  CHECK(!AdmissionUmdDescribePrimary(&create,&observed));
+}
+
 static void test_discard_present_flags(void) {
   D3D11DDIARG_CREATERESOURCE create={0};
   D3D10DDI_MIPINFO mip={0};
@@ -5807,6 +5834,7 @@ int main(void) {
 #if defined(ADMISSION_UMD_D3D10_FRONTEND_TEST)
   test_mesa_d3d10_frontend_open();
 #endif
+  test_displayable_composition_buffer();
   test_discard_present_flags();
 #if defined(ADMISSION_UMD_NATIVE_RUNTIME_TEST)
   State.Failures += AgxKmtNativeBridgeResidencyContractTest();

@@ -117,10 +117,12 @@ static ADMISSION_UMD_RESOURCE *AdmissionUmdResourceFromDxgi(
 static BOOLEAN AdmissionUmdDescribePrimary(
     const D3D11DDIARG_CREATERESOURCE *CreateResource,
     ADMISSION_UMD_DIRECT_FLIP_RESOURCE *Description) {
-  /* Discard-on-present relaxes content preservation; the existing backbuffer
-   * lifetime and Blt path remain valid without a separate storage action. */
+  /* Discard-on-present relaxes content preservation. The displayable marker
+   * uses the existing linear BGRA allocation contract; it must not turn the
+   * non-displayable RGBA path into a scanout resource. */
   const UINT allowedMiscFlags = D3D10_DDI_RESOURCE_MISC_SHARED |
-      D3D10_DDI_RESOURCE_MISC_DISCARD_ON_PRESENT;
+      D3D10_DDI_RESOURCE_MISC_DISCARD_ON_PRESENT |
+      D3DWDDM2_0DDI_RESOURCE_MISC_DISPLAYABLE_SURFACE;
   if (CreateResource == NULL || Description == NULL ||
       CreateResource->pMipInfoList == NULL ||
       CreateResource->ResourceDimension != D3D10DDIRESOURCE_TEXTURE2D ||
@@ -139,6 +141,10 @@ static BOOLEAN AdmissionUmdDescribePrimary(
         CreateResource->pMipInfoList[0].TexelHeight != 1600u)) ||
       CreateResource->Usage != D3D10_DDI_USAGE_DEFAULT || CreateResource->MapFlags ||
       (CreateResource->MiscFlags & ~allowedMiscFlags) ||
+      ((CreateResource->MiscFlags &
+        D3DWDDM2_0DDI_RESOURCE_MISC_DISPLAYABLE_SURFACE) != 0u &&
+       CreateResource->Format != DXGI_FORMAT_B8G8R8A8_UNORM &&
+       CreateResource->Format != DXGI_FORMAT_B8G8R8A8_UNORM_SRGB) ||
       ((CreateResource->MiscFlags &
         D3D10_DDI_RESOURCE_MISC_DISCARD_ON_PRESENT) != 0u &&
        (CreateResource->BindFlags & D3D10_DDI_BIND_PRESENT) == 0u) ||
