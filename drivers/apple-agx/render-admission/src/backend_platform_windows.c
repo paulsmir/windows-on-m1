@@ -2863,8 +2863,10 @@ static VOID AdmissionPlatformWorkerFinished(
   InterlockedExchange(&Runtime->WorkScheduled, 0);
   KeReleaseSpinLock(&Runtime->Adapter->SchedulerLock, oldIrql);
   if (InterlockedCompareExchange(&Runtime->Stopping, 0, 0) == 0 &&
-      InterlockedCompareExchange(&Runtime->Resetting, 0, 0) == 0)
+      InterlockedCompareExchange(&Runtime->Resetting, 0, 0) == 0) {
+    AdmissionSchedulerWorkerFinished(Runtime->Adapter);
     AdmissionDispatchQueuedWork(Runtime->Adapter);
+  }
   KeAcquireSpinLock(&Runtime->Adapter->SchedulerLock, &oldIrql);
   if (InterlockedDecrement(&Runtime->WorkersActive) == 0 &&
       InterlockedCompareExchange(&Runtime->WorkScheduled, 0, 0) == 0)
@@ -3995,6 +3997,14 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeResponsive(
                  now - last < ADMISSION_PLATFORM_QUEUE_TIMEOUT_MS
              ? TRUE
              : FALSE;
+}
+
+_Use_decl_annotations_ BOOLEAN AdmissionPlatformRenderWorkerScheduled(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context != NULL
+      ? (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime : NULL;
+  return runtime != NULL &&
+      InterlockedCompareExchange(&runtime->WorkScheduled, 0, 0) != 0;
 }
 
 _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeReadyEx(

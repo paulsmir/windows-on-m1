@@ -1385,6 +1385,9 @@ NTSTATUS AdmissionPlatformRuntimeStart(
     _Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionPlatformRuntimeStop(
     _Inout_ ADMISSION_CONTEXT *Context);
+/* Read while SchedulerLock protects work-item reservation transitions. */
+BOOLEAN AdmissionPlatformRenderWorkerScheduled(_In_ ADMISSION_CONTEXT *Context);
+VOID AdmissionSchedulerWorkerFinished(_Inout_ ADMISSION_CONTEXT *Context);
 BOOLEAN AdmissionPlatformRuntimeReadyEx(
     _In_ ADMISSION_CONTEXT *Context, _Out_opt_ ULONG *FailedPredicate);
 BOOLEAN AdmissionPlatformRuntimeReady(

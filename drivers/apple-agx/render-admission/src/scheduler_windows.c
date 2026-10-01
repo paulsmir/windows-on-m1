@@ -74,6 +74,12 @@ static BOOLEAN AdmissionSchedulerTryNotifyPreemption(
   RtlZeroMemory(&notification, sizeof(notification));
   notification.Context = Context;
   KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
+  /* A discarded queued render can still own a delayed IO work item.
+   * Do not offer its slot back to Windows until that callback has retired. */
+  if (AdmissionPlatformRenderWorkerScheduled(Context)) {
+    KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
+    return TRUE; /* Accepted and deferred; WorkerFinished retries. */
+  }
   claimed = AppleAgxSchedulerClaimBoundaryPreemption(
                 &Context->Scheduler, &notification.Preemption)
                 ? TRUE
@@ -100,6 +106,25 @@ static BOOLEAN AdmissionSchedulerTryNotifyPreemption(
   if (!claimed)
     InterlockedExchange(&Context->SchedulerFaulted, 1);
   return claimed;
+}
+
+_Use_decl_annotations_ VOID AdmissionSchedulerWorkerFinished(
+    ADMISSION_CONTEXT *Context) {
+  BOOLEAN retry;
+  KIRQL oldIrql;
+  if (Context == NULL ||
+      InterlockedCompareExchange(&Context->SchedulerInitialized, 0, 0) == 0)
+    return;
+  KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
+  retry = AppleAgxSchedulerPreemptionPhase(&Context->Scheduler) ==
+              AppleAgxPreemptionReadyToNotify &&
+      Context->DispatchedFence == 0u &&
+      (InterlockedCompareExchange(&Context->PagingPending, 0, 0) == 0 ||
+       InterlockedCompareExchange(&Context->PagingDpcPending, 0, 0) != 0 ||
+       InterlockedCompareExchange(&Context->PagingDpcsActive, 0, 0) != 0);
+  KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
+  if (retry)
+    (void)AdmissionSchedulerTryNotifyPreemption(Context);
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionSchedulerStart(

@@ -75,6 +75,7 @@ static LONG InterlockedExchange(volatile LONG *p,LONG v){LONG old=*p;*p=v;return
 static LONG InterlockedCompareExchange(volatile LONG *p,LONG v,LONG expected){LONG old=*p;if(old==expected)*p=v;return old;}
 static LONG InterlockedDecrement(volatile LONG *p){assert(*p>0);return --*p;}
 static void KeSetEvent(int *p,int n,int w){(void)n;(void)w;assert(locks==1);assert(!runtime->WorkersActive && !runtime->WorkScheduled);*p=1;}
+static void AdmissionSchedulerWorkerFinished(ADMISSION_CONTEXT *c){(void)c;assert(!locks);}
 static void AdmissionPlatformWorkerFinished(ADMISSION_PLATFORM_RUNTIME *Runtime);
 static void AdmissionDispatchQueuedWork(ADMISSION_CONTEXT *c){
  assert(!locks && c==runtime->Adapter);++dispatches;
