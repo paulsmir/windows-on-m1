@@ -1751,7 +1751,8 @@ NTSTATUS AdmissionGpuvaG3SubmitVirtualPaging(
       args->DmaBufferUmdPrivateDataSize != 0u ||
       args->DmaBufferPrivateDataSize == 0u ||
       args->DmaBufferPrivateDataSize % sizeof(ADMISSION_PAGING_RECORD) != 0u ||
-      args->Flags.Value != pagingFlags.Value || args->NodeOrdinal != 0u ||
+      (args->Flags.Value & ~(1u << 7u)) != pagingFlags.Value ||
+      args->NodeOrdinal != 0u ||
       args->EngineOrdinal != 0u || args->SubmissionFenceId == 0u ||
       KeGetCurrentIrql() > DISPATCH_LEVEL)
     return AdmissionG4SubmitReject(adapter, context, args,
@@ -1774,6 +1775,7 @@ NTSTATUS AdmissionGpuvaG3SubmitVirtualPaging(
   physical.NodeOrdinal = args->NodeOrdinal;
   physical.EngineOrdinal = args->EngineOrdinal;
   physical.Flags.Paging = 1u;
+  physical.Flags.Resubmission = args->Flags.Resubmission;
   status = AdmissionCpuQueueSubmit(adapter, &physical,
       ADMISSION_CPU_PACKET_PAGING, records,
       args->DmaBufferPrivateDataSize);

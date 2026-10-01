@@ -79,7 +79,7 @@ struct _ADMISSION_CONTEXT {
  UCHAR PresentCopyCommand[4096];ADMISSION_PAGING_RECORD PagingRecords[64];
  struct {void *DeviceHandle;void (*DxgkCbNotifyDpc)(void *);} Interface;
 };
-typedef struct {unsigned SubmissionFenceId;void *hContext;} DXGKARG_SUBMITCOMMAND;
+typedef struct {unsigned SubmissionFenceId;void *hContext;struct {unsigned Resubmission:1;} Flags;} DXGKARG_SUBMITCOMMAND;
 typedef struct {unsigned PreemptionFenceId,NodeOrdinal,EngineOrdinal;union {unsigned Value;} Flags;} DXGKARG_PREEMPTCOMMAND;
 typedef struct {unsigned NodeOrdinal,EngineOrdinal,LastAbortedFenceId;} DXGKARG_RESETENGINE;
 typedef void *HANDLE;
@@ -117,7 +117,7 @@ void AdmissionDispatchQueuedWork(ADMISSION_CONTEXT *Context);
 '''.replace('/*PACKET*/',packet)
         cases=r'''
 static void notify_dpc(void *opaque){
- ADMISSION_CONTEXT *c=opaque;DXGKARG_SUBMITCOMMAND a={13,NULL};unsigned char data[4]={0xd1};
+ ADMISSION_CONTEXT *c=opaque;DXGKARG_SUBMITCOMMAND a={13,NULL,{0}};unsigned char data[4]={0xd1};
  assert(lock_depth==0);
  assert(c->PagingPending==0 && c->PresentCopyBytes==0 && c->PagingRecordCount==0);
  if(inject_submission){inject_submission=0;assert(AdmissionPagingSubmitPresent(c,&a,data,4)==0);}
@@ -125,7 +125,7 @@ static void notify_dpc(void *opaque){
 #define RUN_PAGING_DPC(c) do { AdmissionPagingDpc(c); notify_dpc(c); } while(0)
 int main(void){
  ADMISSION_CONTEXT *c=calloc(1,sizeof(*c));assert(c);
- DXGKARG_SUBMITCOMMAND a={11,NULL};unsigned char b[4]={0xb1},d[4]={0xc1};
+ DXGKARG_SUBMITCOMMAND a={11,NULL,{0}};unsigned char b[4]={0xb1},d[4]={0xc1};
  ADMISSION_RENDER_CONTEXT presentContext={{0}};
  ADMISSION_PRESENT_BLT_COMMAND gpuvaPresent={0};
  gpuvaPresent.Magic=ADMISSION_PRESENT_BLT_MAGIC;
@@ -221,6 +221,27 @@ int main(void){
  assert(AdmissionSchedulerRecordCompletion(c,3));c->PagingDpcPending=1;c->PagingCompletionStatus=0;
  RUN_PAGING_DPC(c);
  assert(presentContext.Object.FenceOutstanding==0 && c->PresentCopyContext==NULL);
+ free(c);
+ /* An already queued paging packet is resubmitted with its old fence. */
+ c=calloc(1,sizeof(*c));assert(c);c->Started=c->SchedulerInitialized=1;
+ c->PagingWorkItem=c;c->Interface.DeviceHandle=c;
+ c->Interface.DxgkCbNotifyDpc=notify_dpc;
+ AppleAgxSchedulerInitialize(&c->Scheduler);
+ unsigned char pagingRecord[sizeof(ADMISSION_PAGING_RECORD)]={0};
+ a.hContext=NULL;a.Flags.Resubmission=0;a.SubmissionFenceId=20;
+ c->PagingPending=1; /* Keep accepted packet in the software queue. */
+ assert(AdmissionCpuQueueSubmit(c,&a,ADMISSION_CPU_PACKET_PAGING,
+                                pagingRecord,sizeof(pagingRecord))==STATUS_SUCCESS);
+ assert(c->CpuQueueCount==1 && c->Scheduler.QueuedFence==20);
+ c->PagingPending=0;preempt.PreemptionFenceId=30;
+ assert(AdmissionDdiPreemptCommand(c,&preempt)==STATUS_SUCCESS);
+ assert(c->CpuQueueCount==0 && c->Scheduler.PreemptedFenceCount==1);
+ assert(c->Scheduler.PreemptionPhase==AppleAgxPreemptionIdle);
+ a.Flags.Resubmission=1;c->PagingPending=1;
+ assert(AdmissionCpuQueueSubmit(c,&a,ADMISSION_CPU_PACKET_PAGING,
+                                pagingRecord,sizeof(pagingRecord))==STATUS_SUCCESS);
+ assert(c->CpuQueueCount==1 && c->Scheduler.QueuedFence==20 &&
+        c->Scheduler.PreemptedFenceCount==0);
  free(c);return 0;
 }
 '''

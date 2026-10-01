@@ -25,6 +25,7 @@ void AppleAgxSchedulerInitialize(APPLE_AGX_SCHEDULER *Scheduler) {
   Scheduler->LastSubmittedFence = 0;
   Scheduler->QueuedFence = 0;
   Scheduler->QueueHead = Scheduler->QueueCount = 0u;
+  Scheduler->PreemptedFenceCount = 0u;
   for (index = 0u; index < APPLE_AGX_SCHEDULER_QUEUE_CAPACITY; ++index)
     Scheduler->FenceQueue[index] = 0u;
   Scheduler->ActiveFence = 0;
@@ -143,6 +144,38 @@ APPLE_AGX_BOOL AppleAgxSchedulerQueueFence(
   return APPLE_AGX_TRUE;
 }
 
+/* Only the paging caller may use this path. The old fence must have been
+ * accepted into the queue before the scheduler discarded it at preemption. */
+APPLE_AGX_BOOL AppleAgxSchedulerQueueResubmittedPagingFence(
+    APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
+    APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence) {
+  APPLE_AGX_U32 index, tail;
+  if (!AppleAgxSchedulerValidateEngine(Scheduler, NodeOrdinal,
+          EngineOrdinal) || Fence == 0u ||
+      Scheduler->QueueCount >= APPLE_AGX_SCHEDULER_QUEUE_CAPACITY ||
+      AppleAgxSchedulerDispatchBlocked(Scheduler) ||
+      !AppleAgxSchedulerFenceAfter(Fence, Scheduler->CompletedFence) ||
+      (Scheduler->ActiveFence != 0u &&
+       !AppleAgxSchedulerFenceAfter(Fence, Scheduler->ActiveFence)))
+    return APPLE_AGX_FALSE;
+  if (Scheduler->QueueCount != 0u) {
+    tail = Scheduler->FenceQueue[(Scheduler->QueueHead +
+        Scheduler->QueueCount - 1u) % APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
+    if (!AppleAgxSchedulerFenceAfter(Fence, tail)) return APPLE_AGX_FALSE;
+  }
+  for (index=0u;index<Scheduler->PreemptedFenceCount;++index)
+    if (Scheduler->PreemptedFenceQueue[index] == Fence) break;
+  if (index == Scheduler->PreemptedFenceCount) return APPLE_AGX_FALSE;
+  for (; index + 1u < Scheduler->PreemptedFenceCount; ++index)
+    Scheduler->PreemptedFenceQueue[index] = Scheduler->PreemptedFenceQueue[index+1u];
+  --Scheduler->PreemptedFenceCount;
+  Scheduler->FenceQueue[(Scheduler->QueueHead + Scheduler->QueueCount) %
+      APPLE_AGX_SCHEDULER_QUEUE_CAPACITY] = Fence;
+  if (Scheduler->QueueCount == 0u) Scheduler->QueuedFence = Fence;
+  ++Scheduler->QueueCount;
+  return APPLE_AGX_TRUE;
+}
+
 APPLE_AGX_BOOL AppleAgxSchedulerActivateFence(
     APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence) {
@@ -221,6 +254,10 @@ APPLE_AGX_BOOL AppleAgxSchedulerBeginBoundaryPreemption(
                                     Scheduler->CompletedFence) ||
         !AppleAgxSchedulerFenceAtOrAfter(CutoffFence, ActiveFence))))
     return APPLE_AGX_FALSE;
+  Scheduler->PreemptedFenceCount = Scheduler->QueueCount;
+  for (APPLE_AGX_U32 index=0u;index<Scheduler->QueueCount;++index)
+    Scheduler->PreemptedFenceQueue[index] = Scheduler->FenceQueue[
+        (Scheduler->QueueHead+index)%APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
   Scheduler->QueuedFence = 0u;
   Scheduler->QueueHead = Scheduler->QueueCount = 0u;
   Scheduler->PendingPreemptionFence = PreemptionFence;
@@ -326,6 +363,7 @@ APPLE_AGX_BOOL AppleAgxSchedulerAbortPreemption(
   Scheduler->PreemptionCutoffFence = 0u;
   Scheduler->PreemptionActiveFence = 0u;
   Scheduler->PreemptionLastCompletedFence = 0u;
+  Scheduler->PreemptedFenceCount = 0u;
   Scheduler->PreemptionPending = APPLE_AGX_FALSE;
   Scheduler->PreemptionPhase = AppleAgxPreemptionIdle;
   return APPLE_AGX_TRUE;
@@ -342,6 +380,7 @@ APPLE_AGX_BOOL AppleAgxSchedulerResetEngine(
                           : Scheduler->CompletedFence;
   Scheduler->QueuedFence = 0u;
   Scheduler->QueueHead = Scheduler->QueueCount = 0u;
+  Scheduler->PreemptedFenceCount = 0u;
   Scheduler->ActiveFence = 0u;
   Scheduler->PendingPreemptionFence = 0;
   Scheduler->PreemptionCutoffFence = 0;

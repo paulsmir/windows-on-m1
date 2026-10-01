@@ -181,7 +181,9 @@ typedef struct { ADMISSION_PAGING_MARKER Header; APPLE_AGX_PHYSICAL_PAGING_PLAN 
 } ADMISSION_PAGING_RECORD;
 #define ADMISSION_PAGING_MAGIC 0x504d4152u
 #define ADMISSION_PAGING_VERSION 1u
-typedef union { struct { UINT Paging:1,Reserved:31; }; UINT Value; }
+typedef union { struct { UINT Paging:1,Present:1,RedirectedPresent:1,
+  NullRendering:1,Flip:1,FlipWithNoWait:1,ContextSwitch:1,Resubmission:1,
+  VirtualMachineData:1,Reserved:23; }; UINT Value; }
   DXGK_SUBMITCOMMANDFLAGS;
 typedef struct { HANDLE hContext; UINT SubmissionFenceId,NodeOrdinal,EngineOrdinal;
   DXGK_SUBMITCOMMANDFLAGS Flags; } DXGKARG_SUBMITCOMMAND;

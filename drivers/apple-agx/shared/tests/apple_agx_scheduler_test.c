@@ -293,6 +293,46 @@ static void test_reset_without_active_packet_reports_completed_boundary(void) {
   assert(!AppleAgxSchedulerHasOutstandingFence(&scheduler, 0u, 0u));
 }
 
+static void test_aborted_preemption_cannot_replay_discarded_fence(void) {
+  APPLE_AGX_SCHEDULER scheduler;
+  AppleAgxSchedulerInitialize(&scheduler);
+  assert(AppleAgxSchedulerQueueFence(&scheduler,0u,0u,10u));
+  assert(AppleAgxSchedulerBeginBoundaryPreemption(&scheduler,0u,0u,11u,10u,0u));
+  assert(AppleAgxSchedulerAbortPreemption(&scheduler,11u));
+  assert(!AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,10u));
+}
+
+static void test_preempted_paging_fence_replays_once_without_reordering(void) {
+  APPLE_AGX_SCHEDULER scheduler;
+  APPLE_AGX_PREEMPTION preemption = {0};
+  APPLE_AGX_U32 aborted = 0u;
+  AppleAgxSchedulerInitialize(&scheduler);
+  assert(AppleAgxSchedulerQueueFence(&scheduler,0u,0u,0x1d3eu));
+  assert(AppleAgxSchedulerActivateFence(&scheduler,0u,0u,0x1d3eu));
+  assert(AppleAgxSchedulerCompleteActiveFence(&scheduler,0u,0u,0x1d3eu));
+  assert(AppleAgxSchedulerQueueFence(&scheduler,0u,0u,0x1d3fu));
+  assert(AppleAgxSchedulerQueueFence(&scheduler,0u,0u,0x1d40u));
+  assert(AppleAgxSchedulerBeginBoundaryPreemption(&scheduler,0u,0u,0x1d50u,0x1d40u,0u));
+  assert(!AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,0x1d3fu));
+  assert(AppleAgxSchedulerClaimBoundaryPreemption(&scheduler,&preemption));
+  assert(preemption.LastCompletedFence==0x1d3eu);
+  assert(AppleAgxSchedulerCommitBoundaryPreemption(&scheduler,0x1d50u));
+  assert(!AppleAgxSchedulerQueueFence(&scheduler,0u,0u,0x1d3fu));
+  assert(!AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,0x1d3eu));
+  assert(!AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,0x1d3du));
+  assert(AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,0x1d3fu));
+  assert(!AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,0x1d3fu));
+  assert(AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,0x1d40u));
+  assert(scheduler.PreemptedFenceCount==0u);
+  assert(AppleAgxSchedulerActivateFence(&scheduler,0u,0u,0x1d3fu));
+  assert(AppleAgxSchedulerCompleteActiveFence(&scheduler,0u,0u,0x1d3fu));
+  assert(AppleAgxSchedulerActivateFence(&scheduler,0u,0u,0x1d40u));
+  assert(AppleAgxSchedulerCompleteActiveFence(&scheduler,0u,0u,0x1d40u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler,0u,0u,0x1d41u));
+  assert(AppleAgxSchedulerResetEngine(&scheduler,0u,0u,&aborted));
+  assert(!AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,0x1d41u));
+}
+
 int main(void) {
   test_one_engine_topology_rejects_invalid_coordinates();
   test_context_lifetime_is_owned_by_one_engine();
@@ -309,5 +349,7 @@ int main(void) {
   test_idle_preemption_discards_queued_work_before_notification();
   test_reset_reports_last_aborted_fence_and_restores_progress();
   test_reset_without_active_packet_reports_completed_boundary();
+  test_preempted_paging_fence_replays_once_without_reordering();
+  test_aborted_preemption_cannot_replay_discarded_fence();
   return 0;
 }

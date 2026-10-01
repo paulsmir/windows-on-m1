@@ -7,6 +7,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionCpuQueueSubmit(
   ADMISSION_RENDER_CONTEXT *presentContext = NULL;
   ADMISSION_PRESENT_BLT_COMMAND presentCommand;
   KIRQL oldIrql;
+  BOOLEAN queued;
   if (Context == NULL || Args == NULL || Data == NULL || Bytes == 0u ||
       (Kind != ADMISSION_CPU_PACKET_PAGING && Kind != ADMISSION_CPU_PACKET_PRESENT) ||
       (Kind == ADMISSION_CPU_PACKET_PRESENT && Bytes > ADMISSION_PRESENT_BLT_DMA_MAX) ||
@@ -26,11 +27,19 @@ _Use_decl_annotations_ NTSTATUS AdmissionCpuQueueSubmit(
   }
   KeAcquireSpinLock(&Context->PagingLock, &oldIrql);
   KeAcquireSpinLockAtDpcLevel(&Context->SchedulerLock);
-  if (InterlockedCompareExchange(&Context->PagingStopping, 0, 0) != 0 ||
-      InterlockedCompareExchange(&Context->SchedulerFaulted, 0, 0) != 0 ||
-      (presentContext != NULL && presentContext->Object.FenceOutstanding != 0u) ||
-      Context->CpuQueueCount >= APPLE_AGX_SCHEDULER_QUEUE_CAPACITY ||
-      !AppleAgxSchedulerQueueFence(&Context->Scheduler, 0u, 0u, Args->SubmissionFenceId)) {
+  queued = FALSE;
+  if (InterlockedCompareExchange(&Context->PagingStopping, 0, 0) == 0 &&
+      InterlockedCompareExchange(&Context->SchedulerFaulted, 0, 0) == 0 &&
+      (presentContext == NULL || presentContext->Object.FenceOutstanding == 0u) &&
+      Context->CpuQueueCount < APPLE_AGX_SCHEDULER_QUEUE_CAPACITY) {
+    if (Kind == ADMISSION_CPU_PACKET_PAGING && Args->Flags.Resubmission)
+      queued = AppleAgxSchedulerQueueResubmittedPagingFence(
+          &Context->Scheduler, 0u, 0u, Args->SubmissionFenceId);
+    if (!queued)
+      queued = AppleAgxSchedulerQueueFence(&Context->Scheduler, 0u, 0u,
+                                           Args->SubmissionFenceId);
+  }
+  if (!queued) {
     KeReleaseSpinLockFromDpcLevel(&Context->SchedulerLock);
     KeReleaseSpinLock(&Context->PagingLock, oldIrql);
     return STATUS_DEVICE_BUSY;
