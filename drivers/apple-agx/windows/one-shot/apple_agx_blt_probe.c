@@ -49,6 +49,20 @@ int wmain(void) {
             index, (UINT)adapters[index].AdapterLuid.HighPart,
             adapters[index].AdapterLuid.LowPart,
             adapters[index].NumOfSources, (UINT)status);
+    {
+      D3DKMT_ADAPTERTYPE adapterType = {0};
+      D3DKMT_QUERYADAPTERINFO query = {0};
+      DWORD sessionId = MAXDWORD;
+      query.hAdapter = adapters[index].hAdapter;
+      query.Type = KMTQAITYPE_ADAPTERTYPE;
+      query.pPrivateDriverData = &adapterType;
+      query.PrivateDriverDataSize = sizeof(adapterType);
+      NTSTATUS typeStatus = D3DKMTQueryAdapterInfo(&query);
+      (void)ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
+      wprintf(L"BLT_ADAPTER_TYPE index=%u flags=0x%08x status=0x%08x pid=%lu session=%lu\n",
+              index, adapterType.Value, (UINT)typeStatus,
+              GetCurrentProcessId(), sessionId);
+    }
     close.hAdapter = adapters[index].hAdapter;
     dwm.Magic = ADMISSION_DWM_DDI_PROBE_MAGIC;
     dwm.Version = ADMISSION_DWM_DDI_PROBE_VERSION;
