@@ -100,7 +100,8 @@ values are **not** KMD submission IDs and must not be compared numerically with
 31348. Diagnostic last-completed state is not a timestamped proof that the
 entire dxgkrnl scheduler queue was empty at the precise callback instant.
 
-Last precollection global non-Present submits: **64062**. Global Present BLT,
+There are54 matched successful polls; last is00:17:39Z. Last precollection global
+non-Present submits: **65117** (64062 was the earlier00:17:31 check). Global Present BLT,
 flip and virtual-Present are zero throughout polling. SetVidPnSourceAddress=1
 and CommitVidPn=1 are initial setup, not late DWM presentation.
 
