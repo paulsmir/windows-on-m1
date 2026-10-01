@@ -1,3 +1,9 @@
+EXP920 HOST ENOSPC repaired: pwdevfullkilledmonitor/framepollandleftguestcopydirs. WindowsstillSAMEBOOT22:15:48.762806Z Code0CPU8 at876.881374s; noGPUresetobserved. Originalowner96431active. Finalobservationrestoredwithcoveragegap; oncepostbaselinecompositionrunner96392 stillpending/shouldtriggernow, inspectlog beforeanymanualaction. NoDWMtermination. Migrated33completedfiles to /Users/pavel/J313-evidence-archive/2026-10-02 withverifiedcopies andsymlinks; externalfree8.5GiB. NeedrecoverremainingguestEXP920-live-snapshot dirs, originalcollector/hostgates; markserial+600unavailableiflost. Uservisualquestionstillpending, noresponsepresumed.
+
+EXP920 firstoriginalboot2026-10-01T22:15:48.7628060Z reachedCode0/CPU8/DWM1248/Explorer4680 through103s, no earlyreset. Launcher96389/monitor96390/postbaselineprobe96392. Useroptionalvisualquestionpending (black/desktop/unavailable), no replypresumed; continue750s/physicalPresent/currentDCP/probe. Collect-original/restart helpersboundtoactualboot. NO DWMtermination.
+
+EXP920 ACTIVE: exact920packageinstalled, launcherPID96389/monitorPID96390/postbaselineprobePID96392. Root.local/experiments/EXP920-preempt-notifier-race; manifestfb0f03d4/payloaddf83e269; fixa5c2c1af+faultorigin tags. NeedfirstCode0 then750s/currentDCP/creationprobe; NO DWMtermination. Ifearlycrashpreservetaggeddump. Prior919cleanrecoveryclosedbeforestage; do notremove liveCode0.
+
 # J313 GPU current state — EXP919 cleanup / EXP920 building
 
 User explicitly says continue until fixed. Desktop is still FAIL; accepted package NONE.
