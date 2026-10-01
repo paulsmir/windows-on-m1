@@ -1,4 +1,7 @@
 #include "render_admission.h"
+
+/* Fault diagnostics: first nonzero transition stores file tag 4 and
+ * source line. Consumers retain zero/nonzero semantics; reset clears it. */
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #include "gpuva_g3_private.h"
 #endif
@@ -2755,7 +2758,7 @@ static VOID AdmissionOutputThread(PVOID Context) {
     generation = runtime->OutputQueue.Generation;
     if (!AdmissionOutputQueueBegin(&runtime->OutputQueue, generation)) {
       KeReleaseSpinLock(&runtime->OutputLock, oldIrql);
-      InterlockedExchange(&runtime->Adapter->SchedulerFaulted, 1);
+      InterlockedCompareExchange(&runtime->Adapter->SchedulerFaulted, 0x40000L | __LINE__, 0);
       continue;
     }
     fence = runtime->CompletedOutput.Fence;
@@ -2765,7 +2768,7 @@ static VOID AdmissionOutputThread(PVOID Context) {
     if (AdmissionOutputQueueFinish(&runtime->OutputQueue, generation))
       KeSetEvent(&runtime->OutputIdle, IO_NO_INCREMENT, FALSE);
     else
-      InterlockedExchange(&runtime->Adapter->SchedulerFaulted, 1);
+      InterlockedCompareExchange(&runtime->Adapter->SchedulerFaulted, 0x40000L | __LINE__, 0);
     if (AdmissionOutputQueueCanExit(&runtime->OutputQueue)) {
       (void)AdmissionOutputQueueMarkExited(&runtime->OutputQueue);
       KeSetEvent(&runtime->OutputExited, IO_NO_INCREMENT, FALSE);
@@ -2789,8 +2792,8 @@ _Use_decl_annotations_ VOID AdmissionPlatformRecordPostDpcHealth(
   runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
   RtlZeroMemory(&record, sizeof(record));
   record.Version = 1u; record.Bytes = sizeof(record); record.Fence = Fence;
-  record.SchedulerFaulted = (ULONG)InterlockedCompareExchange(
-      &Context->SchedulerFaulted, 0, 0);
+  record.SchedulerFaulted = InterlockedCompareExchange(
+      &Context->SchedulerFaulted, 0, 0) != 0 ? 1u : 0u;
   KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
   record.CurrentFence = AppleAgxSchedulerCurrentFence(&Context->Scheduler, 0u, 0u);
   record.ActiveFence = AppleAgxSchedulerActiveFence(&Context->Scheduler, 0u, 0u);
@@ -2954,7 +2957,7 @@ static VOID AdmissionPlatformWorker(
   KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
   if (!activated) {
     if (!cancelled && !deferred)
-      InterlockedExchange(&adapter->SchedulerFaulted, 1);
+      InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x40000L | __LINE__, 0);
     AdmissionPlatformWorkerFinished(runtime);
     return;
   }
@@ -2986,7 +2989,7 @@ static VOID AdmissionPlatformWorker(
     AdmissionRecordPreSubmitHeartbeat(
         adapter, heartbeatResult, &heartbeatSnapshot);
 #endif
-    InterlockedExchange(&adapter->SchedulerFaulted, 1);
+    InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x40000L | __LINE__, 0);
     AdmissionFlushGdiReceipt(adapter);
     AdmissionRenderCorrelationWorkerWindows(
         adapter, description.Fence, FALSE, (ULONG)heartbeatResult);
@@ -3018,7 +3021,7 @@ static VOID AdmissionPlatformWorker(
        * select the process VM slot independently of this envelope. */
       if (!NT_SUCCESS(AdmissionGpuvaG3BeginJob(
               adapter, g3_context, description.Fence))) {
-        InterlockedExchange(&adapter->SchedulerFaulted, 1);
+        InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x40000L | __LINE__, 0);
         AdmissionPlatformWorkerFinished(runtime);
         return;
       }
@@ -3026,7 +3029,7 @@ static VOID AdmissionPlatformWorker(
   }
 #endif
   if (!AdmissionPrepareG4Manager(runtime)) {
-    InterlockedExchange(&adapter->SchedulerFaulted, 1);
+    InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x40000L | __LINE__, 0);
     AdmissionPlatformWorkerFinished(runtime);
     return;
   }
@@ -3052,7 +3055,7 @@ static VOID AdmissionPlatformWorker(
         adapter, description.Fence, &failedProgress,
         (ULONG)runtime->Backend.Phase);
 #endif
-    InterlockedExchange(&adapter->SchedulerFaulted, 1);
+    InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x40000L | __LINE__, 0);
     AdmissionFlushGdiReceipt(adapter);
     AdmissionRenderCorrelationWorkerWindows(
         adapter, description.Fence, FALSE, (ULONG)result);
@@ -3190,7 +3193,7 @@ static VOID AdmissionPlatformWorker(
           adapter, runtime->Provider.LastPollGuard,
           (ULONG)runtime->Provider.QueueProvider.Phase,
           (ULONG)runtime->Backend.Phase, description.Fence);
-      InterlockedExchange(&adapter->SchedulerFaulted, 1);
+      InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x40000L | __LINE__, 0);
       break;
     }
     UNREFERENCED_PARAMETER(drained);
@@ -3308,14 +3311,14 @@ static VOID AdmissionPlatformWorker(
     interval.QuadPart = -10000LL;
     if (!NT_SUCCESS(KeDelayExecutionThread(
             KernelMode, FALSE, &interval))) {
-      InterlockedExchange(&adapter->SchedulerFaulted, 1);
+      InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x40000L | __LINE__, 0);
       break;
     }
   }
   if (runtime->Backend.Phase != AppleAgxBackendRuntimeReady &&
       InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 &&
       InterlockedCompareExchange(&runtime->Resetting, 0, 0) == 0)
-    InterlockedExchange(&adapter->SchedulerFaulted, 1);
+    InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x40000L | __LINE__, 0);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   /* EXP629: successful visible qualification is exported through the bounded
@@ -3969,7 +3972,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeReset(
 Exit:
   InterlockedExchange(&runtime->Resetting, 0);
   if (!NT_SUCCESS(status))
-    InterlockedExchange(&Context->SchedulerFaulted, 1);
+    InterlockedCompareExchange(&Context->SchedulerFaulted, 0x40000L | __LINE__, 0);
   return status;
 }
 

@@ -1,4 +1,7 @@
 #include "render_admission.h"
+
+/* Fault diagnostics: first nonzero transition stores file tag 2 and
+ * source line. Consumers retain zero/nonzero semantics; reset clears it. */
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #include "gpuva_g3_private.h"
 #endif
@@ -298,7 +301,7 @@ static VOID AdmissionPagingWorker(_In_ PDEVICE_OBJECT DeviceObject,
       &notification, 0u, &synchronized);
   KeAcquireSpinLock(&context->PagingLock, &oldIrql);
   if (!NT_SUCCESS(status) || !synchronized) {
-    InterlockedExchange(&context->SchedulerFaulted, 1);
+    InterlockedCompareExchange(&context->SchedulerFaulted, 0x20000L | __LINE__, 0);
     if (context->PagingFence == notification.Fence) {
       InterlockedExchange(&context->PagingDpcPending, 0);
       InterlockedExchange(&context->PagingPending, 0);

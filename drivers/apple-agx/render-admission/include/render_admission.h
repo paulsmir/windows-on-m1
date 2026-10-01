@@ -488,6 +488,9 @@ typedef struct _ADMISSION_CONTEXT {
   ADMISSION_RENDER_PACKET RenderPacket;
   ADMISSION_BACKEND_IMAGE BackendImage;
   volatile LONG SchedulerInitialized;
+  /* Zero is healthy. First fault: high16=file (1 scheduler,2 paging,
+   * 3 submission,4 backend), low16=source line in the exact build.
+   * Boolean diagnostic/public fields must normalize this value to0/1. */
   volatile LONG SchedulerFaulted;
   volatile LONG SchedulerDpcPending;
   volatile LONG RenderDpcFence;

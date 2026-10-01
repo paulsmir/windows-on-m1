@@ -1,5 +1,8 @@
 #include "render_admission.h"
 
+/* Fault diagnostics: first nonzero transition stores file tag 1 and
+ * source line. Consumers retain zero/nonzero semantics; reset clears it. */
+
 #define ADMISSION_SCHEDULER_NODE 0u
 #define ADMISSION_SCHEDULER_ENGINE 0u
 
@@ -63,6 +66,7 @@ static BOOLEAN AdmissionSchedulerTryNotifyPreemption(
   ADMISSION_PREEMPTION_NOTIFICATION notification;
   BOOLEAN synchronized = FALSE;
   BOOLEAN claimed;
+  APPLE_AGX_PREEMPTION_PHASE phase;
   NTSTATUS status;
   KIRQL oldIrql;
 
@@ -80,6 +84,17 @@ static BOOLEAN AdmissionSchedulerTryNotifyPreemption(
     KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
     return TRUE; /* Accepted and deferred; WorkerFinished retries. */
   }
+  /* Callers decide to retry under this lock, then release it before coming
+   * here. Another caller may already own or have completed that notification;
+   * a new boundary may even be waiting. These are accepted no-op/deferred
+   * attempts, not evidence that the scheduler failed. */
+  phase = AppleAgxSchedulerPreemptionPhase(&Context->Scheduler);
+  if (phase == AppleAgxPreemptionIdle ||
+      phase == AppleAgxPreemptionNotificationClaimed ||
+      phase == AppleAgxPreemptionWaitCurrentBoundary) {
+    KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
+    return TRUE;
+  }
   claimed = AppleAgxSchedulerClaimBoundaryPreemption(
                 &Context->Scheduler, &notification.Preemption)
                 ? TRUE
@@ -92,7 +107,7 @@ static BOOLEAN AdmissionSchedulerTryNotifyPreemption(
       Context->Interface.DeviceHandle, AdmissionNotifyPreemptionAtInterrupt,
       &notification, 0u, &synchronized);
   if (!NT_SUCCESS(status) || !synchronized) {
-    InterlockedExchange(&Context->SchedulerFaulted, 1);
+    InterlockedCompareExchange(&Context->SchedulerFaulted, 0x10000L | __LINE__, 0);
     return FALSE;
   }
 
@@ -104,7 +119,7 @@ static BOOLEAN AdmissionSchedulerTryNotifyPreemption(
                 : FALSE;
   KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
   if (!claimed)
-    InterlockedExchange(&Context->SchedulerFaulted, 1);
+    InterlockedCompareExchange(&Context->SchedulerFaulted, 0x10000L | __LINE__, 0);
   else
     /* A DPC may already have queued work while delivery still held the
      * dispatch gate. Opening the gate must also supply its missed wakeup. */
@@ -216,7 +231,7 @@ _Use_decl_annotations_ BOOLEAN AdmissionSchedulerRecordCompletion(
                     : FALSE;
   KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
   if (!completed)
-    InterlockedExchange(&Context->SchedulerFaulted, 1);
+    InterlockedCompareExchange(&Context->SchedulerFaulted, 0x10000L | __LINE__, 0);
   return completed;
 }
 
@@ -237,7 +252,7 @@ _Use_decl_annotations_ BOOLEAN AdmissionSchedulerSubmitFence(
     submitted = TRUE;
   KeReleaseSpinLockFromDpcLevel(&Context->SchedulerLock);
   if (!submitted)
-    InterlockedExchange(&Context->SchedulerFaulted, 1);
+    InterlockedCompareExchange(&Context->SchedulerFaulted, 0x10000L | __LINE__, 0);
   return submitted;
 }
 
@@ -346,7 +361,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
           &context->Scheduler, PreemptCommand->NodeOrdinal,
           PreemptCommand->EngineOrdinal, PreemptCommand->PreemptionFenceId,
           cutoffFence, activeFence)) {
-    InterlockedExchange(&context->SchedulerFaulted, 1);
+    InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
     KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
     KeReleaseSpinLockFromDpcLevel(&context->PagingLock);
     return STATUS_SUCCESS;
@@ -363,7 +378,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
        queuedContext->Object.FenceOutstanding != queuedFence ||
        !AdmissionBackendImageReleaseSubmission(
            &context->BackendImage, queuedFence))) {
-    InterlockedExchange(&context->SchedulerFaulted, 1);
+    InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
   } else if (queuedContext != NULL) {
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
     AdmissionGpuvaG3PrivatePreempt(queuedContext,queuedFence);
@@ -378,7 +393,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
   KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
   KeReleaseSpinLockFromDpcLevel(&context->PagingLock);
   if (notifyNow && !AdmissionSchedulerTryNotifyPreemption(context))
-    InterlockedExchange(&context->SchedulerFaulted, 1);
+    InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
   return STATUS_SUCCESS;
 }
 
@@ -455,13 +470,13 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
     if (packetContext != NULL &&
         (ULONG)InterlockedCompareExchange(&packetContext->GpuvaG3PrivateFence,0,0)==packetFence) {
       AdmissionGpuvaG3PrivateCancel(packetContext,packetFence,TRUE);
-      InterlockedExchange(&context->SchedulerFaulted,1);
+      InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
       KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
       KeReleaseSpinLock(&context->PagingLock,oldIrql);
       return STATUS_DEVICE_HARDWARE_ERROR;
     }
 #endif
-    InterlockedExchange(&context->SchedulerFaulted, 1);
+    InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
     KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
     KeReleaseSpinLock(&context->PagingLock, oldIrql);
     if (!NT_SUCCESS(AdmissionPlatformRuntimeReset(
@@ -491,7 +506,7 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
     }
     if (!AdmissionBackendImageReleaseSubmission(
             &context->BackendImage, packetFence)) {
-      InterlockedExchange(&context->SchedulerFaulted, 1);
+      InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
       KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
       KeReleaseSpinLock(&context->PagingLock, oldIrql);
       return STATUS_INVALID_DEVICE_STATE;

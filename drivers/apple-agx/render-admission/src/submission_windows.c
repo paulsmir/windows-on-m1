@@ -1,5 +1,8 @@
 #include "render_admission.h"
 
+/* Fault diagnostics: first nonzero transition stores file tag 3 and
+ * source line. Consumers retain zero/nonzero semantics; reset clears it. */
+
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
 #define ADMISSION_CORRELATE_SUBMIT_EXIT(Context, Arguments, Guard, Status)    \
   AdmissionRenderCorrelationSubmitWindows(                                   \
@@ -226,7 +229,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
   if (bound && !accepted &&
       !AdmissionBackendImageReleaseSubmission(
           &Context->BackendImage, Args->SubmissionFenceId))
-    InterlockedExchange(&Context->SchedulerFaulted, 1);
+    InterlockedCompareExchange(&Context->SchedulerFaulted, 0x30000L | __LINE__, 0);
   KeReleaseSpinLockFromDpcLevel(&Context->SchedulerLock);
   if (!accepted) {
     /* Capture the return owner in the adapter/boot record before touching the
