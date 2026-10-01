@@ -50849,3 +50849,7 @@ Single variable: KMD-only observed-latch software VSync timeline; diagnostics: b
 ## EXP908-BUILD1 AFTER — 2026-10-01T02:24:26.835175+00:00
 
 Builder returned0 and exact package908 linked, but gate REJECTED: KMD code analysis5 warnings0errors (C6387 KeQueryInterruptTimePrecise null output at1039/1075/1190; C28182 nullable synchronize/timer context at1162/1206). Probe0/0. No install/stage/launch. Entire source/quartet/PDB/log receipt preserved under `.local/experiments/EXP908-vsync-model/build1`. All new callbacks and precise-clock out-pointer reviewed together; next build changes only SAL-valid nonnull time output and fail-closed null callback guards, retaining VSync behavior.
+
+## EXP908-BUILD2 BEFORE — 2026-10-01T02:26:38.522054+00:00
+
+Same functional variable/profile/recovery as BUILD1. Source 104c4b838dc95c940cf951276444395502b250af; source archive SHA 9b501959b2117b06f5155935ce0f2330272de3c96012c1e6acc3a66cc7d7f34a; manifest SHA fd1728f5352e91f840c6d987469c0c793b6a3fbb060e36f73f166a346f8f78da; exact command `powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\pauls\EXP908-vsync-model\build-kmd.ps1`, script SHA 98753c4bb16c933de5fa1f1caba4edcdb79c729e0bed9aa75412f72b56290003. Only the complete nullable-callback/QPC-output correction changes code; first build preserved under build1. Automatic log gate rejects code-analysis warnings even when MSBuild exits0. Expected KMD+UMD0/0, probe0/0; no guest change. Evidence candidate build receipts/logs/PDBs; failure remains build gate, not a hardware result.
