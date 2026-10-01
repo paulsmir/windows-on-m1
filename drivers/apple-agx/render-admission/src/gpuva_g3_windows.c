@@ -2142,7 +2142,7 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
       !context->SchedulerContext.Active ||
       !AdmissionPlatformRuntimeReady(adapter) ||
       !NT_SUCCESS(viewStatus =
-          AdmissionMemoryRuntimeScanoutView(adapter, &local)))
+          AdmissionMemoryRuntimeLocalView(adapter, &local)))
     return AdmissionG4SubmitReject(adapter, context, args,
         AdmissionG4RejectEnvelopeState, STATUS_INVALID_PARAMETER,
         (ULONG)viewStatus, TRUE);
