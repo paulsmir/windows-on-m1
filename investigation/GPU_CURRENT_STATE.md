@@ -1,57 +1,78 @@
-# J313 GPU current state — EXP918 closed / EXP919 ready
+# J313 GPU current state — EXP919 cleanup / EXP920 building
 
-User: continue until black screen is fixed. Desktop still FAIL; accepted package NONE.
+User explicitly says continue until fixed. Desktop is still FAIL; accepted package NONE.
 
-## Current machine
-Ordinary immutable377/392 boot2026-10-01T20:45:14.812816Z, checks20:45:56/20:47:52.
-OneAPPL0002 Code28; package/modules/service/signer/arms/diagnostics0; CPU8/disks2USB5,
-SSH/RDPservice/autologon1; freeC5006991360/shadows0. Cleanlauncher77875 (verifyfresh).
-Exact918/oem5 removedunderCode43 afterallhostgates. No hidden/forcedreset.
-OneunnecessaryrecoverySIGINTsnapshot afterSSHhadreturned was documented/corrected;
-logconfirmed continuingguest. Never queue a dependent action before inspectingSSHresult.
+## Current machine/action
+EXP919 fullyclosed. Ordinary377/392 boot2026-10-01T21:59:38.551232Z,
+checks22:01:54/22:03:02 Code28/oneAPPL0002/pkg-module-service-signer-arm-diagnostics0,
+CPU8/disks2USB5/SSH/RDPservice/autologon1/free5034749952/shadows0.
+Cleanlauncher93926 (verifyfresh). Cleanuphostgate13d4be526d0dcf33f52ef2dcc2cd7f1187e2e284f292f2b67f68ab31005219fc.
+EXP920built/sealedNOTSTAGED; needsfreshstage/disk/hostreceipts/dualcontrol.
+Manifestfb0f03d40b528634e2bfd00a67526942f28c1c38eb35211408901e57683cf0bd;
+payloaddf83e2691c91409e49bd0c893ff3d3603ac06746fc1c737650c4b29a67d5313e.
+NativeKMD/UMD/probe+x64contract0/0; nativecontract/sign/PDB/nativearchivePASS.
+Finalfull1195 exactbaseline15F38E2S, no newIDs; initialfixtureCASmissing fixed
+separately(testonly), originalpackage source d16f42c0 unchanged.
+SamecompositionprobeCD7D043E after750s via59989cf1 runner; NO DWMtermination in920.
 
-## Confirmed fix
-EXP917 creationprobe failed887a0005 becauseUMDrejectedactualBGRA87/dim3/binda8/
-misc20002/2560x1600/1mip/layer/sample tuple. DISPLAYABLE_SURFACE20000 wasmissing
-fromvalidator mask thoughBGRAstorage alreadyLinear1/Displayable1/segment2.
-Fixb5291548 actualRED/GREEN preservesdescriptor/lifetime andunsupportedflag/formatguards.
-EXP918 source d5c685596bb3073b758d43385177561dee50b5be/package30.0.918.0:
-773.877312sCode0/CPU8, sameSDKprobeCD7D043E PID4640 successfullycreatesD3D11device,
-compositionflipchainandGetBuffer0; output707B SHA817f3a9b/taskremoved. HARDWAREVALIDATED
-forcreationonly. Physical/virtualDWMpresent0; currentDCPswap9seq2zero120300600.
-LastDWMcontexts51/51 and13/13 complete; noTDRobserved. Desktopnotproven.
+## EXP919 actual failure (DWM test DID NOT RUN)
+Same918package, earlyWindowsPSCIresetbeforefirstSSH. No reinit invocation receipt;
+runner79618 stoppedwithoutintervention. HeaderprovesCPU5/System119/2/80000011
+at38.769s; normalPagingflags1/fence735/DMA4100120 size100/private780.
+Exact918PDB objects: hContextffffb708f8e4c1c0 -> devicefcf76490 -> adapterfcd02000.
+Scheduler atfcd7eb50: Completed731/LastSubmitted732, queue0/active0,
+preempted732 count1, phaseIdle/pending0. CpuQueue0/PagingPending0/Stopping0,
+Dispatched0/SchedulerInitialized1 butSchedulerFaulted1.
+RenderPacketEmpty, BackendImageReady1/no boundfence/job, backendReady,
+WorkScheduled0/WorkersActive0/Stopping0/Resetting0. TerminalResultInvalidState
+withTerminalPending0 is normalClearPending default, NOT GPUfailure proof.
+Firstfault-setting site was not captured. MMIO pagesnotindump, useonlyreadablefields.
 
-## Next causal test EXP919 (prepared NOTSTAGED)
-Current918ETL shows sameDWM1220 BasicRender->AppleFL10device transition. Public
-compositioncreationnowworks, butfreshcompositorafteradapterready isunmeasured.
-One diagnostic DWMreinit afteroriginalCode0>=120s, unchanged918package/firmware/caps.
-Continueoriginal>=750s; observefreshPID/sameExplorer/physicalPresent/currentDCP.
-Thisisnotpermanentrestartworkaround. Ifnooutputrejecttransition-onlyhypothesis.
-No modernDDIversion/NO_REDIRECTION guess or broadrewrite basedonlyonnormativegap.
+## Confirmed software defect / next EXP920
+PreemptCommand cachesnotifyNow thenunlocks; WorkerFinished/DPC canclaim/notify/
+commitfirst. OldTryNotify thenfailsclaim(Idle/Claimed) andPreemptCommand wrongly
+setsSchedulerFaulted. ActualproductionPreempt/Try/Worker+realsharedscheduler
+RED reproducesexactIdle/fault1/oneNotify/731/732; fixGREEN. This isconfirmed
+source race matchingdump, NOT uniquelyprovenoriginalfirstsetter.
+Fixa5c2c1af: underlock benignIdle/Claimed/Wait attemptsreturnaccepted/deferred;
+realSync/Commit/interface/unknownphasefailurespreserved. WorkScheduledguard and
+postcommitwake retained. Diagnostic23faultsets nowfirstCAS filetag|line;
+allBooleansemantics/reset0unchanged andpublicBooleanreceipt normalized.
+Filetags high16:1scheduler,2paging,3submission,4backend;low16source line inexactbuild.
 
-Script50ad356a scripts/g3-dwm-reinitialize-once.ps1 SHA25421390791f340d0d6a40c339cc41b2a4b9680827cab0adfecc008419bc329d.
-Heldexactprocesshandle, IsProcessCritical refusal, oneTerminateProcess, no retry.
-AST0errors/PInvokecompiled/read-onlyownqueryPASS. RecoveryreadonlyDWM1232 handle
-opened/Criticalfalse; nointerventionexecuted. Recheckactualtargetinscript.
-Root `.local/experiments/EXP919-dwm-reinitialize/` sealed47artifact/45transfer:
-manifest6e5e374564587866fd87bbf77e7327312410dc4791eaf07328fffebae8c5e5a5;
-payload14aaf8b97e8cd8d7cd9d2c9bca89e63435b15e411db445409c0829c12bb31e53.
-Final reinitialize-runner.py SHAc2f5445e71f4b4a42bd5d60f07d662497f1300de33c9f92b9d3cd03ccdfa1a6b
-(supersedesprep0e816a43 afterBoot/PIDinputvalidation). DoNOT launch oldpost-window-composition.py.
-NeedfreshstageCode28/free4GiB/shadows0, hostgatedshutdown/dualcontrol; thenone919boot.
+EXP920 source d16f42c07a9ae52ea9c3d8e9c428348b373f7087/package920 builtNOTSTAGED,
+root `.local/experiments/EXP920-preempt-notifier-race/`; build/sign/PDB andfinalfullsuitecomplete.
+Actual3ASan/UBsanreplaysGREEN; firstfaulttagpreservationtested. FirstGREENattempt
+hadinvalidnegativeassumptionaboutopaqueFence0; correctedtounknownphase99 after
+sharedsourceinspection, no productionchangeforthatassumption. ActualREDkept;
+overwritteninitialGREENlog truthfullyrecordedintranscriptnote. Neednative0/0,
+sign/PDB/fulltest exactID gates. NoDWMtermination in920. Confirmnormalstartup,
+>=750s, physicalPresent/currentDCP; samecreationprobe canverifyb529retained.
 
-## Relevant evidence only
-- analysis/EXP918-displayable-resource-verdict.md andEXPERIMENTS.md EXP918/919.
-- analysis/EXP919-dwm-reinitialization-plan.md; source50ad356a/ledgerc4a92922.
-- EXP918root original15gate064790c0/frozen11snapshots176gateb52c02ca/
-  recovery15gate6f040102/probe817f3a9b/cleanup3filegatea343e24f.
-- Existing917report hasexactrejectedresource/primarysource/tests; b529fixnotcurrentunknown.
-- Full1194 tests=baseline15F38E2S plus2knownactiveSerialLockIDs; no newIDs. NotallGREEN.
-- Guestevent468=Dx_Flip_Consumed, notoutputbinding. ActiveApple2560x1600alreadyproven.
-- 918DWMmodule snapshotDXGI/D3D11/AppleUMD/WARP, noD3D9 (snapshotonly).
+## Preserved evidence / cleanup gates
+Kernel596888485B SHA f582779824a83c3ed2a160cd06f6973593ce5ae4fd01795430112a1ed84f04d9
+hostandbuilderverified. Builder C:/Users/pauls/EXP919-kernel-audit exact918PDB/SYS.
+CDB commands mustuseNEWLINES: .sympath consumessemicolonsaspath. Initialmisparsed
+logretained; kernel-analysis.txt/context/objects/device/scheduler/queue-state/
+backend-state/runtime txt areactualresults. Readerreports96%,lastlinecompleted.
+Direct8files+inventoryhostgatee0048b8094acf5923afc54f9fc81b83ae4d1402f01919ef17aa169a6282793ea;
+original6hostloggateb4c7acca3f4a215ee49a0468cb0d3b74ff8ef887bb39adf8b69fa20d680faaa8.
+No originalETL/Code0receipt; recoveryETLnotoriginal. Diagnosticcleanup usedexact
+mixedinventoryaliasSHA0b52357f, notfakeoriginalETLreceipt. ExactsourceWindowsMemoryDMP
+duplicate removed21:52 afterbothcopiesverified; free5025148928/shadow0. Nootherdumpdeleted.
+RecoveryCode43boot21:03:43.181521Z/Stopped/CPU8, nohidden/forcedsignal in919.
+
+## References
+analysis/EXP920-preempt-notification-race-plan.md; EXPERIMENTS.md EXP919/920 only.
+Tests test_preempt_notification_competing_callers, oldpreemptworker/workqueue.
+Priorb5291548 displayableBGRAfix ishardwarevalidated byEXP918 sameprobecreate/bufferS_OK;
+EXP918773.877sCode0butphysicalPresent0/DCPswap9seq2zero. DWMtest919inconclusive,
+neverclaimrestarttested. Source918d5c68559PDBs areinEXP918-displayable-resource.
+Do not broadlyrewrite modernDDI orchangeNO_REDIRECTION withoutcausalproof.
+Event468 isDx_Flip_Consumed, notoutputbinding; activeApple2560x1600proven.
 
 Recovery377 SHAfae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a;
 392 SHA16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06.
 Hidden385 SHA279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c emergencyonly.
-Never standaloneproxyNOP whileSSH/launcheractive. Original/recoveryhostSHA BEFOREcleanup.
-NormalGPUvisibleCode43 exactpackagecleanup thenordinaryCode28twice; nohiddeninterpose.
+NeverproxyNOP whileSSH/launcheractive; INSPECT returnedSSHresultbeforedependentaction.
+Allhostevidencebeforeexactpackagecleanup, thennormalGPUvisibleCode28twice.
