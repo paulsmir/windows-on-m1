@@ -55,6 +55,11 @@ typedef struct { void *GpuvaG3Process; } ADMISSION_RENDER_CONTEXT;
 #define AdmissionPlatformNowMs() 0
 #define AppleAgxRtkitSessionHeartbeat(...) 0
 #define InterlockedExchange(p, v) (*(p) = (v))
+static int InterlockedCompareExchange(volatile int *p, int value, int expected) {
+  int previous = *p;
+  if (previous == expected) *p = value;
+  return previous;
+}
 #define AdmissionFlushGdiReceipt(a) ((void)(a))
 #define AdmissionRenderCorrelationWorkerWindows(...) ((void)0)
 #define AdmissionPlatformWorkerFinished(r) ((void)(r))
