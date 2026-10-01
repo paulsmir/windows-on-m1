@@ -23,7 +23,7 @@ static ULONGLONG fakeNow;static unsigned fakeIrql;static unsigned freed,flushed,
 #define NT_SUCCESS(x) ((x)>=0)
 #define UNREFERENCED_PARAMETER(x) (void)(x)
 #define RtlCopyMemory(p,s,n) memcpy(p,s,n)
-static ULONGLONG KeQueryInterruptTimePrecise(void*p){(void)p;return fakeNow;}
+static ULONGLONG KeQueryInterruptTimePrecise(void*p){assert(p);*(ULONGLONG*)p=fakeNow;return fakeNow;}
 static unsigned KeGetCurrentIrql(void){return fakeIrql;}
 static void KeAcquireSpinLock(KSPIN_LOCK*p,KIRQL*o){(void)p;*o=fakeIrql;fakeIrql=2;}
 static void KeReleaseSpinLock(KSPIN_LOCK*p,KIRQL o){(void)p;fakeIrql=o;}

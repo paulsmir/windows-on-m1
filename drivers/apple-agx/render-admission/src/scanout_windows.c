@@ -1026,6 +1026,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
 /* All timeline and receipt writes are serialized at the adapter's DIRQL.
  * TimerLock only serializes PASSIVE/DPC timer scheduling and teardown;
  * the ISR never acquires it. First32 receipts are immutable, last32 roll. */
+static ULONGLONG AdmissionScanoutTime100ns(void) {
+  ULONGLONG qpc = 0ULL;
+  return KeQueryInterruptTimePrecise(&qpc);
+}
+
 static VOID AdmissionScanoutVsyncRecord(ADMISSION_SCANOUT_RUNTIME *Runtime,
                                       ULONG Kind, NTSTATUS Status) {
   APPLE_AGX_VSYNC_QUERY *q = &Runtime->VsyncReceipt;
@@ -1036,7 +1041,7 @@ static VOID AdmissionScanoutVsyncRecord(ADMISSION_SCANOUT_RUNTIME *Runtime,
   e = &q->Events[n < 32ULL ? (ULONG)n : 32u + (ULONG)((n - 32ULL) % 32ULL)];
   RtlZeroMemory(e, sizeof(*e));
   e->Sequence = n + 1ULL;
-  e->Time100ns = KeQueryInterruptTimePrecise(NULL);
+  e->Time100ns = AdmissionScanoutTime100ns();
   e->Period = Runtime->Timeline.LastPeriod;
   e->PendingSequence = (ULONGLONG)InterlockedCompareExchange64(
       &Runtime->PendingSequence, 0, 0);
@@ -1072,7 +1077,7 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
       &runtime->Panel.Scanout, &irq_status, &latched_sequence);
   if (result == AppleAgxScanoutNoInterrupt && !VerticalTick)
     return FALSE;
-  now = KeQueryInterruptTimePrecise(NULL);
+  now = AdmissionScanoutTime100ns();
   if (result != AppleAgxScanoutNoInterrupt) {
     InterlockedExchange(&Context->LastInterruptStatus, (LONG)irq_status);
     InterlockedIncrement(&Context->InterruptCount);
@@ -1141,6 +1146,8 @@ _Use_decl_annotations_ BOOLEAN AdmissionScanoutInterrupt(
 
 static BOOLEAN AdmissionScanoutVsyncTick(PVOID Opaque) {
   ADMISSION_SCANOUT_RUNTIME *runtime = Opaque;
+  if (runtime == NULL)
+    return FALSE;
   if (InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0)
     return TRUE;
   (void)AdmissionScanoutProcessInterrupt(runtime->Adapter, TRUE);
@@ -1149,6 +1156,8 @@ static BOOLEAN AdmissionScanoutVsyncTick(PVOID Opaque) {
 
 static BOOLEAN AdmissionScanoutVsyncDpcReceipt(PVOID Opaque) {
   ADMISSION_SCANOUT_RUNTIME *runtime = Opaque;
+  if (runtime == NULL)
+    return FALSE;
   if (runtime->VsyncReceipt.DpcCount != APPLE_AGX_VSYNC_MAX)
     runtime->VsyncReceipt.DpcCount++;
   runtime->VsyncReceipt.AcknowledgedNotifyCount =
@@ -1159,6 +1168,8 @@ static BOOLEAN AdmissionScanoutVsyncDpcReceipt(PVOID Opaque) {
 
 _Use_decl_annotations_ static BOOLEAN AdmissionScanoutVsyncControl(PVOID Opaque) {
   ADMISSION_SCANOUT_RUNTIME *runtime = Opaque;
+  if (runtime == NULL)
+    return FALSE;
   runtime->Timeline.Enabled = InterlockedCompareExchange(
       &runtime->VsyncNotifyEnabled, 0, 0) != 0
           ? APPLE_AGX_SCANOUT_TRUE : APPLE_AGX_SCANOUT_FALSE;
@@ -1170,6 +1181,8 @@ _Use_decl_annotations_ static BOOLEAN AdmissionScanoutVsyncControl(PVOID Opaque)
 
 static BOOLEAN AdmissionScanoutVsyncNext(PVOID Opaque) {
   ADMISSION_SCANOUT_RUNTIME *runtime = Opaque;
+  if (runtime == NULL)
+    return FALSE;
   runtime->TimerDeadlineValid = AppleAgxVsyncDeadline(
       &runtime->Timeline, &runtime->TimerDeadline) != 0;
   return TRUE;
@@ -1187,7 +1200,7 @@ static VOID AdmissionScanoutScheduleTimer(ADMISSION_SCANOUT_RUNTIME *Runtime) {
           Runtime, 0u, &done)) || !done || !Runtime->TimerDeadlineValid)
     return;
   next = Runtime->TimerDeadline;
-  now = KeQueryInterruptTimePrecise(NULL);
+  now = AdmissionScanoutTime100ns();
   due.QuadPart = next > now && next - now <= (ULONGLONG)MAXLONGLONG
                     ? -(LONGLONG)(next - now) : -1LL;
   (void)KeSetTimer(&Runtime->VsyncTimer, due, &Runtime->VsyncDpc);
@@ -1200,6 +1213,8 @@ _Use_decl_annotations_ static VOID AdmissionScanoutTimerDpc(KDPC *Dpc, PVOID Opa
   KIRQL oldIrql;
   BOOLEAN done = FALSE;
   NTSTATUS status;
+  if (runtime == NULL || runtime->Adapter == NULL)
+    return;
   UNREFERENCED_PARAMETER(Dpc);
   UNREFERENCED_PARAMETER(Arg1);
   UNREFERENCED_PARAMETER(Arg2);
@@ -1259,6 +1274,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutControlInterrupt(
 
 static BOOLEAN AdmissionScanoutVsyncPauseControl(PVOID Opaque) {
   ADMISSION_SCANOUT_RUNTIME *runtime = Opaque;
+  if (runtime == NULL)
+    return FALSE;
   runtime->Timeline.Running =
       InterlockedCompareExchange(&runtime->TimelinePaused, 0, 0) == 0 &&
       InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 &&
@@ -1306,8 +1323,12 @@ typedef struct _ADMISSION_VSYNC_SNAPSHOT_ARGS {
 
 static BOOLEAN AdmissionScanoutVsyncSnapshot(PVOID Opaque) {
   ADMISSION_VSYNC_SNAPSHOT_ARGS *args = Opaque;
-  ADMISSION_SCANOUT_RUNTIME *runtime = args->Runtime;
-  APPLE_AGX_VSYNC_QUERY *q = &runtime->VsyncReceipt;
+  ADMISSION_SCANOUT_RUNTIME *runtime;
+  APPLE_AGX_VSYNC_QUERY *q;
+  if (args == NULL || args->Runtime == NULL || args->Query == NULL)
+    return FALSE;
+  runtime = args->Runtime;
+  q = &runtime->VsyncReceipt;
   q->Phase100ns = runtime->Timeline.Phase100ns;
   q->ActiveSequence = runtime->Timeline.ActiveSequence;
   q->ActiveAddress = runtime->Timeline.ActiveAddress;
