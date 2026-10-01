@@ -173,6 +173,15 @@ _Use_decl_annotations_ VOID AdmissionDwmFrameRecordReject(
   AdmissionDwmFrameEnd(adapter, entry);
 }
 
+_Use_decl_annotations_ VOID AdmissionDwmFrameRecordEnvelope(
+    ADMISSION_CONTEXT *adapter, PVOID context,
+    const ADMISSION_DWM_ENVELOPE_RECEIPT *receipt) {
+  ADMISSION_DWM_FRAME_ENTRY *entry = AdmissionDwmFrameBegin(adapter, context);
+  if (entry == NULL) return;
+  if (entry->Envelope.Stage == 0u) entry->Envelope = *receipt;
+  AdmissionDwmFrameEnd(adapter, entry);
+}
+
 _Use_decl_annotations_ VOID AdmissionDwmFrameRecordCompletion(
     ADMISSION_CONTEXT *adapter, PVOID context, ULONGLONG fence) {
   ADMISSION_DWM_FRAME_ENTRY *entry = AdmissionDwmFrameBegin(adapter, context);

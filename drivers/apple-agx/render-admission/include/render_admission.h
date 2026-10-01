@@ -904,6 +904,8 @@ VOID AdmissionDwmFrameRecordSubmit(_In_ ADMISSION_CONTEXT *Adapter,
     _In_ ULONG Branch, _In_ NTSTATUS Status, _In_ BOOLEAN Present);
 VOID AdmissionDwmFrameRecordReject(_In_ ADMISSION_CONTEXT *Adapter,
     _In_ PVOID Context, _In_ ULONG Branch, _In_ NTSTATUS Status);
+VOID AdmissionDwmFrameRecordEnvelope(_In_ ADMISSION_CONTEXT *Adapter,
+    _In_ PVOID Context, _In_ const ADMISSION_DWM_ENVELOPE_RECEIPT *Receipt);
 VOID AdmissionDwmFrameRecordCompletion(_In_ ADMISSION_CONTEXT *Adapter,
     _In_ PVOID Context, _In_ ULONGLONG Fence);
 VOID AdmissionDwmFrameRecordPresent(_In_ ADMISSION_CONTEXT *Adapter,

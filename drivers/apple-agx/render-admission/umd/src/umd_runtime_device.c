@@ -48,6 +48,8 @@ VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
   DWORD length, written;
   int used;
   UINT i;
+  LARGE_INTEGER diagnosticQpc = {0};
+  DWORD diagnosticSession = MAXDWORD;
   if (Stage == NULL || Count > 16u || (Count != 0u && Values == NULL))
     goto done;
   if (GetEnvironmentVariableW(L"APPLE_AGX_UMD_REFUSALS_ONLY",only,2)==1u &&
@@ -63,9 +65,12 @@ VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
        (InterlockedCompareExchange(&records, 0, 0) >= 128 ||
         InterlockedIncrement(&records) > 128)))
     goto done;
+  (void)QueryPerformanceCounter(&diagnosticQpc);
+  (void)ProcessIdToSessionId(GetCurrentProcessId(), &diagnosticSession);
   used = _snprintf_s(line, sizeof(line), _TRUNCATE,
-      "%s hr=0x%08lx pid=%lu tid=%lu", Stage, (ULONG)Status,
-      GetCurrentProcessId(), GetCurrentThreadId());
+      "%s hr=0x%08lx pid=%lu tid=%lu session=%lu qpc=%lld", Stage, (ULONG)Status,
+      GetCurrentProcessId(), GetCurrentThreadId(), diagnosticSession,
+      diagnosticQpc.QuadPart);
   if (used < 0) goto done;
   for (i = 0u; i < Count; ++i) {
     int added = _snprintf_s(line + used, sizeof(line) - (SIZE_T)used,

@@ -149,6 +149,13 @@ int wmain(void) {
                   entry->DestinationAllocation, entry->SourceGpuVa,
                   entry->DestinationGpuVa, entry->DestinationGuestIpa,
                   entry->PresentFence, entry->CopiedBytes, entry->CopyStatus);
+          const ADMISSION_DWM_ENVELOPE_RECEIPT *r = &entry->Envelope;
+          wprintf(L"DWM_ENVELOPE context=0x%llx stage=%u irql=%u flags=0x%x context_state=0x%x fence=%u private=%u preempt=%u cancel=%u time100ns=%llu device=0x%llx manager_gen=%llu context_gen=%llu lease_manager=%llu lease_gen=%llu lease_scene=%llu lease_scene_gen=%llu scene_state=0x%x scene_fence=%u scene_gen=%llu\n",
+              entry->Context,r->Stage,r->Irql,r->Flags,r->ContextState,
+              r->Fence,r->PrivateFence,r->PreemptFence,r->CancelFence,
+              r->InterruptTime,r->Device,r->ManagerGeneration,r->ContextGeneration,
+              r->LeaseManagerId,r->LeaseManagerGeneration,r->LeaseSceneId,
+              r->LeaseSceneGeneration,r->SceneState,r->SceneFence,r->SceneGeneration);
         }
         wprintf(L"DWM_FRAME_TDR captured=%u packet_state=%u context=0x%llx fence=%llu completed=%u submitted=%u active=%u paging=%u private_reset=0x%x reset=0x%x\n",
                 frame.Tdr.Captured, frame.Tdr.PacketState,

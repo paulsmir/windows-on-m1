@@ -2109,6 +2109,49 @@ static BOOLEAN AdmissionG4ResolveOutput(
   return TRUE;
 }
 
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+/* Stage2 is called while State.Lock still protects process/scenes. Stage1
+ * records only context-owned scalars; it never dereferences a failed process. */
+static VOID AdmissionG4ObserveEnvelopeReject(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context,
+    const DXGKARG_SUBMITCOMMANDVIRTUAL *args, ULONG stage,
+    ADMISSION_G3_PROCESS *process, const APPLE_AGX_G4_PRIVATE_LEASE *lease) {
+  ADMISSION_DWM_ENVELOPE_RECEIPT r = {0};
+  ADMISSION_G3_PRIVATE_SCENE *scene;
+  r.Stage = stage; r.Irql = (ULONG)KeGetCurrentIrql();
+  r.Flags = args->Flags.Value; r.Fence = args->SubmissionFenceId;
+  r.InterruptTime = KeQueryInterruptTime();
+  r.Device = (ULONGLONG)(ULONG_PTR)context->Object.Device;
+  r.ContextState = (context->GpuvaG3Closing ? 1u : 0u) |
+      (context->GpuvaG3Poisoned ? 2u : 0u) |
+      (InterlockedCompareExchange(&context->GpuvaG3CancelUncertain,0,0) ? 4u : 0u) |
+      (context->SchedulerContext.Active ? 8u : 0u) |
+      (context->Win32Transport ? 16u : 0u);
+  r.PrivateFence = (ULONG)InterlockedCompareExchange(&context->GpuvaG3PrivateFence,0,0);
+  r.PreemptFence = (ULONG)InterlockedCompareExchange(&context->GpuvaG3PreemptFence,0,0);
+  r.CancelFence = (ULONG)InterlockedCompareExchange(&context->GpuvaG3CancelFence,0,0);
+  r.ContextGeneration = context->GpuvaG3PrivateManagerGeneration;
+  if (stage == 2u && process != NULL && lease != NULL) {
+    r.ManagerGeneration = process->PrivateManager.Generation;
+    r.LeaseManagerId = lease->ManagerId;
+    r.LeaseManagerGeneration = lease->ManagerGeneration;
+    r.LeaseSceneId = lease->SceneId;
+    r.LeaseSceneGeneration = lease->SceneGeneration;
+    for (scene=process->PrivateScenes; scene; scene=scene->Next)
+      if (scene->Storage.Generation == lease->SceneId) break;
+    if (scene != NULL) {
+      r.SceneGeneration = scene->Storage.Generation;
+      r.SceneFence = scene->Fence;
+      r.SceneState = 1u | (scene->Context != context ? 2u : 0u) |
+          (scene->Quarantined ? 4u : 0u) | (scene->Queued ? 8u : 0u) |
+          (scene->Submitting ? 16u : 0u) | (scene->Started ? 32u : 0u) |
+          (scene->ReleaseRequested ? 64u : 0u);
+    }
+  }
+  AdmissionDwmFrameRecordEnvelope(adapter,context,&r);
+}
+#endif
+
 static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
     ADMISSION_CONTEXT *adapter, ADMISSION_RENDER_CONTEXT *context,
     const DXGKARG_SUBMITCOMMANDVIRTUAL *args) {
@@ -2144,10 +2187,14 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
       !context->SchedulerContext.Active ||
       !AdmissionPlatformRuntimeReady(adapter) ||
       !NT_SUCCESS(viewStatus =
-          AdmissionMemoryRuntimeLocalView(adapter, &local)))
+          AdmissionMemoryRuntimeLocalView(adapter, &local))) {
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+    AdmissionG4ObserveEnvelopeReject(adapter,context,args,1u,NULL,NULL);
+#endif
     return AdmissionG4SubmitReject(adapter, context, args,
         AdmissionG4RejectEnvelopeState, STATUS_INVALID_PARAMETER,
         (ULONG)viewStatus, TRUE);
+  }
   RtlZeroMemory(&packet, sizeof(packet));
   RtlZeroMemory(&binding, sizeof(binding));
   ExAcquireFastMutex(&state->Lock);
@@ -2169,6 +2216,9 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
           AdmissionG4FindPrivateScene(process,context,&private_v3.Lease,
                                       args->SubmissionFenceId,FALSE);
       if (!private_scene) {
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+        AdmissionG4ObserveEnvelopeReject(adapter,context,args,2u,process,&private_v3.Lease);
+#endif
         ExReleaseFastMutex(&state->Lock);
         return AdmissionG4SubmitReject(adapter,context,args,
             AdmissionG4RejectEnvelopeState,STATUS_INVALID_PARAMETER,0u,TRUE);

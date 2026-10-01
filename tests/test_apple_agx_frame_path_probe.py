@@ -87,13 +87,27 @@ int main(void) {
   adapter.RenderPacket.State=2;adapter.RenderPacket.Description.ContextToken=(unsigned long long)(uintptr_t)context;
   adapter.RenderPacket.Description.Fence=78;
   adapter.Scheduler.CompletedFence=77;adapter.Scheduler.LastSubmittedFence=78;adapter.Scheduler.ActiveFence=78;
+  /* First rejection must stay on its context despite later submit/arm updates. */
+  ADMISSION_DWM_ENVELOPE_RECEIPT envelope={0};
+  envelope.Stage=2;envelope.Flags=0x80;envelope.Fence=78;
+  envelope.PrivateFence=77;envelope.PreemptFence=77;
+  envelope.LeaseSceneId=9;envelope.SceneState=9;
+  AdmissionDwmFrameRecordEnvelope(&adapter,context,&envelope);
+  envelope.Fence=99;
+  AdmissionDwmFrameRecordEnvelope(&adapter,context,&envelope);
+  assert(AdmissionDwmFrameArmWindows(&adapter,(void *)0x2222,1250,4,0x55,0x880000));
+  envelope.Fence=100;envelope.SceneState=33;
+  AdmissionDwmFrameRecordEnvelope(&adapter,(void *)0x2222,&envelope);
   AdmissionDwmFrameRecordTdr(&adapter,STATUS_PENDING,FALSE);
   AdmissionDwmFrameRecordPrivateReset(&adapter,FALSE);
   AdmissionDwmFrameRecordTdr(&adapter,STATUS_DEVICE_HARDWARE_ERROR,TRUE);
   query.Magic=ADMISSION_DWM_FRAME_PROBE_MAGIC;query.Version=ADMISSION_DWM_FRAME_VERSION;query.Bytes=sizeof(query);
   assert(AdmissionDwmFrameProbeQueryWindows(&adapter,&query)==STATUS_SUCCESS);
-  assert(query.BootGeneration==42 && query.CandidateBuild==907 && query.ArmedCount==1);
+  assert(query.BootGeneration==42 && query.CandidateBuild==907 && query.ArmedCount==2);
   assert(query.Entries[0].Context==(unsigned long long)(uintptr_t)context);
+  assert(query.Entries[0].Envelope.Fence==78 && query.Entries[0].Envelope.Flags==0x80);
+  assert(query.Entries[0].Envelope.PreemptFence==77 && query.Entries[0].Envelope.SceneState==9);
+  assert(query.Entries[1].Envelope.Fence==100 && query.Entries[1].Envelope.SceneState==33);
   assert(query.Entries[0].OsProcessId==1244 && query.Entries[0].CanonicalGpuVa==0x7d0000);
   assert(query.Entries[0].QueryCount==1 && query.Entries[0].QueryPredicate==53 && query.Entries[0].QueryResidentPages==15);
   assert(query.Entries[0].SubmitCount==1 && query.Entries[0].SubmittedFence==77);

@@ -9,7 +9,7 @@ class G4RenderLocalViewReplay(unittest.TestCase):
         memory=(ROOT/'drivers/apple-agx/render-admission/src/memory_runtime_windows.c').read_text()
         branches=source.split('/* Branch IDs are a stable diagnostic ABI',1)[1]
         functions='enum {'+branches.split('enum {',1)[1].split('};',1)[0]+'};\n'
-        names=('AdmissionG4SubmitRejectDetail','AdmissionG4SubmitReject',
+        names=('AdmissionG4ObserveEnvelopeReject','AdmissionG4SubmitRejectDetail','AdmissionG4SubmitReject',
           'AdmissionG4GraphAccess','AdmissionG4LogicalEnvelopeAccess','AdmissionG4GraphAccessTyped',
           'AdmissionG4FindPrivateScene','AdmissionG4FindPrivateResubmission',
           'AdmissionG4PrivateGraphAccess','AdmissionG4PrivateGeometry','AdmissionG4PrivateUnqueue',
@@ -34,8 +34,29 @@ class G4RenderLocalViewReplay(unittest.TestCase):
         prefix=prefix.replace('static int output_mapped=1;', 'static int output_mapped=1, output_split=0; static ULONGLONG output_va=0x40000000ULL, output_bytes=0x8000ULL;')
         prefix=prefix.replace('va<0x40000000ULL || va>=0x40001000ULL', 'va<output_va || va-output_va>=output_bytes').replace('*ipa=output_ipa+(va-0x40000000ULL);', '*ipa=output_ipa+(va-output_va)+(output_split && va>=output_va+0x4000ULL ? 0x1000ULL : 0ULL);')
         prefix='#define APPLE_AGX_SCANOUT_J313_POOL_SIZE 0x3800000ULL\n'+prefix
+        prefix=prefix.replace('#include "g4_submit_virtual_functions.inc"',
+            '\n#include "render_qualification.h"\n'
+            'static ADMISSION_DWM_ENVELOPE_RECEIPT observed_receipt;\n'
+            'static unsigned long long KeQueryInterruptTime(void){return 1234;}\n'
+            'static void AdmissionDwmFrameRecordEnvelope(ADMISSION_CONTEXT *a,void *c,const ADMISSION_DWM_ENVELOPE_RECEIPT *r){(void)a;(void)c;observed_receipt=*r;}\n'
+            '#include "g4_submit_virtual_functions.inc"')
         setup=shim.split('int main(void) {',1)[1].split('  assert(AdmissionG4SubmitVirtualEnvelope',1)[0]
         ending="""
+          AdmissionG4ObserveEnvelopeReject(&adapter,&context,&args,1,NULL,NULL);
+          assert(observed_receipt.Stage==1 && observed_receipt.InterruptTime==1234);
+          ADMISSION_G3_PRIVATE_SCENE diagnostic_scene={0};
+          APPLE_AGX_G4_PRIVATE_LEASE diagnostic_lease={0};
+          diagnostic_lease.ManagerId=process.Graph.ProcessId;
+          diagnostic_lease.ManagerGeneration=7;
+          diagnostic_lease.SceneId=diagnostic_lease.SceneGeneration=9;
+          diagnostic_scene.Context=&context;diagnostic_scene.Storage.Generation=9;
+          diagnostic_scene.Queued=1;diagnostic_scene.Started=1;diagnostic_scene.Fence=21;
+          process.PrivateScenes=&diagnostic_scene;
+          AdmissionG4ObserveEnvelopeReject(&adapter,&context,&args,2,&process,&diagnostic_lease);
+          assert(observed_receipt.SceneState==41 && observed_receipt.SceneFence==21);
+          assert(observed_receipt.LeaseManagerGeneration==7 && observed_receipt.LeaseSceneId==9);
+          assert(diagnostic_scene.Queued==1 && diagnostic_scene.Started==1 && diagnostic_scene.Fence==21);
+          process.PrivateScenes=NULL;
           NTSTATUS status=AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args);
           fprintf(stderr,"submit=%08x branch=%u subsite=%u\\n",(unsigned)status,
             adapter.G4SubmitFailure.Branch,adapter.G4SubmitFailure.Subsite);
@@ -85,7 +106,7 @@ class G4RenderLocalViewReplay(unittest.TestCase):
             d=Path(d);(d/'g4_submit_virtual_functions.inc').write_text(functions)
             (d/'replay.c').write_text(prefix+'int main(void) {'+setup+ending)
             exe=d/'replay';subprocess.run([os.environ.get('CC','clang'),'-std=c11','-Wall','-Wextra','-Werror',
-              '-Wno-unused-function','-fsanitize=address,undefined','-I',str(d),'-I',str(ROOT/'drivers/apple-agx/shared/include'),
+              '-Wno-unused-function','-fsanitize=address,undefined','-I',str(d),'-I',str(ROOT/'drivers/apple-agx/shared/include'),'-I',str(ROOT/'drivers/apple-agx/render-admission/include'),
               str(d/'replay.c'),str(ROOT/'drivers/apple-agx/shared/src/apple_agx_g4_submit.c'),
               str(ROOT/'drivers/apple-agx/shared/src/apple_agx_scheduler.c'),'-o',str(exe)],check=True)
             subprocess.run([str(exe)],check=True,timeout=15)

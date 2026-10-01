@@ -16,13 +16,25 @@
 #define ADMISSION_DWM_DDI_PROBE_VERSION 1u
 #define ADMISSION_DWM_FRAME_ARM_MAGIC 0x41465741u
 #define ADMISSION_DWM_FRAME_PROBE_MAGIC 0x50465741u
-#define ADMISSION_DWM_FRAME_VERSION 1u
+#define ADMISSION_DWM_FRAME_VERSION 2u
 #define ADMISSION_DWM_FRAME_CAPACITY 8u
 
 typedef struct _ADMISSION_DWM_FRAME_ARM {
   unsigned int Magic, Version, Bytes, OsProcessId;
   unsigned long long Allocation, CanonicalGpuVa;
 } ADMISSION_DWM_FRAME_ARM;
+
+/* EXP911: first branch7 failure in this armed context, never a global PID guess. */
+typedef struct _ADMISSION_DWM_ENVELOPE_RECEIPT {
+  unsigned int Stage, Irql, Flags, ContextState;
+  unsigned int Fence, PrivateFence, PreemptFence, CancelFence;
+  unsigned long long InterruptTime, Device;
+  unsigned long long ManagerGeneration, ContextGeneration;
+  unsigned long long LeaseManagerId, LeaseManagerGeneration;
+  unsigned long long LeaseSceneId, LeaseSceneGeneration;
+  unsigned int SceneState, SceneFence;
+  unsigned long long SceneGeneration;
+} ADMISSION_DWM_ENVELOPE_RECEIPT;
 
 typedef struct _ADMISSION_DWM_FRAME_ENTRY {
   volatile long Sequence, Dropped;
@@ -36,6 +48,7 @@ typedef struct _ADMISSION_DWM_FRAME_ENTRY {
   unsigned long long SourceGpuVa, DestinationGpuVa, DestinationGuestIpa;
   unsigned long long PresentFence, CopiedBytes;
   unsigned int CopyStatus, Reserved;
+  ADMISSION_DWM_ENVELOPE_RECEIPT Envelope;
 } ADMISSION_DWM_FRAME_ENTRY;
 
 typedef struct _ADMISSION_DWM_FRAME_TDR {
