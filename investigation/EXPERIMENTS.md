@@ -51030,3 +51030,44 @@ REC-20261001-PROXY-READ-CONTROL AFTER: continuation command returned but log con
 REC-20261001-ORDINARY AFTER 2026-10-01T12:40:12.108401+00:00: immutable377/392 boot12:34:37.395251Z restored Code28/present1/package0/arms0/modules0/service0/signer0/diagnostics0/CPU8/disks2OK/USB5/SSH/RDP/autologon1; first receipt .local/analysis/EXP910-present-boundary/recovery-ordinary-first.json. Original same-boot continuation attempt inconclusive; recovery fresh boot proven.
 
 EXP910 CORRECTION 2026-10-01T12:40:12.108401+00:00: ALL11 preserved ETL windows decoded after original size/SHA verification; four later DWM1240 Apple RedirectedFlip events and matching UMD callbacks are present, one actual Present C01E0200. Prior no-DWM-UMD-Present assertion superseded; no new hardware result. Source mapping/limits in analysis/EXP911-present-envelope-plan.md.
+
+## EXP911 BUILD BEFORE 2026-10-01T12:42:54.469975+00:00
+Receipt-only experiment; no admission/caps/firmware change. WHY THIS HYPOTHESIS / WINDOWS CONTRACT / AGX-ASAHI CONTRACT / TRANSLATION / WHAT IS STILL UNKNOWN: analysis/EXP911-present-envelope-plan.md. Root 26f5d890b25e38d620ef33bdf020d27527d60071 integration/ad04-windows-compiler; unrelated m1n1/Mu dirty untouched. Pinned WDK26100 command powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\pauls\EXP911-envelope-receipt\build-kmd.ps1 then build-probe.ps1. Artifacts root.local/experiments/EXP911-envelope-receipt; no install/launch until all hashes/sign/PDB/readiness/guest gates. Recovery immutable377/392. Full suite1190 16F39E2S; two new serial guard identities from live recovery launcher lock, no changed serial code; will independently isolate replay. Shell incorrectly proceeded to source-only commit after comparison assertion; acknowledged, no hardware authorized by that failed check. Use fail-fast from here.
+source.zip SHA256 1085a8bfc7ade841c9336434c898f66072637229b7d778863db437a6cab18c84
+source-manifest.json SHA256 3b84e6180071bbc5920577cfd384f026346912ff5e71f134c16cc3e3e89a2ddf
+build-kmd.ps1 SHA256 0a688d28e58516f1aa4547a5b79ee7b83653d0d14e24398ddc59a5730c8aa790
+build-probe.ps1 SHA256 960edd505ce3c5689bcd3dc2d7fe33e3fbb8ccb173250d707d4dd6a3c5512d15
+
+REC-20261001-DISK BEFORE 2026-10-01T12:44:50.731111+00:00: ordinary Code28/package0 durable boot12:34:37; no shadows, Cfree3986186240<4GiB. Two experiment-owned old events.xml duplicates EXP758/754 independently host size+SHA verified (758 gzip decompressed streaming exact717132001B,754 raw716734900B); host gate root.local/analysis/EXP910-present-boundary/disk-host-gate.json SHAe572635fa4399c7e5ae57f28b8f49479e365439fa42db6c378cae321d63a6108. Guest script remove-verified-two.ps1 SHAef964fc00dd037c6f7f554fd6e6014324751e9cf210cd93129396f15ec7b8ea5 checks both exact guest hashes and Code28/package0 before deleting only those paths. Expected >4GiB, failure any mismatch means no removal. No driver/image change.
+
+REC-20261001-DISK AFTER 2026-10-01T12:48:46.574945+00:00: strict two-file host+guest size/SHA passed before exact removal; free3976712192->5410582528, ShadowCount0. Hostgate e572635fa4399c7e5ae57f28b8f49479e365439fa42db6c378cae321d63a6108; disk-cleanup.json preserved.
+
+## EXP911 HARDWARE BEFORE 2026-10-01T12:48:46.574945+00:00
+WHY THIS HYPOTHESIS: DWM post-Apple redirected Present now proven from all11 EXP910 ETLs; one C01E0200 device error and two correlated DWM branch7 refusals; global first resubmission flag80 cannot identify DWM lease predicate. WINDOWS CONTRACT: C000000D errors device; nonpaging resubmission new fence; no mandatory MPO claim. AGX/ASAHI CONTRACT: preserve exact native queued/preempted lease, UAT, RTKit and DCP. TRANSLATION: receipt-only per-context first branch7 scalar/scene snapshot and UMD QPC/session, all admission rules unchanged. WHAT IS STILL UNKNOWN: outer guard versus suspended lease condition, and link to desktop device failure. One variable=diagnostic visibility; no behavior change. Candidate26f5d890b25e38d620ef33bdf020d27527d60071 branchintegration/ad04-windows-compiler/package30.0.911.0 rootpublic_windows.
+/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler commit26f5d890b25e38d620ef33bdf020d27527d60071 dirty_diff_sha256=8b3ee6093d102a087eee7461b9df6b17d3077dac83f0e4811b74a7e14bc5a925
+/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/m1n1_windows commit9320da31e72af2b64bb1f17c74ec6ecc2fab5919 dirty_diff_sha256=9831a0dcb648dff5ebe6b42e95d2fa471f43c9530b68b4bd4ccc3a5e1cd8cbd7
+/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/mu commit0dac68712f3bc520d46f88af84a430cfb916dfc4 dirty_diff_sha256=2e654da05fbcd83288511c5161cc749c8b87d69e222cfc3f6fed3fceaea79a7d
+Pinned build completed KMD/UMD/probe0/0; SYS/DLL CAT signer and PE-PDB GUID/age verified. Full1190 16F39E2S; exact IDs only two unchanged live-serial-lock tests differ; isolated actual guard2/2PASS, no new GPU test identity. Hardware manifestSHA cc18adeb79c83414fdf253f627f27295d62981a4842464bf47a5943474502cd6; payloadSHA 3f46e6ed56e9235a8d724977d739659d636182a330c4974a3030087bd4bbf78b; readinessSHA 04876f094538c63867788e851fdab7f75e6077a59919b1e0f6d11d9c565ea1f4. Artifact root.local/experiments/EXP911-envelope-receipt. Guest stage powershell -File C:\Users\pavel\EXP911\stage.ps1 after pinned transfer; launch R145_AIR_AUTHORIZATION=GO_EXP911 /Users/pavel/public_windows/.local/experiments/EXP911-envelope-receipt/full-owner-direct.sh. Exact runtime firmware/Mu bytes unchanged fromEXP910; recovery immutable377/392 ordinary, hidden377/385 only emergency. Expected one original>=750s with context refusal discriminated and currentDCP120/300/600; failure reset/unobservable first predicate/zero desktop. Evidence frame-polls, periodic-original-boot, hardware-evidence-original/recovery; host hash gates before stopped-driver exact cleanup. No liveCode0removal.
+firmware/J313_EFI-r143.fd SHA256 e54c009847e64a4b2b327f54385eedb94f5a9e5fd3b459fd6101b07af4c023fc
+AppleAgxRenderAdmission.inf SHA256 9b1a6ce072390d5be55b4b0aca0b632aeca7ffa96468978a7221e185e8ba0674
+AppleAgxRenderAdmission.sys SHA256 a620ab3c67547c971e7edf21e7ba4d5a0d5a16b4ccb67a8c1612115bb48ea6f4
+AppleAgxRenderAdmissionUmd.dll SHA256 6cf64c26d213e8e2b246e6d04f340954f47814e7beb66c3afdb859c9a09a4dd4
+appleagxrenderadmission.cat SHA256 c758773e668b835b813626e45730473dbcf229bca6534bb261100e4d03f26e7c
+firmware/m1n1-exp894.macho SHA256 d3e0f999fe23bffa58f2343cbd0ee1f696da0c6fae08e1510f0ca58d7ca7db69
+firmware/m1n1-exp911.macho SHA256 d3e0f999fe23bffa58f2343cbd0ee1f696da0c6fae08e1510f0ca58d7ca7db69
+firmware/m1n1-exp896.macho SHA256 d3e0f999fe23bffa58f2343cbd0ee1f696da0c6fae08e1510f0ca58d7ca7db69
+firmware/m1n1-exp897.macho SHA256 d3e0f999fe23bffa58f2343cbd0ee1f696da0c6fae08e1510f0ca58d7ca7db69
+firmware/m1n1-exp899.macho SHA256 d3e0f999fe23bffa58f2343cbd0ee1f696da0c6fae08e1510f0ca58d7ca7db69
+firmware/m1n1-exp901.macho SHA256 d3e0f999fe23bffa58f2343cbd0ee1f696da0c6fae08e1510f0ca58d7ca7db69
+firmware/m1n1-exp903.macho SHA256 d3e0f999fe23bffa58f2343cbd0ee1f696da0c6fae08e1510f0ca58d7ca7db69
+firmware/m1n1-exp907.macho SHA256 d3e0f999fe23bffa58f2343cbd0ee1f696da0c6fae08e1510f0ca58d7ca7db69
+firmware/m1n1-exp905.macho SHA256 d3e0f999fe23bffa58f2343cbd0ee1f696da0c6fae08e1510f0ca58d7ca7db69
+firmware/m1n1-exp902.macho SHA256 d3e0f999fe23bffa58f2343cbd0ee1f696da0c6fae08e1510f0ca58d7ca7db69
+firmware/m1n1-exp900.macho SHA256 d3e0f999fe23bffa58f2343cbd0ee1f696da0c6fae08e1510f0ca58d7ca7db69
+firmware/m1n1-exp898.macho SHA256 d3e0f999fe23bffa58f2343cbd0ee1f696da0c6fae08e1510f0ca58d7ca7db69
+firmware/m1n1-exp904.macho SHA256 d3e0f999fe23bffa58f2343cbd0ee1f696da0c6fae08e1510f0ca58d7ca7db69
+firmware/m1n1-exp906.macho SHA256 d3e0f999fe23bffa58f2343cbd0ee1f696da0c6fae08e1510f0ca58d7ca7db69
+firmware/m1n1-exp908.macho SHA256 d3e0f999fe23bffa58f2343cbd0ee1f696da0c6fae08e1510f0ca58d7ca7db69
+firmware/m1n1-exp909.macho SHA256 d3e0f999fe23bffa58f2343cbd0ee1f696da0c6fae08e1510f0ca58d7ca7db69
+
+EXP911 BUILD AFTER 2026-10-01T12:49:52.791715+00:00: source26f5d890 KMD/UMD/probe0warnings0errors; CAT SYS/DLL membership and unchanged signer; PDB2/2 exactGUID+age match. Generic prep_exp clone refused missing EXP910 hash-literal-audit.files.txt before guest modification. Experiment-local seal-package.py preserves existing scripts/profiles, repins input dependencies, adds byte-identical m1n1-exp911 alias, hashes all42 runtime artifacts and43 transfer entries. Hardware manifestcc18adeb79c83414fdf253f627f27295d62981a4842464bf47a5943474502cd6, payload3f46e6ed56e9235a8d724977d739659d636182a330c4974a3030087bd4bbf78b. Full-owner --verify-only PASS. No hardware candidate boot yet.
