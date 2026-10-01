@@ -3997,38 +3997,49 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeResponsive(
              : FALSE;
 }
 
-_Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeReady(
-    ADMISSION_CONTEXT *Context) {
+_Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeReadyEx(
+    ADMISSION_CONTEXT *Context, ULONG *FailedPredicate) {
   ADMISSION_PLATFORM_RUNTIME *runtime =
       Context != NULL
           ? (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime
           : NULL;
-  BOOLEAN ready = runtime != NULL && runtime->ProviderReady &&
-                      runtime->BackendStarted &&
-                      runtime->Backend.Phase == AppleAgxBackendRuntimeReady &&
-                      runtime->WorkItem != NULL &&
-                      InterlockedCompareExchange(
-                          &runtime->Stopping, 0, 0) == 0 &&
-                      InterlockedCompareExchange(
-                          &runtime->Resetting, 0, 0) == 0 &&
-                      InterlockedCompareExchange(
-                          &runtime->WorkScheduled, 0, 0) == 0
-                  ? TRUE
-                  : FALSE;
+  ULONG reason = 0u;
+/* Keep short-circuit order, including lock-protected output state. */
+#define ADMISSION_RUNTIME_REJECTS(id, expression) \
+  ((expression) ? (reason = (id), TRUE) : FALSE)
+  BOOLEAN ready = !(ADMISSION_RUNTIME_REJECTS(1u, runtime == NULL) ||
+      ADMISSION_RUNTIME_REJECTS(2u, !runtime->ProviderReady) ||
+      ADMISSION_RUNTIME_REJECTS(3u, !runtime->BackendStarted) ||
+      ADMISSION_RUNTIME_REJECTS(4u,
+          runtime->Backend.Phase != AppleAgxBackendRuntimeReady) ||
+      ADMISSION_RUNTIME_REJECTS(5u, runtime->WorkItem == NULL) ||
+      ADMISSION_RUNTIME_REJECTS(6u,
+          InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0) ||
+      ADMISSION_RUNTIME_REJECTS(7u,
+          InterlockedCompareExchange(&runtime->Resetting, 0, 0) != 0) ||
+      ADMISSION_RUNTIME_REJECTS(8u,
+          InterlockedCompareExchange(&runtime->WorkScheduled, 0, 0) != 0));
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   if (ready) {
     KIRQL oldIrql;
     KeAcquireSpinLock(&runtime->OutputLock, &oldIrql);
-    ready = AdmissionOutputQueueIsIdle(&runtime->OutputQueue) &&
-                    AdmissionOutputQueueThreadRunning(&runtime->OutputQueue) &&
-                    runtime->CompletedOutput.Phase ==
-                        AdmissionCompletedOutputEmpty
-                ? TRUE
-                : FALSE;
+    ready = !(ADMISSION_RUNTIME_REJECTS(9u,
+                  !AdmissionOutputQueueIsIdle(&runtime->OutputQueue)) ||
+              ADMISSION_RUNTIME_REJECTS(10u,
+                  !AdmissionOutputQueueThreadRunning(&runtime->OutputQueue)) ||
+              ADMISSION_RUNTIME_REJECTS(11u,
+                  runtime->CompletedOutput.Phase != AdmissionCompletedOutputEmpty));
     KeReleaseSpinLock(&runtime->OutputLock, oldIrql);
   }
 #endif
+#undef ADMISSION_RUNTIME_REJECTS
+  if (FailedPredicate != NULL) *FailedPredicate = reason;
   return ready;
+}
+
+_Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeReady(
+    ADMISSION_CONTEXT *Context) {
+  return AdmissionPlatformRuntimeReadyEx(Context, NULL);
 }
 
 #undef ADMISSION_DELEGATE_FENCE

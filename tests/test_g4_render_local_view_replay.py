@@ -33,17 +33,20 @@ class G4RenderLocalViewReplay(unittest.TestCase):
             'static ULONGLONG output_ipa=0x8e4040000ULL;')
         prefix=prefix.replace('static int output_mapped=1;', 'static int output_mapped=1, output_split=0; static ULONGLONG output_va=0x40000000ULL, output_bytes=0x8000ULL;')
         prefix=prefix.replace('va<0x40000000ULL || va>=0x40001000ULL', 'va<output_va || va-output_va>=output_bytes').replace('*ipa=output_ipa+(va-0x40000000ULL);', '*ipa=output_ipa+(va-output_va)+(output_split && va>=output_va+0x4000ULL ? 0x1000ULL : 0ULL);')
-        prefix='#define APPLE_AGX_SCANOUT_J313_POOL_SIZE 0x3800000ULL\n'+prefix
+        prefix='#define APPLE_AGX_EXP907_FRAME_RECEIPT 1\n#define APPLE_AGX_SCANOUT_J313_POOL_SIZE 0x3800000ULL\n'+prefix
         prefix=prefix.replace('#include "g4_submit_virtual_functions.inc"',
             '\n#include "render_qualification.h"\n'
             'static ADMISSION_DWM_ENVELOPE_RECEIPT observed_receipt;\n'
+            'static void AdmissionDwmFrameRecordReject(ADMISSION_CONTEXT *a,void *c,ULONG b,NTSTATUS s){(void)a;(void)c;(void)b;(void)s;}\n'
+            'static int AdmissionPlatformRuntimeReadyEx(ADMISSION_CONTEXT *a,ULONG *reason){*reason=a->RuntimeReady ? 0u : 8u;return AdmissionPlatformRuntimeReady(a); }\n'
             'static unsigned long long KeQueryInterruptTime(void){return 1234;}\n'
             'static void AdmissionDwmFrameRecordEnvelope(ADMISSION_CONTEXT *a,void *c,const ADMISSION_DWM_ENVELOPE_RECEIPT *r){(void)a;(void)c;observed_receipt=*r;}\n'
             '#include "g4_submit_virtual_functions.inc"')
         setup=shim.split('int main(void) {',1)[1].split('  assert(AdmissionG4SubmitVirtualEnvelope',1)[0]
         ending="""
-          AdmissionG4ObserveEnvelopeReject(&adapter,&context,&args,1,NULL,NULL);
+          AdmissionG4ObserveEnvelopeReject(&adapter,&context,&args,1,13,8,NULL,NULL);
           assert(observed_receipt.Stage==1 && observed_receipt.InterruptTime==1234);
+          assert(observed_receipt.Predicate==13 && observed_receipt.RuntimePredicate==8);
           ADMISSION_G3_PRIVATE_SCENE diagnostic_scene={0};
           APPLE_AGX_G4_PRIVATE_LEASE diagnostic_lease={0};
           diagnostic_lease.ManagerId=process.Graph.ProcessId;
@@ -52,11 +55,21 @@ class G4RenderLocalViewReplay(unittest.TestCase):
           diagnostic_scene.Context=&context;diagnostic_scene.Storage.Generation=9;
           diagnostic_scene.Queued=1;diagnostic_scene.Started=1;diagnostic_scene.Fence=21;
           process.PrivateScenes=&diagnostic_scene;
-          AdmissionG4ObserveEnvelopeReject(&adapter,&context,&args,2,&process,&diagnostic_lease);
+          AdmissionG4ObserveEnvelopeReject(&adapter,&context,&args,2,0,0,&process,&diagnostic_lease);
           assert(observed_receipt.SceneState==41 && observed_receipt.SceneFence==21);
           assert(observed_receipt.LeaseManagerGeneration==7 && observed_receipt.LeaseSceneId==9);
           assert(diagnostic_scene.Queued==1 && diagnostic_scene.Started==1 && diagnostic_scene.Fence==21);
           process.PrivateScenes=NULL;
+          adapter.RuntimeReady=0;
+          assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)==STATUS_INVALID_PARAMETER);
+          assert(observed_receipt.Predicate==13 && observed_receipt.RuntimePredicate==8);
+          adapter.RuntimeReady=1;
+          context.GpuvaG3Poisoned=1;
+          assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)==STATUS_INVALID_PARAMETER);
+          assert(observed_receipt.Predicate==6 && observed_receipt.RuntimePredicate==0);
+          context.GpuvaG3Poisoned=0;
+          adapter.G4SubmitFailureClaim=0;
+          memset(&adapter.G4SubmitFailure,0,sizeof(adapter.G4SubmitFailure));
           NTSTATUS status=AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args);
           fprintf(stderr,"submit=%08x branch=%u subsite=%u\\n",(unsigned)status,
             adapter.G4SubmitFailure.Branch,adapter.G4SubmitFailure.Subsite);

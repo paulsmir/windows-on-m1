@@ -103,3 +103,58 @@ int main(void){
             subprocess.run([os.environ.get('CC','clang'),'-std=c11','-Wall','-Wextra','-Werror',
                             '-fsanitize=address,undefined',str(program),'-o',str(binary)],check=True)
             subprocess.run([str(binary)],check=True)
+
+    def test_ready_observation_preserves_busy_and_null_runtime_guards(self):
+        # A diagnostic must not admit a busy worker or dereference an absent runtime.
+        from test_g4_submit_virtual_replay import function_body
+        source=(ROOT/'drivers/apple-agx/render-admission/src/backend_platform_windows.c').read_text()
+        functions='\n'.join(function_body(source,n) for n in
+            ('AdmissionPlatformRuntimeReadyEx','AdmissionPlatformRuntimeReady'))
+        shim=r"""
+#include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
+#define _Use_decl_annotations_
+#define APPLE_AGX_SUBMIT_QUALIFICATION 1
+#define TRUE 1
+#define FALSE 0
+#define AppleAgxBackendRuntimeReady 2
+#define AdmissionCompletedOutputEmpty 0
+typedef int BOOLEAN;typedef unsigned ULONG;typedef int32_t LONG;typedef int KIRQL;
+typedef struct {int Idle,Running;} QUEUE;
+typedef struct {int ProviderReady,BackendStarted;struct {int Phase;} Backend;
+ void *WorkItem;volatile LONG Stopping,Resetting,WorkScheduled;int OutputLock;
+ QUEUE OutputQueue;struct {int Phase;} CompletedOutput;} ADMISSION_PLATFORM_RUNTIME;
+typedef struct {void *PlatformRuntime;} ADMISSION_CONTEXT;
+static int locks;
+static void KeAcquireSpinLock(int *p,int *i){(void)p;*i=2;assert(!locks);++locks;}
+static void KeReleaseSpinLock(int *p,int i){(void)p;(void)i;assert(locks==1);--locks;}
+static LONG InterlockedCompareExchange(volatile LONG *p,LONG v,LONG e){LONG o=*p;if(o==e)*p=v;return o;}
+static int AdmissionOutputQueueIsIdle(QUEUE *q){assert(locks==1);return q->Idle;}
+static int AdmissionOutputQueueThreadRunning(QUEUE *q){assert(locks==1);return q->Running;}
+"""
+        cases=r"""
+int main(void){
+ ULONG reason=99;ADMISSION_CONTEXT a={0};
+ assert(!AdmissionPlatformRuntimeReadyEx(NULL,&reason) && reason==1);
+ assert(!AdmissionPlatformRuntimeReadyEx(&a,&reason) && reason==1);
+ for(unsigned bits=0;bits<1024;++bits){
+  ADMISSION_PLATFORM_RUNTIME r={0};a.PlatformRuntime=&r;
+  r.ProviderReady=!(bits&1);r.BackendStarted=!(bits&2);
+  r.Backend.Phase=(bits&4)?3:2;r.WorkItem=(bits&8)?NULL:&r;
+  r.Stopping=!!(bits&16);r.Resetting=!!(bits&32);r.WorkScheduled=!!(bits&64);
+  r.OutputQueue.Idle=!(bits&128);r.OutputQueue.Running=!(bits&256);
+  r.CompletedOutput.Phase=!!(bits&512);
+  ULONG expected=0;for(unsigned i=0;i<10;++i)if(bits&(1u<<i)){expected=i+2;break;}
+  assert(AdmissionPlatformRuntimeReadyEx(&a,&reason)==(bits==0));
+  assert(reason==expected && locks==0);
+  assert(AdmissionPlatformRuntimeReady(&a)==(bits==0));
+ }
+ return 0;
+}
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            program=Path(tmp)/'ready.c';program.write_text(shim+functions+cases);binary=Path(tmp)/'ready'
+            subprocess.run([os.environ.get('CC','clang'),'-std=c11','-Wall','-Wextra','-Werror',
+                            '-fsanitize=address,undefined',str(program),'-o',str(binary)],check=True)
+            subprocess.run([str(binary)],check=True)

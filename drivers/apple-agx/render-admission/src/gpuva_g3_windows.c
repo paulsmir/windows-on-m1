@@ -2117,9 +2117,10 @@ static BOOLEAN AdmissionG4ResolveOutput(
 static VOID AdmissionG4ObserveEnvelopeReject(ADMISSION_CONTEXT *adapter,
     ADMISSION_RENDER_CONTEXT *context,
     const DXGKARG_SUBMITCOMMANDVIRTUAL *args, ULONG stage,
-    ADMISSION_G3_PROCESS *process, const APPLE_AGX_G4_PRIVATE_LEASE *lease) {
+    ULONG predicate, ULONG runtimePredicate, ADMISSION_G3_PROCESS *process, const APPLE_AGX_G4_PRIVATE_LEASE *lease) {
   ADMISSION_DWM_ENVELOPE_RECEIPT r = {0};
   ADMISSION_G3_PRIVATE_SCENE *scene;
+  r.Predicate = predicate; r.RuntimePredicate = runtimePredicate;
   r.Stage = stage; r.Irql = (ULONG)KeGetCurrentIrql();
   r.Flags = args->Flags.Value; r.Fence = args->SubmissionFenceId;
   r.InterruptTime = KeQueryInterruptTime();
@@ -2178,25 +2179,45 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   ULONG rollbackBranch = AdmissionG4RejectBind;
   DXGK_SUBMITCOMMANDFLAGS unsupportedFlags=args->Flags;
   unsupportedFlags.Resubmission=0;
-  if (KeGetCurrentIrql() != PASSIVE_LEVEL || state == NULL ||
-      process == NULL || process->State != state || process->Poisoned ||
-      context->GpuvaG3Poisoned || context->GpuvaG3RootIpa == 0ULL ||
-      !context->Win32Transport ||
-      (context->Object.Flags & ADMISSION_CONTEXT_VIRTUAL_ADDRESSING) == 0u ||
-      (context->Object.Flags & (ADMISSION_CONTEXT_SYSTEM |
-                                ADMISSION_CONTEXT_GDI)) != 0u ||
-      unsupportedFlags.Value != 0u ||
-      !context->SchedulerContext.Active ||
-      !AdmissionPlatformRuntimeReady(adapter) ||
-      !NT_SUCCESS(viewStatus =
-          AdmissionMemoryRuntimeLocalView(adapter, &local))) {
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
-    AdmissionG4ObserveEnvelopeReject(adapter,context,args,1u,NULL,NULL);
+  ULONG envelopePredicate = 0u, runtimePredicate = 0u;
+/* Record the first failing expression as it is evaluated, not a later reread. */
+#define ADMISSION_G4_REJECTS(id, expression) \
+  ((expression) ? (envelopePredicate = (id), TRUE) : FALSE)
+#define ADMISSION_G4_RUNTIME_READY() \
+  AdmissionPlatformRuntimeReadyEx(adapter, &runtimePredicate)
+#else
+#define ADMISSION_G4_REJECTS(id, expression) (expression)
+#define ADMISSION_G4_RUNTIME_READY() AdmissionPlatformRuntimeReady(adapter)
+#endif
+  if (ADMISSION_G4_REJECTS(1u, KeGetCurrentIrql() != PASSIVE_LEVEL) ||
+      ADMISSION_G4_REJECTS(2u, state == NULL) ||
+      ADMISSION_G4_REJECTS(3u, process == NULL) ||
+      ADMISSION_G4_REJECTS(4u, process->State != state) ||
+      ADMISSION_G4_REJECTS(5u, process->Poisoned) ||
+      ADMISSION_G4_REJECTS(6u, context->GpuvaG3Poisoned) ||
+      ADMISSION_G4_REJECTS(7u, context->GpuvaG3RootIpa == 0ULL) ||
+      ADMISSION_G4_REJECTS(8u, !context->Win32Transport) ||
+      ADMISSION_G4_REJECTS(9u,
+          (context->Object.Flags & ADMISSION_CONTEXT_VIRTUAL_ADDRESSING) == 0u) ||
+      ADMISSION_G4_REJECTS(10u,
+          (context->Object.Flags & (ADMISSION_CONTEXT_SYSTEM |
+                                    ADMISSION_CONTEXT_GDI)) != 0u) ||
+      ADMISSION_G4_REJECTS(11u, unsupportedFlags.Value != 0u) ||
+      ADMISSION_G4_REJECTS(12u, !context->SchedulerContext.Active) ||
+      ADMISSION_G4_REJECTS(13u, !ADMISSION_G4_RUNTIME_READY()) ||
+      ADMISSION_G4_REJECTS(14u, !NT_SUCCESS(viewStatus =
+          AdmissionMemoryRuntimeLocalView(adapter, &local)))) {
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+    AdmissionG4ObserveEnvelopeReject(adapter,context,args,1u,
+        envelopePredicate,runtimePredicate,NULL,NULL);
 #endif
     return AdmissionG4SubmitReject(adapter, context, args,
         AdmissionG4RejectEnvelopeState, STATUS_INVALID_PARAMETER,
         (ULONG)viewStatus, TRUE);
   }
+#undef ADMISSION_G4_RUNTIME_READY
+#undef ADMISSION_G4_REJECTS
   RtlZeroMemory(&packet, sizeof(packet));
   RtlZeroMemory(&binding, sizeof(binding));
   ExAcquireFastMutex(&state->Lock);
@@ -2219,7 +2240,7 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
                                       args->SubmissionFenceId,FALSE);
       if (!private_scene) {
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
-        AdmissionG4ObserveEnvelopeReject(adapter,context,args,2u,process,&private_v3.Lease);
+        AdmissionG4ObserveEnvelopeReject(adapter,context,args,2u,0u,0u,process,&private_v3.Lease);
 #endif
         ExReleaseFastMutex(&state->Lock);
         return AdmissionG4SubmitReject(adapter,context,args,

@@ -16,7 +16,7 @@
 #define ADMISSION_DWM_DDI_PROBE_VERSION 1u
 #define ADMISSION_DWM_FRAME_ARM_MAGIC 0x41465741u
 #define ADMISSION_DWM_FRAME_PROBE_MAGIC 0x50465741u
-#define ADMISSION_DWM_FRAME_VERSION 2u
+#define ADMISSION_DWM_FRAME_VERSION 3u
 #define ADMISSION_DWM_FRAME_CAPACITY 8u
 
 typedef struct _ADMISSION_DWM_FRAME_ARM {
@@ -27,6 +27,7 @@ typedef struct _ADMISSION_DWM_FRAME_ARM {
 /* EXP911: first branch7 failure in this armed context, never a global PID guess. */
 typedef struct _ADMISSION_DWM_ENVELOPE_RECEIPT {
   unsigned int Stage, Irql, Flags, ContextState;
+  unsigned int Predicate, RuntimePredicate;
   unsigned int Fence, PrivateFence, PreemptFence, CancelFence;
   unsigned long long InterruptTime, Device;
   unsigned long long ManagerGeneration, ContextGeneration;

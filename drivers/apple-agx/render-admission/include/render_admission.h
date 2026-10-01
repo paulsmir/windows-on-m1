@@ -1385,6 +1385,8 @@ NTSTATUS AdmissionPlatformRuntimeStart(
     _Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionPlatformRuntimeStop(
     _Inout_ ADMISSION_CONTEXT *Context);
+BOOLEAN AdmissionPlatformRuntimeReadyEx(
+    _In_ ADMISSION_CONTEXT *Context, _Out_opt_ ULONG *FailedPredicate);
 BOOLEAN AdmissionPlatformRuntimeReady(
     _Inout_ ADMISSION_CONTEXT *Context);
 BOOLEAN AdmissionPlatformRuntimeSubmit(
