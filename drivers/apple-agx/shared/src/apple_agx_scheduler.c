@@ -127,12 +127,22 @@ APPLE_AGX_U32 AppleAgxSchedulerCurrentFence(
   return Scheduler->CompletedFence;
 }
 
+/* Windows may queue new work before its preemption DPC returns. Admission
+ * may proceed during delivery, but activation still waits for Commit. */
+static APPLE_AGX_BOOL AppleAgxSchedulerAdmissionBlocked(
+    const APPLE_AGX_SCHEDULER *Scheduler) {
+  return Scheduler != APPLE_AGX_NULL &&
+      Scheduler->PreemptionPhase != AppleAgxPreemptionIdle &&
+      Scheduler->PreemptionPhase != AppleAgxPreemptionNotificationClaimed
+          ? APPLE_AGX_TRUE : APPLE_AGX_FALSE;
+}
+
 APPLE_AGX_BOOL AppleAgxSchedulerQueueFence(
     APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence) {
   if (!AppleAgxSchedulerValidateEngine(Scheduler, NodeOrdinal, EngineOrdinal) ||
       Fence == 0u || Scheduler->QueueCount >= APPLE_AGX_SCHEDULER_QUEUE_CAPACITY ||
-      AppleAgxSchedulerDispatchBlocked(Scheduler) ||
+      AppleAgxSchedulerAdmissionBlocked(Scheduler) ||
       !AppleAgxSchedulerFenceAfter(Fence, Scheduler->LastSubmittedFence))
     return APPLE_AGX_FALSE;
   Scheduler->FenceQueue[(Scheduler->QueueHead + Scheduler->QueueCount) %
@@ -153,7 +163,7 @@ APPLE_AGX_BOOL AppleAgxSchedulerQueueResubmittedPagingFence(
   if (!AppleAgxSchedulerValidateEngine(Scheduler, NodeOrdinal,
           EngineOrdinal) || Fence == 0u ||
       Scheduler->QueueCount >= APPLE_AGX_SCHEDULER_QUEUE_CAPACITY ||
-      AppleAgxSchedulerDispatchBlocked(Scheduler) ||
+      AppleAgxSchedulerAdmissionBlocked(Scheduler) ||
       !AppleAgxSchedulerFenceAfter(Fence, Scheduler->CompletedFence) ||
       (Scheduler->ActiveFence != 0u &&
        !AppleAgxSchedulerFenceAfter(Fence, Scheduler->ActiveFence)))

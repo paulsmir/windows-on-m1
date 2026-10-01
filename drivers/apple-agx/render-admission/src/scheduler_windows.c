@@ -105,6 +105,10 @@ static BOOLEAN AdmissionSchedulerTryNotifyPreemption(
   KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
   if (!claimed)
     InterlockedExchange(&Context->SchedulerFaulted, 1);
+  else
+    /* A DPC may already have queued work while delivery still held the
+     * dispatch gate. Opening the gate must also supply its missed wakeup. */
+    AdmissionDispatchQueuedWork(Context);
   return claimed;
 }
 
