@@ -51598,3 +51598,38 @@ Evidence: snapshot-receipt/fullscreen-host-gate, early-evidence/host-gate, frame
 full.log, original/recovery hardware-evidence, normal clean receipts. Original evidence
 sizeSHA gates precede ordered recovery, exact Code43 package removal and Code28 twice.
 ACTUAL RESULT: pending; stage/fullboot/recovery/cleanup preregistered here.
+
+### EXP923 actual original result / recovery pending — 2026-10-02T06:16:58.426267+00:00
+Stage47/47 and hostdisk launch gatePASS free5902196736. Fullowner41161
+launched06:09:26; originalBoot06:09:38.8882220Z, Code0CPU8Stage12 by44.85s.
+One SDK9988/session1 start06:10:37.7962412, observer9576 precompiled beforelaunch.
+Dump06:10:48.2701289..48.873673 (actual10.47s afterSDK start, five-second delay plus
+identity checks),83612B SHA10a258ce544008d4f81327c7a0c5381555afb3d2d5450b10d3b2d7f189b1fbc2.
+Independent stack-hostgate 97244dae222f79c79311ffd7dc1ee8638a898e5a8735cbf82cf622e1b5b3aa85; earlyETL194248704B
+SHAc0f6fa4832785d418656e68186e764e684d32e728a5414bbd00dd52f914ab36f
+stopExit0 receipt06:10:52.9723557 sameBoot; early UMD157108B f8a51cda.
+Public symbol decode mainthread win32u!NtGdiDdDDIMapGpuVirtualAddress ->
+d3d11!MapGpuVirtualAddressCB -> native map_va/AgxWin32GpuvaBind/agx_bo_create ->
+agx_pool_init/agx_bg_eot_init -> native CreateDevice -> D3D11CreateDevice.
+Three workerthreads are normal NtWaitForWorkViaWorkerFactory. This is BEFORE
+fullscreen boundary, not proof of map defect. UMD later shows map E_PENDING
+returned and both exactbackbuffers importedS_OK. Native DXGI mode/Present absent.
+EarlyPIDfilter610 events, source sdk-events-events.jsonl; wallclockconversion is
+offset from receiptUTC, compare PID/QPC order. Last filtered thunkenter2100;
+no unsupported inference of error from Level0/undocumented event fields.
+Combined snapshot receipt missing: wrapper hashes open redirectedSDKstdout, gets
+sharing error before receipt; taskReady but owned child persists. Dump fourfiles
+verified separately; owned9988 start/imageSHA/session heldhandle checked and stopped
+once06:12:16 afterdump hostgate. No other process terminated. Observerdidcomplete
+earlyETL copy. No unchanged rerun. Monitor explicitlystopped06:13:15.
+Immediate frameCode0 physical/virtualPresent0/TDR0, SourceAddress count1 unchanged.
+DCP+120 nonzero154988/4096000 avg6,5,5,9 hashfe48b716ad5a6b5a; sameSwap9/seq2.
+Corrupted pixels repeat, still no accepted desktop. Original collector15hostgate
+605dd838c37fd9f4a8d9e0f045be71d2c1e3b26fbf1cfe28b7c02a3af9289b44.
+OrderedWindowsrestart accepted06:14:55.4871123 atfree6601424896/sameBootCode0;
+runtime hash4b5d09fd6ad3b5c53a0f9d8345a1b04a0f330db59e132d234464c4194f8df0b7.
+One mistaken SCP usedbuilderusernamepauls againstguest and failedauthentication
+withoutwrite; correctedguestusernamepavel. Noforcedhostsignal. Recoverypending.
+Verdict: earlysnapshot target INCONCLUSIVE; fixed-delay capture excluded as
+post-import discriminator. Next justified EXP924 stage-gated snapshot, workflow
+closed-file receipt/ownedchild-finally repair; same driver and SDK.

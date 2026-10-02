@@ -110,3 +110,15 @@ Never proxyNOP whileSSH or launcher live. Check both control planes and inspect 
 SSH before dependent actions. No liveCode0 removal; evidence gates before Code43 exact
 cleanup, then ordinary GPU-visible Code28 twice. PS scripts>~2800bytes must use SCP/file
 wrapper rather than EncodedCommand. Mandatory implementation commit then CHANGES.csv.
+
+## EXP923 original captured / ordinary restart pending
+OriginalBoot06:09:38.888222Z Code0CPU8; SDK9988/session1 once. Exactdump83612B
+10a258ce at06:10:48 captures MapGpuVirtualAddress during D3D11CreateDevice BEFORE
+fullscreen; matchingUMD latermapreturn andbothBGRAimportsS_OK. NoPresent/TDR.
+Not confirmedmappingdefect. EarlyETL194248704/c0f6fa48,610PIDevents; separatedump
+andearlysizeSHA gates. Original15hostgate605dd838. Wrapperhashopenstdoutfailed
+receiptandleftSDKorphan; heldexactSDK stopped06:12:16 afterdumpgate. Monitorstopped.
+Orderedrestart06:14:55 acceptedCode0/sameboot/free6601424896; owner41161 verifyfresh.
+No923Code43cleanupyet. NextplanEXP924-sdk-post-import-stack-plan: captureafter2
+exactfrontendrecords+2successfulresourceexits, notfixedtime. Same920SDK/firmware.
+Stagegate/closedfiles/finally sourcepreparedASTPInvokePASS; no924hardwareyet.

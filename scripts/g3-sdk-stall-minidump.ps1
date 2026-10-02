@@ -3,7 +3,7 @@ param([int]$TargetProcessId,
       [Parameter(Mandatory=$true)][string]$ExpectedImagePath,
       [Parameter(Mandatory=$true)][string]$ExpectedImageSha256,
       [Parameter(Mandatory=$true)][string]$DumpPath,
-      [string]$ProcessIdFile, [string]$ReadyPath, [string]$EarlyEvidenceDirectory)
+      [string]$ProcessIdFile, [string]$ReadyPath, [string]$EarlyEvidenceDirectory, [string]$StageTracePath)
 $ErrorActionPreference='Stop'
 Add-Type @'
 using System;
@@ -32,7 +32,29 @@ if($ProcessIdFile){
  $process=Get-Process -Id $TargetProcessId
  $handle=$process.Handle
  if($process.StartTime.ToUniversalTime().ToString('o') -ne $identity.StartTimeUtc){throw 'SDK PID reused'}
- Start-Sleep -Seconds 5
+ if($StageTracePath){
+  $deadline=[DateTime]::UtcNow.AddSeconds(35)
+  while($true){
+   if($process.HasExited){throw 'SDK exited before resource checkpoint'}
+   $text=''
+   if(Test-Path -LiteralPath $StageTracePath){
+    $stream=[IO.File]::Open($StageTracePath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::ReadWrite)
+    $reader=[IO.StreamReader]::new($stream)
+    try{$text=$reader.ReadToEnd()}finally{$reader.Dispose()}
+   }
+   $rows=@($text -split "`n"|Where-Object {$_ -match (' pid='+$TargetProcessId+' ')})
+   $front=@($rows|Where-Object {$_ -match '^frontend-create hr=0x00000000 ' -and $_ -match ' 00000057 00000003 00000000 000000a8 00000000 00020002 ' -and $_ -match ' 00000a00 00000640 00000001 00000001'})
+   $exits=@($rows|Where-Object {$_ -match '^g4-create-resource-exit hr=0x00000000 '})
+   if($front.Count -eq 2 -and $exits.Count -eq 2){
+    [ordered]@{Utc=[DateTime]::UtcNow.ToString('o');ProcessId=$TargetProcessId;FrontendCount=2;SuccessfulResourceExits=2;Checkpoint='Both exact BGRA fullscreen backbuffers imported'}|ConvertTo-Json|Set-Content ($DumpPath+'.checkpoint.json')
+    break
+   }
+   if($front.Count -gt 2 -or $exits.Count -gt 2){throw 'unexpected SDK resource sequence'}
+   if([DateTime]::UtcNow -gt $deadline){throw 'resource checkpoint absent; no misleading early snapshot'}
+   Start-Sleep -Milliseconds 100
+  }
+  Start-Sleep -Seconds 2
+ }else{Start-Sleep -Seconds 5}
 }
 if($TargetProcessId -le 0 -or $ExpectedImageSha256 -notmatch '^[0-9a-fA-F]{64}$') {throw 'invalid identity'}
 if(Test-Path -LiteralPath $DumpPath){throw 'dump exists; inspect instead of overwriting'}
