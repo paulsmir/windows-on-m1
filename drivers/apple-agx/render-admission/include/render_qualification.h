@@ -13,7 +13,7 @@
 #define ADMISSION_BLT_PROBE_VERSION 1u
 #define ADMISSION_BLT_PROBE_CAPACITY 32u
 #define ADMISSION_DWM_DDI_PROBE_MAGIC 0x50445741u
-#define ADMISSION_DWM_DDI_PROBE_VERSION 1u
+#define ADMISSION_DWM_DDI_PROBE_VERSION 2u
 #define ADMISSION_DWM_FRAME_ARM_MAGIC 0x41465741u
 #define ADMISSION_DWM_FRAME_PROBE_MAGIC 0x50465741u
 #define ADMISSION_DWM_FRAME_VERSION 3u
@@ -76,13 +76,17 @@ typedef enum _ADMISSION_DWM_DDI_KIND {
   AdmissionDwmDdiSubmitOther = 6,
   AdmissionDwmDdiMpo = 7,
   AdmissionDwmDdiDisplayOnly = 8,
-  AdmissionDwmDdiCount = 9
+  AdmissionDwmDdiDestroyAllocationEnter = 9,
+  AdmissionDwmDdiDestroyAllocationExit = 10,
+  AdmissionDwmDdiCount = 11
 } ADMISSION_DWM_DDI_KIND;
 
 typedef struct _ADMISSION_DWM_DDI_EVENT {
   unsigned int Kind, Status, Flags, SourceId;
   unsigned int Segment, SourceCount, DestinationCount, Reserved;
   unsigned long long Allocation, Address, Context, Fence;
+  unsigned long long ProcessId, ThreadId;
+  unsigned int AllocationCount, Reserved1;
 } ADMISSION_DWM_DDI_EVENT;
 
 typedef struct _ADMISSION_DWM_DDI_ENTRY {

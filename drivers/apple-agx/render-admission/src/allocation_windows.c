@@ -469,7 +469,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateAllocation(
   return status;
 }
 
-_Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyAllocation(
+static NTSTATUS AdmissionDestroyAllocationImpl(
     HANDLE Adapter, const DXGKARG_DESTROYALLOCATION *Args) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
   UINT index;
@@ -506,6 +506,35 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyAllocation(
     ExFreePoolWithTag(allocation, ADMISSION_POOL_TAG);
   }
   return STATUS_SUCCESS;
+}
+
+/* Diagnostic only: the existing body and every return status remain unchanged.
+ * Counters do not issue waits, registry/MMIO writes or other callbacks. */
+_Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyAllocation(
+    HANDLE Adapter, const DXGKARG_DESTROYALLOCATION *Args) {
+  NTSTATUS status;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  ADMISSION_DWM_DDI_EVENT event;
+  RtlZeroMemory(&event, sizeof(event));
+  event.Kind = AdmissionDwmDdiDestroyAllocationEnter;
+  event.ProcessId = (ULONGLONG)(ULONG_PTR)PsGetCurrentProcessId();
+  event.ThreadId = (ULONGLONG)(ULONG_PTR)PsGetCurrentThreadId();
+  if (Args != NULL) {
+    event.AllocationCount = Args->NumAllocations;
+    event.Flags = Args->Flags.Value;
+    if (Args->hResource == NULL && Args->NumAllocations != 0u &&
+        Args->pAllocationList != NULL)
+      event.Allocation = (ULONGLONG)(ULONG_PTR)Args->pAllocationList[0];
+  }
+  AdmissionDwmDdiProbeRecordWindows((ADMISSION_CONTEXT *)Adapter, &event);
+#endif
+  status = AdmissionDestroyAllocationImpl(Adapter, Args);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  event.Kind = AdmissionDwmDdiDestroyAllocationExit;
+  event.Status = (ULONG)status;
+  AdmissionDwmDdiProbeRecordWindows((ADMISSION_CONTEXT *)Adapter, &event);
+#endif
+  return status;
 }
 
 static NTSTATUS AdmissionDescribeAllocationImpl(

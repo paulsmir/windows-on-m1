@@ -7,7 +7,9 @@ _Use_decl_annotations_ VOID AdmissionDwmDdiProbeRecordWindows(
   ADMISSION_DWM_DDI_ENTRY *entry;
   LONG sequence;
   if (Context == NULL || Event == NULL ||
-      Event->Kind >= AdmissionDwmDdiMpo)
+      Event->Kind >= AdmissionDwmDdiCount ||
+      Event->Kind == AdmissionDwmDdiMpo ||
+      Event->Kind == AdmissionDwmDdiDisplayOnly)
     return;
   entry = &Context->DwmDdiProbe.Entries[Event->Kind];
   InterlockedIncrement(&entry->Count);
@@ -38,7 +40,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDwmDdiProbeQueryWindows(
   snapshot.Bytes = sizeof(snapshot);
   snapshot.CandidateBuild = APPLE_AGX_VERSION_BUILD;
   snapshot.BootGeneration = Context->Win32BootGeneration;
-  for (index = 0; index < AdmissionDwmDdiMpo; ++index) {
+  for (index = 0; index < AdmissionDwmDdiCount; ++index) {
     ADMISSION_DWM_DDI_ENTRY *entry = &Context->DwmDdiProbe.Entries[index];
     LONG before = InterlockedCompareExchange(&entry->Sequence, 0, 0);
     snapshot.Entries[index].Count =

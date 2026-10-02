@@ -80,12 +80,13 @@ int wmain(void) {
                 dwm.CandidateBuild, dwm.BootGeneration, dwm.Incomplete, index);
         for (kind = 0u; kind < AdmissionDwmDdiCount; ++kind) {
           const ADMISSION_DWM_DDI_ENTRY *entry = &dwm.Entries[kind];
-          wprintf(L"DWM_DDI_ENTRY kind=%u count=%ld dropped=%ld seq=%ld status=0x%08x flags=0x%x source=%u segment=%u src_count=%u dst_count=%u allocation=0x%llx address=0x%llx context=0x%llx fence=%llu\n",
+          wprintf(L"DWM_DDI_ENTRY kind=%u count=%ld dropped=%ld seq=%ld status=0x%08x flags=0x%x source=%u segment=%u src_count=%u dst_count=%u allocation=0x%llx address=0x%llx context=0x%llx fence=%llu pid=%llu tid=%llu allocations=%u\n",
                   kind, entry->Count, entry->Dropped, entry->Sequence,
                   entry->Last.Status, entry->Last.Flags, entry->Last.SourceId,
                   entry->Last.Segment, entry->Last.SourceCount,
                   entry->Last.DestinationCount, entry->Last.Allocation,
-                  entry->Last.Address, entry->Last.Context, entry->Last.Fence);
+                  entry->Last.Address, entry->Last.Context, entry->Last.Fence, entry->Last.ProcessId,
+              entry->Last.ThreadId, entry->Last.AllocationCount);
         }
       }
     }
