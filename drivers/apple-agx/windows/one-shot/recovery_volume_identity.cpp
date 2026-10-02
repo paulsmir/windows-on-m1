@@ -13,20 +13,71 @@ static bool target_matches(const PARTITION_INFORMATION_EX &p,const NTFS_VOLUME_D
       (ULONGLONG)n.VolumeSerialNumber.QuadPart==0x6612cadc12caaffbULL &&
       n.BytesPerSector==4096 && n.NumberSectors.QuadPart==29052159LL;
 }
+// Temporary aliases are sufficient for this RAM-boot recovery. Resolve the
+// enumerated volume through the object namespace, not persistent Mount Manager.
+static bool alias_exact(const wchar_t *letter,const wchar_t *native,bool *created) {
+  *created=false;
+  wchar_t existing[1024]={};
+  if(QueryDosDeviceW(letter,existing,1024)) {
+    if(_wcsicmp(existing,native)==0)return true;
+    wprintf(L"REFUSE occupied alias %ls -> %ls\n",letter,existing);return false;
+  }
+  DWORD error=GetLastError();
+  if(error!=ERROR_FILE_NOT_FOUND) {
+    wprintf(L"QueryDosDevice %ls error=%lu\n",letter,error);return false;
+  }
+  if(!DefineDosDeviceW(DDD_RAW_TARGET_PATH|DDD_NO_BROADCAST_SYSTEM,letter,native)) {
+    wprintf(L"DefineDosDevice %ls error=%lu\n",letter,GetLastError());return false;
+  }
+  *created=true;
+  bool ok=QueryDosDeviceW(letter,existing,1024) && _wcsicmp(existing,native)==0;
+  if(!ok) {
+    DefineDosDeviceW(DDD_RAW_TARGET_PATH|DDD_NO_BROADCAST_SYSTEM|
+                    DDD_REMOVE_DEFINITION|DDD_EXACT_MATCH_ON_REMOVE,letter,native);
+    *created=false;
+  }
+  return ok;
+}
 static bool mount_exact(const wchar_t *letter,const wchar_t *volume) {
-  wchar_t existing[MAX_PATH]={};
-  if(GetVolumeNameForVolumeMountPointW(letter,existing,MAX_PATH))
-    return _wcsicmp(existing,volume)==0;
-  if(GetDriveTypeW(letter)!=DRIVE_NO_ROOT_DIR) {
-    wprintf(L"REFUSE occupied mount point %ls\n",letter);return false;
+  wchar_t name[MAX_PATH]={},native[1024]={};
+  size_t len=wcslen(volume);
+  if(len<6 || wcsncmp(volume,L"\\\\?\\",4)!=0 || volume[len-1]!=L'\\')return false;
+  wcscpy_s(name,volume+4);name[wcslen(name)-1]=0;
+  if(!QueryDosDeviceW(name,native,1024)) {
+    wprintf(L"QueryDosDevice %ls error=%lu\n",name,GetLastError());return false;
   }
-  if(!SetVolumeMountPointW(letter,volume)) {
-    wprintf(L"SetVolumeMountPoint %ls %ls error=%lu\n",letter,volume,GetLastError());return false;
-  }
+  bool created=false;
+  if(!alias_exact(letter,native,&created))return false;
+  wprintf(L"VERIFIED_TEMP_ALIAS %ls -> %ls source=%ls created=%d\n",letter,native,volume,created);
   return true;
+}
+static int alias_self_test() {
+  wchar_t system[4]={},native[1024]={},letter[3]={L'Z',L':',0},check[1024]={};
+  if(!GetEnvironmentVariableW(L"SystemDrive",system,4) ||
+     !QueryDosDeviceW(system,native,1024))return 20;
+  for(;letter[0]>=L'D';--letter[0]) {
+    if(!QueryDosDeviceW(letter,check,1024) && GetLastError()==ERROR_FILE_NOT_FOUND)break;
+  }
+  if(letter[0]<L'D')return 21;
+  bool created=false;
+  if(!alias_exact(letter,native,&created) || !created)return 22;
+  bool reused=false;
+  bool same=alias_exact(letter,native,&reused) && !reused;
+  bool refused=!alias_exact(letter,L"\\Device\\EXP931WrongTarget",&reused);
+  bool preserved=QueryDosDeviceW(letter,check,1024) && _wcsicmp(check,native)==0;
+  wchar_t root[4]={letter[0],L':',L'\\',0},systemRoot[4]={system[0],L':',L'\\',0};
+  DWORD serial1=0,serial2=0;
+  bool readable=GetVolumeInformationW(root,NULL,0,&serial1,NULL,NULL,NULL,0) &&
+      GetVolumeInformationW(systemRoot,NULL,0,&serial2,NULL,NULL,NULL,0) && serial1==serial2;
+  bool removed=DefineDosDeviceW(DDD_RAW_TARGET_PATH|DDD_NO_BROADCAST_SYSTEM|
+      DDD_REMOVE_DEFINITION|DDD_EXACT_MATCH_ON_REMOVE,letter,native)!=0;
+  bool absent=!QueryDosDeviceW(letter,check,1024) && GetLastError()==ERROR_FILE_NOT_FOUND;
+  if(!same || !refused || !preserved || !readable || !removed || !absent)return 23;
+  puts("TEMP_ALIAS_CREATE_READ_REUSE_COLLISION_REFUSAL_EXACT_REMOVE_PASS");return 0;
 }
 int wmain(int argc,wchar_t **argv) {
   setvbuf(stdout,NULL,_IONBF,0);
+  if(argc==2 && wcscmp(argv[1],L"--alias-self-test")==0)return alias_self_test();
   if(argc==2 && wcscmp(argv[1],L"--self-test")==0) {
     PARTITION_INFORMATION_EX p={};NTFS_VOLUME_DATA_BUFFER n={};
     p.PartitionStyle=PARTITION_STYLE_GPT;p.Gpt.PartitionId=target_id;
@@ -72,6 +123,6 @@ int wmain(int argc,wchar_t **argv) {
   if(enumerationError!=ERROR_NO_MORE_FILES || targets!=1 || evidences!=1) {
     printf("REFUSE enumeration=%lu targets=%u evidence=%u\n",enumerationError,targets,evidences);return 4;
   }
-  if(!mount_exact(L"T:\\",target) || !mount_exact(L"R:\\",evidence))return 5;
+  if(!mount_exact(L"T:",target) || !mount_exact(L"R:",evidence))return 5;
   puts("EXACT_GPT_NTFS_IDENTITY_AND_MOUNTS_PASS");return 0;
 }

@@ -13,10 +13,10 @@ findstr /i /c:"0x6612cadc12caaffb" "%RAM%\ntfs-before.txt" >nul || goto fail
 if not exist T:\Windows\System32\config\SYSTEM goto fail
 if not exist T:\Windows\System32\winload.efi goto fail
 mountvol R:\ /L >"%RAM%\evidence-guid.txt" 2>&1
-set OUT=R:\J313-EXP931B-recovery
+set OUT=R:\J313-EXP931C-recovery
 if exist "%OUT%" goto fail
 md "%OUT%" || goto fail
->"%OUT%\manifest.txt" echo Experiment=EXP931B
+>"%OUT%\manifest.txt" echo Experiment=EXP931C
 >>"%OUT%\manifest.txt" echo TargetGuid=54ba924f-c5e4-4898-8192-327d5cad900e
 >>"%OUT%\manifest.txt" echo TargetSerial=6612cadc12caaffb
 >>"%OUT%\manifest.txt" echo Target=T:
