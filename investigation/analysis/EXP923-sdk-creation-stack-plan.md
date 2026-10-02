@@ -33,3 +33,12 @@ Do not advertise a new DDI or normalize NO_REDIRECTION from this observation alo
 One instrumentation variable; no repeated DWM action. Collect immediately and
 use ordinary377/392 Code43 exactrollback then Code28twice. Every artifact/launch
 must be preregistered and hash-gated; this plan alone is not a hardware launch.
+
+Observer implementation: compile DbgHelp PInvoke before readiness; publish exact PID
+and process start time atomically; hold the matching handle and capture once at five
+seconds. Immediately stop the experiment-owned EXP801DxgBoot logger and copy its
+ETL plus UMD trace, preserving early evidence before the task deadline. This is the
+single snapshot-instrumentation variable; SDK binary/package/firmware stay exact.
+Original collector may accept the already-stopped logger only with matching-boot
+early receipt and every recorded early file size/SHA verified. No fake regression
+test is added: this is diagnostic instrumentation, not a confirmed driver defect.
