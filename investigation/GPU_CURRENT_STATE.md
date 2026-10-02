@@ -22,18 +22,40 @@ Always check bounded SSH plus launcher/USB before physical requests or reset.
 No raw USB/proxy NOP while a launcher owns the guest.
 
 ## Current live state — verify fresh
-EXP931D repair completed. CHKDSK exit1, corrected metadata including201F2,
-17.87seconds. Normal377/392 broker-disabled Windows now booted:
-Boot2026-10-02T20:38:12.723814Z, owner74535 / exec83594, SSHalive, CPU8.
-C:NOTDirty; independent RegOpen0/RegFlush0 (before1016). Twelve evidence files
-host size/SHA verified, gate75b15f5075f955ff2ec801ef7c7b5e18ad8e5a3644ff4f73e8bf04c299db7708.
-Do not reboot into WinPE again. Current boundary package reconciliation:
-Windows reports928/Code31/Armnull, notprevious930. Stage12/Status0 are persisted
-old registry receipts, not currentGPUproof. Read-only package inventory in
-ROOT931/package-inventory.out (exec15638, verifyfinished) before any cleanup.
-Next restore exact inertGPUvisible/noAGXpackage recovery then installhashverified
-corrected930 for firstactualGPUtest. Do notrunoldcleanup withwrongexpectedCode
-or delete sharedsigner whileotherexactAGXpackagesremain. Normalprofileunchanged.
+EXP931D fixedNTFS, SYSTEMflush0;931E cleanCode28 baseline proved.
+EXP932 fresh930 failedbeforeGPU: Phase6/return0xffffa20141176e40 insteadABI1,
+matchingfirmwareARM_CONSUMED250087441. Frozen evidenceROOT932/original-boundary.
+No present/stabilitytest ran. Normal recovery nowloaded afterorderedguestreset;
+Boot21:12:16.249038Z, Code43/exact930oem5/Armnull/serviceStopped. ROOT932/cleanup/
+existingexactremover running exec62647, willorderedrestart afterpackage removal.
+Normalrecoveryowner exec66980 (verifyfreshPID). Afterexit: freshSSH/USB/proxy,
+launch ROOT932/launch-clean-recovery.sh (unchanged377/392) and run
+ROOT932/verify-clean-baseline.ps1 copiedtoC:\Users\pavel\EXP932. NoGPU-hiddenboot.
+Collectcleanupreceipts/hash before933stage. Do NOTstage933untilcleanbaseline.
+Original932 CIMboot drifted36.666s from20:51:44 to20:52:21 due recordedKernelGeneral1
+NTP+36661ms; KernelGeneral12 andsamecontinuousownerprovednoextra reboot. Guard
+refusedfirstrestart; clock-verifiedwrapper thenaccepted exactgeneration/phase.
+
+EXP933 HVC transport fixes: root e8cd2682 /m1n1661cbe31 preservesHVCnextPC;
+root04456756 externalX0arg/result assembly leaves; root71316533 makesIPAstatus
+uint32 as existingcallback (armreceiptreturn64). Source planEXP933-hvc-return-
+contract.md. Actualepilogue RED->GREEN; pinnedMSVC19.44 originalintrinsicDLL RED,
+fixedDLL sixcasesGREEN (status1/2, bothimmediates, poisonedX8, nonvolatiles/SP/PC).
+Updated713probe6GREEN too. Fourarm +fourrenderHVC testsPASS. Foreignrust-fatfs/Mu
+untouched. Newfirmware built ROOT933/m1n1-exp933.macho SHA
+bdcf87154043535f4bcfcba0aa04e30c97d4877dd3ba9c87e18b6af287158395;
+oldbuildmatchedacceptedd3e0f999, cfgandRustarchivehashunchanged. GNUwarningsoutside
+changedlines; no newconditionwarning. MuR143 remainsunchanged.
+
+KMD933build1 correctlyfailed /WX C4242 uint64 to existingULONG IPAstatus; noinstall.
+Build2 source71316533, directoryROOT.local/experiments/EXP933-hvc-return-contract-build2,
+source manifest76f5f19c/archivecbb058f8, builderC:\Users\pauls\EXP933-hvc-return-contract-build2.
+Buildexec41282 running, logbuild-console-after-transfer.log. Initialdispatchbefore
+filetransfercompleted wasrejectedbeforebuild; filesnowcomplete/sourcegatePASS.
+NextfinishWDKzero-warning/sign/hash/PDB gates; nohardwareuntilsealed933manifest,
+old932packagecleaned andnew933stagedfresh. PredefinedcoherenttransportATOMICCONTRACT
+inplan; no WDDMcapability/layout/firmware-memory changes. Build2nativeprovenance
+rebuildsfromcommitted553sourcefiles. No newhardwarehasusedfixedtransportyet.
 
 ROOT931 = ROOT.local/experiments/EXP931-ntfs-system-log-recovery.
 Current launch ROOT931/launch-winpe-d.sh, verification verify-launch-d.py,
