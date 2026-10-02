@@ -72,7 +72,7 @@ alloc/import and BEFOREnativeDXGI mode/Present. DecodecurrentoriginalETW bySDK10
 ifitcannotidentifywait, one documentedMiniDumpWriteDump snapshotofownedSDKprocess
 whileblocked in a separatelypreregistered diagnostic, before60stasktermination.
 Plananalysis/EXP923-sdk-creation-stack-plan.md; scripts/g3-sdk-stall-minidump.ps1
-commita9c3013e/SHAdb165689, builderAST/PInvokePASS. No923stage/build/launch yet.
+commita9c3013e/SHAdb165689, builderAST/PInvokePASS. EXP923 prepared60artifacts47transfer; manifest8e68181e/payload567181d5. No923stage/launch yet.
 LateoriginalETL SDKPIDqueryreturnedempty; cannotidentifywaitfromit.
 EarlyEXP<=600cleanup remains304folders2294files archived/removed, hostarchive9e014c6c retained.
 No additionalambientboot/capability/NO_REDIRECTION probes. MatchprimaryWindows/WDK
