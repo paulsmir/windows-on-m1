@@ -94,7 +94,7 @@ RtkitBootReady/Running1/CpuReady1/StopIdle/CrashlogCrashed0; lastRxep20/payload
 pollsAGXchannels. Do NOTclaimprotocolviolationjustfromlastmsg orphysicalM1fault.
 NEWNEXTTARGET heartbeat/Pong/ASC receiveownershipbeforeenqueue andproperAGXevent
 channelhandling. CompareprimaryAsahi/m1n1/Mu/WDK mapping beforeedit; deterministic
-reproducerbeforefixifrealofflinecontractdefect found. No newhardwarepreregistered.
+reproducerbeforefixifrealofflinecontractdefect found. EXP926 diagnostic-only internal64byteheartbeatreceipt implemented8d0fd7fd; exactResult/time/Rxmetadata, unchanged500ms deadline/queue/status. ASC/RTKit/provider existing3suitesGREEN; native/WDK/sign/seal/install notyetdone. Plananalysis/EXP926-heartbeat-result-plan.md. New925frozenFWlog6 allzero/Eventrptr=wptr6f excludesfulllogring; RenderCorrelationCount0/ASCtrace64saturated givesnoexactfailurecode. No newhardwarelaunchpreregistered.
 Reportanalysis/EXP925-allocation-destroy-boundary-verdict.md; currentcdb-memory.log,
 cdb-flat-context.log,cdb-final-state.log inROOT925. No accepteddesktop/newcodefix.
 
