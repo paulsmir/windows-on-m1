@@ -47,7 +47,7 @@ but SSH did not return. One documented SIGINT captured CPU/IRQ and continued gue
 SSH still failed. A subsequent documented SIGTERM snapshot/reboot entered emergency
 GPU-hidden385 only after this GPU-visible recovery could not be recovered. No known
 Windows stop code, new dump or System1001 was found. Do not invent a bugcheck verdict.
-Hidden Code45/visible0/serviceStopped/CPU8 recovery9file hostgate:
+Hidden Code45/visible0/serviceStopped/CPU8 recovery7file hostgate:
 e9caa17824edd700ba548bf291801eaf7481c1265fdde04578d4486685b13117.
 Guest wallclock initially lagged host and was corrected; CIMBootUTC shifted without
 an inferred new physical reboot. Record fresh stage/preflight identities together.
