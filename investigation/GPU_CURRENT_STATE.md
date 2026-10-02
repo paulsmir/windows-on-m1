@@ -177,3 +177,5 @@ No925Airtransfer/stage/launch yet; no finalhardwaremanifest/payloadsealed yet.
 Next: prepareexact925package+newBltProbe withSDKstagegate; prereg/sealallruntimehashes;
 onepostimportSDK/DWM snapshotplusentry/exitcounts; distinguishKMDbody vsOSsync.
 Do notcallrootcausefixed; DWMstaging800014c0 i1 wait isobserved, owningkernelwaitunknown.
+
+EXP925 final runtime seal manifestf6de4e75/payload05d5790b,65artifacts47transfer; preregistered. Freshclean10:42:32 Code28/CPU8/zeroexperimentstate owner48605. No925stage/launchyet.
