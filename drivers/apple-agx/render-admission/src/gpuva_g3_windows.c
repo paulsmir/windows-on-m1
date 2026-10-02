@@ -1035,12 +1035,16 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
       status,tablePredicate,mapOffset,t,&prepare,o)) captured=TRUE; \
 } while (0)
   if (!adapter || !adapter->Started || !args ||
-      KeGetCurrentIrql()!=PASSIVE_LEVEL || args->Flags.Value!=1u ||
+      KeGetCurrentIrql()!=PASSIVE_LEVEL || (args->Flags.Value&~1u)!=0u ||
       args->PrivateDriverDataSize!=sizeof(q) || !args->pPrivateDriverData)
     return STATUS_INVALID_PARAMETER;
   RtlCopyMemory(&q,args->pPrivateDriverData,sizeof(q));
   if (q.Magic!=APPLE_AGX_G3_PRIVATE_MAGIC || q.Version!=1u ||
       q.Bytes!=sizeof(q) || q.Reserved[0] || q.Reserved[1]) return status;
+  /* RELEASE can reap another retired scene while this process has queued
+   * work. Its original LevelTwo entry is deliberately preserved. */
+  if (q.Operation==APPLE_AGX_G3_PRIVATE_RELEASE && args->Flags.Value!=1u)
+    return STATUS_INVALID_PARAMETER;
   for (i=0;i<9;++i)
     if (q.Ranges[i].Va || q.Ranges[i].Bytes || q.Ranges[i].Reserved) return status;
   state=(ADMISSION_G3_STATE *)adapter->GpuvaG3State;
@@ -1066,6 +1070,11 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
       context->Object.Device==NULL ||
       (HANDLE)CONTAINING_RECORD(context->Object.Device,ADMISSION_DEVICE,Object)!=args->hDevice ||
       context->Object.Device->Adapter!=&adapter->ObjectAdapter) {PRIVATE_CAPTURE(2u,~0u,NULL);goto Done;}
+  /* Software-entry preparation must not reap or mutate tables after its
+   * bounded quiescence wait timed out. The broker also checks owner jobs. */
+  if (q.Operation!=APPLE_AGX_G3_PRIVATE_RELEASE &&
+      (p->Graph.JobInFlight || p->Graph.LeaseToken))
+    {status=STATUS_DEVICE_BUSY;PRIVATE_CAPTURE(7u,~0u,NULL);goto Done;}
   if (!AdmissionG3PrivateReap(p)) {status=STATUS_DEVICE_HARDWARE_ERROR;PRIVATE_CAPTURE(3u,~0u,NULL);goto Done;}
   status=AdmissionMemoryRuntimePrivateView(adapter,&view);
   if (!NT_SUCCESS(status)) {PRIVATE_CAPTURE(4u,~0u,NULL);goto Done;}
@@ -1093,7 +1102,6 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
         q.ManagerGeneration!=p->PrivateManager.Generation ||
         context->GpuvaG3PrivateManagerGeneration!=q.ManagerGeneration) goto Done;
   } else goto Done;
-  if (p->Graph.JobInFlight || p->Graph.LeaseToken) {status=STATUS_DEVICE_BUSY;PRIVATE_CAPTURE(7u,~0u,NULL);goto Done;}
   RtlZeroMemory(&render,sizeof(render));
   render.WidthPx=(USHORT)q.Width;render.HeightPx=(USHORT)q.Height;
   render.UtileWidthPx=(UCHAR)q.UtileWidth;render.UtileHeightPx=(UCHAR)q.UtileHeight;
