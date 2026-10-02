@@ -2,7 +2,7 @@
 #include "apple_agx_local_reserve_abi.h"
 #include <intrin.h>
 
-#pragma intrinsic(__hvc)
+#include "arm64_hypercalls.h"
 
 #define ADMISSION_PHYSICAL_TAG 'pRGA'
 #define ADMISSION_PHYSICAL_SCRATCH_BYTES 0x8000u
@@ -165,7 +165,7 @@ static unsigned int AdmissionPhysicalInvokeHvc(
   if (Immediate != HV_GUEST_IPA_PA_HVC_IMMEDIATE)
     return HV_GUEST_IPA_PA_STATUS_INVALID_REQUEST;
   KeMemoryBarrier();
-  status = __hvc(HV_GUEST_IPA_PA_HVC_IMMEDIATE, RequestIpa);
+  status = AdmissionHvcGuestIpaPa(RequestIpa);
   KeMemoryBarrier();
   if (owner != NULL && Request != NULL) {
     owner->LastHvcReturnStatus = status;

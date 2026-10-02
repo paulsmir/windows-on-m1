@@ -284,5 +284,13 @@
     <FilesToPackage Include="$(TargetPath)" Condition="'$(ConfigurationType)'=='Driver'" />
     <FilesToPackage Include="AppleAgxRenderAdmissionUmd.dll" />
   </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="src\arm64_hypercalls.asm">
+      <Command>"$(VCToolsInstallDir)bin\Hostx64\arm64\armasm64.exe" -nologo -o "$(IntDir)arm64_hypercalls.obj" "%(FullPath)"</Command>
+      <Outputs>$(IntDir)arm64_hypercalls.obj</Outputs>
+      <LinkObjects>true</LinkObjects>
+      <Message>Assemble the private X0-input/X0-result HVC ABI</Message>
+    </CustomBuild>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

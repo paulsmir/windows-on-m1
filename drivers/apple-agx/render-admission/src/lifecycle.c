@@ -3,7 +3,7 @@
 #include "apple_agx_gpuva_g3_caps.h"
 #include "hv_guest_ipa_pa_abi.h"
 #include <intrin.h>
-#pragma intrinsic(__hvc)
+#include "arm64_hypercalls.h"
 #if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 16 && \
     ADMISSION_GPUVA_G1B_PAGE_PROFILE != 64
 #error G3 VidMm path requires a 16- or 64-KiB local segment profile
@@ -25,7 +25,7 @@ static BOOLEAN AdmissionReportGpuvaArmConsumed(ADMISSION_CONTEXT *context) {
   payload = ((ULONGLONG)HV_GPUVA_ARM_CONSUMED_VERSION << 32) |
             context->Win32BootGeneration;
   KeMemoryBarrier();
-  result = __hvc(HV_GPUVA_ARM_CONSUMED_HVC_IMMEDIATE, payload);
+  result = AdmissionHvcArmConsumed(payload);
   AdmissionRecordGpuvaArmGate(context, 6u,
       result == HV_GUEST_IPA_PA_STATUS_SUCCESS ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL,
       result);
