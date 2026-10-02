@@ -75,8 +75,26 @@ static int alias_self_test() {
   if(!same || !refused || !preserved || !readable || !removed || !absent)return 23;
   puts("TEMP_ALIAS_CREATE_READ_REUSE_COLLISION_REFUSAL_EXACT_REMOVE_PASS");return 0;
 }
+static int compare_files(const wchar_t *first,const wchar_t *second) {
+  HANDLE a=CreateFileW(first,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_FLAG_SEQUENTIAL_SCAN,NULL);
+  if(a==INVALID_HANDLE_VALUE){printf("COMPARE_OPEN_FIRST_ERROR=%lu\n",GetLastError());return 30;}
+  HANDLE b=CreateFileW(second,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_FLAG_SEQUENTIAL_SCAN,NULL);
+  if(b==INVALID_HANDLE_VALUE){printf("COMPARE_OPEN_SECOND_ERROR=%lu\n",GetLastError());CloseHandle(a);return 31;}
+  unsigned char x[8192],y[8192];DWORD nx=0,ny=0;ULONGLONG total=0;int result=0;
+  for(;;) {
+    if(!ReadFile(a,x,sizeof(x),&nx,NULL) || !ReadFile(b,y,sizeof(y),&ny,NULL)) {
+      printf("COMPARE_READ_ERROR=%lu\n",GetLastError());result=32;break;
+    }
+    if(nx!=ny || memcmp(x,y,nx)!=0){printf("COMPARE_MISMATCH_OFFSET=%llu\n",total);result=33;break;}
+    total+=nx;if(nx==0)break;
+  }
+  CloseHandle(b);CloseHandle(a);
+  if(result==0)printf("BYTE_IDENTICAL_BACKUP_PASS bytes=%llu\n",total);
+  return result;
+}
 int wmain(int argc,wchar_t **argv) {
   setvbuf(stdout,NULL,_IONBF,0);
+  if(argc==4 && wcscmp(argv[1],L"--compare-files")==0)return compare_files(argv[2],argv[3]);
   if(argc==2 && wcscmp(argv[1],L"--alias-self-test")==0)return alias_self_test();
   if(argc==2 && wcscmp(argv[1],L"--self-test")==0) {
     PARTITION_INFORMATION_EX p={};NTFS_VOLUME_DATA_BUFFER n={};
