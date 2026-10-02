@@ -21,8 +21,38 @@ key /Users/pavel/.ssh/windows_builder. USB endpoints L41/L43:
 Always check bounded SSH plus launcher/USB before physical requests or reset.
 No raw USB/proxy NOP while a launcher owns the guest.
 
-## CURRENT — EXP934 live Code0, physical display NOT accepted
-Fullowner96715/exec40531 (verifyfresh), package934/oem5, originalBoot22:33:55.992455,
+## CURRENT — EXP935 clear fix built; removing934 in normal recovery
+935 source a1d58340b2b5fabdac897335c08853f261c16e8e fixes proven unbound RTV clear:
+934 windowed SDK ce544e78 created swapchain/RTV, then E_NOTIMPL Clear line302 ->
+DXGI_ERROR_DRIVER_INTERNAL_ERROR887a0020 beforePresent. Native fallback wrongly
+required that target already be sole OM binding. Now temporary single-view FB,
+real clear, restore Device::fb (MRT/depth untouched). Actual projected-body replay
+RED old -> GREEN new underASanUBSan;11relatedtestsPASS. Separatefrontendprepare
+suite blocked by preexistingworktreepath/dirtylocalreference; notclaimedgreen.
+Plan analysis/EXP935-clear-view-contract.md. Do not expand depth/otherDDIs.
+ROOT935=ROOT.local/experiments/EXP935-clear-unbound-rtv. Native/source553/WDK
+0warning/hash/signature/PDBGUIDagePASS. SYS9d4c303c, UMDf6479d21, INF5f8dfe0d,
+CAT870e682e (fullhashes kmd-build-receipt.json). Manifest0a59d69a/sourcezipb8d6a455.
+Same m1n1bdcf/MuR143e54; no935installedyet. NewwindowedSDK source81df9375,
+exeSHAce544e78e8f12e0d3e71f8b9f34c6c57f79c8490125fedb5ff13514ac4a4529b.
+Firstverifyclear thenPresent/physical, shortbudget, no stabilityclaim yet.
+
+934 original finalized hostgate359fb847a766cf7105e286b620ea390345e956eb567471bb8077df3c60581063
+(ROOT934/original-final). Orderedrestart23:54:09Z completedPSCI itself; proposed
+SIGTERMnot sent (ownerPIDalreadygone). Freshdualplane/proxy thenROOT934/launch-recovery.sh.
+Normal377/392owner15638/session82269, recoveryevidence23:58:09Z Code43/exact934/
+CPU8/SSH/armnull/Cnotdirty. One nonresetSIGINT snapshot duringnetworkstartup;
+no physicalactionneeded. Exact934cleanup currentlyexec61422: outputprovesdevnode
+andpackage removed, staged0/SYSfalse/UMDfalse; durablerestart scheduled, notyet
+verifiedafterrestart. Pollcompletion/controlplanes thenROOT934/launch-clean-recovery.sh
+(same377/392). Run ROOT934/verify-clean-baseline.ps1 afterboot; requireCode28/no
+packages/services/signer/files/flush0, immutableKernelGeneral12 eventidentity.
+Onlythencreate935manifestusingthatbaseline, stage andfullboot.935stage/orderedrestart/
+first-checkpoint/query wrappers alreadyadapted from934; manifestandhardwaremanifest
+notyetcreated. Preserve noexistinglogs; rootartifactsoutsideworktree. Seeledger latest.
+
+## EXP934 original evidence (closed; do not treat this as live guest)
+Fullowner96715/exec40531 (verifyfresh), package934/oem5, bootEvent122291 Start22:33:09.4783648Z (CIMshift22:33:55.992455),
 firstready22:35:19.946, CPU8/SSH/Code0/Stage12/Status0/Armnull/HVC1/gen239153593.
 Fixedm1n1bdcf8715+MuR143e54. ROOT934=ROOT.local/experiments/EXP934-direct-gpuva-submit.
 Latest current-checkpoint.out completed. Fresh SSH and owner96715 alive22:56UTC. No934rollbackyet;
@@ -38,11 +68,29 @@ pixels/hash35ce83ad3947aaed/corner00180003. Earlier zero reads do not describe w
 At22:56:37Z frame-after-photos.out: sameBoot, DWM140/138 and2/2 unchanged since prior
 sample; generic submissions151678, allocationdestroy11216/11216, Present0/TDR0,
 VSync79862. Background progress does NOT prove continued DWM render progress.
-Source audit: display_scanout_observe_latched returns cached requested IOVA matched
-to D589 swap ID; window sampler computes PA using pool offset, not actual DART PTEs.
-This is a diagnostic limitation, NOT a proven DART mapping defect. Next causal
-checkpoint must distinguish produced surface bytes from actual DCP-mapped bytes;
-do not infer pitch/tiling or change them merely from photo. No934rollback/newrun.
+Current diagnostic verdict (2026-10-03 local):
+D1 same DWM1240 snapshot at23:30UTC shows LPC idle WaitForNextMessage, rejecting
+persistent CreateAllocation stall; stack-only dump47289f2e/103134B hostverified.
+D2 existing original ETL stopped+archivedinternal
+/Users/pavel/J313-evidence-archive/2026-10-03/EXP934-original/original-after-photos.etl
+268435456B SHA33c53a09fb4ae1aedd4490e154c9d2c7081dc4c4455ed0e855acd941da70c7e1.
+IMPORTANT EXP801DxgBoot session STOPPED; no activeETL now. Boundedfirst5000selected
+rows only23:21:28..52:1463VsyncInterrupt/1463VsyncDPC/1462DWMVsyncSignal, DWMCount0/
+Waiters0/hFlipDevice0. DWM17cycles presentneeded1 butdraw0/token0/refresh0/tPresent0.
+So VSyncdelivery works and DWMwakes; don't infer permanentclockwaitfromstack.
+D3 late SDK after observedidle stillnoCreateSwapChainresult at12s; SDKALPCproxywait,
+pairedDWMLPCwaits realpagingfence0x26e2/object40001f40 insideSubmit/UpdateSubresourceUP.
+This is currentboundary, NOT persistentpagingdeadlockproof. OwnedSDK2616 stopped,
+ownedEXP934-LateSdk taskremoved; sixfileslate-sdk manifesthostverified.
+D4 read-onlyprobeinconsole1 provesNumOfSources1 (SSHsession0 reports0); sourceabsence
+hypothesis rejected. frame-console.decoded.out: DWM235/230 last190568 and2/2, noPresent.
+EXP934-ConsoleQuery taskremoved. No934rollback/newdriver/firmware/reboot.
+Next shortdiscriminator: --windowed variant ofsameSDK (nullfullscreenDesc), preserves
+samebuffer/adapter/clear/present anddefaultfullscreen. Sourceeditpendingbuild/commit;
+ROOT.local/experiments/EXP934-windowed-sdk build.ps1 currentlydispatched. Readplan
+analysis/EXP934-windowed-sdk-discriminator.md. Do notrununtilbuild/hashgates.
+CachedDCPIOVA/poolarithmeticdiagnostic limitation remains, no mappingdefectproven.
+EXP806 physicalpattern previouslyvalidatedDCPpath; do notspeculativelychangepitch.
 OneSDKstimulus e1d5875c ranviaEXP934-LivePairedCreation, importedexacttwoBGRAfullscreen
 backbuffers, paired SDK+DWM dumps beforeownedSDKtermination. TaskResult0 thenremoved;
 no SDKleft. Paired9hosthashgate8b9eee2a375554a75218b037b134180a159c592da5202ea7fadb12f093a9e469.
