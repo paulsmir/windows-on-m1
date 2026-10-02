@@ -2999,6 +2999,22 @@ static VOID AdmissionPlatformWorker(
   submission.PrivateDataEnd = description.PrivateDataEnd;
   submission.DmaSubmissionStart = description.DmaStart;
   submission.DmaSubmissionEnd = description.DmaEnd;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  {
+    APPLE_AGX_RTKIT_U32 notifications = 0u;
+    APPLE_AGX_RTKIT_SESSION_RESULT notificationResult =
+        AppleAgxRtkitSessionDrainRuntime(&runtime->Rtkit, &runtime->AscIo,
+            APPLE_AGX_RTKIT_RUNTIME_DRAIN_LIMIT, &notifications);
+    if (notificationResult != AppleAgxRtkitSessionResultOk) {
+      InterlockedCompareExchange(&adapter->SchedulerFaulted,
+          0x40000L | __LINE__, 0);
+      AdmissionRenderCorrelationWorkerWindows(
+          adapter, description.Fence, FALSE, (ULONG)notificationResult);
+      AdmissionPlatformWorkerFinished(runtime);
+      return;
+    }
+  }
+#endif
 #if !defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   /* Legacy diagnostic profiles retain their management probe.  GPUVA jobs
    * use the queue doorbell and completion protocol, not a management pong
@@ -3156,6 +3172,21 @@ static VOID AdmissionPlatformWorker(
     APPLE_AGX_BACKEND_U32 drained = 0u;
     APPLE_AGX_BACKEND_U32 completed = 0u;
     LARGE_INTEGER interval;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    {
+      APPLE_AGX_RTKIT_U32 notifications = 0u;
+      APPLE_AGX_RTKIT_SESSION_RESULT notificationResult =
+          AppleAgxRtkitSessionDrainRuntime(&runtime->Rtkit, &runtime->AscIo,
+              APPLE_AGX_RTKIT_RUNTIME_DRAIN_LIMIT, &notifications);
+      if (notificationResult != AppleAgxRtkitSessionResultOk) {
+        InterlockedCompareExchange(&adapter->SchedulerFaulted,
+            0x40000L | __LINE__, 0);
+        AdmissionRenderCorrelationWorkerWindows(
+            adapter, description.Fence, FALSE, (ULONG)notificationResult);
+        break;
+      }
+    }
+#endif
     if (!AppleAgxPlatformProviderPoll(
             &runtime->Provider, 64u, &drained, &completed)) {
       if (runtime->Provider.LastPollGuard ==

@@ -249,6 +249,56 @@ APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionBoot(
   return AppleAgxRtkitSessionCompleteManagementBootstrap(Session, Io, DeadlineMs);
 }
 
+APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionDrainRuntime(
+    APPLE_AGX_RTKIT_SESSION *Session, const APPLE_AGX_ASC_IO *Io,
+    APPLE_AGX_RTKIT_U32 MaxMessages, APPLE_AGX_RTKIT_U32 *Drained) {
+  APPLE_AGX_ASC_MESSAGE message;
+  APPLE_AGX_RTKIT_MANAGEMENT decoded;
+  APPLE_AGX_ASC_BOOL available;
+  APPLE_AGX_RTKIT_U32 count;
+  APPLE_AGX_RTKIT_SESSION_RESULT result;
+  if (Drained != APPLE_AGX_RTKIT_SESSION_NULL) *Drained = 0u;
+  if (Session == APPLE_AGX_RTKIT_SESSION_NULL ||
+      Io == APPLE_AGX_RTKIT_SESSION_NULL ||
+      Drained == APPLE_AGX_RTKIT_SESSION_NULL || MaxMessages == 0u ||
+      MaxMessages > APPLE_AGX_RTKIT_RUNTIME_DRAIN_LIMIT)
+    return AppleAgxRtkitSessionResultInvalidArgument;
+  if (Session->CrashlogCrashed)
+    return AppleAgxRtkitSessionResultFirmwareCrashed;
+  if (!Session->Running || !Session->CpuReady ||
+      !AppleAgxRtkitBootIsReady(&Session->Boot) ||
+      Session->StopPhase != AppleAgxRtkitStopIdle)
+    return AppleAgxRtkitSessionResultInvalidState;
+  for (count = 0u; count < MaxMessages; ++count) {
+    result = AppleAgxRtkitSessionAscResult(
+        AppleAgxAscTryReceive(Io, &message, &available));
+    if (result != AppleAgxRtkitSessionResultOk) {
+      AppleAgxRtkitSessionCaptureFailureMailbox(Session, Io);
+      return result;
+    }
+    if (!available) return AppleAgxRtkitSessionResultOk;
+    ++*Drained;
+    ++Session->ReceivedCount;
+    Session->LastRxEndpoint = message.Endpoint;
+    Session->LastRxPayload = message.Payload;
+    if (AppleAgxRtkitSessionMessageIsEventWake(&message)) continue;
+    if (message.Endpoint == 0u &&
+        AppleAgxRtkitDecodeManagement(message.Payload, &decoded) &&
+        decoded.Type == AppleAgxRtkitManagementPong) continue;
+    /* The crash buffer was provisioned during bootstrap.  Do not allocate or
+     * enter a blocking reply handshake from runtime notification polling. */
+    if (message.Endpoint == 1u && (message.Payload >> 52u) == 1u &&
+        Session->CrashlogReplySent) {
+      Session->CrashlogCrashed = APPLE_AGX_RTKIT_TRUE;
+      AppleAgxRtkitSessionCaptureFailureMailbox(Session, Io);
+      return AppleAgxRtkitSessionResultFirmwareCrashed;
+    }
+    AppleAgxRtkitSessionCaptureFailureMailbox(Session, Io);
+    return AppleAgxRtkitSessionResultProtocolViolation;
+  }
+  return AppleAgxRtkitSessionResultOk;
+}
+
 APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionHeartbeat(
     APPLE_AGX_RTKIT_SESSION *Session, const APPLE_AGX_ASC_IO *Io,
     APPLE_AGX_ASC_U64 DeadlineMs) {

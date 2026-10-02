@@ -66,6 +66,12 @@ APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionBoot(
     APPLE_AGX_GFX_HANDOFF_STATE *Handoff,
     APPLE_AGX_RTKIT_PRE_MANAGEMENT Prepare, void *PrepareContext,
     APPLE_AGX_ASC_U64 DeadlineMs);
+#define APPLE_AGX_RTKIT_RUNTIME_DRAIN_LIMIT 64u
+/* Runtime mailbox ownership stays with the platform worker, even without ping. */
+APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionDrainRuntime(
+    APPLE_AGX_RTKIT_SESSION *Session, const APPLE_AGX_ASC_IO *Io,
+    APPLE_AGX_RTKIT_U32 MaxMessages, APPLE_AGX_RTKIT_U32 *Drained);
+
 APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionHeartbeat(
     APPLE_AGX_RTKIT_SESSION *Session, const APPLE_AGX_ASC_IO *Io,
     APPLE_AGX_ASC_U64 DeadlineMs);

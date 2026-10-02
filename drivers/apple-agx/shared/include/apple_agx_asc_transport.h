@@ -58,6 +58,9 @@ APPLE_AGX_ASC_RESULT AppleAgxAscSend(const APPLE_AGX_ASC_IO *Io,
                                      APPLE_AGX_ASC_U64 Payload,
                                      APPLE_AGX_ASC_U32 Endpoint,
                                      APPLE_AGX_ASC_U64 DeadlineMs);
+/* Consume one already queued message; never wait, transmit, pause or read time. */
+APPLE_AGX_ASC_RESULT AppleAgxAscTryReceive(const APPLE_AGX_ASC_IO *Io,
+    APPLE_AGX_ASC_MESSAGE *Message, APPLE_AGX_ASC_BOOL *Available);
 APPLE_AGX_ASC_RESULT AppleAgxAscReceive(const APPLE_AGX_ASC_IO *Io,
                                         APPLE_AGX_ASC_MESSAGE *Message,
                                         APPLE_AGX_ASC_U64 DeadlineMs);

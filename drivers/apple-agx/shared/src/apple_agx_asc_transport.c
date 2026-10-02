@@ -140,6 +140,29 @@ APPLE_AGX_ASC_RESULT AppleAgxAscSend(const APPLE_AGX_ASC_IO *Io,
   return AppleAgxAscResultOk;
 }
 
+APPLE_AGX_ASC_RESULT AppleAgxAscTryReceive(const APPLE_AGX_ASC_IO *Io,
+    APPLE_AGX_ASC_MESSAGE *Message, APPLE_AGX_ASC_BOOL *Available) {
+  APPLE_AGX_ASC_U32 control;
+  APPLE_AGX_ASC_U64 selector;
+  if (Available != APPLE_AGX_ASC_NULL)
+    *Available = APPLE_AGX_ASC_FALSE;
+  if (Io == APPLE_AGX_ASC_NULL || Io->Read32 == APPLE_AGX_ASC_NULL ||
+      Io->Read64 == APPLE_AGX_ASC_NULL || Message == APPLE_AGX_ASC_NULL ||
+      Available == APPLE_AGX_ASC_NULL)
+    return AppleAgxAscResultInvalidArgument;
+  if (!Io->Read32(Io->Context, J313_AGX_G2_ASC_OUTBOX_CTRL_OFFSET, &control))
+    return AppleAgxAscResultTransportFailed;
+  if ((control & APPLE_AGX_ASC_MAILBOX_EMPTY) != 0u)
+    return AppleAgxAscResultOk;
+  if (!Io->Read64(Io->Context, J313_AGX_G2_ASC_OUTBOX0_OFFSET,
+                  &Message->Payload) ||
+      !Io->Read64(Io->Context, J313_AGX_G2_ASC_OUTBOX1_OFFSET, &selector))
+    return AppleAgxAscResultTransportFailed;
+  Message->Endpoint = (APPLE_AGX_ASC_U32)(selector & 0xffULL);
+  *Available = APPLE_AGX_ASC_TRUE;
+  return AppleAgxAscResultOk;
+}
+
 APPLE_AGX_ASC_RESULT AppleAgxAscReceive(const APPLE_AGX_ASC_IO *Io,
                                         APPLE_AGX_ASC_MESSAGE *Message,
                                         APPLE_AGX_ASC_U64 DeadlineMs) {

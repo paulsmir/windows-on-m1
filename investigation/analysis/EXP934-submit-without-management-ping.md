@@ -16,3 +16,17 @@ WHAT IS STILL UNKNOWN: Whether removing this false prerequisite allows the boot 
 WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Compile and execute the actual worker span from software packet preparation to backend submit. Inject the observed management timeout with an otherwise valid activated G3 job: old code faults without sending; corrected G3 sends exactly once, does not fake completion, and still blocks if BeginJob or manager preparation fails. Also verify legacy profile still rejects heartbeat timeout. This is a runtime control-flow regression, not a string-presence assertion.
 
 Recovery: preserve933dump/trace/hashgate8854c883 and allsource/PDB artifacts. CurrentnormalGPUvisible guest is933Code43unarmed; removeexact933 package withhashes andorderednormalrecovery before fresh934stage. SameMuR143, newHVCm1n1bdcf8715, sameprofile/caps/layout. Immediatefirstready/Present check; no stabilitywaitwithoutcorrectphysicalimage.
+
+
+Pre-hardware source audit correction: `AppleAgxPlatformProviderDrainEvents` consumes
+shared-memory event records, but heartbeat was the only runtime consumer of ASC
+mailbox messages. Omitting it alone would allow that mailbox to fill. First934build
+is superseded before installation. The complete single change REPLACES synchronous
+per-job ping/pong with bounded nonblocking notification draining before submission
+and during completion polling. Empty is success; at most64 available messages per
+pass. Recognized runtime wake and management pong are consumed; boot-provisioned
+crash notification marks crash/fails; unknown payloads and MMIO errors fail closed.
+No waiting, new ping, timeout extension, or fabricated completion. Startup/shutdown
+management remain unchanged. New native ASC/session tests cover empty/queued/bounded
+messages, no transmit or clock/pause use, unknown message and crash rejection. This
+is necessary ownership continuity, not a separate optional hardware variable.

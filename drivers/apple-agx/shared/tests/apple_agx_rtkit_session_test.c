@@ -198,6 +198,64 @@ static void TestBootWaitsForCpuReadyBeforeSendingWake(void) {
   assert(fake.SendCount == 4u);
 }
 
+static unsigned char FailRuntimeRead64(void *Context, unsigned int Offset,
+                                       unsigned long long *Value) {
+  (void)Context; (void)Offset; (void)Value;
+  return 0u;
+}
+
+static void TestRuntimeDrainIsBoundedAndNeverPingsOrWaits(void) {
+  FAKE_SESSION_ASC fake = {0};
+  APPLE_AGX_ASC_IO io;
+  APPLE_AGX_RTKIT_SESSION session;
+  unsigned int drained, i, received, sends;
+  unsigned long long now;
+  QueueBoot(&fake); io = MakeIo(&fake);
+  AppleAgxRtkitSessionInitialize(&session);
+  assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, NULL, NULL, 100u) ==
+         AppleAgxRtkitSessionResultOk);
+  fake.ReceiveIndex = fake.ReceiveCount = 0u;
+  fake.Now = 10000000u; now = fake.Now; sends = fake.SendCount;
+  received = session.ReceivedCount;
+  /* Runtime drain must not depend on clocks, sleeps or outgoing traffic. */
+  io.NowMs = NULL; io.Pause = NULL; io.Write32 = NULL; io.Write64 = NULL;
+  assert(AppleAgxRtkitSessionDrainRuntime(&session, &io, 64u, &drained) ==
+         AppleAgxRtkitSessionResultOk && drained == 0u);
+  for (i=0u; i<8u; ++i) {
+    Queue(&fake, i == 0u ? 0x0040000000000000ULL : 0x0042000000000000ULL);
+    fake.ReceiveEndpoint[i] = i == 0u ? 0u : 0x20u;
+  }
+  assert(AppleAgxRtkitSessionDrainRuntime(&session, &io, 3u, &drained) ==
+         AppleAgxRtkitSessionResultOk && drained == 3u);
+  assert(fake.ReceiveIndex == 3u && session.ReceivedCount == received+3u);
+  assert(AppleAgxRtkitSessionDrainRuntime(&session, &io, 64u, &drained) ==
+         AppleAgxRtkitSessionResultOk && drained == 5u);
+  assert(fake.ReceiveIndex == 8u && session.ReceivedCount == received+8u);
+  assert(fake.SendCount == sends && fake.Now == now);
+  assert(AppleAgxRtkitSessionDrainRuntime(&session, &io, 0u, &drained) ==
+         AppleAgxRtkitSessionResultInvalidArgument);
+  assert(AppleAgxRtkitSessionDrainRuntime(&session, &io, 65u, &drained) ==
+         AppleAgxRtkitSessionResultInvalidArgument);
+  fake.ReceiveIndex = fake.ReceiveCount = 0u;
+  Queue(&fake, 0x0043000000000000ULL); fake.ReceiveEndpoint[0] = 0x20u;
+  assert(AppleAgxRtkitSessionDrainRuntime(&session, &io, 64u, &drained) ==
+         AppleAgxRtkitSessionResultProtocolViolation && drained == 1u);
+  fake.ReceiveIndex = fake.ReceiveCount = 0u;
+  Queue(&fake, 0x0042000000000000ULL); fake.ReceiveEndpoint[0] = 0x20u;
+  io.Read64 = FailRuntimeRead64;
+  assert(AppleAgxRtkitSessionDrainRuntime(&session, &io, 64u, &drained) ==
+         AppleAgxRtkitSessionResultTransportFailed && drained == 0u);
+  io.Read64 = FakeRead64;
+  fake.ReceiveIndex = fake.ReceiveCount = 0u;
+  Queue(&fake, 1ULL<<52u); fake.ReceiveEndpoint[0] = 1u;
+  session.CrashlogReplySent = APPLE_AGX_RTKIT_TRUE;
+  assert(AppleAgxRtkitSessionDrainRuntime(&session, &io, 64u, &drained) ==
+         AppleAgxRtkitSessionResultFirmwareCrashed && drained == 1u);
+  assert(session.CrashlogCrashed && fake.SendCount == sends && fake.Now == now);
+  assert(AppleAgxRtkitSessionDrainRuntime(&session, &io, 64u, &drained) ==
+         AppleAgxRtkitSessionResultFirmwareCrashed && drained == 0u);
+}
+
 static void TestHeartbeatRequiresExactManagementPong(void) {
   FAKE_SESSION_ASC fake = {0};
   APPLE_AGX_ASC_IO io;
@@ -436,6 +494,7 @@ int main(void) {
   TestBootAndStopAreExactAndBounded();
   TestProtocolFailureClearsRun();
   TestBootWaitsForCpuReadyBeforeSendingWake();
+  TestRuntimeDrainIsBoundedAndNeverPingsOrWaits();
   TestHeartbeatRequiresExactManagementPong();
   TestHelloTimeoutPreservesMailboxSnapshots();
   TestStopCleanupFailurePreservesRetryState();
