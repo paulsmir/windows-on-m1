@@ -4,6 +4,6 @@
 /* Private m1n1 ABI: payload/request in X0, status in X0.  Normal external
  * ARM64 calls also make the compiler honor the volatile-register boundary. */
 unsigned long long AdmissionHvcArmConsumed(unsigned long long payload);
-unsigned long long AdmissionHvcGuestIpaPa(unsigned long long request_ipa);
+unsigned int AdmissionHvcGuestIpaPa(unsigned long long request_ipa);
 
 #endif
