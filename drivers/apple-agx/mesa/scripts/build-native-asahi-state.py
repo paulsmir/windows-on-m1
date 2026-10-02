@@ -1100,9 +1100,8 @@ void APIENTRY
    }
    Device *pDevice = CastDevice(hDevice);
    struct pipe_resource *resource = surface ? surface->texture : NULL;
-   struct pipe_surface *bound = pDevice && pDevice->fb.nr_cbufs == 1 ?
-      &pDevice->fb.cbufs[0] : NULL;
-   if (!pipe->clear || !surface || !resource ||
+   if (!pDevice || !pipe->clear || !pipe->set_framebuffer_state ||
+       !surface || !resource ||
        resource->target != PIPE_TEXTURE_2D ||
        (resource->format != PIPE_FORMAT_B8G8R8A8_UNORM &&
         resource->format != PIPE_FORMAT_B8G8R8A8_SRGB &&
@@ -1119,18 +1118,23 @@ void APIENTRY
        resource->nr_samples != 1 || resource->array_size != 1 ||
        resource->last_level != 0 ||
        util_format_linear(surface->format) != util_format_linear(resource->format) ||
-       surface->level != 0 || surface->first_layer != 0 || surface->last_layer != 0 ||
-       !bound || pDevice->fb.zsbuf.texture || bound->texture != resource ||
-       bound->format != surface->format || bound->level != surface->level ||
-       bound->first_layer != surface->first_layer || bound->last_layer != surface->last_layer ||
-       pDevice->fb.width != pipe_surface_width(surface) ||
-       pDevice->fb.height != pipe_surface_height(surface)) {
-      LOG_UNSUPPORTED("ClearRenderTargetView requires one full admitted color target");
+       surface->level != 0 || surface->first_layer != 0 || surface->last_layer != 0) {
+      LOG_UNSUPPORTED("ClearRenderTargetView requires an admitted color view");
       SetError(hDevice, E_NOTIMPL);
       return;
    }
+   /* D3D clears the supplied view even when it is not bound for drawing.
+    * Asahi clear uses a framebuffer-keyed batch, so supply that view only
+    * for the clear and restore the application's complete binding state. */
+   struct pipe_framebuffer_state clear_fb = {};
+   clear_fb.width = pipe_surface_width(surface);
+   clear_fb.height = pipe_surface_height(surface);
+   clear_fb.nr_cbufs = 1;
+   clear_fb.cbufs[0] = *surface;
+   pipe->set_framebuffer_state(pipe, &clear_fb);
    pipe->clear(pipe, PIPE_CLEAR_COLOR0, 0xf, 0, NULL,
                &clear_color, 0.0, 0);
+   pipe->set_framebuffer_state(pipe, &pDevice->fb);
    if (traceDevice) AgxD3d10WindowsDiagnosticState(traceDevice->windows, "clear-after");'''),
         ('''   struct pipe_context *pipe = CastPipeContext(hDevice);
    struct pipe_surface *surface = CastPipeDepthStencilView(hDepthStencilView);
