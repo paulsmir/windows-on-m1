@@ -1,173 +1,112 @@
-# J313 current GPU state — EXP925 captured; normal recovery; last50 guest cleanup
+# J313 current GPU state — same-boot update, arm-gate refusal
 
-Accepted desktop package NONE. Physical garbage first seen EXP922; no accepted
-Present/output. User requires continue until fixed, source-first, one causal variable,
-short readiness -> one discriminator -> evidence -> rollback; no long stability trial.
-No subagents/no messaging other chats. Root artifacts .local/experiments, not worktree.
+## User constraints and current objective
+Continue to a correct stable physical desktop. Latest explicit override: NO OS
+REBOOT; investigate, build and install corrected driver in the existing Windows
+boot. Supported device-only PnP restart is allowed. Do not run cold rollback or
+shutdown scripts. No subagents / no messaging other chats. Short falsifiable
+checks, no prolonged stability trial before correct physical output.
+Accepted desktop package NONE. Moving image fragments were real observations;
+KMDPresent0 and an early zero buffer do not mean the current panel is blank.
 
-## Current control / recovery
-EXP925 package30.0.925.0/source47f7e2910222e8be1984f1664c2f30a966031e5b installed once.
-OriginalBoot11:36:07.971197Z, Code0/Stage12/CPU8 at43.83s. Owner71485 later exited
-USBErrno6; freshSSHtimeout/noowner/L41L43/guardedNOP RunningproxyPASS.
-Ordinary377/392 recoveryBoot11:41:25.990320Z Code43Stage2CPU8. Recovery18hostgate
-5be421fc45c4befde2810f50db1d3945646a0ef6d09aca626c5d885b679344e1 beforeexact925cleanup.
-Exactoem5 removed11:44:48, binaries/service/signer removed, orderedrestart10s accepted.
-Finalordinaryowner72654 (verifyfresh), Boot11:45:03.592399Z, firstsmallstate11:47:29
-Code28/oneinertAPPL0002/armnull/SYS0/UMD0/CPU8/free4004298752.
-Fullordinarydurablequery timedout30s duringarchiveIO; repeatafterarchive, do notinferpass.
-OwnedWERdwm/explorerdiagnostickeys removed11:46:34 afterrecoveryhostgate;
-loggeralreadyremovedbycollector. No AGX broker in normalprofile.
-No925package retained/staged. NeedfullCode28proof twice and3cleanupreceiptshostgate.
+## Workspace and control
+Worktree /Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler
+(physical /Volumes/pwdev/public_windows/.worktrees/...). Branch
+integration/ad04-windows-compiler. All artifacts ROOT .local/experiments, not
+worktree .local. Root main checkout has extensive unrelated dirt: never edit it.
+Foreign dirt in worktree: m1n1_windows, mu; untracked pauls@192.168.1.24.ps1 and
+analysis/EXP895-standard-blt-stimulus-plan.md. Leave untouched.
+Air pavel@192.168.1.37 key /Users/pavel/.ssh/air; known-hosts
+ROOT.local/experiments/EXP641-standard-present/air_known_hosts.
+Builder pauls@192.168.1.24 key /Users/pavel/.ssh/windows_builder.
+Owner35884 run_uefi full profile remains active (verify fresh). No raw USB/NOP
+while Windows is reachable. Full m1n1 d3e0f999/MuR143e54c0098 unchanged.
+Boot2026-10-02T17:06:29.489308Z (earlierCIM .490552Z differs1.244ms due clock;
+use <=1s tolerance plus exact package/state). Windows SSH alive, no reboot done.
 
-## Causal boundary / EXP924 and925
-EXP924SDK9648 bothBGRA87/dim3/binda8/misc20002/2560x1600 importedS_OK;
-dump2.315s later98045B SHA2c6396ba8feccbefbb48da2a6fb29ef777c2fb6e13008a4d7b712acf4284baab.
-Main waitsDXGIProxyWindow/fullscreencreation; worker8NtAlpcConnectPort/dwmapiEnsureConnected.
-ExtraDWM1224dump128272B SHA8cb9244738cbc0b863df7113b1f41471901435ab57f83b3125eb0ff9d6e0b2b4:
-LPCthread1728 NtGdiDdDDIDestroyAllocation ->d3d11DeallocateCB ->UMDscreenDestroyBuffer ->
-NativeBOdestroy/unref ->agx_pool_cleanup ->batchBegin/resourcecopy/D2D/DComp/uDWMscene.
-uDWMEventThread contendedCS. PDBlocalsallocation800014c0/i1 stagingallocation.
-This isstrongdestruction/retirementboundary, notproofkernelrootcause.
-MicrosoftDestroyAllocation PASSIVE/synczero andVidMm schedulersync beforememoryrelease;
-existingUMDholds/refcount/unmap/GPUVAunbinding/retirementguards found, no exactbugselected.
-Do notguessdeferfree/flush/dropbusy/capabilities/tiling. PrimaryMesaagx_bo.c/pool.c/agx_batch.c
-andnativeWindowsBO/batch/retirement inspected once; no thirdarchaeologypass.
+## Latest installed state
+EXP929 package30.0.929.0/oem6 installed via pnputil/add-driver/install, Exit0,
+no reboot required, same boot. It did not start: Code43 Stage1/c00000bb,
+G3Armnull. AutoReboot changed1->0 per user no-reboot constraint; prior recorded
+in ROOT929/live-before.json. Keep0 while this constraint applies.
+Old928/oem5 remains unbound/staged for live rollback; preserve exact928 and929
+artifacts. Do not run old cleanup scripts that delete shared signer/service or
+schedule restart. Live user override supersedes normal cold cleanup order.
+EXP929-R1 explicitly rearmed installed929 then pnputil/restart-device APPL0002;
+Exit0, sameCode43/Stage1/c00000bb/Armnull. No new ARM_CONSUMED serial print.
+R1 script has no arm cleanup, so installer-finally race alone is insufficient.
+Do not repeat third identical restart. Current boundary is before GPU access.
+SYS929 29439782a13404d0a29cafddae2a1b9cce2a7a159d5fc0cd7a5cd0dfc109ff26
+UMD929 6f8cd5288248f7d3a46fb5dc289aef2b45e5da4d4b1238782e00996cf272241c
 
-EXP925 diagnostic-only pairedKMDdestroyentry/exit privateABI2 kinds9/10 PID/TID/count.
-OriginalSDK4908 once; twoexactimports checkpoint11:37:07.1480098Z; dump99101B
-SHAd52f5004ddedcbc5cedeadade0fa614075ada27335499d67d9c2eed78f8f55da,
-hostgatefullscreen-host-gate.json PASS. Decodedmain/worker8 sameDXGI/ALPCwait.
-Beforeworkload entry202/exit202/dropped0, pid4tid6252; probeinstrumentationworks.
-Afterframe querymissingdueSSHloss, noDWM925snapshot. Therefore KMDbodyvsOSsync
-NOTdistinguished; diagnosticverdictinconclusive forowningkernelboundary, nofixedclaim.
-Presentphysical/virtual0 beforetest; no successfulSDKfullscreen/clear/Presentreceipt.
-FailedSCPearlyETL left6.5MBpartialhostcopy, do notuseascomplete; frozenoriginalguest925
-retainedforrecovery. Mustrecoverearlyreceipt+closedfileshashbeforeusingtrace.
-NoSDKrerununchanged. Nextcausaltarget: kernelallocationrelease/schedulersync boundary,
-useactualrecoveryevidence/stack, notnewcapabilityprobes.
-Plans analysis/EXP924-sdk-post-import-stack-plan.md /EXP925-allocation-destroy-boundary-plan.md.
-925 finalmanifestf6de4e75e10e3f64e31eca158c223d5a4e6c89ddbbd1c9a4f7bac20f5294811b,
-payload05d5790b96c3bbcd3a95021a57ff8d7837c3add81ea5efc16176c859227e8182.
-No implementationfixsince47f7e291. DDI3/allocation6pass; same3stalesource-extraction
-compilefailures reproducedbaseline. SignednativeARM64/WDKbuild0warnings/PDBmatched.
+## Pending EXP930 diagnostic
+Source0fb0191090f2ee1dbd2770ee2919507ec9797d5d adds exact arm-gate receipt:
+phase1=open,2=query/type/value,3=delete,4=flush,5=missing generation,6=HVC;
+Wom1GpuvaArmBuild/Phase/Status/Generation/Hypercall. Original admission and
+one-shot delete/flush remain unchanged. AddDevice enforces nonzero generation;
+928/929 HVC instruction bytes identical. m1n1 handler has no CPU0 restriction.
+Plan analysis/EXP930-live-arm-status-plan.md. Actual resource/admission replay
+GREEN. Build930 nativeARM64/pinnedWDK26100 zero-warning PASS; signature CAT/SYS/
+UMD pinnedE9 PASS. Artifacts ROOT.local/experiments/EXP930-live-arm-status.
+Package download in exec session47921 (verify completion). No930installed yet.
+Next: seal/preregister exact package manifest; install930 UNARMED into current
+Code43 devnode, verify new receipt Build930/Phase2 before GPU. Then one explicit
+arm+device-only restart and read exact failing phase/status. No OS reboot.
+Prepared installer/restart scripts in ROOT930; NOT sealed or executed yet.
 
-## User-approved guest cleanup
-Userapproved exactVSS deletion (done11:24:47/shadow0) andalloldexperimentsexceptlatest50.
-Latest50existingIDs866-869/880-925 retain152folders;245olderfolders2707files7597053541B.
-Root925 last50-retention-plan.json /old-experiment-files.json. ManifestallfilesSHA done.
-SharedEXP726signing copied+hashverified C:\Users\pavel\J313-tools\signing;
-futurestage use signtool-arm64.exe there, notdeletedoldEXP726path.
-Old245folders deletion COMPLETED11:51:31.944Z. All2707hosttar members sizeSHA PASS;
-archiveSHAce49c2f41759f2a275b2335442376212078ebcc2b1db71d50cb1aad9bfb5f7d9,
-internal /Users/pavel/J313-evidence-archive/2026-10-02/guest-old-experiments-last50-retained/old-experiments.tar.gz.
-ManifestSHA362691cc703b86714dc3f2bcc34d2a44619cb3238b18daf44cef1a775f095fae.
-Delete245/remaining0; free4024823808->11622449152. Freshretain152/missing0,
-CPU8Code28;14445BreceiptSHAa3384c21d4a34ccaa19af5a8ff4061601f46c42771cc25a6c039923918610dfb hostverified.
-Sharedsigningfolder nowonly552824Bsigntool-arm64.exe SHA097bdc4805f0cdcb4c1689a1533b0eb9a6143c3751c421b7ecc26b5c8cd5f0b1.
-NormalfullCode28 twice11:49:15/11:49:53 sameBoot11:45:46.241825Z/CPU8/RDPdisksUSB,
-zeroexperimentpackage/service/module/signer/diagnostics;3cleanupreceiptshostgatePASS.
-ROOT803 cleanup COMPLETED12:01:41Z: exact6442450944B sourceSHA2859c93f05c620635deeab826e04bd348fdfddd5c66e2c604c9915326de246fe,
-DedicatedDumpFile null/noactive refs/exclusiveReadPASS; archiveallmemberSHAverified,
-archiveSHA cc4bc0b366625b05d0b02afc5a7c0bbed162f68cbb43a4f5ee7c771e2fd81076,
-internal samearchivefolder/EXP803-dedicated-dump.tar.gz. Exactfilegone;243Bdelete
-receiptSHA634e080445ce83de769cbe57a948be8eb0ca809703ca29a9b4299134cd0699e7 hostverified.
-FINAL12:02:17Z free18054393856/Code28/CPU8/RDPRunning/retain152missing0;
-combinedoldfolders+rootfile14039504485logicalB removed. Sharedsigntoolonly preserved.
-No guestoldcleanup pending. Acceptedarchives retained; owninterruptedhosttarpartial
-removedaftercompletearchivemembers verified. Prior<=600 andETLduplicatecleanup staysvalid.
+## Correction carried by929 and930 (not physically validated)
+Commit6d37f17b57322d6de10320691bbdd424e5199ee0: private ACQUIRE/PREPARE Flags0,
+KMD accepts0orlegacy1; RELEASE stillrequiresHardware1. Own process JobInFlight/
+LeaseToken checked before reap after bounded wait. Existing graph/pool/owner/
+range/generation/broker checks retained. m1n1 publish_entry rejects owner jobs,
+syncs tables and invalidates owner slots. Asahi VM mappings use per-VM locks.
+Real Mesa prepare->KMD->m1n1 broker RED(old rejects0) to GREEN16/64 ASanUBSan;
+retained lease prevents reaping; software RELEASE/unrelatedflags rejected;
+legacy1 combined lifecycle GREEN. Plan analysis/EXP929-private-acquire-software-entry-plan.md.
+Known CPU copy fix927 f99dad9e also remains: copy escape Flags0, KMD accepts0/1.
+No capability, NO_REDIRECTION, scheduler, pitch, memory-layout or firmware fix.
 
-## Authoritative fullkernel925 causal boundary (correction of filesystemtimestamp inference)
-FreshSystem1001UTC11:41:58.8207493Z and1066156Bminidumpdc480066 confirm116
-(ffff8487be2bc010,fffff80142b2ab40,ffffffffc0000483,3).
-FULLKernel-MEMORY.DMP635199439B SHA1040da783be558467e44dc6be89d301ea693c91f64c12e3db5c0dfec2b2a1fc8
-INTERNALHEADER SAMEoriginalcrash11:37:32.596Z/uptime85.161s/CPU3. Filesystem11:32timestamp
-misleading; priorclassification superseded inledger/report. Bothdumpshostverified.
-Matching925PDB/knownoriginalDWMcontextbca93b80 ->Object.Device.Adapterbcc02000,
-PlatformRuntimebcd25000 validatedviaRuntime.Adapter backpointer.
-Frozendestroyentry577/exit577/seq1154/drop0/lastsameallocbd6d5a00/PID4TID312/status0.
-NooutstandingKMDdestroybodyatcrash; previous transientwait notexcluded.
-SchedulerFaulted0x40bb0=0x40000|2992 maps EXACTsealedbackend_platform_windows.c2992
-PRE-SUBMIT RTKIT HEARTBEAT FAILURE. CompletedFence7961 vsLastSubmitted/Active7966,
-packetActive/preemptionpending, TDRResetStatusc0000483. Not a blindfree/resetfix.
-RtkitBootReady/Running1/CpuReady1/StopIdle/CrashlogCrashed0; lastRxep20/payload
-0042000000000000 isevent42, explicitlyacceptedbycurrentHeartbeat. m1n1FirmwareEPevent42
-pollsAGXchannels. Do NOTclaimprotocolviolationjustfromlastmsg orphysicalM1fault.
-NEWNEXTTARGET heartbeat/Pong/ASC receiveownershipbeforeenqueue andproperAGXevent
-channelhandling. CompareprimaryAsahi/m1n1/Mu/WDK mapping beforeedit; deterministic
-reproducerbeforefixifrealofflinecontractdefect found. EXP926 diagnostic-only internal64byteheartbeatreceipt implemented8d0fd7fd; exactResult/time/Rxmetadata, unchanged500ms deadline/queue/status. ASC/RTKit/provider existing3suitesGREEN; native/WDK/sign/seal/install notyetdone. Plananalysis/EXP926-heartbeat-result-plan.md. New925frozenFWlog6 allzero/Eventrptr=wptr6f excludesfulllogring; RenderCorrelationCount0/ASCtrace64saturated givesnoexactfailurecode. No newhardwarelaunchpreregistered.
-Reportanalysis/EXP925-allocation-destroy-boundary-verdict.md; currentcdb-memory.log,
-cdb-flat-context.log,cdb-final-state.log inROOT925. No accepteddesktop/newcodefix.
+## Evidence that selected929 correction
+EXP928 original firstready53.42s Code0/Stage12/CPU8; two read-only queries5s apart,
+no SDK in initial test. Destroy323/323 but first selected primary match0; later
+4033/4033 match0. Primary lifetime hypothesis not supported for measured interval.
+Original15 host gate c72c67a1582ff06d8c8387399d28cd946d5e086923452ab783dbfffb2ed59f74.
+Primary atGPU1500110000, PA8e0110000 was selected by Windows, not an independently
+reserved bootstrap buffer. Shared DCP/VidMM range alone is not a defect.
+Native primary import explicitlyLINEAR and validates stride/offset.
 
-## Immutable recovery / rules
-377m1n1 SHAfae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a;
-392Mu SHA16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06,
-ROOT.local/experiments/EXP810-g4-package817/recovery. Hidden385 emergencyonly
-SHA279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c.
-FreshboundedWindowsSSH +USB/ownerbeforeproxyaction/physicalrequest. NoNOPwhilelive.
-NoCode0packageremoval. EvidencehostgatesbeforeCode43exactcleanup, normalGPUvisible
-Code28twice. Script>2800B useSCP+shortfilehashwrapper. EXPERIMENTS pre+actualmandatory.
-Neverdelete /Users/pavel/J313-evidence-archive targets orhostrecoveryartifacts.
+Read-only live DWM1244 snapshot17:12:02 (101246B, SHA19bffee39317bfc1981f9a0b0f76b2f4c5ad3f98ad94b6c91aaa122192c944b3)
+showed compositorWaitForNextTick/LPCWaitForNextMessage, no transfer stack. VSync
+continued (29674 notifications) and DWM26submit/26complete. Do not call it stuck
+in copy from that snapshot. Focused original ETL:72 normal screen flips were
+Basic adapter17346000 before switch; only AGX19de6000 Present wasRedirectedFlip
+0x8000 on LPC1668, not compositor1408 screenPresent. NO_REDIRECTION remains per
+existing documented no-D3D9 contract; do not toggle experimentally.
 
+EXP928-LIVEPAIR: one SDK in existing boot, simultaneous dumps BEFORE owned SDK
+termination; temporarytask removed. SDKwaitNtAlpcConnectPort/proxywindow;
+DWM LPC private_escape ACQUIRE1,1024x1024,utile32x32, zero scene/manager handles,
+inside ResourceCopyRegion/D2D/DComp/window-border update. Matched928PDB locals.
+SDK105818B SHA02401da957342059cb4a6e6cf9c3e4e78e74cb518f7f2818ba8b99280d40590b
+DWM126782B SHAdcf4013e4cbc1158b02f7f090bf690ed1386bdf38b0e2245422da0493bf112c2
+Paired9 host gate PASS. No physical success or sole-cause proof.
+Files ROOT928/clean-cdb-*.log (.decoded for text), private-request.log,
+live-paired-host-gate.json, dwm-present-focused.jsonl. Partial broad ETL export
+is not the final focused decode. Original ETL/file hash gate preserved.
+CDB command and decoded-log filenames must differ: an earlier collision caused
+syntax errors; corrected clean paired logs are the valid analysis.
 
-## Authoritative EXP926 latest (supersedes pending925/926 notes above)
-Source8d0fd7fd6fd0d7eed1d2c43b6e42e30b4f1de9a7 internal64byteHBreceipt; package30.0.926.0.
-Manifestff39a47c800e089d4529029f96cda8d5f62d3888296174a3a1b10a988891af87,
-payloade3b95c053a4ab9ae2b8a89a62b5d58ea2021f4716dbc6f04f9d5d20ff4a2aba2;
-73artifact49transfer/source546/nativeWDK0warnings/PDBmatch/E9CATmembershipsPASS.
-OriginalBoot12:48:53.001046Z Code0Stage12CPU8 at42.67s; DWM1232/Explorer4672;
-SDK9972 once, postimportdump/earlytrace/closedfileshostgatesPASS, noSDKPresentreturned.
-AfterframePresent0/virtual0, destroy355/355/drop0; DWMsubmit44/complete7/last5356.
-NooriginalTDR observed atcollection; HBinternalreceipt notexposedlive, no926kernel
-failure dump toextractit. Do notclaimHBfixed/noTDRstability. Originalcontrol/analysis
-extendeduntil13:06orderedrestart, despiteuser'sshortcheckpoint preference; notstabilitytrial.
-Operatorexplicitlyseesmovingfragmentsofimage/physicalgarbage. InitialDCPPA8e0110000
-seq2snapshotallzeroONLYbeforelateractivity; nevercallcurrentpanelblankbasedonit.
-DWMextra123488B/c6272c5076e0f79ee8aafc35d49a49bfac1585deca6ae66250849efbec25586d
-snapshot12:59:46 matchedUMD926PDB: LPCthread8NtGdiDdDDIEscape ->copy_escape ->
-transfer_slot ->submit ->BatchFinish/FlushForPresent ->PresentationSubmit/_Present.
-Locals transferstep3/offset10000 (second64KiB transfer), NOTQUERY. HardwareAccess1
-inrequest; allG3copyopsforce1andKMDrequiresFlags.Value1. MicrosoftLevelTwo demands
-GPUidle/noDMA; functiononlyCPURAMcopy/logicalPTE/ownlocks+quiescence. Nextderive
-coherentCPU-copyescape synchronizationcontract andtestrealhandler beforeflagfix.
-Do NOTQUERY-onlyprobe orchangeflagswithoutclassification/pairedKMDUMDcontract.
-Separatephysicalaliashypothesis: SourceMemoryLocalViewandScanoutView bothfrontsameLR,
-952MiBVidMMlocalheapincludesregistered56MiBDCPpool; liveLocalReserveIPA=PA8e0000000,
-DCPinitialsurfaceat8e0110000. Needproveactualownership/allocatorreservation; nofixyet.
-Queryfailure168Bpredicate57/validCanonical65536/VA20000/residentGroupUnavailable from
-original; notautomaticallycurrentstalledcopy. SourceRenderScopecurrentboundaryisupload.
-Original16hostgatec8effecf0cd84da3a0601883799789785a30c48aafb8f38d796060bd5dfa7a73;
-DWMdumpadditionalhostgatePASS. NoSIGINT/no extraSDK/no liveCode0removal.
-Normal377/392 recoveryowner83318 Boot13:13:15.636246Z Code43CPU8,14hostartifactgatePASS.
-Diagnosticsclean13:25:52; exactoem5/926removed13:29:23, orderedrestartaccepted10s.
-Finalnormalowner85421 launchedafterfreshSSHtimeout/noowner/USB/guardedNOP;
-fullCode28checks/threecleanupreceipthostgate pending. Freshcontrolbeforeanyaction.
-ROOT.local/experiments/EXP926-heartbeat-result containsallcurrentevidence/scripts.
-Hostclosed925/9241182556111B relocatedverifiedtointernalarchive before926, originalpaths
-symlinkspreserved. Do notdeletearchives. Air18GBfree before926, now~17GB aftercollections.
-No927implementation/build/hardwareyet. Noacceptedstablephysicaldesktop.
-
-EXP926 finalordinary Boot13:37:34.788089Z Code28fullchecks13:40:34/13:45:29,
-CPU8/oneAPPL0002/RDPSSH/disks2USB5/zeroexperimentstate;3cleanupreceipthostgatePASS.
-Normalowner85421 verifyfresh. Noinstalled/stagedAppleAgx. Free17422225408/shadow0.
-EXP927 atomicCPU-copysoftwareentry implemented f99dad9e (exact40hashinCHANGES):
-UMDFlags0; KMDaccept0orlegacy1, rejectotherbits. NoAdapterSynchronization0;
-allownmutex/quiescence/range/ownership/generationguardsunchanged. ActualKMD
-softwarecopyQUERY failedc000000dRED thenQUERY/UPLOAD/DOWNLOAD byte-roundtrip
-GREEN both16/64; existingqueryreceipt2GREEN. TestmainreturnsNone, correctedassertion;
-nofalsecompilerRED. Existingfixturebadflag0changedunsupportedflag2 because0validnow.
-Plananalysis/EXP927-software-copy-escape-plan.md; no927build/install/hardwareyet.
-Separatephysicalbootstrap-scanout aliashypothesis remainsunfixed; do notbundleit.
-
-EXP927 actual correction 2026-10-02T16:31:41.262493+00:00: software-copy package built and tested on hardware; no accepted stable image, Present0. Later scanout snapshot contains104385 nonzero pixels: physical fragments are real, initial zero snapshot is not current blank-screen proof. Original and recovery host gates PASS; exact927/oem5 removed16:10:09Z with staged0/armnull/SYS0/UMD0 and ordered restart. Fresh SSH timeout/no owner/USB present/PROXY_NOP_PASS; final normal377/392 recovery now preregistered, Code28 durability pending. Long control intervals were analysis/collector errors, not intentional stability testing.
-
-EXP927 final normal recovery verified: Boot2026-10-02T16:31:53.933519Z; full Code28 contract passed16:47:30 and16:48:01Z, exactly one inertAPPL0002, CPU8, SSH/RDP/storage/USB alive, staged/service/modules/signer/arms/diagnostic keys absent. Cleanup3 host size/SHA gate PASS 0f8aa4e6f8624b40006a66f8d1c744ad16c6356f1a1c0376fe705980980c1eb9. Free16695599104B/shadow0. Physical alias hypothesis narrowed: DCP surface0x8e0110000 was explicitly selected by successful SetVidPnSourceAddress for allocationffff8b076cde8be0/address1500110000, not an independently reserved bootstrap buffer. Shared VidMM/DCP range alone does not prove defect. Native primary import explicitly LINEAR/pitch10240, AIL verifies stride and level0offset0; simple tiled-primary hypothesis not supported. Next discriminate selected-primary lifetime/writer; do not blindly shiftheap/pool or detile.
-
-EXP928 diagnostic26751e16 implemented: requested/successful/failed destruction of immutable first selected primary exported in kind9/10 src_count/dst_count/fence; existing ABI2 unchanged. RealwrapperASanUBSan1 andprobe3 GREEN. Plananalysis/EXP928-selected-primary-lifetime-plan.md. No928hardware/build yet. Need exact new package and short noSDK lifetime discriminator; normalclean927recovery verified.
-
-EXP928 build/sign/hash sealed; hardware preregistered noSDK selected-primary lifetime check. No928hardwareyet. Closed927ETL/EVTX663240704B verifiedrelocatedinternalarchiveEXP927-closed-before928 withoriginalsymlinks; SHAmanifest preserved. Hostfree~5GiB, checkbudgetbeforestage.
-
-USER OVERRIDE current: NO REBOOT. Investigate/build corrected driver then supported PnP replacement within Boot2026-10-02T17:06:29.490552Z; no driver installation yet authorized to reboot. EXP928 originalhost15PASS; read-only counts323 destroy, selectedprimaryrequests0/success0; no lifetime confirmation. LiveDWM1244PresentcallbackS_OK in closedUMDtrace despiteKMDPresent0. Freshstack diagnostic pending. Old rollback instructions superseded by no-reboot request.
-
-EXP928-LIVEPAIR: SDK waitsALPC whileDWM LPC private_escape ACQUIRE1/1024x1024/utile32 matched928PDB. SDK105818B SHA02401da957342059cb4a6e6cf9c3e4e78e74cb518f7f2818ba8b99280d40590b; DWM126782B SHAdcf4013e4cbc1158b02f7f090bf690ed1386bdf38b0e2245422da0493bf112c2; paired9hostgatePASS/taskremoved. No reboot. FocusedETL AGXonlyPresent wasRedirectedFlip32768 onLPC1668; compositor1408 hadnoAGXscreenPresent. Prior72normalflips belongedtoBasicadapter17346000 beforeAGX19de6000, do notattribute themtoAGX. EXP929 privateprepare software-entry implemented 6d37f17b57322d6de10320691bbdd424e5199ee0; realKMD/broker REDtoGREEN16/64 withleaseguard+legacyPASS. RELEASEstillHardware1. Plananalysis/EXP929-private-acquire-software-entry-plan.md. Build/livePnPupdate pending; no929installed.
-
-EXP929-R1 AFTER 2026-10-02T18:11:09.716970+00:00: device-only restartreturned0, sameBoot17:06:29.489308Z, newpackage929/oem6, Code43Stage1c00000bb, Armnull. No new ARM_CONSUMED print in activeowner35884 full.log; no further GPU startup. Rearmrequest verified1 beforePnP andthisscriptdoesnotclearit, so priorinstaller-finally race alone is insufficient. Gate deletesarm butreturnsfalse: nextdistinguish ZwFlushKey failure from HVC/report failure with exactstep/status receipt; do not repeat thirdunchangedrestart or bypass one-shot protection. AutoReboot0, WindowsSSHlive, noOSrebootperformed. SourceHVC machinecodeidentical928/929 andAddDeviceenforcesnonzeroGeneration; noCPU0-only HVC handler restriction found.
+## Recovery and storage
+Immutable normal377 m1n1 SHAfae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a
+Mu392 SHA16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06
+ROOT.local/experiments/EXP810-g4-package817/recovery. Hidden385 emergency only,
+currently NOT authorized to reboot. Last full normalCode28 proof was927 final
+Boot16:31:53.933519Z, twicechecks +3cleanuphostgate0f8aa4e6...
+Air free~17.3GB. Prior authorized guest cleanup retained last50 experimentIDs;
+old archives preserved internally. Shared ARM64 signtool now
+C:\Users\pavel\J313-tools\signing\signtool-arm64.exe
+SHA097bdc4805f0cdcb4c1689a1533b0eb9a6143c3751c421b7ecc26b5c8cd5f0b1.
+Host closed927 ETL/EVTX663240704B and closed922 ETLs536870912B verified relocated
+with original symlinks under /Users/pavel/J313-evidence-archive/2026-10-02/
+EXP927-closed-before928 and EXP922-closed-before928. Do not delete archives.
+929 PDBs saved and PE/PDB GUID+age matched in ROOT929/pe-pdb-id-match.json.
