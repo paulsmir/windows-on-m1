@@ -17,14 +17,19 @@ C_ASSERT(DXGK_INVALID_MMU_ID == APPLE_AGX_GPUVA_G3_INVALID_MMU_ID);
 #include "apple_agx_render_template_vm_slot.h"
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 static BOOLEAN AdmissionReportGpuvaArmConsumed(ADMISSION_CONTEXT *context) {
-  ULONGLONG payload;
-  if (context == NULL || context->Win32BootGeneration == 0u)
+  ULONGLONG payload, result;
+  if (context == NULL || context->Win32BootGeneration == 0u) {
+    AdmissionRecordGpuvaArmGate(context, 5u, STATUS_INVALID_DEVICE_STATE, 0ULL);
     return FALSE;
+  }
   payload = ((ULONGLONG)HV_GPUVA_ARM_CONSUMED_VERSION << 32) |
             context->Win32BootGeneration;
   KeMemoryBarrier();
-  return __hvc(HV_GPUVA_ARM_CONSUMED_HVC_IMMEDIATE, payload) ==
-         HV_GUEST_IPA_PA_STATUS_SUCCESS;
+  result = __hvc(HV_GPUVA_ARM_CONSUMED_HVC_IMMEDIATE, payload);
+  AdmissionRecordGpuvaArmGate(context, 6u,
+      result == HV_GUEST_IPA_PA_STATUS_SUCCESS ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL,
+      result);
+  return result == HV_GUEST_IPA_PA_STATUS_SUCCESS;
 }
 #endif
 static BOOLEAN AdmissionConsumeGpuvaArm(ADMISSION_CONTEXT *context,
@@ -33,6 +38,7 @@ static BOOLEAN AdmissionConsumeGpuvaArm(ADMISSION_CONTEXT *context,
   HANDLE key = NULL;
   UNICODE_STRING name;
   ULONG bytes = 0u;
+  ULONG phase = 3u;
   NTSTATUS status;
   union {
     ULONGLONG Alignment;
@@ -40,23 +46,32 @@ static BOOLEAN AdmissionConsumeGpuvaArm(ADMISSION_CONTEXT *context,
   } data;
   PKEY_VALUE_PARTIAL_INFORMATION value =
       (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
-  if (context == NULL || context->PhysicalDeviceObject == NULL ||
-      !NT_SUCCESS(IoOpenDeviceRegistryKey(
-          context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
-          KEY_QUERY_VALUE | KEY_SET_VALUE, &key)))
+  if (context == NULL || context->PhysicalDeviceObject == NULL)
     return FALSE;
+  status = IoOpenDeviceRegistryKey(context->PhysicalDeviceObject,
+      PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE | KEY_SET_VALUE, &key);
+  if (!NT_SUCCESS(status)) {
+    AdmissionRecordGpuvaArmGate(context, 1u, status, 0ULL);
+    return FALSE;
+  }
   RtlInitUnicodeString(&name, value_name);
   status = ZwQueryValueKey(key, &name, KeyValuePartialInformation,
                            value, sizeof(data.Buffer), &bytes);
   if (!NT_SUCCESS(status) || value->Type != REG_DWORD ||
       value->DataLength != sizeof(ULONG) || *(ULONG *)value->Data != 1u) {
     ZwClose(key);
+    AdmissionRecordGpuvaArmGate(context, 2u,
+        NT_SUCCESS(status) ? STATUS_INVALID_PARAMETER : status, 0ULL);
     return FALSE;
   }
   status = ZwDeleteValueKey(key, &name);
-  if (NT_SUCCESS(status))
+  if (NT_SUCCESS(status)) {
+    phase = 4u;
     status = ZwFlushKey(key);
+  }
   ZwClose(key);
+  if (!NT_SUCCESS(status))
+    AdmissionRecordGpuvaArmGate(context, phase, status, 0ULL);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   if (NT_SUCCESS(status) && report_consumption &&
       !AdmissionReportGpuvaArmConsumed(context))

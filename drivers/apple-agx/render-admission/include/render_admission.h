@@ -764,6 +764,9 @@ void AdmissionRecordG1bDdiFailure(_In_opt_ PDEVICE_OBJECT DeviceObject,
 void AdmissionRecordDevice(_In_opt_ PDEVICE_OBJECT DeviceObject,
                            _In_ ADMISSION_RECEIPT Receipt,
                            _In_ NTSTATUS Status);
+void AdmissionRecordGpuvaArmGate(_In_opt_ ADMISSION_CONTEXT *Context,
+                                _In_ ULONG Phase, _In_ NTSTATUS Status,
+                                _In_ ULONGLONG HypercallResult);
 void AdmissionRecordStartStage(_In_opt_ ADMISSION_CONTEXT *Context,
                                _In_ ADMISSION_START_STAGE Stage,
                                _In_ NTSTATUS Status);
