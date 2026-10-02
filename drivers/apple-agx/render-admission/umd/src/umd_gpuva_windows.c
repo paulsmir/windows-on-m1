@@ -320,7 +320,11 @@ static int copy_escape(ADMISSION_UMD_DEVICE *device,
      !device->Adapter->RuntimeAdapter.handle || !device->RuntimeDevice.handle ||
      !device->KernelContext || !device->KernelCallbacks->pfnEscapeCb) return 0;
   request.hDevice=device->RuntimeDevice.handle;
-  request.hContext=device->KernelContext;request.Flags.HardwareAccess=1;
+  request.hContext=device->KernelContext;
+  /* This buffered ABI accesses host-mapped RAM and logical metadata. KMD
+   * enforces allocation/job/paging safety itself; do not ask Windows to idle
+   * the whole GPU before each 64-KiB CPU transfer. */
+  request.Flags.Value=0;
   request.pPrivateDriverData=payload;request.PrivateDriverDataSize=sizeof(*payload);
   HRESULT status = device->KernelCallbacks->pfnEscapeCb(
       device->Adapter->RuntimeAdapter.handle,&request);

@@ -62,7 +62,7 @@ static void r145_copy_cases(void) {
   /* A runtime allocation token is not the pointer returned by KMD Create.
    * Missing QUERY failure attribution must fail even after a successful replay. */
   assert((ULONGLONG)opened.RuntimeAllocation!=(ULONGLONG)(ULONG_PTR)&allocation);
-  escape.Flags.Value=0;
+  escape.Flags.Value=2;
   assert(AdmissionDdiEscape(&a,&escape)==STATUS_INVALID_PARAMETER);
   assert(a.G3CopyQueryFailureClaim==2 && a.G3CopyQueryFailurePredicate==4 &&
          a.G3CopyQueryFailureStatus==(ULONG)STATUS_INVALID_PARAMETER);
@@ -240,7 +240,7 @@ static void r145_copy_cases(void) {
   shadow->ResidentPtes[20]=saved;shadow->ResidentPtes[20].SegmentId=0;
   assert(!NT_SUCCESS(AdmissionDdiEscape(&a,&escape)) && local_cpu[0x100ff9]==9);
   shadow->ResidentPtes[20]=saved;
-  escape.Flags.Value=0;assert(!NT_SUCCESS(AdmissionDdiEscape(&a,&escape)));escape.Flags.Value=1;
+  escape.Flags.Value=2;assert(!NT_SUCCESS(AdmissionDdiEscape(&a,&escape)));escape.Flags.Value=1;
   c.GpuvaG3Closing=TRUE;assert(!NT_SUCCESS(AdmissionDdiEscape(&a,&escape)));c.GpuvaG3Closing=FALSE;
   state.ActiveProcess=p;assert(!NT_SUCCESS(AdmissionDdiEscape(&a,&escape)));state.ActiveProcess=NULL;
   assert(a.G3CopyQueryFailureClaim==0 && query_registry_writes==writes_before_success);

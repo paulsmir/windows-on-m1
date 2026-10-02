@@ -790,7 +790,10 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   COPY_REJECT_IF(!adapter || !adapter->Started, 1u, STATUS_INVALID_PARAMETER, Free);
   COPY_REJECT_IF(!args, 2u, STATUS_INVALID_PARAMETER, Free);
   COPY_REJECT_IF(KeGetCurrentIrql()!=PASSIVE_LEVEL, 3u, STATUS_INVALID_PARAMETER, Free);
-  COPY_REJECT_IF(args->Flags.Value!=1u, 4u, STATUS_INVALID_PARAMETER, Free);
+  /* CPU-only buffered copies use software entry. Retain legacy Level-Two
+   * callers, but reject every unrelated escape flag. Own locks, active-job
+   * and paging admission below remain required in either entry mode. */
+  COPY_REJECT_IF((args->Flags.Value&~1u)!=0u, 4u, STATUS_INVALID_PARAMETER, Free);
   COPY_REJECT_IF(args->PrivateDriverDataSize!=sizeof(*q), 5u, STATUS_INVALID_PARAMETER, Free);
   COPY_REJECT_IF(!args->pPrivateDriverData, 6u, STATUS_INVALID_PARAMETER, Free);
   COPY_REJECT_IF(!adapter->Interface.DxgkCbAcquireHandleData ||
