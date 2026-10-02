@@ -107,3 +107,53 @@ FreshboundedWindowsSSH +USB/ownerbeforeproxyaction/physicalrequest. NoNOPwhileli
 NoCode0packageremoval. EvidencehostgatesbeforeCode43exactcleanup, normalGPUvisible
 Code28twice. Script>2800B useSCP+shortfilehashwrapper. EXPERIMENTS pre+actualmandatory.
 Neverdelete /Users/pavel/J313-evidence-archive targets orhostrecoveryartifacts.
+
+
+## Authoritative EXP926 latest (supersedes pending925/926 notes above)
+Source8d0fd7fd6fd0d7eed1d2c43b6e42e30b4f1de9a7 internal64byteHBreceipt; package30.0.926.0.
+Manifestff39a47c800e089d4529029f96cda8d5f62d3888296174a3a1b10a988891af87,
+payloade3b95c053a4ab9ae2b8a89a62b5d58ea2021f4716dbc6f04f9d5d20ff4a2aba2;
+73artifact49transfer/source546/nativeWDK0warnings/PDBmatch/E9CATmembershipsPASS.
+OriginalBoot12:48:53.001046Z Code0Stage12CPU8 at42.67s; DWM1232/Explorer4672;
+SDK9972 once, postimportdump/earlytrace/closedfileshostgatesPASS, noSDKPresentreturned.
+AfterframePresent0/virtual0, destroy355/355/drop0; DWMsubmit44/complete7/last5356.
+NooriginalTDR observed atcollection; HBinternalreceipt notexposedlive, no926kernel
+failure dump toextractit. Do notclaimHBfixed/noTDRstability. Originalcontrol/analysis
+extendeduntil13:06orderedrestart, despiteuser'sshortcheckpoint preference; notstabilitytrial.
+Operatorexplicitlyseesmovingfragmentsofimage/physicalgarbage. InitialDCPPA8e0110000
+seq2snapshotallzeroONLYbeforelateractivity; nevercallcurrentpanelblankbasedonit.
+DWMextra123488B/c6272c5076e0f79ee8aafc35d49a49bfac1585deca6ae66250849efbec25586d
+snapshot12:59:46 matchedUMD926PDB: LPCthread8NtGdiDdDDIEscape ->copy_escape ->
+transfer_slot ->submit ->BatchFinish/FlushForPresent ->PresentationSubmit/_Present.
+Locals transferstep3/offset10000 (second64KiB transfer), NOTQUERY. HardwareAccess1
+inrequest; allG3copyopsforce1andKMDrequiresFlags.Value1. MicrosoftLevelTwo demands
+GPUidle/noDMA; functiononlyCPURAMcopy/logicalPTE/ownlocks+quiescence. Nextderive
+coherentCPU-copyescape synchronizationcontract andtestrealhandler beforeflagfix.
+Do NOTQUERY-onlyprobe orchangeflagswithoutclassification/pairedKMDUMDcontract.
+Separatephysicalaliashypothesis: SourceMemoryLocalViewandScanoutView bothfrontsameLR,
+952MiBVidMMlocalheapincludesregistered56MiBDCPpool; liveLocalReserveIPA=PA8e0000000,
+DCPinitialsurfaceat8e0110000. Needproveactualownership/allocatorreservation; nofixyet.
+Queryfailure168Bpredicate57/validCanonical65536/VA20000/residentGroupUnavailable from
+original; notautomaticallycurrentstalledcopy. SourceRenderScopecurrentboundaryisupload.
+Original16hostgatec8effecf0cd84da3a0601883799789785a30c48aafb8f38d796060bd5dfa7a73;
+DWMdumpadditionalhostgatePASS. NoSIGINT/no extraSDK/no liveCode0removal.
+Normal377/392 recoveryowner83318 Boot13:13:15.636246Z Code43CPU8,14hostartifactgatePASS.
+Diagnosticsclean13:25:52; exactoem5/926removed13:29:23, orderedrestartaccepted10s.
+Finalnormalowner85421 launchedafterfreshSSHtimeout/noowner/USB/guardedNOP;
+fullCode28checks/threecleanupreceipthostgate pending. Freshcontrolbeforeanyaction.
+ROOT.local/experiments/EXP926-heartbeat-result containsallcurrentevidence/scripts.
+Hostclosed925/9241182556111B relocatedverifiedtointernalarchive before926, originalpaths
+symlinkspreserved. Do notdeletearchives. Air18GBfree before926, now~17GB aftercollections.
+No927implementation/build/hardwareyet. Noacceptedstablephysicaldesktop.
+
+EXP926 finalordinary Boot13:37:34.788089Z Code28fullchecks13:40:34/13:45:29,
+CPU8/oneAPPL0002/RDPSSH/disks2USB5/zeroexperimentstate;3cleanupreceipthostgatePASS.
+Normalowner85421 verifyfresh. Noinstalled/stagedAppleAgx. Free17422225408/shadow0.
+EXP927 atomicCPU-copysoftwareentry implemented f99dad9e (exact40hashinCHANGES):
+UMDFlags0; KMDaccept0orlegacy1, rejectotherbits. NoAdapterSynchronization0;
+allownmutex/quiescence/range/ownership/generationguardsunchanged. ActualKMD
+softwarecopyQUERY failedc000000dRED thenQUERY/UPLOAD/DOWNLOAD byte-roundtrip
+GREEN both16/64; existingqueryreceipt2GREEN. TestmainreturnsNone, correctedassertion;
+nofalsecompilerRED. Existingfixturebadflag0changedunsupportedflag2 because0validnow.
+Plananalysis/EXP927-software-copy-escape-plan.md; no927build/install/hardwareyet.
+Separatephysicalbootstrap-scanout aliashypothesis remainsunfixed; do notbundleit.
