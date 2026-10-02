@@ -385,6 +385,10 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG SourceAddressStatus;
   volatile LONG SourceAddressReceiptState;
   ADMISSION_SOURCE_ADDRESS_RECEIPT SourceAddressReceipt;
+  /* EXP928: lifetime observations for the immutable first selected primary. */
+  volatile LONG SelectedPrimaryDestroyEnter;
+  volatile LONG SelectedPrimaryDestroySuccess;
+  volatile LONG SelectedPrimaryDestroyFailure;
   volatile LONG PaletteStatus;
   volatile LONG ScanLineStage;
   volatile LONG ScanLineStatus;

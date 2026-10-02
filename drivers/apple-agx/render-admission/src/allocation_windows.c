@@ -515,6 +515,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyAllocation(
   NTSTATUS status;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   ADMISSION_DWM_DDI_EVENT event;
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
+  BOOLEAN selectedPrimary = FALSE;
+  UINT index;
   RtlZeroMemory(&event, sizeof(event));
   event.Kind = AdmissionDwmDdiDestroyAllocationEnter;
   event.ProcessId = (ULONGLONG)(ULONG_PTR)PsGetCurrentProcessId();
@@ -525,6 +528,30 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyAllocation(
     if (Args->hResource == NULL && Args->NumAllocations != 0u &&
         Args->pAllocationList != NULL)
       event.Allocation = (ULONGLONG)(ULONG_PTR)Args->pAllocationList[0];
+    /* Compare opaque handles only. Do not dereference an allocation after its
+     * destruction, and do not change the admission or retirement decision.
+     * The immutable source receipt is published with state 2 and a barrier. */
+    if (context != NULL && Args->hResource == NULL &&
+        Args->pAllocationList != NULL &&
+        InterlockedCompareExchange(&context->SourceAddressReceiptState, 2, 2) == 2) {
+      KeMemoryBarrier();
+      for (index = 0u; index < Args->NumAllocations; ++index)
+        if ((ULONGLONG)(ULONG_PTR)Args->pAllocationList[index] ==
+            context->SourceAddressReceipt.Allocation) {
+          selectedPrimary = TRUE;
+          break;
+        }
+      if (selectedPrimary)
+        InterlockedIncrement(&context->SelectedPrimaryDestroyEnter);
+    }
+  }
+  if (context != NULL) {
+    event.SourceCount = (UINT)InterlockedCompareExchange(
+        &context->SelectedPrimaryDestroyEnter, 0, 0);
+    event.DestinationCount = (UINT)InterlockedCompareExchange(
+        &context->SelectedPrimaryDestroySuccess, 0, 0);
+    event.Fence = (ULONGLONG)(ULONG)InterlockedCompareExchange(
+        &context->SelectedPrimaryDestroyFailure, 0, 0);
   }
   AdmissionDwmDdiProbeRecordWindows((ADMISSION_CONTEXT *)Adapter, &event);
 #endif
@@ -532,6 +559,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyAllocation(
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   event.Kind = AdmissionDwmDdiDestroyAllocationExit;
   event.Status = (ULONG)status;
+  if (context != NULL) {
+    if (selectedPrimary)
+      InterlockedIncrement(NT_SUCCESS(status) ?
+          &context->SelectedPrimaryDestroySuccess :
+          &context->SelectedPrimaryDestroyFailure);
+    event.DestinationCount = (UINT)InterlockedCompareExchange(
+        &context->SelectedPrimaryDestroySuccess, 0, 0);
+    event.Fence = (ULONGLONG)(ULONG)InterlockedCompareExchange(
+        &context->SelectedPrimaryDestroyFailure, 0, 0);
+  }
   AdmissionDwmDdiProbeRecordWindows((ADMISSION_CONTEXT *)Adapter, &event);
 #endif
   return status;
