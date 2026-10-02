@@ -70,6 +70,20 @@ typedef struct _ADMISSION_ASC_TRANSPORT {
   ULONG TraceCount;
 } ADMISSION_ASC_TRANSPORT;
 
+/* One platform worker owns this receipt. Odd Sequence means the existing
+ * heartbeat is in progress; an even Sequence publishes its exact result.
+ * Diagnostic memory only: no additional mailbox operation or retry. */
+typedef struct _ADMISSION_HEARTBEAT_RECEIPT {
+  volatile LONG Sequence;
+  ULONG Calls, Fence, Result;
+  ULONGLONG StartMs, EndMs, DeadlineMs;
+  ULONG RxBefore, RxAfter;
+  ULONGLONG LastRxPayload;
+  ULONG LastRxEndpoint, Reserved;
+} ADMISSION_HEARTBEAT_RECEIPT;
+
+C_ASSERT(sizeof(ADMISSION_HEARTBEAT_RECEIPT) == 64u);
+
 typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ADMISSION_CONTEXT *Adapter;
   APPLE_AGX_MEMORY_IO MemoryIo;
@@ -79,6 +93,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ADMISSION_ASC_TRANSPORT AscTransport;
   APPLE_AGX_ASC_IO AscIo;
   APPLE_AGX_RTKIT_SESSION Rtkit;
+  ADMISSION_HEARTBEAT_RECEIPT HeartbeatReceipt;
   APPLE_AGX_GFX_HANDOFF_STATE Handoff;
   APPLE_AGX_GFX_HANDOFF_IO HandoffIo;
   APPLE_AGX_INITDATA_MEMORY_GRAPH Initdata;
@@ -2978,9 +2993,23 @@ static VOID AdmissionPlatformWorker(
   submission.PrivateDataEnd = description.PrivateDataEnd;
   submission.DmaSubmissionStart = description.DmaStart;
   submission.DmaSubmissionEnd = description.DmaEnd;
+  InterlockedIncrement(&runtime->HeartbeatReceipt.Sequence);
+  ++runtime->HeartbeatReceipt.Calls;
+  runtime->HeartbeatReceipt.Fence = description.Fence;
+  runtime->HeartbeatReceipt.Result = MAXULONG;
+  runtime->HeartbeatReceipt.RxBefore = runtime->Rtkit.ReceivedCount;
+  runtime->HeartbeatReceipt.StartMs = AdmissionPlatformNowMs();
+  runtime->HeartbeatReceipt.DeadlineMs =
+      runtime->HeartbeatReceipt.StartMs + J313_AGX_G2_HEARTBEAT_TIMEOUT_MS;
   heartbeatResult = AppleAgxRtkitSessionHeartbeat(
       &runtime->Rtkit, &runtime->AscIo,
-      AdmissionPlatformNowMs() + J313_AGX_G2_HEARTBEAT_TIMEOUT_MS);
+      runtime->HeartbeatReceipt.DeadlineMs);
+  runtime->HeartbeatReceipt.EndMs = AdmissionPlatformNowMs();
+  runtime->HeartbeatReceipt.Result = (ULONG)heartbeatResult;
+  runtime->HeartbeatReceipt.RxAfter = runtime->Rtkit.ReceivedCount;
+  runtime->HeartbeatReceipt.LastRxEndpoint = runtime->Rtkit.LastRxEndpoint;
+  runtime->HeartbeatReceipt.LastRxPayload = runtime->Rtkit.LastRxPayload;
+  InterlockedIncrement(&runtime->HeartbeatReceipt.Sequence);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   heartbeatSnapshot = runtime->Rtkit;
 #endif
