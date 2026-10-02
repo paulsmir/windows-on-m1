@@ -110,3 +110,9 @@ Host closed927 ETL/EVTX663240704B and closed922 ETLs536870912B verified relocate
 with original symlinks under /Users/pavel/J313-evidence-archive/2026-10-02/
 EXP927-closed-before928 and EXP922-closed-before928. Do not delete archives.
 929 PDBs saved and PE/PDB GUID+age matched in ROOT929/pe-pdb-id-match.json.
+
+## Confirmed current blocker (EXP930 live result)
+Installed930/oem7 in SAME boot17:06:29.489308Z. Unarmed install provedcompiledBuild930/phase2. Explicitrearm then device-onlyrestartreturned0 butCode43Stage1: ArmPhase4, ArmStatus0xc000014d STATUS_REGISTRY_IO_FAILED, Generation2805416909, HVC0/notcalled. Armnull; AutoReboot0. IndependentRegFlushKey returns1016 with17.3GBfree. Bounded131072BWriteThrough+Flush(true)PASS SHA59f410ae5e17962412e2aed4f815918f634932f2abf084f00bb638c4db017850. C:Dirty; Ntfs55 MFTcorruption FRN0x10000000201f2 pointsSYSTEM.LOG2; Ntfs50 delayedwritefailure samefile. Errorsprecede929installation (including16:48 duringnormalrecovery). Thisprovespresentlive-startblocker, NOToriginalgraphicsrootcause. Do notbypassdurabilitygate orrepeatGPUrestart.
+12liveinstall/rearmreceipts929+930 hostsizeSHA PASS 396925858f5eef0be7f5f1c180fdb50a78e047a058ca752aedf094bda65ac680. ROOT930/live-update-evidence. PDB930PE GUID/age matchPASS. ReadonlyRepair-Volume -DriveLetter C -Scan isrunning inexec71440; scanonly/noSpotFix/noOfflineScanAndFix/noOSreboot. Next readonline-scan-result, preserveit andassessrequiredrepairagainstuserNO_REBOOT. FileSYSTEM.LOG2corruptionbelongsstorage/NTFS, notAGXdriver; nofsrepairdone.
+
+OnlineScan gracefulcancel exactjob returnedNotSupported at18:34:36Z; jobstillRunning35%, originalexec71440 pending. No forcibleprocess/servicekill. Currentstorageblocker andvalidateddiagnostic inanalysis/EXP930-live-update-verdict.md. No furtherGPUrestartuntilSYSTEMhiveflushhealthy; userNO_REBOOTremains.
