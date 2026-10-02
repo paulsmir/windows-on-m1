@@ -21,51 +21,54 @@ key /Users/pavel/.ssh/windows_builder. USB endpoints L41/L43:
 Always check bounded SSH plus launcher/USB before physical requests or reset.
 No raw USB/proxy NOP while a launcher owns the guest.
 
-## Current live state — verify fresh
-EXP934 coherentBUILD2 stagedfresh934/oem5, Code28/arm1/CPU8/registryflushPASS.
-Previous933fullyremoved; cleanup3hostgatececf542930612b29a34e3dff0a33ea484304e9faa0033dd1892c6e09946f6a62.
-NormalbaselineBootEvent122194 Start22:18:06.3133993, oneinertGPU/packages0/service0/
-signer0/files0/flush0/Cnotdirty beforestage. Controllersnowcheckimmutableevent ID
-andStartTime; CIMbootmoved22:26:29 withclockadjustment, notactualnewboot.
-ROOT934=ROOT.local/experiments/EXP934-direct-gpuva-submit.
-Orderedrestart currently exec28625; afterownerexit freshdualplane/proxyNOP then
-ROOT934/full-owner.sh. FULL manifest235242c5b431bdb0131da26d2846302a0a61d7b9121372fe34f83c11ab2ab445.
-No934fullrunyet. Do notrestage. Firstready->ROOT934/first-checkpoint.ps1 andPresent;
-no longstabilitywaitwithoutcorrectimage. Recovery377/392 normalGPUvisible.
+## CURRENT — EXP934 live Code0, physical display NOT accepted
+Fullowner96715/exec40531 (verifyfresh), package934/oem5, originalBoot22:33:55.992455,
+firstready22:35:19.946, CPU8/SSH/Code0/Stage12/Status0/Armnull/HVC1/gen239153593.
+Fixedm1n1bdcf8715+MuR143e54. ROOT934=ROOT.local/experiments/EXP934-direct-gpuva-submit.
+Latestread current-checkpoint.out pendingcommand, verifycompletion. No934rollbackyet;
+keepcurrentoriginalguestforphysicalobservation/read-onlyinvestigation. No nextexperiment.
+Before935mustcollectthenremoveexact934package throughnormal377/392 recovery.
 
-ONLYBUILD2 SOURCE2602f23dc12498265326746299888c656ca147f6 isvalid. Initial383build
-compiledbutwasNEVERinstalled, supersededbeforehardware: heartbeatwasalsoASCconsumer,
-ProviderDrainEvents onlyshared-memoryring. Correctreplacementboundednonblocking
-ASC TryReceive/SessionDrainRuntime beforeG3submit+duringpoll, max64, no clock/pause/
-transmit/Pongwait. Wake/pong consumed; actualcrash/unknown/MMIOerrors failclosed.
-BeginJob/manager/queue/completion checksunchanged, nofakefence. Testsactualworker
-RED->GREEN includingconsumercontinuity andrealguardfailures; nativeASC/session/
-queue testsPASS. KnownunchangedlegacyprojecttestfailsoldAppleAgx.vcxproj registration.
-Build2ROOT.local/experiments/EXP934-direct-gpuva-submit-build2 WDKzero-warning,
-nativeprovenance/source553/signatures/PDBGUIDage/hosthashPASS. SameHVCfixedm1n1bdcf8715
-(ROOT933/m1n1-exp933.macho) andMuR143e54; no newfirmwarechange. PlanEXP934-submit-
-without-management-ping.md amendedatomicreplacement. Host5GiBgatePASS afterclosed
-933PDBs and928ETL249561088B relocatedhashverifiedinternalarchive/originalsymlinks.
+LiveframebeforeSDK: DWM1240submit27+2/complete26+2, VSync8110+, Present0/Virtual0,
+TDRcaptured0. AfterSDK: submit140+2/complete138+2 last98685/12803, stillPresent0/TDR0.
+NO stabilityclaim or physicallyblankclaim. OriginalsameDCPseq2sampleszero do not
+substitute currentphoto. Userphysical934questionpending/unanswered.
+OneSDKstimulus e1d5875c ranviaEXP934-LivePairedCreation, importedexacttwoBGRAfullscreen
+backbuffers, paired SDK+DWM dumps beforeownedSDKtermination. TaskResult0 thenremoved;
+no SDKleft. Paired9hosthashgate8b9eee2a375554a75218b037b134180a159c592da5202ea7fadb12f093a9e469.
+FilesROOT934/paired-evidence. CDBlogsdecoded withmatched934UMDPDB: SDKproxywindow /
+NtAlpcConnectPort; DWM LPC inCreateAllocation forclass3/512KiB/64KiBalign/flags6
+insideencodercreation/borderDraw. CompositorWaitForNextTick. IMPORTANT oneallocation
+stackNOTproofpersistentallocatorstall, becauseallocation/submit/completioncounters
+continue; nextmustdistinguishtransient/slowallocation/compositionfrompersistentwait.
+No newSDKuntilnewdiscriminator. Reportanalysis/EXP934-current-display-verdict.md.
 
-933 rootcause exactkernel/PDB: adapterffffd307f7a02000/runtimeffffd307f7c25000,
-SchedulerFaulted0x40bcd=backend933line3021 pre-submitHeartbeat. Fence9189 activated
-insoftware butneversent, completed9188. HBSequence134/Calls67/Result3Timeout/
-Start153791/End158890/Deadline154291/Rx553->561/lastEP20 payload0042000000000000.
-Running/CpuReady1/StopIdle/CrashlogCrashed0/BackendReady. Why5.099s intervalunknown.
-RawframeprobeRAOAfileoffset1b490000 +560/2520bytesfitsone4KiBpage, independentCDB
-pointerchainconfirmed. ArmedPID1220 completed21of23/last9044/noPresent; TDRactive
-contextdifferent, firstEnvelopeRejectbranch7 secondary, notinitialfault.
-Original4hostgate8854c883446318a9098633b50209fed14c0d6c30dde175abf57ba5fa2a6e2458,
-archive /Users/pavel/J313-evidence-archive/2026-10-02/EXP933-failure; fullkernel618247056,
-mini1094244, UMD237452, recoveryjson39491. cdb-heartbeat.decoded.log authoritative.
-Broadpoolscan stoppedexactownCDB70920 afterpreciserecovery; no furtherpoolscan.
-933TDR0x116 paramsffffd307f4c30010/fffff8014c54adf0/ffffffffc0000483/3.
-AutoReboot1 persisted; WindowsPSCI_RESET itself, onlyhostSIGINT, noSIGTERM.
+934 ONLYcoherentBUILD2source2602f23dc12498265326746299888c656ca147f6. Initial383build
+supersededbeforehardware; heartbeatwasalsoASCconsumer, separatefromshared-memoryring.
+ReplacementboundednonblockingTryReceive/SessionDrainRuntime beforeG3submit+duringpoll,
+max64/no clock/pause/transmit/Pongwait. Wake/pong consumed, realcrash/unknown/MMIO
+errorsfailclosed. BeginJob/manager/queue/completionunchanged, nofakefence.
+Actualworker RED/GREEN+nativeASC/session/queuePASS; oneunchangedoldlegacyprojecttest
+failsregistration, nativebackendASanlifecyclepasses. WDK934zero-warning/native
+provenance/signatures/hash/PDBGUIDagePASS. Build2ROOT934-direct-gpuva-submit-build2.
+Fullmanifest235242c5b431bdb0131da26d2846302a0a61d7b9121372fe34f83c11ab2ab445.
+Controllerboot-event122194 Start22:18:06.3133993 usedforstage/restart; CIMshiftedbyNTP,
+soimmutableKernelGeneral12 guardretained. Host5GiBgatePASS afterverifiedarchive
+relocationof933PDBs and928ETL249561088B, originalsymlinkspreserved.
 
-HVCfixes e8cd2682/m1n1661cbe31 nextPC,04456756 X0ASM,71316533 IPAuint32 arehardware
-validated933: ArmBuild933/Phase6/Status0/Hypercall1/gen241926950 matchesHV log,
-firmwaremask511/rootops624/DCPswap9. No acceptedstablephysicaldisplayyet.
-Samefirmwarebdcf87154043535f4bcfcba0aa04e30c97d4877dd3ba9c87e18b6af287158395.
+933exactcause: kerneladapterffffd307f7a02000/runtimeffffd307f7c25000,
+SchedulerFault0x40bcd=backend933line3021 managementHBbeforehardwareSubmit.
+Fence9189 softwareactive/notyetsent, completed9188. HBseq134/Calls67/Result3Timeout/
+Start153791/End158890/Deadline154291/Rx553->561/EP20payload0042000000000000.
+Running/CpuReady1/StopIdle/CrashlogCrashed0/BackendReady. Why5.099sgapunknown.
+RawFrameProbeRAOAfile1b490000+560/2520 fitsone4KiBpage; CDBpointerchainconfirmed.
+933TDR0x116paramsffffd307f4c30010/fffff8014c54adf0/ffffffffc0000483/3;
+AutoReboot1, guestPSCIreset itself. OnlyhostSIGINT, noSIGTERM.
+Fourfileshostgate8854c883446318a9098633b50209fed14c0d6c30dde175abf57ba5fa2a6e2458,
+archive /Users/pavel/J313-evidence-archive/2026-10-02/EXP933-failure.
+933removeddurably; cleanupgatececf542930612b29a34e3dff0a33ea484304e9faa0033dd1892c6e09946f6a62.
+HVCfixese8cd2682/m1n1661cbe31(nextPC),04456756(X0ASM),71316533(IPAuint32) hardware
+proved933: ArmPhase6Status0Hypercall1/gen241926950. Firmwarebdcf87154043535f4bcfcba0aa04e30c97d4877dd3ba9c87e18b6af287158395.
 
 ROOT931 = ROOT.local/experiments/EXP931-ntfs-system-log-recovery.
 Current launch ROOT931/launch-winpe-d.sh, verification verify-launch-d.py,
