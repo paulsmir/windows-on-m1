@@ -1,4 +1,4 @@
-# J313 current GPU state — EXP922 closed / physical garbage confirmed / clean ordinary
+# J313 current GPU state — EXP923 closed / post-import stack next / clean ordinary
 
 Accepted desktop package NONE. Visible updating desktop unproved; physical Present0.
 User says continue until fixed, compare actual trace -> Microsoft/WDK -> owning driver
@@ -6,11 +6,14 @@ source, and collect immediately when Present0. No multi-minute stability window 
 actual physical Present/output. No subagents and no messaging other chats.
 
 ## Current machine / cleanup
-Normal immutable377/392 boot2026-10-01T23:39:38.646216Z; checks23:42:28/23:43:23:
-Code28/oneAPPL0002, package/module/service/signer/arm/diagnostics0, CPU8/disks2USB5,
-SSH/RDPservice/autologon1, free4692017152/shadow0. Clean launcher6609 (verify fresh).
-Exact920/oem5 removed under Code43 after independent evidence gates. No hidden boot
-or host signal. Cleanup3file hostgate f45fbfbc7e19f59c850d616620be85f2d88df53e4708f1fec9e0cf4879ac6fc2.
+Normal immutable377/392 boot2026-10-02T06:27:02.050807Z; checks06:28:49/06:29:12:
+Code28/oneAPPL0002, package/module/service/signer/arm/diagnostics0 CPU8/disks2USB5,
+RDPservice/autologon1, free5569912832/shadow0. Clean owner43614 verifyfresh.
+EXP923 normalrecoverywasSSHunreachable despiteCPU8; oneSIGINTcontinued, then
+SIGTERMreset/emergencyhidden385 onlyafterfailedGPUvisiblerecovery. HiddenCode45
+9hostgatee9caa178; exact920/oem5 cleanup06:26:47 thenorderednormalrestart. Cleanup
+3hostgate9596dac01ac0fc1394e562271a879dff0fc9b779a6ed1750afaf277af5f3bb89.
+OwnedstoppedSDKtaskremoved06:29:50. No package carryover. No newdump/System1001.
 
 ## EXP921 actual result and current boundary
 Same package30.0.920.0/source d16f42c07a9ae52ea9c3d8e9c428348b373f7087, firmware unchanged.
@@ -122,3 +125,17 @@ Orderedrestart06:14:55 acceptedCode0/sameboot/free6601424896; owner41161 verifyf
 No923Code43cleanupyet. NextplanEXP924-sdk-post-import-stack-plan: captureafter2
 exactfrontendrecords+2successfulresourceexits, notfixedtime. Same920SDK/firmware.
 Stagegate/closedfiles/finally sourcepreparedASTPInvokePASS; no924hardwareyet.
+
+## Authoritative EXP923 closure / next EXP924
+Reportanalysis/EXP923-early-sdk-stack-verdict.md: dump83612B/10a258ce captured
+transientMapGpuVA duringCreateDevice; trace latermapreturn andbothBGRAimportsS_OK.
+Not a mapdefect proof. Original15gate605dd838; earlyETL194248704/c0f6fa48 and610PIDevents.
+PhysicalPresent0/TDR0; corruptedDCPpixels again. NormalrecoveryfailedSSH, hidden45
+recovered and exactcleanupcompleted; latestcurrentmachine above supersedes pending
+notes. TwoETLpaths archivedoneinternaltarget/fsync/hash, freed388497408externalbytes.
+EXP924 prepared60artifacts47transfer manifest75c9fddd/payload2626078e; source009730dc/
+ledger7c0bca38. Stage-gatedsnapshot after2exactfrontend+2resourceexits,2sec later;
+closedobserverfiles thenownedSDKfinallycleanup. Same920SDK/firmware. No924stage/launch.
+An initialoffline924preparation had stale921recipe/selfoverwrite paths/counts; rejected
+beforestage and retained atEXP924-sdk-post-import-stack-rejected-preparation. Correct
+924 constructedfromsealed923 lists; runtimepaths/counts/fullhashgates verified.
