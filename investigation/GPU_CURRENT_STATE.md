@@ -22,42 +22,55 @@ Always check bounded SSH plus launcher/USB before physical requests or reset.
 No raw USB/proxy NOP while a launcher owns the guest.
 
 ## Current live state — verify fresh
-EXP931D repairedNTFS; flush0/Cnotdirty. EXP932 failedbeforeGPU onHVCreturn;
-original-boundary snapshots preserved ROOT932. Exact930package removed andnormal
-recoveryreboot provedoneCode28/CPU8/packages0/services0/signer0/files0/flush0:
-Boot21:16:14.184513Z. Cleanup3hostgatec7effc26d9f88358124f849d4fae6c92415c020c4bf853b21cb6f9d53dde90a9.
-EXP933 nowfreshstagedonly933/oem5 unboundCode28/arm1/CPU8/registryflushPASS.
-Normalowner84671/exec82488 (verifyfresh); orderedrestart execpending launched
-ROOT933/ordered-restart.ps1. Nextafterguestreset dualplane/proxyNOP then
-ROOT933/full-owner.sh. No933fullrun yet. Do notrepeatstage.
+EXP933 fullrun TDR0x116, HVCtransportfix validated, originalfourfileshostgate
+8854c883446318a9098633b50209fed14c0d6c30dde175abf57ba5fa2a6e2458. Files under
+/Users/pavel/J313-evidence-archive/2026-10-02/EXP933-failure (kernel618247056B,
+mini1094244B, UMD237452B, recoveryjson39491B). No accepteddisplay.
+Current normal377/392 recovery Boot21:32:49.788711, CPU8/SSHlive/Code43/933oem5,
+Armnull/CNOTDirty beforecleanup. ROOT933/cleanup exactremover RUNNING (seeexecute.out),
+willorderedrestart. Afterexit freshdualplane/proxyNOP ->ROOT933/launch-clean-recovery.sh,
+thenverify-clean-baseline.ps1. Verifier exportsBootEventRecordId/BootEventStart:
+useimmutableKernelGeneral12 identityfor934stage/restart, NOTCIMboot timestamp.
+No packagecarryover; do notstage934beforeCode28/packages0/services0/signer0/flush0.
 ROOT933=ROOT.local/experiments/EXP933-hvc-return-contract.
-FullmanifestSHAf1322f6b00605519b59396b7703b336829928f0182e2d2fa3968eca2a73bb229.
 
-CoherentHVCfixes: root e8cd2682/m1n1661cbe31 preserveHVCnextPC;
-root04456756 explicitX0arg/result ASM; root71316533 IPAresultuint32.
-PlanEXP933-hvc-return-contract.md, actualepilogue RED->GREEN +realMSVCprobe
-oldDLL RED/fixedsixcasesGREEN (bothHVCs, success1/failure2, poisonedX8,
-nonvolatiles/SP/PC). Fourarm/fourrenderHVCtestsPASS. Newm1n1bdcf87154043535f4bcfcba0aa04e30c97d4877dd3ba9c87e18b6af287158395,
-cfg+Rustarchiveunchanged vsacceptedd3; MuR143e54 unchanged. Foreignvendor/Mudirtuntouched.
-KMD933build2 SOURCE713165338f297ee1d40d7bfe9b7e3e3b1f4295e7 fullyPASS zero-warning,
-nativeprovenance/source553files/signCAT+SYS/UMD pinnedE9/hosthash/PDBGUIDagePASS.
-Build2 artifactsROOT.local/experiments/EXP933-hvc-return-contract-build2.
-SYS c4270224e5bdf2453940ec7b6a6231473ceb499d29b9862d591c18153ac2dfdf
-UMD 62600d39611af2005ad45e2c5e3de8fc23de3a1c644c09f5ec210686a6260375
-INF 9df5a0cc10b176ebb4763d743022be836856a83c7b79e782a59a6e6d4947f334
-CAT b177158726d3709694c0c52b49cef420e42bc59f7df477a9b24fd040b1f9c72a.
-Copied933/package andnewC:\Users\pavel\EXP933 withtransferhashgatePASS.
-StageManifest7335e2b1, StageReceipt21:20:49Z, FreeC16249393152.
-Expectedfirstcheckpoint: ArmPhase6/Status0/Hypercall1 thenStartDeviceCode0;
-read ROOT933/first-checkpoint.ps1 immediately, thenPresent/physicaloutput.
-No stabilitywait withoutcorrectimage. Recoveryimmutable377/392 thenexact933cleanup.
+EXACT currentrootcause from933kernel/PDB: adapterffffd307f7a02000, runtime
+ffffd307f7c25000, activecontextffffd307f48a80c0. SchedulerFaulted0x40bcd maps
+backend_platform_windows.c933line3021: failedPRE-SUBMITHEARTBEAT, beforeGPUqueue.
+Fence9189 activeinsoftware/notyetsent; completed9188. HBSequence134/Calls67/
+Result3Timeout/Start153791/End158890/Deadline154291/Rx553->561/lastEP20
+payload0042000000000000; Running/CpuReady1/StopIdle/CrashlogCrashed0/BackendReady.
+No claimwhy5.099s interval happened. FirstEnvelopeRejectbranch7 issecondary;
+armedPID1220 completed21of23submits/noPresent/lastfence9044, differentcontext.
+RawFrameProbe foundviaRAOA fileoffset1b490000, offset560/bytes2520 fitsone4KiBpage;
+CDBpointerchainindependentlyconfirmedadapter. cdb-active.decoded.log and
+cdb-heartbeat.decoded.log holdauthoritativefields. Broadpoolscan stoppedexactowned
+CDBPID70920 aftermorepreciserecovery; nofurtherpoolsearchneeded.
 
-EXP932 actual: firstBoot20:51:44.681517, Code43Stage1/Phase6/c0000001,
-Hypercall0xffffa20141176e40 insteadprivateABI1, Generation250087441 matchedHVlog.
-Driver intrinsicMSVC19.44 readX8; m1n1 also skippedpostHVCinstruction with+4.
-CIMboot later20:52:21.347673 dueprovenKernelGeneral1 NTP+36661ms, sameowner/noreset,
-KernelGeneral12stilloriginalboot. Firstrecoveryguardrefused; clockverifiedguard
-thenaccepted. No933hardwarehasvalidatedfixyet. Nooriginalgraphicsrootcausesoleproof.
+EXP934 IN PROGRESS. Source3836806064e357b4a124a1821bfb9efc477df42c removesonly
+G3per-jobmanagementping prerequisite; legacydiagnosticprofilesretainit.
+BeginJob/manager/backendsubmit/completion/faultchecksunchanged, nofakepong,
+no timeout extension/no fabricatedfence. Actualworker-span testREDthenGREEN,
+checksrealBeginJob/prepare failures andlegacytimeoutbehavior. Nativebackend
+ASanlifecycle and3othercontractchecksPASS; knownunchangedlegacyprojectregistration
+testFAIL (wrongoldwindows/AppleAgx.vcxproj target, HEADalsolacksentry); RTKit1/G13queue2PASS.
+SourceplanEXP934-submit-without-management-ping.md hasprimaryAsahi77cb/m1n1render
+andMicrosoftcontract. BuildsROOT.local/experiments/EXP934-direct-gpuva-submit,
+builderC:\Users\pauls\EXP934-direct-gpuva-submit, exec36196 running.
+SourceManifest58f3f740/archive37a78477/buildscriptb5aa3186. No934hardwareyet.
+Reusefixedm1n1bdcf87154043535f4bcfcba0aa04e30c97d4877dd3ba9c87e18b6af287158395
+(ROOT933/m1n1-exp933.macho) andunchangedMuR143e54. NextWDK/sign/hash/PDB gates,
+fresh934stage after933cleanup, oneimmediatePresent/hardwarecheckpoint.
+
+HVCfix source root e8cd2682/m1n1661cbe31 (HVCnextPC),04456756 (X0ASM),71316533
+(IPAstatusuint32). 933actualArmPhase6/Status0/Hypercall1/gen241926950 confirms.
+933package SYS c4270224e5bdf2453940ec7b6a6231473ceb499d29b9862d591c18153ac2dfdf,
+UMD62600d39611af2005ad45e2c5e3de8fc23de3a1c644c09f5ec210686a6260375,
+INF9df5a0cc10b176ebb4763d743022be836856a83c7b79e782a59a6e6d4947f334.
+Root933-build2holdsPDBs andsignedpackage. Stopparamsffffd307f4c30010/
+fffff8014c54adf0/ffffffffc0000483/3. AutoReboot1persistedfromoldhive; original
+hostsentonlySIGINT, WindowsPSCI_RESET itself; nohostSIGTERM. Fullcontrol8CPUs
+atPCfffff8014e27fe4c duringdump, NVMe resetloopnotprovedstoragecause.
 
 ROOT931 = ROOT.local/experiments/EXP931-ntfs-system-log-recovery.
 Current launch ROOT931/launch-winpe-d.sh, verification verify-launch-d.py,
