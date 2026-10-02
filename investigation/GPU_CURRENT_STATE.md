@@ -1,4 +1,4 @@
-# J313 current GPU state — EXP924 closed / EXP925 built not staged
+# J313 current GPU state — EXP925 partially staged / VSS clarification pending
 
 Accepted desktop package NONE. Visible updating desktop unproved; physical Present0.
 User says continue until fixed, compare actual trace -> Microsoft/WDK -> owning driver
@@ -6,14 +6,21 @@ source, and collect immediately when Present0. No multi-minute stability window 
 actual physical Present/output. No subagents and no messaging other chats.
 
 ## Current machine / cleanup
-EXP924 closed. Finalnormal377/392 boot07:05:35.748055Z checked07:11:27/07:12:00:
-Code28/oneinertAPPL0002; package/module/service/signer/arm/diagnostics0 CPU8/disks2USB5,
-RDPservice/autologon1; free4867559424/shadow0. Clean owner48605 verifyfresh.
-Original15gate55e52ea8, normalCode43recovery14gate6b612f00, cleanup3gate
-c9e30f13e953966851ac72d209f2190511998cf44442992aa5697b27e3e6097b.
-Exact920/oem5removed07:05:20; orderedrestart; ownedstopped924taskremoved07:12:47.
-No924hiddenboot orhostsignals. ClosedtwoETL191102976/c5342723 paths fsynced/hashverified
-tooneinternalarchiveEXP924-completed beforeoriginal-pathsymlinks; freed382205952external.
+Normal377/392 live owner48605 (verifyfresh), WindowsCIMboot07:10:25.463747Z.
+EXP925 transfer47/47/verification passed; exact925/oem5 staged/unbound whileCode28.
+Logger/WER/signer configured; noAGXmodule/service started. Stagefailed ShadowCount1,
+not diskthreshold (free4370952192>=4GiB). Fourhost-archived owned923/924ETLduplicates
+hashverifiedthenremoved770703360B; free5141598208. Archives retained.
+Fresh11:02:14 Code28 exactoem5; G3Arm cleared0 pending clarification, free5141438464.
+No925shutdown/launch; no guest-preflight/stage-receipt yet. Do notrepeatstageinstall.
+ShadowC:{607455F7-5AB1-4064-B018-05B7711C62BC}, created1790931953785, temporary,
+nonPersistent/nonClientAccessible/AutoRelease; noRestorePoints/activebackuprequester
+found, onlyVSSVC. Userquestion pending permission toremove exactoneVSS copy, as
+previousdelete scopeexperimentdirs, snapshotcoversC. Do notdeleteorweakenShadow0gate
+untilreply. Afterresolution finishpartialstage: validateexactpkg/Code28/logger/signer,
+arm1, staged-disk-policy freshnoShadow/4GiB, generatecorrectstage/preflight receipts,
+hosthashgate, thenseparateorderedshutdown/dualcontrol/launch. Prior EXP924 cleanup
+3gatec9e30f13 andCode28twice remainsvalid, butguestnowpartial925stagedstate.
 
 ## EXP921 actual result and current boundary
 Same package30.0.920.0/source d16f42c07a9ae52ea9c3d8e9c428348b373f7087, firmware unchanged.
@@ -179,3 +186,5 @@ onepostimportSDK/DWM snapshotplusentry/exitcounts; distinguishKMDbody vsOSsync.
 Do notcallrootcausefixed; DWMstaging800014c0 i1 wait isobserved, owningkernelwaitunknown.
 
 EXP925 final runtime seal manifestf6de4e75/payload05d5790b,65artifacts47transfer; preregistered. Freshclean10:42:32 Code28/CPU8/zeroexperimentstate owner48605. No925stage/launchyet.
+
+EXP925 lateststage status supersedes earlierbuilt-only notes. Finalmanifestf6de4e75e10e3f64e31eca158c223d5a4e6c89ddbbd1c9a4f7bac20f5294811b/payload05d5790b96c3bbcd3a95021a57ff8d7837c3add81ea5efc16176c859227e8182; hardwareprereg13e2304e. PendingVSSclarification; no925AGXlaunch.
