@@ -1,10 +1,9 @@
 # J313 current GPU state — same-boot update, arm-gate refusal
 
 ## User constraints and current objective
-Continue to a correct stable physical desktop. Latest explicit override: NO OS
-REBOOT; investigate, build and install corrected driver in the existing Windows
-boot. Supported device-only PnP restart is allowed. Do not run cold rollback or
-shutdown scripts. No subagents / no messaging other chats. Short falsifiable
+Continue to a correct stable physical desktop. Latest user authorization: reboot is now allowed to recover NTFS/system hive,
+then resume the corrected graphics-driver experiment. Earlier NO_REBOOT
+restrictions below are historical; preserve evidence and recovery artifacts. No subagents / no messaging other chats. Short falsifiable
 checks, no prolonged stability trial before correct physical output.
 Accepted desktop package NONE. Moving image fragments were real observations;
 KMDPresent0 and an early zero buffer do not mean the current panel is blank.
@@ -116,3 +115,5 @@ Installed930/oem7 in SAME boot17:06:29.489308Z. Unarmed install provedcompiledBu
 12liveinstall/rearmreceipts929+930 hostsizeSHA PASS 396925858f5eef0be7f5f1c180fdb50a78e047a058ca752aedf094bda65ac680. ROOT930/live-update-evidence. PDB930PE GUID/age matchPASS. ReadonlyRepair-Volume -DriveLetter C -Scan isrunning inexec71440; scanonly/noSpotFix/noOfflineScanAndFix/noOSreboot. Next readonline-scan-result, preserveit andassessrequiredrepairagainstuserNO_REBOOT. FileSYSTEM.LOG2corruptionbelongsstorage/NTFS, notAGXdriver; nofsrepairdone.
 
 OnlineScan gracefulcancel exactjob returnedNotSupported at18:34:36Z; jobstillRunning35%, originalexec71440 pending. No forcibleprocess/servicekill. Currentstorageblocker andvalidateddiagnostic inanalysis/EXP930-live-update-verdict.md. No furtherGPUrestartuntilSYSTEMhiveflushhealthy; userNO_REBOOTremains.
+
+USER AUTHORIZATION 2026-10-02T19:30:54.692216+00:00: reboot now explicitly permitted for filesystem recovery and continued display repair. Inspect live scan and backup availability before scheduling/launching repair.
