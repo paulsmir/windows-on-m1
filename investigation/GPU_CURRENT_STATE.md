@@ -1,4 +1,4 @@
-# J313 current GPU state — EXP921 rejected transition cause / ordinary clean
+# J313 current GPU state — EXP922 closed / physical garbage confirmed / clean ordinary
 
 Accepted desktop package NONE. Visible updating desktop unproved; physical Present0.
 User says continue until fixed, compare actual trace -> Microsoft/WDK -> owning driver
@@ -36,18 +36,47 @@ verified and guestduplicate removed. Partial hostcopy kept. Recovery15hostgate
 cd1d6b22c678089262d91376a0a4abf732d32b8fe895af213400bd12ea20fff6.
 Two owned collectorETL guestduplicates removed only after host byte/SHA verification.
 
-## EXP922 next — SDK built, NOT staged
-Plan analysis/EXP922-fullscreen-sdk-present-plan.md. One public fullscreen FL10/BGRA
-HWND flip chain -> primary handoff -> clear -> Present1 workload on unchanged920.
-Composition-only creation already works but fullscreen primary contract is untested.
-Do not claim a client frame proves desktop success. At firstCode0/CPU8/Stage12 invoke
-once, capture exact stage/HRESULT/nativeDDI and onePresent check, collect+rollback.
-No DWM reinit or long baseline wait. User source/docs comparison remains mandatory.
-SDK source f8b7f525, ARM64/W4/WX/PREfast buildPASS, exe888832B SHA
- e1d5875c6d383212361e13be4342ff0dbd86fc53ac79a085143b444556c05aa7.
-Initial SDK build failed because inheritedNuGet28000 paths combined withforced26100;
-new project explicitly pins actual26100 includes/libs. Initiallog retained. Driver
-package source remains d16f42c0. Do not silently reinterpret earlier SDK environment.
+## EXP922 actual new boundary / recovery pending
+Exact920package/source d16f42c0; manifest2c7ec192/payload13622434,57artifact45transfer.
+Original boot2026-10-02T00:07:17.442271Z Code0CPU8Stage12; DWM1228/Explorer5316.
+One SDK10204 Session1 workloadstarted00:08:12. ItcreatedFL10device and2BGRA87/a8/
+20002/2560x1600 backbuffers successfully; blockedCreateSwapChainForHwnd fullscreen.
+No returnedfullscreenstage/RTVclear/SDKPresent. TaskReady267014/PT1M, nofullreceipt;
+partial476B SHAdd1dfc23 independentlyverified; exactstoppedtaskremovedafterevidence.
+SDKexe e1d5875c888832B sourcef8b7f525; no driverchange. Neverretrytheworkloadunchanged.
+
+Userprovided2photos and explicitlyconfirmedfirstphysicaldisplay: repeating/deformed
+images andhorizontalartifacts. Rawfilespreserved operator-photos SHAad974cbb/70d0d77d.
+DCPsameSwap9/seq2/IOVA102a0000/PA8e0110000 +120 nonzero46174/4096000 avg1,1,1,2.
+Thisisphysicalgarbage proof, NOTaccepteddesktop orSDKgreenframe; SDKnevercleared.
+DWMphysical/virtualPresent0, allPresentDDIcounters0; SourceAddress count1 unchanged
+before/after. Do notclaim tiling/pitch cause; nativepresentationresource sourceuses
+DRM_FORMAT_MOD_LINEAR/AIL_TILING_LINEAR, so blinddetilefixisnotjustified.
+
+SSHtimedoutthen255, NVMe repeatedlyreinitialized; initialcrashpath hypothesisnotproven.
+One SIGINT toverifiedowner10068 perdocumentedrun_uefi handlercapturedCPU/IRQ then
+continued(NO SIGTERM/reboot). SSHrestored, samebootCode0CPU8DWM1228; Explorer5896now.
+No newMemoryDMP/LiveKernelReports andTDRcapture0; newestSystem1001 isold91921:04:10.
+Do notattributeold119 to922. CPUcaptureinfull.log; signalmayhavechangedprogress,
+so no naturalstabilityclaim. Useraskedwhethermanualrebootneeded; toldnone, wecontrol.
+
+Original15hostgatec67ab3d6f86826084aea4d7ae0f542cb22b8dc29dc99174b0bc068f0dbf16bb2;
+frozencontrol18gate8f0e663f70c20faddf735fe6099041dc6a55629577c22e154995653a6b3ae82a.
+OriginalcollectorstoppedETLbeforecopy. Recovery14hostgate5a2552d7618ce8809d34b23a626960a1d3269d8462d02114fe153619ff3ebf85
+beforeCode43exact920cleanup; finalordinaryboot01:28:45.904514Z Code28twice01:31:42/01:33:18,
+package/module/service/signer/arm/diagnostics0 CPU8/disks2USB5/free4868280320/shadow0.
+Cleanlauncher18519 (verifyfresh); cleanup3hostgate18fa7acb8a9405038b95953a02a79a48a139857429c879884a97c3e00dae864c. No liveCode0removal; hidden385 emergencyonly.
+
+Nextcausaltarget: exactblockingcall insidefullscreencreation AFTERsuccessfulbackbuffer
+alloc/import and BEFOREnativeDXGI mode/Present. DecodecurrentoriginalETW bySDK10204;
+ifitcannotidentifywait, one documentedMiniDumpWriteDump snapshotofownedSDKprocess
+whileblocked in a separatelypreregistered diagnostic, before60stasktermination.
+Plananalysis/EXP923-sdk-creation-stack-plan.md; scripts/g3-sdk-stall-minidump.ps1
+commita9c3013e/SHAdb165689, builderAST/PInvokePASS. No923stage/build/launch yet.
+LateoriginalETL SDKPIDqueryreturnedempty; cannotidentifywaitfromit.
+EarlyEXP<=600cleanup remains304folders2294files archived/removed, hostarchive9e014c6c retained.
+No additionalambientboot/capability/NO_REDIRECTION probes. MatchprimaryWindows/WDK
+contracttoowningcode beforefix. Physicalbufferwriter/pitch/layout remainsunknown.
 
 ## Guest disk cleanup in progress
 User authorized early experiments through600. Disk audit: C119GB/free4.8GB,
