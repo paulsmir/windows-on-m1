@@ -21,6 +21,15 @@ key /Users/pavel/.ssh/windows_builder. USB endpoints L41/L43:
 Always check bounded SSH plus launcher/USB before physical requests or reset.
 No raw USB/proxy NOP while a launcher owns the guest.
 
+## DO NOT DEPLOY THE FIRST934BUILD
+Offline source audit found heartbeat was ALSO the sole runtime ASC mailbox
+consumer; existing ProviderDrainEvents drains the separate shared-memory ring,
+notASC. Source383/direct-removal alone is INCOMPLETE and mustNOTrunonhardware.
+Implement boundednonblockingASC receive/sessiondrain beforeG3submit and during
+completionpoll, retaining recognizedwake/pong handling and failingrealcrash/
+unknown/MMIOerrors. NoPongwait/clockdeadline. Current build36196 mayfinish;
+preserve butsupersede it. No934stage has occurred. Plan amended below.
+
 ## Current live state — verify fresh
 EXP933 fullrun TDR0x116, HVCtransportfix validated, originalfourfileshostgate
 8854c883446318a9098633b50209fed14c0d6c30dde175abf57ba5fa2a6e2458. Files under
