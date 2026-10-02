@@ -1,190 +1,109 @@
-# J313 current GPU state — EXP925 partially staged / VSS clarification pending
+# J313 current GPU state — EXP925 captured; normal recovery; last50 guest cleanup
 
-Accepted desktop package NONE. Visible updating desktop unproved; physical Present0.
-User says continue until fixed, compare actual trace -> Microsoft/WDK -> owning driver
-source, and collect immediately when Present0. No multi-minute stability window until
-actual physical Present/output. No subagents and no messaging other chats.
+Accepted desktop package NONE. Physical garbage first seen EXP922; no accepted
+Present/output. User requires continue until fixed, source-first, one causal variable,
+short readiness -> one discriminator -> evidence -> rollback; no long stability trial.
+No subagents/no messaging other chats. Root artifacts .local/experiments, not worktree.
 
-## Current machine / cleanup
-Normal377/392 live owner48605 (verifyfresh), WindowsCIMboot07:10:25.463747Z.
-EXP925 transfer47/47/verification passed; exact925/oem5 staged/unbound whileCode28.
-Logger/WER/signer configured; noAGXmodule/service started. Stagefailed ShadowCount1,
-not diskthreshold (free4370952192>=4GiB). Fourhost-archived owned923/924ETLduplicates
-hashverifiedthenremoved770703360B; free5141598208. Archives retained.
-Fresh11:02:14 Code28 exactoem5; G3Arm cleared0 pending clarification, free5141438464.
-No925shutdown/launch; no guest-preflight/stage-receipt yet. Do notrepeatstageinstall.
-ShadowC:{607455F7-5AB1-4064-B018-05B7711C62BC}, created1790931953785, temporary,
-nonPersistent/nonClientAccessible/AutoRelease; noRestorePoints/activebackuprequester
-found, onlyVSSVC. Userquestion pending permission toremove exactoneVSS copy, as
-previousdelete scopeexperimentdirs, snapshotcoversC. Do notdeleteorweakenShadow0gate
-untilreply. Afterresolution finishpartialstage: validateexactpkg/Code28/logger/signer,
-arm1, staged-disk-policy freshnoShadow/4GiB, generatecorrectstage/preflight receipts,
-hosthashgate, thenseparateorderedshutdown/dualcontrol/launch. Prior EXP924 cleanup
-3gatec9e30f13 andCode28twice remainsvalid, butguestnowpartial925stagedstate.
+## Current control / recovery
+EXP925 package30.0.925.0/source47f7e2910222e8be1984f1664c2f30a966031e5b installed once.
+OriginalBoot11:36:07.971197Z, Code0/Stage12/CPU8 at43.83s. Owner71485 later exited
+USBErrno6; freshSSHtimeout/noowner/L41L43/guardedNOP RunningproxyPASS.
+Ordinary377/392 recoveryBoot11:41:25.990320Z Code43Stage2CPU8. Recovery18hostgate
+5be421fc45c4befde2810f50db1d3945646a0ef6d09aca626c5d885b679344e1 beforeexact925cleanup.
+Exactoem5 removed11:44:48, binaries/service/signer removed, orderedrestart10s accepted.
+Finalordinaryowner72654 (verifyfresh), Boot11:45:03.592399Z, firstsmallstate11:47:29
+Code28/oneinertAPPL0002/armnull/SYS0/UMD0/CPU8/free4004298752.
+Fullordinarydurablequery timedout30s duringarchiveIO; repeatafterarchive, do notinferpass.
+OwnedWERdwm/explorerdiagnostickeys removed11:46:34 afterrecoveryhostgate;
+loggeralreadyremovedbycollector. No AGX broker in normalprofile.
+No925package retained/staged. NeedfullCode28proof twice and3cleanupreceiptshostgate.
 
-## EXP921 actual result and current boundary
-Same package30.0.920.0/source d16f42c07a9ae52ea9c3d8e9c428348b373f7087, firmware unchanged.
-Original boot23:14:25.640379Z reachedCode0/CPU8. One guarded DWM1224->1228 reinit
-completed23:17:04, sameExplorer5168/sameboot/Code0. Host-verified before/after receipts.
-NewDWM initial GPU work submit2/complete1/fence16427, physical+virtualPresent0, noTDR.
-Fresh45012 DWM events: Apple/FL10 HWDevice409; DeriveDisplaySet201 fSucceeded0 twice;
-no newDWM native DXGI Present/SetDisplayMode/other DXGI call. Transition-only cause
-REJECTED. Exact internal refusal still UNKNOWN; no NO_REDIRECTION/capability guesses.
-DWM ETW wall-clock conversion differs from process-receipt UTC; use PID/QPC ordering.
-DxgKrnl8268 decoded events all Level0: do not classify them as errors; event20 Status5
-is an undocumented internal value, not a proven failed NTSTATUS.
-Stop750s monitor per user atlastsample421.982s; collector later23:22:38. Hypervisor
-DCP +120/+300/+600 happened during collection/control work, same surface remainszero;
-this is not a requested stability trial. Original ordered restart23:30:44 took time
-withSSHlive/Explorerclosed before ownerexit andUSBreenumeration; no forced signal.
+## Causal boundary / EXP924 and925
+EXP924SDK9648 bothBGRA87/dim3/binda8/misc20002/2560x1600 importedS_OK;
+dump2.315s later98045B SHA2c6396ba8feccbefbb48da2a6fb29ef777c2fb6e13008a4d7b712acf4284baab.
+Main waitsDXGIProxyWindow/fullscreencreation; worker8NtAlpcConnectPort/dwmapiEnsureConnected.
+ExtraDWM1224dump128272B SHA8cb9244738cbc0b863df7113b1f41471901435ab57f83b3125eb0ff9d6e0b2b4:
+LPCthread1728 NtGdiDdDDIDestroyAllocation ->d3d11DeallocateCB ->UMDscreenDestroyBuffer ->
+NativeBOdestroy/unref ->agx_pool_cleanup ->batchBegin/resourcecopy/D2D/DComp/uDWMscene.
+uDWMEventThread contendedCS. PDBlocalsallocation800014c0/i1 stagingallocation.
+This isstrongdestruction/retirementboundary, notproofkernelrootcause.
+MicrosoftDestroyAllocation PASSIVE/synczero andVidMm schedulersync beforememoryrelease;
+existingUMDholds/refcount/unmap/GPUVAunbinding/retirementguards found, no exactbugselected.
+Do notguessdeferfree/flush/dropbusy/capabilities/tiling. PrimaryMesaagx_bo.c/pool.c/agx_batch.c
+andnativeWindowsBO/batch/retirement inspected once; no thirdarchaeologypass.
 
-Root .local/experiments/EXP921-dwm-reinitialize:
-original16hostgate a094f8640924cee68ebde8001b6b078cc3a024f800381e547cabf6dcd4d9e7d4;
-frozen98gate1d9c60dac9f00592f2b6b309428fea9cfbc36ecac87da101b13ab86d457abc00
-5complete/1oldpartial; last retained snapshot232151 separately recovered/sizeSHA
-verified and guestduplicate removed. Partial hostcopy kept. Recovery15hostgate
-cd1d6b22c678089262d91376a0a4abf732d32b8fe895af213400bd12ea20fff6.
-Two owned collectorETL guestduplicates removed only after host byte/SHA verification.
+EXP925 diagnostic-only pairedKMDdestroyentry/exit privateABI2 kinds9/10 PID/TID/count.
+OriginalSDK4908 once; twoexactimports checkpoint11:37:07.1480098Z; dump99101B
+SHAd52f5004ddedcbc5cedeadade0fa614075ada27335499d67d9c2eed78f8f55da,
+hostgatefullscreen-host-gate.json PASS. Decodedmain/worker8 sameDXGI/ALPCwait.
+Beforeworkload entry202/exit202/dropped0, pid4tid6252; probeinstrumentationworks.
+Afterframe querymissingdueSSHloss, noDWM925snapshot. Therefore KMDbodyvsOSsync
+NOTdistinguished; diagnosticverdictinconclusive forowningkernelboundary, nofixedclaim.
+Presentphysical/virtual0 beforetest; no successfulSDKfullscreen/clear/Presentreceipt.
+FailedSCPearlyETL left6.5MBpartialhostcopy, do notuseascomplete; frozenoriginalguest925
+retainedforrecovery. Mustrecoverearlyreceipt+closedfileshashbeforeusingtrace.
+NoSDKrerununchanged. Nextcausaltarget: kernelallocationrelease/schedulersync boundary,
+useactualrecoveryevidence/stack, notnewcapabilityprobes.
+Plans analysis/EXP924-sdk-post-import-stack-plan.md /EXP925-allocation-destroy-boundary-plan.md.
+925 finalmanifestf6de4e75e10e3f64e31eca158c223d5a4e6c89ddbbd1c9a4f7bac20f5294811b,
+payload05d5790b96c3bbcd3a95021a57ff8d7837c3add81ea5efc16176c859227e8182.
+No implementationfixsince47f7e291. DDI3/allocation6pass; same3stalesource-extraction
+compilefailures reproducedbaseline. SignednativeARM64/WDKbuild0warnings/PDBmatched.
 
-## EXP922 actual new boundary / recovery pending
-Exact920package/source d16f42c0; manifest2c7ec192/payload13622434,57artifact45transfer.
-Original boot2026-10-02T00:07:17.442271Z Code0CPU8Stage12; DWM1228/Explorer5316.
-One SDK10204 Session1 workloadstarted00:08:12. ItcreatedFL10device and2BGRA87/a8/
-20002/2560x1600 backbuffers successfully; blockedCreateSwapChainForHwnd fullscreen.
-No returnedfullscreenstage/RTVclear/SDKPresent. TaskReady267014/PT1M, nofullreceipt;
-partial476B SHAdd1dfc23 independentlyverified; exactstoppedtaskremovedafterevidence.
-SDKexe e1d5875c888832B sourcef8b7f525; no driverchange. Neverretrytheworkloadunchanged.
+## User-approved guest cleanup
+Userapproved exactVSS deletion (done11:24:47/shadow0) andalloldexperimentsexceptlatest50.
+Latest50existingIDs866-869/880-925 retain152folders;245olderfolders2707files7597053541B.
+Root925 last50-retention-plan.json /old-experiment-files.json. ManifestallfilesSHA done.
+SharedEXP726signing copied+hashverified C:\Users\pavel\J313-tools\signing;
+futurestage use signtool-arm64.exe there, notdeletedoldEXP726path.
+Old245folders deletion COMPLETED11:51:31.944Z. All2707hosttar members sizeSHA PASS;
+archiveSHAce49c2f41759f2a275b2335442376212078ebcc2b1db71d50cb1aad9bfb5f7d9,
+internal /Users/pavel/J313-evidence-archive/2026-10-02/guest-old-experiments-last50-retained/old-experiments.tar.gz.
+ManifestSHA362691cc703b86714dc3f2bcc34d2a44619cb3238b18daf44cef1a775f095fae.
+Delete245/remaining0; free4024823808->11622449152. Freshretain152/missing0,
+CPU8Code28;14445BreceiptSHAa3384c21d4a34ccaa19af5a8ff4061601f46c42771cc25a6c039923918610dfb hostverified.
+Sharedsigningfolder nowonly552824Bsigntool-arm64.exe SHA097bdc4805f0cdcb4c1689a1533b0eb9a6143c3751c421b7ecc26b5c8cd5f0b1.
+NormalfullCode28 twice11:49:15/11:49:53 sameBoot11:45:46.241825Z/CPU8/RDPdisksUSB,
+zeroexperimentpackage/service/module/signer/diagnostics;3cleanupreceiptshostgatePASS.
+ROOT803 cleanup COMPLETED12:01:41Z: exact6442450944B sourceSHA2859c93f05c620635deeab826e04bd348fdfddd5c66e2c604c9915326de246fe,
+DedicatedDumpFile null/noactive refs/exclusiveReadPASS; archiveallmemberSHAverified,
+archiveSHA cc4bc0b366625b05d0b02afc5a7c0bbed162f68cbb43a4f5ee7c771e2fd81076,
+internal samearchivefolder/EXP803-dedicated-dump.tar.gz. Exactfilegone;243Bdelete
+receiptSHA634e080445ce83de769cbe57a948be8eb0ca809703ca29a9b4299134cd0699e7 hostverified.
+FINAL12:02:17Z free18054393856/Code28/CPU8/RDPRunning/retain152missing0;
+combinedoldfolders+rootfile14039504485logicalB removed. Sharedsigntoolonly preserved.
+No guestoldcleanup pending. Acceptedarchives retained; owninterruptedhosttarpartial
+removedaftercompletearchivemembers verified. Prior<=600 andETLduplicatecleanup staysvalid.
 
-Userprovided2photos and explicitlyconfirmedfirstphysicaldisplay: repeating/deformed
-images andhorizontalartifacts. Rawfilespreserved operator-photos SHAad974cbb/70d0d77d.
-DCPsameSwap9/seq2/IOVA102a0000/PA8e0110000 +120 nonzero46174/4096000 avg1,1,1,2.
-Thisisphysicalgarbage proof, NOTaccepteddesktop orSDKgreenframe; SDKnevercleared.
-DWMphysical/virtualPresent0, allPresentDDIcounters0; SourceAddress count1 unchanged
-before/after. Do notclaim tiling/pitch cause; nativepresentationresource sourceuses
-DRM_FORMAT_MOD_LINEAR/AIL_TILING_LINEAR, so blinddetilefixisnotjustified.
+## Authoritative fullkernel925 causal boundary (correction of filesystemtimestamp inference)
+FreshSystem1001UTC11:41:58.8207493Z and1066156Bminidumpdc480066 confirm116
+(ffff8487be2bc010,fffff80142b2ab40,ffffffffc0000483,3).
+FULLKernel-MEMORY.DMP635199439B SHA1040da783be558467e44dc6be89d301ea693c91f64c12e3db5c0dfec2b2a1fc8
+INTERNALHEADER SAMEoriginalcrash11:37:32.596Z/uptime85.161s/CPU3. Filesystem11:32timestamp
+misleading; priorclassification superseded inledger/report. Bothdumpshostverified.
+Matching925PDB/knownoriginalDWMcontextbca93b80 ->Object.Device.Adapterbcc02000,
+PlatformRuntimebcd25000 validatedviaRuntime.Adapter backpointer.
+Frozendestroyentry577/exit577/seq1154/drop0/lastsameallocbd6d5a00/PID4TID312/status0.
+NooutstandingKMDdestroybodyatcrash; previous transientwait notexcluded.
+SchedulerFaulted0x40bb0=0x40000|2992 maps EXACTsealedbackend_platform_windows.c2992
+PRE-SUBMIT RTKIT HEARTBEAT FAILURE. CompletedFence7961 vsLastSubmitted/Active7966,
+packetActive/preemptionpending, TDRResetStatusc0000483. Not a blindfree/resetfix.
+RtkitBootReady/Running1/CpuReady1/StopIdle/CrashlogCrashed0; lastRxep20/payload
+0042000000000000 isevent42, explicitlyacceptedbycurrentHeartbeat. m1n1FirmwareEPevent42
+pollsAGXchannels. Do NOTclaimprotocolviolationjustfromlastmsg orphysicalM1fault.
+NEWNEXTTARGET heartbeat/Pong/ASC receiveownershipbeforeenqueue andproperAGXevent
+channelhandling. CompareprimaryAsahi/m1n1/Mu/WDK mapping beforeedit; deterministic
+reproducerbeforefixifrealofflinecontractdefect found. No newhardwarepreregistered.
+Reportanalysis/EXP925-allocation-destroy-boundary-verdict.md; currentcdb-memory.log,
+cdb-flat-context.log,cdb-final-state.log inROOT925. No accepteddesktop/newcodefix.
 
-SSHtimedoutthen255, NVMe repeatedlyreinitialized; initialcrashpath hypothesisnotproven.
-One SIGINT toverifiedowner10068 perdocumentedrun_uefi handlercapturedCPU/IRQ then
-continued(NO SIGTERM/reboot). SSHrestored, samebootCode0CPU8DWM1228; Explorer5896now.
-No newMemoryDMP/LiveKernelReports andTDRcapture0; newestSystem1001 isold91921:04:10.
-Do notattributeold119 to922. CPUcaptureinfull.log; signalmayhavechangedprogress,
-so no naturalstabilityclaim. Useraskedwhethermanualrebootneeded; toldnone, wecontrol.
-
-Original15hostgatec67ab3d6f86826084aea4d7ae0f542cb22b8dc29dc99174b0bc068f0dbf16bb2;
-frozencontrol18gate8f0e663f70c20faddf735fe6099041dc6a55629577c22e154995653a6b3ae82a.
-OriginalcollectorstoppedETLbeforecopy. Recovery14hostgate5a2552d7618ce8809d34b23a626960a1d3269d8462d02114fe153619ff3ebf85
-beforeCode43exact920cleanup; finalordinaryboot01:28:45.904514Z Code28twice01:31:42/01:33:18,
-package/module/service/signer/arm/diagnostics0 CPU8/disks2USB5/free4868280320/shadow0.
-Cleanlauncher18519 (verifyfresh); cleanup3hostgate18fa7acb8a9405038b95953a02a79a48a139857429c879884a97c3e00dae864c. No liveCode0removal; hidden385 emergencyonly.
-
-Nextcausaltarget: exactblockingcall insidefullscreencreation AFTERsuccessfulbackbuffer
-alloc/import and BEFOREnativeDXGI mode/Present. DecodecurrentoriginalETW bySDK10204;
-ifitcannotidentifywait, one documentedMiniDumpWriteDump snapshotofownedSDKprocess
-whileblocked in a separatelypreregistered diagnostic, before60stasktermination.
-Plananalysis/EXP923-sdk-creation-stack-plan.md; scripts/g3-sdk-stall-minidump.ps1
-commita9c3013e/SHAdb165689, builderAST/PInvokePASS. EXP923 prepared60artifacts47transfer; manifest8e68181e/payload567181d5. No923stage/launch yet.
-LateoriginalETL SDKPIDqueryreturnedempty; cannotidentifywaitfromit.
-EarlyEXP<=600cleanup remains304folders2294files archived/removed, hostarchive9e014c6c retained.
-No additionalambientboot/capability/NO_REDIRECTION probes. MatchprimaryWindows/WDK
-contracttoowningcode beforefix. Physicalbufferwriter/pitch/layout remainsunknown.
-
-## Guest disk cleanup in progress
-User authorized early experiments through600. Disk audit: C119GB/free4.8GB,
-EXPdirs67.405GB, livesnapshots47.602GB/evidence17.477GB. Early<=600 only315MB/304dirs.
-Archive only non-reparse earlyfolders not referencedbyenabledtasks/services/startup;
-full host archive/member size+SHA verification BEFORE exact source removal.
-Completed:304folders/2294files/312729300logicalbytes archived, everytar member
-size/SHAhostverified, thenexactsourcefoldersandguesttarcopyremoved; remainingearly0.
-Hostarchive9e014c6c retained /Users/pavel/J313-evidence-archive/2026-10-02/guest-EXP001-600.
-Freshfree4992929792. LaterCIMBoot23:42:05.936997Z differsfromearlierordinaryquery; no
-physicalresetinferred, freshstage/preflightmustagree oncurrentBoot. First encodedcommand too long beforeexec;
-file-wrapper then createdarchive but finalmetadata Measure-Object failed onorderedmaps;
-independent read-only receipt recovers completedarchive. Never rerun creation over it.
-Unused candidate C:/EXP803-dedicated-dump.sys6.4GB not removed or declared backedup.
-Do not delete personal files, Windows components, paging or recovery artifacts.
-
-## Host evidence / proven fixes
-8 closed921 ETLs relocated/fsynced/sizeSHA verified before original-path symlinks to
-/Users/pavel/J313-evidence-archive/2026-10-02/EXP921-completed; source paths retainbytes.
-Plan/log in921 completed-etl-relocation files. Hostfree~7GB; stage>=5GiB, copywatermark512MiB.
-Earlier33 completedfiles similarly under internal2026-10-02 archive; NEVER delete targets.
-b5291548 displayableBGRA creation defect hardwarevalidated918/920. a5c2c1af actual
-competing-notifier production RED/GREEN;920 samebootCode0>20min nonrecurrence with
-explicit hostENOSPC coveragegap, not proof of exact interleaving. No accepted desktop.
-Event468 is Dx_Flip_Consumed, not output binding. ActiveApple2560x1600 already proven.
-
-Recovery377 SHAfae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a;
-392 SHA16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06.
-Hidden385 SHA279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c emergencyonly.
-Never proxyNOP whileSSH or launcher live. Check both control planes and inspect returned
-SSH before dependent actions. No liveCode0 removal; evidence gates before Code43 exact
-cleanup, then ordinary GPU-visible Code28 twice. PS scripts>~2800bytes must use SCP/file
-wrapper rather than EncodedCommand. Mandatory implementation commit then CHANGES.csv.
-
-## EXP923 original captured / ordinary restart pending
-OriginalBoot06:09:38.888222Z Code0CPU8; SDK9988/session1 once. Exactdump83612B
-10a258ce at06:10:48 captures MapGpuVirtualAddress during D3D11CreateDevice BEFORE
-fullscreen; matchingUMD latermapreturn andbothBGRAimportsS_OK. NoPresent/TDR.
-Not confirmedmappingdefect. EarlyETL194248704/c0f6fa48,610PIDevents; separatedump
-andearlysizeSHA gates. Original15hostgate605dd838. Wrapperhashopenstdoutfailed
-receiptandleftSDKorphan; heldexactSDK stopped06:12:16 afterdumpgate. Monitorstopped.
-Orderedrestart06:14:55 acceptedCode0/sameboot/free6601424896; owner41161 verifyfresh.
-No923Code43cleanupyet. NextplanEXP924-sdk-post-import-stack-plan: captureafter2
-exactfrontendrecords+2successfulresourceexits, notfixedtime. Same920SDK/firmware.
-Stagegate/closedfiles/finally sourcepreparedASTPInvokePASS; no924hardwareyet.
-
-## Authoritative EXP923 closure / next EXP924
-Reportanalysis/EXP923-early-sdk-stack-verdict.md: dump83612B/10a258ce captured
-transientMapGpuVA duringCreateDevice; trace latermapreturn andbothBGRAimportsS_OK.
-Not a mapdefect proof. Original15gate605dd838; earlyETL194248704/c0f6fa48 and610PIDevents.
-PhysicalPresent0/TDR0; corruptedDCPpixels again. NormalrecoveryfailedSSH, hidden45
-recovered and exactcleanupcompleted; latestcurrentmachine above supersedes pending
-notes. TwoETLpaths archivedoneinternaltarget/fsync/hash, freed388497408externalbytes.
-EXP924 prepared60artifacts47transfer manifest75c9fddd/payload2626078e; source009730dc/
-ledger7c0bca38. Stage-gatedsnapshot after2exactfrontend+2resourceexits,2sec later;
-closedobserverfiles thenownedSDKfinallycleanup. Same920SDK/firmware. No924stage/launch.
-An initialoffline924preparation had stale921recipe/selfoverwrite paths/counts; rejected
-beforestage and retained atEXP924-sdk-post-import-stack-rejected-preparation. Correct
-924 constructedfromsealed923 lists; runtimepaths/counts/fullhashgates verified.
-
-## EXP924 authoritative causal boundary
-ExactSDK9648 bothBGRAimports checkpoint06:36:16.559; dump2.315s later98045/2c6396ba.
-Main waitsDXGIProxyWindow creation; worker8 dwmapi EnsureConnected/NtAlpcConnectPort.
-ExtraDWM1224 dump128272/8cb92447 (24threads) LPCPortThread1728 at
-NtGdiDdDDIDestroyAllocation ->UMDscreenDestroyBuffer ->NativeBOdestroy/unref ->
-agx_pool_cleanup ->batchBegin/resourcecopy/D2D/DComp/uDWMscene ->dwmredirPortThread.
-uDWMEventThread contendedCS, compositorWaitForWork. This explainsclientALPCwait
-asstrongallocation-destruction/retirement target, notyetprovenkernelrootcause.
-SDK/closedstdout/earlyETL hostgates pass; early191102976/c5342723; original15gate55e52ea8.
-Oneofflinepass readsource+MicrosoftDeallocate/FreeVA contracts; existingHeld/refcount/
-retirementguards mean no deterministicviolatedinvariantselectedyet. Do notguessdefer,
-flush,dropbusy,capability/layout. Need exactallocation andkernelDDI/retirement boundary.
-Presentphysical/virtual0/TDR0. SDK/observerExitnull receiptlimitation; closedstdoutverified.
-Orderedrestart06:41:04 sourcecaller68a6e94a; recovery/cleanuppending, owner45152 verify.
-No EXP925 prepared/run. No newdriver fix. Currentevidence .local/experiments/EXP924-sdk-post-import-stack.
-
-## EXP925 built only — next exact boundary discriminator
-Paired KMDdestroyentry/exit inexistinginmemoryDDIprobe: privateABIv2/newkinds9/10,
-PID/TID/count/firstdriverhandle/returnstatus. Existingdestroybody statusesunchanged;
-no waits/registry/MMIO innewtrace. Source47f7e2910222e8be1984f1664c2f30a966031e5b,
-ledger2feedb5f; plananalysis/EXP925-allocation-destroy-boundary-plan.md. WDK/ARM64
-native build925 andmatchingBltProbePASS0warnings; 544committedsources verified;
-PE/PDB GUID+age match. CAT/SYS/UMD signaturemembershipPASS withexactE9 signer.
-Builder testroot nottrusted bydefault; CurrentUserRootimportrequiresUI andfailed
-withoutaddingroot; initialfinallycleanupmaskedthaterror. ExactLocalMachineRoot
-addedtemporarilyforverification thenremoved/restored; logsignature-verify-machine-temporary.log.
-Buildreceiptinheritedoldsource/package920 labels; originalpreserved andseparate
-build-receipt-corrected.json usesactualINF925 andsource manifest47f7e291.
-Hostsource manifestb6250b16e099efa0aa1cecc70ba19472fcc0d28dffaf0d7ce22d6a13cc7ba170;
-zip7ba5561776631ca0de0e397ea12dcf739157a0876fd768a8fed304c91ac7a1f1.
-NewpkgINF2a0b99a6/sysc4337bd3/UMD3dbec369/CAT7f3e98df fullhashes correctedreceipt.
-OfflineDDI3PASS/allocation6PASS; three stale source-extraction compilefailures
-reproducedatHEADbaselineandmodified(samefailingtestnames), no new failingnames.
-No925Airtransfer/stage/launch yet; no finalhardwaremanifest/payloadsealed yet.
-Next: prepareexact925package+newBltProbe withSDKstagegate; prereg/sealallruntimehashes;
-onepostimportSDK/DWM snapshotplusentry/exitcounts; distinguishKMDbody vsOSsync.
-Do notcallrootcausefixed; DWMstaging800014c0 i1 wait isobserved, owningkernelwaitunknown.
-
-EXP925 final runtime seal manifestf6de4e75/payload05d5790b,65artifacts47transfer; preregistered. Freshclean10:42:32 Code28/CPU8/zeroexperimentstate owner48605. No925stage/launchyet.
-
-EXP925 lateststage status supersedes earlierbuilt-only notes. Finalmanifestf6de4e75e10e3f64e31eca158c223d5a4e6c89ddbbd1c9a4f7bac20f5294811b/payload05d5790b96c3bbcd3a95021a57ff8d7837c3add81ea5efc16176c859227e8182; hardwareprereg13e2304e. PendingVSSclarification; no925AGXlaunch.
+## Immutable recovery / rules
+377m1n1 SHAfae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a;
+392Mu SHA16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06,
+ROOT.local/experiments/EXP810-g4-package817/recovery. Hidden385 emergencyonly
+SHA279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c.
+FreshboundedWindowsSSH +USB/ownerbeforeproxyaction/physicalrequest. NoNOPwhilelive.
+NoCode0packageremoval. EvidencehostgatesbeforeCode43exactcleanup, normalGPUvisible
+Code28twice. Script>2800B useSCP+shortfilehashwrapper. EXPERIMENTS pre+actualmandatory.
+Neverdelete /Users/pavel/J313-evidence-archive targets orhostrecoveryartifacts.
