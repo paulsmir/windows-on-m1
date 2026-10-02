@@ -1,4 +1,4 @@
-# J313 GPU investigation — offline NTFS recovery EXP931D
+# J313 GPU investigation — NTFS recovered; reconcile AGX packages
 
 ## Objective and constraints
 Continue until correct stable physical desktop. Accepted graphics package: NONE.
@@ -21,17 +21,19 @@ key /Users/pavel/.ssh/windows_builder. USB endpoints L41/L43:
 Always check bounded SSH plus launcher/USB before physical requests or reset.
 No raw USB/proxy NOP while a launcher owns the guest.
 
-## Current live run — verify fresh
-EXP931D WinPE owner74050 / exec session57190. Image RAM upload began after
-photo-confirmed C pre-repair pause, fresh dual-plane checks, exact owner71176
-SIGTERM, owner exit and guarded proxy NOP PASS. No CHKDSK result yet.
-DO NOT interrupt D unless operator confirms FAILED_STEP / Press any key before
-repair. It may be running CHKDSK, whose output is redirected to the evidence ESP.
-D automatically calls wpeutil reboot after CHKDSK, regardless of repair verdict.
-Then fresh dual-plane/proxy check -> ROOT931/launch-normal.sh (normal377/392,
-broker disabled) -> Windows SSH -> ROOT931/collect-offline-result-d.ps1 ->
-host-copy/hash receipts -> independent RegFlushKey and dirty/event check.
-Do not resume GPU work before the registry durability failure is resolved.
+## Current live state — verify fresh
+EXP931D repair completed. CHKDSK exit1, corrected metadata including201F2,
+17.87seconds. Normal377/392 broker-disabled Windows now booted:
+Boot2026-10-02T20:38:12.723814Z, owner74535 / exec83594, SSHalive, CPU8.
+C:NOTDirty; independent RegOpen0/RegFlush0 (before1016). Twelve evidence files
+host size/SHA verified, gate75b15f5075f955ff2ec801ef7c7b5e18ad8e5a3644ff4f73e8bf04c299db7708.
+Do not reboot into WinPE again. Current boundary package reconciliation:
+Windows reports928/Code31/Armnull, notprevious930. Stage12/Status0 are persisted
+old registry receipts, not currentGPUproof. Read-only package inventory in
+ROOT931/package-inventory.out (exec15638, verifyfinished) before any cleanup.
+Next restore exact inertGPUvisible/noAGXpackage recovery then installhashverified
+corrected930 for firstactualGPUtest. Do notrunoldcleanup withwrongexpectedCode
+or delete sharedsigner whileotherexactAGXpackagesremain. Normalprofileunchanged.
 
 ROOT931 = ROOT.local/experiments/EXP931-ntfs-system-log-recovery.
 Current launch ROOT931/launch-winpe-d.sh, verification verify-launch-d.py,
