@@ -2899,13 +2899,17 @@ static VOID AdmissionPlatformWorker(
   ADMISSION_RENDER_PACKET_DESCRIPTION description;
   APPLE_AGX_BACKEND_SUBMISSION submission;
   APPLE_AGX_BACKEND_RUNTIME_RESULT result;
+#if !defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   APPLE_AGX_RTKIT_SESSION_RESULT heartbeatResult;
+#endif
   BOOLEAN activated = FALSE;
   BOOLEAN cancelled = FALSE;
   BOOLEAN deferred = FALSE;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   APPLE_AGX_G13_QUEUE_PROGRESS finalProgress;
+#if !defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   APPLE_AGX_RTKIT_SESSION heartbeatSnapshot;
+#endif
   ADMISSION_QUEUE_SUBMISSION_RECEIPT queueSubmissionReceipt;
   ADMISSION_QUEUE_INFO_RECEIPT queueInfoReceipt;
   ADMISSION_BUFFER_MANAGER_RECEIPT bufferManagerReceipt;
@@ -2938,7 +2942,9 @@ static VOID AdmissionPlatformWorker(
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   RtlZeroMemory(&finalProgress, sizeof(finalProgress));
   RtlZeroMemory(&taTemporal, sizeof(taTemporal));
+#if !defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   RtlZeroMemory(&heartbeatSnapshot, sizeof(heartbeatSnapshot));
+#endif
   RtlZeroMemory(&queueSubmissionReceipt, sizeof(queueSubmissionReceipt));
   RtlZeroMemory(&queueInfoReceipt, sizeof(queueInfoReceipt));
   RtlZeroMemory(&bufferManagerReceipt, sizeof(bufferManagerReceipt));
@@ -2993,6 +2999,10 @@ static VOID AdmissionPlatformWorker(
   submission.PrivateDataEnd = description.PrivateDataEnd;
   submission.DmaSubmissionStart = description.DmaStart;
   submission.DmaSubmissionEnd = description.DmaEnd;
+#if !defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* Legacy diagnostic profiles retain their management probe.  GPUVA jobs
+   * use the queue doorbell and completion protocol, not a management pong
+   * deadline between software activation and actual hardware submission. */
   InterlockedIncrement(&runtime->HeartbeatReceipt.Sequence);
   ++runtime->HeartbeatReceipt.Calls;
   runtime->HeartbeatReceipt.Fence = description.Fence;
@@ -3025,6 +3035,7 @@ static VOID AdmissionPlatformWorker(
     AdmissionPlatformWorkerFinished(runtime);
     return;
   }
+#endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   {
     APPLE_AGX_MEMORY_OBJECT *state = &runtime->Initdata.ChannelMemory.Objects[
@@ -3356,8 +3367,10 @@ static VOID AdmissionPlatformWorker(
   UNREFERENCED_PARAMETER(finalProgress);
   UNREFERENCED_PARAMETER(finalProgressValid);
 #else
+#if !defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   AdmissionRecordPreSubmitHeartbeat(
       adapter, heartbeatResult, &heartbeatSnapshot);
+#endif
   if (queueSubmissionCaptured)
     AdmissionRecordQueueSubmission(adapter, &queueSubmissionReceipt);
   if (queueInfoCaptured)
