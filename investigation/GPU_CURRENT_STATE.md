@@ -1,4 +1,4 @@
-# J313 current GPU state — EXP923 closed / post-import stack next / clean ordinary
+# J313 current GPU state — EXP924 closed / EXP925 built not staged
 
 Accepted desktop package NONE. Visible updating desktop unproved; physical Present0.
 User says continue until fixed, compare actual trace -> Microsoft/WDK -> owning driver
@@ -6,14 +6,14 @@ source, and collect immediately when Present0. No multi-minute stability window 
 actual physical Present/output. No subagents and no messaging other chats.
 
 ## Current machine / cleanup
-Normal immutable377/392 boot2026-10-02T06:27:02.050807Z; checks06:28:49/06:29:12:
-Code28/oneAPPL0002, package/module/service/signer/arm/diagnostics0 CPU8/disks2USB5,
-RDPservice/autologon1, free5569912832/shadow0. Clean owner43614 verifyfresh.
-EXP923 normalrecoverywasSSHunreachable despiteCPU8; oneSIGINTcontinued, then
-SIGTERMreset/emergencyhidden385 onlyafterfailedGPUvisiblerecovery. HiddenCode45
-7hostgatee9caa178; exact920/oem5 cleanup06:26:47 thenorderednormalrestart. Cleanup
-3hostgate9596dac01ac0fc1394e562271a879dff0fc9b779a6ed1750afaf277af5f3bb89.
-OwnedstoppedSDKtaskremoved06:29:50. No package carryover. No newdump/System1001.
+EXP924 closed. Finalnormal377/392 boot07:05:35.748055Z checked07:11:27/07:12:00:
+Code28/oneinertAPPL0002; package/module/service/signer/arm/diagnostics0 CPU8/disks2USB5,
+RDPservice/autologon1; free4867559424/shadow0. Clean owner48605 verifyfresh.
+Original15gate55e52ea8, normalCode43recovery14gate6b612f00, cleanup3gate
+c9e30f13e953966851ac72d209f2190511998cf44442992aa5697b27e3e6097b.
+Exact920/oem5removed07:05:20; orderedrestart; ownedstopped924taskremoved07:12:47.
+No924hiddenboot orhostsignals. ClosedtwoETL191102976/c5342723 paths fsynced/hashverified
+tooneinternalarchiveEXP924-completed beforeoriginal-pathsymlinks; freed382205952external.
 
 ## EXP921 actual result and current boundary
 Same package30.0.920.0/source d16f42c07a9ae52ea9c3d8e9c428348b373f7087, firmware unchanged.
@@ -139,3 +139,41 @@ closedobserverfiles thenownedSDKfinallycleanup. Same920SDK/firmware. No924stage/
 An initialoffline924preparation had stale921recipe/selfoverwrite paths/counts; rejected
 beforestage and retained atEXP924-sdk-post-import-stack-rejected-preparation. Correct
 924 constructedfromsealed923 lists; runtimepaths/counts/fullhashgates verified.
+
+## EXP924 authoritative causal boundary
+ExactSDK9648 bothBGRAimports checkpoint06:36:16.559; dump2.315s later98045/2c6396ba.
+Main waitsDXGIProxyWindow creation; worker8 dwmapi EnsureConnected/NtAlpcConnectPort.
+ExtraDWM1224 dump128272/8cb92447 (24threads) LPCPortThread1728 at
+NtGdiDdDDIDestroyAllocation ->UMDscreenDestroyBuffer ->NativeBOdestroy/unref ->
+agx_pool_cleanup ->batchBegin/resourcecopy/D2D/DComp/uDWMscene ->dwmredirPortThread.
+uDWMEventThread contendedCS, compositorWaitForWork. This explainsclientALPCwait
+asstrongallocation-destruction/retirement target, notyetprovenkernelrootcause.
+SDK/closedstdout/earlyETL hostgates pass; early191102976/c5342723; original15gate55e52ea8.
+Oneofflinepass readsource+MicrosoftDeallocate/FreeVA contracts; existingHeld/refcount/
+retirementguards mean no deterministicviolatedinvariantselectedyet. Do notguessdefer,
+flush,dropbusy,capability/layout. Need exactallocation andkernelDDI/retirement boundary.
+Presentphysical/virtual0/TDR0. SDK/observerExitnull receiptlimitation; closedstdoutverified.
+Orderedrestart06:41:04 sourcecaller68a6e94a; recovery/cleanuppending, owner45152 verify.
+No EXP925 prepared/run. No newdriver fix. Currentevidence .local/experiments/EXP924-sdk-post-import-stack.
+
+## EXP925 built only — next exact boundary discriminator
+Paired KMDdestroyentry/exit inexistinginmemoryDDIprobe: privateABIv2/newkinds9/10,
+PID/TID/count/firstdriverhandle/returnstatus. Existingdestroybody statusesunchanged;
+no waits/registry/MMIO innewtrace. Source47f7e2910222e8be1984f1664c2f30a966031e5b,
+ledger2feedb5f; plananalysis/EXP925-allocation-destroy-boundary-plan.md. WDK/ARM64
+native build925 andmatchingBltProbePASS0warnings; 544committedsources verified;
+PE/PDB GUID+age match. CAT/SYS/UMD signaturemembershipPASS withexactE9 signer.
+Builder testroot nottrusted bydefault; CurrentUserRootimportrequiresUI andfailed
+withoutaddingroot; initialfinallycleanupmaskedthaterror. ExactLocalMachineRoot
+addedtemporarilyforverification thenremoved/restored; logsignature-verify-machine-temporary.log.
+Buildreceiptinheritedoldsource/package920 labels; originalpreserved andseparate
+build-receipt-corrected.json usesactualINF925 andsource manifest47f7e291.
+Hostsource manifestb6250b16e099efa0aa1cecc70ba19472fcc0d28dffaf0d7ce22d6a13cc7ba170;
+zip7ba5561776631ca0de0e397ea12dcf739157a0876fd768a8fed304c91ac7a1f1.
+NewpkgINF2a0b99a6/sysc4337bd3/UMD3dbec369/CAT7f3e98df fullhashes correctedreceipt.
+OfflineDDI3PASS/allocation6PASS; three stale source-extraction compilefailures
+reproducedatHEADbaselineandmodified(samefailingtestnames), no new failingnames.
+No925Airtransfer/stage/launch yet; no finalhardwaremanifest/payloadsealed yet.
+Next: prepareexact925package+newBltProbe withSDKstagegate; prereg/sealallruntimehashes;
+onepostimportSDK/DWM snapshotplusentry/exitcounts; distinguishKMDbody vsOSsync.
+Do notcallrootcausefixed; DWMstaging800014c0 i1 wait isobserved, owningkernelwaitunknown.
