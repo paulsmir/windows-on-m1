@@ -25,14 +25,24 @@ No raw USB/proxy NOP while a launcher owns the guest.
 Fullowner96715/exec40531 (verifyfresh), package934/oem5, originalBoot22:33:55.992455,
 firstready22:35:19.946, CPU8/SSH/Code0/Stage12/Status0/Armnull/HVC1/gen239153593.
 Fixedm1n1bdcf8715+MuR143e54. ROOT934=ROOT.local/experiments/EXP934-direct-gpuva-submit.
-Latestread current-checkpoint.out pendingcommand, verifycompletion. No934rollbackyet;
+Latest current-checkpoint.out completed. Fresh SSH and owner96715 alive22:56UTC. No934rollbackyet;
 keepcurrentoriginalguestforphysicalobservation/read-onlyinvestigation. No nextexperiment.
 Before935mustcollectthenremoveexact934package throughnormal377/392 recovery.
 
 LiveframebeforeSDK: DWM1240submit27+2/complete26+2, VSync8110+, Present0/Virtual0,
 TDRcaptured0. AfterSDK: submit140+2/complete138+2 last98685/12803, stillPresent0/TDR0.
-NO stabilityclaim or physicallyblankclaim. OriginalsameDCPseq2sampleszero do not
-substitute currentphoto. Userphysical934questionpending/unanswered.
+Physical photos now CONFIRM repeated blocks and horizontal lines, NOT correct desktop.
+Photos archived ROOT934/physical-evidence with independent SHA256, captureUTC unknown.
+Correction: seq2 at120/300s was zero; existing600s snapshot contains15012 nonzero
+pixels/hash35ce83ad3947aaed/corner00180003. Earlier zero reads do not describe whole run.
+At22:56:37Z frame-after-photos.out: sameBoot, DWM140/138 and2/2 unchanged since prior
+sample; generic submissions151678, allocationdestroy11216/11216, Present0/TDR0,
+VSync79862. Background progress does NOT prove continued DWM render progress.
+Source audit: display_scanout_observe_latched returns cached requested IOVA matched
+to D589 swap ID; window sampler computes PA using pool offset, not actual DART PTEs.
+This is a diagnostic limitation, NOT a proven DART mapping defect. Next causal
+checkpoint must distinguish produced surface bytes from actual DCP-mapped bytes;
+do not infer pitch/tiling or change them merely from photo. No934rollback/newrun.
 OneSDKstimulus e1d5875c ranviaEXP934-LivePairedCreation, importedexacttwoBGRAfullscreen
 backbuffers, paired SDK+DWM dumps beforeownedSDKtermination. TaskResult0 thenremoved;
 no SDKleft. Paired9hosthashgate8b9eee2a375554a75218b037b134180a159c592da5202ea7fadb12f093a9e469.

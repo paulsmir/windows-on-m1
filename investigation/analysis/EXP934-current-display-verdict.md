@@ -38,3 +38,37 @@ Evidence: ROOT.local/experiments/EXP934-direct-gpuva-submit/frame-query.out,
 frame-after-sdk.out, paired-evidence/host-gate.json (8b9eee2a375554a75218b037b134180a159c592da5202ea7fadb12f093a9e469),
 and matched cdb-sdk-creation.decoded.log / cdb-dwm-paired-sdk.decoded.log.
 Original933 kernel and four verified files remain in internal evidence archive.
+
+## Physical evidence correction, 2026-10-02 22:57 UTC
+
+Two operator photos show repeated image/noise blocks and horizontal colored lines.
+The physical display is corrupted, not blank. Original photo capture times are
+unknown; do not claim synchronization with a particular buffer sample. Both photos
+are preserved with verified SHA256 under ROOT934/physical-evidence/manifest.json.
+Photo hashes: dac93a98f7df389c4d6fe355a12cb96007f2753b027f05812ff1d346a6f84972
+and 1caac792765a5c541cbc95f49c3945a60535244dc673e65e428a161556fbc9c4.
+
+The existing serial log now includes the600s sample: seq2, PA8e0110000,
+IOVA102a0000,15012 nonzero pixels of4096000, hash35ce83ad3947aaed,
+first corner00180003.120s and300s were zero. Thus an assertion that the buffer
+remained zero throughout EXP934 is false. These were already scheduled diagnostics;
+no extra wait or new hardware run was introduced to obtain them.
+
+Source inspection narrows what these diagnostics establish:
+`display.c:747` matches D589's swap ID to the saved requested surface IOVA.
+`hv_agx_power_mmio.c:330` derives PA by pool-offset arithmetic. Neither verifies
+the actual active DART translation. This does not prove a mapping error; it means
+same_surface=1 alone cannot exclude one. No register/stride/tiling change is justified.
+
+Fresh query at22:56:37Z (`frame-after-photos.out`) confirms same original boot,
+Present/VirtualPresent0/TDRcaptured0; DWM counts remain140/138 and2/2, while generic
+submission and allocation counters advance to151678 and11216/11216. This refines
+the earlier progress statement: background allocation/paging activity is alive,
+but continued DWM render progress has not been shown by the latest interval.
+SSH and owning launcher96715 remain alive. No reset, restaging, new draw stimulus,
+or driver modification was performed in response to these photos.
+
+Next distinguishing evidence is the relationship between produced pixel data,
+the submitted surface descriptor, and the actual DCP DART mapping. Current evidence
+does not yet identify which of these contains the defect, and a photograph alone
+cannot establish that changing pitch or tile mode will correct it.
