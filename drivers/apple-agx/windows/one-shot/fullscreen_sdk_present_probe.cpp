@@ -3,6 +3,7 @@
 #include <dxgi1_2.h>
 #include <wrl/client.h>
 #include <stdio.h>
+#include <wchar.h>
 
 using Microsoft::WRL::ComPtr;
 
@@ -27,7 +28,12 @@ static LRESULT CALLBACK ProbeWindowProc(HWND hwnd, UINT message,
                                        WPARAM wparam, LPARAM lparam) {
   return DefWindowProcW(hwnd, message, wparam, lparam);
 }
-int wmain(void) {
+int wmain(int argc, wchar_t **argv) {
+  const bool windowed = argc == 2 && wcscmp(argv[1], L"--windowed") == 0;
+  if (argc != 1 && !windowed) {
+    fprintf(stderr, "Usage: FullscreenSdkPresentProbe.exe [--windowed]\n");
+    return 2;
+  }
   DWORD session = 0;
   if (!ProcessIdToSessionId(GetCurrentProcessId(), &session) || session == 0 ||
       session != WTSGetActiveConsoleSessionId()) {
@@ -35,6 +41,7 @@ int wmain(void) {
     return 2;
   }
   printf("FULLSCREEN_PROCESS pid=%lu session=%lu\n", GetCurrentProcessId(), session);
+  printf("PROBE_MODE windowed=%u\n", static_cast<UINT>(windowed));
   ComPtr<IDXGIFactory2> factory;
   HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(factory.GetAddressOf()));
   Stage("factory2", hr);
@@ -123,21 +130,24 @@ int wmain(void) {
   fullscreen.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
   fullscreen.Windowed = FALSE;
   hr = factory->CreateSwapChainForHwnd(device.Get(), window.Handle, &desc,
-      &fullscreen, nullptr, swap.GetAddressOf());
-  Stage("fullscreen-flip-create", hr);
+      windowed ? nullptr : &fullscreen, nullptr, swap.GetAddressOf());
+  Stage(windowed ? "windowed-flip-create" : "fullscreen-flip-create", hr);
   RestoreFullscreen restore;
-  restore.Swap = swap.Get();
+  restore.Swap = windowed ? nullptr : swap.Get();
   Stage("device-removed-after-create", device->GetDeviceRemovedReason());
   if (FAILED(hr)) return 8;
   BOOL isFullscreen = FALSE;
   ComPtr<IDXGIOutput> actualOutput;
   hr = swap->GetFullscreenState(&isFullscreen, actualOutput.GetAddressOf());
   Stage("fullscreen-state", hr);
-  if (FAILED(hr) || !isFullscreen || !actualOutput) return 8;
-  DXGI_OUTPUT_DESC actualDesc = {};
-  hr = actualOutput->GetDesc(&actualDesc);
-  Stage("fullscreen-output", hr);
-  if (FAILED(hr) || actualDesc.Monitor != outputDesc.Monitor) return 8;
+  if (FAILED(hr) || (isFullscreen != FALSE) != !windowed) return 8;
+  if (!windowed) {
+    if (!actualOutput) return 8;
+    DXGI_OUTPUT_DESC actualDesc = {};
+    hr = actualOutput->GetDesc(&actualDesc);
+    Stage("fullscreen-output", hr);
+    if (FAILED(hr) || actualDesc.Monitor != outputDesc.Monitor) return 8;
+  }
   ComPtr<ID3D11Texture2D> buffer;
   hr = swap->GetBuffer(0, IID_PPV_ARGS(buffer.GetAddressOf()));
   Stage("backbuffer0", hr);
