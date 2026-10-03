@@ -742,9 +742,9 @@ static NTSTATUS AdmissionOpenAllocationImpl(
         allocation->Win32ClassId != classId ||
         allocation->Win32Flags != flags ||
         allocation->WrittenPrimary !=
-            (Args->pPrivateDriverData != NULL &&
-             (((const ADMISSION_PRESENT_RESOURCE_DATA *)Args->pPrivateDriverData)->Flags &
-              ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY) != 0u) ||
+            ((Args->pPrivateDriverData != NULL &&
+              (((const ADMISSION_PRESENT_RESOURCE_DATA *)Args->pPrivateDriverData)->Flags &
+               ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY) != 0u) ? 1u : 0u) ||
         !AdmissionAllocationOpen(&allocation->Object)) {
       guard = AdmissionOpenAllocationGuardDescription;
       goto Rollback;
