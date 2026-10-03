@@ -196,11 +196,13 @@ int wmain(int argc, wchar_t **argv) {
       return 3;
     return Consume((HANDLE)(uintptr_t)value);
   }
-  const bool privateTexture = argc == 2 &&
+  const bool uploadPoint = argc == 2 &&
+      wcscmp(argv[1], L"--local-private-upload-point") == 0;
+  const bool privateTexture = uploadPoint || argc == 2 &&
       (wcscmp(argv[1], L"--local-private") == 0 ||
        wcscmp(argv[1], L"--local-private-upload") == 0);
-  const bool point = argc == 2 && wcscmp(argv[1], L"--local-point") == 0;
-  const bool upload = argc == 2 && (wcscmp(argv[1], L"--local-upload") == 0 ||
+  const bool point = uploadPoint || argc == 2 && wcscmp(argv[1], L"--local-point") == 0;
+  const bool upload = uploadPoint || argc == 2 && (wcscmp(argv[1], L"--local-upload") == 0 ||
        wcscmp(argv[1], L"--local-private-upload") == 0);
   const bool local = privateTexture || point || upload || (argc == 2 && wcscmp(argv[1], L"--local") == 0);
   if (argc != 1 && !local)
