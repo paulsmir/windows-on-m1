@@ -36,12 +36,16 @@ Finalframe/state/UMD/ETLfourfiles independentlyhostverifiedgate
 7d6cebb18dbccca45a6850e5d5be5f4b7b0f7d7cd13bed52afecf1aaffe6a676;
 ROOT939/original-final symlinkinternalEXP939-original/original-final; ETLstopped.
 All939SDKtasksremoved. No physicalscreen/Present success, pixelpatternPASS below.
-FreshSSHtimeout/noowner/USBboth/proxyPASS thenROOT939/launch-recovery.sh launched
-immutable377392brokerdisabled, session74616 (ownercheckfresh). OnSSHreadyupload
-ROOT939cleanup directory, collect-recovery.ps1, verify-clean-baseline.ps1; collect
-Code43/exact939/CPU8/Armnull thenexact939/oem5cleanup, durableorderedrestart and
-normalclean377392Code28gate. Cleanup scripts prepared butnotuploaded/executedyet.
-Onlythencreate940manifestfreshbaseline andstage/arm/seal/fullboot.
+Firstnormal377392(session74616)selfPSCIresetbeforeSSH; onediagnosticretryowner59674/
+session70655 recoveredCode43/exact939/CPU8/Armnull/Cnotdirty. ResetcollectorKernel41,
+no1001/newMEMORY.DMP, causeunknown. No hostforcedreset orGPU-hiddenboot.
+Exact939/oem5cleanup nowexit0/staged0/SYSfalse/UMDfalse; durabilityrestartaccepted
+05:09:31.290Z, BeforeBootCIM05:05:48.832610Z, manifest
+6cbc65abab7d3df0d904f8f7bf6453b24704c6d7e5774343038db1c7bcb2392f.
+Checkowner59674exit/boundedSSH+USB/proxy; thenROOT939/launch-clean-recovery.sh
+normal377392 andverify-clean-baseline.ps1. OnlyafterdurableCode28stage940.
+940hardware-manifest.pending.json prepared; needfreshbaseline/stagereceipt and
+currentgitdiffhashrefreshbeforeseal. No940stageyet.
 ROOT939=.local/experiments/EXP939-frame-arm-software-entry.
 939SYS7cc8541e05bddb8630335a6b575d5742676f3657067321a6bc4c1de11ed88a75
 939UMD5f56d7ea9d2bf74a1764abc0457c8458fb202412aebd656662f01315d5a4440c
