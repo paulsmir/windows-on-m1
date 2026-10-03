@@ -411,7 +411,6 @@ static SIZE_T APIENTRY AdmissionUmdCalcPrivateResourceSize(
     D3D10DDI_HDEVICE Device,
     const D3D11DDIARG_CREATERESOURCE *CreateResource) {
   ADMISSION_UMD_DIRECT_FLIP_RESOURCE description;
-  ADMISSION_PRESENT_RESOURCE_DATA resourceData;
   return AdmissionUmdDeviceFromHandle(Device) != NULL &&
                  AdmissionUmdDescribePrimary(CreateResource, &description)
              ? sizeof(ADMISSION_UMD_RESOURCE)
@@ -438,6 +437,7 @@ VOID APIENTRY AdmissionUmdCreateResource(
   D3DDDICB_ALLOCATE allocate;
   D3DDDI_ALLOCATIONINFO allocationInfo;
   ADMISSION_UMD_DIRECT_FLIP_RESOURCE description;
+  ADMISSION_PRESENT_RESOURCE_DATA resourceData;
   ADMISSION_UMD_RETIREMENT *retirement;
   HRESULT result;
   if (device == NULL || resource == NULL ||
