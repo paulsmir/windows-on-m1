@@ -257,9 +257,13 @@ APPLE_AGX_BOOL AppleAgxG4PatchRenderScalars(
   g4_put32(work + 0x50u, Render->Samples);
   g4_put16(work + 0x54u, mtile_y);
   g4_put16(work + 0x56u, mtile_x);
-  g4_put32(work + 0x60u, Render->IspMergeUpperX);
-  g4_put32(work + 0x64u, Render->IspMergeUpperY);
-  g4_put64(work + 0x70u, tiles_x * tiles_y);
+  /* G13/V13_5 RunFragment header: two unknown U64 fields precede the
+   * merge pair, and one unknown U64 separates it from tile_count.
+   * Keep those fields intact; the embedded JobParameters2 copy below is
+   * separate from these firmware-consumed header scalars. */
+  g4_put32(work + 0x68u, Render->IspMergeUpperX);
+  g4_put32(work + 0x6cu, Render->IspMergeUpperY);
+  g4_put64(work + 0x78u, tiles_x * tiles_y);
   g4_put16(work + 0x3e0u, utiles_y);
   g4_put16(work + 0x3e2u, utiles_x);
   g4_put32(work + 0x3d8u, Render->IspMergeUpperX);

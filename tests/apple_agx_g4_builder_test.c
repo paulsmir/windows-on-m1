@@ -72,6 +72,13 @@ int main(void) {
   render.SamplerHeap = 0x34000000ULL;
   render.PppMultisampleCtrl = 0x88ULL;
   render.PppCtrl = 0x202u;
+  /* Real scene geometry must replace the 16x16 recorded template. */
+  {
+    float merge_x = 1.732051f / render.WidthPx;
+    float merge_y = 1.732051f / render.HeightPx;
+    memcpy(&render.IspMergeUpperX, &merge_x, sizeof(merge_x));
+    memcpy(&render.IspMergeUpperY, &merge_y, sizeof(merge_y));
+  }
   render.Bg.Usc = 0x20004u;
   render.Bg.ResourceSpec = 0x123u;
   render.Eot.Usc = 0x30004u;
@@ -179,6 +186,16 @@ int main(void) {
     assert(get64(objects[19].Data + 1352u) == render.SamplerHeap);
     assert(get64(objects[19].Data + 80u) == ranges[4].Va);
     assert(get64(objects[19].Data + 208u) == render.VdmCtrlStreamBase);
+    /* Source-backed G13/V13_5 RunFragment header (Asahi fragment.rs and
+     * m1n1 WorkCommand3D): unknown U64 at 0x60, merge pair at 0x68,
+     * unknown U64 at 0x70, tile_count at 0x78. The old writes were eight
+     * bytes early, corrupting unknown fields and retaining 16x16 scalars. */
+    assert(get64(objects[18].Data + 0x68u) ==
+        ((unsigned long long)render.IspMergeUpperX |
+         ((unsigned long long)render.IspMergeUpperY << 32)));
+    assert(get64(objects[18].Data + 0x78u) == 40ULL * 23ULL);
+    assert(get64(objects[18].Data + 0x60u) == 0ULL);
+    assert(get64(objects[18].Data + 0x70u) == 0ULL);
     assert(get64(objects[18].Data + 0xa0u) == render.IspScissorBase);
     assert(get64(objects[18].Data + 0x88u) == render.Bg.ResourceSpec);
     assert(get64(objects[18].Data + 0x90u) == render.Bg.Usc);
