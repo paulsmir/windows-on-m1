@@ -5625,6 +5625,8 @@ int main(void) {
   nonPrimaryRuntime.handle = (VOID *)(UINT_PTR)0x360u;
   nonPrimary = create_resource(&deviceFunctions, device, nonPrimaryRuntime,
                                FALSE, FALSE);
+  CHECK(nonPrimary.pDrvPrivate != NULL &&
+        ((ADMISSION_UMD_RESOURCE *)nonPrimary.pDrvPrivate)->WrittenPrimary);
   {
     D3D10DDI_HDEVICE peer={0};
     D3DWDDM1_3DDI_DEVICEFUNCS peerFunctions={0};
