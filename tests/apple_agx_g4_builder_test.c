@@ -196,6 +196,14 @@ int main(void) {
     assert(get64(objects[18].Data + 0x78u) == 40ULL * 23ULL);
     assert(get64(objects[18].Data + 0x60u) == 0ULL);
     assert(get64(objects[18].Data + 0x70u) == 0ULL);
+    /* Both load and partial/reload AuxFBInfo copies describe this scene,
+     * not the recorded template's 16x16 framebuffer. */
+    assert(get64(objects[18].Data + 0xb8u) ==
+        ((unsigned long long)render.WidthPx |
+         ((unsigned long long)render.HeightPx << 32)));
+    assert(get64(objects[18].Data + 0x6e0u) ==
+        ((unsigned long long)render.WidthPx |
+         ((unsigned long long)render.HeightPx << 32)));
     assert(get64(objects[18].Data + 0xa0u) == render.IspScissorBase);
     assert(get64(objects[18].Data + 0x88u) == render.Bg.ResourceSpec);
     assert(get64(objects[18].Data + 0x90u) == render.Bg.Usc);

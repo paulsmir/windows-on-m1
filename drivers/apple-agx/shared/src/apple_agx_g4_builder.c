@@ -282,6 +282,12 @@ APPLE_AGX_BOOL AppleAgxG4PatchRenderScalars(
       ((Render->Flags & (1u << 18)) ? 0x40000u : 0u));
   g4_put32(work + 0x6d8u, 0xc000u |
       ((Render->Flags & (1u << 18)) ? 0x40000u : 0u));
+  /* Primary and reload AuxFBInfo are copies of the same framebuffer
+   * geometry (Asahi RunFragment constructor, G13/V13_5). */
+  g4_put32(work + 0xb8u, Render->WidthPx);
+  g4_put32(work + 0xbcu, Render->HeightPx);
+  g4_put32(work + 0x6e0u, Render->WidthPx);
+  g4_put32(work + 0x6e4u, Render->HeightPx);
   g4_put32(ta + 0x3c4u, rgn_size);
   g4_put32(ta + 0x3c8u, 0x88u);
   g4_put32(ta + 0x3ccu, Render->PppCtrl);
