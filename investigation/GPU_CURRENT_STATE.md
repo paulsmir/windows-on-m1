@@ -21,31 +21,63 @@ key /Users/pavel/.ssh/windows_builder. USB endpoints L41/L43:
 Always check bounded SSH plus launcher/USB before physical requests or reset.
 No raw USB/proxy NOP while a launcher owns the guest.
 
-## CURRENT — normal recovery before937;936 original closed
-937 source2c66edbbf6ca1ac1208f426b53327457fc1c9f5e build/sign/hash/PDBgatesPASS,
-notstaged. ROOT937=ROOT.local/experiments/EXP937-runfragment-header-offsets.
-SYSbdf9cbe43e4a7ba226b78869cd64fd2a2a7ce35be2c79f0b572f7e9d9041939d;
-UMDc6cb21bdfc9f87671da373494e412604cdd9a701e5272a35b5863c767aad3bb9;
-INF85b6105be3e3b87c4e481f0425d4d908acbb984332efdb4c463e6e4e8fbf156c;
+## CURRENT — EXP938 ISP_MTILE_SIZE build;937 rollback pending
+Accepted/stable graphics package NONE.937 pixel test FAILED exactlylike936:
+204800/4096000 bad, samecoordinates, allAPIsS_OK. Same858bac8c --local-private-upload,
+PID3288 exit26/no timeout03:05:56Z, stdoutSHAce8f9f0ff89b9e482a3dc5f1c85ef832513d2e80d849aabd41f10f7c1339a6f5.
+937headeroffsetfix is a realABI correction but notsufficient; stopthathypothesis.
+Original937boot123206 Start03:02:17.5587183Z/gen235605354/Code0Stage12/CPU8.
+OneearlySCP/SSHloss recoveredwithoutreset; oneSIGINTowner45159 snapshotthencontinue.
+Samebootproved, System1001/Application1000empty andMEMORY.DMPold; noGPUcrashclaim.
+937SDKtaskremoved. Originalframe/state/UMD/ETLfrozen andhostverifiedgate
+c49b345076b349701190a5a217575e27d792999d801034cfaff0f72bb8eb59f6.
+ROOT937/original-final symlinkinternalEXP937-original/original-final; ETLstopped,
+268435456B SHA93a6207ae251b9d7f6dd2c20f162c1e984f66bbf9816edd02637295cd61548b9.
+
+Nextsource8e947fc40dd9768cd0153a25afe8e4ee238b0de3 fixesONLYISP_MTILE_SIZE pair
+0x3e0/e2 ->0x3e8/ea. Actualm1n1G13/V13_5 reflection andAsahiJobParameters2 prove
+unknownU64 at3e0, utileY/X at3e8/ea. Templateholds4x4, actual2560x1600/utile32 needs
+20x16; stale128pxwidth vs640pxexpected fitsobservedfivefoldhorizontalrepeats
+(hypothesisuntilhardware). RegressionactualtemplateREDold/GREENnew for1280x720
+and2560x1600; five targetedbuilder/broker/parser/template testsPASS ASanUBSan.
+Plananalysis/EXP938-isp-macrotile-offsets.md. WHY CONTINUE COMPARISON: new measured
+nativegeometry plus exactfieldreflection givesonecausalgeometrydifference, not
+minorhistoricaldifferences. No third equivalentarchaeologypass.
+
+AuxFBInfo16x16 omission was initiallycommitted2aaf9e38984eeda83dd06bd539721e74a8f8564c,
+but NEVERbuilt/installed; reverted90db80bee47cfd17c5f646ba8659bf87873d5223 before938.
+Do NOT bundleAuxstores withcurrentmacrotilecorrection. Deferredissue remainsreal.
+938buildrootROOT.local/experiments/EXP938-isp-macrotile-offsets; source555/native/
+WDK0warnings/signatures/hosthash/PDBGUIDage allPASS. NewpackageSYS23b44ddc6763367c62da798b4ecaf37fbc8840846ad8b1df6b1da06c4f7b890a,
+UMD839916babd3c5894c16398b1ec9239f044acd77b1a716f464012b0daccb9d3ae,
+INF3447c8000f3d739d22987441ff3addea1b4b71fe6d36ea702ed34963f5ed37a6,
+CATa9b2d332c2c8b5dc93d1959bbd0ee54ae6c3ac233df86ce89e44634659bac844.
+SymbolsinternalEXP938-build/symbols. Scripts/package/pixel-sdk preparedhost, notstaged.
+
+937originalendedafterorderedrestart03:12:02.804Z/flushPASS/nohostreset. Firstnormal
+377392recovery(session13952) enteredWindows thenGUESTPSCIreset beforeSSH, nohostsignal.
+One diagnosticretry started03:16:52Z ROOT937/launch-recovery-retry.sh, owner47360/
+session60044. Near120sSSHtimeout, oneSIGINTsnapshot showedCPU0..2usermode,othersidle,
+IRQs/timersactive; thenSSHbecamereachable. SameRTL MAC appearedatAPIPA169.254.241.29
+and192.168.1.37; don'tequateSSHtimeoutwithGPUhang. Operatorphysicalquestionpending,
+answerNOTrequiredforcurrentrecovery (no physicalactionrequested).
+
+RetrySSH03:20:32reportsCode43/exact937/Armnull, immutableevent123311 Start03:12:55.9473768Z
+(initialclockstale; nothostlaunchtime). recovery-reset-evidence.out: Kernel41 unclean
+boot, preceding1074 entriesareourshutdown.exe restarts, no1001/newMEMORY.DMP (oldfile).
+ExactfirstPSCIresetreasonunknown; noGPUfaultclaim. Exact937/oem5cleanup nowcompletedexit0:staged0/SYSfalse/UMDfalse; durabilityrestart
+accepted03:22:44.546Z, BeforeBootCIM03:17:00.947329Z, manifest
+7ffb4e2778fa06f54b7a9958e45f894d1de365a3d88a68aecb6276243406df51.
+Checkowner47360exit/boundedSSH+USB/proxy thenROOT937/launch-clean-recovery.sh
+normal377392; onSSHreadyverify-clean-baseline.ps1 mustpassbefore938stage.
+Onlythenstage938. Neverrawproxywhileowneractive.
+937SYSbdf9cbe43e4a7ba226b78869cd64fd2a2a7ce35be2c79f0b572f7e9d9041939d,
+UMDc6cb21bdfc9f87671da373494e412604cdd9a701e5272a35b5863c767aad3bb9,
+INF85b6105be3e3b87c4e481f0425d4d908acbb984332efdb4c463e6e4e8fbf156c,
 CATed9c108ff0459b8f76f6801d86678c4ca9f7c5bf464af0fc95d13fbe4ebe595a.
-Native/source555/WDK0warnings/signatures/hosthash/PDBGUIDagePASS. Symbolsinternal
-/Users/pavel/J313-evidence-archive/2026-10-03/EXP937-build/symbols.
-
-936 originalendedafterorderedrestart02:53:48.888Z/RegFlushPASS. Owner26170exitafter
-USBreset, nohostsignal. Originalimmutableevent122896 Start01:19:20.9602310Z,
-HVCgen239491071. PhysicalFAIL. Fourfinalfiles(frame,state,UMD,ETL) independently
-hostverifiedgate8893ea17c6f7a2111871984c778a94c95e6ee50cd50f8b12a21be0129f208af9.
-ROOT936/original-final symlinkinternalEXP936-original/original-final. ETL stopped
-andarchived268435456B SHA254b83941adbd82123da1ace8d0de9b780249179a7d0c8b3c414952933b5f6a2.
-
-936exactcleanup ACTUAL:936/oem5 removed/staged0/SYSfalse/UMDfalse/exit0;
-durabilityrestartaccepted02:58:32.064Z, manifest8901422057af3f09bee80afc78ee830aeb9056e9b65912692111691f6f414ca7.
-Normalowner44061exited; freshSSHtimeout/noowner/USBboth/guardedproxyPASS.
-NowlaunchROOT936/launch-clean-recovery.sh sessionpending (same377/392). OnSSHready,
-executeROOT936verify-clean-baseline.ps1 toprove durableoneCode28/CPU8/package0/
-service0/signer0/files0/RegFlush0/Cnotdirty. Thencreate937manifestwithfreshimmutable
-event, stage937only,sealhardwaremanifest,orderedfullboot. All937package/scripts/
-helperandpixel-sdk preparedhost, nothing937installedyet.
+Fullfirmwarebdcf8715/MuR143e54 unchanged. NextfirsthardwarecheckpointsameCPUupload
+fullpixeltest; ifPASS thensharedclear/readback, actualPresent andphysicalconfirmation.
+No stabilitywaituntilcorrectphysicaloutput; do notcallCode0orAPI S_OK visualsuccess.
 
 935 unbound RTV Clear fix and936 direct primary identity fix are hardware proven:
 Clear/real render fence and RotateResourceIdentities now succeed, device remains healthy.
@@ -96,7 +128,7 @@ at0x60/64/70. Current m1n1 G13/V13_5 Construct offsetof proves0x68/6c/78; Asahi
 fragment.rs independently agrees. Realmaterializedtemplate is16x16, headermerge
 1.732051/16 andtilecount1 retained whileunknownU64fields0x60/70 overwritten.
 Fixsource2c66edbbf6ca1ac1208f426b53327457fc1c9f5e changesonlythreeoffsets; samevalues preserved.
-Actualconstructor+template regressionREDold/GREENnew ASanUBSan;6builder/broker/parser/
+Actualconstructor+template regressionREDold/GREENnew ASanUBSan;5builder/broker/parser/
 template testsPASS plusledger2PASS. Untouched virtual-submit replay harness blocked
 by missingAdmissionMemoryRuntimeLocalView/SubmitCommandVirtualInner declarations;
 itscompile list doesnotincludechangedbuilder; do notclaimwhole-suiteGREEN.
