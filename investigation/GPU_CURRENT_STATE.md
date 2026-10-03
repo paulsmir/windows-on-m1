@@ -21,8 +21,69 @@ key /Users/pavel/.ssh/windows_builder. USB endpoints L41/L43:
 Always check bounded SSH plus launcher/USB before physical requests or reset.
 No raw USB/proxy NOP while a launcher owns the guest.
 
-## CURRENT — EXP938 ISP_MTILE_SIZE build;937 rollback pending
-Accepted/stable graphics package NONE.937 pixel test FAILED exactlylike936:
+## CURRENT —939 built; normal recovery toremove938
+939 sourcebb2fbabf292a6a51c535a0fe85bdb93df90fa5e8; FrameArmsoftwareentry only.
+ROOT939=ROOT.local/experiments/EXP939-frame-arm-software-entry. Source555/native/
+WDK0warnings/signatures/hosthash/PDBGUIDagePASS. Notstaged. Exactpackagehashes
+kmd-build-receipt.json; SYS7cc8541e05bddb8630335a6b575d5742676f3657067321a6bc4c1de11ed88a75,
+UMD5f56d7ea9d2bf74a1764abc0457c8458fb202412aebd656662f01315d5a4440c,
+INF204cb945aa7b769969b9059a9efab7b3cca174253a227e13890c20efc409e053,
+CAT577a758b547aa3d2cb2b1ed1b2286af319423d6b4d9e51a6cdc14901c83b5980.
+SymbolsinternalEXP939-build/symbols. Firsttestwillbesamece544defaultfullscreenSDK,
+12sbound/pairedstacksonpending; noNO_REDIRECTION/caps/Auxchange.
+
+938originalclosedafterorderedrestart04:09:58.964Z/RegFlushPASS; owner48711exited
+withoutresetfromhost. Originalimmutable123506 Start03:26:57.9729786Z/gen241892181.
+Finalframe/state/UMD/ETLfourfiles independentlyhostverifiedgate
+1309dc278d0fd2149a5cbe1639f51850e36fd3c570027de5a5ed53f3bfa5756b.
+ROOT938/original-final symlinkinternalEXP938-original/original-final; ETLstopped.
+Pixel-positive938packagepreserved. No acceptedstablegraphics/physicalsuccess.
+
+938exactcleanup completedexit0/staged0/SYSfalse/UMDfalse. Durabilityrestartaccepted
+04:14:31.399Z, manifest16402c8714af313c63272373de47e35cd7aada10ec1df9f6da5aa31767f54a55.
+Normalowner53230exited; freshSSHtimeout/noowner/USBboth/guardedproxyPASS.
+NowlaunchROOT938/launch-clean-recovery.sh (377392), sessionnext. OnSSHreadyrun
+ROOT938verify-clean-baseline.ps1; onlyafterdurableCode28gate stage939exactpackage.
+ROOT939hardware-manifest.pending.json prepared, butneedfreshbaseline manifest and
+stage receiptbeforeseal/launch. No939stageyet. ROOT938=ROOT.local/experiments/EXP938-isp-macrotile-offsets.
+
+Hardware938pixelcorrectnessCONFIRMED:
+- CPUupload/fullcopy PID5688:0bad/4096000; stdoutadead93470354e61f42d7422d2ec272bb06bf7196edef582bfd536eaeac84d03.
+- sharedGPUclear/localreadback PID5544:0bad/4096000, deviceS_OK; stdout88d5b43e68cc6d1a4b557242aae098163605462f58035cdd8a6c6bc630296807.
+- crossprocess producer1332/child6552:0bad/4096000, allAPIsS_OK; stdoutaec5382952d07eef83423fa0b806b15eda1bf68ba63c2205a7e7a11ca380198b.
+The old204800badpixels in936/937 aregone afterISP_MTILE_SIZEoffsetpairfix.
+OneearlierclearPID7392exit7/CompleteS_OK remainsunexplained; diagnosticgetterlogging
+source86f02b00 (fullhashGit) subsequentpassdeviceS_OK. Notstable-releaseproof.
+
+Windowedce544SDKPID6264 allcreate/clear/deviceS_OK butPresent087a0001OCCLUDED.
+Fullscreen SAMEexe/defaultPID1420 neverreturnedCreateSwapChainForHwndwithin12s;
+pairedSDK+DWM1224stacks capturedthenonlySDKterminated. AllSDKtasksremoved.
+PairfilesROOT938/fullscreen-sdk-evidence, decodedROOT.local/experiments/EXP938-paired/
+{sdk,dwm}-decoded.txt, matched938UMDPDB/publicMicrosoftsymbols.
+SDK waitsDXGIProxyWindow creation -> DWMNtAlpcConnectPort. DWMLPCthread in
+AdmissionUmdGpuvaFrameArm -> NtGdiDdDDIEscape beforeSubmit duringD2DUpdateSubresource.
+Oneobservedwait, notproofpermanentdeadlock. Sourceproves FrameArmonlyCPUbookkeeping
+butrequestsHardwareAccess1/globalGPUidle (Microsoftlevel2). Currentcausaltargetis
+thisdiagnostic synchronization, NOT speculativeNO_REDIRECTIONtoggle.
+
+New939sourcebb2fbabf292a6a51c535a0fe85bdb93df90fa5e8: FrameArmUMDflag0 andKMD
+accept0/legacy1 whileallPID/process/device/context/size/alignment/IRQLguards remain.
+NoGPU/UAT/MMIO inhandler; keepmutex/nonblockingclaim; otherhardwareescapesunchanged.
+ActualUMD+KMD+receiptwriter REDold/GREENnew; softwarecopy/private-entry16/64profiles/
+frameprobePASS. Five targetedtestcases. Plananalysis/EXP939-frame-arm-software-entry.md.
+ROOT939=ROOT.local/experiments/EXP939-frame-arm-software-entry; buildsession14777
+running(source555), notstaged. Neednative/WDK/sign/hash/PDBgates.
+
+CurrentROOT938collect-original-final.ps1 dispatched (checksession/output); freezes
+frame/state/UMD plusstopsoriginalEXP801DxgBoot andcopiesETL. ArchiveinternalEXP938-original,
+hostsize/hashgatebeforeorderednormal377392rollback/exact938cleanup/durableCode28.
+Preservepixel-positive938artifact. Next939firsttest SAMEdefaultfullscreenSDK12s,
+expectedCreateSwapchain/Present advance; ifnot, collectpairedstacks/stophypothesis.
+NO_REDIRECTION/caps/Aux dimensionsunchanged. SharedD3D11pass isNOTD3D9interopproof;
+MicrosoftROS referenceRENDER_ONLY/commonUMDsemantics only, noadmissiontransfer.
+Physicalquestionpendingfromearlierrecovery, notneededforcurrentcontrol (SSHhealthy).
+
+Prior evidence: 937 pixel test FAILED exactlylike936:
 204800/4096000 bad, samecoordinates, allAPIsS_OK. Same858bac8c --local-private-upload,
 PID3288 exit26/no timeout03:05:56Z, stdoutSHAce8f9f0ff89b9e482a3dc5f1c85ef832513d2e80d849aabd41f10f7c1339a6f5.
 937headeroffsetfix is a realABI correction but notsufficient; stopthathypothesis.
