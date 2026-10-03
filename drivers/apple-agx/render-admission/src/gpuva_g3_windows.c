@@ -352,7 +352,7 @@ static BOOLEAN AdmissionG3PrivateReleaseScene(ADMISSION_G3_PROCESS *p,
     ADMISSION_G3_PRIVATE_SCENE *scene, ADMISSION_BACKEND_MEMORY_VIEW *view) {
   ADMISSION_G3_PRIVATE_SCENE **link=&p->PrivateScenes;
   UINT i;
-  if (scene->Queued || scene->Quarantined || p->Graph.Uncertain ||
+  if (scene->Queued || scene->Submitting || scene->Quarantined || p->Graph.Uncertain ||
       p->Graph.JobInFlight || p->Graph.LeaseToken) return FALSE;
   for (i=0;i<6;++i)
     if (!AdmissionG3PrivateMapExtent(p,view,&scene->Storage.Extents[i],FALSE)) {
@@ -1044,10 +1044,6 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
   RtlCopyMemory(&q,args->pPrivateDriverData,sizeof(q));
   if (q.Magic!=APPLE_AGX_G3_PRIVATE_MAGIC || q.Version!=1u ||
       q.Bytes!=sizeof(q) || q.Reserved[0] || q.Reserved[1]) return status;
-  /* RELEASE can reap another retired scene while this process has queued
-   * work. Its original LevelTwo entry is deliberately preserved. */
-  if (q.Operation==APPLE_AGX_G3_PRIVATE_RELEASE && args->Flags.Value!=1u)
-    return STATUS_INVALID_PARAMETER;
   for (i=0;i<9;++i)
     if (q.Ranges[i].Va || q.Ranges[i].Bytes || q.Ranges[i].Reserved) return status;
   state=(ADMISSION_G3_STATE *)adapter->GpuvaG3State;
@@ -1091,7 +1087,13 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
         q.ManagerId!=p->Graph.ProcessId || q.ManagerGeneration!=p->PrivateManager.Generation)
       goto Done;
     scene->ReleaseRequested=1u;
-    if (scene->Queued) { status=STATUS_SUCCESS;goto Done; }
+    /* RELEASE transfers ownership to the KMD. As with a queued scene, a
+     * submission reference or another job/lease of this owner defers actual
+     * unmap/free to the existing completion/acquire/context reaper. Never
+     * require Windows to drain unrelated GPU work to acknowledge a release. */
+    if (scene->Queued || scene->Submitting ||
+        p->Graph.JobInFlight || p->Graph.LeaseToken)
+      { status=STATUS_SUCCESS;goto Done; }
     status=AdmissionG3PrivateReleaseScene(p,scene,&view) ? STATUS_SUCCESS : STATUS_DEVICE_BUSY;
     goto Done;
   }

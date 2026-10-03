@@ -574,11 +574,10 @@ static int private_escape(void *context, APPLE_AGX_G3_PRIVATE_REQUEST *payload) 
   /* Unlike the other device callbacks, EscapeCb takes hRTAdapter. The
    * optional context must be paired with its owning hRTDevice in the request. */
   request.hDevice=device->RuntimeDevice.handle;
-  /* Preparation is serialized by the KMD's process/job/lease and broker
-   * publication checks. Do not drain every GPU context for each new scene.
-   * RELEASE retains its existing adapter-idle retirement contract. */
-  request.Flags.HardwareAccess=
-      payload->Operation==APPLE_AGX_G3_PRIVATE_RELEASE ? 1u : 0u;
+  /* The KMD owns scene lifetime. RELEASE may acknowledge a deferred free;
+   * its reaper retains queued/submitting/leased storage until owner safety
+   * and broker unmap/revoke are proven, without adapter-global GPU idle. */
+  request.Flags.HardwareAccess=0u;
   request.hContext=device->KernelContext;
   request.pPrivateDriverData=payload;request.PrivateDriverDataSize=sizeof(*payload);
   UINT operation=payload->Operation,width=payload->Width,height=payload->Height,
