@@ -69,7 +69,7 @@ static HRESULT Complete(ID3D11Device *device, ID3D11DeviceContext *context) {
   return hr == S_OK && done ? S_OK : FAILED(hr) ? hr : E_FAIL;
 }
 static int Readback(ID3D11Device *device, ID3D11DeviceContext *context,
-                    ID3D11Texture2D *texture) {
+                    ID3D11Texture2D *texture, bool point = false) {
   HRESULT hr;
   D3D11_TEXTURE2D_DESC desc = {};
   texture->GetDesc(&desc);
@@ -81,6 +81,10 @@ static int Readback(ID3D11Device *device, ID3D11DeviceContext *context,
       desc.Format != DXGI_FORMAT_B8G8R8A8_UNORM || desc.MipLevels != 1 ||
       desc.ArraySize != 1 || desc.SampleDesc.Count != 1)
     return 22;
+  if (point) {
+    desc.Width = 1;
+    desc.Height = 1;
+  }
   desc.Usage = D3D11_USAGE_STAGING;
   desc.BindFlags = 0;
   desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
@@ -90,7 +94,13 @@ static int Readback(ID3D11Device *device, ID3D11DeviceContext *context,
   Stage("consumer-staging", hr);
   if (FAILED(hr))
     return 23;
-  context->CopyResource(staging.Get(), texture);
+  if (point) {
+    const D3D11_BOX box = {2432, 704, 0, 2433, 705, 1};
+    printf("READBACK_REGION x=2432 y=704 width=1 height=1\n");
+    context->CopySubresourceRegion(staging.Get(), 0, 0, 0, 0, texture, 0, &box);
+  } else {
+    context->CopyResource(staging.Get(), texture);
+  }
   context->Flush();
   hr = device->GetDeviceRemovedReason();
   Stage("consumer-after-copy", hr);
@@ -186,8 +196,9 @@ int wmain(int argc, wchar_t **argv) {
       return 3;
     return Consume((HANDLE)(uintptr_t)value);
   }
+  const bool point = argc == 2 && wcscmp(argv[1], L"--local-point") == 0;
   const bool upload = argc == 2 && wcscmp(argv[1], L"--local-upload") == 0;
-  const bool local = upload || (argc == 2 && wcscmp(argv[1], L"--local") == 0);
+  const bool local = point || upload || (argc == 2 && wcscmp(argv[1], L"--local") == 0);
   if (argc != 1 && !local)
     return 3;
   ComPtr<ID3D11Device> device;
@@ -238,7 +249,7 @@ int wmain(int argc, wchar_t **argv) {
     return 7;
   if (local) {
     Stage("producer-local-readback", S_OK);
-    return Readback(device.Get(), context.Get(), texture.Get());
+    return Readback(device.Get(), context.Get(), texture.Get(), point);
   }
   ComPtr<IDXGIResource> resource;
   hr = texture.As(&resource);
