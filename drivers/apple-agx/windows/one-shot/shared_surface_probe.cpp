@@ -251,7 +251,11 @@ int wmain(int argc, wchar_t **argv) {
   }
   hr = Complete(device.Get(), context.Get());
   Stage("producer-complete", hr);
-  if (FAILED(hr) || FAILED(device->GetDeviceRemovedReason()))
+  if (FAILED(hr))
+    return 7;
+  HRESULT removed = device->GetDeviceRemovedReason();
+  Stage("producer-device-after-complete", removed);
+  if (FAILED(removed))
     return 7;
   if (local) {
     Stage("producer-local-readback", S_OK);
