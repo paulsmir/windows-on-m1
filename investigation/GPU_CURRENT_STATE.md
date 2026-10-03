@@ -20,61 +20,62 @@ Foreign dirt: m1n1_windows/rust/vendor/rust-fatfs, mu;
 untracked drivers/apple-agx/render-admission/pauls@192.168.1.24.ps1 and
 investigation/analysis/EXP895-standard-blt-stimulus-plan.md.
 
-## Current — EXP946 rejected, exact cleanup complete; no accepted graphics
-No working/stable physical-screen result. Last operator photo941 showed moving
-wallpaper fragments and scanlines. Physical observation requested for944/946,
-no new answer yet. Do not equate Code0 or Present S_OK with a correct panel.
+## Current — EXP948 address boundary proven; exact package removed
+No working/stable physical screen. Operator's latest attached photo SHA
+d33fdff73e787583c6cdf77e5dca289e519ce1fe9d4749dddfe953f4fd2fbf64
+is byte-identical to the earlier 941 photo and shows repeated wallpaper
+fragments and scanlines. Do not call that blank; it is not current boot proof.
+Current Air is immutable normal GPU-visible377392 recovery with one inert
+APPL0002 Code28; exact948/oem5 removed. Durable clean boot126718
+Start14:51:17.2097176Z: CPU8/packages0/services0/signerfalse/filesfalse/
+SystemFlush0/Cnotdirty/free11950239744. No AppleAgx installed or staged.
 
-EXP946 source9808992403f1d048d4d4d53f9d1ccaf0601e846b broadened UMD
-WrittenPrimary classification to every BindFlags PRESENT resource. Real x64 UMD
-fixture oldRED/newGREEN and package ARM64 WDK/sign/hash/PDB gates passed.
-Full boot125909 Start13:34:52.1487742Z Code0/CPU8. Same ce544 windowed
-SDK7052 Present1 S_OK/exit0, but DWM1224 SubmitCommand carrying one
-WrittenPrimary returned E_INVALIDARG (0x80070057) repeatedly for distinct
-handles; no successful DWM Present in bounded receipt. Microsoft
-D3DDDICB_SUBMITCOMMAND remarks specify D3D11 FlipEx/primary uses the
-DISPLAYABLE_SURFACE flag; legacy PRESENT alone is not sufficient. 946 verdict
-REJECTED. Original946 state/UMD/ETL hostgate
+EXP948 source2fbb6be39d6e4fd621b2d99ca63d84a4c0ff3a09 diagnostic
+bounded first16 DWM FrameArm PTE maps, same fullm1n1bdcf/MuR143e54c.
+Full boot126519 Start14:39:05.0921518Z Code0/CPU8. Without another SDK
+stimulus, read-only DWM FrameProbe and map00 matched DWM1240 allocation
+0x40003a00 canonicalGPUVA0x1f0000, KMD completed 26/26 render submissions.
+Its valid writable segment2 PTE resolved to local IPA0x8e11a0000. DCP's
+latched source remained segment2 PA0x8e0110000, difference0x1090000.
+KMD Present0/VirtualPresent0, SetVidPnSourceAddress count1, TDR0.
+This proves the completed DWM target is not the selected scanout backing
+and there was no observed KMD transfer or address switch. It does not by
+itself prove which Windows contract prevents the bridge. Original948
+state/UMD/ETL hostgate
+436bdc653cddecd61a0257237ed4b88f4c6acb5a7652dab018941cf1c7198598.
+No extra SDK draw was run on948; experiment stopped at first discriminator.
+
+EXP947 source5a3c280daf93655831ae33fc36c570c101f93d49 first last-only
+map was valid for DWM VA0x7f0000 but not the presented sourceVA1f0000.
+Read-only probe demonstrated the mismatch; verdict INCONCLUSIVE for physical
+presentation. Original947 hostgate
+fb63ad237844eb201032233aa8f9d286b7c26aa7909f97184a11b86e02cfc565.
+Normal recovery stalled twice, immutable hidden385 restored SSH for exact
+cleanup; normal clean Code28 confirmed before948.
+
+EXP946 source9808992403f1d048d4d4d53f9d1ccaf0601e846b broad legacy
+PRESENT->WrittenPrimary was REJECTED on hardware E_INVALIDARG by dxgkrnl.
+Corrective source d49f3013b510ce680e40e58778d2188a63d99767 reverted it
+and added real UMD negative regression RED/GREEN. Original946 gate
 cf686b92e4fce8f0947c48f2fadbbcd3a526a075cc9f95358646759cc14109e3.
-Corrective commit d49f3013b510ce680e40e58778d2188a63d99767 restored
-narrow marker and added negative regression: x64 real fixture RED bad946,
-GREEN revert. Correction is software-only, no new hardware package built.
-Exact946/oem5 removed and ordinary GPU-visible377392 recovery durable boot126116
-Start13:53:35.7943112Z: oneCode28/CPU8/packages0/services0/signerfalse/
-filesfalse/SystemFlush0/Cnotdirty/free12537999360. No AppleAgx installed.
+EXP945 diagnostic confirmed DWM legacy source WrittenPrimary0/NumPrimaries0;
+that is not evidence of a missing new displayable flag. EXP944 new
+DISPLAYABLE_SURFACE primary list worked for SDK direct backbuffer but did not
+correct physical output; no operator image. Preserve these verdicts.
 
-EXP945 source774d64c4f5f867c68085ca3b4c925655281bf80c was diagnostic
-only. Full boot125612 Code0/CPU8. Same ce544 windowed Present1 S_OK/exit0.
-DWM Present source allocation40003500 VA1f0000 had WrittenPrimary0, and
-its actual written BO submissions had NumPrimaries0/S_OK. This is a legacy
-copy-style path, not proof of a missing flag. Original945 hostgate
-648d7569f09aeb91c3d13402c85aa3bc768654b9e7a6021e912f23be6399c2cb.
-Normal recovery with945 first self-PSCI-reset and retry stalled (CPU IRQ
-counts static); immutable hidden385 restored SSH, exact945 package removed,
-normal clean Code28 confirmed before946.
-
-EXP944 sourceae8f50a07fa16da540c1adaa51609cb986cdca7c fixed documented
-DISPLAYABLE_SURFACE/pPrimaryDesc written list. Full boot125308 Code0/CPU8;
-SDK direct displayable submitted NumPrimaries1 and Present1 S_OK. DWM UMD
-Present S_OK but KMD Present/VirtualPresent0; DWM114 render submits completed.
-Transient wait_paging in first DWM dump absent in second, so permanent paging
-hang REJECTED. DCP-selected PA8e0110000/VA1500110000 unchanged; m1n1 CPU
-window snapshots zero even at600s, coherency caveat. Original944 hostgate
-297504768b5307d048a5b33a60985057e2a5931f8214084e71318d8799263b7b.
-No physical success proof. 944 exact cleanup and durable normal Code28 done.
-
-NEXT CAUSAL TARGET: determine whether DWM's completed render target GPUVA
-(around0x1f0000 in its process) resolves to the same local physical surface
-that DCP scans at PA8e0110000, or whether an explicit copy/flip is missing.
-Read primary Asahi DCP, m1n1 selected-surface, Mu ACPI and official Microsoft
-DXGI/WDDM contracts already inspected this turn. Current KMD owns the
-GpuvaG3 logical PTE graph and has DWM FrameArm context/process/VA under lock;
-it can observe this mapping without changing render or presentation. Design one
-minimal receipt-only discriminator with expected result and rollback before any
-hardware. No more capability-bit or broad WrittenPrimaries probing. Avoid
-another old-reference archaeology pass. WHY CLEAN RECONSTRUCTION: current
-runtime boundary is observable through narrow contracts; old admission history
-cannot distinguish the current DWM-to-DCP gap.
+NEXT CAUSAL TARGET: full-WDDM DXGI Present-to-KMD copy/flip contract. In 945
+DWM's native DXGI Present had Blt flag1 and null hDstResource; UMD
+pfnPresentCb returned S_OK, yet KMD Present/VirtualPresent0 and the rendered
+source was physically distinct from DCP scanout. Official Microsoft DXGI
+Presentation Path says presentation must move rendered backbuffer content to
+primary; DXGIDDICB_PRESENT allows hDstAllocation0 for kernel-selected target.
+Do not force a copy through an unrelated escape or widen capability bits.
+Inspect current native Mesa DXGI callbacks, current KMD present/flip caps,
+Mu/ACPI and Asahi/m1n1 scanout (already source-inspected) to identify the
+violated owning contract, with one offline pass and one narrow discriminator
+if still ambiguous. No another old-reference archaeology loop.
+WHY CLEAN RECONSTRUCTION: current runtime gap is now measurable at exact
+DWM-to-DCP boundary; prior admission history does not distinguish its cause.
 
 EXP942 source2b6e8792ca02caab0597a45af974b0ab269f58d6 added separate
 UPLOAD/DOWNLOAD failure receipt withoutcopybehaviorchange. Boot124717,
