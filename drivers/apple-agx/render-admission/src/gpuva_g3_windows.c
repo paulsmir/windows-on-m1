@@ -894,6 +894,15 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   /* Prevalidate the entire range before any copy, unchanged from R145. */
   for(page=first&~0xfffULL;page<end;page+=0x1000ULL) {
     const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte=AdmissionG3CopyPte(p,page);
+    if(isQuery && !pte &&
+       AppleAgxGpuvaG3GraphInspectRangeAccess(&p->Graph,page,0x1000u,
+                                               FALSE,&walk)) {
+      /* The native graph has the leaf; only its CPU logical shadow is lost. */
+      walk.Level=2u;walk.Index=(UINT)((page>>12)&8191u);
+      walk.Reason=AppleAgxG3WalkLogicalShadowAbsent;
+      walk.ComponentReason=AppleAgxG3WalkLogicalShadowAbsent;
+      walk.Va=page;
+    }
     COPY_REJECT_IF(!pte, 56u, STATUS_INVALID_PARAMETER, Unlock);
     COPY_REJECT_IF(!(pte->Flags&APPLE_AGX_GPUVA_G3_VALID), 57u, STATUS_INVALID_PARAMETER, Unlock);
     COPY_REJECT_IF(pte->SegmentId!=ADMISSION_MEMORY_LOCAL_SEGMENT, 58u, STATUS_INVALID_PARAMETER, Unlock);

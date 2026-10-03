@@ -32,6 +32,11 @@ class QueryReceiptTests(unittest.TestCase):
         self.assertEqual(decoded['request_allocation_handle'], '0x81234071')
         self.assertEqual(decoded['canonical_allocation_identity'], '0xabcdef00')
         self.assertEqual(decoded['canonical_allocation_bytes'], 65536)
+        shadow = struct.pack('<12I15Q', 3, 168, 56, 0xc000000d,
+                             223, 0, 2, 496, 6, 6, 2, 1, *([0]*12),
+                             0x81234071, 0xabcdef00, 65536)
+        self.assertEqual(decoder.decode(shadow)['missing_reason'],
+                         'logical-shadow-absent')
         for bad in (valid[:-1], valid+b'\0', struct.pack('<I', 3)+valid[4:],
                     current[:-1], current+b'\0',
                     current[:16]+struct.pack('<I', 256)+current[20:],

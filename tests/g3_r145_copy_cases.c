@@ -155,6 +155,11 @@ static void r145_copy_cases(void) {
   QUERY_REJECT((q->GpuVa=(1ULL<<39)-65536,allocation.Object.Description.Size=131072),(q->GpuVa=65536,allocation.Object.Description.Size=65536),52,STATUS_INVALID_PARAMETER);
   QUERY_REJECT(q->GpuVa=0x4000000,q->GpuVa=0x10000,
       getenv("G3_REPLAY_HISTORICAL") ? 53 : 56,STATUS_INVALID_PARAMETER);
+  if (!getenv("G3_REPLAY_HISTORICAL"))
+    assert(a.G3CopyQueryFailure.MissingLevel==1u &&
+           a.G3CopyQueryFailure.MissingIndex==2u &&
+           a.G3CopyQueryFailure.MissingReason==AppleAgxG3WalkNoTable &&
+           a.G3CopyQueryFailure.MissingVa==0x4000000ULL);
   QUERY_REJECT(replay_local_view_status=STATUS_INVALID_DEVICE_STATE,replay_local_view_status=STATUS_SUCCESS,54,STATUS_INVALID_DEVICE_STATE);
   unsigned char *saved_local_cpu=local_cpu;
   /* local_cpu is also checked by the macro, after restore. */

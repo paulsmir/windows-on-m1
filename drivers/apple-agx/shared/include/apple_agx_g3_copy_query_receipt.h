@@ -19,7 +19,8 @@ enum {
   AppleAgxG3WalkNoTable = 2u,
   AppleAgxG3WalkLeafAbsent = 3u,
   AppleAgxG3WalkLeafNotPublished = 4u,
-  AppleAgxG3WalkTailShort = 5u
+  AppleAgxG3WalkTailShort = 5u,
+  AppleAgxG3WalkLogicalShadowAbsent = 6u
 };
 typedef struct {
   unsigned int Level, Index, Reason, ComponentReason;

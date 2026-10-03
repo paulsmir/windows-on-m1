@@ -13,7 +13,7 @@ import struct
 
 NAME = 'Wom1G3CopyQueryFailure'
 REASONS = ('none', 'no-root', 'no-table', 'leaf-absent',
-           'leaf-not-published', 'tail-short')
+           'leaf-not-published', 'tail-short', 'logical-shadow-absent')
 
 
 def decode(data):
