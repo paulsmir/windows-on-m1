@@ -186,7 +186,8 @@ int wmain(int argc, wchar_t **argv) {
       return 3;
     return Consume((HANDLE)(uintptr_t)value);
   }
-  const bool local = argc == 2 && wcscmp(argv[1], L"--local") == 0;
+  const bool upload = argc == 2 && wcscmp(argv[1], L"--local-upload") == 0;
+  const bool local = upload || (argc == 2 && wcscmp(argv[1], L"--local") == 0);
   if (argc != 1 && !local)
     return 3;
   ComPtr<ID3D11Device> device;
@@ -217,7 +218,20 @@ int wmain(int argc, wchar_t **argv) {
   if (FAILED(hr))
     return 6;
   const FLOAT green[4] = {0, 1, 0, 1};
-  context->ClearRenderTargetView(view.Get(), green);
+  if (upload) {
+    const size_t count = (size_t)desc.Width * desc.Height;
+    uint32_t *pixels = (uint32_t *)HeapAlloc(GetProcessHeap(), 0, count * 4u);
+    if (!pixels)
+      return 30;
+    for (size_t i = 0; i < count; ++i)
+      pixels[i] = 0xff00ff00u;
+    context->UpdateSubresource(texture.Get(), 0, nullptr, pixels, desc.Width * 4u,
+                               desc.Width * desc.Height * 4u);
+    HeapFree(GetProcessHeap(), 0, pixels);
+    Stage("producer-cpu-upload", device->GetDeviceRemovedReason());
+  } else {
+    context->ClearRenderTargetView(view.Get(), green);
+  }
   hr = Complete(device.Get(), context.Get());
   Stage("producer-complete", hr);
   if (FAILED(hr) || FAILED(device->GetDeviceRemovedReason()))
