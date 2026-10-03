@@ -184,7 +184,9 @@ static void test_start_registers_exact_pool(void) {
   fake.Response = FakeRegister;
   assert(AppleAgxFixedPanelStart(&panel, 20ULL) == AppleAgxFixedPanelOk);
   assert(fake.PoolIpa == 0x80000000ULL);
-  assert(fake.PoolSize == 0x3800000ULL);
+  /* EXP953: VidMm may place a primary anywhere in the local allocation
+   * range, so the registered scanout pool must cover all of it. */
+  assert(fake.PoolSize == 0x3b800000ULL);
   assert(panel.Started == APPLE_AGX_SCANOUT_TRUE);
 }
 
@@ -253,7 +255,7 @@ static void test_present_rejects_wrong_segment_and_tail(void) {
   assert(AppleAgxFixedPanelPresent(&panel, 1u, 0ULL,
                                    40ULL, &swap) ==
          AppleAgxFixedPanelInvalidSegment);
-  assert(AppleAgxFixedPanelPresent(&panel, 2u, 0x3000000ULL,
+  assert(AppleAgxFixedPanelPresent(&panel, 2u, 0x3a870000ULL,
                                    40ULL, &swap) ==
          AppleAgxFixedPanelInvalidSurface);
   assert(fake.CommandWrites == writes);
@@ -303,6 +305,69 @@ static void test_v2_queue_present_does_not_poll_or_consume_v1_handoff(void) {
          AppleAgxFixedPanelPresentPending);
 }
 
+static APPLE_AGX_FIXED_PANEL make_v2_panel(FAKE_BROKER *fake) {
+  APPLE_AGX_FIXED_PANEL panel;
+  memset(fake, 0, sizeof(*fake));
+  fake->Version = APPLE_AGX_SCANOUT_ABI_VERSION_V2;
+  fake->Capabilities = APPLE_AGX_SCANOUT_REQUIRED_CAPABILITIES |
+                       APPLE_AGX_SCANOUT_CAP_REPEATED_PRESENT |
+                       APPLE_AGX_SCANOUT_CAP_LATCHED_RECEIPT |
+                       APPLE_AGX_SCANOUT_CAP_LATCHED_IRQ;
+  panel = make_panel(fake);
+  fake->Response = FakeRegister;
+  assert(AppleAgxFixedPanelStart(&panel, 20ULL) == AppleAgxFixedPanelOk);
+  assert(AppleAgxFixedPanelCommit(&panel, 0u, 0u, 2560u, 1600u,
+                                  10240u, 1u) == AppleAgxFixedPanelOk);
+  return panel;
+}
+
+/* EXP953: the legacy DWM primary was placed at local offset 0x3670000,
+ * beyond the former 56 MiB pool, and must be scanout-addressable. */
+static void test_queue_present_accepts_primary_beyond_former_window(void) {
+  FAKE_BROKER fake;
+  APPLE_AGX_FIXED_PANEL panel = make_v2_panel(&fake);
+  APPLE_AGX_SCANOUT_U64 sequence = 0ULL;
+  assert(AppleAgxFixedPanelQueuePresent(&panel, 2u, 0x3670000ULL,
+                                        &sequence) == AppleAgxFixedPanelOk);
+  assert(sequence != 0ULL);
+  assert(fake.SurfaceOffset == 0x3670000ULL);
+}
+
+/* WDDM mode set: SetVidPnSourceVisibility(FALSE), SetVidPnSourceAddress,
+ * SetVidPnSourceVisibility(TRUE).  The address is accepted while hidden and
+ * handed back exactly once when the source becomes visible. */
+static void test_queue_present_while_hidden_is_deferred_until_visible(void) {
+  FAKE_BROKER fake;
+  APPLE_AGX_FIXED_PANEL panel = make_v2_panel(&fake);
+  APPLE_AGX_SCANOUT_U64 sequence = 7ULL;
+  APPLE_AGX_SCANOUT_U64 offset = 0ULL;
+  APPLE_AGX_SCANOUT_U32 writes;
+
+  assert(AppleAgxFixedPanelSetVisible(&panel, 0u, APPLE_AGX_SCANOUT_FALSE) ==
+         AppleAgxFixedPanelOk);
+  writes = fake.CommandWrites;
+  assert(AppleAgxFixedPanelQueuePresent(&panel, 2u, 0x3a860000ULL + 0x10000ULL,
+                                        &sequence) ==
+         AppleAgxFixedPanelInvalidSurface);
+  assert(AppleAgxFixedPanelQueuePresent(&panel, 2u, 0x3670000ULL,
+                                        &sequence) ==
+         AppleAgxFixedPanelDeferred);
+  assert(sequence == 0ULL);
+  assert(fake.CommandWrites == writes);
+  assert(AppleAgxFixedPanelTakeDeferred(&panel, &offset) ==
+         APPLE_AGX_SCANOUT_FALSE);
+  assert(AppleAgxFixedPanelSetVisible(&panel, 0u, APPLE_AGX_SCANOUT_TRUE) ==
+         AppleAgxFixedPanelOk);
+  assert(AppleAgxFixedPanelTakeDeferred(&panel, &offset) ==
+         APPLE_AGX_SCANOUT_TRUE);
+  assert(offset == 0x3670000ULL);
+  assert(AppleAgxFixedPanelTakeDeferred(&panel, &offset) ==
+         APPLE_AGX_SCANOUT_FALSE);
+  assert(AppleAgxFixedPanelQueuePresent(&panel, 2u, offset, &sequence) ==
+         AppleAgxFixedPanelOk);
+  assert(fake.SurfaceOffset == 0x3670000ULL);
+}
+
 int main(void) {
   test_start_registers_exact_pool();
   test_commit_accepts_only_fixed_mode_and_topology();
@@ -311,5 +376,7 @@ int main(void) {
   test_present_rejects_wrong_segment_and_tail();
   test_release_retains_ownership_without_quiesce();
   test_v2_queue_present_does_not_poll_or_consume_v1_handoff();
+  test_queue_present_accepts_primary_beyond_former_window();
+  test_queue_present_while_hidden_is_deferred_until_visible();
   return 0;
 }

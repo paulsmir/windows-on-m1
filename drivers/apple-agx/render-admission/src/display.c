@@ -431,6 +431,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceVisibility(
           context, SetVidPnSourceVisibility->Visible ? TRUE : FALSE)))
     return STATUS_DEVICE_HARDWARE_ERROR;
   context->SourceVisible = SetVidPnSourceVisibility->Visible ? TRUE : FALSE;
+  /* Show a primary that dxgkrnl set while the source was hidden. A busy
+   * queue keeps the deferred address for the next visibility change. */
+  if (context->SourceVisible)
+    (void)AdmissionScanoutQueueDeferred(context);
   return STATUS_SUCCESS;
 }
 

@@ -23,6 +23,7 @@ typedef enum _APPLE_AGX_FIXED_PANEL_RESULT {
   AppleAgxFixedPanelOwnershipUncertain,
   AppleAgxFixedPanelSinglePresentOnly,
   AppleAgxFixedPanelPresentPending,
+  AppleAgxFixedPanelDeferred,
 } APPLE_AGX_FIXED_PANEL_RESULT;
 
 typedef enum _APPLE_AGX_FIXED_PANEL_OWNERSHIP {
@@ -40,6 +41,9 @@ typedef struct _APPLE_AGX_FIXED_PANEL {
   APPLE_AGX_SCANOUT_BOOL Committed;
   APPLE_AGX_SCANOUT_BOOL Visible;
   APPLE_AGX_SCANOUT_BOOL PresentConsumed;
+  /* Source address accepted while the source was hidden (WDDM mode set). */
+  APPLE_AGX_SCANOUT_U64 DeferredOffset;
+  APPLE_AGX_SCANOUT_BOOL DeferredValid;
   APPLE_AGX_FIXED_PANEL_OWNERSHIP Ownership;
 } APPLE_AGX_FIXED_PANEL;
 
@@ -57,6 +61,8 @@ APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelCommit(
 APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelSetVisible(
     APPLE_AGX_FIXED_PANEL *Panel, APPLE_AGX_SCANOUT_U32 SourceId,
     APPLE_AGX_SCANOUT_BOOL Visible);
+APPLE_AGX_SCANOUT_BOOL AppleAgxFixedPanelTakeDeferred(
+    APPLE_AGX_FIXED_PANEL *Panel, APPLE_AGX_SCANOUT_U64 *SegmentOffset);
 APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelPresent(
     APPLE_AGX_FIXED_PANEL *Panel, APPLE_AGX_SCANOUT_U32 SegmentId,
     APPLE_AGX_SCANOUT_U64 SegmentOffset,

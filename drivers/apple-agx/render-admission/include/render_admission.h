@@ -1457,6 +1457,8 @@ NTSTATUS AdmissionScanoutSetVisible(
 NTSTATUS AdmissionScanoutQueuePresent(
     _Inout_ ADMISSION_CONTEXT *Context,
     _In_ const DXGKARG_SETVIDPNSOURCEADDRESS *Args);
+_IRQL_requires_max_(PASSIVE_LEVEL)
+NTSTATUS AdmissionScanoutQueueDeferred(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionScanoutSetTimelinePaused(_Inout_ ADMISSION_CONTEXT *Context,
                                           _In_ BOOLEAN Paused);
 VOID AdmissionScanoutDpc(_Inout_ ADMISSION_CONTEXT *Context);

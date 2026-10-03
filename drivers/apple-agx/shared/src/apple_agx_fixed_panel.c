@@ -44,6 +44,8 @@ APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelInitialize(
   Panel->Committed = APPLE_AGX_SCANOUT_FALSE;
   Panel->Visible = APPLE_AGX_SCANOUT_TRUE;
   Panel->PresentConsumed = APPLE_AGX_SCANOUT_FALSE;
+  Panel->DeferredOffset = 0ULL;
+  Panel->DeferredValid = APPLE_AGX_SCANOUT_FALSE;
   Panel->Ownership = AppleAgxFixedPanelUnregistered;
   result = AppleAgxScanoutInitialize(&Panel->Scanout, Io, FirstSequence,
                                      MaxPolls);
@@ -159,18 +161,35 @@ APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelQueuePresent(
       !Panel->Started || !Panel->Committed)
     return AppleAgxFixedPanelInvalidState;
   *Sequence = 0ULL;
-  if (!Panel->Visible)
-    return AppleAgxFixedPanelNotVisible;
   if (SegmentId != APPLE_AGX_FIXED_PANEL_SEGMENT_ID)
     return AppleAgxFixedPanelInvalidSegment;
   if ((SegmentOffset & (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) != 0ULL ||
       SegmentOffset > APPLE_AGX_SCANOUT_J313_POOL_SIZE -
                           APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
     return AppleAgxFixedPanelInvalidSurface;
+  /* A WDDM mode set programs the new primary while the source is hidden and
+   * shows it on SetVidPnSourceVisibility(TRUE); keep only the latest one. */
+  if (!Panel->Visible) {
+    Panel->DeferredOffset = SegmentOffset;
+    Panel->DeferredValid = APPLE_AGX_SCANOUT_TRUE;
+    return AppleAgxFixedPanelDeferred;
+  }
+  Panel->DeferredValid = APPLE_AGX_SCANOUT_FALSE;
 
   result = AppleAgxScanoutQueuePresent(&Panel->Scanout, SegmentOffset,
                                        Sequence);
   return AppleAgxFixedPanelMapScanoutResult(result);
+}
+
+APPLE_AGX_SCANOUT_BOOL AppleAgxFixedPanelTakeDeferred(
+    APPLE_AGX_FIXED_PANEL *Panel, APPLE_AGX_SCANOUT_U64 *SegmentOffset) {
+  if (Panel == APPLE_AGX_FIXED_PANEL_NULL || SegmentOffset == 0 ||
+      !Panel->Visible || !Panel->DeferredValid)
+    return APPLE_AGX_SCANOUT_FALSE;
+  *SegmentOffset = Panel->DeferredOffset;
+  Panel->DeferredOffset = 0ULL;
+  Panel->DeferredValid = APPLE_AGX_SCANOUT_FALSE;
+  return APPLE_AGX_SCANOUT_TRUE;
 }
 
 APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelStop(
@@ -189,6 +208,8 @@ APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelStop(
   Panel->ActiveOffset = 0ULL;
   Panel->LastSwapId = 0u;
   Panel->PresentConsumed = APPLE_AGX_SCANOUT_FALSE;
+  Panel->DeferredOffset = 0ULL;
+  Panel->DeferredValid = APPLE_AGX_SCANOUT_FALSE;
   Panel->Ownership = AppleAgxFixedPanelUnregistered;
   return AppleAgxFixedPanelOk;
 }

@@ -18,6 +18,7 @@ typedef struct _ADMISSION_SCANOUT_RUNTIME {
   volatile LONG Faulted;
   volatile LONG64 PendingPhysicalAddress;
   volatile LONG64 PendingSequence;
+  volatile LONG64 DeferredPrimaryAddress;
   volatile LONG64 LastNotifiedSequence;
   APPLE_AGX_VSYNC_TIMELINE Timeline;
   KTIMER VsyncTimer;
@@ -883,6 +884,40 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutSetVisible(
              : STATUS_DEVICE_HARDWARE_ERROR;
 }
 
+_Use_decl_annotations_ NTSTATUS AdmissionScanoutQueueDeferred(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
+  APPLE_AGX_FIXED_PANEL_RESULT result;
+  APPLE_AGX_U64 offset = 0ULL;
+  APPLE_AGX_U64 sequence = 0ULL;
+  LONG64 address;
+
+  if (runtime == NULL || !Context->SourceVisible ||
+      InterlockedCompareExchange(&runtime->IrqEnabled, 0, 0) == 0 ||
+      InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0)
+    return STATUS_SUCCESS;
+  if (InterlockedCompareExchange(&runtime->PresentGate, 1, 0) != 0)
+    return STATUS_DEVICE_BUSY;
+  if (!AppleAgxFixedPanelTakeDeferred(&runtime->Panel, &offset)) {
+    InterlockedExchange(&runtime->PresentGate, 0);
+    return STATUS_SUCCESS;
+  }
+  address = InterlockedExchange64(&runtime->DeferredPrimaryAddress, 0);
+  InterlockedExchange64(&runtime->PendingPhysicalAddress, address);
+  result = AppleAgxFixedPanelQueuePresent(
+      &runtime->Panel, ADMISSION_MEMORY_LOCAL_SEGMENT, offset, &sequence);
+  if (result != AppleAgxFixedPanelOk) {
+    InterlockedExchange64(&runtime->PendingPhysicalAddress, 0);
+    InterlockedExchange(&runtime->PresentGate, 0);
+    return result == AppleAgxFixedPanelPresentPending
+               ? STATUS_DEVICE_BUSY
+               : STATUS_DEVICE_HARDWARE_ERROR;
+  }
+  InterlockedExchange64(&runtime->PendingSequence, (LONG64)sequence);
+  InterlockedExchange(&runtime->PendingValid, 1);
+  return STATUS_SUCCESS;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
     ADMISSION_CONTEXT *Context,
     const DXGKARG_SETVIDPNSOURCEADDRESS *Args) {
@@ -909,7 +944,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
       Args->hAllocation == NULL ||
       Args->PrimarySegment != ADMISSION_MEMORY_LOCAL_SEGMENT ||
       Args->PrimaryAddress.QuadPart <= 0 ||
-      !Context->DisplayActive || !Context->SourceVisible ||
+      !Context->DisplayActive ||
       InterlockedCompareExchange(&runtime->IrqEnabled, 0, 0) == 0 ||
       InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0)
     return STATUS_INVALID_PARAMETER;
@@ -971,6 +1006,22 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
     fallbackCandidateValid = TRUE;
   }
 #endif
+  /* EXP953: dxgkrnl programs a mode-set primary between
+   * SetVidPnSourceVisibility(FALSE) and (TRUE).  Accept and retain it; it
+   * is queued by AdmissionScanoutQueueDeferred when the source is shown. */
+  if (!Context->SourceVisible) {
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+    if (fallbackCandidateValid)
+      (void)AdmissionDisplayOutputLeaseRetire(&fallbackCandidate);
+#endif
+    result = AppleAgxFixedPanelQueuePresent(
+        &runtime->Panel, Args->PrimarySegment, surface_offset, &sequence);
+    if (result != AppleAgxFixedPanelDeferred)
+      return STATUS_INVALID_PARAMETER;
+    InterlockedExchange64(&runtime->DeferredPrimaryAddress,
+                          Args->PrimaryAddress.QuadPart);
+    return STATUS_SUCCESS;
+  }
   if (InterlockedCompareExchange(&runtime->PresentGate, 1, 0) != 0) {
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
     if (fallbackCandidateValid)

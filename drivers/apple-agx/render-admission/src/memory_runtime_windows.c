@@ -843,6 +843,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeLocalView(
   return STATUS_SUCCESS;
 }
 
+/* EXP953: VidMm may place a primary anywhere in the local allocation range;
+ * the DCP-registered scanout pool must cover exactly that range. */
+C_ASSERT(APPLE_AGX_SCANOUT_J313_POOL_SIZE == ADMISSION_LOCAL_ALLOCATION_BYTES);
+
 _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeScanoutView(
     ADMISSION_CONTEXT *Context, ADMISSION_SCANOUT_MEMORY_VIEW *View) {
   NTSTATUS status = AdmissionMemoryRuntimeLocalView(Context, View);
