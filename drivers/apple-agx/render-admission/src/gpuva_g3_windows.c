@@ -695,6 +695,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3FrameArmEscape(ADMISSION_CONTEXT
   }
   ExReleaseFastMutex(&state->Lock);
   if (valid) {
+    ULONG ordinal = (ULONG)InterlockedIncrement(
+        &adapter->DwmSourceMapRecordCount) - 1u;
+    map.Ordinal = ordinal;
     map.SourceReceiptState = (ULONG)InterlockedCompareExchange(
         &adapter->SourceAddressReceiptState, 0, 0);
     if (map.SourceReceiptState >= 2u) {
@@ -703,7 +706,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3FrameArmEscape(ADMISSION_CONTEXT
       map.SelectedPrimaryAddress =
           (ULONGLONG)adapter->SourceAddressReceipt.PrimaryAddress;
     }
-    AdmissionRecordDwmSourceMap(adapter->PhysicalDeviceObject, &map);
+    AdmissionRecordDwmSourceMap(adapter->PhysicalDeviceObject, &map, ordinal);
   }
   return valid ? STATUS_SUCCESS : STATUS_INVALID_HANDLE;
 }

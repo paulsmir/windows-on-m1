@@ -4,6 +4,7 @@
 #define ADMISSION_DISPLAY_DDI_RECEIPT_VERSION 1u
 
 C_ASSERT(sizeof(ADMISSION_SOURCE_ADDRESS_RECEIPT) == 128);
+C_ASSERT(sizeof(ADMISSION_DWM_SOURCE_MAP_RECEIPT) == 120);
 C_ASSERT(sizeof(ADMISSION_PRESENT_TRANSFER_RECEIPT) == 64);
 C_ASSERT(sizeof(ADMISSION_QUEUE_INFO_RECEIPT) == 576);
 C_ASSERT(sizeof(ADMISSION_QUEUE_FAULT_SNAPSHOT) == 184);
@@ -2391,14 +2392,20 @@ _Use_decl_annotations_ void AdmissionRecordDisplayDdi(
 
 _Use_decl_annotations_ void AdmissionRecordDwmSourceMap(
     PDEVICE_OBJECT DeviceObject,
-    const ADMISSION_DWM_SOURCE_MAP_RECEIPT *Receipt) {
+    const ADMISSION_DWM_SOURCE_MAP_RECEIPT *Receipt,
+    ULONG Ordinal) {
   HANDLE key = NULL;
+  WCHAR name[32];
   if (DeviceObject == NULL || Receipt == NULL ||
       KeGetCurrentIrql() != PASSIVE_LEVEL ||
       !NT_SUCCESS(IoOpenDeviceRegistryKey(DeviceObject, PLUGPLAY_REGKEY_DEVICE,
                                           KEY_SET_VALUE, &key)))
     return;
   WriteBinary(key, L"Wom1DwmSourceMap", Receipt, sizeof(*Receipt));
+  if (Ordinal < 16u &&
+      NT_SUCCESS(RtlStringCchPrintfW(name, ARRAYSIZE(name),
+                                     L"Wom1DwmSourceMap%02lu", Ordinal)))
+    WriteBinary(key, name, Receipt, sizeof(*Receipt));
   ZwClose(key);
 }
 

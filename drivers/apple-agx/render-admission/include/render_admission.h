@@ -175,7 +175,7 @@ typedef struct _ADMISSION_DWM_SOURCE_MAP_RECEIPT {
   ULONGLONG MappingGeneration, PteAllocation, PteAllocationOffset;
   ULONGLONG PteGuestIpa, ResolvedGuestIpa;
   ULONGLONG SelectedHostPhysicalAddress, SelectedPrimaryAddress;
-  ULONG SegmentId, PteFlags, SourceReceiptState, Reserved;
+  ULONG SegmentId, PteFlags, SourceReceiptState, Ordinal;
 } ADMISSION_DWM_SOURCE_MAP_RECEIPT;
 
 typedef struct _ADMISSION_PRESENT_TRANSFER_RECEIPT {
@@ -416,6 +416,7 @@ typedef struct _ADMISSION_CONTEXT {
   APPLE_AGX_G3_COPY_TRANSFER_FAILURE G3CopyTransferFailure;
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   ADMISSION_DWM_FRAME_PROBE DwmFrameProbe;
+  volatile LONG DwmSourceMapRecordCount;
 #endif
   volatile LONG G3PrivateFailureClaim;
   APPLE_AGX_G3_PRIVATE_FAILURE G3PrivateFailure;
@@ -1309,7 +1310,8 @@ void AdmissionRecordDisplayDdi(_In_opt_ PDEVICE_OBJECT DeviceObject,
                                _In_ NTSTATUS Status);
 void AdmissionRecordDwmSourceMap(
     _In_opt_ PDEVICE_OBJECT DeviceObject,
-    _In_ const ADMISSION_DWM_SOURCE_MAP_RECEIPT *Receipt);
+    _In_ const ADMISSION_DWM_SOURCE_MAP_RECEIPT *Receipt,
+    _In_ ULONG Ordinal);
 void AdmissionRecordMemoryQualification(
     _In_opt_ PDEVICE_OBJECT DeviceObject,
     _In_ const ADMISSION_MEMORY_QUALIFICATION *Qualification);
