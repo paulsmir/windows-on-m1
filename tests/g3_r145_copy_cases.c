@@ -233,8 +233,34 @@ static void r145_copy_cases(void) {
   while(shadow && shadow->OriginalIpa!=local_ipa+0x18000) shadow=shadow->Next;
   assert(shadow && shadow->ResidentPtes);
   APPLE_AGX_GPUVA_G3_LOGICAL_PTE saved=shadow->ResidentPtes[20];
+  /* EXP942: retain the failed data call itself, not an unrelated QUERY.
+   * A bad tail page must leave every earlier destination byte unchanged. */
+  APPLE_AGX_G3_COPY_TRANSFER_FAILURE transfer_first={0};
+  if (!getenv("G3_REPLAY_HISTORICAL")) {
+  a.G3CopyTransferFailureClaim=0;
+  transfer_registry_writes=0;
+  shadow->ResidentPtes[20].Flags=0;
+  assert(AdmissionDdiEscape(&a,&escape)==STATUS_INVALID_PARAMETER);
+  assert(local_cpu[0x100ff9]==9 && !r145_references);
+  assert(a.G3CopyTransferFailureClaim==2 && transfer_registry_writes==1);
+  transfer_first=transfer_registry_receipt;
+  assert(transfer_first.Version==1 && transfer_first.Bytes==sizeof(transfer_first));
+  assert(transfer_first.Operation==APPLE_AGX_G3_COPY_UPLOAD &&
+         transfer_first.Predicate==57 && transfer_first.Status==STATUS_INVALID_PARAMETER);
+  assert(transfer_first.GpuVa==q->GpuVa && transfer_first.Offset==q->Offset &&
+         transfer_first.TransferBytes==q->TransferBytes && transfer_first.FailedPage==0x14000);
+  assert(transfer_first.Allocation==q->Allocation &&
+         transfer_first.Context==(ULONGLONG)(ULONG_PTR)escape.hContext &&
+         transfer_first.RequestProcessGeneration==q->ProcessGeneration &&
+         transfer_first.RequestMappingGeneration==q->MappingGeneration &&
+         transfer_first.CurrentProcessGeneration==p->Graph.ProcessGeneration &&
+         transfer_first.CurrentMappingGeneration==p->Graph.MappingGeneration);
+  }
+  shadow->ResidentPtes[20]=saved;
   shadow->ResidentPtes[20].Allocation=0;
   assert(!NT_SUCCESS(AdmissionDdiEscape(&a,&escape)) && local_cpu[0x100ff9]==9);
+  if (!getenv("G3_REPLAY_HISTORICAL")) assert(transfer_registry_writes==1 &&
+         !memcmp(&transfer_first,&transfer_registry_receipt,sizeof(transfer_first)));
   shadow->ResidentPtes[20]=saved;shadow->ResidentPtes[20].AllocationOffset+=4096;
   assert(!NT_SUCCESS(AdmissionDdiEscape(&a,&escape)) && local_cpu[0x100ff9]==9);
   shadow->ResidentPtes[20]=saved;shadow->ResidentPtes[20].SegmentId=0;

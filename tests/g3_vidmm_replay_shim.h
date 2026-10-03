@@ -303,6 +303,8 @@ struct _ADMISSION_CONTEXT { REPLAY_PACKET RenderPacket; BOOLEAN InterfaceValid; 
   volatile LONG G3CopyQueryFailureClaim;
   ULONG G3CopyQueryFailurePredicate,G3CopyQueryFailureStatus;
   APPLE_AGX_G3_COPY_QUERY_RECEIPT G3CopyQueryFailure;
+  volatile LONG G3CopyTransferFailureClaim;
+  APPLE_AGX_G3_COPY_TRANSFER_FAILURE G3CopyTransferFailure;
   volatile LONG G3PrivateFailureClaim;
   APPLE_AGX_G3_PRIVATE_FAILURE G3PrivateFailure;
   int SchedulerLock,Scheduler;
@@ -318,6 +320,8 @@ static NTSTATUS AdmissionDwmDdiProbeQueryWindows(ADMISSION_CONTEXT *context,
 static UINT r145_references;
 static ULONG query_registry_writes,query_registry_flushes,query_registry_receipt[42];
 static ULONG private_registry_writes;
+static ULONG transfer_registry_writes;
+static APPLE_AGX_G3_COPY_TRANSFER_FAILURE transfer_registry_receipt;
 static APPLE_AGX_G3_PRIVATE_FAILURE private_registry_receipt;
 #define HandleToULong(h) ((ULONG)(uintptr_t)(h))
 static HANDLE PsGetCurrentProcessId(void) {return (HANDLE)0x887;}
@@ -326,6 +330,10 @@ static NTSTATUS IoOpenDeviceRegistryKey(PDEVICE_OBJECT device,ULONG kind,ULONG a
   *key=(HANDLE)0x5588;return STATUS_SUCCESS;
 }
 static void WriteBinary(HANDLE key,const wchar_t *name,const VOID *data,ULONG bytes) {
+  if (!wcscmp(name,L"Wom1G3CopyTransferFailure")) {
+    assert(key==(HANDLE)0x5588 && bytes==sizeof(transfer_registry_receipt) && replay_irql==PASSIVE_LEVEL);
+    memcpy(&transfer_registry_receipt,data,bytes);++transfer_registry_writes;return;
+  }
   if (!wcscmp(name,L"Wom1G3PrivateAcquireFailure")) {
     assert(key==(HANDLE)0x5588 && bytes==sizeof(private_registry_receipt) && replay_irql==PASSIVE_LEVEL);
     memcpy(&private_registry_receipt,data,bytes);++private_registry_writes;return;

@@ -769,9 +769,9 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   ADMISSION_SCANOUT_MEMORY_VIEW view;
   DXGKARGCB_GETHANDLEDATA lookup={0};
   DXGKARGCB_RELEASEHANDLEDATA reference={0};
-  ULONGLONG length=0, offset, end=0, page, first=0;
+  ULONGLONG length=0, offset, end=0, page=0, first=0;
   APPLE_AGX_GPUVA_G3_WALK_FAILURE walk={0};
-  BOOLEAN captured=FALSE, captureAttempted=FALSE;
+  BOOLEAN captured=FALSE, captureAttempted=FALSE, transferCaptured=FALSE;
   ULONG predicate=0u, operation=MAXULONG;
   BOOLEAN isQuery=FALSE;
   NTSTATUS status=STATUS_INVALID_PARAMETER;
@@ -923,6 +923,27 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   }
   RtlCopyMemory(args->pPrivateDriverData,q,sizeof(*q));status=STATUS_SUCCESS;
 Unlock:
+  if (predicate && q &&
+      (q->Operation==APPLE_AGX_G3_COPY_UPLOAD ||
+       q->Operation==APPLE_AGX_G3_COPY_DOWNLOAD) &&
+      InterlockedCompareExchange(&adapter->G3CopyTransferFailureClaim,1,0)==0) {
+    APPLE_AGX_G3_COPY_TRANSFER_FAILURE *r=&adapter->G3CopyTransferFailure;
+    RtlZeroMemory(r,sizeof(*r));
+    r->Version=1u;r->Bytes=sizeof(*r);r->Operation=q->Operation;
+    r->Predicate=predicate;r->Status=(ULONG)status;
+    r->TransferBytes=q->TransferBytes;r->Pid=HandleToULong(PsGetCurrentProcessId());
+    r->GpuVa=q->GpuVa;r->Offset=q->Offset;
+    /* Only these predicates are evaluated inside the page-validation loop. */
+    r->FailedPage=(predicate>=56u && predicate<=61u) ? page : 0ULL;
+    r->Allocation=q->Allocation;r->Context=(ULONGLONG)(ULONG_PTR)args->hContext;
+    r->RequestProcessGeneration=q->ProcessGeneration;
+    r->RequestMappingGeneration=q->MappingGeneration;
+    r->CurrentProcessGeneration=p ? p->Graph.ProcessGeneration : 0ULL;
+    r->CurrentMappingGeneration=p ? p->Graph.MappingGeneration : 0ULL;
+    KeMemoryBarrier();
+    InterlockedExchange(&adapter->G3CopyTransferFailureClaim,2);
+    transferCaptured=TRUE;
+  }
   if(isQuery && predicate) {
     captureAttempted=TRUE;
     captured=AdmissionG3CaptureCopyQueryFailure(adapter,p,context,q,predicate,status,
@@ -954,6 +975,7 @@ Free:
         FALSE,0,0,NULL,NULL);
   if(q) ExFreePoolWithTag(q,ADMISSION_POOL_TAG);
   if(captured) AdmissionRecordG3CopyQueryFailure(adapter);
+  if(transferCaptured) AdmissionRecordG3CopyTransferFailure(adapter);
 #undef COPY_REJECT_IF
   return status;
 }

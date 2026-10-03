@@ -18,7 +18,7 @@ SHARED = ROOT / "drivers/apple-agx/shared"
 M1N1 = ROOT / "m1n1_windows/src"
 
 FUNCTIONS = {
-    "receipts.c": ["AdmissionRecordG3CopyQueryFailure", "AdmissionRecordG3PrivateFailure"],
+    "receipts.c": ["AdmissionRecordG3CopyQueryFailure", "AdmissionRecordG3CopyTransferFailure", "AdmissionRecordG3PrivateFailure"],
     "gpuva_g3_windows.c": [
         "AdmissionG3AllocateNode", "AdmissionG3FreeNode",
         "AdmissionGpuvaG3FindProcess", "AdmissionG3BootstrapRoot",

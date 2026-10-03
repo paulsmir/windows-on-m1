@@ -21,6 +21,7 @@
 #include "apple_agx_g3_private_failure.h"
 #include "apple_agx_local_reserve_abi.h"
 #include "apple_agx_g3_copy_query_receipt.h"
+#include "apple_agx_g3_copy_abi.h"
 #include "apple_agx_residency.h"
 #include "apple_agx_uat_publication.h"
 #include "render_paging.h"
@@ -401,6 +402,8 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG G3CopyQueryFailureClaim;
   ULONG G3CopyQueryFailurePredicate, G3CopyQueryFailureStatus;
   APPLE_AGX_G3_COPY_QUERY_RECEIPT G3CopyQueryFailure;
+  volatile LONG G3CopyTransferFailureClaim;
+  APPLE_AGX_G3_COPY_TRANSFER_FAILURE G3CopyTransferFailure;
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   ADMISSION_DWM_FRAME_PROBE DwmFrameProbe;
 #endif
@@ -898,6 +901,7 @@ void AdmissionRenderCorrelationSubmitFailureWindows(
     _In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG4SubmitFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3CopyQueryFailure(_In_opt_ ADMISSION_CONTEXT *Context);
+void AdmissionRecordG3CopyTransferFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
 NTSTATUS AdmissionGpuvaG3FrameArmEscape(_In_ ADMISSION_CONTEXT *Adapter,
     _In_ const DXGKARG_ESCAPE *Args);

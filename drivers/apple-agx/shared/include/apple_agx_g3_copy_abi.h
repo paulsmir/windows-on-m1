@@ -16,4 +16,13 @@ typedef struct _APPLE_AGX_G3_COPY_REQUEST {
   APPLE_AGX_U32 TransferBytes, Reserved2;
   unsigned char Data[APPLE_AGX_G3_COPY_CAPACITY];
 } APPLE_AGX_G3_COPY_REQUEST;
+
+/* Diagnostic only; not part of the buffered request or its version. */
+typedef struct _APPLE_AGX_G3_COPY_TRANSFER_FAILURE {
+  APPLE_AGX_U32 Version, Bytes, Operation, Predicate;
+  APPLE_AGX_U32 Status, TransferBytes, Pid, Reserved;
+  APPLE_AGX_U64 GpuVa, Offset, FailedPage, Allocation, Context;
+  APPLE_AGX_U64 RequestProcessGeneration, RequestMappingGeneration;
+  APPLE_AGX_U64 CurrentProcessGeneration, CurrentMappingGeneration;
+} APPLE_AGX_G3_COPY_TRANSFER_FAILURE;
 #endif

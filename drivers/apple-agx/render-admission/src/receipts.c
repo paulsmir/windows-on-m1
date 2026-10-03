@@ -2052,6 +2052,21 @@ _Use_decl_annotations_ void AdmissionRecordG3CopyQueryFailure(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordG3CopyTransferFailure(
+    ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      InterlockedCompareExchange(&Context->G3CopyTransferFailureClaim,0,0) != 2)
+    return;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE,KEY_SET_VALUE,&key))) return;
+  WriteBinary(key,L"Wom1G3CopyTransferFailure",&Context->G3CopyTransferFailure,
+      sizeof(Context->G3CopyTransferFailure));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordG3PrivateFailure(
     ADMISSION_CONTEXT *Context) {
   HANDLE key = NULL;
