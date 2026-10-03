@@ -4,7 +4,7 @@
 #define ADMISSION_DISPLAY_DDI_RECEIPT_VERSION 1u
 
 C_ASSERT(sizeof(ADMISSION_SOURCE_ADDRESS_RECEIPT) == 128);
-C_ASSERT(sizeof(ADMISSION_DWM_SOURCE_MAP_RECEIPT) == 120);
+C_ASSERT(sizeof(ADMISSION_DWM_SOURCE_MAP_RECEIPT) == 136);
 C_ASSERT(sizeof(ADMISSION_PRESENT_TRANSFER_RECEIPT) == 64);
 C_ASSERT(sizeof(ADMISSION_QUEUE_INFO_RECEIPT) == 576);
 C_ASSERT(sizeof(ADMISSION_QUEUE_FAULT_SNAPSHOT) == 184);
@@ -2406,6 +2406,8 @@ _Use_decl_annotations_ void AdmissionRecordDwmSourceMap(
       NT_SUCCESS(RtlStringCchPrintfW(name, ARRAYSIZE(name),
                                      L"Wom1DwmSourceMap%02lu", Ordinal)))
     WriteBinary(key, name, Receipt, sizeof(*Receipt));
+  if (Receipt->InSelectedRange)
+    WriteBinary(key, L"Wom1DwmSourceMapMatch", Receipt, sizeof(*Receipt));
   ZwClose(key);
 }
 

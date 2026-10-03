@@ -168,14 +168,16 @@ typedef struct _ADMISSION_SOURCE_ADDRESS_RECEIPT {
   ULONG CacheCleanPerformed;
 } ADMISSION_SOURCE_ADDRESS_RECEIPT;
 
-#define ADMISSION_DWM_SOURCE_MAP_VERSION 1u
+#define ADMISSION_DWM_SOURCE_MAP_VERSION 2u
 typedef struct _ADMISSION_DWM_SOURCE_MAP_RECEIPT {
   ULONG Version, Bytes, OsProcessId, PteFound;
   ULONGLONG GraphProcessId, Allocation, CanonicalGpuVa, RootIpa;
   ULONGLONG MappingGeneration, PteAllocation, PteAllocationOffset;
   ULONGLONG PteGuestIpa, ResolvedGuestIpa;
   ULONGLONG SelectedHostPhysicalAddress, SelectedPrimaryAddress;
+  ULONGLONG SelectedSurfaceBytes;
   ULONG SegmentId, PteFlags, SourceReceiptState, Ordinal;
+  ULONG InSelectedRange, InSelectedRangeCount;
 } ADMISSION_DWM_SOURCE_MAP_RECEIPT;
 
 typedef struct _ADMISSION_PRESENT_TRANSFER_RECEIPT {
@@ -417,6 +419,7 @@ typedef struct _ADMISSION_CONTEXT {
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   ADMISSION_DWM_FRAME_PROBE DwmFrameProbe;
   volatile LONG DwmSourceMapRecordCount;
+  volatile LONG DwmSourceMapInRangeCount;
 #endif
   volatile LONG G3PrivateFailureClaim;
   APPLE_AGX_G3_PRIVATE_FAILURE G3PrivateFailure;

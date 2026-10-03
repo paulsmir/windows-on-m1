@@ -705,6 +705,25 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3FrameArmEscape(ADMISSION_CONTEXT
           adapter->SourceAddressReceipt.SelectedHostPhysicalAddress;
       map.SelectedPrimaryAddress =
           (ULONGLONG)adapter->SourceAddressReceipt.PrimaryAddress;
+      map.SelectedSurfaceBytes =
+          (ULONGLONG)adapter->SourceAddressReceipt.Stride *
+          adapter->SourceAddressReceipt.Height;
+    }
+    if (map.PteFound && map.SegmentId == ADMISSION_MEMORY_LOCAL_SEGMENT &&
+        (map.PteFlags & (APPLE_AGX_GPUVA_G3_VALID |
+                         APPLE_AGX_GPUVA_G3_WRITE)) ==
+            (APPLE_AGX_GPUVA_G3_VALID | APPLE_AGX_GPUVA_G3_WRITE) &&
+        map.SelectedHostPhysicalAddress != 0ULL &&
+        map.SelectedSurfaceBytes != 0ULL &&
+        map.ResolvedGuestIpa >= map.SelectedHostPhysicalAddress &&
+        map.ResolvedGuestIpa - map.SelectedHostPhysicalAddress <
+            map.SelectedSurfaceBytes) {
+      map.InSelectedRange = 1u;
+      map.InSelectedRangeCount = (ULONG)InterlockedIncrement(
+          &adapter->DwmSourceMapInRangeCount);
+    } else {
+      map.InSelectedRangeCount = (ULONG)InterlockedCompareExchange(
+          &adapter->DwmSourceMapInRangeCount, 0, 0);
     }
     AdmissionRecordDwmSourceMap(adapter->PhysicalDeviceObject, &map, ordinal);
   }
