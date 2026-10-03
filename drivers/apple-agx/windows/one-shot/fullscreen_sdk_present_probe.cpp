@@ -55,13 +55,14 @@ static void WindowReceipt(HWND window, IDXGISwapChain1 *swap, const char *stage)
 }
 
 int wmain(int argc, wchar_t **argv) {
+  const bool holdVisual = argc == 2 && wcscmp(argv[1], L"--windowed-hold30") == 0;
   const bool warpControl = argc == 2 && wcscmp(argv[1], L"--warp-control") == 0;
   const bool waitForVisibility = warpControl ||
       (argc == 2 && wcscmp(argv[1], L"--windowed-ready") == 0);
-  const bool windowed = waitForVisibility ||
+  const bool windowed = holdVisual || waitForVisibility ||
       (argc == 2 && wcscmp(argv[1], L"--windowed") == 0);
   if (argc != 1 && !windowed) {
-    fprintf(stderr, "Usage: FullscreenSdkPresentProbe.exe [--windowed|--windowed-ready|--warp-control]\n");
+    fprintf(stderr, "Usage: FullscreenSdkPresentProbe.exe [--windowed|--windowed-ready|--warp-control|--windowed-hold30]\n");
     return 2;
   }
   DWORD session = 0;
@@ -258,11 +259,15 @@ int wmain(int argc, wchar_t **argv) {
     if (hr != S_OK || FAILED(removed)) return 13;
   }
   // Brief message dispatch allows the single completed frame to be inspected.
-  const ULONGLONG end = GetTickCount64() + 5000;
+  const DWORD holdMs = holdVisual ? 30000u : 5000u;
+  printf("VISUAL_HOLD_BEGIN milliseconds=%lu present_hr=0x%08lx rgba=0.15,0.55,0.25,1.0\n", holdMs, (ULONG)hr);
+  fflush(stdout);
+  const ULONGLONG end = GetTickCount64() + holdMs;
   while (GetTickCount64() < end) {
     PumpMessages();
     Sleep(10);
   }
+  if (holdVisual) { printf("VISUAL_HOLD_END\n"); fflush(stdout); }
   context->ClearState();
   view.Reset(); buffer.Reset();
   context->Flush();
