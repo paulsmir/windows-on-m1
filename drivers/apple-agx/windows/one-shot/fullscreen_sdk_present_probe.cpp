@@ -28,10 +28,38 @@ static LRESULT CALLBACK ProbeWindowProc(HWND hwnd, UINT message,
                                        WPARAM wparam, LPARAM lparam) {
   return DefWindowProcW(hwnd, message, wparam, lparam);
 }
+static void PumpMessages() {
+  MSG message = {};
+  while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+    TranslateMessage(&message); DispatchMessageW(&message);
+  }
+}
+
+static void WindowReceipt(HWND window, IDXGISwapChain1 *swap, const char *stage) {
+  WINDOWINFO info = {};
+  info.cbSize = sizeof(info);
+  const BOOL known = GetWindowInfo(window, &info);
+  HWND foreground = GetForegroundWindow();
+  DWORD foregroundPid = 0;
+  GetWindowThreadProcessId(foreground, &foregroundPid);
+  DXGI_SWAP_CHAIN_DESC1 desc = {};
+  const HRESULT result = swap->GetDesc1(&desc);
+  printf("WINDOW_STATE stage=%s info=%u visible=%u iconic=%u hwnd=%p foreground=%p foreground_pid=%lu monitor=%p rect=%ld,%ld,%ld,%ld client=%ld,%ld,%ld,%ld style=0x%lx exstyle=0x%lx swap_desc_hr=0x%08lx swap_effect=%u\n",
+      stage, (UINT)known, (UINT)IsWindowVisible(window), (UINT)IsIconic(window),
+      (void *)window, (void *)foreground, foregroundPid,
+      (void *)MonitorFromWindow(window, MONITOR_DEFAULTTONULL),
+      info.rcWindow.left, info.rcWindow.top, info.rcWindow.right, info.rcWindow.bottom,
+      info.rcClient.left, info.rcClient.top, info.rcClient.right, info.rcClient.bottom,
+      info.dwStyle, info.dwExStyle, (ULONG)result, (UINT)desc.SwapEffect);
+  fflush(stdout);
+}
+
 int wmain(int argc, wchar_t **argv) {
-  const bool windowed = argc == 2 && wcscmp(argv[1], L"--windowed") == 0;
+  const bool waitForVisibility = argc == 2 && wcscmp(argv[1], L"--windowed-ready") == 0;
+  const bool windowed = waitForVisibility ||
+      (argc == 2 && wcscmp(argv[1], L"--windowed") == 0);
   if (argc != 1 && !windowed) {
-    fprintf(stderr, "Usage: FullscreenSdkPresentProbe.exe [--windowed]\n");
+    fprintf(stderr, "Usage: FullscreenSdkPresentProbe.exe [--windowed|--windowed-ready]\n");
     return 2;
   }
   DWORD session = 0;
@@ -171,18 +199,44 @@ int wmain(int argc, wchar_t **argv) {
   Stage("device-removed-after-clear", removed);
   if (FAILED(removed)) return 10;
   DXGI_PRESENT_PARAMETERS parameters = {};
+  if (waitForVisibility) WindowReceipt(window.Handle, swap.Get(), "before-present");
   hr = swap->Present1(1, 0, &parameters);
   Stage("present1-once", hr);
   removed = device->GetDeviceRemovedReason();
   Stage("device-removed-after-present", removed);
   if (FAILED(hr) || FAILED(removed)) return 11;
+  if (waitForVisibility && hr == DXGI_STATUS_OCCLUDED) {
+    const ULONGLONG deadline = GetTickCount64() + 3000;
+    HRESULT test = DXGI_STATUS_OCCLUDED;
+    UINT attempts = 0;
+    while (GetTickCount64() < deadline && test == DXGI_STATUS_OCCLUDED) {
+      PumpMessages();
+      Sleep(16);
+      test = swap->Present(0, DXGI_PRESENT_TEST);
+      ++attempts;
+    }
+    printf("OCCLUSION_TEST attempts=%u\n", attempts);
+    Stage("occlusion-test-result", test);
+    WindowReceipt(window.Handle, swap.Get(), "after-occlusion-test");
+    removed = device->GetDeviceRemovedReason();
+    Stage("device-removed-after-occlusion-test", removed);
+    if (test != S_OK || FAILED(removed)) return 12;
+    // A sequenced Present can rotate the backbuffer even when occluded.
+    context->ClearRenderTargetView(view.Get(), color);
+    context->Flush();
+    removed = device->GetDeviceRemovedReason();
+    Stage("device-removed-after-reclear", removed);
+    if (FAILED(removed)) return 10;
+    hr = swap->Present1(1, 0, &parameters);
+    Stage("present1-after-ready", hr);
+    removed = device->GetDeviceRemovedReason();
+    Stage("device-removed-after-ready-present", removed);
+    if (hr != S_OK || FAILED(removed)) return 13;
+  }
   // Brief message dispatch allows the single completed frame to be inspected.
   const ULONGLONG end = GetTickCount64() + 5000;
   while (GetTickCount64() < end) {
-    MSG message = {};
-    while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
-      TranslateMessage(&message); DispatchMessageW(&message);
-    }
+    PumpMessages();
     Sleep(10);
   }
   context->ClearState();
