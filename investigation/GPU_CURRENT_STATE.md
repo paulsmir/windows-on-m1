@@ -21,13 +21,31 @@ key /Users/pavel/.ssh/windows_builder. USB endpoints L41/L43:
 Always check bounded SSH plus launcher/USB before physical requests or reset.
 No raw USB/proxy NOP while a launcher owns the guest.
 
-## CURRENT — EXP936 live; deterministic pixel corruption
-Driver936/oem5, source4e7bba969150db0348d4c9fa0bb1d25764e31dc4. Owner26170,
-exec33811 (verify fresh). Immutable boot event122896 Start2026-10-03T01:19:20.9602310Z;
-HVC generation239491071, Code0 Stage12, CPU8, SSH alive. Firmwarebdcf8715/MuR143e54.
-Hardware manifest f5b5051a61147591f834e15c89e2dbfd52e5f2f2c0e697344fb47b9732938902.
-936 exact package hashes in ROOT.local/experiments/EXP936-direct-primary-rotation.
-No rollback yet; EXP801DxgBoot trace still active. Physical image FAIL per user.
+## CURRENT — normal recovery before937;936 original closed
+937 source2c66edbbf6ca1ac1208f426b53327457fc1c9f5e build/sign/hash/PDBgatesPASS,
+notstaged. ROOT937=ROOT.local/experiments/EXP937-runfragment-header-offsets.
+SYSbdf9cbe43e4a7ba226b78869cd64fd2a2a7ce35be2c79f0b572f7e9d9041939d;
+UMDc6cb21bdfc9f87671da373494e412604cdd9a701e5272a35b5863c767aad3bb9;
+INF85b6105be3e3b87c4e481f0425d4d908acbb984332efdb4c463e6e4e8fbf156c;
+CATed9c108ff0459b8f76f6801d86678c4ca9f7c5bf464af0fc95d13fbe4ebe595a.
+Native/source555/WDK0warnings/signatures/hosthash/PDBGUIDagePASS. Symbolsinternal
+/Users/pavel/J313-evidence-archive/2026-10-03/EXP937-build/symbols.
+
+936 originalendedafterorderedrestart02:53:48.888Z/RegFlushPASS. Owner26170exitafter
+USBreset, nohostsignal. Originalimmutableevent122896 Start01:19:20.9602310Z,
+HVCgen239491071. PhysicalFAIL. Fourfinalfiles(frame,state,UMD,ETL) independently
+hostverifiedgate8893ea17c6f7a2111871984c778a94c95e6ee50cd50f8b12a21be0129f208af9.
+ROOT936/original-final symlinkinternalEXP936-original/original-final. ETL stopped
+andarchived268435456B SHA254b83941adbd82123da1ace8d0de9b780249179a7d0c8b3c414952933b5f6a2.
+
+936exactcleanup ACTUAL:936/oem5 removed/staged0/SYSfalse/UMDfalse/exit0;
+durabilityrestartaccepted02:58:32.064Z, manifest8901422057af3f09bee80afc78ee830aeb9056e9b65912692111691f6f414ca7.
+Normalowner44061exited; freshSSHtimeout/noowner/USBboth/guardedproxyPASS.
+NowlaunchROOT936/launch-clean-recovery.sh sessionpending (same377/392). OnSSHready,
+executeROOT936verify-clean-baseline.ps1 toprove durableoneCode28/CPU8/package0/
+service0/signer0/files0/RegFlush0/Cnotdirty. Thencreate937manifestwithfreshimmutable
+event, stage937only,sealhardwaremanifest,orderedfullboot. All937package/scripts/
+helperandpixel-sdk preparedhost, nothing937installedyet.
 
 935 unbound RTV Clear fix and936 direct primary identity fix are hardware proven:
 Clear/real render fence and RotateResourceIdentities now succeed, device remains healthy.
@@ -64,17 +82,33 @@ spatial/local/upload/point/private/private-upload tasks removed. Probe childrenn
 Latestdiagnosticbuilds/source plans analysis/EXP936-{local-readback,upload-readback,
 point-readback,private-readback,upload-point}. ROOT936/*-sdk-evidence containreceipts.
 
-One boundedsource comparison: g4 tilingformulas matchcurrentAsahi/m1n1 for32x32
-utiles; no scalarfix justified. General utile-size concern (tiles_per_mtile vsutiles)
-notproven relevant; don'tchangewithoutactualcommand. Native linearPBE/texture stride
-usesAsahi -4/-16respectively; relocationmaskspreservehighbits. ResourceCopy/Region
-nativeblit; Map FlushRetire. CPUcopyescape walks4KiB logicalpages, no obviousrangebug.
-Native Windows opts util_blitter singleoversizedtriangle; upstreamlocalMesa contains
-implementation. No provengeometrybug. Do notrepeatthesecomparisons unchanged.
-Next source action should followonepixel result orcaptureactualbuffers/descriptors.
-No speculative NO_REDIRECTION/capability/pitch/firmwarechange. No937build.
-Recovery remainsimmutable377/392; collect936originalbeforeexactcleanup.
-Accepted/stable graphics package NONE. No physicalsuccess, userreportsartifacts.
+## Confirmed next correction — EXP937 pending build/install
+Actual936 native-render capture:2560x1600, utiles32x32, samples1, sampleSize8;
+merge factors correct atUMDinput, shaderflags0. CaptureSHA
+76ebf705f77cf8ecb460d5f4e89408cc5071c61aa983b88772dd0fd6ad9104b3.
+CDB matched936PDB, wrappercompleted/exit26/no timeout andsame5percentcorruption.
+Framebuffer type unavailable; privatepacket capture failed CDB MASM && expression;
+240B native-render succeeded. Do notrerun solelyfor missingpacket (inputboundary enough).
+TaskEXP936-RenderTrace removed afterhostverify/noownedprocesses.
+
+PROVEN serialization bug: AppleAgxG4PatchRenderScalars wrote headermergeX/Y/tilecount
+at0x60/64/70. Current m1n1 G13/V13_5 Construct offsetof proves0x68/6c/78; Asahi
+fragment.rs independently agrees. Realmaterializedtemplate is16x16, headermerge
+1.732051/16 andtilecount1 retained whileunknownU64fields0x60/70 overwritten.
+Fixsource2c66edbbf6ca1ac1208f426b53327457fc1c9f5e changesonlythreeoffsets; samevalues preserved.
+Actualconstructor+template regressionREDold/GREENnew ASanUBSan;6builder/broker/parser/
+template testsPASS plusledger2PASS. Untouched virtual-submit replay harness blocked
+by missingAdmissionMemoryRuntimeLocalView/SubmitCommandVirtualInner declarations;
+itscompile list doesnotincludechangedbuilder; do notclaimwhole-suiteGREEN.
+Plananalysis/EXP937-runfragment-header-offsets.md. Hardwarehypothesis: exactsame
+CPUuploadfullcopy should become0wrong/4096000. Ifnot, collectimmediately/rejectas
+sufficientcause. Ifpasses thenwindowedpresent/physical, nostabilityuntilcorrectimage.
+Separateobservedomission: AuxFBInfo width/height remain16 atwork0xb8/bc and0x6e0/e4;
+notchangedin937 (onevariable). Potentialnexttargetonlyafter937result.
+
+Current936stilloriginal, no rollbackyet. NextfreezeoriginalETL/frame/UMD, hostverify,
+normal377/392 recovery/exact936cleanup/durableCode28, thenstageonlyverified937.
+No speculativeNO_REDIRECTION/caps/pitch/fwchanges. Accepted/stablepackageNONE.
 
 ## EXP934 original evidence (closed; do not treat this as live guest)
 Fullowner96715/exec40531 (verifyfresh), package934/oem5, bootEvent122291 Start22:33:09.4783648Z (CIMshift22:33:55.992455),
