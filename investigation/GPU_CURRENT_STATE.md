@@ -1,178 +1,187 @@
-# J313 GPU — EXP941 first real windowed Present S_OK; physical proof pending
+# J313 GPU — EXP942 transfer-failure observation
 
-## Objective and working rules
-Continue until the physical Windows screen shows a correct stable picture.
-Accepted/stable graphics package: NONE. Pixel correctness is now proven; physical
-presentation is not. Never equate a zero cached scanout sample or KMDPresent=0 with
-a physically blank panel: the user's photos showed real moving image fragments.
-Use short falsifiable checks, collect immediately on failure, no multi-minute
-stability wait before correct output. No subagents or messages to other chats.
-Read this file first after reset; consult only referenced experiment records.
+## Objective and rules
+Continue until the physical screen shows a correct stable Windows image.
+Accepted/stable graphics package: NONE. Selected clear/copy pixel workloads pass;
+DWM composition and physical presentation do not. User photo proves real fragments,
+not a blank panel. Keep short falsifiable tests and collect immediately on failure.
+No subagents or messages to other chats. Preserve foreign dirt and existing evidence.
+Read this file first after reset; use only referenced ledger entries/plans.
+Every hardware build/run/recovery: BEFORE + ACTUAL in EXPERIMENTS.md.
+Every implementation: verify, commit, then CHANGES.csv row with full commit hash.
+Do not equate Code0, Present S_OK, SDK exit0, or a zero cached sample with visual success.
 
 ## Workspace
-Source worktree /Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler
-(physical /Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler),
-branch integration/ad04-windows-compiler. ROOT=/Users/pavel/public_windows.
-Artifacts ROOT/.local/experiments, never worktree/.local. Preserve foreign dirt:
-m1n1_windows/rust/vendor/rust-fatfs, mu, untracked
- drivers/apple-agx/render-admission/pauls@192.168.1.24.ps1 and
- investigation/analysis/EXP895-standard-blt-stimulus-plan.md.
-Every hardware build/run/recovery has BEFORE and ACTUAL in EXPERIMENTS.md.
-Every code change: test, commit, append CHANGES.csv row with full commit hash.
-Ledger-only commits need no row. Do not overwrite an old result as successful.
+Worktree /Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler
+(physical /Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler).
+Branch integration/ad04-windows-compiler. ROOT=/Users/pavel/public_windows.
+Artifacts ROOT/.local/experiments, not worktree/.local.
+Foreign dirt: m1n1_windows/rust/vendor/rust-fatfs, mu;
+untracked drivers/apple-agx/render-admission/pauls@192.168.1.24.ps1 and
+investigation/analysis/EXP895-standard-blt-stimulus-plan.md.
 
-## CURRENT — EXP941 active; first real windowed Present S_OK
-Source382a333d65368453879155a21895bbef280ba126; ROOT941=.local/experiments/EXP941-native-shared-presentation.
-All555source/native/WDK0warnings/signatures/hosthash/PDBGUIDage gates PASS.
-SYS23a792a3f17d9e23ebc5d49696da355ff9234402f447877efa7e3738afb2ebe5
-UMDd98dab01b6dcaa636191506138b0b097afcd9ec116ed629827d065c27c5eb814
-INFe84f516ca2112460e0c0d7f8e99fc42d65a975c2dcb6e5349a8cf6012378286b
-CAT6f79d1a642f0b7d827e94df494825a6399cab138a0823b71b94f071274deea1a
-NativeGPUVA+extendedDXGI1.1 success usesS_OK; software/base retainsNO_REDIRECTION.
-CurrentWin11D3D11 consumer scope; legacyD3D9interop notclaimed. NoDDI/cap/fwchange.
+## Current — EXP946 rejected, exact cleanup complete; no accepted graphics
+No working/stable physical-screen result. Last operator photo941 showed moving
+wallpaper fragments and scanlines. Physical observation requested for944/946,
+no new answer yet. Do not equate Code0 or Present S_OK with a correct panel.
 
-940 original frozen/hostverified and exactoem5 cleanup complete. First normal
-recovery selfPSCIreset; one retry recovered. No new1001/41 inselectedinterval or
-newdump; reasonunknown. DurableCode28 baseline124297 passed;941only staged/armed.
-Ordered fullrestart05:54:07.373Z, launchsamebdcf/MuR143. Current launcher65399,
-session23072; do notreset orrawproxywhileowned. Original941 immutableevent124399,
-Start2026-10-03T05:54:17.4508010Z, generation242524939; CPU8/Code0/Stage12/HVC1,
-Armnull/exact941. Runtime bootclock differsfromimmutableevent; useeventidentity.
+EXP946 source9808992403f1d048d4d4d53f9d1ccaf0601e846b broadened UMD
+WrittenPrimary classification to every BindFlags PRESENT resource. Real x64 UMD
+fixture oldRED/newGREEN and package ARM64 WDK/sign/hash/PDB gates passed.
+Full boot125909 Start13:34:52.1487742Z Code0/CPU8. Same ce544 windowed
+SDK7052 Present1 S_OK/exit0, but DWM1224 SubmitCommand carrying one
+WrittenPrimary returned E_INVALIDARG (0x80070057) repeatedly for distinct
+handles; no successful DWM Present in bounded receipt. Microsoft
+D3DDDICB_SUBMITCOMMAND remarks specify D3D11 FlipEx/primary uses the
+DISPLAYABLE_SURFACE flag; legacy PRESENT alone is not sufficient. 946 verdict
+REJECTED. Original946 state/UMD/ETL hostgate
+cf686b92e4fce8f0947c48f2fadbbcd3a526a075cc9f95358646759cc14109e3.
+Corrective commit d49f3013b510ce680e40e58778d2188a63d99767 restored
+narrow marker and added negative regression: x64 real fixture RED bad946,
+GREEN revert. Correction is software-only, no new hardware package built.
+Exact946/oem5 removed and ordinary GPU-visible377392 recovery durable boot126116
+Start13:53:35.7943112Z: oneCode28/CPU8/packages0/services0/signerfalse/
+filesfalse/SystemFlush0/Cnotdirty/free12537999360. No AppleAgx installed.
 
-SAMEce544 --windowed SDK3940: create/clear/realPresent1/device-after ALL S_OK,
-first improvement over940OCCLUDED. UMDactualPresent callback androtation S_OK.
-stdout971B SHAdf80d167478f4b545f3ceb464b8112cc6c3d880ad207256716286f9545c93055.
-Task267014 terminated before finalmanifest; later host-recovery-manifest validates
-stdout/stderr hashes andSDKabsence, ownedtaskremoved. No boundedexit claim.
-Postwindowed DWM1244:97submit95complete +2/2, Present0/Virtual0/TDR0.
+EXP945 source774d64c4f5f867c68085ca3b4c925655281bf80c was diagnostic
+only. Full boot125612 Code0/CPU8. Same ce544 windowed Present1 S_OK/exit0.
+DWM Present source allocation40003500 VA1f0000 had WrittenPrimary0, and
+its actual written BO submissions had NumPrimaries0/S_OK. This is a legacy
+copy-style path, not proof of a missing flag. Original945 hostgate
+648d7569f09aeb91c3d13402c85aa3bc768654b9e7a6021e912f23be6399c2cb.
+Normal recovery with945 first self-PSCI-reset and retry stalled (CPU IRQ
+counts static); immutable hidden385 restored SSH, exact945 package removed,
+normal clean Code28 confirmed before946.
 
-Same941 fullscreenSDK3732 pendingCreateSwapChain12s; pairedsdk108978B
-SHAa8c1becb088101f2035f5da928b5866ee8d153bd807fc50a91cab34c0706d985,
-DWM117870B SHA48e276e615228e95ac98f8868ff1ba2cf95ce35c1dd61603101a2b46182b0824.
-All7fileshostverified, SDKkilled~14.37s/taskremoved. Matching941PDB decodeEXP941-paired:
-SDK DXGIproxywindow->DWM ALPC; DWM LPC privateRELEASE->ContextRetire->UpdateSubresourceUP.
-Changing snapshots andcontinuedsubmissions are notpermanentdeadlockproof.
-Do notrepeatfullscreen orblindly changeanotherescape flag.
+EXP944 sourceae8f50a07fa16da540c1adaa51609cb986cdca7c fixed documented
+DISPLAYABLE_SURFACE/pPrimaryDesc written list. Full boot125308 Code0/CPU8;
+SDK direct displayable submitted NumPrimaries1 and Present1 S_OK. DWM UMD
+Present S_OK but KMD Present/VirtualPresent0; DWM114 render submits completed.
+Transient wait_paging in first DWM dump absent in second, so permanent paging
+hang REJECTED. DCP-selected PA8e0110000/VA1500110000 unchanged; m1n1 CPU
+window snapshots zero even at600s, coherency caveat. Original944 hostgate
+297504768b5307d048a5b33a60985057e2a5931f8214084e71318d8799263b7b.
+No physical success proof. 944 exact cleanup and durable normal Code28 done.
 
-Physical941question ispending (sentafterwindowedS_OK); lasthumanfeedback936artifacts.
-Preserve941activeboot whileawaitingphysicalfeedback. No stable/workingdisplayclaim.
-Nextcausalboundary: DWMcomposition/presentation -> actualscanout. A new experiment
-must distinguish this boundary, not repeat now-provenwindowedadmission. Source
-UpdateSubresourceUP unconditionallyFlushRetires wholecontext; resource-map upstream
-has own hazards, but no new fix justified yet. Do not remove synchronization blindly.
-Posttests SSHalive/RDPserviceRunning/storageUSBstatusOK; no currentSystem1001/Application1000/newdump. Physicalinputnotoperator-tested.
-Nooriginal941freeze/ETLstop/rollback yet; collectfinalbeforeexact941normalcleanup.
+NEXT CAUSAL TARGET: determine whether DWM's completed render target GPUVA
+(around0x1f0000 in its process) resolves to the same local physical surface
+that DCP scans at PA8e0110000, or whether an explicit copy/flip is missing.
+Read primary Asahi DCP, m1n1 selected-surface, Mu ACPI and official Microsoft
+DXGI/WDDM contracts already inspected this turn. Current KMD owns the
+GpuvaG3 logical PTE graph and has DWM FrameArm context/process/VA under lock;
+it can observe this mapping without changing render or presentation. Design one
+minimal receipt-only discriminator with expected result and rollback before any
+hardware. No more capability-bit or broad WrittenPrimaries probing. Avoid
+another old-reference archaeology pass. WHY CLEAN RECONSTRUCTION: current
+runtime boundary is observable through narrow contracts; old admission history
+cannot distinguish the current DWM-to-DCP gap.
 
-ROOT940=.local/experiments/EXP940-private-release-software.
-940SYSa8748efa750df0f3e2fba3cfbbf0b082477f1582d0293b0a0039c0e46d24096c
-940UMDa89ecaa21aba054543da8433a632e542920a2d1b07b4836fdefc820017f85f80
-940INF00f2ae4fe2782d670ce661cd0f4e515084e65658d0030725b83b5b6a29317a3b
-940CATcd3f683e2ec5dc942c01f167ee0bf90c87dda0ef0249799b35811148912ad682
+EXP942 source2b6e8792ca02caab0597a45af974b0ab269f58d6 added separate
+UPLOAD/DOWNLOAD failure receipt withoutcopybehaviorchange. Boot124717,
+Start10:35:38.0757362Z/gen242360341/Code0/Stage12/HVC1/CPU8.
+Samece544 --windowed SDK3904 actualPresentS_OK/devicehealthy/exit0 (~11s),
+stdoutSHAe8e3fba418749898cb3c9fa311c877aa36857883d516e00d2d659e394b993713.
+Explorer6184 ResourceCopyRegion failed at QUERY step1 BEFORE transfer.
+QUERYpredicate56: no logicalPTE for VA0x11001f0000/64KiB, process9,
+root9df3a0000/mappinggen21048. Receipt reasonnone because walk was unfilled.
+No Wom1G3CopyTransferFailure key. High-VA real-handler alias QUERY replay
+passed16/64; arithmetic workswhen tablelinks exist. Original942 final files/ETL
+hostverified internalEXP942-original, gate
+ da45f71d8841c5e1c4e9535b097facfb7a6c6c298558b9b7c24996628bf9636.
+ETL had no map eventsinfirstfailure interval; one offlinepass exhausted.
+942cleanupanddurableCode28 verifiedabove.
 
-939 fullscreenSDK5644: CreateSwapChainForHwnd did not return within12s. Paired
-SDK/DWM1236 snapshots then only SDK killed. SDK104871B SHAab7d3d8b41580f44e149d431e2eb804514d9c03ce021af291a7ba73202658565;
-DWM141374B SHA3cb29463d285c32a83883d944ca1015346d64fe3c780e691d3d16de441853fd5.
-Six files host verified, taskEXP939-FullscreenSdk removed.
-Decode ROOT/.local/experiments/EXP939-paired/{sdk,dwm}-decoded.txt with matched939PDB.
-DWM LPC now in private_escape -> AgxWin32AsahiBatchRelease, within FlushRetire /
-D2D constant-buffer update. SDK waits DXGI proxy-window -> DWM ALPC. This is one
-observed wait boundary, not proof of permanent deadlock. No repeated fullscreen.
+WHY CONTINUE COMPARISON: 942 actually rejected a resource QUERY on absent logical
+PTE, but did not identify where the page-table walk broke. 943 adds only that
+missing classification. Admission reconstruction and old archaeology do not
+resolve this current runtime boundary. No repeated fullscreen/GDI capture.
 
-939 unique-coordinate pattern PID1836: all4096000 pixels correct, firstff000000,
-lastff3e7fff, pitch10240, deviceS_OK, exit0/no timeout9.32s. This excludes repeated
-or permuted tiles for the tested GPU copy. Host stdout895B SHAc241245f64c1d8bb65e3757120b24641009f725fa9004999d190cbc28f265f45.
-Pattern source0ab19bc4 (fullhashGit), binarye114a0ae91e86a272107ad839df615ad00f5e0256d9d3fa80f8c758a5d78c547,
-ROOT/.local/experiments/EXP939-coordinate-pattern. TaskEXP939-PatternSdk removed.
-No owned SDK processes/tasks remain. No physical-screen confirmation for939.
+## EXP941 findings and rollback
+Source382a333d65368453879155a21895bbef280ba126 changed native GPUVA+DXGI1.1
+successful CreateDevice policy to S_OK; software/base retain NO_REDIRECTION.
+Current Win11/D3D11 scope; D3D9 interoperability is not implemented/proven.
+Same ce544 windowed SDK3940: actual Present1 and device-after S_OK, previously
+OCCLUDED. stdout971B SHA df80d167478f4b545f3ceb464b8112cc6c3d880ad207256716286f9545c93055.
+Wrapper267014 terminated before manifest; later host receipt verified stdout
+and process absence. Do not claim a bounded successful process exit.
+Fullscreen3732 still pending12s; paired SDK/DWM1244 snapshots, then onlySDK killed.
+Matched941PDB decode EXP941-paired: SDK waits DXGI proxy->DWM ALPC; DWM at
+privateRELEASE->ContextRetire->UpdateSubresourceUP. Moving snapshots are not proof
+of a permanent deadlock. All owned tasks removed.
 
-## EXP940 result and retained contract
-Source ec73437819d57a721694976855ded432b5ddfcc9 changes private RELEASE to
-software entry plus safe deferred ownership transfer. Queued/Submitting/owner
-JobInFlight/LeaseToken retain mappings; existing reaper unmaps/revokes/zeros/frees
-only after holds end. Authentication, generation, quarantine and fence guards
-retained. Real16/64KMD/graph/m1n1 replay old RED/flag-only BUSY/final GREEN.
-Current fullscreen still pending12s, paired stack moved to NtDestroyAllocation
-inside agx_pool_cleanup/ContextRetire/D2D UpdateSubresource. A changing snapshot
-is not proof of a permanent deadlock at each operation. No more blind flag edits.
-941 native shared-route hypothesis is recorded in its plan; first windowed test.
+Operator photo5A3341E7 confirms repeated wallpaper strips and scanlines on941.
+Photo archived internal EXP941-crash/operator-photo.jpg SHA
+ d33fdff73e787583c6cdf77e5dca289e519ce1fe9d4749dddfe953f4fd2fbf64.
+Same boot124399/gen242524939 was still alive4hourslater. DWM186submit184complete
+plus3/3, Present0/Virtual0, source address assigned once0x1500110000 ->PA8e0110000.
+Existing120/300/600s snapshots confirm sameDCPswap9/DVA102a0000 with0/537413/539383
+nonzero pixels. Not blank; pixel correctness of offscreen copies is insufficient.
 
-## Proven changes and remaining boundaries
--935 sourcea1d58340 fixed clearing an unbound RTV; hardware clear nowexecutes.
--936 source4e7bba96 fixed direct-primary rotation identity; rotationS_OK/no deviceerror.
--937 source2c66edbb corrected RunFragment headermerge/tilecount offsets
-  0x60/64/70 ->0x68/6c/78. RealABI defect, but did not remove pixel corruption.
--938 source8e947fc4 corrected ISP_MTILE_SIZE y/x offsets0x3e0/e2 ->0x3e8/ea.
-  Template4x4 became correct20x16 for2560x1600/utile32. Identical fullcopy changed
-  from204800 bad pixels to0/4096000. SharedGPUclear/local and cross-process green
-  readback also0bad;939 coordinate-pattern confirms spatial identity.
--939 FrameArm metadata request no longer asks Windows level-two GPU-idle entry;
-  actual UMD/KMD/CPUwriter tests RED/GREEN with ownerguards. Fullscreen stillpending;
-  next paired stack moved to RELEASE. Do not claim939 alone fixes the desktop.
+GDI CopyFromScreen timedout30s/noPNG; task removed. Afterwards DWM1244 crashed
+10:01:46Z c0000005 in dwmcore!CComposition::PreRender+2e4 reading00000000f1fb9f70;
+new DWM2356. Crash preceded by UMD Flush E_INVALIDARG, causality not established.
+Crashdump3355744B independently verified SHA
+6db8f4e415f059a62a0c91b11751d20de0ab13db90a188d5e65ce000b7273f99, internal EXP941-crash.
+New1a8 Source10 is a diagnostic live dump, NOT a real bugcheck; retained WERqueue
+copy and decoded EXP941-crash/kernel-decoded.txt. Do not blame it for earlier photo.
+Visual hold app0f8d237c (fullhashGit), binarybd68cae693fd276082ec4b230ca39bbd75b3cac427ae925677b8150bf3cd54dc:
+SDK2492 failed EnumOutputs0=887a0002/exit6 BEFORE drawing. No green frame produced.
+Active consolePavelSession1/noRDP session; Code0/resolution persisted nonetheless.
 
-One938 shared-clear run7392 exited7 with CompleteS_OK and unlogged device reason.
-Receipt-only appchange86f02b00 subsequently showed deviceS_OK and0bad. Earlier
-failure remains unexplained; no TDR captured. Do not silently erase it.
+Original941 final fourfiles+ETL frozen/verified internal EXP941-original with
+ROOT941/original-final symlink; hostgate903ad13e7e3b745c1416ef07ab36b513c28e85777d3ab77591eb88570576b060.
+Ordered restart10:11:03 delayed; Win32ShutdownFlags6 returned1115. SYSTEM/SOFTWARE
+and volume C: flush PASS10:14:47.830Z. Windows finally issued PSCI RESET itself.
+Planned SIGTERM was NOT sent (set-e stopped on SSH timeout); only SIGINT snapshot
+and continue occurred. Normal377392 recovered,941/oem5 removed, ordered clean
+restart10:19:12.129Z; durable Code28 gate above passed. No forced host reset.
 
-938 windowedSDK6264: device/create/clearS_OK but Present1=087a0001 OCCLUDED.
-936 readiness already excluded minimized/background/initial-message-pump causes;
-WARP producer on same output presentedS_OK (notAGX/physical proof).
-936 live CDB traced NtGdiDdDDIPresent=c01e0006, flags3081 legacyBlt, beforeKMDPresent.
-NO_REDIRECTION inherited software path disables DWM shared-resource presentation.
-Microsoft docs include legacyD3D9 interoperability requirements; D3D11 sharingPASS
-is not proof ofD3D9 support. Do not blindly toggle returnstatus orcaps. ROS sample
-is RENDER_ONLY; use only commonUMD semantics, no admission/scheduler assumptions.
+## Earlier proven invariants
+935 a1d58340: unbound RTV Clear binding corrected, hardware clear executes.
+936 4e7bba96: direct-primary rotation compares KernelAllocation, rotation S_OK.
+937 2c66edbb: RunFragment headermerge/tilecount offsets68/6c/78 corrected;
+this alone did not fix pixel corruption.
+938 8e947fc4: ISP_MTILE_SIZE y/x3e8/3ea corrected (old3e0/3e2); same fullGPUcopy
+changed204800 bad pixels to0/4096000. Shared GPU clear/open/cross-process also passed.
+939 coordinate pattern0ab19bc4: all4096000 unique coordinates matched, not just green.
+939 bb2fbabf: CPU-only FrameArm software entry; owner guards retained.
+940 ec734378: private RELEASE software entry with safe deferred reclamation;
+retains queued/submitting/job/lease holds, quarantine and broker checks.
+AuxFBInfo dimensions still16 atb8/bc and6e0/e4: known omission, unbuilt commit
+2aaf9e38 reverted90db80be before938. No new evidence identifies it as current cause.
+DCP basic uncompressedBGRA descriptor matches m1n1 reference. Asahi pix_size1
+comment is for compressed/multiplanar surfaces; do not guess a stride/format fix.
+One938 shared clear exited7 with unlogged device reason; later receipt-only retry
+passed. Earlier unexplained failure remains, not erased.
 
-AuxFBInfo dimensions still16x16 atwork0xb8/bc and0x6e0/e4: separateknownomission,
-not changed. Commit2aaf9e38 was unbuilt and reverted90db80be before938. Do notbundle.
-Other size2/utile concerns unproven for current32x32 input; no speculative edits.
+## Controls and recovery
+Air pavel@192.168.1.37 key /Users/pavel/.ssh/air; LogLevel=ERROR BatchMode=yes
+ConnectTimeout=5 ConnectionAttempts=1; knownhosts ROOT/.local/experiments/EXP641-standard-present/air_known_hosts.
+Builder pauls@192.168.1.24 key /Users/pavel/.ssh/windows_builder.
+USB /dev/cu.usbmodemC02HDNCCQ6L41 andL43. Check both control planes before physical
+requests. SIGINT exactowner snapshots+continues; SIGTERM snapshots+resets. No nested
+proxy calls in handler, no rawUSB with liveowner. SSH timeout alone is not a GPU hang.
+Normal recovery ROOT/.local/experiments/EXP810-g4-package817/recovery:
+ m1n1-exp377.macho SHAfae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a
+ J313_EFI-exp392.fd SHA16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06
+GPU visible/broker disabled. Hidden385 emergency only. Exact cleanup every package.
+Fullm1n1 EXP933-hvc-return-contract/m1n1-exp933.macho
+ SHAbdcf87154043535f4bcfcba0aa04e30c97d4877dd3ba9c87e18b6af287158395
+Mu EXP928-selected-primary-lifetime/firmware/J313_EFI-r143.fd
+ SHAe54c009847e64a4b2b327f54385eedb94f5a9e5fd3b459fd6101b07af4c023fc
+Signer E9BE15BD2A184BFABA0C8035B3C620C58037A241; certSHA97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda.
+SDK ce544e78e8f12e0d3e71f8b9f34c6c57f79c8490125fedb5ff13514ac4a4529b.
+Dumphelper046e4063d23e8cb3451d5dd61e160ceb58018e1e2a92b5925b1babc250bb6301.
+Frameprobe EXP928/AppleAgxBltProbe.exe28f636f19efb2ba165a59c70a7ff7c117a04a6401cc911ec40948f7a553b7bf1.
 
-## Recovery / control / build
-Air pavel@192.168.1.37, key /Users/pavel/.ssh/air; use LogLevel=ERROR, BatchMode=yes,
-ConnectTimeout=5, ConnectionAttempts=1, known-hosts
-ROOT/.local/experiments/EXP641-standard-present/air_known_hosts.
-Builder pauls@192.168.1.24, key /Users/pavel/.ssh/windows_builder.
-USB /dev/cu.usbmodemC02HDNCCQ6L41 and...L43. Before physical requests orreset, check
-boundedSSH plus expectedUSB and exact active launcher. No rawproxy while ownerlives.
-SIGINT to exactrun_uefi PID snapshots+continues; SIGTERM snapshots+resets. Never issue
-nested proxy reads inside the interrupt callback. Prefer ordered Windows restart
-with registryflush. Unreachability can be delayedNIC/DHCP: sameRTL MAC00:e0:4c:68:12:b1
-was seen at169.254.241.29 before normal192.168.1.37 returned. Do not infer GPUcrash.
-
-Normal immutable GPU-visible broker-disabled recovery:
-ROOT/.local/experiments/EXP810-g4-package817/recovery/m1n1-exp377.macho
-SHAfae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a
-and J313_EFI-exp392.fd SHA16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06.
-Hidden385 emergencyonly when normalguest cannot be recovered; none used this turn.
-Normal sequence: freezeoriginal ->377392 Code43 exactoldpackage ->exactcleanup ->
-ordered durable restart ->377392 Code28/no package/service/signer/files/RegFlush0/
-Cnotdirty ->stageonlynewhashverifiedpackage+arm ->sealmanifest ->orderedfullboot.
-939 normalrecovery/exactcleanup scripts prepared asdescribed above.
-
-Fullm1n1 ROOT/.local/experiments/EXP933-hvc-return-contract/m1n1-exp933.macho
-SHAbdcf87154043535f4bcfcba0aa04e30c97d4877dd3ba9c87e18b6af287158395.
-MuR143 ROOT/.local/experiments/EXP928-selected-primary-lifetime/firmware/J313_EFI-r143.fd
-SHAe54c009847e64a4b2b327f54385eedb94f5a9e5fd3b459fd6101b07af4c023fc.
-Pinned signerE9BE15BD2A184BFABA0C8035B3C620C58037A241,
-certSHA97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda.
-Air signtool C:\Users\pavel\J313-tools\signing\signtool-arm64.exe
-SHA097bdc4805f0cdcb4c1689a1533b0eb9a6143c3751c421b7ecc26b5c8cd5f0b1.
-Builder signtoolSDK26100x64 temporaryRoot import/restoration verified eachpackage.
-PDBs internal /Users/pavel/J313-evidence-archive/2026-10-03/EXP{936..939}-build/symbols.
-Use /tmp/j313-hvc-abi-test/bin/python(pefile), /opt/homebrew/opt/llvm/bin/llvm-pdbutil.
-
-Source build export scripts/g3_build_source_manifest.py --root WORKTREE --commit
-HASH --manifest ROOTNEW/source-manifest.json --archive ROOTNEW/source.zip.
-Current555 inputs. Clone previous build-kmd.ps1 with exact newhashes/commit/build.
-Store largeETL/PDB internally, verifyhash before preserving original-path symlink.
-Externalpwdev~5GiB free (full-launch gate>=5GiB); internal~80GiB. Preserve latest50
-guestexperiments. No more spacecleanup needed unless gatefails.
-
-938 final hostgate1309dc278d0fd2149a5cbe1639f51850e36fd3c570027de5a5ed53f3bfa5756b;
-ROOT938/original-final symlinkinternalEXP938-original. Allrecent NTFS flush/clean
-checks pass after931 recovery; do not re-enter oldNTFS repair orreplacehives.
-One937 normalrecovery selfPSCIreset hadKernel41/no1001/newdump; retryhealthy, reason
-unknown. No hostforcedreset. All other transitions ordered.
-
-Unrelated pre-existing test limits: frontendprepare localreference path/dirtyMesa;
-virtual-submit replay harness missingAdmissionMemoryRuntimeLocalView/Inner prototypes.
-Do not claim whole-suiteGREEN orfixunrelatedharness. Relevantfocused suites above pass.
+## Build/evidence constraints
+Source manifest scripts/g3_build_source_manifest.py --root WORKTREE --commit HASH
+--manifest ROOTNEW/source-manifest.json --archive ROOTNEW/source.zip.555inputs.
+Pinned SDK26100/v14314.44.35207; exact sign/hash/ARM64/PE-PDB gates each build.
+PDB check /tmp/j313-hvc-abi-test/bin/python and /opt/homebrew/opt/llvm/bin/llvm-pdbutil.
+External launch gate>=5GiB.939/940/941 UMD copies now verified original-path symlinks
+to internal archive; mapping EXP942/evidence-relocation.json. No evidence deleted.
+Large ETLs/PDBs internal /Users/pavel/J313-evidence-archive/2026-10-03.
+Unrelated existing test limitations: frontendprepare reference path/dirtyMesa;
+virtual-submit replay missing AdmissionMemoryRuntimeLocalView/Inner declarations.
+Do not claim whole-suite GREEN or fix unrelated harnesses.
