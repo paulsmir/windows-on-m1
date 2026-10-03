@@ -1,0 +1,25 @@
+# EXP941: select the native shared-resource presentation path
+
+WHY THIS HYPOTHESIS:
+1. EXP938/939 hardware tests prove native GPU-backed BGRA shared create/open, completion, clear, full copy and coordinate-preserving readback across processes. All4096000 pixels match. These are real GPU resources; the direct allocations have no CPU staging mapping.
+2. Current940 windowed Present still returnsDXGI_STATUS_OCCLUDED with a healthy device. DWM itself now calls the UMD Present callback (13 measured calls), but no KMD Present is recorded. Earlier native syscall tracing returnedSTATUS_GRAPHICS_PRESENT_OCCLUDED on the legacyBlt route. The source still unconditionally takes the inherited `if (0)` / NO_REDIRECTION branch.
+3. Microsoft defines NO_REDIRECTION as opting out of DWM shared-resource presentation in favor of a CPU-buffer presentation path. That does not describe the native GPUVA resources and hardware Present implementation. The measured consumer is current Windows11 DWM usingd3d11.dll and this UMD, not an assumed legacy consumer.
+
+WINDOWS CONTRACT: FULL GRAPHICS KMD, native GPUVA UMD supporting the current D3D11 runtime through its negotiated D3D10_0_x interface and DXGI1.1 table. S_OK is successful context creation with the shared-resource path available. The extended table is necessary because this implementation supplies ResolveSharedResource there. Software/non-GPUVA and base-table contexts retain NO_REDIRECTION. No feature level, capability bit, DDI version or function-table size changes.
+https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3d10umddi/nc-d3d10umddi-pfnd3d10ddi_createdevice
+https://learn.microsoft.com/en-us/windows-hardware/drivers/display/supporting-the-dxgi-ddi
+https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/dxgiddi/ns-dxgiddi-dxgi_ddi_arg_resolvesharedresource
+
+Compatibility scope: the DXGI article also describes legacy D3D9 interoperability. Cross-process D3D11 success does not establish D3D9 support, which remains unimplemented/unverified here. This experiment targets the observed Windows11/D3D11 consumer and does not claim general legacy compatibility or a complete certified driver. The old base/software paths remain unchanged. Microsoft ROS is RENDER_ONLY; its CreateDevice S_OK / shared-resource behavior is only a common UMD reference, not a full-graphics admission or scheduler reference.
+
+AGX/ASAHI CONTRACT: native shared allocation adoption, linear layout, per-process GPUVA mapping and real render completion are already implemented and hardware-validated. Source inspection covers AdmissionUmdDescribe/Create/OpenResource, native shared import, AgxResolveSharedResource->FlushRetire, direct rotation identity, resource residency, and native Present forwarding the opaque DXGI context unchanged. Actual kernel/Asahi/broker/MMIO/UAT/IRQ/power/Mu contracts remain the validated940 path. No external code copied and no register or Windows-interface values guessed.
+
+TRANSLATION: after successful native device initialization, use S_OK only for APPLE_AGX_GPUVA_WINSYS plus the negotiated extended DXGI table. Keep the real Create/Open/Resolve/retirement path and guards. The receipt reports the same selected status. Failed initialization still returns its existing failure. Do not parse pDXGIContext or manufacture a successful Present.
+
+ATOMIC CONTRACT: the CreateDevice success result and its diagnostic receipt describe the same selected presentation route. This is one policy correction, not a collection of capability probes. Required Create/Open/Resolve operations are implemented and pixel-tested; no fail-closed callback is changed into a fake success.
+
+WHAT IS STILL UNKNOWN: how the current Windows11 DXGI/DWM path proceeds once this native context no longer opts out of redirection. One samece544 --windowed test must show actual Present behavior and the shared Create/Open/Resolve callback route; positiveOCCLUDED is still failure. Any newly requested unsupported operation must be reported and fixed in its owning layer rather than hidden. Fullscreen proxy latency and physical scanout remain separate checks. Do not claim display success from CreateDevice S_OK alone.
+
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Compile the actual projected successful-CreateDevice tail: old native GPUVA/extended-table path returns the inherited opt-out status (RED). The new policy returns S_OK there while software and base-table paths retain NO_REDIRECTION, and diagnostics use the same selector. Existing native-device failure/lifetime, unbound-clear and direct-rotation tests plus pinned WDK compilation verify surrounding wiring. Hardware pixel evidence supports the shared-resource prerequisite; it is not replaced by the unit shim.
+
+Recovery: preserve original940 evidence, ordinary377/392 GPU-visible recovery, exact940 package cleanup and durableCode28 before staging only hash-verified941. Samebdcf/MuR143 firmware. Keep macrogeometry, FrameArm and safeRelease corrections; no AuxFB or unrelated BLT/capability changes. First test windowed Present with a short bound, then physical output if the route advances.

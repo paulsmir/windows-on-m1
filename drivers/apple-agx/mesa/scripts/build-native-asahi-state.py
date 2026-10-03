@@ -818,6 +818,21 @@ struct Query
     change('src/gallium/frontends/d3d10umd/Device.cpp',
         'dcf950aec993d40743671e1f208655e151158a9b4647bc3581dcd134962086aa',[
         ('#include "Format.h"', '''#include "Format.h"
+static HRESULT
+AgxNativeSharedPresentationStatus(UINT interfaceVersion, UINT runtimeVersion)
+{
+   /* The native GPUVA implementation has GPU-backed shared allocations and
+    * implements the extended table's ResolveSharedResource retirement path.
+    * Keep CPU-only/legacy profiles on their original presentation policy. */
+   if (!IS_DXGI1_1_BASE_FUNCTIONS(interfaceVersion, runtimeVersion))
+      return DXGI_STATUS_NO_REDIRECTION;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+   return S_OK;
+#else
+   return DXGI_STATUS_NO_REDIRECTION;
+#endif
+}
+
 static HRESULT APIENTRY
 AgxResolveSharedResource(DXGI_DDI_ARG_RESOLVESHAREDRESOURCE *args)
 {
@@ -846,7 +861,8 @@ AgxResolveSharedResource(DXGI_DDI_ARG_RESOLVESHAREDRESOURCE *args)
       (UINT)pCreateData->Version,
       IS_DXGI1_3_BASE_FUNCTIONS(pCreateData->Interface,pCreateData->Version) };
    AgxD3d10WindowsPresentMeasure(AdmissionUmdMeasureNativeDevice,
-      DXGI_STATUS_NO_REDIRECTION,present_contract,3u);'''),
+      AgxNativeSharedPresentationStatus(pCreateData->Interface,
+         pCreateData->Version),present_contract,3u);'''),
         ('''   struct pipe_screen *screen = pAdapter->screen;
    struct pipe_context *pipe = screen->context_create(screen, NULL, 0);
    pDevice->pipe = pipe;
@@ -880,7 +896,8 @@ AgxResolveSharedResource(DXGI_DDI_ARG_RESOLVESHAREDRESOURCE *args)
         ('''   if (0) {
       return S_OK;''','''   pDevice->frontend_ready = true;
    pDevice->cleanup_result = S_OK;
-   if (0) {
+   if (AgxNativeSharedPresentationStatus(pCreateData->Interface,
+          pCreateData->Version) == S_OK) {
       return S_OK;'''),
         ('   pipe->destroy(pipe);','''   pDevice->frontend_ready = false;
    pDevice->pipe = NULL;
