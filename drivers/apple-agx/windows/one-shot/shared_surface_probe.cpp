@@ -112,6 +112,15 @@ static int Consume(HANDLE handle) {
     return 25;
   uint64_t mismatches = 0;
   uint32_t first = 0, last = 0;
+  UINT *bad =
+      (UINT *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
+                        (size_t)(desc.Width + desc.Height) * sizeof(UINT));
+  if (!bad) {
+    context->Unmap(staging.Get(), 0);
+    return 27;
+  }
+  UINT *badRows = bad;
+  UINT *badColumns = bad + desc.Height;
   bool valid = mapped.pData && mapped.RowPitch >= desc.Width * 4u;
   if (valid) {
     for (UINT y = 0; y < desc.Height; ++y) {
@@ -123,8 +132,14 @@ static int Consume(HANDLE handle) {
         if (!x && !y)
           first = pixel;
         last = pixel;
-        if (pixel != 0xff00ff00u)
+        if (pixel != 0xff00ff00u) {
+          if (mismatches < 16)
+            printf("BAD_PIXEL x=%u y=%u value=%08x byte_offset=%llu\n", x, y,
+                   pixel, (unsigned long long)y * mapped.RowPitch + x * 4u);
           ++mismatches;
+          ++badRows[y];
+          ++badColumns[x];
+        }
       }
     }
   }
@@ -136,6 +151,20 @@ static int Consume(HANDLE handle) {
          (UINT)valid,
          valid ? (unsigned long long)desc.Width * desc.Height : 0ULL,
          (unsigned long long)mismatches, first, last, mapped.RowPitch);
+  for (UINT axis = 0; axis < 2; ++axis) {
+    const UINT *values = axis == 0 ? badRows : badColumns;
+    UINT count = axis == 0 ? desc.Height : desc.Width;
+    for (UINT start = 0; start < count;) {
+      UINT end = start + 1;
+      while (end < count && values[end] == values[start])
+        ++end;
+      if (values[start])
+        printf("BAD_RUN axis=%s first=%u last=%u count_each=%u\n",
+               axis == 0 ? "row" : "column", start, end - 1, values[start]);
+      start = end;
+    }
+  }
+  HeapFree(GetProcessHeap(), 0, bad);
   fflush(stdout);
   return valid && !mismatches && SUCCEEDED(hr) ? 0 : 26;
 }
