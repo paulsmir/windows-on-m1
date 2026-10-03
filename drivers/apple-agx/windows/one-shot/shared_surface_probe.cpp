@@ -69,7 +69,7 @@ static HRESULT Complete(ID3D11Device *device, ID3D11DeviceContext *context) {
   return hr == S_OK && done ? S_OK : FAILED(hr) ? hr : E_FAIL;
 }
 static int Readback(ID3D11Device *device, ID3D11DeviceContext *context,
-                    ID3D11Texture2D *texture, bool point = false) {
+                    ID3D11Texture2D *texture, bool point = false, bool pattern = false) {
   HRESULT hr;
   D3D11_TEXTURE2D_DESC desc = {};
   texture->GetDesc(&desc);
@@ -133,7 +133,9 @@ static int Readback(ID3D11Device *device, ID3D11DeviceContext *context,
         if (!x && !y)
           first = pixel;
         last = pixel;
-        if (pixel != 0xff00ff00u) {
+        const uint32_t expected = pattern ? 0xff000000u | (y * desc.Width + x)
+                                          : 0xff00ff00u;
+        if (pixel != expected) {
           if (mismatches < 16)
             printf("BAD_PIXEL x=%u y=%u value=%08x byte_offset=%llu\n", x, y,
                    pixel, (unsigned long long)y * mapped.RowPitch + x * 4u);
@@ -196,13 +198,15 @@ int wmain(int argc, wchar_t **argv) {
       return 3;
     return Consume((HANDLE)(uintptr_t)value);
   }
+  const bool pattern = argc == 2 &&
+      wcscmp(argv[1], L"--local-private-pattern") == 0;
   const bool uploadPoint = argc == 2 &&
       wcscmp(argv[1], L"--local-private-upload-point") == 0;
-  const bool privateTexture = uploadPoint || argc == 2 &&
+  const bool privateTexture = pattern || uploadPoint || argc == 2 &&
       (wcscmp(argv[1], L"--local-private") == 0 ||
        wcscmp(argv[1], L"--local-private-upload") == 0);
   const bool point = uploadPoint || argc == 2 && wcscmp(argv[1], L"--local-point") == 0;
-  const bool upload = uploadPoint || argc == 2 && (wcscmp(argv[1], L"--local-upload") == 0 ||
+  const bool upload = pattern || uploadPoint || argc == 2 && (wcscmp(argv[1], L"--local-upload") == 0 ||
        wcscmp(argv[1], L"--local-private-upload") == 0);
   const bool local = privateTexture || point || upload || (argc == 2 && wcscmp(argv[1], L"--local") == 0);
   if (argc != 1 && !local)
@@ -241,7 +245,7 @@ int wmain(int argc, wchar_t **argv) {
     if (!pixels)
       return 30;
     for (size_t i = 0; i < count; ++i)
-      pixels[i] = 0xff00ff00u;
+      pixels[i] = pattern ? 0xff000000u | (uint32_t)i : 0xff00ff00u;
     context->UpdateSubresource(texture.Get(), 0, nullptr, pixels, desc.Width * 4u,
                                desc.Width * desc.Height * 4u);
     HeapFree(GetProcessHeap(), 0, pixels);
@@ -259,7 +263,7 @@ int wmain(int argc, wchar_t **argv) {
     return 7;
   if (local) {
     Stage("producer-local-readback", S_OK);
-    return Readback(device.Get(), context.Get(), texture.Get(), point);
+    return Readback(device.Get(), context.Get(), texture.Get(), point, pattern);
   }
   ComPtr<IDXGIResource> resource;
   hr = texture.As(&resource);
