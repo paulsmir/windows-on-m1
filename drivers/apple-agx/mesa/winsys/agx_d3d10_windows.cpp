@@ -797,7 +797,8 @@ HRESULT AgxD3d10WindowsPresentationRotate(
     if(!slot || !slot->Borrowed || slot->Transition || slot->SubmissionHolds ||
        slot->SourceHolds ||
 #ifdef APPLE_AGX_GPUVA_WINSYS
-       slot->StagingAllocation!=r->Resource.KernelAllocation
+       (slot->Direct ? slot->KernelAllocation : slot->StagingAllocation)!=
+           r->Resource.KernelAllocation
 #else
        slot->KernelAllocation!=r->Resource.KernelAllocation
 #endif

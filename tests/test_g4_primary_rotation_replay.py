@@ -66,7 +66,7 @@ struct Transport { uint64_t Token; };
 struct RenderBuffer { Transport Transport; };
 using AGX_WIN32_SCREEN_BUFFER = RenderBuffer;
 struct ADMISSION_UMD_SCREEN_BUFFER {
-  BOOL Active, Borrowed, Transition, SubmissionHolds, SourceHolds;
+  BOOL Active, Borrowed, Direct, Transition, SubmissionHolds, SourceHolds;
   uint64_t Token;
   D3DKMT_HANDLE KernelAllocation, StagingAllocation;
 };
@@ -185,8 +185,14 @@ int main() {
     slot.Active = slot.Borrowed = 1;
     slot.Token = i + 1;
 #ifdef APPLE_AGX_GPUVA_WINSYS
+#ifdef TEST_DIRECT_PRIMARY
+    slot.Direct = 1;
+    slot.KernelAllocation = 101 + i;
+    slot.StagingAllocation = 0;
+#else
     slot.KernelAllocation = 201 + i;
     slot.StagingAllocation = 101 + i;
+#endif
 #else
     slot.KernelAllocation = 101 + i;
 #endif
@@ -203,6 +209,27 @@ int main() {
     records[i].RenderBuffer.Transport.Token = i + 1;
     records[i].RenderResource = &targets[i];
   }
+  // Real busy ownership still blocks rotation without partially mutating it.
+  for (auto flag : {&device.Runtime.ScreenBuffers[0].Transition,
+                    &device.Runtime.ScreenBuffers[0].SubmissionHolds,
+                    &device.Runtime.ScreenBuffers[0].SourceHolds}) {
+    *flag = 1;
+    assert(AgxD3d10WindowsPresentationRotate(&device, order, 2) ==
+           HRESULT_FROM_WIN32(ERROR_BUSY));
+    assert(records[0].Resource.KernelAllocation == 101);
+    assert(records[1].Resource.KernelAllocation == 102);
+    *flag = 0;
+  }
+#if defined(APPLE_AGX_GPUVA_WINSYS) && !defined(TEST_DIRECT_PRIMARY)
+  auto &identity = device.Runtime.ScreenBuffers[0].StagingAllocation;
+#else
+  auto &identity = device.Runtime.ScreenBuffers[0].KernelAllocation;
+#endif
+  identity = 999;
+  assert(AgxD3d10WindowsPresentationRotate(&device, order, 2) ==
+         HRESULT_FROM_WIN32(ERROR_BUSY));
+  assert(records[0].Resource.KernelAllocation == 101);
+  identity = 101;
   assert(AgxD3d10WindowsPresentationRotate(&device, order, 2) == S_OK);
   assert(records[0].Resource.KernelAllocation == 102);
   assert(records[0].Resource.Retirement->KernelAllocation == 102);
@@ -212,10 +239,17 @@ int main() {
   assert(records[1].RenderBuffer.Transport.Token == 1);
   assert(records[1].RenderResource == &targets[0]);
 #ifdef APPLE_AGX_GPUVA_WINSYS
+#ifdef TEST_DIRECT_PRIMARY
+  assert(device.Runtime.ScreenBuffers[0].KernelAllocation == 101);
+  assert(device.Runtime.ScreenBuffers[1].KernelAllocation == 102);
+  assert(device.Runtime.ScreenBuffers[0].StagingAllocation == 0);
+  assert(device.Runtime.ScreenBuffers[1].StagingAllocation == 0);
+#else
   assert(device.Runtime.ScreenBuffers[0].KernelAllocation == 201);
   assert(device.Runtime.ScreenBuffers[1].KernelAllocation == 202);
   assert(device.Runtime.ScreenBuffers[0].StagingAllocation == 101);
   assert(device.Runtime.ScreenBuffers[1].StagingAllocation == 102);
+#endif
 #else
   assert(device.Runtime.ScreenBuffers[0].KernelAllocation == 101);
   assert(device.Runtime.ScreenBuffers[1].KernelAllocation == 102);
@@ -267,11 +301,16 @@ class G4PrimaryRotationReplay(unittest.TestCase):
     def test_gpuva_rotation_preserves_split_canonical_and_original_identity(self):
         self.replay(True)
 
-    def replay(self, gpuva):
+    def test_gpuva_rotation_accepts_direct_primary_without_staging(self):
+        self.replay(True, direct=True)
+
+    def replay(self, gpuva, direct=False):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "rotation.cpp"
             binary = Path(directory) / "rotation"
             source.write_text(("#define APPLE_AGX_GPUVA_WINSYS 1\n" if gpuva else "") +
+                              ("#define TEST_DIRECT_PRIMARY 1\n" if direct else "") +
+                              "#include <initializer_list>\n" +
                               SHIM + rotation_body() +
                               frontend_rotation_body() + MAIN)
             subprocess.run([os.environ.get("CXX", "clang++"), "-std=c++17",
