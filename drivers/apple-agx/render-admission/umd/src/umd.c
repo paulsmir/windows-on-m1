@@ -749,6 +749,13 @@ HRESULT AdmissionUmdSubmitPresent(ADMISSION_UMD_DEVICE *Device,
   if (ordinal <= 16)
     AdmissionUmdDiagnostic("measure-present-before", S_OK, ticket,
                            ARRAYSIZE(ticket));
+  if (ordinal <= 16) {
+    UINT primary[6] = {(UINT)ordinal, (UINT)present.hSrcAllocation,
+        Source->WrittenPrimary ? 1u : 0u, (UINT)canonicalVa,
+        (UINT)(canonicalVa >> 32), (UINT)Device->FrameSubmittedFence};
+    AdmissionUmdDiagnostic("measure-present-primary", S_OK, primary,
+                           ARRAYSIZE(primary));
+  }
 #endif
   AdmissionUmdPresentMeasure(AdmissionUmdMeasurePresentCallbackEnter,S_OK,NULL,0u);
   HRESULT result=Device->DxgiCallbacks->pfnPresentCb(

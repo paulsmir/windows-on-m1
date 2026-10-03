@@ -530,6 +530,19 @@ static int submit(void *context, const uint64_t *written,
   AdmissionUmdDiagnostic("g4-submit-command-cb", submit_result,
                          submit_values, ARRAYSIZE(submit_values));
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  if (frame_process_is_dwm()) {
+    static volatile LONG observed;
+    LONG ordinal = InterlockedIncrement(&observed);
+    if (ordinal > 0 && ((ordinal & (ordinal - 1)) == 0)) {
+      UINT primary[7] = {(UINT)ordinal, written_count,
+          request.NumPrimaries,
+          request.NumPrimaries ? request.WrittenPrimaries[0] : 0u,
+          trackedAllocation, (UINT)submit_result,
+          request.RenderCBSequence};
+      AdmissionUmdDiagnostic("measure-written-submit", submit_result,
+                             primary, ARRAYSIZE(primary));
+    }
+  }
   device->FrameSubmitStatus = submit_result;
 #endif
   if (FAILED(submit_result)) return 0;
