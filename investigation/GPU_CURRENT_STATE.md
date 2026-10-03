@@ -21,36 +21,38 @@ Every hardware build/run/recovery has BEFORE and ACTUAL in EXPERIMENTS.md.
 Every code change: test, commit, append CHANGES.csv row with full commit hash.
 Ledger-only commits need no row. Do not overwrite an old result as successful.
 
-## CURRENT —940 built; normal recovery after939
-940 sourceec73437819d57a721694976855ded432b5ddfcc9, ROOT940=.local/experiments/EXP940-private-release-software.
-Buildsource555/native/WDK0warnings/signatures/hosthash/PDBGUIDagePASS; notstaged.
-SYSa8748efa750df0f3e2fba3cfbbf0b082477f1582d0293b0a0039c0e46d24096c
-UMDa89ecaa21aba054543da8433a632e542920a2d1b07b4836fdefc820017f85f80
-INF00f2ae4fe2782d670ce661cd0f4e515084e65658d0030725b83b5b6a29317a3b
-CATcd3f683e2ec5dc942c01f167ee0bf90c87dda0ef0249799b35811148912ad682
-SymbolsinternalEXP940-build/symbols. Samebdcf/MuR143. Firsttestsamece544fullscreen12s.
+## CURRENT —941 fullybuilt; normal recovery toremove940
+941 source382a333d65368453879155a21895bbef280ba126, ROOT941=.local/experiments/EXP941-native-shared-presentation.
+Allsource555/native/WDK0warnings/signatures/hosthash/PDBGUIDagePASS; notstaged.
+SYS23a792a3f17d9e23ebc5d49696da355ff9234402f447877efa7e3738afb2ebe5
+UMDd98dab01b6dcaa636191506138b0b097afcd9ec116ed629827d065c27c5eb814
+INFe84f516ca2112460e0c0d7f8e99fc42d65a975c2dcb6e5349a8cf6012378286b
+CAT6f79d1a642f0b7d827e94df494825a6399cab138a0823b71b94f071274deea1a
+SymbolsinternalEXP941-build/symbols. Plananalysis/EXP941-native-shared-presentation.md.
+NativeGPUVA+extendedDXGI1.1successfulcontextusesS_OK/sharedpath; software/base retains
+NO_REDIRECTION. ActualtailREDold/GREENnew withlegacy/native-device/clear/rotation/
+privatechecks. CurrentWin11DWM consumer isd3d11.dll+ourUMD; legacyD3D9 supportnot
+claimed orproven. NoDDIversion/capability/Aux/format/fwchange. Firsttestce544 --windowed,
+shortbound; requireactualPresentS_OK, notpositiveOCCLUDED orCreateDevicealone.
 
-939originalendedafterorderedrestart04:57:04.140Z/RegFlushPASS, owner54779exited,
-nohostreset. Originalimmutable123801 Start04:20:23.7571887Z/gen238787205.
-Finalframe/state/UMD/ETLfourfiles independentlyhostverifiedgate
-7d6cebb18dbccca45a6850e5d5be5f4b7b0f7d7cd13bed52afecf1aaffe6a676;
-ROOT939/original-final symlinkinternalEXP939-original/original-final; ETLstopped.
-All939SDKtasksremoved. No physicalscreen/Present success, pixelpatternPASS below.
-Firstnormal377392(session74616)selfPSCIresetbeforeSSH; onediagnosticretryowner59674/
-session70655 recoveredCode43/exact939/CPU8/Armnull/Cnotdirty. ResetcollectorKernel41,
-no1001/newMEMORY.DMP, causeunknown. No hostforcedreset orGPU-hiddenboot.
-Exact939/oem5cleanup nowexit0/staged0/SYSfalse/UMDfalse; durabilityrestartaccepted
-05:09:31.290Z, BeforeBootCIM05:05:48.832610Z, manifest
-6cbc65abab7d3df0d904f8f7bf6453b24704c6d7e5774343038db1c7bcb2392f.
-Checkowner59674exit/boundedSSH+USB/proxy; thenROOT939/launch-clean-recovery.sh
-normal377392 andverify-clean-baseline.ps1. OnlyafterdurableCode28stage940.
-940hardware-manifest.pending.json prepared; needfreshbaseline/stagereceipt and
-currentgitdiffhashrefreshbeforeseal. No940stageyet.
-ROOT939=.local/experiments/EXP939-frame-arm-software-entry.
-939SYS7cc8541e05bddb8630335a6b575d5742676f3657067321a6bc4c1de11ed88a75
-939UMD5f56d7ea9d2bf74a1764abc0457c8458fb202412aebd656662f01315d5a4440c
-939INF204cb945aa7b769969b9059a9efab7b3cca174253a227e13890c20efc409e053
-939CAT577a758b547aa3d2cb2b1ed1b2286af319423d6b4d9e51a6cdc14901c83b5980
+940originalclosedafterorderedrestart05:41:30.265Z/RegFlushPASS, owner60962exited,
+nohostreset. Immutable124103 Start05:13:59.5980702Z/gen242785505. Finalfourfiles
+hostverifiedgateadf29594d72a2670a35ca7691f2b8eb84020c64fd92c62a9ed70827b1264975a,
+ROOT940/original-final symlinkinternalEXP940-original; originalETLstopped.
+940windowed7224 stillOCCLUDED/devicehealthy. DWMUMD13presentcallbacksS_OK butKMDPresent0;
+fullscreensnapshot atDestroyAllocation/poolcleanup duringD2DUpdateSubresource1. No
+permanentdeadlockclaim, no repeatedfullscreen. All940SDKtasksremoved.
+
+Normal377392ROOT940/launch-recovery.sh running session37776; verifyfreshPID/SSH.
+OnceSSHready uploadROOT940cleanup,collect-recovery.ps1,verify-clean-baseline.ps1;
+collectCode43/exact940/CPU8/Armnull/NTFS, executeexact940/oem5cleanup, durability
+restart andnormalcleanCode28gate. Scriptsreadyhost butnotuploaded/executed.
+Onlyafterdurablebaseline create941manifest/stage/arm/seal/fullboot (samebdcf/MuR143).
+ROOT940=.local/experiments/EXP940-private-release-software.
+940SYSa8748efa750df0f3e2fba3cfbbf0b082477f1582d0293b0a0039c0e46d24096c
+940UMDa89ecaa21aba054543da8433a632e542920a2d1b07b4836fdefc820017f85f80
+940INF00f2ae4fe2782d670ce661cd0f4e515084e65658d0030725b83b5b6a29317a3b
+940CATcd3f683e2ec5dc942c01f167ee0bf90c87dda0ef0249799b35811148912ad682
 
 939 fullscreenSDK5644: CreateSwapChainForHwnd did not return within12s. Paired
 SDK/DWM1236 snapshots then only SDK killed. SDK104871B SHAab7d3d8b41580f44e149d431e2eb804514d9c03ce021af291a7ba73202658565;
