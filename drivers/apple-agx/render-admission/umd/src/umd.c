@@ -474,7 +474,6 @@ VOID APIENTRY AdmissionUmdCreateResource(
   resourceData.Version = ADMISSION_PRESENT_RESOURCE_VERSION;
   resourceData.Bytes = sizeof(resourceData);
   resourceData.Flags = (CreateResource->pPrimaryDesc != NULL ||
-      (CreateResource->BindFlags & D3D10_DDI_BIND_PRESENT) != 0u ||
       (CreateResource->MiscFlags &
        D3DWDDM2_0DDI_RESOURCE_MISC_DISPLAYABLE_SURFACE) != 0u)
       ? ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY : 0u;
