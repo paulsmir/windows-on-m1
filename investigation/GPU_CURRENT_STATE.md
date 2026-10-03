@@ -1,4 +1,4 @@
-# J313 GPU — EXP940 build; EXP939 original freeze in progress
+# J313 GPU — EXP941 first real windowed Present S_OK; physical proof pending
 
 ## Objective and working rules
 Continue until the physical Windows screen shows a correct stable picture.
@@ -21,33 +21,48 @@ Every hardware build/run/recovery has BEFORE and ACTUAL in EXPERIMENTS.md.
 Every code change: test, commit, append CHANGES.csv row with full commit hash.
 Ledger-only commits need no row. Do not overwrite an old result as successful.
 
-## CURRENT —941 fullybuilt; normal recovery toremove940
-941 source382a333d65368453879155a21895bbef280ba126, ROOT941=.local/experiments/EXP941-native-shared-presentation.
-Allsource555/native/WDK0warnings/signatures/hosthash/PDBGUIDagePASS; notstaged.
+## CURRENT — EXP941 active; first real windowed Present S_OK
+Source382a333d65368453879155a21895bbef280ba126; ROOT941=.local/experiments/EXP941-native-shared-presentation.
+All555source/native/WDK0warnings/signatures/hosthash/PDBGUIDage gates PASS.
 SYS23a792a3f17d9e23ebc5d49696da355ff9234402f447877efa7e3738afb2ebe5
 UMDd98dab01b6dcaa636191506138b0b097afcd9ec116ed629827d065c27c5eb814
 INFe84f516ca2112460e0c0d7f8e99fc42d65a975c2dcb6e5349a8cf6012378286b
 CAT6f79d1a642f0b7d827e94df494825a6399cab138a0823b71b94f071274deea1a
-SymbolsinternalEXP941-build/symbols. Plananalysis/EXP941-native-shared-presentation.md.
-NativeGPUVA+extendedDXGI1.1successfulcontextusesS_OK/sharedpath; software/base retains
-NO_REDIRECTION. ActualtailREDold/GREENnew withlegacy/native-device/clear/rotation/
-privatechecks. CurrentWin11DWM consumer isd3d11.dll+ourUMD; legacyD3D9 supportnot
-claimed orproven. NoDDIversion/capability/Aux/format/fwchange. Firsttestce544 --windowed,
-shortbound; requireactualPresentS_OK, notpositiveOCCLUDED orCreateDevicealone.
+NativeGPUVA+extendedDXGI1.1 success usesS_OK; software/base retainsNO_REDIRECTION.
+CurrentWin11D3D11 consumer scope; legacyD3D9interop notclaimed. NoDDI/cap/fwchange.
 
-940originalclosedafterorderedrestart05:41:30.265Z/RegFlushPASS, owner60962exited,
-nohostreset. Immutable124103 Start05:13:59.5980702Z/gen242785505. Finalfourfiles
-hostverifiedgateadf29594d72a2670a35ca7691f2b8eb84020c64fd92c62a9ed70827b1264975a,
-ROOT940/original-final symlinkinternalEXP940-original; originalETLstopped.
-940windowed7224 stillOCCLUDED/devicehealthy. DWMUMD13presentcallbacksS_OK butKMDPresent0;
-fullscreensnapshot atDestroyAllocation/poolcleanup duringD2DUpdateSubresource1. No
-permanentdeadlockclaim, no repeatedfullscreen. All940SDKtasksremoved.
+940 original frozen/hostverified and exactoem5 cleanup complete. First normal
+recovery selfPSCIreset; one retry recovered. No new1001/41 inselectedinterval or
+newdump; reasonunknown. DurableCode28 baseline124297 passed;941only staged/armed.
+Ordered fullrestart05:54:07.373Z, launchsamebdcf/MuR143. Current launcher65399,
+session23072; do notreset orrawproxywhileowned. Original941 immutableevent124399,
+Start2026-10-03T05:54:17.4508010Z, generation242524939; CPU8/Code0/Stage12/HVC1,
+Armnull/exact941. Runtime bootclock differsfromimmutableevent; useeventidentity.
 
-Normal377392ROOT940/launch-recovery.sh running session37776; verifyfreshPID/SSH.
-OnceSSHready uploadROOT940cleanup,collect-recovery.ps1,verify-clean-baseline.ps1;
-collectCode43/exact940/CPU8/Armnull/NTFS, executeexact940/oem5cleanup, durability
-restart andnormalcleanCode28gate. Scriptsreadyhost butnotuploaded/executed.
-Onlyafterdurablebaseline create941manifest/stage/arm/seal/fullboot (samebdcf/MuR143).
+SAMEce544 --windowed SDK3940: create/clear/realPresent1/device-after ALL S_OK,
+first improvement over940OCCLUDED. UMDactualPresent callback androtation S_OK.
+stdout971B SHAdf80d167478f4b545f3ceb464b8112cc6c3d880ad207256716286f9545c93055.
+Task267014 terminated before finalmanifest; later host-recovery-manifest validates
+stdout/stderr hashes andSDKabsence, ownedtaskremoved. No boundedexit claim.
+Postwindowed DWM1244:97submit95complete +2/2, Present0/Virtual0/TDR0.
+
+Same941 fullscreenSDK3732 pendingCreateSwapChain12s; pairedsdk108978B
+SHAa8c1becb088101f2035f5da928b5866ee8d153bd807fc50a91cab34c0706d985,
+DWM117870B SHA48e276e615228e95ac98f8868ff1ba2cf95ce35c1dd61603101a2b46182b0824.
+All7fileshostverified, SDKkilled~14.37s/taskremoved. Matching941PDB decodeEXP941-paired:
+SDK DXGIproxywindow->DWM ALPC; DWM LPC privateRELEASE->ContextRetire->UpdateSubresourceUP.
+Changing snapshots andcontinuedsubmissions are notpermanentdeadlockproof.
+Do notrepeatfullscreen orblindly changeanotherescape flag.
+
+Physical941question ispending (sentafterwindowedS_OK); lasthumanfeedback936artifacts.
+Preserve941activeboot whileawaitingphysicalfeedback. No stable/workingdisplayclaim.
+Nextcausalboundary: DWMcomposition/presentation -> actualscanout. A new experiment
+must distinguish this boundary, not repeat now-provenwindowedadmission. Source
+UpdateSubresourceUP unconditionallyFlushRetires wholecontext; resource-map upstream
+has own hazards, but no new fix justified yet. Do not remove synchronization blindly.
+Posttests SSHalive/RDPserviceRunning/storageUSBstatusOK; no currentSystem1001/Application1000/newdump. Physicalinputnotoperator-tested.
+Nooriginal941freeze/ETLstop/rollback yet; collectfinalbeforeexact941normalcleanup.
+
 ROOT940=.local/experiments/EXP940-private-release-software.
 940SYSa8748efa750df0f3e2fba3cfbbf0b082477f1582d0293b0a0039c0e46d24096c
 940UMDa89ecaa21aba054543da8433a632e542920a2d1b07b4836fdefc820017f85f80
@@ -70,34 +85,16 @@ Pattern source0ab19bc4 (fullhashGit), binarye114a0ae91e86a272107ad839df615ad00f5
 ROOT/.local/experiments/EXP939-coordinate-pattern. TaskEXP939-PatternSdk removed.
 No owned SDK processes/tasks remain. No physical-screen confirmation for939.
 
-## Next — EXP940 software RELEASE with safe deferred reclamation
-Source ec73437819d57a721694976855ded432b5ddfcc9 committed.
-ROOT940=.local/experiments/EXP940-private-release-software.
-Buildsource555 and all native/WDK/sign/hash/PDB gates PASS; no940 staged or installed.
-Plan investigation/analysis/EXP940-private-release-software.md.
-
-UMD private_escape sends Flags0 for RELEASE as already forACQUIRE/PREPARE.
-KMD accepts0/legacy1, authenticates exact owner/context/generation, marks release
-requested and acknowledges while Queued/Submitting/ownerJobInFlight/LeaseToken.
-Existing reaper unmaps/revokes/zeros/frees only after holds end. Direct release
-also refuses Submitting. No graph/broker protection, fence or quarantine weakened.
-Existing queued RELEASE was already asynchronous; success is an ownership-transfer
-acknowledgment, not a render-completion signal or promise of immediate reuse.
-Primary m1n1 publish_entry checks jobs of the same owner and invalidates only its
-slots; revoke rejects referenced backing. Asahi scene lifetime inspected.
-
-Evidence/tests: old RELEASE0 rejected (RED); flag-only intermediate returnsBUSY
-when another real owner job is active (second RED). Final real KMD/graph/wire/m1n1
-replay16/64 keeps sentinel bytes/mapping while owner job runs and reclaims after
-completion. Failed-notify holds/stale generations, failed-revoke quarantine and
-legacyFlags1 replay PASS. Actual UMD request builder oldreleaseFlag1 RED/new0GREEN.
-Seven targeted request/private/storage/pool/FrameArm tests PASS, plus softwarecopy
-bothprofiles and ledger checks. Tests are committed with source.
-
-940 first hardware discriminator: SAME ce544e78 defaultfullscreen SDK,12s then
-paired stacks if pending. Expect creation/Present to advance. If not, collect and
-stop this hypothesis; do not repeat. Retain pixel correction and939 FrameArm fix.
-NO_REDIRECTION, capabilities, AuxFB dimensions, firmware and power remain unchanged.
+## EXP940 result and retained contract
+Source ec73437819d57a721694976855ded432b5ddfcc9 changes private RELEASE to
+software entry plus safe deferred ownership transfer. Queued/Submitting/owner
+JobInFlight/LeaseToken retain mappings; existing reaper unmaps/revokes/zeros/frees
+only after holds end. Authentication, generation, quarantine and fence guards
+retained. Real16/64KMD/graph/m1n1 replay old RED/flag-only BUSY/final GREEN.
+Current fullscreen still pending12s, paired stack moved to NtDestroyAllocation
+inside agx_pool_cleanup/ContextRetire/D2D UpdateSubresource. A changing snapshot
+is not proof of a permanent deadlock at each operation. No more blind flag edits.
+941 native shared-route hypothesis is recorded in its plan; first windowed test.
 
 ## Proven changes and remaining boundaries
 -935 sourcea1d58340 fixed clearing an unbound RTV; hardware clear nowexecutes.
