@@ -196,6 +196,24 @@ int main(void) {
     assert(get64(objects[18].Data + 0x78u) == 40ULL * 23ULL);
     assert(get64(objects[18].Data + 0x60u) == 0ULL);
     assert(get64(objects[18].Data + 0x70u) == 0ULL);
+    /* Asahi JobParameters2 / m1n1 Start3DStruct1 ISP_MTILE_SIZE.
+     * 1280x720 uses 12x8 utiles per macro tile, not template4x4.
+     * The unknown U64 at0x3e0 must not receive this packed pair. */
+    assert((get64(objects[18].Data + 0x3e8u) & 0xffffffffULL) ==
+        (8ULL | (12ULL << 16)));
+    assert(get64(objects[18].Data + 0x3e0u) == 0ULL);
+    {
+      APPLE_AGX_G4_NATIVE_RENDER full = render;
+      full.WidthPx = 2560;
+      full.HeightPx = 1600;
+      assert(AppleAgxG4PatchRenderScalars(&full, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      assert((get64(objects[18].Data + 0x3e8u) & 0xffffffffULL) ==
+          (16ULL | (20ULL << 16)));
+      assert(get64(objects[18].Data + 0x3e0u) == 0ULL);
+      assert(AppleAgxG4PatchRenderScalars(&render, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+    }
     assert(get64(objects[18].Data + 0xa0u) == render.IspScissorBase);
     assert(get64(objects[18].Data + 0x88u) == render.Bg.ResourceSpec);
     assert(get64(objects[18].Data + 0x90u) == render.Bg.Usc);

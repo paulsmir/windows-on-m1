@@ -264,8 +264,10 @@ APPLE_AGX_BOOL AppleAgxG4PatchRenderScalars(
   g4_put32(work + 0x68u, Render->IspMergeUpperX);
   g4_put32(work + 0x6cu, Render->IspMergeUpperY);
   g4_put64(work + 0x78u, tiles_x * tiles_y);
-  g4_put16(work + 0x3e0u, utiles_y);
-  g4_put16(work + 0x3e2u, utiles_x);
+  /* JobParameters2 has an unknown U64 before ISP_MTILE_SIZE.
+   * The packed utile Y/X pair follows it at +0x20 within the structure. */
+  g4_put16(work + 0x3e8u, utiles_y);
+  g4_put16(work + 0x3eau, utiles_x);
   g4_put32(work + 0x3d8u, Render->IspMergeUpperX);
   g4_put32(work + 0x3dcu, Render->IspMergeUpperY);
   g4_put32(work + 0x3f0u, tile_counts);
