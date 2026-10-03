@@ -21,35 +21,52 @@ key /Users/pavel/.ssh/windows_builder. USB endpoints L41/L43:
 Always check bounded SSH plus launcher/USB before physical requests or reset.
 No raw USB/proxy NOP while a launcher owns the guest.
 
-## CURRENT — EXP935 clear fix built; removing934 in normal recovery
-935 source a1d58340b2b5fabdac897335c08853f261c16e8e fixes proven unbound RTV clear:
-934 windowed SDK ce544e78 created swapchain/RTV, then E_NOTIMPL Clear line302 ->
-DXGI_ERROR_DRIVER_INTERNAL_ERROR887a0020 beforePresent. Native fallback wrongly
-required that target already be sole OM binding. Now temporary single-view FB,
-real clear, restore Device::fb (MRT/depth untouched). Actual projected-body replay
-RED old -> GREEN new underASanUBSan;11relatedtestsPASS. Separatefrontendprepare
-suite blocked by preexistingworktreepath/dirtylocalreference; notclaimedgreen.
-Plan analysis/EXP935-clear-view-contract.md. Do not expand depth/otherDDIs.
-ROOT935=ROOT.local/experiments/EXP935-clear-unbound-rtv. Native/source553/WDK
-0warning/hash/signature/PDBGUIDagePASS. SYS9d4c303c, UMDf6479d21, INF5f8dfe0d,
-CAT870e682e (fullhashes kmd-build-receipt.json). Manifest0a59d69a/sourcezipb8d6a455.
-Same m1n1bdcf/MuR143e54; no935installedyet. NewwindowedSDK source81df9375,
-exeSHAce544e78e8f12e0d3e71f8b9f34c6c57f79c8490125fedb5ff13514ac4a4529b.
-Firstverifyclear thenPresent/physical, shortbudget, no stabilityclaim yet.
+## CURRENT — EXP936 rotation fix built; EXP935 entering normal recovery
+No accepted/stable graphics package.935sourcea1d58340 proves unbound RTV Clearfix:
+SameSDKce544e78 --windowed createdswapchain/RTV; ClearFlush/deviceS_OK; native
+Submit/renderfence1completed1. Next_PresentcallbackS_OK then_RotateResourceIdentities
+ERROR_BUSY800700aa -> device887a0020; Present1status087a0001OCCLUDED, notvisibleframe.
+Source proved Directborrowedprimary storesoriginalKernelAllocation andStaging0;
+rotationwronglycomparedStaging. New936source4e7bba969150db0348d4c9fa0bb1d25764e31dc4
+selectsDirect?Kernel:Staging, keepsallrealbusy/ownershipguards andRTV/SRVrotation.
+ActualbodydirectRED old;newdirect/split/legacy/busy/wrongidentityGREEN;12testsPASS.
+Plananalysis/EXP936-direct-primary-rotation.md. No unrelatedformat/capabilityfix.
+ROOT936=ROOT.local/experiments/EXP936-direct-primary-rotation. Native/source553/
+WDK0warnings/sign/hosthash/PDBGUIDagePASS. SYS70a0a081 UMD803ea2d3 INF17dac331
+CAT2891943b; fullhasheskmd-build-receipt.json. Samefullm1n1bdcf/MuR143e54.936notstaged.
+Internal936symbols /Users/pavel/J313-evidence-archive/2026-10-03/EXP936-build/symbols.
 
-934 original finalized hostgate359fb847a766cf7105e286b620ea390345e956eb567471bb8077df3c60581063
-(ROOT934/original-final). Orderedrestart23:54:09Z completedPSCI itself; proposed
-SIGTERMnot sent (ownerPIDalreadygone). Freshdualplane/proxy thenROOT934/launch-recovery.sh.
-Normal377/392owner15638/session82269, recoveryevidence23:58:09Z Code43/exact934/
-CPU8/SSH/armnull/Cnotdirty. One nonresetSIGINT snapshot duringnetworkstartup;
-no physicalactionneeded. Exact934cleanup currentlyexec61422: outputprovesdevnode
-andpackage removed, staged0/SYSfalse/UMDfalse; durablerestart scheduled, notyet
-verifiedafterrestart. Pollcompletion/controlplanes thenROOT934/launch-clean-recovery.sh
-(same377/392). Run ROOT934/verify-clean-baseline.ps1 afterboot; requireCode28/no
-packages/services/signer/files/flush0, immutableKernelGeneral12 eventidentity.
-Onlythencreate935manifestusingthatbaseline, stage andfullboot.935stage/orderedrestart/
-first-checkpoint/query wrappers alreadyadapted from934; manifestandhardwaremanifest
-notyetcreated. Preserve noexistinglogs; rootartifactsoutsideworktree. Seeledger latest.
+EXP935 originalclosed afterorderedrestart00:21:45.425Z/flushPASS, owner17068exited
+withoutsignals. Originalevent122601 Start00:05:15.5236754Z; CIM00:06:34.113756 moved,
+nevercompareCIM toimmutableevent. Firstready00:07:32 CPU8Code0Stage12/HVC1/gen334232800.
+ReadonlyframebeforeDWM1220 26/26+2/2; noPresent. WindowedSDKPID1892 exit11 <4s;
+stdoutSHA6575b799b8caf28cd9c3306802ce4a546d9bb9439b68258f7922759ab0884bf9.
+OwnedEXP935-WindowedSdk taskremoved; noSDKrunning. No pairedhangdumpsneeded; wrapper
+containsstaleDWM1240 onlyunusedpendingbranch: NEXTwrappermustresolveactualDWM PID.
+Console infoDefault=inputDefault, noLogonUI/LockApp; readonlytaskremoved. ACdisplayidle0,
+DC180; no powerpolicychanges. Cannotblameocclusiononlockeddesktop fromthesechecks.
+Originalframe/state/UMD/ETL4fileshostverifiedgate
+d7ff6e5225107ade9f58e695eb0de1fc36975ae674855b7dc66c495d298ab5eb.
+ROOT935/original-final is symlink tointernal
+/Users/pavel/J313-evidence-archive/2026-10-03/EXP935-original/original-final.
+OriginalETLsessionstopped forfreeze; preserveoriginal.evidence. Full935serialkept.
+
+Currentnormalrecoverylaunch ROOT935/launch-recovery.sh session13662 (verifyPID)
+usesimmutable377/392brokerdisabled afterfreshSSHtimeout/noowner/USB/proxyPASS.
+ExpectCode43/exact935unarmed. ROOT935/cleanup scripts prepared (notuploaded/executed),
+collect-recovery.ps1 andverify-clean-baseline.ps1 adapted; needboundedSSH, upload,
+collectthenexact935/oem5cleanup, durablerestart, ROOT935/launch-clean-recovery.sh,
+thenverifyoneCode28/CPU8/package0/service0/signer0/files0/RegFlush0/Cnotdirty.
+Onlythencreate936manifestwithfreshimmutableKernelGeneral12 event,stage936andseal
+hardwaremanifest,fullbootthenSAMEce544e78windowedprobe. PresentS_OK/correctphysical
+image are stillrequired; do nottreat positiveOCCLUDED ordevicehealthyasworkingdesktop.
+
+935clear-source tests actualprojectionASanUBSanREDGREEN. One independent frontend
+preparetest blocked by preexistinglocalreferencepath/dirtyMesa; notclaimedgreen.
+936usesverifiedbuilderpinnednativeclosure, notthatdirtylocalpreparedfrontend.
+WindowedSDKsource81df93753833bb6b7d66b6db82e11a22e1c087d6; exeSHA
+ce544e78e8f12e0d3e71f8b9f34c6c57f79c8490125fedb5ff13514ac4a4529b.
+935/936hardwaremanifests and fullsource/artifacthashes inROOT directories.
 
 ## EXP934 original evidence (closed; do not treat this as live guest)
 Fullowner96715/exec40531 (verifyfresh), package934/oem5, bootEvent122291 Start22:33:09.4783648Z (CIMshift22:33:55.992455),
