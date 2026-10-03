@@ -68,20 +68,11 @@ static HRESULT Complete(ID3D11Device *device, ID3D11DeviceContext *context) {
     return HRESULT_FROM_WIN32(WAIT_TIMEOUT);
   return hr == S_OK && done ? S_OK : FAILED(hr) ? hr : E_FAIL;
 }
-static int Consume(HANDLE handle) {
-  ComPtr<ID3D11Device> device;
-  ComPtr<ID3D11DeviceContext> context;
-  HRESULT hr = Device(device, context);
-  Stage("consumer-device", hr);
-  if (FAILED(hr))
-    return 20;
-  ComPtr<ID3D11Texture2D> shared;
-  hr = device->OpenSharedResource(handle, IID_PPV_ARGS(shared.GetAddressOf()));
-  Stage("consumer-open", hr);
-  if (FAILED(hr))
-    return 21;
+static int Readback(ID3D11Device *device, ID3D11DeviceContext *context,
+                    ID3D11Texture2D *texture) {
+  HRESULT hr;
   D3D11_TEXTURE2D_DESC desc = {};
-  shared->GetDesc(&desc);
+  texture->GetDesc(&desc);
   printf("SHARED_DESC width=%u height=%u format=%u usage=%u misc=0x%x\n",
          desc.Width, desc.Height, (UINT)desc.Format, (UINT)desc.Usage,
          desc.MiscFlags);
@@ -99,7 +90,7 @@ static int Consume(HANDLE handle) {
   Stage("consumer-staging", hr);
   if (FAILED(hr))
     return 23;
-  context->CopyResource(staging.Get(), shared.Get());
+  context->CopyResource(staging.Get(), texture);
   context->Flush();
   hr = device->GetDeviceRemovedReason();
   Stage("consumer-after-copy", hr);
@@ -168,6 +159,21 @@ static int Consume(HANDLE handle) {
   fflush(stdout);
   return valid && !mismatches && SUCCEEDED(hr) ? 0 : 26;
 }
+static int Consume(HANDLE handle) {
+  ComPtr<ID3D11Device> device;
+  ComPtr<ID3D11DeviceContext> context;
+  HRESULT hr = Device(device, context);
+  Stage("consumer-device", hr);
+  if (FAILED(hr))
+    return 20;
+  ComPtr<ID3D11Texture2D> shared;
+  hr = device->OpenSharedResource(handle, IID_PPV_ARGS(shared.GetAddressOf()));
+  Stage("consumer-open", hr);
+  if (FAILED(hr))
+    return 21;
+  return Readback(device.Get(), context.Get(), shared.Get());
+}
+
 int wmain(int argc, wchar_t **argv) {
   DWORD session = 0;
   if (!ProcessIdToSessionId(GetCurrentProcessId(), &session) || session != 1 ||
@@ -180,7 +186,8 @@ int wmain(int argc, wchar_t **argv) {
       return 3;
     return Consume((HANDLE)(uintptr_t)value);
   }
-  if (argc != 1)
+  const bool local = argc == 2 && wcscmp(argv[1], L"--local") == 0;
+  if (argc != 1 && !local)
     return 3;
   ComPtr<ID3D11Device> device;
   ComPtr<ID3D11DeviceContext> context;
@@ -215,6 +222,10 @@ int wmain(int argc, wchar_t **argv) {
   Stage("producer-complete", hr);
   if (FAILED(hr) || FAILED(device->GetDeviceRemovedReason()))
     return 7;
+  if (local) {
+    Stage("producer-local-readback", S_OK);
+    return Readback(device.Get(), context.Get(), texture.Get());
+  }
   ComPtr<IDXGIResource> resource;
   hr = texture.As(&resource);
   HANDLE shared = nullptr;
