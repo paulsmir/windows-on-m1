@@ -168,6 +168,16 @@ typedef struct _ADMISSION_SOURCE_ADDRESS_RECEIPT {
   ULONG CacheCleanPerformed;
 } ADMISSION_SOURCE_ADDRESS_RECEIPT;
 
+#define ADMISSION_DWM_SOURCE_MAP_VERSION 1u
+typedef struct _ADMISSION_DWM_SOURCE_MAP_RECEIPT {
+  ULONG Version, Bytes, OsProcessId, PteFound;
+  ULONGLONG GraphProcessId, Allocation, CanonicalGpuVa, RootIpa;
+  ULONGLONG MappingGeneration, PteAllocation, PteAllocationOffset;
+  ULONGLONG PteGuestIpa, ResolvedGuestIpa;
+  ULONGLONG SelectedHostPhysicalAddress, SelectedPrimaryAddress;
+  ULONG SegmentId, PteFlags, SourceReceiptState, Reserved;
+} ADMISSION_DWM_SOURCE_MAP_RECEIPT;
+
 typedef struct _ADMISSION_PRESENT_TRANSFER_RECEIPT {
   ULONG Version, Bytes, Fence, Status;
   ULONGLONG BytesCopied, SourceLocation, DestinationLocation, ContextToken;
@@ -1297,6 +1307,9 @@ NTSTATUS AdmissionGpuvaG3ExecutePresentVirtual(_In_ ADMISSION_CONTEXT *Adapter,
 void AdmissionRecordDisplayDdi(_In_opt_ PDEVICE_OBJECT DeviceObject,
                                _In_ ULONG DdiId, _In_ ULONG Phase,
                                _In_ NTSTATUS Status);
+void AdmissionRecordDwmSourceMap(
+    _In_opt_ PDEVICE_OBJECT DeviceObject,
+    _In_ const ADMISSION_DWM_SOURCE_MAP_RECEIPT *Receipt);
 void AdmissionRecordMemoryQualification(
     _In_opt_ PDEVICE_OBJECT DeviceObject,
     _In_ const ADMISSION_MEMORY_QUALIFICATION *Qualification);

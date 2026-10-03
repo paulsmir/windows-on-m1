@@ -634,6 +634,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3FrameArmEscape(ADMISSION_CONTEXT
   ADMISSION_G3_STATE *state;
   ADMISSION_G3_PROCESS *process;
   ADMISSION_RENDER_CONTEXT *context;
+  ADMISSION_DWM_SOURCE_MAP_RECEIPT map;
   BOOLEAN valid = FALSE;
   /* Software-only metadata; our process lock and nonblocking receipt claim
    * provide the needed serialization. Accept the old synchronized caller,
@@ -654,6 +655,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3FrameArmEscape(ADMISSION_CONTEXT
     return STATUS_INVALID_PARAMETER;
   state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
   if (state == NULL) return STATUS_INVALID_DEVICE_STATE;
+  RtlZeroMemory(&map, sizeof(map));
+  map.Version = ADMISSION_DWM_SOURCE_MAP_VERSION;
+  map.Bytes = (ULONG)sizeof(map);
+  map.OsProcessId = request.OsProcessId;
+  map.Allocation = request.Allocation;
+  map.CanonicalGpuVa = request.CanonicalGpuVa;
   ExAcquireFastMutex(&state->Lock);
   process = AdmissionGpuvaG3FindProcess(state, args->hKmdProcessHandle);
   for (context = process ? process->Contexts : NULL;
@@ -663,11 +670,41 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3FrameArmEscape(ADMISSION_CONTEXT
       context->Object.Device != NULL &&
       context->Object.Device->Adapter == &adapter->ObjectAdapter &&
       (HANDLE)CONTAINING_RECORD(context->Object.Device, ADMISSION_DEVICE, Object) ==
-          args->hDevice)
+          args->hDevice) {
+    const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte =
+        request.CanonicalGpuVa != 0ULL
+            ? AdmissionG3CopyPte(process, request.CanonicalGpuVa) : NULL;
+    map.GraphProcessId = process->Graph.ProcessId;
+    map.RootIpa = context->GpuvaG3RootIpa;
+    map.MappingGeneration = context->GpuvaG3MappingGeneration;
+    if (pte != NULL) {
+      map.PteFound = 1u;
+      map.PteAllocation = pte->Allocation;
+      map.PteAllocationOffset = pte->AllocationOffset;
+      map.PteGuestIpa = pte->GuestIpa;
+      map.SegmentId = pte->SegmentId;
+      map.PteFlags = pte->Flags;
+      if ((pte->Flags & APPLE_AGX_GPUVA_G3_VALID) != 0u &&
+          pte->GuestIpa <= MAXULONGLONG - (request.CanonicalGpuVa & 0xfffULL))
+        map.ResolvedGuestIpa =
+            pte->GuestIpa + (request.CanonicalGpuVa & 0xfffULL);
+    }
     valid = AdmissionDwmFrameArmWindows(adapter, context,
         request.OsProcessId, process->Graph.ProcessId,
         request.Allocation, request.CanonicalGpuVa);
+  }
   ExReleaseFastMutex(&state->Lock);
+  if (valid) {
+    map.SourceReceiptState = (ULONG)InterlockedCompareExchange(
+        &adapter->SourceAddressReceiptState, 0, 0);
+    if (map.SourceReceiptState >= 2u) {
+      map.SelectedHostPhysicalAddress =
+          adapter->SourceAddressReceipt.SelectedHostPhysicalAddress;
+      map.SelectedPrimaryAddress =
+          (ULONGLONG)adapter->SourceAddressReceipt.PrimaryAddress;
+    }
+    AdmissionRecordDwmSourceMap(adapter->PhysicalDeviceObject, &map);
+  }
   return valid ? STATUS_SUCCESS : STATUS_INVALID_HANDLE;
 }
 #endif

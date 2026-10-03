@@ -2389,6 +2389,19 @@ _Use_decl_annotations_ void AdmissionRecordDisplayDdi(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordDwmSourceMap(
+    PDEVICE_OBJECT DeviceObject,
+    const ADMISSION_DWM_SOURCE_MAP_RECEIPT *Receipt) {
+  HANDLE key = NULL;
+  if (DeviceObject == NULL || Receipt == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(DeviceObject, PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, L"Wom1DwmSourceMap", Receipt, sizeof(*Receipt));
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordMemoryQualification(
     PDEVICE_OBJECT DeviceObject,
     const ADMISSION_MEMORY_QUALIFICATION *Qualification) {
