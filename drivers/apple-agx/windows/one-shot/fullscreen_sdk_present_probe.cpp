@@ -55,11 +55,13 @@ static void WindowReceipt(HWND window, IDXGISwapChain1 *swap, const char *stage)
 }
 
 int wmain(int argc, wchar_t **argv) {
-  const bool waitForVisibility = argc == 2 && wcscmp(argv[1], L"--windowed-ready") == 0;
+  const bool warpControl = argc == 2 && wcscmp(argv[1], L"--warp-control") == 0;
+  const bool waitForVisibility = warpControl ||
+      (argc == 2 && wcscmp(argv[1], L"--windowed-ready") == 0);
   const bool windowed = waitForVisibility ||
       (argc == 2 && wcscmp(argv[1], L"--windowed") == 0);
   if (argc != 1 && !windowed) {
-    fprintf(stderr, "Usage: FullscreenSdkPresentProbe.exe [--windowed|--windowed-ready]\n");
+    fprintf(stderr, "Usage: FullscreenSdkPresentProbe.exe [--windowed|--windowed-ready|--warp-control]\n");
     return 2;
   }
   DWORD session = 0;
@@ -69,7 +71,8 @@ int wmain(int argc, wchar_t **argv) {
     return 2;
   }
   printf("FULLSCREEN_PROCESS pid=%lu session=%lu\n", GetCurrentProcessId(), session);
-  printf("PROBE_MODE windowed=%u\n", static_cast<UINT>(windowed));
+  printf("PROBE_MODE windowed=%u warp_control=%u\n",
+      static_cast<UINT>(windowed), static_cast<UINT>(warpControl));
   ComPtr<IDXGIFactory2> factory;
   HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(factory.GetAddressOf()));
   Stage("factory2", hr);
@@ -133,13 +136,34 @@ int wmain(int argc, wchar_t **argv) {
   ComPtr<ID3D11DeviceContext> context;
   const D3D_FEATURE_LEVEL requested[] = {D3D_FEATURE_LEVEL_10_0};
   D3D_FEATURE_LEVEL obtained = static_cast<D3D_FEATURE_LEVEL>(0);
-  hr = D3D11CreateDevice(selected.Get(), D3D_DRIVER_TYPE_UNKNOWN, nullptr,
+  hr = D3D11CreateDevice(warpControl ? nullptr : selected.Get(),
+      warpControl ? D3D_DRIVER_TYPE_WARP : D3D_DRIVER_TYPE_UNKNOWN, nullptr,
       D3D11_CREATE_DEVICE_BGRA_SUPPORT, requested, ARRAYSIZE(requested),
       D3D11_SDK_VERSION, device.GetAddressOf(), &obtained, context.GetAddressOf());
   Stage("d3d11-device-fl10", hr);
   if (FAILED(hr)) return 7;
   printf("FULLSCREEN_FEATURE_LEVEL value=0x%x\n", (UINT)obtained);
   if (obtained != D3D_FEATURE_LEVEL_10_0) return 7;
+  if (warpControl) {
+    // Keep the same physical output/window but identify the software producer.
+    // Obtain its factory so no unrelated DXGI factory/device pair is mixed.
+    ComPtr<IDXGIDevice> dxgiDevice;
+    ComPtr<IDXGIAdapter> renderAdapter;
+    ComPtr<IDXGIFactory2> renderFactory;
+    hr = device.As(&dxgiDevice);
+    if (SUCCEEDED(hr)) hr = dxgiDevice->GetAdapter(renderAdapter.GetAddressOf());
+    if (SUCCEEDED(hr)) hr = renderAdapter->GetParent(IID_PPV_ARGS(renderFactory.GetAddressOf()));
+    Stage("warp-render-factory", hr);
+    if (FAILED(hr)) return 7;
+    DXGI_ADAPTER_DESC renderDesc = {};
+    hr = renderAdapter->GetDesc(&renderDesc);
+    Stage("warp-render-adapter", hr);
+    if (FAILED(hr)) return 7;
+    printf("CONTROL_RENDER_ADAPTER luid=%08lx:%08lx vendor=%08x device=%08x\n",
+        (ULONG)renderDesc.AdapterLuid.HighPart, renderDesc.AdapterLuid.LowPart,
+        renderDesc.VendorId, renderDesc.DeviceId);
+    factory = renderFactory;
+  }
   DXGI_SWAP_CHAIN_DESC1 desc = {};
   desc.Width = 2560;
   desc.Height = 1600;
