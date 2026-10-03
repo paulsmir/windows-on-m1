@@ -196,9 +196,13 @@ int wmain(int argc, wchar_t **argv) {
       return 3;
     return Consume((HANDLE)(uintptr_t)value);
   }
+  const bool privateTexture = argc == 2 &&
+      (wcscmp(argv[1], L"--local-private") == 0 ||
+       wcscmp(argv[1], L"--local-private-upload") == 0);
   const bool point = argc == 2 && wcscmp(argv[1], L"--local-point") == 0;
-  const bool upload = argc == 2 && wcscmp(argv[1], L"--local-upload") == 0;
-  const bool local = point || upload || (argc == 2 && wcscmp(argv[1], L"--local") == 0);
+  const bool upload = argc == 2 && (wcscmp(argv[1], L"--local-upload") == 0 ||
+       wcscmp(argv[1], L"--local-private-upload") == 0);
+  const bool local = privateTexture || point || upload || (argc == 2 && wcscmp(argv[1], L"--local") == 0);
   if (argc != 1 && !local)
     return 3;
   ComPtr<ID3D11Device> device;
@@ -216,7 +220,7 @@ int wmain(int argc, wchar_t **argv) {
   desc.SampleDesc.Count = 1;
   desc.Usage = D3D11_USAGE_DEFAULT;
   desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-  desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
+  desc.MiscFlags = privateTexture ? 0 : D3D11_RESOURCE_MISC_SHARED;
   ComPtr<ID3D11Texture2D> texture;
   hr = device->CreateTexture2D(&desc, nullptr, texture.GetAddressOf());
   Stage("producer-shared-texture", hr);
