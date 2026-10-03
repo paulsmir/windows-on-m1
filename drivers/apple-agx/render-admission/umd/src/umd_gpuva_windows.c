@@ -483,14 +483,26 @@ static int submit(void *context, const uint64_t *written,
       ReleaseSRWLockShared(&device->ScreenBufferLock);
       return 0;
     }
+    if (slot->Direct && slot->WrittenPrimary) {
+      UINT index;
+      for (index=0u; index<request.NumPrimaries; ++index)
+        if (request.WrittenPrimaries[index]==slot->KernelAllocation) break;
+      if (index==request.NumPrimaries) {
+        if (request.NumPrimaries==D3DDDI_MAX_WRITTEN_PRIMARIES) {
+          ReleaseSRWLockShared(&device->ScreenBufferLock);
+          return 0;
+        }
+        request.WrittenPrimaries[request.NumPrimaries++]=slot->KernelAllocation;
+      }
+    }
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
     if (i == 0u) {
       trackedAllocation = slot->KernelAllocation;
       trackedVa = slot->CanonicalGpuVa;
     }
 #endif
-    /* Submitted commands write only nondisplayable canonical allocations.
-     * The original primary is published by synchronized CPU copy below. */
+    /* Direct displayable BOs are GPU write targets. VidSch must know their
+     * allocation handles before it schedules a flip of either surface. */
   }
   ReleaseSRWLockShared(&device->ScreenBufferLock);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)

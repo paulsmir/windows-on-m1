@@ -188,6 +188,7 @@ typedef struct _ADMISSION_UMD_RESOURCE {
   D3DKMT_HANDLE KernelAllocation;
   ADMISSION_UMD_DIRECT_FLIP_RESOURCE DirectFlip;
   ADMISSION_UMD_RETIREMENT *Retirement;
+  BOOL WrittenPrimary;
 } ADMISSION_UMD_RESOURCE;
 
 VOID APIENTRY AdmissionUmdOpenResource(

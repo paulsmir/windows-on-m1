@@ -4,6 +4,16 @@
 #define ADMISSION_ALLOCATION_U32_MAX 0xffffffffu
 #define ADMISSION_ALLOCATION_U64_MAX (~0ULL)
 
+int AdmissionPresentResourceDataValid(
+    const ADMISSION_PRESENT_RESOURCE_DATA *Data) {
+  return Data != ADMISSION_ALLOCATION_NULL &&
+      Data->Magic == ADMISSION_PRESENT_RESOURCE_MAGIC &&
+      Data->Version == ADMISSION_PRESENT_RESOURCE_VERSION &&
+      Data->Bytes == sizeof(*Data) &&
+      (Data->Flags & ~ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY) == 0u &&
+      Data->Reserved == 0u;
+}
+
 int AdmissionAllocationDescribe(unsigned int Width, unsigned int Height,
                                 unsigned int BytesPerPixel,
                                 unsigned int Type, unsigned int Format,

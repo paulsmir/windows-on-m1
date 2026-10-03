@@ -29,7 +29,7 @@ typedef struct {
   UINT64 next_va;
   UINT failed;
   UINT uploads, downloads, locks, unlocks;
-  UINT Failure, Persistent, Uncached, Round;
+  UINT Failure, Persistent, DisplayableDirect, Uncached, Round;
   BYTE staging[2][131072], canonical[2][131072];
 } G4_FIXTURE;
 
@@ -89,10 +89,15 @@ static HRESULT APIENTRY TestSubmit(HANDLE handle,
     const D3DDDICB_SUBMITCOMMAND *request) {
   G4_FIXTURE *f = (G4_FIXTURE *)handle;
   const BYTE *data = (const BYTE *)request->pPrivateDriverData;
+  if(f->DisplayableDirect && request->NumPrimaries != 1u)
+    fprintf(stderr,"WRITTEN_PRIMARY_RED expected=1 actual=%u\n",request->NumPrimaries);
   if(f->wait_resident != f->Round+1 || request->Commands != 0x20000 ||
      request->CommandLength != 64 || request->BroadcastContextCount != 1 ||
      request->BroadcastContext[0] != (HANDLE)3 ||
-     request->NumPrimaries != 0 || f->uploads != 4*(f->Round+1) || f->downloads != 2*f->Round ||
+     request->NumPrimaries != f->DisplayableDirect ||
+     (f->DisplayableDirect && request->WrittenPrimaries[0] != 100) ||
+     f->uploads != (f->DisplayableDirect ? 2 : 4)*(f->Round+1) ||
+     f->downloads != (f->DisplayableDirect ? 0 : 2*f->Round) ||
      request->PrivateDriverDataSize != 4 ||
      data[0] != 0xa1 || data[3] != 0xd4) f->failed = 1;
   assert(f->canonical[0][19] == 0x71 && f->canonical[1][53] == (f->Round ? 0xa5 : 0x29));
@@ -107,7 +112,9 @@ static HRESULT APIENTRY TestSignal(HANDLE handle,
   if(f->submit != f->Round+1 || request->ObjectCount != 1 ||
      request->ObjectHandleArray[0] != 4 ||
      request->MonitoredFenceValueArray[0] != f->signal + 1) f->failed = 1;
-  if(f->signal%2) assert(f->downloads == 2*(f->Round+1) && f->unlocks == (f->Persistent ? 2u : 3u)*(f->Round+1) && f->staging[1][53] == 0xa5);
+  if(f->signal%2) assert(f->downloads == (f->DisplayableDirect ? 0 : 2*(f->Round+1)) &&
+      f->unlocks == (f->DisplayableDirect ? f->Round+1 : (f->Persistent ? 2u : 3u)*(f->Round+1)) &&
+      (f->DisplayableDirect ? f->staging[1][53] == 0x29 : f->staging[1][53] == 0xa5));
   ++f->signal;
   return S_OK;
 }
@@ -133,7 +140,7 @@ static HRESULT APIENTRY CopyUnlock(HANDLE handle,const D3DDDICB_UNLOCK *q) {
 }
 static HRESULT APIENTRY CopyEscape(HANDLE adapter,const D3DDDICB_ESCAPE *q) {
   G4_FIXTURE *f=(G4_FIXTURE *)adapter;
-  assert(q->hDevice==adapter && q->hContext==(HANDLE)3 && q->Flags.Value==1);
+  assert(q->hDevice==adapter && q->hContext==(HANDLE)3 && q->Flags.Value==0);
   auto *p=(APPLE_AGX_G3_COPY_REQUEST *)q->pPrivateDriverData;
   assert(q->PrivateDriverDataSize==sizeof(*p) && p->Magic==APPLE_AGX_G3_COPY_MAGIC);
   assert(p->Allocation==99 || p->Allocation==100);
@@ -174,7 +181,7 @@ static HRESULT APIENTRY TestEscape(HANDLE adapter,
   ++EscapeCalls;
   if(adapter != EscapeAdapter || !request ||
      request->hDevice != EscapeDevice || request->hContext != EscapeContext ||
-     request->Flags.Value != 1u || request->pPrivateDriverData != EscapePayload ||
+     request->Flags.Value != 0u || request->pPrivateDriverData != EscapePayload ||
      request->PrivateDriverDataSize != sizeof(*EscapePayload)) {
     fprintf(stderr,"R140 escape adapter/device/context contract violation\n");
     return E_INVALIDARG;
@@ -248,7 +255,7 @@ static int test_private_escape(ADMISSION_UMD_DEVICE *device) {
   return 1;
 }
 
-static void run_copy_scenario(UINT failure,UINT persistent) {
+static void run_copy_scenario(UINT failure,UINT persistent,UINT displayableDirect) {
   G4_FIXTURE fixture = {};
   ADMISSION_UMD_ADAPTER adapter = {};
   D3DDDI_DEVICECALLBACKS callbacks = {};
@@ -264,6 +271,7 @@ static void run_copy_scenario(UINT failure,UINT persistent) {
   assert(test_private_escape(device));
   submit_diagnostics=0;signal_diagnostics=0;
   fixture.Failure=failure;fixture.Persistent=persistent;
+  fixture.DisplayableDirect=displayableDirect;
   callbacks.pfnReserveGpuVirtualAddressCb = TestReserve;
   callbacks.pfnMapGpuVirtualAddressCb = TestMap;
   callbacks.pfnFreeGpuVirtualAddressCb = TestFree;
@@ -275,6 +283,7 @@ static void run_copy_scenario(UINT failure,UINT persistent) {
   callbacks.pfnLockCb=CopyLock; callbacks.pfnUnlockCb=CopyUnlock; callbacks.pfnEscapeCb=CopyEscape;
   adapter.Magic=ADMISSION_UMD_ADAPTER_MAGIC;adapter.RuntimeAdapter.handle=&fixture;device->Adapter=&adapter;
   fixture.staging[0][19]=0x71; fixture.staging[1][53]=0x29;
+  if(displayableDirect) fixture.canonical[1][53]=0x29;
   fixture.next_va = 0x20000;
   device->Magic = ADMISSION_UMD_DEVICE_MAGIC;
   device->RuntimeDevice.handle = (HANDLE)&fixture;
@@ -292,6 +301,10 @@ static void run_copy_scenario(UINT failure,UINT persistent) {
   device->ScreenBuffers[1].WrittenPrimary = TRUE;
   for(UINT i=0;i<2;++i) {device->ScreenBuffers[i].StagingAllocation=199+i;device->ScreenBuffers[i].Bytes=98317;device->ScreenBuffers[i].Flags=i ? 15 : 7;}
   device->ScreenBuffers[1].Borrowed=TRUE;
+  if(displayableDirect) {
+    device->ScreenBuffers[1].Direct=TRUE;
+    device->ScreenBuffers[1].StagingAllocation=0;
+  }
   if(persistent) for(UINT i=0;i<2;++i) {
     device->ScreenBuffers[i].Mapped=TRUE;device->ScreenBuffers[i].LockedBase=fixture.staging[i];
     device->ScreenBuffers[i].NativeBo=&fixture;device->ScreenBuffers[i].NativeMapRelease=ReleaseNativeMap;
@@ -314,10 +327,14 @@ static void run_copy_scenario(UINT failure,UINT persistent) {
       written,1,
       native_command,sizeof(native_command),&fence));
   if(persistent) assert(fixture.Uncached==1 && device->ScreenBuffers[0].Mapped && !device->ScreenBuffers[1].Mapped);
-  assert(fixture.staging[1][53]==0xa5 && fixture.staging[1][54]==0xf3);
+  if(displayableDirect)
+    assert(fixture.canonical[1][53]==0xa5 && fixture.staging[1][53]==0x29);
+  else
+    assert(fixture.staging[1][53]==0xa5 && fixture.staging[1][54]==0xf3);
   assert(fence == 2*(fixture.Round+1) && command.Va == 0x20000 && color.Va == 0x40000);
   assert(AgxWin32GpuvaRetire(&space,fence));
-  fixture.staging[1][55]=0x78;
+  if(displayableDirect) fixture.canonical[1][55]=0x78;
+  else fixture.staging[1][55]=0x78;
   }
   assert(AgxWin32GpuvaUnbind(&space,&command));
   assert(AgxWin32GpuvaUnbind(&space,&color));
@@ -330,8 +347,9 @@ static void run_copy_scenario(UINT failure,UINT persistent) {
   HeapFree(GetProcessHeap(),0,device);
 }
 int main(void) {
-  run_copy_scenario(0,0);run_copy_scenario(0,1);
-  run_copy_scenario(1,0);run_copy_scenario(2,0);run_copy_scenario(3,0);
+  run_copy_scenario(0,0,0);run_copy_scenario(0,1,0);
+  run_copy_scenario(1,0,0);run_copy_scenario(2,0,0);run_copy_scenario(3,0,0);
+  run_copy_scenario(0,0,1);
   puts("umd_gpuva_contract_windows: PASS (temporary/persistent/import, internal wait/readback/unlock failure retention)");
   return 0;
 }

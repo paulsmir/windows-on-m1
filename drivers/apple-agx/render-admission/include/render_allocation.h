@@ -20,6 +20,17 @@ typedef struct _ADMISSION_ALLOCATION_DESCRIPTION {
   unsigned int Reserved;
 } ADMISSION_ALLOCATION_DESCRIPTION;
 
+/* Per-resource data survives a shared OpenResource independently of each
+ * allocation's placement description. Never infer displayability from BGRA. */
+#define ADMISSION_PRESENT_RESOURCE_MAGIC 0x52505241u
+#define ADMISSION_PRESENT_RESOURCE_VERSION 1u
+#define ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY 1u
+typedef struct _ADMISSION_PRESENT_RESOURCE_DATA {
+  unsigned int Magic, Version, Bytes, Flags, Reserved;
+} ADMISSION_PRESENT_RESOURCE_DATA;
+int AdmissionPresentResourceDataValid(
+    const ADMISSION_PRESENT_RESOURCE_DATA *Data);
+
 typedef struct _ADMISSION_ALLOCATION_OBJECT {
   unsigned int Magic;
   unsigned int OpenCount;

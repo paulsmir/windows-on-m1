@@ -12,7 +12,7 @@ RENDER = ROOT / 'drivers/apple-agx/render-admission'
 class OpenAllocationTests(unittest.TestCase):
     def test_runtime_handle_resolution_and_rollback(self):
         source = (RENDER / 'src/allocation_windows.c').read_text()
-        callbacks = source[source.index('_Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation'):]
+        callbacks = source[source.index('static NTSTATUS AdmissionOpenAllocationImpl('):]
         shim = r'''
 #include <stdint.h>
 #include <stddef.h>
@@ -43,7 +43,7 @@ class OpenAllocationTests(unittest.TestCase):
 #define CONTAINING_RECORD(p,t,m) ((t *)((char *)(p)-offsetof(t,m)))
 typedef int32_t NTSTATUS,LONG;
 typedef void *HANDLE;
-typedef unsigned int UINT,ULONG,D3DKMT_HANDLE;
+typedef unsigned int UINT,ULONG,D3DKMT_HANDLE,APPLE_AGX_U32;
 typedef unsigned char BOOLEAN;
 typedef struct {D3DKMT_HANDLE hObject;UINT Type;union {UINT Value;struct {
  UINT DeviceSpecific:1;UINT Reserved:31;};} Flags;} DXGKARGCB_GETHANDLEDATA;
@@ -56,9 +56,9 @@ typedef struct {ADMISSION_OBJECT_ADAPTER ObjectAdapter;BOOLEAN InterfaceValid;
  void (*DxgkCbReleaseHandleData)(DXGKARGCB_RELEASEHANDLEDATA);} Interface;
 } ADMISSION_CONTEXT;
 typedef struct {ADMISSION_OBJECT_DEVICE Object;volatile LONG Win32Generation;} ADMISSION_DEVICE;
-typedef struct {ADMISSION_ALLOCATION_OBJECT Object;} ADMISSION_ALLOCATION_HANDLE;
+typedef struct {ADMISSION_ALLOCATION_OBJECT Object;ULONG QualificationCookie,Win32ClassId,Win32Flags,WrittenPrimary;} ADMISSION_ALLOCATION_HANDLE;
 typedef struct {ULONG Magic;ADMISSION_DEVICE *Device;D3DKMT_HANDLE RuntimeAllocation;
- ADMISSION_ALLOCATION_OBJECT *Allocation;BOOLEAN ReadOnly;ULONG Win32Generation;} ADMISSION_OPEN_ALLOCATION;
+ ADMISSION_ALLOCATION_OBJECT *Allocation;BOOLEAN ReadOnly;ULONG Win32Generation,Win32ClassId,Win32Flags;} ADMISSION_OPEN_ALLOCATION;
 typedef struct {D3DKMT_HANDLE hAllocation;void *pPrivateDriverData;
  UINT PrivateDriverDataSize;HANDLE hDeviceSpecificAllocation;} DXGK_OPENALLOCATIONINFO;
 typedef struct {UINT NumAllocations;DXGK_OPENALLOCATIONINFO *pOpenAllocation;
@@ -66,6 +66,16 @@ typedef struct {UINT NumAllocations;DXGK_OPENALLOCATIONINFO *pOpenAllocation;
  UINT Create:1;UINT ReadOnly:1;UINT Reserved:30;};} Flags;UINT SubresourceIndex;
 } DXGKARG_OPENALLOCATION;
 typedef struct {UINT NumAllocations;HANDLE *pOpenHandleList;} DXGKARG_CLOSEALLOCATION;
+typedef int ADMISSION_WIN32_TRANSPORT_RESULT;
+#define AdmissionWin32TransportSuccess 0
+static ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32AllocationCreateValidate(
+ const void *data,UINT bytes,ADMISSION_ALLOCATION_DESCRIPTION *out,
+ UINT *classId,UINT *flags) {
+ if(!data || bytes!=sizeof(*out) ||
+    !AdmissionAllocationDescriptionValid((const ADMISSION_ALLOCATION_DESCRIPTION *)data))return 1;
+ *out=*(const ADMISSION_ALLOCATION_DESCRIPTION *)data;
+ *classId=0;*flags=0;return AdmissionWin32TransportSuccess;
+}
 static ADMISSION_ALLOCATION_HANDLE backing;
 static unsigned calls,releases,refs;
 static int failAllocation;
@@ -143,6 +153,23 @@ int main(void) {
  assert(AdmissionDdiOpenAllocation(&device,&a)==STATUS_INVALID_HANDLE);
  assert(releases==5 && refs==0 && device.Object.AllocationCount==0);
  backing.Object.Magic=ADMISSION_ALLOCATION_OBJECT_MAGIC;
+ ADMISSION_PRESENT_RESOURCE_DATA display={ADMISSION_PRESENT_RESOURCE_MAGIC,
+     ADMISSION_PRESENT_RESOURCE_VERSION,sizeof(display),
+     ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY,0};
+ a.pPrivateDriverData=&display;a.PrivateDriverSize=sizeof(display);
+ backing.WrittenPrimary=1;info[0].hDeviceSpecificAllocation=NULL;
+ assert(AdmissionDdiOpenAllocation(&device,&a)==STATUS_SUCCESS);
+ opened=info[0].hDeviceSpecificAllocation;
+ assert(opened && opened->Allocation==&backing.Object);
+ handles[0]=opened;assert(AdmissionDdiCloseAllocation(&device,&closeArgs)==STATUS_SUCCESS);
+ info[0].hDeviceSpecificAllocation=NULL;
+ display.Flags=0;
+ assert(AdmissionDdiOpenAllocation(&device,&a)==STATUS_INVALID_PARAMETER);
+ assert(info[0].hDeviceSpecificAllocation==NULL && backing.Object.OpenCount==0);
+ backing.WrittenPrimary=0;
+ assert(AdmissionDdiOpenAllocation(&device,&a)==STATUS_SUCCESS);
+ opened=info[0].hDeviceSpecificAllocation;handles[0]=opened;
+ assert(AdmissionDdiCloseAllocation(&device,&closeArgs)==STATUS_SUCCESS);
  assert(AdmissionAllocationDestroy(&backing.Object));
  return 0;
 }

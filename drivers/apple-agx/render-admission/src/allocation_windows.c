@@ -314,6 +314,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiGetStandardAllocationDriverData(
 static NTSTATUS AdmissionCreateAllocationImpl(
     HANDLE Adapter, DXGKARG_CREATEALLOCATION *Args) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
+  const ADMISSION_PRESENT_RESOURCE_DATA *resourceData = NULL;
   DXGK_ALLOCATIONINFO *info;
   const ADMISSION_ALLOCATION_DESCRIPTION *description;
   ADMISSION_ALLOCATION_DESCRIPTION parsedDescription;
@@ -332,10 +333,18 @@ static NTSTATUS AdmissionCreateAllocationImpl(
 #endif
 
   if (context == NULL || Args == NULL || Args->NumAllocations != 1u ||
-      Args->pAllocationInfo == NULL || Args->PrivateDriverDataSize != 0u ||
-      Args->pPrivateDriverData != NULL ||
+      Args->pAllocationInfo == NULL ||
       Args->hResource != NULL)
     return STATUS_INVALID_PARAMETER;
+  if (Args->PrivateDriverDataSize != 0u || Args->pPrivateDriverData != NULL) {
+    if (Args->PrivateDriverDataSize != sizeof(*resourceData) ||
+        Args->pPrivateDriverData == NULL ||
+        !AdmissionPresentResourceDataValid(
+            (const ADMISSION_PRESENT_RESOURCE_DATA *)Args->pPrivateDriverData))
+      return STATUS_INVALID_PARAMETER;
+    resourceData = (const ADMISSION_PRESENT_RESOURCE_DATA *)
+        Args->pPrivateDriverData;
+  }
   /* Resource grouping needs no additional KMD handle: the one allocation
      object below owns all private state and its existing open-count lifetime. */
   if (!AdmissionMemoryReady(&context->Memory))
@@ -385,6 +394,12 @@ static NTSTATUS AdmissionCreateAllocationImpl(
       !AdmissionAllocationAlign64K(description->Size, &aligned) ||
       aligned > MAXSIZE_T)
     return STATUS_INVALID_PARAMETER;
+  if (resourceData != NULL &&
+      (resourceData->Flags & ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY) != 0u &&
+       (description->CpuVisible != 0u ||
+       description->Format != (UINT)D3DDDIFMT_A8R8G8B8 ||
+       description->Type != (UINT)D3DKMDT_GDISURFACE_TEXTURE))
+    return STATUS_INVALID_PARAMETER;
   allocation = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*allocation),
                                ADMISSION_POOL_TAG);
   if (allocation == NULL)
@@ -396,6 +411,8 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   }
   allocation->Win32ClassId = classId;
   allocation->Win32Flags = flags;
+  allocation->WrittenPrimary = resourceData != NULL &&
+      (resourceData->Flags & ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY) != 0u;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   allocation->QualificationCookie = correlated
       ? ADMISSION_UMD_CORRELATION_COOKIE : 0u;
@@ -630,8 +647,13 @@ static NTSTATUS AdmissionOpenAllocationImpl(
                               ObjectAdapter);
   trace = AdmissionOpenAllocationTraceBegin(adapter, device, Args);
   if (Args == NULL || Args->NumAllocations == 0u ||
-      Args->pOpenAllocation == NULL || Args->pPrivateDriverData != NULL ||
-      Args->PrivateDriverSize != 0u)
+      Args->pOpenAllocation == NULL ||
+      ((Args->pPrivateDriverData == NULL) !=
+       (Args->PrivateDriverSize == 0u)) ||
+      (Args->pPrivateDriverData != NULL &&
+       (Args->PrivateDriverSize != sizeof(ADMISSION_PRESENT_RESOURCE_DATA) ||
+        !AdmissionPresentResourceDataValid(
+            (const ADMISSION_PRESENT_RESOURCE_DATA *)Args->pPrivateDriverData))))
     OPEN_ALLOCATION_RETURN(AdmissionOpenAllocationGuardArgs,
                            STATUS_INVALID_PARAMETER);
   if (!adapter->InterfaceValid ||
@@ -719,6 +741,10 @@ static NTSTATUS AdmissionOpenAllocationImpl(
                          sizeof(*description)) != sizeof(*description) ||
         allocation->Win32ClassId != classId ||
         allocation->Win32Flags != flags ||
+        allocation->WrittenPrimary !=
+            (Args->pPrivateDriverData != NULL &&
+             (((const ADMISSION_PRESENT_RESOURCE_DATA *)Args->pPrivateDriverData)->Flags &
+              ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY) != 0u) ||
         !AdmissionAllocationOpen(&allocation->Object)) {
       guard = AdmissionOpenAllocationGuardDescription;
       goto Rollback;

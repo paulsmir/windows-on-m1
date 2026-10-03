@@ -3,6 +3,28 @@
 #include <assert.h>
 #include <string.h>
 
+static void test_displayable_resource_metadata(void) {
+  ADMISSION_PRESENT_RESOURCE_DATA data = {
+      ADMISSION_PRESENT_RESOURCE_MAGIC, ADMISSION_PRESENT_RESOURCE_VERSION,
+      sizeof(ADMISSION_PRESENT_RESOURCE_DATA),
+      ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY, 0u};
+  ADMISSION_PRESENT_RESOURCE_DATA opened;
+  assert(AdmissionPresentResourceDataValid(&data));
+  memcpy(&opened, &data, sizeof(opened));
+  assert(AdmissionPresentResourceDataValid(&opened));
+  opened.Flags = 0u; /* Ordinary shared BGRA is not a written primary. */
+  assert(AdmissionPresentResourceDataValid(&opened));
+  opened.Flags = 2u;
+  assert(!AdmissionPresentResourceDataValid(&opened));
+  opened = data;opened.Reserved = 1u;
+  assert(!AdmissionPresentResourceDataValid(&opened));
+  opened = data;opened.Bytes--;
+  assert(!AdmissionPresentResourceDataValid(&opened));
+  opened = data;opened.Version++;
+  assert(!AdmissionPresentResourceDataValid(&opened));
+  assert(!AdmissionPresentResourceDataValid(0));
+}
+
 static void test_surface_and_64k_contract(void) {
   ADMISSION_ALLOCATION_DESCRIPTION description;
   unsigned long long aligned = 0;
@@ -90,6 +112,7 @@ static void test_allocation_contains_bounded_render_view(void) {
 }
 
 int main(void) {
+  test_displayable_resource_metadata();
   test_surface_and_64k_contract();
   test_handle_lifetime_blocks_open_destroy();
   test_invalid_create_does_not_mutate();

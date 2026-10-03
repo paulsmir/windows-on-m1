@@ -411,6 +411,7 @@ static SIZE_T APIENTRY AdmissionUmdCalcPrivateResourceSize(
     D3D10DDI_HDEVICE Device,
     const D3D11DDIARG_CREATERESOURCE *CreateResource) {
   ADMISSION_UMD_DIRECT_FLIP_RESOURCE description;
+  ADMISSION_PRESENT_RESOURCE_DATA resourceData;
   return AdmissionUmdDeviceFromHandle(Device) != NULL &&
                  AdmissionUmdDescribePrimary(CreateResource, &description)
              ? sizeof(ADMISSION_UMD_RESOURCE)
@@ -468,6 +469,16 @@ VOID APIENTRY AdmissionUmdCreateResource(
   ZeroMemory(resource, sizeof(*resource));
   ZeroMemory(&allocate, sizeof(allocate));
   ZeroMemory(&allocationInfo, sizeof(allocationInfo));
+  ZeroMemory(&resourceData, sizeof(resourceData));
+  resourceData.Magic = ADMISSION_PRESENT_RESOURCE_MAGIC;
+  resourceData.Version = ADMISSION_PRESENT_RESOURCE_VERSION;
+  resourceData.Bytes = sizeof(resourceData);
+  resourceData.Flags = (CreateResource->pPrimaryDesc != NULL ||
+      (CreateResource->MiscFlags &
+       D3DWDDM2_0DDI_RESOURCE_MISC_DISPLAYABLE_SURFACE) != 0u)
+      ? ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY : 0u;
+  allocate.pPrivateDriverData = &resourceData;
+  allocate.PrivateDriverDataSize = sizeof(resourceData);
   allocationInfo.pPrivateDriverData = &description.Allocation;
   allocationInfo.PrivateDriverDataSize = sizeof(description.Allocation);
   allocationInfo.VidPnSourceId = 0u;
@@ -487,6 +498,8 @@ VOID APIENTRY AdmissionUmdCreateResource(
   resource->RuntimeResource = RuntimeResource;
   resource->KernelAllocation = allocationInfo.hAllocation;
   resource->DirectFlip = description;
+  resource->WrittenPrimary =
+      (resourceData.Flags & ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY) != 0u;
   retirement->RuntimeResource = RuntimeResource.handle;
   retirement->KernelResource = allocate.hKMResource;
   retirement->KernelAllocation = allocationInfo.hAllocation;
@@ -506,6 +519,7 @@ VOID APIENTRY AdmissionUmdOpenResource(
       (ADMISSION_UMD_RESOURCE *)ResourceHandle.pDrvPrivate;
   const D3DDDI_OPENALLOCATIONINFO *info;
   const ADMISSION_ALLOCATION_DESCRIPTION *description;
+  const ADMISSION_PRESENT_RESOURCE_DATA *resourceData = NULL;
   ADMISSION_UMD_RETIREMENT *retirement;
   if (OpenResource != NULL && OpenResource->NumAllocations != 0u &&
       OpenResource->pOpenAllocationInfo != NULL) {
@@ -527,6 +541,19 @@ VOID APIENTRY AdmissionUmdOpenResource(
       OpenResource->pOpenAllocationInfo == NULL) {
     AdmissionUmdSetError(device, E_INVALIDARG);
     return;
+  }
+  if (OpenResource->PrivateDriverDataSize != 0u ||
+      OpenResource->pPrivateDriverData != NULL) {
+    if (OpenResource->PrivateDriverDataSize != sizeof(*resourceData) ||
+        OpenResource->pPrivateDriverData == NULL ||
+        !AdmissionPresentResourceDataValid(
+            (const ADMISSION_PRESENT_RESOURCE_DATA *)
+                OpenResource->pPrivateDriverData)) {
+      AdmissionUmdSetError(device, E_INVALIDARG);
+      return;
+    }
+    resourceData = (const ADMISSION_PRESENT_RESOURCE_DATA *)
+        OpenResource->pPrivateDriverData;
   }
   retirement = AdmissionUmdRetirementCreate();
   if (retirement == NULL) {
@@ -560,6 +587,8 @@ VOID APIENTRY AdmissionUmdOpenResource(
   resource->DirectFlip.Linear = 1u;
   resource->DirectFlip.Displayable =
       description->Format == (UINT)D3DDDIFMT_A8R8G8B8 ? 1u : 0u;
+  resource->WrittenPrimary = resourceData != NULL &&
+      (resourceData->Flags & ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY) != 0u;
   retirement->RuntimeResource = RuntimeResource.handle;
   retirement->KernelResource = OpenResource->hKMResource.handle;
   retirement->KernelAllocation = info->hAllocation;
