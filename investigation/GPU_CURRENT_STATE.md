@@ -21,52 +21,60 @@ key /Users/pavel/.ssh/windows_builder. USB endpoints L41/L43:
 Always check bounded SSH plus launcher/USB before physical requests or reset.
 No raw USB/proxy NOP while a launcher owns the guest.
 
-## CURRENT — EXP936 rotation fix built; EXP935 entering normal recovery
-No accepted/stable graphics package.935sourcea1d58340 proves unbound RTV Clearfix:
-SameSDKce544e78 --windowed createdswapchain/RTV; ClearFlush/deviceS_OK; native
-Submit/renderfence1completed1. Next_PresentcallbackS_OK then_RotateResourceIdentities
-ERROR_BUSY800700aa -> device887a0020; Present1status087a0001OCCLUDED, notvisibleframe.
-Source proved Directborrowedprimary storesoriginalKernelAllocation andStaging0;
-rotationwronglycomparedStaging. New936source4e7bba969150db0348d4c9fa0bb1d25764e31dc4
-selectsDirect?Kernel:Staging, keepsallrealbusy/ownershipguards andRTV/SRVrotation.
-ActualbodydirectRED old;newdirect/split/legacy/busy/wrongidentityGREEN;12testsPASS.
-Plananalysis/EXP936-direct-primary-rotation.md. No unrelatedformat/capabilityfix.
-ROOT936=ROOT.local/experiments/EXP936-direct-primary-rotation. Native/source553/
-WDK0warnings/sign/hosthash/PDBGUIDagePASS. SYS70a0a081 UMD803ea2d3 INF17dac331
-CAT2891943b; fullhasheskmd-build-receipt.json. Samefullm1n1bdcf/MuR143e54.936notstaged.
-Internal936symbols /Users/pavel/J313-evidence-archive/2026-10-03/EXP936-build/symbols.
+## CURRENT — EXP936 live; deterministic pixel corruption
+Driver936/oem5, source4e7bba969150db0348d4c9fa0bb1d25764e31dc4. Owner26170,
+exec33811 (verify fresh). Immutable boot event122896 Start2026-10-03T01:19:20.9602310Z;
+HVC generation239491071, Code0 Stage12, CPU8, SSH alive. Firmwarebdcf8715/MuR143e54.
+Hardware manifest f5b5051a61147591f834e15c89e2dbfd52e5f2f2c0e697344fb47b9732938902.
+936 exact package hashes in ROOT.local/experiments/EXP936-direct-primary-rotation.
+No rollback yet; EXP801DxgBoot trace still active. Physical image FAIL per user.
 
-EXP935 originalclosed afterorderedrestart00:21:45.425Z/flushPASS, owner17068exited
-withoutsignals. Originalevent122601 Start00:05:15.5236754Z; CIM00:06:34.113756 moved,
-nevercompareCIM toimmutableevent. Firstready00:07:32 CPU8Code0Stage12/HVC1/gen334232800.
-ReadonlyframebeforeDWM1220 26/26+2/2; noPresent. WindowedSDKPID1892 exit11 <4s;
-stdoutSHA6575b799b8caf28cd9c3306802ce4a546d9bb9439b68258f7922759ab0884bf9.
-OwnedEXP935-WindowedSdk taskremoved; noSDKrunning. No pairedhangdumpsneeded; wrapper
-containsstaleDWM1240 onlyunusedpendingbranch: NEXTwrappermustresolveactualDWM PID.
-Console infoDefault=inputDefault, noLogonUI/LockApp; readonlytaskremoved. ACdisplayidle0,
-DC180; no powerpolicychanges. Cannotblameocclusiononlockeddesktop fromthesechecks.
-Originalframe/state/UMD/ETL4fileshostverifiedgate
-d7ff6e5225107ade9f58e695eb0de1fc36975ae674855b7dc66c495d298ab5eb.
-ROOT935/original-final is symlink tointernal
-/Users/pavel/J313-evidence-archive/2026-10-03/EXP935-original/original-final.
-OriginalETLsessionstopped forfreeze; preserveoriginal.evidence. Full935serialkept.
+935 unbound RTV Clear fix and936 direct primary identity fix are hardware proven:
+Clear/real render fence and RotateResourceIdentities now succeed, device remains healthy.
+AGX SDK real Present remains DXGI_STATUS_OCCLUDED; native Present syscall returns
+c01e0006 with documented flags3081. Visible foreground fullmonitor window; TEST S_OK
+then actual Present still OCCLUDED. Window readiness hypothesis rejected.
+WARP control on same output gives real Present S_OK, not proof of physical pixels.
+Do not toggle NO_REDIRECTION before truthful sharing/render contracts established.
 
-Currentnormalrecoverylaunch ROOT935/launch-recovery.sh session13662 (verifyPID)
-usesimmutable377/392brokerdisabled afterfreshSSHtimeout/noowner/USB/proxyPASS.
-ExpectCode43/exact935unarmed. ROOT935/cleanup scripts prepared (notuploaded/executed),
-collect-recovery.ps1 andverify-clean-baseline.ps1 adapted; needboundedSSH, upload,
-collectthenexact935/oem5cleanup, durablerestart, ROOT935/launch-clean-recovery.sh,
-thenverifyoneCode28/CPU8/package0/service0/signer0/files0/RegFlush0/Cnotdirty.
-Onlythencreate936manifestwithfreshimmutableKernelGeneral12 event,stage936andseal
-hardwaremanifest,fullbootthenSAMEce544e78windowedprobe. PresentS_OK/correctphysical
-image are stillrequired; do nottreat positiveOCCLUDED ordevicehealthyasworkingdesktop.
+Current boundary: two shared BGRA2560x1600 green-clear/child-open/copy/map runs both
+report204800 wrong out of4096000 pixels (5%), APIs all S_OK. Spatial diagnostic
+source3858ddd77860ac877c25d61617f5eb664c502c94, binarydf4d49a4ab40c8effe8c994e18bfeeeacd2862c44d8b6d4722da2d9c77a2df27.
+First bad2432,704 zero. Bad row bands704..767:128,832..895:256,960..1023:384,
+1088..1151:512,1216..1279:640,1344..1407:640,1472..1535:640 per row.
+ROOT936/spatial-sdk-evidence host size/hash verified; stdoutSHA
+70d63fb5c4df3ed04f0c8f96c41f109118ecf9d161f0a1a509eb1646849ece42.
+Latest discrimination on SAME original936 boot, all evidence host hash verified:
+- local (same-process) clear/copy/map: same204800badpixels/samecoordinates.
+- sharedCPUupload: fails native texture_map E_OUTOFMEMORY beforecopy; DirectBO has
+  no CPU staging handle. Not actual RAM exhaustion proof, no corruption verdict.
+- clear then1x1copy source2432,704: zero, APIsS_OK, RowPitch128.
+- ordinaryprivate texture (removeSHARED): same204800badpixels/samecoordinates.
+- privateCPUupload (succeeds) thenfullcopy: same204800badpixels/samecoordinates.
+Thus shared opening, Directlinear source andGPUclear are NOT necessary causes.
+Current common boundary: GPU blit/store/sampling or GPU-to-CPU data path.
+CPUprivateupload-point ACTUAL: greenff00ff00/0bad/exit0 in4.74s, PID6168.
+LargeGPUrender/store remainscurrentboundary; smallcopy/source sampling canwork.
+Diagnostic source16fc645f,
+binary8001b4ac32bdbb98fdbd055c866921df4dd89a00c6110ce6164f4be829aac375.
+UploadPoint taskremoved. Currentpending: EXP936-RenderTrace, CDBactualBatchFinish
+render240B andGpuvaSubmitpacket capture, ownedprivateCPUupload fullcopyprobe.
+Exact936PDBf4973493 copiedguestlocal-symbols; toolsverified. All preceding
+spatial/local/upload/point/private/private-upload tasks removed. Probe childrennone.
+Latestdiagnosticbuilds/source plans analysis/EXP936-{local-readback,upload-readback,
+point-readback,private-readback,upload-point}. ROOT936/*-sdk-evidence containreceipts.
 
-935clear-source tests actualprojectionASanUBSanREDGREEN. One independent frontend
-preparetest blocked by preexistinglocalreferencepath/dirtyMesa; notclaimedgreen.
-936usesverifiedbuilderpinnednativeclosure, notthatdirtylocalpreparedfrontend.
-WindowedSDKsource81df93753833bb6b7d66b6db82e11a22e1c087d6; exeSHA
-ce544e78e8f12e0d3e71f8b9f34c6c57f79c8490125fedb5ff13514ac4a4529b.
-935/936hardwaremanifests and fullsource/artifacthashes inROOT directories.
+One boundedsource comparison: g4 tilingformulas matchcurrentAsahi/m1n1 for32x32
+utiles; no scalarfix justified. General utile-size concern (tiles_per_mtile vsutiles)
+notproven relevant; don'tchangewithoutactualcommand. Native linearPBE/texture stride
+usesAsahi -4/-16respectively; relocationmaskspreservehighbits. ResourceCopy/Region
+nativeblit; Map FlushRetire. CPUcopyescape walks4KiB logicalpages, no obviousrangebug.
+Native Windows opts util_blitter singleoversizedtriangle; upstreamlocalMesa contains
+implementation. No provengeometrybug. Do notrepeatthesecomparisons unchanged.
+Next source action should followonepixel result orcaptureactualbuffers/descriptors.
+No speculative NO_REDIRECTION/capability/pitch/firmwarechange. No937build.
+Recovery remainsimmutable377/392; collect936originalbeforeexactcleanup.
+Accepted/stable graphics package NONE. No physicalsuccess, userreportsartifacts.
 
 ## EXP934 original evidence (closed; do not treat this as live guest)
 Fullowner96715/exec40531 (verifyfresh), package934/oem5, bootEvent122291 Start22:33:09.4783648Z (CIMshift22:33:55.992455),
