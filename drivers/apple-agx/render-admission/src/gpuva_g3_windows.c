@@ -635,8 +635,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3FrameArmEscape(ADMISSION_CONTEXT
   ADMISSION_G3_PROCESS *process;
   ADMISSION_RENDER_CONTEXT *context;
   BOOLEAN valid = FALSE;
+  /* Software-only metadata; our process lock and nonblocking receipt claim
+   * provide the needed serialization. Accept the old synchronized caller,
+   * but reject every unrelated escape flag. No MMIO, DMA or UAT operation. */
   if (adapter == NULL || args == NULL || !adapter->Started ||
-      KeGetCurrentIrql() != PASSIVE_LEVEL || args->Flags.Value != 1u ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL || args->Flags.Value > 1u ||
       args->pPrivateDriverData == NULL ||
       args->PrivateDriverDataSize != sizeof(request))
     return STATUS_INVALID_PARAMETER;

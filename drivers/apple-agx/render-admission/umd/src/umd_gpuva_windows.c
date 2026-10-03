@@ -74,7 +74,9 @@ ULONGLONG AdmissionUmdGpuvaFrameArm(ADMISSION_UMD_DEVICE *device,
   arm.CanonicalGpuVa = canonicalVa;
   request.hDevice = device->RuntimeDevice.handle;
   request.hContext = device->KernelContext;
-  request.Flags.HardwareAccess = 1;
+  /* This receipt only updates KMD CPU bookkeeping. Level-two hardware
+   * synchronization would drain the adapter on the DWM submission path. */
+  request.Flags.HardwareAccess = 0;
   request.pPrivateDriverData = &arm;
   request.PrivateDriverDataSize = sizeof(arm);
   status = device->KernelCallbacks->pfnEscapeCb(
