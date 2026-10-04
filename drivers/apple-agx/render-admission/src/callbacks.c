@@ -211,6 +211,21 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
     return status;
   }
 
+  /* EXP956: dxgkrnl issues the FlipOnVSyncMmIo present with no allocation
+   * list; there is no DMA to build and SetVidPnSourceAddress flips later. */
+  if (device != NULL && Present != NULL && Present->pDmaBuffer == NULL &&
+      (Present->Flags.Value & ~0x8u) == 0x4u &&
+      Present->NumSrcAllocations == 0u && Present->NumDstAllocations == 0u &&
+      Present->pPrivateDriverData == NULL &&
+      Present->PrivateDriverDataSize == 0u) {
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    traceEvent.Phase = AdmissionStandardPresentPhaseExit;
+    traceEvent.Status = (ULONG)STATUS_SUCCESS;
+    AdmissionStandardPresentTraceRecordWindows(adapter, &traceEvent);
+#endif
+    AdmissionDwmRecordPresent(adapter, Context, Present, STATUS_SUCCESS);
+    return STATUS_SUCCESS;
+  }
   /* FlipOnVSyncMmIo flip: no DMA buffer; SetVidPnSourceAddress performs it.
    * dxgkrnl marks the legacy DWM flip FlipWithNoWait (0x8), which an MMIO
    * flip already satisfies because it never stalls the GPU pipeline. */

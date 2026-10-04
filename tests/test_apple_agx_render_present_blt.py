@@ -294,6 +294,12 @@ int main(void){
  assert(plain_flip==STATUS_SUCCESS);
  flip.Flags.Value=0xC;
  assert(AdmissionDdiPresent(&context,&flip)==STATUS_SUCCESS);
+ /* EXP956: dxgkrnl issues the FlipOnVSyncMmIo present with no allocation
+  * list (NumSrcAllocations 0); SetVidPnSourceAddress performs the flip. */
+ DXGKARG_PRESENT mmio={0};mmio.Flags.Value=0xC;
+ assert(AdmissionDdiPresent(&context,&mmio)==STATUS_SUCCESS);
+ mmio.Flags.Value=0x4;
+ assert(AdmissionDdiPresent(&context,&mmio)==STATUS_SUCCESS);
  flip.Flags.Value=0x8; /* FlipWithNoWait alone is not a flip */
  assert(AdmissionDdiPresent(&context,&flip)==STATUS_INVALID_PARAMETER);
  flip.Flags.Value=0x14; /* other modifiers stay unsupported */
