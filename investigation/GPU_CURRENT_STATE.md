@@ -1,4 +1,4 @@
-# J313 GPU — EXP958 DWM corruption boundary
+# J313 GPU — EXP959 diagnostic and recovery boundary
 
 ## Objective and rules
 Continue until the physical screen shows a correct stable Windows image.
@@ -20,36 +20,49 @@ Foreign dirt: m1n1_windows/rust/vendor/rust-fatfs, mu;
 untracked drivers/apple-agx/render-admission/pauls@192.168.1.24.ps1 and
 investigation/analysis/EXP895-standard-blt-stimulus-plan.md.
 
-## Current — REC-EXP958A stalled ordinary recovery; physical reset pending
-No accepted visual desktop package. EXP958 full-owner (package958 30.0.958.0,
-source058053b6, m1n1-exp954 SHA22eda013, Mu r143 SHAe54c0098) survived
-767s Code0/CPU8/SSH/RDP/disk/USB, but DWM crashed repeatedly and current
-panel content was never verified. DCP latched DWM surfaces; a completed DWM
-VA0x5f40000 resolved to DCP PA0x8e2100000. CPU snapshots were mostly zero
-without invalidation; later tiny nonzero samples did not prove desktop pixels.
-EXP958D full DWM dump SHA0f97968e found two truncated low32 uDWM vtable
-pointers in heap, writer unknown. PID5552 UMD trace showed Flush stage3
-E_INVALIDARG before device loss. EXP959 commit c9dacb1 adds only a failure
-receipt classifying local guard vs Windows pfnDeallocateCb and preserving the
-full resource handle. Package959 built 0 warnings/errors, INF615859a9,
-SYS0851f9a9, UMD34411206, CATa1900174; hardware NOT_RUN.
+## Current — REC-EXP959A stalled ordinary recovery; physical reset pending
+No accepted visual desktop package. Operator reset REC-EXP958A and ordinary
+recovery reached exact958 Code43/SSH. Cleanup958 succeeded, removed oem5 and
+ordered reboot; one intermediate PSCI reset occurred. Identical ordinary
+relaunch reached SSH, durable preflight PASS/Code28/CPU8 at11:30Z.
 
-CURRENT AIR: full-owner ordered restart was accepted, then immutable ordinary
-recovery EXP950 launched. REC-EXP958A hung after CPU0-7/IRQ route8 at10:04:15Z.
-At10:19:40Z Windows SSH timeout/ping no route; run_uefi PID1362 holds L41 and
-air.lock, L41/L43 endpoints present, proxy guard BUSY. Both planes unavailable.
-Operator physical reset to Running proxy was requested and logged OPERATOR in
-.local/tandem/CODEX-STATUS.md. Exact958 package remains installed (last
-verified Code0); NEVER remove it until ordinary recovery reaches Code43.
-No EXP959 package staged/installed. Next after reset: check both planes, launch
-same ordinary recovery, collect any dump, verify exact958 Code43; execute
-cleanup958, ordered restart and durable Code28 preflight; then preregister and
-stage exact959. Emergency GPU-hidden recovery only if ordinary fails.
-Evidence: EXP958/evidence/full-shutdown.log,
-rec958a-stalled-full.log SHA00d3914a, final-identity.json,
-full-dwm/dwm.exe.5552.dmp and cdb-heap2.txt; EXP959/kmd-build-receipt.json.
-WHY CLEAN RECONSTRUCTION: no old admission comparison resolves the current DWM
-resource-lifetime error or the separate platform recovery hang.
+EXP959 source c9dacb1, package959 30.0.959.0 INF615859a9/SYS0851f9a9/
+UMD34411206/CATa1900174 (receipt only) staged on that exact clean boot,
+then full-owner m1n1-exp954/Mu-r143 booted Code0/CPU8/SSH/Explorer/disk/USB.
+DCP exact latches through swap37; snapshots mostly zero (later1067/4096000
+nonzero), no physical pixel success. DWM1220 crashed once, restarted1568.
+UMD trace shows two Flush stage3 E_INVALIDARG (PID1220/1568). EXP959's new
+umd-deallocate-failure receipt was silently quota-suppressed: both DWM PIDs
+had exactly 128 non-measure records before the failures, and the diagnostic
+function caps all non-measure/non-reject stages at 128. Therefore classification
+is INCONCLUSIVE; neither local guard nor pfnDeallocateCb is excluded.
+Dump dwm.exe.1220.dmp SHA061742cd analyzed on builder: AV reading
+0x000000003c146258 in uDWM!CCachedBorderBrush destructor while x23 held
+0x000001d03c146240 and x22 held its truncated low32. Earlier EXP958D full
+dump showed analogous high32 loss in two uDWM visual vtable pointers. Writer
+unknown; this repeated pattern is the strongest current corruption boundary.
+
+CURRENT AIR: EXP959 full-owner ordered shutdown completed; immutable ordinary
+recovery REC-EXP959A launched after guarded proxy NOP PASS. It hung after
+CPU0-7/IRQ route8, no Windows SSH by11:49Z; run_uefi PID15114 owns L41,
+L41/L43 endpoints present. Operator physical reset to Running proxy requested.
+Exact959 remains installed (last proven full-owner Code0); NEVER remove until
+ordinary recovery reaches exact959 Code43. After reset: check SSH and both
+USB/proxy/launcher planes, retry same immutable ordinary recovery if at proxy;
+collect dump, verify exact959 Code43, execute cleanup959, ordered reboot and
+durable Code28 preflight. Then fix only the EXP959 diagnostic quota defect,
+prove late failure receipt offline, rebuild exact next package, and run one
+bounded discriminator. Keep uDWM pointer truncation as separate writer-unknown
+boundary; do not attribute it to the Flush error. Keep emergency
+GPU-hidden only if ordinary cannot recover. Evidence EXP959/evidence/umd-final.log,
+dwm.exe.1220.dmp, cdb-analyze.txt, final-identity.json and EXP950 normal2 log.
+EXP960 quota correction commit f38a7f0a2bc514ab0115e67b58f5d60da2f7ae05
+is verified offline (RED/GREEN focused test, UMD 11/11); pinned WDK ARM64
+package960 built 0 warnings/errors, INF f8878e19, SYS7ed0377c,
+UMD4400ca06, CAT0f51cd58, receipt SHAfa384ffc. Bundle scripts are prepared,
+but hardware NOT_RUN and no package960 staged on Air.
+WHY CLEAN RECONSTRUCTION: old admission comparisons do not explain current
+DWM pointer truncation or separate platform recovery hang.
 
 ## EXP941 findings and rollback
 Source382a333d65368453879155a21895bbef280ba126 changed native GPUVA+DXGI1.1
