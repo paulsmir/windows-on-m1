@@ -97,9 +97,10 @@ KernelResource0 and nonzero KernelAllocation. Shared/primary/resource-backed
 forms and failure requeue are unchanged. RED/GREEN and UMD/R148 suites passed;
 pinned WDK build964 0 warnings/errors, exact INF bdb6e604, SYS d3288aaa,
 UMD184f78c9, CATcb05ad69. EXP964 full-owner is ACTIVE on Air, Code0,
-CPU8/SSH/Explorer/DWM1232/disk/USB5. At14:29:41Z (boot14:13:12Z), no DWM
-Application1000 errors, same DWM PID, 11114 UMD lines with zero deallocation
-or Flush E_INVALIDARG errors, KMD DWM graph3 Present10 status0. DCP exact
+CPU8/SSH/Explorer/DWM1232/disk/USB5. At14:44:02Z, >30min after boot
+14:13:12Z, no DWM Application1000 errors, same DWM PID, 13154 UMD lines
+with zero deallocation or Flush E_INVALIDARG errors, KMD DWM graph3
+submit441/complete440/Present44 status0. DCP exact
 latches continue; cached zero samples cannot establish physical pixels.
 Console GDI CopyFromScreen timed out15s/result267014 without PNG; task was
 removed. Operator text description of physical panel was requested
@@ -107,8 +108,9 @@ asynchronously but not yet received. Do NOT call this a stable desktop or
 accepted package. The current EXP964 visual-verification run remains live;
 cleanup964 exact scripts/manifest are staged and guest-hash verified, ready
 for Code43 rollback if pixels are wrong. Do not start a new GPU package while
-this one is installed. Evidence EXP964/evidence/stability-identity.json,
-umd-stability.log, dwm-ddi-first.txt, desktop-capture/before.json and ledger.
+this one is installed. Evidence EXP964/evidence/30min-identity.json SHA44ba64de,
+umd-30min.log SHA58bf98cc, dwm-ddi-30min.txt SHA3b2676d6,
+desktop-capture/before.json and ledger.
 
 Next causal decision depends on physical pixels. If desktop is correct, verify
 motion/input and an additional bounded stability window, then decide package
