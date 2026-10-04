@@ -16,13 +16,13 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
 
         self.assertIn("DRIVER_INITIALIZATION_DATA", driver)
         self.assertIn("DxgkInitialize(", driver)
-        self.assertIn("DXGKDDI_INTERFACE_VERSION_WDDM3_0", driver)
+        self.assertIn("initialization.Version = ADMISSION_G1B_INTERFACE_VERSION", driver)
         self.assertIn("C_ASSERT(sizeof(DRIVER_INITIALIZATION_DATA) == 1296)",
                       driver)
         self.assertNotIn("KMDDOD_INITIALIZATION_DATA", driver)
         self.assertNotIn("DxgkInitializeDisplayOnlyDriver", driver)
         self.assertIn(
-            "DXGKDDI_INTERFACE_VERSION=DXGKDDI_INTERFACE_VERSION_WDDM3_0",
+            "DXGKDDI_INTERFACE_VERSION=$(AppleAgxWddmInterface)",
             project,
         )
 

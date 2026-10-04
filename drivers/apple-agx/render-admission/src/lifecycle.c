@@ -696,7 +696,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
         caps->SupportSmoothRotation = TRUE;
         caps->SupportPerEngineTDR = TRUE;
         caps->SupportDirectFlip = TRUE;
-        caps->PresentationCaps.SupportKernelModeCommandBuffer = 1u;
+        /* The current RenderKm path implements ColorFill only and the GPU
+         * aperture is not declared cache-coherent.  Keep CDD GDI command
+         * buffers disabled until both requirements are met. */
+        caps->PresentationCaps.SupportKernelModeCommandBuffer = 0u;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
         if (context->GpuvaG3State != NULL) {
           APPLE_AGX_GPUVA_G3_ADMISSION_CONTRACT model =

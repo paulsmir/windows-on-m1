@@ -29,9 +29,9 @@ class AppleAgxRenderType1ReadyTests(unittest.TestCase):
         self.assertIn("APPLE_AGX_WDDM_MANDATORY_CAPS_MASK", caps)
         # WDK 26100 requires this to equal DXGK_WDDMDEVICECAPS.WDDMVersion;
         # leaving Type-1 at zero matches the observed AddAdapter C0000059.
-        self.assertIn("caps->WDDMVersion = DXGKDDI_WDDMv3_0", caps)
+        self.assertIn("caps->WDDMVersion = ADMISSION_G1B_WDDM_VERSION", caps)
         self.assertLess(
-            caps.index("caps->WDDMVersion = DXGKDDI_WDDMv3_0"),
+            caps.index("caps->WDDMVersion = ADMISSION_G1B_WDDM_VERSION"),
             caps.index("AppleAgxWddmFeatureContractEvaluate"),
         )
         for assignment in (
@@ -46,10 +46,11 @@ class AppleAgxRenderType1ReadyTests(unittest.TestCase):
             "caps->SupportSmoothRotation = TRUE",
             "caps->SupportPerEngineTDR = TRUE",
             "caps->SupportDirectFlip = TRUE",
-            "caps->PresentationCaps.SupportKernelModeCommandBuffer = 1u",
+            "caps->PresentationCaps.SupportKernelModeCommandBuffer = 0u",
         ):
             self.assertIn(assignment, caps)
         for unsupported in (
+            "SupportKernelModeCommandBuffer = 1",
             "FlipImmediateMmIo = 1",
             "FlipInterval = 1",
             "SupportMultiPlaneOverlay = TRUE",
