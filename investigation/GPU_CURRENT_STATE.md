@@ -1,4 +1,4 @@
-# J313 GPU — EXP959 diagnostic and recovery boundary
+# J313 GPU — EXP964 callback fix and physical-pixel boundary
 
 ## Objective and rules
 Continue until the physical screen shows a correct stable Windows image.
@@ -20,7 +20,7 @@ Foreign dirt: m1n1_windows/rust/vendor/rust-fatfs, mu;
 untracked drivers/apple-agx/render-admission/pauls@192.168.1.24.ps1 and
 investigation/analysis/EXP895-standard-blt-stimulus-plan.md.
 
-## Current — REC-EXP959A stalled ordinary recovery; physical reset pending
+## Current — EXP964 running, callback refusal cleared, physical pixels unknown
 No accepted visual desktop package. Operator reset REC-EXP958A and ordinary
 recovery reached exact958 Code43/SSH. Cleanup958 succeeded, removed oem5 and
 ordered reboot; one intermediate PSCI reset occurred. Identical ordinary
@@ -42,25 +42,81 @@ Dump dwm.exe.1220.dmp SHA061742cd analyzed on builder: AV reading
 dump showed analogous high32 loss in two uDWM visual vtable pointers. Writer
 unknown; this repeated pattern is the strongest current corruption boundary.
 
-CURRENT AIR: EXP959 full-owner ordered shutdown completed; immutable ordinary
-recovery REC-EXP959A launched after guarded proxy NOP PASS. It hung after
-CPU0-7/IRQ route8, no Windows SSH by11:49Z; run_uefi PID15114 owns L41,
-L41/L43 endpoints present. Operator physical reset to Running proxy requested.
-Exact959 remains installed (last proven full-owner Code0); NEVER remove until
-ordinary recovery reaches exact959 Code43. After reset: check SSH and both
-USB/proxy/launcher planes, retry same immutable ordinary recovery if at proxy;
-collect dump, verify exact959 Code43, execute cleanup959, ordered reboot and
-durable Code28 preflight. Then fix only the EXP959 diagnostic quota defect,
-prove late failure receipt offline, rebuild exact next package, and run one
-bounded discriminator. Keep uDWM pointer truncation as separate writer-unknown
-boundary; do not attribute it to the Flush error. Keep emergency
-GPU-hidden only if ordinary cannot recover. Evidence EXP959/evidence/umd-final.log,
-dwm.exe.1220.dmp, cdb-analyze.txt, final-identity.json and EXP950 normal2 log.
+REC-EXP959A stalled ordinary; documented host SIGTERM captured CPUs and reset
+to proxy. One identical ordinary relaunch reached exact959 Code43/SSH. Exact959
+cleanup and ordered reboot gave durable Code28 PASS at12:10:08Z; no package
+carried into EXP960. Manual reset was not needed.
+
 EXP960 quota correction commit f38a7f0a2bc514ab0115e67b58f5d60da2f7ae05
 is verified offline (RED/GREEN focused test, UMD 11/11); pinned WDK ARM64
 package960 built 0 warnings/errors, INF f8878e19, SYS7ed0377c,
-UMD4400ca06, CAT0f51cd58, receipt SHAfa384ffc. Bundle scripts are prepared,
-but hardware NOT_RUN and no package960 staged on Air.
+UMD4400ca06, CAT0f51cd58, receipt SHAfa384ffc. Exact package staged after
+clean Code28, full-owner booted Code0/CPU8/SSH. Corrected receipt proves
+Windows pfnDeallocateCb returned E_INVALIDARG for full hResource
+0x0000019ad19fe880 before DWM Flush stage3 E_INVALIDARG; local guard is
+excluded for this first error. Later same handle received 0x88760870
+(device removed). DWM1236 fail-fast dump SHAef18f82a is 0x889800d0
+"DWM failed during present"; this run did not reproduce low32 pointer AV.
+DCP latches/zero snapshots are not valid desktop pixels; no accepted screen.
+Microsoft D3DDDICB_DEALLOCATE docs confirm hResource form/NumAllocations=0
+we pass; callback invalid parameter cause remains to resolve from exact
+Create/Open/Destroy provenance and runtime ownership. Keep independent low32
+pointer corruption as separate writer-unknown issue.
+
+EXP961 reused exact package960 after full rollback to query the existing KMD
+DWM DDI probe. It did not reproduce UMD callback E_INVALIDARG in a short run;
+the probe retained only latest successful DestroyAllocation among 756/4784
+calls, so verdict INCONCLUSIVE. Exact961-local cleanup and durable Code28 PASS.
+
+EXP962 source commit66565a2a adds only existing bounded G1b failure receipt
+for KMD DestroyAllocation (ID6), package962 built0 warnings/errors. Full-owner
+reproduced UMD stage2 E_INVALIDARG for full runtime hResource
+0x000002bc95d26600 before Flush stage3. G1b registry receipt Count0 before,
+during and after the error; KMD DDI probe observed 1788 DestroyAllocation
+calls, latest status0. Thus no failing KMD DestroyAllocation return was
+observed in this boot. Inference: Direct3D runtime/dxgkrnl rejects the
+resource handle before KMD or after a successful KMD call; exact internal
+ordering not proven. Do not modify KMD hResource logic on speculation.
+New DWM dump SHA f6474f7c has another c0000005 low32 uDWM code-pointer
+read (0x00000000fc5abf50) in CBaseObject::Release. It repeats EXP886/958/959
+corruption but the writer remains unknown; do not claim callback refusal
+caused it. DCP latches/cached-zero samples still do not prove physical pixels.
+
+EXP963 source27a45271 added failure-only UMD retirement origin. Hardware
+first failure was Origin1/CreateResource, Primary0, Shared0,
+KernelResource0, KernelAllocation0x80001140, full runtime handle
+0x000001f84e9f8120. Repeated failures have the same class. This strongly
+points to wrong deallocation form for a device-associated nonshared
+allocation, separately from the writer-unknown low32 DWM corruption.
+EXP963 exact package was removed in Code43 and durable Code28 PASS on
+boot14:06:00.8827080Z after one ordinary recovery PSCI reset.
+
+EXP964 source commit6fc753fa uses the Microsoft documented allocation-list
+`pfnDeallocateCb` form only for nonshared nonprimary CreateResource with
+KernelResource0 and nonzero KernelAllocation. Shared/primary/resource-backed
+forms and failure requeue are unchanged. RED/GREEN and UMD/R148 suites passed;
+pinned WDK build964 0 warnings/errors, exact INF bdb6e604, SYS d3288aaa,
+UMD184f78c9, CATcb05ad69. EXP964 full-owner is ACTIVE on Air, Code0,
+CPU8/SSH/Explorer/DWM1232/disk/USB5. At14:29:41Z (boot14:13:12Z), no DWM
+Application1000 errors, same DWM PID, 11114 UMD lines with zero deallocation
+or Flush E_INVALIDARG errors, KMD DWM graph3 Present10 status0. DCP exact
+latches continue; cached zero samples cannot establish physical pixels.
+Console GDI CopyFromScreen timed out15s/result267014 without PNG; task was
+removed. Operator text description of physical panel was requested
+asynchronously but not yet received. Do NOT call this a stable desktop or
+accepted package. The current EXP964 visual-verification run remains live;
+cleanup964 exact scripts/manifest are staged and guest-hash verified, ready
+for Code43 rollback if pixels are wrong. Do not start a new GPU package while
+this one is installed. Evidence EXP964/evidence/stability-identity.json,
+umd-stability.log, dwm-ddi-first.txt, desktop-capture/before.json and ledger.
+
+Next causal decision depends on physical pixels. If desktop is correct, verify
+motion/input and an additional bounded stability window, then decide package
+acceptance. If artifacts persist, collect the observation, roll back exact964
+to durable Code28, and focus on GPU-produced DWM surface versus DCP scanout
+under synchronized cache observation; do not guess stride or format because
+current m1n1 IOMFB descriptor matches its source reference. Keep the recurring
+low32 DWM pointer writer as an independent unresolved cause.
 WHY CLEAN RECONSTRUCTION: old admission comparisons do not explain current
 DWM pointer truncation or separate platform recovery hang.
 
