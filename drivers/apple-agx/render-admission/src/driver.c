@@ -56,6 +56,8 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
       AdmissionTraceDdiQueryVidPnHWCapability;
   initialization.DxgkDdiSetVidPnSourceAddress =
       AdmissionDdiSetVidPnSourceAddress;
+  initialization.DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3 =
+      AdmissionDdiSetVidPnSourceAddressWithMultiPlaneOverlay3;
   initialization.DxgkDdiStopDeviceAndReleasePostDisplayOwnership =
       AdmissionDdiStopDeviceAndReleasePostDisplayOwnership;
   initialization.DxgkDdiNotifyAcpiEvent = AdmissionDdiNotifyAcpiEvent;

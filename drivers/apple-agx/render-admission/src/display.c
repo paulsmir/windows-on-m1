@@ -781,6 +781,50 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceAddress(
   return status;
 }
 
+/* EXP955: for DriverModel >= WDDM 2.3, dxgkrnl ForcePlanesOff disables
+ * plane 0 through this DDI without a NULL check.  One fixed plane: layer 0
+ * enable is the SetVidPnSourceAddress flip; disable keeps the last surface. */
+_Use_decl_annotations_ NTSTATUS
+AdmissionDdiSetVidPnSourceAddressWithMultiPlaneOverlay3(
+    CONST HANDLE MiniportDeviceContext,
+    DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3 *Args) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
+  DXGK_MULTIPLANE_OVERLAY_PLANE3 *plane;
+  const DXGK_PRIMARYCONTEXTDATA *primary;
+  DXGKARG_SETVIDPNSOURCEADDRESS legacy;
+  NTSTATUS status;
+
+  if (context == NULL || Args == NULL || Args->VidPnSourceId != 0 ||
+      Args->PlaneCount > 1u ||
+      (Args->PlaneCount != 0u && Args->ppPlanes == NULL))
+    return STATUS_INVALID_PARAMETER;
+  Args->OutputFlags.Value = 0u;
+  if (Args->PlaneCount == 0u)
+    return AdmissionScanoutMpoPlaneOff(context, 0ULL);
+  plane = Args->ppPlanes[0];
+  if (plane == NULL || plane->LayerIndex != 0u)
+    return STATUS_INVALID_PARAMETER;
+  plane->OutputFlags.Value = 0u;
+  if (!plane->InputFlags.Enabled)
+    return AdmissionScanoutMpoPlaneOff(context, plane->PresentId);
+  if (plane->ContextCount == 0u || plane->ppContextData == NULL ||
+      plane->ppContextData[0] == NULL)
+    return STATUS_INVALID_PARAMETER;
+  primary = plane->ppContextData[0];
+  RtlZeroMemory(&legacy, sizeof(legacy));
+  legacy.VidPnSourceId = 0;
+  legacy.PrimarySegment = primary->SegmentId;
+  legacy.PrimaryAddress = primary->SegmentAddress;
+  legacy.hAllocation = primary->hAllocation;
+  legacy.Flags.FlipImmediate = plane->InputFlags.FlipImmediate;
+  legacy.Flags.FlipOnNextVSync = plane->InputFlags.FlipOnNextVSync;
+  AdmissionScanoutTagMpoFlip(context, plane->PresentId);
+  status = AdmissionDdiSetVidPnSourceAddress(context, &legacy);
+  if (!NT_SUCCESS(status))
+    AdmissionScanoutClearMpoFlip(context);
+  return status;
+}
+
 _Use_decl_annotations_ NTSTATUS
 AdmissionDdiStopDeviceAndReleasePostDisplayOwnership(
     PVOID MiniportDeviceContext, D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId,

@@ -1462,6 +1462,11 @@ NTSTATUS AdmissionScanoutQueuePresent(
     _In_ const DXGKARG_SETVIDPNSOURCEADDRESS *Args);
 _IRQL_requires_max_(PASSIVE_LEVEL)
 NTSTATUS AdmissionScanoutQueueDeferred(_Inout_ ADMISSION_CONTEXT *Context);
+VOID AdmissionScanoutTagMpoFlip(_Inout_ ADMISSION_CONTEXT *Context,
+                                _In_ ULONGLONG PresentId);
+VOID AdmissionScanoutClearMpoFlip(_Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionScanoutMpoPlaneOff(_Inout_ ADMISSION_CONTEXT *Context,
+                                     _In_ ULONGLONG PresentId);
 NTSTATUS AdmissionScanoutSetTimelinePaused(_Inout_ ADMISSION_CONTEXT *Context,
                                           _In_ BOOLEAN Paused);
 VOID AdmissionScanoutDpc(_Inout_ ADMISSION_CONTEXT *Context);
@@ -1549,6 +1554,8 @@ DXGKDDI_STOPCAPTURE AdmissionDdiStopCapture;
 DXGKDDI_QUERYVIDPNHWCAPABILITY AdmissionDdiQueryVidPnHWCapability;
 DXGKDDI_QUERYVIDPNHWCAPABILITY AdmissionTraceDdiQueryVidPnHWCapability;
 DXGKDDI_SETVIDPNSOURCEADDRESS AdmissionDdiSetVidPnSourceAddress;
+DXGKDDI_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3
+    AdmissionDdiSetVidPnSourceAddressWithMultiPlaneOverlay3;
 DXGKDDI_STOP_DEVICE_AND_RELEASE_POST_DISPLAY_OWNERSHIP
 AdmissionDdiStopDeviceAndReleasePostDisplayOwnership;
 DXGKDDI_NOTIFY_ACPI_EVENT AdmissionDdiNotifyAcpiEvent;

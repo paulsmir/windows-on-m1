@@ -39,16 +39,18 @@ typedef int32_t LONG; typedef int64_t LONG64; typedef int BOOLEAN; typedef int N
 #define STATUS_SUCCESS 0
 #define _Use_decl_annotations_
 #define DXGK_INTERRUPT_CRTC_VSYNC 1
+#define DXGK_INTERRUPT_CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY2 10
+typedef struct {unsigned LayerIndex;unsigned long long PresentId;struct{unsigned Value;}Flags;} DXGK_MULTIPLANE_OVERLAY_VSYNC_INFO2;
 #define RtlZeroMemory(p,n) memset(p,0,n)
 static LONG InterlockedCompareExchange(volatile LONG*p,LONG v,LONG c){LONG o=*p;if(o==c)*p=v;return o;}
 static LONG64 InterlockedCompareExchange64(volatile LONG64*p,LONG64 v,LONG64 c){LONG64 o=*p;if(o==c)*p=v;return o;}
 static LONG InterlockedExchange(volatile LONG*p,LONG v){LONG o=*p;*p=v;return o;}
 static LONG64 InterlockedExchange64(volatile LONG64*p,LONG64 v){LONG64 o=*p;*p=v;return o;}
 static void InterlockedIncrement(volatile LONG*p){++*p;}
-typedef struct {int InterruptType;struct{unsigned VidPnTargetId;struct{LONG64 QuadPart;} PhysicalAddress;}CrtcVsync;} DXGKARGCB_NOTIFY_INTERRUPT_DATA;
+typedef struct {int InterruptType;struct{unsigned VidPnTargetId;struct{LONG64 QuadPart;} PhysicalAddress;}CrtcVsync;struct{unsigned VidPnTargetId,PhysicalAdapterMask,MultiPlaneOverlayVsyncInfoCount;DXGK_MULTIPLANE_OVERLAY_VSYNC_INFO2*pMultiPlaneOverlayVsyncInfo;unsigned long long GpuFrequency,GpuClockCounter;}CrtcVsyncWithMultiPlaneOverlay2;} DXGKARGCB_NOTIFY_INTERRUPT_DATA;
 typedef struct {void*ScanoutRuntime;int InterfaceValid;struct{void*DeviceHandle;void(*DxgkCbNotifyInterrupt)(void*,DXGKARGCB_NOTIFY_INTERRUPT_DATA*);int(*DxgkCbQueueDpc)(void*);void(*DxgkCbNotifyDpc)(void*);NTSTATUS(*DxgkCbSynchronizeExecution)(void*,BOOLEAN(*)(void*),void*,ULONG,BOOLEAN*);}Interface;volatile LONG LastInterruptStatus,InterruptCount,InterruptAckCount,SchedulerDpcPending,RenderDpcFence,DpcCount,SchedulerInitialized,SchedulerFaulted;} ADMISSION_CONTEXT;
-static unsigned notifications,dpcs,notified_dpcs;static LONG64 last_address;
-static void notify(void*c,DXGKARGCB_NOTIFY_INTERRUPT_DATA*d){(void)c;notifications++;last_address=d->CrtcVsync.PhysicalAddress.QuadPart;}
+static unsigned notifications,dpcs,notified_dpcs;static LONG64 last_address;static int last_type;static unsigned long long last_present_id;
+static void notify(void*c,DXGKARGCB_NOTIFY_INTERRUPT_DATA*d){(void)c;notifications++;last_type=d->InterruptType;if(d->InterruptType==DXGK_INTERRUPT_CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY2){assert(d->CrtcVsyncWithMultiPlaneOverlay2.MultiPlaneOverlayVsyncInfoCount==1&&d->CrtcVsyncWithMultiPlaneOverlay2.pMultiPlaneOverlayVsyncInfo->LayerIndex==0);last_present_id=d->CrtcVsyncWithMultiPlaneOverlay2.pMultiPlaneOverlayVsyncInfo->PresentId;}else last_address=d->CrtcVsync.PhysicalAddress.QuadPart;}
 static void notify_dpc(void*c){(void)c;notified_dpcs++;}
 static int queue(void*c){(void)c;dpcs++;return 1;}
 static unsigned irq;static APPLE_AGX_SCANOUT_U64 latch;

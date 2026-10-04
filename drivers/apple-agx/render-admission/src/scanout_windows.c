@@ -19,6 +19,14 @@ typedef struct _ADMISSION_SCANOUT_RUNTIME {
   volatile LONG64 PendingPhysicalAddress;
   volatile LONG64 PendingSequence;
   volatile LONG64 DeferredPrimaryAddress;
+  /* MPO3 flip identity: tagged before the queue, carried with the pending
+   * flip, and reported as CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY2 on latch. */
+  volatile LONG64 NextMpoPresentId;
+  volatile LONG NextMpo;
+  volatile LONG64 PendingMpoPresentId;
+  volatile LONG PendingMpo;
+  volatile LONG64 PlaneOffPresentId;
+  volatile LONG PlaneOffPending;
   volatile LONG64 LastNotifiedSequence;
   APPLE_AGX_VSYNC_TIMELINE Timeline;
   KTIMER VsyncTimer;
@@ -884,6 +892,36 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutSetVisible(
              : STATUS_DEVICE_HARDWARE_ERROR;
 }
 
+_Use_decl_annotations_ VOID AdmissionScanoutTagMpoFlip(
+    ADMISSION_CONTEXT *Context, ULONGLONG PresentId) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
+  if (runtime == NULL)
+    return;
+  InterlockedExchange64(&runtime->NextMpoPresentId, (LONG64)PresentId);
+  InterlockedExchange(&runtime->NextMpo, 1);
+}
+
+_Use_decl_annotations_ VOID AdmissionScanoutClearMpoFlip(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
+  if (runtime == NULL)
+    return;
+  InterlockedExchange(&runtime->NextMpo, 0);
+  InterlockedExchange64(&runtime->NextMpoPresentId, 0);
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionScanoutMpoPlaneOff(
+    ADMISSION_CONTEXT *Context, ULONGLONG PresentId) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
+  if (runtime == NULL)
+    return STATUS_DEVICE_NOT_READY;
+  /* One fixed scanout plane cannot be detached from DCP; the last latched
+   * surface keeps scanning and the request completes at the next vsync. */
+  InterlockedExchange64(&runtime->PlaneOffPresentId, (LONG64)PresentId);
+  InterlockedExchange(&runtime->PlaneOffPending, 1);
+  return STATUS_SUCCESS;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueueDeferred(
     ADMISSION_CONTEXT *Context) {
   ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
@@ -915,6 +953,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueueDeferred(
   }
   InterlockedExchange64(&runtime->PendingSequence, (LONG64)sequence);
   InterlockedExchange(&runtime->PendingValid, 1);
+  InterlockedExchange64(&runtime->PendingMpoPresentId,
+                        InterlockedExchange64(&runtime->NextMpoPresentId, 0));
+  InterlockedExchange(&runtime->PendingMpo,
+                      InterlockedExchange(&runtime->NextMpo, 0));
   return STATUS_SUCCESS;
 }
 
@@ -1047,6 +1089,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
   }
   InterlockedExchange64(&runtime->PendingSequence, (LONG64)sequence);
   InterlockedExchange(&runtime->PendingValid, 1);
+  InterlockedExchange64(&runtime->PendingMpoPresentId,
+                        InterlockedExchange64(&runtime->NextMpoPresentId, 0));
+  InterlockedExchange(&runtime->PendingMpo,
+                      InterlockedExchange(&runtime->NextMpo, 0));
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   if (fallbackCandidateValid) {
     BOOLEAN retained;
@@ -1116,7 +1162,9 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
   APPLE_AGX_SCANOUT_RESULT result;
   DXGKARGCB_NOTIFY_INTERRUPT_DATA data;
   LONG64 pending_sequence;
-  BOOLEAN matched = FALSE, notify_vsync = FALSE;
+  BOOLEAN matched = FALSE, notify_vsync = FALSE, mpo_flip = FALSE;
+  ULONGLONG mpo_present_id = 0ULL;
+  DXGK_MULTIPLANE_OVERLAY_VSYNC_INFO2 mpo_info;
   ULONGLONG now;
   if (runtime == NULL ||
       InterlockedCompareExchange(&runtime->IrqEnabled, 0, 0) == 0 ||
@@ -1151,6 +1199,9 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
           (ULONGLONG)InterlockedCompareExchange64(
               &runtime->PendingPhysicalAddress, 0, 0), now) != 0;
       if (matched) {
+        mpo_flip = InterlockedExchange(&runtime->PendingMpo, 0) != 0;
+        mpo_present_id = (ULONGLONG)InterlockedExchange64(
+            &runtime->PendingMpoPresentId, 0);
         AdmissionScanoutVsyncRecord(runtime, 3u, STATUS_SUCCESS);
         InterlockedExchange64(&runtime->LastNotifiedSequence,
                               (LONG64)latched_sequence);
@@ -1169,13 +1220,32 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
   }
   if (matched && runtime->Timeline.Enabled)
     notify_vsync = TRUE;
+  if (!mpo_flip && notify_vsync &&
+      InterlockedCompareExchange(&runtime->PlaneOffPending, 0, 0) != 0) {
+    /* A plane-0 disable completes on the next vertical sync. */
+    InterlockedExchange(&runtime->PlaneOffPending, 0);
+    mpo_present_id = (ULONGLONG)InterlockedExchange64(
+        &runtime->PlaneOffPresentId, 0);
+    mpo_flip = TRUE;
+  }
   if (notify_vsync && runtime->Timeline.Running &&
       InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0) {
     RtlZeroMemory(&data, sizeof(data));
-    data.InterruptType = DXGK_INTERRUPT_CRTC_VSYNC;
-    data.CrtcVsync.VidPnTargetId = 0u;
-    data.CrtcVsync.PhysicalAddress.QuadPart =
-        (LONGLONG)runtime->Timeline.ActiveAddress;
+    if (mpo_flip) {
+      RtlZeroMemory(&mpo_info, sizeof(mpo_info));
+      mpo_info.LayerIndex = 0u;
+      mpo_info.PresentId = mpo_present_id;
+      data.InterruptType = DXGK_INTERRUPT_CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY2;
+      data.CrtcVsyncWithMultiPlaneOverlay2.VidPnTargetId = 0u;
+      data.CrtcVsyncWithMultiPlaneOverlay2.MultiPlaneOverlayVsyncInfoCount = 1u;
+      data.CrtcVsyncWithMultiPlaneOverlay2.pMultiPlaneOverlayVsyncInfo =
+          &mpo_info;
+    } else {
+      data.InterruptType = DXGK_INTERRUPT_CRTC_VSYNC;
+      data.CrtcVsync.VidPnTargetId = 0u;
+      data.CrtcVsync.PhysicalAddress.QuadPart =
+          (LONGLONG)runtime->Timeline.ActiveAddress;
+    }
     Context->Interface.DxgkCbNotifyInterrupt(
         Context->Interface.DeviceHandle, &data);
     if (runtime->VsyncReceipt.NotifyCount != APPLE_AGX_VSYNC_MAX)
