@@ -38,20 +38,22 @@ static LONG InterlockedCompareExchange(volatile LONG *p,LONG v,LONG c) {
 }
 ''' + function + r'''
 int main(void) {
-  volatile LONG normal=0, failures=0;
+  volatile LONG normal=0, failures=0, retirement_failures=0;
   for(int i=0;i<128;i++)
-    assert(AdmissionUmdDiagnosticPermit("g4-open-adapter-enter",0,&normal,&failures));
-  assert(!AdmissionUmdDiagnosticPermit("g4-open-adapter-enter",0,&normal,&failures));
+    assert(AdmissionUmdDiagnosticPermit("g4-open-adapter-enter",0,&normal,&failures,&retirement_failures));
+  assert(!AdmissionUmdDiagnosticPermit("g4-open-adapter-enter",0,&normal,&failures,&retirement_failures));
   assert(normal==128 && failures==0);
-  assert(AdmissionUmdDiagnosticPermit("umd-deallocate-failure",(HRESULT)0x80070057u,&normal,&failures));
+  assert(AdmissionUmdDiagnosticPermit("umd-deallocate-failure",(HRESULT)0x80070057u,&normal,&failures,&retirement_failures));
   assert(normal==128 && failures==1);
   for(int i=1;i<16;i++)
-    assert(AdmissionUmdDiagnosticPermit("umd-deallocate-failure",(HRESULT)0x80070057u,&normal,&failures));
-  assert(!AdmissionUmdDiagnosticPermit("umd-deallocate-failure",(HRESULT)0x80070057u,&normal,&failures));
+    assert(AdmissionUmdDiagnosticPermit("umd-deallocate-failure",(HRESULT)0x80070057u,&normal,&failures,&retirement_failures));
+  assert(!AdmissionUmdDiagnosticPermit("umd-deallocate-failure",(HRESULT)0x80070057u,&normal,&failures,&retirement_failures));
   assert(failures==17);
-  assert(AdmissionUmdDiagnosticPermit("measure-native-flush-stage",0,&normal,&failures));
-  assert(AdmissionUmdDiagnosticPermit("reject-seterror",(HRESULT)0x80070057u,&normal,&failures));
-  assert(!AdmissionUmdDiagnosticPermit("umd-deallocate-failure",0,&normal,&failures));
+  assert(AdmissionUmdDiagnosticPermit("umd-retirement-failure",(HRESULT)0x80070057u,&normal,&failures,&retirement_failures));
+  assert(retirement_failures==1 && normal==128);
+  assert(AdmissionUmdDiagnosticPermit("measure-native-flush-stage",0,&normal,&failures,&retirement_failures));
+  assert(AdmissionUmdDiagnosticPermit("reject-seterror",(HRESULT)0x80070057u,&normal,&failures,&retirement_failures));
+  assert(!AdmissionUmdDiagnosticPermit("umd-deallocate-failure",0,&normal,&failures,&retirement_failures));
   return 0;
 }
 '''

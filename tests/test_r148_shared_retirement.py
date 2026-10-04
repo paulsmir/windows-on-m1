@@ -50,6 +50,7 @@ static void ReleaseSRWLockExclusive(SRWLOCK*){}
 static void* GetProcessHeap(){return nullptr;}
 static void* HeapAlloc(void*,unsigned,size_t n){return calloc(1,n);}
 static void HeapFree(void*,unsigned,void*p){free(p);}
+inline void AdmissionUmdDiagnostic(const char*,HRESULT,const UINT*,UINT){}
 @@HEADER@@
 @@LIFETIME@@
 struct ADMISSION_UMD_RESOURCE { ADMISSION_UMD_RETIREMENT* Retirement; unsigned KernelAllocation; };

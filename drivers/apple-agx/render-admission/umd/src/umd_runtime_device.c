@@ -43,9 +43,12 @@ BOOL AdmissionUmdDiagnosticEnabled(VOID) {
  * deallocation. Keep the failure receipt independent and bounded. */
 static BOOL AdmissionUmdDiagnosticPermit(
     PCSTR Stage, HRESULT Status, volatile LONG *NormalRecords,
-    volatile LONG *DeallocateFailures) {
+    volatile LONG *DeallocateFailures,
+    volatile LONG *RetirementFailures) {
   if (strcmp(Stage, "umd-deallocate-failure") == 0 && FAILED(Status))
     return InterlockedIncrement(DeallocateFailures) <= 16;
+  if (strcmp(Stage, "umd-retirement-failure") == 0 && FAILED(Status))
+    return InterlockedIncrement(RetirementFailures) <= 16;
   if (strncmp(Stage, "reject-", 7u) == 0 ||
       strncmp(Stage, "measure-", 8u) == 0)
     return TRUE;
@@ -57,6 +60,7 @@ VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
                             const UINT *Values, UINT Count) {
   static volatile LONG records;
   static volatile LONG deallocateFailures;
+  static volatile LONG retirementFailures;
   DWORD saved = GetLastError();
   WCHAR path[MAX_PATH], only[2];
   char line[512];
@@ -71,13 +75,15 @@ VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
   if (GetEnvironmentVariableW(L"APPLE_AGX_UMD_REFUSALS_ONLY",only,2)==1u &&
       only[0]==L'1' && strncmp(Stage,"reject-",7u)!=0 &&
       strncmp(Stage,"measure-",8u)!=0 &&
-      !(strcmp(Stage,"umd-deallocate-failure")==0 && FAILED(Status))) goto done;
+      !(strcmp(Stage,"umd-deallocate-failure")==0 && FAILED(Status)) &&
+      !(strcmp(Stage,"umd-retirement-failure")==0 && FAILED(Status))) goto done;
   length = GetEnvironmentVariableW(L"APPLE_AGX_UMD_TRACE_FILE", path,
                                     ARRAYSIZE(path));
   /* Refusals must not disappear when successful startup chatter consumes
    * the normal 128-record budget. Capture remains opt-in and run-bounded. */
   if (length == 0u || length >= ARRAYSIZE(path) ||
-      !AdmissionUmdDiagnosticPermit(Stage,Status,&records,&deallocateFailures))
+      !AdmissionUmdDiagnosticPermit(Stage,Status,&records,&deallocateFailures,
+                                    &retirementFailures))
     goto done;
   (void)QueryPerformanceCounter(&diagnosticQpc);
   (void)ProcessIdToSessionId(GetCurrentProcessId(), &diagnosticSession);

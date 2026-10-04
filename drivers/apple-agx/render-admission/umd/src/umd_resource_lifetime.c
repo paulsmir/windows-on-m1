@@ -1,4 +1,8 @@
 #include "umd_resource_lifetime.h"
+#include <stdint.h>
+
+VOID AdmissionUmdDiagnostic(const char *Stage, HRESULT Status,
+                            const UINT *Values, UINT Count);
 
 VOID AdmissionUmdRetirementInitialize(
     ADMISSION_UMD_RETIREMENT_QUEUE *Queue, void *CallbackContext,
@@ -92,6 +96,15 @@ BOOL AdmissionUmdRetirementDrain(ADMISSION_UMD_RETIREMENT_QUEUE *Queue) {
   while ((retirement = AdmissionUmdRetirementPop(Queue)) != NULL) {
     result = AdmissionUmdRetirementDeallocate(Queue, retirement);
     if (FAILED(result)) {
+      UINT receipt[8] = {
+          retirement->Origin, (UINT)retirement->Primary,
+          (UINT)retirement->Shared, retirement->KernelResource,
+          retirement->KernelAllocation,
+          (UINT)(uintptr_t)retirement->RuntimeResource,
+          (UINT)((uint64_t)(uintptr_t)retirement->RuntimeResource >> 32),
+          Queue->Count};
+      AdmissionUmdDiagnostic("umd-retirement-failure", result, receipt,
+                             (UINT)(sizeof(receipt) / sizeof(receipt[0])));
       AdmissionUmdRetirementRequeueFront(Queue, retirement);
       if (Queue->ReportError != NULL)
         Queue->ReportError(Queue->CallbackContext, result);

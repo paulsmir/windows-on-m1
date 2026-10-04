@@ -510,6 +510,7 @@ VOID APIENTRY AdmissionUmdCreateResource(
   retirement->RuntimeResource = RuntimeResource.handle;
   retirement->KernelResource = allocate.hKMResource;
   retirement->KernelAllocation = allocationInfo.hAllocation;
+  retirement->Origin = 1u;
   retirement->Primary = CreateResource->pPrimaryDesc != NULL;
   retirement->Shared =
       (CreateResource->MiscFlags & D3D10_DDI_RESOURCE_MISC_SHARED) != 0u;
@@ -599,6 +600,7 @@ VOID APIENTRY AdmissionUmdOpenResource(
   retirement->RuntimeResource = RuntimeResource.handle;
   retirement->KernelResource = OpenResource->hKMResource.handle;
   retirement->KernelAllocation = info->hAllocation;
+  retirement->Origin = 2u;
   retirement->Primary = FALSE;
   retirement->Shared = TRUE;
   resource->Retirement = retirement;

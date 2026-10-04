@@ -13,6 +13,7 @@ typedef struct _ADMISSION_UMD_RETIREMENT {
   HANDLE RuntimeResource;
   ULONG KernelResource;
   ULONG KernelAllocation;
+  ULONG Origin; /* 1=CreateResource, 2=OpenResource; diagnostic only. */
   BOOL Primary;
   BOOL Shared;
 } ADMISSION_UMD_RETIREMENT;
