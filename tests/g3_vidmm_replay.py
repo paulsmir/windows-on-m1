@@ -91,6 +91,11 @@ def generate(revision=None, function_revisions=None):
                     parts.append(f'#include "{include}"\n')
             parts.append("enum { AdmissionG3PagingFailureTableAddress=1, AdmissionG3PagingFailureTableGraph=2, AdmissionG3PagingFailureParentFlags=3, AdmissionG3PagingFailureChildAddress=4, AdmissionG3PagingFailureChildGraph=5, AdmissionG3PagingFailureParentLink=6, AdmissionG3PagingFailureLeafGraph=7, AdmissionG3PagingTableInitialized=8, AdmissionG3PagingFailureTableMirror=9, AdmissionG3PagingFailureSubpage=10 };\n")
         for name in names:
+            if filename == "gpuva_g3_windows.c" and name == "AdmissionGpuvaG3CopyEscape":
+                marker = "typedef struct _ADMISSION_G3_COPY_PAGING_QUIESCENCE"
+                if marker in source:
+                    parts.append(source[source.index(marker):
+                                        source.index("NTSTATUS AdmissionGpuvaG3CopyEscape", source.index(marker))])
             parts.append(f'#line 1 "{filename}:{name}"\n')
             function_source = source
             if revision is not None and name in (
@@ -133,6 +138,8 @@ def generate(revision=None, function_revisions=None):
     for name in ("AdmissionNotifyCompletionAtInterrupt", "AdmissionBackendComplete"):
         parts.append(body(backend,name))
     parts.append("#endif\n")
+    if revision is None and "AdmissionGpuvaG3CopyEscape" not in function_revisions:
+        parts.append("#define APPLE_AGX_R168_COPY_RETRY 1\n")
     if os.environ.get("G3_REPLAY_QUERY_V2") or os.environ.get("G3_REPLAY_R147"):
         scenarios = (ROOT / "tests/g3_vidmm_replay_scenarios.c").read_text()
         system = (ROOT / "tests/g3_system_lifetime_cases.c").read_text()

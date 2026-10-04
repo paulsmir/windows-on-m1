@@ -1022,7 +1022,9 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
    * lock released rather than refusing the copy: a refused copy rejects the
    * UMD batch and the D3D device never presents. The bound exceeds TdrDelay;
    * predicates 42-44 still refuse if the job does not finish. */
-  for(wait_ms=0u;;++wait_ms) {
+  wait_ms=0u;
+RetryPagingQuiescence:
+  for(;;++wait_ms) {
     ExAcquireFastMutex(&state->Lock);
     p=AdmissionGpuvaG3FindProcess(state,args->hKmdProcessHandle);
     /* R161 (EXP874): an UPLOAD/DOWNLOAD also waits until every built paging
@@ -1060,6 +1062,17 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   COPY_REJECT_IF(state->ActiveProcess, 42u, STATUS_DEVICE_BUSY, Unlock);
   COPY_REJECT_IF(p->Graph.JobInFlight, 43u, STATUS_DEVICE_BUSY, Unlock);
   COPY_REJECT_IF(p->Graph.LeaseToken, 44u, STATUS_DEVICE_BUSY, Unlock);
+  /* A paging buffer may be built after the first quiescence test. Retry the
+   * whole owner/context validation while preserving the original 3 s bound;
+   * never copy through a newly pending transfer/fill. */
+  if(q->Operation!=APPLE_AGX_G3_COPY_QUERY &&
+     !AdmissionPagingQuiescent(adapter) && wait_ms<3000u) {
+    ExReleaseFastMutex(&state->Lock);
+    delay.QuadPart=-10000LL;
+    (void)KeDelayExecutionThread(KernelMode,FALSE,&delay);
+    ++wait_ms;
+    goto RetryPagingQuiescence;
+  }
   COPY_REJECT_IF(q->Operation!=APPLE_AGX_G3_COPY_QUERY &&
       !AdmissionPagingQuiescent(adapter), 62u, STATUS_DEVICE_BUSY, Unlock);
   /* R159: only a different process instance invalidates the QUERY. An

@@ -123,6 +123,7 @@ static NTSTATUS KeDelayExecutionThread(KPROCESSOR_MODE m, BOOLEAN a, LARGE_INTEG
   ++replay_delay_calls; if(replay_delay_hook) replay_delay_hook(); return 0; }
 /* R161: paging-worker quiescence and encoded-record accounting. */
 static int replay_paging_pending; static UINT replay_encoded_records;
+static int replay_quiescence_flip_after_success;
 static BOOLEAN replay_pool_fail;
 static UINT replay_pool_calls;
 static volatile LONG *replay_query_claim_watch;
@@ -307,7 +308,10 @@ struct _ADMISSION_CONTEXT { REPLAY_PACKET RenderPacket; BOOLEAN InterfaceValid; 
   APPLE_AGX_G3_COPY_TRANSFER_FAILURE G3CopyTransferFailure;
   volatile LONG G3PrivateFailureClaim;
   APPLE_AGX_G3_PRIVATE_FAILURE G3PrivateFailure;
-  int SchedulerLock,Scheduler;
+  int SchedulerLock,Scheduler,PagingLock;
+  LONG PagingRecordsUnsubmitted;
+  ULONG CpuQueueCount,PagingFence,PagingLastSubmittedFence,PagingLastCompletedFence;
+  volatile LONG PagingPending,PagingWorkersActive,PagingDpcPending,PagingDpcsActive,SchedulerFaulted;
   ADMISSION_BACKEND_IMAGE BackendImage;
   struct { REPLAY_APERTURE Aperture; } Memory;
 };
@@ -317,6 +321,15 @@ static NTSTATUS AdmissionDwmDdiProbeQueryWindows(ADMISSION_CONTEXT *context,
 }
 #define PLUGPLAY_REGKEY_DEVICE 1u
 #define KEY_SET_VALUE 2u
+#define REG_BINARY 3u
+typedef struct { const wchar_t *Buffer; } UNICODE_STRING;
+static void RtlInitUnicodeString(UNICODE_STRING *name,const wchar_t *value) {name->Buffer=value;}
+static NTSTATUS ZwSetValueKey(HANDLE key,const UNICODE_STRING *name,ULONG title,
+    ULONG type,void *data,ULONG bytes) {
+  (void)title;(void)data;(void)bytes;
+  assert(key==(HANDLE)0x5588 && name && !wcscmp(name->Buffer,L"Wom1G3CopyPagingQuiescence") && type==REG_BINARY);
+  return STATUS_SUCCESS;
+}
 static UINT r145_references;
 static ULONG query_registry_writes,query_registry_flushes,query_registry_receipt[42];
 static ULONG private_registry_writes;
@@ -344,7 +357,15 @@ static void WriteBinary(HANDLE key,const wchar_t *name,const VOID *data,ULONG by
 }
 static NTSTATUS ZwFlushKey(HANDLE key) {assert(key==(HANDLE)0x5588);++query_registry_flushes;return STATUS_SUCCESS;}
 static void ZwClose(HANDLE key) {assert(key==(HANDLE)0x5588);}
-static BOOLEAN AdmissionPagingQuiescent(ADMISSION_CONTEXT *a) {(void)a;return replay_paging_pending==0;}
+static BOOLEAN AdmissionPagingQuiescent(ADMISSION_CONTEXT *a) {
+  (void)a;
+  if (replay_quiescence_flip_after_success) {
+    replay_quiescence_flip_after_success=0;
+    replay_paging_pending=1;
+    return TRUE;
+  }
+  return replay_paging_pending==0;
+}
 static void AdmissionPagingNoteEncoded(ADMISSION_CONTEXT *a,UINT n) {(void)a;replay_encoded_records+=n;}
 int AdmissionPagingRecordsValid(const ADMISSION_PAGING_RECORD *,UINT,UINT,UINT);
 static UINT replay_paging_submits,replay_paging_submit_bytes,replay_paging_submit_fence;
