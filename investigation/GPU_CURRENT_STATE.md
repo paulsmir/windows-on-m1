@@ -1,4 +1,4 @@
-# J313 GPU — EXP942 transfer-failure observation
+# J313 GPU — EXP958 DWM corruption boundary
 
 ## Objective and rules
 Continue until the physical screen shows a correct stable Windows image.
@@ -20,82 +20,33 @@ Foreign dirt: m1n1_windows/rust/vendor/rust-fatfs, mu;
 untracked drivers/apple-agx/render-admission/pauls@192.168.1.24.ps1 and
 investigation/analysis/EXP895-standard-blt-stimulus-plan.md.
 
-## Current — EXP948 address boundary proven; exact package removed
-No working/stable physical screen. Operator's latest attached photo SHA
-d33fdff73e787583c6cdf77e5dca289e519ce1fe9d4749dddfe953f4fd2fbf64
-is byte-identical to the earlier 941 photo and shows repeated wallpaper
-fragments and scanlines. Do not call that blank; it is not current boot proof.
-Current Air is immutable normal GPU-visible377392 recovery with one inert
-APPL0002 Code28; exact948/oem5 removed. Durable clean boot126718
-Start14:51:17.2097176Z: CPU8/packages0/services0/signerfalse/filesfalse/
-SystemFlush0/Cnotdirty/free11950239744. No AppleAgx installed or staged.
-
-EXP948 source2fbb6be39d6e4fd621b2d99ca63d84a4c0ff3a09 diagnostic
-bounded first16 DWM FrameArm PTE maps, same fullm1n1bdcf/MuR143e54c.
-Full boot126519 Start14:39:05.0921518Z Code0/CPU8. Without another SDK
-stimulus, read-only DWM FrameProbe and map00 matched DWM1240 allocation
-0x40003a00 canonicalGPUVA0x1f0000, KMD completed 26/26 render submissions.
-Its valid writable segment2 PTE resolved to local IPA0x8e11a0000. DCP's
-latched source remained segment2 PA0x8e0110000, difference0x1090000.
-KMD Present0/VirtualPresent0, SetVidPnSourceAddress count1, TDR0.
-This proves the completed DWM target is not the selected scanout backing
-and there was no observed KMD transfer or address switch. It does not by
-itself prove which Windows contract prevents the bridge. Original948
-state/UMD/ETL hostgate
-436bdc653cddecd61a0257237ed4b88f4c6acb5a7652dab018941cf1c7198598.
-No extra SDK draw was run on948; experiment stopped at first discriminator.
-
-EXP947 source5a3c280daf93655831ae33fc36c570c101f93d49 first last-only
-map was valid for DWM VA0x7f0000 but not the presented sourceVA1f0000.
-Read-only probe demonstrated the mismatch; verdict INCONCLUSIVE for physical
-presentation. Original947 hostgate
-fb63ad237844eb201032233aa8f9d286b7c26aa7909f97184a11b86e02cfc565.
-Normal recovery stalled twice, immutable hidden385 restored SSH for exact
-cleanup; normal clean Code28 confirmed before948.
-
-EXP946 source9808992403f1d048d4d4d53f9d1ccaf0601e846b broad legacy
-PRESENT->WrittenPrimary was REJECTED on hardware E_INVALIDARG by dxgkrnl.
-Corrective source d49f3013b510ce680e40e58778d2188a63d99767 reverted it
-and added real UMD negative regression RED/GREEN. Original946 gate
-cf686b92e4fce8f0947c48f2fadbbcd3a526a075cc9f95358646759cc14109e3.
-EXP945 diagnostic confirmed DWM legacy source WrittenPrimary0/NumPrimaries0;
-that is not evidence of a missing new displayable flag. EXP944 new
-DISPLAYABLE_SURFACE primary list worked for SDK direct backbuffer but did not
-correct physical output; no operator image. Preserve these verdicts.
-
-NEXT CAUSAL TARGET: full-WDDM DXGI Present-to-KMD copy/flip contract. In 945
-DWM's native DXGI Present had Blt flag1 and null hDstResource; UMD
-pfnPresentCb returned S_OK, yet KMD Present/VirtualPresent0 and the rendered
-source was physically distinct from DCP scanout. Official Microsoft DXGI
-Presentation Path says presentation must move rendered backbuffer content to
-primary; DXGIDDICB_PRESENT allows hDstAllocation0 for kernel-selected target.
-Do not force a copy through an unrelated escape or widen capability bits.
-Inspect current native Mesa DXGI callbacks, current KMD present/flip caps,
-Mu/ACPI and Asahi/m1n1 scanout (already source-inspected) to identify the
-violated owning contract, with one offline pass and one narrow discriminator
-if still ambiguous. No another old-reference archaeology loop.
-WHY CLEAN RECONSTRUCTION: current runtime gap is now measurable at exact
-DWM-to-DCP boundary; prior admission history does not distinguish its cause.
-
-EXP942 source2b6e8792ca02caab0597a45af974b0ab269f58d6 added separate
-UPLOAD/DOWNLOAD failure receipt withoutcopybehaviorchange. Boot124717,
-Start10:35:38.0757362Z/gen242360341/Code0/Stage12/HVC1/CPU8.
-Samece544 --windowed SDK3904 actualPresentS_OK/devicehealthy/exit0 (~11s),
-stdoutSHAe8e3fba418749898cb3c9fa311c877aa36857883d516e00d2d659e394b993713.
-Explorer6184 ResourceCopyRegion failed at QUERY step1 BEFORE transfer.
-QUERYpredicate56: no logicalPTE for VA0x11001f0000/64KiB, process9,
-root9df3a0000/mappinggen21048. Receipt reasonnone because walk was unfilled.
-No Wom1G3CopyTransferFailure key. High-VA real-handler alias QUERY replay
-passed16/64; arithmetic workswhen tablelinks exist. Original942 final files/ETL
-hostverified internalEXP942-original, gate
- da45f71d8841c5e1c4e9535b097facfb7a6c6c298558b9b7c24996628bf9636.
-ETL had no map eventsinfirstfailure interval; one offlinepass exhausted.
-942cleanupanddurableCode28 verifiedabove.
-
-WHY CONTINUE COMPARISON: 942 actually rejected a resource QUERY on absent logical
-PTE, but did not identify where the page-table walk broke. 943 adds only that
-missing classification. Admission reconstruction and old archaeology do not
-resolve this current runtime boundary. No repeated fullscreen/GDI capture.
+## Current — EXP958 DWM teardown is the next boundary
+No accepted visual desktop package. Full-owner EXP958 package958 (source 058053b6,
+MPO3 single plane), m1n1-exp954 SHA22eda013, Mu r143 SHAe54c0098 is **currently
+live Code0**; do not remove its package in this guest. Boot09:18:05.4505760Z.
+At +767s CPU8, SSH, RDP service, disk0 and USB5 alive; DCP applied swap106,
+KMD Flip35/SetVidPnSourceAddress98 status0, TDR0. This proves OS continuity,
+not DWM/desktop stability: DWM crashed at least six times (Application1000),
+latest full-host-verified mini dump SHA56db6a8a has an invalid pointer read in
+uDWM!CBaseObject::Release while destroying a visual/resource proxy. EXP957's
+kernel 0x3B missing-MPO3 stack did not recur; direct MPO3 callback use unmeasured.
+DWM completed/presented allocation0x80005f00 VA0x5f40000 resolved to
+IPA0x8e2100000, equal DCP swap36 PA. Thus the old EXP948 no-address-bridge
+hypothesis is rejected for this frame. DCP CPU snapshots of successive latched
+primaries still report zero with cache_clean=0; physical panel appearance is
+unverified. Do not infer black or good pixels from that cached sample.
+NEXT CAUSAL TARGET: source of truncated uDWM visual/resource vtables. EXP958D
+full dump SHA0f97968e confirms two vtable qwords with high32 zero beside full
+uDWM pointers in a committed DWM heap, but does not identify the writer.
+Do one offline source/dump pass; if unresolved, compare the ordinary no-package
+recovery guest before changing the pixel path. Keep exact958 package installed while Code0/SSH is alive. For rollback,
+ordinary recovery -> Code43 -> cleanup958 -> durable Code28 preflight.
+Evidence: EXP958/evidence/live-plus750.txt, read-boundary.json,
+source-maps-v2.json, full-plus750.log, umd-final.log, boot.etl,
+crashes.txt, dwm.exe.5976.dmp, dwm-cdb.txt, full-dwm/dwm.exe.5552.dmp
+and full-dwm/cdb-heap2.txt; EXP957/evidence/rec957a/cdb-analyze.txt.
+WHY CLEAN RECONSTRUCTION: old EXP948 comparison no longer identifies this live
+DWM teardown failure; current dump is the nearest causal boundary.
 
 ## EXP941 findings and rollback
 Source382a333d65368453879155a21895bbef280ba126 changed native GPUVA+DXGI1.1
