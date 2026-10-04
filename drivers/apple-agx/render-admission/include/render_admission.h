@@ -555,6 +555,9 @@ typedef struct _ADMISSION_ALLOCATION_HANDLE {
   ULONG Win32ClassId;
   ULONG Win32Flags;
   ULONG WrittenPrimary;
+  /* Created-with refresh rate reported by DxgkDdiDescribeAllocation. */
+  UINT PrimaryRefreshNumerator;
+  UINT PrimaryRefreshDenominator;
 } ADMISSION_ALLOCATION_HANDLE;
 
 #define ADMISSION_OPEN_ALLOCATION_MAGIC 0x4f504152u

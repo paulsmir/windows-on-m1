@@ -23,13 +23,19 @@ typedef struct _ADMISSION_ALLOCATION_DESCRIPTION {
 /* Per-resource data survives a shared OpenResource independently of each
  * allocation's placement description. Never infer displayability from BGRA. */
 #define ADMISSION_PRESENT_RESOURCE_MAGIC 0x52505241u
-#define ADMISSION_PRESENT_RESOURCE_VERSION 1u
+#define ADMISSION_PRESENT_RESOURCE_VERSION 2u
 #define ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY 1u
 typedef struct _ADMISSION_PRESENT_RESOURCE_DATA {
   unsigned int Magic, Version, Bytes, Flags, Reserved;
+  /* DXGI_DDI_PRIMARY_DESC.ModeDesc.RefreshRate of a primary; 0/0 otherwise. */
+  unsigned int RefreshNumerator, RefreshDenominator;
 } ADMISSION_PRESENT_RESOURCE_DATA;
 int AdmissionPresentResourceDataValid(
     const ADMISSION_PRESENT_RESOURCE_DATA *Data);
+/* The DxgkDdiDescribeAllocation RefreshRate: the created-with rate, or 0/1. */
+void AdmissionPresentResourceRefreshRate(
+    const ADMISSION_PRESENT_RESOURCE_DATA *Data, unsigned int *Numerator,
+    unsigned int *Denominator);
 
 typedef struct _ADMISSION_ALLOCATION_OBJECT {
   unsigned int Magic;

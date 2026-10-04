@@ -155,7 +155,7 @@ int main(void) {
  backing.Object.Magic=ADMISSION_ALLOCATION_OBJECT_MAGIC;
  ADMISSION_PRESENT_RESOURCE_DATA display={ADMISSION_PRESENT_RESOURCE_MAGIC,
      ADMISSION_PRESENT_RESOURCE_VERSION,sizeof(display),
-     ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY,0};
+     ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY,0,0,0};
  a.pPrivateDriverData=&display;a.PrivateDriverSize=sizeof(display);
  backing.WrittenPrimary=1;info[0].hDeviceSpecificAllocation=NULL;
  assert(AdmissionDdiOpenAllocation(&device,&a)==STATUS_SUCCESS);

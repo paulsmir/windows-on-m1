@@ -11,7 +11,24 @@ int AdmissionPresentResourceDataValid(
       Data->Version == ADMISSION_PRESENT_RESOURCE_VERSION &&
       Data->Bytes == sizeof(*Data) &&
       (Data->Flags & ~ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY) == 0u &&
-      Data->Reserved == 0u;
+      Data->Reserved == 0u &&
+      (Data->RefreshDenominator != 0u || Data->RefreshNumerator == 0u);
+}
+
+void AdmissionPresentResourceRefreshRate(
+    const ADMISSION_PRESENT_RESOURCE_DATA *Data, unsigned int *Numerator,
+    unsigned int *Denominator) {
+  if (Numerator == ADMISSION_ALLOCATION_NULL ||
+      Denominator == ADMISSION_ALLOCATION_NULL)
+    return;
+  if (AdmissionPresentResourceDataValid(Data) &&
+      Data->RefreshDenominator != 0u) {
+    *Numerator = Data->RefreshNumerator;
+    *Denominator = Data->RefreshDenominator;
+    return;
+  }
+  *Numerator = 0u;
+  *Denominator = 1u;
 }
 
 int AdmissionAllocationDescribe(unsigned int Width, unsigned int Height,

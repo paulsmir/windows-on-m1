@@ -7,7 +7,7 @@ static void test_displayable_resource_metadata(void) {
   ADMISSION_PRESENT_RESOURCE_DATA data = {
       ADMISSION_PRESENT_RESOURCE_MAGIC, ADMISSION_PRESENT_RESOURCE_VERSION,
       sizeof(ADMISSION_PRESENT_RESOURCE_DATA),
-      ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY, 0u};
+      ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY, 0u, 0u, 0u};
   ADMISSION_PRESENT_RESOURCE_DATA opened;
   assert(AdmissionPresentResourceDataValid(&data));
   memcpy(&opened, &data, sizeof(opened));
@@ -23,6 +23,31 @@ static void test_displayable_resource_metadata(void) {
   opened = data;opened.Version++;
   assert(!AdmissionPresentResourceDataValid(&opened));
   assert(!AdmissionPresentResourceDataValid(0));
+}
+
+/* EXP954: dxgkrnl DXGDEVICE::SetDisplayMode compares the primary's
+ * DxgkDdiDescribeAllocation RefreshRate with the current mode and returns
+ * STATUS_GRAPHICS_PRESENT_DENIED on mismatch, so the KMD must report the
+ * refresh rate the primary was created with (DXGI_DDI_PRIMARY_DESC). */
+static void test_primary_refresh_rate_round_trip(void) {
+  ADMISSION_PRESENT_RESOURCE_DATA data = {
+      ADMISSION_PRESENT_RESOURCE_MAGIC, ADMISSION_PRESENT_RESOURCE_VERSION,
+      sizeof(ADMISSION_PRESENT_RESOURCE_DATA),
+      ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY, 0u,
+      266630000u, 4443844u};
+  unsigned int numerator = 7u, denominator = 7u;
+  assert(AdmissionPresentResourceDataValid(&data));
+  AdmissionPresentResourceRefreshRate(&data, &numerator, &denominator);
+  assert(numerator == 266630000u && denominator == 4443844u);
+  data.RefreshNumerator = 0u;
+  data.RefreshDenominator = 0u; /* not a primary: no created-with rate */
+  assert(AdmissionPresentResourceDataValid(&data));
+  AdmissionPresentResourceRefreshRate(&data, &numerator, &denominator);
+  assert(numerator == 0u && denominator == 1u);
+  data.RefreshNumerator = 60u; /* a rate needs a non-zero denominator */
+  assert(!AdmissionPresentResourceDataValid(&data));
+  AdmissionPresentResourceRefreshRate(0, &numerator, &denominator);
+  assert(numerator == 0u && denominator == 1u);
 }
 
 static void test_surface_and_64k_contract(void) {
@@ -112,6 +137,7 @@ static void test_allocation_contains_bounded_render_view(void) {
 }
 
 int main(void) {
+  test_primary_refresh_rate_round_trip();
   test_displayable_resource_metadata();
   test_surface_and_64k_contract();
   test_handle_lifetime_blocks_open_destroy();

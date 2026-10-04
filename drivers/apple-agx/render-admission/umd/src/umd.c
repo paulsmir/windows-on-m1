@@ -477,6 +477,13 @@ VOID APIENTRY AdmissionUmdCreateResource(
       (CreateResource->MiscFlags &
        D3DWDDM2_0DDI_RESOURCE_MISC_DISPLAYABLE_SURFACE) != 0u)
       ? ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY : 0u;
+  if (CreateResource->pPrimaryDesc != NULL &&
+      CreateResource->pPrimaryDesc->ModeDesc.RefreshRate.Denominator != 0u) {
+    resourceData.RefreshNumerator =
+        CreateResource->pPrimaryDesc->ModeDesc.RefreshRate.Numerator;
+    resourceData.RefreshDenominator =
+        CreateResource->pPrimaryDesc->ModeDesc.RefreshRate.Denominator;
+  }
   allocate.pPrivateDriverData = &resourceData;
   allocate.PrivateDriverDataSize = sizeof(resourceData);
   allocationInfo.pPrivateDriverData = &description.Allocation;

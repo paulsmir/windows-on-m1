@@ -413,6 +413,9 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   allocation->Win32Flags = flags;
   allocation->WrittenPrimary = resourceData != NULL &&
       (resourceData->Flags & ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY) != 0u;
+  AdmissionPresentResourceRefreshRate(resourceData,
+                                      &allocation->PrimaryRefreshNumerator,
+                                      &allocation->PrimaryRefreshDenominator);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   allocation->QualificationCookie = correlated
       ? ADMISSION_UMD_CORRELATION_COOKIE : 0u;
@@ -604,8 +607,10 @@ static NTSTATUS AdmissionDescribeAllocationImpl(
   Args->Height = allocation->Object.Description.Height;
   Args->Format = (D3DDDIFORMAT)allocation->Object.Description.Format;
   RtlZeroMemory(&Args->MultisampleMethod, sizeof(Args->MultisampleMethod));
-  Args->RefreshRate.Numerator = 0u;
-  Args->RefreshRate.Denominator = 1u;
+  /* DXGDEVICE::SetDisplayMode denies a primary whose rate differs from the
+   * current mode (EXP954); report the rate the primary was created with. */
+  Args->RefreshRate.Numerator = allocation->PrimaryRefreshNumerator;
+  Args->RefreshRate.Denominator = allocation->PrimaryRefreshDenominator;
   Args->PrivateDriverFormatAttribute = 0u;
   Args->Flags.Value = 0u;
   Args->Rotation = D3DDDI_ROTATION_IDENTITY;
