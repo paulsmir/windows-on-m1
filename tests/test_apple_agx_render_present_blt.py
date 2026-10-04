@@ -281,6 +281,23 @@ int main(void){
  assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_HANDLE);
  assert(recorded_source.Reason==ADMISSION_PRESENT_OPEN_BAD_DESCRIPTION);
  assert(recorded_destination.Reason==ADMISSION_PRESENT_OPEN_OK);
+ /* EXP955: dxgkrnl issues the legacy DWM MMIO flip (no DMA buffer) with
+  * Flip|FlipWithNoWait (0xC); FlipOnVSyncMmIo flips never stall the pipeline,
+  * so both forms describe the same SetVidPnSourceAddress flip. */
+ assert(AdmissionAllocationDescribe(2560,1600,4,1,21,0,&src.Description));
+ DXGK_PRESENTALLOCATIONINFO flip_info[3]={0};
+ flip_info[1].hDeviceSpecificAllocation=&os;
+ DXGKARG_PRESENT flip={0};
+ flip.pAllocationInfo=flip_info;flip.NumSrcAllocations=1;
+ flip.Flags.Value=0x4;
+ NTSTATUS plain_flip=AdmissionDdiPresent(&context,&flip);
+ assert(plain_flip==STATUS_SUCCESS);
+ flip.Flags.Value=0xC;
+ assert(AdmissionDdiPresent(&context,&flip)==STATUS_SUCCESS);
+ flip.Flags.Value=0x8; /* FlipWithNoWait alone is not a flip */
+ assert(AdmissionDdiPresent(&context,&flip)==STATUS_INVALID_PARAMETER);
+ flip.Flags.Value=0x14; /* other modifiers stay unsupported */
+ assert(AdmissionDdiPresent(&context,&flip)==STATUS_INVALID_PARAMETER);
  return 0;
 }
 '''

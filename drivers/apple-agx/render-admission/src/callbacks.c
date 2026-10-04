@@ -211,8 +211,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
     return status;
   }
 
+  /* FlipOnVSyncMmIo flip: no DMA buffer; SetVidPnSourceAddress performs it.
+   * dxgkrnl marks the legacy DWM flip FlipWithNoWait (0x8), which an MMIO
+   * flip already satisfies because it never stalls the GPU pipeline. */
   if (device == NULL || Present == NULL || Present->pDmaBuffer != NULL ||
-      Present->Flags.Value != 0x4u || Present->pAllocationInfo == NULL ||
+      (Present->Flags.Value & ~0x8u) != 0x4u ||
+      Present->pAllocationInfo == NULL ||
       Present->NumSrcAllocations != 1u || Present->NumDstAllocations != 0u ||
       Present->pPrivateDriverData != NULL ||
       Present->PrivateDriverDataSize != 0u ||

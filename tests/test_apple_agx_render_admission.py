@@ -74,7 +74,7 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
             callbacks.index("AdmissionDdiEscape(")
         ]
         self.assertIn("Present->pDmaBuffer != NULL", present)
-        self.assertIn("Present->Flags.Value != 0x4u", present)
+        self.assertIn("(Present->Flags.Value & ~0x8u) != 0x4u", present)
         self.assertIn("ADMISSION_OPEN_ALLOCATION_MAGIC", present)
         self.assertIn("D3DDDIFMT_A8R8G8B8", present)
         self.assertIn("return STATUS_SUCCESS", present)
