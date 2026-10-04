@@ -139,7 +139,7 @@ def generate(revision=None, function_revisions=None):
         parts.append(body(backend,name))
     parts.append("#endif\n")
     if revision is None and "AdmissionGpuvaG3CopyEscape" not in function_revisions:
-        parts.append("#define APPLE_AGX_R168_COPY_RETRY 1\n")
+        parts.append("#define APPLE_AGX_LATE_COPY_RETRY 1\n")
     if os.environ.get("G3_REPLAY_QUERY_V2") or os.environ.get("G3_REPLAY_R147"):
         scenarios = (ROOT / "tests/g3_vidmm_replay_scenarios.c").read_text()
         system = (ROOT / "tests/g3_system_lifetime_cases.c").read_text()

@@ -1062,19 +1062,21 @@ RetryPagingQuiescence:
   COPY_REJECT_IF(state->ActiveProcess, 42u, STATUS_DEVICE_BUSY, Unlock);
   COPY_REJECT_IF(p->Graph.JobInFlight, 43u, STATUS_DEVICE_BUSY, Unlock);
   COPY_REJECT_IF(p->Graph.LeaseToken, 44u, STATUS_DEVICE_BUSY, Unlock);
-  /* A paging buffer may be built after the first quiescence test. Retry the
-   * whole owner/context validation while preserving the original 3 s bound;
-   * never copy through a newly pending transfer/fill. */
-  if(q->Operation!=APPLE_AGX_G3_COPY_QUERY &&
-     !AdmissionPagingQuiescent(adapter) && wait_ms<3000u) {
-    ExReleaseFastMutex(&state->Lock);
-    delay.QuadPart=-10000LL;
-    (void)KeDelayExecutionThread(KernelMode,FALSE,&delay);
-    ++wait_ms;
-    goto RetryPagingQuiescence;
+  /* A paging buffer can be built between the initial check and either final
+   * check. Retry the whole owner/context validation on either late change,
+   * preserving the original cumulative 3 s bound and R161 guard. */
+  if(q->Operation!=APPLE_AGX_G3_COPY_QUERY) {
+    BOOLEAN pagingReady=AdmissionPagingQuiescent(adapter);
+    if(pagingReady) pagingReady=AdmissionPagingQuiescent(adapter);
+    if(!pagingReady && wait_ms<3000u) {
+      ExReleaseFastMutex(&state->Lock);
+      delay.QuadPart=-10000LL;
+      (void)KeDelayExecutionThread(KernelMode,FALSE,&delay);
+      ++wait_ms;
+      goto RetryPagingQuiescence;
+    }
+    COPY_REJECT_IF(!pagingReady, 62u, STATUS_DEVICE_BUSY, Unlock);
   }
-  COPY_REJECT_IF(q->Operation!=APPLE_AGX_G3_COPY_QUERY &&
-      !AdmissionPagingQuiescent(adapter), 62u, STATUS_DEVICE_BUSY, Unlock);
   /* R159: only a different process instance invalidates the QUERY. An
    * unrelated mapping update advances MappingGeneration constantly; the
    * per-page range validation below (56-61) re-proves this exact range

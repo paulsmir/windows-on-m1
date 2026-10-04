@@ -124,6 +124,7 @@ static NTSTATUS KeDelayExecutionThread(KPROCESSOR_MODE m, BOOLEAN a, LARGE_INTEG
 /* R161: paging-worker quiescence and encoded-record accounting. */
 static int replay_paging_pending; static UINT replay_encoded_records;
 static int replay_quiescence_flip_after_success;
+static UINT replay_quiescence_calls,replay_quiescence_flip_on_call;
 static BOOLEAN replay_pool_fail;
 static UINT replay_pool_calls;
 static volatile LONG *replay_query_claim_watch;
@@ -359,6 +360,12 @@ static NTSTATUS ZwFlushKey(HANDLE key) {assert(key==(HANDLE)0x5588);++query_regi
 static void ZwClose(HANDLE key) {assert(key==(HANDLE)0x5588);}
 static BOOLEAN AdmissionPagingQuiescent(ADMISSION_CONTEXT *a) {
   (void)a;
+  ++replay_quiescence_calls;
+  if (replay_quiescence_flip_on_call == replay_quiescence_calls) {
+    replay_quiescence_flip_on_call=0;
+    replay_paging_pending=1;
+    return TRUE;
+  }
   if (replay_quiescence_flip_after_success) {
     replay_quiescence_flip_after_success=0;
     replay_paging_pending=1;

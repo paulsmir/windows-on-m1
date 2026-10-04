@@ -295,13 +295,19 @@ static void r145_copy_cases(void) {
   expect_ok("R161 upload waits for pending paging",AdmissionDdiEscape(&a,&escape));
   assert(replay_delay_calls>=1 && !replay_paging_pending);
   assert(!memcmp(local_cpu+0x200000+q->Offset,q->Data,q->TransferBytes));
-#if defined(APPLE_AGX_R168_COPY_RETRY)
+#if defined(APPLE_AGX_LATE_COPY_RETRY)
   /* EXP967: a new paging record may appear after the first quiescence
    * check but before the final guard. Retry until it drains, preserving the
    * R161 ordering rule instead of failing the whole DWM batch immediately. */
   replay_quiescence_flip_after_success=1; replay_delay_hook=r161_drain;
   replay_delay_calls=0;
   expect_ok("R168 upload retries quiescence race",AdmissionDdiEscape(&a,&escape));
+  assert(replay_delay_calls>=1 && !replay_paging_pending);
+  /* EXP968: another build can arrive between the retry branch's successful
+   * quiescence sample and the final guard. That guard must retry too. */
+  replay_quiescence_calls=0; replay_quiescence_flip_on_call=2;
+  replay_delay_hook=r161_drain; replay_delay_calls=0;
+  expect_ok("R169 upload retries final-check race",AdmissionDdiEscape(&a,&escape));
   assert(replay_delay_calls>=1 && !replay_paging_pending);
 #endif
   replay_paging_pending=1; replay_delay_hook=NULL; replay_delay_calls=0;
