@@ -628,6 +628,99 @@ static const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *AdmissionG3CopyPte(
 }
 
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+typedef struct _ADMISSION_G3_DWM_SYSTEM_LEAF_SNAPSHOT {
+  ULONG Version, Bytes, OsProcessId, TablesScanned;
+  ULONG GroupsScanned, SystemGroups, IncompleteSystemGroups, Truncated;
+  ULONG PartialGroups, UnalignedGroups, DiscontiguousGroups, MixedGroups;
+  ULONG FirstIndex, FirstFlags[4];
+  ULONGLONG GraphProcessId, FirstTableIpa, FirstAllocation;
+  ULONGLONG FirstGuestIpa[4];
+} ADMISSION_G3_DWM_SYSTEM_LEAF_SNAPSHOT;
+
+static volatile LONG gDwmSystemLeafSnapshotClaimed;
+
+static VOID AdmissionG3SnapshotDwmSystemLeaves(
+    const ADMISSION_G3_PROCESS *Process, ULONG OsProcessId,
+    ADMISSION_G3_DWM_SYSTEM_LEAF_SNAPSHOT *Receipt) {
+  const ADMISSION_G3_TABLE_SHADOW *shadow;
+  UINT group, part;
+  RtlZeroMemory(Receipt, sizeof(*Receipt));
+  Receipt->Version = 1u;
+  Receipt->Bytes = sizeof(*Receipt);
+  Receipt->OsProcessId = OsProcessId;
+  Receipt->GraphProcessId = Process->Graph.ProcessId;
+  Receipt->FirstIndex = MAXULONG;
+  for (shadow = Process->TableShadows; shadow != NULL;
+       shadow = shadow->Next) {
+    if (shadow->LogicalPtes == NULL)
+      continue;
+    if (Receipt->TablesScanned == 16u) {
+      Receipt->Truncated = 1u;
+      break;
+    }
+    ++Receipt->TablesScanned;
+    for (group = 0u; group < 2048u; ++group) {
+      const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte =
+          &shadow->LogicalPtes[group * 4u];
+      ULONGLONG base = pte[0].GuestIpa;
+      BOOLEAN anySystem = FALSE, full = TRUE, same = TRUE;
+      BOOLEAN aligned, contiguous = base <= MAXULONGLONG - 0x3000ULL;
+      ++Receipt->GroupsScanned;
+      for (part = 0u; part < 4u; ++part) {
+        if ((pte[part].Flags & APPLE_AGX_GPUVA_G3_VALID) != 0u &&
+            pte[part].SegmentId == 0u)
+          anySystem = TRUE;
+        if ((pte[part].Flags & APPLE_AGX_GPUVA_G3_VALID) == 0u)
+          full = FALSE;
+        if (pte[part].SegmentId != 0u ||
+            pte[part].Flags != pte[0].Flags)
+          same = FALSE;
+        if (pte[part].GuestIpa != base + (ULONGLONG)part * 0x1000ULL)
+          contiguous = FALSE;
+      }
+      if (!anySystem)
+        continue;
+      ++Receipt->SystemGroups;
+      aligned = (base & 0x3fffULL) == 0ULL;
+      if (full && same && aligned && contiguous)
+        continue;
+      ++Receipt->IncompleteSystemGroups;
+      if (!full) ++Receipt->PartialGroups;
+      if (!aligned) ++Receipt->UnalignedGroups;
+      if (!contiguous) ++Receipt->DiscontiguousGroups;
+      if (!same) ++Receipt->MixedGroups;
+      if (Receipt->FirstIndex == MAXULONG) {
+        Receipt->FirstIndex = group;
+        Receipt->FirstTableIpa = shadow->BrokerIpa;
+        for (part = 0u; part < 4u; ++part) {
+          Receipt->FirstFlags[part] = pte[part].Flags;
+          Receipt->FirstGuestIpa[part] = pte[part].GuestIpa;
+          if (Receipt->FirstAllocation == 0ULL &&
+              (pte[part].Flags & APPLE_AGX_GPUVA_G3_VALID) != 0u)
+            Receipt->FirstAllocation = pte[part].Allocation;
+        }
+      }
+    }
+  }
+}
+
+static VOID AdmissionG3WriteDwmSystemLeaves(
+    ADMISSION_CONTEXT *Adapter,
+    const ADMISSION_G3_DWM_SYSTEM_LEAF_SNAPSHOT *Receipt) {
+  UNICODE_STRING name;
+  HANDLE key = NULL;
+  if (Adapter->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Adapter->PhysicalDeviceObject,
+                                          PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  RtlInitUnicodeString(&name, L"Wom1G3DwmSystemLeafSnapshot");
+  (void)ZwSetValueKey(key, &name, 0, REG_BINARY, (PVOID)Receipt,
+                      sizeof(*Receipt));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3FrameArmEscape(ADMISSION_CONTEXT *adapter,
     const DXGKARG_ESCAPE *args) {
   ADMISSION_DWM_FRAME_ARM request;
@@ -635,6 +728,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3FrameArmEscape(ADMISSION_CONTEXT
   ADMISSION_G3_PROCESS *process;
   ADMISSION_RENDER_CONTEXT *context;
   ADMISSION_DWM_SOURCE_MAP_RECEIPT map;
+  ADMISSION_G3_DWM_SYSTEM_LEAF_SNAPSHOT systemLeaves;
+  BOOLEAN haveSystemLeaves = FALSE;
   BOOLEAN valid = FALSE;
   /* Software-only metadata; our process lock and nonblocking receipt claim
    * provide the needed serialization. Accept the old synchronized caller,
@@ -692,8 +787,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3FrameArmEscape(ADMISSION_CONTEXT
     valid = AdmissionDwmFrameArmWindows(adapter, context,
         request.OsProcessId, process->Graph.ProcessId,
         request.Allocation, request.CanonicalGpuVa);
+    if (valid &&
+        InterlockedCompareExchange(&gDwmSystemLeafSnapshotClaimed, 1, 0) == 0) {
+      AdmissionG3SnapshotDwmSystemLeaves(process, request.OsProcessId,
+                                         &systemLeaves);
+      haveSystemLeaves = TRUE;
+    }
   }
   ExReleaseFastMutex(&state->Lock);
+  if (haveSystemLeaves)
+    AdmissionG3WriteDwmSystemLeaves(adapter, &systemLeaves);
   if (valid) {
     ULONG ordinal = (ULONG)InterlockedIncrement(
         &adapter->DwmSourceMapRecordCount) - 1u;
