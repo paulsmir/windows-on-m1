@@ -576,6 +576,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyAllocation(
   AdmissionDwmDdiProbeRecordWindows((ADMISSION_CONTEXT *)Adapter, &event);
 #endif
   status = AdmissionDestroyAllocationImpl(Adapter, Args);
+#if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
+  /* Keep the first bounded failure after the last-event DWM probe advances. */
+  AdmissionRecordG1bDdiFailure(
+      context == NULL ? NULL : context->PhysicalDeviceObject, 6u, status);
+#endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION) || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   event.Kind = AdmissionDwmDdiDestroyAllocationExit;
   event.Status = (ULONG)status;
