@@ -20,33 +20,36 @@ Foreign dirt: m1n1_windows/rust/vendor/rust-fatfs, mu;
 untracked drivers/apple-agx/render-admission/pauls@192.168.1.24.ps1 and
 investigation/analysis/EXP895-standard-blt-stimulus-plan.md.
 
-## Current — EXP958 DWM teardown is the next boundary
-No accepted visual desktop package. Full-owner EXP958 package958 (source 058053b6,
-MPO3 single plane), m1n1-exp954 SHA22eda013, Mu r143 SHAe54c0098 is **currently
-live Code0**; do not remove its package in this guest. Boot09:18:05.4505760Z.
-At +767s CPU8, SSH, RDP service, disk0 and USB5 alive; DCP applied swap106,
-KMD Flip35/SetVidPnSourceAddress98 status0, TDR0. This proves OS continuity,
-not DWM/desktop stability: DWM crashed at least six times (Application1000),
-latest full-host-verified mini dump SHA56db6a8a has an invalid pointer read in
-uDWM!CBaseObject::Release while destroying a visual/resource proxy. EXP957's
-kernel 0x3B missing-MPO3 stack did not recur; direct MPO3 callback use unmeasured.
-DWM completed/presented allocation0x80005f00 VA0x5f40000 resolved to
-IPA0x8e2100000, equal DCP swap36 PA. Thus the old EXP948 no-address-bridge
-hypothesis is rejected for this frame. DCP CPU snapshots of successive latched
-primaries still report zero with cache_clean=0; physical panel appearance is
-unverified. Do not infer black or good pixels from that cached sample.
-NEXT CAUSAL TARGET: source of truncated uDWM visual/resource vtables. EXP958D
-full dump SHA0f97968e confirms two vtable qwords with high32 zero beside full
-uDWM pointers in a committed DWM heap, but does not identify the writer.
-Do one offline source/dump pass; if unresolved, compare the ordinary no-package
-recovery guest before changing the pixel path. Keep exact958 package installed while Code0/SSH is alive. For rollback,
-ordinary recovery -> Code43 -> cleanup958 -> durable Code28 preflight.
-Evidence: EXP958/evidence/live-plus750.txt, read-boundary.json,
-source-maps-v2.json, full-plus750.log, umd-final.log, boot.etl,
-crashes.txt, dwm.exe.5976.dmp, dwm-cdb.txt, full-dwm/dwm.exe.5552.dmp
-and full-dwm/cdb-heap2.txt; EXP957/evidence/rec957a/cdb-analyze.txt.
-WHY CLEAN RECONSTRUCTION: old EXP948 comparison no longer identifies this live
-DWM teardown failure; current dump is the nearest causal boundary.
+## Current — REC-EXP958A stalled ordinary recovery; physical reset pending
+No accepted visual desktop package. EXP958 full-owner (package958 30.0.958.0,
+source058053b6, m1n1-exp954 SHA22eda013, Mu r143 SHAe54c0098) survived
+767s Code0/CPU8/SSH/RDP/disk/USB, but DWM crashed repeatedly and current
+panel content was never verified. DCP latched DWM surfaces; a completed DWM
+VA0x5f40000 resolved to DCP PA0x8e2100000. CPU snapshots were mostly zero
+without invalidation; later tiny nonzero samples did not prove desktop pixels.
+EXP958D full DWM dump SHA0f97968e found two truncated low32 uDWM vtable
+pointers in heap, writer unknown. PID5552 UMD trace showed Flush stage3
+E_INVALIDARG before device loss. EXP959 commit c9dacb1 adds only a failure
+receipt classifying local guard vs Windows pfnDeallocateCb and preserving the
+full resource handle. Package959 built 0 warnings/errors, INF615859a9,
+SYS0851f9a9, UMD34411206, CATa1900174; hardware NOT_RUN.
+
+CURRENT AIR: full-owner ordered restart was accepted, then immutable ordinary
+recovery EXP950 launched. REC-EXP958A hung after CPU0-7/IRQ route8 at10:04:15Z.
+At10:19:40Z Windows SSH timeout/ping no route; run_uefi PID1362 holds L41 and
+air.lock, L41/L43 endpoints present, proxy guard BUSY. Both planes unavailable.
+Operator physical reset to Running proxy was requested and logged OPERATOR in
+.local/tandem/CODEX-STATUS.md. Exact958 package remains installed (last
+verified Code0); NEVER remove it until ordinary recovery reaches Code43.
+No EXP959 package staged/installed. Next after reset: check both planes, launch
+same ordinary recovery, collect any dump, verify exact958 Code43; execute
+cleanup958, ordered restart and durable Code28 preflight; then preregister and
+stage exact959. Emergency GPU-hidden recovery only if ordinary fails.
+Evidence: EXP958/evidence/full-shutdown.log,
+rec958a-stalled-full.log SHA00d3914a, final-identity.json,
+full-dwm/dwm.exe.5552.dmp and cdb-heap2.txt; EXP959/kmd-build-receipt.json.
+WHY CLEAN RECONSTRUCTION: no old admission comparison resolves the current DWM
+resource-lifetime error or the separate platform recovery hang.
 
 ## EXP941 findings and rollback
 Source382a333d65368453879155a21895bbef280ba126 changed native GPUVA+DXGI1.1
