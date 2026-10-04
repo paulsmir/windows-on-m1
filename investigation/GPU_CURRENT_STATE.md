@@ -1,9 +1,9 @@
-# J313 GPU — EXP964 callback fix and physical-pixel boundary
+# J313 GPU — EXP969 bounded DWM copy improvement, operator stop
 
 ## Objective and rules
-Continue until the physical screen shows a correct stable Windows image.
+Long-term objective: a correct stable physical Windows desktop. The operator ordered STOP for today after EXP969; do not build, stage or launch another GPU experiment until explicitly resumed.
 Accepted/stable graphics package: NONE. Selected clear/copy pixel workloads pass;
-DWM composition and physical presentation do not. User photo proves real fragments,
+correct DWM composition and physical presentation remain unverified. User photo proves real fragments,
 not a blank panel. Keep short falsifiable tests and collect immediately on failure.
 No subagents or messages to other chats. Preserve foreign dirt and existing evidence.
 Read this file first after reset; use only referenced ledger entries/plans.
@@ -20,7 +20,71 @@ Foreign dirt: m1n1_windows/rust/vendor/rust-fatfs, mu;
 untracked drivers/apple-agx/render-admission/pauls@192.168.1.24.ps1 and
 investigation/analysis/EXP895-standard-blt-stimulus-plan.md.
 
-## Current — EXP964 running, callback refusal cleared, physical pixels unknown
+## Current — EXP969 stopped and exact package removed
+No accepted/stable physical graphics package. EXP969 source commit
+42257a270ffbc4aeab81812473878103316a9ecd, package969
+INF e1ee11ab/SYS4d159b1b/UMD853832e0/CATe1d1a31b, changed only the
+bounded retry of both final KMD paging-quiescence checks. RED/GREEN replay
+covered the second-check race and retained R161 no-drain STATUS_DEVICE_BUSY.
+The pinned WDK build had 0 warnings/errors. Hardware boot Event132014/
+LastBoot19:06:57Z reached Code0/CPU8/SSH; DWM1240 and Explorer5324
+remained the same processes through the frozen evidence window. Guest-frozen
+UMD log6440 lines/842841B SHAa6e89da35aba1ea9d22935fe31debcc0ad053f314394c0d9492a3944984b4714
+matched the host copy: DWM Present S_OK appeared and there was NO DWM
+reject-copy-escape/slot/batch/DrawIndexed line. KMD registry had NO
+Wom1G3CopyPagingQuiescence or CopyTransferFailure receipt. This means no
+predicate62/3000ms bound hit with RecordsUnsubmitted>0 was OBSERVED; the
+failure-only receipt does not expose successful per-copy WaitMilliseconds,
+so those durations are UNKNOWN. Do not claim a stable desktop: the operator's
+physical panel answer was still pending at stop. A separate Explorer PID5324
+copy QUERY failed predicate57/STATUS_INVALID_PARAMETER on an invalid logical
+PTE at VA0x50000, allocation0x40000980, GraphProcessId10; UMD rejected
+Explorer Draw. Its relation to panel pixels is unproven.
+
+Exact969 was removed in ordinary GPU-visible Code43. Fresh ordinary recovery
+Event132218/LastBoot19:19:50Z passed durable Preflight Code28/CPU8/SSH,
+PackageAbsent, no AppleAgx service/module/signer/arm or phantom. Evidence
+EXP969/evidence/evidence-manifest.json SHAeab73f41a66e66f1929b087a190ff47f74b96527e199fdf958a54be173d4f954,
+EXP969/evidence/rec969b/durable-preflight.json SHA6808a43838cf7ccb370873284c43e4d3409cd1473bd3d8750775edcc2c1b3c78,
+and EXP969 ACTUAL/REC-EXP969B ACTUAL in EXPERIMENTS.md. Leave this clean
+ordinary guest running and STOP. On explicit resume, first obtain the
+operator's EXP969 physical panel report. If the panel was black or corrupted,
+source-first next causal target is Explorer predicate57 GPUVA residency
+and DWM input/composition versus physical scanout; keep the residual
+post-final-check paging-build race distinct. No new package is prepared.
+
+Reference: EXP967 measured DWM predicate62/STATUS_DEVICE_BUSY at WaitMs0
+with RecordsUnsubmitted7, all submitted queue/worker/fault fields0. EXP968
+retried the first late check but still failed at WaitMs0/unsubmitted13
+because the second final check could return BUSY immediately. EXP969 made
+both final checks retry. R161 EXP874 proved bypassing paging order entirely
+caused a deferred transfer to overwrite an upload and a 0x116; never remove
+that guard. EXP966's predicate62 wait duration was NOT measured; old
+"after3000ms" wording was corrected in EXPERIMENTS.md and CHANGES.csv.
+
+## Referenced prior experiments
+EXP965 source aac78bd15f79706f54066f9e9fd3e2bc6aa9455c cleared only
+SupportKernelModeCommandBuffer because current RenderKm handles ColorFill only
+and aperture is not declared cache-coherent. Focused tests19/19 and pinned WDK
+package965 build0 warnings/errors. After exact964 cleanup (emergency hidden
+Code45 was needed following three ordinary early PSCI resets), durable ordinary
+Code28/CPU8/SSH preflight PASS on boot16:47:03Z. EXP965 exact package965
+INF05736342/SYSa80fad22/UMD3e127795/CAT042fd4d9 launched full-owner,
+Code0/SSH/DWM1220. Operator saw a brief artifact then a FULLY BLACK physical
+panel: worse than EXP964's visible taskbar icons. Explorer AppHangB1 restarted
+twice at16:57-16:58Z while DWM1220 stayed alive. Two Report.wer archives were
+preserved; no historical hang dump exists. Post-restart Explorer7096 live dump
+SHA6c8a243 shows Desktop main thread idle in NtUserWaitMessage; do not infer
+the old hang cause from it. EXP965 GDI-cap suppression is REJECTED as a
+standalone desktop fix. Exact965 was removed in ordinary Code43 and fresh
+ordinary boot Event131006/LastBoot17:18:23Z passed durable Code28/CPU8/SSH,
+PackageAbsent. Existing G3 receipt from EXP965 has UnpublishedGroups[0]=149376
+and [1]=0: segment1 aperture nonpublication is not evidenced; the stronger
+then-hypothesis was incomplete system-segment0 groups of four Windows 4KiB PTEs.
+EXP966 later found only one incomplete group in DWM at frame arm and shifted
+the causal target to the observed copy/paging refusal. EXP965
+ledger/analysis/evidence and operator note in CODEX-STATUS.
+
 No accepted visual desktop package. Operator reset REC-EXP958A and ordinary
 recovery reached exact958 Code43/SSH. Cleanup958 succeeded, removed oem5 and
 ordered reboot; one intermediate PSCI reset occurred. Identical ordinary
@@ -103,22 +167,27 @@ with zero deallocation or Flush E_INVALIDARG errors, KMD DWM graph3
 submit441/complete440/Present44 status0. DCP exact
 latches continue; cached zero samples cannot establish physical pixels.
 Console GDI CopyFromScreen timed out15s/result267014 without PNG; task was
-removed. Operator text description of physical panel was requested
-asynchronously but not yet received. Do NOT call this a stable desktop or
-accepted package. The current EXP964 visual-verification run remains live;
+removed. Operator photo around16:00Z (EXP964/evidence/operator-photo-1600Z.jpg
+SHA30df23e51bb0dfb628f12132ddfe966b085e120b86d7bbbac0323ef38ef0d458)
+shows a BLACK wallpaper and taskbar background but several visible taskbar
+icons. This is partial composition, not a blank panel and not a correct
+desktop. Hypothesis only: GDI/redirection surfaces may be black while GPU/
+DComp/XAML icons work. Do NOT call this a stable desktop or accepted package.
+The current EXP964 visual-verification run remains live;
 cleanup964 exact scripts/manifest are staged and guest-hash verified, ready
 for Code43 rollback if pixels are wrong. Do not start a new GPU package while
 this one is installed. Evidence EXP964/evidence/30min-identity.json SHA44ba64de,
 umd-30min.log SHA58bf98cc, dwm-ddi-30min.txt SHA3b2676d6,
 desktop-capture/before.json and ledger.
 
-Next causal decision depends on physical pixels. If desktop is correct, verify
-motion/input and an additional bounded stability window, then decide package
-acceptance. If artifacts persist, collect the observation, roll back exact964
-to durable Code28, and focus on GPU-produced DWM surface versus DCP scanout
-under synchronized cache observation; do not guess stride or format because
-current m1n1 IOMFB descriptor matches its source reference. Keep the recurring
-low32 DWM pointer writer as an independent unresolved cause.
+Next causal target: source-first Windows GDI/redirection surface contract ->
+our CPU-visible/aperture allocation and GPUVA sampling -> AGX. Derive one
+smallest receipt/test offline, then roll back exact964 to durable Code28 before
+new package hardware. Audit host launcher/proxy first: at16:11Z Windows SSH
+was alive Code0/CPU8 on original boot but no host run_uefi owner was found.
+Supervisor asked operator to press Win for Start-menu discriminator; result
+pending. Do not guess DCP stride/format: current m1n1 IOMFB descriptor matches
+its source reference. Keep recurring low32 DWM pointer writer separate.
 WHY CLEAN RECONSTRUCTION: old admission comparisons do not explain current
 DWM pointer truncation or separate platform recovery hang.
 
