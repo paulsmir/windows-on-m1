@@ -920,6 +920,34 @@ static BOOLEAN AdmissionG3CaptureCopyQueryFailure(ADMISSION_CONTEXT *adapter,
   return TRUE;
 }
 
+typedef struct _ADMISSION_G3_COPY_PAGING_QUIESCENCE {
+  ULONG Version, Bytes, Status, OsProcessId;
+  LONG RecordsUnsubmitted;
+  ULONG CpuQueueCount, PagingPending, PagingWorkersActive;
+  ULONG PagingDpcPending, PagingDpcsActive, SchedulerFaulted, WaitMilliseconds;
+  ULONG PagingFence, LastSubmittedFence, LastCompletedFence, ActiveProcess;
+  ULONGLONG GpuVa, Offset, Allocation, GraphProcessId;
+} ADMISSION_G3_COPY_PAGING_QUIESCENCE;
+
+static volatile LONG gCopyPagingQuiescenceClaimed;
+
+static VOID AdmissionG3WriteCopyPagingQuiescence(
+    ADMISSION_CONTEXT *Adapter,
+    const ADMISSION_G3_COPY_PAGING_QUIESCENCE *Receipt) {
+  UNICODE_STRING name;
+  HANDLE key = NULL;
+  if (Adapter->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Adapter->PhysicalDeviceObject,
+                                          PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  RtlInitUnicodeString(&name, L"Wom1G3CopyPagingQuiescence");
+  (void)ZwSetValueKey(key, &name, 0, REG_BINARY, (PVOID)Receipt,
+                      sizeof(*Receipt));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
 NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
     const DXGKARG_ESCAPE *args) {
   APPLE_AGX_G3_COPY_REQUEST *q=NULL;
@@ -934,6 +962,8 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   ULONGLONG length=0, offset, end=0, page=0, first=0;
   APPLE_AGX_GPUVA_G3_WALK_FAILURE walk={0};
   BOOLEAN captured=FALSE, captureAttempted=FALSE, transferCaptured=FALSE;
+  ADMISSION_G3_COPY_PAGING_QUIESCENCE pagingSnapshot = {0};
+  BOOLEAN pagingSnapshotCaptured = FALSE;
   ULONG predicate=0u, operation=MAXULONG;
   BOOLEAN isQuery=FALSE;
   NTSTATUS status=STATUS_INVALID_PARAMETER;
@@ -1094,6 +1124,38 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   }
   RtlCopyMemory(args->pPrivateDriverData,q,sizeof(*q));status=STATUS_SUCCESS;
 Unlock:
+  if (predicate == 62u && q != NULL &&
+      InterlockedCompareExchange(&gCopyPagingQuiescenceClaimed, 1, 0) == 0) {
+    KIRQL oldIrql;
+    pagingSnapshot.Version = 1u;
+    pagingSnapshot.Bytes = sizeof(pagingSnapshot);
+    pagingSnapshot.Status = (ULONG)status;
+    pagingSnapshot.OsProcessId = HandleToULong(PsGetCurrentProcessId());
+    pagingSnapshot.WaitMilliseconds = wait_ms;
+    pagingSnapshot.GpuVa = q->GpuVa;
+    pagingSnapshot.Offset = q->Offset;
+    pagingSnapshot.Allocation = q->Allocation;
+    pagingSnapshot.GraphProcessId = p ? p->Graph.ProcessId : 0ULL;
+    KeAcquireSpinLock(&adapter->PagingLock, &oldIrql);
+    pagingSnapshot.RecordsUnsubmitted = adapter->PagingRecordsUnsubmitted;
+    pagingSnapshot.CpuQueueCount = adapter->CpuQueueCount;
+    pagingSnapshot.PagingPending = (ULONG)InterlockedCompareExchange(
+        &adapter->PagingPending, 0, 0);
+    pagingSnapshot.PagingWorkersActive = (ULONG)InterlockedCompareExchange(
+        &adapter->PagingWorkersActive, 0, 0);
+    pagingSnapshot.PagingDpcPending = (ULONG)InterlockedCompareExchange(
+        &adapter->PagingDpcPending, 0, 0);
+    pagingSnapshot.PagingDpcsActive = (ULONG)InterlockedCompareExchange(
+        &adapter->PagingDpcsActive, 0, 0);
+    pagingSnapshot.SchedulerFaulted = (ULONG)InterlockedCompareExchange(
+        &adapter->SchedulerFaulted, 0, 0);
+    pagingSnapshot.PagingFence = adapter->PagingFence;
+    pagingSnapshot.LastSubmittedFence = adapter->PagingLastSubmittedFence;
+    pagingSnapshot.LastCompletedFence = adapter->PagingLastCompletedFence;
+    pagingSnapshot.ActiveProcess = state->ActiveProcess != NULL;
+    KeReleaseSpinLock(&adapter->PagingLock, oldIrql);
+    pagingSnapshotCaptured = TRUE;
+  }
   if (predicate && q &&
       (q->Operation==APPLE_AGX_G3_COPY_UPLOAD ||
        q->Operation==APPLE_AGX_G3_COPY_DOWNLOAD) &&
@@ -1147,6 +1209,8 @@ Free:
   if(q) ExFreePoolWithTag(q,ADMISSION_POOL_TAG);
   if(captured) AdmissionRecordG3CopyQueryFailure(adapter);
   if(transferCaptured) AdmissionRecordG3CopyTransferFailure(adapter);
+  if(pagingSnapshotCaptured)
+    AdmissionG3WriteCopyPagingQuiescence(adapter, &pagingSnapshot);
 #undef COPY_REJECT_IF
   return status;
 }
