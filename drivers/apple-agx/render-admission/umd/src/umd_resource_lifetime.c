@@ -79,8 +79,7 @@ HRESULT AdmissionUmdRetirementDeallocate(
   if (Queue == NULL || Retirement == NULL ||
       Retirement->RuntimeResource == NULL || Queue->Deallocate == NULL)
     return E_INVALIDARG;
-  return Queue->Deallocate(Queue->CallbackContext,
-                           Retirement->RuntimeResource);
+  return Queue->Deallocate(Queue->CallbackContext, Retirement);
 }
 
 BOOL AdmissionUmdRetirementDrain(ADMISSION_UMD_RETIREMENT_QUEUE *Queue) {

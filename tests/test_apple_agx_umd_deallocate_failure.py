@@ -26,6 +26,7 @@ class UmdDeallocateFailureTests(unittest.TestCase):
 #include <string.h>
 typedef void *HANDLE;
 typedef unsigned int UINT;
+typedef UINT D3DKMT_HANDLE;
 typedef uintptr_t ULONG_PTR;
 typedef uint64_t ULONGLONG;
 typedef int32_t HRESULT;
@@ -35,9 +36,10 @@ typedef int32_t HRESULT;
 #define FAILED(x) ((x) < 0)
 #define ZeroMemory(p,n) memset((p),0,(n))
 #define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
-typedef struct { HANDLE hResource; UINT NumAllocations; HANDLE *HandleList; } D3DDDICB_DEALLOCATE;
+typedef struct { HANDLE hResource; UINT NumAllocations; const D3DKMT_HANDLE *HandleList; } D3DDDICB_DEALLOCATE;
 typedef HRESULT (*DEALLOCATE_CALLBACK)(HANDLE,const D3DDDICB_DEALLOCATE *);
 typedef struct { DEALLOCATE_CALLBACK pfnDeallocateCb; } CALLBACKS;
+typedef struct { HANDLE RuntimeResource; UINT KernelResource,KernelAllocation,Origin; int Primary,Shared; } ADMISSION_UMD_RETIREMENT;
 typedef struct { CALLBACKS *KernelCallbacks; struct { HANDLE handle; } RuntimeDevice; } ADMISSION_UMD_DEVICE;
 static UINT receipt[3], receipt_count, callback_count;
 static HRESULT receipt_status, callback_result;
@@ -59,8 +61,9 @@ int main(void) {
   CALLBACKS callbacks={callback};
   ADMISSION_UMD_DEVICE device={&callbacks,{(HANDLE)(uintptr_t)0x55}};
   HANDLE wide=(HANDLE)(uintptr_t)UINT64_C(0x12345678abcdef00);
+  ADMISSION_UMD_RETIREMENT retirement={wide,0x33,0x44,2,0,1};
   callback_result=E_INVALIDARG;
-  assert(AdmissionUmdDeallocateResource(&device,wide)==E_INVALIDARG);
+  assert(AdmissionUmdDeallocateResource(&device,&retirement)==E_INVALIDARG);
   assert(callback_count==1 && callback_resource==wide);
   assert(receipt_count==1 && receipt_status==E_INVALIDARG);
   assert(receipt[0]==2 && receipt[1]==0xabcdef00u && receipt[2]==0x12345678u);
@@ -69,7 +72,7 @@ int main(void) {
   assert(callback_count==0 && receipt_count==1);
   assert(receipt[0]==1 && receipt[1]==0 && receipt[2]==0);
   receipt_count=0;callback_result=S_OK;
-  assert(AdmissionUmdDeallocateResource(&device,wide)==S_OK);
+  assert(AdmissionUmdDeallocateResource(&device,&retirement)==S_OK);
   assert(callback_count==1 && receipt_count==0);
   return 0;
 }

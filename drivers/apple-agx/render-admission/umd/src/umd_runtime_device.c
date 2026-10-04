@@ -169,13 +169,15 @@ BOOL AdmissionUmdNextRenderSequence(
 }
 
 static HRESULT APIENTRY AdmissionUmdDeallocateResource(
-    void *Context, HANDLE RuntimeResource) {
+    void *Context, const ADMISSION_UMD_RETIREMENT *Retirement) {
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)Context;
   D3DDDICB_DEALLOCATE deallocate;
-  UINT receipt[3] = {(UINT)1u, (UINT)(ULONG_PTR)RuntimeResource,
-                     (UINT)((ULONGLONG)(ULONG_PTR)RuntimeResource >> 32)};
+  D3DKMT_HANDLE allocation = 0u;
+  HANDLE runtimeResource = Retirement == NULL ? NULL : Retirement->RuntimeResource;
+  UINT receipt[3] = {(UINT)1u, (UINT)(ULONG_PTR)runtimeResource,
+                     (UINT)((ULONGLONG)(ULONG_PTR)runtimeResource >> 32)};
   HRESULT result;
-  if (device == NULL || RuntimeResource == NULL ||
+  if (device == NULL || Retirement == NULL || runtimeResource == NULL ||
       device->KernelCallbacks == NULL ||
       device->KernelCallbacks->pfnDeallocateCb == NULL) {
     AdmissionUmdDiagnostic("umd-deallocate-failure", E_INVALIDARG, receipt,
@@ -183,7 +185,15 @@ static HRESULT APIENTRY AdmissionUmdDeallocateResource(
     return E_INVALIDARG;
   }
   ZeroMemory(&deallocate, sizeof(deallocate));
-  deallocate.hResource = RuntimeResource;
+  if (Retirement->Origin == 1u && !Retirement->Primary &&
+      !Retirement->Shared && Retirement->KernelResource == 0u &&
+      Retirement->KernelAllocation != 0u) {
+    allocation = Retirement->KernelAllocation;
+    deallocate.NumAllocations = 1u;
+    deallocate.HandleList = &allocation;
+  } else {
+    deallocate.hResource = runtimeResource;
+  }
   result = device->KernelCallbacks->pfnDeallocateCb(
       device->RuntimeDevice.handle, &deallocate);
   if (FAILED(result)) {

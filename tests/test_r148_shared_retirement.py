@@ -78,7 +78,7 @@ static Device*CastDevice(Device*x){return x;}
 static void SetError(Device*,HRESULT){++errors;}
 static void FrontendFlush(Device*hDevice){@@FLUSH@@}
 static void pipeflush(Pipe*,void*,unsigned){}
-static HRESULT deallocate(void*,HANDLE){if(fail_deallocate)return E_FAIL;++closes;return S_OK;}
+static HRESULT deallocate(void*,const ADMISSION_UMD_RETIREMENT*){if(fail_deallocate)return E_FAIL;++closes;return S_OK;}
 static void report(void*c,HRESULT h){((ADMISSION_UMD_DEVICE*)c)->LastRetirementError=h;}
 static void enqueue(AGX_D3D10_WINDOWS_DEVICE*d,unsigned h){
  auto*r=(AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE*)calloc(1,sizeof(AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE));

@@ -3,20 +3,21 @@
 
 #include <windows.h>
 
+typedef struct _ADMISSION_UMD_RETIREMENT ADMISSION_UMD_RETIREMENT;
 typedef HRESULT(APIENTRY *ADMISSION_UMD_DEALLOCATE_RESOURCE)(
-    void *Context, HANDLE RuntimeResource);
+    void *Context, const ADMISSION_UMD_RETIREMENT *Retirement);
 typedef VOID(APIENTRY *ADMISSION_UMD_REPORT_RESOURCE_ERROR)(
     void *Context, HRESULT Error);
 
-typedef struct _ADMISSION_UMD_RETIREMENT {
-  struct _ADMISSION_UMD_RETIREMENT *Next;
+struct _ADMISSION_UMD_RETIREMENT {
+  ADMISSION_UMD_RETIREMENT *Next;
   HANDLE RuntimeResource;
   ULONG KernelResource;
   ULONG KernelAllocation;
   ULONG Origin; /* 1=CreateResource, 2=OpenResource; diagnostic only. */
   BOOL Primary;
   BOOL Shared;
-} ADMISSION_UMD_RETIREMENT;
+};
 
 typedef struct _ADMISSION_UMD_RETIREMENT_QUEUE {
   SRWLOCK Lock;
