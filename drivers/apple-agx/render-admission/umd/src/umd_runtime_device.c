@@ -152,14 +152,26 @@ static HRESULT APIENTRY AdmissionUmdDeallocateResource(
     void *Context, HANDLE RuntimeResource) {
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)Context;
   D3DDDICB_DEALLOCATE deallocate;
+  UINT receipt[3] = {(UINT)1u, (UINT)(ULONG_PTR)RuntimeResource,
+                     (UINT)((ULONGLONG)(ULONG_PTR)RuntimeResource >> 32)};
+  HRESULT result;
   if (device == NULL || RuntimeResource == NULL ||
       device->KernelCallbacks == NULL ||
-      device->KernelCallbacks->pfnDeallocateCb == NULL)
+      device->KernelCallbacks->pfnDeallocateCb == NULL) {
+    AdmissionUmdDiagnostic("umd-deallocate-failure", E_INVALIDARG, receipt,
+                           ARRAYSIZE(receipt));
     return E_INVALIDARG;
+  }
   ZeroMemory(&deallocate, sizeof(deallocate));
   deallocate.hResource = RuntimeResource;
-  return device->KernelCallbacks->pfnDeallocateCb(
+  result = device->KernelCallbacks->pfnDeallocateCb(
       device->RuntimeDevice.handle, &deallocate);
+  if (FAILED(result)) {
+    receipt[0] = 2u;
+    AdmissionUmdDiagnostic("umd-deallocate-failure", result, receipt,
+                           ARRAYSIZE(receipt));
+  }
+  return result;
 }
 
 static VOID APIENTRY AdmissionUmdReportResourceError(
