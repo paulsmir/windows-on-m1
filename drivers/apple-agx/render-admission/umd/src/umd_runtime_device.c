@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <wingdi.h>
 #include <stdio.h>
+#include <string.h>
 typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #pragma warning(push)
 #pragma warning(disable : 4201)
@@ -38,9 +39,24 @@ BOOL AdmissionUmdDiagnosticEnabled(VOID) {
       !(refusalOnly == 1u && only[0] == L'1');
 }
 
+/* EXP959 exhausted the normal startup budget before DWM's first failed
+ * deallocation. Keep the failure receipt independent and bounded. */
+static BOOL AdmissionUmdDiagnosticPermit(
+    PCSTR Stage, HRESULT Status, volatile LONG *NormalRecords,
+    volatile LONG *DeallocateFailures) {
+  if (strcmp(Stage, "umd-deallocate-failure") == 0 && FAILED(Status))
+    return InterlockedIncrement(DeallocateFailures) <= 16;
+  if (strncmp(Stage, "reject-", 7u) == 0 ||
+      strncmp(Stage, "measure-", 8u) == 0)
+    return TRUE;
+  return InterlockedCompareExchange(NormalRecords, 0, 0) < 128 &&
+         InterlockedIncrement(NormalRecords) <= 128;
+}
+
 VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
                             const UINT *Values, UINT Count) {
   static volatile LONG records;
+  static volatile LONG deallocateFailures;
   DWORD saved = GetLastError();
   WCHAR path[MAX_PATH], only[2];
   char line[512];
@@ -54,16 +70,14 @@ VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
     goto done;
   if (GetEnvironmentVariableW(L"APPLE_AGX_UMD_REFUSALS_ONLY",only,2)==1u &&
       only[0]==L'1' && strncmp(Stage,"reject-",7u)!=0 &&
-      strncmp(Stage,"measure-",8u)!=0) goto done;
+      strncmp(Stage,"measure-",8u)!=0 &&
+      !(strcmp(Stage,"umd-deallocate-failure")==0 && FAILED(Status))) goto done;
   length = GetEnvironmentVariableW(L"APPLE_AGX_UMD_TRACE_FILE", path,
                                     ARRAYSIZE(path));
   /* Refusals must not disappear when successful startup chatter consumes
    * the normal 128-record budget. Capture remains opt-in and run-bounded. */
   if (length == 0u || length >= ARRAYSIZE(path) ||
-      (strncmp(Stage,"reject-",7u) != 0 &&
-       strncmp(Stage,"measure-",8u) != 0 &&
-       (InterlockedCompareExchange(&records, 0, 0) >= 128 ||
-        InterlockedIncrement(&records) > 128)))
+      !AdmissionUmdDiagnosticPermit(Stage,Status,&records,&deallocateFailures))
     goto done;
   (void)QueryPerformanceCounter(&diagnosticQpc);
   (void)ProcessIdToSessionId(GetCurrentProcessId(), &diagnosticSession);
