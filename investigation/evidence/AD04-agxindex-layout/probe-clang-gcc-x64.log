@@ -1,0 +1,28 @@
+C:\Users\pauls\AD04-agxindex\agxindex_layout_probe.c:15:16: warning: unknown attribute 'gcc_struct' ignored [-Wunknown-attributes]
+   15 | typedef struct PROBE_RECORD {
+      |                ^~~~~~~~~~~~
+C:\Users\pauls\AD04-agxindex\agxindex_layout_probe.c:10:37: note: expanded from macro 'PROBE_RECORD'
+   10 | #define PROBE_RECORD __attribute__((gcc_struct))
+      |                                     ^~~~~~~~~~
+C:\Users\pauls\AD04-agxindex\agxindex_layout_probe.c:32:16: error: static assertion failed due to requirement 'sizeof(probe_index) == 8': gcc_struct layout must be 8 bytes
+   32 | _Static_assert(sizeof(probe_index) == 8, "gcc_struct layout must be 8 bytes");
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-agxindex\agxindex_layout_probe.c:32:36: note: expression evaluates to '20 == 8'
+   32 | _Static_assert(sizeof(probe_index) == 8, "gcc_struct layout must be 8 bytes");
+      |                ~~~~~~~~~~~~~~~~~~~~^~~~
+C:\Users\pauls\AD04-agxindex\agxindex_layout_probe.c:47:15: warning: implicit truncation from 'int' to bit-field changes value from 2 to -2 [-Wbitfield-constant-conversion]
+   47 |    value.size = PROBE_SIZE_64;
+      |               ^ ~~~~~~~~~~~~~
+C:\Users\pauls\AD04-agxindex\agxindex_layout_probe.c:48:15: warning: implicit truncation from 'int' to bit-field changes value from 4 to -4 [-Wbitfield-constant-conversion]
+   48 |    value.type = PROBE_REGISTER;
+      |               ^ ~~~~~~~~~~~~~~
+3 warnings and 1 error generated.
+CLANG_GCC_X64= : The term 'CLANG_GCC_X64=' is not recognized as the name of a cmdlet, function, script file, or 
+operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try 
+again.
+At line:1 char:264
++ ... -agxindex\results\gcc-clang.obj; Write-Output (CLANG_GCC_X64= + $LAST ...
++                                                    ~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (CLANG_GCC_X64=:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 

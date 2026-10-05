@@ -216,6 +216,17 @@ queue-parallel storage while preserving the physical GPT and macOS partitions.
 
 ## Phase 5: GPU acceleration
 
+### Current checkpoint
+
+G0 and the firmware-only G1 gate are implemented for the development J313.
+EXP-20260825-078 completed ten independent V13_5/G13 firmware lifecycles with a
+hardware reboot and fresh-proxy receipt after every cycle.  This proves the
+reviewed resource contract, firmware management heartbeat, shared fault
+observation, context-zero UAT cleanup, and cold-reset boundary.  It does not
+provide a Windows graphics adapter or submit render work.  The exact contract,
+operator procedure, qualified evidence, and direct no-loss target architecture
+are documented in [`AGX_BRINGUP.md`](AGX_BRINGUP.md).
+
 ### Goal
 
 Replace software rendering and boot-framebuffer-only presentation with an ARM64
@@ -225,13 +236,16 @@ Windows WDDM stack for Apple AGX while preserving the working DCP scanout path.
 
 1. Split the project into display, memory-management/command-submission, and
    user-mode rendering milestones.
-2. Bring up a signed WDDM kernel display miniport with reset and timeout recovery.
-3. Add protected GPU virtual-address spaces, validated command submission, and
+2. Define and qualify render-domain power ownership, a dedicated non-zero UAT
+   context, one bounded queue/fence submission, and reset recovery before
+   exposing AGX to Windows.
+3. Bring up a signed WDDM kernel display miniport with reset and timeout recovery.
+4. Add protected GPU virtual-address spaces, validated command submission, and
    fault containment.
-4. Implement the user-mode Direct3D path using a legally compatible strategy;
+5. Implement the user-mode Direct3D path using a legally compatible strategy;
    external source may inform behavior but cannot be copied without license
    review.
-5. Add power, thermal, suspend, and crash recovery after correctness.
+6. Add production power, thermal, suspend, and crash recovery after correctness.
 
 ### Acceptance gate
 

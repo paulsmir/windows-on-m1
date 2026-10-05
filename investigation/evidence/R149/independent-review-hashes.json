@@ -1,0 +1,11 @@
+{
+  "drivers/apple-agx/mesa/winsys/agx_win32_asahi_bo.c": "e93ebc1983cddb872e3e6d66d21e7d7cd95ae193e7ed0d75590a7ca905f36db8",
+  "drivers/apple-agx/mesa/winsys/agx_win32_gpuva.c": "726c5eb33fcaf91cce36db366913ca05b7b1788e31f4654f41ddc281f2544eba",
+  "drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c": "d9d43af3b8ddd7bba0e15ec106e120640bf640afd5a6ad9352cabaf0b4970de3",
+  "drivers/apple-agx/shared/include/apple_agx_g4_submit.h": "eb374aba69bf390905f4b4dee8d53c6823a618708280cce3cbce31371fae8174",
+  "drivers/apple-agx/shared/src/apple_agx_g4_builder.c": "60ff0da36d34c0973007b7f14f036855817374113905819bbeee52cf1bfba76a",
+  "drivers/apple-agx/shared/src/apple_agx_g4_submit.c": "f3331443e1f5a10e8e356ef6776d5f0e2e10d80ba9550ad1bf3fba09491ef343",
+  "tests/test_r149_submit_error.py": "bda45183faea277736c17615522a58776a56a396ad9dc9c8961dabc990daae5a",
+  "tests/test_g4_usc_window_replay.py": "ca9d3e697c2ea04b6f54433534b16634fc777d6de31d2f52ef465f43fc398ed3",
+  "tests/g4_usc_window_replay.c": "b582b5beae4ce07db68b538f6aec6b6e4aae26d03db10f5b3c4329f46a98d1c5"
+}

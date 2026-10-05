@@ -1,0 +1,12 @@
+{
+  "contract_version": 1,
+  "platform": "J313",
+  "acpi_hid": "APPL0002",
+  "source_g2_sha256": "7c3a7af4e86642b3b72a07132584a352ba475a681828b0be6d3d968c94ebf9a2",
+  "synthetic_scanout_interrupt": {
+    "guest": 889,
+    "trigger": "edge",
+    "polarity": "active_high",
+    "sharing": "exclusive"
+  }
+}

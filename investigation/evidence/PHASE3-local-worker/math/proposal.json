@@ -1,0 +1,12 @@
+{
+  "result": "PATCH_PROPOSED",
+  "rationale": "Add /D_USE_MATH_DEFINES to $compileArgs to expose M_LOG2E, M_PI, and M_1_PI via ucrt/math.h on Windows MSVC, matching the Mesa meson.build behavior.",
+  "patch": {
+    "path": "drivers/apple-agx/mesa/scripts/run-phase3-normalized.ps1",
+    "old": "$compileArgs = @('/nologo','/c','/std:c11','/W3','/DNDEBUG','/DHAVE_STRUCT_TIMESPEC','/DMESA_DEBUG=0','/DBUILDING_MESA','/FI',$overlay) + $include + @((Join-Path $compilerWork 'agx_compile.c'))",
+    "new": "$compileArgs = @('/nologo','/c','/std:c11','/W3','/DNDEBUG','/DHAVE_STRUCT_TIMESPEC','/DMESA_DEBUG=0','/DBUILDING_MESA','/D_USE_MATH_DEFINES','/FI',$overlay) + $include + @((Join-Path $compilerWork 'agx_compile.c'))"
+  },
+  "requested_command_ids": [],
+  "unresolved": [],
+  "architecture_question": ""
+}

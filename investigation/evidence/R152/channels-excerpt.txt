@@ -1,0 +1,156 @@
+0: kd> cdb: Reading initial command 'db ffffe20519fec228+16d0 L38; dt -r3 AppleAgxRenderAdmission!_APPLE_AGX_PLATFORM_CHANNEL_BINDINGS ffffe20519fec228; dq ffffcc03f5389800 L6; dq ffffcc03f5371800 La; dt -r1 AppleAgxRenderAdmission!_ADMISSION_G3_PROCESS ffffe20519be67e0; q'
+ffffe205`19fed8f8  04 00 00 00 00 00 00 00-00 00 00 00 00 00 00 00  ................
+ffffe205`19fed908  00 00 00 00 00 00 00 00-00 00 00 00 00 00 00 00  ................
+ffffe205`19fed918  00 00 00 00 00 00 00 00-00 00 00 00 00 00 00 00  ................
+ffffe205`19fed928  00 00 00 00 00 00 00 00                          ........
+   +0x000 Ta               : _APPLE_AGX_PLATFORM_TX_CHANNEL_BINDING
+      +0x000 StateCpuAddress  : 0xffffcc03`f51a4000  "???"
+      +0x008 RingCpuAddress   : 0xffffcc03`f5208000  ""
+      +0x010 StateGpuAddress  : 0xffffffa0`00064000
+      +0x018 RingGpuAddress   : 0xffffffa0`000c4000
+      +0x020 Doorbell         : 4
+   +0x028 D3               : _APPLE_AGX_PLATFORM_TX_CHANNEL_BINDING
+      +0x000 StateCpuAddress  : 0xffffcc03`f51ac000  "???"
+      +0x008 RingCpuAddress   : 0xffffcc03`f5210000  "???"
+      +0x010 StateGpuAddress  : 0xffffffa0`0006c000
+      +0x018 RingGpuAddress   : 0xffffffa0`000cc000
+      +0x020 Doorbell         : 5
+   +0x050 Compute          : _APPLE_AGX_PLATFORM_TX_CHANNEL_BINDING
+      +0x000 StateCpuAddress  : 0xffffcc03`f51b4000  ""
+      +0x008 RingCpuAddress   : 0xffffcc03`f5218000  ""
+      +0x010 StateGpuAddress  : 0xffffffa0`00074000
+      +0x018 RingGpuAddress   : 0xffffffa0`000d4000
+      +0x020 Doorbell         : 6
+   +0x078 Event            : _APPLE_AGX_PLATFORM_RX_CHANNEL_BINDING
+      +0x000 StateCpuAddress  : 0xffffcc03`f5260000  "???"
+      +0x008 RingCpuAddress   : 0xffffcc03`f5268000  "???"
+      +0x010 StateGpuAddress  : 0xffffffa0`0011c000
+      +0x018 RingGpuAddress   : 0xffffffa0`00124000
+ffffcc03`f5389800  ffffffa0`003e3fe0 ffffffa0`210479e0
+ffffcc03`f5389810  ffffffa0`210479e0 ffffffa0`210479e0
+ffffcc03`f5389820  ffffffa0`210479e0 ffffffa0`210479e0
+ffffcc03`f5371800  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffcc03`f5371810  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffcc03`f5371820  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffcc03`f5371830  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffcc03`f5371840  ffffffa0`003d3fe0 ffffffa0`21003680
+   +0x000 Link             : _LIST_ENTRY [ 0xffffe205`16dbfdb0 - 0xffffe205`19a97010 ]
+      +0x000 Flink            : 0xffffe205`16dbfdb0 _LIST_ENTRY [ 0xffffe205`1a1cbdb0 - 0xffffe205`19be67e0 ]
+      +0x008 Blink            : 0xffffe205`19a97010 _LIST_ENTRY [ 0xffffe205`19be67e0 - 0xffffe205`1952add0 ]
+   +0x010 State            : 0xffffe205`1a051000 _ADMISSION_G3_STATE
+      +0x000 Adapter          : 0xffffe205`19d02000 _ADMISSION_CONTEXT
+      +0x008 Lock             : _FAST_MUTEX
+      +0x040 Processes        : _LIST_ENTRY [ 0xffffe205`16069dd0 - 0xffffe205`1a1cadb0 ]
+      +0x050 Client           : _APPLE_AGX_GPUVA_V5_CLIENT
+      +0x088 Registry         : _APPLE_AGX_GPUVA_G3_REGISTRY
+      +0x098 PrivatePool      : APPLE_AGX_G3_PRIVATE_POOL
+      +0x18a0 NextProcessId    : 0xa
+      +0x18a8 ProcessCount     : 9
+      +0x18b0 ActiveProcess    : 0xffffe205`19be67e0 _ADMISSION_G3_PROCESS
+      +0x18b8 ActiveFence      : 0x3bb
+      +0x18bc LastCompletedFence : 0x2f8
+      +0x18c0 PrivateCompletionFence : 0
+      +0x18c8 UnpublishedGroups : [32] 0x3f8
+   +0x018 Graph            : _APPLE_AGX_GPUVA_G3_GRAPH
+      +0x000 Client           : 0xffffe205`1a051050 _APPLE_AGX_GPUVA_V5_CLIENT
+      +0x008 Allocate         : 0xfffff801`35efc670        void*  AppleAgxRenderAdmission!AdmissionG3AllocateNode+0
+      +0x010 Free             : 0xfffff801`35efc6b0        void  AppleAgxRenderAdmission!AdmissionG3FreeNode+0
+      +0x018 MemoryContext    : (null)
+      +0x020 ProcessId        : 7
+      +0x028 ProcessGeneration : 1
+      +0x030 RootIpa          : 0x00000009`d6014000
+      +0x038 NextGeneration   : 0x140
+      +0x040 SharedBackingGeneration : 0x00000008`e0000000
+      +0x048 Registry         : 0xffffe205`1a051088 _APPLE_AGX_GPUVA_G3_REGISTRY
+      +0x050 MappingGeneration : 0x578
+      +0x058 LeaseToken       : 5
+      +0x060 Tables           : 0xffffe205`1a5d9360 _APPLE_AGX_GPUVA_G3_NODE
+      +0x068 Parents          : 0xffffe205`1a5d9420 _APPLE_AGX_GPUVA_G3_NODE
+      +0x070 Leaves           : 0xffffe205`1b71a6e0 _APPLE_AGX_GPUVA_G3_NODE
+      +0x078 Backings         : 0xffffe205`1b71cc00 _APPLE_AGX_GPUVA_G3_NODE
+      +0x080 LastStatus       : 0
+      +0x084 Created          : 1
+      +0x088 Uncertain        : 0
+      +0x08c JobInFlight      : 1
+      +0x090 Slot             : 1
+   +0x0b0 Io               : _APPLE_AGX_MEMORY_IO
+      +0x000 Context          : 0xffffe205`19b59c40 Void
+      +0x008 AllocateContiguous : 0xfffff801`35efa820        unsigned char  AppleAgxRenderAdmission!AdmissionMemoryAllocateContiguous+0
+      +0x010 FreeContiguous   : 0xfffff801`35efa980        unsigned char  AppleAgxRenderAdmission!AdmissionMemoryFreeContiguous+0
+      +0x018 AllocatePageList : (null)
+      +0x020 FreePageList     : (null)
+   +0x0d8 BootstrapRoot    : _APPLE_AGX_MEMORY_OBJECT
+      +0x000 AllocationCpuBase : 0xffffcc03`f5628000 Void
+      +0x008 CpuAddress       : 0xffffcc03`f5628000 Void
+      +0x010 AllocationHandle : 0xffffe205`1aacec00 Void
+      +0x018 AllocationDeviceBase : 0x00000009`d6110000
+      +0x020 DeviceAddress    : 0x00000009`d6110000
+      +0x028 AllocationLength : 0x8000
+      +0x030 Length           : 0x4000
+      +0x038 DevicePages      : (null)
+      +0x040 DevicePageCount  : 0
+      +0x048 GpuVirtualAddress : 0
+      +0x050 SubmittedFence   : 0
+      +0x058 Context          : 0
+      +0x05c State            : 1 ( AppleAgxMemoryCpuOwned )
+   +0x138 TableShadows     : 0xffffe205`1b241740 _ADMISSION_G3_TABLE_SHADOW
+      +0x000 Next             : 0xffffe205`1b240ca0 _ADMISSION_G3_TABLE_SHADOW
+      +0x008 Memory           : _APPLE_AGX_MEMORY_OBJECT
+      +0x068 OriginalIpa      : 0x00000009`1e774000
+      +0x070 BrokerIpa        : 0x00000009`d8b00000
+      +0x078 LogicalPtes      : (null)
+      +0x080 ResidentPtes     : (null)
+      +0x088 PendingPtes      : (null)
+   +0x140 BootstrapIpa     : 0x00000009`d6110000
+   +0x148 LastSetRootIpa   : 0x00000009`d6014000
+   +0x150 SetRootCount     : 1
+   +0x158 PrivateVa        : 0x2000000
+   +0x160 PrivateMiddleIpa : 0x00000009`1ecb0000
+   +0x168 PrivateLeafIpa   : 0x00000009`1ecc0000
+   +0x170 PrivateTables    : [2] APPLE_AGX_G3_PRIVATE_EXTENT
+      +0x000 Generation       : 0x12
+      +0x008 Offset           : 0x4b0000
+      +0x00c Bytes            : 0x10000
+   +0x190 PrivateManager   : APPLE_AGX_G3_PRIVATE_MANAGER
+      +0x000 Owner            : 7
+      +0x008 Generation       : 0x14
+      +0x010 VaBase           : 0x2000000
+      +0x018 Extents          : [3] APPLE_AGX_G3_PRIVATE_EXTENT
+   +0x1d8 PrivateScenes    : 0xffffe205`1b4d8db0 _ADMISSION_G3_PRIVATE_SCENE
+      +0x000 Next             : 0xffffe205`1a9e8db0 _ADMISSION_G3_PRIVATE_SCENE
+      +0x008 Context          : 0xffffe205`1b335090 _ADMISSION_RENDER_CONTEXT
+      +0x010 Storage          : APPLE_AGX_G3_PRIVATE_SCENE
+      +0x108 Geometry         : APPLE_AGX_G4_NATIVE_RENDER
+      +0x1f8 Fence            : 0x3bb
+      +0x1fc Submitting       : 0
+      +0x200 Queued           : 1
+      +0x204 Started          : 1
+      +0x208 GpuDone          : 0
+      +0x20c Reported         : 0
+      +0x210 ReleaseRequested : 0
+      +0x214 Quarantined      : 1
+   +0x1e0 Contexts         : 0xffffe205`1b335090 _ADMISSION_RENDER_CONTEXT
+      +0x000 Object           : _ADMISSION_OBJECT_CONTEXT
+      +0x028 SchedulerContext : _APPLE_AGX_SCHEDULER_CONTEXT
+      +0x038 PrepatchedRender : _ADMISSION_PREPATCHED_RENDER
+      +0x0c0 Win32Generation  : 0x14980002
+      +0x0c4 Win32Transport   : 0x1 ''
+      +0x0c8 GpuvaG3Process   : 0xffffe205`19be67e0 Void
+      +0x0d0 GpuvaG3NextContext : 0xffffe205`1a1fa130 _ADMISSION_RENDER_CONTEXT
+      +0x0d8 GpuvaG3PrivateManagerGeneration : 0x14
+      +0x0e0 GpuvaG3PrivateFence : 0n955
+      +0x0e4 GpuvaG3CancelFence : 0n0
+      +0x0e8 GpuvaG3CancelUncertain : 0n0
+      +0x0ec GpuvaG3Closing   : 0 ''
+      +0x0f0 GpuvaG3RootIpa   : 0x00000009`d6014000
+      +0x0f8 GpuvaG3LastSetRootIpa : 0x00000009`d6014000
+      +0x100 GpuvaG3SetRootCount : 1
+      +0x108 GpuvaG3DmaBufferVa : 0x18e0000
+      +0x110 GpuvaG3MappingGeneration : 0x578
+      +0x118 GpuvaG3DmaBufferBytes : 0x118
+      +0x11c GpuvaG3Poisoned  : 0 ''
+   +0x1e8 DxgkProcess      : 0xffffe205`196fa230 Void
+   +0x1f0 Magic            : 0x47335052
+   +0x1f4 DeviceRefs       : 2
+   +0x1f8 ContextRefs      : 2
+   +0x1fc Poisoned         : 0x1 ''

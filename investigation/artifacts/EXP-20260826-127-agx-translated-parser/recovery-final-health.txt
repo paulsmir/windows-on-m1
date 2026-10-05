@@ -1,0 +1,19 @@
+EXP-20260826-127 final recovery health
+CollectedUtc: 2026-08-26T21:07:34.7582501Z
+BootUtc: 2026-08-26T21:06:28.9588650Z
+Recovery manifest SHA-256: 143fd9aa07f9b224c316c5e23e3993991d7308fa178164beadc785e8dade03f9
+m1n1 SHA-256: 2c39f7723475e6e74fa00b1a88e413ed7e5159a0da1bac5286b6c0442b7d52a9
+LogicalProcessors: 8
+Present APPL0002 count: 0
+AppleAgx service: absent
+AppleAgx package count: 0
+Loaded AppleAgx module count: 0
+AppleInput: Running
+stornvme: Running
+USBXHCI: Running
+Critical events since boot: 0
+stornvme Event 129 since boot: 0
+
+The non-present APPL0002 PnP history entry remained Problem 45 after package
+removal. Its stale Device Parameters diagnostics are not active device or
+driver state. DriverEntry evidence was absent after the cleanup reboot.

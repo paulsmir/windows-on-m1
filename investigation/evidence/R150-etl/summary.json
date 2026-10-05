@@ -1,0 +1,164 @@
+{
+  "scope": "RECOVERY BOOT ONLY; excluded from original EXP864 TDR causal timeline",
+  "input_sha256": "8e346f91190c8ac2e68b46d8aa22195d4568753d4513b2950bb33b90f9381b93",
+  "native_events": 148606,
+  "powershell_events": 148605,
+  "providers": {
+    "": 1,
+    "Microsoft-Windows-DxgKrnl": 138651,
+    "Microsoft-Windows-Kernel-EventTracing": 9953
+  },
+  "first": "2026-09-28T11:06:43.0204066Z",
+  "last": "2026-09-28T11:08:42.6384534Z",
+  "boot_time": "2026-09-28T11:06:42.7482369Z",
+  "header_end_time": "2026-09-28T11:11:42.6589389Z",
+  "native_losses": 0,
+  "native_buffers_lost": 0,
+  "dma_start": 767,
+  "dma_stop": 767,
+  "dma_completion_info": 767,
+  "dma_all_joined": true,
+  "dma_all_preempted_false": true,
+  "queue_stop": 2046,
+  "queue_all_timeout_false": true,
+  "adapters": [
+    {
+      "t": "2026-09-28T11:06:53.4312439Z",
+      "provider": "Microsoft-Windows-DxgKrnl",
+      "id": 110,
+      "version": 1,
+      "op": 0,
+      "pid": 712,
+      "tid": 716,
+      "data": {
+        "pDxgAdapter": "0xffffb68e1139f000",
+        "ConfigSpaceSize": "0",
+        "ConfigSpace": null,
+        "ChainUid": "0",
+        "NumberOfLinksInChain": "0",
+        "LeadLink": "false",
+        "BusType": "3",
+        "VendorID": "5140",
+        "DeviceID": "141",
+        "SubVendorID": "0",
+        "SubSystemID": "0",
+        "RevisionID": "0",
+        "AdapterLuid": "24306"
+      }
+    },
+    {
+      "t": "2026-09-28T11:06:53.4478981Z",
+      "provider": "Microsoft-Windows-DxgKrnl",
+      "id": 110,
+      "version": 1,
+      "op": 0,
+      "pid": 712,
+      "tid": 716,
+      "data": {
+        "pDxgAdapter": "0xffffb68e11393000",
+        "ConfigSpaceSize": "0",
+        "ConfigSpace": null,
+        "ChainUid": "0",
+        "NumberOfLinksInChain": "0",
+        "LeadLink": "false",
+        "BusType": "3",
+        "VendorID": "5140",
+        "DeviceID": "140",
+        "SubVendorID": "0",
+        "SubSystemID": "0",
+        "RevisionID": "0",
+        "AdapterLuid": "24364"
+      }
+    }
+  ],
+  "dma_contexts": [
+    {
+      "context": "0xffffcf8feaf38050",
+      "count": 563,
+      "node": "0",
+      "engine_affinity": "1",
+      "device": "0xffffcf8feaf4e050",
+      "pid": 1248,
+      "adapter": "0xffffb68e11393000",
+      "first": "2026-09-28T11:06:54.5121537Z",
+      "last": "2026-09-28T11:08:05.4648436Z"
+    },
+    {
+      "context": "0xffffcf8feb654dd0",
+      "count": 166,
+      "node": "3",
+      "engine_affinity": "1",
+      "device": "0xffffcf8feb864010",
+      "pid": 1240,
+      "adapter": "0xffffb68e11393000",
+      "first": "2026-09-28T11:06:55.4937351Z",
+      "last": "2026-09-28T11:07:00.7476961Z"
+    },
+    {
+      "context": "0xffffcf8fea8677b0",
+      "count": 3,
+      "node": "0",
+      "engine_affinity": "1",
+      "device": "0xffffcf8fead15010",
+      "pid": 1248,
+      "adapter": "0xffffb68e11393000",
+      "first": "2026-09-28T11:07:01.1009521Z",
+      "last": "2026-09-28T11:07:05.4589261Z"
+    },
+    {
+      "context": "0xffffcf8feb997de0",
+      "count": 22,
+      "node": "1",
+      "engine_affinity": "1",
+      "device": "0xffffcf8fed5d6030",
+      "pid": 5376,
+      "adapter": "0xffffb68e11393000",
+      "first": "2026-09-28T11:07:01.6368615Z",
+      "last": "2026-09-28T11:08:05.4494968Z"
+    },
+    {
+      "context": "0xffffcf8febbb26a0",
+      "count": 1,
+      "node": "2",
+      "engine_affinity": "1",
+      "device": "0xffffcf8fecbdc010",
+      "pid": 5340,
+      "adapter": "0xffffb68e11393000",
+      "first": "2026-09-28T11:07:01.6612588Z",
+      "last": "2026-09-28T11:07:01.6612588Z"
+    },
+    {
+      "context": "0xffffcf8fed3c8610",
+      "count": 3,
+      "node": "3",
+      "engine_affinity": "1",
+      "device": "0xffffcf8fedeb97e0",
+      "pid": 5376,
+      "adapter": "0xffffb68e11393000",
+      "first": "2026-09-28T11:07:02.0094787Z",
+      "last": "2026-09-28T11:07:02.0834930Z"
+    },
+    {
+      "context": "0xffffcf8feb7e2de0",
+      "count": 7,
+      "node": "6",
+      "engine_affinity": "1",
+      "device": "0xffffcf8fed05d010",
+      "pid": 5536,
+      "adapter": "0xffffb68e11393000",
+      "first": "2026-09-28T11:07:02.9354981Z",
+      "last": "2026-09-28T11:07:03.6213906Z"
+    },
+    {
+      "context": "0xffffcf8fecb54de0",
+      "count": 2,
+      "node": "5",
+      "engine_affinity": "1",
+      "device": "0xffffcf8fedf367e0",
+      "pid": 7480,
+      "adapter": "0xffffb68e11393000",
+      "first": "2026-09-28T11:07:03.1024103Z",
+      "last": "2026-09-28T11:07:05.7709472Z"
+    }
+  ]
+}

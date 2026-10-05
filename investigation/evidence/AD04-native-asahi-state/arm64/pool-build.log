@@ -1,0 +1,39 @@
+clang-cl: warning: argument unused during compilation: '/Zc:enumTypes' [-Wunused-command-line-argument]
+clang-cl: warning: argument unused during compilation: '/Zc:preprocessor' [-Wunused-command-line-argument]
+In file included from C:\Users\pauls\AD04-native-state-arm64-001\src\asahi\lib\pool.c:10:
+In file included from C:\Users\pauls\AD04-native-state-arm64-001\src\asahi\lib\agx_device.h:27:
+C:\Users\pauls\AD04-native-state-arm64-001\src\asahi\libagx\libagx_dgc.h(26,55): warning: '_Static_assert' with no message is a C23 extension [-Wc23-extensions]
+   26 |    static_assert(__builtin_ctz(1) == AGX_INDEX_SIZE_U8);
+      |                                                       ^
+      |                                                       , ""
+C:\Users\pauls\AD04-native-state-arm64-001\src\asahi\libagx\libagx_dgc.h(27,56): warning: '_Static_assert' with no message is a C23 extension [-Wc23-extensions]
+   27 |    static_assert(__builtin_ctz(2) == AGX_INDEX_SIZE_U16);
+      |                                                        ^
+      |                                                        , ""
+C:\Users\pauls\AD04-native-state-arm64-001\src\asahi\libagx\libagx_dgc.h(28,56): warning: '_Static_assert' with no message is a C23 extension [-Wc23-extensions]
+   28 |    static_assert(__builtin_ctz(4) == AGX_INDEX_SIZE_U32);
+      |                                                        ^
+      |                                                        , ""
+C:\Users\pauls\AD04-native-state-arm64-001\src\asahi\libagx\libagx_dgc.h(237,4): warning: '_Static_assert' with no message is a C23 extension [-Wc23-extensions]
+  237 |    agx_push_packed(out, launch, CDM_LAUNCH_WORD_0);
+      |    ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\asahi\libagx\libagx_dgc.h(18,49): note: expanded from macro 'agx_push_packed'
+   18 |    static_assert(sizeof(src) == AGX_##T##_LENGTH);                             \
+      |                                                 ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\asahi\libagx\libagx_dgc.h(77,1): warning: unused function 'agx_1d' [-Wunused-function]
+   77 | agx_1d(uint32_t x)
+      | ^~~~~~
+C:\Users\pauls\AD04-native-state-arm64-001\src\asahi\libagx\libagx_dgc.h(83,1): warning: unused function 'agx_2d' [-Wunused-function]
+   83 | agx_2d(uint32_t x, uint32_t y)
+      | ^~~~~~
+C:\Users\pauls\AD04-native-state-arm64-001\src\asahi\libagx\libagx_dgc.h(95,1): warning: unused function 'agx_grid_indirect_local' [-Wunused-function]
+   95 | agx_grid_indirect_local(uint64_t ptr)
+      | ^~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-native-state-arm64-001\src\asahi\libagx\libagx_dgc.h(210,1): warning: unused function 'agx_direct_draw_overreads_indices' [-Wunused-function]
+  210 | agx_direct_draw_overreads_indices(struct agx_draw d)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from C:\Users\pauls\AD04-native-state-arm64-001\src\asahi\lib\pool.c:10:
+C:\Users\pauls\AD04-native-state-arm64-001\src\asahi\lib\agx_device.h(242,1): warning: unused function 'agx_usc_addr' [-Wunused-function]
+  242 | agx_usc_addr(struct agx_device *dev, uint64_t addr)
+      | ^~~~~~~~~~~~
+9 warnings generated.

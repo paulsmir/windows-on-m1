@@ -1,0 +1,6 @@
+diff --git a/drivers/apple-agx/mesa/scripts/run-phase3-normalized.ps1 b/drivers/apple-agx/mesa/scripts/run-phase3-normalized.ps1
+--- a/drivers/apple-agx/mesa/scripts/run-phase3-normalized.ps1
++++ b/drivers/apple-agx/mesa/scripts/run-phase3-normalized.ps1
+@@ -40 +40 @@
+-$compileArgs = @('/nologo','/c','/std:c11','/W3','/DNDEBUG','/DHAVE_STRUCT_TIMESPEC','/DMESA_DEBUG=0','/DBUILDING_MESA','/FI',$overlay) + $include + @((Join-Path $compilerWork 'agx_compile.c'))
++$compileArgs = @('/nologo','/c','/std:c11','/W3','/DNDEBUG','/DHAVE_STRUCT_TIMESPEC','/DMESA_DEBUG=0','/DBUILDING_MESA','/D_USE_MATH_DEFINES','/FI',$overlay) + $include + @((Join-Path $compilerWork 'agx_compile.c'))

@@ -1,0 +1,11 @@
+{
+  "exit": 0,
+  "first_error": "",
+  "native_draw_executed": false,
+  "architecture": "arm64",
+  "pool_exit": 0,
+  "objects": {
+    "agx_state.obj": "3d654eab04aa234608f1a32c3c8982fbb42ff4dfe444c50fd79369332a9e414c",
+    "pool.obj": "9cfc01df8292bc1fb5fb27ed921c5a366098c6f758319ebb5d6ef98fe3a717eb"
+  }
+}

@@ -1,0 +1,5 @@
+
+AD04-asahi-windows-compiler\llvm20\lib\clang\20\include\intrin.h:376:__int64 _InterlockedAdd64(__int64 volatile 
+*Addend, __int64 Value);
+
+

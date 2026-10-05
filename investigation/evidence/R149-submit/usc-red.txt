@@ -1,0 +1,19 @@
+mapped=0x2b0000 shader_base=0x0 packed=0x2b0144 result=3 ordinal=14 va=0x11002b0140
+Assertion failed: (result==AppleAgxG4ParseOk), function producer_to_parser, file g4_usc_window_replay.c, line 111.
+E
+======================================================================
+ERROR: test_native_coordinates_match_mapped_usc_window (tests.test_g4_usc_window_replay.G4UscWindowReplay.test_native_coordinates_match_mapped_usc_window)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/test_g4_usc_window_replay.py", line 37, in test_native_coordinates_match_mapped_usc_window
+    subprocess.run([str(binary)], check=True, timeout=10)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/var/folders/s5/sgnkc7ws7cs5ctyqdwh_6qm40000gp/T/r149-usc-ukipd73o/replay']' died with <Signals.SIGABRT: 6>.
+
+----------------------------------------------------------------------
+Ran 1 test in 0.295s
+
+FAILED (errors=1)

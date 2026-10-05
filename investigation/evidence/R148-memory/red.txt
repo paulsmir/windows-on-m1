@@ -1,0 +1,15 @@
+F
+======================================================================
+FAIL: test_frontend_flush_releases_only_native_retired_shared_resources (test_r148_shared_retirement.SharedRetirement.test_frontend_flush_releases_only_native_retired_shared_resources)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/test_r148_shared_retirement.py", line 115, in test_frontend_flush_releases_only_native_retired_shared_resources
+    self.assertEqual(ran.returncode,0,ran.stdout+ran.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: -6 != 0 : Assertion failed: (closes==1&&!d.PendingPresentations&&d.Runtime.Retirement.Count==0), function main, file replay.cpp, line 313.
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.215s
+
+FAILED (failures=1)

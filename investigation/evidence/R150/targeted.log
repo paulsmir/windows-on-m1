@@ -1,0 +1,6 @@
+test_worker_identity_survives_g3_begin_job_and_runtime_validation (test_r150_backend_identity.R150BackendIdentityTests.test_worker_identity_survives_g3_begin_job_and_runtime_validation) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 2.143s
+
+OK

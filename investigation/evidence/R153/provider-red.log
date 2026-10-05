@@ -1,0 +1,18 @@
+test_provider_contract (test_apple_agx_g13_queue_provider.AppleAgxG13QueueProviderHostTest.test_provider_contract) ... ERROR
+
+======================================================================
+ERROR: test_provider_contract (test_apple_agx_g13_queue_provider.AppleAgxG13QueueProviderHostTest.test_provider_contract)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/test_apple_agx_g13_queue_provider.py", line 22, in test_provider_contract
+    completed = subprocess.run([str(executable)], check=True,
+                               capture_output=True, text=True)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/var/folders/s5/sgnkc7ws7cs5ctyqdwh_6qm40000gp/T/tmp97vjo00g/provider_test']' died with <Signals.SIGABRT: 6>.
+
+----------------------------------------------------------------------
+Ran 1 test in 0.252s
+
+FAILED (errors=1)

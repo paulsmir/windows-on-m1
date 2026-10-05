@@ -1,0 +1,99 @@
+{
+  "base_commit": "3e6744a21cdb5367f3ede01c13cc96fc6056f32a",
+  "scope": "offline audit; no production fix, package, Air or builder connection",
+  "verdict": "STOP_CAUSE_NOT_UNIQUELY_DETERMINED",
+  "package_source_commit": "c5f6ec886ab2708a70a327b812e8bdccea8ad9cb",
+  "matched_package_source_files": 535,
+  "guest_original_sha256": {
+    "Application.evtx": "e945b486c724159c787dcd755964423e6a4ba4a8ddcf0fdecad4787e3e8f835d",
+    "devnode.reg": "be57e6aa208503e61d2aa539db83c4e1782192873b0640a7636fc8a449072f39",
+    "DxgKrnl-Admin.evtx": "58c5ccbd43e6a8b65e33b88b353dc3ee30eba55ff2e37e4a8bd7eff596bf3064",
+    "EXP801DxgBoot.etl": "d156755ea68c7dbd6aa235c5d2f4332af372024ddbbf1086cb31a90d69cd14b2",
+    "pnp-properties.txt": "7148b4149a8eeb70888f405dd4df8b41b77aaec3c7e7d56c756c200e1d232c3f",
+    "pnputil-resources.txt": "8d29194a1de0d665c6e02bc5b9edf9df34f10620f2a2af866ccb1020a956402d",
+    "setupapi.dev.log": "159c4880fc9e185d7bbad9cc4666156f6e97245ec20c1b1baa434dc30568299d",
+    "state.json": "d8605f22963d43f9f60f3189dcf50f89369fd1a3ac8805be312a4213c20a5135",
+    "System.evtx": "f67c6b517bf076d1fe4a7125ebdccda6ca0b46d1a8902a73a1e76dbe66148459",
+    "umd.log": "fbd574fe575d07cf7f931b622ac65f7a28e5b49c60a774d5411bf2715adbe6df"
+  },
+  "query": {
+    "hex": "0100000010000000350000000d0000c0",
+    "sha256": "711f66eead9979b80bd27ca6446053fa8be440010d9da18621ba43a9868b49b4",
+    "version": 1,
+    "bytes": 16,
+    "predicate": 53,
+    "ntstatus": "0xc000000d",
+    "va_length_generations_present": false
+  },
+  "unpublished_groups": {
+    "0": 139562
+  },
+  "local_unpublished_groups": 0,
+  "flush_snapshot_not_correlated_to_query": {
+    "version": 1,
+    "bytes": 88,
+    "branch": 5,
+    "root_segment": 2,
+    "resolve_status": 0,
+    "broker_status": 0,
+    "process": 18446605560934944784,
+    "root_offset": 1047838720,
+    "resolved_root_ipa": 39165673472,
+    "graph_root_ipa": 42290348032,
+    "input_start": 13959168,
+    "input_end": 14221312,
+    "flush_start": 13959168,
+    "flush_end": 14221312
+  },
+  "ranked_candidates": [
+    "bootstrap/parked root at pre-submit QUERY",
+    "missing parent or leaf at requested VA in selected root",
+    "request range/identity differs from populated mapping"
+  ],
+  "minimum_leading_discriminator": "Graph.RootIpa == BootstrapIpa at guard53 under the same lock",
+  "replays": {
+    "16": {
+      "sha256": "4b481824fa667141d569f353d2a1a66bca4f4fa07050df0bc6926e03699ee43d",
+      "observations": [
+        "R146 populated local root before SetRoot: QUERY53",
+        "R146 successful inactive-root FLUSH_TLB: still QUERY53",
+        "R146 identical publication after SetRoot: QUERY success",
+        "R146 read-only local full range: QUERY success",
+        "R146 selected root, absent requested VA: QUERY53",
+        "R146 selected root, unpublished allocation tail: QUERY53",
+        "R145 local copy: PASS"
+      ]
+    },
+    "64": {
+      "sha256": "4b481824fa667141d569f353d2a1a66bca4f4fa07050df0bc6926e03699ee43d",
+      "observations": [
+        "R146 populated local root before SetRoot: QUERY53",
+        "R146 successful inactive-root FLUSH_TLB: still QUERY53",
+        "R146 identical publication after SetRoot: QUERY success",
+        "R146 read-only local full range: QUERY success",
+        "R146 selected root, absent requested VA: QUERY53",
+        "R146 selected root, unpublished allocation tail: QUERY53",
+        "R145 local copy: PASS"
+      ]
+    }
+  },
+  "suite": {
+    "command": "CC=/tmp/agx-clang-wrapper python3 -m unittest discover -s tests -v",
+    "tests": 1154,
+    "failures": 15,
+    "errors": 38,
+    "skipped": 2,
+    "new_failure_error_identities": [],
+    "log": "/Users/pavel/public_windows/.local/experiments/R146-offline/full-suite.log",
+    "sha256": "bf022decde45f2198d639c45862265c488372f9ef2deeb531b5b917dfe623ece"
+  },
+  "arm64": "not applicable: no production translation unit changed",
+  "nested_diffs": {
+    "m1n1_windows": "68387a2e4a778333004ae9e8e035304dfd70c5d83c8e1ec4dcff4c949427f0e7",
+    "mu": "2e654da05fbcd83288511c5161cc749c8b87d69e222cfc3f6fed3fceaea79a7d"
+  },
+  "audit_script_sha256": {
+    "analyze.py": "1cc80ecd1a8d6c5e13712ea110706d253385f28f941352d22df077ca04a8d83a",
+    "replay.py": "bcd2ef94aba8e021f423ba9000b4d20ff97a49d813bd28a1c8e10fa2a28c97ba"
+  }
+}

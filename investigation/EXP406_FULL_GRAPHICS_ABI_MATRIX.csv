@@ -1,0 +1,163 @@
+ddi,exp214,exp405,microsoft_wdk_role,current_implementation,safe_to_register,hardware_dependency
+Version,WDDM3_0,WDDM3_0,official interface 0xF003,WDDM3_0 and sizeof 1296,yes,none
+DxgkDdiAddDevice,set,set,EXP214 and RosKmd base,concrete nonpaged context allocation,yes,none
+DxgkDdiStartDevice,set,set,EXP214 and RosKmd base,POST ownership and one source child,yes,synthetic IRQ broker mapping only
+DxgkDdiStopDevice,set,set,EXP214 and RosKmd base,lifecycle teardown,yes,synthetic IRQ broker unmap only
+DxgkDdiRemoveDevice,set,set,EXP214 and RosKmd base,context free,yes,none
+DxgkDdiDispatchIoRequest,set,set,EXP214 and RosKmd base,fail closed,yes,none
+DxgkDdiInterruptRoutine,set,null,EXP214 and RosKmd base,missing in render-admission,only after status and ack implementation,m1n1 synthetic scanout IRQ only
+DxgkDdiDpcRoutine,set,null,EXP214 and RosKmd base,missing in render-admission,yes but queue only after handled source,none at admission
+DxgkDdiQueryChildRelations,set,set,EXP214 base and Full Graphics display,one internal child,yes,none
+DxgkDdiQueryChildStatus,set,set,EXP214 base and Full Graphics display,always connected internal child,yes,none
+DxgkDdiQueryDeviceDescriptor,set,set,EXP214 base and Full Graphics display,no descriptor required,yes,none
+DxgkDdiSetPowerState,set,set,EXP214 and RosKmd base,hardware-inert success,yes,none
+DxgkDdiNotifyAcpiEvent,set,set,EXP214 and RosKmd base,fail closed,yes,none
+DxgkDdiResetDevice,set,set,EXP214 and RosKmd base,hardware-inert void boundary,yes,none
+DxgkDdiUnload,set,set,EXP214 and RosKmd base,no global state,yes,none
+DxgkDdiQueryInterface,set,set,EXP214 and RosKmd base,fail closed,yes,none
+DxgkDdiControlEtwLogging,set,set,EXP214 and RosKmd base,no-op void boundary,yes,none
+DxgkDdiQueryAdapterInfo,set,set,EXP214 and RosKmd base,Types 1 34 35 64-bit WDDM and display extension,yes,none
+DxgkDdiCreateDevice,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiCreateAllocation,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiDestroyAllocation,set,set,EXP214 and RosKmd render,fail closed,yes,none before create succeeds
+DxgkDdiDescribeAllocation,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiGetStandardAllocationDriverData,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiAcquireSwizzlingRange,null,null,conditional legacy feature,null,yes as null,none
+DxgkDdiReleaseSwizzlingRange,null,null,conditional legacy feature,null,yes as null,none
+DxgkDdiPatch,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiSubmitCommand,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiPreemptCommand,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiBuildPagingBuffer,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiSetPalette,null,null,Full Graphics display branch,missing in render-admission,yes with 32-bpp fail-closed result,none
+DxgkDdiSetPointerPosition,null,set,Full Graphics display branch,hidden pointer only,yes,none
+DxgkDdiSetPointerShape,null,set,Full Graphics display branch,visible cursor fail closed,yes,none
+DxgkDdiResetFromTimeout,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiRestartFromTimeout,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiEscape,set,set,EXP214 and RosKmd render,fail closed,yes,none
+DxgkDdiCollectDbgInfo,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiQueryCurrentFence,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiIsSupportedVidPn,null,set,Full Graphics display branch,empty or fixed one-path validation,yes,none
+DxgkDdiRecommendFunctionalVidPn,null,set,Full Graphics display branch,fixed one-path construction,yes,none
+DxgkDdiEnumVidPnCofuncModality,null,set,Full Graphics display branch,fixed source target modes,yes,none
+DxgkDdiSetVidPnSourceAddress,null,set,Full Graphics display branch,nonpaged fail-closed boundary,yes,next boundary if called
+DxgkDdiSetVidPnSourceVisibility,null,set,Full Graphics display branch,fixed source visibility,yes,none
+DxgkDdiCommitVidPn,null,set,Full Graphics display branch,fixed topology validation,yes,none
+DxgkDdiUpdateActiveVidPnPresentPath,null,set,Full Graphics display branch,identity path validation,yes,none
+DxgkDdiRecommendMonitorModes,null,set,Full Graphics display branch,fixed panel mode,yes,none
+DxgkDdiRecommendVidPnTopology,null,null,conditional display recommendation,null,yes as null,none
+DxgkDdiGetScanLine,null,null,Full Graphics display branch,missing in render-admission,yes with truthful failure and receipt,next boundary if called
+DxgkDdiStopCapture,null,null,conditional capture feature,null,yes as null,none
+DxgkDdiControlInterrupt,set,null,EXP214 and RosKmd base,missing in render-admission,yes with broker mask and unsupported-type failure,m1n1 synthetic scanout IRQ only
+DxgkDdiCreateOverlay,null,null,conditional overlay feature,null,yes as null,none
+DxgkDdiDestroyDevice,set,set,EXP214 and RosKmd render,success only for previously created device,yes,none before create succeeds
+DxgkDdiOpenAllocation,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiCloseAllocation,set,set,EXP214 and RosKmd render,fail closed,yes,none before open succeeds
+DxgkDdiRender,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiPresent,set,set,EXP214 and RosKmd render,false success in EXP405,must change to fail closed,next boundary if called
+DxgkDdiUpdateOverlay,null,null,conditional overlay feature,null,yes as null,none
+DxgkDdiFlipOverlay,null,null,conditional overlay feature,null,yes as null,none
+DxgkDdiDestroyOverlay,null,null,conditional overlay feature,null,yes as null,none
+DxgkDdiCreateContext,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiDestroyContext,set,set,EXP214 and RosKmd render,success only for previously created context,yes,none before create succeeds
+DxgkDdiLinkDevice,null,null,conditional linked-adapter feature,null,yes as null,none
+DxgkDdiSetDisplayPrivateDriverFormat,null,null,conditional display format feature,null,yes as null,none
+DxgkDdiRenderKm,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiDescribePageTable,null,null,reserved compatibility slot,zero,required zero,none
+DxgkDdiUpdatePageTable,null,null,reserved compatibility slot,zero,required zero,none
+DxgkDdiUpdatePageDirectory,null,null,reserved compatibility slot,zero,required zero,none
+DxgkDdiMovePageDirectory,null,null,reserved compatibility slot,zero,required zero,none
+DxgkDdiSubmitRender,null,null,reserved compatibility slot,zero,required zero,none
+DxgkDdiCreateAllocation2,null,null,reserved compatibility slot,zero,required zero,none
+Reserved,null,null,reserved WDK field,zero,required zero,none
+DxgkDdiQueryVidPnHWCapability,null,set,Full Graphics display branch,zero capabilities,yes,none
+DxgkDdiSetPowerComponentFState,set,set,conditional power feature,fail closed,yes,none
+DxgkDdiQueryDependentEngineGroup,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiQueryEngineStatus,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiResetEngine,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiStopDeviceAndReleasePostDisplayOwnership,null,set,Full Graphics display and PnP stop,POST release teardown,yes,none
+DxgkDdiSystemDisplayEnable,null,null,conditional bugcheck display feature,null,yes as null,none
+DxgkDdiSystemDisplayWrite,null,null,conditional bugcheck display feature,null,yes as null,none
+DxgkDdiCancelCommand,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiGetChildContainerId,null,null,conditional monitor container feature,null,yes as null,none
+DxgkDdiPowerRuntimeControlRequest,set,set,conditional power feature,fail closed,yes,none
+DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay,null,null,conditional MPO feature,null,yes as null,none
+DxgkDdiNotifySurpriseRemoval,null,null,conditional PnP feature,null,yes as null,none
+DxgkDdiGetNodeMetadata,set,set,EXP214 and RosKmd render,one 3D node metadata,yes,none
+DxgkDdiSetPowerPState,null,null,reserved WDK field,zero,required zero,none
+DxgkDdiControlInterrupt2,null,null,conditional interrupt model,null,yes as null,none
+DxgkDdiCheckMultiPlaneOverlaySupport,null,null,conditional MPO feature,null,yes as null,none
+DxgkDdiCalibrateGpuClock,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiFormatHistoryBuffer,null,null,conditional diagnostics feature,null,yes as null,none
+DxgkDdiRenderGdi,null,null,conditional GDI hardware feature,null,yes as null,none
+DxgkDdiSubmitCommandVirtual,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiSetRootPageTable,null,null,conditional GPUVA feature,null,yes as null,none
+DxgkDdiGetRootPageTableSize,null,null,conditional GPUVA feature,null,yes as null,none
+DxgkDdiMapCpuHostAperture,null,null,conditional aperture feature,null,yes as null,none
+DxgkDdiUnmapCpuHostAperture,null,null,conditional aperture feature,null,yes as null,none
+DxgkDdiCheckMultiPlaneOverlaySupport2,null,null,conditional MPO feature,null,yes as null,none
+DxgkDdiCreateProcess,set,set,EXP214 and RosKmd render,fail closed,yes,next boundary if called
+DxgkDdiDestroyProcess,set,set,EXP214 and RosKmd render,success only for previously created process,yes,none before create succeeds
+DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay2,null,null,conditional MPO feature,null,yes as null,none
+Reserved1,null,null,reserved WDK field,zero,required zero,none
+Reserved2,null,null,reserved WDK field,zero,required zero,none
+DxgkDdiPowerRuntimeSetDeviceHandle,null,null,conditional power feature,null,yes as null,none
+DxgkDdiSetStablePowerState,set,set,conditional power feature,no-op void boundary,yes,none
+DxgkDdiSetVideoProtectedRegion,null,null,conditional protection feature,null,yes as null,none
+DxgkDdiCheckMultiPlaneOverlaySupport3,null,null,conditional WDDM2_1 MPO feature,zero,yes as null,none
+DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3,null,null,conditional WDDM2_1 MPO feature,zero,yes as null,none
+DxgkDdiPostMultiPlaneOverlayPresent,null,null,conditional WDDM2_1 MPO feature,zero,yes as null,none
+DxgkDdiValidateUpdateAllocationProperty,null,null,conditional WDDM2_1 allocation feature,zero,yes as null,none
+DxgkDdiControlModeBehavior,null,null,conditional WDDM2_1 display feature,zero,yes as null,none
+DxgkDdiUpdateMonitorLinkInfo,null,null,conditional WDDM2_1 display feature,zero,yes as null,none
+DxgkDdiCreateHwContext,null,null,conditional WDDM2_2 hardware scheduling feature,zero,yes as null,none
+DxgkDdiDestroyHwContext,null,null,conditional WDDM2_2 hardware scheduling feature,zero,yes as null,none
+DxgkDdiCreateHwQueue,null,null,conditional WDDM2_2 hardware queue feature,zero,yes as null,none
+DxgkDdiDestroyHwQueue,null,null,conditional WDDM2_2 hardware queue feature,zero,yes as null,none
+DxgkDdiSubmitCommandToHwQueue,null,null,conditional WDDM2_2 hardware queue feature,zero,yes as null,none
+DxgkDdiSwitchToHwContextList,null,null,conditional WDDM2_2 hardware scheduling feature,zero,yes as null,none
+DxgkDdiResetHwEngine,null,null,conditional WDDM2_2 hardware scheduling feature,zero,yes as null,none
+DxgkDdiCreatePeriodicFrameNotification,null,null,conditional WDDM2_2 display feature,zero,yes as null,none
+DxgkDdiDestroyPeriodicFrameNotification,null,null,conditional WDDM2_2 display feature,zero,yes as null,none
+DxgkDdiSetTimingsFromVidPn,null,null,conditional WDDM2_2 display feature,zero,yes as null,none
+DxgkDdiSetTargetGamma,null,null,conditional WDDM2_2 gamma feature,zero,yes as null,none
+DxgkDdiSetTargetContentType,null,null,conditional WDDM2_2 display feature,zero,yes as null,none
+DxgkDdiSetTargetAnalogCopyProtection,null,null,conditional WDDM2_2 protection feature,zero,yes as null,none
+DxgkDdiSetTargetAdjustedColorimetry,null,null,conditional WDDM2_2 color feature,zero,yes as null,none
+DxgkDdiDisplayDetectControl,null,null,conditional WDDM2_2 display feature,zero,yes as null,none
+DxgkDdiQueryConnectionChange,null,null,conditional WDDM2_2 display feature,zero,yes as null,none
+DxgkDdiExchangePreStartInfo,null,null,conditional WDDM2_2 prestart feature,zero,yes as null,none
+DxgkDdiGetMultiPlaneOverlayCaps,null,null,conditional WDDM2_2 MPO feature,zero,yes as null,none
+DxgkDdiGetPostCompositionCaps,null,null,conditional WDDM2_2 composition feature,zero,yes as null,none
+DxgkDdiUpdateHwContextState,null,null,conditional WDDM2_3 hardware context feature,zero,yes as null,none
+DxgkDdiCreateProtectedSession,null,null,conditional WDDM2_3 protection feature,zero,yes as null,none
+DxgkDdiDestroyProtectedSession,null,null,conditional WDDM2_3 protection feature,zero,yes as null,none
+DxgkDdiSetSchedulingLogBuffer,null,null,conditional WDDM2_4 scheduling feature,zero,yes as null,none
+DxgkDdiSetupPriorityBands,null,null,conditional WDDM2_4 scheduling feature,zero,yes as null,none
+DxgkDdiNotifyFocusPresent,null,null,conditional WDDM2_4 scheduling feature,zero,yes as null,none
+DxgkDdiSetContextSchedulingProperties,null,null,conditional WDDM2_4 scheduling feature,zero,yes as null,none
+DxgkDdiSuspendContext,null,null,conditional WDDM2_4 scheduling feature,zero,yes as null,none
+DxgkDdiResumeContext,null,null,conditional WDDM2_4 scheduling feature,zero,yes as null,none
+DxgkDdiSetVirtualMachineData,null,null,conditional WDDM2_4 virtualization feature,zero,yes as null,none
+DxgkDdiBeginExclusiveAccess,null,null,conditional WDDM2_4 access feature,zero,yes as null,none
+DxgkDdiEndExclusiveAccess,null,null,conditional WDDM2_4 access feature,zero,yes as null,none
+DxgkDdiQueryDiagnosticTypesSupport,null,null,conditional WDDM2_4 diagnostics feature,zero,yes as null,none
+DxgkDdiControlDiagnosticReporting,null,null,conditional WDDM2_4 diagnostics feature,zero,yes as null,none
+DxgkDdiResumeHwEngine,null,null,conditional WDDM2_4 hardware scheduling feature,zero,yes as null,none
+DxgkDdiSignalMonitoredFence,null,null,conditional WDDM2_5 fence feature,zero,yes as null,none
+DxgkDdiPresentToHwQueue,null,null,conditional WDDM2_5 hardware queue feature,zero,yes as null,none
+DxgkDdiValidateSubmitCommand,null,null,conditional WDDM2_5 submission feature,zero,yes as null,none
+DxgkDdiSetTargetAdjustedColorimetry2,null,null,conditional WDDM2_5 color feature,zero,yes as null,none
+DxgkDdiSetTrackedWorkloadPowerLevel,null,null,conditional WDDM2_5 power feature,zero,yes as null,none
+DxgkDdiSaveMemoryForHotUpdate,null,null,conditional WDDM2_6 hot-update feature,zero,yes as null,none
+DxgkDdiRestoreMemoryForHotUpdate,null,null,conditional WDDM2_6 hot-update feature,zero,yes as null,none
+DxgkDdiCollectDiagnosticInfo,null,null,conditional WDDM2_6 diagnostics feature,zero,yes as null,none
+Reserved3,null,null,reserved WDK field,zero,required zero,none
+DxgkDdiControlInterrupt3,null,null,conditional WDDM2_7 interrupt model,zero,yes as null,none
+DxgkDdiSetFlipQueueLogBuffer,null,null,conditional WDDM2_9 flip feature,zero,yes as null,none
+DxgkDdiUpdateFlipQueueLog,null,null,conditional WDDM2_9 flip feature,zero,yes as null,none
+DxgkDdiCancelQueuedFlips,null,null,conditional WDDM2_9 flip feature,zero,yes as null,none
+DxgkDdiSetInterruptTargetPresentId,null,null,conditional WDDM2_9 flip feature,zero,yes as null,none
+DxgkDdiSetAllocationBackingStore,null,null,conditional WDDM3_0 feature,zero,yes as null,none
+DxgkDdiCreateCpuEvent,null,null,conditional WDDM3_0 feature,zero,yes as null,none
+DxgkDdiDestroyCpuEvent,null,null,conditional WDDM3_0 feature,zero,yes as null,none
+DxgkDdiCancelFlips,null,null,conditional WDDM3_0 feature,zero,yes as null,none

@@ -1,0 +1,17 @@
+# EXP961 — locate the owner of the failed deallocation
+
+Classification: FULL GRAPHICS. EXP960 proved that the Direct3D runtime's `pfnDeallocateCb` returned `E_INVALIDARG` for full runtime `hResource=0x0000019ad19fe880`; DWM then failed during Present. This does not prove whether dxgkrnl rejected the callback before calling the KMD or whether `DxgkDdiDestroyAllocation` returned an error. The separate low32 DWM pointer corruption observed in earlier runs remains writer-unknown.
+
+## Primary sources and contract
+
+- Hardware: EXP960 `evidence/umd-final.log` SHA `fc1d380286d184237ed86fcae75afd1fa2667b532a97c19b1efe341515cf76f0`, exact package960 hashes and Code0 identity in `investigation/EXPERIMENTS.md`. EXP960 DWM dump SHA `ef18f82abe8aea18b99c452f365f2e889f50c8068432917bb1628809f3cf8a71` has fail-fast `0x889800d0`, not a pointer AV.
+- Windows: Microsoft `D3DDDICB_DEALLOCATE` and `pfnDeallocateCb` specify a non-null runtime `hResource` and `E_INVALIDARG` for invalid callback parameters. `DXGKARG_DESTROYALLOCATION` permits a KMD `hResource`, allocation list, and `DestroyResource` flag. `DxgkDdiCreateAllocation` permits the KMD to leave its own resource handle null. See the official Microsoft pages for those structures and DDIs. The pinned WDK26100 headers are the build ABI.
+- Current UMD: `umd.c` stores the runtime resource handle received in Create/Open, queues it in `ADMISSION_UMD_RETIREMENT`, and `umd_runtime_device.c` submits it untruncated to `pfnDeallocateCb` after the Mesa `Flush` path. The EXP960 failure receipt is stage 2, so the local guard did not reject it.
+- Current KMD: `allocation_windows.c` `AdmissionDestroyAllocationImpl` returns `STATUS_INVALID_PARAMETER` for non-null KMD `Args->hResource`, zero allocations, or null list. `AdmissionCreateAllocationImpl` accepts a new resource only with input `hResource=NULL` and does not create a KMD-private resource handle, which Microsoft permits. Existing `AdmissionDwmDdiProbeRecordWindows` records DestroyAllocation enter/exit count, status, flags and allocation count; `AppleAgxBltProbe.exe` reads this ring via a read-only escape.
+- Asahi/m1n1/Mu: Native AGX batch/UAT/RTKit and DCP paths from EXP960 remain unchanged. `m1n1_windows/src/hv_agx_power_mmio.c`, `m1n1_windows/src/dcp_iomfb_present.c` and Mu `J313AppleAgxAbiAdmission.asl.inc` do not own a Windows runtime resource handle or `pfnDeallocateCb` result. No firmware or hardware register change is proposed.
+
+## Smallest discriminator
+
+After durable Code28 clean baseline, re-stage only exact package960 as a new EXP961-local package and launch the same full-owner profile. At the first DWM `umd-deallocate-failure` stage2 E_INVALIDARG, run the already pinned read-only `C:\Users\pavel\EXP928\AppleAgxBltProbe.exe` (SHA `28f636f19efb2ba165a59c70a7ff7c117a04a6401cc911ec40948f7a553b7bf1`) immediately and save `DWM_DDI_ENTRY kind=9/10` plus the UMD log. If KMD DestroyAllocation has a matching failure, inspect `status`, `flags`, allocation count and source. If the callback fails while KMD DestroyAllocation never fails/is never called, focus on UMD/dxgkrnl runtime handle provenance. Stop and roll back exact package after that discriminator; no stability wait. The read-only probe is the sole new observed variable; binary behavior, capabilities and firmware are unchanged.
+
+Recovery: immutable GPU-visible ordinary m1n1-exp377/Mu-exp392, exact EXP961-local package cleanup in Code43, ordered reboot, durable Code28 preflight. Hidden firmware only if ordinary recovery cannot be restored.

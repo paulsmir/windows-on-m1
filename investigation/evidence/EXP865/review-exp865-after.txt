@@ -1,0 +1,35 @@
+REVIEW R113: ACCEPT — stage+arm goes directly to cold full-owner after GO; preserve armed ordinary prohibition.
+REVIEW R111: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R108: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R107: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R106: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R105: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R103: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R102: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R99: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R98: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R97: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R96: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R95: ACCEPT — R150 replay proves backend ownership defect; isolate its correction.
+REVIEW R94: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R91: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R90: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R88: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R86: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R85: ACCEPT — pin R143 firmware profile plus exact source/package/script hashes.
+REVIEW R74: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R71: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R69: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R65: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R64: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R63: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R55: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R54: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R49: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R48: ACCEPT — retain serial guard for both USB endpoints.
+REVIEW R47: ACCEPT — retain R143 build profile and verify immutable artifacts.
+REVIEW R45: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R40: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R37: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R64: DEFER — outside the isolated EXP865 backend identity change; preserve existing contract and evidence.
+REVIEW R57: DEFER — remaining paging-status audit is outside EXP865 owner-only scope.

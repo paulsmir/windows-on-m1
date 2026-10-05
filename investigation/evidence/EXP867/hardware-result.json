@@ -1,0 +1,233 @@
+{
+  "experiment": "EXP867",
+  "utc_verdict": "2026-09-28T15:11:47.554798+00:00",
+  "verdict": "CONFIRMED_MANAGER_SWITCH_PROGRESS_WITH_LATER_TDR",
+  "overall_600s_and_visible_frame": "FAILED",
+  "single_variable": "R153 per-process firmware manager snapshot and idle rebind on exact EXP866 base; unchanged R143; Flush excluded",
+  "source_commit": "335031768e44505d33fcbc91b4899fdf13b8fb60",
+  "branch": "exp/867-bm",
+  "native_archive_commit": "335031768e44505d33fcbc91b4899fdf13b8fb60",
+  "package_version": "30.0.867.0",
+  "package_sha256": {
+    "appleagxrenderadmission.cat": "88e61116264902cc6f80009dba21b732e1d9f47937be9a0f79564f41d9cd59ce",
+    "AppleAgxRenderAdmission.inf": "12d1acf1552acf3061e891734104f52df238215f5c7e1955fd5344599bcf1f15",
+    "AppleAgxRenderAdmission.sys": "e3d4b9cf41c1fba8cefd8613360056e54d295ace7d8ea5f5da21a42960e38e9c",
+    "AppleAgxRenderAdmissionUmd.dll": "e0cae710c84446342b8c44798415458fe44bcbb2d59b7844b351f3b268fdeeea"
+  },
+  "hardware_manifest_sha256": "ab4012cdc13c1a62e3d30256a595c2727ed9ac4df7ff9fb682e147201589ed00",
+  "launches": 1,
+  "retry_or_rearm": false,
+  "live_observation": {
+    "original_boot": "2026-09-28T14:46:25.1494030Z",
+    "same_boot_code0_samples": 5,
+    "first_sample_uptime_seconds": 135.804131,
+    "last_sample_uptime_seconds": 264.20925,
+    "start_stage": 12,
+    "start_status": 0,
+    "arm_consumed": true,
+    "cpus": 8,
+    "dwm_pid": 1224,
+    "explorer_pid": 536,
+    "disks": 2,
+    "usb_devices": 5,
+    "rdp_service": "Running",
+    "physical_display_and_input": "UNOBSERVED",
+    "scanout_snapshot_count": 2,
+    "scanout_nonzero_pixels": [
+      0,
+      0
+    ]
+  },
+  "kernel_bugcheck": {
+    "code": "0x116",
+    "uptime_seconds": 288.63,
+    "cpu": 1,
+    "parameters": [
+      "0xffff9b0ad1af23e0",
+      "0xfffff803a8147330",
+      "0xffffffffc0000483",
+      "0x3"
+    ],
+    "module": "AppleAgxRenderAdmission.sys"
+  },
+  "watchdog": {
+    "code": "0x141",
+    "uptime_seconds": 288.516,
+    "cpu": 1,
+    "parameters": [
+      "0xffff9b0ac9ed93d0",
+      "0xfffff803a81473e0",
+      "0",
+      "0xffff9b0acecdc080"
+    ]
+  },
+  "native_execution": {
+    "source": "manager-snapshots.txt plus backend-state.txt; matched private PDB",
+    "native_sequence": 81,
+    "ta_written": 125,
+    "ta_done": 125,
+    "d3_written": 162,
+    "d3_done": 162,
+    "ta_stamp": "0x7a005100",
+    "d3_stamp": "0x3d005100",
+    "last_native_fence": 36174,
+    "last_queue_completion": "Success",
+    "native_completions_supported": 81,
+    "count_basis": "D3 persistent barrier/work pairs 162/2, native sequence81, current stamps and final success agree; no per-job owner history retained",
+    "surviving_completed_managers": [
+      {
+        "process_owner": 8,
+        "saved_fence": 1031,
+        "pending_fence": 0,
+        "valid": true
+      },
+      {
+        "process_owner": 13,
+        "saved_fence": 36174,
+        "pending_fence": 0,
+        "valid": true
+      }
+    ],
+    "distinct_process_owners_proven": 2,
+    "scheduler_active_fence": 36357,
+    "scheduler_completed_fence": 36356,
+    "render_packet": "Active",
+    "bound_fence": 36357,
+    "job_fence": 0,
+    "job_ready": false,
+    "backend_phase": "Ready",
+    "queue_provider_phase": "Created",
+    "queue_runtime_phase": "Ready",
+    "queue_pending_fence": 0,
+    "g3_active_process": null,
+    "g3_active_fence": 0,
+    "completion_context": null,
+    "workers_active": 0,
+    "context_token": "0xffff9b0acb092170",
+    "limitations": [
+      "Snapshot is after failed TDR recovery; source-order attribution remains offline work",
+      "Some reserved arena pages are absent from kernel dump",
+      "Saved process IDs are driver process owners; OS PID mapping not derived"
+    ]
+  },
+  "receipts": {
+    "G4_first_branch": 7,
+    "G4_first_branch_name": "EnvelopeState",
+    "G4_first_status": "0xc000000d",
+    "G4_failure_count": 1,
+    "G4_dma_va": "0x1100b90000",
+    "query_predicate": 53,
+    "query_va": "0x1100410000",
+    "query_bytes": 65536,
+    "query_mapping_generation": 35122,
+    "query_missing_level": 0,
+    "query_missing_index": 1,
+    "query_missing_reason": "NoRoot (1)",
+    "query_component_reason": 1,
+    "query_resident_group_available": false,
+    "query_canonical_allocation_available": true,
+    "causal_relation_to_active_fence": "NOT_ESTABLISHED"
+  },
+  "umd": {
+    "lines": 17986,
+    "seterror_total": 546,
+    "by_function_hresult": {
+      "ResourceCopyRegion 0x80004005": 210,
+      "DrawIndexedInstanced 0x80004005": 335,
+      "DrawIndexed 0x80004005": 1
+    },
+    "by_pid": {
+      "1216": 23,
+      "536": 261,
+      "6616": 105,
+      "4408": 1,
+      "5444": 1,
+      "1224": 43,
+      "8536": 1,
+      "5996": 111
+    },
+    "no_submission_count_inferred_from_errors": true
+  },
+  "interrupt_state": {
+    "interrupt_count": 1,
+    "ack_count": 1,
+    "dpc_count": 36417,
+    "timer_vgic_snapshot": "NOT_COLLECTED"
+  },
+  "etl": {
+    "file": "hardware-evidence/recovery-EXP801DxgBoot.etl",
+    "sha256": "8abda006e48301ce2a1ebc1842e0daf27541643b7eb82381ea38f45591a71840",
+    "scope": "HIDDEN_RECOVERY_ONLY",
+    "native_header_boot_filetime": 134350803557619839,
+    "native_header_boot_utc": "2026-09-28T14:45:55.7619839Z",
+    "matching_KernelGeneral12_StartTime": "2026-09-28T14:45:55.7619839Z",
+    "recovery_clock_correction_ms": 477899,
+    "recovery_WMI_boot": "2026-09-28T14:53:53.6631230Z",
+    "original_KernelGeneral12_StartTime": "2026-09-28T14:45:24.2575742Z",
+    "original_clock_correction_ms": 60890,
+    "original_WMI_boot": "2026-09-28T14:46:25.1494030Z",
+    "native_events": 187750,
+    "events_lost": 0,
+    "buffers_lost": 0,
+    "original_etl_available": false,
+    "reason": "Original trace not copied before spontaneous reset; retained file native header exactly matches subsequent hidden boot event12. Clock corrections explain raw header versus WMI boot timestamps; recovery events excluded from original attribution."
+  },
+  "evidence": {
+    "directory": ".local/experiments/EXP867-r153-bm",
+    "guest_files": 27,
+    "guest_bytes": 839273286,
+    "guest_hashes_verified_before_cleanup": true,
+    "final_manifest": ".local/experiments/EXP867-r153-bm/final-evidence-manifest.json",
+    "final_manifest_sha256": "eaf32e0d57b5ee53f5767d10c1df2a0cf95f15f07eaca0803e1ac365f1c1f196",
+    "kernel_dump_sha256": "1d00f977642c5efb867081eef28a88134d538a7dc0c419a645aa31ba1a5ed328",
+    "private_PDB_match": "cdb matched package867 private PDB; symbols.txt"
+  },
+  "recovery": {
+    "route": "immutable EXP377/385 hiddenCode45 exact cleanup then EXP377/392 ordinaryCode28",
+    "cleanup_receipt_sha256": "4b9f847816f187e49fa783d635873c5fa8c27e5fd92a8915236024f3678b08e9",
+    "durable_samples": 2,
+    "final": {
+      "Utc": "2026-09-28T15:02:14.8284880Z",
+      "Boot": "2026-09-28T14:59:25.0194160Z",
+      "Problem": 28,
+      "Present": 1,
+      "Inf": null,
+      "Staged": 0,
+      "G3Arm": null,
+      "B1Arm": null,
+      "Sys": false,
+      "Umd": false,
+      "ServicePresent": false,
+      "SignerRoot": false,
+      "SignerPublisher": false,
+      "AutoLogger": false,
+      "DwmDumps": false,
+      "ExplorerDumps": false,
+      "Cpu": 8,
+      "Disks": [
+        {
+          "Model": "m1n1 Apple ANS NVMe bridge",
+          "Status": "OK"
+        },
+        {
+          "Model": "Generic Mass-Storage USB Device",
+          "Status": "OK"
+        }
+      ],
+      "UsbCount": 5,
+      "Rdp": "Running",
+      "AutoAdminLogon": "1",
+      "DefaultPasswordPresent": true
+    },
+    "complete": true
+  },
+  "next_causal_target": "Offline active render packet/scheduler fence36357 versus idle native backend and completed36174; correlate scene/lease admission, BeginJob/materialization failure and retirement. Do not assume first EnvelopeState/QUERY receipt caused TDR without correlation.",
+  "limitations": [
+    "No original ETL was preserved before spontaneous reset",
+    "No nonzero scanout or sustained desktop claim",
+    "81 count is supported by persistent queue history, not a retained per-job ledger",
+    "Post-TDR state can reflect failed reset; original cause not yet proved",
+    "Watchdog collection wrote/hash-verified files but its known final Measure-Object summary failed",
+    "Hidden launch BEFORE append was skipped by a false parent-shell process match; explicit after-the-fact correction is in EXPERIMENTS.md"
+  ]
+}

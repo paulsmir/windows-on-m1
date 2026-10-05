@@ -1,0 +1,14 @@
+[
+    {
+        "Source":  "C:\\Users\\pauls\\AD04-persistent-dwm-next\\drivers\\apple-agx\\render-admission\\ARM64\\Release\\AppleAgxRenderAdmission.pdb",
+        "Name":  "AppleAgxRenderAdmission.pdb",
+        "SHA256":  "6A0D146B6CB84B5337E316A87CB4E47D379948D21A640E1FD11D5093C96FD50F",
+        "Bytes":  2740224
+    },
+    {
+        "Source":  "C:\\Users\\pauls\\AD04-persistent-dwm-next\\drivers\\apple-agx\\render-admission\\umd\\ARM64\\Release\\AppleAgxRenderAdmissionUmd.pdb",
+        "Name":  "AppleAgxRenderAdmissionUmd.pdb",
+        "SHA256":  "9FEE57B7CBE5316C5F68C1E61212A33616DD4DC80544A3A5105623312553B383",
+        "Bytes":  9981952
+    }
+]

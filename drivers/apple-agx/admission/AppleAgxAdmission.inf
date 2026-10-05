@@ -1,0 +1,47 @@
+[Version]
+Signature="$WINDOWS NT$"
+Class=Display
+ClassGuid={4d36e968-e325-11ce-bfc1-08002be10318}
+Provider=%ProviderName%
+DriverVer=08/28/2026,0.1.0.0
+CatalogFile=AppleAgxAdmission.cat
+PnpLockdown=1
+
+[DestinationDirs]
+DefaultDestDir=12
+
+[Manufacturer]
+%ManufacturerName%=AppleAgxAdmissionModels,NTarm64
+
+[AppleAgxAdmissionModels.NTarm64]
+%DeviceName%=AppleAgxAdmission_Install,ACPI\APPL0002
+
+[AppleAgxAdmission_Install]
+CopyFiles=AppleAgxAdmission.CopyFiles
+FeatureScore=F9
+
+[AppleAgxAdmission_Install.Services]
+AddService=AppleAgxAdmission,0x00000002,AppleAgxAdmission_Service
+
+[AppleAgxAdmission_Service]
+DisplayName=%ServiceName%
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\AppleAgxAdmission.sys
+
+[AppleAgxAdmission.CopyFiles]
+AppleAgxAdmission.sys
+
+[SourceDisksNames]
+1=%DiskName%,,,
+
+[SourceDisksFiles]
+AppleAgxAdmission.sys=1
+
+[Strings]
+ProviderName="Windows on Apple Silicon Project"
+ManufacturerName="Windows on Apple Silicon Project"
+DeviceName="Apple AGX G13 admission discriminator"
+ServiceName="Apple AGX admission discriminator"
+DiskName="Apple AGX admission package"

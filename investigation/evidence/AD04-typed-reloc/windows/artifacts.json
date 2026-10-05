@@ -1,0 +1,10 @@
+[
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-capture-7ac671dac1c74e6791146d913e4c2358\\x64.exe",
+        "Hash":  "F4896A5AAEB8355BEA9B941D0B390C0EAD962938B2A98B47F52EC39D857F8423"
+    },
+    {
+        "Path":  "C:\\Users\\pauls\\AD04-fullcompiler-001\\reloc-capture-7ac671dac1c74e6791146d913e4c2358\\arm64.exe",
+        "Hash":  "962546B4984BD1D137E4D80C1DC013D47B67B18A9F827269E2E1CE3244A8AD1D"
+    }
+]

@@ -1,0 +1,52 @@
+{
+  "task": "R152",
+  "mode": "OFFLINE_ONLY",
+  "branch": "integration/ad04-windows-compiler",
+  "base_commit": "ca8f64cb306616f080d8b4e8cef5ceba0f133c86",
+  "dump_source": "EXP866-r151-stamp/Kernel-MEMORY.DMP",
+  "package_source_commit": "17ee8894e26224db16bfdb6836fd2fc205e1679c",
+  "live_air_access": false,
+  "production_changes": false,
+  "review_sha256": "753bdfe638d6171954875a5fc9a58c09761999ffcab89b9d216f566c7e1300c5",
+  "m1n1_windows": {
+    "commit": "20d55f4c9532df4bcd6bdb8a04ad01089c453672",
+    "dirty_diff_sha256": "68387a2e4a778333004ae9e8e035304dfd70c5d83c8e1ec4dcff4c949427f0e7"
+  },
+  "mu": {
+    "commit": "0dac68712f3bc520d46f88af84a430cfb916dfc4",
+    "dirty_diff_sha256": "2e654da05fbcd83288511c5161cc749c8b87d69e222cfc3f6fed3fceaea79a7d"
+  },
+  "original_evidence": [
+    {
+      "path": "hardware-evidence/AppleAgxRenderAdmission.pdb",
+      "bytes": 2740224,
+      "sha256": "cd3ad66b18f04ce38c3ea89dffd0bf37c1eacc47eeddee74ff16afb26d7fe15b",
+      "origin": "matching_builder_symbols"
+    },
+    {
+      "path": "hardware-evidence/Kernel-MEMORY.DMP",
+      "bytes": 596191375,
+      "sha256": "931b8be709f69b8f51f457fa0c4d578a035ac5b7e10c8e1c307d53d28d0eee5a",
+      "origin": "guest_manifest_verified"
+    },
+    {
+      "path": "hardware-evidence/symbols-verified.json",
+      "bytes": 521,
+      "sha256": "6578945364a3ae21903435f4cb47c5457213551563e1f708df68472e4f1635be",
+      "origin": "host_analysis_or_recovery_sample"
+    }
+  ],
+  "raw_debugger_logs": {
+    "/Users/pavel/public_windows/.local/experiments/R152-offline/active.txt": "43483b84298d12dddcd1c7e79d65cf6c1d73241d8df388cfb424c0934cee4e19",
+    "/Users/pavel/public_windows/.local/experiments/R152-offline/bm.txt": "ac24457b1f3e00bc4ad73a1367f47515b295679a91d5938e1b34b98ecae7e9cb",
+    "/Users/pavel/public_windows/.local/experiments/R152-offline/channels.txt": "33a1363e009240dfab3be4b1f8bd048d3b38c792b2d77edfbc1c6851eecdf7aa",
+    "/Users/pavel/public_windows/.local/experiments/R152-offline/export.txt": "aa824d7346e4a65ecee639a1f193f1b0b2e7e67cc6baaaad7bf1f21a33c901c6",
+    "/Users/pavel/public_windows/.local/experiments/R152-offline/history.txt": "806c2ef4df76d569f4d002e1406f301bb108b3e3c729458f7443e32980d48892",
+    "/Users/pavel/public_windows/.local/experiments/R152-offline/leaves.txt": "e1d860e9bf8b6d8c719b55fe80b3ebe86efb1eaa0abed91d5fa566d1b71a6484",
+    "/Users/pavel/public_windows/.local/experiments/R152-offline/objects.txt": "fe749cad07fb8f19a8d01063552e4f40d87ecd9672495605c24c89a224423b48",
+    "/Users/pavel/public_windows/.local/experiments/R152-offline/owners.txt": "78bde5a605e73a884fc189780dfcd89ff5b9b78dc9b42381ad5d9004ff35f852",
+    "/Users/pavel/public_windows/.local/experiments/R152-offline/state.txt": "dbb52fe190bd7c65a8c65e17233c7e6906bcaff92a8835d38e2f886728d150f2",
+    "/Users/pavel/public_windows/.local/experiments/R152-offline/walk.txt": "5f86fd1851f013502206d693a8eb9800e48086e8c46007404f90730d64e00cad"
+  },
+  "excerpts": "Debugger command through quit; trailing whitespace normalized; raw log hashes retained"
+}

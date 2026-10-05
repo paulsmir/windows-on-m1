@@ -1,0 +1,249 @@
+
+************* Preparing the environment for Debugger Extensions Gallery repositories **************
+   ExtensionRepository : Implicit
+   UseExperimentalFeatureForNugetShare : true
+   AllowNugetExeUpdate : true
+   NonInteractiveNuget : true
+   AllowNugetMSCredentialProviderInstall : true
+   AllowParallelInitializationOfLocalRepositories : true
+
+   EnableRedirectToV8JsProvider : false
+
+   -- Configuring repositories
+      ----> Repository : LocalInstalled, Enabled: true
+      ----> Repository : UserExtensions, Enabled: true
+
+>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.000 seconds
+
+************* Waiting for Debugger Extensions Gallery to Initialize **************
+
+>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.016 seconds
+   ----> Repository : UserExtensions, Enabled: true, Packages count: 0
+   ----> Repository : LocalInstalled, Enabled: true, Packages count: 29
+
+Microsoft (R) Windows Debugger Version 10.0.26100.6584 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+
+Loading Dump File [C:\Users\pauls\EXP866-r151-stamp\Kernel-MEMORY.DMP]
+Kernel Bitmap Dump File: Kernel address space is available, User address space may not be available.
+
+Dump failed with error code (0x0), and reports completion of: 97%
+
+Last line in dump stack log: Dump completed successfully.
+
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*C:\Symbols*https://msdl.microsoft.com/download/symbols
+OK                                             C:\Users\pauls\EXP866-r151-stamp
+Symbol search path is: srv*C:\Symbols*https://msdl.microsoft.com/download/symbols;C:\Users\pauls\EXP866-r151-stamp
+Executable search path is:
+Windows 10 Kernel Version 26100 MP (8 procs) Free ARM 64-bit (AArch64)
+Product: WinNt, suite: TerminalServer SingleUserTS
+Edition build lab: 26100.1.arm64fre.ge_release.240331-1435
+Kernel base = 0xfffff801`37800000 PsLoadedModuleList = 0xfffff801`3856ac50
+Debug session time: Mon Sep 28 15:12:04.176 2026 (UTC + 2:00)
+System Uptime: 0 days 0:00:43.603
+Loading Kernel Symbols
+...............................................................
+.........................................................Page 976782 not present in the dump file. Type ".hh dbgerr004" for details
+.......
+...................................
+Loading User Symbols
+
+Loading unloaded module list
+........
+For analysis of this file, run !analyze -v
+0: kd> cdb: Reading initial command 'dt AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME ffffe20519fe4000; dt -r1 AppleAgxRenderAdmission!_ADMISSION_BACKEND_IMAGE ffffe20519d7dd40; dt AppleAgxRenderAdmission!_ADMISSION_G3_STATE ffffe2051a051000; dx ((AppleAgxRenderAdmission!_ADMISSION_CONTEXT*)0xffffe20519d02000)->Scheduler; q'
+   +0x000 Adapter          : 0xffffe205`19d02000 _ADMISSION_CONTEXT
+   +0x008 MemoryIo         : _APPLE_AGX_MEMORY_IO
+   +0x030 Snapshot         : _APPLE_AGX_CONFIG_SNAPSHOT
+   +0x160 Page 204000 not present in the dump file. Type ".hh dbgerr004" for details
+SgxBase          : 0xffffccf0`80000000  "Page 204000 not present in the dump file. Type ".hh dbgerr004" for details
+--- memory read error at address 0xffffccf0`80000000 ---"
+   +0x168 Page 9fff70 too large to be in the dump file.
+HandoffBase      : 0xffffcc03`f513c000  "Page 9fff70 too large to be in the dump file.
+--- memory read error at address 0xffffcc03`f513c000 ---"
+   +0x170 AscTransport     : _ADMISSION_ASC_TRANSPORT
+   +0x588 AscIo            : _APPLE_AGX_ASC_IO
+   +0x5c0 Rtkit            : _APPLE_AGX_RTKIT_SESSION
+   +0x638 Handoff          : _APPLE_AGX_GFX_HANDOFF_STATE
+   +0x6a0 HandoffIo        : _APPLE_AGX_GFX_HANDOFF_IO
+   +0x6f0 Initdata         : _APPLE_AGX_INITDATA_MEMORY_GRAPH
+   +0x49c8 RetainedEpoch    : 1
+   +0x49d0 RetainedRoot     : 0x00000009`fff78000
+   +0x49d8 RetainedRoot0    : 0x00000008`056a4000
+   +0x49e0 Context0Lease    : _APPLE_AGX_CONTEXT0_BROKER
+   +0x72a0 FirmwareIoManifest : _AGX_FW_IO_MANIFEST
+   +0x7600 HwdataProfileReceipt : _AGX_HWDATA_RECEIPT
+   +0x7640 FirmwareStartFailure : _APPLE_AGX_FIRMWARE_START_RECEIPT
+   +0x764c CaptureFirmwareStart : 0 ''
+   +0x764d RetainedPrepared : 0x1 ''
+   +0x7650 FirmwarePrimitives : _APPLE_AGX_FIRMWARE_PROVIDER_PRIMITIVES
+   +0x76e8 FirmwareProvider : _APPLE_AGX_FIRMWARE_PROVIDER
+   +0x77a8 FirmwareIo       : _APPLE_AGX_FIRMWARE_IO
+   +0x7828 TransportIo      : _APPLE_AGX_PLATFORM_TRANSPORT_IO
+   +0x7870 QueueIo          : _APPLE_AGX_G13_QUEUE_RUNTIME_IO
+   +0x78a8 QueueObjects     : [76] _APPLE_AGX_EXP208_RELOCATION_OBJECT
+   +0x8228 Provider         : _APPLE_AGX_PLATFORM_PROVIDER
+   +0x9938 ProviderConfig   : _APPLE_AGX_PLATFORM_PROVIDER_CONFIG
+   +0x9ae8 Backend          : _APPLE_AGX_BACKEND_RUNTIME
+   +0x9d20 RenderIo         : _APPLE_AGX_BACKEND_IO
+   +0x9e30 PlatformIo       : _APPLE_AGX_BACKEND_IO
+   +0x9f40 RuntimeIo        : _APPLE_AGX_BACKEND_IO
+   +0xa050 DynamicOverlayPlan : _ADMISSION_DYNAMIC_OVERLAY_PLAN
+   +0xab08 DynamicOverlayState : _ADMISSION_DYNAMIC_OVERLAY_STATE
+   +0xab30 DynamicJob       : (null)
+   +0xab38 DynamicStorage   : (null)
+   +0xab40 DynamicStorageBytes : 0
+   +0xab44 DynamicBackgroundColor : 0
+   +0xab48 DynamicExpectedForegroundColor : 0
+   +0xab50 WorkItem         : 0xffffe205`1951e750 _IO_WORKITEM
+   +0xab58 WorkIdle         : _KEVENT
+   +0xab70 WorkScheduled    : 0n0
+   +0xab74 WorkersActive    : 0n0
+   +0xab78 Stopping         : 0n0
+   +0xab7c Resetting        : 0n0
+   +0xab80 LastProgressMs   : 0n41508
+   +0xab88 Progress         : _APPLE_AGX_G13_QUEUE_PROGRESS
+   +0xabac ProgressValid    : 0x1 ''
+   +0xabb0 Completion       : _APPLE_AGX_COMPLETION_TRANSACTION
+   +0xabc0 CompletionContext : (null)
+   +0xabc8 Powered          : 0x1 ''
+   +0xabc9 RenderBorrowed   : 0x1 ''
+   +0xabca QueueImageReady  : 0x1 ''
+   +0xabcb ProviderReady    : 0x1 ''
+   +0xabcc BackendStarted   : 0x1 ''
+   +0x000 Roots            : _APPLE_AGX_RENDER_TEMPLATE_ROOTS
+      +0x000 Ta               : [2] 0x00000015`3f880000
+      +0x010 D3               : [2] 0x00000015`3f870000
+   +0x020 Objects          : [76] _APPLE_AGX_EXP208_RELOCATION_OBJECT
+      +0x000 GpuVa            : 0x00000015`3f800000
+      +0x008 PhysicalAddress  : 0x00000009`1f800000
+      +0x010 Size             : 0x40
+      +0x018 Page 91f800 not present in the dump file. Type ".hh dbgerr004" for details
+Data             : 0xffffccf0`7f800000  "Page 91f800 not present in the dump file. Type ".hh dbgerr004" for details
+--- memory read error at address 0xffffccf0`7f800000 ---"
+   +0x9a0 ArenaCpuAddress  : 0xffffccf0`7f800000 Void
+   +0x9a8 ArenaPhysicalAddress : 0x00000009`1f800000
+   +0x9b0 ArenaGpuAddress  : 0x00000015`3f800000
+   +0x9b8 ArenaBytes       : 0x5d0000
+   +0x9bc ArenaCapacity    : 0x800000
+   +0x9c0 Binding          : _APPLE_AGX_EXP208_GDI_BINDING
+      +0x000 OutputObject     : 0x28
+      +0x008 DestinationGpuVa : 0x16d0000
+      +0x010 DestinationPhysical : 0x00000008`e1170000
+      +0x018 DestinationBytes : 0x4000
+      +0x01c StoreDescriptorObject : 0
+      +0x020 StoreDescriptorOffset : 0
+      +0x028 OriginalOutputGpuVa : 0
+      +0x030 OriginalOutputPhysical : 0
+      +0x038 OriginalOutputBytes : 0
+      +0x040 OriginalOutputData : (null)
+      +0x048 OriginalStoreDescriptor : 0
+      +0x050 PatchedStoreDescriptor : 0
+      +0x058 StorePipelineObject : 0
+      +0x05c ClearUniformOffset : 0
+      +0x060 StoreTextureOffset : 0
+      +0x064 StoreUniformOffset : 0
+      +0x068 OriginalStoreTexture : 0
+      +0x070 PatchedStoreTexture : 0
+      +0x078 OriginalStoreUniform : 0
+      +0x080 PatchedStoreUniform : 0
+      +0x088 OriginalClearUniform : 0
+      +0x090 PatchedClearUniform : 0
+      +0x098 Framebuffer      : _APPLE_AGX_EXP208_FRAMEBUFFER_BINDING
+   +0xb18 Dynamic          : _APPLE_AGX_EXP208_DYNAMIC_RESULT
+      +0x000 TaPreviousStamp  : 0x7a000400
+      +0x004 D3PreviousStamp  : 0x3d000400
+      +0x008 TaCurrentStamp   : 0x7a000500
+      +0x00c D3CurrentStamp   : 0x3d000500
+      +0x010 EventCount       : 0xa
+      +0x014 Start3dQueueCommandCount : 0x3d0004
+   +0xb30 Job              : _APPLE_AGX_BACKEND_JOB_IMAGE
+      +0x000 TaWorkAddresses  : [2] 0x00000015`3f880000
+      +0x010 D3WorkAddresses  : [2] 0x00000015`3f870000
+      +0x020 ComputeWorkAddresses : [2] 0
+      +0x030 TaWorkAddressCount : 2
+      +0x034 D3WorkAddressCount : 2
+      +0x038 ComputeWorkAddressCount : 0
+      +0x03c TaEvent          : 0
+      +0x040 D3Event          : 1
+      +0x044 ComputeEvent     : 0
+      +0x048 TaExpectedStamp  : 0x7a000500
+      +0x04c D3ExpectedStamp  : 0x3d000500
+      +0x050 ComputeExpectedStamp : 0
+      +0x054 TaExpectedDonePointer : 6
+      +0x058 D3ExpectedDonePointer : 0xa
+      +0x05c ComputeExpectedDonePointer : 0
+   +0xb90 Sequence         : 5
+   +0xb94 BoundFence       : 0x3bb
+   +0xb98 JobFence         : 0x3bb
+   +0xb9c JobReady         : 0x1 ''
+   +0xb9d Ready            : 0x1 ''
+   +0xb9e NativeBound      : 0x1 ''
+   +0xb9f G4Native         : 0x1 ''
+   +0xba0 G4Header         : APPLE_AGX_G4_PRIVATE_HEADER_V2
+      +0x000 Base             : APPLE_AGX_G4_PRIVATE_HEADER
+      +0x018 Process          : [9] APPLE_AGX_G4_PROCESS_RANGE
+   +0xc48 G4Command        : [4096]  "???"
+   +0x1c48 G4CommandBytes   : 0x118
+   +0x1c50 G4Lease          : APPLE_AGX_G4_PRIVATE_LEASE
+      +0x000 ManagerId        : 7
+      +0x008 ManagerGeneration : 0x14
+      +0x010 SceneId          : 0x3d
+      +0x018 SceneGeneration  : 0x3d
+   +0x1c70 NativeWidth      : 0x10
+   +0x1c74 NativeHeight     : 0x10
+   +0x1c78 NativePitch      : 0x40
+   +0x1c80 NativeOriginalOutput : _APPLE_AGX_EXP208_RELOCATION_OBJECT
+      +0x000 GpuVa            : 0x16d0000
+      +0x008 PhysicalAddress  : 0x00000009`1fae0000
+      +0x010 Size             : 0x4000
+      +0x018 Page 91fae0 not present in the dump file. Type ".hh dbgerr004" for details
+Data             : 0xffffccf0`7fae0000  "Page 91fae0 not present in the dump file. Type ".hh dbgerr004" for details
+--- memory read error at address 0xffffccf0`7fae0000 ---"
+   +0x000 Adapter          : 0xffffe205`19d02000 _ADMISSION_CONTEXT
+   +0x008 Lock             : _FAST_MUTEX
+   +0x040 Processes        : _LIST_ENTRY [ 0xffffe205`16069dd0 - 0xffffe205`1a1cadb0 ]
+   +0x050 Client           : _APPLE_AGX_GPUVA_V5_CLIENT
+   +0x088 Registry         : _APPLE_AGX_GPUVA_G3_REGISTRY
+   +0x098 PrivatePool      : APPLE_AGX_G3_PRIVATE_POOL
+   +0x18a0 NextProcessId    : 0xa
+   +0x18a8 ProcessCount     : 9
+   +0x18b0 ActiveProcess    : 0xffffe205`19be67e0 _ADMISSION_G3_PROCESS
+   +0x18b8 ActiveFence      : 0x3bb
+   +0x18bc LastCompletedFence : 0x2f8
+   +0x18c0 PrivateCompletionFence : 0
+   +0x18c8 UnpublishedGroups : [32] 0x3f8
+((AppleAgxRenderAdmission!_ADMISSION_CONTEXT*)0xffffe20519d02000)->Scheduler                 [Type: _APPLE_AGX_SCHEDULER]
+    [+0x000] CompletedFence   : 0x3ba [Type: unsigned int]
+    [+0x004] LastSubmittedFence : 0x3bb [Type: unsigned int]
+    [+0x008] QueuedFence      : 0x0 [Type: unsigned int]
+    [+0x00c] QueueHead        : 0x0 [Type: unsigned int]
+    [+0x010] QueueCount       : 0x0 [Type: unsigned int]
+    [+0x014] FenceQueue       [Type: unsigned int [64]]
+    [+0x114] ActiveFence      : 0x3bb [Type: unsigned int]
+    [+0x118] PendingPreemptionFence : 0x2 [Type: unsigned int]
+    [+0x11c] PreemptionCutoffFence : 0x3bb [Type: unsigned int]
+    [+0x120] PreemptionActiveFence : 0x3bb [Type: unsigned int]
+    [+0x124] PreemptionLastCompletedFence : 0x3ba [Type: unsigned int]
+    [+0x128] ContextCount     : 0xb [Type: unsigned int]
+    [+0x12c] PreemptionPending : 0x1 [Type: unsigned char]
+    [+0x12d] Responsive       : 0x1 [Type: unsigned char]
+    [+0x130] PreemptionPhase  : AppleAgxPreemptionWaitCurrentBoundary (1) [Type: _APPLE_AGX_PREEMPTION_PHASE]
+quit:
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\atlmfc.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\ObjectiveC.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\concurrency.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\cpp_rest.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Kernel.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\stl.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Data.Json.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Media.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\windows.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\winrt.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Usb4Kd.natvis'

@@ -1,0 +1,675 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DEFECTS>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+      <FILENAME>wdm.h</FILENAME>
+      <LINE>13206</LINE>
+      <COLUMN>0</COLUMN>
+    </SFA>
+    <DEFECTCODE>28301</DEFECTCODE>
+    <DESCRIPTION>No annotations for first declaration of '__fastfail'. See &lt;no file&gt;(0). </DESCRIPTION>
+    <FUNCTION>__fastfail</FUNCTION>
+    <DECORATED>__fastfail</DECORATED>
+    <FUNCLINE>13206</FUNCLINE>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+      <FILENAME>wdm.h</FILENAME>
+      <LINE>21638</LINE>
+      <COLUMN>8</COLUMN>
+    </SFA>
+    <DEFECTCODE>6001</DEFECTCODE>
+    <DESCRIPTION>Using uninitialized memory '*Register'.</DESCRIPTION>
+    <FUNCTION>WRITE_REGISTER_NOFENCE_BUFFER_UCHAR</FUNCTION>
+    <DECORATED>WRITE_REGISTER_NOFENCE_BUFFER_UCHAR</DECORATED>
+    <FUNCLINE>21626</FUNCLINE>
+    <PROBABILITY>1</PROBABILITY>
+    <RANK>3</RANK>
+    <CATEGORY>
+      <RULECATEGORY>mspft</RULECATEGORY>
+    </CATEGORY>
+    <PATH>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21626</LINE>
+        <COLUMN>0</COLUMN>
+        <KEYEVENT>
+          <ID>1</ID>
+          <KIND>declaration</KIND>
+          <IMPORTANCE>Essential</IMPORTANCE>
+          <MESSAGE>'*Register' is not initialized</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21633</LINE>
+        <COLUMN>20</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21634</LINE>
+        <COLUMN>11</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21635</LINE>
+        <COLUMN>10</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21637</LINE>
+        <COLUMN>20</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21637</LINE>
+        <COLUMN>39</COLUMN>
+        <KEYEVENT>
+          <ID>2</ID>
+          <KIND>branch</KIND>
+          <IMPORTANCE>Full</IMPORTANCE>
+          <MESSAGE>Enter this loop, (assume 'writeCount--')</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21638</LINE>
+        <COLUMN>8</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21638</LINE>
+        <COLUMN>8</COLUMN>
+        <KEYEVENT>
+          <ID>3</ID>
+          <KIND>usage</KIND>
+          <IMPORTANCE>Essential</IMPORTANCE>
+          <MESSAGE>'*Register' is used, but may not have been initialized</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+    </PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+      <FILENAME>wdm.h</FILENAME>
+      <LINE>21659</LINE>
+      <COLUMN>8</COLUMN>
+    </SFA>
+    <DEFECTCODE>6001</DEFECTCODE>
+    <DESCRIPTION>Using uninitialized memory '*Register'.</DESCRIPTION>
+    <FUNCTION>WRITE_REGISTER_NOFENCE_BUFFER_USHORT</FUNCTION>
+    <DECORATED>WRITE_REGISTER_NOFENCE_BUFFER_USHORT</DECORATED>
+    <FUNCLINE>21647</FUNCLINE>
+    <PROBABILITY>1</PROBABILITY>
+    <RANK>3</RANK>
+    <CATEGORY>
+      <RULECATEGORY>mspft</RULECATEGORY>
+    </CATEGORY>
+    <PATH>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21647</LINE>
+        <COLUMN>0</COLUMN>
+        <KEYEVENT>
+          <ID>1</ID>
+          <KIND>declaration</KIND>
+          <IMPORTANCE>Essential</IMPORTANCE>
+          <MESSAGE>'*Register' is not initialized</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21654</LINE>
+        <COLUMN>21</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21655</LINE>
+        <COLUMN>12</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21656</LINE>
+        <COLUMN>10</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21658</LINE>
+        <COLUMN>20</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21658</LINE>
+        <COLUMN>39</COLUMN>
+        <KEYEVENT>
+          <ID>2</ID>
+          <KIND>branch</KIND>
+          <IMPORTANCE>Full</IMPORTANCE>
+          <MESSAGE>Enter this loop, (assume 'writeCount--')</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21659</LINE>
+        <COLUMN>8</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21659</LINE>
+        <COLUMN>8</COLUMN>
+        <KEYEVENT>
+          <ID>3</ID>
+          <KIND>usage</KIND>
+          <IMPORTANCE>Essential</IMPORTANCE>
+          <MESSAGE>'*Register' is used, but may not have been initialized</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+    </PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+      <FILENAME>wdm.h</FILENAME>
+      <LINE>21680</LINE>
+      <COLUMN>8</COLUMN>
+    </SFA>
+    <DEFECTCODE>6001</DEFECTCODE>
+    <DESCRIPTION>Using uninitialized memory '*Register'.</DESCRIPTION>
+    <FUNCTION>WRITE_REGISTER_NOFENCE_BUFFER_ULONG</FUNCTION>
+    <DECORATED>WRITE_REGISTER_NOFENCE_BUFFER_ULONG</DECORATED>
+    <FUNCLINE>21668</FUNCLINE>
+    <PROBABILITY>1</PROBABILITY>
+    <RANK>3</RANK>
+    <CATEGORY>
+      <RULECATEGORY>mspft</RULECATEGORY>
+    </CATEGORY>
+    <PATH>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21668</LINE>
+        <COLUMN>0</COLUMN>
+        <KEYEVENT>
+          <ID>1</ID>
+          <KIND>declaration</KIND>
+          <IMPORTANCE>Essential</IMPORTANCE>
+          <MESSAGE>'*Register' is not initialized</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21675</LINE>
+        <COLUMN>20</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21676</LINE>
+        <COLUMN>11</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21677</LINE>
+        <COLUMN>10</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21679</LINE>
+        <COLUMN>20</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21679</LINE>
+        <COLUMN>39</COLUMN>
+        <KEYEVENT>
+          <ID>2</ID>
+          <KIND>branch</KIND>
+          <IMPORTANCE>Full</IMPORTANCE>
+          <MESSAGE>Enter this loop, (assume 'writeCount--')</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21680</LINE>
+        <COLUMN>8</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21680</LINE>
+        <COLUMN>8</COLUMN>
+        <KEYEVENT>
+          <ID>3</ID>
+          <KIND>usage</KIND>
+          <IMPORTANCE>Essential</IMPORTANCE>
+          <MESSAGE>'*Register' is used, but may not have been initialized</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+    </PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+      <FILENAME>wdm.h</FILENAME>
+      <LINE>21701</LINE>
+      <COLUMN>8</COLUMN>
+    </SFA>
+    <DEFECTCODE>6001</DEFECTCODE>
+    <DESCRIPTION>Using uninitialized memory '*Register'.</DESCRIPTION>
+    <FUNCTION>WRITE_REGISTER_NOFENCE_BUFFER_ULONG64</FUNCTION>
+    <DECORATED>WRITE_REGISTER_NOFENCE_BUFFER_ULONG64</DECORATED>
+    <FUNCLINE>21689</FUNCLINE>
+    <PROBABILITY>1</PROBABILITY>
+    <RANK>3</RANK>
+    <CATEGORY>
+      <RULECATEGORY>mspft</RULECATEGORY>
+    </CATEGORY>
+    <PATH>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21689</LINE>
+        <COLUMN>0</COLUMN>
+        <KEYEVENT>
+          <ID>1</ID>
+          <KIND>declaration</KIND>
+          <IMPORTANCE>Essential</IMPORTANCE>
+          <MESSAGE>'*Register' is not initialized</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21696</LINE>
+        <COLUMN>22</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21697</LINE>
+        <COLUMN>13</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21698</LINE>
+        <COLUMN>10</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21700</LINE>
+        <COLUMN>20</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21700</LINE>
+        <COLUMN>39</COLUMN>
+        <KEYEVENT>
+          <ID>2</ID>
+          <KIND>branch</KIND>
+          <IMPORTANCE>Full</IMPORTANCE>
+          <MESSAGE>Enter this loop, (assume 'writeCount--')</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21701</LINE>
+        <COLUMN>8</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>21701</LINE>
+        <COLUMN>8</COLUMN>
+        <KEYEVENT>
+          <ID>3</ID>
+          <KIND>usage</KIND>
+          <IMPORTANCE>Essential</IMPORTANCE>
+          <MESSAGE>'*Register' is used, but may not have been initialized</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+    </PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+      <FILENAME>wdm.h</FILENAME>
+      <LINE>25418</LINE>
+      <COLUMN>8</COLUMN>
+    </SFA>
+    <DEFECTCODE>28301</DEFECTCODE>
+    <DESCRIPTION>No annotations for first declaration of 'POOL_FLAGS'. See c:\program files (x86)\windows kits\10\include\10.0.26100.0\km\wdm.h(18173). </DESCRIPTION>
+    <FUNCTION></FUNCTION>
+    <DECORATED></DECORATED>
+    <FUNCLINE>0</FUNCLINE>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+      <FILENAME>wdm.h</FILENAME>
+      <LINE>25604</LINE>
+      <COLUMN>0</COLUMN>
+    </SFA>
+    <DEFECTCODE>6387</DEFECTCODE>
+    <DESCRIPTION>'return' could be '0':  this does not adhere to the specification for the function 'ExAllocatePoolZero'. </DESCRIPTION>
+    <FUNCTION>ExAllocatePoolZero</FUNCTION>
+    <DECORATED>ExAllocatePoolZero</DECORATED>
+    <FUNCLINE>25604</FUNCLINE>
+    <PROBABILITY>1</PROBABILITY>
+    <RANK>4</RANK>
+    <CATEGORY>
+      <RULECATEGORY>mspft</RULECATEGORY>
+    </CATEGORY>
+    <PATH>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>25610</LINE>
+        <COLUMN>10</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>25613</LINE>
+        <COLUMN>15</COLUMN>
+        <KEYEVENT>
+          <ID>1</ID>
+          <KIND>declaration</KIND>
+          <IMPORTANCE>Essential</IMPORTANCE>
+          <MESSAGE>'Allocation' may be NULL</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>25625</LINE>
+        <COLUMN>4</COLUMN>
+        <KEYEVENT>
+          <ID>2</ID>
+          <KIND>alias</KIND>
+          <IMPORTANCE>Essential</IMPORTANCE>
+          <MESSAGE>(alias) 'return' receives the value of 'Allocation' (which may be NULL)</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>25604</LINE>
+        <COLUMN>0</COLUMN>
+        <KEYEVENT>
+          <ID>3</ID>
+          <KIND>usage</KIND>
+          <IMPORTANCE>Essential</IMPORTANCE>
+          <MESSAGE>'return' should not be NULL, because this is not consistent with the SAL annotation on 'ExAllocatePoolZero'</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+    </PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+      <FILENAME>wdm.h</FILENAME>
+      <LINE>25672</LINE>
+      <COLUMN>0</COLUMN>
+    </SFA>
+    <DEFECTCODE>6387</DEFECTCODE>
+    <DESCRIPTION>'return' could be '0':  this does not adhere to the specification for the function 'ExAllocatePoolQuotaZero'. </DESCRIPTION>
+    <FUNCTION>ExAllocatePoolQuotaZero</FUNCTION>
+    <DECORATED>ExAllocatePoolQuotaZero</DECORATED>
+    <FUNCLINE>25672</FUNCLINE>
+    <PROBABILITY>1</PROBABILITY>
+    <RANK>4</RANK>
+    <CATEGORY>
+      <RULECATEGORY>mspft</RULECATEGORY>
+    </CATEGORY>
+    <PATH>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>25678</LINE>
+        <COLUMN>10</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>25681</LINE>
+        <COLUMN>15</COLUMN>
+        <KEYEVENT>
+          <ID>1</ID>
+          <KIND>declaration</KIND>
+          <IMPORTANCE>Essential</IMPORTANCE>
+          <MESSAGE>'Allocation' may be NULL</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>25693</LINE>
+        <COLUMN>4</COLUMN>
+        <KEYEVENT>
+          <ID>2</ID>
+          <KIND>alias</KIND>
+          <IMPORTANCE>Essential</IMPORTANCE>
+          <MESSAGE>(alias) 'return' receives the value of 'Allocation' (which may be NULL)</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>25672</LINE>
+        <COLUMN>0</COLUMN>
+        <KEYEVENT>
+          <ID>3</ID>
+          <KIND>usage</KIND>
+          <IMPORTANCE>Essential</IMPORTANCE>
+          <MESSAGE>'return' should not be NULL, because this is not consistent with the SAL annotation on 'ExAllocatePoolQuotaZero'</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+    </PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+      <FILENAME>wdm.h</FILENAME>
+      <LINE>25712</LINE>
+      <COLUMN>0</COLUMN>
+    </SFA>
+    <DEFECTCODE>6387</DEFECTCODE>
+    <DESCRIPTION>'return' could be '0':  this does not adhere to the specification for the function 'ExAllocatePoolQuotaUninitialized'. </DESCRIPTION>
+    <FUNCTION>ExAllocatePoolQuotaUninitialized</FUNCTION>
+    <DECORATED>ExAllocatePoolQuotaUninitialized</DECORATED>
+    <FUNCLINE>25712</FUNCLINE>
+    <PROBABILITY>1</PROBABILITY>
+    <RANK>4</RANK>
+    <CATEGORY>
+      <RULECATEGORY>mspft</RULECATEGORY>
+    </CATEGORY>
+    <PATH>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>25719</LINE>
+        <COLUMN>4</COLUMN>
+        <KEYEVENT>
+          <ID>1</ID>
+          <KIND>declaration</KIND>
+          <IMPORTANCE>Essential</IMPORTANCE>
+          <MESSAGE>'return' may be NULL</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>25712</LINE>
+        <COLUMN>0</COLUMN>
+        <KEYEVENT>
+          <ID>2</ID>
+          <KIND>usage</KIND>
+          <IMPORTANCE>Essential</IMPORTANCE>
+          <MESSAGE>'return' should not be NULL, because this is not consistent with the SAL annotation on 'ExAllocatePoolQuotaUninitialized'</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+    </PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+      <FILENAME>wdm.h</FILENAME>
+      <LINE>25740</LINE>
+      <COLUMN>0</COLUMN>
+    </SFA>
+    <DEFECTCODE>6387</DEFECTCODE>
+    <DESCRIPTION>'return' could be '0':  this does not adhere to the specification for the function 'ExAllocatePoolPriorityZero'. </DESCRIPTION>
+    <FUNCTION>ExAllocatePoolPriorityZero</FUNCTION>
+    <DECORATED>ExAllocatePoolPriorityZero</DECORATED>
+    <FUNCLINE>25740</FUNCLINE>
+    <PROBABILITY>1</PROBABILITY>
+    <RANK>4</RANK>
+    <CATEGORY>
+      <RULECATEGORY>mspft</RULECATEGORY>
+    </CATEGORY>
+    <PATH>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>25747</LINE>
+        <COLUMN>10</COLUMN>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>25750</LINE>
+        <COLUMN>15</COLUMN>
+        <KEYEVENT>
+          <ID>1</ID>
+          <KIND>declaration</KIND>
+          <IMPORTANCE>Essential</IMPORTANCE>
+          <MESSAGE>'Allocation' may be NULL</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>25763</LINE>
+        <COLUMN>4</COLUMN>
+        <KEYEVENT>
+          <ID>2</ID>
+          <KIND>alias</KIND>
+          <IMPORTANCE>Essential</IMPORTANCE>
+          <MESSAGE>(alias) 'return' receives the value of 'Allocation' (which may be NULL)</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+      <SFA>
+        <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+        <FILENAME>wdm.h</FILENAME>
+        <LINE>25740</LINE>
+        <COLUMN>0</COLUMN>
+        <KEYEVENT>
+          <ID>3</ID>
+          <KIND>usage</KIND>
+          <IMPORTANCE>Essential</IMPORTANCE>
+          <MESSAGE>'return' should not be NULL, because this is not consistent with the SAL annotation on 'ExAllocatePoolPriorityZero'</MESSAGE>
+        </KEYEVENT>
+      </SFA>
+    </PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+      <FILENAME>wdm.h</FILENAME>
+      <LINE>29540</LINE>
+      <COLUMN>0</COLUMN>
+    </SFA>
+    <DEFECTCODE>28252</DEFECTCODE>
+    <DESCRIPTION>Inconsistent annotation for 'MmGetSystemRoutineAddress': return/function has 'SAL_maxIRQL(0)' on the prior instance. See c:\program files (x86)\windows kits\10\include\10.0.26100.0\km\wdm.h(14047). </DESCRIPTION>
+    <FUNCTION>MmGetSystemRoutineAddress</FUNCTION>
+    <DECORATED>MmGetSystemRoutineAddress</DECORATED>
+    <FUNCLINE>29540</FUNCLINE>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+      <FILENAME>wdm.h</FILENAME>
+      <LINE>29540</LINE>
+      <COLUMN>0</COLUMN>
+    </SFA>
+    <DEFECTCODE>28253</DEFECTCODE>
+    <DESCRIPTION>Inconsistent annotation for 'MmGetSystemRoutineAddress': return/function has 'SAL_maxIRQL(1)' on this instance. See c:\program files (x86)\windows kits\10\include\10.0.26100.0\km\wdm.h(14047). </DESCRIPTION>
+    <FUNCTION>MmGetSystemRoutineAddress</FUNCTION>
+    <DECORATED>MmGetSystemRoutineAddress</DECORATED>
+    <FUNCLINE>29540</FUNCLINE>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\</FILEPATH>
+      <FILENAME>ntddk.h</FILENAME>
+      <LINE>23399</LINE>
+      <COLUMN>8</COLUMN>
+    </SFA>
+    <DEFECTCODE>28132</DEFECTCODE>
+    <DESCRIPTION>Taking the size of pointer Descriptor:  This will yield the size of a pointer (4 or 8), not the size of the object pointed to. Dereference the pointer, or if the size of a pointer was intended, use the pointer type or (void *) instead.</DESCRIPTION>
+    <FUNCTION>WheaErrorRecordBuilderAddSection</FUNCTION>
+    <DECORATED>WheaErrorRecordBuilderAddSection</DECORATED>
+    <FUNCLINE>23330</FUNCLINE>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>c:\program files (x86)\windows kits\10\include\10.0.26100.0\km\</FILEPATH>
+      <FILENAME>ntddk.h</FILENAME>
+      <LINE>23412</LINE>
+      <COLUMN>0</COLUMN>
+    </SFA>
+    <DEFECTCODE>28230</DEFECTCODE>
+    <DESCRIPTION>The type of '_Param_(1)' has no member 'RecordLength'.</DESCRIPTION>
+    <FUNCTION></FUNCTION>
+    <DECORATED></DECORATED>
+    <FUNCLINE>0</FUNCLINE>
+    <PATH></PATH>
+  </DEFECT>
+  <DEFECT>
+    <SFA>
+      <FILEPATH>c:\program files (x86)\windows kits\10\include\10.0.26100.0\km\</FILEPATH>
+      <FILENAME>ntddk.h</FILENAME>
+      <LINE>23412</LINE>
+      <COLUMN>0</COLUMN>
+    </SFA>
+    <DEFECTCODE>28285</DEFECTCODE>
+    <DESCRIPTION>For function 'WheaErrorRecordBuilderAddPacket' '_Param_(1)' syntax error in 'SAL_writableTo(byteCount(__formal(0,Record)-&gt;RecordLength))' near 'RecordLength))'.</DESCRIPTION>
+    <FUNCTION></FUNCTION>
+    <DECORATED></DECORATED>
+    <FUNCLINE>0</FUNCLINE>
+    <PATH></PATH>
+  </DEFECT>
+</DEFECTS>

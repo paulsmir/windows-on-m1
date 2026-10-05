@@ -1,0 +1,2700 @@
+{
+  "abi_headers": [
+    "drivers/apple-agx/render-admission/include/hv_guest_ipa_pa_abi.h",
+    "drivers/apple-agx/render-admission/include/j313_agx_abi_admission.generated.h",
+    "drivers/apple-agx/shared/include/apple_agx_g3_copy_abi.h",
+    "drivers/apple-agx/shared/include/apple_agx_g3_private_abi.h",
+    "drivers/apple-agx/shared/include/apple_agx_hwdata_profile.generated.h",
+    "drivers/apple-agx/shared/include/apple_agx_hwdata_profile_abi.h",
+    "drivers/apple-agx/shared/include/apple_agx_local_reserve_abi.h",
+    "drivers/apple-agx/shared/include/apple_agx_retained_root_abi.h",
+    "drivers/apple-agx/shared/include/apple_agx_win32_abi.h",
+    "drivers/apple-agx/shared/include/j313_agx_g2.generated.h"
+  ],
+  "file_count": 536,
+  "files": [
+    {
+      "git_blob_sha1": "7cb12513e69fde4de5c72911361121ac2b4f65de",
+      "path": "drivers/apple-agx/admission/AppleAgxAdmission.inf",
+      "sha256": "fdd443afbff08eb8da42c4f937f3972d9c748cd4f0a159e2c1fd407762ce36c6"
+    },
+    {
+      "git_blob_sha1": "bd4d89dd8009f65fe55f0df528a014245a5bde3c",
+      "path": "drivers/apple-agx/admission/AppleAgxAdmission.vcxproj",
+      "sha256": "b557a0186a7c24ee3fef3d363206d41501556afa3fba1334544cf7001df37d0f"
+    },
+    {
+      "git_blob_sha1": "c0db791a290f6fba046ee3da8b3e4f78c9092384",
+      "path": "drivers/apple-agx/admission/include/apple_agx_admission.h",
+      "sha256": "3f6b358e1f43bf33c499198d073507cb258691c982b78171c9ceb8775828f437"
+    },
+    {
+      "git_blob_sha1": "2ba7aaf5cabba650060db6670fee3e8180cc4c09",
+      "path": "drivers/apple-agx/admission/src/driver.c",
+      "sha256": "bbec01462a39cc8abcb9c0012657495831c15ea34f4bc1ca39e8cb7b221f09aa"
+    },
+    {
+      "git_blob_sha1": "a32110f5cb5c58107f5294639166a82b828c7d4f",
+      "path": "drivers/apple-agx/admission/src/lifecycle.c",
+      "sha256": "b4124b2f4b0fd0ddd5df5dc4073f0177bce4aa44081b7023cd4a7adae0f145e2"
+    },
+    {
+      "git_blob_sha1": "3f7cf760132b261de42cf7cffeeb874068586896",
+      "path": "drivers/apple-agx/mesa/compiler-host/agx_shader_fixture.c",
+      "sha256": "a4902677f9a4986ab41b5b99d1048890c77d7a37d503d530dac94e954c3237b0"
+    },
+    {
+      "git_blob_sha1": "de893fa2dfb09e78e7f7cb8c9817d09a2d7a848a",
+      "path": "drivers/apple-agx/mesa/compiler-host/agx_vs_fs_fixture.c",
+      "sha256": "3f594560df5d3e6e8d21eba993ed723bc9f3f42115da630199e473ad53019d75"
+    },
+    {
+      "git_blob_sha1": "a212868da603936795a12dfb05d40df629cd832f",
+      "path": "drivers/apple-agx/mesa/d3d10umd/required-formats-fl10.json",
+      "sha256": "fcc3d24a0a6dfb0f17b4f4e89ce4ea5db83fefda006f1a9c0d5486d5fca899aa"
+    },
+    {
+      "git_blob_sha1": "704d1a06ada9528ea9543e035322ff69dc789e98",
+      "path": "drivers/apple-agx/mesa/mesa-ad03-source-contract.json",
+      "sha256": "7c50e9cf399ad0da505387348a6e8ed6028a1b628b63e955fd0939cbc0c8293a"
+    },
+    {
+      "git_blob_sha1": "a19dd2a6519adbe582de75353adc1fcfc2c3117b",
+      "path": "drivers/apple-agx/mesa/mesa-source.lock.json",
+      "sha256": "4c26f215aff7e0a047ee8e44621dc4a7f311c566ed771dbbf7ffb8be57db9d86"
+    },
+    {
+      "git_blob_sha1": "3f9a532e9e6e7600c2c993738a79a7441a256ecd",
+      "path": "drivers/apple-agx/mesa/scripts/apply-pipeline-bo-overlay.py",
+      "sha256": "e562799206b8adc8d87736dc89023406d40e624caf6dd274e037ea83c1ac7c1c"
+    },
+    {
+      "git_blob_sha1": "51b5f03194d8d2f0f8d4f1a95c3e81c2b93db07c",
+      "path": "drivers/apple-agx/mesa/scripts/audit-agxindex-assignments.ps1",
+      "sha256": "283e8cea7f21cb44c9b04043adf606ee3b85111a17b67013feecfaf10c90fbd9"
+    },
+    {
+      "git_blob_sha1": "83e159b432b460221fae59bd38a9818c4f698880",
+      "path": "drivers/apple-agx/mesa/scripts/build-asahi-runtime-closure.py",
+      "sha256": "137561c70084363cb84bdd779d217b2150a7e14586f8710e81155086ae70e154"
+    },
+    {
+      "git_blob_sha1": "33001cab5993912f687d38bead9286832d0c58bb",
+      "path": "drivers/apple-agx/mesa/scripts/build-d3d10-frontend-control.ps1",
+      "sha256": "b15b8fcda3f8b85a83dafdce923460108bf5fa773158641ac7f07fb2afefd8b4"
+    },
+    {
+      "git_blob_sha1": "c7eb716d1681714f0e449b82d2cfb79a28f6af12",
+      "path": "drivers/apple-agx/mesa/scripts/build-full-asahi.py",
+      "sha256": "7da140554f9f760bce0426330f10119b41999da4a5ce619b7edf5307fcb0c280"
+    },
+    {
+      "git_blob_sha1": "a335eddbb658aced67941819ec3ad060506d09a5",
+      "path": "drivers/apple-agx/mesa/scripts/build-native-asahi-state.py",
+      "sha256": "5b584f6014f3470677ed6ac9229d44ef7a8892bdb4dc3188d32f64aedbfe1f39"
+    },
+    {
+      "git_blob_sha1": "c28bbf645643cc5829ef6b569f3c88ecf28ef1c6",
+      "path": "drivers/apple-agx/mesa/scripts/build-nir-libraries.ps1",
+      "sha256": "72aebbc5316c2033b01bca0b251cd16f7588e9cd63243662eb3f52ff2902569d"
+    },
+    {
+      "git_blob_sha1": "7a6d67d11d83e1bf32732f54c501ab984b6d27d8",
+      "path": "drivers/apple-agx/mesa/scripts/build-reloc-capture.ps1",
+      "sha256": "986a1b93625507d486e9532a42e2bcf23753b08341bdeb79aec4aa53fabf1f3d"
+    },
+    {
+      "git_blob_sha1": "64e6e0b520dada5799427357cea3ddf54d8c13e8",
+      "path": "drivers/apple-agx/mesa/scripts/build-umd-composer-dll.ps1",
+      "sha256": "5f212b586e191f30278f3862fc227ab647a5ece916ab100148f0bfc9fc5b25a0"
+    },
+    {
+      "git_blob_sha1": "ac0e7d531ebf642a223202f526428e5f5d1d609a",
+      "path": "drivers/apple-agx/mesa/scripts/compact_blocker.py",
+      "sha256": "33ff5741ba896888f94f2da0215b211908a4acbf414c7014981914701a34f6e7"
+    },
+    {
+      "git_blob_sha1": "3e1a85e1a4fb9e6f069137c374a52d754ac5367f",
+      "path": "drivers/apple-agx/mesa/scripts/compiler-arm64.ini",
+      "sha256": "ccc91ec1780068ecdfb101b36527e2f13ff14ba7ad298d3d23490117ef57798b"
+    },
+    {
+      "git_blob_sha1": "323152f64de7d00ef9205102b99de51b40bad2fb",
+      "path": "drivers/apple-agx/mesa/scripts/configure-arm64-nir.ps1",
+      "sha256": "b2f13335b93ebfc4ae18c1d4a361899088c895e4bc166f23d64f84ddb5290ad5"
+    },
+    {
+      "git_blob_sha1": "fdfac2a41a3ebf47d6ea8e1e57ffc7c3af0e72a7",
+      "path": "drivers/apple-agx/mesa/scripts/configure-full-compiler.ps1",
+      "sha256": "10c86695541f6b8e139d00319a32e283b6a4d9ec7563e894200f975eb3a8cdce"
+    },
+    {
+      "git_blob_sha1": "ba2745aa8f0a06064f49a5e9132a5c97e43453d8",
+      "path": "drivers/apple-agx/mesa/scripts/derive-agxindex-fragment.py",
+      "sha256": "2c5d2421cb4bc98757fcb04a41f8b17456797d4a65346c84ca37670dc4c239ff"
+    },
+    {
+      "git_blob_sha1": "240e39907a599fdef381a5880971235eadc90e3f",
+      "path": "drivers/apple-agx/mesa/scripts/derive-agxindex-overlay.py",
+      "sha256": "d17a0907bd68e1b174a2a5d2e36da30432d3bc2405e6e863f7eb47ecf716d7be"
+    },
+    {
+      "git_blob_sha1": "070249f1b0cf451faeb4d39ac40c21fe301edbce",
+      "path": "drivers/apple-agx/mesa/scripts/derive-lut-overlay.py",
+      "sha256": "0829dc9f5362a2136f37d2b2c946d6efa95c78cb3354844f9a0db9fb25c53b7c"
+    },
+    {
+      "git_blob_sha1": "7ae0e98fe372767526e62e42efcc43485f4531f4",
+      "path": "drivers/apple-agx/mesa/scripts/derive-offt-overlay.py",
+      "sha256": "081717cfe810e3769dea181a435b6b32ed922cd3a5d6b95996c229310b51bbfe"
+    },
+    {
+      "git_blob_sha1": "fbf0faa85fbff8c7db03e78046172df5827a648d",
+      "path": "drivers/apple-agx/mesa/scripts/diagnose-compiler-execution.ps1",
+      "sha256": "2d1efa737ff133f8cdf9827472a62d6d5d4d10a12940b398227a1c49aac31742"
+    },
+    {
+      "git_blob_sha1": "033e04b70d2310df837b5051a65b6536fabb4248",
+      "path": "drivers/apple-agx/mesa/scripts/enable-full-nir.ps1",
+      "sha256": "25ac799278e85912bcf4b293c78debc437f1cea5eb6fbf26da08407ea1fd9c17"
+    },
+    {
+      "git_blob_sha1": "cc3b97c4babc2960dc01cfbfc33ec901d9cc6efe",
+      "path": "drivers/apple-agx/mesa/scripts/native-asahi-batch-lifecycle.py",
+      "sha256": "3ebfe53eafeffb55896b4341211cbe865564d7f01db846d929704bafa4987214"
+    },
+    {
+      "git_blob_sha1": "14b9fc566d418a6c9d8d5aaf2c081e0a9835dad0",
+      "path": "drivers/apple-agx/mesa/scripts/native-asahi-graph-capture.py",
+      "sha256": "a616e67230cc2283cdd41646f5fb1df7a708cdc56b4be65cf9b6c84fbda9a713"
+    },
+    {
+      "git_blob_sha1": "860c51cc7d05dacce712ae3d681e9f00f3603836",
+      "path": "drivers/apple-agx/mesa/scripts/prepare-phase3-normalized.ps1",
+      "sha256": "bc4b577aeaa1a9b03ceae235a28e186c7c67a1d911bdd2f5669ed8fa5b3ac27d"
+    },
+    {
+      "git_blob_sha1": "8c45468aa29373efb83a8251bd75b85b4453751c",
+      "path": "drivers/apple-agx/mesa/scripts/probe-agxindex-arm64-default.ps1",
+      "sha256": "28a22ad62f4ed9e27b37573cf9e18d7923d85177544ac9ff71216a6662f46043"
+    },
+    {
+      "git_blob_sha1": "d96465a70167c06ad5374fed4c141f7e2b59a8f2",
+      "path": "drivers/apple-agx/mesa/scripts/probe-agxindex-layout.ps1",
+      "sha256": "498fbcdb58d5deca50cb6ba62745a0227859754b4701c3f66f1597a9de553201"
+    },
+    {
+      "git_blob_sha1": "a09a22b7c531e526327b9bbdfbbf6de07788fd6f",
+      "path": "drivers/apple-agx/mesa/scripts/probe-agxindex-pragma.ps1",
+      "sha256": "483fd60bb3e87613e6dab43904b649d8e5b0d0ecf66fe266ab010aae2dc3db2a"
+    },
+    {
+      "git_blob_sha1": "fc93f2edf6fa382ff81b11d8296554a286023625",
+      "path": "drivers/apple-agx/mesa/scripts/probe-fs-epilog-layout.py",
+      "sha256": "c00a9c295ce69e5b0408e8aeedbc78a24c26d9b9d4698ba273e99437f2d92e28"
+    },
+    {
+      "git_blob_sha1": "df44cfb8f2f43ef76efd3a7841d914410685cdb7",
+      "path": "drivers/apple-agx/mesa/scripts/run-agxindex-corpus.ps1",
+      "sha256": "360f0753b1dec7e475d4d9acc8f3dab716c7606d8341e75be4b128a16b0ed0ac"
+    },
+    {
+      "git_blob_sha1": "ac875ee0c725a1282d86a7c73b2755f224be0e67",
+      "path": "drivers/apple-agx/mesa/scripts/run-agxindex-derived-control.ps1",
+      "sha256": "2a8a0ac38ff025494cb9ee62cde032c607b05e80d2c7bcba403d160fc79a695f"
+    },
+    {
+      "git_blob_sha1": "f749a9245782e4fcdb521a2f613c61c286c347d4",
+      "path": "drivers/apple-agx/mesa/scripts/run-asahi-runtime-closure.ps1",
+      "sha256": "1a589558d4b1414ef574d9b6a5c90e640d5dab5c23b2859a914c9fde9d2a3f3b"
+    },
+    {
+      "git_blob_sha1": "374f23ba9e92e7ff63c28f120e12a5a4d80173bb",
+      "path": "drivers/apple-agx/mesa/scripts/run-full-asahi.ps1",
+      "sha256": "7595c7281c374a1944f91a827d912443e9052c2340a81cedb0f0e780a0d6851e"
+    },
+    {
+      "git_blob_sha1": "cd77dff1e6ec358c8d8a74f5dbba52b1c54618a3",
+      "path": "drivers/apple-agx/mesa/scripts/run-math-constants-probe.ps1",
+      "sha256": "dbb2e2179d295d867e50d398850e1344ad6eb1db806f59b92438addfb2974173"
+    },
+    {
+      "git_blob_sha1": "2801a96453ad0ed1bf75ee242ba0cc8bea703c7c",
+      "path": "drivers/apple-agx/mesa/scripts/run-native-owner-contract.ps1",
+      "sha256": "4b57adfda51332d3a1317410e88430a420322b00fa3f3b9973d2cf014c5bfa78"
+    },
+    {
+      "git_blob_sha1": "a68731046093224db1493cc5dc728fab14bd0f5a",
+      "path": "drivers/apple-agx/mesa/scripts/run-offt-derived-control.ps1",
+      "sha256": "a506fdb4bc74c986bc6b1be95d4b06cf584e4bd14b8be559c957de7cf2eccf77"
+    },
+    {
+      "git_blob_sha1": "41ec12a6453a120de2a04759a05b47eab10cb2b7",
+      "path": "drivers/apple-agx/mesa/scripts/run-phase3-normalized.ps1",
+      "sha256": "a75ca1e676ada913d90894d84d1fc3030736b942e99ef9e6249f9c2977c3c655"
+    },
+    {
+      "git_blob_sha1": "42ffbc04cb0bb177464302ed037379ab1e36201b",
+      "path": "drivers/apple-agx/mesa/scripts/run-uatomic-agx-control.ps1",
+      "sha256": "1d6762dcfc77b55c2e78152e88ca0d40a438bebe86ac58122b3a2c7399eb2c57"
+    },
+    {
+      "git_blob_sha1": "2d753adfeb775ffbaea674e4e0d4d53533ef8ddc",
+      "path": "drivers/apple-agx/mesa/scripts/run-umd-draw-composer.ps1",
+      "sha256": "6acf91802f7b7ed446c2ee4b443ca78cbd21856c059d47b53bc444bbeeb1a726"
+    },
+    {
+      "git_blob_sha1": "f6814795a404a699aa1089e37e9e899cd3c4fc12",
+      "path": "drivers/apple-agx/mesa/scripts/run-util-lut2-derived-control.ps1",
+      "sha256": "307b0113e4d2eccaf8366db792e6afd136ad2762634a6a97fe0d6739e8704294"
+    },
+    {
+      "git_blob_sha1": "5401564fb6984ecad2ef7ab6029af8ab121ace88",
+      "path": "drivers/apple-agx/mesa/scripts/setup-full-compiler.ps1",
+      "sha256": "d527dcfb47c977b5289f0eb8009bea32bc6ada1faf0781b0c3488b65d93a36d1"
+    },
+    {
+      "git_blob_sha1": "143e81ec16fede4341f7d126f74a989e2d995873",
+      "path": "drivers/apple-agx/mesa/scripts/stage-run-asahi-runtime-closure.sh",
+      "sha256": "651e809b9d0ac63d1d9ee190ce365b0604e78fac33b92bf383d81720826525b6"
+    },
+    {
+      "git_blob_sha1": "17346db7e7b6d881e25afa73235c732e01f4adbd",
+      "path": "drivers/apple-agx/mesa/scripts/test-lut-features.ps1",
+      "sha256": "3e9c3c19ef234b7d3997c4c916ac4d885cf1677215883ce482861e56cf993b2d"
+    },
+    {
+      "git_blob_sha1": "6958566b7d307fbf9e1da711e30590c71ce8039f",
+      "path": "drivers/apple-agx/mesa/scripts/test-lut-guard.ps1",
+      "sha256": "06c2b6d7c181a6b6b4f513bab54c509f4a4f151ec9b82a470bd2ec557c5002ee"
+    },
+    {
+      "git_blob_sha1": "e55107d7220b9e676bd41ec81564f297bf819de7",
+      "path": "drivers/apple-agx/mesa/scripts/test-offt-internal.ps1",
+      "sha256": "b6e09e98d495c98d1257f3c708c8b28d7b79c20318add5a1c8b6d9c1e779fcd3"
+    },
+    {
+      "git_blob_sha1": "7130695d44edbe595a1feee4553509162f8f8a79",
+      "path": "drivers/apple-agx/mesa/scripts/test-phase3-normalized-policy.ps1",
+      "sha256": "738f059bcf469a164c94bb2303cd6e89d149fa233afb80a1777cf2854a4194a3"
+    },
+    {
+      "git_blob_sha1": "9db2ba11fff960bb5ebd20ec9dda792e85d09da4",
+      "path": "drivers/apple-agx/mesa/scripts/test-uatomic-arm64.ps1",
+      "sha256": "f8b7d38d0bc1022cbb248e69cc01a4fe04d6df2995a1d4f532df07f1043d64d3"
+    },
+    {
+      "git_blob_sha1": "416dc4f79aaa8488c87258048521aa5226322cf0",
+      "path": "drivers/apple-agx/mesa/scripts/test-uatomic-overlay.ps1",
+      "sha256": "e1d2ed4c6d28f2906c1d9173589f984afcb0e02cedad0474a733946424bfabc1"
+    },
+    {
+      "git_blob_sha1": "048a8c7cb5ddae2cbc969bfdb877a5e387b5f60a",
+      "path": "drivers/apple-agx/mesa/scripts/validate-fpcr.ps1",
+      "sha256": "49ed6191fe4569b726d6284b6a98158a74e4f09df3b447a3b3d27c43a7c33191"
+    },
+    {
+      "git_blob_sha1": "35b1a09598bc0e8f2b13fbced3b74e36ef01d524",
+      "path": "drivers/apple-agx/mesa/scripts/validate-uatomic32.ps1",
+      "sha256": "d12db96e2a0019c55fbc9971b3832b9963ad6ae8433f7fd0173143a334695e5d"
+    },
+    {
+      "git_blob_sha1": "193d0786b7132259f3101b3e04440523163a319e",
+      "path": "drivers/apple-agx/mesa/scripts/verify-fullcompiler-evidence.py",
+      "sha256": "aa9794427d50ab92e7aab49d60488d513865d8b55653b67455e63757c10065d0"
+    },
+    {
+      "git_blob_sha1": "192c6bf2f7ab0a220f0180ffaac229e6cd2ce8c1",
+      "path": "drivers/apple-agx/mesa/scripts/verify-pipeline-address-inventory.py",
+      "sha256": "7e051c8a68c7351c896d9dfe32355c3c91202a1e697379ecdd6e526a2e03bd70"
+    },
+    {
+      "git_blob_sha1": "658550dbd57ed8dd439c7ee63bdb415e2f160762",
+      "path": "drivers/apple-agx/mesa/tools/wgl_loader_control.c",
+      "sha256": "861db7a22f527c45bd4cfd84dc9ed9f6f9c14fddd35f0083e0f0b1d64e886a70"
+    },
+    {
+      "git_blob_sha1": "38d8e01a1e3ccbe638de5a18de6f61d466cad34f",
+      "path": "drivers/apple-agx/mesa/windows-overlay/agx-build-pipeline-addresses.json",
+      "sha256": "674583538cc015cf8937af10735452763a365fe5710968cc001dc77570a0a002"
+    },
+    {
+      "git_blob_sha1": "352ea2d634455dbf32494bb00e3335129a6645f2",
+      "path": "drivers/apple-agx/mesa/windows-overlay/agx-null-device.json",
+      "sha256": "3ecb9e122bc6b49cc0e0459899bd2879a06e606c5da8eaaf4505ba64cc6147d3"
+    },
+    {
+      "git_blob_sha1": "ee986baf89d8e52e2fa7ea1f88f817f98a0fc93c",
+      "path": "drivers/apple-agx/mesa/windows-overlay/agx-spill-alloca.json",
+      "sha256": "f4f77af1d492aee40204a9953027815a3a9d84d2c7f030d473fe1166d03088e2"
+    },
+    {
+      "git_blob_sha1": "d1b04604b66eab33aeb8f5d1b869f0def8a14a7e",
+      "path": "drivers/apple-agx/mesa/windows-overlay/agx-state-pipeline-bo.json",
+      "sha256": "2cee6007febf5f8fc0849795c2e49d635dbdc65cf07933943367c0ad77529a79"
+    },
+    {
+      "git_blob_sha1": "6fcaccc95a4b3100a6618c82acb59def6927eecb",
+      "path": "drivers/apple-agx/mesa/windows-overlay/agx_compiler.h",
+      "sha256": "ba840c445e97136572e469b4b0d1249d9372b771df7e4fd11d1da59c3ef29034"
+    },
+    {
+      "git_blob_sha1": "2f64ab1918417b073530e8aa1f4dda85049b4a3e",
+      "path": "drivers/apple-agx/mesa/windows-overlay/agx_pack.c",
+      "sha256": "447f210f538963d1f4a1d5d5386c5596c37c5548255cf9ffaaebf7c1d63a04dc"
+    },
+    {
+      "git_blob_sha1": "78eaed62ffa766269afe818797c9c8da73dd1d9e",
+      "path": "drivers/apple-agx/mesa/windows-overlay/agxindex_fragment_corpus.c",
+      "sha256": "f40f0a1756104504514ae849a8d31c7529c34c096a7aa591d2dcb1462f5c72d4"
+    },
+    {
+      "git_blob_sha1": "f5e584a749a89e1be582134dc8f48561540a9e22",
+      "path": "drivers/apple-agx/mesa/windows-overlay/agxindex_layout_probe.c",
+      "sha256": "0b0c48aa89a48331238e71f4d7abf1405f0f513b97f3ef924a15314929e92dc8"
+    },
+    {
+      "git_blob_sha1": "3aa13cb74705b34eb75f91d72ab778e7da797a68",
+      "path": "drivers/apple-agx/mesa/windows-overlay/agxindex_pragma_probe.c",
+      "sha256": "894b0561ecb42a1d4b93e909d583f53b7f1569935e04f7e80db005d171d38d2e"
+    },
+    {
+      "git_blob_sha1": "ac37ad743905041152f6e6155254b85efba9eb1d",
+      "path": "drivers/apple-agx/mesa/windows-overlay/agxindex_unsigned_corpus.c",
+      "sha256": "f7be5c50d12b8f396b6355427c3451620f91304414808cfafe1ae8bfa0e7986a"
+    },
+    {
+      "git_blob_sha1": "059baed93734dccdb594c78c54f6b1cd8cb3527e",
+      "path": "drivers/apple-agx/mesa/windows-overlay/fpcr_compile_test.c",
+      "sha256": "9cff83a3e27a26155020741fe76042aa9a8a0da846d1e3d4fdcc9e9d1356110f"
+    },
+    {
+      "git_blob_sha1": "649884995118e496b619a627d6b98bf29f3de282",
+      "path": "drivers/apple-agx/mesa/windows-overlay/lut.h",
+      "sha256": "b62b0c94842b0de86df45a2da30691f8d8ffe88c09b8ec8ccb5a9b55f12f2b4b"
+    },
+    {
+      "git_blob_sha1": "b7006a00cf785daa013b864478a2107987624649",
+      "path": "drivers/apple-agx/mesa/windows-overlay/lut_feature_probe.c",
+      "sha256": "91cfe17d58277955c538b50ac399e402b7e5e220c6107407c268ceafa8e6241e"
+    },
+    {
+      "git_blob_sha1": "f406e859a0f3c00879c382c5dbcfc892dd45004a",
+      "path": "drivers/apple-agx/mesa/windows-overlay/lut_guard_probe.c",
+      "sha256": "4c5a67077e50d999602dab6cf1293678e95e89a9aaa5fa368bd3b0bea78cdd13"
+    },
+    {
+      "git_blob_sha1": "689d64b858b6f525edfe06f03487f77c13ab479d",
+      "path": "drivers/apple-agx/mesa/windows-overlay/lut_semantics_test.c",
+      "sha256": "f04340151d69eb3504f7192c11cdbad030bb1dba31754608375d0221b99bf373"
+    },
+    {
+      "git_blob_sha1": "e2fa05ee4c62e00df5d64a01c3d49998faddb3b6",
+      "path": "drivers/apple-agx/mesa/windows-overlay/math_constants_probe.c",
+      "sha256": "adf9cdf92a12720a17c080e1ce5429008481c6e0925a2e4df2815aadae03f48b"
+    },
+    {
+      "git_blob_sha1": "b7d87d3b319d356b2f374a15ce3b35f9e858869b",
+      "path": "drivers/apple-agx/mesa/windows-overlay/offt_internal_probe.c",
+      "sha256": "de284347af6211766a0d9e75fe46010890a49ac0b6b011234c12749e20285c04"
+    },
+    {
+      "git_blob_sha1": "0dac2635307d3ec972562ce896f7af2faae620fe",
+      "path": "drivers/apple-agx/mesa/windows-overlay/uatomic32_semantics_test.c",
+      "sha256": "fe01d0b066bb0e406e22aa0c7ce2383152c7e13019652c9ea581649799ad264d"
+    },
+    {
+      "git_blob_sha1": "da23e75ed8087eb4ad7e9c58dd472a896bcc44b1",
+      "path": "drivers/apple-agx/mesa/windows-overlay/uatomic_clang_compat.h",
+      "sha256": "5f0e07d8a36b2737288399028dbbcf8fb37f63bc92396d22a3685d7aadf350a8"
+    },
+    {
+      "git_blob_sha1": "3048355dd2fb6d5c4f803f66ac98d3aa9a9c2b73",
+      "path": "drivers/apple-agx/mesa/windows-overlay/uatomic_mesa_semantics_test.c",
+      "sha256": "29dd6f68f8caa88d4c43d699b974febfcddb6fd8a59d65a9a80df12ab4d867ff"
+    },
+    {
+      "git_blob_sha1": "af523cae25e3ca9c992764a4f0e88f78efd1fa27",
+      "path": "drivers/apple-agx/mesa/windows-overlay/uatomic_semantics_test.c",
+      "sha256": "7c6352a37d74385931fa6ba46b216b64c5217422eaf689dc772425bfe3d64da0"
+    },
+    {
+      "git_blob_sha1": "af1955081eb7eb2d52d2d2069d013f9c719cdd5f",
+      "path": "drivers/apple-agx/mesa/winsys/agx_d3d10_windows.cpp",
+      "sha256": "478c3edede6fb600e4a9b867cec4bec1e30558a08c0aa503205640412e86cdf0"
+    },
+    {
+      "git_blob_sha1": "5d39413ab110b6853d1e63ce375358e9ef11ea71",
+      "path": "drivers/apple-agx/mesa/winsys/agx_d3d10_windows.h",
+      "sha256": "5c89d908fa494c5788866c4f2075a7e97db1a5bfe3bacdc126edba5426acf777"
+    },
+    {
+      "git_blob_sha1": "3604430ad6644a3fc78dfc5c92946a6603ead6b3",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_asahi_batch.c",
+      "sha256": "23f260461171c22f1094dda5760bf9a62feb47e8659fa410ff5c562722095157"
+    },
+    {
+      "git_blob_sha1": "7b6fe45547177df610c776b4766a0040e05fba71",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_asahi_batch.h",
+      "sha256": "59282ac7aa63de32074eaf5e0a10d9a3b52f384c6256be955ec17b813aaa114c"
+    },
+    {
+      "git_blob_sha1": "abc38051689cda39157d01f4a928bbde829d8b1e",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_asahi_bo.c",
+      "sha256": "e93ebc1983cddb872e3e6d66d21e7d7cd95ae193e7ed0d75590a7ca905f36db8"
+    },
+    {
+      "git_blob_sha1": "73bc8b92fbacc566f06ed619a4a21ebc7664749f",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_asahi_bo.h",
+      "sha256": "e91762c43ce6ade9f04cd19efc598711047fecce32f33d5740e417829411ce88"
+    },
+    {
+      "git_blob_sha1": "df359d46a40b1512962418a7cb2cf52c80e78a9f",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_asahi_capture.c",
+      "sha256": "539097bc9eabbd6e5cbb54d4ddbc5c73505ec5b78182eb9ca722b15588b130b4"
+    },
+    {
+      "git_blob_sha1": "928c7f86e48b4630b47f7c1e72e8adafcfc43034",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_asahi_capture.h",
+      "sha256": "b7fe0b9995de2639a6aab3a2793945a437a5c4b6eea80266f978a9b428dac422"
+    },
+    {
+      "git_blob_sha1": "1b0a09e60ca1e44399827e8807853cd8b3e7272b",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_asahi_pipeline.c",
+      "sha256": "430965aeb458b97e542d685b2829ea9b4df385a121aa296e08b6a1e9c4fe1de4"
+    },
+    {
+      "git_blob_sha1": "134f4b05766fc806a6f0d9e4c21625a92ba3e6a6",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_asahi_pipeline.h",
+      "sha256": "a88b5bc77d6ded71cbc25167805690c68b9bf7a133f55cb3fa2a12d628082c88"
+    },
+    {
+      "git_blob_sha1": "8fcdbfc81b4de2ec6521e9c4bbfa39ac5376bb22",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_asahi_pipeline_test.c",
+      "sha256": "e89696a89aeb5acba309edc79a8f108c3228217d49100de19ad2769b534ed5f2"
+    },
+    {
+      "git_blob_sha1": "14165e90f9bd505de387b58c643915ef35c57190",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_asahi_pool_test.c",
+      "sha256": "9ed69ef80930cc8bbab3ee5145108be21b20e5a21aef3076b6226448c82b0173"
+    },
+    {
+      "git_blob_sha1": "023e4a2cdcfaa521ad3f9711f7122e3f1df4a951",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_asahi_runtime_test.c",
+      "sha256": "3766a9ec6bd5c2b84c583fb365308b141d7b69aa1b2000136aeb94e77a41518f"
+    },
+    {
+      "git_blob_sha1": "0a5701cb45b5442ebf5175160ceff42992a8da0c",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_asahi_scene.c",
+      "sha256": "db8770d050b2298b97d0f7d6da9b0d2744fa70d2d27dab5c3214caecd37c5c98"
+    },
+    {
+      "git_blob_sha1": "3198cc1e08c34d2192954315e799bcd970ea8c21",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_asahi_scene.h",
+      "sha256": "ea71a465a3007f2060f34359fca71c9c732add643b7a6cf2929112d41294e8e4"
+    },
+    {
+      "git_blob_sha1": "2aeb2eae5af1b7055b2404f5a7e0ffa56e657002",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_construction_address.c",
+      "sha256": "25e35c377be5c22458d026922862367cb137706d9d6ce4cd3a29174cf0e82ad4"
+    },
+    {
+      "git_blob_sha1": "34073faf6f29719276261df15c1160804214d796",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_construction_address.h",
+      "sha256": "8b6a7d54d613e534438b9d0694263ad8186bbda3820b41a7390e2ae759b2a30e"
+    },
+    {
+      "git_blob_sha1": "751b2502e373813f84d3304d2c3fa2ba69bd1ba8",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_construction_address_test.c",
+      "sha256": "b5887db9fe75c042c6bb5138652e1ff3ea70ff0b86a9c06a00b08f09ab27e0b5"
+    },
+    {
+      "git_blob_sha1": "0d07ed1c7584f469c1a95df17cd109fbdcc48f61",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_gpuva.c",
+      "sha256": "726c5eb33fcaf91cce36db366913ca05b7b1788e31f4654f41ddc281f2544eba"
+    },
+    {
+      "git_blob_sha1": "0d9bb1db24ae58f4b0c60b172f1ba1eb1bb48a03",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_gpuva.h",
+      "sha256": "c125a4b1409b36491b8190c06cdd908dfe4770a08f15b64aa8c5bdbfee17eb74"
+    },
+    {
+      "git_blob_sha1": "a43868eb34e4c06d5a336880e6f3d7bb293496d2",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c",
+      "sha256": "d9d43af3b8ddd7bba0e15ec106e120640bf640afd5a6ad9352cabaf0b4970de3"
+    },
+    {
+      "git_blob_sha1": "7b78d2709f4400700ca19f11450635d7e48eb7f6",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_gpuva_test.c",
+      "sha256": "7989c9e23039603164e278c0c57210470a89cb837abc3bd9452078c472886177"
+    },
+    {
+      "git_blob_sha1": "06b354f3b9ba2451400ee8b1b0d5cf14b14951a8",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_native_bo.c",
+      "sha256": "2257431aef0d47528444e17147e79453c67de2cbd2107bf3cfdd165971ee2d34"
+    },
+    {
+      "git_blob_sha1": "bbdaab9827dbe7d8a9595ffe64c78bbb192b6ecc",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_native_bo.h",
+      "sha256": "142d819d47f8f7e6d062b970b8e593a3c361cb865d25d74fe13f8108d088bd56"
+    },
+    {
+      "git_blob_sha1": "c0fd80386d14500599377a1038d92a9477972408",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_native_bo_test.c",
+      "sha256": "7c06be75d8b8ebfc131bb91b3b12fb3ba15e014141354fe8907b82d2e8c7a42a"
+    },
+    {
+      "git_blob_sha1": "302eb72c95bf752a69e110ddbab414614aca23a4",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_native_device.c",
+      "sha256": "fc7d1093faa3a00e131ce2bd05e85c1e4f2faa387be61c07d97325cbcda0bec6"
+    },
+    {
+      "git_blob_sha1": "124bddffc014f0ada2e28cffe9d59795bc1b4970",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_native_device.h",
+      "sha256": "44b78b201219acb1e347b01c9b50281098f6de9380d026dd719f3b04c6518928"
+    },
+    {
+      "git_blob_sha1": "62faca0427cc480868e2d91ca7eeda1d7bab2435",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_native_device_test.c",
+      "sha256": "ef949dc007dffbb9bdd01b8f56c8a39127a51bd797bfab5ac46dd854abb7e752"
+    },
+    {
+      "git_blob_sha1": "7133f0a674565059b5d828fc199690d3f61ef968",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_native_pool_bridge.c",
+      "sha256": "e33ef156b45bc24fcab55da282410901695a0968d194695ce4d77a3872e654b9"
+    },
+    {
+      "git_blob_sha1": "116877653f604e4fe5572acf5cc60ef9da843fb4",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_native_pool_bridge.h",
+      "sha256": "d5e52d13eca06d61b040e59d6a7244dee77eaae35192268e05990d6ac1d31f52"
+    },
+    {
+      "git_blob_sha1": "5b8636a8bf31f413b009a6fabf5dd4c8b57a4b60",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_pipe_screen.c",
+      "sha256": "c86beaea1602e27c2ab9b33c2d11cf8be06e79cadbade9c90aa3dd619e528e29"
+    },
+    {
+      "git_blob_sha1": "d21571b9f98714e7444f1d5d037fbbb4f500ca77",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_pipe_screen.h",
+      "sha256": "c20626876f1160cf7dd9ad4e9e524014f777e73d2d4cb0c86d9572ab640cf90c"
+    },
+    {
+      "git_blob_sha1": "2b1f7bdcf0781d80a3b6968b76e97da42f029e92",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_pipe_screen_test.c",
+      "sha256": "0b005d6325773411cfcf979fbc6c3d730e833bbd624c120895885c37b658b997"
+    },
+    {
+      "git_blob_sha1": "5ad6f39e606e305ae7de8f9a7e647f59cf7cd152",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_reloc_capture.c",
+      "sha256": "25379319b52abc505af118c0bbdf164ecc9620b3747765567b0bfbbeb89481be"
+    },
+    {
+      "git_blob_sha1": "9031a2d4ee68a34f9ac5e12fe94e98b9d0734b03",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_reloc_capture.h",
+      "sha256": "02257ab1838346d84399cfa7444158cb25bc68e1b3fbe83812c53fd12babc028"
+    },
+    {
+      "git_blob_sha1": "92645d9c71ade525f0219ca42410c2875e6e71cc",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_reloc_capture_test.c",
+      "sha256": "2e06bae8706b9e70be574d8c00a37bae47df4256cfa4ea1903d7e91b49c9f551"
+    },
+    {
+      "git_blob_sha1": "9f1ffd92326727ab47d1230d7404814f859ad870",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_screen.c",
+      "sha256": "0223ae95f6f2e84d2d18a33a08320be109d578f1f33ac94701e28043cfb58fc3"
+    },
+    {
+      "git_blob_sha1": "48612e7d33c7479bf1800dbe0d01f8f5cdfa27c0",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_screen.h",
+      "sha256": "e3eb000d7aa10a379ddfd2547df5a10427fb27d3154ff1a226debb9e514a32f3"
+    },
+    {
+      "git_blob_sha1": "926dc4b0920d742917b42ef5177aac43841172dc",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_screen_test.c",
+      "sha256": "0c0d15bf0de91f71f24c933125c5b9122dc9c1441683f97369b9a8d28c46d35c"
+    },
+    {
+      "git_blob_sha1": "d9d496ee2c10478b96c5cd0d802cc5f17f2abf41",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_transport.c",
+      "sha256": "f2c6a4ba1ba2e9cb99fa2650775559ffb2596dd0c58c63f5293e7b0ce0b6f491"
+    },
+    {
+      "git_blob_sha1": "a72b7ebd00e91718199e042a12f164c56ff77987",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_transport.h",
+      "sha256": "45b9de67b25b516026a7f3c7083e2f08dadf758019c004e5cb04c2d13eab2742"
+    },
+    {
+      "git_blob_sha1": "b3551b1cdccc9d0fb4a4608fbd574c974002eddb",
+      "path": "drivers/apple-agx/mesa/winsys/agx_win32_transport_test.c",
+      "sha256": "6326c37f4005a07b5778739339407ff00efea39cd721a2a5287a81a827fa5c17"
+    },
+    {
+      "git_blob_sha1": "42bce8f3edf23f4c047d147237a3c97e87e773a1",
+      "path": "drivers/apple-agx/render-admission/AppleAgxRenderAdmission.inf",
+      "sha256": "aab087d7223939ccc3da0a2de4de9abe601473443afb70f5c16f8b6d04c5190e"
+    },
+    {
+      "git_blob_sha1": "fe70487c552022f5a5bc0df76275a9d0bfb908c8",
+      "path": "drivers/apple-agx/render-admission/AppleAgxRenderAdmission.vcxproj",
+      "sha256": "c24e616dcf7d87fe8d762a7f1d8c3a1e258459a3fbc65342e6070182e46d42a8"
+    },
+    {
+      "git_blob_sha1": "c3880b8c76d1fda0e9615379907887a4306d36a3",
+      "path": "drivers/apple-agx/render-admission/include/apple_agx_dynamic_job.h",
+      "sha256": "ec95bbc5f94c115d5e20904336b1d5c631a53a41133428bba6f3d42dd63d9320"
+    },
+    {
+      "git_blob_sha1": "fffbc6a96e221d3d01f584537c6b7503c4e34b45",
+      "path": "drivers/apple-agx/render-admission/include/gpuva_g1b_profile.h",
+      "sha256": "100e3caae8279ef19498a51075718b69ab96c54ce5a59180278b922b3ecbbddb"
+    },
+    {
+      "git_blob_sha1": "ebeb5ec57e80baefe917f8f1dcee632766f33a6a",
+      "path": "drivers/apple-agx/render-admission/include/hv_guest_ipa_pa_abi.h",
+      "sha256": "ba4c1dbd6f3627a9f377ae663afa8ea9bc87374f842db5be4a6653f05d99c6fb"
+    },
+    {
+      "git_blob_sha1": "bf00c5c94482d2f56fd7f857524998133137aec6",
+      "path": "drivers/apple-agx/render-admission/include/j313_agx_abi_admission.generated.h",
+      "sha256": "d7ee094ead732e09139ef226e0acf35c34a422eedfdcfc9bc52358717a9165c3"
+    },
+    {
+      "git_blob_sha1": "d6d8059779760bb8955e330d69a44fc3972e9fc7",
+      "path": "drivers/apple-agx/render-admission/include/render_admission.h",
+      "sha256": "d31a6d4b94432bd28156db5898d4d4e17daf45cbaa38ecf81459a9c9c3e0fb22"
+    },
+    {
+      "git_blob_sha1": "0d9a893594196e3b0a1465a181e3c24929b7f4b3",
+      "path": "drivers/apple-agx/render-admission/include/render_allocation.h",
+      "sha256": "d80d83d34275d07c964143e34be01f3f503e0472a2e3213be6b34da39b37858e"
+    },
+    {
+      "git_blob_sha1": "3dd549955fedea5656e51006f323a18191f51af5",
+      "path": "drivers/apple-agx/render-admission/include/render_allocation_probe.h",
+      "sha256": "80fbaa806aa5f1d6ce6e1fc214c8127763f6477d66497736323fc82c06cbedd4"
+    },
+    {
+      "git_blob_sha1": "22eece5eaf421e1ea7081d902787641cc072d12c",
+      "path": "drivers/apple-agx/render-admission/include/render_backend_image.h",
+      "sha256": "b9777905097826e27a0f8750895ccc7b7a2af63d64c2d6520480f3b6bfacd7b9"
+    },
+    {
+      "git_blob_sha1": "42faf8e0265d1337f3ea9960b4dd7cda756ff690",
+      "path": "drivers/apple-agx/render-admission/include/render_call_correlation.h",
+      "sha256": "fb1cbef21932ba9bba412e54971cd6388d2bd8ce7ae3e35981f0e1961d4b8161"
+    },
+    {
+      "git_blob_sha1": "9adacce17cbc106a1b01083025ece30de6153308",
+      "path": "drivers/apple-agx/render-admission/include/render_completed_output.h",
+      "sha256": "c26ace897aba1b0f202e6ca89421fcc94d9924c2b63467c72d08396ea7411f06"
+    },
+    {
+      "git_blob_sha1": "39ddb69c213a6ce1700dc51a08df45e55c62c599",
+      "path": "drivers/apple-agx/render-admission/include/render_dynamic_dma.h",
+      "sha256": "4102f652b76e49913ba980bcaccbf7a70adc9e15c4df3ee9e59e7fe14fca6d1a"
+    },
+    {
+      "git_blob_sha1": "700adc2aadd3edd077fcfbac8e795b3b432a5c4f",
+      "path": "drivers/apple-agx/render-admission/include/render_dynamic_output.h",
+      "sha256": "b7b8e5db810c0bee3426c0645b87cf66245c7e7f475016ae6a27cb242aa70ed0"
+    },
+    {
+      "git_blob_sha1": "c8c6470267dfc105880bc369be5b9c34f202f205",
+      "path": "drivers/apple-agx/render-admission/include/render_dynamic_overlay.h",
+      "sha256": "a5636dc82eb5768d5acbc85bad2b6437d1e6b1f3c083c8b843a30cd0130a96c8"
+    },
+    {
+      "git_blob_sha1": "d7a24fe6a1f96efd9fbe4e50d68f44ef8a76f4f5",
+      "path": "drivers/apple-agx/render-admission/include/render_gdi.h",
+      "sha256": "8bdfc07185236034260026f7522ed35014523aa28d45f8e220c466b290767b79"
+    },
+    {
+      "git_blob_sha1": "8618f54b019e5bba28d99b63ecb2519a56bf9fd8",
+      "path": "drivers/apple-agx/render-admission/include/render_gdi_receipt.h",
+      "sha256": "de05e9796999bdf7c3682029d2a85806549abb3db4254f4cf66ea3dd0cee24fd"
+    },
+    {
+      "git_blob_sha1": "2be9ae7f8fb4ddea9bf5f570e96ac8be2765664a",
+      "path": "drivers/apple-agx/render-admission/include/render_hvc.h",
+      "sha256": "d913028a038c8364fccf3290f8731be3729da31ab9e9302fa92fa4a61a6efec5"
+    },
+    {
+      "git_blob_sha1": "1672bb994fb99d08ff0f95ceb94a3a87c8c40705",
+      "path": "drivers/apple-agx/render-admission/include/render_memory.h",
+      "sha256": "89c142f0e1f74189fc88931d24eacfe20c63abc5ceb118d12a0603342e43b422"
+    },
+    {
+      "git_blob_sha1": "26889d3b0a378b102250d00144ce92ffd0da6b30",
+      "path": "drivers/apple-agx/render-admission/include/render_objects.h",
+      "sha256": "9eee12cab53086af84ac0041947ba05f95f0e2bdf07e25944c4f95c5ed04cce3"
+    },
+    {
+      "git_blob_sha1": "1df79d8d3aac67a7f025880e7b30ed5601fac479",
+      "path": "drivers/apple-agx/render-admission/include/render_output_queue.h",
+      "sha256": "851653d824735fce4224be2412dc99d8b5f298468b29aea6ab2269ddae45447e"
+    },
+    {
+      "git_blob_sha1": "52497477c46913329751e43a5c50700399e97500",
+      "path": "drivers/apple-agx/render-admission/include/render_paging.h",
+      "sha256": "c8cbd67b00f8f81054650ada0c64dcf2a66e2c252f497132cb88e0ef1a338e04"
+    },
+    {
+      "git_blob_sha1": "8e4bac0ab96bda9aa40b973ffa69ef7999397b4b",
+      "path": "drivers/apple-agx/render-admission/include/render_present.h",
+      "sha256": "b12fb3bbfcab3f10c7c23e9154fa447413d51793ada517f167d145a6bf6a51a7"
+    },
+    {
+      "git_blob_sha1": "14e4f4b39a47f5359abfd7f672314427b676c0e4",
+      "path": "drivers/apple-agx/render-admission/include/render_qualification.h",
+      "sha256": "6de90a063e742921cf925fe35de663ae7a0f6fed19f43dc26bd1221388de44f1"
+    },
+    {
+      "git_blob_sha1": "39d12a992575f0deea71deb9d644021b76a4fb17",
+      "path": "drivers/apple-agx/render-admission/include/render_submission.h",
+      "sha256": "57352e208bbf7703e06311a6adae93cc1a42f83644628a14b965f9e1da2cd000"
+    },
+    {
+      "git_blob_sha1": "eaca6b38141bfc8b71bdd329e1eb677f005558d3",
+      "path": "drivers/apple-agx/render-admission/include/render_submit_trace.h",
+      "sha256": "90a37ee341b5e12b60fa4fb097eb938a6b64ed10f59d433dced1e761d7776880"
+    },
+    {
+      "git_blob_sha1": "9ff02e71138b7b66cf7b7e14ccfcbfa36a1ba73a",
+      "path": "drivers/apple-agx/render-admission/include/render_umd_command.h",
+      "sha256": "2b44e67bc953edd198753e3d805ad988ead1616488fa67b31803d74428747e0d"
+    },
+    {
+      "git_blob_sha1": "cb39b5c922f64d18fd140af4aca4675273fd3d01",
+      "path": "drivers/apple-agx/render-admission/include/render_visible_scanout.h",
+      "sha256": "1c512685d4fb208e539b4e2a8ec97c8a2416f9253ec60c2a0617c139a50d65da"
+    },
+    {
+      "git_blob_sha1": "852ecd5fab5b0c1c24f8df4f77f8dadd3d589461",
+      "path": "drivers/apple-agx/render-admission/include/render_win32_transport.h",
+      "sha256": "6add6ef167f783378304ac0554e832f3841662711cfd411c5e6f5d61b9373f9c"
+    },
+    {
+      "git_blob_sha1": "6cce70eba462f754d825528f265132848a9a5009",
+      "path": "drivers/apple-agx/render-admission/package-version.props",
+      "sha256": "05995252982899e0075ee87ac2edef0fbd1cafe6e90a2d3e8720e2e7f6221935"
+    },
+    {
+      "git_blob_sha1": "feba737738a8a91570ee1cf0f088d87f2c420b53",
+      "path": "drivers/apple-agx/render-admission/package-version.rc",
+      "sha256": "408de11016f9053549311bba0741696545fbaad9fe185af642ccf98f0efcae8d"
+    },
+    {
+      "git_blob_sha1": "4ea5f2ccabc3679abf213feb9f2b10b3fa4a094a",
+      "path": "drivers/apple-agx/render-admission/scripts/build-driver.ps1",
+      "sha256": "3859662d87bb4939fc335d2b2c39a03700e5b0381fc1aa54f10df329f8bdf57e"
+    },
+    {
+      "git_blob_sha1": "8119e2590bd6b9d039572a82e7e9a225e71f3255",
+      "path": "drivers/apple-agx/render-admission/scripts/decode-backend-terminal-trace.py",
+      "sha256": "16aec2e81e9bcf0c4b93243ed96e4a4d9ea0e5d4291d46c324de1836916eba45"
+    },
+    {
+      "git_blob_sha1": "bf115c64634a299a512d19954b1a8c6a4c78d4da",
+      "path": "drivers/apple-agx/render-admission/scripts/decode-gdi-submit-trace.py",
+      "sha256": "945b4673659065704e4b240ac31dd4664e607c83896f6496590437e5110a9759"
+    },
+    {
+      "git_blob_sha1": "efff5b7450d549f32b4a17250c1963e872606e62",
+      "path": "drivers/apple-agx/render-admission/scripts/decode-open-allocation-trace.py",
+      "sha256": "73f74892d0ddbcb82ddab259d4227ebcdab2f47ae036fed51363722b099330f6"
+    },
+    {
+      "git_blob_sha1": "023f7671ab3b48aac29992673e4eaff01b6a6327",
+      "path": "drivers/apple-agx/render-admission/scripts/decode-paging-build-trace.py",
+      "sha256": "dd8916db4d4f9f67551c6f789181fc1abf5a16e804ba52a1cbe0c56ee79412bb"
+    },
+    {
+      "git_blob_sha1": "b864cf3211c90c2f2c86d656b1e8ae7b817c6adc",
+      "path": "drivers/apple-agx/render-admission/scripts/decode-render-correlation.py",
+      "sha256": "b5d65f8e728504e4c55d4f57d468984a0e367bc31bba72c61f0432db1a27615f"
+    },
+    {
+      "git_blob_sha1": "9d293644024ad456960f7b64bb190e65f0c70f14",
+      "path": "drivers/apple-agx/render-admission/scripts/decode-submit-trace.py",
+      "sha256": "e52c42539f9646f5e22109b2fee6387ba22a9b0b5ba4fad28819610ff91017ba"
+    },
+    {
+      "git_blob_sha1": "47706c94e61b577c676d00d3d237c674774d0e3c",
+      "path": "drivers/apple-agx/render-admission/scripts/decode-umd-render-trace.py",
+      "sha256": "ae9aa4879a3adf21cacd552dca11479a4543ea40613a32feeb9fec80bd0a533a"
+    },
+    {
+      "git_blob_sha1": "d4832f40e52d43d0ac0822e636cfdd026d279014",
+      "path": "drivers/apple-agx/render-admission/scripts/mkexp.py",
+      "sha256": "2557ebe93488f76794c52f0c805fab79aec5d8b355be13935dfc737ca34a2299"
+    },
+    {
+      "git_blob_sha1": "87270c22a43757fd5d1ebac956ddc09ef18fa97e",
+      "path": "drivers/apple-agx/render-admission/scripts/test-package-version.ps1",
+      "sha256": "5c1ac2d639d4a9e5809e74d646cb107ccd15cc87d01bb8000660172fc804f1aa"
+    },
+    {
+      "git_blob_sha1": "5e620cd821a3af66be2bed8aa651c67d5b155a34",
+      "path": "drivers/apple-agx/render-admission/scripts/verify-committed-sources.ps1",
+      "sha256": "3e68f3b0913a4d1cf70ae26e9e03e8afa0819f61724bed0919b85206324fd0d6"
+    },
+    {
+      "git_blob_sha1": "15dc1a91b68840bf2704a6184d77598ecb96a3e8",
+      "path": "drivers/apple-agx/render-admission/scripts/verify-native-runtime-provenance.py",
+      "sha256": "4cf11aedf2f4c23cd5eb7de53a87778e4a7e3fb1286d723c1064f5e5b1826597"
+    },
+    {
+      "git_blob_sha1": "77babb4be0fa6d623b3525df2493aef8959fdad9",
+      "path": "drivers/apple-agx/render-admission/scripts/verify-package-version.ps1",
+      "sha256": "9595e46db8cecf4109176dbc59bdd32599a309c3db77fe5346bc5b289474fc9d"
+    },
+    {
+      "git_blob_sha1": "5129a65984ccaadc59e0ef3b66d15314742d9d1d",
+      "path": "drivers/apple-agx/render-admission/src/allocation_windows.c",
+      "sha256": "13e20e84133155aeb447ad2f9be18fa996d44adf49d035e8f123c532b37fb1ba"
+    },
+    {
+      "git_blob_sha1": "d25b9d38b850d00cc228ef50e1d104ef24a491e6",
+      "path": "drivers/apple-agx/render-admission/src/apple_agx_dynamic_job.c",
+      "sha256": "ed0f5fd2bdcdbc3ef6f0adbc096695a8d710570e39760c5335304745f6e3141f"
+    },
+    {
+      "git_blob_sha1": "14b39add2139fc1f2fb3f4b40396a8956bae7487",
+      "path": "drivers/apple-agx/render-admission/src/backend_image_windows.c",
+      "sha256": "1d89c1c302bcb2fd14a25c00d8a28d666d0670dbf96a242250efe2823317732d"
+    },
+    {
+      "git_blob_sha1": "d82c22611205251be76374921d68910dfc8cc1f4",
+      "path": "drivers/apple-agx/render-admission/src/backend_platform_windows.c",
+      "sha256": "e9619a5b77ec13c676b28f1b3d2c1a487dc9bd50878478d480bfb9e3a2f49039"
+    },
+    {
+      "git_blob_sha1": "b67d5ee6ec5534fbf35115465ba92673cdd9e21b",
+      "path": "drivers/apple-agx/render-admission/src/blt_probe_windows.c",
+      "sha256": "83ecd6efd825fc89e17908a9f1fa51f517eacc4efb0ee74fb3dd201500f3b2f8"
+    },
+    {
+      "git_blob_sha1": "70e9792dfc6cff01d8711f0e41df9aeaa8e20e50",
+      "path": "drivers/apple-agx/render-admission/src/callbacks.c",
+      "sha256": "947540935bb2524191025124abbc0766a06702794fbf1a7426ee994ce587bf2d"
+    },
+    {
+      "git_blob_sha1": "49ff66fc41ed83ae73d6938ade3d8fc3402c9513",
+      "path": "drivers/apple-agx/render-admission/src/display.c",
+      "sha256": "2540811952cbe17769b147af96f665a0b023a25794e204237b1e082887d0e19b"
+    },
+    {
+      "git_blob_sha1": "4e0ea936b4644122257919df2fcba6d73986098d",
+      "path": "drivers/apple-agx/render-admission/src/driver.c",
+      "sha256": "96822d85335b235df363579110a43b6d8139a41e93513ac0c6fa6fdbbe7566e0"
+    },
+    {
+      "git_blob_sha1": "8434cad0b1c94af4c3953e386a186821bccbf607",
+      "path": "drivers/apple-agx/render-admission/src/gdi_receipt_windows.c",
+      "sha256": "70864a26fa6bec985d1d018aa2730b1dcb7827be42ae2aa8da9612ed62796293"
+    },
+    {
+      "git_blob_sha1": "b1d67bf45dee7f471829f84d2b60d63bb5be832c",
+      "path": "drivers/apple-agx/render-admission/src/gdi_windows.c",
+      "sha256": "0d786c9fdab8009f43584e028bf673326e2b0a8f50d8afc0f0beeda32cd87910"
+    },
+    {
+      "git_blob_sha1": "94132e6e9ad7ee43ba032fdf22e793719f46c7d1",
+      "path": "drivers/apple-agx/render-admission/src/gpuva_b1_windows.c",
+      "sha256": "3f4230d096cee99a6e02b84e19ce5be0e849a95b111ab7c7e8c53b42c0847a55"
+    },
+    {
+      "git_blob_sha1": "2903e1dab6bbb6fec3ecc87df7deac853103f43d",
+      "path": "drivers/apple-agx/render-admission/src/gpuva_g3_paging_windows.c",
+      "sha256": "8ffa7ab1fe6750b497deb225e61557adc17ddcf83eb25e15aa3a9f8a7469b153"
+    },
+    {
+      "git_blob_sha1": "9c53d6dcea9472660c831ab153c216992aa7b3b4",
+      "path": "drivers/apple-agx/render-admission/src/gpuva_g3_private.h",
+      "sha256": "0e0375e6bcee89b98850cdd0dfd359e66d6cfdc181205dae9380c6bc865d8653"
+    },
+    {
+      "git_blob_sha1": "9ee82c99e2540c1b61f99955b89e1b3eaffcbdfd",
+      "path": "drivers/apple-agx/render-admission/src/gpuva_g3_windows.c",
+      "sha256": "b93a2d3057c0d5b8aa7d05ae42af339e0c2626fb0b60b56553cd2d537f989e50"
+    },
+    {
+      "git_blob_sha1": "a3977920632d7cddc01a9968d6470ee681c16d64",
+      "path": "drivers/apple-agx/render-admission/src/gpuva_v5_windows.c",
+      "sha256": "c47a978589ae4b705db45ff08c3339bab352a46572d257b7d3861e572c4294a7"
+    },
+    {
+      "git_blob_sha1": "f61e9b298dd5d92b3386015d648f4d85072c2404",
+      "path": "drivers/apple-agx/render-admission/src/interrupt.c",
+      "sha256": "f9f1cc164c93d87512a81086db0e92d66ff64b4f1ade42e37e068e0b06820bf3"
+    },
+    {
+      "git_blob_sha1": "f52ea3a388f9b33c6a4361035b87bd2f7cd2ae76",
+      "path": "drivers/apple-agx/render-admission/src/lifecycle.c",
+      "sha256": "a90ee868a0b9416f6f23042ed41027f4c72ceb2e7d488f1bf05a051cda28f724"
+    },
+    {
+      "git_blob_sha1": "586d985d14c7537e05afc3f346f576bc63faaec9",
+      "path": "drivers/apple-agx/render-admission/src/memory_runtime_windows.c",
+      "sha256": "dfc858739efed2fd875e8789d7d77d0d105fa6a2fc78ffd331cb0e70f9b0bad8"
+    },
+    {
+      "git_blob_sha1": "a813c4b316ad0527933e3f9b26c2de3242e9eded",
+      "path": "drivers/apple-agx/render-admission/src/memory_windows.c",
+      "sha256": "e98c849381907c2c20db769e2e475273273665e81299236b688b97c912b2add1"
+    },
+    {
+      "git_blob_sha1": "9336ac0c4327a24c6eb5e521d6eecbeab5cf91a5",
+      "path": "drivers/apple-agx/render-admission/src/objects.c",
+      "sha256": "284ce4981474b4817af5ba96aea93804dc34c2c883aef45a69f605246e2adb0d"
+    },
+    {
+      "git_blob_sha1": "af77675796afa617778cfd8516bb11adbbe2421d",
+      "path": "drivers/apple-agx/render-admission/src/paging_windows.c",
+      "sha256": "68029bef116557eec16547ee5b88364895d31056d021e70c5a53089bf1a0e2db"
+    },
+    {
+      "git_blob_sha1": "2161494830313c1190059a7bffb59b83bd1ba2c7",
+      "path": "drivers/apple-agx/render-admission/src/physical_memory_windows.c",
+      "sha256": "ebdd15f7b6fff835fd0bed9b3e0e7e72d27cf95416a0dfc668f10418be56200a"
+    },
+    {
+      "git_blob_sha1": "da53f716a3ba0f846a421a1bd8c9a72bd9205c8d",
+      "path": "drivers/apple-agx/render-admission/src/present_windows.c",
+      "sha256": "e85432571224914aaed613f302138eaa884fd1c7c5c77c362eb2052b12edf33d"
+    },
+    {
+      "git_blob_sha1": "98120f5588240b68cf3aff59dc7d5918b1205bae",
+      "path": "drivers/apple-agx/render-admission/src/receipts.c",
+      "sha256": "5614e44ba0ade51ef1df6303528c765ebd70aa42ec677ef4def511592431efee"
+    },
+    {
+      "git_blob_sha1": "bc817e1c4cdbedd6c51b214bc3d2da4e411ad911",
+      "path": "drivers/apple-agx/render-admission/src/render_allocation.c",
+      "sha256": "5898b2bc37ccfb69c93a35b9b4309893fb0650ba3cf1043e4e7ba3a648189dd9"
+    },
+    {
+      "git_blob_sha1": "5bea16f504c86880bf7388e41b9568a148bb7f31",
+      "path": "drivers/apple-agx/render-admission/src/render_backend_image.c",
+      "sha256": "9f7d8db879adfc6c9fdf3eadbbbb3202a9a4e850a2721cab36fbb47537ba367d"
+    },
+    {
+      "git_blob_sha1": "b5c6a3b66694807330ce2191bc3afde3b4029fcd",
+      "path": "drivers/apple-agx/render-admission/src/render_call_correlation.c",
+      "sha256": "fd370fc2a3442d5f51b4b6c772c85a9a7b545ec20d2118f74c639bce83fd08f8"
+    },
+    {
+      "git_blob_sha1": "684ccd3f05869498a0359e66a50422582713851b",
+      "path": "drivers/apple-agx/render-admission/src/render_call_correlation_windows.c",
+      "sha256": "6e4e2a791fedf2e33360c33431daf46e4b459769694d9e228566accdeabee578"
+    },
+    {
+      "git_blob_sha1": "2da4668da824aad7e50888428c97bb6714c00ac8",
+      "path": "drivers/apple-agx/render-admission/src/render_completed_output.c",
+      "sha256": "efa8477fb61e9a766c71e1b2cc33c6eafd3024baaf778307079a57a146243323"
+    },
+    {
+      "git_blob_sha1": "b558ead14c36484b055d49585eda9e7b2a00dd74",
+      "path": "drivers/apple-agx/render-admission/src/render_dynamic_dma.c",
+      "sha256": "36faa2d5df5da5c64ed24f5e77209733fb9a16ad7dd0ada5537ba5a13b8a682c"
+    },
+    {
+      "git_blob_sha1": "13b77d06428a5250550e683466504c9f3f603d54",
+      "path": "drivers/apple-agx/render-admission/src/render_dynamic_output.c",
+      "sha256": "155eec152d9cd1a3fdc09858c0836518b12c02716910bd642ecb798f8170dab4"
+    },
+    {
+      "git_blob_sha1": "6e2b876fe56a6a596cfeb0221f17dfa91b4c8d0f",
+      "path": "drivers/apple-agx/render-admission/src/render_dynamic_overlay.c",
+      "sha256": "9b003936917826223f06f276c238fe57da3c8e7c9fc0620f6d5d423aad3f4abe"
+    },
+    {
+      "git_blob_sha1": "d4dae828837cfd1aa4ab111f1ba5fb85fe7d8862",
+      "path": "drivers/apple-agx/render-admission/src/render_dynamic_windows.c",
+      "sha256": "368bc5093a84c88513e100fc369dacb0884ff0f2b3851b35bd29870a0e8c8fee"
+    },
+    {
+      "git_blob_sha1": "f57031a0b0077150a59160584d0ceb43485e946f",
+      "path": "drivers/apple-agx/render-admission/src/render_gdi.c",
+      "sha256": "08196984ea069b84ba8f602cf2bcafddc5fb2254ca953f4b088fbd2c2dc34c07"
+    },
+    {
+      "git_blob_sha1": "fdb7c3aee23e8c02bf30a718ac4831c6b15f8ebb",
+      "path": "drivers/apple-agx/render-admission/src/render_gdi_receipt.c",
+      "sha256": "9b6790113051a5f180ce2779e14d715c95c56d9719886b7b75b0d48677d8c78f"
+    },
+    {
+      "git_blob_sha1": "ae6b644c4d0b6979d7ae90caa27a07b5718bc501",
+      "path": "drivers/apple-agx/render-admission/src/render_hvc.c",
+      "sha256": "84bd657932fcd58e101c2d538e6de56964da3e3fdea338d68f1ab78dddcb0c96"
+    },
+    {
+      "git_blob_sha1": "13aa4c3df2387f994589dd17d7ad6f8d65d00297",
+      "path": "drivers/apple-agx/render-admission/src/render_memory.c",
+      "sha256": "c1854912ef5de80f39459cbad9b187ad00fb25feeb54c5bd171a4d28c5b8db61"
+    },
+    {
+      "git_blob_sha1": "67a375da0b046c43d018828c4f4c3ff9fab5e0b0",
+      "path": "drivers/apple-agx/render-admission/src/render_output_queue.c",
+      "sha256": "dbd7c3681453ea8b1375e0cd5d93a8e6cd09a32f4e7264d49fd41b9de5605518"
+    },
+    {
+      "git_blob_sha1": "e95d8546ab551d865e3fb75140e365bd315f9fee",
+      "path": "drivers/apple-agx/render-admission/src/render_paging.c",
+      "sha256": "677113d5577b7c1743c76b16ad253392065f3c5b3feb8a63d491d14f583c927c"
+    },
+    {
+      "git_blob_sha1": "539e3e4a7d1b84fccd4565e919dc1e9468ebacf9",
+      "path": "drivers/apple-agx/render-admission/src/render_present.c",
+      "sha256": "6cf5de8366aa2da0880e4466f6639c5435f46b277083678d3860b0cbe6007b25"
+    },
+    {
+      "git_blob_sha1": "5f1743d1770bf28acd276d28b64ec0502255cdaf",
+      "path": "drivers/apple-agx/render-admission/src/render_qualification.c",
+      "sha256": "5abdfb3e38831de2214e54cdbfceae34a9c229b122b9a086dc602cc23e569a10"
+    },
+    {
+      "git_blob_sha1": "f97f3e3192cc0b3c4b1b056db4993771cf5a1c67",
+      "path": "drivers/apple-agx/render-admission/src/render_submission.c",
+      "sha256": "a4126f3a11ec0744fe1341187d4e64790c46d5ff28a5d69507c39fc2980282c8"
+    },
+    {
+      "git_blob_sha1": "7984a930290d9edf561cd95ab8133968beff7136",
+      "path": "drivers/apple-agx/render-admission/src/render_umd_command.c",
+      "sha256": "24b9be1f803a5e54c8c4dc98b2ede5fb9772df270b65f5cdb225599edd8ee8b7"
+    },
+    {
+      "git_blob_sha1": "588617eee0539f1383261082a7e59a9b02e0e530",
+      "path": "drivers/apple-agx/render-admission/src/render_visible_scanout.c",
+      "sha256": "5e514afc14bd02016ebf0900db33f0dd07b0bca6d721715355f17b857adcccdb"
+    },
+    {
+      "git_blob_sha1": "be848d1780107f65a00ddfe9a0f773d3073a085f",
+      "path": "drivers/apple-agx/render-admission/src/render_win32_transport.c",
+      "sha256": "8d4c94d942d9316af64724ea8ec9b2dbf6fba9c80d732ac7ff71ee4d05666844"
+    },
+    {
+      "git_blob_sha1": "e7e0dba6c656b65447e7fbbb0cd0a47aa104bb11",
+      "path": "drivers/apple-agx/render-admission/src/scanout_windows.c",
+      "sha256": "1be6a61c6a4b8d35f2c241adb107a8a9269eaa53e002a947483f0ebe075e0945"
+    },
+    {
+      "git_blob_sha1": "0f0ace19e312ff1b2583299bbfa9451f870919ed",
+      "path": "drivers/apple-agx/render-admission/src/scheduler_windows.c",
+      "sha256": "d455998823f357b43d3d5f39cd2bc2c56b230b8b270513514c89f3a742f69b25"
+    },
+    {
+      "git_blob_sha1": "04e8581040fb4b9741a524286f65028248476b22",
+      "path": "drivers/apple-agx/render-admission/src/standard_present_windows.c",
+      "sha256": "657fae3ea9dc855de1f122474107108ad7dadc02a984c1f8216a239d450acb8e"
+    },
+    {
+      "git_blob_sha1": "126f1fb02309e6a236b63a0b105daf94787dd8fc",
+      "path": "drivers/apple-agx/render-admission/src/submission_windows.c",
+      "sha256": "0eb1351387fdd80dbcd59941e52feef2d93eede9804ad4fdd2cc61458ba7f487"
+    },
+    {
+      "git_blob_sha1": "b4d6096380b168f02f3cad0dc9e9857ab65a1591",
+      "path": "drivers/apple-agx/render-admission/src/submit_trace_windows.c",
+      "sha256": "5f92acad8d85d9110b1e390771a6d2821e9d8fb0478e3c4d37377317077f38ff"
+    },
+    {
+      "git_blob_sha1": "5065dffeb6831e9b0a52193c285f9f25053b3a28",
+      "path": "drivers/apple-agx/render-admission/src/umd_render_windows.c",
+      "sha256": "4ae1066d36c03e20ae68810039775209c64e82d8478ec81c365148332a0bb158"
+    },
+    {
+      "git_blob_sha1": "578bcdaaeccdc00bbaf0d2b1de2479f344523116",
+      "path": "drivers/apple-agx/render-admission/src/work_queue_windows.c",
+      "sha256": "193b73697dfdc770f08a109845cc5157b223955f2fcbdeecb09b43b6d45ff70a"
+    },
+    {
+      "git_blob_sha1": "6467354dd64e3fce9204c264215979e2ee0bfa1d",
+      "path": "drivers/apple-agx/render-admission/tests/apple_agx_dynamic_job_test.c",
+      "sha256": "b4882d82cf5feb7b20681e6d587215de9ae68ec5545401e29b54772c1f942df8"
+    },
+    {
+      "git_blob_sha1": "61d360f9860535436789bc676faf0205bcb9334f",
+      "path": "drivers/apple-agx/render-admission/tests/render_allocation_test.c",
+      "sha256": "75520108bfa917bf3237d6d9724c70815efd72549e0bf5515ad9489ed97d48a5"
+    },
+    {
+      "git_blob_sha1": "e60aa5d674176074b35871be825ef17d907d528f",
+      "path": "drivers/apple-agx/render-admission/tests/render_backend_image_test.c",
+      "sha256": "ab23e84241bf5e40e7022640443b4691949d271f8f9db666e8d32d1f75a19f0f"
+    },
+    {
+      "git_blob_sha1": "de42dc3ce4879a76d07723c4e9dbec01aec72485",
+      "path": "drivers/apple-agx/render-admission/tests/render_call_correlation_test.c",
+      "sha256": "beb7708dcd294e2ac318c69589e0113fea7bf6a7c40d57546e022fcb1c470ba4"
+    },
+    {
+      "git_blob_sha1": "9827bf60dbe03c6be41459be797ba83ec842c5f3",
+      "path": "drivers/apple-agx/render-admission/tests/render_completed_output_test.c",
+      "sha256": "665129032a933c111068590bd311e79404a5c6acfbf5c982ce3ead7d44e1258d"
+    },
+    {
+      "git_blob_sha1": "547766564bb419eae4311655855dbf9cded734f9",
+      "path": "drivers/apple-agx/render-admission/tests/render_dynamic_dma_test.c",
+      "sha256": "a3e4171037db44d0cb7b68bf9bfe6efcb85e90e86546e19ab60e681b21a9e128"
+    },
+    {
+      "git_blob_sha1": "fb8356d5103b5b0518b887ad2552b2d2c9d2c8bb",
+      "path": "drivers/apple-agx/render-admission/tests/render_dynamic_fixture_integration_test.c",
+      "sha256": "d42d2e29da3815b9605f426b6d44c31f473c9e710acfc6b95d0f36333ba856d4"
+    },
+    {
+      "git_blob_sha1": "3d68db74951344f01c3b8b30601429d2b700ab64",
+      "path": "drivers/apple-agx/render-admission/tests/render_dynamic_output_test.c",
+      "sha256": "6aa1c9fb316876a672efbedb63ce596357915678068479bfbdff91dadc35f295"
+    },
+    {
+      "git_blob_sha1": "acc6287a517794369aad8a8a6520c52930b9e6e8",
+      "path": "drivers/apple-agx/render-admission/tests/render_dynamic_overlay_test.c",
+      "sha256": "d8aa211f3606292a8a9847abffae0c06fd55e478d8e790a0cfe013006d0e9acf"
+    },
+    {
+      "git_blob_sha1": "d3d9f56a1f4f86a3b2c23675e42d7319ffa820eb",
+      "path": "drivers/apple-agx/render-admission/tests/render_gdi_test.c",
+      "sha256": "956897186d80b68bd55dd22d204ccdd95d40085f7cb3b496c1316331aa59aff9"
+    },
+    {
+      "git_blob_sha1": "dceebf9e0a4a02409382e2a35be1fc431c8cbeb7",
+      "path": "drivers/apple-agx/render-admission/tests/render_hvc_test.c",
+      "sha256": "94740e0c89f208cdc70d232053d5861cdc6196977141583fec17e2f5e54fdb16"
+    },
+    {
+      "git_blob_sha1": "f6deef621c789ef71a1e32bebef2ec4bdeb3d792",
+      "path": "drivers/apple-agx/render-admission/tests/render_memory_test.c",
+      "sha256": "09ce85cb3f83fe0819f527592dc4e849cdb8139fc5df6e6d3f82b9acf612dae7"
+    },
+    {
+      "git_blob_sha1": "8cd9905ad486fdf410203dd3dae5b046afd8291b",
+      "path": "drivers/apple-agx/render-admission/tests/render_objects_test.c",
+      "sha256": "53565157df4ef703299bb2dd92798217c15fcf9e1e0b254eae4e47ffb598efe3"
+    },
+    {
+      "git_blob_sha1": "afc61ccbf79713694dadaff915c38f7b9ff06b70",
+      "path": "drivers/apple-agx/render-admission/tests/render_output_queue_test.c",
+      "sha256": "a71f7963c928c19191ddce00488965c8c594a33d8c0e0e74fc662fc1d59c85ca"
+    },
+    {
+      "git_blob_sha1": "e6f4cf1ff5b7a8c25a12e63e3dbedc38264a3620",
+      "path": "drivers/apple-agx/render-admission/tests/render_paging_test.c",
+      "sha256": "3a12bfce81d72fe62a3ec34744c8cc5a0aeaf673e35b2e1ba4de1b32a4f3d9c8"
+    },
+    {
+      "git_blob_sha1": "94f85f74bb704f70019021f4a75bae76b092d6e4",
+      "path": "drivers/apple-agx/render-admission/tests/render_present_test.c",
+      "sha256": "d91e798b20895205762fcb44d80438bcb5a80859ae1acd6da06a9003c62fea92"
+    },
+    {
+      "git_blob_sha1": "793d2054fc5ee3ced66ba9ff55da03a090b037f1",
+      "path": "drivers/apple-agx/render-admission/tests/render_qualification_test.c",
+      "sha256": "1fbb94095b7a6c0799f19e2a929a087da3eb0fef829853342d7faa285eda5d1f"
+    },
+    {
+      "git_blob_sha1": "df9e012d24a0461075fa091c661c8f04a139c111",
+      "path": "drivers/apple-agx/render-admission/tests/render_submission_test.c",
+      "sha256": "e944cf5f71a691a128c7f5bdb6fad01bc7c04327f45592dd5a4704f09a81b0d5"
+    },
+    {
+      "git_blob_sha1": "c8fe6cc8175f5b3d891c37f1f55871aaa1f3c164",
+      "path": "drivers/apple-agx/render-admission/tests/render_umd_command_test.c",
+      "sha256": "c9aa7700b137efde45aed5aea0d7bd06bc7495dfd248906bf67660a1e3899e7b"
+    },
+    {
+      "git_blob_sha1": "30f1df4dbf6a883dee196b9110959ef16e140ba9",
+      "path": "drivers/apple-agx/render-admission/tests/render_visible_scanout_test.c",
+      "sha256": "abb082a5f2f4cc6ffecf4bb3d585f9ab694f38f2135c1eb735cb4f297c9f64c8"
+    },
+    {
+      "git_blob_sha1": "6b680b17e1e4026a846c1e6c8a2b1098fdf98fef",
+      "path": "drivers/apple-agx/render-admission/tests/render_win32_transport_test.c",
+      "sha256": "0c7731a91cd857ab4a04d3cbe4b112ed2cc3ccc5252786fd63b3f80c0e108ed3"
+    },
+    {
+      "git_blob_sha1": "47c1e3cf324ea0b371e97ba94874ea2de61cbfae",
+      "path": "drivers/apple-agx/render-admission/tests/standard_present_windows_test.c",
+      "sha256": "3fb8d2efa9d57421f230cfc5d2baa03238c5d1a6a757bb945e7fb8c2fd2ccee2"
+    },
+    {
+      "git_blob_sha1": "0febddd3008bec9ad0033f8af32bf5aa1fb708c7",
+      "path": "drivers/apple-agx/render-admission/umd/AppleAgxRenderAdmissionUmd.def",
+      "sha256": "a49363cf53590b88bdd1f7755a179eecd3111a96e4b65d42c0c0ef60ad554ca5"
+    },
+    {
+      "git_blob_sha1": "1203b7635a04b0638a29f5f8c205327efa477ec5",
+      "path": "drivers/apple-agx/render-admission/umd/AppleAgxRenderAdmissionUmd.vcxproj",
+      "sha256": "0496ec73a9190bcd1c40587379f2e0d93759ae61c8bff75f42d93eda5c704a10"
+    },
+    {
+      "git_blob_sha1": "2702633df89a971a7cad918c89c7911cf76fff05",
+      "path": "drivers/apple-agx/render-admission/umd/include/direct_flip_contract.h",
+      "sha256": "84f83cd41dba89aeb9741dd6dc863ed7ef4f43481044dea37322940f5270bdbf"
+    },
+    {
+      "git_blob_sha1": "422a6bcdfe6197fa318480436f8e00e5ea1650a9",
+      "path": "drivers/apple-agx/render-admission/umd/include/umd_asahi_batch_adapter.h",
+      "sha256": "9127d9a2e2b64870f28e8ddfa95b26a0b3d8f3125f6d8a02577ad8f62ea93515"
+    },
+    {
+      "git_blob_sha1": "35cf8f9a315b06c15a43d99b35d510206e5b51ee",
+      "path": "drivers/apple-agx/render-admission/umd/include/umd_asahi_owner.h",
+      "sha256": "a3afef3e4a637757995e69b7d5dc1a783ed416822d61636e86565dd1f42f1083"
+    },
+    {
+      "git_blob_sha1": "544195ee428bdae58cbe41acbb4027726db71fad",
+      "path": "drivers/apple-agx/render-admission/umd/include/umd_draw_composer.h",
+      "sha256": "81829cd4917d98b33272def59b3bfa2ecc837745af77c8a96d46ebdb4b7f40c3"
+    },
+    {
+      "git_blob_sha1": "e7761b225a2912a89f6e6617df51176bc5296e66",
+      "path": "drivers/apple-agx/render-admission/umd/include/umd_resource_lifetime.h",
+      "sha256": "762b52cdd7429b1e4614e8dc402abe9110a596cd3d6a053b6cd6fb535e2a501c"
+    },
+    {
+      "git_blob_sha1": "65698553cdf23a2b1dbd5b02dccedae44391ed54",
+      "path": "drivers/apple-agx/render-admission/umd/src/direct_flip_contract.c",
+      "sha256": "6fa7cb7b770b86f264d618d8e8101fee184d0b044aed075087779d651e6900d6"
+    },
+    {
+      "git_blob_sha1": "c3279c5f8e72eac62eeb78f00740a88fe0062baf",
+      "path": "drivers/apple-agx/render-admission/umd/src/umd.c",
+      "sha256": "880fabf61448b437c497f61aae9561cb621ae35d4026eb1d0b13eca67afd8225"
+    },
+    {
+      "git_blob_sha1": "81d598c8f045d2a2572cd3d49005593b994b72a1",
+      "path": "drivers/apple-agx/render-admission/umd/src/umd_asahi_batch_adapter.c",
+      "sha256": "dbdd39ac2838a631eb32c4156745c225a7b9f1937dbdaa484a006efa78364b02"
+    },
+    {
+      "git_blob_sha1": "d82c048c89f3e9828f32ea829d75b013b9771d68",
+      "path": "drivers/apple-agx/render-admission/umd/src/umd_asahi_owner.c",
+      "sha256": "e542dac6e9eaf0216a93d57372c20db75916727937e70f7eceea36d93add4a6b"
+    },
+    {
+      "git_blob_sha1": "9ec597e727a5b7c8962dffabd9cba48c36a069e6",
+      "path": "drivers/apple-agx/render-admission/umd/src/umd_draw_composer.c",
+      "sha256": "27c303226e8536046009ad1ef22683a2b38d57e4812e8c2da688f9db3267117b"
+    },
+    {
+      "git_blob_sha1": "2b77a0a212e19789dc1f7f3c10767ee7ca245ab8",
+      "path": "drivers/apple-agx/render-admission/umd/src/umd_gpuva_windows.c",
+      "sha256": "f68d6e4744665109c6e7bb12e3182e41b548283ab375bb9f11fc9ea1fb614c35"
+    },
+    {
+      "git_blob_sha1": "c3d632c4ae7dc89909fb1406d2cbb794c60a65f0",
+      "path": "drivers/apple-agx/render-admission/umd/src/umd_internal.h",
+      "sha256": "46e53bfed29c4abb0ed122bd829fc0bd624343ea5c01bc10a085655f675e66af"
+    },
+    {
+      "git_blob_sha1": "81294e9e2a9fd1ebe21da50901ecfa7bacce0195",
+      "path": "drivers/apple-agx/render-admission/umd/src/umd_resource_lifetime.c",
+      "sha256": "d542a2b7a03ff263438c04c9ff084e3997267ba6c680fb0d735081f8e9c27758"
+    },
+    {
+      "git_blob_sha1": "ce519b3b2b590e8ebcfa1909d23b26b7bcfcdaa8",
+      "path": "drivers/apple-agx/render-admission/umd/src/umd_runtime_device.c",
+      "sha256": "a5ae6233615488233bcce443583a211f2b24435c23e83cf511b2c7ef512d6baf"
+    },
+    {
+      "git_blob_sha1": "df10de5e040bf085c4580996f7f24a164e4435a4",
+      "path": "drivers/apple-agx/render-admission/umd/src/umd_win32_screen.c",
+      "sha256": "70a8fb3765b4dadf1670c5eb87d84f02c1060fbbfb801d8eae588b74e0cacddd"
+    },
+    {
+      "git_blob_sha1": "4b29b0c30088475bb80685f72418c67e233f6577",
+      "path": "drivers/apple-agx/render-admission/umd/tests/DbWinCapture.vcxproj",
+      "sha256": "30ceeb26188fa78a225af812805155cd04d19351a9bfd59f74638a40a28b4f14"
+    },
+    {
+      "git_blob_sha1": "ffe322a80abf236340f454cce6a6378a95f1777d",
+      "path": "drivers/apple-agx/render-admission/umd/tests/UmdContractTest.vcxproj",
+      "sha256": "f027767ded99e64d114f6b0a8638d824ef9a967efcf592f52ca881af27210672"
+    },
+    {
+      "git_blob_sha1": "a86321fd688f9b57a4868ff616bd5766a71638c2",
+      "path": "drivers/apple-agx/render-admission/umd/tests/build-contract-test.ps1",
+      "sha256": "4b6700f21e3e4db2d42379533ecd40274a2f6dd7a330d3936956f3fc4c8b30ad"
+    },
+    {
+      "git_blob_sha1": "e171a2026a678bf6d375f1aab3eb106c109186b1",
+      "path": "drivers/apple-agx/render-admission/umd/tests/dbwin_capture.c",
+      "sha256": "c000804d37ae3b204edff1667575421f8e0465f691c1e40406d2b18debd23589"
+    },
+    {
+      "git_blob_sha1": "870d4a88530943c820098db6d64041dea06c50e0",
+      "path": "drivers/apple-agx/render-admission/umd/tests/direct_flip_contract_test.c",
+      "sha256": "87971321549ee07d09608424731755eb93502a1d197437b3025f4f5e251b65ee"
+    },
+    {
+      "git_blob_sha1": "1e38e21e4b531fd6a2803e90d83b1f6565bf7f39",
+      "path": "drivers/apple-agx/render-admission/umd/tests/native_sampling.hlsl",
+      "sha256": "48e2377e7d6b9a6171553dd6be670f3c0dafc493e10f8cea9542c2ba7e1dc277"
+    },
+    {
+      "git_blob_sha1": "3edbd4515990e71e246d43e91ff947db54a95115",
+      "path": "drivers/apple-agx/render-admission/umd/tests/native_sampling_tokens.h",
+      "sha256": "122f9d4089572f862cca5513ba63bbb554253c53ef0c2b14dbc0a88557a80970"
+    },
+    {
+      "git_blob_sha1": "c106395804225ea66bbcd985b7d504dc1fd4e3e2",
+      "path": "drivers/apple-agx/render-admission/umd/tests/prepare_runtime_probe_kmt.py",
+      "sha256": "6be8fc5e97ad26c7652b4050157debf26a68b85d07f29b328cf0489d04b842de"
+    },
+    {
+      "git_blob_sha1": "4a41db4182a797ef7a0cb65ae874895934da7a42",
+      "path": "drivers/apple-agx/render-admission/umd/tests/runtime_ddi_probe.c",
+      "sha256": "62401633a396861ab370fd16c52606e51f541249bc8f89b5b55a12550367ccac"
+    },
+    {
+      "git_blob_sha1": "9b52293895026c083cb0c02b92782dc39359e1ed",
+      "path": "drivers/apple-agx/render-admission/umd/tests/umd_asahi_pool_windows.c",
+      "sha256": "7b6ff31e490c3a819da0284a927d885fbad6e3fe96992ce6e9ab596b7db52e2b"
+    },
+    {
+      "git_blob_sha1": "580eaf80c95eac5d605774a5cb3e98389c093456",
+      "path": "drivers/apple-agx/render-admission/umd/tests/umd_contract_windows.c",
+      "sha256": "af607761ebc60f8e16a838190c9b411356e276b19083fb643cac4e4bd643d7b2"
+    },
+    {
+      "git_blob_sha1": "fcad46826edc95eda82436159d1d20456cf64926",
+      "path": "drivers/apple-agx/render-admission/umd/tests/umd_draw_composer_windows.c",
+      "sha256": "f83dae846ebb0d81cf6b225a3bb78dae9831658b59aee0456c717cb8be3ed934"
+    },
+    {
+      "git_blob_sha1": "e3deb4d6fea144584e9db2c2c3bb31ad35a689ec",
+      "path": "drivers/apple-agx/render-admission/umd/tests/umd_gpuva_contract_windows.c",
+      "sha256": "4c2a5b094474c81a3ed33183755e03e1a1e6aef9cedde7f3f5b130a7c8e1f644"
+    },
+    {
+      "git_blob_sha1": "03ac887d993b6ac0a4a473dab5f56e2457d20a71",
+      "path": "drivers/apple-agx/shared/include/apple_agx_aperture.h",
+      "sha256": "7a4407d7cd88c6ad288950595bf30422bb095bf073b9daec83b82ed3d31bc826"
+    },
+    {
+      "git_blob_sha1": "223ec5b001e996e3157040e2e830d1cebff55fcf",
+      "path": "drivers/apple-agx/shared/include/apple_agx_asc_transport.h",
+      "sha256": "819f6337a6a9d1284db5e0a91d5afb76acdc416a69783b7242fc9742c2c2b126"
+    },
+    {
+      "git_blob_sha1": "c9e034eae517ccf8abf7b2ece93b7502d9a0bfc2",
+      "path": "drivers/apple-agx/shared/include/apple_agx_backend_memory_bridge.h",
+      "sha256": "b84c5159f544fd105671a3629e28a2f2ddd878cec220392b013efbcaf294538c"
+    },
+    {
+      "git_blob_sha1": "461a86f0fccc762b83055a488e604de24d104328",
+      "path": "drivers/apple-agx/shared/include/apple_agx_backend_runtime.h",
+      "sha256": "c3515e535f335cb35817ac06f52a3c8750bb2e4c1ed57dd8fa0d7ee0b96d186e"
+    },
+    {
+      "git_blob_sha1": "020f2d638551320f244123f793570a01eea113fb",
+      "path": "drivers/apple-agx/shared/include/apple_agx_channel_info.h",
+      "sha256": "8ea29583262c62803a56b52442d783df4ddc761cbc27b736cb5a2fe5cb4e6bbf"
+    },
+    {
+      "git_blob_sha1": "b142f245078b917d89241ce5ae23228bddaf838e",
+      "path": "drivers/apple-agx/shared/include/apple_agx_channel_memory.h",
+      "sha256": "78c73c351654b65a1c28e7b890eb3dafb60ecfcdbfb3d807d3629931b6a9c49b"
+    },
+    {
+      "git_blob_sha1": "4806c84c6a0d04acbea347af4b7ad6f3a6d35d83",
+      "path": "drivers/apple-agx/shared/include/apple_agx_config_snapshot.h",
+      "sha256": "fdd107e465768dcacfc11205b6278e91a826cec8254f4379af2b2089cb0be4a7"
+    },
+    {
+      "git_blob_sha1": "f60bf3bd774490ed9c8d94c0e6eb55e13f1e9129",
+      "path": "drivers/apple-agx/shared/include/apple_agx_context0_broker.h",
+      "sha256": "4b342711b7aab5a2b421b6232c2af5cb48b2aa1bf55900541cfe6b18dae5a029"
+    },
+    {
+      "git_blob_sha1": "1814a1ccda8b568796c96839a8e54235c1800f14",
+      "path": "drivers/apple-agx/shared/include/apple_agx_device_control.h",
+      "sha256": "7fe6b7d7c6bc6b5e41a4dc319a9ffef70707c7e26d2de7a2db39e1f4f5d8eff5"
+    },
+    {
+      "git_blob_sha1": "10c6579bdbecbe8e39b869475a4777d857017a73",
+      "path": "drivers/apple-agx/shared/include/apple_agx_dma_shadow.h",
+      "sha256": "29d51662eb36885dbf48020aae3a8002f1bb9bb3adeee5157a8fd9efa5f55770"
+    },
+    {
+      "git_blob_sha1": "fe7135a13852da4c2029b8ec19dfee53f8f493f0",
+      "path": "drivers/apple-agx/shared/include/apple_agx_event_allocator.h",
+      "sha256": "45cf1c629900e4068c07bf3e75a866ad441e4fc53a4827706fae4835252c69f2"
+    },
+    {
+      "git_blob_sha1": "2db7c9460065236d084bfcdd25198dd02985ac51",
+      "path": "drivers/apple-agx/shared/include/apple_agx_exp208_adapter.h",
+      "sha256": "e4467fab1b29b6c041676f2a162f313ac1649c19802cf61c0dbe6d8d1f3773fe"
+    },
+    {
+      "git_blob_sha1": "226316325ee1ca2a380a70ea17387a6927319c46",
+      "path": "drivers/apple-agx/shared/include/apple_agx_exp208_dynamic.h",
+      "sha256": "4fd56202767e301c249a73c02a9bab77c5b2c650d994ff59534ff1531996e5ee"
+    },
+    {
+      "git_blob_sha1": "95ca638fdfb8574f5d52b97d822b0ad0f7d45a67",
+      "path": "drivers/apple-agx/shared/include/apple_agx_exp208_framebuffer.h",
+      "sha256": "58062fc77cb8046989c69fd1143d2739705f6cb0f66d62d885adfbfd59cf11df"
+    },
+    {
+      "git_blob_sha1": "7ed802f45ea149838417d498ae581b0135d8aa67",
+      "path": "drivers/apple-agx/shared/include/apple_agx_exp208_gdi.h",
+      "sha256": "5335e574247b75479f6b6c04addcf98141e270b5dae1ffbf354a89415cc5de8c"
+    },
+    {
+      "git_blob_sha1": "5145f188c336bcbc972dacf045efca98f2afc212",
+      "path": "drivers/apple-agx/shared/include/apple_agx_exp208_relocation.h",
+      "sha256": "407ddcad1403ea06dda240cd396037844b44a7444517b911f5c63703e5c6d15b"
+    },
+    {
+      "git_blob_sha1": "58bb5edda2bef4f6166d1bee51ad2bec8694ffd8",
+      "path": "drivers/apple-agx/shared/include/apple_agx_firmware.h",
+      "sha256": "45c489214413519d8a934ec0d8402fa236082557a55e65f7e09b28f0fda19982"
+    },
+    {
+      "git_blob_sha1": "f7a5a545ba73da58c8244e97d66a3ce29915d42e",
+      "path": "drivers/apple-agx/shared/include/apple_agx_firmware_io.h",
+      "sha256": "c146e6848382b7331c0f4a34694ca14e2e9c231f905369942d509a29baa89e4e"
+    },
+    {
+      "git_blob_sha1": "c803030ec8b063573b6d610866c22f1c68efa756",
+      "path": "drivers/apple-agx/shared/include/apple_agx_firmware_prefix.h",
+      "sha256": "7e2cfcd061163077e9444a20b3f6ae630761b602a5ade2508fb79e5b6a3f9292"
+    },
+    {
+      "git_blob_sha1": "44702f066360e45079a1e3bcfeca30c9a5bc6f5c",
+      "path": "drivers/apple-agx/shared/include/apple_agx_firmware_provider.h",
+      "sha256": "9ad3ae63195db30062a2af6b870ea71df2a7c78f94b8981940262f034a28feb0"
+    },
+    {
+      "git_blob_sha1": "576b181098fdbafaa80b9e45164979c38f35d3f2",
+      "path": "drivers/apple-agx/shared/include/apple_agx_firmware_start_receipt.h",
+      "sha256": "c2c593e2a37d743aeb1d7f9ddfafbee2d704a08f52a44da430cb326ea3d28d37"
+    },
+    {
+      "git_blob_sha1": "fddb65aab5618c6c059d4e895bf537a3ce1dffcf",
+      "path": "drivers/apple-agx/shared/include/apple_agx_firmware_status.h",
+      "sha256": "4bc24d3b9e0865275308d4261c5222a8b4a9e551e3f69fa41dbcdee07c0e9de0"
+    },
+    {
+      "git_blob_sha1": "1ed2ff9672a9bc441fe07a64219f7b13fd5b4091",
+      "path": "drivers/apple-agx/shared/include/apple_agx_fixed_panel.h",
+      "sha256": "a8510f89111c5c66e3246531692f3351c2e7fda0d1c70fe6f76fbe9fa738534b"
+    },
+    {
+      "git_blob_sha1": "2190a124edb424fb5c40097236da5e8cfa70520f",
+      "path": "drivers/apple-agx/shared/include/apple_agx_g13_codec.h",
+      "sha256": "deba95de7a56d0222733968adee5dd87e1cf55ce8e2e3958f53c33a72fe61ea1"
+    },
+    {
+      "git_blob_sha1": "01634685b797efb287b9437c0276f4800e6046dc",
+      "path": "drivers/apple-agx/shared/include/apple_agx_g13_compute_work.h",
+      "sha256": "3bda76a289853461397417de5639ed1819fe4851bb51fec54c7c827d3e35419d"
+    },
+    {
+      "git_blob_sha1": "2772afbb70913bdf031a4490cba0fc83fa00cebe",
+      "path": "drivers/apple-agx/shared/include/apple_agx_g13_queue_provider.h",
+      "sha256": "7df2270387abbae14fb629bb785db646b9617b3f84303fa8094eda73a88857d4"
+    },
+    {
+      "git_blob_sha1": "1e6741bb6acba1c346a996a06a169e8a426c5acb",
+      "path": "drivers/apple-agx/shared/include/apple_agx_g13_queue_runtime.h",
+      "sha256": "e9835e2ff7fcf0afba1a494b08b3689aa3b24cef6f43a9eac0b83ccee64fa69d"
+    },
+    {
+      "git_blob_sha1": "bf4f4fd63bfe28beb286312898d60c2a1580c846",
+      "path": "drivers/apple-agx/shared/include/apple_agx_g3_copy_abi.h",
+      "sha256": "dc64180467a0ac2910aca5025e97ec2f45c67ecd1dc0f5628b8de50ae3fcc1f9"
+    },
+    {
+      "git_blob_sha1": "e9f34b3ddbad521e3b94e44f1e0998c5c41cef0e",
+      "path": "drivers/apple-agx/shared/include/apple_agx_g3_copy_query_receipt.h",
+      "sha256": "014b5b2d56c990e412d8cafff81d2a847fec22367961ba087b99adb4a4580273"
+    },
+    {
+      "git_blob_sha1": "40c3ce3b33bc2c8bf9c333e03167223d26575ea8",
+      "path": "drivers/apple-agx/shared/include/apple_agx_g3_private_abi.h",
+      "sha256": "7632640d05b8d5e51076e36c119b16fa0a4a195e5a051efbf3dc48247a66560a"
+    },
+    {
+      "git_blob_sha1": "9158b7ddb0258a64a495f1a6268c517b0df2e2fc",
+      "path": "drivers/apple-agx/shared/include/apple_agx_g3_private_pool.h",
+      "sha256": "c66c497bb569007710e37b6017261de3dbfe94255ebd873c0ecf7434bfbcbd66"
+    },
+    {
+      "git_blob_sha1": "b1efbc64d4286ec30b596c112963a26478cf5590",
+      "path": "drivers/apple-agx/shared/include/apple_agx_g3_private_storage.h",
+      "sha256": "bbd8d094f6735604943f3cfa581c417ff8d4b8aadefc245a19070b9e485be864"
+    },
+    {
+      "git_blob_sha1": "836d072a7b0b7f61a12694c6b9683d26c7107d44",
+      "path": "drivers/apple-agx/shared/include/apple_agx_g4_builder.h",
+      "sha256": "bb9092ed2ce067c71972f935d464407793466540cc823ebd065f0f4f3d64d879"
+    },
+    {
+      "git_blob_sha1": "712210edda47d68986c89e0776f601a10ac6615c",
+      "path": "drivers/apple-agx/shared/include/apple_agx_g4_submit.h",
+      "sha256": "eb374aba69bf390905f4b4dee8d53c6823a618708280cce3cbce31371fae8174"
+    },
+    {
+      "git_blob_sha1": "d2d34c7aacda4e24d5ffc451fc26a2d004ca6ee4",
+      "path": "drivers/apple-agx/shared/include/apple_agx_gdi.h",
+      "sha256": "acd061381e0d33f544d8695929a06bc2f3bf180f6c3fffb5c311b6419bc06e06"
+    },
+    {
+      "git_blob_sha1": "82117fcb50ada8418401b36209e60927ac0d29ce",
+      "path": "drivers/apple-agx/shared/include/apple_agx_gfx_handoff.h",
+      "sha256": "8bc09d3ab06a994ab784685ed37cca1925a2cd3612d2c82992ce4a13fd731d65"
+    },
+    {
+      "git_blob_sha1": "bd2ed0c658d3166e3f6b392dbaf8cc1622ef220b",
+      "path": "drivers/apple-agx/shared/include/apple_agx_gpuva_b1_completion.h",
+      "sha256": "25cfce9c74e59ebc9812f606cdfa3d8d8a7de0b80e47fcde59b44dbb0d202d7b"
+    },
+    {
+      "git_blob_sha1": "38ea991476c2b981714a1891faeb8fb5b084b42d",
+      "path": "drivers/apple-agx/shared/include/apple_agx_gpuva_b1_graph.h",
+      "sha256": "b047a854e5963770b7bc8c05c20cc7acc658fa9d66dbeb22b784203365b7e3df"
+    },
+    {
+      "git_blob_sha1": "c2453928f45f932b54b8e56b731eccee86c0844b",
+      "path": "drivers/apple-agx/shared/include/apple_agx_gpuva_b1_roots.h",
+      "sha256": "cbf95b1c45cf68b0b9ddfbb990361efa7bce0352090486d211cf9c77feb0183a"
+    },
+    {
+      "git_blob_sha1": "71fdd4ebdb05ba7101913384d7392f7715ad2335",
+      "path": "drivers/apple-agx/shared/include/apple_agx_gpuva_b1_status.h",
+      "sha256": "f894037eda64d56c13fb7dfa07bb450e2edc5770d6d84491ce4b2646ca921882"
+    },
+    {
+      "git_blob_sha1": "b8a0811a33304caee47e926006486e8f02fb5432",
+      "path": "drivers/apple-agx/shared/include/apple_agx_gpuva_b1_submission.h",
+      "sha256": "5ba54c8017c685d6f00c3907bcf31b5f1c934394bcc656093ab777a976eafa3f"
+    },
+    {
+      "git_blob_sha1": "7c4b8b35b3e6e73554af7972baeb1d290bae62cc",
+      "path": "drivers/apple-agx/shared/include/apple_agx_gpuva_broker_v5.h",
+      "sha256": "f65539d29da2cba585b5d2440bfb77c66820f7d460000b5e413dde6c7bc4f3ed"
+    },
+    {
+      "git_blob_sha1": "fcba83664c5281b8aa7d09a66aa9676926fe057a",
+      "path": "drivers/apple-agx/shared/include/apple_agx_gpuva_broker_v5_client.h",
+      "sha256": "c22c6b2d0fa8702de795fc6c6329987dde87858820441c303cb49de8764b27b3"
+    },
+    {
+      "git_blob_sha1": "ab70db86e7091df5dba4a44d21cd043474b0fdc6",
+      "path": "drivers/apple-agx/shared/include/apple_agx_gpuva_g3_caps.h",
+      "sha256": "19b03bfa8a121de3499fcc4ef79e5294b067719d4b8be68682e78a7124d70821"
+    },
+    {
+      "git_blob_sha1": "1298a32c861eae76abb7ea989014293191692813",
+      "path": "drivers/apple-agx/shared/include/apple_agx_gpuva_g3_graph.h",
+      "sha256": "49e2bf1954f72fab5679bf09190a9e54d52aba8b0234f9582f08afe3c95017ae"
+    },
+    {
+      "git_blob_sha1": "fe1e2e863cef955fb920796abce1d72cc18aefb2",
+      "path": "drivers/apple-agx/shared/include/apple_agx_gpuva_g3_translation.h",
+      "sha256": "12e5b2c30795217f1d4c69727ce1826151d5c638ca03fe5a6d355ebf86be60f5"
+    },
+    {
+      "git_blob_sha1": "a9c9b9814ebc8dd0bc176bfc7bf5bc5880771a6f",
+      "path": "drivers/apple-agx/shared/include/apple_agx_hwdata_profile.generated.h",
+      "sha256": "4a5df599339585d620209d19a147e0420ab91b5f55d39b9f8052ca8a2f338451"
+    },
+    {
+      "git_blob_sha1": "3694365228aa8438146eb7a4c42c4491a9ec06dc",
+      "path": "drivers/apple-agx/shared/include/apple_agx_hwdata_profile.h",
+      "sha256": "0d1e66628e5b1e644277e0d556b6ddeeda1cdc33b0de9f8b472352c492a826c7"
+    },
+    {
+      "git_blob_sha1": "3018768ebfdb1c1253abc8b2e57f272f37dfcb83",
+      "path": "drivers/apple-agx/shared/include/apple_agx_hwdata_profile_abi.h",
+      "sha256": "36d5a3ac540243a14f4c7fbed21f997b595863a4b96fbe83d5a4b2756d5fb94e"
+    },
+    {
+      "git_blob_sha1": "ced54f05e9a44bf9e59d0282a6ca2550239f6ed6",
+      "path": "drivers/apple-agx/shared/include/apple_agx_initdata.h",
+      "sha256": "ba9ada22a0e523ef072b9504fd1537f2f76f7521eb466bcc91d0abb21e6528d9"
+    },
+    {
+      "git_blob_sha1": "726aa512ee7807b039f3b6269ff7fdc177d1e156",
+      "path": "drivers/apple-agx/shared/include/apple_agx_initdata_memory.h",
+      "sha256": "8913d2894403811adce5c69bc1c8fd49a5182cf585944ffb41db0b4b949088ae"
+    },
+    {
+      "git_blob_sha1": "e9c945f86869cef2dcd1da31a41d71e859eea2b3",
+      "path": "drivers/apple-agx/shared/include/apple_agx_local_reserve_abi.h",
+      "sha256": "7fdc1c60e38868274ebdda45753f925a75dc5b49fbc20452798456f5c2746f67"
+    },
+    {
+      "git_blob_sha1": "975ab878e1708b6a00f899b99d4a04eb0381e069",
+      "path": "drivers/apple-agx/shared/include/apple_agx_local_segment.h",
+      "sha256": "1d7ac450dabf7677ccc380713b8fb3e389ddcc16bf8fc884c74ad9553deaae3f"
+    },
+    {
+      "git_blob_sha1": "3834db518e13158ec26b7262a445eccf8d38134c",
+      "path": "drivers/apple-agx/shared/include/apple_agx_mapping.h",
+      "sha256": "32c4745035856a38a34e7022d5be8cca63d9728a9cecc9b18e242415ac710f29"
+    },
+    {
+      "git_blob_sha1": "bdc922b0d6ca2c6283752b9a6ac3a6c2cdc0d351",
+      "path": "drivers/apple-agx/shared/include/apple_agx_memory.h",
+      "sha256": "4f08a8ce6b97b6f55b229cecb0b4f9a4272fcb3e1c84b01e780aff7124bf7777"
+    },
+    {
+      "git_blob_sha1": "f668c835ad2a0e68de1d6ed51ca74a439d936f1b",
+      "path": "drivers/apple-agx/shared/include/apple_agx_physical_paging.h",
+      "sha256": "6b59cf90f1c8b4b782914e1b7a7e4cc9a57cde21e5fdd054eb442b3cfe42ee4b"
+    },
+    {
+      "git_blob_sha1": "0d4b2efa1322efee74717801e18a66d30ddc2044",
+      "path": "drivers/apple-agx/shared/include/apple_agx_physical_topology.h",
+      "sha256": "cce919640a44cf24f3130d52ea1afcbd331cddb5dc527b1cba5b2e4efe855651"
+    },
+    {
+      "git_blob_sha1": "e144d1a8eec806e54f649e157c3a33188933ef90",
+      "path": "drivers/apple-agx/shared/include/apple_agx_platform_composer.h",
+      "sha256": "a3fe146ebf8378b68962837c3ff9d7584e35bac7c5f36b7593b7aa3995a3a679"
+    },
+    {
+      "git_blob_sha1": "3f2fa7505bf590ad28599cb3d7ccab4635b93c99",
+      "path": "drivers/apple-agx/shared/include/apple_agx_platform_provider.h",
+      "sha256": "0fe3d665893191303112bc69418b125379e26868e23db0da8fabaa8e1dceac41"
+    },
+    {
+      "git_blob_sha1": "40231e7a345836ada74d4973809258f9b0d285b6",
+      "path": "drivers/apple-agx/shared/include/apple_agx_platform_transport_validation.h",
+      "sha256": "26a3fb30b2b261c1b4ead79f961c630875e301a6f06a51ee7385dd891bf2c496"
+    },
+    {
+      "git_blob_sha1": "2f092b6fc8cfd43d36f05d17e82b1141247b2e97",
+      "path": "drivers/apple-agx/shared/include/apple_agx_post_display_route.h",
+      "sha256": "babb24ce83361c6094edc94bd4a5a8944dc57e02fb23f4acdd816136e866a248"
+    },
+    {
+      "git_blob_sha1": "90830df4154ab782f8174ff3e9c5e14db6a50014",
+      "path": "drivers/apple-agx/shared/include/apple_agx_power.h",
+      "sha256": "e6379f4dc5b6538841c10ded4300c92546ca983a945b0f4c2b007ae63b2d2693"
+    },
+    {
+      "git_blob_sha1": "1b9e5b44c40bebaaeb722e9ce11f9986c4728b87",
+      "path": "drivers/apple-agx/shared/include/apple_agx_regionb.h",
+      "sha256": "6940d0ff3315c9f98dd9d8003854627fdf2419c334c79b6d404d6d3d9f88c218"
+    },
+    {
+      "git_blob_sha1": "897cf8d28f3d2d77d028cd9756539091d9c210d3",
+      "path": "drivers/apple-agx/shared/include/apple_agx_regionb_memory.h",
+      "sha256": "92400d504404378d98882ab75e76ca18fe48dde653a4929782f1697ca1c6ebd9"
+    },
+    {
+      "git_blob_sha1": "f519d0b78ed12af60f8ad130d738a51fb225cf5d",
+      "path": "drivers/apple-agx/shared/include/apple_agx_regionc.h",
+      "sha256": "c4ca3b46288d803e9aa7e9d8c372d4d7b837862fd178bea8f9d5990ed9b2bfc8"
+    },
+    {
+      "git_blob_sha1": "1f3b4bc44d763cff162d92baa8352781bd95cb1a",
+      "path": "drivers/apple-agx/shared/include/apple_agx_relocation.h",
+      "sha256": "ffe309d9357a4f6e00e72812a4f7ccf110b91378a92e2bb99f6f65edb97c756c"
+    },
+    {
+      "git_blob_sha1": "c49f1c9ba010715294799a2de9783fd2dc3b4aad",
+      "path": "drivers/apple-agx/shared/include/apple_agx_render_provider.h",
+      "sha256": "ea298b15f414f6b25c8916c3afbcff36b05638e132e0acfbecbebebd4fc88cc6"
+    },
+    {
+      "git_blob_sha1": "a68b1f2a8794e14070235bea1e83d32af28d20fa",
+      "path": "drivers/apple-agx/shared/include/apple_agx_render_shared_memory.h",
+      "sha256": "d137147d7bcd1b2016dc08ba199e3c7d1a171768387d321366539c6f452835d7"
+    },
+    {
+      "git_blob_sha1": "5598a3e0b421a24122e130af2895bd7fb3ec2cfb",
+      "path": "drivers/apple-agx/shared/include/apple_agx_render_template.h",
+      "sha256": "52b4dde84d88ada03a85b9ef4b3df3c0cb7b3b2aa6c4be5b5d43bda70a442b0a"
+    },
+    {
+      "git_blob_sha1": "0fef3419e7bbcab6deff898b7ba6331c2e9076bd",
+      "path": "drivers/apple-agx/shared/include/apple_agx_render_template_rebase.h",
+      "sha256": "bc8e1cc2262e2fd152d60096b8c0e0ab769768f1ba88ea85bc7f4184777c678b"
+    },
+    {
+      "git_blob_sha1": "11b81542f202518f788f3243d106fd3b29d2c82b",
+      "path": "drivers/apple-agx/shared/include/apple_agx_render_template_vm_slot.h",
+      "sha256": "bb6921d334198aea7314fea0e1445b9f9ef14a7e6e23c531151790ba87d3e809"
+    },
+    {
+      "git_blob_sha1": "8c106d24549cbe4abb329343d47dc341ebfea3a7",
+      "path": "drivers/apple-agx/shared/include/apple_agx_residency.h",
+      "sha256": "444ffb706a7bbb44ef241dba9a56a6762b0b9f61fecf2b1911833a5a2f2dc12e"
+    },
+    {
+      "git_blob_sha1": "1cb1df1fef4ff665233af522b2b80ba2851c5dc6",
+      "path": "drivers/apple-agx/shared/include/apple_agx_retained_root_abi.h",
+      "sha256": "11867598d7f42ddf1087c41ce4faaccf19b53813643cb1a2c2d1721fd931ef1b"
+    },
+    {
+      "git_blob_sha1": "7133345121f20680a667f0c968505770d3ca4b99",
+      "path": "drivers/apple-agx/shared/include/apple_agx_retained_root_client.h",
+      "sha256": "db338090a14bafd3268317778481b85c96b526df086b4d9d9f1a52a2bfbce372"
+    },
+    {
+      "git_blob_sha1": "4a93591c1af8604049f19adf060251b0e7941976",
+      "path": "drivers/apple-agx/shared/include/apple_agx_rtkit.h",
+      "sha256": "4223092b57681de03b8824642a8002c9edc6aede7b26ea64fdc9d6873b7c012d"
+    },
+    {
+      "git_blob_sha1": "86620d437cb8d9379f19f51c556a2aa96153e279",
+      "path": "drivers/apple-agx/shared/include/apple_agx_rtkit_boot.h",
+      "sha256": "ca1720af06381004a01ade2bce9c7a05dff280c89ceef39adeac7cd894797357"
+    },
+    {
+      "git_blob_sha1": "1b7bd138309684c7d5e76137e19ee7eb0b4b07a7",
+      "path": "drivers/apple-agx/shared/include/apple_agx_rtkit_session.h",
+      "sha256": "8a629ce0e4915ab589e5ad0ad405e927086925c6e645f1e21ab8653f970ddb9e"
+    },
+    {
+      "git_blob_sha1": "1cb708d0ea2a46dbf4ebcd8fad7669b3eed82513",
+      "path": "drivers/apple-agx/shared/include/apple_agx_scanout.h",
+      "sha256": "267c20d6900f0a99443cd72afd62acd3be1b150a7544c8924be459051d44c957"
+    },
+    {
+      "git_blob_sha1": "79abe3a40eed000b54625f075e71e2b5a30115e8",
+      "path": "drivers/apple-agx/shared/include/apple_agx_scheduler.h",
+      "sha256": "5aa5c36de976e9efa81db7a201039654ad2ace0b685b4b08adf9bdbb8883d2a1"
+    },
+    {
+      "git_blob_sha1": "e0803073bd2de6964d0280894489980c666a08a9",
+      "path": "drivers/apple-agx/shared/include/apple_agx_software_aperture.h",
+      "sha256": "01251f495b0c74e67f1507d18a82b8a3027af4f52b22d70f72b980b8963de084"
+    },
+    {
+      "git_blob_sha1": "c5f9e7f86c9484610987a83790c44a701dec1ad5",
+      "path": "drivers/apple-agx/shared/include/apple_agx_state.h",
+      "sha256": "45449ea5c73b308c30a3d9a056ec6c7e88ce4331bda9bb339b2447d2ff1838f5"
+    },
+    {
+      "git_blob_sha1": "4816227a1af6d13e0299464fee135c25eaa1c82b",
+      "path": "drivers/apple-agx/shared/include/apple_agx_submission.h",
+      "sha256": "af30be78f39bdfad69047d56bd5c7a9cd040cc3b0a06bcb739c34aa89c068d8c"
+    },
+    {
+      "git_blob_sha1": "6a219999028ee1657449fde90a2315622e02cd36",
+      "path": "drivers/apple-agx/shared/include/apple_agx_submission_coordinator.h",
+      "sha256": "cbd0fafd867114524b083e2fba29e01e0203ca4238ac18d36eb993381244d680"
+    },
+    {
+      "git_blob_sha1": "3fa7790974047eefc981a2e0c7ee3e27ee5a514d",
+      "path": "drivers/apple-agx/shared/include/apple_agx_uat.h",
+      "sha256": "95a3166d31f4d4a4b26f876a6c79944e6938144825053845c8e8faf611d82035"
+    },
+    {
+      "git_blob_sha1": "08ed1e94918ef0cdc425a28b06d30a764f3acdd4",
+      "path": "drivers/apple-agx/shared/include/apple_agx_uat_memory.h",
+      "sha256": "5a8b9d3eec9b03c59e9c6c30258df6278b31b14eb00fce6ecd0ffcf24eb29671"
+    },
+    {
+      "git_blob_sha1": "4d4ed0ae27c114ab1299e14bdb869feef5747623",
+      "path": "drivers/apple-agx/shared/include/apple_agx_uat_publication.h",
+      "sha256": "d2020aecc7952a9b3bbde0e62e9866f03e62812660a94b3a40bfa015b9fb42fb"
+    },
+    {
+      "git_blob_sha1": "d6b46c25ba8bf8f40eb85c709db53ab9b36d6404",
+      "path": "drivers/apple-agx/shared/include/apple_agx_uat_table.h",
+      "sha256": "99a45b1fc0cd4fa627a38e0a42f80c76aaa6ea60506ab95bda0b922dc6ea6540"
+    },
+    {
+      "git_blob_sha1": "b3b22e6937164c5f19e827280ab4a8dd3c8892b6",
+      "path": "drivers/apple-agx/shared/include/apple_agx_wddm_feature_contract.h",
+      "sha256": "665abf904e6cda7bac0694921a29626bc01106c1c122bedf99f20944fc901119"
+    },
+    {
+      "git_blob_sha1": "0cbabcf9ab6bbe5aadd9b690b8d887eb8849f2f9",
+      "path": "drivers/apple-agx/shared/include/apple_agx_win32_abi.h",
+      "sha256": "4bb1f3aa77497ba3d353293f63842902ba545784bb9aea90aaf4d23c59a535f5"
+    },
+    {
+      "git_blob_sha1": "e76433458bf0901ee32f698117761cfd4f02291a",
+      "path": "drivers/apple-agx/shared/include/apple_agx_win32_device_info.h",
+      "sha256": "e94911ee739b4d1c949641aeca6d58505d1ba493f0d13727482ca079a8cb0244"
+    },
+    {
+      "git_blob_sha1": "03f596c55251fe70fc594eb6144d907fe0284069",
+      "path": "drivers/apple-agx/shared/include/apple_agx_work_queue.h",
+      "sha256": "d627e97365bd16c8ece2ac4a025b2f58c1c268a9db42250635a7653d3330ff76"
+    },
+    {
+      "git_blob_sha1": "693f9396683d5678b362eb9e92cd17432d0b0f2e",
+      "path": "drivers/apple-agx/shared/include/j313_agx_g2.generated.h",
+      "sha256": "cd5973d7215d03916d26f4021dd0af05bfe99600c0cd4bc81a34f94d390baa19"
+    },
+    {
+      "git_blob_sha1": "6148d380f5e290a7f99a85cfa5c7dbfbd19b1161",
+      "path": "drivers/apple-agx/shared/src/apple_agx_aperture.c",
+      "sha256": "4bcce52733bd5b842d18bfccd3a7a5948dcdd3217914a9073bc2ace41dccbace"
+    },
+    {
+      "git_blob_sha1": "7a796c77fbb64401999cfbef961caa45dc248d85",
+      "path": "drivers/apple-agx/shared/src/apple_agx_asc_transport.c",
+      "sha256": "73ef10f5c6f859f2003c5433f4976e46df71bf3d0c196f31cf36c8e40ab66e6c"
+    },
+    {
+      "git_blob_sha1": "6c9617fe892296829f8176cfd2350880d0eab07f",
+      "path": "drivers/apple-agx/shared/src/apple_agx_backend_memory_bridge.c",
+      "sha256": "c9cbc934698f90c218d403c0149e2aae8d9e30c2642c7f3f902e13c2f483650f"
+    },
+    {
+      "git_blob_sha1": "09b86e1612d6924fd8a9069b08f11094ea93a86f",
+      "path": "drivers/apple-agx/shared/src/apple_agx_backend_runtime.c",
+      "sha256": "2ac658ce4a6f578cb6ccd60c8187c1efe4294cc06a22cbbfe2b81f909acb4f48"
+    },
+    {
+      "git_blob_sha1": "4428aa4422f411b81adbb81ff9c5e295c4e6a17a",
+      "path": "drivers/apple-agx/shared/src/apple_agx_channel_info.c",
+      "sha256": "b655179ddef6d2ee73159ad6f99095f8ed2bfbee468975b7083a585d1c5f0533"
+    },
+    {
+      "git_blob_sha1": "88ee008df11fddf77871ad79ac05c3e03228c554",
+      "path": "drivers/apple-agx/shared/src/apple_agx_channel_memory.c",
+      "sha256": "5d52198d0e85be6eb8aac3935c9aea14b327768a194d9b0899a0c24f681c1fba"
+    },
+    {
+      "git_blob_sha1": "3b1a3189584feabfb9858c73cace20c5b3fa7881",
+      "path": "drivers/apple-agx/shared/src/apple_agx_config_snapshot.c",
+      "sha256": "d5a417acc8694cc49601ea915e7af6a6788d48f32c3f78a602821542b9fe1e2a"
+    },
+    {
+      "git_blob_sha1": "d6bd406629fecafc9c26497fed438116e5baabe9",
+      "path": "drivers/apple-agx/shared/src/apple_agx_context0_broker.c",
+      "sha256": "044bcc891fddfc4514f158161609f768fa9a05a0cdd8ed17db2cc4899127626d"
+    },
+    {
+      "git_blob_sha1": "e7c3eabd993faab2f1e2507942a6b52c754eb939",
+      "path": "drivers/apple-agx/shared/src/apple_agx_device_control.c",
+      "sha256": "dd641af8b8ad0e98004c212c53f1a79bde174972899756cc7f703983f29994c3"
+    },
+    {
+      "git_blob_sha1": "7af41a50434d21a27fd5446d99ca29394ed3c003",
+      "path": "drivers/apple-agx/shared/src/apple_agx_dma_shadow.c",
+      "sha256": "2741f147135ccff5b0763852070d69662b475524c7b96bcbcbabdf32d3ce95ac"
+    },
+    {
+      "git_blob_sha1": "c518438e62834f57038304b094ee254acbd97dc9",
+      "path": "drivers/apple-agx/shared/src/apple_agx_event_allocator.c",
+      "sha256": "b59101cfbd1ccbec6e26c3f1c2a9d2d12922c813f0ab61d1c966d6aeb9e5daba"
+    },
+    {
+      "git_blob_sha1": "99e28a68c9ea2ac17d60415439ca90b2bab7e49f",
+      "path": "drivers/apple-agx/shared/src/apple_agx_exp208_adapter.c",
+      "sha256": "3223b362835d74225fb7d787fa6da3a23e2009795ffb1d817d4e42593a7d8c5c"
+    },
+    {
+      "git_blob_sha1": "c7a3583b277ce8edb37e04d2caaf43f3b5c974db",
+      "path": "drivers/apple-agx/shared/src/apple_agx_exp208_dynamic.c",
+      "sha256": "d815f2cd7e9802f8d1faa26e526cb6ebfa1288c563dc9e4d260be3a9ac90d919"
+    },
+    {
+      "git_blob_sha1": "912b3978ebff303d168ad8e7140c018efe96d75f",
+      "path": "drivers/apple-agx/shared/src/apple_agx_exp208_framebuffer.c",
+      "sha256": "b63a86d88d9dbb0cdadf527dfe047143e2324f0556def00994ef09d90c0b449a"
+    },
+    {
+      "git_blob_sha1": "aac46599f3af651a3309e9434cf1f91ee87957d3",
+      "path": "drivers/apple-agx/shared/src/apple_agx_exp208_gdi.c",
+      "sha256": "51aab01df70c8d7a335ecd8961e874925d092fb2dcc280fb19675147646e681c"
+    },
+    {
+      "git_blob_sha1": "f9ae3b9371b75b7d7dca1df009c859f791730f5e",
+      "path": "drivers/apple-agx/shared/src/apple_agx_firmware.c",
+      "sha256": "ba1aaa863376629dc10f6de1247ac57405f1b9dd82f809fb8d03b111de27ead0"
+    },
+    {
+      "git_blob_sha1": "1f9b67dcc4805b8717cf63d58e289e862f622080",
+      "path": "drivers/apple-agx/shared/src/apple_agx_firmware_provider.c",
+      "sha256": "7baa66cf92434c1f8f7eacef5fe6cfb0ef8cf82dc5390cf533a6db2931cb1c18"
+    },
+    {
+      "git_blob_sha1": "e860837f0cf0a5c5f4eec4088879635fb9aa3acb",
+      "path": "drivers/apple-agx/shared/src/apple_agx_firmware_status.c",
+      "sha256": "1df6784196aba419792d6dc8ae9633559519ee213143e03d95486108aa9d3ad6"
+    },
+    {
+      "git_blob_sha1": "2e097de4763ba0b1a072acf8d2c8282335d70ecc",
+      "path": "drivers/apple-agx/shared/src/apple_agx_fixed_panel.c",
+      "sha256": "7fde0fff82efc86120dcef957c3e07781c8cddbf5b28bbd032d550b761472e2e"
+    },
+    {
+      "git_blob_sha1": "25fdb69d271e00b6b6bf03f2e7454ab08f795d23",
+      "path": "drivers/apple-agx/shared/src/apple_agx_g13_codec.c",
+      "sha256": "d12ccd0565ce5d9fbbca6f06c234f0d4346c6a20400fafc6d92e4b1c4a3d3f87"
+    },
+    {
+      "git_blob_sha1": "b66d445d1c2b2b31bd27470f9fb472e641c8a68f",
+      "path": "drivers/apple-agx/shared/src/apple_agx_g13_compute_work.c",
+      "sha256": "7b5b866256689cf378cb67487d91c21993b712afaeb27b11812b9dd4621e0805"
+    },
+    {
+      "git_blob_sha1": "320252c67422e5629d00b9d7cb49d8032feb7696",
+      "path": "drivers/apple-agx/shared/src/apple_agx_g13_queue_provider.c",
+      "sha256": "90476f65608e0f3ea28ea0213553996645b1cca7f167851d280ef9298d0040c1"
+    },
+    {
+      "git_blob_sha1": "f2e5b8f26a5892af9af29bbcb66e8ce3263aa483",
+      "path": "drivers/apple-agx/shared/src/apple_agx_g13_queue_runtime.c",
+      "sha256": "0a9fee3417b17d133d5b39bc37a291cb63224cd5845549f37cdd74d7fe3030c6"
+    },
+    {
+      "git_blob_sha1": "c47f29cdf4f4b4192e3600eb3cc22f891a71df61",
+      "path": "drivers/apple-agx/shared/src/apple_agx_g4_builder.c",
+      "sha256": "60ff0da36d34c0973007b7f14f036855817374113905819bbeee52cf1bfba76a"
+    },
+    {
+      "git_blob_sha1": "7e10373f6bc9c57809d53c269c680742d3ea988a",
+      "path": "drivers/apple-agx/shared/src/apple_agx_g4_submit.c",
+      "sha256": "f3331443e1f5a10e8e356ef6776d5f0e2e10d80ba9550ad1bf3fba09491ef343"
+    },
+    {
+      "git_blob_sha1": "8c03c11d63886134ca3f11f0f6da0c18a4882b7f",
+      "path": "drivers/apple-agx/shared/src/apple_agx_gdi.c",
+      "sha256": "ed173a625eac2343fd8aa068aaef702749832c21ba4936188a420c00269404b4"
+    },
+    {
+      "git_blob_sha1": "9164209c4e89f25e637f7a74cd232f8118883b51",
+      "path": "drivers/apple-agx/shared/src/apple_agx_gfx_handoff.c",
+      "sha256": "3ab7b89ae00bb61c6f90b8a828d6f1b6089d3943f906ec53accb9495606ef1a7"
+    },
+    {
+      "git_blob_sha1": "5ad219bd889dbacdd89fc417291f623c1239a865",
+      "path": "drivers/apple-agx/shared/src/apple_agx_gpuva_b1_graph.c",
+      "sha256": "823ac684d4f3a0a553b63aa0f7be190d49b3d93937ab71a0c7b50ff50399cf1b"
+    },
+    {
+      "git_blob_sha1": "59686773a127b2098932d052dbb4f278b2273351",
+      "path": "drivers/apple-agx/shared/src/apple_agx_gpuva_b1_roots.c",
+      "sha256": "cdb7952f1591c3de16fe1eeec9a6e524f74dc9b7659cecc501ff150aa9f3e9cd"
+    },
+    {
+      "git_blob_sha1": "e3a67a8522b2335341378161eb0f05f851bf6c7e",
+      "path": "drivers/apple-agx/shared/src/apple_agx_gpuva_b1_submission.c",
+      "sha256": "3429a1d7902f408e96040574ef4a2840f90f3c2f0bf2b2cbc405706a41165a3f"
+    },
+    {
+      "git_blob_sha1": "adec4664b6853003ad1db6c53203bd88e7e16e3f",
+      "path": "drivers/apple-agx/shared/src/apple_agx_gpuva_broker_v5_client.c",
+      "sha256": "e4b4aae135f03c7cc837661c2ab988962399dc5874766e063d3b31babd14407c"
+    },
+    {
+      "git_blob_sha1": "96a32f9f0f458316611bfcb0690653ab2061ab44",
+      "path": "drivers/apple-agx/shared/src/apple_agx_gpuva_g3_graph.c",
+      "sha256": "5a560eae9a1e9d8dbf1b7ae6c665a89835907d30c3be16c93eb9538b9d8c6046"
+    },
+    {
+      "git_blob_sha1": "907580b42ed8d72dd1c856e8c98698c56d8ea4c4",
+      "path": "drivers/apple-agx/shared/src/apple_agx_gpuva_g3_translation.c",
+      "sha256": "54b5431812146af7813b8e5b65a500bad79d29c95eca2af7540cd5c4669493f3"
+    },
+    {
+      "git_blob_sha1": "a4e34edd5adf5e0c440a83b9dc65042d93124d97",
+      "path": "drivers/apple-agx/shared/src/apple_agx_initdata.c",
+      "sha256": "2ea01644ad6cf3deab4012b1c9dba4b8d7081f00113ed83902622479edbd3546"
+    },
+    {
+      "git_blob_sha1": "11fcb822eea1480189dba647bd7d83c0c2a33474",
+      "path": "drivers/apple-agx/shared/src/apple_agx_initdata_memory.c",
+      "sha256": "e59f97beca8183fab958bdd31a6df48947ceb08cabb86372787b8aedac36da83"
+    },
+    {
+      "git_blob_sha1": "552f5f8b4b08becba59b7eb8d8f49f4b4c075a9f",
+      "path": "drivers/apple-agx/shared/src/apple_agx_local_segment.c",
+      "sha256": "702008ba4c18d8930e60c65b005e71e9016fa52a0cdf4d14f18a09642339220c"
+    },
+    {
+      "git_blob_sha1": "c1b29ef3936a10ab85467c4e548cf92f03d52bd7",
+      "path": "drivers/apple-agx/shared/src/apple_agx_mapping.c",
+      "sha256": "7eecd7bc68f2bdd4b9afe775ecc87f4728e00f1f1f97878201593ac70a2b7b2a"
+    },
+    {
+      "git_blob_sha1": "38a17154c8d6b98a6eedc8b5c4a1e32fab95b67f",
+      "path": "drivers/apple-agx/shared/src/apple_agx_memory.c",
+      "sha256": "3f2f80dc830410d0cc246b4fd23633c64fb9c0d2fba89f14446b303240feee0b"
+    },
+    {
+      "git_blob_sha1": "6da4d807d937203e0379008d30f45555b67bec74",
+      "path": "drivers/apple-agx/shared/src/apple_agx_physical_paging.c",
+      "sha256": "6431fb02b72cbffce7a6ff0be14c9d7f14304bebfce9860f0df523b52e4e99b0"
+    },
+    {
+      "git_blob_sha1": "00b4feb2cf2a069de51e63afb6f26b8bb73dbd5a",
+      "path": "drivers/apple-agx/shared/src/apple_agx_physical_topology.c",
+      "sha256": "0c57e55d48788b3e230e7dfac496358f0e7248deca4752d55565ba6b74a9c61c"
+    },
+    {
+      "git_blob_sha1": "a4405a4d16b413aae2c57ede60238ac4fc9d29ee",
+      "path": "drivers/apple-agx/shared/src/apple_agx_platform_composer.c",
+      "sha256": "f14275f50c08d6a7dd9bb03898e22b918508571cb64dcc42d95cf504dca51d7d"
+    },
+    {
+      "git_blob_sha1": "245fb93282fc1f39fe232a6403907ced49170657",
+      "path": "drivers/apple-agx/shared/src/apple_agx_platform_provider.c",
+      "sha256": "700410600d783ed0ebfbd15ea7ac7e343277b96087afe5d7164d1a2b0176b20a"
+    },
+    {
+      "git_blob_sha1": "aabe87eb7fb317b8649426e59198b4801fe8dc97",
+      "path": "drivers/apple-agx/shared/src/apple_agx_platform_transport_validation.c",
+      "sha256": "c114046a8f4e25c0b261de4608190077dd0d420f9e41aa9921f48886800cc086"
+    },
+    {
+      "git_blob_sha1": "89a3751c25f014ec593a4fe9e34181c869307624",
+      "path": "drivers/apple-agx/shared/src/apple_agx_power.c",
+      "sha256": "5246ab21e434fc3cde297255975c5bff0758ef74a6f651c12909e47c42fcd484"
+    },
+    {
+      "git_blob_sha1": "115a052bccd46f15e0c8434ac4012831fd0b5f62",
+      "path": "drivers/apple-agx/shared/src/apple_agx_regionb.c",
+      "sha256": "15e8b86a636e38b41b8e6c51f49121f4145c9ec25eaddf6452d48a824ace81b4"
+    },
+    {
+      "git_blob_sha1": "f493cf2916990a8f4ec4558711563ef5340ee93a",
+      "path": "drivers/apple-agx/shared/src/apple_agx_regionb_memory.c",
+      "sha256": "61e7137461915f090be085c82313a69e71e2be3d98c6bd03c5669c8a740441ef"
+    },
+    {
+      "git_blob_sha1": "4578ce32320cd9a0bba47ec58704ae3dd89e960e",
+      "path": "drivers/apple-agx/shared/src/apple_agx_regionc.c",
+      "sha256": "b776a83c6493cbe47fb0244e7a12cbc46cc1e7d491d00077935357bc60f70210"
+    },
+    {
+      "git_blob_sha1": "6c2130d160ad08e8fe2ada1fa264509aee8c0b27",
+      "path": "drivers/apple-agx/shared/src/apple_agx_relocation.c",
+      "sha256": "8221ddeab04c9d347ec93bf3c9a1459b02ba791195b921cd92960634d98d5a52"
+    },
+    {
+      "git_blob_sha1": "3c1afcafd2c58e3e8aebeae8dce3ac1a797ef8fe",
+      "path": "drivers/apple-agx/shared/src/apple_agx_render_provider.c",
+      "sha256": "1319af74dbf1aac5eca6e8e4cf99055070f290c93ef279cca0894880b013d989"
+    },
+    {
+      "git_blob_sha1": "53886658c01023737e1857dc5d7a21d56bb340be",
+      "path": "drivers/apple-agx/shared/src/apple_agx_render_shared_memory.c",
+      "sha256": "80738ac4b23ec77755bb912ccfa7e866ebbeef93ee44589d6bcb50f33e513b18"
+    },
+    {
+      "git_blob_sha1": "325086773dc7bf01e4227dae79a83cc5d7c9100e",
+      "path": "drivers/apple-agx/shared/src/apple_agx_render_template.generated.c",
+      "sha256": "a7d37b80e2907f5f4f14f5bf12cdd4df9a113db6acb70c64790d59257c02a5d8"
+    },
+    {
+      "git_blob_sha1": "04fad9ebcfeff2c4883caeb83938b48b5f8cd287",
+      "path": "drivers/apple-agx/shared/src/apple_agx_render_template_rebase.c",
+      "sha256": "2c3a1a047a00294b01bc7ad39ab6ffae79df10fd4d9af30bf5bbbcd1691636f8"
+    },
+    {
+      "git_blob_sha1": "da8adb102a0d788015fa38c9a8f56108e5101c08",
+      "path": "drivers/apple-agx/shared/src/apple_agx_render_template_vm_slot.c",
+      "sha256": "597d8004c11a7b33ac61dff0e30792f450b4aa0b49da6d853d1e34accf0e578b"
+    },
+    {
+      "git_blob_sha1": "243fc11d7aff3a47b64ccfc7aed9937f5bc0727c",
+      "path": "drivers/apple-agx/shared/src/apple_agx_residency.c",
+      "sha256": "def866ca1fc38e6572e99fde58241e116faf76433be030462557319725d25887"
+    },
+    {
+      "git_blob_sha1": "e49ad5d378f97027d26f8512fe239807a27b4234",
+      "path": "drivers/apple-agx/shared/src/apple_agx_rtkit.c",
+      "sha256": "dd72f56a84743a91d30474454143cc4a9b4150eff6a4c028a5681eb2df4f49b5"
+    },
+    {
+      "git_blob_sha1": "da96a163769377ed7c3e14f5d2cf0736118dc719",
+      "path": "drivers/apple-agx/shared/src/apple_agx_rtkit_boot.c",
+      "sha256": "fe136aa9878030c17bada89cc6d6802d756553fdb21f11992866af9893ae99f8"
+    },
+    {
+      "git_blob_sha1": "1d26eeaf8dc87650b75218f99e60faccd0f8a039",
+      "path": "drivers/apple-agx/shared/src/apple_agx_rtkit_session.c",
+      "sha256": "dd90549b098f9d9b6ba98df54c4fd6e2f939bb59bd3973f6006c2bc3914a9584"
+    },
+    {
+      "git_blob_sha1": "5a8e2a24703570c62fedc3d3b56fd69a8d258eb3",
+      "path": "drivers/apple-agx/shared/src/apple_agx_scanout.c",
+      "sha256": "39e0ee42012e9864a35d5a64f09ae71fea7310d36a91895c8244832a30a6cd57"
+    },
+    {
+      "git_blob_sha1": "d8fdc2dac28b6b5936d68ffb7a409e447c33a80c",
+      "path": "drivers/apple-agx/shared/src/apple_agx_scheduler.c",
+      "sha256": "423292737353126707b2b8fda65f215595ddb5011d86cf22c290e61fc18db42e"
+    },
+    {
+      "git_blob_sha1": "4ba69af333b27b98632e099708fdcc1679c3a2b0",
+      "path": "drivers/apple-agx/shared/src/apple_agx_software_aperture.c",
+      "sha256": "8b2e9a37064a2cb6a2655ed38c01ea17bd9634ef3ce81cbd41d35f80b77eb80c"
+    },
+    {
+      "git_blob_sha1": "4179a051299c7cdaf62d3d8dc3b03f6b865ead0c",
+      "path": "drivers/apple-agx/shared/src/apple_agx_state.c",
+      "sha256": "e25ed6aff52685badfc993349e2ee7ecde65ce5f8fb64bbd396cdf3165ba59dc"
+    },
+    {
+      "git_blob_sha1": "6b77472ac70579285db4bed1848748ab3714a159",
+      "path": "drivers/apple-agx/shared/src/apple_agx_submission.c",
+      "sha256": "7d8b767361195be31dcbce0401c752d3a541ed4e0bbc6df6e03543810025d918"
+    },
+    {
+      "git_blob_sha1": "08ae4acdcad5070dcdbb9d729e34aadfec17c4f8",
+      "path": "drivers/apple-agx/shared/src/apple_agx_submission_coordinator.c",
+      "sha256": "21cb6f9e3d7682fdd290f09a064ac9740c776dfba62637e7d5f0239266992b2b"
+    },
+    {
+      "git_blob_sha1": "d31241143bf29804c420dac9d933bb45b6b34a66",
+      "path": "drivers/apple-agx/shared/src/apple_agx_uat.c",
+      "sha256": "eaab658c47d3e6b270d393e035002b453b412993abce4ce668432e260a2a169d"
+    },
+    {
+      "git_blob_sha1": "127faff0931fd150a5ec49e875d4152105233e7d",
+      "path": "drivers/apple-agx/shared/src/apple_agx_uat_memory.c",
+      "sha256": "cb0a43ac3878027f6cc42451e9f46d084e97c4f61fbc477a45db7f30d8bc5e51"
+    },
+    {
+      "git_blob_sha1": "2736f33526aa5e511f112987896cd9804b9cea7c",
+      "path": "drivers/apple-agx/shared/src/apple_agx_uat_publication.c",
+      "sha256": "9b8e0a40643ce9f95ebe1b3cb4c9a6264b228e4702196c2d88978d1c752e5a6c"
+    },
+    {
+      "git_blob_sha1": "3a3ae1f5da4ffe1d64701164a8f56e2a0b2dd16c",
+      "path": "drivers/apple-agx/shared/src/apple_agx_uat_table.c",
+      "sha256": "a8d7efcdb3b9b2f258fc9335d38f5be74c515dd90b4360722ec56fde1b73de5f"
+    },
+    {
+      "git_blob_sha1": "05022b8519d4f12542bbaa9a83761b15c0aa4c04",
+      "path": "drivers/apple-agx/shared/src/apple_agx_wddm_feature_contract.c",
+      "sha256": "ad77df1a63e7d331c2fb303b5e22095ce7ee2c18cd21bc023b8eca072fae6c1c"
+    },
+    {
+      "git_blob_sha1": "de1b144b244b9840e1ebf80d1f17231869e8b753",
+      "path": "drivers/apple-agx/shared/src/apple_agx_win32_abi.c",
+      "sha256": "ce95689377c23505526068abcd244ac89b4b15d45352ba166489375afec78097"
+    },
+    {
+      "git_blob_sha1": "ca51d4fb90568bd8024a5bb5d06cf06a70618d0b",
+      "path": "drivers/apple-agx/shared/src/apple_agx_work_queue.c",
+      "sha256": "58cf06a64740e62bad261697482ee42601aa84a9bb432bc2d6df65f98e44bd4b"
+    },
+    {
+      "git_blob_sha1": "fe3cc2fc24c558cb0afbf53bae49e27515baccbf",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_aperture_test.c",
+      "sha256": "18c9570f445b78ac1d7704621593be304f6f03a0871674eac96af36825578b30"
+    },
+    {
+      "git_blob_sha1": "f7cdfa3052bb3460d158c629cf8a1cf7e929a278",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_asc_transport_test.c",
+      "sha256": "72b56b874c0203092a8fc2ad8e7423b79ea1cf383cb711081707671b2db5a1de"
+    },
+    {
+      "git_blob_sha1": "6d9c2dba6261401c15517d6ea72aa7031e08750e",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_backend_memory_bridge_test.c",
+      "sha256": "ed85df62c348df82220c292eb9afc67928e4ad35c7a8b7aa10db01e6c30a09d1"
+    },
+    {
+      "git_blob_sha1": "68e3ca1c5407ebcad3f81c5a71b44fb9b3391a63",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_backend_runtime_test.c",
+      "sha256": "087a90274b3d5207f363c4c8f09ae673f9547488d98018e5b4932cf2b3eb4307"
+    },
+    {
+      "git_blob_sha1": "69d178f2e38182906dc07f99d76308ca3251de7c",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_channel_info_test.c",
+      "sha256": "0abdc684abf4005d0afb674ed6f51bd9c453102951674b864ca5c7daffb0ba9b"
+    },
+    {
+      "git_blob_sha1": "3a5eb9eff272f3b00fa490375dafd16888c01853",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_channel_memory_test.c",
+      "sha256": "57b8287134a3ed50c36f08f733f6a03a0c2ecc7c89b8b4b97024e202b9b91dfc"
+    },
+    {
+      "git_blob_sha1": "fa6e9a747f7fb8cee1d3f33e4f6832bd20fa7487",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_config_snapshot_test.c",
+      "sha256": "a8eec75b0af758101b87e0c9047e1726c843c0721b89db716f3071534dbff40c"
+    },
+    {
+      "git_blob_sha1": "53cc004e5d824f42b4a657bf13c4ff436a0545c2",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_context0_broker_test.c",
+      "sha256": "e993043852e636caac54108acac3d597ed39fee2125df1abc24015897c1e750d"
+    },
+    {
+      "git_blob_sha1": "0778c573cc253f72b87e1137a708475604689dc2",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_device_control_test.c",
+      "sha256": "6b2619f82a7c612e40bfc6aa899df008c94f34dad3f239a796eaf08517d32f17"
+    },
+    {
+      "git_blob_sha1": "2c5437e7dc43467d2b4faa19016b8bf5771a83ac",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_dma_shadow_test.c",
+      "sha256": "ffbe7ea4968687f001068e64e339f76a96a8f62da09effaa4d1d8e4c75afbeb7"
+    },
+    {
+      "git_blob_sha1": "7208d5ea987f154af56dcc55068239331e7dc6cb",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_event_allocator_test.c",
+      "sha256": "e1d70306412e2a506d4dc3f7be7f9c825e3164bb313d47d416aed2231d4fc490"
+    },
+    {
+      "git_blob_sha1": "14eabb4d874fcc230b58389aba16a6d2a1e236ad",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_exp208_dynamic_test.c",
+      "sha256": "c03255c77e2fc81d0bac23dab52a8c1e9473a929a70f87a8eba50bb064e890a6"
+    },
+    {
+      "git_blob_sha1": "b7ccfea65a43aa13a2f96c20ce3e09ee4f87aa3f",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_exp208_gdi_test.c",
+      "sha256": "99c36c3e23e3a91c2aa050fce49f20a71ba1d670fd687dd68d87894fd0608b7a"
+    },
+    {
+      "git_blob_sha1": "64842cc7aca892720a39cadc8c84fe280566fcaf",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_firmware_provider_test.c",
+      "sha256": "f99a0a5b0bb7520fe07411e18486132030200145db7ae24153cac7f5168dc1e8"
+    },
+    {
+      "git_blob_sha1": "debca6b67a4e304ded1c46385993f58b7e375bb9",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_firmware_status_test.c",
+      "sha256": "114fa42e203e5933f35b25491d4e27b6fefef9fa301231cfebf639b9cd3a0841"
+    },
+    {
+      "git_blob_sha1": "83004ca18a5aab90f4490458bf87ca735bd49b31",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_firmware_test.c",
+      "sha256": "2d668b68a4d4693c0143297f5e0bf3b090ca252db0fc1ba413e62f2affad6fad"
+    },
+    {
+      "git_blob_sha1": "5ebbdffa346977a395321faf42012205e881cb9d",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_fixed_panel_test.c",
+      "sha256": "500bc4c80ff362e8cfaf9172645e18ad30f0bb5c9260ca7d4b4db9df11c10c90"
+    },
+    {
+      "git_blob_sha1": "bcfd8dd0bd8ea3fa43d167c068dd12c4b3314251",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_g13_compute_work_test.c",
+      "sha256": "a18e0a5989e5f2f34c1fa37faaf3d297903889baa017221d962ab3a2680d39c8"
+    },
+    {
+      "git_blob_sha1": "245ff705ca8245c46d970159e17249376475c4c8",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_g13_queue_provider_test.c",
+      "sha256": "fabd7fca07758d70fc13ac6592cc5d6f2586b321945a9e993dbab9fa72edd9ab"
+    },
+    {
+      "git_blob_sha1": "8bb8f52e264fb172ea6a7b5a1e1da1cb1d380fd0",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_g13_queue_runtime_test.c",
+      "sha256": "aaaae269e14101b5246ca45e5a3ad5b7557c64948ce724b576fdfbe3c14f5cd0"
+    },
+    {
+      "git_blob_sha1": "7513080fe5d4ff50d2b902fbd00500684b29a14e",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_gdi_test.c",
+      "sha256": "ac3631295e89b9aac95b625144f0fe298acd41081d8b845afcb00f92e43db218"
+    },
+    {
+      "git_blob_sha1": "5186dc99167c146765ad26cc629d35f4415d4e46",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_gfx_handoff_test.c",
+      "sha256": "45a2f3934dbe3204b199f0ce155340dcb46ab90f0751881c4466000c5dbb43e9"
+    },
+    {
+      "git_blob_sha1": "95d77f8f615199bd2de57e92dbdd79718511237a",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_gpuva_b1_completion_test.c",
+      "sha256": "7658c433d955f43c75779f45d202f8473798f8ceaf0dc67a437697e2edfadef8"
+    },
+    {
+      "git_blob_sha1": "97a750be2ebef4af27cf02db86f7276acfd31784",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_gpuva_b1_graph_test.c",
+      "sha256": "ac509979f0d38a77be8d3fd617a20c662d4043c458d0b091788aa062364046c9"
+    },
+    {
+      "git_blob_sha1": "3fab83f4ff01bb5fa1ea9f8ef41345ccfd27dc6b",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_gpuva_b1_roots_test.c",
+      "sha256": "5b4e91994d099499c7c5350311e9040089cfad426de67da8dc2c7c2d13d65d51"
+    },
+    {
+      "git_blob_sha1": "53da8e49ec3deede4a67fbfe58282b9f96143e41",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_gpuva_b1_status_test.c",
+      "sha256": "fe1612ec3a6d7476cc73cb0e82c948c7662ee2da531d8ac08556c1efdcc12625"
+    },
+    {
+      "git_blob_sha1": "8ba932698795f6228ed621c0f2e014fdad472f48",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_gpuva_b1_submission_test.c",
+      "sha256": "5a1db19ea697e3509082110a23918e99becb09c9af89f1ef12722a97dab11b6c"
+    },
+    {
+      "git_blob_sha1": "f2fe62783161e49360e205a29bb3142eb7cb02ac",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_gpuva_broker_v5_client_test.c",
+      "sha256": "26dab28b617de4f88b20fb9c04b208d54626b8a102cafdbfed736eb45f633357"
+    },
+    {
+      "git_blob_sha1": "ece7fb9f2095d6763a6a8c50f12cb39e7326aba9",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_initdata_memory_test.c",
+      "sha256": "efc653f92b1eb3a429a77c733eec761d43166f1384753c9ef01cf2f0266177ec"
+    },
+    {
+      "git_blob_sha1": "9a6630274f1509235f05f0bc383ddb771a794a69",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_initdata_test.c",
+      "sha256": "87a8f45ac22d6c95ac5ccc55a77158b77fc231c50d2b359de61d2334630a7ef8"
+    },
+    {
+      "git_blob_sha1": "97a0727ebec3ed34d62afdd5d70ac22ddff81ce0",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_local_segment_test.c",
+      "sha256": "14ebcdee9ba070ee42a4a029f3e6e1690a91a02014fa92e1fc38a8e8b586b0a5"
+    },
+    {
+      "git_blob_sha1": "f4eb629762653e025278f28d4ed28baf190cb5b0",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_mapping_test.c",
+      "sha256": "0ff90a3de3772d87bd2feb4e7d016c8bbaaaf0001739f3435b55860af0d4c628"
+    },
+    {
+      "git_blob_sha1": "56d7c95b645dba1a034f097a153ae05bcaca35e6",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_memory_test.c",
+      "sha256": "51639f83c691bcf80c29941e34a09031e247eafa0ab3a97b71593db48e9d3e69"
+    },
+    {
+      "git_blob_sha1": "71cba5480db1dc1e01388fd7acee840aecdc08a6",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_physical_paging_test.c",
+      "sha256": "f31c064af2130ae02bf34e850a5528064cff501444da9b5cdb037e746634478f"
+    },
+    {
+      "git_blob_sha1": "b3440cd48093a41907b36bb16b66993a33679bc9",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_physical_topology_test.c",
+      "sha256": "d661843ade59ca30f26b8a36904da02351d258f71e429c22dc2e9927987d5387"
+    },
+    {
+      "git_blob_sha1": "743bc657f821d63b1faeb9d75c6117a4e02e024b",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_platform_composer_test.c",
+      "sha256": "2132265412a908de8994b5f6dea0d3e9c9a2eab1d93c7a5799fdff8820ebeab7"
+    },
+    {
+      "git_blob_sha1": "f76debf828187675a2a84f89d0b44db39e9c8b4e",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_platform_provider_test.c",
+      "sha256": "657aad89f281373e472ab0ff81175eddbace658b8ef1668191d4d9f696c56bc1"
+    },
+    {
+      "git_blob_sha1": "9b2eac2149be352296a17a682ab604088321d9fd",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_platform_transport_validation_test.c",
+      "sha256": "bc06f82acd51ce86c6d17139f83b73ae3d3d4bb2c7c60de9091140e5095bc33d"
+    },
+    {
+      "git_blob_sha1": "6c6288043bdab8e5dfb9b68231bf75770676b48b",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_power_test.c",
+      "sha256": "7acb1297465e7f753a8f92ef9406ca4e966f960b2075a600ef17fe8256dfdb11"
+    },
+    {
+      "git_blob_sha1": "d4df9a07b0a7647d803ac5d887c88df124d6a5a3",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_regionb_memory_test.c",
+      "sha256": "f13c8fb96ed6de23e1ee32ed3e392d745f8cdef150b3a1aae6e81407ea133534"
+    },
+    {
+      "git_blob_sha1": "c2a9c8ef07a1f158025c36b62cfe889e1c68cb70",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_regionb_test.c",
+      "sha256": "77127d488d3c50f35a0755f4b3255b98990201c87053d0944614f3a14d2b2d98"
+    },
+    {
+      "git_blob_sha1": "7b98b40893dfe359d7973bcacb64f07e1999429c",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_regionc_test.c",
+      "sha256": "a7e91258ffefe3ccc4e8743eb2e37d56a5fee952a00a48a27ed791481fdbadf8"
+    },
+    {
+      "git_blob_sha1": "1b3ddcac1b0b7fc86ba2b7fc12169da44b0e1ca4",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_relocation_test.c",
+      "sha256": "b43c41cae3d155a22b64435b1fec0db5ac9330863bcf168efe8de707f63a400c"
+    },
+    {
+      "git_blob_sha1": "2254c286438e47a14338ad25210a89d952340998",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_render_provider_test.c",
+      "sha256": "a9e397b75466b380a39089e02465d1d1be3866457c4c7d66aa413018b7acc2b0"
+    },
+    {
+      "git_blob_sha1": "420fde257e9fdd6265942db87f285f84c25dd87a",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_render_shared_memory_test.c",
+      "sha256": "c3634804fa6fdecbaa38f848b15ef9687dc6a6b1ce8e474b2639ab55a2831350"
+    },
+    {
+      "git_blob_sha1": "6051bdd4b12c08f62f6fb83c10b68d23913635de",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_render_template_rebase_test.c",
+      "sha256": "cd408b194dcc289995b99287e0e03b206980ee1661c6d6b06a75e4b8bdcdb371"
+    },
+    {
+      "git_blob_sha1": "2a65f2cb4516b2d204692c0541626c0e11e87c95",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_render_template_test.c",
+      "sha256": "6be45752198fe471e0b56b9e46ca2a3a01db01a3f2e3c8c33b6fd2ed71415c2f"
+    },
+    {
+      "git_blob_sha1": "a8daa289bcab454849033c9049060b05b7ca5d43",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_render_template_vm_slot_test.c",
+      "sha256": "7f26c3ea5ad78d921e400df531b21403fdc7050bb7145485889e564ce724fd9b"
+    },
+    {
+      "git_blob_sha1": "8914caf997a2d4b154d5169c51f3b335eb22234c",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_residency_test.c",
+      "sha256": "d9bccc68d3b1083a5a6eb16a3af35fd287f96c69a8250487b629b714f97adb2d"
+    },
+    {
+      "git_blob_sha1": "b9581bd8d8af5ac5c37feaefc2dd27e73c116af1",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_rtkit_boot_test.c",
+      "sha256": "00d93d00de800389d14080e159244c8a14ae489615cb2980339ae7a8015baa9d"
+    },
+    {
+      "git_blob_sha1": "ead51bd9bc7bc3cc72e40dd45b82211776df87c4",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_rtkit_session_test.c",
+      "sha256": "47f69aada3cac4fe4ff7d9e923f5a9b8061c77d4194e047652c53d7f9fe4c99a"
+    },
+    {
+      "git_blob_sha1": "b7d136917b3f9ea2797ae251bfb5c60b510fd9c7",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_rtkit_test.c",
+      "sha256": "a21c1be17c25f301d292eeeac0b808173efb23e2ab0697cb47dc2abbe12ce1e3"
+    },
+    {
+      "git_blob_sha1": "8102a08634d7cae7af94547c6b82536e47748e9a",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_scanout_test.c",
+      "sha256": "ebf14b8d08622a7e91aa6e322ffeeec012e4969dfdbe49a5b852ba6fcf3a816d"
+    },
+    {
+      "git_blob_sha1": "18b645fa6d0c79214289254fdccdbbd0fa77dd0c",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_scheduler_test.c",
+      "sha256": "19cac368625b61a7069642b34fe6ed5bb8787ab627e947588c94010d1d3540e7"
+    },
+    {
+      "git_blob_sha1": "1731c68d941116661c0dfb7b74f01ea989bdc3fd",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_software_aperture_test.c",
+      "sha256": "8d9bc8778a26b3ee3a38985a6beb53845df5f04290357ffd8b0e94772689d86f"
+    },
+    {
+      "git_blob_sha1": "3dedd328ce33334e18f0711b472d72352e3aeb7f",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_state_test.c",
+      "sha256": "556dce5a2b1551929ea0b0a40cb403b7e68cc45c2062b5764d300b767594d28d"
+    },
+    {
+      "git_blob_sha1": "00454859e7b05b9648dbd578aa05114b5d151ef0",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_submission_coordinator_test.c",
+      "sha256": "4cfcfbf918388a238fa0634e6f949d5774770e5305de8d435ec2e598baf5d608"
+    },
+    {
+      "git_blob_sha1": "827f681fe3113dc167e12fbff75ec0a036e4d420",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_submission_test.c",
+      "sha256": "bff980e7c4894e955225246f5a6bff0866863e4607a5fd14681966cd689e98c9"
+    },
+    {
+      "git_blob_sha1": "4e6112a80dfba3bcde1c5eb80a67a7417292faeb",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_uat_memory_test.c",
+      "sha256": "0ad11b399ec0e97abd6049294a59f7ce1478bafb4350a6e3c386ac09141da605"
+    },
+    {
+      "git_blob_sha1": "fb1d2b8f79fe8446ac78ddc7d837bb11fac97bf3",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_uat_publication_test.c",
+      "sha256": "94cc4f7a476192a3294b27b012d073cc69edee96b9b48529bc5061922d113b8c"
+    },
+    {
+      "git_blob_sha1": "2e184a01ae0dcdfd79525436c8df9fcfb1d55b89",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_uat_table_test.c",
+      "sha256": "8fb228d67d63dee2f3c465984cd636e9c2257fb22605e6bb1eabf18ec08fc53f"
+    },
+    {
+      "git_blob_sha1": "1002e3d87c7fdc9150d1716221aee0c8da2a5e74",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_uat_test.c",
+      "sha256": "0e2fad0421b8f85fe184200486d82ab2bfb0e34c9ce5c687f5bf391bf8811589"
+    },
+    {
+      "git_blob_sha1": "c82645fb5b5ddf42b2da416a97186eb5d6f81a14",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_wddm_feature_contract_test.c",
+      "sha256": "456014ec4e7d607acad37ce7615db11979ed79d5b35beaaabb0343af389d9d23"
+    },
+    {
+      "git_blob_sha1": "3a30d81a6e2ffae9d0e46411626ce65cc03b7ffa",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_win32_abi_test.c",
+      "sha256": "44e83717538d22a65ccdb2183aec408011a49206da71630bb62cf083a55d9bfe"
+    },
+    {
+      "git_blob_sha1": "d6c5fad766b092a22265f2e2f43f250b9cef988a",
+      "path": "drivers/apple-agx/shared/tests/apple_agx_work_queue_test.c",
+      "sha256": "e2da039620a4e252fd4e051de6c5a9efd67328d434884a6d80611a7a55603f7d"
+    },
+    {
+      "git_blob_sha1": "82b00f1ec7975b14772083ee5f1a3eff597af841",
+      "path": "drivers/apple-agx/windows/AppleAgx.inf",
+      "sha256": "dec93502c569c3f4b1773a4bdded1073018909ba223d542c349d82e084d2c104"
+    },
+    {
+      "git_blob_sha1": "7b061cb490551ad0d05691563678862fc32ecfd0",
+      "path": "drivers/apple-agx/windows/AppleAgx.vcxproj",
+      "sha256": "349279263dca205b2a40816ae3b553e6d5d79b88adc4f74e3f3513a774191531"
+    },
+    {
+      "git_blob_sha1": "e00a82044847a11dfcf0341e3f327e61b3391250",
+      "path": "drivers/apple-agx/windows/include/apple_agx_driver.h",
+      "sha256": "3c4d80712e0d8593ec6ac498d357042b4e7e2a8594b1926cae01ee7f6e0aee0f"
+    },
+    {
+      "git_blob_sha1": "938ccf3768d250307dffbc257e9332b403c7ed7d",
+      "path": "drivers/apple-agx/windows/one-shot/AppleAgxBltProbe.vcxproj",
+      "sha256": "34f125471f71c59e7ff54e5c59deee0f86b4332cab125720c13e07ceffadb92b"
+    },
+    {
+      "git_blob_sha1": "c403ffdafb43ccfe41e5ab7f9ad5d55e44097a8e",
+      "path": "drivers/apple-agx/windows/one-shot/AppleAgxCpuOutputControl.vcxproj",
+      "sha256": "01590ae78243199d90d30585fc32796165457ca0581d384bb51f6f0e8634cce5"
+    },
+    {
+      "git_blob_sha1": "e4e0b265ce3569fe2fe41a88b26b0edc6c60b2d4",
+      "path": "drivers/apple-agx/windows/one-shot/AppleAgxD3dKmRender.vcxproj",
+      "sha256": "efdabd6daa4681729b4690e38130a55a858fc156d968447fa3469e5dcd72e074"
+    },
+    {
+      "git_blob_sha1": "71c5bc9ff801942b30f59476da06db853e8196bd",
+      "path": "drivers/apple-agx/windows/one-shot/AppleAgxDynamicTriangle.vcxproj",
+      "sha256": "7a9ea76621d264df7939b86bbd9aad88116adac6fdb7836652b6f1569f5d3915"
+    },
+    {
+      "git_blob_sha1": "91ba4f4138f616c7bbd702f55bcbe4b598449068",
+      "path": "drivers/apple-agx/windows/one-shot/AppleAgxGdiColorFill.vcxproj",
+      "sha256": "ed55fcb40ebd72c2b16d8a6cd22d828d343e040b81e907b49fc3acbe13868a49"
+    },
+    {
+      "git_blob_sha1": "a8b5b6b8c068b539dd4768af6d2c81d5e5ec1951",
+      "path": "drivers/apple-agx/windows/one-shot/README-gdi-colorfill.md",
+      "sha256": "b85847e0fda00e643ed2e74ae60b6d3de6d6386e546637f310e28e4b89ea3c22"
+    },
+    {
+      "git_blob_sha1": "deb215787fd73576dbd338f409a0421576ca92d4",
+      "path": "drivers/apple-agx/windows/one-shot/agx_kmt_native_bridge.c",
+      "sha256": "a48825e23e3a5372082b908fa40d558a988c4bb5eaf9b093c0a0c85d1e9427ee"
+    },
+    {
+      "git_blob_sha1": "49a4d8afec8735f625a133eccc0058cbfc5261eb",
+      "path": "drivers/apple-agx/windows/one-shot/agx_kmt_native_bridge.h",
+      "sha256": "898055d58e542c33d433cda5f101f2df55bba9dad460290f870423e26590d5f3"
+    },
+    {
+      "git_blob_sha1": "95c2face2b85a5d5053c741c676843826260b83e",
+      "path": "drivers/apple-agx/windows/one-shot/agx_kmt_native_qualification.c",
+      "sha256": "81f412aa1a36ac751ce639bcddf36a77a6beac53e09bd5168d224bbd673ebf76"
+    },
+    {
+      "git_blob_sha1": "07ccb880e3cf4792ea30c02ec7a57fca03fe0656",
+      "path": "drivers/apple-agx/windows/one-shot/agx_kmt_native_qualification.h",
+      "sha256": "d9dbeeb6862d92b6055940d44fd0f8a9f017596f1e0efd7e35b1eec8c18ba4e1"
+    },
+    {
+      "git_blob_sha1": "d6b6ea9e8c040e47b65bef937178676ad29c5749",
+      "path": "drivers/apple-agx/windows/one-shot/agx_r103_allocate_probe.c",
+      "sha256": "3c0c969c2348bc08638b484913f866c9a78be95b3c94f7c25d6fe395def3d9d7"
+    },
+    {
+      "git_blob_sha1": "8ec253cc65b6d07134201015e7ee4c5811e4e47f",
+      "path": "drivers/apple-agx/windows/one-shot/apple_agx_blt_probe.c",
+      "sha256": "4cbc9dbc4b2d0e5c47190c3c32b749f01961f26ce26ac4911cfb29583d8ac45c"
+    },
+    {
+      "git_blob_sha1": "01d5175dad97adecf27fd0e79d42d7e574c73078",
+      "path": "drivers/apple-agx/windows/one-shot/apple_agx_cpu_output_control.c",
+      "sha256": "f84b13561ded9b5aca3f52590e1955b43b904136c5cbe6a0f2c9838122df3c90"
+    },
+    {
+      "git_blob_sha1": "01fc2212b06704c39a1cfbf33f25c30be5b88f1d",
+      "path": "drivers/apple-agx/windows/one-shot/apple_agx_d3d10_standard.c",
+      "sha256": "cafc1df198454b0b0c690128aa7b6f453b775487d1e6a5dd82927874cb45fa99"
+    },
+    {
+      "git_blob_sha1": "405f6f89ea1fe919e1353b5c71b12d9a7ae47345",
+      "path": "drivers/apple-agx/windows/one-shot/apple_agx_d3dkmt_render.c",
+      "sha256": "7b97130ec50c27bba2af8f85ccf4d83f34b53bffbd1374f50326263b8d6901ad"
+    },
+    {
+      "git_blob_sha1": "50a25fa5962135714be1b9a7f101f6c55d9d6363",
+      "path": "drivers/apple-agx/windows/one-shot/apple_agx_dynamic_triangle.c",
+      "sha256": "a876310ad66c18a9481a6c05611fac484fbb2d3cc88610e2f4772d6f41de0610"
+    },
+    {
+      "git_blob_sha1": "4f2cf866631ee1661a02812e0aac2285a84c792a",
+      "path": "drivers/apple-agx/windows/one-shot/apple_agx_gdi_colorfill.c",
+      "sha256": "b3d8049920d8eb9ace0aaff1eeb2bd169711367c99eab597fddb8fb5b9981782"
+    },
+    {
+      "git_blob_sha1": "d806de999877a68d33b5e85e411ad9528afbf3d4",
+      "path": "drivers/apple-agx/windows/scripts/arm-gpuva-experiment.ps1",
+      "sha256": "ab7b468f133ee99c65a2275e80e832c1a7fda8552e90be75be89d3558652824f"
+    },
+    {
+      "git_blob_sha1": "0aa38500c9d1972be9b8db12aead4a64c05a63f1",
+      "path": "drivers/apple-agx/windows/scripts/build-driver.ps1",
+      "sha256": "bb5bb9010d847ad3477d2a0e3c9e0fee02f515c01877303bb30fb0e8b317d6ae"
+    },
+    {
+      "git_blob_sha1": "1828594e612ffd57cb62c37eb4066bc84efa00b9",
+      "path": "drivers/apple-agx/windows/scripts/cycle-lifecycle-driver.ps1",
+      "sha256": "5eb37e18d3904e617dd549b3411bbaba53de1934eef4eac68351d4f0cb8a7e8c"
+    },
+    {
+      "git_blob_sha1": "6b95aa890c2cd29f2c1bd87e865dbf05162121de",
+      "path": "drivers/apple-agx/windows/scripts/durable-transition.ps1",
+      "sha256": "f5908439217462ef960892394feace73e0a9d732d987fc175da0648d0a9811f9"
+    },
+    {
+      "git_blob_sha1": "1e18649cdd2abece90e303aa24c42127e6d7983c",
+      "path": "drivers/apple-agx/windows/scripts/remove-experiment-driver.ps1",
+      "sha256": "88908e7c99d9312240da1334400fa2ca1f8d686ca706d78aaf7f7d168f366e4b"
+    },
+    {
+      "git_blob_sha1": "243ddf19a43c2e7f86418be962e5167e4b370944",
+      "path": "drivers/apple-agx/windows/scripts/remove-staged-driver.ps1",
+      "sha256": "0fac3ad272cf79f9aef8ca56277f65a8adc25ddcc0927181ebf19cab36dbdf77"
+    },
+    {
+      "git_blob_sha1": "74c673491477b613822cc7b5afde59b4138b0235",
+      "path": "drivers/apple-agx/windows/scripts/stage-driver.ps1",
+      "sha256": "3ccf6a9103abe330ebbdaf9233f4f3dfc703d23cc4aaec90f16b98cb4659e5e3"
+    },
+    {
+      "git_blob_sha1": "9d7dd85a8929e3ae42b318d3a725bd74525ca285",
+      "path": "drivers/apple-agx/windows/src/adapter.c",
+      "sha256": "a158379719b183851dcb6195a9222d4b8382db73269ccc7ba420496538cd6532"
+    },
+    {
+      "git_blob_sha1": "4ab574c8f1d46718f811452bde655f14dd96894b",
+      "path": "drivers/apple-agx/windows/src/diagnostics.c",
+      "sha256": "cb433e72ad378146c3726749c69c6ed54681e8bd2351c62e46db55db6792b4f3"
+    },
+    {
+      "git_blob_sha1": "d609263d70a6974dc032c397179e5b61607d8359",
+      "path": "drivers/apple-agx/windows/src/driver.c",
+      "sha256": "0fed62328badec6332cf1f18c8645c831d6684700b8016bb39dd90934dd6f43d"
+    },
+    {
+      "git_blob_sha1": "3e4dc304a8438f33f9cac159eb14fb53574c429b",
+      "path": "drivers/apple-agx/windows/src/driver_diagnostics.c",
+      "sha256": "9f13ff0184672c0b1df496e1ce1c2d635ce999df27271c344050cd4332d7c9b1"
+    },
+    {
+      "git_blob_sha1": "db26b0acbf996e6916ed4888cbace71a7c48de1c",
+      "path": "drivers/apple-agx/windows/src/fail_closed.c",
+      "sha256": "a5ba73e708c8e32d148509bd4ad41874425f94270832239006b5f87c40936775"
+    },
+    {
+      "git_blob_sha1": "c355f44903f56223860c14bc218b12abf3e276b1",
+      "path": "drivers/apple-agx/windows/src/firmware_transport.c",
+      "sha256": "47d6faa3f93e8e2bdcdeeb2115b5338a1a5a3118e9664290c652244cd74f51c7"
+    },
+    {
+      "git_blob_sha1": "f2acdda265469c39c6458a9099d9766db9a67a57",
+      "path": "drivers/apple-agx/windows/src/memory_windows.c",
+      "sha256": "e0f3ee11bdbc1ab0e7bf8b7175e9b549d1e103c2dc2ec2e7a2b1f790713dd8d7"
+    },
+    {
+      "git_blob_sha1": "6a7149acdc4b37281639056faa8704b2c6da0c33",
+      "path": "drivers/apple-agx/windows/src/mmio.c",
+      "sha256": "59b75585b2055ec13328c5128b035f5952ed67657f866b483b381cc0ee60f211"
+    },
+    {
+      "git_blob_sha1": "1e4b5f75716a061e494f6ba752a6795e8c7dd946",
+      "path": "drivers/apple-agx/windows/src/power.c",
+      "sha256": "f33f1805db6692dad71885ed22cc17d1c6344b9ab7b2699a4015ce4498580bd4"
+    },
+    {
+      "git_blob_sha1": "5bed847d939079d5645f8638d74096a4e447ca59",
+      "path": "drivers/apple-agx/windows/src/resources.c",
+      "sha256": "83dd6c2bb65e84aad9321db2f3cc73a8248a08836914327b7800b97e8e5a3e5d"
+    },
+    {
+      "git_blob_sha1": "45d82d0dedd6a44e874fd3cb37ed8340498a7860",
+      "path": "drivers/apple-agx/windows/src/uat_publication_windows.c",
+      "sha256": "59b10238ee03e3a2438c6a321f2158d90621f1e30579ee6d7f182a9fd3ab5ff2"
+    }
+  ],
+  "repository_commit": "26cbd7e6ed728a7be6e1302f0b6ca4c2a2edb917",
+  "source_archive_sha256": "5c63baa1baf58c8e9f3ff01f6a1f96d7b3bebed802a4e591cf007d650e8072d6",
+  "source_scope": "drivers/apple-agx/**"
+}

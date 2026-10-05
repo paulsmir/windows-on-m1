@@ -1,0 +1,32 @@
+[
+  {
+    "file": "drivers/apple-agx/mesa/winsys/agx_win32_gpuva.c",
+    "function": "AgxWin32GpuvaSubmit",
+    "matches_exp862": true
+  },
+  {
+    "file": "drivers/apple-agx/mesa/winsys/agx_win32_gpuva.c",
+    "function": "AgxWin32GpuvaRetire",
+    "matches_exp862": true
+  },
+  {
+    "file": "drivers/apple-agx/mesa/winsys/agx_d3d10_windows.cpp",
+    "function": "AgxD3d10WindowsFlushStatus",
+    "matches_exp862": true
+  },
+  {
+    "file": "drivers/apple-agx/mesa/winsys/agx_d3d10_windows.cpp",
+    "function": "flush_retire",
+    "matches_exp862": true
+  },
+  {
+    "file": "drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c",
+    "function": "AgxWin32AsahiBatchPoll",
+    "matches_exp862": true
+  },
+  {
+    "file": "drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c",
+    "function": "AgxWin32AsahiBatchRelease",
+    "matches_exp862": true
+  }
+]

@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|ARM64"><Configuration>Release</Configuration><Platform>ARM64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{2ACF82EF-8F8B-42CB-8E95-C63549FAE71C}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>UmdContractTest</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType Condition="'$(RuntimeDdiProbeMode)' == 'Driver'">DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <NativeMesaArchitecture Condition="'$(Platform)' == 'ARM64'">arm64</NativeMesaArchitecture>
+    <NativeMesaArchitecture Condition="'$(Platform)' != 'ARM64'">x64</NativeMesaArchitecture>
+    <EnableInf2cat>false</EnableInf2cat>
+    <ApiValidator_Enable>false</ApiValidator_Enable>
+    <PinnedWindowsKitInclude Condition="'$(PinnedWindowsKitInclude)' == ''">C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0</PinnedWindowsKitInclude>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>..\include;..\..\include;..\..\..\shared\include;..\..\..\mesa\winsys;$(PinnedWindowsKitInclude)\um;$(PinnedWindowsKitInclude)\shared;$(PinnedWindowsKitInclude)\km;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>UNICODE;_UNICODE;DXGKDDI_INTERFACE_VERSION=DXGKDDI_INTERFACE_VERSION_WDDM3_0;APPLE_AGX_UMD_ADMISSION_TRACE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WarningLevel>Level4</WarningLevel>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <SDLCheck>true</SDLCheck>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>gdi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="umd_contract_windows.c" />
+    <ClCompile Include="..\src\umd_draw_composer.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
+    <ClCompile Include="..\src\umd_asahi_batch_adapter.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
+    <ClCompile Include="..\..\src\apple_agx_dynamic_job.c" />
+    <ClCompile Include="..\..\src\render_win32_transport.c" />
+    <ClCompile Include="..\..\tests\render_win32_transport_test.c">
+      <PreprocessorDefinitions>main=AdmissionWin32ReferenceContractTests;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <UndefinePreprocessorDefinitions>NDEBUG;%(UndefinePreprocessorDefinitions)</UndefinePreprocessorDefinitions>
+    </ClCompile>
+    <ClCompile Include="..\src\umd_runtime_device.c">
+      <CompileAs>CompileAsCpp</CompileAs>
+    </ClCompile>
+    <ClCompile Include="..\src\umd_win32_screen.c">
+      <CompileAs>CompileAsCpp</CompileAs>
+    </ClCompile>
+    <ClCompile Include="..\src\umd_resource_lifetime.c" />
+    <ClCompile Include="..\src\direct_flip_contract.c" />
+    <ClCompile Include="..\..\src\render_allocation.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_win32_abi.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_g13_compute_work.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_g13_codec.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_g13_queue_runtime.c" />
+    <ClCompile Include="..\..\..\shared\tests\apple_agx_g13_queue_runtime_test.c" />
+    <ClCompile Include="..\..\..\mesa\winsys\agx_win32_transport.c" />
+    <ClCompile Include="..\..\..\mesa\winsys\agx_win32_screen.c" />
+    <ClCompile Include="..\..\..\mesa\winsys\agx_win32_native_bo.c" />
+    <ClCompile Include="..\..\..\mesa\winsys\agx_win32_construction_address.c" />
+    <ClCompile Include="..\..\..\mesa\winsys\agx_win32_native_device.c" />
+    <ClCompile Include="..\..\..\mesa\winsys\agx_win32_reloc_capture.c" />
+  </ItemGroup>
+  <ItemDefinitionGroup Condition="'$(EnableMesaPipeFactoryTest)' == 'true'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>..\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>/external:I"$(MesaSourceRoot)\include" /external:I"$(MesaSourceRoot)\src" /external:I"$(MesaSourceRoot)\src\gallium\include" /external:I"$(MesaSourceRoot)\src\gallium\auxiliary" /external:I"$(MesaGeneratedRoot)\src" %(AdditionalOptions)</AdditionalOptions>
+      <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+      <PreprocessorDefinitions>ADMISSION_UMD_PIPE_FACTORY_TEST=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(EnableMesaD3d10FrontendTest)' == 'true'">
+    <ClCompile><PreprocessorDefinitions>ADMISSION_UMD_D3D10_FRONTEND_TEST=1;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+  </ItemDefinitionGroup>
+  <!-- Real state-emitter test is retained separately: it requires the full
+       native runtime/compiler link closure, not merely pool/pipeline objects. -->
+  <ItemDefinitionGroup Condition="'$(EnableNativeStateTest)' == 'true'">
+    <ClCompile><PreprocessorDefinitions>ADMISSION_UMD_NATIVE_STATE_TEST=1;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+  </ItemDefinitionGroup>
+  <Target Name="ValidateNativeStateTest" BeforeTargets="PrepareForBuild"
+          Condition="'$(EnableNativeStateTest)' == 'true' and '$(EnableNativePoolTest)' != 'true'">
+    <Error Text="EnableNativeStateTest requires EnableNativePoolTest and the full native runtime link closure." />
+  </Target>
+  <ItemDefinitionGroup Condition="'$(EnableNativePoolTest)' == 'true' and '$(EnableNativeRuntimeTest)' != 'true'">
+    <ClCompile><PreprocessorDefinitions>ADMISSION_UMD_NATIVE_POOL_TEST=1;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+    <Link><AdditionalDependencies>$(NativeObjectRoot)\pool.obj;$(NativeObjectRoot)\agx_win32_asahi_bo.obj;$(NativeObjectRoot)\agx_win32_asahi_capture.obj;$(NativeObjectRoot)\agx_win32_asahi_pool_test.obj;C:\Users\pauls\AD04-fullcompiler-001\nir-$(NativeMesaArchitecture)\src\util\libmesa_util.a;C:\Users\pauls\AD04-fullcompiler-001\nir-$(NativeMesaArchitecture)\src\c11\impl\libmesa_util_c11.a;synchronization.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
+  </ItemDefinitionGroup>
+  <ItemGroup Condition="'$(EnableNativePoolTest)' == 'true' and '$(EnableNativeRuntimeTest)' != 'true'">
+    <Object Include="$(NativeObjectRoot)\agx_state.obj" Condition="'$(EnableNativeStateTest)' == 'true'" />
+    <Object Include="$(NativeObjectRoot)\agx_win32_asahi_pipeline.obj" />
+    <Object Include="$(NativeObjectRoot)\agx_win32_asahi_pipeline_test.obj" />
+    <Object Include="$(NativeObjectRoot)\native_pipeline_contract.obj" />
+    <Object Include="$(NativeObjectRoot)\native_batch_encoder_contract.obj" />
+
+  </ItemGroup>
+  <ItemDefinitionGroup Condition="'$(EnableNativePoolTest)' == 'true' and '$(EnableNativeRuntimeTest)' != 'true'">
+    <Link><OptimizeReferences>true</OptimizeReferences></Link>
+  </ItemDefinitionGroup>
+  <ItemGroup Condition="'$(EnableMesaPipeFactoryTest)' == 'true'">
+    <ClCompile Include="..\..\..\mesa\winsys\agx_d3d10_windows.cpp" />
+  </ItemGroup>
+  <Import Project="$(NativeRuntimeProps)" Condition="'$(EnableNativeRuntimeTest)' == 'true'" />
+  <ItemDefinitionGroup Condition="'$(EnableNativeRuntimeTest)' == 'true'">
+    <ClCompile><PreprocessorDefinitions>ADMISSION_UMD_NATIVE_POOL_TEST=1;ADMISSION_UMD_NATIVE_RUNTIME_TEST=1;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+    <Link><OptimizeReferences>true</OptimizeReferences></Link>
+  </ItemDefinitionGroup>
+  <ItemGroup Condition="'$(EnableNativeRuntimeTest)' == 'true'">
+    <ClCompile Include="..\..\..\windows\one-shot\agx_kmt_native_qualification.c">
+      <PreprocessorDefinitions>AGX_KMT_NATIVE_QUALIFICATION_TEST=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ClCompile Include="..\..\..\windows\one-shot\agx_kmt_native_bridge.c">
+      <CompileAs>CompileAsCpp</CompileAs>
+      <PreprocessorDefinitions>AGX_KMT_NATIVE_BRIDGE_TEST=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="..\..\src\render_dynamic_overlay.c" />
+    <ClCompile Include="..\..\src\render_dynamic_dma.c" />
+    <ClCompile Include="..\..\src\render_submission.c" />
+    <ClCompile Include="..\..\src\render_backend_image.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_render_template.generated.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_render_template_rebase.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_relocation.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_exp208_gdi.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_exp208_framebuffer.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_gdi.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_memory.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_exp208_adapter.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_exp208_dynamic.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\src\umd_asahi_owner.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
+  </ItemGroup>
+  <!-- Opt-in diagnostic targets in this existing test project; no production
+       UMD or native runtime sources are linked into the negotiation probe. -->
+  <ItemGroup Condition="'$(RuntimeDdiProbeMode)' != ''">
+    <ClCompile Remove="@(ClCompile)" />
+    <ClCompile Include="runtime_ddi_probe.c">
+      <PreprocessorDefinitions Condition="'$(RuntimeDdiProbeMode)' == 'Driver'">AGX_RUNTIME_PROBE_DRIVER=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup Condition="'$(GpuvaContractMode)' == 'true'">
+    <ClCompile Remove="@(ClCompile)" />
+    <ClCompile Include="umd_gpuva_contract_windows.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
+    <ClCompile Include="..\src\umd_gpuva_windows.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
+    <ClCompile Include="..\..\..\mesa\winsys\agx_win32_gpuva.c" />
+  </ItemGroup>
+  <ItemDefinitionGroup Condition="'$(GpuvaContractMode)' == 'true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_GPUVA_WINSYS=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <UndefinePreprocessorDefinitions>NDEBUG;%(UndefinePreprocessorDefinitions)</UndefinePreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup Condition="'$(R145ScreenMode)' == 'true'">
+    <ClCompile Remove="@(ClCompile)" />
+    <ClCompile Include="..\..\..\..\..\tests\r145_screen_replay_windows.cpp" />
+    <ClCompile Include="..\..\src\render_allocation.c" />
+  </ItemGroup>
+  <ItemDefinitionGroup Condition="'$(R145ScreenMode)' == 'true'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>..\src;$(R145ReplayIncludeDirectory);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>APPLE_AGX_GPUVA_WINSYS=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <UndefinePreprocessorDefinitions>NDEBUG;%(UndefinePreprocessorDefinitions)</UndefinePreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup Condition="'$(RuntimeDdiProbeMode)' == 'Driver' and '$(RuntimeProbeKmtSource)' != ''">
+    <ClCompile Include="$(RuntimeProbeKmtSource)">
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+  </ItemGroup>
+  <ItemDefinitionGroup Condition="'$(RuntimeDdiProbeMode)' == 'Client'">
+    <Link><AdditionalDependencies>d3d11.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
+  </ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

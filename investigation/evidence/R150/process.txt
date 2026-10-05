@@ -1,0 +1,133 @@
+
+************* Preparing the environment for Debugger Extensions Gallery repositories **************
+   ExtensionRepository : Implicit
+   UseExperimentalFeatureForNugetShare : true
+   AllowNugetExeUpdate : true
+   NonInteractiveNuget : true
+   AllowNugetMSCredentialProviderInstall : true
+   AllowParallelInitializationOfLocalRepositories : true
+
+   EnableRedirectToV8JsProvider : false
+
+   -- Configuring repositories
+      ----> Repository : LocalInstalled, Enabled: true
+      ----> Repository : UserExtensions, Enabled: true
+
+>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.000 seconds
+
+************* Waiting for Debugger Extensions Gallery to Initialize **************
+
+>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.015 seconds
+   ----> Repository : UserExtensions, Enabled: true, Packages count: 0
+   ----> Repository : LocalInstalled, Enabled: true, Packages count: 29
+
+Microsoft (R) Windows Debugger Version 10.0.26100.6584 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+
+Loading Dump File [C:\agx\r150-dump\Kernel-MEMORY.DMP]
+Kernel Bitmap Dump File: Kernel address space is available, User address space may not be available.
+
+Dump failed with error code (0x0), and reports completion of: 97%
+
+Last line in dump stack log: Dump completed successfully.
+
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*C:\Symbols*https://msdl.microsoft.com/download/symbols
+OK                                             C:\Users\pauls\AD04-persistent-dwm-next\drivers\apple-agx\render-admission\ARM64\Release
+Symbol search path is: srv*C:\Symbols*https://msdl.microsoft.com/download/symbols;C:\Users\pauls\AD04-persistent-dwm-next\drivers\apple-agx\render-admission\ARM64\Release
+Executable search path is:
+Windows 10 Kernel Version 26100 MP (8 procs) Free ARM 64-bit (AArch64)
+Product: WinNt, suite: TerminalServer SingleUserTS
+Edition build lab: 26100.1.arm64fre.ge_release.240331-1435
+Kernel base = 0xfffff802`f8000000 PsLoadedModuleList = 0xfffff802`f8d6ac50
+Debug session time: Mon Sep 28 13:06:50.548 2026 (UTC + 2:00)
+System Uptime: 0 days 0:00:29.063
+Loading Kernel Symbols
+...............................................................
+.........................................................Page 958782 not present in the dump file. Type ".hh dbgerr004" for details
+.......
+...................................
+Loading User Symbols
+
+Loading unloaded module list
+........
+For analysis of this file, run !analyze -v
+0: kd> cdb: Reading initial command 'dt dxgkrnl!DXGPROCESS ffff998fc8789670; !process ffff998fc8974080 0; dt -r1 AppleAgxRenderAdmission!_ADMISSION_OBJECT_DEVICE ffff998fcb80ee10; dt AppleAgxRenderAdmission!_ADMISSION_RENDER_CORRELATION_STATE ffff998fcaaeb8f8; .dumpdebug; q'
+Symbol dxgkrnl!DXGPROCESS not found.
+PROCESS ffff998fc8974080
+    SessionId: none  Cid: 04c4    Peb: 6c59410000  ParentCid: 034c
+    DirBase: 96a93c000  ObjectTable: ffffe2078f889a80  HandleCount: 774.
+    Image: LogonUI.exe
+
+   +0x000 Magic            : 0x444f4152
+   +0x004 Flags            : 0
+   +0x008 Adapter          : 0xffff998f`caa70000 _ADMISSION_OBJECT_ADAPTER
+      +0x000 Magic            : 0x414f4152
+      +0x004 Started          : 1
+      +0x008 DeviceCount      : 9
+   +0x010 RuntimeHandle    : 0xffffe207`904287e0 Void
+   +0x018 ContextCount     : 1
+   +0x01c AllocationCount  : 0x30
+   +0x000 Version          : 3
+   +0x004 Bytes            : 0x250
+   +0x008 CandidateBuild   : 0x360
+   +0x00c BootGeneration   : 0xeb2e7b5
+   +0x010 Count            : 0
+   +0x014 Overflow         : 0
+   +0x018 CapturedGeneration : 0
+   +0x01c ExportedGeneration : 0
+   +0x020 ExportAttempted  : 0
+   +0x024 ExportStatus     : 0
+   +0x028 Durable          : 0
+   +0x02c Reserved         : 0
+   +0x030 Slot             : [2] _ADMISSION_RENDER_CORRELATION_SLOT
+----- 64 bit Kernel Bitmap Dump Analysis - Kernel address space is available,
+      User address space may not be available.
+
+DUMP_HEADER64:
+MajorVersion        0000000f
+MinorVersion        000065f4
+KdSecondaryVersion  00000002
+DirectoryTableBase  00000000`001ad000
+PfnDataBase         ffff9380`00000000
+PsLoadedModuleList  fffff802`f8d6ac50
+PsActiveProcessHead fffff802`f8d7b520
+MachineImageType    0000aa64
+NumberProcessors    00000008
+BugCheckCode        00000116
+BugCheckParameter1  ffff998f`cc15e010
+BugCheckParameter2  fffff802`f6ef6cb0
+BugCheckParameter3  ffffffff`c0000483
+BugCheckParameter4  00000000`00000003
+KdDebuggerDataBlock fffff802`f8c00f00
+SecondaryDataState  00000000
+ProductType         00000001
+SuiteMask           00000110
+Attributes          00021000
+
+BITMAP_DUMP:
+DumpOptions         00000000
+HeaderSize          13e000
+BitmapSize          9df708
+Pages               21b49
+
+KiProcessorBlock at fffff802`f8e0b780
+  8 KiProcessorBlock entries:
+  fffff802`ef0e0980 ffffbf81`612f1980 ffffbf81`61368980 ffffbf81`613e3980 ffffbf81`6145a980 ffffbf81`614d1980 ffffbf81`61548980 ffffbf81`615d1980
+quit:
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\atlmfc.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\ObjectiveC.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\concurrency.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\cpp_rest.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Kernel.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\stl.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Data.Json.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Media.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\windows.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\winrt.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Usb4Kd.natvis'

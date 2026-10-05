@@ -1,0 +1,10 @@
+{
+  "tests/g4_mesa_pool_residency_replay.c": "82989349d2f0e9bcd6fb90489b44e832f9538fa70c823e4cba3ccbe0a051b1dc",
+  "tests/test_g4_mesa_pool_residency_replay.py": "9405aec8ef1bcab890009ad9676ec0d7b3a5efcf07f795b9a34b6717429aee29",
+  "investigation/analysis/R148-submit.md": "4f0a8f6fbeeb909a7d49f645e3e3f203442e6ca0a90c9067c71de1ab73e5ef3f",
+  "investigation/evidence/R148-submit/pool-residency-red.txt": "ce7ea4e951de7dcfaba4462510065cd9fe22f29a86bbfe54e4641e0f8adbf21d",
+  "investigation/evidence/R148-submit/pool-residency-green.txt": "330f41c438c5ac26b54f021d8dd47453aabffc7a9857f4d2d1e13dca747bf527",
+  "investigation/evidence/R148-submit/query-v3-red.txt": "6c027db2bf4411381336234c056c32cda7182a0f71f2c4f6733fa22a51c01f2a",
+  "investigation/evidence/R148-submit/query-v3-green.txt": "79ffe8b869e99625226627cba504f332c08d9bc66118d03b773dc8094ea0505f",
+  "docs/superpowers/plans/2026-09-28-r148-query-v3-diagnostic.md": "8af6d3fb785b15bffd6bb7d9fb3ec09ca0b8d0f3c03961ab0983a41e7c4dda82"
+}

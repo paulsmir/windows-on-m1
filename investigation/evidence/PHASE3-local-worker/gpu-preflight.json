@@ -1,0 +1,10 @@
+{
+  "local_model": "devstral-small-2:24b-instruct-2512-q4_K_M",
+  "gpu_preflight": "PASS",
+  "size_total": 14919579729,
+  "size_vram": 14919579729,
+  "gpu_residency_ratio": 1.0,
+  "num_ctx": 4096,
+  "processor": "GPU-resident per api/ps",
+  "keep_alive": "10m"
+}

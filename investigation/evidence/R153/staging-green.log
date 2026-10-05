@@ -1,0 +1,14 @@
+test_exp208_dynamic_scalar_contract (test_apple_agx_exp208_dynamic.AppleAgxExp208DynamicTest.test_exp208_dynamic_scalar_contract) ... ok
+test_completion_uses_bound_output_snapshot_after_release (test_apple_agx_render_backend_image.AppleAgxRenderBackendImageTests.test_completion_uses_bound_output_snapshot_after_release) ... ok
+test_exact_exp208_image_is_materialized_rebased_and_relocated (test_apple_agx_render_backend_image.AppleAgxRenderBackendImageTests.test_exact_exp208_image_is_materialized_rebased_and_relocated) ... ok
+test_production_lifecycle_borrows_the_memory_owner_tail (test_apple_agx_render_backend_image.AppleAgxRenderBackendImageTests.test_production_lifecycle_borrows_the_memory_owner_tail) ... ok
+test_real_materializer_manager_switch (test_r153_manager_lifetime.ManagerLifetimeTests.test_real_materializer_manager_switch) ... ok
+test_production_idle_and_completion_callbacks (test_r153_manager_callbacks.ManagerCallbackTests.test_production_idle_and_completion_callbacks) ... ok
+test_64k_replacement_retires_old_cpu_shadow (test_g4_submit_virtual_replay.G4SubmitVirtualReplay.test_64k_replacement_retires_old_cpu_shadow) ... ok
+test_native_submit_queues_only_after_graph_and_image_bind (test_g4_submit_virtual_replay.G4SubmitVirtualReplay.test_native_submit_queues_only_after_graph_and_image_bind) ... g4_submit_virtual_replay: PASS
+ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 4.087s
+
+OK

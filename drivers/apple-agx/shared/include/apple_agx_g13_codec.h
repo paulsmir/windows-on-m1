@@ -1,0 +1,89 @@
+#ifndef APPLE_AGX_G13_CODEC_H
+#define APPLE_AGX_G13_CODEC_H
+
+#include "apple_agx_backend_runtime.h"
+
+#define APPLE_AGX_G13_RUN_MESSAGE_SIZE 0x30u
+#define APPLE_AGX_G13_EVENT_MESSAGE_SIZE 0x38u
+#define APPLE_AGX_G13_EVENT_COUNT 128u
+#define APPLE_AGX_G13_JOINED_QUEUE_COUNT 2u
+#define APPLE_AGX_G13_RING_SLOT_SIZE 8u
+#define APPLE_AGX_G13_RING_CAPACITY 0x500u
+#define APPLE_AGX_G13_GPU_DONE_POINTER_OFFSET 0x00u
+#define APPLE_AGX_G13_GPU_READ_POINTER_OFFSET 0x30u
+#define APPLE_AGX_G13_CPU_WRITE_POINTER_OFFSET 0x40u
+
+typedef signed int APPLE_AGX_G13_S32;
+
+typedef enum _APPLE_AGX_G13_QUEUE_TYPE {
+  AppleAgxG13QueueTa = 0,
+  AppleAgxG13Queue3d = 1,
+  AppleAgxG13QueueCompute = 2,
+} APPLE_AGX_G13_QUEUE_TYPE;
+
+typedef enum _APPLE_AGX_G13_EVENT_KIND {
+  AppleAgxG13EventFault = 0,
+  AppleAgxG13EventFlag = 1,
+  AppleAgxG13EventTimeout = 4,
+  AppleAgxG13EventGrowTvb = 7,
+  AppleAgxG13EventChannelError = 8,
+} APPLE_AGX_G13_EVENT_KIND;
+
+typedef struct _APPLE_AGX_G13_RUN_COMMAND {
+  APPLE_AGX_BACKEND_U32 QueueType;
+  APPLE_AGX_BACKEND_U64 CommandQueueAddress;
+  APPLE_AGX_BACKEND_U32 Head;
+  APPLE_AGX_BACKEND_U32 EventNumber;
+  APPLE_AGX_BACKEND_U32 NewQueue;
+  APPLE_AGX_BACKEND_U64 Timestamp;
+} APPLE_AGX_G13_RUN_COMMAND;
+
+typedef struct _APPLE_AGX_G13_JOINED_RUN {
+  APPLE_AGX_BACKEND_U32 QueueOrder[APPLE_AGX_G13_JOINED_QUEUE_COUNT];
+  unsigned char Messages[APPLE_AGX_G13_JOINED_QUEUE_COUNT]
+                        [APPLE_AGX_G13_RUN_MESSAGE_SIZE];
+} APPLE_AGX_G13_JOINED_RUN;
+
+typedef struct _APPLE_AGX_G13_QUEUE_PUBLICATION {
+  APPLE_AGX_BACKEND_U32 RingIndex;
+  APPLE_AGX_BACKEND_U32 NextWritePointer;
+  APPLE_AGX_BACKEND_U32 ExpectedDonePointer;
+  unsigned char RingSlot[APPLE_AGX_G13_RING_SLOT_SIZE];
+} APPLE_AGX_G13_QUEUE_PUBLICATION;
+
+typedef struct _APPLE_AGX_G13_EVENT {
+  APPLE_AGX_BACKEND_U32 Kind;
+  APPLE_AGX_BACKEND_BOOL TerminalFault;
+  APPLE_AGX_BACKEND_BOOL RequiresHandler;
+  APPLE_AGX_BACKEND_U64 Firing[2];
+  APPLE_AGX_BACKEND_U64 TimeoutCounter;
+  APPLE_AGX_G13_S32 TimeoutStampIndex;
+  APPLE_AGX_BACKEND_U32 GrowTvbVmId;
+  APPLE_AGX_BACKEND_U32 GrowTvbBufferManagerId;
+  APPLE_AGX_BACKEND_U32 GrowTvbCounter;
+} APPLE_AGX_G13_EVENT;
+
+APPLE_AGX_BACKEND_BOOL AppleAgxG13EncodeRunCommand(
+    const APPLE_AGX_G13_RUN_COMMAND *Command,
+    unsigned char Message[APPLE_AGX_G13_RUN_MESSAGE_SIZE]);
+APPLE_AGX_BACKEND_BOOL AppleAgxG13PrepareQueuePublication(
+    APPLE_AGX_BACKEND_U64 WorkCommandAddress,
+    APPLE_AGX_BACKEND_U32 CurrentWritePointer,
+    APPLE_AGX_G13_QUEUE_PUBLICATION *Publication);
+APPLE_AGX_BACKEND_BOOL AppleAgxG13BuildJoinedRun(
+    const APPLE_AGX_G13_RUN_COMMAND *D3,
+    const APPLE_AGX_G13_RUN_COMMAND *Ta,
+    APPLE_AGX_G13_JOINED_RUN *Joined);
+APPLE_AGX_BACKEND_BOOL AppleAgxG13DecodeEvent(
+    const unsigned char *Message, APPLE_AGX_BACKEND_U32 MessageBytes,
+    APPLE_AGX_G13_EVENT *Event);
+APPLE_AGX_BACKEND_BOOL AppleAgxG13EventHasNumber(
+    const APPLE_AGX_G13_EVENT *Event, APPLE_AGX_BACKEND_U32 EventNumber);
+APPLE_AGX_BACKEND_BOOL AppleAgxG13CompletionSatisfied(
+    const APPLE_AGX_G13_EVENT *Event, APPLE_AGX_BACKEND_U32 EventNumber,
+    APPLE_AGX_BACKEND_U32 ObservedStamp,
+    APPLE_AGX_BACKEND_U32 ExpectedStamp,
+    APPLE_AGX_BACKEND_U32 ObservedDonePointer,
+    APPLE_AGX_BACKEND_U32 ExpectedDonePointer);
+
+#endif

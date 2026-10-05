@@ -1,0 +1,10 @@
+{
+  "preparation_exit_code": 0,
+  "llvm_version": "20.1.8",
+  "target": "x86_64-pc-windows-msvc",
+  "installed_dir": "C:\\Users\\pauls\\AD04-asahi-windows-compiler\\llvm20\\bin",
+  "archive_sha256": "3197846a2b19063687dd56e93e34cd941e3548d907f23a6131571321bdf9fe7b",
+  "method": "SHA-verified official archive extracted with 7-Zip; no global installer",
+  "clang_source_compilation_executed": false,
+  "hardware_experiment_executed": false
+}

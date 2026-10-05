@@ -77,6 +77,8 @@ uint32_t AiGpioPinOffset(uint32_t pin);
 uint32_t AiGpioIrqAckOffset(uint32_t pin, uint32_t group);
 uint32_t AiGpioIrqAckMask(uint32_t pin);
 uint32_t AiGpioIrqMode(uint32_t group, uint32_t mode);
+uint32_t AiGpioInputInterruptValue(uint32_t current, uint32_t group,
+                                    int enabled);
 int AiSpiRegisterRangeValid(uint32_t offset, size_t width, size_t resource_size);
 int AiSpiTransferLengthValid(size_t length);
 int AiSpiDeadlineExpired(uint64_t now_qpc, uint64_t deadline_qpc);

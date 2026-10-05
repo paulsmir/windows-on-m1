@@ -1,0 +1,49 @@
+{
+  "source": "manager-snapshots.txt plus backend-state.txt; matched private PDB",
+  "native_sequence": 81,
+  "ta_written": 125,
+  "ta_done": 125,
+  "d3_written": 162,
+  "d3_done": 162,
+  "ta_stamp": "0x7a005100",
+  "d3_stamp": "0x3d005100",
+  "last_native_fence": 36174,
+  "last_queue_completion": "Success",
+  "native_completions_supported": 81,
+  "count_basis": "D3 persistent barrier/work pairs 162/2, native sequence81, current stamps and final success agree; no per-job owner history retained",
+  "surviving_completed_managers": [
+    {
+      "process_owner": 8,
+      "saved_fence": 1031,
+      "pending_fence": 0,
+      "valid": true
+    },
+    {
+      "process_owner": 13,
+      "saved_fence": 36174,
+      "pending_fence": 0,
+      "valid": true
+    }
+  ],
+  "distinct_process_owners_proven": 2,
+  "scheduler_active_fence": 36357,
+  "scheduler_completed_fence": 36356,
+  "render_packet": "Active",
+  "bound_fence": 36357,
+  "job_fence": 0,
+  "job_ready": false,
+  "backend_phase": "Ready",
+  "queue_provider_phase": "Created",
+  "queue_runtime_phase": "Ready",
+  "queue_pending_fence": 0,
+  "g3_active_process": null,
+  "g3_active_fence": 0,
+  "completion_context": null,
+  "workers_active": 0,
+  "context_token": "0xffff9b0acb092170",
+  "limitations": [
+    "Snapshot is after failed TDR recovery; source-order attribution remains offline work",
+    "Some reserved arena pages are absent from kernel dump",
+    "Saved process IDs are driver process owners; OS PID mapping not derived"
+  ]
+}

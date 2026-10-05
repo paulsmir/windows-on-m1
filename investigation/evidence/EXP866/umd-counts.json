@@ -1,0 +1,37 @@
+{
+  "bytes": 101378,
+  "nul_bytes": 162,
+  "lines": 942,
+  "reject_seterror_count": 4,
+  "functions": {
+    "ResourceCopyRegion": 3,
+    "DrawIndexedInstanced": 1
+  },
+  "errors": [
+    "reject-seterror fn=ResourceCopyRegion line=1321 hr=0x80004005 pid=5272 tid=5500",
+    "reject-seterror fn=ResourceCopyRegion line=1321 hr=0x80004005 pid=1228 tid=2620",
+    "reject-seterror fn=ResourceCopyRegion line=1321 hr=0x80004005 pid=1228 tid=2620",
+    "reject-seterror fn=DrawIndexedInstanced line=297 hr=0x80004005 pid=5716 tid=6248"
+  ],
+  "pids": [
+    1228,
+    1236,
+    1996,
+    5272,
+    5360,
+    5700,
+    5716
+  ],
+  "tail": [
+    "g4-create-device-enter hr=0x00000000 pid=1228 tid=7580",
+    "g4-create-context-virtual-cb hr=0x00000000 pid=1228 tid=7580",
+    "g4-create-paging-queue-cb hr=0x00000000 pid=1228 tid=7580 00000000 00000000 00000001 00000001 00000001",
+    "g4-create-render-fence-cb hr=0x00000000 pid=1228 tid=7580 00000005 00000001 00000001 00000001",
+    "g4-screen-initialize hr=0x00000000 pid=1228 tid=7580",
+    "g4-open-adapter-enter hr=0x00000000 pid=5700 tid=5704",
+    "g4-open-adapter-exit hr=0x00000000 pid=5700 tid=5704",
+    "g4-open-adapter-enter hr=0x00000000 pid=5700 tid=5704",
+    "g4-open-adapter-exit hr=0x00000000 pid=5700 tid=5704",
+    "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
+  ]
+}

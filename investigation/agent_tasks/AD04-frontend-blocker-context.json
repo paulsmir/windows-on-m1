@@ -1,0 +1,14 @@
+{
+  "last_pass": "Typed capture/transport/materializer at two placements; native USC sizes1..64; host sanitizers; Windows x64 build/link/execute and ARM64 build/link",
+  "first_error": "Source mismatch: v1 overlay hardcodes64-byte compact VS/FS split; native Asahi produces independent variable-sized pipeline allocations. No new runtime failure claimed.",
+  "include_or_call_chain": ["native agx_build_pipeline -> pool allocation with BO provenance", "typed capture -> Win32 draw version/validation -> dynamic overlay layout -> materializer", "fixed v1 layout must not be imposed on general native stage pipelines"],
+  "definitions": ["COMPACT_SPLIT=0x40; NATIVE_SPLIT=0x1000", "v1 Draw has a single UscPipelineReference", "native pool allocator can return exact owning BO through out_bo", "capture holds BO object refs, not residency", "Windows GPUVA migration remains CLOSED/NO"],
+  "overlays": ["uatomic spelling/add wrappers + assembly guard + SDK ARM64_FPCR", "agx_index homogeneous internal bitfields", "agx_pack internal off_t storage", "canonical LUT clang guard", "agx_compile Windows NUL debug selftest", "agx_spill canonical c99_alloca include"],
+  "constraints": ["Tier-A autonomously implements reversible source-backed choices in this worktree", "no default Devstral/subagents or push/architect checkout/native-ANS changes", "hardware authorized only after exact candidate preregistration/build/sign/hash/preflight and established recovery", "keep v1 proven behavior; no guessed pipeline layout or false caps", "Full Graphics desktop goal remains active; no helper-only completion"],
+  "source": [
+    {"path":"drivers/apple-agx/render-admission/src/render_dynamic_overlay.c","start":10,"end":20},
+    {"path":"drivers/apple-agx/render-admission/src/render_dynamic_overlay.c","start":432,"end":459},
+    {"path":"/Users/pavel/public_windows/.local/reference/mesa/src/gallium/drivers/asahi/agx_state.c","start":2873,"end":2899},
+    {"path":"/Users/pavel/public_windows/.local/reference/mesa/src/asahi/lib/pool.c","start":52,"end":79}
+  ]
+}

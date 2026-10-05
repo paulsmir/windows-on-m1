@@ -1,0 +1,15 @@
+{
+  "task_id": "AD04-MATH-CONSTANTS-PORTABILITY-006",
+  "input_commit": "05d6f6bed8d4fe9dbe20420999572c30be78625c",
+  "repo": "/Users/pavel/public_windows/.worktrees/task-AD04-MATH-CONSTANTS-006",
+  "worktree": "/Users/pavel/public_windows/.worktrees/task-AD04-MATH-CONSTANTS-006",
+  "branch": "agent/ad04-math-constants-006",
+  "allowed_paths": ["drivers/apple-agx/mesa/scripts/run-phase3-normalized.ps1"],
+  "forbidden_paths": ["drivers/apple-agx/mesa/windows-overlay/", "mu/", "m1n1_windows/"],
+  "max_files": 1,
+  "max_diff_lines": 6,
+  "source_allowed": true,
+  "hardware_allowed": false,
+  "allowed_command_ids": [],
+  "expected_text": ""
+}

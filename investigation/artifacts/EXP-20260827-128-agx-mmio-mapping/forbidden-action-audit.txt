@@ -1,0 +1,11 @@
+EXP-20260827-128 forbidden-action audit
+pointer dereference: 0
+GPU register reads: 0
+GPU register writes: 0
+GPU firmware start: 0
+RTKit start: 0
+interrupt connection: 0
+active UAT: 0
+queue creation: 0
+GPU command submission: 0
+render/present/display ownership: 0

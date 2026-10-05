@@ -1,0 +1,394 @@
+#include "render_qualification.h"
+
+#include <assert.h>
+#include <string.h>
+
+static ADMISSION_PRESENT_VERIFICATION make_frame(
+    unsigned int index, unsigned int fence, unsigned long long allocation,
+    unsigned int color, unsigned long long sequence,
+    unsigned long long offset, unsigned long long physical,
+    unsigned long long hash) {
+  ADMISSION_PRESENT_VERIFICATION frame;
+  memset(&frame, 0, sizeof(frame));
+  frame.CandidateBuild = 631u;
+  frame.BootGeneration = 0x12345678u;
+  frame.Index = index;
+  frame.Purpose = AdmissionPresentPurposeRenderFrame;
+  frame.Fence = fence;
+  frame.DestinationIndex = index;
+  frame.AllocationToken = allocation;
+  frame.ExpectedColor = color;
+  frame.PixelsExpected = 4096000u;
+  frame.PixelsVerified = 4096000u;
+  frame.Format = 21u;
+  frame.Width = 2560u;
+  frame.Height = 1600u;
+  frame.Pitch = 10240u;
+  frame.ContentHash = hash;
+  frame.Sequence = sequence;
+  frame.ActiveOffset = offset;
+  frame.PhysicalAddress = physical;
+  return frame;
+}
+
+int main(void) {
+  ADMISSION_PRESENT_VERIFICATION first = make_frame(
+      0u, 256u, 0xffff800012340000ULL, 0xff112233u, 9u,
+      0x00fa0000ULL, 0x9bd000000ULL, 0x1122334455667788ULL);
+  ADMISSION_PRESENT_VERIFICATION second = make_frame(
+      1u, 257u, 0xffff800012350000ULL, 0xffcc8844u, 10u,
+      0x01f40000ULL, 0x9bdfa0000ULL, 0x8877665544332211ULL);
+  ADMISSION_PRESENT_EXPECTATION expected;
+  ADMISSION_PRESENT_QUERY record;
+  ADMISSION_PRESENT_PRODUCER_STATE producer;
+  ADMISSION_RETIREMENT_QUERY retirement;
+  ADMISSION_RETIREMENT_EXPECTATION retirementExpected;
+  ADMISSION_STANDARD_PRESENT_TRACE standardTrace;
+  ADMISSION_STANDARD_PRESENT_EVENT standardEvent;
+  ADMISSION_STANDARD_PRESENT_EXPECTATION standardExpected;
+  unsigned int presentSequence = 0u;
+  unsigned int sourceAddressSequence = 0u;
+  unsigned long long tracedContext = 0ULL;
+  unsigned long long tracedAllocation = 0ULL;
+  ADMISSION_STANDARD_PRESENT_PRODUCER_STATE standardProducer;
+
+  /* Catches a trace that reports a successful user Present without the exact
+   * later source-address transition for the same primary allocation. */
+  AdmissionStandardPresentTraceInitialize(
+      &standardTrace, AdmissionStandardPresentTraceRead,
+      641u, 0x12345678u);
+  memset(&standardEvent, 0, sizeof(standardEvent));
+  standardEvent.Kind = AdmissionStandardPresentEventPresent;
+  standardEvent.Phase = AdmissionStandardPresentPhaseEntry;
+  standardEvent.Sequence = 1u;
+  standardEvent.ContextToken = 0x1111222233334444ULL;
+  standardEvent.Flags = 0x4u;
+  standardEvent.NumSrc = 1u;
+  standardEvent.NumDst = 0u;
+  assert(AdmissionStandardPresentTraceAppend(&standardTrace, &standardEvent));
+  standardEvent.Phase = AdmissionStandardPresentPhaseExit;
+  standardEvent.Sequence = 2u;
+  standardEvent.Status = 0u;
+  standardEvent.AllocationToken = 0xffff800012340000ULL;
+  standardEvent.NumSrc = 1u;
+  standardEvent.NumDst = 0u;
+  assert(AdmissionStandardPresentTraceAppend(&standardTrace, &standardEvent));
+  memset(&standardEvent, 0, sizeof(standardEvent));
+  standardEvent.Kind = AdmissionStandardPresentEventSourceAddress;
+  standardEvent.Phase = AdmissionStandardPresentPhaseEntry;
+  standardEvent.Sequence = 3u;
+  standardEvent.AllocationToken = 0xffff800012340000ULL;
+  standardEvent.SourceId = 0u;
+  standardEvent.Segment = 2u;
+  standardEvent.PrimaryAddress = 0x9bcf90000ULL;
+  assert(AdmissionStandardPresentTraceAppend(&standardTrace, &standardEvent));
+  standardEvent.Phase = AdmissionStandardPresentPhaseExit;
+  standardEvent.Sequence = 4u;
+  standardEvent.Status = 0u;
+  assert(AdmissionStandardPresentTraceAppend(&standardTrace, &standardEvent));
+  memset(&standardExpected, 0, sizeof(standardExpected));
+  standardExpected.CandidateBuild = 641u;
+  standardExpected.BootGeneration = 0x12345678u;
+  standardExpected.ContextToken = 0x1111222233334444ULL;
+  standardExpected.AllocationToken = 0xffff800012340000ULL;
+  standardExpected.Flags = 0x4u;
+  standardExpected.SourceId = 0u;
+  standardExpected.Segment = 2u;
+  standardExpected.NumSrc = 1u;
+  standardExpected.NumDst = 0u;
+  assert(AdmissionStandardPresentTraceAccept(
+      &standardTrace, &standardExpected,
+      &presentSequence, &sourceAddressSequence));
+  assert(presentSequence == 2u && sourceAddressSequence == 4u);
+  assert(AdmissionStandardPresentTraceAcceptPresent(
+      &standardTrace, &standardExpected, &presentSequence,
+      &tracedContext, &tracedAllocation));
+  assert(presentSequence == 2u);
+  assert(tracedContext == 0x1111222233334444ULL);
+  assert(tracedAllocation == 0xffff800012340000ULL);
+  standardTrace.Events[0].Flags = 1u;
+  standardTrace.Events[0].NumDst = 1u;
+  standardTrace.Events[1].Flags = 1u;
+  standardTrace.Events[1].NumDst = 1u;
+  standardExpected.Flags = 1u;
+  standardExpected.NumDst = 1u;
+  assert(AdmissionStandardPresentTraceAcceptPresent(
+      &standardTrace, &standardExpected, &presentSequence,
+      &tracedContext, &tracedAllocation));
+  standardTrace.Events[0].Flags = 0x4u;
+  standardTrace.Events[0].NumDst = 0u;
+  standardTrace.Events[1].Flags = 0x4u;
+  standardTrace.Events[1].NumDst = 0u;
+  standardExpected.Flags = 0x4u;
+  standardExpected.NumDst = 0u;
+  standardExpected.ContextToken = 0ULL;
+  standardExpected.AllocationToken = 0ULL;
+  assert(AdmissionStandardPresentTraceAccept(
+      &standardTrace, &standardExpected,
+      &presentSequence, &sourceAddressSequence));
+  standardExpected.ContextToken = 0x1111222233334444ULL;
+  standardExpected.AllocationToken = 0xffff800012340000ULL;
+  standardTrace.Events[0].Valid = 0u;
+  assert(!AdmissionStandardPresentTraceAccept(
+      &standardTrace, &standardExpected,
+      &presentSequence, &sourceAddressSequence));
+  standardTrace.Events[0].Valid = 1u;
+  standardTrace.Events[2].AllocationToken = 0xffff800012350000ULL;
+  assert(!AdmissionStandardPresentTraceAccept(
+      &standardTrace, &standardExpected,
+      &presentSequence, &sourceAddressSequence));
+  standardTrace.Events[2].AllocationToken = standardExpected.AllocationToken;
+  standardTrace.Events[2].Sequence = 2u;
+  assert(!AdmissionStandardPresentTraceAccept(
+      &standardTrace, &standardExpected,
+      &presentSequence, &sourceAddressSequence));
+  standardTrace.Events[2].Sequence = 3u;
+  standardTrace.Events[3].Status = 0xc000000dU;
+  assert(!AdmissionStandardPresentTraceAccept(
+      &standardTrace, &standardExpected,
+      &presentSequence, &sourceAddressSequence));
+  standardTrace.Events[3].Status = 0u;
+  standardTrace.Events[3].AllocationToken = 0xffff800012350000ULL;
+  assert(!AdmissionStandardPresentTraceAccept(
+      &standardTrace, &standardExpected,
+      &presentSequence, &sourceAddressSequence));
+  standardTrace.Events[3].AllocationToken = standardExpected.AllocationToken;
+  standardTrace.Overflow = 1u;
+  assert(!AdmissionStandardPresentTraceAccept(
+      &standardTrace, &standardExpected,
+      &presentSequence, &sourceAddressSequence));
+  standardTrace.Overflow = 0u;
+  standardTrace.BootGeneration++;
+  assert(!AdmissionStandardPresentTraceAccept(
+      &standardTrace, &standardExpected,
+      &presentSequence, &sourceAddressSequence));
+  standardTrace.BootGeneration--;
+  assert(AdmissionStandardPresentTraceAccept(
+      &standardTrace, &standardExpected,
+      &presentSequence, &sourceAddressSequence));
+
+  /* Catches destruction of an exclusive primary before the presented surface
+   * has been replaced and VidPN source ownership has been released. */
+  AdmissionStandardPresentProducerInitialize(&standardProducer);
+  assert(AdmissionStandardPresentProducerCanCleanup(&standardProducer));
+  assert(AdmissionStandardPresentProducerAdvance(
+      &standardProducer, AdmissionStandardPresentOwnerAcquired));
+  assert(!AdmissionStandardPresentProducerCanCleanup(&standardProducer));
+  assert(AdmissionStandardPresentProducerAdvance(
+      &standardProducer, AdmissionStandardPresentModeSet));
+  assert(AdmissionStandardPresentProducerAdvance(
+      &standardProducer, AdmissionStandardPresentFrameConfirmed));
+  assert(!AdmissionStandardPresentProducerAdvance(
+      &standardProducer, AdmissionStandardPresentOwnerReleased));
+  assert(!AdmissionStandardPresentProducerCanCleanup(&standardProducer));
+  assert(AdmissionStandardPresentProducerAdvance(
+      &standardProducer, AdmissionStandardPresentFlipBackConfirmed));
+  assert(AdmissionStandardPresentProducerAdvance(
+      &standardProducer, AdmissionStandardPresentOwnerReleased));
+  assert(AdmissionStandardPresentProducerCanCleanup(&standardProducer));
+  assert(!AdmissionStandardPresentProducerAdvance(
+      &standardProducer, AdmissionStandardPresentFrameConfirmed));
+
+  AdmissionStandardPresentProducerInitialize(&standardProducer);
+  assert(AdmissionStandardPresentProducerAdvance(
+      &standardProducer, AdmissionStandardPresentOwnerAcquired));
+  assert(AdmissionStandardPresentProducerAdvance(
+      &standardProducer, AdmissionStandardPresentModeSet));
+  assert(AdmissionStandardPresentProducerAdvance(
+      &standardProducer, AdmissionStandardPresentOwnerReleased));
+  assert(AdmissionStandardPresentProducerCanCleanup(&standardProducer));
+
+  AdmissionPresentProducerInitialize(&producer, 1, 16u);
+  assert(AdmissionPresentProducerCanCleanup(&producer, 0));
+  assert(!AdmissionPresentProducerCanCleanup(&producer, 1));
+  for (unsigned int frame = 0u; frame < 4u; ++frame)
+    assert(AdmissionPresentProducerAfterWait(&producer,
+        AdmissionPresentWaitCompleted) == AdmissionPresentProducerSubmitNextFrame);
+  /* A fifth Render failure bypasses AfterWait, but cannot bypass retirement. */
+  assert(producer.CompletedFrames == 4u);
+  assert(!AdmissionPresentProducerCanCleanup(&producer, 1));
+  assert(!AdmissionPresentProducerRetirementComplete(&producer));
+  for (unsigned int frame = 4u; frame < 16u; ++frame)
+    (void)AdmissionPresentProducerAfterWait(&producer, AdmissionPresentWaitCompleted);
+  assert(!AdmissionPresentProducerCanCleanup(&producer, 1));
+  assert(AdmissionPresentProducerRetirementComplete(&producer));
+  assert(AdmissionPresentProducerCanCleanup(&producer, 1));
+
+  memset(&record, 0, sizeof(record));
+  assert(AdmissionPresentQueryBuild(&record, &first));
+  assert(record.Magic == ADMISSION_PRESENT_QUERY_MAGIC);
+  assert(record.Version == ADMISSION_PRESENT_QUERY_VERSION);
+  assert(record.CandidateBuild == 631u);
+  assert(record.BootGeneration == 0x12345678u);
+  assert(record.Index == 0u && record.Purpose == AdmissionPresentPurposeRenderFrame);
+  assert(record.Fence == 256u && record.DestinationIndex == 0u);
+  assert(record.AllocationToken == 0xffff800012340000ULL);
+  assert(record.ExpectedColor == 0xff112233u);
+  assert(record.PixelsExpected == 4096000u);
+  assert(record.PixelsVerified == 4096000u);
+  assert(record.Format == 21u && record.Width == 2560u);
+  assert(record.Height == 1600u && record.Pitch == 10240u);
+  assert(record.ContentHash == 0x1122334455667788ULL);
+  assert(record.Sequence == 9u && record.ActiveOffset == 0x00fa0000ULL);
+  assert(record.PhysicalAddress == 0x9bd000000ULL);
+  assert(record.Captured == 1u && record.PublishedToQuery == 0u);
+  assert(record.Exported == 0u && record.Durable == 0u);
+
+  memset(&expected, 0, sizeof(expected));
+  expected.CandidateBuild = 631u;
+  expected.Index = 0u;
+  expected.DestinationIndex = 0u;
+  expected.ExpectedColor = 0xff112233u;
+  expected.PixelsExpected = 4096000u;
+  expected.Format = 21u;
+  expected.Width = 2560u;
+  expected.Height = 1600u;
+  expected.Pitch = 10240u;
+  record.PublishedToQuery = 1u;
+  assert(AdmissionPresentQueryAccept(&record, &expected));
+
+  record.PixelsVerified = 0u;
+  assert(!AdmissionPresentQueryAccept(&record, &expected));
+  record.PixelsVerified = 4096000u;
+  record.ExpectedColor = 0u;
+  assert(!AdmissionPresentQueryAccept(&record, &expected));
+  record.ExpectedColor = 0xff112233u;
+  record.Purpose = AdmissionPresentPurposeFallback;
+  assert(!AdmissionPresentQueryAccept(&record, &expected));
+  record.Purpose = AdmissionPresentPurposeRenderFrame;
+
+  assert(AdmissionPresentQueryBuild(&record, &second));
+  record.PublishedToQuery = 1u;
+  expected.BootGeneration = 0x12345678u;
+  expected.Index = 1u;
+  expected.DestinationIndex = 1u;
+  expected.ExpectedColor = 0xffcc8844u;
+  expected.PreviousFence = 256u;
+  expected.PreviousSequence = 9u;
+  expected.PreviousAllocationToken = 0xffff800012340000ULL;
+  expected.PreviousActiveOffset = 0x00fa0000ULL;
+  expected.PreviousPhysicalAddress = 0x9bd000000ULL;
+  expected.PreviousContentHash = 0x1122334455667788ULL;
+  assert(AdmissionPresentQueryAccept(&record, &expected));
+  record.Fence = 256u;
+  assert(!AdmissionPresentQueryAccept(&record, &expected));
+  record.Fence = 257u;
+  record.Sequence = 9u;
+  assert(!AdmissionPresentQueryAccept(&record, &expected));
+  record.Sequence = 10u;
+  record.AllocationToken = expected.PreviousAllocationToken;
+  assert(!AdmissionPresentQueryAccept(&record, &expected));
+  record.AllocationToken = second.AllocationToken;
+  record.ActiveOffset = expected.PreviousActiveOffset;
+  assert(!AdmissionPresentQueryAccept(&record, &expected));
+
+  {
+    ADMISSION_PRESENT_VERIFICATION third = make_frame(
+        2u, 258u, first.AllocationToken, first.ExpectedColor, 11u,
+        first.ActiveOffset, first.PhysicalAddress, first.ContentHash);
+    third.DestinationIndex = 0u;
+    assert(AdmissionPresentQueryBuild(&record, &third));
+    record.PublishedToQuery = 1u;
+    memset(&expected, 0, sizeof(expected));
+    expected.CandidateBuild = 631u;
+    expected.BootGeneration = 0x12345678u;
+    expected.Index = 2u;
+    expected.DestinationIndex = 0u;
+    expected.ExpectedColor = first.ExpectedColor;
+    expected.PixelsExpected = 4096000u;
+    expected.Format = 21u;
+    expected.Width = 2560u;
+    expected.Height = 1600u;
+    expected.Pitch = 10240u;
+    expected.PreviousFence = second.Fence;
+    expected.PreviousAllocationToken = second.AllocationToken;
+    expected.PreviousSequence = second.Sequence;
+    expected.PreviousActiveOffset = second.ActiveOffset;
+    expected.PreviousPhysicalAddress = second.PhysicalAddress;
+    expected.PreviousContentHash = second.ContentHash;
+    expected.ExpectedContentHash = first.ContentHash;
+    expected.ExpectedAllocationToken = first.AllocationToken;
+    expected.ExpectedActiveOffset = first.ActiveOffset;
+    expected.ExpectedPhysicalAddress = first.PhysicalAddress;
+    assert(AdmissionPresentQueryAccept(&record, &expected));
+    record.AllocationToken = second.AllocationToken;
+    assert(!AdmissionPresentQueryAccept(&record, &expected));
+  }
+
+  first.PixelsVerified = 4095999u;
+  assert(!AdmissionPresentQueryBuild(&record, &first));
+  first.PixelsVerified = 4096000u;
+  first.ContentHash = 0ULL;
+  assert(!AdmissionPresentQueryBuild(&record, &first));
+  assert(AdmissionPresentWaitClassify(1, 1, 0, 0) ==
+         AdmissionPresentWaitCompleted);
+  assert(AdmissionPresentWaitClassify(0, 0, 0, 0) ==
+         AdmissionPresentWaitQueryFailed);
+  assert(AdmissionPresentWaitClassify(1, 0, 0, 1) ==
+         AdmissionPresentWaitTimedOut);
+  assert(AdmissionPresentWaitClassify(1, 0, 1, 1) ==
+         AdmissionPresentWaitInvalidRecord);
+
+  AdmissionPresentProducerInitialize(&producer, 1, 2u);
+  assert(AdmissionPresentProducerAfterWait(
+             &producer, AdmissionPresentWaitTimedOut) ==
+         AdmissionPresentProducerPreserveForRecovery);
+  assert(producer.CompletedFrames == 0u && producer.CleanupAllowed == 0u);
+  assert(AdmissionPresentProducerAfterWait(
+             &producer, AdmissionPresentWaitCompleted) ==
+         AdmissionPresentProducerPreserveForRecovery);
+
+  AdmissionPresentProducerInitialize(&producer, 1, 2u);
+  assert(AdmissionPresentProducerAfterWait(
+             &producer, AdmissionPresentWaitCompleted) ==
+         AdmissionPresentProducerSubmitNextFrame);
+  assert(producer.CompletedFrames == 1u && producer.CleanupAllowed == 0u);
+  assert(AdmissionPresentProducerAfterWait(
+             &producer, AdmissionPresentWaitInvalidRecord) ==
+         AdmissionPresentProducerPreserveForRecovery);
+  assert(producer.CompletedFrames == 1u && producer.CleanupAllowed == 0u);
+
+  AdmissionPresentProducerInitialize(&producer, 1, 2u);
+  assert(AdmissionPresentProducerAfterWait(
+             &producer, AdmissionPresentWaitCompleted) ==
+         AdmissionPresentProducerSubmitNextFrame);
+  assert(AdmissionPresentProducerAfterWait(
+             &producer, AdmissionPresentWaitCompleted) ==
+         AdmissionPresentProducerBeginHold);
+  assert(producer.CompletedFrames == 2u && producer.CleanupAllowed == 0u);
+  assert(AdmissionPresentProducerRetirementComplete(&producer));
+  assert(producer.CleanupAllowed == 1u);
+
+  AdmissionPresentProducerInitialize(&producer, 1, 16u);
+  {
+    unsigned int frame;
+    for (frame = 0u; frame < 16u; ++frame) {
+      ADMISSION_PRESENT_PRODUCER_ACTION action =
+          AdmissionPresentProducerAfterWait(
+              &producer, AdmissionPresentWaitCompleted);
+      assert(action == (frame == 15u
+                            ? AdmissionPresentProducerBeginHold
+                            : AdmissionPresentProducerSubmitNextFrame));
+    }
+  }
+  assert(producer.CompletedFrames == 16u && producer.CleanupAllowed == 0u);
+
+  memset(&retirement, 0, sizeof(retirement));
+  assert(AdmissionRetirementQueryBuild(
+      &retirement, 632u, 0x12345678u, 5u,
+      0xffff800099990000ULL, 0ULL, 0x9bbff0000ULL));
+  memset(&retirementExpected, 0, sizeof(retirementExpected));
+  retirementExpected.CandidateBuild = 632u;
+  retirementExpected.BootGeneration = 0x12345678u;
+  retirementExpected.PreviousSequence = 4u;
+  retirementExpected.ExpectedPoolPhysical = 0x9bbff0000ULL;
+  retirementExpected.RenderAllocation0 = first.AllocationToken;
+  retirementExpected.RenderAllocation1 = second.AllocationToken;
+  assert(AdmissionRetirementQueryAccept(&retirement, &retirementExpected));
+  retirement.ActiveOffset = 0xfa0000ULL;
+  assert(!AdmissionRetirementQueryAccept(&retirement, &retirementExpected));
+  retirement.ActiveOffset = 0ULL;
+  retirement.AllocationToken = first.AllocationToken;
+  assert(!AdmissionRetirementQueryAccept(&retirement, &retirementExpected));
+  return 0;
+}

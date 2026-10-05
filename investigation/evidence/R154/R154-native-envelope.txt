@@ -1,0 +1,89 @@
+
+************* Preparing the environment for Debugger Extensions Gallery repositories **************
+   ExtensionRepository : Implicit
+   UseExperimentalFeatureForNugetShare : true
+   AllowNugetExeUpdate : true
+   NonInteractiveNuget : true
+   AllowNugetMSCredentialProviderInstall : true
+   AllowParallelInitializationOfLocalRepositories : true
+
+   EnableRedirectToV8JsProvider : false
+
+   -- Configuring repositories
+      ----> Repository : LocalInstalled, Enabled: true
+      ----> Repository : UserExtensions, Enabled: true
+
+>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.000 seconds
+
+************* Waiting for Debugger Extensions Gallery to Initialize **************
+
+>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.000 seconds
+   ----> Repository : UserExtensions, Enabled: true, Packages count: 0
+   ----> Repository : LocalInstalled, Enabled: true, Packages count: 29
+
+Microsoft (R) Windows Debugger Version 10.0.26100.6584 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+
+Loading Dump File [C:\Users\pauls\EXP867-r153-bm\Kernel-MEMORY.DMP]
+Kernel Bitmap Dump File: Kernel address space is available, User address space may not be available.
+
+Dump failed with error code (0x0), and reports completion of: 96%
+
+Last line in dump stack log: Dump completed successfully.
+
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*C:\Symbols*https://msdl.microsoft.com/download/symbols
+OK                                             C:\Users\pauls\EXP867-r153-bm
+Symbol search path is: srv*C:\Symbols*https://msdl.microsoft.com/download/symbols;C:\Users\pauls\EXP867-r153-bm
+Executable search path is: 
+Windows 10 Kernel Version 26100 MP (8 procs) Free ARM 64-bit (AArch64)
+Product: WinNt, suite: TerminalServer SingleUserTS
+Edition build lab: 26100.1.arm64fre.ge_release.240331-1435
+Kernel base = 0xfffff803`a9a00000 PsLoadedModuleList = 0xfffff803`aa76ac50
+Debug session time: Mon Sep 28 16:51:13.265 2026 (UTC + 2:00)
+System Uptime: 0 days 0:04:48.630
+Loading Kernel Symbols
+...............................................................
+........................................................Page 96fda5 not present in the dump file. Type ".hh dbgerr004" for details
+.Page 94fe35 not present in the dump file. Type ".hh dbgerr004" for details
+.......
+....................................
+Loading User Symbols
+
+Loading unloaded module list
+........
+For analysis of this file, run !analyze -v
+1: kd> cdb: Reading initial command 'dt AppleAgxRenderAdmission!_APPLE_AGX_GPUVA_G3_LOGICAL_PTE 0xffff9b0ad2574a00; dd 0xffff9b0acef7e8e0 L2a; q'
+   +0x000 GuestIpa         : 0x00000008`e17e0000
+   +0x008 SegmentId        : 2
+   +0x00c Flags            : 3
+   +0x010 Allocation       : 0xffff9b0a`cf6dbb80
+   +0x018 AllocationOffset : 0
+ffff9b0a`cef7e8e0  34584741 00a80002 00000118 00000001
+ffff9b0a`cef7e8f0  3d950000 00000000 024d0000 00000000
+ffff9b0a`cef7e900  00010000 00000000 024e0000 00000000
+ffff9b0a`cef7e910  00010000 00000000 024f0000 00000000
+ffff9b0a`cef7e920  00400000 00000000 021b0000 00000000
+ffff9b0a`cef7e930  00020000 00000000 021d0000 00000000
+ffff9b0a`cef7e940  00010000 00000000 021e0000 00000000
+ffff9b0a`cef7e950  00010000 00000000 021f0000 00000000
+ffff9b0a`cef7e960  00010000 00000000 02200000 00000000
+ffff9b0a`cef7e970  00010000 00000000 02210000 00000000
+ffff9b0a`cef7e980  00010000 00000000
+quit:
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\atlmfc.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\ObjectiveC.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\concurrency.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\cpp_rest.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Kernel.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\stl.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Data.Json.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Media.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\windows.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\winrt.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Usb4Kd.natvis'

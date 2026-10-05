@@ -1,0 +1,9 @@
+{
+  "verified": 536,
+  "delta": [
+    "drivers/apple-agx/render-admission/tests/render_backend_image_test.c",
+    "drivers/apple-agx/shared/tests/apple_agx_render_shared_memory_test.c"
+  ],
+  "source_list_sha256": "32b94b98fe598151e1fe1b0ac202abaf55f4149595ac2d213d156c9bc0ff63ca",
+  "note": "Test-only final delta; production object hash unchanged; no build link sign or package"
+}

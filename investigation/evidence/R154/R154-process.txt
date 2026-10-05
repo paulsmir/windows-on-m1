@@ -1,0 +1,360 @@
+
+************* Preparing the environment for Debugger Extensions Gallery repositories **************
+   ExtensionRepository : Implicit
+   UseExperimentalFeatureForNugetShare : true
+   AllowNugetExeUpdate : true
+   NonInteractiveNuget : true
+   AllowNugetMSCredentialProviderInstall : true
+   AllowParallelInitializationOfLocalRepositories : true
+
+   EnableRedirectToV8JsProvider : false
+
+   -- Configuring repositories
+      ----> Repository : LocalInstalled, Enabled: true
+      ----> Repository : UserExtensions, Enabled: true
+
+>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.000 seconds
+
+************* Waiting for Debugger Extensions Gallery to Initialize **************
+
+>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.015 seconds
+   ----> Repository : UserExtensions, Enabled: true, Packages count: 0
+   ----> Repository : LocalInstalled, Enabled: true, Packages count: 29
+
+Microsoft (R) Windows Debugger Version 10.0.26100.6584 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+
+Loading Dump File [C:\Users\pauls\EXP867-r153-bm\Kernel-MEMORY.DMP]
+Kernel Bitmap Dump File: Kernel address space is available, User address space may not be available.
+
+Dump failed with error code (0x0), and reports completion of: 96%
+
+Last line in dump stack log: Dump completed successfully.
+
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*C:\Symbols*https://msdl.microsoft.com/download/symbols
+OK                                             C:\Users\pauls\EXP867-r153-bm
+Symbol search path is: srv*C:\Symbols*https://msdl.microsoft.com/download/symbols;C:\Users\pauls\EXP867-r153-bm
+Executable search path is: 
+Windows 10 Kernel Version 26100 MP (8 procs) Free ARM 64-bit (AArch64)
+Product: WinNt, suite: TerminalServer SingleUserTS
+Edition build lab: 26100.1.arm64fre.ge_release.240331-1435
+Kernel base = 0xfffff803`a9a00000 PsLoadedModuleList = 0xfffff803`aa76ac50
+Debug session time: Mon Sep 28 16:51:13.265 2026 (UTC + 2:00)
+System Uptime: 0 days 0:04:48.630
+Loading Kernel Symbols
+...............................................................
+........................................................Page 96fda5 not present in the dump file. Type ".hh dbgerr004" for details
+.Page 94fe35 not present in the dump file. Type ".hh dbgerr004" for details
+.......
+....................................
+Loading User Symbols
+
+Loading unloaded module list
+........
+For analysis of this file, run !analyze -v
+1: kd> cdb: Reading initial command 'dt -r1 AppleAgxRenderAdmission!_ADMISSION_G3_PROCESS ffff9b0ace26b520; dt -r1 AppleAgxRenderAdmission!_ADMISSION_G3_STATE ffff9b0acf1aa000; dx -r2 ((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffff9b0acf049000)->Rtkit; dx -r2 ((AppleAgxRenderAdmission!_ADMISSION_CONTEXT*)0xffff9b0acef02000)->RenderCorrelation; q'
+   +0x000 Link             : _LIST_ENTRY [ 0xffff9b0a`d01b59a0 - 0xffff9b0a`cf1a12d0 ]
+      +0x000 Flink            : 0xffff9b0a`d01b59a0 _LIST_ENTRY [ 0xffff9b0a`d0a82bc0 - 0xffff9b0a`ce26b520 ]
+      +0x008 Blink            : 0xffff9b0a`cf1a12d0 _LIST_ENTRY [ 0xffff9b0a`ce26b520 - 0xffff9b0a`cf7cd010 ]
+   +0x010 State            : 0xffff9b0a`cf1aa000 _ADMISSION_G3_STATE
+      +0x000 Adapter          : 0xffff9b0a`cef02000 _ADMISSION_CONTEXT
+      +0x008 Lock             : _FAST_MUTEX
+      +0x040 Processes        : _LIST_ENTRY [ 0xffff9b0a`cbd57010 - 0xffff9b0a`d01c75d0 ]
+      +0x050 Client           : _APPLE_AGX_GPUVA_V5_CLIENT
+      +0x088 Registry         : _APPLE_AGX_GPUVA_G3_REGISTRY
+      +0x098 PrivatePool      : APPLE_AGX_G3_PRIVATE_POOL
+      +0x18a0 NextProcessId    : 0xf
+      +0x18a8 ProcessCount     : 0xa
+      +0x18b0 ActiveProcess    : (null) 
+      +0x18b8 ActiveFence      : 0
+      +0x18bc LastCompletedFence : 0x8d4e
+      +0x18c0 PrivateCompletionFence : 0
+      +0x18c8 UnpublishedGroups : [32] 0x4ba0
+   +0x018 Graph            : _APPLE_AGX_GPUVA_G3_GRAPH
+      +0x000 Client           : 0xffff9b0a`cf1aa050 _APPLE_AGX_GPUVA_V5_CLIENT
+      +0x008 Allocate         : 0xfffff803`a812c700        void*  AppleAgxRenderAdmission!AdmissionG3AllocateNode+0
+      +0x010 Free             : 0xfffff803`a812c740        void  AppleAgxRenderAdmission!AdmissionG3FreeNode+0
+      +0x018 MemoryContext    : (null) 
+      +0x020 ProcessId        : 8
+      +0x028 ProcessGeneration : 1
+      +0x030 RootIpa          : 0x00000009`d5a38000
+      +0x038 NextGeneration   : 0x1dcc
+      +0x040 SharedBackingGeneration : 0x00000008`e0000000
+      +0x048 Registry         : 0xffff9b0a`cf1aa088 _APPLE_AGX_GPUVA_G3_REGISTRY
+      +0x050 MappingGeneration : 0x2ba37
+      +0x058 LeaseToken       : 0
+      +0x060 Tables           : 0xffff9b0a`d02b8160 _APPLE_AGX_GPUVA_G3_NODE
+      +0x068 Parents          : 0xffff9b0a`d02bd9e0 _APPLE_AGX_GPUVA_G3_NODE
+      +0x070 Leaves           : 0xffff9b0a`cf6e1a00 _APPLE_AGX_GPUVA_G3_NODE
+      +0x078 Backings         : 0xffff9b0a`cf6c4660 _APPLE_AGX_GPUVA_G3_NODE
+      +0x080 LastStatus       : 0
+      +0x084 Created          : 1
+      +0x088 Uncertain        : 0
+      +0x08c JobInFlight      : 0
+      +0x090 Slot             : 0
+   +0x0b0 Io               : _APPLE_AGX_MEMORY_IO
+      +0x000 Context          : 0xffff9b0a`cd68f010 Void
+      +0x008 AllocateContiguous : 0xfffff803`a812a8b0        unsigned char  AppleAgxRenderAdmission!AdmissionMemoryAllocateContiguous+0
+      +0x010 FreeContiguous   : 0xfffff803`a812aa10        unsigned char  AppleAgxRenderAdmission!AdmissionMemoryFreeContiguous+0
+      +0x018 AllocatePageList : (null) 
+      +0x020 FreePageList     : (null) 
+   +0x0d8 BootstrapRoot    : _APPLE_AGX_MEMORY_OBJECT
+      +0x000 AllocationCpuBase : 0xffffab0f`1e450000 Void
+      +0x008 CpuAddress       : 0xffffab0f`1e450000 Void
+      +0x010 AllocationHandle : 0xffff9b0a`cf1d1bd0 Void
+      +0x018 AllocationDeviceBase : 0x00000009`d5e40000
+      +0x020 DeviceAddress    : 0x00000009`d5e40000
+      +0x028 AllocationLength : 0x8000
+      +0x030 Length           : 0x4000
+      +0x038 DevicePages      : (null) 
+      +0x040 DevicePageCount  : 0
+      +0x048 GpuVirtualAddress : 0
+      +0x050 SubmittedFence   : 0
+      +0x058 Context          : 0
+      +0x05c State            : 1 ( AppleAgxMemoryCpuOwned )
+   +0x138 TableShadows     : 0xffff9b0a`ca870560 _ADMISSION_G3_TABLE_SHADOW
+      +0x000 Next             : 0xffff9b0a`ca87fec0 _ADMISSION_G3_TABLE_SHADOW
+      +0x008 Memory           : _APPLE_AGX_MEMORY_OBJECT
+      +0x068 OriginalIpa      : 0x00000009`1e78c000
+      +0x070 BrokerIpa        : 0x00000009`df388000
+      +0x078 LogicalPtes      : (null) 
+      +0x080 ResidentPtes     : (null) 
+      +0x088 PendingPtes      : (null) 
+   +0x140 BootstrapIpa     : 0x00000009`d5e40000
+   +0x148 LastSetRootIpa   : 0x00000009`d5a38000
+   +0x150 SetRootCount     : 2
+   +0x158 PrivateVa        : 0x2000000
+   +0x160 PrivateMiddleIpa : 0x00000009`1ecb0000
+   +0x168 PrivateLeafIpa   : 0x00000009`1ecc0000
+   +0x170 PrivateTables    : [2] APPLE_AGX_G3_PRIVATE_EXTENT
+      +0x000 Generation       : 0x18
+      +0x008 Offset           : 0x4b0000
+      +0x00c Bytes            : 0x10000
+   +0x190 PrivateManager   : APPLE_AGX_G3_PRIVATE_MANAGER
+      +0x000 Owner            : 8
+      +0x008 Generation       : 0x1a
+      +0x010 VaBase           : 0x2000000
+      +0x018 Extents          : [3] APPLE_AGX_G3_PRIVATE_EXTENT
+   +0x1d8 FirmwareManager  : _APPLE_AGX_RENDER_MANAGER_STATE
+      +0x000 Key              : _APPLE_AGX_RENDER_MANAGER_KEY
+      +0x048 Info             : [188]  "???"
+      +0x104 BlockControl     : [64]  " "
+      +0x144 Counter          : [64]  "???"
+      +0x184 Stats            : [64]  "???"
+      +0x1c4 PendingFence     : 0
+      +0x1c8 SavedFence       : 0x407
+      +0x1cc Valid            : 0x1 ''
+   +0x3a8 PrivateScenes    : 0xffff9b0a`cec312e0 _ADMISSION_G3_PRIVATE_SCENE
+      +0x000 Next             : 0xffff9b0a`c4693010 _ADMISSION_G3_PRIVATE_SCENE
+      +0x008 Context          : 0xffff9b0a`cb092170 _ADMISSION_RENDER_CONTEXT
+      +0x010 Storage          : APPLE_AGX_G3_PRIVATE_SCENE
+      +0x108 Geometry         : APPLE_AGX_G4_NATIVE_RENDER
+      +0x1f8 Fence            : 0x8e05
+      +0x1fc Submitting       : 0
+      +0x200 Queued           : 1
+      +0x204 Started          : 0
+      +0x208 GpuDone          : 0
+      +0x20c Reported         : 0
+      +0x210 ReleaseRequested : 0
+      +0x214 Quarantined      : 0
+   +0x3b0 Contexts         : 0xffff9b0a`cb093340 _ADMISSION_RENDER_CONTEXT
+      +0x000 Object           : _ADMISSION_OBJECT_CONTEXT
+      +0x028 SchedulerContext : _APPLE_AGX_SCHEDULER_CONTEXT
+      +0x038 PrepatchedRender : _ADMISSION_PREPATCHED_RENDER
+      +0x0c0 Win32Generation  : 0x2180107
+      +0x0c4 Win32Transport   : 0x1 ''
+      +0x0c8 GpuvaG3Process   : 0xffff9b0a`ce26b520 Void
+      +0x0d0 GpuvaG3NextContext : 0xffff9b0a`cb092630 _ADMISSION_RENDER_CONTEXT
+      +0x0d8 GpuvaG3PrivateManagerGeneration : 0
+      +0x0e0 GpuvaG3PrivateFence : 0n0
+      +0x0e4 GpuvaG3CancelFence : 0n0
+      +0x0e8 GpuvaG3CancelUncertain : 0n0
+      +0x0ec GpuvaG3Closing   : 0 ''
+      +0x0f0 GpuvaG3RootIpa   : 0
+      +0x0f8 GpuvaG3LastSetRootIpa : 0
+      +0x100 GpuvaG3SetRootCount : 0
+      +0x108 GpuvaG3DmaBufferVa : 0
+      +0x110 GpuvaG3MappingGeneration : 0
+      +0x118 GpuvaG3DmaBufferBytes : 0
+      +0x11c GpuvaG3Poisoned  : 0 ''
+   +0x3b8 DxgkProcess      : 0xffff9b0a`ce5199c0 Void
+   +0x3c0 Magic            : 0x47335052
+   +0x3c4 DeviceRefs       : 3
+   +0x3c8 ContextRefs      : 3
+   +0x3cc Poisoned         : 0 ''
+   +0x000 Adapter          : 0xffff9b0a`cef02000 _ADMISSION_CONTEXT
+      +0x000 ObjectAdapter    : _ADMISSION_OBJECT_ADAPTER
+      +0x010 Memory           : _ADMISSION_MEMORY_CONTRACT
+      +0x0c0 MemoryRuntime    : 0xffff9b0a`cd68f010 Void
+      +0x0c8 PlatformRuntime  : 0xffff9b0a`cf049000 Void
+      +0x0d0 ScanoutRuntime   : 0xffff9b0a`ce2c9690 Void
+      +0x0d8 ApertureEntries  : (null) 
+      +0x0e0 PhysicalDeviceObject : 0xffff9b0a`c59d5d80 _DEVICE_OBJECT
+      +0x0e8 StartInfo        : _DXGK_START_INFO
+      +0x108 Interface        : _DXGKRNL_INTERFACE
+      +0x348 DeviceInformation : _DXGK_DEVICE_INFO
+      +0x398 LocalReserveReceipt : _APPLE_AGX_LOCAL_RESERVE_RECEIPT
+      +0x3c0 PostDisplayInformation : _DXGK_DISPLAY_INFORMATION
+      +0x3e0 InterfaceValid   : 0x1 ''
+      +0x3e1 Started          : 0x1 ''
+      +0x3e2 DisplayActive    : 0x1 ''
+      +0x3e3 SourceVisible    : 0x1 ''
+      +0x3e4 CommittedWidth   : 0xa00
+      +0x3e8 CommittedHeight  : 0x640
+      +0x3ec CommittedStride  : 0x2800
+      +0x3f0 CommittedFormat  : 15 ( D3DDDIFMT_A8R8G8B8 )
+      +0x3f4 SourceAddressStage : 0n2
+      +0x3f8 SourceAddressStatus : 0n0
+      +0x3fc SourceAddressReceiptState : 0n3
+      +0x400 SourceAddressReceipt : _ADMISSION_SOURCE_ADDRESS_RECEIPT
+      +0x480 PaletteStatus    : 0n0
+      +0x484 ScanLineStage    : 0n0
+      +0x488 ScanLineStatus   : 0n0
+      +0x490 Page 300000 not present in the dump file. Type ".hh dbgerr004" for details
+BrokerBase       : 0xffffab0f`1dd09000  "Page 300000 not present in the dump file. Type ".hh dbgerr004" for details
+--- memory read error at address 0xffffab0f`1dd09000 ---"
+      +0x498 GpuvaG3State     : 0xffff9b0a`cf1aa000 Void
+      +0x4a0 G3CopyQueryFailureClaim : 0n2
+      +0x4a4 G3CopyQueryFailurePredicate : 0x35
+      +0x4a8 G3CopyQueryFailureStatus : 0xc000000d
+      +0x4b0 G3CopyQueryFailure : APPLE_AGX_G3_COPY_QUERY_RECEIPT
+      +0x558 G4SubmitFailureClaim : 0n2
+      +0x55c G4SubmitFailureCount : 0n1
+      +0x560 G4SubmitFailure  : _ADMISSION_G4_SUBMIT_FAILURE
+      +0x620 InterruptReady   : 0n1
+      +0x624 InterruptIngressEnabled : 0n1
+      +0x628 InterruptCount   : 0n1
+      +0x62c InterruptAckCount : 0n1
+      +0x630 LastInterruptStatus : 0n1
+      +0x634 DpcCount         : 0n36417
+      +0x638 PagingLock       : 0
+      +0x640 PagingWorkItem   : 0xffff9b0a`ce62da50 _IO_WORKITEM
+      +0x648 PagingIdle       : _KEVENT
+      +0x660 PagingRecords    : [64] _ADMISSION_PAGING_RECORD
+      +0x2460 PagingRecordCount : 0
+      +0x2464 PresentCopyBytes : 0
+      +0x2468 CpuQueueHead     : 0
+      +0x246c CpuQueueCount    : 0
+      +0x2470 DispatchedFence  : 0x8e05
+      +0x2478 CpuQueue         : [64] _ADMISSION_CPU_PACKET
+      +0x7a878 PresentCopyCommand : [4096]  ""
+      +0x7b878 PresentTransferState : 0n0
+      +0x7b880 PresentTransferReceipt : _ADMISSION_PRESENT_TRANSFER_RECEIPT
+      +0x7b8c0 RenderCorrelationLock : 0
+      +0x7b8c8 RenderCorrelationWorkItem : 0xffff9b0a`ce62e5b0 _IO_WORKITEM
+      +0x7b8d0 RenderCorrelationIdle : _KEVENT
+      +0x7b8e8 RenderCorrelationDirty : 0n0
+      +0x7b8ec RenderCorrelationWorkerQueued : 0n0
+      +0x7b8f0 RenderCorrelationStopping : 0n0
+      +0x7b8f8 RenderCorrelation : _ADMISSION_RENDER_CORRELATION_STATE
+      +0x7bb48 PagingFence      : 0x8e04
+      +0x7bb4c PagingLastSubmittedFence : 0
+      +0x7bb50 PagingLastCompletedFence : 0x8e04
+      +0x7bb54 PagingCompletionStatus : 0n0
+      +0x7bb58 PagingPending    : 0n0
+      +0x7bb5c PagingWorkersActive : 0n0
+      +0x7bb60 PagingDpcsActive : 0n0
+      +0x7bb64 PagingStopping   : 0n0
+      +0x7bb68 PagingDpcPending : 0n0
+      +0x7bb6c MemoryStartStage : 0n10
+      +0x7bb70 MemoryStartStatus : 0n0
+      +0x7bb78 SchedulerLock    : 0
+      +0x7bb80 Scheduler        : _APPLE_AGX_SCHEDULER
+      +0x7bcb8 RenderPacket     : _ADMISSION_RENDER_PACKET
+      +0x7bd40 BackendImage     : _ADMISSION_BACKEND_IMAGE
+      +0x7da30 SchedulerInitialized : 0n1
+      +0x7da34 SchedulerFaulted : 0n1
+      +0x7da38 SchedulerDpcPending : 0n0
+      +0x7da3c RenderDpcFence   : 0n0
+      +0x7da40 Win32BootGeneration : 0x153ae11d
+      +0x7da44 FeatureReadyMask : 0n16383
+   +0x008 Lock             : _FAST_MUTEX
+      +0x000 Count            : 0n1
+      +0x008 Owner            : (null) 
+      +0x010 Contention       : 0x332
+      +0x018 Event            : _KEVENT
+      +0x030 OldIrql          : 0
+   +0x040 Processes        : _LIST_ENTRY [ 0xffff9b0a`cbd57010 - 0xffff9b0a`d01c75d0 ]
+      +0x000 Flink            : 0xffff9b0a`cbd57010 _LIST_ENTRY [ 0xffff9b0a`ce7bd790 - 0xffff9b0a`cf1aa040 ]
+      +0x008 Blink            : 0xffff9b0a`d01c75d0 _LIST_ENTRY [ 0xffff9b0a`cf1aa040 - 0xffff9b0a`d101ab50 ]
+   +0x050 Client           : _APPLE_AGX_GPUVA_V5_CLIENT
+      +0x000 Io               : _APPLE_AGX_GPUVA_V5_IO
+      +0x028 Sequence         : 0x1aa2ec
+      +0x030 Epoch            : 1
+   +0x088 Registry         : _APPLE_AGX_GPUVA_G3_REGISTRY
+      +0x000 Frames           : 0xffff9b0a`d0372e10 _APPLE_AGX_GPUVA_G3_FRAME
+      +0x008 NextGeneration   : 0x265fa
+   +0x098 PrivatePool      : APPLE_AGX_G3_PRIVATE_POOL
+      +0x000 Blocks           : [256] APPLE_AGX_G3_PRIVATE_BLOCK
+      +0x1800 NextGeneration   : 0xbd9
+   +0x18a0 NextProcessId    : 0xf
+   +0x18a8 ProcessCount     : 0xa
+   +0x18b0 ActiveProcess    : (null) 
+   +0x18b8 ActiveFence      : 0
+   +0x18bc LastCompletedFence : 0x8d4e
+   +0x18c0 PrivateCompletionFence : 0
+   +0x18c8 UnpublishedGroups : [32] 0x4ba0
+((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME*)0xffff9b0acf049000)->Rtkit                 [Type: _APPLE_AGX_RTKIT_SESSION]
+    [+0x000] Boot             [Type: _APPLE_AGX_RTKIT_BOOT]
+        [+0x000] Phase            : AppleAgxRtkitBootReady (4) [Type: _APPLE_AGX_RTKIT_BOOT_PHASE]
+        [+0x004] NegotiatedVersion : 0xc [Type: unsigned int]
+        [+0x008] EndpointMap      [Type: unsigned int [8]]
+        [+0x028] Begun            : 0x1 [Type: unsigned char]
+        [+0x029] HelloSeen        : 0x1 [Type: unsigned char]
+        [+0x02a] EndpointMapComplete : 0x1 [Type: unsigned char]
+        [+0x02b] IopPowerReady    : 0x1 [Type: unsigned char]
+        [+0x02c] ApPowerRequested : 0x1 [Type: unsigned char]
+        [+0x02d] ApPowerReady     : 0x1 [Type: unsigned char]
+    [+0x030] Running          : 0x1 [Type: unsigned char]
+    [+0x031] CpuReady         : 0x1 [Type: unsigned char]
+    [+0x032] InboxBeforeInitValid : 0x1 [Type: unsigned char]
+    [+0x033] InboxAfterInitValid : 0x1 [Type: unsigned char]
+    [+0x034] InboxAtFailureValid : 0x0 [Type: unsigned char]
+    [+0x035] OutboxAtFailureValid : 0x0 [Type: unsigned char]
+    [+0x038] StopPhase        : AppleAgxRtkitStopIdle (0) [Type: _APPLE_AGX_RTKIT_STOP_PHASE]
+    [+0x03c] InboxControlBeforeInit : 0x20001 [Type: unsigned int]
+    [+0x040] InboxControlAfterInit : 0x100101 [Type: unsigned int]
+    [+0x044] InboxControlAtFailure : 0x0 [Type: unsigned int]
+    [+0x048] OutboxControlAtFailure : 0x0 [Type: unsigned int]
+    [+0x04c] ReceivedCount    : 0x2d3 [Type: unsigned int]
+    [+0x050] LastRxEndpoint   : 0x0 [Type: unsigned int]
+    [+0x058] LastRxPayload    : 0x40000000000000 [Type: unsigned __int64]
+    [+0x060] CrashlogGpuAddress : 0xfa080000000 [Type: unsigned __int64]
+    [+0x068] CrashlogCapacityBytes : 0x4000 [Type: unsigned int]
+    [+0x06c] CrashlogRequestedBytes : 0x2000 [Type: unsigned int]
+    [+0x070] CrashlogReplySent : 0x1 [Type: unsigned char]
+    [+0x071] CrashlogCrashed  : 0x0 [Type: unsigned char]
+((AppleAgxRenderAdmission!_ADMISSION_CONTEXT*)0xffff9b0acef02000)->RenderCorrelation                 [Type: _ADMISSION_RENDER_CORRELATION_STATE]
+    [+0x000] Version          : 0x3 [Type: unsigned int]
+    [+0x004] Bytes            : 0x250 [Type: unsigned int]
+    [+0x008] CandidateBuild   : 0x363 [Type: unsigned int]
+    [+0x00c] BootGeneration   : 0x1553a2ab [Type: unsigned int]
+    [+0x010] Count            : 0x0 [Type: unsigned int]
+    [+0x014] Overflow         : 0x0 [Type: unsigned int]
+    [+0x018] CapturedGeneration : 0x0 [Type: unsigned int]
+    [+0x01c] ExportedGeneration : 0x0 [Type: unsigned int]
+    [+0x020] ExportAttempted  : 0x1 [Type: unsigned int]
+    [+0x024] ExportStatus     : 0x103 [Type: unsigned int]
+    [+0x028] Durable          : 0x0 [Type: unsigned int]
+    [+0x02c] Reserved         : 0x0 [Type: unsigned int]
+    [+0x030] Slot             [Type: _ADMISSION_RENDER_CORRELATION_SLOT [2]]
+        [0]              [Type: _ADMISSION_RENDER_CORRELATION_SLOT]
+        [1]              [Type: _ADMISSION_RENDER_CORRELATION_SLOT]
+quit:
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\atlmfc.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\ObjectiveC.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\concurrency.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\cpp_rest.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Kernel.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\stl.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Data.Json.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Media.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\windows.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\winrt.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Usb4Kd.natvis'

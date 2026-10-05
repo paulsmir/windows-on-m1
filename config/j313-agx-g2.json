@@ -1,0 +1,56 @@
+{
+  "acpi_hid": "APPL0002",
+  "contract_version": 3,
+  "firmware_lifecycle": {
+    "management_endpoint": 0,
+    "firmware_endpoint": 32,
+    "doorbell_endpoint": 33,
+    "iop_boot_request_state": 544,
+    "running_state": 32,
+    "stopped_state": 16,
+    "asc_cpu_control_offset": 68,
+    "asc_cpu_status_offset": 72,
+    "asc_inbox_control_offset": 33040,
+    "asc_outbox_control_offset": 33044,
+    "asc_inbox0_offset": 34816,
+    "asc_inbox1_offset": 34824,
+    "asc_outbox0_offset": 34864,
+    "asc_outbox1_offset": 34872,
+    "asc_boot_timeout_ms": 3000,
+    "endpoint_timeout_ms": 500,
+    "initdata_timeout_ms": 500,
+    "heartbeat_timeout_ms": 500,
+    "stop_timeout_ms": 1000
+  },
+  "interrupt_routes": [
+    { "guest": 880, "physical": 563 },
+    { "guest": 881, "physical": 564 },
+    { "guest": 882, "physical": 565 },
+    { "guest": 883, "physical": 566 },
+    { "guest": 884, "physical": 579 },
+    { "guest": 885, "physical": 576 },
+    { "guest": 886, "physical": 575 },
+    { "guest": 887, "physical": 578 },
+    { "guest": 888, "physical": 577 }
+  ],
+  "acpi_mmio_regions": [
+    "sgx_mmio",
+    "gpu"
+  ],
+  "mmio_subregions": [
+    "asc_mmio"
+  ],
+  "synthetic_mmio_regions": {
+    "power_broker": {
+      "base": 12884901888,
+      "size": 4096
+    }
+  },
+  "platform": "J313",
+  "runtime": {
+    "context_id": 63,
+    "queue_index": 1,
+    "work_timeout_ms": 500
+  },
+  "source_contract_sha256": "b049a055eba8536caeda7d1a8bac90b81ab6357e64d3f9cb600fff4691d7e3a7"
+}

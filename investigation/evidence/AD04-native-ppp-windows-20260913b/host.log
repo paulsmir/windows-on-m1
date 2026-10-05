@@ -1,0 +1,9 @@
+.........
+----------------------------------------------------------------------
+Ran 9 tests in 2.127s
+
+OK
+NATIVE PPP v3: disconnected extra Encoder rejected
+NATIVE PPP v3: two placements/masked relative fields PASS
+NATIVE USC v3: preshader/texture/sampler two placements, all counts PASS
+CAPTURE -> WIRE -> KMD MATERIALIZER: two placements/lifetime PASS

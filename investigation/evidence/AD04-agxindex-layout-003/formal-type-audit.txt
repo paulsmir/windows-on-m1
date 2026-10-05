@@ -1,0 +1,31 @@
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_lower_divergent_shuffle.c:50:         if (is_shuffle(I->op) && I->src[1].type == AGX_INDEX_REGISTER) {
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_pack.c:319:      pack_assert(I, !(src.cache && src.discard));
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_pack.c:352:      pack_assert(I, !(src.cache && src.discard));
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_pack.c:377:      pack_assert(I, !(src.cache && src.discard));
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_pack.c:393:      if (!agx_is_null(I->dest[d]) && I->dest[d].size != AGX_SIZE_16)
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_pack.c:398:      if (!agx_is_null(I->src[s]) && I->src[s].size != AGX_SIZE_16)
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_pack.c:482:   if ((I->op == AGX_OPCODE_IMAD && I->src[2].neg) ||
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_pack.c:483:       (I->op == AGX_OPCODE_IADD && I->src[1].neg))
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_pack.c:515:   if (I->op == AGX_OPCODE_MOV_IMM && I->dest[0].size == AGX_SIZE_16)
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_pack.c:720:      if (is_uniform_store && reg.size != AGX_SIZE_16) {
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_opt_compact_constants.c:37:      if (I->op == AGX_OPCODE_MOV_IMM && I->dest[0].size == AGX_SIZE_32) {
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_optimizer.c:103:      if (src.size == AGX_SIZE_16 && def->src[0].size == AGX_SIZE_32)
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_optimizer.c:242:   if (I->dest[0].size == AGX_SIZE_16 && use->dest[0].size == AGX_SIZE_32)
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_optimizer.c:326:      if (I->op == AGX_OPCODE_SPLIT && def->src[0].type == AGX_INDEX_UNIFORM &&
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_optimizer.c:327:          src.size == AGX_SIZE_64 && I->dest[0].size == AGX_SIZE_32) {
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_opt_register_cache.c:148:            assert(!(I->src[s].discard && I->src[s].cache));
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_lower_parallel_copy.c:54:   if (copy->dest_mem && copy->src.memory) {
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_lower_spill.c:33:   assert(mem.type == AGX_INDEX_REGISTER && mem.memory);
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_lower_spill.c:34:   assert(reg.type == AGX_INDEX_REGISTER && !reg.memory);
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_lower_spill.c:61:      if (I->op != AGX_OPCODE_MOV || (!I->dest[0].memory && !I->src[0].memory))
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_validate_ra.c:116:   assert(idx.type == AGX_INDEX_NORMAL && idx.has_reg);
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_validate_ra.c:128:   assert(idx.type == AGX_INDEX_NORMAL && idx.has_reg);
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_validate_ra.c:195:      if (I->op == AGX_OPCODE_MOV && I->dest[0].type == AGX_INDEX_REGISTER &&
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_validate_ra.c:234:      } else if (I->op == AGX_OPCODE_PHI && I->dest[0].has_reg &&
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_register_allocate.c:577:   assert(!copy->dest_mem && !copy->src.memory && "no memory shuffles");
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_register_allocate.c:848:   if (I->op == AGX_OPCODE_MOV && I->src[0].type == AGX_INDEX_NORMAL &&
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_register_allocate.c:1011:   assert(I->op != AGX_OPCODE_PHI && "phis don't use .kill");
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_register_allocate.c:1037:      if (I->src[s].kill && !I->src[s].memory) {
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_register_allocate.c:1084:      if (I->op == AGX_OPCODE_SPLIT && I->src[0].kill) {
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_register_allocate.c:1135:            if (I->src[s].kill && !I->src[s].memory) {
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_register_allocate.c:1155:         if (I->op == AGX_OPCODE_PHI && I->dest[d].has_reg)

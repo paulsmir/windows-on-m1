@@ -1,0 +1,19 @@
+RED baseline production source from git commit 96da01f0f1ce550007a2f55d41a941ef0c13eda9
+test_worker_identity_survives_g3_begin_job_and_runtime_validation (r150.R150BackendIdentityTests.test_worker_identity_survives_g3_begin_job_and_runtime_validation) ...
+  test_worker_identity_survives_g3_begin_job_and_runtime_validation (r150.R150BackendIdentityTests.test_worker_identity_survives_g3_begin_job_and_runtime_validation) (profile='g3') ... FAIL
+
+======================================================================
+FAIL: test_worker_identity_survives_g3_begin_job_and_runtime_validation (r150.R150BackendIdentityTests.test_worker_identity_survives_g3_begin_job_and_runtime_validation) (profile='g3')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/tests/test_r150_backend_identity.py", line 216, in test_worker_identity_survives_g3_begin_job_and_runtime_validation
+    self.assertEqual(ran.returncode, 0, profile + ": " + ran.stdout + ran.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: -6 != 0 : g3: start backend=63 submission=1 result=1 resolve=0 relocate=0 run3d=0 runta=0 begin=1
+Assertion failed: (result == AppleAgxBackendRuntimeResultOk), function Check, file identity.c, line 189.
+
+
+----------------------------------------------------------------------
+Ran 1 test in 1.137s
+
+FAILED (failures=1)

@@ -1,0 +1,20 @@
+{
+  "exit": 0,
+  "first_error": "",
+  "native_draw_executed": false,
+  "architecture": "x64",
+  "pool_exit": 0,
+  "objects": {
+    "agx_state.obj": "fff2ee934ca236180e1676e22b272889bddce692a4a1a9d5c153862f5d6e3b09",
+    "pool.obj": "89da5feda5ab5821496d39a07a408c7282acd8b87e9c03e03b46fee79e2319f0",
+    "agx_win32_asahi_bo.obj": "5bfb985d9e3f755896e3606468a30530db1e237d34b76cafc4e5164f905f639d",
+    "agx_win32_asahi_capture.obj": "7870e56aea5f903806c3f687137ca66ccd5586724ae9dbf181035442e8a8e33a",
+    "agx_win32_asahi_pipeline.obj": "5cabdb496f0a2f4a8d303d349f0eda9425fd9e2edddc5da23c2c649fbafac127",
+    "agx_win32_asahi_pool_test.obj": "c24a4b29aede9edab3587ca7ee6f30d39dda7b6e7fae1f2e89e0197a48039007",
+    "agx_win32_asahi_pipeline_test.obj": "55cef7e2c3880fd9285519f6f0ab0e6eae0e47d4905b85dc4411e88d4cf67d41",
+    "native_pipeline_contract.obj": "0f36429ec191efa6782163cbdf172e8b43843cb88849a0039c6ee96ab256e338"
+  },
+  "reloc_build_exit": 0,
+  "reloc_exe_sha256": "1f01ed1374ef479f426ca58ee25c0bb38975b0af96f47efd41fd65dc8a2dd845",
+  "reloc_execution": 0
+}

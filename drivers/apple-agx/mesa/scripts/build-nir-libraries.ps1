@@ -1,0 +1,21 @@
+param([ValidateSet('x64','arm64')][string]$Architecture='x64')
+$ErrorActionPreference='Stop'
+$root='C:\Users\pauls\AD04-fullcompiler-001'
+$tool='C:\VS2022Community\VC\Tools\MSVC\14.44.35207'
+$kit='C:\Program Files (x86)\Windows Kits\10'
+$clang='C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin'
+$env:PATH="$root\venv\Scripts;$clang;$tool\bin\HostX64\x64;"+$env:PATH
+$env:INCLUDE="$tool\include;$kit\Include\10.0.26100.0\ucrt;$kit\Include\10.0.26100.0\shared;$kit\Include\10.0.26100.0\um"
+$env:LIB="$tool\lib\$Architecture;$kit\Lib\10.0.26100.0\ucrt\$Architecture;$kit\Lib\10.0.26100.0\um\$Architecture"
+$out=Join-Path $root ('build-nir-'+[guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory $out | Out-Null
+$args=@('-C',"$root\nir-$Architecture",'-j','4','-k','1','src/compiler/nir/libnir.a','src/compiler/libcompiler.a','src/util/libmesa_util.a','src/c11/impl/libmesa_util_c11.a','src/util/blake3/libblake3.a')
+$p=Start-Process -FilePath "$root\venv\Scripts\ninja.exe" -ArgumentList $args -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$out\stdout.log" -RedirectStandardError "$out\stderr.log"
+@{command='BUILD_NIR_LIBRARIES';exit=$p.ExitCode;output=$out;arguments=$args}|ConvertTo-Json|Set-Content "$out\result.json"
+Write-Output "BUILD_EXIT=$($p.ExitCode) EVIDENCE=$out"
+if($p.ExitCode -ne 0) {
+  $first=Select-String -Path "$out\stdout.log","$out\stderr.log" -Pattern '\b(fatal )?error( [A-Z]+\d+)?:' | Select-Object -First 1
+  @{stage='NIR dependencies';exit=$p.ExitCode;first_error=$first.Line}|ConvertTo-Json|Set-Content "$out\first-error.json"
+  Get-Content "$out\first-error.json"
+}
+exit $p.ExitCode

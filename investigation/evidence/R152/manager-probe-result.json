@@ -1,0 +1,24 @@
+{
+  "inputs": {
+    "drivers/apple-agx/shared/tests/apple_agx_render_shared_memory_test.c": "1ef50016d7c6a066e8df217be5418df340c5fc90b5fc0b49a9ed588ddc81637e",
+    "drivers/apple-agx/shared/src/apple_agx_render_shared_memory.c": "80738ac4b23ec77755bb912ccfa7e866ebbeef93ee44589d6bcb50f33e513b18",
+    "drivers/apple-agx/shared/src/apple_agx_g13_compute_work.c": "7b5b866256689cf378cb67487d91c21993b712afaeb27b11812b9dd4621e0805",
+    "drivers/apple-agx/shared/src/apple_agx_render_template.generated.c": "a7d37b80e2907f5f4f14f5bf12cdd4df9a113db6acb70c64790d59257c02a5d8",
+    "drivers/apple-agx/shared/src/apple_agx_render_template_rebase.c": "2c3a1a047a00294b01bc7ad39ab6ffae79df10fd4d9af30bf5bbbcd1691636f8",
+    "drivers/apple-agx/shared/src/apple_agx_exp208_adapter.c": "3223b362835d74225fb7d787fa6da3a23e2009795ffb1d817d4e42593a7d8c5c",
+    "drivers/apple-agx/shared/src/apple_agx_exp208_gdi.c": "51aab01df70c8d7a335ecd8961e874925d092fb2dcc280fb19675147646e681c",
+    "drivers/apple-agx/shared/src/apple_agx_exp208_framebuffer.c": "b63a86d88d9dbb0cdadf527dfe047143e2324f0556def00994ef09d90c0b449a",
+    "drivers/apple-agx/shared/src/apple_agx_gdi.c": "ed173a625eac2343fd8aa068aaef702749832c21ba4936188a420c00269404b4",
+    "drivers/apple-agx/shared/src/apple_agx_relocation.c": "8221ddeab04c9d347ec93bf3c9a1459b02ba791195b921cd92960634d98d5a52",
+    "drivers/apple-agx/shared/src/apple_agx_memory.c": "3f2f80dc830410d0cc246b4fd23633c64fb9c0d2fba89f14446b303240feee0b",
+    "drivers/apple-agx/shared/src/apple_agx_exp208_dynamic.c": "d815f2cd7e9802f8d1faa26e526cb6ebfa1288c563dc9e4d260be3a9ac90d919"
+  },
+  "observe": {
+    "exit": 0,
+    "output": "second manager: page=3100000 expected=6100000 block=3120000 expected=6120000 queue_preserved=1\nnaive InitBM: page=6100000 queue_preserved=0\n"
+  },
+  "require-current": {
+    "exit": -6,
+    "output": "second manager: page=3100000 expected=6100000 block=3120000 expected=6120000 queue_preserved=1\nAssertion failed: (read_u64(active_objects[1].Data+28u)==second_page), function main, file probe.c, line 445.\n"
+  }
+}

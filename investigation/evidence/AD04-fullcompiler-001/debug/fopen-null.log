@@ -1,0 +1,75 @@
+
+************* Preparing the environment for Debugger Extensions Gallery repositories **************
+   ExtensionRepository : Implicit
+   UseExperimentalFeatureForNugetShare : true
+   AllowNugetExeUpdate : true
+   NonInteractiveNuget : true
+   AllowNugetMSCredentialProviderInstall : true
+   AllowParallelInitializationOfLocalRepositories : true
+
+   EnableRedirectToV8JsProvider : false
+
+   -- Configuring repositories
+      ----> Repository : LocalInstalled, Enabled: true
+      ----> Repository : UserExtensions, Enabled: true
+
+>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.015 seconds
+
+************* Waiting for Debugger Extensions Gallery to Initialize **************
+
+>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.016 seconds
+   ----> Repository : UserExtensions, Enabled: true, Packages count: 0
+   ----> Repository : LocalInstalled, Enabled: true, Packages count: 29
+
+Microsoft (R) Windows Debugger Version 10.0.26100.6584 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+CommandLine: C:\Users\pauls\AD04-fullcompiler-001\asahi-d25a261c91764f0597fae88dec4bf195\agx_shader_fixture.exe C:\Users\pauls\AD04-fullcompiler-001\asahi-d25a261c91764f0597fae88dec4bf195\variant0 0 
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*
+Symbol search path is: srv*
+Executable search path is: 
+
++------------------------------------------------------------------------+
+| This target supports Hardware-enforced Stack Protection. A HW based    |
+| "Shadow Stack" may be available to assist in debugging and analysis.   |
+| See aka.ms/userhsp for more info.                                      |
+|                                                                        |
+| dps @ssp                                                               |
+|                                                                        |
++------------------------------------------------------------------------+
+
+ModLoad: 00007ff7`191e0000 00007ff7`19c28000   image00007ff7`191e0000
+ModLoad: 00007ffd`84e40000 00007ffd`850a7000   ntdll.dll
+ModLoad: 00007ffd`835b0000 00007ffd`8367b000   C:\Windows\System32\KERNEL32.DLL
+ModLoad: 00007ffd`822f0000 00007ffd`826f2000   C:\Windows\System32\KERNELBASE.dll
+ModLoad: 00007ffd`827c0000 00007ffd`8290c000   C:\Windows\System32\ucrtbase.dll
+ModLoad: 00007ffd`6f600000 00007ffd`6f62c000   C:\Windows\SYSTEM32\VCRUNTIME140.dll
+(7404.954c): Break instruction exception - code 80000003 (first chance)
+ntdll!LdrpDoDebuggerBreak+0x35:
+00007ffd`84f62239 cc              int     3
+0:000> cdb: Reading initial command 'bu ucrtbase!fopen; g; da @rcx; gu; r rax; kp; q'
+Breakpoint 0 hit
+*** WARNING: Unable to verify checksum for C:\Users\pauls\AD04-fullcompiler-001\asahi-d25a261c91764f0597fae88dec4bf195\agx_shader_fixture.exe
+00007ff7`193c93f6  "/dev/null"
+rax=0000000000000000
+Child-SP          RetAddr               Call Site
+00000022`8a55ebb0 00007ff7`19236721     agx_shader_fixture+0xcec8
+00000022`8a55edc0 00007ff7`193c2c30     agx_shader_fixture+0x56721
+00000022`8a55fef0 00007ffd`835dcd87     agx_shader_fixture+0x1e2c30
+00000022`8a55ff30 00007ffd`84eecaec     KERNEL32!BaseThreadInitThunk+0x17
+00000022`8a55ff60 00000000`00000000     ntdll!RtlUserThreadStart+0x2c
+quit:
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\atlmfc.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\ObjectiveC.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\concurrency.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\cpp_rest.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\stl.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Data.Json.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Media.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\windows.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\winrt.natvis'

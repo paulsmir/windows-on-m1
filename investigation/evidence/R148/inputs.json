@@ -1,0 +1,102 @@
+{
+  "base_commit": "7bdf1a136799662d2f5fe546439b2c296434ec36",
+  "package_source": "8f33725749f60a3247a5639fef1f75f3720064da",
+  "verified_source_files": 536,
+  "guest_files": [
+    {
+      "path": "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/Application.evtx",
+      "bytes": 21041152,
+      "sha256": "ee0ca25974e6ca7a079fac86a78c341da27f8c0d65f07ef2cea767cfadf5f36b"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/devnode.reg",
+      "bytes": 122302,
+      "sha256": "23d9b7bbcde94b1b18ebd3a7269f2e3abab184e216ad4575a767c7958c4a6dc6"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/DxgKrnl-Admin.evtx",
+      "bytes": 69632,
+      "sha256": "58c5ccbd43e6a8b65e33b88b353dc3ee30eba55ff2e37e4a8bd7eff596bf3064"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/EXP801DxgBoot.etl",
+      "bytes": 536870912,
+      "sha256": "0f36eeeb8fba1d930b6c6b8c9bc415cbcd4dcf7b40a6660fad0008608ef4224d"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/hidden-state.json",
+      "bytes": 27477,
+      "sha256": "9e4eb40ba8f392fc08fd66ce912deb3f40a4af3a044f1e7cd94af72c7997ba9c"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/pnp-properties.txt",
+      "bytes": 60892,
+      "sha256": "9ba23e89f635b76aea3551a0a19a208631dcece3ea7ed37f42139907bb5af1af"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/pnputil-resources.txt",
+      "bytes": 1568,
+      "sha256": "8d29194a1de0d665c6e02bc5b9edf9df34f10620f2a2af866ccb1020a956402d"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/post-recovery-Application.evtx",
+      "bytes": 21041152,
+      "sha256": "1ec7cd6208f97710fdfc06385e25ea93cf78cbc02bf74a55d0c4007585cb7eb7"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/post-recovery-events.json",
+      "bytes": 849945,
+      "sha256": "8b642fb824f17c8f46080c27fd9a41daed4505a812fd0f0bce819045bf9929ca"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/post-recovery-System.evtx",
+      "bytes": 21041152,
+      "sha256": "843322460089f08b145442d59f969ff37d7cde08869f00e4fd309ce4c443ced1"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/setupapi.dev.log",
+      "bytes": 3364566,
+      "sha256": "a013f3a67665698650fe0c18019dd08883b011edff3a5403dd5cda12311f722c"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/state.json",
+      "bytes": 29663,
+      "sha256": "d8bd4dd9b47ab2f3e72bd2c569fd87ed6f5fc074ebe93c7adf38477ed304323a"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/System.evtx",
+      "bytes": 21041152,
+      "sha256": "24128b1e08cfa8c789e461feb66c26febaea98922173ac42c49e766f4762e4af"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/umd-final-after-loss.log",
+      "bytes": 13799902,
+      "sha256": "5260e420d40b800b78ed7f79dab5bffa5337669c7a57e19592a4e0ed27015b97"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/umd.log",
+      "bytes": 13770558,
+      "sha256": "324fd0c2ea3f8fcb654adee5d535774ef4f48aa3c2f23743ee042947643bb962"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/wer-dumps.json",
+      "bytes": 268,
+      "sha256": "cbe117a08fe57762ee24e71847b641ce07af2289be2c35c618485f9ed6722ff4"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/WER-explorer.exe.5300.dmp",
+      "bytes": 856056929,
+      "sha256": "2871148d2c92d8af19a0ee260ca7b45aea391c3ca62dbc09f3cbbb2a128ac1cc"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/Wom1G3CopyQueryFailure.bin",
+      "bytes": 144,
+      "sha256": "301cc60523350142a10edd4f1a7c54c68132a0e3d9d85268e2e8bc9e977f0a21"
+    }
+  ],
+  "review_sha256": "753bdfe638d6171954875a5fc9a58c09761999ffcab89b9d216f566c7e1300c5",
+  "nested_dirty_diff_sha256": {
+    "m1n1_windows": "68387a2e4a778333004ae9e8e035304dfd70c5d83c8e1ec4dcff4c949427f0e7",
+    "mu": "2e654da05fbcd83288511c5161cc749c8b87d69e222cfc3f6fed3fceaea79a7d"
+  }
+}

@@ -1,0 +1,195 @@
+1: kd> cdb: Reading initial command '.for (r @$t0=poi(ffffd00f21087040); @$t0 != ffffd00f21087040; r @$t0=poi(@$t0)) { ? @$t0; dt AppleAgxRenderAdmission!_APPLE_AGX_GPUVA_G3_GRAPH @$t0+18 ProcessId LeaseToken; .if (poi(@$t0+1d8)) { dt AppleAgxRenderAdmission!_ADMISSION_G3_PRIVATE_SCENE poi(@$t0+1d8) Next Fence Queued Started GpuDone Reported; }; }; dx -r3 ((AppleAgxRenderAdmission!_ADMISSION_BACKEND_IMAGE*)0xffffd00f20b7dd40)->G4Header.Process; dx -r3 ((AppleAgxRenderAdmission!_ADMISSION_G3_PRIVATE_SCENE*)0xffffd00f219d0db0)->Storage; dt AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME ffffd00f21003000 FirmwareStartFailure; dt -r1 AppleAgxRenderAdmission!APPLE_AGX_G4_NATIVE_RENDER ffffd00f20b7e9b0; q'
+Evaluate expression: -52711585821232 = ffffd00f`20a6cdd0
+   +0x020 ProcessId  : 1
+   +0x058 LeaseToken : 0
+Evaluate expression: -52711645664864 = ffffd00f`1d15a9a0
+   +0x020 ProcessId  : 2
+   +0x058 LeaseToken : 0
+Evaluate expression: -52711586411056 = ffffd00f`209dcdd0
+   +0x020 ProcessId  : 3
+   +0x058 LeaseToken : 0
+Evaluate expression: -52711579860288 = ffffd00f`2101c2c0
+   +0x020 ProcessId  : 5
+   +0x058 LeaseToken : 0
+Evaluate expression: -52711594607152 = ffffd00f`2020bdd0
+   +0x020 ProcessId  : 6
+   +0x058 LeaseToken : 2
+   +0x000 Next     : (null) 
+   +0x1f8 Fence    : 0xdc
+   +0x200 Queued   : 1
+   +0x204 Started  : 1
+   +0x208 GpuDone  : 0
+   +0x20c Reported : 0
+Evaluate expression: -52711569621552 = ffffd00f`219dfdd0
+   +0x020 ProcessId  : 7
+   +0x058 LeaseToken : 0
+   +0x000 Next     : (null) 
+   +0x1f8 Fence    : 0
+   +0x200 Queued   : 0
+   +0x204 Started  : 0
+   +0x208 GpuDone  : 0
+   +0x20c Reported : 0
+((AppleAgxRenderAdmission!_ADMISSION_BACKEND_IMAGE*)0xffffd00f20b7dd40)->G4Header.Process                 [Type: APPLE_AGX_G4_PROCESS_RANGE [9]]
+    [0]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+        [+0x000] Va               : 0x2020000 [Type: unsigned __int64]
+        [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+        [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+    [1]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+        [+0x000] Va               : 0x2030000 [Type: unsigned __int64]
+        [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+        [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+    [2]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+        [+0x000] Va               : 0x2040000 [Type: unsigned __int64]
+        [+0x008] Bytes            : 0x400000 [Type: unsigned int]
+        [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+    [3]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+        [+0x000] Va               : 0x2440000 [Type: unsigned __int64]
+        [+0x008] Bytes            : 0x20000 [Type: unsigned int]
+        [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+    [4]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+        [+0x000] Va               : 0x2460000 [Type: unsigned __int64]
+        [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+        [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+    [5]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+        [+0x000] Va               : 0x2470000 [Type: unsigned __int64]
+        [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+        [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+    [6]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+        [+0x000] Va               : 0x2480000 [Type: unsigned __int64]
+        [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+        [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+    [7]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+        [+0x000] Va               : 0x2490000 [Type: unsigned __int64]
+        [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+        [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+    [8]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+        [+0x000] Va               : 0x24a0000 [Type: unsigned __int64]
+        [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+        [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+((AppleAgxRenderAdmission!_ADMISSION_G3_PRIVATE_SCENE*)0xffffd00f219d0db0)->Storage                 [Type: APPLE_AGX_G3_PRIVATE_SCENE]
+    [+0x000] Generation       : 0xc [Type: unsigned __int64]
+    [+0x008] Extents          [Type: APPLE_AGX_G3_PRIVATE_EXTENT [6]]
+        [0]              [Type: APPLE_AGX_G3_PRIVATE_EXTENT]
+            [+0x000] Generation       : 0xc [Type: unsigned __int64]
+            [+0x008] Offset           : 0x440000 [Type: unsigned int]
+            [+0x00c] Bytes            : 0x20000 [Type: unsigned int]
+        [1]              [Type: APPLE_AGX_G3_PRIVATE_EXTENT]
+            [+0x000] Generation       : 0xd [Type: unsigned __int64]
+            [+0x008] Offset           : 0x460000 [Type: unsigned int]
+            [+0x00c] Bytes            : 0x10000 [Type: unsigned int]
+        [2]              [Type: APPLE_AGX_G3_PRIVATE_EXTENT]
+            [+0x000] Generation       : 0xe [Type: unsigned __int64]
+            [+0x008] Offset           : 0x470000 [Type: unsigned int]
+            [+0x00c] Bytes            : 0x10000 [Type: unsigned int]
+        [3]              [Type: APPLE_AGX_G3_PRIVATE_EXTENT]
+            [+0x000] Generation       : 0xf [Type: unsigned __int64]
+            [+0x008] Offset           : 0x480000 [Type: unsigned int]
+            [+0x00c] Bytes            : 0x10000 [Type: unsigned int]
+        [4]              [Type: APPLE_AGX_G3_PRIVATE_EXTENT]
+            [+0x000] Generation       : 0x10 [Type: unsigned __int64]
+            [+0x008] Offset           : 0x490000 [Type: unsigned int]
+            [+0x00c] Bytes            : 0x10000 [Type: unsigned int]
+        [5]              [Type: APPLE_AGX_G3_PRIVATE_EXTENT]
+            [+0x000] Generation       : 0x11 [Type: unsigned __int64]
+            [+0x008] Offset           : 0x4a0000 [Type: unsigned int]
+            [+0x00c] Bytes            : 0x10000 [Type: unsigned int]
+    [+0x068] Ranges           [Type: APPLE_AGX_G4_PROCESS_RANGE [9]]
+        [0]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+            [+0x000] Va               : 0x2020000 [Type: unsigned __int64]
+            [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+            [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+        [1]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+            [+0x000] Va               : 0x2030000 [Type: unsigned __int64]
+            [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+            [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+        [2]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+            [+0x000] Va               : 0x2040000 [Type: unsigned __int64]
+            [+0x008] Bytes            : 0x400000 [Type: unsigned int]
+            [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+        [3]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+            [+0x000] Va               : 0x2440000 [Type: unsigned __int64]
+            [+0x008] Bytes            : 0x20000 [Type: unsigned int]
+            [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+        [4]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+            [+0x000] Va               : 0x2460000 [Type: unsigned __int64]
+            [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+            [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+        [5]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+            [+0x000] Va               : 0x2470000 [Type: unsigned __int64]
+            [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+            [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+        [6]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+            [+0x000] Va               : 0x2480000 [Type: unsigned __int64]
+            [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+            [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+        [7]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+            [+0x000] Va               : 0x2490000 [Type: unsigned __int64]
+            [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+            [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+        [8]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+            [+0x000] Va               : 0x24a0000 [Type: unsigned __int64]
+            [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+            [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+   +0x7640 FirmwareStartFailure : _APPLE_AGX_FIRMWARE_START_RECEIPT
+   +0x000 Flags            : 4
+   +0x004 IspZlsPixels     : 0
+   +0x008 VdmCtrlStreamBase : 0x200000
+   +0x010 VertexHelper     : APPLE_AGX_G4_HELPER
+      +0x000 Binary           : 0
+      +0x004 Cfg              : 0
+      +0x008 Data             : 0
+   +0x020 FragmentHelper   : APPLE_AGX_G4_HELPER
+      +0x000 Binary           : 0
+      +0x004 Cfg              : 0
+      +0x008 Data             : 0
+   +0x030 IspScissorBase   : 0x00000011`00080e40
+   +0x038 IspDbiasBase     : 0x00000011`00080e80
+   +0x040 IspOclQryBase    : 0
+   +0x048 Depth            : APPLE_AGX_G4_ZLS
+      +0x000 Base             : 0
+      +0x008 CompBase         : 0
+      +0x010 Stride           : 0
+      +0x014 CompStride       : 0
+   +0x060 Stencil          : APPLE_AGX_G4_ZLS
+      +0x000 Base             : 0
+      +0x008 CompBase         : 0
+      +0x010 Stride           : 0
+      +0x014 CompStride       : 0
+   +0x078 ZlsCtrl          : 0
+   +0x080 PppMultisampleCtrl : 0x88
+   +0x088 SamplerHeap      : 0
+   +0x090 PppCtrl          : 0x202
+   +0x094 WidthPx          : 0x10
+   +0x096 HeightPx         : 0x10
+   +0x098 Layers           : 1
+   +0x09a SamplerCount     : 0
+   +0x09c UtileWidthPx     : 0x20 ' '
+   +0x09d UtileHeightPx    : 0x20 ' '
+   +0x09e Samples          : 0x1 ''
+   +0x09f SampleSizeBytes  : 0x8 ''
+   +0x0a0 IspMergeUpperX   : 0x3dddb3d9
+   +0x0a4 IspMergeUpperY   : 0x3dddb3d9
+   +0x0a8 Bg               : APPLE_AGX_G4_BG_EOT
+      +0x000 Usc              : 0x100144
+      +0x004 ResourceSpec     : 0xffff1212
+   +0x0b0 Eot              : APPLE_AGX_G4_BG_EOT
+      +0x000 Usc              : 0x100244
+      +0x004 ResourceSpec     : 0x1012
+   +0x0b8 PartialBg        : APPLE_AGX_G4_BG_EOT
+      +0x000 Usc              : 0x1001c4
+      +0x004 ResourceSpec     : 0xffff1212
+   +0x0c0 PartialEot       : APPLE_AGX_G4_BG_EOT
+      +0x000 Usc              : 0x100244
+      +0x004 ResourceSpec     : 0x1012
+   +0x0c8 IspBgObjDepth    : 0
+   +0x0cc IspBgObjVals     : 0x300
+   +0x0d0 TimestampsVertex : APPLE_AGX_G4_TIMESTAMPS
+      +0x000 StartHandle      : 0
+      +0x004 StartOffset      : 0
+      +0x008 EndHandle        : 0
+      +0x00c EndOffset        : 0
+   +0x0e0 TimestampsFragment : APPLE_AGX_G4_TIMESTAMPS
+      +0x000 StartHandle      : 0
+      +0x004 StartOffset      : 0
+      +0x008 EndHandle        : 0
+      +0x00c EndOffset        : 0

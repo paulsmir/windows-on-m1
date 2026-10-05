@@ -1,0 +1,320 @@
+"""Reproduce EXP505's real CDD buffered BLT against the production callback."""
+import os
+import re
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+RENDER = ROOT/'drivers/apple-agx/render-admission'
+SHARED = ROOT/'drivers/apple-agx/shared'
+
+
+class PresentBltTests(unittest.TestCase):
+    def test_copy_codec_overlap_clipping_and_read_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            binary=Path(tmp)/'codec'
+            subprocess.run([os.environ.get('CC','clang'),'-std=c11','-Wall','-Wextra','-Werror',
+                            '-fsanitize=address,undefined','-I',str(RENDER/'include'),'-I',str(SHARED/'include'),
+                            str(RENDER/'tests/render_present_test.c'),str(RENDER/'src/render_present.c'),
+                            str(RENDER/'src/render_allocation.c'),'-o',str(binary)],check=True)
+            subprocess.run([str(binary)],check=True)
+
+    def test_exp505_buffered_blt_generates_copy_and_both_references(self):
+        source = (RENDER/'src/callbacks.c').read_text()
+        callback = re.search(r'_Use_decl_annotations_ NTSTATUS AdmissionDdiPresent\(.*?^}',source,re.S|re.M).group(0)
+        shim = r'''
+#include <assert.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <string.h>
+#include "render_objects.h"
+#include "render_allocation.h"
+#include "render_present.h"
+#include "render_submission.h"
+#include "render_submit_trace.h"
+#include "apple_agx_dma_shadow.h"
+#define _Use_decl_annotations_
+#define APPLE_AGX_GPUVA_G3_QUALIFICATION
+#define C_ASSERT(x) _Static_assert(x,#x)
+#define TRUE 1
+#define FALSE 0
+#define RtlZeroMemory(p,n) memset(p,0,n)
+#define RtlCopyMemory(p,q,n) memcpy(p,q,n)
+#define FIELD_OFFSET(t,f) ((unsigned)offsetof(t,f))
+#define STATUS_SUCCESS 0
+#define NT_SUCCESS(s) ((s)>=0)
+#define STATUS_INVALID_PARAMETER (-1)
+#define STATUS_INVALID_HANDLE (-2)
+#define STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE (-3)
+#define STATUS_INVALID_ADDRESS (-4)
+#define STATUS_INVALID_USER_BUFFER (-5)
+#define STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER (-6)
+#define D3DDDIFMT_A8R8G8B8 21
+#define APPLE_AGX_SCANOUT_J313_SURFACE_SIZE 0xfa0000ULL
+#define ADMISSION_OPEN_ALLOCATION_MAGIC 0x4f504152u
+#define DXGK_PRESENT_SOURCE_INDEX 1
+#define DXGK_PRESENT_DESTINATION_INDEX 2
+#define CONTAINING_RECORD(p,t,f) ((t *)((char *)(p)-offsetof(t,f)))
+typedef void *HANDLE;
+typedef void *PVOID;
+typedef void VOID;
+typedef unsigned UINT;
+typedef unsigned ULONG;
+typedef int NTSTATUS;
+typedef int BOOLEAN;
+typedef unsigned long long ULONGLONG;
+typedef uintptr_t ULONG_PTR;
+typedef unsigned char *PUCHAR;
+typedef struct {int32_t left,top,right,bottom;} RECT;
+typedef struct {int64_t QuadPart;} PHYSICAL_ADDRESS;
+typedef struct {HANDLE hDeviceSpecificAllocation; unsigned WriteOperation:1,SegmentId:5,Reserved:26;
+ union {PHYSICAL_ADDRESS PhysicalAddress;uint64_t VirtualAddress;};} DXGK_ALLOCATIONLIST;
+typedef struct {HANDLE hDeviceSpecificAllocation;uint64_t AllocationVirtualAddress;
+ PHYSICAL_ADDRESS PhysicalAddress;uint16_t SegmentId,PhysicalAdapterIndex;} DXGK_PRESENTALLOCATIONINFO;
+typedef struct {unsigned AllocationIndex,SlotId,DriverId,AllocationOffset,PatchOffset,SplitOffset;} D3DDDI_PATCHLOCATIONLIST;
+typedef struct {ADMISSION_OBJECT_DEVICE Object;} ADMISSION_DEVICE;
+typedef struct {ADMISSION_OBJECT_CONTEXT Object;struct {int Active;} SchedulerContext;
+ void *GpuvaG3Process;int GpuvaG3Poisoned;} ADMISSION_RENDER_CONTEXT;
+typedef struct {ADMISSION_OBJECT_ADAPTER ObjectAdapter;int Started;} ADMISSION_CONTEXT;
+typedef struct {unsigned Magic;ADMISSION_DEVICE *Device;unsigned RuntimeAllocation;
+ ADMISSION_ALLOCATION_OBJECT *Allocation;int ReadOnly;} ADMISSION_OPEN_ALLOCATION;
+typedef struct {void *pDmaBuffer;unsigned DmaSize;void *pDmaBufferPrivateData;
+ unsigned DmaBufferPrivateDataSize;
+ union {DXGK_ALLOCATIONLIST *pAllocationList;DXGK_PRESENTALLOCATIONINFO *pAllocationInfo;};
+ D3DDDI_PATCHLOCATIONLIST *pPatchLocationListOut;unsigned PatchLocationListOutSize;
+ unsigned MultipassOffset,Color;RECT DstRect,SrcRect;unsigned SubRectCnt;
+ const RECT *pDstSubRects;unsigned FlipInterval;union {unsigned Value;} Flags;
+ unsigned DmaBufferSegmentId;PHYSICAL_ADDRESS DmaBufferPhysicalAddress;
+ unsigned Reserved;uint64_t DmaBufferGpuVirtualAddress;
+ unsigned NumSrcAllocations,NumDstAllocations,PrivateDriverDataSize;void *pPrivateDriverData;
+} DXGKARG_PRESENT;
+typedef struct {HANDLE hContext;union {unsigned Value;} Flags;unsigned EngineOrdinal;
+ void *pDmaBuffer;unsigned DmaBufferSize;void *pDmaBufferPrivateData;unsigned DmaBufferPrivateDataSize;
+ DXGK_ALLOCATIONLIST *pAllocationList;unsigned AllocationListSize;
+ D3DDDI_PATCHLOCATIONLIST *pPatchLocationList;unsigned PatchLocationListSize;
+ unsigned PatchLocationListSubmissionStart,PatchLocationListSubmissionLength;
+ unsigned DmaBufferSubmissionStartOffset,DmaBufferSubmissionEndOffset;
+ unsigned DmaBufferPrivateDataSubmissionStartOffset,DmaBufferPrivateDataSubmissionEndOffset;
+ unsigned SubmissionFenceId;
+} DXGKARG_PATCH;
+typedef struct {HANDLE hContext;union {unsigned Value;struct {unsigned Paging:1,Present:1,Other:30;};} Flags;
+ unsigned EngineOrdinal,NodeOrdinal,SubmissionFenceId;
+ void *pDmaBufferPrivateData;unsigned DmaBufferPrivateDataSize,DmaBufferSize;
+ unsigned DmaBufferSubmissionStartOffset,DmaBufferSubmissionEndOffset;
+ unsigned DmaBufferPrivateDataSubmissionStartOffset,DmaBufferPrivateDataSubmissionEndOffset;
+} DXGKARG_SUBMITCOMMAND;
+typedef struct {HANDLE hContext;uint64_t DmaBufferVirtualAddress;unsigned DmaBufferSize;
+ void *pDmaBufferPrivateData;unsigned DmaBufferPrivateDataSize,DmaBufferUmdPrivateDataSize;
+ unsigned SubmissionFenceId,VidPnSourceId,FlipInterval;
+ union {unsigned Value;struct {unsigned Paging:1,Present:1,Other:30;};} Flags;
+ unsigned EngineOrdinal,NodeOrdinal;} DXGKARG_SUBMITCOMMANDVIRTUAL;
+static unsigned traced_field,traced_value;
+static void AdmissionSubmitTraceValueWindows(ADMISSION_CONTEXT *c,BOOLEAN enabled,
+ unsigned field,unsigned value){(void)c;if(enabled){traced_field=field;traced_value=value;}}
+static unsigned queue_calls,queued_fence,queued_bytes;
+static unsigned char queued_copy[4096];
+static NTSTATUS AdmissionPagingSubmitPresent(ADMISSION_CONTEXT *c,const DXGKARG_SUBMITCOMMAND *a,
+ const VOID *data,UINT bytes){assert(c->Started);assert(bytes<=4096);++queue_calls;
+ queued_fence=a->SubmissionFenceId;queued_bytes=bytes;memcpy(queued_copy,data,bytes);return 0;}
+static size_t RtlCompareMemory(const void *a,const void *b,size_t n){return memcmp(a,b,n)==0?n:0;}
+static void AdmissionRecordPresent(ADMISSION_DEVICE *d,const DXGKARG_PRESENT *p,unsigned b,NTSTATUS s){(void)d;(void)p;(void)b;(void)s;}
+static void AdmissionDwmRecordPresent(ADMISSION_CONTEXT *a,HANDLE c,
+ const DXGKARG_PRESENT *p,NTSTATUS s){(void)a;(void)c;(void)p;(void)s;}
+static unsigned open_receipt_calls;
+static ADMISSION_PRESENT_OPEN_ENDPOINT recorded_source,recorded_destination;
+static void AdmissionRecordPresentOpenFailure(ADMISSION_DEVICE *device,HANDLE context,
+ const DXGKARG_PRESENT *present,const ADMISSION_PRESENT_OPEN_ENDPOINT *source,
+ const ADMISSION_PRESENT_OPEN_ENDPOINT *destination){
+ assert(device!=NULL && context!=NULL && present->Flags.Value==1u);
+ ++open_receipt_calls;recorded_source=*source;recorded_destination=*destination;
+}
+static void AdmissionFlushPresentTransfer(ADMISSION_CONTEXT *c){(void)c;}
+static void AdmissionFlushGdiReceipt(ADMISSION_CONTEXT *c){(void)c;}
+'''
+        cases = r'''
+int main(void){
+ assert(sizeof(ADMISSION_PRESENT_OPEN_ENDPOINT)==64);
+ assert(sizeof(DXGK_ALLOCATIONLIST)==24 && sizeof(DXGK_PRESENTALLOCATIONINFO)==32);
+ assert(offsetof(DXGK_PRESENTALLOCATIONINFO,AllocationVirtualAddress)==8);
+ ADMISSION_CONTEXT adapter={{ADMISSION_OBJECT_ADAPTER_MAGIC,1,1},1};
+ ADMISSION_DEVICE device={{ADMISSION_OBJECT_DEVICE_MAGIC,2,&adapter.ObjectAdapter,0,1,2}};
+ ADMISSION_RENDER_CONTEXT context={{ADMISSION_OBJECT_CONTEXT_MAGIC,2,&device.Object,0,0,1,0},{1},NULL,0};
+ ADMISSION_ALLOCATION_OBJECT src={0},dst={0};
+ assert(AdmissionAllocationDescribe(2560,1600,4,1,21,1,&src.Description));
+ assert(AdmissionAllocationDescribe(2560,1600,4,1,21,0,&dst.Description));
+ src.Magic=dst.Magic=ADMISSION_ALLOCATION_OBJECT_MAGIC;
+ ADMISSION_OPEN_ALLOCATION os={ADMISSION_OPEN_ALLOCATION_MAGIC,&device,1,&src,1};
+ ADMISSION_OPEN_ALLOCATION od={ADMISSION_OPEN_ALLOCATION_MAGIC,&device,2,&dst,0};
+ DXGK_ALLOCATIONLIST a[3]={0};a[1].hDeviceSpecificAllocation=&os;a[1].SegmentId=2;
+ a[1].PhysicalAddress.QuadPart=0x1501000000LL;a[2].hDeviceSpecificAllocation=&od;
+ a[2].SegmentId=2;a[2].WriteOperation=1;a[2].PhysicalAddress.QuadPart=0x1500000000LL;
+ unsigned char dma[4096]={0},private_data[8192]={0};D3DDDI_PATCHLOCATIONLIST patches[256]={0};
+ RECT rects[2]={{10,20,76,88},{100,120,140,160}};DXGKARG_PRESENT p={0};
+ p.pDmaBuffer=dma;p.DmaSize=4096;p.pDmaBufferPrivateData=private_data;p.DmaBufferPrivateDataSize=8192;
+ p.pAllocationList=a;p.pPatchLocationListOut=patches;p.PatchLocationListOutSize=256;
+ p.SrcRect=p.DstRect=(RECT){10,20,140,160};p.SubRectCnt=2;p.pDstSubRects=rects;p.Flags.Value=1;
+ assert(AdmissionDdiPresent(&context,&p)==STATUS_SUCCESS);
+ assert((unsigned char *)p.pDmaBuffer>dma && (unsigned char *)p.pDmaBuffer<=dma+4096);
+ assert(p.pPatchLocationListOut==patches+2);
+ assert(patches[0].AllocationIndex==1 && patches[1].AllocationIndex==2);
+ assert(patches[0].PatchOffset==144 && patches[1].PatchOffset==152);
+ assert(p.MultipassOffset==2);
+ APPLE_AGX_DMA_SHADOW shadow;APPLE_AGX_DMA_SHADOW_VIEW view;ADMISSION_PRESENT_BLT_COMMAND command;
+ assert(AppleAgxDmaShadowOpen(&shadow,private_data,8192));
+ assert(AppleAgxDmaShadowFind(private_data,shadow.BytesUsed,0,200,&view));
+ assert(AdmissionPresentBltValidate(view.Bytes,200,1,&command));
+ assert(command.RectCount==2);
+ assert(command.SourceRect.Left==10 && command.SourceRect.Top==20 &&
+        command.SourceRect.Right==140 && command.SourceRect.Bottom==160);
+ assert(command.DestinationRect.Left==10 && command.DestinationRect.Top==20 &&
+        command.DestinationRect.Right==140 && command.DestinationRect.Bottom==160);
+ assert(command.SourceLocation==0x0200001501000000ULL && command.DestinationLocation==0x0200001500000000ULL);
+ DXGKARG_SUBMITCOMMAND submit={0};submit.hContext=&context;submit.Flags.Value=2;submit.SubmissionFenceId=37;
+ submit.pDmaBufferPrivateData=private_data;submit.DmaBufferPrivateDataSize=8192;submit.DmaBufferSize=4096;
+ submit.DmaBufferSubmissionEndOffset=200;submit.DmaBufferPrivateDataSubmissionEndOffset=shadow.BytesUsed;
+ assert(AdmissionPresentSubmit(&adapter,&submit)==0); /* no Patch call */
+ assert(queue_calls==1 && queued_fence==37 && queued_bytes==200);
+ submit.SubmissionFenceId=38;submit.DmaBufferPrivateDataSubmissionEndOffset=0;
+ assert(AdmissionPresentSubmit(&adapter,&submit)==0); /* nonpaging zero private subrange */
+ assert(queue_calls==2 && queued_fence==38 && queued_bytes==200);
+ submit.DmaBufferPrivateDataSubmissionEndOffset=shadow.BytesUsed-1;
+ traced_field=traced_value=0;
+ assert(AdmissionPresentSubmitTraced(&adapter,&submit,TRUE)==STATUS_INVALID_PARAMETER);
+ assert(traced_field==AdmissionSubmitTracePresentGuard);
+ assert(traced_value==AdmissionPresentSubmitPrivateEndLow);
+ assert(queue_calls==2);
+ submit.DmaBufferPrivateDataSubmissionEndOffset=shadow.BytesUsed;
+ DXGKARG_PATCH patch={0};patch.hContext=&context;patch.Flags.Value=2;
+ patch.pDmaBuffer=dma;patch.DmaBufferSize=4096;patch.pDmaBufferPrivateData=private_data;
+ patch.DmaBufferPrivateDataSize=8192;patch.pAllocationList=a;patch.AllocationListSize=3;
+ patch.pPatchLocationList=patches;patch.PatchLocationListSize=2;patch.PatchLocationListSubmissionLength=2;
+ patch.DmaBufferSubmissionEndOffset=200;patch.DmaBufferPrivateDataSubmissionEndOffset=shadow.BytesUsed;
+ patch.SubmissionFenceId=39;a[1].PhysicalAddress.QuadPart=0x1501800000LL;
+ assert(AdmissionPresentPatch(&adapter,&patch)==0);
+ assert(AdmissionPresentPatch(&adapter,&patch)==0); /* idempotent relocation */
+ assert(AdmissionPresentBltValidate(view.Bytes,200,1,&command));
+ assert(command.SourceLocation==0x0200001501800000ULL);
+ assert(AdmissionPresentBltValidate(queued_copy,queued_bytes,1,&command));
+ assert(command.SourceLocation==0x0200001501000000ULL); /* prior queued snapshot immutable */
+ submit.SubmissionFenceId=39;assert(AdmissionPresentSubmit(&adapter,&submit)==0);
+ assert(queue_calls==3 && queued_fence==39);
+ assert(AppleAgxDmaShadowPatchU64(private_data,shadow.BytesUsed,144,0));
+ assert(AdmissionPresentSubmit(&adapter,&submit)==STATUS_INVALID_PARAMETER);
+ assert(queue_calls==3); /* cannot submit unresolved source */
+ traced_field=traced_value=0;
+ assert(AdmissionPresentSubmitTraced(&adapter,&submit,TRUE)==STATUS_INVALID_PARAMETER);
+ assert(traced_field==AdmissionSubmitTracePresentGuard);
+ assert(traced_value==AdmissionPresentSubmitResidency);
+ assert(AppleAgxDmaShadowPatchU64(private_data,shadow.BytesUsed,144,0x0200001501800000ULL));
+ submit.DmaBufferSubmissionStartOffset=1;traced_field=traced_value=0;
+ assert(AdmissionPresentSubmitTraced(&adapter,&submit,TRUE)==STATUS_INVALID_PARAMETER);
+ assert(traced_field==AdmissionSubmitTracePresentGuard);
+ assert(traced_value==AdmissionPresentSubmitDmaStart);
+ context.Object.Flags=ADMISSION_CONTEXT_VIRTUAL_ADDRESSING;
+ context.GpuvaG3Process=&context;
+ DXGK_PRESENTALLOCATIONINFO virtual_allocations[3]={0};
+ virtual_allocations[1].hDeviceSpecificAllocation=&os;
+ virtual_allocations[1].AllocationVirtualAddress=0x100000ULL;
+ virtual_allocations[2].hDeviceSpecificAllocation=&od;
+ virtual_allocations[2].AllocationVirtualAddress=0x200000ULL;
+ p.pAllocationInfo=virtual_allocations;
+ memset(dma,0,sizeof(dma));memset(private_data,0,sizeof(private_data));
+ p.pDmaBuffer=dma;p.DmaSize=4096;p.pDmaBufferPrivateData=private_data;
+ p.DmaBufferPrivateDataSize=8192;p.pPatchLocationListOut=NULL;
+ p.PatchLocationListOutSize=0;p.MultipassOffset=0;
+ assert(AdmissionDdiPresent(&context,&p)==STATUS_SUCCESS);
+ assert(AppleAgxDmaShadowOpen(&shadow,private_data,8192));
+ assert(AppleAgxDmaShadowFind(private_data,shadow.BytesUsed,0,200,&view));
+ assert(AdmissionPresentBltValidate(view.Bytes,view.DmaBytes,1,&command));
+ assert(command.Version==ADMISSION_PRESENT_BLT_GPUVA_VERSION);
+ assert(command.SourceLocation==0x100000ULL && command.DestinationLocation==0x200000ULL);
+ patch.DmaBufferSubmissionEndOffset=view.DmaBytes;
+ assert(AdmissionPresentPatch(&adapter,&patch)==STATUS_INVALID_PARAMETER);
+ DXGKARG_SUBMITCOMMANDVIRTUAL virtual_submit={0};
+ virtual_submit.hContext=&context;virtual_submit.DmaBufferVirtualAddress=0x60000ULL;
+ virtual_submit.DmaBufferSize=4096;virtual_submit.pDmaBufferPrivateData=private_data;
+ virtual_submit.DmaBufferPrivateDataSize=8192;virtual_submit.SubmissionFenceId=40;
+ virtual_submit.Flags.Value=2;
+ assert(AdmissionPresentSubmitVirtual(&adapter,&context,&virtual_submit)==STATUS_SUCCESS);
+ assert(queue_calls==4 && queued_fence==40 && queued_bytes==200);
+ p.pDmaBuffer=dma;p.DmaSize=4096;p.pDmaBufferPrivateData=private_data;
+ p.DmaBufferPrivateDataSize=8192;p.MultipassOffset=0;
+ virtual_allocations[1].SegmentId=1;
+ assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_PARAMETER);
+ virtual_allocations[1].SegmentId=0;
+ virtual_allocations[2].PhysicalAdapterIndex=1;
+ assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_PARAMETER);
+ virtual_allocations[2].PhysicalAdapterIndex=0;
+ virtual_allocations[1].hDeviceSpecificAllocation=NULL;
+ assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_HANDLE);
+ assert(open_receipt_calls==1);
+ assert(recorded_source.Index==1 && recorded_source.Reason==ADMISSION_PRESENT_OPEN_NULL_HANDLE);
+ assert(recorded_source.Handle==0 && recorded_source.GpuVirtualAddress==0x100000ULL);
+ assert(recorded_destination.Index==2 && recorded_destination.Reason==ADMISSION_PRESENT_OPEN_OK);
+ assert(recorded_destination.Handle==(unsigned long long)(uintptr_t)&od);
+ virtual_allocations[1].hDeviceSpecificAllocation=&os;od.ReadOnly=1;
+ assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_HANDLE);
+ assert(open_receipt_calls==2);
+ assert(recorded_source.Reason==ADMISSION_PRESENT_OPEN_OK);
+ assert(recorded_destination.Reason==ADMISSION_PRESENT_OPEN_READ_ONLY);
+ od.ReadOnly=0;
+ os.Magic=0;
+ assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_HANDLE);
+ assert(recorded_source.Reason==ADMISSION_PRESENT_OPEN_BAD_MAGIC);
+ os.Magic=ADMISSION_OPEN_ALLOCATION_MAGIC;
+ ADMISSION_DEVICE foreign_device={{ADMISSION_OBJECT_DEVICE_MAGIC,2,&adapter.ObjectAdapter,0,1,2}};
+ os.Device=&foreign_device;
+ assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_HANDLE);
+ assert(recorded_source.Reason==ADMISSION_PRESENT_OPEN_FOREIGN_DEVICE);
+ os.Device=&device;
+ os.Allocation=NULL;
+ assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_HANDLE);
+ assert(recorded_source.Reason==ADMISSION_PRESENT_OPEN_NULL_ALLOCATION);
+ os.Allocation=&src;
+ src.Magic=0;
+ assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_HANDLE);
+ assert(recorded_source.Reason==ADMISSION_PRESENT_OPEN_BAD_ALLOCATION_MAGIC);
+ src.Magic=ADMISSION_ALLOCATION_OBJECT_MAGIC;
+ src.Description.Magic=0;
+ assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_HANDLE);
+ assert(recorded_source.Reason==ADMISSION_PRESENT_OPEN_BAD_DESCRIPTION);
+ assert(recorded_destination.Reason==ADMISSION_PRESENT_OPEN_OK);
+ /* EXP955: dxgkrnl issues the legacy DWM MMIO flip (no DMA buffer) with
+  * Flip|FlipWithNoWait (0xC); FlipOnVSyncMmIo flips never stall the pipeline,
+  * so both forms describe the same SetVidPnSourceAddress flip. */
+ assert(AdmissionAllocationDescribe(2560,1600,4,1,21,0,&src.Description));
+ DXGK_PRESENTALLOCATIONINFO flip_info[3]={0};
+ flip_info[1].hDeviceSpecificAllocation=&os;
+ DXGKARG_PRESENT flip={0};
+ flip.pAllocationInfo=flip_info;flip.NumSrcAllocations=1;
+ flip.Flags.Value=0x4;
+ NTSTATUS plain_flip=AdmissionDdiPresent(&context,&flip);
+ assert(plain_flip==STATUS_SUCCESS);
+ flip.Flags.Value=0xC;
+ assert(AdmissionDdiPresent(&context,&flip)==STATUS_SUCCESS);
+ /* EXP956: dxgkrnl issues the FlipOnVSyncMmIo present with no allocation
+  * list (NumSrcAllocations 0); SetVidPnSourceAddress performs the flip. */
+ DXGKARG_PRESENT mmio={0};mmio.Flags.Value=0xC;
+ assert(AdmissionDdiPresent(&context,&mmio)==STATUS_SUCCESS);
+ mmio.Flags.Value=0x4;
+ assert(AdmissionDdiPresent(&context,&mmio)==STATUS_SUCCESS);
+ flip.Flags.Value=0x8; /* FlipWithNoWait alone is not a flip */
+ assert(AdmissionDdiPresent(&context,&flip)==STATUS_INVALID_PARAMETER);
+ flip.Flags.Value=0x14; /* other modifiers stay unsupported */
+ assert(AdmissionDdiPresent(&context,&flip)==STATUS_INVALID_PARAMETER);
+ return 0;
+}
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            frontend=(RENDER/'src/present_windows.c').read_text()
+            frontend=frontend.replace('#include "render_admission.h"','')
+            program=Path(tmp)/'present.c'; program.write_text(shim+frontend+callback+cases)
+            binary=Path(tmp)/'present'
+            subprocess.run([os.environ.get('CC','clang'),'-std=c11','-Wall','-Wextra','-Werror',
+                            '-fsanitize=address,undefined','-I',str(RENDER/'include'),'-I',str(SHARED/'include'),str(program),
+                            str(RENDER/'src/render_allocation.c'),str(RENDER/'src/render_present.c'),
+                            str(RENDER/'src/render_submission.c'),
+                            str(SHARED/'src/apple_agx_dma_shadow.c'),'-o',str(binary)],check=True)
+            subprocess.run([str(binary)],check=True)

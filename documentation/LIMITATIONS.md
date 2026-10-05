@@ -21,6 +21,11 @@ driver for the built-in Apple keyboard and Windows Precision Touchpad is validat
 development J313, but external USB input remains the required installation and recovery
 path. See `APPLE_INPUT.md` for its exact bounded checkpoint and limitations.
 
+The J313 AGX G0 resource contract and G1 firmware-only lifecycle are hardware-qualified.
+They validate firmware management and cold-reset cleanup, but expose no Windows graphics
+adapter and submit no render or compute work. Windows still uses Microsoft Basic Display.
+See `AGX_BRINGUP.md` for the exact boundary and the direct WDDM target architecture.
+
 ## Storage
 
 The synthetic NVMe bridge performs correctness-first synchronous I/O. A measured sequential

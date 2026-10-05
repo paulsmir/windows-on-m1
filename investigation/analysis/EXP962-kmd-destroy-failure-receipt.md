@@ -1,0 +1,13 @@
+# EXP962 — durable first KMD DestroyAllocation failure receipt
+
+Classification: FULL GRAPHICS diagnostic. EXP960 confirmed that Windows `pfnDeallocateCb` returned `E_INVALIDARG` for a full runtime resource handle. EXP961 reused the same exact package and queried the existing read-only KMD DWM DDI probe, but its kind 10 entry retained only the latest success among 756 then 4784 calls. EXP961 did not reproduce the UMD refusal, so it cannot exclude a brief KMD error. A different hardware variable is needed before changing allocation behavior.
+
+WINDOWS CONTRACT: Microsoft's `D3DDDICB_DEALLOCATE` allows non-null runtime `hResource` and `pfnDeallocateCb` reports `E_INVALIDARG` for invalid parameters. `DXGKARG_DESTROYALLOCATION` supplies independent KMD `hResource`, allocation list and `DestroyResource` flag; `DxgkDdiCreateAllocation` may return no KMD-private resource handle. These are distinct handles. The pinned WDK26100 headers define the compiled ABI.
+
+AGX/ASAHI CONTRACT: Asahi AGX/UAT/RTKit queue, memory and event behavior is unchanged. Current m1n1 AGX power/DCP and Mu `APPL0002` ACPI path are unchanged; neither owns Windows callback validation or KMD allocation lifetimes.
+
+TRANSLATION: The current UMD passes the full runtime handle to `pfnDeallocateCb`. The current KMD `AdmissionDestroyAllocationImpl` rejects some shapes, but whether dxgkrnl invoked it for the failing callback is unknown. `AdmissionRecordG1bDdiFailure` already records bounded DDI failure status in the device registry and is used by the other allocation DDIs. Add exactly one call from `AdmissionDdiDestroyAllocation` with unused DDI ID 6. It runs only after a KMD error and does not change return status, allocation object, timing on success, cap bits, GPU work, firmware or signer. Snapshot pre-run `Wom1G1bFailure*` values and compare after the first UMD stage 2 refusal. A new ID6 receipt attributes the failure to KMD; no ID6 with available quota points to rejection before KMD (or a success-only KMD call). The guest probe's last-event status remains supplementary, not decisive.
+
+WHAT IS STILL UNKNOWN: whether this exact DWM callback refusal reaches KMD, which KMD argument predicate or dxgkrnl handle validation causes `E_INVALIDARG`, and whether this error causes the separate low32 DWM heap-pointer corruption. Do not fix KMD `hResource` handling or UMD lifecycle based on speculation.
+
+Checkpoint: short full-owner boot after durable clean Code28, collect first UMD stage2 E_INVALIDARG (if it occurs) plus bounded registry failure receipts and exact package identity. Stop after one discriminator, then exact Code43 cleanup and durable Code28 recovery. If the callback error does not occur, verdict inconclusive and do not rerun the same probe without new evidence.

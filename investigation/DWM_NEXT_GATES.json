@@ -1,0 +1,448 @@
+{
+  "scope": "PRE-DWM hardware; measured EXP737 requirements only",
+  "order": [
+    "nonblocking_map",
+    "dxgi_1_1_table",
+    "0_x_coverage",
+    "shared_create_open",
+    "package",
+    "Air"
+  ],
+  "gates": [
+    {
+      "id": "nonblocking_map",
+      "status": "PASS_OFFLINE",
+      "evidence": "EXP747-nonblocking-map/final",
+      "proof": "Idle/pending/completed Map; ResourceIsStagingBusy active-no-flush/pending/complete/independent-resource; x64 fullsuite0 ARM64build0",
+      "limits": "Context-wide map synchronization; WRITE_DISCARD serializes without rename"
+    },
+    {
+      "id": "shared_create_open",
+      "status": "PASS_OFFLINE",
+      "sizes": [
+        [
+          1024,
+          1024
+        ],
+        [
+          64,
+          320
+        ],
+        [
+          1024,
+          1088
+        ],
+        [
+          192,
+          192
+        ],
+        [
+          256,
+          256
+        ],
+        [
+          512,
+          512
+        ]
+      ],
+      "format": 87,
+      "bind_flags": 40,
+      "isolation": "Device B imports only allocation private bytes and runtime handles; no creator object or pointer/registry lookup",
+      "proof": "Real producer render A -> backing fence -> sample B -> retirement; same backing identity, independent owners/lifetimes",
+      "negative": [
+        "foreign private data",
+        "truncated private data",
+        "pitch not multiple16",
+        "size below pitch*height",
+        "format outside admitted family"
+      ],
+      "negative_pass": "deterministic rejection before import/submission; no crash or leaked holds",
+      "layout": {
+        "modifier": "linear",
+        "mip_levels": 1,
+        "samples": 1,
+        "pitch_invariants": [
+          "pitch>=width*bpp",
+          "pitch%16==0",
+          "size>=pitch*height"
+        ]
+      },
+      "evidence": "EXP750-shared-resource/import-size-full.log + test-import-size-arm64.log",
+      "result": "7sizes including1366x768; createA/openB by copied allocation private bytes and separate KMT handle; native drawA/fence/destroyA; sampled native blitB; two placements/retirement; five invalid private data cases; x64exit0 ARM64build0",
+      "limits": "Selected measured shared DXGI87 RT|SRV linear1mip1sample; primary scanout eligibility remains exact mode; offline KMT aliases do not prove physical pixel values"
+    },
+    {
+      "id": "0_x_coverage",
+      "status": "PASS_OFFLINE",
+      "required": [
+        "BGRA/BGRX 1D/3D/Cube create/map/sample",
+        "GenMips source/runtime decision and implementation when mandatory",
+        "MULTISAMPLE_LOAD truthful decision with pinned WDK/Microsoft evidence"
+      ],
+      "no_waiver": "No format-query absence inference from intentionally failed CreateDevice probe",
+      "evidence": "EXP749-bgr-coverage/final-contract.json + test-final.log + test-final-arm64.log",
+      "proof": "32 native BGR dimension/view draws;16 GenMips chains including3D depth5 andCube6faces; actual ld_ms->txf_ms; capture/materializer/KMD2placements/retirement; x64suite0 ARM64build0",
+      "multisample": "MS_LOAD0x10 for87/88/91/93; real WARP admits1sample TEXTURE2DMS; native fetch verified. MS_RT0 and qualities>1zero; no MSAA claim",
+      "limits": "Offline producer/translation proof; physical filtering/fetch pixels unverified. No0_x advertisement until remaining gates."
+    },
+    {
+      "id": "blt_dxgi",
+      "status": "DEFERRED_POST_FIRST_DWM_RUN",
+      "source_sizes": [
+        [
+          1024,
+          1024
+        ],
+        [
+          64,
+          320
+        ],
+        [
+          1024,
+          1088
+        ],
+        [
+          192,
+          192
+        ],
+        [
+          256,
+          256
+        ],
+        [
+          512,
+          512
+        ]
+      ],
+      "destination_sizes": [
+        [
+          1024,
+          1024
+        ],
+        [
+          64,
+          320
+        ],
+        [
+          1024,
+          1088
+        ],
+        [
+          192,
+          192
+        ],
+        [
+          256,
+          256
+        ],
+        [
+          512,
+          512
+        ]
+      ],
+      "formats": [
+        "BGRA_UNORM",
+        "BGRX_UNORM",
+        "BGRA_SRGB",
+        "BGRX_SRGB"
+      ],
+      "proof": "Real Blt -> one native pass/capture/materializer/retirement; unequal rectangles bilinear stretch; encoded sRGB values preserved",
+      "forbidden": [
+        "sRGB-to-linear conversion",
+        "resolve-then-convert in place"
+      ],
+      "reason": "Microsoft Supporting the DXGI DDI + current NO_REDIRECTION return: no shared-resource presentation redirection; unchanged return",
+      "reopen_if": "Any reject-BltDXGI in first DWM experiment",
+      "hardware_expectation": "reject-blt = 0"
+    },
+    {
+      "id": "dxgi_1_1_table",
+      "status": "PASS_OFFLINE",
+      "proof_before_callback_write": [
+        "runtime selects DXGI1_1 for exact Interface/Version",
+        "exact pinned table size and field offset",
+        "executable sentinel/ABI guard"
+      ],
+      "base_only_action": "revisit interface negotiation before package; no forced extended-table cast",
+      "first_attempt": "Builder real D3D11 software-driver probe, flags0xa9; record runtime version and measured Interface/Version; deliberate CreateDevice failure cannot establish post-create format-query absence",
+      "evidence": "EXP748-runtime-probe/probe4 + table-green",
+      "measurement": {
+        "interface": "0x000a0006",
+        "version": "0x177a",
+        "macro": true,
+        "base_bytes": 56,
+        "extended_bytes": 64,
+        "slot_offset": 56,
+        "builder_d3d11": "26100.9278",
+        "Air_reference_d3d11": "26100.9457"
+      },
+      "scope": "Real builder software runtime negotiation plus native frontend guarded-table execution; not Air execution",
+      "implementation": "Conditional resolver slot, existing flush/retire; base/extended canaries and valid/foreign/null resource tests pass"
+    }
+  ],
+  "preregistration_required_line": "DWM with DirectFlip=TRUE and no CheckDirectFlipSupport: unknown; observe reject-* / ETW.",
+  "references": [
+    ".local/research/DWM_GATES_IMPLEMENTATION_NOTES.md (verify assertions before applying)"
+  ],
+  "preregistration_expectations": [
+    "DWM with DirectFlip=TRUE and no CheckDirectFlipSupport: unknown; observe reject-* / ETW.",
+    "reject-blt = 0; unexpected refusal reopens Blt gate",
+    "Physical screen immediately after logon, before Windows key",
+    "First reached reject-* and ETW; APPLE_AGX_UMD_REFUSALS_ONLY=1"
+  ],
+  "advertisement": {
+    "status": "PASS_OFFLINE",
+    "versions": [
+      "D3D10_0_DDI_SUPPORTED",
+      "D3D10_0_x_DDI_SUPPORTED"
+    ],
+    "evidence": "EXP751-dwm-extended-admission/test-admission.log + test-admission-arm64.log",
+    "source_sha256": "209412e71f64b22752552c5788d88f120d190368b9ce4655829e381f5ecabe67"
+  },
+  "first_dwm_hardware": {
+    "experiment": "EXP751",
+    "status": "EXECUTED_REJECTED",
+    "evidence": "EXP751-dwm-extended-admission/causal-result.json",
+    "post_login": "INCONCLUSIVE_NO_USER_OR_EXPLORER",
+    "actual_boundary": "nativeCreateVertexShader / ClearGuard -> TTN scalar temporary indirect assertion"
+  },
+  "post_hardware_causal_target": {
+    "id": "runtime_indexable_temporary",
+    "status": "PASS_OFFLINE",
+    "mandatory_reason": "Actual standard-runtime ClearGuard VS crashes DWM before desktop; permitted scope exception2",
+    "offline_pass": "Authored indexable-temp VS reproduces assertion then native translation/emission passes with true TGSIarray declarations",
+    "hardware_dependency": "none for translator fix; next DWM consequence needs fresh preregistered hardware",
+    "evidence": "EXP752-indexable-temp/verified-contract.json",
+    "source_sha256": "01e72146c3c0cf4e12f31a189f76993a87562eeb2e685b7be6203581a5a093b3"
+  },
+  "second_dwm_hardware": {
+    "experiment": "EXP752",
+    "status": "EXECUTED_REJECTED_WITH_CAUSAL_ADVANCE",
+    "evidence": "EXP752-indexable-temp/causal-result.json",
+    "fixed_boundary": "tgsi_to_nir indirect scalar temporary assertion absent",
+    "actual_boundary": "Asahi compiler rejects load_vertex_id_zero_base in a hardware vertex shader",
+    "post_login": "INCONCLUSIVE_NO_USER_OR_EXPLORER"
+  },
+  "next_hardware_causal_target": {
+    "id": "multiple_draws_per_windows_flush",
+    "status": "HARDWARE_REJECTED_INSUFFICIENT",
+    "mandatory_reason": "EXP754 E_NOTIMPL occurs during draw type17; package750 one-draw batch split did not remove the same semantic failure",
+    "offline_pass": "Counter-level producer/capture/materializer/KMD/retirement proof only",
+    "missing_offline_proof": [
+      "second-batch color LOAD from data_valid",
+      "depth/stencil LOAD and persistence",
+      "state persistence without rebinding",
+      "both draws!=1 and draw-receipt guards"
+    ],
+    "evidence": "EXP755-multidraw-offline/causal-result.json",
+    "hardware_dependency": "No more hardware until exact SetError attribution and missing batch-split invariants pass offline"
+  },
+  "third_dwm_hardware": {
+    "experiment": "EXP753",
+    "status": "EXECUTED_REJECTED_WITH_CAUSAL_ADVANCE",
+    "evidence": "EXP753-vertexid-hardware/causal-result.json",
+    "fixed_boundary": "load_vertex_id_zero_base hardware-VS assertion absent; exact UMD748 selected without UMD crash",
+    "hardware_device": "PROVEN by exact loaded UMD path/hash/checksum and DXGKRNL HWDEVICE FL10_0",
+    "agx_execution": "NOT_PROVEN: no dwm.exe-correlated native graph/submission/completion/Present",
+    "actual_boundary": "0x8898008D CD3DDevice::CreateBuffer / CD3DDynamicAppendBuffer::EnsureByteSpace",
+    "physical_observation": "background visible plus black taskbar; probably fallback/GDI because no DWM AGX receipts"
+  },
+  "fourth_dwm_hardware": {
+    "experiment": "EXP754",
+    "status": "EXECUTED_REJECTED_WITH_CAUSAL_ADVANCE",
+    "evidence": "EXP754-dynamic-buffers-hardware/causal-result.json",
+    "fixed_boundary": "dynamic VB/IB/CB and 50x50 cached visual admitted; first draw and clear finish",
+    "actual_boundary": "second DWM draw before Windows Flush -> UMD E_NOTIMPL device removal; 0x889800C0 CreateLegacySwapChain is cascade",
+    "agx_execution": "NOT_PROVEN"
+  },
+  "fifth_dwm_hardware": {
+    "experiment": "EXP755",
+    "status": "EXECUTED_REJECTED_NO_CAUSAL_ADVANCE",
+    "evidence": "EXP755-multidraw-offline/causal-result.json",
+    "candidate": "package750 exact UMD 50089bf12bce3a8fe790fae3ecd34fe6380336182416fa1acd513feea6ca4177",
+    "fixed_boundary": "NOT_PROVEN; first DWM attempt still removes device with E_NOTIMPL during draw type17",
+    "repeat_detail": "A retry emits type17 Stop and SchedulePresent only after bad-UMD device removal, so they are not execution receipts",
+    "agx_execution": "NOT_PROVEN",
+    "physical_observation": "NOT_OBSERVED",
+    "cleanup": "PASS ordinary GPU-visible Code28 recovery"
+  },
+  "next_offline_causal_target": {
+    "id": "frontend_seterror_attribution_and_batch_split_invariants",
+    "status": "PASS_OFFLINE",
+    "mandatory_reason": "EXP755 repeats the same E_NOTIMPL while umd-refusals.txt is empty; another hardware run without exact attribution would repeat the hypothesis loop",
+    "implementation": [
+      "route all frontend SetError through reject-seterror __func__/line/HRESULT diagnostic in refusals-only mode",
+      "verify second batch color/depth load actions and state persistence",
+      "exercise both draws!=1 and draw-receipt guards",
+      "source-first verify and admit contract-wide FL10_0 topology, instancing, constant-buffer slots and shader-resource ranges without exact trace-value filters"
+    ],
+    "offline_gate": "PASS: one reject-seterror line per rejection with function/line/HRESULT; success silent; real producer capture proves second-batch color/depth LOAD, state continuity, both one-draw guards, basic topology/instance values and authored cb1/t1 relocations reach the encoder; x64 full execution and ARM64 archive/link pass",
+    "evidence": {
+      "source_diff_sha256": "efb35c31b25f510c4da886b55df33a959bd4dac1bba090eeeae1f9f5d668d2cf",
+      "x64_run": "dwm-next-verified-x64",
+      "x64_executable_sha256": "b91e751da3e07e7cfd2eacd83bdde5aa3062568267e479197ebdbf6341724474",
+      "arm64_run": "dwm-next-verified-arm64",
+      "arm64_executable_sha256": "7fe81abe08b8ce5601a4faa66e78e37b9862f16244541d85dbf755fa6d29626f"
+    },
+    "limit": "Adjacency topology crosses Asahi passthrough-GS/mixed-compute capture and remains post-hardware completeness; it is not advertised as proven and fail-closes with reject-capture reason=adjacency",
+    "hardware_dependency": "fully offline",
+    "scope_rule": "Only pinned-WDK mandatory FL10_0 operations or actual reached runtime prerequisites; optional completeness remains post-hardware"
+  },
+  "next_hardware_candidate": {
+    "experiment": "EXP756",
+    "package": 751,
+    "status": "EXECUTED_REJECTED_WITH_CAUSAL_ADVANCE",
+    "implementation_commit": "39a5bc7ba807bad376037d95b4d7d6c427ecc74d",
+    "cat_sha256": "3ce86663ea375e39225a50d037ac67c7342007b5ca0c79e6e739727d44310a15",
+    "inf_sha256": "37ff68367989d38f5a56d33dddbaf15926cb3b000cc61f5ba54e573902709fe6",
+    "sys_sha256": "d00799c143483b8c4385a8ca3c7a624a63706a5509796c9815a6684e814a41f5",
+    "umd_sha256": "25b62f5b5b3eea4abd669d9b5091e6e3e4ddae6f7d64613eb802e36456c1c5bb",
+    "expected": "first DWM-correlated native graph through physical completion and DXGI Present, or exact first reject-seterror/reject-capture boundary",
+    "actual": "1890 reject-seterror CreateResource line453 E_NOTIMPL records; 975 bad-UMD events; no new Present receipt or DWM-correlated native graph; exact cleanup and Code28 recovery pass"
+  },
+  "post_exp756_offline_target": {
+    "id": "buffer_usage_contract",
+    "status": "PASS_OFFLINE",
+    "boundary": "generated Resource.cpp:452-453 bufferResource && !validBufferUsage",
+    "required": [
+      "argument-bearing reject-buffer-usage receipt with usage bind map misc logical size",
+      "pinned-WDK and Microsoft derivation of all FL10_0 buffer usage combinations",
+      "Asahi resource and mapping contract for each admitted combination",
+      "real frontend create/map/bind tests without observed-size whitelists"
+    ],
+    "forbidden": "Do not admit only the observed 524288-byte buffer or infer the failing DDI arguments solely from a later ETW cascade",
+    "hardware_dependency": "none; later user direction cancels the capture-path package/Air cycle",
+    "evidence": {
+      "source_diff_sha256": "293bd30a6d23da3ff74ae9121b882b491cb56693a1c3a0339d3acb8848f764be",
+      "pinned_wdk_header_sha256": "61899403d94840fab282dbb7da6faf234e2954bbdb47e3455f0f0572eb4e723a",
+      "x64_executable_sha256": "ab672545f1a14186616f4ee8ee0db4e39225f79ae5dc276aee79dad4e41f8985",
+      "arm64_executable_sha256": "8d94f11e2b0a07316104eba72895dcbe17bba8c9c41dc8aaf01024b92e573ab6"
+    }
+  },
+  "next_architecture_phase": {
+    "id": "gpummu_gpuva_g0_g1",
+    "status": "NEXT_THREAD",
+    "decision": "User-selected path recorded by tandem REVIEW R13",
+    "carry_forward": "D3D10 buffer usage, typed view, shader ld lowering and diagnostics",
+    "supersedes": "package752 and EXP757 capture-path Air run"
+  },
+  "current_hardware_handoff": {
+    "experiment": "EXP867",
+    "result": ".local/experiments/EXP867-r153-bm/hardware-result.json",
+    "result_sha256": "42672c57184c64c80e07fa8e5fc7548aeebf9c8806fea1b41cfac7bb027d4434",
+    "source": "exp/867-bm33503176 = exact86617ee8894 plus R153 source/test only; Flush absent",
+    "admission": "Stage12/status0/armconsumed/CPU8; five originalCode0 SSH samples135.804..264.209s",
+    "execution": "Sequence81, D3done162, finalnative36174Success; saved manager owners8/13 fences1031/36174; >5 and >=2 process owners supported",
+    "stability": "FAIL live141288.516s +116288.630s; scanout0; no600s",
+    "recovery": "hiddenCode45 exact867/oem5 cleanup then durableordinaryCode28 twice; finalguest15:02:14.828Z",
+    "next": "Offline active render packet/scheduler fence36357 versus idle native backend and completed36174; correlate scene/lease admission, BeginJob/materialization failure and retirement. Do not assume first EnvelopeState/QUERY receipt caused TDR without correlation.",
+    "hardware_authorization": "EXP867 completed; no retry/rearm/new run authorized",
+    "etl": "Original unavailable; retained header matches hidden Event12 after clock correction; recovery excluded"
+  },
+  "r147_offline_root_ordering": {
+    "status": "implemented",
+    "report": "investigation/analysis/R147-root-ordering.md",
+    "evidence": "investigation/evidence/R147-root-ordering/summary.json",
+    "single_variable": "Bind the process graph to successful non-eviction root-level paging target before COPY QUERY",
+    "preserved": "All copy guards and v2 receipt; execution still requires context SetRoot; R143 firmware and EXP860 ordinary Code28",
+    "hardware_authorization": "No package or Air in R147; EXP861 proposal only"
+  },
+  "r149_boundary": {
+    "status": "USC_CANDIDATE_EARLY_TDR_INCONCLUSIVE",
+    "report": "investigation/analysis/R149-next-boundary.md",
+    "last_hardware": "EXP864",
+    "next_proposed": "Offline dump analysis of first engine/preemption timeout; no new package or run",
+    "independent_pending": [
+      "USC hardware acceptance unproven",
+      "R148 Flush retirement"
+    ],
+    "unresolved": [
+      "Direct rejected-submit/public-Flush callback correlation",
+      "QUERY generation690 leaf lifecycle",
+      "General SSH-stall causality",
+      "Accepted-work Poll(0) wait contract",
+      "Code0 ordered restart lifecycle"
+    ]
+  },
+  "r150_boundary": {
+    "status": "OWNER_CHECKPOINT_HARDWARE_CONFIRMED_LATER_TA_FAILURE",
+    "report": "investigation/analysis/R150-next-boundary.md",
+    "evidence": "investigation/evidence/R150/summary.json",
+    "single_variable": "Preserve backend owner63 in G3 worker; independently selected hardware VM slot1 unchanged",
+    "last_hardware": "EXP865",
+    "next_proposed": "offline accepted220 TA completion boundary",
+    "limits": [
+      "Ten-minute/visible-frame checkpoints failed with0x116",
+      "Current220 D3 mark does not prove second complete frame; TA absent",
+      "True GPU-hang recovery remains fail-closed",
+      "Original ETL unavailable before spontaneous reset"
+    ]
+  },
+  "exp865_preparation": {
+    "status": "EXECUTED",
+    "source_commit": "26cbd7e6ed728a7be6e1302f0b6ca4c2a2edb917",
+    "result": "investigation/evidence/EXP865-preparation/preparation-result.json",
+    "result_sha256": "24c93a4631a001635fb86e84002f2de7561c9a26cf46bc03765f2605e7b690d2",
+    "hardware_manifest_sha256": "7ca944a67db38d4a85672c2c1399c42270e69abe9deded96a80b02b944d1bd86",
+    "guest_payload_sha256": "cce217e994909d01e6689d3eec0538a9af79ecb28a109ef797f39f4427410bbc",
+    "hardware": "EXP865 verdict in current_hardware_handoff"
+  },
+  "r151_boundary": {
+    "status": "HARDWARE_SEQUENCE_PROGRESS_CONFIRMED_LATER_STALL",
+    "report": "investigation/analysis/R151-next-boundary.md",
+    "evidence": "investigation/evidence/R151/summary.json",
+    "single_variable": "Preserve live queue Sequence across G4 Bind/Release template rebuilds",
+    "last_hardware": "EXP866",
+    "next_proposed": "No new hardware; offline Explorer955 sequence5 stall",
+    "checkpoint": "Freshsequence5 with completed760 and inferred4prior joined completions; laterTA/D3 consumers stalled",
+    "limits": [
+      "Count4 inferred from persistent queues, not a per-job counter",
+      "0x141/0x116 persists at later boundary",
+      "No Present/nonzero scanout/originalETL or originalSSH",
+      "Reset remains fail-closed; cleanCode28 recovery complete"
+    ]
+  },
+  "r152_current_boundary": {
+    "status": "OFFLINE_DIAGNOSIS",
+    "evidence": "investigation/evidence/R152/summary.json",
+    "report": "investigation/analysis/R152-next-boundary.md",
+    "confirmed": "Firmware fetched fifth job; active BM pointers absent in Explorer software graph",
+    "next": "Separate per-manager firmware lifetime from queue lifetime offline; passive receipt proposal if unresolved",
+    "runtime_fix": "not implemented",
+    "EXP867": "PROPOSED_ONLY_DIAGNOSTIC_SINGLE_VARIABLE",
+    "Air": "NOT_AUTHORIZED"
+  },
+  "r153_manager_binding": {
+    "status": "HARDWARE_MANAGER_PROGRESS_CONFIRMED_LATER_TDR",
+    "report": "investigation/analysis/R153-manager-contract.md",
+    "evidence": "investigation/evidence/R153/summary.json",
+    "ownership": "R137 process manager snapshot, separate scene and queue lifetimes",
+    "atomic_contract": "selection + snapshot + pointers/scene + InitBM + extra TA entry; preserve queue sequence/state; save only after joined completion before lease release",
+    "next_proposed": "Offline active render packet/scheduler fence36357 versus idle native backend and completed36174; correlate scene/lease admission, BeginJob/materialization failure and retirement. Do not assume first EnvelopeState/QUERY receipt caused TDR without correlation.",
+    "authorization": "EXP867 one-shot complete and recovered; next work offline",
+    "supersedes": "R152 receipt-only proposal",
+    "hardware_unknowns": [
+      "Later active fence36357 versus idle backend cause",
+      "600s DWM and nonzero scanout"
+    ],
+    "hardware_result": "investigation/evidence/EXP867/hardware-result.json"
+  },
+  "r154_prepublication": {
+    "status": "IMPLEMENTED_OFFLINE",
+    "report": "investigation/analysis/R154-next-boundary.md",
+    "evidence": "investigation/evidence/R154/summary.json",
+    "native_boundary": "81 joined completions,44 InitBM publications; current36357 Explorer node0/engine0 never began private job",
+    "changes": [
+      "Fresh graph validation replaces coarse epoch veto",
+      "Exact queued-preemption private-scene ownership across new-fence resubmission"
+    ],
+    "verification": "51 ARM64 TUs0/0; final1165 baseline1164 same17F42E2S/no new failure identities",
+    "next_proposed": "EXP868 epoch correction ONLY atop exact86733503176; unchangedR143, UMD, signer,caps,recovery; Flush excluded",
+    "authorization": "Offline fixes only; no package/Air",
+    "unknowns": [
+      "Exact epoch mutation timing in original boot",
+      "Hardware removal of36357-class TDR",
+      "600s stability and useful primary content"
+    ]
+  }
+}

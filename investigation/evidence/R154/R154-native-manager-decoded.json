@@ -1,0 +1,54 @@
+{
+  "8": {
+    "owner": 8,
+    "generation": "0x1a",
+    "root": "0x9d5a38000",
+    "page_list": "0x24d0000",
+    "page_list_size": 512,
+    "page_count": 128,
+    "max_blocks": 32,
+    "block_count": 32,
+    "block_list": "0x24e0000",
+    "block_size": 131072,
+    "blockcontrol": [
+      32,
+      32,
+      0
+    ],
+    "counter": 1,
+    "stats": [
+      3,
+      0,
+      0,
+      0
+    ],
+    "pending": 0,
+    "saved": 1031
+  },
+  "13": {
+    "owner": 13,
+    "generation": "0xbc3",
+    "root": "0x9df3c0000",
+    "page_list": "0x2020000",
+    "page_list_size": 512,
+    "page_count": 128,
+    "max_blocks": 32,
+    "block_count": 32,
+    "block_list": "0x2030000",
+    "block_size": 131072,
+    "blockcontrol": [
+      32,
+      32,
+      0
+    ],
+    "counter": 1,
+    "stats": [
+      3,
+      0,
+      0,
+      0
+    ],
+    "pending": 0,
+    "saved": 36174
+  }
+}

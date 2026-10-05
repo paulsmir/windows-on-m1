@@ -1,0 +1,339 @@
+
+************* Preparing the environment for Debugger Extensions Gallery repositories **************
+   ExtensionRepository : Implicit
+   UseExperimentalFeatureForNugetShare : true
+   AllowNugetExeUpdate : true
+   NonInteractiveNuget : true
+   AllowNugetMSCredentialProviderInstall : true
+   AllowParallelInitializationOfLocalRepositories : true
+
+   EnableRedirectToV8JsProvider : false
+
+   -- Configuring repositories
+      ----> Repository : LocalInstalled, Enabled: true
+      ----> Repository : UserExtensions, Enabled: true
+
+>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.000 seconds
+
+************* Waiting for Debugger Extensions Gallery to Initialize **************
+
+>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.016 seconds
+   ----> Repository : UserExtensions, Enabled: true, Packages count: 0
+   ----> Repository : LocalInstalled, Enabled: true, Packages count: 29
+
+Microsoft (R) Windows Debugger Version 10.0.26100.6584 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+
+Loading Dump File [C:\Users\pauls\EXP867-r153-bm\Kernel-MEMORY.DMP]
+Kernel Bitmap Dump File: Kernel address space is available, User address space may not be available.
+
+Dump failed with error code (0x0), and reports completion of: 96%
+
+Last line in dump stack log: Dump completed successfully.
+
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*C:\Symbols*https://msdl.microsoft.com/download/symbols
+OK                                             C:\Users\pauls\EXP867-r153-bm
+Symbol search path is: srv*C:\Symbols*https://msdl.microsoft.com/download/symbols;C:\Users\pauls\EXP867-r153-bm
+Executable search path is: 
+Windows 10 Kernel Version 26100 MP (8 procs) Free ARM 64-bit (AArch64)
+Product: WinNt, suite: TerminalServer SingleUserTS
+Edition build lab: 26100.1.arm64fre.ge_release.240331-1435
+Kernel base = 0xfffff803`a9a00000 PsLoadedModuleList = 0xfffff803`aa76ac50
+Debug session time: Mon Sep 28 16:51:13.265 2026 (UTC + 2:00)
+System Uptime: 0 days 0:04:48.630
+Loading Kernel Symbols
+...............................................................
+........................................................Page 96fda5 not present in the dump file. Type ".hh dbgerr004" for details
+.Page 94fe35 not present in the dump file. Type ".hh dbgerr004" for details
+.......
+....................................
+Loading User Symbols
+
+Loading unloaded module list
+........
+For analysis of this file, run !analyze -v
+1: kd> cdb: Reading initial command 'dt -r2 AppleAgxRenderAdmission!_ADMISSION_G3_PRIVATE_SCENE ffff9b0acec312e0; dx -r3 ((AppleAgxRenderAdmission!_ADMISSION_CONTEXT*)0xffff9b0acef02000)->RenderCorrelation; q'
+   +0x000 Next             : 0xffff9b0a`c4693010 _ADMISSION_G3_PRIVATE_SCENE
+      +0x000 Next             : (null) 
+      +0x008 Context          : 0xffff9b0a`cb092630 _ADMISSION_RENDER_CONTEXT
+         +0x000 Object           : _ADMISSION_OBJECT_CONTEXT
+         +0x028 SchedulerContext : _APPLE_AGX_SCHEDULER_CONTEXT
+         +0x038 PrepatchedRender : _ADMISSION_PREPATCHED_RENDER
+         +0x0c0 Win32Generation  : 0x2180106
+         +0x0c4 Win32Transport   : 0x1 ''
+         +0x0c8 GpuvaG3Process   : 0xffff9b0a`ce26b520 Void
+         +0x0d0 GpuvaG3NextContext : 0xffff9b0a`cb092170 _ADMISSION_RENDER_CONTEXT
+         +0x0d8 GpuvaG3PrivateManagerGeneration : 0x1a
+         +0x0e0 GpuvaG3PrivateFence : 0n0
+         +0x0e4 GpuvaG3CancelFence : 0n0
+         +0x0e8 GpuvaG3CancelUncertain : 0n0
+         +0x0ec GpuvaG3Closing   : 0 ''
+         +0x0f0 GpuvaG3RootIpa   : 0
+         +0x0f8 GpuvaG3LastSetRootIpa : 0
+         +0x100 GpuvaG3SetRootCount : 0
+         +0x108 GpuvaG3DmaBufferVa : 0
+         +0x110 GpuvaG3MappingGeneration : 0
+         +0x118 GpuvaG3DmaBufferBytes : 0
+         +0x11c GpuvaG3Poisoned  : 0 ''
+      +0x010 Storage          : APPLE_AGX_G3_PRIVATE_SCENE
+         +0x000 Generation       : 0xbcc
+         +0x008 Extents          : [6] APPLE_AGX_G3_PRIVATE_EXTENT
+         +0x068 Ranges           : [9] APPLE_AGX_G4_PROCESS_RANGE
+      +0x108 Geometry         : APPLE_AGX_G4_NATIVE_RENDER
+         +0x000 Flags            : 0
+         +0x004 IspZlsPixels     : 0
+         +0x008 VdmCtrlStreamBase : 0
+         +0x010 VertexHelper     : APPLE_AGX_G4_HELPER
+         +0x020 FragmentHelper   : APPLE_AGX_G4_HELPER
+         +0x030 IspScissorBase   : 0
+         +0x038 IspDbiasBase     : 0
+         +0x040 IspOclQryBase    : 0
+         +0x048 Depth            : APPLE_AGX_G4_ZLS
+         +0x060 Stencil          : APPLE_AGX_G4_ZLS
+         +0x078 ZlsCtrl          : 0
+         +0x080 PppMultisampleCtrl : 0
+         +0x088 SamplerHeap      : 0
+         +0x090 PppCtrl          : 0
+         +0x094 WidthPx          : 0x400
+         +0x096 HeightPx         : 0x400
+         +0x098 Layers           : 1
+         +0x09a SamplerCount     : 0
+         +0x09c UtileWidthPx     : 0x20 ' '
+         +0x09d UtileHeightPx    : 0x20 ' '
+         +0x09e Samples          : 0x1 ''
+         +0x09f SampleSizeBytes  : 0 ''
+         +0x0a0 IspMergeUpperX   : 0
+         +0x0a4 IspMergeUpperY   : 0
+         +0x0a8 Bg               : APPLE_AGX_G4_BG_EOT
+         +0x0b0 Eot              : APPLE_AGX_G4_BG_EOT
+         +0x0b8 PartialBg        : APPLE_AGX_G4_BG_EOT
+         +0x0c0 PartialEot       : APPLE_AGX_G4_BG_EOT
+         +0x0c8 IspBgObjDepth    : 0
+         +0x0cc IspBgObjVals     : 0
+         +0x0d0 TimestampsVertex : APPLE_AGX_G4_TIMESTAMPS
+         +0x0e0 TimestampsFragment : APPLE_AGX_G4_TIMESTAMPS
+      +0x1f8 Fence            : 0
+      +0x1fc Submitting       : 0
+      +0x200 Queued           : 0
+      +0x204 Started          : 0
+      +0x208 GpuDone          : 0
+      +0x20c Reported         : 0
+      +0x210 ReleaseRequested : 0
+      +0x214 Quarantined      : 0
+   +0x008 Context          : 0xffff9b0a`cb092170 _ADMISSION_RENDER_CONTEXT
+      +0x000 Object           : _ADMISSION_OBJECT_CONTEXT
+         +0x000 Magic            : 0x434f4152
+         +0x004 Flags            : 4
+         +0x008 Device           : 0xffff9b0a`d0f8a810 _ADMISSION_OBJECT_DEVICE
+         +0x010 RuntimeHandle    : 0xffff9b0a`c9c0e1f0 Void
+         +0x018 NodeOrdinal      : 0
+         +0x01c EngineAffinity   : 1
+         +0x020 FenceOutstanding : 0x8e05
+      +0x028 SchedulerContext : _APPLE_AGX_SCHEDULER_CONTEXT
+         +0x000 NodeOrdinal      : 0
+         +0x004 EngineAffinity   : 1
+         +0x008 Active           : 0x1 ''
+      +0x038 PrepatchedRender : _ADMISSION_PREPATCHED_RENDER
+         +0x000 Active           : 0
+         +0x008 Description      : _ADMISSION_RENDER_PACKET_DESCRIPTION
+      +0x0c0 Win32Generation  : 0x2180105
+      +0x0c4 Win32Transport   : 0x1 ''
+      +0x0c8 GpuvaG3Process   : 0xffff9b0a`ce26b520 Void
+      +0x0d0 GpuvaG3NextContext : (null) 
+      +0x0d8 GpuvaG3PrivateManagerGeneration : 0x1a
+      +0x0e0 GpuvaG3PrivateFence : 0n36357
+      +0x0e4 GpuvaG3CancelFence : 0n36357
+      +0x0e8 GpuvaG3CancelUncertain : 0n1
+      +0x0ec GpuvaG3Closing   : 0 ''
+      +0x0f0 GpuvaG3RootIpa   : 0x00000009`d5a38000
+      +0x0f8 GpuvaG3LastSetRootIpa : 0x00000009`d5a38000
+      +0x100 GpuvaG3SetRootCount : 1
+      +0x108 GpuvaG3DmaBufferVa : 0x3d950000
+      +0x110 GpuvaG3MappingGeneration : 0x2ba36
+      +0x118 GpuvaG3DmaBufferBytes : 0x118
+      +0x11c GpuvaG3Poisoned  : 0 ''
+   +0x010 Storage          : APPLE_AGX_G3_PRIVATE_SCENE
+      +0x000 Generation       : 0xbd2
+      +0x008 Extents          : [6] APPLE_AGX_G3_PRIVATE_EXTENT
+         +0x000 Generation       : 0xbd2
+         +0x008 Offset           : 0x1b0000
+         +0x00c Bytes            : 0x20000
+      +0x068 Ranges           : [9] APPLE_AGX_G4_PROCESS_RANGE
+         +0x000 Va               : 0x24d0000
+         +0x008 Bytes            : 0x10000
+         +0x00c Reserved         : 0
+   +0x108 Geometry         : APPLE_AGX_G4_NATIVE_RENDER
+      +0x000 Flags            : 0
+      +0x004 IspZlsPixels     : 0
+      +0x008 VdmCtrlStreamBase : 0
+      +0x010 VertexHelper     : APPLE_AGX_G4_HELPER
+         +0x000 Binary           : 0
+         +0x004 Cfg              : 0
+         +0x008 Data             : 0
+      +0x020 FragmentHelper   : APPLE_AGX_G4_HELPER
+         +0x000 Binary           : 0
+         +0x004 Cfg              : 0
+         +0x008 Data             : 0
+      +0x030 IspScissorBase   : 0
+      +0x038 IspDbiasBase     : 0
+      +0x040 IspOclQryBase    : 0
+      +0x048 Depth            : APPLE_AGX_G4_ZLS
+         +0x000 Base             : 0
+         +0x008 CompBase         : 0
+         +0x010 Stride           : 0
+         +0x014 CompStride       : 0
+      +0x060 Stencil          : APPLE_AGX_G4_ZLS
+         +0x000 Base             : 0
+         +0x008 CompBase         : 0
+         +0x010 Stride           : 0
+         +0x014 CompStride       : 0
+      +0x078 ZlsCtrl          : 0
+      +0x080 PppMultisampleCtrl : 0
+      +0x088 SamplerHeap      : 0
+      +0x090 PppCtrl          : 0
+      +0x094 WidthPx          : 0x10
+      +0x096 HeightPx         : 0x10
+      +0x098 Layers           : 1
+      +0x09a SamplerCount     : 0
+      +0x09c UtileWidthPx     : 0x20 ' '
+      +0x09d UtileHeightPx    : 0x20 ' '
+      +0x09e Samples          : 0x1 ''
+      +0x09f SampleSizeBytes  : 0 ''
+      +0x0a0 IspMergeUpperX   : 0
+      +0x0a4 IspMergeUpperY   : 0
+      +0x0a8 Bg               : APPLE_AGX_G4_BG_EOT
+         +0x000 Usc              : 0
+         +0x004 ResourceSpec     : 0
+      +0x0b0 Eot              : APPLE_AGX_G4_BG_EOT
+         +0x000 Usc              : 0
+         +0x004 ResourceSpec     : 0
+      +0x0b8 PartialBg        : APPLE_AGX_G4_BG_EOT
+         +0x000 Usc              : 0
+         +0x004 ResourceSpec     : 0
+      +0x0c0 PartialEot       : APPLE_AGX_G4_BG_EOT
+         +0x000 Usc              : 0
+         +0x004 ResourceSpec     : 0
+      +0x0c8 IspBgObjDepth    : 0
+      +0x0cc IspBgObjVals     : 0
+      +0x0d0 TimestampsVertex : APPLE_AGX_G4_TIMESTAMPS
+         +0x000 StartHandle      : 0
+         +0x004 StartOffset      : 0
+         +0x008 EndHandle        : 0
+         +0x00c EndOffset        : 0
+      +0x0e0 TimestampsFragment : APPLE_AGX_G4_TIMESTAMPS
+         +0x000 StartHandle      : 0
+         +0x004 StartOffset      : 0
+         +0x008 EndHandle        : 0
+         +0x00c EndOffset        : 0
+   +0x1f8 Fence            : 0x8e05
+   +0x1fc Submitting       : 0
+   +0x200 Queued           : 1
+   +0x204 Started          : 0
+   +0x208 GpuDone          : 0
+   +0x20c Reported         : 0
+   +0x210 ReleaseRequested : 0
+   +0x214 Quarantined      : 0
+((AppleAgxRenderAdmission!_ADMISSION_CONTEXT*)0xffff9b0acef02000)->RenderCorrelation                 [Type: _ADMISSION_RENDER_CORRELATION_STATE]
+    [+0x000] Version          : 0x3 [Type: unsigned int]
+    [+0x004] Bytes            : 0x250 [Type: unsigned int]
+    [+0x008] CandidateBuild   : 0x363 [Type: unsigned int]
+    [+0x00c] BootGeneration   : 0x1553a2ab [Type: unsigned int]
+    [+0x010] Count            : 0x0 [Type: unsigned int]
+    [+0x014] Overflow         : 0x0 [Type: unsigned int]
+    [+0x018] CapturedGeneration : 0x0 [Type: unsigned int]
+    [+0x01c] ExportedGeneration : 0x0 [Type: unsigned int]
+    [+0x020] ExportAttempted  : 0x1 [Type: unsigned int]
+    [+0x024] ExportStatus     : 0x103 [Type: unsigned int]
+    [+0x028] Durable          : 0x0 [Type: unsigned int]
+    [+0x02c] Reserved         : 0x0 [Type: unsigned int]
+    [+0x030] Slot             [Type: _ADMISSION_RENDER_CORRELATION_SLOT [2]]
+        [0]              [Type: _ADMISSION_RENDER_CORRELATION_SLOT]
+            [+0x000] Version          : 0x0 [Type: unsigned int]
+            [+0x004] Bytes            : 0x0 [Type: unsigned int]
+            [+0x008] CandidateBuild   : 0x0 [Type: unsigned int]
+            [+0x00c] BootGeneration   : 0x0 [Type: unsigned int]
+            [+0x010] CallSequence     : 0x0 [Type: unsigned int]
+            [+0x014] ValidMask        : 0x0 [Type: unsigned int]
+            [+0x018] RenderGuard      : 0x0 [Type: unsigned int]
+            [+0x01c] RenderStatus     : 0x0 [Type: unsigned int]
+            [+0x020] CommandLength    : 0x0 [Type: unsigned int]
+            [+0x024] AllocationCount  : 0x0 [Type: unsigned int]
+            [+0x028] DestinationIndex : 0x0 [Type: unsigned int]
+            [+0x02c] DestinationSegment : 0x0 [Type: unsigned int]
+            [+0x030] DmaBytesProduced : 0x0 [Type: unsigned int]
+            [+0x034] PatchesProduced  : 0x0 [Type: unsigned int]
+            [+0x038] Prepatched       : 0x0 [Type: unsigned int]
+            [+0x03c] PatchGuard       : 0x0 [Type: unsigned int]
+            [+0x040] PatchStatus      : 0x0 [Type: unsigned int]
+            [+0x044] SubmitGuard      : 0x0 [Type: unsigned int]
+            [+0x048] SubmitStatus     : 0x0 [Type: unsigned int]
+            [+0x04c] Fence            : 0x0 [Type: unsigned int]
+            [+0x050] WorkerStatus     : 0x0 [Type: unsigned int]
+            [+0x054] Reserved         : 0x0 [Type: unsigned int]
+            [+0x058] SynchronizeStatus : 0x0 [Type: unsigned int]
+            [+0x05c] QueueDpcResult   : 0x0 [Type: unsigned int]
+            [+0x060] QueryFenceCount  : 0x0 [Type: unsigned int]
+            [+0x064] QueryFenceValue  : 0x0 [Type: unsigned int]
+            [+0x068] EntryTimestamp   : 0x0 [Type: unsigned __int64]
+            [+0x070] ExitTimestamp    : 0x0 [Type: unsigned __int64]
+            [+0x078] NotifyTimestamp  : 0x0 [Type: unsigned __int64]
+            [+0x080] DpcTimestamp     : 0x0 [Type: unsigned __int64]
+            [+0x088] AdapterToken     : 0x0 [Type: unsigned __int64]
+            [+0x090] ContextToken     : 0x0 [Type: unsigned __int64]
+            [+0x098] CommandHash      : 0x0 [Type: unsigned __int64]
+            [+0x0a0] AllocationToken  [Type: unsigned __int64 [2]]
+            [+0x0b0] Output           [Type: _ADMISSION_OUTPUT_TRACE [4]]
+        [1]              [Type: _ADMISSION_RENDER_CORRELATION_SLOT]
+            [+0x000] Version          : 0x0 [Type: unsigned int]
+            [+0x004] Bytes            : 0x0 [Type: unsigned int]
+            [+0x008] CandidateBuild   : 0x0 [Type: unsigned int]
+            [+0x00c] BootGeneration   : 0x0 [Type: unsigned int]
+            [+0x010] CallSequence     : 0x0 [Type: unsigned int]
+            [+0x014] ValidMask        : 0x0 [Type: unsigned int]
+            [+0x018] RenderGuard      : 0x0 [Type: unsigned int]
+            [+0x01c] RenderStatus     : 0x0 [Type: unsigned int]
+            [+0x020] CommandLength    : 0x0 [Type: unsigned int]
+            [+0x024] AllocationCount  : 0x0 [Type: unsigned int]
+            [+0x028] DestinationIndex : 0x0 [Type: unsigned int]
+            [+0x02c] DestinationSegment : 0x0 [Type: unsigned int]
+            [+0x030] DmaBytesProduced : 0x0 [Type: unsigned int]
+            [+0x034] PatchesProduced  : 0x0 [Type: unsigned int]
+            [+0x038] Prepatched       : 0x0 [Type: unsigned int]
+            [+0x03c] PatchGuard       : 0x0 [Type: unsigned int]
+            [+0x040] PatchStatus      : 0x0 [Type: unsigned int]
+            [+0x044] SubmitGuard      : 0x0 [Type: unsigned int]
+            [+0x048] SubmitStatus     : 0x0 [Type: unsigned int]
+            [+0x04c] Fence            : 0x0 [Type: unsigned int]
+            [+0x050] WorkerStatus     : 0x0 [Type: unsigned int]
+            [+0x054] Reserved         : 0x0 [Type: unsigned int]
+            [+0x058] SynchronizeStatus : 0x0 [Type: unsigned int]
+            [+0x05c] QueueDpcResult   : 0x0 [Type: unsigned int]
+            [+0x060] QueryFenceCount  : 0x0 [Type: unsigned int]
+            [+0x064] QueryFenceValue  : 0x0 [Type: unsigned int]
+            [+0x068] EntryTimestamp   : 0x0 [Type: unsigned __int64]
+            [+0x070] ExitTimestamp    : 0x0 [Type: unsigned __int64]
+            [+0x078] NotifyTimestamp  : 0x0 [Type: unsigned __int64]
+            [+0x080] DpcTimestamp     : 0x0 [Type: unsigned __int64]
+            [+0x088] AdapterToken     : 0x0 [Type: unsigned __int64]
+            [+0x090] ContextToken     : 0x0 [Type: unsigned __int64]
+            [+0x098] CommandHash      : 0x0 [Type: unsigned __int64]
+            [+0x0a0] AllocationToken  [Type: unsigned __int64 [2]]
+            [+0x0b0] Output           [Type: _ADMISSION_OUTPUT_TRACE [4]]
+quit:
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\atlmfc.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\ObjectiveC.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\concurrency.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\cpp_rest.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Kernel.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\stl.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Data.Json.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Media.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\windows.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\winrt.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Usb4Kd.natvis'

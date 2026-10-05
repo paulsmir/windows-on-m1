@@ -1,0 +1,15 @@
+{
+    "Utc":  "2026-09-28T13:14:51.3130756Z",
+    "Boot":  "2026-09-28T13:13:24.9691810Z",
+    "Problem":  45,
+    "Present":  false,
+    "Inf":  "oem5.inf",
+    "Staged":  1,
+    "Arm":  null,
+    "Service":  "Stopped",
+    "Hashes":  {
+                   "C:\\Windows\\System32\\drivers\\AppleAgxRenderAdmission.sys":  "813A0C746CB200C79A96EAD7571BEC10768FD3DD7123DA40448D4A5F9B426CD1",
+                   "C:\\Windows\\INF\\oem5.inf":  "B2C7E2993D6D92EABF301D9DB6BF640FA4C1FFE3CEA145C47A3E8BC3C587CE21",
+                   "C:\\Windows\\System32\\AppleAgxRenderAdmissionUmd.dll":  "1010EB9B13EE7E58F623FB7DD10CCBA780B2B71B0B1558D948A68D86444DEF50"
+               }
+}

@@ -1,0 +1,315 @@
+
+************* Preparing the environment for Debugger Extensions Gallery repositories **************
+   ExtensionRepository : Implicit
+   UseExperimentalFeatureForNugetShare : true
+   AllowNugetExeUpdate : true
+   NonInteractiveNuget : true
+   AllowNugetMSCredentialProviderInstall : true
+   AllowParallelInitializationOfLocalRepositories : true
+
+   EnableRedirectToV8JsProvider : false
+
+   -- Configuring repositories
+      ----> Repository : LocalInstalled, Enabled: true
+      ----> Repository : UserExtensions, Enabled: true
+
+>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.000 seconds
+
+************* Waiting for Debugger Extensions Gallery to Initialize **************
+
+>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.016 seconds
+   ----> Repository : UserExtensions, Enabled: true, Packages count: 0
+   ----> Repository : LocalInstalled, Enabled: true, Packages count: 29
+
+Microsoft (R) Windows Debugger Version 10.0.26100.6584 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+
+Loading Dump File [C:\Users\pauls\EXP867-r153-bm\Kernel-MEMORY.DMP]
+Kernel Bitmap Dump File: Kernel address space is available, User address space may not be available.
+
+Dump failed with error code (0x0), and reports completion of: 96%
+
+Last line in dump stack log: Dump completed successfully.
+
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*C:\Symbols*https://msdl.microsoft.com/download/symbols
+OK                                             C:\Users\pauls\EXP867-r153-bm
+Symbol search path is: srv*C:\Symbols*https://msdl.microsoft.com/download/symbols;C:\Users\pauls\EXP867-r153-bm
+Executable search path is: 
+Windows 10 Kernel Version 26100 MP (8 procs) Free ARM 64-bit (AArch64)
+Product: WinNt, suite: TerminalServer SingleUserTS
+Edition build lab: 26100.1.arm64fre.ge_release.240331-1435
+Kernel base = 0xfffff803`a9a00000 PsLoadedModuleList = 0xfffff803`aa76ac50
+Debug session time: Mon Sep 28 16:51:13.265 2026 (UTC + 2:00)
+System Uptime: 0 days 0:04:48.630
+Loading Kernel Symbols
+...............................................................
+........................................................Page 96fda5 not present in the dump file. Type ".hh dbgerr004" for details
+.Page 94fe35 not present in the dump file. Type ".hh dbgerr004" for details
+.......
+....................................
+Loading User Symbols
+
+Loading unloaded module list
+........
+For analysis of this file, run !analyze -v
+1: kd> cdb: Reading initial command 'dq 0xffffab0f1e18b800 L7d; dq 0xffffab0f1e174800 La2; dd 0xffffab0f1e15cf44 L2f; dd 0xffffab0f1e1bbfb8 L12; dx -r3 ((AppleAgxRenderAdmission!_ADMISSION_G3_PROCESS*)0xffff9b0ace26b520)->PrivateManager; dx -r3 ((AppleAgxRenderAdmission!_ADMISSION_G3_PRIVATE_SCENE*)0xffff9b0acec312e0)->Storage; q'
+ffffab0f`1e18b800  ffffffa0`003e3fe0 ffffffa0`210479e0
+ffffab0f`1e18b810  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18b820  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18b830  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18b840  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18b850  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18b860  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18b870  ffffffa0`210479e0 ffffffa0`210479e0
+ffffab0f`1e18b880  ffffffa0`003e3fe0 ffffffa0`210479e0
+ffffab0f`1e18b890  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18b8a0  ffffffa0`210479e0 ffffffa0`210479e0
+ffffab0f`1e18b8b0  ffffffa0`003e3fe0 ffffffa0`210479e0
+ffffab0f`1e18b8c0  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18b8d0  ffffffa0`210479e0 ffffffa0`210479e0
+ffffab0f`1e18b8e0  ffffffa0`003e3fe0 ffffffa0`210479e0
+ffffab0f`1e18b8f0  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18b900  ffffffa0`210479e0 ffffffa0`210479e0
+ffffab0f`1e18b910  ffffffa0`003e3fe0 ffffffa0`210479e0
+ffffab0f`1e18b920  ffffffa0`003e3fe0 ffffffa0`210479e0
+ffffab0f`1e18b930  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18b940  ffffffa0`210479e0 ffffffa0`210479e0
+ffffab0f`1e18b950  ffffffa0`003e3fe0 ffffffa0`210479e0
+ffffab0f`1e18b960  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18b970  ffffffa0`210479e0 ffffffa0`210479e0
+ffffab0f`1e18b980  ffffffa0`003e3fe0 ffffffa0`210479e0
+ffffab0f`1e18b990  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18b9a0  ffffffa0`210479e0 ffffffa0`210479e0
+ffffab0f`1e18b9b0  ffffffa0`003e3fe0 ffffffa0`210479e0
+ffffab0f`1e18b9c0  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18b9d0  ffffffa0`210479e0 ffffffa0`210479e0
+ffffab0f`1e18b9e0  ffffffa0`003e3fe0 ffffffa0`210479e0
+ffffab0f`1e18b9f0  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18ba00  ffffffa0`210479e0 ffffffa0`210479e0
+ffffab0f`1e18ba10  ffffffa0`003e3fe0 ffffffa0`210479e0
+ffffab0f`1e18ba20  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18ba30  ffffffa0`210479e0 ffffffa0`210479e0
+ffffab0f`1e18ba40  ffffffa0`003e3fe0 ffffffa0`210479e0
+ffffab0f`1e18ba50  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18ba60  ffffffa0`210479e0 ffffffa0`210479e0
+ffffab0f`1e18ba70  ffffffa0`003e3fe0 ffffffa0`210479e0
+ffffab0f`1e18ba80  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18ba90  ffffffa0`210479e0 ffffffa0`210479e0
+ffffab0f`1e18baa0  ffffffa0`003e3fe0 ffffffa0`210479e0
+ffffab0f`1e18bab0  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18bac0  ffffffa0`210479e0 ffffffa0`210479e0
+ffffab0f`1e18bad0  ffffffa0`003e3fe0 ffffffa0`210479e0
+ffffab0f`1e18bae0  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18baf0  ffffffa0`210479e0 ffffffa0`210479e0
+ffffab0f`1e18bb00  ffffffa0`003e3fe0 ffffffa0`210479e0
+ffffab0f`1e18bb10  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18bb20  ffffffa0`210479e0 ffffffa0`210479e0
+ffffab0f`1e18bb30  ffffffa0`003e3fe0 ffffffa0`210479e0
+ffffab0f`1e18bb40  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18bb50  ffffffa0`210479e0 ffffffa0`210479e0
+ffffab0f`1e18bb60  ffffffa0`003e3fe0 ffffffa0`210479e0
+ffffab0f`1e18bb70  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18bb80  ffffffa0`210479e0 ffffffa0`210479e0
+ffffab0f`1e18bb90  ffffffa0`003e3fe0 ffffffa0`210479e0
+ffffab0f`1e18bba0  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18bbb0  ffffffa0`210479e0 ffffffa0`210479e0
+ffffab0f`1e18bbc0  ffffffa0`003e3fe0 ffffffa0`210479e0
+ffffab0f`1e18bbd0  ffffffa0`210479e0 ffffffa0`003e3fe0
+ffffab0f`1e18bbe0  ffffffa0`210479e0
+ffffab0f`1e174800  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174810  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174820  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174830  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174840  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174850  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174860  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174870  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174880  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174890  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e1748a0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e1748b0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e1748c0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e1748d0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e1748e0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e1748f0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174900  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174910  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174920  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174930  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174940  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174950  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174960  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174970  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174980  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174990  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e1749a0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e1749b0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e1749c0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e1749d0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e1749e0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e1749f0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174a00  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174a10  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174a20  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174a30  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174a40  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174a50  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174a60  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174a70  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174a80  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174a90  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174aa0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174ab0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174ac0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174ad0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174ae0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174af0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174b00  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174b10  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174b20  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174b30  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174b40  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174b50  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174b60  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174b70  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174b80  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174b90  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174ba0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174bb0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174bc0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174bd0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174be0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174bf0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174c00  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174c10  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174c20  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174c30  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174c40  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174c50  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174c60  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174c70  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174c80  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174c90  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174ca0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174cb0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174cc0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174cd0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174ce0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174cf0  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e174d00  ffffffa0`003d3fe0 ffffffa0`21003680
+ffffab0f`1e15cf44  00000001 00000000 00000000 ffffffff
+ffffab0f`1e15cf54  00000000 00000001 00000000 02020000
+ffffab0f`1e15cf64  00000000 00000200 00000080 00000020
+ffffab0f`1e15cf74  00000020 00000000 02030000 00000000
+ffffab0f`1e15cf84  00403fc0 ffffffa0 0000007f 0000000b
+ffffab0f`1e15cf94  0000000b 00000000 00020000 00000000
+ffffab0f`1e15cfa4  00000000 0040bfc0 ffffffa0 00000000
+ffffab0f`1e15cfb4  00000000 00000000 00000000 00000001
+ffffab0f`1e15cfc4  000066cc 00000080 00000080 00000000
+ffffab0f`1e15cfd4  00000000 00000000 00000000 00000000
+ffffab0f`1e15cfe4  00000000 00000000 00000000 00000000
+ffffab0f`1e15cff4  00000000 00000000 00000000
+ffffab0f`1e1bbfb8  00000003 00000000 00000000 00000000
+ffffab0f`1e1bbfc8  00000000 00000000 02090000 00000000
+ffffab0f`1e1bbfd8  00000000 00000000 00000000 00413fc0
+ffffab0f`1e1bbfe8  ffffffa0 00000003 00000000 00000000
+ffffab0f`1e1bbff8  00000000 00000000
+((AppleAgxRenderAdmission!_ADMISSION_G3_PROCESS*)0xffff9b0ace26b520)->PrivateManager                 [Type: APPLE_AGX_G3_PRIVATE_MANAGER]
+    [+0x000] Owner            : 0x8 [Type: unsigned __int64]
+    [+0x008] Generation       : 0x1a [Type: unsigned __int64]
+    [+0x010] VaBase           : 0x2000000 [Type: unsigned __int64]
+    [+0x018] Extents          [Type: APPLE_AGX_G3_PRIVATE_EXTENT [3]]
+        [0]              [Type: APPLE_AGX_G3_PRIVATE_EXTENT]
+            [+0x000] Generation       : 0x1a [Type: unsigned __int64]
+            [+0x008] Offset           : 0x4d0000 [Type: unsigned int]
+            [+0x00c] Bytes            : 0x10000 [Type: unsigned int]
+        [1]              [Type: APPLE_AGX_G3_PRIVATE_EXTENT]
+            [+0x000] Generation       : 0x1b [Type: unsigned __int64]
+            [+0x008] Offset           : 0x4e0000 [Type: unsigned int]
+            [+0x00c] Bytes            : 0x10000 [Type: unsigned int]
+        [2]              [Type: APPLE_AGX_G3_PRIVATE_EXTENT]
+            [+0x000] Generation       : 0x1c [Type: unsigned __int64]
+            [+0x008] Offset           : 0x4f0000 [Type: unsigned int]
+            [+0x00c] Bytes            : 0x400000 [Type: unsigned int]
+((AppleAgxRenderAdmission!_ADMISSION_G3_PRIVATE_SCENE*)0xffff9b0acec312e0)->Storage                 [Type: APPLE_AGX_G3_PRIVATE_SCENE]
+    [+0x000] Generation       : 0xbd2 [Type: unsigned __int64]
+    [+0x008] Extents          [Type: APPLE_AGX_G3_PRIVATE_EXTENT [6]]
+        [0]              [Type: APPLE_AGX_G3_PRIVATE_EXTENT]
+            [+0x000] Generation       : 0xbd2 [Type: unsigned __int64]
+            [+0x008] Offset           : 0x1b0000 [Type: unsigned int]
+            [+0x00c] Bytes            : 0x20000 [Type: unsigned int]
+        [1]              [Type: APPLE_AGX_G3_PRIVATE_EXTENT]
+            [+0x000] Generation       : 0xbd3 [Type: unsigned __int64]
+            [+0x008] Offset           : 0x1d0000 [Type: unsigned int]
+            [+0x00c] Bytes            : 0x10000 [Type: unsigned int]
+        [2]              [Type: APPLE_AGX_G3_PRIVATE_EXTENT]
+            [+0x000] Generation       : 0xbd4 [Type: unsigned __int64]
+            [+0x008] Offset           : 0x1e0000 [Type: unsigned int]
+            [+0x00c] Bytes            : 0x10000 [Type: unsigned int]
+        [3]              [Type: APPLE_AGX_G3_PRIVATE_EXTENT]
+            [+0x000] Generation       : 0xbd5 [Type: unsigned __int64]
+            [+0x008] Offset           : 0x1f0000 [Type: unsigned int]
+            [+0x00c] Bytes            : 0x10000 [Type: unsigned int]
+        [4]              [Type: APPLE_AGX_G3_PRIVATE_EXTENT]
+            [+0x000] Generation       : 0xbd6 [Type: unsigned __int64]
+            [+0x008] Offset           : 0x200000 [Type: unsigned int]
+            [+0x00c] Bytes            : 0x10000 [Type: unsigned int]
+        [5]              [Type: APPLE_AGX_G3_PRIVATE_EXTENT]
+            [+0x000] Generation       : 0xbd7 [Type: unsigned __int64]
+            [+0x008] Offset           : 0x210000 [Type: unsigned int]
+            [+0x00c] Bytes            : 0x10000 [Type: unsigned int]
+    [+0x068] Ranges           [Type: APPLE_AGX_G4_PROCESS_RANGE [9]]
+        [0]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+            [+0x000] Va               : 0x24d0000 [Type: unsigned __int64]
+            [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+            [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+        [1]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+            [+0x000] Va               : 0x24e0000 [Type: unsigned __int64]
+            [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+            [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+        [2]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+            [+0x000] Va               : 0x24f0000 [Type: unsigned __int64]
+            [+0x008] Bytes            : 0x400000 [Type: unsigned int]
+            [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+        [3]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+            [+0x000] Va               : 0x21b0000 [Type: unsigned __int64]
+            [+0x008] Bytes            : 0x20000 [Type: unsigned int]
+            [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+        [4]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+            [+0x000] Va               : 0x21d0000 [Type: unsigned __int64]
+            [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+            [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+        [5]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+            [+0x000] Va               : 0x21e0000 [Type: unsigned __int64]
+            [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+            [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+        [6]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+            [+0x000] Va               : 0x21f0000 [Type: unsigned __int64]
+            [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+            [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+        [7]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+            [+0x000] Va               : 0x2200000 [Type: unsigned __int64]
+            [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+            [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+        [8]              [Type: APPLE_AGX_G4_PROCESS_RANGE]
+            [+0x000] Va               : 0x2210000 [Type: unsigned __int64]
+            [+0x008] Bytes            : 0x10000 [Type: unsigned int]
+            [+0x00c] Reserved         : 0x0 [Type: unsigned int]
+quit:
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\atlmfc.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\ObjectiveC.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\concurrency.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\cpp_rest.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Kernel.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\stl.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Data.Json.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Media.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\windows.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\winrt.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Usb4Kd.natvis'
