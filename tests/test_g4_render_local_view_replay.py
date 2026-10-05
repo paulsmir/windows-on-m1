@@ -19,6 +19,7 @@ class G4RenderLocalViewReplay(unittest.TestCase):
         shim=(ROOT/'tests/g4_submit_virtual_replay.c').read_text()
         prefix=shim.split('int main(void) {',1)[0]
         old=function_body(prefix,'AdmissionMemoryRuntimeScanoutView')
+        prefix=prefix.replace(function_body(prefix,'AdmissionMemoryRuntimeLocalView'),'')
         local="""static NTSTATUS AdmissionMemoryRuntimeLocalView(ADMISSION_CONTEXT *adapter,
             ADMISSION_SCANOUT_MEMORY_VIEW *view) {
             (void)adapter; if(!NT_SUCCESS(scanout_status))return scanout_status;

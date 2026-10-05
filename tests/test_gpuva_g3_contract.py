@@ -14,7 +14,8 @@ class G3ContractTests(unittest.TestCase):
             binary = Path(tmp) / "graph-test"
             subprocess.run([
                 os.environ.get("CC", "clang"), "-std=c11", "-Wall", "-Wextra",
-                "-Werror", "-fsanitize=address,undefined", "-I",
+                "-Werror", "-fsanitize=address,undefined",
+                "-DAPPLE_AGX_G3_LOOKUP_STATS", "-I",
                 str(ROOT / "drivers/apple-agx/shared/include"),
                 str(ROOT / "tests/apple_agx_gpuva_g3_graph_test.c"),
                 str(ROOT / "drivers/apple-agx/shared/src/apple_agx_gpuva_g3_graph.c"),

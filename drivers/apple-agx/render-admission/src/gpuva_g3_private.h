@@ -39,6 +39,7 @@ typedef struct _ADMISSION_G3_STATE {
 
 typedef struct _ADMISSION_G3_TABLE_SHADOW {
   struct _ADMISSION_G3_TABLE_SHADOW *Next;
+  struct _ADMISSION_G3_TABLE_SHADOW *NextBroker;
   APPLE_AGX_MEMORY_OBJECT Memory;
   ULONGLONG OriginalIpa, BrokerIpa;
   APPLE_AGX_GPUVA_G3_LOGICAL_PTE *LogicalPtes;
@@ -61,6 +62,7 @@ typedef struct _ADMISSION_G3_PROCESS {
   APPLE_AGX_MEMORY_IO Io;
   APPLE_AGX_MEMORY_OBJECT BootstrapRoot;
   ADMISSION_G3_TABLE_SHADOW *TableShadows;
+  ADMISSION_G3_TABLE_SHADOW *TableShadowBrokerBuckets[256];
   ULONGLONG BootstrapIpa;
   ULONGLONG LastSetRootIpa;
   ULONG SetRootCount;

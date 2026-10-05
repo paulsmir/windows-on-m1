@@ -7,7 +7,7 @@
 struct fixture {
   AGX_GPUVA_V5_REQUEST request;
   AGX_GPUVA_V5_RESPONSE response;
-  unsigned int commands[32], count;
+  unsigned int commands[32], count, bulk;
 };
 
 static bool write64(void *opaque, unsigned offset, unsigned long long value) {
@@ -21,8 +21,10 @@ static bool write64(void *opaque, unsigned offset, unsigned long long value) {
 static bool write32(void *opaque, unsigned offset, unsigned int value) {
   struct fixture *f = opaque;
   if (offset != AGX_GPUVA_V5_OFFSET + AGX_GPUVA_V5_DOORBELL || value != 1u ||
-      f->request.Version != AGX_GPUVA_V5_VERSION || f->count >= 32u) return false;
-  f->commands[f->count++] = f->request.Command;
+      f->request.Version != AGX_GPUVA_V5_VERSION ||
+      (!f->bulk && f->count >= 32u)) return false;
+  if (f->count < 32u) f->commands[f->count] = f->request.Command;
+  ++f->count;
   memset(&f->response, 0, sizeof(f->response));
   f->response.Receipt = f->request.Sequence;
   f->response.Epoch = 7u;
@@ -44,6 +46,57 @@ static void *allocate(void *opaque, unsigned long long bytes) {
   (void)opaque; return malloc((size_t)bytes);
 }
 static void release(void *opaque, void *ptr) { (void)opaque; free(ptr); }
+
+static unsigned long long scaling_visits(unsigned int leaves) {
+  struct fixture f = {0};
+  APPLE_AGX_GPUVA_V5_CLIENT client;
+  APPLE_AGX_GPUVA_V5_IO io = {&f, write64, read64, write32, barrier};
+  APPLE_AGX_GPUVA_G3_GRAPH graph;
+  unsigned long long ipa = 0, visits;
+  f.bulk = 1u;
+  assert(AppleAgxGpuvaV5ClientInit(&client, &io));
+  assert(AppleAgxGpuvaG3GraphInit(&graph, &client, 1u, 1u,
+                                  allocate, release, 0));
+  assert(AppleAgxGpuvaG3GraphCreate(&graph, 0x10000000ULL, false));
+  assert(AppleAgxGpuvaG3GraphRegisterTable(&graph, 0x10004000ULL, 1u));
+  assert(AppleAgxGpuvaG3GraphUpdateParent(&graph, 0x10000000ULL, 0u,
+                                          0x10004000ULL));
+  for (unsigned int t = 0; t < (leaves + 2047u) / 2048u; ++t) {
+    unsigned long long table = 0x10008000ULL + t * 0x4000ULL;
+    assert(AppleAgxGpuvaG3GraphRegisterTable(&graph, table, 2u));
+    assert(AppleAgxGpuvaG3GraphUpdateParent(&graph, 0x10004000ULL, t, table));
+    for (unsigned int i = 0; i < 2048u && t * 2048u + i < leaves; ++i)
+      assert(AppleAgxGpuvaG3GraphUpdateLeaf(&graph, table, i,
+          0x20000000ULL + (t * 2048u + i) * 0x4000ULL, true));
+  }
+  AppleAgxGpuvaG3LookupStatsReset();
+  assert(AppleAgxGpuvaG3GraphTranslateVa(&graph, 0u, &ipa));
+  assert(ipa == 0x20000000ULL);
+  visits = AppleAgxGpuvaG3LookupStatsVisits();
+  assert(AppleAgxGpuvaG3GraphUpdateLeaf(&graph, 0x10008000ULL, 0u,
+                                        0x60000000ULL, true));
+  assert(AppleAgxGpuvaG3GraphTranslateVa(&graph, 0u, &ipa));
+  assert(ipa == 0x60000000ULL);
+  assert(AppleAgxGpuvaG3GraphUpdateLeaf(&graph, 0x10008000ULL, 0u,
+                                        0ULL, false));
+  assert(!AppleAgxGpuvaG3GraphTranslateVa(&graph, 0u, &ipa));
+  assert(AppleAgxGpuvaG3GraphRegisterTable(&graph, 0x10020000ULL, 0u));
+  assert(AppleAgxGpuvaG3GraphBindRoot(&graph, 0x10020000ULL));
+  assert(!AppleAgxGpuvaG3GraphTranslateVa(&graph, 0u, &ipa));
+  assert(AppleAgxGpuvaG3GraphBindRoot(&graph, 0x10000000ULL));
+  assert(AppleAgxGpuvaG3GraphUpdateLeaf(&graph, 0x10008000ULL, 0u,
+                                        0x20000000ULL, true));
+  assert(AppleAgxGpuvaG3GraphTranslateVa(&graph, 0u, &ipa));
+  assert(ipa == 0x20000000ULL);
+  assert(AppleAgxGpuvaG3GraphDestroy(&graph));
+  return visits;
+}
+
+static void lookup_scale(void) {
+  unsigned long long small = scaling_visits(64u);
+  unsigned long long large = scaling_visits(8192u);
+  assert(large <= small + 3u);
+}
 
 static void level_reuse(void) {
   struct fixture f = {0};
@@ -150,5 +203,6 @@ int main(void) {
   assert(f.count == sizeof(order)/sizeof(order[0]));
   for (unsigned i=0;i<f.count;i++) assert(f.commands[i] == order[i]);
   level_reuse();
+  lookup_scale();
   return 0;
 }

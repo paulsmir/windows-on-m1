@@ -231,6 +231,12 @@ NTSTATUS AdmissionGpuvaG3BrokerTable(
   entry->OriginalIpa = original_ipa;
   entry->Next = process->TableShadows;
   process->TableShadows = entry;
+  {
+    ULONG bucket = (ULONG)((entry->BrokerIpa >> 14) ^
+        (entry->BrokerIpa >> 22) ^ (entry->BrokerIpa >> 30)) & 255u;
+    entry->NextBroker = process->TableShadowBrokerBuckets[bucket];
+    process->TableShadowBrokerBuckets[bucket] = entry;
+  }
   *broker_ipa = entry->BrokerIpa;
   return STATUS_SUCCESS;
 Invalid:
@@ -1574,6 +1580,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyProcess(
       return STATUS_DEVICE_BUSY;
     }
     process->TableShadows = entry->Next;
+    {
+      ULONG bucket = (ULONG)((entry->BrokerIpa >> 14) ^
+          (entry->BrokerIpa >> 22) ^ (entry->BrokerIpa >> 30)) & 255u;
+      ADMISSION_G3_TABLE_SHADOW **link =
+          &process->TableShadowBrokerBuckets[bucket];
+      while (*link != NULL && *link != entry) link = &(*link)->NextBroker;
+      if (*link == entry) *link = entry->NextBroker;
+    }
     if (entry->ResidentPtes != NULL) {
       for (UINT i = 0u; i < 8192u; ++i)
         if (entry->ResidentPtes[i].Flags &&
@@ -2290,29 +2304,26 @@ static int AdmissionG4GraphAccessTyped(void *opaque, unsigned long long va,
 static int AdmissionG4LogicalEnvelopeAccess(ADMISSION_G3_PROCESS *process,
     unsigned long long va, unsigned int bytes) {
   unsigned long long end, page;
-  APPLE_AGX_GPUVA_G3_NODE *edge;
   ADMISSION_G3_TABLE_SHADOW *shadow;
+  ULONGLONG table_ipa, previous_table = 0ULL;
   const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte;
   if (process == NULL || !process->Graph.Created ||
       process->Graph.Uncertain || process->Graph.RootIpa == 0ULL ||
       !bytes || va < 0x10000ULL || va >= (1ULL << 39) ||
       bytes > (1ULL << 39) - va) return 0;
   end = va + bytes;
+  shadow = NULL;
   for (page = va & ~0xfffULL; page < end; page += 0x1000ULL) {
-    for (edge = process->Graph.Parents; edge != NULL; edge = edge->Next)
-      if (edge->Ipa == process->Graph.RootIpa &&
-          edge->Index == (ULONG)((page >> 36) & 7u)) break;
-    if (edge == NULL) return 0;
-    {
-      unsigned long long middle = edge->AuxIpa;
-      for (edge = process->Graph.Parents; edge != NULL; edge = edge->Next)
-        if (edge->Ipa == middle &&
-            edge->Index == (ULONG)((page >> 25) & 2047u)) break;
+    if (!AppleAgxGpuvaG3GraphLeafTableIpa(&process->Graph,
+            page, &table_ipa)) return 0;
+    if (table_ipa != previous_table || shadow == NULL) {
+      ULONG bucket = (ULONG)((table_ipa >> 14) ^ (table_ipa >> 22) ^
+          (table_ipa >> 30)) & 255u;
+      for (shadow = process->TableShadowBrokerBuckets[bucket];
+           shadow != NULL; shadow = shadow->NextBroker)
+        if (shadow->BrokerIpa == table_ipa) break;
+      previous_table = table_ipa;
     }
-    if (edge == NULL) return 0;
-    for (shadow = process->TableShadows; shadow != NULL;
-         shadow = shadow->Next)
-      if (shadow->BrokerIpa == edge->AuxIpa) break;
     if (shadow == NULL || shadow->LogicalPtes == NULL) return 0;
     pte = &shadow->LogicalPtes[(ULONG)((page >> 12) & 8191u)];
     if ((pte->Flags & APPLE_AGX_GPUVA_G3_VALID) == 0u ||

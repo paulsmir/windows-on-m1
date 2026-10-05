@@ -50,6 +50,7 @@ typedef struct _APPLE_AGX_GPUVA_G3_NODE {
   unsigned Index;
 } APPLE_AGX_GPUVA_G3_NODE;
 typedef struct _ADMISSION_G3_TABLE_SHADOW {
+  struct _ADMISSION_G3_TABLE_SHADOW *NextBroker;
   struct _ADMISSION_G3_TABLE_SHADOW *Next;
   ULONGLONG BrokerIpa;
   APPLE_AGX_GPUVA_G3_LOGICAL_PTE *LogicalPtes;
@@ -84,6 +85,8 @@ typedef struct _ADMISSION_G3_PROCESS {
   ADMISSION_G3_STATE *State;
   APPLE_AGX_GPUVA_G3_GRAPH Graph;
   ADMISSION_G3_TABLE_SHADOW *TableShadows;
+  ADMISSION_G3_TABLE_SHADOW *TableShadowBrokerBuckets[256];
+  unsigned OsProcessId;
   unsigned Poisoned;
 } ADMISSION_G3_PROCESS;
 typedef struct { void *Adapter; } REPLAY_DEVICE;
@@ -195,6 +198,11 @@ static NTSTATUS AdmissionDdiSubmitRender(ADMISSION_CONTEXT *a,
     const DXGKARG_SUBMITCOMMAND *p) {
   (void)a;(void)p;return STATUS_INVALID_PARAMETER;
 }
+static void AdmissionJobTimingStartWindows(ADMISSION_CONTEXT *a,
+    ADMISSION_RENDER_CONTEXT *c, unsigned pid, unsigned fence,
+    unsigned dma_bytes) {
+  (void)a;(void)c;(void)pid;(void)fence;(void)dma_bytes;
+}
 
 static int replay_irql, dispatches, bind_ok=1;
 static int graph_begin_calls;
@@ -236,6 +244,26 @@ static NTSTATUS AdmissionMemoryRuntimeScanoutView(
   view->CpuAddress=memory;view->GuestIpaAddress=0x90000000ULL;
   view->HostPhysicalAddress=0x80000000ULL;view->Bytes=sizeof(memory);
   return STATUS_SUCCESS;
+}
+static NTSTATUS AdmissionMemoryRuntimeLocalView(
+    ADMISSION_CONTEXT *adapter, ADMISSION_SCANOUT_MEMORY_VIEW *view) {
+  return AdmissionMemoryRuntimeScanoutView(adapter, view);
+}
+static int AppleAgxGpuvaG3GraphLeafTableIpa(
+    APPLE_AGX_GPUVA_G3_GRAPH *graph, ULONGLONG va, ULONGLONG *ipa) {
+  APPLE_AGX_GPUVA_G3_NODE *edge;
+  if (!graph->Created || graph->Uncertain) return 0;
+  for (edge = graph->Parents; edge; edge = edge->Next)
+    if (edge->Ipa == graph->RootIpa && edge->Index == ((va >> 36) & 7u)) break;
+  if (!edge) return 0;
+  for (APPLE_AGX_GPUVA_G3_NODE *middle = graph->Parents; middle;
+       middle = middle->Next)
+    if (middle->Ipa == edge->AuxIpa &&
+        middle->Index == ((va >> 25) & 2047u)) {
+      *ipa = middle->AuxIpa;
+      return 1;
+    }
+  return 0;
 }
 static int AppleAgxGpuvaG3GraphTranslateVa(
     APPLE_AGX_GPUVA_G3_GRAPH *graph, ULONGLONG va, ULONGLONG *ipa) {
@@ -357,6 +385,9 @@ int main(void) {
   shadow.BrokerIpa = middle.AuxIpa;
   shadow.LogicalPtes = logical;
   process.TableShadows = &shadow;
+  process.TableShadowBrokerBuckets[
+      ((shadow.BrokerIpa >> 14) ^ (shadow.BrokerIpa >> 22) ^
+       (shadow.BrokerIpa >> 30)) & 255u] = &shadow;
   for (unsigned i = 0u; i < 4u; ++i) {
     logical[0x100u + i].GuestIpa = 0x90000000ULL + i * 0x1000ULL;
     logical[0x100u + i].SegmentId = 0u;
@@ -366,6 +397,10 @@ int main(void) {
   logical[0x20u].Flags = 1u;
   logical[0x21u].GuestIpa = 0x91003000ULL;
   logical[0x21u].Flags = 1u;
+  assert(AdmissionG4LogicalEnvelopeAccess(&process, 0x100000ULL, 0x4000u));
+  logical[0x102u].Flags = 0u;
+  assert(!AdmissionG4LogicalEnvelopeAccess(&process, 0x100000ULL, 0x4000u));
+  logical[0x102u].Flags = 3u;
   process.Graph.AllowProcessRanges = 1;
   adapter.GpuvaG3State = &state;
   adapter.RuntimeReady=1;

@@ -46,6 +46,7 @@ class G4SubmitVirtualReplay(unittest.TestCase):
             "AdmissionG4SnapshotFailure", "AdmissionG4ResolveOutput",
             "AdmissionG4SubmitVirtualEnvelope",
             "AdmissionG3OutputMatchesLocal", "AdmissionGpuvaG3BeginJob",
+            "AdmissionDdiSubmitCommandVirtualInner",
             "AdmissionDdiSubmitCommandVirtual"))
         functions = function_body(production, "AdmissionG4SubmitRejectDetail") + "\n" + functions
         with tempfile.TemporaryDirectory(prefix="g4-submit-virtual-") as tmp:

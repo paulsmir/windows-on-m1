@@ -25,6 +25,8 @@ typedef enum _APPLE_AGX_GPUVA_G3_BACKING_KIND {
 
 typedef struct _APPLE_AGX_GPUVA_G3_NODE {
   struct _APPLE_AGX_GPUVA_G3_NODE *Next;
+  struct _APPLE_AGX_GPUVA_G3_NODE *ChildTable;
+  struct _APPLE_AGX_GPUVA_G3_NODE **Slots;
   unsigned long long Ipa, AuxIpa, Generation;
   unsigned int Index, Level, References, Writable;
   unsigned int SystemRetired;
@@ -43,8 +45,14 @@ typedef struct _APPLE_AGX_GPUVA_G3_GRAPH {
   unsigned long long MappingGeneration;
   unsigned long long LeaseToken;
   APPLE_AGX_GPUVA_G3_NODE *Tables, *Parents, *Leaves, *Backings;
+  APPLE_AGX_GPUVA_G3_NODE *RootTable;
   unsigned int LastStatus, Created, Uncertain, JobInFlight, Slot;
 } APPLE_AGX_GPUVA_G3_GRAPH;
+
+#ifdef APPLE_AGX_G3_LOOKUP_STATS
+void AppleAgxGpuvaG3LookupStatsReset(void);
+unsigned long long AppleAgxGpuvaG3LookupStatsVisits(void);
+#endif
 
 bool AppleAgxGpuvaG3GraphInit(APPLE_AGX_GPUVA_G3_GRAPH *,
     APPLE_AGX_GPUVA_V5_CLIENT *, unsigned long long ProcessId,
@@ -84,6 +92,8 @@ bool AppleAgxGpuvaG3GraphContainsRangeAccess(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long StartVa, unsigned int Bytes, bool Write);
 bool AppleAgxGpuvaG3GraphTranslateVa(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long GpuVa, unsigned long long *GuestIpa);
+bool AppleAgxGpuvaG3GraphLeafTableIpa(APPLE_AGX_GPUVA_G3_GRAPH *,
+    unsigned long long GpuVa, unsigned long long *TableIpa);
 bool AppleAgxGpuvaG3GraphInspectRangeAccess(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long StartVa, unsigned int Bytes, bool Write,
     APPLE_AGX_GPUVA_G3_WALK_FAILURE *Failure);

@@ -3,11 +3,35 @@
 
 #define G3_PAGE 0x4000ULL
 
+#ifdef APPLE_AGX_G3_LOOKUP_STATS
+static unsigned long long lookup_visits;
+void AppleAgxGpuvaG3LookupStatsReset(void) { lookup_visits = 0; }
+unsigned long long AppleAgxGpuvaG3LookupStatsVisits(void) { return lookup_visits; }
+#define LOOKUP_VISIT() (++lookup_visits)
+#else
+#define LOOKUP_VISIT() ((void)0)
+#endif
+
 static APPLE_AGX_GPUVA_G3_NODE *node(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
   APPLE_AGX_GPUVA_G3_NODE *item = graph->Allocate(
       graph->MemoryContext, sizeof(*item));
   if (item) memset(item, 0, sizeof(*item));
   return item;
+}
+
+static bool allocate_slots(APPLE_AGX_GPUVA_G3_GRAPH *graph,
+                           APPLE_AGX_GPUVA_G3_NODE *table) {
+  table->Slots = graph->Allocate(graph->MemoryContext,
+      2048u * sizeof(*table->Slots));
+  if (!table->Slots) return false;
+  memset(table->Slots, 0, 2048u * sizeof(*table->Slots));
+  return true;
+}
+
+static APPLE_AGX_GPUVA_G3_NODE *slot(APPLE_AGX_GPUVA_G3_NODE *table,
+                                    unsigned int index) {
+  LOOKUP_VISIT();
+  return table && table->Slots ? table->Slots[index] : 0;
 }
 
 static bool call_with_response(APPLE_AGX_GPUVA_G3_GRAPH *graph,
@@ -46,8 +70,10 @@ static APPLE_AGX_GPUVA_G3_NODE *find_table(
 static APPLE_AGX_GPUVA_G3_NODE *find_edge(
     APPLE_AGX_GPUVA_G3_NODE *head, unsigned long long ipa,
     unsigned int index) {
-  for (; head; head = head->Next)
+  for (; head; head = head->Next) {
+    LOOKUP_VISIT();
     if (head->Ipa == ipa && head->Index == index) return head;
+  }
   return 0;
 }
 
@@ -65,6 +91,7 @@ static void remove_node(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   while (*link && *link != item) link = &(*link)->Next;
   if (*link) {
     *link = item->Next;
+    if (item->Slots) graph->Free(graph->MemoryContext, item->Slots);
     graph->Free(graph->MemoryContext, item);
   }
 }
@@ -168,16 +195,22 @@ bool AppleAgxGpuvaG3GraphCreate(APPLE_AGX_GPUVA_G3_GRAPH *graph,
       graph->Uncertain) return false;
   root = node(graph);
   if (!root) return false;
+  if (!allocate_slots(graph, root)) {
+    graph->Free(graph->MemoryContext, root);
+    return false;
+  }
   request.Command = AGX_GPUVA_V5_CREATE;
   request.TableIpa = root_ipa;
   request.Flags = paging ? 1u : 0u;
   if (!call(graph, &request)) {
+    graph->Free(graph->MemoryContext, root->Slots);
     graph->Free(graph->MemoryContext, root);
     return false;
   }
   root->Ipa = root_ipa;
   root->Level = 0u;
   graph->Tables = root;
+  graph->RootTable = root;
   graph->RootIpa = root_ipa;
   graph->Created = 1u;
   return true;
@@ -248,7 +281,12 @@ bool AppleAgxGpuvaG3GraphRegisterTable(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   /* Reserve replacement metadata before destructive retirement. */
   item = node(graph);
   if (!item) return false;
+  if (!allocate_slots(graph, item)) {
+    graph->Free(graph->MemoryContext, item);
+    return false;
+  }
   if (existing && !retire_table(graph, existing)) {
+    graph->Free(graph->MemoryContext, item->Slots);
     graph->Free(graph->MemoryContext, item);
     return false;
   }
@@ -259,6 +297,7 @@ bool AppleAgxGpuvaG3GraphRegisterTable(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     /* A replaced table is already retired. Retain KMD lifetime records and
      * forbid retry from treating the old shadow as a fresh table. */
     if (existing) graph->Uncertain = 1u;
+    graph->Free(graph->MemoryContext, item->Slots);
     graph->Free(graph->MemoryContext, item);
     return false;
   }
@@ -279,6 +318,7 @@ bool AppleAgxGpuvaG3GraphBindRoot(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   request.TableIpa = ipa;
   if (!call(graph, &request)) return false;
   graph->RootIpa = ipa;
+  graph->RootTable = find_table(graph, ipa, 0u);
   ++graph->MappingGeneration;
   return true;
 }
@@ -287,13 +327,15 @@ bool AppleAgxGpuvaG3GraphUpdateParent(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     unsigned long long table_ipa, unsigned int index,
     unsigned long long child_ipa) {
   AGX_GPUVA_V5_REQUEST request = {0};
-  APPLE_AGX_GPUVA_G3_NODE *parent, *edge, *new_edge = 0;
+  APPLE_AGX_GPUVA_G3_NODE *parent, *edge, *new_edge = 0, *child = 0;
   if (!graph || !graph->Created || graph->Uncertain) return false;
   if (graph->JobInFlight || graph->MappingGeneration == ~0ULL) return false;
   parent = find_table(graph, table_ipa, 0u);
   if (!parent) parent = find_table(graph, table_ipa, 1u);
+  if (child_ipa && parent)
+    child = find_table(graph, child_ipa, parent->Level + 1u);
   if (!parent || index >= (parent->Level == 0u ? 8u : 2048u) ||
-      (child_ipa && !find_table(graph, child_ipa, parent->Level + 1u)))
+      (child_ipa && !child))
     return false;
   edge = find_edge(graph->Parents, table_ipa, index);
   if (child_ipa && edge && edge->AuxIpa == child_ipa) return true;
@@ -309,13 +351,17 @@ bool AppleAgxGpuvaG3GraphUpdateParent(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   }
   if (child_ipa && edge) {
     edge->AuxIpa = child_ipa;
+    edge->ChildTable = child;
   } else if (child_ipa) {
     new_edge->Ipa = table_ipa;
     new_edge->AuxIpa = child_ipa;
     new_edge->Index = index;
+    new_edge->ChildTable = child;
     new_edge->Next = graph->Parents;
     graph->Parents = new_edge;
+    parent->Slots[index] = new_edge;
   } else {
+    parent->Slots[index] = 0;
     remove_node(graph, &graph->Parents, edge);
   }
   ++graph->MappingGeneration;
@@ -343,14 +389,14 @@ bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     APPLE_AGX_GPUVA_G3_BACKING_KIND kind, bool *unavailable) {
   AGX_GPUVA_V5_REQUEST request = {0};
   APPLE_AGX_GPUVA_G3_NODE *leaf, *new_leaf = 0, *backing = 0;
-  APPLE_AGX_GPUVA_G3_NODE *old_backing = 0;
+  APPLE_AGX_GPUVA_G3_NODE *old_backing = 0, *table;
   bool new_backing = false;
   if (unavailable) *unavailable = false;
   if (!graph || !graph->Created || graph->Uncertain || graph->JobInFlight ||
       graph->MappingGeneration == ~0ULL ||
       (kind != AppleAgxGpuvaG3LocalBacking && kind != AppleAgxGpuvaG3SystemBacking &&
        kind != AppleAgxGpuvaG3PrivateBacking) ||
-      !find_table(graph, table_ipa, 2u) || index >= 2048u ||
+      !(table = find_table(graph, table_ipa, 2u)) || index >= 2048u ||
       (guest_ipa && (guest_ipa & (G3_PAGE - 1u)))) return false;
   leaf = find_edge(graph->Leaves, table_ipa, index);
   if (guest_ipa && leaf && leaf->AuxIpa == guest_ipa &&
@@ -469,9 +515,11 @@ bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
       new_leaf->Writable = writable ? 1u : 0u;
       new_leaf->Next = graph->Leaves;
       graph->Leaves = new_leaf;
+      table->Slots[index] = new_leaf;
       ++backing->References;
     }
   } else {
+    table->Slots[index] = 0;
     remove_node(graph, &graph->Leaves, leaf);
     --backing->References;
     if (!revoke_unused_backing(graph, backing)) return false;
@@ -496,16 +544,28 @@ bool AppleAgxGpuvaG3GraphTranslateVa(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   APPLE_AGX_GPUVA_G3_NODE *root_edge, *middle_edge, *leaf;
   if (!graph || !graph->Created || graph->Uncertain || !guest_ipa ||
       va >= (1ULL << 39)) return false;
-  root_edge = find_edge(graph->Parents, graph->RootIpa,
-                        (unsigned int)((va >> 36) & 7u));
+  root_edge = slot(graph->RootTable, (unsigned int)((va >> 36) & 7u));
   if (!root_edge) return false;
-  middle_edge = find_edge(graph->Parents, root_edge->AuxIpa,
-                          (unsigned int)((va >> 25) & 2047u));
+  middle_edge = slot(root_edge->ChildTable,
+                     (unsigned int)((va >> 25) & 2047u));
   if (!middle_edge) return false;
-  leaf = find_edge(graph->Leaves, middle_edge->AuxIpa,
-                   (unsigned int)((va >> 14) & 2047u));
+  leaf = slot(middle_edge->ChildTable,
+              (unsigned int)((va >> 14) & 2047u));
   if (!leaf || !leaf->AuxIpa) return false;
   *guest_ipa = leaf->AuxIpa + (va & (G3_PAGE - 1u));
+  return true;
+}
+
+bool AppleAgxGpuvaG3GraphLeafTableIpa(APPLE_AGX_GPUVA_G3_GRAPH *graph,
+    unsigned long long va, unsigned long long *table_ipa) {
+  APPLE_AGX_GPUVA_G3_NODE *root, *middle;
+  if (!graph || !graph->Created || graph->Uncertain || !table_ipa ||
+      va >= (1ULL << 39)) return false;
+  root = slot(graph->RootTable, (unsigned int)((va >> 36) & 7u));
+  if (!root) return false;
+  middle = slot(root->ChildTable, (unsigned int)((va >> 25) & 2047u));
+  if (!middle) return false;
+  *table_ipa = middle->AuxIpa;
   return true;
 }
 
@@ -547,13 +607,13 @@ bool AppleAgxGpuvaG3GraphInspectRangeAccess(
     unsigned int ri = (unsigned int)((va >> 36) & 7u);
     unsigned int mi = (unsigned int)((va >> 25) & 2047u);
     unsigned int li = (unsigned int)((va >> 14) & 2047u);
-    root_edge = find_edge(graph->Parents, graph->RootIpa, ri);
+    root_edge = slot(graph->RootTable, ri);
     if (!root_edge) return missing_range(failure, start_va, va, 0u, ri,
                                          AppleAgxG3WalkNoRoot);
-    middle_edge = find_edge(graph->Parents, root_edge->AuxIpa, mi);
+    middle_edge = slot(root_edge->ChildTable, mi);
     if (!middle_edge) return missing_range(failure, start_va, va, 1u, mi,
                                            AppleAgxG3WalkNoTable);
-    leaf = find_edge(graph->Leaves, middle_edge->AuxIpa, li);
+    leaf = slot(middle_edge->ChildTable, li);
     if (!leaf) return missing_range(failure, start_va, va, 2u, li,
                                     AppleAgxG3WalkLeafAbsent);
     if (!leaf->AuxIpa || (write && !leaf->Writable))
@@ -715,5 +775,6 @@ bool AppleAgxGpuvaG3GraphDestroy(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
   while (graph->Tables) remove_node(graph, &graph->Tables, graph->Tables);
   graph->Created = 0u;
   graph->RootIpa = 0ULL;
+  graph->RootTable = 0;
   return true;
 }
