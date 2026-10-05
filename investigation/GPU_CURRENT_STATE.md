@@ -1,6 +1,6 @@
-# J313 GPU — EXP973C timing gate met; physical redraw unknown; durable Code28
+# J313 GPU — EXP973C timing gate met; physical redraw failed; durable Code28
 
-## Current as of 2026-10-05 17:50Z
+## Current as of 2026-10-05 17:54Z
 
 EXP973C launched the existing zero-warning package973 (source f832f5cf,
 INF 6dff0fa2, SYS 0fd2cbec, UMD 46df0c04, CAT 5afce5e4) after fresh
@@ -15,13 +15,16 @@ Short ETW, UMD, ring and host log are frozen with sizes/SHA in
 `investigation/EXPERIMENTS.md` EXP973C.
 
 The OPERATOR REQUEST for mouse movement and Win+D was posted at17:30:22Z.
-No later OPERATOR ANSWER appeared within ten minutes; physical desktop
-content and redraw response are UNKNOWN. DCP exact swaps occurred, but
-cached snapshots do not establish visible pixels. No accepted stable graphics
-package exists. The next causal target is physical panel response under this
-faster timing path, with an explicit operator observation before any new
-implementation hypothesis. The separate ordinary recovery stall remains
-unresolved; it did not recur in this rollback.
+The answer arrived at17:41:54Z, just after the ten-minute deadline: only
+taskbar icons were visible; mouse, keyboard and Win+D changed nothing visible.
+The supervisor's ETW decode measured DWM render DMA median15 ms/max19 ms
+(EXP970 median131 ms/max326 ms), but submissions only every 0.5–1 s. The
+remaining measured frame interval is before submission; its exact UMD phase
+is unmeasured. DCP exact swaps and cached snapshots do not prove correct
+physical pixels. No accepted stable graphics package exists. EXP974 targets
+indexed KMD AdmissionG3CopyPte lookup, with UMD per-submit phase timing as
+measurement only. The separate ordinary recovery stall remains unresolved;
+it did not recur in this rollback.
 
 REC-EXP973C-A/B/C ordered out of Code0, booted immutable ordinary EXP377/392
 into fresh Event133556 Code43/CPU8/SSH, removed exact oem5/package973 there,
