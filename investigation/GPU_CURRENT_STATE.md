@@ -1,7 +1,60 @@
-# J313 GPU — EXP974 partial physical desktop, DWM crash; durable Code28
+# J313 GPU — EXP976 DWM use-after-free fixed; slow CPU-staged desktop; durable Code28
 
 
-## Current as of 2026-10-05 19:24Z
+## Current as of 2026-10-05 20:55Z (read this first)
+
+State: Air is in the clean ordinary GPU-visible baseline (REC-EXP976: hidden
+Code45 cleanup of exact package976, then ordinary Code28/CPU8/SSH, durable
+Preflight PASS, PackageAbsent, no PageHeap/IFEO, DisableDDisplay default).
+No accepted graphics package.
+
+Proven today (see EXPERIMENTS.md EXP970..EXP976):
+- Correct pixels: wallpaper, icons, taskbar, Run dialog and Device Manager
+  render correctly through UMD->KMD->DCP (operator photos EXP970/EXP974).
+- BeginJob latency fixed: indexed G3 graph/envelope/CopyPte lookups
+  (e3137c61, 6f534cca) and diagnostic upload rehash gated off (f832f5cf):
+  DWM BeginJob 78 ms -> 0.09 ms, render DMA 131 ms -> 15 ms median.
+- DWM crash root cause (EXP975 PageHeap): d3d11 DeallocateCB read a freed
+  hRTResource passed by AdmissionUmdDeallocateResource; runtime-named
+  deallocations were deferred past DestroyResource (opened/shared retirements
+  and deferred presentation records). Fixed in 37d5423d (synchronous
+  release inside DestroyResource, after flushing the immediate context);
+  offline RED 4 stale -> GREEN; EXP976 hardware: DWM alive 22.5 min, zero
+  dwm crashes, zero deallocate/retirement failures. VALIDATED.
+- EXP974 'fast live desktop' was the non-composed GDI fallback after DWM died.
+
+Open defects, in causal order:
+1. Per-submit CPU staging (UMD transfer_held/transfer_slot): every DWM submit
+   uploads all CopyHeld non-Direct slots in 64 KiB KMD copy escapes, waits for
+   the GPU synchronously, then downloads GPU-written slots. EXP974: upload
+   ~55 ms, download ~32 ms, paging wait ~14 ms, submit cadence 0.5-1 s ->
+   desktop updates take seconds. This is the main performance blocker.
+2. Explorer QUERY predicate57 (PTE explicitly invalid, i.e. allocation not
+   resident) during the out-of-submission copy: VidMm only guarantees
+   residency while the device's contexts are scheduled (MS 'Residency
+   overview'). Intermittent (EXP969/970/976 yes, EXP976E no). Kills Explorer's
+   device -> black wallpaper/taskbar until Explorer restarts.
+3. DWM reject-batch kind1 (Begin) site 0x72 + seterror ResourceCopyRegion
+   after ~12 min in EXP976 (no crash) — not yet analysed.
+4. Hardware cursor plane absent (no SetPointerShape/Position) — cursor
+   invisible when DWM is not drawing it.
+5. Ordinary recovery boot after a full-owner run resets twice (EXP975/976);
+   the GPU-hidden emergency profile cleans up reliably.
+
+NEXT (decided, not started): remove per-submit CPU staging. Design target:
+render/sample GPU-local allocations directly (as Direct primaries already
+do) so no CPU copy happens outside a submission; this addresses (1) and (2)
+together. Start offline: inventory which slot classes are staged and why
+(CPU-visible imports in the aperture, 4 KiB vs 16 KiB UAT leaves), read the
+Asahi/Mesa AGX BO model and the WDDM GpuMmu system-memory segment contract,
+then write the WINDOWS/AGX/TRANSLATION/UNKNOWN plan before any hardware run.
+Supervisor (Claude) runs experiments directly; Codex only on request.
+Before any GPU run: operator-ready gate; after: exact rollback (prefer the
+hidden emergency cleanup if the first ordinary recovery resets).
+Unpushed: branch integration/ad04-windows-compiler is ahead of
+origin/feature/j313-gpu-acceleration (ca71f549); push needs operator OK.
+
+## Previous: as of 2026-10-05 19:24Z
 
 EXP974 source62027081/package974 (INF59141ff3, SYS6a579cb2,
 UMD917062ab, CATf0424d3e) indexed `AdmissionG3CopyPte` through the
