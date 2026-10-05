@@ -617,11 +617,13 @@ static VOID AdmissionG3VerifyUploads(ADMISSION_CONTEXT *adapter,
 #endif
 
 static const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *AdmissionG3CopyPte(
-    ADMISSION_G3_PROCESS *p, ULONGLONG va) {
+    const ADMISSION_G3_PROCESS *p, ULONGLONG va) {
   ADMISSION_G3_TABLE_SHADOW *shadow;
   ULONGLONG leaf;
   ULONG bucket;
-  if (!p || !AppleAgxGpuvaG3GraphLeafTableIpa(&p->Graph,va,&leaf))
+  /* The graph helper only reads slot state; its API predates const callers. */
+  if (!p || !AppleAgxGpuvaG3GraphLeafTableIpa(
+          (APPLE_AGX_GPUVA_G3_GRAPH *)&p->Graph,va,&leaf))
     return NULL;
   bucket=(ULONG)((leaf>>14)^(leaf>>22)^(leaf>>30))&255u;
   for(shadow=p->TableShadowBrokerBuckets[bucket];shadow;shadow=shadow->NextBroker) {
