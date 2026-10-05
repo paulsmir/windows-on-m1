@@ -1,6 +1,22 @@
 # J313 GPU — EXP970 correct desktop, EXP971 latency boundary
 
-## Current as of 2026-10-05 13:38Z
+## Current as of 2026-10-05 14:55Z
+
+EXP971 receipt-only KMD timing source399e47ee/package971 reached Code0/CPU8/
+SSH, but the operator saw no immediate panel redraw after mouse movement and
+Win+D. DWM BeginJob median78.07ms/max263.94ms in the first ring and median
+220.78ms during the input window; Explorer BeginJob median30.90–34.70ms.
+Backend submit was typically below3ms. ETW independently reproduced slow
+render versus fast paging; exact ETW/ring fence join was inconclusive.
+Source inspection and Claude's 14:45Z review identify per-page linear
+`GraphTranslateVa`/range and KMD logical-envelope list walks as the strongest
+next cause. Plan and evidence: `investigation/analysis/EXP971-latency-verdict.md`.
+EXP972 is one indexed-lookup correction with the EXP971 timing ring retained;
+preserve all per-page validation. Exact971 was removed in ordinary Code43,
+and REC-EXP971C passed durable Code28/PackageAbsent/CPU8/SSH at14:52:56Z.
+No accepted stable graphics package exists.
+
+### Previous EXP970 decision
 
 EXP970 repeated exact package969 and proved correct physical desktop content:
 the operator saw wallpaper, desktop icons, taskbar, and watermark after mouse
