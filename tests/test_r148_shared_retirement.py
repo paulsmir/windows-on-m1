@@ -84,6 +84,10 @@ static void enqueue(AGX_D3D10_WINDOWS_DEVICE*d,unsigned h){
  auto*r=(AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE*)calloc(1,sizeof(AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE));
  r->Resource.KernelAllocation=h;r->Resource.Retirement=AdmissionUmdRetirementCreate();
  r->Resource.Retirement->RuntimeResource=(void*)(uintptr_t)h;r->Resource.Retirement->Shared=TRUE;
+ /* EXP975: AgxD3d10WindowsPresentationDestroy releases the hRTResource-named
+  * part inside the runtime's DestroyResource; only the record is deferred. */
+ D3D10DDI_HDEVICE dh={&d->Runtime};D3D10DDI_HRESOURCE rh={&r->Resource};
+ if(FAILED(AdmissionUmdReleaseRuntimeResource(dh,rh))) ++errors;
  r->Next=d->PendingPresentations;d->PendingPresentations=r;
 }
 int main(){
@@ -91,25 +95,25 @@ int main(){
  AGX_D3D10_WINDOWS_DEVICE d={};d.Stage=AgxD3d10DeviceReady;
  AdmissionUmdRetirementInitialize(&d.Runtime.Retirement,&d.Runtime,deallocate,report);
  Pipe p={pipeflush};Device frontend={&d,&p};
- // Native BO still owns shared allocation: no callback, no queue consumption.
+ // Runtime part closes at destroy; native BO still owns the slot, record stays.
  ADMISSION_UMD_ASAHI_BATCH pending={};d.Runtime.NativeBatchTransaction=&pending;
- enqueue(&d,17);registered=17;FrontendFlush(&frontend);assert(closes==0&&d.PendingPresentations);
- // Completion removes BO, empty Flush must collect and deallocate shared alias.
+ enqueue(&d,17);registered=17;FrontendFlush(&frontend);assert(closes==1&&d.PendingPresentations);
+ // Completion removes BO; Flush collects the record without a second close.
  d.Runtime.NativeBatchTransaction=nullptr;registered=0;FrontendFlush(&frontend);assert(closes==1&&!d.PendingPresentations&&d.Runtime.Retirement.Count==0);
  // Repeated create/destroy on a stable device must not grow retirement queue.
  for(unsigned i=0;i<64;++i){enqueue(&d,100+i);FrontendFlush(&frontend);assert(d.Runtime.Retirement.Count==0);}
  assert(closes==65);
- // Callback failure retains exact record; retry closes exactly once.
- enqueue(&d,500);fail_deallocate=TRUE;FrontendFlush(&frontend);
- assert(errors==1&&closes==65&&d.Runtime.Retirement.Count==1);
- fail_deallocate=FALSE;FrontendFlush(&frontend);assert(closes==66&&d.Runtime.Retirement.Count==0);
+ // Callback failure is reported once; the dead runtime handle is never retried.
+ fail_deallocate=TRUE;enqueue(&d,500);FrontendFlush(&frontend);
+ assert(errors==1&&closes==65&&d.Runtime.Retirement.Count==0);
+ fail_deallocate=FALSE;FrontendFlush(&frontend);assert(closes==65&&d.Runtime.Retirement.Count==0);
  // Failed/uncertain submission cannot be papered over by cleanup.
  enqueue(&d,600);d.Runtime.DrawTerminal=TRUE;FrontendFlush(&frontend);assert(closes==66&&d.PendingPresentations);
- d.Runtime.DrawTerminal=FALSE;FrontendFlush(&frontend);assert(closes==67);
+ d.Runtime.DrawTerminal=FALSE;FrontendFlush(&frontend);assert(closes==66&&!d.PendingPresentations);
  puts("R148 shared retirement: PASS");
 }
 '''
-        for tag,value in [('HEADER',header),('LIFETIME',lifetime),('DESTROY',function((umd/'src/umd.c').read_text(),'AdmissionUmdDestroyResource')),('COLLECT',function(winsys,'collect_presentations')),('STATUS',function(winsys,'AgxD3d10WindowsFlushStatus')),('DEFERRED',function(winsys,'AgxD3d10WindowsFlushDeferredResources')),('FLUSH',flush)]:
+        for tag,value in [('HEADER',header),('LIFETIME',lifetime),('DESTROY',function((umd/'src/umd.c').read_text().replace('static BOOL AdmissionUmdRetirementNeedsRuntimeResource','BOOL AdmissionUmdRetirementNeedsRuntimeResource'),'AdmissionUmdRetirementNeedsRuntimeResource')+'\n'+function((umd/'src/umd.c').read_text(),'AdmissionUmdReleaseRuntimeResource')+'\n'+function((umd/'src/umd.c').read_text(),'AdmissionUmdDestroyResource')),('COLLECT',function(winsys,'collect_presentations')),('STATUS',function(winsys,'AgxD3d10WindowsFlushStatus')),('DEFERRED',function(winsys,'AgxD3d10WindowsFlushDeferredResources')),('FLUSH',flush)]:
             body=body.replace("@@"+tag+"@@",value)
         with tempfile.TemporaryDirectory() as tmp:
             src=Path(tmp)/'replay.cpp';binary=Path(tmp)/'replay';src.write_text(body)

@@ -203,6 +203,8 @@ VOID APIENTRY AdmissionUmdCreateResource(
     D3D10DDI_HRTRESOURCE RuntimeResource);
 VOID APIENTRY AdmissionUmdDestroyResource(
     D3D10DDI_HDEVICE DeviceHandle, D3D10DDI_HRESOURCE ResourceHandle);
+HRESULT AdmissionUmdReleaseRuntimeResource(
+    D3D10DDI_HDEVICE DeviceHandle, D3D10DDI_HRESOURCE ResourceHandle);
 HRESULT AdmissionUmdSubmitPresent(ADMISSION_UMD_DEVICE *Device,
                                   ADMISSION_UMD_RESOURCE *Source,
                                   PVOID DxgiContext);

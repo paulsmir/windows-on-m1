@@ -606,6 +606,37 @@ VOID APIENTRY AdmissionUmdOpenResource(
   resource->Retirement = retirement;
 }
 
+/* EXP975: this is a D3D10-DDI driver without free threading, so the runtime
+ * frees hRTResource when DestroyResource returns. A deallocation that names
+ * the runtime resource (opened, shared, primary, or KM-resource allocations)
+ * must therefore run before DestroyResource returns; only HandleList
+ * deallocations may be deferred. */
+static BOOL AdmissionUmdRetirementNeedsRuntimeResource(
+    const ADMISSION_UMD_RETIREMENT *Retirement) {
+  return Retirement->Origin == 2u || Retirement->Primary ||
+      Retirement->Shared || Retirement->KernelResource != 0u;
+}
+
+HRESULT AdmissionUmdReleaseRuntimeResource(
+    D3D10DDI_HDEVICE DeviceHandle, D3D10DDI_HRESOURCE ResourceHandle) {
+  ADMISSION_UMD_DEVICE *device = AdmissionUmdDeviceFromHandle(DeviceHandle);
+  ADMISSION_UMD_RESOURCE *resource =
+      AdmissionUmdResourceFromHandle(ResourceHandle);
+  ADMISSION_UMD_RETIREMENT *retirement;
+  HRESULT result;
+  if (device == NULL || resource == NULL)
+    return E_INVALIDARG;
+  retirement = resource->Retirement;
+  if (retirement == NULL ||
+      !AdmissionUmdRetirementNeedsRuntimeResource(retirement))
+    return S_OK;
+  /* The runtime handle dies with this call either way: never retain it. */
+  resource->Retirement = NULL;
+  result = AdmissionUmdRetirementDeallocate(&device->Retirement, retirement);
+  AdmissionUmdRetirementFree(retirement);
+  return result;
+}
+
 VOID APIENTRY AdmissionUmdDestroyResource(
     D3D10DDI_HDEVICE DeviceHandle, D3D10DDI_HRESOURCE ResourceHandle) {
   ADMISSION_UMD_DEVICE *device = AdmissionUmdDeviceFromHandle(DeviceHandle);
@@ -621,6 +652,13 @@ VOID APIENTRY AdmissionUmdDestroyResource(
   ZeroMemory(resource, sizeof(*resource));
   if (retirement == NULL)
     return;
+  if (AdmissionUmdRetirementNeedsRuntimeResource(retirement)) {
+    result = AdmissionUmdRetirementDeallocate(&device->Retirement, retirement);
+    AdmissionUmdRetirementFree(retirement);
+    if (FAILED(result))
+      AdmissionUmdSetError(device, result);
+    return;
+  }
   if (retirement->Primary && !retirement->Shared) {
     result = AdmissionUmdRetirementDeallocate(&device->Retirement, retirement);
     if (FAILED(result)) {

@@ -701,6 +701,19 @@ HRESULT AgxD3d10WindowsPresentationDestroy(
   if(record->RenderResource) {
     AgxWin32AsahiResourceRelease(&record->RenderResource);
   }
+  /* EXP975: hRTResource is freed when the runtime's DestroyResource returns.
+   * Submit immediate-context work that may still name the resource, then
+   * release the runtime-owned KM resource now; only the native slot
+   * bookkeeping below may stay deferred. */
+  if(Device->Stage==AgxD3d10DeviceReady && Device->Context)
+    Device->Context->flush(Device->Context,NULL,0);
+  {
+    D3D10DDI_HDEVICE deviceHandle={0};D3D10DDI_HRESOURCE resourceHandle={0};
+    deviceHandle.pDrvPrivate=&Device->Runtime;
+    resourceHandle.pDrvPrivate=&record->Resource;
+    HRESULT released=AdmissionUmdReleaseRuntimeResource(deviceHandle,resourceHandle);
+    if(FAILED(released)) AdmissionUmdSetError(&Device->Runtime,released);
+  }
   record->Next=Device->PendingPresentations;
   Device->PendingPresentations=record;*Resource=NULL;
   (void)collect_presentations(Device);
