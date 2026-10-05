@@ -1,4 +1,26 @@
-# J313 GPU — EXP972 partial latency reduction, durable Code28
+# J313 GPU — EXP973 prepared but unlaunched, durable Code28
+
+## Current as of 2026-10-05 16:57Z
+
+EXP973 source f832f5cf gates the R162 upload rehash out of production
+`AdmissionGpuvaG3BeginJob` while preserving the verifier in an explicit
+diagnostic build. The compiled-profile RED→GREEN invariant and focused G3/G4
+replays passed. Pinned WDK package 30.0.973.0 built with 0 warnings/errors;
+the source and four package artifacts matched the build receipt. It was
+staged as exact oem5.inf on ordinary Code28/CPU8/SSH, with G3Armed=1, but
+the operator did not answer `ready` during the preregistered 10-minute gate.
+No full-owner launch, timing ring, ETW, or physical panel observation occurred
+for EXP973. The <5 ms hypothesis remains UNTESTED on hardware.
+
+REC-EXP973A/B used an exact staged-only rollback before GPU access. A fresh
+ordinary EXP377/392 boot reached Event133354/LastBoot16:55:17.8767790Z,
+Code28/CPU8/SSH/Staged0; durable Preflight passed PackageAbsent. Evidence and
+hashes are in EXP973/REC-EXP973A/B in `investigation/EXPERIMENTS.md` and
+`.local/experiments/EXP973-upload-rehash/evidence/rec973a/`. No accepted
+graphics package exists. The next causal target remains one EXP973 full-owner
+timing/physical run, only after a new clean preregistration and an explicit
+operator `ready` response before launch. The separate ordinary recovery stall
+seen in EXP972 remains unresolved.
 
 ## Current as of 2026-10-05 16:15Z
 
