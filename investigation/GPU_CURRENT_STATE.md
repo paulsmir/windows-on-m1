@@ -1,4 +1,51 @@
-# J313 GPU — EXP973C timing gate met; physical redraw failed; durable Code28
+# J313 GPU — EXP974 partial physical desktop, DWM crash; durable Code28
+
+
+## Current as of 2026-10-05 19:24Z
+
+EXP974 source62027081/package974 (INF59141ff3, SYS6a579cb2,
+UMD917062ab, CATf0424d3e) indexed `AdmissionG3CopyPte` through the
+existing graph slots and broker buckets; DWM UMD QPC phases were measurement
+only. The real G3 replay visit-count test was RED on the old lookup and GREEN
+in both 16/64-KiB profiles; affected suites8/8. Pinned WDK ARM64 build had
+0 warnings/0 errors after a const-signature correction. Full host suite1212
+retained the known unrelated22 failures/42 errors/2 skips.
+
+Full-owner Event133758/LastBoot18:30:26Z reached Code0/CPU8/pinned SSH and
+survived >33min. DWM PID1224 early BeginJob median0.0885ms, but 84 UMD
+SubmitCommandCb phases had median0.847s adjacent interval. UMD median upload
+54.869ms (45 copy escapes/2.95MB), download31.907ms, paging wait13.623ms;
+these medians do not sum to a frame duration. DWM crashed at18:33:17Z:
+Application1000 c0000005, d3d11 CBlendState hash erase during dwmcore
+PostRender. Exact dump SHA73eedfdc and cdb decode under
+`.local/experiments/EXP974-copy-pte-phase-r1/evidence/interim/dump/` show an
+invalid low-address write0x581e51e8. Writer and relation to indexed CopyPte
+remain UNKNOWN. Dwm[] at t25. DCP A408 count t2=19 and t25=21.
+
+Operator18:39Z saw fast Win+D wallpaper/Run/Device Manager input response,
+with live typed text, but taskbar and Start region black and mouse cursor
+invisible. Host-verified photo SHA3d3e4717 in EXP974/evidence/operator/
+corroborates the partial panel. DWM had already crashed, so the later live
+updates likely used Windows fallback; they do not establish a working DWM
+path. The second operator request at18:55Z had no answer before final freeze.
+EXP974 is REJECTED as a stable/correct desktop; CopyPte speed effect remains
+INCONCLUSIVE against the 0.8s cadence because there is no matched baseline
+phase receipt. No accepted desktop package exists.
+
+Exact974/oem5 was removed only from ordinary Event133861 Code43. The first
+ordinary recovery boot stalled at IRQ route count8 and required documented
+SIGINT CPU snapshot/SIGTERM reset; identical second boot reached Code43/SSH.
+Fresh immutable ordinary Event133957/LastBoot19:21:04Z passed durable Preflight
+Code28/CPU8/SSH/Staged0/PackageAbsent (manifest SHA23e0bc79). Leave this
+clean GPU-visible guest running. Evidence and before/after recovery entries
+are in `investigation/EXPERIMENTS.md` EXP974 and REC-EXP974A..E.
+
+Next causal target is the recurring DWM low-pointer corruption during D3D11
+object release. Supervisor proposed a separate diagnostic-only PageHeap run
+with the same package identity to fault at the first write; this remains a
+hypothesis and is NOT staged or authorized by this EXP974 verdict. Follow the
+phase-boundary new-thread rule before that work. Preserve the separate ordinary
+recovery stall as platform issue; do not conceal it in the Windows driver.
 
 ## Current as of 2026-10-05 17:54Z
 
