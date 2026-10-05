@@ -1450,6 +1450,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
                             ADMISSION_POOL_TAG);
   if (process == NULL) return STATUS_INSUFFICIENT_RESOURCES;
   RtlZeroMemory(process, sizeof(*process));
+  process->OsProcessId = HandleToULong(PsGetCurrentProcessId());
   process->State = state;
   process->Magic = ADMISSION_G3_PROCESS_MAGIC;
   /* VidMm permits this callback only inside CreateProcess at PASSIVE_LEVEL.
@@ -2682,6 +2683,10 @@ static NTSTATUS AdmissionDdiSubmitCommandVirtualInner(
     return AdmissionGpuvaG3SubmitVirtualPaging(adapter, context, Args);
   if (Args->Flags.Present)
     return AdmissionPresentSubmitVirtual(adapter, context, Args);
+  if (context->GpuvaG3Process != NULL)
+    AdmissionJobTimingStartWindows(adapter, context,
+        ((ADMISSION_G3_PROCESS *)context->GpuvaG3Process)->OsProcessId,
+        Args->SubmissionFenceId, Args->DmaBufferSize);
 #if defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
   InterlockedIncrement((volatile LONG *)&adapter->BltProbe.VirtualSubmitCalls);
 #endif

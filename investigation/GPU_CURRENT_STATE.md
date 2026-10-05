@@ -1,4 +1,28 @@
-# J313 GPU — EXP969 bounded DWM copy improvement, operator stop
+# J313 GPU — EXP970 correct desktop, EXP971 latency boundary
+
+## Current as of 2026-10-05 13:38Z
+
+EXP970 repeated exact package969 and proved correct physical desktop content:
+the operator saw wallpaper, desktop icons, taskbar, and watermark after mouse
+dirty rectangles and Win+D redraw. The image updates seconds late; full redraw
+took about 30 s. ETW970E measured render DMA Explorer 33–48 ms and DWM
+65–326 ms (median 131 ms), with paging near 0.2 ms. The earlier Explorer
+predicate57 eviction hypothesis did not recur and is not the current cause.
+Target: per-job KMD/firmware phase latency, one receipt-only EXP971 run before
+any behavioral fix. Plan: `investigation/analysis/EXP971-job-phase-timing.md`.
+
+REC-EXP970A..D failed before Windows at CPU1..7 PMGR start across two m1n1
+images. The operator's full power cycle restored ordinary recovery. REC-EXP970E
+booted CPU8/SSH/Code43 exact970, ran hash-gated cleanup970, then a fresh
+ordinary EXP377/392 boot passed durable Preflight Code28/PackageAbsent with
+one inert APPL0002. Keep this guest as the recovery control. No accepted stable
+graphics package exists. Why continue the current path: physical pixels and
+cross-process composition are proven; the measured DMA latency is the nearest
+remaining lifecycle boundary and EXP971 can isolate a phase without changing
+behavior. The older material below is retained as historical context, not the
+active state.
+
+## Historical state through EXP969
 
 ## Objective and rules
 Long-term objective: a correct stable physical Windows desktop. The operator ordered STOP for today after EXP969; do not build, stage or launch another GPU experiment until explicitly resumed.

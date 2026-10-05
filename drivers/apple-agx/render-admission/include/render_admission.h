@@ -1430,6 +1430,11 @@ BOOLEAN AdmissionPlatformRuntimeReady(
     _Inout_ ADMISSION_CONTEXT *Context);
 BOOLEAN AdmissionPlatformRuntimeSubmit(
     _Inout_ ADMISSION_CONTEXT *Context);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+VOID AdmissionJobTimingStartWindows(ADMISSION_CONTEXT *Adapter,
+    ADMISSION_RENDER_CONTEXT *RenderContext, ULONG ProcessId,
+    ULONG Fence, ULONG DmaBytes);
+#endif
 NTSTATUS AdmissionPlatformRuntimeReset(
     _Inout_ ADMISSION_CONTEXT *Context,
     _Out_ APPLE_AGX_U32 *LastAbortedFence);

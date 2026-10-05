@@ -72,7 +72,7 @@ typedef struct _ADMISSION_G3_PROCESS {
   ADMISSION_G3_PRIVATE_SCENE *PrivateScenes;
   ADMISSION_RENDER_CONTEXT *Contexts;
   HANDLE DxgkProcess;
-  ULONG Magic, DeviceRefs, ContextRefs;
+  ULONG Magic, DeviceRefs, ContextRefs, OsProcessId;
   BOOLEAN Poisoned;
 } ADMISSION_G3_PROCESS;
 

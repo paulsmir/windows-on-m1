@@ -1,4 +1,5 @@
 #include "render_admission.h"
+#include "render_job_timing.h"
 
 /* Fault diagnostics: first nonzero transition stores file tag 4 and
  * source line. Consumers retain zero/nonzero semantics; reset clears it. */
@@ -114,6 +115,12 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   APPLE_AGX_PLATFORM_PROVIDER Provider;
   APPLE_AGX_PLATFORM_PROVIDER_CONFIG ProviderConfig;
   APPLE_AGX_BACKEND_RUNTIME Backend;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  KSPIN_LOCK JobTimingLock;
+  ADMISSION_JOB_TIMING_STATE JobTiming;
+  ADMISSION_JOB_TIMING_STATE JobTimingSnapshot;
+  ULONG JobTimingWorkers;
+#endif
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
   volatile LONG B1Active;
   volatile LONG B1Completed;
@@ -174,6 +181,115 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   BOOLEAN ProviderReady;
   BOOLEAN BackendStarted;
 } ADMISSION_PLATFORM_RUNTIME;
+
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+static ULONGLONG AdmissionJobQpc(VOID) {
+  return (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+}
+
+VOID AdmissionJobTimingStartWindows(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context, ULONG pid, ULONG fence,
+    ULONG dmaBytes) {
+  ADMISSION_PLATFORM_RUNTIME *runtime;
+  KIRQL oldIrql;
+  ULONGLONG qpc = AdmissionJobQpc();
+  if (adapter == NULL || context == NULL || fence == 0u)
+    return;
+  runtime = (ADMISSION_PLATFORM_RUNTIME *)adapter->PlatformRuntime;
+  if (runtime == NULL) return;
+  KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+  (void)AdmissionJobTimingBegin(&runtime->JobTiming, fence, pid,
+      (ULONGLONG)(ULONG_PTR)context, dmaBytes, qpc);
+  KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+}
+
+static VOID AdmissionJobTimingMarkWindows(
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence,
+    ADMISSION_JOB_PHASE phase) {
+  KIRQL oldIrql;
+  ULONGLONG qpc;
+  if (runtime == NULL || fence == 0u) return;
+  qpc = AdmissionJobQpc();
+  KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+  (void)AdmissionJobTimingMark(&runtime->JobTiming, fence, phase, qpc);
+  KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+}
+
+static VOID AdmissionJobTimingDelayWindows(
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence) {
+  KIRQL oldIrql;
+  KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+  (void)AdmissionJobTimingDelay(&runtime->JobTiming, fence);
+  KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+}
+
+static VOID AdmissionJobTimingTargetWindows(
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence,
+    ULONGLONG bytes) {
+  KIRQL oldIrql;
+  KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+  (void)AdmissionJobTimingTarget(&runtime->JobTiming, fence, bytes);
+  KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+}
+
+static VOID AdmissionJobTimingFirmwareWindows(
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence) {
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *start, *end;
+  ADMISSION_JOB_TIMING_SLOT *slot;
+  KIRQL oldIrql;
+  ULONGLONG taStart, taEnd;
+  start = &runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_TA_TIMESTAMP_START];
+  end = &runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_TA_TIMESTAMP_END];
+  if (start->Data == NULL || end->Data == NULL ||
+      start->Size != sizeof(taStart) || end->Size != sizeof(taEnd)) return;
+  RtlCopyMemory(&taStart, start->Data, sizeof(taStart));
+  RtlCopyMemory(&taEnd, end->Data, sizeof(taEnd));
+  KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+  slot = (ADMISSION_JOB_TIMING_SLOT *)AdmissionJobTimingFind(
+      &runtime->JobTiming, fence);
+  if (slot != NULL) {
+    slot->FirmwareTaStart = taStart;
+    slot->FirmwareTaEnd = taEnd;
+    slot->FirmwareValid = (taStart != 0u ? 1u : 0u) |
+        (taEnd != 0u ? 2u : 0u);
+  }
+  KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+}
+
+static VOID AdmissionJobTimingExportWindows(
+    ADMISSION_PLATFORM_RUNTIME *runtime) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  NTSTATUS status;
+  KIRQL oldIrql;
+  ULONGLONG before;
+  if (runtime == NULL || runtime->Adapter == NULL ||
+      runtime->Adapter->PhysicalDeviceObject == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL) return;
+  KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+  ++runtime->JobTimingWorkers;
+  if (runtime->JobTimingWorkers % 16u != 0u) {
+    KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+    return;
+  }
+  RtlCopyMemory(&runtime->JobTimingSnapshot, &runtime->JobTiming,
+      sizeof(runtime->JobTimingSnapshot));
+  KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+  before = AdmissionJobQpc();
+  status = IoOpenDeviceRegistryKey(runtime->Adapter->PhysicalDeviceObject,
+      PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key);
+  if (NT_SUCCESS(status)) {
+    RtlInitUnicodeString(&name, L"Wom1JobTiming971");
+    status = ZwSetValueKey(key, &name, 0u, REG_BINARY,
+        &runtime->JobTimingSnapshot, sizeof(runtime->JobTimingSnapshot));
+    if (NT_SUCCESS(status)) (void)ZwFlushKey(key);
+    ZwClose(key);
+  }
+  KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+  runtime->JobTiming.LastExportQpcTicks = AdmissionJobQpc() - before;
+  KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+}
+#endif
 
 typedef struct _ADMISSION_COMPLETION_NOTIFICATION {
   ADMISSION_PLATFORM_RUNTIME *Runtime;
@@ -2348,8 +2464,28 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendRelocate(
 
 ADMISSION_DELEGATE_ZERO(AdmissionQueuesCreate, Queues.Create)
 ADMISSION_DELEGATE_ZERO(AdmissionQueuesDestroy, Queues.Destroy)
-ADMISSION_DELEGATE_JOB(AdmissionQueuesRun3d, Queues.Run3d)
-ADMISSION_DELEGATE_JOB(AdmissionQueuesRunTa, Queues.RunTa)
+static APPLE_AGX_BACKEND_BOOL AdmissionQueuesRun3d(
+    void *Context, const APPLE_AGX_BACKEND_JOB_IMAGE *Job,
+    APPLE_AGX_BACKEND_U32 Fence) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionJobTimingMarkWindows(runtime, Fence, AdmissionJobPhaseKick3d);
+#endif
+  return runtime != NULL && runtime->PlatformIo.Queues.Run3d != NULL
+      ? runtime->PlatformIo.Queues.Run3d(runtime->PlatformIo.Context, Job, Fence)
+      : APPLE_AGX_BACKEND_FALSE;
+}
+static APPLE_AGX_BACKEND_BOOL AdmissionQueuesRunTa(
+    void *Context, const APPLE_AGX_BACKEND_JOB_IMAGE *Job,
+    APPLE_AGX_BACKEND_U32 Fence) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionJobTimingMarkWindows(runtime, Fence, AdmissionJobPhaseKickTa);
+#endif
+  return runtime != NULL && runtime->PlatformIo.Queues.RunTa != NULL
+      ? runtime->PlatformIo.Queues.RunTa(runtime->PlatformIo.Context, Job, Fence)
+      : APPLE_AGX_BACKEND_FALSE;
+}
 ADMISSION_DELEGATE_FENCE(AdmissionQueuesStop, Queues.Stop)
 ADMISSION_DELEGATE_FENCE(AdmissionQueuesReset, Queues.Reset)
 
@@ -2437,6 +2573,9 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
       Status != AppleAgxBackendCompletionSuccess)
     return APPLE_AGX_BACKEND_FALSE;
   adapter = runtime->Adapter;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionJobTimingMarkWindows(runtime, Fence, AdmissionJobPhaseComplete);
+#endif
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
   if (InterlockedCompareExchange(&runtime->B1Active, 0, 0) != 0)
     return AdmissionB1Complete(runtime, adapter, Fence);
@@ -2453,6 +2592,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
          !AdmissionSaveG4Manager(runtime, Fence) ||
          !AdmissionGpuvaG3CompleteJob(adapter, Fence)))
       return APPLE_AGX_BACKEND_FALSE;
+    AdmissionJobTimingMarkWindows(runtime, Fence, AdmissionJobPhaseJobEnd);
+    AdmissionJobTimingFirmwareWindows(runtime, Fence);
   }
 #endif
   if (adapter == NULL || !adapter->InterfaceValid ||
@@ -2601,6 +2742,9 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
     return APPLE_AGX_BACKEND_FALSE;
 
   if (runtime->Completion.Phase == AppleAgxCompletionBackendRetired) {
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    AdmissionJobTimingMarkWindows(runtime, Fence, AdmissionJobPhaseNotify);
+#endif
     notification.Runtime = runtime;
     notification.Fence = Fence;
     notification.Node = Node;
@@ -2984,6 +3128,18 @@ static VOID AdmissionPlatformWorker(
   }
   AdmissionRenderCorrelationWorkerWindows(
       adapter, description.Fence, TRUE, (ULONG)STATUS_PENDING);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionJobTimingMarkWindows(runtime, description.Fence,
+      AdmissionJobPhaseWorker);
+  {
+    ADMISSION_OPEN_ALLOCATION *opened =
+        (ADMISSION_OPEN_ALLOCATION *)(ULONG_PTR)description.AllocationToken;
+    if (opened != NULL && opened->Magic == ADMISSION_OPEN_ALLOCATION_MAGIC &&
+        opened->Allocation != NULL)
+      AdmissionJobTimingTargetWindows(runtime, description.Fence,
+          opened->Allocation->Description.Size);
+  }
+#endif
 
   submission.Submission.Kind = AppleAgxSubmissionGdi;
   submission.Submission.Fence = description.Fence;
@@ -3075,12 +3231,16 @@ static VOID AdmissionPlatformWorker(
     if (g3_context != NULL && g3_context->GpuvaG3Process != NULL) {
       /* Keep the backend owner identity. BeginJob and the G4 materializer
        * select the process VM slot independently of this envelope. */
+      AdmissionJobTimingMarkWindows(runtime, description.Fence,
+          AdmissionJobPhaseBeginBefore);
       if (!NT_SUCCESS(AdmissionGpuvaG3BeginJob(
               adapter, g3_context, description.Fence))) {
         InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x40000L | __LINE__, 0);
         AdmissionPlatformWorkerFinished(runtime);
         return;
       }
+      AdmissionJobTimingMarkWindows(runtime, description.Fence,
+          AdmissionJobPhaseBeginAfter);
     }
   }
 #endif
@@ -3089,7 +3249,15 @@ static VOID AdmissionPlatformWorker(
     AdmissionPlatformWorkerFinished(runtime);
     return;
   }
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionJobTimingMarkWindows(runtime, description.Fence,
+      AdmissionJobPhaseBackendBefore);
+#endif
   result = AppleAgxBackendRuntimeSubmit(&runtime->Backend, &submission);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionJobTimingMarkWindows(runtime, description.Fence,
+      AdmissionJobPhaseBackendAfter);
+#endif
   if (result != AppleAgxBackendRuntimeResultOk)
     AdmissionBackendSubmitResultWindows(
         adapter, (ULONG)result, (ULONG)runtime->Backend.Phase);
@@ -3369,6 +3537,10 @@ static VOID AdmissionPlatformWorker(
           (!runtime->ProgressValid ||
            AppleAgxG13QueueProgressHasAdvanced(
                &runtime->Progress, &current))) {
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+        AdmissionJobTimingMarkWindows(runtime, description.Fence,
+            AdmissionJobPhaseFirstProgress);
+#endif
         AdmissionBackendProgressWindows(adapter, &current);
         runtime->Progress = current;
         runtime->ProgressValid = TRUE;
@@ -3380,6 +3552,9 @@ static VOID AdmissionPlatformWorker(
     if (runtime->Backend.Phase != AppleAgxBackendRuntimeSubmitted)
       break;
     interval.QuadPart = -10000LL;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    AdmissionJobTimingDelayWindows(runtime, description.Fence);
+#endif
     if (!NT_SUCCESS(KeDelayExecutionThread(
             KernelMode, FALSE, &interval))) {
       InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x40000L | __LINE__, 0);
@@ -3432,6 +3607,9 @@ static VOID AdmissionPlatformWorker(
 #endif
   AdmissionRenderCorrelationWorkerWindows(
       adapter, description.Fence, FALSE, (ULONG)runtime->Backend.Phase);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionJobTimingExportWindows(runtime);
+#endif
   AdmissionPlatformWorkerFinished(runtime);
 }
 
@@ -3594,6 +3772,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   AdmissionRecordPlatformStage(Context, AdmissionPlatformRuntimeAllocated,
                                STATUS_SUCCESS);
   RtlZeroMemory(runtime, sizeof(*runtime));
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  {
+    LARGE_INTEGER frequency;
+    (void)KeQueryPerformanceCounter(&frequency);
+    KeInitializeSpinLock(&runtime->JobTimingLock);
+    AdmissionJobTimingInitialize(&runtime->JobTiming,
+        (ULONGLONG)frequency.QuadPart);
+  }
+#endif
   runtime->Adapter = Context;
   AdmissionDynamicOverlayStateInitialize(&runtime->DynamicOverlayState);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
