@@ -36,6 +36,7 @@ using UINT=uint32_t; using ULONG=uint32_t; using ULONGLONG=uint64_t;
 using ULONG_PTR=uintptr_t; using D3DKMT_HANDLE=uint32_t;
 using BOOL=bool; using BOOLEAN=bool; using HANDLE=void*; using PVOID=void*;
 using HRESULT=int32_t; using NTSTATUS=int32_t;
+using LONG=int32_t;
 #define TRUE true
 #define FALSE false
 #define _Use_decl_annotations_
@@ -53,6 +54,20 @@ using HRESULT=int32_t; using NTSTATUS=int32_t;
 #define ADMISSION_DWM_FRAME_VERSION 1u
 #define ADMISSION_DWM_FRAME_CAPACITY 2u
 #define ADMISSION_UMD_SCREEN_BUFFER_LIMIT 2u
+#define ADMISSION_DWM_SOURCE_MAP_VERSION 2u
+#define ADMISSION_MEMORY_LOCAL_SEGMENT 2u
+#define APPLE_AGX_GPUVA_G3_VALID 1u
+#define APPLE_AGX_GPUVA_G3_WRITE 2u
+#define MAXULONGLONG UINT64_MAX
+struct APPLE_AGX_GPUVA_G3_LOGICAL_PTE { ULONGLONG Allocation,AllocationOffset,GuestIpa; UINT SegmentId,Flags; };
+struct ADMISSION_DWM_SOURCE_MAP_RECEIPT {
+ UINT Version,Bytes,OsProcessId,PteFound; ULONGLONG GraphProcessId,Allocation,CanonicalGpuVa,RootIpa;
+ ULONGLONG MappingGeneration,PteAllocation,PteAllocationOffset,PteGuestIpa,ResolvedGuestIpa;
+ ULONGLONG SelectedHostPhysicalAddress,SelectedPrimaryAddress,SelectedSurfaceBytes;
+ UINT SegmentId,PteFlags,SourceReceiptState,Ordinal,InSelectedRange,InSelectedRangeCount;
+};
+struct ADMISSION_G3_DWM_SYSTEM_LEAF_SNAPSHOT { UINT Unused; };
+struct SourceReceipt { ULONGLONG SelectedHostPhysicalAddress,PrimaryAddress; UINT Stride,Height; };
 struct Flags { union { struct { UINT HardwareAccess:1, other:31; }; UINT Value; }; };
 struct ADMISSION_DWM_FRAME_ARM {
  UINT Magic,Version,Bytes,OsProcessId; ULONGLONG Allocation,CanonicalGpuVa;
@@ -62,12 +77,15 @@ struct ADMISSION_DWM_FRAME_ENTRY {
  UINT Sequence;
 };
 struct Probe { ADMISSION_DWM_FRAME_ENTRY Entries[2]; UINT ArmedCount,Dropped; };
-struct ADMISSION_CONTEXT { bool Started; void *GpuvaG3State; int ObjectAdapter; Probe DwmFrameProbe; };
+struct ADMISSION_CONTEXT { bool Started; void *GpuvaG3State; int ObjectAdapter; Probe DwmFrameProbe;
+ void *PhysicalDeviceObject; LONG DwmSourceMapRecordCount,SourceAddressReceiptState,DwmSourceMapInRangeCount;
+ SourceReceipt SourceAddressReceipt; };
 struct DeviceObject { void *Adapter; };
 struct ADMISSION_DEVICE { DeviceObject Object; };
 struct ADMISSION_RENDER_CONTEXT {
  bool Win32Transport; struct {DeviceObject *Device;} Object;
  ADMISSION_RENDER_CONTEXT *GpuvaG3NextContext;
+ ULONGLONG GpuvaG3RootIpa,GpuvaG3MappingGeneration;
 };
 struct ADMISSION_G3_PROCESS { ADMISSION_RENDER_CONTEXT *Contexts; struct {ULONGLONG ProcessId;} Graph; };
 struct ADMISSION_G3_STATE { int Lock; ADMISSION_G3_PROCESS *Process; };
@@ -87,6 +105,7 @@ struct ADMISSION_UMD_DEVICE {
  RuntimeHandle RuntimeDevice; HANDLE KernelContext;
 };
 static bool isDwm=true,claim=true,hardwareBusy=true;
+static LONG gDwmSystemLeafSnapshotClaimed=1;
 static unsigned calls=0,blocked=0,lastFlags=~0u,irql=0;
 static ADMISSION_CONTEXT adapter{}; static ADMISSION_G3_STATE state{};
 static ADMISSION_G3_PROCESS process{}; static ADMISSION_RENDER_CONTEXT context{};
@@ -105,6 +124,12 @@ static bool AdmissionDwmFrameClaim(ADMISSION_CONTEXT*){return claim;}
 static void AdmissionDwmFrameRelease(ADMISSION_CONTEXT*){}
 static ADMISSION_G3_PROCESS *AdmissionGpuvaG3FindProcess(ADMISSION_G3_STATE *s,HANDLE h){return h==s->Process?s->Process:nullptr;}
 static void AdmissionUmdDiagnostic(const char*,HRESULT,UINT*,size_t){}
+static const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *AdmissionG3CopyPte(ADMISSION_G3_PROCESS *,ULONGLONG){return nullptr;}
+static LONG InterlockedCompareExchange(LONG *p,LONG value,LONG expected){LONG old=*p;if(old==expected)*p=value;return old;}
+static LONG InterlockedIncrement(LONG *p){return ++*p;}
+static void AdmissionG3SnapshotDwmSystemLeaves(ADMISSION_G3_PROCESS *,UINT,ADMISSION_G3_DWM_SYSTEM_LEAF_SNAPSHOT *){}
+static void AdmissionG3WriteDwmSystemLeaves(ADMISSION_CONTEXT *,const ADMISSION_G3_DWM_SYSTEM_LEAF_SNAPSHOT *){}
+static void AdmissionRecordDwmSourceMap(void *,const ADMISSION_DWM_SOURCE_MAP_RECEIPT *,UINT){}
 '''
 
 END = r'''

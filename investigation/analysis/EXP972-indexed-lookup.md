@@ -38,3 +38,22 @@ The targeted graph and G4 submit replay passed. The whole host suite was run
 once and had failures in other harness/toolchain paths; those are listed
 in `/tmp/exp972-full-suite.log` on the host. Hardware preregistration must
 use the exact committed source and a zero-warning pinned WDK build.
+
+## Replay gate correction, 2026-10-05
+
+The first post-build replay attempt failed to compile the real KMD function
+extracts. `NextBroker` and `TableShadowBrokerBuckets` were introduced by
+e3137c61 but absent from `tests/g3_vidmm_replay_shim.h`. The same shim already
+lacked `OsProcessId` before that commit. Once those mirror fields were added,
+the replay exposed a separate pre-existing timing callback omission in its
+extracted m1n1 platform body. The frame-arm standalone shim also lacked older
+source-map diagnostics and logical PTE declarations. These are harness-only
+changes; no KMD, UMD, m1n1, or Mu source changed. The three requested suites
+then passed together: 5 tests, including real copy escape, private escape,
+broker insert/removal, G4 envelope, and frame-arm owner checks. RED evidence
+`/tmp/exp972-g3-red.log`; GREEN evidence `/tmp/exp972-g3-gate.log`.
+
+The pinned EXP972 package receipt already exists and its build log and receipt
+hashes match the recorded BUILD ACTUAL in `investigation/EXPERIMENTS.md`:
+zero warnings, zero errors, source commit e3137c61. Only replay harness files
+changed after that package build, so the exact signed package remains valid.
