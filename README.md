@@ -28,7 +28,35 @@ and retained healthy built-in keyboard and Precision Touchpad devices. It is sti
 experimental checkpoint: standalone cold boot, suspend/resume, long-duration thermal stress,
 and GPU acceleration remain separate qualification gates.
 
+**GPU acceleration (work in progress, assisted mode only).** On 2026-10-05 the Windows
+desktop was, for the first time, composed by DWM through this project's own Apple AGX
+driver stack (a WDDM 3.2 kernel-mode driver plus a Mesa-based D3D10 user-mode driver) and
+scanned out by the Apple display coprocessor (DCP): wallpaper, desktop icons, and the
+taskbar render correctly on the internal panel. It is not usable yet: every GPU job
+currently takes 35–325 ms, so a full-screen redraw takes about 30 seconds and areas that
+have not been redrawn stay black. This requires the assisted m1n1 hypervisor launch and is
+developed on `feature/j313-gpu-acceleration`, not on `main`.
+
 Only `j313` is currently supported. This is not a general Apple Silicon Windows installer.
+
+## Development branches
+
+| Branch | Purpose | State |
+| --- | --- | --- |
+| `main` | Published platform baseline and documentation | Eight CPU cores, NVMe, USB, built-in keyboard and touchpad; GOP framebuffer only |
+| `feature/j313-gpu-acceleration` | AGX GPU driver (KMD + Mesa UMD), DCP scanout, GPU VA broker in m1n1 | Active. First correct GPU-composed desktop; per-job latency is the current blocker |
+| `feature/j313-native-input` | Built-in SPI-HID keyboard and Precision Touchpad | Validated checkpoint, merged into `main` |
+| `feature/j313-4e4p-cpu-stability` | Eight-core (4E+4P) bring-up | Validated, merged into `main` |
+| `feature/j313-cpu-stability`, `feature/j313-4e2p-cpu-stability`, `feature/j313-4e3p-cpu-stability` | Incremental P-core bring-up (4E+1P … 4E+3P) | Historical validated checkpoints |
+| `stable/j313-4e-baseline` | Frozen four-efficiency-core baseline | Historical recovery reference |
+| `codex/*` | Earlier stability and release-preparation snapshots | Historical |
+
+The submodule forks follow the same naming: [`m1n1_windows`](https://github.com/paulsmir/m1n1_windows)
+and [`apple_silicon_platforms_mu`](https://github.com/paulsmir/apple_silicon_platforms_mu)
+carry the matching GPU work on their own `feature/j313-gpu-acceleration` branches, and the
+root branch pins the exact submodule commits it was tested with. Every hardware run on the
+GPU branch is recorded in `investigation/EXPERIMENTS.md` and indexed in
+`investigation/CHANGES.csv`.
 
 ## Two operating modes
 
