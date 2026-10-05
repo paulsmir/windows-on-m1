@@ -617,20 +617,19 @@ static VOID AdmissionG3VerifyUploads(ADMISSION_CONTEXT *adapter,
 #endif
 
 static const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *AdmissionG3CopyPte(
-    const ADMISSION_G3_PROCESS *p, ULONGLONG va) {
-  APPLE_AGX_GPUVA_G3_NODE *edge;
+    ADMISSION_G3_PROCESS *p, ULONGLONG va) {
   ADMISSION_G3_TABLE_SHADOW *shadow;
-  ULONGLONG middle, leaf;
-  for(edge=p->Graph.Parents;edge;edge=edge->Next)
-    if(edge->Ipa==p->Graph.RootIpa && edge->Index==(UINT)(va>>36)) break;
-  if(!edge) return NULL;
-  middle=edge->AuxIpa;
-  for(edge=p->Graph.Parents;edge;edge=edge->Next)
-    if(edge->Ipa==middle && edge->Index==(UINT)((va>>25)&2047u)) break;
-  if(!edge) return NULL;
-  leaf=edge->AuxIpa;
-  for(shadow=p->TableShadows;shadow;shadow=shadow->Next)
+  ULONGLONG leaf;
+  ULONG bucket;
+  if (!p || !AppleAgxGpuvaG3GraphLeafTableIpa(&p->Graph,va,&leaf))
+    return NULL;
+  bucket=(ULONG)((leaf>>14)^(leaf>>22)^(leaf>>30))&255u;
+  for(shadow=p->TableShadowBrokerBuckets[bucket];shadow;shadow=shadow->NextBroker) {
+#ifdef ADMISSION_G3_COPY_PTE_VISIT
+    ADMISSION_G3_COPY_PTE_VISIT();
+#endif
     if(shadow->BrokerIpa==leaf) break;
+  }
   if(!shadow || !shadow->ResidentPtes) return NULL;
   return &shadow->ResidentPtes[(UINT)((va>>12)&8191u)];
 }

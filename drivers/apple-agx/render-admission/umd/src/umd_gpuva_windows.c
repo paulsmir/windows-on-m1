@@ -34,6 +34,25 @@ static BOOL frame_process_is_dwm(void) {
   return observed == 1;
 }
 
+/* EXP974 measurement only. The diagnostic line carries pid/tid and QPC;
+ * elapsed ticks use the reported frequency for offline per-submit joins. */
+static void measure_g4_phase(UINT phase, LARGE_INTEGER start,
+    UINT count, ULONGLONG bytes, HRESULT status) {
+  LARGE_INTEGER end, frequency;
+  UINT values[7];
+  if (!frame_process_is_dwm()) return;
+  (void)QueryPerformanceCounter(&end);
+  (void)QueryPerformanceFrequency(&frequency);
+  values[0]=phase;
+  values[1]=(UINT)(end.QuadPart-start.QuadPart);
+  values[2]=(UINT)((ULONGLONG)(end.QuadPart-start.QuadPart)>>32);
+  values[3]=(UINT)frequency.QuadPart;
+  values[4]=count;
+  values[5]=(UINT)bytes;
+  values[6]=(UINT)(bytes>>32);
+  AdmissionUmdDiagnostic("measure-g4-phase",status,values,ARRAYSIZE(values));
+}
+
 #ifdef __cplusplus
 extern "C"
 #endif
@@ -239,6 +258,10 @@ static int evict(void *context, const uint64_t *tokens, unsigned count) {
 static int make_resident(void *context, const uint64_t *tokens,
                          unsigned count, uint64_t *fence) {
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  LARGE_INTEGER phase_start;
+  (void)QueryPerformanceCounter(&phase_start);
+#endif
   if (!device || !fence || !device->PagingQueue ||
       !device->KernelCallbacks ||
       !device->KernelCallbacks->pfnMakeResidentCb) return 0;
@@ -278,6 +301,9 @@ static int make_resident(void *context, const uint64_t *tokens,
   request.PriorityList = priorities;
   HRESULT hr = device->KernelCallbacks->pfnMakeResidentCb(
       device->RuntimeDevice.handle, &request);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  measure_g4_phase(1u,phase_start,count,0u,hr);
+#endif
   int rollback = 1;
   if (request.NumAllocations && request.NumAllocations < count)
     rollback = evict(context, tokens, request.NumAllocations);
@@ -312,7 +338,15 @@ static int wait_object(ADMISSION_UMD_DEVICE *device,
 
 static int wait_paging(void *context, uint64_t fence) {
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;
-  return wait_object(device, device ? device->PagingSyncObject : 0, fence);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  LARGE_INTEGER phase_start;
+  (void)QueryPerformanceCounter(&phase_start);
+#endif
+  int ok=wait_object(device, device ? device->PagingSyncObject : 0, fence);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  measure_g4_phase(2u,phase_start,1u,0u,ok ? S_OK : E_FAIL);
+#endif
+  return ok;
 }
 
 static int copy_escape(ADMISSION_UMD_DEVICE *device,
@@ -348,7 +382,8 @@ static int copy_escape(ADMISSION_UMD_DEVICE *device,
 }
 
 static int transfer_slot(ADMISSION_UMD_DEVICE *device,
-                          ADMISSION_UMD_SCREEN_BUFFER *slot,bool download) {
+                          ADMISSION_UMD_SCREEN_BUFFER *slot,bool download,
+                          UINT *transfer_count,ULONGLONG *transfer_bytes) {
   auto *payload=(APPLE_AGX_G3_COPY_REQUEST *)HeapAlloc(
       GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(APPLE_AGX_G3_COPY_REQUEST));
   if(!payload) return 0;
@@ -388,6 +423,8 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
     if(!download) CopyMemory(payload->Data,address+offset,count);
     if(!copy_escape(device,payload)) {success=0;break;}
     if(download) CopyMemory(address+offset,payload->Data,count);
+    if(transfer_count) ++*transfer_count;
+    if(transfer_bytes) *transfer_bytes+=count;
     offset+=count;
   }
   /* Borrowed/imported storage must be unlocked before publication. Native
@@ -429,14 +466,30 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
 }
 
 static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
+  UINT measured_count=0u;
+  ULONGLONG measured_bytes=0u;
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  LARGE_INTEGER phase_start;
+  (void)QueryPerformanceCounter(&phase_start);
+#endif
   if(!device->KernelCallbacks->pfnLockCb || !device->KernelCallbacks->pfnUnlockCb)
     return 0;
   for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i) {
     auto *slot=&device->ScreenBuffers[i];
     if(!slot->CopyHeld || slot->Direct ||
        (download && !(slot->Flags & AppleAgxWin32BufferGpuWrite))) continue;
-    if(!transfer_slot(device,slot,download)) return 0;
+    if(!transfer_slot(device,slot,download,&measured_count,&measured_bytes)) {
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+      measure_g4_phase(download ? 6u : 3u,phase_start,measured_count,
+          measured_bytes,E_FAIL);
+#endif
+      return 0;
+    }
   }
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  measure_g4_phase(download ? 6u : 3u,phase_start,measured_count,
+      measured_bytes,S_OK);
+#endif
   return 1;
 }
 
@@ -522,8 +575,15 @@ static int submit(void *context, const uint64_t *written,
   request.pPrivateDriverData = (void *)private_data;
   request.PrivateDriverDataSize = private_bytes;
   request.RenderCBSequence = (UINT)InterlockedIncrement(&device->RenderCbSequence);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  LARGE_INTEGER submit_start;
+  (void)QueryPerformanceCounter(&submit_start);
+#endif
   HRESULT submit_result = device->KernelCallbacks->pfnSubmitCommandCb(
       device->RuntimeDevice.handle, &request);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  measure_g4_phase(4u,submit_start,request.RenderCBSequence,bytes,submit_result);
+#endif
   UINT submit_values[4] = {request.CommandLength,
       request.PrivateDriverDataSize, request.NumPrimaries,
       request.RenderCBSequence};
@@ -550,9 +610,18 @@ static int submit(void *context, const uint64_t *written,
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   device->FrameSubmittedFence = internal;
 #endif
-  if(!signal_render(device,internal) ||
-     !wait_object(device,device->RenderSyncObject,internal) ||
-     !transfer_held(device,true) || !signal_render(device,internal+1)) {
+  int signaled=signal_render(device,internal);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  LARGE_INTEGER wait_start;
+  (void)QueryPerformanceCounter(&wait_start);
+#endif
+  int waited=signaled && wait_object(device,device->RenderSyncObject,internal);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  measure_g4_phase(5u,wait_start,request.RenderCBSequence,0u,
+      waited ? S_OK : E_FAIL);
+#endif
+  if(!waited || !transfer_held(device,true) ||
+     !signal_render(device,internal+1)) {
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
     device->FrameSubmitStatus = E_FAIL;
 #endif

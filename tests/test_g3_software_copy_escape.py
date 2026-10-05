@@ -25,6 +25,15 @@ EXTRA=r'''
   q->MappingGeneration=q->ProcessGeneration=0;
   expect_ok("legacy synchronized copy QUERY",AdmissionDdiEscape(&a,&escape));
 '''
+COPY_PTE_VISITS=r'''
+  /* The real lookup must traverse two graph slots and one broker bucket,
+   * independent of unrelated parent/shadow list length. */
+  AppleAgxGpuvaG3LookupStatsReset();copy_pte_visits=0;
+  const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *indexed=AdmissionG3CopyPte(p,0x10000);
+  assert(indexed && (indexed->Flags&APPLE_AGX_GPUVA_G3_VALID));
+  assert(AppleAgxGpuvaG3LookupStatsVisits()==2);
+  assert(copy_pte_visits==1);
+'''
 class SoftwareCopyTests(unittest.TestCase):
  def test_real_query_upload_download_both_page_profiles(self):
   spec=importlib.util.spec_from_file_location('g3_software_replay',ROOT/'tests/g3_vidmm_replay.py')
@@ -32,15 +41,20 @@ class SoftwareCopyTests(unittest.TestCase):
   original=m.generate
   def generate(*args,**kwargs):
    source=original(*args,**kwargs)
+   source=source.replace('#include "g3_vidmm_replay_shim.h"',
+      '#include "g3_vidmm_replay_shim.h"\nstatic unsigned copy_pte_visits;\n#define ADMISSION_G3_COPY_PTE_VISIT() (++copy_pte_visits)')
    scenarios=(ROOT/'tests/g3_vidmm_replay_scenarios.c').read_text()
    copy=(ROOT/'tests/g3_r145_copy_cases.c').read_text()
    marker='  expect_ok("R145 copy query",AdmissionDdiEscape(&a,&escape));'
    assert copy.count(marker)==1
    copy=copy.replace(marker,marker+EXTRA)
+   marker='  expect_ok("R145 local publication",AdmissionGpuvaG3BuildPagingBuffer(&a,&x));'
+   assert copy.count(marker)==1
+   copy=copy.replace(marker,marker+COPY_PTE_VISITS)
    scenarios=scenarios.replace('#include "g3_r145_copy_cases.c"',copy)
    return source.replace('#include "g3_vidmm_replay_scenarios.c"',scenarios)
   m.generate=generate
   for profile in ('16','64'):
-   with self.subTest(profile=profile),patch.dict(os.environ,{'G3_REPLAY_R145':'1','G3_REPLAY_PROFILE':profile}):
+   with self.subTest(profile=profile),patch.dict(os.environ,{'G3_REPLAY_R145':'1','G3_REPLAY_PROFILE':profile,'G3_REPLAY_COPY_PTE_VISITS':'1'}):
     self.assertIsNone(m.main())
 if __name__=='__main__':unittest.main()
