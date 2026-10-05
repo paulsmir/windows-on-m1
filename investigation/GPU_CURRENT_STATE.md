@@ -1,26 +1,34 @@
-# J313 GPU — EXP973 prepared but unlaunched, durable Code28
+# J313 GPU — EXP973C timing gate met; physical redraw unknown; durable Code28
 
-## Current as of 2026-10-05 16:57Z
+## Current as of 2026-10-05 17:50Z
 
-EXP973 source f832f5cf gates the R162 upload rehash out of production
-`AdmissionGpuvaG3BeginJob` while preserving the verifier in an explicit
-diagnostic build. The compiled-profile RED→GREEN invariant and focused G3/G4
-replays passed. Pinned WDK package 30.0.973.0 built with 0 warnings/errors;
-the source and four package artifacts matched the build receipt. It was
-staged as exact oem5.inf on ordinary Code28/CPU8/SSH, with G3Armed=1, but
-the operator did not answer `ready` during the preregistered 10-minute gate.
-No full-owner launch, timing ring, ETW, or physical panel observation occurred
-for EXP973. The <5 ms hypothesis remains UNTESTED on hardware.
+EXP973C launched the existing zero-warning package973 (source f832f5cf,
+INF 6dff0fa2, SYS 0fd2cbec, UMD 46df0c04, CAT 5afce5e4) after fresh
+ordinary Event133354 Code28/CPU8/PackageAbsent and exact hash verification.
+Full-owner Event133454 reached Code0/CPU8/pinned SSH. The paired EXP971
+ring measured DWM PID1232 BeginJob median 0.0867 ms over 43 entries,
+max 0.1142 ms; the initial ring had 50 DWM entries at median 0.0678 ms.
+This confirms the preregistered <5 ms timing checkpoint and localizes
+EXP972's residual 19.13 ms BeginJob cost to the production upload rehash.
+Short ETW, UMD, ring and host log are frozen with sizes/SHA in
+`.local/experiments/EXP973-upload-rehash/evidence/exp973c/` and
+`investigation/EXPERIMENTS.md` EXP973C.
 
-REC-EXP973A/B used an exact staged-only rollback before GPU access. A fresh
-ordinary EXP377/392 boot reached Event133354/LastBoot16:55:17.8767790Z,
-Code28/CPU8/SSH/Staged0; durable Preflight passed PackageAbsent. Evidence and
-hashes are in EXP973/REC-EXP973A/B in `investigation/EXPERIMENTS.md` and
-`.local/experiments/EXP973-upload-rehash/evidence/rec973a/`. No accepted
-graphics package exists. The next causal target remains one EXP973 full-owner
-timing/physical run, only after a new clean preregistration and an explicit
-operator `ready` response before launch. The separate ordinary recovery stall
-seen in EXP972 remains unresolved.
+The OPERATOR REQUEST for mouse movement and Win+D was posted at17:30:22Z.
+No later OPERATOR ANSWER appeared within ten minutes; physical desktop
+content and redraw response are UNKNOWN. DCP exact swaps occurred, but
+cached snapshots do not establish visible pixels. No accepted stable graphics
+package exists. The next causal target is physical panel response under this
+faster timing path, with an explicit operator observation before any new
+implementation hypothesis. The separate ordinary recovery stall remains
+unresolved; it did not recur in this rollback.
+
+REC-EXP973C-A/B/C ordered out of Code0, booted immutable ordinary EXP377/392
+into fresh Event133556 Code43/CPU8/SSH, removed exact oem5/package973 there,
+and booted immutable ordinary again. Event133658/LastBoot17:48:38.4181780Z
+passed durable Preflight Code28/CPU8/SSH/Staged0/PackageAbsent. Evidence
+`.local/experiments/EXP973-upload-rehash/evidence/rec973c/`. Leave this
+clean ordinary guest running.
 
 ## Current as of 2026-10-05 16:15Z
 
