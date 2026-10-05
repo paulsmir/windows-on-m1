@@ -581,6 +581,7 @@ static VOID AdmissionG3TraceUpload(ADMISSION_G3_STATE *state,
   t->Hash=AdmissionG3Fnv(2166136261u,data,bytes);t->GpuHash=0u;t->Checks=0u;
 }
 
+#if ADMISSION_G3_VERIFY_UPLOADS_ON_BEGIN_JOB
 /* Re-hash each traced upload through the published graph (the GPU view). */
 static VOID AdmissionG3VerifyUploads(ADMISSION_CONTEXT *adapter,
     ADMISSION_G3_STATE *state, ADMISSION_G3_PROCESS *p) {
@@ -613,6 +614,7 @@ static VOID AdmissionG3VerifyUploads(ADMISSION_CONTEXT *adapter,
     }
   }
 }
+#endif
 
 static const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *AdmissionG3CopyPte(
     const ADMISSION_G3_PROCESS *p, ULONGLONG va) {
@@ -1934,7 +1936,9 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
   if (state == NULL || process == NULL || process->State != state)
     return STATUS_INVALID_DEVICE_STATE;
   ExAcquireFastMutex(&state->Lock);
+#if ADMISSION_G3_VERIFY_UPLOADS_ON_BEGIN_JOB
   AdmissionG3VerifyUploads(adapter,state,process);
+#endif
   if (adapter->BackendImage.G4Native) {
     ADMISSION_BACKEND_IMAGE *image = &adapter->BackendImage;
     if (image->G4Lease.SceneId)

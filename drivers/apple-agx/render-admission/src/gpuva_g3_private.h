@@ -9,8 +9,13 @@
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #define ADMISSION_G3_PROCESS_MAGIC 0x47335052u
 
-/* R162 diagnostic: USC-window uploads re-hashed through the published graph
- * before each native job of the owning process. Evidence only (kernel dump). */
+/* Explicit diagnostic profile; production submission never re-hashes uploads. */
+#ifndef ADMISSION_G3_VERIFY_UPLOADS_ON_BEGIN_JOB
+#define ADMISSION_G3_VERIFY_UPLOADS_ON_BEGIN_JOB 0
+#endif
+
+/* R162 diagnostic: USC-window upload hashes may be checked through the
+ * published graph in the explicit diagnostic profile. Evidence only. */
 #define ADMISSION_G3_UPLOAD_TRACE_COUNT 64u
 typedef struct _ADMISSION_G3_UPLOAD_TRACE {
   ULONGLONG ProcessId, Va;
