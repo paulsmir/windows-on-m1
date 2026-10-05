@@ -36,5 +36,8 @@ int main(void) {
   assert(AdmissionJobTimingDeltaUs(&state, slot, AdmissionJobPhaseNotify,
       AdmissionJobPhaseFirstProgress) == 0u);
   assert(!AdmissionJobTimingMark(&state, 65u, AdmissionJobPhaseWorker, 9999u));
+  assert(!AdmissionJobTimingMark(&state, 65u, (ADMISSION_JOB_PHASE)-1, 9999u));
+  assert(AdmissionJobTimingDeltaUs(&state, slot,
+      (ADMISSION_JOB_PHASE)-1, AdmissionJobPhaseNotify) == 0u);
   return 0;
 }

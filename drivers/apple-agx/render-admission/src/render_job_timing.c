@@ -43,7 +43,7 @@ int AdmissionJobTimingMark(ADMISSION_JOB_TIMING_STATE *state,
     unsigned int fence, ADMISSION_JOB_PHASE phase, unsigned long long qpc) {
   ADMISSION_JOB_TIMING_SLOT *slot =
       (ADMISSION_JOB_TIMING_SLOT *)AdmissionJobTimingFind(state, fence);
-  if (!slot || phase >= ADMISSION_JOB_PHASE_COUNT || !qpc ||
+  if (!slot || (int)phase < 0 || phase >= ADMISSION_JOB_PHASE_COUNT || !qpc ||
       slot->Qpc[phase]) return 0;
   slot->Qpc[phase] = qpc;
   return 1;
@@ -72,7 +72,8 @@ unsigned long long AdmissionJobTimingDeltaUs(
     const ADMISSION_JOB_TIMING_SLOT *slot,
     ADMISSION_JOB_PHASE first, ADMISSION_JOB_PHASE last) {
   unsigned long long delta;
-  if (!state || !slot || first >= ADMISSION_JOB_PHASE_COUNT ||
+  if (!state || !slot || (int)first < 0 || (int)last < 0 ||
+      first >= ADMISSION_JOB_PHASE_COUNT ||
       last >= ADMISSION_JOB_PHASE_COUNT || !state->QpcFrequency ||
       !slot->Qpc[first] || slot->Qpc[last] < slot->Qpc[first]) return 0;
   delta = slot->Qpc[last] - slot->Qpc[first];
