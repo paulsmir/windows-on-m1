@@ -1,6 +1,30 @@
-# J313 GPU — EXP970 correct desktop, EXP971 latency boundary
+# J313 GPU — EXP972 partial latency reduction, durable Code28
 
-## Current as of 2026-10-05 14:55Z
+## Current as of 2026-10-05 16:15Z
+
+EXP972 indexed graph/envelope package972 (source e3137c61, INF e42737f6,
+SYS fc684661, UMD 045a869f, CAT 6176940f) booted full-owner Code0/CPU8/SSH.
+The paired 8-second ring measured DWM BeginJob median 19.13 ms (38 jobs) and
+Explorer 27.07 ms (12 jobs); the initial ring had DWM median 29.15 ms (39
+jobs). This is below EXP971's DWM 78.07 ms median, but above the preregistered
+<5 ms checkpoint. The indexed lookup helped, but did not fully explain the
+remaining BeginJob cost. ETW, UMD, ring and host log were frozen under
+`.local/experiments/EXP972-indexed-lookup/evidence/`. DCP swaps occurred, but
+the operator's requested mouse/Win+D physical report did not arrive; EXP972
+visual correctness is UNKNOWN. No accepted stable graphics package exists.
+
+Two identical GPU-visible ordinary recovery launches stalled at IRQ route
+count8 before SSH. SIGINT captured CPU/IRQ snapshots and SIGTERM returned the
+machine to proxy. The immutable GPU-hidden emergency boot reached Code45/CPU8/
+SSH; hash-gated exact972/oem5 cleanup removed the package. Fresh ordinary
+EXP377/392 boot Event133255/LastBoot16:14:46.987852Z passed durable Preflight
+Code28/PackageAbsent/CPU8/SSH. This ordinary guest is the current recovery
+control. See EXP972 and REC-EXP972A..D in `investigation/EXPERIMENTS.md`.
+
+Next causal target: measure the remaining BeginJob phase before changing code.
+The supervisor identified pre-existing linear `AdmissionG3CopyPte` and other
+TableShadow walks as a possible later EXP973, but EXP972 did not isolate them.
+Keep the recovery stall separate from the GPU timing verdict.
 
 EXP971 receipt-only KMD timing source399e47ee/package971 reached Code0/CPU8/
 SSH, but the operator saw no immediate panel redraw after mouse movement and
