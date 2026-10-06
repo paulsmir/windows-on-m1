@@ -822,6 +822,49 @@ NTSTATUS AdmissionG3ExecuteVirtualPaging(
   return status;
 }
 
+/* EXP987 receipt-only: account one R155/R165 wait (G3 lock held). */
+static VOID AdmissionG3NotePagingWait(ADMISSION_CONTEXT *adapter,
+    ULONG operation, UINT iterations, ULONGLONG ticks, BOOLEAN timedOut,
+    const ADMISSION_G3_PAGING_WAIT_RECEIPT *at) {
+  ADMISSION_G3_PAGING_WAIT_RECEIPT *r;
+  LARGE_INTEGER frequency;
+  if (adapter == NULL || iterations == 0u) return;
+  r = &adapter->G3PagingWait;
+  r->Version = 1u; r->Bytes = sizeof(*r);
+  (void)KeQueryPerformanceCounter(&frequency);
+  r->QpcFrequency = (ULONGLONG)frequency.QuadPart;
+  ++r->Waits; r->TotalIterations += iterations; r->TotalTicks += ticks;
+  if (timedOut) ++r->Timeouts;
+  if (ticks > r->MaxTicks) {
+    r->MaxTicks = ticks; r->MaxIterations = iterations;
+    r->MaxOperation = operation; r->MaxQpc = at->MaxQpc;
+    r->MaxGraphProcessId = at->MaxGraphProcessId;
+    r->MaxActiveGraphProcessId = at->MaxActiveGraphProcessId;
+    r->MaxJobInFlight = at->MaxJobInFlight; r->MaxLease = at->MaxLease;
+    r->MaxActiveIsProcess = at->MaxActiveIsProcess;
+    r->MaxActiveFence = at->MaxActiveFence;
+    r->MaxLastCompletedFence = at->MaxLastCompletedFence;
+    r->MaxPrivateCompletionFence = at->MaxPrivateCompletionFence;
+    InterlockedExchange(&adapter->G3PagingWaitDirty, 1);
+  } else if (timedOut) {
+    InterlockedExchange(&adapter->G3PagingWaitDirty, 1);
+  }
+}
+
+static VOID AdmissionG3SnapPagingWait(ADMISSION_G3_STATE *state,
+    ADMISSION_G3_PROCESS *process, ADMISSION_G3_PAGING_WAIT_RECEIPT *at) {
+  at->MaxQpc = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+  at->MaxGraphProcessId = process->Graph.ProcessId;
+  at->MaxActiveGraphProcessId = state->ActiveProcess ?
+      state->ActiveProcess->Graph.ProcessId : 0ULL;
+  at->MaxJobInFlight = process->Graph.JobInFlight ? 1u : 0u;
+  at->MaxLease = process->Graph.LeaseToken ? 1u : 0u;
+  at->MaxActiveIsProcess = state->ActiveProcess == process ? 1u : 0u;
+  at->MaxActiveFence = state->ActiveFence;
+  at->MaxLastCompletedFence = state->LastCompletedFence;
+  at->MaxPrivateCompletionFence = state->PrivateCompletionFence;
+}
+
 /* EXP983 receipt-only: per-allocation FILL (1) / TRANSFER (2) history. Unlocked
  * diagnostic writes; never consulted by any paging or copy decision. */
 VOID AdmissionGpuvaG3NoteAllocationPaging(ADMISSION_CONTEXT *adapter,
@@ -914,6 +957,10 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
      * in flight (VA free during rendering); the broker refuses that flush with
      * BUSY and FLUSH_TLB may not fail. Like R155, wait with the G3 lock
      * released for joined completion; the bound exceeds TdrDelay. */
+    {
+    ADMISSION_G3_PAGING_WAIT_RECEIPT at;
+    ULONGLONG wait_start = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+    RtlZeroMemory(&at, sizeof(at));
     for (wait_ms = 0u;; ++wait_ms) {
       ExAcquireFastMutex(&state->Lock);
       process = AdmissionGpuvaG3FindProcess(state, args->FlushTlb.hProcess);
@@ -921,9 +968,14 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
           (!process->Graph.JobInFlight && !process->Graph.LeaseToken) ||
           wait_ms >= job_wait_limit_ms)
         break;
+      if (wait_ms == 0u) AdmissionG3SnapPagingWait(state, process, &at);
       ExReleaseFastMutex(&state->Lock);
       delay.QuadPart = -10000LL; /* 1 ms */
       (void)KeDelayExecutionThread(KernelMode, FALSE, &delay);
+    }
+    AdmissionG3NotePagingWait(adapter, 2u, wait_ms,
+        (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart - wait_start,
+        (BOOLEAN)(wait_ms >= job_wait_limit_ms), &at);
     }
     address.GpuPhysical = args->FlushTlb.RootPageTableAddress;
     status = AdmissionGpuvaG3ResolveTable(adapter, &address,
@@ -985,6 +1037,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     }
     ExReleaseFastMutex(&state->Lock);
     AdmissionRecordGpuvaG3Flush(adapter, &receipt);
+    AdmissionRecordG3PagingWait(adapter);
     if (!NT_SUCCESS(status) && receipt.BrokerStatus != 0u &&
         receipt.Branch != 4u)
       return STATUS_GRAPHICS_ALLOCATION_BUSY;
@@ -1039,6 +1092,10 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
    * the fence completes), and DxgkDdiBuildPagingBuffer may not return a busy
    * status for UpdatePageTable. Wait, with the G3 lock released, for the job
    * to finish; the bound exceeds TdrDelay so a genuine hang stays a TDR. */
+  {
+  ADMISSION_G3_PAGING_WAIT_RECEIPT at;
+  ULONGLONG wait_start = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+  RtlZeroMemory(&at, sizeof(at));
   for (wait_ms = 0u;; ++wait_ms) {
     ExAcquireFastMutex(&state->Lock);
     process = AdmissionGpuvaG3FindProcess(state, update->hProcess);
@@ -1046,9 +1103,14 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
         (!process->Graph.JobInFlight && !process->Graph.LeaseToken) ||
         wait_ms >= job_wait_limit_ms)
       break;
+    if (wait_ms == 0u) AdmissionG3SnapPagingWait(state, process, &at);
     ExReleaseFastMutex(&state->Lock);
     delay.QuadPart = -10000LL; /* 1 ms */
     (void)KeDelayExecutionThread(KernelMode, FALSE, &delay);
+  }
+  AdmissionG3NotePagingWait(adapter, 1u, wait_ms,
+      (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart - wait_start,
+      (BOOLEAN)(wait_ms >= job_wait_limit_ms), &at);
   }
   RtlCopyMemory(unpublished_before, state->UnpublishedGroups,
                 sizeof(unpublished_before));
@@ -1171,6 +1233,7 @@ PagingDone:
   ExReleaseFastMutex(&state->Lock);
   if (unpublished_changed)
     AdmissionRecordGpuvaG3UnpublishedGroups(adapter, unpublished_after);
+  AdmissionRecordG3PagingWait(adapter);
   AdmissionRecordGpuvaG3PagingFailure(adapter, &failure);
   if (!NT_SUCCESS(status) && failure.Branch != 0u &&
       failure.GraphLastStatus != 0u)

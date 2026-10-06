@@ -263,6 +263,16 @@ typedef struct _ADMISSION_G3_LEAF_HISTORY {
   ULONGLONG Qpc, ProcessId, TableIpa, Allocation, FirstVa, MappingGeneration;
   ULONG First, Count, ValidCount, Flags, Status, FirstSegment;
 } ADMISSION_G3_LEAF_HISTORY;
+/* EXP987 receipt-only: R155/R165 BuildPagingBuffer waits for a process's
+ * in-flight job. Snapshot of the condition when the wait began. */
+typedef struct _ADMISSION_G3_PAGING_WAIT_RECEIPT {
+  ULONG Version, Bytes, Waits, Timeouts;
+  ULONGLONG TotalIterations, TotalTicks, QpcFrequency;
+  ULONGLONG MaxTicks, MaxQpc, MaxGraphProcessId, MaxActiveGraphProcessId;
+  ULONG MaxIterations, MaxOperation, MaxJobInFlight, MaxLease;
+  ULONG MaxActiveIsProcess, MaxActiveFence, MaxLastCompletedFence,
+      MaxPrivateCompletionFence;
+} ADMISSION_G3_PAGING_WAIT_RECEIPT;
 #define ADMISSION_G3_ALLOC_TRACK_COUNT 1024u
 /* EXP982: last valid leaf mapping per VidMm allocation handle. */
 typedef struct _ADMISSION_G3_ALLOC_TRACK {
@@ -335,6 +345,8 @@ struct _ADMISSION_CONTEXT { REPLAY_PACKET RenderPacket; BOOLEAN InterfaceValid; 
   APPLE_AGX_G3_COPY_TRANSFER_FAILURE G3CopyTransferFailure;
   volatile LONG G3LeafHistoryClaim;
   ADMISSION_G3_LEAF_HISTORY_SNAPSHOT G3LeafHistorySnapshot;
+  ADMISSION_G3_PAGING_WAIT_RECEIPT G3PagingWait;
+  volatile LONG G3PagingWaitDirty;
   volatile LONG G3PrivateFailureClaim;
   APPLE_AGX_G3_PRIVATE_FAILURE G3PrivateFailure;
   int SchedulerLock,Scheduler,PagingLock;
@@ -602,6 +614,7 @@ static ADMISSION_G3_PAGING_FAILURE last_paging_failure;
 static void AdmissionRecordGpuvaG3PagingFailure(ADMISSION_CONTEXT *a,ADMISSION_G3_PAGING_FAILURE *f) {(void)a;if(f->Branch)last_paging_failure=*f;}
 static ADMISSION_G3_FLUSH_RECEIPT last_flush_receipt;
 static void AdmissionRecordGpuvaG3Flush(ADMISSION_CONTEXT *a,const ADMISSION_G3_FLUSH_RECEIPT *r) {(void)a;if(KeGetCurrentIrql()==PASSIVE_LEVEL)last_flush_receipt=*r;}
+static void AdmissionRecordG3PagingWait(ADMISSION_CONTEXT *a) {(void)a;}
 static void AdmissionRecordGpuvaG3UnpublishedGroups(ADMISSION_CONTEXT *a,const ULONGLONG *counts) {(void)a;(void)counts;}
 static void AppleAgxSchedulerContextInitialize(ADMISSION_SCHEDULER_CONTEXT *c) {(void)c;}
 static void AdmissionPrepatchedInitialize(ADMISSION_PREPATCHED_RENDER *p) {(void)p;}

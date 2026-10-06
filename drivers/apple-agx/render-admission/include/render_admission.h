@@ -380,6 +380,16 @@ typedef struct _ADMISSION_G3_LEAF_HISTORY {
   ULONGLONG Qpc, ProcessId, TableIpa, Allocation, FirstVa, MappingGeneration;
   ULONG First, Count, ValidCount, Flags, Status, FirstSegment;
 } ADMISSION_G3_LEAF_HISTORY;
+/* EXP987 receipt-only: R155/R165 BuildPagingBuffer waits for a process's
+ * in-flight job. Snapshot of the condition when the wait began. */
+typedef struct _ADMISSION_G3_PAGING_WAIT_RECEIPT {
+  ULONG Version, Bytes, Waits, Timeouts;
+  ULONGLONG TotalIterations, TotalTicks, QpcFrequency;
+  ULONGLONG MaxTicks, MaxQpc, MaxGraphProcessId, MaxActiveGraphProcessId;
+  ULONG MaxIterations, MaxOperation, MaxJobInFlight, MaxLease;
+  ULONG MaxActiveIsProcess, MaxActiveFence, MaxLastCompletedFence,
+      MaxPrivateCompletionFence;
+} ADMISSION_G3_PAGING_WAIT_RECEIPT;
 #define ADMISSION_G3_ALLOC_TRACK_COUNT 1024u
 /* EXP982: last valid leaf mapping per VidMm allocation handle. */
 typedef struct _ADMISSION_G3_ALLOC_TRACK {
@@ -448,6 +458,8 @@ typedef struct _ADMISSION_CONTEXT {
    * copy predicate57 (PTE present but not valid). */
   volatile LONG G3LeafHistoryClaim;
   ADMISSION_G3_LEAF_HISTORY_SNAPSHOT G3LeafHistorySnapshot;
+  ADMISSION_G3_PAGING_WAIT_RECEIPT G3PagingWait;
+  volatile LONG G3PagingWaitDirty;
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   ADMISSION_DWM_FRAME_PROBE DwmFrameProbe;
   volatile LONG DwmSourceMapRecordCount;
@@ -952,6 +964,7 @@ void AdmissionRenderCorrelationSubmitFailureWindows(
 void AdmissionRecordG4SubmitFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3CopyQueryFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3LeafHistory(_In_opt_ ADMISSION_CONTEXT *Context);
+void AdmissionRecordG3PagingWait(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3CopyTransferFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
 NTSTATUS AdmissionGpuvaG3FrameArmEscape(_In_ ADMISSION_CONTEXT *Adapter,
