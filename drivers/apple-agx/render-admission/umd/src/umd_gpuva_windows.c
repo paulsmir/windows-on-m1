@@ -550,6 +550,18 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
   if(success)
     AdmissionUmdStagingRecord(&slot->Sync,
         AdmissionUmdStagingHash(address,slot->Bytes),slot->Bytes);
+  /* EXP989 receipt-only: sampled content of what crossed CPU<->GPU. */
+  if(success) {
+    UINT samples=0u,nonzero=0u;
+    for(uint64_t at=0;at+4u<=slot->Bytes;at+=256u) {
+      UINT word; CopyMemory(&word,address+at,sizeof(word));
+      ++samples; if(word) ++nonzero;
+    }
+    UINT values[8]={(UINT)download,(UINT)slot->Token,(UINT)slot->Bytes,nonzero,samples,
+        slot->ClassId,(UINT)temporary | ((UINT)slot->Mapped<<1) |
+        ((UINT)slot->Borrowed<<2) | ((UINT)slot->Direct<<3),(UINT)slot->KernelAllocation};
+    AdmissionUmdDiagnostic("measure-xfer",S_OK,values,ARRAYSIZE(values));
+  }
   /* Borrowed/imported storage must be unlocked before publication. Native
    * persistent maps can be uncached only through the native BO owner. */
   if(success) step=4u;
