@@ -41,7 +41,7 @@ FUNCTIONS = {
         "AdmissionG3ResolveLogicalVa", "AdmissionG3SnapshotAperture",
         "AdmissionG3EncodeVirtualPaging",
         "AdmissionG3MapPagingIpa", "AdmissionG3ExecuteVirtualPaging",
-        "AdmissionGpuvaG3BuildPagingBuffer",
+        "AdmissionGpuvaG3NoteAllocationPaging", "AdmissionGpuvaG3BuildPagingBuffer",
     ],
     "callbacks.c": ["AdmissionDdiEscape", "AdmissionDdiCreateContext", "AdmissionDdiDestroyContext"],
     "render_paging.c": ["AdmissionPagingRecordsValid"],

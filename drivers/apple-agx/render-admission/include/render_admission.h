@@ -385,6 +385,9 @@ typedef struct _ADMISSION_G3_LEAF_HISTORY {
 typedef struct _ADMISSION_G3_ALLOC_TRACK {
   ULONGLONG Allocation, ProcessId, LastValidVa, LastValidQpc, LastAnyQpc, LastAnyVa;
   ULONG LastValidCount, Maps, LastSegment, LastFlags;
+  /* EXP983: physical/virtual FILL and TRANSFER paging operations. */
+  ULONGLONG LastFillQpc, LastTransferQpc;
+  ULONG Fills, Transfers, LastPagingSegment, LastPagingOperation;
 } ADMISSION_G3_ALLOC_TRACK;
 typedef struct _ADMISSION_G3_LEAF_HISTORY_SNAPSHOT {
   ULONG Version, Bytes, Next, Predicate;
@@ -1657,6 +1660,9 @@ VOID AdmissionGpuvaG3DetachDevice(ADMISSION_DEVICE *Device);
 NTSTATUS AdmissionGpuvaG3AttachContext(ADMISSION_RENDER_CONTEXT *Context,
     ADMISSION_DEVICE *Device);
 VOID AdmissionGpuvaG3DetachContext(ADMISSION_RENDER_CONTEXT *Context);
+VOID AdmissionGpuvaG3NoteAllocationPaging(ADMISSION_CONTEXT *Context,
+                                          HANDLE Allocation, ULONG Operation,
+                                          ULONG Segment);
 NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *Context,
     DXGKARG_BUILDPAGINGBUFFER *Args);
 DXGKDDI_SETROOTPAGETABLE AdmissionDdiSetRootPageTable;

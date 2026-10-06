@@ -93,6 +93,10 @@ static NTSTATUS AdmissionBuildPagingBuffer(
       mdl = NULL;
     if (mdl == NULL)
       return STATUS_INVALID_PARAMETER;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    AdmissionGpuvaG3NoteAllocationPaging(context, Args->Transfer.hAllocation,
+        2u, Args->Transfer.Destination.SegmentId);
+#endif
     systemOffset = (ULONGLONG)Args->Transfer.MdlOffset << PAGE_SHIFT;
     result = AdmissionMemoryPlanTransfer(
         &context->Memory, Args->Transfer.Source.SegmentId,
@@ -103,6 +107,10 @@ static NTSTATUS AdmissionBuildPagingBuffer(
         Args->Transfer.TransferSize, &plan);
     break;
   case DXGK_OPERATION_FILL:
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    AdmissionGpuvaG3NoteAllocationPaging(context, Args->Fill.hAllocation,
+        1u, Args->Fill.Destination.SegmentId);
+#endif
     result = AdmissionMemoryPlanFill(
         &context->Memory, Args->Fill.Destination.SegmentId,
         (ULONGLONG)Args->Fill.Destination.SegmentAddress.QuadPart,

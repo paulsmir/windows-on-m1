@@ -136,13 +136,25 @@ static void va_record(const void *device, UINT op, ULONGLONG token,
   e->Qpc=now.QuadPart;e->Va=va;e->Bytes=bytes;e->Token=token;e->Device=device;
   e->Op=op;e->Hr=hr;e->Allocation=allocation;
 }
-static void va_dump(const ADMISSION_UMD_DEVICE *device, ULONGLONG token, ULONGLONG va) {
+static void va_dump(const ADMISSION_UMD_DEVICE *device, ULONGLONG token, ULONGLONG va,
+                    D3DKMT_HANDLE allocation) {
   LARGE_INTEGER now; (void)QueryPerformanceCounter(&now);
   LONG last=InterlockedCompareExchange(&va_ring_next,0,0); UINT emitted=0;
-  for(LONG n=0;n<(LONG)ADMISSION_UMD_VA_RING && emitted<48u;++n) {
+  ULONGLONG fences[8]={0}; UINT fenceCount=0;
+  /* Pass 1: MakeResident fences that named this allocation (op 6). */
+  for(LONG n=0;n<(LONG)ADMISSION_UMD_VA_RING && fenceCount<8u;++n) {
     const ADMISSION_UMD_VA_EVENT *e=&va_ring[(ULONG)(last-n)%ADMISSION_UMD_VA_RING];
+    if(e->Qpc && e->Op==6u && allocation && e->Allocation==allocation && e->Bytes)
+      fences[fenceCount++]=e->Bytes;
+  }
+  for(LONG n=0;n<(LONG)ADMISSION_UMD_VA_RING && emitted<64u;++n) {
+    const ADMISSION_UMD_VA_EVENT *e=&va_ring[(ULONG)(last-n)%ADMISSION_UMD_VA_RING];
+    BOOL match=FALSE;
     if(!e->Qpc) continue;
-    if(!(e->Token==token || (e->Va<=va && va<e->Va+(e->Bytes?e->Bytes:1)))) continue;
+    if(e->Op==7u) { for(UINT f=0;f<fenceCount;++f) if(e->Bytes==fences[f]) match=TRUE; }
+    else match=e->Token==token || (allocation && e->Allocation==allocation) ||
+        (e->Op!=6u && e->Va<=va && va<e->Va+(e->Bytes?e->Bytes:1));
+    if(!match) continue;
     UINT values[10]={e->Op,e->Device==device,(UINT)((now.QuadPart-e->Qpc)/2400),
         (UINT)e->Token,(UINT)(e->Va>>32),(UINT)e->Va,(UINT)e->Bytes,(UINT)e->Hr,
         (UINT)e->Allocation,(UINT)n};
@@ -362,6 +374,9 @@ static int make_resident(void *context, const uint64_t *tokens,
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   measure_g4_phase(1u,phase_start,pending,0u,hr);
 #endif
+  /* EXP983: one ring entry per allocation named by this MakeResident. */
+  for(unsigned i=0;i<pending;++i)
+    va_record(device,6u,0,handles[i],0,request.PagingFenceValue,hr);
   /* Allocations the runtime accepted now hold a residency reference, even
    * when the call failed part-way: record them so it is never taken twice. */
   unsigned accepted = (SUCCEEDED(hr) || hr == E_PENDING) ? pending :
@@ -407,6 +422,7 @@ static int wait_paging(void *context, uint64_t fence) {
   (void)QueryPerformanceCounter(&phase_start);
 #endif
   int ok=wait_object(device, device ? device->PagingSyncObject : 0, fence);
+  va_record(device,7u,0,0,0,fence,ok ? S_OK : E_FAIL);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   measure_g4_phase(2u,phase_start,1u,0u,ok ? S_OK : E_FAIL);
 #endif
@@ -568,7 +584,7 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
         ((UINT)slot->Mapped<<3) | ((UINT)slot->Borrowed<<4),
         (UINT)payload->ProcessGeneration,(UINT)payload->MappingGeneration};
     AdmissionUmdDiagnostic("reject-copy-slot",E_FAIL,values,ARRAYSIZE(values));
-    va_dump(device,slot->Token,slot->CanonicalGpuVa);
+    va_dump(device,slot->Token,slot->CanonicalGpuVa,slot->KernelAllocation);
   }
   HeapFree(GetProcessHeap(),0,payload);return success;
 }

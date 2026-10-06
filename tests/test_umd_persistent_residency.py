@@ -60,6 +60,7 @@ struct D3DDDICB_EVICT { UINT Flags; UINT NumAllocations; const D3DKMT_HANDLE*All
 static HRESULT ev(HANDLE,const D3DDDICB_EVICT*){++evicted;return S_OK;}
 struct CB { HRESULT(*pfnMakeResidentCb)(HANDLE,D3DDDI_MAKERESIDENT*); HRESULT(*pfnEvictCb)(HANDLE,const D3DDDICB_EVICT*); };
 struct ADMISSION_UMD_DEVICE { UINT Magic; SLOT ScreenBuffers[16]; SRWLOCK ScreenBufferLock; BOOL DrawTerminal,ScreenClosing; HANDLE PagingQueue; CB*KernelCallbacks; struct{HANDLE handle;}RuntimeDevice; };
+static void va_record(const void*,UINT,unsigned long long,D3DKMT_HANDLE,unsigned long long,unsigned long long,HRESULT){}
 @@FUNCS@@
 int main(){
  CB cb={mk,ev}; ADMISSION_UMD_DEVICE d={}; d.Magic=ADMISSION_UMD_DEVICE_MAGIC; d.PagingQueue=(HANDLE)1; d.KernelCallbacks=&cb;

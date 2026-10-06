@@ -822,6 +822,34 @@ NTSTATUS AdmissionG3ExecuteVirtualPaging(
   return status;
 }
 
+/* EXP983 receipt-only: per-allocation FILL (1) / TRANSFER (2) history. Unlocked
+ * diagnostic writes; never consulted by any paging or copy decision. */
+VOID AdmissionGpuvaG3NoteAllocationPaging(ADMISSION_CONTEXT *adapter,
+                                          HANDLE allocation, ULONG operation,
+                                          ULONG segment) {
+  ADMISSION_G3_STATE *state;
+  ADMISSION_G3_ALLOC_TRACK *t;
+  ULONGLONG key = (ULONGLONG)(ULONG_PTR)allocation;
+  ULONGLONG now;
+  if (adapter == NULL || allocation == NULL) return;
+  state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  if (state == NULL) return;
+  t = &state->AllocTrack[(ULONG)((key >> 6) ^ (key >> 16)) %
+                         ADMISSION_G3_ALLOC_TRACK_COUNT];
+  if (t->Allocation != key) {
+    RtlZeroMemory(t, sizeof(*t));
+    t->Allocation = key;
+  }
+  now = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+  t->LastPagingOperation = operation;
+  t->LastPagingSegment = segment;
+  if (operation == 1u) {
+    t->LastFillQpc = now; ++t->Fills;
+  } else {
+    t->LastTransferQpc = now; ++t->Transfers;
+  }
+}
+
 NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
                                             DXGKARG_BUILDPAGINGBUFFER *args) {
   ADMISSION_G3_STATE *state;
@@ -845,6 +873,12 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
       KeGetCurrentIrql() != PASSIVE_LEVEL) return STATUS_INVALID_PARAMETER;
   state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
   if (state == NULL) return STATUS_INVALID_DEVICE_STATE;
+  if (args->Operation == DXGK_OPERATION_VIRTUAL_FILL)
+    AdmissionGpuvaG3NoteAllocationPaging(adapter, args->FillVirtual.hAllocation,
+        1u, 0u);
+  if (args->Operation == DXGK_OPERATION_VIRTUAL_TRANSFER)
+    AdmissionGpuvaG3NoteAllocationPaging(adapter,
+        args->TransferVirtual.hAllocation, 2u, 0u);
   if (args->Operation == DXGK_OPERATION_VIRTUAL_FILL ||
       args->Operation == DXGK_OPERATION_VIRTUAL_TRANSFER ||
       args->Operation == DXGK_OPERATION_SIGNAL_MONITORED_FENCE)
