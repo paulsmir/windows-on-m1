@@ -977,6 +977,8 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   BOOLEAN isQuery=FALSE;
   NTSTATUS status=STATUS_INVALID_PARAMETER;
   UINT wait_ms;
+  UINT pte_wait=0u;
+  ULONGLONG pte_wait_start=0ULL;
   LARGE_INTEGER delay;
   /* Read only the operation tag when the OS-buffered envelope covers it.
    * An absent/truncated tag is not guessed to be a QUERY. */
@@ -1120,12 +1122,34 @@ RetryPagingQuiescence:
       walk.Va=page;
     }
     COPY_REJECT_IF(!pte, 56u, STATUS_INVALID_PARAMETER, Unlock);
+    /* EXP988: a QUERY may race VidMm populating a freshly mapped, just made
+     * resident range (EXP985/987: Map+MakeResident fence done, no PTE yet).
+     * Re-validate with the G3 lock released for a bounded time instead of
+     * failing the client's batch; the outcome is recorded either way. */
+    if(isQuery && !(pte->Flags&APPLE_AGX_GPUVA_G3_VALID) && pte_wait<1000u) {
+      if(pte_wait==0u)
+        pte_wait_start=(ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+      ++pte_wait;
+      ExReleaseFastMutex(&state->Lock);
+      delay.QuadPart=-10000LL;
+      (void)KeDelayExecutionThread(KernelMode,FALSE,&delay);
+      goto RetryPagingQuiescence;
+    }
     COPY_REJECT_IF(!(pte->Flags&APPLE_AGX_GPUVA_G3_VALID), 57u, STATUS_INVALID_PARAMETER, Unlock);
     COPY_REJECT_IF(pte->SegmentId!=ADMISSION_MEMORY_LOCAL_SEGMENT, 58u, STATUS_INVALID_PARAMETER, Unlock);
     COPY_REJECT_IF(pte->Allocation!=(ULONGLONG)(ULONG_PTR)allocation, 59u, STATUS_INVALID_PARAMETER, Unlock);
     COPY_REJECT_IF(pte->AllocationOffset!=page-q->GpuVa, 60u, STATUS_INVALID_PARAMETER, Unlock);
     COPY_REJECT_IF(!AppleAgxGpuvaG3TableSpanWithinLocal(view.GuestIpaAddress,view.Bytes,
           pte->GuestIpa,0x1000ULL), 61u, STATUS_INVALID_PARAMETER, Unlock);
+  }
+  if(pte_wait) {
+    ADMISSION_G3_PTE_WAIT_RECEIPT *w=&adapter->G3PteWait;
+    LARGE_INTEGER frequency;
+    ULONGLONG ticks=(ULONGLONG)KeQueryPerformanceCounter(&frequency).QuadPart-pte_wait_start;
+    w->Version=1u;w->Bytes=sizeof(*w);w->QpcFrequency=(ULONGLONG)frequency.QuadPart;
+    ++w->Waited;++w->Recovered;w->TotalTicks+=ticks;w->LastVa=q->GpuVa;
+    if(ticks>w->MaxTicks){w->MaxTicks=ticks;w->MaxIterations=pte_wait;}
+    InterlockedExchange(&adapter->G3PteWaitDirty,1);
   }
   if(q->Operation==APPLE_AGX_G3_COPY_QUERY) {
     q->ProcessGeneration=p->Graph.ProcessGeneration;
@@ -1148,6 +1172,15 @@ RetryPagingQuiescence:
   }
   RtlCopyMemory(args->pPrivateDriverData,q,sizeof(*q));status=STATUS_SUCCESS;
 Unlock:
+  if(pte_wait && predicate) {
+    ADMISSION_G3_PTE_WAIT_RECEIPT *w=&adapter->G3PteWait;
+    LARGE_INTEGER frequency;
+    ULONGLONG ticks=(ULONGLONG)KeQueryPerformanceCounter(&frequency).QuadPart-pte_wait_start;
+    w->Version=1u;w->Bytes=sizeof(*w);w->QpcFrequency=(ULONGLONG)frequency.QuadPart;
+    ++w->Waited;++w->TimedOut;w->TotalTicks+=ticks;w->LastVa=q?q->GpuVa:0ULL;
+    if(ticks>w->MaxTicks){w->MaxTicks=ticks;w->MaxIterations=pte_wait;}
+    InterlockedExchange(&adapter->G3PteWaitDirty,1);
+  }
   if (predicate == 62u && q != NULL &&
       InterlockedCompareExchange(&gCopyPagingQuiescenceClaimed, 1, 0) == 0) {
     KIRQL oldIrql;
@@ -1269,6 +1302,7 @@ Free:
   if(q) ExFreePoolWithTag(q,ADMISSION_POOL_TAG);
   if(captured) AdmissionRecordG3CopyQueryFailure(adapter);
   if(leafHistoryCaptured) AdmissionRecordG3LeafHistory(adapter);
+  if(adapter) AdmissionRecordG3PteWait(adapter);
   if(transferCaptured) AdmissionRecordG3CopyTransferFailure(adapter);
   if(pagingSnapshotCaptured)
     AdmissionG3WriteCopyPagingQuiescence(adapter, &pagingSnapshot);

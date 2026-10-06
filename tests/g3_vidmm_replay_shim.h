@@ -273,6 +273,11 @@ typedef struct _ADMISSION_G3_PAGING_WAIT_RECEIPT {
   ULONG MaxActiveIsProcess, MaxActiveFence, MaxLastCompletedFence,
       MaxPrivateCompletionFence;
 } ADMISSION_G3_PAGING_WAIT_RECEIPT;
+/* EXP988: QUERY predicate57 re-validation (PTE not yet populated by VidMm). */
+typedef struct _ADMISSION_G3_PTE_WAIT_RECEIPT {
+  ULONG Version, Bytes, Waited, Recovered, TimedOut, MaxIterations;
+  ULONGLONG MaxTicks, TotalTicks, QpcFrequency, LastVa;
+} ADMISSION_G3_PTE_WAIT_RECEIPT;
 #define ADMISSION_G3_ALLOC_TRACK_COUNT 1024u
 /* EXP982: last valid leaf mapping per VidMm allocation handle. */
 typedef struct _ADMISSION_G3_ALLOC_TRACK {
@@ -346,6 +351,8 @@ struct _ADMISSION_CONTEXT { REPLAY_PACKET RenderPacket; BOOLEAN InterfaceValid; 
   volatile LONG G3LeafHistoryClaim;
   ADMISSION_G3_LEAF_HISTORY_SNAPSHOT G3LeafHistorySnapshot;
   ADMISSION_G3_PAGING_WAIT_RECEIPT G3PagingWait;
+  ADMISSION_G3_PTE_WAIT_RECEIPT G3PteWait;
+  volatile LONG G3PteWaitDirty;
   volatile LONG G3PagingWaitDirty;
   volatile LONG G3PrivateFailureClaim;
   APPLE_AGX_G3_PRIVATE_FAILURE G3PrivateFailure;
@@ -615,6 +622,7 @@ static void AdmissionRecordGpuvaG3PagingFailure(ADMISSION_CONTEXT *a,ADMISSION_G
 static ADMISSION_G3_FLUSH_RECEIPT last_flush_receipt;
 static void AdmissionRecordGpuvaG3Flush(ADMISSION_CONTEXT *a,const ADMISSION_G3_FLUSH_RECEIPT *r) {(void)a;if(KeGetCurrentIrql()==PASSIVE_LEVEL)last_flush_receipt=*r;}
 static void AdmissionRecordG3PagingWait(ADMISSION_CONTEXT *a) {(void)a;}
+static void AdmissionRecordG3PteWait(ADMISSION_CONTEXT *a) {(void)a;}
 static void AdmissionRecordGpuvaG3UnpublishedGroups(ADMISSION_CONTEXT *a,const ULONGLONG *counts) {(void)a;(void)counts;}
 static void AppleAgxSchedulerContextInitialize(ADMISSION_SCHEDULER_CONTEXT *c) {(void)c;}
 static void AdmissionPrepatchedInitialize(ADMISSION_PREPATCHED_RENDER *p) {(void)p;}

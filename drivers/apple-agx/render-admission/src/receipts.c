@@ -2053,6 +2053,21 @@ _Use_decl_annotations_ void AdmissionRecordG3CopyQueryFailure(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordG3PteWait(
+    ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  ADMISSION_G3_PTE_WAIT_RECEIPT copy;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      InterlockedExchange(&Context->G3PteWaitDirty, 0) == 0)
+    return;
+  RtlCopyMemory(&copy, &Context->G3PteWait, sizeof(copy));
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
+  WriteBinary(key, L"Wom1G3PteWait", &copy, sizeof(copy));
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordG3PagingWait(
     ADMISSION_CONTEXT *Context) {
   HANDLE key = NULL;

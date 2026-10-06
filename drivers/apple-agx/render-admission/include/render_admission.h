@@ -390,6 +390,11 @@ typedef struct _ADMISSION_G3_PAGING_WAIT_RECEIPT {
   ULONG MaxActiveIsProcess, MaxActiveFence, MaxLastCompletedFence,
       MaxPrivateCompletionFence;
 } ADMISSION_G3_PAGING_WAIT_RECEIPT;
+/* EXP988: QUERY predicate57 re-validation (PTE not yet populated by VidMm). */
+typedef struct _ADMISSION_G3_PTE_WAIT_RECEIPT {
+  ULONG Version, Bytes, Waited, Recovered, TimedOut, MaxIterations;
+  ULONGLONG MaxTicks, TotalTicks, QpcFrequency, LastVa;
+} ADMISSION_G3_PTE_WAIT_RECEIPT;
 #define ADMISSION_G3_ALLOC_TRACK_COUNT 1024u
 /* EXP982: last valid leaf mapping per VidMm allocation handle. */
 typedef struct _ADMISSION_G3_ALLOC_TRACK {
@@ -459,6 +464,8 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG G3LeafHistoryClaim;
   ADMISSION_G3_LEAF_HISTORY_SNAPSHOT G3LeafHistorySnapshot;
   ADMISSION_G3_PAGING_WAIT_RECEIPT G3PagingWait;
+  ADMISSION_G3_PTE_WAIT_RECEIPT G3PteWait;
+  volatile LONG G3PteWaitDirty;
   volatile LONG G3PagingWaitDirty;
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   ADMISSION_DWM_FRAME_PROBE DwmFrameProbe;
@@ -965,6 +972,7 @@ void AdmissionRecordG4SubmitFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3CopyQueryFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3LeafHistory(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3PagingWait(_In_opt_ ADMISSION_CONTEXT *Context);
+void AdmissionRecordG3PteWait(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3CopyTransferFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
 NTSTATUS AdmissionGpuvaG3FrameArmEscape(_In_ ADMISSION_CONTEXT *Adapter,
