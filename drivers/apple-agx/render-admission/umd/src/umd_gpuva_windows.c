@@ -125,7 +125,7 @@ typedef struct _ADMISSION_UMD_VA_EVENT {
   LONGLONG Qpc; ULONGLONG Va, Bytes, Token; const void *Device;
   UINT Op; HRESULT Hr; D3DKMT_HANDLE Allocation;
 } ADMISSION_UMD_VA_EVENT;
-#define ADMISSION_UMD_VA_RING 1024u
+#define ADMISSION_UMD_VA_RING 8192u
 static ADMISSION_UMD_VA_EVENT va_ring[ADMISSION_UMD_VA_RING];
 static volatile LONG va_ring_next;
 static void va_record(const void *device, UINT op, ULONGLONG token,

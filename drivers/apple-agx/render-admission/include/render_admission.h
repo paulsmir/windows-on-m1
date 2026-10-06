@@ -380,11 +380,21 @@ typedef struct _ADMISSION_G3_LEAF_HISTORY {
   ULONGLONG Qpc, ProcessId, TableIpa, Allocation, FirstVa, MappingGeneration;
   ULONG First, Count, ValidCount, Flags, Status, FirstSegment;
 } ADMISSION_G3_LEAF_HISTORY;
+#define ADMISSION_G3_ALLOC_TRACK_COUNT 1024u
+/* EXP982: last valid leaf mapping per VidMm allocation handle. */
+typedef struct _ADMISSION_G3_ALLOC_TRACK {
+  ULONGLONG Allocation, ProcessId, LastValidVa, LastValidQpc, LastAnyQpc, LastAnyVa;
+  ULONG LastValidCount, Maps, LastSegment, LastFlags;
+} ADMISSION_G3_ALLOC_TRACK;
 typedef struct _ADMISSION_G3_LEAF_HISTORY_SNAPSHOT {
   ULONG Version, Bytes, Next, Predicate;
   ULONGLONG FailVa, FailProcessId, FailTableIpa, FailAllocation, Qpc, QpcFrequency;
   ULONG FailIndex, Reserved;
   ADMISSION_G3_LEAF_HISTORY Records[ADMISSION_G3_LEAF_HISTORY_COUNT];
+  /* EXP982 (Version 2): failing allocation and raw failing PTE. */
+  ULONGLONG KmdAllocation, AllocationSize, PteGuestIpa, PteAllocation, PteAllocationOffset;
+  ULONG AllocationType, PteFound, PteSegment, PteFlags, TrackFound, TrackReserved;
+  ADMISSION_G3_ALLOC_TRACK Track;
 } ADMISSION_G3_LEAF_HISTORY_SNAPSHOT;
 #endif
 

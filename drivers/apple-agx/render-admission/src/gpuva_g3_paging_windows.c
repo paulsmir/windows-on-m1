@@ -536,6 +536,26 @@ static VOID AdmissionG3RecordLeaf(ADMISSION_G3_PROCESS *process,
       (update->Flags.NotifyEviction ? 4u : 0u) |
       (update->Flags.InitialUpdate ? 8u : 0u);
   h->Status = (ULONG)status;
+  if (update->hAllocation != NULL) {
+    ULONGLONG key = (ULONGLONG)(ULONG_PTR)update->hAllocation;
+    ULONG slot = (ULONG)((key >> 6) ^ (key >> 16)) % ADMISSION_G3_ALLOC_TRACK_COUNT;
+    ADMISSION_G3_ALLOC_TRACK *t = &process->State->AllocTrack[slot];
+    if (t->Allocation != key) {
+      RtlZeroMemory(t, sizeof(*t));
+      t->Allocation = key;
+    }
+    t->ProcessId = h->ProcessId;
+    t->LastAnyQpc = h->Qpc;
+    t->LastAnyVa = h->FirstVa;
+    t->LastFlags = h->Flags;
+    ++t->Maps;
+    if (valid) {
+      t->LastValidVa = h->FirstVa;
+      t->LastValidQpc = h->Qpc;
+      t->LastValidCount = valid;
+      t->LastSegment = h->FirstSegment;
+    }
+  }
 }
 
 static APPLE_AGX_GPUVA_G3_NODE *AdmissionG3FindPagingEdge(

@@ -1215,6 +1215,24 @@ Unlock:
     s->Qpc=(ULONGLONG)KeQueryPerformanceCounter(&frequency).QuadPart;
     s->QpcFrequency=(ULONGLONG)frequency.QuadPart;
     RtlCopyMemory(s->Records,state->LeafHistory,sizeof(s->Records));
+    s->Version=2u;
+    if(allocation) {
+      ULONGLONG key=(ULONGLONG)(ULONG_PTR)allocation;
+      const ADMISSION_G3_ALLOC_TRACK *t=&state->AllocTrack[
+          (ULONG)((key>>6)^(key>>16))%ADMISSION_G3_ALLOC_TRACK_COUNT];
+      s->KmdAllocation=key;
+      s->AllocationSize=allocation->Object.Description.Size;
+      s->AllocationType=(ULONG)allocation->Object.Description.Type;
+      if(t->Allocation==key) { s->Track=*t; s->TrackFound=1u; }
+    }
+    {
+      const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *fp=AdmissionG3CopyPte(p,page);
+      if(fp) {
+        s->PteFound=1u;s->PteGuestIpa=fp->GuestIpa;s->PteSegment=fp->SegmentId;
+        s->PteFlags=fp->Flags;s->PteAllocation=fp->Allocation;
+        s->PteAllocationOffset=fp->AllocationOffset;
+      }
+    }
     KeMemoryBarrier();
     InterlockedExchange(&adapter->G3LeafHistoryClaim,2);
     leafHistoryCaptured=TRUE;

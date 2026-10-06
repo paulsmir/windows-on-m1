@@ -263,15 +263,25 @@ typedef struct _ADMISSION_G3_LEAF_HISTORY {
   ULONGLONG Qpc, ProcessId, TableIpa, Allocation, FirstVa, MappingGeneration;
   ULONG First, Count, ValidCount, Flags, Status, FirstSegment;
 } ADMISSION_G3_LEAF_HISTORY;
+#define ADMISSION_G3_ALLOC_TRACK_COUNT 1024u
+/* EXP982: last valid leaf mapping per VidMm allocation handle. */
+typedef struct _ADMISSION_G3_ALLOC_TRACK {
+  ULONGLONG Allocation, ProcessId, LastValidVa, LastValidQpc, LastAnyQpc, LastAnyVa;
+  ULONG LastValidCount, Maps, LastSegment, LastFlags;
+} ADMISSION_G3_ALLOC_TRACK;
 typedef struct _ADMISSION_G3_LEAF_HISTORY_SNAPSHOT {
   ULONG Version, Bytes, Next, Predicate;
   ULONGLONG FailVa, FailProcessId, FailTableIpa, FailAllocation, Qpc, QpcFrequency;
   ULONG FailIndex, Reserved;
   ADMISSION_G3_LEAF_HISTORY Records[ADMISSION_G3_LEAF_HISTORY_COUNT];
+  /* EXP982 (Version 2): failing allocation and raw failing PTE. */
+  ULONGLONG KmdAllocation, AllocationSize, PteGuestIpa, PteAllocation, PteAllocationOffset;
+  ULONG AllocationType, PteFound, PteSegment, PteFlags, TrackFound, TrackReserved;
+  ADMISSION_G3_ALLOC_TRACK Track;
 } ADMISSION_G3_LEAF_HISTORY_SNAPSHOT;
 #define ADMISSION_G3_UPLOAD_TRACE_COUNT 64u
 typedef struct { ULONGLONG ProcessId,Va; ULONG Bytes,Hash,GpuHash,Checks; } ADMISSION_G3_UPLOAD_TRACE;
-typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; APPLE_AGX_G3_PRIVATE_POOL PrivatePool; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence,LastCompletedFence,PrivateCompletionFence; ULONGLONG UnpublishedGroups[32]; ADMISSION_G3_UPLOAD_TRACE UploadTrace[ADMISSION_G3_UPLOAD_TRACE_COUNT]; ULONG UploadTraceNext,UploadVerifyChecks,UploadVerifyMismatch,UploadVerifyUnmapped; ADMISSION_G3_UPLOAD_TRACE UploadFirstMismatch; ADMISSION_G3_LEAF_HISTORY LeafHistory[ADMISSION_G3_LEAF_HISTORY_COUNT]; ULONG LeafHistoryNext; } ADMISSION_G3_STATE;
+typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; APPLE_AGX_G3_PRIVATE_POOL PrivatePool; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence,LastCompletedFence,PrivateCompletionFence; ULONGLONG UnpublishedGroups[32]; ADMISSION_G3_UPLOAD_TRACE UploadTrace[ADMISSION_G3_UPLOAD_TRACE_COUNT]; ULONG UploadTraceNext,UploadVerifyChecks,UploadVerifyMismatch,UploadVerifyUnmapped; ADMISSION_G3_UPLOAD_TRACE UploadFirstMismatch; ADMISSION_G3_LEAF_HISTORY LeafHistory[ADMISSION_G3_LEAF_HISTORY_COUNT]; ULONG LeafHistoryNext; ADMISSION_G3_ALLOC_TRACK AllocTrack[ADMISSION_G3_ALLOC_TRACK_COUNT]; } ADMISSION_G3_STATE;
 typedef struct _ADMISSION_G3_TABLE_SHADOW { struct _ADMISSION_G3_TABLE_SHADOW *Next,*NextBroker; APPLE_AGX_MEMORY_OBJECT Memory; ULONGLONG OriginalIpa,BrokerIpa; APPLE_AGX_GPUVA_G3_LOGICAL_PTE *LogicalPtes,*ResidentPtes,*PendingPtes; } ADMISSION_G3_TABLE_SHADOW;
 typedef struct _ADMISSION_G3_PRIVATE_SCENE {
   struct _ADMISSION_G3_PRIVATE_SCENE *Next;
