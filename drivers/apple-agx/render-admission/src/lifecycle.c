@@ -753,7 +753,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
         caps->ReadOnlyMemorySupported = 1u;
         caps->SysMem64KBPageSupported = declaration.SysMem64KBPageSupported;
         caps->ExplicitPageTableInvalidation = 1u;
-        caps->PageTableUpdateRequireAddressSpaceIdle = 1u;
+        /* EXP986: VidMm must not idle the process for table updates. The
+         * KMD serialises UpdatePageTable/FlushTlb with an in-flight job
+         * itself (R155/R165); requiring an idle address space deferred PTEs
+         * past the MakeResident fence (EXP985) and stalled paging 10 s. */
+        caps->PageTableUpdateRequireAddressSpaceIdle = 0u;
         caps->PageTableUpdateMode = DXGK_PAGETABLEUPDATE_GPU_PHYSICAL;
         caps->VirtualAddressBitCount = model.VirtualAddressBits;
         caps->LeafPageTableSizeFor64KPagesInBytes = model.Leaf64KBytes;
