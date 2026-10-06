@@ -2053,6 +2053,20 @@ _Use_decl_annotations_ void AdmissionRecordG3CopyQueryFailure(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordG4DrawSnapshot(
+    ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      InterlockedExchange(&Context->G4DrawSnapshotDirty, 0) == 0)
+    return;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
+  WriteBinary(key, L"Wom1G4DrawSnapshot", &Context->G4DrawSnapshot,
+      sizeof(Context->G4DrawSnapshot));
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordG3PteWait(
     ADMISSION_CONTEXT *Context) {
   HANDLE key = NULL;

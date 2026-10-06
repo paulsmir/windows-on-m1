@@ -1993,6 +1993,36 @@ BOOLEAN AdmissionGpuvaG3PrivateContextBusy(ADMISSION_RENDER_CONTEXT *context) {
   return busy;
 }
 
+/* EXP990 receipt-only: copy bytes the GPU will read at a process VA through
+ * the logical resident PTEs (G3 lock held). Returns bit0 any page resolved,
+ * bit1 every page valid local. */
+static ULONG AdmissionG4SnapRead(ADMISSION_CONTEXT *adapter,
+    const ADMISSION_G3_PROCESS *p, ULONGLONG va, UCHAR *dst, ULONG bytes,
+    ULONGLONG *firstIpa) {
+  ADMISSION_SCANOUT_MEMORY_VIEW view;
+  ULONG done = 0u, state = 2u;
+  if (!va || !NT_SUCCESS(AdmissionMemoryRuntimeLocalView(adapter, &view)) ||
+      !view.CpuAddress) return 0u;
+  while (done < bytes) {
+    ULONGLONG at = va + done;
+    ULONG part = (ULONG)(0x1000ULL - (at & 0xfffULL));
+    const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte = AdmissionG3CopyPte(p, at);
+    if (part > bytes - done) part = bytes - done;
+    if (!pte || !(pte->Flags & APPLE_AGX_GPUVA_G3_VALID) ||
+        pte->SegmentId != ADMISSION_MEMORY_LOCAL_SEGMENT ||
+        !AppleAgxGpuvaG3TableSpanWithinLocal(view.GuestIpaAddress, view.Bytes,
+            pte->GuestIpa, 0x1000ULL)) {
+      state &= ~2u; done += part; continue;
+    }
+    if (firstIpa && !*firstIpa) *firstIpa = pte->GuestIpa + (at & 0xfffULL);
+    RtlCopyMemory(dst + done, (PUCHAR)view.CpuAddress +
+        (SIZE_T)(pte->GuestIpa - view.GuestIpaAddress) + (SIZE_T)(at & 0xfffULL),
+        part);
+    state |= 1u; done += part;
+  }
+  return state;
+}
+
 NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
     ADMISSION_RENDER_CONTEXT *context, ULONG fence) {
   ADMISSION_G3_STATE *state;
@@ -2061,11 +2091,35 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
     state->ActiveProcess = process;
     state->ActiveFence = fence;
     status = STATUS_SUCCESS;
+    if (adapter->BackendImage.G4Native && g4_valid && g4_view.Render &&
+        g4_view.RenderBytes == sizeof(APPLE_AGX_G4_NATIVE_RENDER)) {
+      APPLE_AGX_G4_NATIVE_RENDER r;
+      ADMISSION_G4_DRAW_SNAPSHOT *s = &adapter->G4DrawSnapshot;
+      ADMISSION_G4_DRAW_SNAP *slot =
+          &s->Slot[s->Next++ % ADMISSION_G4_DRAW_SNAP_COUNT];
+      RtlCopyMemory(&r, g4_view.Render, sizeof(r));
+      RtlZeroMemory(slot, sizeof(*slot));
+      s->Version = 1u; s->Bytes = sizeof(*s);
+      slot->Fence = fence; slot->Flags = r.Flags; slot->PppCtrl = r.PppCtrl;
+      slot->Width = r.WidthPx; slot->Height = r.HeightPx;
+      slot->BgUsc = r.Bg.Usc; slot->EotUsc = r.Eot.Usc;
+      slot->Process = (ULONG)process->Graph.ProcessId;
+      slot->VdmBase = r.VdmCtrlStreamBase;
+      slot->ScissorBase = r.IspScissorBase; slot->DbiasBase = r.IspDbiasBase;
+      slot->VdmState = AdmissionG4SnapRead(adapter, process, r.VdmCtrlStreamBase,
+          slot->Vdm, sizeof(slot->Vdm), &slot->VdmIpa);
+      slot->ScissorState = AdmissionG4SnapRead(adapter, process, r.IspScissorBase,
+          slot->Scissor, sizeof(slot->Scissor), NULL);
+      slot->DbiasState = AdmissionG4SnapRead(adapter, process, r.IspDbiasBase,
+          slot->Dbias, sizeof(slot->Dbias), NULL);
+      InterlockedExchange(&adapter->G4DrawSnapshotDirty, 1);
+    }
   } else if (process->Graph.Uncertain) {
     process->Poisoned = TRUE;
     status = STATUS_DEVICE_HARDWARE_ERROR;
   }
   ExReleaseFastMutex(&state->Lock);
+  if (KeGetCurrentIrql() == PASSIVE_LEVEL) AdmissionRecordG4DrawSnapshot(adapter);
   return status;
 }
 

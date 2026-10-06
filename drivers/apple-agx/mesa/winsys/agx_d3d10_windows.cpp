@@ -40,6 +40,16 @@ extern "C" void (*AgxWin32BatchRefusalHook)(unsigned kind, unsigned site,
                                             unsigned detail0, unsigned detail1);
 extern "C" void (*AgxWin32FirstFaultHook)(unsigned site,uintptr_t context,
                                           unsigned flags,unsigned draws);
+extern "C" void (*AgxWin32VdmTraceHook)(uint64_t va,const uint32_t *words,
+                                        unsigned count,unsigned draws);
+static void AgxD3d10VdmTrace(uint64_t va,const uint32_t *words,
+                             unsigned count,unsigned draws) {
+  static volatile LONG records;
+  if(InterlockedIncrement(&records)>64 || count>13u) return;
+  UINT values[16]={(UINT)va,(UINT)(va>>32),draws};
+  for(unsigned i=0;i<count;++i) values[3+i]=words[i];
+  AdmissionUmdDiagnostic("measure-vdm",S_OK,values,3u+count);
+}
 
 static void AgxD3d10FirstFault(unsigned site,uintptr_t context,
                               unsigned flags,unsigned draws) {
@@ -424,6 +434,7 @@ HRESULT AgxD3d10WindowsCreateDevice(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
   if(!owner->Context) { result=E_OUTOFMEMORY;goto failed; }
   owner->Stage=AgxD3d10DeviceNativeContextReady;
   AgxWin32BatchRefusalHook=AgxD3d10BatchRefusal;
+  AgxWin32VdmTraceHook=AgxD3d10VdmTrace;
   AgxWin32FirstFaultHook=AgxD3d10FirstFault;
   owner->Stage=AgxD3d10DeviceReady;
   *Device = owner;

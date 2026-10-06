@@ -73,6 +73,10 @@ void (*AgxWin32BatchRefusalHook)(unsigned kind, unsigned site,
                                  unsigned detail0, unsigned detail1);
 void (*AgxWin32FirstFaultHook)(unsigned site, uintptr_t context,
                               unsigned flags,unsigned draws);
+/* EXP990 receipt-only: the first VDM control-stream words as written by Mesa,
+ * for comparison with the KMD's job-time view of the same GPU VA. */
+void (*AgxWin32VdmTraceHook)(uint64_t va, const uint32_t *words,
+                             unsigned count, unsigned draws);
 void AgxWin32AsahiMarkBatchFault(struct agx_context *ctx,
                                 struct agx_batch *batch,unsigned site) {
   if(!ctx) return;
@@ -289,6 +293,16 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
    * firmware path with the UAPI NO_VERTEX_CLUSTERING bit. */
   native_render.Flags|=1u<<2;
   if(!prepare_process_buffers(b,g,&native_render,ranges)) { fail_site=__LINE__; goto fail; }
+  if(AgxWin32VdmTraceHook && batch->vdm.bo) {
+    const struct agx_bo *vbo=batch->vdm.bo;
+    const unsigned char *map=(const unsigned char *)agx_bo_map((struct agx_bo *)vbo);
+    uint64_t base=vbo->va ? vbo->va->addr : 0;
+    if(map && base && render->vdm_ctrl_stream_base>=base &&
+       render->vdm_ctrl_stream_base+52<=base+vbo->size)
+      AgxWin32VdmTraceHook(render->vdm_ctrl_stream_base,
+          (const uint32_t *)(map+(render->vdm_ctrl_stream_base-base)),13u,
+          (unsigned)batch->draws);
+  }
   if(!append_attachments(batch,&packet)) { fail_site=__LINE__; goto fail; }
   command_header=agx_cmd_header(false,0,0);
   if(!append_native(&packet,&command_header,sizeof(command_header)) ||

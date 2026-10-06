@@ -278,6 +278,21 @@ typedef struct _ADMISSION_G3_PTE_WAIT_RECEIPT {
   ULONG Version, Bytes, Waited, Recovered, TimedOut, MaxIterations;
   ULONGLONG MaxTicks, TotalTicks, QpcFrequency, LastVa;
 } ADMISSION_G3_PTE_WAIT_RECEIPT;
+/* EXP990 receipt-only: what the GPU will read for a G4 render, sampled at
+ * BeginJob through the process logical PTEs (bit0 resolved, bit1 all valid). */
+typedef struct _ADMISSION_G4_DRAW_SNAP {
+  ULONG Fence, Flags, PppCtrl, Width, Height, BgUsc, EotUsc, Process;
+  ULONGLONG VdmBase, ScissorBase, DbiasBase, VdmIpa;
+  ULONG VdmState, ScissorState, DbiasState, Reserved;
+  UCHAR Vdm[256];
+  UCHAR Scissor[32];
+  UCHAR Dbias[16];
+} ADMISSION_G4_DRAW_SNAP;
+#define ADMISSION_G4_DRAW_SNAP_COUNT 8u
+typedef struct _ADMISSION_G4_DRAW_SNAPSHOT {
+  ULONG Version, Bytes, Next, Reserved;
+  ADMISSION_G4_DRAW_SNAP Slot[ADMISSION_G4_DRAW_SNAP_COUNT];
+} ADMISSION_G4_DRAW_SNAPSHOT;
 #define ADMISSION_G3_ALLOC_TRACK_COUNT 1024u
 /* EXP982: last valid leaf mapping per VidMm allocation handle. */
 typedef struct _ADMISSION_G3_ALLOC_TRACK {
@@ -352,6 +367,8 @@ struct _ADMISSION_CONTEXT { REPLAY_PACKET RenderPacket; BOOLEAN InterfaceValid; 
   ADMISSION_G3_LEAF_HISTORY_SNAPSHOT G3LeafHistorySnapshot;
   ADMISSION_G3_PAGING_WAIT_RECEIPT G3PagingWait;
   ADMISSION_G3_PTE_WAIT_RECEIPT G3PteWait;
+  ADMISSION_G4_DRAW_SNAPSHOT G4DrawSnapshot;
+  volatile LONG G4DrawSnapshotDirty;
   volatile LONG G3PteWaitDirty;
   volatile LONG G3PagingWaitDirty;
   volatile LONG G3PrivateFailureClaim;
@@ -623,6 +640,7 @@ static ADMISSION_G3_FLUSH_RECEIPT last_flush_receipt;
 static void AdmissionRecordGpuvaG3Flush(ADMISSION_CONTEXT *a,const ADMISSION_G3_FLUSH_RECEIPT *r) {(void)a;if(KeGetCurrentIrql()==PASSIVE_LEVEL)last_flush_receipt=*r;}
 static void AdmissionRecordG3PagingWait(ADMISSION_CONTEXT *a) {(void)a;}
 static void AdmissionRecordG3PteWait(ADMISSION_CONTEXT *a) {(void)a;}
+static void AdmissionRecordG4DrawSnapshot(ADMISSION_CONTEXT *a) {(void)a;}
 static void AdmissionRecordGpuvaG3UnpublishedGroups(ADMISSION_CONTEXT *a,const ULONGLONG *counts) {(void)a;(void)counts;}
 static void AppleAgxSchedulerContextInitialize(ADMISSION_SCHEDULER_CONTEXT *c) {(void)c;}
 static void AdmissionPrepatchedInitialize(ADMISSION_PREPATCHED_RENDER *p) {(void)p;}

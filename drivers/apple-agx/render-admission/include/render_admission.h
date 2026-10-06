@@ -395,6 +395,21 @@ typedef struct _ADMISSION_G3_PTE_WAIT_RECEIPT {
   ULONG Version, Bytes, Waited, Recovered, TimedOut, MaxIterations;
   ULONGLONG MaxTicks, TotalTicks, QpcFrequency, LastVa;
 } ADMISSION_G3_PTE_WAIT_RECEIPT;
+/* EXP990 receipt-only: what the GPU will read for a G4 render, sampled at
+ * BeginJob through the process logical PTEs (bit0 resolved, bit1 all valid). */
+typedef struct _ADMISSION_G4_DRAW_SNAP {
+  ULONG Fence, Flags, PppCtrl, Width, Height, BgUsc, EotUsc, Process;
+  ULONGLONG VdmBase, ScissorBase, DbiasBase, VdmIpa;
+  ULONG VdmState, ScissorState, DbiasState, Reserved;
+  UCHAR Vdm[256];
+  UCHAR Scissor[32];
+  UCHAR Dbias[16];
+} ADMISSION_G4_DRAW_SNAP;
+#define ADMISSION_G4_DRAW_SNAP_COUNT 8u
+typedef struct _ADMISSION_G4_DRAW_SNAPSHOT {
+  ULONG Version, Bytes, Next, Reserved;
+  ADMISSION_G4_DRAW_SNAP Slot[ADMISSION_G4_DRAW_SNAP_COUNT];
+} ADMISSION_G4_DRAW_SNAPSHOT;
 #define ADMISSION_G3_ALLOC_TRACK_COUNT 1024u
 /* EXP982: last valid leaf mapping per VidMm allocation handle. */
 typedef struct _ADMISSION_G3_ALLOC_TRACK {
@@ -465,6 +480,8 @@ typedef struct _ADMISSION_CONTEXT {
   ADMISSION_G3_LEAF_HISTORY_SNAPSHOT G3LeafHistorySnapshot;
   ADMISSION_G3_PAGING_WAIT_RECEIPT G3PagingWait;
   ADMISSION_G3_PTE_WAIT_RECEIPT G3PteWait;
+  ADMISSION_G4_DRAW_SNAPSHOT G4DrawSnapshot;
+  volatile LONG G4DrawSnapshotDirty;
   volatile LONG G3PteWaitDirty;
   volatile LONG G3PagingWaitDirty;
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
@@ -973,6 +990,7 @@ void AdmissionRecordG3CopyQueryFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3LeafHistory(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3PagingWait(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3PteWait(_In_opt_ ADMISSION_CONTEXT *Context);
+void AdmissionRecordG4DrawSnapshot(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3CopyTransferFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
 NTSTATUS AdmissionGpuvaG3FrameArmEscape(_In_ ADMISSION_CONTEXT *Adapter,
