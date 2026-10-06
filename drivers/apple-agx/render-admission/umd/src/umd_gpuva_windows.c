@@ -239,20 +239,15 @@ static D3DKMT_HANDLE *translate_handles(ADMISSION_UMD_DEVICE *device,
   return handles;
 }
 
+/* EXP978: the end of a submission releases only its copy holds. Residency is
+ * a persistent per-slot reference (see make_resident); evicting after every
+ * submit made VidMm page the whole working set out and back in (~350 MB/s
+ * each way in EXP977 ETW), stalling paging waits and invalidating PTEs. */
 static int evict(void *context, const uint64_t *tokens, unsigned count) {
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;
-  if (!device || !device->KernelCallbacks ||
-      !device->KernelCallbacks->pfnEvictCb) return 0;
-  D3DKMT_HANDLE *handles = translate_handles(device, tokens, count);
-  if (!handles) return 0;
-  D3DDDICB_EVICT request = {};
-  request.NumAllocations = count;
-  request.AllocationList = handles;
-  HRESULT hr = device->KernelCallbacks->pfnEvictCb(
-      device->RuntimeDevice.handle, &request);
-  HeapFree(GetProcessHeap(), 0, handles);
-  if(SUCCEEDED(hr)) release_copies(device,tokens,count);
-  return SUCCEEDED(hr);
+  if (!device) return 0;
+  release_copies(device,tokens,count);
+  return 1;
 }
 
 static int make_resident(void *context, const uint64_t *tokens,
@@ -294,26 +289,49 @@ static int make_resident(void *context, const uint64_t *tokens,
     HeapFree(GetProcessHeap(),0,priorities);HeapFree(GetProcessHeap(),0,handles);
     return 0;
   }
+  /* Only slots without their persistent residency reference need a call. */
+  unsigned pending=0;
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  for(unsigned i=0;i<count;++i) {
+    auto *slot=find_slot(device,tokens[i]);
+    if(slot && !slot->Resident) handles[pending++]=handles[i];
+  }
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  if(!pending) {
+    HeapFree(GetProcessHeap(), 0, priorities);
+    HeapFree(GetProcessHeap(), 0, handles);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+    measure_g4_phase(1u,phase_start,0u,0u,S_OK);
+#endif
+    *fence = 0;
+    return 1;
+  }
   D3DDDI_MAKERESIDENT request = {};
   request.hPagingQueue = device->PagingQueue;
-  request.NumAllocations = count;
+  request.NumAllocations = pending;
   request.AllocationList = handles;
   request.PriorityList = priorities;
   HRESULT hr = device->KernelCallbacks->pfnMakeResidentCb(
       device->RuntimeDevice.handle, &request);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
-  measure_g4_phase(1u,phase_start,count,0u,hr);
+  measure_g4_phase(1u,phase_start,pending,0u,hr);
 #endif
-  int rollback = 1;
-  if (request.NumAllocations && request.NumAllocations < count)
-    rollback = evict(context, tokens, request.NumAllocations);
+  /* Allocations the runtime accepted now hold a residency reference, even
+   * when the call failed part-way: record them so it is never taken twice. */
+  unsigned accepted = (SUCCEEDED(hr) || hr == E_PENDING) ? pending :
+      (request.NumAllocations < pending ? request.NumAllocations : 0u);
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  for(unsigned i=0;i<accepted;++i)
+    for(UINT j=0;j<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++j) {
+      auto *slot=&device->ScreenBuffers[j];
+      if(slot->Active && !slot->Resident &&
+         slot->KernelAllocation==handles[i])
+        {slot->Resident=TRUE;break;}
+    }
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   HeapFree(GetProcessHeap(), 0, priorities);
   HeapFree(GetProcessHeap(), 0, handles);
-  if (!rollback) {
-    device->DrawTerminal = TRUE;
-    return 3;
-  }
-  if ((FAILED(hr) && hr != E_PENDING) || request.NumAllocations != count) {
+  if ((FAILED(hr) && hr != E_PENDING) || request.NumAllocations != pending) {
     release_copies(device,tokens,count);return 0;
   }
   if(hr==E_PENDING && !request.PagingFenceValue) {

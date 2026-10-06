@@ -921,6 +921,23 @@ static int AdmissionUmdScreenDestroyBuffer(void *Context,
   }
   buffer->Transition = TRUE;
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  /* EXP978: a borrowed Direct allocation outlives this slot, so its
+   * persistent residency reference must be dropped explicitly. */
+  if (buffer->Direct && buffer->Resident && buffer->KernelAllocation &&
+      device->KernelCallbacks->pfnEvictCb) {
+    D3DKMT_HANDLE resident = buffer->KernelAllocation;
+    D3DDDICB_EVICT evict = {};
+    evict.NumAllocations = 1; evict.AllocationList = &resident;
+    result = device->KernelCallbacks->pfnEvictCb(device->RuntimeDevice.handle, &evict);
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
+    if (FAILED(result)) {
+      buffer->Transition = FALSE;
+      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+      device->LastScreenError = result; return 0;
+    }
+    buffer->Resident = FALSE;
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  }
   for (UINT i=0; i<2; ++i) {
     allocation = i == 0 ? (buffer->Direct ? 0 : buffer->KernelAllocation) :
         (buffer->Borrowed ? 0 : buffer->StagingAllocation);

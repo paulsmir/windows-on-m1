@@ -59,6 +59,9 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   BOOL Direct;
   /* Content hash of the staging copy at the last upload/download. */
   ADMISSION_UMD_STAGING_SYNC Sync;
+  /* EXP978: one persistent MakeResident reference for the slot lifetime;
+   * dropped by DeallocateCb, or by EvictCb for borrowed Direct allocations. */
+  BOOL Resident;
 #endif
 } ADMISSION_UMD_SCREEN_BUFFER;
 
