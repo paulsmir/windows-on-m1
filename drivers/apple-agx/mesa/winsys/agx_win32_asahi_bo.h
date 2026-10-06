@@ -47,6 +47,10 @@ typedef struct {
 #ifdef APPLE_AGX_GPUVA_WINSYS
   AGX_WIN32_GPUVA_SPACE Gpuva;
   int GpuvaReady;
+  /* EXP979: VA ranges whose allocation is already destroyed but whose
+   * reservation could not be freed yet (submission in flight). */
+  AGX_WIN32_GPUVA_BO PendingVa[64];
+  APPLE_AGX_U32 PendingVaCount;
   /* InitBM owns these TVB lists and blocks for the queue lifetime. */
 #endif
 } AGX_WIN32_ASAHI_BACKEND;

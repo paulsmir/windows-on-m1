@@ -70,7 +70,11 @@ static int dispose(struct windows_bo *bo) {
   if(!b->Ops.Detach(b->Owner,bo->Backing.Buffer.Transport.Token,&bo->Base,
                    bo->Backing.ConstructionSerial)) return 0;
 #ifdef APPLE_AGX_GPUVA_WINSYS
-  if(!AgxWin32GpuvaUnbind(&b->Gpuva,&bo->Gpuva)) {
+  /* EXP979: the screen slot may still be held by an in-progress copy or
+   * submission. Freeing the VA first left that slot naming a released (and
+   * soon reused) VA, and the copy QUERY then failed predicate57. Release the
+   * slot and allocation first; free the VA only once nothing names it. */
+  if(b->PendingVaCount>=sizeof(b->PendingVa)/sizeof(b->PendingVa[0])) {
     if(!b->Ops.Associate(b->Owner,bo->Backing.Buffer.Transport.Token,&bo->Base,
                         bo->Backing.ConstructionSerial,release_map)) b->Failed=1;
     return 0;
@@ -81,6 +85,10 @@ static int dispose(struct windows_bo *bo) {
                         bo->Backing.ConstructionSerial,release_map)) b->Failed=1;
     return 0;
   }
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if(bo->Gpuva.Bound && !AgxWin32GpuvaUnbind(&b->Gpuva,&bo->Gpuva))
+    b->PendingVa[b->PendingVaCount++]=bo->Gpuva;
+#endif
   --b->LiveBos;
   free(bo);
   return 1;
@@ -263,6 +271,13 @@ int AgxWin32AsahiCollect(AGX_WIN32_ASAHI_BACKEND *b) {
   APPLE_AGX_U32 cursor=0;
   const struct agx_bo *key;
   if(!b || !b->Native) return 0;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  for(APPLE_AGX_U32 i=0;i<b->PendingVaCount;) {
+    if(AgxWin32GpuvaUnbind(&b->Gpuva,&b->PendingVa[i]))
+      b->PendingVa[i]=b->PendingVa[--b->PendingVaCount];
+    else ++i;
+  }
+#endif
   if(b->UnpublishedBo) {
     struct windows_bo *bo=b->UnpublishedBo;
 #ifdef APPLE_AGX_GPUVA_WINSYS
@@ -278,6 +293,9 @@ int AgxWin32AsahiCollect(AGX_WIN32_ASAHI_BACKEND *b) {
     struct windows_bo *bo=(struct windows_bo *)key;
     if(bo->Backend==b && bo->Base.refcnt==0) (void)dispose(bo);
   }
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if(b->PendingVaCount) return 0;
+#endif
   return b->LiveBos==0 && b->UnpublishedBo==NULL;
 }
 int AgxWin32AsahiDetach(AGX_WIN32_ASAHI_BACKEND *b) {
