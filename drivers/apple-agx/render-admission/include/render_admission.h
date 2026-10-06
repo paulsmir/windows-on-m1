@@ -373,6 +373,21 @@ typedef struct _ADMISSION_POST_DPC_HEALTH_RECEIPT {
   ULONG OutputQueuePhase, WorkScheduled, WorkersActive, DpcPending;
 } ADMISSION_POST_DPC_HEALTH_RECEIPT;
 
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+#define ADMISSION_G3_LEAF_HISTORY_COUNT 256u
+/* Flags: 1 Use64KBPages, 2 Repeat, 4 NotifyEviction, 8 InitialUpdate. */
+typedef struct _ADMISSION_G3_LEAF_HISTORY {
+  ULONGLONG Qpc, ProcessId, TableIpa, Allocation, FirstVa, MappingGeneration;
+  ULONG First, Count, ValidCount, Flags, Status, FirstSegment;
+} ADMISSION_G3_LEAF_HISTORY;
+typedef struct _ADMISSION_G3_LEAF_HISTORY_SNAPSHOT {
+  ULONG Version, Bytes, Next, Predicate;
+  ULONGLONG FailVa, FailProcessId, FailTableIpa, FailAllocation, Qpc, QpcFrequency;
+  ULONG FailIndex, Reserved;
+  ADMISSION_G3_LEAF_HISTORY Records[ADMISSION_G3_LEAF_HISTORY_COUNT];
+} ADMISSION_G3_LEAF_HISTORY_SNAPSHOT;
+#endif
+
 typedef struct _ADMISSION_CONTEXT {
   ADMISSION_OBJECT_ADAPTER ObjectAdapter;
   ADMISSION_MEMORY_CONTRACT Memory;
@@ -416,6 +431,10 @@ typedef struct _ADMISSION_CONTEXT {
   APPLE_AGX_G3_COPY_QUERY_RECEIPT G3CopyQueryFailure;
   volatile LONG G3CopyTransferFailureClaim;
   APPLE_AGX_G3_COPY_TRANSFER_FAILURE G3CopyTransferFailure;
+  /* EXP979 diagnostic: leaf UpdatePageTable history frozen at the first
+   * copy predicate57 (PTE present but not valid). */
+  volatile LONG G3LeafHistoryClaim;
+  ADMISSION_G3_LEAF_HISTORY_SNAPSHOT G3LeafHistorySnapshot;
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   ADMISSION_DWM_FRAME_PROBE DwmFrameProbe;
   volatile LONG DwmSourceMapRecordCount;
@@ -919,6 +938,7 @@ void AdmissionRenderCorrelationSubmitFailureWindows(
     _In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG4SubmitFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3CopyQueryFailure(_In_opt_ ADMISSION_CONTEXT *Context);
+void AdmissionRecordG3LeafHistory(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3CopyTransferFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
 NTSTATUS AdmissionGpuvaG3FrameArmEscape(_In_ ADMISSION_CONTEXT *Adapter,

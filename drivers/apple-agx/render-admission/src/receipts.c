@@ -2053,6 +2053,20 @@ _Use_decl_annotations_ void AdmissionRecordG3CopyQueryFailure(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordG3LeafHistory(
+    ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->G3LeafHistoryClaim != 2 ||
+      Context->PhysicalDeviceObject == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
+  WriteBinary(key, L"Wom1G3LeafHistory", &Context->G3LeafHistorySnapshot,
+      sizeof(Context->G3LeafHistorySnapshot));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordG3CopyTransferFailure(
     ADMISSION_CONTEXT *Context) {
   HANDLE key = NULL;

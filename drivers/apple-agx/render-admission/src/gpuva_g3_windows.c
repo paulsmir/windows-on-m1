@@ -960,7 +960,7 @@ static VOID AdmissionG3WriteCopyPagingQuiescence(
 NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
     const DXGKARG_ESCAPE *args) {
   APPLE_AGX_G3_COPY_REQUEST *q=NULL;
-  ADMISSION_G3_STATE *state;
+  ADMISSION_G3_STATE *state=NULL;
   ADMISSION_G3_PROCESS *p=NULL;
   ADMISSION_RENDER_CONTEXT *context=NULL;
   ADMISSION_OPEN_ALLOCATION *opened;
@@ -972,7 +972,7 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   APPLE_AGX_GPUVA_G3_WALK_FAILURE walk={0};
   BOOLEAN captured=FALSE, captureAttempted=FALSE, transferCaptured=FALSE;
   ADMISSION_G3_COPY_PAGING_QUIESCENCE pagingSnapshot = {0};
-  BOOLEAN pagingSnapshotCaptured = FALSE;
+  BOOLEAN pagingSnapshotCaptured = FALSE, leafHistoryCaptured = FALSE;
   ULONG predicate=0u, operation=MAXULONG;
   BOOLEAN isQuery=FALSE;
   NTSTATUS status=STATUS_INVALID_PARAMETER;
@@ -1201,6 +1201,24 @@ Unlock:
     InterlockedExchange(&adapter->G3CopyTransferFailureClaim,2);
     transferCaptured=TRUE;
   }
+  if(predicate==57u && p && q && state &&
+     InterlockedCompareExchange(&adapter->G3LeafHistoryClaim,1,0)==0) {
+    ADMISSION_G3_LEAF_HISTORY_SNAPSHOT *s=&adapter->G3LeafHistorySnapshot;
+    LARGE_INTEGER frequency;
+    ULONGLONG leaf=0ULL;
+    s->Version=1u;s->Bytes=sizeof(*s);s->Predicate=predicate;
+    s->Next=state->LeafHistoryNext;
+    s->FailVa=page;s->FailProcessId=p->Graph.ProcessId;
+    s->FailAllocation=q->Allocation;
+    if(AppleAgxGpuvaG3GraphLeafTableIpa(&p->Graph,page,&leaf)) s->FailTableIpa=leaf;
+    s->FailIndex=(ULONG)((page>>12)&8191u);
+    s->Qpc=(ULONGLONG)KeQueryPerformanceCounter(&frequency).QuadPart;
+    s->QpcFrequency=(ULONGLONG)frequency.QuadPart;
+    RtlCopyMemory(s->Records,state->LeafHistory,sizeof(s->Records));
+    KeMemoryBarrier();
+    InterlockedExchange(&adapter->G3LeafHistoryClaim,2);
+    leafHistoryCaptured=TRUE;
+  }
   if(isQuery && predicate) {
     captureAttempted=TRUE;
     captured=AdmissionG3CaptureCopyQueryFailure(adapter,p,context,q,predicate,status,
@@ -1232,6 +1250,7 @@ Free:
         FALSE,0,0,NULL,NULL);
   if(q) ExFreePoolWithTag(q,ADMISSION_POOL_TAG);
   if(captured) AdmissionRecordG3CopyQueryFailure(adapter);
+  if(leafHistoryCaptured) AdmissionRecordG3LeafHistory(adapter);
   if(transferCaptured) AdmissionRecordG3CopyTransferFailure(adapter);
   if(pagingSnapshotCaptured)
     AdmissionG3WriteCopyPagingQuiescence(adapter, &pagingSnapshot);

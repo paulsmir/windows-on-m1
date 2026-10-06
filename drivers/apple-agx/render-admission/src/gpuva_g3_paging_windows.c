@@ -504,6 +504,40 @@ Done:
   return status;
 }
 
+/* EXP979 diagnostic: every leaf UpdatePageTable outcome, including early
+ * refusals, under the G3 lock held by the caller. */
+static VOID AdmissionG3RecordLeaf(ADMISSION_G3_PROCESS *process,
+    ULONGLONG table_ipa, const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update,
+    NTSTATUS status) {
+  ADMISSION_G3_LEAF_HISTORY *h;
+  UINT i, valid = 0u, entries, scale;
+  if (process == NULL || process->State == NULL || update == NULL) return;
+  h = &process->State->LeafHistory[
+      process->State->LeafHistoryNext++ % ADMISSION_G3_LEAF_HISTORY_COUNT];
+  scale = update->Flags.Use64KBPages ? 16u : 1u;
+  entries = update->Flags.Repeat ? 1u : update->NumPageTableEntries;
+  h->FirstSegment = MAXULONG;
+  for (i = 0u; i < entries; ++i)
+    if (update->pPageTableEntries[i].Valid) {
+      if (!valid) h->FirstSegment = (ULONG)update->pPageTableEntries[i].Segment;
+      ++valid;
+    }
+  h->Qpc = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+  h->ProcessId = process->Graph.ProcessId;
+  h->TableIpa = table_ipa;
+  h->Allocation = (ULONGLONG)(ULONG_PTR)update->hAllocation;
+  h->FirstVa = update->FirstPteVirtualAddress;
+  h->MappingGeneration = process->Graph.MappingGeneration;
+  h->First = update->StartIndex * scale;
+  h->Count = update->NumPageTableEntries * scale;
+  h->ValidCount = valid;
+  h->Flags = (update->Flags.Use64KBPages ? 1u : 0u) |
+      (update->Flags.Repeat ? 2u : 0u) |
+      (update->Flags.NotifyEviction ? 4u : 0u) |
+      (update->Flags.InitialUpdate ? 8u : 0u);
+  h->Status = (ULONG)status;
+}
+
 static APPLE_AGX_GPUVA_G3_NODE *AdmissionG3FindPagingEdge(
     APPLE_AGX_GPUVA_G3_NODE *nodes, ULONGLONG table_ipa, UINT index) {
   for (; nodes != NULL; nodes = nodes->Next)
@@ -968,6 +1002,8 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     status = STATUS_INVALID_DEVICE_STATE;
   } else if (process->Graph.JobInFlight || process->Graph.LeaseToken) {
     status = STATUS_DEVICE_BUSY;
+    if (update->PageTableLevel == 0u)
+      AdmissionG3RecordLeaf(process, table_ipa, update, status);
   } else {
     status = AdmissionMemoryRuntimeLocalView(adapter, &view);
     if (!NT_SUCCESS(status) || view.CpuAddress == NULL ||
@@ -1029,6 +1065,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
       if (update->PageTableLevel == 0u) {
         status = AdmissionG3UpdateLeaf(process, table_ipa, update, adapter,
                                        &failure);
+        AdmissionG3RecordLeaf(process, table_ipa, update, status);
       } else {
         status = AdmissionG3UpdateParent(process, table_ipa, update, adapter,
                                          &failure);

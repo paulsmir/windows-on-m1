@@ -18,7 +18,7 @@ SHARED = ROOT / "drivers/apple-agx/shared"
 M1N1 = ROOT / "m1n1_windows/src"
 
 FUNCTIONS = {
-    "receipts.c": ["AdmissionRecordG3CopyQueryFailure", "AdmissionRecordG3CopyTransferFailure", "AdmissionRecordG3PrivateFailure"],
+    "receipts.c": ["AdmissionRecordG3CopyQueryFailure", "AdmissionRecordG3LeafHistory", "AdmissionRecordG3CopyTransferFailure", "AdmissionRecordG3PrivateFailure"],
     "gpuva_g3_windows.c": [
         "AdmissionG3AllocateNode", "AdmissionG3FreeNode",
         "AdmissionGpuvaG3FindProcess", "AdmissionG3BootstrapRoot",
@@ -37,7 +37,7 @@ FUNCTIONS = {
     "gpuva_g3_paging_windows.c": [
         "AdmissionG3RejectPaging", "AdmissionG3RetireSystemSubtree",
         "AdmissionG3ActivateSystemSubtree", "AdmissionG3ResetTableShadow", "AdmissionG3RegisterTable", "AdmissionG3PrepareTableReuse", "AdmissionG3UpdateParent",
-        "AdmissionG3UpdateLeaf", "AdmissionG3FindPagingEdge",
+        "AdmissionG3UpdateLeaf", "AdmissionG3RecordLeaf", "AdmissionG3FindPagingEdge",
         "AdmissionG3ResolveLogicalVa", "AdmissionG3SnapshotAperture",
         "AdmissionG3EncodeVirtualPaging",
         "AdmissionG3MapPagingIpa", "AdmissionG3ExecuteVirtualPaging",

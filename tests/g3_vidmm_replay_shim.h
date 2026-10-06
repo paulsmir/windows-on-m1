@@ -117,6 +117,7 @@ static KIRQL KeGetCurrentIrql(void) { return replay_irql; }
  * concurrent joined completion; sleeping with the G3 lock held is a bug. */
 typedef union { struct { unsigned int LowPart; int HighPart; }; long long QuadPart; } LARGE_INTEGER;
 typedef enum { KernelMode, UserMode } KPROCESSOR_MODE;
+static LARGE_INTEGER KeQueryPerformanceCounter(LARGE_INTEGER *f) { static long long c; LARGE_INTEGER r; if(f) f->QuadPart=24000000; r.QuadPart=++c; return r; }
 static unsigned replay_delay_calls; static void (*replay_delay_hook)(void);
 static NTSTATUS KeDelayExecutionThread(KPROCESSOR_MODE m, BOOLEAN a, LARGE_INTEGER *i) {
   (void)m;(void)a;assert(i && i->QuadPart<0);assert(replay_irql==PASSIVE_LEVEL);
@@ -257,9 +258,20 @@ typedef struct { ULONG Magic; ADMISSION_DEVICE *Device; UINT RuntimeAllocation;
 typedef struct { int unused; } ADMISSION_SCHEDULER_CONTEXT;
 typedef struct { int unused; } ADMISSION_PREPATCHED_RENDER;
 typedef struct _ADMISSION_RENDER_CONTEXT { ADMISSION_OBJECT_CONTEXT Object; UINT Win32Generation; BOOLEAN Win32Transport,GpuvaG3Poisoned; ADMISSION_SCHEDULER_CONTEXT SchedulerContext; ADMISSION_PREPATCHED_RENDER PrepatchedRender; ADMISSION_G3_PROCESS *GpuvaG3Process; struct _ADMISSION_RENDER_CONTEXT *GpuvaG3NextContext; volatile LONG GpuvaG3PrivateFence,GpuvaG3CancelFence,GpuvaG3CancelUncertain, GpuvaG3PreemptFence; BOOLEAN GpuvaG3Closing; ULONGLONG GpuvaG3PrivateManagerGeneration; ULONGLONG GpuvaG3LastSetRootIpa; ULONG GpuvaG3SetRootCount; ULONGLONG GpuvaG3RootIpa,GpuvaG3DmaBufferVa,GpuvaG3MappingGeneration; ULONG GpuvaG3DmaBufferBytes; } ADMISSION_RENDER_CONTEXT;
+#define ADMISSION_G3_LEAF_HISTORY_COUNT 256u
+typedef struct _ADMISSION_G3_LEAF_HISTORY {
+  ULONGLONG Qpc, ProcessId, TableIpa, Allocation, FirstVa, MappingGeneration;
+  ULONG First, Count, ValidCount, Flags, Status, FirstSegment;
+} ADMISSION_G3_LEAF_HISTORY;
+typedef struct _ADMISSION_G3_LEAF_HISTORY_SNAPSHOT {
+  ULONG Version, Bytes, Next, Predicate;
+  ULONGLONG FailVa, FailProcessId, FailTableIpa, FailAllocation, Qpc, QpcFrequency;
+  ULONG FailIndex, Reserved;
+  ADMISSION_G3_LEAF_HISTORY Records[ADMISSION_G3_LEAF_HISTORY_COUNT];
+} ADMISSION_G3_LEAF_HISTORY_SNAPSHOT;
 #define ADMISSION_G3_UPLOAD_TRACE_COUNT 64u
 typedef struct { ULONGLONG ProcessId,Va; ULONG Bytes,Hash,GpuHash,Checks; } ADMISSION_G3_UPLOAD_TRACE;
-typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; APPLE_AGX_G3_PRIVATE_POOL PrivatePool; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence,LastCompletedFence,PrivateCompletionFence; ULONGLONG UnpublishedGroups[32]; ADMISSION_G3_UPLOAD_TRACE UploadTrace[ADMISSION_G3_UPLOAD_TRACE_COUNT]; ULONG UploadTraceNext,UploadVerifyChecks,UploadVerifyMismatch,UploadVerifyUnmapped; ADMISSION_G3_UPLOAD_TRACE UploadFirstMismatch; } ADMISSION_G3_STATE;
+typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; APPLE_AGX_G3_PRIVATE_POOL PrivatePool; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence,LastCompletedFence,PrivateCompletionFence; ULONGLONG UnpublishedGroups[32]; ADMISSION_G3_UPLOAD_TRACE UploadTrace[ADMISSION_G3_UPLOAD_TRACE_COUNT]; ULONG UploadTraceNext,UploadVerifyChecks,UploadVerifyMismatch,UploadVerifyUnmapped; ADMISSION_G3_UPLOAD_TRACE UploadFirstMismatch; ADMISSION_G3_LEAF_HISTORY LeafHistory[ADMISSION_G3_LEAF_HISTORY_COUNT]; ULONG LeafHistoryNext; } ADMISSION_G3_STATE;
 typedef struct _ADMISSION_G3_TABLE_SHADOW { struct _ADMISSION_G3_TABLE_SHADOW *Next,*NextBroker; APPLE_AGX_MEMORY_OBJECT Memory; ULONGLONG OriginalIpa,BrokerIpa; APPLE_AGX_GPUVA_G3_LOGICAL_PTE *LogicalPtes,*ResidentPtes,*PendingPtes; } ADMISSION_G3_TABLE_SHADOW;
 typedef struct _ADMISSION_G3_PRIVATE_SCENE {
   struct _ADMISSION_G3_PRIVATE_SCENE *Next;
@@ -308,6 +320,8 @@ struct _ADMISSION_CONTEXT { REPLAY_PACKET RenderPacket; BOOLEAN InterfaceValid; 
   APPLE_AGX_G3_COPY_QUERY_RECEIPT G3CopyQueryFailure;
   volatile LONG G3CopyTransferFailureClaim;
   APPLE_AGX_G3_COPY_TRANSFER_FAILURE G3CopyTransferFailure;
+  volatile LONG G3LeafHistoryClaim;
+  ADMISSION_G3_LEAF_HISTORY_SNAPSHOT G3LeafHistorySnapshot;
   volatile LONG G3PrivateFailureClaim;
   APPLE_AGX_G3_PRIVATE_FAILURE G3PrivateFailure;
   int SchedulerLock,Scheduler,PagingLock;
@@ -344,6 +358,7 @@ static NTSTATUS IoOpenDeviceRegistryKey(PDEVICE_OBJECT device,ULONG kind,ULONG a
   assert(device && kind==1 && access==2 && replay_irql==PASSIVE_LEVEL && !r145_references);
   *key=(HANDLE)0x5588;return STATUS_SUCCESS;
 }
+static unsigned leaf_history_registry_writes;
 static void WriteBinary(HANDLE key,const wchar_t *name,const VOID *data,ULONG bytes) {
   if (!wcscmp(name,L"Wom1G3CopyTransferFailure")) {
     assert(key==(HANDLE)0x5588 && bytes==sizeof(transfer_registry_receipt) && replay_irql==PASSIVE_LEVEL);
@@ -352,6 +367,11 @@ static void WriteBinary(HANDLE key,const wchar_t *name,const VOID *data,ULONG by
   if (!wcscmp(name,L"Wom1G3PrivateAcquireFailure")) {
     assert(key==(HANDLE)0x5588 && bytes==sizeof(private_registry_receipt) && replay_irql==PASSIVE_LEVEL);
     memcpy(&private_registry_receipt,data,bytes);++private_registry_writes;return;
+  }
+  if (!wcscmp(name,L"Wom1G3LeafHistory")) {
+    /* EXP979 diagnostic snapshot at the first predicate57; flush not counted. */
+    assert(key==(HANDLE)0x5588 && bytes==sizeof(ADMISSION_G3_LEAF_HISTORY_SNAPSHOT) && replay_irql==PASSIVE_LEVEL);
+    ++leaf_history_registry_writes;--query_registry_flushes;return;
   }
   assert(key==(HANDLE)0x5588 && !wcscmp(name,L"Wom1G3CopyQueryFailure"));
   assert((bytes==16 || bytes==144 || bytes==168) && replay_irql==PASSIVE_LEVEL);
