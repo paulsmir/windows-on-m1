@@ -62,6 +62,9 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   /* EXP978: one persistent MakeResident reference for the slot lifetime;
    * dropped by DeallocateCb, or by EvictCb for borrowed Direct allocations. */
   BOOL Resident;
+  /* EXP985: written by the in-flight submission; consumed by its download.
+   * Only GPU-written slots may overwrite their (possibly shared) staging. */
+  BOOL GpuWritten;
 #endif
 } ADMISSION_UMD_SCREEN_BUFFER;
 

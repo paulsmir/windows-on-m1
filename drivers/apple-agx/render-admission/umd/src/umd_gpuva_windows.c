@@ -601,13 +601,19 @@ static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
   for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i) {
     auto *slot=&device->ScreenBuffers[i];
     if(!slot->CopyHeld || slot->Direct ||
-       (download && !(slot->Flags & AppleAgxWin32BufferGpuWrite))) continue;
+       (download && (!(slot->Flags & AppleAgxWin32BufferGpuWrite) ||
+                     !slot->GpuWritten))) continue;
     if(!transfer_slot(device,slot,download,&measured_count,&measured_bytes)) {
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
       measure_g4_phase(download ? 6u : 3u,phase_start,measured_count,
           measured_bytes,E_FAIL);
 #endif
       return 0;
+    }
+    if(download) {
+      AcquireSRWLockExclusive(&device->ScreenBufferLock);
+      slot->GpuWritten=FALSE;
+      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
     }
   }
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
@@ -628,6 +634,25 @@ static int signal_render(ADMISSION_UMD_DEVICE *device,uint64_t next) {
       device->RuntimeDevice.handle,&signal);
   AdmissionUmdDiagnostic("g4-signal-render-fence",result,NULL,0u);
   return SUCCEEDED(result);
+}
+
+/* EXP985: record which held slots this submission writes (render targets and
+ * depth/stencil named by the winsys). Only these are downloaded afterwards. */
+static int mark_written(ADMISSION_UMD_DEVICE *device, const uint64_t *written,
+                        unsigned written_count) {
+  int ok=1;
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  for(unsigned i=0;i<written_count && ok;++i) {
+    ADMISSION_UMD_SCREEN_BUFFER *slot=NULL;
+    for(UINT j=0;j<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++j)
+      if(device->ScreenBuffers[j].Active && device->ScreenBuffers[j].Token==written[i]) {
+        slot=&device->ScreenBuffers[j];break;
+      }
+    if(!slot || slot->Transition || !slot->CopyHeld) ok=0;
+    else slot->GpuWritten=TRUE;
+  }
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  return ok;
 }
 
 static int submit(void *context, const uint64_t *written,
@@ -686,7 +711,7 @@ static int submit(void *context, const uint64_t *written,
   if (trackedAllocation != 0u)
     (void)AdmissionUmdGpuvaFrameArm(device, trackedAllocation, trackedVa);
 #endif
-  if(!transfer_held(device,false)) {
+  if(!mark_written(device,written,written_count) || !transfer_held(device,false)) {
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
     device->FrameSubmitStatus = E_FAIL;
 #endif

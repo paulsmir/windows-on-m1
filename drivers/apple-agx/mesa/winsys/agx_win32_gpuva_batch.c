@@ -248,7 +248,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   AGX_WIN32_ASAHI_BACKEND *b=backend(batch);
   AGX_G4_BATCH *g=capsule(batch);
   const AGX_WIN32_GPUVA_BO **refs=NULL;
-  const AGX_WIN32_GPUVA_BO *written[PIPE_MAX_COLOR_BUFS]={0};
+  const AGX_WIN32_GPUVA_BO *written[PIPE_MAX_COLOR_BUFS+2]={0};
   unsigned written_count=0;
   unsigned count=0,limit;
   size_t pool_count, pipeline_count;
@@ -326,6 +326,18 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
        (depth->separate_stencil &&
         !add_bo(b,refs,&count,limit,
           agx_resource(depth->separate_stencil)->bo))) { fail_site=__LINE__; goto fail; }
+    /* EXP985: depth/stencil are written too; only written BOs are
+     * downloaded back to their CPU staging after the submission. */
+    struct agx_bo *zs[2]={depth->bo,depth->separate_stencil?
+        agx_resource(depth->separate_stencil)->bo:NULL};
+    for(unsigned k=0;k<2;++k) if(zs[k]) {
+      const AGX_WIN32_GPUVA_BO *mapped=AgxWin32AsahiGpuvaBo(b,zs[k]);
+      if(!mapped) { fail_site=__LINE__; goto fail; }
+      unsigned duplicate=0;
+      for(unsigned j=0;j<written_count;++j)
+        if(written[j]==mapped) duplicate=1;
+      if(!duplicate) written[written_count++]=mapped;
+    }
   }
   int handle;
   AGX_BATCH_FOREACH_BO_HANDLE(batch,handle) {
