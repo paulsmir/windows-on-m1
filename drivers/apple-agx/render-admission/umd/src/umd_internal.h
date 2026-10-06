@@ -220,6 +220,11 @@ HRESULT APIENTRY AdmissionUmdSetDisplayMode(
 #if defined(__cplusplus)
 extern "C" {
 #endif
+#ifdef APPLE_AGX_GPUVA_WINSYS
+void AdmissionUmdVaRecordDeallocate(const void *device, ULONGLONG token,
+                                    D3DKMT_HANDLE allocation, ULONGLONG va,
+                                    HRESULT hr);
+#endif
 VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
                             const UINT *Values, UINT Count);
 #ifndef ADMISSION_UMD_PRESENT_MEASURE_KIND_DEFINED

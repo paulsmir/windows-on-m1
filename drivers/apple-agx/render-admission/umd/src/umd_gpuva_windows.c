@@ -117,6 +117,45 @@ ULONGLONG AdmissionUmdGpuvaFrameArm(ADMISSION_UMD_DEVICE *device,
 }
 #endif
 
+
+/* EXP981 receipt-only: process-wide ring of GPU VA lifecycle operations
+ * (all devices of this process share one GPU VA space). A failed copy slot
+ * dumps every entry overlapping its canonical VA or naming its token. */
+typedef struct _ADMISSION_UMD_VA_EVENT {
+  LONGLONG Qpc; ULONGLONG Va, Bytes, Token; const void *Device;
+  UINT Op; HRESULT Hr; D3DKMT_HANDLE Allocation;
+} ADMISSION_UMD_VA_EVENT;
+#define ADMISSION_UMD_VA_RING 1024u
+static ADMISSION_UMD_VA_EVENT va_ring[ADMISSION_UMD_VA_RING];
+static volatile LONG va_ring_next;
+static void va_record(const void *device, UINT op, ULONGLONG token,
+                      D3DKMT_HANDLE allocation, ULONGLONG va,
+                      ULONGLONG bytes, HRESULT hr) {
+  LARGE_INTEGER now; (void)QueryPerformanceCounter(&now);
+  ADMISSION_UMD_VA_EVENT *e=&va_ring[(ULONG)InterlockedIncrement(&va_ring_next)%ADMISSION_UMD_VA_RING];
+  e->Qpc=now.QuadPart;e->Va=va;e->Bytes=bytes;e->Token=token;e->Device=device;
+  e->Op=op;e->Hr=hr;e->Allocation=allocation;
+}
+static void va_dump(const ADMISSION_UMD_DEVICE *device, ULONGLONG token, ULONGLONG va) {
+  LARGE_INTEGER now; (void)QueryPerformanceCounter(&now);
+  LONG last=InterlockedCompareExchange(&va_ring_next,0,0); UINT emitted=0;
+  for(LONG n=0;n<(LONG)ADMISSION_UMD_VA_RING && emitted<48u;++n) {
+    const ADMISSION_UMD_VA_EVENT *e=&va_ring[(ULONG)(last-n)%ADMISSION_UMD_VA_RING];
+    if(!e->Qpc) continue;
+    if(!(e->Token==token || (e->Va<=va && va<e->Va+(e->Bytes?e->Bytes:1)))) continue;
+    UINT values[10]={e->Op,e->Device==device,(UINT)((now.QuadPart-e->Qpc)/2400),
+        (UINT)e->Token,(UINT)(e->Va>>32),(UINT)e->Va,(UINT)e->Bytes,(UINT)e->Hr,
+        (UINT)e->Allocation,(UINT)n};
+    AdmissionUmdDiagnostic("reject-va-history",S_OK,values,ARRAYSIZE(values));
+    ++emitted;
+  }
+}
+void AdmissionUmdVaRecordDeallocate(const void *device, ULONGLONG token,
+                                    D3DKMT_HANDLE allocation, ULONGLONG va,
+                                    HRESULT hr) {
+  va_record(device,4u,token,allocation,va,0,hr);
+}
+
 static ADMISSION_UMD_SCREEN_BUFFER *find_slot(ADMISSION_UMD_DEVICE *device,
                                              uint64_t token) {
   for (UINT i=0; i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT; ++i)
@@ -171,6 +210,7 @@ static int reserve_va(void *context, uint64_t bytes, uint64_t minimum,
     AdmissionUmdDiagnostic("g4-native-reserve-va-cb", hr, values,
                            ARRAYSIZE(values));
   }
+  va_record(device,1u,0,0,request.VirtualAddress,bytes,hr);
   if (FAILED(hr) || !request.VirtualAddress) return 0;
   *va = request.VirtualAddress;
   return 1;
@@ -201,10 +241,14 @@ static int map_va(void *context, uint64_t token, uint64_t va,
     AdmissionUmdDiagnostic("g4-native-map-va-cb", hr, values,
                            ARRAYSIZE(values));
   }
+  va_record(device,2u,token,request.hAllocation,va,pages<<12,hr);
   if (FAILED(hr) && hr != E_PENDING) return 0;
   if (request.VirtualAddress != va) return 3;
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
   auto *slot=find_slot(device,token);
+  /* EXP981: a second mapping of the same slot replaces its canonical VA. */
+  if(slot && slot->CanonicalGpuVa && slot->CanonicalGpuVa!=va)
+    va_record(device,5u,token,request.hAllocation,slot->CanonicalGpuVa,0,S_OK);
   if(slot) slot->CanonicalGpuVa=va;
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   *fence = request.PagingFenceValue;
@@ -218,8 +262,10 @@ static int free_va(void *context, uint64_t va, uint64_t bytes) {
       !device->KernelCallbacks->pfnFreeGpuVirtualAddressCb) return 0;
   request.BaseAddress = va;
   request.Size = bytes;
-  return SUCCEEDED(device->KernelCallbacks->pfnFreeGpuVirtualAddressCb(
-      device->RuntimeDevice.handle, &request));
+  HRESULT hr = device->KernelCallbacks->pfnFreeGpuVirtualAddressCb(
+      device->RuntimeDevice.handle, &request);
+  va_record(device,3u,0,0,va,bytes,hr);
+  return SUCCEEDED(hr);
 }
 
 static D3DKMT_HANDLE *translate_handles(ADMISSION_UMD_DEVICE *device,
@@ -522,6 +568,7 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
         ((UINT)slot->Mapped<<3) | ((UINT)slot->Borrowed<<4),
         (UINT)payload->ProcessGeneration,(UINT)payload->MappingGeneration};
     AdmissionUmdDiagnostic("reject-copy-slot",E_FAIL,values,ARRAYSIZE(values));
+    va_dump(device,slot->Token,slot->CanonicalGpuVa);
   }
   HeapFree(GetProcessHeap(),0,payload);return success;
 }

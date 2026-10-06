@@ -945,6 +945,8 @@ static int AdmissionUmdScreenDestroyBuffer(void *Context,
     ZeroMemory(&deallocate,sizeof(deallocate));
     deallocate.NumAllocations=1; deallocate.HandleList=&allocation;
     result=device->KernelCallbacks->pfnDeallocateCb(device->RuntimeDevice.handle,&deallocate);
+    AdmissionUmdVaRecordDeallocate(device,buffer->Token,allocation,
+                                   buffer->CanonicalGpuVa,result);
     AcquireSRWLockExclusive(&device->ScreenBufferLock);
     if (FAILED(result)) {
       buffer->Transition=FALSE;
