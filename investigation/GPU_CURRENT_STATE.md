@@ -477,3 +477,10 @@ Large ETLs/PDBs internal /Users/pavel/J313-evidence-archive/2026-10-03.
 Unrelated existing test limitations: frontendprepare reference path/dirtyMesa;
 virtual-submit replay missing AdmissionMemoryRuntimeLocalView/Inner declarations.
 Do not claim whole-suite GREEN or fix unrelated harnesses.
+
+## 2026-10-06 late: predicate57 boundary (EXP980R-EXP982)
+- Proven (EXP982 Wom1G3LeafHistory v2 + UMD reject-va-history): the UMD VA bookkeeping is clean (1:1 reserve/map/free/deallocate, no stale or replaced canonical VA). The failing copy QUERY targets a VA mapped 25 ms earlier (Map E_PENDING, paging fence waited) for which the KMD never received a valid UpdatePageTable; the allocation's only valid mapping is in its creator process (4.5 s earlier).
+- Visible effect: the failing escape returns DEVICEREMOVED to the client; DWM/shell devices enter error state, composition stops -> only the first icons appear, desktop black.
+- Rejected: dispose order (2511a332, EXP980R); stale canonical VA in UMD (EXP982).
+- Active hypothesis (to verify against Microsoft WDDM GPUVA residency docs before code): the CPU-time copy escape reads PTEs outside the window where WDDM guarantees them (VidMm only guarantees residency/PTEs while the device's GPU work is scheduled), so a copy issued between Map/MakeResident and the first scheduled submission can see unpopulated PTEs.
+- Next causal target: move staging<->canonical copies to execution time of the device's submission (KMD performs them when VidMm guarantees residency) or otherwise bind them to a WDDM-guaranteed event; design offline first.
