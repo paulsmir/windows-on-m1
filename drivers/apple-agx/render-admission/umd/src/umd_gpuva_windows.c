@@ -381,9 +381,48 @@ static int copy_escape(ADMISSION_UMD_DEVICE *device,
   return SUCCEEDED(status);
 }
 
+/* Returns 1 when the staging copy still equals the canonical allocation
+ * (unchanged since the last upload/download), 0 when an upload is needed,
+ * and -1 when the staging copy could not be inspected safely. */
+static int staging_unchanged(ADMISSION_UMD_DEVICE *device,
+                             ADMISSION_UMD_SCREEN_BUFFER *slot) {
+  if(!slot->Sync.Valid || (slot->Borrowed && slot->Mapped)) return 0;
+  BYTE *address=(BYTE *)slot->LockedBase;
+  bool temporary=!slot->Mapped, locked=false;
+  if(temporary) {
+    D3DDDICB_LOCK lock={};lock.hAllocation=slot->StagingAllocation;
+    lock.Flags.LockEntire=1;lock.Flags.ReadOnly=1;
+    HRESULT hr=device->KernelCallbacks->pfnLockCb(device->RuntimeDevice.handle,&lock);
+    locked=SUCCEEDED(hr);
+    if(!locked) return 0;
+    if(lock.hAllocation!=slot->StagingAllocation) {device->DrawTerminal=TRUE;address=NULL;}
+    else address=(BYTE *)lock.pData;
+  }
+  int unchanged=address &&
+      !AdmissionUmdStagingUploadNeeded(&slot->Sync,
+          AdmissionUmdStagingHash(address,slot->Bytes),slot->Bytes);
+  if(locked) {
+    D3DDDICB_UNLOCK unlock={};unlock.NumAllocations=1;
+    unlock.phAllocations=&slot->StagingAllocation;
+    if(FAILED(device->KernelCallbacks->pfnUnlockCb(device->RuntimeDevice.handle,&unlock))) {
+      AcquireSRWLockExclusive(&device->ScreenBufferLock);
+      slot->LockedBase=address;slot->Mapped=TRUE;
+      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+      device->DrawTerminal=TRUE;return -1;
+    }
+  }
+  return device->DrawTerminal ? -1 : unchanged;
+}
+
 static int transfer_slot(ADMISSION_UMD_DEVICE *device,
                           ADMISSION_UMD_SCREEN_BUFFER *slot,bool download,
                           UINT *transfer_count,ULONGLONG *transfer_bytes) {
+  if(!download) {
+    int unchanged=staging_unchanged(device,slot);
+    if(unchanged<0) return 0;
+    if(unchanged) return 1;
+  }
+  AdmissionUmdStagingInvalidate(&slot->Sync);
   auto *payload=(APPLE_AGX_G3_COPY_REQUEST *)HeapAlloc(
       GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(APPLE_AGX_G3_COPY_REQUEST));
   if(!payload) return 0;
@@ -427,6 +466,10 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
     if(transfer_bytes) *transfer_bytes+=count;
     offset+=count;
   }
+  /* Staging now equals the canonical allocation in both directions. */
+  if(success)
+    AdmissionUmdStagingRecord(&slot->Sync,
+        AdmissionUmdStagingHash(address,slot->Bytes),slot->Bytes);
   /* Borrowed/imported storage must be unlocked before publication. Native
    * persistent maps can be uncached only through the native BO owner. */
   if(success) step=4u;

@@ -1,6 +1,7 @@
 #ifndef APPLE_AGX_UMD_INTERNAL_H
 #define APPLE_AGX_UMD_INTERNAL_H
 
+#include "umd_staging_sync.h"
 #include "direct_flip_contract.h"
 #include "render_win32_transport.h"
 #include "umd_resource_lifetime.h"
@@ -56,6 +57,8 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
    * target (CpuVisible=0, local segment, 64 KiB aligned): no staging, no
    * copy, never deallocated by the UMD. */
   BOOL Direct;
+  /* Content hash of the staging copy at the last upload/download. */
+  ADMISSION_UMD_STAGING_SYNC Sync;
 #endif
 } ADMISSION_UMD_SCREEN_BUFFER;
 
