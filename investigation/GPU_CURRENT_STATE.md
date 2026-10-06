@@ -484,3 +484,9 @@ Do not claim whole-suite GREEN or fix unrelated harnesses.
 - Rejected: dispose order (2511a332, EXP980R); stale canonical VA in UMD (EXP982).
 - Active hypothesis (to verify against Microsoft WDDM GPUVA residency docs before code): the CPU-time copy escape reads PTEs outside the window where WDDM guarantees them (VidMm only guarantees residency/PTEs while the device's GPU work is scheduled), so a copy issued between Map/MakeResident and the first scheduled submission can see unpopulated PTEs.
 - Next causal target: move staging<->canonical copies to execution time of the device's submission (KMD performs them when VidMm guarantees residency) or otherwise bind them to a WDDM-guaranteed event; design offline first.
+
+## 2026-10-07 night: draws never rasterize in the G4 D3D path (EXP989 + self-test)
+- Fixed tonight: written-only downloads (6c5a4a65, consumers no longer overwrite shared staging); PageTableUpdateRequireAddressSpaceIdle cleared (b9f56bd8, removes VidMm process-idle per table update and most predicate57).
+- Deterministic on-device test tools/agx-render-selftest (b21a4371): clear PASS, cross-device shared clear PASS, every draw FAIL (no fragments) at 16..256 px. Root cause of the black desktop is the draw path, not residency/copies.
+- Active target: why TA/VDM geometry produces no fragments in mesa -> G4 native render -> KMD template builder -> firmware. Candidates to check offline first: UMD-written buffer-manager page/block lists (process ranges 0-2), VDM stream/encoder relocation (object 37), vertex helper/PPP, TA command fields vs Asahi fw/vertex.rs; then a KMD receipt of BM/TA counters after one self-test draw.
+- Recovery profile unchanged; package removed after each run.
