@@ -31,7 +31,7 @@ FUNCTIONS = {
         "AdmissionGpuvaG3ResolveTable", "AdmissionG3RecordSetRootSeen", "AdmissionDdiSetRootPageTable",
         "AdmissionGpuvaG3SubmitVirtualPaging",
         "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
-        "AdmissionG4GraphAccessTyped", "AdmissionG4FindPrivateScene","AdmissionG4FindPrivateResubmission","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy", "AdmissionG4SnapRead", "AdmissionGpuvaG3BeginJob",
+        "AdmissionG4GraphAccessTyped", "AdmissionG4FindPrivateScene","AdmissionG4FindPrivateResubmission","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy", "AdmissionGpuvaG3BeginJob",
         "AdmissionGpuvaG3CompleteJob",
     ],
     "gpuva_g3_paging_windows.c": [
@@ -110,7 +110,7 @@ def generate(revision=None, function_revisions=None):
                     "AdmissionG3RecordSetRootSeen",
                     "AdmissionGpuvaG3SubmitVirtualPaging",
                     "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
-                    "AdmissionG4GraphAccessTyped", "AdmissionG4FindPrivateScene","AdmissionG4FindPrivateResubmission","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy", "AdmissionG4SnapRead", "AdmissionGpuvaG3BeginJob",
+                    "AdmissionG4GraphAccessTyped", "AdmissionG4FindPrivateScene","AdmissionG4FindPrivateResubmission","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy", "AdmissionGpuvaG3BeginJob",
                     "AdmissionGpuvaG3CompleteJob",
                     "AdmissionG3FindPagingEdge",
                     "AdmissionG3ResolveLogicalVa",

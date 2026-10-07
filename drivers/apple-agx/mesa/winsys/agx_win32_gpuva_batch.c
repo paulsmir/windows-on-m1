@@ -293,6 +293,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
    * firmware path with the UAPI NO_VERTEX_CLUSTERING bit. */
   native_render.Flags|=1u<<2;
   if(!prepare_process_buffers(b,g,&native_render,ranges)) { fail_site=__LINE__; goto fail; }
+#ifdef _MSC_VER
   if(AgxWin32VdmTraceHook && batch->vdm.bo) {
     const struct agx_bo *vbo=batch->vdm.bo;
     const unsigned char *map=(const unsigned char *)agx_bo_map((struct agx_bo *)vbo);
@@ -303,6 +304,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
           (const uint32_t *)(map+(render->vdm_ctrl_stream_base-base)),13u,
           (unsigned)batch->draws);
   }
+#endif
   if(!append_attachments(batch,&packet)) { fail_site=__LINE__; goto fail; }
   command_header=agx_cmd_header(false,0,0);
   if(!append_native(&packet,&command_header,sizeof(command_header)) ||

@@ -1993,6 +1993,7 @@ BOOLEAN AdmissionGpuvaG3PrivateContextBusy(ADMISSION_RENDER_CONTEXT *context) {
   return busy;
 }
 
+#ifdef _MSC_VER
 /* EXP990 receipt-only: copy bytes the GPU will read at a process VA through
  * the logical resident PTEs (G3 lock held). Returns bit0 any page resolved,
  * bit1 every page valid local. */
@@ -2022,6 +2023,7 @@ static ULONG AdmissionG4SnapRead(ADMISSION_CONTEXT *adapter,
   }
   return state;
 }
+#endif
 
 NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
     ADMISSION_RENDER_CONTEXT *context, ULONG fence) {
@@ -2091,6 +2093,7 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
     state->ActiveProcess = process;
     state->ActiveFence = fence;
     status = STATUS_SUCCESS;
+#ifdef _MSC_VER
     if (adapter->BackendImage.G4Native && g4_valid && g4_view.Render &&
         g4_view.RenderBytes == sizeof(APPLE_AGX_G4_NATIVE_RENDER)) {
       APPLE_AGX_G4_NATIVE_RENDER r;
@@ -2114,12 +2117,15 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
           slot->Dbias, sizeof(slot->Dbias), NULL);
       InterlockedExchange(&adapter->G4DrawSnapshotDirty, 1);
     }
+#endif
   } else if (process->Graph.Uncertain) {
     process->Poisoned = TRUE;
     status = STATUS_DEVICE_HARDWARE_ERROR;
   }
   ExReleaseFastMutex(&state->Lock);
+#ifdef _MSC_VER
   if (KeGetCurrentIrql() == PASSIVE_LEVEL) AdmissionRecordG4DrawSnapshot(adapter);
+#endif
   return status;
 }
 
