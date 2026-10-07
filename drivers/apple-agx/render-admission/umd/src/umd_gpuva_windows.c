@@ -466,7 +466,7 @@ static int wait_paging(void *context, uint64_t fence) {
 /* EXP1016 measurement only: DWM CPU read cost of staging inspection versus
  * copy-escape latency, aggregated and emitted every 128 samples. */
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
-static volatile LONG64 exp1016_stats[6]; /* hash calls/bytes/ticks, escape calls/bytes/ticks */
+static volatile LONG64 exp1016_stats[9]; /* hash, escape, EXP1019 second hash: calls/bytes/ticks */
 static void exp1016_note(UINT kind, ULONGLONG bytes, LONGLONG start) {
   LARGE_INTEGER end, frequency;
   if(!frame_process_is_dwm()) return;
@@ -550,6 +550,15 @@ static int staging_unchanged(ADMISSION_UMD_DEVICE *device,
       !AdmissionUmdStagingUploadNeeded(&slot->Sync,
           AdmissionUmdStagingHash(address,slot->Bytes),slot->Bytes);
   if(address) EXP1016_NOTE(0u,slot->Bytes,hash_start);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  /* EXP1019 measurement only: the same bytes again, now touched. */
+  if(address) {
+    EXP1016_START(rehash_start);
+    volatile unsigned long long rehash=AdmissionUmdStagingHash(address,slot->Bytes);
+    (void)rehash;
+    EXP1016_NOTE(2u,slot->Bytes,rehash_start);
+  }
+#endif
   if(locked) {
     D3DDDICB_UNLOCK unlock={};unlock.NumAllocations=1;
     unlock.phAllocations=&slot->StagingAllocation;
