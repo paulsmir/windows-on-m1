@@ -4315,6 +4315,23 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeReady(
   return AdmissionPlatformRuntimeReadyEx(Context, NULL);
 }
 
+/* EXP1013: the backend worker reports the completed fence to dxgkrnl before
+ * AdmissionPlatformWorkerFinished clears WorkScheduled, so VidSch may submit
+ * the next job inside that window. Admission must not refuse it (a failed
+ * SubmitCommandVirtual marks the device in error); the queued packet is
+ * dispatched by AdmissionPlatformWorkerFinished. */
+_Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeAcceptsWork(
+    ADMISSION_CONTEXT *Context, ULONG *FailedPredicate) {
+  ULONG reason = 0u;
+  BOOLEAN ready = AdmissionPlatformRuntimeReadyEx(Context, &reason);
+  if (!ready && reason == 8u) {
+    ready = TRUE;
+    reason = 0u;
+  }
+  if (FailedPredicate != NULL) *FailedPredicate = reason;
+  return ready;
+}
+
 #undef ADMISSION_DELEGATE_FENCE
 #undef ADMISSION_DELEGATE_JOB
 #undef ADMISSION_DELEGATE_ZERO

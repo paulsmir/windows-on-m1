@@ -39,7 +39,6 @@ class G4RenderLocalViewReplay(unittest.TestCase):
             '\n#include "render_qualification.h"\n'
             'static ADMISSION_DWM_ENVELOPE_RECEIPT observed_receipt;\n'
             'static void AdmissionDwmFrameRecordReject(ADMISSION_CONTEXT *a,void *c,ULONG b,NTSTATUS s){(void)a;(void)c;(void)b;(void)s;}\n'
-            'static int AdmissionPlatformRuntimeReadyEx(ADMISSION_CONTEXT *a,ULONG *reason){*reason=a->RuntimeReady ? 0u : 8u;return AdmissionPlatformRuntimeReady(a); }\n'
             'static unsigned long long KeQueryInterruptTime(void){return 1234;}\n'
             'static void AdmissionDwmFrameRecordEnvelope(ADMISSION_CONTEXT *a,void *c,const ADMISSION_DWM_ENVELOPE_RECEIPT *r){(void)a;(void)c;observed_receipt=*r;}\n'
             '#include "g4_submit_virtual_functions.inc"')
@@ -63,7 +62,7 @@ class G4RenderLocalViewReplay(unittest.TestCase):
           process.PrivateScenes=NULL;
           adapter.RuntimeReady=0;
           assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)==STATUS_INVALID_PARAMETER);
-          assert(observed_receipt.Predicate==13 && observed_receipt.RuntimePredicate==8);
+          assert(observed_receipt.Predicate==13 && observed_receipt.RuntimePredicate==4);
           adapter.RuntimeReady=1;
           context.GpuvaG3Poisoned=1;
           assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)==STATUS_INVALID_PARAMETER);

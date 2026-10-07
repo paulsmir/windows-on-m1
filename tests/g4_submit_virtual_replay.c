@@ -249,6 +249,11 @@ static int InterlockedExchange(volatile int *value, int exchange) {
 static int AdmissionPlatformRuntimeReady(ADMISSION_CONTEXT *adapter) {
   return adapter->RuntimeReady;
 }
+static int AdmissionPlatformRuntimeAcceptsWork(ADMISSION_CONTEXT *adapter,
+                                               ULONG *reason) {
+  if (reason) *reason = adapter->RuntimeReady ? 0u : 4u;
+  return AdmissionPlatformRuntimeReady(adapter);
+}
 static NTSTATUS AdmissionMemoryRuntimeScanoutView(
     ADMISSION_CONTEXT *adapter, ADMISSION_SCANOUT_MEMORY_VIEW *view) {
   (void)adapter;

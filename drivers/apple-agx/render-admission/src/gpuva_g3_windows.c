@@ -2725,10 +2725,10 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
 #define ADMISSION_G4_REJECTS(id, expression) \
   ((expression) ? (envelopePredicate = (id), TRUE) : FALSE)
 #define ADMISSION_G4_RUNTIME_READY() \
-  AdmissionPlatformRuntimeReadyEx(adapter, &runtimePredicate)
+  AdmissionPlatformRuntimeAcceptsWork(adapter, &runtimePredicate)
 #else
 #define ADMISSION_G4_REJECTS(id, expression) (expression)
-#define ADMISSION_G4_RUNTIME_READY() AdmissionPlatformRuntimeReady(adapter)
+#define ADMISSION_G4_RUNTIME_READY() AdmissionPlatformRuntimeAcceptsWork(adapter, NULL)
 #endif
   if (ADMISSION_G4_REJECTS(1u, KeGetCurrentIrql() != PASSIVE_LEVEL) ||
       ADMISSION_G4_REJECTS(2u, state == NULL) ||
