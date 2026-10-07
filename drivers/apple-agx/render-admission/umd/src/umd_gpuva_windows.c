@@ -586,12 +586,50 @@ static int remap_canonical(ADMISSION_UMD_DEVICE *device,
   return ok;
 }
 
+/* EXP1010: VidMm completed the failing slots' MakeResident packet in ~40 us
+ * without placing the allocation (no NOT_RESIDENT fault, fill or page-in in
+ * the EXP1009 DxgKrnl trace), so the mapping stayed unpopulated. Dropping
+ * the persistent residency reference to zero and requesting it again makes
+ * VidMm re-evaluate the allocation's residency. */
+static int cycle_residency(ADMISSION_UMD_DEVICE *device,
+                           ADMISSION_UMD_SCREEN_BUFFER *slot) {
+  D3DKMT_HANDLE handle=slot->KernelAllocation;
+  if(!handle || !device->KernelCallbacks->pfnEvictCb ||
+     !device->KernelCallbacks->pfnMakeResidentCb) return 0;
+  if(slot->Resident) {
+    D3DDDICB_EVICT evict={};
+    evict.NumAllocations=1;evict.AllocationList=&handle;
+    if(FAILED(device->KernelCallbacks->pfnEvictCb(device->RuntimeDevice.handle,&evict)))
+      return 0;
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
+    slot->Resident=FALSE;
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  }
+  UINT priority=D3DDDI_ALLOCATIONPRIORITY_NORMAL;
+  D3DDDI_MAKERESIDENT request={};
+  request.hPagingQueue=device->PagingQueue;
+  request.NumAllocations=1;request.AllocationList=&handle;
+  request.PriorityList=&priority;
+  HRESULT hr=device->KernelCallbacks->pfnMakeResidentCb(
+      device->RuntimeDevice.handle,&request);
+  va_record(device,6u,slot->Token,handle,0,request.PagingFenceValue,hr);
+  if(FAILED(hr) && hr!=E_PENDING) return 0;
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  slot->Resident=TRUE;
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  int ok=hr!=E_PENDING || (request.PagingFenceValue &&
+                           wait_paging(device,request.PagingFenceValue));
+  UINT values[2]={(UINT)handle,(UINT)ok};
+  AdmissionUmdDiagnostic("measure-residency-cycle",hr,values,ARRAYSIZE(values));
+  return ok;
+}
+
 static int query_canonical(ADMISSION_UMD_DEVICE *device,
                            ADMISSION_UMD_SCREEN_BUFFER *slot,
                            APPLE_AGX_G3_COPY_REQUEST *payload) {
   int ok=copy_escape(device,payload) && payload->ProcessGeneration &&
       payload->MappingGeneration;
-  if(!ok && remap_canonical(device,slot)) {
+  if(!ok && cycle_residency(device,slot) && remap_canonical(device,slot)) {
     payload->Operation=APPLE_AGX_G3_COPY_QUERY;payload->Offset=0;
     payload->TransferBytes=0;payload->ProcessGeneration=0;payload->MappingGeneration=0;
     ok=copy_escape(device,payload) && payload->ProcessGeneration &&

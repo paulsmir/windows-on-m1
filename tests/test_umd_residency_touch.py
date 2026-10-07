@@ -58,6 +58,8 @@ struct ADMISSION_UMD_DEVICE { SLOT ScreenBuffers[16]; SRWLOCK ScreenBufferLock; 
 struct APPLE_AGX_G3_COPY_REQUEST { UINT Operation; ULONGLONG Offset; UINT TransferBytes; ULONGLONG ProcessGeneration, MappingGeneration; };
 static int touches, queries, query_ok_after, remaps;
 static int remap_canonical(ADMISSION_UMD_DEVICE*, const SLOT *s){ assert(s->CanonicalGpuVa); ++remaps; return 1; }
+static int cycles;
+static int cycle_residency(ADMISSION_UMD_DEVICE*, SLOT*){ ++cycles; return 1; }
 static int touch_device(ADMISSION_UMD_DEVICE*, uint64_t va){ assert(va); ++touches; return 1; }
 static int copy_escape(ADMISSION_UMD_DEVICE*, APPLE_AGX_G3_COPY_REQUEST *q){
   ++queries; if(queries>query_ok_after){q->ProcessGeneration=q->MappingGeneration=1;return 1;} return 0; }
@@ -77,7 +79,7 @@ int main(){
   /* EXP1006: QUERY failure -> one remap of the same VA, one retry. */
   APPLE_AGX_G3_COPY_REQUEST q={}; SLOT &s=d.ScreenBuffers[1]; s.Queried=0;
   remaps=0; queries=0; query_ok_after=1;
-  assert(query_canonical(&d,&s,&q) && queries==2 && remaps==1 && s.Queried);
+  assert(query_canonical(&d,&s,&q) && queries==2 && remaps==1 && cycles==1 && s.Queried);
   remaps=0; queries=0; query_ok_after=5; s.Queried=0;
   assert(!query_canonical(&d,&s,&q) && queries==2 && remaps==1 && !s.Queried);
   puts("EXP1003 residency touch: PASS");
