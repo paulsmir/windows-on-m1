@@ -8,8 +8,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionCpuQueueSubmit(
   ADMISSION_PRESENT_BLT_COMMAND presentCommand;
   KIRQL oldIrql;
   BOOLEAN queued;
-  if (Context == NULL || Args == NULL || Data == NULL || Bytes == 0u ||
-      (Kind != ADMISSION_CPU_PACKET_PAGING && Kind != ADMISSION_CPU_PACKET_PRESENT) ||
+  if (Context == NULL || Args == NULL ||
+      (Kind == ADMISSION_CPU_PACKET_NOP ? (Data != NULL || Bytes != 0u)
+                                        : (Data == NULL || Bytes == 0u)) ||
+      (Kind != ADMISSION_CPU_PACKET_PAGING && Kind != ADMISSION_CPU_PACKET_PRESENT &&
+       Kind != ADMISSION_CPU_PACKET_NOP) ||
       (Kind == ADMISSION_CPU_PACKET_PRESENT && Bytes > ADMISSION_PRESENT_BLT_DMA_MAX) ||
       (Kind == ADMISSION_CPU_PACKET_PAGING && Bytes % sizeof(ADMISSION_PAGING_RECORD) != 0u) ||
       Bytes > sizeof(Context->CpuQueue[0].Data) || Context->PagingWorkItem == NULL)
@@ -52,7 +55,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionCpuQueueSubmit(
   packet->PresentContext = presentContext;
   if (presentContext != NULL)
     presentContext->Object.FenceOutstanding = Args->SubmissionFenceId;
-  RtlCopyMemory(&packet->Data, Data, Bytes);
+  if (Bytes != 0u) RtlCopyMemory(&packet->Data, Data, Bytes);
   ++Context->CpuQueueCount;
   if (Kind == ADMISSION_CPU_PACKET_PAGING) {
     LONG records = (LONG)(Bytes / sizeof(ADMISSION_PAGING_RECORD));
@@ -98,7 +101,7 @@ Retry:
         RtlCopyMemory(Context->PresentCopyCommand, packet->Data.Present, packet->Bytes);
         Context->PresentCopyBytes = packet->Bytes;
         Context->PresentCopyContext = packet->PresentContext;
-      } else {
+      } else if (packet->Kind == ADMISSION_CPU_PACKET_PAGING) {
         RtlCopyMemory(Context->PagingRecords, packet->Data.Paging, packet->Bytes);
         Context->PagingRecordCount = packet->Bytes / sizeof(ADMISSION_PAGING_RECORD);
       }

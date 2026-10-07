@@ -357,6 +357,8 @@ typedef struct _ADMISSION_QUEUE_FAULT_SNAPSHOT {
 
 #define ADMISSION_CPU_PACKET_PAGING 1u
 #define ADMISSION_CPU_PACKET_PRESENT 2u
+/* EXP1003: completes in order with no work (residency touch). */
+#define ADMISSION_CPU_PACKET_NOP 3u
 typedef struct _ADMISSION_CPU_PACKET {
   ULONG Fence, Kind, Bytes;
   struct _ADMISSION_RENDER_CONTEXT *PresentContext;

@@ -2917,6 +2917,26 @@ Rollback:
       rollbackBranch, STATUS_INVALID_PARAMETER, 0u, TRUE);
 }
 
+/* EXP1003: residency touch, completed by the CPU queue in fence order. */
+static NTSTATUS AdmissionG4SubmitTouch(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context, const DXGKARG_SUBMITCOMMANDVIRTUAL *args) {
+  DXGKARG_SUBMITCOMMAND physical;
+  DXGK_SUBMITCOMMANDFLAGS unsupported = args->Flags;
+  unsupported.Resubmission = 0;
+  if (context->GpuvaG3Process == NULL || context->GpuvaG3Poisoned ||
+      (context->Object.Flags & (ADMISSION_CONTEXT_SYSTEM | ADMISSION_CONTEXT_GDI)) != 0u ||
+      unsupported.Value != 0u)
+    return AdmissionG4SubmitReject(adapter, context, args,
+        AdmissionG4RejectEnvelopeState, STATUS_INVALID_PARAMETER, 0u, TRUE);
+  RtlZeroMemory(&physical, sizeof(physical));
+  physical.hContext = args->hContext;
+  physical.DmaBufferVirtualAddress = args->DmaBufferVirtualAddress;
+  physical.DmaBufferSize = args->DmaBufferSize;
+  physical.SubmissionFenceId = args->SubmissionFenceId;
+  physical.Flags = args->Flags;
+  return AdmissionCpuQueueSubmit(adapter, &physical, ADMISSION_CPU_PACKET_NOP, NULL, 0u);
+}
+
 static NTSTATUS AdmissionDdiSubmitCommandVirtualInner(
     HANDLE Adapter, const DXGKARG_SUBMITCOMMANDVIRTUAL *Args) {
   ADMISSION_CONTEXT *adapter = (ADMISSION_CONTEXT *)Adapter;
@@ -2951,6 +2971,11 @@ static NTSTATUS AdmissionDdiSubmitCommandVirtualInner(
 #if defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
   InterlockedIncrement((volatile LONG *)&adapter->BltProbe.VirtualSubmitCalls);
 #endif
+  /* dxgkrnl places the UMD private data at the start of the DMA private data. */
+  if (Args->DmaBufferPrivateDataSize >= Args->DmaBufferUmdPrivateDataSize &&
+      AppleAgxG4IsTouch(Args->pDmaBufferPrivateData,
+                        Args->DmaBufferUmdPrivateDataSize))
+    return AdmissionG4SubmitTouch(adapter, context, Args);
   if (Args->DmaBufferUmdPrivateDataSize != 0u)
     return AdmissionG4SubmitVirtualEnvelope(adapter, context, Args);
   if (context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||

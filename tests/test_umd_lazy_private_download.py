@@ -49,12 +49,14 @@ typedef int SRWLOCK;
 static void AcquireSRWLockExclusive(SRWLOCK*){} static void ReleaseSRWLockExclusive(SRWLOCK*){}
 static void AcquireSRWLockShared(SRWLOCK*){} static void ReleaseSRWLockShared(SRWLOCK*){}
 struct SYNC { BOOL Valid; };
-struct SLOT { uint64_t Token; BOOL Active,Transition,CopyHeld,Direct,GpuWritten,Mapped,Borrowed;
-  UINT Flags,SubmissionHolds; D3DKMT_HANDLE KernelAllocation; SYNC Sync; };
+struct SLOT { uint64_t Token; BOOL Active,Transition,CopyHeld,Direct,GpuWritten,Mapped,Borrowed,Queried;
+  UINT Flags,SubmissionHolds; D3DKMT_HANDLE KernelAllocation; SYNC Sync; uint64_t CanonicalGpuVa; };
+static int touches;
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
 struct CB { void *pfnLockCb, *pfnUnlockCb; };
 struct ADMISSION_UMD_DEVICE { SLOT ScreenBuffers[16]; SRWLOCK ScreenBufferLock; CB *KernelCallbacks; };
 static unsigned downloads[16], uploads[16];
+static int touch_device(ADMISSION_UMD_DEVICE*, uint64_t){ ++touches; return 1; }
 static int transfer_slot(ADMISSION_UMD_DEVICE *d, SLOT *s, bool download, UINT *, ULONGLONG *) {
   unsigned i=(unsigned)(s-d->ScreenBuffers); if(download) ++downloads[i]; else ++uploads[i];
   s->Sync.Valid=TRUE; return 1; }

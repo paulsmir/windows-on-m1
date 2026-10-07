@@ -200,6 +200,13 @@ static NTSTATUS AdmissionPresentSubmitVirtual(
 }
 static int AppleAgxDmaShadowOpen(APPLE_AGX_DMA_SHADOW *s,
     const void *p, unsigned n) { (void)s;(void)p;(void)n;return 0; }
+#define ADMISSION_CPU_PACKET_NOP 3u
+static unsigned replay_touch_queued;
+static NTSTATUS AdmissionCpuQueueSubmit(ADMISSION_CONTEXT *a,
+    const DXGKARG_SUBMITCOMMAND *args, ULONG kind, const void *data, UINT bytes) {
+  (void)a; (void)args; assert(kind == ADMISSION_CPU_PACKET_NOP && !data && !bytes);
+  ++replay_touch_queued; return STATUS_SUCCESS;
+}
 static NTSTATUS AdmissionDdiSubmitRender(ADMISSION_CONTEXT *a,
     const DXGKARG_SUBMITCOMMAND *p) {
   (void)a;(void)p;return STATUS_INVALID_PARAMETER;

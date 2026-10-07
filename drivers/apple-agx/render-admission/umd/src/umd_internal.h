@@ -61,6 +61,8 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   ADMISSION_UMD_STAGING_SYNC Sync;
   /* EXP999: per-64 KiB-chunk record of the canonical content. */
   ADMISSION_UMD_STAGING_CHUNK_SET Chunks;
+  /* EXP1003: a copy QUERY of this slot succeeded at least once. */
+  BOOL Queried;
   /* EXP978: one persistent MakeResident reference for the slot lifetime;
    * dropped by DeallocateCb, or by EvictCb for borrowed Direct allocations. */
   BOOL Resident;

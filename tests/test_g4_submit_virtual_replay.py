@@ -45,7 +45,7 @@ class G4SubmitVirtualReplay(unittest.TestCase):
             "AdmissionG4GraphAccessTyped", "AdmissionG4FindPrivateScene","AdmissionG4FindPrivateResubmission","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy",
             "AdmissionG4SnapshotFailure", "AdmissionG4ResolveOutput",
             "AdmissionG4SubmitVirtualEnvelope",
-            "AdmissionG3OutputMatchesLocal", "AdmissionGpuvaG3BeginJob",
+            "AdmissionG3OutputMatchesLocal", "AdmissionGpuvaG3BeginJob", "AdmissionG4SubmitTouch",
             "AdmissionDdiSubmitCommandVirtualInner",
             "AdmissionDdiSubmitCommandVirtual"))
         functions = function_body(production, "AdmissionG4SubmitRejectDetail") + "\n" + functions

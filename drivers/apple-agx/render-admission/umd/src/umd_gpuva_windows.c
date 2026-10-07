@@ -7,6 +7,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #pragma warning(pop)
 #include "umd_internal.h"
 #include "apple_agx_g3_copy_abi.h"
+#include "apple_agx_g4_submit.h"
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
 #include "render_qualification.h"
 #endif
@@ -494,6 +495,50 @@ static int staging_unchanged(ADMISSION_UMD_DEVICE *device,
   return device->DrawTerminal ? -1 : unchanged;
 }
 
+static int signal_render(ADMISSION_UMD_DEVICE *device,uint64_t next);
+
+/* EXP1003: VidMm populates the PTEs of a MakeResident'ed mapping only when
+ * the device is next scheduled (EXP1001 leaf ring: the mapping's last update
+ * stayed the invalid one written at Map time). A CPU-time copy into a slot
+ * before its first scheduled use therefore reads unpopulated PTEs. An empty
+ * touch submission makes VidSch schedule the device first; the KMD completes
+ * it on its CPU queue without GPU work. */
+static int touch_device(ADMISSION_UMD_DEVICE *device,uint64_t va) {
+  APPLE_AGX_G4_TOUCH touch={APPLE_AGX_G4_TOUCH_MAGIC,(unsigned)sizeof(touch)};
+  D3DDDICB_SUBMITCOMMAND request={};
+  if(!va || !device->KernelContext || !device->RenderSyncObject ||
+     !device->KernelCallbacks->pfnSubmitCommandCb ||
+     device->NextRenderFence>UINT64_MAX-2) return 0;
+  request.Commands=va;request.CommandLength=sizeof(uint32_t);
+  request.BroadcastContextCount=1;request.BroadcastContext[0]=device->KernelContext;
+  request.pPrivateDriverData=&touch;request.PrivateDriverDataSize=sizeof(touch);
+  request.RenderCBSequence=(UINT)InterlockedIncrement(&device->RenderCbSequence);
+  HRESULT hr=device->KernelCallbacks->pfnSubmitCommandCb(
+      device->RuntimeDevice.handle,&request);
+  uint64_t next=device->NextRenderFence+1;
+  int ok=SUCCEEDED(hr) && signal_render(device,next) &&
+      wait_object(device,device->RenderSyncObject,next);
+  if(ok) device->NextRenderFence=next;
+  UINT values[2]={(UINT)va,(UINT)ok};
+  AdmissionUmdDiagnostic("measure-touch",hr,values,ARRAYSIZE(values));
+  return ok;
+}
+
+static int query_canonical(ADMISSION_UMD_DEVICE *device,
+                           ADMISSION_UMD_SCREEN_BUFFER *slot,
+                           APPLE_AGX_G3_COPY_REQUEST *payload) {
+  int ok=copy_escape(device,payload) && payload->ProcessGeneration &&
+      payload->MappingGeneration;
+  if(!ok && touch_device(device,slot->CanonicalGpuVa)) {
+    payload->Operation=APPLE_AGX_G3_COPY_QUERY;payload->Offset=0;
+    payload->TransferBytes=0;payload->ProcessGeneration=0;payload->MappingGeneration=0;
+    ok=copy_escape(device,payload) && payload->ProcessGeneration &&
+        payload->MappingGeneration;
+  }
+  if(ok) slot->Queried=TRUE;
+  return ok;
+}
+
 static int transfer_slot(ADMISSION_UMD_DEVICE *device,
                           ADMISSION_UMD_SCREEN_BUFFER *slot,bool download,
                           UINT *transfer_count,ULONGLONG *transfer_bytes) {
@@ -515,7 +560,7 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
 #endif
   UINT step=1u; /* EXP870 diagnostic: 1 query 2 lock 3 transfer 4 unmap 5 unlock */
   HRESULT lock_hr=S_OK;
-  int success=copy_escape(device,payload) && payload->ProcessGeneration && payload->MappingGeneration;
+  int success=query_canonical(device,slot,payload);
   if(success) step=2u;
   BYTE *address=(BYTE *)slot->LockedBase;
   bool temporary=!slot->Mapped, locked=false;
@@ -633,6 +678,16 @@ static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
 #endif
   if(!device->KernelCallbacks->pfnLockCb || !device->KernelCallbacks->pfnUnlockCb)
     return 0;
+  /* EXP1003: one touch before the first copy into any never-queried slot. */
+  if(!download) {
+    uint64_t fresh=0;
+    for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT && !fresh;++i) {
+      auto *slot=&device->ScreenBuffers[i];
+      if(slot->CopyHeld && !slot->Direct && !slot->Queried &&
+         !(cpu_quiet(slot) && slot->Sync.Valid)) fresh=slot->CanonicalGpuVa;
+    }
+    if(fresh) (void)touch_device(device,fresh);
+  }
   for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i) {
     auto *slot=&device->ScreenBuffers[i];
     if(!slot->CopyHeld || slot->Direct ||

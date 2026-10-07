@@ -46,6 +46,22 @@ typedef struct {
   unsigned long long CommandVa;
 } APPLE_AGX_G4_PRIVATE_HEADER;
 
+/* EXP1003: an empty render-context submission. Its only effect is that
+ * VidSch schedules the device, so VidMm makes the residency list resident and
+ * populates its PTEs (Residency overview) before CPU staging copies run. */
+#define APPLE_AGX_G4_TOUCH_MAGIC 0x48435554u /* 'TUCH' */
+typedef struct {
+  unsigned int Magic;
+  unsigned int Bytes;
+} APPLE_AGX_G4_TOUCH;
+
+static inline int AppleAgxG4IsTouch(const void *Data, unsigned int Bytes) {
+  const APPLE_AGX_G4_TOUCH *touch = (const APPLE_AGX_G4_TOUCH *)Data;
+  return Data != 0 && Bytes == sizeof(*touch) &&
+         touch->Magic == APPLE_AGX_G4_TOUCH_MAGIC &&
+         touch->Bytes == sizeof(*touch);
+}
+
 /* Version 2 passes VidMm-owned process mappings to the KMD constructor.
  * Order: TVB page list, block list, block heap, user buffer, tilemap,
  * heap metadata, tail-pointer cache, preemption scratch, auxiliary FB.
