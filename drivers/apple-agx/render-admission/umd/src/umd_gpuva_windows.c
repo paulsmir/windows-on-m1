@@ -557,12 +557,41 @@ static int touch_device(ADMISSION_UMD_DEVICE *device,uint64_t va) {
   return ok;
 }
 
+/* EXP1006: the failing mappings keep the invalid entries written at Map time
+ * (EXP1001/EXP1004 leaf rings) although the allocation is resident. Mapping
+ * the same allocation at the same VA again makes VidMm rewrite the range from
+ * the allocation's current placement. */
+static int remap_canonical(ADMISSION_UMD_DEVICE *device,
+                           const ADMISSION_UMD_SCREEN_BUFFER *slot) {
+  D3DDDI_MAPGPUVIRTUALADDRESS request={};
+  if(!slot->CanonicalGpuVa || !slot->KernelAllocation || !slot->Bytes ||
+     !device->KernelCallbacks->pfnMapGpuVirtualAddressCb) return 0;
+  request.hPagingQueue=device->PagingQueue;
+  request.BaseAddress=slot->CanonicalGpuVa;
+  request.hAllocation=slot->KernelAllocation;
+  request.OffsetInPages=0;
+  request.SizeInPages=((slot->Bytes+0xffffULL)&~0xffffULL)>>12;
+  request.Protection.Write=(slot->Flags & AppleAgxWin32BufferGpuWrite)!=0;
+  request.Protection.Execute=slot->ClassId==AgxWin32BufferClassShader;
+  HRESULT hr=device->KernelCallbacks->pfnMapGpuVirtualAddressCb(
+      device->RuntimeDevice.handle,&request);
+  va_record(device,2u,slot->Token,request.hAllocation,request.BaseAddress,
+            request.SizeInPages<<12,hr);
+  int ok=(SUCCEEDED(hr) || hr==E_PENDING) &&
+      request.VirtualAddress==slot->CanonicalGpuVa &&
+      (hr!=E_PENDING || (request.PagingFenceValue &&
+                         wait_paging(device,request.PagingFenceValue)));
+  UINT values[3]={(UINT)slot->CanonicalGpuVa,(UINT)(slot->CanonicalGpuVa>>32),(UINT)ok};
+  AdmissionUmdDiagnostic("measure-remap",hr,values,ARRAYSIZE(values));
+  return ok;
+}
+
 static int query_canonical(ADMISSION_UMD_DEVICE *device,
                            ADMISSION_UMD_SCREEN_BUFFER *slot,
                            APPLE_AGX_G3_COPY_REQUEST *payload) {
   int ok=copy_escape(device,payload) && payload->ProcessGeneration &&
       payload->MappingGeneration;
-  if(!ok && touch_device(device,slot->CanonicalGpuVa)) {
+  if(!ok && remap_canonical(device,slot)) {
     payload->Operation=APPLE_AGX_G3_COPY_QUERY;payload->Offset=0;
     payload->TransferBytes=0;payload->ProcessGeneration=0;payload->MappingGeneration=0;
     ok=copy_escape(device,payload) && payload->ProcessGeneration &&

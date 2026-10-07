@@ -56,7 +56,8 @@ typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
 struct CB { void *pfnLockCb, *pfnUnlockCb; };
 struct ADMISSION_UMD_DEVICE { SLOT ScreenBuffers[16]; SRWLOCK ScreenBufferLock; CB *KernelCallbacks; };
 struct APPLE_AGX_G3_COPY_REQUEST { UINT Operation; ULONGLONG Offset; UINT TransferBytes; ULONGLONG ProcessGeneration, MappingGeneration; };
-static int touches, queries, query_ok_after;
+static int touches, queries, query_ok_after, remaps;
+static int remap_canonical(ADMISSION_UMD_DEVICE*, const SLOT *s){ assert(s->CanonicalGpuVa); ++remaps; return 1; }
 static int touch_device(ADMISSION_UMD_DEVICE*, uint64_t va){ assert(va); ++touches; return 1; }
 static int copy_escape(ADMISSION_UMD_DEVICE*, APPLE_AGX_G3_COPY_REQUEST *q){
   ++queries; if(queries>query_ok_after){q->ProcessGeneration=q->MappingGeneration=1;return 1;} return 0; }
@@ -73,12 +74,12 @@ int main(){
   touches=0; assert(transfer_held(&d,true)==1 && touches==0);
   /* An unmapped private slot with a valid record is skipped and needs no touch. */
   d.ScreenBuffers[2].Mapped=0; touches=0; assert(transfer_held(&d,false)==1 && touches==0);
-  /* QUERY failure: one touch, one retry, slot marked queried. */
+  /* EXP1006: QUERY failure -> one remap of the same VA, one retry. */
   APPLE_AGX_G3_COPY_REQUEST q={}; SLOT &s=d.ScreenBuffers[1]; s.Queried=0;
-  touches=0; queries=0; query_ok_after=1;
-  assert(query_canonical(&d,&s,&q) && queries==2 && touches==1 && s.Queried);
-  touches=0; queries=0; query_ok_after=5; s.Queried=0;
-  assert(!query_canonical(&d,&s,&q) && queries==2 && touches==1 && !s.Queried);
+  remaps=0; queries=0; query_ok_after=1;
+  assert(query_canonical(&d,&s,&q) && queries==2 && remaps==1 && s.Queried);
+  remaps=0; queries=0; query_ok_after=5; s.Queried=0;
+  assert(!query_canonical(&d,&s,&q) && queries==2 && remaps==1 && !s.Queried);
   puts("EXP1003 residency touch: PASS");
 }
 '''
