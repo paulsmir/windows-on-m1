@@ -698,7 +698,10 @@ SupportedDDIInterfaceVersions[] = {
         ('struct pipe_context *pipe;','''struct pipe_context *pipe;
    AGX_D3D10_WINDOWS_DEVICE *windows;
    HRESULT cleanup_result;
-   bool frontend_ready;'''),
+   bool frontend_ready;
+   /* EXP994: D3D disables depth/stencil while no DSV is bound. */
+   void *app_dsa;
+   void *no_depth_dsa;'''),
         ('''static inline void
 SetError(D3D10DDI_HDEVICE hDevice, HRESULT hr)
 {
@@ -1054,6 +1057,53 @@ void APIENTRY
    if (FAILED(result)) SetError(hDevice, result);''')
     change('src/gallium/frontends/d3d10umd/OutputMerger.cpp',
         'fefcbe8754fd1042b7bf091feab767844cc71a8fe4cbe9f0b41d76dc9dd4fd04',[
+        # EXP994: D3D10/11 disable depth and stencil tests while no depth-
+        # stencil view is bound. Gallium leaves this to the frontend (st/mesa
+        # does it for GL); without it the runtime default DepthEnable/LESS
+        # state rejected every fragment against background depth 0.0.
+        ('''void APIENTRY
+SetRenderTargets(D3D10DDI_HDEVICE hDevice,''','''static void
+AgxD3d10ApplyDepthStencil(Device *pDevice)
+{
+   struct pipe_context *pipe = pDevice->pipe;
+   void *state = pDevice->app_dsa;
+   if (!pDevice->fb.zsbuf.texture) {
+      if (!pDevice->no_depth_dsa) {
+         struct pipe_depth_stencil_alpha_state disabled;
+         memset(&disabled, 0, sizeof disabled);
+         pDevice->no_depth_dsa =
+            pipe->create_depth_stencil_alpha_state(pipe, &disabled);
+      }
+      state = pDevice->no_depth_dsa;
+   }
+   pipe->bind_depth_stencil_alpha_state(pipe, state);
+}
+
+void APIENTRY
+SetRenderTargets(D3D10DDI_HDEVICE hDevice,'''),
+        ('''   pipe->set_framebuffer_state(pipe, &pDevice->fb);
+}''','''   pipe->set_framebuffer_state(pipe, &pDevice->fb);
+   AgxD3d10ApplyDepthStencil(pDevice);
+}'''),
+        ('''   struct pipe_context *pipe = CastPipeContext(hDevice);
+   void *state = CastPipeDepthStencilState(hState);
+   struct pipe_stencil_ref psr;
+
+   psr.ref_value[0] = StencilRef;
+   psr.ref_value[1] = StencilRef;
+
+   pipe->bind_depth_stencil_alpha_state(pipe, state);
+   pipe->set_stencil_ref(pipe, psr);''','''   Device *pDevice = CastDevice(hDevice);
+   struct pipe_context *pipe = CastPipeContext(hDevice);
+   void *state = CastPipeDepthStencilState(hState);
+   struct pipe_stencil_ref psr;
+
+   psr.ref_value[0] = StencilRef;
+   psr.ref_value[1] = StencilRef;
+
+   pDevice->app_dsa = state;
+   AgxD3d10ApplyDepthStencil(pDevice);
+   pipe->set_stencil_ref(pipe, psr);'''),
         ('''   LOG_ENTRYPOINT();
 
    struct pipe_resource *resource = CastPipeResource(pCreateRenderTargetView->hDrvResource);''',

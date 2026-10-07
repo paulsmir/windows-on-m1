@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
@@ -136,6 +137,28 @@ int main(int argc, char **argv) {
     c->Draw(3, 0);
   };
   const float black[4] = {0, 0, 0, 0};
+  // Explicit pipeline state (argv[3]=="explicit"): blend write-all, no cull,
+  // depth disabled. Distinguishes default-state bugs from draw execution.
+  const char *mode = argc > 3 ? argv[3] : "";
+  bool want_blend = !strcmp(mode, "explicit") || !strcmp(mode, "blend");
+  bool want_raster = !strcmp(mode, "explicit") || !strcmp(mode, "raster");
+  bool want_depth = !strcmp(mode, "explicit") || !strcmp(mode, "depth");
+  if (want_blend || want_raster || want_depth) {
+    D3D11_BLEND_DESC bdsc = {}; bdsc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+    bdsc.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE; bdsc.RenderTarget[0].DestBlend = D3D11_BLEND_ZERO;
+    bdsc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD; bdsc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+    bdsc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO; bdsc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+    ID3D11BlendState *bs = nullptr; d->CreateBlendState(&bdsc, &bs);
+    D3D11_RASTERIZER_DESC rd = {}; rd.FillMode = D3D11_FILL_SOLID; rd.CullMode = D3D11_CULL_NONE; rd.DepthClipEnable = TRUE;
+    ID3D11RasterizerState *rs = nullptr; d->CreateRasterizerState(&rd, &rs);
+    D3D11_DEPTH_STENCIL_DESC dd = {}; dd.DepthEnable = FALSE; dd.StencilEnable = FALSE;
+    ID3D11DepthStencilState *ds = nullptr; d->CreateDepthStencilState(&dd, &ds);
+    const float bf[4] = {0, 0, 0, 0};
+    if (want_blend) c->OMSetBlendState(bs, bf, 0xffffffffu);
+    if (want_raster) c->RSSetState(rs);
+    if (want_depth) c->OMSetDepthStencilState(ds, 0);
+    printf("state mode=%s blend=%d raster=%d depth=%d\n", mode, want_blend, want_raster, want_depth);
+  }
   // 2a. Solid-colour pixel shader over a red clear (does the draw run at all?).
   {
     c->ClearRenderTargetView(rtv, red);
