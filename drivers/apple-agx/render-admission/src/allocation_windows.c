@@ -469,13 +469,6 @@ static NTSTATUS AdmissionCreateAllocationImpl(
 #endif
   /* EXP836: the only admitted Mesa class shape keeps AccessedPhysically. */
   info->FlagsWddm2.AccessedPhysically = 1u;
-#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  /* EXP1020: staging is never accessed by the GPU, physically or virtually.
-   * EXP1019: its CPU mapping read at 87 MB/s versus 2.6 GB/s for ordinary
-   * memory even when Cached and system-memory backed. */
-  if (info->FlagsWddm2.Cached)
-    info->FlagsWddm2.AccessedPhysically = 0u;
-#endif
   info->pAllocationUsageHint = NULL;
   info->AllocationPriority = D3DDDI_ALLOCATIONPRIORITY_NORMAL;
   info->Flags2.Value = 0u;

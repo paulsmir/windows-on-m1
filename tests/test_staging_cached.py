@@ -27,8 +27,6 @@ class StagingCached(unittest.TestCase):
         self.assertLess(text.index('info->FlagsWddm2.Value = 0u;'), cached)
         tail = text[cached:text.index('return STATUS_SUCCESS;', cached)]
         self.assertNotIn('FlagsWddm2.Value', tail)
-        # EXP1020: only CPU-only staging drops AccessedPhysically.
-        self.assertIn('if (info->FlagsWddm2.Cached)\n    info->FlagsWddm2.AccessedPhysically = 0u;', tail)
 
     def test_cpu_visible_allocations_live_in_system_memory(self):
         """EXP1017: Cached is ignored in the reserved-DDR memory segment."""
