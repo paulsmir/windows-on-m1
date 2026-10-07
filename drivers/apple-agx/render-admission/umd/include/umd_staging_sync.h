@@ -49,4 +49,42 @@ static inline void AdmissionUmdStagingInvalidate(ADMISSION_UMD_STAGING_SYNC *Syn
   if (Sync != 0) Sync->Valid = 0;
 }
 
+/* EXP999: per-chunk hashes of the canonical copy as last synchronized. A
+ * changed staging chunk is uploaded; an unchanged one is skipped (EXP997:
+ * reused 512 KiB encoder BOs were re-sent whole for a few KiB of commands). */
+#define ADMISSION_UMD_STAGING_CHUNKS 64u
+typedef struct _ADMISSION_UMD_STAGING_CHUNK_SET {
+  unsigned long long Hash[ADMISSION_UMD_STAGING_CHUNKS];
+  int Valid;
+} ADMISSION_UMD_STAGING_CHUNK_SET;
+
+static inline int AdmissionUmdStagingChunked(unsigned long long Bytes,
+                                             unsigned long long Chunk) {
+  return Chunk != 0u && Bytes != 0u &&
+         Bytes <= Chunk * (unsigned long long)ADMISSION_UMD_STAGING_CHUNKS;
+}
+
+static inline int AdmissionUmdStagingChunkCurrent(
+    const ADMISSION_UMD_STAGING_CHUNK_SET *Set, unsigned Index,
+    unsigned long long Hash) {
+  return Set != 0 && Set->Valid && Index < ADMISSION_UMD_STAGING_CHUNKS &&
+         Set->Hash[Index] == Hash;
+}
+
+static inline void AdmissionUmdStagingChunkStore(
+    ADMISSION_UMD_STAGING_CHUNK_SET *Set, unsigned Index,
+    unsigned long long Hash) {
+  if (Set != 0 && Index < ADMISSION_UMD_STAGING_CHUNKS) Set->Hash[Index] = Hash;
+}
+
+static inline void AdmissionUmdStagingChunksValidate(
+    ADMISSION_UMD_STAGING_CHUNK_SET *Set) {
+  if (Set != 0) Set->Valid = 1;
+}
+
+static inline void AdmissionUmdStagingChunksInvalidate(
+    ADMISSION_UMD_STAGING_CHUNK_SET *Set) {
+  if (Set != 0) Set->Valid = 0;
+}
+
 #endif

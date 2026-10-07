@@ -534,18 +534,33 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
   }
   if(success && (!address || !payload->ProcessGeneration || !payload->MappingGeneration)) success=0;
   if(success) step=3u;
+  /* EXP999: skip chunks whose content equals the canonical copy. */
+  bool chunked=AdmissionUmdStagingChunked(slot->Bytes,APPLE_AGX_G3_COPY_CAPACITY)!=0;
   if(success) for(uint64_t offset=0;offset<slot->Bytes;) {
     UINT count=(UINT)((slot->Bytes-offset)>APPLE_AGX_G3_COPY_CAPACITY ?
         APPLE_AGX_G3_COPY_CAPACITY : slot->Bytes-offset);
+    UINT chunk=(UINT)(offset/APPLE_AGX_G3_COPY_CAPACITY);
+    unsigned long long chunk_hash=0;
+    if(!download && chunked) {
+      chunk_hash=AdmissionUmdStagingHash(address+offset,count);
+      if(AdmissionUmdStagingChunkCurrent(&slot->Chunks,chunk,chunk_hash)) {
+        offset+=count;continue;
+      }
+    }
     payload->Operation=download ? APPLE_AGX_G3_COPY_DOWNLOAD : APPLE_AGX_G3_COPY_UPLOAD;
     payload->Offset=offset;payload->TransferBytes=count;
     if(!download) CopyMemory(payload->Data,address+offset,count);
     if(!copy_escape(device,payload)) {success=0;break;}
     if(download) CopyMemory(address+offset,payload->Data,count);
+    if(chunked)
+      AdmissionUmdStagingChunkStore(&slot->Chunks,chunk,download ?
+          AdmissionUmdStagingHash(address+offset,count) : chunk_hash);
     if(transfer_count) ++*transfer_count;
     if(transfer_bytes) *transfer_bytes+=count;
     offset+=count;
   }
+  if(success && chunked) AdmissionUmdStagingChunksValidate(&slot->Chunks);
+  else AdmissionUmdStagingChunksInvalidate(&slot->Chunks);
   /* Staging now equals the canonical allocation in both directions. */
   if(success)
     AdmissionUmdStagingRecord(&slot->Sync,
