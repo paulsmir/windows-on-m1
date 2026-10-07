@@ -1052,7 +1052,9 @@ RetryPagingQuiescence:
     /* R161 (EXP874): an UPLOAD/DOWNLOAD also waits until every built paging
      * FILL/TRANSFER ran; otherwise it writes the new placement and a later
      * transfer overwrites it (or it reads the placement before the move). */
-    if(!p || (!state->ActiveProcess && !p->Graph.JobInFlight && !p->Graph.LeaseToken &&
+    /* EXP1002: canonical copies are process-private and run under this
+     * lock (BeginJob takes it too); only this process's job conflicts. */
+    if(!p || (state->ActiveProcess!=p && !p->Graph.JobInFlight && !p->Graph.LeaseToken &&
         (q->Operation==APPLE_AGX_G3_COPY_QUERY || AdmissionPagingQuiescent(adapter))) ||
        wait_ms>=3000u) break;
     ExReleaseFastMutex(&state->Lock);
@@ -1081,7 +1083,7 @@ RetryPagingQuiescence:
   COPY_REJECT_IF(!allocation->Win32ClassId, 39u, STATUS_INVALID_PARAMETER, Unlock);
   COPY_REJECT_IF(allocation->Object.Description.CpuVisible, 40u, STATUS_INVALID_PARAMETER, Unlock);
   COPY_REJECT_IF(allocation->Object.Description.Type!=ADMISSION_WIN32_ALLOCATION_GPU_LOCAL, 41u, STATUS_INVALID_PARAMETER, Unlock);
-  COPY_REJECT_IF(state->ActiveProcess, 42u, STATUS_DEVICE_BUSY, Unlock);
+  COPY_REJECT_IF(state->ActiveProcess==p, 42u, STATUS_DEVICE_BUSY, Unlock);
   COPY_REJECT_IF(p->Graph.JobInFlight, 43u, STATUS_DEVICE_BUSY, Unlock);
   COPY_REJECT_IF(p->Graph.LeaseToken, 44u, STATUS_DEVICE_BUSY, Unlock);
   /* A paging buffer can be built between the initial check and either final

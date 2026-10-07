@@ -149,6 +149,15 @@ static void r145_copy_cases(void) {
     assert(!state.ActiveProcess && !p->Graph.JobInFlight && !p->Graph.LeaseToken &&
         replay_irql==PASSIVE_LEVEL && !r145_references); }
   replay_delay_hook=NULL; r157_state=NULL; r157_process=NULL;
+  /* EXP1002: canonical copies are process-private and run under the G3
+   * lock; another process's in-flight job must not delay or refuse them. */
+  q->ProcessGeneration=0; q->MappingGeneration=0;
+  { ADMISSION_G3_PROCESS other; memset(&other,0,sizeof(other));
+    state.ActiveProcess=&other; replay_delay_calls=0;
+    a.G3CopyQueryFailureClaim=0; a.G3CopyQueryFailurePredicate=0;
+    NTSTATUS got=AdmissionDdiEscape(&a,&escape);
+    assert(got==STATUS_SUCCESS && replay_delay_calls==0);
+    state.ActiveProcess=NULL; }
   q->ProcessGeneration=0; q->MappingGeneration=0;
   QUERY_REJECT(allocation.Object.Description.Size=0,allocation.Object.Description.Size=0x10000,48,STATUS_INVALID_PARAMETER);
   QUERY_REJECT(allocation.Object.Description.Size=1ULL<<32,allocation.Object.Description.Size=0x10000,49,STATUS_INVALID_PARAMETER);
