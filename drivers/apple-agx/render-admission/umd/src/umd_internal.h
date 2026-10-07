@@ -227,6 +227,8 @@ extern "C" {
 void AdmissionUmdVaRecordDeallocate(const void *device, ULONGLONG token,
                                     D3DKMT_HANDLE allocation, ULONGLONG va,
                                     HRESULT hr);
+int AdmissionUmdGpuvaPrepareCpuMap(ADMISSION_UMD_DEVICE *device,
+                                   uint64_t token);
 #endif
 VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
                             const UINT *Values, UINT Count);

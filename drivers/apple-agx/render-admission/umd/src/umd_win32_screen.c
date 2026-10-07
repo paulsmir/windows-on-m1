@@ -349,6 +349,9 @@ HRESULT AdmissionUmdScreenPrepareSubmissionMaps(
     buffer->LockedAccess = 0u;
     buffer->Mapped = FALSE;
     buffer->Transition = FALSE;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    AdmissionUmdStagingInvalidate(&buffer->Sync); /* EXP995, see UnmapBuffer */
+#endif
   }
   if (FAILED(result)) {
     for (; index < count; ++index)
@@ -785,6 +788,14 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
       device->KernelCallbacks == NULL ||
       device->KernelCallbacks->pfnLockCb == NULL)
     return 0;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  /* EXP995: a private slot defers its post-submission download until the
+   * first CPU map; complete it before the staging becomes CPU-visible. */
+  if (!AdmissionUmdGpuvaPrepareCpuMap(device, Token)) {
+    device->LastScreenError = E_FAIL;
+    return 0;
+  }
+#endif
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
   if (device->ScreenClosing || device->DrawTerminal) {
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
@@ -891,6 +902,11 @@ static int AdmissionUmdScreenUnmapBuffer(void *Context,
   buffer->LockedAccess = 0u;
   buffer->Mapped = FALSE;
   buffer->Transition = FALSE;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  /* EXP995: CPU writes made through the map must reach the canonical copy:
+   * unmapped private slots are otherwise not re-inspected for upload. */
+  AdmissionUmdStagingInvalidate(&buffer->Sync);
+#endif
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   device->LastScreenError = S_OK;
   return 1;

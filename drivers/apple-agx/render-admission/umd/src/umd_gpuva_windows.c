@@ -601,6 +601,14 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
   HeapFree(GetProcessHeap(),0,payload);return success;
 }
 
+/* EXP995: staging of a slot that is neither CPU-mapped nor borrowed (shared
+ * with another device) is read or written by nobody until a CPU map exists.
+ * Such slots skip the post-submission download (GpuWritten stays pending until
+ * AdmissionUmdGpuvaPrepareCpuMap) and the per-submission staging inspection. */
+static bool cpu_quiet(const ADMISSION_UMD_SCREEN_BUFFER *slot) {
+  return !slot->Mapped && !slot->Borrowed;
+}
+
 static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
   UINT measured_count=0u;
   ULONGLONG measured_bytes=0u;
@@ -614,7 +622,8 @@ static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
     auto *slot=&device->ScreenBuffers[i];
     if(!slot->CopyHeld || slot->Direct ||
        (download && (!(slot->Flags & AppleAgxWin32BufferGpuWrite) ||
-                     !slot->GpuWritten))) continue;
+                     !slot->GpuWritten || cpu_quiet(slot))) ||
+       (!download && cpu_quiet(slot) && slot->Sync.Valid)) continue;
     if(!transfer_slot(device,slot,download,&measured_count,&measured_bytes)) {
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
       measure_g4_phase(download ? 6u : 3u,phase_start,measured_count,
@@ -632,6 +641,22 @@ static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
   measure_g4_phase(download ? 6u : 3u,phase_start,measured_count,
       measured_bytes,S_OK);
 #endif
+  return 1;
+}
+
+/* EXP995: before the first CPU map of a slot, bring a pending GPU result
+ * into its staging. Returns 0 only when that download failed. */
+int AdmissionUmdGpuvaPrepareCpuMap(ADMISSION_UMD_DEVICE *device,uint64_t token) {
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  auto *slot=find_slot(device,token);
+  bool pending=slot && !slot->Direct && !slot->Mapped && !slot->Transition &&
+      !slot->SubmissionHolds && slot->GpuWritten;
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  if(!pending) return 1;
+  if(!transfer_slot(device,slot,true,NULL,NULL)) return 0;
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  slot->GpuWritten=FALSE;
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   return 1;
 }
 

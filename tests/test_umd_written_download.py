@@ -46,7 +46,8 @@ typedef int SRWLOCK;
 static void AcquireSRWLockExclusive(SRWLOCK*){} static void ReleaseSRWLockExclusive(SRWLOCK*){}
 static void AcquireSRWLockShared(SRWLOCK*){} static void ReleaseSRWLockShared(SRWLOCK*){}
 struct LARGE_INTEGER { LONGLONG QuadPart; };
-struct SLOT { uint64_t Token; BOOL Active,Transition,CopyHeld,Direct,GpuWritten; UINT Flags; D3DKMT_HANDLE KernelAllocation; };
+struct SYNC { BOOL Valid; };
+struct SLOT { uint64_t Token; BOOL Active,Transition,CopyHeld,Direct,GpuWritten,Mapped,Borrowed; UINT Flags; D3DKMT_HANDLE KernelAllocation; SYNC Sync; };
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
 struct CB { void *pfnLockCb, *pfnUnlockCb; };
 struct ADMISSION_UMD_DEVICE { UINT Magic; SLOT ScreenBuffers[16]; SRWLOCK ScreenBufferLock; CB *KernelCallbacks; };
@@ -56,7 +57,7 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *d, SLOT *s, bool download, UINT *
 @@FUNCS@@
 int main(){
  CB cb={(void*)1,(void*)1}; ADMISSION_UMD_DEVICE d={}; d.Magic=ADMISSION_UMD_DEVICE_MAGIC; d.KernelCallbacks=&cb;
- for(unsigned i=0;i<3;++i){SLOT&s=d.ScreenBuffers[i];s.Active=1;s.CopyHeld=1;s.Token=10+i;s.KernelAllocation=0x100+i;s.Flags=AppleAgxWin32BufferGpuWrite;}
+ for(unsigned i=0;i<3;++i){SLOT&s=d.ScreenBuffers[i];s.Active=1;s.CopyHeld=1;s.Token=10+i;s.KernelAllocation=0x100+i;s.Flags=AppleAgxWin32BufferGpuWrite;s.Mapped=TRUE;}
  /* Held, GpuWrite-capable, but never written by this submission: no download. */
  assert(transfer_held(&d,true)==1);
  if(downloads[0]||downloads[1]||downloads[2]){printf("held-but-unwritten slots downloaded: %u %u %u\n",downloads[0],downloads[1],downloads[2]);return 1;}
@@ -77,7 +78,7 @@ int main(){
 class WrittenOnlyDownload(unittest.TestCase):
     def test_only_written_slots_are_downloaded(self):
         text = SRC.read_text()
-        funcs = function(text, 'mark_written') + '\n' + function(text, 'transfer_held')
+        funcs = function(text, 'cpu_quiet') + '\n' + function(text, 'mark_written') + '\n' + function(text, 'transfer_held')
         if 'mark_written' not in funcs:
             funcs += '\nstatic int mark_written(ADMISSION_UMD_DEVICE*,const uint64_t*,unsigned){return 1;}\n'
         funcs = funcs.replace('auto *slot', 'SLOT *slot')
