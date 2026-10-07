@@ -463,6 +463,37 @@ static int wait_paging(void *context, uint64_t fence) {
   return ok;
 }
 
+/* EXP1016 measurement only: DWM CPU read cost of staging inspection versus
+ * copy-escape latency, aggregated and emitted every 128 samples. */
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+static volatile LONG64 exp1016_stats[6]; /* hash calls/bytes/ticks, escape calls/bytes/ticks */
+static void exp1016_note(UINT kind, ULONGLONG bytes, LONGLONG start) {
+  LARGE_INTEGER end, frequency;
+  if(!frame_process_is_dwm()) return;
+  (void)QueryPerformanceCounter(&end);
+  LONG64 calls=InterlockedIncrement64(&exp1016_stats[kind*3u]);
+  InterlockedAdd64(&exp1016_stats[kind*3u+1u],(LONG64)bytes);
+  InterlockedAdd64(&exp1016_stats[kind*3u+2u],end.QuadPart-start);
+  if(calls%128) return;
+  (void)QueryPerformanceFrequency(&frequency);
+  UINT values[7];
+  values[0]=kind;values[1]=(UINT)calls;
+  values[2]=(UINT)(exp1016_stats[kind*3u+1u]>>10);
+  values[3]=(UINT)exp1016_stats[kind*3u+2u];
+  values[4]=(UINT)((ULONGLONG)exp1016_stats[kind*3u+2u]>>32);
+  values[5]=(UINT)frequency.QuadPart;values[6]=0u;
+  AdmissionUmdDiagnostic("measure-staging-cost",S_OK,values,ARRAYSIZE(values));
+}
+static LONGLONG exp1016_now(void) {
+  LARGE_INTEGER now; (void)QueryPerformanceCounter(&now); return now.QuadPart;
+}
+#define EXP1016_START(name) LONGLONG name=exp1016_now()
+#define EXP1016_NOTE(kind,bytes,name) exp1016_note((kind),(bytes),(name))
+#else
+#define EXP1016_START(name) do {} while(0)
+#define EXP1016_NOTE(kind,bytes,name) do {} while(0)
+#endif
+
 static int copy_escape(ADMISSION_UMD_DEVICE *device,
                         APPLE_AGX_G3_COPY_REQUEST *payload) {
   D3DDDICB_ESCAPE request={};
@@ -476,8 +507,10 @@ static int copy_escape(ADMISSION_UMD_DEVICE *device,
    * the whole GPU before each 64-KiB CPU transfer. */
   request.Flags.Value=0;
   request.pPrivateDriverData=payload;request.PrivateDriverDataSize=sizeof(*payload);
+  EXP1016_START(escape_start);
   HRESULT status = device->KernelCallbacks->pfnEscapeCb(
       device->Adapter->RuntimeAdapter.handle,&request);
+  EXP1016_NOTE(1u,payload->TransferBytes,escape_start);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   if (FAILED(status) && frame_process_is_dwm()) {
     static volatile LONG failures;
@@ -512,9 +545,11 @@ static int staging_unchanged(ADMISSION_UMD_DEVICE *device,
     if(lock.hAllocation!=slot->StagingAllocation) {device->DrawTerminal=TRUE;address=NULL;}
     else address=(BYTE *)lock.pData;
   }
+  EXP1016_START(hash_start);
   int unchanged=address &&
       !AdmissionUmdStagingUploadNeeded(&slot->Sync,
           AdmissionUmdStagingHash(address,slot->Bytes),slot->Bytes);
+  if(address) EXP1016_NOTE(0u,slot->Bytes,hash_start);
   if(locked) {
     D3DDDICB_UNLOCK unlock={};unlock.NumAllocations=1;
     unlock.phAllocations=&slot->StagingAllocation;
