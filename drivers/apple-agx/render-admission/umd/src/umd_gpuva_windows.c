@@ -561,14 +561,15 @@ static int touch_device(ADMISSION_UMD_DEVICE *device,uint64_t va) {
  * (EXP1001/EXP1004 leaf rings) although the allocation is resident. Mapping
  * the same allocation at the same VA again makes VidMm rewrite the range from
  * the allocation's current placement. */
-static int remap_canonical(ADMISSION_UMD_DEVICE *device,
-                           const ADMISSION_UMD_SCREEN_BUFFER *slot) {
+static int map_canonical_as(ADMISSION_UMD_DEVICE *device,
+                            const ADMISSION_UMD_SCREEN_BUFFER *slot,
+                            D3DKMT_HANDLE allocation) {
   D3DDDI_MAPGPUVIRTUALADDRESS request={};
-  if(!slot->CanonicalGpuVa || !slot->KernelAllocation || !slot->Bytes ||
+  if(!slot->CanonicalGpuVa || !allocation || !slot->Bytes ||
      !device->KernelCallbacks->pfnMapGpuVirtualAddressCb) return 0;
   request.hPagingQueue=device->PagingQueue;
   request.BaseAddress=slot->CanonicalGpuVa;
-  request.hAllocation=slot->KernelAllocation;
+  request.hAllocation=allocation;
   request.OffsetInPages=0;
   request.SizeInPages=((slot->Bytes+0xffffULL)&~0xffffULL)>>12;
   request.Protection.Write=(slot->Flags & AppleAgxWin32BufferGpuWrite)!=0;
@@ -586,41 +587,45 @@ static int remap_canonical(ADMISSION_UMD_DEVICE *device,
   return ok;
 }
 
-/* EXP1010: VidMm completed the failing slots' MakeResident packet in ~40 us
- * without placing the allocation (no NOT_RESIDENT fault, fill or page-in in
- * the EXP1009 DxgKrnl trace), so the mapping stayed unpopulated. Dropping
- * the persistent residency reference to zero and requesting it again makes
- * VidMm re-evaluate the allocation's residency. */
-static int cycle_residency(ADMISSION_UMD_DEVICE *device,
-                           ADMISSION_UMD_SCREEN_BUFFER *slot) {
-  D3DKMT_HANDLE handle=slot->KernelAllocation;
-  if(!handle || !device->KernelCallbacks->pfnEvictCb ||
+/* EXP1011: the no-op residency is a property of one VidMm allocation (EXP1009
+ * trace; ~1 % of fresh allocations): neither re-requesting residency nor
+ * re-mapping repairs it. Give the slot a fresh canonical allocation at the
+ * same GPU VA (Mesa keeps its VA), make it resident, map it, and release the
+ * affected one. Staging, holds and the slot identity are unchanged. */
+static int replace_canonical(ADMISSION_UMD_DEVICE *device,
+                             ADMISSION_UMD_SCREEN_BUFFER *slot) {
+  D3DKMT_HANDLE fresh=0, old=slot->KernelAllocation;
+  if(slot->Direct || slot->Borrowed || !old || !slot->CanonicalGpuVa ||
      !device->KernelCallbacks->pfnMakeResidentCb) return 0;
-  if(slot->Resident) {
-    D3DDDICB_EVICT evict={};
-    evict.NumAllocations=1;evict.AllocationList=&handle;
-    if(FAILED(device->KernelCallbacks->pfnEvictCb(device->RuntimeDevice.handle,&evict)))
-      return 0;
-    AcquireSRWLockExclusive(&device->ScreenBufferLock);
-    slot->Resident=FALSE;
-    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  HRESULT hr=AdmissionUmdScreenNewCanonical(device,slot->ClassId,slot->Flags,
+                                            slot->Bytes,&fresh);
+  int ok=SUCCEEDED(hr) && fresh;
+  if(ok) {
+    UINT priority=D3DDDI_ALLOCATIONPRIORITY_NORMAL;
+    D3DDDI_MAKERESIDENT request={};
+    request.hPagingQueue=device->PagingQueue;
+    request.NumAllocations=1;request.AllocationList=&fresh;
+    request.PriorityList=&priority;
+    hr=device->KernelCallbacks->pfnMakeResidentCb(device->RuntimeDevice.handle,&request);
+    va_record(device,6u,slot->Token,fresh,0,request.PagingFenceValue,hr);
+    ok=(SUCCEEDED(hr) || hr==E_PENDING) &&
+        (hr!=E_PENDING || (request.PagingFenceValue &&
+                           wait_paging(device,request.PagingFenceValue)));
   }
-  UINT priority=D3DDDI_ALLOCATIONPRIORITY_NORMAL;
-  D3DDDI_MAKERESIDENT request={};
-  request.hPagingQueue=device->PagingQueue;
-  request.NumAllocations=1;request.AllocationList=&handle;
-  request.PriorityList=&priority;
-  HRESULT hr=device->KernelCallbacks->pfnMakeResidentCb(
-      device->RuntimeDevice.handle,&request);
-  va_record(device,6u,slot->Token,handle,0,request.PagingFenceValue,hr);
-  if(FAILED(hr) && hr!=E_PENDING) return 0;
-  AcquireSRWLockExclusive(&device->ScreenBufferLock);
-  slot->Resident=TRUE;
-  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
-  int ok=hr!=E_PENDING || (request.PagingFenceValue &&
-                           wait_paging(device,request.PagingFenceValue));
-  UINT values[2]={(UINT)handle,(UINT)ok};
-  AdmissionUmdDiagnostic("measure-residency-cycle",hr,values,ARRAYSIZE(values));
+  if(ok) ok=map_canonical_as(device,slot,fresh);
+  if(ok) {
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
+    slot->KernelAllocation=fresh;slot->Resident=TRUE;
+    AdmissionUmdStagingInvalidate(&slot->Sync);
+    AdmissionUmdStagingChunksInvalidate(&slot->Chunks);
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    HRESULT freed=AdmissionUmdScreenFreeAllocation(device,old);
+    AdmissionUmdVaRecordDeallocate(device,slot->Token,old,slot->CanonicalGpuVa,freed);
+  } else if(fresh) {
+    (void)AdmissionUmdScreenFreeAllocation(device,fresh);
+  }
+  UINT values[3]={(UINT)old,(UINT)fresh,(UINT)ok};
+  AdmissionUmdDiagnostic("measure-replace-canonical",hr,values,ARRAYSIZE(values));
   return ok;
 }
 
@@ -629,7 +634,8 @@ static int query_canonical(ADMISSION_UMD_DEVICE *device,
                            APPLE_AGX_G3_COPY_REQUEST *payload) {
   int ok=copy_escape(device,payload) && payload->ProcessGeneration &&
       payload->MappingGeneration;
-  if(!ok && cycle_residency(device,slot) && remap_canonical(device,slot)) {
+  if(!ok && replace_canonical(device,slot)) {
+    payload->Allocation=slot->KernelAllocation;
     payload->Operation=APPLE_AGX_G3_COPY_QUERY;payload->Offset=0;
     payload->TransferBytes=0;payload->ProcessGeneration=0;payload->MappingGeneration=0;
     ok=copy_escape(device,payload) && payload->ProcessGeneration &&

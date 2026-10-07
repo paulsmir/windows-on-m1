@@ -55,11 +55,10 @@ struct SLOT { uint64_t Token; BOOL Active,Transition,CopyHeld,Direct,GpuWritten,
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
 struct CB { void *pfnLockCb, *pfnUnlockCb; };
 struct ADMISSION_UMD_DEVICE { SLOT ScreenBuffers[16]; SRWLOCK ScreenBufferLock; CB *KernelCallbacks; };
-struct APPLE_AGX_G3_COPY_REQUEST { UINT Operation; ULONGLONG Offset; UINT TransferBytes; ULONGLONG ProcessGeneration, MappingGeneration; };
+struct APPLE_AGX_G3_COPY_REQUEST { D3DKMT_HANDLE Allocation; UINT Operation; ULONGLONG Offset; UINT TransferBytes; ULONGLONG ProcessGeneration, MappingGeneration; };
 static int touches, queries, query_ok_after, remaps;
-static int remap_canonical(ADMISSION_UMD_DEVICE*, const SLOT *s){ assert(s->CanonicalGpuVa); ++remaps; return 1; }
 static int cycles;
-static int cycle_residency(ADMISSION_UMD_DEVICE*, SLOT*){ ++cycles; return 1; }
+static int replace_canonical(ADMISSION_UMD_DEVICE*, SLOT *s){ assert(s->CanonicalGpuVa); ++remaps; ++cycles; return 1; }
 static int touch_device(ADMISSION_UMD_DEVICE*, uint64_t va){ assert(va); ++touches; return 1; }
 static int copy_escape(ADMISSION_UMD_DEVICE*, APPLE_AGX_G3_COPY_REQUEST *q){
   ++queries; if(queries>query_ok_after){q->ProcessGeneration=q->MappingGeneration=1;return 1;} return 0; }

@@ -626,6 +626,60 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   return 1;
 }
 
+#ifdef APPLE_AGX_GPUVA_WINSYS
+/* EXP1011: a second GPU-local canonical allocation with the slot's class,
+ * flags and 64 KiB-rounded size (the description CreateClassBufferImpl uses). */
+HRESULT AdmissionUmdScreenNewCanonical(ADMISSION_UMD_DEVICE *Device,
+    APPLE_AGX_U32 ClassId, APPLE_AGX_U32 Flags, APPLE_AGX_U64 Bytes,
+    D3DKMT_HANDLE *Allocation) {
+  ADMISSION_WIN32_ALLOCATION_CREATE description;
+  D3DDDI_ALLOCATIONINFO allocationInfo;
+  D3DDDICB_ALLOCATE allocate;
+  HRESULT result;
+  if (Allocation) *Allocation = 0;
+  if (Device == NULL || Allocation == NULL || Bytes == 0ULL ||
+      Bytes > MAXUINT32 - 65535ULL || Device->KernelCallbacks == NULL ||
+      Device->KernelCallbacks->pfnAllocateCb == NULL)
+    return E_INVALIDARG;
+  Bytes = (Bytes + 65535ULL) & ~65535ULL;
+  ZeroMemory(&description, sizeof(description));
+  if (!AdmissionAllocationDescribe((UINT)Bytes, 1u, 1u,
+          (UINT)D3DKMDT_GDISURFACE_STAGING_CPUVISIBLE,
+          (UINT)D3DDDIFMT_A8, 1u, &description.Allocation))
+    return E_INVALIDARG;
+  description.Magic = ADMISSION_WIN32_ALLOCATION_MAGIC;
+  description.Version = ADMISSION_WIN32_ALLOCATION_VERSION_LOCAL;
+  description.Allocation.Type = ADMISSION_WIN32_ALLOCATION_GPU_LOCAL;
+  description.Allocation.CpuVisible = 0u;
+  description.Bytes = sizeof(description);
+  description.ClassId = ClassId;
+  description.Flags = Flags;
+  ZeroMemory(&allocationInfo, sizeof(allocationInfo));
+  allocationInfo.pPrivateDriverData = &description;
+  allocationInfo.PrivateDriverDataSize = sizeof(description);
+  ZeroMemory(&allocate, sizeof(allocate));
+  allocate.NumAllocations = 1u;
+  allocate.pAllocationInfo = &allocationInfo;
+  result = Device->KernelCallbacks->pfnAllocateCb(
+      Device->RuntimeDevice.handle, &allocate);
+  if (SUCCEEDED(result) && allocationInfo.hAllocation == 0u) result = E_FAIL;
+  if (SUCCEEDED(result)) *Allocation = allocationInfo.hAllocation;
+  return result;
+}
+
+HRESULT AdmissionUmdScreenFreeAllocation(ADMISSION_UMD_DEVICE *Device,
+    D3DKMT_HANDLE Allocation) {
+  D3DDDICB_DEALLOCATE deallocate;
+  if (Device == NULL || Allocation == 0u || Device->KernelCallbacks == NULL ||
+      Device->KernelCallbacks->pfnDeallocateCb == NULL) return E_INVALIDARG;
+  ZeroMemory(&deallocate, sizeof(deallocate));
+  deallocate.NumAllocations = 1u;
+  deallocate.HandleList = &Allocation;
+  return Device->KernelCallbacks->pfnDeallocateCb(
+      Device->RuntimeDevice.handle, &deallocate);
+}
+#endif
+
 static int AdmissionUmdScreenCreateClassBuffer(
     void *Context, APPLE_AGX_U32 ClassId, APPLE_AGX_U64 Bytes,
     APPLE_AGX_U64 Alignment, APPLE_AGX_U32 Flags, APPLE_AGX_U64 *Token) {

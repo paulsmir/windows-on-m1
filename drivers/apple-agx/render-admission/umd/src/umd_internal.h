@@ -233,6 +233,11 @@ void AdmissionUmdVaRecordDeallocate(const void *device, ULONGLONG token,
                                     HRESULT hr);
 int AdmissionUmdGpuvaPrepareCpuMap(ADMISSION_UMD_DEVICE *device,
                                    uint64_t token);
+HRESULT AdmissionUmdScreenNewCanonical(ADMISSION_UMD_DEVICE *Device,
+    APPLE_AGX_U32 ClassId, APPLE_AGX_U32 Flags, APPLE_AGX_U64 Bytes,
+    D3DKMT_HANDLE *Allocation);
+HRESULT AdmissionUmdScreenFreeAllocation(ADMISSION_UMD_DEVICE *Device,
+    D3DKMT_HANDLE Allocation);
 #endif
 VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
                             const UINT *Values, UINT Count);
