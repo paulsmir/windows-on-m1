@@ -307,6 +307,9 @@ typedef struct _ADMISSION_G4_FW_SNAP {
   UCHAR D3[2420];
   UCHAR Seq15[512];
   UCHAR Seq17[512];
+  /* EXP993: native-graph (GPU table) inspection of the TA buffers. */
+  ULONGLONG CheckVa[10], PrivateVa;
+  ULONG CheckOk[10], CheckReason[10], CheckLevel[10], CheckCount;
 } ADMISSION_G4_FW_SNAP;
 typedef struct _ADMISSION_G4_FW_SNAPSHOT {
   ULONG Version, Bytes, Next, Reserved;

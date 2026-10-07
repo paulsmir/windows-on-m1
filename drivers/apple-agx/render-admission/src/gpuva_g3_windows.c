@@ -2174,6 +2174,28 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
           f->Sizes[k] = (ULONG)o->Size; f->GpuVa[k] = o->GpuVa;
           if (o->Data && n) RtlCopyMemory(dst[k], o->Data, n);
         }
+        {
+          /* WorkCommandTA offsets (m1n1 cmdqueue.py, G13/V13_5): struct_2
+           * at 0x40: tvb_tilemap +0x10, tpc +0x20, heapmeta +0x28 (bit63),
+           * heapmeta2 +0x58, deflake1/2/3 +0x70/+0x78/+0x88, encoder +0x90;
+           * unkptr_45c at 0x464. */
+          static const ULONG off[9] = {0x50u, 0x60u, 0x68u, 0x98u, 0xb0u,
+                                       0xb8u, 0xc8u, 0xd0u, 0x464u};
+          for (ULONG k = 0u; k < 9u; ++k) {
+            ULONGLONG va = 0ULL;
+            APPLE_AGX_GPUVA_G3_WALK_FAILURE walk;
+            RtlCopyMemory(&va, f->Ta + off[k], sizeof(va));
+            va &= 0x000000ffffffffffULL;
+            RtlZeroMemory(&walk, sizeof(walk));
+            f->CheckVa[k] = va;
+            if (va) {
+              f->CheckOk[k] = AppleAgxGpuvaG3GraphInspectRangeAccess(
+                  &process->Graph, va & ~0x3fffULL, 0x4000u, TRUE, &walk) ? 1u : 0u;
+              f->CheckReason[k] = walk.Reason; f->CheckLevel[k] = walk.Level;
+            }
+          }
+          f->CheckCount = 9u; f->PrivateVa = process->PrivateVa;
+        }
       }
       InterlockedExchange(&adapter->G4DrawSnapshotDirty, 1);
     }
