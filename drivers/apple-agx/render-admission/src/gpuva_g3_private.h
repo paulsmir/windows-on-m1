@@ -84,7 +84,15 @@ typedef struct _ADMISSION_G3_PROCESS {
   HANDLE DxgkProcess;
   ULONG Magic, DeviceRefs, ContextRefs, OsProcessId;
   BOOLEAN Poisoned;
+  /* EXP997 diagnostic: first poison site, (file << 16) | line. */
+  ULONG PoisonSite;
 } ADMISSION_G3_PROCESS;
+
+#define ADMISSION_G3_POISON(Process, File) do { \
+    (Process)->Poisoned = TRUE; \
+    if (!(Process)->PoisonSite) \
+      (Process)->PoisonSite = ((ULONG)(File) << 16) | (ULONG)__LINE__; \
+  } while (0)
 
 NTSTATUS AdmissionG3PreparePrivateStorage(
     ADMISSION_G3_PROCESS *Process, const APPLE_AGX_G4_NATIVE_RENDER *Render,

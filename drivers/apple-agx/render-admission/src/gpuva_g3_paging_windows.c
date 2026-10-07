@@ -1201,7 +1201,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     if (NT_SUCCESS(status) && update->PageTableLevel == 2u &&
         !update->Flags.NotifyEviction &&
         !AppleAgxGpuvaG3GraphBindRoot(&process->Graph, table_ipa)) {
-      process->Poisoned = TRUE;
+      ADMISSION_G3_POISON(process,2u);
       status = AdmissionG3RejectPaging(&failure,
           AdmissionG3PagingFailureTableGraph, MAXULONG, NULL, 0ULL,
           STATUS_DEVICE_HARDWARE_ERROR);
@@ -1209,7 +1209,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     if (NT_SUCCESS(status) && process->PrivateLeafIpa &&
         !AppleAgxGpuvaG3GraphAttachPrivate(&process->Graph, process->PrivateVa,
             process->PrivateMiddleIpa, process->PrivateLeafIpa)) {
-      process->Poisoned = TRUE;
+      ADMISSION_G3_POISON(process,2u);
       status = AdmissionG3RejectPaging(&failure,
           AdmissionG3PagingFailureTableGraph, MAXULONG, NULL, 0ULL,
           STATUS_DEVICE_HARDWARE_ERROR);
@@ -1229,7 +1229,7 @@ PagingDone:
     failure.GraphUncertain = process->Graph.Uncertain;
   }
   if (process != NULL && !NT_SUCCESS(status) &&
-      process->Graph.Uncertain) process->Poisoned = TRUE;
+      process->Graph.Uncertain) ADMISSION_G3_POISON(process,2u);
   ExReleaseFastMutex(&state->Lock);
   if (unpublished_changed)
     AdmissionRecordGpuvaG3UnpublishedGroups(adapter, unpublished_after);

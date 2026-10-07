@@ -362,11 +362,11 @@ static BOOLEAN AdmissionG3PrivateReleaseScene(ADMISSION_G3_PROCESS *p,
       p->Graph.JobInFlight || p->Graph.LeaseToken) return FALSE;
   for (i=0;i<6;++i)
     if (!AdmissionG3PrivateMapExtent(p,view,&scene->Storage.Extents[i],FALSE)) {
-      scene->Quarantined=1u;p->Poisoned=TRUE;return FALSE;
+      scene->Quarantined=1u;ADMISSION_G3_POISON(p,1u);return FALSE;
     }
   for (i=0;i<6;++i)
     if (!AdmissionG3PrivateFreeExtent(p,view,&scene->Storage.Extents[i])) {
-      scene->Quarantined=1u;p->Poisoned=TRUE;return FALSE;
+      scene->Quarantined=1u;ADMISSION_G3_POISON(p,1u);return FALSE;
     }
   while (*link && *link!=scene) link=&(*link)->Next;
   if (*link) *link=scene->Next;
@@ -409,7 +409,7 @@ static BOOLEAN AdmissionG3PrivateReap(ADMISSION_G3_PROCESS *p) {
             &s->Context->GpuvaG3CancelFence,0,0)==s->Fence) {
       if (s->Started || InterlockedCompareExchange(
               &s->Context->GpuvaG3CancelUncertain,0,0)) {
-        s->Quarantined=1u;p->Poisoned=TRUE;
+        s->Quarantined=1u;ADMISSION_G3_POISON(p,1u);
       } else {
         s->Queued=0u;
         InterlockedExchange(&s->Context->GpuvaG3PreemptFence,0);
@@ -437,7 +437,7 @@ BOOLEAN AdmissionGpuvaG3PrivateReset(ADMISSION_CONTEXT *adapter) {
     ADMISSION_G3_PRIVATE_SCENE *s;
     for (s=p->PrivateScenes;s;s=s->Next)
       if (s->Queued && s->Started) {
-        s->Quarantined=1u;p->Poisoned=TRUE;safe=FALSE;
+        s->Quarantined=1u;ADMISSION_G3_POISON(p,1u);safe=FALSE;
       }
   }
   ExReleaseFastMutex(&state->Lock);
@@ -449,18 +449,25 @@ BOOLEAN AdmissionGpuvaG3PrivateReported(ADMISSION_CONTEXT *adapter,
   ADMISSION_G3_PROCESS *p;
   ADMISSION_G3_PRIVATE_SCENE *s;
   BOOLEAN ok=FALSE;
+  ULONG poison_site;
   if (!context || !context->GpuvaG3Process) return TRUE;
   if (!adapter || !fence || KeGetCurrentIrql()!=PASSIVE_LEVEL) return FALSE;
   p=(ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
   if (p->State->Adapter!=adapter) return FALSE;
   ExAcquireFastMutex(&p->State->Lock);
-  if (!AdmissionG3PrivateReap(p)) goto Done;
+  /* EXP997: a reclaim failure (poisoned process, quarantined scene) keeps the
+   * scene's storage but must not withhold a fence whose GPU work finished.
+   * EXP996: the stuck completion faulted the shared scheduler and VidSch
+   * bugchecked 0x119 on the next paging submission; PrivateCompletionFence
+   * also blocked BeginJob for every process. A poisoned process is refused
+   * at its next submission instead. */
+  (void)AdmissionG3PrivateReap(p);
   if (!InterlockedCompareExchange(&context->GpuvaG3PrivateFence,0,0)) {
     ok=TRUE;goto Done; /* Legacy job, or an already reported exact transaction. */
   }
   for (s=p->PrivateScenes;s;s=s->Next)
     if (s->Context==context && s->Fence==fence && s->Queued) break;
-  if (!s || !s->Started || !s->GpuDone || s->Quarantined) goto Done;
+  if (!s || !s->Started || !s->GpuDone) goto Done;
   s->Reported=1u;s->Queued=0u;
   if (p->State->PrivateCompletionFence==fence) p->State->PrivateCompletionFence=0u;
   InterlockedExchange(&context->GpuvaG3PrivateFence,0);
@@ -469,7 +476,11 @@ BOOLEAN AdmissionGpuvaG3PrivateReported(ADMISSION_CONTEXT *adapter,
   (void)AdmissionG3PrivateReap(p);
   ok=TRUE;
 Done:
+  poison_site=p->Poisoned ? p->PoisonSite : 0u;
   ExReleaseFastMutex(&p->State->Lock);
+#ifdef _MSC_VER
+  if (poison_site) AdmissionRecordG3Poison(adapter, poison_site, p->OsProcessId);
+#endif
   return ok;
 }
 
@@ -512,11 +523,11 @@ BOOLEAN AdmissionGpuvaG3PrivateRetireContext(ADMISSION_RENDER_CONTEXT *context) 
   if (!manager_used && !p->PrivateScenes) {
     for (i=0;i<3;++i)
       if (!AdmissionG3PrivateMapExtent(p,&view,&p->PrivateManager.Extents[i],FALSE)) {
-        p->Poisoned=TRUE;goto Done;
+        ADMISSION_G3_POISON(p,1u);goto Done;
       }
     for (i=0;i<3;++i)
       if (!AdmissionG3PrivateFreeExtent(p,&view,&p->PrivateManager.Extents[i])) {
-        p->Poisoned=TRUE;goto Done;
+        ADMISSION_G3_POISON(p,1u);goto Done;
       }
     RtlZeroMemory(&p->PrivateManager,sizeof(p->PrivateManager));
     RtlZeroMemory(&p->FirmwareManager,sizeof(p->FirmwareManager));
@@ -1492,18 +1503,18 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
     }
   }
   status=STATUS_INSUFFICIENT_RESOURCES;
-  if (!AdmissionG3PrivateReleaseScene(p,scene,&view)) {p->Poisoned=TRUE;goto Done;}
+  if (!AdmissionG3PrivateReleaseScene(p,scene,&view)) {ADMISSION_G3_POISON(p,1u);goto Done;}
   if (fresh) {
     for (i=0;i<3;++i)
       if (!AdmissionG3PrivateMapExtent(p,&view,&p->PrivateManager.Extents[i],FALSE)) {
-        p->Poisoned=TRUE;goto Done;
+        ADMISSION_G3_POISON(p,1u);goto Done;
       }
     for (i=0;i<3;++i) (void)AdmissionG3PrivateFreeExtent(p,&view,&p->PrivateManager.Extents[i]);
     RtlZeroMemory(&p->PrivateManager,sizeof(p->PrivateManager));
     RtlZeroMemory(&p->FirmwareManager,sizeof(p->FirmwareManager));
   }
 Done:
-  if (p && p->Graph.Uncertain) p->Poisoned=TRUE;
+  if (p && p->Graph.Uncertain) ADMISSION_G3_POISON(p,1u);
   ExReleaseFastMutex(&state->Lock);
   if (captured) AdmissionRecordG3PrivateFailure(adapter);
 #undef PRIVATE_CAPTURE
@@ -1591,7 +1602,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
   if (!AppleAgxGpuvaG3GraphCreate(&process->Graph, process->BootstrapIpa,
                                   Args->Flags.SystemProcess != 0u)) {
     if (process->Graph.Uncertain) {
-      process->Poisoned = TRUE;
+      ADMISSION_G3_POISON(process,1u);
       InsertTailList(&state->Processes, &process->Link);
       ++state->ProcessCount;
       ExReleaseFastMutex(&state->Lock);
@@ -1856,7 +1867,7 @@ _Use_decl_annotations_ VOID AdmissionDdiSetRootPageTable(
        !AppleAgxGpuvaG3GraphAttachPrivate(&process->Graph, process->PrivateVa,
            process->PrivateMiddleIpa, process->PrivateLeafIpa))) {
     context->GpuvaG3Poisoned = TRUE;
-    process->Poisoned = TRUE;
+    ADMISSION_G3_POISON(process,1u);
   } else {
     context->GpuvaG3RootIpa = root_ipa;
   }
@@ -2201,7 +2212,7 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
     }
 #endif
   } else if (process->Graph.Uncertain) {
-    process->Poisoned = TRUE;
+    ADMISSION_G3_POISON(process,1u);
     status = STATUS_DEVICE_HARDWARE_ERROR;
   }
   ExReleaseFastMutex(&state->Lock);
@@ -2240,7 +2251,7 @@ BOOLEAN AdmissionGpuvaG3CompleteJob(ADMISSION_CONTEXT *adapter, ULONG fence) {
     state->ActiveFence = 0u;
     state->LastCompletedFence = fence;
   } else {
-    process->Poisoned = TRUE;
+    ADMISSION_G3_POISON(process,1u);
   }
   ExReleaseFastMutex(&state->Lock);
   return complete;

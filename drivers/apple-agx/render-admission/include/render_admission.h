@@ -507,6 +507,8 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG G4DrawSnapshotDirty;
   volatile LONG G3PteWaitDirty;
   volatile LONG G3PagingWaitDirty;
+  /* EXP997 diagnostic: first poisoned G3 process seen at completion. */
+  volatile LONG G3PoisonClaim;
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   ADMISSION_DWM_FRAME_PROBE DwmFrameProbe;
   volatile LONG DwmSourceMapRecordCount;
@@ -1013,6 +1015,8 @@ void AdmissionRecordG3CopyQueryFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3LeafHistory(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3PagingWait(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3PteWait(_In_opt_ ADMISSION_CONTEXT *Context);
+void AdmissionRecordG3Poison(_In_opt_ ADMISSION_CONTEXT *Context,
+                             ULONG Site, ULONG ProcessId);
 void AdmissionRecordG4DrawSnapshot(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3CopyTransferFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
