@@ -445,7 +445,10 @@ static NTSTATUS AdmissionCreateAllocationImpl(
    * such an allocation was CPU-locked inside the CPU-visible memory segment
    * (kernel dump: section at global alloc +0xE0, NULL interface at +0xF0).
    * Keep them in the aperture, where section-backed surfaces are supported. */
-  if (classId == 0u && description->CpuVisible != 0u) {
+  /* EXP1018: Mesa class CPU-visible allocations are CPU-only UMD staging.
+   * EXP1017: Cached has no effect in the reserved-DDR memory segment (reads
+   * stayed 78 MB/s); system-memory (aperture) backing honours it. */
+  if (description->CpuVisible != 0u) {
     info->PreferredSegment.SegmentId0 = ADMISSION_MEMORY_APERTURE_SEGMENT;
     info->SupportedReadSegmentSet = ADMISSION_APERTURE_SEGMENT_SET;
     info->SupportedWriteSegmentSet = ADMISSION_APERTURE_SEGMENT_SET;

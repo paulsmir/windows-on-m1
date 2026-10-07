@@ -28,6 +28,15 @@ class StagingCached(unittest.TestCase):
         tail = text[cached:text.index('return STATUS_SUCCESS;', cached)]
         self.assertNotIn('FlagsWddm2.Value', tail)
 
+    def test_cpu_visible_allocations_live_in_system_memory(self):
+        """EXP1017: Cached is ignored in the reserved-DDR memory segment."""
+        text = SRC.read_text()
+        block = text[text.index('if (description->CpuVisible != 0u) {'):]
+        block = block[:block.index('}')]
+        self.assertIn('PreferredSegment.SegmentId0 = ADMISSION_MEMORY_APERTURE_SEGMENT', block)
+        self.assertIn('SupportedReadSegmentSet = ADMISSION_APERTURE_SEGMENT_SET', block)
+        self.assertIn('SupportedWriteSegmentSet = ADMISSION_APERTURE_SEGMENT_SET', block)
+
 
 if __name__ == '__main__':
     unittest.main()
