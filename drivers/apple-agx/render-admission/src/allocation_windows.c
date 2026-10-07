@@ -455,6 +455,15 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   info->hAllocation = allocation;
   info->FlagsWddm2.Value = 0u;
   info->FlagsWddm2.CpuVisible = description->CpuVisible != 0u;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* EXP1017: a CPU-visible Mesa class allocation is the UMD staging copy of
+   * a GPU-local canonical BO; only the CPU reads and writes it (the KMD copy
+   * escape moves its bytes). EXP1016: write-combined CPU reads of it ran at
+   * 91 MB/s. DXGK_ALLOCATIONINFOFLAGS_WDDM2_0: set Cached for allocations
+   * read by the UMD; VidMm keeps a non-coherent segment coherent. Never on
+   * GPU-accessed (CpuVisible=0), primary or class0 GDI/CDD surfaces. */
+  info->FlagsWddm2.Cached = classId != 0u && description->CpuVisible != 0u;
+#endif
   /* EXP836: the only admitted Mesa class shape keeps AccessedPhysically. */
   info->FlagsWddm2.AccessedPhysically = 1u;
   info->pAllocationUsageHint = NULL;
