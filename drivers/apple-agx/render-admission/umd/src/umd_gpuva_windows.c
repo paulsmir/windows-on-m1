@@ -370,7 +370,8 @@ static int make_resident(void *context, const uint64_t *tokens,
     auto *slot=find_slot(device,tokens[i]);
     valid=slot && !slot->Transition && !slot->CopyHeld &&
         !slot->SourceHolds && !slot->SubmissionHolds &&
-        (slot->StagingAllocation || slot->Direct) && slot->CanonicalGpuVa &&
+        (slot->StagingAllocation || slot->PrivateStaging || slot->Direct) &&
+        slot->CanonicalGpuVa &&
         (!slot->Mapped || (slot->NativeBo && slot->NativeMapRelease));
   }
   if(valid) for(unsigned i=0;i<count;++i) {
@@ -535,7 +536,8 @@ static int staging_unchanged(ADMISSION_UMD_DEVICE *device,
                              ADMISSION_UMD_SCREEN_BUFFER *slot) {
   if(!slot->Sync.Valid || (slot->Borrowed && slot->Mapped)) return 0;
   BYTE *address=(BYTE *)slot->LockedBase;
-  bool temporary=!slot->Mapped, locked=false;
+  if(!slot->Mapped && slot->PrivateStaging) address=slot->PrivateStaging;
+  bool temporary=!slot->Mapped && !slot->PrivateStaging, locked=false;
   if(temporary) {
     D3DDDICB_LOCK lock={};lock.hAllocation=slot->StagingAllocation;
     lock.Flags.LockEntire=1;lock.Flags.ReadOnly=1;
@@ -713,7 +715,8 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
   int success=query_canonical(device,slot,payload);
   if(success) step=2u;
   BYTE *address=(BYTE *)slot->LockedBase;
-  bool temporary=!slot->Mapped, locked=false;
+  if(!slot->Mapped && slot->PrivateStaging) address=slot->PrivateStaging;
+  bool temporary=!slot->Mapped && !slot->PrivateStaging, locked=false;
   if(success && temporary) {
     D3DDDICB_LOCK lock={};lock.hAllocation=slot->StagingAllocation;
     lock.Flags.LockEntire=1;

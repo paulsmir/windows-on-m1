@@ -51,6 +51,9 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
 #ifdef APPLE_AGX_GPUVA_WINSYS
   BOOL WrittenPrimary;
   D3DKMT_HANDLE StagingAllocation;
+  /* EXP1022: CPU-only staging of an unshared slot is ordinary process memory
+   * (EXP1016-1021: VidMm CPU mappings read at ~80 MB/s vs 2.5 GB/s). */
+  BYTE *PrivateStaging;
   APPLE_AGX_U64 CanonicalGpuVa;
   BOOL CopyHeld;
   /* R158: presentation allocation used directly as the GPU-local render

@@ -490,6 +490,9 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   APPLE_AGX_U64 token;
   HRESULT result;
   D3DKMT_HANDLE canonical = 0, staging = BorrowedStaging;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  BYTE *privateStaging = NULL;
+#endif
   ADMISSION_ALLOCATION_DESCRIPTION stagingDescription;
   if (Token) *Token = 0;
 
@@ -570,23 +573,27 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   canonical = allocationInfo.hAllocation;
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if (SUCCEEDED(result) && canonical && !staging) {
-    ZeroMemory(&allocationInfo, sizeof(allocationInfo));
-    allocationInfo.pPrivateDriverData = &stagingDescription;
-    allocationInfo.PrivateDriverDataSize = sizeof(stagingDescription);
-    result = device->KernelCallbacks->pfnAllocateCb(
-        device->RuntimeDevice.handle, &allocate);
-    staging = allocationInfo.hAllocation;
+    /* EXP1022: unshared staging is read and written only by this process
+     * (the KMD copy escape receives its bytes); keep it in ordinary memory. */
+    UNREFERENCED_PARAMETER(stagingDescription);
+    privateStaging = (BYTE *)VirtualAlloc(NULL,
+        (SIZE_T)((Bytes + 0xffffULL) & ~0xffffULL),
+        MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!privateStaging) result = E_OUTOFMEMORY;
   }
 #endif
   if (FAILED(result) || !canonical
 #ifdef APPLE_AGX_GPUVA_WINSYS
-      || !staging
+      || (!staging && !privateStaging)
 #endif
       ) {
     /* Callback failures may return a handle. Record every owned handle before
      * rollback, and keep the slot if release cannot be proved. */
     HRESULT failure = FAILED(result) ? result : E_FAIL;
     D3DKMT_HANDLE owned[2] = {canonical, staging == BorrowedStaging ? 0 : staging};
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    if (privateStaging) (void)VirtualFree(privateStaging, 0, MEM_RELEASE);
+#endif
     for (UINT i = 0; i < 2; ++i) {
       D3DDDICB_DEALLOCATE rollback = {};
       rollback.NumAllocations = 1; rollback.HandleList = &owned[i];
@@ -612,6 +619,7 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   slot->KernelAllocation = canonical;
 #ifdef APPLE_AGX_GPUVA_WINSYS
   slot->StagingAllocation = staging;
+  slot->PrivateStaging = privateStaging;
   slot->Borrowed = BorrowedStaging != 0;
 #endif
   slot->Bytes = Bytes;
@@ -866,6 +874,9 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
   buffer->Transition = TRUE;
   {
     D3DKMT_HANDLE allocation = AdmissionUmdScreenCpuAllocation(buffer);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    BYTE *privateStaging = buffer->PrivateStaging;
+#endif
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
     ZeroMemory(&lock, sizeof(lock));
     lock.hAllocation = allocation;
@@ -875,6 +886,12 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
       lock.Flags.ReadOnly = 1u;
     else if ((Access & AppleAgxWin32BufferCpuRead) == 0u)
       lock.Flags.WriteOnly = 1u;
+#endif
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    if (privateStaging) {
+      lock.pData = privateStaging; /* EXP1022: no VidMm lock */
+      result = S_OK;
+    } else
 #endif
     result = device->KernelCallbacks->pfnLockCb(
         device->RuntimeDevice.handle, &lock);
@@ -934,6 +951,11 @@ static int AdmissionUmdScreenUnmapBuffer(void *Context,
   ZeroMemory(&unlock, sizeof(unlock));
   unlock.NumAllocations = 1u;
   unlock.phAllocations = &allocation;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if (buffer->PrivateStaging)
+    result = S_OK; /* EXP1022: ordinary memory, nothing to unlock */
+  else
+#endif
   result = device->KernelCallbacks->pfnUnlockCb(
       device->RuntimeDevice.handle, &unlock);
   if (FAILED(result)) {
@@ -1028,6 +1050,8 @@ static int AdmissionUmdScreenDestroyBuffer(void *Context,
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   }
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  if (buffer->PrivateStaging)
+    (void)VirtualFree(buffer->PrivateStaging, 0, MEM_RELEASE);
   ZeroMemory(buffer,sizeof(*buffer));
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   device->LastScreenError=S_OK; return 1;

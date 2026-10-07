@@ -52,7 +52,7 @@ static void AcquireSRWLockExclusive(SRWLOCK*){} static void ReleaseSRWLockExclus
 static void AcquireSRWLockShared(SRWLOCK*){} static void ReleaseSRWLockShared(SRWLOCK*){}
 struct D3DDDI_MAKERESIDENT { HANDLE hPagingQueue; UINT NumAllocations; const D3DKMT_HANDLE*AllocationList; const UINT*PriorityList; ULONGLONG PagingFenceValue; };
 struct SLOT { uint64_t Token; BOOL Active,Transition,CopyHeld,Direct,Mapped,Resident; UINT SourceHolds,SubmissionHolds;
-  D3DKMT_HANDLE KernelAllocation,StagingAllocation; uint64_t CanonicalGpuVa; void*NativeBo; void*NativeMapRelease; };
+  D3DKMT_HANDLE KernelAllocation,StagingAllocation; unsigned char *PrivateStaging; uint64_t CanonicalGpuVa; void*NativeBo; void*NativeMapRelease; };
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
 static unsigned made, evicted, made_handles;
 static HRESULT mk(HANDLE,D3DDDI_MAKERESIDENT*r){++made;made_handles+=r->NumAllocations;r->PagingFenceValue=7;return E_PENDING;}
