@@ -2095,7 +2095,8 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
     status = STATUS_SUCCESS;
 #ifdef _MSC_VER
     if (adapter->BackendImage.G4Native && g4_valid && g4_view.Render &&
-        g4_view.RenderBytes == sizeof(APPLE_AGX_G4_NATIVE_RENDER)) {
+        g4_view.RenderBytes == sizeof(APPLE_AGX_G4_NATIVE_RENDER) &&
+        ((const APPLE_AGX_G4_NATIVE_RENDER *)g4_view.Render)->WidthPx == 77u) {
       APPLE_AGX_G4_NATIVE_RENDER r;
       ADMISSION_G4_DRAW_SNAPSHOT *s = &adapter->G4DrawSnapshot;
       ADMISSION_G4_DRAW_SNAP *slot =
@@ -2115,6 +2116,44 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
           slot->Scissor, sizeof(slot->Scissor), NULL);
       slot->DbiasState = AdmissionG4SnapRead(adapter, process, r.IspDbiasBase,
           slot->Dbias, sizeof(slot->Dbias), NULL);
+      {
+        /* Walk Mesa's VDM words (cmdbuf.xml): 0 PPP state (hi:8,size:8 |
+         * lo:32), 1 barrier, 2 VDM state (+1 word per present bit), 3 index
+         * list, 4 stream link, 6 terminate. */
+        ULONG words[64], i = 0u, n;
+        RtlCopyMemory(words, slot->Vdm, sizeof(words));
+        while (i < 64u) {
+          ULONG w = words[i], type = w >> 29;
+          if (type == 0u && i + 1u < 64u) {
+            if (slot->PppCount < 4u) {
+              slot->PppAddr[slot->PppCount] =
+                  ((ULONGLONG)(w & 0xffu) << 32) | words[i + 1u];
+              ++slot->PppCount;
+            }
+            i += 2u;
+          } else if (type == 1u) {
+            i += 1u;
+          } else if (type == 2u) {
+            ULONG at = i + 1u;
+            if (w & 1u) ++at;
+            if ((w & 2u) && (w & 4u) && at + 1u < 64u)
+              slot->PipeAddr = 0x1100000000ULL + (words[at + 1u] & ~0x3fu);
+            n = 0u;
+            for (ULONG bit = 0u; bit < 8u; ++bit)
+              if (bit != 6u && (w & (1u << bit))) ++n;
+            i += 1u + n;
+          } else {
+            if (type == 3u) { slot->IndexWord = w; slot->IndexAt = i; }
+            break;
+          }
+        }
+        for (i = 0u; i < slot->PppCount; ++i)
+          slot->PppState[i] = AdmissionG4SnapRead(adapter, process,
+              slot->PppAddr[i], slot->Ppp[i], sizeof(slot->Ppp[i]), NULL);
+        if (slot->PipeAddr)
+          slot->PipeState = AdmissionG4SnapRead(adapter, process,
+              slot->PipeAddr, slot->Pipe, sizeof(slot->Pipe), NULL);
+      }
       InterlockedExchange(&adapter->G4DrawSnapshotDirty, 1);
     }
 #endif

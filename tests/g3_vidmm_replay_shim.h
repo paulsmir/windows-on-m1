@@ -287,8 +287,13 @@ typedef struct _ADMISSION_G4_DRAW_SNAP {
   UCHAR Vdm[256];
   UCHAR Scissor[32];
   UCHAR Dbias[16];
+  /* EXP991: chain decoded from the VDM stream at job time. */
+  ULONGLONG PppAddr[4], PipeAddr;
+  ULONG PppState[4], PipeState, PppCount, IndexWord, IndexAt;
+  UCHAR Ppp[4][64];
+  UCHAR Pipe[64];
 } ADMISSION_G4_DRAW_SNAP;
-#define ADMISSION_G4_DRAW_SNAP_COUNT 8u
+#define ADMISSION_G4_DRAW_SNAP_COUNT 4u
 typedef struct _ADMISSION_G4_DRAW_SNAPSHOT {
   ULONG Version, Bytes, Next, Reserved;
   ADMISSION_G4_DRAW_SNAP Slot[ADMISSION_G4_DRAW_SNAP_COUNT];
