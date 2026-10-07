@@ -2751,10 +2751,13 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
     AdmissionG4ObserveEnvelopeReject(adapter,context,args,1u,
         envelopePredicate,runtimePredicate,NULL,NULL);
+    /* EXP1013: name the envelope-state predicate in the first-failure receipt. */
+    detail.Subsite = 0x100u | envelopePredicate;
+    detail.Kind = runtimePredicate;
 #endif
-    return AdmissionG4SubmitReject(adapter, context, args,
+    return AdmissionG4SubmitRejectDetail(adapter, context, args,
         AdmissionG4RejectEnvelopeState, STATUS_INVALID_PARAMETER,
-        (ULONG)viewStatus, TRUE);
+        (ULONG)viewStatus, TRUE, &detail);
   }
 #undef ADMISSION_G4_RUNTIME_READY
 #undef ADMISSION_G4_REJECTS
@@ -2782,9 +2785,16 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
         AdmissionG4ObserveEnvelopeReject(adapter,context,args,2u,0u,0u,process,&private_v3.Lease);
 #endif
+        /* EXP1013: private scene lookup failed; record the lease. */
+        detail.Subsite = 0x200u | (args->Flags.Resubmission ? 1u : 0u);
+        detail.Kind = (ULONG)private_v3.Lease.SceneId;
+        detail.Ordinal = (ULONG)private_v3.Lease.SceneGeneration;
+        detail.ProcessGeneration = process->PrivateManager.Generation;
+        detail.MappingGeneration = private_v3.Lease.ManagerGeneration;
+        detail.Va = args->SubmissionFenceId;
         ExReleaseFastMutex(&state->Lock);
-        return AdmissionG4SubmitReject(adapter,context,args,
-            AdmissionG4RejectEnvelopeState,STATUS_INVALID_PARAMETER,0u,TRUE);
+        return AdmissionG4SubmitRejectDetail(adapter,context,args,
+            AdmissionG4RejectEnvelopeState,STATUS_INVALID_PARAMETER,0u,TRUE,&detail);
       }
     }
   }
@@ -2915,9 +2925,12 @@ static NTSTATUS AdmissionG4SubmitTouch(ADMISSION_CONTEXT *adapter,
   unsupported.Resubmission = 0;
   if (context->GpuvaG3Process == NULL || context->GpuvaG3Poisoned ||
       (context->Object.Flags & (ADMISSION_CONTEXT_SYSTEM | ADMISSION_CONTEXT_GDI)) != 0u ||
-      unsupported.Value != 0u)
-    return AdmissionG4SubmitReject(adapter, context, args,
-        AdmissionG4RejectEnvelopeState, STATUS_INVALID_PARAMETER, 0u, TRUE);
+      unsupported.Value != 0u) {
+    struct _ADMISSION_G4_SUBMIT_FAILURE detail = {0};
+    detail.Subsite = 0x300u; /* EXP1013: touch rejected */
+    return AdmissionG4SubmitRejectDetail(adapter, context, args,
+        AdmissionG4RejectEnvelopeState, STATUS_INVALID_PARAMETER, 0u, TRUE, &detail);
+  }
   RtlZeroMemory(&physical, sizeof(physical));
   physical.hContext = args->hContext;
   physical.DmaBufferVirtualAddress = args->DmaBufferVirtualAddress;
