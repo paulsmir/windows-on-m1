@@ -8,7 +8,6 @@
 #include "agx_win32_gpuva.h"
 #endif
 
-#define AGX_WIN32_MIN_NATIVE_BO_BYTES 0x20000u
 #define AGX_WIN32_BO_CACHE_LIMIT 16u
 #define AGX_WIN32_BO_CACHE_BYTES (32ull << 20)
 

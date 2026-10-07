@@ -153,11 +153,6 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if(!b->GpuvaReady || bytes>SIZE_MAX-0xffff) return NULL;
   bytes=(bytes+0xffff)&~(size_t)0xffff;
-  /* EXP1008: 60 of 62 failed staging copies (EXP995-EXP1007) hit BOs of
-   * exactly one 64 KiB GPU page; VidMm sent no valid UpdatePageTable for
-   * those mappings while neighbouring larger BOs of the same process were
-   * populated. Never create a single-64 KiB-page native BO. */
-  if(bytes<AGX_WIN32_MIN_NATIVE_BO_BYTES) bytes=AGX_WIN32_MIN_NATIVE_BO_BYTES;
   if(align<0x10000) align=0x10000;
   if(align!=0x10000) return NULL;
 #else
