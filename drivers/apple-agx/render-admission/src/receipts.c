@@ -2007,15 +2007,17 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3PagingResult(
 _Use_decl_annotations_ void AdmissionRecordGpuvaG3Flush(
     ADMISSION_CONTEXT *Context, const ADMISSION_G3_FLUSH_RECEIPT *Receipt) {
   HANDLE key = NULL;
+  /* EXP996: called for every flush; only failures reach the registry. */
   if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
-      Receipt == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+      Receipt == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      (NT_SUCCESS((NTSTATUS)Receipt->ResolveStatus) &&
+       NT_SUCCESS((NTSTATUS)Receipt->BrokerStatus)))
     return;
   if (!NT_SUCCESS(IoOpenDeviceRegistryKey(
           Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
           KEY_SET_VALUE, &key)))
     return;
   WriteBinary(key, L"Wom1G3FlushInput", Receipt, sizeof(*Receipt));
-  (void)ZwFlushKey(key);
   ZwClose(key);
 }
 

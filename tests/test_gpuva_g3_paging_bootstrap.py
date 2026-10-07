@@ -61,8 +61,23 @@ int main(void) {
         self.assertGreaterEqual(paging.count("AppleAgxGpuvaG3PteInputIndex("), 4)
         self.assertIn("MmGetPhysicalAddress(address->CpuVirtual)", gpuva)
         self.assertNotIn("pointer < base", gpuva)
-        self.assertIn("AdmissionRecordGpuvaG3PagingInput(", callback)
-        self.assertIn("AdmissionRecordGpuvaG3PagingResult(", callback)
+
+    def test_build_paging_buffer_does_no_registry_io_on_success(self):
+        """EXP996 kernel dump: a VidMm worker sat in AdmissionDdiBuildPagingBuffer
+        -> NtFlushKey -> CmpFlushHive -> NTFS when VidSch bugchecked 0x119.
+        Bring-up receipts wrote and flushed the device key on every paging
+        operation; the paging DDI must not perform registry I/O unless it fails."""
+        callback = (RENDER / "src/paging_windows.c").read_text()
+        ddi = callback.split("NTSTATUS AdmissionDdiBuildPagingBuffer(", 1)[1].split("\n}\n", 1)[0]
+        for receipt in ("AdmissionRecordGpuvaG3PagingInput(",
+                        "AdmissionRecordGpuvaG3WorkInput(",
+                        "AdmissionRecordGpuvaG3PagingResult("):
+            self.assertNotIn(receipt, ddi)
+        receipts = (RENDER / "src/receipts.c").read_text()
+        flush = receipts.split("void AdmissionRecordGpuvaG3Flush(", 1)[1].split("\n}\n", 1)[0]
+        guard = flush.split("IoOpenDeviceRegistryKey", 1)[0]
+        self.assertIn("NT_SUCCESS((NTSTATUS)Receipt->BrokerStatus)", guard)
+        self.assertNotIn("ZwFlushKey", flush)
 
     def test_cpu_virtual_update_ignores_dma_pointer_presence(self):
         paging = (RENDER / "src/gpuva_g3_paging_windows.c").read_text()

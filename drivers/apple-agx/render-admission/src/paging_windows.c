@@ -187,14 +187,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiBuildPagingBuffer(
   ULONG dmaSize = Args == NULL ? 0u : Args->DmaSize;
   ULONG privateSize = Args == NULL ? 0u : Args->DmaBufferPrivateDataSize;
   NTSTATUS status;
-#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  AdmissionRecordGpuvaG3PagingInput(context, Args, irql);
-  AdmissionRecordGpuvaG3WorkInput(context, Args, irql);
-#endif
+  /* EXP996: no registry I/O here. The G3 bring-up receipts wrote and flushed
+   * the device key twice per paging operation (VidMm worker found in
+   * NtFlushKey -> CmpFlushHive at the 0x119 bugcheck). Failures keep their
+   * own gated receipts in the G3 paging path. */
   status = AdmissionBuildPagingBuffer(Adapter, Args);
-#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  AdmissionRecordGpuvaG3PagingResult(context, status);
-#endif
   AdmissionPagingBuildTrace(
       context, irql, operation, dmaSize, privateSize, status);
   return status;
