@@ -17,7 +17,7 @@ static DECLSPEC_ALIGN(8) volatile LONG64 NextOwnerCookie;
 static D3DKMT_HANDLE AdmissionUmdScreenCpuAllocation(
     const ADMISSION_UMD_SCREEN_BUFFER *Buffer) {
 #ifdef APPLE_AGX_GPUVA_WINSYS
-  return Buffer->StagingAllocation;
+  return Buffer->SystemDirect ? Buffer->KernelAllocation : Buffer->StagingAllocation;
 #else
   return Buffer->KernelAllocation;
 #endif
@@ -492,6 +492,7 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   D3DKMT_HANDLE canonical = 0, staging = BorrowedStaging;
 #ifdef APPLE_AGX_GPUVA_WINSYS
   BYTE *privateStaging = NULL;
+  BOOL systemDirect = FALSE;
 #endif
   ADMISSION_ALLOCATION_DESCRIPTION stagingDescription;
   if (Token) *Token = 0;
@@ -523,9 +524,14 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   description.Version = ADMISSION_WIN32_ALLOCATION_VERSION;
   stagingDescription = description.Allocation;
 #ifdef APPLE_AGX_GPUVA_WINSYS
-  description.Version = ADMISSION_WIN32_ALLOCATION_VERSION_LOCAL;
-  description.Allocation.Type = ADMISSION_WIN32_ALLOCATION_GPU_LOCAL;
-  description.Allocation.CpuVisible = 0u;
+  /* EXP1025: small unshared buffers live in CPU-visible system memory that
+   * the GPU maps directly (64 KiB system pages, SysMem64KBPageSupported). */
+  systemDirect = !BorrowedStaging && Bytes <= ADMISSION_UMD_SYSTEM_DIRECT_BYTES;
+  if (!systemDirect) {
+    description.Version = ADMISSION_WIN32_ALLOCATION_VERSION_LOCAL;
+    description.Allocation.Type = ADMISSION_WIN32_ALLOCATION_GPU_LOCAL;
+    description.Allocation.CpuVisible = 0u;
+  }
 #else
   UNREFERENCED_PARAMETER(stagingDescription);
   UNREFERENCED_PARAMETER(staging);
@@ -572,7 +578,7 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   }
   canonical = allocationInfo.hAllocation;
 #ifdef APPLE_AGX_GPUVA_WINSYS
-  if (SUCCEEDED(result) && canonical && !staging) {
+  if (SUCCEEDED(result) && canonical && !staging && !systemDirect) {
     /* EXP1022: unshared staging is read and written only by this process
      * (the KMD copy escape receives its bytes); keep it in ordinary memory. */
     UNREFERENCED_PARAMETER(stagingDescription);
@@ -584,7 +590,7 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
 #endif
   if (FAILED(result) || !canonical
 #ifdef APPLE_AGX_GPUVA_WINSYS
-      || (!staging && !privateStaging)
+      || (!staging && !privateStaging && !systemDirect)
 #endif
       ) {
     /* Callback failures may return a handle. Record every owned handle before
@@ -620,6 +626,7 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
 #ifdef APPLE_AGX_GPUVA_WINSYS
   slot->StagingAllocation = staging;
   slot->PrivateStaging = privateStaging;
+  slot->SystemDirect = systemDirect;
   slot->Borrowed = BorrowedStaging != 0;
 #endif
   slot->Bytes = Bytes;

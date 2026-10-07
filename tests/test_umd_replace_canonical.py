@@ -54,7 +54,7 @@ struct D3DDDI_MAKERESIDENT { D3DKMT_HANDLE hPagingQueue; UINT NumAllocations; co
 struct PROT { UINT Write:1; UINT Execute:1; };
 struct D3DDDI_MAPGPUVIRTUALADDRESS { D3DKMT_HANDLE hPagingQueue; ULONGLONG BaseAddress; D3DKMT_HANDLE hAllocation; ULONGLONG OffsetInPages, SizeInPages; PROT Protection; ULONGLONG VirtualAddress, PagingFenceValue; };
 struct SYNC { BOOL Valid; }; struct CHUNKS { BOOL Valid; };
-struct SLOT { uint64_t Token; BOOL Direct,Borrowed,Resident; UINT ClassId,Flags; uint64_t Bytes;
+struct SLOT { uint64_t Token; BOOL SystemDirect,Direct,Borrowed,Resident; UINT ClassId,Flags; uint64_t Bytes;
   D3DKMT_HANDLE KernelAllocation; uint64_t CanonicalGpuVa; SYNC Sync; CHUNKS Chunks; };
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
 struct HANDLE_ { void *handle; };

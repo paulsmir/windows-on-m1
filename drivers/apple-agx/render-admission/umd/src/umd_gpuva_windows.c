@@ -370,9 +370,11 @@ static int make_resident(void *context, const uint64_t *tokens,
     auto *slot=find_slot(device,tokens[i]);
     valid=slot && !slot->Transition && !slot->CopyHeld &&
         !slot->SourceHolds && !slot->SubmissionHolds &&
-        (slot->StagingAllocation || slot->PrivateStaging || slot->Direct) &&
+        (slot->StagingAllocation || slot->PrivateStaging || slot->Direct ||
+         slot->SystemDirect) &&
         slot->CanonicalGpuVa &&
-        (!slot->Mapped || (slot->NativeBo && slot->NativeMapRelease));
+        (!slot->Mapped || slot->SystemDirect ||
+         (slot->NativeBo && slot->NativeMapRelease));
   }
   if(valid) for(unsigned i=0;i<count;++i) {
     auto *slot=find_slot(device,tokens[i]);slot->CopyHeld=TRUE;++slot->SubmissionHolds;
@@ -641,7 +643,7 @@ static int map_canonical_as(ADMISSION_UMD_DEVICE *device,
 static int replace_canonical(ADMISSION_UMD_DEVICE *device,
                              ADMISSION_UMD_SCREEN_BUFFER *slot) {
   D3DKMT_HANDLE fresh=0, old=slot->KernelAllocation;
-  if(slot->Direct || slot->Borrowed || !old || !slot->CanonicalGpuVa ||
+  if(slot->Direct || slot->SystemDirect || slot->Borrowed || !old || !slot->CanonicalGpuVa ||
      !device->KernelCallbacks->pfnMakeResidentCb) return 0;
   HRESULT hr=AdmissionUmdScreenNewCanonical(device,slot->ClassId,slot->Flags,
                                             slot->Bytes,&fresh);
@@ -836,14 +838,14 @@ static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
     uint64_t fresh=0;
     for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT && !fresh;++i) {
       auto *slot=&device->ScreenBuffers[i];
-      if(slot->CopyHeld && !slot->Direct && !slot->Queried &&
+      if(slot->CopyHeld && !slot->Direct && !slot->SystemDirect && !slot->Queried &&
          !(cpu_quiet(slot) && slot->Sync.Valid)) fresh=slot->CanonicalGpuVa;
     }
     if(fresh) (void)touch_device(device,fresh);
   }
   for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i) {
     auto *slot=&device->ScreenBuffers[i];
-    if(!slot->CopyHeld || slot->Direct ||
+    if(!slot->CopyHeld || slot->Direct || slot->SystemDirect ||
        (download && (!(slot->Flags & AppleAgxWin32BufferGpuWrite) ||
                      !slot->GpuWritten || cpu_quiet(slot))) ||
        (!download && cpu_quiet(slot) && slot->Sync.Valid)) continue;
@@ -872,7 +874,7 @@ static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
 int AdmissionUmdGpuvaPrepareCpuMap(ADMISSION_UMD_DEVICE *device,uint64_t token) {
   AcquireSRWLockShared(&device->ScreenBufferLock);
   auto *slot=find_slot(device,token);
-  bool pending=slot && !slot->Direct && !slot->Mapped && !slot->Transition &&
+  bool pending=slot && !slot->Direct && !slot->SystemDirect && !slot->Mapped && !slot->Transition &&
       !slot->SubmissionHolds && slot->GpuWritten;
   ReleaseSRWLockShared(&device->ScreenBufferLock);
   if(!pending) return 1;

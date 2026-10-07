@@ -49,7 +49,7 @@ typedef int SRWLOCK;
 static void AcquireSRWLockExclusive(SRWLOCK*){} static void ReleaseSRWLockExclusive(SRWLOCK*){}
 static void AcquireSRWLockShared(SRWLOCK*){} static void ReleaseSRWLockShared(SRWLOCK*){}
 struct SYNC { BOOL Valid; };
-struct SLOT { uint64_t Token; BOOL Active,Transition,CopyHeld,Direct,GpuWritten,Mapped,Borrowed,Queried;
+struct SLOT { uint64_t Token; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,GpuWritten,Mapped,Borrowed,Queried;
   UINT Flags,SubmissionHolds; D3DKMT_HANDLE KernelAllocation; SYNC Sync; uint64_t CanonicalGpuVa; };
 static int touches;
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
