@@ -35,7 +35,7 @@ FUNCTIONS = {
         "AdmissionGpuvaG3CompleteJob",
     ],
     "gpuva_g3_paging_windows.c": [
-        "AdmissionG3RejectPaging", "AdmissionG3RetireSystemSubtree",
+        "AdmissionG3RejectPaging", "AdmissionG3RecordTableEvent", "AdmissionG3RetireSystemSubtree",
         "AdmissionG3ActivateSystemSubtree", "AdmissionG3ResetTableShadow", "AdmissionG3RegisterTable", "AdmissionG3PrepareTableReuse", "AdmissionG3UpdateParent",
         "AdmissionG3UpdateLeaf", "AdmissionG3RecordLeaf", "AdmissionG3FindPagingEdge",
         "AdmissionG3ResolveLogicalVa", "AdmissionG3SnapshotAperture",
@@ -102,7 +102,7 @@ def generate(revision=None, function_revisions=None):
                     "AdmissionG3PreparePrivateStorageObserved", "AdmissionG3PrivateMapExtentObserved", "AdmissionG3CapturePrivateFailure",
                     "AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionGpuvaG3PrivateCancel","AdmissionGpuvaG3PrivatePreempt","AdmissionG3PrivateReap","AdmissionGpuvaG3PrivateReset","AdmissionGpuvaG3PrivateReported","AdmissionGpuvaG3PrivateRetireContext","AdmissionG3PrivateDestroyStorage","AdmissionGpuvaG3PrivateEscape", "AdmissionDdiEscape",
                     "AdmissionGpuvaG3BrokerTable",
-                    "AdmissionG3RetireSystemSubtree", "AdmissionG3ActivateSystemSubtree",
+                    "AdmissionG3RecordTableEvent", "AdmissionG3RetireSystemSubtree", "AdmissionG3ActivateSystemSubtree",
                     "AdmissionG3ResetTableShadow", "AdmissionG3RegisterTable", "AdmissionG3PrepareTableReuse",
                     "AdmissionGpuvaG3MirrorTable",
                     "AdmissionG3Fnv", "AdmissionG3UscVa", "AdmissionG3TraceUpload", "AdmissionG3VerifyUploads",

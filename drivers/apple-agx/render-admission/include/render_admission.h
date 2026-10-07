@@ -375,6 +375,11 @@ typedef struct _ADMISSION_POST_DPC_HEALTH_RECEIPT {
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #define ADMISSION_G3_LEAF_HISTORY_COUNT 256u
+/* EXP1001: the in-memory ring covers ~200 s; failure snapshots keep 256
+ * records, matching events (same table, VA or allocation) first. */
+#define ADMISSION_G3_LEAF_RING 8192u
+#define ADMISSION_G3_LEAF_EVENT_RESET 0x10u
+#define ADMISSION_G3_LEAF_EVENT_SYSTEM_RETIRE 0x20u
 /* Flags: 1 Use64KBPages, 2 Repeat, 4 NotifyEviction, 8 InitialUpdate. */
 typedef struct _ADMISSION_G3_LEAF_HISTORY {
   ULONGLONG Qpc, ProcessId, TableIpa, Allocation, FirstVa, MappingGeneration;

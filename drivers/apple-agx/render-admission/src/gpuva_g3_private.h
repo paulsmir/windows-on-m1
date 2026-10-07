@@ -40,7 +40,7 @@ typedef struct _ADMISSION_G3_STATE {
   ULONG UploadTraceNext, UploadVerifyChecks, UploadVerifyMismatch,
       UploadVerifyUnmapped;
   ADMISSION_G3_UPLOAD_TRACE UploadFirstMismatch;
-  ADMISSION_G3_LEAF_HISTORY LeafHistory[ADMISSION_G3_LEAF_HISTORY_COUNT];
+  ADMISSION_G3_LEAF_HISTORY LeafHistory[ADMISSION_G3_LEAF_RING];
   ULONG LeafHistoryNext;
   ADMISSION_G3_ALLOC_TRACK AllocTrack[ADMISSION_G3_ALLOC_TRACK_COUNT];
 } ADMISSION_G3_STATE;

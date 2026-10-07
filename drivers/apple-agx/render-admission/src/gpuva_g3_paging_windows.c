@@ -34,6 +34,23 @@ static NTSTATUS AdmissionG3RejectPaging(
 /* A removed edge retires its subtree only when no other parent retains it.
  * Tables populated before their first link are left alone. Local native leaves
  * keep their existing policy; only VidMm system residency is retired here. */
+/* EXP1001 diagnostic: whole-table shadow clears in the leaf ring. */
+static VOID AdmissionG3RecordTableEvent(ADMISSION_G3_PROCESS *process,
+    ULONGLONG table_ipa, ULONG flags) {
+  ADMISSION_G3_LEAF_HISTORY *h;
+  if (process == NULL || process->State == NULL) return;
+  h = &process->State->LeafHistory[
+      process->State->LeafHistoryNext++ % ADMISSION_G3_LEAF_RING];
+  RtlZeroMemory(h, sizeof(*h));
+  h->Qpc = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+  h->ProcessId = process->Graph.ProcessId;
+  h->TableIpa = table_ipa;
+  h->MappingGeneration = process->Graph.MappingGeneration;
+  h->Count = 8192u;
+  h->Flags = flags;
+  h->FirstSegment = MAXULONG;
+}
+
 static BOOLEAN AdmissionG3RetireSystemSubtree(ADMISSION_G3_PROCESS *process,
     ULONGLONG table_ipa, ULONGLONG retired_parent, UINT depth) {
   APPLE_AGX_GPUVA_G3_NODE *edge, *leaf;
@@ -56,6 +73,8 @@ static BOOLEAN AdmissionG3RetireSystemSubtree(ADMISSION_G3_PROCESS *process,
     if (!AppleAgxGpuvaG3GraphUpdateLeaf(&process->Graph,
             table_ipa, leaf->Index, 0ULL, false)) return FALSE;
   }
+  AdmissionG3RecordTableEvent(process, table_ipa,
+                              ADMISSION_G3_LEAF_EVENT_SYSTEM_RETIRE);
   for (shadow = process->TableShadows; shadow; shadow = shadow->Next) {
     if (shadow->BrokerIpa != table_ipa) continue;
     for (UINT i = 0u; i < 8192u; ++i) {
@@ -86,6 +105,7 @@ static void AdmissionG3ActivateSystemSubtree(ADMISSION_G3_PROCESS *process,
 static void AdmissionG3ResetTableShadow(ADMISSION_G3_PROCESS *process,
     ULONGLONG table_ipa) {
   ADMISSION_G3_TABLE_SHADOW *s;
+  AdmissionG3RecordTableEvent(process, table_ipa, ADMISSION_G3_LEAF_EVENT_RESET);
   for (s = process->TableShadows; s; s = s->Next) {
     if (s->BrokerIpa != table_ipa) continue;
     if (s->ResidentPtes) {
@@ -513,7 +533,7 @@ static VOID AdmissionG3RecordLeaf(ADMISSION_G3_PROCESS *process,
   UINT i, valid = 0u, entries, scale;
   if (process == NULL || process->State == NULL || update == NULL) return;
   h = &process->State->LeafHistory[
-      process->State->LeafHistoryNext++ % ADMISSION_G3_LEAF_HISTORY_COUNT];
+      process->State->LeafHistoryNext++ % ADMISSION_G3_LEAF_RING];
   scale = update->Flags.Use64KBPages ? 16u : 1u;
   entries = update->Flags.Repeat ? 1u : update->NumPageTableEntries;
   h->FirstSegment = MAXULONG;

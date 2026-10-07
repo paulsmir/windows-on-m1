@@ -1258,8 +1258,27 @@ Unlock:
     s->FailIndex=(ULONG)((page>>12)&8191u);
     s->Qpc=(ULONGLONG)KeQueryPerformanceCounter(&frequency).QuadPart;
     s->QpcFrequency=(ULONGLONG)frequency.QuadPart;
-    RtlCopyMemory(s->Records,state->LeafHistory,sizeof(s->Records));
-    s->Version=2u;
+    {
+      /* EXP1001: newest-first events naming the failing table, VA or
+       * allocation; remaining records are the newest others. Reserved holds
+       * the matched count; Next the ring position. */
+      ULONG total=state->LeafHistoryNext<ADMISSION_G3_LEAF_RING ?
+          state->LeafHistoryNext : ADMISSION_G3_LEAF_RING;
+      ULONG out=0u,n;
+      for(n=0u;n<total && out<ADMISSION_G3_LEAF_HISTORY_COUNT;++n) {
+        const ADMISSION_G3_LEAF_HISTORY *e=&state->LeafHistory[
+            (state->LeafHistoryNext-1u-n)%ADMISSION_G3_LEAF_RING];
+        if((leaf && e->TableIpa==leaf) ||
+           (allocation && e->Allocation==(ULONGLONG)(ULONG_PTR)allocation) ||
+           (e->FirstVa<=page && page-e->FirstVa<(ULONGLONG)e->Count*0x1000ULL))
+          s->Records[out++]=*e;
+      }
+      s->Reserved=out;
+      for(n=0u;n<total && out<ADMISSION_G3_LEAF_HISTORY_COUNT;++n)
+        s->Records[out++]=state->LeafHistory[
+            (state->LeafHistoryNext-1u-n)%ADMISSION_G3_LEAF_RING];
+    }
+    s->Version=3u;
     if(allocation) {
       ULONGLONG key=(ULONGLONG)(ULONG_PTR)allocation;
       const ADMISSION_G3_ALLOC_TRACK *t=&state->AllocTrack[
