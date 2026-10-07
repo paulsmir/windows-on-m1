@@ -2064,6 +2064,8 @@ _Use_decl_annotations_ void AdmissionRecordG4DrawSnapshot(
           PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
   WriteBinary(key, L"Wom1G4DrawSnapshot", &Context->G4DrawSnapshot,
       sizeof(Context->G4DrawSnapshot));
+  WriteBinary(key, L"Wom1G4FwSnapshot", &Context->G4FwSnapshot,
+      sizeof(Context->G4FwSnapshot));
   ZwClose(key);
 }
 

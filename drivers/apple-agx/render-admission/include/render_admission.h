@@ -415,6 +415,20 @@ typedef struct _ADMISSION_G4_DRAW_SNAPSHOT {
   ULONG Version, Bytes, Next, Reserved;
   ADMISSION_G4_DRAW_SNAP Slot[ADMISSION_G4_DRAW_SNAP_COUNT];
 } ADMISSION_G4_DRAW_SNAPSHOT;
+/* EXP992 receipt-only: final firmware TA/3D/microsequence bytes of a 77x77
+ * marker render at BeginJob (template objects 19, 18, 15, 17). */
+typedef struct _ADMISSION_G4_FW_SNAP {
+  ULONG Fence, Sizes[4];
+  ULONGLONG GpuVa[4];
+  UCHAR Ta[1564];
+  UCHAR D3[2420];
+  UCHAR Seq15[512];
+  UCHAR Seq17[512];
+} ADMISSION_G4_FW_SNAP;
+typedef struct _ADMISSION_G4_FW_SNAPSHOT {
+  ULONG Version, Bytes, Next, Reserved;
+  ADMISSION_G4_FW_SNAP Slot[4];
+} ADMISSION_G4_FW_SNAPSHOT;
 #define ADMISSION_G3_ALLOC_TRACK_COUNT 1024u
 /* EXP982: last valid leaf mapping per VidMm allocation handle. */
 typedef struct _ADMISSION_G3_ALLOC_TRACK {
@@ -486,6 +500,7 @@ typedef struct _ADMISSION_CONTEXT {
   ADMISSION_G3_PAGING_WAIT_RECEIPT G3PagingWait;
   ADMISSION_G3_PTE_WAIT_RECEIPT G3PteWait;
   ADMISSION_G4_DRAW_SNAPSHOT G4DrawSnapshot;
+  ADMISSION_G4_FW_SNAPSHOT G4FwSnapshot;
   volatile LONG G4DrawSnapshotDirty;
   volatile LONG G3PteWaitDirty;
   volatile LONG G3PagingWaitDirty;

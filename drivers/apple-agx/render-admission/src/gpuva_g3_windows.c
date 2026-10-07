@@ -2154,6 +2154,27 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
           slot->PipeState = AdmissionG4SnapRead(adapter, process,
               slot->PipeAddr, slot->Pipe, sizeof(slot->Pipe), NULL);
       }
+      {
+        ADMISSION_G4_FW_SNAPSHOT *fw = &adapter->G4FwSnapshot;
+        ADMISSION_G4_FW_SNAP *f = &fw->Slot[fw->Next++ % 4u];
+        static const ULONG index[4] = {19u, 18u, 15u, 17u};
+        UCHAR *dst[4];
+        ULONG cap[4];
+        dst[0] = f->Ta; cap[0] = sizeof(f->Ta);
+        dst[1] = f->D3; cap[1] = sizeof(f->D3);
+        dst[2] = f->Seq15; cap[2] = sizeof(f->Seq15);
+        dst[3] = f->Seq17; cap[3] = sizeof(f->Seq17);
+        fw->Version = 1u; fw->Bytes = sizeof(*fw);
+        RtlZeroMemory(f, sizeof(*f));
+        f->Fence = fence;
+        for (ULONG k = 0u; k < 4u; ++k) {
+          const APPLE_AGX_EXP208_RELOCATION_OBJECT *o =
+              &adapter->BackendImage.Objects[index[k]];
+          ULONG n = o->Size < cap[k] ? (ULONG)o->Size : cap[k];
+          f->Sizes[k] = (ULONG)o->Size; f->GpuVa[k] = o->GpuVa;
+          if (o->Data && n) RtlCopyMemory(dst[k], o->Data, n);
+        }
+      }
       InterlockedExchange(&adapter->G4DrawSnapshotDirty, 1);
     }
 #endif
