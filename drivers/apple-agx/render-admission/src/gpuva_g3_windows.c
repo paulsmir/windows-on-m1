@@ -1135,19 +1135,9 @@ RetryPagingQuiescence:
       walk.Va=page;
     }
     COPY_REJECT_IF(!pte, 56u, STATUS_INVALID_PARAMETER, Unlock);
-    /* EXP988: a QUERY may race VidMm populating a freshly mapped, just made
-     * resident range (EXP985/987: Map+MakeResident fence done, no PTE yet).
-     * Re-validate with the G3 lock released for a bounded time instead of
-     * failing the client's batch; the outcome is recorded either way. */
-    if(isQuery && !(pte->Flags&APPLE_AGX_GPUVA_G3_VALID) && pte_wait<1000u) {
-      if(pte_wait==0u)
-        pte_wait_start=(ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
-      ++pte_wait;
-      ExReleaseFastMutex(&state->Lock);
-      delay.QuadPart=-10000LL;
-      (void)KeDelayExecutionThread(KernelMode,FALSE,&delay);
-      goto RetryPagingQuiescence;
-    }
+    /* EXP1005: no wait for an invalid PTE. The EXP988 re-validation loop
+     * never recovered (EXP995-EXP1003: 0 of 70 waits) and each wait lasted
+     * 18-33 s (1000 x 1 ms sleeps at ~16 ms timer granularity). */
     COPY_REJECT_IF(!(pte->Flags&APPLE_AGX_GPUVA_G3_VALID), 57u, STATUS_INVALID_PARAMETER, Unlock);
     COPY_REJECT_IF(pte->SegmentId!=ADMISSION_MEMORY_LOCAL_SEGMENT, 58u, STATUS_INVALID_PARAMETER, Unlock);
     COPY_REJECT_IF(pte->Allocation!=(ULONGLONG)(ULONG_PTR)allocation, 59u, STATUS_INVALID_PARAMETER, Unlock);
