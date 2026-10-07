@@ -4315,21 +4315,51 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeReady(
   return AdmissionPlatformRuntimeReadyEx(Context, NULL);
 }
 
-/* EXP1013: the backend worker reports the completed fence to dxgkrnl before
- * AdmissionPlatformWorkerFinished clears WorkScheduled, so VidSch may submit
- * the next job inside that window. Admission must not refuse it (a failed
- * SubmitCommandVirtual marks the device in error); the queued packet is
- * dispatched by AdmissionPlatformWorkerFinished. */
-_Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeAcceptsWork(
-    ADMISSION_CONTEXT *Context, ULONG *FailedPredicate) {
+/* EXP1013/EXP1014: the backend worker reports the completed fence before it
+ * returns the backend to Ready and clears WorkScheduled, and VidSch may submit
+ * the next DMA buffer while a job is still running.  Neither is malformed
+ * input, and STATUS_INVALID_PARAMETER from SubmitCommandVirtual puts the device
+ * in error (DXGKDDI_SUBMITCOMMANDVIRTUAL), so the single render slot applies
+ * bounded backpressure instead: wait (PASSIVE_LEVEL, no lock held) until the
+ * runtime is ready and the render slot is empty.  Non-transient refusals
+ * (stopping, resetting, failed, missing provider) return immediately. */
+_Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeAwaitWork(
+    ADMISSION_CONTEXT *Context, ULONG TimeoutMs, ULONG *FailedPredicate) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context != NULL
+      ? (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime : NULL;
+  ULONGLONG deadline = KeQueryInterruptTime() + (ULONGLONG)TimeoutMs * 10000ULL;
+  LARGE_INTEGER slice;
   ULONG reason = 0u;
-  BOOLEAN ready = AdmissionPlatformRuntimeReadyEx(Context, &reason);
-  if (!ready && reason == 8u) {
-    ready = TRUE;
-    reason = 0u;
+  slice.QuadPart = -100000LL; /* 10 ms */
+  for (;;) {
+    if (AdmissionPlatformRuntimeReadyEx(Context, &reason)) {
+      KIRQL oldIrql;
+      BOOLEAN empty;
+      KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
+      empty = AdmissionRenderPacketState(&Context->RenderPacket) ==
+          AdmissionRenderPacketEmpty;
+      KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
+      if (empty) {
+        reason = 0u;
+        break;
+      }
+      reason = 16u; /* render slot still owned by the previous job */
+    } else if (!(reason == 8u ||
+                 (reason == 4u &&
+                  runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted))) {
+      break;
+    }
+    if (KeGetCurrentIrql() != PASSIVE_LEVEL ||
+        KeQueryInterruptTime() >= deadline)
+      break;
+    if (InterlockedCompareExchange(&runtime->WorkScheduled, 0, 0) != 0)
+      (void)KeWaitForSingleObject(&runtime->WorkIdle, Executive, KernelMode,
+                                  FALSE, &slice);
+    else
+      (void)KeDelayExecutionThread(KernelMode, FALSE, &slice);
   }
   if (FailedPredicate != NULL) *FailedPredicate = reason;
-  return ready;
+  return reason == 0u;
 }
 
 #undef ADMISSION_DELEGATE_FENCE

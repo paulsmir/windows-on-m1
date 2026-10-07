@@ -1534,10 +1534,11 @@ BOOLEAN AdmissionPlatformRuntimeReadyEx(
     _In_ ADMISSION_CONTEXT *Context, _Out_opt_ ULONG *FailedPredicate);
 BOOLEAN AdmissionPlatformRuntimeReady(
     _Inout_ ADMISSION_CONTEXT *Context);
-/* EXP1013: ready to accept new work; a backend worker still returning from
- * the previous job is not a refusal (dispatch retries when it finishes). */
-BOOLEAN AdmissionPlatformRuntimeAcceptsWork(
-    _In_ ADMISSION_CONTEXT *Context, _Out_opt_ ULONG *FailedPredicate);
+/* EXP1014: bounded wait until the runtime is ready and the render slot is
+ * empty; transient busy states are backpressure, not malformed input. */
+BOOLEAN AdmissionPlatformRuntimeAwaitWork(
+    _In_ ADMISSION_CONTEXT *Context, _In_ ULONG TimeoutMs,
+    _Out_opt_ ULONG *FailedPredicate);
 BOOLEAN AdmissionPlatformRuntimeSubmit(
     _Inout_ ADMISSION_CONTEXT *Context);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)

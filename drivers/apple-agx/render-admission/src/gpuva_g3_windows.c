@@ -2724,11 +2724,13 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
 /* Record the first failing expression as it is evaluated, not a later reread. */
 #define ADMISSION_G4_REJECTS(id, expression) \
   ((expression) ? (envelopePredicate = (id), TRUE) : FALSE)
+/* EXP1014: wait at most 1000 ms (well under TDR) for the previous job. */
 #define ADMISSION_G4_RUNTIME_READY() \
-  AdmissionPlatformRuntimeAcceptsWork(adapter, &runtimePredicate)
+  AdmissionPlatformRuntimeAwaitWork(adapter, 1000u, &runtimePredicate)
 #else
 #define ADMISSION_G4_REJECTS(id, expression) (expression)
-#define ADMISSION_G4_RUNTIME_READY() AdmissionPlatformRuntimeAcceptsWork(adapter, NULL)
+#define ADMISSION_G4_RUNTIME_READY() \
+  AdmissionPlatformRuntimeAwaitWork(adapter, 1000u, NULL)
 #endif
   if (ADMISSION_G4_REJECTS(1u, KeGetCurrentIrql() != PASSIVE_LEVEL) ||
       ADMISSION_G4_REJECTS(2u, state == NULL) ||

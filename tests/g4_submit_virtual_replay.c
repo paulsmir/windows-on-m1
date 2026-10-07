@@ -249,8 +249,9 @@ static int InterlockedExchange(volatile int *value, int exchange) {
 static int AdmissionPlatformRuntimeReady(ADMISSION_CONTEXT *adapter) {
   return adapter->RuntimeReady;
 }
-static int AdmissionPlatformRuntimeAcceptsWork(ADMISSION_CONTEXT *adapter,
-                                               ULONG *reason) {
+static int AdmissionPlatformRuntimeAwaitWork(ADMISSION_CONTEXT *adapter,
+                                             ULONG timeout_ms, ULONG *reason) {
+  (void)timeout_ms;
   if (reason) *reason = adapter->RuntimeReady ? 0u : 4u;
   return AdmissionPlatformRuntimeReady(adapter);
 }
