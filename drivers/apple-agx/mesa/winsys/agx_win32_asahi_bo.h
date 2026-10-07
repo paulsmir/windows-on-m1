@@ -8,6 +8,9 @@
 #include "agx_win32_gpuva.h"
 #endif
 
+#define AGX_WIN32_BO_CACHE_LIMIT 16u
+#define AGX_WIN32_BO_CACHE_BYTES (32ull << 20)
+
 struct agx_device;
 struct agx_bo;
 struct pipe_screen;
@@ -51,6 +54,11 @@ typedef struct {
    * reservation could not be freed yet (submission in flight). */
   AGX_WIN32_GPUVA_BO PendingVa[64];
   APPLE_AGX_U32 PendingVaCount;
+  /* EXP996: released native BOs kept bound, mapped and resident for reuse
+   * (Mesa's own BO cache is replaced by agx_bo_create below). */
+  void *Cache[AGX_WIN32_BO_CACHE_LIMIT];
+  APPLE_AGX_U32 CacheCount;
+  APPLE_AGX_U64 CacheBytes;
   /* InitBM owns these TVB lists and blocks for the queue lifetime. */
 #endif
 } AGX_WIN32_ASAHI_BACKEND;

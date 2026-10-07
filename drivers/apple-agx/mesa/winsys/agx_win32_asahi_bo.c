@@ -12,6 +12,8 @@ struct windows_bo {
   AGX_WIN32_ASAHI_BACKEND *Backend;
 #ifdef APPLE_AGX_GPUVA_WINSYS
   AGX_WIN32_GPUVA_BO Gpuva;
+  int Imported;
+  int Cached;
 #endif
 };
 static void native_map(struct agx_device *,struct agx_bo *,void *);
@@ -94,6 +96,51 @@ static int dispose(struct windows_bo *bo) {
   return 1;
 }
 
+#ifdef APPLE_AGX_GPUVA_WINSYS
+/* EXP996: every new BO costs AllocateCb, ReserveGpuVirtualAddress, a mapping
+ * and residency paging-fence wait (EXP994 DWM: ~460 new BOs, 2553 paging waits,
+ * 56 s). Keep released native BOs whole -- slot, VA, residency, CPU map -- and
+ * hand them back to an equal request, as Mesa's agx_bo_cache does. */
+static int cache_in_flight(const AGX_WIN32_ASAHI_BACKEND *b,const struct windows_bo *bo) {
+  for(unsigned i=0;i<b->Gpuva.HeldCount;++i)
+    if(b->Gpuva.Held[i]==bo->Gpuva.Allocation) return 1;
+  return 0;
+}
+static int cache_put(struct windows_bo *bo) {
+  AGX_WIN32_ASAHI_BACKEND *b=bo->Backend;
+  if(bo->Imported || bo->Cached || !bo->Gpuva.Bound || b->Failed || b->Closing ||
+     b->CacheCount>=AGX_WIN32_BO_CACHE_LIMIT ||
+     bo->Base.size>AGX_WIN32_BO_CACHE_BYTES-b->CacheBytes) return 0;
+  bo->Cached=1;
+  b->Cache[b->CacheCount++]=bo;
+  b->CacheBytes+=bo->Base.size;
+  return 1;
+}
+static struct windows_bo *cache_take(AGX_WIN32_ASAHI_BACKEND *b,size_t bytes,
+                                     unsigned flags,unsigned cls) {
+  for(APPLE_AGX_U32 i=b->CacheCount;i-->0;) {
+    struct windows_bo *bo=(struct windows_bo *)b->Cache[i];
+    if(bo->Base.size!=bytes || (unsigned)bo->Base.flags!=flags ||
+       bo->Backing.Buffer.ClassId!=cls || cache_in_flight(b,bo)) continue;
+    b->Cache[i]=b->Cache[--b->CacheCount];
+    b->CacheBytes-=bo->Base.size;
+    bo->Cached=0;
+    return bo;
+  }
+  return NULL;
+}
+/* A BO whose dispose is refused stays registered with refcnt 0 and is retried
+ * by AgxWin32AsahiCollect, exactly as an uncached release would be. */
+static void cache_flush(AGX_WIN32_ASAHI_BACKEND *b) {
+  while(b->CacheCount) {
+    struct windows_bo *bo=(struct windows_bo *)b->Cache[--b->CacheCount];
+    b->CacheBytes-=bo->Base.size;
+    bo->Cached=0;
+    (void)dispose(bo);
+  }
+}
+#endif
+
 struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned align,
                             enum agx_bo_flags flags,const char *label) {
   const unsigned allowed=AGX_BO_LOW_VA|AGX_BO_EXEC|AGX_BO_WRITEBACK|AGX_BO_READONLY;
@@ -120,6 +167,12 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
     access|=AppleAgxWin32BufferCpuRead;
     if(!(flags&AGX_BO_READONLY)) access|=AppleAgxWin32BufferGpuWrite;
   }
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if((bo=cache_take(b,bytes,(unsigned)flags,cls))) {
+    bo->Base.refcnt=1; bo->Base.label=label;
+    return &bo->Base;
+  }
+#endif
   bo=calloc(1,sizeof(*bo));
   if(!bo) return NULL;
   bo->Backend=b;
@@ -211,6 +264,9 @@ struct agx_bo *AgxWin32AsahiImportBo(
 #else
   bo->Coordinate.addr=bo->Backing.ConstructionAddress;
 #endif
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  bo->Imported=1;
+#endif
   bo->Coordinate.size_B=buffer->Transport.Bytes;bo->Base.va=&bo->Coordinate;
   if(!b->Ops.Associate(b->Owner,buffer->Transport.Token,&bo->Base,
                       bo->Backing.ConstructionSerial,release_map)) {
@@ -265,7 +321,12 @@ void agx_bo_unreference(struct agx_device *native,struct agx_bo *base) {
   struct windows_bo *bo=(struct windows_bo *)base;
   if(!base) return;
   if(base->dev!=native || base->refcnt<=0) { bo->Backend->Failed=1; return; }
-  if(--base->refcnt==0) (void)dispose(bo);
+  if(--base->refcnt==0) {
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    if(cache_put(bo)) return;
+#endif
+    (void)dispose(bo);
+  }
 }
 int AgxWin32AsahiCollect(AGX_WIN32_ASAHI_BACKEND *b) {
   APPLE_AGX_U32 cursor=0;
@@ -291,7 +352,11 @@ int AgxWin32AsahiCollect(AGX_WIN32_ASAHI_BACKEND *b) {
   }
   while((key=b->Ops.NextBo(b->Owner,&cursor))) {
     struct windows_bo *bo=(struct windows_bo *)key;
-    if(bo->Backend==b && bo->Base.refcnt==0) (void)dispose(bo);
+    if(bo->Backend==b && bo->Base.refcnt==0
+#ifdef APPLE_AGX_GPUVA_WINSYS
+       && !bo->Cached
+#endif
+       ) (void)dispose(bo);
   }
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if(b->PendingVaCount) return 0;
@@ -300,6 +365,9 @@ int AgxWin32AsahiCollect(AGX_WIN32_ASAHI_BACKEND *b) {
 }
 int AgxWin32AsahiDetach(AGX_WIN32_ASAHI_BACKEND *b) {
   if(!b || !b->Native || b->ActiveCapture || b->ActiveEmission) return 0;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  cache_flush(b);
+#endif
   if(!AgxWin32AsahiCollect(b)) return 0;
   b->Native->windows_private=NULL;
   b->Native->ops.bo_mmap=NULL;
