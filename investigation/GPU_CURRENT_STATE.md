@@ -1,7 +1,43 @@
-# J313 GPU — EXP976 DWM use-after-free fixed; slow CPU-staged desktop; durable Code28
+# J313 GPU — composed G4 desktop; staging/paging costs cut; predicate57 open
 
 
-## Current as of 2026-10-05 20:55Z (read this first)
+## Current as of 2026-10-07 04:30Z (read this first)
+
+State: Air recovering to the ordinary GPU-visible baseline after EXP1000
+(hidden-first rec scripts; issue a guest `shutdown /r` before recover.sh).
+No accepted graphics package; every experiment package is removed after its run.
+
+Proven tonight (EXPERIMENTS.md EXP994..EXP1000, all self-test gated):
+- Draws rasterize with default state (489076d3, no-DSV depth disabled).
+- Lazy download of unmapped private slots (d5c5eb36, EXP995): DWM downloads
+  ~0.9 GB/window -> 0.
+- Winsys BO cache (57213796, EXP997): paging waits 2571/52 s -> 345/12 s.
+- Poisoned process no longer withholds a finished fence (b3a8d162): fixes the
+  EXP996 0x119 (SchedulerFaulted 0x40D6B via stuck completion).
+- No registry I/O in the successful paging path (4465d720, EXP998):
+  18 ms/paging wait (was 34).
+- Chunked 64 KiB uploads (048eaae7, EXP999): upload bytes 818 -> 309 MB;
+  DWM 3.5 submits/s; upload time is now wait-bound (copy escape waits for
+  global paging quiescence and any active job), not byte-bound.
+- Rejected: BO churn as first-order cost (EXP994 analysis); residency
+  eviction as predicate57 cause (EXP1000: MakeResident refresh accepted, retry
+  still fails; reverted 56035cf0).
+
+Open defects, causal order:
+1. predicate57: KMD shadow PTE entry all-zero for a mapping VidMm treats as
+   resident (UMD map/MakeResident 44 s earlier). Kills batches -> seterror ->
+   app/DWM device errors. EXP1001 = receipt-only 200 s leaf ring + snapshot
+   v3 (matching events first; decoder scratch leaf3.py) to classify: never
+   sent / cleared by shadow reset or system retire / invalidated by VidMm.
+2. Copy-escape gates are global (any active job, global paging quiescence,
+   1 ms sleeps, pte_wait 1 s re-entering the quiescence loop): ~5 ms/slot and
+   multi-second stalls. Candidate: per-process job gate + per-allocation
+   paging gate (canonical copies are process-private).
+3. Borrowed (shared) staging is locked+hashed every submit (~33 s/228 s);
+   long-term: shared D3D surfaces without CPU access as Direct GPU-local.
+4. Hardware cursor plane absent.
+
+## Previous: Current as of 2026-10-05 20:55Z (read this first)
 
 State: Air is in the clean ordinary GPU-visible baseline (REC-EXP976: hidden
 Code45 cleanup of exact package976, then ordinary Code28/CPU8/SSH, durable
