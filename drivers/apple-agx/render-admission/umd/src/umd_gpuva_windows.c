@@ -494,54 +494,6 @@ static int staging_unchanged(ADMISSION_UMD_DEVICE *device,
   return device->DrawTerminal ? -1 : unchanged;
 }
 
-/* EXP1000: WDDM guarantees a device's residency list only while its contexts
- * are scheduled, or once a MakeResident paging fence completed (Residency
- * overview). The slot's persistent reference is taken once; EXP997 explorer
- * failed a QUERY (PTE invalid) on a BO made resident 36 s earlier. A failed
- * QUERY takes one extra reference, waits its paging fence and retries once;
- * residency_release drops that reference after the transfer. */
-static int residency_refresh(ADMISSION_UMD_DEVICE *device,
-                             D3DKMT_HANDLE allocation,bool *held) {
-  UINT priority=D3DDDI_ALLOCATIONPRIORITY_NORMAL;
-  D3DDDI_MAKERESIDENT request={};
-  request.hPagingQueue=device->PagingQueue;
-  request.NumAllocations=1;request.AllocationList=&allocation;
-  request.PriorityList=&priority;
-  HRESULT hr=device->KernelCallbacks->pfnMakeResidentCb(
-      device->RuntimeDevice.handle,&request);
-  va_record(device,6u,0,allocation,0,request.PagingFenceValue,hr);
-  if(FAILED(hr) && hr!=E_PENDING) return 0;
-  *held=true;
-  return hr!=E_PENDING || (request.PagingFenceValue &&
-      wait_paging(device,request.PagingFenceValue));
-}
-
-static void residency_release(ADMISSION_UMD_DEVICE *device,
-                              D3DKMT_HANDLE allocation,bool *held) {
-  if(!*held) return;
-  D3DDDICB_EVICT evict={};
-  evict.NumAllocations=1;evict.AllocationList=&allocation;
-  (void)device->KernelCallbacks->pfnEvictCb(device->RuntimeDevice.handle,&evict);
-  *held=false;
-}
-
-static int query_canonical(ADMISSION_UMD_DEVICE *device,D3DKMT_HANDLE allocation,
-                           APPLE_AGX_G3_COPY_REQUEST *payload,bool *held) {
-  int ok=copy_escape(device,payload) && payload->ProcessGeneration &&
-      payload->MappingGeneration;
-  if(ok || !allocation) return ok;
-  int refreshed=residency_refresh(device,allocation,held);
-  if(refreshed) {
-    payload->Operation=APPLE_AGX_G3_COPY_QUERY;payload->Offset=0;
-    payload->TransferBytes=0;payload->ProcessGeneration=0;payload->MappingGeneration=0;
-    ok=copy_escape(device,payload) && payload->ProcessGeneration &&
-        payload->MappingGeneration;
-  }
-  UINT values[3]={(UINT)allocation,(UINT)refreshed,(UINT)ok};
-  AdmissionUmdDiagnostic("measure-residency-refresh",ok ? S_OK : E_FAIL,values,ARRAYSIZE(values));
-  return ok;
-}
-
 static int transfer_slot(ADMISSION_UMD_DEVICE *device,
                           ADMISSION_UMD_SCREEN_BUFFER *slot,bool download,
                           UINT *transfer_count,ULONGLONG *transfer_bytes) {
@@ -563,8 +515,7 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
 #endif
   UINT step=1u; /* EXP870 diagnostic: 1 query 2 lock 3 transfer 4 unmap 5 unlock */
   HRESULT lock_hr=S_OK;
-  bool refresh_held=false;
-  int success=query_canonical(device,slot->KernelAllocation,payload,&refresh_held);
+  int success=copy_escape(device,payload) && payload->ProcessGeneration && payload->MappingGeneration;
   if(success) step=2u;
   BYTE *address=(BYTE *)slot->LockedBase;
   bool temporary=!slot->Mapped, locked=false;
@@ -662,7 +613,6 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
     AdmissionUmdDiagnostic("reject-copy-slot",E_FAIL,values,ARRAYSIZE(values));
     va_dump(device,slot->Token,slot->CanonicalGpuVa,slot->KernelAllocation);
   }
-  residency_release(device,slot->KernelAllocation,&refresh_held);
   HeapFree(GetProcessHeap(),0,payload);return success;
 }
 
