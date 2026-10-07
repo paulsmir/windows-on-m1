@@ -229,6 +229,38 @@ static int reserve_va(void *context, uint64_t bytes, uint64_t minimum,
   return 1;
 }
 
+static int wait_paging(void *context, uint64_t fence);
+
+/* EXP1004: VidMm writes invalid PTEs when it maps a non-resident allocation
+ * and, for fresh BOs, did not re-send valid ones after the later persistent
+ * MakeResident (EXP1001 leaf ring; EXP1003 touch did not repair them). Take
+ * the slot's persistent residency reference first, so the Map paging
+ * operation writes valid entries. Best effort: on failure the mapping
+ * proceeds as before and make_resident takes the reference later. */
+static void resident_before_map(ADMISSION_UMD_DEVICE *device, uint64_t token,
+                                D3DKMT_HANDLE handle) {
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  auto *slot=find_slot(device,token);
+  bool needed=slot && !slot->Resident && slot->KernelAllocation==handle;
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  if(!needed || !device->KernelCallbacks->pfnMakeResidentCb) return;
+  UINT priority=D3DDDI_ALLOCATIONPRIORITY_NORMAL;
+  D3DDDI_MAKERESIDENT request={};
+  request.hPagingQueue=device->PagingQueue;
+  request.NumAllocations=1;request.AllocationList=&handle;
+  request.PriorityList=&priority;
+  HRESULT hr=device->KernelCallbacks->pfnMakeResidentCb(
+      device->RuntimeDevice.handle,&request);
+  va_record(device,6u,token,handle,0,request.PagingFenceValue,hr);
+  if(FAILED(hr) && hr!=E_PENDING) return;
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  slot=find_slot(device,token);
+  if(slot && slot->KernelAllocation==handle) slot->Resident=TRUE;
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  if(hr==E_PENDING && request.PagingFenceValue)
+    (void)wait_paging(device,request.PagingFenceValue);
+}
+
 static int map_va(void *context, uint64_t token, uint64_t va,
                   uint64_t pages, unsigned protection, uint64_t *fence) {
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;
@@ -238,6 +270,7 @@ static int map_va(void *context, uint64_t token, uint64_t va,
       !device->KernelCallbacks->pfnMapGpuVirtualAddressCb) return 0;
   request.hAllocation = allocation_handle(device, token);
   if (!request.hAllocation) return 0;
+  resident_before_map(device, token, request.hAllocation);
   request.hPagingQueue = device->PagingQueue;
   request.BaseAddress = va;
   request.OffsetInPages = 0;
