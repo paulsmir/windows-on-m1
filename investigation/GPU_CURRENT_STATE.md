@@ -23,12 +23,21 @@ Proven tonight (EXPERIMENTS.md EXP994..EXP1000, all self-test gated):
   eviction as predicate57 cause (EXP1000: MakeResident refresh accepted, retry
   still fails; reverted 56035cf0).
 
+Update 2026-10-07 07:20Z (EXP1001-EXP1008):
+- Fail-fast copy QUERY (7fdf94d1, EXP1005): the EXP988 PTE wait never
+  recovered (0/70) and cost 18-33 s each; removed.
+- predicate57 = VidMm sends NO UpdatePageTable for some fresh mappings
+  (EXP1006/1007 rings: neighbours populated, failing VA has no record; zero
+  KMD early-exit rejections). Rejected repairs: MakeResident refresh
+  (EXP1000), scheduled touch (EXP1003; kept, harmless), residency before Map
+  (EXP1004), same-VA re-map (EXP1006), 128 KiB minimum (EXP1008, reverted:
+  failures follow the smallest BO kind, DWM regressed). Recent failures are
+  mostly USC-window (0x11_xxxxxxxx) BOs. Next: verbose DxgKrnl/VidMm ETW
+  for one failing allocation (VidMm's own residency/PTE decision).
+
 Open defects, causal order:
-1. predicate57: KMD shadow PTE entry all-zero for a mapping VidMm treats as
-   resident (UMD map/MakeResident 44 s earlier). Kills batches -> seterror ->
-   app/DWM device errors. EXP1001 = receipt-only 200 s leaf ring + snapshot
-   v3 (matching events first; decoder scratch leaf3.py) to classify: never
-   sent / cleared by shadow reset or system retire / invalidated by VidMm.
+1. predicate57 (see update above). Kills batches -> seterror -> app/DWM
+   device errors; ~6-80 per 4 min depending on retry rate.
 2. Copy-escape gates are global (any active job, global paging quiescence,
    1 ms sleeps, pte_wait 1 s re-entering the quiescence loop): ~5 ms/slot and
    multi-second stalls. Candidate: per-process job gate + per-allocation
