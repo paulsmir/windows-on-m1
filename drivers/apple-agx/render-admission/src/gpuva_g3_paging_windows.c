@@ -578,6 +578,35 @@ static VOID AdmissionG3RecordLeaf(ADMISSION_G3_PROCESS *process,
   }
 }
 
+/* EXP1007 diagnostic: UPDATE_PAGE_TABLE exits that return before a graph
+ * process is resolved (validation, table address, missing/poisoned process).
+ * ProcessId is 0xffff0000 | reason; Status is the returned status. */
+static VOID AdmissionG3RecordLeafEarly(ADMISSION_G3_STATE *state,
+    const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update, ULONG reason,
+    NTSTATUS status) {
+  ADMISSION_G3_LEAF_HISTORY *h;
+  UINT scale;
+  if (state == NULL || update == NULL) return;
+  ExAcquireFastMutex(&state->Lock);
+  h = &state->LeafHistory[state->LeafHistoryNext++ % ADMISSION_G3_LEAF_RING];
+  RtlZeroMemory(h, sizeof(*h));
+  scale = update->Flags.Use64KBPages ? 16u : 1u;
+  h->Qpc = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+  h->ProcessId = 0xffff0000ULL | reason;
+  h->Allocation = (ULONGLONG)(ULONG_PTR)update->hAllocation;
+  h->FirstVa = update->FirstPteVirtualAddress;
+  h->First = update->StartIndex * scale;
+  h->Count = update->NumPageTableEntries * scale;
+  h->Flags = (update->Flags.Use64KBPages ? 1u : 0u) |
+      (update->Flags.Repeat ? 2u : 0u) |
+      (update->Flags.NotifyEviction ? 4u : 0u) |
+      (update->Flags.InitialUpdate ? 8u : 0u) |
+      ((ULONG)update->PageTableLevel << 8);
+  h->Status = (ULONG)status;
+  h->FirstSegment = MAXULONG;
+  ExReleaseFastMutex(&state->Lock);
+}
+
 static APPLE_AGX_GPUVA_G3_NODE *AdmissionG3FindPagingEdge(
     APPLE_AGX_GPUVA_G3_NODE *nodes, ULONGLONG table_ipa, UINT index) {
   for (; nodes != NULL; nodes = nodes->Next)
@@ -1093,8 +1122,10 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
             1u, ADMISSION_GPUVA_G1B_PAGE_PROFILE).Leaf64KBytes == 0u ||
         update->PageTableLevel == 2u)) ||
       (update->UpdateMode != DXGK_PAGETABLEUPDATE_GPU_PHYSICAL &&
-       update->UpdateMode != DXGK_PAGETABLEUPDATE_CPU_VIRTUAL))
+       update->UpdateMode != DXGK_PAGETABLEUPDATE_CPU_VIRTUAL)) {
+    AdmissionG3RecordLeafEarly(state, update, 1u, STATUS_INVALID_PARAMETER);
     return STATUS_INVALID_PARAMETER;
+  }
   /* CPU_VIRTUAL updates complete now; supplied DMA buffers stay untouched. */
   status = AdmissionGpuvaG3ResolveTable(adapter, &update->PageTableAddress,
                                         update->UpdateMode, &table_ipa);
@@ -1102,6 +1133,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     (void)AdmissionG3RejectPaging(&failure,
         AdmissionG3PagingFailureTableAddress, MAXULONG, NULL, 0ULL, status);
     AdmissionRecordGpuvaG3PagingFailure(adapter, &failure);
+    AdmissionG3RecordLeafEarly(state, update, 2u, status);
     return status;
   }
   failure.TableIpa = table_ipa;
@@ -1136,6 +1168,10 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
                 sizeof(unpublished_before));
   if (process == NULL || process->Poisoned || process->Graph.Uncertain) {
     status = STATUS_INVALID_DEVICE_STATE;
+    ExReleaseFastMutex(&state->Lock);
+    AdmissionG3RecordLeafEarly(state, update,
+        process == NULL ? 3u : process->Poisoned ? 4u : 5u, status);
+    ExAcquireFastMutex(&state->Lock);
   } else if (process->Graph.JobInFlight || process->Graph.LeaseToken) {
     status = STATUS_DEVICE_BUSY;
     if (update->PageTableLevel == 0u)

@@ -37,7 +37,7 @@ FUNCTIONS = {
     "gpuva_g3_paging_windows.c": [
         "AdmissionG3RejectPaging", "AdmissionG3RecordTableEvent", "AdmissionG3RetireSystemSubtree",
         "AdmissionG3ActivateSystemSubtree", "AdmissionG3ResetTableShadow", "AdmissionG3RegisterTable", "AdmissionG3PrepareTableReuse", "AdmissionG3UpdateParent",
-        "AdmissionG3UpdateLeaf", "AdmissionG3RecordLeaf", "AdmissionG3FindPagingEdge",
+        "AdmissionG3UpdateLeaf", "AdmissionG3RecordLeaf", "AdmissionG3RecordLeafEarly", "AdmissionG3FindPagingEdge",
         "AdmissionG3ResolveLogicalVa", "AdmissionG3SnapshotAperture",
         "AdmissionG3EncodeVirtualPaging",
         "AdmissionG3MapPagingIpa", "AdmissionG3ExecuteVirtualPaging",
