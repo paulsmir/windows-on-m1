@@ -293,11 +293,19 @@ void AgxWin32AsahiContextDiagnostic(struct pipe_context *ctx,
 }
 int AgxWin32AsahiContextDrawReceipt(struct pipe_context *ctx) {
   if(!ctx) return 0;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  /* EXP1035: a GPUVA batch submits Asahi's own VDM stream, which carries any
+   * number of draws. The one-draw split (EXP755) is a limit of the legacy
+   * capture capsule; under GPUVA it turned every draw into a synchronous
+   * flush/retire (EXP1024: ~11 submit+wait per DWM frame). */
+  return 0;
+#else
   struct agx_context *native=agx_context(ctx);
   AGX_WIN32_ASAHI_BACKEND *backend=agx_device(ctx->screen)->windows_private;
   struct agx_batch *batch=native->batch;
   return batch && batch->draws==1 && batch->windows_batch && backend &&
       !backend->Failed && !native->any_faults;
+#endif
 }
 int AgxWin32AsahiSetStreamOutputTargetOffsetForTest(
   struct pipe_stream_output_target *base,APPLE_AGX_U32 value) {
