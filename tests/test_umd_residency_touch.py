@@ -42,6 +42,7 @@ typedef unsigned long long ULONGLONG; typedef long long LONGLONG;
 #define TRUE 1
 #define FALSE 0
 #define S_OK 0
+#define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
 #define E_FAIL ((HRESULT)0x80004005u)
 #define ADMISSION_UMD_SCREEN_BUFFER_LIMIT 16u
 #define APPLE_AGX_G3_COPY_QUERY 0u
@@ -50,7 +51,7 @@ typedef int SRWLOCK;
 static void AcquireSRWLockExclusive(SRWLOCK*){} static void ReleaseSRWLockExclusive(SRWLOCK*){}
 struct LARGE_INTEGER { LONGLONG QuadPart; };
 struct SYNC { BOOL Valid; };
-struct SLOT { uint64_t Token; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,GpuWritten,Mapped,Borrowed,Queried;
+struct SLOT { uint64_t Token; uint64_t Bytes; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,GpuWritten,Mapped,Borrowed,Queried;
   UINT Flags; D3DKMT_HANDLE KernelAllocation; SYNC Sync; uint64_t CanonicalGpuVa; };
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
 struct CB { void *pfnLockCb, *pfnUnlockCb; };
@@ -63,6 +64,7 @@ static int touch_device(ADMISSION_UMD_DEVICE*, uint64_t va){ assert(va); ++touch
 static int copy_escape(ADMISSION_UMD_DEVICE*, APPLE_AGX_G3_COPY_REQUEST *q){
   ++queries; if(queries>query_ok_after){q->ProcessGeneration=q->MappingGeneration=1;return 1;} return 0; }
 static int transfer_slot(ADMISSION_UMD_DEVICE*, SLOT*, bool, UINT*, ULONGLONG*) { return 1; }
+static void AdmissionUmdDiagnostic(const char *, HRESULT, const UINT *, UINT) {}
 @@FUNCS@@
 int main(){
   CB cb={(void*)1,(void*)1}; ADMISSION_UMD_DEVICE d={}; d.KernelCallbacks=&cb;

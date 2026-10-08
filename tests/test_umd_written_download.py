@@ -38,6 +38,7 @@ typedef unsigned long long ULONGLONG; typedef long long LONGLONG;
 #define TRUE 1
 #define FALSE 0
 #define S_OK 0
+#define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
 #define E_FAIL ((HRESULT)0x80004005u)
 #define ADMISSION_UMD_SCREEN_BUFFER_LIMIT 16u
 #define ADMISSION_UMD_DEVICE_MAGIC 0x55u
@@ -47,7 +48,7 @@ static void AcquireSRWLockExclusive(SRWLOCK*){} static void ReleaseSRWLockExclus
 static void AcquireSRWLockShared(SRWLOCK*){} static void ReleaseSRWLockShared(SRWLOCK*){}
 struct LARGE_INTEGER { LONGLONG QuadPart; };
 struct SYNC { BOOL Valid; };
-struct SLOT { uint64_t Token; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,GpuWritten,Mapped,Borrowed,Queried; UINT Flags; D3DKMT_HANDLE KernelAllocation; SYNC Sync; uint64_t CanonicalGpuVa; };
+struct SLOT { uint64_t Token; uint64_t Bytes; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,GpuWritten,Mapped,Borrowed,Queried; UINT Flags; D3DKMT_HANDLE KernelAllocation; SYNC Sync; uint64_t CanonicalGpuVa; };
 static int touches;
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
 struct CB { void *pfnLockCb, *pfnUnlockCb; };
@@ -56,6 +57,7 @@ static unsigned downloads[16], uploads[16];
 static int touch_device(ADMISSION_UMD_DEVICE*, uint64_t){ ++touches; return 1; }
 static int transfer_slot(ADMISSION_UMD_DEVICE *d, SLOT *s, bool download, UINT *, ULONGLONG *) {
   unsigned i=(unsigned)(s-d->ScreenBuffers); if(download) ++downloads[i]; else ++uploads[i]; return 1; }
+static void AdmissionUmdDiagnostic(const char *, HRESULT, const UINT *, UINT) {}
 @@FUNCS@@
 int main(){
  CB cb={(void*)1,(void*)1}; ADMISSION_UMD_DEVICE d={}; d.Magic=ADMISSION_UMD_DEVICE_MAGIC; d.KernelCallbacks=&cb;

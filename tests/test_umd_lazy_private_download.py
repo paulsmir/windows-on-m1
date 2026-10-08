@@ -42,6 +42,7 @@ typedef unsigned long long ULONGLONG; typedef long long LONGLONG;
 #define TRUE 1
 #define FALSE 0
 #define S_OK 0
+#define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
 #define E_FAIL ((HRESULT)0x80004005u)
 #define ADMISSION_UMD_SCREEN_BUFFER_LIMIT 16u
 enum { AppleAgxWin32BufferGpuWrite = 4u };
@@ -49,7 +50,7 @@ typedef int SRWLOCK;
 static void AcquireSRWLockExclusive(SRWLOCK*){} static void ReleaseSRWLockExclusive(SRWLOCK*){}
 static void AcquireSRWLockShared(SRWLOCK*){} static void ReleaseSRWLockShared(SRWLOCK*){}
 struct SYNC { BOOL Valid; };
-struct SLOT { uint64_t Token; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,GpuWritten,Mapped,Borrowed,Queried;
+struct SLOT { uint64_t Token; uint64_t Bytes; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,GpuWritten,Mapped,Borrowed,Queried;
   UINT Flags,SubmissionHolds; D3DKMT_HANDLE KernelAllocation; SYNC Sync; uint64_t CanonicalGpuVa; };
 static int touches;
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
@@ -63,6 +64,7 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *d, SLOT *s, bool download, UINT *
 static SLOT *find_slot(ADMISSION_UMD_DEVICE *d,uint64_t t){
   for(unsigned i=0;i<16;++i) if(d->ScreenBuffers[i].Active && d->ScreenBuffers[i].Token==t) return &d->ScreenBuffers[i];
   return nullptr; }
+static void AdmissionUmdDiagnostic(const char *, HRESULT, const UINT *, UINT) {}
 @@FUNCS@@
 int main(){
  CB cb={(void*)1,(void*)1}; ADMISSION_UMD_DEVICE d={}; d.KernelCallbacks=&cb;

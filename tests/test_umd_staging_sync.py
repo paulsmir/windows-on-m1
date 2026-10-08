@@ -68,7 +68,7 @@ class StagingSync(unittest.TestCase):
         text = (UMD / 'src/umd_gpuva_windows.c').read_text()
         body = text[text.index('static int transfer_slot('):text.index('static int transfer_held(')]
         # The skip is evaluated for uploads only; downloads always run.
-        self.assertRegex(body, r'if\(!download\) \{\s*int unchanged=staging_unchanged\(device,slot\);')
+        self.assertRegex(body, r'if\(!download\) \{\s*(?:int )?unchanged=staging_unchanged\(device,slot\);')
         # A transfer that starts invalidates the record before any escape.
         self.assertLess(body.index('AdmissionUmdStagingInvalidate(&slot->Sync);'),
                         body.index('copy_escape(device,payload)'))
