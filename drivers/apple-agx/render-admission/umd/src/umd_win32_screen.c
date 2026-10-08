@@ -524,8 +524,8 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   description.Version = ADMISSION_WIN32_ALLOCATION_VERSION;
   stagingDescription = description.Allocation;
 #ifdef APPLE_AGX_GPUVA_WINSYS
-  /* EXP1025: small unshared buffers live in CPU-visible system memory that
-   * the GPU maps directly (64 KiB system pages, SysMem64KBPageSupported). */
+  /* EXP1025/EXP1027: small unshared buffers are one CPU-visible class
+   * allocation the GPU maps directly (the KMD keeps it in the local segment). */
   systemDirect = !BorrowedStaging && Bytes <= ADMISSION_UMD_SYSTEM_DIRECT_BYTES;
   if (!systemDirect) {
     description.Version = ADMISSION_WIN32_ALLOCATION_VERSION_LOCAL;

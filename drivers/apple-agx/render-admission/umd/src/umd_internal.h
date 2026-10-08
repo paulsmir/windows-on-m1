@@ -20,7 +20,7 @@
  * EXP749 measured47 live executables plus resources reaching the old64 slots.
  * This is the device registry, not the per-command reference/wire limit. */
 #define ADMISSION_UMD_SCREEN_BUFFER_LIMIT AGX_WIN32_CONSTRUCTION_MAX_OBJECTS
-/* EXP1025: unshared buffers up to this size are system-memory direct. */
+/* EXP1025: unshared buffers up to this size are direct (no staging). */
 #define ADMISSION_UMD_SYSTEM_DIRECT_BYTES 0x100000ULL
 #define ADMISSION_UMD_SCREEN_FENCE_LIMIT 64u
 #define ADMISSION_UMD_SOURCE_HOLD_LIMIT 64u
@@ -56,8 +56,8 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   /* EXP1022: CPU-only staging of an unshared slot is ordinary process memory
    * (EXP1016-1021: VidMm CPU mappings read at ~80 MB/s vs 2.5 GB/s). */
   BYTE *PrivateStaging;
-  /* EXP1025: one CPU-visible system-memory allocation is both the GPU and the
-   * CPU copy (no staging, no copy escapes). */
+  /* EXP1025/EXP1027: one CPU-visible class allocation (local segment) is both
+   * the GPU and the CPU copy (no staging, no copy escapes). */
   BOOL SystemDirect;
   APPLE_AGX_U64 CanonicalGpuVa;
   BOOL CopyHeld;

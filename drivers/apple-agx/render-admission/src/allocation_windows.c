@@ -445,28 +445,29 @@ static NTSTATUS AdmissionCreateAllocationImpl(
    * such an allocation was CPU-locked inside the CPU-visible memory segment
    * (kernel dump: section at global alloc +0xE0, NULL interface at +0xF0).
    * Keep them in the aperture, where section-backed surfaces are supported. */
-  /* EXP1018: Mesa class CPU-visible allocations are CPU-only UMD staging.
-   * EXP1017: Cached has no effect in the reserved-DDR memory segment (reads
-   * stayed 78 MB/s); system-memory (aperture) backing honours it. */
-  if (description->CpuVisible != 0u) {
+  if (classId == 0u && description->CpuVisible != 0u) {
     info->PreferredSegment.SegmentId0 = ADMISSION_MEMORY_APERTURE_SEGMENT;
     info->SupportedReadSegmentSet = ADMISSION_APERTURE_SEGMENT_SET;
     info->SupportedWriteSegmentSet = ADMISSION_APERTURE_SEGMENT_SET;
+  }
+  /* EXP1027: a CPU-visible Mesa class allocation is a UMD direct buffer used
+   * by both the GPU and the CPU. Only the reserved local segment is UAT
+   * representable for every page (16 KiB-contiguous; EXP1026 system-memory
+   * backing hung the GPU), and it is CPU-visible through
+   * CpuTranslatedAddress. */
+  if (classId != 0u && description->CpuVisible != 0u) {
+    info->PreferredSegment.SegmentId0 = ADMISSION_MEMORY_LOCAL_SEGMENT;
+    info->SupportedReadSegmentSet = ADMISSION_LOCAL_SEGMENT_SET;
+    info->SupportedWriteSegmentSet = ADMISSION_LOCAL_SEGMENT_SET;
   }
 #endif
   info->EvictionSegmentSet = 0u;
   info->hAllocation = allocation;
   info->FlagsWddm2.Value = 0u;
   info->FlagsWddm2.CpuVisible = description->CpuVisible != 0u;
-#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  /* EXP1017: a CPU-visible Mesa class allocation is the UMD staging copy of
-   * a GPU-local canonical BO; only the CPU reads and writes it (the KMD copy
-   * escape moves its bytes). EXP1016: write-combined CPU reads of it ran at
-   * 91 MB/s. DXGK_ALLOCATIONINFOFLAGS_WDDM2_0: set Cached for allocations
-   * read by the UMD; VidMm keeps a non-coherent segment coherent. Never on
-   * GPU-accessed (CpuVisible=0), primary or class0 GDI/CDD surfaces. */
-  info->FlagsWddm2.Cached = classId != 0u && description->CpuVisible != 0u;
-#endif
+  /* EXP1027: CPU-visible Mesa class allocations are GPU-accessed direct
+   * buffers, mostly CPU write-only: keep the default write-combined mapping
+   * (DXGK_ALLOCATIONINFOFLAGS_WDDM2_0: never Cached for write-only). */
   /* EXP836: the only admitted Mesa class shape keeps AccessedPhysically. */
   info->FlagsWddm2.AccessedPhysically = 1u;
   info->pAllocationUsageHint = NULL;
