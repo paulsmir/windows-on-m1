@@ -1,6 +1,43 @@
 # J313 GPU — accelerated desktop renders text; ~4-7 fps composition
 
 
+## Current as of 2026-10-08 17:05Z (read this first)
+
+State: Windows recovered (EXP1047 CHKDSK, EXP1049 normal boot reached SSH);
+exact EXP1046 package removed from the normal recovery profile (cleanup
+16:55Z, ordered restart pending). No AppleAgx package should be present.
+
+Proven 2026-10-08 (EXPERIMENTS.md EXP1049, dumps in
+/Users/pavel/J313-evidence-archive/2026-10-08/EXP1049-dumps):
+- The dumped 0x133 (DPC_WATCHDOG, cumulative) is the rec1046 NORMAL recovery
+  boot (exp392, SSDT 0x24B) with the EXP1046 package still bound: dxgkrnl
+  connected the nine raw AGX level lines 880-888 of the legacy G2 _CRS, and
+  GSIV 886 = AIC 575 = AGX ASC mailbox send-empty (Asahi t8103.dtsi; a FIFO
+  status level, Linux keeps it IRQF_NO_AUTOEN) took 18.9 M ISRs on CPU0;
+  storport retries starved until the DPC watchdog; next boots could not read
+  the registry. r143 full-owner exposes only the synthetic edge 889 (EXP1014
+  dump), so this hazard is specific to the normal recovery profile.
+- Rollback defect: recover.sh launched the normal profile after the hidden
+  cleanup boot failed (no SSH, package still bound). Fixed fail-closed in
+  .local/experiments/EXP1046-present-update/evidence/rec1046h/recover.sh
+  (template copied by prepare.sh): stop unless hidden cleanup reports
+  Staged 0 / Sys false / Umd false.
+- Guest RTC does not advance across resets; Windows event times are not
+  wall time (boot attribution must come from host logs).
+
+Open, causal order:
+1. Crash 1: EXP1046 full-owner 0x133 (same P1-P3), dump overwritten; that
+   package still carried the EXP1044/1045 paging-path registry diagnostics
+   (now reverted). Re-test EXP1046's UMD change (6e9c1ad0) only on a clean
+   package, with dump-first recovery.
+2. Performance: paging churn (EXP1045: 72% invalid PTE writes) and per-op
+   broker cost (EXP1044: ~30 us/op) -> broker redesign (Phase A m1n1 hash
+   index + no TLB invalidate on invalid->valid; Phase B batched ABI).
+3. Notepad (WinUI 3) labels/menu artifact; Settings (presentation update).
+4. Legacy recovery firmware still exposes 575/577 level lines: never boot
+   it with an AppleAgx package bound.
+
+
 ## Current as of 2026-10-08 11:00Z (read this first)
 
 State: Air on the EXP1039 full-owner boot (package installed for same-boot
