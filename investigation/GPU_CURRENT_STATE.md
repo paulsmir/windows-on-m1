@@ -1,5 +1,35 @@
 # J313 GPU — accelerated desktop; ~15 flips/s composition (EXP1055)
 
+# J313 GPU — accelerated desktop; Settings opens, ~18 flips/s composition (EXP1061)
+
+
+## Current as of 2026-10-08 22:36Z (read this first)
+
+State: GPU-visible baseline after each run (rec1061h rollback). Best package:
+EXP1061 (d3a5ce63): zero rejects, DWM stable through trace + Settings +
+Notepad probes, 89 DWM submits/s, ~18 flips/s, Settings renders completely.
+Full-owner m1n1 m1n1-824ea32d-mailbox, r143 unchanged.
+
+Proven 2026-10-08 night (EXPERIMENTS.md EXP1059-EXP1061):
+- Settings/ApplicationFrameHost crash (c0000005 memcpy) needed two fixes:
+  fb077b89 CPU maps of Direct presentation slots through a private shadow
+  (copy-escape download/upload), and cfb8f725 KMD copy escape admits
+  classless GPU-local presentation allocations (EXP1059 predicate 39).
+- Intermittent CreateBo failure = per-device buffer table exhausted at 256
+  live buffers (EXP1060 receipts: active 256 for DWM x3 and an app); DWM then
+  crashed in agx_fast_link writing to the NULL BO (the black flashes). Fixed
+  by d3a5ce63 (4096 buffers, high-water-bounded scans), EXP1061.
+
+Open, causal order:
+1. Notepad/WinUI menu artifacts (noise or missing text): the app context is
+   poisoned at the native draw entry (agx_state.c:5421, first fault on the
+   2nd draw of a batch, also in two other processes); every later flush is
+   dropped. 61530e9b makes zero-vertex/instance draws no-ops and splits the
+   entry checks; EXP1062 verifies or names the refusing check.
+2. DWM upload/completion phases; broker internal scans (m1n1 Phase A).
+3. Occasional multi-second completion wait when an app starts (EXP1056
+   5.66 s, EXP1059 7.52 s; absent in EXP1061).
+
 
 ## Current as of 2026-10-08 21:00Z (read this first)
 
