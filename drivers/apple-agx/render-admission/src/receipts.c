@@ -2104,20 +2104,6 @@ _Use_decl_annotations_ void AdmissionRecordG3Poison(
   ZwClose(key);
 }
 
-_Use_decl_annotations_ void AdmissionRecordPagingCensus(
-    ADMISSION_CONTEXT *Context) {
-  HANDLE key = NULL;
-  ULONGLONG value[64];
-  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
-      KeGetCurrentIrql() != PASSIVE_LEVEL)
-    return;
-  RtlCopyMemory(value, Context->PagingCensus, sizeof(value));
-  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
-          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
-  WriteBinary(key, L"Wom1PagingCensus", value, sizeof(value));
-  ZwClose(key);
-}
-
 _Use_decl_annotations_ void AdmissionRecordG3BrokerTiming(
     ADMISSION_CONTEXT *Context, const ULONGLONG *Calls, const ULONGLONG *Ticks,
     const ULONGLONG *MaxTicks, ULONG Count) {
