@@ -701,7 +701,10 @@ SupportedDDIInterfaceVersions[] = {
    bool frontend_ready;
    /* EXP994: D3D disables depth/stencil while no DSV is bound. */
    void *app_dsa;
-   void *no_depth_dsa;'''),
+   void *no_depth_dsa;
+   /* EXP1064 receipt: last SetRenderTargets binding (slots, NULL views,
+    * views without a texture, DSV present). */
+   UINT agx_rt_args[4];'''),
         ('''static inline void
 SetError(D3D10DDI_HDEVICE hDevice, HRESULT hr)
 {
@@ -720,7 +723,21 @@ AgxSetErrorWithOrigin(D3D10DDI_HDEVICE hDevice, HRESULT hr,
    }
 }
 #define SetError(device, hr) \
-   AgxSetErrorWithOrigin((device), (hr), __func__, __LINE__)'''),
+   AgxSetErrorWithOrigin((device), (hr), __func__, __LINE__)
+
+/* EXP1064 receipt-only: a draw reaching the pipe with neither a color nor a
+ * depth target (EXP1063 kind-6 drops: text quads), with the last binding. */
+static inline void
+AgxD3d10NoTargetReceipt(Device *pDevice, UINT kind, UINT count)
+{
+   static volatile LONG records;
+   if (!pDevice || pDevice->fb.nr_cbufs || pDevice->fb.zsbuf.texture) return;
+   if (InterlockedIncrement(&records) > 24) return;
+   UINT values[7] = {kind, count, (UINT)pDevice->primitive,
+      pDevice->agx_rt_args[0], pDevice->agx_rt_args[1],
+      pDevice->agx_rt_args[2], pDevice->agx_rt_args[3]};
+   AgxD3d10WindowsDiagnostic("reject-no-target", S_OK, values, 7u);
+}'''),
         ('''struct Query
 {
    D3D10DDI_QUERY Type;
@@ -1084,7 +1101,16 @@ AgxD3d10ApplyDepthStencil(Device *pDevice)
 void APIENTRY
 SetRenderTargets(D3D10DDI_HDEVICE hDevice,'''),
         ('''   pipe->set_framebuffer_state(pipe, &pDevice->fb);
-}''','''   pipe->set_framebuffer_state(pipe, &pDevice->fb);
+}''','''   pDevice->agx_rt_args[0] = RTargets;
+   pDevice->agx_rt_args[1] = 0u;
+   pDevice->agx_rt_args[2] = 0u;
+   for (unsigned i = 0; i < RTargets; ++i) {
+      struct pipe_surface *view = CastPipeRenderTargetView(phRenderTargetView[i]);
+      if (!view) ++pDevice->agx_rt_args[1];
+      else if (!view->texture) ++pDevice->agx_rt_args[2];
+   }
+   pDevice->agx_rt_args[3] = CastPipeDepthStencilView(hDepthStencilView) != NULL;
+   pipe->set_framebuffer_state(pipe, &pDevice->fb);
    AgxD3d10ApplyDepthStencil(pDevice);
 }'''),
         ('''   struct pipe_context *pipe = CastPipeContext(hDevice);
@@ -2387,6 +2413,7 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
    const UINT args[] = {VertexCount, StartVertexLocation, static_cast<UINT>(pDevice->primitive)};
    AgxD3d10WindowsDiagnostic("draw-args", S_OK, args, 3);
    AgxD3d10WindowsDiagnosticState(pDevice->windows, "draw-before");
+   AgxD3d10NoTargetReceipt(pDevice, 1u, VertexCount);
    util_draw_arrays(pDevice->pipe, pDevice->primitive, StartVertexLocation, VertexCount);
    AgxD3d10WindowsDiagnosticState(pDevice->windows, "draw-after");''')
     replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','DrawIndexed','''   Device *pDevice = CastDevice(hDevice);
@@ -2418,6 +2445,7 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
    draw.start = StartIndexLocation + pDevice->ib_offset/pDevice->index_size;
    draw.count = IndexCount;
    draw.index_bias = BaseVertexLocation;
+   AgxD3d10NoTargetReceipt(pDevice, 2u, IndexCount);
    pDevice->pipe->draw_vbo(pDevice->pipe, &info, 0, NULL, &draw, 1);''')
     replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','DrawIndexedInstanced','''   Device *pDevice=CastDevice(hDevice);
    if(!pDevice || !pDevice->index_buffer ||
@@ -2443,6 +2471,7 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
    info.primitive_restart=true;info.restart_index=pDevice->restart_index;
    draw.start=StartIndexLocation+pDevice->ib_offset/pDevice->index_size;
    draw.count=IndexCountPerInstance;draw.index_bias=BaseVertexLocation;
+   AgxD3d10NoTargetReceipt(pDevice,3u,IndexCountPerInstance);
    pDevice->pipe->draw_vbo(pDevice->pipe,&info,0,NULL,&draw,1);''')
     replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','DrawInstanced','''   Device *pDevice=CastDevice(hDevice);
    if(!pDevice || pDevice->primitive>=MESA_PRIM_COUNT) {
@@ -2459,6 +2488,7 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
       if(FAILED(status)) {SetError(hDevice,status);return;}
    }
    ResolveState(pDevice);
+   AgxD3d10NoTargetReceipt(pDevice,4u,VertexCountPerInstance);
    util_draw_arrays_instanced(pDevice->pipe,pDevice->primitive,
       StartVertexLocation,VertexCountPerInstance,StartInstanceLocation,
       InstanceCount);''')
