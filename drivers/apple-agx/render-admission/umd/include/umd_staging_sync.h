@@ -14,16 +14,38 @@ typedef struct _ADMISSION_UMD_STAGING_SYNC {
   int Valid;
 } ADMISSION_UMD_STAGING_SYNC;
 
+static inline unsigned long long AdmissionUmdStagingMix(
+    unsigned long long h, unsigned long long w) {
+  h = (h ^ w) * 0x100000001b3ULL;
+  return h ^ (h >> 29);
+}
+
+/* Four independent lanes per 32 bytes so the multiply chain does not bound
+ * throughput (EXP1055: DWM hashed 29.8 GB of staging at 2.5 GB/s in 170 s);
+ * the lanes are folded in order, so words moved between lanes still change
+ * the result. */
 static inline unsigned long long AdmissionUmdStagingHash(
     const void *Data, unsigned long long Bytes) {
   const unsigned char *p = (const unsigned char *)Data;
-  unsigned long long h = 0x9e3779b97f4a7c15ULL ^ Bytes;
-  unsigned long long i = 0;
+  unsigned long long a = 0x9e3779b97f4a7c15ULL ^ Bytes;
+  unsigned long long b = a + 0x632be59bd9b4e019ULL;
+  unsigned long long c = a ^ 0x85ebca6b2fd5c3a1ULL;
+  unsigned long long d = a - 0x27d4eb2f165667c5ULL;
+  unsigned long long h, i = 0;
+  for (; i + 32u <= Bytes; i += 32u) {
+    unsigned long long w[4];
+    memcpy(w, p + i, sizeof(w));
+    a = AdmissionUmdStagingMix(a, w[0]);
+    b = AdmissionUmdStagingMix(b, w[1]);
+    c = AdmissionUmdStagingMix(c, w[2]);
+    d = AdmissionUmdStagingMix(d, w[3]);
+  }
+  h = AdmissionUmdStagingMix(AdmissionUmdStagingMix(
+      AdmissionUmdStagingMix(a, b), c), d);
   for (; i + 8u <= Bytes; i += 8u) {
     unsigned long long w;
     memcpy(&w, p + i, sizeof(w));
-    h = (h ^ w) * 0x100000001b3ULL;
-    h ^= h >> 29;
+    h = AdmissionUmdStagingMix(h, w);
   }
   for (; i < Bytes; ++i)
     h = (h ^ p[i]) * 0x100000001b3ULL;

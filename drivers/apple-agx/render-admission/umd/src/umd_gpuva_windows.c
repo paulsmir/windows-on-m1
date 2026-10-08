@@ -580,15 +580,6 @@ static int staging_unchanged(ADMISSION_UMD_DEVICE *device,
       !AdmissionUmdStagingUploadNeeded(&slot->Sync,
           AdmissionUmdStagingHash(address,slot->Bytes),slot->Bytes);
   if(address) EXP1016_NOTE(0u,slot->Bytes,hash_start);
-#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
-  /* EXP1019 measurement only: the same bytes again, now touched. */
-  if(address) {
-    EXP1016_START(rehash_start);
-    volatile unsigned long long rehash=AdmissionUmdStagingHash(address,slot->Bytes);
-    (void)rehash;
-    EXP1016_NOTE(2u,slot->Bytes,rehash_start);
-  }
-#endif
   if(locked) {
     D3DDDICB_UNLOCK unlock={};unlock.NumAllocations=1;
     unlock.phAllocations=&slot->StagingAllocation;

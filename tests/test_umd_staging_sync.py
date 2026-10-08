@@ -19,6 +19,7 @@ TEST = r'''
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 int main(void) {
   ADMISSION_UMD_STAGING_SYNC s = {0};
   unsigned char *buf = calloc(1, 0x10007);
@@ -38,6 +39,16 @@ int main(void) {
   buf[0x10006] ^= 1u;
   assert(AdmissionUmdStagingUploadNeeded(&s, AdmissionUmdStagingHash(buf, 0x10007), 0x10007));
   buf[0x10006] ^= 1u;
+  /* Words exchanged between independent hash lanes must not cancel. */
+  for (unsigned lane = 1; lane < 4; ++lane) {
+    unsigned long long w0, w1;
+    unsigned char *a = buf + 0x2000, *b = buf + 0x2000 + lane * 8u;
+    memcpy(&w0, a, 8); memcpy(&w1, b, 8);
+    memcpy(a, &w1, 8); memcpy(b, &w0, 8);
+    assert(AdmissionUmdStagingUploadNeeded(&s, AdmissionUmdStagingHash(buf, 0x10007), 0x10007));
+    memcpy(a, &w0, 8); memcpy(b, &w1, 8);
+  }
+  assert(!AdmissionUmdStagingUploadNeeded(&s, AdmissionUmdStagingHash(buf, 0x10007), 0x10007));
   /* Same bytes, different extent: upload. */
   assert(AdmissionUmdStagingUploadNeeded(&s, AdmissionUmdStagingHash(buf, 0x10000), 0x10000));
   /* Invalidation (failed/aborted transfer) forces upload. */
