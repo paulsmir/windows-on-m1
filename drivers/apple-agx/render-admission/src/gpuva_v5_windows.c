@@ -40,6 +40,12 @@ static void AdmissionGpuvaBarrier(void *opaque)
   KeMemoryBarrier();
 }
 
+static unsigned long long AdmissionGpuvaNow(void *opaque)
+{
+  UNREFERENCED_PARAMETER(opaque);
+  return (unsigned long long)KeQueryPerformanceCounter(NULL).QuadPart;
+}
+
 BOOLEAN AdmissionGpuvaV5ClientOpen(ADMISSION_CONTEXT *context,
                                    APPLE_AGX_GPUVA_V5_CLIENT *client)
 {
@@ -53,5 +59,6 @@ BOOLEAN AdmissionGpuvaV5ClientOpen(ADMISSION_CONTEXT *context,
   io.Read64 = AdmissionGpuvaRead64;
   io.Write32 = AdmissionGpuvaWrite32;
   io.Barrier = AdmissionGpuvaBarrier;
+  io.Now = AdmissionGpuvaNow;
   return AppleAgxGpuvaV5ClientInit(client, &io) ? TRUE : FALSE;
 }

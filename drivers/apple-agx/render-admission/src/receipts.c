@@ -2104,6 +2104,30 @@ _Use_decl_annotations_ void AdmissionRecordG3Poison(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordG3BrokerTiming(
+    ADMISSION_CONTEXT *Context, const ULONGLONG *Calls, const ULONGLONG *Ticks,
+    const ULONGLONG *MaxTicks, ULONG Count) {
+  HANDLE key = NULL;
+  ULONGLONG value[2 + 3 * 32];
+  ULONG i;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      Calls == NULL || Ticks == NULL || MaxTicks == NULL || Count > 32u ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  RtlZeroMemory(value, sizeof(value));
+  value[0] = 1u;
+  (void)KeQueryPerformanceCounter((PLARGE_INTEGER)&value[1]);
+  for (i = 0; i < Count; ++i) {
+    value[2 + i] = Calls[i];
+    value[2 + 32 + i] = Ticks[i];
+    value[2 + 64 + i] = MaxTicks[i];
+  }
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
+  WriteBinary(key, L"Wom1G3BrokerTiming", value, sizeof(value));
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordG3PagingWait(
     ADMISSION_CONTEXT *Context) {
   HANDLE key = NULL;

@@ -1024,6 +1024,11 @@ void AdmissionRecordG4SubmitFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3CopyQueryFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3LeafHistory(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3PagingWait(_In_opt_ ADMISSION_CONTEXT *Context);
+/* EXP1044 diagnostic: per-command broker call count/ticks/max ticks. */
+void AdmissionRecordG3BrokerTiming(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_reads_(Count) const ULONGLONG *Calls,
+    _In_reads_(Count) const ULONGLONG *Ticks,
+    _In_reads_(Count) const ULONGLONG *MaxTicks, ULONG Count);
 void AdmissionRecordG3PteWait(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3Poison(_In_opt_ ADMISSION_CONTEXT *Context,
                              ULONG Site, ULONG ProcessId, ULONG BrokerStatus);

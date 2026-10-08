@@ -1,7 +1,7 @@
 /* EXP852 dump PTE group plus its saved firmware exclusion. No access to Air. */
 static void r133_publication_cases(void) {
   ADMISSION_CONTEXT a={0}; ADMISSION_G3_STATE state={0}; REPLAY_BROKER b={0};
-  APPLE_AGX_GPUVA_V5_IO io={&b,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier};
+  APPLE_AGX_GPUVA_V5_IO io={&b,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier,NULL};
   local_ipa=0x8e0000000ULL; replay_identity_ram=true;
   assert(posix_memalign((void **)&local_cpu,0x4000,(size_t)local_bytes)==0);
   memset(local_cpu,0,(size_t)local_bytes);ReplayBrokerInit(&b);

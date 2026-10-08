@@ -1330,6 +1330,20 @@ PagingDone:
   if (unpublished_changed)
     AdmissionRecordGpuvaG3UnpublishedGroups(adapter, unpublished_after);
   AdmissionRecordG3PagingWait(adapter);
+  {
+    /* EXP1044 diagnostic: publish broker call timing every 4096 calls. */
+    static ULONGLONG published;
+    ULONGLONG total = 0;
+    ULONG i;
+    for (i = 0; i < APPLE_AGX_GPUVA_V5_TIMED_COMMANDS; ++i)
+      total += state->Client.Calls[i];
+    if (total - published >= 4096u) {
+      published = total;
+      AdmissionRecordG3BrokerTiming(adapter, state->Client.Calls,
+          state->Client.Ticks, state->Client.MaxTicks,
+          APPLE_AGX_GPUVA_V5_TIMED_COMMANDS);
+    }
+  }
   AdmissionRecordGpuvaG3PagingFailure(adapter, &failure);
   if (!NT_SUCCESS(status) && failure.Branch != 0u &&
       failure.GraphLastStatus != 0u)

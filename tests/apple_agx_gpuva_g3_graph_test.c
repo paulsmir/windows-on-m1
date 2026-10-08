@@ -50,7 +50,7 @@ static void release(void *opaque, void *ptr) { (void)opaque; free(ptr); }
 static unsigned long long scaling_visits(unsigned int leaves) {
   struct fixture f = {0};
   APPLE_AGX_GPUVA_V5_CLIENT client;
-  APPLE_AGX_GPUVA_V5_IO io = {&f, write64, read64, write32, barrier};
+  APPLE_AGX_GPUVA_V5_IO io = {&f, write64, read64, write32, barrier, NULL};
   APPLE_AGX_GPUVA_G3_GRAPH graph;
   unsigned long long ipa = 0, visits;
   f.bulk = 1u;
@@ -101,7 +101,7 @@ static void lookup_scale(void) {
 static void level_reuse(void) {
   struct fixture f = {0};
   APPLE_AGX_GPUVA_V5_CLIENT client;
-  APPLE_AGX_GPUVA_V5_IO io = {&f, write64, read64, write32, barrier};
+  APPLE_AGX_GPUVA_V5_IO io = {&f, write64, read64, write32, barrier, NULL};
   APPLE_AGX_GPUVA_G3_GRAPH graph;
   unsigned int before;
   static const unsigned int retire[] = {
@@ -144,7 +144,7 @@ static void level_reuse(void) {
 int main(void) {
   struct fixture f = {0};
   APPLE_AGX_GPUVA_V5_CLIENT client;
-  APPLE_AGX_GPUVA_V5_IO io = {&f, write64, read64, write32, barrier};
+  APPLE_AGX_GPUVA_V5_IO io = {&f, write64, read64, write32, barrier, NULL};
   APPLE_AGX_GPUVA_G3_GRAPH graph;
   static const unsigned int order[] = {
       AGX_GPUVA_V5_CREATE, AGX_GPUVA_V5_REGISTER_TABLE,
