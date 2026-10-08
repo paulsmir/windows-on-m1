@@ -1,7 +1,7 @@
-# J313 GPU — accelerated desktop renders text; ~4-7 fps composition
+# J313 GPU — accelerated desktop; ~15 flips/s composition (EXP1055)
 
 
-## Current as of 2026-10-08 20:15Z (read this first)
+## Current as of 2026-10-08 21:00Z (read this first)
 
 State: GPU-visible baseline after each run. Best package: EXP1055 (dcd6bbc3 +
 mailbox, graph indices, idempotent re-attach, 1 ms clock): ~15 flips/s. Full-owner m1n1 is
