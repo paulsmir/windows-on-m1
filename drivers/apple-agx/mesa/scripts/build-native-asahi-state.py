@@ -704,7 +704,9 @@ SupportedDDIInterfaceVersions[] = {
    void *no_depth_dsa;
    /* EXP1064 receipt: last SetRenderTargets binding (slots, NULL views,
     * views without a texture, DSV present). */
-   UINT agx_rt_args[4];'''),
+   UINT agx_rt_args[4];
+   /* EXP1065: vertex elements were bound at least once (see update_velems). */
+   BOOL agx_velems_bound;'''),
         ('''static inline void
 SetError(D3D10DDI_HDEVICE hDevice, HRESULT hr)
 {
@@ -2396,6 +2398,26 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
       SetError(hDevice,E_NOTIMPL);return;
    }
    LOG_ENTRYPOINT();''')])
+    # EXP1065: Notepad and the atlas probe crashed at agx_update_vs reading a
+    # NULL ctx->attributes: D3D draws need no input layout (SV_VertexID only),
+    # but upstream update_velems bound nothing for a NULL layout or before the
+    # first IaSetInputLayout. A NULL layout means zero vertex elements.
+    replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','update_velems','''   if (!pDevice->velems_changed && pDevice->agx_velems_bound)
+      return;
+
+   if(pDevice->element_layout) {
+      struct cso_velems_state *state = &pDevice->element_layout->state;
+      for (unsigned i = 0; i < state->count; i++)
+         state->velems[i].src_stride = pDevice->vertex_strides[state->velems[i].vertex_buffer_index];
+      cso_set_vertex_elements(pDevice->cso, state);
+   } else {
+      struct cso_velems_state empty;
+      memset(&empty, 0, sizeof(empty));
+      cso_set_vertex_elements(pDevice->cso, &empty);
+   }
+
+   pDevice->agx_velems_bound = TRUE;
+   pDevice->velems_changed = false;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','Draw','''   LOG_ENTRYPOINT();
    Device *pDevice = CastDevice(hDevice);
    if(pDevice->primitive>=MESA_PRIM_LINES_ADJACENCY) {
