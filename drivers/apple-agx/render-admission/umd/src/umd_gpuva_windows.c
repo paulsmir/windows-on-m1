@@ -696,11 +696,19 @@ static int query_canonical(ADMISSION_UMD_DEVICE *device,
 static int transfer_slot(ADMISSION_UMD_DEVICE *device,
                           ADMISSION_UMD_SCREEN_BUFFER *slot,bool download,
                           UINT *transfer_count,ULONGLONG *transfer_bytes) {
+  int unchanged=0;
   if(!download) {
-    int unchanged=staging_unchanged(device,slot);
+    unchanged=staging_unchanged(device,slot);
     if(unchanged<0) return 0;
-    if(unchanged) return 1;
   }
+  {
+    UINT values[6]={(UINT)slot->Token,(UINT)(slot->Token>>32),(UINT)download,
+        (UINT)unchanged,(UINT)slot->Bytes,
+        (UINT)slot->Mapped|((UINT)slot->Borrowed<<1)|((UINT)slot->GpuWritten<<2)|
+        ((UINT)slot->Queried<<3)|((UINT)(slot->PrivateStaging!=NULL)<<4)};
+    AdmissionUmdDiagnostic("ddi-slot-xfer",S_OK,values,ARRAYSIZE(values));
+  }
+  if(unchanged) return 1;
   AdmissionUmdStagingInvalidate(&slot->Sync);
   auto *payload=(APPLE_AGX_G3_COPY_REQUEST *)HeapAlloc(
       GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(APPLE_AGX_G3_COPY_REQUEST));
@@ -848,7 +856,16 @@ static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
     if(!slot->CopyHeld || slot->Direct || slot->SystemDirect ||
        (download && (!(slot->Flags & AppleAgxWin32BufferGpuWrite) ||
                      !slot->GpuWritten || cpu_quiet(slot))) ||
-       (!download && cpu_quiet(slot) && slot->Sync.Valid)) continue;
+       (!download && cpu_quiet(slot) && slot->Sync.Valid)) {
+      if(slot->CopyHeld && !download) {
+        UINT values[4]={(UINT)slot->Token,(UINT)(slot->Token>>32),
+            (UINT)slot->Direct|((UINT)slot->SystemDirect<<1)|
+            ((UINT)cpu_quiet(slot)<<2)|((UINT)slot->Sync.Valid<<3),
+            (UINT)slot->Bytes};
+        AdmissionUmdDiagnostic("ddi-slot-skip",S_OK,values,ARRAYSIZE(values));
+      }
+      continue;
+    }
     if(!transfer_slot(device,slot,download,&measured_count,&measured_bytes)) {
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
       measure_g4_phase(download ? 6u : 3u,phase_start,measured_count,
@@ -973,6 +990,14 @@ static int submit(void *context, const uint64_t *written,
   if (trackedAllocation != 0u)
     (void)AdmissionUmdGpuvaFrameArm(device, trackedAllocation, trackedVa);
 #endif
+  {
+    UINT values[10]={written_count,0u,0u,0u,0u,0u,0u,0u,0u,0u};
+    for(unsigned i=0;i<written_count && i<4u;++i) {
+      values[1u+2u*i]=(UINT)written[i];values[2u+2u*i]=(UINT)(written[i]>>32);
+    }
+    values[9]=bytes;
+    AdmissionUmdDiagnostic("ddi-submit",S_OK,values,ARRAYSIZE(values));
+  }
   if(!mark_written(device,written,written_count) || !transfer_held(device,false)) {
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
     device->FrameSubmitStatus = E_FAIL;

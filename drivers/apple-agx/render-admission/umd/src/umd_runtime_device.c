@@ -52,6 +52,21 @@ static BOOL AdmissionUmdDiagnosticPermit(
   if (strncmp(Stage, "reject-", 7u) == 0 ||
       strncmp(Stage, "measure-", 8u) == 0)
     return TRUE;
+  /* EXP1032 diagnostic: per-call DDI/slot trace, unbudgeted but opt-in per
+   * process (APPLE_AGX_UMD_DDI_TRACE=1); never emitted otherwise. */
+  if (strncmp(Stage, "ddi-", 4u) == 0) {
+    static volatile LONG ddiTrace = -1;
+    LONG cached = InterlockedCompareExchange(&ddiTrace, -1, -1);
+    if (cached < 0) {
+      WCHAR flag[2];
+      DWORD saved = GetLastError();
+      cached = GetEnvironmentVariableW(L"APPLE_AGX_UMD_DDI_TRACE", flag, 2) == 1u &&
+          flag[0] == L'1';
+      SetLastError(saved);
+      InterlockedExchange(&ddiTrace, cached);
+    }
+    return cached == 1;
+  }
   return InterlockedCompareExchange(NormalRecords, 0, 0) < 128 &&
          InterlockedIncrement(NormalRecords) <= 128;
 }

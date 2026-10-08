@@ -636,6 +636,18 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   slot->Active = TRUE;
   slot->Transition = FALSE;
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  {
+    UINT values[8] = {(UINT)token, (UINT)(token >> 32), (UINT)Bytes,
+        (UINT)Flags, (UINT)ClassId,
+#ifdef APPLE_AGX_GPUVA_WINSYS
+        (UINT)(systemDirect != 0) | ((UINT)(privateStaging != NULL) << 1) |
+            ((UINT)(BorrowedStaging != 0) << 2),
+#else
+        0u,
+#endif
+        (UINT)canonical, 0u};
+    AdmissionUmdDiagnostic("ddi-slot-create", S_OK, values, ARRAYSIZE(values));
+  }
   device->LastScreenError = S_OK;
   *Token = token;
   return 1;

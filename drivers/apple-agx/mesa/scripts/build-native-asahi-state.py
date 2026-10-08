@@ -3398,6 +3398,44 @@ AgxD3d10ResourceWithinRequiredLimits(
         start=text.index('{',text.index(marker))+1
         resource_path.write_text(text[:start]+'\n'+entry+text[start:])
     overlays['src/gallium/frontends/d3d10umd/Resource.cpp']['after']=hashlib.sha256(resource_path.read_bytes()).hexdigest()
+    # EXP1032 diagnostic: opt-in per-call DDI trace ("ddi-" stages are only
+    # written when the process sets APPLE_AGX_UMD_DDI_TRACE=1).
+    H='(UINT)(UINT_PTR)'
+    ddi_traces = {
+        'src/gallium/frontends/d3d10umd/Resource.cpp': {
+            'CreateResource': 'UINT v[8]={'+H+'hResource.pDrvPrivate,pCreateResource?(UINT)pCreateResource->Format:~0u,pCreateResource?(UINT)pCreateResource->Usage:~0u,pCreateResource?pCreateResource->BindFlags:~0u,pCreateResource?pCreateResource->MapFlags:~0u,(pCreateResource&&pCreateResource->pMipInfoList&&pCreateResource->MipLevels)?pCreateResource->pMipInfoList[0].TexelWidth:0u,(pCreateResource&&pCreateResource->pMipInfoList&&pCreateResource->MipLevels)?pCreateResource->pMipInfoList[0].TexelHeight:0u,pCreateResource&&pCreateResource->pInitialDataUP}; AgxD3d10WindowsDiagnostic("ddi-CreateResource",S_OK,v,8u);',
+            'DestroyResource': 'UINT v[1]={'+H+'hResource.pDrvPrivate}; AgxD3d10WindowsDiagnostic("ddi-DestroyResource",S_OK,v,1u);',
+            'ResourceMap': 'UINT v[4]={'+H+'hResource.pDrvPrivate,SubResource,(UINT)DDIMap,Flags}; AgxD3d10WindowsDiagnostic("ddi-ResourceMap",S_OK,v,4u);',
+            'ResourceUnmap': 'UINT v[2]={'+H+'hResource.pDrvPrivate,SubResource}; AgxD3d10WindowsDiagnostic("ddi-ResourceUnmap",S_OK,v,2u);',
+            'ResourceCopy': 'UINT v[2]={'+H+'hDstResource.pDrvPrivate,'+H+'hSrcResource.pDrvPrivate}; AgxD3d10WindowsDiagnostic("ddi-ResourceCopy",S_OK,v,2u);',
+            'ResourceCopyRegion': 'UINT v[11]={'+H+'hDstResource.pDrvPrivate,DstSubResource,DstX,DstY,'+H+'hSrcResource.pDrvPrivate,SrcSubResource,pSrcBox!=NULL,pSrcBox?(UINT)pSrcBox->left:0u,pSrcBox?(UINT)pSrcBox->top:0u,pSrcBox?(UINT)pSrcBox->right:0u,pSrcBox?(UINT)pSrcBox->bottom:0u}; AgxD3d10WindowsDiagnostic("ddi-ResourceCopyRegion",S_OK,v,11u);',
+            'ResourceUpdateSubResourceUP': 'UINT v[9]={'+H+'hDstResource.pDrvPrivate,DstSubResource,pDstBox!=NULL,pDstBox?(UINT)pDstBox->left:0u,pDstBox?(UINT)pDstBox->top:0u,pDstBox?(UINT)pDstBox->right:0u,pDstBox?(UINT)pDstBox->bottom:0u,RowPitch,DepthPitch}; AgxD3d10WindowsDiagnostic("ddi-UpdateSubResourceUP",S_OK,v,9u);',
+        },
+        'src/gallium/frontends/d3d10umd/Draw.cpp': {
+            'Draw': 'UINT v[2]={VertexCount,StartVertexLocation}; AgxD3d10WindowsDiagnostic("ddi-Draw",S_OK,v,2u);',
+            'DrawIndexed': 'UINT v[3]={IndexCount,StartIndexLocation,(UINT)BaseVertexLocation}; AgxD3d10WindowsDiagnostic("ddi-DrawIndexed",S_OK,v,3u);',
+            'DrawInstanced': 'UINT v[4]={VertexCountPerInstance,InstanceCount,StartVertexLocation,StartInstanceLocation}; AgxD3d10WindowsDiagnostic("ddi-DrawInstanced",S_OK,v,4u);',
+            'DrawIndexedInstanced': 'UINT v[5]={IndexCountPerInstance,InstanceCount,StartIndexLocation,(UINT)BaseVertexLocation,StartInstanceLocation}; AgxD3d10WindowsDiagnostic("ddi-DrawIndexedInstanced",S_OK,v,5u);',
+        },
+        'src/gallium/frontends/d3d10umd/Shader.cpp': {
+            'SetShaderResources': 'UINT v[6]={(UINT)shader_type,Offset,NumViews,(NumViews>0u&&phShaderResourceViews)?'+H+'phShaderResourceViews[0].pDrvPrivate:0u,(NumViews>1u&&phShaderResourceViews)?'+H+'phShaderResourceViews[1].pDrvPrivate:0u,(NumViews>2u&&phShaderResourceViews)?'+H+'phShaderResourceViews[2].pDrvPrivate:0u}; AgxD3d10WindowsDiagnostic("ddi-SetShaderResources",S_OK,v,6u);',
+            'CreateShaderResourceView': 'UINT v[4]={'+H+'hShaderResourceView.pDrvPrivate,pCreateSRView?'+H+'pCreateSRView->hDrvResource.pDrvPrivate:0u,pCreateSRView?(UINT)pCreateSRView->Format:~0u,pCreateSRView?(UINT)pCreateSRView->ResourceDimension:~0u}; AgxD3d10WindowsDiagnostic("ddi-CreateShaderResourceView",S_OK,v,4u);',
+        },
+    }
+    ddi_prototype='\nextern "C" VOID AgxD3d10WindowsDiagnostic(PCSTR Stage, HRESULT Status,\n                              const UINT *Values, UINT Count);\n'
+    for ddi_file, ddi_entries in ddi_traces.items():
+        ddi_path=out/ddi_file
+        text=ddi_path.read_text()
+        for name, entry in ddi_entries.items():
+            marker='\n'+name+'('
+            if text.count(marker)!=1: raise SystemExit('Ambiguous DDI trace: '+name)
+            start=text.index('{',text.index(marker))+1
+            text=text[:start]+'\n   { '+entry+' }\n'+text[start:]
+        last=text.rindex('\n#include')
+        last=text.index('\n',last+1)
+        text=text[:last]+ddi_prototype+text[last:]
+        ddi_path.write_text(text)
+        overlays[ddi_file]['after']=hashlib.sha256(ddi_path.read_bytes()).hexdigest()
     change('src/gallium/frontends/d3d10umd/InputAssembly.cpp',
         '210b330c3327042d230a65ff5a7242df89ddb385d50f61bcacfc996d39c55bbd',[
         ('#include "State.h"', '#include "State.h"\n#include "agx_win32_asahi_scene.h"'),
