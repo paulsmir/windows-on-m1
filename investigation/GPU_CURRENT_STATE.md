@@ -3,9 +3,9 @@
 
 ## Current as of 2026-10-08 17:05Z (read this first)
 
-State: Windows recovered (EXP1047 CHKDSK, EXP1049 normal boot reached SSH);
-exact EXP1046 package removed from the normal recovery profile (cleanup
-16:55Z, ordered restart pending). No AppleAgx package should be present.
+State: stable baseline (EXP1049, 17:20Z): normal GPU-visible profile, APPL0002
+Code 28, no AppleAgx package (EXP1046 package removed 16:55Z, verified
+durable in the hidden profile: Preflight PASS, Package Absent).
 
 Proven 2026-10-08 (EXPERIMENTS.md EXP1049, dumps in
 /Users/pavel/J313-evidence-archive/2026-10-08/EXP1049-dumps):
