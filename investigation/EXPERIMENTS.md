@@ -53329,3 +53329,5 @@ AGX/ASAHI CONTRACT: CPU access to a linear resource requires a CPU mapping of it
 TRANSLATION: GPU-only presentation memory is updated by a staging texture and a blit ordered in the current batch.
 WHAT IS STILL UNKNOWN: whether ApplicationFrameHost/Settings then run (other CPU-access paths on presentation surfaces may follow).
 WHY THIS HYPOTHESIS: (1) EXP1045 AFH dump: crash in util_copy_rect from ResourceUpdateSubResourceUP with destination 0x104; (2) presentation surfaces are Direct/CpuVisible 0 imports; (3) operator: Settings does not open. Expected: ms-settings opens a SystemSettings window, no AFH crash, probes PASS. Launch run-trace.sh EXP1046-present-update 1046 EXP1046 12, then the Settings task and probes.
+
+EXP1046 HARDWARE ACTUAL (part 1) 2026-10-08T15:10Z: full-owner reached the desktop (APPL0002 CM_PROB_NONE, DWM pid1228, explorer pid5248, screenshots and synthetic load started); during the load the operator saw artifacts and then a bugcheck restart (BSOD); SSH dropped, run-trace collected nothing (no umd.log). Recovery rec1046h started from Running proxy, dump-first: minidump/MEMORY.DMP to be analysed with the EXP1046 PDBs.
