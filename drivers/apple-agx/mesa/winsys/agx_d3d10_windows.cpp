@@ -774,6 +774,12 @@ HRESULT AgxD3d10WindowsPresentationSubmit(
       activeBatch?(UINT)activeBatch->Submission.PostStatus:0u};
   AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeFlushStatus,
       result,flushState,ARRAYSIZE(flushState));
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if(SUCCEEDED(result) && Resource->RenderBuffer.Transport.Token &&
+     !AdmissionUmdGpuvaPublishDirectMap(&Device->Runtime,
+                                        Resource->RenderBuffer.Transport.Token))
+    result=E_FAIL;
+#endif
   if(SUCCEEDED(result))
     result=AdmissionUmdSubmitPresent(&Device->Runtime,&Resource->Resource,DxgiContext);
   AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeSubmitReturn,result,NULL,0u);

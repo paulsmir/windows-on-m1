@@ -48,7 +48,7 @@ static void AcquireSRWLockExclusive(SRWLOCK*){} static void ReleaseSRWLockExclus
 static void AcquireSRWLockShared(SRWLOCK*){} static void ReleaseSRWLockShared(SRWLOCK*){}
 struct LARGE_INTEGER { LONGLONG QuadPart; };
 struct SYNC { BOOL Valid; };
-struct SLOT { uint64_t Token; uint64_t Bytes; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,GpuWritten,Mapped,Borrowed,Queried; UINT Flags; D3DKMT_HANDLE KernelAllocation; SYNC Sync; uint64_t CanonicalGpuVa; };
+struct SLOT { uint64_t Token; uint64_t Bytes; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,GpuWritten,Mapped,Borrowed,Queried; UINT Flags; D3DKMT_HANDLE KernelAllocation; SYNC Sync; uint64_t CanonicalGpuVa;  unsigned char *PrivateStaging; D3DKMT_HANDLE StagingAllocation; const void *NativeBo; int (*NativeMapRelease)(const void*,const void*,int); };
 static int touches;
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
 struct CB { void *pfnLockCb, *pfnUnlockCb; };
@@ -82,7 +82,7 @@ int main(){
 class WrittenOnlyDownload(unittest.TestCase):
     def test_only_written_slots_are_downloaded(self):
         text = SRC.read_text()
-        funcs = function(text, 'cpu_quiet') + '\n' + function(text, 'mark_written') + '\n' + function(text, 'transfer_held')
+        funcs = function(text, 'cpu_quiet') + '\n' + function(text, 'direct_shadow_slot') + '\n' + function(text, 'mark_written') + '\n' + function(text, 'transfer_held')
         if 'mark_written' not in funcs:
             funcs += '\nstatic int mark_written(ADMISSION_UMD_DEVICE*,const uint64_t*,unsigned){return 1;}\n'
         funcs = funcs.replace('auto *slot', 'SLOT *slot')

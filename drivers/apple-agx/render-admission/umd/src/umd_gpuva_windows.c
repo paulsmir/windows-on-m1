@@ -812,7 +812,10 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
   if(locked || (address && uncache)) {
     D3DDDICB_UNLOCK unlock={};unlock.NumAllocations=1;
     unlock.phAllocations=&slot->StagingAllocation;
-    if(FAILED(device->KernelCallbacks->pfnUnlockCb(device->RuntimeDevice.handle,&unlock))) {
+    /* EXP1059: a Direct shadow map is ordinary memory, not a VidMm lock. */
+    bool shadow=!locked && slot->PrivateStaging && address==slot->PrivateStaging;
+    if(!shadow &&
+       FAILED(device->KernelCallbacks->pfnUnlockCb(device->RuntimeDevice.handle,&unlock))) {
       /* Keep the lock and both allocation owners; teardown is uncertain. */
       if(temporary) {
         AcquireSRWLockExclusive(&device->ScreenBufferLock);
@@ -839,6 +842,19 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
     va_dump(device,slot->Token,slot->CanonicalGpuVa,slot->KernelAllocation);
   }
   HeapFree(GetProcessHeap(),0,payload);return success;
+}
+
+/* EXP1059: a Direct slot (an imported presentation surface) has no
+ * CPU-visible allocation, so a CPU map used to fail and callers such as
+ * UpdateSubresourceUP wrote through a null view (ApplicationFrameHost
+ * c0000005).  Serve the map from a private shadow: download the canonical
+ * content on map; upload the changed chunks through the copy escape before a
+ * submission or a present uses the surface (dropping the map, as for borrowed
+ * staging) or at unmap.  Mesa has already synchronized the GPU users. */
+static bool direct_shadow_slot(const ADMISSION_UMD_SCREEN_BUFFER *slot) {
+  return slot && slot->Direct && !slot->SystemDirect &&
+         !slot->StagingAllocation && slot->KernelAllocation &&
+         slot->CanonicalGpuVa && slot->Bytes;
 }
 
 /* EXP995: staging of a slot that is neither CPU-mapped nor borrowed (shared
@@ -870,7 +886,11 @@ static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
   }
   for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i) {
     auto *slot=&device->ScreenBuffers[i];
-    if(!slot->CopyHeld || slot->Direct || slot->SystemDirect ||
+    /* EXP1059: upload a CPU-mapped Direct shadow before the GPU uses the
+     * surface and drop the map; the next map downloads the GPU result. */
+    bool shadow=!download && direct_shadow_slot(slot) && slot->PrivateStaging &&
+        slot->Mapped && slot->NativeBo && slot->NativeMapRelease;
+    if(!slot->CopyHeld || (slot->Direct && !shadow) || slot->SystemDirect ||
        (download && (!(slot->Flags & AppleAgxWin32BufferGpuWrite) ||
                      !slot->GpuWritten || cpu_quiet(slot))) ||
        (!download && cpu_quiet(slot) && slot->Sync.Valid)) {
@@ -901,6 +921,54 @@ static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
       measured_bytes,S_OK);
 #endif
   return 1;
+}
+
+int AdmissionUmdGpuvaPrepareDirectMap(ADMISSION_UMD_DEVICE *device,
+                                      uint64_t token) {
+  BYTE *shadow=NULL;
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  auto *slot=find_slot(device,token);
+  bool direct=direct_shadow_slot(slot) && !slot->Mapped && !slot->Transition &&
+      !slot->SubmissionHolds;
+  bool allocate=direct && !slot->PrivateStaging;
+  SIZE_T bytes=direct ? (SIZE_T)((slot->Bytes+0xffffULL)&~0xffffULL) : 0;
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  if(!direct) return 1;
+  if(allocate) {
+    shadow=(BYTE *)VirtualAlloc(NULL,bytes,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
+    if(!shadow) return 0;
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
+    slot=find_slot(device,token);
+    if(slot && direct_shadow_slot(slot) && !slot->PrivateStaging) {
+      slot->PrivateStaging=shadow;shadow=NULL;
+    }
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    if(shadow) {(void)VirtualFree(shadow,0,MEM_RELEASE);return 0;}
+  }
+  return transfer_slot(device,slot,true,NULL,NULL);
+}
+
+int AdmissionUmdGpuvaFinishDirectMap(ADMISSION_UMD_DEVICE *device,
+                                     uint64_t token) {
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  auto *slot=find_slot(device,token);
+  bool direct=direct_shadow_slot(slot) && slot->PrivateStaging &&
+      !slot->Mapped && !slot->Transition;
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  return direct ? transfer_slot(device,slot,false,NULL,NULL) : 1;
+}
+
+/* EXP1059: a presented Direct surface may carry CPU writes that no
+ * submission has uploaded yet; publish them before the present. */
+int AdmissionUmdGpuvaPublishDirectMap(ADMISSION_UMD_DEVICE *device,
+                                      uint64_t token) {
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  auto *slot=find_slot(device,token);
+  bool publish=direct_shadow_slot(slot) && slot->PrivateStaging &&
+      slot->Mapped && !slot->Transition && !slot->SubmissionHolds &&
+      !slot->SourceHolds && slot->NativeBo && slot->NativeMapRelease;
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  return publish ? transfer_slot(device,slot,false,NULL,NULL) : 1;
 }
 
 /* EXP995: before the first CPU map of a slot, bring a pending GPU result

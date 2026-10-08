@@ -52,7 +52,7 @@ static void AcquireSRWLockExclusive(SRWLOCK*){} static void ReleaseSRWLockExclus
 struct LARGE_INTEGER { LONGLONG QuadPart; };
 struct SYNC { BOOL Valid; };
 struct SLOT { uint64_t Token; uint64_t Bytes; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,GpuWritten,Mapped,Borrowed,Queried;
-  UINT Flags; D3DKMT_HANDLE KernelAllocation; SYNC Sync; uint64_t CanonicalGpuVa; };
+  UINT Flags; D3DKMT_HANDLE KernelAllocation; SYNC Sync; uint64_t CanonicalGpuVa;  unsigned char *PrivateStaging; D3DKMT_HANDLE StagingAllocation; const void *NativeBo; int (*NativeMapRelease)(const void*,const void*,int); };
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
 struct CB { void *pfnLockCb, *pfnUnlockCb; };
 struct ADMISSION_UMD_DEVICE { SLOT ScreenBuffers[16]; SRWLOCK ScreenBufferLock; CB *KernelCallbacks; };
@@ -91,7 +91,7 @@ int main(){
 class ResidencyTouch(unittest.TestCase):
     def test_touch_policy(self):
         text = SRC.read_text()
-        funcs = '\n'.join(function(text, n) for n in ('cpu_quiet', 'query_canonical', 'transfer_held'))
+        funcs = '\n'.join(function(text, n) for n in ('cpu_quiet', 'direct_shadow_slot', 'query_canonical', 'transfer_held'))
         self.assertIn('query_canonical', funcs, 'touch before first copy is missing')
         funcs = funcs.replace('auto *slot', 'SLOT *slot')
         funcs = re.sub(r'#if defined\(APPLE_AGX_EXP907_FRAME_RECEIPT\).*?#endif\n', '', funcs, flags=re.S)

@@ -51,7 +51,7 @@ static void AcquireSRWLockExclusive(SRWLOCK*){} static void ReleaseSRWLockExclus
 static void AcquireSRWLockShared(SRWLOCK*){} static void ReleaseSRWLockShared(SRWLOCK*){}
 struct SYNC { BOOL Valid; };
 struct SLOT { uint64_t Token; uint64_t Bytes; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,GpuWritten,Mapped,Borrowed,Queried;
-  UINT Flags,SubmissionHolds; D3DKMT_HANDLE KernelAllocation; SYNC Sync; uint64_t CanonicalGpuVa; };
+  UINT Flags,SubmissionHolds; D3DKMT_HANDLE KernelAllocation; SYNC Sync; uint64_t CanonicalGpuVa;  unsigned char *PrivateStaging; D3DKMT_HANDLE StagingAllocation; const void *NativeBo; int (*NativeMapRelease)(const void*,const void*,int); };
 static int touches;
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
 struct CB { void *pfnLockCb, *pfnUnlockCb; };
@@ -100,7 +100,7 @@ class LazyPrivateDownload(unittest.TestCase):
     def test_unmapped_private_slots_sync_lazily(self):
         text = SRC.read_text()
         funcs = '\n'.join(function(text, n) for n in
-                          ('cpu_quiet', 'mark_written', 'transfer_held',
+                          ('cpu_quiet', 'direct_shadow_slot', 'mark_written', 'transfer_held',
                            'AdmissionUmdGpuvaPrepareCpuMap'))
         self.assertIn('AdmissionUmdGpuvaPrepareCpuMap', funcs,
                       'map-time download of pending GPU results is missing')

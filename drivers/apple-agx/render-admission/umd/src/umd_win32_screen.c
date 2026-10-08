@@ -892,7 +892,8 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
 #ifdef APPLE_AGX_GPUVA_WINSYS
   /* EXP995: a private slot defers its post-submission download until the
    * first CPU map; complete it before the staging becomes CPU-visible. */
-  if (!AdmissionUmdGpuvaPrepareCpuMap(device, Token)) {
+  if (!AdmissionUmdGpuvaPrepareCpuMap(device, Token) ||
+      !AdmissionUmdGpuvaPrepareDirectMap(device, Token)) {
     device->LastScreenError = E_FAIL;
     return 0;
   }
@@ -1023,6 +1024,15 @@ static int AdmissionUmdScreenUnmapBuffer(void *Context,
   AdmissionUmdStagingInvalidate(&buffer->Sync);
 #endif
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  /* EXP1059: a Direct slot's shadow returns its changed chunks now. The map
+   * itself is gone either way; a lost upload must not fail BO teardown. */
+  if (!AdmissionUmdGpuvaFinishDirectMap(device, Token)) {
+    UINT values[2] = {(UINT)Token, (UINT)(Token >> 32)};
+    AdmissionUmdDiagnostic("reject-direct-unmap", E_FAIL, values,
+                           ARRAYSIZE(values));
+  }
+#endif
   device->LastScreenError = S_OK;
   return 1;
 }
