@@ -3,8 +3,8 @@
 
 ## Current as of 2026-10-08 20:15Z (read this first)
 
-State: GPU-visible baseline (Code 28, no package) after each run; EXP1053
-(graph lookup indices + AttachPrivate reason) built next. Full-owner m1n1 is
+State: GPU-visible baseline after each run. Best package: EXP1055 (dcd6bbc3 +
+mailbox, graph indices, idempotent re-attach, 1 ms clock): ~15 flips/s. Full-owner m1n1 is
 now m1n1-824ea32d-mailbox (7367d7da), r143 unchanged.
 
 Proven 2026-10-08 evening (EXPERIMENTS.md EXP1050-EXP1052):
@@ -19,8 +19,15 @@ Proven 2026-10-08 evening (EXPERIMENTS.md EXP1050-EXP1052):
 - SetRootPageTable poison (EXP1050 DWM, EXP1051/1052 load app) is step 5 =
   AttachPrivate refusal with broker status 0; reason code in EXP1053.
 
+- O(1) graph lookups (409580b6, EXP1053): 16 MB map ~510 -> ~45 ms.
+- SetRootPageTable poison fixed (7cf12a52, EXP1054): exact re-attach accepted
+  while another context runs; no DWM black flashes, zero rejects.
+- 1 ms system clock while the GPU runtime runs (bba6a51a, EXP1055): job
+  completion was noticed one 15.6 ms tick late; kick->complete 11.1 -> 1.4
+  ms, DWM 16 -> 66 submits/s, flips 385 -> 1184 per ~76 s (~15/s).
+
 Open, causal order:
-1. Measure EXP1053 (UpdatePageTable time, flips) and the AttachPrivate reason.
+1. DWM upload phase (2.2 ms/submit) and pid-10840 batch rejection (EXP1055).
 2. Broker internal scans (m1n1 Phase A: backing hash, per-backing refcount
    for referenced()) once the KMD side no longer dominates.
 3. Settings/AFH presentation update (scene ManagerGeneration lifecycle).
