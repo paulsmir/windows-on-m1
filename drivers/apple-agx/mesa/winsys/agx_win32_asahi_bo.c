@@ -2,6 +2,9 @@
 #include "agx_win32_asahi_bo.h"
 
 void (*AgxWin32BackendFailHook)(unsigned site);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+extern void (*AgxWin32BatchRefusalHook)(unsigned, unsigned, unsigned, unsigned);
+#endif
 #include <stdlib.h>
 #include <string.h>
 
@@ -178,13 +181,24 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
   bo=calloc(1,sizeof(*bo));
   if(!bo) return NULL;
   bo->Backend=b;
-  if(AgxWin32NativeDeviceCreateBo(&b->Buffers,cls,bytes,align,access,&bo->Backing)!=AgxWin32NativeDeviceSuccess) {
+  {
+  AGX_WIN32_NATIVE_DEVICE_RESULT created=
+      AgxWin32NativeDeviceCreateBo(&b->Buffers,cls,bytes,align,access,&bo->Backing);
+  if(created!=AgxWin32NativeDeviceSuccess) {
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    /* EXP1058 receipt-only (reject-batch kind 5): result code, size in 4 KiB
+     * pages, class | alignment in 4 KiB pages << 8. */
+    if(AgxWin32BatchRefusalHook)
+      AgxWin32BatchRefusalHook(5u,(unsigned)created,(unsigned)(bytes>>12),
+          (unsigned)cls|((unsigned)(align>>12)<<8));
+#endif
     /* The existing wrapper may retain a buffer if allocation rollback failed.
      * Stop new native work rather than silently losing that Windows resource. */
     AGX_WIN32_ASAHI_FAIL(b, 1u);
     if(bo->Backing.Live) b->UnpublishedBo=bo;
     else free(bo);
     return NULL;
+  }
   }
   bo->Base.dev=native; bo->Base.flags=flags; bo->Base.size=bytes;
   if(bo->Backing.Buffer.Transport.Token>UINT32_MAX) {
