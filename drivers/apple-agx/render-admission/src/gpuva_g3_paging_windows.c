@@ -53,7 +53,7 @@ static VOID AdmissionG3RecordTableEvent(ADMISSION_G3_PROCESS *process,
 
 static BOOLEAN AdmissionG3RetireSystemSubtree(ADMISSION_G3_PROCESS *process,
     ULONGLONG table_ipa, ULONGLONG retired_parent, UINT depth) {
-  APPLE_AGX_GPUVA_G3_NODE *edge, *leaf;
+  APPLE_AGX_GPUVA_G3_NODE *edge;
   ADMISSION_G3_TABLE_SHADOW *shadow;
   if (!table_ipa || table_ipa == process->Graph.RootIpa) return TRUE;
   if (depth > 2u) return FALSE;
@@ -66,12 +66,12 @@ static BOOLEAN AdmissionG3RetireSystemSubtree(ADMISSION_G3_PROCESS *process,
     if (!AdmissionG3RetireSystemSubtree(process, edge->AuxIpa, table_ipa, depth + 1u))
       return FALSE;
   }
-  for (;;) {
-    for (leaf = process->Graph.Leaves; leaf; leaf = leaf->Next)
-      if (leaf->Ipa == table_ipa && leaf->Kind == AppleAgxGpuvaG3SystemBacking) break;
-    if (!leaf) break;
+  for (UINT index = 0u; index < 2048u; ++index) {
+    const APPLE_AGX_GPUVA_G3_NODE *leaf =
+        AppleAgxGpuvaG3GraphLeaf(&process->Graph, table_ipa, index);
+    if (!leaf || leaf->Kind != AppleAgxGpuvaG3SystemBacking) continue;
     if (!AppleAgxGpuvaG3GraphUpdateLeaf(&process->Graph,
-            table_ipa, leaf->Index, 0ULL, false)) return FALSE;
+            table_ipa, index, 0ULL, false)) return FALSE;
   }
   AdmissionG3RecordTableEvent(process, table_ipa,
                               ADMISSION_G3_LEAF_EVENT_SYSTEM_RETIRE);
@@ -424,9 +424,8 @@ static NTSTATUS AdmissionG3UpdateLeaf(
     ++acquired;
   }
   for (i = 0u; i < groups; ++i) {
-    APPLE_AGX_GPUVA_G3_NODE *leaf;
-    for (leaf = process->Graph.Leaves; leaf; leaf = leaf->Next)
-      if (leaf->Ipa == table_ipa && leaf->Index == first_group + i) break;
+    const APPLE_AGX_GPUVA_G3_NODE *leaf =
+        AppleAgxGpuvaG3GraphLeaf(&process->Graph, table_ipa, first_group + i);
     if (leaf) {
       before[i].GuestIpa = leaf->AuxIpa;
       before[i].WritableMask = leaf->Writable;

@@ -47,6 +47,7 @@ static void *allocate(void *opaque, unsigned long long bytes) {
 }
 static void release(void *opaque, void *ptr) { (void)opaque; free(ptr); }
 
+static unsigned long long update_visits;
 static unsigned long long scaling_visits(unsigned int leaves) {
   struct fixture f = {0};
   APPLE_AGX_GPUVA_V5_CLIENT client;
@@ -73,12 +74,16 @@ static unsigned long long scaling_visits(unsigned int leaves) {
   assert(AppleAgxGpuvaG3GraphTranslateVa(&graph, 0u, &ipa));
   assert(ipa == 0x20000000ULL);
   visits = AppleAgxGpuvaG3LookupStatsVisits();
+  /* Remap, unmap and remap one leaf: leaf, backing and list lookups must not
+   * walk the other mappings of the process. */
+  AppleAgxGpuvaG3LookupStatsReset();
   assert(AppleAgxGpuvaG3GraphUpdateLeaf(&graph, 0x10008000ULL, 0u,
                                         0x60000000ULL, true));
   assert(AppleAgxGpuvaG3GraphTranslateVa(&graph, 0u, &ipa));
   assert(ipa == 0x60000000ULL);
   assert(AppleAgxGpuvaG3GraphUpdateLeaf(&graph, 0x10008000ULL, 0u,
                                         0ULL, false));
+  update_visits = AppleAgxGpuvaG3LookupStatsVisits();
   assert(!AppleAgxGpuvaG3GraphTranslateVa(&graph, 0u, &ipa));
   assert(AppleAgxGpuvaG3GraphRegisterTable(&graph, 0x10020000ULL, 0u));
   assert(AppleAgxGpuvaG3GraphBindRoot(&graph, 0x10020000ULL));
@@ -92,10 +97,45 @@ static unsigned long long scaling_visits(unsigned int leaves) {
   return visits;
 }
 
+static unsigned long long frame_visits(unsigned int frames) {
+  struct fixture f = {0};
+  APPLE_AGX_GPUVA_V5_CLIENT client;
+  APPLE_AGX_GPUVA_V5_IO io = {&f, write64, read64, write32, barrier, 0};
+  APPLE_AGX_GPUVA_G3_GRAPH graph;
+  static APPLE_AGX_GPUVA_G3_REGISTRY registry;
+  unsigned long long visits;
+  memset(&registry, 0, sizeof(registry));
+  assert(AppleAgxGpuvaV5ClientInit(&client, &io));
+  assert(AppleAgxGpuvaG3GraphInit(&graph, &client, 1u, 1u,
+                                  allocate, release, 0));
+  graph.Registry = &registry;
+  for (unsigned int i = 0; i < frames; ++i)
+    assert(AppleAgxGpuvaG3MappingAcquire(&graph,
+        0x40000000ULL + (unsigned long long)i * 0x4000ULL));
+  AppleAgxGpuvaG3LookupStatsReset();
+  /* A new frame, a repeat reference and both releases. */
+  assert(AppleAgxGpuvaG3MappingAcquire(&graph, 0x30000000ULL));
+  assert(AppleAgxGpuvaG3MappingAcquire(&graph, 0x30001000ULL));
+  AppleAgxGpuvaG3MappingRelease(&graph, 0x30001000ULL);
+  AppleAgxGpuvaG3MappingRelease(&graph, 0x30000000ULL);
+  visits = AppleAgxGpuvaG3LookupStatsVisits();
+  assert(!graph.Uncertain);
+  for (unsigned int i = 0; i < frames; ++i)
+    AppleAgxGpuvaG3MappingRelease(&graph,
+        0x40000000ULL + (unsigned long long)i * 0x4000ULL);
+  assert(!graph.Uncertain && registry.Frames == 0);
+  return visits;
+}
+
 static void lookup_scale(void) {
-  unsigned long long small = scaling_visits(64u);
-  unsigned long long large = scaling_visits(8192u);
+  unsigned long long small = scaling_visits(64u), small_update;
+  unsigned long long large, large_update;
+  small_update = update_visits;
+  large = scaling_visits(8192u);
+  large_update = update_visits;
   assert(large <= small + 3u);
+  assert(large_update <= small_update + 16u);
+  assert(frame_visits(8192u) <= frame_visits(64u) + 16u);
 }
 
 static void level_reuse(void) {

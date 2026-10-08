@@ -9,13 +9,21 @@ typedef void (*APPLE_AGX_GPUVA_G3_FREE)(void *, void *);
 
 /* Serialized by the adapter lock, shared across all process roots. A grant
  * is not an OS pin: mapping references come only from ordered VidMm PTEs. */
+/* Lookup indices: every 16-KiB page operation looked frames, backings and
+ * leaves up by walking whole lists (EXP1052: ~21 s of KMD CPU per 4 min in
+ * UpdatePageTable outside the broker).  Lists stay the iteration order;
+ * the buckets and Prev links make lookup and removal O(1). */
+#define APPLE_AGX_GPUVA_G3_FRAME_BUCKETS 4096u
+#define APPLE_AGX_GPUVA_G3_BACKING_BUCKETS 4096u
 typedef struct _APPLE_AGX_GPUVA_G3_FRAME {
   struct _APPLE_AGX_GPUVA_G3_FRAME *Next;
   unsigned long long Ipa, Generation, Mappings, Grants;
+  struct _APPLE_AGX_GPUVA_G3_FRAME *Prev, *HashNext;
 } APPLE_AGX_GPUVA_G3_FRAME;
 typedef struct _APPLE_AGX_GPUVA_G3_REGISTRY {
   APPLE_AGX_GPUVA_G3_FRAME *Frames;
   unsigned long long NextGeneration;
+  APPLE_AGX_GPUVA_G3_FRAME *FrameBuckets[APPLE_AGX_GPUVA_G3_FRAME_BUCKETS];
 } APPLE_AGX_GPUVA_G3_REGISTRY;
 typedef enum _APPLE_AGX_GPUVA_G3_BACKING_KIND {
   AppleAgxGpuvaG3LocalBacking = 0,
@@ -32,6 +40,7 @@ typedef struct _APPLE_AGX_GPUVA_G3_NODE {
   unsigned int SystemRetired;
   APPLE_AGX_GPUVA_G3_FRAME *Frame;
   APPLE_AGX_GPUVA_G3_BACKING_KIND Kind;
+  struct _APPLE_AGX_GPUVA_G3_NODE *Prev, *HashNext;
 } APPLE_AGX_GPUVA_G3_NODE;
 
 typedef struct _APPLE_AGX_GPUVA_G3_GRAPH {
@@ -47,6 +56,8 @@ typedef struct _APPLE_AGX_GPUVA_G3_GRAPH {
   APPLE_AGX_GPUVA_G3_NODE *Tables, *Parents, *Leaves, *Backings;
   APPLE_AGX_GPUVA_G3_NODE *RootTable;
   unsigned int LastStatus, Created, Uncertain, JobInFlight, Slot;
+  APPLE_AGX_GPUVA_G3_NODE *TableHint;
+  APPLE_AGX_GPUVA_G3_NODE *BackingBuckets[APPLE_AGX_GPUVA_G3_BACKING_BUCKETS];
 } APPLE_AGX_GPUVA_G3_GRAPH;
 
 #ifdef APPLE_AGX_G3_LOOKUP_STATS
@@ -90,6 +101,10 @@ bool AppleAgxGpuvaG3GraphContainsRange(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long StartVa, unsigned int Bytes);
 bool AppleAgxGpuvaG3GraphContainsRangeAccess(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long StartVa, unsigned int Bytes, bool Write);
+/* The leaf edge at (level-2 table, index), or NULL; O(1). */
+const APPLE_AGX_GPUVA_G3_NODE *AppleAgxGpuvaG3GraphLeaf(
+    APPLE_AGX_GPUVA_G3_GRAPH *, unsigned long long table_ipa,
+    unsigned int index);
 bool AppleAgxGpuvaG3GraphTranslateVa(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long GpuVa, unsigned long long *GuestIpa);
 bool AppleAgxGpuvaG3GraphLeafTableIpa(APPLE_AGX_GPUVA_G3_GRAPH *,
