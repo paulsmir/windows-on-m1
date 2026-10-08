@@ -776,6 +776,8 @@ struct Query
    bool direct_buffer_map;
    bool shadow_only_map;
    bool shadow_dirty;
+   /* EXP1037: client-format CPU views of lowered textures (Resource.cpp). */
+   void *client_maps;
    Device *owner_device;
    ULONGLONG owner_cookie;
    ULONG device_generation;
@@ -2516,6 +2518,76 @@ MesaD3d10FrontendSetSoOffsetForTest(D3D10DDI_HDEVICE hDevice,
 #include "drm-uapi/drm_fourcc.h"
 #include "agx_win32_asahi_scene.h"
 
+/* EXP1037: A8/RGB32 textures are stored in a lowered physical format
+ * (4c7991ab). Every CPU access translates the D3D client format, as the
+ * initial-data upload already does; a Map returns a client-format view. */
+struct AgxD3d10ClientMap {
+   void *client;
+   void *target;
+   unsigned stride, layer_stride, target_stride, target_layer_stride;
+   unsigned width, height, depth;
+   bool write;
+};
+
+static enum pipe_format
+AgxD3d10ClientFormat(const Resource *resource)
+{
+   if (!resource || resource->buffer || !resource->resource ||
+       AgxD3d10LoweredTextureFormat(resource->Format) == PIPE_FORMAT_NONE)
+      return PIPE_FORMAT_NONE;
+   enum pipe_format client = FormatTranslate(resource->Format, false);
+   return client != resource->resource->format ? client : PIPE_FORMAT_NONE;
+}
+
+static HRESULT
+AgxD3d10ClientMapBegin(Resource *resource, UINT SubResource, void *target,
+                       const struct pipe_transfer *transfer, unsigned width,
+                       unsigned height, unsigned depth, bool read, bool write,
+                       void **client_out, UINT *row_pitch, UINT *depth_pitch)
+{
+   *client_out = NULL;
+   enum pipe_format client = AgxD3d10ClientFormat(resource);
+   if (client == PIPE_FORMAT_NONE) return S_OK;
+   if (!resource->client_maps)
+      resource->client_maps = calloc(resource->NumSubResources,
+                                     sizeof(struct AgxD3d10ClientMap));
+   struct AgxD3d10ClientMap *maps = (struct AgxD3d10ClientMap *)resource->client_maps;
+   if (!maps || maps[SubResource].client || !transfer || !depth) return E_OUTOFMEMORY;
+   unsigned stride = align(util_format_get_stride(client, width), 16u);
+   unsigned layer = stride * util_format_get_nblocksy(client, height);
+   void *memory = calloc(depth, layer);
+   if (!memory) return E_OUTOFMEMORY;
+   for (unsigned z = 0; read && z < depth; ++z)
+      util_format_translate(client, (uint8_t *)memory + z * layer, stride, 0, 0,
+         resource->resource->format,
+         (const uint8_t *)target + z * transfer->layer_stride, transfer->stride,
+         0, 0, width, height);
+   struct AgxD3d10ClientMap entry = {memory, target, stride, layer,
+      (unsigned)transfer->stride, (unsigned)transfer->layer_stride,
+      width, height, depth, write};
+   maps[SubResource] = entry;
+   *client_out = memory;
+   *row_pitch = stride;
+   *depth_pitch = layer;
+   return S_OK;
+}
+
+static void
+AgxD3d10ClientMapEnd(Resource *resource, UINT SubResource)
+{
+   struct AgxD3d10ClientMap *maps = (struct AgxD3d10ClientMap *)resource->client_maps;
+   if (!maps || !maps[SubResource].client) return;
+   struct AgxD3d10ClientMap *m = &maps[SubResource];
+   for (unsigned z = 0; m->write && z < m->depth; ++z)
+      util_format_translate(resource->resource->format,
+         (uint8_t *)m->target + z * m->target_layer_stride, m->target_stride, 0, 0,
+         FormatTranslate(resource->Format, false),
+         (const uint8_t *)m->client + z * m->layer_stride, m->stride,
+         0, 0, m->width, m->height);
+   free(m->client);
+   memset(m, 0, sizeof(*m));
+}
+
 static unsigned
 AgxD3d10CopyFamily(DXGI_FORMAT format)
 {
@@ -3156,6 +3228,12 @@ AgxD3d10ResourceWithinRequiredLimits(
    free(pResource->dynamic_shadow);
    pResource->dynamic_shadow = NULL;
    pResource->active_buffer_map = NULL;
+   if (pResource->client_maps) {
+      for (UINT i = 0; i < pResource->NumSubResources; ++i)
+         free(((struct AgxD3d10ClientMap *)pResource->client_maps)[i].client);
+      free(pResource->client_maps);
+      pResource->client_maps = NULL;
+   }
    if (pResource->so_target) {'''
     if resource_text.count(destroy_anchor)!=1:
         raise SystemExit('Ambiguous presentation DestroyResource anchor')
@@ -3245,7 +3323,27 @@ AgxD3d10ResourceWithinRequiredLimits(
    pMappedSubResource->pData=map;
    if (dynamicBuffer) resource->active_buffer_map=map;
    pMappedSubResource->RowPitch=resource->transfers[SubResource]->stride;
-   pMappedSubResource->DepthPitch=resource->transfers[SubResource]->layer_stride;''')
+   pMappedSubResource->DepthPitch=resource->transfers[SubResource]->layer_stride;
+   if (!resource->buffer) {
+      void *client=NULL;
+      UINT clientRow=0,clientDepth=0;
+      HRESULT clientStatus=AgxD3d10ClientMapBegin(resource,SubResource,map,
+         resource->transfers[SubResource],box.width,box.height,box.depth,
+         (usage&PIPE_MAP_READ)!=0,(usage&PIPE_MAP_WRITE)!=0,
+         &client,&clientRow,&clientDepth);
+      if (FAILED(clientStatus)) {
+         pipe_texture_unmap(device->pipe,resource->transfers[SubResource]);
+         resource->transfers[SubResource]=NULL;
+         pMappedSubResource->pData=NULL;
+         pMappedSubResource->RowPitch=pMappedSubResource->DepthPitch=0;
+         SetError(hDevice,clientStatus);return;
+      }
+      if (client) {
+         pMappedSubResource->pData=client;
+         pMappedSubResource->RowPitch=clientRow;
+         pMappedSubResource->DepthPitch=clientDepth;
+      }
+   }''')
     replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceUnmap','''   Device *device = CastDevice(hDevice);
    Resource *resource = CastResource(hResource);
    if (!device || !resource || resource->owner_device != device ||
@@ -3272,8 +3370,10 @@ AgxD3d10ResourceWithinRequiredLimits(
          if(!map) SetError(hDevice,E_OUTOFMEMORY);
       } else if (resource->direct_buffer_map) resource->direct_buffer_map = false;
       else pipe_buffer_unmap(device->pipe,resource->transfers[SubResource]);
-   } else
+   } else {
+      AgxD3d10ClientMapEnd(resource,SubResource);
       pipe_texture_unmap(device->pipe,resource->transfers[SubResource]);
+   }
    resource->transfers[SubResource]=NULL;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceIsStagingBusy','''   Device *device=CastDevice(hDevice);
    Resource *resource=CastResource(hResource);
@@ -3346,7 +3446,15 @@ AgxD3d10ResourceWithinRequiredLimits(
       SetError(hDevice, E_OUTOFMEMORY);
       return;
    }
-   for (int z = 0; z < box.depth; ++z) {
+   enum pipe_format client = AgxD3d10ClientFormat(resource);
+   for (int z = 0; client != PIPE_FORMAT_NONE && z < box.depth; ++z) {
+      if (!util_format_translate(dst->format,
+             (uint8_t *)map + z * transfer->layer_stride, transfer->stride, 0, 0,
+             client, (const uint8_t *)pSysMemUP + z * DepthPitch, RowPitch, 0, 0,
+             box.width, box.height))
+         SetError(hDevice, E_NOTIMPL);
+   }
+   for (int z = 0; client == PIPE_FORMAT_NONE && z < box.depth; ++z) {
       util_copy_rect((uint8_t *)map + z * transfer->layer_stride, dst->format,
                      transfer->stride, 0, 0, box.width, box.height,
                      (const uint8_t *)pSysMemUP + z * DepthPitch, RowPitch, 0, 0);
