@@ -3431,57 +3431,6 @@ AgxD3d10ResourceWithinRequiredLimits(
       box.height = height;
       box.depth = depth;
    }
-   /* EXP1046: presentation surfaces are imported GPU-only allocations with
-    * no CPU view; write a staging texture and blit it into place. */
-   if (resource->presentation && dst->target == PIPE_TEXTURE_2D &&
-       box.depth == 1 && !AgxD3d10ClientFormat(resource)) {
-      struct pipe_resource templ;
-      memset(&templ, 0, sizeof(templ));
-      templ.target = PIPE_TEXTURE_2D;
-      templ.format = dst->format;
-      templ.width0 = box.width;
-      templ.height0 = box.height;
-      templ.depth0 = 1;
-      templ.array_size = 1;
-      templ.usage = PIPE_USAGE_STAGING;
-      struct pipe_resource *staging =
-         pDevice->pipe->screen->resource_create(pDevice->pipe->screen, &templ);
-      if (!staging) {
-         SetError(hDevice, E_OUTOFMEMORY);
-         return;
-      }
-      struct pipe_box source;
-      memset(&source, 0, sizeof(source));
-      source.width = box.width;
-      source.height = box.height;
-      source.depth = 1;
-      struct pipe_transfer *staged = NULL;
-      void *bits = pDevice->pipe->texture_map(pDevice->pipe, staging, 0,
-         PIPE_MAP_WRITE | PIPE_MAP_DISCARD_WHOLE_RESOURCE, &source, &staged);
-      if (!bits || !staged) {
-         pipe_resource_reference(&staging, NULL);
-         SetError(hDevice, E_OUTOFMEMORY);
-         return;
-      }
-      util_copy_rect((uint8_t *)bits, staging->format, staged->stride, 0, 0,
-                     box.width, box.height, (const uint8_t *)pSysMemUP,
-                     RowPitch, 0, 0);
-      pipe_texture_unmap(pDevice->pipe, staged);
-      struct pipe_blit_info info;
-      memset(&info, 0, sizeof(info));
-      info.src.resource = staging;
-      info.src.format = staging->format;
-      info.src.box = source;
-      info.dst.resource = dst;
-      info.dst.format = dst->format;
-      info.dst.level = level;
-      info.dst.box = box;
-      info.mask = util_format_get_mask(dst->format);
-      info.filter = PIPE_TEX_FILTER_NEAREST;
-      pDevice->pipe->blit(pDevice->pipe, &info);
-      pipe_resource_reference(&staging, NULL);
-      return;
-   }
    /* EXP1040: Asahi's transfer map synchronises with batches that use the
     * resource (shadow or reader sync); no device-wide flush/retire. */
    struct pipe_transfer *transfer = NULL;
