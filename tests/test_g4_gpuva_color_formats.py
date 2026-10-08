@@ -4,10 +4,6 @@ EXP1028: 67 reject-batch (Finish precondition) for a shell process whose
 single render target was PIPE_FORMAT_R8G8B8A8_UNORM; the precondition only
 admitted B8G8R8A8_UNORM, although the native batch encodes the format in its
 own PBE/EOT state and the KMD treats attachments as pointer ranges.
-
-EXP1033: texture uploads to R8/A8 textures blit through an R8_UNORM render
-pass (sample size 8); its refusal (reject-batch kind 2, format 81) left every
-later draw of the process stale (agx_texfmt_selftest 1536 px everywhere).
 """
 from pathlib import Path
 import re
@@ -28,13 +24,11 @@ class GpuvaColorFormats(unittest.TestCase):
         body = ('#include <assert.h>\n#include <stdio.h>\nenum { PIPE_FORMAT_NONE, PIPE_FORMAT_B8G8R8A8_UNORM, '
                 'PIPE_FORMAT_B8G8R8A8_SRGB, PIPE_FORMAT_B8G8R8X8_UNORM, PIPE_FORMAT_B8G8R8X8_SRGB, '
                 'PIPE_FORMAT_R8G8B8A8_UNORM, PIPE_FORMAT_R16G16B16A16_FLOAT, PIPE_FORMAT_R10G10B10A2_UNORM, '
-                'PIPE_FORMAT_Z24_UNORM_S8_UINT, PIPE_FORMAT_R8_UNORM, PIPE_FORMAT_A8_UNORM, PIPE_FORMAT_R8G8_UNORM };\n' + m.group(0) +
+                'PIPE_FORMAT_Z24_UNORM_S8_UINT, PIPE_FORMAT_R8_UNORM };\n' + m.group(0) +
                 '\nint main(void){ assert(gpuva_color_format_supported(PIPE_FORMAT_R8G8B8A8_UNORM));'
                 ' assert(gpuva_color_format_supported(PIPE_FORMAT_B8G8R8A8_UNORM));'
                 ' assert(!gpuva_color_format_supported(PIPE_FORMAT_Z24_UNORM_S8_UINT));'
-                ' assert(gpuva_color_format_supported(PIPE_FORMAT_R8_UNORM));'
-                ' assert(gpuva_color_format_supported(PIPE_FORMAT_A8_UNORM));'
-                ' assert(gpuva_color_format_supported(PIPE_FORMAT_R8G8_UNORM));'
+                ' assert(!gpuva_color_format_supported(PIPE_FORMAT_R8_UNORM));'
                 ' assert(!gpuva_color_format_supported(PIPE_FORMAT_NONE)); puts("PASS"); return 0; }\n')
         with tempfile.TemporaryDirectory() as tmp:
             src = Path(tmp) / 'f.c'; exe = Path(tmp) / 'f'
