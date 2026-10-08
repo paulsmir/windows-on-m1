@@ -450,16 +450,12 @@ static NTSTATUS AdmissionCreateAllocationImpl(
     info->SupportedReadSegmentSet = ADMISSION_APERTURE_SEGMENT_SET;
     info->SupportedWriteSegmentSet = ADMISSION_APERTURE_SEGMENT_SET;
   }
-  /* EXP1027: a CPU-visible Mesa class allocation is a UMD direct buffer used
-   * by both the GPU and the CPU. Only the reserved local segment is UAT
-   * representable for every page (16 KiB-contiguous; EXP1026 system-memory
-   * backing hung the GPU), and it is CPU-visible through
-   * CpuTranslatedAddress. */
-  if (classId != 0u && description->CpuVisible != 0u) {
-    info->PreferredSegment.SegmentId0 = ADMISSION_MEMORY_LOCAL_SEGMENT;
-    info->SupportedReadSegmentSet = ADMISSION_LOCAL_SEGMENT_SET;
-    info->SupportedWriteSegmentSet = ADMISSION_LOCAL_SEGMENT_SET;
-  }
+  /* EXP1027/EXP1028: a CPU-visible Mesa class allocation is a UMD direct
+   * buffer used by both the GPU and the CPU. It keeps the admitted EXP836
+   * shape (CPU-visible set, local preferred): dxgkrnl refuses a local-only
+   * CPU-visible class allocation (EXP1027: AllocateCb E_INVALIDARG). The local
+   * segment is 16 KiB-contiguous and fully UAT-mapped; EXP1026 showed aperture
+   * system backing hangs the GPU, so the preference is what places them. */
 #endif
   info->EvictionSegmentSet = 0u;
   info->hAllocation = allocation;
