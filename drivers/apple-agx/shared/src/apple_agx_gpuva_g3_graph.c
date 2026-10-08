@@ -695,14 +695,21 @@ bool AppleAgxGpuvaG3GraphAttachPrivate(APPLE_AGX_GPUVA_G3_GRAPH *g,
   bool new_leaf;
   if (!g) return false;
   g->AttachFailure =
-      !g->Created || g->Uncertain ? 1u : g->JobInFlight ? 2u :
-      g->LeaseToken ? 3u :
+      !g->Created || g->Uncertain ? 1u :
       va<(1ULL<<25) || va>=(1ULL<<39) || (va&0x1ffffffULL) ? 4u :
       !find_table(g,middle,1u) ? 5u : !find_table(g,leaf,2u) ? 6u : 0u;
   if (g->AttachFailure) return false;
   root_edge=find_edge(g->Parents,g->RootIpa,ri);
   if (root_edge) middle=root_edge->AuxIpa;
   leaf_edge=find_edge(g->Parents,middle,mi);
+  /* SetRootPageTable is per context and VOID: another context of this
+   * process may be running.  An existing exact link needs no publication,
+   * so it does not wait for process quiescence (EXP1053 DWM poison). */
+  if (root_edge && leaf_edge && leaf_edge->AuxIpa==leaf) return true;
+  if (g->JobInFlight || g->LeaseToken) {
+    g->AttachFailure = g->JobInFlight ? 2u : 3u;
+    return false;
+  }
   if (leaf_edge && leaf_edge->AuxIpa!=leaf) { g->AttachFailure=7u; return false; }
   new_leaf=leaf_edge==0;
   if (!AppleAgxGpuvaG3GraphUpdateParent(g,middle,mi,leaf)) {

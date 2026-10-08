@@ -181,6 +181,47 @@ static void level_reuse(void) {
   assert(!AppleAgxGpuvaG3GraphRegisterTable(&graph,0x10000000ULL,1u));
 }
 
+/* SetRootPageTable is per context and cannot fail; another context of the
+ * same process may be executing.  Re-attaching the already linked private
+ * branch changes nothing and must not depend on process quiescence, while a
+ * real link change still requires it. */
+static void private_attach_is_idempotent_while_busy(void) {
+  struct fixture f = {0};
+  APPLE_AGX_GPUVA_V5_CLIENT client;
+  APPLE_AGX_GPUVA_V5_IO io = {&f, write64, read64, write32, barrier, 0};
+  APPLE_AGX_GPUVA_G3_GRAPH graph;
+  const unsigned long long va = 1ULL << 36;
+  f.bulk = 1u;
+  assert(AppleAgxGpuvaV5ClientInit(&client, &io));
+  assert(AppleAgxGpuvaG3GraphInit(&graph, &client, 1u, 1u,
+                                  allocate, release, 0));
+  assert(AppleAgxGpuvaG3GraphCreate(&graph, 0x10000000ULL, false));
+  assert(AppleAgxGpuvaG3GraphRegisterTable(&graph, 0x10004000ULL, 1u));
+  assert(AppleAgxGpuvaG3GraphRegisterTable(&graph, 0x10008000ULL, 2u));
+  assert(AppleAgxGpuvaG3GraphRegisterTable(&graph, 0x1000c000ULL, 2u));
+  graph.JobInFlight = 1u;
+  assert(!AppleAgxGpuvaG3GraphAttachPrivate(&graph, va, 0x10004000ULL,
+                                            0x10008000ULL));
+  assert(graph.AttachFailure == 2u);
+  graph.JobInFlight = 0u;
+  assert(AppleAgxGpuvaG3GraphAttachPrivate(&graph, va, 0x10004000ULL,
+                                           0x10008000ULL));
+  unsigned int commands = f.count;
+  graph.JobInFlight = 1u;
+  assert(AppleAgxGpuvaG3GraphAttachPrivate(&graph, va, 0x10004000ULL,
+                                           0x10008000ULL));
+  assert(f.count == commands && graph.AttachFailure == 0u);
+  assert(!AppleAgxGpuvaG3GraphAttachPrivate(&graph, va, 0x10004000ULL,
+                                            0x1000c000ULL));
+  graph.LeaseToken = 9u;
+  graph.JobInFlight = 0u;
+  assert(AppleAgxGpuvaG3GraphAttachPrivate(&graph, va, 0x10004000ULL,
+                                           0x10008000ULL));
+  assert(f.count == commands);
+  graph.LeaseToken = 0u;
+  assert(AppleAgxGpuvaG3GraphDestroy(&graph));
+}
+
 int main(void) {
   struct fixture f = {0};
   APPLE_AGX_GPUVA_V5_CLIENT client;
@@ -244,5 +285,6 @@ int main(void) {
   for (unsigned i=0;i<f.count;i++) assert(f.commands[i] == order[i]);
   level_reuse();
   lookup_scale();
+  private_attach_is_idempotent_while_busy();
   return 0;
 }
