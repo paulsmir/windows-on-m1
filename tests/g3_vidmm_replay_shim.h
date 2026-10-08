@@ -250,7 +250,7 @@ typedef struct _ADMISSION_OBJECT_DEVICE { UINT Magic; void *Adapter; } ADMISSION
 typedef struct { UINT Magic,Flags; ADMISSION_OBJECT_DEVICE *Device;
   UINT FenceOutstanding; } ADMISSION_OBJECT_CONTEXT;
 typedef struct _ADMISSION_DEVICE { ADMISSION_OBJECT_DEVICE Object; LONG Win32Generation; ADMISSION_G3_PROCESS *GpuvaG3Process; } ADMISSION_DEVICE;
-typedef struct { ADMISSION_ALLOCATION_OBJECT Object; ULONG QualificationCookie,Win32ClassId,Win32Flags; } ADMISSION_ALLOCATION_HANDLE;
+typedef struct { ADMISSION_ALLOCATION_OBJECT Object; ULONG QualificationCookie,Win32ClassId,Win32Flags,Presentation; } ADMISSION_ALLOCATION_HANDLE;
 #define ADMISSION_OPEN_ALLOCATION_MAGIC 0x4f504152u
 typedef struct { ULONG Magic; ADMISSION_DEVICE *Device; UINT RuntimeAllocation;
  ADMISSION_ALLOCATION_OBJECT *Allocation; BOOLEAN ReadOnly;

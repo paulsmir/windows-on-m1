@@ -413,6 +413,7 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   allocation->Win32Flags = flags;
   allocation->WrittenPrimary = resourceData != NULL &&
       (resourceData->Flags & ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY) != 0u;
+  allocation->Presentation = resourceData != NULL && classId == 0u;
   AdmissionPresentResourceRefreshRate(resourceData,
                                       &allocation->PrimaryRefreshNumerator,
                                       &allocation->PrimaryRefreshDenominator);

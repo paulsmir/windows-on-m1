@@ -56,7 +56,7 @@ typedef struct {ADMISSION_OBJECT_ADAPTER ObjectAdapter;BOOLEAN InterfaceValid;
  void (*DxgkCbReleaseHandleData)(DXGKARGCB_RELEASEHANDLEDATA);} Interface;
 } ADMISSION_CONTEXT;
 typedef struct {ADMISSION_OBJECT_DEVICE Object;volatile LONG Win32Generation;} ADMISSION_DEVICE;
-typedef struct {ADMISSION_ALLOCATION_OBJECT Object;ULONG QualificationCookie,Win32ClassId,Win32Flags,WrittenPrimary;} ADMISSION_ALLOCATION_HANDLE;
+typedef struct {ADMISSION_ALLOCATION_OBJECT Object;ULONG QualificationCookie,Win32ClassId,Win32Flags,WrittenPrimary,Presentation;} ADMISSION_ALLOCATION_HANDLE;
 typedef struct {ULONG Magic;ADMISSION_DEVICE *Device;D3DKMT_HANDLE RuntimeAllocation;
  ADMISSION_ALLOCATION_OBJECT *Allocation;BOOLEAN ReadOnly;ULONG Win32Generation,Win32ClassId,Win32Flags;} ADMISSION_OPEN_ALLOCATION;
 typedef struct {D3DKMT_HANDLE hAllocation;void *pPrivateDriverData;

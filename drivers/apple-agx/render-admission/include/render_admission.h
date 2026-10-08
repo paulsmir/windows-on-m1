@@ -672,6 +672,9 @@ typedef struct _ADMISSION_ALLOCATION_HANDLE {
   ULONG Win32ClassId;
   ULONG Win32Flags;
   ULONG WrittenPrimary;
+  /* EXP1060: a classless allocation created with presentation resource data
+   * (a swapchain or primary surface); the copy escape may access it. */
+  ULONG Presentation;
   /* Created-with refresh rate reported by DxgkDdiDescribeAllocation. */
   UINT PrimaryRefreshNumerator;
   UINT PrimaryRefreshDenominator;

@@ -1141,9 +1141,13 @@ RetryPagingQuiescence:
   COPY_REJECT_IF(opened->RuntimeAllocation!=q->Allocation, 37u, STATUS_INVALID_PARAMETER, Unlock);
   COPY_REJECT_IF(opened->Allocation->Magic!=ADMISSION_ALLOCATION_OBJECT_MAGIC, 38u, STATUS_INVALID_PARAMETER, Unlock);
   allocation=CONTAINING_RECORD(opened->Allocation,ADMISSION_ALLOCATION_HANDLE,Object);
-  COPY_REJECT_IF(!allocation->Win32ClassId, 39u, STATUS_INVALID_PARAMETER, Unlock);
+  /* EXP1060: a GPU-local presentation allocation is classless and typed by
+   * its surface; its CPU updates (UpdateSubresourceUP, maps) reach it only
+   * through this copy. The per-page owner checks below still apply. */
+  COPY_REJECT_IF(!allocation->Win32ClassId && !allocation->Presentation, 39u, STATUS_INVALID_PARAMETER, Unlock);
   COPY_REJECT_IF(allocation->Object.Description.CpuVisible, 40u, STATUS_INVALID_PARAMETER, Unlock);
-  COPY_REJECT_IF(allocation->Object.Description.Type!=ADMISSION_WIN32_ALLOCATION_GPU_LOCAL, 41u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(!allocation->Presentation &&
+      allocation->Object.Description.Type!=ADMISSION_WIN32_ALLOCATION_GPU_LOCAL, 41u, STATUS_INVALID_PARAMETER, Unlock);
   COPY_REJECT_IF(state->ActiveProcess==p, 42u, STATUS_DEVICE_BUSY, Unlock);
   COPY_REJECT_IF(p->Graph.JobInFlight, 43u, STATUS_DEVICE_BUSY, Unlock);
   COPY_REJECT_IF(p->Graph.LeaseToken, 44u, STATUS_DEVICE_BUSY, Unlock);
@@ -1169,8 +1173,9 @@ RetryPagingQuiescence:
   COPY_REJECT_IF(q->Operation!=APPLE_AGX_G3_COPY_QUERY &&
       q->ProcessGeneration!=p->Graph.ProcessGeneration, 45u, STATUS_INVALID_PARAMETER, Unlock);
   COPY_REJECT_IF(q->Operation==APPLE_AGX_G3_COPY_UPLOAD &&
-      (opened->ReadOnly || !(opened->Win32Flags&AppleAgxWin32BufferCpuWrite)), 46u, STATUS_INVALID_PARAMETER, Unlock);
-  COPY_REJECT_IF(q->Operation==APPLE_AGX_G3_COPY_DOWNLOAD &&
+      (opened->ReadOnly || (!allocation->Presentation &&
+       !(opened->Win32Flags&AppleAgxWin32BufferCpuWrite))), 46u, STATUS_INVALID_PARAMETER, Unlock);
+  COPY_REJECT_IF(q->Operation==APPLE_AGX_G3_COPY_DOWNLOAD && !allocation->Presentation &&
       !(opened->Win32Flags&AppleAgxWin32BufferCpuRead), 47u, STATUS_INVALID_PARAMETER, Unlock);
   length=q->Operation==APPLE_AGX_G3_COPY_QUERY ?
       allocation->Object.Description.Size : q->TransferBytes;

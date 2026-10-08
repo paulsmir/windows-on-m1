@@ -336,6 +336,36 @@ static void r145_copy_cases(void) {
   q->Operation=APPLE_AGX_G3_COPY_DOWNLOAD;q->Offset=0xff9;q->TransferBytes=0x4009;
   expect_ok("R145 migrated readback",AdmissionDdiEscape(&a,&escape));
   for(UINT i=0;i<q->TransferBytes;++i) assert(q->Data[i]==(unsigned char)(i*37+9));
+  /* EXP1060 (EXP1059 receipt: predicate 39): a GPU-local presentation
+   * allocation is classless and typed by its surface, yet an app may update
+   * it from the CPU (UpdateSubresourceUP). Its owner may copy it; a
+   * read-only open may not upload, and a CPU-visible one still goes via
+   * staging. */
+  allocation.Win32ClassId=0;allocation.Win32Flags=0;
+  opened.Win32ClassId=0;opened.Win32Flags=0;
+  allocation.Object.Description.Type=ADMISSION_WIN32_ALLOCATION_GPU_LOCAL+1u;
+  allocation.Presentation=1;
+  q->Operation=APPLE_AGX_G3_COPY_QUERY;q->Offset=0;q->TransferBytes=0;
+  q->MappingGeneration=q->ProcessGeneration=0;
+  expect_ok("EXP1060 presentation query",AdmissionDdiEscape(&a,&escape));
+  q->Operation=APPLE_AGX_G3_COPY_UPLOAD;q->Offset=0x2000;q->TransferBytes=0x1000;
+  memset(q->Data,0x5a,q->TransferBytes);
+  expect_ok("EXP1060 presentation upload",AdmissionDdiEscape(&a,&escape));
+  assert(local_cpu[0x202000]==0x5a && local_cpu[0x202fff]==0x5a);
+  q->Operation=APPLE_AGX_G3_COPY_DOWNLOAD;memset(q->Data,0,q->TransferBytes);
+  expect_ok("EXP1060 presentation readback",AdmissionDdiEscape(&a,&escape));
+  assert(q->Data[0]==0x5a && q->Data[0xfff]==0x5a);
+  q->Operation=APPLE_AGX_G3_COPY_UPLOAD;opened.ReadOnly=TRUE;
+  assert(AdmissionDdiEscape(&a,&escape)==STATUS_INVALID_PARAMETER);opened.ReadOnly=FALSE;
+  allocation.Object.Description.CpuVisible=1;
+  assert(AdmissionDdiEscape(&a,&escape)==STATUS_INVALID_PARAMETER);
+  allocation.Object.Description.CpuVisible=0;
+  allocation.Presentation=0;q->Operation=APPLE_AGX_G3_COPY_QUERY;q->Offset=0;q->TransferBytes=0;
+  q->MappingGeneration=q->ProcessGeneration=0;a.G3CopyQueryFailureClaim=0;
+  assert(AdmissionDdiEscape(&a,&escape)==STATUS_INVALID_PARAMETER &&
+         a.G3CopyQueryFailurePredicate==39);
+  allocation.Object.Description.Type=ADMISSION_WIN32_ALLOCATION_GPU_LOCAL;
+  allocation.Win32ClassId=1;allocation.Win32Flags=15;opened.Win32ClassId=1;opened.Win32Flags=15;
   p->Contexts=NULL;expect_ok("R145 cleanup",AdmissionDdiDestroyProcess(&a,p));
   free(q);free(local_cpu);local_cpu=NULL;r145_open=NULL;
   puts("R145 local copy: PASS");
