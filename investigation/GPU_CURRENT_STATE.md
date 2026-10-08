@@ -1,3 +1,42 @@
+# J313 GPU — accelerated desktop renders text; ~4-7 fps composition
+
+
+## Current as of 2026-10-08 11:00Z (read this first)
+
+State: Air on the EXP1039 full-owner boot (package installed for same-boot
+probes); recover with guest `shutdown /r` then
+.local/experiments/EXP1039-rgba-alloc/evidence/rec1039h/recover.sh.
+Last validated code: b2e57eaa (EXP1039). Probe set (tools/agx-text-selftest,
+copied to C:\Users\pavel): glyph, gec, text, inst, texfmt, font, swap
+(swap needs the interactive task arm-swap2.ps1).
+
+Proven 2026-10-08 (EXPERIMENTS.md EXP1031-EXP1039):
+- Indexed draws: restart index by index size (3718cc40, EXP1031).
+- Dynamic-buffer shadow published at Unmap (36841918, EXP1033): first D2D
+  glyphs and the black startup interval fixed.
+- Multi-draw GPUVA batches (a3bbb8f9, EXP1035): flips 12 -> ~260-400 per
+  150 s; median frame interval 150-270 ms.
+- G4 colour class carries bytes per pixel (20df4061, EXP1036): R8/A8/RG8
+  render passes bind; KMD bind minimum = W*H*bytes.
+- Lowered A8/RGB32 CPU access translates the client format (e622d648,
+  EXP1037): texfmt 12/12.
+- RGBA8 displayable back buffers accepted as non-scanout allocations without
+  WRITTEN_PRIMARY (c4ec15b8+b2e57eaa, EXP1038/1039): WinUI flip swap chains
+  no longer remove the device.
+- Rejected: Mesa-only R8 admission (EXP1034: KMD 4-byte bind -> device error).
+
+Open, causal order:
+1. Frame latency: per DWM submit a synchronous completion wait (phase 5,
+   ~25-36 s per 230 s) and paging waits (~33 s). Candidate: skip the CPU
+   wait when no held slot needs a download (umd_gpuva_windows.c submit()),
+   after proving holds/copies are not released on that assumption.
+2. Notepad (WinUI 3) tab/menu labels missing; explorer XAML text works;
+   fonts and RGBA8 swap chains excluded (EXP1039). Parked.
+3. DWM output lags seconds behind window changes (same cause as 1?).
+4. TDR reset unsupported (0x116 after a hang).
+
+---- older state below ----
+
 # J313 GPU — composed G4 desktop; staging/paging costs cut; predicate57 open
 
 
