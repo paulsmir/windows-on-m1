@@ -23,7 +23,7 @@ class G4MesaPoolResidencyReplay(unittest.TestCase):
                  "AgxWin32AsahiBatchRelease")
         with tempfile.TemporaryDirectory(prefix="r148-pool-residency-") as directory:
             tmp = Path(directory)
-            (tmp / "g4_mesa_pool_functions.inc").write_text("void (*AgxWin32BatchRefusalHook)(unsigned, unsigned, unsigned, unsigned);\n" + "\n".join(
+            (tmp / "g4_mesa_pool_functions.inc").write_text("void (*AgxWin32BatchRefusalHook)(unsigned, unsigned, unsigned, unsigned);\n#define AGX_WIN32_ASAHI_FAIL(b, f) ((b)->Failed = 1)\n" + "\n".join(
                 body(source, name) for name in names))
             binary = tmp / "replay"
             subprocess.run([os.environ.get("CC", "clang"), "-std=c11", "-Wall",

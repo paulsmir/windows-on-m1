@@ -63,6 +63,18 @@ typedef struct {
 #endif
 } AGX_WIN32_ASAHI_BACKEND;
 
+/* EXP1056 receipt-only: the first transition of a backend to Failed reports
+ * (file << 16) | line through an optional hook; the result is unchanged.
+ * Files: 1 asahi_bo.c, 2 asahi_capture.c, 3 asahi_pipeline.c,
+ * 4 gpuva_batch.c. */
+extern void (*AgxWin32BackendFailHook)(unsigned site);
+#define AGX_WIN32_ASAHI_FAIL(backend, file) do {                          \
+    AGX_WIN32_ASAHI_BACKEND *agx_fail_backend_ = (backend);               \
+    if (!agx_fail_backend_->Failed && AgxWin32BackendFailHook)            \
+      AgxWin32BackendFailHook(((unsigned)(file) << 16) | (unsigned)__LINE__); \
+    agx_fail_backend_->Failed = 1;                                        \
+  } while (0)
+
 
 int AgxWin32AsahiAttach(AGX_WIN32_ASAHI_BACKEND *, struct agx_device *,
     AGX_WIN32_SCREEN *, const AGX_WIN32_ASAHI_OWNER_OPS *, void *, APPLE_AGX_U64);

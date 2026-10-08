@@ -1,5 +1,7 @@
 #include "agx_device.h"
 #include "agx_win32_asahi_bo.h"
+
+void (*AgxWin32BackendFailHook)(unsigned site);
 #include <stdlib.h>
 #include <string.h>
 
@@ -78,13 +80,13 @@ static int dispose(struct windows_bo *bo) {
    * slot and allocation first; free the VA only once nothing names it. */
   if(b->PendingVaCount>=sizeof(b->PendingVa)/sizeof(b->PendingVa[0])) {
     if(!b->Ops.Associate(b->Owner,bo->Backing.Buffer.Transport.Token,&bo->Base,
-                        bo->Backing.ConstructionSerial,release_map)) b->Failed=1;
+                        bo->Backing.ConstructionSerial,release_map)) AGX_WIN32_ASAHI_FAIL(b, 1u);
     return 0;
   }
 #endif
   if(AgxWin32NativeDeviceDestroyBo(&b->Buffers,&bo->Backing)!=AgxWin32NativeDeviceSuccess) {
     if(!b->Ops.Associate(b->Owner,bo->Backing.Buffer.Transport.Token,&bo->Base,
-                        bo->Backing.ConstructionSerial,release_map)) b->Failed=1;
+                        bo->Backing.ConstructionSerial,release_map)) AGX_WIN32_ASAHI_FAIL(b, 1u);
     return 0;
   }
 #ifdef APPLE_AGX_GPUVA_WINSYS
@@ -179,7 +181,7 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
   if(AgxWin32NativeDeviceCreateBo(&b->Buffers,cls,bytes,align,access,&bo->Backing)!=AgxWin32NativeDeviceSuccess) {
     /* The existing wrapper may retain a buffer if allocation rollback failed.
      * Stop new native work rather than silently losing that Windows resource. */
-    b->Failed=1;
+    AGX_WIN32_ASAHI_FAIL(b, 1u);
     if(bo->Backing.Live) b->UnpublishedBo=bo;
     else free(bo);
     return NULL;
@@ -189,7 +191,7 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
     if(AgxWin32NativeDeviceDestroyBo(&b->Buffers,&bo->Backing)!=AgxWin32NativeDeviceSuccess)
       b->UnpublishedBo=bo;
     else free(bo);
-    b->Failed=1; return NULL;
+    AGX_WIN32_ASAHI_FAIL(b, 1u); return NULL;
   }
   bo->Base.handle=(uint32_t)bo->Backing.Buffer.Transport.Token;
   bo->Base.align=align; bo->Base.prime_fd=-1; bo->Base.refcnt=1; bo->Base.label=label;
@@ -201,7 +203,7 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
     if(b->Gpuva.Terminal || AgxWin32NativeDeviceDestroyBo(&b->Buffers,&bo->Backing)!=
         AgxWin32NativeDeviceSuccess) b->UnpublishedBo=bo;
     else free(bo);
-    b->Failed=1;return NULL;
+    AGX_WIN32_ASAHI_FAIL(b, 1u);return NULL;
   }
   bo->Coordinate.addr=bo->Gpuva.Va;
 #else
@@ -215,7 +217,7 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
     if(AgxWin32NativeDeviceDestroyBo(&b->Buffers,&bo->Backing)!=AgxWin32NativeDeviceSuccess)
       b->UnpublishedBo=bo;
     else free(bo);
-    b->Failed=1; return NULL;
+    AGX_WIN32_ASAHI_FAIL(b, 1u); return NULL;
   }
   ++b->LiveBos;
   return &bo->Base;
@@ -258,7 +260,7 @@ struct agx_bo *AgxWin32AsahiImportBo(
     if(b->Gpuva.Terminal || AgxWin32NativeDeviceDestroyBo(&b->Buffers,&bo->Backing)!=
         AgxWin32NativeDeviceSuccess) b->UnpublishedBo=bo;
     else free(bo);
-    b->Failed=1;return NULL;
+    AGX_WIN32_ASAHI_FAIL(b, 1u);return NULL;
   }
   bo->Coordinate.addr=bo->Gpuva.Va;
 #else
@@ -273,7 +275,7 @@ struct agx_bo *AgxWin32AsahiImportBo(
     if(AgxWin32NativeDeviceDestroyBo(&b->Buffers,&bo->Backing)!=
        AgxWin32NativeDeviceSuccess) b->UnpublishedBo=bo;
     else free(bo);
-    b->Failed=1;return NULL;
+    AGX_WIN32_ASAHI_FAIL(b, 1u);return NULL;
   }
   ++b->LiveBos;
   return &bo->Base;
@@ -307,20 +309,20 @@ static void native_map(struct agx_device *native,struct agx_bo *base,void *fixed
   AGX_WIN32_ASAHI_BACKEND *b=native->windows_private;
   if(!b || b!=bo->Backend || fixed || b->Failed || base->refcnt<=0) return;
   if(AgxWin32NativeBoMap(b->Buffers.Screen,&bo->Backing,AppleAgxWin32BufferCpuWrite,&address)
-      !=AgxWin32NativeBoSuccess) { b->Failed=1; return; }
+      !=AgxWin32NativeBoSuccess) { AGX_WIN32_ASAHI_FAIL(b, 1u); return; }
   base->_map=address;
 }
 
 void agx_bo_reference(struct agx_bo *base) {
   if(!base) return;
   struct windows_bo *bo=(struct windows_bo *)base;
-  if(base->refcnt<=0 || base->refcnt==INT32_MAX) { bo->Backend->Failed=1; return; }
+  if(base->refcnt<=0 || base->refcnt==INT32_MAX) { AGX_WIN32_ASAHI_FAIL(bo->Backend, 1u); return; }
   ++base->refcnt;
 }
 void agx_bo_unreference(struct agx_device *native,struct agx_bo *base) {
   struct windows_bo *bo=(struct windows_bo *)base;
   if(!base) return;
-  if(base->dev!=native || base->refcnt<=0) { bo->Backend->Failed=1; return; }
+  if(base->dev!=native || base->refcnt<=0) { AGX_WIN32_ASAHI_FAIL(bo->Backend, 1u); return; }
   if(--base->refcnt==0) {
 #ifdef APPLE_AGX_GPUVA_WINSYS
     if(cache_put(bo)) return;
@@ -502,5 +504,5 @@ struct agx_bo *AgxWin32AsahiLookupBo(struct agx_device *native,uint32_t handle) 
     if(bo->dev==native && bo->handle==handle && bo->refcnt>0 &&
         AgxWin32AsahiIdentity(b,bo,&id)) return bo;
   }
-  b->Failed=1;return NULL;
+  AGX_WIN32_ASAHI_FAIL(b, 1u);return NULL;
 }

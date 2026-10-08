@@ -25,7 +25,8 @@ class BoDisposeOrder(unittest.TestCase):
         source = (WINSYS / "agx_win32_asahi_bo.c").read_text()
         with tempfile.TemporaryDirectory(prefix="exp979-dispose-") as directory:
             tmp = Path(directory)
-            (tmp / "dispose_function.inc").write_text(body(source, "dispose"))
+            (tmp / "dispose_function.inc").write_text(
+                "#define AGX_WIN32_ASAHI_FAIL(b, f) ((b)->Failed = 1)\n" + body(source, "dispose"))
             binary = tmp / "replay"
             subprocess.run([os.environ.get("CC", "clang"), "-std=c11",
                 "-DAPPLE_AGX_GPUVA_WINSYS", "-Wall", "-Wextra",

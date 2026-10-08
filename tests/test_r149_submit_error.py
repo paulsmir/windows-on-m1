@@ -86,7 +86,7 @@ static void FrontendFlush(Device *hDevice) {
                  "AgxWin32AsahiBatchAbort", "AgxWin32AsahiBatchRelease")
         with tempfile.TemporaryDirectory(prefix="r149-submit-error-") as directory:
             tmp = Path(directory)
-            (tmp / "g4_mesa_pool_functions.inc").write_text("void (*AgxWin32BatchRefusalHook)(unsigned, unsigned, unsigned, unsigned);\n" + "\n".join(body(batch, n) for n in names))
+            (tmp / "g4_mesa_pool_functions.inc").write_text("void (*AgxWin32BatchRefusalHook)(unsigned, unsigned, unsigned, unsigned);\n#define AGX_WIN32_ASAHI_FAIL(b, f) ((b)->Failed = 1)\n" + "\n".join(body(batch, n) for n in names))
             (tmp / "replay.c").write_text(source)
             binary = tmp / "replay"
             subprocess.run([os.environ.get("CC", "clang"), "-std=c11", "-Wall", "-Wextra",

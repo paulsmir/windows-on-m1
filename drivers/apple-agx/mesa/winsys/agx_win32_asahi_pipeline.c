@@ -139,7 +139,7 @@ int AgxWin32AsahiEncoderDrawPreflight(struct agx_device *native,struct agx_bo *b
      (uintptr_t)current>(uintptr_t)end ||
      (uintptr_t)current-(uintptr_t)r->Scope.Cpu<r->CompletedEnd ||
      bytes>UINT64_MAX-tail || bytes+tail>(uintptr_t)end-(uintptr_t)current) {
-    b->Failed=1; return 0;
+    AGX_WIN32_ASAHI_FAIL(b, 3u); return 0;
   }
   return 1;
 }

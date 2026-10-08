@@ -40,7 +40,7 @@ static void release(void *context,APPLE_AGX_U64 token,APPLE_AGX_U64 serial) {
     if(c->Identities[i].Token==token && c->Identities[i].Serial==serial) {
       agx_bo_unreference(c->Backend->Native,c->Bos[i]); return;
     }
-  c->Backend->Failed=1;
+  AGX_WIN32_ASAHI_FAIL(c->Backend, 2u);
 }
 AGX_WIN32_RELOC_RESULT AgxWin32AsahiCaptureBeginVersion(AGX_WIN32_ASAHI_CAPTURE *c,
     AGX_WIN32_ASAHI_BACKEND *backend,APPLE_AGX_U64 owner,APPLE_AGX_U32 generation,

@@ -36,6 +36,7 @@ VOID AgxD3d10WindowsPresentMeasure(UINT Kind,HRESULT Status,
   AdmissionUmdPresentMeasure(Kind,Status,Values,Count);
 }
 
+extern "C" void (*AgxWin32BackendFailHook)(unsigned site);
 extern "C" void (*AgxWin32BatchRefusalHook)(unsigned kind, unsigned site,
                                             unsigned detail0, unsigned detail1);
 extern "C" void (*AgxWin32FirstFaultHook)(unsigned site,uintptr_t context,
@@ -68,6 +69,10 @@ static void AgxD3d10BatchRefusal(unsigned kind, unsigned site,
                                  unsigned detail0, unsigned detail1) {
   UINT values[4]={kind,site,detail0,detail1};
   AdmissionUmdDiagnostic("reject-batch",E_FAIL,values,4u);
+}
+/* EXP1056: kind 4 = first backend Failed transition, site = file<<16|line. */
+static void AgxD3d10BackendFail(unsigned site) {
+  AgxD3d10BatchRefusal(4u, site, 0u, 0u);
 }
 
 VOID AgxD3d10WindowsDiagnosticSetError(
@@ -434,6 +439,7 @@ HRESULT AgxD3d10WindowsCreateDevice(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
   if(!owner->Context) { result=E_OUTOFMEMORY;goto failed; }
   owner->Stage=AgxD3d10DeviceNativeContextReady;
   AgxWin32BatchRefusalHook=AgxD3d10BatchRefusal;
+  AgxWin32BackendFailHook=AgxD3d10BackendFail;
   AgxWin32VdmTraceHook=AgxD3d10VdmTrace;
   AgxWin32FirstFaultHook=AgxD3d10FirstFault;
   owner->Stage=AgxD3d10DeviceReady;

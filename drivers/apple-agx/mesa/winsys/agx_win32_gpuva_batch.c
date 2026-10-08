@@ -417,7 +417,7 @@ fail:
   /* Native submission also marks the context faulted. Publish that failure
    * to Windows FlushStatus even when residency rollback completed safely.
    * Keep Gpuva.Terminal separate: a rejected batch can still be released. */
-  b->Failed=1;
+  AGX_WIN32_ASAHI_FAIL(b, 4u);
   return 0;
 }
 
