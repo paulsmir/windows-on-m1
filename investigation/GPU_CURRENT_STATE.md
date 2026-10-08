@@ -1,6 +1,32 @@
 # J313 GPU — accelerated desktop renders text; ~4-7 fps composition
 
 
+## Current as of 2026-10-08 20:15Z (read this first)
+
+State: GPU-visible baseline (Code 28, no package) after each run; EXP1053
+(graph lookup indices + AttachPrivate reason) built next. Full-owner m1n1 is
+now m1n1-824ea32d-mailbox (7367d7da), r143 unchanged.
+
+Proven 2026-10-08 evening (EXPERIMENTS.md EXP1050-EXP1052):
+- Broker mailbox (m1n1 824ea32d, root 7fa353a2, EXP1051/1052): one trapped
+  doorbell per call; per-call floor 22 us -> 2.6 us, UPDATE_LEAF 29.7 -> 9.7
+  us; DWM flips x1.9 and submits x1.67 vs EXP1043.
+- Paging profile (EXP1052): UpdatePageTable 27.7 s of BuildPagingBuffer in
+  ~4 min, broker only 6.7 s; paging queue/worker/DPC latencies small (0.5 ms,
+  31 us, 138 us, 4 us). The cost is KMD graph list walks per 16-KiB group and
+  per 4-KiB system PTE -> 409580b6 (O(1) indices), to be measured in EXP1053.
+- EXP1050 staging-blit Settings fix rejected (DWM device error); reverted.
+- SetRootPageTable poison (EXP1050 DWM, EXP1051/1052 load app) is step 5 =
+  AttachPrivate refusal with broker status 0; reason code in EXP1053.
+
+Open, causal order:
+1. Measure EXP1053 (UpdatePageTable time, flips) and the AttachPrivate reason.
+2. Broker internal scans (m1n1 Phase A: backing hash, per-backing refcount
+   for referenced()) once the KMD side no longer dominates.
+3. Settings/AFH presentation update (scene ManagerGeneration lifecycle).
+4. Notepad menu artifacts / dark-looking WinUI surfaces.
+
+
 ## Current as of 2026-10-08 17:05Z (read this first)
 
 State: stable baseline (EXP1049, 17:20Z): normal GPU-visible profile, APPL0002
