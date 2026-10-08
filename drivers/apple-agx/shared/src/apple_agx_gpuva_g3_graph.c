@@ -693,16 +693,24 @@ bool AppleAgxGpuvaG3GraphAttachPrivate(APPLE_AGX_GPUVA_G3_GRAPH *g,
   APPLE_AGX_GPUVA_G3_NODE *root_edge, *leaf_edge;
   unsigned ri=(unsigned)(va>>36), mi=(unsigned)((va>>25)&2047u);
   bool new_leaf;
-  if (!g || !g->Created || g->Uncertain || g->JobInFlight || g->LeaseToken ||
-      va<(1ULL<<25) || va>=(1ULL<<39) || (va&0x1ffffffULL) ||
-      !find_table(g,middle,1u) || !find_table(g,leaf,2u)) return false;
+  if (!g) return false;
+  g->AttachFailure =
+      !g->Created || g->Uncertain ? 1u : g->JobInFlight ? 2u :
+      g->LeaseToken ? 3u :
+      va<(1ULL<<25) || va>=(1ULL<<39) || (va&0x1ffffffULL) ? 4u :
+      !find_table(g,middle,1u) ? 5u : !find_table(g,leaf,2u) ? 6u : 0u;
+  if (g->AttachFailure) return false;
   root_edge=find_edge(g->Parents,g->RootIpa,ri);
   if (root_edge) middle=root_edge->AuxIpa;
   leaf_edge=find_edge(g->Parents,middle,mi);
-  if (leaf_edge && leaf_edge->AuxIpa!=leaf) return false;
+  if (leaf_edge && leaf_edge->AuxIpa!=leaf) { g->AttachFailure=7u; return false; }
   new_leaf=leaf_edge==0;
-  if (!AppleAgxGpuvaG3GraphUpdateParent(g,middle,mi,leaf)) return false;
+  if (!AppleAgxGpuvaG3GraphUpdateParent(g,middle,mi,leaf)) {
+    g->AttachFailure=8u;
+    return false;
+  }
   if (!root_edge && !AppleAgxGpuvaG3GraphUpdateParent(g,g->RootIpa,ri,middle)) {
+    g->AttachFailure=9u;
     if (new_leaf && !g->Uncertain &&
         !AppleAgxGpuvaG3GraphUpdateParent(g,middle,mi,0)) g->Uncertain=1u;
     return false;

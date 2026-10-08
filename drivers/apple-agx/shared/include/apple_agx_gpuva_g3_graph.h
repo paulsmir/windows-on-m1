@@ -57,6 +57,10 @@ typedef struct _APPLE_AGX_GPUVA_G3_GRAPH {
   APPLE_AGX_GPUVA_G3_NODE *RootTable;
   unsigned int LastStatus, Created, Uncertain, JobInFlight, Slot;
   APPLE_AGX_GPUVA_G3_NODE *TableHint;
+  /* EXP1053 receipt-only: last AttachPrivate refusal (0 none, 1 state,
+   * 2 job in flight, 3 lease, 4 VA, 5 middle table, 6 leaf table,
+   * 7 edge conflict, 8 middle link, 9 root link). */
+  unsigned int AttachFailure;
   APPLE_AGX_GPUVA_G3_NODE *BackingBuckets[APPLE_AGX_GPUVA_G3_BACKING_BUCKETS];
 } APPLE_AGX_GPUVA_G3_GRAPH;
 

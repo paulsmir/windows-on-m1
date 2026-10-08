@@ -1946,7 +1946,9 @@ _Use_decl_annotations_ VOID AdmissionDdiSetRootPageTable(
                process->PrivateLeafIpa)) step = 5u;
   if (step != 0u) {
     context->GpuvaG3Poisoned = TRUE;
-    ADMISSION_G3_POISON(process,0x10u + step);
+    /* Step 5 names the AttachPrivate refusal (file 0x20 + reason). */
+    ADMISSION_G3_POISON(process, step == 5u ?
+        0x20u + process->Graph.AttachFailure : 0x10u + step);
   } else {
     context->GpuvaG3RootIpa = root_ipa;
   }
