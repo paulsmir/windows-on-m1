@@ -7,6 +7,14 @@
 #define AGX_GPUVA_V5_DOORBELL 0xb8u
 #define AGX_GPUVA_V5_RESPONSE_OFFSET 0xc0u
 #define AGX_GPUVA_V5_VERSION 6u
+/* Doorbell values: 1 executes the request in the MMIO window; 2 executes the
+ * request at offset 0 of the attached 16-KiB mailbox page and also writes the
+ * response at AGX_GPUVA_V5_MAILBOX_RESPONSE.  A broker without mailbox
+ * support refuses AGX_GPUVA_V5_ATTACH_MAILBOX as INVALID. */
+#define AGX_GPUVA_V5_DOORBELL_WINDOW 1u
+#define AGX_GPUVA_V5_DOORBELL_MAILBOX 2u
+#define AGX_GPUVA_V5_MAILBOX_BYTES 0x4000u
+#define AGX_GPUVA_V5_MAILBOX_RESPONSE 0x80u
 
 enum {
     AGX_GPUVA_V5_CREATE = 1,
@@ -24,6 +32,8 @@ enum {
     AGX_GPUVA_V5_REVOKE_TABLE,
     AGX_GPUVA_V5_REGISTER_SHARED_BACKING,
     AGX_GPUVA_V5_FLUSH_TLB,
+    /* AuxIpa = mailbox page IPA, or 0 to detach. */
+    AGX_GPUVA_V5_ATTACH_MAILBOX,
 };
 
 typedef struct _AGX_GPUVA_V5_REQUEST {

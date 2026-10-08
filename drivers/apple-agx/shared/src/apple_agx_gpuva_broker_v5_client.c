@@ -32,25 +32,75 @@ bool AppleAgxGpuvaV5ClientCall(APPLE_AGX_GPUVA_V5_CLIENT *client,
     q.Sequence = ++client->Sequence;
     q.Epoch = client->Epoch;
     memcpy(words, &q, sizeof(q));
-    for (i = 0; i < sizeof(words) / sizeof(words[0]); ++i)
-        if (!client->Io.Write64(client->Io.Context,
-                                 AGX_GPUVA_V5_OFFSET + i * 8u, words[i]))
+    if (client->Mailbox) {
+        /* One trapped access per call: the broker snapshots the request from
+         * the page and stores the response after it. */
+        volatile unsigned long long *box =
+            (volatile unsigned long long *)client->Mailbox;
+        for (i = 0; i < sizeof(words) / sizeof(words[0]); ++i)
+            box[i] = words[i];
+        client->Io.Barrier(client->Io.Context);
+        if (!client->Io.Write32(client->Io.Context,
+                                AGX_GPUVA_V5_OFFSET + AGX_GPUVA_V5_DOORBELL,
+                                AGX_GPUVA_V5_DOORBELL_MAILBOX))
             return false;
-    client->Io.Barrier(client->Io.Context);
-    if (!client->Io.Write32(client->Io.Context,
-                            AGX_GPUVA_V5_OFFSET + AGX_GPUVA_V5_DOORBELL, 1u))
-        return false;
-    client->Io.Barrier(client->Io.Context);
-    for (i = 0; i < sizeof(result) / sizeof(result[0]); ++i)
-        if (!client->Io.Read64(client->Io.Context,
-                                AGX_GPUVA_V5_OFFSET +
-                                    AGX_GPUVA_V5_RESPONSE_OFFSET + i * 8u,
-                                &result[i])) return false;
+        client->Io.Barrier(client->Io.Context);
+        box = (volatile unsigned long long *)(client->Mailbox +
+                                              AGX_GPUVA_V5_MAILBOX_RESPONSE);
+        for (i = 0; i < sizeof(result) / sizeof(result[0]); ++i)
+            result[i] = box[i];
+    } else {
+        for (i = 0; i < sizeof(words) / sizeof(words[0]); ++i)
+            if (!client->Io.Write64(client->Io.Context,
+                                     AGX_GPUVA_V5_OFFSET + i * 8u, words[i]))
+                return false;
+        client->Io.Barrier(client->Io.Context);
+        if (!client->Io.Write32(client->Io.Context,
+                                AGX_GPUVA_V5_OFFSET + AGX_GPUVA_V5_DOORBELL,
+                                AGX_GPUVA_V5_DOORBELL_WINDOW))
+            return false;
+        client->Io.Barrier(client->Io.Context);
+        for (i = 0; i < sizeof(result) / sizeof(result[0]); ++i)
+            if (!client->Io.Read64(client->Io.Context,
+                                    AGX_GPUVA_V5_OFFSET +
+                                        AGX_GPUVA_V5_RESPONSE_OFFSET + i * 8u,
+                                    &result[i])) return false;
+    }
     memcpy(&r, result, sizeof(r));
     if (r.Receipt != q.Sequence || !r.Epoch ||
         (client->Epoch && r.Epoch != client->Epoch)) return false;
     /* The first nonmutating stale-epoch call discovers the current epoch. */
     if (!client->Epoch) client->Epoch = r.Epoch;
     *response = r;
+    return true;
+}
+
+bool AppleAgxGpuvaV5ClientAttachMailbox(APPLE_AGX_GPUVA_V5_CLIENT *client,
+                                        volatile void *page,
+                                        unsigned long long page_ipa)
+{
+    AGX_GPUVA_V5_REQUEST q;
+    AGX_GPUVA_V5_RESPONSE r;
+    if (!client || !page || !page_ipa ||
+        (page_ipa & (AGX_GPUVA_V5_MAILBOX_BYTES - 1u)) || client->Mailbox ||
+        !client->Epoch) return false;
+    memset(&q, 0, sizeof(q));
+    q.Command = AGX_GPUVA_V5_ATTACH_MAILBOX;
+    q.AuxIpa = page_ipa;
+    if (!AppleAgxGpuvaV5ClientCall(client, &q, &r) || r.Status) return false;
+    client->Mailbox = (volatile unsigned char *)page;
+    return true;
+}
+
+bool AppleAgxGpuvaV5ClientDetachMailbox(APPLE_AGX_GPUVA_V5_CLIENT *client)
+{
+    AGX_GPUVA_V5_REQUEST q;
+    AGX_GPUVA_V5_RESPONSE r;
+    if (!client) return false;
+    if (!client->Mailbox) return true;
+    memset(&q, 0, sizeof(q));
+    q.Command = AGX_GPUVA_V5_ATTACH_MAILBOX;
+    if (!AppleAgxGpuvaV5ClientCall(client, &q, &r) || r.Status) return false;
+    client->Mailbox = 0;
     return true;
 }

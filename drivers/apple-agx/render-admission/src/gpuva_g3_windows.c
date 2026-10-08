@@ -109,6 +109,59 @@ ADMISSION_G3_PROCESS *AdmissionGpuvaG3FindProcess(
   return NULL;
 }
 
+/* Start-time receipt only (PASSIVE_LEVEL, never on the paging path):
+ * 1 = mailbox attached, 2 = allocation failed, 3 = broker refused. */
+static VOID AdmissionG3RecordMailbox(ADMISSION_CONTEXT *Adapter, ULONG Value) {
+  UNICODE_STRING name;
+  HANDLE key = NULL;
+  if (Adapter->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Adapter->PhysicalDeviceObject,
+                                          PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  RtlInitUnicodeString(&name, L"Wom1G3Mailbox");
+  (void)ZwSetValueKey(key, &name, 0, REG_DWORD, &Value, sizeof(Value));
+  ZwClose(key);
+}
+
+/* One 16-KiB page carries each broker request and response, so a call costs
+ * one trapped doorbell instead of 25 window accesses.  The page is cached
+ * normal memory like the broker's own view of guest RAM; a broker without
+ * mailbox support refuses the attach and the window path stays in use. */
+static VOID AdmissionG3AttachMailbox(ADMISSION_G3_STATE *state) {
+  PHYSICAL_ADDRESS lowest, highest, boundary;
+  ULONGLONG ipa;
+  PVOID page;
+  lowest.QuadPart = 0;
+  highest.QuadPart = (LONGLONG)(ADMISSION_HVC_PHYSICAL_LIMIT - 1ULL);
+  boundary.QuadPart = AGX_GPUVA_V5_MAILBOX_BYTES;
+  page = MmAllocateContiguousNodeMemory(AGX_GPUVA_V5_MAILBOX_BYTES, lowest,
+      highest, boundary, PAGE_READWRITE, MM_ANY_NODE_OK);
+  if (page == NULL) {
+    AdmissionG3RecordMailbox(state->Adapter, 2u);
+    return;
+  }
+  RtlZeroMemory(page, AGX_GPUVA_V5_MAILBOX_BYTES);
+  ipa = (ULONGLONG)MmGetPhysicalAddress(page).QuadPart;
+  if ((ipa & (AGX_GPUVA_V5_MAILBOX_BYTES - 1u)) != 0u ||
+      !AppleAgxGpuvaV5ClientAttachMailbox(&state->Client, page, ipa)) {
+    MmFreeContiguousMemory(page);
+    AdmissionG3RecordMailbox(state->Adapter, 3u);
+    return;
+  }
+  state->Mailbox = page;
+  AdmissionG3RecordMailbox(state->Adapter, 1u);
+}
+
+static VOID AdmissionG3DetachMailbox(ADMISSION_G3_STATE *state) {
+  if (state->Mailbox == NULL) return;
+  /* An unacknowledged detach leaves the page owned by the broker: leak it
+   * rather than let Windows reuse a page the broker may still store into. */
+  if (AppleAgxGpuvaV5ClientDetachMailbox(&state->Client))
+    MmFreeContiguousMemory(state->Mailbox);
+  state->Mailbox = NULL;
+}
+
 NTSTATUS AdmissionGpuvaG3Start(ADMISSION_CONTEXT *context) {
   ADMISSION_G3_STATE *state;
   AGX_GPUVA_V5_REQUEST probe = {0};
@@ -133,6 +186,7 @@ NTSTATUS AdmissionGpuvaG3Start(ADMISSION_CONTEXT *context) {
     ExFreePoolWithTag(state, ADMISSION_POOL_TAG);
     return STATUS_DEVICE_HARDWARE_ERROR;
   }
+  AdmissionG3AttachMailbox(state);
   context->GpuvaG3State = state;
   return STATUS_SUCCESS;
 }
@@ -148,6 +202,7 @@ NTSTATUS AdmissionGpuvaG3Stop(ADMISSION_CONTEXT *context) {
     ExReleaseFastMutex(&state->Lock);
     return STATUS_DEVICE_BUSY;
   }
+  AdmissionG3DetachMailbox(state);
   context->GpuvaG3State = NULL;
   ExReleaseFastMutex(&state->Lock);
   ExFreePoolWithTag(state, ADMISSION_POOL_TAG);

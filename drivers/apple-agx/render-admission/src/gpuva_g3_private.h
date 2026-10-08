@@ -27,6 +27,8 @@ typedef struct _ADMISSION_G3_STATE {
   FAST_MUTEX Lock;
   LIST_ENTRY Processes;
   APPLE_AGX_GPUVA_V5_CLIENT Client;
+  /* Cached, physically contiguous broker mailbox page (NULL: MMIO window). */
+  PVOID Mailbox;
   APPLE_AGX_GPUVA_G3_REGISTRY Registry;
   APPLE_AGX_G3_PRIVATE_POOL PrivatePool;
   ULONGLONG NextProcessId;
