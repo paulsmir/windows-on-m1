@@ -1,5 +1,27 @@
-# J313 GPU — accelerated desktop; Settings opens, ~18 flips/s composition (EXP1061)
+# J313 GPU — accelerated desktop; Settings and Notepad menus render, ~18 flips/s (EXP1063)
 
+
+## Current as of 2026-10-08 23:25Z (read this first)
+
+State: GPU-visible baseline after each run (rec1064h rollback). Best package:
+EXP1063/EXP1064 (701c49e6 / 33004b7f): zero first faults, DWM stable, Settings
+renders, Notepad menu labels/toolbar/text render, ~17-19 flips/s.
+
+Proven since 22:36Z (EXPERIMENTS.md EXP1062-EXP1064):
+- App contexts were poisoned forever by the native draw entry: zero-count
+  draws (61530e9b, EXP1062) and draws refused before batch work (701c49e6,
+  EXP1063: dropped with a kind-6 receipt instead). Menus now render.
+- The dropped draws are app-bound NULL render targets (EXP1064 receipt:
+  SetRenderTargets 1 slot, NULL handle, no DSV): no output by D3D rules.
+- DrawIndexed(0) is now a no-op instead of E_NOTIMPL (33004b7f).
+
+Open, causal order:
+1. Some Notepad windows still show speckled menu bars / glyph blobs (pixels
+   scrambled within blocks: suspect a texture layout or upload mismatch on a
+   CPU-updated texture; compression is off, the staging hash covers every
+   byte). Needs a per-texture CPU-write vs GPU-read receipt.
+2. DWM upload/completion phases; broker internal scans (m1n1 Phase A).
+3. Occasional multi-second completion wait at app start.
 
 ## Current as of 2026-10-08 22:36Z (read this first)
 
