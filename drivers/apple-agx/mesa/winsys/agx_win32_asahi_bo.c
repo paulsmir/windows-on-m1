@@ -116,18 +116,25 @@ static int cache_put(struct windows_bo *bo) {
   b->CacheBytes+=bo->Base.size;
   return 1;
 }
+/* EXP1042: as Mesa's agx_bo_cache, any BO of the same flags and class that
+ * covers the request without exceeding twice its size; the smallest wins. */
 static struct windows_bo *cache_take(AGX_WIN32_ASAHI_BACKEND *b,size_t bytes,
                                      unsigned flags,unsigned cls) {
+  APPLE_AGX_U32 best=b->CacheCount;
   for(APPLE_AGX_U32 i=b->CacheCount;i-->0;) {
     struct windows_bo *bo=(struct windows_bo *)b->Cache[i];
-    if(bo->Base.size!=bytes || (unsigned)bo->Base.flags!=flags ||
+    if(bo->Base.size<bytes || bo->Base.size/2>bytes ||
+       (unsigned)bo->Base.flags!=flags ||
        bo->Backing.Buffer.ClassId!=cls || cache_in_flight(b,bo)) continue;
-    b->Cache[i]=b->Cache[--b->CacheCount];
-    b->CacheBytes-=bo->Base.size;
-    bo->Cached=0;
-    return bo;
+    if(best==b->CacheCount ||
+       bo->Base.size<((struct windows_bo *)b->Cache[best])->Base.size) best=i;
   }
-  return NULL;
+  if(best==b->CacheCount) return NULL;
+  struct windows_bo *bo=(struct windows_bo *)b->Cache[best];
+  b->Cache[best]=b->Cache[--b->CacheCount];
+  b->CacheBytes-=bo->Base.size;
+  bo->Cached=0;
+  return bo;
 }
 /* A BO whose dispose is refused stays registered with refcnt 0 and is retried
  * by AgxWin32AsahiCollect, exactly as an uncached release would be. */

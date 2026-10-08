@@ -9,6 +9,11 @@ agx_bo_create. Invariants of the replacement cache:
   requests beyond the entry/byte limits are never cached or handed out;
 - flushing disposes every cached BO; a refused dispose leaves the BO for
   AgxWin32AsahiCollect (refcnt 0, no longer cached).
+EXP1042: like Mesa's agx_bo_cache, a released BO serves any request of the
+same flags and class whose size it covers without exceeding twice the request
+(the smallest such BO); multi-draw batches release more, differently sized
+pool/command BOs than the exact-size 16-entry cache retained (EXP1040 DWM:
+2-6 fresh BO mappings with paging-fence waits between batches).
 """
 from pathlib import Path
 import re
@@ -64,7 +69,10 @@ int main(void) {
   uint64_t held[1]={11}; b.Gpuva.Held=held; b.Gpuva.HeldCount=1;
   assert(!cache_take(&b,0x40000,0,1));
   b.Gpuva.Held=NULL; b.Gpuva.HeldCount=0;
-  assert(cache_take(&b,0x40000,0,1)==a && !a->Cached && b.CacheCount==1 && b.CacheBytes==0x80000);
+  /* A smaller request reuses a BO that covers it within twice its size,
+     never one more than twice as large. */
+  assert(!cache_take(&b,0x1c000,0,1));
+  assert(cache_take(&b,0x30000,0,1)==a && !a->Cached && b.CacheCount==1 && b.CacheBytes==0x80000);
   /* Limits: a failed or closing backend, or a full byte budget, refuses. */
   b.Closing=1; assert(!cache_put(a)); b.Closing=0;
   struct windows_bo *huge=mk(&b,AGX_WIN32_BO_CACHE_BYTES,0,1,14); assert(!cache_put(huge));
