@@ -710,8 +710,28 @@ HRESULT AdmissionUmdScreenFreeAllocation(ADMISSION_UMD_DEVICE *Device,
 static int AdmissionUmdScreenCreateClassBuffer(
     void *Context, APPLE_AGX_U32 ClassId, APPLE_AGX_U64 Bytes,
     APPLE_AGX_U64 Alignment, APPLE_AGX_U32 Flags, APPLE_AGX_U64 *Token) {
-  return AdmissionUmdScreenCreateClassBufferImpl(
+  ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)Context;
+  int created = AdmissionUmdScreenCreateClassBufferImpl(
       Context, ClassId, Bytes, Alignment, Flags, Token, 0);
+  /* EXP1057 receipt-only: an application's native backend fails for good
+   * when a buffer cannot be created (EXP1056 Notepad, asahi_bo.c site 184).
+   * Name the slot occupancy and device state of the refusal. */
+  if (!created && device != NULL) {
+    UINT active = 0u, values[7];
+    AcquireSRWLockShared(&device->ScreenBufferLock);
+    for (UINT i = 0u; i < ADMISSION_UMD_SCREEN_BUFFER_LIMIT; ++i)
+      if (device->ScreenBuffers[i].Active) ++active;
+    ReleaseSRWLockShared(&device->ScreenBufferLock);
+    values[0] = active; values[1] = ClassId;
+    values[2] = (UINT)Bytes; values[3] = (UINT)(Bytes >> 32);
+    values[4] = (UINT)device->LastScreenError;
+    values[5] = (UINT)(device->DrawTerminal != FALSE) |
+        ((UINT)(device->ScreenClosing != FALSE) << 1);
+    values[6] = Flags;
+    AdmissionUmdDiagnostic("reject-screen-create", E_FAIL, values,
+                           ARRAYSIZE(values));
+  }
+  return created;
 }
 
 HRESULT AdmissionUmdScreenAdoptAllocation(
