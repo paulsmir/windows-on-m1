@@ -369,7 +369,7 @@ struct _ADMISSION_G3_PROCESS {
   HANDLE DxgkProcess;
   ULONG Magic, DeviceRefs, ContextRefs, OsProcessId;
   BOOLEAN Poisoned;
-  ULONG PoisonSite;
+  ULONG PoisonSite, PoisonBrokerStatus;
 };
 #define ADMISSION_G3_POISON(Process, File) do { \
     (Process)->Poisoned = TRUE; \

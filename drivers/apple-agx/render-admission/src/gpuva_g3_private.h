@@ -86,12 +86,16 @@ typedef struct _ADMISSION_G3_PROCESS {
   BOOLEAN Poisoned;
   /* EXP997 diagnostic: first poison site, (file << 16) | line. */
   ULONG PoisonSite;
+  /* EXP1030: broker status (graph LastStatus) when first poisoned. */
+  ULONG PoisonBrokerStatus;
 } ADMISSION_G3_PROCESS;
 
 #define ADMISSION_G3_POISON(Process, File) do { \
     (Process)->Poisoned = TRUE; \
-    if (!(Process)->PoisonSite) \
+    if (!(Process)->PoisonSite) { \
       (Process)->PoisonSite = ((ULONG)(File) << 16) | (ULONG)__LINE__; \
+      (Process)->PoisonBrokerStatus = (Process)->Graph.LastStatus; \
+    } \
   } while (0)
 
 NTSTATUS AdmissionG3PreparePrivateStorage(

@@ -49,7 +49,7 @@ typedef struct { FAST_MUTEX Lock; ADMISSION_CONTEXT *Adapter; ULONG PrivateCompl
 typedef struct _ADMISSION_RENDER_CONTEXT { void *GpuvaG3Process; volatile LONG GpuvaG3PrivateFence; } ADMISSION_RENDER_CONTEXT;
 typedef struct _ADMISSION_G3_PRIVATE_SCENE { struct _ADMISSION_G3_PRIVATE_SCENE *Next; ADMISSION_RENDER_CONTEXT *Context;
   ULONG Fence, ResumeFence, Submitting, Queued, Started, GpuDone, Reported, ReleaseRequested, Quarantined; } ADMISSION_G3_PRIVATE_SCENE;
-typedef struct { ADMISSION_G3_STATE *State; ADMISSION_G3_PRIVATE_SCENE *PrivateScenes; BOOLEAN Poisoned; ULONG PoisonSite, OsProcessId; } ADMISSION_G3_PROCESS;
+typedef struct { ADMISSION_G3_STATE *State; ADMISSION_G3_PRIVATE_SCENE *PrivateScenes; BOOLEAN Poisoned; ULONG PoisonSite, PoisonBrokerStatus, OsProcessId; } ADMISSION_G3_PROCESS;
 static int reaps;
 static BOOLEAN AdmissionG3PrivateReap(ADMISSION_G3_PROCESS *p){++reaps;return !p->Poisoned;}
 @@FUNC@@

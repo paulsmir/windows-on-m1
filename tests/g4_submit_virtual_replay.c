@@ -88,7 +88,7 @@ typedef struct _ADMISSION_G3_PROCESS {
   ADMISSION_G3_TABLE_SHADOW *TableShadowBrokerBuckets[256];
   unsigned OsProcessId;
   unsigned Poisoned;
-  unsigned PoisonSite;
+  unsigned PoisonSite, PoisonBrokerStatus;
 } ADMISSION_G3_PROCESS;
 #define ADMISSION_G3_POISON(Process, File) do { \
     (Process)->Poisoned = 1u; \

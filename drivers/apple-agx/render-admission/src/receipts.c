@@ -2089,14 +2089,15 @@ _Use_decl_annotations_ void AdmissionRecordG3PteWait(
 /* EXP997: once per adapter; the site is (file << 16) | line of the first
  * ADMISSION_G3_POISON of that process. */
 _Use_decl_annotations_ void AdmissionRecordG3Poison(
-    ADMISSION_CONTEXT *Context, ULONG Site, ULONG ProcessId) {
+    ADMISSION_CONTEXT *Context, ULONG Site, ULONG ProcessId,
+    ULONG BrokerStatus) {
   HANDLE key = NULL;
-  ULONG value[3];
+  ULONG value[4];
   if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
       KeGetCurrentIrql() != PASSIVE_LEVEL ||
       InterlockedCompareExchange(&Context->G3PoisonClaim, 1, 0) != 0)
     return;
-  value[0] = 1u; value[1] = Site; value[2] = ProcessId;
+  value[0] = 2u; value[1] = Site; value[2] = ProcessId; value[3] = BrokerStatus;
   if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
           PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
   WriteBinary(key, L"Wom1G3Poison", value, sizeof(value));

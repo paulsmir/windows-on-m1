@@ -450,6 +450,7 @@ BOOLEAN AdmissionGpuvaG3PrivateReported(ADMISSION_CONTEXT *adapter,
   ADMISSION_G3_PRIVATE_SCENE *s;
   BOOLEAN ok=FALSE;
   ULONG poison_site;
+  ULONG poison_status;
   if (!context || !context->GpuvaG3Process) return TRUE;
   if (!adapter || !fence || KeGetCurrentIrql()!=PASSIVE_LEVEL) return FALSE;
   p=(ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
@@ -477,9 +478,11 @@ BOOLEAN AdmissionGpuvaG3PrivateReported(ADMISSION_CONTEXT *adapter,
   ok=TRUE;
 Done:
   poison_site=p->Poisoned ? p->PoisonSite : 0u;
+  poison_status=p->PoisonBrokerStatus;
   ExReleaseFastMutex(&p->State->Lock);
 #ifdef _MSC_VER
-  if (poison_site) AdmissionRecordG3Poison(adapter, poison_site, p->OsProcessId);
+  if (poison_site) AdmissionRecordG3Poison(adapter, poison_site, p->OsProcessId,
+                                           poison_status);
 #endif
   return ok;
 }

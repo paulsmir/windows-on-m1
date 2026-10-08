@@ -1026,7 +1026,7 @@ void AdmissionRecordG3LeafHistory(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3PagingWait(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3PteWait(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3Poison(_In_opt_ ADMISSION_CONTEXT *Context,
-                             ULONG Site, ULONG ProcessId);
+                             ULONG Site, ULONG ProcessId, ULONG BrokerStatus);
 void AdmissionRecordG4DrawSnapshot(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3CopyTransferFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
