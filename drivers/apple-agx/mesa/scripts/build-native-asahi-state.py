@@ -3279,11 +3279,7 @@ AgxD3d10ResourceWithinRequiredLimits(
    }
    pMappedSubResource->pData=NULL;
    pMappedSubResource->RowPitch=pMappedSubResource->DepthPitch=0;
-   /* EXP1041: WRITE_DISCARD renames through Asahi's map synchronisation
-    * (agx_prepare_for_map shadows a resource that batches still read), so
-    * only reads and plain writes keep the device-wide flush/retire. */
-   HRESULT status = (DDIMap == D3D10_DDI_MAP_WRITE_NOOVERWRITE ||
-                     DDIMap == D3D10_DDI_MAP_WRITE_DISCARD) ? S_OK :
+   HRESULT status = DDIMap == D3D10_DDI_MAP_WRITE_NOOVERWRITE ? S_OK :
       (Flags & D3D10_DDI_MAP_FLAG_DONOTWAIT) ?
        AgxD3d10WindowsTryFlushRetire(device->windows) :
        AgxD3d10WindowsFlushRetire(device->windows);
