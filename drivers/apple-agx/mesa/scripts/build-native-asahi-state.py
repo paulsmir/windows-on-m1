@@ -2417,7 +2417,9 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
    util_draw_arrays(pDevice->pipe, pDevice->primitive, StartVertexLocation, VertexCount);
    AgxD3d10WindowsDiagnosticState(pDevice->windows, "draw-after");''')
     replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','DrawIndexed','''   Device *pDevice = CastDevice(hDevice);
-   if (!pDevice || !IndexCount || pDevice->primitive >= MESA_PRIM_COUNT ||
+   /* EXP1064: DrawIndexed(0) is a D3D no-op, not an error. */
+   if (pDevice && !IndexCount) return;
+   if (!pDevice || pDevice->primitive >= MESA_PRIM_COUNT ||
        !pDevice->index_buffer ||
        (pDevice->index_size != 2 && pDevice->index_size != 4)) {
       SetError(hDevice, E_NOTIMPL);
