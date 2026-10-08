@@ -3431,11 +3431,8 @@ AgxD3d10ResourceWithinRequiredLimits(
       box.height = height;
       box.depth = depth;
    }
-   HRESULT result = AgxD3d10WindowsFlushRetire(pDevice->windows);
-   if (FAILED(result)) {
-      SetError(hDevice, result);
-      return;
-   }
+   /* EXP1040: Asahi's transfer map synchronises with batches that use the
+    * resource (shadow or reader sync); no device-wide flush/retire. */
    struct pipe_transfer *transfer = NULL;
    void *map = dst->target == PIPE_BUFFER ?
       pDevice->pipe->buffer_map(pDevice->pipe, dst, level,

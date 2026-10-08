@@ -1,6 +1,12 @@
 """EXP840: DWM restarted 525 times because UpdateSubresourceUP accepted only
 whole constant-buffer updates. The overlay must follow the D3D10 DDI contract
-for boxed buffer ranges and texture subresources."""
+for boxed buffer ranges and texture subresources.
+
+EXP1040: the update no longer flushes and retires the whole device first.
+Asahi's map synchronisation (agx_prepare_for_map: shadow when the resource
+has readers, otherwise sync only those readers) orders the CPU write; the
+unconditional flush/retire split every D2D constant-buffer update into its
+own synchronous submission."""
 
 from pathlib import Path
 import unittest
@@ -34,7 +40,8 @@ class UpdateSubresourceUpOverlay(unittest.TestCase):
         self.assertIn("pDstBox->right > width", body)
         # An empty box is a D3D no-op, not an error.
         self.assertIn("pDstBox->right <= pDstBox->left", body)
-        self.assertIn("AgxD3d10WindowsFlushRetire", body)
+        self.assertNotIn("AgxD3d10WindowsFlushRetire", body)
+        self.assertIn("PIPE_MAP_DISCARD_RANGE", body)
 
 
 class CreateResourceOwnership(unittest.TestCase):
