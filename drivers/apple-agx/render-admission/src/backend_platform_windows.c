@@ -180,7 +180,11 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   BOOLEAN QueueImageReady;
   BOOLEAN ProviderReady;
   BOOLEAN BackendStarted;
+  BOOLEAN TimerResolutionRaised;
 } ADMISSION_PLATFORM_RUNTIME;
+
+/* 1 ms in 100-ns units (ExSetTimerResolution). */
+#define ADMISSION_PLATFORM_TIMER_RESOLUTION 10000u
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 static ULONGLONG AdmissionJobQpc(VOID) {
@@ -4091,6 +4095,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
 #endif
   AdmissionRecordPlatformStage(Context, AdmissionPlatformWorkItem,
                                STATUS_SUCCESS);
+  /* Job completion, ASC replies and paging quiescence are polled with 1 ms
+   * KeDelayExecutionThread waits. At the default 15.6 ms clock each wait
+   * lasts until the next tick (EXP1043-EXP1054 job timing: one wait per job,
+   * kick->complete uniform over 1-16 ms). Hold a 1 ms clock while the GPU
+   * runtime is started; AdmissionPlatformRuntimeStop releases it. */
+  (void)ExSetTimerResolution(ADMISSION_PLATFORM_TIMER_RESOLUTION, TRUE);
+  runtime->TimerResolutionRaised = TRUE;
   AdmissionRecordPlatformStage(Context, AdmissionPlatformComplete,
                                STATUS_SUCCESS);
   return STATUS_SUCCESS;
@@ -4123,6 +4134,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStop(
   status = AdmissionPlatformDestroy(runtime);
   if (!NT_SUCCESS(status))
     return status;
+  if (runtime->TimerResolutionRaised) {
+    (void)ExSetTimerResolution(0u, FALSE);
+    runtime->TimerResolutionRaised = FALSE;
+  }
   Context->PlatformRuntime = NULL;
   ExFreePoolWithTag(runtime, ADMISSION_PLATFORM_TAG);
   return STATUS_SUCCESS;
