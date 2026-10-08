@@ -143,6 +143,12 @@ def project_sources(out,project,overlays):
     renamed=signature.replace('agx_draw_vbo(','agx_draw_vbo_windows_body(')
     wrapper=signature+'''{
    struct agx_context *ctx = agx_context(pctx);
+   /* EXP1061: Draw(0)/DrawIndexed(0) and zero-instance draws are D3D no-ops
+    * that d3d10umd forwards unchanged; refusing them below poisoned the
+    * context for good (Notepad: noise surfaces, no text). */
+   if (!indirect && num_draws == 1 && draws &&
+       (!draws[0].count || !info->instance_count))
+      return;
    if (indirect && indirect->count_from_stream_output) {
       /* DrawAuto is expanded by upstream Asahi into a direct draw.  The graph
        * gate validates the exact count-from-XFB form before the CPU read; the
@@ -156,8 +162,16 @@ def project_sources(out,project,overlays):
       ctx->any_faults = true; return;
    }
    struct agx_batch *batch = agx_get_batch(ctx);
-   if (!batch || !AgxWin32AsahiBatchPrepareDraw(batch,info,draws) ||
-       !AgxWin32AsahiBatchEnter(batch)) {
+   /* One check per line: the fault receipt site names the refusing check. */
+   if (!batch) {
+      AgxWin32AsahiBatchTraceDraw(ctx, batch, 2u);
+      ctx->any_faults = true; return;
+   }
+   if (!AgxWin32AsahiBatchPrepareDraw(batch,info,draws)) {
+      AgxWin32AsahiBatchTraceDraw(ctx, batch, 2u);
+      ctx->any_faults = true; return;
+   }
+   if (!AgxWin32AsahiBatchEnter(batch)) {
       AgxWin32AsahiBatchTraceDraw(ctx, batch, 2u);
       ctx->any_faults = true; return;
    }
