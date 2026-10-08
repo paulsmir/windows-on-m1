@@ -243,6 +243,24 @@ static int prepare_process_buffers(AGX_WIN32_ASAHI_BACKEND *b,AGX_G4_BATCH *g,
       g->Lease.SceneId && g->Lease.SceneGeneration;
 }
 
+
+/* EXP1029: the native batch encodes the colour format in its own PBE/EOT
+ * state and the KMD treats attachments as format-agnostic pointer ranges.
+ * EXP1028: RGBA8 render targets (shell UI) were refused here. Accept the
+ * formats the Asahi batch path encodes whose tile-buffer sample fits the
+ * 8/16-byte native layout checked below. */
+static int gpuva_color_format_supported(unsigned format) {
+  switch(format) {
+  case PIPE_FORMAT_B8G8R8A8_UNORM: case PIPE_FORMAT_B8G8R8A8_SRGB:
+  case PIPE_FORMAT_B8G8R8X8_UNORM: case PIPE_FORMAT_B8G8R8X8_SRGB:
+  case PIPE_FORMAT_R8G8B8A8_UNORM: case PIPE_FORMAT_R16G16B16A16_FLOAT:
+  case PIPE_FORMAT_R10G10B10A2_UNORM:
+    return 1;
+  default:
+    return 0;
+  }
+}
+
 static int batch_has_render_work(const struct agx_batch *batch) {
   return batch && (batch->draws || batch->clear);
 }
@@ -266,7 +284,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
      !batch_has_render_work(batch) || batch->cdm.bo || g->Submitted || g->Rejected ||
      !batch->vdm.bo ||
      batch->key.nr_cbufs!=1 || !batch->key.cbufs[0].texture ||
-     batch->key.cbufs[0].format!=PIPE_FORMAT_B8G8R8A8_UNORM ||
+     !gpuva_color_format_supported(batch->key.cbufs[0].format) ||
      batch->key.zsbuf.texture || render->samples!=1 ||
      (render->sample_size_B!=8 && render->sample_size_B!=16) ||
      batch->bo_list.bit_count>UINT32_MAX-(PIPE_MAX_COLOR_BUFS+17))
