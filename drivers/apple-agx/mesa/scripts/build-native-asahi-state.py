@@ -3262,8 +3262,14 @@ AgxD3d10ResourceWithinRequiredLimits(
                 resource->logical_bytes);
       resource->active_buffer_map = NULL;
       if (resource->shadow_only_map) {
+         /* EXP1033: publish the shadow now. Copies, index-buffer binds and
+          * already-bound vertex buffers read the BO, not the shadow. */
          resource->shadow_only_map=false;
-         resource->shadow_dirty=true;
+         void *map=AgxWin32AsahiBufferCurrentMap(device->pipe,resource->resource);
+         if(!map) map=AgxWin32AsahiBufferWriteMap(device->pipe,resource->resource);
+         if(map) memcpy(map,resource->dynamic_shadow,resource->logical_bytes);
+         resource->shadow_dirty=map==NULL;
+         if(!map) SetError(hDevice,E_OUTOFMEMORY);
       } else if (resource->direct_buffer_map) resource->direct_buffer_map = false;
       else pipe_buffer_unmap(device->pipe,resource->transfers[SubResource]);
    } else
