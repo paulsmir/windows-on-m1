@@ -474,7 +474,7 @@ static HRESULT terminalize_device(AGX_D3D10_WINDOWS_DEVICE **inout,HRESULT error
   static_assert(sizeof(*owner)>=sizeof(AGX_D3D10_WINDOWS_TERMINAL),
                 "terminal record must fit the consumed owner allocation");
   if(SUCCEEDED(error)) error=E_FAIL;
-  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i)
+  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(&owner->Runtime);++i)
     if(owner->Runtime.ScreenBuffers[i].Active) ++activeBuffers;
   for(UINT i=0;i<ADMISSION_UMD_SCREEN_FENCE_LIMIT;++i)
     if(owner->Runtime.ScreenFences[i].Active &&
@@ -826,7 +826,7 @@ HRESULT AgxD3d10WindowsPresentationRotate(
       ReleaseSRWLockExclusive(&Device->Runtime.ScreenBufferLock);return E_INVALIDARG;
     }
     if(!i) rotationFormat=format;
-    for(UINT j=0;j<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++j)
+    for(UINT j=0;j<ADMISSION_UMD_SCREEN_BUFFER_SCAN(&Device->Runtime);++j)
       if(Device->Runtime.ScreenBuffers[j].Active &&
          Device->Runtime.ScreenBuffers[j].Token==r->RenderBuffer.Transport.Token)
         slot=&Device->Runtime.ScreenBuffers[j];
@@ -879,7 +879,7 @@ static HRESULT resource_allocation(
   if(!resource || !AgxWin32AsahiResourceIdentity(resource,&identity))
     return E_INVALIDARG;
   AcquireSRWLockShared(&device->Runtime.ScreenBufferLock);
-  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i) {
+  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(&device->Runtime);++i) {
     ADMISSION_UMD_SCREEN_BUFFER *slot=&device->Runtime.ScreenBuffers[i];
     if(slot->Active && !slot->Transition && slot->Token==identity.Token &&
        slot->Serial==identity.Serial && slot->Bytes==identity.Bytes) {

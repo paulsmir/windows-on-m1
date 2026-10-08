@@ -66,7 +66,7 @@ ULONGLONG AdmissionUmdGpuvaFrameArm(ADMISSION_UMD_DEVICE *device,
     return canonicalVa;
   if (canonicalVa == 0ULL) {
     AcquireSRWLockShared(&device->ScreenBufferLock);
-    for (UINT index = 0u; index < ADMISSION_UMD_SCREEN_BUFFER_LIMIT; ++index)
+    for (UINT index = 0u; index < ADMISSION_UMD_SCREEN_BUFFER_SCAN(device); ++index)
       if (device->ScreenBuffers[index].Active &&
           device->ScreenBuffers[index].KernelAllocation == allocation) {
         canonicalVa = device->ScreenBuffers[index].CanonicalGpuVa;
@@ -171,7 +171,7 @@ void AdmissionUmdVaRecordDeallocate(const void *device, ULONGLONG token,
 
 static ADMISSION_UMD_SCREEN_BUFFER *find_slot(ADMISSION_UMD_DEVICE *device,
                                              uint64_t token) {
-  for (UINT i=0; i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT; ++i)
+  for (UINT i=0; i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(device); ++i)
     if (device->ScreenBuffers[i].Active && device->ScreenBuffers[i].Token==token)
       return &device->ScreenBuffers[i];
   return NULL;
@@ -193,7 +193,7 @@ static D3DKMT_HANDLE allocation_handle(ADMISSION_UMD_DEVICE *device,
   if (!device || device->Magic != ADMISSION_UMD_DEVICE_MAGIC ||
       !token || device->ScreenClosing) return 0;
   AcquireSRWLockShared(&device->ScreenBufferLock);
-  for (UINT i = 0; i < ADMISSION_UMD_SCREEN_BUFFER_LIMIT; ++i) {
+  for (UINT i = 0; i < ADMISSION_UMD_SCREEN_BUFFER_SCAN(device); ++i) {
     ADMISSION_UMD_SCREEN_BUFFER *slot = &device->ScreenBuffers[i];
     if (slot->Active && !slot->Transition && slot->Token == token) {
       handle = slot->KernelAllocation;
@@ -369,7 +369,7 @@ static int make_resident(void *context, const uint64_t *tokens,
     priorities[i] = D3DDDI_ALLOCATIONPRIORITY_NORMAL;
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
   bool valid=!device->DrawTerminal && !device->ScreenClosing;
-  for(UINT i=0;valid && i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i)
+  for(UINT i=0;valid && i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(device);++i)
     if(device->ScreenBuffers[i].CopyHeld) valid=false;
   for(unsigned i=0;valid && i<count;++i) {
     auto *slot=find_slot(device,tokens[i]);
@@ -425,7 +425,7 @@ static int make_resident(void *context, const uint64_t *tokens,
       (request.NumAllocations < pending ? request.NumAllocations : 0u);
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
   for(unsigned i=0;i<accepted;++i)
-    for(UINT j=0;j<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++j) {
+    for(UINT j=0;j<ADMISSION_UMD_SCREEN_BUFFER_SCAN(device);++j) {
       auto *slot=&device->ScreenBuffers[j];
       if(slot->Active && !slot->Resident &&
          slot->KernelAllocation==handles[i])
@@ -877,14 +877,14 @@ static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
   /* EXP1003: one touch before the first copy into any never-queried slot. */
   if(!download) {
     uint64_t fresh=0;
-    for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT && !fresh;++i) {
+    for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(device) && !fresh;++i) {
       auto *slot=&device->ScreenBuffers[i];
       if(slot->CopyHeld && !slot->Direct && !slot->SystemDirect && !slot->Queried &&
          !(cpu_quiet(slot) && slot->Sync.Valid)) fresh=slot->CanonicalGpuVa;
     }
     if(fresh) (void)touch_device(device,fresh);
   }
-  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i) {
+  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(device);++i) {
     auto *slot=&device->ScreenBuffers[i];
     /* EXP1059: upload a CPU-mapped Direct shadow before the GPU uses the
      * surface and drop the map; the next map downloads the GPU result. */
@@ -1008,7 +1008,7 @@ static int mark_written(ADMISSION_UMD_DEVICE *device, const uint64_t *written,
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
   for(unsigned i=0;i<written_count && ok;++i) {
     ADMISSION_UMD_SCREEN_BUFFER *slot=NULL;
-    for(UINT j=0;j<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++j)
+    for(UINT j=0;j<ADMISSION_UMD_SCREEN_BUFFER_SCAN(device);++j)
       if(device->ScreenBuffers[j].Active && device->ScreenBuffers[j].Token==written[i]) {
         slot=&device->ScreenBuffers[j];break;
       }
@@ -1039,7 +1039,7 @@ static int submit(void *context, const uint64_t *written,
   AcquireSRWLockShared(&device->ScreenBufferLock);
   for (unsigned i = 0; i < written_count; ++i) {
     ADMISSION_UMD_SCREEN_BUFFER *slot = NULL;
-    for (UINT j = 0; j < ADMISSION_UMD_SCREEN_BUFFER_LIMIT; ++j)
+    for (UINT j = 0; j < ADMISSION_UMD_SCREEN_BUFFER_SCAN(device); ++j)
       if (device->ScreenBuffers[j].Active &&
           device->ScreenBuffers[j].Token == written[i]) {
         slot = &device->ScreenBuffers[j];

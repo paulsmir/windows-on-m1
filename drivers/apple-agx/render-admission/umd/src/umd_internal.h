@@ -20,6 +20,9 @@
  * EXP749 measured47 live executables plus resources reaching the old64 slots.
  * This is the device registry, not the per-command reference/wire limit. */
 #define ADMISSION_UMD_SCREEN_BUFFER_LIMIT AGX_WIN32_CONSTRUCTION_MAX_OBJECTS
+/* EXP1061: live slots stay below ScreenBufferHighWater (FreeSlot hands out
+ * the lowest free index), so a scan costs the peak live count, not capacity. */
+#define ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device) ((Device)->ScreenBufferHighWater)
 /* EXP1025: unshared buffers up to this size are direct (no staging). */
 #define ADMISSION_UMD_SYSTEM_DIRECT_BYTES 0x100000ULL
 #define ADMISSION_UMD_SCREEN_FENCE_LIMIT 64u
@@ -165,6 +168,7 @@ typedef struct _ADMISSION_UMD_DEVICE {
 #endif
   AGX_WIN32_SCREEN Screen;
   ADMISSION_UMD_SCREEN_BUFFER ScreenBuffers[ADMISSION_UMD_SCREEN_BUFFER_LIMIT];
+  UINT ScreenBufferHighWater;
   ADMISSION_UMD_SCREEN_FENCE ScreenFences[ADMISSION_UMD_SCREEN_FENCE_LIMIT];
   APPLE_AGX_U64 NextScreenToken;
   APPLE_AGX_U64 NextScreenSerial;

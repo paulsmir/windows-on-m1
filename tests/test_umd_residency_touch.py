@@ -45,6 +45,7 @@ typedef unsigned long long ULONGLONG; typedef long long LONGLONG;
 #define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
 #define E_FAIL ((HRESULT)0x80004005u)
 #define ADMISSION_UMD_SCREEN_BUFFER_LIMIT 16u
+#define ADMISSION_UMD_SCREEN_BUFFER_SCAN(d) ADMISSION_UMD_SCREEN_BUFFER_LIMIT
 #define APPLE_AGX_G3_COPY_QUERY 0u
 enum { AppleAgxWin32BufferGpuWrite = 4u };
 typedef int SRWLOCK;

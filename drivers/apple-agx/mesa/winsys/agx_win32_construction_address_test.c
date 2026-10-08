@@ -6,8 +6,8 @@ assert(AgxWin32ConstructionInitialize(&s,0x1000000000ULL,7)==AgxWin32Constructio
 for(unsigned i=0;i<AGX_WIN32_CONSTRUCTION_MAX_OBJECTS;++i)
   assert(AgxWin32ConstructionReserve(&s,i+1,i+1,1,&a)==AgxWin32ConstructionSuccess);
 b=s.Next;
-assert(AgxWin32ConstructionReserve(&s,999,999,1,&a)==AgxWin32ConstructionCapacity && !a && s.Next==b);
+assert(AgxWin32ConstructionReserve(&s,AGX_WIN32_CONSTRUCTION_MAX_OBJECTS+1u,AGX_WIN32_CONSTRUCTION_MAX_OBJECTS+1u,1,&a)==AgxWin32ConstructionCapacity && !a && s.Next==b);
 assert(AgxWin32ConstructionRelease(&s,1,1)==AgxWin32ConstructionSuccess);
-assert(AgxWin32ConstructionReserve(&s,999,999,1,&a)==AgxWin32ConstructionSuccess && a==b);
+assert(AgxWin32ConstructionReserve(&s,AGX_WIN32_CONSTRUCTION_MAX_OBJECTS+1u,AGX_WIN32_CONSTRUCTION_MAX_OBJECTS+1u,1,&a)==AgxWin32ConstructionSuccess && a==b);
 assert(AgxWin32ConstructionResolve(&s,1,1,0,1,&r)==AgxWin32ConstructionStale);
 return 0;}

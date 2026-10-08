@@ -46,6 +46,7 @@ typedef unsigned long long ULONGLONG; typedef unsigned char BYTE; typedef size_t
 #define S_OK 0
 #define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
 #define ADMISSION_UMD_SCREEN_BUFFER_LIMIT 8u
+#define ADMISSION_UMD_SCREEN_BUFFER_SCAN(d) ADMISSION_UMD_SCREEN_BUFFER_LIMIT
 #define MEM_COMMIT 1u
 #define MEM_RESERVE 2u
 #define MEM_RELEASE 4u

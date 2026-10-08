@@ -38,9 +38,9 @@ static int associate(void *context,APPLE_AGX_U64 token,const void *key,
   AcquireSRWLockExclusive(&d->ScreenBufferLock);
   if(!d->ScreenClosing) {
     BOOL duplicate=FALSE;
-    for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i)
+    for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(d);++i)
       if(d->ScreenBuffers[i].Active && d->ScreenBuffers[i].NativeBo==key) duplicate=TRUE;
-    for(UINT i=0;!duplicate && i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i) {
+    for(UINT i=0;!duplicate && i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(d);++i) {
       ADMISSION_UMD_SCREEN_BUFFER *b=&d->ScreenBuffers[i];
       if(b->Active && b->Token==token && !b->Transition && !b->NativeBo && !b->SubmissionHolds) {
         b->NativeBo=key; b->NativeBoSerial=serial; b->NativeBackend=c->Backend;
@@ -56,7 +56,7 @@ static int detach(void *context,APPLE_AGX_U64 token,const void *key,APPLE_AGX_U6
   ADMISSION_UMD_DEVICE *d=c->Device;
   int result=0;
   AcquireSRWLockExclusive(&d->ScreenBufferLock);
-  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i) {
+  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(d);++i) {
     ADMISSION_UMD_SCREEN_BUFFER *b=&d->ScreenBuffers[i];
     if(b->Active && b->Token==token && b->NativeBo==key && b->NativeBoSerial==serial &&
        b->NativeBackend==c->Backend && !b->Transition && !b->SubmissionHolds && !b->SourceHolds) {
@@ -73,7 +73,7 @@ static int identity(void *context,const void *key,APPLE_AGX_U64 serial,AGX_WIN32
   int result=0;
   if(!key || !out) return 0;
   AcquireSRWLockShared(&d->ScreenBufferLock);
-  for(UINT i=0;!d->ScreenClosing && i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i) {
+  for(UINT i=0;!d->ScreenClosing && i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(d);++i) {
     ADMISSION_UMD_SCREEN_BUFFER *b=&d->ScreenBuffers[i];
     if(b->Active && b->NativeBo==key && b->NativeBackend==c->Backend && !b->Transition &&
        (!serial || b->NativeBoSerial==serial)) {
@@ -94,7 +94,7 @@ static const void *next_bo(void *context,APPLE_AGX_U32 *cursor) {
   ADMISSION_UMD_DEVICE *d=c->Device;
   const void *key=NULL;
   AcquireSRWLockShared(&d->ScreenBufferLock);
-  while(*cursor<ADMISSION_UMD_SCREEN_BUFFER_LIMIT) {
+  while(*cursor<ADMISSION_UMD_SCREEN_BUFFER_SCAN(d)) {
     ADMISSION_UMD_SCREEN_BUFFER *b=&d->ScreenBuffers[(*cursor)++];
     if(b->Active && b->NativeBackend==c->Backend && b->NativeBo) { key=b->NativeBo; break; }
   }

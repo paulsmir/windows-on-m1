@@ -28,7 +28,7 @@ static ADMISSION_UMD_SCREEN_BUFFER *AdmissionUmdScreenFind(
   UINT index;
   if (Device == NULL || Token == 0ULL)
     return NULL;
-  for (index = 0u; index < ADMISSION_UMD_SCREEN_BUFFER_LIMIT; ++index) {
+  for (index = 0u; index < ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device); ++index) {
     ADMISSION_UMD_SCREEN_BUFFER *buffer = &Device->ScreenBuffers[index];
     if (buffer->Active && buffer->Token == Token)
       return buffer;
@@ -42,8 +42,11 @@ static ADMISSION_UMD_SCREEN_BUFFER *AdmissionUmdScreenFreeSlot(
   if (Device == NULL)
     return NULL;
   for (index = 0u; index < ADMISSION_UMD_SCREEN_BUFFER_LIMIT; ++index)
-    if (!Device->ScreenBuffers[index].Active)
+    if (!Device->ScreenBuffers[index].Active) {
+      if (Device->ScreenBufferHighWater <= index)
+        Device->ScreenBufferHighWater = index + 1u;
       return &Device->ScreenBuffers[index];
+    }
   return NULL;
 }
 
@@ -227,7 +230,7 @@ HRESULT AdmissionUmdScreenQueryNativeBo(
     return E_INVALIDARG;
   AcquireSRWLockShared(&Device->ScreenBufferLock);
   if (!Device->ScreenClosing)
-    for (index = 0u; index < ADMISSION_UMD_SCREEN_BUFFER_LIMIT; ++index) {
+    for (index = 0u; index < ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device); ++index) {
       ADMISSION_UMD_SCREEN_BUFFER *buffer = &Device->ScreenBuffers[index];
       if (buffer->Active && !buffer->Transition &&
           buffer->NativeBo == NativeBo &&
@@ -291,7 +294,7 @@ HRESULT AdmissionUmdScreenPrepareSubmissionMaps(
     const AGX_WIN32_RELOC_ALLOCATION *identity =
         &Submission->Identities[index];
     ADMISSION_UMD_SCREEN_BUFFER *buffer = NULL;
-    for (slot = 0u; slot < ADMISSION_UMD_SCREEN_BUFFER_LIMIT; ++slot) {
+    for (slot = 0u; slot < ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device); ++slot) {
       ADMISSION_UMD_SCREEN_BUFFER *candidate = &Device->ScreenBuffers[slot];
       if (candidate->Active && candidate->Token == identity->Token) {
         buffer = candidate;
@@ -377,7 +380,7 @@ BOOL AdmissionUmdScreenHasLiveSources(ADMISSION_UMD_DEVICE *Device) {
     ReleaseSRWLockShared(&Device->ScreenBufferLock);
     return TRUE;
   }
-  for(index=0u;index<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++index) {
+  for(index=0u;index<ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device);++index) {
     if(Device->ScreenBuffers[index].NativeBackend != NULL) {
       ReleaseSRWLockShared(&Device->ScreenBufferLock);
       return TRUE;
@@ -407,7 +410,7 @@ HRESULT AdmissionUmdScreenBeginClose(ADMISSION_UMD_DEVICE *Device) {
         break;
       }
     if (SUCCEEDED(result))
-      for (index = 0u; index < ADMISSION_UMD_SCREEN_BUFFER_LIMIT; ++index)
+      for (index = 0u; index < ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device); ++index)
         if (Device->ScreenBuffers[index].Transition ||
             Device->ScreenBuffers[index].SubmissionHolds ||
             Device->ScreenBuffers[index].NativeBackend != NULL) {
@@ -551,7 +554,7 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
   slot=AdmissionUmdScreenFreeSlot(device);
 #ifdef APPLE_AGX_GPUVA_WINSYS
-  if(BorrowedStaging) for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i)
+  if(BorrowedStaging) for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(device);++i)
     if(device->ScreenBuffers[i].Active &&
        device->ScreenBuffers[i].StagingAllocation==BorrowedStaging) slot=NULL;
 #endif
@@ -719,7 +722,7 @@ static int AdmissionUmdScreenCreateClassBuffer(
   if (!created && device != NULL) {
     UINT active = 0u, values[7];
     AcquireSRWLockShared(&device->ScreenBufferLock);
-    for (UINT i = 0u; i < ADMISSION_UMD_SCREEN_BUFFER_LIMIT; ++i)
+    for (UINT i = 0u; i < ADMISSION_UMD_SCREEN_BUFFER_SCAN(device); ++i)
       if (device->ScreenBuffers[i].Active) ++active;
     ReleaseSRWLockShared(&device->ScreenBufferLock);
     values[0] = active; values[1] = ClassId;
@@ -767,7 +770,7 @@ HRESULT AdmissionUmdScreenAdoptAllocation(
      * reached the surface. One registration per handle; aliases share it. */
     AcquireSRWLockExclusive(&Device->ScreenBufferLock);
     slot=AdmissionUmdScreenFreeSlot(Device);
-    for (UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i)
+    for (UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device);++i)
       if (Device->ScreenBuffers[i].Active &&
           (Device->ScreenBuffers[i].StagingAllocation==KernelAllocation ||
            Device->ScreenBuffers[i].KernelAllocation==KernelAllocation))
@@ -789,7 +792,7 @@ HRESULT AdmissionUmdScreenAdoptAllocation(
    * representable): keep the canonical local BO paired with CPU staging. */
   /* One canonical owner per borrowed handle; aliases must share that owner. */
   AcquireSRWLockExclusive(&Device->ScreenBufferLock);
-  for (UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i)
+  for (UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device);++i)
     if (Device->ScreenBuffers[i].Active &&
         (Device->ScreenBuffers[i].StagingAllocation==KernelAllocation ||
          Device->ScreenBuffers[i].KernelAllocation==KernelAllocation)) {
@@ -809,7 +812,7 @@ HRESULT AdmissionUmdScreenAdoptAllocation(
 #else
   AcquireSRWLockExclusive(&Device->ScreenBufferLock);
   slot=AdmissionUmdScreenFreeSlot(Device);
-  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i)
+  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device);++i)
     if(Device->ScreenBuffers[i].Active &&
        Device->ScreenBuffers[i].KernelAllocation==KernelAllocation)
       slot=NULL;
@@ -842,7 +845,7 @@ BOOL AdmissionUmdScreenAllocationRegistered(
   BOOL found=FALSE;
   if(!Device || !KernelAllocation) return FALSE;
   AcquireSRWLockShared(&Device->ScreenBufferLock);
-  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i)
+  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device);++i)
     if(Device->ScreenBuffers[i].Active &&
        (
 #ifdef APPLE_AGX_GPUVA_WINSYS
@@ -1387,7 +1390,7 @@ HRESULT AdmissionUmdScreenFinalize(ADMISSION_UMD_DEVICE *Device,
     Device->LastScreenError = HRESULT_FROM_WIN32(ERROR_BUSY);
     return Device->LastScreenError;
   }
-  for (index = 0u; index < ADMISSION_UMD_SCREEN_BUFFER_LIMIT; ++index) {
+  for (index = 0u; index < ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device); ++index) {
     ADMISSION_UMD_SCREEN_BUFFER *buffer = &Device->ScreenBuffers[index];
     if (!buffer->Active)
       continue;

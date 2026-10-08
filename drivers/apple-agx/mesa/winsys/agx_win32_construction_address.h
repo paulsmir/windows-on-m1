@@ -3,7 +3,9 @@
 
 #include "apple_agx_state.h"
 
-#define AGX_WIN32_CONSTRUCTION_MAX_OBJECTS 256u
+/* EXP1060: 256 live buffers per device were exhausted by DWM and apps
+ * (CreateBo refused, backend failed). Also the UMD screen-buffer capacity. */
+#define AGX_WIN32_CONSTRUCTION_MAX_OBJECTS 4096u
 
 typedef struct _AGX_WIN32_CONSTRUCTION_OBJECT {
   APPLE_AGX_U64 Token;

@@ -17,7 +17,7 @@ extern "C" {
 
 static ADMISSION_UMD_SCREEN_BUFFER *find(ADMISSION_UMD_DEVICE *d,
                                         APPLE_AGX_U64 token) {
-  for (UINT i=0; i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT; ++i)
+  for (UINT i=0; i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(d); ++i)
     if(d->ScreenBuffers[i].Active && d->ScreenBuffers[i].Token==token)
       return &d->ScreenBuffers[i];
   return NULL;

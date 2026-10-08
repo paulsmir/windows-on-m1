@@ -43,6 +43,7 @@ typedef unsigned long long ULONGLONG; typedef size_t SIZE_T; typedef void* HANDL
 #define FAILED(x) ((x)<0)
 #define D3DDDI_ALLOCATIONPRIORITY_NORMAL 0x78000000u
 #define ADMISSION_UMD_SCREEN_BUFFER_LIMIT 16u
+#define ADMISSION_UMD_SCREEN_BUFFER_SCAN(d) ADMISSION_UMD_SCREEN_BUFFER_LIMIT
 #define ADMISSION_UMD_DEVICE_MAGIC 0x55u
 static void* GetProcessHeap(){return nullptr;}
 static void* HeapAlloc(void*,unsigned,size_t n){return calloc(1,n);}
