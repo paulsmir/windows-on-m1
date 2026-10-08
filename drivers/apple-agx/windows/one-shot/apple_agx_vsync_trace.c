@@ -31,6 +31,7 @@ int wmain(int argc, wchar_t **argv) {
     D3DKMT_ESCAPE escape = {0};
     ZeroMemory(&g_query, sizeof(g_query));
     g_query.Magic = APPLE_AGX_VSYNC_QUERY_MAGIC;
+    g_query.Version = 1u;
     g_query.Bytes = sizeof(g_query);
     escape.hAdapter = adapters[index].hAdapter;
     escape.Type = D3DKMT_ESCAPE_DRIVERPRIVATE;
@@ -49,6 +50,7 @@ int wmain(int argc, wchar_t **argv) {
     LARGE_INTEGER qpc;
     ZeroMemory(&g_query, sizeof(g_query));
     g_query.Magic = APPLE_AGX_VSYNC_QUERY_MAGIC;
+    g_query.Version = 1u;
     g_query.Bytes = sizeof(g_query);
     escape.hAdapter = adapter;
     escape.Type = D3DKMT_ESCAPE_DRIVERPRIVATE;
