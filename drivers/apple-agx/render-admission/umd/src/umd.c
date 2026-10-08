@@ -119,7 +119,10 @@ static BOOLEAN AdmissionUmdDescribePrimary(
     ADMISSION_UMD_DIRECT_FLIP_RESOURCE *Description) {
   /* Discard-on-present relaxes content preservation. The displayable marker
    * uses the existing linear BGRA allocation contract; it must not turn the
-   * non-displayable RGBA path into a scanout resource. */
+   * non-displayable RGBA path into a scanout resource. EXP1038: without the
+   * WDDM 3.0 DisplayableSupport cap DXGI marks RGBA8 flip-model buffers
+   * displayable too (WinUI); they keep the non-scanout RGBA allocation
+   * (Displayable 0, never direct-flip compatible) instead of failing. */
   const UINT allowedMiscFlags = D3D10_DDI_RESOURCE_MISC_SHARED |
       D3D10_DDI_RESOURCE_MISC_DISCARD_ON_PRESENT |
       D3DWDDM2_0DDI_RESOURCE_MISC_DISPLAYABLE_SURFACE;
@@ -144,7 +147,9 @@ static BOOLEAN AdmissionUmdDescribePrimary(
       ((CreateResource->MiscFlags &
         D3DWDDM2_0DDI_RESOURCE_MISC_DISPLAYABLE_SURFACE) != 0u &&
        CreateResource->Format != DXGI_FORMAT_B8G8R8A8_UNORM &&
-       CreateResource->Format != DXGI_FORMAT_B8G8R8A8_UNORM_SRGB) ||
+       CreateResource->Format != DXGI_FORMAT_B8G8R8A8_UNORM_SRGB &&
+       (CreateResource->Format != DXGI_FORMAT_R8G8B8A8_UNORM ||
+        (CreateResource->BindFlags & D3D10_DDI_BIND_PRESENT) == 0u)) ||
       ((CreateResource->MiscFlags &
         D3D10_DDI_RESOURCE_MISC_DISCARD_ON_PRESENT) != 0u &&
        (CreateResource->BindFlags & D3D10_DDI_BIND_PRESENT) == 0u) ||

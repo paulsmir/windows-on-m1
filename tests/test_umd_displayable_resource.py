@@ -65,7 +65,14 @@ int main(void) {
  c.MiscFlags=2u;assert(AdmissionUmdDescribePrimary(&c,&reference));
  assert(memcmp(&observed,&reference,sizeof(observed))==0);
  c.MiscFlags=0x20002u;
- c.Format=28u;assert(!AdmissionUmdDescribePrimary(&c,&observed));
+ /* EXP1038: WinUI flip-model RGBA8 back buffers carry the displayable
+    flag (no DisplayableSupport cap); refusing them removed the device. They
+    stay a non-scanout RGBA allocation (Displayable 0, A8B8G8R8). */
+ c.Format=28u;c.pMipInfoList[0].TexelWidth=600u;c.pMipInfoList[0].TexelHeight=200u;
+ assert(AdmissionUmdDescribePrimary(&c,&observed));
+ assert(observed.Displayable==0u && observed.Allocation.Format==32u);
+ c.pMipInfoList[0].TexelWidth=2560u;c.pMipInfoList[0].TexelHeight=1600u;
+ c.Format=10u;assert(!AdmissionUmdDescribePrimary(&c,&observed));
  c.Format=87u;
  unsigned forbidden[]={0x1u,0x800u,0x1000u,0x2000u,0x4000u,0x10000u,0x80000000u};
  for(unsigned i=0;i<sizeof(forbidden)/sizeof(forbidden[0]);++i){
