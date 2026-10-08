@@ -206,9 +206,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiBuildPagingBuffer(
     case DXGK_OPERATION_FILL: c[20 + op] += Args->Fill.FillSize; break;
     case DXGK_OPERATION_VIRTUAL_TRANSFER:
       c[20 + op] += Args->TransferVirtual.TransferSizeInBytes;
-      if (Args->TransferVirtual.TransferDirection <= 2u)
-        c[40 + Args->TransferVirtual.TransferDirection] +=
-            Args->TransferVirtual.TransferSizeInBytes;
+      {
+        ULONG direction = (ULONG)Args->TransferVirtual.TransferDirection;
+        if (direction <= 2u)
+          c[40u + direction] += Args->TransferVirtual.TransferSizeInBytes;
+      }
       break;
     case DXGK_OPERATION_VIRTUAL_FILL: c[20 + op] += Args->FillVirtual.FillSizeInBytes; break;
     case DXGK_OPERATION_UPDATE_PAGE_TABLE: {
