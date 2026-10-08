@@ -17,7 +17,7 @@ static int r137_escape_transport(void *opaque,APPLE_AGX_G3_PRIVATE_REQUEST *q) {
 #include "g3_r137_mesa_prepare.inc"
 static void r137_private_combined(void) {
   ADMISSION_CONTEXT a={0};ADMISSION_G3_STATE state={0};REPLAY_BROKER broker={0};
-  APPLE_AGX_GPUVA_V5_IO io={&broker,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier,NULL};
+  APPLE_AGX_GPUVA_V5_IO io={&broker,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier};
   assert(posix_memalign((void **)&local_cpu,0x4000,(size_t)local_bytes)==0);
   memset(local_cpu,0,(size_t)local_bytes);
   ReplayBrokerInit(&broker);InitializeListHead(&state.Processes);

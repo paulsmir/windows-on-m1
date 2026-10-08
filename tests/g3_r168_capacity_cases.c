@@ -11,7 +11,7 @@ static UINT r168_live_backings(void) {
 static void r168_capacity_cases(void) {
   ADMISSION_CONTEXT adapter={0}; ADMISSION_G3_STATE state={0};
   REPLAY_BROKER broker={0}; DXGKARG_CREATEPROCESS create={0};
-  APPLE_AGX_GPUVA_V5_IO io={&broker,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier,NULL};
+  APPLE_AGX_GPUVA_V5_IO io={&broker,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier};
   DXGK_PTE entries[4]={0}; DXGKARG_BUILDPAGINGBUFFER args={0};
   local_ipa=0x8e0000000ULL; local_bytes=0x40000000ULL;
   vidmm_local_bytes=0x3b800000ULL;
