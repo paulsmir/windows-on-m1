@@ -8,8 +8,8 @@
 #include "agx_win32_gpuva.h"
 #endif
 
-#define AGX_WIN32_BO_CACHE_LIMIT 64u
-#define AGX_WIN32_BO_CACHE_BYTES (64ull << 20)
+#define AGX_WIN32_BO_CACHE_LIMIT 16u
+#define AGX_WIN32_BO_CACHE_BYTES (32ull << 20)
 
 struct agx_device;
 struct agx_bo;
