@@ -45,6 +45,10 @@ int AgxWin32AsahiBatchComputeLeave(struct agx_batch *);
 int AgxWin32AsahiBatchComputeFinalize(struct agx_batch *,const void *);
 int AgxWin32AsahiBatchDrawAllowed(struct agx_context *,const struct pipe_draw_info *,
     unsigned,const struct pipe_draw_indirect_info *,const struct pipe_draw_start_count_bias *,unsigned);
+/* Called for a draw DrawAllowed refused before any batch work; returns
+ * non-zero when the context must be marked faulted. */
+int AgxWin32AsahiBatchDrawRefused(struct agx_context *,const struct pipe_draw_info *,
+    const struct pipe_draw_indirect_info *,const struct pipe_draw_start_count_bias *,unsigned);
 int AgxWin32AsahiBatchFinish(struct agx_batch *,const struct drm_asahi_cmd_render *);
 int AgxWin32AsahiBatchPoll(struct agx_batch *,APPLE_AGX_U32);
 int AgxWin32AsahiBatchAbort(struct agx_batch *);

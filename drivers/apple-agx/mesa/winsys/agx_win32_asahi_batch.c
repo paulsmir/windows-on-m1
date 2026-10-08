@@ -241,6 +241,13 @@ int AgxWin32AsahiBatchComputeFinalize(struct agx_batch *b,const void *end) {
   }
   return c->Render.ComputeEncoderBytes!=0u;
 }
+int AgxWin32AsahiBatchDrawRefused(struct agx_context *ctx,
+    const struct pipe_draw_info *info,
+    const struct pipe_draw_indirect_info *indirect,
+    const struct pipe_draw_start_count_bias *draws,unsigned count) {
+  (void)ctx; (void)info; (void)indirect; (void)draws; (void)count;
+  return 1; /* the patch-list path fails closed */
+}
 int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx,
     const struct pipe_draw_info *info,unsigned drawid,
     const struct pipe_draw_indirect_info *indirect,

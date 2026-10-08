@@ -152,6 +152,32 @@ int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx,
          info->instance_count && ctx->framebuffer.nr_cbufs &&
          ctx->framebuffer.cbufs[0].texture;
 }
+/* EXP1063: a draw DrawAllowed refuses has touched no batch state, so it is
+ * dropped instead of poisoning the context (EXP1062: Notepad lost every
+ * later flush after one such draw). The first refusals are reported
+ * (reject-batch kind 6): reason bits 1 no draw, 2 indirect, 4 no instances,
+ * 8 no color buffer, 16 color buffer 0 unbound; nr_cbufs | depth << 8;
+ * vertex count. */
+int AgxWin32AsahiBatchDrawRefused(struct agx_context *ctx,
+    const struct pipe_draw_info *info,
+    const struct pipe_draw_indirect_info *indirect,
+    const struct pipe_draw_start_count_bias *draws,unsigned count) {
+  static unsigned reported;
+  unsigned reason=0u;
+  if(!ctx) return 1;
+  if(!info || !draws || !count) reason|=1u;
+  if(indirect) reason|=2u;
+  if(info && !info->instance_count) reason|=4u;
+  if(!ctx->framebuffer.nr_cbufs) reason|=8u;
+  else if(!ctx->framebuffer.cbufs[0].texture) reason|=16u;
+  if(reported<32u) {
+    ++reported;
+    (void)batch_refuse(6u,reason,(unsigned)ctx->framebuffer.nr_cbufs|
+        ((unsigned)(ctx->framebuffer.zsbuf.texture!=NULL)<<8),
+        draws && count ? draws[0].count : 0u);
+  }
+  return 0;
+}
 int AgxWin32AsahiBatchComputeEnter(struct agx_batch *batch) {
   (void)batch;
   return 0; /* no direct-VA CDM command parser is agreed with KMD yet */

@@ -10,7 +10,10 @@ a permanent fault. Invariants:
 - a direct single draw with count 0 or instance_count 0 is skipped without a
   batch, a body call or a fault;
 - a real draw still enters, runs and leaves the batch once;
-- a refused entry still marks the context faulted (fail closed).
+- a refused entry still marks the context faulted (fail closed);
+- EXP1063: a draw DrawAllowed refuses before any batch work (EXP1062 Notepad:
+  no color buffer or indirect) is dropped when the backend asks, without
+  poisoning the context; the patch-list backend still fails closed.
 """
 from pathlib import Path
 import os
@@ -31,7 +34,7 @@ struct pipe_draw_info { unsigned instance_count; };
 struct pipe_draw_indirect_info { bool count_from_stream_output; };
 struct pipe_draw_start_count_bias { unsigned start, count; int index_bias; };
 struct agx_batch { int entered; };
-struct agx_context { struct pipe_context base; bool any_faults; struct agx_batch *batch; bool prepare_fails; };
+struct agx_context { struct pipe_context base; bool any_faults; struct agx_batch *batch; bool prepare_fails, no_color, refusal_poisons; };
 static struct agx_batch the_batch;
 static unsigned gets, bodies, leaves;
 static struct agx_context *agx_context(struct pipe_context *p) { return (struct agx_context *)p; }
@@ -43,7 +46,15 @@ static int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx, const struct p
     unsigned drawid, const struct pipe_draw_indirect_info *indirect,
     const struct pipe_draw_start_count_bias *draws, unsigned count) {
   (void)drawid;
-  return ctx && !ctx->any_faults && info && draws && count && !indirect && info->instance_count;
+  return ctx && !ctx->any_faults && info && draws && count && !indirect && info->instance_count &&
+         !ctx->no_color;
+}
+static unsigned refusals;
+static int AgxWin32AsahiBatchDrawRefused(struct agx_context *ctx, const struct pipe_draw_info *info,
+    const struct pipe_draw_indirect_info *indirect, const struct pipe_draw_start_count_bias *draws,
+    unsigned count) {
+  (void)info; (void)indirect; (void)draws; (void)count; ++refusals;
+  return ctx->refusal_poisons;
 }
 static int AgxWin32AsahiBatchPrepareDraw(struct agx_batch *b, const struct pipe_draw_info *info,
     const struct pipe_draw_start_count_bias *draw) {
@@ -73,9 +84,21 @@ int main(void) {
   info.instance_count = 1;
   agx_draw_vbo(&ctx.base, &info, 0, NULL, &six, 1);
   assert(!ctx.any_faults && gets == 1 && bodies == 1 && leaves == 1 && !the_batch.entered);
+  /* EXP1063: a draw refused before batch work (no color buffer) is dropped
+   * when the backend says so, and still fails closed otherwise. */
+  ctx.no_color = true;
+  agx_draw_vbo(&ctx.base, &info, 0, NULL, &six, 1);
+  assert(!ctx.any_faults && refusals == 1 && gets == 1 && bodies == 1);
+  ctx.no_color = false;
+  agx_draw_vbo(&ctx.base, &info, 0, NULL, &six, 1);
+  assert(!ctx.any_faults && gets == 2 && bodies == 2);
+  ctx.no_color = true; ctx.refusal_poisons = true;
+  agx_draw_vbo(&ctx.base, &info, 0, NULL, &six, 1);
+  assert(ctx.any_faults && refusals == 2 && bodies == 2);
+  ctx.any_faults = false; ctx.no_color = false; ctx.refusal_poisons = false;
   ctx.prepare_fails = true;
   agx_draw_vbo(&ctx.base, &info, 0, NULL, &six, 1);
-  assert(ctx.any_faults && bodies == 1);
+  assert(ctx.any_faults && bodies == 2);
   return 0;
 }
 '''

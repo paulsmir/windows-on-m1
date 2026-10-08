@@ -159,6 +159,11 @@ def project_sources(out,project,overlays):
    }
    if (!AgxWin32AsahiBatchDrawAllowed(ctx, info, drawid_offset, indirect, draws, num_draws)) {
       AgxWin32AsahiBatchTraceDraw(ctx, ctx->batch, 1u);
+      /* EXP1063: refused before any batch work; the backend decides whether
+       * the draw is dropped or the context fails. */
+      if (ctx->any_faults ||
+          !AgxWin32AsahiBatchDrawRefused(ctx, info, indirect, draws, num_draws))
+         return;
       ctx->any_faults = true; return;
    }
    struct agx_batch *batch = agx_get_batch(ctx);
