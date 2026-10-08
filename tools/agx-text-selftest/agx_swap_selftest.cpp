@@ -1,3 +1,4 @@
+#include <stdlib.h>
 // Presentation probe: D2D text in flip-model swap chains of RGBA8 and BGRA8,
 // then the composed screen pixels of each window are read back through GDI.
 #include <windows.h>
@@ -23,7 +24,8 @@ static int screen_dark(int x, int y, int w, int hgt) {
     if (r < 80 && g < 80 && bl < 80) ++n; if (r > 160 && g < 80 && bl < 80) ++red; }
   DeleteObject(b); DeleteDC(m); ReleaseDC(nullptr, s); return n * 1000 + (red > 1000 ? 1 : 0);
 }
-int main() {
+int main(int argc, char **argv) {
+  int only = argc > 1 ? atoi(argv[1]) : -1;
   setvbuf(stdout, nullptr, _IONBF, 0); SetProcessDPIAware();
   FILE *out = nullptr; fopen_s(&out, "C:\\Users\\pavel\\swap-result.txt", "w");
   WNDCLASSW wc = {}; wc.lpfnWndProc = proc; wc.hInstance = GetModuleHandleW(0); wc.lpszClassName = L"AgxSwap"; RegisterClassW(&wc);
@@ -37,6 +39,7 @@ int main() {
   const DXGI_FORMAT fmts[] = {DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM};
   const char *names[] = {"BGRA8", "RGBA8"};
   for (int i = 0; i < 2; ++i) {
+    if (only >= 0 && i != only) continue;
     int X = 100, Y = 100 + i * 260, W = 600, H = 200;
     HWND h = CreateWindowExW(WS_EX_TOPMOST, L"AgxSwap", L"swap", WS_POPUP | WS_VISIBLE, X, Y, W, H, 0, 0, wc.hInstance, 0);
     DXGI_SWAP_CHAIN_DESC1 sd = {}; sd.Width = W; sd.Height = H; sd.Format = fmts[i]; sd.SampleDesc.Count = 1;

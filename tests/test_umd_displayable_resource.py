@@ -11,6 +11,14 @@ RENDER = ROOT / 'drivers/apple-agx/render-admission'
 
 
 class DisplayableResourceTests(unittest.TestCase):
+    def test_written_primary_requires_a_scanout_resource(self):
+        """EXP1038: the KMD admits WRITTEN_PRIMARY only for A8R8G8B8 GDI-surface
+        allocations; a displayable RGBA8 back buffer must not request it."""
+        source = (RENDER / 'umd/src/umd.c').read_text()
+        flags = source[source.index('resourceData.Flags ='):]
+        flags = flags[:flags.index(';')]
+        self.assertIn('description.Displayable', flags)
+
     def test_observed_bgra_displayable_buffer_preserves_storage_contract(self):
         source = (RENDER / 'umd/src/umd.c').read_text()
         function = re.search(

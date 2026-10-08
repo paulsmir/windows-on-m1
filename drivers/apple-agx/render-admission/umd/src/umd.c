@@ -478,9 +478,12 @@ VOID APIENTRY AdmissionUmdCreateResource(
   resourceData.Magic = ADMISSION_PRESENT_RESOURCE_MAGIC;
   resourceData.Version = ADMISSION_PRESENT_RESOURCE_VERSION;
   resourceData.Bytes = sizeof(resourceData);
-  resourceData.Flags = (CreateResource->pPrimaryDesc != NULL ||
-      (CreateResource->MiscFlags &
-       D3DWDDM2_0DDI_RESOURCE_MISC_DISPLAYABLE_SURFACE) != 0u)
+  /* EXP1038: only scanout-capable (BGRA) resources are written primaries;
+   * the KMD admits that flag for A8R8G8B8 GDI-surface allocations only. */
+  resourceData.Flags = description.Displayable &&
+      (CreateResource->pPrimaryDesc != NULL ||
+       (CreateResource->MiscFlags &
+        D3DWDDM2_0DDI_RESOURCE_MISC_DISPLAYABLE_SURFACE) != 0u)
       ? ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY : 0u;
   if (CreateResource->pPrimaryDesc != NULL &&
       CreateResource->pPrimaryDesc->ModeDesc.RefreshRate.Denominator != 0u) {
