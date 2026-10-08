@@ -173,6 +173,8 @@ typedef struct _ADMISSION_UMD_DEVICE {
   APPLE_AGX_U64 LastDrawRequest;
   ADMISSION_UMD_DRAW_SUBMISSION *DrawSubmission;
   BOOL DrawTerminal;
+  /* EXP1043 diagnostic: slot of the last map_va, for paging-wait attribution. */
+  APPLE_AGX_U64 PagingWaitToken;
   volatile LONG RenderCbSequence;
   APPLE_AGX_U32 NativeBackendCount;
   void *NativeBatchTransaction;

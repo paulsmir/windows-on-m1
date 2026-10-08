@@ -230,6 +230,10 @@ static int reserve_va(void *context, uint64_t bytes, uint64_t minimum,
 }
 
 static int wait_paging(void *context, uint64_t fence);
+/* EXP1043 diagnostic: attribute each paging-fence CPU wait to its caller and
+ * to the slot it serves (site in the phase-2 count, slot shape in bytes). */
+static int wait_paging_at(ADMISSION_UMD_DEVICE *device, uint64_t fence,
+                          UINT site, uint64_t token);
 
 /* EXP1004: VidMm writes invalid PTEs when it maps a non-resident allocation
  * and, for fresh BOs, did not re-send valid ones after the later persistent
@@ -258,7 +262,7 @@ static void resident_before_map(ADMISSION_UMD_DEVICE *device, uint64_t token,
   if(slot && slot->KernelAllocation==handle) slot->Resident=TRUE;
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   if(hr==E_PENDING && request.PagingFenceValue)
-    (void)wait_paging(device,request.PagingFenceValue);
+    (void)wait_paging_at(device,request.PagingFenceValue,2u,token);
 }
 
 static int map_va(void *context, uint64_t token, uint64_t va,
@@ -288,6 +292,7 @@ static int map_va(void *context, uint64_t token, uint64_t va,
                            ARRAYSIZE(values));
   }
   va_record(device,2u,token,request.hAllocation,va,pages<<12,hr);
+  device->PagingWaitToken = token;
   if (FAILED(hr) && hr != E_PENDING) return 0;
   if (request.VirtualAddress != va) return 3;
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
@@ -452,8 +457,8 @@ static int wait_object(ADMISSION_UMD_DEVICE *device,
       device->RuntimeDevice.handle, &request));
 }
 
-static int wait_paging(void *context, uint64_t fence) {
-  ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;
+static int wait_paging_at(ADMISSION_UMD_DEVICE *device, uint64_t fence,
+                          UINT site, uint64_t token) {
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   LARGE_INTEGER phase_start;
   (void)QueryPerformanceCounter(&phase_start);
@@ -461,9 +466,30 @@ static int wait_paging(void *context, uint64_t fence) {
   int ok=wait_object(device, device ? device->PagingSyncObject : 0, fence);
   va_record(device,7u,0,0,0,fence,ok ? S_OK : E_FAIL);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
-  measure_g4_phase(2u,phase_start,1u,0u,ok ? S_OK : E_FAIL);
+  ULONGLONG shape=0;
+  if(device && token) {
+    AcquireSRWLockShared(&device->ScreenBufferLock);
+    auto *slot=find_slot(device,token);
+    if(slot)
+      shape=(slot->Bytes>>10) | ((ULONGLONG)slot->ClassId<<32) |
+          ((ULONGLONG)slot->Borrowed<<40) | ((ULONGLONG)slot->SystemDirect<<41) |
+          ((ULONGLONG)slot->Direct<<42) | ((ULONGLONG)(slot->PrivateStaging!=NULL)<<43) |
+          ((ULONGLONG)slot->Flags<<48);
+    ReleaseSRWLockShared(&device->ScreenBufferLock);
+  }
+  measure_g4_phase(2u,phase_start,site,shape,ok ? S_OK : E_FAIL);
+#else
+  (void)site;(void)token;
 #endif
   return ok;
+}
+
+static int wait_paging(void *context, uint64_t fence) {
+  ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;
+  /* Called by the winsys after map_va (bind) or make_resident (submit). */
+  uint64_t token = device ? device->PagingWaitToken : 0;
+  if (device) device->PagingWaitToken = 0;
+  return wait_paging_at(device, fence, token ? 1u : 5u, token);
 }
 
 /* EXP1016 measurement only: DWM CPU read cost of staging inspection versus
@@ -629,7 +655,7 @@ static int map_canonical_as(ADMISSION_UMD_DEVICE *device,
   int ok=(SUCCEEDED(hr) || hr==E_PENDING) &&
       request.VirtualAddress==slot->CanonicalGpuVa &&
       (hr!=E_PENDING || (request.PagingFenceValue &&
-                         wait_paging(device,request.PagingFenceValue)));
+                         wait_paging_at(device,request.PagingFenceValue,3u,slot->Token)));
   UINT values[3]={(UINT)slot->CanonicalGpuVa,(UINT)(slot->CanonicalGpuVa>>32),(UINT)ok};
   AdmissionUmdDiagnostic("measure-remap",hr,values,ARRAYSIZE(values));
   return ok;
@@ -658,7 +684,7 @@ static int replace_canonical(ADMISSION_UMD_DEVICE *device,
     va_record(device,6u,slot->Token,fresh,0,request.PagingFenceValue,hr);
     ok=(SUCCEEDED(hr) || hr==E_PENDING) &&
         (hr!=E_PENDING || (request.PagingFenceValue &&
-                           wait_paging(device,request.PagingFenceValue)));
+                           wait_paging_at(device,request.PagingFenceValue,4u,slot->Token)));
   }
   if(ok) ok=map_canonical_as(device,slot,fresh);
   if(ok) {

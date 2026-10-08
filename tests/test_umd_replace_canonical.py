@@ -69,6 +69,7 @@ static HRESULT make(void*, D3DDDI_MAKERESIDENT *r){ order+="R"; assert(r->NumAll
 static HRESULT map(void*, D3DDDI_MAPGPUVIRTUALADDRESS *m){ order+="M"; assert(m->hAllocation==0x99);
   m->VirtualAddress=m->BaseAddress+map_va_out_delta; m->PagingFenceValue=10; return E_PENDING; }
 static int wait_paging(ADMISSION_UMD_DEVICE*, uint64_t f){ order+="W"; return f==9 || f==10; }
+static int wait_paging_at(ADMISSION_UMD_DEVICE *d, uint64_t f, UINT, uint64_t){ return wait_paging(d,f); }
 static void va_record(const void*, UINT, ULONGLONG, D3DKMT_HANDLE, ULONGLONG, ULONGLONG, HRESULT) {}
 static void AdmissionUmdVaRecordDeallocate(ADMISSION_UMD_DEVICE*, uint64_t, D3DKMT_HANDLE, uint64_t, HRESULT) {}
 static void AdmissionUmdStagingInvalidate(SYNC *s){ s->Valid=FALSE; }

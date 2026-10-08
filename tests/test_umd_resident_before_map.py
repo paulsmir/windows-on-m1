@@ -62,11 +62,12 @@ struct SLOT { uint64_t Token; BOOL Active,Transition,Resident; D3DKMT_HANDLE Ker
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
 struct HANDLE_ { void *handle; };
 struct CB { HRESULT (*pfnMakeResidentCb)(void*, D3DDDI_MAKERESIDENT*); HRESULT (*pfnMapGpuVirtualAddressCb)(void*, D3DDDI_MAPGPUVIRTUALADDRESS*); };
-struct ADMISSION_UMD_DEVICE { UINT Magic; SLOT ScreenBuffers[4]; SRWLOCK ScreenBufferLock; CB *KernelCallbacks; HANDLE_ RuntimeDevice; D3DKMT_HANDLE PagingQueue; BOOL ScreenClosing; };
+struct ADMISSION_UMD_DEVICE { UINT Magic; SLOT ScreenBuffers[4]; SRWLOCK ScreenBufferLock; CB *KernelCallbacks; HANDLE_ RuntimeDevice; D3DKMT_HANDLE PagingQueue; BOOL ScreenClosing; uint64_t PagingWaitToken; };
 static std::string order; static HRESULT make_hr=E_PENDING;
 static HRESULT make(void*, D3DDDI_MAKERESIDENT *r){ order+="R"; r->PagingFenceValue=9; return make_hr; }
 static HRESULT map(void*, D3DDDI_MAPGPUVIRTUALADDRESS *m){ order+="M"; m->VirtualAddress=m->BaseAddress; m->PagingFenceValue=10; return E_PENDING; }
 static int wait_paging(void*, uint64_t f){ order+="W"; return f==9 || f==10; }
+static int wait_paging_at(ADMISSION_UMD_DEVICE *d, uint64_t f, UINT, uint64_t){ return wait_paging(d,f); }
 static void va_record(const void*, UINT, ULONGLONG, D3DKMT_HANDLE, ULONGLONG, ULONGLONG, HRESULT) {}
 static void AdmissionUmdDiagnostic(const char*, HRESULT, const UINT*, UINT) {}
 @@FUNCS@@
