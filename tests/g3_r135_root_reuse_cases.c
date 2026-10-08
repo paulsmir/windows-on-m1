@@ -6,7 +6,7 @@ static void r155_end_job(void) {
 }
 static void r135_root_reuse_cases(void) {
   ADMISSION_CONTEXT a={0}; ADMISSION_G3_STATE state={0}; REPLAY_BROKER b={0};
-  APPLE_AGX_GPUVA_V5_IO io={&b,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier};
+  APPLE_AGX_GPUVA_V5_IO io={&b,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier, 0};
   ADMISSION_DEVICE device={0}; DXGKARG_CREATECONTEXT cc={0};
   DXGKARG_SETROOTPAGETABLE setroot={0}; DXGKARG_BUILDPAGINGBUFFER reuse={0};
   DXGK_PTE pte={0}, zero={0}, parents[2048]={0};

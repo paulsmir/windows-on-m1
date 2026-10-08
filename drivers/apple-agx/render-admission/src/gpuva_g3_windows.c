@@ -908,6 +908,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3FrameArmEscape(ADMISSION_CONTEXT
     }
     AdmissionRecordDwmSourceMap(adapter->PhysicalDeviceObject, &map, ordinal);
   }
+  /* EXP1052 receipt-only: publish the paging profile from this PASSIVE escape
+   * (never from the paging path), at most every two seconds. */
+  AdmissionRecordPagingProfile(adapter, &state->Client);
   return valid ? STATUS_SUCCESS : STATUS_INVALID_HANDLE;
 }
 #endif
@@ -1898,6 +1901,7 @@ _Use_decl_annotations_ VOID AdmissionDdiSetRootPageTable(
   ADMISSION_G3_PROCESS *process;
   DXGK_PAGETABLEUPDATEADDRESS address;
   ULONGLONG root_ipa = 0ULL;
+  ULONG step;
   if (adapter == NULL || Args == NULL || Args->hContext == NULL) return;
   context = (ADMISSION_RENDER_CONTEXT *)Args->hContext;
   if (context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
@@ -1927,16 +1931,22 @@ _Use_decl_annotations_ VOID AdmissionDdiSetRootPageTable(
     return;
   }
   ExAcquireFastMutex(&process->State->Lock);
-  if (process->Poisoned || process->Graph.Uncertain ||
-      !NT_SUCCESS(AdmissionGpuvaG3BrokerTable(
-          process, root_ipa, TRUE, &root_ipa)) ||
-      !AppleAgxGpuvaG3GraphRegisterTable(&process->Graph, root_ipa, 0u) ||
-      !AppleAgxGpuvaG3GraphBindRoot(&process->Graph, root_ipa) ||
-      (process->PrivateLeafIpa &&
-       !AppleAgxGpuvaG3GraphAttachPrivate(&process->Graph, process->PrivateVa,
-           process->PrivateMiddleIpa, process->PrivateLeafIpa))) {
+  /* EXP1052 receipt-only: the same short-circuit order, with the failing
+   * step encoded in the poison site's file field (0x11..0x15). */
+  step = 0u;
+  if (process->Poisoned || process->Graph.Uncertain) step = 1u;
+  else if (!NT_SUCCESS(AdmissionGpuvaG3BrokerTable(
+               process, root_ipa, TRUE, &root_ipa))) step = 2u;
+  else if (!AppleAgxGpuvaG3GraphRegisterTable(&process->Graph, root_ipa, 0u))
+    step = 3u;
+  else if (!AppleAgxGpuvaG3GraphBindRoot(&process->Graph, root_ipa)) step = 4u;
+  else if (process->PrivateLeafIpa &&
+           !AppleAgxGpuvaG3GraphAttachPrivate(&process->Graph,
+               process->PrivateVa, process->PrivateMiddleIpa,
+               process->PrivateLeafIpa)) step = 5u;
+  if (step != 0u) {
     context->GpuvaG3Poisoned = TRUE;
-    ADMISSION_G3_POISON(process,1u);
+    ADMISSION_G3_POISON(process,0x10u + step);
   } else {
     context->GpuvaG3RootIpa = root_ipa;
   }

@@ -67,7 +67,7 @@ static void barrier(void *opaque){(void)opaque;}
 static void run(void){
  struct fixture *f=calloc(1,sizeof(*f));assert(f);f->slots[0][0]=0x91000001;f->slots[0][1]=0x90000001;
  struct hv_agx_gpuva_v5_ops ops={f,translate,map_page,read_slot,write_slot,sync_tables,invalidate,prefix,legacy63};
- APPLE_AGX_GPUVA_V5_IO io={f,w64,r64,w32,barrier};APPLE_AGX_GPUVA_V5_CLIENT client;
+ APPLE_AGX_GPUVA_V5_IO io={f,w64,r64,w32,barrier, 0};APPLE_AGX_GPUVA_V5_CLIENT client;
  APPLE_AGX_GPUVA_B1_PAGE graph_a[302],graph_b[302];unsigned int count;
  APPLE_AGX_GPUVA_B1_ROOT *a=calloc(1,sizeof(*a)),*b=calloc(1,sizeof(*b));assert(a&&b);
  APPLE_AGX_GPUVA_B1_ROOT_INPUT ai={1,1,TABLES,TABLES+0x4000,TABLES+0x8000,TABLES+0xc000,TABLES+0x10000,17,27,0};

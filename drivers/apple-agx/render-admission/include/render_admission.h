@@ -361,6 +361,7 @@ typedef struct _ADMISSION_QUEUE_FAULT_SNAPSHOT {
 #define ADMISSION_CPU_PACKET_NOP 3u
 typedef struct _ADMISSION_CPU_PACKET {
   ULONG Fence, Kind, Bytes;
+  LONGLONG SubmitQpc; /* EXP1052 receipt: SubmitCommand time. */
   struct _ADMISSION_RENDER_CONTEXT *PresentContext;
   union {
     ADMISSION_PAGING_RECORD Paging[ADMISSION_MAX_PAGING_RECORDS];
@@ -387,6 +388,17 @@ typedef struct _ADMISSION_G3_LEAF_HISTORY {
   ULONGLONG Qpc, ProcessId, TableIpa, Allocation, FirstVa, MappingGeneration;
   ULONG First, Count, ValidCount, Flags, Status, FirstSegment;
 } ADMISSION_G3_LEAF_HISTORY;
+/* EXP1052 receipt-only paging profile. Triplets are {count, ticks, max}.
+ * Kept in memory on the paging path; published only from the DWM frame-arm
+ * escape (PASSIVE, rate-limited, no flush). */
+#define ADMISSION_PAGING_PROFILE_OPS 32u
+typedef struct _ADMISSION_PAGING_PROFILE {
+  volatile LONG64 Build[ADMISSION_PAGING_PROFILE_OPS][3];
+  volatile LONG64 UpdatePageTableEntries;
+  volatile LONG64 QueueToDispatch[3], DispatchToWorker[3], Worker[3];
+  volatile LONG64 NotifyToDpc[3];
+  volatile LONG64 LastPublishedQpc;
+} ADMISSION_PAGING_PROFILE;
 /* EXP987 receipt-only: R155/R165 BuildPagingBuffer waits for a process's
  * in-flight job. Snapshot of the condition when the wait began. */
 typedef struct _ADMISSION_G3_PAGING_WAIT_RECEIPT {
@@ -517,6 +529,8 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG G4DrawSnapshotDirty;
   volatile LONG G3PteWaitDirty;
   volatile LONG G3PagingWaitDirty;
+  ADMISSION_PAGING_PROFILE PagingProfile;
+  LONGLONG PagingDispatchQpc, PagingNotifyQpc;
   /* EXP997 diagnostic: first poisoned G3 process seen at completion. */
   volatile LONG G3PoisonClaim;
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
@@ -1024,6 +1038,10 @@ void AdmissionRecordG4SubmitFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3CopyQueryFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3LeafHistory(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3PagingWait(_In_opt_ ADMISSION_CONTEXT *Context);
+VOID AdmissionPagingProfileAdd(_Inout_ volatile LONG64 *Triplet, LONGLONG Ticks);
+/* Caller at PASSIVE_LEVEL outside the paging path; Client may be NULL. */
+void AdmissionRecordPagingProfile(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_opt_ const struct _APPLE_AGX_GPUVA_V5_CLIENT *Client);
 void AdmissionRecordG3PteWait(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3Poison(_In_opt_ ADMISSION_CONTEXT *Context,
                              ULONG Site, ULONG ProcessId, ULONG BrokerStatus);

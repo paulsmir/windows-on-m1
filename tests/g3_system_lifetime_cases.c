@@ -42,7 +42,7 @@ static APPLE_AGX_GPUVA_G3_FRAME *sys_frame(ADMISSION_G3_STATE *s,ULONGLONG ipa) 
 }
 static void r134_system_64k_cases(void) {
   ADMISSION_CONTEXT a={0}; ADMISSION_G3_STATE state={0}; REPLAY_BROKER b={0};
-  APPLE_AGX_GPUVA_V5_IO io={&b,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier};
+  APPLE_AGX_GPUVA_V5_IO io={&b,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier, 0};
   DXGK_PTE pte={0}, four[4]={0}, zero={0};
   assert(ADMISSION_GPUVA_G1B_PAGE_PROFILE==16);
   assert(posix_memalign((void **)&local_cpu,0x4000,(size_t)local_bytes)==0);
@@ -88,7 +88,7 @@ static void r134_system_64k_cases(void) {
 }
 static void system_lifetime_cases(void) {
   ADMISSION_CONTEXT a={0}; ADMISSION_G3_STATE state={0}; REPLAY_BROKER b={0};
-  APPLE_AGX_GPUVA_V5_IO io={&b,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier};
+  APPLE_AGX_GPUVA_V5_IO io={&b,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier, 0};
   DXGK_PTE pte[32]={0},zero={0};
   assert(posix_memalign((void **)&local_cpu,0x4000,(size_t)local_bytes)==0);
   memset(local_cpu,0,(size_t)local_bytes);

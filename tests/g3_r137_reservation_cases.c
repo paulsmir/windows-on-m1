@@ -1,6 +1,6 @@
 static void r137_reservation_cases(void) {
   ADMISSION_CONTEXT a={0}; ADMISSION_G3_STATE state={0}; REPLAY_BROKER b={0};
-  APPLE_AGX_GPUVA_V5_IO io={&b,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier};
+  APPLE_AGX_GPUVA_V5_IO io={&b,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier, 0};
   assert(posix_memalign((void **)&local_cpu,0x4000,(size_t)local_bytes)==0);
   memset(local_cpu,0,(size_t)local_bytes);
   ReplayBrokerInit(&b); InitializeListHead(&state.Processes);

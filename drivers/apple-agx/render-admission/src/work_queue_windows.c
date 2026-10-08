@@ -50,6 +50,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionCpuQueueSubmit(
   packet = &Context->CpuQueue[(Context->CpuQueueHead + Context->CpuQueueCount) %
       APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
   packet->Fence = Args->SubmissionFenceId;
+  packet->SubmitQpc = KeQueryPerformanceCounter(NULL).QuadPart;
   packet->Kind = Kind;
   packet->Bytes = Bytes;
   packet->PresentContext = presentContext;
@@ -105,6 +106,10 @@ Retry:
         RtlCopyMemory(Context->PagingRecords, packet->Data.Paging, packet->Bytes);
         Context->PagingRecordCount = packet->Bytes / sizeof(ADMISSION_PAGING_RECORD);
       }
+      Context->PagingDispatchQpc = KeQueryPerformanceCounter(NULL).QuadPart;
+      if (packet->Kind == ADMISSION_CPU_PACKET_PAGING)
+        AdmissionPagingProfileAdd(Context->PagingProfile.QueueToDispatch,
+                                  Context->PagingDispatchQpc - packet->SubmitQpc);
       Context->CpuQueueHead = (Context->CpuQueueHead + 1u) % APPLE_AGX_SCHEDULER_QUEUE_CAPACITY;
       --Context->CpuQueueCount;
       Context->PagingFence = fence;

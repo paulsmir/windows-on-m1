@@ -32,7 +32,7 @@ static void barrier(void *opaque) { ++((struct fixture *)opaque)->barriers; }
 int main(void)
 {
     struct fixture f={0}; APPLE_AGX_GPUVA_V5_CLIENT c; AGX_GPUVA_V5_REQUEST q={0}; AGX_GPUVA_V5_RESPONSE r={0};
-    APPLE_AGX_GPUVA_V5_IO io={&f,w64,r64,w32,barrier};
+    APPLE_AGX_GPUVA_V5_IO io={&f,w64,r64,w32,barrier, 0};
     assert(AppleAgxGpuvaV5ClientInit(&c,&io));
     q.Command=AGX_GPUVA_V5_CREATE; q.ProcessId=1; q.ProcessGeneration=1;
     assert(AppleAgxGpuvaV5ClientCall(&c,&q,&r));

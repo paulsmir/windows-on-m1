@@ -34,6 +34,12 @@ static bool AdmissionGpuvaWrite32(void *opaque, unsigned offset, unsigned int va
   return true;
 }
 
+static unsigned long long AdmissionGpuvaNow(void *opaque)
+{
+  UNREFERENCED_PARAMETER(opaque);
+  return (unsigned long long)KeQueryPerformanceCounter(NULL).QuadPart;
+}
+
 static void AdmissionGpuvaBarrier(void *opaque)
 {
   UNREFERENCED_PARAMETER(opaque);
@@ -53,5 +59,6 @@ BOOLEAN AdmissionGpuvaV5ClientOpen(ADMISSION_CONTEXT *context,
   io.Read64 = AdmissionGpuvaRead64;
   io.Write32 = AdmissionGpuvaWrite32;
   io.Barrier = AdmissionGpuvaBarrier;
+  io.Now = AdmissionGpuvaNow; /* EXP1052 receipt-only call timing. */
   return AppleAgxGpuvaV5ClientInit(client, &io) ? TRUE : FALSE;
 }

@@ -2,7 +2,7 @@
  * views. Only OS allocation, memory and stage-2 services are simulated. */
 static void r144_local_bounds_cases(void) {
   ADMISSION_CONTEXT a={0}; ADMISSION_G3_STATE state={0}; REPLAY_BROKER b={0};
-  APPLE_AGX_GPUVA_V5_IO io={&b,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier};
+  APPLE_AGX_GPUVA_V5_IO io={&b,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier, 0};
   DXGKARG_CREATEPROCESS create={0}; DXGKARG_BUILDPAGINGBUFFER args={0};
   DXGK_PTE zero={0}, ptes[16]={0}, parent={0};
   ADMISSION_SCANOUT_MEMORY_VIEW scanout={0};

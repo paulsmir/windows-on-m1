@@ -191,7 +191,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiBuildPagingBuffer(
    * the device key twice per paging operation (VidMm worker found in
    * NtFlushKey -> CmpFlushHive at the 0x119 bugcheck). Failures keep their
    * own gated receipts in the G3 paging path. */
-  status = AdmissionBuildPagingBuffer(Adapter, Args);
+  {
+    /* EXP1052 receipt-only: in-memory per-operation build time. */
+    LONGLONG start = KeQueryPerformanceCounter(NULL).QuadPart;
+    status = AdmissionBuildPagingBuffer(Adapter, Args);
+    if (context != NULL && operation < ADMISSION_PAGING_PROFILE_OPS) {
+      AdmissionPagingProfileAdd(context->PagingProfile.Build[operation],
+          KeQueryPerformanceCounter(NULL).QuadPart - start);
+      if (Args->Operation == DXGK_OPERATION_UPDATE_PAGE_TABLE)
+        InterlockedAdd64(&context->PagingProfile.UpdatePageTableEntries,
+                         (LONG64)Args->UpdatePageTable.NumPageTableEntries);
+    }
+  }
   AdmissionPagingBuildTrace(
       context, irql, operation, dmaSize, privateSize, status);
   return status;
@@ -246,6 +257,7 @@ static BOOLEAN AdmissionPagingNotifyAtInterrupt(PVOID Opaque) {
   }
   context->Interface.DxgkCbNotifyInterrupt(
       context->Interface.DeviceHandle, &data);
+  context->PagingNotifyQpc = KeQueryPerformanceCounter(NULL).QuadPart;
   if (InterlockedCompareExchange(&context->PresentTransferState, 2, 2) == 2 &&
       context->PresentTransferReceipt.Fence == notification->Fence) {
     context->PresentTransferReceipt.NotifyInterrupt = 1u;
@@ -267,9 +279,14 @@ static VOID AdmissionPagingWorker(_In_ PDEVICE_OBJECT DeviceObject,
   ULONGLONG copiedBytes = 0ULL;
   KIRQL oldIrql;
 
+  LONGLONG workerStart;
   UNREFERENCED_PARAMETER(DeviceObject);
   if (context == NULL)
     return;
+  workerStart = KeQueryPerformanceCounter(NULL).QuadPart;
+  if (context->PagingDispatchQpc != 0)
+    AdmissionPagingProfileAdd(context->PagingProfile.DispatchToWorker,
+                              workerStart - context->PagingDispatchQpc);
   InterlockedIncrement(&context->PagingWorkersActive);
   context->PresentCopyFaultVa = 0ULL;
   context->PresentCopyFaultWrite = 0u;
@@ -295,6 +312,8 @@ static VOID AdmissionPagingWorker(_In_ PDEVICE_OBJECT DeviceObject,
       !AdmissionSchedulerRecordCompletion(context, context->PagingFence))
     status = STATUS_INVALID_DEVICE_STATE;
   context->PagingCompletionStatus = status;
+  AdmissionPagingProfileAdd(context->PagingProfile.Worker,
+      KeQueryPerformanceCounter(NULL).QuadPart - workerStart);
   notification.Context = context;
   notification.Fence = context->PagingFence;
   notification.Status = status;
@@ -414,6 +433,9 @@ _Use_decl_annotations_ VOID AdmissionPagingDpc(
       InterlockedExchange(&Context->PagingDpcPending, 0) == 0)
     return;
   InterlockedIncrement(&Context->PagingDpcsActive);
+  if (Context->PagingNotifyQpc != 0)
+    AdmissionPagingProfileAdd(Context->PagingProfile.NotifyToDpc,
+        KeQueryPerformanceCounter(NULL).QuadPart - Context->PagingNotifyQpc);
   KeAcquireSpinLock(&Context->PagingLock, &oldIrql);
   completedFence = Context->PagingFence;
   if (NT_SUCCESS(Context->PagingCompletionStatus))

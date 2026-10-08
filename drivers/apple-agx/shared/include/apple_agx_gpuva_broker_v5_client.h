@@ -9,7 +9,11 @@ typedef struct _APPLE_AGX_GPUVA_V5_IO {
     bool (*Read64)(void *, unsigned, unsigned long long *);
     bool (*Write32)(void *, unsigned, unsigned int);
     void (*Barrier)(void *);
+    /* EXP1052 receipt-only: optional monotonic tick source for call timing. */
+    unsigned long long (*Now)(void *);
 } APPLE_AGX_GPUVA_V5_IO;
+
+#define APPLE_AGX_GPUVA_V5_TIMED_COMMANDS 32u
 
 typedef struct _APPLE_AGX_GPUVA_V5_CLIENT {
     APPLE_AGX_GPUVA_V5_IO Io;
@@ -17,6 +21,10 @@ typedef struct _APPLE_AGX_GPUVA_V5_CLIENT {
     unsigned long long Epoch;
     /* CPU view of the attached 16-KiB mailbox page, or NULL (MMIO window). */
     volatile unsigned char *Mailbox;
+    /* EXP1052 receipt-only: per-command call count, ticks and max ticks. */
+    unsigned long long Calls[APPLE_AGX_GPUVA_V5_TIMED_COMMANDS];
+    unsigned long long Ticks[APPLE_AGX_GPUVA_V5_TIMED_COMMANDS];
+    unsigned long long MaxTicks[APPLE_AGX_GPUVA_V5_TIMED_COMMANDS];
 } APPLE_AGX_GPUVA_V5_CLIENT;
 
 bool AppleAgxGpuvaV5ClientInit(APPLE_AGX_GPUVA_V5_CLIENT *,

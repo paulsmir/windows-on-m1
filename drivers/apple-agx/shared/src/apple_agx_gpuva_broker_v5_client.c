@@ -14,9 +14,33 @@ bool AppleAgxGpuvaV5ClientInit(APPLE_AGX_GPUVA_V5_CLIENT *client,
     return true;
 }
 
+static bool ClientCallUntimed(APPLE_AGX_GPUVA_V5_CLIENT *client,
+                              const AGX_GPUVA_V5_REQUEST *request,
+                              AGX_GPUVA_V5_RESPONSE *response);
+
 bool AppleAgxGpuvaV5ClientCall(APPLE_AGX_GPUVA_V5_CLIENT *client,
                                const AGX_GPUVA_V5_REQUEST *request,
                                AGX_GPUVA_V5_RESPONSE *response)
+{
+    unsigned long long start, elapsed;
+    unsigned command;
+    bool ok;
+    if (!client || !client->Io.Now || !request)
+        return ClientCallUntimed(client, request, response);
+    start = client->Io.Now(client->Io.Context);
+    ok = ClientCallUntimed(client, request, response);
+    elapsed = client->Io.Now(client->Io.Context) - start;
+    command = request->Command < APPLE_AGX_GPUVA_V5_TIMED_COMMANDS ?
+        request->Command : 0u;
+    ++client->Calls[command];
+    client->Ticks[command] += elapsed;
+    if (elapsed > client->MaxTicks[command]) client->MaxTicks[command] = elapsed;
+    return ok;
+}
+
+static bool ClientCallUntimed(APPLE_AGX_GPUVA_V5_CLIENT *client,
+                              const AGX_GPUVA_V5_REQUEST *request,
+                              AGX_GPUVA_V5_RESPONSE *response)
 {
     AGX_GPUVA_V5_REQUEST q;
     AGX_GPUVA_V5_RESPONSE r;

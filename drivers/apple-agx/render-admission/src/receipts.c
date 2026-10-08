@@ -2503,3 +2503,62 @@ _Use_decl_annotations_ void AdmissionRecordMemoryQualification(
               sizeof(*Qualification));
   ZwClose(key);
 }
+
+_Use_decl_annotations_ VOID AdmissionPagingProfileAdd(volatile LONG64 *Triplet,
+                                                      LONGLONG Ticks) {
+  LONG64 seen;
+  if (Triplet == NULL || Ticks < 0) return;
+  InterlockedIncrement64(&Triplet[0]);
+  InterlockedAdd64(&Triplet[1], Ticks);
+  seen = Triplet[2];
+  while (Ticks > seen &&
+         InterlockedCompareExchange64(&Triplet[2], Ticks, seen) != seen)
+    seen = Triplet[2];
+}
+
+/* EXP1052 receipt-only: {version, qpc, frequency}, the paging profile, then
+ * the broker client's per-command calls/ticks/max.  Never called from the
+ * paging path; written at most every two seconds and never flushed. */
+_Use_decl_annotations_ void AdmissionRecordPagingProfile(
+    ADMISSION_CONTEXT *Context, const APPLE_AGX_GPUVA_V5_CLIENT *Client) {
+  ULONGLONG value[3 + ADMISSION_PAGING_PROFILE_OPS * 3 + 1 + 4 * 3 +
+                  3 * APPLE_AGX_GPUVA_V5_TIMED_COMMANDS];
+  LARGE_INTEGER frequency;
+  LONGLONG now, last;
+  HANDLE key = NULL;
+  ULONG i, at;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  now = KeQueryPerformanceCounter(&frequency).QuadPart;
+  last = Context->PagingProfile.LastPublishedQpc;
+  if (now - last < 2 * frequency.QuadPart ||
+      InterlockedCompareExchange64(&Context->PagingProfile.LastPublishedQpc,
+                                   now, last) != last)
+    return;
+  RtlZeroMemory(value, sizeof(value));
+  value[0] = 1u;
+  value[1] = (ULONGLONG)now;
+  value[2] = (ULONGLONG)frequency.QuadPart;
+  at = 3u;
+  for (i = 0u; i < ADMISSION_PAGING_PROFILE_OPS; ++i) {
+    value[at++] = (ULONGLONG)Context->PagingProfile.Build[i][0];
+    value[at++] = (ULONGLONG)Context->PagingProfile.Build[i][1];
+    value[at++] = (ULONGLONG)Context->PagingProfile.Build[i][2];
+  }
+  value[at++] = (ULONGLONG)Context->PagingProfile.UpdatePageTableEntries;
+  for (i = 0u; i < 3u; ++i) value[at++] = (ULONGLONG)Context->PagingProfile.QueueToDispatch[i];
+  for (i = 0u; i < 3u; ++i) value[at++] = (ULONGLONG)Context->PagingProfile.DispatchToWorker[i];
+  for (i = 0u; i < 3u; ++i) value[at++] = (ULONGLONG)Context->PagingProfile.Worker[i];
+  for (i = 0u; i < 3u; ++i) value[at++] = (ULONGLONG)Context->PagingProfile.NotifyToDpc[i];
+  if (Client != NULL)
+    for (i = 0u; i < APPLE_AGX_GPUVA_V5_TIMED_COMMANDS; ++i) {
+      value[at + i] = Client->Calls[i];
+      value[at + APPLE_AGX_GPUVA_V5_TIMED_COMMANDS + i] = Client->Ticks[i];
+      value[at + 2u * APPLE_AGX_GPUVA_V5_TIMED_COMMANDS + i] = Client->MaxTicks[i];
+    }
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
+  WriteBinary(key, L"Wom1G3PagingProfile", value, sizeof(value));
+  ZwClose(key);
+}
