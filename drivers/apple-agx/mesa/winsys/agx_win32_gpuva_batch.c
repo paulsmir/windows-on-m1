@@ -255,9 +255,24 @@ static int gpuva_color_format_supported(unsigned format) {
   case PIPE_FORMAT_B8G8R8X8_UNORM: case PIPE_FORMAT_B8G8R8X8_SRGB:
   case PIPE_FORMAT_R8G8B8A8_UNORM: case PIPE_FORMAT_R16G16B16A16_FLOAT:
   case PIPE_FORMAT_R10G10B10A2_UNORM:
+  /* EXP1035: R8/A8 texture uploads blit through 1-byte render passes; the
+   * private header carries the colour class the KMD binding sizes by. */
+  case PIPE_FORMAT_R8_UNORM: case PIPE_FORMAT_A8_UNORM:
+  case PIPE_FORMAT_R8G8_UNORM:
     return 1;
   default:
     return 0;
+  }
+}
+
+static unsigned gpuva_color_class(unsigned format) {
+  switch(format) {
+  case PIPE_FORMAT_R8_UNORM: case PIPE_FORMAT_A8_UNORM:
+    return APPLE_AGX_G4_COLOR_1BYTE;
+  case PIPE_FORMAT_R8G8_UNORM:
+    return APPLE_AGX_G4_COLOR_2BYTE;
+  default:
+    return APPLE_AGX_G4_COLOR_BGRA8;
   }
 }
 
@@ -335,7 +350,9 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   memcpy(cpu,packet.Native,packet.Header.V2.Base.CommandBytes);
   if(!AppleAgxG4ComposeHeaderV3(&packet.Header,&native_render,
       g->Command->va->addr,packet.Header.V2.Base.CommandBytes,
-      APPLE_AGX_G4_COLOR_BGRA8,ranges,&g->Lease)) { fail_site=__LINE__; goto fail; }
+      gpuva_color_class(batch->key.cbufs[0].format),ranges,&g->Lease)) {
+    fail_site=__LINE__; goto fail;
+  }
   refs=calloc(limit,sizeof(*refs));
   if(!refs) { fail_site=__LINE__; goto fail; }
   if(!add_bo(b,refs,&count,limit,g->Command) ||

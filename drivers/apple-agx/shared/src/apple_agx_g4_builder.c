@@ -113,12 +113,13 @@ APPLE_AGX_BOOL AppleAgxG4BindNativeObjects(
   if (View == 0 || Objects == 0 || View->Render == 0 ||
       View->RenderBytes != sizeof(render) || View->Attachments == 0 ||
       View->AttachmentCount != 1u ||
-      View->ColorFormat != APPLE_AGX_G4_COLOR_BGRA8 ||
+      !AppleAgxG4ColorBytes(View->ColorFormat) ||
       ObjectCount < APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)
     return APPLE_AGX_FALSE;
   memcpy(&render, View->Render, sizeof(render));
   memcpy(&color, View->Attachments, sizeof(color));
-  minimum = (APPLE_AGX_U64)render.WidthPx * render.HeightPx * 4ULL;
+  minimum = (APPLE_AGX_U64)render.WidthPx * render.HeightPx *
+      AppleAgxG4ColorBytes(View->ColorFormat);
   if (!render.WidthPx || !render.HeightPx || !minimum ||
       render.Layers != 1u || render.Samples != 1u ||
       (render.SampleSizeBytes != 8u && render.SampleSizeBytes != 16u) ||

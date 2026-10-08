@@ -361,7 +361,8 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
   Image->G4Native = APPLE_AGX_TRUE;
   Image->NativeWidth = render.WidthPx;
   Image->NativeHeight = render.HeightPx;
-  Image->NativePitch = (APPLE_AGX_U32)render.WidthPx * 4u;
+  Image->NativePitch = (APPLE_AGX_U32)render.WidthPx *
+      AppleAgxG4ColorBytes(View->ColorFormat);
   Image->Binding = candidate;
   Image->BoundFence = Packet->Fence;
   *Binding = candidate;

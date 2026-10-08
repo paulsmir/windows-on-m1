@@ -140,7 +140,7 @@ static APPLE_AGX_G4_PARSE_RESULT parse_submit(
       umd_private_bytes != (unsigned int)header.HeaderBytes + dma_bytes)
     return AppleAgxG4ParseInvalid;
   if (header.Version >= APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA) {
-    if (header.Reserved != APPLE_AGX_G4_COLOR_BGRA8)
+    if (!AppleAgxG4ColorBytes(header.Reserved))
       return AppleAgxG4ParseUnsupported;
     if (umd_private_bytes < sizeof(header_v2))
       return AppleAgxG4ParseInvalid;

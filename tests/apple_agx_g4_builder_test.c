@@ -166,6 +166,42 @@ int main(void) {
       assert(!AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
       packet.Attachment.Size = 1280ULL * 720ULL * 4ULL;
+      /* EXP1035: R8/A8 upload blits render 1-byte targets; the binding
+       * minimum follows the colour class carried in the private header. */
+      {
+        G4_PACKET narrow = packet;
+        ACCESS_CONTEXT narrow_graph = {0};
+        APPLE_AGX_G4_SUBMIT_VIEW narrow_view = {0};
+        narrow.Header.Base.Reserved = APPLE_AGX_G4_COLOR_1BYTE;
+        narrow.Attachment.Size = 1280ULL * 720ULL;
+        narrow_graph.Packet = &narrow;
+        assert(AppleAgxG4ParseSubmit(&narrow, sizeof(narrow), sizeof(narrow),
+            narrow.Header.Base.CommandVa, narrow.Header.Base.CommandBytes,
+            graph_access, &narrow_graph, &narrow_view) == AppleAgxG4ParseOk);
+        assert(narrow_view.ColorFormat == APPLE_AGX_G4_COLOR_1BYTE);
+        assert(AppleAgxG4BindNativeObjects(&narrow_view, objects,
+            APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+        narrow_view.ColorFormat = APPLE_AGX_G4_COLOR_2BYTE;
+        assert(!AppleAgxG4BindNativeObjects(&narrow_view, objects,
+            APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+        narrow.Attachment.Size = 1280ULL * 720ULL * 2ULL;
+        assert(AppleAgxG4BindNativeObjects(&narrow_view, objects,
+            APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+        narrow_view.ColorFormat = APPLE_AGX_G4_COLOR_BGRA8;
+        assert(!AppleAgxG4BindNativeObjects(&narrow_view, objects,
+            APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+        narrow_view.ColorFormat = 7u;
+        narrow.Attachment.Size = 1280ULL * 720ULL * 4ULL;
+        assert(!AppleAgxG4BindNativeObjects(&narrow_view, objects,
+            APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+        narrow.Header.Base.Reserved = 7u;
+        memset(&narrow_graph, 0, sizeof(narrow_graph));
+        narrow_graph.Packet = &narrow;
+        assert(AppleAgxG4ParseSubmit(&narrow, sizeof(narrow), sizeof(narrow),
+            narrow.Header.Base.CommandVa, narrow.Header.Base.CommandBytes,
+            graph_access, &narrow_graph, &narrow_view) ==
+            AppleAgxG4ParseUnsupported);
+      }
       assert(AppleAgxG4BuildTa3d(&view, arena,
           AppleAgxRenderTemplateBytes(), 1u, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));

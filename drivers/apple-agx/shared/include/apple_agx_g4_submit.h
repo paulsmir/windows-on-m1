@@ -32,6 +32,15 @@
 #define APPLE_AGX_G4_COMPUTE 1u
 #define APPLE_AGX_G4_FRAGMENT_ATTACHMENTS 3u
 #define APPLE_AGX_G4_COLOR_BGRA8 1u
+/* EXP1035: colour classes by bytes per pixel. BGRA8 also names the existing
+ * 4-byte (and wider) class; R8/A8 upload blits render 1- or 2-byte targets. */
+#define APPLE_AGX_G4_COLOR_1BYTE 2u
+#define APPLE_AGX_G4_COLOR_2BYTE 3u
+static inline unsigned int AppleAgxG4ColorBytes(unsigned int color_format) {
+  return color_format == APPLE_AGX_G4_COLOR_BGRA8 ? 4u :
+      color_format == APPLE_AGX_G4_COLOR_1BYTE ? 1u :
+      color_format == APPLE_AGX_G4_COLOR_2BYTE ? 2u : 0u;
+}
 /* Native USC fields are 32-bit offsets within this process execution window.
  * UMD placement, native encoding, parser and firmware work must agree. */
 #define APPLE_AGX_G4_USC_EXECUTION_BASE 0x1100000000ULL
@@ -194,7 +203,7 @@ static inline int AppleAgxG4ComposeHeaderV2(
   unsigned int required[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
   unsigned int i, j;
   if (!header || !ranges || !AppleAgxG4ProcessRequiredBytes(render, required) ||
-      color_format != APPLE_AGX_G4_COLOR_BGRA8 ||
+      !AppleAgxG4ColorBytes(color_format) ||
       command_va < 0x10000ULL || command_va >= (1ULL << 39) ||
       !command_bytes || command_bytes > APPLE_AGX_G4_NATIVE_MAX_BYTES ||
       command_bytes > (1ULL << 39) - command_va) return 0;
