@@ -51,7 +51,7 @@ static NTSTATUS AdmissionBuildPagingBuffer(
       Args->Operation == DXGK_OPERATION_VIRTUAL_FILL ||
       Args->Operation == DXGK_OPERATION_VIRTUAL_TRANSFER ||
       Args->Operation == DXGK_OPERATION_SIGNAL_MONITORED_FENCE)
-    return AdmissionGpuvaG3BuildPagingBuffer(context, Args);
+    return AdmissionGpuvaG3BuildPagingBufferChecked(context, Args);
 #endif
   switch (Args->Operation) {
   case DXGK_OPERATION_MAP_APERTURE_SEGMENT:

@@ -942,6 +942,46 @@ VOID AdmissionGpuvaG3NoteAllocationPaging(ADMISSION_CONTEXT *adapter,
   }
 }
 
+/* EXP1026: DxgkDdiBuildPagingBuffer may return only STATUS_SUCCESS,
+ * STATUS_GRAPHICS_ALLOCATION_BUSY or STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
+ * any other code bugchecks 0x10E/0xB (EXP1014 and EXP1025 dumps: an
+ * UpdatePageTable issued while VidMm evicted a resource returned
+ * STATUS_INVALID_DEVICE_STATE for a destroyed/poisoned process). A page-table
+ * update or TLB flush the KMD cannot apply instead poisons the owning process,
+ * whose GPU jobs are then refused, and completes for VidMm. */
+static BOOLEAN AdmissionG3PagingStatusAllowed(NTSTATUS Status) {
+  return Status == STATUS_SUCCESS ||
+         Status == STATUS_GRAPHICS_ALLOCATION_BUSY ||
+         Status == STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
+}
+
+NTSTATUS AdmissionGpuvaG3BuildPagingBufferChecked(ADMISSION_CONTEXT *adapter,
+                                            DXGKARG_BUILDPAGINGBUFFER *args) {
+  ADMISSION_G3_STATE *state;
+  ADMISSION_G3_PROCESS *process;
+  HANDLE handle;
+  NTSTATUS status = AdmissionGpuvaG3BuildPagingBuffer(adapter, args);
+  if (AdmissionG3PagingStatusAllowed(status) || args == NULL ||
+      (args->Operation != DXGK_OPERATION_UPDATE_PAGE_TABLE &&
+       args->Operation != DXGK_OPERATION_FLUSH_TLB))
+    return status;
+  handle = args->Operation == DXGK_OPERATION_UPDATE_PAGE_TABLE ?
+      args->UpdatePageTable.hProcess : args->FlushTlb.hProcess;
+  state = adapter != NULL ? (ADMISSION_G3_STATE *)adapter->GpuvaG3State : NULL;
+  if (state != NULL && KeGetCurrentIrql() == PASSIVE_LEVEL) {
+    ExAcquireFastMutex(&state->Lock);
+    process = AdmissionGpuvaG3FindProcess(state, handle);
+    if (process != NULL && !process->Poisoned)
+      ADMISSION_G3_POISON(process, 0x26u);
+    ExReleaseFastMutex(&state->Lock);
+  }
+  if (adapter != NULL) {
+    (void)InterlockedIncrement(&adapter->G3PagingContractCompletions);
+    InterlockedExchange(&adapter->G3PagingContractLastStatus, (LONG)status);
+  }
+  return STATUS_SUCCESS;
+}
+
 NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
                                             DXGKARG_BUILDPAGINGBUFFER *args) {
   ADMISSION_G3_STATE *state;

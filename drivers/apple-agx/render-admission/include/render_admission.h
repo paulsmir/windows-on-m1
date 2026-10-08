@@ -508,6 +508,9 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG G3LeafHistoryClaim;
   ADMISSION_G3_LEAF_HISTORY_SNAPSHOT G3LeafHistorySnapshot;
   ADMISSION_G3_PAGING_WAIT_RECEIPT G3PagingWait;
+  /* EXP1026: paging operations completed after a disallowed internal status. */
+  volatile LONG G3PagingContractCompletions;
+  volatile LONG G3PagingContractLastStatus;
   ADMISSION_G3_PTE_WAIT_RECEIPT G3PteWait;
   ADMISSION_G4_DRAW_SNAPSHOT G4DrawSnapshot;
   ADMISSION_G4_FW_SNAPSHOT G4FwSnapshot;
@@ -1742,6 +1745,9 @@ VOID AdmissionGpuvaG3NoteAllocationPaging(ADMISSION_CONTEXT *Context,
                                           HANDLE Allocation, ULONG Operation,
                                           ULONG Segment);
 NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *Context,
+    DXGKARG_BUILDPAGINGBUFFER *Args);
+/* EXP1026: completes disallowed internal statuses (see the definition). */
+NTSTATUS AdmissionGpuvaG3BuildPagingBufferChecked(ADMISSION_CONTEXT *Context,
     DXGKARG_BUILDPAGINGBUFFER *Args);
 DXGKDDI_SETROOTPAGETABLE AdmissionDdiSetRootPageTable;
 #endif
