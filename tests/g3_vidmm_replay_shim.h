@@ -671,6 +671,7 @@ static void AdmissionRecordGpuvaG3PagingFailure(ADMISSION_CONTEXT *a,ADMISSION_G
 static ADMISSION_G3_FLUSH_RECEIPT last_flush_receipt;
 static void AdmissionRecordGpuvaG3Flush(ADMISSION_CONTEXT *a,const ADMISSION_G3_FLUSH_RECEIPT *r) {(void)a;if(KeGetCurrentIrql()==PASSIVE_LEVEL)last_flush_receipt=*r;}
 static void AdmissionRecordG3PagingWait(ADMISSION_CONTEXT *a) {(void)a;}
+static void AdmissionRecordPagingCensus(ADMISSION_CONTEXT *a) {(void)a;}
 static void AdmissionRecordG3BrokerTiming(ADMISSION_CONTEXT *a, const ULONGLONG *c, const ULONGLONG *t, const ULONGLONG *m, ULONG n) {(void)a;(void)c;(void)t;(void)m;(void)n;}
 static void AdmissionRecordG3PteWait(ADMISSION_CONTEXT *a) {(void)a;}
 static void AdmissionRecordG4DrawSnapshot(ADMISSION_CONTEXT *a) {(void)a;}

@@ -191,6 +191,43 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiBuildPagingBuffer(
    * the device key twice per paging operation (VidMm worker found in
    * NtFlushKey -> CmpFlushHive at the 0x119 bugcheck). Failures keep their
    * own gated receipts in the G3 paging path. */
+  /* EXP1045 diagnostic census, counted on the first pass of each operation:
+   * [0..19] calls per operation, [20..39] units per operation (bytes for
+   * transfers/fills, PTEs for UpdatePageTable), [40..42] virtual transfer
+   * bytes by direction, [43] UpdatePageTable invalid PTEs, [44..51] valid
+   * PTEs by DXGK_PTE.Segment (7 = other), [52] repeat updates, [63] total. */
+  if (context != NULL && Args != NULL && Args->MultipassOffset == 0u) {
+    ULONGLONG *c = context->PagingCensus;
+    ULONG op = operation < 20u ? operation : 19u;
+    ++c[op];
+    ++c[63];
+    switch (operation) {
+    case DXGK_OPERATION_TRANSFER: c[20 + op] += Args->Transfer.TransferSize; break;
+    case DXGK_OPERATION_FILL: c[20 + op] += Args->Fill.FillSize; break;
+    case DXGK_OPERATION_VIRTUAL_TRANSFER:
+      c[20 + op] += Args->TransferVirtual.TransferSizeInBytes;
+      if (Args->TransferVirtual.TransferDirection <= 2u)
+        c[40 + Args->TransferVirtual.TransferDirection] +=
+            Args->TransferVirtual.TransferSizeInBytes;
+      break;
+    case DXGK_OPERATION_VIRTUAL_FILL: c[20 + op] += Args->FillVirtual.FillSizeInBytes; break;
+    case DXGK_OPERATION_UPDATE_PAGE_TABLE: {
+      const DXGK_PTE *pte = Args->UpdatePageTable.pPageTableEntries;
+      ULONG n = Args->UpdatePageTable.NumPageTableEntries, i;
+      c[20 + op] += n;
+      if (Args->UpdatePageTable.Flags.Repeat) ++c[52];
+      if (pte != NULL)
+        for (i = 0; i < n; ++i) {
+          const DXGK_PTE *e = Args->UpdatePageTable.Flags.Repeat ? pte : pte + i;
+          if (!e->Valid) ++c[43];
+          else ++c[44 + (e->Segment < 7u ? e->Segment : 7u)];
+        }
+      break;
+    }
+    default: break;
+    }
+    if ((c[63] & 8191u) == 0u) AdmissionRecordPagingCensus(context);
+  }
   status = AdmissionBuildPagingBuffer(Adapter, Args);
   AdmissionPagingBuildTrace(
       context, irql, operation, dmaSize, privateSize, status);

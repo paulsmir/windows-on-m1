@@ -517,6 +517,8 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG G4DrawSnapshotDirty;
   volatile LONG G3PteWaitDirty;
   volatile LONG G3PagingWaitDirty;
+  /* EXP1045 diagnostic: BuildPagingBuffer operation census. */
+  ULONGLONG PagingCensus[64];
   /* EXP997 diagnostic: first poisoned G3 process seen at completion. */
   volatile LONG G3PoisonClaim;
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
@@ -1024,6 +1026,8 @@ void AdmissionRecordG4SubmitFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3CopyQueryFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3LeafHistory(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3PagingWait(_In_opt_ ADMISSION_CONTEXT *Context);
+/* EXP1045 diagnostic: BuildPagingBuffer census (see paging_windows.c). */
+void AdmissionRecordPagingCensus(_In_opt_ ADMISSION_CONTEXT *Context);
 /* EXP1044 diagnostic: per-command broker call count/ticks/max ticks. */
 void AdmissionRecordG3BrokerTiming(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_reads_(Count) const ULONGLONG *Calls,
