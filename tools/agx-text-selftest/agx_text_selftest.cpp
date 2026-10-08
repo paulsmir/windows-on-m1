@@ -48,9 +48,21 @@ int main() {
   IDWriteTextFormat *tf = nullptr;
   dw->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
                        DWRITE_FONT_STRETCH_NORMAL, 32.0f, L"en-us", &tf);
-  const char *names[] = {"rect", "text-grayscale", "text-cleartype", "text-aliased"};
+  const char *names[] = {"rect", "text-grayscale", "text-cleartype", "text-aliased",
+                         "text-grayscale-gamma1", "text-grayscale-natural", "text-grayscale-gdi",
+                         "ellipse-aa", "ellipse-aliased", "text-grayscale-outline"};
+  IDWriteRenderingParams *gamma1 = nullptr, *natural = nullptr, *gdi = nullptr;
+  dw->CreateCustomRenderingParams(1.0f, 0.0f, 0.0f, DWRITE_PIXEL_GEOMETRY_FLAT,
+                                  DWRITE_RENDERING_MODE_DEFAULT, &gamma1);
+  dw->CreateCustomRenderingParams(1.8f, 0.5f, 0.0f, DWRITE_PIXEL_GEOMETRY_FLAT,
+                                  DWRITE_RENDERING_MODE_NATURAL, &natural);
+  dw->CreateCustomRenderingParams(1.8f, 0.5f, 0.0f, DWRITE_PIXEL_GEOMETRY_FLAT,
+                                  DWRITE_RENDERING_MODE_GDI_CLASSIC, &gdi);
   int fails = 0;
-  for (int variant = 0; variant < 4; ++variant) {
+  IDWriteRenderingParams *outline = nullptr;
+  dw->CreateCustomRenderingParams(1.8f, 0.5f, 0.0f, DWRITE_PIXEL_GEOMETRY_FLAT,
+                                  DWRITE_RENDERING_MODE_OUTLINE, &outline);
+  for (int variant = 0; variant < 10; ++variant) {
     D3D11_TEXTURE2D_DESC td = {W, H, 1, 1, DXGI_FORMAT_B8G8R8A8_UNORM, {1, 0}, D3D11_USAGE_DEFAULT,
                                D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, 0, 0};
     ID3D11Texture2D *t = nullptr; d->CreateTexture2D(&td, nullptr, &t);
@@ -62,10 +74,16 @@ int main() {
     if (FAILED(hr)) { printf("FAIL %s rt hr=0x%08lx\n", names[variant], hr); ++fails; continue; }
     rt->SetTextAntialiasMode(variant == 2 ? D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE :
                              variant == 3 ? D2D1_TEXT_ANTIALIAS_MODE_ALIASED : D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+    if (variant == 4) rt->SetTextRenderingParams(gamma1);
+    if (variant == 5) rt->SetTextRenderingParams(natural);
+    if (variant == 6) rt->SetTextRenderingParams(gdi);
+    if (variant == 9) rt->SetTextRenderingParams(outline);
+    rt->SetAntialiasMode(variant == 8 ? D2D1_ANTIALIAS_MODE_ALIASED : D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
     ID2D1SolidColorBrush *b = nullptr; rt->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 1), &b);
     rt->BeginDraw();
     rt->Clear(D2D1::ColorF(1, 1, 1, 1));
     if (variant == 0) rt->FillRectangle(D2D1::RectF(10, 10, 60, 50), b);
+    else if (variant == 7 || variant == 8) rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(40, 32), 28, 24), b);
     else rt->DrawText(L"Hello World", 11, tf, D2D1::RectF(4, 4, (float)W, (float)H), b);
     hr = rt->EndDraw();
     c->Flush();
