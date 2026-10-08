@@ -61,7 +61,11 @@ int main() {
     HRESULT hr = d->CreateTexture2D(&td, m == 0 ? &init : nullptr, &t);
     if (FAILED(hr)) { printf("FAIL %s-%s create 0x%08lx\n", fn[fi], mn[m], hr); ++fails; continue; }
     if (m == 1) c->UpdateSubresource(t, 0, nullptr, data, TW * bpp, 0);
-    if (m == 2) { D3D11_BOX b = {8, 8, 0, 24, 24, 1}; c->UpdateSubresource(t, 0, &b, data, 16 * bpp, 0); }
+    if (m == 2) {
+      static unsigned char zero[TW * TH * 4];  // cached BOs may hold earlier content
+      c->UpdateSubresource(t, 0, nullptr, zero, TW * bpp, 0);
+      D3D11_BOX b = {8, 8, 0, 24, 24, 1}; c->UpdateSubresource(t, 0, &b, data, 16 * bpp, 0);
+    }
     if (m == 3) { D3D11_MAPPED_SUBRESOURCE ms; if (SUCCEEDED(c->Map(t, 0, D3D11_MAP_WRITE_DISCARD, 0, &ms))) {
         for (UINT y = 0; y < TH; ++y) memset((char *)ms.pData + y * ms.RowPitch, 0xff, TW * bpp); c->Unmap(t, 0); } }
     ID3D11ShaderResourceView *srv = nullptr; d->CreateShaderResourceView(t, 0, &srv);

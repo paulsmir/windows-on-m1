@@ -35,6 +35,13 @@ int main() {
   HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
       D3D11_CREATE_DEVICE_BGRA_SUPPORT, levels, 1, D3D11_SDK_VERSION, &d, &got, &c);
   printf("device hr=0x%08lx\n", hr); if (FAILED(hr)) return 1;
+  const DXGI_FORMAT probe[] = {DXGI_FORMAT_A8_UNORM, DXGI_FORMAT_R8_UNORM, DXGI_FORMAT_B8G8R8A8_UNORM,
+                               DXGI_FORMAT_R8G8B8A8_UNORM};
+  const char *pn[] = {"A8", "R8", "BGRA8", "RGBA8"};
+  for (int i = 0; i < 4; ++i) { UINT caps = 0; HRESULT ch = d->CheckFormatSupport(probe[i], &caps);
+    printf("format %s hr=0x%08lx support=0x%08x sample=%u tex2d=%u rt=%u blend=%u\n", pn[i], ch, caps,
+           (caps & D3D11_FORMAT_SUPPORT_SHADER_SAMPLE) != 0, (caps & D3D11_FORMAT_SUPPORT_TEXTURE2D) != 0,
+           (caps & D3D11_FORMAT_SUPPORT_RENDER_TARGET) != 0, (caps & D3D11_FORMAT_SUPPORT_BLENDABLE) != 0); }
   ID2D1Factory *f = nullptr; IDWriteFactory *dw = nullptr;
   D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &f);
   DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), (IUnknown **)&dw);

@@ -3484,7 +3484,10 @@ AgxD3d10ResourceWithinRequiredLimits(
    }
    pDevice->ib_offset = Offset;
    pDevice->index_size = indexSize;
-   pDevice->restart_index = 0;
+   /* EXP1031: the cut index is all ones for the bound index size (upstream
+    * Mesa d3d10umd). With 0, primitive restart cut every primitive using
+    * vertex 0: hardware probe DrawIndexed drew 240/1024 px, BaseVertex 0. */
+   pDevice->restart_index = indexSize == 2u ? 0xffffu : 0xffffffffu;
    pipe_resource_reference(&pDevice->index_buffer, resource->resource);''')
     change('src/asahi/lib/agx_device.h',
         'e6ba76e16b2aace0ebf8b1ff2348cb800ad6cc254cef633d490de5bc203bfda3',[
