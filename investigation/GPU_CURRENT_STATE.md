@@ -1,5 +1,3 @@
-# J313 GPU — accelerated desktop; ~15 flips/s composition (EXP1055)
-
 # J313 GPU — accelerated desktop; Settings opens, ~18 flips/s composition (EXP1061)
 
 
