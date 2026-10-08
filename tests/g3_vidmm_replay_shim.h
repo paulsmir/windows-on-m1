@@ -568,6 +568,9 @@ typedef struct {
   UINT flush_commands;
 } REPLAY_BROKER;
 static struct hv_agx_gpuva_v5 gpuva_v5;
+/* Platform global touched by the extracted gpuva_execute (mailbox attach);
+ * the replay drives each broker through its own REPLAY_BROKER wire. */
+static struct hv_agx_gpuva_v5_wire gpuva_v5_wire;
 static bool request_powered = true;
 static void gpuva_execute(void *, const AGX_GPUVA_V5_REQUEST *, AGX_GPUVA_V5_RESPONSE *);
 /* Feed the production translate_guest implementation an explicit stage-2
