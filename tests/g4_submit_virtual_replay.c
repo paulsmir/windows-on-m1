@@ -75,7 +75,9 @@ typedef struct _ADMISSION_G3_PRIVATE_SCENE {
   APPLE_AGX_G3_PRIVATE_SCENE Storage;
   APPLE_AGX_G4_NATIVE_RENDER Geometry;
   ULONG Fence, ResumeFence, Submitting, Queued, Started, GpuDone, Reported, ReleaseRequested, Quarantined;
+  ULONG Cached;
 } ADMISSION_G3_PRIVATE_SCENE;
+#define ADMISSION_G3_PRIVATE_SCENE_CACHE 4u
 
 typedef struct _ADMISSION_G3_PROCESS {
   ULONGLONG PrivateVa;

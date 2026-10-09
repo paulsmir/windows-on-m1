@@ -75,7 +75,7 @@ class PrivateEscapeEntryTests(unittest.TestCase):
     assert(mapped==local_ipa+vidmm_local_bytes+deferred_offset);
   }
 ''')
-   marker='\n  assert(!p->PrivateScenes && !context.GpuvaG3PrivateFence);'
+   marker='\n  assert(p->PrivateScenes==scene && scene->Cached && !context.GpuvaG3PrivateFence);'
    assert private.count(marker)==1
    private=private.replace(marker,marker+r'''
   assert(!state.PrivatePool.Blocks[deferred_offset>>16].Owner);
