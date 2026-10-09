@@ -103,6 +103,9 @@ typedef struct _ADMISSION_FW_TIMING_ENTRY {
   UCHAR TaStats[0x80];
 } ADMISSION_FW_TIMING_ENTRY;
 typedef struct _ADMISSION_FW_TIMING_RING {
+  /* Reserved (multi-job phase 1, receipt-only): builds whose firmware stamp
+   * words did not hold the expected previous values, low 16 bits, and the
+   * mismatching objects of the last one (TA2, 3D2, TA1, 3D1) << 16. */
   ULONG Version, Bytes, Count, Reserved;
   ADMISSION_FW_TIMING_ENTRY Entries[ADMISSION_FW_TIMING_CAPACITY];
 } ADMISSION_FW_TIMING_RING;
@@ -303,6 +306,33 @@ static VOID AdmissionJobTimingPstateWindows(
     if (completion) slot->Firmware3dEnd = word;
     else slot->Firmware3dStart = word;
   }
+  KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+}
+
+/* Multi-job phase 1 receipt: the firmware alone writes the TA/3D stamps after
+ * queue initialisation, so before a build the previous job's values must be
+ * there (Asahi event.rs). Counted, never repaired. */
+static VOID AdmissionStampCheckWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
+    BOOLEAN initializeQueues) {
+  static const ULONG objects[4] = {9u, 10u, 26u, 27u};
+  const APPLE_AGX_EXP208_DYNAMIC_RESULT *dynamic =
+      &runtime->Adapter->BackendImage.Dynamic;
+  ULONG index, mask = 0u, value;
+  KIRQL oldIrql;
+  if (initializeQueues) return;
+  for (index = 0u; index < 4u; ++index) {
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *object =
+        &runtime->QueueObjects[objects[index]];
+    if (object->Data == NULL || object->Size < sizeof(ULONG)) return;
+    RtlCopyMemory(&value, object->Data, sizeof(value));
+    if (value != ((index & 1u) ? dynamic->D3PreviousStamp :
+                                 dynamic->TaPreviousStamp))
+      mask |= 1u << index;
+  }
+  if (!mask) return;
+  KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+  runtime->FwTiming.Reserved = ((runtime->FwTiming.Reserved + 1u) & 0xffffu) |
+      (mask << 16);
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
 }
 
@@ -2277,8 +2307,12 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
           &runtime->Adapter->BackendImage,
           Submission->Submission.Fence, TaEvent, D3Event,
           Plan->TaExpectedDonePointer, Plan->D3ExpectedDonePointer,
-          Plan->IncludeInitBm, &staged) ||
-      !AppleAgxInitdataMemoryGetRenderBindings(&runtime->Initdata,
+          Plan->IncludeInitBm, &staged))
+    goto BuildFailure;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionStampCheckWindows(runtime, Plan->InitializeQueues);
+#endif
+  if (!AppleAgxInitdataMemoryGetRenderBindings(&runtime->Initdata,
                                                &bindings) ||
       !(runtime->Adapter->BackendImage.G4Manager ?
           AppleAgxRenderSharedMemoryBuildManagedG4Job(

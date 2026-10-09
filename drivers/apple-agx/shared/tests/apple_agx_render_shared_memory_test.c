@@ -340,7 +340,10 @@ int main(void) {
          sizeof(persistent_queue_pointers));
   memcpy(persistent_init_bm, active_objects[16].Data,
          sizeof(persistent_init_bm));
+  /* Multi-job phase 1 (Asahi event.rs, m1n1 render.py): stamps are
+   * written by the CPU only when the queues are initialised. */
   arena[layouts[9].ArenaOffset] = 0x92u;
+  active_objects[9].Data[0] = 0x9fu;
   arena[layouts[14].ArenaOffset + layouts[14].Size - 1u] = 0xaeu;
   arena[layouts[18].ArenaOffset + layouts[18].Size - 1u] = 0xbeu;
   arena[layouts[19].ArenaOffset + layouts[19].Size - 1u] = 0xbfu;
@@ -363,7 +366,7 @@ int main(void) {
                 sizeof(persistent_queue_pointers)) == 0);
   assert(memcmp(active_objects[16].Data, persistent_init_bm,
                 sizeof(persistent_init_bm)) == 0);
-  assert(active_objects[9].Data[0] == 0x92u);
+  assert(active_objects[9].Data[0] == 0x9fu);
   assert(active_objects[14].Data[active_objects[14].Size - 1u] == 0xaeu);
   assert(active_objects[18].Data[active_objects[18].Size - 1u] == 0xbeu);
   assert(active_objects[19].Data[active_objects[19].Size - 1u] == 0xbfu);
@@ -384,11 +387,16 @@ int main(void) {
   assert(active_job.TaWorkAddresses[1]==
          owner.VirtualAddresses[19]+owner.ObjectOffsets[19]);
   /* R151: publish the second dynamic epoch into real active G4 objects.
-   * Runtime-owned event-control state survives while event_count and all
-   * firmware/CPU stamp words use the new previous/current pair. */
+   * Runtime-owned event-control state survives, event_count (CPU-owned,
+   * m1n1 render.py += 2 per job) and the work commands take the new pair,
+   * and the stamp words keep what the firmware wrote (multi-job phase 1). */
   {
     APPLE_AGX_EXP208_DYNAMIC_INPUT dynamic={2u,1u,2u,APPLE_AGX_FALSE};
+    static const unsigned int fw_stamp[4]={0x7a0001ffu,0x3d0001ffu,0x7a0001feu,0x3d0001feu};
+    static const unsigned int stamp_object[4]={9u,10u,26u,27u};
     unsigned char event_control;
+    for(index=0u;index<4u;++index)
+      memcpy(active_objects[stamp_object[index]].Data,&fw_stamp[index],4u);
     active_objects[11].Data[0] ^= 0x80u;
     event_control=active_objects[11].Data[0];
     assert(AppleAgxExp208PatchDynamic(arena,APPLE_AGX_EXP208_ARENA_BYTES,
@@ -399,10 +407,8 @@ int main(void) {
         APPLE_AGX_FALSE,&bindings,&staged_job,active_objects,&active_job));
     assert(active_objects[11].Data[0]==event_control);
     assert(read_u32(active_objects[12].Data)==4u);
-    assert(read_u32(active_objects[9].Data)==0x7a000100u);
-    assert(read_u32(active_objects[10].Data)==0x3d000100u);
-    assert(read_u32(active_objects[26].Data)==0x7a000100u);
-    assert(read_u32(active_objects[27].Data)==0x3d000100u);
+    for(index=0u;index<4u;++index)
+      assert(read_u32(active_objects[stamp_object[index]].Data)==fw_stamp[index]);
     assert(read_u32(active_objects[14].Data+12u)==0x7a000200u);
     assert(read_u32(active_objects[15].Data+0x23cu)==0x3d000200u);
     assert(read_u32(active_objects[17].Data+0x24cu)==0x7a000200u);
@@ -410,6 +416,16 @@ int main(void) {
     assert(active_job.D3ExpectedStamp==0x3d000200u);
     assert(memcmp(active_objects[24].Data,persistent_queue_pointers,
                   sizeof(persistent_queue_pointers))==0);
+    /* Queue (re)initialisation still seeds the stamps with the previous
+     * values of the current epoch. */
+    assert(AppleAgxRenderSharedMemoryBuildActiveG4Job(
+        &owner,arena,APPLE_AGX_EXP208_ARENA_BYTES,source_objects,
+        APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,0x1500800000ULL,
+        APPLE_AGX_TRUE,&bindings,&staged_job,active_objects,&active_job));
+    assert(read_u32(active_objects[9].Data)==0x7a000100u);
+    assert(read_u32(active_objects[10].Data)==0x3d000100u);
+    assert(read_u32(active_objects[26].Data)==0x7a000100u);
+    assert(read_u32(active_objects[27].Data)==0x3d000100u);
   }
   assert(AppleAgxRenderSharedMemoryDestroy(&owner) ==
          AppleAgxRenderSharedMemoryResultOk);

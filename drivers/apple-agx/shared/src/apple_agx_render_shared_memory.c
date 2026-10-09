@@ -381,19 +381,20 @@ APPLE_AGX_RENDER_SHARED_MEMORY_RESULT AppleAgxRenderSharedMemoryBuild(
   return Owner->LastResult;
 }
 
+/* Objects the CPU rewrites for every job. The TA/3D stamps (9, 10, 26, 27)
+ * are not among them: as in Asahi event.rs and m1n1 render.py the CPU seeds
+ * them when the queues are (re)initialised and the firmware alone writes
+ * them afterwards, so a later job's build cannot signal an earlier job that
+ * is still running. event_count (12) stays CPU-owned (m1n1: += 2 per job). */
 static APPLE_AGX_BOOL per_submission_object(APPLE_AGX_U32 Index,
                                             APPLE_AGX_BOOL IncludeInitBm) {
   switch (Index) {
-    case 9u:
-    case 10u:
     case 12u:
     case 14u:
     case 15u:
     case 17u:
     case 18u:
     case 19u:
-    case 26u:
-    case 27u:
       return APPLE_AGX_TRUE;
     case 16u:
       return IncludeInitBm;
