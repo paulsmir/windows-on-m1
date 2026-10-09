@@ -8,7 +8,12 @@
 #define APPLE_AGX_G3_PRIVATE_UNIT 0x10000u
 /* Global physical backing is independent of each process reservation. */
 #define APPLE_AGX_G3_PRIVATE_UNITS 1024u
-#define APPLE_AGX_G3_PROCESS_UNITS 128u
+/* EXP1116: 192 units (12 MiB). Two submissions in flight (EXP1093) left
+ * DWM's 128-unit budget (66-unit full-screen manager plus 7-11 units per
+ * scene) evicting a cached scene on nearly every miss; EXP1094 raised it
+ * while every process still held a 4 MiB heap and exhausted the pool.
+ * EXP1115's on-demand heaps leave ~500 of 1024 units free. */
+#define APPLE_AGX_G3_PROCESS_UNITS 192u
 #define APPLE_AGX_G3_PRIVATE_VA_BYTES 0x02000000ULL
 #define APPLE_AGX_G3_PRIVATE_VA_UNITS 512u
 /* The top 4 MiB of each process's private VA are the 32-block TVB heap

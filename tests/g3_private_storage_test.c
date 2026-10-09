@@ -7,7 +7,9 @@ int main(void) {
   unsigned char *cpu=malloc(pool_bytes);
   APPLE_AGX_G3_PRIVATE_POOL pool={0};
   APPLE_AGX_G3_PRIVATE_MANAGER manager={0};
-  APPLE_AGX_G3_PRIVATE_SCENE scenes[3]={{0}};
+  APPLE_AGX_G3_PRIVATE_SCENE scenes[8]={{0}};
+  /* A 66-unit manager plus 27-unit scenes (2560x1600, 16x16 utiles). */
+  const unsigned fit=(APPLE_AGX_G3_PROCESS_UNITS-66u)/27u;
   APPLE_AGX_G4_NATIVE_RENDER r={0};
   r.WidthPx=2560;r.HeightPx=1600;r.Layers=1;r.Samples=1;
   r.UtileWidthPx=r.UtileHeightPx=16;
@@ -36,17 +38,20 @@ int main(void) {
   assert(pages[0]==0x1234);
   for(unsigned i=3;i<9;++i)
     assert(scenes[0].Ranges[i].Va!=scenes[1].Ranges[i].Va);
+  assert(fit>=2u && fit<8u);
+  for(unsigned i=2;i<fit;++i)
+    assert(AppleAgxG3PrivatePrepare(&pool,1,cpu,1ULL<<36,&r,&manager,&scenes[i]));
   APPLE_AGX_G3_PRIVATE_POOL before=pool;
-  assert(!AppleAgxG3PrivatePrepare(&pool,1,cpu,1ULL<<36,&r,&manager,&scenes[2]));
+  assert(!AppleAgxG3PrivatePrepare(&pool,1,cpu,1ULL<<36,&r,&manager,&scenes[fit]));
   for(unsigned i=0;i<APPLE_AGX_G3_PRIVATE_UNITS;++i) assert(!memcmp(&before.Blocks[i],&pool.Blocks[i],sizeof(pool.Blocks[i])));
-  assert(!scenes[2].Generation);
+  assert(!scenes[fit].Generation);
   /* The existing quota refusal must be observed before its partial allocations
    * are rolled back; observing it must not change the restored pool. */
   {
     APPLE_AGX_G3_PRIVATE_PREPARE_DIAGNOSTIC diagnostic={0};
     APPLE_AGX_G3_PRIVATE_POOL_STATS restored;
     assert(!AppleAgxG3PrivatePrepareObserved(&pool,1,cpu,1ULL<<36,&r,
-        &manager,&scenes[2],&diagnostic));
+        &manager,&scenes[fit],&diagnostic));
     assert(diagnostic.Predicate==3u && diagnostic.FailedRange<9u);
     AppleAgxG3PrivatePoolStats(&pool,1,&restored);
     assert(diagnostic.Stats.OwnerUnits>restored.OwnerUnits);

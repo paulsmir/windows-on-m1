@@ -111,12 +111,17 @@ static void r137_private_combined(void) {
   /* Exercise the existing per-owner refusal through the actual typed escape.
    * A later failure must not overwrite its pre-rollback first-cause receipt. */
   {
-    AGX_G4_BATCH second={0}, refused={0};
+    /* 4 table/list units, a 64-unit heap and 27-unit scenes (2560x1600,
+     * 16x16 utiles): the per-owner quota fits `fit` scenes. */
+    const unsigned fit=(APPLE_AGX_G3_PROCESS_UNITS-68u)/27u;
+    AGX_G4_BATCH extra[8]={{0}}, refused={0};
     APPLE_AGX_G4_PROCESS_RANGE scratch[9];
     APPLE_AGX_G3_PRIVATE_REQUEST drop={0};
     a.PhysicalDeviceObject=(PDEVICE_OBJECT)1;
     ULONG writes=private_registry_writes;
-    assert(prepare_process_buffers(&umd,&second,r,scratch));
+    assert(fit>=2u && fit<=8u);
+    for(unsigned i=1;i<fit;++i) assert(prepare_process_buffers(&umd,&extra[i],r,scratch));
+    assert(private_registry_writes==writes);
     assert(!prepare_process_buffers(&umd,&refused,r,scratch));
     assert(a.G3PrivateFailureClaim==2 && private_registry_writes==writes+1);
     APPLE_AGX_G3_PRIVATE_FAILURE first=a.G3PrivateFailure;
@@ -124,16 +129,18 @@ static void r137_private_combined(void) {
     assert(first.Branch==11 && first.Status==(UINT)STATUS_INSUFFICIENT_RESOURCES);
     assert(first.PreparePredicate==3 && first.FailedRange<9);
     assert(first.ProcessId==p->Graph.ProcessId && first.ContextHandle==(uintptr_t)&context);
-    assert(first.SceneCount==2 && first.ContextSceneCount==2 && first.ManagerPresent);
+    assert(first.SceneCount==fit && first.ContextSceneCount==fit && first.ManagerPresent);
     assert(!memcmp(&first,&private_registry_receipt,sizeof(first)));
     assert(!prepare_process_buffers(&umd,&refused,r,scratch));
     assert(!memcmp(&first,&a.G3PrivateFailure,sizeof(first)));
     assert(private_registry_writes==writes+1);
     drop.Magic=APPLE_AGX_G3_PRIVATE_MAGIC;drop.Version=1;drop.Bytes=sizeof(drop);
     drop.Operation=APPLE_AGX_G3_PRIVATE_RELEASE;
-    drop.ManagerId=second.Lease.ManagerId;drop.ManagerGeneration=second.Lease.ManagerGeneration;
-    drop.SceneId=second.Lease.SceneId;drop.SceneGeneration=second.Lease.SceneGeneration;
-    assert(r137_escape_transport(&t,&drop));
+    for(unsigned i=1;i<fit;++i) {
+      drop.ManagerId=extra[i].Lease.ManagerId;drop.ManagerGeneration=extra[i].Lease.ManagerGeneration;
+      drop.SceneId=extra[i].Lease.SceneId;drop.SceneGeneration=extra[i].Lease.SceneGeneration;
+      assert(r137_escape_transport(&t,&drop));
+    }
   }
   struct agx_resource target={.bo=&target,.va=0x20000,
       .layout={.size_B=2560ULL*1600*4}};
