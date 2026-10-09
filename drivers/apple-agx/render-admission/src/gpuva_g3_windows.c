@@ -429,6 +429,75 @@ static BOOLEAN AdmissionG3PrivateReleaseScene(ADMISSION_G3_PROCESS *p,
   return TRUE;
 }
 
+/* EXP1085: every job mapped ~36 private-storage pages at ACQUIRE and revoked
+ * them at release, one broker call per 16 KiB page (376 ms of hypervisor
+ * traps per second under DWM), and ACQUIRE waited for the process's job in
+ * flight because the broker refuses table changes then. A scene whose job
+ * completed and was reported stays mapped instead and is reused, zeroed and
+ * with a fresh generation, by an ACQUIRE of the same context and geometry.
+ * Cancelled, unqueued and quarantined scenes keep the unmap/free path. */
+static BOOLEAN AdmissionG3PrivateCacheScene(ADMISSION_G3_PROCESS *p,
+    ADMISSION_G3_PRIVATE_SCENE *scene) {
+  ADMISSION_G3_PRIVATE_SCENE *s;
+  UINT cached=0u;
+  if (scene->Cached) return TRUE;
+  if (!scene->ReleaseRequested || !scene->Reported || scene->Queued ||
+      scene->Submitting || scene->Quarantined || p->Poisoned ||
+      p->Graph.Uncertain || scene->Context->GpuvaG3Closing) return FALSE;
+  for (s=p->PrivateScenes;s;s=s->Next) if (s->Cached) ++cached;
+  if (cached>=ADMISSION_G3_PRIVATE_SCENE_CACHE) return FALSE;
+  scene->Cached=1u;
+  return TRUE;
+}
+
+static ADMISSION_G3_PRIVATE_SCENE *AdmissionG3PrivateCachedScene(
+    ADMISSION_G3_PROCESS *p, HANDLE context,
+    const APPLE_AGX_G3_PRIVATE_REQUEST *q) {
+  ADMISSION_G3_PRIVATE_SCENE *s;
+  if (q->Operation!=APPLE_AGX_G3_PRIVATE_ACQUIRE || !p->PrivateManager.Generation)
+    return NULL;
+  for (s=p->PrivateScenes;s;s=s->Next)
+    if (s->Cached && (HANDLE)s->Context==context &&
+        s->Geometry.WidthPx==q->Width && s->Geometry.HeightPx==q->Height &&
+        s->Geometry.UtileWidthPx==q->UtileWidth &&
+        s->Geometry.UtileHeightPx==q->UtileHeight) return s;
+  return NULL;
+}
+
+/* Zero a cached scene's storage as construction does and renew every extent's
+ * generation; no table or broker change. A failure quarantines the scene. */
+static BOOLEAN AdmissionG3PrivateReuseScene(ADMISSION_G3_PROCESS *p,
+    ADMISSION_G3_PRIVATE_SCENE *scene, ADMISSION_BACKEND_MEMORY_VIEW *view) {
+  UINT i;
+  for (i=0;i<6;++i) {
+    APPLE_AGX_G3_PRIVATE_EXTENT *e=&scene->Storage.Extents[i];
+    RtlZeroMemory((PUCHAR)view->CpuAddress+e->Offset,e->Bytes);
+    if (!AppleAgxG3PrivateRenew(&p->State->PrivatePool,p->Graph.ProcessId,e)) {
+      scene->Quarantined=1u;ADMISSION_G3_POISON(p,1u);return FALSE;
+    }
+  }
+  KeMemoryBarrier();
+  scene->Storage.Generation=scene->Storage.Extents[0].Generation;
+  scene->Fence=scene->ResumeFence=0u;
+  scene->Submitting=scene->Queued=scene->Started=scene->GpuDone=scene->Reported=0u;
+  scene->ReleaseRequested=scene->Cached=0u;
+  return TRUE;
+}
+
+/* Pool pressure: unmap and free every cached scene (no job in flight). */
+static BOOLEAN AdmissionG3PrivateEvictCached(ADMISSION_G3_PROCESS *p,
+    ADMISSION_BACKEND_MEMORY_VIEW *view) {
+  ADMISSION_G3_PRIVATE_SCENE *s,*next;
+  BOOLEAN evicted=FALSE;
+  for (s=p->PrivateScenes;s;s=next) {
+    next=s->Next;
+    if (!s->Cached) continue;
+    if (!AdmissionG3PrivateReleaseScene(p,s,view)) return FALSE;
+    evicted=TRUE;
+  }
+  return evicted;
+}
+
 /* Interrupt/DPC owners hold SchedulerLock and publish only a cancellation
  * marker. The matching scene reference pins Context until PASSIVE reaping. */
 VOID AdmissionGpuvaG3PrivateCancel(ADMISSION_RENDER_CONTEXT *context,
@@ -472,7 +541,7 @@ static BOOLEAN AdmissionG3PrivateReap(ADMISSION_G3_PROCESS *p) {
       }
     }
     if (s->Quarantined || p->Graph.Uncertain) continue;
-    if (s->ReleaseRequested && !s->Queued &&
+    if (s->ReleaseRequested && !s->Queued && !AdmissionG3PrivateCacheScene(p,s) &&
         !p->Graph.JobInFlight && !p->Graph.LeaseToken &&
         !AdmissionG3PrivateReleaseScene(p,s,&view)) return FALSE;
   }
@@ -1495,7 +1564,8 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
     ExAcquireFastMutex(&state->Lock);
     p=AdmissionGpuvaG3FindProcess(state,args->hKmdProcessHandle);
     if (!p || q.Operation==APPLE_AGX_G3_PRIVATE_RELEASE ||
-        (!p->Graph.JobInFlight && !p->Graph.LeaseToken) || wait_ms>=3000u) break;
+        (!p->Graph.JobInFlight && !p->Graph.LeaseToken) || wait_ms>=3000u ||
+        AdmissionG3PrivateCachedScene(p,args->hContext,&q)) break;
     ExReleaseFastMutex(&state->Lock);
     delay.QuadPart=-10000LL;
     (void)KeDelayExecutionThread(KernelMode,FALSE,&delay);
@@ -1512,6 +1582,7 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
   /* Software-entry preparation must not reap or mutate tables after its
    * bounded quiescence wait timed out. The broker also checks owner jobs. */
   if (q.Operation!=APPLE_AGX_G3_PRIVATE_RELEASE &&
+      !AdmissionG3PrivateCachedScene(p,args->hContext,&q) &&
       (p->Graph.JobInFlight || p->Graph.LeaseToken))
     {status=STATUS_DEVICE_BUSY;PRIVATE_CAPTURE(7u,~0u,NULL);goto Done;}
   if (!AdmissionG3PrivateReap(p)) {status=STATUS_DEVICE_HARDWARE_ERROR;PRIVATE_CAPTURE(3u,~0u,NULL);goto Done;}
@@ -1531,7 +1602,7 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
      * submission reference or another job/lease of this owner defers actual
      * unmap/free to the existing completion/acquire/context reaper. Never
      * require Windows to drain unrelated GPU work to acknowledge a release. */
-    if (scene->Queued || scene->Submitting ||
+    if (scene->Queued || scene->Submitting || AdmissionG3PrivateCacheScene(p,scene) ||
         p->Graph.JobInFlight || p->Graph.LeaseToken)
       { status=STATUS_SUCCESS;goto Done; }
     status=AdmissionG3PrivateReleaseScene(p,scene,&view) ? STATUS_SUCCESS : STATUS_DEVICE_BUSY;
@@ -1547,6 +1618,16 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
         q.ManagerGeneration!=p->PrivateManager.Generation ||
         context->GpuvaG3PrivateManagerGeneration!=q.ManagerGeneration) goto Done;
   } else goto Done;
+  scene=AdmissionG3PrivateCachedScene(p,args->hContext,&q);
+  if (scene) {
+    if (!AdmissionG3PrivateReuseScene(p,scene,&view))
+      {status=STATUS_DEVICE_HARDWARE_ERROR;goto Done;}
+    q.ManagerId=p->Graph.ProcessId;q.ManagerGeneration=p->PrivateManager.Generation;
+    q.SceneId=q.SceneGeneration=scene->Storage.Generation;
+    RtlCopyMemory(q.Ranges,scene->Storage.Ranges,sizeof(q.Ranges));
+    context->GpuvaG3PrivateManagerGeneration=q.ManagerGeneration;
+    RtlCopyMemory(args->pPrivateDriverData,&q,sizeof(q));status=STATUS_SUCCESS;goto Done;
+  }
   RtlZeroMemory(&render,sizeof(render));
   render.WidthPx=(USHORT)q.Width;render.HeightPx=(USHORT)q.Height;
   render.UtileWidthPx=(UCHAR)q.UtileWidth;render.UtileHeightPx=(UCHAR)q.UtileHeight;
@@ -1559,6 +1640,10 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
   RtlZeroMemory(scene,sizeof(*scene));scene->Context=context;scene->Geometry=render;
   fresh=p->PrivateManager.Generation==0;
   status=AdmissionG3PreparePrivateStorageObserved(p,&render,&p->PrivateManager,&scene->Storage,&prepare);
+  if (status==STATUS_INSUFFICIENT_RESOURCES && AdmissionG3PrivateEvictCached(p,&view)) {
+    RtlZeroMemory(&prepare,sizeof(prepare));
+    status=AdmissionG3PreparePrivateStorageObserved(p,&render,&p->PrivateManager,&scene->Storage,&prepare);
+  }
   if (!NT_SUCCESS(status)) {PRIVATE_CAPTURE(11u,~0u,NULL);ExFreePoolWithTag(scene,ADMISSION_POOL_TAG);goto Done;}
   scene->Next=p->PrivateScenes;p->PrivateScenes=scene;
   if (fresh)

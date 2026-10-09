@@ -177,21 +177,28 @@ static void r137_private_combined(void) {
   assert(!p->Graph.JobInFlight); /* Notify retry owns the adapter boundary. */
   assert(scratch[0]==0x5a && state.PrivatePool.Blocks[scratch_offset>>16].Owner);
   const char *fault=getenv("G3_REPLAY_R137_QUARANTINE");
-  if(fault && !strcmp(fault,"revoke")) broker.sync_failures=2;
   replay_sync_fail=0;
   assert(AdmissionBackendComplete(&runtime,41,0,0,AppleAgxBackendCompletionSuccess));
   assert(replay_notify_count==1 && !context.Object.FenceOutstanding);
+  /* EXP1086: the reported, released scene stays mapped for reuse. */
+  assert(p->PrivateScenes==scene && scene->Cached && !context.GpuvaG3PrivateFence);
+  assert(state.PrivatePool.Blocks[scratch_offset>>16].Owner && scratch[0]==0x5a);
   if(fault && !strcmp(fault,"revoke")) {
+    /* Its eventual unmap (here: context retirement) quarantines on a failed revoke. */
+    assert(!p->Poisoned);
+    broker.sync_failures=2;
+    assert(!AdmissionGpuvaG3PrivateRetireContext(&context));
     assert(p->Poisoned && p->Graph.Uncertain && scene->Quarantined);
     assert(state.PrivatePool.Blocks[scratch_offset>>16].Owner && scratch[0]==0x5a);
-    assert(!AdmissionGpuvaG3PrivateRetireContext(&context));
     goto Quarantine;
   }
-  assert(!p->PrivateScenes && !context.GpuvaG3PrivateFence);
-  assert(!state.PrivatePool.Blocks[scratch_offset>>16].Owner);
-  for(unsigned i=0;i<scratch_bytes;++i) assert(!scratch[i]);
   AGX_G4_BATCH next={0};
+  UINT broker_commands=broker.commands;
   assert(prepare_process_buffers(&umd,&next,r,ranges));
+  /* Reuse: no table change and no broker call; zeroed as construction does. */
+  assert(broker.commands==broker_commands);
+  assert(p->PrivateScenes==scene && !scene->Cached && !scene->ReleaseRequested);
+  for(unsigned i=0;i<scratch_bytes;++i) assert(!scratch[i]);
   assert(next.Lease.SceneGeneration!=batch.Lease.SceneGeneration);
   assert(!r137_escape_transport(&t,&release)); /* Old generation cannot release reused bytes. */
   scene=p->PrivateScenes;assert(scene && scene->Storage.Ranges[3].Va==p->PrivateVa+scratch_va_offset);

@@ -63,7 +63,14 @@ typedef struct _ADMISSION_G3_PRIVATE_SCENE {
   APPLE_AGX_G3_PRIVATE_SCENE Storage;
   APPLE_AGX_G4_NATIVE_RENDER Geometry;
   ULONG Fence, ResumeFence, Submitting, Queued, Started, GpuDone, Reported, ReleaseRequested, Quarantined;
+  /* EXP1086: released after a reported completion and kept mapped for reuse
+   * by an ACQUIRE of the same context and geometry. */
+  ULONG Cached;
 } ADMISSION_G3_PRIVATE_SCENE;
+
+/* EXP1086: released scenes a process keeps mapped (each ~0.6 MiB of its
+ * 8 MiB private budget); more are unmapped and freed as before. */
+#define ADMISSION_G3_PRIVATE_SCENE_CACHE 4u
 
 typedef struct _ADMISSION_G3_PROCESS {
   LIST_ENTRY Link;

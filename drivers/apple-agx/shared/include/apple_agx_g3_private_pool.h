@@ -96,8 +96,10 @@ static inline int AppleAgxG3PrivateAllocate(APPLE_AGX_G3_PRIVATE_POOL *p,
   return 1;
 }
 
-static inline int AppleAgxG3PrivateFree(APPLE_AGX_G3_PRIVATE_POOL *p,
-    unsigned long long owner, const APPLE_AGX_G3_PRIVATE_EXTENT *e) {
+/* The blocks of `e` as allocated to `owner` with e's generation. */
+static inline int AppleAgxG3PrivateOwned(const APPLE_AGX_G3_PRIVATE_POOL *p,
+    unsigned long long owner, const APPLE_AGX_G3_PRIVATE_EXTENT *e,
+    unsigned *first_out, unsigned *count_out) {
   unsigned first, count;
   if (!p || !e || !owner || !e->Generation || !e->Bytes ||
       ((e->Offset|e->Bytes|e->VaOffset)&(APPLE_AGX_G3_PRIVATE_UNIT-1)) ||
@@ -113,7 +115,30 @@ static inline int AppleAgxG3PrivateFree(APPLE_AGX_G3_PRIVATE_POOL *p,
     if (p->Blocks[i].Owner!=owner || p->Blocks[i].Generation!=e->Generation ||
         p->Blocks[i].First!=first || p->Blocks[i].Count!=count ||
         p->Blocks[i].VaFirst!=e->VaOffset/APPLE_AGX_G3_PRIVATE_UNIT) return 0;
-  for (unsigned i=first; i<APPLE_AGX_G3_PRIVATE_UNITS && i<first+count; ++i)
+  *first_out=first; *count_out=count;
+  return 1;
+}
+
+/* EXP1086: a released extent the same owner keeps (still mapped, its bytes
+ * zeroed by the caller) takes a fresh generation, so leases naming the old
+ * generation can no longer match it. */
+static inline int AppleAgxG3PrivateRenew(APPLE_AGX_G3_PRIVATE_POOL *p,
+    unsigned long long owner, APPLE_AGX_G3_PRIVATE_EXTENT *e) {
+  unsigned first, count;
+  if (!AppleAgxG3PrivateOwned(p,owner,e,&first,&count) ||
+      p->NextGeneration == ~0ULL) return 0;
+  ++p->NextGeneration;
+  for (unsigned i=first; i<first+count; ++i)
+    p->Blocks[i].Generation=p->NextGeneration;
+  e->Generation=p->NextGeneration;
+  return 1;
+}
+
+static inline int AppleAgxG3PrivateFree(APPLE_AGX_G3_PRIVATE_POOL *p,
+    unsigned long long owner, const APPLE_AGX_G3_PRIVATE_EXTENT *e) {
+  unsigned first, count;
+  if (!AppleAgxG3PrivateOwned(p,owner,e,&first,&count)) return 0;
+  for (unsigned i=first; i<first+count; ++i)
     p->Blocks[i]=(APPLE_AGX_G3_PRIVATE_BLOCK){0};
   return 1;
 }
