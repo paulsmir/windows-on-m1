@@ -24,6 +24,57 @@ struct windows_bo {
 #endif
 };
 static void native_map(struct agx_device *,struct agx_bo *,void *);
+
+/* EXP1091: EXP1089 CSwitch samples put ~11 % of DWM's composition thread in
+ * AgxWin32AsahiLookupBo: each referenced handle walked every registered BO
+ * through the owner's NextBo, one shared lock per step. Index live BOs by
+ * handle instead (linear probing, backward-shift deletion). */
+static APPLE_AGX_U32 handle_slot(APPLE_AGX_U32 handle,APPLE_AGX_U32 mask) {
+  return (handle*2654435761u)&mask;
+}
+static void handle_map_place(void **map,APPLE_AGX_U32 mask,struct windows_bo *bo) {
+  APPLE_AGX_U32 i=handle_slot(bo->Base.handle,mask);
+  while(map[i]) i=(i+1)&mask;
+  map[i]=bo;
+}
+static int handle_map_put(AGX_WIN32_ASAHI_BACKEND *b,struct windows_bo *bo) {
+  if((b->HandleMapCount+1u)*2u>b->HandleMapCap) {
+    APPLE_AGX_U32 cap=b->HandleMapCap?b->HandleMapCap*2u:256u;
+    void **map;
+    if(cap<b->HandleMapCap || !(map=calloc(cap,sizeof(*map)))) return 0;
+    for(APPLE_AGX_U32 i=0;i<b->HandleMapCap;++i)
+      if(b->HandleMap[i]) handle_map_place(map,cap-1u,(struct windows_bo *)b->HandleMap[i]);
+    free(b->HandleMap);
+    b->HandleMap=map; b->HandleMapCap=cap;
+  }
+  handle_map_place(b->HandleMap,b->HandleMapCap-1u,bo);
+  ++b->HandleMapCount;
+  return 1;
+}
+static void handle_map_remove(AGX_WIN32_ASAHI_BACKEND *b,struct windows_bo *bo) {
+  APPLE_AGX_U32 mask,i,j;
+  if(!b->HandleMapCap) return;
+  mask=b->HandleMapCap-1u;
+  for(i=handle_slot(bo->Base.handle,mask);b->HandleMap[i]!=bo;i=(i+1)&mask)
+    if(!b->HandleMap[i]) return;
+  b->HandleMap[i]=NULL; --b->HandleMapCount;
+  for(j=(i+1)&mask;b->HandleMap[j];j=(j+1)&mask) {
+    APPLE_AGX_U32 home=handle_slot(((struct windows_bo *)b->HandleMap[j])->Base.handle,mask);
+    /* Move the entry back unless its home lies cyclically in (i, j]. */
+    if(i<=j ? (home<=i || home>j) : (home<=i && home>j)) {
+      b->HandleMap[i]=b->HandleMap[j]; b->HandleMap[j]=NULL; i=j;
+    }
+  }
+}
+static struct windows_bo *handle_map_get(const AGX_WIN32_ASAHI_BACKEND *b,APPLE_AGX_U32 handle) {
+  APPLE_AGX_U32 mask,i;
+  if(!b->HandleMapCap) return NULL;
+  mask=b->HandleMapCap-1u;
+  for(i=handle_slot(handle,mask);b->HandleMap[i];i=(i+1)&mask)
+    if(((struct windows_bo *)b->HandleMap[i])->Base.handle==handle)
+      return (struct windows_bo *)b->HandleMap[i];
+  return NULL;
+}
 static int release_map(const void *key,const void *expected,int commit) {
   struct windows_bo *bo=(struct windows_bo *)key;
   if(!bo || !expected || bo->Base._map!=expected ||
@@ -127,6 +178,7 @@ static int dispose(struct windows_bo *bo) {
   if(bo->Gpuva.Bound && !AgxWin32GpuvaUnbind(&b->Gpuva,&bo->Gpuva))
     b->PendingVa[b->PendingVaCount++]=bo->Gpuva;
 #endif
+  handle_map_remove(b,bo);
   --b->LiveBos;
   free(bo);
   return 1;
@@ -285,6 +337,7 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
     AGX_WIN32_ASAHI_FAIL(b, 1u); return NULL;
   }
   ++b->LiveBos;
+  (void)handle_map_put(b,bo); /* a miss falls back to the owner walk */
   return &bo->Base;
 }
 
@@ -343,6 +396,7 @@ struct agx_bo *AgxWin32AsahiImportBo(
     AGX_WIN32_ASAHI_FAIL(b, 1u);return NULL;
   }
   ++b->LiveBos;
+  (void)handle_map_put(b,bo); /* a miss falls back to the owner walk */
   return &bo->Base;
 }
 
@@ -449,6 +503,7 @@ int AgxWin32AsahiDetach(AGX_WIN32_ASAHI_BACKEND *b) {
   b->Native->ops.bo_mmap=NULL;
   b->Ops.Leave(b->Owner);
   b->Native=NULL;
+  free(b->HandleMap); b->HandleMap=NULL; b->HandleMapCap=b->HandleMapCount=0;
   /* Failed detach returns above with the original transaction owner intact.
    * A completed detach may reuse this backend for another native screen. */
   b->BatchOps=NULL;
@@ -572,6 +627,12 @@ struct agx_bo *AgxWin32AsahiLookupBo(struct agx_device *native,uint32_t handle) 
   APPLE_AGX_U32 cursor=0;
   const void *key;
   if(!b || !handle) return NULL;
+  {
+    struct windows_bo *hit=handle_map_get(b,handle);
+    AGX_WIN32_RELOC_ALLOCATION id;
+    if(hit && hit->Base.dev==native && hit->Base.refcnt>0 &&
+       AgxWin32AsahiIdentity(b,&hit->Base,&id)) return &hit->Base;
+  }
   while((key=b->Ops.NextBo(b->Owner,&cursor))!=NULL) {
     struct agx_bo *bo=(struct agx_bo *)key;
     AGX_WIN32_RELOC_ALLOCATION id;
