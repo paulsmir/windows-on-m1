@@ -51,6 +51,7 @@ int AgxWin32AsahiBatchDrawRefused(struct agx_context *,const struct pipe_draw_in
     const struct pipe_draw_indirect_info *,const struct pipe_draw_start_count_bias *,unsigned);
 int AgxWin32AsahiBatchFinish(struct agx_batch *,const struct drm_asahi_cmd_render *);
 int AgxWin32AsahiBatchPoll(struct agx_batch *,APPLE_AGX_U32);
+void AgxWin32AsahiBatchDiagnostic(struct agx_batch *,APPLE_AGX_U32 out[2]);
 int AgxWin32AsahiBatchAbort(struct agx_batch *);
 int AgxWin32AsahiBatchRelease(struct agx_batch *);
 void AgxWin32AsahiMarkContextFault(struct agx_context *,unsigned);

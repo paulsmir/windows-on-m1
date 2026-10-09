@@ -86,6 +86,11 @@ void *AgxWin32AsahiBufferCurrentMap(struct pipe_context *, struct pipe_resource 
 void *AgxWin32AsahiBufferWriteMap(struct pipe_context *, struct pipe_resource *);
 void AgxWin32AsahiContextDiagnostic(struct pipe_context *,
     APPLE_AGX_U32 State[16], APPLE_AGX_U32 Bindings[16]);
+/* EXP1083 receipt-only: per batch slot capsule flags | active << 8 |
+ * submitted << 9 and fence (8 values), then any_faults, backend Failed,
+ * held | terminal << 1 | last refused line << 8, held render fence. */
+void AgxWin32AsahiContextRetireDiagnostic(struct pipe_context *,
+    APPLE_AGX_U32 State[12]);
 int AgxWin32AsahiContextDrawReceipt(struct pipe_context *);
 int AgxWin32AsahiSetStreamOutputTargetOffsetForTest(
     struct pipe_stream_output_target *,APPLE_AGX_U32);

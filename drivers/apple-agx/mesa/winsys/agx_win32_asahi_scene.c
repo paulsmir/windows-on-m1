@@ -248,6 +248,28 @@ int AgxWin32AsahiResourceBusy(struct pipe_context *ctx,struct pipe_resource *res
   }
   return 0;
 }
+void AgxWin32AsahiContextRetireDiagnostic(struct pipe_context *ctx,
+    APPLE_AGX_U32 state[12]) {
+  memset(state,0,12*sizeof(*state));
+  if(!ctx) return;
+  struct agx_context *n=agx_context(ctx);
+  AGX_WIN32_ASAHI_BACKEND *d=agx_device(ctx->screen)->windows_private;
+#if defined(APPLE_AGX_GPUVA_WINSYS)
+  for(unsigned i=0;i<AGX_MAX_BATCHES && i<4u;++i) {
+    APPLE_AGX_U32 slot[2];
+    AgxWin32AsahiBatchDiagnostic(&n->batches.slots[i],slot);
+    state[2u*i]=slot[0]|((APPLE_AGX_U32)BITSET_TEST(n->batches.active,i)<<8)|
+        ((APPLE_AGX_U32)BITSET_TEST(n->batches.submitted,i)<<9);
+    state[2u*i+1u]=slot[1];
+  }
+  if(d) {
+    state[10]=(APPLE_AGX_U32)(d->Gpuva.Held!=NULL)|((APPLE_AGX_U32)(d->Gpuva.Terminal!=0)<<1)|
+        (d->Gpuva.LastFailure<<8);
+    state[11]=(APPLE_AGX_U32)d->Gpuva.RenderFence;
+  }
+#endif
+  state[8]=n->any_faults;state[9]=d?(APPLE_AGX_U32)d->Failed:0u;
+}
 void AgxWin32AsahiContextDiagnostic(struct pipe_context *ctx,
     APPLE_AGX_U32 state[16],APPLE_AGX_U32 bindings[16]) {
   memset(state,0,16*sizeof(*state));memset(bindings,0,16*sizeof(*bindings));

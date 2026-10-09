@@ -512,7 +512,12 @@ int AgxWin32AsahiBatchPoll(struct agx_batch *batch,APPLE_AGX_U32 timeout) {
   (void)timeout;
   if(!g || g->Retired || g->Rejected) return 1;
   if(!b || !g->Submitted || !g->Fence) return 0;
-  if(!AgxWin32GpuvaRetire(&b->Gpuva,g->Fence)) return 0;
+  /* EXP1082: a CPU map may already have retired this submission's residency
+   * set (native_map); then only its fence is waited for. */
+  if(b->Gpuva.Held && b->Gpuva.RenderFence==g->Fence) {
+    if(!AgxWin32GpuvaRetire(&b->Gpuva,g->Fence)) return 0;
+  } else if(b->Gpuva.Terminal || !b->Gpuva.Ops.WaitRender ||
+            !b->Gpuva.Ops.WaitRender(b->Gpuva.Context,g->Fence)) return 0;
   g->Retired=1;
   (void)release_lease(b,g); /* a failed release is retried by Release */
   return 1;
@@ -524,6 +529,14 @@ int AgxWin32AsahiBatchAbort(struct agx_batch *batch) {
   g->Entered=0;
   g->Rejected=1;
   return 1;
+}
+/* EXP1083 receipt-only: capsule state of one batch slot. */
+void AgxWin32AsahiBatchDiagnostic(struct agx_batch *batch,APPLE_AGX_U32 out[2]) {
+  AGX_G4_BATCH *g=capsule(batch);
+  out[0]=(APPLE_AGX_U32)(g!=NULL)|((APPLE_AGX_U32)(g && g->Submitted)<<1)|
+      ((APPLE_AGX_U32)(g && g->Retired)<<2)|((APPLE_AGX_U32)(g && g->Rejected)<<3)|
+      ((APPLE_AGX_U32)(g && g->Entered)<<4)|((APPLE_AGX_U32)(g && g->Lease.SceneId)<<5);
+  out[1]=g?(APPLE_AGX_U32)g->Fence:0u;
 }
 int AgxWin32AsahiBatchRelease(struct agx_batch *batch) {
   AGX_G4_BATCH *g=capsule(batch);

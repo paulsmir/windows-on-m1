@@ -59,7 +59,8 @@ static int private_escape(void *context, APPLE_AGX_G3_PRIVATE_REQUEST *r) {
 }
 typedef struct {
   struct { uint64_t *Held; uint64_t RenderFence; unsigned Terminal; void *Context;
-    struct { int (*PrivateEscape)(void *, APPLE_AGX_G3_PRIVATE_REQUEST *); } Ops; } Gpuva;
+    struct { int (*PrivateEscape)(void *, APPLE_AGX_G3_PRIVATE_REQUEST *);
+      int (*WaitRender)(void *, uint64_t); } Ops; } Gpuva;
   int GpuvaReady, Failed;
 } AGX_WIN32_ASAHI_BACKEND;
 struct agx_bo { int unused; };
@@ -86,7 +87,8 @@ static struct agx_device *agx_device(struct pipe_screen *s) { return &s->dev; }
 static void AgxWin32AsahiPublishPages(struct agx_device *d) { (void)d; }
 static void AgxWin32PerfNote(const char *fmt, ...) { (void)fmt; }
 void (*AgxWin32BatchRefusalHook)(unsigned, unsigned, unsigned, unsigned);
-static unsigned flushes, retires;
+static unsigned flushes, retires, waits;
+static int wait_render(void *context, uint64_t fence) { (void)context; (void)fence; ++waits; return 1; }
 static uint64_t completed_fence = ~0ull;
 static int AgxWin32GpuvaComplete(void *space, uint64_t fence) {
   (void)space; return fence && fence <= completed_fence;
@@ -122,6 +124,7 @@ static int submit(AGX_WIN32_ASAHI_BACKEND *b, struct agx_batch *batch, uint64_t 
 int main(void) {
   AGX_WIN32_ASAHI_BACKEND backend = {{0}, 1, 0};
   backend.Gpuva.Ops.PrivateEscape = private_escape;
+  backend.Gpuva.Ops.WaitRender = wait_render;
   struct pipe_screen screen = {{&backend}};
   struct agx_batch slots[AGX_MAX_BATCHES];
   struct agx_bo vdm;
@@ -165,7 +168,20 @@ int main(void) {
   BITSET_SET(ctx.batches.active, 1); assert(AgxWin32AsahiBatchBegin(&slots[1]));
   assert(retires == before + 2 && !slots[3].windows_batch && !slots[0].windows_batch);
   assert(!backend.Gpuva.Held && live_leases == 0 && flushes == 0);
-  free(slots[1].windows_batch);
+  /* A CPU map retired F's residency set out of band (native_map): F is not
+   * marked retired, nothing holds, and later polls wait for its fence only. */
+  BITSET_CLEAR(ctx.batches.active, 1);
+  completed_fence = 29;
+  assert(submit(&backend, &slots[1], 30));
+  assert(AgxWin32GpuvaRetire(&backend.Gpuva, 30) && !backend.Gpuva.Held);
+  assert(!capsule(&slots[1])->Retired && live_leases == 1);
+  BITSET_SET(ctx.batches.active, 2); assert(AgxWin32AsahiBatchBegin(&slots[2]));
+  assert(slots[1].windows_batch && waits == 0);
+  assert(submit(&backend, &slots[2], 31));
+  completed_fence = 31;
+  BITSET_SET(ctx.batches.active, 3); assert(AgxWin32AsahiBatchBegin(&slots[3]));
+  assert(waits == 1 && !slots[1].windows_batch && !slots[2].windows_batch && live_leases == 0);
+  free(slots[3].windows_batch);
   puts("PASS");
   return 0;
 }

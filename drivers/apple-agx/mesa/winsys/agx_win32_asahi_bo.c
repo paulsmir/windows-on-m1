@@ -373,6 +373,15 @@ static void native_map(struct agx_device *native,struct agx_bo *base,void *fixed
   void *address=NULL;
   AGX_WIN32_ASAHI_BACKEND *b=native->windows_private;
   if(!b || b!=bo->Backend || fixed || b->Failed || base->refcnt<=0) return;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  /* EXP1082: a submission now returns once queued, so the one in flight may
+   * still hold this BO's slot, which refuses a CPU map (DWM's backend failed
+   * on such a first map every ~2.3 s), and its completion must run before
+   * CPU access. Retire it first, as the next submission would. */
+  if(cache_in_flight(b,bo) && !AgxWin32GpuvaRetire(&b->Gpuva,b->Gpuva.RenderFence)) {
+    AGX_WIN32_ASAHI_FAIL(b, 1u); return;
+  }
+#endif
   if(AgxWin32NativeBoMap(b->Buffers.Screen,&bo->Backing,AppleAgxWin32BufferCpuWrite,&address)
       !=AgxWin32NativeBoSuccess) { AGX_WIN32_ASAHI_FAIL(b, 1u); return; }
   base->_map=address;

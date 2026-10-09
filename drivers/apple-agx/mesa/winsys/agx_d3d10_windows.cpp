@@ -674,6 +674,23 @@ HRESULT AgxD3d10WindowsFlushDeferredResources(AGX_D3D10_WINDOWS_DEVICE *Device) 
   return S_OK;
 }
 
+/* EXP1083 receipt-only: why a flush-retire failed (EXP1082: DWM ResourceMap
+ * returned ERROR_BUSY): step 1 context retirement, 2 presentation collection;
+ * timeout, result, screen error, draw terminal, pending presentations, then
+ * AgxWin32AsahiContextRetireDiagnostic. The first 16 per process. */
+static void flush_retire_receipt(AGX_D3D10_WINDOWS_DEVICE *Device,UINT step,
+                                 DWORD timeout,HRESULT result) {
+  static volatile LONG reported;
+  if(InterlockedIncrement(&reported)>16) return;
+  APPLE_AGX_U32 state[12];
+  AgxWin32AsahiContextRetireDiagnostic(Device->Context,state);
+  UINT values[18]={step,(UINT)timeout,(UINT)result,
+      (UINT)Device->Runtime.LastScreenError,(UINT)Device->Runtime.DrawTerminal,
+      (UINT)(Device->PendingPresentations!=NULL)};
+  for(UINT i=0;i<12u;++i) values[6u+i]=state[i];
+  AdmissionUmdDiagnostic("reject-flush-retire",result,values,ARRAYSIZE(values));
+}
+
 static HRESULT flush_retire(AGX_D3D10_WINDOWS_DEVICE *Device,DWORD timeout) {
   if(!Device || Device->Stage!=AgxD3d10DeviceReady || !Device->Context)
     return E_INVALIDARG;
@@ -683,14 +700,17 @@ static HRESULT flush_retire(AGX_D3D10_WINDOWS_DEVICE *Device,DWORD timeout) {
   if(!AgxWin32AsahiContextRetire(Device->Context,timeout)) {
     result=FAILED(Device->Runtime.LastScreenError)?
         Device->Runtime.LastScreenError:HRESULT_FROM_WIN32(ERROR_BUSY);
+    flush_retire_receipt(Device,1u,timeout,result);
     /* Only an unsignalled fence in a zero-time poll is a nonblocking retry.
      * Preserve real errors and keep all submission holds until completion. */
     if(timeout==0 && result==HRESULT_FROM_WIN32(ERROR_TIMEOUT))
       return DXGI_DDI_ERR_WASSTILLDRAWING;
     return result;
   }
-  if(!collect_presentations(Device))
+  if(!collect_presentations(Device)) {
+    flush_retire_receipt(Device,2u,timeout,HRESULT_FROM_WIN32(ERROR_BUSY));
     return timeout==0 ? DXGI_DDI_ERR_WASSTILLDRAWING : HRESULT_FROM_WIN32(ERROR_BUSY);
+  }
   return S_OK;
 }
 HRESULT AgxD3d10WindowsFlushRetire(AGX_D3D10_WINDOWS_DEVICE *Device) {
