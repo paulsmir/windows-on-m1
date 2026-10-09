@@ -216,6 +216,51 @@ int main(void) {
       assert(objects[39].GpuVa == render.IspDbiasBase);
       assert(objects[40].GpuVa == packet.Attachment.Pointer);
       assert(objects[63].GpuVa == render.SamplerHeap);
+      /* Dynamic TVB (Asahi buffer.rs ensure_blocks): the KMD backs the first
+       * HeapBlocks of the 32-block window and the buffer manager, InitBM and
+       * BlockControl describe exactly those blocks. A 1280x720 render needs
+       * min_tvb_blocks = align(ceil(40 * 23 / 128), 8) = 8. */
+      {
+        static const unsigned int bad[] = {7u, 33u};
+        unsigned int i;
+        for (i = 0u; i < 2u; ++i) {
+          assert(AppleAgxRenderTemplateMaterialize(
+              arena, AppleAgxRenderTemplateBytes(), &roots));
+          assert(AppleAgxRenderTemplateBuildRelocationObjectsRebased(
+              arena, AppleAgxRenderTemplateBytes(), 0x800000000ULL,
+              0x1503800000ULL, 0x1503800000ULL,
+              AppleAgxRenderTemplateBytes(), objects,
+              APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT, &roots));
+          view.HeapBlocks = bad[i];
+          assert(!AppleAgxG4BuildTa3d(&view, arena,
+              AppleAgxRenderTemplateBytes(), 1u, objects,
+              APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+        }
+        assert(AppleAgxRenderTemplateMaterialize(
+            arena, AppleAgxRenderTemplateBytes(), &roots));
+        assert(AppleAgxRenderTemplateBuildRelocationObjectsRebased(
+            arena, AppleAgxRenderTemplateBytes(), 0x800000000ULL,
+            0x1503800000ULL, 0x1503800000ULL,
+            AppleAgxRenderTemplateBytes(), objects,
+            APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT, &roots));
+        view.HeapBlocks = 8u;
+        assert(AppleAgxG4BuildTa3d(&view, arena,
+            AppleAgxRenderTemplateBytes(), 1u, objects,
+            APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+        assert(get64(objects[1].Data + 0x24u) ==
+            ((8u * 16u) | ((unsigned long long)(8u * 4u) << 32)));
+        assert(get64(objects[1].Data + 0x2cu) ==
+            (8u | ((unsigned long long)8u << 32)));
+        assert((get64(objects[1].Data + 0x48u) & 0xffffffffULL) == 8u * 4u - 1u);
+        assert(get64(objects[1].Data + 0x84u) ==
+            ((8u * 4u) | ((unsigned long long)(8u * 4u) << 32)));
+        assert((get64(objects[16].Data + 0x10u) & 0xffffffffULL) == 8u);
+        assert(get64(objects[20].Data) ==
+            (8u | ((unsigned long long)8u << 32)));
+        /* The page list and blocks keep the full reserved window. */
+        assert(objects[43].GpuVa == ranges[2].Va);
+        view.HeapBlocks = 0u;
+      }
     }
     assert(get64(objects[13].Data + 24u) == ranges[3].Va);
     assert(get64(objects[18].Data + 2220u) == render.SamplerHeap);

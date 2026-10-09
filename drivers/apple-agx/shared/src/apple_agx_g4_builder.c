@@ -156,7 +156,8 @@ static void g4_put64(unsigned char *p, APPLE_AGX_U64 value) {
   g4_put32(p + 4u, (APPLE_AGX_U32)(value >> 32));
 }
 static APPLE_AGX_BOOL g4_patch_buffer_manager(
-    const APPLE_AGX_G4_PROCESS_RANGE *process,
+    const APPLE_AGX_G4_NATIVE_RENDER *render,
+    const APPLE_AGX_G4_PROCESS_RANGE *process, APPLE_AGX_U32 backed,
     APPLE_AGX_EXP208_RELOCATION_OBJECT *objects) {
   unsigned char *info = objects[1].Data;
   unsigned char *init = objects[16].Data;
@@ -169,9 +170,14 @@ static APPLE_AGX_BOOL g4_patch_buffer_manager(
       process[0].Bytes < process[2].Bytes / G4_HEAP_BLOCK * 16u ||
       process[1].Bytes < process[2].Bytes / G4_HEAP_BLOCK * 8u)
     return APPLE_AGX_FALSE;
-  blocks = process[2].Bytes / G4_HEAP_BLOCK;
+  blocks = backed ? backed : (APPLE_AGX_U32)(process[2].Bytes / G4_HEAP_BLOCK);
+  /* Asahi buffer.rs/queue/render.rs: every render gets at least its
+   * min_tvb_blocks; only blocks the KMD backed may be named. */
+  if (blocks > process[2].Bytes / G4_HEAP_BLOCK ||
+      blocks < AppleAgxG4MinTvbBlocks(render->WidthPx, render->HeightPx))
+    return APPLE_AGX_FALSE;
   /* Asahi fw/buffer.rs Info (G13/V13_5), InitBuffer and BlockControl.
-   * The page and block lists themselves are written by the UMD. */
+   * The page and block lists themselves are written by the KMD. */
   g4_put32(info + 0x24u, blocks * 16u);
   g4_put32(info + 0x28u, blocks * 4u);
   g4_put32(info + 0x2cu, blocks);
@@ -329,7 +335,8 @@ APPLE_AGX_BOOL AppleAgxG4BuildTa3d(
   if (!AppleAgxG4BindProcessObjects(&render, View->Process,
           Objects, ObjectCount) ||
       !AppleAgxG4BindNativeObjects(View, Objects, ObjectCount) ||
-      !g4_patch_buffer_manager(View->Process, Objects) ||
+      !g4_patch_buffer_manager(&render, View->Process, View->HeapBlocks,
+          Objects) ||
       !AppleAgxRenderTemplateSelectVmSlot(Arena, ArenaBytes, VmSlot) ||
       !AppleAgxG4ApplySceneRelocations(Objects, ObjectCount) ||
       !AppleAgxG4PatchRenderScalars(&render, Objects, ObjectCount))

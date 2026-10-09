@@ -75,6 +75,7 @@ typedef struct _ADMISSION_G3_PRIVATE_SCENE {
   APPLE_AGX_G3_PRIVATE_SCENE Storage;
   APPLE_AGX_G4_NATIVE_RENDER Geometry;
   ULONG Fence, ResumeFence, Submitting, Queued, Started, GpuDone, Reported, ReleaseRequested, Quarantined;
+  ULONG HeapBlocks;
   ULONG Cached;
   ULONGLONG CachedAt;
 } ADMISSION_G3_PRIVATE_SCENE;
@@ -355,8 +356,9 @@ static int AppleAgxGpuvaG3GraphContainsRangeAccess(
   if (va == 0x30000 && !write && bytes == 1) return 1;
   if (va == 0x40000000ULL && write &&
       (bytes==1u || bytes==4096u)) return 1;
+  /* Mapped process ranges; EXP1115 checks only the backed heap prefix. */
   for(unsigned i=0;i<APPLE_AGX_G4_PROCESS_RANGE_COUNT;++i)
-    if(va==ranges[i].Va && bytes==ranges[i].Bytes && write)
+    if(va==ranges[i].Va && bytes<=ranges[i].Bytes && write)
       return graph->AllowProcessRanges;
   return 0;
 }
@@ -662,6 +664,10 @@ int main(void) {
   ADMISSION_G3_PRIVATE_SCENE scene={0};
   scene.Context=&context;scene.Geometry=packet.Render;scene.Storage.Generation=9;
   process.PrivateManager.Generation=5;context.GpuvaG3PrivateManagerGeneration=5;
+  /* EXP1115: the manager backs only the render's min_tvb_blocks. */
+  process.PrivateManager.Blocks=AppleAgxG4MinTvbBlocks(packet.Render.WidthPx,
+      packet.Render.HeightPx);
+  assert(process.PrivateManager.Blocks>=8u && process.PrivateManager.Blocks<32u);
   process.PrivateScenes=&scene;
   ULONGLONG private_va=process.PrivateVa;
   for(unsigned i=0;i<9;++i) {
@@ -783,8 +789,14 @@ int main(void) {
   assert(adapter.BackendImage.G4ManagerKey.Owner==process.Graph.ProcessId);
   assert(adapter.BackendImage.G4ManagerKey.Generation==process.PrivateManager.Generation);
   assert(adapter.BackendImage.G4ManagerKey.RootIpa==process.Graph.RootIpa);
+  /* The key names the lists and heap window, and the backed block count
+   * the job was built with: a different count re-initializes the manager. */
+  assert(scene.HeapBlocks==process.PrivateManager.Blocks);
   assert(memcmp(adapter.BackendImage.G4ManagerKey.Backing,scene.Storage.Ranges,
-      sizeof(adapter.BackendImage.G4ManagerKey.Backing))==0);
+      2u*sizeof(adapter.BackendImage.G4ManagerKey.Backing[0]))==0);
+  assert(adapter.BackendImage.G4ManagerKey.Backing[2].Va==scene.Storage.Ranges[2].Va);
+  assert(adapter.BackendImage.G4ManagerKey.Backing[2].Bytes==
+      process.PrivateManager.Blocks*0x20000u);
   puts("g4_submit_virtual_replay: PASS");
   return 0;
 }

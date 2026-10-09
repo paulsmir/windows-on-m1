@@ -50,7 +50,64 @@ static void r137_private_combined(void) {
   r->UtileWidthPx=r->UtileHeightPx=16;r->Flags=1u<<2;
   r->VdmCtrlStreamBase=r->IspScissorBase=r->IspDbiasBase=0x10000;
   APPLE_AGX_G4_PROCESS_RANGE ranges[9];
+  /* EXP1115 (Asahi buffer.rs): a 1280x800 render backs only its
+   * min_tvb_blocks of the 32-block heap window; the 2560x1600 ACQUIRE below
+   * grows the idle manager through the real escape and broker. */
+  APPLE_AGX_G4_PROCESS_RANGE small_ranges[9];
+  {
+    APPLE_AGX_G4_NATIVE_RENDER small=render;
+    AGX_G4_BATCH small_batch={0};
+    APPLE_AGX_G3_PRIVATE_REQUEST drop={0};
+    ULONGLONG ipa=0;
+    small.WidthPx=1280;small.HeightPx=800;small.UtileWidthPx=small.UtileHeightPx=32;
+    assert(prepare_process_buffers(&umd,&small_batch,&small,small_ranges));
+    assert(p->PrivateManager.Blocks==8u && p->PrivateManager.GrownCount==0u);
+    assert(small_ranges[2].Va==p->PrivateVa+APPLE_AGX_G3_PRIVATE_HEAP_VA_OFFSET);
+    assert(small_ranges[2].Bytes==32u*0x20000u);
+    assert(AppleAgxGpuvaG3GraphTranslateVa(&p->Graph,small_ranges[2].Va+8u*0x20000u-0x4000u,&ipa));
+    assert(!AppleAgxGpuvaG3GraphTranslateVa(&p->Graph,small_ranges[2].Va+8u*0x20000u,&ipa));
+    /* The submit parser accepts the heap window although only its backed
+     * prefix is mapped: the firmware is told about those blocks only. */
+    {
+      AGX_G4_PRIVATE small_packet={0};
+      struct agx_resource small_target={.bo=&small_target,.va=0x20000,
+          .layout={.size_B=1280ULL*800*4}};
+      struct agx_batch small_mesa={.key={.nr_cbufs=1,
+          .cbufs={{.texture=&small_target}}}};
+      APPLE_AGX_G4_NATIVE_HEADER small_header={.Type=APPLE_AGX_G4_RENDER,.Size=sizeof(small)};
+      APPLE_AGX_G4_SUBMIT_VIEW small_view={0};
+      APPLE_AGX_G4_FAILURE small_failure={0};
+      ADMISSION_G3_PRIVATE_SCENE *small_scene;
+      unsigned small_bytes;
+      assert(append_attachments(&small_mesa,&small_packet));
+      assert(append_native(&small_packet,&small_header,sizeof(small_header)));
+      assert(append_native(&small_packet,&small,sizeof(small)));
+      small_bytes=small_packet.Header.V2.Base.CommandBytes;
+      assert(AppleAgxG4ComposeHeaderV3(&small_packet.Header,&small,0x10000,small_bytes,
+          APPLE_AGX_G4_COLOR_BGRA8,small_ranges,&small_batch.Lease));
+      small_scene=AdmissionG4FindPrivateScene(p,&context,&small_batch.Lease,41,FALSE);
+      assert(small_scene);
+      assert(AppleAgxG4ParseSubmitEx(&small_packet,sizeof(small_packet),
+          sizeof(small_packet.Header)+small_bytes,0x10000,small_bytes,
+          AdmissionG4PrivateGraphAccess,small_scene,&small_view,&small_failure)==AppleAgxG4ParseOk);
+    }
+    drop.Magic=APPLE_AGX_G3_PRIVATE_MAGIC;drop.Version=1;drop.Bytes=sizeof(drop);
+    drop.Operation=APPLE_AGX_G3_PRIVATE_RELEASE;
+    drop.ManagerId=small_batch.Lease.ManagerId;drop.ManagerGeneration=small_batch.Lease.ManagerGeneration;
+    drop.SceneId=small_batch.Lease.SceneId;drop.SceneGeneration=small_batch.Lease.SceneGeneration;
+    assert(r137_escape_transport(&t,&drop));
+    assert(!p->PrivateScenes);
+  }
   assert(prepare_process_buffers(&umd,&batch,r,ranges));
+  assert(p->PrivateManager.Blocks==32u && p->PrivateManager.GrownCount==1u);
+  assert(state.PrivateStats[ADMISSION_G3_PRIVATE_STAT_HEAP_GROW]==1u);
+  assert(ranges[2].Va==small_ranges[2].Va && ranges[2].Bytes==small_ranges[2].Bytes);
+  {
+    ULONGLONG ipa=0;
+    assert(AppleAgxGpuvaG3GraphTranslateVa(&p->Graph,ranges[2].Va+8u*0x20000u,&ipa));
+    assert(ipa==local_ipa+vidmm_local_bytes+p->PrivateManager.Grown[0].Offset);
+    assert(AppleAgxGpuvaG3GraphTranslateVa(&p->Graph,ranges[2].Va+32u*0x20000u-0x4000u,&ipa));
+  }
   /* Exercise the existing per-owner refusal through the actual typed escape.
    * A later failure must not overwrite its pre-rollback first-cause receipt. */
   {

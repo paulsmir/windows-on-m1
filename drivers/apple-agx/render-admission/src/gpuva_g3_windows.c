@@ -667,12 +667,15 @@ BOOLEAN AdmissionGpuvaG3PrivateRetireContext(ADMISSION_RENDER_CONTEXT *context) 
     if (c!=context && c->GpuvaG3PrivateManagerGeneration==p->PrivateManager.Generation)
       manager_used=TRUE;
   if (!manager_used && !p->PrivateScenes) {
-    for (i=0;i<3;++i)
-      if (!AdmissionG3PrivateMapExtent(p,&view,&p->PrivateManager.Extents[i],FALSE)) {
+    UINT extents=AppleAgxG3PrivateManagerExtentCount(&p->PrivateManager);
+    for (i=0;i<extents;++i)
+      if (!AdmissionG3PrivateMapExtent(p,&view,
+              AppleAgxG3PrivateManagerExtent(&p->PrivateManager,i),FALSE)) {
         ADMISSION_G3_POISON(p,1u);goto Done;
       }
-    for (i=0;i<3;++i)
-      if (!AdmissionG3PrivateFreeExtent(p,&view,&p->PrivateManager.Extents[i])) {
+    for (i=0;i<extents;++i)
+      if (!AdmissionG3PrivateFreeExtent(p,&view,
+              AppleAgxG3PrivateManagerExtent(&p->PrivateManager,i))) {
         ADMISSION_G3_POISON(p,1u);goto Done;
       }
     RtlZeroMemory(&p->PrivateManager,sizeof(p->PrivateManager));
@@ -1547,6 +1550,34 @@ static BOOLEAN AdmissionG3CapturePrivateFailure(ADMISSION_CONTEXT *adapter,
   return TRUE;
 }
 
+/* Asahi buffer.rs ensure_blocks while the manager is idle (no job of this
+ * process in flight, the ACQUIRE/PREPARE precondition): back and map heap
+ * blocks up to `blocks`. A failed map is revoked and the extent returned. */
+static NTSTATUS AdmissionG3GrowPrivateHeap(ADMISSION_G3_PROCESS *p,
+    ADMISSION_BACKEND_MEMORY_VIEW *view, UINT blocks, UINT *failedOffset) {
+  APPLE_AGX_G3_PRIVATE_MANAGER *m=&p->PrivateManager;
+  APPLE_AGX_G3_PRIVATE_EXTENT *grown;
+  UINT previous=m->Blocks;
+  if (p->Graph.JobInFlight || p->Graph.LeaseToken) return STATUS_DEVICE_BUSY;
+  if (!AppleAgxG3PrivateGrowHeap(&p->State->PrivatePool,p->Graph.ProcessId,
+          (unsigned char *)view->CpuAddress,m,blocks,&grown))
+    return STATUS_INSUFFICIENT_RESOURCES;
+  if (!grown) return STATUS_SUCCESS;
+  KeMemoryBarrier();
+  if (AdmissionG3PrivateMapExtentObserved(p,view,grown,TRUE,failedOffset)) {
+    ++p->State->PrivateStats[ADMISSION_G3_PRIVATE_STAT_HEAP_GROW];
+    return STATUS_SUCCESS;
+  }
+  if (!AdmissionG3PrivateMapExtent(p,view,grown,FALSE)) {
+    ADMISSION_G3_POISON(p,1u);return STATUS_DEVICE_HARDWARE_ERROR;
+  }
+  if (!AdmissionG3PrivateFreeExtent(p,view,grown)) {
+    ADMISSION_G3_POISON(p,1u);return STATUS_DEVICE_HARDWARE_ERROR;
+  }
+  --m->GrownCount;m->Blocks=previous;
+  return STATUS_INSUFFICIENT_RESOURCES;
+}
+
 static ULONG AdmissionG3ManagerWord(const unsigned char *bytes, ULONG offset) {
   ULONG value;
   RtlCopyMemory(&value,bytes+offset,sizeof(value));
@@ -1592,7 +1623,7 @@ static BOOLEAN AdmissionG3SnapshotProcesses(ADMISSION_G3_STATE *state,
     r=&out[8u+16u*slot];
     r[0]=p->OsProcessId;r[1]=stats.OwnerUnits;r[2]=scenes|(cached<<16);
     r[3]=p->MaxTvbBlocks;r[4]=p->MaxShape;
-    r[5]=p->PrivateManager.Extents[2].Bytes/0x20000u;r[6]=m->Valid ? 1u : 0u;
+    r[5]=p->PrivateManager.Blocks;r[6]=m->Valid ? 1u : 0u;
     r[7]=AdmissionG3ManagerWord(m->Stats,0x0u);r[8]=AdmissionG3ManagerWord(m->Stats,0x4u);
     r[9]=AdmissionG3ManagerWord(m->Stats,0x8u);r[10]=AdmissionG3ManagerWord(m->Stats,0xcu);
     r[11]=AdmissionG3ManagerWord(m->Stats,0x20u);
@@ -1746,6 +1777,16 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
   if (!scene) {status=STATUS_INSUFFICIENT_RESOURCES;PRIVATE_CAPTURE(10u,~0u,NULL);goto Done;}
   RtlZeroMemory(scene,sizeof(*scene));scene->Context=context;scene->Geometry=render;
   fresh=p->PrivateManager.Generation==0;
+  if (!fresh && AppleAgxG4MinTvbBlocks(render.WidthPx,render.HeightPx)<=
+      APPLE_AGX_G3_PRIVATE_HEAP_BLOCKS) {
+    UINT need=AppleAgxG4MinTvbBlocks(render.WidthPx,render.HeightPx);
+    status=AdmissionG3GrowPrivateHeap(p,&view,need,&mapOffset);
+    while (status==STATUS_INSUFFICIENT_RESOURCES && AdmissionG3PrivateEvictCached(p,&view))
+      status=AdmissionG3GrowPrivateHeap(p,&view,need,&mapOffset);
+    if (!NT_SUCCESS(status)) {
+      PRIVATE_CAPTURE(14u,2u,NULL);ExFreePoolWithTag(scene,ADMISSION_POOL_TAG);goto Done;
+    }
+  }
   status=AdmissionG3PreparePrivateStorageObserved(p,&render,&p->PrivateManager,&scene->Storage,&prepare);
   while (status==STATUS_INSUFFICIENT_RESOURCES && AdmissionG3PrivateEvictCached(p,&view)) {
     RtlZeroMemory(&prepare,sizeof(prepare));
@@ -1774,11 +1815,15 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
   status=STATUS_INSUFFICIENT_RESOURCES;
   if (!AdmissionG3PrivateReleaseScene(p,scene,&view)) {ADMISSION_G3_POISON(p,1u);goto Done;}
   if (fresh) {
-    for (i=0;i<3;++i)
-      if (!AdmissionG3PrivateMapExtent(p,&view,&p->PrivateManager.Extents[i],FALSE)) {
+    UINT extents=AppleAgxG3PrivateManagerExtentCount(&p->PrivateManager);
+    for (i=0;i<extents;++i)
+      if (!AdmissionG3PrivateMapExtent(p,&view,
+              AppleAgxG3PrivateManagerExtent(&p->PrivateManager,i),FALSE)) {
         ADMISSION_G3_POISON(p,1u);goto Done;
       }
-    for (i=0;i<3;++i) (void)AdmissionG3PrivateFreeExtent(p,&view,&p->PrivateManager.Extents[i]);
+    for (i=0;i<extents;++i)
+      (void)AdmissionG3PrivateFreeExtent(p,&view,
+          AppleAgxG3PrivateManagerExtent(&p->PrivateManager,i));
     RtlZeroMemory(&p->PrivateManager,sizeof(p->PrivateManager));
     RtlZeroMemory(&p->FirmwareManager,sizeof(p->FirmwareManager));
   }
@@ -2233,6 +2278,13 @@ static int AdmissionG4PrivateGraphAccess(void *opaque, unsigned long long va,
   if (kind==AppleAgxG4AccessProcess) {
     if (ordinal>=9u || va!=scene->Storage.Ranges[ordinal].Va ||
         bytes!=scene->Storage.Ranges[ordinal].Bytes || !write) return 0;
+    /* EXP1115: of the TVB heap window only the backed prefix is mapped and
+     * named to the firmware: the job's count, else the manager's now. */
+    if (ordinal==2u) {
+      ULONG blocks=scene->HeapBlocks ? scene->HeapBlocks : p->PrivateManager.Blocks;
+      if (!blocks || (ULONGLONG)blocks*APPLE_AGX_G3_PRIVATE_HEAP_BLOCK>bytes) return 0;
+      bytes=blocks*APPLE_AGX_G3_PRIVATE_HEAP_BLOCK;
+    }
     return AdmissionG4GraphAccess(&p->Graph,va,bytes,write);
   }
   return AdmissionG4GraphAccessTyped(p,va,bytes,write,kind,ordinal);
@@ -2376,6 +2428,9 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
       image->G4ManagerKey.RootIpa=process->Graph.RootIpa;
       RtlCopyMemory(image->G4ManagerKey.Backing,private_scene->Storage.Ranges,
           sizeof(image->G4ManagerKey.Backing));
+      /* A different backed block count is a different manager: InitBM. */
+      image->G4ManagerKey.Backing[2].Bytes=
+          private_scene->HeapBlocks*APPLE_AGX_G3_PRIVATE_HEAP_BLOCK;
     }
     /* The graph lock covers fresh range/output validation and JOB_BEGIN.
      * A process-wide epoch also changes for unrelated mappings; it cannot
@@ -3115,6 +3170,11 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   if (result != AppleAgxG4ParseOk)
     AdmissionG4SnapshotFailure(process, &failure, &detail);
   if (result==AppleAgxG4ParseOk && private_scene) {
+    /* Dynamic TVB: the job is built for the blocks backed now and BeginJob
+     * keys the manager by the same count; a resubmission keeps its count. */
+    if (!args->Flags.Resubmission || !private_scene->HeapBlocks)
+      private_scene->HeapBlocks=process->PrivateManager.Blocks;
+    view.HeapBlocks=private_scene->HeapBlocks;
     private_scene->ResumeFence=args->Flags.Resubmission ? private_scene->Fence : 0u;
     private_scene->Submitting=1u;private_scene->Queued=1u;
     private_scene->Fence=args->SubmissionFenceId;

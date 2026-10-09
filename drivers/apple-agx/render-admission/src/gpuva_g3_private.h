@@ -57,6 +57,7 @@ enum {
   ADMISSION_G3_PRIVATE_STAT_UNMAPPED_PAGES, ADMISSION_G3_PRIVATE_STAT_CACHED_RELEASE,
   ADMISSION_G3_PRIVATE_STAT_CACHED_REAP, ADMISSION_G3_PRIVATE_STAT_RELEASE_QUEUED,
   ADMISSION_G3_PRIVATE_STAT_MISS_OTHER_GEOMETRY,
+  ADMISSION_G3_PRIVATE_STAT_HEAP_GROW, /* EXP1115 */
   /* 12..15: the last two miss geometries, Width|Height<<16 and
    * UtileWidth|UtileHeight<<8|cached<<16. */
   ADMISSION_G3_PRIVATE_STAT_MISS_SHAPE=12
@@ -78,6 +79,8 @@ typedef struct _ADMISSION_G3_PRIVATE_SCENE {
   APPLE_AGX_G3_PRIVATE_SCENE Storage;
   APPLE_AGX_G4_NATIVE_RENDER Geometry;
   ULONG Fence, ResumeFence, Submitting, Queued, Started, GpuDone, Reported, ReleaseRequested, Quarantined;
+  /* EXP1115: TVB blocks backed when this scene's job was built. */
+  ULONG HeapBlocks;
   /* EXP1086: released after a reported completion and kept mapped for reuse
    * by an ACQUIRE of the same context and geometry. */
   ULONG Cached;

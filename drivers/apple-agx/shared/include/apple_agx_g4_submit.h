@@ -300,6 +300,9 @@ typedef struct {
   unsigned int ColorFormat;
   APPLE_AGX_G4_PROCESS_RANGE Process[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
   APPLE_AGX_G4_PRIVATE_LEASE Lease;
+  /* Set by the KMD, never parsed: TVB blocks backed at the start of
+   * Process[2] (0: all of Process[2]). */
+  unsigned int HeapBlocks;
 } APPLE_AGX_G4_SUBMIT_VIEW;
 
 APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmit(

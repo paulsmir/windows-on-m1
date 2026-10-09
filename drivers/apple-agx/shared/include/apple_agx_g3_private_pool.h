@@ -11,6 +11,12 @@
 #define APPLE_AGX_G3_PROCESS_UNITS 128u
 #define APPLE_AGX_G3_PRIVATE_VA_BYTES 0x02000000ULL
 #define APPLE_AGX_G3_PRIVATE_VA_UNITS 512u
+/* The top 4 MiB of each process's private VA are the 32-block TVB heap
+ * window (Asahi buffer.rs), backed on demand at fixed VA; general
+ * allocations stay below it. */
+#define APPLE_AGX_G3_PRIVATE_HEAP_VA_OFFSET 0x01c00000u
+#define APPLE_AGX_G3_PRIVATE_GENERAL_VA_UNITS \
+  (APPLE_AGX_G3_PRIVATE_HEAP_VA_OFFSET / APPLE_AGX_G3_PRIVATE_UNIT)
 
 typedef struct {
   unsigned long long Owner, Generation;
@@ -48,8 +54,10 @@ static inline void AppleAgxG3PrivatePoolStats(
   }
 }
 
-static inline int AppleAgxG3PrivateAllocate(APPLE_AGX_G3_PRIVATE_POOL *p,
-    unsigned long long owner, unsigned bytes, APPLE_AGX_G3_PRIVATE_EXTENT *out) {
+/* va_unit ~0u: first fit below the heap window; otherwise exactly there. */
+static inline int AppleAgxG3PrivateAllocateVa(APPLE_AGX_G3_PRIVATE_POOL *p,
+    unsigned long long owner, unsigned bytes, unsigned va_unit,
+    APPLE_AGX_G3_PRIVATE_EXTENT *out) {
   unsigned count, used=0, run=0, first=0, va_run=0, va_first=0;
   unsigned char va_used[APPLE_AGX_G3_PRIVATE_VA_UNITS]={0};
   if (!p || !out || !owner || !bytes || bytes > (8u<<20) ||
@@ -76,11 +84,18 @@ static inline int AppleAgxG3PrivateAllocate(APPLE_AGX_G3_PRIVATE_POOL *p,
     else if (++run==count) { first=i+1-count; break; }
   }
   if (run!=count) return 0;
-  for(unsigned i=0;i<APPLE_AGX_G3_PRIVATE_VA_UNITS;++i) {
-    if(va_used[i]) va_run=0;
-    else if(++va_run==count) {va_first=i+1-count;break;}
+  if (va_unit!=~0u) {
+    if (va_unit>=APPLE_AGX_G3_PRIVATE_VA_UNITS ||
+        count>APPLE_AGX_G3_PRIVATE_VA_UNITS-va_unit) return 0;
+    for (unsigned i=va_unit;i<va_unit+count;++i) if (va_used[i]) return 0;
+    va_first=va_unit;
+  } else {
+    for(unsigned i=0;i<APPLE_AGX_G3_PRIVATE_GENERAL_VA_UNITS;++i) {
+      if(va_used[i]) va_run=0;
+      else if(++va_run==count) {va_first=i+1-count;break;}
+    }
+    if(va_run!=count) return 0;
   }
-  if(va_run!=count) return 0;
   ++p->NextGeneration;
   for (unsigned i=first; i<first+count; ++i) {
     p->Blocks[i].Owner=owner;
@@ -94,6 +109,20 @@ static inline int AppleAgxG3PrivateAllocate(APPLE_AGX_G3_PRIVATE_POOL *p,
   out->Bytes=count*APPLE_AGX_G3_PRIVATE_UNIT;
   out->VaOffset=va_first*APPLE_AGX_G3_PRIVATE_UNIT;
   return 1;
+}
+
+static inline int AppleAgxG3PrivateAllocate(APPLE_AGX_G3_PRIVATE_POOL *p,
+    unsigned long long owner, unsigned bytes, APPLE_AGX_G3_PRIVATE_EXTENT *out) {
+  return AppleAgxG3PrivateAllocateVa(p,owner,bytes,~0u,out);
+}
+
+/* Fixed process VA offset (unit aligned), e.g. TVB heap blocks. */
+static inline int AppleAgxG3PrivateAllocateAt(APPLE_AGX_G3_PRIVATE_POOL *p,
+    unsigned long long owner, unsigned bytes, unsigned va_offset,
+    APPLE_AGX_G3_PRIVATE_EXTENT *out) {
+  if (va_offset & (APPLE_AGX_G3_PRIVATE_UNIT-1u)) return 0;
+  return AppleAgxG3PrivateAllocateVa(p,owner,bytes,
+      va_offset/APPLE_AGX_G3_PRIVATE_UNIT,out);
 }
 
 /* The blocks of `e` as allocated to `owner` with e's generation. */
