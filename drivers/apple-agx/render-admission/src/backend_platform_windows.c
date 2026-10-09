@@ -91,10 +91,13 @@ C_ASSERT(sizeof(ADMISSION_HEARTBEAT_RECEIPT) == 64u);
  * firmware dispatch and GPU work: the TA work command's timestamp tail, the
  * TA stats timestamps, and the eight timestamp objects 28..35. */
 #define ADMISSION_FW_TIMING_CAPACITY 16u
-#define ADMISSION_FW_TIMING_VERSION 1u
+#define ADMISSION_FW_TIMING_VERSION 2u
+#define ADMISSION_TA_WORK_TS1_OFFSET 0x5e4u
 typedef struct _ADMISSION_FW_TIMING_ENTRY {
-  ULONG Fence, Reserved;
+  ULONG Fence, Ts1Polls;
   ULONGLONG KickQpc, CompleteQpc;
+  /* EXP1113: first changed TA ts1 word seen while polling, and its QPC. */
+  ULONGLONG Ts1Kick, Ts1First, Ts1FirstQpc;
   ULONGLONG Timestamps[8];
   UCHAR TaTail[0x68];
   UCHAR TaStats[0x80];
@@ -142,6 +145,8 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ULONG JobTimingWorkers;
   ADMISSION_FW_TIMING_RING FwTiming;
   ADMISSION_FW_TIMING_RING FwTimingSnapshot;
+  ULONG FwTs1Fence, FwTs1Polls;
+  ULONGLONG FwTs1Kick, FwTs1First, FwTs1FirstQpc;
 #endif
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
   volatile LONG B1Active;
@@ -301,6 +306,15 @@ static VOID AdmissionJobTimingPstateWindows(
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
 }
 
+static ULONGLONG AdmissionFwTs1Read(ADMISSION_PLATFORM_RUNTIME *runtime) {
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *w =
+      &runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_TA_WORK];
+  const volatile ULONG *word;
+  if (w->Data == NULL || w->Size < ADMISSION_TA_WORK_TS1_OFFSET + 8u) return 0ULL;
+  word = (const volatile ULONG *)(w->Data + ADMISSION_TA_WORK_TS1_OFFSET);
+  return (ULONGLONG)word[0] | ((ULONGLONG)word[1] << 32);
+}
+
 static VOID AdmissionFwTimingCaptureWindows(
     ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence) {
   ADMISSION_FW_TIMING_ENTRY entry;
@@ -327,6 +341,12 @@ static VOID AdmissionFwTimingCaptureWindows(
           ADMISSION_TA_STATS_TIMESTAMPS_OFFSET + sizeof(entry.TaStats))
     RtlCopyMemory(entry.TaStats, (const UCHAR *)stats->CpuAddress +
         ADMISSION_TA_STATS_TIMESTAMPS_OFFSET, sizeof(entry.TaStats));
+  if (runtime->FwTs1Fence == fence) {
+    entry.Ts1Polls = runtime->FwTs1Polls;
+    entry.Ts1Kick = runtime->FwTs1Kick;
+    entry.Ts1First = runtime->FwTs1First;
+    entry.Ts1FirstQpc = runtime->FwTs1FirstQpc;
+  }
   KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
   slot = AdmissionJobTimingFind(&runtime->JobTiming, fence);
   if (slot != NULL) {
@@ -3495,6 +3515,13 @@ static VOID AdmissionPlatformWorker(
 #endif
 
   pollStart = KeQueryPerformanceCounter(&pollFrequency);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  runtime->FwTs1Fence = description.Fence;
+  runtime->FwTs1Polls = 0u;
+  runtime->FwTs1Kick = AdmissionFwTs1Read(runtime);
+  runtime->FwTs1First = 0ULL;
+  runtime->FwTs1FirstQpc = 0ULL;
+#endif
   while (runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted &&
          InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 &&
          InterlockedCompareExchange(&runtime->Resetting, 0, 0) == 0) {
@@ -3688,6 +3715,19 @@ static VOID AdmissionPlatformWorker(
         taTemporal.SampleCount = ADMISSION_TA_TEMPORAL_SAMPLE_COUNT;
         AdmissionRecordTaTemporal(adapter, &taTemporal);
         taTemporalReported = TRUE;
+      }
+    }
+#endif
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    /* EXP1113 receipt-only: the TA start timestamp lives in ts1 only until
+     * the TA end overwrites it; keep the first change seen while polling. */
+    if (runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted &&
+        runtime->FwTs1Fence == description.Fence && runtime->FwTs1First == 0ULL) {
+      ULONGLONG ts1 = AdmissionFwTs1Read(runtime);
+      ++runtime->FwTs1Polls;
+      if (ts1 != runtime->FwTs1Kick) {
+        runtime->FwTs1First = ts1;
+        runtime->FwTs1FirstQpc = AdmissionJobQpc();
       }
     }
 #endif
