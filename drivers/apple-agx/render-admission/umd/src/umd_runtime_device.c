@@ -71,6 +71,29 @@ static BOOL AdmissionUmdDiagnosticPermit(
          InterlockedIncrement(NormalRecords) <= 128;
 }
 
+/* EXP1078 context-switch trace: DWM's composition thread kept entering NTFS
+ * and the Defender filter (create, query-name, cleanup) because every line
+ * opened, appended and closed the trace file; measure-* lines are unbudgeted
+ * (hundreds per second in DWM). Keep one append handle per process; writes
+ * with FILE_APPEND_DATA stay atomic appends across processes. */
+static HANDLE AdmissionUmdTraceHandle(PCWSTR Path) {
+  static HANDLE cached;
+  HANDLE handle = (HANDLE)InterlockedCompareExchangePointer(
+      (PVOID volatile *)&cached, NULL, NULL);
+  if (handle != NULL) return handle;
+  handle = CreateFileW(Path, FILE_APPEND_DATA,
+                       FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                       NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (handle == INVALID_HANDLE_VALUE) return INVALID_HANDLE_VALUE;
+  if (InterlockedCompareExchangePointer((PVOID volatile *)&cached, handle,
+                                        NULL) != NULL) {
+    CloseHandle(handle);
+    handle = (HANDLE)InterlockedCompareExchangePointer(
+        (PVOID volatile *)&cached, NULL, NULL);
+  }
+  return handle;
+}
+
 VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
                             const UINT *Values, UINT Count) {
   static volatile LONG records;
@@ -115,12 +138,10 @@ VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
   }
   if ((SIZE_T)used + 1u >= sizeof(line)) goto done;
   line[used++] = '\n';
-  file = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                     NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+  file = AdmissionUmdTraceHandle(path);
   if (file != INVALID_HANDLE_VALUE)
     (void)WriteFile(file, line, (DWORD)used, &written, NULL);
  done:
-  if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
   SetLastError(saved);
 }
 
