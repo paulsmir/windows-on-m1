@@ -1,4 +1,38 @@
-# J313 GPU — accelerated desktop; Settings and Notepad menus render, ~18 flips/s (EXP1063)
+# J313 GPU — accelerated desktop; GPU hangs traced to missing Asahi zero/scratch pages (EXP1068)
+
+
+## Current as of 2026-10-09 01:10Z (read this first)
+
+State: GPU-visible baseline after each run (rec1068h rollback). Best package
+for rendering: EXP1067 (4d7d3f0c), but it times out the GPU at ~90 s uptime;
+EXP1063/EXP1064 remain the stable reference (~17-19 flips/s).
+
+Proven since 23:25Z (EXPERIMENTS.md EXP1065-EXP1068):
+- agx_update_vs crash on layout-less draws: NULL input layout binds empty
+  vertex elements (b1327c6e, EXP1066).
+- SV_VertexID read k + id: lowering ran after info gathering, so the PARAMS
+  push range was never uploaded; 4d7d3f0c regathers (EXP1067 all PASS).
+- Queued-only submission gave no overlap and crashed D3D11 at device
+  destruction: rejected, reverted (e8edf351).
+- GPU hang = a draw reading an unbound vertex buffer (EXP1068 case B; case C
+  SV_VertexID-only passes). Asahi points unbound VBs, null textures/PBEs,
+  XFB offsets and query counters at AGX_ZERO/SCRATCH_PAGE_ADDRESS, which
+  Linux binds in every VM; Windows bound neither. Fix 9a9a3020: per-device
+  zero/scratch BOs, resident in every batch, VAs published per thread at
+  draw entry and BatchBegin. EXP1069 verifies.
+- The TDR reset cannot recover the engine: AdmissionPlatformRuntimeReset
+  returns STATUS_DEVICE_HARDWARE_ERROR, bugcheck 0x116 (separate defect).
+
+Open, causal order:
+1. EXP1069: nolayout probes B/A must complete without a watchdog; DWM must
+   survive the trace load past 90 s; speckle in Notepad/WinUI re-checked.
+2. TDR recovery (firmware restart path) and DWM c00001ad loop after device
+   removal; private scene storage STATUS_INSUFFICIENT_RESOURCES (EXP1067).
+3. 60 fps: 2-4 submits/frame at ~5 ms each (4 ms synchronous completion
+   wait); needs several submissions in flight without the EXP1066
+   device-destroy signal defect, and lower per-job cost (kick prep 346 us).
+4. Precompiled libagx kernels keep the Linux zero-page constant (null
+   texture query, GS/tess draws); DWM does not use them.
 
 
 ## Current as of 2026-10-08 23:25Z (read this first)
