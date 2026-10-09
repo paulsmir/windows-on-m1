@@ -22,6 +22,27 @@ static APPLE_AGX_U64 align_up(APPLE_AGX_U64 Value,
   return (Value + Alignment - 1ULL) & ~(Alignment - 1ULL);
 }
 
+/* EXP1099: firmware-shared objects are mapped MmNonCached (Device memory on
+ * ARM64): every store is its own transaction and unaligned wide accesses fault.
+ * EXP1092 job timing put 340 us of every job between BackendBefore and the 3D
+ * kick, consistent with ~12 KiB of per-submission template bytes copied one
+ * byte at a time. Copy with naturally aligned 8-byte stores where source and
+ * destination share their alignment; the resulting bytes are identical. The
+ * volatile accesses keep the compiler from widening them or calling memcpy. */
+static void copy_shared_bytes(unsigned char *Destination,
+                              const unsigned char *Source, APPLE_AGX_U32 Bytes) {
+  APPLE_AGX_U32 i = 0u;
+  if ((((APPLE_AGX_U64)Destination ^ (APPLE_AGX_U64)Source) & 7ULL) == 0ULL) {
+    for (; i < Bytes && ((APPLE_AGX_U64)(Destination + i) & 7ULL) != 0ULL; ++i)
+      Destination[i] = Source[i];
+    for (; Bytes - i >= 8u; i += 8u)
+      *(volatile APPLE_AGX_U64 *)(Destination + i) =
+          *(const volatile APPLE_AGX_U64 *)(Source + i);
+  }
+  for (; i < Bytes; ++i)
+    Destination[i] = Source[i];
+}
+
 static void zero_bytes(void *Address, APPLE_AGX_U64 Bytes) {
   APPLE_AGX_U64 index;
   for (index = 0ULL; index < Bytes; ++index)
@@ -401,7 +422,6 @@ static APPLE_AGX_BOOL bind_relocation_objects(
   layouts = AppleAgxRenderTemplateObjectLayouts();
   for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_TEMPLATE_OBJECT_COUNT;
        ++index) {
-    APPLE_AGX_U32 byte;
     const unsigned char *source =
         (const unsigned char *)TemplateArena + layouts[index].ArenaOffset;
     unsigned char *destination =
@@ -410,10 +430,8 @@ static APPLE_AGX_BOOL bind_relocation_objects(
     if (layouts[index].ArenaOffset > TemplateArenaBytes ||
         layouts[index].Size > TemplateArenaBytes - layouts[index].ArenaOffset)
       return APPLE_AGX_FALSE;
-    if (InitializePersistent || per_submission_object(index, IncludeInitBm)) {
-      for (byte = 0u; byte < layouts[index].Size; ++byte)
-        destination[byte] = source[byte];
-    }
+    if (InitializePersistent || per_submission_object(index, IncludeInitBm))
+      copy_shared_bytes(destination, source, layouts[index].Size);
     RelocationObjects[index].GpuVa =
         Owner->VirtualAddresses[index] + Owner->ObjectOffsets[index];
     RelocationObjects[index].PhysicalAddress =
@@ -678,8 +696,7 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildActiveG4Job(
 
 static void copy_bytes(unsigned char *Destination, const unsigned char *Source,
                        APPLE_AGX_U32 Bytes) {
-  APPLE_AGX_U32 i;
-  for (i=0u;i<Bytes;++i) Destination[i]=Source[i];
+  copy_shared_bytes(Destination,Source,Bytes);
 }
 
 static APPLE_AGX_BOOL manager_key_equal(
