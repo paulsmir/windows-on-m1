@@ -1,7 +1,7 @@
 # J313 GPU: dynamic private memory; two submissions in flight next (EXP1112-EXP1116)
 
 
-## Current as of 2026-10-09 18:50Z (read this first)
+## Current as of 2026-10-09 19:05Z (read this first)
 
 State: GPU-visible baseline after each run. Best validated launch: driver
 exp/1115-build f814128e (EXP1111 contents + receipts 318d8cfa/bfb35d80/
@@ -21,10 +21,18 @@ Proven since 15:45Z:
   idle, InitBM on growth. Firmware accepts 8/24-block managers; pool 522
   units, overflow 0, no regressions.
 
+EXP1116 (two submissions in flight + 192-unit quota on the dynamic heap):
+memory held (pressure 0, pool 540), but the KMD runs one packet at a time
+and DWM's queued second submission took the slot ahead of apps (Notepad
+drag 34 -> 24, typing 38 -> 31; same-size drag +4 %). Reverted (0298f267);
+the 192-unit quota (30db3a4d) stays.
+
 Open, causal order:
-1. One GPU job in flight: DWM pays ~6 sequential round trips per frame.
-   EXP1116 = two submissions in flight (e4398e22 = c545a3d2) + 192-unit
-   quota (30db3a4d); EXP1094's failure (global pool exhaustion) is removed.
+1. One job slot (KMD RenderPacket + one G4 arena/backend image + one
+   firmware queue entry): TA of the next job cannot overlap 3D of the
+   current one, and dxgkrnl serializes all processes through it. Next:
+   source-first design of a multi-entry firmware queue (Asahi queue/mod.rs,
+   workqueue.rs; m1n1 cmdqueue) with per-job images.
 2. Scene size: full-screen scenes are 11 units (TPC 5, user buffer 2);
    Asahi shares one TPC per buffer and uses a 0x80 user buffer on one
    cluster.
