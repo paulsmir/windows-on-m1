@@ -1,4 +1,36 @@
-# J313 GPU: dynamic private memory; two submissions in flight next (EXP1112-EXP1116)
+# J313 GPU: efficient VidMm paging; per-frame allocation churn next (EXP1117-EXP1123)
+
+
+## Current as of 2026-10-09 21:50Z (read this first)
+
+State: GPU-visible baseline after each run. Best validated launch: driver
+exp/1122-build af4245a3 (EXP1119 multi-job phases 1-3 + 083347d4 slot event
++ 5de7675f export rate + ca8fd4f3 census + 0df483b0 CPU-only paging-process
+page tables) with m1n1 fa3356ee. EXP1122 flips: Notepad drag 46-47, typing
+50-51, cursor 55-60, charmap 60, same-size drag 52-54. No TDR/rejects.
+
+Proven since 19:05Z:
+- Multi-job phases 1-3 (EXP1117-EXP1119): firmware-owned stamps, two
+  per-job object slots, completion by event + stamp + retired entries.
+- Submitters wait on a render-slot event (EXP1121, 1b7a92d9): queued
+  cross-process gaps 9.7-10.5 ms -> 0.25-0.4 ms.
+- VidMm churn (EXP1121 census): Notepad makes VidMm transfer
+  (LOCAL_TO_SYSTEM) and fill whole 0x250000-byte allocations; the rate
+  scales with frames (~38/s each at 50 flips/s, EXP1122).
+- The paging process needs no GPU page tables (EXP1122, 0df483b0; MS "System
+  paging process"): broker 385 -> 186 ms/s, Notepad +11-13 flips/s,
+  Complete->JobEnd >1 ms stalls 11 -> 1 per 128 jobs.
+
+Open, causal order:
+1. Why VidMm transfers/fills a 2.4 MiB allocation every frame: EXP1123
+   receipt Wom1AllocLife1123 (creator pid, type, class, flags, lifetime)
+   joined with the census (scratchpad alloclife.py). Fix the owner layer.
+2. Paging passes: EXP1123 coalesces contiguous local records (85e2b4b9);
+   LOCAL_TO_SYSTEM destinations stay one MmMapIoSpace page per record.
+3. Remaining broker time: user-process system-memory grants (REG_SHARED/
+   REVOKE ~3400/s each while typing).
+4. Multi-job phases 4-7 (docs/superpowers/plans/2026-10-09-multi-job-
+   firmware-queue.md) after the churn is understood.
 
 
 ## Current as of 2026-10-09 19:05Z (read this first)
