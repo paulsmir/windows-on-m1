@@ -53,6 +53,8 @@ typedef struct {
   unsigned GpuvaReady, Failed;
 } AGX_WIN32_ASAHI_BACKEND;
 struct agx_screen { struct agx_bo *rodata; };
+/* EXP1069: Asahi's per-device zero and scratch pages (agx_open_device). */
+struct agx_device { struct agx_bo *zero_bo, *scratch_bo; };
 struct agx_context { struct { struct agx_screen *screen; } base; };
 struct agx_batch {
   struct agx_context *ctx;
@@ -88,6 +90,8 @@ static APPLE_AGX_G4_FAILURE failure;
 static AGX_WIN32_ASAHI_BACKEND *backend(struct agx_batch *b) { (void)b;return &owner; }
 static AGX_G4_BATCH *capsule(struct agx_batch *b) { return b->windows_batch; }
 static struct agx_screen *agx_screen(struct agx_screen *s) { return s; }
+static struct agx_device native_device;
+static struct agx_device *agx_device(struct agx_screen *s) { (void)s;return &native_device; }
 static struct agx_resource *agx_resource(struct agx_resource *r) { return r; }
 static uint64_t agx_map_gpu(struct agx_resource *r) { return r->bo->va->addr; }
 static const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(
@@ -185,6 +189,7 @@ static void run(unsigned fail,unsigned many,unsigned scenario) {
   struct agx_bo *pipeline_bos[3]={&bos[8],&bos[9],&bos[5]};
   bos[8].flags=bos[9].flags=1; /* Preserve low-VA pool creation intent. */
   struct agx_screen screen={&bos[3]};struct agx_context ctx={{&screen}};
+  native_device=(struct agx_device){&bos[10],&bos[11]};
   struct agx_resource color={.bo=&bos[4],.layout={.size_B=65536}};
   struct agx_batch batch={.ctx=&ctx,.vdm={&bos[2]},.draws=1,
     .bo_list={.bit_count=16,.count=1,.handles={3}},
@@ -204,7 +209,7 @@ static void run(unsigned fail,unsigned many,unsigned scenario) {
   } else if(scenario==3) {
     bos[5].refs=0;
   } else if(scenario>=4) {
-    batch.bo_list.bit_count=UINT32_MAX-(PIPE_MAX_COLOR_BUFS+17)-1;
+    batch.bo_list.bit_count=UINT32_MAX-(PIPE_MAX_COLOR_BUFS+19)-1;
     batch.pool.bos.size=(scenario==4?2u:1u)*sizeof(pool_bos[0]);
   }
   /* Set aliases at the actual ABI offsets, checked by the wrapper below. */
@@ -224,7 +229,9 @@ static void run(unsigned fail,unsigned many,unsigned scenario) {
     fprintf(stderr,"R148 missing batch-pool residency/upload (expected admitted submit)\n");
   }
   assert(result==!fail);
-  assert(submit_count==1 && resident_count==(scenario==1?4u:many?9u:6u));
+  /* The zero and scratch pages (bos 10, 11) are resident in every batch. */
+  assert(submit_count==1 && resident_count==(scenario==1?6u:many?11u:8u));
+  assert(bos[10].uploaded && bos[11].uploaded);
   if(scenario!=1) {
     assert(bos[5].uploaded && bos[8].uploaded && bos[8].flags==1);
     if(many) assert(bos[6].uploaded && bos[7].uploaded && bos[9].uploaded);

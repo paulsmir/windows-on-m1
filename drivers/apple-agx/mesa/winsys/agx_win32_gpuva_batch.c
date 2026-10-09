@@ -106,6 +106,7 @@ static int batch_refuse(unsigned kind, unsigned site,
 
 int AgxWin32AsahiBatchBegin(struct agx_batch *batch) {
   AGX_WIN32_ASAHI_BACKEND *b=backend(batch);
+  if(batch && batch->ctx) AgxWin32AsahiPublishPages(agx_device(batch->ctx->base.screen));
   if(!b || !b->GpuvaReady || b->Failed || batch->windows_batch ||
      !batch->vdm.bo) return batch_refuse(1u, __LINE__, 0u, 0u);
   /* One monitored submission owns this process residency set. Drain earlier
@@ -342,7 +343,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
    * earlier slabs after rollover and the low-VA pipeline pool. */
   pool_count=util_dynarray_num_elements(&batch->pool.bos,struct agx_bo *);
   pipeline_count=util_dynarray_num_elements(&batch->pipeline_pool.bos,struct agx_bo *);
-  limit=batch->bo_list.bit_count+PIPE_MAX_COLOR_BUFS+17;
+  limit=batch->bo_list.bit_count+PIPE_MAX_COLOR_BUFS+19;
   if(pool_count>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
   limit+=(unsigned)pool_count;
   if(pipeline_count>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
@@ -383,7 +384,10 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   if(!refs) { fail_site=__LINE__; goto fail; }
   if(!add_bo(b,refs,&count,limit,g->Command) ||
      !add_bo(b,refs,&count,limit,batch->vdm.bo) ||
-     !add_bo(b,refs,&count,limit,agx_screen(batch->ctx->base.screen)->rodata))
+     !add_bo(b,refs,&count,limit,agx_screen(batch->ctx->base.screen)->rodata) ||
+     /* EXP1069: descriptors may name the device's zero/scratch pages. */
+     !add_bo(b,refs,&count,limit,agx_device(batch->ctx->base.screen)->zero_bo) ||
+     !add_bo(b,refs,&count,limit,agx_device(batch->ctx->base.screen)->scratch_bo))
     { fail_site=__LINE__; goto fail; }
   for(unsigned i=0;i<batch->key.nr_cbufs;++i) {
     if(batch->key.cbufs[i].texture) {

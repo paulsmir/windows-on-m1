@@ -35,6 +35,21 @@ static int release_map(const void *key,const void *expected,int commit) {
   return 1;
 }
 
+#if defined(_WIN32)
+#define AGX_WIN32_THREAD_LOCAL __declspec(thread)
+#else
+#define AGX_WIN32_THREAD_LOCAL _Thread_local
+#endif
+/* EXP1069: VAs of the current device's zero/scratch pages (agx_abi.h). */
+AGX_WIN32_THREAD_LOCAL uint64_t agx_win32_zero_page_va;
+AGX_WIN32_THREAD_LOCAL uint64_t agx_win32_scratch_page_va;
+void AgxWin32AsahiPublishPages(struct agx_device *native) {
+  agx_win32_zero_page_va =
+      native && native->zero_bo && native->zero_bo->va ? native->zero_bo->va->addr : 0;
+  agx_win32_scratch_page_va =
+      native && native->scratch_bo && native->scratch_bo->va ? native->scratch_bo->va->addr : 0;
+}
+
 int AgxWin32AsahiAttach(AGX_WIN32_ASAHI_BACKEND *b, struct agx_device *native,
     AGX_WIN32_SCREEN *screen, const AGX_WIN32_ASAHI_OWNER_OPS *ops, void *owner,
     APPLE_AGX_U64 base) {

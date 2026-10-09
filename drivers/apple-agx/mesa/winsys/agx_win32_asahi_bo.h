@@ -76,6 +76,8 @@ extern void (*AgxWin32BackendFailHook)(unsigned site);
   } while (0)
 
 
+/* EXP1069: publish the device's zero/scratch page VAs to this thread. */
+void AgxWin32AsahiPublishPages(struct agx_device *native);
 int AgxWin32AsahiAttach(AGX_WIN32_ASAHI_BACKEND *, struct agx_device *,
     AGX_WIN32_SCREEN *, const AGX_WIN32_ASAHI_OWNER_OPS *, void *, APPLE_AGX_U64);
 int AgxWin32AsahiCollect(AGX_WIN32_ASAHI_BACKEND *);

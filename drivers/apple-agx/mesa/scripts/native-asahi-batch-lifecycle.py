@@ -66,6 +66,23 @@ def project_sources(out,project,overlays):
         if start<0: raise RuntimeError('Pure device declaration missing: '+name)
         pure+=original_device[start:b]+'\n'
     save('src/asahi/lib/agx_win32_device_key.c',pure)
+    # EXP1069: per-device zero/scratch pages replace Asahi's fixed VM pages.
+    ap='src/asahi/lib/agx_abi.h';abi=(out/ap).read_text()
+    abi=replace(abi,'#define AGX_ZERO_PAGE_ADDRESS (((uint64_t)1) << 32)','''#ifdef _WIN32
+/* EXP1069: no VM-wide fixed pages on Windows; the thread that builds a
+ * device's commands publishes that device's zero/scratch page VAs. */
+extern __declspec(thread) uint64_t agx_win32_zero_page_va;
+extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
+#define AGX_ZERO_PAGE_ADDRESS (agx_win32_zero_page_va)
+#else
+#define AGX_ZERO_PAGE_ADDRESS (((uint64_t)1) << 32)
+#endif''')
+    abi=replace(abi,'#define AGX_SCRATCH_PAGE_ADDRESS (AGX_ZERO_PAGE_ADDRESS + AGX_ZERO_PAGE_SIZE)','''#ifdef _WIN32
+#define AGX_SCRATCH_PAGE_ADDRESS (agx_win32_scratch_page_va)
+#else
+#define AGX_SCRATCH_PAGE_ADDRESS (AGX_ZERO_PAGE_ADDRESS + AGX_ZERO_PAGE_SIZE)
+#endif''')
+    save(ap,abi)
     bp='src/gallium/drivers/asahi/agx_batch.c'
     s=(out/bp).read_text()
     s=s.replace('#include <xf86drm.h>','/* Windows runtime owns synchronization. */')
@@ -143,6 +160,7 @@ def project_sources(out,project,overlays):
     renamed=signature.replace('agx_draw_vbo(','agx_draw_vbo_windows_body(')
     wrapper=signature+'''{
    struct agx_context *ctx = agx_context(pctx);
+   AgxWin32AsahiPublishPages(agx_device(pctx->screen));
    /* EXP1061: Draw(0)/DrawIndexed(0) and zero-instance draws are D3D no-ops
     * that d3d10umd forwards unchanged; refusing them below poisoned the
     * context for good (Notepad: noise surfaces, no text). */
@@ -386,7 +404,30 @@ AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *backend, AGX_WIN32_SCREEN *wi
          cfg.buffer = bo->va->addr;
       }
 
-      agx_screen->rodata = bo;''')
+      agx_screen->rodata = bo;
+
+      /* EXP1069: Asahi reads unbound vertex buffers, null textures and XFB
+       * offsets from a zero page and discards null-image writes into a
+       * scratch page; Linux binds both at fixed VAs in every VM. Windows has
+       * no such per-VM mapping (EXP1068: an unbound vertex buffer hung the
+       * GPU), so each device owns one of each as ordinary BOs. */
+      struct agx_bo *zero = agx_bo_create(&agx_screen->dev, AGX_ZERO_PAGE_SIZE,
+                                          0, 0, "Zero page");
+      struct agx_bo *scratch = agx_bo_create(&agx_screen->dev,
+                                             AGX_ZERO_PAGE_SIZE, 0, 0,
+                                             "Scratch page");
+      void *zero_map = zero ? agx_bo_map(zero) : NULL;
+      void *scratch_map = scratch ? agx_bo_map(scratch) : NULL;
+      if (!zero_map || !scratch_map) {
+         if (zero) agx_bo_unreference(&agx_screen->dev, zero);
+         if (scratch) agx_bo_unreference(&agx_screen->dev, scratch);
+         screen->destroy(screen);
+         return NULL;
+      }
+      memset(zero_map, 0, AGX_ZERO_PAGE_SIZE);
+      memset(scratch_map, 0, AGX_ZERO_PAGE_SIZE);
+      agx_screen->dev.zero_bo = zero;
+      agx_screen->dev.scratch_bo = scratch;''')
     s=s[:decl]+signature+original+s[b:]
     a,b=function(s,'agx_destroy_screen');part=s[a:b]
     part=part.replace('   drmSyncobjDestroy(screen->dev.fd, screen->flush_syncobj);','')
@@ -394,7 +435,13 @@ AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *backend, AGX_WIN32_SCREEN *wi
    screen->rodata = NULL;
    /* The owner retains zero-ref backing if deallocation fails. Relinquish the
     * screen's reference once; Detach/Collect is the only retry owner. */
-   agx_bo_unreference(&screen->dev, rodata);''')
+   agx_bo_unreference(&screen->dev, rodata);
+   struct agx_bo *zero_page = screen->dev.zero_bo;
+   struct agx_bo *scratch_page = screen->dev.scratch_bo;
+   screen->dev.zero_bo = NULL;
+   screen->dev.scratch_bo = NULL;
+   if (zero_page) agx_bo_unreference(&screen->dev, zero_page);
+   if (scratch_page) agx_bo_unreference(&screen->dev, scratch_page);''')
     part=replace(part,'   u_transfer_helper_destroy(pscreen->transfer_helper);','')
     part=replace(part,'   agx_close_device(&screen->dev);','''   AGX_WIN32_ASAHI_BACKEND *backend = screen->dev.windows_private;
    if (!AgxWin32AsahiDetach(backend)) return;

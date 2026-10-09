@@ -14,6 +14,8 @@ a permanent fault. Invariants:
 - EXP1063: a draw DrawAllowed refuses before any batch work (EXP1062 Notepad:
   no color buffer or indirect) is dropped when the backend asks, without
   poisoning the context; the patch-list backend still fails closed.
+- EXP1069: every draw entry publishes the context's device zero/scratch pages
+  before any descriptor work, including draws that end up skipped.
 """
 from pathlib import Path
 import os
@@ -29,7 +31,13 @@ PROGRAM = r'''
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
-struct pipe_context { int unused; };
+struct pipe_screen { int unused; };
+struct pipe_context { struct pipe_screen *screen; };
+struct agx_device { int unused; };
+static struct agx_device the_device;
+static struct agx_device *agx_device(struct pipe_screen *s) { (void)s; return &the_device; }
+static unsigned publishes;
+static void AgxWin32AsahiPublishPages(struct agx_device *d) { assert(d == &the_device); ++publishes; }
 struct pipe_draw_info { unsigned instance_count; };
 struct pipe_draw_indirect_info { bool count_from_stream_output; };
 struct pipe_draw_start_count_bias { unsigned start, count; int index_bias; };
@@ -73,7 +81,8 @@ static void agx_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info 
              const struct pipe_draw_start_count_bias *draws, unsigned num_draws)
 @@WRAPPER@@
 int main(void) {
-  struct agx_context ctx = {0}; current = &ctx;
+  struct pipe_screen screen = {0};
+  struct agx_context ctx = {0}; current = &ctx; ctx.base.screen = &screen;
   struct pipe_draw_info info = {.instance_count = 1};
   struct pipe_draw_start_count_bias zero = {0, 0, 0}, six = {0, 6, 0};
   agx_draw_vbo(&ctx.base, &info, 0, NULL, &zero, 1);
@@ -99,6 +108,7 @@ int main(void) {
   ctx.prepare_fails = true;
   agx_draw_vbo(&ctx.base, &info, 0, NULL, &six, 1);
   assert(ctx.any_faults && bodies == 2);
+  assert(publishes == 7);
   return 0;
 }
 '''
