@@ -1686,6 +1686,16 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
     status=AdmissionG3PreparePrivateStorageObserved(p,&render,&p->PrivateManager,&scene->Storage,&prepare);
   }
   if (!NT_SUCCESS(status)) {PRIVATE_CAPTURE(11u,~0u,NULL);ExFreePoolWithTag(scene,ADMISSION_POOL_TAG);goto Done;}
+  {
+    /* EXP1094 receipt-only: global and per-process pool high-water. */
+    APPLE_AGX_G3_PRIVATE_POOL_STATS pool;
+    ULONGLONG high=state->PrivateStats[ADMISSION_G3_PRIVATE_STAT_POOL_HIGH];
+    AppleAgxG3PrivatePoolStats(&state->PrivatePool,p->Graph.ProcessId,&pool);
+    if (pool.GlobalUnits>(high&0xffffULL)) high=(high&~0xffffULL)|pool.GlobalUnits;
+    if (pool.OwnerUnits>((high>>16)&0xffffULL))
+      high=(high&~0xffff0000ULL)|((ULONGLONG)pool.OwnerUnits<<16);
+    state->PrivateStats[ADMISSION_G3_PRIVATE_STAT_POOL_HIGH]=high;
+  }
   scene->Next=p->PrivateScenes;p->PrivateScenes=scene;
   if (fresh)
     for (i=0;i<3;++i)
