@@ -83,7 +83,7 @@ int main(){
 class WrittenOnlyDownload(unittest.TestCase):
     def test_only_written_slots_are_downloaded(self):
         text = SRC.read_text()
-        funcs = function(text, 'cpu_quiet') + '\n' + function(text, 'direct_shadow_slot') + '\n' + function(text, 'mark_written') + '\n' + function(text, 'transfer_held')
+        funcs = function(text, 'cpu_quiet') + '\n' + function(text, 'download_due') + '\n' + function(text, 'direct_shadow_slot') + '\n' + function(text, 'mark_written') + '\n' + function(text, 'transfer_held')
         if 'mark_written' not in funcs:
             funcs += '\nstatic int mark_written(ADMISSION_UMD_DEVICE*,const uint64_t*,unsigned){return 1;}\n'
         funcs = funcs.replace('auto *slot', 'SLOT *slot')

@@ -16,6 +16,11 @@ appends to it instead of starting another pass. Invariants:
 - EXP1071 hardware: a retired submission returns its private scene lease at
   once, so open batches flushed back to back hold at most one lease (holding
   each until cleanup exhausted the process range: D3DERR_OUTOFVIDEOMEMORY).
+- EXP1082: a submission still running on the GPU (its fence not signalled)
+  is neither waited for nor retired by Begin; it stays submitted and holding
+  while the next batch is built, and that batch's Finish retires it before
+  submitting. A held set owned by no batch of this context still refuses
+  Begin.
 """
 from pathlib import Path
 import os
@@ -82,6 +87,10 @@ static void AgxWin32AsahiPublishPages(struct agx_device *d) { (void)d; }
 static void AgxWin32PerfNote(const char *fmt, ...) { (void)fmt; }
 void (*AgxWin32BatchRefusalHook)(unsigned, unsigned, unsigned, unsigned);
 static unsigned flushes, retires;
+static uint64_t completed_fence = ~0ull;
+static int AgxWin32GpuvaComplete(void *space, uint64_t fence) {
+  (void)space; return fence && fence <= completed_fence;
+}
 static uint64_t held_storage;
 static int AgxWin32GpuvaRetire(void *space, uint64_t completion) {
   AGX_WIN32_ASAHI_BACKEND *b = (AGX_WIN32_ASAHI_BACKEND *)
@@ -134,7 +143,29 @@ int main(void) {
   /* A held set that no batch of this context owns is still refused. */
   backend.Gpuva.Held = &held_storage; backend.Gpuva.RenderFence = 99;
   assert(!submit(&backend, &slots[2], 12));
-  free(slots[2].windows_batch);
+  free(slots[2].windows_batch); slots[2].windows_batch = NULL;
+  BITSET_CLEAR(ctx.batches.active, 2);
+  /* EXP1082: ... and a foreign held set refuses a new batch. */
+  BITSET_SET(ctx.batches.active, 3); assert(!AgxWin32AsahiBatchBegin(&slots[3]));
+  backend.Gpuva.Held = NULL; backend.Gpuva.RenderFence = 0;
+  assert(AgxWin32AsahiBatchBegin(&slots[3]));
+  /* D submits; the GPU has not finished it yet. */
+  completed_fence = 19;
+  assert(submit(&backend, &slots[3], 20));
+  unsigned before = retires;
+  /* E begins without waiting for or retiring D. */
+  BITSET_SET(ctx.batches.active, 0); assert(AgxWin32AsahiBatchBegin(&slots[0]));
+  assert(retires == before && slots[3].windows_batch && !capsule(&slots[3])->Retired);
+  assert(backend.Gpuva.Held && live_leases == 1 && BITSET_TEST(ctx.batches.submitted, 3));
+  /* E's Finish retires D (the wait) before it submits. */
+  assert(submit(&backend, &slots[0], 21));
+  assert(retires == before + 1 && capsule(&slots[3])->Retired && live_leases == 1);
+  /* Once E completes, the next Begin retires and cleans up both. */
+  completed_fence = 21;
+  BITSET_SET(ctx.batches.active, 1); assert(AgxWin32AsahiBatchBegin(&slots[1]));
+  assert(retires == before + 2 && !slots[3].windows_batch && !slots[0].windows_batch);
+  assert(!backend.Gpuva.Held && live_leases == 0 && flushes == 0);
+  free(slots[1].windows_batch);
   puts("PASS");
   return 0;
 }
@@ -146,7 +177,7 @@ class BatchBeginKeepsActive(unittest.TestCase):
         source = SRC.read_text()
         functions = "\n".join(body(source, name) for name in (
             "backend", "capsule", "batch_refuse", "release_lease", "AgxWin32AsahiBatchPoll",
-            "retire_held", "AgxWin32AsahiBatchBegin"))
+            "held_by", "retire_held", "AgxWin32AsahiBatchBegin"))
         program = PROGRAM.replace("@@FUNCTIONS@@", functions)
         program = program.replace("#include <stdlib.h>", "#include <stdlib.h>\n#include <stddef.h>")
         with tempfile.TemporaryDirectory() as directory:

@@ -49,7 +49,7 @@ FUNCTIONS = {
 
 
 def body(source, name):
-    match = re.search(r"(?m)^(?:_Use_decl_annotations_\s+)?(?:static\s+)?(?:const\s+)?(?:unsigned long long|[A-Za-z_][A-Za-z_0-9]*)(?:\s+|\s*\*+\s*)" + re.escape(name) + r"\s*\([^;]*?\)\s*\{", source, re.S)
+    match = re.search(r"(?m)^(?:_Use_decl_annotations_\s+)?(?:static\s+)?(?:const\s+)?(?:struct\s+)?(?:unsigned long long|[A-Za-z_][A-Za-z_0-9]*)(?:\s+|\s*\*+\s*)" + re.escape(name) + r"\s*\([^;]*?\)\s*\{", source, re.S)
     if match is None:
         raise ValueError(f"missing KMD function {name}")
     depth = 1

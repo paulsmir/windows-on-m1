@@ -865,6 +865,14 @@ static bool cpu_quiet(const ADMISSION_UMD_SCREEN_BUFFER *slot) {
   return !slot->Mapped && !slot->Borrowed;
 }
 
+/* The held slots a completed submission downloads (transfer_held(true)):
+ * GPU-written, CPU-visible (mapped or shared) and not presentation-direct. */
+static bool download_due(const ADMISSION_UMD_SCREEN_BUFFER *slot) {
+  return slot->CopyHeld && !slot->Direct && !slot->SystemDirect &&
+         (slot->Flags & AppleAgxWin32BufferGpuWrite) && slot->GpuWritten &&
+         !cpu_quiet(slot);
+}
+
 static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
   UINT measured_count=0u;
   ULONGLONG measured_bytes=0u;
@@ -890,10 +898,9 @@ static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
      * surface and drop the map; the next map downloads the GPU result. */
     bool shadow=!download && direct_shadow_slot(slot) && slot->PrivateStaging &&
         slot->Mapped && slot->NativeBo && slot->NativeMapRelease;
-    if(!slot->CopyHeld || (slot->Direct && !shadow) || slot->SystemDirect ||
-       (download && (!(slot->Flags & AppleAgxWin32BufferGpuWrite) ||
-                     !slot->GpuWritten || cpu_quiet(slot))) ||
-       (!download && cpu_quiet(slot) && slot->Sync.Valid)) {
+    if(download ? !download_due(slot) :
+       (!slot->CopyHeld || (slot->Direct && !shadow) || slot->SystemDirect ||
+        (cpu_quiet(slot) && slot->Sync.Valid))) {
       if(slot->CopyHeld && !download) {
         UINT values[4]={(UINT)slot->Token,(UINT)(slot->Token>>32),
             (UINT)slot->Direct|((UINT)slot->SystemDirect<<1)|
@@ -1019,6 +1026,88 @@ static int mark_written(ADMISSION_UMD_DEVICE *device, const uint64_t *written,
   return ok;
 }
 
+/* EXP1082: whether completing the submission now held downloads anything a
+ * CPU or another device may read. */
+static bool completion_needs_download(ADMISSION_UMD_DEVICE *device) {
+  bool due=false;
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(device) && !due;++i)
+    due=download_due(&device->ScreenBuffers[i]);
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  return due;
+}
+
+/* EXP1082: completion work of the queued job: wait for its fence, then
+ * download the GPU-written CPU-visible slots it still holds. Runs once,
+ * before any wait for that fence returns; a failure is terminal for the
+ * device. It calls no runtime GPU-signal callback: it may run inside the
+ * device's destruction (EXP1066: D3D11 crashed in
+ * SignalSynchronizationObjectFromGpu2CB there). */
+static int complete_render(ADMISSION_UMD_DEVICE *device) {
+  uint64_t internal=device->PendingRenderFence;
+  if(!internal) return 1;
+  device->PendingRenderFence=0;
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  LARGE_INTEGER wait_start;
+  (void)QueryPerformanceCounter(&wait_start);
+#endif
+  int waited=wait_object(device,device->RenderSyncObject,internal);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  measure_g4_phase(5u,wait_start,device->PendingRenderSequence,0u,
+      waited ? S_OK : E_FAIL);
+#endif
+  if(!waited || !transfer_held(device,true)) {
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+    device->FrameSubmitStatus = E_FAIL;
+#endif
+    device->DrawTerminal=TRUE;return 0;
+  }
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  device->FrameCompletedFence = internal;
+#endif
+  return 1;
+}
+
+/* EXP1080/EXP1081: DWM spent ~12 ms of every ~55 ms frame waiting inside
+ * submit() for each job (1.7 ms x ~8 submissions) while its CPU work for the
+ * next batch ran only afterwards. Return once the job and its fence signal
+ * are queued when its completion downloads nothing: the winsys keeps the
+ * submission held and retires it (wait_render) before the next submission
+ * or a CPU access, so the GPU runs while the CPU builds the next batch. A
+ * job that wrote a CPU-visible slot still completes here, so that slot's
+ * staging is current when submit() returns, as before. */
+static int finish_submission(ADMISSION_UMD_DEVICE *device,uint64_t internal,
+                             UINT sequence,uint64_t *fence) {
+  if(!completion_needs_download(device)) {
+    device->PendingRenderFence=internal;
+    device->PendingRenderSequence=sequence;
+    device->NextRenderFence=internal;
+    *fence=internal;
+    return 1;
+  }
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  LARGE_INTEGER wait_start;
+  (void)QueryPerformanceCounter(&wait_start);
+#endif
+  int waited=wait_object(device,device->RenderSyncObject,internal);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  measure_g4_phase(5u,wait_start,sequence,0u,waited ? S_OK : E_FAIL);
+#endif
+  if(!waited || !transfer_held(device,true) ||
+     !signal_render(device,internal+1)) {
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+    device->FrameSubmitStatus = E_FAIL;
+#endif
+    device->DrawTerminal=TRUE;return 2;
+  }
+  device->NextRenderFence=internal+1;
+  *fence=internal+1;
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  device->FrameCompletedFence = internal;
+#endif
+  return 1;
+}
+
 static int submit(void *context, const uint64_t *written,
                   unsigned written_count, uint64_t va, uint32_t bytes,
                   const void *private_data, uint32_t private_bytes,
@@ -1036,6 +1125,9 @@ static int submit(void *context, const uint64_t *written,
       device->NextRenderFence > UINT64_MAX - 2 ||
       written_count > D3DDDI_MAX_WRITTEN_PRIMARIES ||
       (written_count && !written)) return 0;
+  /* The winsys retires the previous submission first; keep at most one
+   * queued job even if it did not, before this one's uploads. */
+  if(device->PendingRenderFence && !complete_render(device)) return 2;
   AcquireSRWLockShared(&device->ScreenBufferLock);
   for (unsigned i = 0; i < written_count; ++i) {
     ADMISSION_UMD_SCREEN_BUFFER *slot = NULL;
@@ -1131,27 +1223,15 @@ static int submit(void *context, const uint64_t *written,
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   device->FrameSubmittedFence = internal;
 #endif
-  int signaled=signal_render(device,internal);
-#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
-  LARGE_INTEGER wait_start;
-  (void)QueryPerformanceCounter(&wait_start);
-#endif
-  int waited=signaled && wait_object(device,device->RenderSyncObject,internal);
-#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
-  measure_g4_phase(5u,wait_start,request.RenderCBSequence,0u,
-      waited ? S_OK : E_FAIL);
-#endif
-  if(!waited || !transfer_held(device,true) ||
-     !signal_render(device,internal+1)) {
+  if(!signal_render(device,internal)) {
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
     device->FrameSubmitStatus = E_FAIL;
 #endif
     device->DrawTerminal=TRUE;return 2;
   }
-  device->NextRenderFence=internal+1;
-  *fence=internal+1;
+  int finished=finish_submission(device,internal,request.RenderCBSequence,fence);
+  if(finished!=1) return finished;
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
-  device->FrameCompletedFence = internal;
   {
     static volatile LONG receipts;
     if (InterlockedIncrement(&receipts) <= 16) {
@@ -1170,12 +1250,22 @@ static int submit(void *context, const uint64_t *written,
 
 static int wait_render(void *context, uint64_t fence) {
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;
+  if (device && device->PendingRenderFence &&
+      fence >= device->PendingRenderFence && !complete_render(device))
+    return 0;
   int waited = wait_object(device, device ? device->RenderSyncObject : 0, fence);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   if (waited && device != NULL && device->FrameCompletedFence < fence)
     device->FrameCompletedFence = fence;
 #endif
   return waited;
+}
+
+/* EXP1082: non-blocking: whether the GPU has signalled this render fence. */
+static int query_render(void *context, uint64_t fence) {
+  ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;
+  return device && device->RenderFenceAddress && fence &&
+         *device->RenderFenceAddress >= fence;
 }
 
 static int private_escape(void *context, APPLE_AGX_G3_PRIVATE_REQUEST *payload) {
@@ -1214,7 +1304,7 @@ extern "C"
 const AGX_WIN32_GPUVA_OPS *AdmissionUmdGpuvaOperations(void) {
   static const AGX_WIN32_GPUVA_OPS operations = {
       reserve_va, map_va, free_va, make_resident, wait_paging,
-      submit, wait_render, evict, private_escape};
+      submit, wait_render, evict, private_escape, query_render};
   return &operations;
 }
 #endif

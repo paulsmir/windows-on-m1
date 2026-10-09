@@ -184,3 +184,12 @@ int AgxWin32GpuvaRetire(AGX_WIN32_GPUVA_SPACE *space, uint64_t completion) {
   space->RenderFence = 0;
   return 1;
 }
+
+/* EXP1082: whether a submission's completion fence is signalled, without
+ * waiting. Without the query every submission counts as complete, so callers
+ * retire it (and wait) as before. */
+int AgxWin32GpuvaComplete(AGX_WIN32_GPUVA_SPACE *space, uint64_t completion) {
+  if (!space || !completion) return 0;
+  return !space->Ops.QueryRender ||
+         space->Ops.QueryRender(space->Context, completion) != 0;
+}

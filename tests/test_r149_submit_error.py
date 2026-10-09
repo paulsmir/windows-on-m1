@@ -85,7 +85,7 @@ static void FrontendFlush(Device *hDevice) {
     assert(AgxWin32AsahiBatchPoll(&batch,0));
   } else { assert(!frontend_errors); }
 """)
-        names = ("batch_refuse", "batch_has_render_work", "retire_held", "gpuva_color_format_supported", "gpuva_color_class", "add_bo", "append_native", "append_attachments", "prepare_process_buffers",
+        names = ("batch_refuse", "batch_has_render_work", "held_by", "retire_held", "gpuva_color_format_supported", "gpuva_color_class", "add_bo", "append_native", "append_attachments", "prepare_process_buffers",
                  "AgxWin32AsahiBatchFinish", "release_lease", "AgxWin32AsahiBatchPoll",
                  "AgxWin32AsahiBatchAbort", "AgxWin32AsahiBatchRelease")
         with tempfile.TemporaryDirectory(prefix="r149-submit-error-") as directory:

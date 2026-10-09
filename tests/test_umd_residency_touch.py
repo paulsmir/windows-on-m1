@@ -92,7 +92,7 @@ int main(){
 class ResidencyTouch(unittest.TestCase):
     def test_touch_policy(self):
         text = SRC.read_text()
-        funcs = '\n'.join(function(text, n) for n in ('cpu_quiet', 'direct_shadow_slot', 'query_canonical', 'transfer_held'))
+        funcs = '\n'.join(function(text, n) for n in ('cpu_quiet', 'download_due', 'direct_shadow_slot', 'query_canonical', 'transfer_held'))
         self.assertIn('query_canonical', funcs, 'touch before first copy is missing')
         funcs = funcs.replace('auto *slot', 'SLOT *slot')
         funcs = re.sub(r'#if defined\(APPLE_AGX_EXP907_FRAME_RECEIPT\).*?#endif\n', '', funcs, flags=re.S)

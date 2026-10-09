@@ -126,7 +126,7 @@ int main(){
 class DirectShadowMap(unittest.TestCase):
     def test_direct_slots_map_through_a_shadow(self):
         text = SRC.read_text()
-        names = ('direct_shadow_slot', 'cpu_quiet', 'transfer_held',
+        names = ('direct_shadow_slot', 'cpu_quiet', 'download_due', 'transfer_held',
                  'AdmissionUmdGpuvaPrepareDirectMap', 'AdmissionUmdGpuvaFinishDirectMap',
                  'AdmissionUmdGpuvaPublishDirectMap')
         parts = [function(text, n) for n in names]

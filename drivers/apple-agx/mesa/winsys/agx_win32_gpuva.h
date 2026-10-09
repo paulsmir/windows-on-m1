@@ -26,6 +26,8 @@ typedef struct {
   int (*WaitRender)(void *, uint64_t);
   int (*Evict)(void *, const uint64_t *, unsigned);
   int (*PrivateEscape)(void *, APPLE_AGX_G3_PRIVATE_REQUEST *);
+  /* EXP1082 (optional): non-blocking, 1 once the render fence is signalled. */
+  int (*QueryRender)(void *, uint64_t);
 } AGX_WIN32_GPUVA_OPS;
 
 typedef struct {
@@ -59,6 +61,7 @@ int AgxWin32GpuvaSubmit(AGX_WIN32_GPUVA_SPACE *,
                         const void *PrivateData, uint32_t PrivateBytes,
                         uint64_t *CompletionFence);
 int AgxWin32GpuvaRetire(AGX_WIN32_GPUVA_SPACE *, uint64_t CompletionFence);
+int AgxWin32GpuvaComplete(AGX_WIN32_GPUVA_SPACE *, uint64_t CompletionFence);
 
 #ifdef __cplusplus
 }

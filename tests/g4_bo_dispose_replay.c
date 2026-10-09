@@ -51,7 +51,7 @@ static struct windows_bo *bound_bo(AGX_WIN32_ASAHI_BACKEND *b) {
   return bo;
 }
 int main(void) {
-  static AGX_WIN32_GPUVA_OPS ops = {reserve_va,map_va,free_va,res,waitf,sub,waitf,ev,NULL};
+  static AGX_WIN32_GPUVA_OPS ops = {reserve_va,map_va,free_va,res,waitf,sub,waitf,ev,NULL,NULL};
   AGX_WIN32_ASAHI_BACKEND b; memset(&b, 0, sizeof(b));
   b.Ops.Associate = associate; b.Ops.Detach = detach;
   assert(AgxWin32GpuvaInit(&b.Gpuva, &ops, &b));

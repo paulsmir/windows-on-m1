@@ -104,6 +104,27 @@ static int batch_refuse(unsigned kind, unsigned site,
   return 0;
 }
 
+/* The batch of this context whose submission holds the residency set. */
+static struct agx_batch *held_by(struct agx_batch *batch,AGX_WIN32_ASAHI_BACKEND *b) {
+  for(unsigned i=0;i<AGX_MAX_BATCHES;++i) {
+    struct agx_batch *old=&batch->ctx->batches.slots[i];
+    AGX_G4_BATCH *g=capsule(old);
+    if(old==batch || !g || !g->Submitted || g->Retired || g->Rejected ||
+       g->Fence!=b->Gpuva.RenderFence) continue;
+    return old;
+  }
+  return NULL;
+}
+/* EXP1071: several open batches may be flushed back to back (agx_flush_all).
+ * The submission of the previous one still holds the residency set; retire
+ * it (waiting for it, EXP1082) before this batch submits. A set held by no
+ * batch of this context is left alone (the submission is refused as before). */
+static int retire_held(struct agx_batch *batch,AGX_WIN32_ASAHI_BACKEND *b) {
+  if(!b->Gpuva.Held) return 1;
+  struct agx_batch *old=held_by(batch,b);
+  return old && AgxWin32AsahiBatchPoll(old,1000) && !b->Gpuva.Held;
+}
+
 int AgxWin32AsahiBatchBegin(struct agx_batch *batch) {
   AGX_WIN32_ASAHI_BACKEND *b=backend(batch);
   if(batch && batch->ctx) AgxWin32AsahiPublishPages(agx_device(batch->ctx->base.screen));
@@ -112,18 +133,26 @@ int AgxWin32AsahiBatchBegin(struct agx_batch *batch) {
   /* EXP1071: other active batches stay open, as in Linux Mesa; Asahi's
    * hazard tracking flushes one when a dependency, a CPU access or a Gallium
    * flush needs it. (Flushing them here caused 66% of DWM's submissions in
-   * EXP1070.) Submission is synchronous, so a submitted batch is complete:
-   * retire it, which frees the residency set for this batch. */
+   * EXP1070.) A completed submitted batch is retired and cleaned up here.
+   * EXP1082: one still running on the GPU stays submitted -- Mesa counts it
+   * as a user of its resources until agx_sync_batch -- and the next
+   * submission retires it (retire_held), so this batch is built meanwhile. */
   for(unsigned i=0;i<AGX_MAX_BATCHES;++i) {
     struct agx_batch *old=&batch->ctx->batches.slots[i];
     if(old==batch || !old->windows_batch ||
        BITSET_TEST(batch->ctx->batches.active,i)) continue;
+    AGX_G4_BATCH *og=capsule(old);
+    if(og->Submitted && og->Fence && !og->Retired && !og->Rejected &&
+       !AgxWin32GpuvaComplete(&b->Gpuva,og->Fence)) {
+      AgxWin32PerfNote("Begin keep: in flight");
+      continue;
+    }
     AgxWin32PerfNote("Begin drain: retire submitted");
     if(batch->ctx->any_faults || !AgxWin32AsahiBatchPoll(old,1000)) return batch_refuse(1u, __LINE__, 0u, 0u);
     agx_sync_batch(batch->ctx,old);
     if(old->windows_batch) return batch_refuse(1u, __LINE__, 0u, 0u);
   }
-  if(b->Gpuva.Held) return batch_refuse(1u, __LINE__, 0u, 0u);
+  if(b->Gpuva.Held && !held_by(batch,b)) return batch_refuse(1u, __LINE__, 0u, 0u);
   AGX_G4_BATCH *g=calloc(1,sizeof(*g));
   if(!g) return batch_refuse(1u, __LINE__, 0u, 0u);
   batch->windows_batch=g;
@@ -304,22 +333,6 @@ static unsigned gpuva_color_class(unsigned format) {
   default:
     return APPLE_AGX_G4_COLOR_BGRA8;
   }
-}
-
-/* EXP1071: several open batches may be flushed back to back (agx_flush_all).
- * The completed submission of the previous one still holds the residency
- * set; retire it before this batch submits. A set held by no batch of this
- * context is left alone (the submission is refused as before). */
-static int retire_held(struct agx_batch *batch,AGX_WIN32_ASAHI_BACKEND *b) {
-  if(!b->Gpuva.Held) return 1;
-  for(unsigned i=0;i<AGX_MAX_BATCHES;++i) {
-    struct agx_batch *old=&batch->ctx->batches.slots[i];
-    AGX_G4_BATCH *g=capsule(old);
-    if(old==batch || !g || !g->Submitted || g->Retired || g->Rejected ||
-       g->Fence!=b->Gpuva.RenderFence) continue;
-    return AgxWin32AsahiBatchPoll(old,1000) && !b->Gpuva.Held;
-  }
-  return 0;
 }
 
 static int batch_has_render_work(const struct agx_batch *batch) {

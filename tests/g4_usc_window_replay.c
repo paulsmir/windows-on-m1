@@ -71,7 +71,7 @@ static int evict(void *c,const uint64_t *a,unsigned n) {
   (void)c;(void)a;(void)n;return 1;
 }
 static AGX_WIN32_GPUVA_OPS ops={reserve_va,map_va,free_va,resident,wait_fence,
-  submit,wait_fence,evict,NULL};
+  submit,wait_fence,evict,NULL,NULL};
 static int enter(void *c,AGX_WIN32_SCREEN *s) {
   FIXTURE *f=c; (void)s; ++f->enters;return 1;
 }

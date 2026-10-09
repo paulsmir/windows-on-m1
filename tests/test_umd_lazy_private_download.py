@@ -101,7 +101,7 @@ class LazyPrivateDownload(unittest.TestCase):
     def test_unmapped_private_slots_sync_lazily(self):
         text = SRC.read_text()
         funcs = '\n'.join(function(text, n) for n in
-                          ('cpu_quiet', 'direct_shadow_slot', 'mark_written', 'transfer_held',
+                          ('cpu_quiet', 'download_due', 'direct_shadow_slot', 'mark_written', 'transfer_held',
                            'AdmissionUmdGpuvaPrepareCpuMap'))
         self.assertIn('AdmissionUmdGpuvaPrepareCpuMap', funcs,
                       'map-time download of pending GPU results is missing')

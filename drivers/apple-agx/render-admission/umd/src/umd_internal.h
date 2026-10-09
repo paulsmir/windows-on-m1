@@ -156,6 +156,10 @@ typedef struct _ADMISSION_UMD_DEVICE {
   D3DKMT_HANDLE RenderSyncObject;
   volatile UINT64 *RenderFenceAddress;
   UINT64 NextRenderFence;
+  /* EXP1082: the queued render job whose completion (wait for its fence,
+   * download of held GPU-written slots) runs at its retirement. */
+  UINT64 PendingRenderFence;
+  UINT PendingRenderSequence;
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   BOOL DwmFrameArmAttempted;
   UINT DwmFrameArmAttempts;
