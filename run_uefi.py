@@ -137,6 +137,16 @@ cpufreq_result = p.cpufreq_init()
 if cpufreq_result != 0:
     raise RuntimeError(f"CPU frequency preflight failed: cpufreq_init={cpufreq_result}")
 print("CPU frequency preflight: clusters raised to their configured performance states")
+# EXP1084: Windows has no Apple SoC DVFS driver, so the P-cluster stays at
+# m1n1's default P-state 7 (1956 MHz). WOM1_PCPU_PSTATE requests a fixed
+# non-turbo operating point (tools/j313_cpufreq.py); unset keeps the default.
+if os.environ.get("WOM1_PCPU_PSTATE"):
+    from tools.j313_cpufreq import PCPU_MHZ, requested_pstate, set_pcpu_pstate
+    _requested = int(os.environ["WOM1_PCPU_PSTATE"])
+    _before, _after = set_pcpu_pstate(p, _requested)
+    print(f"CPU frequency: P-cluster P-state {requested_pstate(_before)} -> "
+          f"{requested_pstate(_after)} ({PCPU_MHZ[_requested]} MHz), "
+          f"raw 0x{_before:x} -> 0x{_after:x}")
 u = ProxyUtils(p, heap_size=768 * 1024 * 1024)
 hv = HV(iface, p, u)
 
