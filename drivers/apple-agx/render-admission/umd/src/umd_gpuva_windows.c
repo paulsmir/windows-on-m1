@@ -1131,21 +1131,27 @@ static int submit(void *context, const uint64_t *written,
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   device->FrameSubmittedFence = internal;
 #endif
-  if(!signal_render(device,internal)) {
+  int signaled=signal_render(device,internal);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  LARGE_INTEGER wait_start;
+  (void)QueryPerformanceCounter(&wait_start);
+#endif
+  int waited=signaled && wait_object(device,device->RenderSyncObject,internal);
+#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  measure_g4_phase(5u,wait_start,request.RenderCBSequence,0u,
+      waited ? S_OK : E_FAIL);
+#endif
+  if(!waited || !transfer_held(device,true) ||
+     !signal_render(device,internal+1)) {
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
     device->FrameSubmitStatus = E_FAIL;
 #endif
     device->DrawTerminal=TRUE;return 2;
   }
-  /* EXP1066: return once the job is queued. The winsys holds this
-   * submission's slots until it retires it (AgxWin32GpuvaRetire ->
-   * wait_render), and no later submission starts before that retirement, so
-   * the completion work runs there while the CPU builds the next batch. */
-  device->PendingRenderFence=internal;
-  device->PendingRenderSequence=request.RenderCBSequence;
   device->NextRenderFence=internal+1;
   *fence=internal+1;
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
+  device->FrameCompletedFence = internal;
   {
     static volatile LONG receipts;
     if (InterlockedIncrement(&receipts) <= 16) {
@@ -1162,40 +1168,8 @@ static int submit(void *context, const uint64_t *written,
   return 1;
 }
 
-/* EXP1066: completion work of the queued job: wait for its fence, download
- * the GPU-written CPU-visible slots it still holds, then signal the fence the
- * winsys waits for. Runs once; a failure is terminal for the device. */
-static int complete_render(ADMISSION_UMD_DEVICE *device) {
-  uint64_t internal=device->PendingRenderFence;
-  if(!internal) return 1;
-  device->PendingRenderFence=0;
-#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
-  LARGE_INTEGER wait_start;
-  (void)QueryPerformanceCounter(&wait_start);
-#endif
-  int waited=wait_object(device,device->RenderSyncObject,internal);
-#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
-  measure_g4_phase(5u,wait_start,device->PendingRenderSequence,0u,
-      waited ? S_OK : E_FAIL);
-#endif
-  if(!waited || !transfer_held(device,true) ||
-     !signal_render(device,internal+1)) {
-#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
-    device->FrameSubmitStatus = E_FAIL;
-#endif
-    device->DrawTerminal=TRUE;return 0;
-  }
-#if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
-  device->FrameCompletedFence = internal;
-#endif
-  return 1;
-}
-
 static int wait_render(void *context, uint64_t fence) {
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;
-  if (device && device->PendingRenderFence &&
-      fence > device->PendingRenderFence && !complete_render(device))
-    return 0;
   int waited = wait_object(device, device ? device->RenderSyncObject : 0, fence);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   if (waited && device != NULL && device->FrameCompletedFence < fence)
