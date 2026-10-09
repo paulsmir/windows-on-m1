@@ -146,6 +146,8 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ADMISSION_JOB_TIMING_STATE JobTiming;
   ADMISSION_JOB_TIMING_STATE JobTimingSnapshot;
   ULONG JobTimingWorkers;
+  /* QPC of the last receipt export (at most one per two seconds). */
+  ULONGLONG JobTimingExportQpc;
   ADMISSION_FW_TIMING_RING FwTiming;
   ADMISSION_FW_TIMING_RING FwTimingSnapshot;
   ULONG FwTs1Fence, FwTs1Polls;
@@ -430,18 +432,25 @@ static VOID AdmissionJobTimingExportWindows(
   if (runtime == NULL || runtime->Adapter == NULL ||
       runtime->Adapter->PhysicalDeviceObject == NULL ||
       KeGetCurrentIrql() != PASSIVE_LEVEL) return;
+  /* EXP1117-EXP1119: every 16th job this export (registry set and flush,
+   * 0.76-1.13 ms) ran before the worker released the render slot, ~37 times
+   * a second. Export at most every two seconds and never flush: the probe
+   * reads the live values. */
+  before = AdmissionJobQpc();
   KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
   ++runtime->JobTimingWorkers;
-  if (runtime->JobTimingWorkers % 16u != 0u) {
+  if (runtime->JobTimingExportQpc != 0ULL &&
+      before - runtime->JobTimingExportQpc <
+          2ULL * runtime->JobTiming.QpcFrequency) {
     KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
     return;
   }
+  runtime->JobTimingExportQpc = before;
   RtlCopyMemory(&runtime->JobTimingSnapshot, &runtime->JobTiming,
       sizeof(runtime->JobTimingSnapshot));
   RtlCopyMemory(&runtime->FwTimingSnapshot, &runtime->FwTiming,
       sizeof(runtime->FwTimingSnapshot));
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
-  before = AdmissionJobQpc();
   status = IoOpenDeviceRegistryKey(runtime->Adapter->PhysicalDeviceObject,
       PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key);
   if (NT_SUCCESS(status)) {
@@ -453,7 +462,6 @@ static VOID AdmissionJobTimingExportWindows(
       status = ZwSetValueKey(key, &name, 0u, REG_BINARY,
           &runtime->FwTimingSnapshot, sizeof(runtime->FwTimingSnapshot));
     }
-    if (NT_SUCCESS(status)) (void)ZwFlushKey(key);
     ZwClose(key);
   }
   KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
