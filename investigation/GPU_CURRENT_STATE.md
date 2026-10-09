@@ -1,4 +1,34 @@
-# J313 GPU — accelerated desktop stable; DWM frame-time work under way (EXP1075-EXP1081)
+# J313 GPU — accelerated desktop stable; DWM frame time halved (EXP1081-EXP1088)
+
+
+## Current as of 2026-10-09 07:42Z (read this first)
+
+State: GPU-visible baseline after each run. Best validated package: EXP1087
+(exp/1087-build b55e214f = EXP1083 source + KMD private scene cache, LRU):
+charmap drag 20-24 flips/s, Notepad load 12-15, Settings renders, stable.
+Launch with WOM1_PCPU_PSTATE=12 (run_uefi.py 0df36bc6).
+
+Proven since 05:19Z (EXPERIMENTS.md EXP1081-EXP1087):
+- a360abf6 BO cache LRU admission (EXP1081): no per-frame texture re-creation.
+- 69912e68 + 85d6fd5b async render completion with first-map retirement
+  (EXP1082/1083): stable, small gain (one submission in flight).
+- 0df36bc6 P-cluster P-state 12 at launch (EXP1084, cpubench 1.5 -> 1.0
+  ns/iter on P-cores). Windows parks the P-cores and keeps DWM on E-cores;
+  forcing DWM onto P-cores halves its rate (EXP1085): DWM is latency-bound.
+- EXP1085 Wom1G3PagingProfile: 376 ms/s of synchronous m1n1 broker traps,
+  ~35 private-storage pages mapped and revoked per job; ACQUIRE also waited
+  for the GPU (R157). cac08ced + 29f47ae4 keep reported scenes mapped and
+  reuse them (LRU): 91 % hits, broker 360 -> 77.5 ms/s, +40 % flips (EXP1087).
+- Build branches exp/108x-build hold the exact hardware sources (write-watch
+  c4446277 not yet on hardware).
+
+Open, causal order:
+1. EXP1088: eight cached scenes (remaining ~15 misses/s).
+2. Write-watch staging (c4446277): 31 GB/run of staging hashes.
+3. Several submissions in flight (ACQUIRE no longer waits on a cache hit).
+4. Remaining broker traffic, Draw/Present costs, transient ResourceMap
+   ERROR_BUSY (FlushStatus branch), firmware recovery path.
+
 
 
 ## Current as of 2026-10-09 05:19Z (read this first)
