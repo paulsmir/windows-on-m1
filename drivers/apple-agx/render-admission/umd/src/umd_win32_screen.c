@@ -1073,11 +1073,15 @@ static int AdmissionUmdScreenDestroyBuffer(void *Context,
   buffer->Transition = TRUE;
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   /* EXP978: a borrowed Direct allocation outlives this slot, so its
-   * persistent residency reference must be dropped explicitly. */
+   * persistent residency reference must be dropped explicitly.
+   * EXP1124: without EvictOnlyIfNecessary VidMm paged every released
+   * application surface out to system memory just before its owner freed
+   * it; only drop the reference and let VidMm evict under pressure. */
   if (buffer->Direct && buffer->Resident && buffer->KernelAllocation &&
       device->KernelCallbacks->pfnEvictCb) {
     D3DKMT_HANDLE resident = buffer->KernelAllocation;
     D3DDDICB_EVICT evict = {};
+    evict.Flags.EvictOnlyIfNecessary = 1u;
     evict.NumAllocations = 1; evict.AllocationList = &resident;
     result = device->KernelCallbacks->pfnEvictCb(device->RuntimeDevice.handle, &evict);
     AcquireSRWLockExclusive(&device->ScreenBufferLock);
