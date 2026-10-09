@@ -361,6 +361,9 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
         (unsigned)(batch->key.cbufs[0].texture ? batch->key.cbufs[0].format : 0xffffu) |
         ((render ? render->sample_size_B : 0u) << 16));
   if(g->Entered && !AgxWin32AsahiBatchLeave(batch)) { fail_site=__LINE__; goto fail; }
+  /* Retire (and return the scene lease of) the previous completed
+   * submission before this batch acquires its own. */
+  if(!retire_held(batch,b)) { fail_site=__LINE__; goto fail; }
   /* Mesa pools own their slabs separately from the batch handle bitset.
    * Every slab must join the canonical residency/copy transaction, including
    * earlier slabs after rollover and the low-VA pipeline pool. */
@@ -455,7 +458,6 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   util_dynarray_foreach(&batch->pipeline_pool.bos,struct agx_bo *,bo) {
     if(!*bo || !add_bo(b,refs,&count,limit,*bo)) { fail_site=__LINE__; goto fail; }
   }
-  if(!retire_held(batch,b)) { fail_site=__LINE__; goto fail; }
   if(!AgxWin32GpuvaSubmit(&b->Gpuva,refs,count,
       AgxWin32AsahiGpuvaBo(b,g->Command),packet.Header.V2.Base.CommandBytes,
       written,written_count,
@@ -475,6 +477,22 @@ fail:
   return 0;
 }
 
+/* EXP1071: the private scene storage is needed only while the GPU runs the
+ * job. Return it as soon as the submission retires: with several open
+ * batches flushed back to back, holding every lease until cleanup exhausted
+ * the process range (D3DERR_OUTOFVIDEOMEMORY in apps). */
+static int release_lease(AGX_WIN32_ASAHI_BACKEND *b,AGX_G4_BATCH *g) {
+  APPLE_AGX_G3_PRIVATE_REQUEST request={0};
+  if(!g->Lease.SceneId) return 1;
+  request.Magic=APPLE_AGX_G3_PRIVATE_MAGIC;request.Version=APPLE_AGX_G3_PRIVATE_VERSION;
+  request.Bytes=sizeof(request);request.Operation=APPLE_AGX_G3_PRIVATE_RELEASE;
+  request.ManagerId=g->Lease.ManagerId;request.ManagerGeneration=g->Lease.ManagerGeneration;
+  request.SceneId=g->Lease.SceneId;request.SceneGeneration=g->Lease.SceneGeneration;
+  if(!b->Gpuva.Ops.PrivateEscape ||
+     !b->Gpuva.Ops.PrivateEscape(b->Gpuva.Context,&request)) return 0;
+  memset(&g->Lease,0,sizeof(g->Lease));
+  return 1;
+}
 int AgxWin32AsahiBatchPoll(struct agx_batch *batch,APPLE_AGX_U32 timeout) {
   AGX_G4_BATCH *g=capsule(batch);
   AGX_WIN32_ASAHI_BACKEND *b=backend(batch);
@@ -483,6 +501,7 @@ int AgxWin32AsahiBatchPoll(struct agx_batch *batch,APPLE_AGX_U32 timeout) {
   if(!b || !g->Submitted || !g->Fence) return 0;
   if(!AgxWin32GpuvaRetire(&b->Gpuva,g->Fence)) return 0;
   g->Retired=1;
+  (void)release_lease(b,g); /* a failed release is retried by Release */
   return 1;
 }
 int AgxWin32AsahiBatchAbort(struct agx_batch *batch) {
@@ -499,15 +518,7 @@ int AgxWin32AsahiBatchRelease(struct agx_batch *batch) {
   if(!g) return 1;
   if(!b || b->Gpuva.Terminal || (!g->Retired && !g->Rejected) || g->Entered)
     return 0;
-  if(g->Lease.SceneId) {
-    APPLE_AGX_G3_PRIVATE_REQUEST request={0};
-    request.Magic=APPLE_AGX_G3_PRIVATE_MAGIC;request.Version=APPLE_AGX_G3_PRIVATE_VERSION;
-    request.Bytes=sizeof(request);request.Operation=APPLE_AGX_G3_PRIVATE_RELEASE;
-    request.ManagerId=g->Lease.ManagerId;request.ManagerGeneration=g->Lease.ManagerGeneration;
-    request.SceneId=g->Lease.SceneId;request.SceneGeneration=g->Lease.SceneGeneration;
-    if(!b->Gpuva.Ops.PrivateEscape ||
-       !b->Gpuva.Ops.PrivateEscape(b->Gpuva.Context,&request)) return 0;
-  }
+  if(!release_lease(b,g)) return 0;
   if(g->Command) agx_bo_unreference(b->Native,g->Command);
   batch->windows_batch=NULL;
   free(g);

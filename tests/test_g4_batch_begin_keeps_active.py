@@ -12,7 +12,10 @@ appends to it instead of starting another pass. Invariants:
 - when several open batches are flushed back to back (agx_flush_all), each
   Finish first retires the completed submission that still holds the
   residency set, so the next submission is not refused;
-- a held set owned by no batch of this context is still refused.
+- a held set owned by no batch of this context is still refused;
+- EXP1071 hardware: a retired submission returns its private scene lease at
+  once, so open batches flushed back to back hold at most one lease (holding
+  each until cleanup exhausted the process range: D3DERR_OUTOFVIDEOMEMORY).
 """
 from pathlib import Path
 import os
@@ -37,9 +40,21 @@ PROGRAM = r'''
 #define BITSET_CLEAR(set, i) ((set)[(i) / 32u] &= ~(1u << ((i) % 32u)))
 #define BITSET_SET(set, i) ((set)[(i) / 32u] |= (1u << ((i) % 32u)))
 typedef unsigned APPLE_AGX_U32;
-typedef struct { unsigned ManagerId; } APPLE_AGX_G4_PRIVATE_LEASE;
+#include <string.h>
+typedef struct { unsigned ManagerId, ManagerGeneration, SceneId, SceneGeneration; } APPLE_AGX_G4_PRIVATE_LEASE;
+#define APPLE_AGX_G3_PRIVATE_MAGIC 1u
+#define APPLE_AGX_G3_PRIVATE_VERSION 1u
+#define APPLE_AGX_G3_PRIVATE_RELEASE 2u
+typedef struct { unsigned Magic, Version, Bytes, Operation, ManagerId, ManagerGeneration,
+  SceneId, SceneGeneration; } APPLE_AGX_G3_PRIVATE_REQUEST;
+static unsigned live_leases;
+static int private_escape(void *context, APPLE_AGX_G3_PRIVATE_REQUEST *r) {
+  (void)context; if (r->Operation != APPLE_AGX_G3_PRIVATE_RELEASE || !live_leases) return 0;
+  --live_leases; return 1;
+}
 typedef struct {
-  struct { uint64_t *Held; uint64_t RenderFence; unsigned Terminal; } Gpuva;
+  struct { uint64_t *Held; uint64_t RenderFence; unsigned Terminal; void *Context;
+    struct { int (*PrivateEscape)(void *, APPLE_AGX_G3_PRIVATE_REQUEST *); } Ops; } Gpuva;
   int GpuvaReady, Failed;
 } AGX_WIN32_ASAHI_BACKEND;
 struct agx_bo { int unused; };
@@ -87,6 +102,8 @@ static void agx_sync_batch(struct agx_context *ctx, struct agx_batch *batch) {
 /* Mirrors AgxWin32GpuvaSubmit: refused while another submission holds. */
 static int submit(AGX_WIN32_ASAHI_BACKEND *b, struct agx_batch *batch, uint64_t fence) {
   if (!retire_held(batch, b) || b->Gpuva.Held) return 0;
+  /* prepare_process_buffers: this batch's scene lease. */
+  capsule(batch)->Lease = (APPLE_AGX_G4_PRIVATE_LEASE){1, 1, (unsigned)fence, 1}; ++live_leases;
   b->Gpuva.Held = &held_storage; b->Gpuva.RenderFence = fence;
   AGX_G4_BATCH *g = capsule(batch); g->Submitted = 1; g->Fence = fence;
   unsigned i = (unsigned)(batch - batch->ctx->batches.slots);
@@ -95,6 +112,7 @@ static int submit(AGX_WIN32_ASAHI_BACKEND *b, struct agx_batch *batch, uint64_t 
 }
 int main(void) {
   AGX_WIN32_ASAHI_BACKEND backend = {{0}, 1, 0};
+  backend.Gpuva.Ops.PrivateEscape = private_escape;
   struct pipe_screen screen = {{&backend}};
   struct agx_batch slots[AGX_MAX_BATCHES];
   struct agx_bo vdm;
@@ -108,9 +126,10 @@ int main(void) {
   assert(submit(&backend, &slots[0], 10));
   assert(submit(&backend, &slots[1], 11));
   assert(retires == 1 && ((AGX_G4_BATCH *)slots[0].windows_batch)->Retired);
+  assert(live_leases == 1 && !((AGX_G4_BATCH *)slots[0].windows_batch)->Lease.SceneId);
   /* C opens: the completed submitted batches are retired and cleaned up. */
   BITSET_SET(ctx.batches.active, 2); assert(AgxWin32AsahiBatchBegin(&slots[2]));
-  assert(flushes == 0 && retires == 2 && !backend.Gpuva.Held);
+  assert(flushes == 0 && retires == 2 && !backend.Gpuva.Held && live_leases == 0);
   assert(!slots[0].windows_batch && !slots[1].windows_batch && slots[2].windows_batch);
   /* A held set that no batch of this context owns is still refused. */
   backend.Gpuva.Held = &held_storage; backend.Gpuva.RenderFence = 99;
@@ -126,7 +145,7 @@ class BatchBeginKeepsActive(unittest.TestCase):
     def test_new_batch_keeps_other_active_batches_open(self):
         source = SRC.read_text()
         functions = "\n".join(body(source, name) for name in (
-            "backend", "capsule", "batch_refuse", "AgxWin32AsahiBatchPoll",
+            "backend", "capsule", "batch_refuse", "release_lease", "AgxWin32AsahiBatchPoll",
             "retire_held", "AgxWin32AsahiBatchBegin"))
         program = PROGRAM.replace("@@FUNCTIONS@@", functions)
         program = program.replace("#include <stdlib.h>", "#include <stdlib.h>\n#include <stddef.h>")
@@ -141,10 +160,10 @@ class BatchBeginKeepsActive(unittest.TestCase):
             ran = subprocess.run([str(exe)], capture_output=True, text=True)
             self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
 
-    def test_finish_retires_the_completed_holder_before_submitting(self):
+    def test_finish_retires_the_completed_holder_before_its_lease(self):
         source = SRC.read_text()
         finish = body(source, "AgxWin32AsahiBatchFinish")
-        self.assertLess(finish.index("retire_held(batch,b)"), finish.index("AgxWin32GpuvaSubmit("))
+        self.assertLess(finish.index("retire_held(batch,b)"), finish.index("prepare_process_buffers("))
 
 
 if __name__ == "__main__":
