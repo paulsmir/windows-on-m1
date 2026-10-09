@@ -1,4 +1,36 @@
-# J313 GPU: classic window drags at 60 fps; app content is the next pole (EXP1099-EXP1111)
+# J313 GPU: dynamic private memory; two submissions in flight next (EXP1112-EXP1116)
+
+
+## Current as of 2026-10-09 18:50Z (read this first)
+
+State: GPU-visible baseline after each run. Best validated launch: driver
+exp/1115-build f814128e (EXP1111 contents + receipts 318d8cfa/bfb35d80/
+b0bb4883 + be9b4ee7 dynamic TVB heap) with m1n1 fa3356ee. Flips unchanged
+from EXP1111 (charmap 60, cursor 55-60, same-size drag 51, Notepad drag 34,
+typing 38-39).
+
+Proven since 15:45Z:
+- Present lead (EXP1113, m1n1 10ad59c0 receipt): the DCP applies a swap only
+  if swap_submit finished >= ~1.5 ms before vblank (firmware); m1n1's
+  A407+A408 RPCs add ~0.25 ms. Per job: kick -> TA end ~175 us, 3D ~140 us,
+  finalize until CPU-visible ~100 us.
+- Private memory (EXP1114 receipt Wom1G3PrivateProcs): every process held a
+  32-block (4 MiB) TVB heap = 64 of its 82-128 units; pool 884/1024 units.
+- Dynamic TVB heap (EXP1115, be9b4ee7, Asahi ensure_blocks): fixed heap VA
+  window, backed blocks = max min_tvb_blocks of the process's renders, grown
+  idle, InitBM on growth. Firmware accepts 8/24-block managers; pool 522
+  units, overflow 0, no regressions.
+
+Open, causal order:
+1. One GPU job in flight: DWM pays ~6 sequential round trips per frame.
+   EXP1116 = two submissions in flight (e4398e22 = c545a3d2) + 192-unit
+   quota (30db3a4d); EXP1094's failure (global pool exhaustion) is removed.
+2. Scene size: full-screen scenes are 11 units (TPC 5, user buffer 2);
+   Asahi shares one TPC per buffer and uses a 0x80 user buffer on one
+   cluster.
+3. Notepad (WinUI) frames ~34/s: two processes share the job slot.
+4. Present lead: pre-issue swap_start (~0.12 ms) in m1n1.
+
 
 
 ## Current as of 2026-10-09 15:45Z (read this first)
