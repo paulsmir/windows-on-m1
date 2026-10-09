@@ -26,17 +26,47 @@ static ULONG AdmissionUmdNextGeneration(VOID) {
   return generation == 0u ? 1u : generation;
 }
 
+/* EXP1094: EXP1092 context-switch samples put ~3.5 % of DWM's composition
+ * thread in RtlQueryEnvironmentVariable: every diagnostic call (several per
+ * submission) looked up both trace variables. They are process start-up
+ * configuration; read them once per process. */
+static INIT_ONCE AdmissionUmdTraceOnce = INIT_ONCE_STATIC_INIT;
+static WCHAR AdmissionUmdTracePath[MAX_PATH];
+static BOOL AdmissionUmdTraceRefusalsOnly;
+
+static BOOL CALLBACK AdmissionUmdTraceLoad(PINIT_ONCE Once, PVOID Parameter,
+                                           PVOID *Context) {
+  WCHAR only[2];
+  DWORD length;
+  UNREFERENCED_PARAMETER(Once);
+  UNREFERENCED_PARAMETER(Parameter);
+  UNREFERENCED_PARAMETER(Context);
+  AdmissionUmdTraceRefusalsOnly =
+      GetEnvironmentVariableW(L"APPLE_AGX_UMD_REFUSALS_ONLY", only, 2) == 1u &&
+      only[0] == L'1';
+  length = GetEnvironmentVariableW(L"APPLE_AGX_UMD_TRACE_FILE",
+      AdmissionUmdTracePath, ARRAYSIZE(AdmissionUmdTracePath));
+  if (length == 0u || length >= ARRAYSIZE(AdmissionUmdTracePath))
+    AdmissionUmdTracePath[0] = L'\0';
+  return TRUE;
+}
+
+/* The trace file path, or NULL when tracing is off. */
+static PCWSTR AdmissionUmdTraceConfig(BOOL *RefusalsOnly) {
+  (void)InitOnceExecuteOnce(&AdmissionUmdTraceOnce, AdmissionUmdTraceLoad,
+                            NULL, NULL);
+  *RefusalsOnly = AdmissionUmdTraceRefusalsOnly;
+  return AdmissionUmdTracePath[0] != L'\0' ? AdmissionUmdTracePath : NULL;
+}
+
 /* Opt-in, process-local diagnostics for standard-runtime admission. Never
  * change the caller's last-error state or any graphics result. */
 BOOL AdmissionUmdDiagnosticEnabled(VOID) {
   DWORD saved = GetLastError();
-  WCHAR path[MAX_PATH], only[2];
-  DWORD refusalOnly = GetEnvironmentVariableW(L"APPLE_AGX_UMD_REFUSALS_ONLY",only,2);
-  DWORD length = GetEnvironmentVariableW(
-      L"APPLE_AGX_UMD_TRACE_FILE", path, ARRAYSIZE(path));
+  BOOL refusalsOnly;
+  PCWSTR path = AdmissionUmdTraceConfig(&refusalsOnly);
   SetLastError(saved);
-  return length != 0u && length < ARRAYSIZE(path) &&
-      !(refusalOnly == 1u && only[0] == L'1');
+  return path != NULL && !refusalsOnly;
 }
 
 /* EXP959 exhausted the normal startup budget before DWM's first failed
@@ -100,27 +130,26 @@ VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
   static volatile LONG deallocateFailures;
   static volatile LONG retirementFailures;
   DWORD saved = GetLastError();
-  WCHAR path[MAX_PATH], only[2];
+  BOOL refusalsOnly;
+  PCWSTR path;
   char line[512];
   HANDLE file = INVALID_HANDLE_VALUE;
-  DWORD length, written;
+  DWORD written;
   int used;
   UINT i;
   LARGE_INTEGER diagnosticQpc = {0};
   DWORD diagnosticSession = MAXDWORD;
   if (Stage == NULL || Count > 16u || (Count != 0u && Values == NULL))
     goto done;
-  if (GetEnvironmentVariableW(L"APPLE_AGX_UMD_REFUSALS_ONLY",only,2)==1u &&
-      only[0]==L'1' && strncmp(Stage,"reject-",7u)!=0 &&
+  path = AdmissionUmdTraceConfig(&refusalsOnly);
+  if (path == NULL) goto done;
+  if (refusalsOnly && strncmp(Stage,"reject-",7u)!=0 &&
       strncmp(Stage,"measure-",8u)!=0 &&
       !(strcmp(Stage,"umd-deallocate-failure")==0 && FAILED(Status)) &&
       !(strcmp(Stage,"umd-retirement-failure")==0 && FAILED(Status))) goto done;
-  length = GetEnvironmentVariableW(L"APPLE_AGX_UMD_TRACE_FILE", path,
-                                    ARRAYSIZE(path));
   /* Refusals must not disappear when successful startup chatter consumes
    * the normal 128-record budget. Capture remains opt-in and run-bounded. */
-  if (length == 0u || length >= ARRAYSIZE(path) ||
-      !AdmissionUmdDiagnosticPermit(Stage,Status,&records,&deallocateFailures,
+  if (!AdmissionUmdDiagnosticPermit(Stage,Status,&records,&deallocateFailures,
                                     &retirementFailures))
     goto done;
   (void)QueryPerformanceCounter(&diagnosticQpc);
