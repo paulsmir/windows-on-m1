@@ -1,4 +1,34 @@
-# J313 GPU — accelerated desktop; GPU hangs traced to missing Asahi zero/scratch pages (EXP1068)
+# J313 GPU — accelerated desktop stable; latency work under way (EXP1069-EXP1073)
+
+
+## Current as of 2026-10-09 03:20Z (read this first)
+
+State: GPU-visible baseline after each run (rec1073h rollback). Best validated
+package: EXP1072 (74580051): zero/scratch pages, keep-active batches, lease at
+retire; DWM stable, no TDR, Notepad/Settings render without speckle.
+
+Proven since 01:10Z (EXPERIMENTS.md EXP1069-EXP1073):
+- 9a9a3020 zero/scratch pages end the GPU hangs (EXP1069 validated).
+- BatchBegin drained every other open batch: 66 % of DWM submissions
+  (EXP1070 perf reasons). b77d9373 keeps them open; 74580051 returns the
+  scene lease at retire (EXP1071 exhausted it). DWM submissions per present
+  13.4 -> 10.9 (EXP1072).
+- Under the mouse load the flip rate (~10/s) is bound by Notepad's frame
+  time (SetWindowPos waits for its redraw), not DWM; Notepad's GDI-interop
+  surface (2.4 MB, CPU-mapped) is copied down/up through escapes on every
+  submission (~3000 measure-xfer per run).
+- KMD completion detection cost one 1 ms tick per job; 8ef1eb63 polls every
+  20 us for 2 ms: Submit->Notify 2.31 -> 1.67 ms, GPU job ~0.73 ms (EXP1073).
+- EXP1073 GPU stall without TDR = registry I/O in the paging DDI under
+  MmRotatePhysicalView (live dump, agx_livedump f5f97491); fixed by 6029de0f
+  (paging-DDI receipts written by a work item). EXP1074 verifies.
+
+Open, causal order:
+1. EXP1074: fine poll + 6029de0f stable under the same load.
+2. Notepad GDI-interop ping-pong copies (CPU-mapped GPU-written slot).
+3. Per-job fixed costs: Submit->Worker ~0.28 ms, kick prep ~0.35 ms,
+   VidSch notify->wake ~1 ms; then multi-in-flight submission.
+4. TDR recovery (firmware restart path); libagx zero-page constants.
 
 
 ## Current as of 2026-10-09 01:10Z (read this first)
