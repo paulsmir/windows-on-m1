@@ -5,8 +5,15 @@ VA reserve, a mapping and residency paging-fence wait (2553 waits, 55.7 s of
 251 s). Mesa's agx_bo_cache is bypassed because the winsys replaces
 agx_bo_create. Invariants of the replacement cache:
 - an equal request (rounded size, flags, buffer class) reuses a released BO;
-- imported BOs, BOs named by an in-flight submission (GpuvaSpace.Held), and
-  requests beyond the entry/byte limits are never cached or handed out;
+- imported BOs and BOs named by an in-flight submission (GpuvaSpace.Held) are
+  never cached or handed out; a BO larger than the whole byte budget is never
+  cached;
+- EXP1080: a full cache admits the newly released BO by disposing its least
+  recently released entries, as Mesa's agx_bo_cache does. Refusing it froze
+  DWM's cache with stale entries: every released 2.9 MB texture was disposed
+  (DestroyResource ~10 ms) and created again with a MakeResident and a VA map
+  (CreateResource ~18 ms, 7.7 s of paging waits in a 70 s window drag);
+- taking an entry keeps the release order of the others;
 - flushing disposes every cached BO; a refused dispose leaves the BO for
   AgxWin32AsahiCollect (refcnt 0, no longer cached).
 """
@@ -47,6 +54,7 @@ typedef struct { int Failed, Closing; AGX_WIN32_GPUVA_SPACE Gpuva;
 struct windows_bo { struct agx_bo Base; struct { struct { unsigned ClassId; } Buffer; } Backing;
   AGX_WIN32_ASAHI_BACKEND *Backend; AGX_WIN32_GPUVA_BO Gpuva; int Imported, Cached; };
 static int disposed, refuse;
+static void AgxWin32PerfNote(const char *fmt, ...) { (void)fmt; }
 static int dispose(struct windows_bo *bo) { (void)bo; if(refuse) return 0; ++disposed; return 1; }
 @@FUNCS@@
 static struct windows_bo *mk(AGX_WIN32_ASAHI_BACKEND *b,size_t size,unsigned flags,unsigned cls,uint64_t alloc) {
@@ -65,18 +73,43 @@ int main(void) {
   assert(!cache_take(&b,0x40000,0,1));
   b.Gpuva.Held=NULL; b.Gpuva.HeldCount=0;
   assert(cache_take(&b,0x40000,0,1)==a && !a->Cached && b.CacheCount==1 && b.CacheBytes==0x80000);
-  /* Limits: a failed or closing backend, or a full byte budget, refuses. */
+  /* A failed or closing backend refuses. */
   b.Closing=1; assert(!cache_put(a)); b.Closing=0;
-  struct windows_bo *huge=mk(&b,AGX_WIN32_BO_CACHE_BYTES,0,1,14); assert(!cache_put(huge));
+  /* Taking from the middle keeps the release order of the others. */
+  struct windows_bo *x[4];
+  for(unsigned i=0;i<4;++i) { x[i]=mk(&b,0x20000,0,1,20+i); assert(cache_put(x[i])); }
+  uint64_t busy[2]={22,23}; b.Gpuva.Held=busy; b.Gpuva.HeldCount=2;
+  assert(cache_take(&b,0x20000,0,1)==x[1]);
+  b.Gpuva.Held=NULL; b.Gpuva.HeldCount=0;
+  assert(b.CacheCount==4 && b.Cache[0]==e && b.Cache[1]==x[0] && b.Cache[2]==x[2] && b.Cache[3]==x[3]);
+  /* A full cache admits the released BO by disposing the oldest entry. */
   for(unsigned i=b.CacheCount;i<AGX_WIN32_BO_CACHE_LIMIT;++i) assert(cache_put(mk(&b,0x10000,0,1,100+i)));
-  assert(!cache_put(a));
+  assert(disposed==0);
+  assert(cache_put(a));
+  assert(disposed==1 && !e->Cached && a->Cached && b.CacheCount==AGX_WIN32_BO_CACHE_LIMIT);
+  assert(b.Cache[0]==x[0] && b.Cache[AGX_WIN32_BO_CACHE_LIMIT-1]==a);
+  /* The byte budget: the oldest entries go until the new BO fits. */
+  APPLE_AGX_U64 bytes=0; for(unsigned i=0;i<b.CacheCount;++i) bytes+=((struct windows_bo *)b.Cache[i])->Base.size;
+  assert(b.CacheBytes==bytes);
+  struct windows_bo *big=mk(&b,AGX_WIN32_BO_CACHE_BYTES-0x40000,0,1,15);
+  assert(cache_put(big));
+  assert(b.CacheCount==2 && b.Cache[0]==a && b.Cache[1]==big && b.CacheBytes==AGX_WIN32_BO_CACHE_BYTES);
+  assert(disposed==AGX_WIN32_BO_CACHE_LIMIT && !x[0]->Cached);
+  /* A BO larger than the whole budget is refused and evicts nothing. */
+  struct windows_bo *huge=mk(&b,AGX_WIN32_BO_CACHE_BYTES+0x10000,0,1,14);
+  assert(!cache_put(huge) && b.CacheCount==2 && disposed==AGX_WIN32_BO_CACHE_LIMIT);
+  /* An eviction whose dispose is refused leaves the BO uncached for collect. */
+  refuse=1; struct windows_bo *c=mk(&b,0x40000,0,1,16);
+  assert(cache_put(c) && !a->Cached && b.CacheCount==2 && b.Cache[0]==big && b.Cache[1]==c);
+  refuse=0;
   /* Flush disposes everything; a refused dispose leaves it uncached. */
+  int before=disposed;
   refuse=1; struct windows_bo *last=(struct windows_bo *)b.Cache[b.CacheCount-1];
   cache_flush(&b);
-  assert(b.CacheCount==0 && b.CacheBytes==0 && disposed==0 && !last->Cached);
+  assert(b.CacheCount==0 && b.CacheBytes==0 && disposed==before && !last->Cached);
   refuse=0;
   for(unsigned i=0;i<4;++i) assert(cache_put(mk(&b,0x10000,0,1,200+i)));
-  cache_flush(&b); assert(disposed==4 && b.CacheCount==0);
+  cache_flush(&b); assert(disposed==before+4 && b.CacheCount==0);
   puts("EXP996 bo cache: PASS");
   return 0;
 }
@@ -87,7 +120,7 @@ class BoCache(unittest.TestCase):
     def test_cache_reuse_and_limits(self):
         text = SRC.read_text()
         funcs = '\n'.join(function(text, n) for n in
-                          ('cache_in_flight', 'cache_put', 'cache_take', 'cache_flush'))
+                          ('cache_in_flight', 'cache_evict_oldest', 'cache_put', 'cache_take', 'cache_flush'))
         self.assertIn('cache_take', funcs, 'winsys BO cache is missing')
         limits = '\n'.join(l for l in HDR.read_text().splitlines()
                            if l.startswith('#define AGX_WIN32_BO_CACHE_'))

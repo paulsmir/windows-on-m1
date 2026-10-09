@@ -142,11 +142,28 @@ static int cache_in_flight(const AGX_WIN32_ASAHI_BACKEND *b,const struct windows
     if(b->Gpuva.Held[i]==bo->Gpuva.Allocation) return 1;
   return 0;
 }
+/* Cache[] is kept in release order, oldest first. A refused dispose leaves
+ * the BO for AgxWin32AsahiCollect, as cache_flush does. */
+static void cache_evict_oldest(AGX_WIN32_ASAHI_BACKEND *b) {
+  struct windows_bo *bo=(struct windows_bo *)b->Cache[0];
+  memmove(&b->Cache[0],&b->Cache[1],(size_t)(--b->CacheCount)*sizeof(b->Cache[0]));
+  b->CacheBytes-=bo->Base.size;
+  bo->Cached=0;
+  AgxWin32PerfNote("BO cache evict");
+  (void)dispose(bo);
+}
+/* EXP1080: a full cache refused every later release, so DWM's cache stayed
+ * full of stale entries while each released 2.9 MB texture was disposed and
+ * created again (DestroyResource ~10 ms, CreateResource ~18 ms of MakeResident
+ * and map paging waits). Admit the released BO and dispose the least recently
+ * released entries instead, as Mesa's agx_bo_cache does. */
 static int cache_put(struct windows_bo *bo) {
   AGX_WIN32_ASAHI_BACKEND *b=bo->Backend;
   if(bo->Imported || bo->Cached || !bo->Gpuva.Bound || b->Failed || b->Closing ||
-     b->CacheCount>=AGX_WIN32_BO_CACHE_LIMIT ||
-     bo->Base.size>AGX_WIN32_BO_CACHE_BYTES-b->CacheBytes) return 0;
+     bo->Base.size>AGX_WIN32_BO_CACHE_BYTES) return 0;
+  while(b->CacheCount && (b->CacheCount>=AGX_WIN32_BO_CACHE_LIMIT ||
+        bo->Base.size>AGX_WIN32_BO_CACHE_BYTES-b->CacheBytes))
+    cache_evict_oldest(b);
   bo->Cached=1;
   b->Cache[b->CacheCount++]=bo;
   b->CacheBytes+=bo->Base.size;
@@ -158,7 +175,7 @@ static struct windows_bo *cache_take(AGX_WIN32_ASAHI_BACKEND *b,size_t bytes,
     struct windows_bo *bo=(struct windows_bo *)b->Cache[i];
     if(bo->Base.size!=bytes || (unsigned)bo->Base.flags!=flags ||
        bo->Backing.Buffer.ClassId!=cls || cache_in_flight(b,bo)) continue;
-    b->Cache[i]=b->Cache[--b->CacheCount];
+    memmove(&b->Cache[i],&b->Cache[i+1],(size_t)(--b->CacheCount-i)*sizeof(b->Cache[0]));
     b->CacheBytes-=bo->Base.size;
     bo->Cached=0;
     return bo;
@@ -205,9 +222,12 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
   }
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if((bo=cache_take(b,bytes,(unsigned)flags,cls))) {
+    AgxWin32PerfNote("BO cache hit");
     bo->Base.refcnt=1; bo->Base.label=label;
     return &bo->Base;
   }
+  /* EXP1081 receipt-only: hit/miss/evict counts in measure-perf-reason. */
+  AgxWin32PerfNote("BO cache miss");
 #endif
   bo=calloc(1,sizeof(*bo));
   if(!bo) return NULL;
