@@ -359,6 +359,8 @@ static BOOLEAN AdmissionG3PrivateMapExtentObserved(ADMISSION_G3_PROCESS *p,
     ADMISSION_BACKEND_MEMORY_VIEW *view, const APPLE_AGX_G3_PRIVATE_EXTENT *e,
     BOOLEAN publish, UINT *failedOffset) {
   UINT offset;
+  p->State->PrivateStats[publish ? ADMISSION_G3_PRIVATE_STAT_MAPPED_PAGES :
+                                   ADMISSION_G3_PRIVATE_STAT_UNMAPPED_PAGES]+=e->Bytes/0x4000u;
   for (offset=0; offset<e->Bytes; offset+=0x4000u)
     if (!AppleAgxGpuvaG3GraphUpdateLeafBacking(&p->Graph,p->PrivateLeafIpa,
             (e->VaOffset+offset)>>14,
@@ -426,6 +428,7 @@ static BOOLEAN AdmissionG3PrivateReleaseScene(ADMISSION_G3_PROCESS *p,
   while (*link && *link!=scene) link=&(*link)->Next;
   if (*link) *link=scene->Next;
   ExFreePoolWithTag(scene,ADMISSION_POOL_TAG);
+  ++p->State->PrivateStats[ADMISSION_G3_PRIVATE_STAT_RELEASED];
   return TRUE;
 }
 
@@ -438,16 +441,32 @@ static BOOLEAN AdmissionG3PrivateReleaseScene(ADMISSION_G3_PROCESS *p,
  * Cancelled, unqueued and quarantined scenes keep the unmap/free path. */
 static BOOLEAN AdmissionG3PrivateCacheScene(ADMISSION_G3_PROCESS *p,
     ADMISSION_G3_PRIVATE_SCENE *scene) {
-  ADMISSION_G3_PRIVATE_SCENE *s;
-  UINT cached=0u;
   if (scene->Cached) return TRUE;
   if (!scene->ReleaseRequested || !scene->Reported || scene->Queued ||
       scene->Submitting || scene->Quarantined || p->Poisoned ||
       p->Graph.Uncertain || scene->Context->GpuvaG3Closing) return FALSE;
-  for (s=p->PrivateScenes;s;s=s->Next) if (s->Cached) ++cached;
-  if (cached>=ADMISSION_G3_PRIVATE_SCENE_CACHE) return FALSE;
+  /* EXP1087: always admit (most recent last); a miss trims the oldest. */
   scene->Cached=1u;
+  scene->CachedAt=++p->PrivateCacheClock;
   return TRUE;
+}
+
+/* EXP1087: with no job in flight (an ACQUIRE miss), unmap the least recently
+ * cached scenes beyond ADMISSION_G3_PRIVATE_SCENE_CACHE. */
+static BOOLEAN AdmissionG3PrivateTrimCache(ADMISSION_G3_PROCESS *p,
+    ADMISSION_BACKEND_MEMORY_VIEW *view) {
+  for (;;) {
+    ADMISSION_G3_PRIVATE_SCENE *s,*oldest=NULL;
+    UINT cached=0u;
+    for (s=p->PrivateScenes;s;s=s->Next)
+      if (s->Cached) {
+        ++cached;
+        if (!oldest || s->CachedAt<oldest->CachedAt) oldest=s;
+      }
+    if (cached<=ADMISSION_G3_PRIVATE_SCENE_CACHE) return TRUE;
+    if (!AdmissionG3PrivateReleaseScene(p,oldest,view)) return FALSE;
+    ++p->State->PrivateStats[ADMISSION_G3_PRIVATE_STAT_TRIM];
+  }
 }
 
 static ADMISSION_G3_PRIVATE_SCENE *AdmissionG3PrivateCachedScene(
@@ -493,6 +512,7 @@ static BOOLEAN AdmissionG3PrivateEvictCached(ADMISSION_G3_PROCESS *p,
     next=s->Next;
     if (!s->Cached) continue;
     if (!AdmissionG3PrivateReleaseScene(p,s,view)) return FALSE;
+    ++p->State->PrivateStats[ADMISSION_G3_PRIVATE_STAT_PRESSURE];
     evicted=TRUE;
   }
   return evicted;
@@ -541,6 +561,8 @@ static BOOLEAN AdmissionG3PrivateReap(ADMISSION_G3_PROCESS *p) {
       }
     }
     if (s->Quarantined || p->Graph.Uncertain) continue;
+    if (s->ReleaseRequested && !s->Queued && !s->Cached && AdmissionG3PrivateCacheScene(p,s))
+      ++p->State->PrivateStats[ADMISSION_G3_PRIVATE_STAT_CACHED_REAP];
     if (s->ReleaseRequested && !s->Queued && !AdmissionG3PrivateCacheScene(p,s) &&
         !p->Graph.JobInFlight && !p->Graph.LeaseToken &&
         !AdmissionG3PrivateReleaseScene(p,s,&view)) return FALSE;
@@ -979,7 +1001,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3FrameArmEscape(ADMISSION_CONTEXT
   }
   /* EXP1052 receipt-only: publish the paging profile from this PASSIVE escape
    * (never from the paging path), at most every two seconds. */
-  AdmissionRecordPagingProfile(adapter, &state->Client);
+  AdmissionRecordPagingProfile(adapter, &state->Client, state->PrivateStats);
   return valid ? STATUS_SUCCESS : STATUS_INVALID_HANDLE;
 }
 #endif
@@ -1602,7 +1624,11 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
      * submission reference or another job/lease of this owner defers actual
      * unmap/free to the existing completion/acquire/context reaper. Never
      * require Windows to drain unrelated GPU work to acknowledge a release. */
-    if (scene->Queued || scene->Submitting || AdmissionG3PrivateCacheScene(p,scene) ||
+    if (scene->Queued || scene->Submitting)
+      ++state->PrivateStats[ADMISSION_G3_PRIVATE_STAT_RELEASE_QUEUED];
+    else if (AdmissionG3PrivateCacheScene(p,scene))
+      ++state->PrivateStats[ADMISSION_G3_PRIVATE_STAT_CACHED_RELEASE];
+    if (scene->Queued || scene->Submitting || scene->Cached ||
         p->Graph.JobInFlight || p->Graph.LeaseToken)
       { status=STATUS_SUCCESS;goto Done; }
     status=AdmissionG3PrivateReleaseScene(p,scene,&view) ? STATUS_SUCCESS : STATUS_DEVICE_BUSY;
@@ -1622,6 +1648,7 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
   if (scene) {
     if (!AdmissionG3PrivateReuseScene(p,scene,&view))
       {status=STATUS_DEVICE_HARDWARE_ERROR;goto Done;}
+    ++state->PrivateStats[ADMISSION_G3_PRIVATE_STAT_HIT];
     q.ManagerId=p->Graph.ProcessId;q.ManagerGeneration=p->PrivateManager.Generation;
     q.SceneId=q.SceneGeneration=scene->Storage.Generation;
     RtlCopyMemory(q.Ranges,scene->Storage.Ranges,sizeof(q.Ranges));
@@ -1633,6 +1660,23 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
   render.UtileWidthPx=(UCHAR)q.UtileWidth;render.UtileHeightPx=(UCHAR)q.UtileHeight;
   render.Layers=1;render.Samples=1;
   if (!AppleAgxG4ProcessRequiredBytes(&render,required)) {PRIVATE_CAPTURE(8u,~0u,NULL);goto Done;}
+  if (q.Operation==APPLE_AGX_G3_PRIVATE_ACQUIRE) {
+    ADMISSION_G3_PRIVATE_SCENE *s;
+    UINT cached=0u,same_context=0u;
+    for (s=p->PrivateScenes;s;s=s->Next)
+      if (s->Cached) { ++cached; if (s->Context==context) ++same_context; }
+    ++state->PrivateStats[ADMISSION_G3_PRIVATE_STAT_MISS];
+    if (same_context) ++state->PrivateStats[ADMISSION_G3_PRIVATE_STAT_MISS_OTHER_GEOMETRY];
+    state->PrivateStats[ADMISSION_G3_PRIVATE_STAT_MISS_SHAPE+2]=
+        state->PrivateStats[ADMISSION_G3_PRIVATE_STAT_MISS_SHAPE];
+    state->PrivateStats[ADMISSION_G3_PRIVATE_STAT_MISS_SHAPE+3]=
+        state->PrivateStats[ADMISSION_G3_PRIVATE_STAT_MISS_SHAPE+1];
+    state->PrivateStats[ADMISSION_G3_PRIVATE_STAT_MISS_SHAPE]=
+        (ULONGLONG)(q.Width|(q.Height<<16));
+    state->PrivateStats[ADMISSION_G3_PRIVATE_STAT_MISS_SHAPE+1]=
+        (ULONGLONG)(q.UtileWidth|(q.UtileHeight<<8)|(cached<<16));
+    if (!AdmissionG3PrivateTrimCache(p,&view)) {status=STATUS_DEVICE_HARDWARE_ERROR;goto Done;}
+  }
   status=AdmissionG3PrivateTables(p,&view,&tablePredicate,&observed);
   if (!NT_SUCCESS(status)) {PRIVATE_CAPTURE(9u,~0u,&observed);goto Done;}
   scene=ExAllocatePool2(POOL_FLAG_NON_PAGED,sizeof(*scene),ADMISSION_POOL_TAG);

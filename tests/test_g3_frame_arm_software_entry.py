@@ -89,7 +89,7 @@ struct ADMISSION_RENDER_CONTEXT {
  ULONGLONG GpuvaG3RootIpa,GpuvaG3MappingGeneration;
 };
 struct ADMISSION_G3_PROCESS { ADMISSION_RENDER_CONTEXT *Contexts; struct {ULONGLONG ProcessId;} Graph; };
-struct ADMISSION_G3_STATE { int Lock; ADMISSION_G3_PROCESS *Process; int Client; };
+struct ADMISSION_G3_STATE { int Lock; ADMISSION_G3_PROCESS *Process; int Client; ULONGLONG PrivateStats[16]; };
 struct DXGKARG_ESCAPE {
  Flags Flags; void *pPrivateDriverData; UINT PrivateDriverDataSize;
  HANDLE hKmdProcessHandle,hContext,hDevice;
@@ -131,7 +131,7 @@ static LONG InterlockedIncrement(LONG *p){return ++*p;}
 static void AdmissionG3SnapshotDwmSystemLeaves(ADMISSION_G3_PROCESS *,UINT,ADMISSION_G3_DWM_SYSTEM_LEAF_SNAPSHOT *){}
 static void AdmissionG3WriteDwmSystemLeaves(ADMISSION_CONTEXT *,const ADMISSION_G3_DWM_SYSTEM_LEAF_SNAPSHOT *){}
 static void AdmissionRecordDwmSourceMap(void *,const ADMISSION_DWM_SOURCE_MAP_RECEIPT *,UINT){}
-static void AdmissionRecordPagingProfile(ADMISSION_CONTEXT *,const int *){}
+static void AdmissionRecordPagingProfile(ADMISSION_CONTEXT *,const int *,const ULONGLONG *){}
 '''
 
 END = r'''

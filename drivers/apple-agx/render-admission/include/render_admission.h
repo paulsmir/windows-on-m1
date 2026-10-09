@@ -1046,7 +1046,8 @@ void AdmissionRecordG3PagingWait(_In_opt_ ADMISSION_CONTEXT *Context);
 VOID AdmissionPagingProfileAdd(_Inout_ volatile LONG64 *Triplet, LONGLONG Ticks);
 /* Caller at PASSIVE_LEVEL outside the paging path; Client may be NULL. */
 void AdmissionRecordPagingProfile(_In_opt_ ADMISSION_CONTEXT *Context,
-    _In_opt_ const struct _APPLE_AGX_GPUVA_V5_CLIENT *Client);
+    _In_opt_ const struct _APPLE_AGX_GPUVA_V5_CLIENT *Client,
+    _In_opt_ const ULONGLONG *PrivateStats);
 void AdmissionRecordG3PteWait(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3Poison(_In_opt_ ADMISSION_CONTEXT *Context,
                              ULONG Site, ULONG ProcessId, ULONG BrokerStatus);
