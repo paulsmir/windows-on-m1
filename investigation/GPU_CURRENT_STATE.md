@@ -1,4 +1,37 @@
-# J313 GPU — accelerated desktop stable; latency work under way (EXP1069-EXP1073)
+# J313 GPU — accelerated desktop stable; DWM frame-time work under way (EXP1075-EXP1081)
+
+
+## Current as of 2026-10-09 05:19Z (read this first)
+
+State: GPU-visible baseline after each run (rec1080h rollback). Best validated
+package: EXP1079 (9a066306): stable, no TDR; charmap drag ~12-14 flips/s.
+
+Unit correction (EXPERIMENTS.md, EXP1076 correction): AppleAgxVsyncTrace `t`
+is 100 ns, not QPC 24 MHz. Every earlier flips/s figure derived from it is
+2.4x too high (EXP1063 "~17-19" was ~7-8; EXP1069 ~4.2; EXP1077 charmap ~11).
+
+Proven since 03:20Z (EXPERIMENTS.md EXP1074-EXP1080):
+- e4da9190 resumes a halted AGX firmware after a Timeout/Fault event (Asahi
+  recover(); EXP1075 bugcheck 0x116). Not yet exercised on hardware.
+- 88e24942 BO cache 128/64 MiB; 9a066306 keeps the UMD trace handle open.
+- EXP1078: DWM composition is CPU-bound (~58 % running), not GPU-bound.
+- EXP1080 per-DDI timing (75d986d1), charmap drag, DWM per 2 s: UMD 37-59 %
+  of wall; CreateResource ~14 x ~18 ms, DestroyResource ~14 x ~10 ms, Draw
+  ~200 x 1.6 ms, Present ~55 x 3.6 ms. Phases (70 s): paging wait 7.7 s for
+  new 2.9 MB textures, upload 7.5 s, completion wait 13.7 s (1.75 ms x
+  112 submits/s, synchronous).
+- Cause of the resource churn: the winsys BO cache refused every release once
+  full and never evicted; a360abf6 admits by LRU eviction (Mesa agx_bo_cache
+  policy). EXP1081 verifies.
+
+Open, causal order:
+1. EXP1081: BO cache hits replace DWM's create/destroy paging waits.
+2. Synchronous completion wait per submission (~14 ms per frame) -> several
+   submissions in flight (EXP1066 device-destroy signal defect must be solved).
+3. Draw/Present fixed costs; Notepad GDI-interop ping-pong copies.
+4. Hardware check of the firmware recovery path when a timeout recurs.
+
+
 
 
 ## Current as of 2026-10-09 03:20Z (read this first)
