@@ -414,6 +414,21 @@ static NTSTATUS AdmissionG3UpdateLeaf(
     status = STATUS_INTEGER_OVERFLOW;
     goto Done;
   }
+  if (process->CpuOnlyMappings) {
+    /* Only the CPU paging executor reads paging-process VAs (it resolves
+     * them through LogicalPtes). Publish no leaf, take no grant or mapping
+     * reference, and keep ResidentPtes empty so no release path runs. */
+    if (shadow->ResidentPtes) { status = STATUS_INVALID_DEVICE_STATE; goto Done; }
+    if (update->Flags.Use64KBPages)
+      (void)AppleAgxGpuvaG3InvalidateLogical64K(shadow->LogicalPtes,
+          update->StartIndex, update->NumPageTableEntries);
+    else
+      RtlCopyMemory(shadow->LogicalPtes + first, candidate + first,
+                    count * sizeof(*shadow->LogicalPtes));
+    ++process->Graph.MappingGeneration;
+    status = STATUS_SUCCESS;
+    goto Done;
+  }
   for (i = 0u; i < count; ++i) {
     APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte = &candidate[first + i];
     if (pte->Flags && pte->SegmentId == 0u &&

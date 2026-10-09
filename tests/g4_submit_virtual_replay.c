@@ -93,6 +93,7 @@ typedef struct _ADMISSION_G3_PROCESS {
   unsigned OsProcessId;
   unsigned Poisoned;
   unsigned PoisonSite, PoisonBrokerStatus;
+  unsigned char CpuOnlyMappings;
 } ADMISSION_G3_PROCESS;
 #define ADMISSION_G3_POISON(Process, File) do { \
     (Process)->Poisoned = 1u; \

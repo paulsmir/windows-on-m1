@@ -382,6 +382,7 @@ struct _ADMISSION_G3_PROCESS {
   ULONG Magic, DeviceRefs, ContextRefs, OsProcessId;
   BOOLEAN Poisoned;
   ULONG PoisonSite, PoisonBrokerStatus;
+  BOOLEAN CpuOnlyMappings;
 };
 #define ADMISSION_G3_POISON(Process, File) do { \
     (Process)->Poisoned = TRUE; \

@@ -152,6 +152,13 @@ class G3VidMmReplayTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertIn("R132 system lifetime: PASS", result.stdout)
 
+    def test_paging_process_leaves_stay_cpu_only(self):
+        env = dict(os.environ, G3_REPLAY_PAGING_CPU_ONLY="1")
+        result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
+                                env=env, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("paging process CPU-only: PASS", result.stdout)
+
     def test_exp799_shared_local_leaf_with_real_broker(self):
         env = dict(os.environ, G3_REPLAY_EXP799="1")
         result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,

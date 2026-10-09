@@ -1860,6 +1860,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
   process->OsProcessId = HandleToULong(PsGetCurrentProcessId());
   process->State = state;
   process->Magic = ADMISSION_G3_PROCESS_MAGIC;
+  process->CpuOnlyMappings = Args->Flags.SystemProcess != 0u;
   /* VidMm permits this callback only inside CreateProcess at PASSIVE_LEVEL.
    * Reserve VA/metadata now; private data is committed lazily by native render.
    * The OS releases the reservation with the process, including failed create. */
@@ -2380,7 +2381,9 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
       KeGetCurrentIrql() != PASSIVE_LEVEL) return STATUS_INVALID_PARAMETER;
   state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
   process = (ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
-  if (state == NULL || process == NULL || process->State != state)
+  /* The paging process has no GPU-visible leaves; it never runs a GPU job. */
+  if (state == NULL || process == NULL || process->State != state ||
+      process->CpuOnlyMappings)
     return STATUS_INVALID_DEVICE_STATE;
   ExAcquireFastMutex(&state->Lock);
 #if ADMISSION_G3_VERIFY_UPLOADS_ON_BEGIN_JOB

@@ -26,6 +26,7 @@ static void update(ADMISSION_CONTEXT *adapter, HANDLE process, UINT level,
   assert(args.pDmaBuffer==dma && args.pDmaBufferPrivateData==private_data);
 }
 #include "g3_system_lifetime_cases.c"
+#include "g3_paging_cpu_only_cases.c"
 #include "g3_r133_publication_cases.c"
 #include "g3_r135_root_reuse_cases.c"
 #include "g3_r137_reservation_cases.c"
@@ -41,6 +42,7 @@ static void r165_end_job(void) {
 }
 int main(void) {
   if(getenv("G3_REPLAY_R168")) {r168_capacity_cases();return 0;}
+  if(getenv("G3_REPLAY_PAGING_CPU_ONLY")) {paging_cpu_only_cases();return 0;}
   if (getenv("G3_REPLAY_R145")) { r145_copy_cases(); return 0; }
   if (getenv("G3_REPLAY_R144")) { r144_local_bounds_cases(); return 0; }
   if (getenv("G3_REPLAY_RESERVE_BASE"))
@@ -89,7 +91,10 @@ int main(void) {
   adapter.GpuvaG3State=&state;
   adapter.ObjectAdapter=&adapter;
   state.Adapter=&adapter;
-  sys.Flags.SystemProcess=1;
+  /* EXP776 created the system process first. The leaf publication cases below
+   * need a GPU-visible process; the system paging process is CPU-only and
+   * has its own cases (g3_paging_cpu_only_cases.c). */
+  sys.Flags.SystemProcess=0;
   sys.NumPasid=1;
   expect_ok("EXP776 CreateProcess PASID1",AdmissionDdiCreateProcess(&adapter,&sys));
   assert(sys.hKmdProcess);

@@ -124,6 +124,10 @@ typedef struct _ADMISSION_G3_PROCESS {
   HANDLE DxgkProcess;
   ULONG Magic, DeviceRefs, ContextRefs, OsProcessId;
   BOOLEAN Poisoned;
+  /* VidMm's system paging process. Its VA space exists only for paging
+   * operations, which this driver executes on the CPU through the logical
+   * shadow, so its leaves are never published to the GPU (no grants). */
+  BOOLEAN CpuOnlyMappings;
   /* EXP997 diagnostic: first poison site, (file << 16) | line. */
   ULONG PoisonSite;
   /* EXP1030: broker status (graph LastStatus) when first poisoned. */

@@ -14,7 +14,8 @@ static void r133_publication_cases(void) {
   {AGX_GPUVA_V5_REQUEST r={0};AGX_GPUVA_V5_RESPONSE reply={0};r.Command=AGX_GPUVA_V5_CREATE;
    assert(AppleAgxGpuvaV5ClientCall(&state.Client,&r,&reply));assert(reply.Epoch==7);}
   a.Started=TRUE;a.GpuvaG3State=&state;state.Adapter=&a;
-  ADMISSION_G3_PROCESS *p=sys_process(&a,0x4000,1);
+  /* Publication needs a GPU-visible process; the paging process is CPU-only. */
+  ADMISSION_G3_PROCESS *p=sys_process(&a,0x4000,0);
   DXGK_PTE ptes[1024]={0};
   for(UINT i=0;i<1024;++i) {
     ptes[i].Flags=1;

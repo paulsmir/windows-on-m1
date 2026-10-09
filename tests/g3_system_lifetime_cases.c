@@ -129,13 +129,14 @@ static void system_lifetime_cases(void) {
   }
   expect_ok("R132 same-owner alias",sys_update(&a,p,leaf,0,12,4,pte,0,0));
   expect_ok("R132 second-root",sys_update(&a,q,local_cpu+0x28000,0,4,4,pte,0,0));
+  /* The system paging process is CPU-only: no mapping reference, no grant. */
   expect_ok("R132 paging alias",sys_update(&a,paging,local_cpu+0x38000,0,4,4,pte,0,0));
-  assert(sys_frame(&state,system_ipa)->Mappings==16 && sys_frame(&state,system_ipa)->Grants==3);
+  assert(sys_frame(&state,system_ipa)->Mappings==12 && sys_frame(&state,system_ipa)->Grants==2);
   assert(sys_frame(&state,system_ipa)->Generation==generation);
   assert(AppleAgxGpuvaG3GraphBeginJob(&p->Graph,1));
   assert(sys_update(&a,p,leaf,0,4,4,&zero,0,1)==STATUS_DEVICE_BUSY);
   assert(AdmissionDdiDestroyProcess(&a,p)==STATUS_DEVICE_BUSY);
-  assert(sys_frame(&state,system_ipa)->Mappings==16);
+  assert(sys_frame(&state,system_ipa)->Mappings==12);
   assert(AppleAgxGpuvaG3GraphEndJob(&p->Graph));
   expect_ok("R132 reverse destroy paging",AdmissionDdiDestroyProcess(&a,paging));
   expect_ok("R132 reverse destroy q",AdmissionDdiDestroyProcess(&a,q));
