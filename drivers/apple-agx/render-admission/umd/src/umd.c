@@ -514,7 +514,7 @@ VOID APIENTRY AdmissionUmdCreateResource(
         CreateResource->pPrimaryDesc != NULL ? 1u : 0u,
         (UINT)allocationInfo.hAllocation, (UINT)allocate.hKMResource};
     AdmissionUmdDiagnostic("measure-present-resource", result, values,
-                           ARRAYSIZE(values));
+                           (UINT)(sizeof(values) / sizeof(values[0])));
   }
   if (FAILED(result) || allocationInfo.hAllocation == 0u) {
     AdmissionUmdRetirementFree(retirement);
@@ -676,7 +676,7 @@ VOID APIENTRY AdmissionUmdDestroyResource(
     UINT values[4] = {(UINT)retirement->KernelAllocation, retirement->Origin,
         retirement->Shared ? 1u : 0u, retirement->Primary ? 1u : 0u};
     AdmissionUmdDiagnostic("measure-present-destroy", S_OK, values,
-                           ARRAYSIZE(values));
+                           (UINT)(sizeof(values) / sizeof(values[0])));
   }
   if (AdmissionUmdRetirementNeedsRuntimeResource(retirement)) {
     result = AdmissionUmdRetirementDeallocate(&device->Retirement, retirement);
