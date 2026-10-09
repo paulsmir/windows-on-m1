@@ -22,10 +22,11 @@ static inline APPLE_AGX_SCANOUT_BOOL AppleAgxVsyncLatch(
     APPLE_AGX_SCANOUT_U64 Address, APPLE_AGX_SCANOUT_U64 Now100ns) {
   if (!Sequence || !Address || Sequence <= T->ActiveSequence)
     return APPLE_AGX_SCANOUT_FALSE;
-  if (!T->ActiveValid) {
-    T->Phase100ns = Now100ns;
-    T->LastPeriod = 0ULL;
-  }
+  /* EXP1106: every latch is a hardware vblank; the period grid restarts at
+   * it. Anchored only at the first latch, the grid drifted 25 us/s from the
+   * panel (EXP1105). The latch's own notification is this period's vsync. */
+  T->Phase100ns = Now100ns;
+  T->LastPeriod = 0ULL;
   T->ActiveSequence = Sequence;
   T->ActiveAddress = Address;
   T->ActiveValid = APPLE_AGX_SCANOUT_TRUE;

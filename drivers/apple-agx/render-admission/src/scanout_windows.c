@@ -34,6 +34,7 @@ typedef struct _ADMISSION_SCANOUT_RUNTIME {
   KSPIN_LOCK TimerLock;
   volatile LONG Stopping, TimelinePaused;
   ULONGLONG TimerDeadline;
+  ULONGLONG TimerDue;
   BOOLEAN TimerDeadlineValid;
   BOOLEAN TimerArmed;
   APPLE_AGX_VSYNC_QUERY VsyncReceipt;
@@ -1123,6 +1124,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
 /* All timeline and receipt writes are serialized at the adapter's DIRQL.
  * TimerLock only serializes PASSIVE/DPC timer scheduling and teardown;
  * the ISR never acquires it. First32 receipts are immutable, last32 roll. */
+/* EXP1106: a period's tick is armed this long after its predicted vblank,
+ * so the hardware latch of that vblank (which re-anchors the grid) arrives
+ * first and the period gets one vsync, not a tick and then a latch. */
+#define ADMISSION_SCANOUT_TICK_MARGIN_100NS 5000ULL
+
 static ULONGLONG AdmissionScanoutTime100ns(void) {
   ULONGLONG qpc = 0ULL;
   return KeQueryInterruptTimePrecise(&qpc);
@@ -1320,7 +1326,8 @@ static VOID AdmissionScanoutScheduleTimer(ADMISSION_SCANOUT_RUNTIME *Runtime) {
           Runtime->Adapter->Interface.DeviceHandle, AdmissionScanoutVsyncNext,
           Runtime, 0u, &done)) || !done || !Runtime->TimerDeadlineValid)
     return;
-  next = Runtime->TimerDeadline;
+  next = Runtime->TimerDeadline + ADMISSION_SCANOUT_TICK_MARGIN_100NS;
+  Runtime->TimerDue = next;
   now = AdmissionScanoutTime100ns();
   due.QuadPart = next > now && next - now <= (ULONGLONG)MAXLONGLONG
                     ? -(LONGLONG)(next - now) : -1LL;
