@@ -23,8 +23,10 @@
 /* EXP1061: live slots stay below ScreenBufferHighWater (FreeSlot hands out
  * the lowest free index), so a scan costs the peak live count, not capacity. */
 #define ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device) ((Device)->ScreenBufferHighWater)
-/* EXP1025: unshared buffers up to this size are direct (no staging). */
-#define ADMISSION_UMD_SYSTEM_DIRECT_BYTES 0x100000ULL
+/* EXP1025: unshared buffers up to this size are direct (no staging).
+ * EXP1111: up to the KMD's 16 MiB class-allocation limit; larger mapped
+ * buffers paid a copy escape per 64 KiB on every CPU/GPU hand-off (EXP1110). */
+#define ADMISSION_UMD_SYSTEM_DIRECT_BYTES 0x1000000ULL
 #define ADMISSION_UMD_SCREEN_FENCE_LIMIT 64u
 #define ADMISSION_UMD_SOURCE_HOLD_LIMIT 64u
 
