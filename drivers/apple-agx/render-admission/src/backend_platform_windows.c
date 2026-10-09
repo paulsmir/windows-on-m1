@@ -85,6 +85,26 @@ typedef struct _ADMISSION_HEARTBEAT_RECEIPT {
 
 C_ASSERT(sizeof(ADMISSION_HEARTBEAT_RECEIPT) == 64u);
 
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+/* EXP1112 receipt-only: what the firmware wrote per job, to split the
+ * ~330 us from the TA kick to the TA end timestamp (EXP1100-EXP1111) into
+ * firmware dispatch and GPU work: the TA work command's timestamp tail, the
+ * TA stats timestamps, and the eight timestamp objects 28..35. */
+#define ADMISSION_FW_TIMING_CAPACITY 16u
+#define ADMISSION_FW_TIMING_VERSION 1u
+typedef struct _ADMISSION_FW_TIMING_ENTRY {
+  ULONG Fence, Reserved;
+  ULONGLONG KickQpc, CompleteQpc;
+  ULONGLONG Timestamps[8];
+  UCHAR TaTail[0x68];
+  UCHAR TaStats[0x80];
+} ADMISSION_FW_TIMING_ENTRY;
+typedef struct _ADMISSION_FW_TIMING_RING {
+  ULONG Version, Bytes, Count, Reserved;
+  ADMISSION_FW_TIMING_ENTRY Entries[ADMISSION_FW_TIMING_CAPACITY];
+} ADMISSION_FW_TIMING_RING;
+#endif
+
 typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ADMISSION_CONTEXT *Adapter;
   APPLE_AGX_MEMORY_IO MemoryIo;
@@ -120,6 +140,8 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ADMISSION_JOB_TIMING_STATE JobTiming;
   ADMISSION_JOB_TIMING_STATE JobTimingSnapshot;
   ULONG JobTimingWorkers;
+  ADMISSION_FW_TIMING_RING FwTiming;
+  ADMISSION_FW_TIMING_RING FwTimingSnapshot;
 #endif
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
   volatile LONG B1Active;
@@ -279,6 +301,46 @@ static VOID AdmissionJobTimingPstateWindows(
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
 }
 
+static VOID AdmissionFwTimingCaptureWindows(
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence) {
+  ADMISSION_FW_TIMING_ENTRY entry;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *taWork =
+      &runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_TA_WORK];
+  const APPLE_AGX_MEMORY_OBJECT *stats =
+      &runtime->Initdata.RegionBMemory.Objects[AppleAgxRegionBMemoryStatsTa];
+  const ADMISSION_JOB_TIMING_SLOT *slot;
+  KIRQL oldIrql;
+  ULONG index;
+  RtlZeroMemory(&entry, sizeof(entry));
+  entry.Fence = fence;
+  for (index = 0u; index < 8u; ++index) {
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *object =
+        &runtime->QueueObjects[28u + index];
+    if (object->Data != NULL && object->Size == sizeof(ULONGLONG))
+      RtlCopyMemory(&entry.Timestamps[index], object->Data, sizeof(ULONGLONG));
+  }
+  if (taWork->Data != NULL && taWork->Size >= ADMISSION_TA_WORK_TIMESTAMP_TAIL_OFFSET +
+          sizeof(entry.TaTail))
+    RtlCopyMemory(entry.TaTail, (const UCHAR *)taWork->Data +
+        ADMISSION_TA_WORK_TIMESTAMP_TAIL_OFFSET, sizeof(entry.TaTail));
+  if (stats->CpuAddress != NULL && stats->Length >=
+          ADMISSION_TA_STATS_TIMESTAMPS_OFFSET + sizeof(entry.TaStats))
+    RtlCopyMemory(entry.TaStats, (const UCHAR *)stats->CpuAddress +
+        ADMISSION_TA_STATS_TIMESTAMPS_OFFSET, sizeof(entry.TaStats));
+  KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+  slot = AdmissionJobTimingFind(&runtime->JobTiming, fence);
+  if (slot != NULL) {
+    entry.KickQpc = slot->Qpc[AdmissionJobPhaseKickTa];
+    entry.CompleteQpc = slot->Qpc[AdmissionJobPhaseComplete];
+  }
+  runtime->FwTiming.Version = ADMISSION_FW_TIMING_VERSION;
+  runtime->FwTiming.Bytes = sizeof(runtime->FwTiming);
+  runtime->FwTiming.Entries[runtime->FwTiming.Count %
+      ADMISSION_FW_TIMING_CAPACITY] = entry;
+  ++runtime->FwTiming.Count;
+  KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+}
+
 static VOID AdmissionJobTimingFirmwareWindows(
     ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence) {
   const APPLE_AGX_EXP208_RELOCATION_OBJECT *start, *end;
@@ -302,6 +364,7 @@ static VOID AdmissionJobTimingFirmwareWindows(
   }
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
   AdmissionJobTimingPstateWindows(runtime, fence, TRUE);
+  AdmissionFwTimingCaptureWindows(runtime, fence);
 }
 
 static VOID AdmissionJobTimingExportWindows(
@@ -322,6 +385,8 @@ static VOID AdmissionJobTimingExportWindows(
   }
   RtlCopyMemory(&runtime->JobTimingSnapshot, &runtime->JobTiming,
       sizeof(runtime->JobTimingSnapshot));
+  RtlCopyMemory(&runtime->FwTimingSnapshot, &runtime->FwTiming,
+      sizeof(runtime->FwTimingSnapshot));
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
   before = AdmissionJobQpc();
   status = IoOpenDeviceRegistryKey(runtime->Adapter->PhysicalDeviceObject,
@@ -330,6 +395,11 @@ static VOID AdmissionJobTimingExportWindows(
     RtlInitUnicodeString(&name, L"Wom1JobTiming971");
     status = ZwSetValueKey(key, &name, 0u, REG_BINARY,
         &runtime->JobTimingSnapshot, sizeof(runtime->JobTimingSnapshot));
+    if (NT_SUCCESS(status) && runtime->FwTimingSnapshot.Count != 0u) {
+      RtlInitUnicodeString(&name, L"Wom1FwTiming1112");
+      status = ZwSetValueKey(key, &name, 0u, REG_BINARY,
+          &runtime->FwTimingSnapshot, sizeof(runtime->FwTimingSnapshot));
+    }
     if (NT_SUCCESS(status)) (void)ZwFlushKey(key);
     ZwClose(key);
   }
