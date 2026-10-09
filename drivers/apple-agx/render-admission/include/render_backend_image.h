@@ -31,6 +31,10 @@ typedef struct _ADMISSION_BACKEND_IMAGE {
   APPLE_AGX_BOOL Ready;
   APPLE_AGX_BOOL NativeBound;
   APPLE_AGX_BOOL G4Native;
+  /* Arena and objects are exactly the last Prepare's image: every bind
+   * clears it; only Prepare sets it. A G4 bind of a pristine image skips
+   * rematerializing the 6 MiB arena. */
+  APPLE_AGX_BOOL Pristine;
   APPLE_AGX_G4_PRIVATE_HEADER_V2 G4Header;
   unsigned char G4Command[APPLE_AGX_G4_NATIVE_MAX_BYTES];
   APPLE_AGX_U32 G4CommandBytes;

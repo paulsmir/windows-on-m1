@@ -732,6 +732,152 @@ static void test_g4_native_scene_stages_and_releases(void) {
   free(target);free(arena);
 }
 
+/* Every G4 job paid two full template materializations: the bind and the
+ * release each zeroed the 6 MiB write-combined arena (EXP1102: Submit->Worker
+ * 155 us, JobEnd->Notify 108 us). The release already leaves the exact
+ * Prepare image, so a G4 bind of a pristine image must not rewrite the arena,
+ * and must still produce exactly what a bind after a fresh Prepare produces. */
+typedef struct {
+  APPLE_AGX_G4_NATIVE_HEADER AttachCommand;
+  APPLE_AGX_G4_ATTACHMENT Attachment;
+  APPLE_AGX_G4_NATIVE_HEADER RenderCommand;
+  APPLE_AGX_G4_NATIVE_RENDER Render;
+} TEST_G4_NATIVE;
+
+static void g4_fixture(TEST_G4_NATIVE *native, APPLE_AGX_G4_SUBMIT_VIEW *view,
+    ADMISSION_RENDER_PACKET_DESCRIPTION *packet, unsigned char *target,
+    unsigned fence) {
+  APPLE_AGX_G4_NATIVE_RENDER render={0};
+  APPLE_AGX_G4_ATTACHMENT color={0};
+  unsigned required[APPLE_AGX_G4_PROCESS_RANGE_COUNT];
+  unsigned long long va=0x10000000ULL;
+  memset(native,0,sizeof(*native));memset(view,0,sizeof(*view));
+  memset(packet,0,sizeof(*packet));
+  render.Flags=1u<<2;render.WidthPx=1280;render.HeightPx=720;
+  render.Layers=1;render.UtileWidthPx=render.UtileHeightPx=32;
+  render.Samples=1;render.SampleSizeBytes=8;
+  render.VdmCtrlStreamBase=0x12000000ULL;
+  render.IspScissorBase=0x12100000ULL;
+  render.IspDbiasBase=0x12200000ULL;
+  render.SamplerHeap=0x12300000ULL;
+  assert(AppleAgxG4ProcessRequiredBytes(&render,required));
+  for(unsigned i=0;i<APPLE_AGX_G4_PROCESS_RANGE_COUNT;++i){
+    view->Process[i].Va=va;view->Process[i].Bytes=required[i];va+=required[i];
+  }
+  color.Pointer=0x13000000ULL;color.Size=1280ULL*720ULL*4ULL;
+  native->AttachCommand.Type=APPLE_AGX_G4_FRAGMENT_ATTACHMENTS;
+  native->AttachCommand.Size=sizeof(color);
+  native->AttachCommand.VdmBarrier=0xffffu;
+  native->AttachCommand.CdmBarrier=0xffffu;
+  native->Attachment=color;
+  native->RenderCommand.Type=APPLE_AGX_G4_RENDER;
+  native->RenderCommand.Size=sizeof(render);
+  native->Render=render;
+  view->Native=(const unsigned char *)native;
+  view->CommandVa=0x20000ULL;view->CommandBytes=sizeof(*native);
+  view->Render=(const unsigned char *)&native->Render;
+  view->RenderBytes=sizeof(render);
+  view->Attachments=&native->Attachment;view->AttachmentCount=1u;
+  view->ColorFormat=APPLE_AGX_G4_COLOR_BGRA8;
+  packet->Fence=fence;packet->DestinationGpuVa=color.Pointer;
+  packet->DestinationPhysical=0x890200000ULL;
+  packet->DestinationCpuToken=(unsigned long long)(uintptr_t)target;
+  packet->DestinationBytes=(unsigned)color.Size;
+}
+
+static void assert_same_bound_image(const ADMISSION_BACKEND_IMAGE *a,
+    const unsigned char *arena_a, const ADMISSION_BACKEND_IMAGE *b,
+    const unsigned char *arena_b) {
+  assert(memcmp(arena_a,arena_b,TEST_BACKEND_BYTES)==0);
+  for(unsigned i=0;i<APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT;++i){
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *x=&a->Objects[i],*y=&b->Objects[i];
+    assert(x->GpuVa==y->GpuVa && x->PhysicalAddress==y->PhysicalAddress &&
+        x->Size==y->Size);
+    if(i==APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT) assert(x->Data==y->Data);
+    else assert(x->Data-arena_a==y->Data-arena_b);
+  }
+  assert(a->BoundFence==b->BoundFence && a->Sequence==b->Sequence &&
+      a->G4Native==b->G4Native && a->NativeBound==b->NativeBound &&
+      a->JobReady==b->JobReady && a->JobFence==b->JobFence &&
+      a->G4CommandBytes==b->G4CommandBytes &&
+      memcmp(a->G4Command,b->G4Command,a->G4CommandBytes)==0 &&
+      memcmp(&a->G4Header,&b->G4Header,sizeof(a->G4Header))==0 &&
+      memcmp(&a->Binding,&b->Binding,sizeof(a->Binding))==0 &&
+      memcmp(&a->Roots,&b->Roots,sizeof(a->Roots))==0 &&
+      memcmp(&a->Dynamic,&b->Dynamic,sizeof(a->Dynamic))==0);
+}
+
+static void test_g4_bind_of_pristine_image_skips_rematerialization(void) {
+  unsigned char *arena=malloc(TEST_BACKEND_BYTES);
+  unsigned char *fresh=malloc(TEST_BACKEND_BYTES);
+  unsigned char *target=malloc(1280u*720u*4u);
+  static ADMISSION_BACKEND_IMAGE image, reference;
+  ADMISSION_LOCAL_MEMORY_VIEW backend={0}, fresh_backend={0};
+  ADMISSION_RENDER_PACKET_DESCRIPTION packet;
+  APPLE_AGX_G4_SUBMIT_VIEW view;
+  TEST_G4_NATIVE native;
+  APPLE_AGX_EXP208_GDI_BINDING binding;
+  APPLE_AGX_BACKEND_JOB_IMAGE job;
+  const unsigned gap=AppleAgxRenderTemplateBytes()-1u;
+  assert(arena && fresh && target);
+  memset(arena,0xa5,TEST_BACKEND_BYTES);memset(fresh,0xa5,TEST_BACKEND_BYTES);
+  backend.CpuAddress=arena;backend.HostPhysicalAddress=TEST_BACKEND_PHYSICAL;
+  backend.GpuVirtualAddress=TEST_BACKEND_GPU;backend.Bytes=TEST_BACKEND_BYTES;
+  fresh_backend=backend;fresh_backend.CpuAddress=fresh;
+  assert(AdmissionBackendImagePrepare(&image,&backend));
+  assert(arena[gap]==0u);
+  /* A byte only materialization writes: a pristine bind leaves it alone. */
+  arena[gap]=0x5au;
+  g4_fixture(&native,&view,&packet,target,77u);
+  assert(AdmissionBackendImageBindG4Submission(
+      &image,&packet,target,&view,&binding));
+  assert(arena[gap]==0x5au);
+  arena[gap]=0u;
+  /* The job and its release leave the exact Prepare image: the next bind
+   * equals a bind after a fresh Prepare, and again skips materialization. */
+  assert(AdmissionBackendImageStageJob(&image,77u,1u,2u,5u,6u,
+      APPLE_AGX_TRUE,&job));
+  assert(AdmissionBackendImageReleaseSubmission(&image,77u));
+  arena[gap]=0x5au;
+  g4_fixture(&native,&view,&packet,target,78u);
+  assert(AdmissionBackendImageBindG4Submission(
+      &image,&packet,target,&view,&binding));
+  assert(arena[gap]==0x5au);
+  arena[gap]=0u;
+  assert(AdmissionBackendImagePrepare(&reference,&fresh_backend));
+  reference.Sequence=image.Sequence;
+  assert(AdmissionBackendImageBindG4Submission(
+      &reference,&packet,target,&view,&binding));
+  assert_same_bound_image(&image,arena,&reference,fresh);
+  assert(AdmissionBackendImageStageJob(&image,78u,1u,2u,7u,8u,
+      APPLE_AGX_FALSE,&job));
+  assert(AdmissionBackendImageReleaseSubmission(&image,78u));
+  /* A legacy job releases without materializing, so the next G4 bind must
+   * rematerialize: it equals a fresh bind again. */
+  {
+    APPLE_AGX_GDI_DMA_COMMAND command=exact_color_fill(packet.DestinationGpuVa);
+    packet.Fence=79u;packet.DestinationBytes=0x4000u;
+    assert(AdmissionBackendImageBindSubmission(&image,&packet,target,
+        (const unsigned char *)&command,sizeof(command),&binding));
+    assert(AdmissionBackendImageStageJob(&image,79u,1u,2u,9u,10u,
+        APPLE_AGX_FALSE,&job));
+    assert(AdmissionBackendImageReleaseSubmission(&image,79u));
+  }
+  arena[gap]=0x5au;
+  g4_fixture(&native,&view,&packet,target,80u);
+  assert(AdmissionBackendImageBindG4Submission(
+      &image,&packet,target,&view,&binding));
+  assert(arena[gap]==0u);
+  memset(fresh,0xa5,TEST_BACKEND_BYTES);
+  assert(AdmissionBackendImagePrepare(&reference,&fresh_backend));
+  reference.Sequence=image.Sequence;
+  assert(AdmissionBackendImageBindG4Submission(
+      &reference,&packet,target,&view,&binding));
+  assert_same_bound_image(&image,arena,&reference,fresh);
+  assert(AdmissionBackendImageReleaseSubmission(&image,80u));
+  free(target);free(fresh);free(arena);
+}
+
 int main(void) {
   test_materializes_and_relocates_exact_rebased_image();
   test_rejects_invalid_tail_atomically();
@@ -742,5 +888,6 @@ int main(void) {
   test_native_binding_preserves_logical_attachment();
   test_b1_same_va_distinct_physical_output();
   test_g4_native_scene_stages_and_releases();
+  test_g4_bind_of_pristine_image_skips_rematerialization();
   return 0;
 }

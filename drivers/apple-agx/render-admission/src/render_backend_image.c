@@ -80,6 +80,7 @@ APPLE_AGX_BOOL AdmissionBackendImagePrepare(
   candidate.ArenaBytes = template_bytes;
   candidate.ArenaCapacity = (APPLE_AGX_U32)BackendView->Bytes;
   candidate.Ready = APPLE_AGX_TRUE;
+  candidate.Pristine = APPLE_AGX_TRUE;
   *Image = candidate;
   return APPLE_AGX_TRUE;
 }
@@ -106,6 +107,7 @@ APPLE_AGX_BOOL AdmissionBackendImageBindSubmission(
       Packet->DestinationPhysical == 0ULL ||
       Packet->DestinationBytes == 0u)
     return APPLE_AGX_FALSE;
+  Image->Pristine = APPLE_AGX_FALSE;
 
   saved_output =
       Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
@@ -176,6 +178,7 @@ APPLE_AGX_BOOL AdmissionBackendImageBindDynamicSubmission(
       (Packet->DestinationBytes != APPLE_AGX_EXP208_FRAMEBUFFER_BYTES &&
        Packet->DestinationBytes != APPLE_AGX_EXP208_GDI_OUTPUT_BYTES))
     return APPLE_AGX_FALSE;
+  Image->Pristine = APPLE_AGX_FALSE;
   if (!AppleAgxExp208AdoptNativePipelineLayout(
           Image->Objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT))
@@ -257,6 +260,7 @@ APPLE_AGX_BOOL AdmissionBackendImageBindNativeSubmission(
       Native->DestinationBytes>(1ULL<<40)-Packet->DestinationGpuVa ||
       Native->DestinationBytes>(1ULL<<40)-Packet->DestinationPhysical)
     return APPLE_AGX_FALSE;
+  Image->Pristine=APPLE_AGX_FALSE;
   output=&Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
   saved=*output;
   output->Data=DestinationCpuAddress;
@@ -319,8 +323,14 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
   backend.GpuVirtualAddress = Image->ArenaGpuAddress;
   backend.Bytes = Image->ArenaCapacity;
   sequence = Image->Sequence;
-  if (!AdmissionBackendImagePrepare(Image, &backend) ||
-      !AppleAgxG4BuildTa3d(View, Image->ArenaCpuAddress,
+  /* A release already restored the exact Prepare image. */
+  if (Image->Pristine != APPLE_AGX_TRUE &&
+      !AdmissionBackendImagePrepare(Image, &backend)) {
+    Image->Ready = APPLE_AGX_FALSE;
+    return APPLE_AGX_FALSE;
+  }
+  Image->Pristine = APPLE_AGX_FALSE;
+  if (!AppleAgxG4BuildTa3d(View, Image->ArenaCpuAddress,
           Image->ArenaBytes, 1u, Image->Objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)) {
     Image->Ready = APPLE_AGX_FALSE;
