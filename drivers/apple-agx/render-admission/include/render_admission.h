@@ -627,6 +627,8 @@ typedef struct _ADMISSION_CONTEXT {
   APPLE_AGX_SCHEDULER Scheduler;
   ADMISSION_RENDER_PACKET RenderPacket;
   ADMISSION_BACKEND_IMAGE BackendImage;
+  /* EXP1105: Prepare image of the objects a G4 job changes. */
+  ADMISSION_BACKEND_IMAGE_SNAPSHOT BackendSnapshot;
   volatile LONG SchedulerInitialized;
   /* Zero is healthy. First fault: high16=file (1 scheduler,2 paging,
    * 3 submission,4 backend), low16=source line in the exact build.

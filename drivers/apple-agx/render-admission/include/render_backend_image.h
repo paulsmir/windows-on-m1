@@ -45,6 +45,19 @@ typedef struct _ADMISSION_BACKEND_IMAGE {
   APPLE_AGX_EXP208_RELOCATION_OBJECT NativeOriginalOutput;
 } ADMISSION_BACKEND_IMAGE;
 
+/* EXP1105: the exact Prepare image of the objects a G4 job can change,
+ * taken right after Prepare (before any VM slot selection). A G4 release
+ * restores from it instead of rematerializing the 6 MiB arena. */
+#define ADMISSION_BACKEND_SNAPSHOT_BYTES 0x10000u
+typedef struct _ADMISSION_BACKEND_IMAGE_SNAPSHOT {
+  APPLE_AGX_BOOL Valid;
+  APPLE_AGX_U32 StoredBytes;
+  /* Nonzero prefix kept per restored object; the rest is zero. */
+  APPLE_AGX_U32 Stored[APPLE_AGX_RENDER_TEMPLATE_OBJECT_COUNT];
+  ADMISSION_BACKEND_IMAGE Image;
+  unsigned char Data[ADMISSION_BACKEND_SNAPSHOT_BYTES];
+} ADMISSION_BACKEND_IMAGE_SNAPSHOT;
+
 typedef enum _ADMISSION_BACKEND_OUTPUT_VERIFICATION {
   AdmissionBackendOutputVerificationUniform = 1u,
   AdmissionBackendOutputVerificationTriangle = 2u,
@@ -118,6 +131,20 @@ APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmission(
  * is an arena write outside any submission, so it clears Pristine. */
 APPLE_AGX_BOOL AdmissionBackendImageSelectVmSlot(
     ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Slot);
+/* Objects a G4 job can change: the CPU writes the command objects (< 36)
+ * and the relocation fields of 41, 42 and 63; the GPU reaches only the
+ * arena-backed GBM objects 36..40. Every other relocation target is rebound
+ * to process-private memory or null by the G4 bind. */
+APPLE_AGX_BOOL AdmissionBackendImageRestoredObject(APPLE_AGX_U32 Index);
+APPLE_AGX_BOOL AdmissionBackendImageCaptureSnapshot(
+    const ADMISSION_BACKEND_IMAGE *Image,
+    ADMISSION_BACKEND_IMAGE_SNAPSHOT *Snapshot);
+/* A G4 release restores from a matching valid snapshot; any other release
+ * is AdmissionBackendImageReleaseSubmission. */
+APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmissionRestore(
+    ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_BACKEND_IMAGE_SNAPSHOT *Snapshot, APPLE_AGX_U32 Fence);
+
 APPLE_AGX_BOOL AdmissionBackendImageRestartQueueLifetime(
     ADMISSION_BACKEND_IMAGE *Image);
 

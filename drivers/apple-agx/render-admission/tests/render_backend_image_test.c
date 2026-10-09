@@ -916,6 +916,125 @@ static void test_vm_slot_selection_after_prepare_forces_rematerialization(void) 
   free(target);free(fresh);free(arena);
 }
 
+/* EXP1105: the G4 release restored the Prepare image by rematerializing the
+ * whole 6 MiB arena (~100 us under SchedulerLock, EXP1104 JobEnd->Notify
+ * 109 us). Only the restored objects can change during a G4 job: the CPU
+ * writes the small command objects and the relocation fields of 41/42/63,
+ * and the GPU can reach only the arena-backed GBM objects 36..40 (every
+ * other relocation target is rebound to process-private memory or null).
+ * A snapshot taken right after Prepare restores exactly those bytes. */
+static void test_g4_release_restores_prepare_image_from_snapshot(void) {
+  unsigned char *arena=malloc(TEST_BACKEND_BYTES);
+  unsigned char *fresh=malloc(TEST_BACKEND_BYTES);
+  unsigned char *scratch=calloc(1u,36u*0x8000u);
+  unsigned char *target=malloc(1280u*720u*4u);
+  static ADMISSION_BACKEND_IMAGE image, reference;
+  static ADMISSION_BACKEND_IMAGE_SNAPSHOT snapshot, invalid;
+  static APPLE_AGX_EXP208_RELOCATION_OBJECT queue[APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT];
+  ADMISSION_LOCAL_MEMORY_VIEW backend={0}, fresh_backend={0};
+  ADMISSION_RENDER_PACKET_DESCRIPTION packet;
+  APPLE_AGX_G4_SUBMIT_VIEW view;
+  TEST_G4_NATIVE native;
+  APPLE_AGX_EXP208_GDI_BINDING binding;
+  APPLE_AGX_BACKEND_JOB_IMAGE job;
+  const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layout=AppleAgxRenderTemplateObjectLayouts();
+  const APPLE_AGX_EXP208_RELOCATION *relocations=AppleAgxRenderTemplateRelocations();
+  const unsigned gap=AppleAgxRenderTemplateBytes()-1u;
+  const unsigned untouched=layout[50].ArenaOffset+100u;
+  unsigned i;
+  assert(arena && fresh && scratch && target);
+  memset(arena,0xa5,TEST_BACKEND_BYTES);memset(fresh,0xa5,TEST_BACKEND_BYTES);
+  backend.CpuAddress=arena;backend.HostPhysicalAddress=TEST_BACKEND_PHYSICAL;
+  backend.GpuVirtualAddress=TEST_BACKEND_GPU;backend.Bytes=TEST_BACKEND_BYTES;
+  fresh_backend=backend;fresh_backend.CpuAddress=fresh;
+  assert(AdmissionBackendImagePrepare(&image,&backend));
+  assert(AdmissionBackendImageCaptureSnapshot(&image,&snapshot));
+  assert(snapshot.Valid && snapshot.StoredBytes<=ADMISSION_BACKEND_SNAPSHOT_BYTES);
+  assert(AdmissionBackendImagePrepare(&reference,&fresh_backend));
+  for(unsigned pass=0;pass<3;++pass){
+    unsigned fence=100u+pass;
+    g4_fixture(&native,&view,&packet,target,fence);
+    assert(AdmissionBackendImageBindG4Submission(
+        &image,&packet,target,&view,&binding));
+    assert(!AdmissionBackendImageCaptureSnapshot(&image,&invalid));
+    /* A bind after a restore equals a bind after a fresh Prepare. */
+    {
+      static ADMISSION_BACKEND_IMAGE bound;
+      unsigned char *other=malloc(TEST_BACKEND_BYTES);
+      ADMISSION_LOCAL_MEMORY_VIEW other_backend=backend;
+      assert(other);memset(other,0xa5,TEST_BACKEND_BYTES);
+      other_backend.CpuAddress=other;
+      assert(AdmissionBackendImagePrepare(&bound,&other_backend));
+      bound.Sequence=image.Sequence;
+      assert(AdmissionBackendImageBindG4Submission(
+          &bound,&packet,target,&view,&binding));
+      assert_same_bound_image(&image,arena,&bound,other);
+      free(other);
+    }
+    /* No relocation the GPU follows reaches an unrestored arena object. */
+    for(i=0;i<AppleAgxRenderTemplateRelocationCount();++i){
+      const APPLE_AGX_EXP208_RELOCATION_OBJECT *o=&image.Objects[relocations[i].TargetObject];
+      if(AdmissionBackendImageRestoredObject(relocations[i].TargetObject)) continue;
+      assert(o->GpuVa==0ULL || o->GpuVa<TEST_BACKEND_GPU ||
+          o->GpuVa>=TEST_BACKEND_GPU+TEST_BACKEND_BYTES);
+    }
+    assert(AdmissionBackendImageStageJob(&image,fence,1u,2u,5u+pass,6u+pass,
+        pass==0u,&job));
+    /* The platform relocates its queue copy; objects >= 36 alias the arena. */
+    memcpy(queue,image.Objects,sizeof(queue));
+    for(i=0;i<36u;++i){
+      queue[i].Data=scratch+i*0x8000u;queue[i].GpuVa=0x1600000000ULL+i*0x8000u;
+    }
+    for(i=36u;i<APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT;++i)
+      if(queue[i].GpuVa==0ULL) queue[i].GpuVa=0x10000ULL;
+    assert(AppleAgxApplyRelocations(queue,APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+        relocations,AppleAgxRenderTemplateRelocationCount()));
+    /* GPU writes into the arena-backed GBM objects. */
+    for(i=36u;i<=40u;++i)
+      memset(arena+layout[i].ArenaOffset+(pass*977u)%layout[i].Size,0x3c,
+          layout[i].Size-(pass*977u)%layout[i].Size);
+    arena[gap]=0x5au;arena[untouched]=0x5au;
+    assert(AdmissionBackendImageReleaseSubmissionRestore(&image,&snapshot,fence));
+    /* Restored without rematerializing the arena. */
+    assert(arena[gap]==0x5au && arena[untouched]==0x5au);
+    arena[gap]=0u;arena[untouched]=0u;
+    assert(image.Ready && image.Pristine && !image.G4Native && !image.NativeBound &&
+        image.BoundFence==0u && !image.JobReady && image.Sequence==pass+1u);
+    assert(memcmp(arena,fresh,TEST_BACKEND_BYTES)==0);
+    for(i=0;i<APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT;++i)
+      assert(image.Objects[i].GpuVa==reference.Objects[i].GpuVa &&
+          image.Objects[i].PhysicalAddress==reference.Objects[i].PhysicalAddress &&
+          image.Objects[i].Size==reference.Objects[i].Size &&
+          image.Objects[i].Data-arena==reference.Objects[i].Data-fresh);
+    assert(memcmp(&image.Roots,&reference.Roots,sizeof(image.Roots))==0 &&
+        memcmp(&image.Binding,&reference.Binding,sizeof(image.Binding))==0 &&
+        memcmp(&image.Dynamic,&reference.Dynamic,sizeof(image.Dynamic))==0 &&
+        memcmp(&image.Job,&reference.Job,sizeof(image.Job))==0 &&
+        image.ArenaBytes==reference.ArenaBytes && !image.G4Manager &&
+        image.G4CommandBytes==0u && image.JobFence==0u);
+  }
+  /* Without a valid snapshot the release rematerializes. */
+  g4_fixture(&native,&view,&packet,target,110u);
+  assert(AdmissionBackendImageBindG4Submission(
+      &image,&packet,target,&view,&binding));
+  memset(&invalid,0,sizeof(invalid));
+  arena[gap]=0x5au;
+  assert(AdmissionBackendImageReleaseSubmissionRestore(&image,&invalid,110u));
+  assert(arena[gap]==0u && image.Pristine);
+  /* A legacy job is released without the snapshot path. */
+  {
+    APPLE_AGX_GDI_DMA_COMMAND command=exact_color_fill(packet.DestinationGpuVa);
+    packet.Fence=111u;packet.DestinationBytes=0x4000u;
+    assert(AdmissionBackendImageBindSubmission(&image,&packet,target,
+        (const unsigned char *)&command,sizeof(command),&binding));
+    arena[gap]=0x5au;
+    assert(AdmissionBackendImageReleaseSubmissionRestore(&image,&snapshot,111u));
+    assert(arena[gap]==0x5au && !image.Pristine);
+    arena[gap]=0u;
+  }
+  free(target);free(scratch);free(fresh);free(arena);
+}
+
 int main(void) {
   test_materializes_and_relocates_exact_rebased_image();
   test_rejects_invalid_tail_atomically();
@@ -928,5 +1047,6 @@ int main(void) {
   test_g4_native_scene_stages_and_releases();
   test_g4_bind_of_pristine_image_skips_rematerialization();
   test_vm_slot_selection_after_prepare_forces_rematerialization();
+  test_g4_release_restores_prepare_image_from_snapshot();
   return 0;
 }

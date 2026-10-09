@@ -20,6 +20,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionBackendImageStart(
   if (!AdmissionBackendImagePrepare(
           &Context->BackendImage, &image_view))
     return STATUS_INVALID_IMAGE_FORMAT;
+  /* Taken before StartDevice selects the VM slot. Without a snapshot every
+   * G4 release rematerializes the arena. */
+  (void)AdmissionBackendImageCaptureSnapshot(
+      &Context->BackendImage, &Context->BackendSnapshot);
   KeMemoryBarrier();
   return STATUS_SUCCESS;
 }
@@ -32,5 +36,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionBackendImageStop(
       AdmissionRenderPacketEmpty)
     return STATUS_DEVICE_BUSY;
   AdmissionBackendImageReset(&Context->BackendImage);
+  Context->BackendSnapshot.Valid = APPLE_AGX_FALSE;
   return STATUS_SUCCESS;
 }

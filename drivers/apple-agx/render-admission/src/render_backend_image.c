@@ -536,6 +536,105 @@ APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmission(
   return APPLE_AGX_TRUE;
 }
 
+APPLE_AGX_BOOL AdmissionBackendImageRestoredObject(APPLE_AGX_U32 Index) {
+  return Index <= 42u || Index == 63u ? APPLE_AGX_TRUE : APPLE_AGX_FALSE;
+}
+
+static APPLE_AGX_BOOL snapshot_matches(
+    const ADMISSION_BACKEND_IMAGE_SNAPSHOT *Snapshot,
+    const ADMISSION_BACKEND_IMAGE *Image) {
+  return Snapshot != ADMISSION_BACKEND_IMAGE_NULL &&
+      Snapshot->Valid == APPLE_AGX_TRUE &&
+      Snapshot->StoredBytes <= ADMISSION_BACKEND_SNAPSHOT_BYTES &&
+      Snapshot->Image.Ready == APPLE_AGX_TRUE &&
+      Snapshot->Image.ArenaCpuAddress == Image->ArenaCpuAddress &&
+      Snapshot->Image.ArenaPhysicalAddress == Image->ArenaPhysicalAddress &&
+      Snapshot->Image.ArenaGpuAddress == Image->ArenaGpuAddress &&
+      Snapshot->Image.ArenaBytes == Image->ArenaBytes &&
+      Snapshot->Image.ArenaCapacity == Image->ArenaCapacity;
+}
+
+APPLE_AGX_BOOL AdmissionBackendImageCaptureSnapshot(
+    const ADMISSION_BACKEND_IMAGE *Image,
+    ADMISSION_BACKEND_IMAGE_SNAPSHOT *Snapshot) {
+  const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layouts;
+  const unsigned char *arena;
+  APPLE_AGX_U32 index, stored = 0u;
+  if (Snapshot == ADMISSION_BACKEND_IMAGE_NULL)
+    return APPLE_AGX_FALSE;
+  Snapshot->Valid = APPLE_AGX_FALSE;
+  layouts = AppleAgxRenderTemplateObjectLayouts();
+  if (Image == ADMISSION_BACKEND_IMAGE_NULL || layouts == 0 ||
+      Image->Ready != APPLE_AGX_TRUE || Image->Pristine != APPLE_AGX_TRUE ||
+      Image->BoundFence != 0u || Image->ArenaCpuAddress == 0 ||
+      Image->ArenaBytes != AppleAgxRenderTemplateBytes())
+    return APPLE_AGX_FALSE;
+  arena = (const unsigned char *)Image->ArenaCpuAddress;
+  for (index = 0u; index < APPLE_AGX_RENDER_TEMPLATE_OBJECT_COUNT; ++index) {
+    APPLE_AGX_U32 length;
+    Snapshot->Stored[index] = 0u;
+    if (!AdmissionBackendImageRestoredObject(index))
+      continue;
+    if (layouts[index].ArenaOffset > Image->ArenaBytes ||
+        layouts[index].Size > Image->ArenaBytes - layouts[index].ArenaOffset)
+      return APPLE_AGX_FALSE;
+    /* One uncached pass at StartDevice: whole words while aligned. */
+    length = layouts[index].Size;
+    while (length != 0u) {
+      const unsigned char *end = arena + layouts[index].ArenaOffset + length;
+      if (((APPLE_AGX_U64)(unsigned long long)end & 7ULL) == 0ULL &&
+          length >= 8u) {
+        if (*(const volatile APPLE_AGX_U64 *)(end - 8) != 0ULL) break;
+        length -= 8u;
+      } else {
+        if (end[-1] != 0u) break;
+        --length;
+      }
+    }
+    while (length != 0u &&
+           arena[layouts[index].ArenaOffset + length - 1u] == 0u)
+      --length;
+    if (length > ADMISSION_BACKEND_SNAPSHOT_BYTES - stored)
+      return APPLE_AGX_FALSE;
+    memcpy(Snapshot->Data + stored, arena + layouts[index].ArenaOffset, length);
+    Snapshot->Stored[index] = length;
+    stored += length;
+  }
+  Snapshot->StoredBytes = stored;
+  Snapshot->Image = *Image;
+  Snapshot->Valid = APPLE_AGX_TRUE;
+  return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmissionRestore(
+    ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_BACKEND_IMAGE_SNAPSHOT *Snapshot, APPLE_AGX_U32 Fence) {
+  const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layouts;
+  unsigned char *arena;
+  APPLE_AGX_U32 index, offset = 0u, sequence;
+  if (Image == ADMISSION_BACKEND_IMAGE_NULL ||
+      Image->Ready != APPLE_AGX_TRUE || Fence == 0u ||
+      Image->BoundFence != Fence || !Image->G4Native ||
+      !snapshot_matches(Snapshot, Image))
+    return AdmissionBackendImageReleaseSubmission(Image, Fence);
+  layouts = AppleAgxRenderTemplateObjectLayouts();
+  arena = (unsigned char *)Image->ArenaCpuAddress;
+  for (index = 0u; index < APPLE_AGX_RENDER_TEMPLATE_OBJECT_COUNT; ++index) {
+    APPLE_AGX_U32 stored = Snapshot->Stored[index];
+    unsigned char *object = arena + layouts[index].ArenaOffset;
+    if (!AdmissionBackendImageRestoredObject(index))
+      continue;
+    memcpy(object, Snapshot->Data + offset, stored);
+    memset(object + stored, 0, layouts[index].Size - stored);
+    offset += stored;
+  }
+  /* Event slots and queues outlive this scene; preserve their stamp epoch. */
+  sequence = Image->Sequence;
+  *Image = Snapshot->Image;
+  Image->Sequence = sequence;
+  return APPLE_AGX_TRUE;
+}
+
 APPLE_AGX_BOOL AdmissionBackendImageSelectVmSlot(
     ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Slot) {
   if (Image == ADMISSION_BACKEND_IMAGE_NULL ||

@@ -2764,8 +2764,9 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
     }
     if (runtime->CompletedOutput.Phase == AdmissionCompletedOutputCaptured &&
         (!AdmissionDynamicOverlayReleaseActive(runtime, Fence) ||
-         !AdmissionBackendImageReleaseSubmission(
-             &adapter->BackendImage, Fence) ||
+         !AdmissionBackendImageReleaseSubmissionRestore(
+             &adapter->BackendImage,
+             &adapter->BackendSnapshot, Fence) ||
          !AdmissionCompletedOutputMarkReleased(
              &runtime->CompletedOutput, Fence))) {
       KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
@@ -2788,8 +2789,9 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
     }
 #else
     if (!AdmissionDynamicOverlayReleaseActive(runtime, Fence) ||
-        !AdmissionBackendImageReleaseSubmission(
-            &adapter->BackendImage, Fence) ||
+        !AdmissionBackendImageReleaseSubmissionRestore(
+            &adapter->BackendImage,
+            &adapter->BackendSnapshot, Fence) ||
         !AdmissionRenderPacketComplete(&adapter->RenderPacket, Fence) ||
         runtime->CompletionContext == NULL ||
         runtime->CompletionContext->Object.FenceOutstanding != Fence) {
