@@ -292,6 +292,8 @@ typedef enum ADMISSION_UMD_PRESENT_MEASURE_KIND {
 VOID AdmissionUmdPresentMeasure(UINT Kind, HRESULT Status,
                                 const UINT *Values, UINT Count);
 BOOL AdmissionUmdDiagnosticEnabled(VOID);
+/* Write the buffered trace lines now (EXP1109). */
+VOID AdmissionUmdDiagnosticFlush(VOID);
 VOID AdmissionUmdSetError(ADMISSION_UMD_DEVICE *Device, HRESULT Error);
 BOOL AdmissionUmdNextRenderSequence(
     ADMISSION_UMD_DEVICE *Device, UINT *Sequence);

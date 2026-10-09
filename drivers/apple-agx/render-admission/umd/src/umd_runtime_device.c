@@ -124,6 +124,71 @@ static HANDLE AdmissionUmdTraceHandle(PCWSTR Path) {
   return handle;
 }
 
+/* EXP1109: a ~9.8 ms DWM frame issued ~30 trace writes, each through the
+ * file-system filter stack (EXP1108 sn1108). Lines collect in a per-process
+ * buffer and are appended in one write when it would overflow, when the
+ * oldest buffered line is 250 ms old, for a refusal or failure record, and at
+ * process detach. Caller holds AdmissionUmdTraceLock. */
+#define ADMISSION_UMD_TRACE_BUFFER_BYTES 65536u
+#define ADMISSION_UMD_TRACE_FLUSH_MS 250
+static SRWLOCK AdmissionUmdTraceLock = SRWLOCK_INIT;
+static char AdmissionUmdTraceBuffer[ADMISSION_UMD_TRACE_BUFFER_BYTES];
+static DWORD AdmissionUmdTraceUsed;
+static LONGLONG AdmissionUmdTraceOldestQpc;
+
+static VOID AdmissionUmdTraceWriteLocked(VOID) {
+  BOOL refusalsOnly;
+  PCWSTR path;
+  HANDLE file;
+  DWORD written;
+  if (AdmissionUmdTraceUsed == 0u) return;
+  path = AdmissionUmdTraceConfig(&refusalsOnly);
+  file = path != NULL ? AdmissionUmdTraceHandle(path) : INVALID_HANDLE_VALUE;
+  if (file != INVALID_HANDLE_VALUE)
+    (void)WriteFile(file, AdmissionUmdTraceBuffer, AdmissionUmdTraceUsed,
+                    &written, NULL);
+  AdmissionUmdTraceUsed = 0u;
+}
+
+/* Also called from DllMain at process detach, where a terminated thread may
+ * still own the lock: never wait for it. */
+VOID AdmissionUmdDiagnosticFlush(VOID) {
+  DWORD saved = GetLastError();
+  if (TryAcquireSRWLockExclusive(&AdmissionUmdTraceLock)) {
+    AdmissionUmdTraceWriteLocked();
+    ReleaseSRWLockExclusive(&AdmissionUmdTraceLock);
+  }
+  SetLastError(saved);
+}
+
+static DWORD AdmissionUmdTraceSession(VOID) {
+  static volatile LONG cached = -1;
+  LONG value = InterlockedCompareExchange(&cached, -1, -1);
+  if (value < 0) {
+    DWORD session = MAXDWORD;
+    (void)ProcessIdToSessionId(GetCurrentProcessId(), &session);
+    value = (LONG)session;
+    InterlockedExchange(&cached, value);
+  }
+  return (DWORD)value;
+}
+
+static VOID AdmissionUmdTraceAppend(const char *Line, DWORD Bytes,
+                                    BOOL Urgent, LONGLONG Qpc) {
+  LARGE_INTEGER frequency;
+  (void)QueryPerformanceFrequency(&frequency);
+  AcquireSRWLockExclusive(&AdmissionUmdTraceLock);
+  if (AdmissionUmdTraceUsed + Bytes > ADMISSION_UMD_TRACE_BUFFER_BYTES)
+    AdmissionUmdTraceWriteLocked();
+  if (AdmissionUmdTraceUsed == 0u) AdmissionUmdTraceOldestQpc = Qpc;
+  memcpy(AdmissionUmdTraceBuffer + AdmissionUmdTraceUsed, Line, Bytes);
+  AdmissionUmdTraceUsed += Bytes;
+  if (Urgent || Qpc - AdmissionUmdTraceOldestQpc >=
+                    frequency.QuadPart * ADMISSION_UMD_TRACE_FLUSH_MS / 1000)
+    AdmissionUmdTraceWriteLocked();
+  ReleaseSRWLockExclusive(&AdmissionUmdTraceLock);
+}
+
 VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
                             const UINT *Values, UINT Count) {
   static volatile LONG records;
@@ -133,8 +198,6 @@ VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
   BOOL refusalsOnly;
   PCWSTR path;
   char line[512];
-  HANDLE file = INVALID_HANDLE_VALUE;
-  DWORD written;
   int used;
   UINT i;
   LARGE_INTEGER diagnosticQpc = {0};
@@ -153,7 +216,7 @@ VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
                                     &retirementFailures))
     goto done;
   (void)QueryPerformanceCounter(&diagnosticQpc);
-  (void)ProcessIdToSessionId(GetCurrentProcessId(), &diagnosticSession);
+  diagnosticSession = AdmissionUmdTraceSession();
   used = _snprintf_s(line, sizeof(line), _TRUNCATE,
       "%s hr=0x%08lx pid=%lu tid=%lu session=%lu qpc=%lld", Stage, (ULONG)Status,
       GetCurrentProcessId(), GetCurrentThreadId(), diagnosticSession,
@@ -167,9 +230,9 @@ VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
   }
   if ((SIZE_T)used + 1u >= sizeof(line)) goto done;
   line[used++] = '\n';
-  file = AdmissionUmdTraceHandle(path);
-  if (file != INVALID_HANDLE_VALUE)
-    (void)WriteFile(file, line, (DWORD)used, &written, NULL);
+  AdmissionUmdTraceAppend(line, (DWORD)used,
+      strncmp(Stage, "reject-", 7u) == 0 || FAILED(Status),
+      diagnosticQpc.QuadPart);
  done:
   SetLastError(saved);
 }

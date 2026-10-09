@@ -267,8 +267,9 @@ static HRESULT AdmissionUmdSubmitClear(
 
 BOOL WINAPI DllMain(HINSTANCE Instance, DWORD Reason, LPVOID Reserved) {
   UNREFERENCED_PARAMETER(Instance);
-  UNREFERENCED_PARAMETER(Reason);
   UNREFERENCED_PARAMETER(Reserved);
+  if (Reason == DLL_PROCESS_DETACH)
+    AdmissionUmdDiagnosticFlush();
   return TRUE;
 }
 
