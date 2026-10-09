@@ -240,6 +240,45 @@ static VOID AdmissionJobTimingTargetWindows(
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
 }
 
+/* EXP1101 receipt-only: the firmware's GPU performance state from HwDataA
+ * (m1n1 initdata.py AGXHWDataA, G13 V13_5: actual_pstate 0x2c, tgt_pstate
+ * 0x30, cur_pstate 0x38), packed actual | tgt << 8 | cur << 16 | valid << 31.
+ * Stored in the slot's otherwise unused Firmware3dStart (at the TA kick) and
+ * Firmware3dEnd (at completion). */
+#define ADMISSION_HWDATAA_ACTUAL_PSTATE 0x2cu
+#define ADMISSION_HWDATAA_TGT_PSTATE 0x30u
+#define ADMISSION_HWDATAA_CUR_PSTATE 0x38u
+static ULONGLONG AdmissionJobTimingPstateWord(
+    ADMISSION_PLATFORM_RUNTIME *runtime) {
+  const APPLE_AGX_MEMORY_OBJECT *hwdata =
+      &runtime->Initdata.RegionBMemory.Objects[AppleAgxRegionBMemoryHwdataA];
+  const volatile UCHAR *base = (const volatile UCHAR *)hwdata->CpuAddress;
+  if (base == NULL || hwdata->Length < ADMISSION_HWDATAA_CUR_PSTATE + 4u)
+    return 0ULL;
+  return (ULONGLONG)(*(const volatile ULONG *)(base +
+                         ADMISSION_HWDATAA_ACTUAL_PSTATE) & 0xffu) |
+         ((ULONGLONG)(*(const volatile ULONG *)(base +
+                          ADMISSION_HWDATAA_TGT_PSTATE) & 0xffu) << 8) |
+         ((ULONGLONG)(*(const volatile ULONG *)(base +
+                          ADMISSION_HWDATAA_CUR_PSTATE) & 0xffu) << 16) |
+         (1ULL << 31);
+}
+
+static VOID AdmissionJobTimingPstateWindows(
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence, BOOLEAN completion) {
+  ADMISSION_JOB_TIMING_SLOT *slot;
+  KIRQL oldIrql;
+  ULONGLONG word = AdmissionJobTimingPstateWord(runtime);
+  KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+  slot = (ADMISSION_JOB_TIMING_SLOT *)AdmissionJobTimingFind(
+      &runtime->JobTiming, fence);
+  if (slot != NULL) {
+    if (completion) slot->Firmware3dEnd = word;
+    else slot->Firmware3dStart = word;
+  }
+  KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+}
+
 static VOID AdmissionJobTimingFirmwareWindows(
     ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence) {
   const APPLE_AGX_EXP208_RELOCATION_OBJECT *start, *end;
@@ -262,6 +301,7 @@ static VOID AdmissionJobTimingFirmwareWindows(
         (taEnd != 0u ? 2u : 0u);
   }
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+  AdmissionJobTimingPstateWindows(runtime, fence, TRUE);
 }
 
 static VOID AdmissionJobTimingExportWindows(
@@ -2527,6 +2567,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionQueuesRunTa(
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   AdmissionJobTimingMarkWindows(runtime, Fence, AdmissionJobPhaseKickTa);
+  if (runtime != NULL) AdmissionJobTimingPstateWindows(runtime, Fence, FALSE);
 #endif
   return runtime != NULL && runtime->PlatformIo.Queues.RunTa != NULL
       ? runtime->PlatformIo.Queues.RunTa(runtime->PlatformIo.Context, Job, Fence)
