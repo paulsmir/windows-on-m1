@@ -53650,3 +53650,9 @@ Expected: charmap drag above EXP1077/EXP1078 (~11-14 fps, corrected units) and m
 EXP1079 HARDWARE ACTUAL 2026-10-09T04:56Z: full-owner Code0, DWM pid1228, no crash, WATCHDOG 15 unchanged; nolayout/vid ALL PASS before and after; rejects 3 reject-batch, 9 reject-no-target. charmap drag 12.0-13.6 fps (EXP1077 ~11, EXP1078 ~12-14 on the same package as EXP1077); Notepad window load ~7 fps (EXP1077 ~6), mouse script 1238 moves. Verdict: 9a066306 removes tracing overhead (~10-15 %), but DWM stays CPU-bound at ~12 fps; the per-line trace file open/close was not the main cost. Next: rollback; EXP1080 with per-DDI timing (75d986d1) to measure DWM's wall-time share inside the UMD.
 
 EXP1080 BUILD BEFORE 2026-10-09T04:56Z: source 75d986d1 = EXP1079 code + per-DDI timing (diagnostic). mkexp source EXP1080 EXP1080-ddi-timing 1080.
+
+EXP1079 ROLLBACK ACTUAL: rec1079h/recover.sh RECOVERY_DONE, normal Code 28, Preflight PASS {BeforeBoot 04:56:36Z, AfterBoot 04:59:13Z, Package Absent}.
+
+EXP1080 HARDWARE BEFORE 2026-10-09T05:01Z (autonomous, diagnostic): source tree 75d986d1 (manifest commit f0b0576d), R85 PACKAGE1080 BUILD PASS, HASHES_MATCH 16, staged from Code 28; sys 5e760062c38f91e7, umd a4d5d8b9ec5f113a, manifest 1d28cda5483c4405, hardware-manifest 76265b62690219e5; recovery rec1080h/recover.sh. Variable: per-DDI QPC timing receipts (no behaviour change). Load: charmap drag 60 s with vsync trace, then vid.
+WHY THIS HYPOTHESIS: (1) EXP1078: DWM composition thread CPU-bound (~58 % running) at ~12 fps; (2) QPC submission phases explain only ~30 % of DWM wall time; (3) no ETW sampling in this guest, so time inside the UMD DDIs is the next discriminator between our UMD (Mesa/d3d10umd) and DWM/runtime work.
+Expected: measure-ddi-window shows DWM's top-level UMD time per 2 s window; if it is most of the wall time, the DDI table names the heavy entry points. Launch PROBE_SCRIPT=probe1080.sh run-probe.sh EXP1080-ddi-timing 1080 EXP1080 0.
