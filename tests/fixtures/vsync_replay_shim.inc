@@ -32,6 +32,10 @@ static int KeCancelTimer(KTIMER*t){t->Armed=0;return 1;}
 static int KeRemoveQueueDpc(KDPC*d){d->Queued=0;return 1;}
 static void KeFlushQueuedDpcs(void){flushed=1;}
 static void ExFreePoolWithTag(void*p,unsigned tag){(void)p;(void)tag;assert(flushed);freed=1;}
+/* EXP1091: AdmissionScanoutQueryTimeline snapshots into nonpaged pool; no scenario queries. */
+#define POOL_FLAG_NON_PAGED 0x40ULL
+#define STATUS_INSUFFICIENT_RESOURCES -8
+static void*ExAllocatePool2(ULONGLONG f,unsigned long n,unsigned tag){(void)f;(void)n;(void)tag;assert(!"unexpected allocation");return NULL;}
 typedef int32_t LONG; typedef int64_t LONG64; typedef int BOOLEAN; typedef int NTSTATUS; typedef void VOID;
 #define TRUE 1
 #define FALSE 0
