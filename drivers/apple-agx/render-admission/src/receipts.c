@@ -2702,5 +2702,10 @@ _Use_decl_annotations_ void AdmissionRecordPagingProfile(
   if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
           PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
   WriteBinary(key, L"Wom1G3PagingProfile", value, sizeof(value));
+  /* EXP1121 receipt-only census of VidMm's last paging operations. */
+  Context->PagingCensus.Version = 1u;
+  Context->PagingCensus.Bytes = sizeof(Context->PagingCensus);
+  WriteBinary(key, L"Wom1PagingCensus1121", &Context->PagingCensus,
+              sizeof(Context->PagingCensus));
   ZwClose(key);
 }

@@ -399,6 +399,21 @@ typedef struct _ADMISSION_PAGING_PROFILE {
   volatile LONG64 NotifyToDpc[3];
   volatile LONG64 LastPublishedQpc;
 } ADMISSION_PAGING_PROFILE;
+/* EXP1121 receipt-only: the last 128 VIRTUAL_TRANSFER, VIRTUAL_FILL and
+ * UPDATE_PAGE_TABLE operations VidMm built, kept in memory on the paging
+ * path and published with the paging profile. */
+#define ADMISSION_PAGING_CENSUS_ENTRIES 128u
+typedef struct _ADMISSION_PAGING_CENSUS_ENTRY {
+  ULONGLONG Qpc;
+  ULONG Operation, Detail, Flags, Entries;
+  ULONGLONG Allocation, Process, Offset, Bytes, SourceVa, DestinationVa;
+} ADMISSION_PAGING_CENSUS_ENTRY;
+typedef struct _ADMISSION_PAGING_CENSUS {
+  ULONG Version, Bytes;
+  volatile LONG Next;
+  ULONG Reserved;
+  ADMISSION_PAGING_CENSUS_ENTRY Entries[ADMISSION_PAGING_CENSUS_ENTRIES];
+} ADMISSION_PAGING_CENSUS;
 /* EXP987 receipt-only: R155/R165 BuildPagingBuffer waits for a process's
  * in-flight job. Snapshot of the condition when the wait began. */
 typedef struct _ADMISSION_G3_PAGING_WAIT_RECEIPT {
@@ -532,6 +547,7 @@ typedef struct _ADMISSION_CONTEXT {
   /* EXP1073: paging-DDI receipts staged for a work item (receipts.c). */
   PVOID PagingReceipts;
   ADMISSION_PAGING_PROFILE PagingProfile;
+  ADMISSION_PAGING_CENSUS PagingCensus;
   LONGLONG PagingDispatchQpc, PagingNotifyQpc;
   /* EXP997 diagnostic: first poisoned G3 process seen at completion. */
   volatile LONG G3PoisonClaim;

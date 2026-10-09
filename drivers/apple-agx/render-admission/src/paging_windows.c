@@ -179,6 +179,48 @@ static VOID AdmissionPagingBuildTrace(
   } while (0)
 #endif
 
+/* EXP1121 receipt-only: memory writes only, no registry I/O (EXP996). */
+static VOID AdmissionPagingCensusRecord(ADMISSION_CONTEXT *Context,
+    const DXGKARG_BUILDPAGINGBUFFER *Args) {
+  ADMISSION_PAGING_CENSUS_ENTRY *e;
+  ULONG slot;
+  if (Context == NULL || Args == NULL ||
+      (Args->Operation != DXGK_OPERATION_VIRTUAL_TRANSFER &&
+       Args->Operation != DXGK_OPERATION_VIRTUAL_FILL &&
+       Args->Operation != DXGK_OPERATION_UPDATE_PAGE_TABLE))
+    return;
+  slot = (ULONG)InterlockedIncrement(&Context->PagingCensus.Next) - 1u;
+  e = &Context->PagingCensus.Entries[slot % ADMISSION_PAGING_CENSUS_ENTRIES];
+  RtlZeroMemory(e, sizeof(*e));
+  e->Qpc = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+  e->Operation = (ULONG)Args->Operation;
+  if (Args->Operation == DXGK_OPERATION_VIRTUAL_TRANSFER) {
+    e->Allocation = (ULONGLONG)(ULONG_PTR)Args->TransferVirtual.hAllocation;
+    e->Offset = Args->TransferVirtual.AllocationOffsetInBytes;
+    e->Bytes = Args->TransferVirtual.TransferSizeInBytes;
+    e->SourceVa = Args->TransferVirtual.SourceVirtualAddress;
+    e->DestinationVa = Args->TransferVirtual.DestinationVirtualAddress;
+    e->Detail = (ULONG)Args->TransferVirtual.TransferDirection;
+    e->Flags = Args->TransferVirtual.Flags.Flags;
+  } else if (Args->Operation == DXGK_OPERATION_VIRTUAL_FILL) {
+    e->Allocation = (ULONGLONG)(ULONG_PTR)Args->FillVirtual.hAllocation;
+    e->Offset = Args->FillVirtual.AllocationOffsetInBytes;
+    e->Bytes = Args->FillVirtual.FillSizeInBytes;
+    e->DestinationVa = Args->FillVirtual.DestinationVirtualAddress;
+    e->Flags = Args->FillVirtual.FillPattern;
+  } else {
+    e->Allocation = (ULONGLONG)(ULONG_PTR)Args->UpdatePageTable.hAllocation;
+    e->Process = (ULONGLONG)(ULONG_PTR)Args->UpdatePageTable.hProcess;
+    e->Detail = Args->UpdatePageTable.PageTableLevel |
+        ((ULONG)Args->UpdatePageTable.UpdateMode << 8);
+    RtlCopyMemory(&e->Flags, &Args->UpdatePageTable.Flags,
+        min(sizeof(e->Flags), sizeof(Args->UpdatePageTable.Flags)));
+    e->Entries = Args->UpdatePageTable.NumPageTableEntries;
+    e->Offset = Args->UpdatePageTable.StartIndex;
+    e->DestinationVa = Args->UpdatePageTable.FirstPteVirtualAddress;
+  }
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiBuildPagingBuffer(
     HANDLE Adapter, DXGKARG_BUILDPAGINGBUFFER *Args) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
@@ -194,6 +236,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiBuildPagingBuffer(
   {
     /* EXP1052 receipt-only: in-memory per-operation build time. */
     LONGLONG start = KeQueryPerformanceCounter(NULL).QuadPart;
+    AdmissionPagingCensusRecord(context, Args);
     status = AdmissionBuildPagingBuffer(Adapter, Args);
     if (context != NULL && operation < ADMISSION_PAGING_PROFILE_OPS) {
       AdmissionPagingProfileAdd(context->PagingProfile.Build[operation],
