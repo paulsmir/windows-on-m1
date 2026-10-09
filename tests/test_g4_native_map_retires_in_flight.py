@@ -38,7 +38,8 @@ PROGRAM = r'''
 #include <stdlib.h>
 #define APPLE_AGX_GPUVA_WINSYS 1
 typedef struct { uint64_t Allocation; unsigned Bound; } AGX_WIN32_GPUVA_BO;
-typedef struct { uint64_t *Held; unsigned HeldCount; uint64_t RenderFence; } AGX_WIN32_GPUVA_SPACE;
+typedef struct { uint64_t *Held; unsigned HeldCount; uint64_t RenderFence;
+  struct { uint64_t *Handles; unsigned Count; uint64_t Fence; } Older; } AGX_WIN32_GPUVA_SPACE;
 typedef struct { int Failed; struct { void *Screen; } Buffers; AGX_WIN32_GPUVA_SPACE Gpuva; } AGX_WIN32_ASAHI_BACKEND;
 typedef struct { int unused; } AGX_WIN32_NATIVE_BO;
 struct agx_device { void *windows_private; };
@@ -61,6 +62,11 @@ static int AgxWin32NativeBoMap(void *screen, AGX_WIN32_NATIVE_BO *bo, unsigned a
   struct windows_bo *owner = (struct windows_bo *)((char *)bo - offsetof(struct windows_bo, Backing));
   if (held(owner->Gpuva.Allocation)) return 1;
   ++maps; *address = storage; return AgxWin32NativeBoSuccess;
+}
+static uint64_t AgxWin32GpuvaHoldingFence(const AGX_WIN32_GPUVA_SPACE *space, uint64_t allocation) {
+  for (unsigned i = 0; space->Held && i < space->HeldCount; ++i)
+    if (space->Held[i] == allocation) return space->RenderFence;
+  return 0;
 }
 static int AgxWin32GpuvaRetire(AGX_WIN32_GPUVA_SPACE *space, uint64_t fence) {
   if (refuse_retire || !space->Held || fence != space->RenderFence) return 0;

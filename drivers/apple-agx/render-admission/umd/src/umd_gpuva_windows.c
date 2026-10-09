@@ -182,7 +182,11 @@ static void release_copies(ADMISSION_UMD_DEVICE *device,
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
   for(unsigned i=0;i<count;++i) {
     auto *slot=find_slot(device,tokens[i]);
-    if(slot && slot->CopyHeld) {slot->CopyHeld=FALSE;--slot->SubmissionHolds;}
+    /* EXP1093: a queued submission already dropped CopyHeld (its slots may
+     * join the next one); each retired or rolled-back set drops one hold. */
+    if(!slot) continue;
+    slot->CopyHeld=FALSE;
+    if(slot->SubmissionHolds) --slot->SubmissionHolds;
   }
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
 }
@@ -373,8 +377,10 @@ static int make_resident(void *context, const uint64_t *tokens,
     if(device->ScreenBuffers[i].CopyHeld) valid=false;
   for(unsigned i=0;valid && i<count;++i) {
     auto *slot=find_slot(device,tokens[i]);
+    /* EXP1093: at most the one other submission still in flight may hold it
+     * (the winsys retires the older one before a new submission). */
     valid=slot && !slot->Transition && !slot->CopyHeld &&
-        !slot->SourceHolds && !slot->SubmissionHolds &&
+        !slot->SourceHolds && slot->SubmissionHolds<=1u &&
         (slot->StagingAllocation || slot->PrivateStaging || slot->Direct ||
          slot->SystemDirect) &&
         slot->CanonicalGpuVa &&
@@ -750,6 +756,10 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
     AdmissionUmdDiagnostic("ddi-slot-xfer",S_OK,values,ARRAYSIZE(values));
   }
   if(unchanged) return 1;
+  /* EXP1093: the other in-flight submission may still read this slot's
+   * canonical copy; it completes before the copy overwrites it. */
+  if(!download && slot->SubmissionHolds>1u && slot->LastUseFence &&
+     !wait_object(device,device->RenderSyncObject,slot->LastUseFence)) return 0;
   AdmissionUmdStagingInvalidate(&slot->Sync);
   auto *payload=(APPLE_AGX_G3_COPY_REQUEST *)HeapAlloc(
       GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(APPLE_AGX_G3_COPY_REQUEST));
@@ -1151,9 +1161,6 @@ static int submit(void *context, const uint64_t *written,
       device->NextRenderFence > UINT64_MAX - 2 ||
       written_count > D3DDDI_MAX_WRITTEN_PRIMARIES ||
       (written_count && !written)) return 0;
-  /* The winsys retires the previous submission first; keep at most one
-   * queued job even if it did not, before this one's uploads. */
-  if(device->PendingRenderFence && !complete_render(device)) return 2;
   AcquireSRWLockShared(&device->ScreenBufferLock);
   for (unsigned i = 0; i < written_count; ++i) {
     ADMISSION_UMD_SCREEN_BUFFER *slot = NULL;
@@ -1257,6 +1264,15 @@ static int submit(void *context, const uint64_t *written,
   }
   int finished=finish_submission(device,internal,request.RenderCBSequence,fence);
   if(finished!=1) return finished;
+  /* EXP1093: the queued submission's slots stay held (SubmissionHolds) until
+   * retirement but may join the next submission; remember the fence an
+   * upload into them must wait for. */
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(device);++i) {
+    auto *slot=&device->ScreenBuffers[i];
+    if(slot->CopyHeld) {slot->CopyHeld=FALSE;slot->LastUseFence=*fence;}
+  }
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   {
     static volatile LONG receipts;
