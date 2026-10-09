@@ -399,6 +399,31 @@ static void TestIngestFailureNamesDecoderOwner(void) {
   assert(f.Provider.LastIngestRuntimeResult ==
          AppleAgxG13QueueRuntimeResultInvalidArgument);
 }
+/* EXP1075: a firmware Timeout event with a successful resume completes the
+ * pending fence through a Recovered observation; the provider accepts the
+ * next submission and no queue Quiesce runs. */
+static unsigned int Recoveries;
+static APPLE_AGX_BACKEND_BOOL Recover(void *Context, APPLE_AGX_BACKEND_U32 Fence,
+                                      APPLE_AGX_BACKEND_U32 Kind) {
+  (void)Context; assert(Fence == 41u && Kind == (unsigned)AppleAgxG13EventTimeout);
+  ++Recoveries; return APPLE_AGX_BACKEND_TRUE;
+}
+static void TestFirmwareTimeoutRecovers(void) {
+  FIXTURE f;
+  APPLE_AGX_G13_QUEUE_PROVIDER_EVENT_BATCH batch;
+  unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE] = {0};
+  Init(&f);
+  Submit(&f);
+  f.Provider.Runtime.Io.Recover = Recover;
+  PutU32(event, (unsigned int)AppleAgxG13EventTimeout);
+  assert(AppleAgxG13QueueProviderIngestEvent(
+      &f.Provider, event, sizeof(event), &batch));
+  assert(Recoveries == 1u && f.Quiesces == 0u);
+  assert(batch.ObservationCount == 1u &&
+         batch.Observations[0].Status == AppleAgxBackendObservationRecovered);
+  assert(batch.CompletedFence == 41u);
+  assert(f.Provider.Phase == AppleAgxG13QueueProviderCreated);
+}
 static void TestSecondSubmitPublishesOnlyWorkTa(void) {
   FIXTURE f;
   Init(&f); Submit(&f);
@@ -605,6 +630,7 @@ int main(void) {
   TestPhaseFenceRejectReportsExactInvariant();
   TestExactCompletion(); TestFailClosedQuiesce();
   TestIngestFailureNamesDecoderOwner();
+  TestFirmwareTimeoutRecovers();
   TestReadOnlyJobPlanTracksQueueLifetime();
   TestIdleManagerRebindPreservesQueueLifetime();
   TestSecondSubmitPublishesOnlyWorkTa();

@@ -354,6 +354,15 @@ APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeObserve(
     return AppleAgxBackendRuntimeAcknowledgeCompletion(Runtime);
   if (Runtime->Phase != AppleAgxBackendRuntimeSubmitted)
     return AppleAgxBackendRuntimeResultInvalidState;
+  if (Observation->Status == AppleAgxBackendObservationRecovered) {
+    /* The firmware dropped the job and runs again (queue provider proved
+     * the resume); complete the fence like a natural completion so the
+     * Windows scheduler continues, instead of a queue stop and a TDR. */
+    Runtime->TaComplete = Runtime->D3Complete = APPLE_AGX_TRUE;
+    return AppleAgxBackendTerminal(Runtime, AppleAgxBackendCompletionSuccess,
+                                   AppleAgxBackendRuntimeReady,
+                                   AppleAgxBackendRuntimeResultOk);
+  }
   if (Observation->Status != AppleAgxBackendObservationComplete) {
     APPLE_AGX_BACKEND_COMPLETION_STATUS completionStatus;
     APPLE_AGX_BOOL stopped;

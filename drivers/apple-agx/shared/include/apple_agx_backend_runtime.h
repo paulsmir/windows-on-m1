@@ -55,6 +55,9 @@ typedef enum _APPLE_AGX_BACKEND_OBSERVATION_STATUS {
   AppleAgxBackendObservationFault,
   AppleAgxBackendObservationTimeout,
   AppleAgxBackendObservationReset,
+  /* EXP1075: the firmware reported a Timeout/Fault for this job, dropped
+   * it and was resumed; the job completes without stamp evidence. */
+  AppleAgxBackendObservationRecovered,
 } APPLE_AGX_BACKEND_OBSERVATION_STATUS;
 
 /*

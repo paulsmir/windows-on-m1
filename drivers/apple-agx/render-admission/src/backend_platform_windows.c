@@ -181,6 +181,10 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   BOOLEAN ProviderReady;
   BOOLEAN BackendStarted;
   BOOLEAN TimerResolutionRaised;
+  /* EXP1075: firmware Timeout/Fault events resumed (Asahi recover()). */
+  volatile LONG FirmwareRecoveries;
+  ULONG LastFirmwareRecoveryKind, LastFirmwareRecoveryFence;
+  BOOLEAN FirmwareRecoveryUnpublished;
 } ADMISSION_PLATFORM_RUNTIME;
 
 /* 1 ms in 100-ns units (ExSetTimerResolution). */
@@ -1881,6 +1885,44 @@ static APPLE_AGX_BACKEND_BOOL AdmissionTransportReadU32(
   KeMemoryBarrier();
   *Value = *Address;
   KeMemoryBarrier();
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
+/* EXP1075 kernel dump: after a firmware Timeout event (kind 4) the FW status
+ * read halt_count=1, halted=1, resume=0. Nothing resumed the firmware, the job
+ * never completed, and the TDR reset (an RTKit stop the halted firmware cannot
+ * acknowledge) failed: bugcheck 0x116. Asahi recover() waits up to 100 ms for
+ * halted, then writes halted=0 and resume=1; the firmware drops the reported
+ * work and continues with the queues. FW status layout (m1n1
+ * InitData_FWStatus): halt_count +0x10, halted +0x20, resume +0x30. The
+ * firmware-shared mapping is coherent (AdmissionTransportFlush is a barrier). */
+static APPLE_AGX_BACKEND_BOOL AdmissionTransportRecover(
+    void *Context, APPLE_AGX_BACKEND_U32 Fence, APPLE_AGX_BACKEND_U32 EventKind) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  volatile ULONG *status;
+  ULONGLONG deadline;
+  if (runtime == NULL || Fence == 0u ||
+      runtime->Provider.QueueProvider.PendingFence != Fence ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return APPLE_AGX_BACKEND_FALSE;
+  status = (volatile ULONG *)runtime->Initdata
+      .DataObjects[AppleAgxInitdataMemoryFirmwareStatus].CpuAddress;
+  if (status == NULL) return APPLE_AGX_BACKEND_FALSE;
+  deadline = AdmissionPlatformNowMs() + 100u;
+  KeMemoryBarrier();
+  while (status[0x20u / 4u] == 0u) {
+    if (AdmissionPlatformNowMs() >= deadline) return APPLE_AGX_BACKEND_FALSE;
+    KeStallExecutionProcessor(50u);
+    KeMemoryBarrier();
+  }
+  status[0x20u / 4u] = 0u;
+  KeMemoryBarrier();
+  status[0x30u / 4u] = 1u;
+  KeMemoryBarrier();
+  InterlockedIncrement(&runtime->FirmwareRecoveries);
+  runtime->LastFirmwareRecoveryKind = EventKind;
+  runtime->LastFirmwareRecoveryFence = Fence;
+  runtime->FirmwareRecoveryUnpublished = TRUE;
   return APPLE_AGX_BACKEND_TRUE;
 }
 
@@ -3624,6 +3666,24 @@ static VOID AdmissionPlatformWorker(
 #endif
   AdmissionRenderCorrelationWorkerWindows(
       adapter, description.Fence, FALSE, (ULONG)runtime->Backend.Phase);
+  if (runtime->FirmwareRecoveryUnpublished) {
+    /* EXP1075 receipt: {recoveries, last event kind, last fence}. */
+    HANDLE key = NULL;
+    UNICODE_STRING name;
+    ULONG value[3];
+    runtime->FirmwareRecoveryUnpublished = FALSE;
+    value[0] = (ULONG)InterlockedCompareExchange(&runtime->FirmwareRecoveries, 0, 0);
+    value[1] = runtime->LastFirmwareRecoveryKind;
+    value[2] = runtime->LastFirmwareRecoveryFence;
+    if (NT_SUCCESS(IoOpenDeviceRegistryKey(adapter->PhysicalDeviceObject,
+            PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
+      RtlInitUnicodeString(&name, L"Wom1FirmwareRecovery");
+      if (NT_SUCCESS(ZwSetValueKey(key, &name, 0u, REG_BINARY, value,
+                                   sizeof(value))))
+        (void)ZwFlushKey(key);
+      ZwClose(key);
+    }
+  }
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   AdmissionJobTimingExportWindows(runtime);
 #endif
@@ -3920,6 +3980,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->QueueIo.PublishU32 = AdmissionTransportPublishU32;
   runtime->QueueIo.ReadU32 = AdmissionTransportReadU32;
   runtime->QueueIo.Quiesce = AdmissionTransportQuiesce;
+  runtime->QueueIo.Recover = AdmissionTransportRecover;
 
   runtime->FirmwarePrimitives.Context = runtime;
   runtime->FirmwarePrimitives.IsPassiveLevel = AdmissionFirmwareAtPassive;

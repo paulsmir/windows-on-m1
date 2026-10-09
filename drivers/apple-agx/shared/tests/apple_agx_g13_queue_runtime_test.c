@@ -21,6 +21,9 @@ typedef struct _TEST_IO {
   unsigned int FailSendAt;
   unsigned int FailQuiesce;
   unsigned int FailReads;
+  unsigned int Recovers;
+  unsigned int FailRecover;
+  unsigned int RecoverKind;
 } TEST_IO;
 
 static APPLE_AGX_BACKEND_BOOL TestFlush(void *Context, const void *Address,
@@ -81,6 +84,16 @@ static APPLE_AGX_BACKEND_BOOL TestQuiesce(void *Context,
   ++io->Quiesces;
   return io->FailQuiesce ? APPLE_AGX_BACKEND_FALSE
                          : APPLE_AGX_BACKEND_TRUE;
+}
+
+static APPLE_AGX_BACKEND_BOOL TestRecover(void *Context,
+                                          APPLE_AGX_BACKEND_U32 Fence,
+                                          APPLE_AGX_BACKEND_U32 Kind) {
+  TEST_IO *io = (TEST_IO *)Context;
+  assert(Fence != 0u);
+  ++io->Recovers;
+  io->RecoverKind = Kind;
+  return io->FailRecover ? APPLE_AGX_BACKEND_FALSE : APPLE_AGX_BACKEND_TRUE;
 }
 
 typedef struct _TEST_FIXTURE {
@@ -609,6 +622,83 @@ static void TestPartialTransportFailureFaultsWithoutFence(void) {
                                                 &completion));
 }
 
+/* EXP1075: a firmware Timeout (kind 4) halted the firmware; resuming it
+ * completes the job as Recovered without the queue Quiesce (an RTKit stop the
+ * halted firmware cannot acknowledge), and the next job runs. A failed resume
+ * or a platform without Recover keeps the old terminal path. */
+static void TestFirmwareTimeoutRecovers(void) {
+  TEST_FIXTURE fixture;
+  APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
+  APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
+  unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
+
+  TestInitialize(&fixture);
+  fixture.Runtime.Io.Recover = TestRecover;
+  submission = TestSubmission(&fixture, 50u);
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  memset(event, 0, sizeof(event));
+  PutU32(event, (unsigned int)AppleAgxG13EventTimeout);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(&fixture.Runtime, event,
+                                            sizeof(event)) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(fixture.IoState.Recovers == 1u && fixture.IoState.Quiesces == 0u);
+  assert(fixture.IoState.RecoverKind == (unsigned)AppleAgxG13EventTimeout);
+  assert(fixture.Runtime.RecoveredFaults == 1u);
+  assert(AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime, &completion));
+  assert(completion.Fence == 50u &&
+         completion.Status == AppleAgxG13QueueCompletionRecovered);
+  assert(fixture.Runtime.Phase == AppleAgxG13QueueRuntimeReady);
+  /* The resumed firmware moved past the dropped work. */
+  fixture.TaDone = fixture.TaWrite;
+  fixture.D3Done = fixture.D3Write;
+  submission = TestSubmission(&fixture, 51u);
+  submission.Ta.GpuAddressCount = 1u;
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  TestCompleteSubmission(&fixture, &submission);
+
+  /* A Fault event (kind 0) recovers the same way. */
+  submission = TestSubmission(&fixture, 52u);
+  submission.Ta.GpuAddressCount = 1u;
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  memset(event, 0, sizeof(event));
+  PutU32(event, (unsigned int)AppleAgxG13EventFault);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(&fixture.Runtime, event,
+                                            sizeof(event)) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(fixture.IoState.Recovers == 2u && fixture.IoState.Quiesces == 0u);
+  assert(AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime, &completion));
+  assert(completion.Status == AppleAgxG13QueueCompletionRecovered);
+
+  /* The firmware did not halt (resume refused): terminal path as before. */
+  TestInitialize(&fixture);
+  fixture.Runtime.Io.Recover = TestRecover;
+  fixture.IoState.FailRecover = 1u;
+  submission = TestSubmission(&fixture, 53u);
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  memset(event, 0, sizeof(event));
+  PutU32(event, (unsigned int)AppleAgxG13EventTimeout);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(&fixture.Runtime, event,
+                                            sizeof(event)) ==
+         AppleAgxG13QueueRuntimeResultFaulted);
+  assert(fixture.IoState.Recovers == 1u && fixture.IoState.Quiesces == 1u);
+  assert(AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime, &completion));
+  assert(completion.Status == AppleAgxG13QueueCompletionFaulted);
+
+  /* No Recover callback: unchanged terminal path. */
+  TestInitialize(&fixture);
+  submission = TestSubmission(&fixture, 54u);
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(&fixture.Runtime, event,
+                                            sizeof(event)) ==
+         AppleAgxG13QueueRuntimeResultFaulted);
+  assert(fixture.IoState.Quiesces == 1u);
+}
+
 static void TestReadFailureCannotMasqueradeAsZeroPointer(void) {
   TEST_FIXTURE fixture;
   APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
@@ -635,6 +725,7 @@ unsigned AppleAgxG13QueueRuntimeContractTests(void) {
   TestTimeoutAndCancelRequireQuiescence();
   TestPartialTransportFailureFaultsWithoutFence();
   TestReadFailureCannotMasqueradeAsZeroPointer();
+  TestFirmwareTimeoutRecovers();
   return QueueRuntimeFailures;
 }
 

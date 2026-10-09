@@ -646,6 +646,38 @@ static void TestFaultWithoutQuiesceDoesNotCompleteOrDropFence(void) {
          AppleAgxBackendRuntimeResultOk);
 }
 
+/* EXP1075: the queue provider resumed the firmware after a Timeout/Fault
+ * event; the job completes like a natural completion (Windows fence advances,
+ * runtime Ready) without a queue Stop, and the next job can be submitted. */
+static void TestRecoveredCompletesWithoutStop(void) {
+  FAKE_BACKEND fake;
+  APPLE_AGX_BACKEND_RUNTIME runtime;
+  APPLE_AGX_BACKEND_IO io;
+  APPLE_AGX_BACKEND_SUBMISSION submission;
+  APPLE_AGX_BACKEND_OBSERVATION observation;
+
+  memset(&fake, 0, sizeof(fake));
+  io = BackendIo(&fake);
+  submission = Submission(&fake);
+  AppleAgxBackendRuntimeInitialize(&runtime, 3ULL);
+  fake.Runtime = &runtime;
+  assert(AppleAgxBackendRuntimeStart(&runtime, &io) ==
+         AppleAgxBackendRuntimeResultOk);
+  assert(AppleAgxBackendRuntimeSubmit(&runtime, &submission) ==
+         AppleAgxBackendRuntimeResultOk);
+  memset(&observation, 0, sizeof(observation));
+  observation.Status = AppleAgxBackendObservationRecovered;
+  fake.FailStop = 1u; /* a Stop here would fail the test */
+  assert(AppleAgxBackendRuntimeObserve(&runtime, &observation) ==
+         AppleAgxBackendRuntimeResultOk);
+  assert(runtime.Phase == AppleAgxBackendRuntimeReady);
+  assert(fake.CompletionCount == 1u && fake.CompletionFence == 77u);
+  assert(fake.CompletionStatus == AppleAgxBackendCompletionSuccess);
+  fake.FailStop = 0u;
+  assert(AppleAgxBackendRuntimeStop(&runtime) ==
+         AppleAgxBackendRuntimeResultOk);
+}
+
 static void TestCanonicalFifoCompletesTwoSubmissionsInOrder(void) {
   FAKE_BACKEND fake;
   APPLE_AGX_BACKEND_RUNTIME runtime;
@@ -736,6 +768,7 @@ int main(void) {
   TestRejectedRun3dRetainsNoQueueOwnership();
   TestFaultWithoutQuiesceDoesNotCompleteOrDropFence();
   TestCanonicalFifoCompletesTwoSubmissionsInOrder();
+  TestRecoveredCompletesWithoutStop();
   puts("apple_agx_backend_runtime_test: ok");
   return 0;
 }

@@ -365,6 +365,16 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformQueueSendRunMessage(
       (APPLE_AGX_G13_QUEUE_TYPE)QueueType, Message);
 }
 
+static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformQueueRecover(
+    void *Context, APPLE_AGX_BACKEND_U32 Fence, APPLE_AGX_BACKEND_U32 EventKind) {
+  APPLE_AGX_PLATFORM_PROVIDER *provider = Context;
+  return provider != PLATFORM_NULL && provider->BindingReady &&
+                 provider->CallerQueueRuntimeIo.Recover != PLATFORM_NULL
+             ? provider->CallerQueueRuntimeIo.Recover(
+                   provider->CallerQueueRuntimeIo.Context, Fence, EventKind)
+             : APPLE_AGX_BACKEND_FALSE;
+}
+
 static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformQueueQuiesce(
     void *Context, APPLE_AGX_BACKEND_U32 Fence) {
   APPLE_AGX_PLATFORM_PROVIDER *provider = Context;
@@ -627,6 +637,7 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderInitialize(
   queue_io.ReadU32 = AppleAgxPlatformQueueReadU32;
   queue_io.SendRunMessage = AppleAgxPlatformQueueSendRunMessage;
   queue_io.Quiesce = AppleAgxPlatformQueueQuiesce;
+  queue_io.Recover = AppleAgxPlatformQueueRecover;
   AppleAgxPlatformZero(&provider_io,
                        (APPLE_AGX_BACKEND_U32)sizeof(provider_io));
   provider_io.Context = Provider;

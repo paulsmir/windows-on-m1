@@ -441,6 +441,23 @@ static APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13TerminalFailure(
   return Result;
 }
 
+/* EXP1075: a firmware Timeout or Fault event leaves the firmware halted.
+ * When the platform can resume it (Asahi recover()), the reported work is
+ * complete (dropped by the firmware) and the queues stay usable. */
+static APPLE_AGX_BACKEND_BOOL AppleAgxG13RecoverFirmware(
+    APPLE_AGX_G13_QUEUE_RUNTIME *Runtime, const APPLE_AGX_G13_EVENT *Event) {
+  if ((Event->Kind != (APPLE_AGX_BACKEND_U32)AppleAgxG13EventTimeout &&
+       Event->Kind != (APPLE_AGX_BACKEND_U32)AppleAgxG13EventFault) ||
+      Runtime->Io.Recover == APPLE_AGX_G13_QUEUE_RUNTIME_NULL ||
+      !Runtime->Io.Recover(Runtime->Io.Context, Runtime->PendingFence,
+                           Event->Kind))
+    return APPLE_AGX_BACKEND_FALSE;
+  ++Runtime->RecoveredFaults;
+  Runtime->LastRecoveredEventKind = Event->Kind;
+  AppleAgxG13SetCompletion(Runtime, AppleAgxG13QueueCompletionRecovered);
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
 APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeHandleEvent(
     APPLE_AGX_G13_QUEUE_RUNTIME *Runtime, const unsigned char *Message,
     APPLE_AGX_BACKEND_U32 MessageBytes) {
@@ -453,6 +470,8 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeHandleEvent(
     APPLE_AGX_G13_EVENT computeEvent;
     if (!AppleAgxG13DecodeEvent(Message,MessageBytes,&computeEvent))
       return AppleAgxG13QueueRuntimeResultInvalidArgument;
+    if (computeEvent.TerminalFault && AppleAgxG13RecoverFirmware(Runtime,&computeEvent))
+      return AppleAgxG13QueueRuntimeResultOk;
     if (computeEvent.TerminalFault)
       return AppleAgxG13TerminalFailure(
           Runtime,AppleAgxG13QueueCompletionFaulted,
@@ -473,6 +492,8 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeHandleEvent(
     return AppleAgxG13QueueRuntimeResultInvalidState;
   if (!AppleAgxG13DecodeEvent(Message, MessageBytes, &event))
     return AppleAgxG13QueueRuntimeResultInvalidArgument;
+  if (event.TerminalFault && AppleAgxG13RecoverFirmware(Runtime, &event))
+    return AppleAgxG13QueueRuntimeResultOk;
   if (event.TerminalFault)
     return AppleAgxG13TerminalFailure(
         Runtime, AppleAgxG13QueueCompletionFaulted,
@@ -578,7 +599,8 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueRuntimeTakeCompletion(
   *Completion = Runtime->Completion;
   status = Runtime->Completion.Status;
   AppleAgxG13ClearPending(Runtime);
-  Runtime->Phase = status == AppleAgxG13QueueCompletionSuccess
+  Runtime->Phase = status == AppleAgxG13QueueCompletionSuccess ||
+                           status == AppleAgxG13QueueCompletionRecovered
                        ? AppleAgxG13QueueRuntimeReady
                        : AppleAgxG13QueueRuntimeFaulted;
   return APPLE_AGX_BACKEND_TRUE;

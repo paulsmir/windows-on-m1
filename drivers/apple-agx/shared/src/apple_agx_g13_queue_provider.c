@@ -672,6 +672,18 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderIngestEvent(
     return APPLE_AGX_BACKEND_FALSE;
   }
   Batch->CompletedFence = completion.Fence;
+  if (completion.Status == AppleAgxG13QueueCompletionRecovered) {
+    /* EXP1075: the firmware was resumed after a Timeout/Fault event; the
+     * job completes and the provider accepts the next submission. */
+    Batch->ObservationCount = 1u;
+    AppleAgxG13ProviderZero(&Batch->Observations[0],
+        (APPLE_AGX_BACKEND_U32)sizeof(Batch->Observations[0]));
+    Batch->Observations[0].Status = AppleAgxBackendObservationRecovered;
+    AppleAgxG13ProviderClearStaged(Provider);
+    Provider->Phase = AppleAgxG13QueueProviderCreated;
+    Provider->LastIngestGuard = AppleAgxG13QueueProviderIngestGuardOk;
+    return APPLE_AGX_BACKEND_TRUE;
+  }
   if (completion.Status == AppleAgxG13QueueCompletionSuccess) {
     AppleAgxG13ProviderClearStaged(Provider);
     Provider->Phase = AppleAgxG13QueueProviderCreated;
