@@ -503,19 +503,16 @@ static BOOLEAN AdmissionG3PrivateReuseScene(ADMISSION_G3_PROCESS *p,
   return TRUE;
 }
 
-/* Pool pressure: unmap and free every cached scene (no job in flight). */
+/* Pool pressure (no job in flight): unmap and free the least recently cached
+ * scene. FALSE when none is cached or its release failed. */
 static BOOLEAN AdmissionG3PrivateEvictCached(ADMISSION_G3_PROCESS *p,
     ADMISSION_BACKEND_MEMORY_VIEW *view) {
-  ADMISSION_G3_PRIVATE_SCENE *s,*next;
-  BOOLEAN evicted=FALSE;
-  for (s=p->PrivateScenes;s;s=next) {
-    next=s->Next;
-    if (!s->Cached) continue;
-    if (!AdmissionG3PrivateReleaseScene(p,s,view)) return FALSE;
-    ++p->State->PrivateStats[ADMISSION_G3_PRIVATE_STAT_PRESSURE];
-    evicted=TRUE;
-  }
-  return evicted;
+  ADMISSION_G3_PRIVATE_SCENE *s,*oldest=NULL;
+  for (s=p->PrivateScenes;s;s=s->Next)
+    if (s->Cached && (!oldest || s->CachedAt<oldest->CachedAt)) oldest=s;
+  if (!oldest || !AdmissionG3PrivateReleaseScene(p,oldest,view)) return FALSE;
+  ++p->State->PrivateStats[ADMISSION_G3_PRIVATE_STAT_PRESSURE];
+  return TRUE;
 }
 
 /* Interrupt/DPC owners hold SchedulerLock and publish only a cancellation
@@ -1684,7 +1681,7 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
   RtlZeroMemory(scene,sizeof(*scene));scene->Context=context;scene->Geometry=render;
   fresh=p->PrivateManager.Generation==0;
   status=AdmissionG3PreparePrivateStorageObserved(p,&render,&p->PrivateManager,&scene->Storage,&prepare);
-  if (status==STATUS_INSUFFICIENT_RESOURCES && AdmissionG3PrivateEvictCached(p,&view)) {
+  while (status==STATUS_INSUFFICIENT_RESOURCES && AdmissionG3PrivateEvictCached(p,&view)) {
     RtlZeroMemory(&prepare,sizeof(prepare));
     status=AdmissionG3PreparePrivateStorageObserved(p,&render,&p->PrivateManager,&scene->Storage,&prepare);
   }

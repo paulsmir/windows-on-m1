@@ -8,7 +8,9 @@ once were never replaced. Invariants:
   are not admitted;
 - trimming unmaps the least recently cached scenes until at most
   ADMISSION_G3_PRIVATE_SCENE_CACHE remain and keeps the most recent ones;
-- a failed unmap stops trimming and reports failure.
+- a failed unmap stops trimming and reports failure;
+- EXP1088: pool pressure evicts the least recently cached scene, one at a
+  time, until the preparation fits.
 """
 from pathlib import Path
 import os
@@ -40,7 +42,7 @@ typedef unsigned char BOOLEAN;
 #define TRUE 1
 #define FALSE 0
 #define ADMISSION_G3_PRIVATE_SCENE_CACHE 4u
-enum { ADMISSION_G3_PRIVATE_STAT_TRIM = 2 };
+enum { ADMISSION_G3_PRIVATE_STAT_TRIM = 2, ADMISSION_G3_PRIVATE_STAT_PRESSURE = 3 };
 typedef struct { int GpuvaG3Closing; } ADMISSION_RENDER_CONTEXT;
 typedef struct _ADMISSION_G3_PRIVATE_SCENE {
   struct _ADMISSION_G3_PRIVATE_SCENE *Next; ADMISSION_RENDER_CONTEXT *Context;
@@ -90,6 +92,11 @@ int main(void) {
   s[6].Reported = 1; assert(AdmissionG3PrivateCacheScene(&p, &s[6]));
   refuse_release = 1; assert(!AdmissionG3PrivateTrimCache(&p, &view)); refuse_release = 0;
   assert(!s[2].Released && s[2].Cached);
+  /* Pool pressure evicts only the least recently cached, one per call. */
+  assert(AdmissionG3PrivateEvictCached(&p, &view));
+  assert(s[2].Released && !s[3].Released && state.PrivateStats[ADMISSION_G3_PRIVATE_STAT_PRESSURE] == 1);
+  while (AdmissionG3PrivateEvictCached(&p, &view)) {}
+  for (int i = 0; i < 7; ++i) assert(!s[i].Cached || s[i].Released);
   puts("PASS");
   return 0;
 }
@@ -100,7 +107,7 @@ class PrivateSceneCacheLru(unittest.TestCase):
     def test_admits_every_release_and_trims_the_oldest(self):
         text = SRC.read_text()
         functions = '\n'.join(function(text, n) for n in (
-            'AdmissionG3PrivateCacheScene', 'AdmissionG3PrivateTrimCache'))
+            'AdmissionG3PrivateCacheScene', 'AdmissionG3PrivateTrimCache', 'AdmissionG3PrivateEvictCached'))
         self.assertIn('AdmissionG3PrivateTrimCache(', functions)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'lru.c'
