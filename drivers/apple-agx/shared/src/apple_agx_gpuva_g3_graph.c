@@ -199,6 +199,10 @@ void AppleAgxGpuvaG3MappingRelease(APPLE_AGX_GPUVA_G3_GRAPH *g,
 
 static void release_grant(APPLE_AGX_GPUVA_G3_GRAPH *g,
     APPLE_AGX_GPUVA_G3_NODE *backing) {
+  if (backing->Retained) {
+    backing->Retained = 0u;
+    --g->RetainedLocal;
+  }
   if (backing->Frame) {
     --backing->Frame->Grants;
     release_frame(g, backing->Frame);
@@ -207,10 +211,29 @@ static void release_grant(APPLE_AGX_GPUVA_G3_GRAPH *g,
   remove_node(g, &g->Backings, backing);
 }
 
+/* A kept local grant becomes referenced again. */
+static void reuse_backing(APPLE_AGX_GPUVA_G3_GRAPH *graph,
+    APPLE_AGX_GPUVA_G3_NODE *backing) {
+  if (backing->Retained) {
+    backing->Retained = 0u;
+    --graph->RetainedLocal;
+  }
+}
+
 static bool revoke_unused_backing(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     APPLE_AGX_GPUVA_G3_NODE *backing) {
   AGX_GPUVA_V5_REQUEST revoke = {0};
   if (!backing || backing->References) return true;
+  if (backing->Kind == AppleAgxGpuvaG3LocalBacking && !backing->Frame &&
+      graph->SharedBackingGeneration &&
+      backing->Generation == graph->SharedBackingGeneration) {
+    if (backing->Retained) return true;
+    if (graph->RetainedLocal < APPLE_AGX_GPUVA_G3_RETAINED_LOCAL) {
+      backing->Retained = 1u;
+      ++graph->RetainedLocal;
+      return true;
+    }
+  }
   revoke.Command = AGX_GPUVA_V5_REVOKE_BACKING;
   revoke.AuxIpa = backing->Ipa;
   revoke.AllocationGeneration = backing->Generation;
@@ -549,6 +572,7 @@ bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     if (leaf) {
       if (old_backing != backing) {
         --old_backing->References;
+        reuse_backing(graph, backing);
         ++backing->References;
       }
       leaf->AuxIpa = guest_ipa;
@@ -566,6 +590,7 @@ bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
       new_leaf->Writable = writable ? 1u : 0u;
       push_node(&graph->Leaves, new_leaf);
       table->Slots[index] = new_leaf;
+      reuse_backing(graph, backing);
       ++backing->References;
     }
   } else {

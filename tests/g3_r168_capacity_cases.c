@@ -39,20 +39,45 @@ static void r168_capacity_cases(void) {
   args.UpdatePageTable.pPageTableEntries=entries;
   expect_ok("R168 empty leaf",AdmissionGpuvaG3BuildPagingBuffer(&adapter,&args));
   if(getenv("G3_REPLAY_R168_LIFETIME")) {
-    for(UINT cycle=0;cycle<32;++cycle) {
+    /* EXP1125: an unmapped shared local grant stays registered (a broker
+     * bitmap bit, no capacity) so VidMm's next surface on the same pages
+     * skips REGISTER/REVOKE; at most APPLE_AGX_GPUVA_G3_RETAINED_LOCAL are
+     * kept per process and process destruction revokes all of them. */
+    const UINT cycles=APPLE_AGX_GPUVA_G3_RETAINED_LOCAL+8u;
+    UINT calls;
+    for(UINT cycle=0;cycle<cycles;++cycle) {
+      UINT retained=cycle<APPLE_AGX_GPUVA_G3_RETAINED_LOCAL ?
+          cycle : APPLE_AGX_GPUVA_G3_RETAINED_LOCAL;
       for(UINT page=0;page<4;++page) {
         entries[page].Flags=0x41;
         entries[page].PageAddress=0x1000u+cycle*4u+page;
       }
       expect_ok("R168 local map",AdmissionGpuvaG3BuildPagingBuffer(&adapter,&args));
-      assert(r168_live_backings()==1u);
+      assert(r168_live_backings()==retained+1u);
       RtlZeroMemory(entries,sizeof(entries));
       args.UpdatePageTable.Flags.NotifyEviction=cycle&1u;
       expect_ok("R168 local unmap",AdmissionGpuvaG3BuildPagingBuffer(&adapter,&args));
-      assert(r168_live_backings()==0u);
+      assert(r168_live_backings()==(cycle<APPLE_AGX_GPUVA_G3_RETAINED_LOCAL ?
+          cycle+1u : APPLE_AGX_GPUVA_G3_RETAINED_LOCAL));
+      assert(process->Graph.RetainedLocal==r168_live_backings());
       args.UpdatePageTable.Flags.NotifyEviction=0u;
     }
-    puts("R168 local map/unmap/eviction lifetime: PASS (32 cycles; zero retained grants)");
+    /* Remapping retained pages publishes the leaf with one broker call. */
+    for(UINT page=0;page<4;++page) {
+      entries[page].Flags=0x41; entries[page].PageAddress=0x1000u+page;
+    }
+    calls=broker.commands;
+    expect_ok("R168 retained remap",AdmissionGpuvaG3BuildPagingBuffer(&adapter,&args));
+    assert(broker.commands==calls+1u);
+    assert(process->Graph.RetainedLocal==APPLE_AGX_GPUVA_G3_RETAINED_LOCAL-1u);
+    RtlZeroMemory(entries,sizeof(entries));
+    calls=broker.commands;
+    expect_ok("R168 retained unmap",AdmissionGpuvaG3BuildPagingBuffer(&adapter,&args));
+    assert(broker.commands==calls+1u);
+    assert(r168_live_backings()==APPLE_AGX_GPUVA_G3_RETAINED_LOCAL);
+    expect_ok("R168 destroy",AdmissionDdiDestroyProcess(&adapter,process));
+    assert(r168_live_backings()==0u);
+    puts("R168 local map/unmap/eviction lifetime: PASS (bounded retained local grants; zero retained grants after destroy)");
   } else {
     UINT capacity=HV_AGX_GPUVA_V5_BACKINGS+
         (getenv("G3_REPLAY_R168_BROKER_REFUSAL")?0u:1u);

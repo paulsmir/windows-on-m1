@@ -25,6 +25,11 @@ typedef struct _APPLE_AGX_GPUVA_G3_REGISTRY {
   unsigned long long NextGeneration;
   APPLE_AGX_GPUVA_G3_FRAME *FrameBuckets[APPLE_AGX_GPUVA_G3_FRAME_BUCKETS];
 } APPLE_AGX_GPUVA_G3_REGISTRY;
+/* EXP1125: unreferenced shared local-reserve grants kept registered per
+ * process (a broker bitmap bit each) so the next mapping of the same pages
+ * skips REGISTER/REVOKE. Broker tables never live in VidMm's local segment
+ * (the KMD shadows every table), so a kept grant cannot block a table. */
+#define APPLE_AGX_GPUVA_G3_RETAINED_LOCAL 4096u
 typedef enum _APPLE_AGX_GPUVA_G3_BACKING_KIND {
   AppleAgxGpuvaG3LocalBacking = 0,
   AppleAgxGpuvaG3SystemBacking = 1,
@@ -38,6 +43,7 @@ typedef struct _APPLE_AGX_GPUVA_G3_NODE {
   unsigned long long Ipa, AuxIpa, Generation;
   unsigned int Index, Level, References, Writable;
   unsigned int SystemRetired;
+  unsigned int Retained; /* backing kept with no references (EXP1125) */
   APPLE_AGX_GPUVA_G3_FRAME *Frame;
   APPLE_AGX_GPUVA_G3_BACKING_KIND Kind;
   struct _APPLE_AGX_GPUVA_G3_NODE *Prev, *HashNext;
@@ -61,6 +67,7 @@ typedef struct _APPLE_AGX_GPUVA_G3_GRAPH {
    * 2 job in flight, 3 lease, 4 VA, 5 middle table, 6 leaf table,
    * 7 edge conflict, 8 middle link, 9 root link). */
   unsigned int AttachFailure;
+  unsigned int RetainedLocal;
   APPLE_AGX_GPUVA_G3_NODE *BackingBuckets[APPLE_AGX_GPUVA_G3_BACKING_BUCKETS];
 } APPLE_AGX_GPUVA_G3_GRAPH;
 

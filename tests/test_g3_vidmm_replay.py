@@ -16,7 +16,7 @@ class G3VidMmReplayTests(unittest.TestCase):
             env=dict(os.environ, G3_REPLAY_R144="1", G3_REPLAY_R168="1",
                      G3_REPLAY_R168_LIFETIME="1"), text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("zero retained grants", result.stdout)
+        self.assertIn("zero retained grants after destroy", result.stdout)
 
     def test_local_capacity_matches_advertised_residency(self):
         result = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
