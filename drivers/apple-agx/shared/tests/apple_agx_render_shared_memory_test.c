@@ -364,8 +364,10 @@ int main(void) {
                 sizeof(persistent_job_list)) == 0);
   assert(memcmp(active_objects[24].Data, persistent_queue_pointers,
                 sizeof(persistent_queue_pointers)) == 0);
-  assert(memcmp(active_objects[16].Data, persistent_init_bm,
-                sizeof(persistent_init_bm)) == 0);
+  /* A job without InitBM leaves slot 0's InitBM copy untouched. */
+  assert(memcmp((unsigned char *)owner.Objects[16].CpuAddress +
+                    owner.ObjectOffsets[16],
+                persistent_init_bm, sizeof(persistent_init_bm)) == 0);
   assert(active_objects[9].Data[0] == 0x9fu);
   assert(active_objects[14].Data[active_objects[14].Size - 1u] == 0xaeu);
   assert(active_objects[18].Data[active_objects[18].Size - 1u] == 0xbeu);
@@ -374,6 +376,36 @@ int main(void) {
   assert(active_job.D3ExpectedStamp == 0x3d000200u);
   assert(active_job.TaExpectedDonePointer == 3u);
   assert(active_job.D3ExpectedDonePointer == 4u);
+  /* Multi-job phase 2: consecutive jobs (stamp steps of 0x100) alternate
+   * between two copies of every per-job object; the second copy sits in the
+   * free space below the original in the same 16 KiB page, keeping the
+   * original's alignment, so no new firmware mapping is needed. */
+  {
+    static const unsigned int slotted[15]={13u,14u,15u,16u,17u,18u,19u,
+        28u,29u,30u,31u,32u,33u,34u,35u};
+    static const unsigned int delta[15]={0x48u,0x20u,0x1000u,0x20u,0x1000u,
+        0x980u,0x620u,8u,8u,8u,8u,8u,8u,8u,8u};
+    for(index=0u;index<15u;++index) {
+      const unsigned int o=slotted[index];
+      assert(active_objects[o].GpuVa==
+             owner.VirtualAddresses[o]+owner.ObjectOffsets[o]-delta[index]);
+      assert(active_objects[o].Data==
+             (unsigned char *)owner.Objects[o].CpuAddress+
+             owner.ObjectOffsets[o]-delta[index]);
+    }
+    assert(active_job.TaWorkAddresses[1]==active_objects[19].GpuVa);
+    assert(active_job.D3WorkAddresses[0]==active_objects[14].GpuVa);
+    assert(active_job.D3WorkAddresses[1]==active_objects[18].GpuVa);
+    /* Pointers inside a slot's objects name that slot's copies. */
+    assert(read_u64(active_objects[18].Data+20u)==active_objects[15].GpuVa);
+    assert(read_u64(active_objects[18].Data+2336u)==active_objects[28].GpuVa);
+    assert(read_u64(active_objects[19].Data+1140u)==active_objects[17].GpuVa);
+    assert(read_u64(active_objects[15].Data+68u)==active_objects[18].GpuVa);
+    /* Persistent objects (rings, stamps, manager) do not move. */
+    assert(active_objects[4].GpuVa==owner.VirtualAddresses[4]+owner.ObjectOffsets[4]);
+    assert(active_objects[26].GpuVa==owner.VirtualAddresses[26]+owner.ObjectOffsets[26]);
+    assert(active_objects[1].GpuVa==owner.VirtualAddresses[1]+owner.ObjectOffsets[1]);
+  }
   source_objects[63].GpuVa=0ULL;
   for(index=67u;index<=71u;++index) source_objects[index].GpuVa=0ULL;
   assert(AppleAgxRenderSharedMemoryBuildActiveG4Job(
@@ -385,7 +417,7 @@ int main(void) {
   assert(read_u64(active_objects[19].Data+88u)==0ULL);
   assert(read_u64(active_objects[19].Data+1352u)==0ULL);
   assert(active_job.TaWorkAddresses[1]==
-         owner.VirtualAddresses[19]+owner.ObjectOffsets[19]);
+         owner.VirtualAddresses[19]+owner.ObjectOffsets[19]-0x620u);
   /* R151: publish the second dynamic epoch into real active G4 objects.
    * Runtime-owned event-control state survives, event_count (CPU-owned,
    * m1n1 render.py += 2 per job) and the work commands take the new pair,

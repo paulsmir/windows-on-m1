@@ -403,6 +403,26 @@ static APPLE_AGX_BOOL per_submission_object(APPLE_AGX_U32 Index,
   }
 }
 
+/* Multi-job phase 2: objects a job owns while it runs (scene 13, barrier,
+ * micro-sequences, InitBM, TA/3D work commands, timestamps) have two copies
+ * that consecutive jobs alternate between. The macOS layout puts each at the
+ * end of its 16 KiB page, so the second copy sits right below the original
+ * in the same page and mapping, keeping the original's alignment. */
+static APPLE_AGX_BOOL slotted_object(APPLE_AGX_U32 Index) {
+  return (Index >= 13u && Index <= 19u) || (Index >= 28u && Index <= 35u);
+}
+
+static APPLE_AGX_U64 slot_delta(APPLE_AGX_U64 Offset, APPLE_AGX_U32 Size) {
+  APPLE_AGX_U64 alignment = Offset ? (Offset & (~Offset + 1ULL)) : 0x1000ULL;
+  if (alignment > 0x1000ULL) alignment = 0x1000ULL;
+  return align_up((APPLE_AGX_U64)Size, alignment);
+}
+
+/* Slot of a staged job: its stamps step by 0x100, the first job uses 0. */
+static APPLE_AGX_U32 job_slot(const APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
+  return ((Job->TaExpectedStamp >> 8u) ^ 1u) & 1u;
+}
+
 static APPLE_AGX_BOOL bind_relocation_objects(
     const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
     const void *TemplateArena,
@@ -410,7 +430,7 @@ static APPLE_AGX_BOOL bind_relocation_objects(
     APPLE_AGX_EXP208_RELOCATION_OBJECT *RelocationObjects,
     APPLE_AGX_U32 RelocationObjectCapacity,
     APPLE_AGX_BOOL InitializePersistent,
-    APPLE_AGX_BOOL IncludeInitBm) {
+    APPLE_AGX_BOOL IncludeInitBm, APPLE_AGX_U32 Slot) {
   const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layouts;
   APPLE_AGX_U32 index;
   if (Owner == RENDER_SHARED_NULL || !Owner->Initialized || !Owner->Built ||
@@ -418,25 +438,38 @@ static APPLE_AGX_BOOL bind_relocation_objects(
       TemplateArena == RENDER_SHARED_NULL ||
       TemplateArenaBytes < AppleAgxRenderTemplateBytes() ||
       RelocationObjects == RENDER_SHARED_NULL ||
-      RelocationObjectCapacity < APPLE_AGX_RENDER_SHARED_MEMORY_TEMPLATE_OBJECT_COUNT)
+      RelocationObjectCapacity < APPLE_AGX_RENDER_SHARED_MEMORY_TEMPLATE_OBJECT_COUNT ||
+      Slot > 1u)
     return APPLE_AGX_FALSE;
   layouts = AppleAgxRenderTemplateObjectLayouts();
   for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_TEMPLATE_OBJECT_COUNT;
        ++index) {
     const unsigned char *source =
         (const unsigned char *)TemplateArena + layouts[index].ArenaOffset;
-    unsigned char *destination =
-        (unsigned char *)Owner->Objects[index].CpuAddress +
-        Owner->ObjectOffsets[index];
+    APPLE_AGX_U64 delta = 0ULL, other = 0ULL;
+    unsigned char *destination;
     if (layouts[index].ArenaOffset > TemplateArenaBytes ||
         layouts[index].Size > TemplateArenaBytes - layouts[index].ArenaOffset)
       return APPLE_AGX_FALSE;
+    if (slotted_object(index)) {
+      APPLE_AGX_U64 below = slot_delta(Owner->ObjectOffsets[index],
+                                       layouts[index].Size);
+      if (below > Owner->ObjectOffsets[index]) return APPLE_AGX_FALSE;
+      delta = Slot ? below : 0ULL;
+      other = Slot ? 0ULL : below;
+    }
+    destination = (unsigned char *)Owner->Objects[index].CpuAddress +
+        Owner->ObjectOffsets[index] - delta;
     if (InitializePersistent || per_submission_object(index, IncludeInitBm))
       copy_shared_bytes(destination, source, layouts[index].Size);
+    /* Queue (re)initialisation seeds both copies alike. */
+    if (InitializePersistent && slotted_object(index))
+      copy_shared_bytes((unsigned char *)Owner->Objects[index].CpuAddress +
+          Owner->ObjectOffsets[index] - other, source, layouts[index].Size);
     RelocationObjects[index].GpuVa =
-        Owner->VirtualAddresses[index] + Owner->ObjectOffsets[index];
+        Owner->VirtualAddresses[index] + Owner->ObjectOffsets[index] - delta;
     RelocationObjects[index].PhysicalAddress =
-        Owner->Objects[index].DeviceAddress + Owner->ObjectOffsets[index];
+        Owner->Objects[index].DeviceAddress + Owner->ObjectOffsets[index] - delta;
     RelocationObjects[index].Size = layouts[index].Size;
     RelocationObjects[index].Data = destination;
   }
@@ -451,7 +484,7 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBindRelocationObjects(
     APPLE_AGX_U32 RelocationObjectCapacity) {
   return bind_relocation_objects(
       Owner, TemplateArena, TemplateArenaBytes, RelocationObjects,
-      RelocationObjectCapacity, APPLE_AGX_TRUE, APPLE_AGX_TRUE);
+      RelocationObjectCapacity, APPLE_AGX_TRUE, APPLE_AGX_TRUE, 0u);
 }
 
 APPLE_AGX_BOOL AppleAgxRenderSharedMemoryInitializeComputeQueue(
@@ -612,7 +645,8 @@ static APPLE_AGX_BOOL build_active_job(
   initialize_persistent = InitializeQueues;
   if (!bind_relocation_objects(
           Owner, TemplateArena, TemplateArenaBytes, ActiveObjects,
-          SourceObjectCount, initialize_persistent, IncludeInitBm))
+          SourceObjectCount, initialize_persistent, IncludeInitBm,
+          job_slot(StagedJob)))
     return APPLE_AGX_FALSE;
   if (IncludeInitBm) {
     APPLE_AGX_EXP208_RELOCATION_OBJECT *control = &ActiveObjects[20];
