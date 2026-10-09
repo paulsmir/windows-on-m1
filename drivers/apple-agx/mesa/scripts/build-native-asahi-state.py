@@ -4102,10 +4102,18 @@ agx_shader_initialize("""
         if state_text.count(preprocess)!=1:
             raise SystemExit('Ambiguous agx_preprocess_nir anchor')
         state_text=state_text.replace(preprocess,'''
-   if (nir->info.stage == MESA_SHADER_VERTEX)
-      NIR_PASS(_, nir, nir_shader_intrinsics_pass,
+   if (nir->info.stage == MESA_SHADER_VERTEX) {
+      bool lowered_vertex_id = false;
+      NIR_PASS(lowered_vertex_id, nir, nir_shader_intrinsics_pass,
                agx_win32_lower_vertex_id_zero_base,
                nir_metadata_control_flow, NULL);
+      /* EXP1067: the lowering reads load_first_vertex after the info above
+       * was gathered; without SYSTEM_VALUE_FIRST_VERTEX in system_values_read
+       * uses_base_param stays false, the draw parameters are never uploaded,
+       * and SV_VertexID read an unwritten uniform (k + id). */
+      if (lowered_vertex_id)
+         nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+   }
 
    agx_preprocess_nir(nir);
 ''',1)
