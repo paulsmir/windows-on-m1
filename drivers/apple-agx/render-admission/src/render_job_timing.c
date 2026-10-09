@@ -80,3 +80,8 @@ unsigned long long AdmissionJobTimingDeltaUs(
   return delta / state->QpcFrequency * 1000000ULL +
       delta % state->QpcFrequency * 1000000ULL / state->QpcFrequency;
 }
+
+unsigned int AdmissionJobPollStallUs(unsigned long long ElapsedUs) {
+  return ElapsedUs < ADMISSION_JOB_POLL_SPIN_WINDOW_US ?
+      ADMISSION_JOB_POLL_SPIN_STEP_US : 0u;
+}

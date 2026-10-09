@@ -3053,6 +3053,7 @@ static VOID AdmissionPlatformWorker(
   BOOLEAN activated = FALSE;
   BOOLEAN cancelled = FALSE;
   BOOLEAN deferred = FALSE;
+  LARGE_INTEGER pollStart, pollFrequency;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   APPLE_AGX_G13_QUEUE_PROGRESS finalProgress;
 #if !defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
@@ -3338,6 +3339,7 @@ static VOID AdmissionPlatformWorker(
   queueSubmitMs = AdmissionPlatformNowMs();
 #endif
 
+  pollStart = KeQueryPerformanceCounter(&pollFrequency);
   while (runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted &&
          InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 &&
          InterlockedCompareExchange(&runtime->Resetting, 0, 0) == 0) {
@@ -3555,6 +3557,17 @@ static VOID AdmissionPlatformWorker(
     }
     if (runtime->Backend.Phase != AppleAgxBackendRuntimeSubmitted)
       break;
+    {
+      /* EXP1073: poll short jobs at a fine step before sleeping ticks. */
+      LARGE_INTEGER pollNow = KeQueryPerformanceCounter(NULL);
+      ULONG stallUs = AdmissionJobPollStallUs(pollFrequency.QuadPart > 0 ?
+          (ULONGLONG)(pollNow.QuadPart - pollStart.QuadPart) * 1000000ULL /
+              (ULONGLONG)pollFrequency.QuadPart : ~0ULL);
+      if (stallUs != 0u) {
+        KeStallExecutionProcessor(stallUs);
+        continue;
+      }
+    }
     interval.QuadPart = -10000LL;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
     AdmissionJobTimingDelayWindows(runtime, description.Fence);

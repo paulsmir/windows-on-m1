@@ -51,6 +51,15 @@ int AdmissionJobTimingDelay(ADMISSION_JOB_TIMING_STATE *State,
     unsigned int Fence);
 int AdmissionJobTimingTarget(ADMISSION_JOB_TIMING_STATE *State,
     unsigned int Fence, unsigned long long Bytes);
+/* EXP1073: completion poll schedule of the job worker. EXP1072: 62 of 63
+ * jobs completed inside the first 1 ms sleep after the kick, so detection
+ * cost one timer tick (BackendAfter->Complete median 1510 us, minimum
+ * 1041 us). The worker busy-polls every STEP microseconds for the first
+ * WINDOW microseconds after the kick, then sleeps one tick per poll. */
+#define ADMISSION_JOB_POLL_SPIN_WINDOW_US 2000u
+#define ADMISSION_JOB_POLL_SPIN_STEP_US 20u
+/* Microseconds to busy-wait before the next poll, or 0 to sleep one tick. */
+unsigned int AdmissionJobPollStallUs(unsigned long long ElapsedUs);
 unsigned long long AdmissionJobTimingDeltaUs(
     const ADMISSION_JOB_TIMING_STATE *State,
     const ADMISSION_JOB_TIMING_SLOT *Slot,
