@@ -557,6 +557,28 @@ static int copy_escape(ADMISSION_UMD_DEVICE *device,
   return SUCCEEDED(status);
 }
 
+/* EXP1083: EXP1081 DWM hashed 31 GB of staging (1.28 ms per submission
+ * check) to learn that mapped slots were unchanged. A write-watched private
+ * staging copy with no page written since it was last proven equal to the
+ * canonical copy is unchanged without reading it. */
+static bool staging_watched(const ADMISSION_UMD_SCREEN_BUFFER *slot,
+                            const BYTE *address) {
+  return slot->WriteWatch && address && address==slot->PrivateStaging;
+}
+static bool staging_written(const ADMISSION_UMD_SCREEN_BUFFER *slot,
+                            const BYTE *address) {
+  PVOID page=NULL; ULONG_PTR count=1; ULONG granularity=0;
+  if(!staging_watched(slot,address)) return true;
+  if(GetWriteWatch(0,(PVOID)address,(SIZE_T)slot->Bytes,&page,&count,
+                   &granularity)!=0) return true;
+  return count!=0;
+}
+/* Call once the staging copy equals the canonical copy (Sync recorded). */
+static void staging_clean(const ADMISSION_UMD_SCREEN_BUFFER *slot,BYTE *address) {
+  if(staging_watched(slot,address))
+    (void)ResetWriteWatch(address,(SIZE_T)slot->Bytes);
+}
+
 /* Returns 1 when the staging copy still equals the canonical allocation
  * (unchanged since the last upload/download), 0 when an upload is needed,
  * and -1 when the staging copy could not be inspected safely. */
@@ -565,6 +587,7 @@ static int staging_unchanged(ADMISSION_UMD_DEVICE *device,
   if(!slot->Sync.Valid || (slot->Borrowed && slot->Mapped)) return 0;
   BYTE *address=(BYTE *)slot->LockedBase;
   if(!slot->Mapped && slot->PrivateStaging) address=slot->PrivateStaging;
+  if(!staging_written(slot,address)) return 1;
   bool temporary=!slot->Mapped && !slot->PrivateStaging, locked=false;
   if(temporary) {
     D3DDDICB_LOCK lock={};lock.hAllocation=slot->StagingAllocation;
@@ -580,6 +603,7 @@ static int staging_unchanged(ADMISSION_UMD_DEVICE *device,
       !AdmissionUmdStagingUploadNeeded(&slot->Sync,
           AdmissionUmdStagingHash(address,slot->Bytes),slot->Bytes);
   if(address) EXP1016_NOTE(0u,slot->Bytes,hash_start);
+  if(unchanged) staging_clean(slot,address);
   if(locked) {
     D3DDDICB_UNLOCK unlock={};unlock.NumAllocations=1;
     unlock.phAllocations=&slot->StagingAllocation;
@@ -787,9 +811,11 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
   if(success && chunked) AdmissionUmdStagingChunksValidate(&slot->Chunks);
   else AdmissionUmdStagingChunksInvalidate(&slot->Chunks);
   /* Staging now equals the canonical allocation in both directions. */
-  if(success)
+  if(success) {
     AdmissionUmdStagingRecord(&slot->Sync,
         AdmissionUmdStagingHash(address,slot->Bytes),slot->Bytes);
+    staging_clean(slot,address);
+  }
   /* EXP989 receipt-only: sampled content of what crossed CPU<->GPU. */
   if(success) {
     UINT samples=0u,nonzero=0u;

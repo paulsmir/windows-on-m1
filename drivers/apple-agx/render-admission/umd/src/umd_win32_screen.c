@@ -495,7 +495,7 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   D3DKMT_HANDLE canonical = 0, staging = BorrowedStaging;
 #ifdef APPLE_AGX_GPUVA_WINSYS
   BYTE *privateStaging = NULL;
-  BOOL systemDirect = FALSE;
+  BOOL systemDirect = FALSE, writeWatch = FALSE;
 #endif
   ADMISSION_ALLOCATION_DESCRIPTION stagingDescription;
   if (Token) *Token = 0;
@@ -585,9 +585,15 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
     /* EXP1022: unshared staging is read and written only by this process
      * (the KMD copy escape receives its bytes); keep it in ordinary memory. */
     UNREFERENCED_PARAMETER(stagingDescription);
+    /* EXP1083: watch CPU writes, so an unwritten staging copy needs no hash. */
     privateStaging = (BYTE *)VirtualAlloc(NULL,
         (SIZE_T)((Bytes + 0xffffULL) & ~0xffffULL),
-        MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        MEM_COMMIT | MEM_RESERVE | MEM_WRITE_WATCH, PAGE_READWRITE);
+    writeWatch = privateStaging != NULL;
+    if (!privateStaging)
+      privateStaging = (BYTE *)VirtualAlloc(NULL,
+          (SIZE_T)((Bytes + 0xffffULL) & ~0xffffULL),
+          MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (!privateStaging) result = E_OUTOFMEMORY;
   }
 #endif
@@ -629,6 +635,7 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
 #ifdef APPLE_AGX_GPUVA_WINSYS
   slot->StagingAllocation = staging;
   slot->PrivateStaging = privateStaging;
+  slot->WriteWatch = writeWatch;
   slot->SystemDirect = systemDirect;
   slot->Borrowed = BorrowedStaging != 0;
 #endif
