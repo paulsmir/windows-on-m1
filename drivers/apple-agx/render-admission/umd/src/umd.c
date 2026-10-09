@@ -505,6 +505,17 @@ VOID APIENTRY AdmissionUmdCreateResource(
   result = device->KernelCallbacks->pfnAllocateCb(
       device->RuntimeDevice.handle, &allocate);
   AdmissionUmdDiagnostic("presentation-allocate",result,NULL,0u);
+  {
+    /* EXP1124 measurement (unbudgeted): which D3D resources the app creates
+     * as presentation allocations, and how often (EXP1123: ~37/s, 41 ms). */
+    UINT values[8] = {(UINT)CreateResource->Format, CreateResource->BindFlags,
+        CreateResource->MiscFlags, CreateResource->pMipInfoList[0].TexelWidth,
+        CreateResource->pMipInfoList[0].TexelHeight,
+        CreateResource->pPrimaryDesc != NULL ? 1u : 0u,
+        (UINT)allocationInfo.hAllocation, (UINT)allocate.hKMResource};
+    AdmissionUmdDiagnostic("measure-present-resource", result, values,
+                           ARRAYSIZE(values));
+  }
   if (FAILED(result) || allocationInfo.hAllocation == 0u) {
     AdmissionUmdRetirementFree(retirement);
     AdmissionUmdSetError(device, FAILED(result) ? result : E_FAIL);
@@ -661,6 +672,12 @@ VOID APIENTRY AdmissionUmdDestroyResource(
   ZeroMemory(resource, sizeof(*resource));
   if (retirement == NULL)
     return;
+  {
+    UINT values[4] = {(UINT)retirement->KernelAllocation, retirement->Origin,
+        retirement->Shared ? 1u : 0u, retirement->Primary ? 1u : 0u};
+    AdmissionUmdDiagnostic("measure-present-destroy", S_OK, values,
+                           ARRAYSIZE(values));
+  }
   if (AdmissionUmdRetirementNeedsRuntimeResource(retirement)) {
     result = AdmissionUmdRetirementDeallocate(&device->Retirement, retirement);
     AdmissionUmdRetirementFree(retirement);
