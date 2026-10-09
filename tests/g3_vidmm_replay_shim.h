@@ -339,7 +339,7 @@ typedef struct _ADMISSION_G3_LEAF_HISTORY_SNAPSHOT {
 } ADMISSION_G3_LEAF_HISTORY_SNAPSHOT;
 #define ADMISSION_G3_UPLOAD_TRACE_COUNT 64u
 typedef struct { ULONGLONG ProcessId,Va; ULONG Bytes,Hash,GpuHash,Checks; } ADMISSION_G3_UPLOAD_TRACE;
-typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; APPLE_AGX_G3_PRIVATE_POOL PrivatePool; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence,LastCompletedFence,PrivateCompletionFence; ULONGLONG UnpublishedGroups[32]; ADMISSION_G3_UPLOAD_TRACE UploadTrace[ADMISSION_G3_UPLOAD_TRACE_COUNT]; ULONG UploadTraceNext,UploadVerifyChecks,UploadVerifyMismatch,UploadVerifyUnmapped; ADMISSION_G3_UPLOAD_TRACE UploadFirstMismatch; ADMISSION_G3_LEAF_HISTORY LeafHistory[ADMISSION_G3_LEAF_RING]; ULONG LeafHistoryNext; ADMISSION_G3_ALLOC_TRACK AllocTrack[ADMISSION_G3_ALLOC_TRACK_COUNT]; ULONGLONG PrivateStats[16]; } ADMISSION_G3_STATE;
+typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; APPLE_AGX_G3_PRIVATE_POOL PrivatePool; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence,LastCompletedFence,PrivateCompletionFence; ULONGLONG UnpublishedGroups[32]; ADMISSION_G3_UPLOAD_TRACE UploadTrace[ADMISSION_G3_UPLOAD_TRACE_COUNT]; ULONG UploadTraceNext,UploadVerifyChecks,UploadVerifyMismatch,UploadVerifyUnmapped; ADMISSION_G3_UPLOAD_TRACE UploadFirstMismatch; ADMISSION_G3_LEAF_HISTORY LeafHistory[ADMISSION_G3_LEAF_RING]; ULONG LeafHistoryNext; ADMISSION_G3_ALLOC_TRACK AllocTrack[ADMISSION_G3_ALLOC_TRACK_COUNT]; ULONGLONG PrivateStats[16]; LONGLONG ProcessReceiptQpc; } ADMISSION_G3_STATE;
 enum { ADMISSION_G3_PRIVATE_STAT_HIT, ADMISSION_G3_PRIVATE_STAT_MISS, ADMISSION_G3_PRIVATE_STAT_TRIM, ADMISSION_G3_PRIVATE_STAT_PRESSURE,
   ADMISSION_G3_PRIVATE_STAT_RELEASED, ADMISSION_G3_PRIVATE_STAT_MAPPED_PAGES, ADMISSION_G3_PRIVATE_STAT_UNMAPPED_PAGES,
   ADMISSION_G3_PRIVATE_STAT_CACHED_RELEASE, ADMISSION_G3_PRIVATE_STAT_CACHED_REAP, ADMISSION_G3_PRIVATE_STAT_RELEASE_QUEUED,
@@ -355,6 +355,8 @@ typedef struct _ADMISSION_G3_PRIVATE_SCENE {
   ULONGLONG CachedAt;
 } ADMISSION_G3_PRIVATE_SCENE;
 #define ADMISSION_G3_PRIVATE_SCENE_CACHE 8u
+#define ADMISSION_G3_PROCESS_RECEIPT_SLOTS 16u
+#define ADMISSION_G3_PROCESS_RECEIPT_WORDS (8u + 16u * ADMISSION_G3_PROCESS_RECEIPT_SLOTS)
 
 struct _ADMISSION_G3_PROCESS {
   LIST_ENTRY Link;
@@ -369,6 +371,7 @@ struct _ADMISSION_G3_PROCESS {
   ULONGLONG PrivateVa;
   ULONGLONG PrivateMiddleIpa, PrivateLeafIpa;
   ULONGLONG PrivateCacheClock; /* EXP1087 */
+  ULONG MaxTvbBlocks, MaxShape; /* EXP1114 */
   APPLE_AGX_G3_PRIVATE_EXTENT PrivateTables[2];
   APPLE_AGX_G3_PRIVATE_MANAGER PrivateManager;
   APPLE_AGX_RENDER_MANAGER_STATE FirmwareManager;
@@ -394,6 +397,7 @@ typedef struct {
   APPLE_AGX_RENDER_MANAGER_STATE *G4Manager;
   APPLE_AGX_RENDER_MANAGER_KEY G4ManagerKey;
 } ADMISSION_BACKEND_IMAGE;
+typedef struct { int Valid; } ADMISSION_BACKEND_IMAGE_SNAPSHOT;
 typedef struct { unsigned State; struct { ULONG Fence; ULONGLONG ContextToken; } Description; } REPLAY_PACKET;
 struct _ADMISSION_CONTEXT { REPLAY_PACKET RenderPacket; BOOLEAN InterfaceValid; LONG RenderDpcFence,SchedulerDpcPending; DXGKRNL_INTERFACE Interface; void *GpuvaG3State; BOOLEAN Started;
   PDEVICE_OBJECT PhysicalDeviceObject; ADMISSION_CONTEXT *ObjectAdapter;
@@ -418,6 +422,7 @@ struct _ADMISSION_CONTEXT { REPLAY_PACKET RenderPacket; BOOLEAN InterfaceValid; 
   ULONG CpuQueueCount,PagingFence,PagingLastSubmittedFence,PagingLastCompletedFence;
   volatile LONG PagingPending,PagingWorkersActive,PagingDpcPending,PagingDpcsActive,SchedulerFaulted;
   ADMISSION_BACKEND_IMAGE BackendImage;
+  ADMISSION_BACKEND_IMAGE_SNAPSHOT BackendSnapshot;
   struct { REPLAY_APERTURE Aperture; } Memory;
 };
 static NTSTATUS AdmissionDwmDdiProbeQueryWindows(ADMISSION_CONTEXT *context,
@@ -448,6 +453,7 @@ static NTSTATUS IoOpenDeviceRegistryKey(PDEVICE_OBJECT device,ULONG kind,ULONG a
   *key=(HANDLE)0x5588;return STATUS_SUCCESS;
 }
 static unsigned leaf_history_registry_writes;
+static unsigned private_procs_registry_writes;
 static void WriteBinary(HANDLE key,const wchar_t *name,const VOID *data,ULONG bytes) {
   if (!wcscmp(name,L"Wom1G3CopyTransferFailure")) {
     assert(key==(HANDLE)0x5588 && bytes==sizeof(transfer_registry_receipt) && replay_irql==PASSIVE_LEVEL);
@@ -456,6 +462,11 @@ static void WriteBinary(HANDLE key,const wchar_t *name,const VOID *data,ULONG by
   if (!wcscmp(name,L"Wom1G3PrivateAcquireFailure")) {
     assert(key==(HANDLE)0x5588 && bytes==sizeof(private_registry_receipt) && replay_irql==PASSIVE_LEVEL);
     memcpy(&private_registry_receipt,data,bytes);++private_registry_writes;return;
+  }
+  if (!wcscmp(name,L"Wom1G3PrivateProcs")) {
+    /* EXP1114 receipt-only snapshot; never flushed. */
+    assert(key==(HANDLE)0x5588 && bytes==ADMISSION_G3_PROCESS_RECEIPT_WORDS*sizeof(ULONG) && replay_irql==PASSIVE_LEVEL);
+    ++private_procs_registry_writes;return;
   }
   if (!wcscmp(name,L"Wom1G3LeafHistory")) {
     /* EXP979 diagnostic snapshot at the first predicate57; flush not counted. */

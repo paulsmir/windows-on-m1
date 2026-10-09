@@ -13,6 +13,7 @@ static unsigned AppleAgxSchedulerActiveFence(int *s,unsigned n,unsigned e) {(voi
 static int AppleAgxSchedulerCompleteActiveFence(int *s,unsigned n,unsigned e,unsigned f) {(void)s;(void)n;(void)e;if(f!=replay_active_fence)return 0;replay_active_fence=0;return 1;}
 static int AdmissionDynamicOverlayReleaseActive(ADMISSION_PLATFORM_RUNTIME *r,unsigned f) {(void)r;(void)f;return 1;}
 static int AdmissionBackendImageReleaseSubmission(ADMISSION_BACKEND_IMAGE *i,unsigned f) {(void)f;memset(i,0,sizeof(*i));return 1;}
+static int AdmissionBackendImageReleaseSubmissionRestore(ADMISSION_BACKEND_IMAGE *i,ADMISSION_BACKEND_IMAGE_SNAPSHOT *s,unsigned f) {(void)s;return AdmissionBackendImageReleaseSubmission(i,f);}
 static int AdmissionRenderPacketComplete(REPLAY_PACKET *p,unsigned f) {if(p->Description.Fence!=f)return 0;memset(p,0,sizeof(*p));return 1;}
 static int AppleAgxSchedulerPreemptionPhase(int *s) {(void)s;return 0;}
 static int AppleAgxSchedulerObserveBoundaryCompletion(int *s,unsigned n,unsigned e,unsigned f) {(void)s;(void)n;(void)e;(void)f;return 0;}
