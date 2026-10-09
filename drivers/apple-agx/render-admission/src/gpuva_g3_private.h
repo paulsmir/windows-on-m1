@@ -82,10 +82,12 @@ typedef struct _ADMISSION_G3_PRIVATE_SCENE {
   ULONGLONG CachedAt; /* EXP1087: LRU order within the process */
 } ADMISSION_G3_PRIVATE_SCENE;
 
-/* EXP1086: released scenes a process keeps mapped (each ~0.6 MiB of its
- * 8 MiB private budget). EXP1087: a miss trims the least recently cached
- * beyond this many (the miss path runs with no job in flight). */
-#define ADMISSION_G3_PRIVATE_SCENE_CACHE 4u
+/* EXP1086: released scenes a process keeps mapped. EXP1087: a miss trims the
+ * least recently cached beyond this many (the miss path runs with no job in
+ * flight). EXP1088: four entries thrashed between DWM's geometries (15
+ * misses/s); a scene takes at least six 64 KiB units of the 8 MiB process
+ * budget, so pool pressure evicts the oldest entries one at a time. */
+#define ADMISSION_G3_PRIVATE_SCENE_CACHE 8u
 
 typedef struct _ADMISSION_G3_PROCESS {
   LIST_ENTRY Link;
