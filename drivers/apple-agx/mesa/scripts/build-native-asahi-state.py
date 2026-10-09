@@ -832,6 +832,7 @@ struct Query
    bool direct_buffer_map;
    bool shadow_only_map;
    bool shadow_dirty;
+   bool shadow_stale;
    /* EXP1037: client-format CPU views of lowered textures (Resource.cpp). */
    void *client_maps;
    Device *owner_device;
@@ -3384,6 +3385,12 @@ AgxD3d10ResourceWithinRequiredLimits(
       }
       void *current = AgxWin32AsahiBufferCurrentMap(
          device->pipe,resource->resource);
+      /* EXP1090: map the BO itself (unsynchronized, as NO_OVERWRITE permits)
+       * instead of handing out the CPU shadow: keeping that shadow current
+       * cost a full-buffer copy at every Unmap (EXP1089: 29 % of DWM's
+       * composition thread in memcpy under ResourceUnmap). */
+      if (!current)
+         current = AgxWin32AsahiBufferWriteMap(device->pipe,resource->resource);
       if (current) {
          resource->active_buffer_map=current;
          resource->direct_buffer_map=true;
@@ -3392,6 +3399,8 @@ AgxD3d10ResourceWithinRequiredLimits(
          pMappedSubResource->DepthPitch=resource->logical_bytes;
          return;
       }
+      /* The shadow no longer mirrors direct writes; never hand it out stale. */
+      if (resource->shadow_stale) { SetError(hDevice, E_OUTOFMEMORY); return; }
       resource->active_buffer_map=resource->dynamic_shadow;
       resource->shadow_only_map=true;
       pMappedSubResource->pData=resource->dynamic_shadow;
@@ -3446,9 +3455,12 @@ AgxD3d10ResourceWithinRequiredLimits(
       SetError(hDevice, E_INVALIDARG); return;
    }
    if (resource->buffer) {
-      if (resource->dynamic_shadow && resource->active_buffer_map)
-         memcpy(resource->dynamic_shadow, resource->active_buffer_map,
-                resource->logical_bytes);
+      /* EXP1090: direct writes are not copied back into the shadow (a full
+       * logical_bytes memcpy per Unmap); the shadow is marked stale instead
+       * and is only used again as the fallback of an unmappable BO. */
+      if (resource->dynamic_shadow && resource->active_buffer_map &&
+          resource->active_buffer_map != resource->dynamic_shadow)
+         resource->shadow_stale = true;
       resource->active_buffer_map = NULL;
       if (resource->shadow_only_map) {
          /* EXP1033: publish the shadow now. Copies, index-buffer binds and

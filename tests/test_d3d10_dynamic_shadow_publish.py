@@ -31,6 +31,23 @@ class DynamicShadowPublish(unittest.TestCase):
         self.assertIn('memcpy(map,resource->dynamic_shadow,resource->logical_bytes);', branch)
         self.assertNotIn('resource->shadow_dirty=true;', branch)
 
+    def test_direct_maps_skip_the_full_shadow_copy(self):
+        """EXP1090: EXP1089 CSwitch samples put 29 % of DWM's composition thread
+        in memcpy under ResourceUnmap: every Unmap of a directly mapped dynamic
+        buffer copied the whole buffer back into its CPU shadow. A NO_OVERWRITE
+        map now maps the BO itself; the shadow is only a fallback and is marked
+        stale (never handed out) once direct writes bypass it."""
+        unmap = body('ResourceUnmap')
+        self.assertNotIn('memcpy(resource->dynamic_shadow, resource->active_buffer_map', unmap)
+        self.assertIn('resource->shadow_stale = true;', unmap)
+        self.assertIn('resource->active_buffer_map != resource->dynamic_shadow', unmap)
+        mapping = body('ResourceMap')
+        nooverwrite = mapping[mapping.index('if (DDIMap == D3D10_DDI_MAP_WRITE_NOOVERWRITE) {'):]
+        self.assertLess(nooverwrite.index('AgxWin32AsahiBufferWriteMap(device->pipe,resource->resource)'),
+                        nooverwrite.index('resource->active_buffer_map=resource->dynamic_shadow;'))
+        self.assertLess(nooverwrite.index('if (resource->shadow_stale)'),
+                        nooverwrite.index('resource->active_buffer_map=resource->dynamic_shadow;'))
+
 
 if __name__ == '__main__':
     unittest.main()
