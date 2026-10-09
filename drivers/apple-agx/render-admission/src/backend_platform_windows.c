@@ -1687,9 +1687,6 @@ static unsigned char AdmissionRetainedActivate(ADMISSION_PLATFORM_RUNTIME *runti
     valid=AgxHwdataMaterialize(&runtime->HwdataProfileReceipt,&runtime->FirmwareIoManifest,
         runtime->RetainedEpoch,runtime->RetainedRoot,hwdata_a->CpuAddress,hwdata_a->Length,
         hwdata_b->CpuAddress,hwdata_b->Length);
-    if(valid)
-      valid=AgxHwdataApplyJ313DvfsFloor(hwdata_a->CpuAddress,hwdata_a->Length,
-          AGX_HWDATA_J313_DVFS_FLOOR_SCALED);
     AdmissionRecordHwdataProfile(runtime->Adapter,valid?0u:2u,&runtime->HwdataProfileReceipt);
     if(!valid) return 0;
   }

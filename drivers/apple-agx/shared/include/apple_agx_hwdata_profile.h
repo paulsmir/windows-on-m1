@@ -52,31 +52,6 @@ static inline unsigned char AgxHwdataReadReceipt(AGX_FW_IO_READ64 read,void *ctx
     *out=a;
     return 1;
 }
-/* EXP1102: J313 GPU DVFS floor. EXP1101 receipts: every DWM job ran at
- * HwDataA actual_pstate 1 (396 MHz of 1278): the profile's base and minimum
- * performance states are both 1 (J313 ADT gpu-perf-base-pstate = 1; m1n1's
- * default without that property is 3), and DWM's short bursts never move the
- * firmware's utilization filter. The floor raises base_pstate_scaled (0x44,
- * _2 0x7d8, _3 0x7e0, _4 0x81c) and min_pstate_scaled (0x54, u32) /
- * min_pstate_scaled_4 (0x860, float) together (min <= base), offsets from m1n1
- * initdata.py AGXHWDataA for G13 V13_5. max (600) and the power-off path are
- * unchanged. */
-#define AGX_HWDATA_J313_DVFS_FLOOR_SCALED 300u
-static inline unsigned char AgxHwdataApplyJ313DvfsFloor(void *a, unsigned long long a_bytes,
-    unsigned int scaled) {
-    static const unsigned int base_offsets[4]={0x44u,0x7d8u,0x7e0u,0x81cu};
-    union { float f; unsigned int u; } min_float;
-    volatile unsigned int *words;
-    unsigned int i;
-    if(!a || a_bytes<AGX_HWDATA_A_BYTES || (((unsigned long long)a)&3ULL) ||
-       scaled<100u || scaled>600u || scaled%100u) return 0;
-    words=(volatile unsigned int *)a;
-    min_float.f=(float)scaled;
-    for(i=0;i<4u;i++) words[base_offsets[i]/4u]=scaled;
-    words[0x54u/4u]=scaled;
-    words[0x860u/4u]=min_float.u;
-    return 1;
-}
 static inline unsigned char AgxHwdataMaterialize(const AGX_HWDATA_RECEIPT *r,
     const AGX_FW_IO_MANIFEST *io,unsigned long long epoch,unsigned long long root,
     void *a,unsigned long long a_bytes,void *b,unsigned long long b_bytes) {
