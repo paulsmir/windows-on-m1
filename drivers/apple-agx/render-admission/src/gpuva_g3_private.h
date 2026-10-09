@@ -47,6 +47,8 @@ typedef struct _ADMISSION_G3_STATE {
   ADMISSION_G3_ALLOC_TRACK AllocTrack[ADMISSION_G3_ALLOC_TRACK_COUNT];
   /* EXP1087 receipt-only, under Lock: ADMISSION_G3_PRIVATE_STAT_* counters. */
   ULONGLONG PrivateStats[16];
+  /* EXP1114 receipt-only, under Lock: last per-process snapshot (QPC). */
+  LONGLONG ProcessReceiptQpc;
 } ADMISSION_G3_STATE;
 enum {
   ADMISSION_G3_PRIVATE_STAT_HIT, ADMISSION_G3_PRIVATE_STAT_MISS,
@@ -89,6 +91,11 @@ typedef struct _ADMISSION_G3_PRIVATE_SCENE {
  * budget, so pool pressure evicts the oldest entries one at a time. */
 #define ADMISSION_G3_PRIVATE_SCENE_CACHE 8u
 
+/* EXP1114 receipt-only: 8 header words, then 16 words for each of the 16
+ * processes holding the most private units. */
+#define ADMISSION_G3_PROCESS_RECEIPT_SLOTS 16u
+#define ADMISSION_G3_PROCESS_RECEIPT_WORDS (8u + 16u * ADMISSION_G3_PROCESS_RECEIPT_SLOTS)
+
 typedef struct _ADMISSION_G3_PROCESS {
   LIST_ENTRY Link;
   ADMISSION_G3_STATE *State;
@@ -103,6 +110,9 @@ typedef struct _ADMISSION_G3_PROCESS {
   ULONGLONG PrivateVa;
   ULONGLONG PrivateMiddleIpa, PrivateLeafIpa;
   ULONGLONG PrivateCacheClock; /* EXP1087 */
+  /* EXP1114 receipt-only: largest AppleAgxG4MinTvbBlocks this process asked
+   * private storage for, and that render's Width | Height << 16. */
+  ULONG MaxTvbBlocks, MaxShape;
   APPLE_AGX_G3_PRIVATE_EXTENT PrivateTables[2];
   APPLE_AGX_G3_PRIVATE_MANAGER PrivateManager;
   APPLE_AGX_RENDER_MANAGER_STATE FirmwareManager;

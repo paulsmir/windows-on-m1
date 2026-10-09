@@ -1547,6 +1547,63 @@ static BOOLEAN AdmissionG3CapturePrivateFailure(ADMISSION_CONTEXT *adapter,
   return TRUE;
 }
 
+static ULONG AdmissionG3ManagerWord(const unsigned char *bytes, ULONG offset) {
+  ULONG value;
+  RtlCopyMemory(&value,bytes+offset,sizeof(value));
+  return value;
+}
+
+/* EXP1114 receipt-only, under Lock, at most every two seconds: each process's
+ * private units and scenes, the largest render it asked storage for, and its
+ * saved firmware buffer-manager Stats/Info/BlockControl words (Asahi
+ * fw/buffer.rs: Stats max_pages, max_b, overflow_count, gpu_c, reset; Info
+ * page_count 0x28, block_count 0x30; BlockControl total, wptr). Header:
+ * version, slots used, global units, largest free run, QPC low/high,
+ * frequency, processes listed. */
+static BOOLEAN AdmissionG3SnapshotProcesses(ADMISSION_G3_STATE *state,
+    ULONG out[ADMISSION_G3_PROCESS_RECEIPT_WORDS]) {
+  LARGE_INTEGER frequency;
+  LONGLONG now=KeQueryPerformanceCounter(&frequency).QuadPart;
+  APPLE_AGX_G3_PRIVATE_POOL_STATS stats;
+  LIST_ENTRY *link;
+  ULONG used=0u,total=0u,i;
+  if (state->ProcessReceiptQpc && now-state->ProcessReceiptQpc<2*frequency.QuadPart)
+    return FALSE;
+  state->ProcessReceiptQpc=now;
+  RtlZeroMemory(out,ADMISSION_G3_PROCESS_RECEIPT_WORDS*sizeof(ULONG));
+  AppleAgxG3PrivatePoolStats(&state->PrivatePool,0ULL,&stats);
+  out[0]=1u;out[2]=stats.GlobalUnits;out[3]=stats.LargestFreeUnits;
+  out[4]=(ULONG)now;out[5]=(ULONG)((ULONGLONG)now>>32);out[6]=(ULONG)frequency.QuadPart;
+  for (link=state->Processes.Flink;link!=&state->Processes;link=link->Flink) {
+    ADMISSION_G3_PROCESS *p=CONTAINING_RECORD(link,ADMISSION_G3_PROCESS,Link);
+    const APPLE_AGX_RENDER_MANAGER_STATE *m=&p->FirmwareManager;
+    ADMISSION_G3_PRIVATE_SCENE *s;
+    ULONG *r,slot,scenes=0u,cached=0u;
+    ++total;
+    AppleAgxG3PrivatePoolStats(&state->PrivatePool,p->Graph.ProcessId,&stats);
+    if (!stats.OwnerUnits && !p->MaxTvbBlocks) continue;
+    if (used<ADMISSION_G3_PROCESS_RECEIPT_SLOTS) slot=used++;
+    else {
+      for (slot=0u,i=1u;i<used;++i)
+        if (out[8u+16u*i+1u]<out[8u+16u*slot+1u]) slot=i;
+      if (stats.OwnerUnits<=out[8u+16u*slot+1u]) continue;
+    }
+    for (s=p->PrivateScenes;s;s=s->Next) { ++scenes; if (s->Cached) ++cached; }
+    r=&out[8u+16u*slot];
+    r[0]=p->OsProcessId;r[1]=stats.OwnerUnits;r[2]=scenes|(cached<<16);
+    r[3]=p->MaxTvbBlocks;r[4]=p->MaxShape;
+    r[5]=p->PrivateManager.Extents[2].Bytes/0x20000u;r[6]=m->Valid ? 1u : 0u;
+    r[7]=AdmissionG3ManagerWord(m->Stats,0x0u);r[8]=AdmissionG3ManagerWord(m->Stats,0x4u);
+    r[9]=AdmissionG3ManagerWord(m->Stats,0x8u);r[10]=AdmissionG3ManagerWord(m->Stats,0xcu);
+    r[11]=AdmissionG3ManagerWord(m->Stats,0x20u);
+    r[12]=AdmissionG3ManagerWord(m->Info,0x28u);r[13]=AdmissionG3ManagerWord(m->Info,0x30u);
+    r[14]=AdmissionG3ManagerWord(m->BlockControl,0x0u);
+    r[15]=AdmissionG3ManagerWord(m->BlockControl,0x4u);
+  }
+  out[1]=used;out[7]=total;
+  return TRUE;
+}
+
 NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
     const DXGKARG_ESCAPE *args) {
   APPLE_AGX_G3_PRIVATE_REQUEST q;
@@ -1564,7 +1621,8 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
   UINT required[9]={0}, tablePredicate=0u, mapOffset=0u;
   APPLE_AGX_G3_PRIVATE_POOL_STATS observed={0};
   APPLE_AGX_G3_PRIVATE_PREPARE_DIAGNOSTIC prepare={0};
-  BOOLEAN captured=FALSE;
+  BOOLEAN captured=FALSE, snapshot=FALSE;
+  ULONG receipt[ADMISSION_G3_PROCESS_RECEIPT_WORDS];
 #define PRIVATE_CAPTURE(b,t,o) do { \
   if (AdmissionG3CapturePrivateFailure(adapter,state,p,args,&q,required,b, \
       status,tablePredicate,mapOffset,t,&prepare,o)) captured=TRUE; \
@@ -1645,6 +1703,10 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
         q.ManagerGeneration!=p->PrivateManager.Generation ||
         context->GpuvaG3PrivateManagerGeneration!=q.ManagerGeneration) goto Done;
   } else goto Done;
+  {
+    ULONG blocks=AppleAgxG4MinTvbBlocks(q.Width,q.Height);
+    if (blocks>p->MaxTvbBlocks) { p->MaxTvbBlocks=blocks;p->MaxShape=q.Width|(q.Height<<16); }
+  }
   scene=AdmissionG3PrivateCachedScene(p,args->hContext,&q);
   if (scene) {
     if (!AdmissionG3PrivateReuseScene(p,scene,&view))
@@ -1722,8 +1784,10 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
   }
 Done:
   if (p && p->Graph.Uncertain) ADMISSION_G3_POISON(p,1u);
+  snapshot=AdmissionG3SnapshotProcesses(state,receipt);
   ExReleaseFastMutex(&state->Lock);
   if (captured) AdmissionRecordG3PrivateFailure(adapter);
+  if (snapshot) AdmissionRecordG3PrivateProcesses(adapter,receipt,sizeof(receipt));
 #undef PRIVATE_CAPTURE
   return status;
 }

@@ -145,6 +145,15 @@ typedef struct {
   APPLE_AGX_G4_TIMESTAMPS TimestampsVertex, TimestampsFragment;
 } APPLE_AGX_G4_NATIVE_RENDER;
 
+/* Asahi queue/render.rs get_tiling_params: the TVB blocks a render of this
+ * size needs at least, align(ceil(tiles / 128), 8) for one cluster. */
+static inline unsigned int AppleAgxG4MinTvbBlocks(unsigned int width,
+    unsigned int height) {
+  unsigned long long tiles = ((width + 31ULL) / 32ULL) * ((height + 31ULL) / 32ULL);
+  if (!width || !height || width > 16384u || height > 16384u) return 0u;
+  return (unsigned int)((((tiles + 127ULL) / 128ULL + 7ULL) / 8ULL) * 8ULL);
+}
+
 /* The TVB and per-scene capacities follow Asahi buffer.rs/render.rs.  The
  * TPC reserves the t600x maximum of eight GPU clusters, so the UMD can
  * allocate before the KMD supplies a measured cluster count.  All returned

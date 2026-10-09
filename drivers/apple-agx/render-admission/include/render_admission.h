@@ -1090,6 +1090,10 @@ VOID AdmissionDwmFrameRecordPrivateReset(_In_ ADMISSION_CONTEXT *Adapter,
     _In_ BOOLEAN Succeeded);
 #endif
 void AdmissionRecordG3PrivateFailure(_In_opt_ ADMISSION_CONTEXT *Context);
+/* EXP1114 receipt-only: per-process private storage snapshot. */
+void AdmissionRecordG3PrivateProcesses(_In_opt_ ADMISSION_CONTEXT *Context,
+                                       _In_reads_bytes_(Bytes) const ULONG *Values,
+                                       _In_ ULONG Bytes);
 void AdmissionRecordGpuvaG3UnpublishedGroups(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_reads_(32) const ULONGLONG *Counts);

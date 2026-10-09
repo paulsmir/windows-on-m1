@@ -2294,6 +2294,20 @@ _Use_decl_annotations_ void AdmissionRecordG3PrivateFailure(
   ZwClose(key);
 }
 
+/* EXP1114 receipt-only: written after the G3 state lock is released, at most
+ * every two seconds (the caller's snapshot gate); never flushed. */
+_Use_decl_annotations_ void AdmissionRecordG3PrivateProcesses(
+    ADMISSION_CONTEXT *Context, const ULONG *Values, ULONG Bytes) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      Values == NULL || Bytes == 0u || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
+  WriteBinary(key, L"Wom1G3PrivateProcs", Values, Bytes);
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordG4SubmitFailure(
     ADMISSION_CONTEXT *Context) {
   HANDLE key = NULL;
