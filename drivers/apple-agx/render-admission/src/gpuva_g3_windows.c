@@ -994,7 +994,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3FrameArmEscape(ADMISSION_CONTEXT
       map.InSelectedRangeCount = (ULONG)InterlockedCompareExchange(
           &adapter->DwmSourceMapInRangeCount, 0, 0);
     }
-    AdmissionRecordDwmSourceMap(adapter->PhysicalDeviceObject, &map, ordinal);
+    /* EXP1109: DWM arms ~5 times per frame and each receipt write is a
+     * registry open/set/close on its thread (~85 us, EXP1108). Keep the first
+     * 16 ordinals and every 256th; the probe entry above is always current. */
+    if (ordinal < 16u || (ordinal & 255u) == 0u)
+      AdmissionRecordDwmSourceMap(adapter->PhysicalDeviceObject, &map, ordinal);
   }
   /* EXP1052 receipt-only: publish the paging profile from this PASSIVE escape
    * (never from the paging path), at most every two seconds. */

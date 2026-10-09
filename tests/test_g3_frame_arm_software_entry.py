@@ -130,7 +130,8 @@ static LONG InterlockedCompareExchange(LONG *p,LONG value,LONG expected){LONG ol
 static LONG InterlockedIncrement(LONG *p){return ++*p;}
 static void AdmissionG3SnapshotDwmSystemLeaves(ADMISSION_G3_PROCESS *,UINT,ADMISSION_G3_DWM_SYSTEM_LEAF_SNAPSHOT *){}
 static void AdmissionG3WriteDwmSystemLeaves(ADMISSION_CONTEXT *,const ADMISSION_G3_DWM_SYSTEM_LEAF_SNAPSHOT *){}
-static void AdmissionRecordDwmSourceMap(void *,const ADMISSION_DWM_SOURCE_MAP_RECEIPT *,UINT){}
+static unsigned sourceMapRecords;
+static void AdmissionRecordDwmSourceMap(void *,const ADMISSION_DWM_SOURCE_MAP_RECEIPT *,UINT){++sourceMapRecords;}
 static void AdmissionRecordPagingProfile(ADMISSION_CONTEXT *,const int *,const ULONGLONG *){}
 '''
 
@@ -180,6 +181,15 @@ int main(int argc,char **argv) {
   a.Flags.Value=1;assert(AdmissionGpuvaG3FrameArmEscape(&adapter,&a)==STATUS_SUCCESS);
   a.Flags.Value=0;claim=false;assert(AdmissionGpuvaG3FrameArmEscape(&adapter,&a)==STATUS_INVALID_HANDLE);
   assert(state.Lock==0 && blocked==0);
+  /* EXP1109: DWM arms ~5 times per frame; each receipt write is a registry
+   * open/set/close on DWM's thread (~85 us, EXP1108 ss1107). The first 16
+   * ordinals and every 256th are written; every arm still updates the probe. */
+  claim=true;adapter.DwmSourceMapRecordCount=0;sourceMapRecords=0;
+  for(unsigned i=0;i<1000;++i){q.Allocation=0x80+(i&1);
+    assert(AdmissionGpuvaG3FrameArmEscape(&adapter,&a)==STATUS_SUCCESS);
+    assert(adapter.DwmFrameProbe.Entries[0].Allocation==0x80+(i&1));}
+  assert(adapter.DwmSourceMapRecordCount==1000);
+  assert(sourceMapRecords==16u+3u);
  }
  puts("frame_arm_software_entry: PASS");
 }
