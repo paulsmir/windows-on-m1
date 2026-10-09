@@ -55,7 +55,10 @@ typedef struct {
 struct agx_screen { struct agx_bo *rodata; };
 /* EXP1069: Asahi's per-device zero and scratch pages (agx_open_device). */
 struct agx_device { struct agx_bo *zero_bo, *scratch_bo; };
-struct agx_context { struct { struct agx_screen *screen; } base; };
+#define AGX_MAX_BATCHES 1
+struct agx_batch;
+struct agx_context { struct { struct agx_screen *screen; } base;
+  struct { struct agx_batch *slots; } batches; };
 struct agx_batch {
   struct agx_context *ctx;
   void *windows_batch;
@@ -167,6 +170,7 @@ static int evict(void *ctx,const uint64_t *tokens,unsigned count) {
   for(unsigned i=0;i<count;++i) {assert(bos[tokens[i]].resident);bos[tokens[i]].resident=0;}
   return 1;
 }
+int AgxWin32AsahiBatchPoll(struct agx_batch *batch,unsigned timeout);
 #include "g4_mesa_pool_functions.inc"
 
 /* scenario: normal, empty pools, null pool entry, invalid identity,
@@ -188,7 +192,7 @@ static void run(unsigned fail,unsigned many,unsigned scenario) {
   struct agx_bo *pool_bos[4]={&bos[5],&bos[6],&bos[3],&bos[7]};
   struct agx_bo *pipeline_bos[3]={&bos[8],&bos[9],&bos[5]};
   bos[8].flags=bos[9].flags=1; /* Preserve low-VA pool creation intent. */
-  struct agx_screen screen={&bos[3]};struct agx_context ctx={{&screen}};
+  struct agx_screen screen={&bos[3]};struct agx_context ctx={{&screen},{NULL}};
   native_device=(struct agx_device){&bos[10],&bos[11]};
   struct agx_resource color={.bo=&bos[4],.layout={.size_B=65536}};
   struct agx_batch batch={.ctx=&ctx,.vdm={&bos[2]},.draws=1,

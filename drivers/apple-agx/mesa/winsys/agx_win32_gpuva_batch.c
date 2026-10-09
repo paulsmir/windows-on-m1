@@ -109,17 +109,16 @@ int AgxWin32AsahiBatchBegin(struct agx_batch *batch) {
   if(batch && batch->ctx) AgxWin32AsahiPublishPages(agx_device(batch->ctx->base.screen));
   if(!b || !b->GpuvaReady || b->Failed || batch->windows_batch ||
      !batch->vdm.bo) return batch_refuse(1u, __LINE__, 0u, 0u);
-  /* One monitored submission owns this process residency set. Drain earlier
-   * active and submitted batches before opening another transaction. */
+  /* EXP1071: other active batches stay open, as in Linux Mesa; Asahi's
+   * hazard tracking flushes one when a dependency, a CPU access or a Gallium
+   * flush needs it. (Flushing them here caused 66% of DWM's submissions in
+   * EXP1070.) Submission is synchronous, so a submitted batch is complete:
+   * retire it, which frees the residency set for this batch. */
   for(unsigned i=0;i<AGX_MAX_BATCHES;++i) {
     struct agx_batch *old=&batch->ctx->batches.slots[i];
-    if(old==batch || !old->windows_batch) continue;
-    if(BITSET_TEST(batch->ctx->batches.active,i)) {
-      AgxWin32PerfNote("Begin drain: flush active");
-      agx_flush_batch(batch->ctx,old);
-    } else {
-      AgxWin32PerfNote("Begin drain: retire submitted");
-    }
+    if(old==batch || !old->windows_batch ||
+       BITSET_TEST(batch->ctx->batches.active,i)) continue;
+    AgxWin32PerfNote("Begin drain: retire submitted");
     if(batch->ctx->any_faults || !AgxWin32AsahiBatchPoll(old,1000)) return batch_refuse(1u, __LINE__, 0u, 0u);
     agx_sync_batch(batch->ctx,old);
     if(old->windows_batch) return batch_refuse(1u, __LINE__, 0u, 0u);
@@ -307,6 +306,22 @@ static unsigned gpuva_color_class(unsigned format) {
   }
 }
 
+/* EXP1071: several open batches may be flushed back to back (agx_flush_all).
+ * The completed submission of the previous one still holds the residency
+ * set; retire it before this batch submits. A set held by no batch of this
+ * context is left alone (the submission is refused as before). */
+static int retire_held(struct agx_batch *batch,AGX_WIN32_ASAHI_BACKEND *b) {
+  if(!b->Gpuva.Held) return 1;
+  for(unsigned i=0;i<AGX_MAX_BATCHES;++i) {
+    struct agx_batch *old=&batch->ctx->batches.slots[i];
+    AGX_G4_BATCH *g=capsule(old);
+    if(old==batch || !g || !g->Submitted || g->Retired || g->Rejected ||
+       g->Fence!=b->Gpuva.RenderFence) continue;
+    return AgxWin32AsahiBatchPoll(old,1000) && !b->Gpuva.Held;
+  }
+  return 0;
+}
+
 static int batch_has_render_work(const struct agx_batch *batch) {
   return batch && (batch->draws || batch->clear);
 }
@@ -440,6 +455,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   util_dynarray_foreach(&batch->pipeline_pool.bos,struct agx_bo *,bo) {
     if(!*bo || !add_bo(b,refs,&count,limit,*bo)) { fail_site=__LINE__; goto fail; }
   }
+  if(!retire_held(batch,b)) { fail_site=__LINE__; goto fail; }
   if(!AgxWin32GpuvaSubmit(&b->Gpuva,refs,count,
       AgxWin32AsahiGpuvaBo(b,g->Command),packet.Header.V2.Base.CommandBytes,
       written,written_count,

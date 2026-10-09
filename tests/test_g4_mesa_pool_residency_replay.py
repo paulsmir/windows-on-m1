@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class G4MesaPoolResidencyReplay(unittest.TestCase):
     def test_all_pool_slabs_are_resident_uploaded_and_retired(self):
         source = (ROOT / "drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c").read_text()
-        names = ("batch_refuse", "batch_has_render_work", "gpuva_color_format_supported", "gpuva_color_class", "add_bo", "append_native", "append_attachments",
+        names = ("batch_refuse", "batch_has_render_work", "retire_held", "gpuva_color_format_supported", "gpuva_color_class", "add_bo", "append_native", "append_attachments",
                  "prepare_process_buffers", "AgxWin32AsahiBatchFinish",
                  "AgxWin32AsahiBatchPoll", "AgxWin32AsahiBatchAbort",
                  "AgxWin32AsahiBatchRelease")
