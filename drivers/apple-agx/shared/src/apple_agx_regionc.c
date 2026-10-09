@@ -4,6 +4,16 @@
 
 #define APPLE_AGX_REGIONC_J313_SCALAR_PRESENCE 0x1ff5b8bfULL
 #define APPLE_AGX_REGIONC_J313_ORACLE_FNV1A64 0xc3bc91a9acf61290ULL
+/* EXP1100: InitData_RegionC idle_to_off_delay_ms (m1n1 initdata.py, G13
+ * V13_5: offset 0x1119c; the default 2 ms, as in Asahi, applies because the
+ * J313 ADT has no gpu-idle-off-delay-ms). EXP1099 job timing: a job kicked
+ * after more than 2 ms of GPU idle ended TA ~310 us later than one after a
+ * shorter gap (power-up), and DWM idles 7-12 ms between frames, so every
+ * frame's first job paid it. Keep the GPU powered for 20 ms after its last
+ * work. fender_idle_to_off_delay_ms (40) and fw_early_wake_timeout_ms (5) are
+ * unchanged; every other byte equals the m1n1 oracle. */
+#define APPLE_AGX_REGIONC_J313_IDLE_OFF_DELAY_OFFSET 0x1119cu
+#define APPLE_AGX_REGIONC_J313_IDLE_OFF_DELAY_MS 20u
 
 typedef struct _APPLE_AGX_REGIONC_WORD {
   unsigned int Offset;
@@ -141,6 +151,8 @@ APPLE_AGX_REGIONC_RESULT AppleAgxRegionCEncodeJ313G13V13_5(
         Destination + AppleAgxRegionCJ313Words[index].Offset,
         AppleAgxRegionCJ313Words[index].Value);
   }
+  AppleAgxRegionCWriteU32(Destination + APPLE_AGX_REGIONC_J313_IDLE_OFF_DELAY_OFFSET,
+                          APPLE_AGX_REGIONC_J313_IDLE_OFF_DELAY_MS);
   Manifest->EncodedSize = DestinationSize;
   Manifest->NonzeroWordCount =
       (unsigned int)(sizeof(AppleAgxRegionCJ313Words) /

@@ -59,8 +59,15 @@ static void test_exact_physical_j313_regionc(void) {
          AppleAgxRegionCResultOk);
   assert(manifest.EncodedSize == sizeof(destination));
   assert(manifest.OracleFnv1a64 == 0xc3bc91a9acf61290ULL);
+  /* EXP1100: the GPU idle power-off delay is 20 ms (m1n1 default 2 ms); with
+   * that one field restored, every byte equals the pinned m1n1 oracle. */
+  assert(destination[0x1119cu] == 20u && destination[0x1119du] == 0u &&
+         destination[0x1119eu] == 0u && destination[0x1119fu] == 0u);
+  assert(destination[0x111a0u] == 40u && destination[0x111a4u] == 5u);
+  destination[0x1119cu] = 2u;
   assert(fnv1a64(destination, sizeof(destination)) ==
          0xc3bc91a9acf61290ULL);
+  destination[0x1119cu] = 20u;
   assert(destination[0x24u] == 0xb8u);
   assert(destination[0x10fdcu] == 1u);
 }
