@@ -114,6 +114,66 @@ static void AgxD3d10PerfNote(const char *message) {
   ReleaseSRWLockExclusive(&AgxD3d10PerfLock);
 }
 
+/* EXP1080 diagnostic: inclusive QPC time per d3d10umd DDI (LOG_ENTRYPOINT)
+ * and top-level time per window. Every ~2 s one "measure-ddi-window" line
+ * {wall_us, toplevel_us, presents} and up to 12 "measure-ddi-time" lines
+ * {calls, total_us, max_us, name[0..23]} sorted by total time. */
+static SRWLOCK AgxD3d10DdiLock=SRWLOCK_INIT;
+static struct { const char *Name; LONGLONG Ticks, Max; UINT Calls; } AgxD3d10DdiTable[96];
+static LONGLONG AgxD3d10DdiTopLevel, AgxD3d10DdiWindowStart, AgxD3d10DdiFrequency;
+static LONG AgxD3d10DdiWindowPresents;
+static UINT AgxD3d10DdiLines;
+extern "C" void AgxD3d10DdiTimerNote(const char *name, long long ticks,
+                                     unsigned depth) {
+  LARGE_INTEGER now;
+  if(!name || ticks<0) return;
+  AcquireSRWLockExclusive(&AgxD3d10DdiLock);
+  if(!AgxD3d10DdiFrequency) {
+    LARGE_INTEGER f; QueryPerformanceFrequency(&f); AgxD3d10DdiFrequency=f.QuadPart;
+    QueryPerformanceCounter(&now); AgxD3d10DdiWindowStart=now.QuadPart;
+  }
+  UINT i=0;
+  for(;i<ARRAYSIZE(AgxD3d10DdiTable) && AgxD3d10DdiTable[i].Name &&
+       AgxD3d10DdiTable[i].Name!=name;++i) {}
+  if(i<ARRAYSIZE(AgxD3d10DdiTable)) {
+    AgxD3d10DdiTable[i].Name=name; AgxD3d10DdiTable[i].Ticks+=ticks;
+    if(ticks>AgxD3d10DdiTable[i].Max) AgxD3d10DdiTable[i].Max=ticks;
+    ++AgxD3d10DdiTable[i].Calls;
+  }
+  if(depth==0) AgxD3d10DdiTopLevel+=ticks;
+  QueryPerformanceCounter(&now);
+  if(depth==0 && now.QuadPart-AgxD3d10DdiWindowStart>2*AgxD3d10DdiFrequency &&
+     AgxD3d10DdiLines<4096u) {
+    const LONGLONG us=AgxD3d10DdiFrequency/1000000 ? AgxD3d10DdiFrequency/1000000 : 1;
+    UINT header[3]={(UINT)((now.QuadPart-AgxD3d10DdiWindowStart)/us),
+        (UINT)(AgxD3d10DdiTopLevel/us),(UINT)InterlockedExchange(&AgxD3d10DdiWindowPresents,0)};
+    AdmissionUmdDiagnostic("measure-ddi-window",S_OK,header,ARRAYSIZE(header));
+    ++AgxD3d10DdiLines;
+    for(UINT n=0;n<12u;++n) {
+      UINT best=ARRAYSIZE(AgxD3d10DdiTable);
+      for(UINT j=0;j<ARRAYSIZE(AgxD3d10DdiTable) && AgxD3d10DdiTable[j].Name;++j)
+        if(AgxD3d10DdiTable[j].Calls &&
+           (best==ARRAYSIZE(AgxD3d10DdiTable) ||
+            AgxD3d10DdiTable[j].Ticks>AgxD3d10DdiTable[best].Ticks)) best=j;
+      if(best==ARRAYSIZE(AgxD3d10DdiTable)) break;
+      UINT values[9]={AgxD3d10DdiTable[best].Calls,
+          (UINT)(AgxD3d10DdiTable[best].Ticks/us),(UINT)(AgxD3d10DdiTable[best].Max/us)};
+      char text[24]={0};
+      for(UINT k=0;k<sizeof(text) && AgxD3d10DdiTable[best].Name[k];++k)
+        text[k]=AgxD3d10DdiTable[best].Name[k];
+      memcpy(&values[3],text,sizeof(text));
+      AdmissionUmdDiagnostic("measure-ddi-time",S_OK,values,ARRAYSIZE(values));
+      ++AgxD3d10DdiLines;
+      AgxD3d10DdiTable[best].Calls=0;
+    }
+    for(UINT j=0;j<ARRAYSIZE(AgxD3d10DdiTable);++j) {
+      AgxD3d10DdiTable[j].Ticks=AgxD3d10DdiTable[j].Max=0; AgxD3d10DdiTable[j].Calls=0;
+    }
+    AgxD3d10DdiTopLevel=0; AgxD3d10DdiWindowStart=now.QuadPart;
+  }
+  ReleaseSRWLockExclusive(&AgxD3d10DdiLock);
+}
+
 /* EXP1056: kind 4 = first backend Failed transition, site = file<<16|line. */
 static void AgxD3d10BackendFail(unsigned site) {
   AgxD3d10BatchRefusal(4u, site, 0u, 0u);
@@ -796,6 +856,7 @@ HRESULT AgxD3d10WindowsPresentationSubmit(
     return E_INVALIDARG;
   }
   InterlockedIncrement(&AgxD3d10Presents);
+  InterlockedIncrement(&AgxD3d10DdiWindowPresents);
   APPLE_AGX_U32 before[16],after[16],bindings[16];
   AgxWin32AsahiContextDiagnostic(Device->Context,before,bindings);
   int flushed=AgxWin32AsahiContextFlushForPresent(Device->Context);

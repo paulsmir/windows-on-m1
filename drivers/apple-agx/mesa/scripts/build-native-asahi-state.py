@@ -689,6 +689,43 @@ SupportedDDIInterfaceVersions[] = {
    default:
       return E_NOTIMPL;
    }''')
+    # EXP1080 diagnostic: DWM is CPU-bound (EXP1078 CSwitch trace) and this
+    # guest has no ETW sampling source. Time every d3d10umd DDI entry
+    # (LOG_ENTRYPOINT) with a scoped QPC timer; agx_d3d10_windows.cpp sums
+    # the time per DDI and reports DWM's share of wall time inside the UMD.
+    change('src/gallium/frontends/d3d10umd/Debug.h',
+        '5e8e975d8f224db6cf747143cf8d1a667f308e6a4851322fcb4adc6401d38125',[
+        ('''#else
+#define LOG_ENTRYPOINT() (void)0
+#endif''','''#elif defined(_WIN32) && defined(__cplusplus)
+extern "C" void AgxD3d10DdiTimerNote(const char *name, long long ticks,
+                                     unsigned depth);
+inline unsigned &AgxDdiTimerDepth() {
+   static thread_local unsigned depth;
+   return depth;
+}
+struct AgxDdiTimer {
+   const char *name;
+   LARGE_INTEGER start;
+   unsigned depth;
+   explicit AgxDdiTimer(const char *n) : name(n), depth(AgxDdiTimerDepth()++) {
+      QueryPerformanceCounter(&start);
+   }
+   ~AgxDdiTimer() {
+      LARGE_INTEGER end;
+      QueryPerformanceCounter(&end);
+      --AgxDdiTimerDepth();
+      AgxD3d10DdiTimerNote(name, end.QuadPart - start.QuadPart, depth);
+   }
+   AgxDdiTimer(const AgxDdiTimer &) = delete;
+   AgxDdiTimer &operator=(const AgxDdiTimer &) = delete;
+};
+#define AGX_DDI_CAT2(a, b) a##b
+#define AGX_DDI_CAT(a, b) AGX_DDI_CAT2(a, b)
+#define LOG_ENTRYPOINT() AgxDdiTimer AGX_DDI_CAT(agx_ddi_timer_, __LINE__)(__func__)
+#else
+#define LOG_ENTRYPOINT() (void)0
+#endif''')])
     change('src/gallium/frontends/d3d10umd/State.h',
         '4280c406ca8c1c199d09a0d062f8b52fb0baaec43a2ca7482e0d1a3acc7c4dd3',[
         ('#include "DriverIncludes.h"',
