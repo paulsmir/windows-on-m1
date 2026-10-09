@@ -65,17 +65,16 @@ static inline unsigned char AgxHwdataReadReceipt(AGX_FW_IO_READ64 read,void *ctx
 static inline unsigned char AgxHwdataApplyJ313DvfsFloor(void *a, unsigned long long a_bytes,
     unsigned int scaled) {
     static const unsigned int base_offsets[4]={0x44u,0x7d8u,0x7e0u,0x81cu};
-    /* IEEE-754 single bits of 100.0 .. 600.0: no floating point in the KMD. */
-    static const unsigned int float_bits[6]={0x42c80000u,0x43480000u,0x43960000u,
-        0x43c80000u,0x43fa0000u,0x44160000u};
+    union { float f; unsigned int u; } min_float;
     volatile unsigned int *words;
     unsigned int i;
     if(!a || a_bytes<AGX_HWDATA_A_BYTES || (((unsigned long long)a)&3ULL) ||
        scaled<100u || scaled>600u || scaled%100u) return 0;
     words=(volatile unsigned int *)a;
+    min_float.f=(float)scaled;
     for(i=0;i<4u;i++) words[base_offsets[i]/4u]=scaled;
     words[0x54u/4u]=scaled;
-    words[0x860u/4u]=float_bits[scaled/100u-1u];
+    words[0x860u/4u]=min_float.u;
     return 1;
 }
 static inline unsigned char AgxHwdataMaterialize(const AGX_HWDATA_RECEIPT *r,
