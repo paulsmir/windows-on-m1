@@ -253,6 +253,9 @@ static int InterlockedExchange(volatile int *value, int exchange) {
 static int AdmissionPlatformRuntimeReady(ADMISSION_CONTEXT *adapter) {
   return adapter->RuntimeReady;
 }
+static void AdmissionPlatformRuntimeSlotChanged(ADMISSION_CONTEXT *adapter) {
+  (void)adapter;
+}
 static int AdmissionPlatformRuntimeAwaitWork(ADMISSION_CONTEXT *adapter,
                                              ULONG timeout_ms, ULONG *reason) {
   (void)timeout_ms;

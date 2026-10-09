@@ -58,7 +58,7 @@ typedef struct {void *DeviceHandle;NTSTATUS (*DxgkCbSynchronizeExecution)(void*,
 typedef struct {void *PlatformRuntime;int SchedulerLock,InterfaceValid;volatile LONG SchedulerInitialized,SchedulerFaulted,SchedulerDpcPending;
  volatile LONG PagingPending,PagingDpcPending,PagingDpcsActive;ULONG DispatchedFence;INTERFACE Interface;APPLE_AGX_SCHEDULER Scheduler;} ADMISSION_CONTEXT;
 typedef struct {ADMISSION_CONTEXT *Adapter;int ProviderReady,BackendStarted;struct {int Phase;} Backend;void *WorkItem;
- volatile LONG Stopping,Resetting,WorkScheduled,WorkersActive;int WorkIdle;} ADMISSION_PLATFORM_RUNTIME;
+ volatile LONG Stopping,Resetting,WorkScheduled,WorkersActive;int WorkIdle,SlotEvent;} ADMISSION_PLATFORM_RUNTIME;
 typedef struct {ADMISSION_CONTEXT *Context;APPLE_AGX_PREEMPTION Preemption;} ADMISSION_PREEMPTION_NOTIFICATION;
 static int locks,interrupts,dpcs,dispatches;
 static ULONG enqueueOnDpc, expectedPreempt=77, expectedCompleted;
@@ -69,7 +69,7 @@ static void KeReleaseSpinLock(int *p,int i){(void)p;(void)i;assert(locks);locks=
 static LONG InterlockedCompareExchange(volatile LONG *p,LONG v,LONG e){LONG o=*p;if(o==e)*p=v;return o;}
 static LONG InterlockedExchange(volatile LONG *p,LONG v){LONG o=*p;*p=v;return o;}
 static LONG InterlockedDecrement(volatile LONG *p){assert(*p>0);return --*p;}
-static void KeSetEvent(int *p,int n,int w){(void)n;(void)w;assert(locks);*p=1;}
+static void KeSetEvent(int *p,int n,int w){(void)n;(void)w;if(current&&p==&current->SlotEvent){*p=1;return;}assert(locks);*p=1;}
 static void AdmissionDispatchQueuedWork(ADMISSION_CONTEXT *c){
  assert(!locks);++dispatches;
  if(enqueueOnDpc && !AppleAgxSchedulerDispatchBlocked(&c->Scheduler) &&

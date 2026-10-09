@@ -15,6 +15,10 @@ Invariants:
 - with the runtime ready and the render slot empty, admission returns at once;
 - WorkScheduled, a Submitted backend, or an occupied render slot are waited
   out (bounded) and then admitted;
+- EXP1120 analysis: every wait is on the runtime's slot event, cleared before
+  the test and set when the slot frees or the worker finishes; a job queued
+  behind a concurrent submitter waited ~10 ms in a timer sleep (9.7-10.5 ms
+  Notify -> next Kick in EXP1118/EXP1119). No timer sleep remains;
 - a busy state that outlives the timeout is refused with its predicate;
 - stopping, resetting, failed or missing runtimes are refused without waiting;
 - the G4 envelope uses the bounded wait.
@@ -58,7 +62,7 @@ static LONG InterlockedCompareExchange(volatile LONG *p, LONG, LONG){ return *p;
 struct BACKEND { int Phase; };
 struct KEVENT { int x; };
 struct ADMISSION_PLATFORM_RUNTIME { BOOLEAN ProviderReady, BackendStarted; BACKEND Backend; void *WorkItem;
-  volatile LONG Stopping, Resetting, WorkScheduled; KEVENT WorkIdle; };
+  volatile LONG Stopping, Resetting, WorkScheduled; KEVENT WorkIdle, SlotEvent; };
 struct PACKET { int State; };
 struct ADMISSION_CONTEXT { void *PlatformRuntime; int SchedulerLock; PACKET RenderPacket; };
 static ULONGLONG now; static int waits, delays, finish_after;
@@ -69,7 +73,10 @@ static void KeAcquireSpinLock(int*, KIRQL*){} static void KeReleaseSpinLock(int*
 static int AdmissionRenderPacketState(PACKET *p){ return p->State; }
 static void tick(){ now += 100000ULL; if(finish_after && --finish_after==0){ rt->WorkScheduled=0;
   rt->Backend.Phase=AppleAgxBackendRuntimeReady; ctx->RenderPacket.State=AdmissionRenderPacketEmpty; } }
-static NTSTATUS KeWaitForSingleObject(KEVENT*, int, int, BOOLEAN, LARGE_INTEGER*){ ++waits; tick(); return 0; }
+static int slot_waits, clears;
+static void KeClearEvent(KEVENT*){ ++clears; }
+static NTSTATUS KeWaitForSingleObject(KEVENT *e, int, int, BOOLEAN, LARGE_INTEGER*){
+  ++waits; if(e==&rt->SlotEvent) ++slot_waits; tick(); return 0; }
 static NTSTATUS KeDelayExecutionThread(int, BOOLEAN, LARGE_INTEGER*){ ++delays; tick(); return 0; }
 @@FUNCS@@
 int main(){
@@ -83,9 +90,10 @@ int main(){
   /* VidSch submits while the previous job still runs. */
   waits=0; r.WorkScheduled=1; r.Backend.Phase=AppleAgxBackendRuntimeSubmitted; c.RenderPacket.State=AdmissionRenderPacketActive; finish_after=5;
   if(!AdmissionPlatformRuntimeAwaitWork(&c,1000,&why)){printf("running job refused next submission (%lu)\n",why);return 1;}
-  /* Render slot busy with an idle worker: timer delay, not a spin on the idle event. */
-  waits=delays=0; c.RenderPacket.State=AdmissionRenderPacketActive; finish_after=2;
-  assert(AdmissionPlatformRuntimeAwaitWork(&c,1000,&why) && delays==2 && waits==0);
+  /* Render slot busy with an idle worker (a concurrent submitter holds it):
+   * wait on the slot event, which the slot's release sets, not a timer. */
+  waits=delays=slot_waits=0; c.RenderPacket.State=AdmissionRenderPacketActive; finish_after=2;
+  assert(AdmissionPlatformRuntimeAwaitWork(&c,1000,&why) && slot_waits==2 && delays==0);
   /* A job outliving the bound is refused with its predicate. */
   r.Backend.Phase=AppleAgxBackendRuntimeSubmitted; finish_after=0; now=0;
   assert(!AdmissionPlatformRuntimeAwaitWork(&c,50,&why) && why==4);
@@ -98,6 +106,8 @@ int main(){
   r.Backend.Phase=AppleAgxBackendRuntimeReady; r.ProviderReady=0; assert(!AdmissionPlatformRuntimeAwaitWork(&c,1000,NULL));
   c.PlatformRuntime=NULL; assert(!AdmissionPlatformRuntimeAwaitWork(&c,1000,&why) && why==1);
   assert(waits+delays==0);
+  /* Every wait was on the slot event, each preceded by a clear. */
+  assert(slot_waits>0 && clears>=slot_waits);
   puts("EXP1014 envelope backpressure: PASS");
 }
 '''

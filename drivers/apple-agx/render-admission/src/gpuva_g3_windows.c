@@ -3239,6 +3239,7 @@ Rollback:
         (ULONGLONG)(ULONG_PTR)context);
   context->Object.FenceOutstanding = 0u;
   KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  AdmissionPlatformRuntimeSlotChanged(adapter);
   context->GpuvaG3DmaBufferVa = 0ULL;
   context->GpuvaG3DmaBufferBytes = 0u;
   if (adapter->BackendImage.G4Native)

@@ -168,6 +168,9 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ULONG DynamicExpectedForegroundColor;
   PIO_WORKITEM WorkItem;
   KEVENT WorkIdle;
+  /* Set when the render slot frees or the worker finishes; submitters
+   * waiting for the slot clear it before testing (no lost wakeup). */
+  KEVENT SlotEvent;
   volatile LONG WorkScheduled;
   volatile LONG WorkersActive;
   volatile LONG Stopping;
@@ -3247,6 +3250,16 @@ static VOID AdmissionPlatformWorkerFinished(
       InterlockedCompareExchange(&Runtime->WorkScheduled, 0, 0) == 0)
     KeSetEvent(&Runtime->WorkIdle, IO_NO_INCREMENT, FALSE);
   KeReleaseSpinLock(&Runtime->Adapter->SchedulerLock, oldIrql);
+  KeSetEvent(&Runtime->SlotEvent, IO_NO_INCREMENT, FALSE);
+}
+
+/* The render slot left a busy state (completion, reset, cancelled prepare). */
+_Use_decl_annotations_ VOID AdmissionPlatformRuntimeSlotChanged(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context != NULL
+      ? (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime : NULL;
+  if (runtime != NULL)
+    KeSetEvent(&runtime->SlotEvent, IO_NO_INCREMENT, FALSE);
 }
 
 static VOID AdmissionPlatformWorker(
@@ -4299,6 +4312,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->RuntimeIo.Retire = AdmissionBackendRetire;
   AppleAgxCompletionTransactionInitialize(&runtime->Completion);
   KeInitializeEvent(&runtime->WorkIdle, NotificationEvent, TRUE);
+  KeInitializeEvent(&runtime->SlotEvent, NotificationEvent, FALSE);
   InterlockedExchange(&runtime->WorkScheduled, 0);
   InterlockedExchange(&runtime->WorkersActive, 0);
   InterlockedExchange(&runtime->Stopping, 0);
@@ -4606,8 +4620,11 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeAwaitWork(
   ULONGLONG deadline = KeQueryInterruptTime() + (ULONGLONG)TimeoutMs * 10000ULL;
   LARGE_INTEGER slice;
   ULONG reason = 0u;
-  slice.QuadPart = -100000LL; /* 10 ms */
+  slice.QuadPart = -100000LL; /* 10 ms backstop */
   for (;;) {
+    /* Clear before testing: a release after the test sets it again. */
+    if (runtime != NULL)
+      KeClearEvent(&runtime->SlotEvent);
     if (AdmissionPlatformRuntimeReadyEx(Context, &reason)) {
       KIRQL oldIrql;
       BOOLEAN empty;
@@ -4628,11 +4645,10 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeAwaitWork(
     if (KeGetCurrentIrql() != PASSIVE_LEVEL ||
         KeQueryInterruptTime() >= deadline)
       break;
-    if (InterlockedCompareExchange(&runtime->WorkScheduled, 0, 0) != 0)
-      (void)KeWaitForSingleObject(&runtime->WorkIdle, Executive, KernelMode,
-                                  FALSE, &slice);
-    else
-      (void)KeDelayExecutionThread(KernelMode, FALSE, &slice);
+    /* EXP1118/EXP1119: a timer sleep here held a job queued behind a
+     * concurrent submitter for ~10 ms after the slot had freed. */
+    (void)KeWaitForSingleObject(&runtime->SlotEvent, Executive, KernelMode,
+                                FALSE, &slice);
   }
   if (FailedPredicate != NULL) *FailedPredicate = reason;
   return reason == 0u;

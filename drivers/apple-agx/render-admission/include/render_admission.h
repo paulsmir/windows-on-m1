@@ -1573,6 +1573,7 @@ BOOLEAN AdmissionPlatformRuntimeReady(
     _Inout_ ADMISSION_CONTEXT *Context);
 /* EXP1014: bounded wait until the runtime is ready and the render slot is
  * empty; transient busy states are backpressure, not malformed input. */
+VOID AdmissionPlatformRuntimeSlotChanged(_In_opt_ ADMISSION_CONTEXT *Context);
 BOOLEAN AdmissionPlatformRuntimeAwaitWork(
     _In_ ADMISSION_CONTEXT *Context, _In_ ULONG TimeoutMs,
     _Out_opt_ ULONG *FailedPredicate);

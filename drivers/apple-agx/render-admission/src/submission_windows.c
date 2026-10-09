@@ -292,5 +292,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCancelCommand(
     cancelled = TRUE;
   }
   KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  if (cancelled) AdmissionPlatformRuntimeSlotChanged(adapter);
   return cancelled ? STATUS_SUCCESS : STATUS_DEVICE_BUSY;
 }

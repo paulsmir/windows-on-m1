@@ -66,7 +66,7 @@ int main(void){
 #define IO_NO_INCREMENT 0
 typedef int32_t LONG;typedef int KIRQL;
 typedef struct {int SchedulerLock;} ADMISSION_CONTEXT;
-typedef struct {ADMISSION_CONTEXT *Adapter;volatile LONG WorkScheduled,WorkersActive,Stopping,Resetting;int WorkIdle;} ADMISSION_PLATFORM_RUNTIME;
+typedef struct {ADMISSION_CONTEXT *Adapter;volatile LONG WorkScheduled,WorkersActive,Stopping,Resetting;int WorkIdle,SlotEvent;} ADMISSION_PLATFORM_RUNTIME;
 static int locks,dispatches,successor,nested;
 static ADMISSION_PLATFORM_RUNTIME *runtime;
 static void KeAcquireSpinLock(int *p,int *irql){(void)p;*irql=2;++locks;}
@@ -74,7 +74,7 @@ static void KeReleaseSpinLock(int *p,int irql){(void)p;(void)irql;--locks;}
 static LONG InterlockedExchange(volatile LONG *p,LONG v){LONG old=*p;*p=v;return old;}
 static LONG InterlockedCompareExchange(volatile LONG *p,LONG v,LONG expected){LONG old=*p;if(old==expected)*p=v;return old;}
 static LONG InterlockedDecrement(volatile LONG *p){assert(*p>0);return --*p;}
-static void KeSetEvent(int *p,int n,int w){(void)n;(void)w;assert(locks==1);assert(!runtime->WorkersActive && !runtime->WorkScheduled);*p=1;}
+static void KeSetEvent(int *p,int n,int w){(void)n;(void)w;if(p==&runtime->SlotEvent){*p=1;return;}assert(locks==1);assert(!runtime->WorkersActive && !runtime->WorkScheduled);*p=1;}
 static void AdmissionSchedulerWorkerFinished(ADMISSION_CONTEXT *c){(void)c;assert(!locks);}
 static void AdmissionPlatformWorkerFinished(ADMISSION_PLATFORM_RUNTIME *Runtime);
 static void AdmissionDispatchQueuedWork(ADMISSION_CONTEXT *c){
@@ -85,17 +85,19 @@ static void AdmissionDispatchQueuedWork(ADMISSION_CONTEXT *c){
 '''
         cases=r'''
 int main(void){
- ADMISSION_CONTEXT c={0};ADMISSION_PLATFORM_RUNTIME r={&c,1,1,0,0,0};runtime=&r;
+ ADMISSION_CONTEXT c={0};ADMISSION_PLATFORM_RUNTIME r={&c,1,1,0,0,0,0};runtime=&r;
  successor=1;AdmissionPlatformWorkerFinished(&r);
  assert(r.WorkScheduled==1 && r.WorkersActive==0 && !r.WorkIdle && dispatches==1);
+ /* A finishing worker wakes submitters waiting for the render slot. */
+ assert(r.SlotEvent);
  ++r.WorkersActive;AdmissionPlatformWorkerFinished(&r);
  assert(!r.WorkScheduled && !r.WorkersActive && r.WorkIdle && dispatches==2);
- r=(ADMISSION_PLATFORM_RUNTIME){&c,1,1,0,0,0};successor=1;nested=1;
+ r=(ADMISSION_PLATFORM_RUNTIME){&c,1,1,0,0,0,0};successor=1;nested=1;
  AdmissionPlatformWorkerFinished(&r);
  assert(r.WorkIdle && !r.WorkersActive && !r.WorkScheduled && dispatches==4);
- r=(ADMISSION_PLATFORM_RUNTIME){&c,1,1,1,0,0};AdmissionPlatformWorkerFinished(&r);
+ r=(ADMISSION_PLATFORM_RUNTIME){&c,1,1,1,0,0,0};AdmissionPlatformWorkerFinished(&r);
  assert(r.WorkIdle && dispatches==4);
- r=(ADMISSION_PLATFORM_RUNTIME){&c,1,1,0,1,0};AdmissionPlatformWorkerFinished(&r);
+ r=(ADMISSION_PLATFORM_RUNTIME){&c,1,1,0,1,0,0};AdmissionPlatformWorkerFinished(&r);
  assert(r.WorkIdle && dispatches==4 && locks==0);return 0;
 }
 '''
