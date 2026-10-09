@@ -368,6 +368,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionPagingStart(
   Context->PagingWorkItem = IoAllocateWorkItem(Context->PhysicalDeviceObject);
   if (Context->PagingWorkItem == NULL)
     return STATUS_INSUFFICIENT_RESOURCES;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (!NT_SUCCESS(AdmissionPagingReceiptsStart(Context))) {
+    IoFreeWorkItem(Context->PagingWorkItem);
+    Context->PagingWorkItem = NULL;
+    return STATUS_INSUFFICIENT_RESOURCES;
+  }
+#endif
   Context->PagingRecordCount = 0u;
   Context->PresentCopyBytes = 0u;
   Context->CpuQueueHead = Context->CpuQueueCount = Context->DispatchedFence = 0u;
@@ -383,6 +390,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionPagingStart(
   if (!AdmissionMemoryMarkPagingReady(&Context->Memory)) {
     IoFreeWorkItem(Context->PagingWorkItem);
     Context->PagingWorkItem = NULL;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    AdmissionPagingReceiptsStop(Context);
+#endif
     return STATUS_INVALID_DEVICE_STATE;
   }
   (void)InterlockedOr(&Context->FeatureReadyMask,
@@ -420,6 +430,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionPagingStop(
   Context->PagingRecordCount = 0u;
   KeReleaseSpinLock(&Context->PagingLock, oldIrql);
   IoFreeWorkItem(workItem);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionPagingReceiptsStop(Context);
+#endif
   (void)InterlockedAnd(&Context->FeatureReadyMask,
                        ~((LONG)APPLE_AGX_WDDM_READY_MEMORY_PAGING));
   return STATUS_SUCCESS;

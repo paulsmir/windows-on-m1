@@ -2004,38 +2004,176 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3PagingResult(
   ZwClose(key);
 }
 
-_Use_decl_annotations_ void AdmissionRecordGpuvaG3Flush(
-    ADMISSION_CONTEXT *Context, const ADMISSION_G3_FLUSH_RECEIPT *Receipt) {
+/* EXP1073 live dump: a VidMm worker deadlocked in AdmissionGpuvaG3BuildPagingBuffer
+ * -> AdmissionRecordGpuvaG3UnpublishedGroups -> NtFlushKey -> CmpDoFileWrite
+ * while it ran inside MmRotatePhysicalView (eviction, TransferToSystem), and
+ * every later GPU submission waited without a TDR. EXP996 removed only the
+ * success-path receipts. The paging DDI's remaining receipts (flush failure,
+ * paging failure, unpublished groups, paging wait) are copied here and
+ * written by a work item, so DxgkDdiBuildPagingBuffer does no registry I/O. */
+enum {
+  AdmissionPagingReceiptFlush = 1u,
+  AdmissionPagingReceiptFailure = 2u,
+  AdmissionPagingReceiptUnpublished = 4u,
+  AdmissionPagingReceiptWait = 8u
+};
+typedef struct _ADMISSION_PAGING_RECEIPTS {
+  KSPIN_LOCK Lock;
+  PIO_WORKITEM WorkItem;
+  KEVENT Idle;
+  volatile LONG Queued, Stopping;
+  ULONG Dirty;
+  ADMISSION_G3_FLUSH_RECEIPT Flush;
+  ADMISSION_G3_PAGING_FAILURE Failure;
+  ULONGLONG Unpublished[32];
+} ADMISSION_PAGING_RECEIPTS;
+
+static IO_WORKITEM_ROUTINE AdmissionPagingReceiptWorker;
+
+static void AdmissionPagingReceiptStage(ADMISSION_CONTEXT *Context,
+                                        ULONG Kind, const VOID *Data) {
+  ADMISSION_PAGING_RECEIPTS *receipts =
+      (ADMISSION_PAGING_RECEIPTS *)Context->PagingReceipts;
+  BOOLEAN queue = FALSE;
+  KIRQL oldIrql;
+  if (receipts == NULL) return;
+  KeAcquireSpinLock(&receipts->Lock, &oldIrql);
+  if (InterlockedCompareExchange(&receipts->Stopping, 0, 0) == 0) {
+    if (Kind == AdmissionPagingReceiptFlush)
+      RtlCopyMemory(&receipts->Flush, Data, sizeof(receipts->Flush));
+    else if (Kind == AdmissionPagingReceiptFailure)
+      RtlCopyMemory(&receipts->Failure, Data, sizeof(receipts->Failure));
+    else if (Kind == AdmissionPagingReceiptUnpublished)
+      RtlCopyMemory(receipts->Unpublished, Data, sizeof(receipts->Unpublished));
+    receipts->Dirty |= Kind;
+    if (InterlockedCompareExchange(&receipts->Queued, 1, 0) == 0) {
+      KeClearEvent(&receipts->Idle);
+      queue = TRUE;
+    }
+  }
+  KeReleaseSpinLock(&receipts->Lock, oldIrql);
+  if (queue)
+    IoQueueWorkItem(receipts->WorkItem, AdmissionPagingReceiptWorker,
+                    DelayedWorkQueue, Context);
+}
+
+static void AdmissionPagingReceiptWrite(ADMISSION_CONTEXT *Context,
+    PCWSTR Name, const VOID *Value, ULONG Bytes, BOOLEAN Flush) {
   HANDLE key = NULL;
-  /* EXP996: called for every flush; only failures reach the registry. */
-  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
-      Receipt == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL ||
-      (NT_SUCCESS((NTSTATUS)Receipt->ResolveStatus) &&
-       NT_SUCCESS((NTSTATUS)Receipt->BrokerStatus)))
-    return;
   if (!NT_SUCCESS(IoOpenDeviceRegistryKey(
           Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
           KEY_SET_VALUE, &key)))
     return;
-  WriteBinary(key, L"Wom1G3FlushInput", Receipt, sizeof(*Receipt));
+  WriteBinary(key, Name, Value, Bytes);
+  if (Flush) (void)ZwFlushKey(key);
   ZwClose(key);
+}
+
+static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
+                                         _In_opt_ PVOID Context) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Context;
+  ADMISSION_PAGING_RECEIPTS *receipts;
+  UNREFERENCED_PARAMETER(Device);
+  if (context == NULL || context->PagingReceipts == NULL) return;
+  receipts = (ADMISSION_PAGING_RECEIPTS *)context->PagingReceipts;
+  for (;;) {
+    ADMISSION_G3_FLUSH_RECEIPT flush;
+    ADMISSION_G3_PAGING_FAILURE failure;
+    ULONGLONG unpublished[32];
+    ADMISSION_G3_PAGING_WAIT_RECEIPT wait;
+    ULONG dirty;
+    KIRQL oldIrql;
+    KeAcquireSpinLock(&receipts->Lock, &oldIrql);
+    dirty = receipts->Dirty;
+    receipts->Dirty = 0u;
+    RtlCopyMemory(&flush, &receipts->Flush, sizeof(flush));
+    RtlCopyMemory(&failure, &receipts->Failure, sizeof(failure));
+    RtlCopyMemory(unpublished, receipts->Unpublished, sizeof(unpublished));
+    if (dirty == 0u) {
+      /* Cleared under the lock that Stage sets Dirty under: no lost wakeup. */
+      InterlockedExchange(&receipts->Queued, 0);
+      KeSetEvent(&receipts->Idle, IO_NO_INCREMENT, FALSE);
+      KeReleaseSpinLock(&receipts->Lock, oldIrql);
+      return;
+    }
+    KeReleaseSpinLock(&receipts->Lock, oldIrql);
+    if (dirty & AdmissionPagingReceiptFlush)
+      AdmissionPagingReceiptWrite(context, L"Wom1G3FlushInput", &flush,
+                                  sizeof(flush), FALSE);
+    if (dirty & AdmissionPagingReceiptFailure)
+      AdmissionPagingReceiptWrite(context, L"Wom1G3PagingFailure", &failure,
+                                  sizeof(failure), TRUE);
+    if (dirty & AdmissionPagingReceiptUnpublished)
+      AdmissionPagingReceiptWrite(context, L"Wom1G3UnpublishedGroups",
+                                  unpublished, sizeof(unpublished), TRUE);
+    if ((dirty & AdmissionPagingReceiptWait) &&
+        InterlockedExchange(&context->G3PagingWaitDirty, 0) != 0) {
+      RtlCopyMemory(&wait, &context->G3PagingWait, sizeof(wait));
+      AdmissionPagingReceiptWrite(context, L"Wom1G3PagingWait", &wait,
+                                  sizeof(wait), FALSE);
+    }
+  }
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionPagingReceiptsStart(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_PAGING_RECEIPTS *receipts;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL)
+    return STATUS_INVALID_PARAMETER;
+  if (Context->PagingReceipts != NULL) return STATUS_SUCCESS;
+  receipts = (ADMISSION_PAGING_RECEIPTS *)ExAllocatePool2(
+      POOL_FLAG_NON_PAGED, sizeof(*receipts), ADMISSION_POOL_TAG);
+  if (receipts == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+  KeInitializeSpinLock(&receipts->Lock);
+  KeInitializeEvent(&receipts->Idle, NotificationEvent, TRUE);
+  receipts->WorkItem = IoAllocateWorkItem(Context->PhysicalDeviceObject);
+  if (receipts->WorkItem == NULL) {
+    ExFreePoolWithTag(receipts, ADMISSION_POOL_TAG);
+    return STATUS_INSUFFICIENT_RESOURCES;
+  }
+  Context->PagingReceipts = receipts;
+  return STATUS_SUCCESS;
+}
+
+_Use_decl_annotations_ VOID AdmissionPagingReceiptsStop(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_PAGING_RECEIPTS *receipts;
+  LARGE_INTEGER timeout;
+  KIRQL oldIrql;
+  if (Context == NULL || Context->PagingReceipts == NULL) return;
+  receipts = (ADMISSION_PAGING_RECEIPTS *)Context->PagingReceipts;
+  KeAcquireSpinLock(&receipts->Lock, &oldIrql);
+  InterlockedExchange(&receipts->Stopping, 1);
+  KeReleaseSpinLock(&receipts->Lock, oldIrql);
+  timeout.QuadPart = -20000000LL;
+  /* A worker still running after 2 s keeps its storage (leaked, not freed). */
+  if (KeWaitForSingleObject(&receipts->Idle, Executive, KernelMode, FALSE,
+                            &timeout) != STATUS_SUCCESS)
+    return;
+  Context->PagingReceipts = NULL;
+  IoFreeWorkItem(receipts->WorkItem);
+  ExFreePoolWithTag(receipts, ADMISSION_POOL_TAG);
+}
+
+_Use_decl_annotations_ void AdmissionRecordGpuvaG3Flush(
+    ADMISSION_CONTEXT *Context, const ADMISSION_G3_FLUSH_RECEIPT *Receipt) {
+  /* EXP996: called for every flush; only failures reach the registry. */
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      Receipt == NULL ||
+      (NT_SUCCESS((NTSTATUS)Receipt->ResolveStatus) &&
+       NT_SUCCESS((NTSTATUS)Receipt->BrokerStatus)))
+    return;
+  AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptFlush, Receipt);
 }
 
 _Use_decl_annotations_ void AdmissionRecordGpuvaG3PagingFailure(
     ADMISSION_CONTEXT *Context,
     const ADMISSION_G3_PAGING_FAILURE *Failure) {
-  HANDLE key = NULL;
   if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
-      Failure == NULL || Failure->Branch == 0u ||
-      KeGetCurrentIrql() != PASSIVE_LEVEL)
+      Failure == NULL || Failure->Branch == 0u)
     return;
-  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(
-          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
-          KEY_SET_VALUE, &key)))
-    return;
-  WriteBinary(key, L"Wom1G3PagingFailure", Failure, sizeof(*Failure));
-  (void)ZwFlushKey(key);
-  ZwClose(key);
+  /* Written (and flushed) by AdmissionPagingReceiptWorker. */
+  AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptFailure, Failure);
 }
 
 /* One 16-byte receipt per adapter instance; never overwrite the first cause. */
@@ -2106,17 +2244,10 @@ _Use_decl_annotations_ void AdmissionRecordG3Poison(
 
 _Use_decl_annotations_ void AdmissionRecordG3PagingWait(
     ADMISSION_CONTEXT *Context) {
-  HANDLE key = NULL;
-  ADMISSION_G3_PAGING_WAIT_RECEIPT copy;
   if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
-      KeGetCurrentIrql() != PASSIVE_LEVEL ||
-      InterlockedExchange(&Context->G3PagingWaitDirty, 0) == 0)
+      InterlockedCompareExchange(&Context->G3PagingWaitDirty, 0, 0) == 0)
     return;
-  RtlCopyMemory(&copy, &Context->G3PagingWait, sizeof(copy));
-  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
-          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
-  WriteBinary(key, L"Wom1G3PagingWait", &copy, sizeof(copy));
-  ZwClose(key);
+  AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptWait, NULL);
 }
 
 _Use_decl_annotations_ void AdmissionRecordG3LeafHistory(
@@ -2186,18 +2317,10 @@ _Use_decl_annotations_ void AdmissionRecordG4SubmitFailure(
 
 _Use_decl_annotations_ void AdmissionRecordGpuvaG3UnpublishedGroups(
     ADMISSION_CONTEXT *Context, const ULONGLONG *Counts) {
-  HANDLE key = NULL;
   if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
-      Counts == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+      Counts == NULL)
     return;
-  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(
-          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
-          KEY_SET_VALUE, &key)))
-    return;
-  WriteBinary(key, L"Wom1G3UnpublishedGroups", Counts,
-              32u * sizeof(*Counts));
-  (void)ZwFlushKey(key);
-  ZwClose(key);
+  AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptUnpublished, Counts);
 }
 #endif
 

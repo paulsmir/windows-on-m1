@@ -27,7 +27,9 @@ class LevelOneFailureReceiptTests(unittest.TestCase):
             paging.rindex("ExReleaseFastMutex(&state->Lock);"),
             paging.rindex("AdmissionRecordGpuvaG3PagingFailure(adapter, &failure)"))
         self.assertIn('L"Wom1G3PagingFailure"', receipts)
-        self.assertIn("ZwFlushKey(key)", receipts.split("void AdmissionRecordGpuvaG3PagingFailure(", 1)[1])
+        # EXP1073: staged in the paging DDI, written and flushed by the worker.
+        worker = receipts.split("static VOID AdmissionPagingReceiptWorker(", 1)[1].split("\n}\n", 1)[0]
+        self.assertIn("L\"Wom1G3PagingFailure\", &failure,\n                                  sizeof(failure), TRUE)", worker)
 
 
 if __name__ == "__main__":

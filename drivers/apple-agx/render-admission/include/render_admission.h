@@ -529,6 +529,8 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG G4DrawSnapshotDirty;
   volatile LONG G3PteWaitDirty;
   volatile LONG G3PagingWaitDirty;
+  /* EXP1073: paging-DDI receipts staged for a work item (receipts.c). */
+  PVOID PagingReceipts;
   ADMISSION_PAGING_PROFILE PagingProfile;
   LONGLONG PagingDispatchQpc, PagingNotifyQpc;
   /* EXP997 diagnostic: first poisoned G3 process seen at completion. */
@@ -1089,6 +1091,10 @@ void AdmissionRecordGpuvaG3UnpublishedGroups(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_reads_(32) const ULONGLONG *Counts);
 BOOLEAN AdmissionGpuvaG3DeclarationReady(_In_ const ADMISSION_CONTEXT *Context);
+_IRQL_requires_(PASSIVE_LEVEL)
+NTSTATUS AdmissionPagingReceiptsStart(_In_ ADMISSION_CONTEXT *Context);
+_IRQL_requires_(PASSIVE_LEVEL)
+VOID AdmissionPagingReceiptsStop(_In_ ADMISSION_CONTEXT *Context);
 #endif
 _IRQL_requires_(PASSIVE_LEVEL)
 void AdmissionFlushSourceAddressReceipt(_In_ ADMISSION_CONTEXT *Context);
