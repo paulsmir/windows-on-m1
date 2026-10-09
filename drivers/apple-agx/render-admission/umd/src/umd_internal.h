@@ -59,6 +59,9 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   /* EXP1022: CPU-only staging of an unshared slot is ordinary process memory
    * (EXP1016-1021: VidMm CPU mappings read at ~80 MB/s vs 2.5 GB/s). */
   BYTE *PrivateStaging;
+  /* EXP1083: PrivateStaging was allocated with MEM_WRITE_WATCH; the watch is
+   * reset whenever the staging is proven equal to the canonical copy. */
+  BOOL WriteWatch;
   /* EXP1025/EXP1027: one CPU-visible class allocation (local segment) is both
    * the GPU and the CPU copy (no staging, no copy escapes). */
   BOOL SystemDirect;

@@ -86,7 +86,7 @@ class StagingSync(unittest.TestCase):
         # The record is refreshed only on success, after the chunk loop.
         record = body.index('AdmissionUmdStagingRecord(&slot->Sync,')
         self.assertGreater(record, body.index('offset+=count;'))
-        self.assertTrue(re.search(r'if\(success\)\s*AdmissionUmdStagingRecord', body))
+        self.assertTrue(re.search(r'if\(success\)\s*\{?\s*AdmissionUmdStagingRecord', body))
 
 
 if __name__ == '__main__':
