@@ -184,6 +184,8 @@ typedef struct { ADMISSION_PAGING_MARKER Header; APPLE_AGX_PHYSICAL_PAGING_PLAN 
 } ADMISSION_PAGING_RECORD;
 #define ADMISSION_PAGING_MAGIC 0x504d4152u
 #define ADMISSION_PAGING_VERSION 1u
+#define ADMISSION_PAGING_LOCAL_SEGMENT 2u
+#define ADMISSION_PAGING_LOCAL_RUN_MAX 0x400000u
 typedef union { struct { UINT Paging:1,Present:1,RedirectedPresent:1,
   NullRendering:1,Flip:1,FlipWithNoWait:1,ContextSwitch:1,Resubmission:1,
   VirtualMachineData:1,Reserved:23; }; UINT Value; }
@@ -497,6 +499,7 @@ static BOOLEAN AdmissionPagingQuiescent(ADMISSION_CONTEXT *a) {
   return replay_paging_pending==0;
 }
 static void AdmissionPagingNoteEncoded(ADMISSION_CONTEXT *a,UINT n) {(void)a;replay_encoded_records+=n;}
+int AdmissionPagingLocalRun(const ADMISSION_PAGING_RECORD *);
 int AdmissionPagingRecordsValid(const ADMISSION_PAGING_RECORD *,UINT,UINT,UINT);
 static UINT replay_paging_submits,replay_paging_submit_bytes,replay_paging_submit_fence;
 static NTSTATUS AdmissionCpuQueueSubmit(ADMISSION_CONTEXT *adapter,

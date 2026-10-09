@@ -793,6 +793,37 @@ static NTSTATUS AdmissionG3EncodeVirtualPaging(
           &record.SourceIpa, &record.SourceSegment);
       if (!NT_SUCCESS(status)) return status;
     }
+    /* Extend a local-segment record across physically contiguous pages; the
+     * first page that is not local or not contiguous starts a new record. */
+    if (AdmissionPagingLocalRun(&record) &&
+        (record.Kind != AdmissionPagingVirtualTransfer ||
+         ((src ^ dst) & 0xfffULL) == 0ULL)) {
+      ExAcquireFastMutex(&state->Lock);
+      while (offset + bytes < total && bytes < ADMISSION_PAGING_LOCAL_RUN_MAX) {
+        ULONGLONG next_ipa;
+        UINT next_segment;
+        UINT chunk = total - offset - bytes < 0x1000ULL ?
+            (UINT)(total - offset - bytes) : 0x1000u;
+        if (chunk > ADMISSION_PAGING_LOCAL_RUN_MAX - bytes)
+          chunk = ADMISSION_PAGING_LOCAL_RUN_MAX - bytes;
+        if (!NT_SUCCESS(AdmissionG3ResolveLogicalVa(process,
+                context->GpuvaG3RootIpa, dst + bytes, TRUE,
+                &next_ipa, &next_segment)) ||
+            next_segment != ADMISSION_MEMORY_LOCAL_SEGMENT ||
+            next_ipa != record.DestinationIpa + bytes)
+          break;
+        if (record.Kind == AdmissionPagingVirtualTransfer &&
+            (!NT_SUCCESS(AdmissionG3ResolveLogicalVa(process,
+                 context->GpuvaG3RootIpa, src + bytes, FALSE,
+                 &next_ipa, &next_segment)) ||
+             next_segment != ADMISSION_MEMORY_LOCAL_SEGMENT ||
+             next_ipa != record.SourceIpa + bytes))
+          break;
+        bytes += chunk;
+      }
+      ExReleaseFastMutex(&state->Lock);
+      record.Bytes = bytes;
+    }
     RtlCopyMemory(args->pDmaBuffer, &marker, sizeof(marker));
     RtlCopyMemory(args->pDmaBufferPrivateData, &record, sizeof(record));
     args->pDmaBuffer = (PUCHAR)args->pDmaBuffer + sizeof(marker);
@@ -815,8 +846,7 @@ static NTSTATUS AdmissionG3MapPagingIpa(
     PVOID *system_mapping) {
   PHYSICAL_ADDRESS physical;
   ULONGLONG page = ipa & ~0xfffULL;
-  if (address == NULL || system_mapping == NULL || bytes == 0u ||
-      bytes > 0x1000u - (UINT)(ipa & 0xfffu))
+  if (address == NULL || system_mapping == NULL || bytes == 0u)
     return STATUS_INVALID_PARAMETER;
   *address = NULL;
   *system_mapping = NULL;
@@ -829,7 +859,8 @@ static NTSTATUS AdmissionG3MapPagingIpa(
         (SIZE_T)(ipa - view->GuestIpaAddress);
     return STATUS_SUCCESS;
   }
-  if (segment != 0u && segment != ADMISSION_MEMORY_APERTURE_SEGMENT)
+  if ((segment != 0u && segment != ADMISSION_MEMORY_APERTURE_SEGMENT) ||
+      bytes > 0x1000u - (UINT)(ipa & 0xfffu))
     return STATUS_INVALID_PARAMETER;
   if (page > 0x7fffffffffffffffULL) return STATUS_INVALID_ADDRESS;
   physical.QuadPart = (LONGLONG)page;
@@ -838,6 +869,29 @@ static NTSTATUS AdmissionG3MapPagingIpa(
   *address = (PUCHAR)*system_mapping + (SIZE_T)(ipa & 0xfffu);
   UNREFERENCED_PARAMETER(adapter);
   return STATUS_SUCCESS;
+}
+
+/* Byte i of a fill is byte (phase + i) & 3 of the pattern.  The bulk is
+ * written as aligned 8-byte words: the pattern repeats every 4 bytes. */
+static VOID AdmissionG3FillPattern(PUCHAR destination, UINT bytes,
+    UINT pattern, UINT phase) {
+  const UCHAR *p = (const UCHAR *)&pattern;
+  UCHAR lanes[8];
+  ULONGLONG word;
+  UINT index = 0u, lane;
+  while (index < bytes && ((ULONG_PTR)(destination + index) & 7u) != 0u) {
+    destination[index] = p[(phase + index) & 3u];
+    ++index;
+  }
+  if (bytes - index >= 8u) {
+    for (lane = 0u; lane < 8u; ++lane)
+      lanes[lane] = p[(phase + index + lane) & 3u];
+    RtlCopyMemory(&word, lanes, sizeof(word));
+    for (; bytes - index >= 8u; index += 8u)
+      *(ULONGLONG *)(destination + index) = word;
+  }
+  for (; index < bytes; ++index)
+    destination[index] = p[(phase + index) & 3u];
 }
 
 NTSTATUS AdmissionG3ExecuteVirtualPaging(
@@ -851,7 +905,9 @@ NTSTATUS AdmissionG3ExecuteVirtualPaging(
       (record->Kind != AdmissionPagingVirtualFill &&
        record->Kind != AdmissionPagingVirtualTransfer &&
        record->Kind != AdmissionPagingMonitoredFence) ||
-      record->Bytes == 0u || record->Bytes > 0x1000u ||
+      record->Bytes == 0u ||
+      record->Bytes > (AdmissionPagingLocalRun(record) ?
+          ADMISSION_PAGING_LOCAL_RUN_MAX : 0x1000u) ||
       KeGetCurrentIrql() != PASSIVE_LEVEL)
     return STATUS_INVALID_PARAMETER;
   status = AdmissionMemoryRuntimeLocalView(adapter, &view);
@@ -866,9 +922,8 @@ NTSTATUS AdmissionG3ExecuteVirtualPaging(
         &source, &source_mapping);
     if (NT_SUCCESS(status)) RtlMoveMemory(destination, source, record->Bytes);
   } else if (record->Kind == AdmissionPagingVirtualFill) {
-    const UCHAR *pattern = (const UCHAR *)&record->FillPattern;
-    for (index = 0u; index < record->Bytes; ++index)
-      destination[index] = pattern[(record->PatternOffset + index) & 3u];
+    AdmissionG3FillPattern(destination, record->Bytes, record->FillPattern,
+                           record->PatternOffset);
   } else {
     const UCHAR *value = (const UCHAR *)&record->FenceValue;
     if (record->PatternOffset >= sizeof(record->FenceValue) ||

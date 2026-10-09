@@ -40,11 +40,11 @@ FUNCTIONS = {
         "AdmissionG3UpdateLeaf", "AdmissionG3RecordLeaf", "AdmissionG3RecordLeafEarly", "AdmissionG3FindPagingEdge",
         "AdmissionG3ResolveLogicalVa", "AdmissionG3SnapshotAperture",
         "AdmissionG3EncodeVirtualPaging",
-        "AdmissionG3MapPagingIpa", "AdmissionG3ExecuteVirtualPaging",
+        "AdmissionG3MapPagingIpa", "AdmissionG3FillPattern", "AdmissionG3ExecuteVirtualPaging",
         "AdmissionG3NotePagingWait", "AdmissionG3SnapPagingWait", "AdmissionGpuvaG3NoteAllocationPaging", "AdmissionGpuvaG3BuildPagingBuffer",
     ],
     "callbacks.c": ["AdmissionDdiEscape", "AdmissionDdiCreateContext", "AdmissionDdiDestroyContext"],
-    "render_paging.c": ["AdmissionPagingRecordsValid"],
+    "render_paging.c": ["AdmissionPagingLocalRun", "AdmissionPagingRecordsValid"],
 }
 
 
@@ -117,6 +117,7 @@ def generate(revision=None, function_revisions=None):
                     "AdmissionG3SnapshotAperture",
                     "AdmissionG3EncodeVirtualPaging",
                     "AdmissionG3MapPagingIpa",
+                    "AdmissionG3FillPattern",
                     "AdmissionG3ExecuteVirtualPaging"):
                 function_source = (SRC / filename).read_text()
             if name in function_revisions:

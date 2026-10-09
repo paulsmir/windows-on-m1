@@ -5,6 +5,12 @@
 
 #define ADMISSION_PAGING_MAGIC 0x504d4152u /* "RAMP" */
 #define ADMISSION_PAGING_VERSION 1u
+/* ADMISSION_MEMORY_LOCAL_SEGMENT.  Its CPU view is linear, so a virtual
+ * fill/transfer record may span physically contiguous pages there (up to
+ * ADMISSION_PAGING_LOCAL_RUN_MAX bytes); any other segment is one 4 KiB
+ * page per record. */
+#define ADMISSION_PAGING_LOCAL_SEGMENT 2u
+#define ADMISSION_PAGING_LOCAL_RUN_MAX 0x400000u
 
 enum {
   AdmissionPagingPhysical = 0u,
@@ -38,6 +44,8 @@ typedef struct _ADMISSION_PAGING_RECORD {
 int AdmissionPagingFenceCanSubmit(unsigned int LastSubmitted,
                                   unsigned int Candidate,
                                   unsigned int Resubmission);
+/* Nonzero when every byte of the record lies in the local segment. */
+int AdmissionPagingLocalRun(const ADMISSION_PAGING_RECORD *Record);
 int AdmissionPagingRecordsValid(const ADMISSION_PAGING_RECORD *Records,
                                 unsigned int RecordCount,
                                 unsigned int MaximumRecords,

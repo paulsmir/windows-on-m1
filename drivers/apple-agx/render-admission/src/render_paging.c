@@ -14,6 +14,14 @@ int AdmissionPagingFenceCanSubmit(unsigned int LastSubmitted,
   return distance != 0u && distance < 0x80000000u;
 }
 
+int AdmissionPagingLocalRun(const ADMISSION_PAGING_RECORD *Record) {
+  return (Record->Kind == AdmissionPagingVirtualFill ||
+          Record->Kind == AdmissionPagingVirtualTransfer) &&
+      Record->DestinationSegment == ADMISSION_PAGING_LOCAL_SEGMENT &&
+      (Record->Kind != AdmissionPagingVirtualTransfer ||
+       Record->SourceSegment == ADMISSION_PAGING_LOCAL_SEGMENT);
+}
+
 int AdmissionPagingRecordsValid(const ADMISSION_PAGING_RECORD *Records,
                                 unsigned int RecordCount,
                                 unsigned int MaximumRecords,
@@ -36,12 +44,14 @@ int AdmissionPagingRecordsValid(const ADMISSION_PAGING_RECORD *Records,
           Records[index].Plan.Kind > AppleAgxPhysicalPagingDiscard)
         return 0;
     } else if (Records[index].Bytes == 0u ||
-               Records[index].Bytes > 0x1000u ||
-               (Records[index].Kind == AdmissionPagingVirtualTransfer &&
-                (Records[index].SourceIpa & 0xfffu) +
-                    Records[index].Bytes > 0x1000u) ||
-               (Records[index].DestinationIpa & 0xfffu) +
-                   Records[index].Bytes > 0x1000u ||
+               Records[index].Bytes > ADMISSION_PAGING_LOCAL_RUN_MAX ||
+               (!AdmissionPagingLocalRun(&Records[index]) &&
+                (Records[index].Bytes > 0x1000u ||
+                 (Records[index].Kind == AdmissionPagingVirtualTransfer &&
+                  (Records[index].SourceIpa & 0xfffu) +
+                      Records[index].Bytes > 0x1000u) ||
+                 (Records[index].DestinationIpa & 0xfffu) +
+                     Records[index].Bytes > 0x1000u)) ||
                (Records[index].Kind == AdmissionPagingMonitoredFence ?
                     Records[index].PatternOffset >=
                         sizeof(Records[index].FenceValue) ||

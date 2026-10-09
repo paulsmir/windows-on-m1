@@ -27,6 +27,7 @@ static void update(ADMISSION_CONTEXT *adapter, HANDLE process, UINT level,
 }
 #include "g3_system_lifetime_cases.c"
 #include "g3_paging_cpu_only_cases.c"
+#include "g3_paging_coalesce_cases.c"
 #include "g3_r133_publication_cases.c"
 #include "g3_r135_root_reuse_cases.c"
 #include "g3_r137_reservation_cases.c"
@@ -43,6 +44,7 @@ static void r165_end_job(void) {
 int main(void) {
   if(getenv("G3_REPLAY_R168")) {r168_capacity_cases();return 0;}
   if(getenv("G3_REPLAY_PAGING_CPU_ONLY")) {paging_cpu_only_cases();return 0;}
+  if(getenv("G3_REPLAY_PAGING_COALESCE")) {paging_coalesce_cases();return 0;}
   if (getenv("G3_REPLAY_R145")) { r145_copy_cases(); return 0; }
   if (getenv("G3_REPLAY_R144")) { r144_local_bounds_cases(); return 0; }
   if (getenv("G3_REPLAY_RESERVE_BASE"))
@@ -816,13 +818,17 @@ int main(void) {
             records*sizeof(ADMISSION_PAGING_RECORD);
         submission.SubmissionFenceId=1;
         submission.Flags.Paging=1;
-        assert(records==34 && submission.DmaBufferSize==0x220 &&
-               submission.DmaBufferPrivateDataSize==0xff0);
+        /* EXP797 receipted 34 one-page records (0x220/0xff0) per pass. The
+         * span is contiguous local memory, so it is now 4 MiB + 1.5 MiB. */
+        assert(records==2 &&
+               submission.DmaBufferSize==2*sizeof(ADMISSION_PAGING_MARKER) &&
+               submission.DmaBufferPrivateDataSize==
+                   2*sizeof(ADMISSION_PAGING_RECORD));
         expect_ok("EXP797 virtual paging Submit packet",
             AdmissionGpuvaG3SubmitVirtualPaging(&adapter,
                 (ADMISSION_RENDER_CONTEXT *)cc.hContext,&submission));
         assert(replay_paging_submits==1 &&
-               replay_paging_submit_bytes==0xff0 &&
+               replay_paging_submit_bytes==2*sizeof(ADMISSION_PAGING_RECORD) &&
                replay_paging_submit_fence==1);
         submission.Flags.Value=0;
         assert(AdmissionGpuvaG3SubmitVirtualPaging(&adapter,
@@ -842,7 +848,7 @@ int main(void) {
       if (status==STATUS_SUCCESS) break;
       assert(passes<64);
     } while (1);
-    assert(passes>1 && fill.MultipassOffset==0x580000u);
+    assert(passes==1 && fill.MultipassOffset==0x580000u);
     for (UINT i=0;i<0x580000u;i++)
       assert(local_cpu[0x200000+i]==
           ((unsigned char *)&fill.FillVirtual.FillPattern)[i&3u]);
