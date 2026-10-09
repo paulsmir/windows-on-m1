@@ -414,6 +414,23 @@ typedef struct _ADMISSION_PAGING_CENSUS {
   ULONG Reserved;
   ADMISSION_PAGING_CENSUS_ENTRY Entries[ADMISSION_PAGING_CENSUS_ENTRIES];
 } ADMISSION_PAGING_CENSUS;
+/* EXP1123 receipt-only: the last 256 allocation creations (Kind 1) and
+ * destructions (Kind 2), to name the creator and lifetime of allocations
+ * VidMm fills and transfers (census Allocation is the same handle).
+ * Flags: bit0 CpuVisible, bit1 WrittenPrimary, bit2 Presentation,
+ * bits 8-15 preferred segment, bits 16-23 read segment set. */
+#define ADMISSION_ALLOCATION_LIFE_ENTRIES 256u
+typedef struct _ADMISSION_ALLOCATION_LIFE_ENTRY {
+  ULONGLONG Qpc, Allocation, Bytes;
+  ULONG Kind, ProcessId, Width, Height;
+  ULONG Format, Type, ClassId, Flags, CreateFlags, Reserved;
+} ADMISSION_ALLOCATION_LIFE_ENTRY;
+typedef struct _ADMISSION_ALLOCATION_LIFE {
+  ULONG Version, Bytes;
+  volatile LONG Next;
+  ULONG Reserved;
+  ADMISSION_ALLOCATION_LIFE_ENTRY Entries[ADMISSION_ALLOCATION_LIFE_ENTRIES];
+} ADMISSION_ALLOCATION_LIFE;
 /* EXP987 receipt-only: R155/R165 BuildPagingBuffer waits for a process's
  * in-flight job. Snapshot of the condition when the wait began. */
 typedef struct _ADMISSION_G3_PAGING_WAIT_RECEIPT {
@@ -548,6 +565,7 @@ typedef struct _ADMISSION_CONTEXT {
   PVOID PagingReceipts;
   ADMISSION_PAGING_PROFILE PagingProfile;
   ADMISSION_PAGING_CENSUS PagingCensus;
+  ADMISSION_ALLOCATION_LIFE AllocationLife;
   LONGLONG PagingDispatchQpc, PagingNotifyQpc;
   /* EXP997 diagnostic: first poisoned G3 process seen at completion. */
   volatile LONG G3PoisonClaim;

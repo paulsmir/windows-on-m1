@@ -311,6 +311,20 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiGetStandardAllocationDriverData(
   return status;
 }
 
+/* EXP1123 receipt-only: memory ring, published with the paging profile. */
+static ADMISSION_ALLOCATION_LIFE_ENTRY *AdmissionAllocationLifeSlot(
+    ADMISSION_CONTEXT *Context, ULONG Kind, PVOID Allocation) {
+  ADMISSION_ALLOCATION_LIFE_ENTRY *e;
+  ULONG slot = (ULONG)InterlockedIncrement(&Context->AllocationLife.Next) - 1u;
+  e = &Context->AllocationLife.Entries[slot % ADMISSION_ALLOCATION_LIFE_ENTRIES];
+  RtlZeroMemory(e, sizeof(*e));
+  e->Qpc = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+  e->Allocation = (ULONGLONG)(ULONG_PTR)Allocation;
+  e->Kind = Kind;
+  e->ProcessId = HandleToULong(PsGetCurrentProcessId());
+  return e;
+}
+
 static NTSTATUS AdmissionCreateAllocationImpl(
     HANDLE Adapter, DXGKARG_CREATEALLOCATION *Args) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
@@ -482,9 +496,33 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   return STATUS_SUCCESS;
 }
 
+static VOID AdmissionAllocationLifeCreate(ADMISSION_CONTEXT *Context,
+    const DXGKARG_CREATEALLOCATION *Args) {
+  const DXGK_ALLOCATIONINFO *info = &Args->pAllocationInfo[0];
+  const ADMISSION_ALLOCATION_HANDLE *allocation =
+      (const ADMISSION_ALLOCATION_HANDLE *)info->hAllocation;
+  ADMISSION_ALLOCATION_LIFE_ENTRY *e;
+  if (allocation == NULL) return;
+  e = AdmissionAllocationLifeSlot(Context, 1u, info->hAllocation);
+  e->Bytes = info->Size;
+  e->Width = allocation->Object.Description.Width;
+  e->Height = allocation->Object.Description.Height;
+  e->Format = allocation->Object.Description.Format;
+  e->Type = allocation->Object.Description.Type;
+  e->ClassId = allocation->Win32ClassId;
+  e->Flags = (allocation->Object.Description.CpuVisible ? 1u : 0u) |
+      (allocation->WrittenPrimary ? 2u : 0u) |
+      (allocation->Presentation ? 4u : 0u) |
+      ((info->PreferredSegment.SegmentId0 & 0xffu) << 8) |
+      ((info->SupportedReadSegmentSet & 0xffu) << 16);
+  e->CreateFlags = Args->Flags.Value;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateAllocation(
     HANDLE Adapter, DXGKARG_CREATEALLOCATION *Args) {
   NTSTATUS status = AdmissionCreateAllocationImpl(Adapter, Args);
+  if (NT_SUCCESS(status))
+    AdmissionAllocationLifeCreate((ADMISSION_CONTEXT *)Adapter, Args);
 #if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0 || defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
 #endif
@@ -506,6 +544,8 @@ static NTSTATUS AdmissionDestroyAllocationImpl(
   if (context == NULL || Args == NULL || Args->hResource != NULL ||
       Args->NumAllocations == 0u || Args->pAllocationList == NULL)
     return STATUS_INVALID_PARAMETER;
+  for (index = 0u; index < Args->NumAllocations && index < 8u; ++index)
+    (void)AdmissionAllocationLifeSlot(context, 2u, Args->pAllocationList[index]);
   for (index = 0u; index < Args->NumAllocations; ++index) {
     ADMISSION_ALLOCATION_HANDLE *allocation =
         (ADMISSION_ALLOCATION_HANDLE *)Args->pAllocationList[index];

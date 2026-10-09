@@ -2707,5 +2707,9 @@ _Use_decl_annotations_ void AdmissionRecordPagingProfile(
   Context->PagingCensus.Bytes = sizeof(Context->PagingCensus);
   WriteBinary(key, L"Wom1PagingCensus1121", &Context->PagingCensus,
               sizeof(Context->PagingCensus));
+  Context->AllocationLife.Version = 1u;
+  Context->AllocationLife.Bytes = sizeof(Context->AllocationLife);
+  WriteBinary(key, L"Wom1AllocLife1123", &Context->AllocationLife,
+              sizeof(Context->AllocationLife));
   ZwClose(key);
 }
