@@ -325,6 +325,46 @@ static void TestJoinedPublishAndExactCompletion(void) {
                                                 &completion));
 }
 
+/* Multi-job phase 3 (Asahi workqueue.rs/event.rs): a job is complete when
+ * its event fired and its stamp reached its value. A later job on the same
+ * ring may already have moved the done pointer past this job's entries. */
+static void TestStampCompletesPastDonePointer(void) {
+  TEST_FIXTURE fixture;
+  APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
+  APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
+  unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
+
+  TestInitialize(&fixture);
+  submission = TestSubmission(&fixture, 42u);
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  /* A later job's entries were published after this job's (write 4). */
+  fixture.D3Write = fixture.TaWrite = 4u;
+  /* Not yet retired: done behind this job's entries. */
+  fixture.D3Stamp = submission.D3.ExpectedStamp;
+  fixture.D3Done = 1u;
+  TestEvent(event, 9u, APPLE_AGX_G13_EVENT_COUNT);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(
+             &fixture.Runtime, event, sizeof(event)) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(!fixture.Runtime.D3Pending.Complete);
+  fixture.D3Done = 3u;
+  TestEvent(event, 9u, APPLE_AGX_G13_EVENT_COUNT);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(
+             &fixture.Runtime, event, sizeof(event)) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  fixture.TaStamp = submission.Ta.ExpectedStamp + 0x100u;
+  fixture.TaDone = 3u;
+  TestEvent(event, 7u, APPLE_AGX_G13_EVENT_COUNT);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(
+             &fixture.Runtime, event, sizeof(event)) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime,
+                                               &completion));
+  assert(completion.Fence == 42u);
+  assert(completion.Status == AppleAgxG13QueueCompletionSuccess);
+}
+
 static void TestPreparedRangesNeedNoCopy(void) {
   TEST_FIXTURE fixture;
   APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
@@ -715,6 +755,7 @@ static void TestReadFailureCannotMasqueradeAsZeroPointer(void) {
 unsigned AppleAgxG13QueueRuntimeContractTests(void) {
   TestComputeThenRenderDependency();
   TestJoinedPublishAndExactCompletion();
+  TestStampCompletesPastDonePointer();
   TestPreparedRangesNeedNoCopy();
   TestFirstAndLaterTaPublicationContract();
   TestCountsAreBoundedAndQueueSpecific();

@@ -410,6 +410,7 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ObserveQueue(
     APPLE_AGX_G13_QUEUE_PENDING *Pending) {
   APPLE_AGX_BACKEND_U32 stamp;
   APPLE_AGX_BACKEND_U32 done;
+  APPLE_AGX_BACKEND_U32 write;
 
   if (Pending->Complete)
     return APPLE_AGX_BACKEND_TRUE;
@@ -419,11 +420,13 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ObserveQueue(
     return APPLE_AGX_BACKEND_TRUE;
   if (!Runtime->Io.ReadU32(Runtime->Io.Context, Binding->Stamp, &stamp) ||
       !Runtime->Io.ReadU32(Runtime->Io.Context, Binding->GpuDonePointer,
-                           &done))
+                           &done) ||
+      !Runtime->Io.ReadU32(Runtime->Io.Context, Binding->CpuWritePointer,
+                           &write))
     return APPLE_AGX_BACKEND_FALSE;
-  if (AppleAgxG13CompletionSatisfied(
+  if (AppleAgxG13CompletionSatisfiedWindow(
           Event, Pending->EventNumber, stamp, Pending->ExpectedStamp, done,
-          Pending->ExpectedDonePointer))
+          Pending->ExpectedDonePointer, write, Binding->RingCapacity))
     Pending->Complete = APPLE_AGX_BACKEND_TRUE;
   return APPLE_AGX_BACKEND_TRUE;
 }

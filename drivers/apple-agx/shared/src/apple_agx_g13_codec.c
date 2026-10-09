@@ -153,6 +153,29 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13EventHasNumber(
              : APPLE_AGX_BACKEND_FALSE;
 }
 
+/* Asahi workqueue.rs/event.rs: the job's stamp decides. Its ring entries
+ * must also be retired: the done pointer is at or past them but never past
+ * what the CPU published. With one job in flight this is equality. */
+APPLE_AGX_BACKEND_BOOL AppleAgxG13CompletionSatisfiedWindow(
+    const APPLE_AGX_G13_EVENT *Event, APPLE_AGX_BACKEND_U32 EventNumber,
+    APPLE_AGX_BACKEND_U32 ObservedStamp,
+    APPLE_AGX_BACKEND_U32 ExpectedStamp,
+    APPLE_AGX_BACKEND_U32 ObservedDonePointer,
+    APPLE_AGX_BACKEND_U32 ExpectedDonePointer,
+    APPLE_AGX_BACKEND_U32 WritePointer, APPLE_AGX_BACKEND_U32 Capacity) {
+  if (ExpectedStamp == 0u || Capacity == 0u ||
+      Capacity > APPLE_AGX_G13_RING_CAPACITY ||
+      !AppleAgxG13EventHasNumber(Event, EventNumber) ||
+      ObservedDonePointer >= Capacity || ExpectedDonePointer >= Capacity ||
+      WritePointer >= Capacity ||
+      (ObservedDonePointer + Capacity - ExpectedDonePointer) % Capacity >
+          (WritePointer + Capacity - ExpectedDonePointer) % Capacity)
+    return APPLE_AGX_BACKEND_FALSE;
+  return (APPLE_AGX_BACKEND_U32)(ObservedStamp - ExpectedStamp) < 0x80000000u
+             ? APPLE_AGX_BACKEND_TRUE
+             : APPLE_AGX_BACKEND_FALSE;
+}
+
 APPLE_AGX_BACKEND_BOOL AppleAgxG13CompletionSatisfied(
     const APPLE_AGX_G13_EVENT *Event, APPLE_AGX_BACKEND_U32 EventNumber,
     APPLE_AGX_BACKEND_U32 ObservedStamp,

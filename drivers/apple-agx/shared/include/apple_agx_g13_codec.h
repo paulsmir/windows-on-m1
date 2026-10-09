@@ -85,5 +85,15 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13CompletionSatisfied(
     APPLE_AGX_BACKEND_U32 ExpectedStamp,
     APPLE_AGX_BACKEND_U32 ObservedDonePointer,
     APPLE_AGX_BACKEND_U32 ExpectedDonePointer);
+/* Multi-job phase 3: as above, but the done pointer may have moved on to a
+ * later job's entries: it must lie in [ExpectedDonePointer, WritePointer]
+ * on a ring of Capacity entries. */
+APPLE_AGX_BACKEND_BOOL AppleAgxG13CompletionSatisfiedWindow(
+    const APPLE_AGX_G13_EVENT *Event, APPLE_AGX_BACKEND_U32 EventNumber,
+    APPLE_AGX_BACKEND_U32 ObservedStamp,
+    APPLE_AGX_BACKEND_U32 ExpectedStamp,
+    APPLE_AGX_BACKEND_U32 ObservedDonePointer,
+    APPLE_AGX_BACKEND_U32 ExpectedDonePointer,
+    APPLE_AGX_BACKEND_U32 WritePointer, APPLE_AGX_BACKEND_U32 Capacity);
 
 #endif
