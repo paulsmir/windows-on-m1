@@ -8,11 +8,7 @@
 #define APPLE_AGX_G3_PRIVATE_UNIT 0x10000u
 /* Global physical backing is independent of each process reservation. */
 #define APPLE_AGX_G3_PRIVATE_UNITS 1024u
-/* EXP1094: 192 units (12 MiB). A process holds its 66-unit buffer manager
- * plus 7-11 units per scene; EXP1093 (two submissions in flight, eight
- * cached scenes) exhausted DWM's 128-unit budget on every miss (3454 pool
- * pressure evictions, 76 % hits, broker 45 -> 137 ms/s). */
-#define APPLE_AGX_G3_PROCESS_UNITS 192u
+#define APPLE_AGX_G3_PROCESS_UNITS 128u
 #define APPLE_AGX_G3_PRIVATE_VA_BYTES 0x02000000ULL
 #define APPLE_AGX_G3_PRIVATE_VA_UNITS 512u
 

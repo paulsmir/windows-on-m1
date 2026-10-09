@@ -13,14 +13,14 @@ typedef struct { APPLE_AGX_G4_PRIVATE_LEASE Lease; } AGX_G4_BATCH;
 typedef struct {
   APPLE_AGX_G3_PRIVATE_POOL Pool;
   APPLE_AGX_G3_PRIVATE_MANAGER Manager;
-  APPLE_AGX_G3_PRIVATE_SCENE Scenes[8];
+  APPLE_AGX_G3_PRIVATE_SCENE Scenes[3];
   unsigned Count, Calls;
   unsigned char *Cpu;
 } KERNEL;
 static int escape(void *opaque, APPLE_AGX_G3_PRIVATE_REQUEST *q) {
   KERNEL *k=opaque; APPLE_AGX_G4_NATIVE_RENDER r={0};
   assert(q->Magic==APPLE_AGX_G3_PRIVATE_MAGIC && q->Version==1 && q->Bytes==sizeof(*q));
-  assert(q->Operation==APPLE_AGX_G3_PRIVATE_ACQUIRE && k->Count<8);
+  assert(q->Operation==APPLE_AGX_G3_PRIVATE_ACQUIRE && k->Count<3);
   ++k->Calls;r.WidthPx=q->Width;r.HeightPx=q->Height;r.Layers=q->Layers;
   r.UtileWidthPx=q->UtileWidth;r.UtileHeightPx=q->UtileHeight;r.Samples=q->Samples;
   APPLE_AGX_G3_PRIVATE_SCENE *s=&k->Scenes[k->Count];
@@ -48,13 +48,8 @@ int main(void) {
   assert(pages[0]==0xdecafbad && one.Lease.ManagerGeneration==two.Lease.ManagerGeneration);
   for(unsigned i=0;i<3;++i) assert(a[i].Va==c[i].Va);
   for(unsigned i=3;i<9;++i) assert(a[i].Va!=c[i].Va);
-  /* EXP1094: the 12 MiB process quota holds further scenes; the first one
-   * beyond it is refused without a lease. */
-  AGX_G4_BATCH more[4]={{0}}; unsigned extra=0;
-  while(extra<4 && prepare_process_buffers(&b,&more[extra],&r,c)) ++extra;
-  assert(extra<4 && (APPLE_AGX_G3_PROCESS_UNITS>128u)==(extra>0));
-  three=more[extra];
-  assert(!three.Lease.SceneId && k.Calls==3+extra);
+  assert(!prepare_process_buffers(&b,&three,&r,c));
+  assert(!three.Lease.SceneId && k.Calls==3);
   assert(!prepare_process_buffers(&b,&one,&r,c));
   free(k.Cpu);puts("g4_mesa_process_buffers_replay: PASS");return 0;
 }

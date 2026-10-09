@@ -60,19 +60,14 @@ static void r137_private_combined(void) {
     a.PhysicalDeviceObject=(PDEVICE_OBJECT)1;
     ULONG writes=private_registry_writes;
     assert(prepare_process_buffers(&umd,&second,r,scratch));
-    /* EXP1094: the 12 MiB process quota holds further scenes first. */
-    AGX_G4_BATCH more[4]={{0}}; unsigned extra=0;
-    while(extra<4 && prepare_process_buffers(&umd,&more[extra],r,scratch) &&
-          a.G3PrivateFailureClaim==0) ++extra;
-    assert(extra<4 && (APPLE_AGX_G3_PROCESS_UNITS>128u)==(extra>0));
-    refused=more[extra];
+    assert(!prepare_process_buffers(&umd,&refused,r,scratch));
     assert(a.G3PrivateFailureClaim==2 && private_registry_writes==writes+1);
     APPLE_AGX_G3_PRIVATE_FAILURE first=a.G3PrivateFailure;
     assert(first.Version==1 && first.Bytes==sizeof(first));
     assert(first.Branch==11 && first.Status==(UINT)STATUS_INSUFFICIENT_RESOURCES);
     assert(first.PreparePredicate==3 && first.FailedRange<9);
     assert(first.ProcessId==p->Graph.ProcessId && first.ContextHandle==(uintptr_t)&context);
-    assert(first.SceneCount==2+extra && first.ContextSceneCount==2+extra && first.ManagerPresent);
+    assert(first.SceneCount==2 && first.ContextSceneCount==2 && first.ManagerPresent);
     assert(!memcmp(&first,&private_registry_receipt,sizeof(first)));
     assert(!prepare_process_buffers(&umd,&refused,r,scratch));
     assert(!memcmp(&first,&a.G3PrivateFailure,sizeof(first)));
@@ -82,10 +77,6 @@ static void r137_private_combined(void) {
     drop.ManagerId=second.Lease.ManagerId;drop.ManagerGeneration=second.Lease.ManagerGeneration;
     drop.SceneId=second.Lease.SceneId;drop.SceneGeneration=second.Lease.SceneGeneration;
     assert(r137_escape_transport(&t,&drop));
-    for(unsigned i=0;i<extra;++i) {
-      drop.SceneId=more[i].Lease.SceneId;drop.SceneGeneration=more[i].Lease.SceneGeneration;
-      assert(r137_escape_transport(&t,&drop));
-    }
   }
   struct agx_resource target={.bo=&target,.va=0x20000,
       .layout={.size_B=2560ULL*1600*4}};

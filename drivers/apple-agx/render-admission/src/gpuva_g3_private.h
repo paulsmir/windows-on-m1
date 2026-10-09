@@ -55,9 +55,6 @@ enum {
   ADMISSION_G3_PRIVATE_STAT_UNMAPPED_PAGES, ADMISSION_G3_PRIVATE_STAT_CACHED_RELEASE,
   ADMISSION_G3_PRIVATE_STAT_CACHED_REAP, ADMISSION_G3_PRIVATE_STAT_RELEASE_QUEUED,
   ADMISSION_G3_PRIVATE_STAT_MISS_OTHER_GEOMETRY,
-  /* EXP1094: pool high-water after a miss, global used units | the missing
-   * process's used units << 16 (both maxima since boot). */
-  ADMISSION_G3_PRIVATE_STAT_POOL_HIGH,
   /* 12..15: the last two miss geometries, Width|Height<<16 and
    * UtileWidth|UtileHeight<<8|cached<<16. */
   ADMISSION_G3_PRIVATE_STAT_MISS_SHAPE=12
@@ -88,9 +85,8 @@ typedef struct _ADMISSION_G3_PRIVATE_SCENE {
 /* EXP1086: released scenes a process keeps mapped. EXP1087: a miss trims the
  * least recently cached beyond this many (the miss path runs with no job in
  * flight). EXP1088: four entries thrashed between DWM's geometries (15
- * misses/s); a scene takes at least six 64 KiB units of the process
- * budget (EXP1094: 12 MiB), so pool pressure evicts the oldest entries one
- * at a time. */
+ * misses/s); a scene takes at least six 64 KiB units of the 8 MiB process
+ * budget, so pool pressure evicts the oldest entries one at a time. */
 #define ADMISSION_G3_PRIVATE_SCENE_CACHE 8u
 
 typedef struct _ADMISSION_G3_PROCESS {
