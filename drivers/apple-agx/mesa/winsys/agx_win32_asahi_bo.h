@@ -51,6 +51,10 @@ typedef struct {
   void (*ContextDestroy)(struct pipe_context *);
   APPLE_AGX_U32 ContextCount;
   int Closing;
+  /* EXP1091: handle -> windows_bo for AgxWin32AsahiLookupBo (open addressing,
+   * power-of-two capacity, NULL = empty). */
+  void **HandleMap;
+  APPLE_AGX_U32 HandleMapCap, HandleMapCount;
 #ifdef APPLE_AGX_GPUVA_WINSYS
   AGX_WIN32_GPUVA_SPACE Gpuva;
   int GpuvaReady;
