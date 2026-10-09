@@ -1,4 +1,37 @@
-# J313 GPU — accelerated desktop stable; storage stalls fixed (EXP1089-EXP1098)
+# J313 GPU: accelerated desktop stable; per-job latency cut 30 % (EXP1099-EXP1105)
+
+
+## Current as of 2026-10-09 14:05Z (read this first)
+
+State: GPU-visible baseline after each run. Best validated launch: driver
+exp/1105-build b0578618 (EXP1101 receipt build 4a050c93 + 57e4523d +
+3c48bbb9 + 27ff51e5) with m1n1 fa3356ee. Burst job Submit->Notify 671 us
+(EXP1092 1.18 ms), charmap drag 36-39 flips/s, Notepad 25-27, stable.
+
+Proven since 11:15Z:
+- 0d22b8bc aligned 8-byte copies of per-job firmware templates (EXP1099,
+  BackendBefore->Kick 340 -> 58 us).
+- 23f52b1b RegionC idle_to_off_delay_ms 2 -> 20 (EXP1100: GPU power-up no
+  longer paid per frame; Submit->Notify 1155 -> 814 us).
+- 1581e187 HwDataA P-state receipt (EXP1101: DWM jobs at state 1); a DVFS
+  floor at state 3 (EXP1102) changed nothing: the ~330 us kick->TA end and
+  the 78 us 3D phase are fixed firmware/GPU latencies. Reverted.
+- Every G4 job rematerialized the 6 MiB write-combined template arena twice
+  (~100 us each). 57e4523d + 3c48bbb9: the G4 bind skips Prepare on a
+  pristine image (EXP1103 failed: StartDevice wrote the VM slot raw after
+  Prepare; fixed by selecting through the image). EXP1104: Submit->Worker
+  155 -> 51 us. 27ff51e5: the G4 release restores objects 0..42 and 63 from
+  a StartDevice snapshot (EXP1105: JobEnd->Notify 109 -> 35 us).
+
+Open, causal order:
+1. The flip rate did not follow the per-job gains (~37/s throughout
+   EXP1100-EXP1105): flips land on every 1st-3rd vsync; DWM spends ~4.9 s
+   of a 15.7 s drag in CMonitorClock::WaitForNextTick (cs1100). Find what
+   makes a frame miss its vsync (present/flip path, DWM pacing).
+2. Worker hand-off after > 1 ms idle: Submit->Worker ~110 us (EXP1105 idle
+   jobs) vs ~50 in bursts; the first job of each frame pays it.
+3. a9c5c811 (UMD trace configuration read once) built but unmeasured.
+4. Host resets without PSCI (EXP1095, EXP1011): watch for recurrence.
 
 
 ## Current as of 2026-10-09 11:15Z (read this first)
