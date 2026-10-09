@@ -1,4 +1,32 @@
-# J313 GPU: per-frame shared-surface churn; borrowed-release evict hint (EXP1117-EXP1125)
+# J313 GPU: broker fast path; Notepad drag 53 / typing 57 (EXP1117-EXP1127)
+
+
+## Current as of 2026-10-09 23:55Z (read this first)
+
+State: GPU-visible baseline after each run. Best validated launch: driver
+exp/1126-build b3e2d5bf (EXP1122 + 85e2b4b9 coalesced paging + f1d5ba47
+allocation receipt + b9e33767/96e21de1 UMD measurement + ffbc0772
+EvictOnlyIfNecessary + 66e57c27 retained local grants) with full-owner m1n1
+96a0c1ef (fa3356ee + local-reserve broker fast path; macho becec9cd,
+built natively: make -j8 IOMFB_FULL_OWNER=1 AGX_LOCAL_RESERVE_V2=1
+TOOLCHAIN=/opt/homebrew/Cellar/llvm/22.1.8/bin/ LLDDIR=/tmp/agx-lld-dir/,
+rustc on PATH; the same command reproduces fa3356ee bit-for-bit).
+EXP1127 flips: Notepad drag 52.6-53.4, typing 56.9-57.1, cursor 55-60,
+charmap 60, same-size drag 51.5-52.5. No TDR/rejects/HV exceptions.
+
+Proven since 22:55Z:
+- EXP1125 ffbc0772: DWM's borrowed-surface release no longer forces VidMm
+  to page Notepad's shared surface out (VIRTUAL_TRANSFER 0/s).
+- EXP1126 66e57c27: unmapped shared local grants stay registered
+  (REG_SHARED/REVOKE ~3500/s -> <200/s).
+- EXP1127 m1n1 96a0c1ef: UPD_LEAF 13 -> 4.3 us; broker 162 -> 76 ms/s.
+
+Open, causal order:
+1. Notepad still creates a 1032x581 shared surface per frame (~50/s, ~27 ms
+   lifetime): VidMm fill + 2-4 UPDATE_PAGE_TABLE per surface (~70-80 ms/s).
+   Why DComp/XAML does not reuse it is unknown (driver capability?).
+2. Single render slot / multi-job phases 4-7.
+3. Same-size SetWindowPos drag 52; charmap and cursor at 60.
 
 
 ## Current as of 2026-10-09 22:55Z (read this first)
