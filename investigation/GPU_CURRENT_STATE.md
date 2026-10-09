@@ -1,4 +1,37 @@
-# J313 GPU: accelerated desktop stable; per-job latency cut 30 % (EXP1099-EXP1105)
+# J313 GPU: classic window drags at 60 fps; app content is the next pole (EXP1099-EXP1111)
+
+
+## Current as of 2026-10-09 15:45Z (read this first)
+
+State: GPU-visible baseline after each run. Best validated launch: driver
+exp/1111-build ce249e01 (EXP1106 phase-locked vsync + EXP1109 trace
+overhead removal + 16 MiB direct buffers) with m1n1 fa3356ee. Guest
+environment: EXP801DxgBoot AutoLogger Start=0 (stage scripts require 0;
+re-enable via evidence/EXP1108/EXP801DxgBoot-autologger.reg for crash
+tracing).
+
+Measurement protocol changed (EXP1108 correction): the old drag loads passed
+the window size to SetWindowPos every step, which reallocates the GDI
+redirection surface; use position-only moves (gdimove-nosize, npmove-nosize)
+as the primary metric. EXP1111 (30 s each): charmap drag 60.0 flips/s,
+cursor-only 55-60, same-size SetWindowPos drag 51, Notepad drag 38-39,
+Notepad typing 38-39.
+
+Proven since 14:05Z: phase-locked vsync (EXP1106, 60 notifications/s),
+diagnostic overhead off DWM's thread (EXP1109: frame-arm registry receipt
+rate-limited, UMD trace batched), mapped buffers up to 16 MiB direct
+(EXP1111, no copy escapes for them).
+
+Open, causal order:
+1. Notepad (WinUI) frames: the app renders during a pure move; two processes
+   share the single GPU job slot; ~half of its frames take two periods.
+   Next: trace Notepad + DWM job interleaving and remaining escapes.
+2. DWM frame GPU chain: ~6 sequential job round trips per frame (~4 ms of an
+   8.5 ms frame); per-job firmware ~410 us (kick->TA end ~330 us).
+3. m1n1/DCP present lead ~2 ms (presents 0-2 ms before vblank miss):
+   synchronous A407/A408 DCP RPCs and per-present printf in the HV exit path.
+4. a9c5c811 measured with EXP1109 (built in); host resets without PSCI
+   (EXP1095, EXP1011): none since.
 
 
 ## Current as of 2026-10-09 14:05Z (read this first)
