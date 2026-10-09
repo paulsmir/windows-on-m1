@@ -1,5 +1,48 @@
-# J313 GPU — accelerated desktop stable; DWM frame time halved (EXP1081-EXP1088)
+# J313 GPU — accelerated desktop stable; storage stalls fixed (EXP1089-EXP1098)
 
+
+## Current as of 2026-10-09 11:15Z (read this first)
+
+State: GPU-visible baseline after each run. Best validated launch: driver
+source 43e68a36 (exp/1092-build: EXP1090 + O(1) BO handle lookup + nonpaged
+vsync query) with m1n1 fa3356ee (local branch nvme-cq-partial-ack, not
+pushed; build with brew llvm 22.1.8 + rust 1.97.1 + LLDDIR=/tmp/agx-lld-dir,
+which reproduces the deployed 824ea32d byte-for-byte). EXP1098: Notepad load
+24-26 flips/s, charmap drag 35.5-36.4, Settings renders, no rejects, zero
+stornvme resets. Launch with WOM1_PCPU_PSTATE=12. Probe protocol from EXP1097
+resets Notepad's saved session first (np-reset.ps1); earlier runs opened
+more windows each time, so EXP1092-EXP1096 flips/s are not comparable.
+
+Proven since 07:42Z:
+- c4446277 write-watch staging (EXP1089), 01553885 direct dynamic maps
+  (EXP1090, +30 %), 48eb2167 handle-indexed BO lookup (EXP1092).
+- 49686f09: the vsync diagnostic escape bugchecked 0xD1 (pageable escape
+  buffer written at DIRQL, EXP1091); snapshot now goes through nonpaged pool.
+- m1n1 NVMe INTx: an 8-command synchronous batch raises INTx at its first
+  CQE and the model notified once per assertion; partial CQ-head
+  acknowledgements and EOIed-but-unconsumed notifications stranded CQEs
+  until stornvme's 10 s reset (System 129, in every run EXP1089-EXP1097,
+  before the EXP1091 and EXP1095 failures). fb4102c5 + fa3356ee renotify
+  (partial ack; still asserted 10 ms after an EOI). EXP1098: zero resets.
+
+Rejected:
+- Two submissions in flight (c545a3d2, EXP1093/EXP1094, reverted 34e43386):
+  completion waits fell 4.37 -> 3.03 s per 15.7 s, but DWM's 8 MiB private
+  budget (66-unit buffer manager + 7-11 units per scene) thrashed, and a
+  12 MiB quota exhausted the 64 MiB global pool (SystemSettings
+  D3DERR_OUTOFVIDEOMEMORY). Revisit only with a smaller per-process buffer
+  manager or a larger global pool.
+
+Open, causal order:
+1. Per-job GPU latency (EXP1092 Wom1JobTiming971, median Submit->Notify
+   1.18 ms): BackendBefore->Kick3d 340 us inside AppleAgxBackendRuntimeSubmit
+   (Resolve/Relocate/AppleAgxExp208BuildJob), BackendAfter->FirstProgress
+   381 us, Submit->Worker 169 us, JobEnd->Notify 110 us. Next: a sampled
+   profile (sample.wprp, scratchpad sample_agg.py) of the charmap drag.
+2. a9c5c811 (UMD trace configuration read once) is built but unmeasured
+   (EXP1095 ended in an unexplained host reset).
+3. KMD WriteBinary on escape paths, staging hash (~6 % of DWM samples).
+4. Host resets without PSCI (EXP1095, EXP1011): re-check after the NVMe fix.
 
 ## Current as of 2026-10-09 07:42Z (read this first)
 
