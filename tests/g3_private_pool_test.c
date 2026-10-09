@@ -4,22 +4,31 @@
 int main(void) {
   APPLE_AGX_G3_PRIVATE_POOL p={0}, before;
   APPLE_AGX_G3_PRIVATE_EXTENT a={0}, b={0}, c={0};
-  /* A full process quota includes data, table extents and padding. */
+  /* A full process quota includes data, table extents and padding. An
+   * extent is at most 8 MiB; EXP1094's 12 MiB quota takes two. */
+  const unsigned rest=(APPLE_AGX_G3_PROCESS_UNITS-128u)*APPLE_AGX_G3_PRIVATE_UNIT;
+  APPLE_AGX_G3_PRIVATE_EXTENT a2={0}, b2={0};
+  assert(!AppleAgxG3PrivateAllocate(&p, 1, (8u<<20)+1u, &a));
   assert(AppleAgxG3PrivateAllocate(&p, 1, 8u<<20, &a));
   assert(a.Bytes==(8u<<20) && a.Generation && a.Offset==0);
+  assert(AppleAgxG3PrivateAllocate(&p, 1, rest, &a2) && a2.Offset==8u<<20);
   before=p;
   assert(!AppleAgxG3PrivateAllocate(&p, 1, 1, &c));
   assert(memcmp(&p,&before,sizeof(p))==0);
   assert(AppleAgxG3PrivateAllocate(&p, 2, 8u<<20, &b));
-  assert(b.Offset==8u<<20 && b.Generation!=a.Generation);
+  assert(AppleAgxG3PrivateAllocate(&p, 2, rest, &b2));
+  assert(b.Offset==(8u<<20)+rest && b.Generation!=a.Generation);
   assert(a.VaOffset==0 && b.VaOffset==0); /* Independent process namespaces. */
   c=b;c.VaOffset=0x10000;before=p;
   assert(!AppleAgxG3PrivateFree(&p,2,&c) && !memcmp(&p,&before,sizeof(p)));
-  /* Fill the remaining pool with further full quotas. */
+  /* Fill the remaining pool with 8 MiB extents of further owners. */
   APPLE_AGX_G3_PRIVATE_EXTENT fill[APPLE_AGX_G3_PRIVATE_UNITS/128u];
-  unsigned fills=0;
-  for(unsigned owner=10;owner<8u+APPLE_AGX_G3_PRIVATE_UNITS/128u;++owner)
-    assert(AppleAgxG3PrivateAllocate(&p, owner, 8u<<20, &fill[fills++]));
+  unsigned fills=0, left=APPLE_AGX_G3_PRIVATE_UNITS-2u*APPLE_AGX_G3_PROCESS_UNITS;
+  for(unsigned owner=10;left;++owner) {
+    unsigned units=left<128u?left:128u;
+    assert(AppleAgxG3PrivateAllocate(&p, owner, units*APPLE_AGX_G3_PRIVATE_UNIT, &fill[fills++]));
+    left-=units;
+  }
   /* A caller-supplied extent may not walk beyond the final pool block. */
   c=b; c.Bytes+=APPLE_AGX_G3_PRIVATE_UNIT;
   before=p; assert(!AppleAgxG3PrivateFree(&p, 2, &c));
@@ -34,7 +43,8 @@ int main(void) {
   before=p; assert(!AppleAgxG3PrivateFree(&p, 1, &a));
   assert(memcmp(&p,&before,sizeof(p))==0);
   assert(AppleAgxG3PrivateFree(&p, 3, &c));
-  assert(AppleAgxG3PrivateFree(&p, 2, &b));
+  assert(AppleAgxG3PrivateFree(&p, 2, &b) && AppleAgxG3PrivateFree(&p, 2, &b2));
+  assert(AppleAgxG3PrivateFree(&p, 1, &a2));
   for(unsigned i=0;i<fills;++i) assert(AppleAgxG3PrivateFree(&p, 10+i, &fill[i]));
   for(unsigned n=1;n<0x30000;n+=113) {
     assert(AppleAgxG3PrivateAllocate(&p, 4, n, &c));
