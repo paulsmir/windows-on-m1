@@ -1,4 +1,37 @@
-# J313 GPU: efficient VidMm paging; per-frame allocation churn next (EXP1117-EXP1123)
+# J313 GPU: per-frame shared-surface churn; borrowed-release evict hint (EXP1117-EXP1125)
+
+
+## Current as of 2026-10-09 22:55Z (read this first)
+
+State: GPU-visible baseline after each run. Best validated launch is still
+exp/1122-build af4245a3 (EXP1122). EXP1123/EXP1123R/EXP1124 (exp/1124-build
+365fe5c5 = EXP1122 + 85e2b4b9 coalesced local paging + f1d5ba47 allocation
+receipt + b9e33767 UMD measurement) are functionally clean; Notepad drag is
+40-42 in all three coalescing runs vs 46-47 in EXP1122 (not attributed).
+
+Proven since 21:50Z:
+- Coalescing: a 2.4 MiB fill is one record/pass (fills 425 -> 38 builds/s).
+- EXP1123 run 1 ended in an abrupt whole-machine reset (no HV, Windows or
+  firmware evidence, Kernel-Power 41 only); the identical rerun EXP1123R
+  passed after 25 min idle -> intermittent platform reset (thermal unproven).
+- Per-frame churn source (EXP1124): Notepad creates a 1032x581 B8G8R8A8
+  RT|SR MISC_SHARED texture (~37/s, not a swap-chain buffer) through
+  AdmissionUmdCreateResource; VidMm zero-fills it, maps it into Notepad and
+  DWM, then pages it LOCAL_TO_SYSTEM ~34 ms later because DWM's borrowed
+  Direct screen buffer drops its EXP978 residency reference with a plain
+  Evict (D3DDDI_EVICT_FLAGS: "finished, evict at first opportunity"); dxgkrnl
+  destroys it 3-5 ms later.
+
+Open, causal order:
+1. EXP1125 (ffbc0772): EvictOnlyIfNecessary on the borrowed release; expect
+   the per-frame VIRTUAL_TRANSFER and system-page remaps to disappear.
+2. Remaining per-surface cost: 592-PTE UPDATE_PAGE_TABLE maps/unmaps in the
+   app and DWM processes (~1 ms each, 148 broker UPD_LEAF calls per update).
+   A multi-group broker publication would need an m1n1 broker change (ask
+   the user before changing m1n1).
+3. Notepad drag 46 -> 42 with coalescing: needs one A/B (EXP1122 artifacts
+   vs EXP1123) if it persists after item 1.
+4. Multi-job phases 4-7.
 
 
 ## Current as of 2026-10-09 21:50Z (read this first)
