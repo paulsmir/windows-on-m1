@@ -878,6 +878,44 @@ static void test_g4_bind_of_pristine_image_skips_rematerialization(void) {
   free(target);free(fresh);free(arena);
 }
 
+/* EXP1103: StartDevice selects VM slot 1 in the arena right after Prepare
+ * (lifecycle.c). A raw write leaves the arena unlike the Prepare image, so
+ * the first G4 bind skipped rematerialization and failed SelectVmSlot; every
+ * G4 submit was then rejected (Wom1G4SubmitFailure branch 11). Selecting the
+ * slot through the image clears Pristine; the bind then rematerializes. */
+static void test_vm_slot_selection_after_prepare_forces_rematerialization(void) {
+  unsigned char *arena=malloc(TEST_BACKEND_BYTES);
+  unsigned char *fresh=malloc(TEST_BACKEND_BYTES);
+  unsigned char *target=malloc(1280u*720u*4u);
+  static ADMISSION_BACKEND_IMAGE image, reference;
+  ADMISSION_LOCAL_MEMORY_VIEW backend={0}, fresh_backend={0};
+  ADMISSION_RENDER_PACKET_DESCRIPTION packet;
+  APPLE_AGX_G4_SUBMIT_VIEW view;
+  TEST_G4_NATIVE native;
+  APPLE_AGX_EXP208_GDI_BINDING binding;
+  assert(arena && fresh && target);
+  memset(arena,0xa5,TEST_BACKEND_BYTES);memset(fresh,0xa5,TEST_BACKEND_BYTES);
+  backend.CpuAddress=arena;backend.HostPhysicalAddress=TEST_BACKEND_PHYSICAL;
+  backend.GpuVirtualAddress=TEST_BACKEND_GPU;backend.Bytes=TEST_BACKEND_BYTES;
+  fresh_backend=backend;fresh_backend.CpuAddress=fresh;
+  assert(AdmissionBackendImagePrepare(&image,&backend));
+  assert(!AdmissionBackendImageSelectVmSlot(&image,0u));
+  assert(!AdmissionBackendImageSelectVmSlot(&image,63u));
+  assert(AdmissionBackendImageSelectVmSlot(&image,1u));
+  assert(!image.Pristine);
+  g4_fixture(&native,&view,&packet,target,90u);
+  assert(AdmissionBackendImageBindG4Submission(
+      &image,&packet,target,&view,&binding));
+  assert(AdmissionBackendImagePrepare(&reference,&fresh_backend));
+  assert(AdmissionBackendImageBindG4Submission(
+      &reference,&packet,target,&view,&binding));
+  assert_same_bound_image(&image,arena,&reference,fresh);
+  /* A bound image refuses the selection. */
+  assert(!AdmissionBackendImageSelectVmSlot(&image,1u));
+  assert(AdmissionBackendImageReleaseSubmission(&image,90u));
+  free(target);free(fresh);free(arena);
+}
+
 int main(void) {
   test_materializes_and_relocates_exact_rebased_image();
   test_rejects_invalid_tail_atomically();
@@ -889,5 +927,6 @@ int main(void) {
   test_b1_same_va_distinct_physical_output();
   test_g4_native_scene_stages_and_releases();
   test_g4_bind_of_pristine_image_skips_rematerialization();
+  test_vm_slot_selection_after_prepare_forces_rematerialization();
   return 0;
 }

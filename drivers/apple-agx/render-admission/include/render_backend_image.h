@@ -114,6 +114,10 @@ APPLE_AGX_BOOL AdmissionBackendImageCaptureOutput(
 APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmission(
     ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence);
 
+/* Select the firmware VM slot in the arena's context_id fields. Selection
+ * is an arena write outside any submission, so it clears Pristine. */
+APPLE_AGX_BOOL AdmissionBackendImageSelectVmSlot(
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Slot);
 APPLE_AGX_BOOL AdmissionBackendImageRestartQueueLifetime(
     ADMISSION_BACKEND_IMAGE *Image);
 

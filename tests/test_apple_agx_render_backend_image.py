@@ -56,6 +56,10 @@ class AppleAgxRenderBackendImageTests(unittest.TestCase):
                         lifecycle.index("AdmissionBackendImageStart(context)"))
         self.assertLess(lifecycle.index("AdmissionBackendImageStart(context)"),
                         lifecycle.index("AdmissionSchedulerStart(context)"))
+        # EXP1103: the arena's VM slot is selected through the image so the
+        # selection clears Pristine (a raw write broke the first G4 bind).
+        self.assertIn("AdmissionBackendImageSelectVmSlot(", lifecycle)
+        self.assertNotIn("AppleAgxRenderTemplateSelectVmSlot(", lifecycle)
         self.assertIn(r"src\render_backend_image.c", project)
         self.assertIn(r"src\backend_image_windows.c", project)
         self.assertIn(

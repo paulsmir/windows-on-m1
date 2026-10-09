@@ -328,9 +328,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   }
 #if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION) || \
     defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  if (!AppleAgxRenderTemplateSelectVmSlot(
-          context->BackendImage.ArenaCpuAddress,
-          context->BackendImage.ArenaCapacity, 1u)) {
+  if (!AdmissionBackendImageSelectVmSlot(&context->BackendImage, 1u)) {
     (void)AdmissionBackendImageStop(context);
     (void)AdmissionMemoryRuntimeStop(context);
     (void)AdmissionInterruptStop(context);
