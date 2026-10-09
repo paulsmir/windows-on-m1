@@ -74,7 +74,11 @@ static void FrontendFlush(Device *hDevice) {
   struct Pipe pipe={native_flush};Device frontend={&device,&pipe};
   FrontendFlush(&frontend);
   int result=finish_result;
-  if(!result) {
+  if(!result && !capsule(&batch)->Rejected) {
+    /* Entry-guard refusal (scenario 6): agx_batch_submit aborts the batch
+     * and faults the context; the backend itself stays usable. */
+    assert(!owner.Failed && AgxWin32AsahiBatchAbort(&batch));
+  } else if(!result) {
     fprintf(stderr,"R149 rejected=%u terminal=%u frontend_errors=%u status=%x\\n",
       capsule(&batch)->Rejected,owner.Gpuva.Terminal,frontend_errors,(unsigned)frontend_error);
     assert(frontend_errors==1 && FAILED(frontend_error));

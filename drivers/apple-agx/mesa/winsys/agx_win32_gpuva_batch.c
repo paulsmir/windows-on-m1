@@ -326,6 +326,10 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   unsigned char *cpu;
   struct drm_asahi_cmd_header command_header;
   unsigned fail_site=0u;
+  /* References besides the bo_list bitset and the colour buffers: command,
+   * VDM, rodata, zero and scratch pages (EXP1069), depth/stencil and slack.
+   * The entry guard and the reference limit must use the same count. */
+  enum { fixed_refs=19u };
   if(!b || !g || !render || b->Failed || b->Gpuva.Terminal ||
      !batch_has_render_work(batch) || batch->cdm.bo || g->Submitted || g->Rejected ||
      !batch->vdm.bo ||
@@ -333,7 +337,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
      !gpuva_color_format_supported(batch->key.cbufs[0].format) ||
      batch->key.zsbuf.texture || render->samples!=1 ||
      (render->sample_size_B!=8 && render->sample_size_B!=16) ||
-     batch->bo_list.bit_count>UINT32_MAX-(PIPE_MAX_COLOR_BUFS+17))
+     batch->bo_list.bit_count>UINT32_MAX-(PIPE_MAX_COLOR_BUFS+fixed_refs))
     return batch_refuse(2u, __LINE__,
         (batch->key.nr_cbufs & 0xffu) | ((unsigned)(batch->key.zsbuf.texture!=NULL) << 8) |
         ((unsigned)(batch->cdm.bo!=NULL) << 9) | ((unsigned)(batch->draws==0) << 10) |
@@ -347,7 +351,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
    * earlier slabs after rollover and the low-VA pipeline pool. */
   pool_count=util_dynarray_num_elements(&batch->pool.bos,struct agx_bo *);
   pipeline_count=util_dynarray_num_elements(&batch->pipeline_pool.bos,struct agx_bo *);
-  limit=batch->bo_list.bit_count+PIPE_MAX_COLOR_BUFS+19;
+  limit=batch->bo_list.bit_count+PIPE_MAX_COLOR_BUFS+fixed_refs;
   if(pool_count>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
   limit+=(unsigned)pool_count;
   if(pipeline_count>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }

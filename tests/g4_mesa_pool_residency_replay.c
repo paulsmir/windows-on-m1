@@ -208,6 +208,10 @@ static void run(unsigned fail,unsigned many,unsigned scenario) {
     pipeline_bos[0]=NULL;
   } else if(scenario==3) {
     bos[5].refs=0;
+  } else if(scenario==6) {
+    /* EXP1069 regression: the entry guard must cover the whole fixed
+     * reference count (+19), or the limit wraps and the batch fails late. */
+    batch.bo_list.bit_count=UINT32_MAX-(PIPE_MAX_COLOR_BUFS+18);
   } else if(scenario>=4) {
     batch.bo_list.bit_count=UINT32_MAX-(PIPE_MAX_COLOR_BUFS+19)-1;
     batch.pool.bos.size=(scenario==4?2u:1u)*sizeof(pool_bos[0]);
@@ -218,6 +222,10 @@ static void run(unsigned fail,unsigned many,unsigned scenario) {
   if(scenario>=2) {
     assert(!result && !submit_count && !resident_count && !eviction_count);
     assert(!owner.Gpuva.Held && !owner.Gpuva.Terminal);
+    /* The entry guard refuses without failing the backend; the caller
+     * (agx_batch_submit) then aborts the batch. */
+    assert(scenario!=6 || !owner.Failed);
+    if(scenario==6) assert(AgxWin32AsahiBatchAbort(&batch));
     assert(AgxWin32AsahiBatchRelease(&batch));
     assert(!batch.windows_batch && !bos[1].refs);
     assert(release_count==(scenario>=4?0u:1u));
@@ -244,6 +252,6 @@ static void run(unsigned fail,unsigned many,unsigned scenario) {
 }
 int main(void) {
   run(0,0,0);run(0,1,0);run(1,1,0);run(0,0,1);
-  run(0,0,2);run(0,0,3);run(0,0,4);run(0,0,5);
+  run(0,0,2);run(0,0,3);run(0,0,4);run(0,0,5);run(0,0,6);
   puts("R148 production batch pool residency/upload/rollback: PASS");return 0;
 }
