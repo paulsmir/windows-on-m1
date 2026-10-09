@@ -190,8 +190,11 @@ static int dispose(struct windows_bo *bo) {
  * 56 s). Keep released native BOs whole -- slot, VA, residency, CPU map -- and
  * hand them back to an equal request, as Mesa's agx_bo_cache does. */
 static int cache_in_flight(const AGX_WIN32_ASAHI_BACKEND *b,const struct windows_bo *bo) {
-  for(unsigned i=0;i<b->Gpuva.HeldCount;++i)
+  for(unsigned i=0;b->Gpuva.Held && i<b->Gpuva.HeldCount;++i)
     if(b->Gpuva.Held[i]==bo->Gpuva.Allocation) return 1;
+  /* EXP1093: and the older submission still in flight. */
+  for(unsigned i=0;b->Gpuva.Older.Handles && i<b->Gpuva.Older.Count;++i)
+    if(b->Gpuva.Older.Handles[i]==bo->Gpuva.Allocation) return 1;
   return 0;
 }
 /* Cache[] is kept in release order, oldest first. A refused dispose leaves
@@ -432,8 +435,12 @@ static void native_map(struct agx_device *native,struct agx_bo *base,void *fixed
    * still hold this BO's slot, which refuses a CPU map (DWM's backend failed
    * on such a first map every ~2.3 s), and its completion must run before
    * CPU access. Retire it first, as the next submission would. */
-  if(cache_in_flight(b,bo) && !AgxWin32GpuvaRetire(&b->Gpuva,b->Gpuva.RenderFence)) {
-    AGX_WIN32_ASAHI_FAIL(b, 1u); return;
+  {
+    /* EXP1093: retire through the newest in-flight submission naming it. */
+    uint64_t fence=AgxWin32GpuvaHoldingFence(&b->Gpuva,bo->Gpuva.Allocation);
+    if(fence && !AgxWin32GpuvaRetire(&b->Gpuva,fence)) {
+      AGX_WIN32_ASAHI_FAIL(b, 1u); return;
+    }
   }
 #endif
   if(AgxWin32NativeBoMap(b->Buffers.Screen,&bo->Backing,AppleAgxWin32BufferCpuWrite,&address)

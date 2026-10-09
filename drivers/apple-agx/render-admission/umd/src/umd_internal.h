@@ -83,6 +83,9 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   /* EXP985: written by the in-flight submission; consumed by its download.
    * Only GPU-written slots may overwrite their (possibly shared) staging. */
   BOOL GpuWritten;
+  /* EXP1093: render fence of the latest submission that holds this slot; an
+   * upload into it waits for that fence while another submission holds it. */
+  UINT64 LastUseFence;
 #endif
 } ADMISSION_UMD_SCREEN_BUFFER;
 
