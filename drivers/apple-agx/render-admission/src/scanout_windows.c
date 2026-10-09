@@ -1471,11 +1471,20 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueryTimeline(
       Query->Version != 1u || Query->Bytes != sizeof(*Query))
     return STATUS_INVALID_PARAMETER;
   args.Runtime = AdmissionScanoutGet(Context);
-  args.Query = Query;
   if (args.Runtime == NULL)
     return STATUS_DEVICE_NOT_READY;
+  /* EXP1091 0xD1: the escape's private-data buffer is pageable, while the
+   * snapshot runs at DIRQL. Snapshot into nonpaged memory there and copy to
+   * the caller's buffer at PASSIVE_LEVEL. */
+  args.Query = ExAllocatePool2(
+      POOL_FLAG_NON_PAGED, sizeof(*args.Query), ADMISSION_SCANOUT_TAG);
+  if (args.Query == NULL)
+    return STATUS_INSUFFICIENT_RESOURCES;
   status = Context->Interface.DxgkCbSynchronizeExecution(
       Context->Interface.DeviceHandle, AdmissionScanoutVsyncSnapshot,
       &args, 0u, &done);
+  if (NT_SUCCESS(status) && done)
+    RtlCopyMemory(Query, args.Query, sizeof(*Query));
+  ExFreePoolWithTag(args.Query, ADMISSION_SCANOUT_TAG);
   return NT_SUCCESS(status) && !done ? STATUS_UNSUCCESSFUL : status;
 }
