@@ -45,7 +45,20 @@ typedef struct _ADMISSION_G3_STATE {
   ADMISSION_G3_LEAF_HISTORY LeafHistory[ADMISSION_G3_LEAF_RING];
   ULONG LeafHistoryNext;
   ADMISSION_G3_ALLOC_TRACK AllocTrack[ADMISSION_G3_ALLOC_TRACK_COUNT];
+  /* EXP1087 receipt-only, under Lock: ADMISSION_G3_PRIVATE_STAT_* counters. */
+  ULONGLONG PrivateStats[16];
 } ADMISSION_G3_STATE;
+enum {
+  ADMISSION_G3_PRIVATE_STAT_HIT, ADMISSION_G3_PRIVATE_STAT_MISS,
+  ADMISSION_G3_PRIVATE_STAT_TRIM, ADMISSION_G3_PRIVATE_STAT_PRESSURE,
+  ADMISSION_G3_PRIVATE_STAT_RELEASED, ADMISSION_G3_PRIVATE_STAT_MAPPED_PAGES,
+  ADMISSION_G3_PRIVATE_STAT_UNMAPPED_PAGES, ADMISSION_G3_PRIVATE_STAT_CACHED_RELEASE,
+  ADMISSION_G3_PRIVATE_STAT_CACHED_REAP, ADMISSION_G3_PRIVATE_STAT_RELEASE_QUEUED,
+  ADMISSION_G3_PRIVATE_STAT_MISS_OTHER_GEOMETRY,
+  /* 12..15: the last two miss geometries, Width|Height<<16 and
+   * UtileWidth|UtileHeight<<8|cached<<16. */
+  ADMISSION_G3_PRIVATE_STAT_MISS_SHAPE=12
+};
 
 typedef struct _ADMISSION_G3_TABLE_SHADOW {
   struct _ADMISSION_G3_TABLE_SHADOW *Next;
@@ -66,10 +79,12 @@ typedef struct _ADMISSION_G3_PRIVATE_SCENE {
   /* EXP1086: released after a reported completion and kept mapped for reuse
    * by an ACQUIRE of the same context and geometry. */
   ULONG Cached;
+  ULONGLONG CachedAt; /* EXP1087: LRU order within the process */
 } ADMISSION_G3_PRIVATE_SCENE;
 
 /* EXP1086: released scenes a process keeps mapped (each ~0.6 MiB of its
- * 8 MiB private budget); more are unmapped and freed as before. */
+ * 8 MiB private budget). EXP1087: a miss trims the least recently cached
+ * beyond this many (the miss path runs with no job in flight). */
 #define ADMISSION_G3_PRIVATE_SCENE_CACHE 4u
 
 typedef struct _ADMISSION_G3_PROCESS {
@@ -85,6 +100,7 @@ typedef struct _ADMISSION_G3_PROCESS {
   ULONG SetRootCount;
   ULONGLONG PrivateVa;
   ULONGLONG PrivateMiddleIpa, PrivateLeafIpa;
+  ULONGLONG PrivateCacheClock; /* EXP1087 */
   APPLE_AGX_G3_PRIVATE_EXTENT PrivateTables[2];
   APPLE_AGX_G3_PRIVATE_MANAGER PrivateManager;
   APPLE_AGX_RENDER_MANAGER_STATE FirmwareManager;

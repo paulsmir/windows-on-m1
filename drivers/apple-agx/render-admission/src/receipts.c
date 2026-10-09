@@ -2640,12 +2640,14 @@ _Use_decl_annotations_ VOID AdmissionPagingProfileAdd(volatile LONG64 *Triplet,
 }
 
 /* EXP1052 receipt-only: {version, qpc, frequency}, the paging profile, then
- * the broker client's per-command calls/ticks/max.  Never called from the
- * paging path; written at most every two seconds and never flushed. */
+ * the broker client's per-command calls/ticks/max, then (EXP1087) sixteen
+ * private scene cache counters.  Never called from the paging path; written
+ * at most every two seconds and never flushed. */
 _Use_decl_annotations_ void AdmissionRecordPagingProfile(
-    ADMISSION_CONTEXT *Context, const APPLE_AGX_GPUVA_V5_CLIENT *Client) {
+    ADMISSION_CONTEXT *Context, const APPLE_AGX_GPUVA_V5_CLIENT *Client,
+    const ULONGLONG *PrivateStats) {
   ULONGLONG value[3 + ADMISSION_PAGING_PROFILE_OPS * 3 + 1 + 4 * 3 +
-                  3 * APPLE_AGX_GPUVA_V5_TIMED_COMMANDS];
+                  3 * APPLE_AGX_GPUVA_V5_TIMED_COMMANDS + 16];
   LARGE_INTEGER frequency;
   LONGLONG now, last;
   HANDLE key = NULL;
@@ -2680,6 +2682,9 @@ _Use_decl_annotations_ void AdmissionRecordPagingProfile(
       value[at + APPLE_AGX_GPUVA_V5_TIMED_COMMANDS + i] = Client->Ticks[i];
       value[at + 2u * APPLE_AGX_GPUVA_V5_TIMED_COMMANDS + i] = Client->MaxTicks[i];
     }
+  at += 3u * APPLE_AGX_GPUVA_V5_TIMED_COMMANDS;
+  if (PrivateStats != NULL)
+    for (i = 0u; i < 16u; ++i) value[at + i] = (ULONGLONG)PrivateStats[i];
   if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
           PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
   WriteBinary(key, L"Wom1G3PagingProfile", value, sizeof(value));
