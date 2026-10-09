@@ -5,6 +5,8 @@ void (*AgxWin32BackendFailHook)(unsigned site);
 #ifdef APPLE_AGX_GPUVA_WINSYS
 extern void (*AgxWin32BatchRefusalHook)(unsigned, unsigned, unsigned, unsigned);
 #endif
+#include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -43,6 +45,20 @@ static int release_map(const void *key,const void *expected,int commit) {
 /* EXP1069: VAs of the current device's zero/scratch pages (agx_abi.h). */
 AGX_WIN32_THREAD_LOCAL uint64_t agx_win32_zero_page_va;
 AGX_WIN32_THREAD_LOCAL uint64_t agx_win32_scratch_page_va;
+/* EXP1070: Asahi perf_debug messages (why a batch is flushed or synced,
+ * shadowing, fallbacks), formatted and handed to the UMD, which counts them
+ * per process. Formatting is skipped while no counter is installed. */
+void (*AgxWin32PerfHook)(const char *message);
+void AgxWin32PerfNote(const char *fmt, ...) {
+  char message[64];
+  va_list args;
+  if(!AgxWin32PerfHook || !fmt) return;
+  va_start(args,fmt);
+  vsnprintf(message,sizeof(message),fmt,args);
+  va_end(args);
+  AgxWin32PerfHook(message);
+}
+
 void AgxWin32AsahiPublishPages(struct agx_device *native) {
   agx_win32_zero_page_va =
       native && native->zero_bo && native->zero_bo->va ? native->zero_bo->va->addr : 0;

@@ -114,8 +114,12 @@ int AgxWin32AsahiBatchBegin(struct agx_batch *batch) {
   for(unsigned i=0;i<AGX_MAX_BATCHES;++i) {
     struct agx_batch *old=&batch->ctx->batches.slots[i];
     if(old==batch || !old->windows_batch) continue;
-    if(BITSET_TEST(batch->ctx->batches.active,i))
+    if(BITSET_TEST(batch->ctx->batches.active,i)) {
+      AgxWin32PerfNote("Begin drain: flush active");
       agx_flush_batch(batch->ctx,old);
+    } else {
+      AgxWin32PerfNote("Begin drain: retire submitted");
+    }
     if(batch->ctx->any_faults || !AgxWin32AsahiBatchPoll(old,1000)) return batch_refuse(1u, __LINE__, 0u, 0u);
     agx_sync_batch(batch->ctx,old);
     if(old->windows_batch) return batch_refuse(1u, __LINE__, 0u, 0u);

@@ -78,6 +78,9 @@ extern void (*AgxWin32BackendFailHook)(unsigned site);
 
 /* EXP1069: publish the device's zero/scratch page VAs to this thread. */
 void AgxWin32AsahiPublishPages(struct agx_device *native);
+/* EXP1070: per-process perf_debug counter, installed by the UMD. */
+extern void (*AgxWin32PerfHook)(const char *message);
+void AgxWin32PerfNote(const char *fmt, ...);
 int AgxWin32AsahiAttach(AGX_WIN32_ASAHI_BACKEND *, struct agx_device *,
     AGX_WIN32_SCREEN *, const AGX_WIN32_ASAHI_OWNER_OPS *, void *, APPLE_AGX_U64);
 int AgxWin32AsahiCollect(AGX_WIN32_ASAHI_BACKEND *);

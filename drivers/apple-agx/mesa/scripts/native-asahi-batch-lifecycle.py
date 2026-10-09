@@ -53,6 +53,13 @@ def project_sources(out,project,overlays):
     hp='src/gallium/drivers/asahi/agx_state.h'
     h=(out/hp).read_text()
     h=replace(h,'struct agx_batch {','struct agx_batch {\n   void *windows_batch; /* stable request/capture/adapter capsule */')
+    # EXP1070: on Windows every perf_debug message (flush/sync reasons,
+    # shadowing, fallbacks) is counted per process, whatever AGX_DBG_PERF says.
+    h,n=re.subn(r'#define perf_debug\(dev, \.\.\.\)[^\n]*\\\n(?:[^\n]*\\\n)*[^\n]*while \(0\)\n',
+        lambda m:'#ifdef _WIN32\n#ifdef __cplusplus\nextern "C"\n#endif\nvoid AgxWin32PerfNote(const char *fmt, ...);\n'
+                 '#define perf_debug(dev, ...) do { (void)(dev); AgxWin32PerfNote(__VA_ARGS__); } while (0)\n'
+                 '#else\n'+m.group(0)+'#endif\n',h)
+    if n!=1: raise RuntimeError('perf_debug definition changed')
     save(hp,h)
     dp='src/asahi/lib/agx_device.h';device=(out/dp).read_text()
     device=replace(device,'   return util_sparse_array_get(&dev->bo_map, handle);',

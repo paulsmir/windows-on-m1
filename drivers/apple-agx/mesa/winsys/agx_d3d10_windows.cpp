@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <wingdi.h>
+#include <string.h>
 typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #pragma warning(push)
 #pragma warning(disable : 4201)
@@ -41,6 +42,7 @@ extern "C" void (*AgxWin32BatchRefusalHook)(unsigned kind, unsigned site,
                                             unsigned detail0, unsigned detail1);
 extern "C" void (*AgxWin32FirstFaultHook)(unsigned site,uintptr_t context,
                                           unsigned flags,unsigned draws);
+extern "C" void (*AgxWin32PerfHook)(const char *message);
 extern "C" void (*AgxWin32VdmTraceHook)(uint64_t va,const uint32_t *words,
                                         unsigned count,unsigned draws);
 static void AgxD3d10VdmTrace(uint64_t va,const uint32_t *words,
@@ -70,6 +72,48 @@ static void AgxD3d10BatchRefusal(unsigned kind, unsigned site,
   UINT values[4]={kind,site,detail0,detail1};
   AdmissionUmdDiagnostic("reject-batch",E_FAIL,values,4u);
 }
+/* EXP1070 diagnostic: per-process count of Asahi perf_debug messages (why
+ * batches are flushed or synced). Digits fold to '#' so numeric variants
+ * share one entry. Every 512 messages, one "measure-perf-reason" line per
+ * entry that changed: {serial, new count, total, presents, text[0..23]}. */
+static SRWLOCK AgxD3d10PerfLock=SRWLOCK_INIT;
+static struct { UINT Hash, Count, Reported; char Text[24]; } AgxD3d10PerfTable[48];
+static UINT AgxD3d10PerfTotal, AgxD3d10PerfSerial, AgxD3d10PerfLines;
+static volatile LONG AgxD3d10Presents;
+static void AgxD3d10PerfNote(const char *message) {
+  char text[24]={0};
+  UINT hash=2166136261u, index;
+  for(UINT i=0;message && message[i] && message[i]!='\n' && i<63u;++i) {
+    char c=message[i]>='0' && message[i]<='9' ? '#' : message[i];
+    hash=(hash^(unsigned char)c)*16777619u;
+    if(i<sizeof(text)) text[i]=c;
+  }
+  AcquireSRWLockExclusive(&AgxD3d10PerfLock);
+  for(index=0;index+1u<ARRAYSIZE(AgxD3d10PerfTable);++index)
+    if(!AgxD3d10PerfTable[index].Count || AgxD3d10PerfTable[index].Hash==hash) break;
+  if(!AgxD3d10PerfTable[index].Count) {
+    static const char other[24]="(other)";
+    AgxD3d10PerfTable[index].Hash=hash;
+    memcpy(AgxD3d10PerfTable[index].Text,
+           index+1u<ARRAYSIZE(AgxD3d10PerfTable) ? text : other,sizeof(text));
+  }
+  ++AgxD3d10PerfTable[index].Count;
+  if((++AgxD3d10PerfTotal & 511u)==0u && AgxD3d10PerfLines<4096u) {
+    ++AgxD3d10PerfSerial;
+    for(UINT i=0;i<ARRAYSIZE(AgxD3d10PerfTable) && AgxD3d10PerfTable[i].Count;++i) {
+      if(AgxD3d10PerfTable[i].Count==AgxD3d10PerfTable[i].Reported) continue;
+      UINT values[10]={AgxD3d10PerfSerial,
+          AgxD3d10PerfTable[i].Count-AgxD3d10PerfTable[i].Reported,
+          AgxD3d10PerfTotal,(UINT)AgxD3d10Presents};
+      memcpy(&values[4],AgxD3d10PerfTable[i].Text,sizeof(AgxD3d10PerfTable[i].Text));
+      AgxD3d10PerfTable[i].Reported=AgxD3d10PerfTable[i].Count;
+      ++AgxD3d10PerfLines;
+      AdmissionUmdDiagnostic("measure-perf-reason",S_OK,values,ARRAYSIZE(values));
+    }
+  }
+  ReleaseSRWLockExclusive(&AgxD3d10PerfLock);
+}
+
 /* EXP1056: kind 4 = first backend Failed transition, site = file<<16|line. */
 static void AgxD3d10BackendFail(unsigned site) {
   AgxD3d10BatchRefusal(4u, site, 0u, 0u);
@@ -442,6 +486,7 @@ HRESULT AgxD3d10WindowsCreateDevice(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
   AgxWin32BackendFailHook=AgxD3d10BackendFail;
   AgxWin32VdmTraceHook=AgxD3d10VdmTrace;
   AgxWin32FirstFaultHook=AgxD3d10FirstFault;
+  AgxWin32PerfHook=AgxD3d10PerfNote;
   owner->Stage=AgxD3d10DeviceReady;
   *Device = owner;
   AdmissionUmdDiagnostic("g4-create-device-exit",S_OK,NULL,0u);
@@ -750,6 +795,7 @@ HRESULT AgxD3d10WindowsPresentationSubmit(
     AdmissionUmdDiagnostic("g4-present-exit",E_INVALIDARG,NULL,0u);
     return E_INVALIDARG;
   }
+  InterlockedIncrement(&AgxD3d10Presents);
   APPLE_AGX_U32 before[16],after[16],bindings[16];
   AgxWin32AsahiContextDiagnostic(Device->Context,before,bindings);
   int flushed=AgxWin32AsahiContextFlushForPresent(Device->Context);
