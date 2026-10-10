@@ -414,22 +414,27 @@ typedef struct _ADMISSION_PAGING_CENSUS {
   ULONG Reserved;
   ADMISSION_PAGING_CENSUS_ENTRY Entries[ADMISSION_PAGING_CENSUS_ENTRIES];
 } ADMISSION_PAGING_CENSUS;
-/* EXP1131 receipt-only: the last 256 display-path DDI calls, to time what
- * the KMD was asked to show while DWM rebuilt its primaries (Settings
- * close). Kind 1 visibility (Detail = Visible), 2 CommitVidPn (Flags =
- * CommitVidPn flags, Detail = 1 when powered off/no functional VidPn),
- * 3 SetVidPnSourceAddress (Flags, Address, Allocation), 4 MPO3 (Detail =
- * PlaneCount | Enabled << 8, Flags = plane input flags). Status is the
- * returned status (0 when recorded at entry). */
+/* EXP1131 receipt-only: display-path DDI calls, to time what the KMD was
+ * asked to show while DWM rebuilt its primaries (Settings close). Kind 1
+ * visibility (Detail = Visible) and 2 CommitVidPn (Flags = power
+ * transition | powered off << 1, Detail = 1 when powered off/no functional
+ * VidPn, Allocation = hPrimaryAllocation) are always kept.
+ * Flips, 3 SetVidPnSourceAddress (Flags, Address, Allocation) and 4 MPO3
+ * (Detail = PlaneCount | Enabled << 8, Flags = plane input flags), arrive
+ * ~60/s, so one is kept only after a gap of more than 50 ms or when its
+ * kind, flags or detail change; Gap is then the microseconds since the
+ * previous flip, and Flips counts every flip. */
 #define ADMISSION_DISPLAY_RING_ENTRIES 256u
 typedef struct _ADMISSION_DISPLAY_RING_ENTRY {
   ULONGLONG Qpc, Address, Allocation;
-  ULONG Kind, Flags, Detail, Status;
+  ULONG Kind, Flags, Detail, Gap;
 } ADMISSION_DISPLAY_RING_ENTRY;
 typedef struct _ADMISSION_DISPLAY_RING {
   ULONG Version, Bytes;
   volatile LONG Next;
-  ULONG Reserved;
+  volatile LONG Flips;
+  LONGLONG LastFlipQpc;
+  ULONG LastFlipKind, LastFlipFlags, LastFlipDetail, Reserved;
   ADMISSION_DISPLAY_RING_ENTRY Entries[ADMISSION_DISPLAY_RING_ENTRIES];
 } ADMISSION_DISPLAY_RING;
 /* EXP1123 receipt-only: the last 256 allocation creations (Kind 1) and

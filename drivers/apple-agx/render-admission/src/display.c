@@ -418,22 +418,41 @@ Exit:
 }
 
 /* EXP1131 receipt-only: memory ring, published with the paging profile.
- * Safe at any IRQL: interlocked slot, no waits or callbacks. */
+ * Safe at any IRQL: interlocked slot, no waits or callbacks. dxgkrnl
+ * serializes flips per source, so the last-flip fields need no lock. */
 static VOID AdmissionDisplayRingRecord(ADMISSION_CONTEXT *Context, ULONG Kind,
-    ULONG Flags, ULONG Detail, ULONGLONG Address, ULONGLONG Allocation,
-    NTSTATUS Status) {
+    ULONG Flags, ULONG Detail, ULONGLONG Address, ULONGLONG Allocation) {
+  ADMISSION_DISPLAY_RING *ring;
   ADMISSION_DISPLAY_RING_ENTRY *e;
-  ULONG slot;
+  LARGE_INTEGER frequency;
+  LONGLONG now;
+  ULONG gap = 0u, slot;
   if (Context == NULL) return;
-  slot = (ULONG)InterlockedIncrement(&Context->DisplayRing.Next) - 1u;
-  e = &Context->DisplayRing.Entries[slot % ADMISSION_DISPLAY_RING_ENTRIES];
-  e->Qpc = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+  ring = &Context->DisplayRing;
+  now = KeQueryPerformanceCounter(&frequency).QuadPart;
+  if (Kind >= 3u) {
+    LONGLONG elapsed = now - ring->LastFlipQpc;
+    BOOLEAN keep = ring->LastFlipQpc == 0 || elapsed > frequency.QuadPart / 20 ||
+        Kind != ring->LastFlipKind || Flags != ring->LastFlipFlags ||
+        Detail != ring->LastFlipDetail ? TRUE : FALSE;
+    (void)InterlockedIncrement(&ring->Flips);
+    if (ring->LastFlipQpc != 0 && frequency.QuadPart != 0)
+      gap = (ULONG)min(elapsed * 1000000 / frequency.QuadPart, (LONGLONG)MAXULONG);
+    ring->LastFlipQpc = now;
+    ring->LastFlipKind = Kind;
+    ring->LastFlipFlags = Flags;
+    ring->LastFlipDetail = Detail;
+    if (!keep) return;
+  }
+  slot = (ULONG)InterlockedIncrement(&ring->Next) - 1u;
+  e = &ring->Entries[slot % ADMISSION_DISPLAY_RING_ENTRIES];
+  e->Qpc = (ULONGLONG)now;
   e->Address = Address;
   e->Allocation = Allocation;
   e->Kind = Kind;
   e->Flags = Flags;
   e->Detail = Detail;
-  e->Status = (ULONG)Status;
+  e->Gap = gap;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceVisibility(
@@ -447,7 +466,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceVisibility(
        SetVidPnSourceVisibility->VidPnSourceId != D3DDDI_ID_ALL))
     return STATUS_INVALID_PARAMETER;
   AdmissionDisplayRingRecord(context, 1u, 0u,
-      SetVidPnSourceVisibility->Visible ? 1u : 0u, 0ULL, 0ULL, STATUS_SUCCESS);
+      SetVidPnSourceVisibility->Visible ? 1u : 0u, 0ULL, 0ULL);
   if (!NT_SUCCESS(AdmissionScanoutSetVisible(
           context, SetVidPnSourceVisibility->Visible ? TRUE : FALSE)))
     return STATUS_DEVICE_HARDWARE_ERROR;
@@ -474,9 +493,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCommitVidPn(
   NTSTATUS status = STATUS_INVALID_PARAMETER;
 
   if (context != NULL && CommitVidPn != NULL)
-    AdmissionDisplayRingRecord(context, 2u, CommitVidPn->Flags.Value,
+    AdmissionDisplayRingRecord(context, 2u,
+        (ULONG)(CommitVidPn->Flags.PathPowerTransition |
+            (CommitVidPn->Flags.PathPoweredOff << 1)),
         CommitVidPn->Flags.PathPoweredOff || CommitVidPn->hFunctionalVidPn == 0
-            ? 1u : 0u, 0ULL, 0ULL, STATUS_SUCCESS);
+            ? 1u : 0u, 0ULL, (ULONGLONG)(ULONG_PTR)CommitVidPn->hPrimaryAllocation);
   if (context == NULL || !context->Started || CommitVidPn == NULL ||
       CommitVidPn->AffectedVidPnSourceId != 0)
     goto Exit;
@@ -694,7 +715,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceAddress(
     AdmissionDisplayRingRecord(context, 3u, SetVidPnSourceAddress->Flags.Value,
         SetVidPnSourceAddress->PrimarySegment,
         (ULONGLONG)SetVidPnSourceAddress->PrimaryAddress.QuadPart,
-        (ULONGLONG)(ULONG_PTR)SetVidPnSourceAddress->hAllocation, STATUS_SUCCESS);
+        (ULONGLONG)(ULONG_PTR)SetVidPnSourceAddress->hAllocation);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   RtlZeroMemory(&traceEvent, sizeof(traceEvent));
   traceEvent.Kind = AdmissionStandardPresentEventSourceAddress;
@@ -833,7 +854,7 @@ AdmissionDdiSetVidPnSourceAddressWithMultiPlaneOverlay3(
           Args->ppPlanes[0]->InputFlags.Value : 0u,
       Args->PlaneCount | (Args->PlaneCount != 0u && Args->ppPlanes[0] != NULL &&
           Args->ppPlanes[0]->InputFlags.Enabled ? 0x100u : 0u),
-      0ULL, 0ULL, STATUS_SUCCESS);
+      0ULL, 0ULL);
   Args->OutputFlags.Value = 0u;
   if (Args->PlaneCount == 0u)
     return AdmissionScanoutMpoPlaneOff(context, 0ULL);
