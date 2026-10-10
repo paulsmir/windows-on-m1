@@ -91,3 +91,47 @@ Each phase is preceded by host tests (RED -> GREEN where it is deterministic) an
 ## Recovery
 
 Every phase uses the standard GPU-visible baseline and rollback (`recNNNNh/recover.sh`, durable preflight). A queue reset must reinitialise stamps and rings (phase 1 relies on TaFirstRun).
+
+## Site map for phase 5 (2026-10-10, read-only survey of the G3 build)
+
+Short names: g3 = render-admission/src/gpuva_g3_windows.c, bp =
+backend_platform_windows.c, sch = scheduler_windows.c, wq =
+work_queue_windows.c, rbi = render_backend_image.c (line numbers as of
+f1617c42; re-check before editing).
+
+- Entry: SubmitCommandVirtual (g3 ~3375) -> Inner -> AdmissionG4SubmitVirtualEnvelope
+  (g3 ~3025). Predicate 13 is AdmissionPlatformRuntimeAwaitWork (blocks up to
+  10 s for the slot). Under state->Lock it rejects while PrivateCompletionFence
+  is set, looks up the private scene (FindPrivateScene refuses while the
+  context's GpuvaG3PrivateFence is nonzero), parses, sets the scene
+  Queued/Fence and the context Private/Preempt/CancelFence. Under
+  SchedulerLock it prepares the single RenderPacket only if it is Empty and
+  the context's FenceOutstanding is 0, then binds (rbi
+  AdmissionBackendImageBindG4Submission: arena, TA/3D build, header, command
+  copy <= 4096 B, lease, BoundFence) and queues the fence.
+- Single-job state: RenderPacket (Empty/Prepared/Queued/Active),
+  BackendImage (BoundFence, G4Header/Command/Lease, G4Manager), scheduler
+  ActiveFence/DispatchedFence (cleared only by the render DPC, sch ~289),
+  state ActiveProcess/ActiveFence, PrivateCompletionFence (set at CompleteJob,
+  cleared at PrivateReported in the DPC path), graph JobInFlight/LeaseToken
+  (slot 1), backend/provider/queue-runtime pending job, context
+  FenceOutstanding and Private/Preempt/CancelFence.
+- Worker (bp): kick at head fence when Active/Dispatched/PagingPending are 0;
+  BeginJob (g3 ~2372) requires ActiveProcess NULL and no
+  PrivateCompletionFence, re-validates DMA range and mapping generation;
+  PrepareG4Manager; backend submit; poll; AdmissionBackendComplete
+  (SaveG4Manager, CompleteJob, CompleteActiveFence, image restore, packet
+  Empty, DMA_COMPLETED); DPC clears DispatchedFence and dispatches;
+  WorkerFinished signals SlotEvent.
+- Depth 2 with the firmware still serial needs per entry: packet
+  description, a copy of header + command + render + attachment + lease +
+  HeapBlocks, DmaBufferVa/Bytes/MappingGeneration, completion context;
+  FenceOutstanding and the context Private*/Preempt/CancelFence become per
+  entry (scene->Fence already is); PrivateCompletionFence stops gating
+  submit; the bind moves into the worker before BeginJob. Arena, G4Manager,
+  graph lease, ActiveProcess and backend pending state can stay single.
+- Must also walk all entries: PreemptCommand (sch ~330), ResetEngine
+  (sch ~432), BackendRetire/PlatformRuntimeReset (bp), CancelCommand,
+  SchedulerStop. Tests to update: test_g4_envelope_backpressure,
+  g4_submit_virtual_replay (occupied packet rejects), render worker
+  lifetime, render work queue.
