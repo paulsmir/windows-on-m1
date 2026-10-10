@@ -170,6 +170,8 @@ def main():
     parser.add_argument('--source-manifest', type=Path)
     # EXP1182: a Mesa build other than nir-<architecture> (e.g. b_ndebug=true).
     parser.add_argument('--mesa-build', type=Path)
+    # The build-full-asahi.py evidence of that Mesa build (pinned library hashes).
+    parser.add_argument('--compiler-evidence', type=Path)
     args = parser.parse_args()
     if args.gpuva and args.source_manifest is None:
         parser.error('--gpuva requires --source-manifest')
@@ -177,7 +179,7 @@ def main():
     out.mkdir(exist_ok=False)
     native = args.native_source
     build = args.mesa_build or ROOT / ('nir-' + args.architecture)
-    evidence = COMPILER_EVIDENCE[args.architecture]
+    evidence = args.compiler_evidence or COMPILER_EVIDENCE[args.architecture]
     manifest = {'architecture': args.architecture, 'project': str(args.project),
                 'native_source': str(native), 'compiler_evidence': str(evidence),
                 'scope': 'Real native runtime/compiler archive; executable link and execution required',

@@ -19,8 +19,11 @@ ROOT = Path(r'C:\Users\pauls\AD04-fullcompiler-001')
 MESA = Path(r'C:\Users\pauls\AD04-d3d10-frontend-build\mesa')
 parser = argparse.ArgumentParser()
 parser.add_argument('--architecture', choices=('x64', 'arm64', 'x86'), default='x64')
-ARCH = parser.parse_args().architecture
-BUILD = ROOT / ('nir-' + ARCH)
+# EXP1182: a Mesa build other than nir-<architecture> (e.g. b_ndebug=true).
+parser.add_argument('--mesa-build', type=Path)
+ARGS = parser.parse_args()
+ARCH = ARGS.architecture
+BUILD = ARGS.mesa_build or ROOT / ('nir-' + ARCH)
 GENERATED = Path(r'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated')
 CLANG = Path(r'C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin')
 INPUT = ROOT / 'asahi-input'
