@@ -28,10 +28,22 @@ static ADMISSION_UMD_SCREEN_BUFFER *AdmissionUmdScreenFind(
   UINT index;
   if (Device == NULL || Token == 0ULL)
     return NULL;
+#ifdef ADMISSION_UMD_SLOT_CACHE_SIZE
+  volatile LONG *hint = &Device->TokenSlotHint[ADMISSION_UMD_SLOT_HASH(Token)];
+  index = (UINT)*hint;
+  if (index && index <= ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device) &&
+      Device->ScreenBuffers[index - 1u].Active &&
+      Device->ScreenBuffers[index - 1u].Token == Token)
+    return &Device->ScreenBuffers[index - 1u];
+#endif
   for (index = 0u; index < ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device); ++index) {
     ADMISSION_UMD_SCREEN_BUFFER *buffer = &Device->ScreenBuffers[index];
-    if (buffer->Active && buffer->Token == Token)
+    if (buffer->Active && buffer->Token == Token) {
+#ifdef ADMISSION_UMD_SLOT_CACHE_SIZE
+      *hint = (LONG)(index + 1u);
+#endif
       return buffer;
+    }
   }
   return NULL;
 }

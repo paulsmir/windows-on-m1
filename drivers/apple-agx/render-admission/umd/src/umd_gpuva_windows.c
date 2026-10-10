@@ -171,9 +171,21 @@ void AdmissionUmdVaRecordDeallocate(const void *device, ULONGLONG token,
 
 static ADMISSION_UMD_SCREEN_BUFFER *find_slot(ADMISSION_UMD_DEVICE *device,
                                              uint64_t token) {
+#ifdef ADMISSION_UMD_SLOT_CACHE_SIZE
+  volatile LONG *hint = &device->TokenSlotHint[ADMISSION_UMD_SLOT_HASH(token)];
+  UINT cached = (UINT)*hint;
+  if (cached && cached <= ADMISSION_UMD_SCREEN_BUFFER_SCAN(device) &&
+      device->ScreenBuffers[cached - 1u].Active &&
+      device->ScreenBuffers[cached - 1u].Token == token)
+    return &device->ScreenBuffers[cached - 1u];
+#endif
   for (UINT i=0; i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(device); ++i)
-    if (device->ScreenBuffers[i].Active && device->ScreenBuffers[i].Token==token)
+    if (device->ScreenBuffers[i].Active && device->ScreenBuffers[i].Token==token) {
+#ifdef ADMISSION_UMD_SLOT_CACHE_SIZE
+      *hint = (LONG)(i + 1u);
+#endif
       return &device->ScreenBuffers[i];
+    }
   return NULL;
 }
 
@@ -197,13 +209,9 @@ static D3DKMT_HANDLE allocation_handle(ADMISSION_UMD_DEVICE *device,
   if (!device || device->Magic != ADMISSION_UMD_DEVICE_MAGIC ||
       !token || device->ScreenClosing) return 0;
   AcquireSRWLockShared(&device->ScreenBufferLock);
-  for (UINT i = 0; i < ADMISSION_UMD_SCREEN_BUFFER_SCAN(device); ++i) {
-    ADMISSION_UMD_SCREEN_BUFFER *slot = &device->ScreenBuffers[i];
-    if (slot->Active && !slot->Transition && slot->Token == token) {
-      handle = slot->KernelAllocation;
-      break;
-    }
-  }
+  /* Active tokens are unique: the slot find_slot returns is the only one. */
+  ADMISSION_UMD_SCREEN_BUFFER *slot = find_slot(device, token);
+  if (slot && !slot->Transition) handle = slot->KernelAllocation;
   ReleaseSRWLockShared(&device->ScreenBufferLock);
   return handle;
 }

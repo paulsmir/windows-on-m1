@@ -67,16 +67,33 @@ static int detach(void *context,APPLE_AGX_U64 token,const void *key,APPLE_AGX_U6
   ReleaseSRWLockExclusive(&d->ScreenBufferLock);
   return result;
 }
+static int identity_match(const ADMISSION_UMD_SCREEN_BUFFER *b,const void *key,
+                          const void *backend,APPLE_AGX_U64 serial) {
+  return b->Active && b->NativeBo==key && b->NativeBackend==backend && !b->Transition &&
+         (!serial || b->NativeBoSerial==serial);
+}
 static int identity(void *context,const void *key,APPLE_AGX_U64 serial,AGX_WIN32_RELOC_ALLOCATION *out) {
   ADMISSION_UMD_ASAHI_OWNER *c=(ADMISSION_UMD_ASAHI_OWNER *)context;
   ADMISSION_UMD_DEVICE *d=c->Device;
   int result=0;
   if(!key || !out) return 0;
   AcquireSRWLockShared(&d->ScreenBufferLock);
-  for(UINT i=0;!d->ScreenClosing && i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(d);++i) {
+  /* Only associate sets NativeBackend and it refuses a BO already held by an
+   * active slot, so at most one slot matches: a verified hint is the one. */
+  UINT first=0;
+#ifdef ADMISSION_UMD_SLOT_CACHE_SIZE
+  volatile LONG *hint=&d->NativeBoSlotHint[ADMISSION_UMD_SLOT_HASH((ULONG_PTR)key)];
+  UINT cached=(UINT)*hint;
+  if(cached && cached<=ADMISSION_UMD_SCREEN_BUFFER_SCAN(d) &&
+     identity_match(&d->ScreenBuffers[cached-1u],key,c->Backend,serial))
+    first=cached-1u;
+#endif
+  for(UINT i=first;!d->ScreenClosing && i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(d);++i) {
     ADMISSION_UMD_SCREEN_BUFFER *b=&d->ScreenBuffers[i];
-    if(b->Active && b->NativeBo==key && b->NativeBackend==c->Backend && !b->Transition &&
-       (!serial || b->NativeBoSerial==serial)) {
+    if(identity_match(b,key,c->Backend,serial)) {
+#ifdef ADMISSION_UMD_SLOT_CACHE_SIZE
+      *hint=(LONG)(i+1u);
+#endif
       ZeroMemory(out,sizeof(*out)); out->Owner=d->OwnerCookie; out->Token=b->Token;
       out->Serial=b->Serial; out->Generation=d->Win32Generation; out->Bytes=b->Bytes;
       out->AllocationIndex=~0u;

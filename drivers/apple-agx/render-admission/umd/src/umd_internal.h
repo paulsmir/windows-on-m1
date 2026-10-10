@@ -23,6 +23,16 @@
 /* EXP1061: live slots stay below ScreenBufferHighWater (FreeSlot hands out
  * the lowest free index), so a scan costs the peak live count, not capacity. */
 #define ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device) ((Device)->ScreenBufferHighWater)
+/* EXP1174: CS 1.6 spent ~10% of its game thread in linear scans of the
+ * screen-buffer slots (make_resident, evict, allocation_handle, identity:
+ * buffers per submission x live slots). Lookups by token or native BO go
+ * through a direct-mapped hint (slot index + 1) that is verified against the
+ * slot on every use and refilled by the linear scan on a miss: active tokens
+ * and native BOs are unique, so a verified hint is the slot the scan finds.
+ * Stale hints are harmless and need no maintenance. */
+#define ADMISSION_UMD_SLOT_CACHE_SIZE 8192u
+#define ADMISSION_UMD_SLOT_HASH(Key) \
+  ((UINT)((((APPLE_AGX_U64)(Key)) * 0x9E3779B97F4A7C15ULL) >> 51))
 /* EXP1025: unshared buffers up to this size are direct (no staging).
  * EXP1111: up to the KMD's 16 MiB class-allocation limit; larger mapped
  * buffers paid a copy escape per 64 KiB on every CPU/GPU hand-off (EXP1110). */
@@ -181,6 +191,8 @@ typedef struct _ADMISSION_UMD_DEVICE {
   AGX_WIN32_SCREEN Screen;
   ADMISSION_UMD_SCREEN_BUFFER ScreenBuffers[ADMISSION_UMD_SCREEN_BUFFER_LIMIT];
   UINT ScreenBufferHighWater;
+  volatile LONG TokenSlotHint[ADMISSION_UMD_SLOT_CACHE_SIZE];
+  volatile LONG NativeBoSlotHint[ADMISSION_UMD_SLOT_CACHE_SIZE];
   ADMISSION_UMD_SCREEN_FENCE ScreenFences[ADMISSION_UMD_SCREEN_FENCE_LIMIT];
   APPLE_AGX_U64 NextScreenToken;
   APPLE_AGX_U64 NextScreenSerial;
