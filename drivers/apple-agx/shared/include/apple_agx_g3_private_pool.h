@@ -14,7 +14,8 @@
  * while every process still held a 4 MiB heap and exhausted the pool.
  * EXP1115's on-demand heaps leave ~500 of 1024 units free.
  * EXP1139/EXP1140: with two submissions per context in flight, queued
- * scenes are not cacheable and DWM's 192 units forced 6734 pressure
+ * scenes are not cacheable and DWM's quota (the EXP1122-EXP1142 builds
+ * carried 128 units, not this branch's 192) forced 6734 pressure
  * evictions (one in flight: 262); scene misses rose 0.45 % -> 9.7 % (29 %
  * in a GDI-window drag), and each miss maps tables only after the
  * process's queue drains. 246 units (~15.4 MiB) adds 54 units: still two
