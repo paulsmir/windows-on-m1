@@ -320,7 +320,7 @@ parser.add_argument('--native-state-test', action='store_true')
 parser.add_argument('--native-batch-lifecycle', action='store_true')
 parser.add_argument('--gpuva', action='store_true')
 parser.add_argument('--prepare-only', action='store_true')
-parser.add_argument('--architecture', choices=('x64','arm64'), default='x64')
+parser.add_argument('--architecture', choices=('x64','arm64','x86'), default='x64')
 parser.add_argument('--project',type=Path)
 args = parser.parse_args()
 if (args.native_batch_lifecycle or args.prepare_only) and not (args.windows_platform_declarations and args.project):
@@ -4275,6 +4275,8 @@ if args.project:
     flags += ['/Gy','/DAGX_WIN32_NATIVE_PIPELINE_TEST=1']
 if args.native_state_test: flags.append('/DAGX_WIN32_NATIVE_STATE_TEST=1')
 if args.architecture=='arm64': flags.append('--target=aarch64-pc-windows-msvc')
+if args.architecture=='x86' and not any(a.startswith('--target=') for a in flags):
+    flags.append('--target=i686-pc-windows-msvc')
 includes = [build/'src', build/'include', mesa/'include', mesa/'src',
     mesa/'src/gallium/include', mesa/'src/gallium/auxiliary',
     mesa/'src/asahi/lib', mesa/'src/asahi/layout', mesa/'src/asahi/compiler',

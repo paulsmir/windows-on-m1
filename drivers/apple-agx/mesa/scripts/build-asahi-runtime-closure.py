@@ -25,6 +25,8 @@ OWNER_GENERATED = Path(r'C:\Users\pauls\AD04-umd-owner-004-generated')
 COMPILER_EVIDENCE = {
     'x64': ROOT / 'asahi-x64-4aac999030764fef813f32b1e0dcc7fd',
     'arm64': ROOT / 'asahi-arm64-37c472b7142e4e52a35fccf1b41da45a',
+    # CS 1.6 ICD (32-bit hl.exe): fixture output byte-identical to x64.
+    'x86': ROOT / 'asahi-x86-9fca8df7af384a0db9a109216f59d940',
 }
 LIBRARIES = ('src/compiler/nir/libnir.a', 'src/compiler/libcompiler.a',
              'src/util/libmesa_util.a', 'src/c11/impl/libmesa_util_c11.a',
@@ -78,8 +80,9 @@ def compiler_flags(entry, architecture):
              if not a.startswith(('-I', '/I', '/Fo', '/Fd'))
              and a not in ('/c', '/showIncludes', '/Zi', entry['file'])]
     flags += ['/DHAVE_FUNC_ATTRIBUTE_PACKED=1', '/Gy']
-    if architecture == 'arm64' and not any(a.startswith('--target=') for a in flags):
-        flags.append('--target=aarch64-pc-windows-msvc')
+    target = {'arm64': 'aarch64-pc-windows-msvc', 'x86': 'i686-pc-windows-msvc'}.get(architecture)
+    if target and not any(a.startswith('--target=') for a in flags):
+        flags.append('--target=' + target)
     return flags
 
 
@@ -160,7 +163,7 @@ def write_props(path, architecture, native, library, dependencies, gpuva, proven
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--project', required=True, type=Path)
-    parser.add_argument('--architecture', choices=('x64', 'arm64'), default='x64')
+    parser.add_argument('--architecture', choices=('x64', 'arm64', 'x86'), default='x64')
     parser.add_argument('--native-source', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--gpuva', action='store_true')
