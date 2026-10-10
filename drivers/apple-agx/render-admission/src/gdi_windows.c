@@ -197,8 +197,11 @@ static NTSTATUS AdmissionGdiPreparePacket(
   }
 
   KeAcquireSpinLock(&Adapter->SchedulerLock, &old_irql);
+  /* Phase 5a: a pending G4 job owns the next slot use; preparing this
+   * packet first would hold the slot while the scheduler's head fence
+   * (older, pending) can never bind: busy until the queue drains. */
   if (AdmissionRenderPacketState(&Adapter->RenderPacket) ==
-          AdmissionRenderPacketEmpty) {
+          AdmissionRenderPacketEmpty && Adapter->G4PendingCount == 0u) {
     if (Context->Object.FenceOutstanding == 0u &&
         AdmissionRenderPacketPrepare(
             &Adapter->RenderPacket, &description)) {
@@ -269,6 +272,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionGdiAdoptPrepatchedPacket(
   KeAcquireSpinLock(&Adapter->SchedulerLock, &oldIrql);
   if (AdmissionRenderPacketState(&Adapter->RenderPacket) ==
           AdmissionRenderPacketEmpty &&
+      Adapter->G4PendingCount == 0u &&
       Context->Object.FenceOutstanding == 0u &&
       AdmissionPrepatchedAdopt(
           &Context->PrepatchedRender, Args->SubmissionFenceId,
