@@ -1,7 +1,19 @@
 # J313 GPU: Settings-close blank fixed (EXP1132); Notepad drag 53 / typing 57
 
 
-## Current as of 2026-10-10 02:20Z (read this first)
+## Current as of 2026-10-10 03:40Z (read this first)
+
+Phase 5a (KMD cross-context queue) is in: e9474244 + 8e2e43b3 (deferred
+path also while the worker finishes; Wom1SubmitPath1135 counters).
+EXP1134/EXP1135: functionally clean, flips unchanged; AwaitWork waits went
+from ~105/s (EXP1130) to 1 per run, 10 % of submissions deferred. The GPU
+is idle when 90 % of submissions arrive: the limit is each process's
+serial wait for its own previous job. Next: phase 5b (two jobs per context:
+FenceOutstanding -> oldest + count, private preempt/cancel per scene) and
+then UMD two-in-flight (e4398e22) on top. App DestroyDevice drain fix
+2ebf1a96 (EXP1133 device-terminal) is committed, not yet run.
+
+## Earlier: 2026-10-10 02:20Z
 
 State: GPU-visible baseline after each run. Best validated launch:
 exp/1132-build f7ef24a7 (b3e2d5bf + display ring + UMD lifetime lines +
