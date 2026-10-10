@@ -528,6 +528,36 @@ typedef struct _ADMISSION_G3_LEAF_HISTORY_SNAPSHOT {
 } ADMISSION_G3_LEAF_HISTORY_SNAPSHOT;
 #endif
 
+/* Phase 5a (docs/superpowers/plans/2026-10-10-kmd-cross-context-render-
+ * queue.md): SubmitCommandVirtual runs on dxgkrnl's VidSch worker thread, so
+ * waiting there for the single render slot stalled the whole GPU scheduler
+ * (EXP1130: ~1 s of 15.9 s; EXP1133). A submission of a context with nothing
+ * outstanding is validated and copied here instead, its fence queued in
+ * order; the platform worker binds it when the slot empties. One job per
+ * context is still the rule (FenceOutstanding). */
+#define ADMISSION_G4_PENDING_CAPACITY 2u
+typedef enum _ADMISSION_G4_PENDING_STATE {
+  AdmissionG4PendingFree = 0,
+  AdmissionG4PendingFilling, /* reserved by the submitter, not yet counted */
+  AdmissionG4PendingQueued,
+  AdmissionG4PendingBinding,
+  AdmissionG4PendingDropped,
+} ADMISSION_G4_PENDING_STATE;
+struct _ADMISSION_RENDER_CONTEXT;
+typedef struct _ADMISSION_G4_PENDING {
+  ADMISSION_G4_PENDING_STATE State;
+  ULONG Fence;
+  struct _ADMISSION_RENDER_CONTEXT *Context;
+  ADMISSION_RENDER_PACKET_DESCRIPTION Packet;
+  /* Native, Render and Attachments point into this entry at bind time. */
+  APPLE_AGX_G4_SUBMIT_VIEW View;
+  ULONGLONG MappingGeneration, DmaBufferVa;
+  ULONG DmaBufferBytes;
+  APPLE_AGX_G4_ATTACHMENT Attachment;
+  unsigned char Render[sizeof(APPLE_AGX_G4_NATIVE_RENDER)];
+  unsigned char Native[APPLE_AGX_G4_NATIVE_MAX_BYTES];
+} ADMISSION_G4_PENDING;
+
 typedef struct _ADMISSION_CONTEXT {
   ADMISSION_OBJECT_ADAPTER ObjectAdapter;
   ADMISSION_MEMORY_CONTRACT Memory;
@@ -685,6 +715,11 @@ typedef struct _ADMISSION_CONTEXT {
   KSPIN_LOCK SchedulerLock;
   APPLE_AGX_SCHEDULER Scheduler;
   ADMISSION_RENDER_PACKET RenderPacket;
+  /* Phase 5a: validated G4 submissions of other contexts waiting for the
+   * render slot, oldest first, under SchedulerLock (see
+   * ADMISSION_G4_PENDING). The worker binds the head into RenderPacket. */
+  ADMISSION_G4_PENDING G4Pending[ADMISSION_G4_PENDING_CAPACITY];
+  ULONG G4PendingHead, G4PendingCount;
   ADMISSION_BACKEND_IMAGE BackendImage;
   /* EXP1105: Prepare image of the objects a G4 job changes. */
   ADMISSION_BACKEND_IMAGE_SNAPSHOT BackendSnapshot;
@@ -1638,6 +1673,9 @@ BOOLEAN AdmissionPlatformRuntimeAwaitWork(
     _Out_opt_ ULONG *FailedPredicate);
 BOOLEAN AdmissionPlatformRuntimeSubmit(
     _Inout_ ADMISSION_CONTEXT *Context);
+/* Phase 5a: the runtime can take work later (started, not stopping,
+ * resetting or failed); a busy slot or worker is not a refusal. */
+BOOLEAN AdmissionPlatformRuntimeQueueable(_In_ ADMISSION_CONTEXT *Context);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 VOID AdmissionJobTimingStartWindows(ADMISSION_CONTEXT *Adapter,
     ADMISSION_RENDER_CONTEXT *RenderContext, ULONG ProcessId,
@@ -1804,6 +1842,12 @@ BOOLEAN AdmissionGpuvaG3PrivateReset(ADMISSION_CONTEXT *);
 VOID AdmissionGpuvaG3PrivateCancel(ADMISSION_RENDER_CONTEXT *, ULONG, BOOLEAN);
 VOID AdmissionGpuvaG3PrivatePreempt(ADMISSION_RENDER_CONTEXT *, ULONG);
 BOOLEAN AdmissionGpuvaG3PrivateReported(ADMISSION_CONTEXT *, ADMISSION_RENDER_CONTEXT *, ULONG);
+/* Phase 5a: bind the head pending submission into the empty render slot
+ * (worker, PASSIVE_LEVEL); FALSE only when an accepted job cannot be bound. */
+BOOLEAN AdmissionG4PendingBindHead(ADMISSION_CONTEXT *);
+/* Phase 5a: drop every pending submission like a queued packet (SchedulerLock
+ * held); Preempt selects preemption (resubmitted later) over cancel. */
+VOID AdmissionG4PendingDropLocked(ADMISSION_CONTEXT *, BOOLEAN Preempt);
 NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *, const DXGKARG_ESCAPE *);
 #endif
 DXGKDDI_COLLECTDBGINFO AdmissionDdiCollectDbgInfo;

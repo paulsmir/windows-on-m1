@@ -120,6 +120,23 @@ typedef struct {
 } ADMISSION_RENDER_PACKET;
 enum { AdmissionRenderPacketEmpty, AdmissionRenderPacketPrepared,
        AdmissionRenderPacketQueued };
+/* Phase 5a pending submissions (mirrors render_admission.h). */
+#define ADMISSION_G4_PENDING_CAPACITY 2u
+typedef enum { AdmissionG4PendingFree = 0, AdmissionG4PendingFilling,
+  AdmissionG4PendingQueued, AdmissionG4PendingBinding,
+  AdmissionG4PendingDropped } ADMISSION_G4_PENDING_STATE;
+typedef struct {
+  ADMISSION_G4_PENDING_STATE State;
+  ULONG Fence;
+  ADMISSION_RENDER_CONTEXT *Context;
+  ADMISSION_RENDER_PACKET_DESCRIPTION Packet;
+  APPLE_AGX_G4_SUBMIT_VIEW View;
+  ULONGLONG MappingGeneration, DmaBufferVa;
+  ULONG DmaBufferBytes;
+  APPLE_AGX_G4_ATTACHMENT Attachment;
+  unsigned char Render[sizeof(APPLE_AGX_G4_NATIVE_RENDER)];
+  unsigned char Native[APPLE_AGX_G4_NATIVE_MAX_BYTES];
+} ADMISSION_G4_PENDING;
 typedef struct {
   APPLE_AGX_G4_PRIVATE_HEADER_V2 G4Header;
   unsigned char G4Command[APPLE_AGX_G4_NATIVE_MAX_BYTES];
@@ -150,9 +167,11 @@ typedef struct {
     ULONGLONG LogicalIpa[4];
     unsigned LogicalSegment[4], LogicalFlags[4];
   } G4SubmitFailure;
-  int SchedulerLock, SchedulerFaulted, RuntimeReady;
+  int SchedulerLock, SchedulerFaulted, RuntimeReady, RuntimeQueueable;
   APPLE_AGX_SCHEDULER Scheduler;
   ADMISSION_RENDER_PACKET RenderPacket;
+  ADMISSION_G4_PENDING G4Pending[ADMISSION_G4_PENDING_CAPACITY];
+  ULONG G4PendingHead, G4PendingCount, DispatchedFence;
   ADMISSION_BACKEND_IMAGE BackendImage;
 } ADMISSION_CONTEXT;
 struct _ADMISSION_RENDER_CONTEXT {
@@ -254,6 +273,10 @@ static int InterlockedExchange(volatile int *value, int exchange) {
 static int AdmissionPlatformRuntimeReady(ADMISSION_CONTEXT *adapter) {
   return adapter->RuntimeReady;
 }
+static BOOLEAN AdmissionPlatformRuntimeQueueable(ADMISSION_CONTEXT *adapter) {
+  return adapter->RuntimeQueueable ? TRUE : FALSE;
+}
+static void (*bind_hook)(void);
 static void AdmissionPlatformRuntimeSlotChanged(ADMISSION_CONTEXT *adapter) {
   (void)adapter;
 }
@@ -326,6 +349,7 @@ static int AdmissionBackendImageBindG4Submission(ADMISSION_BACKEND_IMAGE *image,
     const APPLE_AGX_G4_SUBMIT_VIEW *view,
     APPLE_AGX_EXP208_GDI_BINDING *binding) {
   (void)cpu;(void)binding;
+  if(bind_hook)bind_hook();
   if(!bind_ok)return 0;
   APPLE_AGX_G4_NATIVE_RENDER render;
   memcpy(&render,view->Render,sizeof(render));
@@ -385,6 +409,129 @@ typedef struct {
   APPLE_AGX_G4_NATIVE_HEADER Command;
   APPLE_AGX_G4_NATIVE_RENDER Render;
 } PACKET;
+
+static ADMISSION_CONTEXT *hook_adapter;
+static void drop_while_binding(void) {
+  KIRQL irql;
+  KeAcquireSpinLock(&hook_adapter->SchedulerLock, &irql);
+  AdmissionG4PendingDropLocked(hook_adapter, TRUE);
+  KeReleaseSpinLock(&hook_adapter->SchedulerLock, irql);
+}
+
+/* Phase 5a: with the render slot owned by context A's job (fence 7), a
+ * valid submission of context B queues instead of waiting on VidSch's
+ * thread, binds in order once the slot empties, and preemption drops it. */
+static void phase5a_cases(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *a, DXGKARG_SUBMITCOMMANDVIRTUAL *args) {
+  static ADMISSION_RENDER_CONTEXT b;
+  DXGKARG_SUBMITCOMMANDVIRTUAL other = *args;
+  int before = dispatches;
+  assert(adapter->RenderPacket.State == AdmissionRenderPacketQueued &&
+         adapter->RenderPacket.Description.Fence == 7u);
+  b = *a;
+  b.Object.FenceOutstanding = 0u;
+  b.GpuvaG3DmaBufferVa = 0ULL;
+  b.GpuvaG3DmaBufferBytes = 0u;
+  other.hContext = &b;
+  /* Not queueable (runtime stopping/failed): today's path, slot busy -> refused. */
+  other.SubmissionFenceId = 8u;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, &b, &other) != STATUS_SUCCESS);
+  assert(adapter->G4PendingCount == 0u && b.Object.FenceOutstanding == 0u);
+  adapter->RuntimeQueueable = 1;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, &b, &other) == STATUS_SUCCESS);
+  assert(adapter->G4PendingCount == 1u && dispatches == before + 1);
+  assert(adapter->G4Pending[adapter->G4PendingHead].State == AdmissionG4PendingQueued);
+  assert(adapter->G4Pending[adapter->G4PendingHead].Fence == 8u);
+  assert(b.Object.FenceOutstanding == 8u && b.GpuvaG3DmaBufferVa == 0ULL);
+  assert(adapter->RenderPacket.Description.Fence == 7u);
+  assert(adapter->Scheduler.LastSubmittedFence == 8u);
+  /* One job per context: B's next submission is not queued behind it. */
+  other.SubmissionFenceId = 9u;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, &b, &other) != STATUS_SUCCESS);
+  assert(adapter->G4PendingCount == 1u && b.Object.FenceOutstanding == 8u);
+  /* Nothing binds while A's job still owns the slot. */
+  assert(AdmissionG4PendingBindHead(adapter));
+  assert(adapter->G4PendingCount == 1u &&
+         adapter->RenderPacket.Description.Fence == 7u);
+  /* A completes: the worker binds B's job from the copy, in order. */
+  adapter->RenderPacket.State = AdmissionRenderPacketEmpty;
+  a->Object.FenceOutstanding = 0u;
+  adapter->BackendImage.G4Native = 0u;
+  adapter->BackendImage.BoundFence = 0u;
+  assert(AppleAgxSchedulerActivateFence(&adapter->Scheduler, 0u, 0u, 7u));
+  assert(AppleAgxSchedulerCompleteActiveFence(&adapter->Scheduler, 0u, 0u, 7u));
+  memset(adapter->BackendImage.G4Command, 0, sizeof(adapter->BackendImage.G4Command));
+  assert(AdmissionG4PendingBindHead(adapter));
+  assert(adapter->G4PendingCount == 0u);
+  assert(adapter->RenderPacket.State == AdmissionRenderPacketQueued &&
+         adapter->RenderPacket.Description.Fence == 8u);
+  assert(adapter->BackendImage.BoundFence == 8u && adapter->BackendImage.G4Native);
+  assert(memcmp(adapter->BackendImage.G4Command,
+                (const unsigned char *)args->pDmaBufferPrivateData +
+                    sizeof(APPLE_AGX_G4_PRIVATE_HEADER_V2),
+                adapter->BackendImage.G4CommandBytes) == 0);
+  assert(b.GpuvaG3DmaBufferVa == other.DmaBufferVirtualAddress &&
+         b.GpuvaG3DmaBufferBytes == other.DmaBufferSize);
+  /* Preemption drops a pending job and releases its context. */
+  a->Object.FenceOutstanding = 0u;
+  other.hContext = a;
+  other.SubmissionFenceId = 10u;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, a, &other) == STATUS_SUCCESS);
+  assert(adapter->G4PendingCount == 1u && a->Object.FenceOutstanding == 10u);
+  {
+    KIRQL irql;
+    KeAcquireSpinLock(&adapter->SchedulerLock, &irql);
+    adapter->DispatchedFence = 10u;
+    AdmissionG4PendingDropLocked(adapter, TRUE);
+    KeReleaseSpinLock(&adapter->SchedulerLock, irql);
+  }
+  assert(adapter->G4PendingCount == 0u && a->Object.FenceOutstanding == 0u &&
+         adapter->DispatchedFence == 0u);
+  assert(adapter->G4Pending[0].State == AdmissionG4PendingFree &&
+         adapter->G4Pending[1].State == AdmissionG4PendingFree);
+  /* Preemption while the worker binds: the entry is cancelled, not run. */
+  b.Object.FenceOutstanding = 0u;
+  adapter->RenderPacket.State = AdmissionRenderPacketEmpty;
+  adapter->BackendImage.G4Native = 0u;
+  adapter->BackendImage.BoundFence = 0u;
+  other.hContext = &b;
+  other.SubmissionFenceId = 11u;
+  /* Keep the slot busy so the submission queues (stand-in active job). */
+  adapter->RenderPacket.State = AdmissionRenderPacketQueued;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, &b, &other) == STATUS_SUCCESS);
+  adapter->RenderPacket.State = AdmissionRenderPacketEmpty;
+  AppleAgxSchedulerInitialize(&adapter->Scheduler);
+  assert(AppleAgxSchedulerQueueFence(&adapter->Scheduler, 0u, 0u, 11u));
+  hook_adapter = adapter;
+  bind_hook = drop_while_binding;
+  assert(AdmissionG4PendingBindHead(adapter));
+  bind_hook = NULL;
+  assert(adapter->G4PendingCount == 0u &&
+         adapter->RenderPacket.State == AdmissionRenderPacketEmpty);
+  assert(b.Object.FenceOutstanding == 0u && !adapter->BackendImage.G4Native);
+  assert(b.GpuvaG3DmaBufferVa == 0ULL && !adapter->SchedulerFaulted);
+  /* A bind failure of an accepted job is reported to the caller. The
+   * scheduler moved fence 11 to its preempted queue in the real driver. */
+  AppleAgxSchedulerInitialize(&adapter->Scheduler);
+  adapter->RenderPacket.State = AdmissionRenderPacketQueued;
+  other.SubmissionFenceId = 12u;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, &b, &other) == STATUS_SUCCESS);
+  adapter->RenderPacket.State = AdmissionRenderPacketEmpty;
+  bind_ok = 0;
+  assert(!AdmissionG4PendingBindHead(adapter));
+  bind_ok = 1;
+  assert(adapter->G4PendingCount == 0u && b.Object.FenceOutstanding == 0u &&
+         adapter->RenderPacket.State == AdmissionRenderPacketEmpty);
+  /* Restore the caller's state: A's fence 7 queued in the slot. */
+  adapter->RuntimeQueueable = 0;
+  AppleAgxSchedulerInitialize(&adapter->Scheduler);
+  assert(AppleAgxSchedulerQueueFence(&adapter->Scheduler, 0u, 0u, 7u));
+  adapter->RenderPacket.State = AdmissionRenderPacketQueued;
+  adapter->RenderPacket.Description.Fence = 7u;
+  a->Object.FenceOutstanding = 7u;
+  a->GpuvaG3DmaBufferVa = args->DmaBufferVirtualAddress;
+  puts("phase 5a pending submissions: PASS");
+}
 
 int main(void) {
   PACKET packet = {0};
@@ -488,6 +635,7 @@ int main(void) {
          AdmissionRenderPacketQueued);
   assert(context.Object.FenceOutstanding==7u &&
          context.GpuvaG3DmaBufferVa==args.DmaBufferVirtualAddress);
+  phase5a_cases(&adapter, &context, &args);
   adapter.RenderPacket.State=AdmissionRenderPacketEmpty;
   context.Object.FenceOutstanding=0u;
   adapter.BackendImage.G4Native=0u;

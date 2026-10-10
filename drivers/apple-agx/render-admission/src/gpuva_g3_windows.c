@@ -3022,6 +3022,205 @@ static VOID AdmissionG4ObserveEnvelopeReject(ADMISSION_CONTEXT *adapter,
 }
 #endif
 
+/* Phase 5a: a submission may be queued behind the render slot when its
+ * context has nothing outstanding, a pending entry is free and the runtime
+ * is only busy (another job bound, running or finishing). */
+static BOOLEAN AdmissionG4PendingAdmissible(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context) {
+  KIRQL old_irql;
+  BOOLEAN admissible;
+  if (KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      !AdmissionPlatformRuntimeQueueable(adapter))
+    return FALSE;
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  admissible = context->Object.FenceOutstanding == 0u &&
+      adapter->G4PendingCount < ADMISSION_G4_PENDING_CAPACITY &&
+      (AdmissionRenderPacketState(&adapter->RenderPacket) !=
+           AdmissionRenderPacketEmpty || adapter->G4PendingCount != 0u) &&
+      InterlockedCompareExchange(&adapter->SchedulerFaulted, 0, 0) == 0
+      ? TRUE : FALSE;
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  return admissible;
+}
+
+/* Phase 5a: copy a validated submission into the tail pending entry and
+ * queue its fence. The entry is reserved under SchedulerLock, filled outside
+ * it, and published with the fence; the worker binds it in order. */
+static BOOLEAN AdmissionG4PendingQueue(ADMISSION_CONTEXT *adapter,
+    ADMISSION_G3_STATE *state, ADMISSION_RENDER_CONTEXT *context,
+    ADMISSION_G3_PRIVATE_SCENE *private_scene,
+    const DXGKARG_SUBMITCOMMANDVIRTUAL *args,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *packet,
+    const APPLE_AGX_G4_SUBMIT_VIEW *view, ULONGLONG mapping_generation) {
+  ADMISSION_G4_PENDING *entry = NULL;
+  KIRQL old_irql;
+  ULONG slot;
+  BOOLEAN queued = FALSE;
+  if (view->Native == NULL || view->Render == NULL ||
+      view->Attachments == NULL || view->AttachmentCount != 1u ||
+      view->RenderBytes != sizeof(APPLE_AGX_G4_NATIVE_RENDER) ||
+      view->CommandBytes == 0u ||
+      view->CommandBytes > APPLE_AGX_G4_NATIVE_MAX_BYTES)
+    return FALSE;
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  slot = (adapter->G4PendingHead + adapter->G4PendingCount) %
+      ADMISSION_G4_PENDING_CAPACITY;
+  if (context->Object.FenceOutstanding == 0u &&
+      adapter->G4PendingCount < ADMISSION_G4_PENDING_CAPACITY &&
+      adapter->G4Pending[slot].State == AdmissionG4PendingFree &&
+      InterlockedCompareExchange(&adapter->SchedulerFaulted, 0, 0) == 0) {
+    entry = &adapter->G4Pending[slot];
+    entry->State = AdmissionG4PendingFilling;
+    context->Object.FenceOutstanding = args->SubmissionFenceId;
+  }
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  if (entry == NULL)
+    return FALSE;
+  entry->Fence = args->SubmissionFenceId;
+  entry->Context = context;
+  entry->Packet = *packet;
+  entry->View = *view;
+  entry->View.Native = NULL;
+  entry->View.Render = NULL;
+  entry->View.Attachments = NULL;
+  entry->MappingGeneration = mapping_generation;
+  entry->DmaBufferVa = args->DmaBufferVirtualAddress;
+  entry->DmaBufferBytes = args->DmaBufferSize;
+  RtlCopyMemory(&entry->Attachment, view->Attachments, sizeof(entry->Attachment));
+  RtlCopyMemory(entry->Render, view->Render, sizeof(entry->Render));
+  RtlCopyMemory(entry->Native, view->Native, view->CommandBytes);
+  ExAcquireFastMutex(&state->Lock);
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  if (entry->State == AdmissionG4PendingFilling &&
+      AppleAgxSchedulerQueueFence(&adapter->Scheduler, 0u, 0u,
+          args->SubmissionFenceId)) {
+    entry->State = AdmissionG4PendingQueued;
+    ++adapter->G4PendingCount;
+    queued = TRUE;
+  } else {
+    entry->State = AdmissionG4PendingFree;
+    entry->Context = NULL;
+    if (context->Object.FenceOutstanding == args->SubmissionFenceId)
+      context->Object.FenceOutstanding = 0u;
+  }
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  if (queued && private_scene) {
+    private_scene->ResumeFence=0u;private_scene->Submitting=0u;
+  }
+  ExReleaseFastMutex(&state->Lock);
+  return queued;
+}
+
+/* Phase 5a: bind the head pending submission into the empty render slot.
+ * The packet is prepared under SchedulerLock (reserving the slot), bound
+ * outside it, then queued unless preemption or reset dropped the entry
+ * meanwhile. Returns FALSE only when an accepted job could not be bound. */
+_Use_decl_annotations_ BOOLEAN AdmissionG4PendingBindHead(
+    ADMISSION_CONTEXT *adapter) {
+  ADMISSION_G4_PENDING *entry;
+  ADMISSION_RENDER_CONTEXT *context;
+  APPLE_AGX_G4_SUBMIT_VIEW view;
+  APPLE_AGX_EXP208_GDI_BINDING binding;
+  KIRQL old_irql;
+  BOOLEAN bound, dropped, ok = TRUE;
+  if (adapter == NULL)
+    return TRUE;
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  entry = &adapter->G4Pending[adapter->G4PendingHead];
+  if (adapter->G4PendingCount == 0u ||
+      entry->State != AdmissionG4PendingQueued ||
+      AdmissionRenderPacketState(&adapter->RenderPacket) !=
+          AdmissionRenderPacketEmpty ||
+      AppleAgxSchedulerQueuedFence(&adapter->Scheduler, 0u, 0u) != entry->Fence ||
+      !AdmissionRenderPacketPrepare(&adapter->RenderPacket, &entry->Packet)) {
+    KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+    return TRUE;
+  }
+  entry->State = AdmissionG4PendingBinding;
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  context = entry->Context;
+  view = entry->View;
+  view.Native = entry->Native;
+  view.Render = entry->Render;
+  view.Attachments = &entry->Attachment;
+  RtlZeroMemory(&binding, sizeof(binding));
+  bound = AdmissionBackendImageBindG4Submission(&adapter->BackendImage,
+      &entry->Packet, (PVOID)(ULONG_PTR)entry->Packet.DestinationCpuToken,
+      &view, &binding) ? TRUE : FALSE;
+  if (bound) {
+    context->GpuvaG3MappingGeneration = entry->MappingGeneration;
+    context->GpuvaG3DmaBufferVa = entry->DmaBufferVa;
+    context->GpuvaG3DmaBufferBytes = entry->DmaBufferBytes;
+  }
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  dropped = entry->State == AdmissionG4PendingDropped ? TRUE : FALSE;
+  if (!bound || dropped ||
+      !AdmissionRenderPacketQueue(&adapter->RenderPacket, entry->Fence,
+          (ULONGLONG)(ULONG_PTR)context, entry->Packet.PrivateDataToken, 0u,
+          entry->Packet.DmaEnd)) {
+    /* Clear before the slot empties: a resubmission may bind right after. */
+    context->GpuvaG3DmaBufferVa = 0ULL;
+    context->GpuvaG3DmaBufferBytes = 0u;
+    (void)AdmissionRenderPacketCancelPrepared(&adapter->RenderPacket,
+        (ULONGLONG)(ULONG_PTR)context);
+    if (bound)
+      (void)AdmissionBackendImageReleaseSubmission(&adapter->BackendImage,
+          entry->Fence);
+    if (!dropped) {
+      /* An accepted fence cannot complete: cancel the scene and let the
+       * caller fault the scheduler (TDR recovery). */
+      AdmissionGpuvaG3PrivateCancel(context, entry->Fence, FALSE);
+      if (context->Object.FenceOutstanding == entry->Fence)
+        context->Object.FenceOutstanding = 0u;
+      ok = FALSE;
+    }
+  }
+  entry->State = AdmissionG4PendingFree;
+  entry->Context = NULL;
+  adapter->G4PendingHead = (adapter->G4PendingHead + 1u) %
+      ADMISSION_G4_PENDING_CAPACITY;
+  --adapter->G4PendingCount;
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  return ok;
+}
+
+/* Phase 5a: preemption and reset treat every pending submission like the
+ * queued packet: the context is released and its private scene preempted
+ * (VidSch resubmits it) or cancelled. An entry the worker is binding is
+ * marked dropped; the worker then cancels its prepared packet. Called with
+ * SchedulerLock held. */
+_Use_decl_annotations_ VOID AdmissionG4PendingDropLocked(
+    ADMISSION_CONTEXT *adapter, BOOLEAN preempt) {
+  ULONG index, kept = 0u;
+  if (adapter == NULL)
+    return;
+  for (index = 0u; index < adapter->G4PendingCount; ++index) {
+    ADMISSION_G4_PENDING *entry = &adapter->G4Pending[
+        (adapter->G4PendingHead + index) % ADMISSION_G4_PENDING_CAPACITY];
+    ADMISSION_RENDER_CONTEXT *context = entry->Context;
+    if (entry->State == AdmissionG4PendingDropped) {
+      kept = 1u;
+      continue;
+    }
+    if (context != NULL &&
+        context->Object.FenceOutstanding == entry->Fence) {
+      if (preempt) AdmissionGpuvaG3PrivatePreempt(context, entry->Fence);
+      else AdmissionGpuvaG3PrivateCancel(context, entry->Fence, FALSE);
+      context->Object.FenceOutstanding = 0u;
+    }
+    if (adapter->DispatchedFence == entry->Fence)
+      adapter->DispatchedFence = 0u;
+    if (entry->State == AdmissionG4PendingBinding) {
+      entry->State = AdmissionG4PendingDropped;
+      kept = 1u;
+    } else {
+      entry->State = AdmissionG4PendingFree;
+      entry->Context = NULL;
+    }
+  }
+  adapter->G4PendingCount = kept;
+}
+
 static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
     ADMISSION_CONTEXT *adapter, ADMISSION_RENDER_CONTEXT *context,
     const DXGKARG_SUBMITCOMMANDVIRTUAL *args) {
@@ -3042,7 +3241,7 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   APPLE_AGX_EXP208_GDI_BINDING binding;
   KIRQL old_irql;
   NTSTATUS viewStatus = STATUS_SUCCESS;
-  BOOLEAN prepared = FALSE, queued = FALSE;
+  BOOLEAN prepared = FALSE, queued = FALSE, deferred;
   ULONG rollbackBranch = AdmissionG4RejectBind;
   DXGK_SUBMITCOMMANDFLAGS unsupportedFlags=args->Flags;
   unsupportedFlags.Resubmission=0;
@@ -3060,6 +3259,9 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
 #define ADMISSION_G4_RUNTIME_READY() \
   AdmissionPlatformRuntimeAwaitWork(adapter, 10000u, NULL)
 #endif
+  /* Phase 5a: while the render slot holds another context's job, queue
+   * instead of waiting on dxgkrnl's VidSch worker thread. */
+  deferred = AdmissionG4PendingAdmissible(adapter, context);
   if (ADMISSION_G4_REJECTS(1u, KeGetCurrentIrql() != PASSIVE_LEVEL) ||
       ADMISSION_G4_REJECTS(2u, state == NULL) ||
       ADMISSION_G4_REJECTS(3u, process == NULL) ||
@@ -3075,7 +3277,7 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
                                     ADMISSION_CONTEXT_GDI)) != 0u) ||
       ADMISSION_G4_REJECTS(11u, unsupportedFlags.Value != 0u) ||
       ADMISSION_G4_REJECTS(12u, !context->SchedulerContext.Active) ||
-      ADMISSION_G4_REJECTS(13u, !ADMISSION_G4_RUNTIME_READY()) ||
+      ADMISSION_G4_REJECTS(13u, !deferred && !ADMISSION_G4_RUNTIME_READY()) ||
       ADMISSION_G4_REJECTS(14u, !NT_SUCCESS(viewStatus =
           AdmissionMemoryRuntimeLocalView(adapter, &local)))) {
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
@@ -3094,8 +3296,10 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   RtlZeroMemory(&packet, sizeof(packet));
   RtlZeroMemory(&binding, sizeof(binding));
   ExAcquireFastMutex(&state->Lock);
+  /* A deferred job binds and begins only after the worker has reported the
+   * previous private completion, so only the immediate path checks it here. */
   if (context->GpuvaG3RootIpa != process->Graph.RootIpa ||
-      process->Graph.Uncertain || state->PrivateCompletionFence) {
+      process->Graph.Uncertain || (!deferred && state->PrivateCompletionFence)) {
     ExReleaseFastMutex(&state->Lock);
     return AdmissionG4SubmitReject(adapter, context, args,
         AdmissionG4RejectRoot, STATUS_INVALID_PARAMETER, 0u, TRUE);
@@ -3191,9 +3395,20 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
     return AdmissionG4SubmitRejectDetail(adapter, context, args,
         AdmissionG4RejectParse, STATUS_INVALID_PARAMETER, (ULONG)result,
         TRUE, &detail);
+  if (deferred) {
+    if (AdmissionG4PendingQueue(adapter, state, context, private_scene, args,
+            &packet, &view, mapping_generation)) {
+      AdmissionDispatchQueuedWork(adapter);
+      return STATUS_SUCCESS;
+    }
+    AdmissionG4PrivateUnqueue(process,private_scene,args->SubmissionFenceId);
+    return AdmissionG4SubmitReject(adapter, context, args,
+        AdmissionG4RejectPrepare, STATUS_INVALID_PARAMETER, 0u, TRUE);
+  }
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   if (AdmissionRenderPacketState(&adapter->RenderPacket) ==
           AdmissionRenderPacketEmpty &&
+      adapter->G4PendingCount == 0u &&
       context->Object.FenceOutstanding == 0u &&
       InterlockedCompareExchange(&adapter->SchedulerFaulted, 0, 0) == 0 &&
       AdmissionRenderPacketPrepare(&adapter->RenderPacket, &packet)) {

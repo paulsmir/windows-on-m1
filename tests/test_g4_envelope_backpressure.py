@@ -21,6 +21,7 @@ Invariants:
   Notify -> next Kick in EXP1118/EXP1119). No timer sleep remains;
 - a busy state that outlives the timeout is refused with its predicate;
 - stopping, resetting, failed or missing runtimes are refused without waiting;
+- Phase 5a: queued (deferred-bind) submissions keep the slot busy;
 - the G4 envelope uses the bounded wait.
 """
 from pathlib import Path
@@ -64,7 +65,7 @@ struct KEVENT { int x; };
 struct ADMISSION_PLATFORM_RUNTIME { BOOLEAN ProviderReady, BackendStarted; BACKEND Backend; void *WorkItem;
   volatile LONG Stopping, Resetting, WorkScheduled; KEVENT WorkIdle, SlotEvent; };
 struct PACKET { int State; };
-struct ADMISSION_CONTEXT { void *PlatformRuntime; int SchedulerLock; PACKET RenderPacket; };
+struct ADMISSION_CONTEXT { void *PlatformRuntime; int SchedulerLock; PACKET RenderPacket; ULONG G4PendingCount; };
 static ULONGLONG now; static int waits, delays, finish_after;
 static ADMISSION_PLATFORM_RUNTIME *rt; static ADMISSION_CONTEXT *ctx;
 static ULONGLONG KeQueryInterruptTime(void){ return now; }
@@ -72,7 +73,8 @@ static KIRQL KeGetCurrentIrql(void){ return PASSIVE_LEVEL; }
 static void KeAcquireSpinLock(int*, KIRQL*){} static void KeReleaseSpinLock(int*, KIRQL){}
 static int AdmissionRenderPacketState(PACKET *p){ return p->State; }
 static void tick(){ now += 100000ULL; if(finish_after && --finish_after==0){ rt->WorkScheduled=0;
-  rt->Backend.Phase=AppleAgxBackendRuntimeReady; ctx->RenderPacket.State=AdmissionRenderPacketEmpty; } }
+  rt->Backend.Phase=AppleAgxBackendRuntimeReady; ctx->RenderPacket.State=AdmissionRenderPacketEmpty;
+  ctx->G4PendingCount=0; } }
 static int slot_waits, clears;
 static void KeClearEvent(KEVENT*){ ++clears; }
 static NTSTATUS KeWaitForSingleObject(KEVENT *e, int, int, BOOLEAN, LARGE_INTEGER*){
@@ -81,7 +83,7 @@ static NTSTATUS KeDelayExecutionThread(int, BOOLEAN, LARGE_INTEGER*){ ++delays; 
 @@FUNCS@@
 int main(){
   ADMISSION_PLATFORM_RUNTIME r={1,1,{AppleAgxBackendRuntimeReady},(void*)1,0,0,0,{0}};
-  ADMISSION_CONTEXT c={&r,0,{AdmissionRenderPacketEmpty}}; rt=&r; ctx=&c; ULONG why=99;
+  ADMISSION_CONTEXT c={&r,0,{AdmissionRenderPacketEmpty},0}; rt=&r; ctx=&c; ULONG why=99;
   assert(AdmissionPlatformRuntimeAwaitWork(&c,1000,&why) && why==0 && waits+delays==0);
   /* Worker returning after the fence notification. */
   r.WorkScheduled=1; finish_after=3;
@@ -94,6 +96,10 @@ int main(){
    * wait on the slot event, which the slot's release sets, not a timer. */
   waits=delays=slot_waits=0; c.RenderPacket.State=AdmissionRenderPacketActive; finish_after=2;
   assert(AdmissionPlatformRuntimeAwaitWork(&c,1000,&why) && slot_waits==2 && delays==0);
+  /* Phase 5a: an empty slot with queued submissions is still busy; an
+   * immediate bind must not overtake them. */
+  waits=delays=slot_waits=0; c.G4PendingCount=1; finish_after=2;
+  assert(AdmissionPlatformRuntimeAwaitWork(&c,1000,&why) && slot_waits==2 && why==0);
   /* A job outliving the bound is refused with its predicate. */
   r.Backend.Phase=AppleAgxBackendRuntimeSubmitted; finish_after=0; now=0;
   assert(!AdmissionPlatformRuntimeAwaitWork(&c,50,&why) && why==4);

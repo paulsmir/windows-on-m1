@@ -3331,6 +3331,15 @@ static VOID AdmissionPlatformWorker(
   taTemporal.Bytes = sizeof(taTemporal);
 #endif
 
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* Phase 5a: a submission that queued while the slot was busy is bound
+   * here, at PASSIVE_LEVEL, once its fence heads the queue. */
+  if (!AdmissionG4PendingBindHead(adapter)) {
+    InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x40000L | __LINE__, 0);
+    AdmissionPlatformWorkerFinished(runtime);
+    return;
+  }
+#endif
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   cancelled = AdmissionRenderPacketState(&adapter->RenderPacket) == AdmissionRenderPacketEmpty ||
       InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0 ||
@@ -4613,6 +4622,19 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeReady(
   return AdmissionPlatformRuntimeReadyEx(Context, NULL);
 }
 
+_Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeQueueable(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context != NULL
+      ? (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime : NULL;
+  return runtime != NULL && runtime->ProviderReady &&
+      runtime->BackendStarted && runtime->WorkItem != NULL &&
+      InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 &&
+      InterlockedCompareExchange(&runtime->Resetting, 0, 0) == 0 &&
+      (runtime->Backend.Phase == AppleAgxBackendRuntimeReady ||
+       runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted)
+      ? TRUE : FALSE;
+}
+
 /* EXP1013/EXP1014: the backend worker reports the completed fence before it
  * returns the backend to Ready and clears WorkScheduled, and VidSch may submit
  * the next DMA buffer while a job is still running.  Neither is malformed
@@ -4637,8 +4659,9 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeAwaitWork(
       KIRQL oldIrql;
       BOOLEAN empty;
       KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
+      /* Phase 5a: an immediate bind must not overtake queued submissions. */
       empty = AdmissionRenderPacketState(&Context->RenderPacket) ==
-          AdmissionRenderPacketEmpty;
+          AdmissionRenderPacketEmpty && Context->G4PendingCount == 0u;
       KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
       if (empty) {
         reason = 0u;

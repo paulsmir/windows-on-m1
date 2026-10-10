@@ -117,8 +117,13 @@ Retry:
       Context->DispatchedFence = fence;
       InterlockedExchange(&Context->PagingPending, 1);
       cpu = TRUE;
-    } else if (AdmissionRenderPacketState(&Context->RenderPacket) == AdmissionRenderPacketQueued &&
-               Context->RenderPacket.Description.Fence == fence) {
+    } else if ((AdmissionRenderPacketState(&Context->RenderPacket) == AdmissionRenderPacketQueued &&
+                Context->RenderPacket.Description.Fence == fence) ||
+               /* Phase 5a: the worker binds a pending head into the empty slot. */
+               (AdmissionRenderPacketState(&Context->RenderPacket) == AdmissionRenderPacketEmpty &&
+                Context->G4PendingCount != 0u &&
+                Context->G4Pending[Context->G4PendingHead].State == AdmissionG4PendingQueued &&
+                Context->G4Pending[Context->G4PendingHead].Fence == fence)) {
       Context->DispatchedFence = fence;
       render = TRUE;
     }

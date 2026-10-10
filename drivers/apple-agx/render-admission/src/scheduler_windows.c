@@ -185,6 +185,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionSchedulerStop(
   if (Context->Scheduler.ContextCount != 0u ||
       AdmissionRenderPacketState(&Context->RenderPacket) !=
           AdmissionRenderPacketEmpty ||
+      Context->G4PendingCount != 0u ||
       AppleAgxSchedulerHasOutstandingFence(
           &Context->Scheduler, ADMISSION_SCHEDULER_NODE,
           ADMISSION_SCHEDULER_ENGINE) ||
@@ -385,6 +386,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
 #endif
     queuedContext->Object.FenceOutstanding = 0u;
   }
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* Phase 5a: pending submissions were never started; VidSch resubmits. */
+  AdmissionG4PendingDropLocked(context, TRUE);
+#endif
   notifyNow = AppleAgxSchedulerPreemptionPhase(&context->Scheduler) ==
                   AppleAgxPreemptionReadyToNotify && context->DispatchedFence == 0u &&
       (InterlockedCompareExchange(&context->PagingPending, 0, 0) == 0 ||
@@ -485,6 +490,9 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
     KeAcquireSpinLock(&context->PagingLock, &oldIrql);
     KeAcquireSpinLockAtDpcLevel(&context->SchedulerLock);
     AdmissionCpuQueueReleaseContextsLocked(context);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    AdmissionG4PendingDropLocked(context, FALSE);
+#endif
     context->CpuQueueHead = context->CpuQueueCount = context->DispatchedFence = 0u;
     InterlockedExchange(&context->RenderDpcFence, 0);
     InterlockedExchange(&context->SchedulerFaulted, 0);
@@ -519,6 +527,9 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
               : FALSE;
   if (reset) {
     AdmissionCpuQueueReleaseContextsLocked(context);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    AdmissionG4PendingDropLocked(context, FALSE);
+#endif
     context->CpuQueueHead = context->CpuQueueCount = context->DispatchedFence = 0u;
     InterlockedExchange(&context->RenderDpcFence, 0);
     AdmissionPagingUpdateIdleLocked(context);
