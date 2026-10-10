@@ -1,7 +1,36 @@
-# J313 GPU: broker fast path; Notepad drag 53 / typing 57 (EXP1117-EXP1127)
+# J313 GPU: Settings-close blank root-caused (EXP1130/EXP1131); Notepad drag 53 / typing 57
 
 
-## Current as of 2026-10-09 23:55Z (read this first)
+## Current as of 2026-10-10 02:10Z (read this first)
+
+State: GPU-visible baseline after each run. Best validated launch is still
+exp/1126-build b3e2d5bf + m1n1 98cdabae (EXP1129: revoke 33 -> 6.5 us).
+EXP1131 (exp/1131-build e404c6df: + receipt-only display ring and UMD
+lifetime lines) is functionally clean.
+
+Proven since 23:55Z:
+- EXP1130 ETW: DWM's composition thread waits ~4-5 ms per frame for the
+  previous submission to retire (UMD retire_held / PresentationRotate /
+  CopyFrontToBackBuffer) and runs ~7 ms CPU per frame.
+- Settings-close blank root cause (EXP1130 ETW + EXP1131 receipts): DWM's
+  PresentationDestroy deallocates a presentation resource, then the native
+  BO's Direct screen slot evicts the dead handle; dxgkrnl marks the device
+  as removed (DxgkEvictInternal -> VidSchMarkDeviceAsError) and DWM runs
+  CD3DDevice::ProcessDeviceLost: full device rebuild, visibility off ->
+  ModeChange primaries, normal flips after 0.9-1.3 s. Fix 0dd8bb24 (slot
+  forgets a handle the runtime deallocated), RED/GREEN test.
+
+Open, causal order:
+1. EXP1132 = EXP1131 + 0dd8bb24 + 421d5110 (per-kind ring filter): expect no
+   visibility-off/ModeChange and no DWM allocation rebuild on Settings close.
+2. Multi-job: KMD queue depth 2 (submit stops blocking; worker binds the next
+   entry) then UMD two submissions in flight (re-apply e4398e22). Site map:
+   scratchpad multijob-map.txt (per-context Private/Preempt/CancelFence and
+   FenceOutstanding must become per entry).
+3. Notepad per-frame shared surface (~50/s).
+
+
+## Current as of 2026-10-09 23:55Z
 
 State: GPU-visible baseline after each run. Best validated launch: driver
 exp/1126-build b3e2d5bf (EXP1122 + 85e2b4b9 coalesced paging + f1d5ba47
