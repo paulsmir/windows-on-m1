@@ -6,7 +6,9 @@
  * clears to red, draws a green immediate-mode triangle (glBegin/glEnd, the
  * GoldSrc renderer's path) and a blue textured quad, reads back pixels and
  * calls SwapBuffers. Exit 0 only when every checked pixel matches.
- * Usage: agx_gl_smoke.exe [frames] [expect-renderer-substring] */
+ * Usage: agx_gl_smoke.exe [frames] [expect-renderer-substring]
+ * Run from a directory without opengl32.dll to exercise Microsoft's
+ * opengl32.dll and the adapter's registered ICD (EXP1156). */
 #include <windows.h>
 #include <dbghelp.h>
 #include <GL/gl.h>
@@ -90,6 +92,56 @@ static void on_abort(int sig) {
   TerminateProcess(GetCurrentProcess(), 7);
 }
 
+/* EXP1156: what dxgkrnl names as this process's OpenGL ICD for the window's
+ * adapter (KMTQAITYPE_UMOPENGLINFO; a WOW64 caller gets the ...Wow values).
+ * Layouts of d3dkmthk.h, declared here so the test builds without the WDK. */
+typedef struct { HDC hDc; UINT hAdapter; LUID AdapterLuid; UINT VidPnSourceId; } SMOKE_OPENADAPTERFROMHDC;
+typedef struct { UINT hAdapter; int Type; void *pPrivateDriverData; UINT PrivateDriverDataSize; } SMOKE_QUERYADAPTERINFO;
+typedef struct { WCHAR UmdOpenGlIcdFileName[MAX_PATH]; ULONG Version; ULONG Flags; } SMOKE_OPENGLINFO;
+typedef struct { UINT hAdapter; } SMOKE_CLOSEADAPTER;
+typedef struct { WCHAR DeviceName[32]; UINT hAdapter; LUID AdapterLuid; UINT VidPnSourceId; } SMOKE_OPENADAPTERFROMGDI;
+static void print_icd_info(HWND wnd, HDC dc) {
+  HMODULE gdi = GetModuleHandleA("gdi32.dll");
+  LONG (APIENTRY *open)(SMOKE_OPENADAPTERFROMHDC *) = NULL;
+  LONG (APIENTRY *query)(SMOKE_QUERYADAPTERINFO *) = NULL;
+  LONG (APIENTRY *close)(SMOKE_CLOSEADAPTER *) = NULL;
+  LONG (APIENTRY *opengdi)(SMOKE_OPENADAPTERFROMGDI *) = NULL;
+  SMOKE_OPENADAPTERFROMHDC o; SMOKE_QUERYADAPTERINFO q; SMOKE_OPENGLINFO info; SMOKE_CLOSEADAPTER c;
+  LONG status;
+  if (gdi) {
+    *(FARPROC *)&open = GetProcAddress(gdi, "D3DKMTOpenAdapterFromHdc");
+    *(FARPROC *)&query = GetProcAddress(gdi, "D3DKMTQueryAdapterInfo");
+    *(FARPROC *)&close = GetProcAddress(gdi, "D3DKMTCloseAdapter");
+    *(FARPROC *)&opengdi = GetProcAddress(gdi, "D3DKMTOpenAdapterFromGdiDisplayName");
+  }
+  if (!open || !query || !close) { printf("ICD_INFO no-thunks\n"); return; }
+  memset(&o, 0, sizeof(o)); o.hDc = dc;
+  status = open(&o);
+  if (status < 0 && opengdi) {
+    /* A DC outside an interactive session has no adapter (builder control);
+     * the window's monitor names the GDI display device instead. */
+    MONITORINFOEXW mi; SMOKE_OPENADAPTERFROMGDI g;
+    printf("ICD_INFO open-adapter-from-hdc %08lx\n", (unsigned long)status);
+    memset(&mi, 0, sizeof(mi)); mi.cbSize = sizeof(mi);
+    memset(&g, 0, sizeof(g));
+    if (GetMonitorInfoW(MonitorFromWindow(wnd, MONITOR_DEFAULTTOPRIMARY), (MONITORINFO *)&mi)) {
+      wcsncpy_s(g.DeviceName, 32, mi.szDevice, _TRUNCATE);
+      status = opengdi(&g);
+      o.hAdapter = g.hAdapter; o.AdapterLuid = g.AdapterLuid;
+    }
+  }
+  if (status < 0) { printf("ICD_INFO open-adapter %08lx\n", (unsigned long)status); return; }
+  memset(&info, 0, sizeof(info)); memset(&q, 0, sizeof(q));
+  q.hAdapter = o.hAdapter; q.Type = 2; /* KMTQAITYPE_UMOPENGLINFO */
+  q.pPrivateDriverData = &info; q.PrivateDriverDataSize = sizeof(info);
+  status = query(&q);
+  printf("ICD_INFO status %08lx luid %08lx:%08lx name \"%ls\" version %lu flags %08lx\n",
+         (unsigned long)status, (unsigned long)o.AdapterLuid.HighPart,
+         (unsigned long)o.AdapterLuid.LowPart, status < 0 ? L"" : info.UmdOpenGlIcdFileName,
+         status < 0 ? 0ul : info.Version, status < 0 ? 0ul : info.Flags);
+  c.hAdapter = o.hAdapter; close(&c);
+}
+
 static LRESULT CALLBACK proc(HWND w, UINT m, WPARAM a, LPARAM b) {
   if (m == WM_CLOSE) { PostQuitMessage(0); return 0; }
   return DefWindowProcA(w, m, a, b);
@@ -139,6 +191,7 @@ int main(int argc, char **argv) {
                       100, 100, 656, 519, NULL, NULL, wc.hInstance, NULL);
   if (!wnd) { printf("NO_WINDOW %lu\n", GetLastError()); return 2; }
   dc = GetDC(wnd);
+  print_icd_info(wnd, dc);
   memset(&pfd, 0, sizeof(pfd));
   pfd.nSize = sizeof(pfd); pfd.nVersion = 1;
   pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
