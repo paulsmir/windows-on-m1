@@ -135,3 +135,44 @@ f1617c42; re-check before editing).
   SchedulerStop. Tests to update: test_g4_envelope_backpressure,
   g4_submit_virtual_replay (occupied packet rejects), render worker
   lifetime, render work queue.
+
+## Firmware-side map for overlap (2026-10-10, read-only survey at dc2d0b35)
+
+BR = shared/src/apple_agx_backend_runtime.c, QP/QR = g13 queue provider /
+runtime, RSM = render_shared_memory.c, BP = backend_platform_windows.c.
+
+Blockers that exist even before any KMD window:
+- BR:407-410 requires the exact done pointer of the single pending job;
+  once N+1's ring entries retire this fails (phase 2 fixed only QR).
+- RSM:807-808 / BP:2229-2242 refuse to build or prepare while a job's
+  manager fence is set; objects 1/20/21/22 (BM Info, BlockControl,
+  Counter, Misc) are not slotted and are restored from saved state per job,
+  which would overwrite firmware-live BM state while N runs.
+
+Single-job state to generalise (in order): observation batches carry no
+fence (BRH:98-104, QPH:6/34-41, PC:225-236); QR pending records and
+completion slot (QRH:133-148, QR:313-315/383-404); QP staged + pending
+fence (QPH:132-135, QP:174-176/320-358/610-692); BR PendingJob/Phase
+(BRH:184-197, BR:222-268/288-318/357-391/448-474); manager save only on the
+newest fence with a same-key live manager (RSM:766-847); per-entry
+QueueObjects timing copies (BP:139-140, 344-423); release the BackendImage
+right after Submit instead of at completion (hypothesis: the arena is CPU
+staging only in the G4 path); worker submits N+1 from its poll loop (same
+process, same manager key, different scene, no compute); depth <= 2 because
+objects 13-19 and 28-35 alternate by stamp parity.
+
+Ordered minimal list: (1) RED tests per step; (2) drop BR exact done
+pointer; (3) fence-tagged observations, 4 per batch; (4) QR 2-deep;
+(5) QP staged slot + FIFO, manager change needs a drain; (6) BR 2-entry
+FIFO; (7) live same-key manager, save on newest fence; (8) per-entry timing
+objects, early image release; (9) worker submits N+1 in its poll loop;
+(10) per-entry completion; (11) Windows packet window (site map above).
+
+Only hardware can answer: whether TA(N+1) starts while 3D(N) runs on the
+same manager and VM slot; whether two scenes can be live on one template
+manager without per-job writes beyond Counter +1; TVB heap exhaustion with
+two scenes (GrowTvb ignored, QR:504-505); whether a second doorbell with an
+advanced head is accepted while busy; Start3D queue_cmd_count/event_count
+with overlap; which job Recover drops with two outstanding; when the
+firmware stops reading a job's objects (slot reuse at N+2); any per-job
+maintenance between jobs of one context.
