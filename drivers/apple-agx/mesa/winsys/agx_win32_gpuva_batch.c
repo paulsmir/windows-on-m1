@@ -180,9 +180,18 @@ int AgxWin32AsahiBatchEnter(struct agx_batch *batch) {
   ++g->Entered;
   return 1;
 }
+/* EXP1167: agx_draw_vbo ends with flushes (scissor/depth-bias or sampler
+ * heap overflow) that submit the batch after the draw is encoded; Finish
+ * leaves every level, so that draw's Leave succeeds. Any other unbalanced
+ * Leave is refused (reject-batch kind 8: 1 no capsule, 4 rejected,
+ * 8 not entered; fence, draws). */
 int AgxWin32AsahiBatchLeave(struct agx_batch *batch) {
   AGX_G4_BATCH *g=capsule(batch);
-  if(!g || !g->Entered) return 0;
+  if(g && g->Submitted && !g->Rejected) return 1;
+  if(!g || g->Rejected || !g->Entered)
+    return batch_refuse(8u,(unsigned)(!g)|((unsigned)(g && g->Rejected)<<2)|
+        ((unsigned)(g && !g->Entered)<<3),
+        g ? (unsigned)g->Fence : 0u, batch ? batch->draws : 0u);
   --g->Entered;
   return 1;
 }

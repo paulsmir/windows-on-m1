@@ -47,8 +47,19 @@ int main(void) {
   assert(AgxWin32AsahiBatchLeave(&batch) && AgxWin32AsahiBatchLeave(&batch));
   assert(g.Entered == 1);
   assert(AgxWin32AsahiBatchLeave(&batch) && g.Entered == 0);
-  /* An unbalanced Leave is still refused. */
-  assert(!AgxWin32AsahiBatchLeave(&batch));
+  /* An unbalanced Leave is still refused, naming the condition (kind 8). */
+  assert(!AgxWin32AsahiBatchLeave(&batch) && last_kind == 8u && last_site == 8u);
+  /* EXP1167: the end-of-draw flushes of agx_draw_vbo (scissor/depth-bias or
+   * sampler heap overflow) submit the batch after the draw is encoded and
+   * Finish leaves every level; the draw's Leave then succeeds. */
+  assert(AgxWin32AsahiBatchEnter(&batch));
+  g.Entered = 0; g.Submitted = 1;          /* AgxWin32AsahiBatchFinish */
+  unsigned before = refusals;
+  assert(AgxWin32AsahiBatchLeave(&batch) && refusals == before);
+  g.Submitted = 0; g.Rejected = 1;         /* a failed Finish still faults */
+  assert(!AgxWin32AsahiBatchLeave(&batch) && last_kind == 8u && (last_site & 4u));
+  g.Rejected = 0;
+  refusals = 0;
   /* A submitted or rejected batch refuses Enter. */
   g.Submitted = 1;
   assert(!AgxWin32AsahiBatchEnter(&batch) && refusals == 1 && last_kind == 7u && last_site == 2u);
