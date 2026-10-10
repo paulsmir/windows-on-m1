@@ -67,6 +67,18 @@ class GlthreadEntryPoints(unittest.TestCase):
         hook = text.find('set_background_context =', start)
         self.assertTrue(start < hook < init)
 
+    def test_no_stw_state_without_a_device(self):
+        # EXP1177: DrvDeleteContext after DllMain cleared stw_dev faulted in
+        # stw_lookup_context (hl.exe crash dump at game exit).
+        text = (ICD / 'agx_wgl_glthread.c').read_text()
+        for helper in ('agx_glthread_finish_current', 'agx_glthread_finish_handle', 'agx_glthread_start'):
+            m = re.search(r'static \w+ ' + helper + r'\([^)]*\)\s*\{(.*?)\n\}', text, re.S)
+            self.assertTrue(m, helper)
+            b = m.group(1)
+            uses = [b.find(x) for x in ('stw_lookup_context(', 'stw_current_context(') if x in b]
+            self.assertTrue(uses, helper)
+            self.assertTrue(0 <= b.find('stw_dev') < min(uses), helper)
+
     def test_build_links_the_repository_def(self):
         script = (ICD / 'build-icd-x86.ps1').read_text()
         self.assertIn(r'/DEF:$agx\windows\icd\agx_wgl_icd.def', script)

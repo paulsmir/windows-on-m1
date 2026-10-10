@@ -30,20 +30,25 @@ static BOOL agx_glthread_wanted(void) {
   return n == 1u && value[0] == '1';
 }
 
+/* EXP1177: at process exit DllMain clears stw_dev before opengl32 deletes
+ * the remaining contexts; stw's Drv* entry points then return early, but
+ * stw_lookup_context locks stw_dev's context table and faulted (hl.exe dump:
+ * AgxWglDrvDeleteContext+0x31, read of 0x70). Like stw, touch no stw state
+ * without a device. */
 static void agx_glthread_finish_context(struct stw_context *ctx) {
   if (ctx) agx_glthread_finish_st(ctx->st);
 }
 
 static void agx_glthread_finish_current(void) {
-  agx_glthread_finish_context(stw_current_context());
+  if (stw_dev) agx_glthread_finish_context(stw_current_context());
 }
 
 static void agx_glthread_finish_handle(DHGLRC dhglrc) {
-  if (dhglrc) agx_glthread_finish_context(stw_lookup_context(dhglrc));
+  if (stw_dev && dhglrc) agx_glthread_finish_context(stw_lookup_context(dhglrc));
 }
 
 static DHGLRC agx_glthread_start(DHGLRC dhglrc) {
-  struct stw_context *ctx = dhglrc ? stw_lookup_context(dhglrc) : NULL;
+  struct stw_context *ctx = stw_dev && dhglrc ? stw_lookup_context(dhglrc) : NULL;
   if (ctx && agx_glthread_wanted())
     agx_glthread_init_st(ctx->st);  /* stays single-threaded if refused */
   return dhglrc;
