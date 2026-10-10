@@ -2997,9 +2997,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
   AdmissionDwmFrameRecordCompletion(adapter, runtime->CompletionContext, Fence);
 #endif
   KeAcquireSpinLock(&adapter->SchedulerLock,&old_irql);
-  if (runtime->CompletionContext != NULL &&
-      runtime->CompletionContext->Object.FenceOutstanding == Fence)
-    runtime->CompletionContext->Object.FenceOutstanding = 0u;
+  if (runtime->CompletionContext != NULL)
+    AdmissionContextRetireFence(runtime->CompletionContext, Fence);
   runtime->CompletionContext = NULL;
   KeReleaseSpinLock(&adapter->SchedulerLock,old_irql);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
@@ -3234,7 +3233,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendRetire(
       AdmissionGpuvaG3PrivateCancel(render_context,Fence,
           state == AdmissionRenderPacketActive ? TRUE : FALSE);
 #endif
-      render_context->Object.FenceOutstanding = 0u;
+      AdmissionContextRetireFence(render_context, Fence);
       retired = TRUE;
     }
   }

@@ -765,6 +765,14 @@ typedef struct _ADMISSION_RENDER_CONTEXT {
   struct _ADMISSION_RENDER_CONTEXT *GpuvaG3NextContext;
   ULONGLONG GpuvaG3PrivateManagerGeneration;
   volatile LONG GpuvaG3PrivateFence, GpuvaG3CancelFence, GpuvaG3CancelUncertain, GpuvaG3PreemptFence;
+  /* Phase 5b: a context may have two private G4 jobs queued. The second
+   * uses these slot-2 markers; slots are matched by fence, never shifted,
+   * so a DPC marking one slot cannot race a PASSIVE clear of the other. */
+  volatile LONG GpuvaG3PrivateFence2, GpuvaG3CancelFence2, GpuvaG3PreemptFence2;
+  /* Phase 5b: FenceOutstanding is the context's oldest outstanding job;
+   * this is the next one (queued after it), promoted when the oldest
+   * retires. Changed under SchedulerLock. */
+  ULONG GpuvaG3SecondFence;
   BOOLEAN GpuvaG3Closing;
   ULONGLONG GpuvaG3RootIpa;
   ULONGLONG GpuvaG3LastSetRootIpa;
@@ -775,6 +783,26 @@ typedef struct _ADMISSION_RENDER_CONTEXT {
   BOOLEAN GpuvaG3Poisoned;
 #endif
 } ADMISSION_RENDER_CONTEXT;
+
+/* Phase 5b: the job with Fence left the context (completed, cancelled,
+ * preempted or refused); the next outstanding job becomes the oldest.
+ * Callers hold SchedulerLock. */
+static __inline VOID AdmissionContextRetireFence(
+    ADMISSION_RENDER_CONTEXT *Context, ULONG Fence) {
+  if (Context == NULL || Fence == 0u)
+    return;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (Context->Object.FenceOutstanding == Fence) {
+    Context->Object.FenceOutstanding = Context->GpuvaG3SecondFence;
+    Context->GpuvaG3SecondFence = 0u;
+  } else if (Context->GpuvaG3SecondFence == Fence) {
+    Context->GpuvaG3SecondFence = 0u;
+  }
+#else
+  if (Context->Object.FenceOutstanding == Fence)
+    Context->Object.FenceOutstanding = 0u;
+#endif
+}
 
 typedef struct _ADMISSION_ALLOCATION_HANDLE {
   ADMISSION_ALLOCATION_OBJECT Object;

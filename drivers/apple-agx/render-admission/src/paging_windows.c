@@ -498,8 +498,7 @@ _Use_decl_annotations_ VOID AdmissionPagingDpc(
     Context->PagingLastCompletedFence = completedFence;
   if (Context->PresentCopyContext != NULL) {
     KeAcquireSpinLockAtDpcLevel(&Context->SchedulerLock);
-    if (Context->PresentCopyContext->Object.FenceOutstanding == completedFence)
-      Context->PresentCopyContext->Object.FenceOutstanding = 0u;
+    AdmissionContextRetireFence(Context->PresentCopyContext, completedFence);
     KeReleaseSpinLockFromDpcLevel(&Context->SchedulerLock);
     Context->PresentCopyContext = NULL;
   }

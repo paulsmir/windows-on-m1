@@ -57,7 +57,12 @@ typedef uintptr_t ULONG_PTR;
 typedef void *PVOID,*HANDLE;
 typedef struct {unsigned InterruptType;struct {unsigned PreemptionFenceId,LastCompletedFenceId,NodeOrdinal,EngineOrdinal;} DmaPreempted;} DXGKARGCB_NOTIFY_INTERRUPT_DATA;
 typedef struct {unsigned PreemptionFenceId,NodeOrdinal,EngineOrdinal;struct {unsigned Value;} Flags;} DXGKARG_PREEMPTCOMMAND;
-typedef struct {struct {unsigned FenceOutstanding;} Object;} ADMISSION_RENDER_CONTEXT;
+typedef struct {struct {unsigned FenceOutstanding;} Object; unsigned GpuvaG3SecondFence;} ADMISSION_RENDER_CONTEXT;
+static void AdmissionContextRetireFence(ADMISSION_RENDER_CONTEXT *c, unsigned f) {
+  if (!c || !f) return;
+  if (c->Object.FenceOutstanding == f) { c->Object.FenceOutstanding = c->GpuvaG3SecondFence; c->GpuvaG3SecondFence = 0; }
+  else if (c->GpuvaG3SecondFence == f) c->GpuvaG3SecondFence = 0;
+}
 typedef struct {int State;struct {unsigned Fence;uintptr_t ContextToken;} Description;} PACKET;
 typedef struct {void *DeviceHandle;NTSTATUS (*DxgkCbSynchronizeExecution)(void*,BOOLEAN(*)(void*),void*,ULONG,BOOLEAN*);
  void (*DxgkCbNotifyInterrupt)(void*,DXGKARGCB_NOTIFY_INTERRUPT_DATA*);BOOLEAN (*DxgkCbQueueDpc)(void*);} INTERFACE;

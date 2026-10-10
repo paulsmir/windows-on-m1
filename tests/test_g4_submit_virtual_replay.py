@@ -41,6 +41,7 @@ class G4SubmitVirtualReplay(unittest.TestCase):
         branches = "enum {" + branches.split("enum {", 1)[1].split("};", 1)[0] + "};"
         functions = branches + "\n" + "\n".join(function_body(production, name) for name in (
             "AdmissionG4SubmitReject", "AdmissionGpuvaG3PrivatePreempt",
+            "AdmissionG3PrivateSlotPreempted", "AdmissionG3PrivateSlotCancelled",
             "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
             "AdmissionG4GraphAccessTyped", "AdmissionG4FindPrivateScene","AdmissionG4FindPrivateResubmission","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy",
             "AdmissionG4SnapshotFailure", "AdmissionG4ResolveOutput",

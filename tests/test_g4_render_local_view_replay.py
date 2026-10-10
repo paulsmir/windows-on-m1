@@ -11,6 +11,7 @@ class G4RenderLocalViewReplay(unittest.TestCase):
         functions='enum {'+branches.split('enum {',1)[1].split('};',1)[0]+'};\n'
         names=('AdmissionG4ObserveEnvelopeReject','AdmissionG4SubmitRejectDetail','AdmissionG4SubmitReject',
           'AdmissionG4GraphAccess','AdmissionG4LogicalEnvelopeAccess','AdmissionG4GraphAccessTyped',
+          'AdmissionG3PrivateSlotPreempted','AdmissionG3PrivateSlotCancelled',
           'AdmissionG4FindPrivateScene','AdmissionG4FindPrivateResubmission',
           'AdmissionG4PrivateGraphAccess','AdmissionG4PrivateGeometry','AdmissionG4PrivateUnqueue',
           'AdmissionG4SnapshotFailure','AdmissionG4ResolveOutput',

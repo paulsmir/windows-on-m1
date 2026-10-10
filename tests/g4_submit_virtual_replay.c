@@ -177,6 +177,8 @@ typedef struct {
 } ADMISSION_CONTEXT;
 struct _ADMISSION_RENDER_CONTEXT {
   volatile LONG GpuvaG3PrivateFence,GpuvaG3CancelFence,GpuvaG3CancelUncertain, GpuvaG3PreemptFence; BOOLEAN GpuvaG3Closing;
+  volatile LONG GpuvaG3PrivateFence2,GpuvaG3CancelFence2,GpuvaG3PreemptFence2;
+  ULONG GpuvaG3SecondFence;
   ULONGLONG GpuvaG3PrivateManagerGeneration;
   ADMISSION_G3_PROCESS *GpuvaG3Process;
   unsigned GpuvaG3Poisoned;
@@ -187,6 +189,11 @@ struct _ADMISSION_RENDER_CONTEXT {
   ADMISSION_OBJECT_CONTEXT Object;
   struct { unsigned Active; } SchedulerContext;
 };
+static inline void AdmissionContextRetireFence(ADMISSION_RENDER_CONTEXT *c, ULONG f) {
+  if (!c || !f) return;
+  if (c->Object.FenceOutstanding == f) { c->Object.FenceOutstanding = c->GpuvaG3SecondFence; c->GpuvaG3SecondFence = 0; }
+  else if (c->GpuvaG3SecondFence == f) c->GpuvaG3SecondFence = 0;
+}
 typedef struct {
   REPLAY_FLAGS Flags;
   void *hContext;
@@ -449,13 +456,18 @@ static void phase5a_cases(ADMISSION_CONTEXT *adapter,
   assert(b.Object.FenceOutstanding == 8u && b.GpuvaG3DmaBufferVa == 0ULL);
   assert(adapter->RenderPacket.Description.Fence == 7u);
   assert(adapter->Scheduler.LastSubmittedFence == 8u);
-  /* One job per context: B's next submission is not queued behind it. */
+  /* Phase 5b: a context may queue a second job behind its first (slot 2);
+   * a third is not queued. */
   other.SubmissionFenceId = 9u;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, &b, &other) == STATUS_SUCCESS);
+  assert(adapter->G4PendingCount == 2u && b.Object.FenceOutstanding == 8u &&
+         b.GpuvaG3SecondFence == 9u);
+  other.SubmissionFenceId = 10u;
   assert(AdmissionG4SubmitVirtualEnvelope(adapter, &b, &other) != STATUS_SUCCESS);
-  assert(adapter->G4PendingCount == 1u && b.Object.FenceOutstanding == 8u);
+  assert(adapter->G4PendingCount == 2u && b.GpuvaG3SecondFence == 9u);
   /* Nothing binds while A's job still owns the slot. */
   assert(AdmissionG4PendingBindHead(adapter));
-  assert(adapter->G4PendingCount == 1u &&
+  assert(adapter->G4PendingCount == 2u &&
          adapter->RenderPacket.Description.Fence == 7u);
   /* A completes: the worker binds B's job from the copy, in order. */
   adapter->RenderPacket.State = AdmissionRenderPacketEmpty;
@@ -466,8 +478,8 @@ static void phase5a_cases(ADMISSION_CONTEXT *adapter,
   assert(AppleAgxSchedulerCompleteActiveFence(&adapter->Scheduler, 0u, 0u, 7u));
   memset(adapter->BackendImage.G4Command, 0, sizeof(adapter->BackendImage.G4Command));
   assert(AdmissionG4PendingBindHead(adapter));
-  assert(adapter->G4PendingCount == 0u && adapter->SubmitPath.Binds == 1);
-  assert(adapter->SubmitPath.Deferred == 1);
+  assert(adapter->G4PendingCount == 1u && adapter->SubmitPath.Binds == 1);
+  assert(adapter->SubmitPath.Deferred == 2);
   assert(adapter->RenderPacket.State == AdmissionRenderPacketQueued &&
          adapter->RenderPacket.Description.Fence == 8u);
   assert(adapter->BackendImage.BoundFence == 8u && adapter->BackendImage.G4Native);
@@ -477,6 +489,17 @@ static void phase5a_cases(ADMISSION_CONTEXT *adapter,
                 adapter->BackendImage.G4CommandBytes) == 0);
   assert(b.GpuvaG3DmaBufferVa == other.DmaBufferVirtualAddress &&
          b.GpuvaG3DmaBufferBytes == other.DmaBufferSize);
+  /* B's first job completes: its second becomes the oldest and binds next. */
+  adapter->RenderPacket.State = AdmissionRenderPacketEmpty;
+  adapter->BackendImage.G4Native = 0u;
+  adapter->BackendImage.BoundFence = 0u;
+  assert(AppleAgxSchedulerActivateFence(&adapter->Scheduler, 0u, 0u, 8u));
+  assert(AppleAgxSchedulerCompleteActiveFence(&adapter->Scheduler, 0u, 0u, 8u));
+  AdmissionContextRetireFence(&b, 8u);
+  assert(b.Object.FenceOutstanding == 9u && b.GpuvaG3SecondFence == 0u);
+  assert(AdmissionG4PendingBindHead(adapter));
+  assert(adapter->G4PendingCount == 0u && adapter->SubmitPath.Binds == 2 &&
+         adapter->RenderPacket.Description.Fence == 9u);
   /* Preemption drops a pending job and releases its context. */
   a->Object.FenceOutstanding = 0u;
   other.hContext = a;
@@ -555,8 +578,47 @@ static void phase5a_cases(ADMISSION_CONTEXT *adapter,
   puts("phase 5a pending submissions: PASS");
 }
 
+/* Phase 5b: two private jobs of one context use fixed slots matched by
+ * fence; a third is refused, markers land in the slot of their fence, and
+ * new jobs wait while a preempted job awaits its resubmission. */
+static void phase5b_private_slots(void) {
+  static ADMISSION_G3_STATE st;
+  static ADMISSION_G3_PROCESS p;
+  static ADMISSION_RENDER_CONTEXT c;
+  static ADMISSION_G3_PRIVATE_SCENE s1, s2, s3;
+  APPLE_AGX_G4_PRIVATE_LEASE l1={17,5,9,9}, l2={17,5,11,11}, l3={17,5,13,13};
+  p.State=&st; p.Graph.ProcessId=17; p.PrivateManager.Generation=5;
+  c.GpuvaG3Process=&p; c.GpuvaG3PrivateManagerGeneration=5;
+  s1.Context=s2.Context=s3.Context=&c;
+  s1.Storage.Generation=9; s2.Storage.Generation=11; s3.Storage.Generation=13;
+  s1.Next=&s2; s2.Next=&s3; p.PrivateScenes=&s1;
+  assert(AdmissionG4FindPrivateScene(&p,&c,&l1,30,FALSE)==&s1);
+  s1.Queued=1; s1.Fence=30; c.GpuvaG3PrivateFence=30;
+  assert(AdmissionG4FindPrivateScene(&p,&c,&l2,31,FALSE)==&s2);
+  s2.Queued=1; s2.Fence=31; c.GpuvaG3PrivateFence2=31;
+  assert(AdmissionG4FindPrivateScene(&p,&c,&l3,32,FALSE)==NULL);
+  AdmissionGpuvaG3PrivatePreempt(&c,31);
+  assert(c.GpuvaG3PreemptFence2==31 && !c.GpuvaG3PreemptFence);
+  assert(AdmissionG3PrivateSlotPreempted(&c,31) && !AdmissionG3PrivateSlotPreempted(&c,30));
+  /* Slot 1 frees (job 30 reported), but job 31 awaits resubmission. */
+  s1.Queued=0; s1.Fence=0; c.GpuvaG3PrivateFence=0;
+  assert(AdmissionG4FindPrivateScene(&p,&c,&l3,32,FALSE)==NULL);
+  assert(AdmissionG4FindPrivateResubmission(&p,&c,&l2,33)==&s2);
+  assert(AdmissionG4FindPrivateResubmission(&p,&c,&l1,33)==NULL);
+  c.GpuvaG3PreemptFence2=0;
+  assert(AdmissionG4FindPrivateScene(&p,&c,&l3,32,FALSE)==&s3);
+  AdmissionGpuvaG3PrivateCancel(&c,31,FALSE);
+  assert(c.GpuvaG3CancelFence2==31 && !c.GpuvaG3CancelFence &&
+         !c.GpuvaG3CancelUncertain && AdmissionG3PrivateSlotCancelled(&c,31));
+  assert(AdmissionG4FindPrivateScene(&p,&c,&l2,31,TRUE)==NULL);
+  AdmissionGpuvaG3PrivateCancel(&c,99,TRUE); /* not queued: no marker */
+  assert(!c.GpuvaG3CancelUncertain && !c.GpuvaG3CancelFence);
+  puts("phase 5b private slots: PASS");
+}
+
 int main(void) {
   PACKET packet = {0};
+  phase5b_private_slots();
   ADMISSION_G3_STATE state = {0};
   ADMISSION_G3_PROCESS process = {0};
   ADMISSION_CONTEXT adapter = {0};

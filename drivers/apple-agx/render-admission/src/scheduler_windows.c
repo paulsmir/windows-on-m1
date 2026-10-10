@@ -321,9 +321,8 @@ static VOID AdmissionCpuQueueReleaseContextsLocked(ADMISSION_CONTEXT *Context) {
   for (index = 0u; index < Context->CpuQueueCount; ++index) {
     ADMISSION_CPU_PACKET *packet = &Context->CpuQueue[
         (Context->CpuQueueHead + index) % APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
-    if (packet->PresentContext != NULL &&
-        packet->PresentContext->Object.FenceOutstanding == packet->Fence)
-      packet->PresentContext->Object.FenceOutstanding = 0u;
+    if (packet->PresentContext != NULL)
+      AdmissionContextRetireFence(packet->PresentContext, packet->Fence);
     packet->PresentContext = NULL;
   }
 }
@@ -384,7 +383,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
     AdmissionGpuvaG3PrivatePreempt(queuedContext,queuedFence);
 #endif
-    queuedContext->Object.FenceOutstanding = 0u;
+    AdmissionContextRetireFence(queuedContext, queuedFence);
   }
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   /* Phase 5a: pending submissions were never started; VidSch resubmits. */
@@ -473,7 +472,8 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
         context->RenderPacket.Description.ContextToken;
     packetFence=context->RenderPacket.Description.Fence;
     if (packetContext != NULL &&
-        (ULONG)InterlockedCompareExchange(&packetContext->GpuvaG3PrivateFence,0,0)==packetFence) {
+        ((ULONG)InterlockedCompareExchange(&packetContext->GpuvaG3PrivateFence,0,0)==packetFence ||
+         (ULONG)InterlockedCompareExchange(&packetContext->GpuvaG3PrivateFence2,0,0)==packetFence)) {
       AdmissionGpuvaG3PrivateCancel(packetContext,packetFence,TRUE);
       InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
       KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
@@ -544,7 +544,9 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
     AdmissionGpuvaG3PrivateCancel(packetContext,packetFence,FALSE);
 #endif
-    packetContext->Object.FenceOutstanding = 0u;
+    KeAcquireSpinLock(&context->SchedulerLock, &oldIrql);
+    AdmissionContextRetireFence(packetContext, packetFence);
+    KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
   }
   InterlockedExchange(&context->SchedulerFaulted, 0);
   return STATUS_SUCCESS;

@@ -46,7 +46,7 @@ static LONG InterlockedCompareExchange(volatile LONG *p,LONG x,LONG c){LONG o=*p
 static LONG InterlockedExchange(volatile LONG *p,LONG v){LONG o=*p;*p=v;return o;}
 typedef struct _ADMISSION_CONTEXT { int unused; } ADMISSION_CONTEXT;
 typedef struct { FAST_MUTEX Lock; ADMISSION_CONTEXT *Adapter; ULONG PrivateCompletionFence; } ADMISSION_G3_STATE;
-typedef struct _ADMISSION_RENDER_CONTEXT { void *GpuvaG3Process; volatile LONG GpuvaG3PrivateFence; } ADMISSION_RENDER_CONTEXT;
+typedef struct _ADMISSION_RENDER_CONTEXT { void *GpuvaG3Process; volatile LONG GpuvaG3PrivateFence, GpuvaG3PrivateFence2; } ADMISSION_RENDER_CONTEXT;
 typedef struct _ADMISSION_G3_PRIVATE_SCENE { struct _ADMISSION_G3_PRIVATE_SCENE *Next; ADMISSION_RENDER_CONTEXT *Context;
   ULONG Fence, ResumeFence, Submitting, Queued, Started, GpuDone, Reported, ReleaseRequested, Quarantined; } ADMISSION_G3_PRIVATE_SCENE;
 typedef struct { ADMISSION_G3_STATE *State; ADMISSION_G3_PRIVATE_SCENE *PrivateScenes; BOOLEAN Poisoned; ULONG PoisonSite, PoisonBrokerStatus, OsProcessId; } ADMISSION_G3_PROCESS;
