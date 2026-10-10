@@ -406,6 +406,9 @@ AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *backend, AGX_WIN32_SCREEN *wi
    }
    agx_screen->dev.params = *params;
    agx_screen->dev.chip = AGX_CHIP_G13G;
+   /* GL_RENDERER / adapter name: Linux builds it from the kernel's
+    * parameters (agx_device.c); the compiled Windows contract is G13G. */
+   snprintf(agx_screen->dev.name, sizeof(agx_screen->dev.name), "Apple M1 (G13G)");
    agx_screen->dev.libagx_programs = libagx_g13g;
    agx_screen->dev.fd = -1;
    glsl_type_singleton_init_or_ref();
