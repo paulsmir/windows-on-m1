@@ -1,12 +1,14 @@
-# J313 GPU: Settings-close blank root-caused (EXP1130/EXP1131); Notepad drag 53 / typing 57
+# J313 GPU: Settings-close blank fixed (EXP1132); Notepad drag 53 / typing 57
 
 
-## Current as of 2026-10-10 02:10Z (read this first)
+## Current as of 2026-10-10 02:20Z (read this first)
 
-State: GPU-visible baseline after each run. Best validated launch is still
-exp/1126-build b3e2d5bf + m1n1 98cdabae (EXP1129: revoke 33 -> 6.5 us).
-EXP1131 (exp/1131-build e404c6df: + receipt-only display ring and UMD
-lifetime lines) is functionally clean.
+State: GPU-visible baseline after each run. Best validated launch:
+exp/1132-build f7ef24a7 (b3e2d5bf + display ring + UMD lifetime lines +
+0dd8bb24 forget freed slot + 421d5110 ring filter) with m1n1 98cdabae.
+EXP1132: no black screen on Settings close (no visibility-off/ModeChange,
+DWM keeps flipping, no DWM device rebuild); Notepad drag 52.2-53.3,
+typing 56.3-57.2; no TDR/rejects.
 
 Proven since 23:55Z:
 - EXP1130 ETW: DWM's composition thread waits ~4-5 ms per frame for the
@@ -21,8 +23,8 @@ Proven since 23:55Z:
   forgets a handle the runtime deallocated), RED/GREEN test.
 
 Open, causal order:
-1. EXP1132 = EXP1131 + 0dd8bb24 + 421d5110 (per-kind ring filter): expect no
-   visibility-off/ModeChange and no DWM allocation rebuild on Settings close.
+1. App DestroyDevice still fails (terminalize_device E_FAIL in
+   ApplicationFrameHost/M365Copilot, EXP1132): invisible, but leaks.
 2. Multi-job: KMD queue depth 2 (submit stops blocking; worker binds the next
    entry) then UMD two submissions in flight (re-apply e4398e22). Site map:
    docs/superpowers/plans/2026-10-09-multi-job-firmware-queue.md "Site map" (per-context Private/Preempt/CancelFence and
