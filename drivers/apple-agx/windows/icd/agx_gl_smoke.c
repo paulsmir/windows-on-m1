@@ -33,6 +33,32 @@ static LONG WINAPI crash(EXCEPTION_POINTERS *info) {
   return EXCEPTION_EXECUTE_HANDLER;
 }
 
+/* EXP1147 hung after frame 0 and was killed with no evidence: a watchdog
+ * thread dumps every thread's stack when no frame finishes for 15 s. */
+static volatile LONG frame_progress;
+static DWORD WINAPI watchdog(LPVOID unused) {
+  LONG last = -1; DWORD idle = 0;
+  (void)unused;
+  for (;;) {
+    Sleep(1000);
+    LONG now = frame_progress;
+    if (now != last) { last = now; idle = 0; continue; }
+    if (++idle < 15) continue;
+    char path[MAX_PATH]; DWORD n = GetModuleFileNameA(NULL, path, MAX_PATH);
+    while (n && path[n - 1] != '\\') --n;
+    strcpy_s(path + n, MAX_PATH - n, "agx_gl_smoke_hang.dmp");
+    printf("HANG no frame progress for 15 s after step %ld\n", now);
+    HANDLE f = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+    if (f != INVALID_HANDLE_VALUE) {
+      MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), f,
+          (MINIDUMP_TYPE)(MiniDumpWithDataSegs | MiniDumpWithThreadInfo | MiniDumpWithIndirectlyReferencedMemory),
+          NULL, NULL, NULL);
+      CloseHandle(f);
+    }
+    TerminateProcess(GetCurrentProcess(), 6);
+  }
+}
+
 static LRESULT CALLBACK proc(HWND w, UINT m, WPARAM a, LPARAM b) {
   if (m == WM_CLOSE) { PostQuitMessage(0); return 0; }
   return DefWindowProcA(w, m, a, b);
@@ -54,6 +80,7 @@ int main(int argc, char **argv) {
   int frames = argc > 1 ? atoi(argv[1]) : 120;
   setvbuf(stdout, NULL, _IONBF, 0);
   SetUnhandledExceptionFilter(crash);
+  CreateThread(NULL, 0, watchdog, NULL, 0, NULL);
   const char *want = argc > 2 ? argv[2] : NULL;
   WNDCLASSA wc; HWND wnd; HDC dc; HGLRC rc; PIXELFORMATDESCRIPTOR pfd;
   int format, failures = 0;
@@ -76,6 +103,7 @@ int main(int argc, char **argv) {
   { PIXELFORMATDESCRIPTOR got; DescribePixelFormat(dc, format, sizeof(got), &got);
     printf("PIXEL_FORMAT %d flags %08lx color %u depth %u\n", format, got.dwFlags,
            got.cColorBits, got.cDepthBits); }
+  InterlockedIncrement(&frame_progress);
   rc = wglCreateContext(dc);
   if (!rc || !wglMakeCurrent(dc, rc)) { printf("NO_CONTEXT %lu\n", GetLastError()); return 4; }
   printf("GL_VENDOR %s\nGL_RENDERER %s\nGL_VERSION %s\n", (const char *)glGetString(GL_VENDOR),
@@ -117,7 +145,9 @@ int main(int argc, char **argv) {
       failures += !expect("texture", 500, 300, 0x0000ff);
       printf("FRAME %d checked, glGetError 0x%x\n", n, glGetError());
     }
+    InterlockedIncrement(&frame_progress);
     SwapBuffers(dc);
+    InterlockedIncrement(&frame_progress);
   }
   QueryPerformanceCounter(&t1);
   printf("FRAMES %d in %.3f s = %.1f fps\n", frames,

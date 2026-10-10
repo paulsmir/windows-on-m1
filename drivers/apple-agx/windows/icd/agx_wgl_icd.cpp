@@ -46,6 +46,55 @@ typedef struct AGX_WGL_ADAPTER {
 } AGX_WGL_ADAPTER;
 
 static AGX_WGL_ADAPTER *AgxWgl;
+
+/* EXP1147: the native batch path reports refusals and faults through these
+ * winsys hooks, which only the D3D10 glue (agx_d3d10_windows.cpp) set, so the
+ * ICD's GL jobs failed silently. Log them like the D3D10 glue does. */
+extern "C" {
+extern void (*AgxWin32BatchRefusalHook)(unsigned, unsigned, unsigned, unsigned);
+extern void (*AgxWin32BackendFailHook)(unsigned site);
+extern void (*AgxWin32FirstFaultHook)(unsigned site, uintptr_t context,
+                                      unsigned flags, unsigned draws);
+extern void (*AgxWin32VdmTraceHook)(uint64_t va, const uint32_t *words,
+                                    unsigned count, unsigned draws);
+extern void (*AgxWin32PerfHook)(const char *message);
+}
+
+static void wgl_batch_refusal(unsigned kind, unsigned site, unsigned d0, unsigned d1) {
+  UINT values[4] = {kind, site, d0, d1};
+  AdmissionUmdDiagnostic("reject-batch", E_FAIL, values, 4u);
+}
+
+static void wgl_backend_fail(unsigned site) { wgl_batch_refusal(4u, site, 0u, 0u); }
+
+static void wgl_first_fault(unsigned site, uintptr_t context, unsigned flags,
+                            unsigned draws) {
+  static volatile LONG records;
+  if (InterlockedIncrement(&records) > 64) return;
+  UINT values[4] = {site, (UINT)context, flags, draws};
+  AdmissionUmdDiagnostic("measure-native-first-fault", S_OK, values, 4u);
+}
+
+static void wgl_vdm_trace(uint64_t va, const uint32_t *words, unsigned count,
+                          unsigned draws) {
+  static volatile LONG records;
+  if (InterlockedIncrement(&records) > 32 || count > 13u) return;
+  UINT values[16] = {(UINT)va, (UINT)(va >> 32), draws};
+  for (unsigned i = 0; i < count; ++i) values[3 + i] = words[i];
+  AdmissionUmdDiagnostic("measure-vdm", S_OK, values, 3u + count);
+}
+
+/* Asahi perf_debug text (why batches flush or sync): the first 200 lines. */
+static void wgl_perf_note(const char *message) {
+  static volatile LONG records;
+  char stage[96];
+  if (!message || InterlockedIncrement(&records) > 200) return;
+  if (_snprintf_s(stage, sizeof(stage), _TRUNCATE, "measure-perf %s", message) < 0) return;
+  /* One token per line: measure-perf_<text>. */
+  for (unsigned i = 0; i < sizeof(stage) && stage[i]; ++i)
+    if (stage[i] == '\n' || stage[i] == '\r' || stage[i] == ' ') stage[i] = '_';
+  AdmissionUmdDiagnostic(stage, S_OK, NULL, 0u);
+}
 static struct pipe_resource *(*AgxWglResourceCreate)(struct pipe_screen *,
                                                      const struct pipe_resource *);
 
@@ -125,6 +174,11 @@ static struct pipe_screen *wgl_screen_create(HDC hdc) {
   a = (AGX_WGL_ADAPTER *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*a));
   if (!a) return NULL;
   AgxWgl = a;
+  AgxWin32BatchRefusalHook = wgl_batch_refusal;
+  AgxWin32BackendFailHook = wgl_backend_fail;
+  AgxWin32FirstFaultHook = wgl_first_fault;
+  AgxWin32VdmTraceHook = wgl_vdm_trace;
+  AgxWin32PerfHook = wgl_perf_note;
   result = open_adapter(a, hdc);
   if (SUCCEEDED(result)) result = open_runtime(a);
   if (SUCCEEDED(result)) {
