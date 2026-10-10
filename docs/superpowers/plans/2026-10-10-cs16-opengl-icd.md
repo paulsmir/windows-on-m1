@@ -106,6 +106,26 @@ WHAT IS STILL UNKNOWN:
 - WOW64 address-space pressure from CPU staging shadows (the CPU-visible
   footprint roughly equals GPU memory use). Measured in the x86 phase.
 
+## Phase 2 packaging decision (2026-10-10, after phase 1)
+
+- st/mesa at the pinned tree (26.3.0-devel) hands drivers NIR only: no
+  `PIPE_SHADER_IR_TGSI` path remains in `src/mesa/state_tracker`. NIR
+  carries `glsl_type` pointers interned per compiler copy, so a GL stack in
+  one DLL and the Asahi driver in another (the UMD DLL) would compare types
+  from two interning tables. Rejected without NIR serialisation at the
+  boundary.
+- Chosen: one ICD DLL per architecture that links the GL stack (st/mesa,
+  glsl, glapi, WGL frontend) from a meson build of the same patched tree
+  with the runtime closure's Asahi objects, the winsys, the umd_* code and
+  the bridge, so one copy of NIR/util/gallium exists. The WGL control builds
+  (`AD04-wgl-softpipe-x64-010`, `-x86-011`) were configured from the same
+  Mesa tree (`AD04-d3d10-frontend-build\mesa`, 26.3.0-devel) with
+  `-Dplatforms=windows -Dgallium-drivers=softpipe -Dopengl=true
+  -Dglx=disabled -Degl=disabled -Dllvm=disabled -Dvulkan-drivers=[]`.
+- The gallium interface headers are not patched by the native state builder
+  (only the Asahi driver, the d3d10umd frontend, tgsi_to_nir and poly), so
+  the closure objects and the meson GL libraries share one ABI.
+
 ## Ownership
 
 | Concern | Owner |
