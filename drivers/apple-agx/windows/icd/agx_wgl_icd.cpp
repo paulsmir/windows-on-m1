@@ -255,6 +255,8 @@ typedef struct {
   int Pending;               /* slot holding the previous frame, or -1 */
   unsigned Next;
   LONGLONG Frames, LastTick, SumPresent, SumShow, SumInterval;
+  LONGLONG SumMap, SumCopy, SumDib;
+  BYTE *Cpu;                 /* cached copy of the shown image (EXP1170) */
 } AGX_WGL_PRESENT_RING;
 static AGX_WGL_PRESENT_RING AgxWglRings[4];
 static SRWLOCK AgxWglRingLock = SRWLOCK_INIT;
@@ -262,6 +264,7 @@ static SRWLOCK AgxWglRingLock = SRWLOCK_INIT;
 static void wgl_ring_release(AGX_WGL_PRESENT_RING *ring) {
   for (unsigned i = 0; i < 2; ++i)
     pipe_resource_reference(&ring->Staging[i], NULL);
+  if (ring->Cpu) HeapFree(GetProcessHeap(), 0, ring->Cpu);
   ZeroMemory(ring, sizeof(*ring));
   ring->Pending = -1;
 }
@@ -300,10 +303,16 @@ static AGX_WGL_PRESENT_RING *wgl_ring_get(struct pipe_screen *screen, HDC hdc,
   return free_ring;
 }
 
+/* EXP1170 receipt: the show is timed in three parts -- map (fence wait),
+ * copy out of the GPU allocation's CPU mapping (write-combined for Mesa
+ * classes, slow to read) into cached memory, and SetDIBitsToDevice. */
 static BOOL wgl_show(struct pipe_context *ctx, struct pipe_resource *image,
-                     HDC hdc, unsigned width, unsigned height, BOOL bgra) {
+                     HDC hdc, unsigned width, unsigned height, BOOL bgra,
+                     AGX_WGL_PRESENT_RING *ring) {
   struct pipe_transfer *transfer = NULL;
   struct pipe_box box;
+  LARGE_INTEGER t0, t1, t2, t3;
+  QueryPerformanceCounter(&t0);
   u_box_2d(0, 0, (int)width, (int)height, &box);
   const BYTE *map = (const BYTE *)ctx->texture_map(ctx, image, 0, PIPE_MAP_READ,
                                                    &box, &transfer);
@@ -311,8 +320,27 @@ static BOOL wgl_show(struct pipe_context *ctx, struct pipe_resource *image,
     wgl_note("reject-wgl-present-map", E_FAIL);
     return FALSE;
   }
-  wgl_blit_to_dc(hdc, map, transfer->stride, width, height, bgra);
+  QueryPerformanceCounter(&t1);
+  const BYTE *source = map;
+  unsigned stride = transfer->stride;
+  if (ring && !ring->Cpu)
+    ring->Cpu = (BYTE *)HeapAlloc(GetProcessHeap(), 0, (SIZE_T)width * height * 4u);
+  if (ring && ring->Cpu) {
+    for (unsigned y = 0; y < height; ++y)
+      memcpy(ring->Cpu + (SIZE_T)y * width * 4u, map + (SIZE_T)y * stride,
+             (SIZE_T)width * 4u);
+    source = ring->Cpu;
+    stride = width * 4u;
+  }
+  QueryPerformanceCounter(&t2);
+  wgl_blit_to_dc(hdc, source, stride, width, height, bgra);
+  QueryPerformanceCounter(&t3);
   ctx->texture_unmap(ctx, transfer);
+  if (ring) {
+    ring->SumMap += t1.QuadPart - t0.QuadPart;
+    ring->SumCopy += t2.QuadPart - t1.QuadPart;
+    ring->SumDib += t3.QuadPart - t2.QuadPart;
+  }
   return TRUE;
 }
 
@@ -327,13 +355,17 @@ static void wgl_present_receipt(AGX_WGL_PRESENT_RING *ring, LONGLONG start,
   if (ring->LastTick) ring->SumInterval += start - ring->LastTick;
   ring->LastTick = start;
   if (++ring->Frames % 120 != 0 || !frequency.QuadPart) return;
-  UINT values[5] = {
+  UINT values[8] = {
     (UINT)(ring->SumPresent * 1000000 / frequency.QuadPart / 120),
     (UINT)(ring->SumShow * 1000000 / frequency.QuadPart / 120),
     (UINT)(ring->SumInterval * 1000000 / frequency.QuadPart / 120),
-    ring->Width, ring->Height };
-  AdmissionUmdDiagnostic("measure-wgl-present", S_OK, values, 5u);
+    ring->Width, ring->Height,
+    (UINT)(ring->SumMap * 1000000 / frequency.QuadPart / 120),
+    (UINT)(ring->SumCopy * 1000000 / frequency.QuadPart / 120),
+    (UINT)(ring->SumDib * 1000000 / frequency.QuadPart / 120) };
+  AdmissionUmdDiagnostic("measure-wgl-present", S_OK, values, 8u);
   ring->SumPresent = ring->SumShow = ring->SumInterval = 0;
+  ring->SumMap = ring->SumCopy = ring->SumDib = 0;
 }
 
 static void wgl_present(struct pipe_screen *screen, struct pipe_context *ctx,
@@ -356,7 +388,7 @@ static void wgl_present(struct pipe_screen *screen, struct pipe_context *ctx,
   if (!ring) {
     /* No staging ring: show this frame synchronously, as before. */
     ReleaseSRWLockExclusive(&AgxWglRingLock);
-    (void)wgl_show(ctx, res, hdc, width, height, bgra);
+    (void)wgl_show(ctx, res, hdc, width, height, bgra, NULL);
     return;
   }
   struct pipe_box box;
@@ -367,7 +399,7 @@ static void wgl_present(struct pipe_screen *screen, struct pipe_context *ctx,
   QueryPerformanceCounter(&shown);
   /* Frame N-1 finished on the GPU while the game built frame N. */
   int show = ring->Pending >= 0 ? ring->Pending : (int)slot;
-  (void)wgl_show(ctx, ring->Staging[show], hdc, width, height, bgra);
+  (void)wgl_show(ctx, ring->Staging[show], hdc, width, height, bgra, ring);
   ring->Pending = (int)slot;
   ring->Next = slot ^ 1u;
   QueryPerformanceCounter(&end);
