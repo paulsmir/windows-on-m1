@@ -480,6 +480,49 @@ static BOOL wgl_ring_sync(struct pipe_context *ctx, AGX_WGL_PRESENT_RING *ring,
   return TRUE;
 }
 
+/* EXP1173 receipt-only: kernel time of the last 120 presents, per group of
+ * D3DKMT thunks (calls, microseconds): submit, CPU wait, lock/unlock,
+ * residency, allocation, GPU VA, escape, signals. With the present on a
+ * worker, the game thread's frame is its own work plus these calls. */
+static unsigned wgl_kmt_group(unsigned op) {
+  switch (op) {
+  case AgxKmtGpuvaSubmit: return 1;
+  case AgxKmtGpuvaWaitCpu: return 2;
+  case AgxKmtGpuvaLock: case AgxKmtGpuvaUnlock: return 3;
+  case AgxKmtGpuvaMakeResident: case AgxKmtGpuvaEvict:
+  case AgxKmtGpuvaQueryResidency: case AgxKmtGpuvaSetPriority: return 4;
+  case AgxKmtGpuvaAllocate: case AgxKmtGpuvaDeallocate: return 5;
+  case AgxKmtGpuvaReserve: case AgxKmtGpuvaMap: case AgxKmtGpuvaFree: return 6;
+  case AgxKmtGpuvaEscape: return 7;
+  case AgxKmtGpuvaSignalGpu2: case AgxKmtGpuvaSignal2: return 8;
+  default: return 0;
+  }
+}
+
+static void wgl_kmt_receipt(LONGLONG us) {
+  static UINT last_calls[AgxKmtGpuvaOpCount];
+  static LONGLONG last_ticks[AgxKmtGpuvaOpCount];
+  UINT calls[8] = {0};
+  LONGLONG ticks[8] = {0};
+  if (!AgxWgl || !us) return;
+  AGX_KMT_GPUVA_RECEIPT *r = &AgxWgl->Bridge.Receipt;
+  for (unsigned op = 0; op < AgxKmtGpuvaOpCount; ++op) {
+    unsigned g = wgl_kmt_group(op);
+    if (g) {
+      calls[g - 1] += r->Calls[op] - last_calls[op];
+      ticks[g - 1] += r->Ticks[op] - last_ticks[op];
+    }
+    last_calls[op] = r->Calls[op];
+    last_ticks[op] = r->Ticks[op];
+  }
+  UINT values[16];
+  for (unsigned i = 0; i < 8; ++i) {
+    values[2 * i] = calls[i];
+    values[2 * i + 1] = (UINT)(ticks[i] * 1000000 / us);
+  }
+  AdmissionUmdDiagnostic("measure-wgl-kmt", S_OK, values, 16u);
+}
+
 /* Receipt (EXP1168/EXP1171): every 120 presents, in microseconds, the mean
  * game-thread present, worker show per shown frame, present-to-present
  * interval, size, game-thread sync (map wait), worker copy and SetDIBits per
@@ -508,6 +551,7 @@ static void wgl_present_receipt(AGX_WGL_PRESENT_RING *ring, LONGLONG start,
   ring->Shown = ring->Dropped = ring->DibFailed = 0;
   ReleaseSRWLockExclusive(&AgxWglWorkerLock);
   AdmissionUmdDiagnostic("measure-wgl-present", S_OK, values, 12u);
+  wgl_kmt_receipt(us);
   ring->SumPresent = ring->SumInterval = ring->SumSync = 0;
 }
 

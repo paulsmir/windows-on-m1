@@ -28,9 +28,23 @@ static AGX_KMT_GPUVA_BRIDGE *bridge(HANDLE handle) {
   return b && b->Magic == AGX_KMT_GPUVA_MAGIC ? b : NULL;
 }
 
+/* EXP1173 receipt-only: the time of each kernel call, from kmt_begin just
+ * before the thunk to done() just after it (refusals are not timed). */
+static void kmt_begin(AGX_KMT_GPUVA_BRIDGE *b) {
+  LARGE_INTEGER now;
+  QueryPerformanceCounter(&now);
+  b->Receipt.Begin = now.QuadPart;
+}
+
 static HRESULT done(AGX_KMT_GPUVA_BRIDGE *b, AGX_KMT_GPUVA_OP op,
                     NTSTATUS status) {
   HRESULT result = AgxKmtGpuvaResult(status);
+  if (b->Receipt.Begin) {
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+    b->Receipt.Ticks[op] += now.QuadPart - b->Receipt.Begin;
+    b->Receipt.Begin = 0;
+  }
   ++b->Receipt.Calls[op];
   if (FAILED(result)) {
     ++b->Receipt.Failures[op];
@@ -70,7 +84,7 @@ static HRESULT APIENTRY query_adapter(HANDLE adapter,
   request.Type = KMTQAITYPE_UMDRIVERPRIVATE;
   request.pPrivateDriverData = args->pPrivateDriverData;
   request.PrivateDriverDataSize = args->PrivateDriverDataSize;
-  return done(b, AgxKmtGpuvaQueryAdapter, b->Kmt.QueryAdapterInfo(&request));
+  return done(b, AgxKmtGpuvaQueryAdapter, (kmt_begin(b), b->Kmt.QueryAdapterInfo(&request)));
 }
 
 static HRESULT APIENTRY create_context(HANDLE device,
@@ -88,7 +102,7 @@ static HRESULT APIENTRY create_context(HANDLE device,
   request.PrivateDriverDataSize = args->PrivateDriverDataSize;
   request.ClientHint = D3DKMT_CLIENTHINT_OPENGL;
   result = done(b, AgxKmtGpuvaCreateContext,
-                b->Kmt.CreateContextVirtual(&request));
+                (kmt_begin(b), b->Kmt.CreateContextVirtual(&request)));
   if (SUCCEEDED(result)) args->hContext = (HANDLE)(UINT_PTR)request.hContext;
   return result;
 }
@@ -101,7 +115,7 @@ static HRESULT APIENTRY destroy_context(HANDLE device,
   if (!b || !args || !kmt_handle(args->hContext, &request.hContext) ||
       !request.hContext)
     return refuse(b, AgxKmtGpuvaDestroyContext);
-  return done(b, AgxKmtGpuvaDestroyContext, b->Kmt.DestroyContext(&request));
+  return done(b, AgxKmtGpuvaDestroyContext, (kmt_begin(b), b->Kmt.DestroyContext(&request)));
 }
 
 static HRESULT APIENTRY create_paging_queue(HANDLE device,
@@ -115,7 +129,7 @@ static HRESULT APIENTRY create_paging_queue(HANDLE device,
   request.Priority = args->Priority;
   request.PhysicalAdapterIndex = args->PhysicalAdapterIndex;
   result = done(b, AgxKmtGpuvaCreatePagingQueue,
-                b->Kmt.CreatePagingQueue(&request));
+                (kmt_begin(b), b->Kmt.CreatePagingQueue(&request)));
   if (SUCCEEDED(result)) {
     args->hPagingQueue = request.hPagingQueue;
     args->hSyncObject = request.hSyncObject;
@@ -132,7 +146,7 @@ static HRESULT APIENTRY destroy_paging_queue(HANDLE device,
     return refuse(b, AgxKmtGpuvaDestroyPagingQueue);
   request = *args;
   return done(b, AgxKmtGpuvaDestroyPagingQueue,
-              b->Kmt.DestroyPagingQueue(&request));
+              (kmt_begin(b), b->Kmt.DestroyPagingQueue(&request)));
 }
 
 static HRESULT APIENTRY create_sync(HANDLE device,
@@ -145,7 +159,7 @@ static HRESULT APIENTRY create_sync(HANDLE device,
   request.hDevice = b->DeviceHandle;
   request.Info = args->Info;
   result = done(b, AgxKmtGpuvaCreateSync,
-                b->Kmt.CreateSynchronizationObject2(&request));
+                (kmt_begin(b), b->Kmt.CreateSynchronizationObject2(&request)));
   if (SUCCEEDED(result)) {
     /* Info is in/out: a monitored fence returns its CPU and GPU VAs. */
     args->Info = request.Info;
@@ -161,7 +175,7 @@ static HRESULT APIENTRY destroy_sync(HANDLE device,
   if (!b || !args || !args->hSyncObject) return refuse(b, AgxKmtGpuvaDestroySync);
   request.hSyncObject = args->hSyncObject;
   return done(b, AgxKmtGpuvaDestroySync,
-              b->Kmt.DestroySynchronizationObject(&request));
+              (kmt_begin(b), b->Kmt.DestroySynchronizationObject(&request)));
 }
 
 static HRESULT APIENTRY allocate(HANDLE device, D3DDDICB_ALLOCATE *args) {
@@ -191,7 +205,7 @@ static HRESULT APIENTRY allocate(HANDLE device, D3DDDICB_ALLOCATE *args) {
   request.PrivateDriverDataSize = args->PrivateDriverDataSize;
   request.NumAllocations = args->NumAllocations;
   request.pAllocationInfo2 = info;
-  result = done(b, AgxKmtGpuvaAllocate, b->Kmt.CreateAllocation2(&request));
+  result = done(b, AgxKmtGpuvaAllocate, (kmt_begin(b), b->Kmt.CreateAllocation2(&request)));
   /* Handles are returned even when the call fails part-way, so the caller
    * can roll back exactly what was created (umd_win32_screen.c:620). */
   for (UINT i = 0; i < args->NumAllocations; ++i)
@@ -209,7 +223,7 @@ static HRESULT APIENTRY deallocate(HANDLE device, const D3DDDICB_DEALLOCATE *arg
   request.hDevice = b->DeviceHandle;
   request.phAllocationList = args->HandleList;
   request.AllocationCount = args->NumAllocations;
-  return done(b, AgxKmtGpuvaDeallocate, b->Kmt.DestroyAllocation2(&request));
+  return done(b, AgxKmtGpuvaDeallocate, (kmt_begin(b), b->Kmt.DestroyAllocation2(&request)));
 }
 
 static HRESULT APIENTRY reserve_va(HANDLE device,
@@ -221,7 +235,7 @@ static HRESULT APIENTRY reserve_va(HANDLE device,
   request = *args;
   /* The runtime fills the adapter (umd_gpuva_windows.c:217 passes 0). */
   request.hAdapter = b->AdapterHandle;
-  result = done(b, AgxKmtGpuvaReserve, b->Kmt.ReserveGpuVirtualAddress(&request));
+  result = done(b, AgxKmtGpuvaReserve, (kmt_begin(b), b->Kmt.ReserveGpuVirtualAddress(&request)));
   args->VirtualAddress = request.VirtualAddress;
   args->PagingFenceValue = request.PagingFenceValue;
   return result;
@@ -234,7 +248,7 @@ static HRESULT APIENTRY map_va(HANDLE device, D3DDDI_MAPGPUVIRTUALADDRESS *args)
   if (!b || !args || !args->hPagingQueue || !args->hAllocation)
     return refuse(b, AgxKmtGpuvaMap);
   request = *args;
-  result = done(b, AgxKmtGpuvaMap, b->Kmt.MapGpuVirtualAddress(&request));
+  result = done(b, AgxKmtGpuvaMap, (kmt_begin(b), b->Kmt.MapGpuVirtualAddress(&request)));
   args->VirtualAddress = request.VirtualAddress;
   args->PagingFenceValue = request.PagingFenceValue;
   return result;
@@ -249,7 +263,7 @@ static HRESULT APIENTRY free_va(HANDLE device,
   request.hAdapter = b->AdapterHandle;
   request.BaseAddress = args->BaseAddress;
   request.Size = args->Size;
-  return done(b, AgxKmtGpuvaFree, b->Kmt.FreeGpuVirtualAddress(&request));
+  return done(b, AgxKmtGpuvaFree, (kmt_begin(b), b->Kmt.FreeGpuVirtualAddress(&request)));
 }
 
 static HRESULT APIENTRY make_resident(HANDLE device, D3DDDI_MAKERESIDENT *args) {
@@ -260,7 +274,7 @@ static HRESULT APIENTRY make_resident(HANDLE device, D3DDDI_MAKERESIDENT *args) 
       !args->NumAllocations)
     return refuse(b, AgxKmtGpuvaMakeResident);
   request = *args;
-  result = done(b, AgxKmtGpuvaMakeResident, b->Kmt.MakeResident(&request));
+  result = done(b, AgxKmtGpuvaMakeResident, (kmt_begin(b), b->Kmt.MakeResident(&request)));
   args->PagingFenceValue = request.PagingFenceValue;
   args->NumBytesToTrim = request.NumBytesToTrim;
   return result;
@@ -277,7 +291,7 @@ static HRESULT APIENTRY evict(HANDLE device, D3DDDICB_EVICT *args) {
   request.NumAllocations = args->NumAllocations;
   request.AllocationList = args->AllocationList;
   request.Flags = args->Flags;
-  result = done(b, AgxKmtGpuvaEvict, b->Kmt.Evict(&request));
+  result = done(b, AgxKmtGpuvaEvict, (kmt_begin(b), b->Kmt.Evict(&request)));
   args->NumBytesToTrim = request.NumBytesToTrim;
   return result;
 }
@@ -297,7 +311,7 @@ static HRESULT APIENTRY wait_cpu(HANDLE device,
   request.hAsyncEvent = args->hAsyncEvent;
   request.Flags = args->Flags;
   return done(b, AgxKmtGpuvaWaitCpu,
-              b->Kmt.WaitForSynchronizationObjectFromCpu(&request));
+              (kmt_begin(b), b->Kmt.WaitForSynchronizationObjectFromCpu(&request)));
 }
 
 static HRESULT APIENTRY submit(HANDLE device, const D3DDDICB_SUBMITCOMMAND *args) {
@@ -321,7 +335,7 @@ static HRESULT APIENTRY submit(HANDLE device, const D3DDDICB_SUBMITCOMMAND *args
   request.NumPrimaries = args->NumPrimaries;
   for (UINT i = 0; i < args->NumPrimaries; ++i)
     request.WrittenPrimaries[i] = args->WrittenPrimaries[i];
-  return done(b, AgxKmtGpuvaSubmit, b->Kmt.SubmitCommand(&request));
+  return done(b, AgxKmtGpuvaSubmit, (kmt_begin(b), b->Kmt.SubmitCommand(&request)));
 }
 
 static HRESULT APIENTRY signal_gpu2(HANDLE device,
@@ -346,7 +360,7 @@ static HRESULT APIENTRY signal_gpu2(HANDLE device,
   C_ASSERT(sizeof(request.Reserved) == sizeof(args->Reserved));
   memcpy(request.Reserved, args->Reserved, sizeof(request.Reserved));
   return done(b, AgxKmtGpuvaSignalGpu2,
-              b->Kmt.SignalSynchronizationObjectFromGpu2(&request));
+              (kmt_begin(b), b->Kmt.SignalSynchronizationObjectFromGpu2(&request)));
 }
 
 static HRESULT APIENTRY signal2(HANDLE device,
@@ -370,7 +384,7 @@ static HRESULT APIENTRY signal2(HANDLE device,
   if (args->Flags.EnqueueCpuEvent) request.CpuEventHandle = args->CpuEventHandle;
   else request.Fence.FenceValue = args->FenceValue;
   return done(b, AgxKmtGpuvaSignal2,
-              b->Kmt.SignalSynchronizationObject2(&request));
+              (kmt_begin(b), b->Kmt.SignalSynchronizationObject2(&request)));
 }
 
 static HRESULT APIENTRY lock(HANDLE device, D3DDDICB_LOCK *args) {
@@ -389,7 +403,7 @@ static HRESULT APIENTRY lock(HANDLE device, D3DDDICB_LOCK *args) {
   ZeroMemory(&request, sizeof(request));
   request.hDevice = b->DeviceHandle;
   request.hAllocation = args->hAllocation;
-  result = done(b, AgxKmtGpuvaLock, b->Kmt.Lock2(&request));
+  result = done(b, AgxKmtGpuvaLock, (kmt_begin(b), b->Kmt.Lock2(&request)));
   if (SUCCEEDED(result)) args->pData = request.pData;
   return result;
 }
@@ -403,7 +417,7 @@ static HRESULT APIENTRY unlock(HANDLE device, const D3DDDICB_UNLOCK *args) {
     HRESULT result;
     request.hDevice = b->DeviceHandle;
     request.hAllocation = args->phAllocations[i];
-    result = done(b, AgxKmtGpuvaUnlock, b->Kmt.Unlock2(&request));
+    result = done(b, AgxKmtGpuvaUnlock, (kmt_begin(b), b->Kmt.Unlock2(&request)));
     if (FAILED(result)) return result;
   }
   return S_OK;
@@ -424,7 +438,7 @@ static HRESULT APIENTRY escape(HANDLE adapter, const D3DDDICB_ESCAPE *args) {
   request.Flags = args->Flags;
   request.pPrivateDriverData = args->pPrivateDriverData;
   request.PrivateDriverDataSize = args->PrivateDriverDataSize;
-  return done(b, AgxKmtGpuvaEscape, b->Kmt.Escape(&request));
+  return done(b, AgxKmtGpuvaEscape, (kmt_begin(b), b->Kmt.Escape(&request)));
 }
 
 static HRESULT APIENTRY set_priority(HANDLE device, D3DDDICB_SETPRIORITY *args) {
@@ -438,7 +452,7 @@ static HRESULT APIENTRY set_priority(HANDLE device, D3DDDICB_SETPRIORITY *args) 
   request.phAllocationList = args->HandleList;
   request.AllocationCount = args->NumAllocations;
   request.pPriorities = args->pPriorities;
-  return done(b, AgxKmtGpuvaSetPriority, b->Kmt.SetAllocationPriority(&request));
+  return done(b, AgxKmtGpuvaSetPriority, (kmt_begin(b), b->Kmt.SetAllocationPriority(&request)));
 }
 
 static HRESULT APIENTRY query_residency(HANDLE device,
@@ -455,7 +469,7 @@ static HRESULT APIENTRY query_residency(HANDLE device,
   request.AllocationCount = args->NumAllocations;
   request.pResidencyStatus = (D3DKMT_ALLOCATIONRESIDENCYSTATUS *)args->pResidencyStatus;
   return done(b, AgxKmtGpuvaQueryResidency,
-              b->Kmt.QueryAllocationResidency(&request));
+              (kmt_begin(b), b->Kmt.QueryAllocationResidency(&request)));
 }
 
 static VOID APIENTRY set_error(D3D10DDI_HRTCORELAYER core, HRESULT error) {

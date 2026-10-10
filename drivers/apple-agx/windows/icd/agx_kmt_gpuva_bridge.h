@@ -67,6 +67,9 @@ typedef struct _AGX_KMT_GPUVA_RECEIPT {
   NTSTATUS LastFailedStatus;
   HRESULT LastRuntimeError;
   UINT RuntimeErrors;
+  /* EXP1173: QueryPerformanceCounter ticks spent in each op's thunk. */
+  LONGLONG Ticks[AgxKmtGpuvaOpCount];
+  LONGLONG Begin;
 } AGX_KMT_GPUVA_RECEIPT;
 
 typedef struct _AGX_KMT_GPUVA_BRIDGE {
