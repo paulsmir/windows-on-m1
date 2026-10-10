@@ -343,6 +343,8 @@ static HRESULT APIENTRY AdmissionUmdDeallocateResource(
     receipt[0] = 2u;
     AdmissionUmdDiagnostic("umd-deallocate-failure", result, receipt,
                            ARRAYSIZE(receipt));
+  } else {
+    AdmissionUmdScreenForgetAllocation(device, Retirement->KernelAllocation);
   }
   return result;
 }

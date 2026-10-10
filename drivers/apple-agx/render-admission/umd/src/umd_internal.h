@@ -321,6 +321,8 @@ HRESULT AdmissionUmdScreenInitialize(ADMISSION_UMD_DEVICE *Device);
 HRESULT AdmissionUmdScreenFinalize(ADMISSION_UMD_DEVICE *Device,
                                    ULONG *Undeallocated);
 BOOL AdmissionUmdScreenHasLiveSources(ADMISSION_UMD_DEVICE *Device);
+VOID AdmissionUmdScreenForgetAllocation(ADMISSION_UMD_DEVICE *Device,
+                                        D3DKMT_HANDLE Allocation);
 HRESULT AdmissionUmdScreenBeginClose(ADMISSION_UMD_DEVICE *Device);
 VOID AdmissionUmdScreenCancelClose(ADMISSION_UMD_DEVICE *Device);
 HRESULT AdmissionUmdScreenSignalFence(ADMISSION_UMD_DEVICE *Device,

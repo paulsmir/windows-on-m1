@@ -50,6 +50,11 @@ static __attribute__((used)) void AdmissionUmdDiagnostic(const char *name,HRESUL
   ++receipt_count; receipt_status=result;
   memcpy(receipt,values,sizeof(receipt));
 }
+/* EXP1131: a successful deallocation makes the screen slots forget the handle. */
+static unsigned forget_calls;
+static __attribute__((used)) void AdmissionUmdScreenForgetAllocation(ADMISSION_UMD_DEVICE *device,UINT allocation) {
+  (void)device;(void)allocation;++forget_calls;
+}
 static HRESULT callback(HANDLE device,const D3DDDICB_DEALLOCATE *request) {
   assert(device==(HANDLE)(uintptr_t)0x55);
   assert(request->NumAllocations==0 && request->HandleList==0);

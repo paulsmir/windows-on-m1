@@ -61,6 +61,29 @@ static ADMISSION_UMD_SOURCE_HOLD_RECORD *AdmissionUmdScreenFreeHold(
   return NULL;
 }
 
+/* EXP1131: the runtime deallocated the resource that owns Allocation. That
+ * destroys the handle and drops every residency reference the device held
+ * on it, so a Direct slot still naming it must neither evict nor reuse it:
+ * an Evict of the dead handle made dxgkrnl mark the device as removed
+ * (EXP1130 ETW: DxgkEvictInternal -> VidSchMarkDeviceAsError) and DWM
+ * rebuilt its device, blanking the screen, on every Settings close. */
+VOID AdmissionUmdScreenForgetAllocation(ADMISSION_UMD_DEVICE *Device,
+                                        D3DKMT_HANDLE Allocation) {
+  UINT index;
+  if (Device == NULL || Allocation == 0u)
+    return;
+  AcquireSRWLockExclusive(&Device->ScreenBufferLock);
+  for (index = 0u; index < ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device); ++index) {
+    ADMISSION_UMD_SCREEN_BUFFER *buffer = &Device->ScreenBuffers[index];
+    if (buffer->Active && buffer->Direct &&
+        buffer->KernelAllocation == Allocation) {
+      buffer->Resident = FALSE;
+      buffer->KernelAllocation = 0;
+    }
+  }
+  ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+}
+
 static ADMISSION_UMD_SOURCE_HOLD_RECORD *AdmissionUmdScreenFindHold(
     ADMISSION_UMD_DEVICE *Device, APPLE_AGX_U64 HoldId) {
   UINT index;

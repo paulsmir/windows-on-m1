@@ -50,6 +50,11 @@ static void AdmissionUmdDiagnostic(const char *name,HRESULT result,const UINT *v
   assert(strcmp(name,"umd-deallocate-failure")==0 && count==3);
   receipt_stage=values[0];result_seen=result;
 }
+/* EXP1131: a successful deallocation makes the screen slots forget the handle. */
+static unsigned forget_calls;
+static __attribute__((used)) void AdmissionUmdScreenForgetAllocation(ADMISSION_UMD_DEVICE *device,UINT allocation) {
+  (void)device;(void)allocation;++forget_calls;
+}
 static HRESULT callback(HANDLE device,const D3DDDICB_DEALLOCATE *request) {
   assert(device==(HANDLE)(uintptr_t)0x55);
   ++calls;resource_seen=request->hResource;
