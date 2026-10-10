@@ -8,6 +8,9 @@
  * kernel context handles travel as HANDLE values holding a D3DKMT_HANDLE. */
 
 #include <windows.h>
+/* NTSTATUS: Mesa builds define WIN32_LEAN_AND_MEAN, which skips wincrypt.h
+ * and with it the user-mode NTSTATUS typedef of bcrypt.h. */
+#include <bcrypt.h>
 #include <d3dkmthk.h>
 #pragma warning(push)
 #pragma warning(disable:4201)
