@@ -1,7 +1,27 @@
 # J313 GPU: Settings-close blank fixed (EXP1132); Notepad drag 53 / typing 57
 
 
-## Current as of 2026-10-10 04:05Z (read this first)
+## Current as of 2026-10-10 05:15Z (read this first)
+
+Best validated launch: exp/1136-build 51c33ae7 (phase 5a + counters +
+destroy drain), UMD one submission in flight.
+Integration (KMD) also carries, not yet run in the one-in-flight setup:
+875de913 phase 5b (second job per context; functionally exercised in
+EXP1137/EXP1139, ~38k deferred second jobs, no failure), b40a7c29 escape
+JobEvent (EXP1139), c24ec6ce GDI packets wait for pending G4 entries
+(latent deadlock found in review).
+Two submissions per context in flight (UMD e4398e22, reverted again on
+integration): EXP1137 regressed (timer-polled private-scene waits, EXP1138);
+with b40a7c29 (EXP1139) Notepad drag reaches 59.7-59.9 (98 % one-period)
+but GDI windows stay regressed (charmap drag 44 vs 60, same-size drag 42
+vs 53). EXP1140 charmap capture: no dominant wait; candidates: the copy
+escape waiting for the process's own in-flight job (R157 rule, no
+documented hazard) and retire ordering.
+Next: single-in-flight charmap capture as the comparison, then decide on
+the copy-escape rule; the one-in-flight + 5b + JobEvent + GDI-pending build
+needs its own validation run.
+
+## Earlier: 2026-10-10 04:05Z
 
 Best validated launch: exp/1136-build 51c33ae7 (phase 5a + submit-path
 counters + 2ebf1a96 destroy drain) with m1n1 98cdabae. EXP1136: app devices
