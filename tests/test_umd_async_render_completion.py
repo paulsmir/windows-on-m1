@@ -138,13 +138,10 @@ class AsyncRenderCompletion(unittest.TestCase):
         self.assertIn('download ? !download_due(slot)', held)
         self.assertNotIn('signal_render(', function(text, 'complete_render'))
         submit = function(text, 'submit')
-        # EXP1093: two submissions may be in flight; submit no longer
-        # completes the previous one first (the winsys bounds the depth).
-        self.assertNotIn('complete_render(device)', submit)
+        self.assertLess(submit.index('complete_render(device)'),
+                        submit.index('transfer_held(device,false)'))
         self.assertLess(submit.index('signal_render(device,internal)'),
                         submit.index('finish_submission('))
-        after = submit[submit.index('finish_submission('):]
-        self.assertIn('slot->CopyHeld=FALSE;slot->LastUseFence=*fence;', after)
         self.assertIn('private_escape, query_render};', text)
 
 

@@ -37,23 +37,12 @@ typedef struct {
   unsigned Bound;
 } AGX_WIN32_GPUVA_BO;
 
-/* EXP1093: a submission still in flight behind the newest one. */
-typedef struct {
-  uint64_t *Handles;
-  unsigned Count;
-  uint64_t Fence;
-} AGX_WIN32_GPUVA_SET;
-
 typedef struct {
   AGX_WIN32_GPUVA_OPS Ops;
   void *Context;
-  /* The newest submission's residency set and fence. */
   uint64_t *Held;
   uint64_t RenderFence;
   unsigned HeldCount;
-  /* EXP1093: at most one older submission may still be in flight; it is
-   * retired first (GPU order) and before a third submission starts. */
-  AGX_WIN32_GPUVA_SET Older;
   unsigned Terminal;
   unsigned LastFailure; /* diagnostic: source line of the last refused call */
   unsigned LastDetail;  /* diagnostic: MakeResident/Submit callback result */
@@ -73,11 +62,6 @@ int AgxWin32GpuvaSubmit(AGX_WIN32_GPUVA_SPACE *,
                         uint64_t *CompletionFence);
 int AgxWin32GpuvaRetire(AGX_WIN32_GPUVA_SPACE *, uint64_t CompletionFence);
 int AgxWin32GpuvaComplete(AGX_WIN32_GPUVA_SPACE *, uint64_t CompletionFence);
-/* EXP1093: whether an in-flight submission names this allocation, and the
- * fence of the newest one that does (0: none). */
-uint64_t AgxWin32GpuvaHoldingFence(const AGX_WIN32_GPUVA_SPACE *, uint64_t Allocation);
-/* Whether CompletionFence is an in-flight (held) submission's fence. */
-int AgxWin32GpuvaFenceHeld(const AGX_WIN32_GPUVA_SPACE *, uint64_t CompletionFence);
 
 #ifdef __cplusplus
 }
