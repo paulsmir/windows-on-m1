@@ -7,8 +7,7 @@
  * after creating a context and finishes it wherever the frontend itself uses
  * the context (make current, flush/swap, destroy); Mesa's WGL frontend (stw)
  * never enables it. These wrappers, exported in place of stw's Drv* entry
- * points (agx_wgl_icd.def), do the same for WGL. Set AGX_GLTHREAD=0 to keep
- * contexts single-threaded.
+ * points (agx_wgl_icd.def), do the same for WGL when AGX_GLTHREAD=1.
  *
  * Asahi meets glthread's requirements: map_unsynchronized_thread_safe and
  * allow_mapped_buffers_during_execution (the u_screen default). stw paths
@@ -23,10 +22,12 @@
 void agx_glthread_init_st(struct st_context *st);
 void agx_glthread_finish_st(struct st_context *st);
 
+/* EXP1177: in CS 1.6 gameplay glthread lowered the frame rate from 37.5 to
+ * 29 fps median (operator: 25-27), so it is opt-in (AGX_GLTHREAD=1). */
 static BOOL agx_glthread_wanted(void) {
   char value[4];
   DWORD n = GetEnvironmentVariableA("AGX_GLTHREAD", value, sizeof(value));
-  return !(n == 1u && value[0] == '0');
+  return n == 1u && value[0] == '1';
 }
 
 static void agx_glthread_finish_context(struct stw_context *ctx) {
