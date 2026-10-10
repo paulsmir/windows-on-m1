@@ -298,6 +298,14 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
     # complete by event + stamp polling (agx_sync_batch), so a fence request
     # waits for every submitted batch and returns a fence that is signalled
     # by construction; a failed wait leaves the context faulted, no fence.
+    # EXP1148: st/mesa calls flush_resource on the window back buffer before
+    # SwapBuffers. Upstream converts a non-shareable BO into a SHARED one
+    # (Linux dma-buf export); the Windows BO layer refuses AGX_BO_SHAREABLE,
+    # so transition_resource got no resource and asserted. Windows shares
+    # through kernel allocations, never BO export, and the ICD displays by
+    # CPU readback: flushing the resource's writer is the whole contract.
+    # The D3D10 frontend never calls flush_resource.
+    s=body(s,'agx_flush_resource','''   agx_flush_writer(agx_context(pctx), agx_resource(pres), "flush_resource");''')
     s=replace(s,'static void\nagx_flush(struct pipe_context *pctx,','''static char agx_windows_fence_storage;
 #define AGX_WINDOWS_SIGNALLED_FENCE \\
    ((struct pipe_fence_handle *)&agx_windows_fence_storage)
@@ -333,17 +341,23 @@ agx_flush(struct pipe_context *pctx,''')
     a,b=function(s,'agx_clear');decl=s.rfind('static void',0,a);signature=s[decl:a]
     wrapper=signature+'''{
    struct agx_context *ctx = agx_context(pctx);
-   bool color_clear = buffers == PIPE_CLEAR_COLOR0 && color_clear_mask == 0xf &&
-                      stencil_clear_mask == 0;
-   bool depth_clear = buffers == PIPE_CLEAR_DEPTH && color_clear_mask == 0 &&
-                      stencil_clear_mask == 0 && depth >= 0.0 && depth <= 1.0;
-   bool depth_stencil_clear =
-      buffers == (PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL) &&
-      color_clear_mask == 0 && stencil_clear_mask == 0 &&
-      depth >= 0.0 && depth <= 1.0;
-   if (ctx->any_faults ||
-       (!color_clear && !depth_clear && !depth_stencil_clear) || !color ||
-       scissor_state) { ctx->any_faults = true; return; }
+   /* Gallium clear masks: color_clear_mask carries 4 bits per colour buffer
+    * (GL passes its whole ColorMask, 0xffffffff by default) and only buffer
+    * 0's nibble applies here; stencil_clear_mask applies only with
+    * PIPE_CLEAR_STENCIL (GL passes the stencil write mask, D3D10 passes 0).
+    * Partial masks never reach pipe->clear (st/mesa clears with quads), and
+    * the Asahi body ignores both masks. EXP1148: a GL glClear(COLOR|DEPTH)
+    * was refused by the former D3D10-shaped guard and faulted the context.
+    * Accepted: COLOR0, DEPTH and STENCIL-with-DEPTH, alone or together. */
+   const unsigned supported = PIPE_CLEAR_COLOR0 | PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL;
+   bool shape = buffers && !(buffers & ~supported) &&
+                (!(buffers & PIPE_CLEAR_STENCIL) || (buffers & PIPE_CLEAR_DEPTH));
+   bool color_ok = !(buffers & PIPE_CLEAR_COLOR0) || (color_clear_mask & 0xf) == 0xf;
+   bool depth_ok = !(buffers & PIPE_CLEAR_DEPTH) || (depth >= 0.0 && depth <= 1.0);
+   bool stencil_ok = !(buffers & PIPE_CLEAR_STENCIL) ||
+                     stencil_clear_mask == 0 || stencil_clear_mask == 0xff;
+   if (ctx->any_faults || !shape || !color_ok || !depth_ok || !stencil_ok ||
+       !color || scissor_state) { ctx->any_faults = true; return; }
    struct agx_batch *batch = agx_get_batch(ctx);
    if (!batch || !AgxWin32AsahiBatchEnter(batch)) { ctx->any_faults = true; return; }
    agx_clear_windows_body(pctx, buffers, color_clear_mask, stencil_clear_mask, scissor_state, color, depth, stencil);

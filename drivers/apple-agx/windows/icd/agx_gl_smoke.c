@@ -10,6 +10,7 @@
 #include <windows.h>
 #include <dbghelp.h>
 #include <GL/gl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -59,6 +60,24 @@ static DWORD WINAPI watchdog(LPVOID unused) {
   }
 }
 
+/* EXP1148: a Mesa assert opened the CRT's modal message box and the test
+ * looked hung. Print asserts to stderr and dump on the resulting abort. */
+static void on_abort(int sig) {
+  char path[MAX_PATH]; DWORD n = GetModuleFileNameA(NULL, path, MAX_PATH);
+  (void)sig;
+  while (n && path[n - 1] != '\\') --n;
+  strcpy_s(path + n, MAX_PATH - n, "agx_gl_smoke_abort.dmp");
+  fprintf(stderr, "ABORT\n");
+  HANDLE f = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+  if (f != INVALID_HANDLE_VALUE) {
+    MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), f,
+        (MINIDUMP_TYPE)(MiniDumpWithDataSegs | MiniDumpWithThreadInfo | MiniDumpWithIndirectlyReferencedMemory),
+        NULL, NULL, NULL);
+    CloseHandle(f);
+  }
+  TerminateProcess(GetCurrentProcess(), 7);
+}
+
 static LRESULT CALLBACK proc(HWND w, UINT m, WPARAM a, LPARAM b) {
   if (m == WM_CLOSE) { PostQuitMessage(0); return 0; }
   return DefWindowProcA(w, m, a, b);
@@ -80,6 +99,9 @@ int main(int argc, char **argv) {
   int frames = argc > 1 ? atoi(argv[1]) : 120;
   setvbuf(stdout, NULL, _IONBF, 0);
   SetUnhandledExceptionFilter(crash);
+  _set_error_mode(_OUT_TO_STDERR);
+  _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+  signal(SIGABRT, on_abort);
   CreateThread(NULL, 0, watchdog, NULL, 0, NULL);
   const char *want = argc > 2 ? argv[2] : NULL;
   WNDCLASSA wc; HWND wnd; HDC dc; HGLRC rc; PIXELFORMATDESCRIPTOR pfd;
