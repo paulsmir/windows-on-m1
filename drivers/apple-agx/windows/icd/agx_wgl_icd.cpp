@@ -10,6 +10,7 @@
 #include <windows.h>
 #include <string.h>
 #include "agx_kmt_gpuva_bridge.h"
+#include "agx_wgl_present_copy.h"
 #include "umd_internal.h"
 /* umd_asahi_owner.c / umd_asahi_batch_adapter.c define these with C linkage. */
 extern "C" {
@@ -256,6 +257,7 @@ typedef struct {
   unsigned Next;
   LONGLONG Frames, LastTick, SumPresent, SumShow, SumInterval;
   LONGLONG SumMap, SumCopy, SumDib;
+  unsigned Slices;            /* concurrent copy slices of the last show */
   BYTE *Cpu;                 /* cached copy of the shown image (EXP1170) */
 } AGX_WGL_PRESENT_RING;
 static AGX_WGL_PRESENT_RING AgxWglRings[4];
@@ -303,6 +305,57 @@ static AGX_WGL_PRESENT_RING *wgl_ring_get(struct pipe_screen *screen, HDC hdc,
   return free_ring;
 }
 
+/* EXP1170: the copy out of the write-combined mapping is ~92% of the show
+ * (19 ms per 2560x1600 present on one thread). Uncached loads are latency
+ * bound per core, so the rows are split into AGX_WGL_COPY_SLICES slices
+ * copied concurrently on the process thread pool; the presenting thread
+ * copies one slice itself and waits for the others. Callers hold
+ * AgxWglRingLock, which serialises use of the single job. */
+typedef struct {
+  BYTE *Dst;
+  const BYTE *Src;
+  SIZE_T DstStride, SrcStride, RowBytes;
+  unsigned Height;
+  volatile LONG Next;
+} AGX_WGL_COPY_JOB;
+static AGX_WGL_COPY_JOB AgxWglCopyJob;
+static PTP_WORK AgxWglCopyWork;
+
+static VOID CALLBACK wgl_copy_slice(PTP_CALLBACK_INSTANCE instance, PVOID context,
+                                    PTP_WORK work) {
+  (void)instance; (void)work;
+  AGX_WGL_COPY_JOB *job = (AGX_WGL_COPY_JOB *)context;
+  unsigned index = (unsigned)InterlockedIncrement(&job->Next) - 1u;
+  unsigned first, end;
+  if (index >= AGX_WGL_COPY_SLICES) return;
+  agx_wgl_slice_rows(job->Height, AGX_WGL_COPY_SLICES, index, &first, &end);
+  agx_wgl_copy_rows(job->Dst, job->DstStride, job->Src, job->SrcStride,
+                    job->RowBytes, first, end);
+}
+
+/* Returns the number of slices copied concurrently (1: no thread pool). */
+static unsigned wgl_copy_image(BYTE *dst, const BYTE *src, unsigned src_stride,
+                               unsigned width, unsigned height) {
+  if (!AgxWglCopyWork)
+    AgxWglCopyWork = CreateThreadpoolWork(wgl_copy_slice, &AgxWglCopyJob, NULL);
+  if (!AgxWglCopyWork) {
+    agx_wgl_copy_rows(dst, (SIZE_T)width * 4u, src, src_stride,
+                      (SIZE_T)width * 4u, 0u, height);
+    return 1u;
+  }
+  AgxWglCopyJob.Dst = dst;
+  AgxWglCopyJob.Src = src;
+  AgxWglCopyJob.DstStride = AgxWglCopyJob.RowBytes = (SIZE_T)width * 4u;
+  AgxWglCopyJob.SrcStride = src_stride;
+  AgxWglCopyJob.Height = height;
+  AgxWglCopyJob.Next = 0;
+  for (unsigned i = 1; i < AGX_WGL_COPY_SLICES; ++i)
+    SubmitThreadpoolWork(AgxWglCopyWork);
+  wgl_copy_slice(NULL, &AgxWglCopyJob, AgxWglCopyWork);
+  WaitForThreadpoolWorkCallbacks(AgxWglCopyWork, FALSE);
+  return AGX_WGL_COPY_SLICES;
+}
+
 /* EXP1170 receipt: the show is timed in three parts -- map (fence wait),
  * copy out of the GPU allocation's CPU mapping (write-combined for Mesa
  * classes, slow to read) into cached memory, and SetDIBitsToDevice. */
@@ -326,9 +379,7 @@ static BOOL wgl_show(struct pipe_context *ctx, struct pipe_resource *image,
   if (ring && !ring->Cpu)
     ring->Cpu = (BYTE *)HeapAlloc(GetProcessHeap(), 0, (SIZE_T)width * height * 4u);
   if (ring && ring->Cpu) {
-    for (unsigned y = 0; y < height; ++y)
-      memcpy(ring->Cpu + (SIZE_T)y * width * 4u, map + (SIZE_T)y * stride,
-             (SIZE_T)width * 4u);
+    ring->Slices = wgl_copy_image(ring->Cpu, map, stride, width, height);
     source = ring->Cpu;
     stride = width * 4u;
   }
@@ -355,15 +406,16 @@ static void wgl_present_receipt(AGX_WGL_PRESENT_RING *ring, LONGLONG start,
   if (ring->LastTick) ring->SumInterval += start - ring->LastTick;
   ring->LastTick = start;
   if (++ring->Frames % 120 != 0 || !frequency.QuadPart) return;
-  UINT values[8] = {
+  UINT values[9] = {
     (UINT)(ring->SumPresent * 1000000 / frequency.QuadPart / 120),
     (UINT)(ring->SumShow * 1000000 / frequency.QuadPart / 120),
     (UINT)(ring->SumInterval * 1000000 / frequency.QuadPart / 120),
     ring->Width, ring->Height,
     (UINT)(ring->SumMap * 1000000 / frequency.QuadPart / 120),
     (UINT)(ring->SumCopy * 1000000 / frequency.QuadPart / 120),
-    (UINT)(ring->SumDib * 1000000 / frequency.QuadPart / 120) };
-  AdmissionUmdDiagnostic("measure-wgl-present", S_OK, values, 8u);
+    (UINT)(ring->SumDib * 1000000 / frequency.QuadPart / 120),
+    ring->Slices };
+  AdmissionUmdDiagnostic("measure-wgl-present", S_OK, values, 9u);
   ring->SumPresent = ring->SumShow = ring->SumInterval = 0;
   ring->SumMap = ring->SumCopy = ring->SumDib = 0;
 }
@@ -442,6 +494,9 @@ extern "C" BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved
     break;
   case DLL_PROCESS_DETACH:
     if (reserved == NULL) {
+      /* FreeLibrary: no copy callback is pending (each present waits). */
+      if (AgxWglCopyWork) CloseThreadpoolWork(AgxWglCopyWork);
+      AgxWglCopyWork = NULL;
       stw_cleanup_thread();
       stw_cleanup();
     } else {
