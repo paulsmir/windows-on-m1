@@ -284,6 +284,7 @@
     <Inf Include="AppleAgxRenderAdmission.inf" />
     <FilesToPackage Include="$(TargetPath)" Condition="'$(ConfigurationType)'=='Driver'" />
     <FilesToPackage Include="AppleAgxRenderAdmissionUmd.dll" />
+    <FilesToPackage Include="AppleAgxOpenGL32.dll" />
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="src\arm64_hypercalls.asm">

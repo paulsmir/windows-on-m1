@@ -10,6 +10,9 @@ PnpLockdown=1
 [DestinationDirs]
 Admission.KmdCopyFiles=12
 Admission.UmdCopyFiles=11
+; 13 = the driver store: the x86 ICD runs from it (System32\DriverStore is
+; exempt from WOW64 redirection), as AMD's atiglpxx.dll does.
+Admission.WowIcdCopyFiles=13
 
 [Manufacturer]
 %ManufacturerName%=Models,NTarm64
@@ -18,7 +21,7 @@ Admission.UmdCopyFiles=11
 %DeviceName%=Admission_Install,ACPI\APPL0002
 
 [Admission_Install]
-CopyFiles=Admission.KmdCopyFiles,Admission.UmdCopyFiles
+CopyFiles=Admission.KmdCopyFiles,Admission.UmdCopyFiles,Admission.WowIcdCopyFiles
 AddReg=Admission.SoftwareSettings
 FeatureScore=F9
 
@@ -38,8 +41,20 @@ AppleAgxRenderAdmission.sys
 [Admission.UmdCopyFiles]
 AppleAgxRenderAdmissionUmd.dll,,,0x4000
 
+; EXP1155: 32-bit games (hl.exe) use Microsoft's opengl32.dll, which loads the
+; adapter's OpenGL ICD named by KMTQAITYPE_UMOPENGLINFO; 32-bit callers on a
+; 64-bit system get the ...Wow values ("Loading an OpenGL Installable Client
+; Driver", Microsoft Learn). The ICD is the x86 Mesa WGL/Asahi build.
+[Admission.WowIcdCopyFiles]
+AppleAgxOpenGL32.dll
+
 [Admission.SoftwareSettings]
 HKR,,UserModeDriverName,%REG_MULTI_SZ%,AppleAgxRenderAdmissionUmd.dll,AppleAgxRenderAdmissionUmd.dll,AppleAgxRenderAdmissionUmd.dll,AppleAgxRenderAdmissionUmd.dll
+; OpenGLFlags bit 0 is set for compatibility; bit 1 (skip glFinish before
+; SwapBuffers) stays clear.
+HKR,,OpenGLDriverNameWow,%REG_SZ%,%13%\AppleAgxOpenGL32.dll
+HKR,,OpenGLVersionWow,%REG_DWORD%,1
+HKR,,OpenGLFlagsWow,%REG_DWORD%,1
 
 [SourceDisksNames]
 1=%DiskName%,,,
@@ -47,6 +62,7 @@ HKR,,UserModeDriverName,%REG_MULTI_SZ%,AppleAgxRenderAdmissionUmd.dll,AppleAgxRe
 [SourceDisksFiles]
 AppleAgxRenderAdmission.sys=1
 AppleAgxRenderAdmissionUmd.dll=1
+AppleAgxOpenGL32.dll=1
 
 [Strings]
 ProviderName="Windows on Apple Silicon Project"
@@ -55,3 +71,5 @@ DeviceName="Apple AGX clean WDDM render-admission experiment"
 ServiceName="Apple AGX clean render-admission KMD"
 DiskName="Apple AGX clean render-admission package"
 REG_MULTI_SZ=0x00010000
+REG_SZ=0x00000000
+REG_DWORD=0x00010001

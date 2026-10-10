@@ -25,10 +25,24 @@ param(
     [string]$MesaSourceRoot = 'C:\Users\pauls\AD04-d3d10-frontend-build\mesa',
     [string]$MesaGeneratedRoot = 'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated',
     [ValidateRange(0,65535)]
-    [int]$PackageBuild = 461
+    [int]$PackageBuild = 461,
+    # The x86 OpenGL ICD (build-icd-x86.ps1 output) the INF installs as the
+    # adapter's WOW64 ICD (OpenGLDriverNameWow).
+    [string]$WowOpenGLIcd
 )
 
 $ErrorActionPreference = "Stop"
+if ([string]::IsNullOrWhiteSpace($WowOpenGLIcd) -or
+    -not (Test-Path -LiteralPath $WowOpenGLIcd -PathType Leaf)) {
+    throw 'the package carries the WOW64 OpenGL ICD: pass -WowOpenGLIcd <x86 libgallium_wgl.dll>'
+}
+# IMAGE_FILE_MACHINE_I386 at the PE header: WOW64 opengl32.dll is x86.
+$icdBytes = [IO.File]::ReadAllBytes($WowOpenGLIcd)
+$peOffset = [BitConverter]::ToInt32($icdBytes, 0x3c)
+if ([BitConverter]::ToUInt32($icdBytes, $peOffset) -ne 0x4550 -or
+    [BitConverter]::ToUInt16($icdBytes, $peOffset + 4) -ne 0x14c) {
+    throw "WowOpenGLIcd is not an x86 PE image: $WowOpenGLIcd"
+}
 if ($GpuvaB1Qualification -and ($MemoryQualification -or $ManagementQualification -or $RetainedRootQualification -or $StopAfterEndpoints -or $FirmwareQualification -or $BackendQualification -or $SubmitQualification -or $VisibleScanoutQualification -or $VisibleAgxQualification -or $GpuvaG1bPageProfile -ne 0 -or $GpuvaG1bAllocationHint)) {
     throw "GpuvaB1Qualification requires a standalone WDDM3.0 physical candidate"
 }
@@ -162,6 +176,7 @@ if (-not (Test-Path $umd)) {
     throw "Clean render-admission ARM64 UMD output was not found: $umd"
 }
 Copy-Item -Force $umd (Join-Path $root "AppleAgxRenderAdmissionUmd.dll")
+Copy-Item -Force $WowOpenGLIcd (Join-Path $root "AppleAgxOpenGL32.dll")
 
 $memoryQualificationValue = if ($MemoryQualification) { "true" } else { "false" }
 $managementQualificationValue = if ($ManagementQualification) { "true" } else { "false" }

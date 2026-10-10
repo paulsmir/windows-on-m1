@@ -424,6 +424,30 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn("D3D10DDIARG_OPENADAPTER", source)
         self.assertIn("return E_NOTIMPL", source)
 
+    def test_package_registers_the_wow64_opengl_icd(self):
+        # EXP1155: a name mismatch between the registry value and the copied
+        # file makes Microsoft's opengl32.dll fall back to GDI Generic silently.
+        import re
+        inf = self.read("AppleAgxRenderAdmission.inf")
+        project = self.read("AppleAgxRenderAdmission.vcxproj")
+        build = self.read("scripts/build-driver.ps1")
+
+        name = re.search(r"^HKR,,OpenGLDriverNameWow,%REG_SZ%,%13%\\(\S+)$", inf, re.M).group(1)
+        self.assertEqual(name, "AppleAgxOpenGL32.dll")
+        section = re.search(r"^\[Admission\.WowIcdCopyFiles\]\n(\S+)$", inf, re.M).group(1)
+        self.assertEqual(section, name)
+        self.assertIn("Admission.WowIcdCopyFiles=13", inf)
+        self.assertIn("CopyFiles=Admission.KmdCopyFiles,Admission.UmdCopyFiles,Admission.WowIcdCopyFiles", inf)
+        self.assertIn(name + "=1", inf)
+        self.assertIn("HKR,,OpenGLVersionWow,%REG_DWORD%,1", inf)
+        self.assertIn("HKR,,OpenGLFlagsWow,%REG_DWORD%,1", inf)
+        self.assertIn("REG_SZ=0x00000000", inf)
+        self.assertIn("REG_DWORD=0x00010001", inf)
+        self.assertNotIn("OpenGLDriverName,", inf)
+        self.assertIn('<FilesToPackage Include="%s" />' % name, project)
+        self.assertIn('(Join-Path $root "%s")' % name, build)
+        self.assertIn("0x14c", build)
+
     def test_project_links_only_admission_and_selected_provider_sources(self):
         project = self.read("AppleAgxRenderAdmission.vcxproj")
 
