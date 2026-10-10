@@ -443,7 +443,11 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn("HKR,,OpenGLFlagsWow,%REG_DWORD%,1", inf)
         self.assertIn("REG_SZ=0x00000000", inf)
         self.assertIn("REG_DWORD=0x00010001", inf)
-        self.assertNotIn("OpenGLDriverName,", inf)
+        # dxgkrnl reads Version/Flags(+Wow) only with the native name (EXP1160).
+        self.assertIn("HKR,,OpenGLDriverName,%REG_SZ%,%13%\\AppleAgxOpenGL64.dll", inf)
+        self.assertIn("HKR,,OpenGLVersion,%REG_DWORD%,1", inf)
+        self.assertIn("HKR,,OpenGLFlags,%REG_DWORD%,1", inf)
+        self.assertNotIn("AppleAgxOpenGL64.dll=1", inf)
         self.assertIn('<FilesToPackage Include="%s" />' % name, project)
         self.assertIn('(Join-Path $root "%s")' % name, build)
         self.assertIn("0x14c", build)

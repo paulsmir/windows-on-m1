@@ -52,6 +52,13 @@ AppleAgxOpenGL32.dll
 HKR,,UserModeDriverName,%REG_MULTI_SZ%,AppleAgxRenderAdmissionUmd.dll,AppleAgxRenderAdmissionUmd.dll,AppleAgxRenderAdmissionUmd.dll,AppleAgxRenderAdmissionUmd.dll
 ; OpenGLFlags bit 0 is set for compatibility; bit 1 (skip glFinish before
 ; SwapBuffers) stays clear.
+; EXP1160: dxgkrnl reads OpenGLVersion/Flags and their Wow values only when
+; the native OpenGLDriverName exists, and opengl32.dll declines an ICD
+; reported as version 0. No ARM64 ICD is built yet: native callers fail to
+; load the named file and keep Microsoft's GDI Generic implementation.
+HKR,,OpenGLDriverName,%REG_SZ%,%13%\AppleAgxOpenGL64.dll
+HKR,,OpenGLVersion,%REG_DWORD%,1
+HKR,,OpenGLFlags,%REG_DWORD%,1
 HKR,,OpenGLDriverNameWow,%REG_SZ%,%13%\AppleAgxOpenGL32.dll
 HKR,,OpenGLVersionWow,%REG_DWORD%,1
 HKR,,OpenGLFlagsWow,%REG_DWORD%,1
