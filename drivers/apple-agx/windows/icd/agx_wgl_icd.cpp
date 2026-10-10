@@ -21,6 +21,7 @@ extern "C" {
 #include "util/u_debug.h"
 #include "util/box.h"
 #include "util/format/u_format.h"
+#include "util/u_inlines.h"
 extern "C" {
 #include "stw_winsys.h" /* declares stw_init/stw_cleanup without C++ guards */
 }
@@ -205,18 +206,141 @@ static struct pipe_screen *wgl_screen_create(HDC hdc) {
   return a->Screen;
 }
 
-/* Copy the finished colour buffer into the window: map it for read (the
- * winsys flushes, waits for the job and downloads its staging copy), then
- * SetDIBitsToDevice with a top-down 32-bit BGRX DIB. */
-static void wgl_present(struct pipe_screen *screen, struct pipe_context *ctx,
-                        struct pipe_resource *res, HDC hdc) {
+/* Copy a mapped BGRX/RGBX image into the window: SetDIBitsToDevice with a
+ * top-down 32-bit DIB, repacking when the pitch or channel order differs. */
+static void wgl_blit_to_dc(HDC hdc, const BYTE *map, unsigned stride,
+                           unsigned width, unsigned height, BOOL bgra) {
+  BITMAPINFO info;
+  ZeroMemory(&info, sizeof(info));
+  info.bmiHeader.biSize = sizeof(info.bmiHeader);
+  info.bmiHeader.biWidth = (LONG)width;
+  info.bmiHeader.biHeight = -(LONG)height;
+  info.bmiHeader.biPlanes = 1;
+  info.bmiHeader.biBitCount = 32;
+  info.bmiHeader.biCompression = BI_RGB;
+  if (bgra && stride == width * 4u) {
+    SetDIBitsToDevice(hdc, 0, 0, width, height, 0, 0, 0, height, map, &info,
+                      DIB_RGB_COLORS);
+    return;
+  }
+  BYTE *packed = (BYTE *)HeapAlloc(GetProcessHeap(), 0, (SIZE_T)width * height * 4u);
+  if (!packed) return;
+  for (unsigned y = 0; y < height; ++y) {
+    const BYTE *src = map + (SIZE_T)y * stride;
+    BYTE *dst = packed + (SIZE_T)y * width * 4u;
+    if (bgra) memcpy(dst, src, (SIZE_T)width * 4u);
+    else for (unsigned x = 0; x < width; ++x) {
+      dst[4 * x + 0] = src[4 * x + 2]; dst[4 * x + 1] = src[4 * x + 1];
+      dst[4 * x + 2] = src[4 * x + 0]; dst[4 * x + 3] = src[4 * x + 3];
+    }
+  }
+  SetDIBitsToDevice(hdc, 0, 0, width, height, 0, 0, 0, height, packed, &info,
+                    DIB_RGB_COLORS);
+  HeapFree(GetProcessHeap(), 0, packed);
+}
+
+/* EXP1168: mapping the back buffer for read each frame flushed the frame,
+ * waited for the GPU, blitted into a staging copy and waited again, so the
+ * CPU (the game, under x86 emulation) and the GPU never overlapped: CS 1.6
+ * fullscreen ran at ~13 presents per second. Present now queues a GPU copy
+ * of frame N into one of two linear staging images, submits it without
+ * waiting, and shows frame N-1 from the other image (one frame of latency).
+ * One ring per window size and format; GL presents are serialised by the
+ * WGL frontend's current-context rules for a window. */
+typedef struct {
+  HDC Dc;
+  unsigned Width, Height;
+  enum pipe_format Format;
+  struct pipe_resource *Staging[2];
+  int Pending;               /* slot holding the previous frame, or -1 */
+  unsigned Next;
+  LONGLONG Frames, LastTick, SumPresent, SumShow, SumInterval;
+} AGX_WGL_PRESENT_RING;
+static AGX_WGL_PRESENT_RING AgxWglRings[4];
+static SRWLOCK AgxWglRingLock = SRWLOCK_INIT;
+
+static void wgl_ring_release(AGX_WGL_PRESENT_RING *ring) {
+  for (unsigned i = 0; i < 2; ++i)
+    pipe_resource_reference(&ring->Staging[i], NULL);
+  ZeroMemory(ring, sizeof(*ring));
+  ring->Pending = -1;
+}
+
+static AGX_WGL_PRESENT_RING *wgl_ring_get(struct pipe_screen *screen, HDC hdc,
+                                          const struct pipe_resource *res) {
+  AGX_WGL_PRESENT_RING *free_ring = NULL;
+  for (unsigned i = 0; i < 4; ++i) {
+    AGX_WGL_PRESENT_RING *ring = &AgxWglRings[i];
+    if (ring->Staging[0] && ring->Dc == hdc) {
+      if (ring->Width == res->width0 && ring->Height == res->height0 &&
+          ring->Format == res->format) return ring;
+      wgl_ring_release(ring);
+    }
+    if (!ring->Staging[0] && !free_ring) free_ring = ring;
+  }
+  if (!free_ring) { free_ring = &AgxWglRings[0]; wgl_ring_release(free_ring); }
+  struct pipe_resource templ;
+  memset(&templ, 0, sizeof(templ));
+  templ.target = PIPE_TEXTURE_2D;
+  templ.format = res->format;
+  templ.width0 = res->width0;
+  templ.height0 = res->height0;
+  templ.depth0 = 1;
+  templ.array_size = 1;
+  templ.usage = PIPE_USAGE_STAGING;
+  for (unsigned i = 0; i < 2; ++i) {
+    free_ring->Staging[i] = screen->resource_create(screen, &templ);
+    if (!free_ring->Staging[i]) { wgl_ring_release(free_ring); return NULL; }
+  }
+  free_ring->Dc = hdc;
+  free_ring->Width = res->width0;
+  free_ring->Height = res->height0;
+  free_ring->Format = res->format;
+  free_ring->Pending = -1;
+  return free_ring;
+}
+
+static BOOL wgl_show(struct pipe_context *ctx, struct pipe_resource *image,
+                     HDC hdc, unsigned width, unsigned height, BOOL bgra) {
   struct pipe_transfer *transfer = NULL;
   struct pipe_box box;
-  BITMAPINFO info;
-  const BYTE *map;
+  u_box_2d(0, 0, (int)width, (int)height, &box);
+  const BYTE *map = (const BYTE *)ctx->texture_map(ctx, image, 0, PIPE_MAP_READ,
+                                                   &box, &transfer);
+  if (!map || !transfer) {
+    wgl_note("reject-wgl-present-map", E_FAIL);
+    return FALSE;
+  }
+  wgl_blit_to_dc(hdc, map, transfer->stride, width, height, bgra);
+  ctx->texture_unmap(ctx, transfer);
+  return TRUE;
+}
+
+/* Receipt (EXP1168): every 120 presents, the mean present, show (map +
+ * SetDIBits) and present-to-present times in microseconds. */
+static void wgl_present_receipt(AGX_WGL_PRESENT_RING *ring, LONGLONG start,
+                                LONGLONG shown, LONGLONG end) {
+  LARGE_INTEGER frequency;
+  QueryPerformanceFrequency(&frequency);
+  ring->SumPresent += end - start;
+  ring->SumShow += end - shown;
+  if (ring->LastTick) ring->SumInterval += start - ring->LastTick;
+  ring->LastTick = start;
+  if (++ring->Frames % 120 != 0 || !frequency.QuadPart) return;
+  UINT values[5] = {
+    (UINT)(ring->SumPresent * 1000000 / frequency.QuadPart / 120),
+    (UINT)(ring->SumShow * 1000000 / frequency.QuadPart / 120),
+    (UINT)(ring->SumInterval * 1000000 / frequency.QuadPart / 120),
+    ring->Width, ring->Height };
+  AdmissionUmdDiagnostic("measure-wgl-present", S_OK, values, 5u);
+  ring->SumPresent = ring->SumShow = ring->SumInterval = 0;
+}
+
+static void wgl_present(struct pipe_screen *screen, struct pipe_context *ctx,
+                        struct pipe_resource *res, HDC hdc) {
+  LARGE_INTEGER start, shown, end;
   unsigned width, height;
   BOOL bgra;
-  (void)screen;
   if (!ctx || !res || !hdc) return;
   width = res->width0; height = res->height0;
   bgra = res->format == PIPE_FORMAT_B8G8R8A8_UNORM ||
@@ -226,41 +350,29 @@ static void wgl_present(struct pipe_screen *screen, struct pipe_context *ctx,
     wgl_note("reject-wgl-present-format", E_NOTIMPL);
     return;
   }
-  u_box_2d(0, 0, (int)width, (int)height, &box);
-  map = (const BYTE *)ctx->texture_map(ctx, res, 0, PIPE_MAP_READ, &box, &transfer);
-  if (!map || !transfer) {
-    wgl_note("reject-wgl-present-map", E_FAIL);
+  QueryPerformanceCounter(&start);
+  AcquireSRWLockExclusive(&AgxWglRingLock);
+  AGX_WGL_PRESENT_RING *ring = wgl_ring_get(screen, hdc, res);
+  if (!ring) {
+    /* No staging ring: show this frame synchronously, as before. */
+    ReleaseSRWLockExclusive(&AgxWglRingLock);
+    (void)wgl_show(ctx, res, hdc, width, height, bgra);
     return;
   }
-  ZeroMemory(&info, sizeof(info));
-  info.bmiHeader.biSize = sizeof(info.bmiHeader);
-  info.bmiHeader.biWidth = (LONG)width;
-  info.bmiHeader.biHeight = -(LONG)height;
-  info.bmiHeader.biPlanes = 1;
-  info.bmiHeader.biBitCount = 32;
-  info.bmiHeader.biCompression = BI_RGB;
-  if (bgra && transfer->stride == width * 4u) {
-    SetDIBitsToDevice(hdc, 0, 0, width, height, 0, 0, 0, height, map, &info,
-                      DIB_RGB_COLORS);
-  } else {
-    /* Pitch or channel order differs from a packed BGRX DIB: repack. */
-    BYTE *packed = (BYTE *)HeapAlloc(GetProcessHeap(), 0, (SIZE_T)width * height * 4u);
-    if (packed) {
-      for (unsigned y = 0; y < height; ++y) {
-        const BYTE *src = map + (SIZE_T)y * transfer->stride;
-        BYTE *dst = packed + (SIZE_T)y * width * 4u;
-        if (bgra) memcpy(dst, src, (SIZE_T)width * 4u);
-        else for (unsigned x = 0; x < width; ++x) {
-          dst[4 * x + 0] = src[4 * x + 2]; dst[4 * x + 1] = src[4 * x + 1];
-          dst[4 * x + 2] = src[4 * x + 0]; dst[4 * x + 3] = src[4 * x + 3];
-        }
-      }
-      SetDIBitsToDevice(hdc, 0, 0, width, height, 0, 0, 0, height, packed, &info,
-                        DIB_RGB_COLORS);
-      HeapFree(GetProcessHeap(), 0, packed);
-    }
-  }
-  ctx->texture_unmap(ctx, transfer);
+  struct pipe_box box;
+  u_box_2d(0, 0, (int)width, (int)height, &box);
+  unsigned slot = ring->Next;
+  ctx->resource_copy_region(ctx, ring->Staging[slot], 0, 0, 0, 0, res, 0, &box);
+  ctx->flush(ctx, NULL, 0);
+  QueryPerformanceCounter(&shown);
+  /* Frame N-1 finished on the GPU while the game built frame N. */
+  int show = ring->Pending >= 0 ? ring->Pending : (int)slot;
+  (void)wgl_show(ctx, ring->Staging[show], hdc, width, height, bgra);
+  ring->Pending = (int)slot;
+  ring->Next = slot ^ 1u;
+  QueryPerformanceCounter(&end);
+  wgl_present_receipt(ring, start.QuadPart, shown.QuadPart, end.QuadPart);
+  ReleaseSRWLockExclusive(&AgxWglRingLock);
 }
 
 static bool wgl_get_adapter_luid(struct pipe_screen *screen, HDC hdc, LUID *luid) {
