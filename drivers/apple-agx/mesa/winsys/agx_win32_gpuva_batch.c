@@ -104,32 +104,25 @@ static int batch_refuse(unsigned kind, unsigned site,
   return 0;
 }
 
-/* The batch of this context whose submission completes at `fence`. */
-static struct agx_batch *submitted_at(struct agx_batch *batch,uint64_t fence) {
-  for(unsigned i=0;fence && i<AGX_MAX_BATCHES;++i) {
+/* The batch of this context whose submission holds the residency set. */
+static struct agx_batch *held_by(struct agx_batch *batch,AGX_WIN32_ASAHI_BACKEND *b) {
+  for(unsigned i=0;i<AGX_MAX_BATCHES;++i) {
     struct agx_batch *old=&batch->ctx->batches.slots[i];
     AGX_G4_BATCH *g=capsule(old);
     if(old==batch || !g || !g->Submitted || g->Retired || g->Rejected ||
-       g->Fence!=fence) continue;
+       g->Fence!=b->Gpuva.RenderFence) continue;
     return old;
   }
   return NULL;
 }
-/* The batch of this context whose submission holds the newest residency set. */
-static struct agx_batch *held_by(struct agx_batch *batch,AGX_WIN32_ASAHI_BACKEND *b) {
-  return submitted_at(batch,b->Gpuva.RenderFence);
-}
 /* EXP1071: several open batches may be flushed back to back (agx_flush_all).
- * EXP1093: two submissions may be in flight (EXP1090: 26 % of DWM's wall
- * time waited for the previous one before each submission). Make room by
- * retiring (waiting for) the older one only; the newest stays in flight
- * while this batch submits. A set held by no batch of this context is left
- * alone (the submission is refused as before). */
+ * The submission of the previous one still holds the residency set; retire
+ * it (waiting for it, EXP1082) before this batch submits. A set held by no
+ * batch of this context is left alone (the submission is refused as before). */
 static int retire_held(struct agx_batch *batch,AGX_WIN32_ASAHI_BACKEND *b) {
-  if(b->Gpuva.Held && !held_by(batch,b)) return 0;
-  if(!b->Gpuva.Older.Handles) return 1;
-  struct agx_batch *old=submitted_at(batch,b->Gpuva.Older.Fence);
-  return old && AgxWin32AsahiBatchPoll(old,1000) && !b->Gpuva.Older.Handles;
+  if(!b->Gpuva.Held) return 1;
+  struct agx_batch *old=held_by(batch,b);
+  return old && AgxWin32AsahiBatchPoll(old,1000) && !b->Gpuva.Held;
 }
 
 int AgxWin32AsahiBatchBegin(struct agx_batch *batch) {
@@ -521,7 +514,7 @@ int AgxWin32AsahiBatchPoll(struct agx_batch *batch,APPLE_AGX_U32 timeout) {
   if(!b || !g->Submitted || !g->Fence) return 0;
   /* EXP1082: a CPU map may already have retired this submission's residency
    * set (native_map); then only its fence is waited for. */
-  if(AgxWin32GpuvaFenceHeld(&b->Gpuva,g->Fence)) {
+  if(b->Gpuva.Held && b->Gpuva.RenderFence==g->Fence) {
     if(!AgxWin32GpuvaRetire(&b->Gpuva,g->Fence)) return 0;
   } else if(b->Gpuva.Terminal || !b->Gpuva.Ops.WaitRender ||
             !b->Gpuva.Ops.WaitRender(b->Gpuva.Context,g->Fence)) return 0;
