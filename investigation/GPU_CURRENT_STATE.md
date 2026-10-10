@@ -1,7 +1,42 @@
-# J313 GPU: CS 1.6 menu renders on the AGX OpenGL ICD (EXP1163)
+# J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (~37 fps gameplay)
 
 
-## Current as of 2026-10-10 14:55Z (read this first)
+## Current as of 2026-10-10 21:35Z (read this first)
+
+CS 1.6 plays fullscreen 2560x1600 on the AGX OpenGL ICD (operator sessions
+EXP1167-EXP1177; no reject-batch, no first-fault, no TDR in any session).
+Accepted package: PACKAGE1180 (.local/experiments/EXP1180-cs16-wrapper-exit):
+PACKAGE1151 sys 407bffbc / UMD bbe106b3 + INF f7db56b7 + ICD 57e6a8a8.
+Frame-rate history (gameplay medians from measure-wgl-present receipts):
+EXP1169 two-slot ring 10.5 fps (show 71 ms: SetDIBits from the
+write-combined staging map) -> EXP1171 cached copy in 4 slices 27 fps ->
+EXP1173 present worker (3-slot mailbox) 37.3 fps; automated de_dust2 spawn
+EXP1172 56.7 fps. EXP1175 UMD slot hints: correct, no measurable change
+(37.5). EXP1177 glthread: stable but 29 fps -> opt-in only (AGX_GLTHREAD=1).
+Where gameplay time goes (EXP1173 kernel receipts, EXP1174 sampler): kernel
+calls 5-6% of the frame; game thread ~56% GL driver (agx_build_pipeline,
+immediate-mode dispatch/vbo, pool alloc, GL_QUADS index generation), ~16-20%
+Steam overlay/client loop, ~6% engine.
+Contracts learned this session (do not relearn):
+- Reading GPU staging memory from the CPU goes through a write-combined
+  mapping: copy it in concurrent slices into cached memory before GDI
+  (EXP1170/1171); never SetDIBits straight from the mapping.
+- WGL glthread needs the frontend's set_background_context hook (EXP1176) and
+  wrappers must not touch stw state once DllMain cleared stw_dev (EXP1177
+  crash at game exit); both fixed.
+- The automated CS harness closes only its own hl.exe (cs-run1172) and must
+  not run while the operator is at the machine; an abort must also stop the
+  guest cs-run/shots processes (EXP1171, EXP1178, EXP1181).
+- Rollback can lose the serial lock to a lingering launcher; retry the
+  recover script without a second shutdown (REC-EXP1177 note).
+Open: TDR recovery for G4 private jobs (EXP1167 bugcheck 0x116 when a stuck
+hl.exe faced a reboot); occasional small artifacts reported by the operator;
+Steam overlay cost; zero-copy present (D3DKMTPresent/redirection) as the
+"real driver" path; ARM64 ICD.
+Guest C: free must stay >= 4 GB (stage gate); traces archived in
+.local/experiments/guest-trace-archive-20261010 and -20261010b.
+
+## Earlier: 2026-10-10 14:55Z
 
 CS 1.6 (32-bit hl.exe, Half-Life directory untouched) renders its main menu
 on AGX: GL_RENDERER "Apple M1 (G13G)", GL 2.1 Mesa 26.3 (EXP1163). The x86
