@@ -593,6 +593,14 @@ static HRESULT terminalize_device(AGX_D3D10_WINDOWS_DEVICE **inout,HRESULT error
   } else {
     error=E_FAIL;
   }
+  {
+    /* EXP1132: app DestroyDevice still terminalizes (ApplicationFrameHost,
+     * M365Copilot); name the close stage and state that refused it. */
+    UINT values[9]={stage,(UINT)error,(UINT)owner->CleanupStatus,
+        activeBuffers,queryMarkers,nativeContexts,liveBos,
+        (UINT)kernelQuiesced,(UINT)owner->Runtime.LastScreenError};
+    AdmissionUmdDiagnostic("device-terminal",error,values,ARRAYSIZE(values));
+  }
   AdmissionUmdSetError(&owner->Runtime,error);
   unlink_owner(owner);
   ZeroMemory(owner,sizeof(*owner));
