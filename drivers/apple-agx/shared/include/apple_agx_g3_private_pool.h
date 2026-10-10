@@ -12,8 +12,16 @@
  * DWM's 128-unit budget (66-unit full-screen manager plus 7-11 units per
  * scene) evicting a cached scene on nearly every miss; EXP1094 raised it
  * while every process still held a 4 MiB heap and exhausted the pool.
- * EXP1115's on-demand heaps leave ~500 of 1024 units free. */
-#define APPLE_AGX_G3_PROCESS_UNITS 192u
+ * EXP1115's on-demand heaps leave ~500 of 1024 units free.
+ * EXP1139/EXP1140: with two submissions per context in flight, queued
+ * scenes are not cacheable and DWM's 192 units forced 6734 pressure
+ * evictions (one in flight: 262); scene misses rose 0.45 % -> 9.7 % (29 %
+ * in a GDI-window drag), and each miss maps tables only after the
+ * process's queue drains. 246 units (~15.4 MiB) adds 54 units: still two
+ * 8 MiB extents, the same 18-unit remainder after a 66-unit manager and
+ * 27-unit full-screen scenes as 192 (quota refusals stay partial), and
+ * ~300 pool units left with today's load. */
+#define APPLE_AGX_G3_PROCESS_UNITS 246u
 #define APPLE_AGX_G3_PRIVATE_VA_BYTES 0x02000000ULL
 #define APPLE_AGX_G3_PRIVATE_VA_UNITS 512u
 /* The top 4 MiB of each process's private VA are the 32-block TVB heap
