@@ -1,7 +1,15 @@
 # J313 GPU: Settings-close blank fixed (EXP1132); Notepad drag 53 / typing 57
 
 
-## Current as of 2026-10-10 05:55Z (read this first)
+## Current as of 2026-10-10 06:35Z (read this first)
+
+EXP1144 soak (same package as EXP1143, four load cycles, ~24 min, 12
+Settings cycles): no hang/TDR/DWM restart, flips identical in every cycle,
+private pool bounded, DWM memory flat. Remaining stutter: typing 94 % and
+same-size GDI drag 91-94 % one-period (DWM-only loads 98-99 %). Next:
+EXP1145 profile of exactly those two loads.
+
+## Earlier: 2026-10-10 05:55Z
 
 Best validated launch: exp/1143-build 5d8fe283 = exp/1141-build + UMD two
 submissions in flight (df628fdc) + per-process private quota 246 units
