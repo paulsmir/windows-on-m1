@@ -59,6 +59,14 @@ class GlthreadEntryPoints(unittest.TestCase):
             self.assertTrue(0 <= finish < call, name)
         self.assertEqual(text.count('agx_glthread_init_st('), 2)  # declaration + start
 
+    def test_frontend_hook_is_set_before_glthread_starts(self):
+        # EXP1176: glthread's worker start asserts fscreen->set_background_context.
+        text = (ICD / 'agx_wgl_glthread_mesa.c').read_text()
+        start = text.index('void agx_glthread_init_st(')
+        init = text.index('_mesa_glthread_init(', start)
+        hook = text.find('set_background_context =', start)
+        self.assertTrue(start < hook < init)
+
     def test_build_links_the_repository_def(self):
         script = (ICD / 'build-icd-x86.ps1').read_text()
         self.assertIn(r'/DEF:$agx\windows\icd\agx_wgl_icd.def', script)
