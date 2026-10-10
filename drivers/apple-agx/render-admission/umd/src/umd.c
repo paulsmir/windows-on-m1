@@ -331,6 +331,12 @@ static HRESULT APIENTRY AdmissionUmdCreateDevice(
     return E_INVALIDARG;
   device = (ADMISSION_UMD_DEVICE *)Args->hDrvDevice.pDrvPrivate;
   result = AdmissionUmdRuntimeDeviceInitialize(device, adapter, Args);
+  {
+    /* EXP1131: device lifetime per process (DWM recreation evidence). */
+    UINT values[2] = {(UINT)(ULONG_PTR)device, (UINT)Args->Flags};
+    AdmissionUmdDiagnostic("device-create", result, values,
+                           (UINT)(sizeof(values) / sizeof(values[0])));
+  }
   if (FAILED(result))
     return result;
 
@@ -726,6 +732,10 @@ static VOID APIENTRY AdmissionUmdDestroyDevice(D3D10DDI_HDEVICE DeviceHandle) {
   ADMISSION_UMD_DEVICE *device = AdmissionUmdDeviceFromHandle(DeviceHandle);
   BOOL consumed = FALSE;
   HRESULT result = AdmissionUmdRuntimeDeviceFinalize(device, &consumed);
+  {
+    UINT values[1] = {(UINT)(ULONG_PTR)device};
+    AdmissionUmdDiagnostic("device-destroy", result, values, 1u);
+  }
   if (FAILED(result) && !consumed)
     AdmissionUmdSetError(device, result);
 }

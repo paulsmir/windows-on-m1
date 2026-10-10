@@ -2,6 +2,7 @@
 #include <wingdi.h>
 #include <stdio.h>
 #include <string.h>
+#include <intrin.h>
 typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #pragma warning(push)
 #pragma warning(disable : 4201)
@@ -82,6 +83,14 @@ static BOOL AdmissionUmdDiagnosticPermit(
   if (strncmp(Stage, "reject-", 7u) == 0 ||
       strncmp(Stage, "measure-", 8u) == 0)
     return TRUE;
+  /* EXP1131: DWM rebuilt its primaries after a Settings close (EXP1130) and
+   * no runtime error or device lifetime line survived the startup budget.
+   * Keep them on a separate bounded budget so a failing loop cannot flood. */
+  if (strcmp(Stage, "runtime-set-error") == 0 ||
+      strncmp(Stage, "device-", 7u) == 0) {
+    static volatile LONG lifetimeRecords;
+    return InterlockedIncrement(&lifetimeRecords) <= 64;
+  }
   /* EXP1032 diagnostic: per-call DDI/slot trace, unbudgeted but opt-in per
    * process (APPLE_AGX_UMD_DDI_TRACE=1); never emitted otherwise. */
   if (strncmp(Stage, "ddi-", 4u) == 0) {
@@ -208,6 +217,8 @@ VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
   if (path == NULL) goto done;
   if (refusalsOnly && strncmp(Stage,"reject-",7u)!=0 &&
       strncmp(Stage,"measure-",8u)!=0 &&
+      strcmp(Stage,"runtime-set-error")!=0 &&
+      strncmp(Stage,"device-",7u)!=0 &&
       !(strcmp(Stage,"umd-deallocate-failure")==0 && FAILED(Status)) &&
       !(strcmp(Stage,"umd-retirement-failure")==0 && FAILED(Status))) goto done;
   /* Refusals must not disappear when successful startup chatter consumes
@@ -270,8 +281,12 @@ VOID AdmissionUmdPresentMeasure(UINT Kind, HRESULT Status,
   AdmissionUmdDiagnostic(names[Kind], Status, receipt, Count + 2u);
 }
 
+EXTERN_C IMAGE_DOS_HEADER __ImageBase;
+
 VOID AdmissionUmdSetError(ADMISSION_UMD_DEVICE *Device, HRESULT Error) {
-  AdmissionUmdDiagnostic("runtime-set-error", Error, NULL, 0u);
+  /* EXP1131: the caller's image offset names the failing DDI path. */
+  UINT caller = (UINT)((ULONG_PTR)_ReturnAddress() - (ULONG_PTR)&__ImageBase);
+  AdmissionUmdDiagnostic("runtime-set-error", Error, &caller, 1u);
   if (Device != NULL && Device->SetErrorCallback != NULL)
     Device->SetErrorCallback(Device->RuntimeCoreLayer, Error);
 }

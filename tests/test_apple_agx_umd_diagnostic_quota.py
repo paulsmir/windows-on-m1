@@ -36,6 +36,13 @@ static LONG InterlockedIncrement(volatile LONG *p) { return ++*p; }
 static LONG InterlockedCompareExchange(volatile LONG *p,LONG v,LONG c) {
   LONG old=*p; if(old==c)*p=v; return old;
 }
+typedef uint32_t DWORD;
+#include <stddef.h>
+typedef wchar_t WCHAR;
+static LONG InterlockedExchange(volatile LONG *p,LONG v) { LONG old=*p; *p=v; return old; }
+static DWORD GetLastError(void) { return 0; }
+static void SetLastError(DWORD e) { (void)e; }
+static DWORD GetEnvironmentVariableW(const WCHAR *n, WCHAR *b, DWORD c) { (void)n; (void)b; (void)c; return 0; }
 ''' + function + r'''
 int main(void) {
   volatile LONG normal=0, failures=0, retirement_failures=0;
@@ -54,6 +61,16 @@ int main(void) {
   assert(AdmissionUmdDiagnosticPermit("measure-native-flush-stage",0,&normal,&failures,&retirement_failures));
   assert(AdmissionUmdDiagnosticPermit("reject-seterror",(HRESULT)0x80070057u,&normal,&failures,&retirement_failures));
   assert(!AdmissionUmdDiagnosticPermit("umd-deallocate-failure",0,&normal,&failures,&retirement_failures));
+  /* EXP1131: runtime errors and device lifetime survive a saturated normal
+   * budget, on their own bound of 64. */
+  for(int i=0;i<32;i++) {
+    assert(AdmissionUmdDiagnosticPermit("runtime-set-error",(HRESULT)0x887a0005u,&normal,&failures,&retirement_failures));
+    assert(AdmissionUmdDiagnosticPermit(i&1?"device-destroy":"device-create",0,&normal,&failures,&retirement_failures));
+  }
+  assert(!AdmissionUmdDiagnosticPermit("device-create",0,&normal,&failures,&retirement_failures));
+  assert(!AdmissionUmdDiagnosticPermit("runtime-set-error",(HRESULT)0x887a0005u,&normal,&failures,&retirement_failures));
+  assert(normal==128);
+  assert(!AdmissionUmdDiagnosticPermit("ddi-submit",0,&normal,&failures,&retirement_failures));
   return 0;
 }
 '''
