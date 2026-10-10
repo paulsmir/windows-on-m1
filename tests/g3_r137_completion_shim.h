@@ -17,7 +17,6 @@ static int AdmissionBackendImageReleaseSubmissionRestore(ADMISSION_BACKEND_IMAGE
 static int AdmissionRenderPacketComplete(REPLAY_PACKET *p,unsigned f) {if(p->Description.Fence!=f)return 0;memset(p,0,sizeof(*p));return 1;}
 static int AppleAgxSchedulerPreemptionPhase(int *s) {(void)s;return 0;}
 static int AppleAgxSchedulerObserveBoundaryCompletion(int *s,unsigned n,unsigned e,unsigned f) {(void)s;(void)n;(void)e;(void)f;return 0;}
-static ULONGLONG KeQueryInterruptTime(void) {return 1;}
 #define AdmissionRenderCorrelationNotifyAtInterruptWindows(a,f,t,q) ((void)0)
 #define AdmissionRenderCorrelationSynchronizeWindows(a,f,s,r) ((void)0)
 #define AdmissionGdiReceiptCompleteWindows(a,f,s,r) ((void)0)

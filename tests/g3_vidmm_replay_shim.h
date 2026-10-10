@@ -119,9 +119,23 @@ typedef union { struct { unsigned int LowPart; int HighPart; }; long long QuadPa
 typedef enum { KernelMode, UserMode } KPROCESSOR_MODE;
 static LARGE_INTEGER KeQueryPerformanceCounter(LARGE_INTEGER *f) { static long long c; LARGE_INTEGER r; if(f) f->QuadPart=24000000; r.QuadPart=++c; return r; }
 static unsigned replay_delay_calls; static void (*replay_delay_hook)(void);
+/* Interrupt time advances by every relative wait, so wall-clock bounds hold. */
+static unsigned long long replay_interrupt_time;
+static unsigned long long KeQueryInterruptTime(void) { return replay_interrupt_time; }
 static NTSTATUS KeDelayExecutionThread(KPROCESSOR_MODE m, BOOLEAN a, LARGE_INTEGER *i) {
   (void)m;(void)a;assert(i && i->QuadPart<0);assert(replay_irql==PASSIVE_LEVEL);
+  replay_interrupt_time+=(unsigned long long)(-i->QuadPart);
   ++replay_delay_calls; if(replay_delay_hook) replay_delay_hook(); return 0; }
+/* EXP1138: the G3 job event; a timed wait behaves like the old delay. */
+typedef struct { int Signaled; } KEVENT;
+typedef enum { NotificationEvent, SynchronizationEvent } EVENT_TYPE;
+enum { Executive };
+#define IO_NO_INCREMENT 0
+static void KeInitializeEvent(KEVENT *e, EVENT_TYPE t, BOOLEAN s) { (void)t; e->Signaled=s; }
+static void KeClearEvent(KEVENT *e) { e->Signaled=0; }
+static LONG KeSetEvent(KEVENT *e, LONG inc, BOOLEAN w) { (void)inc;(void)w; e->Signaled=1; return 0; }
+static NTSTATUS KeWaitForSingleObject(KEVENT *e, int r, KPROCESSOR_MODE m, BOOLEAN a, LARGE_INTEGER *t) {
+  (void)e;(void)r; return KeDelayExecutionThread(m,a,t); }
 /* R161: paging-worker quiescence and encoded-record accounting. */
 static int replay_paging_pending; static UINT replay_encoded_records;
 static int replay_quiescence_flip_after_success;
@@ -347,7 +361,7 @@ typedef struct _ADMISSION_G3_LEAF_HISTORY_SNAPSHOT {
 } ADMISSION_G3_LEAF_HISTORY_SNAPSHOT;
 #define ADMISSION_G3_UPLOAD_TRACE_COUNT 64u
 typedef struct { ULONGLONG ProcessId,Va; ULONG Bytes,Hash,GpuHash,Checks; } ADMISSION_G3_UPLOAD_TRACE;
-typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; APPLE_AGX_G3_PRIVATE_POOL PrivatePool; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence,LastCompletedFence,PrivateCompletionFence; ULONGLONG UnpublishedGroups[32]; ADMISSION_G3_UPLOAD_TRACE UploadTrace[ADMISSION_G3_UPLOAD_TRACE_COUNT]; ULONG UploadTraceNext,UploadVerifyChecks,UploadVerifyMismatch,UploadVerifyUnmapped; ADMISSION_G3_UPLOAD_TRACE UploadFirstMismatch; ADMISSION_G3_LEAF_HISTORY LeafHistory[ADMISSION_G3_LEAF_RING]; ULONG LeafHistoryNext; ADMISSION_G3_ALLOC_TRACK AllocTrack[ADMISSION_G3_ALLOC_TRACK_COUNT]; ULONGLONG PrivateStats[16]; LONGLONG ProcessReceiptQpc; } ADMISSION_G3_STATE;
+typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; KEVENT JobEvent; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; APPLE_AGX_G3_PRIVATE_POOL PrivatePool; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence,LastCompletedFence,PrivateCompletionFence; ULONGLONG UnpublishedGroups[32]; ADMISSION_G3_UPLOAD_TRACE UploadTrace[ADMISSION_G3_UPLOAD_TRACE_COUNT]; ULONG UploadTraceNext,UploadVerifyChecks,UploadVerifyMismatch,UploadVerifyUnmapped; ADMISSION_G3_UPLOAD_TRACE UploadFirstMismatch; ADMISSION_G3_LEAF_HISTORY LeafHistory[ADMISSION_G3_LEAF_RING]; ULONG LeafHistoryNext; ADMISSION_G3_ALLOC_TRACK AllocTrack[ADMISSION_G3_ALLOC_TRACK_COUNT]; ULONGLONG PrivateStats[16]; LONGLONG ProcessReceiptQpc; } ADMISSION_G3_STATE;
 enum { ADMISSION_G3_PRIVATE_STAT_HIT, ADMISSION_G3_PRIVATE_STAT_MISS, ADMISSION_G3_PRIVATE_STAT_TRIM, ADMISSION_G3_PRIVATE_STAT_PRESSURE,
   ADMISSION_G3_PRIVATE_STAT_RELEASED, ADMISSION_G3_PRIVATE_STAT_MAPPED_PAGES, ADMISSION_G3_PRIVATE_STAT_UNMAPPED_PAGES,
   ADMISSION_G3_PRIVATE_STAT_CACHED_RELEASE, ADMISSION_G3_PRIVATE_STAT_CACHED_REAP, ADMISSION_G3_PRIVATE_STAT_RELEASE_QUEUED,

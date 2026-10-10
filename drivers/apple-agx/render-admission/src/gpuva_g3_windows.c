@@ -175,6 +175,7 @@ NTSTATUS AdmissionGpuvaG3Start(ADMISSION_CONTEXT *context) {
   RtlZeroMemory(state, sizeof(*state));
   state->Adapter = context;
   ExInitializeFastMutex(&state->Lock);
+  KeInitializeEvent(&state->JobEvent, NotificationEvent, FALSE);
   InitializeListHead(&state->Processes);
   if (!AdmissionGpuvaV5ClientOpen(context, &state->Client)) {
     ExFreePoolWithTag(state, ADMISSION_POOL_TAG);
@@ -1186,6 +1187,7 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   BOOLEAN isQuery=FALSE;
   NTSTATUS status=STATUS_INVALID_PARAMETER;
   UINT wait_ms;
+  ULONGLONG deadline;
   UINT pte_wait=0u;
   ULONGLONG pte_wait_start=0ULL;
   LARGE_INTEGER delay;
@@ -1243,8 +1245,11 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
    * UMD batch and the D3D device never presents. The bound exceeds TdrDelay;
    * predicates 42-44 still refuse if the job does not finish. */
   wait_ms=0u;
+  /* EXP1138: the 3 s bound is wall-clock; event wakes make iterations short. */
+  deadline=KeQueryInterruptTime()+3000ULL*10000ULL;
 RetryPagingQuiescence:
   for(;;++wait_ms) {
+    KeClearEvent(&state->JobEvent);
     ExAcquireFastMutex(&state->Lock);
     p=AdmissionGpuvaG3FindProcess(state,args->hKmdProcessHandle);
     /* R161 (EXP874): an UPLOAD/DOWNLOAD also waits until every built paging
@@ -1254,10 +1259,12 @@ RetryPagingQuiescence:
      * lock (BeginJob takes it too); only this process's job conflicts. */
     if(!p || (state->ActiveProcess!=p && !p->Graph.JobInFlight && !p->Graph.LeaseToken &&
         (q->Operation==APPLE_AGX_G3_COPY_QUERY || AdmissionPagingQuiescent(adapter))) ||
-       wait_ms>=3000u) break;
+       KeQueryInterruptTime()>=deadline) break;
     ExReleaseFastMutex(&state->Lock);
+    /* EXP1138: wake when this process's job ends (1 ms backstop for the
+     * paging-quiescence condition, which has no event). */
     delay.QuadPart=-10000LL;
-    (void)KeDelayExecutionThread(KernelMode,FALSE,&delay);
+    (void)KeWaitForSingleObject(&state->JobEvent,Executive,KernelMode,FALSE,&delay);
   }
   COPY_REJECT_IF(!p, 23u, STATUS_INVALID_PARAMETER, Unlock);
   COPY_REJECT_IF(p->Poisoned, 24u, STATUS_INVALID_PARAMETER, Unlock);
@@ -1294,7 +1301,7 @@ RetryPagingQuiescence:
   if(q->Operation!=APPLE_AGX_G3_COPY_QUERY) {
     BOOLEAN pagingReady=AdmissionPagingQuiescent(adapter);
     if(pagingReady) pagingReady=AdmissionPagingQuiescent(adapter);
-    if(!pagingReady && wait_ms<3000u) {
+    if(!pagingReady && KeQueryInterruptTime()<deadline) {
       ExReleaseFastMutex(&state->Lock);
       delay.QuadPart=-10000LL;
       (void)KeDelayExecutionThread(KernelMode,FALSE,&delay);
@@ -1690,6 +1697,7 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
   BOOLEAN fresh;
   UINT i;
   UINT wait_ms;
+  ULONGLONG deadline;
   LARGE_INTEGER delay;
   UINT required[9]={0}, tablePredicate=0u, mapOffset=0u;
   APPLE_AGX_G3_PRIVATE_POOL_STATS observed={0};
@@ -1714,15 +1722,21 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
   /* R157: ACQUIRE/PREPARE map private tables, which is not allowed while this
    * process has a native job in flight. Wait (lock released, bounded above
    * TdrDelay) for joined completion instead of refusing with busy. */
+  /* EXP1138: with two submissions in flight these 1 ms timer sleeps cost
+   * DWM ~1 s per 15.9 s (1236 waits); wake on the job's end instead, with
+   * the same 1 ms backstop and a 3 s wall-clock bound. */
+  deadline=KeQueryInterruptTime()+3000ULL*10000ULL;
   for (wait_ms=0u;;++wait_ms) {
+    KeClearEvent(&state->JobEvent);
     ExAcquireFastMutex(&state->Lock);
     p=AdmissionGpuvaG3FindProcess(state,args->hKmdProcessHandle);
     if (!p || q.Operation==APPLE_AGX_G3_PRIVATE_RELEASE ||
-        (!p->Graph.JobInFlight && !p->Graph.LeaseToken) || wait_ms>=3000u ||
+        (!p->Graph.JobInFlight && !p->Graph.LeaseToken) ||
+        KeQueryInterruptTime()>=deadline ||
         AdmissionG3PrivateCachedScene(p,args->hContext,&q)) break;
     ExReleaseFastMutex(&state->Lock);
     delay.QuadPart=-10000LL;
-    (void)KeDelayExecutionThread(KernelMode,FALSE,&delay);
+    (void)KeWaitForSingleObject(&state->JobEvent,Executive,KernelMode,FALSE,&delay);
   }
   if (!p || p->Poisoned || p->Graph.Uncertain) {PRIVATE_CAPTURE(1u,~0u,NULL);goto Done;}
   /* Compare handles against attached objects before dereferencing them. */
@@ -2647,6 +2661,8 @@ BOOLEAN AdmissionGpuvaG3CompleteJob(ADMISSION_CONTEXT *adapter, ULONG fence) {
     ADMISSION_G3_POISON(process,1u);
   }
   ExReleaseFastMutex(&state->Lock);
+  /* EXP1138: wake escapes waiting for this process's job to end. */
+  if (complete) KeSetEvent(&state->JobEvent, IO_NO_INCREMENT, FALSE);
   return complete;
 }
 

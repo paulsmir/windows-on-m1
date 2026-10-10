@@ -25,6 +25,9 @@ typedef struct _ADMISSION_G3_UPLOAD_TRACE {
 typedef struct _ADMISSION_G3_STATE {
   ADMISSION_CONTEXT *Adapter;
   FAST_MUTEX Lock;
+  /* EXP1138: set when a native job ends (CompleteJob). Escapes that must
+   * wait for their process's job wait on it instead of 1 ms timer sleeps. */
+  KEVENT JobEvent;
   LIST_ENTRY Processes;
   APPLE_AGX_GPUVA_V5_CLIENT Client;
   /* Cached, physically contiguous broker mailbox page (NULL: MMIO window). */
