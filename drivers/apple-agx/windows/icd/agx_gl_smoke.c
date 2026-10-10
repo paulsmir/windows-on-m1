@@ -17,6 +17,18 @@
 
 /* EXP1146 lost stdout and had no dump when the process faulted: write a
  * minidump beside the executable and report the fault on stderr. */
+/* EXT_framebuffer_object / EXT_framebuffer_blit (GL 1.1 headers lack them). */
+#define GL_FRAMEBUFFER_EXT 0x8D40
+#define GL_READ_FRAMEBUFFER_EXT 0x8CA8
+#define GL_DRAW_FRAMEBUFFER_EXT 0x8CA9
+#define GL_COLOR_ATTACHMENT0_EXT 0x8CE0
+#define GL_FRAMEBUFFER_COMPLETE_EXT 0x8CD5
+typedef void (APIENTRY *PFNGENFB)(GLsizei, GLuint *);
+typedef void (APIENTRY *PFNBINDFB)(GLenum, GLuint);
+typedef void (APIENTRY *PFNFBTEX2D)(GLenum, GLenum, GLenum, GLuint, GLint);
+typedef GLenum (APIENTRY *PFNCHECKFB)(GLenum);
+typedef void (APIENTRY *PFNBLITFB)(GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum);
+
 static LONG WINAPI crash(EXCEPTION_POINTERS *info) {
   char path[MAX_PATH]; DWORD n = GetModuleFileNameA(NULL, path, MAX_PATH);
   while (n && path[n - 1] != '\\') --n;
@@ -107,6 +119,11 @@ int main(int argc, char **argv) {
   /* "nodepth": a colour-only window (the G4 KMD builder accepts no ZLS
    * attachment yet), cleared with GL_COLOR_BUFFER_BIT only. */
   int nodepth = argc > 3 && !strcmp(argv[3], "nodepth");
+  /* "fbo": draw the scene into a colour-only framebuffer object and blit it
+   * to the window, so no batch carries the window's depth buffer. */
+  int fbo = argc > 3 && !strcmp(argv[3], "fbo");
+  PFNGENFB genfb = NULL; PFNBINDFB bindfb = NULL; PFNFBTEX2D fbtex = NULL;
+  PFNCHECKFB checkfb = NULL; PFNBLITFB blitfb = NULL; GLuint fb = 0, fbcolor = 0;
   WNDCLASSA wc; HWND wnd; HDC dc; HGLRC rc; PIXELFORMATDESCRIPTOR pfd;
   int format, failures = 0;
   LARGE_INTEGER f, t0, t1;
@@ -132,10 +149,19 @@ int main(int argc, char **argv) {
       if ((c.dwFlags & (PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER)) ==
               (PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER) &&
           !(c.dwFlags & PFD_GENERIC_FORMAT) && c.iPixelType == PFD_TYPE_RGBA &&
-          c.cColorBits == 32 && !c.cDepthBits && !c.cStencilBits && !c.cAccumBits) {
+          c.cColorBits >= 24 && !c.cDepthBits && !c.cStencilBits && !c.cAccumBits) {
         format = i; pfd = c;
       }
     }
+    if (!format)
+      for (int i = 1; i <= count; ++i) {
+        PIXELFORMATDESCRIPTOR c;
+        DescribePixelFormat(dc, i, sizeof(c), &c);
+        if (c.cDepthBits && c.cStencilBits) continue;
+        printf("PFD %d flags %08lx type %d color %u alpha %u depth %u stencil %u accum %u\n",
+               i, c.dwFlags, c.iPixelType, c.cColorBits, c.cAlphaBits, c.cDepthBits,
+               c.cStencilBits, c.cAccumBits);
+      }
   } else {
     format = ChoosePixelFormat(dc, &pfd);
   }
@@ -156,6 +182,22 @@ int main(int argc, char **argv) {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 4, 4, 0, GL_RGBA, GL_UNSIGNED_BYTE, texels);
+  if (fbo) {
+    *(PROC *)&genfb = wglGetProcAddress("glGenFramebuffersEXT");
+    *(PROC *)&bindfb = wglGetProcAddress("glBindFramebufferEXT");
+    *(PROC *)&fbtex = wglGetProcAddress("glFramebufferTexture2DEXT");
+    *(PROC *)&checkfb = wglGetProcAddress("glCheckFramebufferStatusEXT");
+    *(PROC *)&blitfb = wglGetProcAddress("glBlitFramebufferEXT");
+    if (!genfb || !bindfb || !fbtex || !checkfb || !blitfb) { printf("NO_FBO_ENTRY_POINTS\n"); return 8; }
+    glGenTextures(1, &fbcolor); glBindTexture(GL_TEXTURE_2D, fbcolor);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 640, 480, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    genfb(1, &fb); bindfb(GL_FRAMEBUFFER_EXT, fb);
+    fbtex(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_2D, fbcolor, 0);
+    printf("FBO status %04x\n", checkfb(GL_FRAMEBUFFER_EXT));
+    glBindTexture(GL_TEXTURE_2D, tex);
+  }
   glViewport(0, 0, 640, 480);
   glMatrixMode(GL_PROJECTION); glLoadIdentity(); glOrtho(0, 640, 0, 480, -1, 1);
   glMatrixMode(GL_MODELVIEW); glLoadIdentity();
@@ -163,8 +205,9 @@ int main(int argc, char **argv) {
   for (int n = 0; n < frames; ++n) {
     MSG msg;
     while (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) { TranslateMessage(&msg); DispatchMessageA(&msg); }
+    if (fbo) bindfb(GL_FRAMEBUFFER_EXT, fb);
     glClearColor(1.f, 0.f, 0.f, 1.f);
-    glClear(nodepth ? GL_COLOR_BUFFER_BIT : GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClear(nodepth || fbo ? GL_COLOR_BUFFER_BIT : GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glDisable(GL_TEXTURE_2D);
     glColor3f(0.f, 1.f, 0.f);
     glBegin(GL_TRIANGLES);
@@ -178,6 +221,11 @@ int main(int argc, char **argv) {
     glTexCoord2f(1, 1); glVertex2f(600.f, 400.f);
     glTexCoord2f(0, 1); glVertex2f(400.f, 400.f);
     glEnd();
+    if (fbo) {
+      bindfb(GL_READ_FRAMEBUFFER_EXT, fb); bindfb(GL_DRAW_FRAMEBUFFER_EXT, 0);
+      blitfb(0, 0, 640, 480, 0, 0, 640, 480, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+      bindfb(GL_FRAMEBUFFER_EXT, 0);
+    }
     if (n == 0 || n == frames - 1) {
       glFinish();
       failures += !expect("clear", 620, 20, 0xff0000);
