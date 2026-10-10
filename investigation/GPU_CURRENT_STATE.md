@@ -1,7 +1,15 @@
 # J313 GPU: Settings-close blank fixed (EXP1132); Notepad drag 53 / typing 57
 
 
-## Current as of 2026-10-10 03:40Z (read this first)
+## Current as of 2026-10-10 04:05Z (read this first)
+
+Best validated launch: exp/1136-build 51c33ae7 (phase 5a + submit-path
+counters + 2ebf1a96 destroy drain) with m1n1 98cdabae. EXP1136: app devices
+close cleanly (0 device-terminal/runtime-set-error lines), flips as EXP1135.
+In test: EXP1137 = phase 5b (875de913: second G4 job per context, two
+private marker slots per context) + UMD two-in-flight (59ec6c38).
+
+## Earlier: 2026-10-10 03:40Z
 
 Phase 5a (KMD cross-context queue) is in: e9474244 + 8e2e43b3 (deferred
 path also while the worker finishes; Wom1SubmitPath1135 counters).
