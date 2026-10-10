@@ -1,4 +1,35 @@
-# J313 GPU: Settings-close blank fixed (EXP1132); Notepad drag 53 / typing 57
+# J313 GPU: CS 1.6 menu renders on the AGX OpenGL ICD (EXP1163)
+
+
+## Current as of 2026-10-10 14:55Z (read this first)
+
+CS 1.6 (32-bit hl.exe, Half-Life directory untouched) renders its main menu
+on AGX: GL_RENDERER "Apple M1 (G13G)", GL 2.1 Mesa 26.3 (EXP1163). The x86
+ICD is installed by the driver package as the adapter's OpenGL ICD:
+driver-store AppleAgxOpenGL32.dll, OpenGLDriverNameWow/VersionWow/FlagsWow
+plus a native OpenGLDriverName/Version/Flags entry (ARM64 ICD not built;
+ARM64 GL callers fall back to GDI Generic). Microsoft's opengl32.dll loads it
+for any x86 GL app (x86 smoke without opengl32.dll beside it: 57-60 fps).
+Accepted package: PACKAGE1163 (.local/experiments/EXP1163-cs16-icd-nomsaa):
+PACKAGE1151 sys 407bffbc / UMD bbe106b3 + INF f7db56b7 + ICD 57aa7e18.
+Contracts learned (do not relearn):
+- DriverVer must equal the KMD VERSIONINFO, else dxgkrnl DpiAddDevice fails
+  Code 31 0xC0000182 (EXP1156-1159); re-catalog only with
+  render-admission/scripts/repackage-driver.ps1.
+- dxgkrnl reads OpenGLVersion/Flags(+Wow) only with a native OpenGLDriverName;
+  opengl32 declines an ICD reported as version 0 (EXP1160/1161).
+- WGL contexts share one screen/G4 context: residency sets of other contexts
+  are retired, not refused (7b034fd0, EXP1162).
+- The G4 builder is single-sample: the Windows screen sets AGX_DBG_NOMSAA
+  (0eddfcf0, EXP1163).
+- A private opengl32.dll beside hl.exe is never used (EXP1155).
+Recovery: standard recNNNNh; an adapter that never starts leaves G3Armed
+unconsumed (clear it after evidence: arm-clear-if-unstarted.ps1).
+Guest C: free must stay >= 4 GB (stage gate); traces archived in
+.local/experiments/guest-trace-archive-20261010.
+Next causal targets: map load / gameplay rendering, frame rate, fullscreen
+(operator saw a black fullscreen; the KMD exposes only 2560x1600), MSAA in
+the G4 builder, ARM64 ICD.
 
 
 ## Current as of 2026-10-10 09:15Z (read this first)
