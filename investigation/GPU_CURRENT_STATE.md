@@ -1,7 +1,24 @@
 # J313 GPU: Settings-close blank fixed (EXP1132); Notepad drag 53 / typing 57
 
 
-## Current as of 2026-10-10 05:40Z (read this first)
+## Current as of 2026-10-10 05:55Z (read this first)
+
+Best validated launch: exp/1143-build 5d8fe283 = exp/1141-build + UMD two
+submissions in flight (df628fdc) + per-process private quota 246 units
+(5d8fe283), m1n1 98cdabae. Integration f0d1c5af has the identical driver
+tree (two-in-flight is the default again). EXP1143: Notepad drag 57-59,
+typing 57-58, charmap 60, same-size drag 56-58, one-period pacing 94-99 %,
+private pressure 0, no rejects/TDR, Settings cycles clean.
+Note: every exp/1122..exp/1142 hardware build carried a 128-unit private
+quota (integration's 192 never reached that lineage).
+Proven: the GDI-window regression of two-in-flight (EXP1139/EXP1140) was
+private-scene quota pressure (EXP1142 vs EXP1140), fixed by the quota.
+Remaining DWM cost: 14099 own-job waits, 10.8 s in 382 s (0.7 ms each),
+paging waits ~0.7 s; Notepad still creates a surface per frame (RichEdit
+D2D DC render target).
+Next causal target: the remaining Notepad drag/typing gap below 60.
+
+## Earlier: 2026-10-10 05:40Z
 
 Best validated launch: exp/1141-build 0a6904fa = integration KMD (phase 5a
 + counters, phase 5b, escape JobEvent b40a7c29, GDI-pending c24ec6ce) +
