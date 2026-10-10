@@ -9,7 +9,10 @@ appends to it instead of starting another pass. Invariants:
 - Begin does not flush another active batch;
 - Begin still retires completed submitted batches, so the residency set is
   free for the new batch;
-- a held set owned by no batch of this context is still refused;
+- EXP1161 (WGL): a held set owned by no batch of this context belongs to
+  another GL context of the same screen (one G4 context and fence
+  timeline per screen); it is not refused -- making room retires it
+  through the space, as a CPU map does, and its batch retires by fence;
 - EXP1071 hardware: a retired submission returns its private scene lease at
   once, so open batches flushed back to back hold at most the leases of the
   submissions still in flight (holding each until cleanup exhausted the
@@ -157,13 +160,7 @@ int main(void) {
   assert(open_batch(&ctx, 3));
   assert(evicts == 3 && !backend.Gpuva.Held && !backend.Gpuva.Older.Handles && live_leases == 0);
   assert(!slots[0].windows_batch && !slots[1].windows_batch && !slots[2].windows_batch);
-  /* A held set that no batch of this context owns is still refused. */
-  uint64_t foreign = 5;
-  backend.Gpuva.Held = &foreign; backend.Gpuva.HeldCount = 1; backend.Gpuva.RenderFence = 99;
-  assert(!submit(&backend, &slots[3], 13));
   free(slots[3].windows_batch); slots[3].windows_batch = NULL; BITSET_CLEAR(ctx.batches.active, 3);
-  assert(!open_batch(&ctx, 3));
-  backend.Gpuva.Held = NULL; backend.Gpuva.HeldCount = 0; backend.Gpuva.RenderFence = 0;
   /* D and E submitted, the GPU on neither. */
   completed_fence = 19;
   assert(open_batch(&ctx, 3) && submit(&backend, &slots[3], 20));
@@ -189,7 +186,28 @@ int main(void) {
   completed_fence = 31;
   assert(open_batch(&ctx, 3) && !slots[1].windows_batch && !slots[2].windows_batch);
   assert(!backend.Gpuva.Held && live_leases == 0 && flushes == 0);
-  free(slots[3].windows_batch);
+  /* EXP1161: a second GL context on the same screen submits; this context's
+   * Begin and submission are not refused. Room for a third submission is
+   * made by retiring the other context's older set through the space; that
+   * batch then retires by its fence without a second eviction. */
+  struct agx_batch other_slots[AGX_MAX_BATCHES];
+  struct agx_context other = {{&screen}, 0, {other_slots, {0}, {0}}};
+  for (unsigned i = 0; i < AGX_MAX_BATCHES; ++i) other_slots[i] = (struct agx_batch){&other, NULL, {&vdm}};
+  completed_fence = 39;
+  assert(open_batch(&other, 0) && submit(&backend, &other_slots[0], 40));
+  assert(open_batch(&ctx, 0) && submit(&backend, &slots[0], 41));
+  assert(backend.Gpuva.Older.Fence == 40 && backend.Gpuva.RenderFence == 41);
+  unsigned foreign_evicts = evicts;
+  assert(submit(&backend, &slots[3], 42));
+  assert(evicts == foreign_evicts + 1 && backend.Gpuva.Older.Fence == 41 && backend.Gpuva.RenderFence == 42);
+  assert(!capsule(&other_slots[0])->Retired);
+  assert(AgxWin32AsahiBatchPoll(&other_slots[0], 1000) && capsule(&other_slots[0])->Retired);
+  assert(evicts == foreign_evicts + 1);
+  completed_fence = 42;
+  assert(open_batch(&ctx, 1) && !slots[0].windows_batch && !slots[3].windows_batch);
+  assert(!backend.Gpuva.Held && !backend.Gpuva.Older.Handles && live_leases == 0);
+  free(other_slots[0].windows_batch);
+  free(slots[1].windows_batch);
   puts("PASS");
   return 0;
 }
@@ -202,7 +220,7 @@ class BatchBeginKeepsActive(unittest.TestCase):
         space = SPACE.read_text()
         functions = "\n".join(body(source, name) for name in (
             "backend", "capsule", "batch_refuse", "release_lease", "AgxWin32AsahiBatchPoll",
-            "submitted_at", "held_by", "retire_held", "AgxWin32AsahiBatchBegin"))
+            "submitted_at", "retire_held", "AgxWin32AsahiBatchBegin"))
         space_functions = "\n".join(body(space, name) for name in (
             "AgxWin32GpuvaRetire", "AgxWin32GpuvaComplete", "AgxWin32GpuvaFenceHeld"))
         program = PROGRAM.replace("@@SPACE@@", space_functions).replace("@@FUNCTIONS@@", functions)

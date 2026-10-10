@@ -115,21 +115,21 @@ static struct agx_batch *submitted_at(struct agx_batch *batch,uint64_t fence) {
   }
   return NULL;
 }
-/* The batch of this context whose submission holds the newest residency set. */
-static struct agx_batch *held_by(struct agx_batch *batch,AGX_WIN32_ASAHI_BACKEND *b) {
-  return submitted_at(batch,b->Gpuva.RenderFence);
-}
 /* EXP1071: several open batches may be flushed back to back (agx_flush_all).
  * EXP1093: two submissions may be in flight (EXP1090: 26 % of DWM's wall
  * time waited for the previous one before each submission). Make room by
  * retiring (waiting for) the older one only; the newest stays in flight
- * while this batch submits. A set held by no batch of this context is left
- * alone (the submission is refused as before). */
+ * while this batch submits.
+ * EXP1161: under WGL several GL contexts share one screen, its G4 context
+ * and fence timeline, so a set may belong to another context's batch; it is
+ * retired through the space by its fence, as a CPU map does (native_map),
+ * and that batch later retires by the same fence. */
 static int retire_held(struct agx_batch *batch,AGX_WIN32_ASAHI_BACKEND *b) {
-  if(b->Gpuva.Held && !held_by(batch,b)) return 0;
   if(!b->Gpuva.Older.Handles) return 1;
   struct agx_batch *old=submitted_at(batch,b->Gpuva.Older.Fence);
-  return old && AgxWin32AsahiBatchPoll(old,1000) && !b->Gpuva.Older.Handles;
+  if(!old) return AgxWin32GpuvaRetire(&b->Gpuva,b->Gpuva.Older.Fence) &&
+                  !b->Gpuva.Older.Handles;
+  return AgxWin32AsahiBatchPoll(old,1000) && !b->Gpuva.Older.Handles;
 }
 
 int AgxWin32AsahiBatchBegin(struct agx_batch *batch) {
@@ -159,7 +159,6 @@ int AgxWin32AsahiBatchBegin(struct agx_batch *batch) {
     agx_sync_batch(batch->ctx,old);
     if(old->windows_batch) return batch_refuse(1u, __LINE__, 0u, 0u);
   }
-  if(b->Gpuva.Held && !held_by(batch,b)) return batch_refuse(1u, __LINE__, 0u, 0u);
   AGX_G4_BATCH *g=calloc(1,sizeof(*g));
   if(!g) return batch_refuse(1u, __LINE__, 0u, 0u);
   batch->windows_batch=g;
