@@ -38,7 +38,8 @@ $c = @('render-admission\umd\src\umd_resource_lifetime.c', 'render-admission\umd
   'shared\src\apple_agx_win32_abi.c', 'mesa\winsys\agx_win32_transport.c',
   'mesa\winsys\agx_win32_screen.c', 'mesa\winsys\agx_win32_native_bo.c',
   'mesa\winsys\agx_win32_construction_address.c', 'mesa\winsys\agx_win32_native_device.c',
-  'mesa\winsys\agx_win32_reloc_capture.c')
+  'mesa\winsys\agx_win32_reloc_capture.c', 'windows\icd\agx_wgl_glthread.c',
+  'windows\icd\agx_wgl_glthread_mesa.c')
 $objects = @()
 # Windows PowerShell turns native stderr (clang warnings) into terminating
 # errors under 'Stop'; native failures are judged by exit codes below.
@@ -61,7 +62,7 @@ $libs = @('src\gallium\auxiliary\libgallium.a', 'src\compiler\nir\libnir.a', 'sr
   'src\gallium\frontends\wgl\libwgl.a', 'src\util\libxmlconfig.a') | ForEach-Object { Join-Path $build $_ }
 $dll = Join-Path $Out 'libgallium_wgl.dll'
 $link = @('/nologo', '/DLL', '/machine:x86', '/DEBUG', "/PDB:$Out\libgallium_wgl.pdb",
-  "/DEF:$build\src\gallium\targets\wgl\gallium_wgl.def", "/IMPLIB:$Out\libgallium_wgl.lib",
+  "/DEF:$agx\windows\icd\agx_wgl_icd.def", "/IMPLIB:$Out\libgallium_wgl.lib",
   "/WHOLEARCHIVE:$build\src\gallium\frontends\wgl\libwgl.a", "/OUT:$dll") + $objects +
   @((Join-Path $Closure 'native_runtime.lib')) + $libs +
   @('ws2_32.lib', 'synchronization.lib', 'kernel32.lib', 'user32.lib', 'gdi32.lib', 'advapi32.lib',
