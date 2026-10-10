@@ -18,7 +18,7 @@ from compact_blocker import first_diagnostic
 ROOT = Path(r'C:\Users\pauls\AD04-fullcompiler-001')
 MESA = Path(r'C:\Users\pauls\AD04-d3d10-frontend-build\mesa')
 parser = argparse.ArgumentParser()
-parser.add_argument('--architecture', choices=('x64', 'arm64'), default='x64')
+parser.add_argument('--architecture', choices=('x64', 'arm64', 'x86'), default='x64')
 ARCH = parser.parse_args().architecture
 BUILD = ROOT / ('nir-' + ARCH)
 GENERATED = Path(r'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated')
@@ -115,7 +115,8 @@ libraries = [BUILD / p for p in ('src/compiler/nir/libnir.a', 'src/compiler/libc
                                 'src/util/blake3/libblake3.a')]
 exe = OUT / 'agx_shader_fixture.exe'
 run('link', [CLANG / 'clang-cl.exe', '/nologo', '/MD', *objects, *libraries,
-             *(['--target=aarch64-pc-windows-msvc'] if ARCH == 'arm64' else []),
+             *({'arm64': ['--target=aarch64-pc-windows-msvc'],
+                'x86': ['--target=i686-pc-windows-msvc']}.get(ARCH, [])),
              '/Fe' + str(exe), '/link', 'synchronization.lib', 'advapi32.lib', 'user32.lib'])
 if ARCH == 'arm64':
     (OUT / 'artifacts.json').write_text(json.dumps({str(p): digest(p) for p in [exe, *libraries]}, indent=2))
