@@ -164,21 +164,26 @@ int AgxWin32AsahiBatchBegin(struct agx_batch *batch) {
   batch->windows_batch=g;
   return 1;
 }
+/* EXP1166: the Asahi draw path re-enters draw_vbo on the current batch
+ * (util_draw_multi for num_draws > 1, unrolled/emulated indirect draws,
+ * transform-feedback draws, primitive-restart emulation), so Entered is a
+ * depth: each draw enters and leaves one level. A one-level flag refused
+ * every nested draw and faulted the GL context (CS 1.6 froze).
+ * EXP1164 receipt-only: a refused Enter reports reject-batch kind 7 (1 no
+ * capsule, 2 submitted, 4 rejected; fence, draws). */
 int AgxWin32AsahiBatchEnter(struct agx_batch *batch) {
   AGX_G4_BATCH *g=capsule(batch);
-  /* EXP1164 receipt-only: name the refusing condition (reject-batch kind 7:
-   * 1 no capsule, 2 submitted, 4 rejected, 8 already entered; fence, draws). */
-  if(!g || g->Submitted || g->Rejected || g->Entered)
+  if(!g || g->Submitted || g->Rejected)
     return batch_refuse(7u,(unsigned)(!g)|((unsigned)(g && g->Submitted)<<1)|
-        ((unsigned)(g && g->Rejected)<<2)|((unsigned)(g && g->Entered)<<3),
+        ((unsigned)(g && g->Rejected)<<2),
         g ? (unsigned)g->Fence : 0u, batch ? batch->draws : 0u);
-  g->Entered=1;
+  ++g->Entered;
   return 1;
 }
 int AgxWin32AsahiBatchLeave(struct agx_batch *batch) {
   AGX_G4_BATCH *g=capsule(batch);
   if(!g || !g->Entered) return 0;
-  g->Entered=0;
+  --g->Entered;
   return 1;
 }
 int AgxWin32AsahiBatchPrepareDraw(struct agx_batch *batch,
@@ -384,7 +389,8 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
         ((unsigned)(render ? render->samples : 0) << 16),
         (unsigned)(batch->key.cbufs[0].texture ? batch->key.cbufs[0].format : 0xffffu) |
         ((render ? render->sample_size_B : 0u) << 16));
-  if(g->Entered && !AgxWin32AsahiBatchLeave(batch)) { fail_site=__LINE__; goto fail; }
+  /* A flush inside a (nested) draw leaves every level. */
+  g->Entered=0;
   /* Retire (and return the scene lease of) the previous completed
    * submission before this batch acquires its own. */
   if(!retire_held(batch,b)) { fail_site=__LINE__; goto fail; }

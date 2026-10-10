@@ -114,7 +114,6 @@ static unsigned char *agx_bo_map(struct agx_bo *bo) { return bo->cpu; }
 static void agx_bo_unreference(void *native,struct agx_bo *bo) {
   (void)native;assert(bo->refs && !bo->resident);--bo->refs;
 }
-static int AgxWin32AsahiBatchLeave(struct agx_batch *b) { capsule(b)->Entered=0;return 1; }
 static struct drm_asahi_cmd_header agx_cmd_header(bool compute,unsigned a,unsigned b) {
   assert(!compute && !a && !b);
   return (struct drm_asahi_cmd_header){APPLE_AGX_G4_RENDER,240,0,0};
