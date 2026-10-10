@@ -1,7 +1,25 @@
 # J313 GPU: Settings-close blank fixed (EXP1132); Notepad drag 53 / typing 57
 
 
-## Current as of 2026-10-10 06:47Z (read this first)
+## Current as of 2026-10-10 09:15Z (read this first)
+
+OpenGL on AGX works from a 32-bit x86 process (EXP1149): x86 ICD
+(libgallium_wgl.dll = Mesa GL stack + x86 Asahi closure + umd_* code +
+GPUVA D3DKMT bridge, drivers/apple-agx/windows/icd, plan
+docs/superpowers/plans/2026-10-10-cs16-opengl-icd.md) ran agx_gl_smoke in
+FBO mode: 300 frames 59.9 fps, all pixel checks correct, desktop unaffected.
+Driver package for all ICD runs: EXP1143 (unchanged).
+Fixed on the way: window colour buffers without DISPLAY_TARGET (EXP1146),
+Windows fences + fence callbacks (EXP1147), Gallium clear masks and
+flush_resource = flush writer (EXP1148).
+Blocker for CS 1.6: the G4 KMD builder (shared/src/apple_agx_g4_builder.c
+AppleAgxG4BindNativeObjects) refuses every ZLS field and the UMD finish
+refuses batches with a zsbuf; Mesa WGL offers no depth-less pixel format.
+Next causal target: depth/stencil (ZLS) mapping from the Asahi render
+command into the G4 job template, then hl.exe -gl with the private
+opengl32/libgallium_wgl pair in the Half-Life directory.
+
+## Earlier: 2026-10-10 06:47Z
 
 EXP1145 (profile, same package): the same-size GDI drag's extra two-period
 frames come from win32k recreating the window's redirection bitmap on
