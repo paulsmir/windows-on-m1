@@ -166,7 +166,12 @@ int AgxWin32AsahiBatchBegin(struct agx_batch *batch) {
 }
 int AgxWin32AsahiBatchEnter(struct agx_batch *batch) {
   AGX_G4_BATCH *g=capsule(batch);
-  if(!g || g->Submitted || g->Rejected || g->Entered) return 0;
+  /* EXP1164 receipt-only: name the refusing condition (reject-batch kind 7:
+   * 1 no capsule, 2 submitted, 4 rejected, 8 already entered; fence, draws). */
+  if(!g || g->Submitted || g->Rejected || g->Entered)
+    return batch_refuse(7u,(unsigned)(!g)|((unsigned)(g && g->Submitted)<<1)|
+        ((unsigned)(g && g->Rejected)<<2)|((unsigned)(g && g->Entered)<<3),
+        g ? (unsigned)g->Fence : 0u, batch ? batch->draws : 0u);
   g->Entered=1;
   return 1;
 }
