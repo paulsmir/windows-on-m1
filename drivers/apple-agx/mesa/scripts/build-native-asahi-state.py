@@ -322,6 +322,8 @@ parser.add_argument('--gpuva', action='store_true')
 parser.add_argument('--prepare-only', action='store_true')
 parser.add_argument('--architecture', choices=('x64','arm64','x86'), default='x64')
 parser.add_argument('--project',type=Path)
+# EXP1182: a Mesa build other than nir-<architecture> (e.g. b_ndebug=true).
+parser.add_argument('--mesa-build', type=Path)
 args = parser.parse_args()
 if (args.native_batch_lifecycle or args.prepare_only) and not (args.windows_platform_declarations and args.project):
     parser.error('Native lifecycle/prepare requires --windows-platform-declarations and --project')
@@ -330,7 +332,7 @@ if args.gpuva and not args.native_batch_lifecycle:
 out = args.output
 out.mkdir(exist_ok=False)
 mesa = Path(r'C:\Users\pauls\AD04-d3d10-frontend-build\mesa')
-build = Path(r'C:\Users\pauls\AD04-fullcompiler-001') / ('nir-'+args.architecture)
+build = args.mesa_build or Path(r'C:\Users\pauls\AD04-fullcompiler-001') / ('nir-'+args.architecture)
 generated = Path(r'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated')
 sdk = Path(r'C:\Program Files (x86)\Windows Kits\10')
 vc = Path(r'C:\VS2022Community\VC\Tools\MSVC\14.44.35207')

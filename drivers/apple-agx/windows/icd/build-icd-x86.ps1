@@ -7,11 +7,13 @@
 param(
   [Parameter(Mandatory = $true)][string]$Repository,
   [Parameter(Mandatory = $true)][string]$Closure,
-  [Parameter(Mandatory = $true)][string]$Out
+  [Parameter(Mandatory = $true)][string]$Out,
+  # EXP1182: the x86 Mesa build the closure was built from (b_ndebug builds).
+  [string]$MesaBuild = 'C:\Users\pauls\AD04-fullcompiler-001\nir-x86'
 )
 $ErrorActionPreference = 'Stop'
 $mesa = 'C:\Users\pauls\AD04-d3d10-frontend-build\mesa'
-$build = 'C:\Users\pauls\AD04-fullcompiler-001\nir-x86'
+$build = $MesaBuild
 $tool = 'C:\VS2022Community\VC\Tools\MSVC\14.44.35207'
 $kit = 'C:\Program Files (x86)\Windows Kits\10'
 $clang = 'C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin'
