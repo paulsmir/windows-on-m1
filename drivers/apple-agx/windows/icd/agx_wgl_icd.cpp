@@ -184,6 +184,8 @@ static struct pipe_screen *wgl_screen_create(HDC hdc) {
   if (SUCCEEDED(result)) {
     a->Owner.Device = &a->Device;
     a->Owner.Backend = &a->Backend;
+    /* Every Mesa WGL pixel format has depth: GL windows submit ZLS. */
+    a->Backend.ZlsAttachments = 1;
     AdmissionUmdAsahiOwnerOperations(&a->OwnerOperations);
     a->Screen = AgxWin32AsahiScreenCreateForWindows(&a->Backend, &a->Device.Screen,
         &a->OwnerOperations, &a->Owner, AdmissionUmdAsahiBatchOperations());

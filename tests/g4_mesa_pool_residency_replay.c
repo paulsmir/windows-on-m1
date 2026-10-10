@@ -51,6 +51,7 @@ typedef struct {
   AGX_WIN32_GPUVA_SPACE Gpuva;
   void *Native;
   unsigned GpuvaReady, Failed;
+  int ZlsAttachments;
 } AGX_WIN32_ASAHI_BACKEND;
 struct agx_screen { struct agx_bo *rodata; };
 /* EXP1069: Asahi's per-device zero and scratch pages (agx_open_device). */

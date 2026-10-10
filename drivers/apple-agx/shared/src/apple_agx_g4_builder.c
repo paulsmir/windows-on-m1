@@ -103,6 +103,33 @@ APPLE_AGX_BOOL AppleAgxG4ApplySceneRelocations(
   return APPLE_AGX_TRUE;
 }
 
+/* CS 1.6 ICD (EXP1149): G13 depth/stencil (ZLS) attachments. Each buffer
+ * description is all zero or has a base; compression needs a base; the ZLS
+ * control and ZLS pixel words are present exactly when a buffer is. The
+ * parser has already proved every base is mapped and writable for the
+ * submitting process (apple_agx_g4_submit.c AGX4_ADDRESS(..., 1)). */
+static APPLE_AGX_BOOL g4_zls_attachment_valid(const APPLE_AGX_G4_ZLS *Zls) {
+  if (!Zls->Base)
+    return !Zls->CompBase && !Zls->Stride && !Zls->CompStride;
+  return Zls->Base >= 0x10000ULL &&
+      (Zls->CompBase ? Zls->CompBase >= 0x10000ULL : !Zls->CompStride);
+}
+
+static APPLE_AGX_BOOL g4_has_zls(const APPLE_AGX_G4_NATIVE_RENDER *Render) {
+  return Render->Depth.Base || Render->Stencil.Base;
+}
+
+static APPLE_AGX_BOOL g4_zls_valid(const APPLE_AGX_G4_NATIVE_RENDER *Render) {
+  if (!g4_zls_attachment_valid(&Render->Depth) ||
+      !g4_zls_attachment_valid(&Render->Stencil))
+    return APPLE_AGX_FALSE;
+  if (!g4_has_zls(Render))
+    return !Render->ZlsCtrl && !Render->IspZlsPixels;
+  /* ISP_ZLS_PIXELS = (width - 1) | ((height - 1) << 15). */
+  return Render->ZlsCtrl && Render->IspZlsPixels &&
+      (Render->IspZlsPixels >> 30) == 0u;
+}
+
 APPLE_AGX_BOOL AppleAgxG4BindNativeObjects(
     const APPLE_AGX_G4_SUBMIT_VIEW *View,
     APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
@@ -127,11 +154,7 @@ APPLE_AGX_BOOL AppleAgxG4BindNativeObjects(
       (render.Flags & ~((1u << 1) | (1u << 2) | (1u << 18))) != 0u ||
       !render.VdmCtrlStreamBase || !render.IspScissorBase ||
       !render.IspDbiasBase || render.IspOclQryBase ||
-      render.Depth.Base || render.Depth.CompBase ||
-      render.Depth.Stride || render.Depth.CompStride ||
-      render.Stencil.Base || render.Stencil.CompBase ||
-      render.Stencil.Stride || render.Stencil.CompStride || render.ZlsCtrl ||
-      render.IspZlsPixels || color.Pad || color.Flags ||
+      !g4_zls_valid(&render) || color.Pad || color.Flags ||
       color.Pointer < 0x10000ULL || color.Size < minimum ||
       color.Size > 0xffffffffULL)
     return APPLE_AGX_FALSE;
@@ -318,6 +341,47 @@ APPLE_AGX_BOOL AppleAgxG4PatchRenderScalars(
   g4_put32(work + 0x8bcu, (Render->Flags & (1u << 1)) ? 1u : 0u);
   g4_put32(ta + 0x550u, Render->SamplerCount);
   g4_put32(ta + 0x554u, (APPLE_AGX_U32)Render->SamplerCount + 1u);
+  if (g4_has_zls(Render)) {
+    /* G13 (< G14X: no register array), V13_5. Asahi queue/render.rs fills
+     * JobParameters1 (work+0x80) and JobParameters3 (work+0x4b8); field
+     * order from Asahi fw/fragment.rs, offsets agree with m1n1
+     * Start3DStruct2/3 (AuxFBInfo is 0x18 bytes from V13_0B4) and with every
+     * field patched above. Load, store and partial use the same base. The
+     * colour-only path leaves these template bytes untouched. */
+    const APPLE_AGX_G4_ZLS *z = &Render->Depth, *st = &Render->Stencil;
+    g4_put64(work + 0xc8u, Render->IspZlsPixels);   /* JP1 isp_zls_pixels */
+    g4_put64(work + 0xd8u, Render->ZlsCtrl);        /* JP1 zls_ctrl */
+    g4_put64(work + 0xe0u, z->Base);                /* z_load */
+    g4_put64(work + 0xe8u, z->Base);                /* z_store */
+    g4_put64(work + 0xf0u, st->Base);               /* s_load */
+    g4_put64(work + 0xf8u, st->Base);               /* s_store */
+    g4_put64(work + 0x100u, z->Stride);             /* z_load_stride */
+    g4_put64(work + 0x108u, z->Stride);             /* z_store_stride */
+    g4_put64(work + 0x110u, st->Stride);            /* s_load_stride */
+    g4_put64(work + 0x118u, st->Stride);            /* s_store_stride */
+    g4_put64(work + 0x120u, z->CompBase);           /* z_load_comp */
+    g4_put64(work + 0x128u, z->CompStride);         /* z_load_comp_stride */
+    g4_put64(work + 0x130u, z->CompBase);           /* z_store_comp */
+    g4_put64(work + 0x138u, z->CompStride);         /* z_store_comp_stride */
+    g4_put64(work + 0x140u, st->CompBase);          /* s_load_comp */
+    g4_put64(work + 0x148u, st->CompStride);        /* s_load_comp_stride */
+    g4_put64(work + 0x150u, st->CompBase);          /* s_store_comp */
+    g4_put64(work + 0x158u, st->CompStride);        /* s_store_comp_stride */
+    g4_put64(work + 0x650u, Render->ZlsCtrl);       /* JP3 zls_ctrl (reload) */
+    g4_put64(work + 0x660u, z->Base);               /* JP3 z_load */
+    g4_put64(work + 0x668u, z->Stride);             /* z_partial_stride */
+    g4_put64(work + 0x670u, z->CompStride);         /* z_partial_comp_stride */
+    g4_put64(work + 0x678u, z->Base);               /* z_store */
+    g4_put64(work + 0x680u, z->Base);               /* z_partial */
+    g4_put64(work + 0x688u, z->CompBase);           /* z_partial_comp */
+    g4_put64(work + 0x690u, st->Base);              /* s_load */
+    g4_put64(work + 0x698u, st->Stride);            /* s_partial_stride */
+    g4_put64(work + 0x6a0u, st->CompStride);        /* s_partial_comp_stride */
+    g4_put64(work + 0x6a8u, st->Base);              /* s_store */
+    g4_put64(work + 0x6b0u, st->Base);              /* s_partial */
+    g4_put64(work + 0x6b8u, st->CompBase);          /* s_partial_comp */
+    g4_put64(work + 0x768u, Render->IspZlsPixels);  /* JP3 isp_zls_pixels */
+  }
   return APPLE_AGX_TRUE;
 }
 

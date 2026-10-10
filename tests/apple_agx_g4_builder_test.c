@@ -162,6 +162,41 @@ int main(void) {
       assert(!AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
       packet.Render.IspOclQryBase = 0ULL;
+      /* CS 1.6 ICD: a GL window always carries depth. A consistent ZLS
+       * description (base -> control and ZLS pixels; compression only with
+       * a base; strides only with a base) binds; anything else refuses. */
+      packet.Render.Depth.Base = 0x34000000ULL;
+      packet.Render.Depth.Stride = 0x1400u;
+      packet.Render.ZlsCtrl = 0x80000ULL | 0x80ULL;
+      packet.Render.IspZlsPixels = (1280u - 1u) | ((720u - 1u) << 15);
+      assert(AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Render.Stencil.Base = 0x35000000ULL;
+      assert(AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Render.ZlsCtrl = 0ULL;
+      assert(!AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Render.ZlsCtrl = 0x80080ULL;
+      packet.Render.IspZlsPixels = 0u;
+      assert(!AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Render.IspZlsPixels = (1280u - 1u) | ((720u - 1u) << 15);
+      packet.Render.Depth.Base = 0ULL;
+      packet.Render.Depth.CompBase = 0x36000000ULL;
+      assert(!AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Render.Depth.CompBase = 0ULL;
+      assert(!AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)); /* stride w/o base */
+      packet.Render.Depth.Stride = 0u;
+      packet.Render.Stencil.Base = 0ULL;
+      assert(!AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)); /* control w/o base */
+      packet.Render.ZlsCtrl = 0ULL;
+      assert(!AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)); /* pixels w/o base */
+      packet.Render.IspZlsPixels = 0u;
       packet.Attachment.Size = 1024u;
       assert(!AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
@@ -294,6 +329,75 @@ int main(void) {
       assert(get64(objects[18].Data + 0x3e0u) == 0ULL);
       assert(AppleAgxG4PatchRenderScalars(&render, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+    }
+    /* Without ZLS the depth/stencil fields keep the template's bytes (the
+     * validated colour-only path is unchanged). */
+    {
+      static const unsigned zls_offsets[] = {
+        0xc8u, 0xd8u, 0xe0u, 0xe8u, 0xf0u, 0xf8u, 0x100u, 0x108u, 0x110u,
+        0x118u, 0x120u, 0x128u, 0x130u, 0x138u, 0x140u, 0x148u, 0x150u,
+        0x158u, 0x650u, 0x660u, 0x668u, 0x670u, 0x678u, 0x680u, 0x688u,
+        0x690u, 0x698u, 0x6a0u, 0x6a8u, 0x6b0u, 0x6b8u, 0x768u};
+      unsigned long long before[sizeof(zls_offsets) / sizeof(zls_offsets[0])];
+      unsigned i;
+      APPLE_AGX_G4_NATIVE_RENDER zls = render;
+      for (i = 0; i < sizeof(zls_offsets) / sizeof(zls_offsets[0]); ++i)
+        before[i] = get64(objects[18].Data + zls_offsets[i]);
+      assert(AppleAgxG4PatchRenderScalars(&render, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      for (i = 0; i < sizeof(zls_offsets) / sizeof(zls_offsets[0]); ++i)
+        assert(get64(objects[18].Data + zls_offsets[i]) == before[i]);
+      /* G13/V13_5 (Asahi fw/fragment.rs + queue/render.rs, m1n1
+       * Start3DStruct2/3): JobParameters1 at work+0x80, JobParameters3 at
+       * work+0x4b8; load/store/partial all use the attachment base. */
+      zls.ZlsCtrl = 0x80080ULL;
+      zls.IspZlsPixels = (1280u - 1u) | ((720u - 1u) << 15);
+      zls.Depth.Base = 0x34000000ULL; zls.Depth.Stride = 0x1400u;
+      zls.Depth.CompBase = 0x34400000ULL; zls.Depth.CompStride = 0x80u;
+      zls.Stencil.Base = 0x35000000ULL; zls.Stencil.Stride = 0x500u;
+      zls.Stencil.CompBase = 0x35400000ULL; zls.Stencil.CompStride = 0x40u;
+      assert(AppleAgxG4PatchRenderScalars(&zls, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      assert(get64(objects[18].Data + 0xc8u) == zls.IspZlsPixels);
+      assert(get64(objects[18].Data + 0xd8u) == zls.ZlsCtrl);
+      assert(get64(objects[18].Data + 0xe0u) == zls.Depth.Base);
+      assert(get64(objects[18].Data + 0xe8u) == zls.Depth.Base);
+      assert(get64(objects[18].Data + 0xf0u) == zls.Stencil.Base);
+      assert(get64(objects[18].Data + 0xf8u) == zls.Stencil.Base);
+      assert(get64(objects[18].Data + 0x100u) == 0x1400u);
+      assert(get64(objects[18].Data + 0x108u) == 0x1400u);
+      assert(get64(objects[18].Data + 0x110u) == 0x500u);
+      assert(get64(objects[18].Data + 0x118u) == 0x500u);
+      assert(get64(objects[18].Data + 0x120u) == zls.Depth.CompBase);
+      assert(get64(objects[18].Data + 0x128u) == 0x80u);
+      assert(get64(objects[18].Data + 0x130u) == zls.Depth.CompBase);
+      assert(get64(objects[18].Data + 0x138u) == 0x80u);
+      assert(get64(objects[18].Data + 0x140u) == zls.Stencil.CompBase);
+      assert(get64(objects[18].Data + 0x148u) == 0x40u);
+      assert(get64(objects[18].Data + 0x150u) == zls.Stencil.CompBase);
+      assert(get64(objects[18].Data + 0x158u) == 0x40u);
+      assert(get64(objects[18].Data + 0x650u) == zls.ZlsCtrl);
+      assert(get64(objects[18].Data + 0x660u) == zls.Depth.Base);
+      assert(get64(objects[18].Data + 0x668u) == 0x1400u);
+      assert(get64(objects[18].Data + 0x670u) == 0x80u);
+      assert(get64(objects[18].Data + 0x678u) == zls.Depth.Base);
+      assert(get64(objects[18].Data + 0x680u) == zls.Depth.Base);
+      assert(get64(objects[18].Data + 0x688u) == zls.Depth.CompBase);
+      assert(get64(objects[18].Data + 0x690u) == zls.Stencil.Base);
+      assert(get64(objects[18].Data + 0x698u) == 0x500u);
+      assert(get64(objects[18].Data + 0x6a0u) == 0x40u);
+      assert(get64(objects[18].Data + 0x6a8u) == zls.Stencil.Base);
+      assert(get64(objects[18].Data + 0x6b0u) == zls.Stencil.Base);
+      assert(get64(objects[18].Data + 0x6b8u) == zls.Stencil.CompBase);
+      assert(get64(objects[18].Data + 0x768u) == zls.IspZlsPixels);
+      /* Neighbouring source-backed fields are not disturbed. */
+      assert(get64(objects[18].Data + 0xa8u) == render.IspDbiasBase);
+      assert(get64(objects[18].Data + 0x170u) == (480ULL << 24));
+      assert(get64(objects[18].Data + 0x640u) == render.PartialBg.ResourceSpec);
+      assert((get64(objects[18].Data + 0x740u) & 0xffffffffULL) == render.IspBgObjDepth);
+      /* Restore the colour-only state for the checks below. */
+      for (i = 0; i < sizeof(zls_offsets) / sizeof(zls_offsets[0]); ++i)
+        memcpy(objects[18].Data + zls_offsets[i], &before[i], 8u);
     }
     assert(get64(objects[18].Data + 0xa0u) == render.IspScissorBase);
     assert(get64(objects[18].Data + 0x88u) == render.Bg.ResourceSpec);

@@ -46,6 +46,9 @@ typedef struct {
   const void *BatchOps; /* existing UMD transaction callbacks, caller-owned */
   void *BatchOwner;
   int EncoderAllocationIntent;
+  /* CS 1.6 ICD (EXP1149): depth/stencil (ZLS) attachments may be submitted;
+   * set only by the OpenGL ICD until the D3D10 path is validated with them. */
+  int ZlsAttachments;
   int Failed;
   struct pipe_context *(*ContextCreate)(struct pipe_screen *, void *, unsigned);
   void (*ContextDestroy)(struct pipe_context *);

@@ -370,7 +370,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
      !batch->vdm.bo ||
      batch->key.nr_cbufs!=1 || !batch->key.cbufs[0].texture ||
      !gpuva_color_format_supported(batch->key.cbufs[0].format) ||
-     batch->key.zsbuf.texture || render->samples!=1 ||
+     (batch->key.zsbuf.texture && !b->ZlsAttachments) || render->samples!=1 ||
      (render->sample_size_B!=8 && render->sample_size_B!=16) ||
      batch->bo_list.bit_count>UINT32_MAX-(PIPE_MAX_COLOR_BUFS+fixed_refs))
     return batch_refuse(2u, __LINE__,
