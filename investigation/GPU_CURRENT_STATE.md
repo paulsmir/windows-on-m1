@@ -1,7 +1,18 @@
 # J313 GPU: Settings-close blank fixed (EXP1132); Notepad drag 53 / typing 57
 
 
-## Current as of 2026-10-10 06:35Z (read this first)
+## Current as of 2026-10-10 06:47Z (read this first)
+
+EXP1145 (profile, same package): the same-size GDI drag's extra two-period
+frames come from win32k recreating the window's redirection bitmap on
+every SetWindowPos without SWP_NOSIZE (RecreateRedirectionBitmap, CPU
+EngCopyBits) while DWM waits on the GDI semaphore and reopens the surface;
+no AppleAgx frame on that path. DWM per frame there: 6.5 ms running,
+2.3 ms retire waits. Typing capture was perturbed by the stack walk
+(inconclusive). Desktop status: all loads 57-60 fps, 94-99 % one-period,
+24-minute soak clean (EXP1144).
+
+## Earlier: 2026-10-10 06:35Z
 
 EXP1144 soak (same package as EXP1143, four load cycles, ~24 min, 12
 Settings cycles): no hang/TDR/DWM restart, flips identical in every cycle,
