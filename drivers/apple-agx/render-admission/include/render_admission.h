@@ -421,9 +421,10 @@ typedef struct _ADMISSION_PAGING_CENSUS {
  * VidPn, Allocation = hPrimaryAllocation) are always kept.
  * Flips, 3 SetVidPnSourceAddress (Flags, Address, Allocation) and 4 MPO3
  * (Detail = PlaneCount | Enabled << 8, Flags = plane input flags), arrive
- * ~60/s, so one is kept only after a gap of more than 50 ms or when its
- * kind, flags or detail change; Gap is then the microseconds since the
- * previous flip, and Flips counts every flip. */
+ * ~60/s (an MPO3 flip also reaches SetVidPnSourceAddress), so one is kept
+ * only after a gap of more than 50 ms since the previous flip of its kind or
+ * when its flags or detail change; Gap is then the microseconds since that
+ * flip, and Flips counts every flip of both kinds. */
 #define ADMISSION_DISPLAY_RING_ENTRIES 256u
 typedef struct _ADMISSION_DISPLAY_RING_ENTRY {
   ULONGLONG Qpc, Address, Allocation;
@@ -433,8 +434,8 @@ typedef struct _ADMISSION_DISPLAY_RING {
   ULONG Version, Bytes;
   volatile LONG Next;
   volatile LONG Flips;
-  LONGLONG LastFlipQpc;
-  ULONG LastFlipKind, LastFlipFlags, LastFlipDetail, Reserved;
+  LONGLONG LastFlipQpc[2];
+  ULONG LastFlipFlags[2], LastFlipDetail[2];
   ADMISSION_DISPLAY_RING_ENTRY Entries[ADMISSION_DISPLAY_RING_ENTRIES];
 } ADMISSION_DISPLAY_RING;
 /* EXP1123 receipt-only: the last 256 allocation creations (Kind 1) and

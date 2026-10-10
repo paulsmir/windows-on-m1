@@ -430,18 +430,18 @@ static VOID AdmissionDisplayRingRecord(ADMISSION_CONTEXT *Context, ULONG Kind,
   if (Context == NULL) return;
   ring = &Context->DisplayRing;
   now = KeQueryPerformanceCounter(&frequency).QuadPart;
-  if (Kind >= 3u) {
-    LONGLONG elapsed = now - ring->LastFlipQpc;
-    BOOLEAN keep = ring->LastFlipQpc == 0 || elapsed > frequency.QuadPart / 20 ||
-        Kind != ring->LastFlipKind || Flags != ring->LastFlipFlags ||
-        Detail != ring->LastFlipDetail ? TRUE : FALSE;
+  if (Kind == 3u || Kind == 4u) {
+    ULONG k = Kind - 3u;
+    LONGLONG elapsed = now - ring->LastFlipQpc[k];
+    BOOLEAN keep = ring->LastFlipQpc[k] == 0 ||
+        elapsed > frequency.QuadPart / 20 || Flags != ring->LastFlipFlags[k] ||
+        Detail != ring->LastFlipDetail[k] ? TRUE : FALSE;
     (void)InterlockedIncrement(&ring->Flips);
-    if (ring->LastFlipQpc != 0 && frequency.QuadPart != 0)
+    if (ring->LastFlipQpc[k] != 0 && frequency.QuadPart != 0)
       gap = (ULONG)min(elapsed * 1000000 / frequency.QuadPart, (LONGLONG)MAXULONG);
-    ring->LastFlipQpc = now;
-    ring->LastFlipKind = Kind;
-    ring->LastFlipFlags = Flags;
-    ring->LastFlipDetail = Detail;
+    ring->LastFlipQpc[k] = now;
+    ring->LastFlipFlags[k] = Flags;
+    ring->LastFlipDetail[k] = Detail;
     if (!keep) return;
   }
   slot = (ULONG)InterlockedIncrement(&ring->Next) - 1u;
