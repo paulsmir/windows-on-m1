@@ -122,6 +122,9 @@ int main(int argc, char **argv) {
   /* "fbo": draw the scene into a colour-only framebuffer object and blit it
    * to the window, so no batch carries the window's depth buffer. */
   int fbo = argc > 3 && !strcmp(argv[3], "fbo");
+  /* "depthtest": a near yellow quad, glFlush (the next batch must reload
+   * depth through ZLS), then a far magenta quad over it; yellow must win. */
+  int depthtest = argc > 3 && !strcmp(argv[3], "depthtest");
   PFNGENFB genfb = NULL; PFNBINDFB bindfb = NULL; PFNFBTEX2D fbtex = NULL;
   PFNCHECKFB checkfb = NULL; PFNBLITFB blitfb = NULL; GLuint fb = 0, fbcolor = 0;
   WNDCLASSA wc; HWND wnd; HDC dc; HGLRC rc; PIXELFORMATDESCRIPTOR pfd;
@@ -213,6 +216,21 @@ int main(int argc, char **argv) {
     glBegin(GL_TRIANGLES);
     glVertex2f(40.f, 40.f); glVertex2f(280.f, 40.f); glVertex2f(40.f, 280.f);
     glEnd();
+    if (depthtest) {
+      glEnable(GL_DEPTH_TEST); glDepthFunc(GL_LESS);
+      glColor3f(1.f, 1.f, 0.f); /* near: z = -0.5 in ortho(-1,1) */
+      glBegin(GL_QUADS);
+      glVertex3f(300.f, 300.f, 0.5f); glVertex3f(380.f, 300.f, 0.5f);
+      glVertex3f(380.f, 380.f, 0.5f); glVertex3f(300.f, 380.f, 0.5f);
+      glEnd();
+      glFlush();
+      glColor3f(1.f, 0.f, 1.f); /* far, drawn later */
+      glBegin(GL_QUADS);
+      glVertex3f(280.f, 280.f, -0.5f); glVertex3f(400.f, 280.f, -0.5f);
+      glVertex3f(400.f, 400.f, -0.5f); glVertex3f(280.f, 400.f, -0.5f);
+      glEnd();
+      glDisable(GL_DEPTH_TEST);
+    }
     glEnable(GL_TEXTURE_2D);
     glColor3f(1.f, 1.f, 1.f);
     glBegin(GL_QUADS);
@@ -231,6 +249,10 @@ int main(int argc, char **argv) {
       failures += !expect("clear", 620, 20, 0xff0000);
       failures += !expect("triangle", 80, 80, 0x00ff00);
       failures += !expect("texture", 500, 300, 0x0000ff);
+      if (depthtest) {
+        failures += !expect("depth near wins", 340, 340, 0xffff00);
+        failures += !expect("depth far visible", 290, 290, 0xff00ff);
+      }
       printf("FRAME %d checked, glGetError 0x%x\n", n, glGetError());
     }
     InterlockedIncrement(&frame_progress);
