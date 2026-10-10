@@ -4623,9 +4623,14 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeReady(
 }
 
 _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeQueueable(
-    ADMISSION_CONTEXT *Context) {
+    ADMISSION_CONTEXT *Context, BOOLEAN *WorkerBusy) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context != NULL
       ? (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime : NULL;
+  if (WorkerBusy != NULL)
+    *WorkerBusy = runtime != NULL &&
+        (InterlockedCompareExchange(&runtime->WorkScheduled, 0, 0) != 0 ||
+         runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted)
+        ? TRUE : FALSE;
   return runtime != NULL && runtime->ProviderReady &&
       runtime->BackendStarted && runtime->WorkItem != NULL &&
       InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 &&
@@ -4649,7 +4654,8 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeAwaitWork(
       ? (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime : NULL;
   ULONGLONG deadline = KeQueryInterruptTime() + (ULONGLONG)TimeoutMs * 10000ULL;
   LARGE_INTEGER slice;
-  ULONG reason = 0u;
+  ULONG reason = 0u, firstReason = 0u;
+  LONGLONG waitStart = 0;
   slice.QuadPart = -100000LL; /* 10 ms backstop */
   for (;;) {
     /* Clear before testing: a release after the test sets it again. */
@@ -4676,10 +4682,26 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeAwaitWork(
     if (KeGetCurrentIrql() != PASSIVE_LEVEL ||
         KeQueryInterruptTime() >= deadline)
       break;
+    if (waitStart == 0) {
+      waitStart = KeQueryPerformanceCounter(NULL).QuadPart;
+      firstReason = reason;
+    }
     /* EXP1118/EXP1119: a timer sleep here held a job queued behind a
      * concurrent submitter for ~10 ms after the slot had freed. */
     (void)KeWaitForSingleObject(&runtime->SlotEvent, Executive, KernelMode,
                                 FALSE, &slice);
+  }
+  if (waitStart != 0 && Context != NULL) {
+    /* EXP1135 receipt-only. */
+    ULONG bucket = firstReason == 4u ? 0u : firstReason == 8u ? 1u :
+        firstReason == 16u ? 2u : 3u;
+    LONGLONG waited = KeQueryPerformanceCounter(NULL).QuadPart - waitStart;
+    LONGLONG maxWait = Context->SubmitPath.MaxWaitQpc;
+    InterlockedIncrement(&Context->SubmitPath.Waits[bucket]);
+    InterlockedExchangeAdd64(&Context->SubmitPath.WaitQpc[bucket], waited);
+    if (waited > maxWait)
+      (void)InterlockedCompareExchange64(&Context->SubmitPath.MaxWaitQpc,
+                                         waited, maxWait);
   }
   if (FailedPredicate != NULL) *FailedPredicate = reason;
   return reason == 0u;

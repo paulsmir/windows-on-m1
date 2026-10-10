@@ -535,6 +535,17 @@ typedef struct _ADMISSION_G3_LEAF_HISTORY_SNAPSHOT {
  * outstanding is validated and copied here instead, its fence queued in
  * order; the platform worker binds it when the slot empties. One job per
  * context is still the rule (FenceOutstanding). */
+/* EXP1135 receipt-only: which path G4 submissions took and how long
+ * SubmitCommandVirtual waited for the render slot, by the first busy
+ * ReadyEx predicate: [0] 4 backend submitted, [1] 8 worker finishing,
+ * [2] 16 slot occupied, [3] other. QPC units. */
+typedef struct _ADMISSION_SUBMIT_PATH {
+  ULONG Version, Bytes;
+  volatile LONG Immediate, Deferred, Binds, Reserved;
+  volatile LONG Waits[4];
+  volatile LONG64 WaitQpc[4];
+  volatile LONG64 MaxWaitQpc;
+} ADMISSION_SUBMIT_PATH;
 #define ADMISSION_G4_PENDING_CAPACITY 2u
 typedef enum _ADMISSION_G4_PENDING_STATE {
   AdmissionG4PendingFree = 0,
@@ -720,6 +731,7 @@ typedef struct _ADMISSION_CONTEXT {
    * ADMISSION_G4_PENDING). The worker binds the head into RenderPacket. */
   ADMISSION_G4_PENDING G4Pending[ADMISSION_G4_PENDING_CAPACITY];
   ULONG G4PendingHead, G4PendingCount;
+  ADMISSION_SUBMIT_PATH SubmitPath;
   ADMISSION_BACKEND_IMAGE BackendImage;
   /* EXP1105: Prepare image of the objects a G4 job changes. */
   ADMISSION_BACKEND_IMAGE_SNAPSHOT BackendSnapshot;
@@ -1674,8 +1686,10 @@ BOOLEAN AdmissionPlatformRuntimeAwaitWork(
 BOOLEAN AdmissionPlatformRuntimeSubmit(
     _Inout_ ADMISSION_CONTEXT *Context);
 /* Phase 5a: the runtime can take work later (started, not stopping,
- * resetting or failed); a busy slot or worker is not a refusal. */
-BOOLEAN AdmissionPlatformRuntimeQueueable(_In_ ADMISSION_CONTEXT *Context);
+ * resetting or failed); a busy slot or worker is not a refusal. WorkerBusy
+ * reports a scheduled worker or a submitted backend job. */
+BOOLEAN AdmissionPlatformRuntimeQueueable(_In_ ADMISSION_CONTEXT *Context,
+    _Out_opt_ BOOLEAN *WorkerBusy);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 VOID AdmissionJobTimingStartWindows(ADMISSION_CONTEXT *Adapter,
     ADMISSION_RENDER_CONTEXT *RenderContext, ULONG ProcessId,

@@ -2715,5 +2715,9 @@ _Use_decl_annotations_ void AdmissionRecordPagingProfile(
   Context->DisplayRing.Bytes = sizeof(Context->DisplayRing);
   WriteBinary(key, L"Wom1DisplayRing1131", &Context->DisplayRing,
               sizeof(Context->DisplayRing));
+  Context->SubmitPath.Version = 1u;
+  Context->SubmitPath.Bytes = sizeof(Context->SubmitPath);
+  WriteBinary(key, L"Wom1SubmitPath1135", (const VOID *)&Context->SubmitPath,
+              sizeof(Context->SubmitPath));
   ZwClose(key);
 }

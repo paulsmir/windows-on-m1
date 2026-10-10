@@ -3024,19 +3024,22 @@ static VOID AdmissionG4ObserveEnvelopeReject(ADMISSION_CONTEXT *adapter,
 
 /* Phase 5a: a submission may be queued behind the render slot when its
  * context has nothing outstanding, a pending entry is free and the runtime
- * is only busy (another job bound, running or finishing). */
+ * is only busy: another job bound or running, entries queued, or (EXP1135)
+ * the worker still finishing the previous job with the slot already empty,
+ * the most frequent wait in EXP1130 (ReadyEx predicate 8). */
 static BOOLEAN AdmissionG4PendingAdmissible(ADMISSION_CONTEXT *adapter,
     ADMISSION_RENDER_CONTEXT *context) {
   KIRQL old_irql;
-  BOOLEAN admissible;
+  BOOLEAN admissible, worker_busy = FALSE;
   if (KeGetCurrentIrql() != PASSIVE_LEVEL ||
-      !AdmissionPlatformRuntimeQueueable(adapter))
+      !AdmissionPlatformRuntimeQueueable(adapter, &worker_busy))
     return FALSE;
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   admissible = context->Object.FenceOutstanding == 0u &&
       adapter->G4PendingCount < ADMISSION_G4_PENDING_CAPACITY &&
       (AdmissionRenderPacketState(&adapter->RenderPacket) !=
-           AdmissionRenderPacketEmpty || adapter->G4PendingCount != 0u) &&
+           AdmissionRenderPacketEmpty || adapter->G4PendingCount != 0u ||
+       worker_busy) &&
       InterlockedCompareExchange(&adapter->SchedulerFaulted, 0, 0) == 0
       ? TRUE : FALSE;
   KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
@@ -3175,6 +3178,7 @@ _Use_decl_annotations_ BOOLEAN AdmissionG4PendingBindHead(
       ok = FALSE;
     }
   }
+  if (ok && !dropped) InterlockedIncrement(&adapter->SubmitPath.Binds);
   entry->State = AdmissionG4PendingFree;
   entry->Context = NULL;
   adapter->G4PendingHead = (adapter->G4PendingHead + 1u) %
@@ -3398,6 +3402,7 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   if (deferred) {
     if (AdmissionG4PendingQueue(adapter, state, context, private_scene, args,
             &packet, &view, mapping_generation)) {
+      InterlockedIncrement(&adapter->SubmitPath.Deferred);
       AdmissionDispatchQueuedWork(adapter);
       return STATUS_SUCCESS;
     }
@@ -3447,6 +3452,7 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   }
   ExReleaseFastMutex(&state->Lock);
   if (!queued) goto Rollback;
+  InterlockedIncrement(&adapter->SubmitPath.Immediate);
   AdmissionDispatchQueuedWork(adapter);
   return STATUS_SUCCESS;
 Rollback:

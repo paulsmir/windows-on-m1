@@ -65,10 +65,16 @@ struct KEVENT { int x; };
 struct ADMISSION_PLATFORM_RUNTIME { BOOLEAN ProviderReady, BackendStarted; BACKEND Backend; void *WorkItem;
   volatile LONG Stopping, Resetting, WorkScheduled; KEVENT WorkIdle, SlotEvent; };
 struct PACKET { int State; };
-struct ADMISSION_CONTEXT { void *PlatformRuntime; int SchedulerLock; PACKET RenderPacket; ULONG G4PendingCount; };
+typedef long long LONG64, LONGLONG;
+struct SUBMIT_PATH { volatile LONG Waits[4]; volatile LONG64 WaitQpc[4]; volatile LONG64 MaxWaitQpc; };
+struct ADMISSION_CONTEXT { void *PlatformRuntime; int SchedulerLock; PACKET RenderPacket; ULONG G4PendingCount; SUBMIT_PATH SubmitPath; };
+static LONG InterlockedIncrement(volatile LONG *p){ return ++*p; }
+static LONG64 InterlockedExchangeAdd64(volatile LONG64 *p, LONG64 v){ LONG64 o=*p; *p+=v; return o; }
+static LONG64 InterlockedCompareExchange64(volatile LONG64 *p, LONG64 x, LONG64 c){ LONG64 o=*p; if(o==c)*p=x; return o; }
 static ULONGLONG now; static int waits, delays, finish_after;
 static ADMISSION_PLATFORM_RUNTIME *rt; static ADMISSION_CONTEXT *ctx;
 static ULONGLONG KeQueryInterruptTime(void){ return now; }
+static LARGE_INTEGER KeQueryPerformanceCounter(void*){ LARGE_INTEGER q; q.QuadPart=(long long)now+1; return q; }
 static KIRQL KeGetCurrentIrql(void){ return PASSIVE_LEVEL; }
 static void KeAcquireSpinLock(int*, KIRQL*){} static void KeReleaseSpinLock(int*, KIRQL){}
 static int AdmissionRenderPacketState(PACKET *p){ return p->State; }
@@ -83,7 +89,7 @@ static NTSTATUS KeDelayExecutionThread(int, BOOLEAN, LARGE_INTEGER*){ ++delays; 
 @@FUNCS@@
 int main(){
   ADMISSION_PLATFORM_RUNTIME r={1,1,{AppleAgxBackendRuntimeReady},(void*)1,0,0,0,{0}};
-  ADMISSION_CONTEXT c={&r,0,{AdmissionRenderPacketEmpty},0}; rt=&r; ctx=&c; ULONG why=99;
+  ADMISSION_CONTEXT c={&r,0,{AdmissionRenderPacketEmpty},0,{}}; rt=&r; ctx=&c; ULONG why=99;
   assert(AdmissionPlatformRuntimeAwaitWork(&c,1000,&why) && why==0 && waits+delays==0);
   /* Worker returning after the fence notification. */
   r.WorkScheduled=1; finish_after=3;
@@ -112,6 +118,9 @@ int main(){
   r.Backend.Phase=AppleAgxBackendRuntimeReady; r.ProviderReady=0; assert(!AdmissionPlatformRuntimeAwaitWork(&c,1000,NULL));
   c.PlatformRuntime=NULL; assert(!AdmissionPlatformRuntimeAwaitWork(&c,1000,&why) && why==1);
   assert(waits+delays==0);
+  /* EXP1135: every wait is counted under its first busy predicate. */
+  assert(c.SubmitPath.Waits[1]>=1 && c.SubmitPath.Waits[0]>=1 && c.SubmitPath.Waits[2]>=1);
+  assert(c.SubmitPath.WaitQpc[1]>0 && c.SubmitPath.MaxWaitQpc>0);
   /* Every wait was on the slot event, each preceded by a clear. */
   assert(slot_waits>0 && clears>=slot_waits);
   puts("EXP1014 envelope backpressure: PASS");
