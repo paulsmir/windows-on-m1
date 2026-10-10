@@ -46,6 +46,23 @@ typedef struct AGX_WGL_ADAPTER {
 } AGX_WGL_ADAPTER;
 
 static AGX_WGL_ADAPTER *AgxWgl;
+static struct pipe_resource *(*AgxWglResourceCreate)(struct pipe_screen *,
+                                                     const struct pipe_resource *);
+
+/* EXP1146: Mesa's WGL frontend creates window colour buffers with
+ * PIPE_BIND_DISPLAY_TARGET (display through a winsys display target); the
+ * Asahi driver turns that into AGX_BO_SHAREABLE, which the Windows BO layer
+ * refuses, so the back buffer was never created ("no readbuffer"). This
+ * winsys displays by CPU readback (wgl_present), so a window colour buffer is
+ * an ordinary render target here. */
+static struct pipe_resource *wgl_resource_create(struct pipe_screen *screen,
+                                                 const struct pipe_resource *templ) {
+  struct pipe_resource local;
+  if (!templ) return NULL;
+  local = *templ;
+  local.bind &= ~(unsigned)PIPE_BIND_DISPLAY_TARGET;
+  return AgxWglResourceCreate(screen, &local);
+}
 
 static void wgl_note(const char *stage, HRESULT status) {
   UINT values[1] = {AgxWgl ? AgxWgl->Bridge.Receipt.LastFailedOp : 0u};
@@ -118,6 +135,12 @@ static struct pipe_screen *wgl_screen_create(HDC hdc) {
         &a->OwnerOperations, &a->Owner, AdmissionUmdAsahiBatchOperations());
     if (!a->Screen)
       result = FAILED(a->Device.LastScreenError) ? a->Device.LastScreenError : E_FAIL;
+    else if (!a->Screen->resource_create)
+      result = E_NOINTERFACE;
+    else {
+      AgxWglResourceCreate = a->Screen->resource_create;
+      a->Screen->resource_create = wgl_resource_create;
+    }
   }
   a->Failure = result;
   wgl_note(SUCCEEDED(result) ? "wgl-screen-create" : "reject-wgl-screen-create", result);

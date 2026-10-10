@@ -8,10 +8,30 @@
  * calls SwapBuffers. Exit 0 only when every checked pixel matches.
  * Usage: agx_gl_smoke.exe [frames] [expect-renderer-substring] */
 #include <windows.h>
+#include <dbghelp.h>
 #include <GL/gl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* EXP1146 lost stdout and had no dump when the process faulted: write a
+ * minidump beside the executable and report the fault on stderr. */
+static LONG WINAPI crash(EXCEPTION_POINTERS *info) {
+  char path[MAX_PATH]; DWORD n = GetModuleFileNameA(NULL, path, MAX_PATH);
+  while (n && path[n - 1] != '\\') --n;
+  strcpy_s(path + n, MAX_PATH - n, "agx_gl_smoke.dmp");
+  fprintf(stderr, "CRASH code %08lx address %p\n", info->ExceptionRecord->ExceptionCode,
+          info->ExceptionRecord->ExceptionAddress);
+  HANDLE f = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+  if (f != INVALID_HANDLE_VALUE) {
+    MINIDUMP_EXCEPTION_INFORMATION e = {GetCurrentThreadId(), info, FALSE};
+    MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), f,
+        (MINIDUMP_TYPE)(MiniDumpWithDataSegs | MiniDumpWithThreadInfo | MiniDumpWithIndirectlyReferencedMemory),
+        &e, NULL, NULL);
+    CloseHandle(f);
+  }
+  return EXCEPTION_EXECUTE_HANDLER;
+}
 
 static LRESULT CALLBACK proc(HWND w, UINT m, WPARAM a, LPARAM b) {
   if (m == WM_CLOSE) { PostQuitMessage(0); return 0; }
@@ -32,6 +52,8 @@ static int expect(const char *what, int x, int y, unsigned rgb) {
 
 int main(int argc, char **argv) {
   int frames = argc > 1 ? atoi(argv[1]) : 120;
+  setvbuf(stdout, NULL, _IONBF, 0);
+  SetUnhandledExceptionFilter(crash);
   const char *want = argc > 2 ? argv[2] : NULL;
   WNDCLASSA wc; HWND wnd; HDC dc; HGLRC rc; PIXELFORMATDESCRIPTOR pfd;
   int format, failures = 0;
@@ -51,6 +73,9 @@ int main(int argc, char **argv) {
   pfd.iPixelType = PFD_TYPE_RGBA; pfd.cColorBits = 32; pfd.cDepthBits = 24;
   format = ChoosePixelFormat(dc, &pfd);
   if (!format || !SetPixelFormat(dc, format, &pfd)) { printf("NO_PIXEL_FORMAT %d %lu\n", format, GetLastError()); return 3; }
+  { PIXELFORMATDESCRIPTOR got; DescribePixelFormat(dc, format, sizeof(got), &got);
+    printf("PIXEL_FORMAT %d flags %08lx color %u depth %u\n", format, got.dwFlags,
+           got.cColorBits, got.cDepthBits); }
   rc = wglCreateContext(dc);
   if (!rc || !wglMakeCurrent(dc, rc)) { printf("NO_CONTEXT %lu\n", GetLastError()); return 4; }
   printf("GL_VENDOR %s\nGL_RENDERER %s\nGL_VERSION %s\n", (const char *)glGetString(GL_VENDOR),

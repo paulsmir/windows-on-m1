@@ -292,9 +292,42 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
    agx_flush_render(ctx, batch, &render);
    if (!AgxWin32AsahiBatchLeave(batch)) { ctx->any_faults = true; return; }
    agx_batch_submit(ctx, batch, compute, &render);''')
+    # CS 1.6 ICD (EXP1146): Mesa's GL frontend asks for a fence on glFinish
+    # and SwapBuffers and waits on screen->fence_finish; the D3D10 frontend
+    # never asks (it would have faulted every context). Windows batches
+    # complete by event + stamp polling (agx_sync_batch), so a fence request
+    # waits for every submitted batch and returns a fence that is signalled
+    # by construction; a failed wait leaves the context faulted, no fence.
+    s=replace(s,'static void\nagx_flush(struct pipe_context *pctx,','''static char agx_windows_fence_storage;
+#define AGX_WINDOWS_SIGNALLED_FENCE \\
+   ((struct pipe_fence_handle *)&agx_windows_fence_storage)
+
+static void
+agx_windows_fence_reference(struct pipe_screen *screen,
+                            struct pipe_fence_handle **ptr,
+                            struct pipe_fence_handle *fence)
+{
+   (void)screen;
+   *ptr = fence;
+}
+
+static bool
+agx_windows_fence_finish(struct pipe_screen *screen, struct pipe_context *ctx,
+                         struct pipe_fence_handle *fence, uint64_t timeout)
+{
+   (void)screen; (void)ctx; (void)timeout;
+   return fence == AGX_WINDOWS_SIGNALLED_FENCE;
+}
+
+static void
+agx_flush(struct pipe_context *pctx,''')
     s=body(s,'agx_flush','''   struct agx_context *ctx = agx_context(pctx);
-   if (fence) { ctx->any_faults = true; *fence = NULL; return; }
    (void)flags;
+   if (fence) {
+      agx_sync_all(ctx, "Windows fence");
+      *fence = ctx->any_faults ? NULL : AGX_WINDOWS_SIGNALLED_FENCE;
+      return;
+   }
    agx_flush_all(ctx, "Windows runtime flush");''')
     # Clear is native state mutation/upload; it uses the same batch capsule.
     a,b=function(s,'agx_clear');decl=s.rfind('static void',0,a);signature=s[decl:a]
@@ -369,6 +402,9 @@ AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *backend, AGX_WIN32_SCREEN *wi
     for field in ('get_screen_fd','query_dmabuf_modifiers','query_memory_info','is_dmabuf_modifier_supported','resource_from_handle','resource_get_handle','resource_get_param','get_timestamp','fence_reference','fence_finish','fence_get_fd','get_device_uuid','get_driver_uuid','get_cl_cts_version'):
         original=re.sub(r'   screen->'+field+r' = [^;]+;\n','',original)
     original=original.replace('   agx_disk_cache_init(agx_screen);','')
+    original=replace(original,'   screen->destroy =','''   screen->fence_reference = agx_windows_fence_reference;
+   screen->fence_finish = agx_windows_fence_finish;
+   screen->destroy =''')
     original=original.replace('   agx_init_compute_caps(screen);','')
     original=replace(original,'   agx_init_screen_caps(screen);','''   agx_init_screen_caps(screen);
    struct pipe_caps *windows_caps = (struct pipe_caps *)&screen->caps;
