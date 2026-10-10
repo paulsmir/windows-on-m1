@@ -103,7 +103,10 @@ int main(int argc, char **argv) {
   _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
   signal(SIGABRT, on_abort);
   CreateThread(NULL, 0, watchdog, NULL, 0, NULL);
-  const char *want = argc > 2 ? argv[2] : NULL;
+  const char *want = argc > 2 && strcmp(argv[2], "-") ? argv[2] : NULL;
+  /* "nodepth": a colour-only window (the G4 KMD builder accepts no ZLS
+   * attachment yet), cleared with GL_COLOR_BUFFER_BIT only. */
+  int nodepth = argc > 3 && !strcmp(argv[3], "nodepth");
   WNDCLASSA wc; HWND wnd; HDC dc; HGLRC rc; PIXELFORMATDESCRIPTOR pfd;
   int format, failures = 0;
   LARGE_INTEGER f, t0, t1;
@@ -120,7 +123,22 @@ int main(int argc, char **argv) {
   pfd.nSize = sizeof(pfd); pfd.nVersion = 1;
   pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
   pfd.iPixelType = PFD_TYPE_RGBA; pfd.cColorBits = 32; pfd.cDepthBits = 24;
-  format = ChoosePixelFormat(dc, &pfd);
+  format = 0;
+  if (nodepth) {
+    int count = DescribePixelFormat(dc, 1, sizeof(pfd), &pfd);
+    for (int i = 1; i <= count && !format; ++i) {
+      PIXELFORMATDESCRIPTOR c;
+      DescribePixelFormat(dc, i, sizeof(c), &c);
+      if ((c.dwFlags & (PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER)) ==
+              (PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER) &&
+          !(c.dwFlags & PFD_GENERIC_FORMAT) && c.iPixelType == PFD_TYPE_RGBA &&
+          c.cColorBits == 32 && !c.cDepthBits && !c.cStencilBits && !c.cAccumBits) {
+        format = i; pfd = c;
+      }
+    }
+  } else {
+    format = ChoosePixelFormat(dc, &pfd);
+  }
   if (!format || !SetPixelFormat(dc, format, &pfd)) { printf("NO_PIXEL_FORMAT %d %lu\n", format, GetLastError()); return 3; }
   { PIXELFORMATDESCRIPTOR got; DescribePixelFormat(dc, format, sizeof(got), &got);
     printf("PIXEL_FORMAT %d flags %08lx color %u depth %u\n", format, got.dwFlags,
@@ -146,7 +164,7 @@ int main(int argc, char **argv) {
     MSG msg;
     while (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) { TranslateMessage(&msg); DispatchMessageA(&msg); }
     glClearColor(1.f, 0.f, 0.f, 1.f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClear(nodepth ? GL_COLOR_BUFFER_BIT : GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glDisable(GL_TEXTURE_2D);
     glColor3f(0.f, 1.f, 0.f);
     glBegin(GL_TRIANGLES);
