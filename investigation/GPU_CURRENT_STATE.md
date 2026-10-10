@@ -25,7 +25,7 @@ Open, causal order:
    visibility-off/ModeChange and no DWM allocation rebuild on Settings close.
 2. Multi-job: KMD queue depth 2 (submit stops blocking; worker binds the next
    entry) then UMD two submissions in flight (re-apply e4398e22). Site map:
-   scratchpad multijob-map.txt (per-context Private/Preempt/CancelFence and
+   docs/superpowers/plans/2026-10-09-multi-job-firmware-queue.md "Site map" (per-context Private/Preempt/CancelFence and
    FenceOutstanding must become per entry).
 3. Notepad per-frame shared surface (~50/s).
 
