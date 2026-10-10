@@ -78,9 +78,16 @@ static void wgl_first_fault(unsigned site, uintptr_t context, unsigned flags,
   AdmissionUmdDiagnostic("measure-native-first-fault", S_OK, values, 4u);
 }
 
+/* EXP1182 receipt-only: the winsys calls this hook once per submitted render
+ * batch with its draw count; count batches and draws for measure-wgl-draws. */
+static volatile LONG AgxWglBatches, AgxWglDraws, AgxWglMaxDraws;
+
 static void wgl_vdm_trace(uint64_t va, const uint32_t *words, unsigned count,
                           unsigned draws) {
   static volatile LONG records;
+  InterlockedIncrement(&AgxWglBatches);
+  InterlockedExchangeAdd(&AgxWglDraws, (LONG)draws);
+  if ((LONG)draws > AgxWglMaxDraws) AgxWglMaxDraws = (LONG)draws;
   if (InterlockedIncrement(&records) > 32 || count > 13u) return;
   UINT values[16] = {(UINT)va, (UINT)(va >> 32), draws};
   for (unsigned i = 0; i < count; ++i) values[3 + i] = words[i];
@@ -552,6 +559,11 @@ static void wgl_present_receipt(AGX_WGL_PRESENT_RING *ring, LONGLONG start,
   ReleaseSRWLockExclusive(&AgxWglWorkerLock);
   AdmissionUmdDiagnostic("measure-wgl-present", S_OK, values, 12u);
   wgl_kmt_receipt(us);
+  /* EXP1182: render batches, draws and the largest batch of the 120 presents. */
+  UINT draws[3] = {(UINT)InterlockedExchange(&AgxWglBatches, 0),
+                   (UINT)InterlockedExchange(&AgxWglDraws, 0),
+                   (UINT)InterlockedExchange(&AgxWglMaxDraws, 0)};
+  AdmissionUmdDiagnostic("measure-wgl-draws", S_OK, draws, 3u);
   ring->SumPresent = ring->SumInterval = ring->SumSync = 0;
 }
 
