@@ -306,7 +306,8 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
       View->Attachments == 0 ||
       Binding == 0 || Image->Ready != APPLE_AGX_TRUE ||
       Image->BoundFence != 0u || Image->G4Native ||
-      View->RenderBytes != sizeof(render) || View->AttachmentCount != 1u ||
+      View->RenderBytes != sizeof(render) || View->AttachmentCount == 0u ||
+      View->AttachmentCount > APPLE_AGX_G4_MAX_ATTACHMENTS ||
       View->CommandBytes == 0u ||
       View->CommandBytes > APPLE_AGX_G4_NATIVE_MAX_BYTES ||
       Packet->Fence == 0u || Packet->DestinationPhysical == 0ULL ||

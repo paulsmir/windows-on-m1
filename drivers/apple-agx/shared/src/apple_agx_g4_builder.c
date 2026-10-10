@@ -139,7 +139,8 @@ APPLE_AGX_BOOL AppleAgxG4BindNativeObjects(
   APPLE_AGX_U64 minimum;
   if (View == 0 || Objects == 0 || View->Render == 0 ||
       View->RenderBytes != sizeof(render) || View->Attachments == 0 ||
-      View->AttachmentCount != 1u ||
+      View->AttachmentCount == 0u ||
+      View->AttachmentCount > APPLE_AGX_G4_MAX_ATTACHMENTS ||
       !AppleAgxG4ColorBytes(View->ColorFormat) ||
       ObjectCount < APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)
     return APPLE_AGX_FALSE;

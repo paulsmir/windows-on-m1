@@ -22,6 +22,14 @@ typedef struct {
 } G4_PACKET;
 
 typedef struct {
+  APPLE_AGX_G4_PRIVATE_HEADER_V2 Header;
+  APPLE_AGX_G4_NATIVE_HEADER AttachCommand;
+  APPLE_AGX_G4_ATTACHMENT Attachment[2];
+  APPLE_AGX_G4_NATIVE_HEADER RenderCommand;
+  APPLE_AGX_G4_NATIVE_RENDER Render;
+} G4_PACKET_ZLS;
+
+typedef struct {
   const G4_PACKET *Packet;
   unsigned Calls;
 } ACCESS_CONTEXT;
@@ -50,6 +58,17 @@ static int graph_access(void *opaque, unsigned long long va,
       if (va == native[i]) return 1;
   }
   return 0;
+}
+
+/* The depth attachment of the EXP1150 case: its range and its base. */
+static APPLE_AGX_G4_ATTACHMENT zls_depth;
+static int graph_access_zls(void *opaque, unsigned long long va,
+                            unsigned int bytes, int write) {
+  if (write && zls_depth.Pointer == 0x34000000ULL &&
+      ((va == zls_depth.Pointer && bytes == zls_depth.Size) ||
+       (va == zls_depth.Pointer && bytes == 1u)))
+    return 1;
+  return graph_access(opaque, va, bytes, write);
 }
 
 int main(void) {
@@ -150,6 +169,47 @@ int main(void) {
           packet.Header.Base.CommandVa, packet.Header.Base.CommandBytes,
           graph_access, &graph, &view) == AppleAgxG4ParseOk);
       assert(graph.Calls >= 15u);
+      /* EXP1150: a GL window job lists colour then depth (Mesa
+       * append_attachments); the KMD rejected any count but one. Parse
+       * proves both attachments; bind uses attachment 0. */
+      {
+        G4_PACKET_ZLS zls = {0};
+        G4_PACKET shadow = packet;
+        ACCESS_CONTEXT zgraph = {0};
+        APPLE_AGX_G4_SUBMIT_VIEW zview = {0};
+        zls.Header = packet.Header;
+        zls.Header.Base.CommandBytes = sizeof(zls) - sizeof(zls.Header);
+        zls.AttachCommand = packet.AttachCommand;
+        zls.AttachCommand.Size = sizeof(zls.Attachment);
+        zls.Attachment[0] = packet.Attachment;
+        zls.Attachment[1].Pointer = 0x34000000ULL;
+        zls.Attachment[1].Size = 1280ULL * 720ULL * 4ULL;
+        zls.RenderCommand = packet.RenderCommand;
+        zls.Render = packet.Render;
+        zls.Render.Depth.Base = 0x34000000ULL;
+        zls.Render.ZlsCtrl = 0x80080ULL;
+        zls.Render.IspZlsPixels = (1280u - 1u) | ((720u - 1u) << 15);
+        shadow.Header = zls.Header;
+        shadow.Render = zls.Render;
+        zgraph.Packet = &shadow;
+        zls_depth = zls.Attachment[1];
+        assert(AppleAgxG4ParseSubmit(&zls, sizeof(zls), sizeof(zls),
+            zls.Header.Base.CommandVa, zls.Header.Base.CommandBytes,
+            graph_access_zls, &zgraph, &zview) == AppleAgxG4ParseOk);
+        assert(zview.AttachmentCount == 2u);
+        assert(AppleAgxG4BindNativeObjects(&zview, objects,
+            APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+        assert(objects[40].GpuVa == zls.Attachment[0].Pointer);
+        zview.AttachmentCount = APPLE_AGX_G4_MAX_ATTACHMENTS + 1u;
+        assert(!AppleAgxG4BindNativeObjects(&zview, objects,
+            APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+        /* An unmapped depth range is refused at parse time. */
+        zls_depth.Pointer = 0x37000000ULL;
+        memset(&zview, 0, sizeof(zview));
+        assert(AppleAgxG4ParseSubmit(&zls, sizeof(zls), sizeof(zls),
+            zls.Header.Base.CommandVa, zls.Header.Base.CommandBytes,
+            graph_access_zls, &zgraph, &zview) == AppleAgxG4ParseUnmapped);
+      }
       packet.Render.Samples = 4u;
       assert(!AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));

@@ -3133,7 +3133,8 @@ static BOOLEAN AdmissionG4PendingQueue(ADMISSION_CONTEXT *adapter,
   ULONG slot;
   BOOLEAN queued = FALSE;
   if (view->Native == NULL || view->Render == NULL ||
-      view->Attachments == NULL || view->AttachmentCount != 1u ||
+      view->Attachments == NULL || view->AttachmentCount == 0u ||
+      view->AttachmentCount > APPLE_AGX_G4_MAX_ATTACHMENTS ||
       view->RenderBytes != sizeof(APPLE_AGX_G4_NATIVE_RENDER) ||
       view->CommandBytes == 0u ||
       view->CommandBytes > APPLE_AGX_G4_NATIVE_MAX_BYTES)
@@ -3166,7 +3167,10 @@ static BOOLEAN AdmissionG4PendingQueue(ADMISSION_CONTEXT *adapter,
   entry->MappingGeneration = mapping_generation;
   entry->DmaBufferVa = args->DmaBufferVirtualAddress;
   entry->DmaBufferBytes = args->DmaBufferSize;
+  /* Only the colour target (attachment 0) is bound; ZLS attachments were
+   * proven at parse time and live in the copied native command. */
   RtlCopyMemory(&entry->Attachment, view->Attachments, sizeof(entry->Attachment));
+  entry->View.AttachmentCount = 1u;
   RtlCopyMemory(entry->Render, view->Render, sizeof(entry->Render));
   RtlCopyMemory(entry->Native, view->Native, view->CommandBytes);
   ExAcquireFastMutex(&state->Lock);
@@ -3423,7 +3427,8 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
        (private_scene && (!AdmissionG4PrivateGeometry(private_scene,&view) ||
         RtlCompareMemory(&view.Lease,&private_v3.Lease,sizeof(view.Lease))!=sizeof(view.Lease)))))
     result=AppleAgxG4ParseInvalid;
-  if (result == AppleAgxG4ParseOk && view.AttachmentCount == 1u) {
+  if (result == AppleAgxG4ParseOk && view.AttachmentCount != 0u &&
+      view.AttachmentCount <= APPLE_AGX_G4_MAX_ATTACHMENTS) {
     RtlCopyMemory(&color, view.Attachments, sizeof(color));
     packet.Fence = args->SubmissionFenceId;
     packet.AllocationCount = 1u;
