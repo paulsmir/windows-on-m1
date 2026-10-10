@@ -555,7 +555,8 @@ static void wgl_present_receipt(AGX_WGL_PRESENT_RING *ring, LONGLONG start,
   ring->SumPresent = ring->SumInterval = ring->SumSync = 0;
 }
 
-/* EXP1174 diagnostic, only when the UMD trace is enabled: a sampling
+/* EXP1174 diagnostic, only when the UMD trace is enabled and the process has
+ * APPLE_AGX_ICD_SAMPLE=1: a sampling
  * profiler of the presenting (game) thread. EXP1173 gameplay: ~25 ms of a
  * 27 ms frame is CPU work outside the kernel (game, Mesa and this ICD under
  * x86 emulation) and WPR CPU sampling is unavailable in this guest. Every
@@ -669,7 +670,12 @@ static DWORD WINAPI wgl_sampler_main(LPVOID parameter) {
 static void wgl_sampler_start(void) {
   HMODULE self = NULL;
   HANDLE game = NULL;
-  if (AgxWglSampler || !AdmissionUmdDiagnosticEnabled()) return;
+  char enabled[4];
+  /* EXP1174: 500 suspensions a second cost the emulated game ~20% of its
+   * frame rate, so sampling needs APPLE_AGX_ICD_SAMPLE=1 besides the trace. */
+  if (AgxWglSampler || !AdmissionUmdDiagnosticEnabled() ||
+      GetEnvironmentVariableA("APPLE_AGX_ICD_SAMPLE", enabled, sizeof(enabled)) != 1u ||
+      enabled[0] != '1') return;
   if (!DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(),
                        &game, THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT, FALSE, 0))
     return;
