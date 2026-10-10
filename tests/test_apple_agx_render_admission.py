@@ -448,6 +448,18 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn('(Join-Path $root "%s")' % name, build)
         self.assertIn("0x14c", build)
 
+    def test_repackage_keeps_the_driver_version_of_the_kmd(self):
+        # EXP1156-EXP1159: restamping DriverVer over binaries built for another
+        # version makes dxgkrnl fail DpiAddDevice with 0xC0000182 (Code 31).
+        import re
+        script = self.read("scripts/repackage-driver.ps1")
+        params = script[script.index("param("):script.index("\n)\n")]
+        self.assertNotRegex(params, r"(?i)\$(Version|DriverVer|PackageBuild)\b")
+        self.assertIn("[Diagnostics.FileVersionInfo]::GetVersionInfo($sys)", script)
+        self.assertRegex(script, r"stampinf\.exe\" .*-v \$version ")
+        self.assertTrue(script.rstrip().endswith(
+            "& (Join-Path $PSScriptRoot 'verify-package-version.ps1') -PackageDirectory $Out"))
+
     def test_project_links_only_admission_and_selected_provider_sources(self):
         project = self.read("AppleAgxRenderAdmission.vcxproj")
 
