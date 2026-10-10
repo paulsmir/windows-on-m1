@@ -629,6 +629,15 @@ HRESULT AgxD3d10WindowsDestroyDeviceDdi(AGX_D3D10_WINDOWS_DEVICE **Device,
   owner->Backend.Closing=1;
   if(owner->Backend.ContextCount>(owner->Context?1u:0u))
     return terminalize_device(Device,HRESULT_FROM_WIN32(ERROR_BUSY));
+  /* EXP1133 device-terminal: apps destroyed devices with a batch still
+   * active; once the kernel context was gone it could neither be submitted
+   * nor retired and the close terminalized (48-63 BOs kept). Submit and wait
+   * first, as Mesa's agx_destroy_context does (agx_sync_all). */
+  if(owner->Context) {
+    owner->Context->flush(owner->Context,NULL,0);
+    if(!AgxWin32AsahiContextRetire(owner->Context,INFINITE))
+      return terminalize_device(Device,E_FAIL);
+  }
   result=AdmissionUmdRuntimeDeviceDestroyKernelContext(&owner->Runtime,&destroyed);
   if(FAILED(result) || !destroyed)
     return terminalize_device(Device,FAILED(result)?result:E_FAIL);
