@@ -1,0 +1,96 @@
+#ifndef AGX_KMT_GPUVA_BRIDGE_H
+#define AGX_KMT_GPUVA_BRIDGE_H
+
+/* CS 1.6 ICD plan, phase 1: the D3D runtime callbacks the G4/GPUVA umd_*
+ * code calls, implemented on the D3DKMT thunks, so an OpenGL ICD (no D3D
+ * runtime) drives the validated staging, residency and submit code
+ * unchanged. Runtime handles passed to the callbacks are the bridge itself;
+ * kernel context handles travel as HANDLE values holding a D3DKMT_HANDLE. */
+
+#include <windows.h>
+#include <d3dkmthk.h>
+#pragma warning(push)
+#pragma warning(disable:4201)
+#include <d3d10umddi.h>
+#pragma warning(pop)
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct _AGX_KMT_THUNKS {
+  PFND3DKMT_QUERYADAPTERINFO QueryAdapterInfo;
+  PFND3DKMT_CREATECONTEXTVIRTUAL CreateContextVirtual;
+  PFND3DKMT_DESTROYCONTEXT DestroyContext;
+  PFND3DKMT_CREATEPAGINGQUEUE CreatePagingQueue;
+  PFND3DKMT_DESTROYPAGINGQUEUE DestroyPagingQueue;
+  PFND3DKMT_CREATESYNCHRONIZATIONOBJECT2 CreateSynchronizationObject2;
+  PFND3DKMT_DESTROYSYNCHRONIZATIONOBJECT DestroySynchronizationObject;
+  PFND3DKMT_CREATEALLOCATION CreateAllocation2;
+  PFND3DKMT_DESTROYALLOCATION2 DestroyAllocation2;
+  PFND3DKMT_RESERVEGPUVIRTUALADDRESS ReserveGpuVirtualAddress;
+  PFND3DKMT_MAPGPUVIRTUALADDRESS MapGpuVirtualAddress;
+  PFND3DKMT_FREEGPUVIRTUALADDRESS FreeGpuVirtualAddress;
+  PFND3DKMT_MAKERESIDENT MakeResident;
+  PFND3DKMT_EVICT Evict;
+  PFND3DKMT_WAITFORSYNCHRONIZATIONOBJECTFROMCPU WaitForSynchronizationObjectFromCpu;
+  PFND3DKMT_SUBMITCOMMAND SubmitCommand;
+  PFND3DKMT_SIGNALSYNCHRONIZATIONOBJECTFROMGPU2 SignalSynchronizationObjectFromGpu2;
+  PFND3DKMT_SIGNALSYNCHRONIZATIONOBJECT2 SignalSynchronizationObject2;
+  PFND3DKMT_LOCK2 Lock2;
+  PFND3DKMT_UNLOCK2 Unlock2;
+  PFND3DKMT_ESCAPE Escape;
+  PFND3DKMT_SETALLOCATIONPRIORITY SetAllocationPriority;
+  PFND3DKMT_QUERYALLOCATIONRESIDENCY QueryAllocationResidency;
+} AGX_KMT_THUNKS;
+
+typedef enum _AGX_KMT_GPUVA_OP {
+  AgxKmtGpuvaNone, AgxKmtGpuvaQueryAdapter, AgxKmtGpuvaCreateContext,
+  AgxKmtGpuvaDestroyContext, AgxKmtGpuvaCreatePagingQueue,
+  AgxKmtGpuvaDestroyPagingQueue, AgxKmtGpuvaCreateSync,
+  AgxKmtGpuvaDestroySync, AgxKmtGpuvaAllocate, AgxKmtGpuvaDeallocate,
+  AgxKmtGpuvaReserve, AgxKmtGpuvaMap, AgxKmtGpuvaFree,
+  AgxKmtGpuvaMakeResident, AgxKmtGpuvaEvict, AgxKmtGpuvaWaitCpu,
+  AgxKmtGpuvaSubmit, AgxKmtGpuvaSignalGpu2, AgxKmtGpuvaSignal2,
+  AgxKmtGpuvaLock, AgxKmtGpuvaUnlock, AgxKmtGpuvaEscape,
+  AgxKmtGpuvaSetPriority, AgxKmtGpuvaQueryResidency, AgxKmtGpuvaSetError,
+  AgxKmtGpuvaOpCount
+} AGX_KMT_GPUVA_OP;
+
+typedef struct _AGX_KMT_GPUVA_RECEIPT {
+  UINT Calls[AgxKmtGpuvaOpCount];
+  UINT Failures[AgxKmtGpuvaOpCount];
+  AGX_KMT_GPUVA_OP LastFailedOp;
+  NTSTATUS LastFailedStatus;
+  HRESULT LastRuntimeError;
+  UINT RuntimeErrors;
+} AGX_KMT_GPUVA_RECEIPT;
+
+typedef struct _AGX_KMT_GPUVA_BRIDGE {
+  UINT Magic;
+  AGX_KMT_THUNKS Kmt;
+  D3DKMT_HANDLE AdapterHandle, DeviceHandle;
+  D3DDDI_ADAPTERCALLBACKS AdapterCallbacks;
+  D3DDDI_DEVICECALLBACKS DeviceCallbacks;
+  D3D11DDI_CORELAYER_DEVICECALLBACKS CoreCallbacks;
+  /* Null-filled: GL presents through the ICD, never through DXGI. */
+  DXGI_DDI_BASE_CALLBACKS DxgiCallbacks;
+  AGX_KMT_GPUVA_RECEIPT Receipt;
+} AGX_KMT_GPUVA_BRIDGE;
+
+/* The D3DKMT exports of gdi32.dll; FALSE if any is missing. */
+BOOL AgxKmtThunksLoad(AGX_KMT_THUNKS *Thunks);
+
+/* Fill the callback tables over the given adapter/device handles. The
+ * bridge address is the runtime adapter, device and core-layer handle. */
+HRESULT AgxKmtGpuvaBridgeInitialize(AGX_KMT_GPUVA_BRIDGE *Bridge,
+    const AGX_KMT_THUNKS *Thunks, D3DKMT_HANDLE Adapter, D3DKMT_HANDLE Device);
+
+/* NTSTATUS of a thunk -> HRESULT the umd_* code expects from a callback. */
+HRESULT AgxKmtGpuvaResult(NTSTATUS Status);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
