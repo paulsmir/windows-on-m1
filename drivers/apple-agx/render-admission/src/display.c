@@ -417,6 +417,25 @@ Exit:
   return status;
 }
 
+/* EXP1131 receipt-only: memory ring, published with the paging profile.
+ * Safe at any IRQL: interlocked slot, no waits or callbacks. */
+static VOID AdmissionDisplayRingRecord(ADMISSION_CONTEXT *Context, ULONG Kind,
+    ULONG Flags, ULONG Detail, ULONGLONG Address, ULONGLONG Allocation,
+    NTSTATUS Status) {
+  ADMISSION_DISPLAY_RING_ENTRY *e;
+  ULONG slot;
+  if (Context == NULL) return;
+  slot = (ULONG)InterlockedIncrement(&Context->DisplayRing.Next) - 1u;
+  e = &Context->DisplayRing.Entries[slot % ADMISSION_DISPLAY_RING_ENTRIES];
+  e->Qpc = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+  e->Address = Address;
+  e->Allocation = Allocation;
+  e->Kind = Kind;
+  e->Flags = Flags;
+  e->Detail = Detail;
+  e->Status = (ULONG)Status;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceVisibility(
     CONST HANDLE MiniportDeviceContext,
     CONST DXGKARG_SETVIDPNSOURCEVISIBILITY *SetVidPnSourceVisibility) {
@@ -427,6 +446,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceVisibility(
       (SetVidPnSourceVisibility->VidPnSourceId != 0 &&
        SetVidPnSourceVisibility->VidPnSourceId != D3DDDI_ID_ALL))
     return STATUS_INVALID_PARAMETER;
+  AdmissionDisplayRingRecord(context, 1u, 0u,
+      SetVidPnSourceVisibility->Visible ? 1u : 0u, 0ULL, 0ULL, STATUS_SUCCESS);
   if (!NT_SUCCESS(AdmissionScanoutSetVisible(
           context, SetVidPnSourceVisibility->Visible ? TRUE : FALSE)))
     return STATUS_DEVICE_HARDWARE_ERROR;
@@ -452,6 +473,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCommitVidPn(
   SIZE_T numberOfPaths = 0;
   NTSTATUS status = STATUS_INVALID_PARAMETER;
 
+  if (context != NULL && CommitVidPn != NULL)
+    AdmissionDisplayRingRecord(context, 2u, CommitVidPn->Flags.Value,
+        CommitVidPn->Flags.PathPoweredOff || CommitVidPn->hFunctionalVidPn == 0
+            ? 1u : 0u, 0ULL, 0ULL, STATUS_SUCCESS);
   if (context == NULL || !context->Started || CommitVidPn == NULL ||
       CommitVidPn->AffectedVidPnSourceId != 0)
     goto Exit;
@@ -665,6 +690,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceAddress(
 
   if (context == NULL)
     return status;
+  if (SetVidPnSourceAddress != NULL)
+    AdmissionDisplayRingRecord(context, 3u, SetVidPnSourceAddress->Flags.Value,
+        SetVidPnSourceAddress->PrimarySegment,
+        (ULONGLONG)SetVidPnSourceAddress->PrimaryAddress.QuadPart,
+        (ULONGLONG)(ULONG_PTR)SetVidPnSourceAddress->hAllocation, STATUS_SUCCESS);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   RtlZeroMemory(&traceEvent, sizeof(traceEvent));
   traceEvent.Kind = AdmissionStandardPresentEventSourceAddress;
@@ -798,6 +828,12 @@ AdmissionDdiSetVidPnSourceAddressWithMultiPlaneOverlay3(
       Args->PlaneCount > 1u ||
       (Args->PlaneCount != 0u && Args->ppPlanes == NULL))
     return STATUS_INVALID_PARAMETER;
+  AdmissionDisplayRingRecord(context, 4u,
+      Args->PlaneCount != 0u && Args->ppPlanes[0] != NULL ?
+          Args->ppPlanes[0]->InputFlags.Value : 0u,
+      Args->PlaneCount | (Args->PlaneCount != 0u && Args->ppPlanes[0] != NULL &&
+          Args->ppPlanes[0]->InputFlags.Enabled ? 0x100u : 0u),
+      0ULL, 0ULL, STATUS_SUCCESS);
   Args->OutputFlags.Value = 0u;
   if (Args->PlaneCount == 0u)
     return AdmissionScanoutMpoPlaneOff(context, 0ULL);

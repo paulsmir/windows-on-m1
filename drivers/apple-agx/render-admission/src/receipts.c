@@ -2711,5 +2711,9 @@ _Use_decl_annotations_ void AdmissionRecordPagingProfile(
   Context->AllocationLife.Bytes = sizeof(Context->AllocationLife);
   WriteBinary(key, L"Wom1AllocLife1123", &Context->AllocationLife,
               sizeof(Context->AllocationLife));
+  Context->DisplayRing.Version = 1u;
+  Context->DisplayRing.Bytes = sizeof(Context->DisplayRing);
+  WriteBinary(key, L"Wom1DisplayRing1131", &Context->DisplayRing,
+              sizeof(Context->DisplayRing));
   ZwClose(key);
 }

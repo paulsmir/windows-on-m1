@@ -414,6 +414,24 @@ typedef struct _ADMISSION_PAGING_CENSUS {
   ULONG Reserved;
   ADMISSION_PAGING_CENSUS_ENTRY Entries[ADMISSION_PAGING_CENSUS_ENTRIES];
 } ADMISSION_PAGING_CENSUS;
+/* EXP1131 receipt-only: the last 256 display-path DDI calls, to time what
+ * the KMD was asked to show while DWM rebuilt its primaries (Settings
+ * close). Kind 1 visibility (Detail = Visible), 2 CommitVidPn (Flags =
+ * CommitVidPn flags, Detail = 1 when powered off/no functional VidPn),
+ * 3 SetVidPnSourceAddress (Flags, Address, Allocation), 4 MPO3 (Detail =
+ * PlaneCount | Enabled << 8, Flags = plane input flags). Status is the
+ * returned status (0 when recorded at entry). */
+#define ADMISSION_DISPLAY_RING_ENTRIES 256u
+typedef struct _ADMISSION_DISPLAY_RING_ENTRY {
+  ULONGLONG Qpc, Address, Allocation;
+  ULONG Kind, Flags, Detail, Status;
+} ADMISSION_DISPLAY_RING_ENTRY;
+typedef struct _ADMISSION_DISPLAY_RING {
+  ULONG Version, Bytes;
+  volatile LONG Next;
+  ULONG Reserved;
+  ADMISSION_DISPLAY_RING_ENTRY Entries[ADMISSION_DISPLAY_RING_ENTRIES];
+} ADMISSION_DISPLAY_RING;
 /* EXP1123 receipt-only: the last 256 allocation creations (Kind 1) and
  * destructions (Kind 2), to name the creator and lifetime of allocations
  * VidMm fills and transfers (census Allocation is the same handle).
@@ -566,6 +584,7 @@ typedef struct _ADMISSION_CONTEXT {
   ADMISSION_PAGING_PROFILE PagingProfile;
   ADMISSION_PAGING_CENSUS PagingCensus;
   ADMISSION_ALLOCATION_LIFE AllocationLife;
+  ADMISSION_DISPLAY_RING DisplayRing;
   LONGLONG PagingDispatchQpc, PagingNotifyQpc;
   /* EXP997 diagnostic: first poisoned G3 process seen at completion. */
   volatile LONG G3PoisonClaim;
