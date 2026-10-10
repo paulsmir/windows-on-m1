@@ -22,9 +22,22 @@ Proven since 23:55Z:
   ModeChange primaries, normal flips after 0.9-1.3 s. Fix 0dd8bb24 (slot
   forgets a handle the runtime deallocated), RED/GREEN test.
 
+EXP1133 (02:50Z): re-applying UMD two-in-flight (e4398e22) on the
+single-slot KMD is REJECTED again (Notepad drag 53 -> 41, charmap drag
+60 -> 44, two-period frames 13 -> 43 %); reverted (5ecae261). Overlap needs
+a KMD queue where one context's renders and presents queue in fence order.
+
+New evidence (offline, EXP1130 ETW): Notepad's per-frame shared texture is
+created by RichEdit's D2D DC render target (riched20 ->
+D2DDCRenderTarget::BindDC -> DCPresenter::BindDC -> CD3DSurface::Create),
+and each creation waits synchronously for paging (AgxWin32GpuvaBind ->
+wait_paging_at).
+
 Open, causal order:
-1. App DestroyDevice still fails (terminalize_device E_FAIL in
-   ApplicationFrameHost/M365Copilot, EXP1132): invisible, but leaks.
+1. App DestroyDevice terminalizes (EXP1133 device-terminal): stage Closing,
+   the kernel context is destroyed first, then AgxWin32AsahiContextRetire
+   refuses because a batch is still active (unsubmitted); 48-63 BOs stay in
+   UMD bookkeeping per destroyed device. Invisible; memory leak in AFH.
 2. Multi-job: KMD queue depth 2 (submit stops blocking; worker binds the next
    entry) then UMD two submissions in flight (re-apply e4398e22). Site map:
    docs/superpowers/plans/2026-10-09-multi-job-firmware-queue.md "Site map" (per-context Private/Preempt/CancelFence and
