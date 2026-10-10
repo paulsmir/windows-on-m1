@@ -555,6 +555,135 @@ static void wgl_present_receipt(AGX_WGL_PRESENT_RING *ring, LONGLONG start,
   ring->SumPresent = ring->SumInterval = ring->SumSync = 0;
 }
 
+/* EXP1174 diagnostic, only when the UMD trace is enabled: a sampling
+ * profiler of the presenting (game) thread. EXP1173 gameplay: ~25 ms of a
+ * 27 ms frame is CPU work outside the kernel (game, Mesa and this ICD under
+ * x86 emulation) and WPR CPU sampling is unavailable in this guest. Every
+ * 2 ms the sampler suspends the game thread, reads its x86 EIP and resumes
+ * it (no other call while it is suspended); every 5000 samples it reports
+ * the samples per module (measure-sample-module_<file>: index, base, count)
+ * and the 48 hottest 16-byte buckets (measure-sample-top: module index, RVA,
+ * count; symbolised offline from the PDBs). */
+#define AGX_WGL_SAMPLE_SLOTS 8192u
+#define AGX_WGL_SAMPLE_REPORT 5000u
+typedef struct { ULONG_PTR Bucket; UINT Count; } AGX_WGL_SAMPLE;
+static AGX_WGL_SAMPLE AgxWglSamples[AGX_WGL_SAMPLE_SLOTS];
+static UINT AgxWglSampleLost;
+static HANDLE AgxWglSampler;
+
+static void wgl_sample_add(ULONG_PTR eip) {
+  ULONG_PTR bucket = eip & ~(ULONG_PTR)15;
+  UINT slot = (UINT)((bucket >> 4) * 2654435761u) & (AGX_WGL_SAMPLE_SLOTS - 1u);
+  for (UINT probe = 0; probe < 64u; ++probe) {
+    AGX_WGL_SAMPLE *s = &AgxWglSamples[(slot + probe) & (AGX_WGL_SAMPLE_SLOTS - 1u)];
+    if (s->Bucket == bucket) { ++s->Count; return; }
+    if (!s->Count) { s->Bucket = bucket; s->Count = 1; return; }
+  }
+  ++AgxWglSampleLost;
+}
+
+static ULONG_PTR wgl_sample_base(ULONG_PTR address) {
+  MEMORY_BASIC_INFORMATION info;
+  if (!VirtualQuery((LPCVOID)address, &info, sizeof(info))) return 0;
+  return (ULONG_PTR)info.AllocationBase;
+}
+
+static void wgl_sample_report(void) {
+  ULONG_PTR bases[16] = {0};
+  UINT counts[16] = {0}, modules = 0;
+  UINT order[48], ranked = 0;
+  for (UINT i = 0; i < AGX_WGL_SAMPLE_SLOTS; ++i) {
+    if (!AgxWglSamples[i].Count) continue;
+    ULONG_PTR base = wgl_sample_base(AgxWglSamples[i].Bucket);
+    UINT m = 0;
+    while (m < modules && bases[m] != base) ++m;
+    if (m == modules && modules < 15u) bases[modules++] = base;
+    else if (m == modules) m = 15u;   /* everything else */
+    counts[m] += AgxWglSamples[i].Count;
+    /* keep the 48 hottest buckets (insertion into a small sorted list) */
+    UINT at;
+    if (ranked < 48u) at = ranked++;
+    else if (AgxWglSamples[order[47]].Count >= AgxWglSamples[i].Count) continue;
+    else at = 47u;
+    while (at && AgxWglSamples[order[at - 1]].Count < AgxWglSamples[i].Count) {
+      order[at] = order[at - 1];
+      --at;
+    }
+    order[at] = i;
+  }
+  for (UINT m = 0; m < 16u; ++m) {
+    if (!counts[m]) continue;
+    char path[MAX_PATH], stage[96];
+    const char *name = "other";
+    if (m < 15u && bases[m] && GetModuleFileNameA((HMODULE)bases[m], path, MAX_PATH)) {
+      const char *slash = strrchr(path, '\\');
+      name = slash ? slash + 1 : path;
+    } else if (m < 15u) name = "anonymous";
+    if (_snprintf_s(stage, sizeof(stage), _TRUNCATE, "measure-sample-module_%s", name) < 0) continue;
+    UINT values[4] = {m, (UINT)bases[m], counts[m], AgxWglSampleLost};
+    AdmissionUmdDiagnostic(stage, S_OK, values, 4u);
+  }
+  for (UINT r = 0; r < ranked; r += 5u) {
+    UINT values[15], n = 0;
+    for (UINT k = r; k < ranked && k < r + 5u; ++k) {
+      const AGX_WGL_SAMPLE *s = &AgxWglSamples[order[k]];
+      ULONG_PTR base = wgl_sample_base(s->Bucket);
+      UINT m = 0;
+      while (m < modules && bases[m] != base) ++m;
+      if (m == modules) m = 15u;
+      values[n++] = m;
+      values[n++] = (UINT)(s->Bucket - base);
+      values[n++] = s->Count;
+    }
+    AdmissionUmdDiagnostic("measure-sample-top", S_OK, values, n);
+  }
+  ZeroMemory(AgxWglSamples, sizeof(AgxWglSamples));
+  AgxWglSampleLost = 0;
+}
+
+static DWORD WINAPI wgl_sampler_main(LPVOID parameter) {
+  HANDLE game = (HANDLE)parameter;
+  HANDLE timer = CreateWaitableTimerExW(NULL, NULL,
+      CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+  if (!timer) timer = CreateWaitableTimerW(NULL, FALSE, NULL);
+  LARGE_INTEGER due;
+  due.QuadPart = -20000;   /* 2 ms */
+  if (!timer || !SetWaitableTimer(timer, &due, 2, NULL, NULL, FALSE)) return 0;
+  for (UINT samples = 0;;) {
+    WaitForSingleObject(timer, INFINITE);
+    if (SuspendThread(game) == (DWORD)-1) return 0;   /* the game thread exited */
+    CONTEXT context;
+    ZeroMemory(&context, sizeof(context));
+    context.ContextFlags = CONTEXT_CONTROL;
+    BOOL ok = GetThreadContext(game, &context);
+    ResumeThread(game);
+#if defined(_M_IX86)
+    if (ok) wgl_sample_add((ULONG_PTR)context.Eip);
+#else
+    if (ok) wgl_sample_add((ULONG_PTR)context.Pc);
+#endif
+    if (ok && ++samples % AGX_WGL_SAMPLE_REPORT == 0) wgl_sample_report();
+  }
+}
+
+static void wgl_sampler_start(void) {
+  HMODULE self = NULL;
+  HANDLE game = NULL;
+  if (AgxWglSampler || !AdmissionUmdDiagnosticEnabled()) return;
+  if (!DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(),
+                       &game, THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT, FALSE, 0))
+    return;
+  /* Like the present worker, the sampler never exits and pins the ICD. */
+  if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                          (LPCWSTR)(void *)&wgl_sampler_main, &self)) {
+    CloseHandle(game);
+    return;
+  }
+  AgxWglSampler = CreateThread(NULL, 0, wgl_sampler_main, game, 0, NULL);
+  if (!AgxWglSampler) { FreeLibrary(self); CloseHandle(game); return; }
+  SetThreadPriority(AgxWglSampler, THREAD_PRIORITY_TIME_CRITICAL);
+}
+
 static void wgl_present(struct pipe_screen *screen, struct pipe_context *ctx,
                         struct pipe_resource *res, HDC hdc) {
   LARGE_INTEGER start, synced, end;
@@ -571,6 +700,7 @@ static void wgl_present(struct pipe_screen *screen, struct pipe_context *ctx,
   }
   QueryPerformanceCounter(&start);
   AcquireSRWLockExclusive(&AgxWglRingLock);
+  wgl_sampler_start();
   AGX_WGL_PRESENT_RING *ring = wgl_ring_get(screen, hdc, res, bgra);
   if (!ring) {
     ReleaseSRWLockExclusive(&AgxWglRingLock);
