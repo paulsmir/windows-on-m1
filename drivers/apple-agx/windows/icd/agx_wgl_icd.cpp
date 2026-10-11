@@ -12,6 +12,7 @@
 #include "agx_kmt_gpuva_bridge.h"
 #include "agx_wgl_present_copy.h"
 #include "agx_wgl_present_ring.h"
+#include "agx_wgl_draw_hook.h"
 #include "umd_internal.h"
 /* umd_asahi_owner.c / umd_asahi_batch_adapter.c define these with C linkage. */
 extern "C" {
@@ -206,6 +207,9 @@ static struct pipe_screen *wgl_screen_create(HDC hdc) {
     else {
       AgxWglResourceCreate = a->Screen->resource_create;
       a->Screen->resource_create = wgl_resource_create;
+      /* EXP1183: merge GL multi-draws before Asahi splits them per draw. */
+      if (!agx_wgl_draw_hook_install(a->Screen))
+        wgl_note("reject-wgl-draw-hook", E_FAIL);
     }
   }
   a->Failure = result;
@@ -564,6 +568,11 @@ static void wgl_present_receipt(AGX_WGL_PRESENT_RING *ring, LONGLONG start,
                    (UINT)InterlockedExchange(&AgxWglDraws, 0),
                    (UINT)InterlockedExchange(&AgxWglMaxDraws, 0)};
   AdmissionUmdDiagnostic("measure-wgl-draws", S_OK, draws, 3u);
+  /* EXP1183: draw calls/draws reaching the driver hook, merged calls/draws,
+   * POLYGON/QUADS calls converted per draw. */
+  UINT merge[AGX_WGL_MERGE_COUNTERS];
+  agx_wgl_draw_hook_counters(merge);
+  AdmissionUmdDiagnostic("measure-wgl-merge", S_OK, merge, AGX_WGL_MERGE_COUNTERS);
   ring->SumPresent = ring->SumInterval = ring->SumSync = 0;
 }
 
