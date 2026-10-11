@@ -2347,6 +2347,85 @@ _Use_decl_annotations_ void AdmissionRecordG2PresentPath(
   ZwClose(key);
 }
 
+static volatile LONG AdmissionG2PresentDdiCalls, AdmissionG2PresentDdiRefused;
+static volatile LONGLONG AdmissionG2PresentDdiQpc;
+
+/* One endpoint of the receipt: open reason (as AdmissionPresentOpen sees the
+ * handle: 0 ours, 1 none, 2 another object), description type, format,
+ * width, height, pitch, CPU-visible, GPU VA low and high. */
+static void AdmissionG2PresentDdiEndpoint(ADMISSION_DEVICE *Device,
+    const DXGK_PRESENTALLOCATIONINFO *Info, ULONG *Out) {
+  const ADMISSION_OPEN_ALLOCATION *opened =
+      (const ADMISSION_OPEN_ALLOCATION *)Info->hDeviceSpecificAllocation;
+  const ADMISSION_ALLOCATION_DESCRIPTION *description;
+  Out[7] = (ULONG)Info->AllocationVirtualAddress;
+  Out[8] = (ULONG)(Info->AllocationVirtualAddress >> 32);
+  if (opened == NULL) { Out[0] = 1u; return; }
+  if (opened->Magic != ADMISSION_OPEN_ALLOCATION_MAGIC ||
+      opened->Device != Device || opened->Allocation == NULL ||
+      opened->Allocation->Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC) {
+    Out[0] = 2u;
+    return;
+  }
+  description = &opened->Allocation->Description;
+  Out[1] = description->Type;
+  Out[2] = description->Format;
+  Out[3] = description->Width;
+  Out[4] = description->Height;
+  Out[5] = description->Pitch;
+  Out[6] = description->CpuVisible;
+}
+
+_Use_decl_annotations_ void AdmissionRecordG2PresentDdi(
+    ADMISSION_CONTEXT *Context, ADMISSION_DEVICE *Device, HANDLE RenderContext,
+    const DXGKARG_PRESENT *Present, NTSTATUS Status) {
+  ULONG values[ADMISSION_G2_PRESENT_DDI_RECEIPT_WORDS];
+  LARGE_INTEGER frequency;
+  LONGLONG now, last;
+  LONG calls, refused = 0;
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      Device == NULL || Present == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  calls = InterlockedIncrement(&AdmissionG2PresentDdiCalls);
+  if (!NT_SUCCESS(Status))
+    refused = InterlockedIncrement(&AdmissionG2PresentDdiRefused);
+  /* The first call and the first refusal now, then at most every 2 s. */
+  now = KeQueryPerformanceCounter(&frequency).QuadPart;
+  last = AdmissionG2PresentDdiQpc;
+  if (calls != 1 && refused != 1 && last && now - last < 2 * frequency.QuadPart)
+    return;
+  if (InterlockedCompareExchange64(&AdmissionG2PresentDdiQpc, now, last) != last)
+    return;
+  RtlZeroMemory(values, sizeof(values));
+  values[0] = 1u;
+  values[1] = (ULONG)calls;
+  values[2] = (ULONG)InterlockedCompareExchange(&AdmissionG2PresentDdiRefused, 0, 0);
+  values[3] = (ULONG)Status;
+  values[4] = Present->Flags.Value;
+  values[5] = HandleToULong(PsGetCurrentProcessId());
+  if (RenderContext != NULL &&
+      ((ADMISSION_RENDER_CONTEXT *)RenderContext)->Object.Magic ==
+          ADMISSION_OBJECT_CONTEXT_MAGIC)
+    values[6] = ((ADMISSION_RENDER_CONTEXT *)RenderContext)->Object.Flags;
+  if (Present->pAllocationInfo != NULL) {
+    AdmissionG2PresentDdiEndpoint(Device,
+        &Present->pAllocationInfo[DXGK_PRESENT_SOURCE_INDEX], &values[7]);
+    AdmissionG2PresentDdiEndpoint(Device,
+        &Present->pAllocationInfo[DXGK_PRESENT_DESTINATION_INDEX], &values[16]);
+  }
+  RtlCopyMemory(&values[25], &Present->SrcRect, sizeof(RECT));
+  RtlCopyMemory(&values[29], &Present->DstRect, sizeof(RECT));
+  values[33] = Present->SubRectCnt;
+  if (Present->pDstSubRects != NULL && Present->SubRectCnt != 0u)
+    RtlCopyMemory(&values[34], &Present->pDstSubRects[0], sizeof(RECT));
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
+  WriteBinary(key, L"Wom1G2PresentDdi", values, sizeof(values));
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordG4SubmitFailure(
     ADMISSION_CONTEXT *Context) {
   HANDLE key = NULL;

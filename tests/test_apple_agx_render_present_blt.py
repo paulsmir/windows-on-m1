@@ -131,6 +131,11 @@ static NTSTATUS AdmissionPagingSubmitPresent(ADMISSION_CONTEXT *c,const DXGKARG_
  queued_fence=a->SubmissionFenceId;queued_bytes=bytes;memcpy(queued_copy,data,bytes);return 0;}
 static size_t RtlCompareMemory(const void *a,const void *b,size_t n){return memcmp(a,b,n)==0?n:0;}
 static void AdmissionRecordPresent(ADMISSION_DEVICE *d,const DXGKARG_PRESENT *p,unsigned b,NTSTATUS s){(void)d;(void)p;(void)b;(void)s;}
+/* G2 HW3: the DDI receipt sees only virtual, non-system/GDI contexts. */
+static unsigned ddi_receipt_calls;static NTSTATUS ddi_receipt_status;
+static void AdmissionRecordG2PresentDdi(ADMISSION_CONTEXT *a,ADMISSION_DEVICE *d,HANDLE c,
+ const DXGKARG_PRESENT *p,NTSTATUS s){assert(a!=NULL && d!=NULL && c!=NULL && p!=NULL);
+ ++ddi_receipt_calls;ddi_receipt_status=s;}
 static void AdmissionDwmRecordPresent(ADMISSION_CONTEXT *a,HANDLE c,
  const DXGKARG_PRESENT *p,NTSTATUS s){(void)a;(void)c;(void)p;(void)s;}
 static unsigned open_receipt_calls;
@@ -167,6 +172,7 @@ int main(void){
  p.pAllocationList=a;p.pPatchLocationListOut=patches;p.PatchLocationListOutSize=256;
  p.SrcRect=p.DstRect=(RECT){10,20,140,160};p.SubRectCnt=2;p.pDstSubRects=rects;p.Flags.Value=1;
  assert(AdmissionDdiPresent(&context,&p)==STATUS_SUCCESS);
+ assert(ddi_receipt_calls==0); /* a physical context is not a GL/D3D blt */
  assert((unsigned char *)p.pDmaBuffer>dma && (unsigned char *)p.pDmaBuffer<=dma+4096);
  assert(p.pPatchLocationListOut==patches+2);
  assert(patches[0].AllocationIndex==1 && patches[1].AllocationIndex==2);
@@ -236,6 +242,7 @@ int main(void){
  p.DmaBufferPrivateDataSize=8192;p.pPatchLocationListOut=NULL;
  p.PatchLocationListOutSize=0;p.MultipassOffset=0;
  assert(AdmissionDdiPresent(&context,&p)==STATUS_SUCCESS);
+ assert(ddi_receipt_calls==1 && ddi_receipt_status==STATUS_SUCCESS);
  assert(AppleAgxDmaShadowOpen(&shadow,private_data,8192));
  assert(AppleAgxDmaShadowFind(private_data,shadow.BytesUsed,0,200,&view));
  assert(AdmissionPresentBltValidate(view.Bytes,view.DmaBytes,1,&command));
@@ -263,6 +270,11 @@ int main(void){
  p.DmaBufferPrivateDataSize=8192;p.MultipassOffset=0;
  virtual_allocations[1].SegmentId=1;
  assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_PARAMETER);
+ assert(ddi_receipt_calls==2 && ddi_receipt_status==STATUS_INVALID_PARAMETER);
+ context.Object.Flags=ADMISSION_CONTEXT_VIRTUAL_ADDRESSING|ADMISSION_CONTEXT_GDI;
+ assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_PARAMETER);
+ assert(ddi_receipt_calls==2); /* CDD's GDI context is not recorded */
+ context.Object.Flags=ADMISSION_CONTEXT_VIRTUAL_ADDRESSING;
  virtual_allocations[1].SegmentId=0;
  virtual_allocations[2].PhysicalAdapterIndex=1;
  assert(AdmissionDdiPresent(&context,&p)==STATUS_INVALID_PARAMETER);
