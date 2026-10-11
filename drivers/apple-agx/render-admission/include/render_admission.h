@@ -1264,6 +1264,18 @@ void AdmissionRecordG3Reservation(_In_opt_ ADMISSION_CONTEXT *Context,
 #define ADMISSION_G2_PRESENT_PATH_RECEIPT_WORDS (3u + ADMISSION_G2_PRESENT_PATH_REASONS)
 void AdmissionRecordG2PresentPath(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_reads_(ADMISSION_G2_PRESENT_PATH_RECEIPT_WORDS) const ULONG *Values);
+/* G2 HW3 receipt: what DxgkDdiPresent Blt receives on a virtual-addressing,
+ * non-system context (an OpenGL ICD's D3DKMTPresent as dxgkrnl redirects it,
+ * or a D3D process's blt). Wom1G2PresentDdi: version, calls, refusals, last
+ * status, flags, process id, context flags; source then destination (open
+ * reason 0 ours/1 none/2 other, type, format, width, height, pitch,
+ * CPU-visible, GPU VA low, high); SrcRect; DstRect; sub-rect count; first
+ * sub-rect. Written for the first call, the first refusal and at most every
+ * 2 s. */
+#define ADMISSION_G2_PRESENT_DDI_RECEIPT_WORDS 38u
+void AdmissionRecordG2PresentDdi(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_opt_ ADMISSION_DEVICE *Device, _In_opt_ HANDLE RenderContext,
+    _In_opt_ const DXGKARG_PRESENT *Present, _In_ NTSTATUS Status);
 void AdmissionRecordG2PresentArena(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_reads_(ADMISSION_G2_PRESENT_ARENA_RECEIPT_WORDS) const ULONG *Values);
 void AdmissionRecordGpuvaG3UnpublishedGroups(

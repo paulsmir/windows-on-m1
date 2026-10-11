@@ -187,6 +187,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
     status = AdmissionPresentBlt(device, Context, Present);
     if (!NT_SUCCESS(status))
       AdmissionRecordPresent(device, Present, 4u, status);
+    /* G2 HW3 receipt-only: the blts of GL and D3D processes. */
+    if (renderContext->Object.Magic == ADMISSION_OBJECT_CONTEXT_MAGIC &&
+        (renderContext->Object.Flags &
+         (ADMISSION_CONTEXT_VIRTUAL_ADDRESSING | ADMISSION_CONTEXT_SYSTEM |
+          ADMISSION_CONTEXT_GDI)) == ADMISSION_CONTEXT_VIRTUAL_ADDRESSING)
+      AdmissionRecordG2PresentDdi(adapter, device, Context, Present, status);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
     if (NT_SUCCESS(status) && Present->pAllocationList != NULL) {
       source = (ADMISSION_OPEN_ALLOCATION *)
