@@ -1,5 +1,33 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
+## Current as of 2026-10-11 17:10Z (read this first)
+
+Installed: PACKAGE1214 (.local/experiments/EXP1214-g2-compute-notifier):
+KMD 0ff4b470 on build/exp1211-kmd-compute (sys bb40b1ac, UMD 0091b823),
+ICD out45 c5955939, EXP1194 INF, 30.0.1214.0.
+Proven on hardware (EXP1214): G2 HW1 done -- the first KMD-built AGX compute
+job (UMD AGX4 compute envelope -> KMD RunCompute in the compute sidecar,
+VM slot 1, doorbell 6, event 2) runs and completes its fence:
+glCopyBufferSubData COPY_BUFFER PASS 32773 bytes, then rendering continues
+(30 frames glGetError 0); smoke 56.5 fps, timedemo playnoovl 49.0 fps.
+Defects found on the way (all fixed with RED->GREEN): RunCompute unwired in
+provider/composer/KMD (EXP1211, 34cf2e00); compute doorbell 6 refused
+(EXP1212, d548536f); deadline poll refused ComputeSubmitted (EXP1213,
+703e8acc); the job had a private notifier with a zero threshold pointer
+(EXP1213 dump, 2110fd9e: the compute job now uses the Queue notifier --
+template EventControl, object 11 -- and event_count = 2 * render sequence +
+compute jobs since queue initialisation, Asahi queue/mod.rs).
+Still true: a worker-side refusal or a timeout turns into an unrecoverable
+TDR (0x116, reset defect, G5); keep compute checks on the submit side.
+Known follow-up before multi-job compute: the compute work queue gpu_buf
+(sidecar +0xc000, Asahi per work queue, persistent) is wiped with the
+sidecar on every BuildCompute.
+Next causal target: HW2a -- KMD private VA reservation
+(DxgkCbReserveGpuVirtualAddressRange BaseAddress 0x11FE000000, top of the
+USC window) with a receipt and a render regression; then HW2b (present blt
+as a KMD-owned compute job built by AppleAgxPresentBuild), HW3 (ICD present
+through D3DKMTPresent).
+
 ## Current as of 2026-10-11 15:10Z (read this first)
 
 Installed: stable GPU-visible recovery profile (no AppleAgx package) after
