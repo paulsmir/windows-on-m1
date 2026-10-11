@@ -2262,6 +2262,71 @@ static APPLE_AGX_BACKEND_BOOL AdmissionSaveG4Manager(
 }
 #endif
 
+/* G2: a standalone compute job (Asahi queue/compute.rs): one RunCompute in
+ * the shared compute sidecar, run in the VM slot JOB_BEGIN leased to the
+ * process, with the CDM stream and the context-store buffer from its
+ * validated envelope. Nothing of the TA/3D template is staged. */
+static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildComputeJob(
+    ADMISSION_PLATFORM_RUNTIME *runtime,
+    const APPLE_AGX_BACKEND_SUBMISSION *Submission,
+    const APPLE_AGX_G13_QUEUE_JOB_PLAN *Plan,
+    APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
+  const ADMISSION_BACKEND_IMAGE *image = &runtime->Adapter->BackendImage;
+  const APPLE_AGX_G4_COMPUTE_ENVELOPE *envelope = &image->G4ComputeEnvelope;
+  const ULONG fence = Submission->Submission.Fence;
+  APPLE_AGX_G13_COMPUTE_IDENTITY_BUILD_SNAPSHOT *build =
+      &runtime->Provider.QueueProvider.ComputeIdentityDiagnostic.Build;
+  APPLE_AGX_RENDER_COMPUTE_INPUT input;
+  APPLE_AGX_RENDER_COMPUTE_OUTPUT output;
+  ULONGLONG streamBytes;
+  if (Job == NULL || !image->G4Compute || image->BoundFence != fence ||
+      image->JobReady || !runtime->Provider.QueueProvider.Config.HasCompute ||
+      envelope->Compute.CdmCtrlStreamEnd <= envelope->Compute.CdmCtrlStreamBase)
+    return APPLE_AGX_BACKEND_FALSE;
+  streamBytes = envelope->Compute.CdmCtrlStreamEnd -
+      envelope->Compute.CdmCtrlStreamBase;
+  if (streamBytes > APPLE_AGX_G4_CDM_STREAM_MAX_BYTES)
+    return APPLE_AGX_BACKEND_FALSE;
+  RtlZeroMemory(&input, sizeof(input));
+  RtlZeroMemory(&output, sizeof(output));
+  input.CdmStreamBase = envelope->Compute.CdmCtrlStreamBase;
+  input.CdmStreamBytes = (APPLE_AGX_U32)streamBytes;
+  input.Counter = fence;
+  input.UscExecutionBase = APPLE_AGX_G4_USC_EXECUTION_BASE;
+  input.VmSlot = ADMISSION_GPUVA_G3_JOB_VM_SLOT;
+  input.EventNumber =
+      runtime->Provider.QueueProvider.Config.Compute.EventNumber;
+  input.StampValue = fence;
+  input.EventSequence = fence;
+  input.ClientSequence = fence & 0xffu;
+  input.PreemptionGpuAddress = envelope->Header.Preemption.Va;
+  if (!AppleAgxRenderSharedMemoryBuildCompute(
+          &runtime->Initdata.RenderSharedMemory, &input, &output))
+    return APPLE_AGX_BACKEND_FALSE;
+  RtlZeroMemory(Job, sizeof(*Job));
+  Job->Kind = AppleAgxBackendJobCompute;
+  Job->ComputeWorkAddresses[0] = output.WorkGpuAddress;
+  Job->ComputeWorkAddressCount = 1u;
+  Job->ComputeEvent = input.EventNumber;
+  Job->ComputeExpectedStamp = input.StampValue;
+  Job->ComputeExpectedDonePointer = Plan->ComputeExpectedDonePointer;
+  /* The receipt a refused compute submission records. */
+  RtlZeroMemory(build, sizeof(*build));
+  build->Valid = APPLE_AGX_BACKEND_TRUE;
+  build->ContextIdentity = (APPLE_AGX_BACKEND_U64)(ULONG_PTR)runtime;
+  build->JobIdentity = (APPLE_AGX_BACKEND_U64)(ULONG_PTR)Job;
+  build->ExpectedProviderIdentity =
+      (APPLE_AGX_BACKEND_U64)(ULONG_PTR)&runtime->Provider.QueueProvider;
+  build->Fence = fence;
+  build->WorkAddressCount = Job->ComputeWorkAddressCount;
+  build->JobEvent = Job->ComputeEvent;
+  build->JobExpectedStamp = Job->ComputeExpectedStamp;
+  build->JobExpectedDonePointer = Job->ComputeExpectedDonePointer;
+  build->WorkAddress = Job->ComputeWorkAddresses[0];
+  build->ConfigEvent = input.EventNumber;
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
 static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     void *Context, const unsigned char *SubmissionBytes,
     APPLE_AGX_BACKEND_U32 SubmissionByteCount,
@@ -2281,6 +2346,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
   if (runtime == NULL || Submission == NULL || Plan == NULL ||
       Submission->Submission.Fence == 0u)
     return APPLE_AGX_BACKEND_FALSE;
+  if (runtime->Adapter->BackendImage.G4Compute)
+    return AdmissionExternalBuildComputeJob(runtime, Submission, Plan, Job);
   RtlZeroMemory(&staged, sizeof(staged));
   RtlZeroMemory(&bindings, sizeof(bindings));
   RtlZeroMemory(&dynamicView, sizeof(dynamicView));
@@ -2591,6 +2658,19 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendResolve(
   ADMISSION_BACKEND_IMAGE *image = runtime == NULL ||
       runtime->Adapter == NULL ? NULL :
       &runtime->Adapter->BackendImage;
+  if (image != NULL && image->G4Compute) {
+    /* G2: the bound envelope's native command is the DMA buffer. */
+    if (Submission == NULL || Bytes == NULL || ByteCount == NULL ||
+        image->BoundFence != Submission->Submission.Fence ||
+        Submission->PrivateData != &image->G4ComputeEnvelope ||
+        Submission->DmaSubmissionStart != 0u ||
+        Submission->DmaSubmissionEnd !=
+            image->G4ComputeEnvelope.Header.Base.CommandBytes)
+      return APPLE_AGX_BACKEND_FALSE;
+    *Bytes = (const unsigned char *)&image->G4ComputeEnvelope.Native;
+    *ByteCount = image->G4ComputeEnvelope.Header.Base.CommandBytes;
+    return APPLE_AGX_BACKEND_TRUE;
+  }
   if (image != NULL && image->G4Native) {
     if (Submission == NULL || Bytes == NULL || ByteCount == NULL ||
         image->G4CommandBytes == 0u ||
@@ -2808,9 +2888,14 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
     if (g3_context == NULL && adapter != NULL)
       g3_context = (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
           adapter->RenderPacket.Description.ContextToken;
+    /* G2: a compute job ends on its compute stamp, a render job on 3D. The
+     * job kind outlives the image binding: a retried completion arrives
+     * after the release below. */
     if (adapter != NULL && g3_context != NULL &&
         g3_context->GpuvaG3Process != NULL &&
-        (!runtime->Backend.TaComplete || !runtime->Backend.D3Complete ||
+        ((runtime->Backend.PendingJob.Kind == AppleAgxBackendJobCompute ?
+              !runtime->Backend.ComputeComplete :
+              (!runtime->Backend.TaComplete || !runtime->Backend.D3Complete)) ||
          !AdmissionSaveG4Manager(runtime, Fence) ||
          !AdmissionGpuvaG3CompleteJob(adapter, Fence)))
       return APPLE_AGX_BACKEND_FALSE;

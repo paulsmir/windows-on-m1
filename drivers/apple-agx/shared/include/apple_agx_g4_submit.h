@@ -26,6 +26,9 @@
 #define APPLE_AGX_G4_PRIVATE_VERSION 1u
 #define APPLE_AGX_G4_PRIVATE_VERSION_PROCESS_VA 2u
 #define APPLE_AGX_G4_PRIVATE_VERSION_PRIVATE_VA 3u
+/* G2: a compute command (Asahi drm_asahi_cmd_compute) with its
+ * process-mapped compute preemption buffer. */
+#define APPLE_AGX_G4_PRIVATE_VERSION_COMPUTE 4u
 #define APPLE_AGX_G4_PROCESS_RANGE_COUNT 9u
 #define APPLE_AGX_G4_NATIVE_MAX_BYTES 4096u
 #define APPLE_AGX_G4_RENDER 0u
@@ -131,6 +134,37 @@ typedef struct {
 typedef struct {
   unsigned int StartHandle, StartOffset, EndHandle, EndOffset;
 } APPLE_AGX_G4_TIMESTAMPS;
+
+/* G2: the MIT Asahi UAPI compute payload (drm_asahi_cmd_compute). The KMD
+ * builds the firmware RunCompute work item around it; the CDM control
+ * stream, USC programs and sampler heap stay in the process GPU VA space,
+ * and USC addresses are relative to APPLE_AGX_G4_USC_EXECUTION_BASE. */
+typedef struct {
+  unsigned int Flags, SamplerCount;
+  unsigned long long CdmCtrlStreamBase, CdmCtrlStreamEnd, SamplerHeap;
+  APPLE_AGX_G4_HELPER Helper;
+  APPLE_AGX_G4_TIMESTAMPS Timestamps;
+} APPLE_AGX_G4_NATIVE_COMPUTE;
+
+/* The compute preemption buffer (Asahi queue/compute.rs "CPMT", allocated
+ * in the user VM): the firmware's compute_preempt1_size plus four 8-byte
+ * pointers. The size is per GPU generation; the KMD passes its requirement
+ * to AppleAgxG4ParseComputeEx. */
+typedef struct {
+  APPLE_AGX_G4_PRIVATE_HEADER Base;
+  APPLE_AGX_G4_PROCESS_RANGE Preemption;
+} APPLE_AGX_G4_PRIVATE_HEADER_COMPUTE;
+/* The whole compute envelope as the UMD writes it into the DMA private data
+ * (header, then the native command it copies from its DMA buffer) and as the
+ * KMD keeps it for the job it builds. */
+typedef struct {
+  APPLE_AGX_G4_PRIVATE_HEADER_COMPUTE Header;
+  APPLE_AGX_G4_NATIVE_HEADER Native;
+  APPLE_AGX_G4_NATIVE_COMPUTE Compute;
+} APPLE_AGX_G4_COMPUTE_ENVELOPE;
+#define APPLE_AGX_G4_SAMPLER_BYTES 16u
+#define APPLE_AGX_G4_MAX_SAMPLERS 1024u
+#define APPLE_AGX_G4_CDM_STREAM_MAX_BYTES 0x10000000u
 
 /* The current MIT Asahi UAPI render payload. Offset and size assertions in
  * the production parser and native Mesa build gate future layout changes. */
@@ -246,6 +280,43 @@ static inline int AppleAgxG4ComposeHeaderV2(
   return 1;
 }
 
+/* G2: the compute envelope header; Base.Reserved stays 0. */
+static inline int AppleAgxG4ComposeHeaderCompute(
+    APPLE_AGX_G4_PRIVATE_HEADER_COMPUTE *header,
+    unsigned long long command_va, unsigned int command_bytes,
+    const APPLE_AGX_G4_PROCESS_RANGE *preemption) {
+  if (!header || !preemption || command_va < 0x10000ULL ||
+      command_va >= (1ULL << 39) || !command_bytes ||
+      command_bytes > APPLE_AGX_G4_NATIVE_MAX_BYTES ||
+      command_bytes > (1ULL << 39) - command_va || preemption->Reserved ||
+      preemption->Va < 0x10000ULL || preemption->Va >= (1ULL << 39) ||
+      (preemption->Va & 0xffffULL) || !preemption->Bytes ||
+      (preemption->Bytes & 0xffffu) ||
+      preemption->Bytes > (1ULL << 39) - preemption->Va ||
+      (preemption->Va < command_va + command_bytes &&
+       command_va < preemption->Va + preemption->Bytes)) return 0;
+  header->Base.Magic = APPLE_AGX_G4_PRIVATE_MAGIC;
+  header->Base.Version = APPLE_AGX_G4_PRIVATE_VERSION_COMPUTE;
+  header->Base.HeaderBytes = (unsigned short)sizeof(*header);
+  header->Base.CommandBytes = command_bytes;
+  header->Base.Reserved = 0u;
+  header->Base.CommandVa = command_va;
+  header->Preemption = *preemption;
+  return 1;
+}
+
+/* G2: TRUE when the private data is a compute envelope (checks only the
+ * magic and version; AppleAgxG4ParseComputeEx validates it). */
+static inline int AppleAgxG4IsCompute(const void *data, unsigned int bytes) {
+  APPLE_AGX_G4_PRIVATE_HEADER header;
+  const unsigned char *p = (const unsigned char *)data;
+  unsigned int i;
+  if (!data || bytes < sizeof(header)) return 0;
+  for (i = 0u; i < sizeof(header); ++i) ((unsigned char *)&header)[i] = p[i];
+  return header.Magic == APPLE_AGX_G4_PRIVATE_MAGIC &&
+         header.Version == APPLE_AGX_G4_PRIVATE_VERSION_COMPUTE;
+}
+
 static inline int AppleAgxG4ComposeHeaderV3(APPLE_AGX_G4_PRIVATE_HEADER_V3 *header,
     const APPLE_AGX_G4_NATIVE_RENDER *render, unsigned long long command_va,
     unsigned command_bytes, unsigned color_format,
@@ -275,7 +346,12 @@ typedef enum {
   AppleAgxG4AccessProcess = 1,
   AppleAgxG4AccessCpuEnvelope = 2,
   AppleAgxG4AccessAttachment = 3,
-  AppleAgxG4AccessRender = 4
+  AppleAgxG4AccessRender = 4,
+  /* G2: compute envelope: CDM control stream, sampler heap, helper data,
+   * USC helper program, compute preemption buffer. */
+  AppleAgxG4AccessComputeStream = 5,
+  AppleAgxG4AccessSamplerHeap = 6,
+  AppleAgxG4AccessComputePreemption = 7
 } APPLE_AGX_G4_ACCESS_KIND;
 typedef enum {
   AppleAgxG4FailureNone = 0,
@@ -309,6 +385,27 @@ typedef struct {
    * Process[2] (0: all of Process[2]). */
   unsigned int HeapBlocks;
 } APPLE_AGX_G4_SUBMIT_VIEW;
+
+/* G2: a validated compute envelope. */
+typedef struct {
+  const unsigned char *Native;
+  APPLE_AGX_G4_NATIVE_COMPUTE Compute;
+  APPLE_AGX_G4_PROCESS_RANGE Preemption;
+  unsigned int CommandBytes;
+  unsigned long long CommandVa;
+} APPLE_AGX_G4_COMPUTE_VIEW;
+
+/* G2: validate a compute envelope: header, the native compute command
+ * (flags 0, no helper program, no timestamps: unsupported until the KMD
+ * owns them), a mapped CDM control stream [base, end), a mapped sampler
+ * heap when samplers are used, and a mapped writable preemption buffer of
+ * at least PreemptBytes that overlaps neither the command nor the stream. */
+APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseComputeEx(
+    const void *PrivateData, unsigned int PrivateCapacity,
+    unsigned int UmdPrivateBytes, unsigned long long DmaVa,
+    unsigned int DmaBytes, unsigned int PreemptBytes,
+    APPLE_AGX_G4_ACCESS_EX Access, void *AccessContext,
+    APPLE_AGX_G4_COMPUTE_VIEW *View, APPLE_AGX_G4_FAILURE *Failure);
 
 APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmit(
     const void *PrivateData, unsigned int PrivateCapacity,

@@ -457,8 +457,56 @@ static void test_terminal_triangle_receipt_requires_two_colour_geometry(void) {
   assert(receipt.OutputGuardCorrupt == 1u);
 }
 
+/* G2: a compute packet has no destination; it is admitted only with every
+ * destination field zero, and a render packet still needs its destination. */
+static void test_compute_packet_has_no_destination(void) {
+  ADMISSION_RENDER_PACKET packet;
+  ADMISSION_RENDER_PACKET_DESCRIPTION compute = {0}, render;
+  compute.Fence = 21u;
+  compute.ContextToken = 0x1000ULL;
+  compute.AllocationToken = 0x1000ULL;
+  compute.PrivateDataToken = 0x3000ULL;
+  compute.PrivateDataBytes = 112u;
+  compute.PrivateDataEnd = 112u;
+  compute.DmaEnd = 72u;
+  compute.Kind = ADMISSION_RENDER_PACKET_KIND_COMPUTE;
+  AdmissionRenderPacketInitialize(&packet);
+  assert(AdmissionRenderPacketPrepare(&packet, &compute));
+  assert(AdmissionRenderPacketMatches(&packet, &compute,
+                                      AdmissionRenderPacketPrepared));
+  assert(AdmissionRenderPacketQueue(&packet, 21u, 0x1000ULL, 0x3000ULL,
+                                    0u, 72u));
+  assert(AdmissionRenderPacketActivate(&packet, 21u));
+  assert(AdmissionRenderPacketComplete(&packet, 21u));
+  /* Any destination field makes the compute description invalid. */
+  render = packet_description(22u);
+  compute.DestinationGpuVa = render.DestinationGpuVa;
+  assert(!AdmissionRenderPacketPrepare(&packet, &compute));
+  compute.DestinationGpuVa = 0ULL;
+  compute.AllocationCount = 1u;
+  assert(!AdmissionRenderPacketPrepare(&packet, &compute));
+  compute.AllocationCount = 0u;
+  compute.VisibleDestinationBytes = 4u;
+  assert(!AdmissionRenderPacketPrepare(&packet, &compute));
+  compute.VisibleDestinationBytes = 0u;
+  /* The kind is part of the exact packet identity. */
+  assert(AdmissionRenderPacketPrepare(&packet, &compute));
+  compute.Kind = ADMISSION_RENDER_PACKET_KIND_RENDER;
+  assert(!AdmissionRenderPacketMatches(&packet, &compute,
+                                       AdmissionRenderPacketPrepared));
+  assert(AdmissionRenderPacketCancelPrepared(&packet, 0x1000ULL));
+  /* A render description without its destination, or an unknown kind,
+   * is refused. */
+  assert(!AdmissionRenderPacketPrepare(&packet, &compute));
+  render.Kind = 2u;
+  assert(!AdmissionRenderPacketPrepare(&packet, &render));
+  render.Kind = ADMISSION_RENDER_PACKET_KIND_RENDER;
+  assert(AdmissionRenderPacketPrepare(&packet, &render));
+}
+
 int main(void) {
   test_exact_packet_moves_prepared_queued_active_completed();
+  test_compute_packet_has_no_destination();
   test_prepatched_capture_adopt_and_worker_copy_are_exact();
   test_direct_framebuffer_needs_no_companion_identity();
   test_prepatched_rejects_incomplete_or_cross_context_state();

@@ -32,7 +32,14 @@ typedef struct _ADMISSION_RENDER_PACKET_DESCRIPTION {
   unsigned long long VisibleDestinationPhysical;
   unsigned long long VisibleDestinationAllocationToken;
   unsigned int VisibleDestinationBytes;
+  /* G2: a render job writes one destination allocation; a compute job
+   * (RunCompute) has none: its writes are process-VM stores the GPU MMU
+   * confines, so every destination field stays zero. */
+  unsigned int Kind;
 } ADMISSION_RENDER_PACKET_DESCRIPTION;
+
+#define ADMISSION_RENDER_PACKET_KIND_RENDER 0u
+#define ADMISSION_RENDER_PACKET_KIND_COMPUTE 1u
 
 typedef struct _ADMISSION_RENDER_PACKET {
   unsigned int Magic;

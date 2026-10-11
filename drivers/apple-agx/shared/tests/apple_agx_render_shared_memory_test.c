@@ -231,6 +231,23 @@ int main(void) {
         output.SidecarBytes==0x10000u);
     assert(((const unsigned char *)output.SidecarCpuAddress)[
         APPLE_AGX_COMPUTE_WORK_OFFSET]==APPLE_AGX_G13_COMPUTE_TAG);
+    {
+      /* Without a process buffer the prelude keeps the sidecar area. */
+      const unsigned char *work=(const unsigned char *)output.SidecarCpuAddress+
+          APPLE_AGX_COMPUTE_WORK_OFFSET;
+      APPLE_AGX_U64 preempt=0u;
+      memcpy(&preempt,work+0x70u,sizeof(preempt));
+      assert(preempt==owner.VirtualAddresses[
+          APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR]+
+          APPLE_AGX_COMPUTE_PREEMPT_OFFSET);
+      /* G2: a standalone job stores its CDM context in its own VM. */
+      input.PreemptionGpuAddress=0x1500600000ULL;
+      assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+      memcpy(&preempt,work+0x70u,sizeof(preempt));
+      assert(preempt==0x1500600000ULL);
+      input.PreemptionGpuAddress=0x1500600020ULL;
+      assert(!AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+    }
   }
   layouts = AppleAgxRenderTemplateObjectLayouts();
   for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_TEMPLATE_OBJECT_COUNT;

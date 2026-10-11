@@ -589,6 +589,29 @@ static void test_persistent_owner_and_bounded_event_drain(void) {
         APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR].CpuAddress &&
       built_submission.Compute.PreparedRanges[0].Bytes==0x10000u &&
       built_submission.Compute.ExpectedStamp==0x600u);
+  {
+    /* G2: a standalone compute job flushes the sidecar that holds its
+     * RunCompute; a work item elsewhere needs an external render owner. */
+    APPLE_AGX_BACKEND_JOB_IMAGE compute_job=job;
+    compute_job.Kind=AppleAgxBackendJobCompute;
+    compute_job.TaWorkAddressCount=compute_job.D3WorkAddressCount=0u;
+    memset(&built_submission,0,sizeof(built_submission));
+    assert(components.CapturedProviderIo.BuildSubmission(
+        components.CapturedProviderIo.Context,&compute_job,78u,&built_submission));
+    assert(built_submission.Fence==78u &&
+        built_submission.Ta.GpuAddressCount==0u &&
+        built_submission.D3.GpuAddressCount==0u &&
+        built_submission.Compute.GpuAddressCount==1u &&
+        built_submission.Compute.GpuAddresses[0]==compute_job.ComputeWorkAddresses[0] &&
+        built_submission.Compute.PreparedRanges[0].Address==render_shared.Objects[
+          APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR].CpuAddress &&
+        built_submission.Compute.PreparedRanges[0].Bytes==0x10000u &&
+        built_submission.Compute.ExpectedStamp==0x600u);
+    compute_job.ComputeWorkAddresses[0]=render_shared.VirtualAddresses[
+        APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR]+0x10000u;
+    assert(!components.CapturedProviderIo.BuildSubmission(
+        components.CapturedProviderIo.Context,&compute_job,78u,&built_submission));
+  }
 
   event_read = (volatile APPLE_AGX_BACKEND_U32 *)(storage[26] + 0x00u);
   event_write = (volatile APPLE_AGX_BACKEND_U32 *)(storage[26] + 0x20u);

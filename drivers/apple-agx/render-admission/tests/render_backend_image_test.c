@@ -1035,6 +1035,64 @@ static void test_g4_release_restores_prepare_image_from_snapshot(void) {
   free(target);free(scratch);free(fresh);free(arena);
 }
 
+/* G2: a compute job binds only its envelope. The template arena, the
+ * Prepare image and the render stamp epoch stay exactly as they were, and
+ * the image refuses any other binding or a TA/3D stage meanwhile. */
+static void test_g4_compute_binds_without_touching_arena(void) {
+  unsigned char *arena=malloc(TEST_BACKEND_BYTES);
+  unsigned char *before=malloc(TEST_BACKEND_BYTES);
+  unsigned char *target=malloc(0x4000u);
+  ADMISSION_BACKEND_IMAGE image;
+  ADMISSION_LOCAL_MEMORY_VIEW backend={0};
+  ADMISSION_RENDER_PACKET_DESCRIPTION packet={0};
+  APPLE_AGX_G4_COMPUTE_ENVELOPE envelope={0};
+  APPLE_AGX_GDI_DMA_COMMAND command;
+  APPLE_AGX_EXP208_GDI_BINDING binding;
+  APPLE_AGX_BACKEND_JOB_IMAGE job;
+  APPLE_AGX_G4_PROCESS_RANGE preemption={0x30000000ULL,0x10000u,0u};
+  APPLE_AGX_BOOL pristine;
+  APPLE_AGX_U32 sequence;
+  assert(arena && before && target);
+  backend.CpuAddress=arena;backend.HostPhysicalAddress=TEST_BACKEND_PHYSICAL;
+  backend.GpuVirtualAddress=TEST_BACKEND_GPU;backend.Bytes=TEST_BACKEND_BYTES;
+  assert(AdmissionBackendImagePrepare(&image,&backend));
+  assert(AppleAgxG4ComposeHeaderCompute(&envelope.Header,0x20000ULL,
+      sizeof(envelope.Native)+sizeof(envelope.Compute),&preemption));
+  envelope.Native.Type=APPLE_AGX_G4_COMPUTE;
+  envelope.Native.Size=sizeof(envelope.Compute);
+  envelope.Compute.CdmCtrlStreamBase=0x31000000ULL;
+  envelope.Compute.CdmCtrlStreamEnd=0x31000040ULL;
+  memcpy(before,arena,TEST_BACKEND_BYTES);
+  pristine=image.Pristine;sequence=image.Sequence;
+  assert(!AdmissionBackendImageBindG4Compute(&image,0u,&envelope));
+  envelope.Header.Base.Version=APPLE_AGX_G4_PRIVATE_VERSION_PRIVATE_VA;
+  assert(!AdmissionBackendImageBindG4Compute(&image,90u,&envelope));
+  envelope.Header.Base.Version=APPLE_AGX_G4_PRIVATE_VERSION_COMPUTE;
+  assert(AdmissionBackendImageBindG4Compute(&image,90u,&envelope));
+  assert(image.G4Compute && image.BoundFence==90u && !image.G4Native &&
+      memcmp(&image.G4ComputeEnvelope,&envelope,sizeof(envelope))==0);
+  /* One job at a time, and no TA/3D stage of a compute binding. */
+  assert(!AdmissionBackendImageBindG4Compute(&image,91u,&envelope));
+  packet.Fence=91u;packet.DestinationGpuVa=0x1500040000ULL;
+  packet.DestinationPhysical=0x9d0040000ULL;
+  command=exact_color_fill(packet.DestinationGpuVa);
+  packet.DestinationCpuToken=(unsigned long long)(uintptr_t)target;
+  packet.DestinationBytes=0x4000u;
+  assert(!AdmissionBackendImageBindSubmission(&image,&packet,target,
+      (const unsigned char *)&command,sizeof(command),&binding));
+  assert(!AdmissionBackendImageStageJob(&image,90u,1u,2u,5u,6u,
+      APPLE_AGX_TRUE,&job));
+  assert(!AdmissionBackendImageReleaseSubmission(&image,91u));
+  assert(AdmissionBackendImageReleaseSubmission(&image,90u));
+  assert(!image.G4Compute && image.BoundFence==0u && !image.JobReady &&
+      image.Pristine==pristine && image.Sequence==sequence &&
+      memcmp(before,arena,TEST_BACKEND_BYTES)==0);
+  /* The released image takes the next job of either kind. */
+  assert(AdmissionBackendImageBindG4Compute(&image,92u,&envelope));
+  assert(AdmissionBackendImageReleaseSubmission(&image,92u));
+  free(target);free(before);free(arena);
+}
+
 int main(void) {
   test_materializes_and_relocates_exact_rebased_image();
   test_rejects_invalid_tail_atomically();
@@ -1048,5 +1106,6 @@ int main(void) {
   test_g4_bind_of_pristine_image_skips_rematerialization();
   test_vm_slot_selection_after_prepare_forces_rematerialization();
   test_g4_release_restores_prepare_image_from_snapshot();
+  test_g4_compute_binds_without_touching_arena();
   return 0;
 }

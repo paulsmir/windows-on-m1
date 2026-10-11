@@ -48,7 +48,17 @@ typedef enum _APPLE_AGX_BACKEND_RUNTIME_RESULT {
 typedef enum _APPLE_AGX_BACKEND_QUEUE {
   AppleAgxBackendQueueTa = 0,
   AppleAgxBackendQueue3d,
+  /* G2: the compute queue of a standalone compute job. */
+  AppleAgxBackendQueueCompute,
 } APPLE_AGX_BACKEND_QUEUE;
+
+/* G2: what the firmware runs for one Windows fence. A render job is TA then
+ * 3D (Run3d stages, RunTa submits); a compute job is one RunCompute work
+ * item on the compute queue (Asahi drm_asahi_cmd_compute). */
+typedef enum _APPLE_AGX_BACKEND_JOB_KIND {
+  AppleAgxBackendJobRender = 0,
+  AppleAgxBackendJobCompute = 1,
+} APPLE_AGX_BACKEND_JOB_KIND;
 
 typedef enum _APPLE_AGX_BACKEND_OBSERVATION_STATUS {
   AppleAgxBackendObservationComplete = 0,
@@ -93,6 +103,7 @@ typedef struct _APPLE_AGX_BACKEND_JOB_IMAGE {
   APPLE_AGX_U32 TaExpectedDonePointer;
   APPLE_AGX_U32 D3ExpectedDonePointer;
   APPLE_AGX_U32 ComputeExpectedDonePointer;
+  APPLE_AGX_BACKEND_JOB_KIND Kind;
 } APPLE_AGX_BACKEND_JOB_IMAGE;
 
 typedef struct _APPLE_AGX_BACKEND_OBSERVATION {
@@ -150,6 +161,11 @@ typedef struct _APPLE_AGX_BACKEND_IO {
     APPLE_AGX_BOOL (*RunTa)(void *Context,
                             const APPLE_AGX_BACKEND_JOB_IMAGE *Job,
                             APPLE_AGX_U32 Fence);
+    /* G2: submit a compute job (Kind Compute). FALSE means the fence was
+     * never accepted (as Run3d); TRUE hands it to the firmware. */
+    APPLE_AGX_BOOL (*RunCompute)(void *Context,
+                                 const APPLE_AGX_BACKEND_JOB_IMAGE *Job,
+                                 APPLE_AGX_U32 Fence);
     APPLE_AGX_BOOL (*Stop)(void *Context, APPLE_AGX_U32 Fence);
     APPLE_AGX_BOOL (*Reset)(void *Context, APPLE_AGX_U32 Fence);
   } Queues;
@@ -190,6 +206,7 @@ typedef struct _APPLE_AGX_BACKEND_RUNTIME {
   APPLE_AGX_BOOL QueuesQuiesced;
   APPLE_AGX_BOOL TaComplete;
   APPLE_AGX_BOOL D3Complete;
+  APPLE_AGX_BOOL ComputeComplete;
   APPLE_AGX_BOOL TerminalPending;
   APPLE_AGX_BOOL TerminalCpuFlushed;
   APPLE_AGX_BACKEND_COMPLETION_STATUS TerminalStatus;

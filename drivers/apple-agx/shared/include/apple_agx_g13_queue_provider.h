@@ -12,6 +12,8 @@ typedef enum _APPLE_AGX_G13_QUEUE_PROVIDER_PHASE {
   AppleAgxG13QueueProviderComputeSubmitted,
   AppleAgxG13QueueProviderSubmitted,
   AppleAgxG13QueueProviderFaulted,
+  /* G2: a standalone compute job is with the firmware. */
+  AppleAgxG13QueueProviderComputeOnlySubmitted,
 } APPLE_AGX_G13_QUEUE_PROVIDER_PHASE;
 
 typedef enum _APPLE_AGX_G13_QUEUE_PROVIDER_INGEST_GUARD {
@@ -21,6 +23,7 @@ typedef enum _APPLE_AGX_G13_QUEUE_PROVIDER_INGEST_GUARD {
   AppleAgxG13QueueProviderIngestGuardD3Observation = 3u,
   AppleAgxG13QueueProviderIngestGuardTaObservation = 4u,
   AppleAgxG13QueueProviderIngestGuardCompletionFence = 5u,
+  AppleAgxG13QueueProviderIngestGuardComputeObservation = 6u,
 } APPLE_AGX_G13_QUEUE_PROVIDER_INGEST_GUARD;
 
 typedef struct _APPLE_AGX_G13_QUEUE_PROVIDER_IO {

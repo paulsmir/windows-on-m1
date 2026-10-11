@@ -40,6 +40,8 @@ typedef struct _FAKE_BACKEND {
   unsigned int LastRelocatedFence;
   unsigned int FailStop;
   unsigned int FailRun3d;
+  /* G2: Relocate produces a compute job; RunCompute calls and refusal. */
+  unsigned int ComputeJob, RunComputeCalls, FailRunCompute;
   APPLE_AGX_BACKEND_RUNTIME *Runtime;
   APPLE_AGX_BACKEND_RUNTIME_PHASE CompletionObservedPhase;
 } FAKE_BACKEND;
@@ -199,6 +201,15 @@ static APPLE_AGX_BOOL Relocate(
   assert(SubmissionByteCount == 16u);
   assert(Submission->Submission.Fence != 0u);
   fake->LastRelocatedFence = Submission->Submission.Fence;
+  if (fake->ComputeJob) {
+    Job->Kind = AppleAgxBackendJobCompute;
+    Job->ComputeWorkAddresses[0] = 0x1503890000ULL;
+    Job->ComputeWorkAddressCount = fake->ComputeJob == 2u ? 2u : 1u;
+    Job->ComputeEvent = 11u;
+    Job->ComputeExpectedStamp = 0xc0000100u;
+    Job->ComputeExpectedDonePointer = 1u;
+    return Record(fake, OP_RELOCATE);
+  }
   Job->TaWorkAddresses[0] = Roots->Ta[0];
   Job->TaWorkAddresses[1] = Roots->Ta[1];
   Job->D3WorkAddresses[0] = Roots->D3[0];
@@ -249,6 +260,16 @@ static APPLE_AGX_BOOL RunTa(void *Context,
          Job->TaWorkAddresses[1] == 0x1503898000ULL &&
          Fence == fake->LastRelocatedFence);
   return Record(fake, OP_RUN_TA);
+}
+
+static APPLE_AGX_BOOL RunCompute(void *Context,
+                                 const APPLE_AGX_BACKEND_JOB_IMAGE *Job,
+                                 APPLE_AGX_U32 Fence) {
+  FAKE_BACKEND *fake = (FAKE_BACKEND *)Context;
+  assert(Job->Kind == AppleAgxBackendJobCompute &&
+         Fence == fake->LastRelocatedFence);
+  ++fake->RunComputeCalls;
+  return fake->FailRunCompute ? APPLE_AGX_FALSE : APPLE_AGX_TRUE;
 }
 
 static APPLE_AGX_BOOL StopQueues(void *Context, APPLE_AGX_U32 Fence) {
@@ -322,6 +343,7 @@ static APPLE_AGX_BACKEND_IO BackendIo(FAKE_BACKEND *Fake) {
   io.Queues.Destroy = DestroyQueues;
   io.Queues.Run3d = Run3d;
   io.Queues.RunTa = RunTa;
+  io.Queues.RunCompute = RunCompute;
   io.Queues.Stop = StopQueues;
   io.Queues.Reset = ResetQueues;
   io.Complete = Complete;
@@ -382,6 +404,65 @@ static void TestJoinedCompletion(void) {
   assert(fake.CompletionObservedPhase == AppleAgxBackendRuntimeReady);
   assert(fake.Operations[fake.OperationCount - 2u] == OP_FLUSH_CPU);
   assert(fake.Operations[fake.OperationCount - 1u] == OP_COMPLETE);
+  assert(AppleAgxBackendRuntimeStop(&runtime) ==
+         AppleAgxBackendRuntimeResultOk);
+}
+
+/* G2: a compute job is one RunCompute; its compute observation completes
+ * the exact fence; TA/3D observations and a malformed job are refused. */
+static void TestComputeJobCompletes(void) {
+  FAKE_BACKEND fake;
+  APPLE_AGX_BACKEND_RUNTIME runtime;
+  APPLE_AGX_BACKEND_IO io;
+  APPLE_AGX_BACKEND_SUBMISSION submission;
+  APPLE_AGX_BACKEND_OBSERVATION observation;
+  memset(&fake, 0, sizeof(fake));
+  fake.ComputeJob = 1u;
+  io = BackendIo(&fake);
+  submission = Submission(&fake);
+  AppleAgxBackendRuntimeInitialize(&runtime, 3ULL);
+  fake.Runtime = &runtime;
+  assert(AppleAgxBackendRuntimeStart(&runtime, &io) ==
+         AppleAgxBackendRuntimeResultOk);
+  assert(AppleAgxBackendRuntimeSubmit(&runtime, &submission) ==
+         AppleAgxBackendRuntimeResultOk);
+  assert(fake.RunComputeCalls == 1u && CountOperation(&fake, OP_RUN_3D) == 0u &&
+         CountOperation(&fake, OP_RUN_TA) == 0u &&
+         runtime.Phase == AppleAgxBackendRuntimeSubmitted);
+  memset(&observation, 0, sizeof(observation));
+  observation.Status = AppleAgxBackendObservationComplete;
+  observation.Queue = AppleAgxBackendQueue3d;
+  observation.Event = 11u;
+  observation.Stamp = 0xc0000100u;
+  observation.DonePointer = 1u;
+  assert(AppleAgxBackendRuntimeObserve(&runtime, &observation) ==
+         AppleAgxBackendRuntimeResultInvalidArgument);
+  observation.Queue = AppleAgxBackendQueueCompute;
+  observation.Stamp = 0xc00000ffu;  /* not reached */
+  assert(AppleAgxBackendRuntimeObserve(&runtime, &observation) ==
+         AppleAgxBackendRuntimeResultInvalidArgument && fake.CompletionCount == 0u);
+  observation.Stamp = 0xc0000100u;
+  assert(AppleAgxBackendRuntimeObserve(&runtime, &observation) ==
+         AppleAgxBackendRuntimeResultOk);
+  assert(runtime.Phase == AppleAgxBackendRuntimeReady &&
+         fake.CompletionCount == 1u && fake.CompletionFence == 77u &&
+         fake.CompletionStatus == AppleAgxBackendCompletionSuccess);
+  /* a refused RunCompute never reached the queue: ready, no completion */
+  fake.FailRunCompute = 1u;
+  submission.Submission.Fence = 78u;
+  assert(AppleAgxBackendRuntimeSubmit(&runtime, &submission) ==
+         AppleAgxBackendRuntimeResultQueueFailed &&
+         runtime.Phase == AppleAgxBackendRuntimeReady && fake.CompletionCount == 1u);
+  /* a compute job with two work items is malformed */
+  fake.FailRunCompute = 0u; fake.ComputeJob = 2u;
+  submission.Submission.Fence = 79u;
+  assert(AppleAgxBackendRuntimeSubmit(&runtime, &submission) ==
+         AppleAgxBackendRuntimeResultImageFailed && fake.RunComputeCalls == 2u);
+  /* without RunCompute (a render-only provider) a compute job is refused */
+  fake.ComputeJob = 1u; runtime.Io.Queues.RunCompute = NULL;
+  submission.Submission.Fence = 80u;
+  assert(AppleAgxBackendRuntimeSubmit(&runtime, &submission) ==
+         AppleAgxBackendRuntimeResultQueueFailed);
   assert(AppleAgxBackendRuntimeStop(&runtime) ==
          AppleAgxBackendRuntimeResultOk);
 }
@@ -761,6 +842,7 @@ static void TestCanonicalFifoCompletesTwoSubmissionsInOrder(void) {
 int main(void) {
   TestCanonicalEntryBridge();
   TestJoinedCompletion();
+  TestComputeJobCompletes();
   TestResetCompletesExactFenceOnce();
   TestRejectedCompletionRetainsExactFenceForRetry();
   TestFailedQuiescePinsAllDmaOwnershipForRetry();

@@ -73,6 +73,15 @@ static APPLE_AGX_BACKEND_BOOL Build(
   Submission->Fence = Fence;
   Submission->Timestamp = 99ULL;
   Submission->NowTicks = 1000ULL;
+  if (Job->Kind == AppleAgxBackendJobCompute) {
+    Submission->Compute.PreparedRanges[0].Address=f->ComputeSrc;
+    Submission->Compute.PreparedRanges[0].Bytes=sizeof(f->ComputeSrc);
+    Submission->Compute.PreparedRangeCount=1u;
+    Submission->Compute.GpuAddresses[0]=Job->ComputeWorkAddresses[0];
+    Submission->Compute.GpuAddressCount=1u;
+    Submission->Compute.ExpectedStamp=Job->ComputeExpectedStamp;
+    return APPLE_AGX_BACKEND_TRUE;
+  }
   Submission->Ta.PreparedRanges[0].Address = f->TaSrc;
   Submission->Ta.PreparedRanges[0].Bytes = sizeof(f->TaSrc);
   Submission->Ta.PreparedRanges[1].Address = f->TaDst;
@@ -91,7 +100,7 @@ static APPLE_AGX_BACKEND_BOOL Build(
   Submission->D3.GpuAddresses[1] = Job->D3WorkAddresses[1];
   Submission->D3.GpuAddressCount = Job->D3WorkAddressCount;
   Submission->D3.ExpectedStamp = Job->D3ExpectedStamp;
-  if(f->Config.HasCompute) {
+  if(f->Config.HasCompute && Job->ComputeWorkAddressCount!=0u) {
     Submission->Compute.PreparedRanges[0].Address=f->ComputeSrc;
     Submission->Compute.PreparedRanges[0].Bytes=sizeof(f->ComputeSrc);
     Submission->Compute.PreparedRangeCount=1u;
@@ -622,6 +631,52 @@ static void TestComputeCompletesBeforeRenderPublication(void) {
   assert(f.TaWrite==2u && f.D3Write==2u && batch.CompletedFence==0u);
   Complete(&f);
 }
+/* G2: a standalone compute job runs alone on the compute queue and its
+ * compute stamp completes the fence; the queues then take a render job. */
+static void TestStandaloneComputeJob(void) {
+  FIXTURE f;
+  APPLE_AGX_BACKEND_JOB_IMAGE c;
+  APPLE_AGX_G13_QUEUE_PROVIDER_EVENT_BATCH batch;
+  unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
+  InitMode(&f,1);
+  memset(&c,0,sizeof(c));
+  c.Kind=AppleAgxBackendJobCompute;
+  c.ComputeWorkAddresses[0]=0x1500300000ULL; c.ComputeWorkAddressCount=1u;
+  c.ComputeEvent=11u; c.ComputeExpectedStamp=0x600u; c.ComputeExpectedDonePointer=1u;
+  assert(f.Io.Queues.RunCompute != NULL);
+  assert(f.Io.Queues.Create(f.Io.Context));
+  /* a render job image or a wrong event never reaches the queue */
+  f.Job.Kind=AppleAgxBackendJobRender;
+  assert(!f.Io.Queues.RunCompute(f.Io.Context,&f.Job,41u));
+  c.ComputeEvent=7u; assert(!f.Io.Queues.RunCompute(f.Io.Context,&c,41u));
+  c.ComputeEvent=11u; c.ComputeExpectedDonePointer=2u;
+  assert(!f.Io.Queues.RunCompute(f.Io.Context,&c,41u));
+  c.ComputeExpectedDonePointer=1u;
+  assert(f.Sends==0u && f.Provider.Phase==AppleAgxG13QueueProviderCreated);
+  assert(f.Io.Queues.RunCompute(f.Io.Context,&c,41u));
+  assert(f.Provider.Phase==AppleAgxG13QueueProviderComputeOnlySubmitted &&
+         f.Sends==1u && f.SendOrder[0]==(unsigned)AppleAgxG13QueueCompute &&
+         f.ComputeWrite==1u && f.TaWrite==0u && f.D3Write==0u);
+  /* busy: neither another compute nor a render job is accepted */
+  assert(!f.Io.Queues.RunCompute(f.Io.Context,&c,42u));
+  assert(!f.Io.Queues.Run3d(f.Io.Context,&f.Job,42u));
+  Event(event,9u);
+  assert(AppleAgxG13QueueProviderIngestEvent(&f.Provider,event,sizeof(event),&batch));
+  assert(batch.CompletedFence==0u && batch.ObservationCount==0u);
+  f.ComputeStamp=0x600u; f.ComputeDone=1u; Event(event,11u);
+  assert(AppleAgxG13QueueProviderIngestEvent(&f.Provider,event,sizeof(event),&batch));
+  assert(batch.CompletedFence==41u && batch.ObservationCount==1u &&
+         batch.Observations[0].Queue==AppleAgxBackendQueueCompute &&
+         batch.Observations[0].Event==11u && batch.Observations[0].Stamp==0x600u &&
+         batch.Observations[0].DonePointer==1u &&
+         batch.Observations[0].Status==AppleAgxBackendObservationComplete);
+  assert(f.Provider.Phase==AppleAgxG13QueueProviderCreated && f.Provider.PendingFence==0u);
+  /* a render job without a compute prelude follows */
+  f.Job.ComputeWorkAddressCount=0u;
+  assert(f.Io.Queues.Run3d(f.Io.Context,&f.Job,41u));
+  assert(f.Io.Queues.RunTa(f.Io.Context,&f.Job,41u));
+  Complete(&f);
+}
 int main(void) {
   TestAtomicStagingAndOrder(); TestComputeRejectCapturesOperandsAcrossRollback();
   TestComputeSuccessDoesNotCreateFailureDiagnostic();
@@ -642,5 +697,6 @@ int main(void) {
   TestProgressReceiptRejectsUnchangedSampleAsNotAdvanced();
   TestProgressReceiptFailsClosedForInvalidStateAndRead();
   TestComputeCompletesBeforeRenderPublication();
+  TestStandaloneComputeJob();
   puts("apple_agx_g13_queue_provider_test: ok"); return 0;
 }
