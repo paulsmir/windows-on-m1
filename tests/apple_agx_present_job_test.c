@@ -138,6 +138,18 @@ static void reset_dst(void) {
     dst_mem[i] = ref_mem[i] = 0xdead0000u ^ i;
 }
 
+/* AppleAgxPresentValidate refuses exactly what Build refuses: a job checked
+ * at submission builds in the worker without a failure path. */
+static int both(const APPLE_AGX_PRESENT_ARENA *a, int fill, unsigned int colour,
+                const APPLE_AGX_PRESENT_SURFACE *s, const APPLE_AGX_PRESENT_RECT *sr,
+                const APPLE_AGX_PRESENT_SURFACE *d, const APPLE_AGX_PRESENT_RECT *dr,
+                const APPLE_AGX_PRESENT_RECT *r, unsigned int n, APPLE_AGX_PRESENT_JOB *j) {
+  int v = AppleAgxPresentValidate(a, fill, s, sr, d, dr, r, n);
+  int b = AppleAgxPresentBuild(a, fill, colour, s, sr, d, dr, r, n, j);
+  assert(v == b);
+  return b;
+}
+
 int main(void) {
   APPLE_AGX_PRESENT_ARENA arena = {arena_mem, ARENA_VA, sizeof(arena_mem), USC_BASE};
   APPLE_AGX_PRESENT_JOB job;
@@ -197,19 +209,19 @@ int main(void) {
     APPLE_AGX_PRESENT_ARENA unaligned = arena;
     unsigned char before[64];
     memcpy(before, arena_mem + APPLE_AGX_PRESENT_JOB_OFFSET, sizeof(before));
-    assert(!AppleAgxPresentBuild(&arena, 0, 0, &src, &sr, &dst, &dr, &out, 1, &job));
-    assert(!AppleAgxPresentBuild(&arena, 0, 0, &src, &sr, &dst, &dr, &empty, 1, &job));
-    assert(!AppleAgxPresentBuild(&arena, 0, 0, &src, &sr, &dst, &small_dr, &outside_dr, 1, &job));
-    assert(!AppleAgxPresentBuild(&arena, 0, 0, &src, &bad_sr, &dst, &dr, &outside_dr, 1, &job));
+    assert(!both(&arena, 0, 0, &src, &sr, &dst, &dr, &out, 1, &job));
+    assert(!both(&arena, 0, 0, &src, &sr, &dst, &dr, &empty, 1, &job));
+    assert(!both(&arena, 0, 0, &src, &sr, &dst, &small_dr, &outside_dr, 1, &job));
+    assert(!both(&arena, 0, 0, &src, &bad_sr, &dst, &dr, &outside_dr, 1, &job));
     for (unsigned int i = 0; i <= APPLE_AGX_PRESENT_MAX_RECTS; ++i) many[i] = outside_dr;
-    assert(!AppleAgxPresentBuild(&arena, 0, 0, &src, &sr, &dst, &dr, many,
+    assert(!both(&arena, 0, 0, &src, &sr, &dst, &dr, many,
                                  APPLE_AGX_PRESENT_MAX_RECTS + 1, &job));
-    assert(AppleAgxPresentBuild(&arena, 0, 0, &src, &sr, &dst, &dr, many,
+    assert(both(&arena, 0, 0, &src, &sr, &dst, &dr, many,
                                 APPLE_AGX_PRESENT_MAX_RECTS, &job));
     unaligned.Va += 0x1000;
-    assert(!AppleAgxPresentBuild(&unaligned, 0, 0, &src, &sr, &dst, &dr, &outside_dr, 1, &job));
+    assert(!both(&unaligned, 0, 0, &src, &sr, &dst, &dr, &outside_dr, 1, &job));
     APPLE_AGX_PRESENT_SURFACE bad = dst; bad.Pitch = 255 * 4;
-    assert(!AppleAgxPresentBuild(&arena, 0, 0, &src, &sr, &bad, &dr, &outside_dr, 1, &job));
+    assert(!both(&arena, 0, 0, &src, &sr, &bad, &dr, &outside_dr, 1, &job));
     (void)before;
   }
   puts("present job: PASS");
