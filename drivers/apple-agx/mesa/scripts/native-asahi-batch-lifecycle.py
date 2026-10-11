@@ -314,6 +314,25 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
     # CPU readback: flushing the resource's writer is the whole contract.
     # The D3D10 frontend never calls flush_resource.
     s=body(s,'agx_flush_resource','''   agx_flush_writer(agx_context(pctx), agx_resource(pres), "flush_resource");''')
+    # EXP1199: a compressed texture is CPU-written through a staging blit:
+    # a u_blitter pass in its own batch, flushed at once ("GPU write staging
+    # blit"). CS 1.6 re-uploads lightmaps every frame (EXP1198: 1.2 such
+    # blits per frame, one extra submission each). The first CPU write to an
+    # already initialized level decompresses the texture once (upstream
+    # agx_decompress, as for feedback loops); later writes tile on the CPU
+    # (shadowing when a batch still reads the texture). Initial uploads keep
+    # the staging blit, so static textures stay compressed. GPUVA profile only.
+    s=replace(s,'''   bool staging_blit = ail_is_level_logically_compressed(&rsrc->layout, level);''','''#ifdef APPLE_AGX_GPUVA_WINSYS
+   /* EXP1199: decompress a compressed texture on its first CPU update. */
+   if ((usage & PIPE_MAP_WRITE) && resource->target != PIPE_BUFFER &&
+       !(resource->bind & (PIPE_BIND_SHARED | PIPE_BIND_SCANOUT |
+                           PIPE_BIND_DEPTH_STENCIL)) &&
+       ail_is_level_logically_compressed(&rsrc->layout, level) &&
+       agx_resource_valid(rsrc, level))
+      agx_decompress(ctx, rsrc, "CPU texture update");
+#endif
+
+   bool staging_blit = ail_is_level_logically_compressed(&rsrc->layout, level);''')
     # EXP1195 (GPUVA profile): pipe fences are real. A flush that asks for
     # a fence submits like any flush and returns a fence holding the device's
     # newest accepted submission's completion fence (the GPU completes them in
