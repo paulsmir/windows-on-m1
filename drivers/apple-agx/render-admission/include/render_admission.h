@@ -1258,6 +1258,12 @@ void AdmissionRecordG3Reservation(_In_opt_ ADMISSION_CONTEXT *Context,
 /* G2 HW2b receipt: present arenas (Wom1G2PresentArena: version, made,
  * refused, last predicate, last status, last arena VA low, high). */
 #define ADMISSION_G2_PRESENT_ARENA_RECEIPT_WORDS 7u
+/* G2 HW2b receipt: present paths (Wom1G2PresentPath: version, a count per
+ * reason 0 GPU .. 9 GPU refused, last reason, last fence). */
+#define ADMISSION_G2_PRESENT_PATH_REASONS 10u
+#define ADMISSION_G2_PRESENT_PATH_RECEIPT_WORDS (3u + ADMISSION_G2_PRESENT_PATH_REASONS)
+void AdmissionRecordG2PresentPath(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_reads_(ADMISSION_G2_PRESENT_PATH_RECEIPT_WORDS) const ULONG *Values);
 void AdmissionRecordG2PresentArena(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_reads_(ADMISSION_G2_PRESENT_ARENA_RECEIPT_WORDS) const ULONG *Values);
 void AdmissionRecordGpuvaG3UnpublishedGroups(
