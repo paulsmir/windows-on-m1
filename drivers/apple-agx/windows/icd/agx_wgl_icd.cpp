@@ -4,12 +4,20 @@
  * stw_winsys::create_screen opens the AGX adapter behind the window's DC,
  * creates a D3DKMT device, drives the validated umd_* device/screen code
  * through the GPUVA D3DKMT bridge and returns the Windows Asahi pipe_screen;
- * present reads the finished colour buffer back and draws it into the DC
- * with GDI (DWM composes the window's redirection surface). One screen per
+ * present blits the finished colour buffer into a linear present source on
+ * the GPU and presents it with D3DKMTPresent (G2 HW3), or, where the kernel
+ * refuses that, reads it back and draws it into the DC with GDI (DWM
+ * composes the window's redirection surface either way). One screen per
  * process, created on the first DC, as Mesa's stw device expects. */
 #include <windows.h>
 #include <string.h>
 #include "agx_kmt_gpuva_bridge.h"
+/* C units of this DLL (render_allocation.c, agx_win32_screen.c) whose
+ * headers have no C++ guards: C linkage, as umd_win32_screen.c sees them. */
+extern "C" {
+#include "render_allocation.h"
+#include "agx_win32_screen.h"
+}
 #include "agx_wgl_present_copy.h"
 #include "agx_wgl_present_ring.h"
 #include "agx_wgl_draw_hook.h"
@@ -275,6 +283,24 @@ static struct pipe_screen *wgl_screen_create(HDC hdc) {
   }
   a->Failure = result;
   wgl_note(SUCCEEDED(result) ? "wgl-screen-create" : "reject-wgl-screen-create", result);
+  /* G2 HW3 receipt-only: which present callbacks opengl32 handed the ICD
+   * (DrvSetCallbackProcs, before the first context): PresentBuffers,
+   * GetAdapterLuid, CheckFullscreenSupport, PresentToRedirectionSurface,
+   * SubmitPresentToRedirectionSurface, and the D3DKMTPresent export. */
+  if (stw_dev) {
+    UINT callbacks[6] = {
+      stw_dev->callbacks.pfnPresentBuffers != NULL,
+#if WINVER >= 0xA00
+      stw_dev->callbacks.pfnGetAdapterLuid != NULL,
+      stw_dev->callbacks.pfnCheckFullscreenSupport != NULL,
+      stw_dev->callbacks.pfnPresentToRedirectionSurface != NULL,
+      stw_dev->callbacks.pfnSubmitPresentToRedirectionSurface != NULL,
+#else
+      2u, 2u, 2u, 2u,
+#endif
+      a->Kmt.Present != NULL };
+    AdmissionUmdDiagnostic("measure-wgl-callbacks", S_OK, callbacks, 6u);
+  }
   /* A failed adapter stays recorded (no second attempt with half-owned
    * kernel objects); stw reports the missing screen to the application. */
   return a->Screen;
@@ -648,6 +674,8 @@ static void wgl_kmt_receipt(LONGLONG us) {
  * game-thread present, worker show per shown frame, present-to-present
  * interval, size, game-thread sync (map wait), worker copy and SetDIBits per
  * shown frame, copy slices, frames shown and dropped, and failed GetDC. */
+static void wgl_common_receipt(LONGLONG us);
+
 static void wgl_present_receipt(AGX_WGL_PRESENT_RING *ring, LONGLONG start,
                                 LONGLONG end) {
   LARGE_INTEGER frequency;
@@ -673,6 +701,12 @@ static void wgl_present_receipt(AGX_WGL_PRESENT_RING *ring, LONGLONG start,
   ring->Shown = ring->Dropped = ring->DibFailed = ring->NotReady = 0;
   ReleaseSRWLockExclusive(&AgxWglWorkerLock);
   AdmissionUmdDiagnostic("measure-wgl-present", S_OK, values, 13u);
+  wgl_common_receipt(us);
+  ring->SumPresent = ring->SumInterval = ring->SumSync = 0;
+}
+
+/* The receipts of every 120 presents whichever path showed them. */
+static void wgl_common_receipt(LONGLONG us) {
   wgl_kmt_receipt(us);
   /* EXP1182: render batches, draws and the largest batch of the 120 presents. */
   UINT draws[3] = {(UINT)InterlockedExchange(&AgxWglBatches, 0),
@@ -721,7 +755,6 @@ static void wgl_present_receipt(AGX_WGL_PRESENT_RING *ring, LONGLONG start,
   UINT pace[8];
   agx_wgl_pace_counters(pace);
   AdmissionUmdDiagnostic("measure-wgl-pace", S_OK, pace, 8u);
-  ring->SumPresent = ring->SumInterval = ring->SumSync = 0;
 }
 
 /* EXP1174 diagnostic, only when the UMD trace is enabled and the process has
@@ -903,6 +936,242 @@ static void wgl_sampler_start(void) {
   SetThreadPriority(AgxWglSampler, THREAD_PRIORITY_TIME_CRITICAL);
 }
 
+/* G2 HW3: present through the kernel. Each window has a present source: one
+ * linear A8R8G8B8 GPU-local allocation of the back buffer's size, described
+ * like DWM's presentation surfaces (AdmissionUmdDescribePrimary) and adopted
+ * as a direct Mesa BO (as the D3D10 glue's attach_presentation_render_
+ * resource). A present blits the back buffer into it on the GPU, flushes,
+ * and calls D3DKMTPresent (Blt, the window, the source; Microsoft's OpenGL
+ * ICD contract): dxgkrnl redirects the blt to the window and the KMD runs it
+ * as a GPU job after the blit (one kernel context, in order). No CPU copy.
+ * A present the kernel refuses is shown through the ring instead, and after
+ * AGX_WGL_KMT_REFUSALS refusals in a row the window keeps the ring until its
+ * size changes. */
+#define AGX_WGL_KMT_SOURCES 4u
+#define AGX_WGL_KMT_REFUSALS 8u
+#define AGX_WGL_KMT_PENDING 8u
+typedef struct {
+  HWND Window;
+  unsigned Width, Height;          /* the back buffer's */
+  D3DKMT_HANDLE Allocation;
+  AGX_WIN32_SCREEN_BUFFER Buffer;
+  struct pipe_resource *Image;
+  unsigned Failures;               /* consecutive refused presents */
+  BOOL Refused;
+  /* Receipt sums (measure-wgl-kmtpresent), microseconds after scaling. */
+  LONGLONG Frames, LastTick, SumPresent, SumInterval, SumCopy, SumKernel;
+  unsigned Shown, Failed, Empty, LastFailure;
+} AGX_WGL_KMT_SOURCE;
+static AGX_WGL_KMT_SOURCE AgxWglKmtSources[AGX_WGL_KMT_SOURCES];
+/* Released sources whose BO the winsys still holds (as collect_presentations). */
+static D3DKMT_HANDLE AgxWglKmtPending[AGX_WGL_KMT_PENDING];
+
+static void wgl_kmt_deallocate(D3DKMT_HANDLE allocation) {
+  D3DDDICB_DEALLOCATE release;
+  ZeroMemory(&release, sizeof(release));
+  release.NumAllocations = 1u;
+  release.HandleList = &allocation;
+  (void)AgxWgl->Bridge.DeviceCallbacks.pfnDeallocateCb(&AgxWgl->Bridge, &release);
+}
+
+static void wgl_kmt_collect(void) {
+  for (unsigned i = 0; i < AGX_WGL_KMT_PENDING; ++i)
+    if (AgxWglKmtPending[i] &&
+        !AdmissionUmdScreenAllocationRegistered(&AgxWgl->Device, AgxWglKmtPending[i])) {
+      wgl_kmt_deallocate(AgxWglKmtPending[i]);
+      AgxWglKmtPending[i] = 0;
+    }
+}
+
+static void wgl_kmt_release(AGX_WGL_KMT_SOURCE *s) {
+  if (s->Image) AgxWin32AsahiResourceRelease(&s->Image);
+  if (s->Allocation) {
+    unsigned i = 0;
+    while (i < AGX_WGL_KMT_PENDING && AgxWglKmtPending[i]) ++i;
+    if (i < AGX_WGL_KMT_PENDING) AgxWglKmtPending[i] = s->Allocation;
+    else wgl_note("reject-wgl-kmt-release", E_OUTOFMEMORY);   /* kept: never freed under the GPU */
+  }
+  ZeroMemory(s, sizeof(*s));
+  wgl_kmt_collect();
+}
+
+static BOOL wgl_kmt_create(AGX_WGL_KMT_SOURCE *s, HWND window, unsigned width,
+                           unsigned height) {
+  ADMISSION_ALLOCATION_DESCRIPTION description;
+  D3DDDI_ALLOCATIONINFO info;
+  D3DDDICB_ALLOCATE allocate;
+  HRESULT result;
+  if (!AdmissionAllocationDescribe(width, height, 4u, (UINT)D3DKMDT_GDISURFACE_TEXTURE,
+                                   (UINT)D3DDDIFMT_A8R8G8B8, 0u, &description)) {
+    wgl_note("reject-wgl-kmt-describe", E_INVALIDARG);
+    return FALSE;
+  }
+  description.Size = (description.Size + 127ULL) & ~127ULL;
+  ZeroMemory(&info, sizeof(info));
+  ZeroMemory(&allocate, sizeof(allocate));
+  info.pPrivateDriverData = &description;
+  info.PrivateDriverDataSize = sizeof(description);
+  allocate.NumAllocations = 1u;
+  allocate.pAllocationInfo = &info;
+  result = AgxWgl->Bridge.DeviceCallbacks.pfnAllocateCb(&AgxWgl->Bridge, &allocate);
+  if (FAILED(result) || !info.hAllocation) {
+    wgl_note("reject-wgl-kmt-allocate", FAILED(result) ? result : E_FAIL);
+    return FALSE;
+  }
+  s->Allocation = info.hAllocation;
+  result = AdmissionUmdScreenAdoptAllocation(&AgxWgl->Device, info.hAllocation,
+      description.Size, 0x10000ULL, AgxWin32BufferClassGeneral,
+      AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite |
+          AppleAgxWin32BufferGpuRead | AppleAgxWin32BufferGpuWrite,
+      FALSE, TRUE, &s->Buffer);
+  if (FAILED(result)) {
+    wgl_note("reject-wgl-kmt-adopt", result);
+    wgl_kmt_deallocate(s->Allocation);
+    ZeroMemory(s, sizeof(*s));
+    return FALSE;
+  }
+  s->Image = AgxWin32AsahiImportLinearColor32(AgxWgl->Screen, &s->Buffer,
+      description.Width, description.Height, description.Pitch, description.Size,
+      AgxWin32AsahiLinearFormatBgra8Unorm);
+  if (!s->Image) {
+    wgl_note("reject-wgl-kmt-import", E_FAIL);
+    (void)AgxWin32ScreenDestroyBuffer(&AgxWgl->Device.Screen, &s->Buffer);
+    wgl_kmt_deallocate(s->Allocation);
+    ZeroMemory(s, sizeof(*s));
+    return FALSE;
+  }
+  s->Window = window;
+  s->Width = width;
+  s->Height = height;
+  return TRUE;
+}
+
+/* The window's source for a back buffer of this size; NULL keeps the ring. */
+static AGX_WGL_KMT_SOURCE *wgl_kmt_get(HWND window, unsigned width, unsigned height) {
+  AGX_WGL_KMT_SOURCE *free_source = NULL;
+  wgl_kmt_collect();
+  for (unsigned i = 0; i < AGX_WGL_KMT_SOURCES; ++i) {
+    AGX_WGL_KMT_SOURCE *s = &AgxWglKmtSources[i];
+    if (s->Window == window) {
+      if (s->Width == width && s->Height == height)
+        return s->Refused || !s->Image ? NULL : s;
+      wgl_kmt_release(s);
+    }
+    if (!s->Window && !free_source) free_source = s;
+  }
+  if (!free_source) {
+    free_source = &AgxWglKmtSources[0];
+    wgl_kmt_release(free_source);
+  }
+  if (!wgl_kmt_create(free_source, window, width, height)) {
+    /* Remember the refusal for this size: no allocation each frame. */
+    free_source->Window = window;
+    free_source->Width = width;
+    free_source->Height = height;
+    free_source->Refused = TRUE;
+    return NULL;
+  }
+  return free_source;
+}
+
+/* Receipt (G2 HW3): every 120 kernel presents, in microseconds, the mean
+ * present (blit, flush and D3DKMTPresent), interval, GPU blit submission and
+ * D3DKMTPresent, the presented size, presents shown, refused and skipped
+ * (empty client area), the last refusal status and refused-window state. */
+static void wgl_kmt_present_receipt(AGX_WGL_KMT_SOURCE *s, unsigned width,
+                                    unsigned height, BOOL now) {
+  LARGE_INTEGER frequency;
+  QueryPerformanceFrequency(&frequency);
+  if (!frequency.QuadPart || (!now && s->Frames % 120 != 0)) return;
+  LONGLONG us = frequency.QuadPart, frames = s->Frames % 120 ? s->Frames % 120 : 120;
+  UINT values[11] = {
+    (UINT)(s->SumPresent * 1000000 / us / frames),
+    (UINT)(s->SumInterval * 1000000 / us / frames),
+    (UINT)(s->SumCopy * 1000000 / us / frames),
+    (UINT)(s->SumKernel * 1000000 / us / frames),
+    width, height, s->Shown, s->Failed, s->Empty, s->LastFailure,
+    s->Refused ? 1u : 0u };
+  AdmissionUmdDiagnostic("measure-wgl-kmtpresent", S_OK, values, 11u);
+  s->SumPresent = s->SumInterval = s->SumCopy = s->SumKernel = 0;
+  s->Shown = s->Failed = s->Empty = 0;
+  if (!now) wgl_common_receipt(us);
+}
+
+/* TRUE: the frame was presented by the kernel (or there is nothing to show);
+ * FALSE: the ring shows it. Called with AgxWglRingLock held. */
+static BOOL wgl_kmt_present(struct pipe_context *ctx, struct pipe_resource *res,
+                            HWND window, LONGLONG start) {
+  static volatile LONG first;
+  LARGE_INTEGER copied, end;
+  RECT client;
+  if (!AgxWgl || !AgxWgl->Bridge.Kmt.Present || !AgxWgl->Device.KernelContext ||
+      !ctx->blit || !ctx->flush)
+    return FALSE;
+  AGX_WGL_KMT_SOURCE *s = wgl_kmt_get(window, res->width0, res->height0);
+  if (!s) return FALSE;
+  if (s->LastTick) s->SumInterval += start - s->LastTick;
+  s->LastTick = start;
+  ++s->Frames;
+  /* The KMD blits without stretching: present the part of the frame the
+   * client area shows (a window being resized or minimized). */
+  unsigned width = res->width0, height = res->height0;
+  if (GetClientRect(window, &client)) {
+    if (client.right < (LONG)width) width = client.right > 0 ? (unsigned)client.right : 0u;
+    if (client.bottom < (LONG)height) height = client.bottom > 0 ? (unsigned)client.bottom : 0u;
+  }
+  if (!width || !height) {
+    ++s->Empty;
+    QueryPerformanceCounter(&end);
+    s->SumPresent += end.QuadPart - start;
+    wgl_kmt_present_receipt(s, width, height, FALSE);
+    return TRUE;
+  }
+  struct pipe_blit_info blit;
+  memset(&blit, 0, sizeof(blit));
+  blit.dst.resource = s->Image;
+  blit.dst.format = s->Image->format;
+  blit.dst.box.width = (int)width;
+  blit.dst.box.height = (int)height;
+  blit.dst.box.depth = 1;
+  blit.src.resource = res;
+  blit.src.format = res->format;
+  blit.src.box = blit.dst.box;
+  blit.mask = PIPE_MASK_RGBA;
+  blit.filter = PIPE_TEX_FILTER_NEAREST;
+  ctx->blit(ctx, &blit);
+  /* Submitted before the present: the kernel context runs them in order. */
+  ctx->flush(ctx, NULL, 0);
+  QueryPerformanceCounter(&copied);
+  RECT rect = {0, 0, (LONG)width, (LONG)height};
+  NTSTATUS status = AgxKmtGpuvaPresentBlt(&AgxWgl->Bridge, AgxWgl->Device.KernelContext,
+                                          window, s->Allocation, &rect);
+  QueryPerformanceCounter(&end);
+  s->SumCopy += copied.QuadPart - start;
+  s->SumKernel += end.QuadPart - copied.QuadPart;
+  s->SumPresent += end.QuadPart - start;
+  if (status >= 0) {
+    s->Failures = 0;
+    ++s->Shown;
+    if (InterlockedCompareExchange(&first, 1, 0) == 0) {
+      UINT values[3] = {width, height, (UINT)status};
+      AdmissionUmdDiagnostic("wgl-kmt-present-first", S_OK, values, 3u);
+    }
+    wgl_kmt_present_receipt(s, width, height, FALSE);
+    return TRUE;
+  }
+  ++s->Failed;
+  s->LastFailure = (unsigned)status;
+  if (s->Failed == 1u) wgl_note("reject-wgl-kmt-present", HRESULT_FROM_NT(status));
+  if (++s->Failures >= AGX_WGL_KMT_REFUSALS) {
+    /* Keep the source until the size changes; the ring shows from now on. */
+    s->Refused = TRUE;
+    wgl_kmt_present_receipt(s, width, height, TRUE);
+  } else {
+    wgl_kmt_present_receipt(s, width, height, FALSE);
+  }
+  return FALSE;
+}
+
 /* Present one frame to a window: queue its GPU copy into a ring slot and
  * hand the previous frame to the worker. Called by stw's GDI present (after
  * the frame finished: stw waited) and by the winsys framebuffer (EXP1191:
@@ -926,6 +1195,11 @@ extern "C" BOOL agx_wgl_present_window(struct pipe_screen *screen,
   QueryPerformanceCounter(&start);
   AcquireSRWLockExclusive(&AgxWglRingLock);
   wgl_sampler_start();
+  /* G2 HW3: the kernel presents; the ring shows what it refuses. */
+  if (wgl_kmt_present(ctx, res, window, start.QuadPart)) {
+    ReleaseSRWLockExclusive(&AgxWglRingLock);
+    return TRUE;
+  }
   AGX_WGL_PRESENT_RING *ring = wgl_ring_get(screen, window, res, bgra);
   /* EXP1204 diagnostic, only with the UMD trace and APPLE_AGX_PRESENT_SKIP=N
    * (2-9): copy and show every N-th frame only, to measure what the present
