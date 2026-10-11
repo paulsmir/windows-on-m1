@@ -40,7 +40,7 @@ typedef struct _APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_INPUT {
   APPLE_AGX_BACKEND_U64 FirmwareStampGpuAddress;
   APPLE_AGX_BACKEND_U64 Counter;
   APPLE_AGX_BACKEND_U64 EventSequence;
-  APPLE_AGX_BACKEND_U32 EventGeneration;
+  APPLE_AGX_BACKEND_U32 EventGeneration;  /* the notifier generation (queue id) */
   APPLE_AGX_BACKEND_U32 VmSlot;
   APPLE_AGX_BACKEND_U32 StampValue;
 } APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_INPUT;

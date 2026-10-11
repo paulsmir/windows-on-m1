@@ -266,9 +266,13 @@ int main(void) {
     assert(objects[index].Data ==
            (unsigned char *)owner.Objects[index].CpuAddress + object_offset);
     assert(objects[index].Size == layouts[index].Size);
-    assert(memcmp(objects[index].Data,
-                  arena + layouts[index].ArenaOffset,
-                  layouts[index].Size) == 0);
+    /* The compute job built above counted its one notification. */
+    if (index == APPLE_AGX_RENDER_SHARED_MEMORY_NOTIFIER_THRESHOLD)
+      assert(read_u32(objects[index].Data) == 1u);
+    else
+      assert(memcmp(objects[index].Data,
+                    arena + layouts[index].ArenaOffset,
+                    layouts[index].Size) == 0);
   }
 
   memset(&staged_job, 0, sizeof(staged_job));
@@ -475,6 +479,68 @@ int main(void) {
     assert(read_u32(active_objects[10].Data)==0x3d000100u);
     assert(read_u32(active_objects[26].Data)==0x7a000100u);
     assert(read_u32(active_objects[27].Data)==0x3d000100u);
+  }
+  /* EXP1213: a compute job joins the Queue's notifier like the render jobs
+   * (Asahi queue/mod.rs: one notifier per Queue; queue/compute.rs:
+   * notifier_buf = &notifier.state.unk_buf, event_generation = the
+   * notifier generation) and its one notification is counted in the shared
+   * threshold (notification_count = 2 * render + compute). EXP1213 left the
+   * firmware holding the job's stamp in a private notifier whose threshold
+   * pointer was zero. */
+  {
+    APPLE_AGX_RENDER_COMPUTE_INPUT input={0};
+    APPLE_AGX_RENDER_COMPUTE_OUTPUT output={0};
+    APPLE_AGX_EXP208_DYNAMIC_INPUT dynamic={3u,1u,2u,APPLE_AGX_FALSE};
+    const APPLE_AGX_U64 notifier=owner.VirtualAddresses[11]+owner.ObjectOffsets[11];
+    unsigned char *control=(unsigned char *)owner.Objects[11].CpuAddress+
+        owner.ObjectOffsets[11];
+    unsigned char *event_count=(unsigned char *)owner.Objects[12].CpuAddress+
+        owner.ObjectOffsets[12];
+    const unsigned char *work,*micro;
+    assert(read_u32(event_count)==4u);
+    control[8]=5u;
+    input.CdmStreamBase=0x1500400000ULL;input.CdmStreamBytes=72u;
+    input.Counter=7u;input.UscExecutionBase=0x1100000000ULL;
+    input.VmSlot=1u;input.EventNumber=2u;input.StampValue=0x300u;
+    input.EventSequence=11u;input.ClientSequence=5u;
+    assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+    work=(const unsigned char *)output.SidecarCpuAddress+
+        APPLE_AGX_COMPUTE_WORK_OFFSET;
+    micro=(const unsigned char *)output.SidecarCpuAddress+
+        APPLE_AGX_COMPUTE_MICROSEQUENCE_OFFSET;
+    assert(read_u64(work+0x14u)==notifier);
+    assert(read_u64(micro+0x164u)==notifier+0xa8u);
+    assert(read_u32(micro+0x2cu)==5u);
+    assert(read_u32(event_count)==5u && output.NotifierThreshold==5u);
+    /* rebuilding the same job does not count it twice */
+    assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+    assert(read_u32(event_count)==5u);
+    input.StampValue=0x301u;
+    assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+    assert(read_u32(event_count)==6u);
+    /* the next render job adds its two notifications to both */
+    assert(AppleAgxExp208PatchDynamic(arena,APPLE_AGX_EXP208_ARENA_BYTES,
+        &dynamic));
+    assert(AppleAgxRenderSharedMemoryBuildActiveG4Job(
+        &owner,arena,APPLE_AGX_EXP208_ARENA_BYTES,source_objects,
+        APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,0x1500800000ULL,
+        APPLE_AGX_FALSE,&bindings,&staged_job,active_objects,&active_job));
+    assert(read_u32(active_objects[12].Data)==8u);
+    /* queue initialisation resets the firmware count and ours with it */
+    assert(AppleAgxRenderSharedMemoryBuildActiveG4Job(
+        &owner,arena,APPLE_AGX_EXP208_ARENA_BYTES,source_objects,
+        APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,0x1500800000ULL,
+        APPLE_AGX_TRUE,&bindings,&staged_job,active_objects,&active_job));
+    assert(read_u32(active_objects[12].Data)==6u);
+    /* a fresh queue lifetime is idle: a compute job before any render job
+     * waits for its own notification only */
+    assert(AppleAgxRenderSharedMemoryBindRelocationObjects(
+        &owner,arena,APPLE_AGX_EXP208_ARENA_BYTES,objects,
+        APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+    assert(read_u32(event_count)==read_u32(arena+layouts[12].ArenaOffset));
+    input.StampValue=0x302u;
+    assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+    assert(read_u32(event_count)==1u && read_u32(micro+0x2cu)==0u);
   }
   assert(AppleAgxRenderSharedMemoryDestroy(&owner) ==
          AppleAgxRenderSharedMemoryResultOk);

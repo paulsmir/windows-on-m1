@@ -14,13 +14,20 @@
 #define APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_POINTERS 38u
 #define APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR 39u
 #define APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT 40u
+/* The Queue's notifier (m1n1 EventControl, Asahi event::Notifier) and its
+ * threshold (m1n1 event_count, Asahi Threshold). One per Queue: the TA, 3D
+ * and compute work queues share it (Asahi queue/mod.rs). */
+#define APPLE_AGX_RENDER_SHARED_MEMORY_NOTIFIER 11u
+#define APPLE_AGX_RENDER_SHARED_MEMORY_NOTIFIER_THRESHOLD 12u
+#define APPLE_AGX_G13_NOTIFIER_BYTES 0xb0u
+#define APPLE_AGX_G13_NOTIFIER_GENERATION_OFFSET 0x08u
+#define APPLE_AGX_G13_NOTIFIER_BUFFER_OFFSET 0xa8u
 #define APPLE_AGX_RENDER_STATS_TA_FIELD_OFFSET 4u
 #define APPLE_AGX_RENDER_STATS_3D_FIELD_OFFSET 8u
 #define APPLE_AGX_COMPUTE_PREEMPT_OFFSET 0x0000u
 #define APPLE_AGX_COMPUTE_WORK_OFFSET 0x8000u
 #define APPLE_AGX_COMPUTE_MICROSEQUENCE_OFFSET 0x8400u
 #define APPLE_AGX_COMPUTE_STATISTICS_OFFSET 0x8600u
-#define APPLE_AGX_COMPUTE_NOTIFIER_OFFSET 0x8700u
 #define APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET 0x8780u
 #define APPLE_AGX_COMPUTE_GPU_BUFFER_OFFSET 0xc000u
 
@@ -41,6 +48,7 @@ typedef struct _APPLE_AGX_RENDER_COMPUTE_OUTPUT {
   APPLE_AGX_U64 WorkGpuAddress,SidecarGpuAddress;
   const void *SidecarCpuAddress;
   APPLE_AGX_U32 SidecarBytes;
+  APPLE_AGX_U32 NotifierThreshold;
 } APPLE_AGX_RENDER_COMPUTE_OUTPUT;
 
 typedef struct _APPLE_AGX_RENDER_RUNTIME_BINDINGS {
@@ -70,6 +78,14 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
   APPLE_AGX_RENDER_SHARED_MEMORY_RESULT LastResult;
   APPLE_AGX_RENDER_MANAGER_KEY ManagerKey;
   APPLE_AGX_U32 ManagerFence;
+  /* The notifier threshold counts every notifying command since the
+   * queue was initialised (Asahi notification_count = 2 * render +
+   * compute): the render part is the last render job's 2 * sequence (its
+   * event_count from the template arena), the compute part is counted
+   * here; event_count carries their sum. */
+  APPLE_AGX_U32 NotifierRenderCount;
+  APPLE_AGX_U32 NotifierComputeCount;
+  APPLE_AGX_U32 NotifierComputeStamp;
 } APPLE_AGX_RENDER_SHARED_MEMORY_OWNER;
 
 APPLE_AGX_BOOL AppleAgxRenderManagerNeedsBind(
@@ -116,7 +132,7 @@ AppleAgxRenderSharedMemoryApplyQueueArenas(
     APPLE_AGX_U64 SharedVa, APPLE_AGX_U64 SharedBytes);
 
 APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBindRelocationObjects(
-    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
     const void *TemplateArena,
     APPLE_AGX_U32 TemplateArenaBytes,
     APPLE_AGX_EXP208_RELOCATION_OBJECT *RelocationObjects,
@@ -131,7 +147,7 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
 /* Refresh the firmware-visible context-0 objects from the dynamically patched
  * template arena, then build the job from that active relocation graph. */
 APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildActiveJob(
-    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
     const void *TemplateArena, APPLE_AGX_U32 TemplateArenaBytes,
     const APPLE_AGX_EXP208_RELOCATION_OBJECT *SourceObjects,
     APPLE_AGX_U32 SourceObjectCount, APPLE_AGX_U64 ArenaGpuAddress,
@@ -142,7 +158,7 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildActiveJob(
     APPLE_AGX_BACKEND_JOB_IMAGE *ActiveJob);
 
 APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildActiveG4Job(
-    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
     const void *TemplateArena, APPLE_AGX_U32 TemplateArenaBytes,
     const APPLE_AGX_EXP208_RELOCATION_OBJECT *SourceObjects,
     APPLE_AGX_U32 SourceObjectCount, APPLE_AGX_U64 ArenaGpuAddress,
