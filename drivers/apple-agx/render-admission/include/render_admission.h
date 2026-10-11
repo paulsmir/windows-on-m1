@@ -655,6 +655,20 @@ typedef struct _ADMISSION_CONTEXT {
     ULONGLONG LogicalIpa[4];
     ULONG LogicalSegment[4], LogicalFlags[4];
   } G4SubmitFailure;
+  /* EXP1210 receipt-only (Wom1G4PreemptOverlap): DxgkDdiPreemptCommand calls
+   * and those that arrived while a DxgkDdiSubmitCommandVirtual call was still
+   * inside the driver, with the fences of the first and the last such call. */
+  volatile LONG G4SubmitVirtualInFlight;
+  volatile LONG G4SubmitVirtualFence;
+  volatile LONG G4SubmitVirtualFlags;
+  volatile LONG G4PreemptOverlapClaim;
+  volatile LONG G4PreemptOverlapDirty;
+  struct _ADMISSION_G4_PREEMPT_OVERLAP {
+    ULONG Version, Bytes;
+    volatile LONG Preemptions, Overlaps, Submissions, Resubmissions;
+    ULONG FirstPreemptionFence, FirstSubmitFence, FirstSubmitFlags;
+    volatile LONG LastPreemptionFence, LastSubmitFence, LastSubmitFlags;
+  } G4PreemptOverlap;
 #endif
   volatile LONG InterruptReady;
   volatile LONG InterruptIngressEnabled;
@@ -1176,6 +1190,7 @@ void AdmissionRecordGpuvaG3PagingFailure(
 void AdmissionRenderCorrelationSubmitFailureWindows(
     _In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG4SubmitFailure(_In_opt_ ADMISSION_CONTEXT *Context);
+void AdmissionRecordG4PreemptOverlap(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3CopyQueryFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3LeafHistory(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3PagingWait(_In_opt_ ADMISSION_CONTEXT *Context);

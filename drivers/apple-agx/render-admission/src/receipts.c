@@ -2329,6 +2329,27 @@ _Use_decl_annotations_ void AdmissionRecordG4SubmitFailure(
   ZwClose(key);
 }
 
+/* EXP1210 receipt-only: publish the preemption/submission overlap counters
+ * (PASSIVE, from the correlation export worker) when they changed. */
+_Use_decl_annotations_ void AdmissionRecordG4PreemptOverlap(
+    ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  struct _ADMISSION_G4_PREEMPT_OVERLAP snapshot;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      InterlockedExchange(&Context->G4PreemptOverlapDirty, 0) == 0)
+    return;
+  snapshot = Context->G4PreemptOverlap;
+  snapshot.Version = 1u;
+  snapshot.Bytes = sizeof(snapshot);
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, L"Wom1G4PreemptOverlap", &snapshot, sizeof(snapshot));
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordGpuvaG3UnpublishedGroups(
     ADMISSION_CONTEXT *Context, const ULONGLONG *Counts) {
   if (Context == NULL || Context->PhysicalDeviceObject == NULL ||

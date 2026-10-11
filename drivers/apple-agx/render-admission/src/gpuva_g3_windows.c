@@ -2333,6 +2333,37 @@ static ADMISSION_G3_PRIVATE_SCENE *AdmissionG4FindPrivateResubmission(
   return s;
 }
 
+/* EXP1210 receipt-only: which predicates of AdmissionG4FindPrivateResubmission
+ * refuse this resubmission (same order; process lock held), and the scene. */
+static ULONG AdmissionG4ResubmissionRefusal(ADMISSION_G3_PROCESS *p,
+    ADMISSION_RENDER_CONTEXT *context, const APPLE_AGX_G4_PRIVATE_LEASE *lease,
+    ULONG fence, ADMISSION_G3_PRIVATE_SCENE **scene) {
+  ADMISSION_G3_PRIVATE_SCENE *s=NULL;
+  ULONG r=0u;
+  *scene=NULL;
+  if (context->GpuvaG3Closing) r|=1u<<0;
+  if (!lease || !lease->ManagerId || lease->ManagerId!=p->Graph.ProcessId) r|=1u<<1;
+  if (lease && lease->ManagerGeneration!=p->PrivateManager.Generation) r|=1u<<2;
+  if (lease && context->GpuvaG3PrivateManagerGeneration!=lease->ManagerGeneration) r|=1u<<3;
+  if (InterlockedCompareExchange(&context->GpuvaG3CancelUncertain,0,0)) r|=1u<<4;
+  if (lease) for (s=p->PrivateScenes;s;s=s->Next)
+    if (s->Storage.Generation==lease->SceneId) break;
+  if (!s) return r|(1u<<5);
+  *scene=s;
+  if (s->Context!=context) r|=1u<<6;
+  if (s->Storage.Generation!=lease->SceneGeneration) r|=1u<<7;
+  if (!s->Queued) r|=1u<<8;
+  if (s->Submitting) r|=1u<<9;
+  if (s->Started) r|=1u<<10;
+  if (s->Quarantined) r|=1u<<11;
+  if (!fence) r|=1u<<12;
+  if (!s->Fence) r|=1u<<13;
+  if (fence && fence==s->Fence) r|=1u<<14;
+  if (AdmissionG3PrivateSlotCancelled(context,s->Fence)) r|=1u<<15;
+  if (!AdmissionG3PrivateSlotPreempted(context,s->Fence)) r|=1u<<16;
+  return r;
+}
+
 static int AdmissionG4PrivateGraphAccess(void *opaque, unsigned long long va,
     unsigned int bytes, int write, APPLE_AGX_G4_ACCESS_KIND kind,
     unsigned int ordinal) {
@@ -3410,6 +3441,36 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
         detail.ProcessGeneration = process->PrivateManager.Generation;
         detail.MappingGeneration = private_v3.Lease.ManagerGeneration;
         detail.Va = args->SubmissionFenceId;
+        if (args->Flags.Resubmission) {
+          /* EXP1210 receipt-only: AccessBytes = refused predicates (bit n =
+           * nth check of AdmissionG4FindPrivateResubmission); LogicalIpa =
+           * scene fence|resume<<32, private slots, preempt marks, cancel
+           * marks (slot 1 | slot 2 << 32); LogicalSegment[0] = scene
+           * Queued|Submitting<<1|Started<<2|Quarantined<<3|ReleaseRequested<<4,
+           * [1] = calls in DxgkDdiSubmitCommandVirtual; LogicalFlags = the
+           * context's outstanding and second fence, pending count, render
+           * packet state. */
+          ADMISSION_G3_PRIVATE_SCENE *seen;
+          detail.AccessBytes = AdmissionG4ResubmissionRefusal(process,context,
+              &private_v3.Lease,args->SubmissionFenceId,&seen);
+          if (seen) {
+            detail.LogicalIpa[0] = (ULONGLONG)seen->Fence | ((ULONGLONG)seen->ResumeFence << 32);
+            detail.LogicalSegment[0] = (seen->Queued ? 1u : 0u) | (seen->Submitting ? 2u : 0u) |
+                (seen->Started ? 4u : 0u) | (seen->Quarantined ? 8u : 0u) |
+                (seen->ReleaseRequested ? 16u : 0u);
+          }
+          detail.LogicalIpa[1] = (ULONG)InterlockedCompareExchange(&context->GpuvaG3PrivateFence,0,0) |
+              ((ULONGLONG)(ULONG)InterlockedCompareExchange(&context->GpuvaG3PrivateFence2,0,0) << 32);
+          detail.LogicalIpa[2] = (ULONG)InterlockedCompareExchange(&context->GpuvaG3PreemptFence,0,0) |
+              ((ULONGLONG)(ULONG)InterlockedCompareExchange(&context->GpuvaG3PreemptFence2,0,0) << 32);
+          detail.LogicalIpa[3] = (ULONG)InterlockedCompareExchange(&context->GpuvaG3CancelFence,0,0) |
+              ((ULONGLONG)(ULONG)InterlockedCompareExchange(&context->GpuvaG3CancelFence2,0,0) << 32);
+          detail.LogicalSegment[1] = (ULONG)InterlockedCompareExchange(&adapter->G4SubmitVirtualInFlight,0,0);
+          detail.LogicalFlags[0] = context->Object.FenceOutstanding;
+          detail.LogicalFlags[1] = context->GpuvaG3SecondFence;
+          detail.LogicalFlags[2] = adapter->G4PendingCount;
+          detail.LogicalFlags[3] = AdmissionRenderPacketState(&adapter->RenderPacket);
+        }
         ExReleaseFastMutex(&state->Lock);
         return AdmissionG4SubmitRejectDetail(adapter,context,args,
             AdmissionG4RejectEnvelopeState,STATUS_INVALID_PARAMETER,0u,TRUE,&detail);
@@ -3688,7 +3749,20 @@ static NTSTATUS AdmissionDdiSubmitCommandVirtualInner(
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommandVirtual(
     HANDLE Adapter, const DXGKARG_SUBMITCOMMANDVIRTUAL *Args) {
-  NTSTATUS status = AdmissionDdiSubmitCommandVirtualInner(Adapter, Args);
+  ADMISSION_CONTEXT *overlap = (ADMISSION_CONTEXT *)Adapter;
+  NTSTATUS status;
+  /* EXP1210 receipt-only: the call is inside the driver (preempt overlap). */
+  if (overlap != NULL) {
+    InterlockedIncrement(&overlap->G4SubmitVirtualInFlight);
+    if (Args != NULL) {
+      InterlockedExchange(&overlap->G4SubmitVirtualFence, (LONG)Args->SubmissionFenceId);
+      InterlockedExchange(&overlap->G4SubmitVirtualFlags, (LONG)Args->Flags.Value);
+      InterlockedIncrement(Args->Flags.Resubmission ?
+          &overlap->G4PreemptOverlap.Resubmissions : &overlap->G4PreemptOverlap.Submissions);
+    }
+  }
+  status = AdmissionDdiSubmitCommandVirtualInner(Adapter, Args);
+  if (overlap != NULL) InterlockedDecrement(&overlap->G4SubmitVirtualInFlight);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   if (Args != NULL)
     AdmissionDwmFrameRecordSubmit((ADMISSION_CONTEXT *)Adapter,

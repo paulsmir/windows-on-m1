@@ -49,6 +49,7 @@ Restart:
     status = AdmissionRenderCorrelationExportSnapshot(context, &snapshot);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
     AdmissionRecordG4SubmitFailure(context);
+    AdmissionRecordG4PreemptOverlap(context);
 #endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
     AdmissionFlushGdiReceipt(context);
