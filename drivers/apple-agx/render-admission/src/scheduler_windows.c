@@ -342,6 +342,33 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
       PreemptCommand->EngineOrdinal != ADMISSION_SCHEDULER_ENGINE ||
       InterlockedCompareExchange(&context->SchedulerInitialized, 0, 0) == 0)
     return STATUS_INVALID_PARAMETER;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* EXP1210 receipt-only: does a preemption request arrive while a
+   * DxgkDdiSubmitCommandVirtual call is still inside the driver? */
+  {
+    LONG preemptions = InterlockedIncrement(&context->G4PreemptOverlap.Preemptions);
+    BOOLEAN publish = (preemptions & 63) == 1;
+    if (InterlockedCompareExchange(&context->G4SubmitVirtualInFlight, 0, 0) > 0) {
+      LONG fence = InterlockedCompareExchange(&context->G4SubmitVirtualFence, 0, 0);
+      LONG flags = InterlockedCompareExchange(&context->G4SubmitVirtualFlags, 0, 0);
+      InterlockedIncrement(&context->G4PreemptOverlap.Overlaps);
+      if (InterlockedCompareExchange(&context->G4PreemptOverlapClaim, 1, 0) == 0) {
+        context->G4PreemptOverlap.FirstPreemptionFence = PreemptCommand->PreemptionFenceId;
+        context->G4PreemptOverlap.FirstSubmitFence = (ULONG)fence;
+        context->G4PreemptOverlap.FirstSubmitFlags = (ULONG)flags;
+      }
+      InterlockedExchange(&context->G4PreemptOverlap.LastPreemptionFence,
+                          (LONG)PreemptCommand->PreemptionFenceId);
+      InterlockedExchange(&context->G4PreemptOverlap.LastSubmitFence, fence);
+      InterlockedExchange(&context->G4PreemptOverlap.LastSubmitFlags, flags);
+      publish = TRUE;
+    }
+    if (publish) {
+      InterlockedExchange(&context->G4PreemptOverlapDirty, 1);
+      AdmissionRenderCorrelationSubmitFailureWindows(context);
+    }
+  }
+#endif
   KeAcquireSpinLockAtDpcLevel(&context->PagingLock);
   KeAcquireSpinLockAtDpcLevel(&context->SchedulerLock);
   cutoffFence = AppleAgxSchedulerLastSubmittedFence(

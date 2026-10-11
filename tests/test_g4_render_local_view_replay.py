@@ -12,7 +12,7 @@ class G4RenderLocalViewReplay(unittest.TestCase):
         names=('AdmissionG4ObserveEnvelopeReject','AdmissionG4SubmitRejectDetail','AdmissionG4SubmitReject',
           'AdmissionG4GraphAccess','AdmissionG4LogicalEnvelopeAccess','AdmissionG4GraphAccessTyped',
           'AdmissionG3PrivateSlotPreempted','AdmissionG3PrivateSlotCancelled',
-          'AdmissionG4FindPrivateScene','AdmissionG4FindPrivateResubmission',
+          'AdmissionG4FindPrivateScene','AdmissionG4FindPrivateResubmission','AdmissionG4ResubmissionRefusal',
           'AdmissionG4PrivateGraphAccess','AdmissionG4PrivateGeometry','AdmissionG4PrivateUnqueue',
           'AdmissionG4SnapshotFailure','AdmissionG4ResolveOutput',
           'AdmissionGpuvaG3PrivatePreempt','AdmissionGpuvaG3PrivateCancel','AdmissionG4PendingAdmissible',

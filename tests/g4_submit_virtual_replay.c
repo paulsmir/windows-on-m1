@@ -167,6 +167,9 @@ typedef struct {
     ULONGLONG LogicalIpa[4];
     unsigned LogicalSegment[4], LogicalFlags[4];
   } G4SubmitFailure;
+  /* EXP1210 receipt-only overlap counters (AdmissionDdiSubmitCommandVirtual). */
+  volatile int G4SubmitVirtualInFlight, G4SubmitVirtualFence, G4SubmitVirtualFlags;
+  struct { volatile int Preemptions, Overlaps, Submissions, Resubmissions; } G4PreemptOverlap;
   int SchedulerLock, SchedulerFaulted, RuntimeReady, RuntimeQueueable;
   APPLE_AGX_SCHEDULER Scheduler;
   ADMISSION_RENDER_PACKET RenderPacket;
@@ -272,6 +275,7 @@ static int InterlockedCompareExchange(volatile int *value, int exchange, int com
   int old=*value;if(old==compare)*value=exchange;return old;
 }
 static int InterlockedIncrement(volatile int *value) { return ++*value; }
+static int InterlockedDecrement(volatile int *value) { return --*value; }
 static int InterlockedExchange(volatile int *value, int exchange) {
   int old=*value;*value=exchange;return old;
 }
@@ -980,7 +984,16 @@ int main(void) {
   assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
   scene.Started=0;
   context.GpuvaG3PreemptFence=0;
+  adapter.G4SubmitFailureClaim=0;
   assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
+  /* EXP1210: the refusal names the missing preempt mark (bit 16 only) and
+   * records the scene and slots. */
+  assert(adapter.G4SubmitFailure.Subsite==0x201u &&
+         adapter.G4SubmitFailure.AccessBytes==(1u<<16));
+  assert(adapter.G4SubmitFailure.LogicalIpa[0]==21u &&
+         adapter.G4SubmitFailure.LogicalSegment[0]==(1u|16u) && /* Queued, ReleaseRequested */
+         adapter.G4SubmitFailure.LogicalIpa[1]==21u &&
+         adapter.G4SubmitFailure.LogicalIpa[2]==0u);
   context.GpuvaG3PreemptFence=21;
   args.SubmissionFenceId=21;
   assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
