@@ -1,6 +1,33 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 34.6 fps; 47.7 without the Steam overlay UI)
 
 
+## Current as of 2026-10-11 08:45Z (read this first)
+
+Installed: PACKAGE1200 (.local/experiments/EXP1200-cs16-staging-names, ICD
+902170f7 on closure-017: real pipe fences, present ring polling copy fences,
+winsys framebuffer, receipts; INF 29f6d97e OpenGLFlags 3). Benchmark after
+EXP1194: play 32.6-34.8 fps (spread), noovl 47.7-47.8 (52-53 fps gameplay).
+Frame split (EXP1197, play 26.9 ms): Asahi draw path 7.9 ms (388 draws x
+20 us), flush 0.3, present 0.6, kernel waits 0.3, rest 18.2 ms (engine,
+Steam overlay UI, Mesa GL front end). noovl 19.2 ms: draw 6.5, flush 1.6 +
+present 1.8 (both mostly GPUVA retire waits: two submissions in flight,
+three per frame), rest 9.5.
+Learned since 05:40Z:
+- Non-blocking fences (1baa075c) and the polling present ring (d21a45b7) are
+  correct but gave no fps: the previous copy was always done at present
+  time (EXP1195); the present time is the copy submission's retire wait.
+- glthread still loses with the overlay UI (26.8 fps; its GL state queries
+  drain the worker); +2% without it (EXP1196). Stays opt-in.
+- Lightmap staging blits happen only at map load (EXP1200); the
+  decompress-on-update rule was removed (f019f5be).
+- KMD defect: dxgkrnl resubmission of a preempted G4 private job is refused
+  (Wom1G4SubmitFailure branch 7 subsite 0x201, EXP1197) and faults the GL
+  context; seen once in noovl after the per-frame waits were removed.
+  Separate task proposed (KMD owns it).
+Next causal targets: KMD resubmission fix, then GPUVA in-flight depth
+(UMD SubmissionHolds<=1 and winsys Older must change together), CPU per
+draw (20 us) and the Mesa front end under emulation.
+
 ## Current as of 2026-10-11 05:40Z (read this first)
 
 Standard benchmark (EXP1187+): timedemo of the operator-recorded movement
