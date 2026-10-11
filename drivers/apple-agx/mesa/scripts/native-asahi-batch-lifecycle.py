@@ -332,7 +332,19 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
       agx_decompress(ctx, rsrc, "CPU texture update");
 #endif
 
-   bool staging_blit = ail_is_level_logically_compressed(&rsrc->layout, level);''')
+   bool staging_blit = ail_is_level_logically_compressed(&rsrc->layout, level);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+   /* EXP1200 receipt-only: which textures the CPU writes through a staging
+    * blit (counted by text by the ICD's perf-note receipt). */
+   if (staging_blit && (usage & PIPE_MAP_WRITE))
+      perf_debug_ctx(ctx, "CPU staging %ux%u f%u l%u v%u b%x w%u",
+                     rsrc->base.width0, rsrc->base.height0,
+                     (unsigned)rsrc->base.format, level,
+                     (unsigned)agx_resource_valid(rsrc, level),
+                     (unsigned)resource->bind,
+                     (unsigned)(box->width == u_minify(rsrc->base.width0, level) &&
+                                box->height == u_minify(rsrc->base.height0, level)));
+#endif''')
     # EXP1195 (GPUVA profile): pipe fences are real. A flush that asks for
     # a fence submits like any flush and returns a fence holding the device's
     # newest accepted submission's completion fence (the GPU completes them in
