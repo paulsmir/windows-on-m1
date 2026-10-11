@@ -7,6 +7,9 @@ typedef char agx4_attachment_size[(sizeof(APPLE_AGX_G4_ATTACHMENT) == 24u) ? 1 :
 typedef char agx4_render_size[(sizeof(APPLE_AGX_G4_NATIVE_RENDER) == 240u) ? 1 : -1];
 typedef char agx4_process_range_size[(sizeof(APPLE_AGX_G4_PROCESS_RANGE) == 16u) ? 1 : -1];
 typedef char agx4_private_v2_size[(sizeof(APPLE_AGX_G4_PRIVATE_HEADER_V2) == 168u) ? 1 : -1];
+/* G2: drm_asahi_cmd_compute is 64 bytes (4+4+8+8+8, helper 16, ts 16). */
+typedef char agx4_compute_size[(sizeof(APPLE_AGX_G4_NATIVE_COMPUTE) == 64u) ? 1 : -1];
+typedef char agx4_compute_header_size[(sizeof(APPLE_AGX_G4_PRIVATE_HEADER_COMPUTE) == 40u) ? 1 : -1];
 
 static int valid_va(unsigned long long va, unsigned long long bytes) {
   return va >= 0x10000ULL && va < (1ULL << 39) && bytes &&
@@ -264,4 +267,90 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmitEx(
   state.Failure = failure;
   return parse_submit(private_data, private_capacity, umd_private_bytes,
       dma_va, dma_bytes, &state, view);
+}
+
+static int ranges_overlap(unsigned long long a, unsigned long long a_bytes,
+                          unsigned long long b, unsigned long long b_bytes) {
+  return a < b + b_bytes && b < a + a_bytes;
+}
+
+APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseComputeEx(
+    const void *private_data, unsigned int private_capacity,
+    unsigned int umd_private_bytes, unsigned long long dma_va,
+    unsigned int dma_bytes, unsigned int preempt_bytes,
+    APPLE_AGX_G4_ACCESS_EX access, void *context,
+    APPLE_AGX_G4_COMPUTE_VIEW *view, APPLE_AGX_G4_FAILURE *failure) {
+  AGX4_ACCESS_STATE state = {0};
+  APPLE_AGX_G4_PRIVATE_HEADER_COMPUTE header;
+  APPLE_AGX_G4_NATIVE_HEADER native_header;
+  APPLE_AGX_G4_NATIVE_COMPUTE compute;
+  const unsigned char *bytes = (const unsigned char *)private_data;
+  unsigned long long stream_bytes;
+  state.Typed = access;
+  state.Context = context;
+  state.Failure = failure;
+  if (view != 0) memset(view, 0, sizeof(*view));
+  if (failure) memset(failure, 0, sizeof(*failure));
+  if (!private_data || !view || !access || !preempt_bytes ||
+      private_capacity < sizeof(header) || umd_private_bytes < sizeof(header) ||
+      umd_private_bytes > private_capacity ||
+      dma_bytes == 0u || dma_bytes > APPLE_AGX_G4_NATIVE_MAX_BYTES ||
+      !valid_va(dma_va, dma_bytes)) return AppleAgxG4ParseInvalid;
+  memcpy(&header, bytes, sizeof(header));
+  if (header.Base.Magic != APPLE_AGX_G4_PRIVATE_MAGIC ||
+      header.Base.Version != APPLE_AGX_G4_PRIVATE_VERSION_COMPUTE ||
+      header.Base.HeaderBytes != sizeof(header) || header.Base.Reserved != 0u ||
+      header.Base.CommandVa != dma_va || header.Base.CommandBytes != dma_bytes ||
+      umd_private_bytes != (unsigned int)sizeof(header) + dma_bytes ||
+      dma_bytes != sizeof(native_header) + sizeof(compute))
+    return AppleAgxG4ParseInvalid;
+  memcpy(&native_header, bytes + sizeof(header), sizeof(native_header));
+  if (native_header.Type != APPLE_AGX_G4_COMPUTE)
+    return AppleAgxG4ParseUnsupported;
+  if (native_header.Size != sizeof(compute) || native_header.VdmBarrier != 0u ||
+      native_header.CdmBarrier != 0u)
+    return AppleAgxG4ParseInvalid;
+  memcpy(&compute, bytes + sizeof(header) + sizeof(native_header), sizeof(compute));
+  if (compute.Flags != 0u)
+    return AppleAgxG4ParseInvalid;
+  /* Helper programs (scratch) and timestamps need KMD-owned state. */
+  if (compute.Helper.Binary || compute.Helper.Cfg || compute.Helper.Data ||
+      compute.Timestamps.StartHandle || compute.Timestamps.EndHandle)
+    return AppleAgxG4ParseUnsupported;
+  if (compute.Timestamps.StartOffset || compute.Timestamps.EndOffset)
+    return AppleAgxG4ParseInvalid;
+  if (compute.CdmCtrlStreamBase >= compute.CdmCtrlStreamEnd ||
+      (compute.CdmCtrlStreamBase & 3ULL) || (compute.CdmCtrlStreamEnd & 3ULL))
+    return AppleAgxG4ParseInvalid;
+  stream_bytes = compute.CdmCtrlStreamEnd - compute.CdmCtrlStreamBase;
+  if (stream_bytes > APPLE_AGX_G4_CDM_STREAM_MAX_BYTES ||
+      !valid_va(compute.CdmCtrlStreamBase, stream_bytes) ||
+      compute.SamplerCount > APPLE_AGX_G4_MAX_SAMPLERS ||
+      (compute.SamplerCount != 0u) != (compute.SamplerHeap != 0ULL) ||
+      (compute.SamplerHeap && !valid_va(compute.SamplerHeap,
+          (unsigned long long)compute.SamplerCount * APPLE_AGX_G4_SAMPLER_BYTES)))
+    return AppleAgxG4ParseInvalid;
+  if (header.Preemption.Reserved || header.Preemption.Bytes < preempt_bytes ||
+      (header.Preemption.Va & 0xffffULL) || (header.Preemption.Bytes & 0xffffu) ||
+      !valid_va(header.Preemption.Va, header.Preemption.Bytes) ||
+      ranges_overlap(header.Preemption.Va, header.Preemption.Bytes, dma_va, dma_bytes) ||
+      ranges_overlap(header.Preemption.Va, header.Preemption.Bytes,
+                     compute.CdmCtrlStreamBase, stream_bytes))
+    return AppleAgxG4ParseInvalid;
+  if (!check_access(&state, dma_va, dma_bytes, 0, AppleAgxG4AccessCpuEnvelope) ||
+      !check_access(&state, compute.CdmCtrlStreamBase, (unsigned int)stream_bytes,
+                    0, AppleAgxG4AccessComputeStream) ||
+      (compute.SamplerCount &&
+       !check_access(&state, compute.SamplerHeap,
+                     compute.SamplerCount * APPLE_AGX_G4_SAMPLER_BYTES, 0,
+                     AppleAgxG4AccessSamplerHeap)) ||
+      !check_access(&state, header.Preemption.Va, header.Preemption.Bytes, 1,
+                    AppleAgxG4AccessComputePreemption))
+    return AppleAgxG4ParseUnmapped;
+  view->Native = bytes + sizeof(header);
+  view->Compute = compute;
+  view->Preemption = header.Preemption;
+  view->CommandBytes = dma_bytes;
+  view->CommandVa = dma_va;
+  return AppleAgxG4ParseOk;
 }
