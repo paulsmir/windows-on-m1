@@ -1,4 +1,28 @@
-# J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 34.6 fps; 47.7 without the Steam overlay UI)
+# J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 41.6 fps; 51.7 without the Steam overlay UI, gameplay at the 60 Hz vsync cap)
+
+## Current as of 2026-10-11 10:15Z (read this first)
+
+Installed: PACKAGE1207 (.local/experiments/EXP1207-cs16-shadow-pools, ICD
+67e10a37 on closure-022, INF OpenGLFlags 3 from EXP1194). Benchmark
+(EXP1184 harness, operator demo): play 41.6 fps, noovl 51.7 fps.
+Proven since 08:45Z:
+- x86 scalar stores into write-combined memory run at 20 MB/s under the
+  emulator (1.3 GB/s cached; memcpy into WC 15 GB/s, EXP1206). Recording
+  the batch pools and the encoder into cached shadows and copying them
+  into the allocations at submission (bfb8679e, EXP1207) cut
+  agx_encode_state 12.0 -> 1.7 us/draw and draw_vbo 21.9 -> 8.8 us/call;
+  game-thread CPU noovl 15.4 -> 11.2 ms. Four submissions in flight
+  (98a2bdd3) and the diagnostics opt-in (APPLE_AGX_ICD_PHASES=1) stay.
+- The operator's config.cfg has gl_vsync 1: swaps are paced to 60 Hz
+  (stw semantics), so without the overlay gameplay sits at the cap
+  (median frame 17.1 ms) and the game thread sleeps ~5 ms per frame.
+- The present worker shows 82% of the frames: 12.4 ms per shown frame
+  (readback copy 10.5 ms + DIB 1.9 ms), ~43 shown fps.
+Next causal targets: (1) with the overlay (operator's normal setup) the
+game thread is CPU-bound at 18.4 ms; its 6.5 ms over noovl is not the
+draw path (+59 draws) -- attribute it with one sampled overlay run;
+(2) the present readback copy (frames actually shown); (3) KMD
+resubmission defect (separate task, KMD owns it).
 
 
 ## Current as of 2026-10-11 08:45Z (read this first)
