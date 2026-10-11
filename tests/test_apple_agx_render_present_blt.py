@@ -51,6 +51,8 @@ class PresentBltTests(unittest.TestCase):
 #define STATUS_INVALID_ADDRESS (-4)
 #define STATUS_INVALID_USER_BUFFER (-5)
 #define STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER (-6)
+#define STATUS_NOT_SUPPORTED (-7)
+#define APPLE_AGX_PRESENT_MAX_RECTS 64u
 #define D3DDDIFMT_A8R8G8B8 21
 #define APPLE_AGX_SCANOUT_J313_SURFACE_SIZE 0xfa0000ULL
 #define ADMISSION_OPEN_ALLOCATION_MAGIC 0x4f504152u
@@ -113,6 +115,15 @@ typedef struct {HANDLE hContext;uint64_t DmaBufferVirtualAddress;unsigned DmaBuf
 static unsigned traced_field,traced_value;
 static void AdmissionSubmitTraceValueWindows(ADMISSION_CONTEXT *c,BOOLEAN enabled,
  unsigned field,unsigned value){(void)c;if(enabled){traced_field=field;traced_value=value;}}
+/* G2 HW2b: the GPU present path; NOT_SUPPORTED keeps the CPU path. */
+static unsigned gpu_present_calls,gpu_present_rects;
+static NTSTATUS gpu_present_status=STATUS_NOT_SUPPORTED;
+static NTSTATUS AdmissionGpuvaG3SubmitPresentCompute(ADMISSION_CONTEXT *a,
+ ADMISSION_RENDER_CONTEXT *c,const DXGKARG_SUBMITCOMMANDVIRTUAL *s,
+ const ADMISSION_PRESENT_BLT_COMMAND *command,const APPLE_AGX_GDI_RECT *rects,unsigned n){
+ (void)a;(void)c;(void)s;assert(command->Version==ADMISSION_PRESENT_BLT_GPUVA_VERSION &&
+ rects!=NULL && n==command->RectCount);++gpu_present_calls;gpu_present_rects=n;
+ return gpu_present_status;}
 static unsigned queue_calls,queued_fence,queued_bytes;
 static unsigned char queued_copy[4096];
 static NTSTATUS AdmissionPagingSubmitPresent(ADMISSION_CONTEXT *c,const DXGKARG_SUBMITCOMMAND *a,
@@ -239,6 +250,15 @@ int main(void){
  virtual_submit.Flags.Value=2;
  assert(AdmissionPresentSubmitVirtual(&adapter,&context,&virtual_submit)==STATUS_SUCCESS);
  assert(queue_calls==4 && queued_fence==40 && queued_bytes==200);
+ /* G2 HW2b: a present the GPU path takes never reaches the CPU queue. */
+ assert(gpu_present_calls==1 && gpu_present_rects==command.RectCount);
+ gpu_present_status=STATUS_SUCCESS;
+ assert(AdmissionPresentSubmitVirtual(&adapter,&context,&virtual_submit)==STATUS_SUCCESS);
+ assert(gpu_present_calls==2 && queue_calls==4);
+ gpu_present_status=STATUS_INVALID_PARAMETER;
+ assert(AdmissionPresentSubmitVirtual(&adapter,&context,&virtual_submit)==STATUS_INVALID_PARAMETER);
+ assert(gpu_present_calls==3 && queue_calls==4);
+ gpu_present_status=STATUS_NOT_SUPPORTED;
  p.pDmaBuffer=dma;p.DmaSize=4096;p.pDmaBufferPrivateData=private_data;
  p.DmaBufferPrivateDataSize=8192;p.MultipassOffset=0;
  virtual_allocations[1].SegmentId=1;

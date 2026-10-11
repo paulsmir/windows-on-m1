@@ -153,6 +153,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentBlt(
       (UINT)sizeof(APPLE_AGX_DMA_SHADOW_HEADER) - (UINT)sizeof(APPLE_AGX_DMA_SHADOW_RECORD);
   if (capacity > Present->DmaSize)
     capacity = Present->DmaSize;
+  /* G2 HW2b: one GPU present job takes at most APPLE_AGX_PRESENT_MAX_RECTS
+   * sub-rects; more continue in the next multipass DMA buffer. */
+  if (virtualAddressing &&
+      capacity > sizeof(ADMISSION_PRESENT_BLT_COMMAND) +
+                     APPLE_AGX_PRESENT_MAX_RECTS * sizeof(RECT))
+    capacity = (UINT)(sizeof(ADMISSION_PRESENT_BLT_COMMAND) +
+                      APPLE_AGX_PRESENT_MAX_RECTS * sizeof(RECT));
   if (capacity < sizeof(ADMISSION_PRESENT_BLT_COMMAND) + sizeof(RECT))
     return STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
   if (!AdmissionPresentBltEncode(&input, Present->pDmaBuffer, capacity, &bytes, &next))
@@ -394,6 +401,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentSubmitVirtual(
           Args->DmaBufferPrivateDataSize, &shadow, &view, &command, NULL) ||
       command.Version != ADMISSION_PRESENT_BLT_GPUVA_VERSION)
     return STATUS_INVALID_PARAMETER;
+  /* G2 HW2b: the GPU runs the blt in the presenting process's VM when it
+   * can; otherwise the present stays on the CPU path below. A virtual
+   * submission carries the whole DMA buffer (no submission offsets). */
+  if (AdmissionPresentBltValidate(view.Bytes, view.DmaBytes, 1, &command)) {
+    NTSTATUS gpu = AdmissionGpuvaG3SubmitPresentCompute(Adapter, Context,
+        Args, &command, (const APPLE_AGX_GDI_RECT *)(
+            (const unsigned char *)view.Bytes + sizeof(command)),
+        command.RectCount);
+    if (gpu != STATUS_NOT_SUPPORTED) return gpu;
+  }
   RtlZeroMemory(&submit, sizeof(submit));
   submit.hContext = Args->hContext;
   submit.Flags.Value = Args->Flags.Value;

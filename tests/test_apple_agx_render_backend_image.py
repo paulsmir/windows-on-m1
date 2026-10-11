@@ -30,6 +30,8 @@ class AppleAgxRenderBackendImageTests(unittest.TestCase):
                 str(SHARED / "src" / "apple_agx_render_template_rebase.c"),
                 str(SHARED / "src" / "apple_agx_render_template_vm_slot.c"),
                 str(SHARED / "src" / "apple_agx_g4_builder.c"),
+                str(SHARED / "src" / "apple_agx_present_job.c"),
+                str(SHARED / "src" / "apple_agx_cdm.c"),
                 str(SHARED / "src" / "apple_agx_relocation.c"),
                 str(SHARED / "src" / "apple_agx_exp208_gdi.c"),
                 str(SHARED / "src" / "apple_agx_exp208_framebuffer.c"),

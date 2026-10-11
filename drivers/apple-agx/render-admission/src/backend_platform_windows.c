@@ -2282,18 +2282,39 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildComputeJob(
       &runtime->Provider.QueueProvider.ComputeIdentityDiagnostic.Build;
   APPLE_AGX_RENDER_COMPUTE_INPUT input;
   APPLE_AGX_RENDER_COMPUTE_OUTPUT output;
-  ULONGLONG streamBytes;
-  if (Job == NULL || !image->G4Compute || image->BoundFence != fence ||
-      image->JobReady || !runtime->Provider.QueueProvider.Config.HasCompute ||
-      envelope->Compute.CdmCtrlStreamEnd <= envelope->Compute.CdmCtrlStreamBase)
+  ULONGLONG streamBase, streamBytes, preemption;
+  if (Job == NULL || !(image->G4Compute || image->PresentCompute) ||
+      image->BoundFence != fence ||
+      image->JobReady || !runtime->Provider.QueueProvider.Config.HasCompute)
     return APPLE_AGX_BACKEND_FALSE;
-  streamBytes = envelope->Compute.CdmCtrlStreamEnd -
-      envelope->Compute.CdmCtrlStreamBase;
-  if (streamBytes > APPLE_AGX_G4_CDM_STREAM_MAX_BYTES)
+  if (image->PresentCompute) {
+    /* G2 HW2b: the present job is written into the process's arena now:
+     * the previous job that used it has completed (one job at a time),
+     * and submission proved every input (AppleAgxPresentValidate). */
+    const ADMISSION_PRESENT_COMPUTE *present = &image->Present;
+    APPLE_AGX_PRESENT_JOB job;
+    if (!AppleAgxPresentBuild(&present->Arena, (int)present->Fill,
+            present->Colour, &present->Source, &present->SourceRect,
+            &present->Destination, &present->DestinationRect, present->Rects,
+            present->RectCount, &job))
+      return APPLE_AGX_BACKEND_FALSE;
+    KeMemoryBarrier();
+    streamBase = job.CdmStreamBase;
+    streamBytes = job.CdmStreamEnd - job.CdmStreamBase;
+    preemption = job.PreemptionVa;
+  } else {
+    if (envelope->Compute.CdmCtrlStreamEnd <= envelope->Compute.CdmCtrlStreamBase)
+      return APPLE_AGX_BACKEND_FALSE;
+    streamBase = envelope->Compute.CdmCtrlStreamBase;
+    streamBytes = envelope->Compute.CdmCtrlStreamEnd -
+        envelope->Compute.CdmCtrlStreamBase;
+    preemption = envelope->Header.Preemption.Va;
+  }
+  if (streamBytes == 0ULL || streamBytes > APPLE_AGX_G4_CDM_STREAM_MAX_BYTES)
     return APPLE_AGX_BACKEND_FALSE;
   RtlZeroMemory(&input, sizeof(input));
   RtlZeroMemory(&output, sizeof(output));
-  input.CdmStreamBase = envelope->Compute.CdmCtrlStreamBase;
+  input.CdmStreamBase = streamBase;
   input.CdmStreamBytes = (APPLE_AGX_U32)streamBytes;
   input.Counter = fence;
   input.UscExecutionBase = APPLE_AGX_G4_USC_EXECUTION_BASE;
@@ -2303,7 +2324,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildComputeJob(
   input.StampValue = fence;
   input.EventSequence = fence;
   input.ClientSequence = fence & 0xffu;
-  input.PreemptionGpuAddress = envelope->Header.Preemption.Va;
+  input.PreemptionGpuAddress = preemption;
   if (!AppleAgxRenderSharedMemoryBuildCompute(
           &runtime->Initdata.RenderSharedMemory, &input, &output))
     return APPLE_AGX_BACKEND_FALSE;
@@ -2350,7 +2371,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
   if (runtime == NULL || Submission == NULL || Plan == NULL ||
       Submission->Submission.Fence == 0u)
     return APPLE_AGX_BACKEND_FALSE;
-  if (runtime->Adapter->BackendImage.G4Compute)
+  if (runtime->Adapter->BackendImage.G4Compute ||
+      runtime->Adapter->BackendImage.PresentCompute)
     return AdmissionExternalBuildComputeJob(runtime, Submission, Plan, Job);
   RtlZeroMemory(&staged, sizeof(staged));
   RtlZeroMemory(&bindings, sizeof(bindings));
@@ -2662,6 +2684,18 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendResolve(
   ADMISSION_BACKEND_IMAGE *image = runtime == NULL ||
       runtime->Adapter == NULL ? NULL :
       &runtime->Adapter->BackendImage;
+  if (image != NULL && image->PresentCompute) {
+    /* G2 HW2b: the bound present job stands for the DMA buffer. */
+    if (Submission == NULL || Bytes == NULL || ByteCount == NULL ||
+        image->BoundFence != Submission->Submission.Fence ||
+        Submission->PrivateData != &image->Present ||
+        Submission->DmaSubmissionStart != 0u ||
+        Submission->DmaSubmissionEnd != (APPLE_AGX_U32)sizeof(image->Present))
+      return APPLE_AGX_BACKEND_FALSE;
+    *Bytes = (const unsigned char *)&image->Present;
+    *ByteCount = (APPLE_AGX_BACKEND_U32)sizeof(image->Present);
+    return APPLE_AGX_BACKEND_TRUE;
+  }
   if (image != NULL && image->G4Compute) {
     /* G2: the bound envelope's native command is the DMA buffer. */
     if (Submission == NULL || Bytes == NULL || ByteCount == NULL ||

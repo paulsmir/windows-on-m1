@@ -571,6 +571,9 @@ typedef struct _ADMISSION_G4_PENDING {
    * Native are unused. */
   BOOLEAN Compute;
   APPLE_AGX_G4_COMPUTE_ENVELOPE ComputeEnvelope;
+  /* G2 HW2b: a present blt compute entry binds this job instead. */
+  BOOLEAN Present;
+  ADMISSION_PRESENT_COMPUTE PresentJob;
 } ADMISSION_G4_PENDING;
 
 typedef struct _ADMISSION_CONTEXT {
@@ -1952,6 +1955,12 @@ NTSTATUS AdmissionGpuvaG3AttachContext(ADMISSION_RENDER_CONTEXT *Context,
 /* G2 HW2b: give the context's process its present arena when it is idle;
  * failure leaves the process without one (receipt Wom1G2PresentArena). */
 NTSTATUS AdmissionGpuvaG3EnsurePresentArena(ADMISSION_RENDER_CONTEXT *Context);
+/* G2 HW2b: queue a GPUVA present blt as a KMD compute job in the presenting
+ * process's VM. STATUS_NOT_SUPPORTED leaves the present to the CPU path. */
+NTSTATUS AdmissionGpuvaG3SubmitPresentCompute(ADMISSION_CONTEXT *Adapter,
+    ADMISSION_RENDER_CONTEXT *Context, const DXGKARG_SUBMITCOMMANDVIRTUAL *Args,
+    const ADMISSION_PRESENT_BLT_COMMAND *Command,
+    const APPLE_AGX_GDI_RECT *Rects, ULONG RectCount);
 VOID AdmissionGpuvaG3DetachContext(ADMISSION_RENDER_CONTEXT *Context);
 VOID AdmissionGpuvaG3NoteAllocationPaging(ADMISSION_CONTEXT *Context,
                                           HANDLE Allocation, ULONG Operation,

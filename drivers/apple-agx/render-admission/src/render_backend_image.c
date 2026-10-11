@@ -386,7 +386,8 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Compute(
     const APPLE_AGX_G4_COMPUTE_ENVELOPE *Envelope) {
   if (Image == 0 || Envelope == 0 || Fence == 0u ||
       Image->Ready != APPLE_AGX_TRUE || Image->BoundFence != 0u ||
-      Image->G4Native || Image->G4Compute || Image->NativeBound ||
+      Image->G4Native || Image->G4Compute || Image->PresentCompute ||
+      Image->NativeBound ||
       Image->JobReady || Image->JobFence != 0u ||
       Envelope->Header.Base.Version != APPLE_AGX_G4_PRIVATE_VERSION_COMPUTE ||
       Envelope->Native.Type != APPLE_AGX_G4_COMPUTE)
@@ -394,6 +395,24 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Compute(
   memcpy(&Image->G4ComputeEnvelope, Envelope, sizeof(*Envelope));
   AdmissionBackendBindingZero(&Image->Binding);
   Image->G4Compute = APPLE_AGX_TRUE;
+  Image->BoundFence = Fence;
+  return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AdmissionBackendImageBindPresentCompute(
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence,
+    const ADMISSION_PRESENT_COMPUTE *Present) {
+  if (Image == 0 || Present == 0 || Fence == 0u ||
+      Image->Ready != APPLE_AGX_TRUE || Image->BoundFence != 0u ||
+      Image->G4Native || Image->G4Compute || Image->PresentCompute ||
+      Image->NativeBound || Image->JobReady || Image->JobFence != 0u ||
+      !AppleAgxPresentValidate(&Present->Arena, (int)Present->Fill,
+          &Present->Source, &Present->SourceRect, &Present->Destination,
+          &Present->DestinationRect, Present->Rects, Present->RectCount))
+    return APPLE_AGX_FALSE;
+  memcpy(&Image->Present, Present, sizeof(*Present));
+  AdmissionBackendBindingZero(&Image->Binding);
+  Image->PresentCompute = APPLE_AGX_TRUE;
   Image->BoundFence = Fence;
   return APPLE_AGX_TRUE;
 }
@@ -512,10 +531,12 @@ APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmission(
       Image->Ready != APPLE_AGX_TRUE || Fence == 0u ||
       Image->BoundFence != Fence)
     return APPLE_AGX_FALSE;
-  if (Image->G4Compute) {
+  if (Image->G4Compute || Image->PresentCompute) {
     /* The arena was never touched: only the binding goes. */
     memset(&Image->G4ComputeEnvelope, 0, sizeof(Image->G4ComputeEnvelope));
+    memset(&Image->Present, 0, sizeof(Image->Present));
     Image->G4Compute = APPLE_AGX_FALSE;
+    Image->PresentCompute = APPLE_AGX_FALSE;
     Image->BoundFence = 0u;
     Image->JobFence = 0u;
     Image->JobReady = APPLE_AGX_FALSE;
@@ -698,7 +719,7 @@ APPLE_AGX_BOOL AdmissionBackendImageStageJob(
       Job == ADMISSION_BACKEND_IMAGE_NULL ||
       Image->Ready != APPLE_AGX_TRUE || Image->JobReady ||
       Fence == 0u || Image->BoundFence != Fence || Image->G4Compute ||
-      Image->Sequence == 0xffffffffu)
+      Image->PresentCompute || Image->Sequence == 0xffffffffu)
     return APPLE_AGX_FALSE;
   dynamic_input.Sequence = Image->Sequence + 1u;
   dynamic_input.TaEventNumber = TaEvent;

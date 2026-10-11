@@ -419,10 +419,19 @@ struct _ADMISSION_G3_PROCESS {
 
 /* render_memory.h: the firmware VM slot of the job being begun. */
 #define ADMISSION_GPUVA_G3_JOB_VM_SLOT 1u
+/* render_backend_image.h: a KMD present blt compute job (G2 HW2b). */
+typedef struct _ADMISSION_PRESENT_COMPUTE {
+  APPLE_AGX_PRESENT_ARENA Arena;
+  APPLE_AGX_PRESENT_SURFACE Source, Destination;
+  APPLE_AGX_PRESENT_RECT SourceRect, DestinationRect;
+  APPLE_AGX_PRESENT_RECT Rects[APPLE_AGX_PRESENT_MAX_RECTS];
+  APPLE_AGX_U32 RectCount, Fill, Colour;
+} ADMISSION_PRESENT_COMPUTE;
 typedef struct { int unused; } REPLAY_APERTURE;
 typedef struct {
-  UINT G4Native,BoundFence,G4CommandBytes,G4Compute;
+  UINT G4Native,BoundFence,G4CommandBytes,G4Compute,PresentCompute;
   APPLE_AGX_G4_COMPUTE_ENVELOPE G4ComputeEnvelope;
+  ADMISSION_PRESENT_COMPUTE Present;
   APPLE_AGX_G4_PRIVATE_HEADER_V2 G4Header;
   unsigned char Commands[APPLE_AGX_G4_NATIVE_MAX_BYTES];
   APPLE_AGX_G4_PRIVATE_LEASE G4Lease;

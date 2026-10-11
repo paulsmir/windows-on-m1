@@ -2582,6 +2582,33 @@ static ULONG AdmissionG4SnapRead(ADMISSION_CONTEXT *adapter,
 }
 #endif
 
+/* G2 HW2b: a present job reads its source and writes its destination in
+ * the process graph (never in the private range, which holds the arena),
+ * and its arena is this process's present arena. */
+static ULONG AdmissionG3PresentSurfaceBytes(const APPLE_AGX_PRESENT_SURFACE *s) {
+  ULONGLONG bytes;
+  if (s->Width == 0u || s->Height == 0u) return 0u;
+  bytes = (ULONGLONG)(s->Height - 1u) * s->Pitch + (ULONGLONG)s->Width * 4u;
+  return bytes > 0xffffffffULL ? 0u : (ULONG)bytes;
+}
+
+static BOOLEAN AdmissionG3PresentAccessible(ADMISSION_G3_PROCESS *process,
+    const ADMISSION_PRESENT_COMPUTE *present) {
+  ULONG source = present->Fill ? 0u :
+      AdmissionG3PresentSurfaceBytes(&present->Source);
+  ULONG destination = AdmissionG3PresentSurfaceBytes(&present->Destination);
+  return process->PresentArena.Generation &&
+      present->Arena.Va == process->PrivateVa + process->PresentArena.VaOffset &&
+      present->Arena.Bytes == APPLE_AGX_PRESENT_ARENA_BYTES &&
+      destination != 0u &&
+      AdmissionG4GraphAccessTyped(process, present->Destination.Va,
+          destination, 1, AppleAgxG4AccessProcess, 0u) &&
+      (present->Fill ||
+       (source != 0u &&
+        AdmissionG4GraphAccessTyped(process, present->Source.Va, source, 0,
+            AppleAgxG4AccessProcess, 0u))) ? TRUE : FALSE;
+}
+
 NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
     ADMISSION_RENDER_CONTEXT *context, ULONG fence) {
   ADMISSION_G3_STATE *state;
@@ -2620,6 +2647,13 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
         image->G4Header.Base.CommandVa != context->GpuvaG3DmaBufferVa ||
         image->G4CommandBytes != context->GpuvaG3DmaBufferBytes)
       g4_valid = FALSE;
+  } else if (adapter->BackendImage.PresentCompute) {
+    /* G2 HW2b: re-prove the bound present under the same lock as
+     * JOB_BEGIN: the arena is this process's and its surfaces are still
+     * readable and writable in its graph. */
+    if (adapter->BackendImage.BoundFence != fence ||
+        !AdmissionG3PresentAccessible(process, &adapter->BackendImage.Present))
+      g4_valid = FALSE;
   } else if (adapter->BackendImage.G4Compute) {
     /* G2: the mappings may have changed since submit; re-prove the bound
      * envelope against the graph under the same lock as JOB_BEGIN. */
@@ -2643,15 +2677,18 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
       g4_valid &&
       !context->GpuvaG3Poisoned && context->GpuvaG3RootIpa != 0ULL &&
       context->GpuvaG3RootIpa == process->Graph.RootIpa &&
-      (adapter->BackendImage.G4Native || adapter->BackendImage.G4Compute ?
+      /* A present job's GPU work is in its arena, not its DMA buffer. */
+      (adapter->BackendImage.PresentCompute ? TRUE :
+       adapter->BackendImage.G4Native || adapter->BackendImage.G4Compute ?
           AdmissionG4LogicalEnvelopeAccess(process,
               context->GpuvaG3DmaBufferVa,
               context->GpuvaG3DmaBufferBytes) :
           AppleAgxGpuvaG3GraphContainsRange(&process->Graph,
               context->GpuvaG3DmaBufferVa,
               context->GpuvaG3DmaBufferBytes)) &&
-      /* A compute job has no destination allocation to prove. */
-      (adapter->BackendImage.G4Compute ||
+      /* A compute job has no destination allocation to prove; a present
+       * job's destination was proven above. */
+      (adapter->BackendImage.G4Compute || adapter->BackendImage.PresentCompute ||
        AdmissionG3OutputMatchesLocal(adapter, &process->Graph)) &&
       AppleAgxGpuvaG3GraphBeginJob(&process->Graph,
           ADMISSION_GPUVA_G3_JOB_VM_SLOT)) {
@@ -3294,14 +3331,17 @@ static BOOLEAN AdmissionG4PendingQueue(ADMISSION_CONTEXT *adapter,
     const ADMISSION_RENDER_PACKET_DESCRIPTION *packet,
     const APPLE_AGX_G4_SUBMIT_VIEW *view,
     const APPLE_AGX_G4_COMPUTE_ENVELOPE *compute,
+    const ADMISSION_PRESENT_COMPUTE *present,
     ULONGLONG mapping_generation) {
   ADMISSION_G4_PENDING *entry = NULL;
   KIRQL old_irql;
   ULONG slot;
   BOOLEAN queued = FALSE;
-  /* G2: exactly one of a render view or a compute envelope. */
-  if (compute != NULL ? (view != NULL || private_scene != NULL ||
-                         packet->Kind != ADMISSION_RENDER_PACKET_KIND_COMPUTE) :
+  /* G2: exactly one of a render view, a compute envelope or a present. */
+  if (compute != NULL && present != NULL) return FALSE;
+  if (compute != NULL || present != NULL ?
+      (view != NULL || private_scene != NULL ||
+       packet->Kind != ADMISSION_RENDER_PACKET_KIND_COMPUTE) :
       (view == NULL || view->Native == NULL || view->Render == NULL ||
        view->Attachments == NULL || view->AttachmentCount == 0u ||
        view->AttachmentCount > APPLE_AGX_G4_MAX_ATTACHMENTS ||
@@ -3334,7 +3374,11 @@ static BOOLEAN AdmissionG4PendingQueue(ADMISSION_CONTEXT *adapter,
   entry->DmaBufferVa = args->DmaBufferVirtualAddress;
   entry->DmaBufferBytes = args->DmaBufferSize;
   entry->Compute = compute != NULL ? TRUE : FALSE;
-  if (compute != NULL) {
+  entry->Present = present != NULL ? TRUE : FALSE;
+  if (present != NULL) {
+    RtlZeroMemory(&entry->View, sizeof(entry->View));
+    RtlCopyMemory(&entry->PresentJob, present, sizeof(entry->PresentJob));
+  } else if (compute != NULL) {
     RtlZeroMemory(&entry->View, sizeof(entry->View));
     RtlCopyMemory(&entry->ComputeEnvelope, compute,
                   sizeof(entry->ComputeEnvelope));
@@ -3404,7 +3448,10 @@ _Use_decl_annotations_ BOOLEAN AdmissionG4PendingBindHead(
   view.Render = entry->Render;
   view.Attachments = &entry->Attachment;
   RtlZeroMemory(&binding, sizeof(binding));
-  bound = (entry->Compute ?
+  bound = (entry->Present ?
+      AdmissionBackendImageBindPresentCompute(&adapter->BackendImage,
+          entry->Fence, &entry->PresentJob) :
+      entry->Compute ?
       AdmissionBackendImageBindG4Compute(&adapter->BackendImage,
           entry->Fence, &entry->ComputeEnvelope) :
       AdmissionBackendImageBindG4Submission(&adapter->BackendImage,
@@ -3537,7 +3584,7 @@ static NTSTATUS AdmissionG4SubmitComputeLocked(ADMISSION_CONTEXT *adapter,
   packet.DmaEnd = view.CommandBytes;
   if (deferred) {
     if (AdmissionG4PendingQueue(adapter, state, context, NULL, args,
-            &packet, NULL, &envelope, mapping_generation)) {
+            &packet, NULL, &envelope, NULL, mapping_generation)) {
       InterlockedIncrement(&adapter->SubmitPath.Deferred);
       AdmissionDispatchQueuedWork(adapter);
       return STATUS_SUCCESS;
@@ -3601,6 +3648,178 @@ Rollback:
         args->SubmissionFenceId);
   return AdmissionG4SubmitReject(adapter, context, args,
       rollbackBranch, STATUS_INVALID_PARAMETER, 0u, TRUE);
+}
+
+/* G2 HW2b: DxgkDdiPresent Blt (GPUVA) as a compute job in the presenting
+ * process's VM, queued exactly like a G4 compute job. What the worker builds
+ * is proven here (AppleAgxPresentValidate, graph access), so the worker has
+ * no refusal path. A present the GPU path cannot take (no arena, other
+ * format, more rects than one job, a context or process not ready) returns
+ * STATUS_NOT_SUPPORTED before claiming its fence and stays on the CPU path. */
+static BOOLEAN AdmissionG3PresentRect(const APPLE_AGX_GDI_RECT *in,
+    APPLE_AGX_PRESENT_RECT *out) {
+  if (in->Left > 0x7fffffffu || in->Top > 0x7fffffffu ||
+      in->Right > 0x7fffffffu || in->Bottom > 0x7fffffffu) return FALSE;
+  out->Left = (int)in->Left; out->Top = (int)in->Top;
+  out->Right = (int)in->Right; out->Bottom = (int)in->Bottom;
+  return TRUE;
+}
+
+NTSTATUS AdmissionGpuvaG3SubmitPresentCompute(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context, const DXGKARG_SUBMITCOMMANDVIRTUAL *args,
+    const ADMISSION_PRESENT_BLT_COMMAND *command,
+    const APPLE_AGX_GDI_RECT *rects, ULONG count) {
+  ADMISSION_G3_STATE *state;
+  ADMISSION_G3_PROCESS *process;
+  ADMISSION_BACKEND_MEMORY_VIEW view;
+  ADMISSION_PRESENT_COMPUTE present;
+  ADMISSION_RENDER_PACKET_DESCRIPTION packet;
+  ULONGLONG mapping_generation;
+  KIRQL old_irql;
+  BOOLEAN deferred, prepared = FALSE, queued = FALSE;
+  ULONG i;
+  if (adapter == NULL || context == NULL || args == NULL || command == NULL ||
+      rects == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return STATUS_NOT_SUPPORTED;
+  state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  process = (ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
+  if (state == NULL || process == NULL || process->State != state ||
+      process->Poisoned || context->GpuvaG3Poisoned ||
+      context->GpuvaG3RootIpa == 0ULL || !context->SchedulerContext.Active ||
+      (context->Object.Flags & ADMISSION_CONTEXT_VIRTUAL_ADDRESSING) == 0u ||
+      command->Version != ADMISSION_PRESENT_BLT_GPUVA_VERSION ||
+      command->SourceDescription.BytesPerPixel != 4u ||
+      command->DestinationDescription.BytesPerPixel != 4u ||
+      count == 0u || count > APPLE_AGX_PRESENT_MAX_RECTS ||
+      !NT_SUCCESS(AdmissionMemoryRuntimePrivateView(adapter, &view)) ||
+      view.CpuAddress == NULL)
+    return STATUS_NOT_SUPPORTED;
+  RtlZeroMemory(&present, sizeof(present));
+  present.Source.Va = command->SourceLocation;
+  present.Source.Pitch = command->SourceDescription.Pitch;
+  present.Source.Width = command->SourceDescription.Width;
+  present.Source.Height = command->SourceDescription.Height;
+  present.Destination.Va = command->DestinationLocation;
+  present.Destination.Pitch = command->DestinationDescription.Pitch;
+  present.Destination.Width = command->DestinationDescription.Width;
+  present.Destination.Height = command->DestinationDescription.Height;
+  if (!AdmissionG3PresentRect(&command->SourceRect, &present.SourceRect) ||
+      !AdmissionG3PresentRect(&command->DestinationRect,
+                              &present.DestinationRect))
+    return STATUS_NOT_SUPPORTED;
+  for (i = 0u; i < count; ++i)
+    if (!AdmissionG3PresentRect(&rects[i], &present.Rects[i]))
+      return STATUS_NOT_SUPPORTED;
+  present.RectCount = count;
+  /* The kernel reads and writes in parallel: overlapping source and
+   * destination bytes (a scroll within one allocation) need the CPU path's
+   * source snapshot. */
+  {
+    ULONG source = AdmissionG3PresentSurfaceBytes(&present.Source);
+    ULONG destination = AdmissionG3PresentSurfaceBytes(&present.Destination);
+    if (source == 0u || destination == 0u ||
+        (present.Source.Va < present.Destination.Va + destination &&
+         present.Destination.Va < present.Source.Va + source))
+      return STATUS_NOT_SUPPORTED;
+  }
+  deferred = AdmissionG4PendingAdmissible(adapter, context);
+  if (!deferred && !AdmissionPlatformRuntimeAwaitWork(adapter, 10000u, NULL))
+    return STATUS_NOT_SUPPORTED;
+  ExAcquireFastMutex(&state->Lock);
+  /* The arena is made once and never moves until the process ends. */
+  if (process->PresentArena.Generation) {
+    present.Arena.Cpu = (unsigned char *)view.CpuAddress +
+        process->PresentArena.Offset;
+    present.Arena.Va = process->PrivateVa + process->PresentArena.VaOffset;
+    present.Arena.Bytes = APPLE_AGX_PRESENT_ARENA_BYTES;
+    present.Arena.UscBase = APPLE_AGX_G4_USC_EXECUTION_BASE;
+  }
+  if (!process->PresentArena.Generation ||
+      context->GpuvaG3RootIpa != process->Graph.RootIpa ||
+      process->Graph.Uncertain ||
+      (!deferred && state->PrivateCompletionFence) ||
+      !AppleAgxPresentValidate(&present.Arena, 0, &present.Source,
+          &present.SourceRect, &present.Destination, &present.DestinationRect,
+          present.Rects, present.RectCount) ||
+      !AdmissionG3PresentAccessible(process, &present)) {
+    ExReleaseFastMutex(&state->Lock);
+    return STATUS_NOT_SUPPORTED;
+  }
+  mapping_generation = process->Graph.MappingGeneration;
+  ExReleaseFastMutex(&state->Lock);
+  RtlZeroMemory(&packet, sizeof(packet));
+  packet.Kind = ADMISSION_RENDER_PACKET_KIND_COMPUTE;
+  packet.Fence = args->SubmissionFenceId;
+  packet.ContextToken = (ULONGLONG)(ULONG_PTR)context;
+  packet.AllocationToken = (ULONGLONG)(ULONG_PTR)context;
+  packet.PrivateDataToken =
+      (ULONGLONG)(ULONG_PTR)&adapter->BackendImage.Present;
+  packet.PrivateDataBytes = (ULONG)sizeof(present);
+  packet.PrivateDataEnd = packet.PrivateDataBytes;
+  packet.DmaEnd = (ULONG)sizeof(present);
+  if (deferred) {
+    if (AdmissionG4PendingQueue(adapter, state, context, NULL, args,
+            &packet, NULL, NULL, &present, mapping_generation)) {
+      InterlockedIncrement(&adapter->SubmitPath.Deferred);
+      AdmissionDispatchQueuedWork(adapter);
+      return STATUS_SUCCESS;
+    }
+    return STATUS_NOT_SUPPORTED;
+  }
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  if (AdmissionRenderPacketState(&adapter->RenderPacket) ==
+          AdmissionRenderPacketEmpty &&
+      adapter->G4PendingCount == 0u &&
+      context->Object.FenceOutstanding == 0u &&
+      InterlockedCompareExchange(&adapter->SchedulerFaulted, 0, 0) == 0 &&
+      AdmissionRenderPacketPrepare(&adapter->RenderPacket, &packet)) {
+    context->Object.FenceOutstanding = args->SubmissionFenceId;
+    prepared = TRUE;
+  }
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  if (!prepared) return STATUS_NOT_SUPPORTED;
+  /* From here the fence is this job's: a failure is a rejected submit. */
+  if (!AdmissionBackendImageBindPresentCompute(&adapter->BackendImage,
+          args->SubmissionFenceId, &present)) goto Rollback;
+  context->GpuvaG3MappingGeneration = mapping_generation;
+  context->GpuvaG3DmaBufferVa = args->DmaBufferVirtualAddress;
+  context->GpuvaG3DmaBufferBytes = args->DmaBufferSize;
+  ExAcquireFastMutex(&state->Lock);
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  if (AdmissionRenderPacketQueue(&adapter->RenderPacket,
+          args->SubmissionFenceId, (ULONGLONG)(ULONG_PTR)context,
+          packet.PrivateDataToken, 0u, packet.DmaEnd)) {
+    if (AppleAgxSchedulerQueueFence(&adapter->Scheduler, 0u, 0u,
+            args->SubmissionFenceId))
+      queued = TRUE;
+    else
+      (void)AdmissionRenderPacketReset(&adapter->RenderPacket,
+          args->SubmissionFenceId, 0u);
+  }
+  if (!queued) AdmissionContextRetireFence(context, args->SubmissionFenceId);
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  ExReleaseFastMutex(&state->Lock);
+  if (queued) {
+    InterlockedIncrement(&adapter->SubmitPath.Immediate);
+    AdmissionDispatchQueuedWork(adapter);
+    return STATUS_SUCCESS;
+  }
+Rollback:
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  if (AdmissionRenderPacketState(&adapter->RenderPacket) ==
+          AdmissionRenderPacketPrepared)
+    (void)AdmissionRenderPacketCancelPrepared(&adapter->RenderPacket,
+        (ULONGLONG)(ULONG_PTR)context);
+  AdmissionContextRetireFence(context, args->SubmissionFenceId);
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  AdmissionPlatformRuntimeSlotChanged(adapter);
+  context->GpuvaG3DmaBufferVa = 0ULL;
+  context->GpuvaG3DmaBufferBytes = 0u;
+  if (adapter->BackendImage.PresentCompute)
+    (void)AdmissionBackendImageReleaseSubmission(&adapter->BackendImage,
+        args->SubmissionFenceId);
+  return AdmissionG4SubmitReject(adapter, context, args,
+      AdmissionG4RejectQueue, STATUS_INVALID_PARAMETER, 0u, TRUE);
 }
 
 static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
@@ -3829,7 +4048,7 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
         TRUE, &detail);
   if (deferred) {
     if (AdmissionG4PendingQueue(adapter, state, context, private_scene, args,
-            &packet, &view, NULL, mapping_generation)) {
+            &packet, &view, NULL, NULL, mapping_generation)) {
       InterlockedIncrement(&adapter->SubmitPath.Deferred);
       AdmissionDispatchQueuedWork(adapter);
       return STATUS_SUCCESS;
