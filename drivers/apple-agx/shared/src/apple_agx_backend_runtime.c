@@ -44,6 +44,7 @@ static void AppleAgxBackendClearPending(APPLE_AGX_BACKEND_RUNTIME *Runtime) {
                       (APPLE_AGX_U32)sizeof(Runtime->PendingJob));
   Runtime->TaComplete = APPLE_AGX_FALSE;
   Runtime->D3Complete = APPLE_AGX_FALSE;
+  Runtime->ComputeComplete = APPLE_AGX_FALSE;
   Runtime->TerminalPending = APPLE_AGX_FALSE;
   Runtime->TerminalCpuFlushed = APPLE_AGX_FALSE;
   Runtime->TerminalStatus = AppleAgxBackendCompletionSuccess;
@@ -199,6 +200,13 @@ static APPLE_AGX_BOOL AppleAgxBackendSubmissionValid(
 static APPLE_AGX_BOOL
 AppleAgxBackendJobValid(const APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
   APPLE_AGX_U32 index;
+  if (Job->Kind == AppleAgxBackendJobCompute)
+    return Job->ComputeWorkAddressCount == 1u &&
+           Job->ComputeWorkAddresses[0] != 0ULL &&
+           Job->ComputeExpectedStamp != 0u &&
+           Job->TaWorkAddressCount == 0u && Job->D3WorkAddressCount == 0u
+               ? APPLE_AGX_TRUE : APPLE_AGX_FALSE;
+  if (Job->Kind != AppleAgxBackendJobRender) return APPLE_AGX_FALSE;
   if (Job->TaWorkAddressCount != APPLE_AGX_BACKEND_QUEUE_WORK_COUNT ||
       Job->D3WorkAddressCount != APPLE_AGX_BACKEND_QUEUE_WORK_COUNT ||
       Job->TaExpectedStamp == 0u || Job->D3ExpectedStamp == 0u)
@@ -246,6 +254,20 @@ APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeSubmit(
   Runtime->PendingSubmission = *Submission;
   Runtime->TaComplete = APPLE_AGX_FALSE;
   Runtime->D3Complete = APPLE_AGX_FALSE;
+  Runtime->ComputeComplete = APPLE_AGX_FALSE;
+  if (Runtime->PendingJob.Kind == AppleAgxBackendJobCompute) {
+    /* G2: one atomic admission, as Run3d: FALSE never reached the queue. */
+    if (Runtime->Io.Queues.RunCompute == APPLE_AGX_BACKEND_NULL ||
+        !Runtime->Io.Queues.RunCompute(Runtime->Io.Context,
+                                       &Runtime->PendingJob,
+                                       Submission->Submission.Fence)) {
+      AppleAgxBackendClearPending(Runtime);
+      Runtime->Phase = AppleAgxBackendRuntimeReady;
+      return AppleAgxBackendRuntimeResultQueueFailed;
+    }
+    Runtime->Phase = AppleAgxBackendRuntimeSubmitted;
+    return AppleAgxBackendRuntimeResultOk;
+  }
   if (!Runtime->Io.Queues.Run3d(Runtime->Io.Context, &Runtime->PendingJob,
                                 Submission->Submission.Fence)) {
     /*
@@ -359,6 +381,7 @@ APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeObserve(
      * the resume); complete the fence like a natural completion so the
      * Windows scheduler continues, instead of a queue stop and a TDR. */
     Runtime->TaComplete = Runtime->D3Complete = APPLE_AGX_TRUE;
+    Runtime->ComputeComplete = APPLE_AGX_TRUE;
     return AppleAgxBackendTerminal(Runtime, AppleAgxBackendCompletionSuccess,
                                    AppleAgxBackendRuntimeReady,
                                    AppleAgxBackendRuntimeResultOk);
@@ -391,6 +414,20 @@ APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeObserve(
                                    AppleAgxBackendRuntimeResultFaulted);
   }
 
+  if (Runtime->PendingJob.Kind == AppleAgxBackendJobCompute) {
+    /* G2: the compute stamp completes a compute job. */
+    if (Observation->Queue != AppleAgxBackendQueueCompute ||
+        Runtime->ComputeComplete ||
+        Observation->Event != Runtime->PendingJob.ComputeEvent ||
+        Observation->DonePointer != Runtime->PendingJob.ComputeExpectedDonePointer ||
+        !AppleAgxBackendStampReached(Observation->Stamp,
+                                     Runtime->PendingJob.ComputeExpectedStamp))
+      return AppleAgxBackendRuntimeResultInvalidArgument;
+    Runtime->ComputeComplete = APPLE_AGX_TRUE;
+    return AppleAgxBackendTerminal(Runtime, AppleAgxBackendCompletionSuccess,
+                                   AppleAgxBackendRuntimeReady,
+                                   AppleAgxBackendRuntimeResultOk);
+  }
   if (Observation->Queue == AppleAgxBackendQueueTa) {
     complete = &Runtime->TaComplete;
     expectedEvent = Runtime->PendingJob.TaEvent;

@@ -111,6 +111,9 @@ typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION {
   APPLE_AGX_G13_WORK_PUBLICATION Ta;
   APPLE_AGX_G13_WORK_PUBLICATION D3;
   APPLE_AGX_G13_WORK_PUBLICATION Compute;
+  /* G2: a standalone compute job. Its compute completion is the job's
+   * completion (no TA/3D follows, BeginRenderAfterCompute refuses). */
+  APPLE_AGX_BACKEND_BOOL ComputeOnly;
 } APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION;
 
 typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION {
@@ -146,6 +149,8 @@ typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME {
   APPLE_AGX_G13_QUEUE_PENDING TaPending;
   APPLE_AGX_G13_QUEUE_PENDING D3Pending;
   APPLE_AGX_G13_QUEUE_PENDING ComputePending;
+  /* The pending compute work is a standalone job (submission ComputeOnly). */
+  APPLE_AGX_BACKEND_BOOL ComputeTerminal;
   APPLE_AGX_BACKEND_U32 RecoveredFaults, LastRecoveredEventKind;
 } APPLE_AGX_G13_QUEUE_RUNTIME;
 

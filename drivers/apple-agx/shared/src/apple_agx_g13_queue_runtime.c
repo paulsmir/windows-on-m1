@@ -105,6 +105,7 @@ static void AppleAgxG13ClearPending(APPLE_AGX_G13_QUEUE_RUNTIME *Runtime) {
   AppleAgxG13QueueRuntimeZero(
       &Runtime->ComputePending,
       (APPLE_AGX_BACKEND_U32)sizeof(Runtime->ComputePending));
+  Runtime->ComputeTerminal = APPLE_AGX_BACKEND_FALSE;
 }
 
 APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeInitialize(
@@ -271,6 +272,8 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeSubmitCompute(
   Runtime->ComputePending.EventNumber=Runtime->Config.Compute.EventNumber;
   Runtime->ComputePending.ExpectedStamp=Submission->Compute.ExpectedStamp;
   Runtime->ComputePending.ExpectedDonePointer=publication.ExpectedDonePointer;
+  Runtime->ComputeTerminal=Submission->ComputeOnly ? APPLE_AGX_BACKEND_TRUE :
+                                                     APPLE_AGX_BACKEND_FALSE;
   Runtime->ComputeFirstRun=APPLE_AGX_BACKEND_FALSE;
   Runtime->Phase=AppleAgxG13QueueRuntimeComputeSubmitted;
   return AppleAgxG13QueueRuntimeResultOk;
@@ -280,7 +283,7 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueRuntimeBeginRenderAfterCompute(
     APPLE_AGX_G13_QUEUE_RUNTIME *Runtime, APPLE_AGX_BACKEND_U32 Fence) {
   if(!Runtime || !Fence || Runtime->PendingFence!=Fence ||
      Runtime->Phase!=AppleAgxG13QueueRuntimeComputeComplete ||
-     !Runtime->ComputePending.Complete)
+     !Runtime->ComputePending.Complete || Runtime->ComputeTerminal)
     return APPLE_AGX_BACKEND_FALSE;
   Runtime->PendingFence=0u;Runtime->DeadlineTicks=0ULL;
   AppleAgxG13QueueRuntimeZero(&Runtime->ComputePending,
@@ -486,8 +489,14 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeHandleEvent(
       return AppleAgxG13TerminalFailure(
           Runtime,AppleAgxG13QueueCompletionFaulted,
           AppleAgxG13QueueRuntimeResultTransportFailed);
-    if (Runtime->ComputePending.Complete)
-      Runtime->Phase=AppleAgxG13QueueRuntimeComputeComplete;
+    /* G2: a standalone compute job completes here; a compute prelude
+     * waits for BeginRenderAfterCompute and the TA/3D submission. */
+    if (Runtime->ComputePending.Complete) {
+      if (Runtime->ComputeTerminal)
+        AppleAgxG13SetCompletion(Runtime, AppleAgxG13QueueCompletionSuccess);
+      else
+        Runtime->Phase=AppleAgxG13QueueRuntimeComputeComplete;
+    }
     return AppleAgxG13QueueRuntimeResultOk;
   }
   if (Runtime->Phase != AppleAgxG13QueueRuntimeSubmitted &&

@@ -227,6 +227,55 @@ static void TestComputeThenRenderDependency(void) {
   TestCompleteSubmission(&f,&s);
 }
 
+/* G2: a standalone compute job completes its fence on the compute event;
+ * no TA/3D follows, and the queues accept the next job afterwards. */
+static void TestStandaloneComputeCompletes(void) {
+  TEST_FIXTURE f;APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION s,r;
+  APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
+  unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
+  TestInitialize(&f);TestEnableCompute(&f);
+  memset(&s,0,sizeof(s));
+  s.Fence=70u;s.Timestamp=0x1122334455667788ULL;s.NowTicks=1000ULL;
+  s.Compute.Source=f.ComputeSource;s.Compute.Destination=f.ComputeDestination;
+  s.Compute.Bytes=sizeof(f.ComputeSource);
+  s.Compute.GpuAddresses[0]=0x1500300000ULL;
+  s.Compute.GpuAddressCount=1u;s.Compute.ExpectedStamp=0x700u;
+  s.ComputeOnly=APPLE_AGX_BACKEND_TRUE;
+  assert(AppleAgxG13QueueRuntimeSubmitCompute(&f.Runtime,&s)==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(f.Runtime.Phase==AppleAgxG13QueueRuntimeComputeSubmitted &&
+         f.Runtime.ComputeTerminal && f.ComputeWrite==1u && f.IoState.Sends==1u &&
+         f.IoState.SendOrder[0]==(unsigned)AppleAgxG13QueueCompute);
+  /* the event alone does not complete it */
+  TestEvent(event,11u,APPLE_AGX_G13_EVENT_COUNT);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(&f.Runtime,event,sizeof(event))==
+         AppleAgxG13QueueRuntimeResultOk &&
+         f.Runtime.Phase==AppleAgxG13QueueRuntimeComputeSubmitted);
+  f.ComputeStamp=s.Compute.ExpectedStamp;f.ComputeDone=f.ComputeWrite;
+  assert(AppleAgxG13QueueRuntimeHandleEvent(&f.Runtime,event,sizeof(event))==
+         AppleAgxG13QueueRuntimeResultOk &&
+         f.Runtime.Phase==AppleAgxG13QueueRuntimeCompletionPending);
+  assert(!AppleAgxG13QueueRuntimeBeginRenderAfterCompute(&f.Runtime,70u));
+  assert(AppleAgxG13QueueRuntimeTakeCompletion(&f.Runtime,&completion) &&
+         completion.Fence==70u &&
+         completion.Status==AppleAgxG13QueueCompletionSuccess &&
+         f.Runtime.Phase==AppleAgxG13QueueRuntimeReady &&
+         !f.Runtime.ComputeTerminal && f.IoState.Sends==1u);
+  /* a render job follows on the same queues */
+  r=TestSubmission(&f,71u);
+  assert(AppleAgxG13QueueRuntimeSubmit(&f.Runtime,&r)==
+         AppleAgxG13QueueRuntimeResultOk);
+  TestCompleteSubmission(&f,&r);
+  /* a prelude (not ComputeOnly) still waits for the render submission */
+  s.Fence=72u;s.ComputeOnly=APPLE_AGX_BACKEND_FALSE;s.Compute.ExpectedStamp=0x701u;
+  assert(AppleAgxG13QueueRuntimeSubmitCompute(&f.Runtime,&s)==
+         AppleAgxG13QueueRuntimeResultOk && !f.Runtime.ComputeTerminal);
+  f.ComputeStamp=s.Compute.ExpectedStamp;f.ComputeDone=f.ComputeWrite;
+  assert(AppleAgxG13QueueRuntimeHandleEvent(&f.Runtime,event,sizeof(event))==
+         AppleAgxG13QueueRuntimeResultOk &&
+         f.Runtime.Phase==AppleAgxG13QueueRuntimeComputeComplete);
+}
+
 static void PutU32(unsigned char *Destination, unsigned int Value) {
   Destination[0] = (unsigned char)(Value & 0xffu);
   Destination[1] = (unsigned char)((Value >> 8) & 0xffu);
@@ -754,6 +803,7 @@ static void TestReadFailureCannotMasqueradeAsZeroPointer(void) {
 
 unsigned AppleAgxG13QueueRuntimeContractTests(void) {
   TestComputeThenRenderDependency();
+  TestStandaloneComputeCompletes();
   TestJoinedPublishAndExactCompletion();
   TestStampCompletesPastDonePointer();
   TestPreparedRangesNeedNoCopy();
