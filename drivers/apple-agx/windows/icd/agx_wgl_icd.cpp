@@ -900,6 +900,22 @@ extern "C" BOOL agx_wgl_present_window(struct pipe_screen *screen,
   AcquireSRWLockExclusive(&AgxWglRingLock);
   wgl_sampler_start();
   AGX_WGL_PRESENT_RING *ring = wgl_ring_get(screen, window, res, bgra);
+  /* EXP1204 diagnostic, only with the UMD trace and APPLE_AGX_PRESENT_SKIP=N
+   * (2-9): copy and show every N-th frame only, to measure what the present
+   * copy costs the game thread. Off by default. */
+  static int skip = -1;
+  if (skip < 0) {
+    char value[4];
+    skip = AdmissionUmdDiagnosticEnabled() &&
+           GetEnvironmentVariableA("APPLE_AGX_PRESENT_SKIP", value, sizeof(value)) == 1u &&
+           value[0] >= '2' && value[0] <= '9' ? value[0] - '0' : 0;
+  }
+  if (ring && skip && (ring->Frames + 1) % skip) {
+    QueryPerformanceCounter(&end);
+    wgl_present_receipt(ring, start.QuadPart, end.QuadPart);
+    ReleaseSRWLockExclusive(&AgxWglRingLock);
+    return TRUE;
+  }
   if (!ring) {
     ReleaseSRWLockExclusive(&AgxWglRingLock);
     HDC dc = GetDC(window);
