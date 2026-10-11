@@ -308,7 +308,8 @@ static inline int AppleAgxG4ComposeHeaderCompute(
 /* G2: TRUE when the private data is a compute envelope (checks only the
  * magic and version; AppleAgxG4ParseComputeEx validates it). */
 static inline int AppleAgxG4IsCompute(const void *data, unsigned int bytes) {
-  APPLE_AGX_G4_PRIVATE_HEADER header;
+  /* Zeroed first: MSVC (C4701 under /WX) does not see the byte copy. */
+  APPLE_AGX_G4_PRIVATE_HEADER header = {0};
   const unsigned char *p = (const unsigned char *)data;
   unsigned int i;
   if (!data || bytes < sizeof(header)) return 0;
