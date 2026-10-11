@@ -134,9 +134,11 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
    return -1;''')
     a,b=function(s,'agx_get_in_sync');start=s.rfind('static int',0,a)
     s=s[:start]+'#ifndef _WIN32\n'+s[start:b]+'\n#endif\n'+s[b:]
-    s=body(s,'agx_batch_submit','''   bool entered = render &&
+    s=body(s,'agx_batch_submit','''   /* G2: a compute-only batch submits its compute command alone. */
+   bool entered = render ?
       ((compute != NULL) == (batch->cdm.bo != NULL)) &&
-      AgxWin32AsahiBatchFinish(batch, render);
+         AgxWin32AsahiBatchFinish(batch, render) :
+      compute != NULL && AgxWin32AsahiBatchFinishCompute(batch, compute);
    if (!entered && !AgxWin32AsahiBatchAbort(batch)) { ctx->any_faults = true; return; }
    agx_batch_mark_submitted(batch);
    if (ctx->batch == batch) ctx->batch = NULL;
@@ -305,6 +307,26 @@ extern int AgxWin32AsahiDrawPhasesOn;
        !(batch->vdm.bo && (batch->clear || batch->initialized))) {
       if (!AgxWin32AsahiBatchAbort(batch)) { ctx->any_faults = true; return; }
       agx_batch_reset(ctx, batch);
+      return;
+   }
+   /* G2: a compute-only batch (agx_get_compute_batch: buffer copies, query
+    * copies, grid launches) is one compute command, as upstream submits it. */
+   if (agx_batch_is_compute(batch)) {
+      struct drm_asahi_cmd_compute compute_only;
+      if (ctx->any_faults || !batch->cdm.bo || batch->vdm.bo) {
+         ctx->any_faults = true;
+         if (AgxWin32AsahiBatchAbort(batch)) agx_batch_reset(ctx, batch);
+         return;
+      }
+      if (!AgxWin32AsahiBatchComputeEnter(batch)) {
+         ctx->any_faults = true; return;
+      }
+      agx_flush_compute(ctx, batch, &compute_only);
+      if (!AgxWin32AsahiBatchComputeLeave(batch) ||
+          !AgxWin32AsahiBatchComputeFinalize(batch, batch->cdm.current)) {
+         ctx->any_faults = true; return;
+      }
+      agx_batch_submit(ctx, batch, &compute_only, NULL);
       return;
    }
    if (ctx->any_faults || !batch->vdm.bo || !batch->initialized ||

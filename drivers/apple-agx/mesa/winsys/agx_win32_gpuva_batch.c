@@ -42,12 +42,30 @@ _Static_assert(offsetof(struct drm_asahi_cmd_render,bg)==
                offsetof(APPLE_AGX_G4_NATIVE_RENDER,Bg), "background USC");
 _Static_assert(offsetof(struct drm_asahi_cmd_render,ts_vtx)==
                offsetof(APPLE_AGX_G4_NATIVE_RENDER,TimestampsVertex), "timestamps");
+_Static_assert(sizeof(struct drm_asahi_cmd_compute)==
+               sizeof(APPLE_AGX_G4_NATIVE_COMPUTE), "native compute layout");
+_Static_assert(offsetof(struct drm_asahi_cmd_compute,cdm_ctrl_stream_base)==
+               offsetof(APPLE_AGX_G4_NATIVE_COMPUTE,CdmCtrlStreamBase), "CDM VA");
+_Static_assert(offsetof(struct drm_asahi_cmd_compute,sampler_heap)==
+               offsetof(APPLE_AGX_G4_NATIVE_COMPUTE,SamplerHeap), "compute samplers");
+_Static_assert(offsetof(struct drm_asahi_cmd_compute,helper)==
+               offsetof(APPLE_AGX_G4_NATIVE_COMPUTE,Helper), "compute helper");
+_Static_assert(offsetof(struct drm_asahi_cmd_compute,ts)==
+               offsetof(APPLE_AGX_G4_NATIVE_COMPUTE,Timestamps), "compute timestamps");
+_Static_assert(offsetof(APPLE_AGX_G4_COMPUTE_ENVELOPE,Native)==
+               sizeof(APPLE_AGX_G4_PRIVATE_HEADER_COMPUTE), "compute envelope layout");
+/* The UMD bridge marks at most this many written allocations per submission
+ * (D3DDDI_MAX_WRITTEN_PRIMARIES in umd_gpuva_windows.c submit). */
+#define AGX_G4_WRITTEN_LIMIT 16u
 
 typedef struct {
   struct agx_bo *Command;
+  /* G2: the CDM context-store buffer of a compute job, in this process's VM
+   * (Asahi allocates one per job from the user VM, queue/compute.rs). */
+  struct agx_bo *Preemption;
   APPLE_AGX_G4_PRIVATE_LEASE Lease;
   uint64_t Fence;
-  unsigned Entered, Submitted, Retired, Rejected;
+  unsigned Entered, ComputeEntered, Submitted, Retired, Rejected;
 } AGX_G4_BATCH;
 
 static AGX_WIN32_ASAHI_BACKEND *backend(struct agx_batch *batch) {
@@ -139,8 +157,11 @@ static int retire_held(struct agx_batch *batch,AGX_WIN32_ASAHI_BACKEND *b) {
 int AgxWin32AsahiBatchBegin(struct agx_batch *batch) {
   AGX_WIN32_ASAHI_BACKEND *b=backend(batch);
   if(batch && batch->ctx) AgxWin32AsahiPublishPages(agx_device(batch->ctx->base.screen));
+  /* G2: a compute batch (agx_get_compute_batch) owns a CDM encoder instead. */
   if(!b || !b->GpuvaReady || b->Failed || batch->windows_batch ||
-     !batch->vdm.bo) return batch_refuse(1u, __LINE__, 0u, 0u);
+     !(agx_batch_is_compute(batch) ? batch->cdm.bo && !batch->vdm.bo :
+                                     batch->vdm.bo != NULL))
+    return batch_refuse(1u, __LINE__, 0u, 0u);
   /* EXP1071: other active batches stay open, as in Linux Mesa; Asahi's
    * hazard tracking flushes one when a dependency, a CPU access or a Gallium
    * flush needs it. (Flushing them here caused 66% of DWM's submissions in
@@ -240,17 +261,38 @@ int AgxWin32AsahiBatchDrawRefused(struct agx_context *ctx,
   }
   return 0;
 }
+/* G2: a compute-only batch submits one AGX4 compute envelope (KMD admits it
+ * as a standalone RunCompute job). The CDM work of a render batch (geometry
+ * shader prerasterization) still has no KMD contract and stays refused. */
+static int compute_only(const struct agx_batch *batch) {
+  return batch && agx_batch_is_compute(batch) && batch->cdm.bo && !batch->vdm.bo;
+}
 int AgxWin32AsahiBatchComputeEnter(struct agx_batch *batch) {
-  (void)batch;
-  return 0; /* no direct-VA CDM command parser is agreed with KMD yet */
+  AGX_G4_BATCH *g=capsule(batch);
+  if(!compute_only(batch) || !g || g->Submitted || g->Rejected)
+    return batch_refuse(10u,(unsigned)!compute_only(batch)|((unsigned)!g<<1),
+        g ? (unsigned)g->Fence : 0u, 0u);
+  ++g->ComputeEntered;
+  return 1;
 }
 int AgxWin32AsahiBatchComputeLeave(struct agx_batch *batch) {
-  (void)batch;
-  return 0;
+  AGX_G4_BATCH *g=capsule(batch);
+  if(!g || g->Rejected || !g->ComputeEntered) return batch_refuse(10u,4u,0u,0u);
+  --g->ComputeEntered;
+  return 1;
 }
+/* The stream ends in the encoder itself: the end Mesa reports is an offset
+ * into that buffer (agx_flush_compute), meaningless once the stream has
+ * continued in a pool chunk, so such a batch is refused. */
 int AgxWin32AsahiBatchComputeFinalize(struct agx_batch *batch,const void *end) {
-  (void)batch; (void)end;
-  return 0;
+  AGX_G4_BATCH *g=capsule(batch);
+  const unsigned char *map=compute_only(batch) ?
+      (const unsigned char *)agx_bo_map(batch->cdm.bo) : NULL;
+  if(!g || g->Submitted || g->Rejected || g->ComputeEntered || !map ||
+     (const unsigned char *)end<map ||
+     (size_t)((const unsigned char *)end-map)+4u>batch->cdm.bo->size)
+    return batch_refuse(10u,8u,g ? (unsigned)g->Fence : 0u,0u);
+  return 1;
 }
 
 static int add_bo(AGX_WIN32_ASAHI_BACKEND *b,
@@ -378,12 +420,15 @@ static size_t pool_extent(const struct agx_pool *pool,const struct agx_bo *bo) {
   return bo==pool->transient_bo ? pool->transient_offset : bo->size;
 }
 static int publish_shadows(struct agx_batch *batch) {
-  struct agx_bo *vdm=batch->vdm.bo;
-  uintptr_t map=(uintptr_t)agx_bo_map(vdm),current=(uintptr_t)batch->vdm.current;
-  size_t used=vdm->size;
-  if(map && current>=map && current-map<=vdm->size)
+  /* The batch's encoder: VDM for a render batch, CDM for a compute one
+   * (agx_flush_compute writes its terminator at the current pointer). */
+  struct agx_encoder *encoder=batch->vdm.bo ? &batch->vdm : &batch->cdm;
+  struct agx_bo *stream=encoder->bo;
+  uintptr_t map=(uintptr_t)agx_bo_map(stream),current=(uintptr_t)encoder->current;
+  size_t used=stream->size;
+  if(map && current>=map && current-map<=stream->size)
     used=(size_t)(current-map)+AGX_WIN32_ENCODER_TAIL;
-  if(!AgxWin32AsahiShadowPublish(vdm,used)) return 0;
+  if(!AgxWin32AsahiShadowPublish(stream,used)) return 0;
   util_dynarray_foreach(&batch->pool.bos,struct agx_bo *,bo)
     if(!AgxWin32AsahiShadowPublish(*bo,pool_extent(&batch->pool,*bo))) return 0;
   util_dynarray_foreach(&batch->pipeline_pool.bos,struct agx_bo *,bo)
@@ -545,6 +590,116 @@ fail:
   return 0;
 }
 
+/* G2: submit a compute-only batch as one AGX4 compute envelope: the native
+ * DRM_ASAHI_CMD_COMPUTE command as the DMA buffer, its copy behind the
+ * compute header in the private data, and a per-job context-store buffer.
+ * Residency is the render rule (command, stream, device pages, bo_list,
+ * pools); the written set is every BO this batch is the Mesa writer of, so
+ * the UMD refreshes their CPU copies after the job. Helper programs
+ * (scratch) and timestamps need KMD-owned state and are refused. */
+int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
+                                    const struct drm_asahi_cmd_compute *compute) {
+  AGX_WIN32_ASAHI_BACKEND *b=backend(batch);
+  AGX_G4_BATCH *g=capsule(batch);
+  const AGX_WIN32_GPUVA_BO **refs=NULL;
+  const AGX_WIN32_GPUVA_BO *written[AGX_G4_WRITTEN_LIMIT]={0};
+  unsigned written_count=0,count=0,limit;
+  size_t pool_count,pipeline_count;
+  APPLE_AGX_G4_COMPUTE_ENVELOPE envelope;
+  APPLE_AGX_G4_PROCESS_RANGE preemption;
+  struct drm_asahi_cmd_header command_header;
+  const unsigned command_bytes=
+      (unsigned)(sizeof(envelope.Native)+sizeof(envelope.Compute));
+  unsigned char *cpu;
+  unsigned fail_site=0u;
+  int handle;
+  /* Command, stream, preemption, rodata, zero and scratch pages, sampler
+   * heap and slack. */
+  enum { fixed_refs=8u };
+  if(!b || !g || !compute || b->Failed || b->Gpuva.Terminal ||
+     !compute_only(batch) || g->Submitted || g->Rejected || g->ComputeEntered ||
+     compute->flags || compute->helper.binary || compute->helper.cfg ||
+     compute->helper.data || compute->ts.start.handle || compute->ts.end.handle ||
+     batch->bo_list.bit_count>UINT32_MAX-fixed_refs)
+    return batch_refuse(9u, __LINE__,
+        (unsigned)!compute_only(batch)|((unsigned)(compute && compute->helper.binary)<<1)|
+        ((unsigned)(compute && compute->ts.start.handle)<<2)|
+        ((unsigned)(b && b->Failed)<<3)|((unsigned)(b && b->Gpuva.Terminal)<<4),
+        compute ? compute->sampler_count : 0u);
+  g->Entered=0;
+  if(!retire_held(batch,b)) { fail_site=__LINE__; goto fail; }
+  pool_count=util_dynarray_num_elements(&batch->pool.bos,struct agx_bo *);
+  pipeline_count=util_dynarray_num_elements(&batch->pipeline_pool.bos,struct agx_bo *);
+  limit=batch->bo_list.bit_count+fixed_refs;
+  if(pool_count>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
+  limit+=(unsigned)pool_count;
+  if(pipeline_count>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
+  limit+=(unsigned)pipeline_count;
+  /* 64 KiB (the BO granule) covers the G13 context-store size the KMD
+   * requires (APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES). */
+  g->Preemption=agx_bo_create(b->Native,0x10000u,0,0,"Compute preemption");
+  g->Command=agx_bo_create(b->Native,command_bytes,0,0,"VA compute command");
+  if(!g->Preemption || !g->Command || !AgxWin32AsahiGpuvaBo(b,g->Preemption) ||
+     !AgxWin32AsahiGpuvaBo(b,g->Command)) { fail_site=__LINE__; goto fail; }
+  memset(&envelope,0,sizeof(envelope));
+  command_header=agx_cmd_header(true,0,0);
+  memcpy(&envelope.Native,&command_header,sizeof(envelope.Native));
+  memcpy(&envelope.Compute,compute,sizeof(envelope.Compute));
+  preemption.Va=g->Preemption->va->addr;
+  preemption.Bytes=(unsigned)g->Preemption->size;
+  preemption.Reserved=0u;
+  cpu=agx_bo_map(g->Command);
+  if(!cpu || !AppleAgxG4ComposeHeaderCompute(&envelope.Header,
+      g->Command->va->addr,command_bytes,&preemption)) { fail_site=__LINE__; goto fail; }
+  memcpy(cpu,&envelope.Native,command_bytes);
+  refs=calloc(limit,sizeof(*refs));
+  if(!refs) { fail_site=__LINE__; goto fail; }
+  if(!add_bo(b,refs,&count,limit,g->Command) ||
+     !add_bo(b,refs,&count,limit,batch->cdm.bo) ||
+     !add_bo(b,refs,&count,limit,g->Preemption) ||
+     !add_bo(b,refs,&count,limit,agx_screen(batch->ctx->base.screen)->rodata) ||
+     !add_bo(b,refs,&count,limit,agx_device(batch->ctx->base.screen)->zero_bo) ||
+     !add_bo(b,refs,&count,limit,agx_device(batch->ctx->base.screen)->scratch_bo) ||
+     !add_bo(b,refs,&count,limit,batch->sampler_heap.bo))
+    { fail_site=__LINE__; goto fail; }
+  AGX_BATCH_FOREACH_BO_HANDLE(batch,handle) {
+    struct agx_bo *referenced=AgxWin32AsahiLookupBo(b->Native,handle);
+    if(!referenced || !add_bo(b,refs,&count,limit,referenced))
+      { fail_site=__LINE__; goto fail; }
+    if(agx_writer_get(batch->ctx,(unsigned)handle)==batch) {
+      const AGX_WIN32_GPUVA_BO *mapped=AgxWin32AsahiGpuvaBo(b,referenced);
+      unsigned duplicate=0;
+      if(!mapped) { fail_site=__LINE__; goto fail; }
+      for(unsigned j=0;j<written_count;++j)
+        if(written[j]==mapped) duplicate=1;
+      if(!duplicate) {
+        if(written_count==AGX_G4_WRITTEN_LIMIT) { fail_site=__LINE__; goto fail; }
+        written[written_count++]=mapped;
+      }
+    }
+  }
+  util_dynarray_foreach(&batch->pool.bos,struct agx_bo *,bo) {
+    if(!*bo || !add_bo(b,refs,&count,limit,*bo)) { fail_site=__LINE__; goto fail; }
+  }
+  util_dynarray_foreach(&batch->pipeline_pool.bos,struct agx_bo *,bo) {
+    if(!*bo || !add_bo(b,refs,&count,limit,*bo)) { fail_site=__LINE__; goto fail; }
+  }
+  if(!publish_shadows(batch)) { fail_site=__LINE__; goto fail; }
+  if(!AgxWin32GpuvaSubmit(&b->Gpuva,refs,count,
+      AgxWin32AsahiGpuvaBo(b,g->Command),command_bytes,written,written_count,
+      &envelope,(unsigned)sizeof(envelope),&g->Fence)) { fail_site=__LINE__; goto fail; }
+  g->Submitted=1;
+  if(g->Fence>b->NewestFence) b->NewestFence=g->Fence;
+  free(refs);
+  return 1;
+fail:
+  free(refs);
+  (void)batch_refuse(3u, fail_site, b->Gpuva.LastFailure, b->Gpuva.LastDetail);
+  g->Rejected=1;
+  AGX_WIN32_ASAHI_FAIL(b, 4u);
+  return 0;
+}
+
 /* EXP1071: the private scene storage is needed only while the GPU runs the
  * job. Return it as soon as the submission retires: with several open
  * batches flushed back to back, holding every lease until cleanup exhausted
@@ -619,6 +774,7 @@ int AgxWin32AsahiBatchAbort(struct agx_batch *batch) {
   if(!g) return 1;
   if(g->Submitted && !g->Retired) return 0;
   g->Entered=0;
+  g->ComputeEntered=0;
   g->Rejected=1;
   return 1;
 }
@@ -634,10 +790,12 @@ int AgxWin32AsahiBatchRelease(struct agx_batch *batch) {
   AGX_G4_BATCH *g=capsule(batch);
   AGX_WIN32_ASAHI_BACKEND *b=backend(batch);
   if(!g) return 1;
-  if(!b || b->Gpuva.Terminal || (!g->Retired && !g->Rejected) || g->Entered)
+  if(!b || b->Gpuva.Terminal || (!g->Retired && !g->Rejected) ||
+     g->ComputeEntered || g->Entered)
     return 0;
   if(!release_lease(b,g)) return 0;
   if(g->Command) agx_bo_unreference(b->Native,g->Command);
+  if(g->Preemption) agx_bo_unreference(b->Native,g->Preemption);
   batch->windows_batch=NULL;
   free(g);
   return 1;

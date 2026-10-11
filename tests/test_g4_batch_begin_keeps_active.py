@@ -86,8 +86,10 @@ struct agx_context {
 struct agx_batch {
   struct agx_context *ctx;
   void *windows_batch;
-  struct { struct agx_bo *bo; } vdm;
+  struct { struct agx_bo *bo; } vdm, cdm;
+  int compute;
 };
+static int agx_batch_is_compute(const struct agx_batch *batch) { return batch->compute; }
 typedef struct {
   struct agx_bo *Command;
   APPLE_AGX_G4_PRIVATE_LEASE Lease;
@@ -142,7 +144,7 @@ int main(void) {
   struct agx_batch slots[AGX_MAX_BATCHES];
   struct agx_bo vdm;
   struct agx_context ctx = {{&screen}, 0, {slots, {0}, {0}}};
-  for (unsigned i = 0; i < AGX_MAX_BATCHES; ++i) slots[i] = (struct agx_batch){&ctx, NULL, {&vdm}};
+  for (unsigned i = 0; i < AGX_MAX_BATCHES; ++i) slots[i] = (struct agx_batch){&ctx, NULL, {&vdm}, {NULL}, 0};
   /* A opens, then B opens while A is still active: A is not flushed. */
   assert(open_batch(&ctx, 0) && open_batch(&ctx, 1));
   assert(flushes == 0 && slots[0].windows_batch && slots[1].windows_batch);
@@ -201,7 +203,7 @@ int main(void) {
    * that batch then retires by its fence without a second eviction. */
   struct agx_batch other_slots[AGX_MAX_BATCHES];
   struct agx_context other = {{&screen}, 0, {other_slots, {0}, {0}}};
-  for (unsigned i = 0; i < AGX_MAX_BATCHES; ++i) other_slots[i] = (struct agx_batch){&other, NULL, {&vdm}};
+  for (unsigned i = 0; i < AGX_MAX_BATCHES; ++i) other_slots[i] = (struct agx_batch){&other, NULL, {&vdm}, {NULL}, 0};
   completed_fence = 39;
   assert(open_batch(&other, 0) && submit(&backend, &other_slots[0], 40));
   for (unsigned i = 0; i + 1u < DEPTH; ++i)

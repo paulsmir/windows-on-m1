@@ -337,6 +337,12 @@ static int batch_reject(AGX_WIN32_ASAHI_BATCH *c,unsigned line) {
   (void)c; (void)line;
   return 0;
 }
+/* The construction-address path has no compute submission (G2 is GPUVA). */
+int AgxWin32AsahiBatchFinishCompute(struct agx_batch *b,
+                                    const struct drm_asahi_cmd_compute *c) {
+  (void)c;
+  return batch_reject(capsule(b),__LINE__);
+}
 int AgxWin32AsahiBatchFinish(struct agx_batch *b,const struct drm_asahi_cmd_render *r) {
   AGX_WIN32_ASAHI_BATCH *c=capsule(b); AGX_WIN32_ASAHI_BACKEND *d=backend(b);
   if(!c || !d || !r || d->Failed || b->ctx->any_faults || c->Submitted || c->Rejected ||

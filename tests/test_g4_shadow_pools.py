@@ -141,7 +141,7 @@ struct util_dynarray { void *data; unsigned size; };
   for (type *elem = (type *)(buf)->data; elem < (type *)((char *)(buf)->data + (buf)->size); elem++)
 struct agx_pool { struct util_dynarray bos; struct agx_bo *transient_bo; unsigned transient_offset; };
 struct agx_encoder { struct agx_bo *bo; uint8_t *current, *end; };
-struct agx_batch { struct agx_encoder vdm; struct agx_pool pool, pipeline_pool; };
+struct agx_batch { struct agx_encoder vdm, cdm; struct agx_pool pool, pipeline_pool; };
 static void *agx_bo_map(struct agx_bo *bo) { return bo->_map; }
 static struct { struct agx_bo *bo; size_t bytes; } calls[16];
 static unsigned ncalls, refuse_at = 99;
@@ -175,6 +175,12 @@ int main(void) {
   /* A refused publish stops before the submission. */
   ncalls = 0; refuse_at = 2;
   assert(!publish_shadows(&batch) && ncalls == 3);
+  /* G2: a compute batch publishes its CDM encoder up to the terminator. */
+  ncalls = 0; refuse_at = 99;
+  batch.cdm = batch.vdm; batch.cdm.current = enc_map + 0x80;
+  batch.vdm.bo = NULL; batch.vdm.current = NULL;
+  assert(publish_shadows(&batch) && ncalls == 4 && calls[0].bo == &enc &&
+         calls[0].bytes == 0x80 + AGX_WIN32_ENCODER_TAIL);
   puts("EXP1207 batch publish: PASS");
   return 0;
 }

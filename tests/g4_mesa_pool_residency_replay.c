@@ -65,7 +65,7 @@ struct agx_context { struct { struct agx_screen *screen; } base;
 struct agx_batch {
   struct agx_context *ctx;
   void *windows_batch;
-  struct { struct agx_bo *bo; unsigned char *current; } vdm,cdm;
+  struct agx_encoder { struct agx_bo *bo; unsigned char *current; } vdm,cdm;
   unsigned draws,clear;
   struct { unsigned bit_count, count; unsigned handles[8]; } bo_list;
   struct agx_pool pool,pipeline_pool;
@@ -83,9 +83,10 @@ typedef struct {
 } AGX_G4_PRIVATE;
 typedef struct {
   struct agx_bo *Command;
+  struct agx_bo *Preemption;
   APPLE_AGX_G4_PRIVATE_LEASE Lease;
   uint64_t Fence;
-  unsigned Entered, Submitted, Retired, Rejected;
+  unsigned Entered, ComputeEntered, Submitted, Retired, Rejected;
 } AGX_G4_BATCH;
 static AGX_WIN32_ASAHI_BACKEND owner;
 static struct agx_bo bos[16];
