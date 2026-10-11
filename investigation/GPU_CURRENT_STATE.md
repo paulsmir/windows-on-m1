@@ -1,5 +1,23 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
+## Current as of 2026-10-11 12:50Z (read this first)
+
+Installed: PACKAGE1210 (.local/experiments/EXP1210-g4-preempt-overlap):
+KMD 0ed494a3 (= 1151 KMD + preemption/resubmission receipts, 7486debc,
+built as 54d3a4df on d8c1c5c7 so the UMD keeps the 1151 sources), UMD
+7dbfa63b, ICD f504307c (EXP1209), EXP1194 INF, version 30.0.1210.0.
+Roadmap: docs/superpowers/plans/2026-10-11-agx-driver-roadmap.md (G1-G5
+OpenGL, M1/M2 flexible memory before Direct3D, 64-bit OpenGL, ANS, D3D).
+G1 (EXP1197 resubmission refusal): the overlap race is rejected -- 0 of
+8961 preemptions arrived while SubmitCommandVirtual was inside the driver,
+and 2989 resubmissions were accepted (EXP1210). The refusal did not recur;
+Wom1G4SubmitFailure now records the refused predicate mask and the
+scene/slot state (g4rcpt.py in the EXP1210 directory) for the next one.
+Next causal target: G2, present through D3DKMTPresent (Blt, hWindow) with
+the KMD's DxgkDdiPresent blt -- first establish whether present_windows.c
+executes the blt on the GPU or the CPU.
+Guest C: 70 GB free (REC-20261011-DISK).
+
 ## Current as of 2026-10-11 10:55Z (read this first)
 
 Installed: PACKAGE1209 (.local/experiments/EXP1209-cs16-swap-grid, ICD
