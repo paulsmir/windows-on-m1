@@ -52,8 +52,9 @@ class G3VidMmReplayTests(unittest.TestCase):
                 self.assertIn("R144 full-local paging: PASS", r.stdout)
 
     def test_r139_os_reserved_leaf_spans(self):
-        # EXP855B returned 32 MiB; neighbors/high slots prevent a trace allowlist.
-        for base in ("0x2000000", "0x6000000", "0xffe000000", "0x7ffe000000"):
+        # G2 HW2: the KMD requests the top span of the USC window (root 1,
+        # middle 255); other spans are refused (r137_reservation_cases).
+        for base in ("0x11fe000000",):
             with self.subTest(base=base):
                 r = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
                     env=dict(os.environ, G3_REPLAY_R137="1",
@@ -65,7 +66,7 @@ class G3VidMmReplayTests(unittest.TestCase):
             for mode in ("G3_REPLAY_R137_ESCAPE", "G3_REPLAY_R137_COMBINED"):
                 with self.subTest(profile=profile, mode=mode):
                     env = dict(os.environ, G3_REPLAY_R137="1",
-                               G3_REPLAY_RESERVE_BASE="0x2000000", G3_REPLAY_PROFILE=profile)
+                               G3_REPLAY_RESERVE_BASE="0x11fe000000", G3_REPLAY_PROFILE=profile)
                     env[mode] = "1"
                     r = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
                                        env=env, text=True, capture_output=True)
@@ -75,7 +76,7 @@ class G3VidMmReplayTests(unittest.TestCase):
         for profile in ("16", "64"):
             r = subprocess.run([sys.executable, str(REPLAY)], cwd=ROOT,
                 env=dict(os.environ, G3_REPLAY_R135="1", G3_REPLAY_R137_PRIVATE="1",
-                         G3_REPLAY_RESERVE_BASE="0x2000000", G3_REPLAY_PROFILE=profile),
+                         G3_REPLAY_RESERVE_BASE="0x11fe000000", G3_REPLAY_PROFILE=profile),
                 text=True, capture_output=True)
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 

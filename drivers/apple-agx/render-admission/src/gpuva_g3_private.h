@@ -52,6 +52,8 @@ typedef struct _ADMISSION_G3_STATE {
   ULONGLONG PrivateStats[16];
   /* EXP1114 receipt-only, under Lock: last per-process snapshot (QPC). */
   LONGLONG ProcessReceiptQpc;
+  /* G2 HW2 receipt-only: private VA reservations made and refused. */
+  LONG ReserveMade, ReserveRefused;
 } ADMISSION_G3_STATE;
 enum {
   ADMISSION_G3_PRIVATE_STAT_HIT, ADMISSION_G3_PRIVATE_STAT_MISS,

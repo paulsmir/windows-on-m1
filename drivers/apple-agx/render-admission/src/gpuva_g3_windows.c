@@ -1894,6 +1894,9 @@ Done:
   return status;
 }
 
+/* The private pool's per-process VA window is the reserved span. */
+C_ASSERT(APPLE_AGX_G4_PRIVATE_VA_BYTES == APPLE_AGX_G3_PRIVATE_VA_BYTES);
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
     PVOID MiniportDeviceContext, DXGKARG_CREATEPROCESS *Args) {
   ADMISSION_CONTEXT *adapter = (ADMISSION_CONTEXT *)MiniportDeviceContext;
@@ -1928,21 +1931,38 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
   {
     DXGKARGCB_RESERVEGPUVIRTUALADDRESSRANGE reserve = {0};
     reserve.hDxgkProcess = Args->hDxgkProcess;
-    reserve.SizeInBytes = 0x02000000ULL;
-    reserve.Alignment = 0x02000000u;
+    reserve.SizeInBytes = APPLE_AGX_G4_PRIVATE_VA_BYTES;
+    reserve.Alignment = (UINT)APPLE_AGX_G4_PRIVATE_VA_BYTES;
+    /* G2 HW2: the top leaf span of the USC window, so kernels the KMD
+     * places there execute (d3dkmddi.h: BaseAddress aligned to the leaf
+     * coverage). The UMD may not map into it (AllowUserModeMapping 0). */
+    reserve.BaseAddress = APPLE_AGX_G4_PRIVATE_VA_BASE;
     status = adapter->Interface.DxgkCbReserveGpuVirtualAddressRange(
         adapter->Interface.DeviceHandle, &reserve);
-    if (!NT_SUCCESS(status)) goto Fail;
-    /* Validate the OS-owned reservation in leaf-table spans (32 MiB).
-     * VidMm may return a slot within native root entry zero; requiring a
-     * whole root-entry span (64 GiB) rejects its successful reservation. */
-    if (reserve.StartVirtualAddress < (1ULL << 25) ||
-        reserve.StartVirtualAddress >= (1ULL << 39) ||
-        (reserve.StartVirtualAddress & (0x02000000ULL - 1ULL)) ||
-        reserve.SizeInBytes > (1ULL << 39) - reserve.StartVirtualAddress) {
+    /* Validate the OS-owned reservation in leaf-table spans (32 MiB): it
+     * must be the requested span. */
+    if (NT_SUCCESS(status) &&
+        (reserve.StartVirtualAddress != APPLE_AGX_G4_PRIVATE_VA_BASE ||
+         reserve.StartVirtualAddress < (1ULL << 25) ||
+         reserve.StartVirtualAddress >= (1ULL << 39) ||
+         (reserve.StartVirtualAddress & (0x02000000ULL - 1ULL)) ||
+         reserve.SizeInBytes > (1ULL << 39) - reserve.StartVirtualAddress))
       status = STATUS_INVALID_ADDRESS;
-      goto Fail;
+    {
+      ULONG receipt[ADMISSION_G3_RESERVE_RECEIPT_WORDS];
+      receipt[0] = 1u;
+      receipt[1] = (ULONG)(NT_SUCCESS(status) ?
+          InterlockedIncrement(&state->ReserveMade) :
+          InterlockedCompareExchange(&state->ReserveMade, 0, 0));
+      receipt[2] = (ULONG)(NT_SUCCESS(status) ?
+          InterlockedCompareExchange(&state->ReserveRefused, 0, 0) :
+          InterlockedIncrement(&state->ReserveRefused));
+      receipt[3] = (ULONG)status;
+      receipt[4] = (ULONG)reserve.StartVirtualAddress;
+      receipt[5] = (ULONG)(reserve.StartVirtualAddress >> 32);
+      AdmissionRecordG3Reservation(adapter, receipt);
     }
+    if (!NT_SUCCESS(status)) goto Fail;
     process->PrivateVa = reserve.StartVirtualAddress;
     process->DxgkProcess = Args->hDxgkProcess;
   }

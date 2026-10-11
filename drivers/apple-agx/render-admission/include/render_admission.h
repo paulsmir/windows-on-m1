@@ -1247,6 +1247,11 @@ void AdmissionRecordG3PrivateFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3PrivateProcesses(_In_opt_ ADMISSION_CONTEXT *Context,
                                        _In_reads_bytes_(Bytes) const ULONG *Values,
                                        _In_ ULONG Bytes);
+/* G2 HW2 receipt: the per-process private VA reservations (Wom1G3Reserve:
+ * version, reserved, refused, last status, last VA low, last VA high). */
+#define ADMISSION_G3_RESERVE_RECEIPT_WORDS 6u
+void AdmissionRecordG3Reservation(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_reads_(ADMISSION_G3_RESERVE_RECEIPT_WORDS) const ULONG *Values);
 void AdmissionRecordGpuvaG3UnpublishedGroups(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_reads_(32) const ULONGLONG *Counts);
