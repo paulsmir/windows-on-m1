@@ -542,6 +542,18 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformQueuesRunTa(
              : APPLE_AGX_BACKEND_FALSE;
 }
 
+/* G2: standalone compute jobs go to the queue provider like RunTa/Run3d. */
+static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformQueuesRunCompute(
+    void *Context, const APPLE_AGX_BACKEND_JOB_IMAGE *Job,
+    APPLE_AGX_BACKEND_U32 Fence) {
+  APPLE_AGX_PLATFORM_PROVIDER *provider = Context;
+  return provider != PLATFORM_NULL && provider->BindingReady &&
+                 provider->QueueBackendIo.Queues.RunCompute != PLATFORM_NULL
+             ? provider->QueueBackendIo.Queues.RunCompute(
+                   provider->QueueBackendIo.Context, Job, Fence)
+             : APPLE_AGX_BACKEND_FALSE;
+}
+
 static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformQueueFence(
     APPLE_AGX_PLATFORM_PROVIDER *Provider,
     APPLE_AGX_BACKEND_BOOL (*Operation)(void *, APPLE_AGX_BACKEND_U32),
@@ -730,6 +742,7 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderInitialize(
   queue_backend_io.Queues.Destroy = AppleAgxPlatformQueuesDestroy;
   queue_backend_io.Queues.Run3d = AppleAgxPlatformQueuesRun3d;
   queue_backend_io.Queues.RunTa = AppleAgxPlatformQueuesRunTa;
+  queue_backend_io.Queues.RunCompute = AppleAgxPlatformQueuesRunCompute;
   queue_backend_io.Queues.Stop = AppleAgxPlatformQueuesStop;
   queue_backend_io.Queues.Reset = AppleAgxPlatformQueuesReset;
 
