@@ -510,6 +510,10 @@ static unsigned wgl_kmt_group(unsigned op) {
 }
 
 extern "C" IMAGE_DOS_HEADER __ImageBase;  /* this image (linker-provided) */
+/* agx_wgl_framebuffer.c */
+extern "C" struct stw_winsys_framebuffer *agx_wgl_create_framebuffer(
+    struct pipe_screen *screen, HWND window, int pixel_format);
+extern "C" void agx_wgl_framebuffer_counters(UINT out[6]);
 
 static void wgl_kmt_receipt(LONGLONG us) {
   static UINT last_calls[AgxKmtGpuvaOpCount];
@@ -534,17 +538,18 @@ static void wgl_kmt_receipt(LONGLONG us) {
   }
   AdmissionUmdDiagnostic("measure-wgl-kmt", S_OK, values, 16u);
   /* EXP1189: per caller chain of the fence waits since the last receipt,
-   * the four return addresses (image RVAs), waits and microseconds. */
+   * the return addresses (image RVAs; EXP1192: eight), waits and
+   * microseconds. */
   for (unsigned i = 0; i < AGX_KMT_WAIT_SITES; ++i) {
     AGX_KMT_WAIT_SITE *s = &r->WaitSites[i];
     if (!s->Calls) continue;
-    UINT site[7];
+    UINT site[AGX_KMT_WAIT_DEPTH + 3u];
     for (unsigned k = 0; k < AGX_KMT_WAIT_DEPTH; ++k)
       site[k] = s->Return[k] ? (UINT)(s->Return[k] - (ULONG_PTR)&__ImageBase) : 0u;
-    site[4] = s->Calls;
-    site[5] = (UINT)(s->Ticks * 1000000 / us);
-    site[6] = r->WaitSitesLost;
-    AdmissionUmdDiagnostic("measure-wgl-wait", S_OK, site, 7u);
+    site[AGX_KMT_WAIT_DEPTH] = s->Calls;
+    site[AGX_KMT_WAIT_DEPTH + 1u] = (UINT)(s->Ticks * 1000000 / us);
+    site[AGX_KMT_WAIT_DEPTH + 2u] = r->WaitSitesLost;
+    AdmissionUmdDiagnostic("measure-wgl-wait", S_OK, site, AGX_KMT_WAIT_DEPTH + 3u);
   }
   ZeroMemory(r->WaitSites, sizeof(r->WaitSites));
   r->WaitSitesLost = 0;
@@ -589,6 +594,11 @@ static void wgl_present_receipt(AGX_WGL_PRESENT_RING *ring, LONGLONG start,
   UINT merge[AGX_WGL_MERGE_COUNTERS];
   agx_wgl_draw_hook_counters(merge);
   AdmissionUmdDiagnostic("measure-wgl-merge", S_OK, merge, AGX_WGL_MERGE_COUNTERS);
+  /* EXP1192: winsys framebuffers created, refused (last refused pixel
+   * format's dwFlags and samples), presents, failed presents. */
+  UINT fb[6];
+  agx_wgl_framebuffer_counters(fb);
+  AdmissionUmdDiagnostic("measure-wgl-winsysfb", S_OK, fb, 6u);
   ring->SumPresent = ring->SumInterval = ring->SumSync = 0;
 }
 
@@ -874,9 +884,6 @@ static bool wgl_get_adapter_luid(struct pipe_screen *screen, HDC hdc, LUID *luid
 
 static const char *wgl_get_name(void) { return "agx"; }
 
-/* agx_wgl_framebuffer.c */
-extern "C" struct stw_winsys_framebuffer *agx_wgl_create_framebuffer(
-    struct pipe_screen *screen, HWND window, int pixel_format);
 
 static const struct stw_winsys AgxWglWinsys = {
   &wgl_screen_create,

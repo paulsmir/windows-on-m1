@@ -64,7 +64,7 @@ typedef enum _AGX_KMT_GPUVA_OP {
  * of the first return addresses into this image found on the stack above a
  * fence wait (its callers), the waits and their QPC ticks. */
 #define AGX_KMT_WAIT_SITES 8u
-#define AGX_KMT_WAIT_DEPTH 4u
+#define AGX_KMT_WAIT_DEPTH 8u  /* EXP1192: 4 stopped at agx_sync_all */
 typedef struct _AGX_KMT_WAIT_SITE {
   ULONG_PTR Return[AGX_KMT_WAIT_DEPTH];
   UINT Calls;

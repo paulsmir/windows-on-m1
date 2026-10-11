@@ -35,6 +35,16 @@ struct pipe_context *agx_wgl_st_pipe(struct st_context *st);
 BOOL agx_wgl_present_window(struct pipe_screen *screen, struct pipe_context *ctx,
                             struct pipe_resource *res, HWND window);
 
+/* EXP1192 receipt-only: created, refused, last refused dwFlags, last
+ * refused samples, presents, failed presents (read and reset by the
+ * present receipt on the presenting thread). */
+static volatile LONG AgxWglFbCounters[6];
+
+void agx_wgl_framebuffer_counters(UINT out[6]) {
+  for (unsigned i = 0; i < 6u; ++i)
+    out[i] = (UINT)InterlockedExchange(&AgxWglFbCounters[i], 0);
+}
+
 typedef struct {
   struct stw_winsys_framebuffer base;
   struct pipe_screen *screen;
@@ -112,9 +122,12 @@ static bool agx_wgl_framebuffer_present(struct stw_winsys_framebuffer *base,
   struct pipe_context *pipe = ctx ? agx_wgl_st_pipe(ctx->st) : NULL;
   struct pipe_resource *frame = fb->buffers[agx_wgl_fb_slot(fb->back, ST_ATTACHMENT_BACK_LEFT)];
   agx_wgl_framebuffer_pace(fb, interval);
+  InterlockedIncrement(&AgxWglFbCounters[4]);
   if (!pipe || !frame ||
-      !agx_wgl_present_window(fb->screen, pipe, frame, fb->window))
+      !agx_wgl_present_window(fb->screen, pipe, frame, fb->window)) {
+    InterlockedIncrement(&AgxWglFbCounters[5]);
     return false;
+  }
   fb->back = agx_wgl_fb_after_present(fb->back);
   return true;
 }
@@ -124,10 +137,15 @@ struct stw_winsys_framebuffer *agx_wgl_create_framebuffer(struct pipe_screen *sc
                                                           int pixel_format) {
   const struct stw_pixelformat_info *pfi = stw_pixelformat_get_info(pixel_format);
   if (!screen || !window || !pfi || (pfi->pfd.dwFlags & PFD_SUPPORT_GDI) ||
-      !(pfi->pfd.dwFlags & PFD_DOUBLEBUFFER) || pfi->stvis.samples > 1)
+      !(pfi->pfd.dwFlags & PFD_DOUBLEBUFFER) || pfi->stvis.samples > 1) {
+    InterlockedIncrement(&AgxWglFbCounters[1]);
+    InterlockedExchange(&AgxWglFbCounters[2], pfi ? (LONG)pfi->pfd.dwFlags : -1);
+    InterlockedExchange(&AgxWglFbCounters[3], pfi ? (LONG)pfi->stvis.samples : -1);
     return NULL;
+  }
   AGX_WGL_FRAMEBUFFER *fb = (AGX_WGL_FRAMEBUFFER *)CALLOC(1, sizeof(*fb));
   if (!fb) return NULL;
+  InterlockedIncrement(&AgxWglFbCounters[0]);
   fb->screen = screen;
   fb->window = window;
   fb->back = 1u;
