@@ -6,7 +6,10 @@
  * clears to red, draws a green immediate-mode triangle (glBegin/glEnd, the
  * GoldSrc renderer's path) and a blue textured quad, reads back pixels and
  * calls SwapBuffers. Exit 0 only when every checked pixel matches.
- * Usage: agx_gl_smoke.exe [frames] [expect-renderer-substring]
+ * Usage: agx_gl_smoke.exe [frames] [expect-renderer-substring] [mode]
+ * Mode "copybuffer" (G2 HW1) first copies a buffer with glCopyBufferSubData,
+ * which Asahi runs as a compute batch (libagx copy kernels), and compares
+ * every byte read back with glGetBufferSubData.
  * Run from a directory without opengl32.dll to exercise Microsoft's
  * opengl32.dll and the adapter's registered ICD (EXP1156). */
 #include <windows.h>
@@ -14,6 +17,7 @@
 #include <GL/gl.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -30,6 +34,19 @@ typedef void (APIENTRY *PFNBINDFB)(GLenum, GLuint);
 typedef void (APIENTRY *PFNFBTEX2D)(GLenum, GLenum, GLenum, GLuint, GLint);
 typedef GLenum (APIENTRY *PFNCHECKFB)(GLenum);
 typedef void (APIENTRY *PFNBLITFB)(GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum);
+/* ARB_vertex_buffer_object / ARB_copy_buffer (GL 1.5 / 3.1 entry points). */
+#define GL_ARRAY_BUFFER_ARB 0x8892
+#define GL_STATIC_DRAW_ARB 0x88E4
+#define GL_COPY_READ_BUFFER 0x8F36
+#define GL_COPY_WRITE_BUFFER 0x8F37
+typedef ptrdiff_t GLsizeiptrARB;
+typedef ptrdiff_t GLintptrARB;
+typedef void (APIENTRY *PFNGENBUFFERS)(GLsizei, GLuint *);
+typedef void (APIENTRY *PFNDELETEBUFFERS)(GLsizei, const GLuint *);
+typedef void (APIENTRY *PFNBINDBUFFER)(GLenum, GLuint);
+typedef void (APIENTRY *PFNBUFFERDATA)(GLenum, GLsizeiptrARB, const void *, GLenum);
+typedef void (APIENTRY *PFNGETBUFFERSUBDATA)(GLenum, GLintptrARB, GLsizeiptrARB, void *);
+typedef void (APIENTRY *PFNCOPYBUFFERSUBDATA)(GLenum, GLenum, GLintptrARB, GLintptrARB, GLsizeiptrARB);
 
 static LONG WINAPI crash(EXCEPTION_POINTERS *info) {
   char path[MAX_PATH]; DWORD n = GetModuleFileNameA(NULL, path, MAX_PATH);
@@ -147,6 +164,58 @@ static LRESULT CALLBACK proc(HWND w, UINT m, WPARAM a, LPARAM b) {
   return DefWindowProcA(w, m, a, b);
 }
 
+/* G2 HW1: glCopyBufferSubData is a compute job (Asahi agx_resource_copy_region:
+ * libagx_copy_uint4 for the 16-byte aligned body, libagx_copy_uchar for the
+ * tail). Source and destination offsets are 16-byte aligned, the size is not,
+ * so both kernels run. Every destination byte is checked: the copied range
+ * equals the source, the rest keeps its initial value. */
+static int copy_buffer_test(void) {
+  enum { BYTES = 0x10000, SRC_OFFSET = 16, DST_OFFSET = 48, SIZE = 0x8000 + 5 };
+  PFNGENBUFFERS gen; PFNDELETEBUFFERS del; PFNBINDBUFFER bind; PFNBUFFERDATA data;
+  PFNGETBUFFERSUBDATA get; PFNCOPYBUFFERSUBDATA copy;
+  const char *ext = (const char *)glGetString(GL_EXTENSIONS);
+  static unsigned char src[BYTES], dst[BYTES], got[BYTES];
+  GLuint buffers[2];
+  LARGE_INTEGER f, t0, t1;
+  int bad = -1;
+  *(PROC *)&gen = wglGetProcAddress("glGenBuffersARB");
+  *(PROC *)&del = wglGetProcAddress("glDeleteBuffersARB");
+  *(PROC *)&bind = wglGetProcAddress("glBindBufferARB");
+  *(PROC *)&data = wglGetProcAddress("glBufferDataARB");
+  *(PROC *)&get = wglGetProcAddress("glGetBufferSubDataARB");
+  *(PROC *)&copy = wglGetProcAddress("glCopyBufferSubData");
+  printf("COPY_BUFFER extension %s\n", ext && strstr(ext, "GL_ARB_copy_buffer") ? "yes" : "no");
+  if (!gen || !del || !bind || !data || !get || !copy) {
+    printf("COPY_BUFFER: NO_ENTRY_POINTS\n"); return 0;
+  }
+  for (unsigned i = 0; i < BYTES; ++i) {
+    src[i] = (unsigned char)((i * 2654435761u) >> 24);
+    dst[i] = (unsigned char)(0x5a ^ i);
+  }
+  gen(2, buffers);
+  bind(GL_COPY_READ_BUFFER, buffers[0]);
+  data(GL_COPY_READ_BUFFER, BYTES, src, GL_STATIC_DRAW_ARB);
+  bind(GL_COPY_WRITE_BUFFER, buffers[1]);
+  data(GL_COPY_WRITE_BUFFER, BYTES, dst, GL_STATIC_DRAW_ARB);
+  QueryPerformanceFrequency(&f); QueryPerformanceCounter(&t0);
+  copy(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, SRC_OFFSET, DST_OFFSET, SIZE);
+  get(GL_COPY_WRITE_BUFFER, 0, BYTES, got);
+  QueryPerformanceCounter(&t1);
+  for (unsigned i = 0; i < BYTES && bad < 0; ++i) {
+    unsigned char want = i >= DST_OFFSET && i < DST_OFFSET + SIZE ?
+        src[i - DST_OFFSET + SRC_OFFSET] : dst[i];
+    if (got[i] != want) bad = (int)i;
+  }
+  printf("COPY_BUFFER glGetError 0x%x, %.3f ms\n", glGetError(),
+         1000.0 * (double)(t1.QuadPart - t0.QuadPart) / (double)f.QuadPart);
+  if (bad >= 0)
+    printf("COPY_BUFFER: FAIL at byte %d (got %02x)\n", bad, got[bad]);
+  else
+    printf("COPY_BUFFER: PASS %d bytes\n", (int)SIZE);
+  del(2, buffers);
+  return bad < 0;
+}
+
 static int expect(const char *what, int x, int y, unsigned rgb) {
   unsigned char p[4] = {0};
   glReadPixels(x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, p);
@@ -177,6 +246,7 @@ int main(int argc, char **argv) {
   /* "depthtest": a near yellow quad, glFlush (the next batch must reload
    * depth through ZLS), then a far magenta quad over it; yellow must win. */
   int depthtest = argc > 3 && !strcmp(argv[3], "depthtest");
+  int copybuffer = argc > 3 && !strcmp(argv[3], "copybuffer");
   PFNGENFB genfb = NULL; PFNBINDFB bindfb = NULL; PFNFBTEX2D fbtex = NULL;
   PFNCHECKFB checkfb = NULL; PFNBLITFB blitfb = NULL; GLuint fb = 0, fbcolor = 0;
   WNDCLASSA wc; HWND wnd; HDC dc; HGLRC rc; PIXELFORMATDESCRIPTOR pfd;
@@ -233,6 +303,7 @@ int main(int argc, char **argv) {
   if (want && !strstr((const char *)glGetString(GL_RENDERER), want)) {
     printf("UNEXPECTED_RENDERER (want %s)\n", want); return 5;
   }
+  if (copybuffer) failures += !copy_buffer_test();
   for (int i = 0; i < 16; ++i) { texels[4*i] = 0; texels[4*i+1] = 0; texels[4*i+2] = 255; texels[4*i+3] = 255; }
   glGenTextures(1, &tex); glBindTexture(GL_TEXTURE_2D, tex);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
