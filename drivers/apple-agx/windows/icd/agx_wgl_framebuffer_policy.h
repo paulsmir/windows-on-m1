@@ -28,4 +28,30 @@ static inline unsigned agx_wgl_fb_after_present(unsigned back) {
   return (back ^ 1u) & 1u;
 }
 
+/* EXP1209: WGL_EXT_swap_control pacing on a steady swap grid.
+ *
+ * stw paces its GDI path by sleeping 1.75 x (period - time since the last
+ * swap), measured before the sleep (stw_framebuffer.c wait_swap_interval).
+ * A frame shorter than the period therefore sleeps too long and the next
+ * one not at all: with CS 1.6's 12 ms frames and a 60 Hz interval the
+ * swaps alternate 12 and 20 ms (EXP1207: median 17.1 ms, and the present
+ * worker drops the frame after each short interval). Here the swaps follow
+ * a grid of one period: a swap before its grid point waits for it; a swap
+ * late by less than a quarter period keeps the grid (the next one has less
+ * to wait, so a timer overshoot never accumulates); a later swap, the first
+ * swap, a grid point more than one period ahead (interval or clock change)
+ * or no pacing (period <= 0) restarts it. Returns the microseconds to wait
+ * and moves *next_us to the next grid point (0: no grid). */
+static inline long long agx_wgl_pace(long long *next_us, long long now_us,
+                                     long long period_us) {
+  long long next = *next_us;
+  if (period_us <= 0) { *next_us = 0; return 0; }
+  if (!next || now_us - next >= period_us / 4 || next - now_us > period_us) {
+    *next_us = now_us + period_us;
+    return 0;
+  }
+  *next_us = next + period_us;
+  return next > now_us ? next - now_us : 0;
+}
+
 #endif

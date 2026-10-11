@@ -27,6 +27,7 @@
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 #include "util/os_time.h"
+#include <string.h>
 #include "agx_wgl_framebuffer_policy.h"
 
 /* agx_wgl_glthread_mesa.c: the st_context's pipe (Mesa main/ headers). */
@@ -45,6 +46,16 @@ void agx_wgl_framebuffer_counters(UINT out[6]) {
     out[i] = (UINT)InterlockedExchange(&AgxWglFbCounters[i], 0);
 }
 
+/* EXP1209 receipt-only: paced swaps, waits, waited us, grid restarts, and
+ * the swap-to-swap intervals relative to the refresh period: < 3/4,
+ * 3/4..5/4, 5/4..7/4, >= 7/4 (read and reset by the present receipt). */
+static volatile LONG AgxWglPaceCounters[8];
+
+void agx_wgl_pace_counters(UINT out[8]) {
+  for (unsigned i = 0; i < 8u; ++i)
+    out[i] = (UINT)InterlockedExchange(&AgxWglPaceCounters[i], 0);
+}
+
 typedef struct {
   struct stw_winsys_framebuffer base;
   struct pipe_screen *screen;
@@ -52,6 +63,9 @@ typedef struct {
   struct pipe_resource *buffers[2];
   unsigned back;  /* index of the buffer stw holds as BACK_LEFT */
   int64_t prev_swap_us;
+  long long next_swap_us;  /* EXP1209: the swap grid (agx_wgl_pace) */
+  int64_t last_swap_us;    /* receipt: the previous swap */
+  HANDLE timer;            /* high-resolution waitable timer, created on first wait */
 } AGX_WGL_FRAMEBUFFER;
 
 static AGX_WGL_FRAMEBUFFER *agx_wgl_framebuffer(struct stw_winsys_framebuffer *fb) {
@@ -68,6 +82,7 @@ static void agx_wgl_framebuffer_destroy(struct stw_winsys_framebuffer *base,
   AGX_WGL_FRAMEBUFFER *fb = agx_wgl_framebuffer(base);
   (void)context;
   agx_wgl_framebuffer_release(fb);
+  if (fb->timer) CloseHandle(fb->timer);
   FREE(fb);
 }
 
@@ -100,17 +115,70 @@ agx_wgl_framebuffer_get_resource(struct stw_winsys_framebuffer *base,
   return resource;
 }
 
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+#endif
+
+/* Sleep() rounds to the process timer resolution; a high-resolution
+ * waitable timer (Windows 10 1803+) wakes within a fraction of a
+ * millisecond. Falls back to an ordinary timer, then to Sleep. */
+static void agx_wgl_framebuffer_wait(AGX_WGL_FRAMEBUFFER *fb, long long us) {
+  LARGE_INTEGER due;
+  if (!fb->timer)
+    fb->timer = CreateWaitableTimerExW(NULL, NULL, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+                                       TIMER_ALL_ACCESS);
+  if (!fb->timer)
+    fb->timer = CreateWaitableTimerExW(NULL, NULL, 0, TIMER_ALL_ACCESS);
+  due.QuadPart = -us * 10;
+  if (fb->timer && SetWaitableTimer(fb->timer, &due, 0, NULL, NULL, FALSE) &&
+      WaitForSingleObject(fb->timer, INFINITE) == WAIT_OBJECT_0)
+    return;
+  os_time_sleep(us);
+}
+
 /* WGL_EXT_swap_control: stw paces the GDI path itself (wait_swap_interval)
- * but leaves a winsys framebuffer's interval to present; the same pacing,
- * so a swap interval behaves as before. */
+ * but leaves a winsys framebuffer's interval to present. EXP1209: paced on
+ * the swap grid of agx_wgl_pace instead of stw's 1.75 x sleep, which
+ * alternated short and long swaps; APPLE_AGX_SWAP_PACING=stw (diagnostic)
+ * keeps stw's rule for comparison. */
 static void agx_wgl_framebuffer_pace(AGX_WGL_FRAMEBUFFER *fb, int interval) {
-  int64_t now = os_time_get_nano() / 1000;
-  if (interval > 0 && fb->prev_swap_us && stw_dev && stw_dev->refresh_rate > 0) {
-    int64_t delta = now - fb->prev_swap_us;
-    int64_t period = (int64_t)(1.0e6 / stw_dev->refresh_rate * interval);
-    if (delta >= 0 && delta < period) os_time_sleep((int64_t)((period - delta) * 1.75f));
+  static int stw_rule = -1;
+  int64_t now = os_time_get_nano() / 1000, swap;
+  int64_t refresh = stw_dev && stw_dev->refresh_rate > 0 ?
+      (int64_t)(1.0e6 / stw_dev->refresh_rate) : 0;
+  int64_t period = interval > 0 ? refresh * interval : 0;
+  if (stw_rule < 0) {
+    char value[8];
+    DWORD n = GetEnvironmentVariableA("APPLE_AGX_SWAP_PACING", value, sizeof(value));
+    stw_rule = n == 3u && !strcmp(value, "stw");
   }
-  fb->prev_swap_us = now;
+  if (stw_rule) {
+    if (period && fb->prev_swap_us) {
+      int64_t delta = now - fb->prev_swap_us;
+      if (delta >= 0 && delta < period) os_time_sleep((int64_t)((period - delta) * 1.75f));
+    }
+    fb->prev_swap_us = now;
+  } else {
+    long long before = fb->next_swap_us;
+    long long wait = agx_wgl_pace(&fb->next_swap_us, now, period);
+    if (period) {
+      InterlockedIncrement(&AgxWglPaceCounters[0]);
+      if (fb->next_swap_us != before + period) InterlockedIncrement(&AgxWglPaceCounters[3]);
+    }
+    if (wait > 0) {
+      InterlockedIncrement(&AgxWglPaceCounters[1]);
+      InterlockedExchangeAdd(&AgxWglPaceCounters[2], (LONG)wait);
+      agx_wgl_framebuffer_wait(fb, wait);
+    }
+  }
+  /* receipt: swap-to-swap interval in quarters of the refresh period */
+  swap = os_time_get_nano() / 1000;
+  if (fb->last_swap_us && refresh) {
+    int64_t q = (swap - fb->last_swap_us) * 4;
+    InterlockedIncrement(&AgxWglPaceCounters[q < refresh * 3 ? 4 : q < refresh * 5 ? 5 :
+                                             q < refresh * 7 ? 6 : 7]);
+  }
+  fb->last_swap_us = swap;
 }
 
 /* SwapBuffers: stw has flushed the frame (no fence) and presents the

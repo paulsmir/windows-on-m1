@@ -583,6 +583,7 @@ extern "C" IMAGE_DOS_HEADER __ImageBase;  /* this image (linker-provided) */
 extern "C" struct stw_winsys_framebuffer *agx_wgl_create_framebuffer(
     struct pipe_screen *screen, HWND window, int pixel_format);
 extern "C" void agx_wgl_framebuffer_counters(UINT out[6]);
+extern "C" void agx_wgl_pace_counters(UINT out[8]);
 /* winsys (closure): EXP1202 native draw phase receipt. */
 extern "C" void AgxWin32AsahiDrawPhases(unsigned out[6]);
 
@@ -715,6 +716,11 @@ static void wgl_present_receipt(AGX_WGL_PRESENT_RING *ring, LONGLONG start,
   UINT fb[6];
   agx_wgl_framebuffer_counters(fb);
   AdmissionUmdDiagnostic("measure-wgl-winsysfb", S_OK, fb, 6u);
+  /* EXP1209: swap pacing (paced swaps, waits, waited us, grid restarts,
+   * swap intervals < 3/4, 3/4..5/4, 5/4..7/4, >= 7/4 refresh periods). */
+  UINT pace[8];
+  agx_wgl_pace_counters(pace);
+  AdmissionUmdDiagnostic("measure-wgl-pace", S_OK, pace, 8u);
   ring->SumPresent = ring->SumInterval = ring->SumSync = 0;
 }
 
