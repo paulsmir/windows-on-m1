@@ -671,6 +671,24 @@ static void wgl_present_receipt(AGX_WGL_PRESENT_RING *ring, LONGLONG start,
   UINT phases[6];
   AgxWin32AsahiDrawPhases(phases);
   AdmissionUmdDiagnostic("measure-wgl-phase", S_OK, phases, 6u);
+  /* EXP1203: CPU time of the presenting (game) thread and of the process
+   * over the last 120 presents, us (kernel+user): with the frame interval it
+   * tells pure CPU work from waiting or preemption. */
+  {
+    static ULONGLONG last_thread, last_process;
+    FILETIME c, e, k, u;
+    ULONGLONG thread = 0, process = 0;
+    if (GetThreadTimes(GetCurrentThread(), &c, &e, &k, &u))
+      thread = (((ULONGLONG)k.dwHighDateTime << 32) | k.dwLowDateTime) +
+               (((ULONGLONG)u.dwHighDateTime << 32) | u.dwLowDateTime);
+    if (GetProcessTimes(GetCurrentProcess(), &c, &e, &k, &u))
+      process = (((ULONGLONG)k.dwHighDateTime << 32) | k.dwLowDateTime) +
+                (((ULONGLONG)u.dwHighDateTime << 32) | u.dwLowDateTime);
+    UINT times[2] = {last_thread ? (UINT)((thread - last_thread) / 10u) : 0u,
+                     last_process ? (UINT)((process - last_process) / 10u) : 0u};
+    last_thread = thread; last_process = process;
+    AdmissionUmdDiagnostic("measure-wgl-threadtime", S_OK, times, 2u);
+  }
   /* EXP1192: winsys framebuffers created, refused (last refused pixel
    * format's dwFlags and samples), presents, failed presents. */
   UINT fb[6];
