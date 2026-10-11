@@ -96,9 +96,48 @@ static void wgl_vdm_trace(uint64_t va, const uint32_t *words, unsigned count,
 }
 
 /* Asahi perf_debug text (why batches flush or sync): the first 200 lines. */
+/* EXP1198 receipt-only: steady-state counts of the perf notes (flush and
+ * sync reasons, BO cache hits/misses) by text, reported and reset with the
+ * present receipt (the first 200 notes are still written one by one). */
+#define AGX_WGL_PERF_SLOTS 24u
+static struct { char Text[64]; UINT Count; } AgxWglPerfCounts[AGX_WGL_PERF_SLOTS];
+static UINT AgxWglPerfLost;
+static SRWLOCK AgxWglPerfLock = SRWLOCK_INIT;
+
+static void wgl_perf_count(const char *message) {
+  AcquireSRWLockExclusive(&AgxWglPerfLock);
+  unsigned i = 0;
+  for (; i < AGX_WGL_PERF_SLOTS && AgxWglPerfCounts[i].Count; ++i)
+    if (!strncmp(AgxWglPerfCounts[i].Text, message, sizeof(AgxWglPerfCounts[i].Text) - 1)) break;
+  if (i == AGX_WGL_PERF_SLOTS) ++AgxWglPerfLost;
+  else {
+    if (!AgxWglPerfCounts[i].Count)
+      strncpy_s(AgxWglPerfCounts[i].Text, sizeof(AgxWglPerfCounts[i].Text), message, _TRUNCATE);
+    ++AgxWglPerfCounts[i].Count;
+  }
+  ReleaseSRWLockExclusive(&AgxWglPerfLock);
+}
+
+static void wgl_perf_report(void) {
+  AcquireSRWLockExclusive(&AgxWglPerfLock);
+  for (unsigned i = 0; i < AGX_WGL_PERF_SLOTS && AgxWglPerfCounts[i].Count; ++i) {
+    char stage[96];
+    if (_snprintf_s(stage, sizeof(stage), _TRUNCATE, "measure-perfc %s", AgxWglPerfCounts[i].Text) >= 0) {
+      for (unsigned k = 0; k < sizeof(stage) && stage[k]; ++k)
+        if (stage[k] == '\n' || stage[k] == '\r' || stage[k] == ' ') stage[k] = '_';
+      UINT values[2] = {AgxWglPerfCounts[i].Count, AgxWglPerfLost};
+      AdmissionUmdDiagnostic(stage, S_OK, values, 2u);
+    }
+  }
+  ZeroMemory(AgxWglPerfCounts, sizeof(AgxWglPerfCounts));
+  AgxWglPerfLost = 0;
+  ReleaseSRWLockExclusive(&AgxWglPerfLock);
+}
+
 static void wgl_perf_note(const char *message) {
   static volatile LONG records;
   char stage[96];
+  if (message) wgl_perf_count(message);
   if (!message || InterlockedIncrement(&records) > 200) return;
   if (_snprintf_s(stage, sizeof(stage), _TRUNCATE, "measure-perf %s", message) < 0) return;
   /* One token per line: measure-perf_<text>. */
@@ -625,6 +664,7 @@ static void wgl_present_receipt(AGX_WGL_PRESENT_RING *ring, LONGLONG start,
   UINT cpu[AGX_WGL_CPU_COUNTERS];
   agx_wgl_draw_hook_cpu(cpu);
   AdmissionUmdDiagnostic("measure-wgl-cpu", S_OK, cpu, AGX_WGL_CPU_COUNTERS);
+  wgl_perf_report();  /* EXP1198 */
   /* EXP1192: winsys framebuffers created, refused (last refused pixel
    * format's dwFlags and samples), presents, failed presents. */
   UINT fb[6];
