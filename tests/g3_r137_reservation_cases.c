@@ -18,6 +18,11 @@ static void r137_reservation_cases(void) {
     assert(reserve_calls==calls+1 && reserve_process==args.hDxgkProcess);
     ADMISSION_G3_PROCESS *p=args.hKmdProcess;
     assert(p->PrivateVa==reserve_base && p->DxgkProcess==args.hDxgkProcess);
+    /* G2 HW2 receipt: the reservation and its VA */
+    assert(replay_reserve_receipt[0]==1u && replay_reserve_receipt[1]==system+1u &&
+           replay_reserve_receipt[3]==0u &&
+           replay_reserve_receipt[4]==(ULONG)APPLE_AGX_G4_PRIVATE_VA_BASE &&
+           replay_reserve_receipt[5]==(ULONG)(APPLE_AGX_G4_PRIVATE_VA_BASE>>32));
     if(getenv("G3_REPLAY_R137_ESCAPE") && !system) {
       ADMISSION_DEVICE device={0}; ADMISSION_RENDER_CONTEXT context={0};
       device.Object.Magic=ADMISSION_OBJECT_DEVICE_MAGIC;
@@ -129,6 +134,17 @@ static void r137_reservation_cases(void) {
     reserve_base=invalid_bases[i];
     assert(AdmissionDdiCreateProcess(&a,&fail)==STATUS_INVALID_ADDRESS);
     assert(!fail.hKmdProcess && state.ProcessCount==0);
+  }
+  /* G2 HW2: a valid span other than the requested top of the USC window
+   * is not the range the KMD asked for. */
+  reserve_base=1ULL<<36;
+  {
+    ULONG refused=replay_reserve_receipt[2];
+    assert(AdmissionDdiCreateProcess(&a,&fail)==STATUS_INVALID_ADDRESS);
+    assert(!fail.hKmdProcess && state.ProcessCount==0);
+    assert(replay_reserve_receipt[2]==refused+1u &&
+           replay_reserve_receipt[3]==(ULONG)STATUS_INVALID_ADDRESS &&
+           replay_reserve_receipt[4]==0u && replay_reserve_receipt[5]==0x10u);
   }
   reserve_base=(1ULL<<36)+1;
   assert(!NT_SUCCESS(AdmissionDdiCreateProcess(&a,&fail)));

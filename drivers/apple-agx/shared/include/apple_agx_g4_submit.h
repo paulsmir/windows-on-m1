@@ -53,6 +53,13 @@ static inline unsigned int AppleAgxG4ColorBytes(unsigned int color_format) {
 #define APPLE_AGX_G4_MAX_ATTACHMENTS 3u
 #define APPLE_AGX_G4_USC_EXECUTION_BASE 0x1100000000ULL
 #define APPLE_AGX_G4_USC_WINDOW_BYTES 0x100000000ULL
+/* G2 HW2: the KMD's per-process private range (32 MiB, one leaf table) is
+ * the top span of the USC window, so the KMD's own kernels (present blt)
+ * execute from it; the UMD cannot map there (AllowUserModeMapping 0). */
+#define APPLE_AGX_G4_PRIVATE_VA_BYTES 0x02000000ULL
+#define APPLE_AGX_G4_PRIVATE_VA_BASE \
+  (APPLE_AGX_G4_USC_EXECUTION_BASE + APPLE_AGX_G4_USC_WINDOW_BYTES - \
+   APPLE_AGX_G4_PRIVATE_VA_BYTES)
 
 typedef struct {
   unsigned int Magic;

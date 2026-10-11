@@ -2308,6 +2308,19 @@ _Use_decl_annotations_ void AdmissionRecordG3PrivateProcesses(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordG3Reservation(
+    ADMISSION_CONTEXT *Context, const ULONG *Values) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      Values == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
+  WriteBinary(key, L"Wom1G3Reserve", Values,
+              ADMISSION_G3_RESERVE_RECEIPT_WORDS * sizeof(ULONG));
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordG4SubmitFailure(
     ADMISSION_CONTEXT *Context) {
   HANDLE key = NULL;

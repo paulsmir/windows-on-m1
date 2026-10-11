@@ -148,6 +148,7 @@ static KIRQL replay_query_claim_irql;
 static void *ExAllocatePool2(int pool,SIZE_T bytes,ULONG tag) {(void)pool;(void)tag;++replay_pool_calls;return replay_pool_fail?NULL:calloc(1,bytes);}
 static void ExFreePoolWithTag(void *p,ULONG tag) {(void)tag;free(p);}
 static LONG InterlockedExchange(volatile LONG *p,LONG n) {LONG old=*p;*p=n;return old;}
+static LONG InterlockedIncrement(volatile LONG *p) {return ++*p;}
 static LONG InterlockedCompareExchange(volatile LONG *p,LONG n,LONG old) { LONG v=*p;if(v==old){if(p==replay_query_claim_watch && n==1)replay_query_claim_irql=replay_irql;*p=n;}return v; }
 
 typedef struct { long long QuadPart; } PHYSICAL_ADDRESS;
@@ -221,11 +222,11 @@ typedef struct { HANDLE hDxgkProcess; ULONGLONG SizeInBytes; UINT Alignment;
 static UINT reserve_calls;
 static NTSTATUS reserve_status;
 static HANDLE reserve_process;
-static ULONGLONG reserve_base=1ULL<<36;
+static ULONGLONG reserve_base=APPLE_AGX_G4_PRIVATE_VA_BASE;
 static NTSTATUS ReplayReserveVa(HANDLE adapter, DXGKARGCB_RESERVEGPUVIRTUALADDRESSRANGE *args) {
   assert(KeGetCurrentIrql()==PASSIVE_LEVEL && adapter==(HANDLE)0x1234);
   assert(args->SizeInBytes==0x02000000ULL && args->Alignment==0x02000000u);
-  assert(!args->Flags && !args->BaseAddress);
+  assert(!args->Flags && args->BaseAddress==APPLE_AGX_G4_PRIVATE_VA_BASE);
   reserve_process=args->hDxgkProcess; ++reserve_calls;
   args->StartVirtualAddress=reserve_base;
   return reserve_status;
@@ -362,7 +363,7 @@ typedef struct _ADMISSION_G3_LEAF_HISTORY_SNAPSHOT {
 } ADMISSION_G3_LEAF_HISTORY_SNAPSHOT;
 #define ADMISSION_G3_UPLOAD_TRACE_COUNT 64u
 typedef struct { ULONGLONG ProcessId,Va; ULONG Bytes,Hash,GpuHash,Checks; } ADMISSION_G3_UPLOAD_TRACE;
-typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; KEVENT JobEvent; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; APPLE_AGX_G3_PRIVATE_POOL PrivatePool; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence,LastCompletedFence,PrivateCompletionFence; ULONGLONG UnpublishedGroups[32]; ADMISSION_G3_UPLOAD_TRACE UploadTrace[ADMISSION_G3_UPLOAD_TRACE_COUNT]; ULONG UploadTraceNext,UploadVerifyChecks,UploadVerifyMismatch,UploadVerifyUnmapped; ADMISSION_G3_UPLOAD_TRACE UploadFirstMismatch; ADMISSION_G3_LEAF_HISTORY LeafHistory[ADMISSION_G3_LEAF_RING]; ULONG LeafHistoryNext; ADMISSION_G3_ALLOC_TRACK AllocTrack[ADMISSION_G3_ALLOC_TRACK_COUNT]; ULONGLONG PrivateStats[16]; LONGLONG ProcessReceiptQpc; } ADMISSION_G3_STATE;
+typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; KEVENT JobEvent; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; APPLE_AGX_G3_PRIVATE_POOL PrivatePool; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence,LastCompletedFence,PrivateCompletionFence; ULONGLONG UnpublishedGroups[32]; ADMISSION_G3_UPLOAD_TRACE UploadTrace[ADMISSION_G3_UPLOAD_TRACE_COUNT]; ULONG UploadTraceNext,UploadVerifyChecks,UploadVerifyMismatch,UploadVerifyUnmapped; ADMISSION_G3_UPLOAD_TRACE UploadFirstMismatch; ADMISSION_G3_LEAF_HISTORY LeafHistory[ADMISSION_G3_LEAF_RING]; ULONG LeafHistoryNext; ADMISSION_G3_ALLOC_TRACK AllocTrack[ADMISSION_G3_ALLOC_TRACK_COUNT]; ULONGLONG PrivateStats[16]; LONGLONG ProcessReceiptQpc; LONG ReserveMade,ReserveRefused; } ADMISSION_G3_STATE;
 enum { ADMISSION_G3_PRIVATE_STAT_HIT, ADMISSION_G3_PRIVATE_STAT_MISS, ADMISSION_G3_PRIVATE_STAT_TRIM, ADMISSION_G3_PRIVATE_STAT_PRESSURE,
   ADMISSION_G3_PRIVATE_STAT_RELEASED, ADMISSION_G3_PRIVATE_STAT_MAPPED_PAGES, ADMISSION_G3_PRIVATE_STAT_UNMAPPED_PAGES,
   ADMISSION_G3_PRIVATE_STAT_CACHED_RELEASE, ADMISSION_G3_PRIVATE_STAT_CACHED_REAP, ADMISSION_G3_PRIVATE_STAT_RELEASE_QUEUED,
@@ -715,6 +716,11 @@ static bool ReplayRead64(void *opaque,unsigned offset,unsigned long long *value)
 }
 static void ReplayBarrier(void *opaque) {(void)opaque;}
 static void AdmissionRecordGpuvaG3CreateInput(PDEVICE_OBJECT p,DXGKARG_CREATEPROCESS *a,int started,KIRQL irql) {(void)p;(void)a;(void)started;(void)irql;}
+#define ADMISSION_G3_RESERVE_RECEIPT_WORDS 6u
+static ULONG replay_reserve_receipt[ADMISSION_G3_RESERVE_RECEIPT_WORDS];
+static void AdmissionRecordG3Reservation(ADMISSION_CONTEXT *c,const ULONG *v) {
+  (void)c;memcpy(replay_reserve_receipt,v,sizeof(replay_reserve_receipt));
+}
 static void AdmissionRecordGpuvaG3ContextInput(PDEVICE_OBJECT p,DXGKARG_CREATECONTEXT *a,KIRQL irql) {(void)p;(void)a;(void)irql;}
 static void AdmissionRecordGpuvaG3DmaContext(PDEVICE_OBJECT p,DXGKARG_CREATECONTEXT *a) {(void)p;(void)a;}
 static ADMISSION_G3_PAGING_FAILURE last_paging_failure;
