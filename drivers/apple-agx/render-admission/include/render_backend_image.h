@@ -11,6 +11,18 @@
 #include "apple_agx_render_template_rebase.h"
 #include "apple_agx_g4_builder.h"
 #include "apple_agx_render_manager.h"
+#include "apple_agx_present_job.h"
+
+/* G2 HW2b: a present blt the KMD runs as a compute job in the presenting
+ * process's VM: its present arena (KMD view and job-VM VA) and the surfaces
+ * and rects proven at submission (AppleAgxPresentValidate, graph access). */
+typedef struct _ADMISSION_PRESENT_COMPUTE {
+  APPLE_AGX_PRESENT_ARENA Arena;
+  APPLE_AGX_PRESENT_SURFACE Source, Destination;
+  APPLE_AGX_PRESENT_RECT SourceRect, DestinationRect;
+  APPLE_AGX_PRESENT_RECT Rects[APPLE_AGX_PRESENT_MAX_RECTS];
+  APPLE_AGX_U32 RectCount, Fill, Colour;
+} ADMISSION_PRESENT_COMPUTE;
 
 typedef struct _ADMISSION_BACKEND_IMAGE {
   APPLE_AGX_RENDER_TEMPLATE_ROOTS Roots;
@@ -48,6 +60,10 @@ typedef struct _ADMISSION_BACKEND_IMAGE {
    * arena stays untouched (and Pristine). */
   APPLE_AGX_BOOL G4Compute;
   APPLE_AGX_G4_COMPUTE_ENVELOPE G4ComputeEnvelope;
+  /* G2 HW2b: a present blt compute job; its arena is the presenting
+   * process's, the template arena stays untouched. */
+  APPLE_AGX_BOOL PresentCompute;
+  ADMISSION_PRESENT_COMPUTE Present;
 } ADMISSION_BACKEND_IMAGE;
 
 /* EXP1105: the exact Prepare image of the objects a G4 job can change,
@@ -128,6 +144,9 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
 APPLE_AGX_BOOL AdmissionBackendImageBindG4Compute(
     ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence,
     const APPLE_AGX_G4_COMPUTE_ENVELOPE *Envelope);
+APPLE_AGX_BOOL AdmissionBackendImageBindPresentCompute(
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence,
+    const ADMISSION_PRESENT_COMPUTE *Present);
 
 APPLE_AGX_BOOL AdmissionBackendImageCaptureOutput(
     const ADMISSION_BACKEND_IMAGE *Image,

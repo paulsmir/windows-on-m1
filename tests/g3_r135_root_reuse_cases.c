@@ -178,6 +178,32 @@ static void r135_root_reuse_cases(void) {
   context->GpuvaG3RootIpa=rebound_root;
   expect_ok("R135 restored root job",AdmissionGpuvaG3BeginJob(&a,context,92));
   assert(AdmissionGpuvaG3CompleteJob(&a,92));
+  /* G2 HW2b: a bound present job begins only with this process's arena and
+   * its source readable and destination writable in the process graph. */
+  if(p->PresentArena.Generation) {
+    ADMISSION_PRESENT_COMPUTE *present=&a.BackendImage.Present;
+    memset(present,0,sizeof(*present));
+    present->Arena.Cpu=(unsigned char *)local_cpu;
+    present->Arena.Va=p->PrivateVa+p->PresentArena.VaOffset;
+    present->Arena.Bytes=APPLE_AGX_PRESENT_ARENA_BYTES;
+    present->Arena.UscBase=APPLE_AGX_G4_USC_EXECUTION_BASE;
+    present->Source=(APPLE_AGX_PRESENT_SURFACE){0x10000ULL,64u,16u,16u};
+    present->Destination=(APPLE_AGX_PRESENT_SURFACE){0x18000ULL,64u,16u,16u};
+    a.BackendImage.PresentCompute=1u; a.BackendImage.BoundFence=93u;
+    expect_ok("HW2b present job",AdmissionGpuvaG3BeginJob(&a,context,93));
+    assert(p->Graph.JobInFlight && AdmissionGpuvaG3CompleteJob(&a,93));
+    a.BackendImage.BoundFence=94u;
+    present->Destination.Va=0x40000ULL;               /* not mapped */
+    assert(!NT_SUCCESS(AdmissionGpuvaG3BeginJob(&a,context,94)));
+    present->Destination.Va=0x18000ULL;
+    present->Source.Va=present->Arena.Va;             /* the private range */
+    assert(!NT_SUCCESS(AdmissionGpuvaG3BeginJob(&a,context,94)));
+    present->Source.Va=0x10000ULL;
+    present->Arena.Va+=0x10000ULL;                    /* not this arena */
+    assert(!NT_SUCCESS(AdmissionGpuvaG3BeginJob(&a,context,94)));
+    assert(!state.ActiveProcess && !p->Graph.JobInFlight);
+    a.BackendImage.PresentCompute=0u; a.BackendImage.BoundFence=0u;
+  }
   assert(!AppleAgxGpuvaG3GraphRegisterTable(&p->Graph,p->Graph.RootIpa,1));
   expect_ok("R135 destroy context",AdmissionDdiDestroyContext(cc.hContext));
   expect_ok("R135 destroy process",AdmissionDdiDestroyProcess(&a,p));

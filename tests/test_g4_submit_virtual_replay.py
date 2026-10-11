@@ -43,7 +43,7 @@ class G4SubmitVirtualReplay(unittest.TestCase):
             "AdmissionG4SubmitReject", "AdmissionGpuvaG3PrivatePreempt",
             "AdmissionG3PrivateSlotPreempted", "AdmissionG3PrivateSlotCancelled",
             "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
-            "AdmissionG4GraphAccessTyped", "AdmissionG4FindPrivateScene","AdmissionG4FindPrivateResubmission","AdmissionG4ResubmissionRefusal","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy",
+            "AdmissionG4GraphAccessTyped", "AdmissionG3PresentSurfaceBytes", "AdmissionG3PresentAccessible", "AdmissionG4FindPrivateScene","AdmissionG4FindPrivateResubmission","AdmissionG4ResubmissionRefusal","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy",
             "AdmissionG4SnapshotFailure", "AdmissionG4ResolveOutput",
             "AdmissionGpuvaG3PrivateCancel", "AdmissionG4PendingAdmissible",
             "AdmissionG4PendingQueue", "AdmissionG4PendingBindHead",

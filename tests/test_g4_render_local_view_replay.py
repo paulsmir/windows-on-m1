@@ -10,7 +10,7 @@ class G4RenderLocalViewReplay(unittest.TestCase):
         branches=source.split('/* Branch IDs are a stable diagnostic ABI',1)[1]
         functions='enum {'+branches.split('enum {',1)[1].split('};',1)[0]+'};\n'
         names=('AdmissionG4ObserveEnvelopeReject','AdmissionG4SubmitRejectDetail','AdmissionG4SubmitReject',
-          'AdmissionG4GraphAccess','AdmissionG4LogicalEnvelopeAccess','AdmissionG4GraphAccessTyped',
+          'AdmissionG4GraphAccess','AdmissionG4LogicalEnvelopeAccess','AdmissionG4GraphAccessTyped','AdmissionG3PresentSurfaceBytes','AdmissionG3PresentAccessible',
           'AdmissionG3PrivateSlotPreempted','AdmissionG3PrivateSlotCancelled',
           'AdmissionG4FindPrivateScene','AdmissionG4FindPrivateResubmission','AdmissionG4ResubmissionRefusal',
           'AdmissionG4PrivateGraphAccess','AdmissionG4PrivateGeometry','AdmissionG4PrivateUnqueue',

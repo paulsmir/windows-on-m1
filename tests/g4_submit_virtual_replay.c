@@ -8,6 +8,15 @@
 #include "apple_agx_render_manager.h"
 #include "apple_agx_gpuva_g3_translation.h"
 #include "apple_agx_g13_compute_work.h"
+#include "apple_agx_present_job.h"
+/* render_backend_image.h: a KMD present blt compute job (G2 HW2b). */
+typedef struct _ADMISSION_PRESENT_COMPUTE {
+  APPLE_AGX_PRESENT_ARENA Arena;
+  APPLE_AGX_PRESENT_SURFACE Source, Destination;
+  APPLE_AGX_PRESENT_RECT SourceRect, DestinationRect;
+  APPLE_AGX_PRESENT_RECT Rects[APPLE_AGX_PRESENT_MAX_RECTS];
+  unsigned RectCount, Fill, Colour;
+} ADMISSION_PRESENT_COMPUTE;
 
 typedef int NTSTATUS;
 typedef int LONG;
@@ -84,6 +93,7 @@ typedef struct _ADMISSION_G3_PRIVATE_SCENE {
 
 typedef struct _ADMISSION_G3_PROCESS {
   ULONGLONG PrivateVa;
+  APPLE_AGX_G3_PRIVATE_EXTENT PresentArena;
   APPLE_AGX_G3_PRIVATE_MANAGER PrivateManager;
   APPLE_AGX_RENDER_MANAGER_STATE FirmwareManager;
   ADMISSION_G3_PRIVATE_SCENE *PrivateScenes;
@@ -143,6 +153,8 @@ typedef struct {
   unsigned char Native[APPLE_AGX_G4_NATIVE_MAX_BYTES];
   BOOLEAN Compute;
   APPLE_AGX_G4_COMPUTE_ENVELOPE ComputeEnvelope;
+  BOOLEAN Present;
+  ADMISSION_PRESENT_COMPUTE PresentJob;
 } ADMISSION_G4_PENDING;
 typedef struct {
   APPLE_AGX_G4_PRIVATE_HEADER_V2 G4Header;
@@ -153,6 +165,8 @@ typedef struct {
   APPLE_AGX_RENDER_MANAGER_KEY G4ManagerKey;
   unsigned G4Compute;
   APPLE_AGX_G4_COMPUTE_ENVELOPE G4ComputeEnvelope;
+  unsigned PresentCompute;
+  ADMISSION_PRESENT_COMPUTE Present;
 } ADMISSION_BACKEND_IMAGE;
 typedef struct { unsigned DestinationBytes; } APPLE_AGX_EXP208_GDI_BINDING;
 typedef struct {
@@ -405,6 +419,15 @@ static int AdmissionBackendImageBindG4Compute(ADMISSION_BACKEND_IMAGE *image,
     return 0;
   memcpy(&image->G4ComputeEnvelope,envelope,sizeof(*envelope));
   image->G4Compute=1;image->BoundFence=fence;return 1;
+}
+static int AdmissionBackendImageBindPresentCompute(ADMISSION_BACKEND_IMAGE *image,
+    unsigned fence, const ADMISSION_PRESENT_COMPUTE *present) {
+  if(bind_hook)bind_hook();
+  if(!bind_ok || image->BoundFence || image->G4Native || image->G4Compute ||
+     image->PresentCompute)
+    return 0;
+  memcpy(&image->Present,present,sizeof(*present));
+  image->PresentCompute=1;image->BoundFence=fence;return 1;
 }
 static void AdmissionDispatchQueuedWork(ADMISSION_CONTEXT *adapter) {
   (void)adapter;++dispatches;
