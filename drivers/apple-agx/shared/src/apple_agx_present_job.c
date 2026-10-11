@@ -91,6 +91,57 @@ static unsigned int usc_words(const APPLE_AGX_PRESENT_ARENA *a,
   return n ? used + n : 0u;
 }
 
+/* Every refusal of AppleAgxPresentBuild; what it writes after this check
+ * cannot fail (fixed sizes, offsets inside a valid arena). */
+static int present_check(const APPLE_AGX_PRESENT_ARENA *Arena, int Fill,
+                         const APPLE_AGX_PRESENT_SURFACE *Source,
+                         const APPLE_AGX_PRESENT_RECT *SourceRect,
+                         const APPLE_AGX_PRESENT_SURFACE *Destination,
+                         const APPLE_AGX_PRESENT_RECT *DestinationRect,
+                         const APPLE_AGX_PRESENT_RECT *SubRects,
+                         unsigned int SubRectCount,
+                         unsigned int *StepX, unsigned int *StepY) {
+  unsigned int i;
+  *StepX = *StepY = 0u;
+  if (!arena_valid(Arena) || !surface_valid(Destination) ||
+      !SubRects || !SubRectCount || SubRectCount > APPLE_AGX_PRESENT_MAX_RECTS ||
+      !rect_inside(DestinationRect, -(int)MAX_EXTENT, -(int)MAX_EXTENT,
+                   2 * (int)MAX_EXTENT, 2 * (int)MAX_EXTENT))
+    return 0;
+  if (!Fill) {
+    unsigned int sw, sh, dw, dh;
+    if (!surface_valid(Source) ||
+        !rect_inside(SourceRect, 0, 0, (int)Source->Width, (int)Source->Height))
+      return 0;
+    sw = (unsigned int)(SourceRect->Right - SourceRect->Left);
+    sh = (unsigned int)(SourceRect->Bottom - SourceRect->Top);
+    dw = (unsigned int)(DestinationRect->Right - DestinationRect->Left);
+    dh = (unsigned int)(DestinationRect->Bottom - DestinationRect->Top);
+    *StepX = (sw << 16) / dw;
+    *StepY = (sh << 16) / dh;
+    if (!*StepX || !*StepY) return 0;
+  }
+  for (i = 0u; i < SubRectCount; ++i)
+    if (!rect_inside(&SubRects[i], DestinationRect->Left, DestinationRect->Top,
+                     DestinationRect->Right, DestinationRect->Bottom) ||
+        !rect_inside(&SubRects[i], 0, 0, (int)Destination->Width,
+                     (int)Destination->Height))
+      return 0;
+  return 1;
+}
+
+int AppleAgxPresentValidate(const APPLE_AGX_PRESENT_ARENA *Arena, int Fill,
+                            const APPLE_AGX_PRESENT_SURFACE *Source,
+                            const APPLE_AGX_PRESENT_RECT *SourceRect,
+                            const APPLE_AGX_PRESENT_SURFACE *Destination,
+                            const APPLE_AGX_PRESENT_RECT *DestinationRect,
+                            const APPLE_AGX_PRESENT_RECT *SubRects,
+                            unsigned int SubRectCount) {
+  unsigned int step_x, step_y;
+  return present_check(Arena, Fill, Source, SourceRect, Destination,
+                       DestinationRect, SubRects, SubRectCount, &step_x, &step_y);
+}
+
 int AppleAgxPresentBuild(const APPLE_AGX_PRESENT_ARENA *Arena, int Fill,
                          unsigned int Colour,
                          const APPLE_AGX_PRESENT_SURFACE *Source,
@@ -106,30 +157,10 @@ int AppleAgxPresentBuild(const APPLE_AGX_PRESENT_ARENA *Arena, int Fill,
                       (APPLE_AGX_CDM_LAUNCH_WORDS + APPLE_AGX_CDM_BARRIER_WORDS) +
                       APPLE_AGX_CDM_TERMINATE_WORDS];
   unsigned int words = 0u, i, n, step_x = 0u, step_y = 0u;
-  if (!arena_valid(Arena) || !Job || !surface_valid(Destination) ||
-      !SubRects || !SubRectCount || SubRectCount > APPLE_AGX_PRESENT_MAX_RECTS ||
-      !rect_inside(DestinationRect, -(int)MAX_EXTENT, -(int)MAX_EXTENT,
-                   2 * (int)MAX_EXTENT, 2 * (int)MAX_EXTENT))
+  if (!Job || !present_check(Arena, Fill, Source, SourceRect, Destination,
+                             DestinationRect, SubRects, SubRectCount,
+                             &step_x, &step_y))
     return 0;
-  if (!Fill) {
-    unsigned int sw, sh, dw, dh;
-    if (!surface_valid(Source) ||
-        !rect_inside(SourceRect, 0, 0, (int)Source->Width, (int)Source->Height))
-      return 0;
-    sw = (unsigned int)(SourceRect->Right - SourceRect->Left);
-    sh = (unsigned int)(SourceRect->Bottom - SourceRect->Top);
-    dw = (unsigned int)(DestinationRect->Right - DestinationRect->Left);
-    dh = (unsigned int)(DestinationRect->Bottom - DestinationRect->Top);
-    step_x = (sw << 16) / dw;
-    step_y = (sh << 16) / dh;
-    if (!step_x || !step_y) return 0;
-  }
-  for (i = 0u; i < SubRectCount; ++i)
-    if (!rect_inside(&SubRects[i], DestinationRect->Left, DestinationRect->Top,
-                     DestinationRect->Right, DestinationRect->Bottom) ||
-        !rect_inside(&SubRects[i], 0, 0, (int)Destination->Width,
-                     (int)Destination->Height))
-      return 0;
   for (i = 0u; i < SubRectCount; ++i) {
     const APPLE_AGX_PRESENT_RECT *r = &SubRects[i];
     const unsigned int block = BLOCKS_OFFSET + i * BLOCK_BYTES;

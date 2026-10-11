@@ -45,6 +45,16 @@ typedef struct {
   unsigned int Launches;
 } APPLE_AGX_PRESENT_JOB;
 
+/* Exactly the refusals of AppleAgxPresentBuild, without writing: a job
+ * validated at submission builds in the worker without a failure path. */
+int AppleAgxPresentValidate(const APPLE_AGX_PRESENT_ARENA *Arena, int Fill,
+                            const APPLE_AGX_PRESENT_SURFACE *Source,
+                            const APPLE_AGX_PRESENT_RECT *SourceRect,
+                            const APPLE_AGX_PRESENT_SURFACE *Destination,
+                            const APPLE_AGX_PRESENT_RECT *DestinationRect,
+                            const APPLE_AGX_PRESENT_RECT *SubRects,
+                            unsigned int SubRectCount);
+
 /* Copy both kernel binaries to their arena offsets (once per arena). */
 int AppleAgxPresentArenaInstall(const APPLE_AGX_PRESENT_ARENA *Arena);
 
