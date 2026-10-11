@@ -550,6 +550,23 @@ static void wgl_kmt_receipt(LONGLONG us) {
     site[AGX_KMT_WAIT_DEPTH + 1u] = (UINT)(s->Ticks * 1000000 / us);
     site[AGX_KMT_WAIT_DEPTH + 2u] = r->WaitSitesLost;
     AdmissionUmdDiagnostic("measure-wgl-wait", S_OK, site, AGX_KMT_WAIT_DEPTH + 3u);
+    /* EXP1193: the site's callers in other modules: chain RVA 0 (to pair
+     * the line with its site), position, module RVA, waits, microseconds. */
+    for (unsigned k = 0; k < AGX_KMT_WAIT_FOREIGN; ++k) {
+      HMODULE module = NULL;
+      char path[MAX_PATH], stage[96];
+      if (!s->Foreign[k] ||
+          !GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                              GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                              (LPCSTR)s->Foreign[k], &module) ||
+          !GetModuleFileNameA(module, path, MAX_PATH)) continue;
+      const char *slash = strrchr(path, '\\');
+      if (_snprintf_s(stage, sizeof(stage), _TRUNCATE, "measure-wgl-waitf_%s",
+                      slash ? slash + 1 : path) < 0) continue;
+      UINT caller[5] = {site[0], k, (UINT)(s->Foreign[k] - (ULONG_PTR)module),
+                        s->Calls, site[AGX_KMT_WAIT_DEPTH + 1u]};
+      AdmissionUmdDiagnostic(stage, S_OK, caller, 5u);
+    }
   }
   ZeroMemory(r->WaitSites, sizeof(r->WaitSites));
   r->WaitSitesLost = 0;

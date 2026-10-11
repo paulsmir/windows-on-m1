@@ -65,8 +65,12 @@ typedef enum _AGX_KMT_GPUVA_OP {
  * fence wait (its callers), the waits and their QPC ticks. */
 #define AGX_KMT_WAIT_SITES 8u
 #define AGX_KMT_WAIT_DEPTH 8u  /* EXP1192: 4 stopped at agx_sync_all */
+#define AGX_KMT_WAIT_FOREIGN 3u
 typedef struct _AGX_KMT_WAIT_SITE {
   ULONG_PTR Return[AGX_KMT_WAIT_DEPTH];
+  /* EXP1193: the first return addresses into other modules above the
+   * chain (who called into the ICD), from the site's first wait. */
+  ULONG_PTR Foreign[AGX_KMT_WAIT_FOREIGN];
   UINT Calls;
   LONGLONG Ticks;
 } AGX_KMT_WAIT_SITE;

@@ -300,7 +300,8 @@ static HRESULT APIENTRY evict(HANDLE device, D3DDDICB_EVICT *args) {
 /* EXP1189 receipt-only: the callers of a fence wait, as the first return
  * addresses into this image's code on the stack above wait_cpu (a scan, not
  * an unwind: optimized x86 code keeps no frame chain). */
-static __declspec(noinline) void wait_chain(ULONG_PTR out[AGX_KMT_WAIT_DEPTH]) {
+static __declspec(noinline) void wait_chain(ULONG_PTR out[AGX_KMT_WAIT_DEPTH],
+                                            ULONG_PTR foreign[AGX_KMT_WAIT_FOREIGN]) {
   static ULONG_PTR code_start, code_end;
   if (!code_end) {
     HMODULE self = NULL;
@@ -315,20 +316,35 @@ static __declspec(noinline) void wait_chain(ULONG_PTR out[AGX_KMT_WAIT_DEPTH]) {
   }
   const ULONG_PTR *stack = (const ULONG_PTR *)_AddressOfReturnAddress();
   const ULONG_PTR *limit = (const ULONG_PTR *)((NT_TIB *)NtCurrentTeb())->StackBase;
-  unsigned found = 0, skipped = 0;
-  for (unsigned i = 0; i < 1024u && stack + i < limit && found < AGX_KMT_WAIT_DEPTH; ++i) {
+  unsigned found = 0, skipped = 0, i = 0, last = 0;
+  for (; i < 1024u && stack + i < limit && found < AGX_KMT_WAIT_DEPTH; ++i) {
     if (stack[i] < code_start || stack[i] >= code_end) continue;
     if (!skipped) { skipped = 1; continue; }   /* the return into wait_cpu */
     out[found++] = stack[i];
+    last = i;
+  }
+  /* EXP1193: above the last frame of this image, the first values that lie
+   * in another loaded module (candidate return addresses of its callers). */
+  found = 0;
+  for (i = last + 1u; i < last + 256u && stack + i < limit && found < AGX_KMT_WAIT_FOREIGN; ++i) {
+    HMODULE module = NULL;
+    if (stack[i] < 0x10000u || (stack[i] >= code_start && stack[i] < code_end)) continue;
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (LPCWSTR)stack[i], &module) && module)
+      foreign[found++] = stack[i];
   }
 }
 
 static void wait_site_add(AGX_KMT_GPUVA_RECEIPT *r,
-                          const ULONG_PTR chain[AGX_KMT_WAIT_DEPTH], LONGLONG ticks) {
+                          const ULONG_PTR chain[AGX_KMT_WAIT_DEPTH],
+                          const ULONG_PTR foreign[AGX_KMT_WAIT_FOREIGN], LONGLONG ticks) {
   for (unsigned i = 0; i < AGX_KMT_WAIT_SITES; ++i) {
     AGX_KMT_WAIT_SITE *s = &r->WaitSites[i];
-    if (!s->Calls) memcpy(s->Return, chain, sizeof(s->Return));
-    else if (memcmp(s->Return, chain, sizeof(s->Return))) continue;
+    if (!s->Calls) {
+      memcpy(s->Return, chain, sizeof(s->Return));
+      memcpy(s->Foreign, foreign, sizeof(s->Foreign));
+    } else if (memcmp(s->Return, chain, sizeof(s->Return))) continue;
     ++s->Calls;
     s->Ticks += ticks;
     return;
@@ -340,7 +356,7 @@ static HRESULT APIENTRY wait_cpu(HANDLE device,
     const D3DDDICB_WAITFORSYNCHRONIZATIONOBJECTFROMCPU *args) {
   AGX_KMT_GPUVA_BRIDGE *b = bridge(device);
   D3DKMT_WAITFORSYNCHRONIZATIONOBJECTFROMCPU request;
-  ULONG_PTR chain[AGX_KMT_WAIT_DEPTH] = {0};
+  ULONG_PTR chain[AGX_KMT_WAIT_DEPTH] = {0}, foreign[AGX_KMT_WAIT_FOREIGN] = {0};
   if (!b || !args || !args->ObjectCount || !args->ObjectHandleArray ||
       !args->FenceValueArray)
     return refuse(b, AgxKmtGpuvaWaitCpu);
@@ -351,12 +367,12 @@ static HRESULT APIENTRY wait_cpu(HANDLE device,
   request.FenceValueArray = args->FenceValueArray;
   request.hAsyncEvent = args->hAsyncEvent;
   request.Flags = args->Flags;
-  if (b->Receipt.ScanWaits) wait_chain(chain);
+  if (b->Receipt.ScanWaits) wait_chain(chain, foreign);
   LONGLONG before = b->Receipt.Ticks[AgxKmtGpuvaWaitCpu];
   HRESULT result = done(b, AgxKmtGpuvaWaitCpu,
       (kmt_begin(b), b->Kmt.WaitForSynchronizationObjectFromCpu(&request)));
   if (b->Receipt.ScanWaits)
-    wait_site_add(&b->Receipt, chain, b->Receipt.Ticks[AgxKmtGpuvaWaitCpu] - before);
+    wait_site_add(&b->Receipt, chain, foreign, b->Receipt.Ticks[AgxKmtGpuvaWaitCpu] - before);
   return result;
 }
 
