@@ -1,4 +1,23 @@
-# J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 41.6 fps; 51.7 without the Steam overlay UI, gameplay at the 60 Hz vsync cap)
+# J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
+
+## Current as of 2026-10-11 10:55Z (read this first)
+
+Installed: PACKAGE1209 (.local/experiments/EXP1209-cs16-swap-grid, ICD
+f504307c on closure-022, INF OpenGLFlags 3 from EXP1194). Benchmark: play
+43.2 fps, noovl 49.8 fps (the timedemo average is now capped by the
+operator's gl_vsync 1: median frame 17.05 ms).
+Proven since 10:15Z:
+- Swap intervals are paced on a one-period grid (3de8fe45, EXP1209): 95%
+  of the swaps one refresh period apart (stw rule: 51%, alternating), the
+  present worker shows 92% of the frames (82%). APPLE_AGX_SWAP_PACING=stw
+  is the diagnostic control.
+- With the overlay the game thread is CPU-bound (20 ms); EXP1208 profile:
+  the overlay's own code plus the GL 1.1 entry through the CHPE opengl32
+  (x86 -> native -> x86 per call) dominate; the ICD draw path is ~0.3%.
+Next causal targets: (1) the remaining 8% dropped shown frames (worker
+11.9 ms per show inside a 16.7 ms period; GDI readback path, 10 ms of
+uncached reads per frame -- zero-copy presentation is the architectural
+fix); (2) KMD resubmission defect (separate task).
 
 ## Current as of 2026-10-11 10:15Z (read this first)
 
