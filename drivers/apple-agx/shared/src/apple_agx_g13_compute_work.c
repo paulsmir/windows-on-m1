@@ -83,7 +83,7 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13ComputeMicrosequenceBuild(
      !aligned(i->QueueInfoGpuAddress,8u)||
      !aligned(i->NotifierBufferGpuAddress,8u)||
      !aligned(i->FirmwareStampGpuAddress,4u)||!i->Counter||
-     !i->EventSequence||!i->EventGeneration||i->VmSlot>=0x10u||
+     !i->EventSequence||i->VmSlot>=0x10u||
      !i->StampValue||i->WorkGpuAddress>~0ULL-0x309u)
     return APPLE_AGX_BACKEND_FALSE;
   zero(seq,APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_BYTES);
