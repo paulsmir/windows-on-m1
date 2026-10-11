@@ -591,17 +591,44 @@ static void wgl_present_receipt(AGX_WGL_PRESENT_RING *ring, LONGLONG start,
 typedef struct { ULONG_PTR Bucket; UINT Count; } AGX_WGL_SAMPLE;
 static AGX_WGL_SAMPLE AgxWglSamples[AGX_WGL_SAMPLE_SLOTS];
 static UINT AgxWglSampleLost;
+/* EXP1185: for samples whose EIP is outside any image (the emulator's
+ * native-call gate: 18-50% of the game thread in EXP1184), the code
+ * addresses found in the top 64 bytes of the x86 stack, i.e. who called. */
+static AGX_WGL_SAMPLE AgxWglCallers[AGX_WGL_SAMPLE_SLOTS];
+static UINT AgxWglCallerLost;
 static HANDLE AgxWglSampler;
 
-static void wgl_sample_add(ULONG_PTR eip) {
+static void wgl_sample_put(AGX_WGL_SAMPLE *table, UINT *lost, ULONG_PTR eip) {
   ULONG_PTR bucket = eip & ~(ULONG_PTR)15;
   UINT slot = (UINT)((bucket >> 4) * 2654435761u) & (AGX_WGL_SAMPLE_SLOTS - 1u);
   for (UINT probe = 0; probe < 64u; ++probe) {
-    AGX_WGL_SAMPLE *s = &AgxWglSamples[(slot + probe) & (AGX_WGL_SAMPLE_SLOTS - 1u)];
+    AGX_WGL_SAMPLE *s = &table[(slot + probe) & (AGX_WGL_SAMPLE_SLOTS - 1u)];
     if (s->Bucket == bucket) { ++s->Count; return; }
     if (!s->Count) { s->Bucket = bucket; s->Count = 1; return; }
   }
-  ++AgxWglSampleLost;
+  ++*lost;
+}
+
+static void wgl_sample_add(ULONG_PTR eip) {
+  wgl_sample_put(AgxWglSamples, &AgxWglSampleLost, eip);
+}
+
+static BOOL wgl_sample_in_image(ULONG_PTR address) {
+  MEMORY_BASIC_INFORMATION info;
+  return address >= 0x10000u &&
+         VirtualQuery((LPCVOID)address, &info, sizeof(info)) &&
+         info.Type == MEM_IMAGE && (info.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ |
+                                                   PAGE_EXECUTE_READWRITE |
+                                                   PAGE_EXECUTE_WRITECOPY));
+}
+
+static void wgl_sample_callers(ULONG_PTR eip, const DWORD *stack, SIZE_T words) {
+  if (wgl_sample_in_image(eip)) return;
+  for (SIZE_T i = 0, found = 0; i < words && found < 3u; ++i)
+    if (wgl_sample_in_image(stack[i])) {
+      wgl_sample_put(AgxWglCallers, &AgxWglCallerLost, stack[i]);
+      ++found;
+    }
 }
 
 static ULONG_PTR wgl_sample_base(ULONG_PTR address) {
@@ -610,24 +637,25 @@ static ULONG_PTR wgl_sample_base(ULONG_PTR address) {
   return (ULONG_PTR)info.AllocationBase;
 }
 
-static void wgl_sample_report(void) {
+static void wgl_sample_report_table(AGX_WGL_SAMPLE *table, UINT *lost,
+                                    const char *module_tag, const char *top_tag) {
   ULONG_PTR bases[16] = {0};
   UINT counts[16] = {0}, modules = 0;
   UINT order[48], ranked = 0;
   for (UINT i = 0; i < AGX_WGL_SAMPLE_SLOTS; ++i) {
-    if (!AgxWglSamples[i].Count) continue;
-    ULONG_PTR base = wgl_sample_base(AgxWglSamples[i].Bucket);
+    if (!table[i].Count) continue;
+    ULONG_PTR base = wgl_sample_base(table[i].Bucket);
     UINT m = 0;
     while (m < modules && bases[m] != base) ++m;
     if (m == modules && modules < 15u) bases[modules++] = base;
     else if (m == modules) m = 15u;   /* everything else */
-    counts[m] += AgxWglSamples[i].Count;
+    counts[m] += table[i].Count;
     /* keep the 48 hottest buckets (insertion into a small sorted list) */
     UINT at;
     if (ranked < 48u) at = ranked++;
-    else if (AgxWglSamples[order[47]].Count >= AgxWglSamples[i].Count) continue;
+    else if (table[order[47]].Count >= table[i].Count) continue;
     else at = 47u;
-    while (at && AgxWglSamples[order[at - 1]].Count < AgxWglSamples[i].Count) {
+    while (at && table[order[at - 1]].Count < table[i].Count) {
       order[at] = order[at - 1];
       --at;
     }
@@ -641,14 +669,14 @@ static void wgl_sample_report(void) {
       const char *slash = strrchr(path, '\\');
       name = slash ? slash + 1 : path;
     } else if (m < 15u) name = "anonymous";
-    if (_snprintf_s(stage, sizeof(stage), _TRUNCATE, "measure-sample-module_%s", name) < 0) continue;
-    UINT values[4] = {m, (UINT)bases[m], counts[m], AgxWglSampleLost};
+    if (_snprintf_s(stage, sizeof(stage), _TRUNCATE, "%s%s", module_tag, name) < 0) continue;
+    UINT values[4] = {m, (UINT)bases[m], counts[m], *lost};
     AdmissionUmdDiagnostic(stage, S_OK, values, 4u);
   }
   for (UINT r = 0; r < ranked; r += 5u) {
     UINT values[15], n = 0;
     for (UINT k = r; k < ranked && k < r + 5u; ++k) {
-      const AGX_WGL_SAMPLE *s = &AgxWglSamples[order[k]];
+      const AGX_WGL_SAMPLE *s = &table[order[k]];
       ULONG_PTR base = wgl_sample_base(s->Bucket);
       UINT m = 0;
       while (m < modules && bases[m] != base) ++m;
@@ -657,10 +685,17 @@ static void wgl_sample_report(void) {
       values[n++] = (UINT)(s->Bucket - base);
       values[n++] = s->Count;
     }
-    AdmissionUmdDiagnostic("measure-sample-top", S_OK, values, n);
+    AdmissionUmdDiagnostic(top_tag, S_OK, values, n);
   }
-  ZeroMemory(AgxWglSamples, sizeof(AgxWglSamples));
-  AgxWglSampleLost = 0;
+  ZeroMemory(table, sizeof(AGX_WGL_SAMPLE) * AGX_WGL_SAMPLE_SLOTS);
+  *lost = 0;
+}
+
+static void wgl_sample_report(void) {
+  wgl_sample_report_table(AgxWglSamples, &AgxWglSampleLost,
+                          "measure-sample-module_", "measure-sample-top");
+  wgl_sample_report_table(AgxWglCallers, &AgxWglCallerLost,
+                          "measure-sample-cmodule_", "measure-sample-ctop");
 }
 
 static DWORD WINAPI wgl_sampler_main(LPVOID parameter) {
@@ -678,10 +713,19 @@ static DWORD WINAPI wgl_sampler_main(LPVOID parameter) {
     ZeroMemory(&context, sizeof(context));
     context.ContextFlags = CONTEXT_CONTROL;
     BOOL ok = GetThreadContext(game, &context);
-    ResumeThread(game);
 #if defined(_M_IX86)
-    if (ok) wgl_sample_add((ULONG_PTR)context.Eip);
+    DWORD stack[16];
+    SIZE_T got = 0;
+    /* Read the top of the x86 stack while the thread is still suspended. */
+    if (ok && !ReadProcessMemory(GetCurrentProcess(), (LPCVOID)(ULONG_PTR)context.Esp,
+                                 stack, sizeof(stack), &got)) got = 0;
+    ResumeThread(game);
+    if (ok) {
+      wgl_sample_add((ULONG_PTR)context.Eip);
+      wgl_sample_callers((ULONG_PTR)context.Eip, stack, got / sizeof(DWORD));
+    }
 #else
+    ResumeThread(game);
     if (ok) wgl_sample_add((ULONG_PTR)context.Pc);
 #endif
     if (ok && ++samples % AGX_WGL_SAMPLE_REPORT == 0) wgl_sample_report();
