@@ -297,6 +297,15 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
       return;
    }
    struct drm_asahi_cmd_render render;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+   /* EXP1201 receipt-only: the kinds of batches submitted (framebuffer
+    * size, draws bucket, clear mask, depth), counted by text by the ICD. */
+   perf_debug_ctx(ctx, "submit %ux%u d%s c%x z%u", batch->key.width,
+                  batch->key.height,
+                  !batch->draws ? "0" : batch->draws == 1 ? "1" :
+                  batch->draws < 10 ? "2-9" : batch->draws < 100 ? "10-99" : "100+",
+                  batch->clear, batch->key.zsbuf.texture != NULL);
+#endif
    agx_flush_render(ctx, batch, &render);
    if (!AgxWin32AsahiBatchLeave(batch)) { ctx->any_faults = true; return; }
    agx_batch_submit(ctx, batch, compute, &render);''')
