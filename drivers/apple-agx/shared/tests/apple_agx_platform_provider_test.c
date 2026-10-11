@@ -871,6 +871,17 @@ static void test_deferred_bind_does_not_authorize_queue_creation(void) {
   assert(AppleAgxPlatformProviderInitialize(&provider, &config, &io));
   assert(!components.CapturedQueueIo.Queues.Create(components.CapturedQueueIo.Context));
   assert(transport.DoorbellCalls == 0 && transport.PublishCalls == 0);
+  {
+    /* EXP1211: RunCompute is re-wrapped with the provider context like
+     * RunTa: before the binding exists it refuses instead of entering the
+     * queue provider with the platform provider as its context. */
+    APPLE_AGX_BACKEND_JOB_IMAGE compute_job;
+    memset(&compute_job, 0, sizeof(compute_job));
+    compute_job.Kind = AppleAgxBackendJobCompute;
+    assert(components.CapturedQueueIo.Queues.RunCompute != NULL);
+    assert(!components.CapturedQueueIo.Queues.RunCompute(
+        components.CapturedQueueIo.Context, &compute_job, 5u));
+  }
   for (i = 0; i < config.RenderSharedMemory->ObjectCount; ++i) {
     config.RenderSharedMemory->Objects[i].State = AppleAgxMemoryGpuMapped;
     config.RenderSharedMemory->Objects[i].GpuVirtualAddress = config.RenderSharedMemory->VirtualAddresses[i];

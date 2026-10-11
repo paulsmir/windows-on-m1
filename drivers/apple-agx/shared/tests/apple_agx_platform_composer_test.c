@@ -159,9 +159,27 @@ int main(void) {
   assert(combined.RenderContext.Publish(combined.Context));
   assert(combined.Queues.Create(combined.Context));
   assert(combined.Queues.Run3d(combined.Context, &job, 7u));
+  /* EXP1211: RunCompute is composed; a queue owner without it refuses. */
+  assert(combined.Queues.RunCompute != NULL &&
+         !combined.Queues.RunCompute(combined.Context, &job, 8u));
   assert(fake.FirmwareCalls == 2u);
   assert(fake.RenderCalls == 1u);
   assert(fake.QueueCalls == 2u);
+  {
+    APPLE_AGX_PLATFORM_COMPOSER compute_state;
+    APPLE_AGX_BACKEND_IO compute_combined;
+    APPLE_AGX_BACKEND_IO compute_queues = queues;
+    APPLE_AGX_PLATFORM_COMPOSER_CONFIG compute_config = config;
+    memset(&compute_state, 0, sizeof(compute_state));
+    memset(&compute_combined, 0, sizeof(compute_combined));
+    compute_queues.Queues.RunCompute = queue_run;
+    compute_config.Queues = &compute_queues;
+    assert(AppleAgxPlatformComposerInitialize(&compute_state, &compute_config,
+                                               &compute_combined));
+    assert(compute_combined.Queues.RunCompute(compute_combined.Context, &job, 8u));
+    assert(fake.QueueCalls == 3u);
+    fake.QueueCalls = 2u;
+  }
   memset(&batch, 0, sizeof(batch));
   assert(AppleAgxPlatformComposerPrepareEvent(
       &composer_state, event, sizeof(event), &batch));

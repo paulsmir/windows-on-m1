@@ -2788,6 +2788,16 @@ static APPLE_AGX_BACKEND_BOOL AdmissionQueuesRunTa(
       ? runtime->PlatformIo.Queues.RunTa(runtime->PlatformIo.Context, Job, Fence)
       : APPLE_AGX_BACKEND_FALSE;
 }
+/* G2: a standalone compute job (RunCompute on the compute queue). */
+static APPLE_AGX_BACKEND_BOOL AdmissionQueuesRunCompute(
+    void *Context, const APPLE_AGX_BACKEND_JOB_IMAGE *Job,
+    APPLE_AGX_BACKEND_U32 Fence) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  return runtime != NULL && runtime->PlatformIo.Queues.RunCompute != NULL
+      ? runtime->PlatformIo.Queues.RunCompute(runtime->PlatformIo.Context, Job,
+                                              Fence)
+      : APPLE_AGX_BACKEND_FALSE;
+}
 ADMISSION_DELEGATE_FENCE(AdmissionQueuesStop, Queues.Stop)
 ADMISSION_DELEGATE_FENCE(AdmissionQueuesReset, Queues.Reset)
 
@@ -4407,6 +4417,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->RuntimeIo.Queues.Destroy = AdmissionQueuesDestroy;
   runtime->RuntimeIo.Queues.Run3d = AdmissionQueuesRun3d;
   runtime->RuntimeIo.Queues.RunTa = AdmissionQueuesRunTa;
+  runtime->RuntimeIo.Queues.RunCompute = AdmissionQueuesRunCompute;
   runtime->RuntimeIo.Queues.Stop = AdmissionQueuesStop;
   runtime->RuntimeIo.Queues.Reset = AdmissionQueuesReset;
   runtime->RuntimeIo.Complete = AdmissionBackendComplete;

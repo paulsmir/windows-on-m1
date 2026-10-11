@@ -118,6 +118,15 @@ QUEUE_SIMPLE(queue_destroy, Destroy)
 QUEUE_RUN(queue_run_3d, Run3d)
 QUEUE_RUN(queue_run_ta, RunTa)
 #undef QUEUE_RUN
+/* G2: a standalone compute job; a queue owner without compute refuses it. */
+static APPLE_AGX_BACKEND_BOOL queue_run_compute(
+    void *Context, const APPLE_AGX_BACKEND_JOB_IMAGE *Job,
+    APPLE_AGX_BACKEND_U32 Fence) {
+  APPLE_AGX_PLATFORM_COMPOSER *c = composer(Context);
+  return c != COMPOSER_NULL && c->Queues.Queues.RunCompute != COMPOSER_NULL
+             ? c->Queues.Queues.RunCompute(c->Queues.Context, Job, Fence)
+             : APPLE_AGX_BACKEND_FALSE;
+}
 #define QUEUE_FENCE(Name, Field)                                             \
   static APPLE_AGX_BACKEND_BOOL Name(void *Context,                          \
                                       APPLE_AGX_BACKEND_U32 Fence) {          \
@@ -196,6 +205,7 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformComposerInitialize(
   Io->Queues.Destroy = queue_destroy;
   Io->Queues.Run3d = queue_run_3d;
   Io->Queues.RunTa = queue_run_ta;
+  Io->Queues.RunCompute = queue_run_compute;
   Io->Queues.Stop = queue_stop;
   Io->Queues.Reset = queue_reset;
   return APPLE_AGX_BACKEND_TRUE;
