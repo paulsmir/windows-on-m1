@@ -221,7 +221,28 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
    }
 }
 '''
-    s=s[:decl]+signature.rstrip()+';\n'+renamed+s[a:b]+'\n'+wrapper+s[b:]
+    # EXP1202 receipt-only (GPUVA profile): time per phase of the native draw
+    # body -- batch/index setup, shader variants, descriptors and uploads,
+    # agx_encode_state (pipelines), VDM emission -- read by the ICD.
+    drawbody=s[a:b]
+    def mark(text, line, phase, after):
+        i=text.index(line)
+        cut=i+len(line) if after else i
+        return text[:cut]+'   AGX_WIN32_DRAW_PHASE(%d);\n'%phase+text[cut:]
+    drawbody=mark(drawbody,'   struct agx_batch *batch = agx_get_batch(ctx);\n',0,True)
+    drawbody=mark(drawbody,'   agx_batch_init_state(batch);\n',1,True)
+    drawbody=mark(drawbody,'   agx_update_descriptors(batch, ctx->vs);\n',2,False)
+    drawbody=mark(drawbody,'   uint8_t *out = agx_encode_state(batch, batch->vdm.current);\n',3,False)
+    drawbody=mark(drawbody,'   uint8_t *out = agx_encode_state(batch, batch->vdm.current);\n',4,True)
+    drawbody=mark(drawbody,'   batch->draws++;\n',5,False)
+    phase_decl='''#ifdef APPLE_AGX_GPUVA_WINSYS
+void AgxWin32AsahiDrawPhase(unsigned phase);
+#define AGX_WIN32_DRAW_PHASE(i) AgxWin32AsahiDrawPhase(i)
+#else
+#define AGX_WIN32_DRAW_PHASE(i) ((void)0)
+#endif
+'''
+    s=s[:decl]+phase_decl+signature.rstrip()+';\n'+renamed+drawbody+'\n'+wrapper+s[b:]
     # A graphics GS batch temporarily owns the real CDM encoder. Switch the
     # active capture scope only around the upstream preraster launches.
     a,b=function(s,'agx_launch_gs_prerast');part=s[a:b]

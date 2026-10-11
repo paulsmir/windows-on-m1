@@ -562,6 +562,8 @@ extern "C" IMAGE_DOS_HEADER __ImageBase;  /* this image (linker-provided) */
 extern "C" struct stw_winsys_framebuffer *agx_wgl_create_framebuffer(
     struct pipe_screen *screen, HWND window, int pixel_format);
 extern "C" void agx_wgl_framebuffer_counters(UINT out[6]);
+/* winsys (closure): EXP1202 native draw phase receipt. */
+extern "C" void AgxWin32AsahiDrawPhases(unsigned out[6]);
 
 static void wgl_kmt_receipt(LONGLONG us) {
   static UINT last_calls[AgxKmtGpuvaOpCount];
@@ -665,6 +667,10 @@ static void wgl_present_receipt(AGX_WGL_PRESENT_RING *ring, LONGLONG start,
   agx_wgl_draw_hook_cpu(cpu);
   AdmissionUmdDiagnostic("measure-wgl-cpu", S_OK, cpu, AGX_WGL_CPU_COUNTERS);
   wgl_perf_report();  /* EXP1198 */
+  /* EXP1202: native draw phases (draws, us per phase). */
+  UINT phases[6];
+  AgxWin32AsahiDrawPhases(phases);
+  AdmissionUmdDiagnostic("measure-wgl-phase", S_OK, phases, 6u);
   /* EXP1192: winsys framebuffers created, refused (last refused pixel
    * format's dwFlags and samples), presents, failed presents. */
   UINT fb[6];

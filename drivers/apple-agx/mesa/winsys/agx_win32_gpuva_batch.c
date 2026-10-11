@@ -6,6 +6,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include "util/os_time.h"
 
 #ifndef APPLE_AGX_GPUVA_WINSYS
 #error This batch path is only for APPLE_AGX_GPUVA_WINSYS
@@ -532,6 +533,21 @@ static int release_lease(AGX_WIN32_ASAHI_BACKEND *b,AGX_G4_BATCH *g) {
      !b->Gpuva.Ops.PrivateEscape(b->Gpuva.Context,&request)) return 0;
   memset(&g->Lease,0,sizeof(g->Lease));
   return 1;
+}
+/* EXP1202 receipt-only: time per phase of the native draw body (phase 0
+ * starts the clock once the batch is taken; 1-5 add the time since the
+ * previous mark). Game thread only; read and reset by the ICD receipt. */
+static uint64_t draw_phase_ns[6],draw_phase_last;
+static APPLE_AGX_U32 draw_phase_draws;
+void AgxWin32AsahiDrawPhase(unsigned phase) {
+  uint64_t now=(uint64_t)os_time_get_nano();
+  if(!phase) { draw_phase_last=now; ++draw_phase_draws; return; }
+  if(phase<6u && draw_phase_last) draw_phase_ns[phase]+=now-draw_phase_last;
+  draw_phase_last=now;
+}
+void AgxWin32AsahiDrawPhases(APPLE_AGX_U32 out[6]) {
+  out[0]=draw_phase_draws; draw_phase_draws=0;
+  for(unsigned i=1;i<6u;++i) { out[i]=(APPLE_AGX_U32)(draw_phase_ns[i]/1000u); draw_phase_ns[i]=0; }
 }
 /* EXP1195: pipe fences over the device's render fence timeline. The GPU
  * completes submissions in order, so the newest accepted submission's

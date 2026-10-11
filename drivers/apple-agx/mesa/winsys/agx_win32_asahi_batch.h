@@ -59,6 +59,11 @@ void AgxWin32AsahiMarkContextFault(struct agx_context *,unsigned);
  * accepted submission (0: none), whether a completion fence has signalled
  * (non-blocking), and a wait for it (1 on success). */
 APPLE_AGX_U64 AgxWin32AsahiNewestFence(struct agx_context *);
+/* EXP1202 receipt-only: draws and microseconds per native draw phase
+ * (1 batch/index setup, 2 shader variants, 3 descriptors/uploads,
+ * 4 agx_encode_state, 5 VDM emission); read and reset. */
+void AgxWin32AsahiDrawPhase(unsigned);
+void AgxWin32AsahiDrawPhases(APPLE_AGX_U32 out[6]);
 int AgxWin32AsahiFenceSignalled(struct agx_device *,APPLE_AGX_U64);
 int AgxWin32AsahiFenceWait(struct agx_device *,APPLE_AGX_U64);
 void AgxWin32AsahiMarkBatchFault(struct agx_context *,struct agx_batch *,unsigned);
