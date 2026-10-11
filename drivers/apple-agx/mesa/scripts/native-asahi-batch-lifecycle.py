@@ -191,6 +191,14 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
          return;
       ctx->any_faults = true; return;
    }
+   /* EXP1189: as upstream, legalize feedback loops and transform-feedback
+    * writes before taking the batch: they may flush the bound render
+    * target's writer, i.e. this batch. Taken first, an empty batch was
+    * reset under the entered draw (capsule freed), the body drew into a new
+    * one and Leave faulted the context. The body's own calls then find
+    * nothing left to legalize. */
+   agx_legalize_feedback_loops(ctx);
+   agx_legalize_xfb(ctx);
    struct agx_batch *batch = agx_get_batch(ctx);
    /* One check per line: the fault receipt site names the refusing check. */
    if (!batch) {

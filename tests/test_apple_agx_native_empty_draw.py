@@ -48,6 +48,9 @@ static unsigned gets, bodies, leaves;
 static struct agx_context *agx_context(struct pipe_context *p) { return (struct agx_context *)p; }
 static struct agx_batch *agx_get_batch(struct agx_context *ctx) { (void)ctx; ++gets; return &the_batch; }
 static void AgxWin32AsahiBatchTraceDraw(struct agx_context *c, struct agx_batch *b, unsigned p) { (void)c; (void)b; (void)p; }
+/* EXP1189: the entry legalizes before taking the batch (no-ops here). */
+static void agx_legalize_feedback_loops(struct agx_context *ctx) { (void)ctx; }
+static void agx_legalize_xfb(struct agx_context *ctx) { (void)ctx; }
 static struct agx_context *current;
 /* Mirrors agx_win32_gpuva_batch.c. */
 static int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx, const struct pipe_draw_info *info,
