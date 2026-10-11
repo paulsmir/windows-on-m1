@@ -512,8 +512,23 @@ int main(void) {
     assert(read_u64(micro+0x164u)==notifier+0xa8u);
     assert(read_u32(micro+0x2cu)==5u);
     assert(read_u32(event_count)==5u && output.NotifierThreshold==5u);
-    /* rebuilding the same job does not count it twice */
-    assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+    /* rebuilding the same job does not count it twice; the work queue
+     * state the firmware owns survives it (Asahi workqueue.rs: gpu_buf per
+     * work queue; event fw stamps and statistics persist), while the
+     * default context store is the job's own (queue/compute.rs) */
+    {
+      unsigned char *side=(unsigned char *)owner.Objects[
+          APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR].CpuAddress;
+      side[APPLE_AGX_COMPUTE_GPU_BUFFER_OFFSET+0x2c17u]=0x5au;
+      side[APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET]=0x36u;
+      side[APPLE_AGX_COMPUTE_STATISTICS_OFFSET]=0x11u;
+      side[APPLE_AGX_COMPUTE_PREEMPT_OFFSET]=0x77u;
+      assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+      assert(side[APPLE_AGX_COMPUTE_GPU_BUFFER_OFFSET+0x2c17u]==0x5au &&
+             side[APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET]==0x36u &&
+             side[APPLE_AGX_COMPUTE_STATISTICS_OFFSET]==0x11u &&
+             side[APPLE_AGX_COMPUTE_PREEMPT_OFFSET]==0u);
+    }
     assert(read_u32(event_count)==5u);
     input.StampValue=0x301u;
     assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));

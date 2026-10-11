@@ -528,6 +528,11 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryInitializeComputeQueue(
       APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR]+0xc000u);
   zero_bytes(pointers,0x60u);
   put_u32(pointers+0x50u,0x500u);
+  /* A new work queue starts with empty firmware state. */
+  zero_bytes((unsigned char *)Owner->Objects[
+                 APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR].CpuAddress+
+                 APPLE_AGX_COMPUTE_STATISTICS_OFFSET,
+             0x10000u-APPLE_AGX_COMPUTE_STATISTICS_OFFSET);
   return APPLE_AGX_TRUE;
 }
 
@@ -569,7 +574,13 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
   if((notifier&7u)||(!counted&&Owner->NotifierComputeCount>=
       ~(APPLE_AGX_U32)0-Owner->NotifierRenderCount))
     return APPLE_AGX_FALSE;
-  zero_bytes(sidecar,0x10000u);
+  /* Only the job's own words are rebuilt: the statistics, fw stamp and
+   * gpu_buf belong to the work queue (Asahi workqueue.rs) and persist. */
+  if(!Input->PreemptionGpuAddress)
+    zero_bytes(sidecar+APPLE_AGX_COMPUTE_PREEMPT_OFFSET,
+               APPLE_AGX_COMPUTE_WORK_OFFSET-APPLE_AGX_COMPUTE_PREEMPT_OFFSET);
+  zero_bytes(sidecar+APPLE_AGX_COMPUTE_WORK_OFFSET,
+             APPLE_AGX_COMPUTE_STATISTICS_OFFSET-APPLE_AGX_COMPUTE_WORK_OFFSET);
   micro.WorkGpuAddress=gpu+APPLE_AGX_COMPUTE_WORK_OFFSET;
   micro.StatisticsGpuAddress=gpu+APPLE_AGX_COMPUTE_STATISTICS_OFFSET;
   micro.QueueInfoGpuAddress=Owner->VirtualAddresses[
