@@ -499,6 +499,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
       ExFreePoolWithTag(context, ADMISSION_POOL_TAG);
       return status;
     }
+    /* G2 HW2b: a process that submits GPU work presents; its present
+     * arena is made here, before this context submits anything. */
+    if (Args->Flags.VirtualAddressing && !systemOrGdi)
+      (void)AdmissionGpuvaG3EnsurePresentArena(context);
   }
 #endif
 

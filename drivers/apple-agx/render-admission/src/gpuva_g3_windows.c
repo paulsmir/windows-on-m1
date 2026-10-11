@@ -2,6 +2,7 @@
 #include "apple_agx_g3_copy_abi.h"
 #include "apple_agx_g4_submit.h"
 #include "apple_agx_g13_compute_work.h"
+#include "apple_agx_present_job.h"
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 
@@ -408,6 +409,9 @@ static NTSTATUS AdmissionG3PrivateTables(ADMISSION_G3_PROCESS *p,
   else if (!AppleAgxGpuvaG3GraphAttachPrivate(&p->Graph,p->PrivateVa,
           p->PrivateMiddleIpa,p->PrivateLeafIpa))
     *predicate=5u;
+  /* The node a later root move needs to re-link the leaf (PrepareTableReuse). */
+  else if (!AppleAgxGpuvaG3GraphReserveNode(&p->Graph))
+    *predicate=6u;
   else return STATUS_SUCCESS;
   AppleAgxG3PrivatePoolStats(&p->State->PrivatePool,p->Graph.ProcessId,stats);
   return p->Graph.Uncertain ? STATUS_DEVICE_HARDWARE_ERROR : STATUS_INSUFFICIENT_RESOURCES;
@@ -2122,6 +2126,94 @@ VOID AdmissionGpuvaG3DetachDevice(ADMISSION_DEVICE *device) {
   if (process->DeviceRefs) --process->DeviceRefs;
   device->GpuvaG3Process = NULL;
   ExReleaseFastMutex(&process->State->Lock);
+}
+
+/* G2 HW2b: the KMD's present arena is an extent of the process's private
+ * range, which lies in the USC window, so the present kernels execute in
+ * the presenting process's VM. It is made while the process is idle (no
+ * job, no lease: the leaf may change) and stays published until the
+ * process ends (AdmissionG3PrivateDestroyStorage frees every owner extent).
+ * Predicates: 1-5 tables, 10 busy, 11 view, 12 pool, 13 kernels, 14 map. */
+static NTSTATUS AdmissionG3PresentArenaEnsure(ADMISSION_G3_PROCESS *p,
+    UINT *predicate) {
+  ADMISSION_BACKEND_MEMORY_VIEW view;
+  APPLE_AGX_G3_PRIVATE_POOL_STATS stats;
+  APPLE_AGX_PRESENT_ARENA arena;
+  NTSTATUS status;
+  *predicate = 0u;
+  if (p->PresentArena.Generation) return STATUS_SUCCESS;
+  if (p->Poisoned || p->Graph.Uncertain || p->Graph.JobInFlight ||
+      p->Graph.LeaseToken || p->CpuOnlyMappings) {
+    *predicate = 10u;
+    return STATUS_DEVICE_BUSY;
+  }
+  status = AdmissionMemoryRuntimePrivateView(p->State->Adapter, &view);
+  if (!NT_SUCCESS(status) || view.CpuAddress == NULL) {
+    *predicate = 11u;
+    return NT_SUCCESS(status) ? STATUS_INVALID_ADDRESS : status;
+  }
+  status = AdmissionG3PrivateTables(p, &view, predicate, &stats);
+  if (!NT_SUCCESS(status)) return status;
+  if (!AppleAgxG3PrivateAllocate(&p->State->PrivatePool, p->Graph.ProcessId,
+          APPLE_AGX_PRESENT_ARENA_BYTES, &p->PresentArena)) {
+    RtlZeroMemory(&p->PresentArena, sizeof(p->PresentArena));
+    *predicate = 12u;
+    return STATUS_INSUFFICIENT_RESOURCES;
+  }
+  RtlZeroMemory((PUCHAR)view.CpuAddress + p->PresentArena.Offset,
+                APPLE_AGX_PRESENT_ARENA_BYTES);
+  arena.Cpu = (unsigned char *)view.CpuAddress + p->PresentArena.Offset;
+  arena.Va = p->PrivateVa + p->PresentArena.VaOffset;
+  arena.Bytes = APPLE_AGX_PRESENT_ARENA_BYTES;
+  arena.UscBase = APPLE_AGX_G4_USC_EXECUTION_BASE;
+  if (!AppleAgxPresentArenaInstall(&arena)) {
+    (void)AdmissionG3PrivateFreeExtent(p, &view, &p->PresentArena);
+    *predicate = 13u;
+    return STATUS_INVALID_IMAGE_FORMAT;
+  }
+  KeMemoryBarrier();
+  if (!AdmissionG3PrivateMapExtent(p, &view, &p->PresentArena, TRUE)) {
+    /* A partly published arena must leave the leaf before its pages can
+     * return to the pool; otherwise the process cannot be trusted. */
+    if (!AdmissionG3PrivateMapExtent(p, &view, &p->PresentArena, FALSE) ||
+        !AdmissionG3PrivateFreeExtent(p, &view, &p->PresentArena))
+      ADMISSION_G3_POISON(p, 1u);
+    *predicate = 14u;
+    return p->Graph.Uncertain ? STATUS_DEVICE_HARDWARE_ERROR
+                              : STATUS_INSUFFICIENT_RESOURCES;
+  }
+  return STATUS_SUCCESS;
+}
+
+NTSTATUS AdmissionGpuvaG3EnsurePresentArena(ADMISSION_RENDER_CONTEXT *context) {
+  ADMISSION_G3_PROCESS *process;
+  ULONG receipt[ADMISSION_G2_PRESENT_ARENA_RECEIPT_WORDS];
+  UINT predicate = 0u;
+  NTSTATUS status;
+  BOOLEAN made;
+  if (context == NULL || context->GpuvaG3Process == NULL) return STATUS_SUCCESS;
+  process = (ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
+  ExAcquireFastMutex(&process->State->Lock);
+  made = process->PresentArena.Generation == 0u;
+  status = AdmissionG3PresentArenaEnsure(process, &predicate);
+  made = made && NT_SUCCESS(status);
+  receipt[0] = 1u;
+  receipt[1] = (ULONG)(made ?
+      InterlockedIncrement(&process->State->PresentArenasMade) :
+      InterlockedCompareExchange(&process->State->PresentArenasMade, 0, 0));
+  receipt[2] = (ULONG)(NT_SUCCESS(status) ?
+      InterlockedCompareExchange(&process->State->PresentArenasRefused, 0, 0) :
+      InterlockedIncrement(&process->State->PresentArenasRefused));
+  receipt[3] = predicate;
+  receipt[4] = (ULONG)status;
+  receipt[5] = (ULONG)(process->PresentArena.Generation ?
+      process->PrivateVa + process->PresentArena.VaOffset : 0ULL);
+  receipt[6] = (ULONG)((process->PresentArena.Generation ?
+      process->PrivateVa + process->PresentArena.VaOffset : 0ULL) >> 32);
+  ExReleaseFastMutex(&process->State->Lock);
+  if (made || !NT_SUCCESS(status))
+    AdmissionRecordG2PresentArena(process->State->Adapter, receipt);
+  return status;
 }
 
 NTSTATUS AdmissionGpuvaG3AttachContext(ADMISSION_RENDER_CONTEXT *context,

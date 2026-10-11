@@ -23,6 +23,55 @@ static void r137_reservation_cases(void) {
            replay_reserve_receipt[3]==0u &&
            replay_reserve_receipt[4]==(ULONG)APPLE_AGX_G4_PRIVATE_VA_BASE &&
            replay_reserve_receipt[5]==(ULONG)(APPLE_AGX_G4_PRIVATE_VA_BASE>>32));
+    /* G2 HW2b: a GPU context gives an idle user process its present arena:
+     * an extent of the private range in the USC window, kernels installed,
+     * pages published; not while a job runs; never for the paging process. */
+    {
+      ADMISSION_DEVICE device={0}; ADMISSION_RENDER_CONTEXT context={0};
+      ADMISSION_BACKEND_MEMORY_VIEW view;
+      unsigned receipts=replay_arena_receipts;
+      device.Object.Magic=ADMISSION_OBJECT_DEVICE_MAGIC;
+      device.Object.Adapter=&a.ObjectAdapter; device.GpuvaG3Process=p;
+      context.Object.Magic=ADMISSION_OBJECT_CONTEXT_MAGIC;
+      context.Object.Device=&device.Object;
+      expect_ok("HW2b attach context",AdmissionGpuvaG3AttachContext(&context,&device));
+      if(system) {
+        assert(AdmissionGpuvaG3EnsurePresentArena(&context)==STATUS_DEVICE_BUSY);
+        assert(!p->PresentArena.Generation && replay_arena_receipts==receipts+1u &&
+               replay_arena_receipt[3]==10u && replay_arena_receipt[5]==0u);
+      } else {
+        p->Graph.JobInFlight=true;
+        assert(AdmissionGpuvaG3EnsurePresentArena(&context)==STATUS_DEVICE_BUSY);
+        p->Graph.JobInFlight=false;
+        assert(!p->PresentArena.Generation && replay_arena_receipt[2]>=1u &&
+               replay_arena_receipt[3]==10u);
+        expect_ok("HW2b present arena",AdmissionGpuvaG3EnsurePresentArena(&context));
+        ULONGLONG va=p->PrivateVa+p->PresentArena.VaOffset;
+        assert(p->PresentArena.Generation &&
+               p->PresentArena.Bytes==APPLE_AGX_PRESENT_ARENA_BYTES && !(va&0xffffULL) &&
+               va>=APPLE_AGX_G4_USC_EXECUTION_BASE &&
+               va+APPLE_AGX_PRESENT_ARENA_BYTES<=APPLE_AGX_G4_USC_EXECUTION_BASE+
+                   APPLE_AGX_G4_USC_WINDOW_BYTES);
+        assert(replay_arena_receipt[0]==1u && replay_arena_receipt[1]==1u &&
+               replay_arena_receipt[3]==0u && replay_arena_receipt[4]==0u &&
+               replay_arena_receipt[5]==(ULONG)va && replay_arena_receipt[6]==(ULONG)(va>>32));
+        expect_ok("HW2b private view",AdmissionMemoryRuntimePrivateView(&a,&view));
+        assert(!memcmp((unsigned char *)view.CpuAddress+p->PresentArena.Offset+
+                           APPLE_AGX_PRESENT_COPY_OFFSET,
+                       AppleAgxPresentCopy.Binary,AppleAgxPresentCopy.BinaryBytes));
+        assert(!memcmp((unsigned char *)view.CpuAddress+p->PresentArena.Offset+
+                           APPLE_AGX_PRESENT_FILL_OFFSET,
+                       AppleAgxPresentFill.Binary,AppleAgxPresentFill.BinaryBytes));
+        assert(AppleAgxGpuvaG3GraphContainsRangeAccess(&p->Graph,va,
+                   APPLE_AGX_PRESENT_ARENA_BYTES,true));
+        /* made once per process */
+        receipts=replay_arena_receipts;
+        APPLE_AGX_G3_PRIVATE_EXTENT kept=p->PresentArena;
+        expect_ok("HW2b present arena again",AdmissionGpuvaG3EnsurePresentArena(&context));
+        assert(replay_arena_receipts==receipts && !memcmp(&kept,&p->PresentArena,sizeof(kept)));
+      }
+      AdmissionGpuvaG3DetachContext(&context);
+    }
     if(getenv("G3_REPLAY_R137_ESCAPE") && !system) {
       ADMISSION_DEVICE device={0}; ADMISSION_RENDER_CONTEXT context={0};
       device.Object.Magic=ADMISSION_OBJECT_DEVICE_MAGIC;
@@ -79,9 +128,12 @@ static void r137_reservation_cases(void) {
       expect_ok("R137 varied geometry",AdmissionDdiEscape(&a,&e));
       AdmissionGpuvaG3DetachContext(&context);
     }
-    if(getenv("G3_REPLAY_R137_PRIVATE")) {
-      ULONGLONG middle=local_ipa+(40ULL<<20), leaf=middle+0x4000, data=middle+0x10000;
-      memset(local_cpu+(40u<<20),0,0x8000);
+    /* Hand-built private tables, for the process the KMD gave none (G2 HW2b:
+     * a user process got them with its present arena), above the pool
+     * extents the KMD allocated. */
+    if(getenv("G3_REPLAY_R137_PRIVATE") && !p->PrivateMiddleIpa) {
+      ULONGLONG middle=local_ipa+(72ULL<<20), leaf=middle+0x4000, data=middle+0x10000;
+      memset(local_cpu+(72u<<20),0,0x8000);
       assert(AppleAgxGpuvaG3GraphRegisterTable(&p->Graph,middle,1));
       assert(AppleAgxGpuvaG3GraphRegisterTable(&p->Graph,leaf,2));
       assert(AppleAgxGpuvaG3GraphUpdateParent(&p->Graph,p->Graph.RootIpa,1,middle));

@@ -15,6 +15,7 @@
 #include "apple_agx_gpuva_g3_graph.h"
 #include "apple_agx_g4_submit.h"
 #include "apple_agx_g13_compute_work.h"
+#include "apple_agx_present_job.h"
 #include "apple_agx_state.h"
 #include "apple_agx_vsync.h"
 #include "apple_agx_g3_private_abi.h"
@@ -57,6 +58,7 @@ typedef const void VOID_CONST;
 #define STATUS_SUCCESS 0
 #define STATUS_INVALID_PARAMETER ((NTSTATUS)0xC000000D)
 #define STATUS_INVALID_ADDRESS ((NTSTATUS)0xC0000141)
+#define STATUS_INVALID_IMAGE_FORMAT ((NTSTATUS)0xC000007B)
 #define STATUS_INVALID_DEVICE_STATE ((NTSTATUS)0xC0000184)
 #define STATUS_NOT_SUPPORTED ((NTSTATUS)0xC00000BB)
 #define STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER ((NTSTATUS)0xC01E0001)
@@ -363,7 +365,7 @@ typedef struct _ADMISSION_G3_LEAF_HISTORY_SNAPSHOT {
 } ADMISSION_G3_LEAF_HISTORY_SNAPSHOT;
 #define ADMISSION_G3_UPLOAD_TRACE_COUNT 64u
 typedef struct { ULONGLONG ProcessId,Va; ULONG Bytes,Hash,GpuHash,Checks; } ADMISSION_G3_UPLOAD_TRACE;
-typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; KEVENT JobEvent; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; APPLE_AGX_G3_PRIVATE_POOL PrivatePool; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence,LastCompletedFence,PrivateCompletionFence; ULONGLONG UnpublishedGroups[32]; ADMISSION_G3_UPLOAD_TRACE UploadTrace[ADMISSION_G3_UPLOAD_TRACE_COUNT]; ULONG UploadTraceNext,UploadVerifyChecks,UploadVerifyMismatch,UploadVerifyUnmapped; ADMISSION_G3_UPLOAD_TRACE UploadFirstMismatch; ADMISSION_G3_LEAF_HISTORY LeafHistory[ADMISSION_G3_LEAF_RING]; ULONG LeafHistoryNext; ADMISSION_G3_ALLOC_TRACK AllocTrack[ADMISSION_G3_ALLOC_TRACK_COUNT]; ULONGLONG PrivateStats[16]; LONGLONG ProcessReceiptQpc; LONG ReserveMade,ReserveRefused; } ADMISSION_G3_STATE;
+typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; KEVENT JobEvent; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; APPLE_AGX_G3_PRIVATE_POOL PrivatePool; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence,LastCompletedFence,PrivateCompletionFence; ULONGLONG UnpublishedGroups[32]; ADMISSION_G3_UPLOAD_TRACE UploadTrace[ADMISSION_G3_UPLOAD_TRACE_COUNT]; ULONG UploadTraceNext,UploadVerifyChecks,UploadVerifyMismatch,UploadVerifyUnmapped; ADMISSION_G3_UPLOAD_TRACE UploadFirstMismatch; ADMISSION_G3_LEAF_HISTORY LeafHistory[ADMISSION_G3_LEAF_RING]; ULONG LeafHistoryNext; ADMISSION_G3_ALLOC_TRACK AllocTrack[ADMISSION_G3_ALLOC_TRACK_COUNT]; ULONGLONG PrivateStats[16]; LONGLONG ProcessReceiptQpc; LONG ReserveMade,ReserveRefused,PresentArenasMade,PresentArenasRefused; } ADMISSION_G3_STATE;
 enum { ADMISSION_G3_PRIVATE_STAT_HIT, ADMISSION_G3_PRIVATE_STAT_MISS, ADMISSION_G3_PRIVATE_STAT_TRIM, ADMISSION_G3_PRIVATE_STAT_PRESSURE,
   ADMISSION_G3_PRIVATE_STAT_RELEASED, ADMISSION_G3_PRIVATE_STAT_MAPPED_PAGES, ADMISSION_G3_PRIVATE_STAT_UNMAPPED_PAGES,
   ADMISSION_G3_PRIVATE_STAT_CACHED_RELEASE, ADMISSION_G3_PRIVATE_STAT_CACHED_REAP, ADMISSION_G3_PRIVATE_STAT_RELEASE_QUEUED,
@@ -398,6 +400,7 @@ struct _ADMISSION_G3_PROCESS {
   ULONGLONG PrivateCacheClock; /* EXP1087 */
   ULONG MaxTvbBlocks, MaxShape; /* EXP1114 */
   APPLE_AGX_G3_PRIVATE_EXTENT PrivateTables[2];
+  APPLE_AGX_G3_PRIVATE_EXTENT PresentArena;
   APPLE_AGX_G3_PRIVATE_MANAGER PrivateManager;
   APPLE_AGX_RENDER_MANAGER_STATE FirmwareManager;
   ADMISSION_G3_PRIVATE_SCENE *PrivateScenes;
@@ -721,6 +724,12 @@ static ULONG replay_reserve_receipt[ADMISSION_G3_RESERVE_RECEIPT_WORDS];
 static void AdmissionRecordG3Reservation(ADMISSION_CONTEXT *c,const ULONG *v) {
   (void)c;memcpy(replay_reserve_receipt,v,sizeof(replay_reserve_receipt));
 }
+#define ADMISSION_G2_PRESENT_ARENA_RECEIPT_WORDS 7u
+static ULONG replay_arena_receipt[ADMISSION_G2_PRESENT_ARENA_RECEIPT_WORDS];
+static unsigned replay_arena_receipts;
+static void AdmissionRecordG2PresentArena(ADMISSION_CONTEXT *c,const ULONG *v) {
+  (void)c;memcpy(replay_arena_receipt,v,sizeof(replay_arena_receipt));++replay_arena_receipts;
+}
 static void AdmissionRecordGpuvaG3ContextInput(PDEVICE_OBJECT p,DXGKARG_CREATECONTEXT *a,KIRQL irql) {(void)p;(void)a;(void)irql;}
 static void AdmissionRecordGpuvaG3DmaContext(PDEVICE_OBJECT p,DXGKARG_CREATECONTEXT *a) {(void)p;(void)a;}
 static ADMISSION_G3_PAGING_FAILURE last_paging_failure;
@@ -745,6 +754,7 @@ static NTSTATUS AdmissionGpuvaG3ResolveTable(ADMISSION_CONTEXT *,const DXGK_PAGE
 static NTSTATUS AdmissionGpuvaG3BrokerTable(ADMISSION_G3_PROCESS *,ULONGLONG,BOOLEAN,ULONGLONG *);
 static NTSTATUS AdmissionGpuvaG3MirrorTable(ADMISSION_G3_PROCESS *,ULONGLONG,PVOID);
 static NTSTATUS AdmissionGpuvaG3AttachContext(ADMISSION_RENDER_CONTEXT *,ADMISSION_DEVICE *);
+static NTSTATUS AdmissionGpuvaG3EnsurePresentArena(ADMISSION_RENDER_CONTEXT *);
 static void AdmissionGpuvaG3DetachContext(ADMISSION_RENDER_CONTEXT *);
 #if defined(G3_PRIVATE_COMBINED)
 #include "g3_r137_completion_shim.h"

@@ -4,6 +4,11 @@ static APPLE_AGX_GPUVA_G3_GRAPH *r155_graph;
 static void r155_end_job(void) {
   if(r155_graph && r155_graph->JobInFlight) assert(AppleAgxGpuvaG3GraphEndJob(r155_graph));
 }
+/* The first published private page: the present arena when the context made
+ * it (G2 HW2b; the table units below it are never mapped), else the
+ * hand-built leaf's page 0. */
+#define R135_PRIVATE_PAGE(p) ((p)->PrivateVa + \
+    ((p)->PresentArena.Generation ? (p)->PresentArena.VaOffset : 0ULL))
 static void r135_root_reuse_cases(void) {
   ADMISSION_CONTEXT a={0}; ADMISSION_G3_STATE state={0}; REPLAY_BROKER b={0};
   APPLE_AGX_GPUVA_V5_IO io={&b,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier, 0};
@@ -31,7 +36,9 @@ static void r135_root_reuse_cases(void) {
   setroot.Address.SegmentOffset=0x10000;
   AdmissionDdiSetRootPageTable(&a,&setroot);
   assert(!((ADMISSION_RENDER_CONTEXT *)cc.hContext)->GpuvaG3Poisoned);
-  if(getenv("G3_REPLAY_R137_PRIVATE")) {
+  /* G2 HW2b: the context made the process's present arena and with it the
+   * KMD private tables; hand-built tables are only for a process without. */
+  if(getenv("G3_REPLAY_R137_PRIVATE") && !p->PrivateMiddleIpa) {
     p->PrivateMiddleIpa=local_ipa+(40ULL<<20);
     p->PrivateLeafIpa=p->PrivateMiddleIpa+0x4000;
     assert(AppleAgxGpuvaG3GraphRegisterTable(&p->Graph,p->PrivateMiddleIpa,1));
@@ -67,7 +74,7 @@ static void r135_root_reuse_cases(void) {
   expect_ok("R135 clear middle",sys_update(&a,p,local_cpu+0x14000,1,0,1,&zero,0,0));
   expect_ok("R135 clear root",sys_update(&a,p,local_cpu+0x10000,2,0,1,&zero,0,0));
   if(p->PrivateLeafIpa)
-    assert(AppleAgxGpuvaG3GraphContainsRange(&p->Graph,p->PrivateVa,0x4000));
+    assert(AppleAgxGpuvaG3GraphContainsRange(&p->Graph,R135_PRIVATE_PAGE(p),0x4000));
   else assert(!p->Graph.Parents && !p->Graph.Leaves);
   assert(!p->Graph.JobInFlight);
   /* Ordinary updates must not reinterpret a still-current empty root. */
@@ -102,7 +109,7 @@ static void r135_root_reuse_cases(void) {
     assert(p->Graph.RootIpa==former_root && !p->Graph.Uncertain);
     assert(last_paging_failure.GraphLastStatus==HV_AGX_GPUVA_V5_BUSY);
     if(p->PrivateLeafIpa)
-      assert(AppleAgxGpuvaG3GraphContainsRange(&p->Graph,p->PrivateVa,0x4000));
+      assert(AppleAgxGpuvaG3GraphContainsRange(&p->Graph,R135_PRIVATE_PAGE(p),0x4000));
     assert(hv_agx_gpuva_v5_release(&gpuva_v5,1,token)==HV_AGX_GPUVA_V5_OK);
   }
   /* Populating the parking root is an ownership conflict, not permission to
@@ -116,7 +123,7 @@ static void r135_root_reuse_cases(void) {
     assert(!NT_SUCCESS(AdmissionGpuvaG3BuildPagingBuffer(&a,&reuse)));
     assert(p->Graph.RootIpa==former_root);
     if(p->PrivateLeafIpa) {
-      assert(AppleAgxGpuvaG3GraphContainsRange(&p->Graph,p->PrivateVa,0x4000));
+      assert(AppleAgxGpuvaG3GraphContainsRange(&p->Graph,R135_PRIVATE_PAGE(p),0x4000));
       assert(p->Graph.MappingGeneration==before_generation);
     }
     assert(AppleAgxGpuvaG3GraphUpdateParent(&p->Graph,p->BootstrapIpa,ordinary_root_index,0));
@@ -155,7 +162,7 @@ static void r135_root_reuse_cases(void) {
   expect_ok("R135 map after rebind",sys_update(&a,p,local_cpu+0x18000,0,1,1,&pte,1,0));
   assert(AppleAgxGpuvaG3GraphContainsRangeAccess(&p->Graph,0x10000,0x10000,true));
   if(p->PrivateLeafIpa)
-    assert(AppleAgxGpuvaG3GraphContainsRange(&p->Graph,p->PrivateVa,0x4000));
+    assert(AppleAgxGpuvaG3GraphContainsRange(&p->Graph,R135_PRIVATE_PAGE(p),0x4000));
   /* Otherwise-admissible job: only its root identity differs on rejection.
    * The established replay shim models the output view; real DMA translation,
    * root gate, broker lease/job and completion are exercised here. */

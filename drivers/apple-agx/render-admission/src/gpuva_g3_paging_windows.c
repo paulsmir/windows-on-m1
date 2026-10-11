@@ -178,7 +178,9 @@ static BOOLEAN AdmissionG3PrepareTableReuse(ADMISSION_G3_PROCESS *process,
     UINT i, rejected;
     /* Inspect BOTH roots before detaching either. Refusal must preserve the
      * private mapping and MappingGeneration, including an ordinary parking
-     * root whose reserved edge is absent. */
+     * root whose reserved edge is absent. Re-linking the leaf below the new
+     * root must not depend on an allocation after the detach. */
+    if (!AppleAgxGpuvaG3GraphReserveNode(graph)) return FALSE;
     for (i = 0u; i < 2u; ++i) {
       if (!AppleAgxGpuvaG3GraphCanDetachPrivateRoot(graph, process->PrivateVa,
               roots[i], process->PrivateLeafIpa)) return FALSE;
