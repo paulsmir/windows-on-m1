@@ -63,6 +63,7 @@ APPLE_AGX_U64 AgxWin32AsahiNewestFence(struct agx_context *);
  * (1 batch/index setup, 2 shader variants, 3 descriptors/uploads,
  * 4 agx_encode_state, 5 VDM emission); read and reset. */
 void AgxWin32AsahiDrawPhase(unsigned);
+extern int AgxWin32AsahiDrawPhasesOn; /* EXP1206: marks are skipped while 0 */
 void AgxWin32AsahiDrawPhases(APPLE_AGX_U32 out[6]);
 int AgxWin32AsahiFenceSignalled(struct agx_device *,APPLE_AGX_U64);
 int AgxWin32AsahiFenceWait(struct agx_device *,APPLE_AGX_U64);

@@ -25,6 +25,8 @@ void agx_wgl_draw_hook_counters(unsigned out[AGX_WGL_MERGE_COUNTERS]);
  * the driver below the hook, flush calls and microseconds; read and reset. */
 #define AGX_WGL_CPU_COUNTERS 4u
 void agx_wgl_draw_hook_cpu(unsigned out[AGX_WGL_CPU_COUNTERS]);
+/* EXP1206: enable the draw/flush timers (diagnostics only). */
+void agx_wgl_draw_hook_timing(bool enabled);
 
 #ifdef __cplusplus
 }

@@ -237,7 +237,9 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
     drawbody=mark(drawbody,'   batch->draws++;\n',5,False)
     phase_decl='''#ifdef APPLE_AGX_GPUVA_WINSYS
 void AgxWin32AsahiDrawPhase(unsigned phase);
-#define AGX_WIN32_DRAW_PHASE(i) AgxWin32AsahiDrawPhase(i)
+extern int AgxWin32AsahiDrawPhasesOn;
+#define AGX_WIN32_DRAW_PHASE(i) \\
+   do { if (unlikely(AgxWin32AsahiDrawPhasesOn)) AgxWin32AsahiDrawPhase(i); } while (0)
 #else
 #define AGX_WIN32_DRAW_PHASE(i) ((void)0)
 #endif

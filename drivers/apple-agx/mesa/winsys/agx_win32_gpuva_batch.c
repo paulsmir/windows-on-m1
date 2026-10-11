@@ -540,6 +540,7 @@ static int release_lease(AGX_WIN32_ASAHI_BACKEND *b,AGX_G4_BATCH *g) {
 /* EXP1202 receipt-only: time per phase of the native draw body (phase 0
  * starts the clock once the batch is taken; 1-5 add the time since the
  * previous mark). Game thread only; read and reset by the ICD receipt. */
+int AgxWin32AsahiDrawPhasesOn; /* EXP1206: set by the ICD for diagnostics */
 static uint64_t draw_phase_ns[6],draw_phase_last;
 static APPLE_AGX_U32 draw_phase_draws;
 void AgxWin32AsahiDrawPhase(unsigned phase) {

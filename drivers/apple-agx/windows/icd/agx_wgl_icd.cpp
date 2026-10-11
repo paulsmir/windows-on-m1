@@ -13,6 +13,8 @@
 #include "agx_wgl_present_copy.h"
 #include "agx_wgl_present_ring.h"
 #include "agx_wgl_draw_hook.h"
+/* winsys (closure): EXP1206 switch for the native draw phase marks. */
+extern "C" int AgxWin32AsahiDrawPhasesOn;
 #include "umd_internal.h"
 /* umd_asahi_owner.c / umd_asahi_batch_adapter.c define these with C linkage. */
 extern "C" {
@@ -163,6 +165,22 @@ static struct pipe_resource *wgl_resource_create(struct pipe_screen *screen,
   return AgxWglResourceCreate(screen, &local);
 }
 
+/* EXP1206: the per-draw and per-note diagnostics (draw phase and
+ * draw/flush timers, fence-wait stack scans, perf-note formatting and
+ * counts) run only with the UMD trace and APPLE_AGX_ICD_PHASES=1; the UMD
+ * trace alone (machine-wide for experiments and play) keeps the per-frame
+ * receipts only. */
+static BOOL wgl_deep_diagnostics(void) {
+  static int enabled = -1;
+  if (enabled < 0) {
+    char value[4];
+    enabled = AdmissionUmdDiagnosticEnabled() &&
+              GetEnvironmentVariableA("APPLE_AGX_ICD_PHASES", value, sizeof(value)) == 1u &&
+              value[0] == '1';
+  }
+  return enabled > 0;
+}
+
 static void wgl_note(const char *stage, HRESULT status) {
   UINT values[1] = {AgxWgl ? AgxWgl->Bridge.Receipt.LastFailedOp : 0u};
   AdmissionUmdDiagnostic(stage, status, values, 1u);
@@ -199,7 +217,7 @@ static HRESULT open_runtime(AGX_WGL_ADAPTER *a) {
   HRESULT result = AgxKmtGpuvaBridgeInitialize(&a->Bridge, &a->Kmt,
                                                a->AdapterHandle, a->DeviceHandle);
   if (FAILED(result)) return result;
-  a->Bridge.Receipt.ScanWaits = AdmissionUmdDiagnosticEnabled();
+  a->Bridge.Receipt.ScanWaits = wgl_deep_diagnostics();
   ZeroMemory(&open, sizeof(open));
   open.hRTAdapter.handle = &a->Bridge;
   open.Interface = D3DWDDM1_3_DDI_INTERFACE_VERSION;
@@ -229,7 +247,10 @@ static struct pipe_screen *wgl_screen_create(HDC hdc) {
   AgxWin32BackendFailHook = wgl_backend_fail;
   AgxWin32FirstFaultHook = wgl_first_fault;
   AgxWin32VdmTraceHook = wgl_vdm_trace;
-  AgxWin32PerfHook = wgl_perf_note;
+  /* EXP1206: a perf hook makes the winsys format every perf note. */
+  AgxWin32PerfHook = wgl_deep_diagnostics() ? wgl_perf_note : NULL;
+  AgxWin32AsahiDrawPhasesOn = wgl_deep_diagnostics();
+  agx_wgl_draw_hook_timing(wgl_deep_diagnostics() != FALSE);
   result = open_adapter(a, hdc);
   if (SUCCEEDED(result)) result = open_runtime(a);
   if (SUCCEEDED(result)) {

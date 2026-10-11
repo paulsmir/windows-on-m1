@@ -58,6 +58,9 @@ static volatile long AgxWglMergeCounters[AGX_WGL_MERGE_COUNTERS];
  * driver below this hook, flush calls and nanoseconds (game thread). */
 static long long AgxWglCpuCounters[AGX_WGL_CPU_COUNTERS];
 static unsigned AgxWglDrawDepth;
+static bool AgxWglDrawTiming;  /* EXP1206: only with APPLE_AGX_ICD_PHASES=1 */
+
+void agx_wgl_draw_hook_timing(bool enabled) { AgxWglDrawTiming = enabled; }
 
 static AGX_WGL_HOOK *hook_of(struct pipe_context *pipe) {
   for (unsigned i = 0; i < AGX_WGL_HOOK_CONTEXTS; ++i)
@@ -138,6 +141,10 @@ static void hook_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info
                           unsigned num_draws) {
   AGX_WGL_HOOK *h = hook_of(pipe);
   if (!h) return;
+  if (!AgxWglDrawTiming) {
+    hook_draw_vbo_body(h, pipe, info, drawid_offset, indirect, draws, num_draws);
+    return;
+  }
   /* The u_primconvert fallback re-enters this hook: time the outermost. */
   int64_t start = AgxWglDrawDepth++ ? 0 : os_time_get_nano();
   hook_draw_vbo_body(h, pipe, info, drawid_offset, indirect, draws, num_draws);
@@ -152,6 +159,7 @@ static void hook_flush(struct pipe_context *pipe, struct pipe_fence_handle **fen
   AGX_WGL_HOOK *h = hook_of(pipe);
   int64_t start;
   if (!h) return;
+  if (!AgxWglDrawTiming) { h->flush(pipe, fence, flags); return; }
   start = os_time_get_nano();
   h->flush(pipe, fence, flags);
   ++AgxWglCpuCounters[2];
