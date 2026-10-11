@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build an AD03 fixture with the exact pinned Mesa asahi_clc flags/libs."""
 import argparse
+import os
 import shlex
 import subprocess
 import sys
@@ -41,6 +42,15 @@ def replace_link(command, object_path, output):
     return args
 
 
+def with_sysroot(args):
+    """A toolchain without a default macOS SDK (Homebrew LLVM) gets the one
+    named by SDKROOT, as xcrun-provided compilers do implicitly."""
+    sysroot = os.environ.get("SDKROOT")
+    if not sysroot or "-isysroot" in args:
+        return args
+    return [args[0], "-isysroot", sysroot, *args[1:]]
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mesa-build", type=Path, required=True)
@@ -56,9 +66,9 @@ def main():
         output = args.output.resolve()
         source = args.source.resolve()
         object_path = output.with_suffix(".o")
-        subprocess.run(replace_compile(compile_line, source, object_path),
+        subprocess.run(with_sysroot(replace_compile(compile_line, source, object_path)),
                        cwd=args.mesa_build, check=True)
-        subprocess.run(replace_link(link_line, object_path, output),
+        subprocess.run(with_sysroot(replace_link(link_line, object_path, output)),
                        cwd=args.mesa_build, check=True)
     except (OSError, ValueError, StopIteration,
             subprocess.CalledProcessError) as error:
