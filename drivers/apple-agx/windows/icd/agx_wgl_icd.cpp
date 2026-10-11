@@ -160,6 +160,7 @@ static HRESULT open_runtime(AGX_WGL_ADAPTER *a) {
   HRESULT result = AgxKmtGpuvaBridgeInitialize(&a->Bridge, &a->Kmt,
                                                a->AdapterHandle, a->DeviceHandle);
   if (FAILED(result)) return result;
+  a->Bridge.Receipt.ScanWaits = AdmissionUmdDiagnosticEnabled();
   ZeroMemory(&open, sizeof(open));
   open.hRTAdapter.handle = &a->Bridge;
   open.Interface = D3DWDDM1_3_DDI_INTERFACE_VERSION;
@@ -510,6 +511,8 @@ static unsigned wgl_kmt_group(unsigned op) {
   }
 }
 
+extern "C" IMAGE_DOS_HEADER __ImageBase;  /* this image (linker-provided) */
+
 static void wgl_kmt_receipt(LONGLONG us) {
   static UINT last_calls[AgxKmtGpuvaOpCount];
   static LONGLONG last_ticks[AgxKmtGpuvaOpCount];
@@ -532,6 +535,21 @@ static void wgl_kmt_receipt(LONGLONG us) {
     values[2 * i + 1] = (UINT)(ticks[i] * 1000000 / us);
   }
   AdmissionUmdDiagnostic("measure-wgl-kmt", S_OK, values, 16u);
+  /* EXP1189: per caller chain of the fence waits since the last receipt,
+   * the four return addresses (image RVAs), waits and microseconds. */
+  for (unsigned i = 0; i < AGX_KMT_WAIT_SITES; ++i) {
+    AGX_KMT_WAIT_SITE *s = &r->WaitSites[i];
+    if (!s->Calls) continue;
+    UINT site[7];
+    for (unsigned k = 0; k < AGX_KMT_WAIT_DEPTH; ++k)
+      site[k] = s->Return[k] ? (UINT)(s->Return[k] - (ULONG_PTR)&__ImageBase) : 0u;
+    site[4] = s->Calls;
+    site[5] = (UINT)(s->Ticks * 1000000 / us);
+    site[6] = r->WaitSitesLost;
+    AdmissionUmdDiagnostic("measure-wgl-wait", S_OK, site, 7u);
+  }
+  ZeroMemory(r->WaitSites, sizeof(r->WaitSites));
+  r->WaitSitesLost = 0;
 }
 
 /* Receipt (EXP1168/EXP1171): every 120 presents, in microseconds, the mean

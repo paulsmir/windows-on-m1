@@ -60,6 +60,17 @@ typedef enum _AGX_KMT_GPUVA_OP {
   AgxKmtGpuvaOpCount
 } AGX_KMT_GPUVA_OP;
 
+/* EXP1189 receipt-only: where the CPU waits for the GPU. Per distinct chain
+ * of the first return addresses into this image found on the stack above a
+ * fence wait (its callers), the waits and their QPC ticks. */
+#define AGX_KMT_WAIT_SITES 8u
+#define AGX_KMT_WAIT_DEPTH 4u
+typedef struct _AGX_KMT_WAIT_SITE {
+  ULONG_PTR Return[AGX_KMT_WAIT_DEPTH];
+  UINT Calls;
+  LONGLONG Ticks;
+} AGX_KMT_WAIT_SITE;
+
 typedef struct _AGX_KMT_GPUVA_RECEIPT {
   UINT Calls[AgxKmtGpuvaOpCount];
   UINT Failures[AgxKmtGpuvaOpCount];
@@ -70,6 +81,10 @@ typedef struct _AGX_KMT_GPUVA_RECEIPT {
   /* EXP1173: QueryPerformanceCounter ticks spent in each op's thunk. */
   LONGLONG Ticks[AgxKmtGpuvaOpCount];
   LONGLONG Begin;
+  /* EXP1189: set by the owner when the UMD trace is enabled. */
+  BOOL ScanWaits;
+  AGX_KMT_WAIT_SITE WaitSites[AGX_KMT_WAIT_SITES];
+  UINT WaitSitesLost;
 } AGX_KMT_GPUVA_RECEIPT;
 
 typedef struct _AGX_KMT_GPUVA_BRIDGE {

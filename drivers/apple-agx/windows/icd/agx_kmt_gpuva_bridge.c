@@ -1,4 +1,5 @@
 #include "agx_kmt_gpuva_bridge.h"
+#include <intrin.h>
 #include <string.h>
 
 #define AGX_KMT_GPUVA_MAGIC 0x56474b41u /* 'AKGV' */
@@ -296,10 +297,50 @@ static HRESULT APIENTRY evict(HANDLE device, D3DDDICB_EVICT *args) {
   return result;
 }
 
+/* EXP1189 receipt-only: the callers of a fence wait, as the first return
+ * addresses into this image's code on the stack above wait_cpu (a scan, not
+ * an unwind: optimized x86 code keeps no frame chain). */
+static __declspec(noinline) void wait_chain(ULONG_PTR out[AGX_KMT_WAIT_DEPTH]) {
+  static ULONG_PTR code_start, code_end;
+  if (!code_end) {
+    HMODULE self = NULL;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            (LPCWSTR)(void *)wait_chain, &self))
+      return;
+    const IMAGE_NT_HEADERS *nt = (const IMAGE_NT_HEADERS *)(
+        (const BYTE *)self + ((const IMAGE_DOS_HEADER *)self)->e_lfanew);
+    code_start = (ULONG_PTR)self + nt->OptionalHeader.BaseOfCode;
+    code_end = code_start + nt->OptionalHeader.SizeOfCode;
+  }
+  const ULONG_PTR *stack = (const ULONG_PTR *)_AddressOfReturnAddress();
+  const ULONG_PTR *limit = (const ULONG_PTR *)((NT_TIB *)NtCurrentTeb())->StackBase;
+  unsigned found = 0, skipped = 0;
+  for (unsigned i = 0; i < 1024u && stack + i < limit && found < AGX_KMT_WAIT_DEPTH; ++i) {
+    if (stack[i] < code_start || stack[i] >= code_end) continue;
+    if (!skipped) { skipped = 1; continue; }   /* the return into wait_cpu */
+    out[found++] = stack[i];
+  }
+}
+
+static void wait_site_add(AGX_KMT_GPUVA_RECEIPT *r,
+                          const ULONG_PTR chain[AGX_KMT_WAIT_DEPTH], LONGLONG ticks) {
+  for (unsigned i = 0; i < AGX_KMT_WAIT_SITES; ++i) {
+    AGX_KMT_WAIT_SITE *s = &r->WaitSites[i];
+    if (!s->Calls) memcpy(s->Return, chain, sizeof(s->Return));
+    else if (memcmp(s->Return, chain, sizeof(s->Return))) continue;
+    ++s->Calls;
+    s->Ticks += ticks;
+    return;
+  }
+  ++r->WaitSitesLost;
+}
+
 static HRESULT APIENTRY wait_cpu(HANDLE device,
     const D3DDDICB_WAITFORSYNCHRONIZATIONOBJECTFROMCPU *args) {
   AGX_KMT_GPUVA_BRIDGE *b = bridge(device);
   D3DKMT_WAITFORSYNCHRONIZATIONOBJECTFROMCPU request;
+  ULONG_PTR chain[AGX_KMT_WAIT_DEPTH] = {0};
   if (!b || !args || !args->ObjectCount || !args->ObjectHandleArray ||
       !args->FenceValueArray)
     return refuse(b, AgxKmtGpuvaWaitCpu);
@@ -310,8 +351,13 @@ static HRESULT APIENTRY wait_cpu(HANDLE device,
   request.FenceValueArray = args->FenceValueArray;
   request.hAsyncEvent = args->hAsyncEvent;
   request.Flags = args->Flags;
-  return done(b, AgxKmtGpuvaWaitCpu,
-              (kmt_begin(b), b->Kmt.WaitForSynchronizationObjectFromCpu(&request)));
+  if (b->Receipt.ScanWaits) wait_chain(chain);
+  LONGLONG before = b->Receipt.Ticks[AgxKmtGpuvaWaitCpu];
+  HRESULT result = done(b, AgxKmtGpuvaWaitCpu,
+      (kmt_begin(b), b->Kmt.WaitForSynchronizationObjectFromCpu(&request)));
+  if (b->Receipt.ScanWaits)
+    wait_site_add(&b->Receipt, chain, b->Receipt.Ticks[AgxKmtGpuvaWaitCpu] - before);
+  return result;
 }
 
 static HRESULT APIENTRY submit(HANDLE device, const D3DDDICB_SUBMITCOMMAND *args) {
