@@ -1,5 +1,34 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
+## Current as of 2026-10-11 15:10Z (read this first)
+
+Installed: stable GPU-visible recovery profile (no AppleAgx package) after
+EXP1211 (rec1211h RECOVERY_DONE, Preflight PASS).
+G2 decision (operator, option 1): the present blt runs on the GPU as a
+KMD-built AGX compute job; design docs/superpowers/plans/2026-10-11-g2-gpu-present-blt.md.
+Implemented (host-tested): standalone compute jobs in the backend/G13 queue
+provider (279e21fb), the AGX4 compute envelope (efac9430, version 4,
+APPLE_AGX_G4_COMPUTE_ENVELOPE 112 bytes), KMD admission as a destination-less
+compute packet that binds only the envelope and builds RunCompute in the
+compute sidecar in VM slot 1 with the envelope's user-VM context-store
+buffer (6ef5ea6e), Mesa compute-only batches submitted by the winsys
+(62e100da), smoke copybuffer mode (26f7a2b9), CDM/USC encoder checked
+against Mesa's packer (54b567b9).
+Proven on hardware (EXP1211): the compute-capable KMD leaves render
+unchanged (smoke PASS 57.6 fps, timedemo 49.8 fps); a copybuffer envelope is
+admitted, bound, begun (JOB_BEGIN) and built for the firmware.
+Proven defect (EXP1211 dump, fixed 34cf2e00): RunCompute was not wired
+through the platform provider, composer and KMD runtime IO -- the backend
+refused the fence in the worker, and the resulting TDR reset failed
+(0x116). A worker-side refusal still turns into an unrecoverable TDR
+(reset restarts the backend and fails, as in EXP1075): every compute-path
+check must stay on the submit side.
+Next causal target: EXP1212, the same copybuffer probe with the wiring fix
+only (KMD = build/exp1211-kmd-compute + 34cf2e00, ICD out45 unchanged).
+After the first standalone compute job: HW2 (KMD present blt: KMD USC
+arena via DxgkCbReserveGpuVirtualAddressRange BaseAddress in the USC window,
+own copy kernel compiled with the pinned AD04 Mesa compiler, encoder above).
+
 ## Current as of 2026-10-11 12:50Z (read this first)
 
 Installed: PACKAGE1210 (.local/experiments/EXP1210-g4-preempt-overlap):
