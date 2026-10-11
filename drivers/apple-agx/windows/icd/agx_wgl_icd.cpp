@@ -279,6 +279,10 @@ typedef struct {
   enum pipe_format Format;
   BOOL Bgra;
   struct pipe_resource *Staging[AGX_WGL_RING_SLOTS];
+  /* EXP1195: completion of each slot's GPU copy; a copied slot goes to the
+   * worker once its fence has signalled (polled, never waited for). */
+  struct pipe_screen *Screen;
+  struct pipe_fence_handle *Fence[AGX_WGL_RING_SLOTS];
   const BYTE *Map[AGX_WGL_RING_SLOTS];
   unsigned Stride[AGX_WGL_RING_SLOTS];
   unsigned State[AGX_WGL_RING_SLOTS];  /* AGX_WGL_SLOT_*, AgxWglWorkerLock */
@@ -289,6 +293,7 @@ typedef struct {
   LONGLONG Frames, LastTick, SumPresent, SumInterval, SumSync;
   LONGLONG SumShow, SumCopy, SumDib;
   unsigned Shown, Dropped, DibFailed, Slices;
+  unsigned NotReady;  /* EXP1195: presents whose shown candidate was still copying */
 } AGX_WGL_PRESENT_RING;
 static AGX_WGL_PRESENT_RING AgxWglRings[4];
 static SRWLOCK AgxWglRingLock = SRWLOCK_INIT;     /* the ring table; taken first */
@@ -410,8 +415,11 @@ static void wgl_ring_drain(AGX_WGL_PRESENT_RING *ring) {
 
 static void wgl_ring_release(AGX_WGL_PRESENT_RING *ring) {
   wgl_ring_drain(ring);
-  for (unsigned i = 0; i < AGX_WGL_RING_SLOTS; ++i)
+  for (unsigned i = 0; i < AGX_WGL_RING_SLOTS; ++i) {
+    if (ring->Fence[i] && ring->Screen)
+      ring->Screen->fence_reference(ring->Screen, &ring->Fence[i], NULL);
     pipe_resource_reference(&ring->Staging[i], NULL);
+  }
   if (ring->Cpu) HeapFree(GetProcessHeap(), 0, ring->Cpu);
   ZeroMemory(ring, sizeof(*ring));
 }
@@ -440,6 +448,7 @@ static AGX_WGL_PRESENT_RING *wgl_ring_get(struct pipe_screen *screen, HWND windo
   templ.depth0 = 1;
   templ.array_size = 1;
   templ.usage = PIPE_USAGE_STAGING;
+  free_ring->Screen = screen;
   for (unsigned i = 0; i < AGX_WGL_RING_SLOTS; ++i) {
     free_ring->Staging[i] = screen->resource_create(screen, &templ);
     if (!free_ring->Staging[i]) { wgl_ring_release(free_ring); return NULL; }
@@ -587,7 +596,7 @@ static void wgl_present_receipt(AGX_WGL_PRESENT_RING *ring, LONGLONG start,
   LONGLONG us = frequency.QuadPart;
   AcquireSRWLockExclusive(&AgxWglWorkerLock);
   LONGLONG shown = ring->Shown ? ring->Shown : 1;
-  UINT values[12] = {
+  UINT values[13] = {
     (UINT)(ring->SumPresent * 1000000 / us / 120),
     (UINT)(ring->SumShow * 1000000 / us / shown),
     (UINT)(ring->SumInterval * 1000000 / us / 120),
@@ -595,11 +604,12 @@ static void wgl_present_receipt(AGX_WGL_PRESENT_RING *ring, LONGLONG start,
     (UINT)(ring->SumSync * 1000000 / us / 120),
     (UINT)(ring->SumCopy * 1000000 / us / shown),
     (UINT)(ring->SumDib * 1000000 / us / shown),
-    ring->Slices, ring->Shown, ring->Dropped, ring->DibFailed };
+    ring->Slices, ring->Shown, ring->Dropped, ring->DibFailed,
+    ring->NotReady /* EXP1195 */ };
   ring->SumShow = ring->SumCopy = ring->SumDib = 0;
-  ring->Shown = ring->Dropped = ring->DibFailed = 0;
+  ring->Shown = ring->Dropped = ring->DibFailed = ring->NotReady = 0;
   ReleaseSRWLockExclusive(&AgxWglWorkerLock);
-  AdmissionUmdDiagnostic("measure-wgl-present", S_OK, values, 12u);
+  AdmissionUmdDiagnostic("measure-wgl-present", S_OK, values, 13u);
   wgl_kmt_receipt(us);
   /* EXP1182: render batches, draws and the largest batch of the 120 presents. */
   UINT draws[3] = {(UINT)InterlockedExchange(&AgxWglBatches, 0),
@@ -839,7 +849,7 @@ extern "C" BOOL agx_wgl_present_window(struct pipe_screen *screen,
     struct pipe_box box;
     u_box_2d(0, 0, (int)width, (int)height, &box);
     ctx->resource_copy_region(ctx, ring->Staging[copy], 0, 0, 0, 0, res, 0, &box);
-    ctx->flush(ctx, NULL, 0);
+    ctx->flush(ctx, &ring->Fence[copy], 0);
   }
   AcquireSRWLockExclusive(&AgxWglWorkerLock);
   if (copy >= 0) {
@@ -850,6 +860,15 @@ extern "C" BOOL agx_wgl_present_window(struct pipe_screen *screen,
   int show = AgxWglJobRing ? -1 :
       agx_wgl_slot_to_show(ring->State, ring->Seq, AGX_WGL_RING_SLOTS, copy);
   ReleaseSRWLockExclusive(&AgxWglWorkerLock);
+  /* EXP1195: a frame whose copy has not finished stays copied for a later
+   * present (or is replaced by a newer frame); the game thread no longer
+   * waits for the GPU here. A slot without a fence (faulted context) is
+   * synced as before. */
+  if (show >= 0 && ring->Fence[show] &&
+      !screen->fence_finish(screen, NULL, ring->Fence[show], 0)) {
+    show = -1;
+    ++ring->NotReady;
+  }
   QueryPerformanceCounter(&synced);
   LONGLONG sync_start = synced.QuadPart;
   if (show >= 0) {
