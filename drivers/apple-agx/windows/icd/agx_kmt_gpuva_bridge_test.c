@@ -35,6 +35,7 @@ static D3DKMT_SIGNALSYNCHRONIZATIONOBJECTFROMGPU2 q_signal_gpu; static D3DKMT_HA
 static D3DKMT_SIGNALSYNCHRONIZATIONOBJECT2 q_signal;
 static D3DKMT_LOCK2 q_lock; static unsigned unlocks;
 static D3DKMT_ESCAPE q_escape;
+static D3DKMT_PRESENT q_present; static RECT q_present_subrect;
 
 static NTSTATUS APIENTRY f_query(const D3DKMT_QUERYADAPTERINFO *a) { ++calls; q_query = *a; return next_status; }
 static NTSTATUS APIENTRY f_context(D3DKMT_CREATECONTEXTVIRTUAL *a) { ++calls; q_context = *a; a->hContext = CONTEXT; return next_status; }
@@ -59,13 +60,15 @@ static NTSTATUS APIENTRY f_unlock(const D3DKMT_UNLOCK2 *a) { ++calls; ++unlocks;
 static NTSTATUS APIENTRY f_escape(const D3DKMT_ESCAPE *a) { ++calls; q_escape = *a; return next_status; }
 static NTSTATUS APIENTRY f_priority(const D3DKMT_SETALLOCATIONPRIORITY *a) { ++calls; return a->hDevice == DEVICE ? next_status : (NTSTATUS)0xc000000dL; }
 static NTSTATUS APIENTRY f_residency(const D3DKMT_QUERYALLOCATIONRESIDENCY *a) { ++calls; return a->hDevice == DEVICE ? next_status : (NTSTATUS)0xc000000dL; }
+/* The sub-rect is read during the call: the bridge's copy is a local. */
+static NTSTATUS APIENTRY f_present(D3DKMT_PRESENT *a) { ++calls; q_present = *a; if (a->pSrcSubRects) q_present_subrect = a->pSrcSubRects[0]; return next_status; }
 
 int main(void) {
   static AGX_KMT_GPUVA_BRIDGE bridge;
   AGX_KMT_THUNKS t = {f_query, f_context, f_destroy_context, f_paging, f_destroy_paging,
       f_sync, f_destroy_sync, f_alloc, f_dealloc, f_reserve, f_map, f_free, f_resident,
       f_evict, f_wait, f_submit, f_signal_gpu, f_signal, f_lock, f_unlock, f_escape,
-      f_priority, f_residency};
+      f_priority, f_residency, f_present};
   const D3DDDI_DEVICECALLBACKS *d;
   HANDLE h = &bridge;
   BYTE blob[104];
@@ -225,6 +228,39 @@ int main(void) {
     D3DDDICB_SETPRIORITY a = {NULL, 1, list, prio}; D3DDDI_RESIDENCYSTATUS status[1];
     D3DDDICB_QUERYRESIDENCY r = {NULL, 1, list, status};
     CHECK(d->pfnSetPriorityCb(h, &a) == S_OK && d->pfnQueryResidencyCb(h, &r) == S_OK); }
+
+  /* G2 HW3: Microsoft's OpenGL ICD blt present (D3DKMTPresent): Blt with
+   * SrcRectValid and DstRectValid, one sub-rect equal to SrcRect, no
+   * destination; INVALID_PARAMETER otherwise (d3dkmthk D3DKMTPresent). */
+  { RECT r = {0, 0, 1280, 720}; HWND window = (HWND)(UINT_PTR)0x10010;
+    D3DKMT_PRESENTFLAGS expected; ZeroMemory(&expected, sizeof(expected));
+    expected.Blt = 1; expected.SrcRectValid = 1; expected.DstRectValid = 1;
+    CHECK(AgxKmtGpuvaPresentBlt(&bridge, (HANDLE)(UINT_PTR)CONTEXT, window, 0x80000002u, &r) == 0);
+    CHECK(q_present.hContext == CONTEXT && q_present.hWindow == window &&
+          q_present.hSource == 0x80000002u && !q_present.hDestination &&
+          q_present.Flags.Value == expected.Value && q_present.SubRectCnt == 1 &&
+          !q_present.BroadcastContextCount && !q_present.PrivateDriverDataSize);
+    CHECK(!memcmp(&q_present.SrcRect, &r, sizeof(r)) && !memcmp(&q_present.DstRect, &r, sizeof(r)) &&
+          !memcmp(&q_present_subrect, &r, sizeof(r)));
+    CHECK(bridge.Receipt.Calls[AgxKmtGpuvaPresent] == 1);
+    /* An occluded window is the kernel's answer, returned as is. */
+    next_status = (NTSTATUS)0xc01e0006L;
+    CHECK(AgxKmtGpuvaPresentBlt(&bridge, (HANDLE)(UINT_PTR)CONTEXT, window, 0x80000002u, &r) ==
+          (NTSTATUS)0xc01e0006L);
+    next_status = 0;
+    /* Empty rects and missing handles never reach the kernel. */
+    RECT empty = {0, 0, 0, 720}; calls = 0;
+    CHECK(AgxKmtGpuvaPresentBlt(&bridge, (HANDLE)(UINT_PTR)CONTEXT, window, 0x80000002u, &empty) ==
+          (NTSTATUS)0xc000000dL && calls == 0);
+    CHECK(AgxKmtGpuvaPresentBlt(&bridge, NULL, window, 0x80000002u, &r) ==
+          (NTSTATUS)0xc000000dL && calls == 0);
+    CHECK(AgxKmtGpuvaPresentBlt(&bridge, (HANDLE)(UINT_PTR)CONTEXT, NULL, 0x80000002u, &r) ==
+          (NTSTATUS)0xc000000dL && calls == 0);
+    /* Without the export the ICD keeps its GDI present. */
+    bridge.Kmt.Present = NULL;
+    CHECK(AgxKmtGpuvaPresentBlt(&bridge, (HANDLE)(UINT_PTR)CONTEXT, window, 0x80000002u, &r) ==
+          (NTSTATUS)0xc00000bbL && calls == 0);
+    bridge.Kmt.Present = f_present; }
 
   /* Failures are counted and mapped; a foreign handle is refused. */
   next_status = (NTSTATUS)0xc00002b6L;

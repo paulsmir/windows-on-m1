@@ -9,6 +9,7 @@
 #define KMT_STATUS_NO_MEMORY ((NTSTATUS)0xc0000017L)
 #define KMT_STATUS_DEVICE_REMOVED ((NTSTATUS)0xc00002b6L)
 #define KMT_STATUS_GRAPHICS_NO_VIDEO_MEMORY ((NTSTATUS)0xc01e0100L)
+#define KMT_STATUS_NOT_SUPPORTED ((NTSTATUS)0xc00000bbL)
 
 HRESULT AgxKmtGpuvaResult(NTSTATUS Status) {
   /* The runtime reports a queued paging operation (MakeResident, Map) as
@@ -542,6 +543,42 @@ static VOID APIENTRY set_error(D3D10DDI_HRTCORELAYER core, HRESULT error) {
   b->Receipt.LastRuntimeError = error;
 }
 
+NTSTATUS AgxKmtGpuvaPresentBlt(AGX_KMT_GPUVA_BRIDGE *Bridge, HANDLE Context,
+    HWND Window, D3DKMT_HANDLE Source, const RECT *Rect) {
+  AGX_KMT_GPUVA_BRIDGE *b = bridge(Bridge);
+  D3DKMT_PRESENT request;
+  D3DKMT_HANDLE context = 0;
+  RECT rect;
+  NTSTATUS status;
+  if (!b || !Window || !Source || !Rect || Rect->left < 0 || Rect->top < 0 ||
+      Rect->right <= Rect->left || Rect->bottom <= Rect->top ||
+      !kmt_handle(Context, &context) || !context) {
+    (void)refuse(b, AgxKmtGpuvaPresent);
+    return KMT_STATUS_INVALID_PARAMETER;
+  }
+  if (!b->Kmt.Present) {
+    (void)done(b, AgxKmtGpuvaPresent, KMT_STATUS_NOT_SUPPORTED);
+    return KMT_STATUS_NOT_SUPPORTED;
+  }
+  rect = *Rect;
+  ZeroMemory(&request, sizeof(request));
+  request.hContext = context;
+  request.hWindow = Window;
+  request.hSource = Source;
+  request.SrcRect = rect;
+  request.DstRect = rect;
+  request.SubRectCnt = 1;
+  request.pSrcSubRects = &rect;
+  request.FlipInterval = D3DDDI_FLIPINTERVAL_IMMEDIATE;
+  request.Flags.Blt = 1;
+  request.Flags.SrcRectValid = 1;
+  request.Flags.DstRectValid = 1;
+  kmt_begin(b);
+  status = b->Kmt.Present(&request);
+  (void)done(b, AgxKmtGpuvaPresent, status);
+  return status;
+}
+
 /* Store through FARPROC: GetProcAddress returns a generic function pointer. */
 #define LOAD_THUNK(field, name) \
   ((*(FARPROC *)&Thunks->field = GetProcAddress(gdi, name)) != NULL)
@@ -552,6 +589,8 @@ BOOL AgxKmtThunksLoad(AGX_KMT_THUNKS *Thunks) {
   ZeroMemory(Thunks, sizeof(*Thunks));
   if (!gdi) gdi = LoadLibraryW(L"gdi32.dll");
   if (!gdi) return FALSE;
+  /* Optional: present falls back to GDI without it. */
+  (void)LOAD_THUNK(Present, "D3DKMTPresent");
   return LOAD_THUNK(QueryAdapterInfo, "D3DKMTQueryAdapterInfo") &&
       LOAD_THUNK(CreateContextVirtual, "D3DKMTCreateContextVirtual") &&
       LOAD_THUNK(DestroyContext, "D3DKMTDestroyContext") &&

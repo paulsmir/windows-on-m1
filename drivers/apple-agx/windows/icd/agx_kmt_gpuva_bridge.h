@@ -45,6 +45,8 @@ typedef struct _AGX_KMT_THUNKS {
   PFND3DKMT_ESCAPE Escape;
   PFND3DKMT_SETALLOCATIONPRIORITY SetAllocationPriority;
   PFND3DKMT_QUERYALLOCATIONRESIDENCY QueryAllocationResidency;
+  /* G2 HW3, optional: NULL leaves the ICD on its GDI present. */
+  PFND3DKMT_PRESENT Present;
 } AGX_KMT_THUNKS;
 
 typedef enum _AGX_KMT_GPUVA_OP {
@@ -57,7 +59,7 @@ typedef enum _AGX_KMT_GPUVA_OP {
   AgxKmtGpuvaSubmit, AgxKmtGpuvaSignalGpu2, AgxKmtGpuvaSignal2,
   AgxKmtGpuvaLock, AgxKmtGpuvaUnlock, AgxKmtGpuvaEscape,
   AgxKmtGpuvaSetPriority, AgxKmtGpuvaQueryResidency, AgxKmtGpuvaSetError,
-  AgxKmtGpuvaOpCount
+  AgxKmtGpuvaPresent, AgxKmtGpuvaOpCount
 } AGX_KMT_GPUVA_OP;
 
 /* EXP1189 receipt-only: where the CPU waits for the GPU. Per distinct chain
@@ -110,6 +112,17 @@ BOOL AgxKmtThunksLoad(AGX_KMT_THUNKS *Thunks);
  * bridge address is the runtime adapter, device and core-layer handle. */
 HRESULT AgxKmtGpuvaBridgeInitialize(AGX_KMT_GPUVA_BRIDGE *Bridge,
     const AGX_KMT_THUNKS *Thunks, D3DKMT_HANDLE Adapter, D3DKMT_HANDLE Device);
+
+/* G2 HW3: present Rect of the source allocation to Window from the kernel
+ * Context (a HANDLE holding a D3DKMT_HANDLE), as Microsoft's OpenGL ICD
+ * example of D3DKMTPresent does: Blt with SrcRectValid and DstRectValid,
+ * SrcRect == DstRect == the one sub-rect, no destination (dxgkrnl redirects
+ * the blt to the window). Returns the thunk's NTSTATUS so the caller can
+ * tell an occluded or denied present from a failure; STATUS_NOT_SUPPORTED
+ * (0xC00000BB) without the export, STATUS_INVALID_PARAMETER for bad
+ * arguments (not passed to the kernel). */
+NTSTATUS AgxKmtGpuvaPresentBlt(AGX_KMT_GPUVA_BRIDGE *Bridge, HANDLE Context,
+    HWND Window, D3DKMT_HANDLE Source, const RECT *Rect);
 
 /* NTSTATUS of a thunk -> HRESULT the umd_* code expects from a callback. */
 HRESULT AgxKmtGpuvaResult(NTSTATUS Status);
