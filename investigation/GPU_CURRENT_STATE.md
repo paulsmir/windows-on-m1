@@ -1,4 +1,41 @@
-# J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (~37 fps gameplay)
+# J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 34.6 fps; 47.7 without the Steam overlay UI)
+
+
+## Current as of 2026-10-11 05:40Z (read this first)
+
+Standard benchmark (EXP1187+): timedemo of the operator-recorded movement
+demo cstrike\agxbench.dem (3771 frames, de_dust2; copy in
+.local/experiments/EXP1187-cs16-operator-demo/evidence/agxbench-operator.dem)
+via .local/experiments/EXP1184-cs16-bench/bench.sh (modes play, playnoovl =
+SteamNoOverlayUIDrawing=1 for the benchmark's hl.exe only, playsample).
+The scripted demos of EXP1184/EXP1186 were observer views (joinclass never
+spawned the player): their 40.5 fps measured a static scene.
+Results (timedemo fps): EXP1187 baseline 34.2-35.2 / noovl 44.3 (EXP1188);
+EXP1194 34.6 / noovl 47.7 (gameplay frames 52 fps without the overlay UI).
+Accepted package: PACKAGE1194 (.local/experiments/EXP1194-cs16-openglflags):
+sys 407bffbc / UMD bbe106b3 + INF 29f6d97e (OpenGLFlags 3) + ICD 514a0070
+(out31 on closure ICD-x86-closure-014-ndebug; receipts on with the trace).
+Contracts learned (do not relearn):
+- The operator's Steam overlay performance monitor draws quad by quad in
+  immediate mode (gameoverlayrenderer 0x87d37-0x87ed7): ~22% of the frame
+  (EXP1188); operator-side setting.
+- Microsoft's opengl32 calls the ICD's glFinish before every swap-buffers
+  unless OpenGLFlags bit 1 is set (Microsoft Learn "Loading an OpenGL
+  Installable Client Driver"; EXP1193/1194). Set: 3.
+- Mesa's WGL frontend waits for every frame (ST_FLUSH_WAIT) unless the window
+  has a winsys framebuffer; the ICD now provides one (agx_wgl_framebuffer.c,
+  EXP1191/1192).
+- The native draw entry must legalize feedback loops/xfb before taking the
+  batch (upstream order; EXP1189 fault, fix d3ae649e, closure-014).
+- Fence-wait sites: measure-wgl-wait (+ measure-wgl-waitf_<module>) with
+  the ICD relink map (relink-mapNN.ps1, /MAP; static functions only in the
+  map, not in the PDB publics).
+- The game-thread sampler under Prism attributes time to the last
+  indirect-branch target: reliable per module, approximate per function.
+Remaining costs: play is CPU-bound (26 ms/frame: ICD ~56% of the game
+thread -- agx_build_pipeline/encode_state/pool, immediate-mode dispatch --,
+overlay UI ~14-17%); noovl waits on GPUVA's two in-flight submissions
+(retire_held 0.43/frame x 1.37 ms) and the present-ring sync (1.6 ms).
 
 
 ## Current as of 2026-10-10 21:35Z (read this first)
