@@ -55,6 +55,11 @@ typedef struct _ADMISSION_G3_STATE {
   /* G2 HW2 receipt-only: private VA reservations made and refused, present
    * arenas made and refused. */
   LONG ReserveMade, ReserveRefused, PresentArenasMade, PresentArenasRefused;
+  /* G2 HW2b receipt-only: presents per path reason (AdmissionG3NotePresentPath)
+   * and the QPC of the last receipt write. */
+  LONG PresentPath[ADMISSION_G2_PRESENT_PATH_REASONS];
+  LONG PresentPathLast, PresentPathFence;
+  LONGLONG PresentPathQpc;
 } ADMISSION_G3_STATE;
 enum {
   ADMISSION_G3_PRIVATE_STAT_HIT, ADMISSION_G3_PRIVATE_STAT_MISS,

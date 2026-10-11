@@ -3665,10 +3665,17 @@ static BOOLEAN AdmissionG3PresentRect(const APPLE_AGX_GDI_RECT *in,
   return TRUE;
 }
 
-NTSTATUS AdmissionGpuvaG3SubmitPresentCompute(ADMISSION_CONTEXT *adapter,
+/* G2 HW2b receipt: why a present stayed on the CPU path (1 arguments,
+ * 2 context, format or rect count, 3 rect, 4 overlapping surfaces, 5 runtime
+ * busy, 6 no present arena, 7 root, validation or graph access, 8 queue or
+ * render slot full); 0 is a GPU job, 9 a GPU refusal after its fence was
+ * claimed. */
+#define ADMISSION_PRESENT_CPU(why) \
+  do { *reason = (why); return STATUS_NOT_SUPPORTED; } while (0)
+static NTSTATUS AdmissionG3SubmitPresentComputeInner(ADMISSION_CONTEXT *adapter,
     ADMISSION_RENDER_CONTEXT *context, const DXGKARG_SUBMITCOMMANDVIRTUAL *args,
     const ADMISSION_PRESENT_BLT_COMMAND *command,
-    const APPLE_AGX_GDI_RECT *rects, ULONG count) {
+    const APPLE_AGX_GDI_RECT *rects, ULONG count, ULONG *reason) {
   ADMISSION_G3_STATE *state;
   ADMISSION_G3_PROCESS *process;
   ADMISSION_BACKEND_MEMORY_VIEW view;
@@ -3680,7 +3687,7 @@ NTSTATUS AdmissionGpuvaG3SubmitPresentCompute(ADMISSION_CONTEXT *adapter,
   ULONG i;
   if (adapter == NULL || context == NULL || args == NULL || command == NULL ||
       rects == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
-    return STATUS_NOT_SUPPORTED;
+    ADMISSION_PRESENT_CPU(1u);
   state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
   process = (ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
   if (state == NULL || process == NULL || process->State != state ||
@@ -3693,7 +3700,7 @@ NTSTATUS AdmissionGpuvaG3SubmitPresentCompute(ADMISSION_CONTEXT *adapter,
       count == 0u || count > APPLE_AGX_PRESENT_MAX_RECTS ||
       !NT_SUCCESS(AdmissionMemoryRuntimePrivateView(adapter, &view)) ||
       view.CpuAddress == NULL)
-    return STATUS_NOT_SUPPORTED;
+    ADMISSION_PRESENT_CPU(2u);
   RtlZeroMemory(&present, sizeof(present));
   present.Source.Va = command->SourceLocation;
   present.Source.Pitch = command->SourceDescription.Pitch;
@@ -3706,10 +3713,10 @@ NTSTATUS AdmissionGpuvaG3SubmitPresentCompute(ADMISSION_CONTEXT *adapter,
   if (!AdmissionG3PresentRect(&command->SourceRect, &present.SourceRect) ||
       !AdmissionG3PresentRect(&command->DestinationRect,
                               &present.DestinationRect))
-    return STATUS_NOT_SUPPORTED;
+    ADMISSION_PRESENT_CPU(3u);
   for (i = 0u; i < count; ++i)
     if (!AdmissionG3PresentRect(&rects[i], &present.Rects[i]))
-      return STATUS_NOT_SUPPORTED;
+      ADMISSION_PRESENT_CPU(3u);
   present.RectCount = count;
   /* The kernel reads and writes in parallel: overlapping source and
    * destination bytes (a scroll within one allocation) need the CPU path's
@@ -3720,11 +3727,11 @@ NTSTATUS AdmissionGpuvaG3SubmitPresentCompute(ADMISSION_CONTEXT *adapter,
     if (source == 0u || destination == 0u ||
         (present.Source.Va < present.Destination.Va + destination &&
          present.Destination.Va < present.Source.Va + source))
-      return STATUS_NOT_SUPPORTED;
+      ADMISSION_PRESENT_CPU(4u);
   }
   deferred = AdmissionG4PendingAdmissible(adapter, context);
   if (!deferred && !AdmissionPlatformRuntimeAwaitWork(adapter, 10000u, NULL))
-    return STATUS_NOT_SUPPORTED;
+    ADMISSION_PRESENT_CPU(5u);
   ExAcquireFastMutex(&state->Lock);
   /* The arena is made once and never moves until the process ends. */
   if (process->PresentArena.Generation) {
@@ -3742,8 +3749,9 @@ NTSTATUS AdmissionGpuvaG3SubmitPresentCompute(ADMISSION_CONTEXT *adapter,
           &present.SourceRect, &present.Destination, &present.DestinationRect,
           present.Rects, present.RectCount) ||
       !AdmissionG3PresentAccessible(process, &present)) {
+    ULONG why = process->PresentArena.Generation ? 7u : 6u;
     ExReleaseFastMutex(&state->Lock);
-    return STATUS_NOT_SUPPORTED;
+    ADMISSION_PRESENT_CPU(why);
   }
   mapping_generation = process->Graph.MappingGeneration;
   ExReleaseFastMutex(&state->Lock);
@@ -3764,7 +3772,7 @@ NTSTATUS AdmissionGpuvaG3SubmitPresentCompute(ADMISSION_CONTEXT *adapter,
       AdmissionDispatchQueuedWork(adapter);
       return STATUS_SUCCESS;
     }
-    return STATUS_NOT_SUPPORTED;
+    ADMISSION_PRESENT_CPU(8u);
   }
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   if (AdmissionRenderPacketState(&adapter->RenderPacket) ==
@@ -3777,7 +3785,7 @@ NTSTATUS AdmissionGpuvaG3SubmitPresentCompute(ADMISSION_CONTEXT *adapter,
     prepared = TRUE;
   }
   KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
-  if (!prepared) return STATUS_NOT_SUPPORTED;
+  if (!prepared) ADMISSION_PRESENT_CPU(8u);
   /* From here the fence is this job's: a failure is a rejected submit. */
   if (!AdmissionBackendImageBindPresentCompute(&adapter->BackendImage,
           args->SubmissionFenceId, &present)) goto Rollback;
@@ -3820,6 +3828,50 @@ Rollback:
         args->SubmissionFenceId);
   return AdmissionG4SubmitReject(adapter, context, args,
       AdmissionG4RejectQueue, STATUS_INVALID_PARAMETER, 0u, TRUE);
+}
+
+#undef ADMISSION_PRESENT_CPU
+
+static VOID AdmissionG3NotePresentPath(ADMISSION_CONTEXT *adapter,
+    ADMISSION_G3_STATE *state, ULONG reason, ULONG fence) {
+  LARGE_INTEGER frequency;
+  LONGLONG now, last;
+  ULONG receipt[ADMISSION_G2_PRESENT_PATH_RECEIPT_WORDS], i;
+  if (reason >= ADMISSION_G2_PRESENT_PATH_REASONS) return;
+  InterlockedIncrement(&state->PresentPath[reason]);
+  state->PresentPathLast = (LONG)reason;
+  state->PresentPathFence = (LONG)fence;
+  if (KeGetCurrentIrql() != PASSIVE_LEVEL) return;
+  /* At most one registry write every 2 s (DWM presents every frame). */
+  now = KeQueryPerformanceCounter(&frequency).QuadPart;
+  last = state->PresentPathQpc;
+  if (last && now - last < 2 * frequency.QuadPart) return;
+  if (InterlockedCompareExchange64(&state->PresentPathQpc, now, last) != last)
+    return;
+  receipt[0] = 1u;
+  for (i = 0u; i < ADMISSION_G2_PRESENT_PATH_REASONS; ++i)
+    receipt[1u + i] = (ULONG)InterlockedCompareExchange(
+        &state->PresentPath[i], 0, 0);
+  receipt[1u + ADMISSION_G2_PRESENT_PATH_REASONS] = reason;
+  receipt[2u + ADMISSION_G2_PRESENT_PATH_REASONS] = fence;
+  AdmissionRecordG2PresentPath(adapter, receipt);
+}
+
+NTSTATUS AdmissionGpuvaG3SubmitPresentCompute(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context, const DXGKARG_SUBMITCOMMANDVIRTUAL *args,
+    const ADMISSION_PRESENT_BLT_COMMAND *command,
+    const APPLE_AGX_GDI_RECT *rects, ULONG count) {
+  ULONG reason = 0u;
+  NTSTATUS status = AdmissionG3SubmitPresentComputeInner(adapter, context,
+      args, command, rects, count, &reason);
+  ADMISSION_G3_STATE *state = adapter == NULL ? NULL :
+      (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  if (status == STATUS_SUCCESS) reason = 0u;
+  else if (status != STATUS_NOT_SUPPORTED) reason = 9u;
+  if (state != NULL)
+    AdmissionG3NotePresentPath(adapter, state, reason,
+        args == NULL ? 0u : args->SubmissionFenceId);
+  return status;
 }
 
 static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
