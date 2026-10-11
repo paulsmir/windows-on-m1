@@ -1,5 +1,33 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
+## Current as of 2026-10-12 00:30Z (read this first)
+
+Installed: PACKAGE1217 (.local/experiments/EXP1217-g2-present-gpu): KMD
+1945e5da on build/exp1211-kmd-compute (sys 3c74c641, UMD 6693b714), ICD out45
+c5955939, EXP1194 INF, 30.0.1217.0. Timedemo playnoovl 49.9 fps, smoke 56.7.
+Proven on hardware since HW1 (EXP1214):
+- HW2a (EXP1215): every process's KMD private range is reserved at
+  BaseAddress 0x11FE000000 (top 32 MiB of the USC window; d3dkmddi
+  BaseAddress); G4 private scenes render there (dump: 23 reserved, 0 refused).
+- HW2b-1 (EXP1216): every GPU process gets a 128 KiB present arena (kernels
+  installed, pages published) at context creation (26-29 made, 0 refused,
+  VA 0x11fe020000); two KMD compute jobs per queue lifetime complete
+  (persistent work-queue state); timedemo 50.2 fps (EXP1216b).
+- HW2b-2 (EXP1217): GPU present routing installed, no regression, but
+  inert: no client presents by blt in a virtual context (DWM flips, the GL
+  ICD uses its GDI ring); Wom1G2PresentPath never written.
+Unrelated hazard: guest interrupt-liveness hangs under the m1n1 HV (EXP1215
+0x101: a CPU in user mode stops receiving clock ticks; EXP980 class) -- a
+separate investigation was proposed.
+Bench hygiene: macOS cleans /tmp -- /tmp/agx-lld-dir/ld.lld (m1n1
+proxyclient linker, copy of .local/toolchain22/ld.lld) and session
+scratchpad scripts can vanish; generated recover.sh restores the linker,
+pipeline scripts are kept in .local/tandem/gpu-pipeline. The evidence
+archive lives on /Volumes/SSD (symlinked from /Users/pavel/J313-evidence-archive).
+Next causal target: G2 HW3 -- the OpenGL ICD presents through
+D3DKMTPresent (Blt, hWindow; dxgkrnl redirects to DWM), so the GL process
+submits present blts that the GPU path runs; then remove the GDI ring.
+
 ## Current as of 2026-10-11 17:10Z (read this first)
 
 Installed: PACKAGE1214 (.local/experiments/EXP1214-g2-compute-notifier):
