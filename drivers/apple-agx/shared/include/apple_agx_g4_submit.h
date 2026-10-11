@@ -154,6 +154,14 @@ typedef struct {
   APPLE_AGX_G4_PRIVATE_HEADER Base;
   APPLE_AGX_G4_PROCESS_RANGE Preemption;
 } APPLE_AGX_G4_PRIVATE_HEADER_COMPUTE;
+/* The whole compute envelope as the UMD writes it into the DMA private data
+ * (header, then the native command it copies from its DMA buffer) and as the
+ * KMD keeps it for the job it builds. */
+typedef struct {
+  APPLE_AGX_G4_PRIVATE_HEADER_COMPUTE Header;
+  APPLE_AGX_G4_NATIVE_HEADER Native;
+  APPLE_AGX_G4_NATIVE_COMPUTE Compute;
+} APPLE_AGX_G4_COMPUTE_ENVELOPE;
 #define APPLE_AGX_G4_SAMPLER_BYTES 16u
 #define APPLE_AGX_G4_MAX_SAMPLERS 1024u
 #define APPLE_AGX_G4_CDM_STREAM_MAX_BYTES 0x10000000u

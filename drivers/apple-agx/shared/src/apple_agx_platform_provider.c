@@ -176,12 +176,24 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformBuildSubmission(
   APPLE_AGX_PLATFORM_PROVIDER *provider =
       (APPLE_AGX_PLATFORM_PROVIDER *)Context;
   APPLE_AGX_BACKEND_U32 index;
-  /* G2: a standalone compute job publishes only its RunCompute work item;
-   * the external render owner (the KMD's job image) resolves its prepared
-   * range like the TA/3D work items, else the shared compute sidecar. */
+  /* G2: a standalone compute job publishes only its RunCompute work item.
+   * The prepared range is the object that holds it: the shared compute
+   * sidecar where the KMD builds RunCompute (as for the render prelude),
+   * else an external render object resolved like the TA/3D work items. */
   if (provider != PLATFORM_NULL && Job != PLATFORM_NULL &&
       Job->Kind == AppleAgxBackendJobCompute) {
-    const APPLE_AGX_MEMORY_OBJECT *sidecar;
+    const APPLE_AGX_MEMORY_OBJECT *sidecar = PLATFORM_NULL;
+    APPLE_AGX_BACKEND_U64 sidecar_va = 0ULL;
+    if (provider->RenderSharedMemory != PLATFORM_NULL) {
+      sidecar = &provider->RenderSharedMemory->Objects[
+          APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR];
+      sidecar_va = provider->RenderSharedMemory->VirtualAddresses[
+          APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR];
+      if (sidecar->CpuAddress == PLATFORM_NULL || sidecar->Length < 0x10000u ||
+          sidecar_va == 0ULL || Job->ComputeWorkAddresses[0] < sidecar_va ||
+          Job->ComputeWorkAddresses[0] - sidecar_va >= 0x10000u)
+        sidecar = PLATFORM_NULL;
+    }
     if (Fence == 0u || Submission == PLATFORM_NULL ||
         !provider->QueueProvider.Config.HasCompute ||
         Job->TaWorkAddressCount != 0u || Job->D3WorkAddressCount != 0u ||
@@ -189,8 +201,7 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformBuildSubmission(
         Job->ComputeEvent != provider->QueueProvider.Config.Compute.EventNumber ||
         !Job->ComputeExpectedStamp ||
         Job->ComputeExpectedDonePointer >= APPLE_AGX_G13_RING_CAPACITY ||
-        (!provider->ExternalRenderReady &&
-         provider->RenderSharedMemory == PLATFORM_NULL) ||
+        (sidecar == PLATFORM_NULL && !provider->ExternalRenderReady) ||
         provider->Transport.NowTicks == PLATFORM_NULL)
       return APPLE_AGX_BACKEND_FALSE;
     AppleAgxPlatformZero(Submission,
@@ -200,19 +211,15 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformBuildSubmission(
         provider->Transport.NowTicks(provider->Transport.Context);
     if (Submission->NowTicks == 0ULL)
       return APPLE_AGX_BACKEND_FALSE;
-    if (provider->ExternalRenderReady) {
-      if (!provider->ExternalRender.ResolvePreparedRange(
-              provider->ExternalRender.Context, Job->ComputeWorkAddresses[0],
-              &Submission->Compute.PreparedRanges[0].Address,
-              &Submission->Compute.PreparedRanges[0].Bytes))
-        return APPLE_AGX_BACKEND_FALSE;
-    } else {
-      sidecar = &provider->RenderSharedMemory->Objects[
-          APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR];
-      if (sidecar->CpuAddress == PLATFORM_NULL || sidecar->Length < 0x10000u)
-        return APPLE_AGX_BACKEND_FALSE;
+    if (sidecar != PLATFORM_NULL) {
       Submission->Compute.PreparedRanges[0].Address = sidecar->CpuAddress;
       Submission->Compute.PreparedRanges[0].Bytes = 0x10000u;
+    } else if (!provider->ExternalRender.ResolvePreparedRange(
+                   provider->ExternalRender.Context,
+                   Job->ComputeWorkAddresses[0],
+                   &Submission->Compute.PreparedRanges[0].Address,
+                   &Submission->Compute.PreparedRanges[0].Bytes)) {
+      return APPLE_AGX_BACKEND_FALSE;
     }
     Submission->Compute.PreparedRangeCount = 1u;
     Submission->Compute.GpuAddresses[0] = Job->ComputeWorkAddresses[0];

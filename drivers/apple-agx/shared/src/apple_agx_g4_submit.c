@@ -10,6 +10,7 @@ typedef char agx4_private_v2_size[(sizeof(APPLE_AGX_G4_PRIVATE_HEADER_V2) == 168
 /* G2: drm_asahi_cmd_compute is 64 bytes (4+4+8+8+8, helper 16, ts 16). */
 typedef char agx4_compute_size[(sizeof(APPLE_AGX_G4_NATIVE_COMPUTE) == 64u) ? 1 : -1];
 typedef char agx4_compute_header_size[(sizeof(APPLE_AGX_G4_PRIVATE_HEADER_COMPUTE) == 40u) ? 1 : -1];
+typedef char agx4_compute_envelope_size[(sizeof(APPLE_AGX_G4_COMPUTE_ENVELOPE) == 112u) ? 1 : -1];
 
 static int valid_va(unsigned long long va, unsigned long long bytes) {
   return va >= 0x10000ULL && va < (1ULL << 39) && bytes &&

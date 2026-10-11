@@ -550,7 +550,8 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
       sidecar+APPLE_AGX_COMPUTE_MICROSEQUENCE_OFFSET)) return APPLE_AGX_FALSE;
   work.Counter=Input->Counter;work.VmSlot=Input->VmSlot;
   work.NotifierGpuAddress=gpu+APPLE_AGX_COMPUTE_NOTIFIER_OFFSET;
-  work.PreemptionGpuAddress=gpu+APPLE_AGX_COMPUTE_PREEMPT_OFFSET;
+  work.PreemptionGpuAddress=Input->PreemptionGpuAddress ?
+      Input->PreemptionGpuAddress : gpu+APPLE_AGX_COMPUTE_PREEMPT_OFFSET;
   work.CdmStreamBase=Input->CdmStreamBase;
   work.CdmStreamEnd=Input->CdmStreamBase+Input->CdmStreamBytes;
   work.UscExecutionBase=Input->UscExecutionBase;

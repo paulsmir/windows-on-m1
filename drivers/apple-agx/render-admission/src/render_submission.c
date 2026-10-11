@@ -72,13 +72,30 @@ int AdmissionRenderPacketPrepare(
       Description->PrivateDataBytes == 0u ||
       Description->PrivateDataStart >= Description->PrivateDataEnd ||
       Description->PrivateDataEnd > Description->PrivateDataBytes ||
-      Description->DmaStart >= Description->DmaEnd ||
-      Description->DestinationCpuToken == 0ULL ||
-      Description->DestinationGpuVa == 0ULL ||
-      Description->DestinationPhysical == 0ULL ||
-      Description->DestinationBytes == 0u ||
-      Description->DestinationIndex >= Description->AllocationCount)
+      Description->DmaStart >= Description->DmaEnd)
     return 0;
+  if (Description->Kind == ADMISSION_RENDER_PACKET_KIND_COMPUTE) {
+    if (Description->AllocationCount != 0u ||
+        Description->DestinationCpuToken != 0ULL ||
+        Description->DestinationGpuVa != 0ULL ||
+        Description->DestinationPhysical != 0ULL ||
+        Description->DestinationBytes != 0u ||
+        Description->DestinationIndex != 0u ||
+        Description->PatchOffset != 0u ||
+        Description->VisibleDestinationCpuToken != 0ULL ||
+        Description->VisibleDestinationGpuVa != 0ULL ||
+        Description->VisibleDestinationPhysical != 0ULL ||
+        Description->VisibleDestinationAllocationToken != 0ULL ||
+        Description->VisibleDestinationBytes != 0u)
+      return 0;
+  } else if (Description->Kind != ADMISSION_RENDER_PACKET_KIND_RENDER ||
+             Description->DestinationCpuToken == 0ULL ||
+             Description->DestinationGpuVa == 0ULL ||
+             Description->DestinationPhysical == 0ULL ||
+             Description->DestinationBytes == 0u ||
+             Description->DestinationIndex >= Description->AllocationCount) {
+    return 0;
+  }
   Packet->Description = *Description;
   Packet->State = AdmissionRenderPacketPrepared;
   return 1;
@@ -126,7 +143,8 @@ int AdmissionRenderPacketMatches(
          current->VisibleDestinationAllocationToken ==
              Description->VisibleDestinationAllocationToken &&
          current->VisibleDestinationBytes ==
-             Description->VisibleDestinationBytes;
+             Description->VisibleDestinationBytes &&
+         current->Kind == Description->Kind;
 }
 
 int AdmissionRenderPacketQueue(

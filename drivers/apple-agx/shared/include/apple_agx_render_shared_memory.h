@@ -30,6 +30,11 @@ typedef struct _APPLE_AGX_RENDER_COMPUTE_INPUT {
   APPLE_AGX_U64 Counter;
   APPLE_AGX_U64 UscExecutionBase;
   APPLE_AGX_U32 VmSlot,EventNumber,StampValue,EventSequence,ClientSequence;
+  /* G2: the CDM context-store buffer in the job's own VM, as Asahi
+   * allocates it from the user VM (queue/compute.rs ualloc); at least
+   * APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES. Zero keeps the kernel sidecar
+   * area of the render prelude. */
+  APPLE_AGX_U64 PreemptionGpuAddress;
 } APPLE_AGX_RENDER_COMPUTE_INPUT;
 
 typedef struct _APPLE_AGX_RENDER_COMPUTE_OUTPUT {

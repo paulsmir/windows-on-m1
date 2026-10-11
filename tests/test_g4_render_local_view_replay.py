@@ -17,7 +17,7 @@ class G4RenderLocalViewReplay(unittest.TestCase):
           'AdmissionG4SnapshotFailure','AdmissionG4ResolveOutput',
           'AdmissionGpuvaG3PrivatePreempt','AdmissionGpuvaG3PrivateCancel','AdmissionG4PendingAdmissible',
           'AdmissionG4PendingQueue','AdmissionG4PendingBindHead','AdmissionG4PendingDropLocked',
-          'AdmissionG4SubmitVirtualEnvelope',
+          'AdmissionG4SubmitComputeLocked','AdmissionG4SubmitVirtualEnvelope',
           'AdmissionG3OutputMatchesLocal','AdmissionGpuvaG3BeginJob')
         functions+='\n'.join(function_body(source,n) for n in names)
         shim=(ROOT/'tests/g4_submit_virtual_replay.c').read_text()

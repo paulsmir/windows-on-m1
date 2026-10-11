@@ -43,6 +43,11 @@ typedef struct _ADMISSION_BACKEND_IMAGE {
   APPLE_AGX_RENDER_MANAGER_KEY G4ManagerKey;
   APPLE_AGX_U32 NativeWidth, NativeHeight, NativePitch;
   APPLE_AGX_EXP208_RELOCATION_OBJECT NativeOriginalOutput;
+  /* G2: a standalone compute job keeps only its validated envelope; the
+   * KMD builds RunCompute in the shared compute sidecar, so the template
+   * arena stays untouched (and Pristine). */
+  APPLE_AGX_BOOL G4Compute;
+  APPLE_AGX_G4_COMPUTE_ENVELOPE G4ComputeEnvelope;
 } ADMISSION_BACKEND_IMAGE;
 
 /* EXP1105: the exact Prepare image of the objects a G4 job can change,
@@ -117,6 +122,12 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
     void *DestinationCpuAddress,
     const APPLE_AGX_G4_SUBMIT_VIEW *View,
     APPLE_AGX_EXP208_GDI_BINDING *Binding);
+
+/* G2: bind a compute envelope the caller validated against the process
+ * graph. Only an idle image (no bound fence, no staged job) accepts it. */
+APPLE_AGX_BOOL AdmissionBackendImageBindG4Compute(
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence,
+    const APPLE_AGX_G4_COMPUTE_ENVELOPE *Envelope);
 
 APPLE_AGX_BOOL AdmissionBackendImageCaptureOutput(
     const ADMISSION_BACKEND_IMAGE *Image,

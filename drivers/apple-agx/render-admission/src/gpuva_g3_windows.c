@@ -1,6 +1,7 @@
 #include "gpuva_g3_private.h"
 #include "apple_agx_g3_copy_abi.h"
 #include "apple_agx_g4_submit.h"
+#include "apple_agx_g13_compute_work.h"
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 
@@ -2507,20 +2508,41 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
         image->G4Header.Base.CommandVa != context->GpuvaG3DmaBufferVa ||
         image->G4CommandBytes != context->GpuvaG3DmaBufferBytes)
       g4_valid = FALSE;
+  } else if (adapter->BackendImage.G4Compute) {
+    /* G2: the mappings may have changed since submit; re-prove the bound
+     * envelope against the graph under the same lock as JOB_BEGIN. */
+    ADMISSION_BACKEND_IMAGE *image = &adapter->BackendImage;
+    APPLE_AGX_G4_COMPUTE_VIEW compute_view;
+    if (image->BoundFence != fence ||
+        AppleAgxG4ParseComputeEx(&image->G4ComputeEnvelope,
+            (unsigned int)sizeof(image->G4ComputeEnvelope),
+            (unsigned int)sizeof(image->G4ComputeEnvelope),
+            image->G4ComputeEnvelope.Header.Base.CommandVa,
+            image->G4ComputeEnvelope.Header.Base.CommandBytes,
+            APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES, AdmissionG4GraphAccessTyped,
+            process, &compute_view, NULL) != AppleAgxG4ParseOk ||
+        image->G4ComputeEnvelope.Header.Base.CommandVa !=
+            context->GpuvaG3DmaBufferVa ||
+        image->G4ComputeEnvelope.Header.Base.CommandBytes !=
+            context->GpuvaG3DmaBufferBytes)
+      g4_valid = FALSE;
   }
   if (state->ActiveProcess == NULL && !state->PrivateCompletionFence && !process->Poisoned &&
       g4_valid &&
       !context->GpuvaG3Poisoned && context->GpuvaG3RootIpa != 0ULL &&
       context->GpuvaG3RootIpa == process->Graph.RootIpa &&
-      (adapter->BackendImage.G4Native ?
+      (adapter->BackendImage.G4Native || adapter->BackendImage.G4Compute ?
           AdmissionG4LogicalEnvelopeAccess(process,
               context->GpuvaG3DmaBufferVa,
               context->GpuvaG3DmaBufferBytes) :
           AppleAgxGpuvaG3GraphContainsRange(&process->Graph,
               context->GpuvaG3DmaBufferVa,
               context->GpuvaG3DmaBufferBytes)) &&
-      AdmissionG3OutputMatchesLocal(adapter, &process->Graph) &&
-      AppleAgxGpuvaG3GraphBeginJob(&process->Graph, 1u)) {
+      /* A compute job has no destination allocation to prove. */
+      (adapter->BackendImage.G4Compute ||
+       AdmissionG3OutputMatchesLocal(adapter, &process->Graph)) &&
+      AppleAgxGpuvaG3GraphBeginJob(&process->Graph,
+          ADMISSION_GPUVA_G3_JOB_VM_SLOT)) {
     if (private_scene) {
       ADMISSION_BACKEND_IMAGE *image=&adapter->BackendImage;
       private_scene->Started=1u;
@@ -3158,17 +3180,22 @@ static BOOLEAN AdmissionG4PendingQueue(ADMISSION_CONTEXT *adapter,
     ADMISSION_G3_PRIVATE_SCENE *private_scene,
     const DXGKARG_SUBMITCOMMANDVIRTUAL *args,
     const ADMISSION_RENDER_PACKET_DESCRIPTION *packet,
-    const APPLE_AGX_G4_SUBMIT_VIEW *view, ULONGLONG mapping_generation) {
+    const APPLE_AGX_G4_SUBMIT_VIEW *view,
+    const APPLE_AGX_G4_COMPUTE_ENVELOPE *compute,
+    ULONGLONG mapping_generation) {
   ADMISSION_G4_PENDING *entry = NULL;
   KIRQL old_irql;
   ULONG slot;
   BOOLEAN queued = FALSE;
-  if (view->Native == NULL || view->Render == NULL ||
-      view->Attachments == NULL || view->AttachmentCount == 0u ||
-      view->AttachmentCount > APPLE_AGX_G4_MAX_ATTACHMENTS ||
-      view->RenderBytes != sizeof(APPLE_AGX_G4_NATIVE_RENDER) ||
-      view->CommandBytes == 0u ||
-      view->CommandBytes > APPLE_AGX_G4_NATIVE_MAX_BYTES)
+  /* G2: exactly one of a render view or a compute envelope. */
+  if (compute != NULL ? (view != NULL || private_scene != NULL ||
+                         packet->Kind != ADMISSION_RENDER_PACKET_KIND_COMPUTE) :
+      (view == NULL || view->Native == NULL || view->Render == NULL ||
+       view->Attachments == NULL || view->AttachmentCount == 0u ||
+       view->AttachmentCount > APPLE_AGX_G4_MAX_ATTACHMENTS ||
+       view->RenderBytes != sizeof(APPLE_AGX_G4_NATIVE_RENDER) ||
+       view->CommandBytes == 0u ||
+       view->CommandBytes > APPLE_AGX_G4_NATIVE_MAX_BYTES))
     return FALSE;
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   slot = (adapter->G4PendingHead + adapter->G4PendingCount) %
@@ -3191,19 +3218,26 @@ static BOOLEAN AdmissionG4PendingQueue(ADMISSION_CONTEXT *adapter,
   entry->Fence = args->SubmissionFenceId;
   entry->Context = context;
   entry->Packet = *packet;
-  entry->View = *view;
-  entry->View.Native = NULL;
-  entry->View.Render = NULL;
-  entry->View.Attachments = NULL;
   entry->MappingGeneration = mapping_generation;
   entry->DmaBufferVa = args->DmaBufferVirtualAddress;
   entry->DmaBufferBytes = args->DmaBufferSize;
-  /* Only the colour target (attachment 0) is bound; ZLS attachments were
-   * proven at parse time and live in the copied native command. */
-  RtlCopyMemory(&entry->Attachment, view->Attachments, sizeof(entry->Attachment));
-  entry->View.AttachmentCount = 1u;
-  RtlCopyMemory(entry->Render, view->Render, sizeof(entry->Render));
-  RtlCopyMemory(entry->Native, view->Native, view->CommandBytes);
+  entry->Compute = compute != NULL ? TRUE : FALSE;
+  if (compute != NULL) {
+    RtlZeroMemory(&entry->View, sizeof(entry->View));
+    RtlCopyMemory(&entry->ComputeEnvelope, compute,
+                  sizeof(entry->ComputeEnvelope));
+  } else {
+    entry->View = *view;
+    entry->View.Native = NULL;
+    entry->View.Render = NULL;
+    entry->View.Attachments = NULL;
+    /* Only the colour target (attachment 0) is bound; ZLS attachments were
+     * proven at parse time and live in the copied native command. */
+    RtlCopyMemory(&entry->Attachment, view->Attachments, sizeof(entry->Attachment));
+    entry->View.AttachmentCount = 1u;
+    RtlCopyMemory(entry->Render, view->Render, sizeof(entry->Render));
+    RtlCopyMemory(entry->Native, view->Native, view->CommandBytes);
+  }
   ExAcquireFastMutex(&state->Lock);
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   if (entry->State == AdmissionG4PendingFilling &&
@@ -3258,9 +3292,12 @@ _Use_decl_annotations_ BOOLEAN AdmissionG4PendingBindHead(
   view.Render = entry->Render;
   view.Attachments = &entry->Attachment;
   RtlZeroMemory(&binding, sizeof(binding));
-  bound = AdmissionBackendImageBindG4Submission(&adapter->BackendImage,
-      &entry->Packet, (PVOID)(ULONG_PTR)entry->Packet.DestinationCpuToken,
-      &view, &binding) ? TRUE : FALSE;
+  bound = (entry->Compute ?
+      AdmissionBackendImageBindG4Compute(&adapter->BackendImage,
+          entry->Fence, &entry->ComputeEnvelope) :
+      AdmissionBackendImageBindG4Submission(&adapter->BackendImage,
+          &entry->Packet, (PVOID)(ULONG_PTR)entry->Packet.DestinationCpuToken,
+          &view, &binding)) ? TRUE : FALSE;
   if (bound) {
     context->GpuvaG3MappingGeneration = entry->MappingGeneration;
     context->GpuvaG3DmaBufferVa = entry->DmaBufferVa;
@@ -3334,6 +3371,124 @@ _Use_decl_annotations_ VOID AdmissionG4PendingDropLocked(
     }
   }
   adapter->G4PendingCount = kept;
+}
+
+/* G2: a compute envelope becomes one standalone RunCompute job. It takes
+ * the render slot exactly like a render job (one GPU job at a time, fence
+ * order, preemption, reset and TDR) but binds no destination and no private
+ * scene: its stores are process-VM accesses that the GPU MMU confines to
+ * this process's VM slot, as for Asahi drm_asahi_cmd_compute. Called with
+ * state->Lock held after the envelope-state and graph-root checks; releases
+ * the lock. */
+static NTSTATUS AdmissionG4SubmitComputeLocked(ADMISSION_CONTEXT *adapter,
+    ADMISSION_G3_STATE *state, ADMISSION_G3_PROCESS *process,
+    ADMISSION_RENDER_CONTEXT *context,
+    const DXGKARG_SUBMITCOMMANDVIRTUAL *args, BOOLEAN deferred) {
+  APPLE_AGX_G4_COMPUTE_ENVELOPE envelope;
+  APPLE_AGX_G4_COMPUTE_VIEW view;
+  APPLE_AGX_G4_PARSE_RESULT result = AppleAgxG4ParseInvalid;
+  APPLE_AGX_G4_FAILURE failure = {0};
+  struct _ADMISSION_G4_SUBMIT_FAILURE detail = {0};
+  ADMISSION_RENDER_PACKET_DESCRIPTION packet;
+  ULONGLONG mapping_generation;
+  KIRQL old_irql;
+  ULONG rollbackBranch = AdmissionG4RejectBind;
+  BOOLEAN prepared = FALSE, queued = FALSE;
+  RtlZeroMemory(&envelope, sizeof(envelope));
+  RtlZeroMemory(&view, sizeof(view));
+  /* Parse a private copy: the job runs exactly the envelope checked. */
+  if (args->DmaBufferUmdPrivateDataSize == sizeof(envelope) &&
+      args->DmaBufferPrivateDataSize >= sizeof(envelope)) {
+    RtlCopyMemory(&envelope, args->pDmaBufferPrivateData, sizeof(envelope));
+    result = AppleAgxG4ParseComputeEx(&envelope, (unsigned int)sizeof(envelope),
+        (unsigned int)sizeof(envelope), args->DmaBufferVirtualAddress,
+        args->DmaBufferSize, APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES,
+        AdmissionG4GraphAccessTyped, process, &view, &failure);
+  }
+  mapping_generation = process->Graph.MappingGeneration;
+  if (result != AppleAgxG4ParseOk)
+    AdmissionG4SnapshotFailure(process, &failure, &detail);
+  ExReleaseFastMutex(&state->Lock);
+  if (result != AppleAgxG4ParseOk)
+    return AdmissionG4SubmitRejectDetail(adapter, context, args,
+        AdmissionG4RejectParse, STATUS_INVALID_PARAMETER, (ULONG)result,
+        TRUE, &detail);
+  RtlZeroMemory(&packet, sizeof(packet));
+  packet.Kind = ADMISSION_RENDER_PACKET_KIND_COMPUTE;
+  packet.Fence = args->SubmissionFenceId;
+  packet.ContextToken = (ULONGLONG)(ULONG_PTR)context;
+  packet.AllocationToken = (ULONGLONG)(ULONG_PTR)context;
+  packet.PrivateDataToken =
+      (ULONGLONG)(ULONG_PTR)&adapter->BackendImage.G4ComputeEnvelope;
+  packet.PrivateDataBytes = (ULONG)sizeof(envelope);
+  packet.PrivateDataEnd = packet.PrivateDataBytes;
+  packet.DmaEnd = view.CommandBytes;
+  if (deferred) {
+    if (AdmissionG4PendingQueue(adapter, state, context, NULL, args,
+            &packet, NULL, &envelope, mapping_generation)) {
+      InterlockedIncrement(&adapter->SubmitPath.Deferred);
+      AdmissionDispatchQueuedWork(adapter);
+      return STATUS_SUCCESS;
+    }
+    return AdmissionG4SubmitReject(adapter, context, args,
+        AdmissionG4RejectPrepare, STATUS_INVALID_PARAMETER, 0u, TRUE);
+  }
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  if (AdmissionRenderPacketState(&adapter->RenderPacket) ==
+          AdmissionRenderPacketEmpty &&
+      adapter->G4PendingCount == 0u &&
+      context->Object.FenceOutstanding == 0u &&
+      InterlockedCompareExchange(&adapter->SchedulerFaulted, 0, 0) == 0 &&
+      AdmissionRenderPacketPrepare(&adapter->RenderPacket, &packet)) {
+    context->Object.FenceOutstanding = args->SubmissionFenceId;
+    prepared = TRUE;
+  }
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  if (!prepared)
+    return AdmissionG4SubmitReject(adapter, context, args,
+        AdmissionG4RejectPrepare, STATUS_INVALID_PARAMETER, 0u, TRUE);
+  if (!AdmissionBackendImageBindG4Compute(&adapter->BackendImage,
+          args->SubmissionFenceId, &envelope)) goto Rollback;
+  context->GpuvaG3MappingGeneration = mapping_generation;
+  context->GpuvaG3DmaBufferVa = args->DmaBufferVirtualAddress;
+  context->GpuvaG3DmaBufferBytes = args->DmaBufferSize;
+  rollbackBranch = AdmissionG4RejectQueue;
+  ExAcquireFastMutex(&state->Lock);
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  if (AdmissionRenderPacketQueue(&adapter->RenderPacket,
+          args->SubmissionFenceId, (ULONGLONG)(ULONG_PTR)context,
+          packet.PrivateDataToken, 0u, packet.DmaEnd)) {
+    if (AppleAgxSchedulerQueueFence(&adapter->Scheduler, 0u, 0u,
+            args->SubmissionFenceId))
+      queued = TRUE;
+    else
+      (void)AdmissionRenderPacketReset(&adapter->RenderPacket,
+          args->SubmissionFenceId, 0u);
+  }
+  if (!queued) AdmissionContextRetireFence(context, args->SubmissionFenceId);
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  ExReleaseFastMutex(&state->Lock);
+  if (queued) {
+    InterlockedIncrement(&adapter->SubmitPath.Immediate);
+    AdmissionDispatchQueuedWork(adapter);
+    return STATUS_SUCCESS;
+  }
+Rollback:
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  if (AdmissionRenderPacketState(&adapter->RenderPacket) ==
+          AdmissionRenderPacketPrepared)
+    (void)AdmissionRenderPacketCancelPrepared(&adapter->RenderPacket,
+        (ULONGLONG)(ULONG_PTR)context);
+  AdmissionContextRetireFence(context, args->SubmissionFenceId);
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  AdmissionPlatformRuntimeSlotChanged(adapter);
+  context->GpuvaG3DmaBufferVa = 0ULL;
+  context->GpuvaG3DmaBufferBytes = 0u;
+  if (adapter->BackendImage.G4Compute)
+    (void)AdmissionBackendImageReleaseSubmission(&adapter->BackendImage,
+        args->SubmissionFenceId);
+  return AdmissionG4SubmitReject(adapter, context, args,
+      rollbackBranch, STATUS_INVALID_PARAMETER, 0u, TRUE);
 }
 
 static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
@@ -3419,6 +3574,13 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
     return AdmissionG4SubmitReject(adapter, context, args,
         AdmissionG4RejectRoot, STATUS_INVALID_PARAMETER, 0u, TRUE);
   }
+  /* G2: the compute envelope (private version 4) is a standalone job. */
+  if (args->pDmaBufferPrivateData != NULL &&
+      args->DmaBufferPrivateDataSize >= args->DmaBufferUmdPrivateDataSize &&
+      AppleAgxG4IsCompute(args->pDmaBufferPrivateData,
+                          args->DmaBufferUmdPrivateDataSize))
+    return AdmissionG4SubmitComputeLocked(adapter, state, process, context,
+                                          args, deferred);
   if (args->pDmaBufferPrivateData && args->DmaBufferUmdPrivateDataSize>=sizeof(private_header) &&
       args->DmaBufferPrivateDataSize>=args->DmaBufferUmdPrivateDataSize) {
     RtlCopyMemory(&private_header,args->pDmaBufferPrivateData,sizeof(private_header));
@@ -3555,7 +3717,7 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
         TRUE, &detail);
   if (deferred) {
     if (AdmissionG4PendingQueue(adapter, state, context, private_scene, args,
-            &packet, &view, mapping_generation)) {
+            &packet, &view, NULL, mapping_generation)) {
       InterlockedIncrement(&adapter->SubmitPath.Deferred);
       AdmissionDispatchQueuedWork(adapter);
       return STATUS_SUCCESS;

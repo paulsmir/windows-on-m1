@@ -381,6 +381,23 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
   return APPLE_AGX_TRUE;
 }
 
+APPLE_AGX_BOOL AdmissionBackendImageBindG4Compute(
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence,
+    const APPLE_AGX_G4_COMPUTE_ENVELOPE *Envelope) {
+  if (Image == 0 || Envelope == 0 || Fence == 0u ||
+      Image->Ready != APPLE_AGX_TRUE || Image->BoundFence != 0u ||
+      Image->G4Native || Image->G4Compute || Image->NativeBound ||
+      Image->JobReady || Image->JobFence != 0u ||
+      Envelope->Header.Base.Version != APPLE_AGX_G4_PRIVATE_VERSION_COMPUTE ||
+      Envelope->Native.Type != APPLE_AGX_G4_COMPUTE)
+    return APPLE_AGX_FALSE;
+  memcpy(&Image->G4ComputeEnvelope, Envelope, sizeof(*Envelope));
+  AdmissionBackendBindingZero(&Image->Binding);
+  Image->G4Compute = APPLE_AGX_TRUE;
+  Image->BoundFence = Fence;
+  return APPLE_AGX_TRUE;
+}
+
 APPLE_AGX_BOOL AdmissionBackendImageCaptureOutput(
     const ADMISSION_BACKEND_IMAGE *Image,
     const ADMISSION_RENDER_PACKET_DESCRIPTION *Packet,
@@ -495,6 +512,15 @@ APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmission(
       Image->Ready != APPLE_AGX_TRUE || Fence == 0u ||
       Image->BoundFence != Fence)
     return APPLE_AGX_FALSE;
+  if (Image->G4Compute) {
+    /* The arena was never touched: only the binding goes. */
+    memset(&Image->G4ComputeEnvelope, 0, sizeof(Image->G4ComputeEnvelope));
+    Image->G4Compute = APPLE_AGX_FALSE;
+    Image->BoundFence = 0u;
+    Image->JobFence = 0u;
+    Image->JobReady = APPLE_AGX_FALSE;
+    return APPLE_AGX_TRUE;
+  }
   if (Image->G4Native) {
     ADMISSION_LOCAL_MEMORY_VIEW backend;
     APPLE_AGX_U32 sequence = Image->Sequence;
@@ -671,7 +697,7 @@ APPLE_AGX_BOOL AdmissionBackendImageStageJob(
   if (Image == ADMISSION_BACKEND_IMAGE_NULL ||
       Job == ADMISSION_BACKEND_IMAGE_NULL ||
       Image->Ready != APPLE_AGX_TRUE || Image->JobReady ||
-      Fence == 0u || Image->BoundFence != Fence ||
+      Fence == 0u || Image->BoundFence != Fence || Image->G4Compute ||
       Image->Sequence == 0xffffffffu)
     return APPLE_AGX_FALSE;
   dynamic_input.Sequence = Image->Sequence + 1u;

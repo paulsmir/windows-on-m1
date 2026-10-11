@@ -48,6 +48,7 @@ class G4SubmitVirtualReplay(unittest.TestCase):
             "AdmissionGpuvaG3PrivateCancel", "AdmissionG4PendingAdmissible",
             "AdmissionG4PendingQueue", "AdmissionG4PendingBindHead",
             "AdmissionG4PendingDropLocked",
+            "AdmissionG4SubmitComputeLocked",
             "AdmissionG4SubmitVirtualEnvelope",
             "AdmissionG3OutputMatchesLocal", "AdmissionGpuvaG3BeginJob", "AdmissionG4SubmitTouch",
             "AdmissionDdiSubmitCommandVirtualInner",

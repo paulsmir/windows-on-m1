@@ -567,6 +567,10 @@ typedef struct _ADMISSION_G4_PENDING {
   APPLE_AGX_G4_ATTACHMENT Attachment;
   unsigned char Render[sizeof(APPLE_AGX_G4_NATIVE_RENDER)];
   unsigned char Native[APPLE_AGX_G4_NATIVE_MAX_BYTES];
+  /* G2: a compute entry binds this envelope; View, Attachment, Render and
+   * Native are unused. */
+  BOOLEAN Compute;
+  APPLE_AGX_G4_COMPUTE_ENVELOPE ComputeEnvelope;
 } ADMISSION_G4_PENDING;
 
 typedef struct _ADMISSION_CONTEXT {

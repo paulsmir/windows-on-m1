@@ -8,6 +8,10 @@
 #include "apple_agx_software_aperture.h"
 
 #define ADMISSION_MEMORY_UAT_CONTEXT 63u
+/* GPUVA: the firmware VM slot that m1n1 leases to the process graph of the
+ * job on the GPU (JOB_BEGIN); the template arena selects the same slot and
+ * a standalone compute job runs in it. */
+#define ADMISSION_GPUVA_G3_JOB_VM_SLOT 1u
 #define ADMISSION_MEMORY_APERTURE_SEGMENT 1u
 #define ADMISSION_MEMORY_LOCAL_SEGMENT 2u
 
