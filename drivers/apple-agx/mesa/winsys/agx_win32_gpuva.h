@@ -10,6 +10,10 @@ extern "C" {
 
 #define AGX_GPUVA_MAP_WRITE 1u
 #define AGX_GPUVA_MAP_EXECUTE 2u
+/* EXP1203: submissions that may be in flight at once (the newest included).
+ * Must equal ADMISSION_UMD_IN_FLIGHT_SETS (umd_internal.h): the UMD lets a
+ * slot join a new submission while fewer than this many sets hold it. */
+#define AGX_GPUVA_IN_FLIGHT 4u
 
 /* Host-testable boundary around WDDM callbacks. Return 0 on failure, 1 for
  * completed work, 2 for pending work. Map and MakeResident may return 3 after uncertain
@@ -51,9 +55,13 @@ typedef struct {
   uint64_t *Held;
   uint64_t RenderFence;
   unsigned HeldCount;
-  /* EXP1093: at most one older submission may still be in flight; it is
-   * retired first (GPU order) and before a third submission starts. */
-  AGX_WIN32_GPUVA_SET Older;
+  /* EXP1093: older submissions still in flight behind the newest one,
+   * oldest first; they retire in this (GPU) order. EXP1203: up to
+   * AGX_GPUVA_IN_FLIGHT submissions in flight (was two): CS 1.6 submits
+   * three per frame, so with two every frame waited for its own previous
+   * submission. A submission needs a free older slot. */
+  AGX_WIN32_GPUVA_SET Older[AGX_GPUVA_IN_FLIGHT - 1u];
+  unsigned OlderCount;
   unsigned Terminal;
   unsigned LastFailure; /* diagnostic: source line of the last refused call */
   unsigned LastDetail;  /* diagnostic: MakeResident/Submit callback result */

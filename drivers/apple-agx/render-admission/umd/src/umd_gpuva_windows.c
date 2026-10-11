@@ -385,10 +385,12 @@ static int make_resident(void *context, const uint64_t *tokens,
     if(device->ScreenBuffers[i].CopyHeld) valid=false;
   for(unsigned i=0;valid && i<count;++i) {
     auto *slot=find_slot(device,tokens[i]);
-    /* EXP1093: at most the one other submission still in flight may hold it
-     * (the winsys retires the older one before a new submission). */
+    /* EXP1093: only the other submissions still in flight may hold it
+     * (EXP1203: at most ADMISSION_UMD_IN_FLIGHT_SETS - 1; the winsys
+     * retires the oldest one before a new submission). */
     valid=slot && !slot->Transition && !slot->CopyHeld &&
-        !slot->SourceHolds && slot->SubmissionHolds<=1u &&
+        !slot->SourceHolds &&
+        slot->SubmissionHolds<ADMISSION_UMD_IN_FLIGHT_SETS &&
         (slot->StagingAllocation || slot->PrivateStaging || slot->Direct ||
          slot->SystemDirect) &&
         slot->CanonicalGpuVa &&

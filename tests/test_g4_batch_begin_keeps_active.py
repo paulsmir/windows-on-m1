@@ -20,12 +20,13 @@ appends to it instead of starting another pass. Invariants:
 - EXP1082: a submission still running on the GPU (its fence not signalled)
   is neither waited for nor retired by Begin; it stays submitted and holding
   while the next batch is built.
-- EXP1093: two submissions may be in flight (EXP1090: 26 % of DWM's wall
-  time was the wait for the previous submission before each one). A
-  submission waits only for the older of the two, in GPU (FIFO) order; a
-  third is never submitted while two are in flight; retiring the newest
-  set (a CPU map, native_map) retires the older one first; the older one
-  alone can be retired, leaving the newest in flight.
+- EXP1093/EXP1203: up to AGX_GPUVA_IN_FLIGHT submissions may be in flight
+  (EXP1090: 26 % of DWM's wall time was the wait for the previous
+  submission before each one; EXP1203: CS 1.6 submits three per frame). A
+  submission waits only when all are in flight, and then only for the
+  oldest, in GPU (FIFO) order; retiring the newest set (a CPU map,
+  native_map) retires the older ones first; an older one alone can be
+  retired, leaving the newer ones in flight.
 The space functions are the real winsys ones (agx_win32_gpuva.c).
 """
 from pathlib import Path
@@ -50,7 +51,7 @@ PROGRAM = r'''
 #include <stddef.h>
 #include <string.h>
 #include "agx_win32_gpuva.h"
-#define AGX_MAX_BATCHES 4
+#define AGX_MAX_BATCHES 8
 #define BITSET_TEST(set, i) ((((set)[(i) / 32u]) >> ((i) % 32u)) & 1u)
 #define BITSET_CLEAR(set, i) ((set)[(i) / 32u] &= ~(1u << ((i) % 32u)))
 #define BITSET_SET(set, i) ((set)[(i) / 32u] |= (1u << ((i) % 32u)))
@@ -109,13 +110,15 @@ static void agx_sync_batch(struct agx_context *ctx, struct agx_batch *batch) {
 @@SPACE@@
 @@FUNCTIONS@@
 /* Mirrors AgxWin32AsahiBatchFinish + AgxWin32GpuvaSubmit: room is made by
- * retiring the older in-flight submission; the space refuses a third. */
+ * retiring the oldest in-flight submission; the space refuses a submission
+ * without a free older slot. */
+#define DEPTH AGX_GPUVA_IN_FLIGHT
 static int submit(AGX_WIN32_ASAHI_BACKEND *b, struct agx_batch *batch, uint64_t fence) {
-  if (!retire_held(batch, b) || b->Gpuva.Older.Handles || b->Gpuva.Terminal) return 0;
+  if (!retire_held(batch, b) || b->Gpuva.OlderCount == DEPTH - 1u || b->Gpuva.Terminal) return 0;
   capsule(batch)->Lease = (APPLE_AGX_G4_PRIVATE_LEASE){1, 1, fence, 1}; ++live_leases;
   if (b->Gpuva.Held) {  /* gpuva_shift */
-    b->Gpuva.Older.Handles = b->Gpuva.Held; b->Gpuva.Older.Count = b->Gpuva.HeldCount;
-    b->Gpuva.Older.Fence = b->Gpuva.RenderFence;
+    AGX_WIN32_GPUVA_SET *o = &b->Gpuva.Older[b->Gpuva.OlderCount++];
+    o->Handles = b->Gpuva.Held; o->Count = b->Gpuva.HeldCount; o->Fence = b->Gpuva.RenderFence;
   }
   b->Gpuva.Held = calloc(1, sizeof(uint64_t)); b->Gpuva.HeldCount = 1; b->Gpuva.RenderFence = fence;
   AGX_G4_BATCH *g = capsule(batch); g->Submitted = 1; g->Fence = fence;
@@ -143,24 +146,30 @@ int main(void) {
   /* A opens, then B opens while A is still active: A is not flushed. */
   assert(open_batch(&ctx, 0) && open_batch(&ctx, 1));
   assert(flushes == 0 && slots[0].windows_batch && slots[1].windows_batch);
-  /* agx_flush_all: A then B back to back, the GPU still running A: B is
-   * submitted without waiting for A; both are in flight, A the older. */
+  /* agx_flush_all: batches submitted back to back while the GPU runs none
+   * of them: DEPTH submissions stay in flight without a wait, oldest first. */
   completed_fence = 9;
-  assert(submit(&backend, &slots[0], 10) && submit(&backend, &slots[1], 11));
-  assert(evicts == 0 && waits == 0 && live_leases == 2 && !capsule(&slots[0])->Retired);
-  assert(backend.Gpuva.Older.Fence == 10 && backend.Gpuva.RenderFence == 11);
-  /* C opens: both still running, both kept. */
-  assert(open_batch(&ctx, 2) && evicts == 0 && slots[0].windows_batch && slots[1].windows_batch);
-  /* C's submission waits for A only, in GPU order; B stays in flight. */
-  assert(submit(&backend, &slots[2], 12));
+  for (unsigned i = 0; i < DEPTH; ++i) {
+    if (i >= 2u) assert(open_batch(&ctx, i));
+    assert(submit(&backend, &slots[i], 10u + i));
+  }
+  assert(evicts == 0 && waits == 0 && live_leases == DEPTH && !capsule(&slots[0])->Retired);
+  assert(backend.Gpuva.OlderCount == DEPTH - 1u && backend.Gpuva.Older[0].Fence == 10 &&
+         backend.Gpuva.RenderFence == 10u + DEPTH - 1u);
+  /* Another opens: all still running, all kept. */
+  assert(open_batch(&ctx, DEPTH) && evicts == 0 && slots[0].windows_batch && slots[1].windows_batch);
+  /* Its submission waits for the oldest only, in GPU order. */
+  assert(submit(&backend, &slots[DEPTH], 10u + DEPTH));
   assert(evicts == 1 && waits == 1 && capsule(&slots[0])->Retired && !capsule(&slots[1])->Retired);
-  assert(live_leases == 2 && backend.Gpuva.Older.Fence == 11 && backend.Gpuva.RenderFence == 12);
-  /* Everything completes: the next Begin retires B then C and cleans up A, B, C. */
-  completed_fence = 12;
-  assert(open_batch(&ctx, 3));
-  assert(evicts == 3 && !backend.Gpuva.Held && !backend.Gpuva.Older.Handles && live_leases == 0);
-  assert(!slots[0].windows_batch && !slots[1].windows_batch && !slots[2].windows_batch);
-  free(slots[3].windows_batch); slots[3].windows_batch = NULL; BITSET_CLEAR(ctx.batches.active, 3);
+  assert(live_leases == DEPTH && backend.Gpuva.Older[0].Fence == 11 &&
+         backend.Gpuva.RenderFence == 10u + DEPTH);
+  /* Everything completes: the next Begin retires and cleans up every one. */
+  completed_fence = 10u + DEPTH;
+  assert(open_batch(&ctx, DEPTH + 1u));
+  assert(evicts == DEPTH + 1u && !backend.Gpuva.Held && !backend.Gpuva.OlderCount && live_leases == 0);
+  for (unsigned i = 0; i <= DEPTH; ++i) assert(!slots[i].windows_batch);
+  free(slots[DEPTH + 1u].windows_batch); slots[DEPTH + 1u].windows_batch = NULL;
+  BITSET_CLEAR(ctx.batches.active, DEPTH + 1u);
   /* D and E submitted, the GPU on neither. */
   completed_fence = 19;
   assert(open_batch(&ctx, 3) && submit(&backend, &slots[3], 20));
@@ -171,7 +180,7 @@ int main(void) {
    * retired, and a later Begin waits only for their fences. */
   assert(AgxWin32GpuvaFenceHeld(&backend.Gpuva, 20) && AgxWin32GpuvaFenceHeld(&backend.Gpuva, 21));
   assert(AgxWin32GpuvaRetire(&backend.Gpuva, 21));
-  assert(evicts == before + 2 && !backend.Gpuva.Held && !backend.Gpuva.Older.Handles);
+  assert(evicts == before + 2 && !backend.Gpuva.Held && !backend.Gpuva.OlderCount);
   assert(!AgxWin32GpuvaFenceHeld(&backend.Gpuva, 20) && !capsule(&slots[3])->Retired);
   assert(open_batch(&ctx, 1) && !slots[3].windows_batch && !slots[0].windows_batch);
   assert(evicts == before + 2 && waits == waited + 4 && live_leases == 0);
@@ -180,34 +189,38 @@ int main(void) {
   assert(submit(&backend, &slots[1], 30));
   assert(open_batch(&ctx, 2) && submit(&backend, &slots[2], 31));
   assert(AgxWin32GpuvaRetire(&backend.Gpuva, 30));
-  assert(backend.Gpuva.Held && backend.Gpuva.RenderFence == 31 && !backend.Gpuva.Older.Handles);
+  assert(backend.Gpuva.Held && backend.Gpuva.RenderFence == 31 && !backend.Gpuva.OlderCount);
   /* A fence that no in-flight set has is refused. */
   assert(!AgxWin32GpuvaRetire(&backend.Gpuva, 30) && !AgxWin32GpuvaRetire(&backend.Gpuva, 32));
   completed_fence = 31;
   assert(open_batch(&ctx, 3) && !slots[1].windows_batch && !slots[2].windows_batch);
   assert(!backend.Gpuva.Held && live_leases == 0 && flushes == 0);
   /* EXP1161: a second GL context on the same screen submits; this context's
-   * Begin and submission are not refused. Room for a third submission is
-   * made by retiring the other context's older set through the space; that
-   * batch then retires by its fence without a second eviction. */
+   * Begin and submissions are not refused. Room for one more submission is
+   * made by retiring the other context's (oldest) set through the space;
+   * that batch then retires by its fence without a second eviction. */
   struct agx_batch other_slots[AGX_MAX_BATCHES];
   struct agx_context other = {{&screen}, 0, {other_slots, {0}, {0}}};
   for (unsigned i = 0; i < AGX_MAX_BATCHES; ++i) other_slots[i] = (struct agx_batch){&other, NULL, {&vdm}};
   completed_fence = 39;
   assert(open_batch(&other, 0) && submit(&backend, &other_slots[0], 40));
-  assert(open_batch(&ctx, 0) && submit(&backend, &slots[0], 41));
-  assert(backend.Gpuva.Older.Fence == 40 && backend.Gpuva.RenderFence == 41);
+  for (unsigned i = 0; i + 1u < DEPTH; ++i)
+    assert(open_batch(&ctx, i) && submit(&backend, &slots[i], 41u + i));
+  assert(backend.Gpuva.Older[0].Fence == 40 && backend.Gpuva.RenderFence == 40u + DEPTH - 1u);
   unsigned foreign_evicts = evicts;
-  assert(submit(&backend, &slots[3], 42));
-  assert(evicts == foreign_evicts + 1 && backend.Gpuva.Older.Fence == 41 && backend.Gpuva.RenderFence == 42);
+  assert(open_batch(&ctx, DEPTH) && submit(&backend, &slots[DEPTH], 40u + DEPTH));
+  assert(evicts == foreign_evicts + 1 && backend.Gpuva.Older[0].Fence == 41 &&
+         backend.Gpuva.RenderFence == 40u + DEPTH);
   assert(!capsule(&other_slots[0])->Retired);
   assert(AgxWin32AsahiBatchPoll(&other_slots[0], 1000) && capsule(&other_slots[0])->Retired);
   assert(evicts == foreign_evicts + 1);
-  completed_fence = 42;
-  assert(open_batch(&ctx, 1) && !slots[0].windows_batch && !slots[3].windows_batch);
-  assert(!backend.Gpuva.Held && !backend.Gpuva.Older.Handles && live_leases == 0);
+  completed_fence = 40u + DEPTH;
+  assert(open_batch(&ctx, DEPTH + 1u));
+  for (unsigned i = 0; i + 1u < DEPTH; ++i) assert(!slots[i].windows_batch);
+  assert(!slots[DEPTH].windows_batch);
+  assert(!backend.Gpuva.Held && !backend.Gpuva.OlderCount && live_leases == 0);
   free(other_slots[0].windows_batch);
-  free(slots[1].windows_batch);
+  free(slots[DEPTH + 1u].windows_batch);
   puts("PASS");
   return 0;
 }
@@ -242,14 +255,22 @@ class BatchBeginKeepsActive(unittest.TestCase):
         finish = body(source, "AgxWin32AsahiBatchFinish")
         self.assertLess(finish.index("retire_held(batch,b)"), finish.index("prepare_process_buffers("))
 
-    def test_space_bounds_the_depth_at_two(self):
+    def test_space_bounds_the_depth(self):
         space = SPACE.read_text()
         submit = body(space, "AgxWin32GpuvaSubmit")
-        # A third submission is refused while two are in flight; the newest
-        # set becomes the older one on every path that installs a new Held.
-        self.assertIn("space->Terminal || space->Older.Handles) return gpuva_refuse", submit)
+        # A submission without a free older slot is refused; the newest set
+        # becomes an older one on every path that installs a new Held.
+        self.assertIn("space->OlderCount == AGX_GPUVA_IN_FLIGHT - 1u)", submit)
         self.assertEqual(submit.count("gpuva_shift(space);"), submit.count("space->Held = handles;"))
-        self.assertIn("space->Older.Handles ||", body(space, "AgxWin32GpuvaUnbind"))
+        self.assertIn("space->OlderCount ||", body(space, "AgxWin32GpuvaUnbind"))
+        # The UMD lets a slot join a submission while fewer than the depth
+        # hold it; the two bounds must agree.
+        umd = (ROOT / "drivers/apple-agx/render-admission/umd/src/umd_internal.h").read_text()
+        header = (ROOT / "drivers/apple-agx/mesa/winsys/agx_win32_gpuva.h").read_text()
+        import re
+        a = re.search(r"#define AGX_GPUVA_IN_FLIGHT (\d+)u", header).group(1)
+        b = re.search(r"#define ADMISSION_UMD_IN_FLIGHT_SETS (\d+)u", umd).group(1)
+        self.assertEqual(a, b)
 
 
 if __name__ == "__main__":

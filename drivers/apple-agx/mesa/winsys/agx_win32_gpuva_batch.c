@@ -117,20 +117,23 @@ static struct agx_batch *submitted_at(struct agx_batch *batch,uint64_t fence) {
   return NULL;
 }
 /* EXP1071: several open batches may be flushed back to back (agx_flush_all).
- * EXP1093: two submissions may be in flight (EXP1090: 26 % of DWM's wall
- * time waited for the previous one before each submission). Make room by
- * retiring (waiting for) the older one only; the newest stays in flight
- * while this batch submits.
+ * EXP1093: several submissions may be in flight (EXP1090: 26 % of DWM's
+ * wall time waited for the previous one before each submission; EXP1203:
+ * AGX_GPUVA_IN_FLIGHT). Make room by retiring (waiting for) the oldest one
+ * only; the newer ones stay in flight while this batch submits.
  * EXP1161: under WGL several GL contexts share one screen, its G4 context
  * and fence timeline, so a set may belong to another context's batch; it is
  * retired through the space by its fence, as a CPU map does (native_map),
  * and that batch later retires by the same fence. */
 static int retire_held(struct agx_batch *batch,AGX_WIN32_ASAHI_BACKEND *b) {
-  if(!b->Gpuva.Older.Handles) return 1;
-  struct agx_batch *old=submitted_at(batch,b->Gpuva.Older.Fence);
-  if(!old) return AgxWin32GpuvaRetire(&b->Gpuva,b->Gpuva.Older.Fence) &&
-                  !b->Gpuva.Older.Handles;
-  return AgxWin32AsahiBatchPoll(old,1000) && !b->Gpuva.Older.Handles;
+  /* EXP1203: room is needed only when every older slot is taken. */
+  if(b->Gpuva.OlderCount<AGX_GPUVA_IN_FLIGHT-1u) return 1;
+  uint64_t oldest=b->Gpuva.Older[0].Fence;
+  struct agx_batch *old=submitted_at(batch,oldest);
+  if(!old) return AgxWin32GpuvaRetire(&b->Gpuva,oldest) &&
+                  b->Gpuva.OlderCount<AGX_GPUVA_IN_FLIGHT-1u;
+  return AgxWin32AsahiBatchPoll(old,1000) &&
+         b->Gpuva.OlderCount<AGX_GPUVA_IN_FLIGHT-1u;
 }
 
 int AgxWin32AsahiBatchBegin(struct agx_batch *batch) {

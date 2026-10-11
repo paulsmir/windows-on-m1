@@ -8,8 +8,8 @@ residency sets. Invariants:
   underflows;
 - a queued submission drops CopyHeld (only the submission being built holds
   it) and records the fence the slot was last used with;
-- a slot may join a new submission while the one other in-flight set holds
-  it, never while two do;
+- a slot may join a new submission while the other in-flight sets hold it
+  (EXP1203: fewer than ADMISSION_UMD_IN_FLIGHT_SETS), never while that many do;
 - an upload into a slot that the other in-flight submission still holds
   waits for that submission's fence before the copy overwrites the canonical
   copy; a download, an unchanged slot or an unheld slot does not wait.
@@ -90,7 +90,9 @@ class TwoInFlightHolds(unittest.TestCase):
         text = SRC.read_text()
         flat = lambda s: re.sub(r'\s+', '', s)
         resident = flat(function(text, 'make_resident'))
-        self.assertIn('slot->SubmissionHolds<=1u', resident)
+        # EXP1203: fewer than ADMISSION_UMD_IN_FLIGHT_SETS in-flight sets may hold a
+        # slot that joins a new submission (EXP1093 depth 2: at most one).
+        self.assertIn('slot->SubmissionHolds<ADMISSION_UMD_IN_FLIGHT_SETS', resident)
         self.assertIn('slot->CopyHeld=TRUE;++slot->SubmissionHolds;', resident)
         transfer = flat(function(text, 'transfer_slot'))
         wait = transfer.index('if(!download&&slot->SubmissionHolds>1u&&slot->LastUseFence&&'

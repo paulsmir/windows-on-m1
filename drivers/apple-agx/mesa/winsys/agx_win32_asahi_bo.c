@@ -192,9 +192,10 @@ static int dispose(struct windows_bo *bo) {
 static int cache_in_flight(const AGX_WIN32_ASAHI_BACKEND *b,const struct windows_bo *bo) {
   for(unsigned i=0;b->Gpuva.Held && i<b->Gpuva.HeldCount;++i)
     if(b->Gpuva.Held[i]==bo->Gpuva.Allocation) return 1;
-  /* EXP1093: and the older submission still in flight. */
-  for(unsigned i=0;b->Gpuva.Older.Handles && i<b->Gpuva.Older.Count;++i)
-    if(b->Gpuva.Older.Handles[i]==bo->Gpuva.Allocation) return 1;
+  /* EXP1093: and the older submissions still in flight. */
+  for(unsigned k=0;k<b->Gpuva.OlderCount;++k)
+    for(unsigned i=0;i<b->Gpuva.Older[k].Count;++i)
+      if(b->Gpuva.Older[k].Handles[i]==bo->Gpuva.Allocation) return 1;
   return 0;
 }
 /* Cache[] is kept in release order, oldest first. A refused dispose leaves

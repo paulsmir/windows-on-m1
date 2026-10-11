@@ -20,6 +20,12 @@
  * EXP749 measured47 live executables plus resources reaching the old64 slots.
  * This is the device registry, not the per-command reference/wire limit. */
 #define ADMISSION_UMD_SCREEN_BUFFER_LIMIT AGX_WIN32_CONSTRUCTION_MAX_OBJECTS
+/* EXP1203: submissions that may be in flight at once (the newest included);
+ * equals AGX_GPUVA_IN_FLIGHT (agx_win32_gpuva.h). When a submission is
+ * built at most ADMISSION_UMD_IN_FLIGHT_SETS - 1 others are in flight (the
+ * winsys retires the oldest first), so a slot may join it while fewer than
+ * ADMISSION_UMD_IN_FLIGHT_SETS sets hold it. */
+#define ADMISSION_UMD_IN_FLIGHT_SETS 4u
 /* EXP1061: live slots stay below ScreenBufferHighWater (FreeSlot hands out
  * the lowest free index), so a scan costs the peak live count, not capacity. */
 #define ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device) ((Device)->ScreenBufferHighWater)

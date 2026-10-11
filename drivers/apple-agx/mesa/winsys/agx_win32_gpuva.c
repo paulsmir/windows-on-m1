@@ -67,7 +67,7 @@ int AgxWin32GpuvaBind(AGX_WIN32_GPUVA_SPACE *space, AGX_WIN32_GPUVA_BO *bo,
 int AgxWin32GpuvaUnbind(AGX_WIN32_GPUVA_SPACE *space,
                         AGX_WIN32_GPUVA_BO *bo) {
   if (!space || !bo || !bo->Bound || space->Terminal || space->Held ||
-      space->Older.Handles ||
+      space->OlderCount ||
       !space->Ops.Free(space->Context, bo->Va, bo->Bytes)) return 0;
   memset(bo, 0, sizeof(*bo));
   return 1;
@@ -79,13 +79,14 @@ static int gpuva_refuse(AGX_WIN32_GPUVA_SPACE *space, unsigned line) {
   return 0;
 }
 
-/* EXP1093: the newest in-flight submission becomes the older one (the caller
- * guaranteed Older is free). */
+/* EXP1093: the newest in-flight submission becomes the newest older one
+ * (the caller guaranteed a free older slot). */
 static void gpuva_shift(AGX_WIN32_GPUVA_SPACE *space) {
   if (!space->Held) return;
-  space->Older.Handles = space->Held;
-  space->Older.Count = space->HeldCount;
-  space->Older.Fence = space->RenderFence;
+  AGX_WIN32_GPUVA_SET *older = &space->Older[space->OlderCount++];
+  older->Handles = space->Held;
+  older->Count = space->HeldCount;
+  older->Fence = space->RenderFence;
   space->Held = NULL;
   space->HeldCount = 0;
   space->RenderFence = 0;
@@ -106,7 +107,8 @@ int AgxWin32GpuvaSubmit(AGX_WIN32_GPUVA_SPACE *space,
       !command || !command->Bound || !command_bytes ||
       command_bytes > command->Bytes || !private_data || !private_bytes ||
       !completion || (written_count && !written) || written_count > count ||
-      space->Terminal || space->Older.Handles) return gpuva_refuse(space, __LINE__);
+      space->Terminal || space->OlderCount == AGX_GPUVA_IN_FLIGHT - 1u)
+    return gpuva_refuse(space, __LINE__);
   handles = malloc((size_t)count * sizeof(*handles));
   if (!handles) return gpuva_refuse(space, __LINE__);
   for (unsigned i = 0; i < count; ++i) {
@@ -187,21 +189,30 @@ int AgxWin32GpuvaSubmit(AGX_WIN32_GPUVA_SPACE *space,
 }
 
 int AgxWin32GpuvaRetire(AGX_WIN32_GPUVA_SPACE *space, uint64_t completion) {
+  unsigned upto = 0;
+  int held;
   if (!space || !completion || space->Terminal) return 0;
-  /* EXP1093: the older submission completes (and retires) first. */
-  if (space->Older.Handles) {
-    if (completion != space->Older.Fence &&
-        (!space->Held || completion != space->RenderFence)) return 0;
-    if (!space->Ops.WaitRender(space->Context, space->Older.Fence)) return 0;
-    if (!space->Ops.Evict(space->Context, space->Older.Handles, space->Older.Count)) {
+  held = space->Held && completion == space->RenderFence;
+  if (held) upto = space->OlderCount;
+  else {
+    while (upto < space->OlderCount && space->Older[upto].Fence != completion) ++upto;
+    if (upto == space->OlderCount) return 0;  /* not an in-flight submission */
+    ++upto;
+  }
+  /* EXP1093: older submissions complete (and retire) first, in GPU order. */
+  while (upto--) {
+    AGX_WIN32_GPUVA_SET *oldest = &space->Older[0];
+    if (!space->Ops.WaitRender(space->Context, oldest->Fence)) return 0;
+    if (!space->Ops.Evict(space->Context, oldest->Handles, oldest->Count)) {
       space->Terminal = 1;
       return 0;
     }
-    free(space->Older.Handles);
-    memset(&space->Older, 0, sizeof(space->Older));
-    if (completion != space->RenderFence || !space->Held) return 1;
+    free(oldest->Handles);
+    memmove(&space->Older[0], &space->Older[1],
+            (size_t)(--space->OlderCount) * sizeof(space->Older[0]));
+    memset(&space->Older[space->OlderCount], 0, sizeof(space->Older[0]));
   }
-  if (!space->Held || completion != space->RenderFence) return 0;
+  if (!held) return 1;
   if (!space->Ops.WaitRender(space->Context, completion)) return 0;
   if (!space->Ops.Evict(space->Context, space->Held, space->HeldCount)) {
     space->Terminal = 1;
@@ -228,14 +239,17 @@ uint64_t AgxWin32GpuvaHoldingFence(const AGX_WIN32_GPUVA_SPACE *space,
   if (!space || !allocation) return 0;
   for (unsigned i = 0; space->Held && i < space->HeldCount; ++i)
     if (space->Held[i] == allocation) return space->RenderFence;
-  for (unsigned i = 0; space->Older.Handles && i < space->Older.Count; ++i)
-    if (space->Older.Handles[i] == allocation) return space->Older.Fence;
+  for (unsigned k = space->OlderCount; k--;)   /* newest older first */
+    for (unsigned i = 0; i < space->Older[k].Count; ++i)
+      if (space->Older[k].Handles[i] == allocation) return space->Older[k].Fence;
   return 0;
 }
 
 int AgxWin32GpuvaFenceHeld(const AGX_WIN32_GPUVA_SPACE *space,
                            uint64_t completion) {
-  return space && completion &&
-         ((space->Held && completion == space->RenderFence) ||
-          (space->Older.Handles && completion == space->Older.Fence));
+  if (!space || !completion) return 0;
+  if (space->Held && completion == space->RenderFence) return 1;
+  for (unsigned k = 0; k < space->OlderCount; ++k)
+    if (space->Older[k].Fence == completion) return 1;
+  return 0;
 }

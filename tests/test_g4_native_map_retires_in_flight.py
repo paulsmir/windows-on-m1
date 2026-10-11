@@ -38,8 +38,9 @@ PROGRAM = r'''
 #include <stdlib.h>
 #define APPLE_AGX_GPUVA_WINSYS 1
 typedef struct { uint64_t Allocation; unsigned Bound; } AGX_WIN32_GPUVA_BO;
+typedef struct { uint64_t *Handles; unsigned Count; uint64_t Fence; } AGX_WIN32_GPUVA_SET;
 typedef struct { uint64_t *Held; unsigned HeldCount; uint64_t RenderFence;
-  struct { uint64_t *Handles; unsigned Count; uint64_t Fence; } Older; } AGX_WIN32_GPUVA_SPACE;
+  AGX_WIN32_GPUVA_SET Older[3]; unsigned OlderCount; } AGX_WIN32_GPUVA_SPACE;
 typedef struct { int Failed; struct { void *Screen; } Buffers; AGX_WIN32_GPUVA_SPACE Gpuva; } AGX_WIN32_ASAHI_BACKEND;
 typedef struct { int unused; } AGX_WIN32_NATIVE_BO;
 struct agx_device { void *windows_private; };

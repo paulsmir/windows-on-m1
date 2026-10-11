@@ -48,7 +48,8 @@ typedef unsigned long long APPLE_AGX_U64; typedef unsigned APPLE_AGX_U32;
 @@LIMITS@@
 struct agx_bo { size_t size; unsigned flags; int refcnt; };
 typedef struct { uint64_t Allocation, Va, Bytes; unsigned Bound; } AGX_WIN32_GPUVA_BO;
-typedef struct { uint64_t *Held; unsigned HeldCount; struct { uint64_t *Handles; unsigned Count; uint64_t Fence; } Older; } AGX_WIN32_GPUVA_SPACE;
+typedef struct { uint64_t *Handles; unsigned Count; uint64_t Fence; } AGX_WIN32_GPUVA_SET;
+typedef struct { uint64_t *Held; unsigned HeldCount; AGX_WIN32_GPUVA_SET Older[3]; unsigned OlderCount; } AGX_WIN32_GPUVA_SPACE;
 typedef struct { int Failed, Closing; AGX_WIN32_GPUVA_SPACE Gpuva;
   void *Cache[AGX_WIN32_BO_CACHE_LIMIT]; APPLE_AGX_U32 CacheCount; APPLE_AGX_U64 CacheBytes; } AGX_WIN32_ASAHI_BACKEND;
 struct windows_bo { struct agx_bo Base; struct { struct { unsigned ClassId; } Buffer; } Backing;
@@ -73,9 +74,9 @@ int main(void) {
   assert(!cache_take(&b,0x40000,0,1));
   b.Gpuva.Held=NULL; b.Gpuva.HeldCount=0;
   /* EXP1093: nor one named by the older submission still in flight. */
-  b.Gpuva.Older.Handles=held; b.Gpuva.Older.Count=1;
+  b.Gpuva.Older[0].Handles=held; b.Gpuva.Older[0].Count=1; b.Gpuva.OlderCount=1;
   assert(!cache_take(&b,0x40000,0,1));
-  b.Gpuva.Older.Handles=NULL; b.Gpuva.Older.Count=0;
+  b.Gpuva.Older[0].Handles=NULL; b.Gpuva.Older[0].Count=0; b.Gpuva.OlderCount=0;
   assert(cache_take(&b,0x40000,0,1)==a && !a->Cached && b.CacheCount==1 && b.CacheBytes==0x80000);
   /* A failed or closing backend refuses. */
   b.Closing=1; assert(!cache_put(a)); b.Closing=0;
