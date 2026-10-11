@@ -19,6 +19,7 @@
 #include "pipe/p_state.h"
 #include "indices/u_primconvert.h"
 #include "util/u_inlines.h"
+#include "util/os_time.h"
 #include "agx_wgl_draw_merge.h"
 #include "agx_wgl_draw_hook.h"
 
@@ -39,6 +40,7 @@ typedef struct {
                          struct pipe_stream_output_target **, const unsigned *,
                          enum mesa_prim);
   void (*destroy)(struct pipe_context *);
+  void (*flush)(struct pipe_context *, struct pipe_fence_handle **, unsigned);
   const struct pipe_rasterizer_state *rast;
   unsigned so_targets;
   struct primconvert_context *pc;
@@ -52,6 +54,10 @@ static struct pipe_context *(*AgxWglContextCreate)(struct pipe_screen *, void *,
                                                    unsigned);
 /* Receipt counters (game thread; read and reset by the present receipt). */
 static volatile long AgxWglMergeCounters[AGX_WGL_MERGE_COUNTERS];
+/* EXP1197 receipt-only: outermost draw_vbo calls and nanoseconds in the
+ * driver below this hook, flush calls and nanoseconds (game thread). */
+static long long AgxWglCpuCounters[AGX_WGL_CPU_COUNTERS];
+static unsigned AgxWglDrawDepth;
 
 static AGX_WGL_HOOK *hook_of(struct pipe_context *pipe) {
   for (unsigned i = 0; i < AGX_WGL_HOOK_CONTEXTS; ++i)
@@ -75,15 +81,14 @@ static void primconvert_draw(AGX_WGL_HOOK *h, const struct pipe_draw_info *info,
   util_primconvert_draw_vbo(h->pc, info, drawid_offset, indirect, draws, num_draws);
 }
 
-static void hook_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
-                          unsigned drawid_offset,
-                          const struct pipe_draw_indirect_info *indirect,
-                          const struct pipe_draw_start_count_bias *draws,
-                          unsigned num_draws) {
-  AGX_WGL_HOOK *h = hook_of(pipe);
+static void hook_draw_vbo_body(AGX_WGL_HOOK *h, struct pipe_context *pipe,
+                               const struct pipe_draw_info *info,
+                               unsigned drawid_offset,
+                               const struct pipe_draw_indirect_info *indirect,
+                               const struct pipe_draw_start_count_bias *draws,
+                               unsigned num_draws) {
   enum mesa_prim mode = (enum mesa_prim)info->mode;
   bool unsupported = mode == MESA_PRIM_POLYGON || mode == MESA_PRIM_QUADS;
-  if (!h) return;
   ++AgxWglMergeCounters[0];
   AgxWglMergeCounters[1] += num_draws;
   if (!indirect && !info->index_size && !h->so_targets &&
@@ -126,6 +131,33 @@ static void hook_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info
   h->draw_vbo(pipe, info, drawid_offset, indirect, draws, num_draws);
 }
 
+static void hook_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
+                          unsigned drawid_offset,
+                          const struct pipe_draw_indirect_info *indirect,
+                          const struct pipe_draw_start_count_bias *draws,
+                          unsigned num_draws) {
+  AGX_WGL_HOOK *h = hook_of(pipe);
+  if (!h) return;
+  /* The u_primconvert fallback re-enters this hook: time the outermost. */
+  int64_t start = AgxWglDrawDepth++ ? 0 : os_time_get_nano();
+  hook_draw_vbo_body(h, pipe, info, drawid_offset, indirect, draws, num_draws);
+  if (!--AgxWglDrawDepth) {
+    ++AgxWglCpuCounters[0];
+    AgxWglCpuCounters[1] += os_time_get_nano() - start;
+  }
+}
+
+static void hook_flush(struct pipe_context *pipe, struct pipe_fence_handle **fence,
+                       unsigned flags) {
+  AGX_WGL_HOOK *h = hook_of(pipe);
+  int64_t start;
+  if (!h) return;
+  start = os_time_get_nano();
+  h->flush(pipe, fence, flags);
+  ++AgxWglCpuCounters[2];
+  AgxWglCpuCounters[3] += os_time_get_nano() - start;
+}
+
 static void hook_bind_rasterizer(struct pipe_context *pipe, void *cso) {
   AGX_WGL_HOOK *h = hook_of(pipe);
   if (!h) return;
@@ -159,7 +191,7 @@ static struct pipe_context *hook_context_create(struct pipe_screen *screen,
   if (!pipe) return NULL;
   h = hook_of(NULL);
   if (!h || !pipe->draw_vbo || !pipe->bind_rasterizer_state || !pipe->destroy ||
-      !pipe->set_stream_output_targets) {
+      !pipe->set_stream_output_targets || !pipe->flush) {
     /* No free slot: this context would see POLYGON/QUADS it cannot draw. */
     pipe->destroy(pipe);
     return NULL;
@@ -168,11 +200,13 @@ static struct pipe_context *hook_context_create(struct pipe_screen *screen,
   h->bind_rasterizer = pipe->bind_rasterizer_state;
   h->set_so_targets = pipe->set_stream_output_targets;
   h->destroy = pipe->destroy;
+  h->flush = pipe->flush;
   h->pipe = pipe;
   pipe->draw_vbo = hook_draw_vbo;
   pipe->bind_rasterizer_state = hook_bind_rasterizer;
   pipe->set_stream_output_targets = hook_set_so_targets;
   pipe->destroy = hook_destroy;
+  pipe->flush = hook_flush;
   return pipe;
 }
 
@@ -192,5 +226,13 @@ void agx_wgl_draw_hook_counters(unsigned out[AGX_WGL_MERGE_COUNTERS]) {
   for (unsigned i = 0; i < AGX_WGL_MERGE_COUNTERS; ++i) {
     out[i] = (unsigned)AgxWglMergeCounters[i];
     AgxWglMergeCounters[i] = 0;
+  }
+}
+
+void agx_wgl_draw_hook_cpu(unsigned out[AGX_WGL_CPU_COUNTERS]) {
+  for (unsigned i = 0; i < AGX_WGL_CPU_COUNTERS; ++i) {
+    long long v = AgxWglCpuCounters[i];
+    out[i] = (unsigned)((i & 1u) ? v / 1000 : v);   /* calls, microseconds */
+    AgxWglCpuCounters[i] = 0;
   }
 }

@@ -621,6 +621,10 @@ static void wgl_present_receipt(AGX_WGL_PRESENT_RING *ring, LONGLONG start,
   UINT merge[AGX_WGL_MERGE_COUNTERS];
   agx_wgl_draw_hook_counters(merge);
   AdmissionUmdDiagnostic("measure-wgl-merge", S_OK, merge, AGX_WGL_MERGE_COUNTERS);
+  /* EXP1197: draw_vbo calls/us and flush calls/us below the draw hook. */
+  UINT cpu[AGX_WGL_CPU_COUNTERS];
+  agx_wgl_draw_hook_cpu(cpu);
+  AdmissionUmdDiagnostic("measure-wgl-cpu", S_OK, cpu, AGX_WGL_CPU_COUNTERS);
   /* EXP1192: winsys framebuffers created, refused (last refused pixel
    * format's dwFlags and samples), presents, failed presents. */
   UINT fb[6];

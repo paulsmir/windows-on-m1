@@ -21,6 +21,11 @@ bool agx_wgl_draw_hook_install(struct pipe_screen *screen);
 /* Read and reset the counters. */
 void agx_wgl_draw_hook_counters(unsigned out[AGX_WGL_MERGE_COUNTERS]);
 
+/* EXP1197 receipt-only: outermost draw_vbo calls and microseconds spent in
+ * the driver below the hook, flush calls and microseconds; read and reset. */
+#define AGX_WGL_CPU_COUNTERS 4u
+void agx_wgl_draw_hook_cpu(unsigned out[AGX_WGL_CPU_COUNTERS]);
+
 #ifdef __cplusplus
 }
 #endif
