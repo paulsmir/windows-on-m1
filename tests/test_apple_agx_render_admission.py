@@ -440,13 +440,14 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn("CopyFiles=Admission.KmdCopyFiles,Admission.UmdCopyFiles,Admission.WowIcdCopyFiles", inf)
         self.assertIn(name + "=1", inf)
         self.assertIn("HKR,,OpenGLVersionWow,%REG_DWORD%,1", inf)
-        self.assertIn("HKR,,OpenGLFlagsWow,%REG_DWORD%,1", inf)
+        # EXP1194: bit 1 -- no runtime glFinish before the ICD's swap-buffers.
+        self.assertIn("HKR,,OpenGLFlagsWow,%REG_DWORD%,3", inf)
         self.assertIn("REG_SZ=0x00000000", inf)
         self.assertIn("REG_DWORD=0x00010001", inf)
         # dxgkrnl reads Version/Flags(+Wow) only with the native name (EXP1160).
         self.assertIn("HKR,,OpenGLDriverName,%REG_SZ%,%13%\\AppleAgxOpenGL64.dll", inf)
         self.assertIn("HKR,,OpenGLVersion,%REG_DWORD%,1", inf)
-        self.assertIn("HKR,,OpenGLFlags,%REG_DWORD%,1", inf)
+        self.assertIn("HKR,,OpenGLFlags,%REG_DWORD%,3", inf)
         self.assertNotIn("AppleAgxOpenGL64.dll=1", inf)
         self.assertIn('<FilesToPackage Include="%s" />' % name, project)
         self.assertIn('(Join-Path $root "%s")' % name, build)
