@@ -2102,10 +2102,14 @@ static APPLE_AGX_BACKEND_BOOL AdmissionTransportDoorbell(
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
   ULONGLONG message;
   ULONGLONG deadline;
+  /* The pipe doorbells of the bound group-1 channels (Asahi gpu.rs run_job:
+   * pipe type | priority << 2 -> vertex 4, fragment 5, compute 6) and the
+   * device-control doorbell. */
   if (runtime == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL ||
       runtime->Rtkit.Running == APPLE_AGX_RTKIT_FALSE ||
       (Doorbell != APPLE_AGX_PLATFORM_TA_DOORBELL &&
        Doorbell != APPLE_AGX_PLATFORM_D3_DOORBELL &&
+       Doorbell != APPLE_AGX_PLATFORM_COMPUTE_DOORBELL &&
        Doorbell != APPLE_AGX_DEVICE_CONTROL_DOORBELL_CHANNEL))
     return APPLE_AGX_BACKEND_FALSE;
   message = AppleAgxRtkitDoorbell(Doorbell);
