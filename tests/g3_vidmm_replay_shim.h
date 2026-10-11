@@ -14,6 +14,7 @@
 #include "apple_agx_gpuva_g3_translation.h"
 #include "apple_agx_gpuva_g3_graph.h"
 #include "apple_agx_g4_submit.h"
+#include "apple_agx_g13_compute_work.h"
 #include "apple_agx_state.h"
 #include "apple_agx_vsync.h"
 #include "apple_agx_g3_private_abi.h"
@@ -412,9 +413,12 @@ struct _ADMISSION_G3_PROCESS {
       (Process)->PoisonSite = ((ULONG)(File) << 16) | (ULONG)__LINE__; \
   } while (0)
 
+/* render_memory.h: the firmware VM slot of the job being begun. */
+#define ADMISSION_GPUVA_G3_JOB_VM_SLOT 1u
 typedef struct { int unused; } REPLAY_APERTURE;
 typedef struct {
-  UINT G4Native,BoundFence,G4CommandBytes;
+  UINT G4Native,BoundFence,G4CommandBytes,G4Compute;
+  APPLE_AGX_G4_COMPUTE_ENVELOPE G4ComputeEnvelope;
   APPLE_AGX_G4_PRIVATE_HEADER_V2 G4Header;
   unsigned char Commands[APPLE_AGX_G4_NATIVE_MAX_BYTES];
   APPLE_AGX_G4_PRIVATE_LEASE G4Lease;

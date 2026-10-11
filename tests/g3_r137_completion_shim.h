@@ -1,7 +1,8 @@
 #include "apple_agx_backend_runtime.h"
 typedef struct {
   ADMISSION_CONTEXT *Adapter;
-  struct { unsigned TaComplete,D3Complete; } Backend;
+  struct { unsigned TaComplete,D3Complete,ComputeComplete;
+           struct { unsigned Kind; } PendingJob; } Backend;
   APPLE_AGX_COMPLETION_TRANSACTION Completion;
   ADMISSION_RENDER_CONTEXT *CompletionContext;
 } ADMISSION_PLATFORM_RUNTIME;
