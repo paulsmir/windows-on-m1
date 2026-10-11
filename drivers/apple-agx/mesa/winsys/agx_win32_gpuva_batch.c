@@ -503,6 +503,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
       &packet,packet.Header.V2.Base.HeaderBytes+packet.Header.V2.Base.CommandBytes,
       &g->Fence)) { fail_site=__LINE__; goto fail; }
   g->Submitted=1;
+  if(g->Fence>b->NewestFence) b->NewestFence=g->Fence;
   free(refs);
   return 1;
 fail:
@@ -531,6 +532,27 @@ static int release_lease(AGX_WIN32_ASAHI_BACKEND *b,AGX_G4_BATCH *g) {
      !b->Gpuva.Ops.PrivateEscape(b->Gpuva.Context,&request)) return 0;
   memset(&g->Lease,0,sizeof(g->Lease));
   return 1;
+}
+/* EXP1195: pipe fences over the device's render fence timeline. The GPU
+ * completes submissions in order, so the newest accepted submission's
+ * completion fence covers every earlier one. Signalled reads the monitored
+ * fence value (QueryRender) without waiting; Wait blocks on it. A device
+ * without a usable GPUVA space never signals and fails its waits. */
+APPLE_AGX_U64 AgxWin32AsahiNewestFence(struct agx_context *ctx) {
+  AGX_WIN32_ASAHI_BACKEND *b=ctx?agx_device(ctx->base.screen)->windows_private:NULL;
+  return b?b->NewestFence:0u;
+}
+int AgxWin32AsahiFenceSignalled(struct agx_device *dev,APPLE_AGX_U64 fence) {
+  AGX_WIN32_ASAHI_BACKEND *b=dev?dev->windows_private:NULL;
+  if(!fence) return 1;
+  if(!b || !b->GpuvaReady || b->Gpuva.Terminal || !b->Gpuva.Ops.QueryRender) return 0;
+  return b->Gpuva.Ops.QueryRender(b->Gpuva.Context,fence)!=0;
+}
+int AgxWin32AsahiFenceWait(struct agx_device *dev,APPLE_AGX_U64 fence) {
+  AGX_WIN32_ASAHI_BACKEND *b=dev?dev->windows_private:NULL;
+  if(!fence) return 1;
+  if(!b || !b->GpuvaReady || b->Gpuva.Terminal || !b->Gpuva.Ops.WaitRender) return 0;
+  return b->Gpuva.Ops.WaitRender(b->Gpuva.Context,fence)!=0;
 }
 int AgxWin32AsahiBatchPoll(struct agx_batch *batch,APPLE_AGX_U32 timeout) {
   AGX_G4_BATCH *g=capsule(batch);

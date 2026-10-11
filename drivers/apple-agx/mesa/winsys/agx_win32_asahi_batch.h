@@ -55,5 +55,11 @@ void AgxWin32AsahiBatchDiagnostic(struct agx_batch *,APPLE_AGX_U32 out[2]);
 int AgxWin32AsahiBatchAbort(struct agx_batch *);
 int AgxWin32AsahiBatchRelease(struct agx_batch *);
 void AgxWin32AsahiMarkContextFault(struct agx_context *,unsigned);
+/* EXP1195: pipe fences. The completion fence of the device's newest
+ * accepted submission (0: none), whether a completion fence has signalled
+ * (non-blocking), and a wait for it (1 on success). */
+APPLE_AGX_U64 AgxWin32AsahiNewestFence(struct agx_context *);
+int AgxWin32AsahiFenceSignalled(struct agx_device *,APPLE_AGX_U64);
+int AgxWin32AsahiFenceWait(struct agx_device *,APPLE_AGX_U64);
 void AgxWin32AsahiMarkBatchFault(struct agx_context *,struct agx_batch *,unsigned);
 #endif

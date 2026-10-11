@@ -61,6 +61,9 @@ typedef struct {
 #ifdef APPLE_AGX_GPUVA_WINSYS
   AGX_WIN32_GPUVA_SPACE Gpuva;
   int GpuvaReady;
+  /* EXP1195: completion fence of the newest accepted submission (pipe
+   * fences); render fences increase with every submission. */
+  APPLE_AGX_U64 NewestFence;
   /* EXP979: VA ranges whose allocation is already destroyed but whose
    * reservation could not be freed yet (submission in flight). */
   AGX_WIN32_GPUVA_BO PendingVa[64];

@@ -314,7 +314,55 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
     # CPU readback: flushing the resource's writer is the whole contract.
     # The D3D10 frontend never calls flush_resource.
     s=body(s,'agx_flush_resource','''   agx_flush_writer(agx_context(pctx), agx_resource(pres), "flush_resource");''')
-    s=replace(s,'static void\nagx_flush(struct pipe_context *pctx,','''static char agx_windows_fence_storage;
+    # EXP1195 (GPUVA profile): pipe fences are real. A flush that asks for
+    # a fence submits like any flush and returns a fence holding the device's
+    # newest accepted submission's completion fence (the GPU completes them in
+    # order); fence_finish polls it with timeout 0 and waits otherwise. The
+    # EXP1146 fence (sync every batch, return a signalled fence) blocked the
+    # caller at fence creation -- glFenceSync and the ICD's present ring could
+    # never test a fence without waiting. The D3D10 profile keeps EXP1146.
+    s=replace(s,'static void\nagx_flush(struct pipe_context *pctx,','''#ifdef APPLE_AGX_GPUVA_WINSYS
+#include "util/os_time.h"
+struct agx_windows_fence {
+   struct pipe_reference reference;
+   struct agx_device *dev;
+   uint64_t value; /* 0: nothing was submitted, signalled */
+};
+
+static void
+agx_windows_fence_reference(struct pipe_screen *screen,
+                            struct pipe_fence_handle **ptr,
+                            struct pipe_fence_handle *fence)
+{
+   struct agx_windows_fence *old = (struct agx_windows_fence *)*ptr;
+   struct agx_windows_fence *new_ = (struct agx_windows_fence *)fence;
+   (void)screen;
+   if (pipe_reference(old ? &old->reference : NULL,
+                      new_ ? &new_->reference : NULL))
+      free(old);
+   *ptr = fence;
+}
+
+static bool
+agx_windows_fence_finish(struct pipe_screen *screen, struct pipe_context *ctx,
+                         struct pipe_fence_handle *fence, uint64_t timeout)
+{
+   struct agx_windows_fence *f = (struct agx_windows_fence *)fence;
+   (void)screen; (void)ctx;
+   if (!f) return false;
+   if (AgxWin32AsahiFenceSignalled(f->dev, f->value)) return true;
+   if (!timeout) return false;
+   if (timeout == OS_TIMEOUT_INFINITE)
+      return AgxWin32AsahiFenceWait(f->dev, f->value) != 0;
+   int64_t end = os_time_get_nano() + (int64_t)MIN2(timeout, (uint64_t)INT64_MAX / 2);
+   while (!AgxWin32AsahiFenceSignalled(f->dev, f->value)) {
+      if (os_time_get_nano() >= end) return false;
+      os_time_sleep(50);
+   }
+   return true;
+}
+#else
+static char agx_windows_fence_storage;
 #define AGX_WINDOWS_SIGNALLED_FENCE \\
    ((struct pipe_fence_handle *)&agx_windows_fence_storage)
 
@@ -334,17 +382,33 @@ agx_windows_fence_finish(struct pipe_screen *screen, struct pipe_context *ctx,
    (void)screen; (void)ctx; (void)timeout;
    return fence == AGX_WINDOWS_SIGNALLED_FENCE;
 }
+#endif
 
 static void
 agx_flush(struct pipe_context *pctx,''')
     s=body(s,'agx_flush','''   struct agx_context *ctx = agx_context(pctx);
    (void)flags;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+   agx_flush_all(ctx, fence ? "Windows fence" : "Windows runtime flush");
+   if (fence) {
+      struct agx_windows_fence *f =
+         ctx->any_faults ? NULL : calloc(1, sizeof(*f));
+      if (f) {
+         pipe_reference_init(&f->reference, 1);
+         f->dev = agx_device(pctx->screen);
+         f->value = AgxWin32AsahiNewestFence(ctx);
+      }
+      agx_windows_fence_reference(pctx->screen, fence, NULL);
+      *fence = (struct pipe_fence_handle *)f;
+   }
+#else
    if (fence) {
       agx_sync_all(ctx, "Windows fence");
       *fence = ctx->any_faults ? NULL : AGX_WINDOWS_SIGNALLED_FENCE;
       return;
    }
-   agx_flush_all(ctx, "Windows runtime flush");''')
+   agx_flush_all(ctx, "Windows runtime flush");
+#endif''')
     # Clear is native state mutation/upload; it uses the same batch capsule.
     a,b=function(s,'agx_clear');decl=s.rfind('static void',0,a);signature=s[decl:a]
     wrapper=signature+'''{
