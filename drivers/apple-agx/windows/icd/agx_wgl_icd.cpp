@@ -271,9 +271,9 @@ static void wgl_blit_to_dc(HDC hdc, const BYTE *map, unsigned stride,
  * mapping: a linear staging texture maps directly to agx_bo_map, which stays
  * valid for the BO's lifetime (the ring holds the reference and drains the
  * worker before releasing it). The worker draws through its own GetDC of
- * the window. One ring per window DC, size and format. */
+ * the window. One ring per window, size and format (EXP1191: keyed by the
+ * window, as the winsys framebuffer presents without a DC). */
 typedef struct {
-  HDC Dc;
   HWND Window;
   unsigned Width, Height;
   enum pipe_format Format;
@@ -416,20 +416,19 @@ static void wgl_ring_release(AGX_WGL_PRESENT_RING *ring) {
   ZeroMemory(ring, sizeof(*ring));
 }
 
-static AGX_WGL_PRESENT_RING *wgl_ring_get(struct pipe_screen *screen, HDC hdc,
+static AGX_WGL_PRESENT_RING *wgl_ring_get(struct pipe_screen *screen, HWND window,
                                           const struct pipe_resource *res,
                                           BOOL bgra) {
   AGX_WGL_PRESENT_RING *free_ring = NULL;
   for (unsigned i = 0; i < 4; ++i) {
     AGX_WGL_PRESENT_RING *ring = &AgxWglRings[i];
-    if (ring->Staging[0] && ring->Dc == hdc) {
+    if (ring->Staging[0] && ring->Window == window) {
       if (ring->Width == res->width0 && ring->Height == res->height0 &&
           ring->Format == res->format) return ring;
       wgl_ring_release(ring);
     }
     if (!ring->Staging[0] && !free_ring) free_ring = ring;
   }
-  HWND window = WindowFromDC(hdc);
   if (!window || !wgl_worker_start()) return NULL;
   if (!free_ring) { free_ring = &AgxWglRings[0]; wgl_ring_release(free_ring); }
   struct pipe_resource templ;
@@ -448,7 +447,6 @@ static AGX_WGL_PRESENT_RING *wgl_ring_get(struct pipe_screen *screen, HDC hdc,
   free_ring->Cpu = (BYTE *)HeapAlloc(GetProcessHeap(), 0,
                                      (SIZE_T)res->width0 * res->height0 * 4u);
   if (!free_ring->Cpu) { wgl_ring_release(free_ring); return NULL; }
-  free_ring->Dc = hdc;
   free_ring->Window = window;
   free_ring->Width = res->width0;
   free_ring->Height = res->height0;
@@ -773,28 +771,37 @@ static void wgl_sampler_start(void) {
   SetThreadPriority(AgxWglSampler, THREAD_PRIORITY_TIME_CRITICAL);
 }
 
-static void wgl_present(struct pipe_screen *screen, struct pipe_context *ctx,
-                        struct pipe_resource *res, HDC hdc) {
+/* Present one frame to a window: queue its GPU copy into a ring slot and
+ * hand the previous frame to the worker. Called by stw's GDI present (after
+ * the frame finished: stw waited) and by the winsys framebuffer (EXP1191:
+ * stw flushed without waiting; the GPU copy is ordered after the frame on
+ * the same context and wgl_ring_sync waits for the shown slot's copy). */
+extern "C" BOOL agx_wgl_present_window(struct pipe_screen *screen,
+                                       struct pipe_context *ctx,
+                                       struct pipe_resource *res, HWND window) {
   LARGE_INTEGER start, synced, end;
   unsigned width, height;
   BOOL bgra;
-  if (!ctx || !res || !hdc) return;
+  if (!ctx || !res || !window) return FALSE;
   width = res->width0; height = res->height0;
   bgra = res->format == PIPE_FORMAT_B8G8R8A8_UNORM ||
          res->format == PIPE_FORMAT_B8G8R8X8_UNORM;
   if (!bgra && res->format != PIPE_FORMAT_R8G8B8A8_UNORM &&
       res->format != PIPE_FORMAT_R8G8B8X8_UNORM) {
     wgl_note("reject-wgl-present-format", E_NOTIMPL);
-    return;
+    return FALSE;
   }
   QueryPerformanceCounter(&start);
   AcquireSRWLockExclusive(&AgxWglRingLock);
   wgl_sampler_start();
-  AGX_WGL_PRESENT_RING *ring = wgl_ring_get(screen, hdc, res, bgra);
+  AGX_WGL_PRESENT_RING *ring = wgl_ring_get(screen, window, res, bgra);
   if (!ring) {
     ReleaseSRWLockExclusive(&AgxWglRingLock);
-    wgl_show_now(ctx, res, hdc, width, height, bgra);
-    return;
+    HDC dc = GetDC(window);
+    if (!dc) return FALSE;
+    wgl_show_now(ctx, res, dc, width, height, bgra);
+    ReleaseDC(window, dc);
+    return TRUE;
   }
   unsigned dropped = 0;
   AcquireSRWLockExclusive(&AgxWglWorkerLock);
@@ -839,6 +846,23 @@ static void wgl_present(struct pipe_screen *screen, struct pipe_context *ctx,
   QueryPerformanceCounter(&end);
   wgl_present_receipt(ring, start.QuadPart, end.QuadPart);
   ReleaseSRWLockExclusive(&AgxWglRingLock);
+  return TRUE;
+}
+
+/* stw's GDI present (formats without a winsys framebuffer). */
+static void wgl_present(struct pipe_screen *screen, struct pipe_context *ctx,
+                        struct pipe_resource *res, HDC hdc) {
+  HWND window = hdc ? WindowFromDC(hdc) : NULL;
+  if (!ctx || !res || !hdc) return;
+  if (window) {
+    (void)agx_wgl_present_window(screen, ctx, res, window);
+    return;
+  }
+  /* A DC without a window (memory DC): show synchronously. */
+  if (res->format == PIPE_FORMAT_B8G8R8A8_UNORM || res->format == PIPE_FORMAT_B8G8R8X8_UNORM)
+    wgl_show_now(ctx, res, hdc, res->width0, res->height0, TRUE);
+  else if (res->format == PIPE_FORMAT_R8G8B8A8_UNORM || res->format == PIPE_FORMAT_R8G8B8X8_UNORM)
+    wgl_show_now(ctx, res, hdc, res->width0, res->height0, FALSE);
 }
 
 static bool wgl_get_adapter_luid(struct pipe_screen *screen, HDC hdc, LUID *luid) {
@@ -850,6 +874,10 @@ static bool wgl_get_adapter_luid(struct pipe_screen *screen, HDC hdc, LUID *luid
 
 static const char *wgl_get_name(void) { return "agx"; }
 
+/* agx_wgl_framebuffer.c */
+extern "C" struct stw_winsys_framebuffer *agx_wgl_create_framebuffer(
+    struct pipe_screen *screen, HWND window, int pixel_format);
+
 static const struct stw_winsys AgxWglWinsys = {
   &wgl_screen_create,
   &wgl_present,
@@ -857,7 +885,7 @@ static const struct stw_winsys AgxWglWinsys = {
   NULL, /* shared_surface_open */
   NULL, /* shared_surface_close */
   NULL, /* compose */
-  NULL, /* create_framebuffer */
+  &agx_wgl_create_framebuffer, /* EXP1191 */
   &wgl_get_name,
 };
 

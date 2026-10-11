@@ -23,3 +23,10 @@ void agx_glthread_init_st(struct st_context *st) {
 void agx_glthread_finish_st(struct st_context *st) {
   if (st && st->ctx) _mesa_glthread_finish(st->ctx);  /* no-op when disabled */
 }
+
+/* EXP1191: the pipe context of an stw context's st_context, for the winsys
+ * framebuffer's present (agx_wgl_framebuffer.c). Called from SwapBuffers on
+ * the application thread, after stw finished glthread (AgxWglDrvSwapBuffers). */
+struct pipe_context *agx_wgl_st_pipe(struct st_context *st) {
+  return st ? st->pipe : NULL;
+}

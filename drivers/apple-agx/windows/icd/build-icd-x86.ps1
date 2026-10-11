@@ -42,7 +42,7 @@ $c = @('render-admission\umd\src\umd_resource_lifetime.c', 'render-admission\umd
   'mesa\winsys\agx_win32_construction_address.c', 'mesa\winsys\agx_win32_native_device.c',
   'mesa\winsys\agx_win32_reloc_capture.c', 'windows\icd\agx_wgl_glthread.c',
   'windows\icd\agx_wgl_glthread_mesa.c', 'windows\icd\agx_wgl_draw_merge.c',
-  'windows\icd\agx_wgl_draw_hook.c')
+  'windows\icd\agx_wgl_draw_hook.c', 'windows\icd\agx_wgl_framebuffer.c')
 $objects = @()
 # Windows PowerShell turns native stderr (clang warnings) into terminating
 # errors under 'Stop'; native failures are judged by exit codes below.
