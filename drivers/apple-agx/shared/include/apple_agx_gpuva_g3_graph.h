@@ -68,6 +68,10 @@ typedef struct _APPLE_AGX_GPUVA_G3_GRAPH {
    * 7 edge conflict, 8 middle link, 9 root link). */
   unsigned int AttachFailure;
   unsigned int RetainedLocal;
+  /* One node reserved for when the allocator fails: re-linking the private
+   * leaf after a root move (detach, bind, attach) must not depend on a
+   * fresh allocation (AppleAgxGpuvaG3GraphReserveNode). */
+  struct _APPLE_AGX_GPUVA_G3_NODE *SpareNode;
   APPLE_AGX_GPUVA_G3_NODE *BackingBuckets[APPLE_AGX_GPUVA_G3_BACKING_BUCKETS];
 } APPLE_AGX_GPUVA_G3_GRAPH;
 
@@ -123,6 +127,9 @@ bool AppleAgxGpuvaG3GraphLeafTableIpa(APPLE_AGX_GPUVA_G3_GRAPH *,
 bool AppleAgxGpuvaG3GraphInspectRangeAccess(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long StartVa, unsigned int Bytes, bool Write,
     APPLE_AGX_GPUVA_G3_WALK_FAILURE *Failure);
+/* Keep one node in reserve for an allocation failure; false only when
+ * none is held and none can be allocated. */
+bool AppleAgxGpuvaG3GraphReserveNode(APPLE_AGX_GPUVA_G3_GRAPH *);
 bool AppleAgxGpuvaG3GraphAttachPrivate(APPLE_AGX_GPUVA_G3_GRAPH *,
     unsigned long long ReservedVa, unsigned long long MiddleIpa,
     unsigned long long LeafIpa);

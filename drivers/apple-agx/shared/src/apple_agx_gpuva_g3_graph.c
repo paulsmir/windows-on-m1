@@ -15,8 +15,20 @@ unsigned long long AppleAgxGpuvaG3LookupStatsVisits(void) { return lookup_visits
 static APPLE_AGX_GPUVA_G3_NODE *node(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
   APPLE_AGX_GPUVA_G3_NODE *item = graph->Allocate(
       graph->MemoryContext, sizeof(*item));
+  if (!item && graph->SpareNode) {
+    item = graph->SpareNode;
+    graph->SpareNode = 0;
+  }
   if (item) memset(item, 0, sizeof(*item));
   return item;
+}
+
+bool AppleAgxGpuvaG3GraphReserveNode(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
+  if (!graph) return false;
+  if (!graph->SpareNode)
+    graph->SpareNode = graph->Allocate(graph->MemoryContext,
+                                       sizeof(*graph->SpareNode));
+  return graph->SpareNode != 0;
 }
 
 static unsigned int bucket(unsigned long long ipa) {
@@ -870,6 +882,8 @@ bool AppleAgxGpuvaG3GraphDestroy(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
   request.Command = AGX_GPUVA_V5_DESTROY;
   if (!call(graph, &request)) return false;
   while (graph->Tables) remove_node(graph, &graph->Tables, graph->Tables);
+  if (graph->SpareNode) graph->Free(graph->MemoryContext, graph->SpareNode);
+  graph->SpareNode = 0;
   graph->Created = 0u;
   graph->RootIpa = 0ULL;
   graph->RootTable = 0;

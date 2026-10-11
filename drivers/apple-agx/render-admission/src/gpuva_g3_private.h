@@ -52,8 +52,9 @@ typedef struct _ADMISSION_G3_STATE {
   ULONGLONG PrivateStats[16];
   /* EXP1114 receipt-only, under Lock: last per-process snapshot (QPC). */
   LONGLONG ProcessReceiptQpc;
-  /* G2 HW2 receipt-only: private VA reservations made and refused. */
-  LONG ReserveMade, ReserveRefused;
+  /* G2 HW2 receipt-only: private VA reservations made and refused, present
+   * arenas made and refused. */
+  LONG ReserveMade, ReserveRefused, PresentArenasMade, PresentArenasRefused;
 } ADMISSION_G3_STATE;
 enum {
   ADMISSION_G3_PRIVATE_STAT_HIT, ADMISSION_G3_PRIVATE_STAT_MISS,
@@ -122,6 +123,9 @@ typedef struct _ADMISSION_G3_PROCESS {
    * private storage for, and that render's Width | Height << 16. */
   ULONG MaxTvbBlocks, MaxShape;
   APPLE_AGX_G3_PRIVATE_EXTENT PrivateTables[2];
+  /* G2 HW2b: the KMD present arena (apple_agx_present_job.h), an extent of
+   * the private range (inside the USC window); 0 Generation until made. */
+  APPLE_AGX_G3_PRIVATE_EXTENT PresentArena;
   APPLE_AGX_G3_PRIVATE_MANAGER PrivateManager;
   APPLE_AGX_RENDER_MANAGER_STATE FirmwareManager;
   ADMISSION_G3_PRIVATE_SCENE *PrivateScenes;

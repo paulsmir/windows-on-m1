@@ -1252,6 +1252,11 @@ void AdmissionRecordG3PrivateProcesses(_In_opt_ ADMISSION_CONTEXT *Context,
 #define ADMISSION_G3_RESERVE_RECEIPT_WORDS 6u
 void AdmissionRecordG3Reservation(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_reads_(ADMISSION_G3_RESERVE_RECEIPT_WORDS) const ULONG *Values);
+/* G2 HW2b receipt: present arenas (Wom1G2PresentArena: version, made,
+ * refused, last predicate, last status, last arena VA low, high). */
+#define ADMISSION_G2_PRESENT_ARENA_RECEIPT_WORDS 7u
+void AdmissionRecordG2PresentArena(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_reads_(ADMISSION_G2_PRESENT_ARENA_RECEIPT_WORDS) const ULONG *Values);
 void AdmissionRecordGpuvaG3UnpublishedGroups(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_reads_(32) const ULONGLONG *Counts);
@@ -1944,6 +1949,9 @@ NTSTATUS AdmissionGpuvaG3AttachDevice(ADMISSION_CONTEXT *Adapter,
 VOID AdmissionGpuvaG3DetachDevice(ADMISSION_DEVICE *Device);
 NTSTATUS AdmissionGpuvaG3AttachContext(ADMISSION_RENDER_CONTEXT *Context,
     ADMISSION_DEVICE *Device);
+/* G2 HW2b: give the context's process its present arena when it is idle;
+ * failure leaves the process without one (receipt Wom1G2PresentArena). */
+NTSTATUS AdmissionGpuvaG3EnsurePresentArena(ADMISSION_RENDER_CONTEXT *Context);
 VOID AdmissionGpuvaG3DetachContext(ADMISSION_RENDER_CONTEXT *Context);
 VOID AdmissionGpuvaG3NoteAllocationPaging(ADMISSION_CONTEXT *Context,
                                           HANDLE Allocation, ULONG Operation,
