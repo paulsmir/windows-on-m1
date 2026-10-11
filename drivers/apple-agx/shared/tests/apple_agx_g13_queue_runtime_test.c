@@ -276,6 +276,39 @@ static void TestStandaloneComputeCompletes(void) {
          f.Runtime.Phase==AppleAgxG13QueueRuntimeComputeComplete);
 }
 
+/* EXP1213: a submitted compute job (standalone or prelude) is polled for
+ * its deadline like a render job; the poll before the deadline is not a
+ * failure, and the deadline completes the fence as timed out. */
+static void TestComputeDeadlineIsPolled(void) {
+  TEST_FIXTURE f;APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION s;
+  APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
+  int prelude;
+  for(prelude=0;prelude<2;++prelude) {
+    TestInitialize(&f);TestEnableCompute(&f);
+    memset(&s,0,sizeof(s));
+    s.Fence=80u;s.Timestamp=0x1122334455667788ULL;s.NowTicks=1000ULL;
+    s.Compute.Source=f.ComputeSource;s.Compute.Destination=f.ComputeDestination;
+    s.Compute.Bytes=sizeof(f.ComputeSource);
+    s.Compute.GpuAddresses[0]=0x1500300000ULL;
+    s.Compute.GpuAddressCount=1u;s.Compute.ExpectedStamp=0x800u;
+    s.ComputeOnly=prelude ? APPLE_AGX_BACKEND_FALSE : APPLE_AGX_BACKEND_TRUE;
+    assert(AppleAgxG13QueueRuntimeSubmitCompute(&f.Runtime,&s)==
+           AppleAgxG13QueueRuntimeResultOk);
+    assert(AppleAgxG13QueueRuntimeCheckTimeout(&f.Runtime,1099ULL)==
+           AppleAgxG13QueueRuntimeResultOk &&
+           f.Runtime.Phase==AppleAgxG13QueueRuntimeComputeSubmitted &&
+           f.IoState.Quiesces==0u);
+    assert(!AppleAgxG13QueueRuntimeTakeCompletion(&f.Runtime,&completion));
+    assert(AppleAgxG13QueueRuntimeCheckTimeout(&f.Runtime,1100ULL)==
+           AppleAgxG13QueueRuntimeResultTimedOut && f.IoState.Quiesces==1u);
+    assert(AppleAgxG13QueueRuntimeTakeCompletion(&f.Runtime,&completion) &&
+           completion.Fence==80u &&
+           completion.Status==AppleAgxG13QueueCompletionTimedOut);
+    assert(AppleAgxG13QueueRuntimeReset(&f.Runtime)==
+           AppleAgxG13QueueRuntimeResultOk);
+  }
+}
+
 static void PutU32(unsigned char *Destination, unsigned int Value) {
   Destination[0] = (unsigned char)(Value & 0xffu);
   Destination[1] = (unsigned char)((Value >> 8) & 0xffu);
@@ -804,6 +837,7 @@ static void TestReadFailureCannotMasqueradeAsZeroPointer(void) {
 unsigned AppleAgxG13QueueRuntimeContractTests(void) {
   TestComputeThenRenderDependency();
   TestStandaloneComputeCompletes();
+  TestComputeDeadlineIsPolled();
   TestJoinedPublishAndExactCompletion();
   TestStampCompletesPastDonePointer();
   TestPreparedRangesNeedNoCopy();

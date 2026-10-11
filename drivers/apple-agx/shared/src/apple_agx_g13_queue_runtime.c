@@ -530,7 +530,9 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeCheckTimeout(
     APPLE_AGX_BACKEND_U64 NowTicks) {
   if (Runtime == APPLE_AGX_G13_QUEUE_RUNTIME_NULL || NowTicks == 0ULL)
     return AppleAgxG13QueueRuntimeResultInvalidArgument;
-  if (Runtime->Phase != AppleAgxG13QueueRuntimeSubmitted)
+  /* EXP1213: SubmitCompute arms the same deadline as Submit. */
+  if (Runtime->Phase != AppleAgxG13QueueRuntimeSubmitted &&
+      Runtime->Phase != AppleAgxG13QueueRuntimeComputeSubmitted)
     return AppleAgxG13QueueRuntimeResultInvalidState;
   if ((APPLE_AGX_BACKEND_U64)(NowTicks - Runtime->DeadlineTicks) >=
       (1ULL << 63))

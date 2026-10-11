@@ -677,6 +677,40 @@ static void TestStandaloneComputeJob(void) {
   assert(f.Io.Queues.RunTa(f.Io.Context,&f.Job,41u));
   Complete(&f);
 }
+/* EXP1213: the worker polls a submitted compute job for its deadline; the
+ * poll before the deadline succeeds (it faulted the worker on hardware) and
+ * the deadline reports a timeout for the exact fence. */
+static void TestComputeJobDeadlinePoll(void) {
+  FIXTURE f;
+  APPLE_AGX_BACKEND_JOB_IMAGE c;
+  APPLE_AGX_G13_QUEUE_PROVIDER_EVENT_BATCH batch;
+  int prelude;
+  for(prelude=0;prelude<2;++prelude) {
+    InitMode(&f,1);
+    assert(f.Io.Queues.Create(f.Io.Context));
+    if(prelude) {
+      assert(f.Io.Queues.Run3d(f.Io.Context,&f.Job,41u));
+      assert(f.Io.Queues.RunTa(f.Io.Context,&f.Job,41u));
+      assert(f.Provider.Phase==AppleAgxG13QueueProviderComputeSubmitted);
+    } else {
+      memset(&c,0,sizeof(c));
+      c.Kind=AppleAgxBackendJobCompute;
+      c.ComputeWorkAddresses[0]=0x1500300000ULL; c.ComputeWorkAddressCount=1u;
+      c.ComputeEvent=11u; c.ComputeExpectedStamp=0x600u;
+      c.ComputeExpectedDonePointer=1u;
+      assert(f.Io.Queues.RunCompute(f.Io.Context,&c,41u));
+      assert(f.Provider.Phase==AppleAgxG13QueueProviderComputeOnlySubmitted);
+    }
+    assert(AppleAgxG13QueueProviderCheckTimeout(&f.Provider,1099ULL,&batch));
+    assert(batch.ObservationCount==0u && batch.CompletedFence==0u &&
+           f.Quiesces==0u);
+    assert(AppleAgxG13QueueProviderCheckTimeout(&f.Provider,1100ULL,&batch));
+    assert(f.Quiesces==1u && batch.ObservationCount==1u &&
+           batch.Observations[0].Status==AppleAgxBackendObservationTimeout &&
+           batch.CompletedFence==41u &&
+           f.Provider.Phase==AppleAgxG13QueueProviderFaulted);
+  }
+}
 int main(void) {
   TestAtomicStagingAndOrder(); TestComputeRejectCapturesOperandsAcrossRollback();
   TestComputeSuccessDoesNotCreateFailureDiagnostic();
@@ -698,5 +732,6 @@ int main(void) {
   TestProgressReceiptFailsClosedForInvalidStateAndRead();
   TestComputeCompletesBeforeRenderPublication();
   TestStandaloneComputeJob();
+  TestComputeJobDeadlinePoll();
   puts("apple_agx_g13_queue_provider_test: ok"); return 0;
 }
