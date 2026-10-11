@@ -126,7 +126,7 @@ struct stw_winsys_framebuffer *agx_wgl_create_framebuffer(struct pipe_screen *sc
   if (!screen || !window || !pfi || (pfi->pfd.dwFlags & PFD_SUPPORT_GDI) ||
       !(pfi->pfd.dwFlags & PFD_DOUBLEBUFFER) || pfi->stvis.samples > 1)
     return NULL;
-  AGX_WGL_FRAMEBUFFER *fb = CALLOC_STRUCT(AGX_WGL_FRAMEBUFFER);
+  AGX_WGL_FRAMEBUFFER *fb = (AGX_WGL_FRAMEBUFFER *)CALLOC(1, sizeof(*fb));
   if (!fb) return NULL;
   fb->screen = screen;
   fb->window = window;
