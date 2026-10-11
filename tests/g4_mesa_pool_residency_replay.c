@@ -36,6 +36,7 @@ struct agx_bo {
   AGX_WIN32_GPUVA_BO view;
   unsigned handle, flags, refs, resident, uploaded;
   unsigned char cpu[512];
+  size_t size;
 };
 struct agx_resource {
   struct agx_bo *bo;
@@ -46,12 +47,13 @@ struct util_dynarray { void *data; unsigned size; };
 #define util_dynarray_num_elements(a,t) ((a)->size / sizeof(t))
 #define util_dynarray_foreach(a,t,i) \
   for(t *i=(t *)(a)->data; i < (t *)((char *)(a)->data+(a)->size); ++i)
-struct agx_pool { struct util_dynarray bos; };
+struct agx_pool { struct util_dynarray bos; struct agx_bo *transient_bo; unsigned transient_offset; };
 typedef struct {
   AGX_WIN32_GPUVA_SPACE Gpuva;
   void *Native;
   unsigned GpuvaReady, Failed;
   int ZlsAttachments;
+  uint64_t NewestFence;
 } AGX_WIN32_ASAHI_BACKEND;
 struct agx_screen { struct agx_bo *rodata; };
 /* EXP1069: Asahi's per-device zero and scratch pages (agx_open_device). */
@@ -63,7 +65,7 @@ struct agx_context { struct { struct agx_screen *screen; } base;
 struct agx_batch {
   struct agx_context *ctx;
   void *windows_batch;
-  struct { struct agx_bo *bo; } vdm,cdm;
+  struct { struct agx_bo *bo; unsigned char *current; } vdm,cdm;
   unsigned draws,clear;
   struct { unsigned bit_count, count; unsigned handles[8]; } bo_list;
   struct agx_pool pool,pipeline_pool;
@@ -90,6 +92,13 @@ static struct agx_bo bos[16];
 static struct agx_va vas[16];
 static unsigned resident_count, submit_count, eviction_count, release_count;
 static unsigned reject_submit;
+/* EXP1207: every shadow (encoder, each pool slab) is published before the
+ * submission names it. */
+#define AGX_WIN32_ENCODER_TAIL 0x100u
+static unsigned publish_count, expected_publish;
+static int AgxWin32AsahiShadowPublish(struct agx_bo *bo,size_t bytes) {
+  (void)bytes;assert(bo);++publish_count;return 1;
+}
 static APPLE_AGX_G4_FAILURE failure;
 static AGX_WIN32_ASAHI_BACKEND *backend(struct agx_batch *b) { (void)b;return &owner; }
 static AGX_G4_BATCH *capsule(struct agx_batch *b) { return b->windows_batch; }
@@ -151,6 +160,7 @@ static int mapped(void *ctx,unsigned long long va,unsigned bytes,int write,
 static int submit(void *ctx,const uint64_t *written,unsigned written_count,
     uint64_t va,uint32_t bytes,const void *packet,uint32_t packet_bytes,uint64_t *fence) {
   (void)ctx;++submit_count;assert(written_count==1 && written[0]==4);
+  assert(publish_count==expected_publish);
   /* Model transfer_held: only canonical allocations in the residency set
    * have their CPU staging contents uploaded before KMD submission. */
   for(unsigned i=1;i<16;++i) if(bos[i].resident) bos[i].uploaded=1;
@@ -178,6 +188,7 @@ int AgxWin32AsahiBatchPoll(struct agx_batch *batch,unsigned timeout);
 static void run(unsigned fail,unsigned many,unsigned scenario) {
   memset(&owner,0,sizeof(owner));memset(bos,0,sizeof(bos));
   resident_count=submit_count=eviction_count=release_count=0;reject_submit=fail;
+  publish_count=0;expected_publish=scenario==1?1u:many?8u:3u;
   for(unsigned i=1;i<16;++i) {
     vas[i].addr=0x100000ULL*i;bos[i].va=&vas[i];bos[i].handle=i;
     bos[i].view=(AGX_WIN32_GPUVA_BO){i,vas[i].addr,0x40000,1};
@@ -195,7 +206,7 @@ static void run(unsigned fail,unsigned many,unsigned scenario) {
   struct agx_screen screen={&bos[3]};struct agx_context ctx={{&screen},{NULL}};
   native_device=(struct agx_device){&bos[10],&bos[11]};
   struct agx_resource color={.bo=&bos[4],.layout={.size_B=65536}};
-  struct agx_batch batch={.ctx=&ctx,.vdm={&bos[2]},.draws=1,
+  struct agx_batch batch={.ctx=&ctx,.vdm={&bos[2],bos[2].cpu},.draws=1,
     .bo_list={.bit_count=16,.count=1,.handles={3}},
     .pool={.bos={pool_bos,(many?4u:1u)*sizeof(pool_bos[0])}},
     .pipeline_pool={.bos={pipeline_bos,(many?3u:1u)*sizeof(pipeline_bos[0])}},

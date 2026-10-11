@@ -9,6 +9,9 @@ extern void (*AgxWin32BatchRefusalHook)(unsigned, unsigned, unsigned, unsigned);
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(APPLE_AGX_GPUVA_WINSYS) && defined(_WIN32)
+#include <malloc.h>
+#endif
 
 /* Windows replacement for the OS-dependent BO symbols used by native pool.c.
  * The default profile uses construction coordinates; G4 binds VidMm GPUVA. */
@@ -21,9 +24,46 @@ struct windows_bo {
   AGX_WIN32_GPUVA_BO Gpuva;
   int Imported;
   int Cached;
+  /* EXP1207: the cached CPU map of an AGX_WIN32_BO_SHADOW BO (Base._map);
+   * Backing.CpuAddress stays the allocation's write-combined view. */
+  void *Shadow;
 #endif
 };
 static void native_map(struct agx_device *,struct agx_bo *,void *);
+
+#ifdef APPLE_AGX_GPUVA_WINSYS
+/* EXP1207: an x86 client runs emulated, where each scalar store into the
+ * write-combined view of a Mesa allocation costs ~200 ns (EXP1206: 32-bit
+ * stores 20 MB/s into WC, 1.3 GB/s into cached memory; memcpy into WC
+ * 15 GB/s). Asahi packs descriptors, PPP/USC state and the VDM stream word by
+ * word into the batch pools and the encoder (EXP1202: agx_encode_state
+ * ~12 us per draw). Those are written only while their batch is recorded and
+ * read by the GPU only after its submission, so they are recorded into a
+ * cached shadow and copied into the allocation just before the submission. */
+static void *shadow_alloc(size_t bytes) {
+#ifdef _WIN32
+  return _aligned_malloc(bytes,4096u);
+#else
+  void *p=NULL;
+  return posix_memalign(&p,4096u,bytes) ? NULL : p;
+#endif
+}
+static void shadow_free(void *p) {
+#ifdef _WIN32
+  _aligned_free(p);
+#else
+  free(p);
+#endif
+}
+int AgxWin32AsahiShadowPublish(struct agx_bo *base,size_t bytes) {
+  struct windows_bo *bo=(struct windows_bo *)base;
+  if(!base || !((unsigned)base->flags&AGX_WIN32_BO_SHADOW) || !base->_map) return 1;
+  if(base->_map!=bo->Shadow || !bo->Backing.CpuAddress) return 0;
+  if(bytes>base->size) bytes=base->size;
+  memcpy(bo->Backing.CpuAddress,bo->Shadow,bytes);
+  return 1;
+}
+#endif
 
 /* EXP1091: EXP1089 CSwitch samples put ~11 % of DWM's composition thread in
  * AgxWin32AsahiLookupBo: each referenced handle walked every registered BO
@@ -180,6 +220,9 @@ static int dispose(struct windows_bo *bo) {
 #endif
   handle_map_remove(b,bo);
   --b->LiveBos;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  shadow_free(bo->Shadow);
+#endif
   free(bo);
   return 1;
 }
@@ -252,7 +295,11 @@ static void cache_flush(AGX_WIN32_ASAHI_BACKEND *b) {
 
 struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned align,
                             enum agx_bo_flags flags,const char *label) {
-  const unsigned allowed=AGX_BO_LOW_VA|AGX_BO_EXEC|AGX_BO_WRITEBACK|AGX_BO_READONLY;
+  const unsigned allowed=AGX_BO_LOW_VA|AGX_BO_EXEC|AGX_BO_WRITEBACK|AGX_BO_READONLY
+#ifdef APPLE_AGX_GPUVA_WINSYS
+      |AGX_WIN32_BO_SHADOW
+#endif
+      ;
   AGX_WIN32_ASAHI_BACKEND *b=native?native->windows_private:NULL;
   struct windows_bo *bo;
   unsigned cls,access;
@@ -351,7 +398,11 @@ struct agx_bo *AgxWin32AsahiEncoderCreate(struct agx_device *native,
   struct agx_bo *bo;
   if(!b || b->Native!=native || b->Failed || b->EncoderAllocationIntent) return NULL;
   b->EncoderAllocationIntent=1;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  bo=agx_bo_create(native,bytes,align,AGX_WIN32_BO_SHADOW,label);
+#else
   bo=agx_bo_create(native,bytes,align,0,label);
+#endif
   b->EncoderAllocationIntent=0;
   return bo;
 }
@@ -446,6 +497,16 @@ static void native_map(struct agx_device *native,struct agx_bo *base,void *fixed
 #endif
   if(AgxWin32NativeBoMap(b->Buffers.Screen,&bo->Backing,AppleAgxWin32BufferCpuWrite,&address)
       !=AgxWin32NativeBoSuccess) { AGX_WIN32_ASAHI_FAIL(b, 1u); return; }
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  /* EXP1207: the shadow outlives the map with the BO (BO cache reuse). */
+  if((unsigned)base->flags&AGX_WIN32_BO_SHADOW) {
+    if(!bo->Shadow && !(bo->Shadow=shadow_alloc(base->size))) {
+      AGX_WIN32_ASAHI_FAIL(b, 1u); return;
+    }
+    base->_map=bo->Shadow;
+    return;
+  }
+#endif
   base->_map=address;
 }
 

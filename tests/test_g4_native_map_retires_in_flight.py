@@ -44,9 +44,12 @@ typedef struct { uint64_t *Held; unsigned HeldCount; uint64_t RenderFence;
 typedef struct { int Failed; struct { void *Screen; } Buffers; AGX_WIN32_GPUVA_SPACE Gpuva; } AGX_WIN32_ASAHI_BACKEND;
 typedef struct { int unused; } AGX_WIN32_NATIVE_BO;
 struct agx_device { void *windows_private; };
-struct agx_bo { int refcnt; void *_map; };
+struct agx_bo { int refcnt; void *_map; unsigned flags; size_t size; };
 struct windows_bo { struct agx_bo Base; AGX_WIN32_NATIVE_BO Backing; AGX_WIN32_ASAHI_BACKEND *Backend;
-  AGX_WIN32_GPUVA_BO Gpuva; };
+  AGX_WIN32_GPUVA_BO Gpuva; void *Shadow; };
+/* EXP1207: these BOs carry no shadow flag. */
+#define AGX_WIN32_BO_SHADOW (1u << 30)
+static void *shadow_alloc(size_t bytes) { return malloc(bytes); }
 #define AGX_WIN32_ASAHI_FAIL(backend, file) ((backend)->Failed = 1)
 enum { AppleAgxWin32BufferCpuWrite = 1, AgxWin32NativeBoSuccess = 0 };
 static AGX_WIN32_ASAHI_BACKEND backend;

@@ -368,6 +368,29 @@ static int batch_has_render_work(const struct agx_batch *batch) {
   return batch && (batch->draws || batch->clear);
 }
 
+/* EXP1207: the batch pools and the encoder are recorded into cached shadows
+ * (AGX_WIN32_BO_SHADOW). Copy what this batch wrote into the allocations
+ * before the submission names them: a pool's transient slab up to its offset,
+ * earlier slabs whole; the encoder up to its current pointer plus the
+ * terminator agx_flush_render writes past it, or whole when the stream
+ * continued in a pool chunk (agx_ensure_cmdbuf_has_space). */
+static size_t pool_extent(const struct agx_pool *pool,const struct agx_bo *bo) {
+  return bo==pool->transient_bo ? pool->transient_offset : bo->size;
+}
+static int publish_shadows(struct agx_batch *batch) {
+  struct agx_bo *vdm=batch->vdm.bo;
+  uintptr_t map=(uintptr_t)agx_bo_map(vdm),current=(uintptr_t)batch->vdm.current;
+  size_t used=vdm->size;
+  if(map && current>=map && current-map<=vdm->size)
+    used=(size_t)(current-map)+AGX_WIN32_ENCODER_TAIL;
+  if(!AgxWin32AsahiShadowPublish(vdm,used)) return 0;
+  util_dynarray_foreach(&batch->pool.bos,struct agx_bo *,bo)
+    if(!AgxWin32AsahiShadowPublish(*bo,pool_extent(&batch->pool,*bo))) return 0;
+  util_dynarray_foreach(&batch->pipeline_pool.bos,struct agx_bo *,bo)
+    if(!AgxWin32AsahiShadowPublish(*bo,pool_extent(&batch->pipeline_pool,*bo))) return 0;
+  return 1;
+}
+
 int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
                              const struct drm_asahi_cmd_render *render) {
   AGX_WIN32_ASAHI_BACKEND *b=backend(batch);
@@ -501,6 +524,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   util_dynarray_foreach(&batch->pipeline_pool.bos,struct agx_bo *,bo) {
     if(!*bo || !add_bo(b,refs,&count,limit,*bo)) { fail_site=__LINE__; goto fail; }
   }
+  if(!publish_shadows(batch)) { fail_site=__LINE__; goto fail; }
   if(!AgxWin32GpuvaSubmit(&b->Gpuva,refs,count,
       AgxWin32AsahiGpuvaBo(b,g->Command),packet.Header.V2.Base.CommandBytes,
       written,written_count,

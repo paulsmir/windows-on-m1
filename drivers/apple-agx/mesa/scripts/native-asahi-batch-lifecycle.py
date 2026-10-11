@@ -96,6 +96,19 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
     s=s.replace('#include "vdrm.h"','')
     s=s.replace('#include "asahi/lib/agx_device_virtio.h"','#include "agx_device.h"')
     s=replace(s,'#include "agx_state.h"','#include "agx_state.h"\n#include "agx_win32_asahi_batch.h"')
+    # EXP1207: the batch pools record into cached shadows, published into
+    # their allocations at submission (agx_win32_gpuva_batch.c).
+    s=replace(s,'''   agx_pool_init(&batch->pool, dev, "Batch pool", 0, true);
+   agx_pool_init(&batch->pipeline_pool, dev, "Batch low VA pool", AGX_BO_LOW_VA,
+                 true);''','''#ifdef APPLE_AGX_GPUVA_WINSYS
+   agx_pool_init(&batch->pool, dev, "Batch pool", AGX_WIN32_BO_SHADOW, true);
+   agx_pool_init(&batch->pipeline_pool, dev, "Batch low VA pool",
+                 AGX_BO_LOW_VA | AGX_WIN32_BO_SHADOW, true);
+#else
+   agx_pool_init(&batch->pool, dev, "Batch pool", 0, true);
+   agx_pool_init(&batch->pipeline_pool, dev, "Batch low VA pool", AGX_BO_LOW_VA,
+                 true);
+#endif''')
     a,b=function(s,'agx_batch_init');part=s[a:b]
     begin=part.index('   if (!batch->syncobj) {');end=part.index('   agx_batch_mark_active(batch);',begin)
     part=part[:begin]+'''   agx_batch_mark_active(batch);

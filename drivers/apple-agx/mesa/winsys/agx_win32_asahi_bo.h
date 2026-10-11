@@ -123,6 +123,16 @@ struct agx_bo *AgxWin32AsahiImportBo(
 #ifdef APPLE_AGX_GPUVA_WINSYS
 const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(
     AGX_WIN32_ASAHI_BACKEND *, struct agx_bo *);
+/* EXP1207: winsys creation flag beside enum agx_bo_flags. The BO's CPU map
+ * (agx_bo_map) is a cached shadow of the allocation; nothing reaches the
+ * allocation the GPU reads until AgxWin32AsahiShadowPublish copies the
+ * shadow's first Bytes into its write-combined view (Bytes is clamped to the
+ * BO size). A BO without the flag, or never CPU-mapped, publishes nothing. */
+#define AGX_WIN32_BO_SHADOW (1u << 30)
+/* Bytes past an encoder's current pointer that the flush writes without
+ * advancing it: agx_flush_render's 5 + 64 byte stream terminator. */
+#define AGX_WIN32_ENCODER_TAIL 0x100u
+int AgxWin32AsahiShadowPublish(struct agx_bo *, size_t Bytes);
 #endif
 struct agx_bo *AgxWin32AsahiLookupBo(struct agx_device *, uint32_t);
 
