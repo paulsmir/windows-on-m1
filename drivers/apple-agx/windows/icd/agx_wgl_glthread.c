@@ -103,7 +103,14 @@ BOOL APIENTRY AgxWglDrvSwapLayerBuffers(HDC hdc, UINT planes) {
   return DrvSwapLayerBuffers(hdc, planes);
 }
 
+/* agx_wgl_icd.cpp, G2 HW3b: opengl32's callback for a present this ICD
+ * started through PresentBuffers; -1 when the call is not one of those. */
+int agx_wgl_redirect_buffers(HDC hdc, LPPRESENTBUFFERS data);
+
 BOOL APIENTRY AgxWglDrvPresentBuffers(HDC hdc, LPPRESENTBUFFERS data) {
+  /* The presenting thread finished glthread before it presented. */
+  int ours = agx_wgl_redirect_buffers(hdc, data);
+  if (ours >= 0) return ours != 0;
   agx_glthread_finish_current();
   return DrvPresentBuffers(hdc, data);
 }
