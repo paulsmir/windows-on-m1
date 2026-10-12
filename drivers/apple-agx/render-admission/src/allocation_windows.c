@@ -479,8 +479,13 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   /* EXP1027: CPU-visible Mesa class allocations are GPU-accessed direct
    * buffers, mostly CPU write-only: keep the default write-combined mapping
    * (DXGK_ALLOCATIONINFOFLAGS_WDDM2_0: never Cached for write-only). */
-  /* EXP836: the only admitted Mesa class shape keeps AccessedPhysically. */
-  info->FlagsWddm2.AccessedPhysically = 1u;
+  /* M2-c: AGX renders through GPU virtual addresses only. Microsoft ("GPU
+   * Segments"): set AccessedPhysically only for allocations a rendering engine
+   * accesses physically -- it makes VidMm place them contiguously in a memory
+   * segment and map them into the aperture whenever resident in system
+   * memory. EXP836 admitted write set 0x3 with it set and never tested it
+   * clear. Class0 surfaces (CDD/GDI staging, primaries) keep it. */
+  info->FlagsWddm2.AccessedPhysically = classId == 0u;
   info->pAllocationUsageHint = NULL;
   info->AllocationPriority = D3DDDI_ALLOCATIONPRIORITY_NORMAL;
   info->Flags2.Value = 0u;

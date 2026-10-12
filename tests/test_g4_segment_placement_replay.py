@@ -49,10 +49,25 @@ typedef unsigned APPLE_AGX_U32;
 typedef long NTSTATUS;
 enum { STATUS_SUCCESS=0, STATUS_INVALID_PARAMETER=-1,
        STATUS_NOT_SUPPORTED=-2, STATUS_INSUFFICIENT_RESOURCES=-3 };
-typedef struct { uint64_t Size; unsigned CpuVisible, Reserved; } ADMISSION_ALLOCATION_DESCRIPTION;
+#define D3DDDIFMT_A8R8G8B8 21u
+#define D3DKMDT_GDISURFACE_TEXTURE 2u
+typedef struct { unsigned Type, Format; uint64_t Size; unsigned CpuVisible, Reserved; }
+    ADMISSION_ALLOCATION_DESCRIPTION;
 typedef struct { ADMISSION_ALLOCATION_DESCRIPTION Description; } ALLOCATION_OBJECT;
-typedef struct { ALLOCATION_OBJECT Object; unsigned Win32ClassId, Win32Flags; }
+typedef struct { ALLOCATION_OBJECT Object; unsigned Win32ClassId, Win32Flags;
+                 int WrittenPrimary, Presentation;
+                 unsigned PrimaryRefreshNumerator, PrimaryRefreshDenominator; }
     ADMISSION_ALLOCATION_HANDLE;
+#define ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY 1u
+typedef struct { unsigned Magic, Version, Bytes, Flags, Reserved,
+                 RefreshNumerator, RefreshDenominator; } ADMISSION_PRESENT_RESOURCE_DATA;
+static int AdmissionPresentResourceDataValid(const ADMISSION_PRESENT_RESOURCE_DATA *data) {
+  (void)data; return 0;
+}
+static void AdmissionPresentResourceRefreshRate(const ADMISSION_PRESENT_RESOURCE_DATA *data,
+                                                unsigned *numerator, unsigned *denominator) {
+  (void)data; *numerator = 0; *denominator = 1;
+}
 typedef struct { int Memory; void *PhysicalDeviceObject; } ADMISSION_CONTEXT;
 typedef struct { unsigned Value, SegmentId0; } SEGMENT_HINT;
 typedef struct { unsigned Value, CpuVisible, AccessedPhysically; } WDDM_FLAGS;
@@ -175,7 +190,9 @@ int main(void) {
    * shape for Mesa class BOs is the class0 shape. */
   assert(info.SupportedReadSegmentSet == ADMISSION_CPU_VISIBLE_SEGMENT_SET);
   assert(info.SupportedWriteSegmentSet == ADMISSION_CPU_VISIBLE_SEGMENT_SET);
-  assert(info.FlagsWddm2.AccessedPhysically == 1u);
+  /* M2-c: AGX renders through GPU VA only; a class BO is not accessed
+   * physically (contiguity / aperture mapping are not required). */
+  assert(info.FlagsWddm2.AccessedPhysically == 0u);
   ExFreePoolWithTag(info.hAllocation, ADMISSION_POOL_TAG);
   native.Size = 0x4000;
   memset(&info, 0, sizeof(info));
@@ -194,7 +211,7 @@ int main(void) {
     info.PrivateDriverDataSize = sizeof(native);
     assert(AdmissionCreateAllocationImpl(&context, &args) == STATUS_SUCCESS);
     assert(info.FlagsWddm2.CpuVisible == 0);
-    assert(info.FlagsWddm2.AccessedPhysically == 1);
+    assert(info.FlagsWddm2.AccessedPhysically == 0);
     assert(info.SupportedWriteSegmentSet == ADMISSION_LOCAL_SEGMENT_SET);
     assert(info.PreferredSegment.SegmentId0 == ADMISSION_MEMORY_LOCAL_SEGMENT);
     assert(info.EvictionSegmentSet == 0);
@@ -205,7 +222,9 @@ int main(void) {
   info.pPrivateDriverData = &legacy;
   info.PrivateDriverDataSize = sizeof(legacy);
   assert(AdmissionCreateAllocationImpl(&context, &args) == STATUS_SUCCESS);
-  /* EXP839: section-backed CPU-visible class0 surfaces stay in the aperture. */
+  /* EXP839: section-backed CPU-visible class0 surfaces stay in the aperture
+   * and keep the physical-access shape. */
+  assert(info.FlagsWddm2.AccessedPhysically == 1u);
   assert(info.SupportedReadSegmentSet == ADMISSION_APERTURE_SEGMENT_SET);
   assert(info.SupportedWriteSegmentSet == ADMISSION_APERTURE_SEGMENT_SET);
   assert(info.PreferredSegment.SegmentId0 == ADMISSION_MEMORY_APERTURE_SEGMENT);
