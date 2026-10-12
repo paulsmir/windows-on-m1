@@ -304,9 +304,13 @@ int main(void) {
     observed.UpdatePageTable.hProcess=sys.hKmdProcess;
     expect_ok("EXP799 first process local leaf",
         AdmissionGpuvaG3BuildPagingBuffer(&adapter,&observed));
-    for (unsigned i=0;i<HV_AGX_GPUVA_V5_BACKINGS;i++)
-      if (gpuva_v5.backings[i].live && gpuva_v5.backings[i].pa==target)
-        first_owner=(int)gpuva_v5.backings[i].owner;
+    {
+      const struct hv_agx_gpuva_v5_backing *record=
+          hv_agx_gpuva_v5_backing_by_pa(&gpuva_v5,target);
+      for (unsigned owner=0;record && first_owner<0 &&
+           owner<HV_AGX_GPUVA_V5_PROCESSES;owner++)
+        if (hv_agx_gpuva_v5_backing_owned(record,owner)) first_owner=(int)owner;
+    }
     assert(first_owner>=0);
     expect_ok("EXP799 second process create",
         AdmissionDdiCreateProcess(&adapter,&user));

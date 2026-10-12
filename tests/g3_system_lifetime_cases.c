@@ -351,7 +351,10 @@ static void system_lifetime_cases(void) {
   /* Capacity refusal preserves preceding leaves and logical-only residency. */
   p=sys_process(&a,0x40000,0);leaf=local_cpu+0x48000;
   q=sys_process(&a,0x50000,1);
-  for(UINT i=0;i<HV_AGX_GPUVA_V5_BACKINGS-1;++i)
+  /* The pre-M2-d bound (8192 pages) as the system-page limit. */
+  assert(hv_agx_gpuva_v5_configure_system_backings(&gpuva_v5,8192u)==
+         HV_AGX_GPUVA_V5_OK);
+  for(UINT i=0;i<8192u-1u;++i)
     assert(hv_agx_gpuva_v5_register_shared_backing(&gpuva_v5,q->Graph.ProcessId,
         q->Graph.ProcessGeneration,777,system_ipa+0x100000+i*0x4000ULL)==HV_AGX_GPUVA_V5_OK);
   expect_ok("R133 capacity stays unpublished",sys_update(&a,p,leaf,0,4,8,pte,0,0));
@@ -361,7 +364,7 @@ static void system_lifetime_cases(void) {
   assert(sys_frame(&state,system_ipa+0x4000)->Mappings==4);
   assert(sys_frame(&state,system_ipa+0x4000)->Grants==0);
   assert(!p->Graph.Uncertain);
-  for(UINT i=0;i<HV_AGX_GPUVA_V5_BACKINGS-1;++i)
+  for(UINT i=0;i<8192u-1u;++i)
     assert(hv_agx_gpuva_v5_revoke_backing(&gpuva_v5,q->Graph.ProcessId,
         q->Graph.ProcessGeneration,777,system_ipa+0x100000+i*0x4000ULL)==HV_AGX_GPUVA_V5_OK);
   expect_ok("R133 capacity retry",sys_update(&a,p,leaf,0,8,4,pte+4,0,0));

@@ -150,10 +150,11 @@ static void r137_reservation_cases(void) {
       assert(AppleAgxGpuvaG3GraphUpdateParent(&p->Graph,new_root,1,0));
       assert(AppleAgxGpuvaG3GraphAttachPrivate(&p->Graph,1ULL<<36,middle,leaf));
       unsigned found=0;
-      for(unsigned i=0;i<HV_AGX_GPUVA_V5_BACKINGS;++i)
-        if(gpuva_v5.backings[i].live && gpuva_v5.backings[i].ipa==data) {
-          assert(!gpuva_v5.backings[i].shared); ++found;
-        }
+      const struct hv_agx_gpuva_v5_backing *record=
+          hv_agx_gpuva_v5_backing_by_ipa(&gpuva_v5,data);
+      assert(record && !record->shared);
+      for(unsigned owner=0;owner<HV_AGX_GPUVA_V5_PROCESSES;++owner)
+        if(hv_agx_gpuva_v5_backing_owned(record,owner)) ++found;
       assert(found==1);
       assert(!AppleAgxGpuvaG3GraphUpdateLeafBacking(&p->Graph,leaf,0,data,true,
           AppleAgxGpuvaG3LocalBacking));

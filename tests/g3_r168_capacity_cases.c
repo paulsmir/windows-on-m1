@@ -1,7 +1,5 @@
 static UINT r168_live_backings(void) {
-  UINT count=0;
-  for(UINT index=0;index<HV_AGX_GPUVA_V5_BACKINGS;++index)
-    if(gpuva_v5.backings[index].live) ++count;
+  UINT count=hv_agx_gpuva_v5_live_backings(&gpuva_v5);
   for(UINT owner=0;owner<HV_AGX_GPUVA_V5_PROCESSES;++owner)
     for(UINT word=0;word<HV_AGX_GPUVA_V5_LOCAL_PAGES/64u;++word)
       count+=(UINT)__builtin_popcountll(gpuva_v5.local_grants[owner][word]);
@@ -79,8 +77,12 @@ static void r168_capacity_cases(void) {
     assert(r168_live_backings()==0u);
     puts("R168 local map/unmap/eviction lifetime: PASS (bounded retained local grants; zero retained grants after destroy)");
   } else {
-    UINT capacity=HV_AGX_GPUVA_V5_BACKINGS+
-        (getenv("G3_REPLAY_R168_BROKER_REFUSAL")?0u:1u);
+    /* The pre-M2-d broker bound (8192 x 16 KiB): local grants exceed it; in
+     * refusal mode it is set as the system-page limit and then exhausted. */
+    UINT capacity=8192u+(getenv("G3_REPLAY_R168_BROKER_REFUSAL")?0u:1u);
+    if(getenv("G3_REPLAY_R168_BROKER_REFUSAL"))
+      assert(hv_agx_gpuva_v5_configure_system_backings(&gpuva_v5,capacity)==
+             HV_AGX_GPUVA_V5_OK);
     for(UINT page=0;page<capacity;++page)
       assert(hv_agx_gpuva_v5_register_shared_backing(&gpuva_v5,
           process->Graph.ProcessId,process->Graph.ProcessGeneration,process->Graph.SharedBackingGeneration,
