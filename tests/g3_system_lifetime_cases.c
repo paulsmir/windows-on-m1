@@ -57,6 +57,7 @@ static void r134_system_64k_cases(void) {
   void *leaf=local_cpu+0x18000;
   pte.Flags=1; pte.PageAddress=system_ipa>>12;
   expect_ok("R134 system 64K",sys_update(&a,p,leaf,0,1,1,&pte,1,0));
+  assert(state.Leaf64KPtes[0]==1u && state.Leaf64KPtes[2]==0u);
   for(UINT i=0;i<4;++i) {
     ULONGLONG va=0x10000ULL+(ULONGLONG)i*0x4000ULL;
     assert(AppleAgxGpuvaG3GraphContainsRangeAccess(&p->Graph,va,0x4000,true));

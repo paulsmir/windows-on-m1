@@ -41,6 +41,8 @@ typedef struct _ADMISSION_G3_STATE {
   ULONG LastCompletedFence;
   ULONG PrivateCompletionFence;
   ULONGLONG UnpublishedGroups[32];
+  /* M2-b receipt: valid 64 KiB PTEs applied by leaf updates, per segment. */
+  ULONGLONG Leaf64KPtes[32];
   ADMISSION_G3_UPLOAD_TRACE UploadTrace[ADMISSION_G3_UPLOAD_TRACE_COUNT];
   ULONG UploadTraceNext, UploadVerifyChecks, UploadVerifyMismatch,
       UploadVerifyUnmapped;

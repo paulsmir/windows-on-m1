@@ -2015,7 +2015,8 @@ enum {
   AdmissionPagingReceiptFlush = 1u,
   AdmissionPagingReceiptFailure = 2u,
   AdmissionPagingReceiptUnpublished = 4u,
-  AdmissionPagingReceiptWait = 8u
+  AdmissionPagingReceiptWait = 8u,
+  AdmissionPagingReceiptLeaf64K = 16u
 };
 typedef struct _ADMISSION_PAGING_RECEIPTS {
   KSPIN_LOCK Lock;
@@ -2026,6 +2027,7 @@ typedef struct _ADMISSION_PAGING_RECEIPTS {
   ADMISSION_G3_FLUSH_RECEIPT Flush;
   ADMISSION_G3_PAGING_FAILURE Failure;
   ULONGLONG Unpublished[32];
+  ULONGLONG Leaf64K[32];
 } ADMISSION_PAGING_RECEIPTS;
 
 static IO_WORKITEM_ROUTINE AdmissionPagingReceiptWorker;
@@ -2045,6 +2047,8 @@ static void AdmissionPagingReceiptStage(ADMISSION_CONTEXT *Context,
       RtlCopyMemory(&receipts->Failure, Data, sizeof(receipts->Failure));
     else if (Kind == AdmissionPagingReceiptUnpublished)
       RtlCopyMemory(receipts->Unpublished, Data, sizeof(receipts->Unpublished));
+    else if (Kind == AdmissionPagingReceiptLeaf64K)
+      RtlCopyMemory(receipts->Leaf64K, Data, sizeof(receipts->Leaf64K));
     receipts->Dirty |= Kind;
     if (InterlockedCompareExchange(&receipts->Queued, 1, 0) == 0) {
       KeClearEvent(&receipts->Idle);
@@ -2079,7 +2083,7 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
   for (;;) {
     ADMISSION_G3_FLUSH_RECEIPT flush;
     ADMISSION_G3_PAGING_FAILURE failure;
-    ULONGLONG unpublished[32];
+    ULONGLONG unpublished[32], leaf64k[32];
     ADMISSION_G3_PAGING_WAIT_RECEIPT wait;
     ULONG dirty;
     KIRQL oldIrql;
@@ -2089,6 +2093,7 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
     RtlCopyMemory(&flush, &receipts->Flush, sizeof(flush));
     RtlCopyMemory(&failure, &receipts->Failure, sizeof(failure));
     RtlCopyMemory(unpublished, receipts->Unpublished, sizeof(unpublished));
+    RtlCopyMemory(leaf64k, receipts->Leaf64K, sizeof(leaf64k));
     if (dirty == 0u) {
       /* Cleared under the lock that Stage sets Dirty under: no lost wakeup. */
       InterlockedExchange(&receipts->Queued, 0);
@@ -2106,6 +2111,9 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
     if (dirty & AdmissionPagingReceiptUnpublished)
       AdmissionPagingReceiptWrite(context, L"Wom1G3UnpublishedGroups",
                                   unpublished, sizeof(unpublished), TRUE);
+    if (dirty & AdmissionPagingReceiptLeaf64K)
+      AdmissionPagingReceiptWrite(context, L"Wom1G3Leaf64KPtes",
+                                  leaf64k, sizeof(leaf64k), FALSE);
     if ((dirty & AdmissionPagingReceiptWait) &&
         InterlockedExchange(&context->G3PagingWaitDirty, 0) != 0) {
       RtlCopyMemory(&wait, &context->G3PagingWait, sizeof(wait));
@@ -2474,6 +2482,14 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3UnpublishedGroups(
       Counts == NULL)
     return;
   AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptUnpublished, Counts);
+}
+
+_Use_decl_annotations_ void AdmissionRecordGpuvaG3Leaf64KPtes(
+    ADMISSION_CONTEXT *Context, const ULONGLONG *Counts) {
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      Counts == NULL)
+    return;
+  AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptLeaf64K, Counts);
 }
 #endif
 
