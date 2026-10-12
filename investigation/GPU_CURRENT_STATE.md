@@ -1,5 +1,19 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
+## Current as of 2026-10-12 07:00Z (read this first)
+
+Installed: PACKAGE1232 (KMD/ARM64 UMD 7eb593d9, UMD32 fce5f2db, ICD out54
+422f5eb5 = DXGI flip presenter, 30.0.1231.0).
+Proven (EXP1232): G2 HW3c -- windowed GL on screen without the GDI ring:
+the ICD blits the GL colour buffer into a shared D3D11 texture it opened,
+waits ~0.8 ms for the blit, and its own D3D11 device (WOW64 UMD) copies it
+into a flip-discard swap chain and presents; PrintWindow MATCH x3, 59.6 fps,
+no DWM fault. APPLE_AGX_PRESENT=dxgi|redirect|ring selects the path.
+Still open: legacy redirected (blt) presentation unserviced (see 06:30Z).
+Next causal target: CS 1.6 standard benchmark on the DXGI path (fullscreen
+GL), then x86 closure 024 binaries (stack-frame fixes for UMD32/ICD), then
+remove the GDI ring, then M1 hardware run.
+
 ## Current as of 2026-10-12 06:30Z (read this first)
 
 Installed: PACKAGE1231 (KMD/ARM64 UMD build 7eb593d9 = c92ac343 + the stack
