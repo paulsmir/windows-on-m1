@@ -158,11 +158,14 @@ static BOOLEAN AdmissionUmdDescribePrimary(
       CreateResource->MipLevels != 1u || CreateResource->ArraySize != 1u ||
       CreateResource->SampleDesc.Count != 1u ||
       CreateResource->SampleDesc.Quality != 0u ||
+      /* A shared BGRA texture with any RT/SRV binds is the same linear
+       * allocation; EXP1226: opengl32's window redirection surface is
+       * SRV-only (the GL ICD writes it, DWM samples it). */
       ((CreateResource->BindFlags & D3D10_DDI_BIND_PRESENT) == 0u &&
        (CreateResource->MiscFlags != D3D10_DDI_RESOURCE_MISC_SHARED ||
         CreateResource->Format != DXGI_FORMAT_B8G8R8A8_UNORM ||
-        CreateResource->BindFlags != (D3D10_DDI_BIND_RENDER_TARGET |
-                                     D3D10_DDI_BIND_SHADER_RESOURCE))) ||
+        (CreateResource->BindFlags & (D3D10_DDI_BIND_RENDER_TARGET |
+                                      D3D10_DDI_BIND_SHADER_RESOURCE)) == 0u)) ||
       CreateResource->pInitialDataUP != NULL)
     return FALSE;
   ZeroMemory(Description, sizeof(*Description));

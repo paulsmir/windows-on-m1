@@ -87,6 +87,22 @@ int main(void) {
   c.MiscFlags=0x20002u|forbidden[i];
   assert(!AdmissionUmdDescribePrimary(&c,&observed));
  }
+ /* EXP1226: opengl32's window redirection surface (PresentBuffers nVersion 2)
+    is a shared BGRA texture the GL ICD writes and DWM samples, created with
+    only the shader-resource bind; any non-empty RT/SRV subset is the same
+    linear BGRA allocation. Unshared or RGBA non-present resources are not
+    presentation resources. */
+ c.pMipInfoList[0].TexelWidth=656u;c.pMipInfoList[0].TexelHeight=519u;
+ c.BindFlags=8u;c.MiscFlags=2u;
+ assert(AdmissionUmdDescribePrimary(&c,&observed));
+ assert(observed.Allocation.Format==21u && observed.Allocation.Pitch>=656u*4u);
+ assert(AdmissionAllocationDescriptionValid(&observed.Allocation));
+ c.BindFlags=32u;assert(AdmissionUmdDescribePrimary(&c,&observed));
+ c.BindFlags=0u;assert(!AdmissionUmdDescribePrimary(&c,&observed));
+ c.BindFlags=8u;c.MiscFlags=0u;assert(!AdmissionUmdDescribePrimary(&c,&observed));
+ c.MiscFlags=2u;c.Format=28u;assert(!AdmissionUmdDescribePrimary(&c,&observed));
+ c.Format=87u;c.BindFlags=0xa8u;
+ c.pMipInfoList[0].TexelWidth=2560u;c.pMipInfoList[0].TexelHeight=1600u;
  c.MiscFlags=0x20002u;c.ArraySize=2u;
  assert(!AdmissionUmdDescribePrimary(&c,&observed));
  c.ArraySize=1u;c.SampleDesc.Count=2u;
