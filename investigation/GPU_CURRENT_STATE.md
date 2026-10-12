@@ -1,6 +1,25 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-12 07:20Z (read this first)
+## Current as of 2026-10-12 08:10Z (read this first)
+
+Installed: PACKAGE1235 (KMD/ARM64 UMD build eb951f1d = 7eb593d9 + M2-a
+04bea5f5 + Wom1G3Leaf64KPtes receipt 5e76de65; INF with
+MemoryManager\Supports64KBPages = 1 (097091ae); ICD out55, UMD32 out4;
+30.0.1235.0) on the M1 set, full-owner from the integration worktree.
+Proven: dxgmms2 gives an allocation 64 KB system pages only with the adapter
+opt-in (Class and Video keys both carry it now) + SysMem64KBPageSupported +
+an aperture in the segment set + 64 KiB-multiple size + not CPU-visible with
+a CPU-visible local segment (investigation/analysis/M2-vidmm-64k-decision.md).
+EXP1235: opt-in + M2-a safe (all checks pass) but no allocation qualifies
+under today's placement (Leaf64KPtes never written; UnpublishedGroups[0] 913
+from section-backed class0 CDD/GDI surfaces).
+Next causal target: M2-d -- the m1n1 broker's system-backing registry must
+hold UMA-scale backings (v5: 4096 x 16 KiB = 64 MiB, linear scans; R143
+section "Grant and DART limits" asks for an indexed/range design, not a bigger
+array), then M2-c (GPU allocations with the aperture in their set, aperture
+segment > 256 MiB) as the 64 KB discriminator. CS bench still waits for Steam.
+
+## Current as of 2026-10-12 07:20Z
 
 Installed: PACKAGE1234 = EXP1233's package (KMD/ARM64 UMD 7eb593d9, x86
 closure 024: UMD32 out4 b97adbe2, ICD out55 2ce3c9e7, 30.0.1231.0) on the M1
