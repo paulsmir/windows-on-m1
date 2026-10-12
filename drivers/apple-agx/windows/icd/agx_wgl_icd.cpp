@@ -10,6 +10,7 @@
  * composes the window's redirection surface either way). One screen per
  * process, created on the first DC, as Mesa's stw device expects. */
 #include <windows.h>
+#include <psapi.h>   /* K32EnumProcessModules (kernel32): EXP1222 module receipt */
 #include <string.h>
 #include "agx_kmt_gpuva_bridge.h"
 /* C units of this DLL (render_allocation.c, agx_win32_screen.c) whose
@@ -1314,6 +1315,45 @@ extern "C" int agx_wgl_redirect_buffers(HDC hdc, LPPRESENTBUFFERS data) {
 #endif
 }
 
+/* EXP1222 receipt-only: the modules PresentBuffers loads into the process
+ * (EXP1221: nVersion 2 returned TRUE without a callback and left
+ * ERROR_MOD_NOT_FOUND). The module list before the first call is kept; after
+ * each of the first 32 calls every module not in it is reported once
+ * (measure-wgl-pb-module_<file>: attempt, variant, GetLastError). */
+#define AGX_WGL_PB_MODULES 256u
+static HMODULE AgxWglPbModules[AGX_WGL_PB_MODULES];
+static DWORD AgxWglPbModuleCount;
+static UINT AgxWglPbModuleCalls;
+
+static void wgl_pb_modules(UINT attempt, UINT variant, DWORD error) {
+  HMODULE now[AGX_WGL_PB_MODULES];
+  DWORD bytes = 0;
+  if (AgxWglPbModuleCalls > 32u) return;
+  if (!K32EnumProcessModules(GetCurrentProcess(), now, sizeof(now), &bytes)) return;
+  DWORD count = bytes / sizeof(HMODULE);
+  if (count > AGX_WGL_PB_MODULES) count = AGX_WGL_PB_MODULES;
+  if (AgxWglPbModuleCalls++ == 0u) {
+    memcpy(AgxWglPbModules, now, count * sizeof(HMODULE));
+    AgxWglPbModuleCount = count;
+    UINT values[2] = {count, 0u};
+    AdmissionUmdDiagnostic("measure-wgl-pb-modules", S_OK, values, 2u);
+    return;
+  }
+  for (DWORD i = 0; i < count; ++i) {
+    DWORD k = 0;
+    while (k < AgxWglPbModuleCount && AgxWglPbModules[k] != now[i]) ++k;
+    if (k < AgxWglPbModuleCount) continue;
+    char path[MAX_PATH], stage[96];
+    if (!GetModuleFileNameA(now[i], path, MAX_PATH)) continue;
+    const char *slash = strrchr(path, '\\');
+    if (_snprintf_s(stage, sizeof(stage), _TRUNCATE, "measure-wgl-pb-module_%s",
+                    slash ? slash + 1 : path) < 0) continue;
+    UINT values[3] = {attempt, variant, (UINT)error};
+    AdmissionUmdDiagnostic(stage, S_OK, values, 3u);
+    if (AgxWglPbModuleCount < AGX_WGL_PB_MODULES) AgxWglPbModules[AgxWglPbModuleCount++] = now[i];
+  }
+}
+
 /* One present through opengl32: PresentBuffers with this source's request;
  * opengl32 calls agx_wgl_redirect_buffers back. Returns the stage. */
 static UINT wgl_redirect_present(AGX_WGL_KMT_SOURCE *s, HWND window, const RECT *rect,
@@ -1335,7 +1375,8 @@ static UINT wgl_redirect_present(AGX_WGL_KMT_SOURCE *s, HWND window, const RECT 
   /* EXP1221 measurement of the undocumented half: until a callback comes,
    * attempts 1-8 use nVersion 2 without sync (Mesa stw's call), 9-16 with
    * vsync, 17-24 nVersion 1, 25-32 nVersion 3; then nVersion 2. A variant
-   * that is called back is kept. */
+   * that is called back is kept. EXP1221: nVersion 3 is called back (with
+   * no surface); nVersion 2 returns TRUE without a callback. */
   static const UINT variants[4][2] = {{2u, PRESCB_SYNCTYPE_NONE}, {2u, PRESCB_SYNCTYPE_VSYNC},
                                       {1u, PRESCB_SYNCTYPE_NONE}, {3u, PRESCB_SYNCTYPE_NONE}};
   UINT variant = s->PbVariant ? s->PbVariant - 1u :
@@ -1346,6 +1387,7 @@ static UINT wgl_redirect_present(AGX_WGL_KMT_SOURCE *s, HWND window, const RECT 
   cb.luidAdapter = AgxWgl->Luid;
   cb.pPrivData = request;
   cb.updateRect = *rect;
+  if (!AgxWglPbModuleCalls) wgl_pb_modules(0u, variant, 0u);   /* the baseline, before the first call */
   SetLastError(0);
   {
     LARGE_INTEGER t; QueryPerformanceCounter(&t); AgxWglDpbStartQpc = t.QuadPart;
@@ -1353,6 +1395,7 @@ static UINT wgl_redirect_present(AGX_WGL_KMT_SOURCE *s, HWND window, const RECT 
   ok = stw_dev->callbacks.pfnPresentBuffers(dc, &cb);
   if (!request->Called) *status = (LONG)GetLastError();
   request->Active = FALSE;
+  wgl_pb_modules(s->PbAttempts, variant, (DWORD)*status);
   if (request->Called) {
     ++s->PbCalled[variant];
     if (!s->PbVariant) s->PbVariant = variant + 1u;
