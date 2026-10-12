@@ -1241,6 +1241,55 @@ static UINT wgl_redirect_open(AGX_WGL_KMT_SOURCE *s, HANDLE shared, LONG *status
   return AGX_WGL_REDIRECT_SHOWN;
 }
 
+/* EXP1229 receipt-only: what this process sees in the redirection surface
+ * after its copy (DWM composed it as all zeros). Texel at the copy's centre
+ * in the surface and the same texel in the source image, read through a
+ * 2x1 staging texture (the READ map waits for the copies); the first four
+ * presents, then every 120th. */
+static void wgl_redirect_readback(struct pipe_context *ctx, AGX_WGL_KMT_SOURCE *s,
+                                  int x, int y, int width, int height) {
+  static volatile LONG presents;
+  LONG n = InterlockedIncrement(&presents);
+  if (n > 4 && n % 120) return;
+  struct pipe_screen *screen = ctx->screen;
+  struct pipe_resource templ;
+  memset(&templ, 0, sizeof(templ));
+  templ.target = PIPE_TEXTURE_2D;
+  templ.format = s->DestinationImage->format;
+  templ.width0 = 2; templ.height0 = 1; templ.depth0 = 1; templ.array_size = 1;
+  templ.usage = PIPE_USAGE_STAGING;
+  struct pipe_resource *staging = screen->resource_create(screen, &templ);
+  UINT values[8] = {(UINT)n, 0u, 0u, (UINT)(x + width / 2), (UINT)(y + height / 2),
+                    (UINT)s->DestinationImage->format, (UINT)s->Image->format, 0u};
+  if (staging) {
+    struct pipe_resource *from[2] = {s->DestinationImage, s->Image};
+    const int fx[2] = {x + width / 2, width / 2}, fy[2] = {y + height / 2, height / 2};
+    for (unsigned i = 0; i < 2u; ++i) {
+      struct pipe_blit_info blit;
+      memset(&blit, 0, sizeof(blit));
+      blit.dst.resource = staging; blit.dst.format = staging->format;
+      blit.dst.box.x = (int)i; blit.dst.box.width = 1; blit.dst.box.height = 1;
+      blit.dst.box.depth = 1;
+      blit.src.resource = from[i]; blit.src.format = from[i]->format;
+      blit.src.box = blit.dst.box; blit.src.box.x = fx[i]; blit.src.box.y = fy[i];
+      blit.mask = PIPE_MASK_RGBA; blit.filter = PIPE_TEX_FILTER_NEAREST;
+      ctx->blit(ctx, &blit);
+    }
+    ctx->flush(ctx, NULL, 0);
+    struct pipe_transfer *transfer = NULL;
+    struct pipe_box box;
+    u_box_2d(0, 0, 2, 1, &box);
+    const UINT *map = (const UINT *)ctx->texture_map(ctx, staging, 0, PIPE_MAP_READ, &box,
+                                                     &transfer);
+    if (map && transfer) {
+      values[1] = map[0]; values[2] = map[1]; values[7] = 1u;
+      ctx->texture_unmap(ctx, transfer);
+    }
+    pipe_resource_reference(&staging, NULL);
+  }
+  AdmissionUmdDiagnostic("measure-wgl-redirect-readback", S_OK, values, 8u);
+}
+
 /* opengl32's DrvPresentBuffers callback for a present started by
  * wgl_redirect_present (agx_wgl_glthread.c routes it here first): open the
  * surface if it changed and hand the blt to PresentToRedirectionSurface.
@@ -1336,6 +1385,8 @@ extern "C" int agx_wgl_redirect_buffers(HDC hdc, LPPRESENTBUFFERS data) {
     blit.filter = PIPE_TEX_FILTER_NEAREST;
     request->Context->blit(request->Context, &blit);
     request->Context->flush(request->Context, NULL, 0);
+    wgl_redirect_readback(request->Context, s, (int)x, (int)y, (int)rect.right,
+                          (int)rect.bottom);
   }
   PRESENTTOREDIRECTIONSURFACECB args;
   ZeroMemory(&args, sizeof(args));
