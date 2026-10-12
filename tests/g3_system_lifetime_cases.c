@@ -202,10 +202,17 @@ static void system_lifetime_cases(void) {
   assert(!ReplayTranslate(&b,0x300000000ULL)); /* MMIO/no stage-2 RAM */
   root_base=system_ipa+0x10000000ULL;root_length=0x4000;
   assert(!ReplayTranslate(&b,system_ipa));root_base=root_length=0;
+  /* M1: a preloaded ramdisk is denied through its published region; the
+   * layout window alone is ordinary guest RAM. */
   J313_AUTONOMOUS_LAYOUT.ramdisk_base=system_ipa+0x10000000ULL;
   J313_AUTONOMOUS_LAYOUT.ramdisk_max_size=0x4000;
-  assert(!ReplayTranslate(&b,system_ipa));
+  assert(ReplayTranslate(&b,system_ipa));
   J313_AUTONOMOUS_LAYOUT.ramdisk_base=J313_AUTONOMOUS_LAYOUT.ramdisk_max_size=0;
+  b.memory.region_count=3;
+  b.memory.regions[2].kind=HV_CONTRACT_REGION_RAMDISK;
+  b.memory.regions[2].base=system_ipa+0x10000000ULL;
+  b.memory.regions[2].size=0x4000;
+  assert(!ReplayTranslate(&b,system_ipa));b.memory.region_count=2;
   b.memory.region_count=3;
   b.memory.regions[2].kind=HV_CONTRACT_REGION_DART_TABLES;
   b.memory.regions[2].base=system_ipa+0x10000000ULL;
