@@ -11,6 +11,8 @@
  * process, created on the first DC, as Mesa's stw device expects. */
 #include <windows.h>
 #include <psapi.h>   /* K32EnumProcessModules (kernel32): EXP1222 module receipt */
+#include <d3d11.h>   /* G2 HW3c: the GL window's DXGI flip-model swap chain */
+#include <dxgi1_2.h>
 #include <string.h>
 #include "agx_kmt_gpuva_bridge.h"
 /* C units of this DLL (render_allocation.c, agx_win32_screen.c) whose
@@ -1022,6 +1024,14 @@ typedef struct {
    * variant the calls answered by a callback, TRUE without one, FALSE. */
   UINT PbAttempts, PbVariant, PbCalled[4], PbTrue[4], PbFalse[4];
   UINT Stages[AGX_WGL_REDIRECT_STAGES], LastStage, LastStatus, Async;
+  /* G2 HW3c (EXP1232): the window's DXGI flip-model swap chain on this
+   * adapter's D3D11 device in this process, and the shared texture the ICD
+   * writes (opened as Surface/DestinationImage) and D3D11 copies into the
+   * swap chain's back buffer. */
+  IDXGISwapChain1 *Chain;
+  ID3D11Texture2D *Shared;
+  UINT DxgiStage; LONG DxgiStatus;
+  LONGLONG SumWait;
   /* Receipt sums (measure-wgl-kmtpresent), microseconds after scaling. */
   LONGLONG Frames, LastTick, SumPresent, SumInterval, SumCopy, SumKernel;
   unsigned Shown, Failed, Empty, LastFailure;
@@ -1086,6 +1096,8 @@ static void wgl_redirect_close(AGX_WGL_KMT_SOURCE *s) {
 
 static void wgl_kmt_release(AGX_WGL_KMT_SOURCE *s) {
   wgl_redirect_close(s);
+  if (s->Shared) s->Shared->Release();
+  if (s->Chain) s->Chain->Release();
   if (s->Image) AgxWin32AsahiResourceRelease(&s->Image);
   wgl_kmt_pend(s->Allocation, 0);
   ZeroMemory(s, sizeof(*s));
@@ -1570,10 +1582,205 @@ static void wgl_kmt_present_receipt(AGX_WGL_KMT_SOURCE *s, unsigned width,
     width, height, s->Shown, s->Failed, s->Empty, s->LastFailure,
     s->Refused ? 1u : 0u };
   AdmissionUmdDiagnostic("measure-wgl-kmtpresent", S_OK, values, 11u);
+  {
+    /* G2 HW3c: last DXGI stage and status, mean wait for the ICD's blit (us),
+     * swap chain present, shared texture size. */
+    UINT dxgi[7] = {s->DxgiStage, (UINT)s->DxgiStatus,
+        (UINT)(s->SumWait * 1000000 / us / frames), s->Chain ? 1u : 0u,
+        s->Destination.Width, s->Destination.Height, s->Surface.Kind};
+    AdmissionUmdDiagnostic("measure-wgl-dxgi", S_OK, dxgi, 7u);
+    s->SumWait = 0;
+  }
   wgl_redirect_receipt(s);
   s->SumPresent = s->SumInterval = s->SumCopy = s->SumKernel = 0;
   s->Shown = s->Failed = s->Empty = 0;
   if (!now) wgl_common_receipt(us);
+}
+
+/* G2 HW3c (EXP1232): present a GL frame through a DXGI flip-model swap chain.
+ * EXP1231 proved flip-model presents from this driver composed on screen
+ * (32-bit D3D11 smoke) while redirected (blt) presents are not serviced
+ * (EXP1231-D2: no DxgkDdiPresent Blt at all). The ICD makes a D3D11 device
+ * on its adapter (the WOW64 UMD in this process), a flip-discard swap chain
+ * for the window and a shared B8G8R8A8 texture it opens on its own device
+ * (wgl_redirect_open); per frame it blits the GL colour buffer into that
+ * texture, waits for the blit, and D3D11 copies it into the back buffer and
+ * presents. Stages for measure-wgl-dxgi. */
+enum {
+  AGX_WGL_DXGI_SHOWN,
+  AGX_WGL_DXGI_DEVICE,       /* no D3D11 device on this adapter */
+  AGX_WGL_DXGI_CHAIN,        /* CreateSwapChainForHwnd */
+  AGX_WGL_DXGI_TEXTURE,      /* CreateTexture2D / GetSharedHandle */
+  AGX_WGL_DXGI_OPEN,         /* the ICD could not open/adopt the texture */
+  AGX_WGL_DXGI_WAIT,         /* the blit's fence */
+  AGX_WGL_DXGI_BUFFER,       /* GetBuffer */
+  AGX_WGL_DXGI_PRESENT,      /* IDXGISwapChain::Present */
+  AGX_WGL_DXGI_STAGES
+};
+typedef HRESULT (WINAPI *AGX_CREATE_DXGI_FACTORY1)(REFIID, void **);
+static struct {
+  BOOL Tried;
+  HRESULT Status;
+  IDXGIFactory2 *Factory;
+  ID3D11Device *Device;
+  ID3D11DeviceContext *Context;
+} AgxWglDxgi;
+
+static HRESULT wgl_dxgi_device(void) {
+  if (AgxWglDxgi.Tried) return AgxWglDxgi.Status;
+  AgxWglDxgi.Tried = TRUE;
+  HMODULE dxgi = LoadLibraryW(L"dxgi.dll"), d3d11 = LoadLibraryW(L"d3d11.dll");
+  AGX_CREATE_DXGI_FACTORY1 createFactory = dxgi ?
+      (AGX_CREATE_DXGI_FACTORY1)(void *)GetProcAddress(dxgi, "CreateDXGIFactory1") : NULL;
+  PFN_D3D11_CREATE_DEVICE createDevice = d3d11 ?
+      (PFN_D3D11_CREATE_DEVICE)(void *)GetProcAddress(d3d11, "D3D11CreateDevice") : NULL;
+  HRESULT result = createFactory && createDevice ? S_OK : HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND);
+  IDXGIAdapter1 *adapter = NULL, *pick = NULL;
+  if (SUCCEEDED(result))
+    result = createFactory(__uuidof(IDXGIFactory2), (void **)&AgxWglDxgi.Factory);
+  for (UINT i = 0; SUCCEEDED(result) && !pick &&
+       AgxWglDxgi.Factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i) {
+    DXGI_ADAPTER_DESC1 desc;
+    if (SUCCEEDED(adapter->GetDesc1(&desc)) &&
+        desc.AdapterLuid.LowPart == AgxWgl->Luid.LowPart &&
+        desc.AdapterLuid.HighPart == AgxWgl->Luid.HighPart)
+      pick = adapter;
+    else
+      adapter->Release();
+  }
+  if (SUCCEEDED(result) && !pick) result = DXGI_ERROR_NOT_FOUND;
+  if (SUCCEEDED(result)) {
+    const D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1,
+                                        D3D_FEATURE_LEVEL_10_0};
+    D3D_FEATURE_LEVEL level;
+    result = createDevice(pick, D3D_DRIVER_TYPE_UNKNOWN, NULL, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+                          levels, 3u, D3D11_SDK_VERSION, &AgxWglDxgi.Device, &level,
+                          &AgxWglDxgi.Context);
+  }
+  if (pick) pick->Release();
+  AgxWglDxgi.Status = result;
+  if (FAILED(result)) wgl_note("reject-wgl-dxgi-device", result);
+  return result;
+}
+
+/* The window's swap chain and shared texture at the client size; a size
+ * change rebuilds both. Returns AGX_WGL_DXGI_SHOWN when ready. */
+static UINT wgl_dxgi_target(AGX_WGL_KMT_SOURCE *s, HWND window, unsigned width,
+                            unsigned height, LONG *status) {
+  if (s->Chain && s->Shared && s->DestinationImage &&
+      s->Destination.Width == width && s->Destination.Height == height)
+    return AGX_WGL_DXGI_SHOWN;
+  wgl_redirect_close(s);
+  if (s->Shared) { s->Shared->Release(); s->Shared = NULL; }
+  HRESULT result;
+  if (!s->Chain) {
+    DXGI_SWAP_CHAIN_DESC1 desc;
+    ZeroMemory(&desc, sizeof(desc));
+    desc.Width = width; desc.Height = height;
+    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    desc.SampleDesc.Count = 1u;
+    desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    desc.BufferCount = 2u;
+    desc.Scaling = DXGI_SCALING_STRETCH;
+    desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    desc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
+    result = AgxWglDxgi.Factory->CreateSwapChainForHwnd(AgxWglDxgi.Device, window, &desc,
+                                                         NULL, NULL, &s->Chain);
+    if (FAILED(result)) { s->Chain = NULL; *status = (LONG)result; return AGX_WGL_DXGI_CHAIN; }
+    (void)AgxWglDxgi.Factory->MakeWindowAssociation(window,
+        DXGI_MWA_NO_WINDOW_CHANGES | DXGI_MWA_NO_ALT_ENTER);
+  } else {
+    DXGI_SWAP_CHAIN_DESC1 desc;
+    if (SUCCEEDED(s->Chain->GetDesc1(&desc)) && (desc.Width != width || desc.Height != height)) {
+      result = s->Chain->ResizeBuffers(0u, width, height, DXGI_FORMAT_UNKNOWN, 0u);
+      if (FAILED(result)) { *status = (LONG)result; return AGX_WGL_DXGI_CHAIN; }
+    }
+  }
+  D3D11_TEXTURE2D_DESC texture;
+  ZeroMemory(&texture, sizeof(texture));
+  texture.Width = width; texture.Height = height;
+  texture.MipLevels = 1u; texture.ArraySize = 1u;
+  texture.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+  texture.SampleDesc.Count = 1u;
+  texture.Usage = D3D11_USAGE_DEFAULT;
+  texture.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+  texture.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
+  result = AgxWglDxgi.Device->CreateTexture2D(&texture, NULL, &s->Shared);
+  HANDLE shared = NULL;
+  if (SUCCEEDED(result)) {
+    IDXGIResource *resource = NULL;
+    result = s->Shared->QueryInterface(__uuidof(IDXGIResource), (void **)&resource);
+    if (SUCCEEDED(result)) {
+      result = resource->GetSharedHandle(&shared);
+      resource->Release();
+    }
+  }
+  if (FAILED(result) || !shared) {
+    if (s->Shared) { s->Shared->Release(); s->Shared = NULL; }
+    *status = (LONG)(FAILED(result) ? result : E_HANDLE);
+    return AGX_WGL_DXGI_TEXTURE;
+  }
+  LONG openStatus = 0;
+  UINT stage = wgl_redirect_open(s, shared, &openStatus);
+  if (stage != AGX_WGL_REDIRECT_SHOWN || !s->DestinationImage) {
+    *status = openStatus ? openStatus : (LONG)stage;
+    return AGX_WGL_DXGI_OPEN;
+  }
+  return AGX_WGL_DXGI_SHOWN;
+}
+
+static UINT wgl_dxgi_present(AGX_WGL_KMT_SOURCE *s, struct pipe_context *ctx,
+                             struct pipe_resource *res, HWND window, unsigned width,
+                             unsigned height, LONG *status) {
+  *status = 0;
+  if (FAILED(wgl_dxgi_device())) { *status = (LONG)AgxWglDxgi.Status; return AGX_WGL_DXGI_DEVICE; }
+  UINT stage = wgl_dxgi_target(s, window, width, height, status);
+  if (stage != AGX_WGL_DXGI_SHOWN) return stage;
+  struct pipe_blit_info blit;
+  memset(&blit, 0, sizeof(blit));
+  blit.dst.resource = s->DestinationImage;
+  blit.dst.format = s->DestinationImage->format;
+  blit.dst.box.width = (int)width;
+  blit.dst.box.height = (int)height;
+  blit.dst.box.depth = 1;
+  blit.src.resource = res;
+  blit.src.format = res->format;
+  blit.src.box = blit.dst.box;
+  blit.mask = PIPE_MASK_RGBA;
+  blit.filter = PIPE_TEX_FILTER_NEAREST;
+  ctx->blit(ctx, &blit);
+  /* The D3D11 device is another device: its copy may read the texture only
+   * after this blit completed. */
+  LARGE_INTEGER before, after;
+  QueryPerformanceCounter(&before);
+  struct pipe_fence_handle *fence = NULL;
+  ctx->flush(ctx, &fence, 0);
+  bool done = fence && ctx->screen->fence_finish(ctx->screen, NULL, fence, ~0ull);
+  if (fence) ctx->screen->fence_reference(ctx->screen, &fence, NULL);
+  QueryPerformanceCounter(&after);
+  s->SumWait += after.QuadPart - before.QuadPart;
+  if (!done) { *status = (LONG)E_FAIL; return AGX_WGL_DXGI_WAIT; }
+  ID3D11Texture2D *back = NULL;
+  HRESULT result = s->Chain->GetBuffer(0u, __uuidof(ID3D11Texture2D), (void **)&back);
+  if (FAILED(result)) { *status = (LONG)result; return AGX_WGL_DXGI_BUFFER; }
+  AgxWglDxgi.Context->CopyResource(back, s->Shared);
+  back->Release();
+  result = s->Chain->Present(0u, 0u);
+  if (FAILED(result)) { *status = (LONG)result; return AGX_WGL_DXGI_PRESENT; }
+  return AGX_WGL_DXGI_SHOWN;
+}
+
+/* APPLE_AGX_PRESENT: "dxgi" (default), "redirect" (opengl32 PresentBuffers,
+ * G2 HW3b) or "ring" (the GDI ring only). */
+static int wgl_present_mode(void) {
+  static int mode = -1;
+  if (mode < 0) {
+    char value[16];
+    DWORD n = GetEnvironmentVariableA("APPLE_AGX_PRESENT", value, sizeof(value));
+    mode = n && n < sizeof(value) && !strcmp(value, "redirect") ? 1 :
+           n && n < sizeof(value) && !strcmp(value, "ring") ? 2 : 0;
+  }
+  return mode;
 }
 
 /* TRUE: the frame was presented by the kernel (or there is nothing to show);
@@ -1609,6 +1816,33 @@ static BOOL wgl_kmt_present(struct pipe_context *ctx, struct pipe_resource *res,
     s->SumPresent += end.QuadPart - start;
     wgl_kmt_present_receipt(s, width, height, FALSE);
     return TRUE;
+  }
+  if (wgl_present_mode() == 0) {
+    LONG status = 0;
+    UINT stage = wgl_dxgi_present(s, ctx, res, window, width, height, &status);
+    QueryPerformanceCounter(&end);
+    s->SumPresent += end.QuadPart - start;
+    s->DxgiStage = stage;
+    if (stage == AGX_WGL_DXGI_SHOWN) {
+      s->Failures = 0;
+      ++s->Shown;
+      wgl_kmt_present_receipt(s, width, height, FALSE);
+      return TRUE;
+    }
+    ++s->Failed;
+    s->DxgiStatus = status;
+    s->LastFailure = (0x80u << 24) | (stage << 16) | ((UINT)status & 0xffffu);
+    if (s->Failed == 1u) {
+      UINT values[2] = {stage, (UINT)status};
+      AdmissionUmdDiagnostic("reject-wgl-dxgi-present", E_FAIL, values, 2u);
+    }
+    if (++s->Failures >= AGX_WGL_KMT_REFUSALS) {
+      s->Refused = TRUE;
+      wgl_kmt_present_receipt(s, width, height, TRUE);
+    } else {
+      wgl_kmt_present_receipt(s, width, height, FALSE);
+    }
+    return FALSE;
   }
   struct pipe_blit_info blit;
   memset(&blit, 0, sizeof(blit));
@@ -1686,7 +1920,7 @@ extern "C" BOOL agx_wgl_present_window(struct pipe_screen *screen,
   AcquireSRWLockExclusive(&AgxWglRingLock);
   wgl_sampler_start();
   /* G2 HW3: the kernel presents; the ring shows what it refuses. */
-  if (wgl_kmt_present(ctx, res, window, start.QuadPart)) {
+  if (wgl_present_mode() != 2 && wgl_kmt_present(ctx, res, window, start.QuadPart)) {
     ReleaseSRWLockExclusive(&AgxWglRingLock);
     return TRUE;
   }
