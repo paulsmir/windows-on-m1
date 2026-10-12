@@ -965,7 +965,11 @@ static void wgl_sampler_start(void) {
  * instead, and after AGX_WGL_KMT_REFUSALS such presents in a row the window
  * keeps the ring until its size changes. */
 #define AGX_WGL_KMT_SOURCES 4u
-#define AGX_WGL_KMT_REFUSALS 8u
+/* EXP1220: PresentBuffers returned TRUE without calling DrvPresentBuffers
+ * back for the first eight frames; the protocol may engage only once DWM
+ * has made the window's surface, so a window keeps trying for four seconds
+ * of frames before it keeps the ring. */
+#define AGX_WGL_KMT_REFUSALS 240u
 #define AGX_WGL_KMT_PENDING 8u
 /* Where a redirected present stopped (measure-wgl-redirect). */
 enum {
@@ -1011,6 +1015,9 @@ typedef struct {
   UINT RedirectVersion;            /* PresentToRedirectionSurface nVersion */
   UINT DestinationStage;           /* wgl_redirect_open's result for Surface.Shared */
   LONG DestinationStatus;
+  /* EXP1221: PresentBuffers attempts, the variant kept (1-4, 0 none), and per
+   * variant the calls answered by a callback, TRUE without one, FALSE. */
+  UINT PbAttempts, PbVariant, PbCalled[4], PbTrue[4], PbFalse[4];
   UINT Stages[AGX_WGL_REDIRECT_STAGES], LastStage, LastStatus, Async;
   /* Receipt sums (measure-wgl-kmtpresent), microseconds after scaling. */
   LONGLONG Frames, LastTick, SumPresent, SumInterval, SumCopy, SumKernel;
@@ -1180,7 +1187,7 @@ static UINT wgl_redirect_open(AGX_WGL_KMT_SOURCE *s, HANDLE shared, LONG *status
         s->Surface.ResourcePrivateBytes, s->Surface.AllocationPrivateBytes,
         r->Magic, r->Type, r->Format, r->Width, r->Height, r->Pitch, r->CpuVisible,
         (UINT)s->Surface.GpuVirtualAddress, (UINT)(s->Surface.GpuVirtualAddress >> 32)};
-    AdmissionUmdDiagnostic("wgl-redirect-surface", S_OK, values, 16u);
+    AdmissionUmdDiagnostic("measure-wgl-redirect-surface", S_OK, values, 16u);
   }
   if (*status < 0) { ZeroMemory(&s->Surface, sizeof(s->Surface)); return AGX_WGL_REDIRECT_OPEN; }
   memcpy(&d, s->Surface.AllocationPrivate, sizeof(d));
@@ -1222,12 +1229,33 @@ static UINT wgl_redirect_open(AGX_WGL_KMT_SOURCE *s, HANDLE shared, LONG *status
  * surface if it changed and hand the blt to PresentToRedirectionSurface.
  * Runs on the presenting thread, which holds AgxWglRingLock. Returns -1 for
  * a call that is not this ICD's, else the BOOL for opengl32. */
+/* EXP1221 receipt-only: every DrvPresentBuffers call opengl32 makes (the
+ * first 16 one by one: sequence, ours, during its PresentBuffers, on the
+ * presenting thread, hSurface, token low and high, microseconds since that
+ * PresentBuffers began, pPrivData low; then counts in measure-wgl-redirect). */
+static volatile LONG AgxWglDpbCalls, AgxWglDpbForeign;
+static LONGLONG AgxWglDpbStartQpc;
+
 extern "C" int agx_wgl_redirect_buffers(HDC hdc, LPPRESENTBUFFERS data) {
   AGX_WGL_REDIRECT_REQUEST *request = data ? (AGX_WGL_REDIRECT_REQUEST *)data->pPrivData : NULL;
-  if (!request || request < &AgxWglRedirectRequests[0] ||
-      request >= &AgxWglRedirectRequests[AGX_WGL_KMT_SOURCES] ||
-      request->Magic != AGX_WGL_REDIRECT_MAGIC)
-    return -1;
+  BOOL ours = request && request >= &AgxWglRedirectRequests[0] &&
+      request < &AgxWglRedirectRequests[AGX_WGL_KMT_SOURCES] &&
+      request->Magic == AGX_WGL_REDIRECT_MAGIC;
+  LONG seq = InterlockedIncrement(&AgxWglDpbCalls);
+  if (!ours) InterlockedIncrement(&AgxWglDpbForeign);
+  if (seq <= 16) {
+    LARGE_INTEGER now, frequency;
+    QueryPerformanceCounter(&now); QueryPerformanceFrequency(&frequency);
+    UINT values[9] = {(UINT)seq, ours ? 1u : 0u, ours && request->Active ? 1u : 0u,
+        ours && request->Thread == GetCurrentThreadId() ? 1u : 0u,
+        data ? (UINT)(UINT_PTR)data->hSurface : 0u,
+        data ? (UINT)data->ullPresentToken : 0u, data ? (UINT)(data->ullPresentToken >> 32) : 0u,
+        frequency.QuadPart && AgxWglDpbStartQpc ?
+            (UINT)((now.QuadPart - AgxWglDpbStartQpc) * 1000000 / frequency.QuadPart) : 0u,
+        data ? (UINT)(UINT_PTR)data->pPrivData : 0u};
+    AdmissionUmdDiagnostic("measure-wgl-dpb", S_OK, values, 9u);
+  }
+  if (!ours) return -1;
   AGX_WGL_KMT_SOURCE *s = (AGX_WGL_KMT_SOURCE *)request->Source;
   /* Only during its PresentBuffers call and on its thread: a late or
    * foreign-thread callback must not touch the source. */
@@ -1304,15 +1332,33 @@ static UINT wgl_redirect_present(AGX_WGL_KMT_SOURCE *s, HWND window, const RECT 
   request->Thread = GetCurrentThreadId();
   request->Active = TRUE;
   ZeroMemory(&cb, sizeof(cb));
-  cb.nVersion = 2;
-  cb.syncType = PRESCB_SYNCTYPE_NONE;   /* G3 paces the swaps */
+  /* EXP1221 measurement of the undocumented half: until a callback comes,
+   * attempts 1-8 use nVersion 2 without sync (Mesa stw's call), 9-16 with
+   * vsync, 17-24 nVersion 1, 25-32 nVersion 3; then nVersion 2. A variant
+   * that is called back is kept. */
+  static const UINT variants[4][2] = {{2u, PRESCB_SYNCTYPE_NONE}, {2u, PRESCB_SYNCTYPE_VSYNC},
+                                      {1u, PRESCB_SYNCTYPE_NONE}, {3u, PRESCB_SYNCTYPE_NONE}};
+  UINT variant = s->PbVariant ? s->PbVariant - 1u :
+      s->PbAttempts < 32u ? s->PbAttempts / 8u : 0u;
+  ++s->PbAttempts;
+  cb.nVersion = variants[variant][0];
+  cb.syncType = variants[variant][1];   /* G3 paces the swaps otherwise */
   cb.luidAdapter = AgxWgl->Luid;
   cb.pPrivData = request;
   cb.updateRect = *rect;
   SetLastError(0);
+  {
+    LARGE_INTEGER t; QueryPerformanceCounter(&t); AgxWglDpbStartQpc = t.QuadPart;
+  }
   ok = stw_dev->callbacks.pfnPresentBuffers(dc, &cb);
-  if (!ok && !request->Called) *status = (LONG)GetLastError();
+  if (!request->Called) *status = (LONG)GetLastError();
   request->Active = FALSE;
+  if (request->Called) {
+    ++s->PbCalled[variant];
+    if (!s->PbVariant) s->PbVariant = variant + 1u;
+  } else {
+    ++(ok ? s->PbTrue : s->PbFalse)[variant];
+  }
   ReleaseDC(window, dc);
   if (!request->Called) return ok ? AGX_WGL_REDIRECT_NO_CALLBACK : AGX_WGL_REDIRECT_REFUSED;
   if (request->Stage != AGX_WGL_REDIRECT_SHOWN) { *status = request->Status; return request->Stage; }
@@ -1324,14 +1370,21 @@ static UINT wgl_redirect_present(AGX_WGL_KMT_SOURCE *s, HWND window, const RECT 
  * PresentToRedirectionSurface version, destination format, width, height,
  * CPU-visible, open kind, opened GPU VA low. */
 static void wgl_redirect_receipt(AGX_WGL_KMT_SOURCE *s) {
-  UINT values[AGX_WGL_REDIRECT_STAGES + 10u], n = 0;
+  /* The UMD diagnostic takes at most 16 values (EXP1220 lost a 19-value line). */
+  UINT values[16], n = 0;
   for (unsigned i = 0; i < AGX_WGL_REDIRECT_STAGES; ++i) values[n++] = s->Stages[i];
   values[n++] = s->LastStage; values[n++] = s->LastStatus; values[n++] = s->Async;
-  values[n++] = s->RedirectVersion; values[n++] = s->Destination.Format;
-  values[n++] = s->Destination.Width; values[n++] = s->Destination.Height;
-  values[n++] = s->Destination.CpuVisible; values[n++] = s->Surface.Kind;
-  values[n++] = (UINT)s->Surface.GpuVirtualAddress;
+  values[n++] = s->RedirectVersion; values[n++] = s->Surface.Kind;
+  values[n++] = (UINT)AgxWglDpbCalls; values[n++] = (UINT)AgxWglDpbForeign;
   AdmissionUmdDiagnostic("measure-wgl-redirect", S_OK, values, n);
+  UINT dest[16] = {s->Destination.Format, s->Destination.Width, s->Destination.Height,
+      s->Destination.CpuVisible, (UINT)s->Surface.GpuVirtualAddress,
+      (UINT)(s->Surface.GpuVirtualAddress >> 32), s->DestinationStage, (UINT)s->DestinationStatus,
+      s->PbAttempts, s->PbVariant, 0u, 0u, 0u, 0u, 0u, 0u};
+  AdmissionUmdDiagnostic("measure-wgl-redirect-dest", S_OK, dest, 10u);
+  UINT pb[12];
+  for (unsigned i = 0; i < 4u; ++i) { pb[3 * i] = s->PbCalled[i]; pb[3 * i + 1] = s->PbTrue[i]; pb[3 * i + 2] = s->PbFalse[i]; }
+  AdmissionUmdDiagnostic("measure-wgl-redirect-pb", S_OK, pb, 12u);
   ZeroMemory(s->Stages, sizeof(s->Stages));
   s->Async = 0;
 }
@@ -1423,7 +1476,7 @@ static BOOL wgl_kmt_present(struct pipe_context *ctx, struct pipe_resource *res,
     ++s->Shown;
     if (InterlockedCompareExchange(&first, 1, 0) == 0) {
       UINT values[3] = {width, height, s->RedirectVersion};
-      AdmissionUmdDiagnostic("wgl-kmt-present-first", S_OK, values, 3u);
+      AdmissionUmdDiagnostic("measure-wgl-kmt-present-first", S_OK, values, 3u);
     }
     wgl_kmt_present_receipt(s, width, height, FALSE);
     return TRUE;
