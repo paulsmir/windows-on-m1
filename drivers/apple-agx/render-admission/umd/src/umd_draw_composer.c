@@ -215,7 +215,10 @@ HRESULT AdmissionUmdDrawSeal(ADMISSION_UMD_DEVICE *d,
     APPLE_AGX_U64 requestId, APPLE_AGX_U16 version,
     const AGX_WIN32_DRAW_REQUEST *input,
     const AGX_WIN32_RELOC_ALLOCATION *ids, ADMISSION_UMD_DRAW_SUBMISSION *s) {
-  ADMISSION_UMD_DRAW_SUBMISSION candidate={};
+  /* EXP1230: the 41 KB submission (32 KB command) lived on the stack and
+   * dwm.exe overflowed a worker thread's stack in this UMD; build it on
+   * the heap. */
+  ADMISSION_UMD_DRAW_SUBMISSION *candidate;
   APPLE_AGX_WIN32_ALLOCATION_REFERENCE refs[APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES];
   AGX_WIN32_DRAW_REQUEST request;
   HRESULT result=E_INVALIDARG;
@@ -225,6 +228,9 @@ HRESULT AdmissionUmdDrawSeal(ADMISSION_UMD_DEVICE *d,
      input->ReferenceCount>APPLE_AGX_WIN32_COMMAND_REFERENCE_LIMIT(version) ||
      input->RelocationCount>APPLE_AGX_WIN32_COMMAND_RELOCATION_LIMIT(version))
     return E_INVALIDARG;
+  candidate=(ADMISSION_UMD_DRAW_SUBMISSION *)HeapAlloc(GetProcessHeap(),
+      HEAP_ZERO_MEMORY,sizeof(*candidate));
+  if(!candidate) return E_OUTOFMEMORY;
   request=*input;
   CopyMemory(refs,input->References,input->ReferenceCount*sizeof(refs[0]));
   AcquireSRWLockExclusive(&d->ScreenBufferLock);
@@ -234,8 +240,8 @@ HRESULT AdmissionUmdDrawSeal(ADMISSION_UMD_DEVICE *d,
   if(!d->Screen.Active || !d->OwnerCookie || !d->KernelContext ||
      request.Generation!=d->Win32Generation || requestId<=d->LastDrawRequest)
     SEAL_REJECT();
-  candidate.Owner=d->OwnerCookie; candidate.Generation=d->Win32Generation;
-  candidate.Context=d->KernelContext; candidate.RequestId=requestId;
+  candidate->Owner=d->OwnerCookie; candidate->Generation=d->Win32Generation;
+  candidate->Context=d->KernelContext; candidate->RequestId=requestId;
   for(UINT i=0;i<request.ReferenceCount;++i) {
     const AGX_WIN32_RELOC_ALLOCATION *a=&ids[i];
     ADMISSION_UMD_SCREEN_BUFFER *b=find(d,a->Token);
@@ -248,33 +254,34 @@ HRESULT AdmissionUmdDrawSeal(ADMISSION_UMD_DEVICE *d,
        ((access & AppleAgxWin32AccessWrite) && !(b->Flags & AppleAgxWin32BufferGpuWrite)) ||
        ((access & AppleAgxWin32AccessExecute) && b->ClassId!=AgxWin32BufferClassShader))
       SEAL_REJECT();
-    for(index=0;index<candidate.Count;++index) {
-      if(candidate.Identities[index].Token==a->Token) break;
-      if(candidate.Allocations[index].hAllocation==b->KernelAllocation) SEAL_REJECT();
+    for(index=0;index<candidate->Count;++index) {
+      if(candidate->Identities[index].Token==a->Token) break;
+      if(candidate->Allocations[index].hAllocation==b->KernelAllocation) SEAL_REJECT();
     }
-    if(index==candidate.Count) {
-      candidate.Identities[index]=*a;
-      candidate.Identities[index].AllocationIndex=index;
-      candidate.Allocations[index].hAllocation=b->KernelAllocation;
-      ++candidate.Count;
-    } else if(candidate.Identities[index].Serial!=a->Serial ||
-              candidate.Identities[index].Bytes!=a->Bytes) SEAL_REJECT();
+    if(index==candidate->Count) {
+      candidate->Identities[index]=*a;
+      candidate->Identities[index].AllocationIndex=index;
+      candidate->Allocations[index].hAllocation=b->KernelAllocation;
+      ++candidate->Count;
+    } else if(candidate->Identities[index].Serial!=a->Serial ||
+              candidate->Identities[index].Bytes!=a->Bytes) SEAL_REJECT();
     if(access & AppleAgxWin32AccessWrite)
-      candidate.Allocations[index].WriteOperation=1;
+      candidate->Allocations[index].WriteOperation=1;
     refs[i].AllocationIndex=index;
   }
-  request.References=refs; request.AllocationCount=candidate.Count;
-  if(AgxWin32TransportBuildDrawVersion(&request,version,candidate.Command,
-      sizeof(candidate.Command),&candidate.CommandBytes)!=AppleAgxWin32AbiSuccess)
+  request.References=refs; request.AllocationCount=candidate->Count;
+  if(AgxWin32TransportBuildDrawVersion(&request,version,candidate->Command,
+      sizeof(candidate->Command),&candidate->CommandBytes)!=AppleAgxWin32AbiSuccess)
     SEAL_REJECT();
-  if(!validate(d,&candidate)) SEAL_REJECT();
-  for(UINT i=0;i<candidate.Count;++i)
-    ++find(d,candidate.Identities[i].Token)->SubmissionHolds;
-  candidate.Phase=AdmissionDrawSealed;
-  *s=candidate; d->DrawSubmission=s; d->LastDrawRequest=requestId;
+  if(!validate(d,candidate)) SEAL_REJECT();
+  for(UINT i=0;i<candidate->Count;++i)
+    ++find(d,candidate->Identities[i].Token)->SubmissionHolds;
+  candidate->Phase=AdmissionDrawSealed;
+  *s=*candidate; d->DrawSubmission=s; d->LastDrawRequest=requestId;
   result=S_OK;
 done:
   ReleaseSRWLockExclusive(&d->ScreenBufferLock);
+  HeapFree(GetProcessHeap(),0,candidate);
   return result;
 }
 

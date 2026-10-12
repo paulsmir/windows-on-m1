@@ -439,7 +439,38 @@ if args.windows_platform_declarations:
             for (i = 0; i < opcode.specific.dcl_indexable_temp.count; i++)
                sx.temps[sx.declared_temps + i] =
                   ureg_dst_array_offset(array, i);
-            sx.declared_temps += opcode.specific.dcl_indexable_temp.count;''')])
+            sx.declared_temps += opcode.specific.dcl_indexable_temp.count;'''),
+        # EXP1230: dwm.exe overflowed a worker thread's stack in this UMD
+        # (0xC00000FD at __chkstk) when the first redirected GL window
+        # appeared; this translator kept 89 KB of state on the stack. Keep it
+        # on the heap (the function has one exit).
+        ('''   struct Shader_xlate sx;\n''','''   struct Shader_xlate *sx_heap = CALLOC_STRUCT(Shader_xlate);
+#define sx (*sx_heap)\n'''),
+        ('''   memset(&sx, 0, sizeof sx);\n''','''   if (!sx_heap)
+      return NULL;
+   memset(&sx, 0, sizeof sx);\n'''),
+        ('''   return tokens;\n''','''   FREE(sx_heap);
+#undef sx
+   return tokens;\n''')])
+    # EXP1230: the parallel-copy lowering kept 64 KB of per-register state on
+    # the stack of whatever thread compiles a shader (dwm.exe worker threads).
+    change('src/asahi/compiler/agx_lower_parallel_copy.c',
+        'cd2a520e2078ab788f6a013ff556728a2277910beffc1bf8fabfeedcd5b466f6',[
+        ('''   struct copy_ctx _ctx = {.entry_count = num_copies};
+   struct copy_ctx *ctx = &_ctx;
+''','''   struct copy_ctx *ctx = calloc(1, sizeof(*ctx));
+   ctx->entry_count = num_copies;
+'''),
+        ('''   free(copies2);
+}
+
+void
+agx_emit_parallel_copies(''','''   free(ctx);
+   free(copies2);
+}
+
+void
+agx_emit_parallel_copies(''')])
     change('src/gallium/auxiliary/nir/tgsi_to_nir.c',
         '755f85617fa4f38923c759d1f27029c078c2bc47aead66abbb79130fea3f9b17',[
         ('''   nir_alu_type *samp_types;''','''   nir_alu_type *samp_types;

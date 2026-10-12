@@ -3,6 +3,7 @@
 #endif
 #include "agx_win32_transport.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 #define AGX_WIN32_BUFFER_FLAGS_ALLOWED 0x1fu
@@ -73,12 +74,13 @@ APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildClear(
   return AppleAgxWin32AbiSuccess;
 }
 
-APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDrawVersion(
+/* EXP1230: the 32 KB staging command lived on the caller's stack and
+ * dwm.exe overflowed a worker thread's stack in the UMD; it is heap
+ * storage now (build_draw writes it, the wrapper owns it). */
+static APPLE_AGX_WIN32_ABI_RESULT build_draw(
     const AGX_WIN32_DRAW_REQUEST *Request, APPLE_AGX_U16 CommandVersion,
     void *CommandBuffer, APPLE_AGX_U32 CommandCapacity,
-    APPLE_AGX_U32 *CommandBytes) {
-  APPLE_AGX_U64 storage[
-      APPLE_AGX_WIN32_COMMAND_MAX_BYTES / sizeof(APPLE_AGX_U64)];
+    APPLE_AGX_U32 *CommandBytes, APPLE_AGX_U64 *storage) {
   unsigned char *bytes = (unsigned char *)storage;
   APPLE_AGX_WIN32_COMMAND_HEADER *header;
   APPLE_AGX_WIN32_DRAW_PAYLOAD draw;
@@ -120,7 +122,7 @@ APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDrawVersion(
   if (totalBytes > APPLE_AGX_WIN32_COMMAND_MAX_BYTES ||
       CommandCapacity < totalBytes)
     return AppleAgxWin32AbiArgument;
-  memset(storage, 0, sizeof(storage));
+  memset(storage, 0, APPLE_AGX_WIN32_COMMAND_MAX_BYTES);
   header = (APPLE_AGX_WIN32_COMMAND_HEADER *)bytes;
   header->Magic = APPLE_AGX_WIN32_COMMAND_MAGIC;
   header->Version = CommandVersion;
@@ -168,6 +170,20 @@ APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDrawVersion(
   memcpy(CommandBuffer, bytes, totalBytes);
   *CommandBytes = totalBytes;
   return AppleAgxWin32AbiSuccess;
+}
+
+APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDrawVersion(
+    const AGX_WIN32_DRAW_REQUEST *Request, APPLE_AGX_U16 CommandVersion,
+    void *CommandBuffer, APPLE_AGX_U32 CommandCapacity,
+    APPLE_AGX_U32 *CommandBytes) {
+  APPLE_AGX_U64 *storage = (APPLE_AGX_U64 *)malloc(APPLE_AGX_WIN32_COMMAND_MAX_BYTES);
+  APPLE_AGX_WIN32_ABI_RESULT result;
+  if (!storage)
+    return AppleAgxWin32AbiArgument;
+  result = build_draw(Request, CommandVersion, CommandBuffer, CommandCapacity,
+                      CommandBytes, storage);
+  free(storage);
+  return result;
 }
 
 APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDraw(
