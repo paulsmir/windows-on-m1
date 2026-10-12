@@ -1,6 +1,28 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-12 07:00Z (read this first)
+## Current as of 2026-10-12 07:20Z (read this first)
+
+Installed: PACKAGE1234 = EXP1233's package (KMD/ARM64 UMD 7eb593d9, x86
+closure 024: UMD32 out4 b97adbe2, ICD out55 2ce3c9e7, 30.0.1231.0) on the M1
+launch set (m1n1 6ee9cc4d, Mu 71c9b2d551 J313_EFI-m1.fd 4d382bfa).
+Proven: EXP1233 -- x86 closure 024 behaves as out54/out3 (stack frames
+gated); EXP1234 -- M1: no ramdisk => the window 0x860000000 + 1 GiB is
+Windows RAM (TotalPhysicalMemory 4,534,439,936 -> 5,608,181,760 B, +1 GiB
+exactly) with every GPU check unchanged. m1/ramdisk-window is merged into
+integration (b7905c4a, submodules m1n1 6ee9cc4d / mu 71c9b2d551); EXP1235+
+full-owner must use the integration worktree with the M1 macho/FD.
+Next causal target: M2 (UMA). First offline question: how this guest's
+VidMm (dxgmms2.sys, not dxgkrnl.sys) reads DXGK_ALLOCATIONINFO's
+Alignment / MinimumPageSize+RecommendedPageSize union for a WDDM 3.2
+driver -- the KMD writes Alignment 0x10000, i.e. Min 0 / Rec 1; DXGK_PAGE_SIZE
+has no definition in WDK 26100 -- and when it issues 64 KB system pages
+(SysMem64KBPageSupported is declared; EXP854/EXP1004 never saw a
+Use64KBPages update). CS bench still waits for a Steam sign-in; then remove
+the GDI ring. Redirected-blt track: dxgkrnl asserts
+"!RedirectedBlt || hDestination == NULL" and routes DxgkPresentRedirected /
+D3DKMT_PM_REDIRECTED_BLT separately (strings in this guest's dxgkrnl.sys).
+
+## Current as of 2026-10-12 07:00Z
 
 Installed: PACKAGE1232 (KMD/ARM64 UMD 7eb593d9, UMD32 fce5f2db, ICD out54
 422f5eb5 = DXGI flip presenter, 30.0.1231.0).
