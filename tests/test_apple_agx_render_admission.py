@@ -232,7 +232,8 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
 
         self.assertIn("HighestVisibleAddress.QuadPart = 0xFFFFFFFFFFLL", lifecycle)
         self.assertIn("iommuCaps->Value = 0", lifecycle)
-        self.assertIn("SupportsOnly64Bit = 1", lifecycle)
+        # EXP1225: follows the installed WOW64 UMD (test_apple_agx_wow64_support).
+        self.assertIn("SupportsOnly64Bit = AdmissionWow64Only64Bit(", lifecycle)
         self.assertIn("AppleAgxWddmFeatureContractEvaluate", lifecycle)
         self.assertIn("featureOutput.PublishCapsMask == 0u", lifecycle)
         self.assertIn("caps->SupportNonVGA = TRUE", lifecycle)

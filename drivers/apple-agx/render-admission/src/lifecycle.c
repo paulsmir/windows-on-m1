@@ -1,4 +1,5 @@
 #include "render_admission.h"
+#include "render_wow64.h"
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #include "apple_agx_gpuva_g3_caps.h"
 #include "hv_guest_ipa_pa_abi.h"
@@ -600,6 +601,42 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRemoveDevice(PVOID MiniportDeviceCon
   return STATUS_SUCCESS;
 }
 
+/* EXP1225: whether the installed package registered a WOW64 user-mode
+ * driver (the INF's HKR UserModeDriverNameWow, in the driver key). Runs at
+ * PASSIVE_LEVEL from DxgkDdiQueryAdapterInfo; any failure reads as "not
+ * registered", which keeps the adapter 64-bit-only. */
+static int AdmissionReadWow64Umd(PDEVICE_OBJECT PhysicalDeviceObject) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  KEY_VALUE_PARTIAL_INFORMATION probe;
+  PKEY_VALUE_PARTIAL_INFORMATION value = NULL;
+  ULONG bytes = 0;
+  NTSTATUS status;
+  int named = 0;
+  PAGED_CODE();
+  if (PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DRIVER, KEY_READ, &key)))
+    return 0;
+  RtlInitUnicodeString(&name, L"UserModeDriverNameWow");
+  status = ZwQueryValueKey(key, &name, KeyValuePartialInformation, &probe,
+                           sizeof(probe), &bytes);
+  if ((status == STATUS_BUFFER_OVERFLOW || status == STATUS_BUFFER_TOO_SMALL) &&
+      bytes > sizeof(probe) && bytes <= 0x4000u) {
+    value = (PKEY_VALUE_PARTIAL_INFORMATION)ExAllocatePool2(
+        POOL_FLAG_PAGED, bytes, ADMISSION_POOL_TAG);
+    if (value != NULL &&
+        NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                   value, bytes, &bytes)) &&
+        FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + value->DataLength <= bytes)
+      named = AdmissionWow64UmdNamed(value->Type, value->Data, value->DataLength);
+    if (value != NULL)
+      ExFreePoolWithTag(value, ADMISSION_POOL_TAG);
+  }
+  ZwClose(key);
+  return named;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     HANDLE Adapter, const DXGKARG_QUERYADAPTERINFO *QueryAdapterInfo) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
@@ -998,7 +1035,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     } else {
       only64Caps = (DXGK_64_BIT_ONLY_CAPS *)QueryAdapterInfo->pOutputData;
       RtlZeroMemory(only64Caps, sizeof(*only64Caps));
-      only64Caps->SupportsOnly64Bit = 1;
+      /* dxgkrnl hides a 64-bit-only adapter from WOW64 enumeration. */
+      only64Caps->SupportsOnly64Bit = AdmissionWow64Only64Bit(
+          AdmissionReadWow64Umd(context->PhysicalDeviceObject));
       status = STATUS_SUCCESS;
     }
     break;
