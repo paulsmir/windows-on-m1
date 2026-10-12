@@ -5,7 +5,10 @@
  * frame and presents, then copies the back buffer to a staging texture and
  * checks one texel. Every step prints its HRESULT, so a refusal names the
  * step; exit 0 only when every frame presented and the texel matches.
- * Usage: agx_d3d11_smoke.exe [frames] */
+ * EXP1231: "blt" as the second argument makes the swap chain blt-model
+ * (DXGI_SWAP_EFFECT_DISCARD, one buffer): DXGI presents through DWM's
+ * window redirection surface, the path opengl32 uses for GL windows.
+ * Usage: agx_d3d11_smoke.exe [frames] [flip|blt] */
 #define COBJMACROS
 #define INITGUID
 #include <windows.h>
@@ -13,6 +16,7 @@
 #include <dxgi1_2.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 static LRESULT CALLBACK proc(HWND w, UINT m, WPARAM wp, LPARAM lp) {
   return DefWindowProcA(w, m, wp, lp);
@@ -23,6 +27,7 @@ static LRESULT CALLBACK proc(HWND w, UINT m, WPARAM wp, LPARAM lp) {
 
 int main(int argc, char **argv) {
   int frames = argc > 1 ? atoi(argv[1]) : 120, failures = 0, presented = 0;
+  int blt = argc > 2 && strcmp(argv[2], "blt") == 0;
   IDXGIFactory2 *factory = NULL; IDXGIAdapter1 *adapter = NULL, *pick = NULL;
   ID3D11Device *device = NULL; ID3D11DeviceContext *ctx = NULL;
   IDXGISwapChain1 *chain = NULL; ID3D11Texture2D *back = NULL, *staging = NULL;
@@ -57,7 +62,9 @@ int main(int argc, char **argv) {
     memset(&sd, 0, sizeof(sd));
     sd.Width = 640; sd.Height = 480; sd.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
     sd.SampleDesc.Count = 1; sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    sd.BufferCount = 2; sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    sd.BufferCount = blt ? 1 : 2;
+    sd.SwapEffect = blt ? DXGI_SWAP_EFFECT_DISCARD : DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    printf("SWAP_EFFECT %s\n", blt ? "blt" : "flip");
     STEP("CreateSwapChainForHwnd", IDXGIFactory2_CreateSwapChainForHwnd(factory, (IUnknown *)device,
          wnd, &sd, NULL, NULL, &chain));
   }
