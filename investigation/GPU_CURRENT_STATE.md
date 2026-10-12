@@ -1,5 +1,26 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
+## Current as of 2026-10-12 03:25Z (read this first)
+
+Installed: PACKAGE1225 (= EXP1224's: sys 3f6db5bb, UMD 23123147, UMD32
+7430c7b9 in SysWOW64 under UserModeDriverNameWow, ICD 5aede15d, INF d4e258f7
+form, 30.0.1218.0); EXP1226 (KMD c92ac343) is being installed.
+Proven (EXP1225, offline trace of this guest's dxgkrnl.sys + pinned WDK):
+32-bit processes never saw the AGX adapter because the KMD itself answered
+DXGKQAITYPE_64BITONLYCAPS SupportsOnly64Bit = 1 (since 2d34b0ae). dxgkrnl
+reads that cap once at adapter start and skips a 64-bit-only adapter in
+every WOW64 enumeration (FilteredAdapterFromWow64Process); OpenAdapterFromLuid
+from WOW64 still works and names the WOW UMD. So the WOW64 UMD registration
+(EXP1223 driver-store form, EXP1224/1225 SysWOW64 form) was never exercised,
+and EXP1224's hang cannot be the WOW64 UMD (HV interrupt-liveness class).
+Fix (81d5ec62, build c92ac343): the cap follows the installed
+UserModeDriverNameWow (driver key); every UMD-to-KMD wire record is
+layout-identical for x86 and ARM64 (tests/test_apple_agx_wow64_private_abi.py).
+Active hypothesis EXP1226: with the cap 0, x86 enumeration lists 0x4d236, the
+32-bit D3D11 smoke runs on AppleAgxRenderAdmissionUmd32.dll, and opengl32's
+PresentBuffers gets a redirection surface (G2 HW3b). Tools: agx_kmt_umdname.c
+(x86/ARM64 enumeration diagnostic), agx_d3d11_smoke.c (x86 D3D11 smoke).
+
 ## Current as of 2026-10-12 02:45Z (read this first)
 
 Installed: PACKAGE1222 (.local/experiments/EXP1222-g2-hw3b-pb-modules): KMD
