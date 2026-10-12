@@ -1,5 +1,35 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
+## Current as of 2026-10-12 02:45Z (read this first)
+
+Installed: PACKAGE1222 (.local/experiments/EXP1222-g2-hw3b-pb-modules): KMD
+build commit 19db0d1a on build/exp1211-kmd-compute (= EXP1217 KMD + the
+Wom1G2PresentDdi receipt; sys 3f6db5bb, UMD 23123147), ICD out50 5aede15d
+(integration e8319531), 30.0.1218.0. Timedemo playnoovl 50.3 fps, smoke 57.4.
+Standing operator rule (2026-10-12): the bench is always free -- no hl.exe
+gate, no confirmation; keep going autonomously until D3D 11/12 is done.
+Proven on hardware this session:
+- G3 CONFIRMED (EXP1219): GL swaps are paced on the display's vertical blanks
+  (D3DKMTWaitForVerticalBlankEvent from the x86 ICD on the KMD's vsync
+  timeline): smoke 59.6 fps, 119-120 waits per 120 swaps, 0 failures, swap
+  intervals centred on the period; late CS frames present without waiting.
+- G2 HW3 legacy path REJECTED (EXP1218): D3DKMTPresent(Blt, hWindow) from the
+  ICD returns STATUS_GRAPHICS_VIDPN_SOURCE_IN_USE while DWM owns the source,
+  before the KMD.
+- G2 HW3b protocol measured (EXP1220-EXP1222): opengl32 hands the ICD
+  PresentBuffers/PresentToRedirectionSurface; PresentBuffers nVersion 2
+  creates a D3D11 device in the calling process (dwmapi, dxgi, d3d11 loaded)
+  and fails with ERROR_MOD_NOT_FOUND because this adapter has no 32-bit D3D
+  UMD (no UserModeDriverNameWow); nVersion 3 then calls DrvPresentBuffers
+  back synchronously with no surface; nVersion 1 is refused.
+The ICD keeps its ring (GPU copy + CPU copy + SetDIBits) as the shown path;
+PrintWindow of a GL window matches its frame.
+Next causal target: a WOW64 (x86) build of the D3D UMD registered as
+UserModeDriverNameWow (needed by opengl32's redirection and by 32-bit D3D
+games), then rerun the redirection present (EXP1220 protocol, nVersion 2).
+Then remove the ring (G2 done), M1+M2 (memory; surveys in
+investigation/analysis/M1-ramdisk-window-survey.md and M2-uma-fact-base.md).
+
 ## Current as of 2026-10-12 00:30Z (read this first)
 
 Installed: PACKAGE1217 (.local/experiments/EXP1217-g2-present-gpu): KMD
