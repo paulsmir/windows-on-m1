@@ -28,7 +28,10 @@ param(
     [int]$PackageBuild = 461,
     # The x86 OpenGL ICD (build-icd-x86.ps1 output) the INF installs as the
     # adapter's WOW64 ICD (OpenGLDriverNameWow).
-    [string]$WowOpenGLIcd
+    [string]$WowOpenGLIcd,
+    # EXP1222: the x86 D3D UMD (umd\build-umd-x86.ps1 output) the INF installs
+    # as UserModeDriverNameWow.
+    [string]$WowUmd
 )
 
 $ErrorActionPreference = "Stop"
@@ -42,6 +45,16 @@ $peOffset = [BitConverter]::ToInt32($icdBytes, 0x3c)
 if ([BitConverter]::ToUInt32($icdBytes, $peOffset) -ne 0x4550 -or
     [BitConverter]::ToUInt16($icdBytes, $peOffset + 4) -ne 0x14c) {
     throw "WowOpenGLIcd is not an x86 PE image: $WowOpenGLIcd"
+}
+if ([string]::IsNullOrWhiteSpace($WowUmd) -or
+    -not (Test-Path -LiteralPath $WowUmd -PathType Leaf)) {
+    throw 'the package carries the WOW64 D3D UMD: pass -WowUmd <AppleAgxRenderAdmissionUmd32.dll>'
+}
+$umdBytes = [IO.File]::ReadAllBytes($WowUmd)
+$umdPe = [BitConverter]::ToInt32($umdBytes, 0x3c)
+if ([BitConverter]::ToUInt32($umdBytes, $umdPe) -ne 0x4550 -or
+    [BitConverter]::ToUInt16($umdBytes, $umdPe + 4) -ne 0x14c) {
+    throw "WowUmd is not an x86 PE image: $WowUmd"
 }
 if ($GpuvaB1Qualification -and ($MemoryQualification -or $ManagementQualification -or $RetainedRootQualification -or $StopAfterEndpoints -or $FirmwareQualification -or $BackendQualification -or $SubmitQualification -or $VisibleScanoutQualification -or $VisibleAgxQualification -or $GpuvaG1bPageProfile -ne 0 -or $GpuvaG1bAllocationHint)) {
     throw "GpuvaB1Qualification requires a standalone WDDM3.0 physical candidate"
@@ -177,6 +190,7 @@ if (-not (Test-Path $umd)) {
 }
 Copy-Item -Force $umd (Join-Path $root "AppleAgxRenderAdmissionUmd.dll")
 Copy-Item -Force $WowOpenGLIcd (Join-Path $root "AppleAgxOpenGL32.dll")
+Copy-Item -Force $WowUmd (Join-Path $root "AppleAgxRenderAdmissionUmd32.dll")
 
 $memoryQualificationValue = if ($MemoryQualification) { "true" } else { "false" }
 $managementQualificationValue = if ($ManagementQualification) { "true" } else { "false" }

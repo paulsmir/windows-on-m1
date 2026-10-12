@@ -453,6 +453,27 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn('(Join-Path $root "%s")' % name, build)
         self.assertIn("0x14c", build)
 
+    def test_wow64_umd_is_registered_and_copied(self):
+        import re
+        # EXP1222: opengl32's PresentBuffers needs a D3D11 device in the 32-bit
+        # caller; the WOW64 UMD it loads must be the file the INF copies (a name
+        # drift is ERROR_MOD_NOT_FOUND again).
+        inf = self.read("AppleAgxRenderAdmission.inf").replace("\r\n", "\n")
+        names = re.search(r"^HKR,,UserModeDriverNameWow,%REG_MULTI_SZ%,(.+)$", inf, re.M).group(1).split(",")
+        self.assertEqual(names, ["%13%\\AppleAgxRenderAdmissionUmd32.dll"] * 4)
+        section = re.search(r"^\[Admission\.WowUmdCopyFiles\]\n(\S+)$", inf, re.M).group(1)
+        self.assertEqual(section, "AppleAgxRenderAdmissionUmd32.dll")
+        self.assertIn("Admission.WowUmdCopyFiles=13", inf)
+        self.assertIn(",Admission.WowUmdCopyFiles\n", inf)
+        self.assertIn("AppleAgxRenderAdmissionUmd32.dll=1", inf)
+        repack = self.read("scripts/repackage-driver.ps1")
+        self.assertIn("AppleAgxRenderAdmissionUmd32.dll", repack)
+        project = self.read("AppleAgxRenderAdmission.vcxproj")
+        build = self.read("scripts/build-driver.ps1")
+        self.assertIn('<FilesToPackage Include="AppleAgxRenderAdmissionUmd32.dll" />', project)
+        self.assertIn('(Join-Path $root "AppleAgxRenderAdmissionUmd32.dll")', build)
+        self.assertIn("WowUmd is not an x86 PE image", build)
+
     def test_repackage_keeps_the_driver_version_of_the_kmd(self):
         # EXP1156-EXP1159: restamping DriverVer over binaries built for another
         # version makes dxgkrnl fail DpiAddDevice with 0xC0000182 (Code 31).

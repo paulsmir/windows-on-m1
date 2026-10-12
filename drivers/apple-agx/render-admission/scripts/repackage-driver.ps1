@@ -1,5 +1,5 @@
 # Re-catalog an already built, signed render-admission package with a new INF
-# (and the x86 OpenGL ICD) without rebuilding the binaries.
+# (and the x86 OpenGL ICD and x86 D3D UMD) without rebuilding the binaries.
 #
 # EXP1156-EXP1159: dxgkrnl fails DpiAddDevice with STATUS_DEVICE_CONFIGURATION_ERROR
 # (Code 31) when the INF DriverVer differs from the KMD VERSIONINFO
@@ -11,6 +11,8 @@ param(
     [Parameter(Mandatory = $true)][string]$Inf,
     [Parameter(Mandatory = $true)][string]$Out,
     [string]$WowOpenGLIcd,
+    # EXP1222: the WOW64 D3D UMD (build-umd-x86.ps1), UserModeDriverNameWow.
+    [string]$WowUmd,
     [Parameter(Mandatory = $true)][string]$SignerThumbprint,
     [string]$Kit = 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0',
     [string]$SignTool = 'C:\Users\pauls\packages\Microsoft.Windows.SDK.CPP.10.0.28000.2526\c\bin\10.0.28000.0\x86\signtool.exe'
@@ -26,6 +28,7 @@ Get-ChildItem $Out -File | Remove-Item -Force
 Copy-Item $sys, $umd $Out
 Copy-Item $Inf (Join-Path $Out 'AppleAgxRenderAdmission.inf')
 if ($WowOpenGLIcd) { Copy-Item $WowOpenGLIcd (Join-Path $Out 'AppleAgxOpenGL32.dll') }
+if ($WowUmd) { Copy-Item $WowUmd (Join-Path $Out 'AppleAgxRenderAdmissionUmd32.dll') }
 # Native tools report through stderr and exit codes; judge the exit codes.
 $ErrorActionPreference = 'Continue'
 & "$Kit\x64\stampinf.exe" -d '*' -a 'ARM64' -v $version -k '1.15' -x -f (Join-Path $Out 'AppleAgxRenderAdmission.inf')

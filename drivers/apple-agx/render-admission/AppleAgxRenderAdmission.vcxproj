@@ -287,6 +287,7 @@
     <FilesToPackage Include="$(TargetPath)" Condition="'$(ConfigurationType)'=='Driver'" />
     <FilesToPackage Include="AppleAgxRenderAdmissionUmd.dll" />
     <FilesToPackage Include="AppleAgxOpenGL32.dll" />
+    <FilesToPackage Include="AppleAgxRenderAdmissionUmd32.dll" />
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="src\arm64_hypercalls.asm">
