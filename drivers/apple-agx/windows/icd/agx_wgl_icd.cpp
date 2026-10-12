@@ -995,6 +995,8 @@ typedef struct {
   DWORD Thread;           /* the presenting thread */
   void *Source;           /* its AGX_WGL_KMT_SOURCE */
   RECT Rect;
+  struct pipe_context *Context; /* the presenting GL context (copy into the surface) */
+  POINT Offset;           /* the client area's origin in the window (surface) */
   BOOL Called;            /* DrvPresentBuffers ran for it */
   UINT Stage;
   LONG Status;
@@ -1294,9 +1296,47 @@ extern "C" int agx_wgl_redirect_buffers(HDC hdc, LPPRESENTBUFFERS data) {
     return 0;
   }
 #if WINVER >= 0xA00
+  /* updateRect stays in the client (source) coordinates D3DKMTPresent takes
+   * as its source rect; the copy lands at the client offset in the surface. */
   RECT rect = request->Rect;
-  if (rect.right > (LONG)s->Destination.Width) rect.right = (LONG)s->Destination.Width;
-  if (rect.bottom > (LONG)s->Destination.Height) rect.bottom = (LONG)s->Destination.Height;
+  const LONG x = request->Offset.x, y = request->Offset.y;
+  if (x < 0 || y < 0 || x >= (LONG)s->Destination.Width || y >= (LONG)s->Destination.Height) {
+    request->Stage = AGX_WGL_REDIRECT_DESCRIPTION;
+    request->Status = (LONG)E_INVALIDARG;
+    return 0;
+  }
+  if (rect.right > (LONG)s->Destination.Width - x) rect.right = (LONG)s->Destination.Width - x;
+  if (rect.bottom > (LONG)s->Destination.Height - y) rect.bottom = (LONG)s->Destination.Height - y;
+  /* EXP1228: a redirected present from this GPU-VA context reaches no
+   * DxgkDdiPresent (WDDM 2: the user-mode driver writes the redirection
+   * surface; the present only hands DWM the update). Copy the frame (already
+   * in s->Image) into the surface on this context, ordered before the
+   * present that D3DKMTPresent queues on the same context. */
+  if (!s->DestinationImage || !request->Context || rect.right <= 0 || rect.bottom <= 0) {
+    request->Stage = AGX_WGL_REDIRECT_ADOPT;
+    request->Status = (LONG)E_NOTIMPL;
+    return 0;
+  }
+  {
+    struct pipe_blit_info blit;
+    memset(&blit, 0, sizeof(blit));
+    blit.dst.resource = s->DestinationImage;
+    blit.dst.format = s->DestinationImage->format;
+    blit.dst.box.x = (int)x;
+    blit.dst.box.y = (int)y;
+    blit.dst.box.width = (int)rect.right;
+    blit.dst.box.height = (int)rect.bottom;
+    blit.dst.box.depth = 1;
+    blit.src.resource = s->Image;
+    blit.src.format = s->Image->format;
+    blit.src.box = blit.dst.box;
+    blit.src.box.x = 0;
+    blit.src.box.y = 0;
+    blit.mask = PIPE_MASK_RGBA;
+    blit.filter = PIPE_TEX_FILTER_NEAREST;
+    request->Context->blit(request->Context, &blit);
+    request->Context->flush(request->Context, NULL, 0);
+  }
   PRESENTTOREDIRECTIONSURFACECB args;
   ZeroMemory(&args, sizeof(args));
   args.hContext = (UINT)(UINT_PTR)AgxWgl->Device.KernelContext;
@@ -1374,8 +1414,8 @@ static void wgl_pb_modules(UINT attempt, UINT variant, DWORD error) {
 
 /* One present through opengl32: PresentBuffers with this source's request;
  * opengl32 calls agx_wgl_redirect_buffers back. Returns the stage. */
-static UINT wgl_redirect_present(AGX_WGL_KMT_SOURCE *s, HWND window, const RECT *rect,
-                                 LONG *status) {
+static UINT wgl_redirect_present(AGX_WGL_KMT_SOURCE *s, struct pipe_context *ctx, HWND window,
+                                 const RECT *rect, LONG *status) {
   AGX_WGL_REDIRECT_REQUEST *request =
       &AgxWglRedirectRequests[s - AgxWglKmtSources];
   PRESENTBUFFERSCB cb;
@@ -1387,6 +1427,17 @@ static UINT wgl_redirect_present(AGX_WGL_KMT_SOURCE *s, HWND window, const RECT 
   request->Magic = AGX_WGL_REDIRECT_MAGIC;
   request->Source = s;
   request->Rect = *rect;
+  request->Context = ctx;
+  {
+    /* The redirection surface covers the whole window (EXP1227: 656x519 for
+     * a 640x480 client); the frame goes to the client area's place in it. */
+    POINT origin = {0, 0};
+    RECT frame;
+    if (ClientToScreen(window, &origin) && GetWindowRect(window, &frame)) {
+      request->Offset.x = origin.x - frame.left;
+      request->Offset.y = origin.y - frame.top;
+    }
+  }
   request->Thread = GetCurrentThreadId();
   request->Active = TRUE;
   ZeroMemory(&cb, sizeof(cb));
@@ -1526,7 +1577,7 @@ static BOOL wgl_kmt_present(struct pipe_context *ctx, struct pipe_resource *res,
   QueryPerformanceCounter(&copied);
   RECT rect = {0, 0, (LONG)width, (LONG)height};
   LONG status = 0;
-  UINT stage = wgl_redirect_present(s, window, &rect, &status);
+  UINT stage = wgl_redirect_present(s, ctx, window, &rect, &status);
   QueryPerformanceCounter(&end);
   s->SumCopy += copied.QuadPart - start;
   s->SumKernel += end.QuadPart - copied.QuadPart;
