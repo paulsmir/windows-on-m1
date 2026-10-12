@@ -1,5 +1,30 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
+## Current as of 2026-10-12 06:30Z (read this first)
+
+Installed: PACKAGE1231 (KMD/ARM64 UMD build 7eb593d9 = c92ac343 + the stack
+fixes, UMD32 fce5f2db, ICD out53, 30.0.1231.0). Proven this session:
+- 32-bit D3D11 on AGX, on screen (EXP1226, EXP1231): WOW64 enumeration
+  (SupportsOnly64Bit from UserModeDriverNameWow), FL 10_0 device, flip
+  swap chain, presents composed by DWM (screen and PrintWindow blue).
+- DWM stack overflow fixed (EXP1231): the UMD reserved 32-89 KB frames
+  on DDI paths; all moved to the heap; tools/pe_stack_frames.py gates
+  images at 16 KiB (x86 UMD32/ICD still need the x86 closure rebuilt).
+- opengl32 redirection protocol fully driven (EXP1227-EXP1230):
+  PresentBuffers v2 -> dwmapi #100 surface -> DrvPresentBuffers(hSurface)
+  -> PresentToRedirectionSurface nVersion 3 (only 3 accepted) -> D3DKMTPresent
+  RedirectedBlt; the ICD writes the surface (readback proves it).
+Open boundary: redirected (blt) presentation is unserviced -- dxgkrnl never
+calls DxgkDdiPresent Blt (EXP1231-D2 probe: 0 this boot) and DWM composes the
+surfaces empty, for GL and for DXGI blt-model D3D11 alike. Separate track:
+DxgKrnl ETW (EXP801DxgBoot) to see how dxgkrnl services redirected blts for
+this GPU-VA, SupportKernelModeCommandBuffer=0 driver (needed for D3D9 and
+blt-model D3D10/11 windows).
+Next causal target (G2): the ICD presents GL frames through a DXGI flip-model
+swap chain it owns (D3D11 on AGX in the GL process), replacing opengl32's
+redirection and the GDI ring; then CS fullscreen, then M1 hardware run
+(m1n1 6ee9cc4d, Mu 71c9b2d551 FD 4d382bfa, worktree .worktrees/m1-ramdisk-window).
+
 ## Current as of 2026-10-12 03:25Z (read this first)
 
 Installed: PACKAGE1225 (= EXP1224's: sys 3f6db5bb, UMD 23123147, UMD32
