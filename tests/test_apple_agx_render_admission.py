@@ -460,10 +460,12 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         # drift is ERROR_MOD_NOT_FOUND again).
         inf = self.read("AppleAgxRenderAdmission.inf").replace("\r\n", "\n")
         names = re.search(r"^HKR,,UserModeDriverNameWow,%REG_MULTI_SZ%,(.+)$", inf, re.M).group(1).split(",")
-        self.assertEqual(names, ["%13%\\AppleAgxRenderAdmissionUmd32.dll"] * 4)
+        # Microsoft's contract: a file name, the file in %systemroot%\SysWOW64
+        # (EXP1223: a driver-store path was not loaded).
+        self.assertEqual(names, ["AppleAgxRenderAdmissionUmd32.dll"] * 4)
         section = re.search(r"^\[Admission\.WowUmdCopyFiles\]\n(\S+)$", inf, re.M).group(1)
-        self.assertEqual(section, "AppleAgxRenderAdmissionUmd32.dll")
-        self.assertIn("Admission.WowUmdCopyFiles=13", inf)
+        self.assertEqual(section.split(",")[0], "AppleAgxRenderAdmissionUmd32.dll")
+        self.assertIn("Admission.WowUmdCopyFiles=10,SysWOW64", inf)
         self.assertIn(",Admission.WowUmdCopyFiles\n", inf)
         self.assertIn("AppleAgxRenderAdmissionUmd32.dll=1", inf)
         repack = self.read("scripts/repackage-driver.ps1")

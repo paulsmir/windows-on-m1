@@ -13,7 +13,9 @@ Admission.UmdCopyFiles=11
 ; 13 = the driver store: the x86 ICD runs from it (System32\DriverStore is
 ; exempt from WOW64 redirection), as AMD's atiglpxx.dll does.
 Admission.WowIcdCopyFiles=13
-Admission.WowUmdCopyFiles=13
+; EXP1223: the 32-bit D3D runtime did not load a WOW UMD named by a driver-store
+; path; Microsoft's contract is SysWOW64 and a file name (WDDM 64-bit issues).
+Admission.WowUmdCopyFiles=10,SysWOW64
 
 [Manufacturer]
 %ManufacturerName%=Models,NTarm64
@@ -52,13 +54,14 @@ AppleAgxOpenGL32.dll
 ; EXP1222: opengl32's PresentBuffers creates a D3D11 device in the calling
 ; (32-bit) process for a window's redirection surface, and 32-bit D3D games
 ; need one too: the WOW64 build of the D3D user-mode driver, registered as
-; UserModeDriverNameWow, runs from the driver store like the x86 ICD.
+; UserModeDriverNameWow and copied to %systemroot%\SysWOW64 ("Windows Display
+; Driver Model (WDDM) 64-Bit Issues", Microsoft Learn).
 [Admission.WowUmdCopyFiles]
-AppleAgxRenderAdmissionUmd32.dll
+AppleAgxRenderAdmissionUmd32.dll,,,0x4000
 
 [Admission.SoftwareSettings]
 HKR,,UserModeDriverName,%REG_MULTI_SZ%,AppleAgxRenderAdmissionUmd.dll,AppleAgxRenderAdmissionUmd.dll,AppleAgxRenderAdmissionUmd.dll,AppleAgxRenderAdmissionUmd.dll
-HKR,,UserModeDriverNameWow,%REG_MULTI_SZ%,%13%\AppleAgxRenderAdmissionUmd32.dll,%13%\AppleAgxRenderAdmissionUmd32.dll,%13%\AppleAgxRenderAdmissionUmd32.dll,%13%\AppleAgxRenderAdmissionUmd32.dll
+HKR,,UserModeDriverNameWow,%REG_MULTI_SZ%,AppleAgxRenderAdmissionUmd32.dll,AppleAgxRenderAdmissionUmd32.dll,AppleAgxRenderAdmissionUmd32.dll,AppleAgxRenderAdmissionUmd32.dll
 ; OpenGLFlags bit 0 is set for compatibility. EXP1194: bit 1 is set -- the
 ; runtime then does not call the ICD's finish before its swap-buffers
 ; ("Loading an OpenGL Installable Client Driver"). The ICD's swap flushes
