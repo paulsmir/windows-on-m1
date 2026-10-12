@@ -121,6 +121,37 @@ def prepare_compiler_selftest_source(source, out):
     return destination, provenance
 
 
+def prepare_parallel_copy_source(source, out):
+    """EXP1230: dwm.exe overflowed a worker thread's stack in the UMD; the
+    parallel-copy lowering kept 64 KB of per-register state on the stack of
+    whatever thread compiles a shader. Keep it on the heap."""
+    original = source.read_bytes()
+    pairs = [(b'   struct copy_ctx _ctx = {.entry_count = num_copies};\n'
+              b'   struct copy_ctx *ctx = &_ctx;\n',
+              b'   struct copy_ctx *ctx = calloc(1, sizeof(*ctx));\n'
+              b'   ctx->entry_count = num_copies;\n'),
+             (b'   free(copies2);\n}\n\nvoid\nagx_emit_parallel_copies(',
+              b'   free(ctx);\n   free(copies2);\n}\n\nvoid\nagx_emit_parallel_copies(')]
+    text = original
+    for anchor, replacement in pairs:
+        for ending in (b'\n', b'\r\n'):
+            a = anchor.replace(b'\n', ending)
+            if text.count(a) == 1:
+                text = text.replace(a, replacement.replace(b'\n', ending), 1)
+                break
+        else:
+            raise RuntimeError('Ambiguous pinned parallel-copy anchor: ' + str(source))
+    destination = out / 'compiler-evidence' / source.name
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    for header in sorted(source.parent.glob('*.h')):
+        target = destination.parent / header.name
+        if not target.exists():
+            shutil.copy2(header, target)
+    destination.write_bytes(text)
+    return destination, {'baseline': str(source), 'before_sha256': hashlib.sha256(original).hexdigest(),
+                         'selected': str(destination), 'after_sha256': sha256(destination)}
+
+
 def compile_command(compiler, flags, includes, source, obj):
     command = [compiler, *flags, *('/I' + str(p) for p in includes),
                '/c', source, '/Fo' + str(obj)]
@@ -283,6 +314,12 @@ def main():
         selected_compile, transform = prepare_compiler_selftest_source(compile_matches[0], out)
         manifest['compiler_selftest_transform'] = transform
         compiler_units = [selected_compile if p == compile_matches[0] else p for p in compiler_units]
+        copy_matches = [p for p in compiler_units if p.name == 'agx_lower_parallel_copy.c']
+        if len(copy_matches) != 1:
+            raise RuntimeError('Ambiguous compiler evidence agx_lower_parallel_copy.c selection')
+        selected_copy, copy_transform = prepare_parallel_copy_source(copy_matches[0], out)
+        manifest['compiler_parallel_copy_transform'] = copy_transform
+        compiler_units = [selected_copy if p == copy_matches[0] else p for p in compiler_units]
         libraries = []
         for relative in LIBRARIES:
             library = build / relative

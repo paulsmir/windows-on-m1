@@ -452,25 +452,6 @@ if args.windows_platform_declarations:
         ('''   return tokens;\n''','''   FREE(sx_heap);
 #undef sx
    return tokens;\n''')])
-    # EXP1230: the parallel-copy lowering kept 64 KB of per-register state on
-    # the stack of whatever thread compiles a shader (dwm.exe worker threads).
-    change('src/asahi/compiler/agx_lower_parallel_copy.c',
-        'cd2a520e2078ab788f6a013ff556728a2277910beffc1bf8fabfeedcd5b466f6',[
-        ('''   struct copy_ctx _ctx = {.entry_count = num_copies};
-   struct copy_ctx *ctx = &_ctx;
-''','''   struct copy_ctx *ctx = calloc(1, sizeof(*ctx));
-   ctx->entry_count = num_copies;
-'''),
-        ('''   free(copies2);
-}
-
-void
-agx_emit_parallel_copies(''','''   free(ctx);
-   free(copies2);
-}
-
-void
-agx_emit_parallel_copies(''')])
     change('src/gallium/auxiliary/nir/tgsi_to_nir.c',
         '755f85617fa4f38923c759d1f27029c078c2bc47aead66abbb79130fea3f9b17',[
         ('''   nir_alu_type *samp_types;''','''   nir_alu_type *samp_types;
