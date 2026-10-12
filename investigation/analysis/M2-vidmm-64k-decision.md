@@ -7,8 +7,11 @@ lives in dxgmms2.sys; dxgkrnl.sys has no MinimumPageSize/RecommendedPageSize log
 documents only that system memory is managed at 4 KB, that `SysMem64KBPageSupported` means "the
 driver provides memory segment management at 64KB" (WDDM 2.1), and that VidMm picks 64 KB pages
 from alignment, size and segment ([Support for 64KB Pages], [GpuMmu Model], [DXGK_GPUMMUCAPS]).
-`DXGK_PAGE_SIZE` (the type of the WDDM 3.x `MinimumPageSize`/`RecommendedPageSize` union over
-`Alignment`) has no definition anywhere in WDK 10.0.26100.
+The WDDM 3.x `MinimumPageSize`/`RecommendedPageSize` union over `Alignment` is typed by the
+comment as `DXGK_PAGE_SIZE`; the header defines it as `DXGK_PAGESIZE` (d3dkmddi.h:11082: 4KB 0,
+8KB 1, 16KB 2, 64KB 4, ... 16MB 12), which also types `DXGK_SEGMENTDESCRIPTOR5.SlabSize`. Read
+as the union, the KMD's Alignment 0x10000 is Minimum 4 KB / Recommended 8 KB (R104); EXP836 found
+page-size hints refused for Mesa class allocations (R105 PageMode).
 
 ## Facts (addresses are RVAs in this image)
 
@@ -62,6 +65,11 @@ from alignment, size and segment ([Support for 64KB Pages], [GpuMmu Model], [DXG
 - KMD gap: a Use64KBPages leaf update publishes complete native 16 KiB groups but zeroes the
   logical (CPU-envelope) PTEs (f7c300d6), so the CPU paging executor and the G4 parser cannot
   resolve 64K-mapped VAs. The envelope already exists (16 scaled 4 KiB entries per 64 KiB PTE).
+
+Two size mechanisms therefore exist: the WDDM 2.1 one decoded above (adapter opt-in +
+SysMem64KBPageSupported -> 64 KB PTEs, conditions known) and the WDDM 3.2 one (segment
+`SlabSize`, allocation Minimum/RecommendedPageSize), whose VidMm handling is not decoded here.
+M2 follows the first; the second stays a labelled alternative.
 
 ## M2 ladder
 
