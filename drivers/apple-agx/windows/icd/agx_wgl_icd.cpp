@@ -1169,6 +1169,20 @@ static AGX_WGL_KMT_SOURCE *wgl_kmt_get(HWND window, unsigned width, unsigned hei
   return free_source;
 }
 
+#if WINVER >= 0xA00 && defined(_M_IX86)
+/* The x86 layout opengl32 reads (EXP1227, SysWOW64\opengl32.dll). */
+static_assert(offsetof(PRESENTTOREDIRECTIONSURFACECB, hContext) == 0x4, "opengl32 ABI");
+static_assert(offsetof(PRESENTTOREDIRECTIONSURFACECB, hSource) == 0x8, "opengl32 ABI");
+static_assert(offsetof(PRESENTTOREDIRECTIONSURFACECB, hDestination) == 0xc, "opengl32 ABI");
+static_assert(offsetof(PRESENTTOREDIRECTIONSURFACECB, hSharedHandle) == 0x10, "opengl32 ABI");
+static_assert(offsetof(PRESENTTOREDIRECTIONSURFACECB, updateId) == 0x18, "opengl32 ABI");
+static_assert(offsetof(PRESENTTOREDIRECTIONSURFACECB, updateRect) == 0x20, "opengl32 ABI");
+static_assert(offsetof(PRESENTTOREDIRECTIONSURFACECB, broadcastContextCount) == 0x30, "opengl32 ABI");
+static_assert(offsetof(PRESENTTOREDIRECTIONSURFACECB, broadcastSrcAllocation) == 0x134, "opengl32 ABI");
+static_assert(offsetof(PRESENTTOREDIRECTIONSURFACECB, cbPrivateDriverDataSize) == 0x334, "opengl32 ABI");
+static_assert(offsetof(PRESENTTOREDIRECTIONSURFACECB, pPrivateDriverData) == 0x338, "opengl32 ABI");
+#endif
+
 /* G2 HW3b: open the window's redirection surface (opengl32's hSurface) on
  * this device and adopt it as a direct BO, so it has a GPU VA in this
  * process for the KMD's present job. Returns the stage that failed or
@@ -1291,11 +1305,15 @@ extern "C" int agx_wgl_redirect_buffers(HDC hdc, LPPRESENTBUFFERS data) {
   args.hSharedHandle = data->hSurface;
   args.updateId = data->ullPresentToken;
   args.updateRect = rect;
-  /* gldrv.h gives the structure, not its version: the first that opengl32
-   * accepts is kept (measure-wgl-redirect records it). */
-  static const UINT versions[] = {1u, 2u};
+  /* gldrv.h gives the structure, not its version. EXP1227: this Windows'
+   * SysWOW64\opengl32.dll returns FALSE without SetLastError unless
+   * nVersion == 3 (then it requires hContext and hSource, at most 64
+   * broadcast contexts, and issues D3DKMTPresent with Blt | SrcRectValid |
+   * RedirectedBlt); 1 and 2 stay as fallbacks for other builds. The first
+   * accepted version is kept (measure-wgl-redirect records it). */
+  static const UINT versions[] = {3u, 2u, 1u};
   BOOL ok = FALSE;
-  for (unsigned i = 0; i < 2u && !ok; ++i) {
+  for (unsigned i = 0; i < ARRAYSIZE(versions) && !ok; ++i) {
     if (s->RedirectVersion && versions[i] != s->RedirectVersion) continue;
     args.nVersion = versions[i];
     SetLastError(0);
