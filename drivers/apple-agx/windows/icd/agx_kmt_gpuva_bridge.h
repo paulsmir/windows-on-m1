@@ -49,6 +49,11 @@ typedef struct _AGX_KMT_THUNKS {
   PFND3DKMT_PRESENT Present;
   /* G3, optional: NULL leaves swap pacing on the CPU swap grid. */
   PFND3DKMT_WAITFORVERTICALBLANKEVENT WaitForVerticalBlankEvent;
+  /* G2 HW3b, optional: opening the window's shared redirection surface. */
+  PFND3DKMT_QUERYRESOURCEINFO QueryResourceInfo;
+  PFND3DKMT_QUERYRESOURCEINFOFROMNTHANDLE QueryResourceInfoFromNtHandle;
+  PFND3DKMT_OPENRESOURCE2 OpenResource2;
+  PFND3DKMT_OPENRESOURCEFROMNTHANDLE OpenResourceFromNtHandle;
 } AGX_KMT_THUNKS;
 
 typedef enum _AGX_KMT_GPUVA_OP {
@@ -61,7 +66,8 @@ typedef enum _AGX_KMT_GPUVA_OP {
   AgxKmtGpuvaSubmit, AgxKmtGpuvaSignalGpu2, AgxKmtGpuvaSignal2,
   AgxKmtGpuvaLock, AgxKmtGpuvaUnlock, AgxKmtGpuvaEscape,
   AgxKmtGpuvaSetPriority, AgxKmtGpuvaQueryResidency, AgxKmtGpuvaSetError,
-  AgxKmtGpuvaPresent, AgxKmtGpuvaWaitVblank, AgxKmtGpuvaOpCount
+  AgxKmtGpuvaPresent, AgxKmtGpuvaWaitVblank, AgxKmtGpuvaSharedOpen,
+  AgxKmtGpuvaSharedClose, AgxKmtGpuvaOpCount
 } AGX_KMT_GPUVA_OP;
 
 /* EXP1189 receipt-only: where the CPU waits for the GPU. Per distinct chain
@@ -132,6 +138,32 @@ NTSTATUS AgxKmtGpuvaPresentBlt(AGX_KMT_GPUVA_BRIDGE *Bridge, HANDLE Context,
  * STATUS_NOT_SUPPORTED (0xC00000BB) without the export. */
 NTSTATUS AgxKmtGpuvaWaitVerticalBlank(AGX_KMT_GPUVA_BRIDGE *Bridge,
     D3DDDI_VIDEO_PRESENT_SOURCE_ID Source);
+
+/* G2 HW3b: a shared resource of one allocation (the DWM redirection surface
+ * opengl32 hands DrvPresentBuffers) opened on the bridge's device. */
+#define AGX_KMT_SHARED_PRIVATE_BYTES 64u
+typedef struct _AGX_KMT_SHARED_SURFACE {
+  HANDLE Shared;                 /* the handle opened */
+  UINT Kind;                     /* 1 global (D3DKMT) share handle, 2 NT handle */
+  D3DKMT_HANDLE Resource;        /* this process's resource handle */
+  D3DKMT_HANDLE Allocation;      /* this process's allocation handle */
+  UINT NumAllocations;
+  UINT RuntimePrivateBytes, ResourcePrivateBytes, AllocationPrivateBytes;
+  D3DGPU_VIRTUAL_ADDRESS GpuVirtualAddress;   /* as the open returned it */
+  BYTE AllocationPrivate[AGX_KMT_SHARED_PRIVATE_BYTES]; /* the creator's data */
+} AGX_KMT_SHARED_SURFACE;
+
+/* Open Shared as a global share handle (D3DKMTQueryResourceInfo,
+ * D3DKMTOpenResource2) or, failing that, as an NT handle (...FromNtHandle).
+ * Only a resource of exactly one allocation is opened. Returns the NTSTATUS
+ * of the failing step (STATUS_NOT_SUPPORTED without the exports,
+ * STATUS_INVALID_PARAMETER for any other shape); on success Surface holds
+ * the opened handles and the allocation's private data. */
+NTSTATUS AgxKmtGpuvaOpenShared(AGX_KMT_GPUVA_BRIDGE *Bridge, HANDLE Shared,
+    AGX_KMT_SHARED_SURFACE *Surface);
+/* Destroy the opened resource (D3DKMTDestroyAllocation2 with its handle). */
+NTSTATUS AgxKmtGpuvaCloseShared(AGX_KMT_GPUVA_BRIDGE *Bridge,
+    AGX_KMT_SHARED_SURFACE *Surface);
 
 /* NTSTATUS of a thunk -> HRESULT the umd_* code expects from a callback. */
 HRESULT AgxKmtGpuvaResult(NTSTATUS Status);

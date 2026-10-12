@@ -599,6 +599,140 @@ NTSTATUS AgxKmtGpuvaWaitVerticalBlank(AGX_KMT_GPUVA_BRIDGE *Bridge,
   return status;
 }
 
+NTSTATUS AgxKmtGpuvaOpenShared(AGX_KMT_GPUVA_BRIDGE *Bridge, HANDLE Shared,
+    AGX_KMT_SHARED_SURFACE *Surface) {
+  AGX_KMT_GPUVA_BRIDGE *b = bridge(Bridge);
+  D3DDDI_OPENALLOCATIONINFO2 info;
+  BYTE *runtime = NULL, *resource = NULL, *allocation = NULL;
+  UINT runtimeBytes = 0, resourceBytes = 0, totalBytes = 0, count = 0;
+  NTSTATUS status = KMT_STATUS_INVALID_PARAMETER;
+  if (Surface) ZeroMemory(Surface, sizeof(*Surface));
+  if (!b || !Shared || !Surface) {
+    (void)refuse(b, AgxKmtGpuvaSharedOpen);
+    return KMT_STATUS_INVALID_PARAMETER;
+  }
+  if (!b->Kmt.QueryResourceInfo || !b->Kmt.OpenResource2 ||
+      !b->Kmt.QueryResourceInfoFromNtHandle || !b->Kmt.OpenResourceFromNtHandle) {
+    (void)done(b, AgxKmtGpuvaSharedOpen, KMT_STATUS_NOT_SUPPORTED);
+    return KMT_STATUS_NOT_SUPPORTED;
+  }
+  Surface->Shared = Shared;
+  kmt_begin(b);
+  if ((UINT_PTR)Shared <= MAXUINT32) {
+    D3DKMT_QUERYRESOURCEINFO query;
+    ZeroMemory(&query, sizeof(query));
+    query.hDevice = b->DeviceHandle;
+    query.hGlobalShare = (D3DKMT_HANDLE)(UINT_PTR)Shared;
+    status = b->Kmt.QueryResourceInfo(&query);
+    if (status >= 0) {
+      Surface->Kind = 1u;
+      runtimeBytes = query.PrivateRuntimeDataSize;
+      resourceBytes = query.ResourcePrivateDriverDataSize;
+      totalBytes = query.TotalPrivateDriverDataSize;
+      count = query.NumAllocations;
+    }
+  }
+  if (!Surface->Kind) {
+    D3DKMT_QUERYRESOURCEINFOFROMNTHANDLE query;
+    ZeroMemory(&query, sizeof(query));
+    query.hDevice = b->DeviceHandle;
+    query.hNtHandle = Shared;
+    status = b->Kmt.QueryResourceInfoFromNtHandle(&query);
+    if (status < 0) {
+      (void)done(b, AgxKmtGpuvaSharedOpen, status);
+      return status;
+    }
+    Surface->Kind = 2u;
+    runtimeBytes = query.PrivateRuntimeDataSize;
+    resourceBytes = query.ResourcePrivateDriverDataSize;
+    totalBytes = query.TotalPrivateDriverDataSize;
+    count = query.NumAllocations;
+  }
+  Surface->NumAllocations = count;
+  Surface->RuntimePrivateBytes = runtimeBytes;
+  Surface->ResourcePrivateBytes = resourceBytes;
+  Surface->AllocationPrivateBytes = totalBytes;
+  if (count != 1u || totalBytes > 4096u || runtimeBytes > 65536u ||
+      resourceBytes > 65536u) {
+    (void)done(b, AgxKmtGpuvaSharedOpen, KMT_STATUS_INVALID_PARAMETER);
+    return KMT_STATUS_INVALID_PARAMETER;
+  }
+  runtime = (BYTE *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, runtimeBytes + 1u);
+  resource = (BYTE *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, resourceBytes + 1u);
+  allocation = (BYTE *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, totalBytes + 1u);
+  if (!runtime || !resource || !allocation) {
+    status = KMT_STATUS_NO_MEMORY;
+  } else {
+    ZeroMemory(&info, sizeof(info));
+    if (Surface->Kind == 1u) {
+      D3DKMT_OPENRESOURCE open;
+      ZeroMemory(&open, sizeof(open));
+      open.hDevice = b->DeviceHandle;
+      open.hGlobalShare = (D3DKMT_HANDLE)(UINT_PTR)Shared;
+      open.NumAllocations = 1u;
+      open.pOpenAllocationInfo2 = &info;
+      open.pPrivateRuntimeData = runtime;
+      open.PrivateRuntimeDataSize = runtimeBytes;
+      open.pResourcePrivateDriverData = resource;
+      open.ResourcePrivateDriverDataSize = resourceBytes;
+      open.pTotalPrivateDriverDataBuffer = allocation;
+      open.TotalPrivateDriverDataBufferSize = totalBytes;
+      status = b->Kmt.OpenResource2(&open);
+      Surface->Resource = open.hResource;
+    } else {
+      D3DKMT_OPENRESOURCEFROMNTHANDLE open;
+      ZeroMemory(&open, sizeof(open));
+      open.hDevice = b->DeviceHandle;
+      open.hNtHandle = Shared;
+      open.NumAllocations = 1u;
+      open.pOpenAllocationInfo2 = &info;
+      open.pPrivateRuntimeData = runtime;
+      open.PrivateRuntimeDataSize = runtimeBytes;
+      open.pResourcePrivateDriverData = resource;
+      open.ResourcePrivateDriverDataSize = resourceBytes;
+      open.pTotalPrivateDriverDataBuffer = allocation;
+      open.TotalPrivateDriverDataBufferSize = totalBytes;
+      status = b->Kmt.OpenResourceFromNtHandle(&open);
+      Surface->Resource = open.hResource;
+    }
+    if (status >= 0) {
+      UINT bytes = info.PrivateDriverDataSize;
+      Surface->Allocation = info.hAllocation;
+      Surface->GpuVirtualAddress = info.GpuVirtualAddress;
+      /* The open points the allocation's private data into the buffer. */
+      if (!info.pPrivateDriverData || !bytes) bytes = totalBytes;
+      memcpy(Surface->AllocationPrivate,
+             info.pPrivateDriverData ? (const BYTE *)info.pPrivateDriverData : allocation,
+             bytes < AGX_KMT_SHARED_PRIVATE_BYTES ? bytes : AGX_KMT_SHARED_PRIVATE_BYTES);
+      Surface->AllocationPrivateBytes = bytes;
+    }
+  }
+  if (runtime) HeapFree(GetProcessHeap(), 0, runtime);
+  if (resource) HeapFree(GetProcessHeap(), 0, resource);
+  if (allocation) HeapFree(GetProcessHeap(), 0, allocation);
+  (void)done(b, AgxKmtGpuvaSharedOpen, status);
+  return status;
+}
+
+NTSTATUS AgxKmtGpuvaCloseShared(AGX_KMT_GPUVA_BRIDGE *Bridge,
+    AGX_KMT_SHARED_SURFACE *Surface) {
+  AGX_KMT_GPUVA_BRIDGE *b = bridge(Bridge);
+  D3DKMT_DESTROYALLOCATION2 request;
+  NTSTATUS status;
+  if (!b || !Surface || !Surface->Resource) {
+    (void)refuse(b, AgxKmtGpuvaSharedClose);
+    return KMT_STATUS_INVALID_PARAMETER;
+  }
+  ZeroMemory(&request, sizeof(request));
+  request.hDevice = b->DeviceHandle;
+  request.hResource = Surface->Resource;
+  kmt_begin(b);
+  status = b->Kmt.DestroyAllocation2(&request);
+  (void)done(b, AgxKmtGpuvaSharedClose, status);
+  if (status >= 0) ZeroMemory(Surface, sizeof(*Surface));
+  return status;
+}
+
 /* Store through FARPROC: GetProcAddress returns a generic function pointer. */
 #define LOAD_THUNK(field, name) \
   ((*(FARPROC *)&Thunks->field = GetProcAddress(gdi, name)) != NULL)
@@ -612,6 +746,10 @@ BOOL AgxKmtThunksLoad(AGX_KMT_THUNKS *Thunks) {
   /* Optional: present falls back to GDI without it. */
   (void)LOAD_THUNK(Present, "D3DKMTPresent");
   (void)LOAD_THUNK(WaitForVerticalBlankEvent, "D3DKMTWaitForVerticalBlankEvent");
+  (void)LOAD_THUNK(QueryResourceInfo, "D3DKMTQueryResourceInfo");
+  (void)LOAD_THUNK(QueryResourceInfoFromNtHandle, "D3DKMTQueryResourceInfoFromNtHandle");
+  (void)LOAD_THUNK(OpenResource2, "D3DKMTOpenResource2");
+  (void)LOAD_THUNK(OpenResourceFromNtHandle, "D3DKMTOpenResourceFromNtHandle");
   return LOAD_THUNK(QueryAdapterInfo, "D3DKMTQueryAdapterInfo") &&
       LOAD_THUNK(CreateContextVirtual, "D3DKMTCreateContextVirtual") &&
       LOAD_THUNK(DestroyContext, "D3DKMTDestroyContext") &&

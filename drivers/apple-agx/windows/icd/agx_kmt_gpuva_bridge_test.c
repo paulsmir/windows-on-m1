@@ -37,6 +37,9 @@ static D3DKMT_LOCK2 q_lock; static unsigned unlocks;
 static D3DKMT_ESCAPE q_escape;
 static D3DKMT_PRESENT q_present; static RECT q_present_subrect;
 static D3DKMT_WAITFORVERTICALBLANKEVENT q_vblank;
+static unsigned shared_count = 1u;
+#define GLOBAL_SHARE 0x40000123u
+#define NT_SHARE ((HANDLE)(UINT_PTR)0x5a4)
 
 static NTSTATUS APIENTRY f_query(const D3DKMT_QUERYADAPTERINFO *a) { ++calls; q_query = *a; return next_status; }
 static NTSTATUS APIENTRY f_context(D3DKMT_CREATECONTEXTVIRTUAL *a) { ++calls; q_context = *a; a->hContext = CONTEXT; return next_status; }
@@ -62,6 +65,31 @@ static NTSTATUS APIENTRY f_escape(const D3DKMT_ESCAPE *a) { ++calls; q_escape = 
 static NTSTATUS APIENTRY f_priority(const D3DKMT_SETALLOCATIONPRIORITY *a) { ++calls; return a->hDevice == DEVICE ? next_status : (NTSTATUS)0xc000000dL; }
 static NTSTATUS APIENTRY f_residency(const D3DKMT_QUERYALLOCATIONRESIDENCY *a) { ++calls; return a->hDevice == DEVICE ? next_status : (NTSTATUS)0xc000000dL; }
 static NTSTATUS APIENTRY f_vblank(const D3DKMT_WAITFORVERTICALBLANKEVENT *a) { ++calls; q_vblank = *a; return next_status; }
+/* A shared resource of shared_count allocations: 16 bytes of runtime data,
+ * 28 of resource data, 48 of allocation data (a description). */
+static NTSTATUS APIENTRY f_qri(D3DKMT_QUERYRESOURCEINFO *a) { ++calls;
+  if (a->hDevice != DEVICE || a->hGlobalShare != GLOBAL_SHARE) return (NTSTATUS)0xc000000dL;
+  a->PrivateRuntimeDataSize = 16; a->ResourcePrivateDriverDataSize = 28;
+  a->TotalPrivateDriverDataSize = 48 * shared_count; a->NumAllocations = shared_count; return 0; }
+static NTSTATUS APIENTRY f_qrint(D3DKMT_QUERYRESOURCEINFOFROMNTHANDLE *a) { ++calls;
+  if (a->hDevice != DEVICE || a->hNtHandle != NT_SHARE) return (NTSTATUS)0xc0000008L;
+  a->PrivateRuntimeDataSize = 16; a->ResourcePrivateDriverDataSize = 28;
+  a->TotalPrivateDriverDataSize = 48; a->NumAllocations = 1; return 0; }
+static void fill_open(D3DDDI_OPENALLOCATIONINFO2 *info, void *total, UINT bytes) {
+  memset(total, 0x5a, bytes); ((BYTE *)total)[0] = 0x52;
+  info->hAllocation = 0x80000010u; info->pPrivateDriverData = total;
+  info->PrivateDriverDataSize = 48; info->GpuVirtualAddress = 0x1234560000ull; }
+static NTSTATUS APIENTRY f_open2(D3DKMT_OPENRESOURCE *a) { ++calls;
+  if (a->hDevice != DEVICE || a->hGlobalShare != GLOBAL_SHARE || a->NumAllocations != 1 ||
+      a->PrivateRuntimeDataSize != 16 || a->ResourcePrivateDriverDataSize != 28 ||
+      a->TotalPrivateDriverDataBufferSize != 48) return (NTSTATUS)0xc000000dL;
+  fill_open(a->pOpenAllocationInfo2, a->pTotalPrivateDriverDataBuffer, 48);
+  a->hResource = 0x80000020u; return 0; }
+static NTSTATUS APIENTRY f_opennt(D3DKMT_OPENRESOURCEFROMNTHANDLE *a) { ++calls;
+  if (a->hDevice != DEVICE || a->hNtHandle != NT_SHARE || a->NumAllocations != 1 ||
+      a->TotalPrivateDriverDataBufferSize != 48) return (NTSTATUS)0xc000000dL;
+  fill_open(a->pOpenAllocationInfo2, a->pTotalPrivateDriverDataBuffer, 48);
+  a->hResource = 0x80000030u; return 0; }
 /* The sub-rect is read during the call: the bridge's copy is a local. */
 static NTSTATUS APIENTRY f_present(D3DKMT_PRESENT *a) { ++calls; q_present = *a; if (a->pSrcSubRects) q_present_subrect = a->pSrcSubRects[0]; return next_status; }
 
@@ -70,7 +98,7 @@ int main(void) {
   AGX_KMT_THUNKS t = {f_query, f_context, f_destroy_context, f_paging, f_destroy_paging,
       f_sync, f_destroy_sync, f_alloc, f_dealloc, f_reserve, f_map, f_free, f_resident,
       f_evict, f_wait, f_submit, f_signal_gpu, f_signal, f_lock, f_unlock, f_escape,
-      f_priority, f_residency, f_present, f_vblank};
+      f_priority, f_residency, f_present, f_vblank, f_qri, f_qrint, f_open2, f_opennt};
   const D3DDDI_DEVICECALLBACKS *d;
   HANDLE h = &bridge;
   BYTE blob[104];
@@ -271,6 +299,32 @@ int main(void) {
   bridge.Kmt.WaitForVerticalBlankEvent = NULL; calls = 0;
   CHECK(AgxKmtGpuvaWaitVerticalBlank(&bridge, 0u) == (NTSTATUS)0xc00000bbL && calls == 0);
   bridge.Kmt.WaitForVerticalBlankEvent = f_vblank;
+
+  /* G2 HW3b: a global share handle opens through OpenResource2, an NT
+   * handle through OpenResourceFromNtHandle; the creator's allocation data
+   * and the opened handles come back; close destroys the opened resource. */
+  { AGX_KMT_SHARED_SURFACE sf;
+    CHECK(AgxKmtGpuvaOpenShared(&bridge, (HANDLE)(UINT_PTR)GLOBAL_SHARE, &sf) == 0);
+    CHECK(sf.Kind == 1u && sf.Resource == 0x80000020u && sf.Allocation == 0x80000010u &&
+          sf.NumAllocations == 1u && sf.AllocationPrivateBytes == 48u &&
+          sf.AllocationPrivate[0] == 0x52 && sf.AllocationPrivate[47] == 0x5a &&
+          sf.GpuVirtualAddress == 0x1234560000ull && sf.RuntimePrivateBytes == 16u);
+    CHECK(AgxKmtGpuvaCloseShared(&bridge, &sf) == 0);
+    CHECK(q_dealloc.hDevice == DEVICE && q_dealloc.hResource == 0x80000020u &&
+          !q_dealloc.AllocationCount && !sf.Resource);
+    CHECK(AgxKmtGpuvaOpenShared(&bridge, NT_SHARE, &sf) == 0);
+    CHECK(sf.Kind == 2u && sf.Resource == 0x80000030u && sf.Allocation == 0x80000010u);
+    /* a resource of two allocations is not a redirection surface */
+    shared_count = 2u;
+    CHECK(AgxKmtGpuvaOpenShared(&bridge, (HANDLE)(UINT_PTR)GLOBAL_SHARE, &sf) ==
+          (NTSTATUS)0xc000000dL && !sf.Resource);
+    shared_count = 1u;
+    /* neither kind: the NT query's status */
+    CHECK(AgxKmtGpuvaOpenShared(&bridge, (HANDLE)(UINT_PTR)0x777, &sf) == (NTSTATUS)0xc0000008L);
+    bridge.Kmt.OpenResource2 = NULL; calls = 0;
+    CHECK(AgxKmtGpuvaOpenShared(&bridge, (HANDLE)(UINT_PTR)GLOBAL_SHARE, &sf) ==
+          (NTSTATUS)0xc00000bbL && calls == 0);
+    bridge.Kmt.OpenResource2 = f_open2; }
 
   /* Failures are counted and mapped; a foreign handle is refused. */
   next_status = (NTSTATUS)0xc00002b6L;
