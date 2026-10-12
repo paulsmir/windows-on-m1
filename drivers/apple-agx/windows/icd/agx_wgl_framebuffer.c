@@ -32,6 +32,8 @@
 
 /* agx_wgl_glthread_mesa.c: the st_context's pipe (Mesa main/ headers). */
 struct pipe_context *agx_wgl_st_pipe(struct st_context *st);
+/* agx_wgl_icd.cpp: one vertical blank of the display (G3); < 0 unavailable. */
+LONG agx_wgl_wait_vblank(void);
 /* agx_wgl_icd.cpp: queue the frame's GPU copy and show the previous one. */
 BOOL agx_wgl_present_window(struct pipe_screen *screen, struct pipe_context *ctx,
                             struct pipe_resource *res, HWND window);
@@ -56,6 +58,15 @@ void agx_wgl_pace_counters(UINT out[8]) {
     out[i] = (UINT)InterlockedExchange(&AgxWglPaceCounters[i], 0);
 }
 
+/* G3 receipt-only: vblank-paced swaps, vblank waits, waited us, late swaps
+ * (presented without a wait), failed waits, last failure status. */
+static volatile LONG AgxWglVblankCounters[6];
+
+void agx_wgl_vblank_counters(UINT out[6]) {
+  for (unsigned i = 0; i < 6u; ++i)
+    out[i] = (UINT)InterlockedExchange(&AgxWglVblankCounters[i], 0);
+}
+
 typedef struct {
   struct stw_winsys_framebuffer base;
   struct pipe_screen *screen;
@@ -66,6 +77,8 @@ typedef struct {
   long long next_swap_us;  /* EXP1209: the swap grid (agx_wgl_pace) */
   int64_t last_swap_us;    /* receipt: the previous swap */
   HANDLE timer;            /* high-resolution waitable timer, created on first wait */
+  long long last_vblank_us; /* G3: the previous swap's vblank (agx_wgl_vblank_waits) */
+  BOOL vblank_failed;      /* G3: the vblank wait failed; the grid paces from now on */
 } AGX_WGL_FRAMEBUFFER;
 
 static AGX_WGL_FRAMEBUFFER *agx_wgl_framebuffer(struct stw_winsys_framebuffer *fb) {
@@ -136,23 +149,53 @@ static void agx_wgl_framebuffer_wait(AGX_WGL_FRAMEBUFFER *fb, long long us) {
   os_time_sleep(us);
 }
 
+/* G3: pace on the display's vertical blanks (agx_wgl_vblank_waits). FALSE
+ * when the wait is unavailable; the swap grid paces from then on. */
+static BOOL agx_wgl_framebuffer_vblank(AGX_WGL_FRAMEBUFFER *fb, int64_t now,
+                                       int64_t refresh, int interval) {
+  unsigned waits;
+  if (fb->vblank_failed || interval <= 0 || refresh <= 0) return FALSE;
+  waits = agx_wgl_vblank_waits(&fb->last_vblank_us, now, refresh, interval);
+  InterlockedIncrement(&AgxWglVblankCounters[0]);
+  if (!waits) InterlockedIncrement(&AgxWglVblankCounters[3]);
+  for (unsigned i = 0; i < waits; ++i) {
+    LONG status = agx_wgl_wait_vblank();
+    if (status < 0) {
+      InterlockedIncrement(&AgxWglVblankCounters[4]);
+      InterlockedExchange(&AgxWglVblankCounters[5], status);
+      fb->vblank_failed = TRUE;
+      fb->last_vblank_us = 0;
+      return FALSE;
+    }
+    InterlockedIncrement(&AgxWglVblankCounters[1]);
+  }
+  if (waits) {
+    fb->last_vblank_us = os_time_get_nano() / 1000;
+    InterlockedExchangeAdd(&AgxWglVblankCounters[2], (LONG)(fb->last_vblank_us - now));
+  }
+  return TRUE;
+}
+
 /* WGL_EXT_swap_control: stw paces the GDI path itself (wait_swap_interval)
- * but leaves a winsys framebuffer's interval to present. EXP1209: paced on
- * the swap grid of agx_wgl_pace instead of stw's 1.75 x sleep, which
- * alternated short and long swaps; APPLE_AGX_SWAP_PACING=stw (diagnostic)
- * keeps stw's rule for comparison. */
+ * but leaves a winsys framebuffer's interval to present. G3: paced on the
+ * display's vertical blanks; where that wait is unavailable, on the EXP1209
+ * swap grid of agx_wgl_pace instead of stw's 1.75 x sleep, which alternated
+ * short and long swaps. APPLE_AGX_SWAP_PACING=stw or =grid (diagnostics)
+ * keep stw's rule or the grid for comparison. */
 static void agx_wgl_framebuffer_pace(AGX_WGL_FRAMEBUFFER *fb, int interval) {
-  static int stw_rule = -1;
+  static int rule = -1;   /* 0 vblank, 1 stw, 2 grid */
   int64_t now = os_time_get_nano() / 1000, swap;
   int64_t refresh = stw_dev && stw_dev->refresh_rate > 0 ?
       (int64_t)(1.0e6 / stw_dev->refresh_rate) : 0;
   int64_t period = interval > 0 ? refresh * interval : 0;
-  if (stw_rule < 0) {
+  if (rule < 0) {
     char value[8];
     DWORD n = GetEnvironmentVariableA("APPLE_AGX_SWAP_PACING", value, sizeof(value));
-    stw_rule = n == 3u && !strcmp(value, "stw");
+    rule = n == 3u && !strcmp(value, "stw") ? 1 : n == 4u && !strcmp(value, "grid") ? 2 : 0;
   }
-  if (stw_rule) {
+  if (rule == 0 && agx_wgl_framebuffer_vblank(fb, now, refresh, interval)) {
+    /* paced */
+  } else if (rule == 1) {
     if (period && fb->prev_swap_us) {
       int64_t delta = now - fb->prev_swap_us;
       if (delta >= 0 && delta < period) os_time_sleep((int64_t)((period - delta) * 1.75f));

@@ -49,6 +49,7 @@ typedef struct AGX_WGL_ADAPTER {
   PFND3DKMT_CREATEDEVICE CreateDevice;
   D3DKMT_HANDLE AdapterHandle, DeviceHandle;
   LUID Luid;
+  D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId;  /* G3: the display's vblanks */
   AGX_KMT_GPUVA_BRIDGE Bridge;
   ADMISSION_UMD_ADAPTER Runtime;
   ADMISSION_UMD_DEVICE Device;
@@ -209,6 +210,7 @@ static HRESULT open_adapter(AGX_WGL_ADAPTER *a, HDC hdc) {
   if (status < 0) return AgxKmtGpuvaResult(status);
   a->AdapterHandle = open.hAdapter;
   a->Luid = open.AdapterLuid;
+  a->VidPnSourceId = open.VidPnSourceId;
   ZeroMemory(&create, sizeof(create));
   create.hAdapter = open.hAdapter;
   status = a->CreateDevice(&create);
@@ -610,6 +612,7 @@ extern "C" struct stw_winsys_framebuffer *agx_wgl_create_framebuffer(
     struct pipe_screen *screen, HWND window, int pixel_format);
 extern "C" void agx_wgl_framebuffer_counters(UINT out[6]);
 extern "C" void agx_wgl_pace_counters(UINT out[8]);
+extern "C" void agx_wgl_vblank_counters(UINT out[6]);
 /* winsys (closure): EXP1202 native draw phase receipt. */
 extern "C" void AgxWin32AsahiDrawPhases(unsigned out[6]);
 
@@ -755,6 +758,11 @@ static void wgl_common_receipt(LONGLONG us) {
   UINT pace[8];
   agx_wgl_pace_counters(pace);
   AdmissionUmdDiagnostic("measure-wgl-pace", S_OK, pace, 8u);
+  /* G3: vblank-paced swaps, vblank waits, waited us, late swaps (no wait),
+   * failed waits, last failure status. */
+  UINT vblank[6];
+  agx_wgl_vblank_counters(vblank);
+  AdmissionUmdDiagnostic("measure-wgl-vblank", S_OK, vblank, 6u);
 }
 
 /* EXP1174 diagnostic, only when the UMD trace is enabled and the process has
@@ -1278,6 +1286,13 @@ extern "C" BOOL agx_wgl_present_window(struct pipe_screen *screen,
   wgl_present_receipt(ring, start.QuadPart, end.QuadPart);
   ReleaseSRWLockExclusive(&AgxWglRingLock);
   return TRUE;
+}
+
+/* G3: one vertical blank of the display the screen's DC showed
+ * (D3DKMTWaitForVerticalBlankEvent); negative when it is unavailable. */
+extern "C" LONG agx_wgl_wait_vblank(void) {
+  if (!AgxWgl || !AgxWgl->Screen) return (LONG)0xc00000bbL;
+  return (LONG)AgxKmtGpuvaWaitVerticalBlank(&AgxWgl->Bridge, AgxWgl->VidPnSourceId);
 }
 
 /* stw's GDI present (formats without a winsys framebuffer). */

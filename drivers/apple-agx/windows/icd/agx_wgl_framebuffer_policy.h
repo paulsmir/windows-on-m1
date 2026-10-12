@@ -54,4 +54,24 @@ static inline long long agx_wgl_pace(long long *next_us, long long now_us,
   return next > now_us ? next - now_us : 0;
 }
 
+/* G3: WGL_EXT_swap_control on the display's vertical blanks
+ * (D3DKMTWaitForVerticalBlankEvent, the WDDM wait of an OpenGL ICD), so the
+ * swaps follow the vsync that DWM composes on instead of a CPU clock.
+ * *last_us is when the previous swap's vblank happened (0: none yet). A
+ * swap waits for the vblanks still missing from `interval` since then; a
+ * later swap (a frame over its budget) presents at once and moves *last_us
+ * to the latest vblank already passed, so a slow frame costs its own time,
+ * never an extra period. Returns the vblanks to wait; after waiting, the
+ * caller stores the time the last wait returned in *last_us. No pacing
+ * (interval or period <= 0) never waits and forgets the vblank. */
+static inline unsigned agx_wgl_vblank_waits(long long *last_us, long long now_us,
+                                            long long period_us, int interval) {
+  long long last = *last_us, passed;
+  if (interval <= 0 || period_us <= 0) { *last_us = 0; return 0; }
+  if (!last || now_us < last) return 1u;
+  passed = (now_us - last) / period_us;
+  if (passed >= interval) { *last_us = last + passed * period_us; return 0u; }
+  return (unsigned)(interval - passed);
+}
+
 #endif

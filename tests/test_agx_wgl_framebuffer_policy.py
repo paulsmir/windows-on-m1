@@ -142,7 +142,75 @@ int main(void) {
 '''
 
 
+VBLANK = r'''
+#include <assert.h>
+#include <stdio.h>
+#include "agx_wgl_framebuffer_policy.h"
+/* The display's vblanks at phase + k*P; a wait returns at the next one. */
+static long long P = 16666, phase = 3210, clock_us, last_vblank, last_swap;
+static long long next_vblank(long long t) { return phase + ((t - phase) / P + 1) * P; }
+/* One frame of `work` us, then SwapBuffers; returns the swap interval. */
+static long long frame(long long work, int interval, unsigned *waited) {
+  clock_us += work;
+  unsigned n = agx_wgl_vblank_waits(&last_vblank, clock_us, P, interval);
+  assert(n <= (unsigned)(interval > 0 ? interval : 0));
+  for (unsigned i = 0; i < n; ++i) clock_us = next_vblank(clock_us);
+  if (n) last_vblank = clock_us;
+  if (waited) *waited = n;
+  long long iv = clock_us - last_swap; last_swap = clock_us;
+  return iv;
+}
+static void reset(void) { clock_us = 1000000; last_vblank = 0; last_swap = clock_us; }
+int main(void) {
+  unsigned n;
+  /* short frames, interval 1: one swap per vblank, on the vblank */
+  reset(); (void)frame(12000, 1, &n); assert(n == 1);
+  for (int i = 0; i < 600; ++i) {
+    assert(frame(12000, 1, &n) == P && n == 1);
+    assert((clock_us - phase) % P == 0);
+  }
+  /* interval 2: every other vblank */
+  reset(); (void)frame(5000, 2, NULL);
+  for (int i = 0; i < 100; ++i) assert(frame(5000, 2, NULL) == 2 * P);
+  /* frames a little over the period: never wait a whole extra period, the
+   * swaps follow the frames (adaptive), and the next fast frame is back on
+   * a vblank */
+  reset(); (void)frame(12000, 1, NULL);
+  for (int i = 0; i < 300; ++i) { assert(frame(17500, 1, &n) == 17500 && n == 0); }
+  assert(frame(5000, 1, &n) < P && n == 1 && (clock_us - phase) % P == 0);
+  assert(frame(12000, 1, &n) == P && n == 1);
+  /* jittery 13-17.5 ms frames: no swap interval above the frame time plus
+   * one period, average spacing at most the period plus the late share */
+  { unsigned rng = 9u; reset(); (void)frame(10000, 1, NULL);
+    long long first = last_swap; int frames = 4000;
+    for (int i = 0; i < frames; ++i) {
+      rng = rng * 1103515245u + 12345u;
+      long long work = 13000 + (long long)((rng >> 8) % 4500);
+      long long iv = frame(work, 1, NULL);
+      assert(iv >= work && iv < work + P);
+    }
+    long long avg = (last_swap - first) / frames;
+    assert(avg >= P && avg <= P + 1200); }
+  /* interval 0 never waits and forgets the vblank */
+  reset(); (void)frame(12000, 1, NULL);
+  for (int i = 0; i < 10; ++i) assert(frame(5000, 0, &n) == 5000 && n == 0 && last_vblank == 0);
+  printf("VBLANK PASS\n");
+  return 0;
+}
+'''
+
+
 class FramebufferPolicy(unittest.TestCase):
+    def test_vblank_pacing_follows_the_display(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / 'v.c').write_text(VBLANK)
+            subprocess.run(['cc', '-std=c11', '-Wall', '-Werror', '-fsanitize=address,undefined',
+                            '-I' + str(ICD), str(tmp / 'v.c'), '-o', str(tmp / 'v')], check=True)
+            out = subprocess.run([str(tmp / 'v')], capture_output=True, text=True)
+            self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+            self.assertIn('VBLANK PASS', out.stdout)
+
     def test_swap_pacing_keeps_a_steady_grid(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
