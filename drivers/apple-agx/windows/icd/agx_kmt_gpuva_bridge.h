@@ -47,6 +47,8 @@ typedef struct _AGX_KMT_THUNKS {
   PFND3DKMT_QUERYALLOCATIONRESIDENCY QueryAllocationResidency;
   /* G2 HW3, optional: NULL leaves the ICD on its GDI present. */
   PFND3DKMT_PRESENT Present;
+  /* G3, optional: NULL leaves swap pacing on the CPU swap grid. */
+  PFND3DKMT_WAITFORVERTICALBLANKEVENT WaitForVerticalBlankEvent;
 } AGX_KMT_THUNKS;
 
 typedef enum _AGX_KMT_GPUVA_OP {
@@ -59,7 +61,7 @@ typedef enum _AGX_KMT_GPUVA_OP {
   AgxKmtGpuvaSubmit, AgxKmtGpuvaSignalGpu2, AgxKmtGpuvaSignal2,
   AgxKmtGpuvaLock, AgxKmtGpuvaUnlock, AgxKmtGpuvaEscape,
   AgxKmtGpuvaSetPriority, AgxKmtGpuvaQueryResidency, AgxKmtGpuvaSetError,
-  AgxKmtGpuvaPresent, AgxKmtGpuvaOpCount
+  AgxKmtGpuvaPresent, AgxKmtGpuvaWaitVblank, AgxKmtGpuvaOpCount
 } AGX_KMT_GPUVA_OP;
 
 /* EXP1189 receipt-only: where the CPU waits for the GPU. Per distinct chain
@@ -123,6 +125,13 @@ HRESULT AgxKmtGpuvaBridgeInitialize(AGX_KMT_GPUVA_BRIDGE *Bridge,
  * arguments (not passed to the kernel). */
 NTSTATUS AgxKmtGpuvaPresentBlt(AGX_KMT_GPUVA_BRIDGE *Bridge, HANDLE Context,
     HWND Window, D3DKMT_HANDLE Source, const RECT *Rect);
+
+/* G3: wait for the next vertical blank of the video present source (the
+ * VidPnSourceId D3DKMTOpenAdapterFromHdc returned) through
+ * D3DKMTWaitForVerticalBlankEvent. Returns its NTSTATUS;
+ * STATUS_NOT_SUPPORTED (0xC00000BB) without the export. */
+NTSTATUS AgxKmtGpuvaWaitVerticalBlank(AGX_KMT_GPUVA_BRIDGE *Bridge,
+    D3DDDI_VIDEO_PRESENT_SOURCE_ID Source);
 
 /* NTSTATUS of a thunk -> HRESULT the umd_* code expects from a callback. */
 HRESULT AgxKmtGpuvaResult(NTSTATUS Status);

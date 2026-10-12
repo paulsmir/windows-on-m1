@@ -36,6 +36,7 @@ static D3DKMT_SIGNALSYNCHRONIZATIONOBJECT2 q_signal;
 static D3DKMT_LOCK2 q_lock; static unsigned unlocks;
 static D3DKMT_ESCAPE q_escape;
 static D3DKMT_PRESENT q_present; static RECT q_present_subrect;
+static D3DKMT_WAITFORVERTICALBLANKEVENT q_vblank;
 
 static NTSTATUS APIENTRY f_query(const D3DKMT_QUERYADAPTERINFO *a) { ++calls; q_query = *a; return next_status; }
 static NTSTATUS APIENTRY f_context(D3DKMT_CREATECONTEXTVIRTUAL *a) { ++calls; q_context = *a; a->hContext = CONTEXT; return next_status; }
@@ -60,6 +61,7 @@ static NTSTATUS APIENTRY f_unlock(const D3DKMT_UNLOCK2 *a) { ++calls; ++unlocks;
 static NTSTATUS APIENTRY f_escape(const D3DKMT_ESCAPE *a) { ++calls; q_escape = *a; return next_status; }
 static NTSTATUS APIENTRY f_priority(const D3DKMT_SETALLOCATIONPRIORITY *a) { ++calls; return a->hDevice == DEVICE ? next_status : (NTSTATUS)0xc000000dL; }
 static NTSTATUS APIENTRY f_residency(const D3DKMT_QUERYALLOCATIONRESIDENCY *a) { ++calls; return a->hDevice == DEVICE ? next_status : (NTSTATUS)0xc000000dL; }
+static NTSTATUS APIENTRY f_vblank(const D3DKMT_WAITFORVERTICALBLANKEVENT *a) { ++calls; q_vblank = *a; return next_status; }
 /* The sub-rect is read during the call: the bridge's copy is a local. */
 static NTSTATUS APIENTRY f_present(D3DKMT_PRESENT *a) { ++calls; q_present = *a; if (a->pSrcSubRects) q_present_subrect = a->pSrcSubRects[0]; return next_status; }
 
@@ -68,7 +70,7 @@ int main(void) {
   AGX_KMT_THUNKS t = {f_query, f_context, f_destroy_context, f_paging, f_destroy_paging,
       f_sync, f_destroy_sync, f_alloc, f_dealloc, f_reserve, f_map, f_free, f_resident,
       f_evict, f_wait, f_submit, f_signal_gpu, f_signal, f_lock, f_unlock, f_escape,
-      f_priority, f_residency, f_present};
+      f_priority, f_residency, f_present, f_vblank};
   const D3DDDI_DEVICECALLBACKS *d;
   HANDLE h = &bridge;
   BYTE blob[104];
@@ -261,6 +263,14 @@ int main(void) {
     CHECK(AgxKmtGpuvaPresentBlt(&bridge, (HANDLE)(UINT_PTR)CONTEXT, window, 0x80000002u, &r) ==
           (NTSTATUS)0xc00000bbL && calls == 0);
     bridge.Kmt.Present = f_present; }
+
+  /* G3: the vblank wait names this adapter, device and present source. */
+  CHECK(AgxKmtGpuvaWaitVerticalBlank(&bridge, 0u) == 0);
+  CHECK(q_vblank.hAdapter == ADAPTER && q_vblank.hDevice == DEVICE && q_vblank.VidPnSourceId == 0u &&
+        bridge.Receipt.Calls[AgxKmtGpuvaWaitVblank] == 1);
+  bridge.Kmt.WaitForVerticalBlankEvent = NULL; calls = 0;
+  CHECK(AgxKmtGpuvaWaitVerticalBlank(&bridge, 0u) == (NTSTATUS)0xc00000bbL && calls == 0);
+  bridge.Kmt.WaitForVerticalBlankEvent = f_vblank;
 
   /* Failures are counted and mapped; a foreign handle is refused. */
   next_status = (NTSTATUS)0xc00002b6L;

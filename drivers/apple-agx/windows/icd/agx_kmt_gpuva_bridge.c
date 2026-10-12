@@ -579,6 +579,26 @@ NTSTATUS AgxKmtGpuvaPresentBlt(AGX_KMT_GPUVA_BRIDGE *Bridge, HANDLE Context,
   return status;
 }
 
+NTSTATUS AgxKmtGpuvaWaitVerticalBlank(AGX_KMT_GPUVA_BRIDGE *Bridge,
+    D3DDDI_VIDEO_PRESENT_SOURCE_ID Source) {
+  AGX_KMT_GPUVA_BRIDGE *b = bridge(Bridge);
+  D3DKMT_WAITFORVERTICALBLANKEVENT request;
+  NTSTATUS status;
+  if (!b) return KMT_STATUS_INVALID_PARAMETER;
+  if (!b->Kmt.WaitForVerticalBlankEvent) {
+    (void)done(b, AgxKmtGpuvaWaitVblank, KMT_STATUS_NOT_SUPPORTED);
+    return KMT_STATUS_NOT_SUPPORTED;
+  }
+  ZeroMemory(&request, sizeof(request));
+  request.hAdapter = b->AdapterHandle;
+  request.hDevice = b->DeviceHandle;
+  request.VidPnSourceId = Source;
+  kmt_begin(b);
+  status = b->Kmt.WaitForVerticalBlankEvent(&request);
+  (void)done(b, AgxKmtGpuvaWaitVblank, status);
+  return status;
+}
+
 /* Store through FARPROC: GetProcAddress returns a generic function pointer. */
 #define LOAD_THUNK(field, name) \
   ((*(FARPROC *)&Thunks->field = GetProcAddress(gdi, name)) != NULL)
@@ -591,6 +611,7 @@ BOOL AgxKmtThunksLoad(AGX_KMT_THUNKS *Thunks) {
   if (!gdi) return FALSE;
   /* Optional: present falls back to GDI without it. */
   (void)LOAD_THUNK(Present, "D3DKMTPresent");
+  (void)LOAD_THUNK(WaitForVerticalBlankEvent, "D3DKMTWaitForVerticalBlankEvent");
   return LOAD_THUNK(QueryAdapterInfo, "D3DKMTQueryAdapterInfo") &&
       LOAD_THUNK(CreateContextVirtual, "D3DKMTCreateContextVirtual") &&
       LOAD_THUNK(DestroyContext, "D3DKMTDestroyContext") &&
