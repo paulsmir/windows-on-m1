@@ -78,6 +78,12 @@ HKR,,OpenGLFlags,%REG_DWORD%,3
 HKR,,OpenGLDriverNameWow,%REG_SZ%,%13%\AppleAgxOpenGL32.dll
 HKR,,OpenGLVersionWow,%REG_DWORD%,1
 HKR,,OpenGLFlagsWow,%REG_DWORD%,3
+; M2: VidMm (dxgmms2) gives an allocation 64 KB system-memory pages only when
+; the adapter opts in through MemoryManager\Supports64KBPages and the KMD
+; reports DXGK_GPUMMUCAPS.SysMem64KBPageSupported; AGX maps 16 KiB pages, so
+; GPU-accessed system memory needs those 64 KiB contiguous chunks
+; (investigation/analysis/M2-vidmm-64k-decision.md).
+HKR,MemoryManager,Supports64KBPages,%REG_DWORD%,1
 
 [SourceDisksNames]
 1=%DiskName%,,,
