@@ -421,12 +421,8 @@ static NTSTATUS AdmissionG3UpdateLeaf(
      * them through LogicalPtes). Publish no leaf, take no grant or mapping
      * reference, and keep ResidentPtes empty so no release path runs. */
     if (shadow->ResidentPtes) { status = STATUS_INVALID_DEVICE_STATE; goto Done; }
-    if (update->Flags.Use64KBPages)
-      (void)AppleAgxGpuvaG3InvalidateLogical64K(shadow->LogicalPtes,
-          update->StartIndex, update->NumPageTableEntries);
-    else
-      RtlCopyMemory(shadow->LogicalPtes + first, candidate + first,
-                    count * sizeof(*shadow->LogicalPtes));
+    RtlCopyMemory(shadow->LogicalPtes + first, candidate + first,
+                  count * sizeof(*shadow->LogicalPtes));
     ++process->Graph.MappingGeneration;
     status = STATUS_SUCCESS;
     goto Done;
@@ -523,12 +519,11 @@ static NTSTATUS AdmissionG3UpdateLeaf(
   shadow->ResidentPtes = candidate;
   candidate = NULL;
   acquired = 0u;
-  if (update->Flags.Use64KBPages)
-    (void)AppleAgxGpuvaG3InvalidateLogical64K(shadow->LogicalPtes,
-        update->StartIndex, update->NumPageTableEntries);
-  else
-    RtlCopyMemory(shadow->LogicalPtes + first, shadow->ResidentPtes + first,
-                  count * sizeof(*shadow->LogicalPtes));
+  /* M2-a: a 64-KiB PTE is sixteen 4-KiB envelope entries (an invalid one
+   * leaves them zero), so the CPU paging executor and the G4 CPU-envelope
+   * checks resolve 64K-mapped VAs and R131's stale 4-KiB shadow is overwritten. */
+  RtlCopyMemory(shadow->LogicalPtes + first, shadow->ResidentPtes + first,
+                count * sizeof(*shadow->LogicalPtes));
   ++process->Graph.MappingGeneration;
   status = STATUS_SUCCESS;
 Done:

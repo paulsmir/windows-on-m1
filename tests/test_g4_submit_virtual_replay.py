@@ -31,9 +31,12 @@ def function_body(source, name):
 
 
 class G4SubmitVirtualReplay(unittest.TestCase):
-    def test_64k_replacement_retires_old_cpu_shadow(self):
+    def test_64k_replacement_overwrites_old_cpu_shadow(self):
+        # M2-a: 64K updates publish their 4K envelope over the old shadow
+        # (g3_system_lifetime_cases.c checks the entries and the 64K unmap).
         update = function_body(PAGING.read_text(), "AdmissionG3UpdateLeaf")
-        self.assertIn("AppleAgxGpuvaG3InvalidateLogical64K(shadow->LogicalPtes", update)
+        self.assertNotIn("InvalidateLogical", update)
+        self.assertEqual(update.count("RtlCopyMemory(shadow->LogicalPtes + first"), 2)
 
     def test_native_submit_queues_only_after_graph_and_image_bind(self):
         production = SOURCE.read_text()

@@ -80,8 +80,14 @@ static void r134_system_64k_cases(void) {
   assert(AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0x10000,0x4000));
   expect_ok("R134 64K after 4K",sys_update(&a,p,leaf,0,1,1,&pte,1,0));
   assert(AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0x10000,0x10000));
+  ADMISSION_G3_TABLE_SHADOW *s=p->TableShadows;
+  while(s->OriginalIpa!=local_ipa+0x18000) s=s->Next;
+  assert(s->LogicalPtes[16].GuestIpa==system_ipa &&
+         s->LogicalPtes[31].GuestIpa==system_ipa+0xf000ULL);
   expect_ok("R134 unmap",sys_update(&a,p,leaf,0,1,1,&zero,1,0));
   assert(!AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0x10000,0x10000));
+  /* R131: a 64K unmap leaves no CPU envelope to trust. */
+  for(UINT j=16;j<32;++j) assert(!s->LogicalPtes[j].Flags);
   expect_ok("R134 destroy",AdmissionDdiDestroyProcess(&a,p));
   free(local_cpu);local_cpu=NULL;
   puts("R134 system 64K outer DDI: PASS");
@@ -160,13 +166,18 @@ static void system_lifetime_cases(void) {
   assert(AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0x4000,0x4000));
   assert(!AppleAgxGpuvaG3GraphContainsRangeAccess(&p->Graph,0x4000,1,true));
   for(UINT i=0;i<4;++i) pte[i].ReadOnly=0;
-  /* 64K replacement removes R131's CPU envelope but has 16 resident subpages. */
+  /* M2-a: the 64K replacement carries sixteen 4K CPU-envelope entries over
+   * R131's old shadow (overwritten, not trusted) and 16 resident subpages. */
   expect_ok("R132 64K",sys_update(&a,p,leaf,0,0,1,pte,1,0));
   assert(AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0,0x10000));
   ADMISSION_G3_TABLE_SHADOW *s=p->TableShadows;
   while(s->OriginalIpa!=local_ipa+0x18000) s=s->Next;
-  assert(!s->LogicalPtes[4].Flags);
+  for(UINT j=0;j<16;++j)
+    assert(s->LogicalPtes[j].Flags==(APPLE_AGX_GPUVA_G3_VALID|APPLE_AGX_GPUVA_G3_WRITE) &&
+           s->LogicalPtes[j].GuestIpa==system_ipa+(ULONGLONG)j*0x1000ULL &&
+           s->LogicalPtes[j].SegmentId==0u);
   expect_ok("R132 64K to 4K",sys_update(&a,p,leaf,0,5,1,&zero,0,0));
+  assert(!s->LogicalPtes[5].Flags && s->LogicalPtes[8].Flags);
   assert(!AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0x4000,1));
   assert(AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0x8000,1));
   UINT commands=b.commands;

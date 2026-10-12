@@ -997,7 +997,8 @@ int main(void) {
   assert(graph_begin_calls == 1);
   assert(context.GpuvaG3MappingGeneration == process.Graph.MappingGeneration);
   state.ActiveProcess = NULL;
-  assert(AppleAgxGpuvaG3InvalidateLogical64K(logical, 2u, 1u));
+  /* An unmapped 64K PTE leaves its sixteen envelope slots empty. */
+  for (unsigned n = 0x20u; n < 0x30u; ++n) logical[n].Flags = 0u;
   assert(logical[0x20u].Flags == 0u && logical[0x21u].Flags == 0u);
   assert(logical[0x100u].Flags == 3u);
   assert(AdmissionGpuvaG3BeginJob(&adapter, &context, 13u) != STATUS_SUCCESS);
