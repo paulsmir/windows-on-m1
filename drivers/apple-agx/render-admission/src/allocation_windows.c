@@ -9,6 +9,8 @@
   (1u << (ADMISSION_MEMORY_APERTURE_SEGMENT - 1u))
 #define ADMISSION_CPU_VISIBLE_SEGMENT_SET \
   (ADMISSION_APERTURE_SEGMENT_SET | ADMISSION_LOCAL_SEGMENT_SET)
+#define ADMISSION_POOL_SEGMENT_SET \
+  (1u << (ADMISSION_MEMORY_POOL_SEGMENT - 1u))
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 static VOID AdmissionR105Apply(DXGK_ALLOCATIONINFO *Info,
@@ -340,6 +342,7 @@ static NTSTATUS AdmissionCreateAllocationImpl(
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   ADMISSION_R105_OVERRIDE r105 = {0};
   BOOLEAN r105Enabled = FALSE;
+  ADMISSION_SCANOUT_MEMORY_VIEW pool;
 #endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   ADMISSION_ALLOCATION_DESCRIPTION normalized;
@@ -471,6 +474,20 @@ static NTSTATUS AdmissionCreateAllocationImpl(
    * CPU-visible class allocation (EXP1027: AllocateCb E_INVALIDARG). The local
    * segment is 16 KiB-contiguous and fully UAT-mapped; EXP1026 showed aperture
    * system backing hangs the GPU, so the preference is what places them. */
+  /* M2-f2: with the KMD-populated pool (segment 3, Windows memory taken at
+   * start, 16 KiB-contiguous by construction) these BOs live there; the
+   * aperture stays the fallback a CPU-visible set keeps (EXP1027), and the
+   * local segment is left out so VidMm never moves a BO between two memory
+   * segments (no memory-to-memory transfer exists). */
+  if (classId != 0u && description->CpuVisible != 0u &&
+      AdmissionMemoryPoolView(context, &pool)) {
+    info->PreferredSegment.Value = 0u;
+    info->PreferredSegment.SegmentId0 = ADMISSION_MEMORY_POOL_SEGMENT;
+    info->PreferredSegment.SegmentId1 = ADMISSION_MEMORY_APERTURE_SEGMENT;
+    info->SupportedReadSegmentSet =
+        ADMISSION_POOL_SEGMENT_SET | ADMISSION_APERTURE_SEGMENT_SET;
+    info->SupportedWriteSegmentSet = info->SupportedReadSegmentSet;
+  }
 #endif
   info->EvictionSegmentSet = 0u;
   info->hAllocation = allocation;

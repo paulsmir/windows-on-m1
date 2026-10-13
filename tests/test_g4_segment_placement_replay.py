@@ -36,6 +36,8 @@ SHIM = r"""
 #define ADMISSION_CPU_VISIBLE_SEGMENT_SET 3u
 #define ADMISSION_APERTURE_SEGMENT_SET 1u
 #define ADMISSION_MEMORY_APERTURE_SEGMENT 1u
+#define ADMISSION_MEMORY_POOL_SEGMENT 3u
+#define ADMISSION_POOL_SEGMENT_SET 4u
 #define ADMISSION_ALLOCATION_ALIGNMENT 0x10000u
 #define ADMISSION_POOL_TAG 0u
 #define POOL_FLAG_NON_PAGED 0u
@@ -69,7 +71,16 @@ static void AdmissionPresentResourceRefreshRate(const ADMISSION_PRESENT_RESOURCE
   (void)data; *numerator = 0; *denominator = 1;
 }
 typedef struct { int Memory; void *PhysicalDeviceObject; } ADMISSION_CONTEXT;
-typedef struct { unsigned Value, SegmentId0; } SEGMENT_HINT;
+typedef struct { unsigned Value, SegmentId0, SegmentId1; } SEGMENT_HINT;
+/* M2-f2: production asks pool_windows.c whether segment 3 is mapped. */
+typedef struct { void *CpuAddress; uint64_t GuestIpaAddress, GpuVirtualAddress,
+                 Bytes; } ADMISSION_SCANOUT_MEMORY_VIEW;
+static int replay_pool_present;
+static int AdmissionMemoryPoolView(const ADMISSION_CONTEXT *context,
+                                   ADMISSION_SCANOUT_MEMORY_VIEW *view) {
+  (void)context; memset(view, 0, sizeof(*view));
+  return replay_pool_present;
+}
 typedef struct { unsigned Value, CpuVisible, AccessedPhysically; } WDDM_FLAGS;
 typedef struct {
   void *pPrivateDriverData;
@@ -229,6 +240,38 @@ int main(void) {
   assert(info.SupportedWriteSegmentSet == ADMISSION_APERTURE_SEGMENT_SET);
   assert(info.PreferredSegment.SegmentId0 == ADMISSION_MEMORY_APERTURE_SEGMENT);
   ExFreePoolWithTag(info.hAllocation, ADMISSION_POOL_TAG);
+  /* M2-f2: with the pool mapped, a CPU-visible class BO prefers segment 3
+   * then the aperture and never lists the local segment (no 2<->3 move);
+   * CPU-invisible class BOs and class0 surfaces keep their shapes. */
+  replay_pool_present = 1;
+  native.ClassId = 1; native.CpuVisible = 1; native.Size = 0x10000;
+  memset(&info, 0, sizeof(info));
+  info.pPrivateDriverData = &native;
+  info.PrivateDriverDataSize = sizeof(native);
+  assert(AdmissionCreateAllocationImpl(&context, &args) == STATUS_SUCCESS);
+  assert(info.PreferredSegment.SegmentId0 == ADMISSION_MEMORY_POOL_SEGMENT);
+  assert(info.PreferredSegment.SegmentId1 == ADMISSION_MEMORY_APERTURE_SEGMENT);
+  assert(info.SupportedReadSegmentSet ==
+         (ADMISSION_POOL_SEGMENT_SET | ADMISSION_APERTURE_SEGMENT_SET));
+  assert(info.SupportedWriteSegmentSet == info.SupportedReadSegmentSet);
+  assert(!(info.SupportedReadSegmentSet & ADMISSION_LOCAL_SEGMENT_SET));
+  assert(info.FlagsWddm2.CpuVisible == 1 && info.FlagsWddm2.AccessedPhysically == 0);
+  ExFreePoolWithTag(info.hAllocation, ADMISSION_POOL_TAG);
+  native.CpuVisible = 0;
+  memset(&info, 0, sizeof(info));
+  info.pPrivateDriverData = &native;
+  info.PrivateDriverDataSize = sizeof(native);
+  assert(AdmissionCreateAllocationImpl(&context, &args) == STATUS_SUCCESS);
+  assert(info.SupportedWriteSegmentSet == ADMISSION_LOCAL_SEGMENT_SET);
+  assert(info.PreferredSegment.SegmentId0 == ADMISSION_MEMORY_LOCAL_SEGMENT);
+  ExFreePoolWithTag(info.hAllocation, ADMISSION_POOL_TAG);
+  memset(&info, 0, sizeof(info));
+  info.pPrivateDriverData = &legacy;
+  info.PrivateDriverDataSize = sizeof(legacy);
+  assert(AdmissionCreateAllocationImpl(&context, &args) == STATUS_SUCCESS);
+  assert(info.SupportedWriteSegmentSet == ADMISSION_APERTURE_SEGMENT_SET);
+  ExFreePoolWithTag(info.hAllocation, ADMISSION_POOL_TAG);
+  replay_pool_present = 0;
   return 0;
 }
 """
