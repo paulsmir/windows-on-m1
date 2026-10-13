@@ -21,8 +21,22 @@ Decision: placement reverted to local-preferred (6e728357); M2 flexibility
 moves to a KMD-populated memory segment (PopulatedFromSystemMemory, backing
 taken from Windows at start, 16 KiB-contiguous) -- plan in
 investigation/analysis/M2-vidmm-64k-decision.md (addendum 2026-10-13).
-Next: robustness (refuse instead of hang on unpublished BO ranges; TDR
-reset), then the PopulatedFromSystemMemory segment.
+EXP1246 (pool probe, receipt only, every check unchanged): Windows grants
+the KMD a 1 GiB physically contiguous write-combined block at StartDevice in
+123.5 ms (MmAllocatePagesForMdlEx REQUIRE_CONTIGUOUS_CHUNKS, SkipBytes 0;
+0x980000000, 1 GiB-aligned); 2 MiB / 64 KiB chunking also gets 1 GiB (3.9 s /
+2.3 s). Installed: PACKAGE1246 (d874bbb2 = EXP1245 + probe).
+Next causal target: M2-f2 -- a third, CPU-visible PopulatedFromSystemMemory
+memory segment backed by that KMD-owned block (CpuTranslatedAddress = block
+base; segment offsets -> IPA = base + offset, 16 KiB-contiguous by
+construction; UAT publication as registered system backings; CPU paging
+executor and transfers for segment 3; CPU-visible class BOs prefer it; block
+freed at StopDevice). Then shrink the m1n1 reserve (HV_AGX_LOCAL_BYTES 1 GiB
+-> firmware/table needs) and size the segment per machine.
+Robustness (investigation/analysis/G4-recovery.md): firmware Timeout/Fault
+events are already recovered (EXP1242: 178 resumes); engine reset must stop
+restarting retained firmware (always 0x116) and the KMD deadline must not
+pre-empt the firmware's own detection; fault-injection checkpoint pending.
 
 ## Current as of 2026-10-13 12:55Z
 
