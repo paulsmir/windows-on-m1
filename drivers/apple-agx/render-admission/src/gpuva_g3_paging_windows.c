@@ -347,9 +347,10 @@ static VOID AdmissionG3CountLeaf64K(ADMISSION_G3_STATE *state,
 }
 
 /* M2 receipt: attribute one system 16 KiB group outcome to the shape of the
- * allocation VidMm named in the leaf update (receipt only). */
+ * allocation VidMm named in the leaf update (receipt only). M2-f2: pool
+ * (segment 3) groups are tallied as their own shapes, trait 0x10. */
 static VOID AdmissionG3NoteSystemShape(ADMISSION_G3_STATE *state,
-    ULONGLONG allocation, BOOLEAN use64k, BOOLEAN published,
+    ULONGLONG allocation, BOOLEAN use64k, BOOLEAN published, BOOLEAN pool,
     ULONGLONG va, ULONGLONG ipa) {
   const ADMISSION_ALLOCATION_HANDLE *handle =
       (const ADMISSION_ALLOCATION_HANDLE *)(ULONG_PTR)allocation;
@@ -368,7 +369,7 @@ static VOID AdmissionG3NoteSystemShape(ADMISSION_G3_STATE *state,
         (handle->Presentation ? 2u : 0u) | (handle->WrittenPrimary ? 4u : 0u);
     while (size_log2 < 63u && (1ULL << size_log2) < size) ++size_log2;
   }
-  traits |= 0x40000000u;
+  traits |= 0x40000000u | (pool ? 0x10u : 0u);
   for (k = 0u; k < ADMISSION_G3_SYSTEM_SHAPE_COUNT; ++k) {
     ADMISSION_G3_SYSTEM_SHAPE *s = &state->SystemShapes[k];
     if (s->Traits == 0u ||
@@ -590,13 +591,16 @@ static NTSTATUS AdmissionG3UpdateLeaf(
       goto Done;
     }
     ++published;
-    if (segment == 0u && flags) {
-      ULONGLONG *tally = &process->State->SystemGroups[
-          (update->Flags.Use64KBPages ? 4u : 0u) +
-          (complete ? 0u : refused ? 2u : 1u)];
-      if (*tally != MAXULONGLONG) ++*tally;
+    if (ADMISSION_G3_FRAME_SEGMENT(segment) && flags) {
+      if (segment == 0u) {
+        ULONGLONG *tally = &process->State->SystemGroups[
+            (update->Flags.Use64KBPages ? 4u : 0u) +
+            (complete ? 0u : refused ? 2u : 1u)];
+        if (*tally != MAXULONGLONG) ++*tally;
+      }
       AdmissionG3NoteSystemShape(process->State, group[0].Allocation,
           update->Flags.Use64KBPages ? TRUE : FALSE, complete,
+          segment == ADMISSION_MEMORY_POOL_SEGMENT ? TRUE : FALSE,
           update->FirstPteVirtualAddress - (ULONGLONG)first * 0x1000ULL +
               (ULONGLONG)(first_group + i) * 0x4000ULL, ipa);
     }

@@ -78,6 +78,16 @@ static void m2f2_pool_segment_cases(ADMISSION_CONTEXT *a, ADMISSION_G3_STATE *st
   memset(four,0,sizeof(four));
   expect_ok("M2-f2 pool unmap 4K",sys_update(a,p,leaf,0,64,4,four,0,0));
   assert(!AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0x40000ULL,0x4000));
+  /* M2-f2 receipt: pool groups are tallied in their own shape (trait 0x10):
+   * one published 4K group, four published 64K groups, none unpublished. */
+  { UINT k, found=0u;
+    for(k=0u;k<ADMISSION_G3_SYSTEM_SHAPE_COUNT;++k)
+      if(state->SystemShapes[k].Traits==(0x40000000u|0x10u|8u)) {
+        assert(state->SystemShapes[k].Groups[0]==1u && state->SystemShapes[k].Groups[1]==0u &&
+               state->SystemShapes[k].Groups[2]==4u && state->SystemShapes[k].Groups[3]==0u);
+        ++found;
+      }
+    assert(found==1u); }
   replay_pool_ipa=replay_pool_bytes=0;
   puts("M2-f2 pool segment: PASS");
 }
