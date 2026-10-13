@@ -1,6 +1,23 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-13T21:25Z (read this first)
+## Current as of 2026-10-13T23:00Z (read this first)
+
+Installed: PACKAGE1255 (KMD 32fde092 = production pool + receipt-sized
+reserve, 30.0.1255.0) on m1n1 3b2b9c06 (macho 283a2354, 384 MiB reserve) +
+Mu 361a2134 (J313_EFI-m2f2c.fd 1c7d87d6, reserve ABI v3).
+M2-f2c-1/2 proven:
+- The AGX local reserve size is a receipt parameter (ABI v3) in m1n1, Mu PEI,
+  the generated AGX0 _CRS and the KMD (EXP1254/EXP1254-B at 1 GiB).
+- m1n1 selects 384 MiB on J313 (EXP1255): Windows RAM 6.28 GB (+640 MiB),
+  segment 2 312 MiB (benchmark peak 160 MiB), every check passes.
+Lab note: scratchpad helpers can vanish (run-probe.sh did); backup in
+.local/scratchpad-tools-backup, maintained copy tools/agx-lab.
+Next causal target: M2-f2c-3 (KMD pool size per machine, today fixed 1 GiB,
+CS peak ~690 MiB); then CPU-invisible class BOs into the pool, the ACPI
+declaration of the pool window, the resubmission defect (branch 7 subsite
+0x201), G4-recovery, D3D 11/12.
+
+## Current as of 2026-10-13T21:25Z
 
 Installed: PACKAGE1253 (production KMD 9434b468 = integration c96a34e4
 drivers/, 30.0.1253.0) on m1n1 b12d1952 (macho fe86bee1) + M1 FD 4d382bfa.
