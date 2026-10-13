@@ -492,6 +492,22 @@ int main(void) {
       assert(job.TaWorkAddresses[1] == objects[19].GpuVa);
       assert(job.D3WorkAddresses[1] == objects[18].GpuVa);
       assert(get64(objects[19].Data + 88u) == 0ULL);
+      /* M2-c (EXP1241): a system-memory colour attachment is reached by GPU
+       * VA only; the output object has no CPU bytes or physical address. */
+      {
+        APPLE_AGX_EXP208_RELOCATION_OBJECT va_only[
+            APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT];
+        APPLE_AGX_BACKEND_JOB_IMAGE va_job = {0};
+        memcpy(va_only, objects, sizeof(va_only));
+        va_only[40].Data = 0;
+        va_only[40].PhysicalAddress = 0ULL;
+        va_only[40].GpuVa = 0x11000e0000ULL;
+        va_only[40].Size = 0x4000u;
+        assert(AppleAgxG4StageJob(&parameters, va_only,
+            APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT, &va_job));
+        assert(va_job.TaWorkAddresses[1] == va_only[19].GpuVa);
+        assert(va_job.D3WorkAddresses[1] == va_only[18].GpuVa);
+      }
     }
     free(arena);
   }

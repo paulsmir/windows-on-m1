@@ -129,8 +129,10 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxExp208ValidateRelocations(
                         AppleAgxExp208RelocationGpuVaPage32kU32
                 ? 4u
                 : 8u;
+    /* A target contributes only its address (checked below); M2-c
+     * system-memory render targets have no CPU bytes. */
     if (source->Data == APPLE_AGX_EXP208_NULL || source->Size == 0u ||
-        target->Data == APPLE_AGX_EXP208_NULL || target->Size == 0u ||
+        target->Size == 0u ||
         relocation->SourceOffset > source->Size ||
         width > source->Size - relocation->SourceOffset ||
         relocation->TargetOffset >= target->Size)
