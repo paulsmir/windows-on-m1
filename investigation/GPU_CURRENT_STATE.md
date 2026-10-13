@@ -2,8 +2,10 @@
 
 ## Current as of 2026-10-13T15:30Z (read this first)
 
-Installed: PACKAGE1244 (receipt-only build 57984e1c; M2-c system placement)
-until EXP1245's rollback; recovery profile otherwise as before.
+Installed: PACKAGE1245 (build 62502977: local-preferred placement + every
+fix since EXP1238; 30.0.1245.0) -- EXP1245 CONFIRMED the stable baseline:
+CS 1.6 benchmark 48.0 fps rendered, copy x2, D3D11, GL DXGI PrintWindow
+MATCH x3, DWM faults 0, no G4 refusal, no class BO in system memory.
 Proven since 12:55Z:
 - VA-only render targets work end to end (EXP1242: probe + GL smoke PASS
   with system-memory colour attachments) after ad894162 (render packet
@@ -19,10 +21,8 @@ Decision: placement reverted to local-preferred (6e728357); M2 flexibility
 moves to a KMD-populated memory segment (PopulatedFromSystemMemory, backing
 taken from Windows at start, 16 KiB-contiguous) -- plan in
 investigation/analysis/M2-vidmm-64k-decision.md (addendum 2026-10-13).
-Next: EXP1245 full validation of the reverted placement with every fix
-(expect EXP1238: CS fullscreen ~47 fps, copy test PASS, D3D11, GL PrintWindow
-MATCH); then robustness (refuse instead of hang on unpublished BO ranges;
-TDR reset) and the PopulatedFromSystemMemory segment.
+Next: robustness (refuse instead of hang on unpublished BO ranges; TDR
+reset), then the PopulatedFromSystemMemory segment.
 
 ## Current as of 2026-10-13 12:55Z
 
