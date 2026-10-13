@@ -4,11 +4,11 @@
  * stw_winsys::create_screen opens the AGX adapter behind the window's DC,
  * creates a D3DKMT device, drives the validated umd_* device/screen code
  * through the GPUVA D3DKMT bridge and returns the Windows Asahi pipe_screen;
- * present blits the finished colour buffer into a linear present source on
- * the GPU and presents it with D3DKMTPresent (G2 HW3), or, where the kernel
- * refuses that, reads it back and draws it into the DC with GDI (DWM
- * composes the window's redirection surface either way). One screen per
- * process, created on the first DC, as Mesa's stw device expects. */
+ * present blits the finished colour buffer into a shared texture and D3D11
+ * presents it through the window's DXGI flip-model swap chain on the same
+ * adapter (G2 HW3c); a DC without a window (a memory DC) gets a synchronous
+ * GDI copy. One screen per process, created on the first DC, as Mesa's stw
+ * device expects. */
 #include <windows.h>
 #include <psapi.h>   /* K32EnumProcessModules (kernel32): EXP1222 module receipt */
 #include <d3d11.h>   /* G2 HW3c: the GL window's DXGI flip-model swap chain */
@@ -21,8 +21,6 @@ extern "C" {
 #include "render_allocation.h"
 #include "agx_win32_screen.h"
 }
-#include "agx_wgl_present_copy.h"
-#include "agx_wgl_present_ring.h"
 #include "agx_wgl_draw_hook.h"
 /* winsys (closure): EXP1206 switch for the native draw phase marks. */
 extern "C" int AgxWin32AsahiDrawPhasesOn;
@@ -344,218 +342,7 @@ static void wgl_blit_to_dc(HDC hdc, const BYTE *map, unsigned stride,
   HeapFree(GetProcessHeap(), 0, packed);
 }
 
-/* EXP1168: mapping the back buffer for read each frame flushed the frame,
- * waited for the GPU, blitted into a staging copy and waited again, so the
- * CPU (the game, under x86 emulation) and the GPU never overlapped: CS 1.6
- * fullscreen ran at ~13 presents per second. Present queues a GPU copy of
- * frame N into a linear staging image and submits it without waiting.
- *
- * EXP1171: the show (copy out of the write-combined mapping + SetDIBits,
- * ~14 ms in play) still ran on the game thread. A present worker now shows
- * the newest finished frame while the game builds the next, through a
- * three-slot mailbox (agx_wgl_present_ring.h): the game thread queues the
- * GPU copy of frame N into a free slot, makes the slot of frame N-1
- * CPU-visible (texture_map + unmap: waits for its copy, normally finished
- * long ago) and hands it to the worker if the worker is idle; otherwise the
- * frame waits and a newer one replaces it. Every pipe_context call stays on
- * the game thread. The worker reads the staging image through its BO's CPU
- * mapping: a linear staging texture maps directly to agx_bo_map, which stays
- * valid for the BO's lifetime (the ring holds the reference and drains the
- * worker before releasing it). The worker draws through its own GetDC of
- * the window. One ring per window, size and format (EXP1191: keyed by the
- * window, as the winsys framebuffer presents without a DC). */
-typedef struct {
-  HWND Window;
-  unsigned Width, Height;
-  enum pipe_format Format;
-  BOOL Bgra;
-  struct pipe_resource *Staging[AGX_WGL_RING_SLOTS];
-  /* EXP1195: completion of each slot's GPU copy; a copied slot goes to the
-   * worker once its fence has signalled (polled, never waited for). */
-  struct pipe_screen *Screen;
-  struct pipe_fence_handle *Fence[AGX_WGL_RING_SLOTS];
-  const BYTE *Map[AGX_WGL_RING_SLOTS];
-  unsigned Stride[AGX_WGL_RING_SLOTS];
-  unsigned State[AGX_WGL_RING_SLOTS];  /* AGX_WGL_SLOT_*, AgxWglWorkerLock */
-  long long Seq[AGX_WGL_RING_SLOTS];
-  BYTE *Cpu;                 /* cached copy of the shown image (EXP1170) */
-  /* Receipt sums: game thread (present, interval, sync) and worker (show,
-   * copy, dib per shown frame), the latter under AgxWglWorkerLock. */
-  LONGLONG Frames, LastTick, SumPresent, SumInterval, SumSync;
-  LONGLONG SumShow, SumCopy, SumDib;
-  unsigned Shown, Dropped, DibFailed, Slices;
-  unsigned NotReady;  /* EXP1195: presents whose shown candidate was still copying */
-} AGX_WGL_PRESENT_RING;
-static AGX_WGL_PRESENT_RING AgxWglRings[4];
-static SRWLOCK AgxWglRingLock = SRWLOCK_INIT;     /* the ring table; taken first */
-static SRWLOCK AgxWglWorkerLock = SRWLOCK_INIT;   /* slot states and the job */
-static CONDITION_VARIABLE AgxWglWorkerWake = CONDITION_VARIABLE_INIT;
-static CONDITION_VARIABLE AgxWglWorkerIdle = CONDITION_VARIABLE_INIT;
-static AGX_WGL_PRESENT_RING *AgxWglJobRing;       /* non-NULL: a job is queued or running */
-static unsigned AgxWglJobSlot;
-static HANDLE AgxWglWorker;
-
-/* EXP1170: the copy out of the write-combined mapping is ~92% of the show
- * (19 ms per 2560x1600 present on one thread). Uncached loads are latency
- * bound per core, so the rows are split into AGX_WGL_COPY_SLICES slices
- * copied concurrently on the process thread pool; the copying thread copies
- * one slice itself and waits for the others. Only the present worker copies
- * through the single job. */
-typedef struct {
-  BYTE *Dst;
-  const BYTE *Src;
-  SIZE_T DstStride, SrcStride, RowBytes;
-  unsigned Height;
-  volatile LONG Next;
-} AGX_WGL_COPY_JOB;
-static AGX_WGL_COPY_JOB AgxWglCopyJob;
-static PTP_WORK AgxWglCopyWork;
-
-static VOID CALLBACK wgl_copy_slice(PTP_CALLBACK_INSTANCE instance, PVOID context,
-                                    PTP_WORK work) {
-  (void)instance; (void)work;
-  AGX_WGL_COPY_JOB *job = (AGX_WGL_COPY_JOB *)context;
-  unsigned index = (unsigned)InterlockedIncrement(&job->Next) - 1u;
-  unsigned first, end;
-  if (index >= AGX_WGL_COPY_SLICES) return;
-  agx_wgl_slice_rows(job->Height, AGX_WGL_COPY_SLICES, index, &first, &end);
-  agx_wgl_copy_rows(job->Dst, job->DstStride, job->Src, job->SrcStride,
-                    job->RowBytes, first, end);
-}
-
-/* Returns the number of slices copied concurrently (1: no thread pool). */
-static unsigned wgl_copy_image(BYTE *dst, const BYTE *src, unsigned src_stride,
-                               unsigned width, unsigned height) {
-  if (!AgxWglCopyWork)
-    AgxWglCopyWork = CreateThreadpoolWork(wgl_copy_slice, &AgxWglCopyJob, NULL);
-  if (!AgxWglCopyWork) {
-    agx_wgl_copy_rows(dst, (SIZE_T)width * 4u, src, src_stride,
-                      (SIZE_T)width * 4u, 0u, height);
-    return 1u;
-  }
-  AgxWglCopyJob.Dst = dst;
-  AgxWglCopyJob.Src = src;
-  AgxWglCopyJob.DstStride = AgxWglCopyJob.RowBytes = (SIZE_T)width * 4u;
-  AgxWglCopyJob.SrcStride = src_stride;
-  AgxWglCopyJob.Height = height;
-  AgxWglCopyJob.Next = 0;
-  for (unsigned i = 1; i < AGX_WGL_COPY_SLICES; ++i)
-    SubmitThreadpoolWork(AgxWglCopyWork);
-  wgl_copy_slice(NULL, &AgxWglCopyJob, AgxWglCopyWork);
-  WaitForThreadpoolWorkCallbacks(AgxWglCopyWork, FALSE);
-  return AGX_WGL_COPY_SLICES;
-}
-
-/* The worker: copy the slot into cached memory (EXP1169: SetDIBits straight
- * from the write-combined mapping took 71 ms) and draw it into the window.
- * The ring's fields other than State/receipts are fixed while a job for it
- * is outstanding (wgl_ring_drain). It never exits: it pins the ICD. */
-static DWORD WINAPI wgl_present_worker(LPVOID unused) {
-  (void)unused;
-  AcquireSRWLockExclusive(&AgxWglWorkerLock);
-  for (;;) {
-    while (!AgxWglJobRing)
-      SleepConditionVariableSRW(&AgxWglWorkerWake, &AgxWglWorkerLock, INFINITE, 0);
-    AGX_WGL_PRESENT_RING *ring = AgxWglJobRing;
-    unsigned slot = AgxWglJobSlot;
-    ReleaseSRWLockExclusive(&AgxWglWorkerLock);
-    LARGE_INTEGER t0, t1, t2;
-    QueryPerformanceCounter(&t0);
-    unsigned slices = wgl_copy_image(ring->Cpu, ring->Map[slot], ring->Stride[slot],
-                                     ring->Width, ring->Height);
-    QueryPerformanceCounter(&t1);
-    HDC dc = GetDC(ring->Window);
-    if (dc) {
-      wgl_blit_to_dc(dc, ring->Cpu, ring->Width * 4u, ring->Width, ring->Height,
-                     ring->Bgra);
-      ReleaseDC(ring->Window, dc);
-    }
-    QueryPerformanceCounter(&t2);
-    AcquireSRWLockExclusive(&AgxWglWorkerLock);
-    ring->SumShow += t2.QuadPart - t0.QuadPart;
-    ring->SumCopy += t1.QuadPart - t0.QuadPart;
-    ring->SumDib += t2.QuadPart - t1.QuadPart;
-    ring->Slices = slices;
-    ++ring->Shown;
-    if (!dc) ++ring->DibFailed;
-    ring->State[slot] = AGX_WGL_SLOT_FREE;
-    AgxWglJobRing = NULL;
-    WakeAllConditionVariable(&AgxWglWorkerIdle);
-  }
-}
-
-static BOOL wgl_worker_start(void) {
-  HMODULE self = NULL;
-  if (AgxWglWorker) return TRUE;
-  /* The worker never exits, so it holds a reference that keeps the ICD
-   * loaded for the life of the process. */
-  if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                          (LPCWSTR)(void *)&wgl_present_worker, &self))
-    return FALSE;
-  AgxWglWorker = CreateThread(NULL, 0, wgl_present_worker, NULL, 0, NULL);
-  if (!AgxWglWorker) { FreeLibrary(self); return FALSE; }
-  return TRUE;
-}
-
-static void wgl_ring_drain(AGX_WGL_PRESENT_RING *ring) {
-  AcquireSRWLockExclusive(&AgxWglWorkerLock);
-  while (AgxWglJobRing == ring)
-    SleepConditionVariableSRW(&AgxWglWorkerIdle, &AgxWglWorkerLock, INFINITE, 0);
-  ReleaseSRWLockExclusive(&AgxWglWorkerLock);
-}
-
-static void wgl_ring_release(AGX_WGL_PRESENT_RING *ring) {
-  wgl_ring_drain(ring);
-  for (unsigned i = 0; i < AGX_WGL_RING_SLOTS; ++i) {
-    if (ring->Fence[i] && ring->Screen)
-      ring->Screen->fence_reference(ring->Screen, &ring->Fence[i], NULL);
-    pipe_resource_reference(&ring->Staging[i], NULL);
-  }
-  if (ring->Cpu) HeapFree(GetProcessHeap(), 0, ring->Cpu);
-  ZeroMemory(ring, sizeof(*ring));
-}
-
-static AGX_WGL_PRESENT_RING *wgl_ring_get(struct pipe_screen *screen, HWND window,
-                                          const struct pipe_resource *res,
-                                          BOOL bgra) {
-  AGX_WGL_PRESENT_RING *free_ring = NULL;
-  for (unsigned i = 0; i < 4; ++i) {
-    AGX_WGL_PRESENT_RING *ring = &AgxWglRings[i];
-    if (ring->Staging[0] && ring->Window == window) {
-      if (ring->Width == res->width0 && ring->Height == res->height0 &&
-          ring->Format == res->format) return ring;
-      wgl_ring_release(ring);
-    }
-    if (!ring->Staging[0] && !free_ring) free_ring = ring;
-  }
-  if (!window || !wgl_worker_start()) return NULL;
-  if (!free_ring) { free_ring = &AgxWglRings[0]; wgl_ring_release(free_ring); }
-  struct pipe_resource templ;
-  memset(&templ, 0, sizeof(templ));
-  templ.target = PIPE_TEXTURE_2D;
-  templ.format = res->format;
-  templ.width0 = res->width0;
-  templ.height0 = res->height0;
-  templ.depth0 = 1;
-  templ.array_size = 1;
-  templ.usage = PIPE_USAGE_STAGING;
-  free_ring->Screen = screen;
-  for (unsigned i = 0; i < AGX_WGL_RING_SLOTS; ++i) {
-    free_ring->Staging[i] = screen->resource_create(screen, &templ);
-    if (!free_ring->Staging[i]) { wgl_ring_release(free_ring); return NULL; }
-  }
-  free_ring->Cpu = (BYTE *)HeapAlloc(GetProcessHeap(), 0,
-                                     (SIZE_T)res->width0 * res->height0 * 4u);
-  if (!free_ring->Cpu) { wgl_ring_release(free_ring); return NULL; }
-  free_ring->Window = window;
-  free_ring->Width = res->width0;
-  free_ring->Height = res->height0;
-  free_ring->Format = res->format;
-  free_ring->Bgra = bgra;
-  return free_ring;
-}
-
-/* Synchronous show for a DC without a ring (no window or no worker). */
+/* Synchronous show for a DC without a window (a memory DC). */
 static void wgl_show_now(struct pipe_context *ctx, struct pipe_resource *image,
                          HDC hdc, unsigned width, unsigned height, BOOL bgra) {
   struct pipe_transfer *transfer = NULL;
@@ -569,25 +356,6 @@ static void wgl_show_now(struct pipe_context *ctx, struct pipe_resource *image,
   }
   wgl_blit_to_dc(hdc, map, transfer->stride, width, height, bgra);
   ctx->texture_unmap(ctx, transfer);
-}
-
-/* Make the GPU copy into `slot` CPU-visible: the READ map waits for its
- * writer; the linear staging map is the BO's persistent CPU mapping. */
-static BOOL wgl_ring_sync(struct pipe_context *ctx, AGX_WGL_PRESENT_RING *ring,
-                          unsigned slot) {
-  struct pipe_transfer *transfer = NULL;
-  struct pipe_box box;
-  u_box_2d(0, 0, (int)ring->Width, (int)ring->Height, &box);
-  const BYTE *map = (const BYTE *)ctx->texture_map(ctx, ring->Staging[slot], 0,
-                                                   PIPE_MAP_READ, &box, &transfer);
-  if (!map || !transfer) {
-    wgl_note("reject-wgl-present-map", E_FAIL);
-    return FALSE;
-  }
-  ring->Map[slot] = map;
-  ring->Stride[slot] = transfer->stride;
-  ctx->texture_unmap(ctx, transfer);
-  return TRUE;
 }
 
 /* EXP1173 receipt-only: kernel time of the last 120 presents, per group of
@@ -676,42 +444,7 @@ static void wgl_kmt_receipt(LONGLONG us) {
   r->WaitSitesLost = 0;
 }
 
-/* Receipt (EXP1168/EXP1171): every 120 presents, in microseconds, the mean
- * game-thread present, worker show per shown frame, present-to-present
- * interval, size, game-thread sync (map wait), worker copy and SetDIBits per
- * shown frame, copy slices, frames shown and dropped, and failed GetDC. */
-static void wgl_common_receipt(LONGLONG us);
-
-static void wgl_present_receipt(AGX_WGL_PRESENT_RING *ring, LONGLONG start,
-                                LONGLONG end) {
-  LARGE_INTEGER frequency;
-  QueryPerformanceFrequency(&frequency);
-  ring->SumPresent += end - start;
-  if (ring->LastTick) ring->SumInterval += start - ring->LastTick;
-  ring->LastTick = start;
-  if (++ring->Frames % 120 != 0 || !frequency.QuadPart) return;
-  LONGLONG us = frequency.QuadPart;
-  AcquireSRWLockExclusive(&AgxWglWorkerLock);
-  LONGLONG shown = ring->Shown ? ring->Shown : 1;
-  UINT values[13] = {
-    (UINT)(ring->SumPresent * 1000000 / us / 120),
-    (UINT)(ring->SumShow * 1000000 / us / shown),
-    (UINT)(ring->SumInterval * 1000000 / us / 120),
-    ring->Width, ring->Height,
-    (UINT)(ring->SumSync * 1000000 / us / 120),
-    (UINT)(ring->SumCopy * 1000000 / us / shown),
-    (UINT)(ring->SumDib * 1000000 / us / shown),
-    ring->Slices, ring->Shown, ring->Dropped, ring->DibFailed,
-    ring->NotReady /* EXP1195 */ };
-  ring->SumShow = ring->SumCopy = ring->SumDib = 0;
-  ring->Shown = ring->Dropped = ring->DibFailed = ring->NotReady = 0;
-  ReleaseSRWLockExclusive(&AgxWglWorkerLock);
-  AdmissionUmdDiagnostic("measure-wgl-present", S_OK, values, 13u);
-  wgl_common_receipt(us);
-  ring->SumPresent = ring->SumInterval = ring->SumSync = 0;
-}
-
-/* The receipts of every 120 presents whichever path showed them. */
+/* The receipts of every 120 presents. */
 static void wgl_common_receipt(LONGLONG us) {
   wgl_kmt_receipt(us);
   /* EXP1182: render batches, draws and the largest batch of the 120 presents. */
@@ -964,15 +697,14 @@ static void wgl_sampler_start(void) {
  * source, the opened destination, the shared handle and the token; opengl32
  * submits the blt (DxgkDdiPresent on the GL context: the KMD's GPU present
  * job, after the blit -- one kernel context, in order) and tells DWM. No CPU
- * copy. A present that does not complete this way is shown through the ring
- * instead, and after AGX_WGL_KMT_REFUSALS such presents in a row the window
- * keeps the ring until its size changes. */
+ * copy. (Redirected blts are not serviced on this driver -- EXP1231-D2 --
+ * so APPLE_AGX_PRESENT=redirect is kept for that work; the default is the
+ * DXGI flip path below.) A present that does not complete is not shown; its
+ * receipts name the stage. */
 #define AGX_WGL_KMT_SOURCES 4u
-/* EXP1220: PresentBuffers returned TRUE without calling DrvPresentBuffers
- * back for the first eight frames; the protocol may engage only once DWM
- * has made the window's surface, so a window keeps trying for four seconds
- * of frames before it keeps the ring. */
-#define AGX_WGL_KMT_REFUSALS 240u
+/* The present sources and the redirection requests; taken by the presenting
+ * thread for a whole present. */
+static SRWLOCK AgxWglPresentLock = SRWLOCK_INIT;
 #define AGX_WGL_KMT_PENDING 8u
 /* Where a redirected present stopped (measure-wgl-redirect). */
 enum {
@@ -1010,8 +742,7 @@ typedef struct {
   D3DKMT_HANDLE Allocation;
   AGX_WIN32_SCREEN_BUFFER Buffer;
   struct pipe_resource *Image;
-  unsigned Failures;               /* consecutive refused presents */
-  BOOL Refused;
+  BOOL Refused;                    /* no source could be made for this size */
   /* G2 HW3b: the window's redirection surface, opened on this device. */
   AGX_KMT_SHARED_SURFACE Surface;
   ADMISSION_ALLOCATION_DESCRIPTION Destination;
@@ -1155,7 +886,7 @@ static BOOL wgl_kmt_create(AGX_WGL_KMT_SOURCE *s, HWND window, unsigned width,
   return TRUE;
 }
 
-/* The window's source for a back buffer of this size; NULL keeps the ring. */
+/* The window's source for a back buffer of this size; NULL: none can be made. */
 static AGX_WGL_KMT_SOURCE *wgl_kmt_get(HWND window, unsigned width, unsigned height) {
   AGX_WGL_KMT_SOURCE *free_source = NULL;
   wgl_kmt_collect();
@@ -1305,7 +1036,7 @@ static void wgl_redirect_readback(struct pipe_context *ctx, AGX_WGL_KMT_SOURCE *
 /* opengl32's DrvPresentBuffers callback for a present started by
  * wgl_redirect_present (agx_wgl_glthread.c routes it here first): open the
  * surface if it changed and hand the blt to PresentToRedirectionSurface.
- * Runs on the presenting thread, which holds AgxWglRingLock. Returns -1 for
+ * Runs on the presenting thread, which holds AgxWglPresentLock. Returns -1 for
  * a call that is not this ICD's, else the BOOL for opengl32. */
 /* EXP1221 receipt-only: every DrvPresentBuffers call opengl32 makes (the
  * first 16 one by one: sequence, ours, during its PresentBuffers, on the
@@ -1770,21 +1501,20 @@ static UINT wgl_dxgi_present(AGX_WGL_KMT_SOURCE *s, struct pipe_context *ctx,
   return AGX_WGL_DXGI_SHOWN;
 }
 
-/* APPLE_AGX_PRESENT: "dxgi" (default), "redirect" (opengl32 PresentBuffers,
- * G2 HW3b) or "ring" (the GDI ring only). */
+/* APPLE_AGX_PRESENT: "dxgi" (default) or "redirect" (opengl32 PresentBuffers,
+ * G2 HW3b). */
 static int wgl_present_mode(void) {
   static int mode = -1;
   if (mode < 0) {
     char value[16];
     DWORD n = GetEnvironmentVariableA("APPLE_AGX_PRESENT", value, sizeof(value));
-    mode = n && n < sizeof(value) && !strcmp(value, "redirect") ? 1 :
-           n && n < sizeof(value) && !strcmp(value, "ring") ? 2 : 0;
+    mode = n && n < sizeof(value) && !strcmp(value, "redirect") ? 1 : 0;
   }
   return mode;
 }
 
-/* TRUE: the frame was presented by the kernel (or there is nothing to show);
- * FALSE: the ring shows it. Called with AgxWglRingLock held. */
+/* TRUE: the frame was presented (or there is nothing to show); FALSE: it
+ * was not shown. Called with AgxWglPresentLock held. */
 static BOOL wgl_kmt_present(struct pipe_context *ctx, struct pipe_resource *res,
                             HWND window, LONGLONG start) {
   static volatile LONG first;
@@ -1824,7 +1554,6 @@ static BOOL wgl_kmt_present(struct pipe_context *ctx, struct pipe_resource *res,
     s->SumPresent += end.QuadPart - start;
     s->DxgiStage = stage;
     if (stage == AGX_WGL_DXGI_SHOWN) {
-      s->Failures = 0;
       ++s->Shown;
       wgl_kmt_present_receipt(s, width, height, FALSE);
       return TRUE;
@@ -1836,12 +1565,7 @@ static BOOL wgl_kmt_present(struct pipe_context *ctx, struct pipe_resource *res,
       UINT values[2] = {stage, (UINT)status};
       AdmissionUmdDiagnostic("reject-wgl-dxgi-present", E_FAIL, values, 2u);
     }
-    if (++s->Failures >= AGX_WGL_KMT_REFUSALS) {
-      s->Refused = TRUE;
-      wgl_kmt_present_receipt(s, width, height, TRUE);
-    } else {
-      wgl_kmt_present_receipt(s, width, height, FALSE);
-    }
+    wgl_kmt_present_receipt(s, width, height, FALSE);
     return FALSE;
   }
   struct pipe_blit_info blit;
@@ -1869,7 +1593,6 @@ static BOOL wgl_kmt_present(struct pipe_context *ctx, struct pipe_resource *res,
   s->SumPresent += end.QuadPart - start;
   ++s->Stages[stage];
   if (stage == AGX_WGL_REDIRECT_SHOWN) {
-    s->Failures = 0;
     ++s->Shown;
     if (InterlockedCompareExchange(&first, 1, 0) == 0) {
       UINT values[3] = {width, height, s->RedirectVersion};
@@ -1886,122 +1609,37 @@ static BOOL wgl_kmt_present(struct pipe_context *ctx, struct pipe_resource *res,
     UINT values[2] = {stage, (UINT)status};
     AdmissionUmdDiagnostic("reject-wgl-kmt-present", E_FAIL, values, 2u);
   }
-  if (++s->Failures >= AGX_WGL_KMT_REFUSALS) {
-    /* Keep the source until the size changes; the ring shows from now on. */
-    s->Refused = TRUE;
-    wgl_kmt_present_receipt(s, width, height, TRUE);
-  } else {
-    wgl_kmt_present_receipt(s, width, height, FALSE);
-  }
+  wgl_kmt_present_receipt(s, width, height, FALSE);
   return FALSE;
 }
 
-/* Present one frame to a window: queue its GPU copy into a ring slot and
- * hand the previous frame to the worker. Called by stw's GDI present (after
- * the frame finished: stw waited) and by the winsys framebuffer (EXP1191:
- * stw flushed without waiting; the GPU copy is ordered after the frame on
- * the same context and wgl_ring_sync waits for the shown slot's copy). */
+/* Present one frame to a window through its DXGI flip-model swap chain (G2
+ * HW3c; APPLE_AGX_PRESENT=redirect: opengl32's redirection protocol). Called
+ * by stw's GDI present (after the frame finished: stw waited) and by the
+ * winsys framebuffer (EXP1191: stw flushed without waiting; the blit into
+ * the shared texture is ordered after the frame on the same context).
+ * FALSE: the frame was not shown (measure-wgl-kmtpresent and
+ * measure-wgl-dxgi name the stage). */
 extern "C" BOOL agx_wgl_present_window(struct pipe_screen *screen,
                                        struct pipe_context *ctx,
                                        struct pipe_resource *res, HWND window) {
-  LARGE_INTEGER start, synced, end;
-  unsigned width, height;
-  BOOL bgra;
+  LARGE_INTEGER start;
+  BOOL shown;
+  (void)screen;
   if (!ctx || !res || !window) return FALSE;
-  width = res->width0; height = res->height0;
-  bgra = res->format == PIPE_FORMAT_B8G8R8A8_UNORM ||
-         res->format == PIPE_FORMAT_B8G8R8X8_UNORM;
-  if (!bgra && res->format != PIPE_FORMAT_R8G8B8A8_UNORM &&
+  if (res->format != PIPE_FORMAT_B8G8R8A8_UNORM &&
+      res->format != PIPE_FORMAT_B8G8R8X8_UNORM &&
+      res->format != PIPE_FORMAT_R8G8B8A8_UNORM &&
       res->format != PIPE_FORMAT_R8G8B8X8_UNORM) {
     wgl_note("reject-wgl-present-format", E_NOTIMPL);
     return FALSE;
   }
   QueryPerformanceCounter(&start);
-  AcquireSRWLockExclusive(&AgxWglRingLock);
+  AcquireSRWLockExclusive(&AgxWglPresentLock);
   wgl_sampler_start();
-  /* G2 HW3: the kernel presents; the ring shows what it refuses. */
-  if (wgl_present_mode() != 2 && wgl_kmt_present(ctx, res, window, start.QuadPart)) {
-    ReleaseSRWLockExclusive(&AgxWglRingLock);
-    return TRUE;
-  }
-  AGX_WGL_PRESENT_RING *ring = wgl_ring_get(screen, window, res, bgra);
-  /* EXP1204 diagnostic, only with the UMD trace and APPLE_AGX_PRESENT_SKIP=N
-   * (2-9): copy and show every N-th frame only, to measure what the present
-   * copy costs the game thread. Off by default. */
-  static int skip = -1;
-  if (skip < 0) {
-    char value[4];
-    skip = AdmissionUmdDiagnosticEnabled() &&
-           GetEnvironmentVariableA("APPLE_AGX_PRESENT_SKIP", value, sizeof(value)) == 1u &&
-           value[0] >= '2' && value[0] <= '9' ? value[0] - '0' : 0;
-  }
-  if (ring && skip && (ring->Frames + 1) % skip) {
-    QueryPerformanceCounter(&end);
-    wgl_present_receipt(ring, start.QuadPart, end.QuadPart);
-    ReleaseSRWLockExclusive(&AgxWglRingLock);
-    return TRUE;
-  }
-  if (!ring) {
-    ReleaseSRWLockExclusive(&AgxWglRingLock);
-    HDC dc = GetDC(window);
-    if (!dc) return FALSE;
-    wgl_show_now(ctx, res, dc, width, height, bgra);
-    ReleaseDC(window, dc);
-    return TRUE;
-  }
-  unsigned dropped = 0;
-  AcquireSRWLockExclusive(&AgxWglWorkerLock);
-  int copy = agx_wgl_slot_for_copy(ring->State, ring->Seq, AGX_WGL_RING_SLOTS,
-                                   &dropped);
-  ReleaseSRWLockExclusive(&AgxWglWorkerLock);
-  if (copy >= 0) {
-    struct pipe_box box;
-    u_box_2d(0, 0, (int)width, (int)height, &box);
-    ctx->resource_copy_region(ctx, ring->Staging[copy], 0, 0, 0, 0, res, 0, &box);
-    ctx->flush(ctx, &ring->Fence[copy], 0);
-  }
-  AcquireSRWLockExclusive(&AgxWglWorkerLock);
-  if (copy >= 0) {
-    ring->State[copy] = AGX_WGL_SLOT_COPIED;
-    ring->Seq[copy] = ring->Frames + 1;
-  }
-  ring->Dropped += dropped;
-  int show = AgxWglJobRing ? -1 :
-      agx_wgl_slot_to_show(ring->State, ring->Seq, AGX_WGL_RING_SLOTS, copy);
-  ReleaseSRWLockExclusive(&AgxWglWorkerLock);
-  /* EXP1195: a frame whose copy has not finished stays copied for a later
-   * present (or is replaced by a newer frame); the game thread no longer
-   * waits for the GPU here. A slot without a fence (faulted context) is
-   * synced as before. */
-  if (show >= 0 && ring->Fence[show] &&
-      !screen->fence_finish(screen, NULL, ring->Fence[show], 0)) {
-    show = -1;
-    ++ring->NotReady;
-  }
-  QueryPerformanceCounter(&synced);
-  LONGLONG sync_start = synced.QuadPart;
-  if (show >= 0) {
-    BOOL ready = wgl_ring_sync(ctx, ring, (unsigned)show);
-    QueryPerformanceCounter(&synced);
-    AcquireSRWLockExclusive(&AgxWglWorkerLock);
-    if (ready) {
-      ring->State[show] = AGX_WGL_SLOT_SHOWING;
-      ring->Dropped += agx_wgl_drop_older(ring->State, ring->Seq,
-                                          AGX_WGL_RING_SLOTS, show);
-      AgxWglJobRing = ring;
-      AgxWglJobSlot = (unsigned)show;
-      WakeConditionVariable(&AgxWglWorkerWake);
-    } else {
-      ring->State[show] = AGX_WGL_SLOT_FREE;
-      ++ring->Dropped;
-    }
-    ReleaseSRWLockExclusive(&AgxWglWorkerLock);
-  }
-  ring->SumSync += synced.QuadPart - sync_start;
-  QueryPerformanceCounter(&end);
-  wgl_present_receipt(ring, start.QuadPart, end.QuadPart);
-  ReleaseSRWLockExclusive(&AgxWglRingLock);
-  return TRUE;
+  shown = wgl_kmt_present(ctx, res, window, start.QuadPart);
+  ReleaseSRWLockExclusive(&AgxWglPresentLock);
+  return shown;
 }
 
 /* G3: one vertical blank of the display the screen's DC showed
@@ -2063,10 +1701,7 @@ extern "C" BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved
     break;
   case DLL_PROCESS_DETACH:
     if (reserved == NULL) {
-      /* FreeLibrary (only before a present worker started, which pins the
-       * ICD): no copy callback is pending. */
-      if (AgxWglCopyWork) CloseThreadpoolWork(AgxWglCopyWork);
-      AgxWglCopyWork = NULL;
+      /* FreeLibrary. */
       stw_cleanup_thread();
       stw_cleanup();
     } else {
