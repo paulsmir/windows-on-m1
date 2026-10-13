@@ -1,6 +1,30 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-13 12:55Z (read this first)
+## Current as of 2026-10-13T15:30Z (read this first)
+
+Installed: PACKAGE1244 (receipt-only build 57984e1c; M2-c system placement)
+until EXP1245's rollback; recovery profile otherwise as before.
+Proven since 12:55Z:
+- VA-only render targets work end to end (EXP1242: probe + GL smoke PASS
+  with system-memory colour attachments) after ad894162 (render packet
+  destination) and bdd1e258 (EXP208 relocation target without CPU bytes).
+- M2-c system-memory placement is NOT viable (EXP1240-EXP1244): VidMm maps
+  CPU-visible class BOs with 4 KB PTEs ~99% of the time and backs every
+  shape partly with scattered 4 KiB pages (Wom1G3SystemShapes, EXP1244);
+  identical KMD descriptions, so no allocation shape is 16 KiB-safe. Effects:
+  CS renders refused (G4 Parse Unmapped), compute copy GPU timeout -> 0x116.
+- A backend build failure or GPU timeout leaves the fence pending and, with
+  reset unsupported, ends in 0x116 (EXP1241, EXP1242 kernel dumps).
+Decision: placement reverted to local-preferred (6e728357); M2 flexibility
+moves to a KMD-populated memory segment (PopulatedFromSystemMemory, backing
+taken from Windows at start, 16 KiB-contiguous) -- plan in
+investigation/analysis/M2-vidmm-64k-decision.md (addendum 2026-10-13).
+Next: EXP1245 full validation of the reverted placement with every fix
+(expect EXP1238: CS fullscreen ~47 fps, copy test PASS, D3D11, GL PrintWindow
+MATCH); then robustness (refuse instead of hang on unpublished BO ranges;
+TDR reset) and the PopulatedFromSystemMemory segment.
+
+## Current as of 2026-10-13 12:55Z
 
 Installed: PACKAGE1238 (KMD build 30f9e034: M2-a/M2-b receipt/M2-c step 1;
 ICD out56 73cbdc6d without the GDI ring; UMD32 out4; INF Supports64KBPages;
