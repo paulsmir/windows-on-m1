@@ -12,7 +12,20 @@ int main(void) {
   assert(!hv_agx_retained_backing_allowed(&s,0x805000000ULL,0x4000));
   assert(!hv_agx_retained_backing_allowed(&s,0x9fff78000ULL,0x4000));
   assert(!hv_agx_retained_backing_allowed(&s,0x85f000000ULL,0x4000));
+  /* EXP1251: the boot inputs the launcher hands the guest (firmware image,
+   * its heap, ADT and boot-args copies) are guest RAM once the guest runs
+   * (Windows allocates them); they no longer deny GPU backing. The boot
+   * framebuffer, device DART tables and a published ramdisk still do. */
+  assert(hv_agx_retained_backing_allowed(&s,0x851000000ULL,0x4000));
+  s.regions[2].kind=HV_CONTRACT_REGION_HEAP;
+  assert(hv_agx_retained_backing_allowed(&s,0x851000000ULL,0x4000));
+  s.regions[2].kind=HV_CONTRACT_REGION_ADT;
+  assert(hv_agx_retained_backing_allowed(&s,0x851000000ULL,0x4000));
+  s.regions[2].kind=HV_CONTRACT_REGION_BOOT_ARGS;
+  assert(hv_agx_retained_backing_allowed(&s,0x851000000ULL,0x4000));
+  s.regions[2].kind=HV_CONTRACT_REGION_DART_TABLES;
   assert(!hv_agx_retained_backing_allowed(&s,0x851000000ULL,0x4000));
+  s.regions[2].kind=HV_CONTRACT_REGION_FIRMWARE;
   assert(!hv_agx_retained_backing_allowed(&s,0x858000001ULL,0x4000));
   /* M1: the ramdisk window is ordinary guest RAM unless the launcher
    * published a ramdisk region; then GPU DMA must not reach the boot medium. */

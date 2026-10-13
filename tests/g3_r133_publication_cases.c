@@ -5,10 +5,13 @@ static void r133_publication_cases(void) {
   local_ipa=0x8e0000000ULL; replay_identity_ram=true;
   assert(posix_memalign((void **)&local_cpu,0x4000,(size_t)local_bytes)==0);
   memset(local_cpu,0,(size_t)local_bytes);ReplayBrokerInit(&b);
-  /* EXP852 contract.bin regions: guest RAM and protected firmware. */
+  /* EXP852 contract.bin regions: guest RAM and the firmware boot input, where
+   * VidMm placed a system page the broker then refused. Boot inputs are
+   * guest RAM since EXP1251, so the refusal is modelled with a region that
+   * still denies GPU backing (device DART tables) at the same range. */
   b.memory.boot.ram_base=0x850000000ULL;b.memory.boot.ram_size=0x18f708000ULL;
   b.memory.regions[0].base=0x850000000ULL;b.memory.regions[0].size=0x18f708000ULL;
-  b.memory.regions[1].kind=HV_CONTRACT_REGION_FIRMWARE;
+  b.memory.regions[1].kind=HV_CONTRACT_REGION_DART_TABLES;
   b.memory.regions[1].base=0x8510b4000ULL;b.memory.regions[1].size=0x1d88000ULL;
   InitializeListHead(&state.Processes);assert(AppleAgxGpuvaV5ClientInit(&state.Client,&io));
   {AGX_GPUVA_V5_REQUEST r={0};AGX_GPUVA_V5_RESPONSE reply={0};r.Command=AGX_GPUVA_V5_CREATE;
