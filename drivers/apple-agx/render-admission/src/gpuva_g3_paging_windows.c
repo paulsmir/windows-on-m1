@@ -358,7 +358,7 @@ static VOID AdmissionG3NoteSystemShape(ADMISSION_G3_STATE *state,
    * hAllocation); anything else is never dereferenced. */
   if (handle != NULL &&
       (allocation & (ULONGLONG)(sizeof(ULONG_PTR) - 1u)) == 0ULL &&
-      handle->Object.Magic == ADMISSION_ALLOCATION_MAGIC) {
+      handle->Object.Magic == ADMISSION_ALLOCATION_OBJECT_MAGIC) {
     ULONGLONG size = handle->Object.Description.Size;
     class_id = handle->Win32ClassId;
     win32_flags = handle->Win32Flags;

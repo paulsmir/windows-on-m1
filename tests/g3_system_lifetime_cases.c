@@ -58,9 +58,12 @@ static void r134_system_64k_cases(void) {
   a.Started=TRUE;a.GpuvaG3State=&state;state.Adapter=&a;
   ADMISSION_G3_PROCESS *p=sys_process(&a,0x10000,0);
   void *leaf=local_cpu+0x18000;
+  /* The handle exactly as DxgkDdiCreateAllocation builds it (EXP1243: a
+   * receipt that compared the description magic saw no allocation). */
   ADMISSION_ALLOCATION_HANDLE bo={0};
-  bo.Object.Magic=ADMISSION_ALLOCATION_MAGIC;
-  bo.Object.Description.Size=0x10000u; bo.Object.Description.CpuVisible=1u;
+  ADMISSION_ALLOCATION_DESCRIPTION shape;
+  assert(AdmissionAllocationDescribe(0x10000u,1u,1u,2u,28u,1u,&shape));
+  assert(AdmissionAllocationCreate(&shape,&bo.Object));
   bo.Win32ClassId=2u; bo.Win32Flags=0x10101u;
   sys_allocation=&bo;
   pte.Flags=1; pte.PageAddress=system_ipa>>12;
