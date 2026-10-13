@@ -1,6 +1,24 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-13T20:20Z (read this first)
+## Current as of 2026-10-13T21:25Z (read this first)
+
+Installed: PACKAGE1253 (production KMD 9434b468 = integration c96a34e4
+drivers/, 30.0.1253.0) on m1n1 b12d1952 (macho fe86bee1) + M1 FD 4d382bfa.
+M2-f2 (flexible GPU memory for Mesa BOs) is complete on hardware:
+- EXP1252: the 64 KiB-block fallback through the window (16,183 blocks,
+  mapped in 107.9 ms); EXP1253: production build on a boot where Windows had
+  no 1 GiB block -> fallback, chunks from 0x850470000 accepted after m1n1
+  b12d1952 (boot inputs are guest RAM for GPU backing; EXP1251 had refused
+  them), 59,592 pool groups published, 0 unpublished, CS 48.1 fps.
+- Measured (agx_segstats, D3DKMTQueryStatistics): segment 2 (m1n1 reserve,
+  952 MiB) peaks at 167 MiB in CS 1.6; segment 3 (pool, 1 GiB) at 668/688 MiB.
+Next causal target: M2-f2c-1 -- receipt-sized local reserve (ABI v3 in m1n1,
+Mu + ASL generator, KMD; ~20 pinned tests), S unchanged; then f2c-2 (m1n1
+picks a smaller S, e.g. 384 MiB) and f2c-3 (pool size per machine). Design
+and inventory: investigation/analysis/M2-f2c-reserve-size.md. Then the
+resubmission defect (branch 7 subsite 0x201), G4-recovery, D3D 11/12.
+
+## Current as of 2026-10-13T20:20Z
 
 Installed: PACKAGE1250 (KMD 0cb63858, 30.0.1250.0) on m1n1 fc59c8cb (macho
 31471866, M2-f2 pool window on M2-d) + M1 FD 4d382bfa.
