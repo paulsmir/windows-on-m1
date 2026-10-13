@@ -87,8 +87,32 @@ static void test_unproven_encoding_bits_are_rejected_atomically(void) {
   assert(source[0] == 0x5a && source[15] == 0x5a);
 }
 
+/* M2-c: a relocation reads only its target's address. A target without a
+ * CPU mapping (a render target in system memory, reached by GPU VA only) is
+ * a valid GPU-VA target. */
+static void test_gpu_va_target_needs_no_cpu_bytes(void) {
+  unsigned char source[8];
+  APPLE_AGX_RELOCATION_OBJECT objects[2] = {
+      {0x200000ULL, 0x900000ULL, sizeof(source), source},
+      {0x1100000000ULL, 0ULL, 0x10000u, 0},
+  };
+  APPLE_AGX_RELOCATION relocation = {0u, 0u, 1u, 0u, AppleAgxRelocationGpuVa,
+                                     AppleAgxRelocationExactU64, 0ULL};
+  memset(source, 0, sizeof(source));
+  assert(AppleAgxApplyRelocations(objects, 2u, &relocation, 1u));
+  assert(get_u64(source) == 0x1100000000ULL);
+  /* An empty target is still refused, and so is a physical relocation to a
+   * target without a physical address. */
+  objects[1].Size = 0u;
+  assert(!AppleAgxApplyRelocations(objects, 2u, &relocation, 1u));
+  objects[1].Size = 0x10000u;
+  relocation.AddressSpace = AppleAgxRelocationPhysical;
+  assert(!AppleAgxApplyRelocations(objects, 2u, &relocation, 1u));
+}
+
 int main(void) {
   test_all_proven_g13_encodings();
+  test_gpu_va_target_needs_no_cpu_bytes();
   test_batch_is_fail_closed_and_atomic();
   test_unproven_encoding_bits_are_rejected_atomically();
   return 0;

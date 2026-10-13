@@ -301,7 +301,9 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
   APPLE_AGX_EXP208_GDI_BINDING candidate;
   APPLE_AGX_EXP208_RELOCATION_OBJECT saved;
   APPLE_AGX_U32 sequence;
-  if (Image == 0 || Packet == 0 || DestinationCpuAddress == 0 ||
+  /* M2-c: a target outside the local reserve has no CPU token or host
+   * physical address (both zero); the scene reaches it by GPU VA only. */
+  if (Image == 0 || Packet == 0 ||
       View == 0 || View->Native == 0 || View->Render == 0 ||
       View->Attachments == 0 ||
       Binding == 0 || Image->Ready != APPLE_AGX_TRUE ||
@@ -310,7 +312,8 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
       View->AttachmentCount > APPLE_AGX_G4_MAX_ATTACHMENTS ||
       View->CommandBytes == 0u ||
       View->CommandBytes > APPLE_AGX_G4_NATIVE_MAX_BYTES ||
-      Packet->Fence == 0u || Packet->DestinationPhysical == 0ULL ||
+      Packet->Fence == 0u ||
+      (Packet->DestinationPhysical == 0ULL) != (DestinationCpuAddress == 0) ||
       Packet->DestinationGpuVa == 0ULL || Packet->DestinationBytes == 0u)
     return APPLE_AGX_FALSE;
   memcpy(&render, View->Render, sizeof(render));

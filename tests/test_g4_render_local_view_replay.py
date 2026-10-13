@@ -14,11 +14,11 @@ class G4RenderLocalViewReplay(unittest.TestCase):
           'AdmissionG3PrivateSlotPreempted','AdmissionG3PrivateSlotCancelled',
           'AdmissionG4FindPrivateScene','AdmissionG4FindPrivateResubmission','AdmissionG4ResubmissionRefusal',
           'AdmissionG4PrivateGraphAccess','AdmissionG4PrivateGeometry','AdmissionG4PrivateUnqueue',
-          'AdmissionG4SnapshotFailure','AdmissionG4ResolveOutput',
+          'AdmissionG4SnapshotFailure','AdmissionG4OutputInLocal','AdmissionG4ResolveOutput',
           'AdmissionGpuvaG3PrivatePreempt','AdmissionGpuvaG3PrivateCancel','AdmissionG4PendingAdmissible',
           'AdmissionG4PendingQueue','AdmissionG4PendingBindHead','AdmissionG4PendingDropLocked',
           'AdmissionG4SubmitComputeLocked','AdmissionG4SubmitVirtualEnvelope',
-          'AdmissionG3OutputMatchesLocal','AdmissionGpuvaG3BeginJob')
+          'AdmissionG3OutputMatchesLocal','AdmissionG3OutputAccessible','AdmissionGpuvaG3BeginJob')
         functions+='\n'.join(function_body(source,n) for n in names)
         shim=(ROOT/'tests/g4_submit_virtual_replay.c').read_text()
         prefix=shim.split('int main(void) {',1)[0]
@@ -96,7 +96,10 @@ class G4RenderLocalViewReplay(unittest.TestCase):
           assert(AdmissionMemoryRuntimeScanoutView(&adapter,&scanout)==STATUS_SUCCESS);
           assert(scanout.Bytes==0x3800000ULL && scanout.PoolBytes==scanout.Bytes);
           ADMISSION_RENDER_PACKET_DESCRIPTION out={0};
-          assert(!AdmissionG4ResolveOutput(&process,&packet.Attachment,&scanout,&out));
+          /* Outside the DCP pool the output is VA-only (M2-c), never a scanout
+           * physical address. */
+          assert(AdmissionG4ResolveOutput(&process,&packet.Attachment,&scanout,&out) &&
+                 out.DestinationPhysical==0 && out.DestinationCpuToken==0);
           ADMISSION_SCANOUT_MEMORY_VIEW local={0};
           assert(AdmissionMemoryRuntimeLocalView(&adapter,&local)==STATUS_SUCCESS);
           packet.Attachment.Size=0x8000u;
@@ -108,6 +111,12 @@ class G4RenderLocalViewReplay(unittest.TestCase):
           assert(!AdmissionG4ResolveOutput(&process,&packet.Attachment,&local,&out));
           output_ipa=local.GuestIpaAddress-0x1000ULL;
           assert(!AdmissionG4ResolveOutput(&process,&packet.Attachment,&local,&out));
+          /* M2-c: outside the local reserve but mapped writable: VA only. */
+          output_va_only=packet.Attachment.Pointer;output_va_only_bytes=(unsigned)packet.Attachment.Size;
+          assert(AdmissionG4ResolveOutput(&process,&packet.Attachment,&local,&out));
+          assert(out.DestinationGpuVa==packet.Attachment.Pointer && out.DestinationPhysical==0 &&
+                 out.DestinationCpuToken==0 && out.DestinationBytes==packet.Attachment.Size);
+          output_va_only_bytes=0;
           output_mapped=0;
           assert(!AdmissionG4ResolveOutput(&process,&packet.Attachment,&local,&out));
           output_mapped=1;output_va=0x860000ULL;output_bytes=0xfd2000ULL;output_ipa=0x8e2d10000ULL;
@@ -117,6 +126,14 @@ class G4RenderLocalViewReplay(unittest.TestCase):
           assert(AdmissionG3OutputMatchesLocal(&adapter,&process.Graph));
           adapter.BackendImage.G4Native=0;
           assert(!AdmissionG3OutputMatchesLocal(&adapter,&process.Graph));
+          /* M2-c: a VA-only destination at BeginJob: mapped writable or not. */
+          adapter.BackendImage.G4Native=1;
+          adapter.RenderPacket.Description.DestinationPhysical=0;
+          adapter.RenderPacket.Description.DestinationCpuToken=0;
+          output_va_only=output_va;output_va_only_bytes=(unsigned)output_bytes;
+          assert(AdmissionG3OutputAccessible(&adapter,&process.Graph));
+          output_va_only_bytes=0;
+          assert(!AdmissionG3OutputAccessible(&adapter,&process.Graph));
           puts("high local render admitted through BeginJob; exact935 span and legacy scanout guards checked");return 0;
         }"""
         with tempfile.TemporaryDirectory(prefix='g4-render-local-') as d:

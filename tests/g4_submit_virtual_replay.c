@@ -278,6 +278,7 @@ static void AdmissionJobTimingStartWindows(ADMISSION_CONTEXT *a,
 static int replay_irql, dispatches, bind_ok=1, compute_preempt_mapped=1;
 static int graph_begin_calls;
 static int output_mapped=1;
+static ULONGLONG output_va_only; static unsigned output_va_only_bytes;
 static ULONGLONG output_ipa=0x90001000ULL;
 static NTSTATUS scanout_status = STATUS_SUCCESS;
 static int receipt_queues;
@@ -441,8 +442,13 @@ static int AppleAgxGpuvaG3GraphContainsRangeAccess(
   /* G2 compute: CDM stream, writable 64 KiB context-store buffer. */
   if (va == 0x50000 && !write && bytes == 0x40u) return 1;
   if (va == 0x60000 && write && bytes == 0x10000u) return compute_preempt_mapped;
+  /* The parser probes the attachment's first byte; the whole output range
+   * is writable only while the output is mapped (M2-c VA-only outputs). */
   if (va == 0x40000000ULL && write &&
-      (bytes==1u || bytes==4096u)) return 1;
+      (bytes==1u || bytes==4096u)) return bytes == 1u || output_mapped;
+  /* M2-c: an output mapped writable outside the local reserve. */
+  if (output_va_only_bytes && va == output_va_only && write &&
+      bytes <= output_va_only_bytes) return 1;
   /* Mapped process ranges; EXP1115 checks only the backed heap prefix. */
   for(unsigned i=0;i<APPLE_AGX_G4_PROCESS_RANGE_COUNT;++i)
     if(va==ranges[i].Va && bytes<=ranges[i].Bytes && write)
@@ -954,7 +960,10 @@ int main(void) {
   output_mapped = 0;
   assert(AdmissionDdiSubmitCommandVirtual(&adapter, &args) ==
          STATUS_INVALID_PARAMETER);
-  assert(adapter.G4SubmitFailure.Subsite == AppleAgxG4FailureOutput);
+  /* M2-c: the output is reached by VA; an unmapped output range is refused
+   * at the parser's writable-attachment check. */
+  assert(adapter.G4SubmitFailure.Subsite == AppleAgxG4FailureAccess);
+  assert(adapter.G4SubmitFailure.Kind == AppleAgxG4AccessAttachment);
   output_mapped = 1;
   packet.Header.Base.Magic = APPLE_AGX_G4_PRIVATE_MAGIC;
   adapter.G4SubmitFailureClaim = 0;

@@ -2400,6 +2400,22 @@ static BOOLEAN AdmissionG3OutputMatchesLocal(
   return TRUE;
 }
 
+/* M2-c: a VA-only destination (outside the local reserve) must still be
+ * mapped writable; a local one must still be its recorded local pages. */
+static BOOLEAN AdmissionG3OutputAccessible(
+    ADMISSION_CONTEXT *adapter, APPLE_AGX_GPUVA_G3_GRAPH *graph) {
+  const ADMISSION_RENDER_PACKET_DESCRIPTION *packet =
+      &adapter->RenderPacket.Description;
+  if (adapter->BackendImage.G4Native &&
+      packet->DestinationPhysical == 0ULL &&
+      packet->DestinationCpuToken == 0ULL)
+    return packet->DestinationGpuVa != 0ULL &&
+        packet->DestinationBytes != 0u &&
+        AppleAgxGpuvaG3GraphContainsRangeAccess(graph,
+            packet->DestinationGpuVa, packet->DestinationBytes, TRUE);
+  return AdmissionG3OutputMatchesLocal(adapter, graph);
+}
+
 static ADMISSION_G3_PRIVATE_SCENE *AdmissionG4FindPrivateScene(
     ADMISSION_G3_PROCESS *p, ADMISSION_RENDER_CONTEXT *context,
     const APPLE_AGX_G4_PRIVATE_LEASE *lease, ULONG fence, BOOLEAN begin) {
@@ -2689,7 +2705,7 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
       /* A compute job has no destination allocation to prove; a present
        * job's destination was proven above. */
       (adapter->BackendImage.G4Compute || adapter->BackendImage.PresentCompute ||
-       AdmissionG3OutputMatchesLocal(adapter, &process->Graph)) &&
+       AdmissionG3OutputAccessible(adapter, &process->Graph)) &&
       AppleAgxGpuvaG3GraphBeginJob(&process->Graph,
           ADMISSION_GPUVA_G3_JOB_VM_SLOT)) {
     if (private_scene) {
@@ -3218,22 +3234,20 @@ static void AdmissionG4SnapshotFailure(
   }
 }
 
-static BOOLEAN AdmissionG4ResolveOutput(
+/* The attachment's offset in the local reserve when all of it lies there
+ * IPA-contiguously. */
+static BOOLEAN AdmissionG4OutputInLocal(
     ADMISSION_G3_PROCESS *process,
     const APPLE_AGX_G4_ATTACHMENT *attachment,
-    const ADMISSION_SCANOUT_MEMORY_VIEW *local,
-    ADMISSION_RENDER_PACKET_DESCRIPTION *packet) {
-  ULONGLONG ipa, offset, position;
-  if (process == NULL || attachment == NULL || local == NULL ||
-      packet == NULL || attachment->Pointer == 0ULL ||
-      attachment->Size == 0ULL || attachment->Size > MAXULONG ||
-      !AppleAgxGpuvaG3GraphTranslateVa(&process->Graph,
+    const ADMISSION_SCANOUT_MEMORY_VIEW *local, ULONGLONG *offset) {
+  ULONGLONG ipa, position;
+  if (!AppleAgxGpuvaG3GraphTranslateVa(&process->Graph,
           attachment->Pointer, &ipa) || ipa < local->GuestIpaAddress)
     return FALSE;
-  offset = ipa - local->GuestIpaAddress;
-  if (offset > local->Bytes ||
-      attachment->Size > local->Bytes - offset ||
-      local->HostPhysicalAddress > MAXULONGLONG - offset)
+  *offset = ipa - local->GuestIpaAddress;
+  if (*offset > local->Bytes ||
+      attachment->Size > local->Bytes - *offset ||
+      local->HostPhysicalAddress > MAXULONGLONG - *offset)
     return FALSE;
   for (position = 0ULL; position < attachment->Size;) {
     ULONGLONG mapped;
@@ -3243,10 +3257,36 @@ static BOOLEAN AdmissionG4ResolveOutput(
     position += 0x4000ULL -
         ((attachment->Pointer + position) & 0x3fffULL);
   }
-  packet->DestinationCpuToken =
-      (ULONGLONG)(ULONG_PTR)((PUCHAR)local->CpuAddress + (SIZE_T)offset);
+  return TRUE;
+}
+
+/* The GPU writes the colour attachment through the process graph (GPU VA).
+ * A target in the local reserve also gets its local CPU token and host
+ * physical address (the CPU output capture and GDI paths read them); any
+ * other target -- M2-c: system memory, 64 KB-backed -- is addressed by VA
+ * only and needs its range mapped writable for this process. */
+static BOOLEAN AdmissionG4ResolveOutput(
+    ADMISSION_G3_PROCESS *process,
+    const APPLE_AGX_G4_ATTACHMENT *attachment,
+    const ADMISSION_SCANOUT_MEMORY_VIEW *local,
+    ADMISSION_RENDER_PACKET_DESCRIPTION *packet) {
+  ULONGLONG offset;
+  if (process == NULL || attachment == NULL || local == NULL ||
+      packet == NULL || attachment->Pointer == 0ULL ||
+      attachment->Size == 0ULL || attachment->Size > MAXULONG)
+    return FALSE;
+  if (AdmissionG4OutputInLocal(process, attachment, local, &offset)) {
+    packet->DestinationCpuToken =
+        (ULONGLONG)(ULONG_PTR)((PUCHAR)local->CpuAddress + (SIZE_T)offset);
+    packet->DestinationPhysical = local->HostPhysicalAddress + offset;
+  } else if (AppleAgxGpuvaG3GraphContainsRangeAccess(&process->Graph,
+                 attachment->Pointer, (UINT)attachment->Size, TRUE)) {
+    packet->DestinationCpuToken = 0ULL;
+    packet->DestinationPhysical = 0ULL;
+  } else {
+    return FALSE;
+  }
   packet->DestinationGpuVa = attachment->Pointer;
-  packet->DestinationPhysical = local->HostPhysicalAddress + offset;
   packet->DestinationBytes = (ULONG)attachment->Size;
   return TRUE;
 }

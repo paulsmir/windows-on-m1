@@ -67,8 +67,10 @@ APPLE_AGX_BOOL AppleAgxApplyRelocations(
                     (APPLE_AGX_U32)AppleAgxRelocationGpuVaPage32kU32
                 ? 4u
                 : 8u;
+    /* Only the target's address is read (M2-c: a GPU-VA target, such as a
+     * render target in system memory, has no CPU mapping). */
     if (source->Data == APPLE_AGX_RELOCATION_NULL || source->Size == 0u ||
-        target->Data == APPLE_AGX_RELOCATION_NULL || target->Size == 0u ||
+        target->Size == 0u ||
         relocation->SourceOffset > source->Size ||
         width > source->Size - relocation->SourceOffset ||
         relocation->TargetOffset >= target->Size)
