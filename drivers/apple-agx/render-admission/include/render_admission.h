@@ -21,6 +21,7 @@
 #include "apple_agx_memory.h"
 #include "apple_agx_g3_private_failure.h"
 #include "apple_agx_local_reserve_abi.h"
+#include "apple_agx_pool_window_abi.h"
 #include "apple_agx_g3_copy_query_receipt.h"
 #include "apple_agx_g3_copy_abi.h"
 #include "apple_agx_residency.h"
@@ -584,8 +585,10 @@ typedef struct _ADMISSION_CONTEXT {
   /* M2-f2: segment-3 pool (Windows memory the KMD allocated at start). */
   PMDL PoolMdl;
   PVOID PoolCpu;
-  ULONGLONG PoolIpa;
+  ULONGLONG PoolIpa; /* hypervisor window base (segment 3 CPU base) */
   ULONGLONG PoolBytes;
+  /* Pool pages kept because the window could not release them. */
+  volatile LONG PoolLeaks;
   PVOID PlatformRuntime;
   PVOID ScanoutRuntime;
   APPLE_AGX_SOFTWARE_APERTURE_ENTRY *ApertureEntries;
