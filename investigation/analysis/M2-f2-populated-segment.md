@@ -110,3 +110,24 @@ Ladder (replaces the one above):
 2. f2b: CPU-visible class BOs prefer segment 3 with paging/publication support. Checkpoint: full
    pipeline; segment-3 groups published, no refusal.
 3. f2c: shrink the m1n1 reserve; size the block per machine.
+
+## f2b work list (EXP1247 confirmed f2a; order of implementation, each with its test)
+
+A. Pool view: `AdmissionMemoryPoolView` (pool_windows.c) -- done in f2a.
+B. Translation (shared): resolve PTE segment 3 to pool IPA + offset (bounded); segment 4+ invalid.
+   Test: apple_agx_gpuva_g3_translation_test.c.
+C. Leaf publication (gpuva_g3_paging_windows.c UpdateLeaf): segment-3 PTEs resolve through the pool
+   view; 64 KB PTEs allowed for segment 3 (64 KiB-aligned); a group is complete when four contiguous
+   16 KiB-aligned entries lie inside the pool; backing kind System; frame references
+   (MappingAcquire/Release) for segment 0 and 3 alike, also in RetireSystemSubtree,
+   ResetTableShadow and DestroyProcess. Pool tallies through the shapes receipt (trait 0x10).
+   Test: g3_system_lifetime_cases.c (segment-3 update publishes a System backing; unmap releases).
+D. Virtual paging (CPU executor): `AdmissionG3MapPagingIpa` maps segment 3 through the pool view;
+   `AdmissionG3EncodeVirtualPaging` direction/coalescing rules for segment 3.
+E. Physical paging: TRANSFER 0<->3, FILL 3, DISCARD 3 through the planners (render_memory.c,
+   shared apple_agx_physical_paging.c) with the pool CPU base. Test: physical paging test.
+F. Consumers of segment ids: `AdmissionG4LogicalEnvelopeAccess`, present virtual source
+   translate/read, copy escape (predicates 58/61) accept segment 3 via the pool view.
+G. Placement: CPU-visible class BOs set {aperture, local, pool}, preferred pool then local.
+   Test: test_g4_segment_placement_replay.py.
+Hardware checkpoint after G (EXP1248): full pipeline, pool groups published, no refusal.
