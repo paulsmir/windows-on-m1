@@ -270,7 +270,9 @@ typedef struct _ADMISSION_OBJECT_DEVICE { UINT Magic; void *Adapter; } ADMISSION
 typedef struct { UINT Magic,Flags; ADMISSION_OBJECT_DEVICE *Device;
   UINT FenceOutstanding; } ADMISSION_OBJECT_CONTEXT;
 typedef struct _ADMISSION_DEVICE { ADMISSION_OBJECT_DEVICE Object; LONG Win32Generation; ADMISSION_G3_PROCESS *GpuvaG3Process; } ADMISSION_DEVICE;
-typedef struct { ADMISSION_ALLOCATION_OBJECT Object; ULONG QualificationCookie,Win32ClassId,Win32Flags,Presentation; } ADMISSION_ALLOCATION_HANDLE;
+typedef struct { ADMISSION_ALLOCATION_OBJECT Object; ULONG QualificationCookie,Win32ClassId,Win32Flags,WrittenPrimary,Presentation; } ADMISSION_ALLOCATION_HANDLE;
+#define ADMISSION_G3_SYSTEM_SHAPE_COUNT 16u
+typedef struct { ULONG ClassId,Win32Flags,Traits,SizeLog2; ULONGLONG Groups[4]; ULONGLONG UnpublishedVa,UnpublishedIpa; } ADMISSION_G3_SYSTEM_SHAPE;
 #define ADMISSION_OPEN_ALLOCATION_MAGIC 0x4f504152u
 typedef struct { ULONG Magic; ADMISSION_DEVICE *Device; UINT RuntimeAllocation;
  ADMISSION_ALLOCATION_OBJECT *Allocation; BOOLEAN ReadOnly;
@@ -365,7 +367,7 @@ typedef struct _ADMISSION_G3_LEAF_HISTORY_SNAPSHOT {
 } ADMISSION_G3_LEAF_HISTORY_SNAPSHOT;
 #define ADMISSION_G3_UPLOAD_TRACE_COUNT 64u
 typedef struct { ULONGLONG ProcessId,Va; ULONG Bytes,Hash,GpuHash,Checks; } ADMISSION_G3_UPLOAD_TRACE;
-typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; KEVENT JobEvent; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; APPLE_AGX_G3_PRIVATE_POOL PrivatePool; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence,LastCompletedFence,PrivateCompletionFence; ULONGLONG UnpublishedGroups[32]; ULONGLONG Leaf64KPtes[32]; ULONGLONG SystemGroups[8]; ADMISSION_G3_UPLOAD_TRACE UploadTrace[ADMISSION_G3_UPLOAD_TRACE_COUNT]; ULONG UploadTraceNext,UploadVerifyChecks,UploadVerifyMismatch,UploadVerifyUnmapped; ADMISSION_G3_UPLOAD_TRACE UploadFirstMismatch; ADMISSION_G3_LEAF_HISTORY LeafHistory[ADMISSION_G3_LEAF_RING]; ULONG LeafHistoryNext; ADMISSION_G3_ALLOC_TRACK AllocTrack[ADMISSION_G3_ALLOC_TRACK_COUNT]; ULONGLONG PrivateStats[16]; LONGLONG ProcessReceiptQpc; LONG ReserveMade,ReserveRefused,PresentArenasMade,PresentArenasRefused; } ADMISSION_G3_STATE;
+typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; KEVENT JobEvent; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; APPLE_AGX_G3_PRIVATE_POOL PrivatePool; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence,LastCompletedFence,PrivateCompletionFence; ULONGLONG UnpublishedGroups[32]; ULONGLONG Leaf64KPtes[32]; ULONGLONG SystemGroups[8]; ADMISSION_G3_SYSTEM_SHAPE SystemShapes[ADMISSION_G3_SYSTEM_SHAPE_COUNT]; ULONG SystemShapesGeneration; ADMISSION_G3_UPLOAD_TRACE UploadTrace[ADMISSION_G3_UPLOAD_TRACE_COUNT]; ULONG UploadTraceNext,UploadVerifyChecks,UploadVerifyMismatch,UploadVerifyUnmapped; ADMISSION_G3_UPLOAD_TRACE UploadFirstMismatch; ADMISSION_G3_LEAF_HISTORY LeafHistory[ADMISSION_G3_LEAF_RING]; ULONG LeafHistoryNext; ADMISSION_G3_ALLOC_TRACK AllocTrack[ADMISSION_G3_ALLOC_TRACK_COUNT]; ULONGLONG PrivateStats[16]; LONGLONG ProcessReceiptQpc; LONG ReserveMade,ReserveRefused,PresentArenasMade,PresentArenasRefused; } ADMISSION_G3_STATE;
 enum { ADMISSION_G3_PRIVATE_STAT_HIT, ADMISSION_G3_PRIVATE_STAT_MISS, ADMISSION_G3_PRIVATE_STAT_TRIM, ADMISSION_G3_PRIVATE_STAT_PRESSURE,
   ADMISSION_G3_PRIVATE_STAT_RELEASED, ADMISSION_G3_PRIVATE_STAT_MAPPED_PAGES, ADMISSION_G3_PRIVATE_STAT_UNMAPPED_PAGES,
   ADMISSION_G3_PRIVATE_STAT_CACHED_RELEASE, ADMISSION_G3_PRIVATE_STAT_CACHED_REAP, ADMISSION_G3_PRIVATE_STAT_RELEASE_QUEUED,
@@ -752,6 +754,7 @@ static void AdmissionRecordG4DrawSnapshot(ADMISSION_CONTEXT *a) {(void)a;}
 static void AdmissionRecordGpuvaG3UnpublishedGroups(ADMISSION_CONTEXT *a,const ULONGLONG *counts) {(void)a;(void)counts;}
 static void AdmissionRecordGpuvaG3Leaf64KPtes(ADMISSION_CONTEXT *a,const ULONGLONG *counts) {(void)a;(void)counts;}
 static void AdmissionRecordGpuvaG3SystemGroups(ADMISSION_CONTEXT *a,const ULONGLONG *counts) {(void)a;(void)counts;}
+static void AdmissionRecordGpuvaG3SystemShapes(ADMISSION_CONTEXT *a,const ADMISSION_G3_SYSTEM_SHAPE *shapes) {(void)a;(void)shapes;}
 static void AppleAgxSchedulerContextInitialize(ADMISSION_SCHEDULER_CONTEXT *c) {(void)c;}
 static void AdmissionPrepatchedInitialize(ADMISSION_PREPATCHED_RENDER *p) {(void)p;}
 static bool AdmissionPrepatchedActive(ADMISSION_PREPATCHED_RENDER *p) {(void)p;return false;}

@@ -1,12 +1,15 @@
 /* Real KMD DDI + graph + wire + broker; only OS memory/CPU and stage-2 I/O
  * are host models. Expectations are independent descriptor/ref-count facts. */
 static void *sys_no_nodes(void *p,unsigned long long n) {(void)p;(void)n;return NULL;}
+/* The hAllocation VidMm names in the next update (NULL: no allocation). */
+static void *sys_allocation;
 static NTSTATUS sys_update(ADMISSION_CONTEXT *a, ADMISSION_G3_PROCESS *p,
     void *table, UINT level, UINT start, UINT count, DXGK_PTE *ptes,
     UINT wide, UINT repeat) {
   DXGKARG_BUILDPAGINGBUFFER x={0};
   x.Operation=DXGK_OPERATION_UPDATE_PAGE_TABLE;
   x.UpdatePageTable.hProcess=p;
+  x.UpdatePageTable.hAllocation=sys_allocation;
   x.UpdatePageTable.PageTableAddress.CpuVirtual=table;
   x.UpdatePageTable.UpdateMode=DXGK_PAGETABLEUPDATE_CPU_VIRTUAL;
   x.UpdatePageTable.PageTableLevel=level;
@@ -55,12 +58,27 @@ static void r134_system_64k_cases(void) {
   a.Started=TRUE;a.GpuvaG3State=&state;state.Adapter=&a;
   ADMISSION_G3_PROCESS *p=sys_process(&a,0x10000,0);
   void *leaf=local_cpu+0x18000;
+  ADMISSION_ALLOCATION_HANDLE bo={0};
+  bo.Object.Magic=ADMISSION_ALLOCATION_MAGIC;
+  bo.Object.Description.Size=0x10000u; bo.Object.Description.CpuVisible=1u;
+  bo.Win32ClassId=2u; bo.Win32Flags=0x10101u;
+  sys_allocation=&bo;
   pte.Flags=1; pte.PageAddress=system_ipa>>12;
   expect_ok("R134 system 64K",sys_update(&a,p,leaf,0,1,1,&pte,1,0));
   assert(state.Leaf64KPtes[0]==1u && state.Leaf64KPtes[2]==0u);
   /* One 64K PTE: four published system groups. */
   assert(state.SystemGroups[4]==4u && state.SystemGroups[5]==0u &&
          state.SystemGroups[6]==0u);
+  /* M2 receipt: attributed to the update's allocation shape. */
+  assert(state.SystemShapes[0].Traits==(0x40000000u|1u) &&
+         state.SystemShapes[0].ClassId==2u &&
+         state.SystemShapes[0].Win32Flags==0x10101u &&
+         state.SystemShapes[0].SizeLog2==16u &&
+         state.SystemShapes[0].Groups[2]==4u &&
+         state.SystemShapes[0].Groups[0]==0u &&
+         state.SystemShapes[0].Groups[1]==0u &&
+         state.SystemShapes[0].Groups[3]==0u &&
+         state.SystemShapes[1].Traits==0u);
   for(UINT i=0;i<4;++i) {
     ULONGLONG va=0x10000ULL+(ULONGLONG)i*0x4000ULL;
     assert(AppleAgxGpuvaG3GraphContainsRangeAccess(&p->Graph,va,0x4000,true));
@@ -70,6 +88,12 @@ static void r134_system_64k_cases(void) {
   pte.PageAddress=(system_ipa+0x1000ULL)>>12;
   expect_ok("R134 misaligned system base",sys_update(&a,p,leaf,0,1,1,&pte,1,0));
   assert(!AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0x10000,0x10000));
+  /* Four unpublished 64K groups; the first one's VA and IPA are kept. */
+  assert(state.SystemShapes[0].Groups[3]==4u &&
+         state.SystemShapes[0].UnpublishedVa==0x10000ULL &&
+         state.SystemShapes[0].UnpublishedIpa==system_ipa+0x1000ULL);
+  /* A handle that is not an allocation has its own shape. */
+  sys_allocation=NULL;
   pte.PageAddress=system_ipa>>12;
   b.bad_subpage=system_ipa+0x4000ULL;
   expect_ok("R134 protected system frame",sys_update(&a,p,leaf,0,1,1,&pte,1,0));

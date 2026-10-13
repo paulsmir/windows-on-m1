@@ -1287,6 +1287,23 @@ void AdmissionRecordGpuvaG3Leaf64KPtes(
 void AdmissionRecordGpuvaG3SystemGroups(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_reads_(8) const ULONGLONG *Counts);
+/* M2 receipt Wom1G3SystemShapes: the system (segment-0) 16 KiB groups of
+ * valid leaf updates per allocation shape, attributed through
+ * DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE.hAllocation. Traits: 1 CpuVisible,
+ * 2 Presentation, 4 WrittenPrimary, 8 handle is not an allocation,
+ * 0x40000000 slot in use, 0x80000000 overflow slot (every later shape).
+ * Groups: [0] 4 KiB published, [1] 4 KiB unpublished (incomplete or
+ * refused), [2] 64 KiB published, [3] 64 KiB unpublished. */
+#define ADMISSION_G3_SYSTEM_SHAPE_COUNT 16u
+typedef struct _ADMISSION_G3_SYSTEM_SHAPE {
+  ULONG ClassId, Win32Flags, Traits, SizeLog2;
+  ULONGLONG Groups[4];
+  ULONGLONG UnpublishedVa, UnpublishedIpa;
+} ADMISSION_G3_SYSTEM_SHAPE;
+void AdmissionRecordGpuvaG3SystemShapes(
+    _In_opt_ ADMISSION_CONTEXT *Context,
+    _In_reads_(ADMISSION_G3_SYSTEM_SHAPE_COUNT)
+        const ADMISSION_G3_SYSTEM_SHAPE *Shapes);
 BOOLEAN AdmissionGpuvaG3DeclarationReady(_In_ const ADMISSION_CONTEXT *Context);
 _IRQL_requires_(PASSIVE_LEVEL)
 NTSTATUS AdmissionPagingReceiptsStart(_In_ ADMISSION_CONTEXT *Context);

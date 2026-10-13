@@ -2017,7 +2017,8 @@ enum {
   AdmissionPagingReceiptUnpublished = 4u,
   AdmissionPagingReceiptWait = 8u,
   AdmissionPagingReceiptLeaf64K = 16u,
-  AdmissionPagingReceiptSystemGroups = 32u
+  AdmissionPagingReceiptSystemGroups = 32u,
+  AdmissionPagingReceiptSystemShapes = 64u
 };
 typedef struct _ADMISSION_PAGING_RECEIPTS {
   KSPIN_LOCK Lock;
@@ -2030,6 +2031,7 @@ typedef struct _ADMISSION_PAGING_RECEIPTS {
   ULONGLONG Unpublished[32];
   ULONGLONG Leaf64K[32];
   ULONGLONG SystemGroups[8];
+  ADMISSION_G3_SYSTEM_SHAPE SystemShapes[ADMISSION_G3_SYSTEM_SHAPE_COUNT];
 } ADMISSION_PAGING_RECEIPTS;
 
 static IO_WORKITEM_ROUTINE AdmissionPagingReceiptWorker;
@@ -2053,6 +2055,8 @@ static void AdmissionPagingReceiptStage(ADMISSION_CONTEXT *Context,
       RtlCopyMemory(receipts->Leaf64K, Data, sizeof(receipts->Leaf64K));
     else if (Kind == AdmissionPagingReceiptSystemGroups)
       RtlCopyMemory(receipts->SystemGroups, Data, sizeof(receipts->SystemGroups));
+    else if (Kind == AdmissionPagingReceiptSystemShapes)
+      RtlCopyMemory(receipts->SystemShapes, Data, sizeof(receipts->SystemShapes));
     receipts->Dirty |= Kind;
     if (InterlockedCompareExchange(&receipts->Queued, 1, 0) == 0) {
       KeClearEvent(&receipts->Idle);
@@ -2088,6 +2092,7 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
     ADMISSION_G3_FLUSH_RECEIPT flush;
     ADMISSION_G3_PAGING_FAILURE failure;
     ULONGLONG unpublished[32], leaf64k[32], groups[8];
+    ADMISSION_G3_SYSTEM_SHAPE shapes[ADMISSION_G3_SYSTEM_SHAPE_COUNT];
     ADMISSION_G3_PAGING_WAIT_RECEIPT wait;
     ULONG dirty;
     KIRQL oldIrql;
@@ -2099,6 +2104,7 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
     RtlCopyMemory(unpublished, receipts->Unpublished, sizeof(unpublished));
     RtlCopyMemory(leaf64k, receipts->Leaf64K, sizeof(leaf64k));
     RtlCopyMemory(groups, receipts->SystemGroups, sizeof(groups));
+    RtlCopyMemory(shapes, receipts->SystemShapes, sizeof(shapes));
     if (dirty == 0u) {
       /* Cleared under the lock that Stage sets Dirty under: no lost wakeup. */
       InterlockedExchange(&receipts->Queued, 0);
@@ -2123,6 +2129,10 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
     if (dirty & AdmissionPagingReceiptSystemGroups)
       AdmissionPagingReceiptWrite(context, L"Wom1G3SystemGroups",
                                   groups, sizeof(groups), TRUE);
+    if (dirty & AdmissionPagingReceiptSystemShapes)
+      /* Flushed: EXP1242 needs it after a TDR bugcheck. */
+      AdmissionPagingReceiptWrite(context, L"Wom1G3SystemShapes",
+                                  shapes, sizeof(shapes), TRUE);
     if ((dirty & AdmissionPagingReceiptWait) &&
         InterlockedExchange(&context->G3PagingWaitDirty, 0) != 0) {
       RtlCopyMemory(&wait, &context->G3PagingWait, sizeof(wait));
@@ -2508,6 +2518,15 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3SystemGroups(
     return;
   AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptSystemGroups,
                               Counts);
+}
+
+_Use_decl_annotations_ void AdmissionRecordGpuvaG3SystemShapes(
+    ADMISSION_CONTEXT *Context, const ADMISSION_G3_SYSTEM_SHAPE *Shapes) {
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      Shapes == NULL)
+    return;
+  AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptSystemShapes,
+                              Shapes);
 }
 #endif
 

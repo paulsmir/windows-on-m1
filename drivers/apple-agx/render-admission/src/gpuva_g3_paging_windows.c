@@ -344,6 +344,60 @@ static VOID AdmissionG3CountLeaf64K(ADMISSION_G3_STATE *state,
   }
 }
 
+/* M2 receipt: attribute one system 16 KiB group outcome to the shape of the
+ * allocation VidMm named in the leaf update (receipt only). */
+static VOID AdmissionG3NoteSystemShape(ADMISSION_G3_STATE *state,
+    ULONGLONG allocation, BOOLEAN use64k, BOOLEAN published,
+    ULONGLONG va, ULONGLONG ipa) {
+  const ADMISSION_ALLOCATION_HANDLE *handle =
+      (const ADMISSION_ALLOCATION_HANDLE *)(ULONG_PTR)allocation;
+  ADMISSION_G3_SYSTEM_SHAPE *slot = NULL;
+  ULONG class_id = 0u, win32_flags = 0u, traits = 8u, size_log2 = 0u, k;
+  ULONGLONG *groups;
+  /* hAllocation is the KMD's own allocation pointer (DXGK_ALLOCATIONINFO.
+   * hAllocation); anything else is never dereferenced. */
+  if (handle != NULL &&
+      (allocation & (ULONGLONG)(sizeof(ULONG_PTR) - 1u)) == 0ULL &&
+      handle->Object.Magic == ADMISSION_ALLOCATION_MAGIC) {
+    ULONGLONG size = handle->Object.Description.Size;
+    class_id = handle->Win32ClassId;
+    win32_flags = handle->Win32Flags;
+    traits = (handle->Object.Description.CpuVisible ? 1u : 0u) |
+        (handle->Presentation ? 2u : 0u) | (handle->WrittenPrimary ? 4u : 0u);
+    while (size_log2 < 63u && (1ULL << size_log2) < size) ++size_log2;
+  }
+  traits |= 0x40000000u;
+  for (k = 0u; k < ADMISSION_G3_SYSTEM_SHAPE_COUNT; ++k) {
+    ADMISSION_G3_SYSTEM_SHAPE *s = &state->SystemShapes[k];
+    if (s->Traits == 0u ||
+        (s->Traits == traits && s->ClassId == class_id &&
+         s->Win32Flags == win32_flags && s->SizeLog2 == size_log2) ||
+        (k + 1u == ADMISSION_G3_SYSTEM_SHAPE_COUNT &&
+         (s->Traits & 0x80000000u))) {
+      slot = s;
+      break;
+    }
+  }
+  if (slot == NULL) {
+    /* The last slot becomes the overflow bucket for every later shape. */
+    slot = &state->SystemShapes[ADMISSION_G3_SYSTEM_SHAPE_COUNT - 1u];
+    slot->Traits = 0x80000000u | 0x40000000u;
+    slot->ClassId = slot->Win32Flags = slot->SizeLog2 = 0u;
+  } else if (slot->Traits == 0u) {
+    slot->Traits = traits;
+    slot->ClassId = class_id;
+    slot->Win32Flags = win32_flags;
+    slot->SizeLog2 = size_log2;
+  }
+  groups = &slot->Groups[(use64k ? 2u : 0u) + (published ? 0u : 1u)];
+  if (*groups != MAXULONGLONG) ++*groups;
+  if (!published && slot->UnpublishedVa == 0ULL) {
+    slot->UnpublishedVa = va;
+    slot->UnpublishedIpa = ipa;
+  }
+  ++state->SystemShapesGeneration;
+}
+
 static NTSTATUS AdmissionG3UpdateLeaf(
     ADMISSION_G3_PROCESS *process, ULONGLONG table_ipa,
     const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update,
@@ -526,6 +580,10 @@ static NTSTATUS AdmissionG3UpdateLeaf(
           (update->Flags.Use64KBPages ? 4u : 0u) +
           (complete ? 0u : refused ? 2u : 1u)];
       if (*tally != MAXULONGLONG) ++*tally;
+      AdmissionG3NoteSystemShape(process->State, group[0].Allocation,
+          update->Flags.Use64KBPages ? TRUE : FALSE, complete,
+          update->FirstPteVirtualAddress - (ULONGLONG)first * 0x1000ULL +
+              (ULONGLONG)(first_group + i) * 0x4000ULL, ipa);
     }
     if (!complete && flags && segment < 32u &&
         process->State->UnpublishedGroups[segment] != MAXULONGLONG)
@@ -1082,6 +1140,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
   ULONGLONG unpublished_before[32], unpublished_after[32];
   ULONGLONG leaf64k_before[32], leaf64k_after[32];
   ULONGLONG groups_before[8], groups_after[8];
+  ULONG shapes_before;
   BOOLEAN unpublished_changed = FALSE, leaf64k_changed = FALSE,
           groups_changed = FALSE;
   ADMISSION_SCANOUT_MEMORY_VIEW view;
@@ -1300,6 +1359,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
                 sizeof(unpublished_before));
   RtlCopyMemory(leaf64k_before, state->Leaf64KPtes, sizeof(leaf64k_before));
   RtlCopyMemory(groups_before, state->SystemGroups, sizeof(groups_before));
+  shapes_before = state->SystemShapesGeneration;
   if (process == NULL || process->Poisoned || process->Graph.Uncertain) {
     status = STATUS_INVALID_DEVICE_STATE;
     ExReleaseFastMutex(&state->Lock);
@@ -1426,6 +1486,9 @@ PagingDone:
   }
   if (process != NULL && !NT_SUCCESS(status) &&
       process->Graph.Uncertain) ADMISSION_G3_POISON(process,2u);
+  /* Staged under the state lock: the receipt copies the slots itself. */
+  if (state->SystemShapesGeneration != shapes_before)
+    AdmissionRecordGpuvaG3SystemShapes(adapter, state->SystemShapes);
   ExReleaseFastMutex(&state->Lock);
   if (unpublished_changed)
     AdmissionRecordGpuvaG3UnpublishedGroups(adapter, unpublished_after);
