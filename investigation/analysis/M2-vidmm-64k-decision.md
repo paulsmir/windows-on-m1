@@ -45,6 +45,9 @@ page-size hints refused for Mesa class allocations (R105 PageMode).
      non-aperture CPU-visible segment (0x84ab8: flags & 0x6004 without 0x1001 -- our local
      segment 2) unless a section/backing pointer is supplied, or when allocation flag bit 21
      is set.
+     Bit 21 is set (0x889e0) from bit 12 of the incoming WDDM2 flags, which
+     DXGK_ALLOCATIONINFOFLAGS_WDDM2_0 names Reserved02 ("repurposed LinkMirrored"), not
+     AccessedPhysically (bit 15); this KMD never sets it.
 4. Allocation alignment is validated as a power of two ("Allocation alignment (%u) must be power
    of two", 0xba9b4) and rounded to the page boundary (0x88984): this VidMm reads the union as
    `Alignment` on these paths.
