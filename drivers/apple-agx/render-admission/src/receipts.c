@@ -2112,8 +2112,9 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
       AdmissionPagingReceiptWrite(context, L"Wom1G3UnpublishedGroups",
                                   unpublished, sizeof(unpublished), TRUE);
     if (dirty & AdmissionPagingReceiptLeaf64K)
+      /* Flushed: EXP1239 needs it after a GPU fault/bugcheck. */
       AdmissionPagingReceiptWrite(context, L"Wom1G3Leaf64KPtes",
-                                  leaf64k, sizeof(leaf64k), FALSE);
+                                  leaf64k, sizeof(leaf64k), TRUE);
     if ((dirty & AdmissionPagingReceiptWait) &&
         InterlockedExchange(&context->G3PagingWaitDirty, 0) != 0) {
       RtlCopyMemory(&wait, &context->G3PagingWait, sizeof(wait));
