@@ -15,7 +15,6 @@
  * write-combined MDL mapping is the CPU view. Pages are zeroed (they reach
  * user mode through CPU-visible allocations). Without a window or pages the
  * adapter runs on two segments. */
-#define ADMISSION_MEMORY_POOL_BYTES 0x40000000ULL
 #define ADMISSION_MEMORY_POOL_GPU_VA 0x1700000000ULL
 #define ADMISSION_MEMORY_POOL_CHUNK 0x10000ULL
 /* One MAP_APPEND covers at most 16 MiB: the hypervisor validates every page
@@ -24,6 +23,40 @@
 
 C_ASSERT(sizeof(PFN_NUMBER) == sizeof(unsigned long long));
 C_ASSERT(ADMISSION_MEMORY_POOL_CHUNK % AGX_POOL_WINDOW_PAGE == 0ULL);
+
+/* The RAM Windows manages (MmGetPhysicalMemoryRangesEx2: base/length pairs,
+ * a zero pair ends the block, the caller frees it); 0 when unknown. */
+static ULONGLONG AdmissionPoolRamBytes(VOID) {
+  PPHYSICAL_MEMORY_RANGE ranges = MmGetPhysicalMemoryRangesEx2(NULL, 0u);
+  ULONGLONG total = 0ULL;
+  ULONG i;
+  if (ranges == NULL) return 0ULL;
+  for (i = 0u; ranges[i].BaseAddress.QuadPart != 0 ||
+               ranges[i].NumberOfBytes.QuadPart != 0; ++i)
+    total += (ULONGLONG)ranges[i].NumberOfBytes.QuadPart;
+  ExFreePool(ranges);
+  return total;
+}
+
+/* Optional DWORD AgxPoolMegabytes under the device's Device Parameters. */
+static ULONG AdmissionPoolOverrideMegabytes(ADMISSION_CONTEXT *Context) {
+  ULONG buffer[(sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG) + 3u) / 4u];
+  PKEY_VALUE_PARTIAL_INFORMATION info = (PKEY_VALUE_PARTIAL_INFORMATION)buffer;
+  UNICODE_STRING name;
+  HANDLE key;
+  ULONG length = 0u, value = 0u;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return 0u;
+  RtlInitUnicodeString(&name, L"AgxPoolMegabytes");
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 buffer, sizeof(buffer), &length)) &&
+      info->Type == REG_DWORD && info->DataLength == sizeof(ULONG))
+    RtlCopyMemory(&value, info->Data, sizeof(value));
+  ZwClose(key);
+  return value;
+}
 
 static volatile UCHAR *AdmissionPoolWindowRegister(ADMISSION_CONTEXT *Context,
                                                    ULONG Offset) {
@@ -75,7 +108,7 @@ static BOOLEAN AdmissionPoolWindowOpen(ADMISSION_CONTEXT *Context,
   Window->SkipBytes = base;
   Window->RequestedBytes = capacity;
   if (base == 0ULL || (base & (ADMISSION_MEMORY_POOL_CHUNK - 1ULL)) ||
-      capacity < ADMISSION_MEMORY_POOL_BYTES ||
+      capacity < ADMISSION_POOL_MIN_BYTES ||
       base > ADMISSION_HVC_PHYSICAL_LIMIT - capacity)
     return FALSE;
   if (AdmissionPoolWindowRead64(Context, AGX_POOL_WINDOW_REG_MAPPED) != 0ULL) {
@@ -89,19 +122,19 @@ static BOOLEAN AdmissionPoolWindowOpen(ADMISSION_CONTEXT *Context,
   return TRUE;
 }
 
-static PMDL AdmissionPoolAllocate(ULONGLONG SkipBytes,
+static PMDL AdmissionPoolAllocate(ULONGLONG Bytes, ULONGLONG SkipBytes,
                                   ADMISSION_POOL_ATTEMPT *Attempt) {
   PHYSICAL_ADDRESS low, high, skip;
   LARGE_INTEGER frequency, start, end;
   PMDL mdl;
   Attempt->SkipBytes = SkipBytes;
-  Attempt->RequestedBytes = ADMISSION_MEMORY_POOL_BYTES;
+  Attempt->RequestedBytes = Bytes;
   low.QuadPart = 0;
   high.QuadPart = (LONGLONG)(ADMISSION_HVC_PHYSICAL_LIMIT - 1ULL);
   skip.QuadPart = (LONGLONG)SkipBytes;
   start = KeQueryPerformanceCounter(&frequency);
   mdl = MmAllocatePagesForMdlEx(low, high, skip,
-      (SIZE_T)ADMISSION_MEMORY_POOL_BYTES, MmWriteCombined,
+      (SIZE_T)Bytes, MmWriteCombined,
       MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS | MM_ALLOCATE_FULLY_REQUIRED);
   end = KeQueryPerformanceCounter(NULL);
   if (frequency.QuadPart > 0) {
@@ -117,7 +150,7 @@ static PMDL AdmissionPoolAllocate(ULONGLONG SkipBytes,
       (const unsigned long long *)MmGetMdlPfnArray(mdl),
       MmGetMdlByteCount(mdl) / PAGE_SIZE, Attempt);
   Attempt->Status =
-      MmGetMdlByteCount(mdl) >= ADMISSION_MEMORY_POOL_BYTES ? 1u : 3u;
+      MmGetMdlByteCount(mdl) >= Bytes ? 1u : 3u;
   /* Every run must start on a 64 KiB boundary (64 KB PTEs, window pages)
    * and lie below the HVC limit; one block is not aligned by contract. */
   if (Attempt->Status != 1u ||
@@ -135,6 +168,7 @@ static PMDL AdmissionPoolAllocate(ULONGLONG SkipBytes,
 /* Maps the MDL's physical runs, in order, from the window base. On failure
  * the caller's release unmaps whatever was mapped. */
 static BOOLEAN AdmissionPoolWindowMap(ADMISSION_CONTEXT *Context, PMDL Mdl,
+                                      ULONGLONG Bytes,
                                       ADMISSION_POOL_ATTEMPT *Window) {
   const PFN_NUMBER *frames = MmGetMdlPfnArray(Mdl);
   ULONGLONG count = MmGetMdlByteCount(Mdl) / PAGE_SIZE, i = 0ULL;
@@ -160,7 +194,7 @@ static BOOLEAN AdmissionPoolWindowMap(ADMISSION_CONTEXT *Context, PMDL Mdl,
   Window->ObtainedBytes =
       AdmissionPoolWindowRead64(Context, AGX_POOL_WINDOW_REG_MAPPED);
   if (Window->Misaligned == AgxPoolWindowOk &&
-      Window->ObtainedBytes == ADMISSION_MEMORY_POOL_BYTES) {
+      Window->ObtainedBytes == Bytes) {
     Window->Status = ADMISSION_POOL_WINDOW_MAPPED;
     return TRUE;
   }
@@ -193,6 +227,9 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolStart(ADMISSION_CONTEXT *Context)
   ADMISSION_POOL_PROBE receipt;
   ADMISSION_POOL_ATTEMPT *window =
       &receipt.Attempts[ADMISSION_POOL_ATTEMPT_WINDOW];
+  ADMISSION_POOL_ATTEMPT *policy =
+      &receipt.Attempts[ADMISSION_POOL_ATTEMPT_POLICY];
+  ULONGLONG bytes;
   PMDL mdl;
   if (Context == NULL || Context->PoolMdl != NULL ||
       KeGetCurrentIrql() != PASSIVE_LEVEL ||
@@ -201,8 +238,20 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolStart(ADMISSION_CONTEXT *Context)
   RtlZeroMemory(&receipt, sizeof(receipt));
   receipt.Version = ADMISSION_POOL_PROBE_VERSION;
   receipt.Bytes = sizeof(receipt);
-  receipt.Count = ADMISSION_POOL_ATTEMPT_WINDOW + 1u;
+  receipt.Count = ADMISSION_POOL_ATTEMPT_POLICY + 1u;
   if (!AdmissionPoolWindowOpen(Context, window)) {
+    AdmissionRecordM2PoolProbe(Context, &receipt);
+    return;
+  }
+  /* M2-f2c-3: size the pool for this machine (render_pool_probe.h). */
+  policy->ObtainedBytes = AdmissionPoolRamBytes();
+  policy->SkipBytes = AdmissionPoolOverrideMegabytes(Context);
+  bytes = AdmissionPoolPolicyBytes(policy->ObtainedBytes,
+                                   window->RequestedBytes,
+                                   (unsigned int)policy->SkipBytes);
+  policy->RequestedBytes = bytes;
+  policy->Status = bytes != 0ULL ? 1u : 2u;
+  if (bytes == 0ULL) {
     AdmissionRecordM2PoolProbe(Context, &receipt);
     return;
   }
@@ -210,14 +259,14 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolStart(ADMISSION_CONTEXT *Context)
    * the 64 KiB-block fallback runs on a boot where Windows would grant one
    * block. Production builds never define it. */
 #if !defined(ADMISSION_POOL_DIAG_CHUNKS_ONLY)
-  mdl = AdmissionPoolAllocate(0ULL,
+  mdl = AdmissionPoolAllocate(bytes, 0ULL,
                               &receipt.Attempts[ADMISSION_POOL_ATTEMPT_BLOCK]);
 #else
   mdl = NULL;
 #endif
   if (mdl == NULL)
     mdl = AdmissionPoolAllocate(
-        ADMISSION_MEMORY_POOL_CHUNK,
+        bytes, ADMISSION_MEMORY_POOL_CHUNK,
         &receipt.Attempts[ADMISSION_POOL_ATTEMPT_CHUNKS]);
   if (mdl == NULL) {
     AdmissionRecordM2PoolProbe(Context, &receipt);
@@ -226,7 +275,7 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolStart(ADMISSION_CONTEXT *Context)
   Context->PoolMdl = mdl;
   /* From here the pages may be aliased: only the release path frees them. */
   Context->PoolIpa = window->SkipBytes;
-  if (!AdmissionPoolWindowMap(Context, mdl, window)) {
+  if (!AdmissionPoolWindowMap(Context, mdl, bytes, window)) {
     AdmissionMemoryPoolRelease(Context);
     AdmissionRecordM2PoolProbe(Context, &receipt);
     return;
@@ -239,7 +288,7 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolStart(ADMISSION_CONTEXT *Context)
     AdmissionRecordM2PoolProbe(Context, &receipt);
     return;
   }
-  Context->PoolBytes = ADMISSION_MEMORY_POOL_BYTES;
+  Context->PoolBytes = bytes;
   if (AppleAgxPhysicalTopologyAddPool(&Context->Memory.Topology,
           ADMISSION_MEMORY_POOL_GPU_VA, Context->PoolBytes) !=
       AppleAgxPhysicalTopologyOk) {

@@ -39,3 +39,21 @@ void AdmissionPoolAnalyzeFrames(const unsigned long long *Frames,
     }
   }
 }
+
+unsigned long long AdmissionPoolPolicyBytes(unsigned long long RamBytes,
+                                            unsigned long long WindowBytes,
+                                            unsigned int OverrideMegabytes) {
+  unsigned long long maximum = WindowBytes < ADMISSION_POOL_MAX_BYTES
+                                   ? WindowBytes : ADMISSION_POOL_MAX_BYTES;
+  unsigned long long bytes;
+  maximum &= ~(ADMISSION_POOL_OVERRIDE_STEP - 1ULL);
+  if (maximum < ADMISSION_POOL_MIN_BYTES) return 0ULL;
+  if (OverrideMegabytes != 0u)
+    bytes = ((unsigned long long)OverrideMegabytes << 20) &
+            ~(ADMISSION_POOL_OVERRIDE_STEP - 1ULL);
+  else
+    bytes = (RamBytes / 4ULL) & ~(ADMISSION_POOL_STEP - 1ULL);
+  if (bytes < ADMISSION_POOL_MIN_BYTES) bytes = ADMISSION_POOL_MIN_BYTES;
+  if (bytes > maximum) bytes = maximum;
+  return bytes;
+}
