@@ -1,6 +1,28 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-12 08:10Z (read this first)
+## Current as of 2026-10-13 12:55Z (read this first)
+
+Installed: PACKAGE1238 (KMD build 30f9e034: M2-a/M2-b receipt/M2-c step 1;
+ICD out56 73cbdc6d without the GDI ring; UMD32 out4; INF Supports64KBPages;
+30.0.1237.0) on m1n1 4da6528f (M2-d broker index) + M1 FD 4d382bfa,
+full-owner from the integration worktree.
+Proven:
+- G2 complete (EXP1236-B, EXP1238): CS 1.6 standard benchmark fullscreen
+  through the ICD's DXGI flip presenter, 47.4 fps, no ring compiled in
+  (df09806b + 92f83041); windowed GL 59.6 fps PrintWindow MATCH.
+- M2-d (EXP1236): m1n1 broker backings indexed by PA/IPA, 2 GiB system
+  pages; REGISTER/REVOKE_BACKING 12.4/10.4 -> 3.5/3.3 us.
+- M2-c step 1 (EXP1237): Mesa class BOs without AccessedPhysically admitted.
+Running: EXP1239 (M2-c step 2: CPU-visible class BOs aperture-only = system
+memory; expected first Wom1G3Leaf64KPtes > 0). If 64 KB pages do not come
+(Leaf64KPtes 0 + GPU fault/0x116, EXP1026 class), decode dxgmms2's allocation
+bit 21 / adapter cap bit 14 exclusions (M2-vidmm-64k-decision.md).
+Next after EXP1239: non-CPU-visible GPU allocations with the aperture in
+their set, aperture/local sizing, then local reserve shrink (M2-e); G2
+performance follow-up: present cost (fence wait ~4 ms + copy) -- render into
+the swap chain buffer / GPU-side wait.
+
+## Current as of 2026-10-12 08:10Z
 
 Installed: PACKAGE1235 (KMD/ARM64 UMD build eb951f1d = 7eb593d9 + M2-a
 04bea5f5 + Wom1G3Leaf64KPtes receipt 5e76de65; INF with
