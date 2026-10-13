@@ -88,6 +88,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment5(
    * VIDMM_GLOBAL::Rotate on the first CPU-visible lock of this segment. */
   output->SegmentDescriptors[1].Flags.PopulatedFromSystemMemory = 0u;
   output->SegmentDescriptors[1].Flags.PopulatedByReservedDDRByFirmware = 1u;
+  /* M2-f2: segment 3 is Windows memory this driver allocated at start, so it
+   * is PopulatedFromSystemMemory; the CPU sees it at the block's address. */
+  if (Context->Memory.Topology.SegmentCount == 3u &&
+      Context->Memory.Topology.Pool.Id == 3u) {
+    ADMISSION_SCANOUT_MEMORY_VIEW pool;
+    if (!AdmissionMemoryPoolView(Context, &pool))
+      return STATUS_INVALID_DEVICE_STATE;
+    AdmissionDescribeSegment5(&Context->Memory.Topology.Pool,
+                              &output->SegmentDescriptors[2]);
+    output->SegmentDescriptors[2].CpuTranslatedAddress.QuadPart =
+        (LONGLONG)pool.GuestIpaAddress;
+  }
 #endif
   return STATUS_SUCCESS;
 }
@@ -151,6 +163,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment4(
   local->CpuTranslatedAddress.QuadPart = (LONGLONG)cpuTranslated;
   local->Flags.PopulatedFromSystemMemory = 0u;
   local->Flags.PopulatedByReservedDDRByFirmware = 1u;
+  if (Context->Memory.Topology.SegmentCount == 3u &&
+      Context->Memory.Topology.Pool.Id == 3u) {
+    DXGK_SEGMENTDESCRIPTOR4 *pool_descriptor = (DXGK_SEGMENTDESCRIPTOR4 *)(
+        (PUCHAR)output->pSegmentDescriptor +
+        2u * output->SegmentDescriptorStride);
+    ADMISSION_SCANOUT_MEMORY_VIEW pool;
+    if (!AdmissionMemoryPoolView(Context, &pool))
+      return STATUS_INVALID_DEVICE_STATE;
+    AdmissionDescribeSegment(&Context->Memory.Topology.Pool, pool_descriptor);
+    pool_descriptor->CpuTranslatedAddress.QuadPart =
+        (LONGLONG)pool.GuestIpaAddress;
+  }
 #endif
   output->NbSegment = Context->Memory.Topology.SegmentCount;
   output->PagingBufferSegmentId =

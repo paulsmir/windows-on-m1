@@ -48,3 +48,39 @@ APPLE_AGX_PHYSICAL_TOPOLOGY_RESULT AppleAgxPhysicalTopologyDescribe(
   Topology->Local.PopulatedFromSystemMemory = APPLE_AGX_TRUE;
   return AppleAgxPhysicalTopologyOk;
 }
+
+static APPLE_AGX_BOOL AppleAgxPhysicalTopologyOverlaps(
+    const APPLE_AGX_PHYSICAL_SEGMENT *Segment, APPLE_AGX_U64 Base,
+    APPLE_AGX_U64 Size) {
+  return Segment->Size != 0ULL && Base < Segment->Base + Segment->Size &&
+                 Segment->Base < Base + Size
+             ? APPLE_AGX_TRUE
+             : APPLE_AGX_FALSE;
+}
+
+APPLE_AGX_PHYSICAL_TOPOLOGY_RESULT AppleAgxPhysicalTopologyAddPool(
+    APPLE_AGX_PHYSICAL_TOPOLOGY *Topology, APPLE_AGX_U64 PoolBase,
+    APPLE_AGX_U64 PoolSize) {
+  if (Topology == (APPLE_AGX_PHYSICAL_TOPOLOGY *)0 ||
+      Topology->SegmentCount != 2u || Topology->Pool.Id != 0u ||
+      PoolSize == 0ULL)
+    return AppleAgxPhysicalTopologyInvalidArgument;
+  if ((PoolBase & (APPLE_AGX_TOPOLOGY_PAGE_64K - 1ULL)) != 0ULL ||
+      (PoolSize & (APPLE_AGX_TOPOLOGY_PAGE_64K - 1ULL)) != 0ULL)
+    return AppleAgxPhysicalTopologyMisaligned;
+  if (PoolBase > APPLE_AGX_TOPOLOGY_U64_MAX - PoolSize)
+    return AppleAgxPhysicalTopologyOverflow;
+  if (AppleAgxPhysicalTopologyOverlaps(&Topology->Aperture, PoolBase,
+                                       PoolSize) ||
+      AppleAgxPhysicalTopologyOverlaps(&Topology->Local, PoolBase, PoolSize))
+    return AppleAgxPhysicalTopologyInvalidArgument;
+  Topology->Pool.Id = 3u;
+  Topology->Pool.Base = PoolBase;
+  Topology->Pool.Size = PoolSize;
+  Topology->Pool.CommitLimit = PoolSize;
+  Topology->Pool.Use64KPages = APPLE_AGX_TRUE;
+  Topology->Pool.CpuVisible = APPLE_AGX_TRUE;
+  Topology->Pool.PopulatedFromSystemMemory = APPLE_AGX_TRUE;
+  Topology->SegmentCount = 3u;
+  return AppleAgxPhysicalTopologyOk;
+}

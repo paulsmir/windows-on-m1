@@ -45,7 +45,9 @@ class G3CpuVisibleSegmentTests(unittest.TestCase):
     def test_both_segment_queries_publish_cpu_translation(self):
         source = (RENDER / "src/memory_windows.c").read_text()
         self.assertIn("AdmissionMemoryCpuVisibleLocalBase(", source)
-        self.assertEqual(source.count("CpuTranslatedAddress.QuadPart ="), 2)
+        # Local segment and (M2-f2) the KMD-populated pool, in both queries.
+        self.assertEqual(source.count("CpuTranslatedAddress.QuadPart ="), 4)
+        self.assertEqual(source.count("(LONGLONG)pool.GuestIpaAddress"), 2)
         self.assertIn("local.CpuVisible = APPLE_AGX_TRUE", source)
 
 

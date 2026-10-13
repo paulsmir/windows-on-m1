@@ -581,6 +581,11 @@ typedef struct _ADMISSION_CONTEXT {
   ADMISSION_OBJECT_ADAPTER ObjectAdapter;
   ADMISSION_MEMORY_CONTRACT Memory;
   PVOID MemoryRuntime;
+  /* M2-f2: segment-3 pool (Windows memory the KMD allocated at start). */
+  PMDL PoolMdl;
+  PVOID PoolCpu;
+  ULONGLONG PoolIpa;
+  ULONGLONG PoolBytes;
   PVOID PlatformRuntime;
   PVOID ScanoutRuntime;
   APPLE_AGX_SOFTWARE_APERTURE_ENTRY *ApertureEntries;
@@ -1301,9 +1306,13 @@ typedef struct _ADMISSION_G3_SYSTEM_SHAPE {
   ULONGLONG Groups[4];
   ULONGLONG UnpublishedVa, UnpublishedIpa;
 } ADMISSION_G3_SYSTEM_SHAPE;
-/* M2-f1: contiguous-pool probe at adapter start (receipt only). */
+/* M2-f2: segment-3 pool lifetime (pool_windows.c). */
 _IRQL_requires_(PASSIVE_LEVEL)
-VOID AdmissionProbeContiguousPool(_In_ ADMISSION_CONTEXT *Context);
+VOID AdmissionMemoryPoolStart(_Inout_ ADMISSION_CONTEXT *Context);
+_IRQL_requires_(PASSIVE_LEVEL)
+VOID AdmissionMemoryPoolStop(_Inout_opt_ ADMISSION_CONTEXT *Context);
+BOOLEAN AdmissionMemoryPoolView(_In_opt_ const ADMISSION_CONTEXT *Context,
+                                _Out_ ADMISSION_SCANOUT_MEMORY_VIEW *View);
 _IRQL_requires_(PASSIVE_LEVEL)
 void AdmissionRecordM2PoolProbe(_In_opt_ ADMISSION_CONTEXT *Context,
                                 _In_ const ADMISSION_POOL_PROBE *Probe);

@@ -156,7 +156,11 @@ _Use_decl_annotations_ BOOLEAN AdmissionGpuvaG3DeclarationReady(
                                model.LocalUse64KBPages ||
                                model.SysMem64KBPageSupported, 0u))
     return FALSE;
-  return context->Memory.Topology.SegmentCount == model.SegmentCount &&
+  /* M2-f2: an optional third segment is the KMD-populated pool. */
+  return (context->Memory.Topology.SegmentCount == model.SegmentCount ||
+          (context->Memory.Topology.SegmentCount == model.SegmentCount + 1u &&
+           context->Memory.Topology.Pool.Id == model.SegmentCount + 1u &&
+           context->Memory.Topology.Pool.Aperture == APPLE_AGX_FALSE)) &&
          context->Memory.Topology.Aperture.Id == model.ApertureSegmentId &&
          context->Memory.Topology.Local.Id == model.LocalSegmentId &&
          context->Memory.Topology.PagingBufferSegmentId ==
@@ -268,11 +272,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   if (!NT_SUCCESS(status))
     return status;
 
-#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  /* M2-f1 receipt: contiguous memory available to a driver-populated
-   * segment; everything it allocates is freed before the runtime starts. */
-  AdmissionProbeContiguousPool(context);
-#endif
   status = AdmissionMemoryRuntimeStart(context);
   AdmissionRecordStartStage(context, AdmissionStartMemory, status);
   if (!NT_SUCCESS(status)) {
@@ -488,6 +487,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
     (void)AdmissionInterruptStop(context);
     return status;
   }
+  /* M2-f2: after every fallible start step; without the block the adapter
+   * keeps two segments. */
+  AdmissionMemoryPoolStart(context);
 #endif
   context->DisplayActive = TRUE;
   context->SourceVisible = TRUE;
@@ -546,6 +548,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStopDevice(PVOID MiniportDeviceConte
   status = AdmissionMemoryRuntimeStop(context);
   if (!NT_SUCCESS(status))
     return status;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* VidMm no longer uses segment 3 once the memory runtime stopped. */
+  AdmissionMemoryPoolStop(context);
+#endif
   status = AdmissionInterruptStop(context);
   if (!NT_SUCCESS(status))
     return status;
@@ -600,6 +606,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRemoveDevice(PVOID MiniportDeviceCon
   if (context->MemoryRuntime != NULL &&
       !NT_SUCCESS(AdmissionMemoryRuntimeStop(context)))
     return STATUS_DEVICE_BUSY;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionMemoryPoolStop(context);
+#endif
   AdmissionRecordDevice(context->PhysicalDeviceObject, AdmissionReceiptRemove,
                         STATUS_SUCCESS);
   ExFreePoolWithTag(context, ADMISSION_POOL_TAG);
