@@ -118,6 +118,8 @@
     <ClCompile Include="src\interrupt.c" />
     <ClCompile Include="src\objects.c" />
     <ClCompile Include="src\render_memory.c" />
+    <ClCompile Include="src\render_pool_probe.c" />
+    <ClCompile Include="src\pool_probe_windows.c" />
     <ClCompile Include="src\memory_windows.c" />
     <ClCompile Include="src\render_allocation.c" />
     <ClCompile Include="src\allocation_windows.c" />

@@ -2913,3 +2913,19 @@ _Use_decl_annotations_ void AdmissionRecordPagingProfile(
               sizeof(Context->SubmitPath));
   ZwClose(key);
 }
+
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+_Use_decl_annotations_ void AdmissionRecordM2PoolProbe(
+    ADMISSION_CONTEXT *Context, const ADMISSION_POOL_PROBE *Probe) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      Probe == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, L"Wom1M2PoolProbe", Probe, sizeof(*Probe));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+#endif

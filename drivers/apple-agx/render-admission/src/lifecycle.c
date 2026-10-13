@@ -268,6 +268,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   if (!NT_SUCCESS(status))
     return status;
 
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* M2-f1 receipt: contiguous memory available to a driver-populated
+   * segment; everything it allocates is freed before the runtime starts. */
+  AdmissionProbeContiguousPool(context);
+#endif
   status = AdmissionMemoryRuntimeStart(context);
   AdmissionRecordStartStage(context, AdmissionStartMemory, status);
   if (!NT_SUCCESS(status)) {

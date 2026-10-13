@@ -16,6 +16,7 @@
 #include "render_objects.h"
 #include "render_memory.h"
 #include "render_allocation.h"
+#include "render_pool_probe.h"
 #include "render_hvc.h"
 #include "apple_agx_memory.h"
 #include "apple_agx_g3_private_failure.h"
@@ -1300,6 +1301,12 @@ typedef struct _ADMISSION_G3_SYSTEM_SHAPE {
   ULONGLONG Groups[4];
   ULONGLONG UnpublishedVa, UnpublishedIpa;
 } ADMISSION_G3_SYSTEM_SHAPE;
+/* M2-f1: contiguous-pool probe at adapter start (receipt only). */
+_IRQL_requires_(PASSIVE_LEVEL)
+VOID AdmissionProbeContiguousPool(_In_ ADMISSION_CONTEXT *Context);
+_IRQL_requires_(PASSIVE_LEVEL)
+void AdmissionRecordM2PoolProbe(_In_opt_ ADMISSION_CONTEXT *Context,
+                                _In_ const ADMISSION_POOL_PROBE *Probe);
 void AdmissionRecordGpuvaG3SystemShapes(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_reads_(ADMISSION_G3_SYSTEM_SHAPE_COUNT)
