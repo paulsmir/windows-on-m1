@@ -465,12 +465,19 @@ static NTSTATUS AdmissionCreateAllocationImpl(
     info->SupportedReadSegmentSet = ADMISSION_APERTURE_SEGMENT_SET;
     info->SupportedWriteSegmentSet = ADMISSION_APERTURE_SEGMENT_SET;
   }
-  /* EXP1027/EXP1028: a CPU-visible Mesa class allocation is a UMD direct
-   * buffer used by both the GPU and the CPU. It keeps the admitted EXP836
-   * shape (CPU-visible set, local preferred): dxgkrnl refuses a local-only
-   * CPU-visible class allocation (EXP1027: AllocateCb E_INVALIDARG). The local
-   * segment is 16 KiB-contiguous and fully UAT-mapped; EXP1026 showed aperture
-   * system backing hangs the GPU, so the preference is what places them. */
+  /* M2-c: a CPU-visible Mesa class allocation (a UMD direct buffer the CPU
+   * writes and the GPU reads) is system memory, as on any UMA GPU: the
+   * aperture segment id names system memory (GPU Segments). Without a
+   * CPU-visible local segment in its set and with a 64 KiB-aligned size,
+   * dxgmms2 backs it with 64 KB pages once the adapter opts in
+   * (investigation/analysis/M2-vidmm-64k-decision.md), which the KMD
+   * publishes as native 16 KiB UAT pages. EXP1026's hang was the 4 KiB
+   * backing this opt-in replaces; EXP1027 refused only local-only sets. */
+  if (classId != 0u && description->CpuVisible != 0u) {
+    info->PreferredSegment.SegmentId0 = ADMISSION_MEMORY_APERTURE_SEGMENT;
+    info->SupportedReadSegmentSet = ADMISSION_APERTURE_SEGMENT_SET;
+    info->SupportedWriteSegmentSet = ADMISSION_APERTURE_SEGMENT_SET;
+  }
 #endif
   info->EvictionSegmentSet = 0u;
   info->hAllocation = allocation;
