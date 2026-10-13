@@ -205,6 +205,8 @@ typedef struct { ADMISSION_PAGING_MARKER Header; APPLE_AGX_PHYSICAL_PAGING_PLAN 
 #define ADMISSION_PAGING_MAGIC 0x504d4152u
 #define ADMISSION_PAGING_VERSION 1u
 #define ADMISSION_PAGING_LOCAL_SEGMENT 2u
+#define ADMISSION_PAGING_POOL_SEGMENT 3u
+#define ADMISSION_PAGING_MEMORY_SEGMENT(segment) ((segment) == ADMISSION_PAGING_LOCAL_SEGMENT || (segment) == ADMISSION_PAGING_POOL_SEGMENT)
 #define ADMISSION_PAGING_LOCAL_RUN_MAX 0x400000u
 typedef union { struct { UINT Paging:1,Present:1,RedirectedPresent:1,
   NullRendering:1,Flip:1,FlipWithNoWait:1,ContextSwitch:1,Resubmission:1,

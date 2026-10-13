@@ -17,9 +17,9 @@ int AdmissionPagingFenceCanSubmit(unsigned int LastSubmitted,
 int AdmissionPagingLocalRun(const ADMISSION_PAGING_RECORD *Record) {
   return (Record->Kind == AdmissionPagingVirtualFill ||
           Record->Kind == AdmissionPagingVirtualTransfer) &&
-      Record->DestinationSegment == ADMISSION_PAGING_LOCAL_SEGMENT &&
+      ADMISSION_PAGING_MEMORY_SEGMENT(Record->DestinationSegment) &&
       (Record->Kind != AdmissionPagingVirtualTransfer ||
-       Record->SourceSegment == ADMISSION_PAGING_LOCAL_SEGMENT);
+       ADMISSION_PAGING_MEMORY_SEGMENT(Record->SourceSegment));
 }
 
 int AdmissionPagingRecordsValid(const ADMISSION_PAGING_RECORD *Records,
@@ -59,8 +59,8 @@ int AdmissionPagingRecordsValid(const ADMISSION_PAGING_RECORD *Records,
                         sizeof(Records[index].FenceValue) -
                             Records[index].PatternOffset :
                     Records[index].PatternOffset > 3u) ||
-               Records[index].DestinationSegment > 2u ||
-               Records[index].SourceSegment > 2u)
+               Records[index].DestinationSegment > ADMISSION_PAGING_POOL_SEGMENT ||
+               Records[index].SourceSegment > ADMISSION_PAGING_POOL_SEGMENT)
       return 0;
   }
   return 1;

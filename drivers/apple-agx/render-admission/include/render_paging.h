@@ -10,6 +10,11 @@
  * ADMISSION_PAGING_LOCAL_RUN_MAX bytes); any other segment is one 4 KiB
  * page per record. */
 #define ADMISSION_PAGING_LOCAL_SEGMENT 2u
+/* M2-f2: the KMD-populated pool is a second memory segment. */
+#define ADMISSION_PAGING_POOL_SEGMENT 3u
+#define ADMISSION_PAGING_MEMORY_SEGMENT(segment) \
+  ((segment) == ADMISSION_PAGING_LOCAL_SEGMENT || \
+   (segment) == ADMISSION_PAGING_POOL_SEGMENT)
 #define ADMISSION_PAGING_LOCAL_RUN_MAX 0x400000u
 
 enum {

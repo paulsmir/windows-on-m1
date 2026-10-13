@@ -138,5 +138,37 @@ static void paging_coalesce_cases(void) {
     assert(!AdmissionPagingRecordsValid(&bad,1,64,sizeof(ADMISSION_PAGING_MARKER)));
     assert(!NT_SUCCESS(AdmissionG3ExecuteVirtualPaging(&a,&bad)));
   }
+  /* M2-f2: 16 contiguous pool pages (segment 3, PTE flags 0x61) at VA
+   * 0x70000 = pool offset 0x40000. A fill is one record and the CPU executor
+   * writes it through the pool view, exactly in range. */
+  {
+    unsigned char *pool_cpu;
+    assert(posix_memalign((void **)&pool_cpu,0x4000,0x100000)==0);
+    memset(pool_cpu,0xee,0x100000);
+    replay_pool_cpu=pool_cpu; replay_pool_ipa=system_ipa+0x1000000ULL;
+    replay_pool_bytes=0x100000ULL;
+    for (i=0;i<16;++i) {ptes[i].Flags=0x61;ptes[i].PageAddress=(0x40000>>12)+i;}
+    expect_ok("pool map",sys_update(&a,paging,local_cpu+0x18000,0,112,16,ptes,0,0));
+    memset(&x,0,sizeof(x));
+    x.Operation=DXGK_OPERATION_VIRTUAL_FILL;
+    x.hSystemContext=cc.hContext;
+    x.FillVirtual.DestinationVirtualAddress=0x70000;
+    x.FillVirtual.FillSizeInBytes=0x10000;
+    x.FillVirtual.FillPattern=0x5a5a5a5a;
+    count=coalesce_build(&a,&x,dma,private_data);
+    assert(count==1 && records[0].DestinationSegment==ADMISSION_MEMORY_POOL_SEGMENT &&
+           records[0].DestinationIpa==replay_pool_ipa+0x40000ULL && records[0].Bytes==0x10000u);
+    coalesce_run(&a,private_data,count);
+    for (i=0;i<0x10000u;++i) assert(pool_cpu[0x40000+i]==0x5a);
+    assert(pool_cpu[0x3ffff]==0xee && pool_cpu[0x50000]==0xee);
+    /* A pool record outside the pool is refused by the executor. */
+    {
+      ADMISSION_PAGING_RECORD bad=records[0];
+      bad.DestinationIpa=replay_pool_ipa+0x100000ULL-0x8000ULL;
+      assert(!NT_SUCCESS(AdmissionG3ExecuteVirtualPaging(&a,&bad)));
+    }
+    replay_pool_cpu=NULL; replay_pool_ipa=replay_pool_bytes=0;
+    free(pool_cpu);
+  }
   puts("paging coalesce: PASS");
 }

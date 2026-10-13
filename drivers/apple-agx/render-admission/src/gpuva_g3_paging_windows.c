@@ -865,10 +865,11 @@ static NTSTATUS AdmissionG3EncodeVirtualPaging(
     ExReleaseFastMutex(&state->Lock);
     if (!NT_SUCCESS(status)) return status;
     if (record.Kind == AdmissionPagingVirtualTransfer) {
+      /* VidMm's "local" is any memory segment: 2 and (M2-f2) 3. */
       BOOLEAN source_local =
-          record.SourceSegment == ADMISSION_MEMORY_LOCAL_SEGMENT;
+          ADMISSION_PAGING_MEMORY_SEGMENT(record.SourceSegment);
       BOOLEAN destination_local =
-          record.DestinationSegment == ADMISSION_MEMORY_LOCAL_SEGMENT;
+          ADMISSION_PAGING_MEMORY_SEGMENT(record.DestinationSegment);
       if ((args->TransferVirtual.TransferDirection ==
                DXGK_MEMORY_TRANSFER_LOCAL_TO_SYSTEM &&
            (!source_local || destination_local)) ||
@@ -904,14 +905,14 @@ static NTSTATUS AdmissionG3EncodeVirtualPaging(
         if (!NT_SUCCESS(AdmissionG3ResolveLogicalVa(process,
                 context->GpuvaG3RootIpa, dst + bytes, TRUE,
                 &next_ipa, &next_segment)) ||
-            next_segment != ADMISSION_MEMORY_LOCAL_SEGMENT ||
+            next_segment != record.DestinationSegment ||
             next_ipa != record.DestinationIpa + bytes)
           break;
         if (record.Kind == AdmissionPagingVirtualTransfer &&
             (!NT_SUCCESS(AdmissionG3ResolveLogicalVa(process,
                  context->GpuvaG3RootIpa, src + bytes, FALSE,
                  &next_ipa, &next_segment)) ||
-             next_segment != ADMISSION_MEMORY_LOCAL_SEGMENT ||
+             next_segment != record.SourceSegment ||
              next_ipa != record.SourceIpa + bytes))
           break;
         bytes += chunk;
@@ -952,6 +953,17 @@ static NTSTATUS AdmissionG3MapPagingIpa(
       return STATUS_INVALID_ADDRESS;
     *address = (PUCHAR)view->CpuAddress +
         (SIZE_T)(ipa - view->GuestIpaAddress);
+    return STATUS_SUCCESS;
+  }
+  if (segment == ADMISSION_MEMORY_POOL_SEGMENT) {
+    /* M2-f2: the pool is one contiguous block mapped write-combined. */
+    ADMISSION_SCANOUT_MEMORY_VIEW pool;
+    if (!AdmissionMemoryPoolView(adapter, &pool) || pool.CpuAddress == NULL ||
+        ipa < pool.GuestIpaAddress || bytes > pool.Bytes ||
+        ipa - pool.GuestIpaAddress > pool.Bytes - bytes)
+      return STATUS_INVALID_ADDRESS;
+    *address = (PUCHAR)pool.CpuAddress +
+        (SIZE_T)(ipa - pool.GuestIpaAddress);
     return STATUS_SUCCESS;
   }
   if ((segment != 0u && segment != ADMISSION_MEMORY_APERTURE_SEGMENT) ||
