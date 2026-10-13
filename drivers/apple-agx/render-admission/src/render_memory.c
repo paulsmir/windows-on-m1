@@ -283,6 +283,32 @@ APPLE_AGX_APERTURE_RESULT AdmissionMemoryPlanAperture64K(
       RunCapacity, RunCount);
 }
 
+/* M2-f2: a physical paging endpoint is either the local segment or the
+ * KMD-populated pool, each planned against its own base and size; the
+ * shared planner sees it as "the" memory segment and the plan is renamed. */
+static int AdmissionMemoryPagingSegment(
+    const ADMISSION_MEMORY_CONTRACT *Memory, APPLE_AGX_U32 SegmentId,
+    APPLE_AGX_U64 *Base, APPLE_AGX_U64 *Bytes) {
+  if (SegmentId == ADMISSION_MEMORY_LOCAL_SEGMENT) {
+    *Base = Memory->Topology.Local.Base;
+    *Bytes = Memory->LocalAllocationBytes;
+    return 1;
+  }
+  if (SegmentId == ADMISSION_MEMORY_POOL_SEGMENT &&
+      Memory->Topology.Pool.Id == ADMISSION_MEMORY_POOL_SEGMENT) {
+    *Base = Memory->Topology.Pool.Base;
+    *Bytes = Memory->Topology.Pool.Size;
+    return 1;
+  }
+  return 0;
+}
+
+static APPLE_AGX_U32 AdmissionMemoryPlannerSegment(APPLE_AGX_U32 SegmentId) {
+  return SegmentId == ADMISSION_MEMORY_POOL_SEGMENT
+             ? APPLE_AGX_PHYSICAL_PAGING_LOCAL_SEGMENT
+             : SegmentId;
+}
+
 APPLE_AGX_PHYSICAL_PAGING_RESULT AdmissionMemoryPlanTransfer(
     const ADMISSION_MEMORY_CONTRACT *Memory,
     APPLE_AGX_U32 SourceSegmentId, APPLE_AGX_U64 SourceAddress,
@@ -290,13 +316,24 @@ APPLE_AGX_PHYSICAL_PAGING_RESULT AdmissionMemoryPlanTransfer(
     APPLE_AGX_U64 DestinationAddress, APPLE_AGX_U64 TransferOffset,
     APPLE_AGX_U64 SystemOffset, APPLE_AGX_U64 Bytes,
     APPLE_AGX_PHYSICAL_PAGING_PLAN *Plan) {
+  APPLE_AGX_U32 memory_segment;
+  APPLE_AGX_U64 base, bytes;
+  APPLE_AGX_PHYSICAL_PAGING_RESULT result;
   if (Memory == ADMISSION_MEMORY_NULL ||
       Memory->Initialized != APPLE_AGX_TRUE)
     return AppleAgxPhysicalPagingInvalidArgument;
-  return AppleAgxPhysicalPagingPlanTransfer(
-      SourceSegmentId, SourceAddress, DestinationSegmentId,
-      DestinationAddress, Memory->Topology.Local.Base,
-      Memory->LocalAllocationBytes, TransferOffset, SystemOffset, Bytes, Plan);
+  /* Exactly one side is system memory (segment 0). */
+  if ((SourceSegmentId == 0u) == (DestinationSegmentId == 0u))
+    return AppleAgxPhysicalPagingUnsupportedEndpoint;
+  memory_segment = SourceSegmentId != 0u ? SourceSegmentId : DestinationSegmentId;
+  if (!AdmissionMemoryPagingSegment(Memory, memory_segment, &base, &bytes))
+    return AppleAgxPhysicalPagingUnsupportedEndpoint;
+  result = AppleAgxPhysicalPagingPlanTransfer(
+      AdmissionMemoryPlannerSegment(SourceSegmentId), SourceAddress,
+      AdmissionMemoryPlannerSegment(DestinationSegmentId), DestinationAddress,
+      base, bytes, TransferOffset, SystemOffset, Bytes, Plan);
+  if (result == AppleAgxPhysicalPagingOk) Plan->MemorySegmentId = memory_segment;
+  return result;
 }
 
 APPLE_AGX_PHYSICAL_PAGING_RESULT AdmissionMemoryPlanFill(
@@ -304,22 +341,34 @@ APPLE_AGX_PHYSICAL_PAGING_RESULT AdmissionMemoryPlanFill(
     APPLE_AGX_U32 DestinationSegmentId,
     APPLE_AGX_U64 DestinationAddress, APPLE_AGX_U64 Bytes,
     APPLE_AGX_U32 Pattern, APPLE_AGX_PHYSICAL_PAGING_PLAN *Plan) {
+  APPLE_AGX_U64 base, bytes;
+  APPLE_AGX_PHYSICAL_PAGING_RESULT result;
   if (Memory == ADMISSION_MEMORY_NULL ||
       Memory->Initialized != APPLE_AGX_TRUE)
     return AppleAgxPhysicalPagingInvalidArgument;
-  return AppleAgxPhysicalPagingPlanFill(
-      DestinationSegmentId, DestinationAddress,
-      Memory->Topology.Local.Base, Memory->LocalAllocationBytes, Bytes,
-      Pattern, Plan);
+  if (!AdmissionMemoryPagingSegment(Memory, DestinationSegmentId, &base, &bytes))
+    return AppleAgxPhysicalPagingUnsupportedEndpoint;
+  result = AppleAgxPhysicalPagingPlanFill(
+      AdmissionMemoryPlannerSegment(DestinationSegmentId), DestinationAddress,
+      base, bytes, Bytes, Pattern, Plan);
+  if (result == AppleAgxPhysicalPagingOk)
+    Plan->MemorySegmentId = DestinationSegmentId;
+  return result;
 }
 
 APPLE_AGX_PHYSICAL_PAGING_RESULT AdmissionMemoryPlanDiscard(
     const ADMISSION_MEMORY_CONTRACT *Memory, APPLE_AGX_U32 SegmentId,
     APPLE_AGX_U64 SegmentAddress, APPLE_AGX_PHYSICAL_PAGING_PLAN *Plan) {
+  APPLE_AGX_U64 base, bytes;
+  APPLE_AGX_PHYSICAL_PAGING_RESULT result;
   if (Memory == ADMISSION_MEMORY_NULL ||
       Memory->Initialized != APPLE_AGX_TRUE)
     return AppleAgxPhysicalPagingInvalidArgument;
-  return AppleAgxPhysicalPagingPlanDiscard(
-      SegmentId, SegmentAddress, Memory->Topology.Local.Base,
-      Memory->LocalAllocationBytes, Plan);
+  if (!AdmissionMemoryPagingSegment(Memory, SegmentId, &base, &bytes))
+    return AppleAgxPhysicalPagingUnsupportedEndpoint;
+  result = AppleAgxPhysicalPagingPlanDiscard(
+      AdmissionMemoryPlannerSegment(SegmentId), SegmentAddress, base, bytes,
+      Plan);
+  if (result == AppleAgxPhysicalPagingOk) Plan->MemorySegmentId = SegmentId;
+  return result;
 }

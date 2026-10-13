@@ -27,6 +27,10 @@ typedef struct _APPLE_AGX_PHYSICAL_PAGING_PLAN {
   APPLE_AGX_U64 SystemOffset;
   APPLE_AGX_U64 Bytes;
   APPLE_AGX_U32 FillPattern;
+  /* The memory segment LocalOffset is relative to (the planners name
+   * APPLE_AGX_PHYSICAL_PAGING_LOCAL_SEGMENT; a caller planning a second
+   * memory segment against its own base renames it). */
+  APPLE_AGX_U32 MemorySegmentId;
 } APPLE_AGX_PHYSICAL_PAGING_PLAN;
 
 APPLE_AGX_PHYSICAL_PAGING_RESULT AppleAgxPhysicalPagingPlanTransfer(

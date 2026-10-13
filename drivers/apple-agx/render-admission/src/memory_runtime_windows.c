@@ -1072,9 +1072,23 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeExecutePaging(
     systemBytes = MmGetMdlByteCount(mdl);
   }
   ExAcquireFastMutex(&runtime->PagingLock);
-  result = AppleAgxPhysicalPagingExecute(
-      &Record->Plan, (unsigned char *)runtime->LocalObject.CpuAddress,
-      runtime->LocalObject.Length, (unsigned char *)systemBase, systemBytes);
+  if (Record->Plan.MemorySegmentId == ADMISSION_MEMORY_POOL_SEGMENT) {
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    /* M2-f2: pool offsets are relative to the pool's own CPU view. */
+    ADMISSION_SCANOUT_MEMORY_VIEW pool;
+    result = AdmissionMemoryPoolView(Context, &pool)
+        ? AppleAgxPhysicalPagingExecute(
+              &Record->Plan, (unsigned char *)pool.CpuAddress, pool.Bytes,
+              (unsigned char *)systemBase, systemBytes)
+        : AppleAgxPhysicalPagingUnsupportedEndpoint;
+#else
+    result = AppleAgxPhysicalPagingUnsupportedEndpoint;
+#endif
+  } else {
+    result = AppleAgxPhysicalPagingExecute(
+        &Record->Plan, (unsigned char *)runtime->LocalObject.CpuAddress,
+        runtime->LocalObject.Length, (unsigned char *)systemBase, systemBytes);
+  }
   KeMemoryBarrier();
   ExReleaseFastMutex(&runtime->PagingLock);
   if (createdMapping && systemBase != NULL)

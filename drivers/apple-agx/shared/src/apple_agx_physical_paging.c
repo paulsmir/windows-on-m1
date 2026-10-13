@@ -41,6 +41,7 @@ APPLE_AGX_PHYSICAL_PAGING_RESULT AppleAgxPhysicalPagingPlanTransfer(
   candidate.SystemOffset = SystemOffset;
   candidate.Bytes = Bytes;
   candidate.FillPattern = 0u;
+  candidate.MemorySegmentId = APPLE_AGX_PHYSICAL_PAGING_LOCAL_SEGMENT;
 
   if (SourceSegmentId == 0u &&
       DestinationSegmentId == APPLE_AGX_PHYSICAL_PAGING_LOCAL_SEGMENT) {
@@ -79,6 +80,7 @@ APPLE_AGX_PHYSICAL_PAGING_RESULT AppleAgxPhysicalPagingPlanFill(
   candidate.SystemOffset = 0u;
   candidate.Bytes = Bytes;
   candidate.FillPattern = Pattern;
+  candidate.MemorySegmentId = APPLE_AGX_PHYSICAL_PAGING_LOCAL_SEGMENT;
   result = AppleAgxLocalOffset(DestinationAddress, 0u, LocalBase, LocalBytes,
                                Bytes, &candidate.LocalOffset);
   if (result != AppleAgxPhysicalPagingOk)
@@ -102,6 +104,7 @@ APPLE_AGX_PHYSICAL_PAGING_RESULT AppleAgxPhysicalPagingPlanDiscard(
   candidate.SystemOffset = 0u;
   candidate.Bytes = 1u;
   candidate.FillPattern = 0u;
+  candidate.MemorySegmentId = APPLE_AGX_PHYSICAL_PAGING_LOCAL_SEGMENT;
   result = AppleAgxLocalOffset(SegmentAddress, 0u, LocalBase, LocalBytes, 1u,
                                &candidate.LocalOffset);
   if (result != AppleAgxPhysicalPagingOk)

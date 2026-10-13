@@ -259,6 +259,63 @@ static void test_paging_plans_preserve_segment_and_uat_units(void) {
   assert(runs[0].Length == 0x10000ULL);
 }
 
+/* M2-f2: the KMD-populated pool (segment 3) is planned against its own
+ * base and size and the plan names it, so the executor picks its CPU view;
+ * the local segment keeps naming segment 2. */
+static void test_pool_segment_paging_plans(void) {
+  ADMISSION_MEMORY_CONTRACT memory;
+  APPLE_AGX_PHYSICAL_PAGING_PLAN plan;
+  memset(&memory, 0, sizeof(memory));
+  assert(AdmissionMemoryInitialize(&memory, entries, TEST_APERTURE_PAGES,
+                                   TEST_APERTURE_BASE, TEST_APERTURE_SIZE,
+                                   TEST_LOCAL_BASE, TEST_LOCAL_SIZE));
+  /* No pool yet: segment 3 is not an endpoint. */
+  assert(AdmissionMemoryPlanFill(&memory, ADMISSION_MEMORY_POOL_SEGMENT,
+             0x1700000000ULL, 0x1000ULL, 0u, &plan) ==
+         AppleAgxPhysicalPagingUnsupportedEndpoint);
+  assert(AppleAgxPhysicalTopologyAddPool(&memory.Topology, 0x1700000000ULL,
+             0x40000000ULL) == AppleAgxPhysicalTopologyOk);
+  assert(AdmissionMemoryPlanTransfer(&memory, 0u, 0u,
+             ADMISSION_MEMORY_POOL_SEGMENT, 0x1700020000ULL, 0x1000ULL,
+             0x3000ULL, 0x4000ULL, &plan) == AppleAgxPhysicalPagingOk);
+  assert(plan.Kind == AppleAgxPhysicalPagingUpload &&
+         plan.LocalOffset == 0x21000ULL && plan.SystemOffset == 0x3000ULL &&
+         plan.Bytes == 0x4000ULL &&
+         plan.MemorySegmentId == ADMISSION_MEMORY_POOL_SEGMENT);
+  assert(AdmissionMemoryPlanTransfer(&memory, ADMISSION_MEMORY_POOL_SEGMENT,
+             0x173fff0000ULL, 0u, 0u, 0ULL, 0ULL, 0x10000ULL, &plan) ==
+         AppleAgxPhysicalPagingOk);
+  assert(plan.Kind == AppleAgxPhysicalPagingDownload &&
+         plan.LocalOffset == 0x3fff0000ULL &&
+         plan.MemorySegmentId == ADMISSION_MEMORY_POOL_SEGMENT);
+  /* Past the pool end. */
+  assert(AdmissionMemoryPlanTransfer(&memory, ADMISSION_MEMORY_POOL_SEGMENT,
+             0x173fff0000ULL, 0u, 0u, 0ULL, 0ULL, 0x20000ULL, &plan) ==
+         AppleAgxPhysicalPagingOutOfRange);
+  assert(AdmissionMemoryPlanFill(&memory, ADMISSION_MEMORY_POOL_SEGMENT,
+             0x1700040000ULL, 0x10000ULL, 0x55667788u, &plan) ==
+         AppleAgxPhysicalPagingOk);
+  assert(plan.Kind == AppleAgxPhysicalPagingFill &&
+         plan.LocalOffset == 0x40000ULL &&
+         plan.MemorySegmentId == ADMISSION_MEMORY_POOL_SEGMENT);
+  assert(AdmissionMemoryPlanDiscard(&memory, ADMISSION_MEMORY_POOL_SEGMENT,
+             0x1700050000ULL, &plan) == AppleAgxPhysicalPagingOk);
+  assert(plan.Kind == AppleAgxPhysicalPagingDiscard &&
+         plan.LocalOffset == 0x50000ULL &&
+         plan.MemorySegmentId == ADMISSION_MEMORY_POOL_SEGMENT);
+  /* Memory-to-memory moves stay unsupported (as local-to-local is). */
+  assert(AdmissionMemoryPlanTransfer(&memory, ADMISSION_MEMORY_LOCAL_SEGMENT,
+             TEST_LOCAL_BASE, ADMISSION_MEMORY_POOL_SEGMENT, 0x1700000000ULL,
+             0ULL, 0ULL, 0x1000ULL, &plan) ==
+         AppleAgxPhysicalPagingUnsupportedEndpoint);
+  /* The local segment still plans against itself and names segment 2. */
+  assert(AdmissionMemoryPlanFill(&memory, ADMISSION_MEMORY_LOCAL_SEGMENT,
+             TEST_LOCAL_BASE + 0x40000ULL, 0x1000ULL, 0u, &plan) ==
+         AppleAgxPhysicalPagingOk);
+  assert(plan.LocalOffset == 0x40000ULL &&
+         plan.MemorySegmentId == ADMISSION_MEMORY_LOCAL_SEGMENT);
+}
+
 static void test_system_page_aperture_ranges_are_atomic(void) {
   ADMISSION_MEMORY_CONTRACT memory;
   APPLE_AGX_U64 pages[3] = {0x40000000ULL, 0x40003000ULL, 0x40008000ULL};
@@ -324,5 +381,6 @@ int main(void) {
   test_local_allocation_view_resolves_cpu_host_and_gpu_together();
   test_invalid_initialization_is_atomic();
   test_paging_plans_preserve_segment_and_uat_units();
+  test_pool_segment_paging_plans();
   return 0;
 }
