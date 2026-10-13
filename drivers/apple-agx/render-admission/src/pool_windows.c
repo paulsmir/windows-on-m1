@@ -206,8 +206,15 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolStart(ADMISSION_CONTEXT *Context)
     AdmissionRecordM2PoolProbe(Context, &receipt);
     return;
   }
+  /* EXP1251 diagnostic: ADMISSION_POOL_DIAG_CHUNKS_ONLY skips the block so
+   * the 64 KiB-block fallback runs on a boot where Windows would grant one
+   * block. Production builds never define it. */
+#if !defined(ADMISSION_POOL_DIAG_CHUNKS_ONLY)
   mdl = AdmissionPoolAllocate(0ULL,
                               &receipt.Attempts[ADMISSION_POOL_ATTEMPT_BLOCK]);
+#else
+  mdl = NULL;
+#endif
   if (mdl == NULL)
     mdl = AdmissionPoolAllocate(
         ADMISSION_MEMORY_POOL_CHUNK,
