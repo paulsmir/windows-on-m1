@@ -26,7 +26,12 @@ the KMD a 1 GiB physically contiguous write-combined block at StartDevice in
 123.5 ms (MmAllocatePagesForMdlEx REQUIRE_CONTIGUOUS_CHUNKS, SkipBytes 0;
 0x980000000, 1 GiB-aligned); 2 MiB / 64 KiB chunking also gets 1 GiB (3.9 s /
 2.3 s). Installed: PACKAGE1246 (d874bbb2 = EXP1245 + probe).
-Next causal target: M2-f2 -- a third, CPU-visible PopulatedFromSystemMemory
+EXP1247 CONFIRMED M2-f2a: the adapter runs with segment 3 (1 GiB block at
+0x980000000, PopulatedFromSystemMemory, unused); every check unchanged.
+Installed: PACKAGE1247 (2b347a8a). Design: investigation/analysis/
+M2-f2-populated-segment.md (revision: third segment for Mesa class BOs).
+Next causal target: M2-f2b -- CPU-visible class BOs prefer segment 3, i.e.
+the third, CPU-visible PopulatedFromSystemMemory
 memory segment backed by that KMD-owned block (CpuTranslatedAddress = block
 base; segment offsets -> IPA = base + offset, 16 KiB-contiguous by
 construction; UAT publication as registered system backings; CPU paging
