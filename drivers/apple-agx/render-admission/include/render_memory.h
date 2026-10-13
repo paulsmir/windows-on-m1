@@ -14,6 +14,12 @@
 #define ADMISSION_GPUVA_G3_JOB_VM_SLOT 1u
 #define ADMISSION_MEMORY_APERTURE_SEGMENT 1u
 #define ADMISSION_MEMORY_LOCAL_SEGMENT 2u
+/* M2-f2: CPU-visible memory segment populated from Windows memory the KMD
+ * allocated at start; its pages, like system pages, are tracked by registry
+ * frames and published as System backings (not local-reserve grants). */
+#define ADMISSION_MEMORY_POOL_SEGMENT 3u
+#define ADMISSION_G3_FRAME_SEGMENT(segment) \
+  ((segment) == 0u || (segment) == ADMISSION_MEMORY_POOL_SEGMENT)
 
 typedef struct _ADMISSION_MEMORY_CONTRACT {
   APPLE_AGX_PHYSICAL_TOPOLOGY Topology;

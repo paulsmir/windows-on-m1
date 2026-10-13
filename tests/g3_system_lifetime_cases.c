@@ -43,6 +43,44 @@ static APPLE_AGX_GPUVA_G3_FRAME *sys_frame(ADMISSION_G3_STATE *s,ULONGLONG ipa) 
   while(f && f->Ipa!=ipa) f=f->Next;
   return f;
 }
+/* M2-f2: segment-3 (KMD-populated pool) PTEs resolve against the pool,
+ * publish as System backings with registry frames, and release on unmap;
+ * without the pool they are refused. Runs inside R134 (same broker). */
+static void m2f2_pool_segment_cases(ADMISSION_CONTEXT *a, ADMISSION_G3_STATE *state,
+                                    ADMISSION_G3_PROCESS *p, void *leaf) {
+  DXGK_PTE four[4]={0}, pte={0}, zero={0};
+  const ULONGLONG pool_ipa=system_ipa+0x1000000ULL;
+  ULONGLONG before[8];
+  sys_allocation=NULL;
+  for(UINT i=0;i<4;++i) {four[i].Valid=1;four[i].Segment=ADMISSION_MEMORY_POOL_SEGMENT;four[i].PageAddress=(0x8000ULL>>12)+i;}
+  /* No pool: a segment-3 PTE is not translatable. */
+  replay_pool_bytes=0;
+  assert(!NT_SUCCESS(sys_update(a,p,leaf,0,64,4,four,0,0)));
+  replay_pool_ipa=pool_ipa;replay_pool_bytes=0x100000ULL;
+  memcpy(before,state->SystemGroups,sizeof(before));
+  expect_ok("M2-f2 pool 4K group",sys_update(a,p,leaf,0,64,4,four,0,0));
+  assert(AppleAgxGpuvaG3GraphContainsRangeAccess(&p->Graph,0x40000ULL,0x4000,true));
+  assert(sys_frame(state,pool_ipa+0x8000ULL));
+  assert(state->UnpublishedGroups[ADMISSION_MEMORY_POOL_SEGMENT]==0u);
+  /* Pool groups are not system-memory groups. */
+  assert(!memcmp(before,state->SystemGroups,sizeof(before)));
+  /* Past the pool end nothing is translatable. */
+  for(UINT i=0;i<4;++i) four[i].PageAddress=((0x100000ULL-0x2000ULL)>>12)+i;
+  assert(!NT_SUCCESS(sys_update(a,p,leaf,0,68,4,four,0,0)));
+  /* One 64 KB pool PTE: four published groups. */
+  pte.Valid=1;pte.Segment=ADMISSION_MEMORY_POOL_SEGMENT;pte.PageAddress=0x20000ULL>>12;
+  expect_ok("M2-f2 pool 64K",sys_update(a,p,leaf,0,8,1,&pte,1,0));
+  assert(AppleAgxGpuvaG3GraphContainsRangeAccess(&p->Graph,0x80000ULL,0x10000,true));
+  for(UINT i=0;i<4;++i) assert(sys_frame(state,pool_ipa+0x20000ULL+(ULONGLONG)i*0x4000ULL));
+  /* Unmapping releases the frames. */
+  expect_ok("M2-f2 pool unmap 64K",sys_update(a,p,leaf,0,8,1,&zero,1,0));
+  assert(!AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0x80000ULL,0x10000));
+  memset(four,0,sizeof(four));
+  expect_ok("M2-f2 pool unmap 4K",sys_update(a,p,leaf,0,64,4,four,0,0));
+  assert(!AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0x40000ULL,0x4000));
+  replay_pool_ipa=replay_pool_bytes=0;
+  puts("M2-f2 pool segment: PASS");
+}
 static void r134_system_64k_cases(void) {
   ADMISSION_CONTEXT a={0}; ADMISSION_G3_STATE state={0}; REPLAY_BROKER b={0};
   APPLE_AGX_GPUVA_V5_IO io={&b,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier, 0};
@@ -119,6 +157,7 @@ static void r134_system_64k_cases(void) {
   assert(!AppleAgxGpuvaG3GraphContainsRange(&p->Graph,0x10000,0x10000));
   /* R131: a 64K unmap leaves no CPU envelope to trust. */
   for(UINT j=16;j<32;++j) assert(!s->LogicalPtes[j].Flags);
+  m2f2_pool_segment_cases(&a,&state,p,leaf);
   expect_ok("R134 destroy",AdmissionDdiDestroyProcess(&a,p));
   free(local_cpu);local_cpu=NULL;
   puts("R134 system 64K outer DDI: PASS");

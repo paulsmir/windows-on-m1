@@ -79,6 +79,8 @@ typedef const void VOID_CONST;
 #define ADMISSION_POOL_TAG 0x47335453u
 #define ADMISSION_MEMORY_APERTURE_SEGMENT 1u
 #define ADMISSION_MEMORY_LOCAL_SEGMENT 2u
+#define ADMISSION_MEMORY_POOL_SEGMENT 3u
+#define ADMISSION_G3_FRAME_SEGMENT(segment) ((segment) == 0u || (segment) == ADMISSION_MEMORY_POOL_SEGMENT)
 #ifndef ADMISSION_GPUVA_G1B_PAGE_PROFILE
 #define ADMISSION_GPUVA_G1B_PAGE_PROFILE 64
 #endif
@@ -602,6 +604,9 @@ NTSTATUS AdmissionG3ExecuteVirtualPaging(ADMISSION_CONTEXT *,
 static PHYSICAL_ADDRESS MmGetPhysicalAddress(void *p) { PHYSICAL_ADDRESS a={0};if(local_cpu && (unsigned char *)p>=local_cpu && (unsigned char *)p<local_cpu+local_bytes) a.QuadPart=(long long)(local_ipa+((unsigned char *)p-local_cpu));return a; }
 static NTSTATUS AdmissionMemoryRuntimePrivateView(ADMISSION_CONTEXT *a,ADMISSION_BACKEND_MEMORY_VIEW *v) {(void)a;v->GuestIpaAddress=local_ipa+vidmm_local_bytes;v->Bytes=(ULONGLONG)APPLE_AGX_G3_PRIVATE_UNITS*APPLE_AGX_G3_PRIVATE_UNIT;v->CpuAddress=local_cpu+vidmm_local_bytes;return STATUS_SUCCESS;}
 static NTSTATUS replay_local_view_status;
+/* M2-f2: the segment-3 pool (absent unless a case sets it). */
+static unsigned char *replay_pool_cpu; static ULONGLONG replay_pool_ipa, replay_pool_bytes;
+static BOOLEAN AdmissionMemoryPoolView(const ADMISSION_CONTEXT *a,ADMISSION_SCANOUT_MEMORY_VIEW *v) {(void)a;memset(v,0,sizeof(*v));if(!replay_pool_bytes)return FALSE;v->CpuAddress=replay_pool_cpu;v->GuestIpaAddress=replay_pool_ipa;v->Bytes=replay_pool_bytes;return TRUE;}
 static NTSTATUS AdmissionMemoryRuntimeLocalView(ADMISSION_CONTEXT *a,ADMISSION_SCANOUT_MEMORY_VIEW *v) {(void)a;memset(v,0,sizeof(*v));v->GuestIpaAddress=local_ipa;v->Bytes=vidmm_local_bytes;v->CpuAddress=local_cpu;return replay_local_view_status;}
 #ifdef G3_REPLAY_FULL_LOCAL
 #define APPLE_AGX_SCANOUT_J313_POOL_SIZE (56ULL<<20)

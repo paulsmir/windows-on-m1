@@ -79,11 +79,12 @@ static BOOLEAN AdmissionG3RetireSystemSubtree(ADMISSION_G3_PROCESS *process,
     if (shadow->BrokerIpa != table_ipa) continue;
     for (UINT i = 0u; i < 8192u; ++i) {
       if (shadow->ResidentPtes && shadow->ResidentPtes[i].Flags &&
-          shadow->ResidentPtes[i].SegmentId == 0u) {
+          ADMISSION_G3_FRAME_SEGMENT(shadow->ResidentPtes[i].SegmentId)) {
         AppleAgxGpuvaG3MappingRelease(&process->Graph, shadow->ResidentPtes[i].GuestIpa);
         RtlZeroMemory(&shadow->ResidentPtes[i], sizeof(*shadow->ResidentPtes));
       }
-      if (shadow->LogicalPtes && shadow->LogicalPtes[i].SegmentId == 0u)
+      if (shadow->LogicalPtes &&
+          ADMISSION_G3_FRAME_SEGMENT(shadow->LogicalPtes[i].SegmentId))
         RtlZeroMemory(&shadow->LogicalPtes[i], sizeof(*shadow->LogicalPtes));
     }
   }
@@ -110,7 +111,8 @@ static void AdmissionG3ResetTableShadow(ADMISSION_G3_PROCESS *process,
     if (s->BrokerIpa != table_ipa) continue;
     if (s->ResidentPtes) {
       for (UINT i = 0u; i < 8192u; ++i)
-        if (s->ResidentPtes[i].Flags && s->ResidentPtes[i].SegmentId == 0u)
+        if (s->ResidentPtes[i].Flags &&
+            ADMISSION_G3_FRAME_SEGMENT(s->ResidentPtes[i].SegmentId))
           AppleAgxGpuvaG3MappingRelease(&process->Graph, s->ResidentPtes[i].GuestIpa);
       RtlZeroMemory(s->ResidentPtes, 8192u * sizeof(*s->ResidentPtes));
     }
@@ -402,7 +404,7 @@ static NTSTATUS AdmissionG3UpdateLeaf(
     ADMISSION_G3_PROCESS *process, ULONGLONG table_ipa,
     const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update,
     ADMISSION_CONTEXT *adapter, ADMISSION_G3_PAGING_FAILURE *failure) {
-  ADMISSION_SCANOUT_MEMORY_VIEW view;
+  ADMISSION_SCANOUT_MEMORY_VIEW view, pool;
   APPLE_AGX_GPUVA_G3_LOGICAL_PTE *candidate = NULL;
   APPLE_AGX_GPUVA_G3_NATIVE_LEAF *before = NULL;
   ADMISSION_G3_TABLE_SHADOW *shadow;
@@ -423,6 +425,8 @@ static NTSTATUS AdmissionG3UpdateLeaf(
     return STATUS_INVALID_PARAMETER;
   if (!NT_SUCCESS(AdmissionMemoryRuntimeLocalView(adapter, &view)))
     return STATUS_INVALID_DEVICE_STATE;
+  /* M2-f2: without the pool every segment-3 PTE is refused below. */
+  (void)AdmissionMemoryPoolView(adapter, &pool);
   first = update->StartIndex * scale;
   count = update->NumPageTableEntries * scale;
   first_group = first / 4u;
@@ -456,15 +460,22 @@ static NTSTATUS AdmissionG3UpdateLeaf(
         pte->PhysicalAdapterIndex || pte->PageTablePageSize ||
         pte->SystemReserved0 || pte->Reserved ||
         !AppleAgxGpuvaG3PteAddressBytes(pte->PageAddress, &offset) ||
-        AppleAgxGpuvaG3ResolvePageAddress((UINT)pte->Segment, offset,
-            ADMISSION_MEMORY_LOCAL_SEGMENT, view.GuestIpaAddress,
-            view.Bytes, &ipa) != AppleAgxGpuvaG3Ok ||
+        (pte->Segment == ADMISSION_MEMORY_POOL_SEGMENT ?
+            AppleAgxGpuvaG3ResolvePoolPage(offset, pool.GuestIpaAddress,
+                pool.Bytes, &ipa) :
+            AppleAgxGpuvaG3ResolvePageAddress((UINT)pte->Segment, offset,
+                ADMISSION_MEMORY_LOCAL_SEGMENT, view.GuestIpaAddress,
+                view.Bytes, &ipa)) != AppleAgxGpuvaG3Ok ||
         ipa > MAXULONGLONG - (step - 1ULL) ||
         (update->Flags.Use64KBPages &&
-         ((pte->Segment != 0u && pte->Segment != ADMISSION_MEMORY_LOCAL_SEGMENT) ||
+         ((pte->Segment != 0u && pte->Segment != ADMISSION_MEMORY_LOCAL_SEGMENT &&
+           pte->Segment != ADMISSION_MEMORY_POOL_SEGMENT) ||
           (pte->Segment == ADMISSION_MEMORY_LOCAL_SEGMENT &&
            ((ipa & 0xffffULL) || view.Bytes < step ||
-            offset > view.Bytes - step)))) ||
+            offset > view.Bytes - step)) ||
+          (pte->Segment == ADMISSION_MEMORY_POOL_SEGMENT &&
+           ((ipa & 0xffffULL) || pool.Bytes < step ||
+            offset > pool.Bytes - step)))) ||
         update->AllocationOffsetInBytes > MAXULONGLONG - (ULONGLONG)i * step)
       goto Done;
     allocation_offset = update->AllocationOffsetInBytes + (ULONGLONG)i * step;
@@ -497,7 +508,7 @@ static NTSTATUS AdmissionG3UpdateLeaf(
   }
   for (i = 0u; i < count; ++i) {
     APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte = &candidate[first + i];
-    if (pte->Flags && pte->SegmentId == 0u &&
+    if (pte->Flags && ADMISSION_G3_FRAME_SEGMENT(pte->SegmentId) &&
         !AppleAgxGpuvaG3MappingAcquire(&process->Graph, pte->GuestIpa)) {
       status = STATUS_INSUFFICIENT_RESOURCES;
       goto Done;
@@ -523,7 +534,10 @@ static NTSTATUS AdmissionG3UpdateLeaf(
     for (j = 1u; complete && j < 4u; ++j)
       if (group[j].Flags != flags || group[j].SegmentId != segment ||
           group[j].GuestIpa != ipa + (ULONGLONG)j * 0x1000ULL) complete = FALSE;
-    if (complete && segment != 0u &&
+    if (complete && segment == ADMISSION_MEMORY_POOL_SEGMENT &&
+        !AppleAgxGpuvaG3TableSpanWithinLocal(pool.GuestIpaAddress, pool.Bytes,
+                                             ipa, 0x4000ULL)) complete = FALSE;
+    if (complete && segment != 0u && segment != ADMISSION_MEMORY_POOL_SEGMENT &&
         (segment != ADMISSION_MEMORY_LOCAL_SEGMENT ||
          !AppleAgxGpuvaG3TableSpanWithinLocal(view.GuestIpaAddress, view.Bytes,
                                               ipa, 0x4000ULL))) complete = FALSE;
@@ -532,7 +546,8 @@ static NTSTATUS AdmissionG3UpdateLeaf(
     BOOLEAN updated = AppleAgxGpuvaG3GraphTryLeafBacking(&process->Graph, table_ipa,
         first_group + i, complete ? ipa : 0ULL,
         complete && (flags & APPLE_AGX_GPUVA_G3_WRITE),
-        segment == 0u ? AppleAgxGpuvaG3SystemBacking : AppleAgxGpuvaG3LocalBacking,
+        ADMISSION_G3_FRAME_SEGMENT(segment) ? AppleAgxGpuvaG3SystemBacking :
+                                              AppleAgxGpuvaG3LocalBacking,
         &unavailable);
     if (!updated && unavailable) {
       /* VidMm's logical mapping may be CPU-only under the retained broker
@@ -592,7 +607,8 @@ static NTSTATUS AdmissionG3UpdateLeaf(
   /* Publication and TLB acknowledgement precede release of the old lifetime. */
   if (shadow->ResidentPtes) {
     for (i = first; i < first + count; ++i)
-      if (shadow->ResidentPtes[i].Flags && shadow->ResidentPtes[i].SegmentId == 0u)
+      if (shadow->ResidentPtes[i].Flags &&
+          ADMISSION_G3_FRAME_SEGMENT(shadow->ResidentPtes[i].SegmentId))
         AppleAgxGpuvaG3MappingRelease(&process->Graph, shadow->ResidentPtes[i].GuestIpa);
     ExFreePoolWithTag(shadow->ResidentPtes, ADMISSION_POOL_TAG);
   }
@@ -609,7 +625,8 @@ static NTSTATUS AdmissionG3UpdateLeaf(
   AdmissionG3CountLeaf64K(process->State, update);
 Done:
   for (i = 0u; i < acquired; ++i)
-    if (candidate[first + i].Flags && candidate[first + i].SegmentId == 0u)
+    if (candidate[first + i].Flags &&
+        ADMISSION_G3_FRAME_SEGMENT(candidate[first + i].SegmentId))
       AppleAgxGpuvaG3MappingRelease(&process->Graph, candidate[first + i].GuestIpa);
   if (before) ExFreePoolWithTag(before, ADMISSION_POOL_TAG);
   if (candidate) ExFreePoolWithTag(candidate, ADMISSION_POOL_TAG);

@@ -2074,7 +2074,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyProcess(
     if (entry->ResidentPtes != NULL) {
       for (UINT i = 0u; i < 8192u; ++i)
         if (entry->ResidentPtes[i].Flags &&
-            entry->ResidentPtes[i].SegmentId == 0u)
+            ADMISSION_G3_FRAME_SEGMENT(entry->ResidentPtes[i].SegmentId))
           AppleAgxGpuvaG3MappingRelease(&process->Graph,
               entry->ResidentPtes[i].GuestIpa);
       ExFreePoolWithTag(entry->ResidentPtes, ADMISSION_POOL_TAG);
