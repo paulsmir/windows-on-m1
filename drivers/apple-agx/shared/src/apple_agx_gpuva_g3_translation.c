@@ -101,6 +101,20 @@ APPLE_AGX_GPUVA_G3_RESULT AppleAgxGpuvaG3ResolvePageAddress(
   return AppleAgxGpuvaG3Ok;
 }
 
+APPLE_AGX_GPUVA_G3_RESULT AppleAgxGpuvaG3ResolvePoolPage(
+    unsigned long long address, unsigned long long pool_base,
+    unsigned long long pool_bytes, unsigned long long *guest_ipa) {
+  if (guest_ipa == 0 || pool_base == 0ULL ||
+      (pool_base & (APPLE_AGX_GPUVA_G3_NATIVE_PAGE - 1u)) ||
+      (address & (APPLE_AGX_GPUVA_G3_LOGICAL_PAGE - 1u)) ||
+      pool_bytes < APPLE_AGX_GPUVA_G3_NATIVE_PAGE ||
+      address > pool_bytes - APPLE_AGX_GPUVA_G3_LOGICAL_PAGE ||
+      pool_base > ~0ULL - address)
+    return AppleAgxGpuvaG3Invalid;
+  *guest_ipa = pool_base + address;
+  return AppleAgxGpuvaG3Ok;
+}
+
 APPLE_AGX_GPUVA_G3_RESULT AppleAgxGpuvaG3Plan64KSpan(
     const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *entries,
     unsigned int start_index, unsigned int count,

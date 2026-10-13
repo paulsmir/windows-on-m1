@@ -45,6 +45,27 @@ int main(void) {
       2u, 0x900000000ULL, 0x4000000ULL, &resolved) == AppleAgxGpuvaG3Invalid);
   assert(AppleAgxGpuvaG3ResolvePageAddress(2u, 0x4001ULL,
       2u, 0x900000000ULL, 0x4000000ULL, &resolved) == AppleAgxGpuvaG3Invalid);
+  /* M2-f2: segment 3 (the KMD-populated pool) offsets resolve against the
+   * pool block, bounded and page-aligned like the local segment. */
+  assert(AppleAgxGpuvaG3ResolvePoolPage(0x4000ULL, 0x980000000ULL,
+      0x40000000ULL, &resolved) == AppleAgxGpuvaG3Ok);
+  assert(resolved == 0x980004000ULL);
+  assert(AppleAgxGpuvaG3ResolvePoolPage(0ULL, 0x980000000ULL,
+      0x40000000ULL, &resolved) == AppleAgxGpuvaG3Ok);
+  assert(resolved == 0x980000000ULL);
+  assert(AppleAgxGpuvaG3ResolvePoolPage(0x3ffff000ULL, 0x980000000ULL,
+      0x40000000ULL, &resolved) == AppleAgxGpuvaG3Ok);
+  assert(resolved == 0x9bffff000ULL);
+  assert(AppleAgxGpuvaG3ResolvePoolPage(0x40000000ULL, 0x980000000ULL,
+      0x40000000ULL, &resolved) == AppleAgxGpuvaG3Invalid);
+  assert(AppleAgxGpuvaG3ResolvePoolPage(0x4001ULL, 0x980000000ULL,
+      0x40000000ULL, &resolved) == AppleAgxGpuvaG3Invalid);
+  assert(AppleAgxGpuvaG3ResolvePoolPage(0x4000ULL, 0x980001000ULL,
+      0x40000000ULL, &resolved) == AppleAgxGpuvaG3Invalid);
+  assert(AppleAgxGpuvaG3ResolvePoolPage(0x4000ULL, 0ULL,
+      0x40000000ULL, &resolved) == AppleAgxGpuvaG3Invalid);
+  assert(AppleAgxGpuvaG3ResolvePoolPage(0x4000ULL, 0x980000000ULL,
+      0x40000000ULL, 0) == AppleAgxGpuvaG3Invalid);
   valid_group(p, 0x850000000ULL, 0u, APPLE_AGX_GPUVA_G3_VALID);
   assert(AppleAgxGpuvaG3PlanSpan(p, 0u, 4u, 0x4000ULL,
       2u, 0x10000u, out, 2u, &n) == AppleAgxGpuvaG3Ok);

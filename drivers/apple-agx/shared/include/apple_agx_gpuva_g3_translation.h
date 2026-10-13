@@ -74,5 +74,9 @@ APPLE_AGX_GPUVA_G3_RESULT AppleAgxGpuvaG3ResolvePageAddress(
     unsigned int SegmentId, unsigned long long PageAddress,
     unsigned int LocalSegmentId, unsigned long long LocalGuestIpaBase,
     unsigned long long LocalBytes, unsigned long long *GuestIpa);
+/* M2-f2: a segment-3 (KMD-populated pool) PTE offset -> pool IPA. */
+APPLE_AGX_GPUVA_G3_RESULT AppleAgxGpuvaG3ResolvePoolPage(
+    unsigned long long address, unsigned long long pool_base,
+    unsigned long long pool_bytes, unsigned long long *guest_ipa);
 
 #endif
