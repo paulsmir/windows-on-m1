@@ -183,14 +183,13 @@ int main(void) {
   info.pPrivateDriverData = &native;
   info.PrivateDriverDataSize = sizeof(native);
   assert(AdmissionCreateAllocationImpl(&context, &args) == STATUS_SUCCESS);
-  /* M2-c: a CPU-visible Mesa class BO is UMA system memory (the aperture
-   * segment id names system memory): 64 KiB-aligned size, no CPU-visible
-   * local segment in its set, so VidMm may back it with 64 KB pages. */
-  assert(info.PreferredSegment.SegmentId0 == ADMISSION_MEMORY_APERTURE_SEGMENT);
+  assert(info.PreferredSegment.SegmentId0 == 2);
   assert(info.Size == 0x10000 && info.Alignment == 0x10000);
   assert(info.FlagsWddm2.CpuVisible == 1);
-  assert(info.SupportedReadSegmentSet == ADMISSION_APERTURE_SEGMENT_SET);
-  assert(info.SupportedWriteSegmentSet == ADMISSION_APERTURE_SEGMENT_SET);
+  /* EXP836: a local-only write set is refused by dxgkrnl; the admitted
+   * shape for Mesa class BOs is the class0 shape. */
+  assert(info.SupportedReadSegmentSet == ADMISSION_CPU_VISIBLE_SEGMENT_SET);
+  assert(info.SupportedWriteSegmentSet == ADMISSION_CPU_VISIBLE_SEGMENT_SET);
   /* M2-c: AGX renders through GPU VA only; a class BO is not accessed
    * physically (contiguity / aperture mapping are not required). */
   assert(info.FlagsWddm2.AccessedPhysically == 0u);
