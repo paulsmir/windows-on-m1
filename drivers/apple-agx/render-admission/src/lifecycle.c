@@ -122,7 +122,7 @@ static BOOLEAN AdmissionG3FirmwareResourcesPresent(
         bit = 1u << 3;
       else if (start != 0ULL &&
                (start & (APPLE_AGX_LOCAL_RESERVE_ALIGNMENT - 1ULL)) == 0ULL &&
-               length == APPLE_AGX_LOCAL_RESERVE_BYTES)
+               AppleAgxLocalReserveBytesValid(length))
         bit = 1u << 4;
       if (bit == 0u || (seen & bit) != 0u)
         return FALSE;

@@ -91,7 +91,7 @@ int AdmissionVisibleScanoutReceiptValid(
       Receipt->PoolPhysicalAddress != Receipt->HostPhysicalAddress ||
       Receipt->PoolPhysicalAddress >= (1ULL << 40u) ||
       (Receipt->SurfaceOffset & (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) != 0ULL ||
-      Receipt->SurfaceOffset > APPLE_AGX_SCANOUT_J313_POOL_SIZE -
+      Receipt->SurfaceOffset > APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE -
                                    APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
       Receipt->RequestedSequence == 0ULL ||
       Receipt->AppliedSequence != Receipt->RequestedSequence ||
@@ -199,7 +199,7 @@ int AdmissionVisibleAgxReceiptValid(
                  Receipt->DestinationHash != 0ULL &&
                  (Receipt->DestinationOffset &
                   (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) == 0ULL &&
-                 Receipt->DestinationOffset <= APPLE_AGX_SCANOUT_J313_POOL_SIZE -
+                 Receipt->DestinationOffset <= APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE -
                                                    APPLE_AGX_SCANOUT_J313_SURFACE_SIZE &&
                  Receipt->ActiveOffsetBefore != Receipt->DestinationOffset &&
                  Receipt->RequestedSequence != 0ULL &&

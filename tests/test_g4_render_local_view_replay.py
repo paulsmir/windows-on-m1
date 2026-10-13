@@ -38,7 +38,10 @@ class G4RenderLocalViewReplay(unittest.TestCase):
             'static ULONGLONG output_ipa=0x8e4040000ULL;')
         prefix=prefix.replace('static int output_mapped=1;', 'static int output_mapped=1, output_split=0; static ULONGLONG output_va=0x40000000ULL, output_bytes=0x8000ULL;')
         prefix=prefix.replace('va<0x40000000ULL || va>=0x40001000ULL', 'va<output_va || va-output_va>=output_bytes').replace('*ipa=output_ipa+(va-0x40000000ULL);', '*ipa=output_ipa+(va-output_va)+(output_split && va>=output_va+0x4000ULL ? 0x1000ULL : 0ULL);')
-        prefix='#define APPLE_AGX_EXP907_FRAME_RECEIPT 1\n#define APPLE_AGX_SCANOUT_J313_POOL_SIZE 0x3800000ULL\n'+prefix
+        prefix=('#define APPLE_AGX_EXP907_FRAME_RECEIPT 1\n'
+                '#define APPLE_AGX_SCANOUT_J313_SURFACE_SIZE 0xfa0000ULL\n'
+                '#define APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE 0x3b800000ULL\n'
+                '#define APPLE_AGX_SCANOUT_ALIGNMENT 0x10000ULL\n'+prefix)
         prefix=prefix.replace('#include "g4_submit_virtual_functions.inc"',
             '\n#include "render_qualification.h"\n'
             'static ADMISSION_DWM_ENVELOPE_RECEIPT observed_receipt;\n'
@@ -90,11 +93,16 @@ class G4RenderLocalViewReplay(unittest.TestCase):
           assert(AdmissionGpuvaG3BeginJob(&adapter,&context,args.SubmissionFenceId)!=STATUS_SUCCESS);
           assert(graph_begin_calls==1);output_ipa-=0x4000ULL;
           adapter.BackendImage.G4Native=0;
-          assert(!AdmissionG3OutputMatchesLocal(&adapter,&process.Graph));
+          /* M2-f2c: the DCP pool is all of segment 2 (EXP953), so the
+           * scanout view the non-native path checks is the local view. */
+          assert(AdmissionG3OutputMatchesLocal(&adapter,&process.Graph));
           adapter.BackendImage.G4Native=1;
           ADMISSION_SCANOUT_MEMORY_VIEW scanout={0};
           assert(AdmissionMemoryRuntimeScanoutView(&adapter,&scanout)==STATUS_SUCCESS);
-          assert(scanout.Bytes==0x3800000ULL && scanout.PoolBytes==scanout.Bytes);
+          /* M2-f2c: the scanout view is the whole receipt-sized segment 2. */
+          assert(scanout.Bytes==952ULL*1024*1024 && scanout.PoolBytes==scanout.Bytes);
+          /* A 56 MiB pool (a smaller reserve) excludes the 64 MiB output. */
+          scanout.Bytes=scanout.PoolBytes=0x3800000ULL;
           ADMISSION_RENDER_PACKET_DESCRIPTION out={0};
           /* Outside the DCP pool the output is VA-only (M2-c), never a scanout
            * physical address. */
@@ -125,7 +133,9 @@ class G4RenderLocalViewReplay(unittest.TestCase):
           adapter.RenderPacket.Description.DestinationBytes=(ULONG)output_bytes;
           assert(AdmissionG3OutputMatchesLocal(&adapter,&process.Graph));
           adapter.BackendImage.G4Native=0;
-          assert(!AdmissionG3OutputMatchesLocal(&adapter,&process.Graph));
+          /* M2-f2c: the DCP pool is all of segment 2 (EXP953), so the
+           * scanout view the non-native path checks is the local view. */
+          assert(AdmissionG3OutputMatchesLocal(&adapter,&process.Graph));
           /* M2-c: a VA-only destination at BeginJob: mapped writable or not. */
           adapter.BackendImage.G4Native=1;
           adapter.RenderPacket.Description.DestinationPhysical=0;

@@ -2,11 +2,10 @@
 
 #define ADMISSION_MEMORY_RUNTIME_TAG 'uRGA'
 #define ADMISSION_LOCAL_GPU_VA 0x1500000000ULL
-#define ADMISSION_LOCAL_BYTES 0x40000000ULL
-#define ADMISSION_LOCAL_ALLOCATION_BYTES 0x3b800000ULL
-#define ADMISSION_PRIVATE_BYTES 0x04000000ULL
-#define ADMISSION_BACKEND_OFFSET 0x3f800000ULL
-#define ADMISSION_BACKEND_BYTES 0x00800000ULL
+/* M2-f2c: the reserve's size comes from the broker receipt (ABI v3);
+ * segment 2, the private span and the backend arena are laid out in it. */
+#define ADMISSION_PRIVATE_BYTES APPLE_AGX_LOCAL_RESERVE_PRIVATE_BYTES
+#define ADMISSION_BACKEND_BYTES APPLE_AGX_LOCAL_RESERVE_BACKEND_BYTES
 #define ADMISSION_APERTURE_GPU_VA 0x1600000000ULL
 #define ADMISSION_APERTURE_BYTES 0x10000000ULL
 #define ADMISSION_UAT_PAGE_CAPACITY 64u
@@ -329,7 +328,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
 
   AdmissionMemoryRecordStart(Context, AdmissionMemoryStartLocalObject,
                              STATUS_PENDING);
-  requestedBytes = ADMISSION_LOCAL_BYTES;
+  requestedBytes = APPLE_AGX_LOCAL_RESERVE_MAX_BYTES;
   status = AdmissionPhysicalBorrowLocal(
       &runtime->PhysicalOwner, &Context->DeviceInformation, &localBorrowed,
       &Context->LocalReserveReceipt);
@@ -341,18 +340,20 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
   runtime->LocalObject.AllocationHandle = localBorrowed;
   runtime->LocalObject.AllocationDeviceBase = localBorrowed->HostPhysicalBase;
   runtime->LocalObject.DeviceAddress = localBorrowed->HostPhysicalBase;
-  runtime->LocalObject.AllocationLength = ADMISSION_LOCAL_BYTES;
-  runtime->LocalObject.Length = ADMISSION_LOCAL_BYTES;
+  requestedBytes = (ULONGLONG)localBorrowed->Size;
+  runtime->LocalObject.AllocationLength = requestedBytes;
+  runtime->LocalObject.Length = requestedBytes;
   runtime->LocalObject.State = AppleAgxMemoryCpuOwned;
   runtime->LocalReady = TRUE;
   /* Firmware reserves the pages but does not guarantee their contents.
    * Clear the entire borrowed slab before any UAT or VidMm page-table use. */
   if (runtime->LocalObject.CpuAddress == NULL ||
-      runtime->LocalObject.Length != ADMISSION_LOCAL_BYTES) {
+      !AppleAgxLocalReserveBytesValid(runtime->LocalObject.Length)) {
     status = STATUS_INVALID_DEVICE_STATE;
     goto Fail;
   }
-  RtlZeroMemory(runtime->LocalObject.CpuAddress, ADMISSION_LOCAL_BYTES);
+  RtlZeroMemory(runtime->LocalObject.CpuAddress,
+                (SIZE_T)runtime->LocalObject.Length);
   memoryResult = AppleAgxMemoryMarkCpuWritten(&runtime->LocalObject);
   if (memoryResult != AppleAgxMemoryResultOk) {
     status = STATUS_INVALID_DEVICE_STATE;
@@ -419,13 +420,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
           fixedInput->Size >
               ADMISSION_BACKEND_BYTES - fixedInput->ArenaOffset ||
           runtime->LocalObject.DeviceAddress >
-              MAXULONGLONG - ADMISSION_BACKEND_OFFSET -
+              MAXULONGLONG -
+                  AppleAgxLocalReserveBackendOffset(
+                      runtime->LocalObject.Length) -
                   fixedInput->ArenaOffset) {
         status = STATUS_INVALID_IMAGE_FORMAT;
         goto Fail;
       }
       fixedPhysical = runtime->LocalObject.DeviceAddress +
-                      ADMISSION_BACKEND_OFFSET +
+                      AppleAgxLocalReserveBackendOffset(
+                          runtime->LocalObject.Length) +
                       fixedInput->ArenaOffset;
       if (AppleAgxUatMap(
               ADMISSION_MEMORY_UAT_CONTEXT, &runtime->Residency.Roots,
@@ -467,13 +471,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
                                fixedInput->ArenaOffset -
                                alias->ObjectOffset ||
             runtime->LocalObject.DeviceAddress >
-                MAXULONGLONG - ADMISSION_BACKEND_OFFSET -
+                MAXULONGLONG -
+                    AppleAgxLocalReserveBackendOffset(
+                        runtime->LocalObject.Length) -
                     fixedInput->ArenaOffset - alias->ObjectOffset) {
           status = STATUS_INVALID_IMAGE_FORMAT;
           goto Fail;
         }
         aliasPhysical = runtime->LocalObject.DeviceAddress +
-                        ADMISSION_BACKEND_OFFSET +
+                        AppleAgxLocalReserveBackendOffset(
+                            runtime->LocalObject.Length) +
                         fixedInput->ArenaOffset + alias->ObjectOffset;
         if (AppleAgxUatMap(
                 ADMISSION_MEMORY_UAT_CONTEXT, &runtime->Residency.Roots,
@@ -521,14 +528,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
           &Context->Memory, runtime->ApertureEntries,
           (APPLE_AGX_U32)ADMISSION_APERTURE_PAGE_COUNT,
           ADMISSION_APERTURE_GPU_VA, ADMISSION_APERTURE_BYTES,
-          ADMISSION_LOCAL_GPU_VA, ADMISSION_LOCAL_BYTES) ||
+          ADMISSION_LOCAL_GPU_VA, runtime->LocalObject.Length) ||
       !AdmissionMemoryPartitionLocal(
-          &Context->Memory, ADMISSION_LOCAL_ALLOCATION_BYTES,
+          &Context->Memory,
+          AppleAgxLocalReserveSegmentBytes(runtime->LocalObject.Length),
           ADMISSION_PRIVATE_BYTES, ADMISSION_BACKEND_BYTES) ||
       !AdmissionMemoryMarkUatReady(
           &Context->Memory, ADMISSION_MEMORY_UAT_CONTEXT,
           APPLE_AGX_UAT_PAGE_SIZE_16K, ADMISSION_LOCAL_GPU_VA,
-          ADMISSION_LOCAL_BYTES)) {
+          runtime->LocalObject.Length)) {
     status = STATUS_INVALID_DEVICE_STATE;
     goto Fail;
   }
@@ -792,12 +800,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeLocalView(
       runtime->LocalObject.CpuAddress == NULL ||
       runtime->LocalObject.DeviceAddress == 0ULL ||
       runtime->LocalObject.GpuVirtualAddress != ADMISSION_LOCAL_GPU_VA ||
+      !AppleAgxLocalReserveBytesValid(runtime->LocalObject.Length) ||
       Context->Memory.LocalAllocationBytes !=
-          ADMISSION_LOCAL_ALLOCATION_BYTES ||
+          AppleAgxLocalReserveSegmentBytes(runtime->LocalObject.Length) ||
       runtime->LocalObject.AllocationCpuBase == NULL ||
-      runtime->LocalObject.Length < ADMISSION_LOCAL_BYTES ||
       Context->Memory.BackendOffset !=
-          ADMISSION_LOCAL_ALLOCATION_BYTES + ADMISSION_PRIVATE_BYTES ||
+          Context->Memory.LocalAllocationBytes + ADMISSION_PRIVATE_BYTES ||
       Context->Memory.LocalAllocationBytes > Context->Memory.BackendOffset ||
       Context->Memory.PrivateOffset != Context->Memory.LocalAllocationBytes ||
       Context->Memory.PrivateBytes != Context->Memory.BackendOffset -
@@ -805,7 +813,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeLocalView(
     return STATUS_INVALID_DEVICE_STATE;
   allocation = (ADMISSION_PHYSICAL_ALLOCATION *)
       runtime->LocalObject.AllocationHandle;
-  if (allocation->Size < ADMISSION_LOCAL_BYTES)
+  if (allocation->Size < runtime->LocalObject.Length)
     return STATUS_INVALID_DEVICE_STATE;
   if (allocation->BorrowedFirmwareReserve) {
     if (!AppleAgxLocalReserveMatchesResource(
@@ -823,13 +831,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeLocalView(
   offset = (ULONGLONG)((PUCHAR)runtime->LocalObject.CpuAddress -
                        (PUCHAR)runtime->LocalObject.AllocationCpuBase);
   if (offset > allocation->Size ||
-      ADMISSION_LOCAL_BYTES > allocation->Size - offset ||
+      runtime->LocalObject.Length > allocation->Size - offset ||
       allocation->GuestIpaBase > MAXULONGLONG - offset ||
       allocation->HostPhysicalBase > MAXULONGLONG - offset ||
       allocation->GuestIpaBase + offset >
-          MAXULONGLONG - ADMISSION_LOCAL_BYTES ||
+          MAXULONGLONG - runtime->LocalObject.Length ||
       allocation->HostPhysicalBase + offset >
-          MAXULONGLONG - ADMISSION_LOCAL_BYTES)
+          MAXULONGLONG - runtime->LocalObject.Length)
     return STATUS_INTEGER_OVERFLOW;
   if (runtime->LocalObject.DeviceAddress !=
       allocation->HostPhysicalBase + offset)
@@ -844,21 +852,25 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeLocalView(
 }
 
 /* EXP953: VidMm may place a primary anywhere in the local allocation range;
- * the DCP-registered scanout pool must cover exactly that range. */
-C_ASSERT(APPLE_AGX_SCANOUT_J313_POOL_SIZE == ADMISSION_LOCAL_ALLOCATION_BYTES);
+ * the DCP-registered scanout pool must cover exactly that range (M2-f2c: the
+ * receipt-sized segment 2, at most the J313 maximum). */
+C_ASSERT(APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE ==
+         APPLE_AGX_LOCAL_RESERVE_MAX_BYTES - ADMISSION_PRIVATE_BYTES -
+             ADMISSION_BACKEND_BYTES);
 
 _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeScanoutView(
     ADMISSION_CONTEXT *Context, ADMISSION_SCANOUT_MEMORY_VIEW *View) {
   NTSTATUS status = AdmissionMemoryRuntimeLocalView(Context, View);
   if (!NT_SUCCESS(status)) return status;
-  if (View->Bytes < APPLE_AGX_SCANOUT_J313_POOL_SIZE) {
+  if (View->Bytes < APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
+      View->Bytes > APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE ||
+      (View->Bytes & (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) != 0ULL) {
     RtlZeroMemory(View, sizeof(*View));
     return STATUS_INVALID_DEVICE_STATE;
   }
   /* R143 admission registers W=0 only. A high primary must fail before MMIO;
    * relocation needs a separately proven quiesce/re-register lifecycle. */
-  View->Bytes = APPLE_AGX_SCANOUT_J313_POOL_SIZE;
-  View->PoolBytes = APPLE_AGX_SCANOUT_J313_POOL_SIZE;
+  View->PoolBytes = View->Bytes;
   return STATUS_SUCCESS;
 }
 
@@ -935,11 +947,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeQualify(
       Qualification->HostPhysicalBase == 0ULL ||
       Qualification->HostPhysicalBase >= ADMISSION_HVC_PHYSICAL_LIMIT ||
       Qualification->LocalGpuVa != ADMISSION_LOCAL_GPU_VA ||
-      Qualification->LocalBytes != ADMISSION_LOCAL_BYTES ||
+      Qualification->LocalBytes != runtime->LocalObject.Length ||
       mapping->Context != ADMISSION_MEMORY_UAT_CONTEXT ||
       mapping->VirtualAddress != ADMISSION_LOCAL_GPU_VA ||
       mapping->PhysicalAddress != runtime->LocalObject.DeviceAddress ||
-      mapping->Length != ADMISSION_LOCAL_BYTES ||
+      mapping->Length != runtime->LocalObject.Length ||
       mapping->PhysicalStride != APPLE_AGX_UAT_PAGE_SIZE_16K ||
       runtime->Published.Context != ADMISSION_MEMORY_UAT_CONTEXT)
     return STATUS_DEVICE_HARDWARE_ERROR;
@@ -956,13 +968,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeQualify(
           &firstPhysical, &firstDescriptor) != AppleAgxUatResultOk ||
       AppleAgxUatResolvePage(
           ADMISSION_MEMORY_UAT_CONTEXT, &runtime->Residency.Roots,
-          ADMISSION_LOCAL_GPU_VA + ADMISSION_LOCAL_BYTES -
+          ADMISSION_LOCAL_GPU_VA + runtime->LocalObject.Length -
               APPLE_AGX_UAT_PAGE_SIZE_16K,
           &runtime->Residency.Inventory, &lastPhysical,
           &lastDescriptor) != AppleAgxUatResultOk ||
       firstPhysical != runtime->LocalObject.DeviceAddress ||
       lastPhysical != runtime->LocalObject.DeviceAddress +
-                          ADMISSION_LOCAL_BYTES -
+                          runtime->LocalObject.Length -
                           APPLE_AGX_UAT_PAGE_SIZE_16K)
     return STATUS_DEVICE_HARDWARE_ERROR;
   Qualification->FirstResolvedPhysical = firstPhysical;

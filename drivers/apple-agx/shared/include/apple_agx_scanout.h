@@ -36,7 +36,9 @@ typedef unsigned long long APPLE_AGX_SCANOUT_U64;
 #define APPLE_AGX_SCANOUT_J313_HEIGHT 1600u
 #define APPLE_AGX_SCANOUT_J313_STRIDE 10240u
 #define APPLE_AGX_SCANOUT_J313_SURFACE_SIZE 0xfa0000ULL
-#define APPLE_AGX_SCANOUT_J313_POOL_SIZE 0x3b800000ULL
+/* M2-f2c: the pool is segment 2 of the receipt-sized reserve; this is its
+ * J313 maximum (a 1 GiB reserve less the private span and backend arena). */
+#define APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE 0x3b800000ULL
 #define APPLE_AGX_SCANOUT_ALIGNMENT 0x10000ULL
 #define APPLE_AGX_SCANOUT_FORMAT_BGRA8888 1u
 #define APPLE_AGX_SCANOUT_IRQ_LATCHED (1u << 0u)
@@ -145,6 +147,8 @@ typedef struct _APPLE_AGX_SCANOUT_CLIENT {
   APPLE_AGX_SCANOUT_U32 AbiVersion;
   APPLE_AGX_SCANOUT_U32 Capabilities;
   APPLE_AGX_SCANOUT_U64 PendingPresentSequence;
+  /* Bytes of the registered pool; surfaces must lie inside it. */
+  APPLE_AGX_SCANOUT_U64 PoolBytes;
   APPLE_AGX_SCANOUT_BOOL Qualified;
   APPLE_AGX_SCANOUT_BOOL PresentPending;
 } APPLE_AGX_SCANOUT_CLIENT;
@@ -156,7 +160,7 @@ APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutQualify(
     APPLE_AGX_SCANOUT_CLIENT *Client);
 APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutRegisterPool(
     APPLE_AGX_SCANOUT_CLIENT *Client, APPLE_AGX_SCANOUT_U64 PoolIpa,
-    APPLE_AGX_SCANOUT_U64 DeadlineMs);
+    APPLE_AGX_SCANOUT_U64 PoolBytes, APPLE_AGX_SCANOUT_U64 DeadlineMs);
 APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutPresentApplied(
     APPLE_AGX_SCANOUT_CLIENT *Client, APPLE_AGX_SCANOUT_U64 SurfaceOffset,
     APPLE_AGX_SCANOUT_U64 DeadlineMs, APPLE_AGX_SCANOUT_U32 *SwapId);

@@ -349,7 +349,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPhysicalBorrowLocal(
   RtlZeroMemory(Receipt, sizeof(*Receipt));
   resources = DeviceInformation->TranslatedResourceList;
   localAddress.QuadPart = 0;
-  Owner->LastAllocateBytes = APPLE_AGX_LOCAL_RESERVE_BYTES;
+  Owner->LastAllocateBytes = APPLE_AGX_LOCAL_RESERVE_MAX_BYTES;
   Owner->LastAllocateStep = 5u;
   Owner->LastAllocateStatus = STATUS_PENDING;
   for (fullIndex = 0u; fullIndex < resources->Count; ++fullIndex) {

@@ -536,7 +536,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(
       Context->BrokerBase == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
     return STATUS_INVALID_DEVICE_STATE;
   if (!NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(Context, &memory)) ||
-      memory.PoolBytes != APPLE_AGX_SCANOUT_J313_POOL_SIZE ||
+      memory.PoolBytes != memory.Bytes ||
       (memory.GuestIpaAddress &
        (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) != 0ULL)
     return STATUS_INVALID_ADDRESS;
@@ -572,7 +572,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(
   io.Write64 = AdmissionScanoutWrite64;
   io.Pause = AdmissionScanoutPause;
   result = AppleAgxFixedPanelInitialize(
-      &runtime->Panel, &io, memory.GuestIpaAddress, 1ULL,
+      &runtime->Panel, &io, memory.GuestIpaAddress, memory.PoolBytes, 1ULL,
       ADMISSION_SCANOUT_MAX_POLLS);
   if (result != AppleAgxFixedPanelOk) {
     ExFreePoolWithTag(runtime, ADMISSION_SCANOUT_TAG);

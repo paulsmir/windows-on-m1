@@ -68,11 +68,18 @@ class AppleAgxRenderMemoryTests(unittest.TestCase):
 
     def test_local_capacity_is_independent_of_scanout_window(self):
         runtime = (RENDER / "src" / "memory_runtime_windows.c").read_text()
-        self.assertIn("#define ADMISSION_LOCAL_BYTES 0x40000000ULL", runtime)
+        abi = (ROOT / "drivers/apple-agx/shared/include/apple_agx_local_reserve_abi.h").read_text()
+        # M2-f2c: the reserve size comes from the receipt; segment 2 and the
+        # backend arena are derived from it, the arena stays 8 MiB.
+        self.assertNotIn("#define ADMISSION_LOCAL_BYTES", runtime)
+        self.assertNotIn("#define ADMISSION_LOCAL_ALLOCATION_BYTES", runtime)
         self.assertIn(
-            "#define ADMISSION_LOCAL_ALLOCATION_BYTES 0x3b800000ULL", runtime
+            "AppleAgxLocalReserveSegmentBytes(runtime->LocalObject.Length)", runtime
         )
-        self.assertIn("#define ADMISSION_BACKEND_BYTES 0x00800000ULL", runtime)
+        self.assertIn(
+            "#define ADMISSION_BACKEND_BYTES APPLE_AGX_LOCAL_RESERVE_BACKEND_BYTES", runtime
+        )
+        self.assertIn("#define APPLE_AGX_LOCAL_RESERVE_BACKEND_BYTES 0x00800000ULL", abi)
 
 
 if __name__ == "__main__":

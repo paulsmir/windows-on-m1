@@ -47,15 +47,18 @@ int main(void) {
  FV *fv=(void *)((char *)a+sizeof(ALLOC)); fv->Header=(HDR){5,sizeof(FV),0};
  fv->BaseAddress=0x852000000ULL; fv->Length=0x200000;
  HDR *end=(void *)((char *)fv+sizeof(FV)); *end=(HDR){0xffff,sizeof(HDR),0};
- assert(AgxLocalReserveHobsSafe(b));
- a->AllocDescriptor.MemoryBaseAddress=b+0x3ffff000; assert(!AgxLocalReserveHobsSafe(b));
+ assert(AgxLocalReserveHobsSafe(b,0x40000000ULL));
+ a->AllocDescriptor.MemoryBaseAddress=b+0x3ffff000; assert(!AgxLocalReserveHobsSafe(b,0x40000000ULL));
+ /* M2-f2c: a 384 MiB reserve ends before that allocation. */
+ assert(AgxLocalReserveHobsSafe(b,0x18000000ULL));
+ a->AllocDescriptor.MemoryBaseAddress=b+0x17fff000; assert(!AgxLocalReserveHobsSafe(b,0x18000000ULL));
  a->AllocDescriptor.MemoryBaseAddress=0x851000000ULL;
  unsigned types[]={5,9,12};
- for(unsigned i=0;i<3;++i){fv->Header.HobType=types[i];fv->BaseAddress=b+0x20000000;assert(!AgxLocalReserveHobsSafe(b));}
+ for(unsigned i=0;i<3;++i){fv->Header.HobType=types[i];fv->BaseAddress=b+0x20000000;assert(!AgxLocalReserveHobsSafe(b,0x40000000ULL));}
  fv->BaseAddress=0x852000000ULL;
- phit->EfiMemoryTop=b+0x1000; assert(!AgxLocalReserveHobsSafe(b));
+ phit->EfiMemoryTop=b+0x1000; assert(!AgxLocalReserveHobsSafe(b,0x40000000ULL));
  phit->EfiMemoryTop=0x854000000ULL;
- a->AllocDescriptor.MemoryBaseAddress=UINT64_MAX-1; assert(!AgxLocalReserveHobsSafe(b));
+ a->AllocDescriptor.MemoryBaseAddress=UINT64_MAX-1; assert(!AgxLocalReserveHobsSafe(b,0x40000000ULL));
  return 0;
 }
 '''

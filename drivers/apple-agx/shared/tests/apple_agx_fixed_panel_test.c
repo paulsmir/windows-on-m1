@@ -171,7 +171,7 @@ static APPLE_AGX_FIXED_PANEL make_panel(FAKE_BROKER *Fake) {
   io.Write64 = write64;
   io.Pause = pause_broker;
   assert(AppleAgxFixedPanelInitialize(
-             &panel, &io, 0x80000000ULL, 1ULL, 8u) ==
+             &panel, &io, 0x80000000ULL, 0x3b800000ULL, 1ULL, 8u) ==
          AppleAgxFixedPanelOk);
   return panel;
 }
@@ -227,6 +227,50 @@ static void test_present_translates_segment_address_without_copy(void) {
                                    60ULL, &swap) ==
          AppleAgxFixedPanelSinglePresentOnly);
   assert(fake.SurfaceOffset == 0x1000000ULL);
+}
+
+/* M2-f2c: the pool is the receipt-sized segment 2; a smaller reserve
+ * registers its own size and bounds every surface by it. */
+static void test_pool_follows_the_reserve_size(void) {
+  FAKE_BROKER fake;
+  APPLE_AGX_SCANOUT_IO io;
+  APPLE_AGX_FIXED_PANEL panel;
+  APPLE_AGX_SCANOUT_U32 swap = 0u;
+  memset(&fake, 0, sizeof(fake));
+  memset(&io, 0, sizeof(io));
+  io.Context = &fake;
+  io.NowMs = now_ms;
+  io.Read32 = read32;
+  io.Read64 = read64;
+  io.Write32 = write32;
+  io.Write64 = write64;
+  io.Pause = pause_broker;
+  /* Above the J313 maximum, unaligned or below one surface: refused. */
+  assert(AppleAgxFixedPanelInitialize(&panel, &io, 0x80000000ULL,
+                                      0x3b810000ULL, 1ULL, 8u) ==
+         AppleAgxFixedPanelInvalidArgument);
+  assert(AppleAgxFixedPanelInitialize(&panel, &io, 0x80000000ULL,
+                                      0x13804000ULL, 1ULL, 8u) ==
+         AppleAgxFixedPanelInvalidArgument);
+  assert(AppleAgxFixedPanelInitialize(&panel, &io, 0x80000000ULL,
+                                      0x800000ULL, 1ULL, 8u) ==
+         AppleAgxFixedPanelInvalidArgument);
+  /* A 384 MiB reserve: segment 2 is 312 MiB. */
+  assert(AppleAgxFixedPanelInitialize(&panel, &io, 0x80000000ULL,
+                                      0x13800000ULL, 1ULL, 8u) ==
+         AppleAgxFixedPanelOk);
+  fake.Response = FakeRegister;
+  assert(AppleAgxFixedPanelStart(&panel, 20ULL) == AppleAgxFixedPanelOk);
+  assert(fake.PoolSize == 0x13800000ULL);
+  assert(AppleAgxFixedPanelCommit(&panel, 0u, 0u, 2560u, 1600u,
+                                  10240u, 1u) == AppleAgxFixedPanelOk);
+  fake.Response = FakePresent;
+  /* 0x12860000 + one surface ends inside the pool; the next aligned
+   * offset would end past it. */
+  assert(AppleAgxFixedPanelPresent(&panel, 2u, 0x12870000ULL, 40ULL, &swap) ==
+         AppleAgxFixedPanelInvalidSurface);
+  assert(AppleAgxFixedPanelPresent(&panel, 2u, 0x12860000ULL, 40ULL, &swap) ==
+         AppleAgxFixedPanelOk);
 }
 
 static void test_register_timeout_retains_uncertain_ownership(void) {
@@ -373,6 +417,7 @@ int main(void) {
   test_commit_accepts_only_fixed_mode_and_topology();
   test_present_translates_segment_address_without_copy();
   test_register_timeout_retains_uncertain_ownership();
+  test_pool_follows_the_reserve_size();
   test_present_rejects_wrong_segment_and_tail();
   test_release_retains_ownership_without_quiesce();
   test_v2_queue_present_does_not_poll_or_consume_v1_handoff();

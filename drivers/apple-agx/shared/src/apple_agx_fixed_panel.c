@@ -28,16 +28,20 @@ static APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelMapScanoutResult(
 
 APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelInitialize(
     APPLE_AGX_FIXED_PANEL *Panel, const APPLE_AGX_SCANOUT_IO *Io,
-    APPLE_AGX_SCANOUT_U64 PoolIpa,
+    APPLE_AGX_SCANOUT_U64 PoolIpa, APPLE_AGX_SCANOUT_U64 PoolBytes,
     APPLE_AGX_SCANOUT_U64 FirstSequence, APPLE_AGX_SCANOUT_U32 MaxPolls) {
   APPLE_AGX_SCANOUT_RESULT result;
 
   if (Panel == APPLE_AGX_FIXED_PANEL_NULL ||
       Io == APPLE_AGX_FIXED_PANEL_NULL || PoolIpa == 0ULL ||
-      (PoolIpa & (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) != 0ULL)
+      (PoolIpa & (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) != 0ULL ||
+      PoolBytes < APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
+      PoolBytes > APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE ||
+      (PoolBytes & (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) != 0ULL)
     return AppleAgxFixedPanelInvalidArgument;
 
   Panel->PoolIpa = PoolIpa;
+  Panel->PoolBytes = PoolBytes;
   Panel->ActiveOffset = 0ULL;
   Panel->LastSwapId = 0u;
   Panel->Started = APPLE_AGX_SCANOUT_FALSE;
@@ -62,7 +66,7 @@ APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelStart(
   if (result != AppleAgxScanoutOk)
     return AppleAgxFixedPanelMapScanoutResult(result);
   result = AppleAgxScanoutRegisterPool(&Panel->Scanout, Panel->PoolIpa,
-                                       DeadlineMs);
+                                       Panel->PoolBytes, DeadlineMs);
   if (result != AppleAgxScanoutOk) {
     APPLE_AGX_SCANOUT_U32 state;
     /* REGISTER was submitted.  Only an explicit UNREGISTERED state proves
@@ -134,8 +138,7 @@ APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelPresent(
    * within PrimarySegment, not an absolute GPU VA. */
   offset = SegmentOffset;
   if ((offset & (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) != 0ULL ||
-      offset > APPLE_AGX_SCANOUT_J313_POOL_SIZE -
-                   APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
+      offset > Panel->PoolBytes - APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
     return AppleAgxFixedPanelInvalidSurface;
   /* ABI v1 proves APPLIED, not display latch/vblank.  It is therefore safe
    * only for the initial fixed scanout handoff, not reusable WDDM flips. */
@@ -164,8 +167,7 @@ APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelQueuePresent(
   if (SegmentId != APPLE_AGX_FIXED_PANEL_SEGMENT_ID)
     return AppleAgxFixedPanelInvalidSegment;
   if ((SegmentOffset & (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) != 0ULL ||
-      SegmentOffset > APPLE_AGX_SCANOUT_J313_POOL_SIZE -
-                          APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
+      SegmentOffset > Panel->PoolBytes - APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
     return AppleAgxFixedPanelInvalidSurface;
   /* A WDDM mode set programs the new primary while the source is hidden and
    * shows it on SetVidPnSourceVisibility(TRUE); keep only the latest one. */

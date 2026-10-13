@@ -14,7 +14,7 @@ int main(void) {
     struct hv_agx_local_receipt r = {0};
     struct hv_agx_local_failure f = {0};
     assert(HV_AGX_LOCAL_BYTES == 0x40000000ULL);
-    assert(HV_AGX_LOCAL_ABI_VERSION == 2);
+    assert(HV_AGX_LOCAL_ABI_VERSION == 3);
     for (unsigned i = 0; i < 2; ++i) {
         uint64_t b = starts[i];
         struct mapping m = {0};
@@ -46,9 +46,10 @@ int main(void) {
     assert(!hv_agx_local_carveout_allows(0x880000000ULL, UINT64_MAX-1, 0x4000, false));
     r = (struct hv_agx_local_receipt){0x8e0000000ULL,0x8e0000000ULL,0x40000000ULL};
     assert(hv_agx_local_scanout_allows(&r,r.host_pa,0x3800000));
-    assert(hv_agx_local_scanout_allows(&r,r.host_pa+0x3e7fc000,0x4000));
-    assert(!hv_agx_local_scanout_allows(&r,r.host_pa+0x3e800000,0x4000));
-    assert(!hv_agx_local_scanout_allows(&r,r.host_pa+0x3e7fc000,0x8000));
+    /* M2-f2c: scanout stays inside segment 2 (reserve - private - backend). */
+    assert(hv_agx_local_scanout_allows(&r,r.host_pa+0x3b7fc000,0x4000));
+    assert(!hv_agx_local_scanout_allows(&r,r.host_pa+0x3b800000,0x4000));
+    assert(!hv_agx_local_scanout_allows(&r,r.host_pa+0x3b7fc000,0x8000));
     assert(!hv_agx_local_scanout_allows(&r,UINT64_MAX-1,0x4000));
     r.bytes=0; assert(!hv_agx_local_scanout_allows(&r,r.host_pa,0x4000));
     return 0;

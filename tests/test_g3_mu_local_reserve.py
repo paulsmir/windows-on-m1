@@ -15,7 +15,9 @@ class MuLocalReserveTest(unittest.TestCase):
     def test_pei_reserves_before_dxe_and_maps_broker_as_device(self):
         source = PEI.read_text()
         self.assertIn("AgxLocalReserveRangeValid", source)
-        self.assertIn("BuildMemoryAllocationHob (LocalBase, AGX_LOCAL_RESERVE_BYTES, EfiReservedMemoryType)", source)
+        self.assertIn("BuildMemoryAllocationHob (LocalBase, LocalBytes, EfiReservedMemoryType)", source)
+        self.assertIn("ReserveMemoryRegion (LocalBase, (UINT32)LocalBytes)", source)
+        self.assertIn("!AgxLocalReserveSizeValid (LocalBytes)", source)
         self.assertLess(source.index("ReserveMemoryRegion (LocalBase"),
                         source.index("BuildMemoryAllocationHob (LocalBase"))
         self.assertLess(source.index("BuildMemoryAllocationHob (LocalBase"),

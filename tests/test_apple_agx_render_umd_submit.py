@@ -270,7 +270,7 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         )
         self.assertIn(
             "Context->Memory.LocalAllocationBytes !=\n"
-            "          ADMISSION_LOCAL_ALLOCATION_BYTES",
+            "          AppleAgxLocalReserveSegmentBytes(runtime->LocalObject.Length)",
             memory,
         )
 

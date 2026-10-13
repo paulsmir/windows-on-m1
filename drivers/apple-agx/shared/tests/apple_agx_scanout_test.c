@@ -244,6 +244,10 @@ static APPLE_AGX_SCANOUT_CLIENT make_client(FAKE_MMIO *Fake,
   io.Pause = fake_pause;
   assert(AppleAgxScanoutInitialize(&client, &io, FirstSequence, MaxPolls) ==
          AppleAgxScanoutOk);
+  /* A fresh client bounds surfaces by nothing until a pool is registered. */
+  assert(client.PoolBytes == 0ULL);
+  /* Present tests model the full J313 pool as registered. */
+  client.PoolBytes = APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE;
   return client;
 }
 
@@ -262,7 +266,7 @@ static void test_abi_matches_m1n1_v1_header(void) {
   assert(APPLE_AGX_SCANOUT_REG_ACTIVE_OFFSET == 0x38u);
   assert(APPLE_AGX_SCANOUT_REG_REQUEST_SEQUENCE == 0x90u);
   assert(APPLE_AGX_SCANOUT_REG_COMMAND == 0x98u);
-  assert(APPLE_AGX_SCANOUT_J313_POOL_SIZE == 0x3b800000ULL);
+  assert(APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE == 0x3b800000ULL);
   assert(APPLE_AGX_SCANOUT_J313_SURFACE_SIZE == 0xfa0000ULL);
   assert(APPLE_AGX_SCANOUT_IRQ_MASK == 3u);
 }
@@ -289,10 +293,10 @@ static void test_register_requires_terminal_receipt_ready_and_applied(void) {
   fake.Response = FakeResponseRegisterGood;
   client = make_client(&fake, 7ULL, 4u);
   qualify(&client);
-  assert(AppleAgxScanoutRegisterPool(&client, 0x81000000ULL, 100ULL) ==
+  assert(AppleAgxScanoutRegisterPool(&client, 0x81000000ULL, APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE, 100ULL) ==
          AppleAgxScanoutOk);
   assert(fake.PoolIpa == 0x81000000ULL);
-  assert(fake.PoolSize == APPLE_AGX_SCANOUT_J313_POOL_SIZE);
+  assert(fake.PoolSize == APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE);
   assert(fake.RequestSequence == 7ULL);
   assert(fake.Command == APPLE_AGX_SCANOUT_CMD_REGISTER_POOL);
 
@@ -300,14 +304,14 @@ static void test_register_requires_terminal_receipt_ready_and_applied(void) {
   fake.Response = FakeResponseRegisterWrongState;
   client = make_client(&fake, 8ULL, 2u);
   qualify(&client);
-  assert(AppleAgxScanoutRegisterPool(&client, 0x82000000ULL, 100ULL) ==
+  assert(AppleAgxScanoutRegisterPool(&client, 0x82000000ULL, APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE, 100ULL) ==
          AppleAgxScanoutInconsistentReceipt);
 
   fake_init(&fake);
   fake.Response = FakeResponseRegisterWrongApplied;
   client = make_client(&fake, 9ULL, 2u);
   qualify(&client);
-  assert(AppleAgxScanoutRegisterPool(&client, 0x83000000ULL, 100ULL) ==
+  assert(AppleAgxScanoutRegisterPool(&client, 0x83000000ULL, APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE, 100ULL) ==
          AppleAgxScanoutInconsistentReceipt);
 }
 
@@ -382,7 +386,7 @@ static void test_stale_receipt_timeout_and_sequence_are_fail_closed(void) {
   fake.Response = FakeResponseStale;
   client = make_client(&fake, 40ULL, 4u);
   qualify(&client);
-  assert(AppleAgxScanoutRegisterPool(&client, 0x84000000ULL, 100ULL) ==
+  assert(AppleAgxScanoutRegisterPool(&client, 0x84000000ULL, APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE, 100ULL) ==
          AppleAgxScanoutStaleSequence);
 
   fake.Response = FakeResponseNone;
@@ -416,7 +420,7 @@ static void test_late_or_clock_regressed_terminal_receipt_is_rejected(void) {
   fake.PauseNowMs = 101ULL;
   client = make_client(&fake, 70ULL, 4u);
   qualify(&client);
-  assert(AppleAgxScanoutRegisterPool(&client, 0x85000000ULL, 100ULL) ==
+  assert(AppleAgxScanoutRegisterPool(&client, 0x85000000ULL, APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE, 100ULL) ==
          AppleAgxScanoutTimeout);
 
   fake_init(&fake);
@@ -426,7 +430,7 @@ static void test_late_or_clock_regressed_terminal_receipt_is_rejected(void) {
   fake.PauseNowMs = 9ULL;
   client = make_client(&fake, 71ULL, 4u);
   qualify(&client);
-  assert(AppleAgxScanoutRegisterPool(&client, 0x86000000ULL, 100ULL) ==
+  assert(AppleAgxScanoutRegisterPool(&client, 0x86000000ULL, APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE, 100ULL) ==
          AppleAgxScanoutClockRegression);
 }
 

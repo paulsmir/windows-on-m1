@@ -190,7 +190,7 @@ static PVOID MmMapIoSpaceEx(PHYSICAL_ADDRESS address, SIZE_T bytes, ULONG protec
       protection == (PAGE_READWRITE | PAGE_NOCACHE))
     return broker_registers;
   if ((ULONGLONG)address.QuadPart == UINT64_C(0x8e0000000) &&
-      bytes == APPLE_AGX_LOCAL_RESERVE_BYTES &&
+      bytes == APPLE_AGX_LOCAL_RESERVE_MAX_BYTES &&
       protection == (PAGE_READWRITE | PAGE_WRITECOMBINE)) {
     if (fail_local_map) return NULL;
     local_mapping = calloc(1, bytes);
@@ -348,12 +348,12 @@ static int replay_memory_stages(ADMISSION_PHYSICAL_ALLOCATION *borrowed) {
                                &status))
     goto done;
   if (AppleAgxUatMap(63u, &residency.Roots, UINT64_C(0x1100020000),
-                     borrowed->HostPhysicalBase + ADMISSION_BACKEND_OFFSET,
+                     borrowed->HostPhysicalBase + AppleAgxLocalReserveBackendOffset(APPLE_AGX_LOCAL_RESERVE_MAX_BYTES),
                      0x40000u, AppleAgxUatGpuPipelineShared,
                      &residency.Allocator, &residency.Inventory) !=
           AppleAgxUatResultOk ||
       AppleAgxUatMap(63u, &residency.Roots, UINT64_C(0x1100010000),
-                     borrowed->HostPhysicalBase + (ADMISSION_BACKEND_OFFSET + 0x40000),
+                     borrowed->HostPhysicalBase + (AppleAgxLocalReserveBackendOffset(APPLE_AGX_LOCAL_RESERVE_MAX_BYTES) + 0x40000),
                      0x4000u, AppleAgxUatGpuPipelineShared,
                      &residency.Allocator, &residency.Inventory) !=
           AppleAgxUatResultOk)
@@ -520,11 +520,13 @@ static int replay_scanout_start(ADMISSION_CONTEXT *context) {
             (unsigned)status, broker_accesses);
     return 1;
   }
-  assert(scanout_broker.registered_pool_size == 0x3800000ULL);
+  /* EXP953/M2-f2c: the DCP pool is all of the receipt-sized segment 2. */
+  assert(scanout_broker.registered_pool_size == 0x3b800000ULL);
   assert(scanout_broker.pool_pa == context->LocalReserveReceipt.HostPa);
   ADMISSION_ALLOCATION_HANDLE primary={.Object={ADMISSION_ALLOCATION_OBJECT_MAGIC,
     {2560,1600,10240,4,D3DDDIFMT_A8R8G8B8,APPLE_AGX_SCANOUT_J313_SURFACE_SIZE}}};
-  DXGKARG_SETVIDPNSOURCEADDRESS args={0,&primary,2,{context->Memory.Topology.Local.Base+0x8000000}};
+  /* A primary at the pool end lies outside the registered pool. */
+  DXGKARG_SETVIDPNSOURCEADDRESS args={0,&primary,2,{context->Memory.Topology.Local.Base+0x3b800000}};
   context->DisplayActive=context->SourceVisible=TRUE;
   unsigned before_present=broker_accesses;
   assert(AdmissionScanoutQueuePresent(context,&args)==STATUS_INVALID_ADDRESS);
@@ -534,14 +536,14 @@ static int replay_scanout_start(ADMISSION_CONTEXT *context) {
   assert(context->Memory.PrivateOffset == 0x3b800000ULL);
   assert(context->Memory.PrivateBytes == 0x4000000ULL);
   assert(AdmissionMemoryRuntimeScanoutView(context, &view) == STATUS_SUCCESS);
-  assert(view.Bytes == 0x3800000ULL && view.PoolBytes == 0x3800000ULL);
+  assert(view.Bytes == 0x3b800000ULL && view.PoolBytes == 0x3b800000ULL);
   assert(AdmissionMemoryRuntimeBackendView(context, &backend) == STATUS_SUCCESS);
   assert(backend.GuestIpaAddress == context->LocalReserveReceipt.GuestIpa + 0x3f800000ULL);
   assert(backend.HostPhysicalAddress == view.HostPhysicalAddress + 0x3f800000ULL);
   assert(backend.GpuVirtualAddress == view.GpuVirtualAddress + 0x3f800000ULL);
   assert(backend.CpuAddress == (PUCHAR)view.CpuAddress + 0x3f800000ULL);
   assert(backend.Bytes == 0x800000ULL);
-  assert(ADMISSION_BACKEND_OFFSET == context->Memory.BackendOffset);
+  assert(AppleAgxLocalReserveBackendOffset(APPLE_AGX_LOCAL_RESERVE_MAX_BYTES) == context->Memory.BackendOffset);
   assert(AdmissionScanoutStop(context) == STATUS_SUCCESS);
   assert(context->ScanoutRuntime == NULL);
   assert(scanout_broker.registered_pool_size == 0);
@@ -556,7 +558,9 @@ static int replay_scanout_start(ADMISSION_CONTEXT *context) {
     assert(AppleAgxLocalSegmentAddressToGpuVa(2, 2,
         context->Memory.Topology.Local.Base, view.Bytes, 0, context->Memory.Topology.Local.Base + invalid[i],
         APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, 0, &surface) != AppleAgxLocalSegmentAddressOk);
-    assert(AdmissionMemoryResolveLocalView(&context->Memory, context->Memory.Topology.Local.Base + invalid[i],
+    /* The scanout view is all of segment 2 (EXP953/M2-f2c): these cross
+     * into private storage for the local view as well. */
+    assert(!AdmissionMemoryResolveLocalView(&context->Memory, context->Memory.Topology.Local.Base + invalid[i],
         APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, 0, view.CpuAddress,
         view.HostPhysicalAddress, &local));
   }
@@ -575,7 +579,7 @@ static int replay_scanout_start(ADMISSION_CONTEXT *context) {
   unsigned accesses = broker_accesses;
   memory_runtime->LocalObject.Length = view.Bytes;
   assert(AdmissionScanoutStart(context) == STATUS_INVALID_ADDRESS);
-  memory_runtime->LocalObject.Length = ADMISSION_LOCAL_BYTES;
+  memory_runtime->LocalObject.Length = APPLE_AGX_LOCAL_RESERVE_MAX_BYTES;
   context->Memory.BackendOffset -= 0x10000;
   assert(AdmissionScanoutStart(context) == STATUS_INVALID_ADDRESS);
   context->Memory.BackendOffset += 0x10000;
@@ -633,7 +637,7 @@ int main(void) {
   memcpy(broker_registers + APPLE_AGX_LOCAL_RESERVE_OFFSET + APPLE_AGX_LOCAL_REG_HOST_PA,
          &(uint64_t){UINT64_C(0x8e0000000)}, sizeof(uint64_t));
   memcpy(broker_registers + APPLE_AGX_LOCAL_RESERVE_OFFSET + APPLE_AGX_LOCAL_REG_BYTES,
-         &(uint64_t){APPLE_AGX_LOCAL_RESERVE_BYTES}, sizeof(uint64_t));
+         &(uint64_t){APPLE_AGX_LOCAL_RESERVE_MAX_BYTES}, sizeof(uint64_t));
   list.Count = 1;
   list.List[0].PartialResourceList.Count = 11;
   memory(&entry[0], J313_AGX_G2_SGX_MMIO_BASE, J313_AGX_G2_SGX_MMIO_SIZE);
@@ -724,7 +728,7 @@ int main(void) {
       allocation->PhysicalMemoryObject != NULL ||
       allocation->AdapterMemoryObject != NULL ||
       allocation->CpuBase != local_mapping ||
-      allocation->MappedSize != APPLE_AGX_LOCAL_RESERVE_BYTES) {
+      allocation->MappedSize != APPLE_AGX_LOCAL_RESERVE_MAX_BYTES) {
     fprintf(stderr, "borrowed allocation impersonated a Dxgk-owned object\n");
     return 1;
   }
@@ -739,16 +743,16 @@ int main(void) {
   context.MemoryRuntime = &scanout_runtime;
   APPLE_AGX_SOFTWARE_APERTURE_ENTRY aperture[16] = {{0}};
   assert(AdmissionMemoryInitialize(&context.Memory, aperture, 16,
-      0x1600000000ULL, 0x10000ULL, ADMISSION_LOCAL_GPU_VA, ADMISSION_LOCAL_BYTES));
+      0x1600000000ULL, 0x10000ULL, ADMISSION_LOCAL_GPU_VA, APPLE_AGX_LOCAL_RESERVE_MAX_BYTES));
   assert(AdmissionMemoryPartitionLocal(&context.Memory,
-      ADMISSION_LOCAL_ALLOCATION_BYTES, ADMISSION_PRIVATE_BYTES, ADMISSION_BACKEND_BYTES));
+      AppleAgxLocalReserveSegmentBytes(APPLE_AGX_LOCAL_RESERVE_MAX_BYTES), ADMISSION_PRIVATE_BYTES, ADMISSION_BACKEND_BYTES));
   context.Memory.UatReady = APPLE_AGX_TRUE;
-  scanout_runtime.LocalObject.Length = ADMISSION_LOCAL_BYTES;
+  scanout_runtime.LocalObject.Length = APPLE_AGX_LOCAL_RESERVE_MAX_BYTES;
   if (AdmissionMemoryRuntimeScanoutView(&context, &scanout_view) !=
           STATUS_SUCCESS ||
       scanout_view.GuestIpaAddress != UINT64_C(0x8e0000000) ||
       scanout_view.HostPhysicalAddress != UINT64_C(0x8e0000000) ||
-      scanout_view.Bytes != APPLE_AGX_SCANOUT_J313_POOL_SIZE) {
+      scanout_view.Bytes != APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE) {
     fprintf(stderr, "EXP834 borrowed scanout view failed: %08x\n",
             (unsigned)AdmissionMemoryRuntimeScanoutView(&context, &scanout_view));
     return 1;
@@ -812,10 +816,10 @@ int main(void) {
   old_allocation->PhysicalMemoryObject = (void *)0x1;
   old_allocation->AdapterMemoryObject = (void *)0x2;
   old_allocation->Adl = calloc(1, sizeof(*old_allocation->Adl));
-  old_allocation->MappedBase = malloc(APPLE_AGX_LOCAL_RESERVE_BYTES);
-  old_allocation->MappedSize = APPLE_AGX_LOCAL_RESERVE_BYTES;
+  old_allocation->MappedBase = malloc(APPLE_AGX_LOCAL_RESERVE_MAX_BYTES);
+  old_allocation->MappedSize = APPLE_AGX_LOCAL_RESERVE_MAX_BYTES;
   old_allocation->CpuBase = old_allocation->MappedBase;
-  old_allocation->Size = APPLE_AGX_LOCAL_RESERVE_BYTES;
+  old_allocation->Size = APPLE_AGX_LOCAL_RESERVE_MAX_BYTES;
   old_allocation->GuestIpaBase = UINT64_C(0x8f0000000);
   old_allocation->HostPhysicalBase = UINT64_C(0x8f0000000);
   if (old_allocation->Adl != NULL)
@@ -830,15 +834,15 @@ int main(void) {
     fprintf(stderr, "Dxgk-owned contiguous ADL scanout view regressed\n");
     return 1;
   }
-  old_allocation->Size = ADMISSION_LOCAL_ALLOCATION_BYTES;
+  old_allocation->Size = AppleAgxLocalReserveSegmentBytes(APPLE_AGX_LOCAL_RESERVE_MAX_BYTES);
   assert(AdmissionScanoutStart(&context) == STATUS_INVALID_ADDRESS);
-  old_allocation->Size = ADMISSION_LOCAL_BYTES;
+  old_allocation->Size = APPLE_AGX_LOCAL_RESERVE_MAX_BYTES;
   ULONGLONG saved_ipa = old_allocation->GuestIpaBase;
-  old_allocation->GuestIpaBase = MAXULONGLONG - APPLE_AGX_SCANOUT_J313_POOL_SIZE + 1;
+  old_allocation->GuestIpaBase = MAXULONGLONG - APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE + 1;
   assert(AdmissionMemoryRuntimeScanoutView(&context, &scanout_view) == STATUS_INTEGER_OVERFLOW);
   old_allocation->GuestIpaBase = saved_ipa;
   ULONGLONG saved_pa = old_allocation->HostPhysicalBase;
-  old_allocation->HostPhysicalBase = MAXULONGLONG - APPLE_AGX_SCANOUT_J313_POOL_SIZE + 1;
+  old_allocation->HostPhysicalBase = MAXULONGLONG - APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE + 1;
   scanout_runtime.LocalObject.DeviceAddress = old_allocation->HostPhysicalBase;
   assert(AdmissionMemoryRuntimeScanoutView(&context, &scanout_view) == STATUS_INTEGER_OVERFLOW);
   old_allocation->HostPhysicalBase = saved_pa;

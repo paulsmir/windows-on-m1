@@ -29,10 +29,29 @@ class LocalReserveAbiTest(unittest.TestCase):
                          define(KMD, "APPLE_AGX_LOCAL_RESERVE_VERSION"))
         self.assertEqual(define(MU, "AGX_LOCAL_BROKER_VERSION"),
                          define(KMD, "APPLE_AGX_LOCAL_RESERVE_VERSION"))
-        self.assertEqual(define(M1N1, "HV_AGX_LOCAL_BYTES"),
+        # M2-f2c (ABI v3): the receipt carries the size; every layer accepts
+        # the same [MIN, MAX] range and the same layout, and m1n1's selected
+        # size lies inside it.
+        self.assertEqual(define(KMD, "APPLE_AGX_LOCAL_RESERVE_VERSION"), 3)
+        self.assertEqual(define(M1N1, "HV_AGX_LOCAL_MAX_BYTES"),
                          define(MU, "AGX_LOCAL_RESERVE_BYTES"))
         self.assertEqual(define(MU, "AGX_LOCAL_RESERVE_BYTES"),
-                         define(KMD, "APPLE_AGX_LOCAL_RESERVE_BYTES"))
+                         define(KMD, "APPLE_AGX_LOCAL_RESERVE_MAX_BYTES"))
+        m1n1_min = (define(M1N1, "HV_AGX_LOCAL_MIN_SEGMENT_BYTES") +
+                    define(M1N1, "HV_AGX_LOCAL_PRIVATE_BYTES") +
+                    define(M1N1, "HV_AGX_LOCAL_BACKEND_BYTES"))
+        kmd_min = (define(KMD, "APPLE_AGX_LOCAL_RESERVE_MIN_SEGMENT_BYTES") +
+                   define(KMD, "APPLE_AGX_LOCAL_RESERVE_PRIVATE_BYTES") +
+                   define(KMD, "APPLE_AGX_LOCAL_RESERVE_BACKEND_BYTES"))
+        self.assertEqual(m1n1_min, define(MU, "AGX_LOCAL_RESERVE_MIN_BYTES"))
+        self.assertEqual(kmd_min, define(MU, "AGX_LOCAL_RESERVE_MIN_BYTES"))
+        self.assertEqual(define(M1N1, "HV_AGX_LOCAL_PRIVATE_BYTES"),
+                         define(KMD, "APPLE_AGX_LOCAL_RESERVE_PRIVATE_BYTES"))
+        self.assertEqual(define(M1N1, "HV_AGX_LOCAL_BACKEND_BYTES"),
+                         define(KMD, "APPLE_AGX_LOCAL_RESERVE_BACKEND_BYTES"))
+        selected = define(M1N1, "HV_AGX_LOCAL_BYTES")
+        self.assertTrue(m1n1_min <= selected <= define(M1N1, "HV_AGX_LOCAL_MAX_BYTES"))
+        self.assertEqual(selected % define(M1N1, "HV_AGX_LOCAL_ALIGNMENT"), 0)
         self.assertEqual(define(M1N1, "HV_AGX_LOCAL_MMIO_OFFSET"),
                          define(KMD, "APPLE_AGX_LOCAL_RESERVE_OFFSET"))
         self.assertEqual(define(MU, "AGX_LOCAL_BROKER_BASE"),

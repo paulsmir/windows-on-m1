@@ -160,6 +160,7 @@ APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutInitialize(
   Client->AbiVersion = 0u;
   Client->Capabilities = 0u;
   Client->PendingPresentSequence = 0ULL;
+  Client->PoolBytes = 0ULL;
   Client->Qualified = APPLE_AGX_SCANOUT_FALSE;
   Client->PresentPending = APPLE_AGX_SCANOUT_FALSE;
   return AppleAgxScanoutOk;
@@ -196,11 +197,14 @@ APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutQualify(
 
 APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutRegisterPool(
     APPLE_AGX_SCANOUT_CLIENT *Client, APPLE_AGX_SCANOUT_U64 PoolIpa,
-    APPLE_AGX_SCANOUT_U64 DeadlineMs) {
+    APPLE_AGX_SCANOUT_U64 PoolBytes, APPLE_AGX_SCANOUT_U64 DeadlineMs) {
   APPLE_AGX_SCANOUT_U64 sequence;
   APPLE_AGX_SCANOUT_RESULT result;
   if (Client == APPLE_AGX_SCANOUT_NULL || PoolIpa == 0ULL ||
-      (PoolIpa & (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) != 0ULL)
+      (PoolIpa & (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) != 0ULL ||
+      PoolBytes < APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
+      PoolBytes > APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE ||
+      (PoolBytes & (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) != 0ULL)
     return AppleAgxScanoutInvalidArgument;
   if (!Client->Qualified)
     return AppleAgxScanoutNotQualified;
@@ -210,12 +214,13 @@ APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutRegisterPool(
   if (!AppleAgxScanoutWrite64(Client, APPLE_AGX_SCANOUT_REG_POOL_IPA,
                               PoolIpa) ||
       !AppleAgxScanoutWrite64(Client, APPLE_AGX_SCANOUT_REG_POOL_SIZE,
-                              APPLE_AGX_SCANOUT_J313_POOL_SIZE) ||
+                              PoolBytes) ||
       !AppleAgxScanoutWrite64(Client, APPLE_AGX_SCANOUT_REG_REQUEST_SEQUENCE,
                               sequence) ||
       !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_COMMAND,
                               APPLE_AGX_SCANOUT_CMD_REGISTER_POOL))
     return AppleAgxScanoutTransportFailed;
+  Client->PoolBytes = PoolBytes;
   return AppleAgxScanoutWaitForReceipt(Client, sequence,
                                        AppleAgxScanoutWaitRegister, 0ULL,
                                        DeadlineMs, APPLE_AGX_SCANOUT_NULL);
@@ -228,8 +233,8 @@ APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutPresentApplied(
   APPLE_AGX_SCANOUT_RESULT result;
   if (Client == APPLE_AGX_SCANOUT_NULL || SwapId == APPLE_AGX_SCANOUT_NULL ||
       (SurfaceOffset & (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) != 0ULL ||
-      SurfaceOffset > APPLE_AGX_SCANOUT_J313_POOL_SIZE -
-                          APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
+      Client->PoolBytes < APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
+      SurfaceOffset > Client->PoolBytes - APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
     return AppleAgxScanoutInvalidArgument;
   *SwapId = 0u;
   if (!Client->Qualified)
@@ -267,8 +272,8 @@ APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutQueuePresent(
 
   if (Client == APPLE_AGX_SCANOUT_NULL || Sequence == APPLE_AGX_SCANOUT_NULL ||
       (SurfaceOffset & (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) != 0ULL ||
-      SurfaceOffset > APPLE_AGX_SCANOUT_J313_POOL_SIZE -
-                          APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
+      Client->PoolBytes < APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
+      SurfaceOffset > Client->PoolBytes - APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
     return AppleAgxScanoutInvalidArgument;
   *Sequence = 0ULL;
   if (!Client->Qualified)
