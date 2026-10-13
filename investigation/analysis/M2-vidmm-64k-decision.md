@@ -88,3 +88,40 @@ M2 follows the first; the second stays a labelled alternative.
 [Support for 64KB Pages]: https://learn.microsoft.com/en-us/windows-hardware/drivers/display/support-for-64kb-pages
 [GpuMmu Model]: https://learn.microsoft.com/en-us/windows-hardware/drivers/display/gpummu-model
 [DXGK_GPUMMUCAPS]: https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3dkmddi/ns-d3dkmddi-_dxgk_gpummucaps
+
+## Addendum 2026-10-13: system memory is not a home for GPU-accessed BOs (EXP1240-EXP1244)
+
+Hardware evidence, in order:
+
+- EXP1240-EXP1242: with CPU-visible class BOs aperture-only (M2-c) VidMm issued 64 KB PTEs and the
+  KMD published them, and VA-only render targets work end to end once two validators stopped
+  requiring CPU bytes (ad894162, bdd1e258). But CS refused its renders (G4 Parse: attachment or
+  render envelope Unmapped) and the compute copy hung (queue timeout, ResetFailed -> 0x116).
+- EXP1244 (`Wom1G3SystemShapes`, groups attributed through UpdatePageTable `hAllocation`): every
+  system-memory shape is a CPU-visible Mesa class BO; VidMm maps them almost always with 4 KB
+  PTEs (64 KB groups ~1%, the documented single-PTE-mode conversion) and backs every shape partly
+  with scattered 4 KB pages (0.003% to 37% of a shape's 16 KiB groups). The KMD's
+  `DXGK_ALLOCATIONINFO` is identical for all class BOs, so the backing VidMm chooses is not a
+  function of the description (VidMm also exposes `LargifyUpgradeThreshold*`, i.e. 4 KB first,
+  larger later -- labelled inference).
+
+Conclusion: the AGX UAT maps 16 KiB pages only; VidMm-managed system memory gives no 16 KiB
+contiguity guarantee, and the KMD cannot request one for aperture-resident allocations. M2-c
+placement is reverted (6e728357); the VA-only output fixes stay (an evicted render target needs
+them).
+
+M2 continues through a memory segment whose backing the KMD owns:
+
+- `DXGK_SEGMENTFLAGS.PopulatedFromSystemMemory`: "the memory segment is actually populated from
+  system memory that the driver allocated during initialization" (Microsoft d3dkmddi docs). The KMD
+  takes the backing from Windows at start (16 KiB-aligned contiguous runs) and returns it at stop:
+  the memory stays OS RAM when the GPU is not running, the size is chosen per machine (fraction of
+  RAM, registry override) and nothing in m1n1 is machine-specific.
+- A `CpuVisible` memory segment is addressed by the CPU at `CpuTranslatedAddress + offset`, which
+  needs one physically contiguous range; scattered runs need `SupportsCpuHostAperture`
+  (DxgkDdiMapCpuHostAperture) instead. First step: one contiguous range (or a few segments) taken
+  early at start; the host-aperture variant only if contiguous allocation proves too small.
+- The firmware/RTKit/scanout/table objects stay in the m1n1 reserve
+  (`PopulatedByReservedDDRByFirmware`), which then shrinks to their needs (old M2-e).
+- Robustness independent of placement: refuse (not hang) a submission that references an
+  unpublished BO range, and implement TDR reset (0x116 today).
