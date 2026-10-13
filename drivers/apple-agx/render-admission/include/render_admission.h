@@ -1284,6 +1284,9 @@ void AdmissionRecordGpuvaG3UnpublishedGroups(
 void AdmissionRecordGpuvaG3Leaf64KPtes(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_reads_(32) const ULONGLONG *Counts);
+void AdmissionRecordGpuvaG3SystemGroups(
+    _In_opt_ ADMISSION_CONTEXT *Context,
+    _In_reads_(8) const ULONGLONG *Counts);
 BOOLEAN AdmissionGpuvaG3DeclarationReady(_In_ const ADMISSION_CONTEXT *Context);
 _IRQL_requires_(PASSIVE_LEVEL)
 NTSTATUS AdmissionPagingReceiptsStart(_In_ ADMISSION_CONTEXT *Context);

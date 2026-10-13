@@ -43,6 +43,10 @@ typedef struct _ADMISSION_G3_STATE {
   ULONGLONG UnpublishedGroups[32];
   /* M2-b receipt: valid 64 KiB PTEs applied by leaf updates, per segment. */
   ULONGLONG Leaf64KPtes[32];
+  /* M2 receipt: segment-0 (system) 16 KiB groups of valid leaf updates,
+   * [Use64KBPages * 4 + outcome]: 0 published, 1 incomplete (not four
+   * contiguous 16 KiB-aligned 4 KiB pages), 2 refused by the broker. */
+  ULONGLONG SystemGroups[8];
   ADMISSION_G3_UPLOAD_TRACE UploadTrace[ADMISSION_G3_UPLOAD_TRACE_COUNT];
   ULONG UploadTraceNext, UploadVerifyChecks, UploadVerifyMismatch,
       UploadVerifyUnmapped;
