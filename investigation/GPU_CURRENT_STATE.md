@@ -1,6 +1,32 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-13T15:30Z (read this first)
+## Current as of 2026-10-13T20:20Z (read this first)
+
+Installed: PACKAGE1250 (KMD 0cb63858, 30.0.1250.0) on m1n1 fc59c8cb (macho
+31471866, M2-f2 pool window on M2-d) + M1 FD 4d382bfa.
+Proven since 15:30Z:
+- M2-f2b (EXP1249, contiguous pool): CPU-visible Mesa class BOs live in
+  segment 3 (placement {3,1}); 60,016 pool 16 KiB groups published as System
+  backings, 0 unpublished; every check unchanged (CS 48.2 fps).
+- The single 1 GiB block is opportunistic (EXP1248: NULL in 0.1 ms; EXP1249/
+  EXP1250: granted), so segment 3 now goes through a hypervisor window: m1n1
+  fc59c8cb presents KMD-allocated guest RAM as one contiguous IPA window
+  (J313 0xd00000000, 4 GiB; broker+0xe00 MAP_APPEND/UNMAP_ALL; design
+  investigation/analysis/M2-f2-pool-window.md). EXP1249: the prepared
+  window is inert. EXP1250: segment 3 CpuTranslatedAddress = window IPA
+  (outside the RAM map, PopulatedFromSystemMemory) is accepted; broker
+  publishes window IPAs (IPA != PA) at CS scale (62,084 groups, 0
+  unpublished); every check passes.
+Open: the 64 KiB-block fallback has not run on hardware (Windows granted the
+block in EXP1250) -> EXP1251 diagnostic forces it. Known intermittent KMD
+defect seen again in EXP1250: dxgkrnl resubmission of a preempted G4 job
+refused (Wom1G4SubmitFailure branch 7 subsite 0x201, see below).
+Next causal targets: EXP1251 (chunk fallback); M2-f2c (pool size per
+machine, ACPI declaration of the window, CPU-invisible class BOs into the
+pool, shrink the m1n1 reserve to scanout/tables/firmware); then the
+resubmission defect and the G4-recovery items; then D3D 11/12.
+
+## Current as of 2026-10-13T15:30Z
 
 Installed: PACKAGE1245 (build 62502977: local-preferred placement + every
 fix since EXP1238; 30.0.1245.0) -- EXP1245 CONFIRMED the stable baseline:
