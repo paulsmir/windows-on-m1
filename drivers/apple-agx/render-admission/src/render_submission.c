@@ -89,9 +89,11 @@ int AdmissionRenderPacketPrepare(
         Description->VisibleDestinationBytes != 0u)
       return 0;
   } else if (Description->Kind != ADMISSION_RENDER_PACKET_KIND_RENDER ||
-             Description->DestinationCpuToken == 0ULL ||
+             /* M2-c: a destination outside the local reserve is addressed
+              * by GPU VA only; CPU token and physical address go together. */
+             (Description->DestinationCpuToken == 0ULL) !=
+                 (Description->DestinationPhysical == 0ULL) ||
              Description->DestinationGpuVa == 0ULL ||
-             Description->DestinationPhysical == 0ULL ||
              Description->DestinationBytes == 0u ||
              Description->DestinationIndex >= Description->AllocationCount) {
     return 0;

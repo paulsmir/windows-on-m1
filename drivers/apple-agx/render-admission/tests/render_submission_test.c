@@ -504,9 +504,46 @@ static void test_compute_packet_has_no_destination(void) {
   assert(AdmissionRenderPacketPrepare(&packet, &render));
 }
 
+static void test_render_destination_may_be_gpu_va_only(void) {
+  ADMISSION_RENDER_PACKET packet;
+  ADMISSION_RENDER_PACKET_DESCRIPTION description = packet_description(23u);
+
+  /* M2-c: a render target outside the local reserve (system memory, 64 KB
+   * pages) is reached only through the GPU page tables; the KMD has no CPU
+   * token or physical address for it. */
+  description.DestinationCpuToken = 0ULL;
+  description.DestinationPhysical = 0ULL;
+  AdmissionRenderPacketInitialize(&packet);
+  assert(AdmissionRenderPacketPrepare(&packet, &description));
+  assert(AdmissionRenderPacketMatches(&packet, &description,
+                                      AdmissionRenderPacketPrepared));
+  assert(AdmissionRenderPacketQueue(&packet, 23u, 0x1000ULL, 0x3000ULL,
+                                    0u, 160u));
+  assert(AdmissionRenderPacketActivate(&packet, 23u));
+  assert(AdmissionRenderPacketComplete(&packet, 23u));
+  /* The CPU token and the physical address stay one identity. */
+  AdmissionRenderPacketInitialize(&packet);
+  description = packet_description(24u);
+  description.DestinationCpuToken = 0ULL;
+  assert(!AdmissionRenderPacketPrepare(&packet, &description));
+  description = packet_description(24u);
+  description.DestinationPhysical = 0ULL;
+  assert(!AdmissionRenderPacketPrepare(&packet, &description));
+  /* The GPU VA and size are always required. */
+  description = packet_description(24u);
+  description.DestinationCpuToken = 0ULL;
+  description.DestinationPhysical = 0ULL;
+  description.DestinationGpuVa = 0ULL;
+  assert(!AdmissionRenderPacketPrepare(&packet, &description));
+  description.DestinationGpuVa = 0x1500010000ULL;
+  description.DestinationBytes = 0u;
+  assert(!AdmissionRenderPacketPrepare(&packet, &description));
+}
+
 int main(void) {
   test_exact_packet_moves_prepared_queued_active_completed();
   test_compute_packet_has_no_destination();
+  test_render_destination_may_be_gpu_va_only();
   test_prepatched_capture_adopt_and_worker_copy_are_exact();
   test_direct_framebuffer_needs_no_companion_identity();
   test_prepatched_rejects_incomplete_or_cross_context_state();
