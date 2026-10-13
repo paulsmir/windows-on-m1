@@ -53,6 +53,7 @@ class GpuvaPresentWindowsTests(unittest.TestCase):
 #define STATUS_PARTIAL_COPY -5
 #define MAXUINT 0xffffffffu
 #define ADMISSION_MEMORY_LOCAL_SEGMENT 2u
+#define ADMISSION_MEMORY_POOL_SEGMENT 3u
 #define MM_COPY_MEMORY_PHYSICAL 1
 #define NT_SUCCESS(status) ((status)>=0)
 #define RtlZeroMemory(pointer,bytes) memset(pointer,0,bytes)
@@ -102,6 +103,8 @@ static void *ExAllocatePool2(unsigned flags,size_t bytes,unsigned tag){(void)fla
 static void ExFreePoolWithTag(void *pointer,unsigned tag){(void)tag;free(pointer);}
 static void ExAcquireFastMutex(int *lock){assert(!*lock);*lock=1;}
 static void ExReleaseFastMutex(int *lock){assert(*lock);*lock=0;}
+static int AdmissionMemoryPoolView(ADMISSION_CONTEXT *context,
+    ADMISSION_SCANOUT_MEMORY_VIEW *view){(void)context;memset(view,0,sizeof(*view));return 0;}
 static NTSTATUS AdmissionMemoryRuntimeLocalView(ADMISSION_CONTEXT *context,
     ADMISSION_SCANOUT_MEMORY_VIEW *view){assert(context==&adapter);
   view->CpuAddress=destination_memory;view->GuestIpaAddress=0xa00000ULL;

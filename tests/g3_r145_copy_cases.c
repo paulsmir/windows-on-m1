@@ -199,6 +199,38 @@ static void r145_copy_cases(void) {
   expect_ok("R145 copy query",AdmissionDdiEscape(&a,&escape));
   assert(q->MappingGeneration==p->Graph.MappingGeneration && q->ProcessGeneration);
   assert(a.G3CopyQueryFailureClaim==0 && query_registry_writes==writes_before_success);
+  /* M2-f2: a CPU copy into a page of the segment-3 pool goes through the
+   * pool's view; without the pool (58) or outside it (61) it is refused.
+   * Historical KMD revisions predate segment 3. */
+  if (!getenv("G3_REPLAY_HISTORICAL")) {
+    unsigned char *pool_cpu;
+    APPLE_AGX_GPUVA_G3_LOGICAL_PTE saved_first=*rp;
+    assert(posix_memalign((void **)&pool_cpu,0x4000,0x10000)==0);
+    memset(pool_cpu,0,0x10000);
+    rp->SegmentId=ADMISSION_MEMORY_POOL_SEGMENT;
+    rp->GuestIpa=system_ipa+0x1000000ULL+0x2000ULL;
+    q->Operation=APPLE_AGX_G3_COPY_UPLOAD;q->Offset=0;q->TransferBytes=0x100;
+    q->ProcessGeneration=p->Graph.ProcessGeneration;
+    q->MappingGeneration=p->Graph.MappingGeneration;
+    memset(q->Data,0x77,q->TransferBytes);
+    assert(AdmissionDdiEscape(&a,&escape)==STATUS_INVALID_PARAMETER);
+    replay_pool_cpu=pool_cpu;replay_pool_ipa=system_ipa+0x1000000ULL;replay_pool_bytes=0x10000ULL;
+    unsigned char local_before=local_cpu[saved_first.GuestIpa-local_ipa];
+    expect_ok("M2-f2 pool copy upload",AdmissionDdiEscape(&a,&escape));
+    for(UINT i=0;i<0x100u;++i) assert(pool_cpu[0x2000+i]==0x77);
+    assert(pool_cpu[0x1fff]==0 && pool_cpu[0x2100]==0);
+    assert(local_cpu[saved_first.GuestIpa-local_ipa]==local_before);
+    rp->GuestIpa=system_ipa+0x1000000ULL+0x10000ULL;
+    assert(AdmissionDdiEscape(&a,&escape)==STATUS_INVALID_PARAMETER);
+    *rp=saved_first;
+    replay_pool_cpu=NULL;replay_pool_ipa=replay_pool_bytes=0;
+    free(pool_cpu);
+    q->Operation=APPLE_AGX_G3_COPY_QUERY;q->Offset=0;q->TransferBytes=0;
+    q->ProcessGeneration=0;q->MappingGeneration=0;
+    a.G3CopyQueryFailureClaim=0;a.G3CopyQueryFailurePredicate=0;
+    expect_ok("R145 copy query again",AdmissionDdiEscape(&a,&escape));
+    puts("M2-f2 pool copy escape: PASS");
+  }
   if (ADMISSION_GPUVA_G1B_PAGE_PROFILE==16 && !getenv("G3_REPLAY_HISTORICAL")) {
     ULONGLONG saved_page=ptes[1].PageAddress;
     ptes[1].PageAddress=0x300;

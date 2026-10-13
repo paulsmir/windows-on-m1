@@ -1180,7 +1180,7 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   ADMISSION_RENDER_CONTEXT *context=NULL;
   ADMISSION_OPEN_ALLOCATION *opened;
   ADMISSION_ALLOCATION_HANDLE *allocation=NULL;
-  ADMISSION_SCANOUT_MEMORY_VIEW view;
+  ADMISSION_SCANOUT_MEMORY_VIEW view, pool;
   DXGKARGCB_GETHANDLEDATA lookup={0};
   DXGKARGCB_RELEASEHANDLEDATA reference={0};
   ULONGLONG length=0, offset, end=0, page=0, first=0;
@@ -1337,6 +1337,8 @@ RetryPagingQuiescence:
   status=AdmissionMemoryRuntimeLocalView(adapter,&view);
   COPY_REJECT_IF(!NT_SUCCESS(status), 54u, status, Unlock);
   COPY_REJECT_IF(!view.CpuAddress, 55u, STATUS_INVALID_PARAMETER, Unlock);
+  /* M2-f2: CPU-visible class BOs may live in the segment-3 pool. */
+  (void)AdmissionMemoryPoolView(adapter,&pool);
   /* Prevalidate the entire range before any copy, unchanged from R145. */
   for(page=first&~0xfffULL;page<end;page+=0x1000ULL) {
     const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte=AdmissionG3CopyPte(p,page);
@@ -1354,10 +1356,14 @@ RetryPagingQuiescence:
      * never recovered (EXP995-EXP1003: 0 of 70 waits) and each wait lasted
      * 18-33 s (1000 x 1 ms sleeps at ~16 ms timer granularity). */
     COPY_REJECT_IF(!(pte->Flags&APPLE_AGX_GPUVA_G3_VALID), 57u, STATUS_INVALID_PARAMETER, Unlock);
-    COPY_REJECT_IF(pte->SegmentId!=ADMISSION_MEMORY_LOCAL_SEGMENT, 58u, STATUS_INVALID_PARAMETER, Unlock);
+    COPY_REJECT_IF(pte->SegmentId!=ADMISSION_MEMORY_LOCAL_SEGMENT &&
+        (pte->SegmentId!=ADMISSION_MEMORY_POOL_SEGMENT || !pool.CpuAddress), 58u, STATUS_INVALID_PARAMETER, Unlock);
     COPY_REJECT_IF(pte->Allocation!=(ULONGLONG)(ULONG_PTR)allocation, 59u, STATUS_INVALID_PARAMETER, Unlock);
     COPY_REJECT_IF(pte->AllocationOffset!=page-q->GpuVa, 60u, STATUS_INVALID_PARAMETER, Unlock);
-    COPY_REJECT_IF(!AppleAgxGpuvaG3TableSpanWithinLocal(view.GuestIpaAddress,view.Bytes,
+    COPY_REJECT_IF(pte->SegmentId==ADMISSION_MEMORY_POOL_SEGMENT ?
+        !AppleAgxGpuvaG3TableSpanWithinLocal(pool.GuestIpaAddress,pool.Bytes,
+          pte->GuestIpa,0x1000ULL) :
+        !AppleAgxGpuvaG3TableSpanWithinLocal(view.GuestIpaAddress,view.Bytes,
           pte->GuestIpa,0x1000ULL), 61u, STATUS_INVALID_PARAMETER, Unlock);
   }
   if(pte_wait) {
@@ -1377,7 +1383,8 @@ RetryPagingQuiescence:
     for(offset=0;offset<length;) {
       ULONGLONG va=first+offset, part=0x1000ULL-(va&0xfffULL);
       const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte=AdmissionG3CopyPte(p,va);
-      PUCHAR cpu=(PUCHAR)view.CpuAddress+(SIZE_T)(pte->GuestIpa-view.GuestIpaAddress)+(SIZE_T)(va&0xfffULL);
+      const ADMISSION_SCANOUT_MEMORY_VIEW *home=pte->SegmentId==ADMISSION_MEMORY_POOL_SEGMENT ? &pool : &view;
+      PUCHAR cpu=(PUCHAR)home->CpuAddress+(SIZE_T)(pte->GuestIpa-home->GuestIpaAddress)+(SIZE_T)(va&0xfffULL);
       if(part>length-offset) part=length-offset;
       if(q->Operation==APPLE_AGX_G3_COPY_UPLOAD)
         RtlCopyMemory(cpu,q->Data+(SIZE_T)offset,(SIZE_T)part);
@@ -2953,6 +2960,8 @@ static int AdmissionG4GraphAccess(void *opaque, unsigned long long va,
 typedef struct _ADMISSION_G3_PRESENT_COPY {
   ADMISSION_G3_PROCESS *Process;
   ADMISSION_SCANOUT_MEMORY_VIEW Local;
+  /* M2-f2: segment-3 sources are read through the pool's WC view. */
+  ADMISSION_SCANOUT_MEMORY_VIEW Pool;
   NTSTATUS Status;
   ULONGLONG SourceVa, SourceAllocation;
   ULONGLONG CurrentVa, FaultVa;
@@ -2974,7 +2983,7 @@ static int AdmissionG3PresentTranslateSource(void *Opaque,
       (pte->Flags & APPLE_AGX_GPUVA_G3_VALID) == 0u ||
       (pte->Flags & ~(APPLE_AGX_GPUVA_G3_VALID |
                       APPLE_AGX_GPUVA_G3_WRITE)) != 0u ||
-      pte->SegmentId > ADMISSION_MEMORY_LOCAL_SEGMENT ||
+      pte->SegmentId > ADMISSION_MEMORY_POOL_SEGMENT ||
       pte->Allocation != copy->SourceAllocation ||
       pte->AllocationOffset != (offset & ~0xfffULL)) {
     copy->FaultVa = GpuVa;
@@ -3009,6 +3018,15 @@ static int AdmissionG3PresentRead(void *Opaque, unsigned long long GuestIpa,
           (GuestIpa - copy->Local.GuestIpaAddress)) {
     RtlCopyMemory(Bytes, (PUCHAR)copy->Local.CpuAddress +
         (SIZE_T)(GuestIpa - copy->Local.GuestIpaAddress), ByteCount);
+    return 1;
+  }
+  if (copy->Pool.CpuAddress != NULL &&
+      GuestIpa >= copy->Pool.GuestIpaAddress &&
+      GuestIpa - copy->Pool.GuestIpaAddress <= copy->Pool.Bytes &&
+      ByteCount <= copy->Pool.Bytes -
+          (GuestIpa - copy->Pool.GuestIpaAddress)) {
+    RtlCopyMemory(Bytes, (PUCHAR)copy->Pool.CpuAddress +
+        (SIZE_T)(GuestIpa - copy->Pool.GuestIpaAddress), ByteCount);
     return 1;
   }
   address.PhysicalAddress.QuadPart = (LONGLONG)GuestIpa;
@@ -3074,6 +3092,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3ExecutePresentVirtual(
   copy.Process = process;
   copy.Status = STATUS_SUCCESS;
   copy.Status = AdmissionMemoryRuntimeLocalView(Adapter, &copy.Local);
+  (void)AdmissionMemoryPoolView(Adapter, &copy.Pool);
   if (!NT_SUCCESS(copy.Status))
     return copy.Status;
   scratch = ExAllocatePool2(POOL_FLAG_NON_PAGED, scratchBytes,
@@ -3104,7 +3123,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionGpuvaG3ExecutePresentVirtual(
         (sourcePte->Flags & APPLE_AGX_GPUVA_G3_VALID) == 0u ||
         (sourcePte->Flags & ~(APPLE_AGX_GPUVA_G3_VALID |
                               APPLE_AGX_GPUVA_G3_WRITE)) != 0u ||
-        sourcePte->SegmentId > ADMISSION_MEMORY_LOCAL_SEGMENT ||
+        sourcePte->SegmentId > ADMISSION_MEMORY_POOL_SEGMENT ||
         sourcePte->Allocation == 0ULL ||
         sourcePte->AllocationOffset != offset ||
         (copy.SourceAllocation != 0ULL &&
@@ -3186,7 +3205,7 @@ static int AdmissionG4LogicalEnvelopeAccess(ADMISSION_G3_PROCESS *process,
         (pte->Flags & ~(APPLE_AGX_GPUVA_G3_VALID |
                         APPLE_AGX_GPUVA_G3_WRITE)) != 0u ||
         pte->GuestIpa == 0ULL ||
-        pte->SegmentId > ADMISSION_MEMORY_LOCAL_SEGMENT) return 0;
+        pte->SegmentId > ADMISSION_MEMORY_POOL_SEGMENT) return 0;
   }
   return 1;
 }
