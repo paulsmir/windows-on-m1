@@ -84,3 +84,29 @@ hv_agx_gpuva_v5 table registration and AppleAgxGpuvaG3MirrorTable before impleme
    receipts show leaves published as shared system backings for block pages.
 3. f2c (hardware): shrink the m1n1 reserve to the firmware regions; size the block per machine
    (registry override, fraction of RAM).
+
+## Revision (same day): a third segment after all
+
+Re-reading the consumers changed the decision. Segment 2 also holds the scanout primaries (fixed
+panel segment 2, scanout_windows.c, read by the DCP through its own DART), the VidMm page tables
+(PageTableSegmentId 2, read by the KMD through the CPU view) and every physical-path allocation
+(GDI/present/dynamic paths require segment 2). Re-backing segment 2 would move display surfaces into
+Windows memory the DCP DART does not map. The broker itself is not a constraint: `register_table`
+accepts any translated IPA, and the UAT tables are KMD-owned mirrors (`AdmissionGpuvaG3MirrorTable`).
+
+New decision: segment 3 = CPU-visible `PopulatedFromSystemMemory` memory segment backed by the KMD
+block, used only by Mesa class BOs (GPU access by VA only, never scanned out, never page tables,
+never allocation-list/physical). Segment 2 stays the firmware reserve for display, tables and
+firmware-adjacent allocations and shrinks later. The ~40 tests that pin two segments change
+mechanically; the generic plumbing that must learn segment 3 is: reporting (QuerySegment4/5,
+QUERYSEGMENTCOUNT, the G3 admission contract and topology), placement, PTE resolution
+(`AppleAgxGpuvaG3ResolvePageAddress`), leaf publication (System backing kind for segment 3), the CPU
+paging executor (`AdmissionG3MapPagingIpa`, `AdmissionG3EncodeVirtualPaging`), physical paging 0<->3
+(`apple_agx_physical_paging.c` planners) and the copy escape if class BOs use it.
+
+Ladder (replaces the one above):
+1. f2a: segment 3 reported and backed by the block, no allocation uses it (one variable: three
+   segments). Checkpoint: adapter starts, every EXP1246 check passes.
+2. f2b: CPU-visible class BOs prefer segment 3 with paging/publication support. Checkpoint: full
+   pipeline; segment-3 groups published, no refusal.
+3. f2c: shrink the m1n1 reserve; size the block per machine.
