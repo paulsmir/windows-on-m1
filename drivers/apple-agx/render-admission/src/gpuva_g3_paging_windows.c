@@ -522,10 +522,10 @@ static NTSTATUS AdmissionG3UpdateLeaf(
     }
     ++published;
     if (segment == 0u && flags) {
-      ULONGLONG *count = &process->State->SystemGroups[
+      ULONGLONG *tally = &process->State->SystemGroups[
           (update->Flags.Use64KBPages ? 4u : 0u) +
           (complete ? 0u : refused ? 2u : 1u)];
-      if (*count != MAXULONGLONG) ++*count;
+      if (*tally != MAXULONGLONG) ++*tally;
     }
     if (!complete && flags && segment < 32u &&
         process->State->UnpublishedGroups[segment] != MAXULONGLONG)
