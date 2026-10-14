@@ -268,11 +268,10 @@ int main(void) {
   assert(info.PreferredSegment.SegmentId0 == ADMISSION_MEMORY_APERTURE_SEGMENT);
   ExFreePoolWithTag(info.hAllocation, ADMISSION_POOL_TAG);
   /* M2-f2: with the pool mapped, a CPU-visible class BO lives in segment 3
-   * and never lists the local segment (no 2<->3 move). Its supported sets
-   * keep the aperture, without which dxgkrnl refuses a CPU-visible
-   * allocation (EXP1027, EXP1266). M2-f8b (EXP1265-D): the aperture is not a
-   * preferred segment, since the GPU cannot map its scattered 4 KiB backing.
-   * CPU-invisible class BOs and class0 surfaces keep their shapes. */
+   * and never lists the local segment (no 2<->3 move). M2-f8 (EXP1265-D):
+   * nor the aperture, whose scattered 4 KiB backing the GPU cannot map; a
+   * full segment 3 must make VidMm evict instead. CPU-invisible class BOs
+   * and class0 surfaces keep their shapes. */
   replay_pool_present = 1;
   native.ClassId = 1; native.CpuVisible = 1; native.Size = 0x10000;
   memset(&info, 0, sizeof(info));
@@ -281,8 +280,7 @@ int main(void) {
   assert(AdmissionCreateAllocationImpl(&context, &args) == STATUS_SUCCESS);
   assert(info.PreferredSegment.SegmentId0 == ADMISSION_MEMORY_POOL_SEGMENT);
   assert(info.PreferredSegment.SegmentId1 == 0u);
-  assert(info.SupportedReadSegmentSet ==
-         (ADMISSION_POOL_SEGMENT_SET | ADMISSION_APERTURE_SEGMENT_SET));
+  assert(info.SupportedReadSegmentSet == ADMISSION_POOL_SEGMENT_SET);
   assert(info.SupportedWriteSegmentSet == info.SupportedReadSegmentSet);
   assert(!(info.SupportedReadSegmentSet & ADMISSION_LOCAL_SEGMENT_SET));
   assert(info.FlagsWddm2.CpuVisible == 1 && info.FlagsWddm2.AccessedPhysically == 0);
