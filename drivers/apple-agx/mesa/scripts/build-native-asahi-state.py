@@ -1071,18 +1071,16 @@ void APIENTRY
                      D3D10_DDI_FORMAT_SUPPORT_BLENDABLE |
                      D3D10_DDI_FORMAT_SUPPORT_SHADER_SAMPLE |
                      D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD |
-                     D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET |
-                     D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_RESOLVE;
+                     D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET;
       /* EXP749: ld2dms preserves the sample index and reaches native txf_ms.
-       * D3D-G5: 2x/4x render targets (KMD utile_config/tib_blocks) resolve
-       * through the Gallium blit. */
+       * D3D-G5: 2x/4x render targets (KMD utile_config/tib_blocks); the
+       * runtime derives resolve support, ResolveSubresource blits. */
    } else if (Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
        Format == DXGI_FORMAT_R16G16B16A16_FLOAT) {
       *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET |
                      D3D10_DDI_FORMAT_SUPPORT_BLENDABLE |
                      D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD |
-                     D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET |
-                     D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_RESOLVE;
+                     D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET;
    } else if (Format == DXGI_FORMAT_R8_UNORM || Format == DXGI_FORMAT_R16_FLOAT ||
        Format == DXGI_FORMAT_R32G32B32A32_FLOAT ||
        Format == DXGI_FORMAT_R10G10B10A2_UNORM ||
