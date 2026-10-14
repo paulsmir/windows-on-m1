@@ -4271,6 +4271,22 @@ uint32_t AgxWin32NativeBuildPipelineTest(struct agx_batch *batch,
                         : tgsi_to_nir(cso->tokens, pctx->screen, false);'''
         if state_text.count(shader_ir)!=1:
             raise SystemExit('Ambiguous native TGSI stream-output anchor')
+        # EXP1287: tgsi_to_nir stores every output before each RET (its
+        # returns become structured control flow), so an early-returning D3D
+        # pixel shader exported inside branches; AGX fragment exports must
+        # end the shader (agx_validate block form). Honeykrisp lowers shader
+        # outputs to temporaries copied once at the end (hk_shader.c).
+        state_text=state_text.replace(shader_ir,shader_ir+'''
+
+   if (cso->type == PIPE_SHADER_IR_TGSI &&
+       nir->info.stage == MESA_SHADER_FRAGMENT) {
+      NIR_PASS(_, nir, nir_lower_io_vars_to_temporaries,
+               nir_shader_get_entrypoint(nir), nir_var_shader_out);
+      NIR_PASS(_, nir, nir_lower_global_vars_to_local);
+      NIR_PASS(_, nir, nir_split_var_copies);
+      NIR_PASS(_, nir, nir_lower_var_copies);
+      NIR_PASS(_, nir, nir_lower_vars_to_ssa);
+   }''')
         scan_anchor='#include "gallium/auxiliary/tgsi/tgsi_from_mesa.h"\n'
         create_anchor='static void *\nagx_create_shader_state('
         if state_text.count(scan_anchor)!=1 or state_text.count(create_anchor)!=1:
