@@ -80,8 +80,9 @@ tessellation and SM5 (FL 11_0), and GL 3.2+ all depend on it.
 2. Its DMA buffer is the Asahi command stream:
    - COMPUTE header + `drm_asahi_cmd_compute`;
    - optional attachments;
-   - RENDER header with `vdm_barrier` = 1 (the compute command) + `drm_asahi_cmd_render`.
-3. Parser rules: one COMPUTE then one RENDER; the render must name the compute as its VDM barrier;
+   - RENDER header with `vdm_barrier` NONE and `cdm_barrier` = 1 (it waits on the first CDM command, the
+     compute) + `drm_asahi_cmd_render`.
+3. Parser rules: one COMPUTE then one RENDER; the render must name the compute as its CDM barrier;
    any other barrier, a second command, or trailing bytes fail closed.
 4. The KMD binds both payloads to one backend image and builds a Kind=Render job whose `Compute*`
    fields hold the compute work item. The queue provider runs the compute first, then TA/3D
