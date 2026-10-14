@@ -220,6 +220,11 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   volatile LONG FirmwareRecoveries;
   ULONG LastFirmwareRecoveryKind, LastFirmwareRecoveryFence;
   BOOLEAN FirmwareRecoveryUnpublished;
+  /* G4-recovery receipt: submit-to-recovery latency, jobs past the KMD
+   * deadline (no longer terminal) and the longest job. */
+  ULONGLONG JobSubmitMs;
+  ULONG LastFirmwareRecoveryMs, MaxFirmwareRecoveryMs;
+  ULONG LongestJobMs, LongestJobFence, PublishedDeadlineExpiries;
 } ADMISSION_PLATFORM_RUNTIME;
 
 /* 1 ms in 100-ns units (ExSetTimerResolution). */
@@ -2093,6 +2098,10 @@ static APPLE_AGX_BACKEND_BOOL AdmissionTransportRecover(
   InterlockedIncrement(&runtime->FirmwareRecoveries);
   runtime->LastFirmwareRecoveryKind = EventKind;
   runtime->LastFirmwareRecoveryFence = Fence;
+  runtime->LastFirmwareRecoveryMs = runtime->JobSubmitMs != 0ULL
+      ? (ULONG)(AdmissionPlatformNowMs() - runtime->JobSubmitMs) : 0u;
+  if (runtime->LastFirmwareRecoveryMs > runtime->MaxFirmwareRecoveryMs)
+    runtime->MaxFirmwareRecoveryMs = runtime->LastFirmwareRecoveryMs;
   runtime->FirmwareRecoveryUnpublished = TRUE;
   return APPLE_AGX_BACKEND_TRUE;
 }
@@ -3704,8 +3713,9 @@ static VOID AdmissionPlatformWorker(
       bufferManagerCaptured = TRUE;
   }
 #endif
+  runtime->JobSubmitMs = AdmissionPlatformNowMs();
   InterlockedExchange64(
-      &runtime->LastProgressMs, (LONG64)AdmissionPlatformNowMs());
+      &runtime->LastProgressMs, (LONG64)runtime->JobSubmitMs);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   queueSubmitMs = AdmissionPlatformNowMs();
 #endif
@@ -4015,15 +4025,34 @@ static VOID AdmissionPlatformWorker(
 #endif
   AdmissionRenderCorrelationWorkerWindows(
       adapter, description.Fence, FALSE, (ULONG)runtime->Backend.Phase);
-  if (runtime->FirmwareRecoveryUnpublished) {
-    /* EXP1075 receipt: {recoveries, last event kind, last fence}. */
+  if (runtime->JobSubmitMs != 0ULL) {
+    ULONG jobMs = (ULONG)(AdmissionPlatformNowMs() - runtime->JobSubmitMs);
+    if (jobMs > runtime->LongestJobMs) {
+      runtime->LongestJobMs = jobMs;
+      runtime->LongestJobFence = description.Fence;
+    }
+    runtime->JobSubmitMs = 0ULL;
+  }
+  if (runtime->FirmwareRecoveryUnpublished ||
+      runtime->Provider.QueueProvider.Runtime.DeadlineExpiries !=
+          runtime->PublishedDeadlineExpiries) {
+    /* EXP1075 receipt: {recoveries, last event kind, last fence}; G4-recovery
+     * adds {last and max submit-to-recovery ms, jobs past the KMD deadline,
+     * longest job ms, its fence}. */
     HANDLE key = NULL;
     UNICODE_STRING name;
-    ULONG value[3];
+    ULONG value[8];
     runtime->FirmwareRecoveryUnpublished = FALSE;
+    runtime->PublishedDeadlineExpiries =
+        runtime->Provider.QueueProvider.Runtime.DeadlineExpiries;
     value[0] = (ULONG)InterlockedCompareExchange(&runtime->FirmwareRecoveries, 0, 0);
     value[1] = runtime->LastFirmwareRecoveryKind;
     value[2] = runtime->LastFirmwareRecoveryFence;
+    value[3] = runtime->LastFirmwareRecoveryMs;
+    value[4] = runtime->MaxFirmwareRecoveryMs;
+    value[5] = runtime->PublishedDeadlineExpiries;
+    value[6] = runtime->LongestJobMs;
+    value[7] = runtime->LongestJobFence;
     if (NT_SUCCESS(IoOpenDeviceRegistryKey(adapter->PhysicalDeviceObject,
             PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
       RtlInitUnicodeString(&name, L"Wom1FirmwareRecovery");

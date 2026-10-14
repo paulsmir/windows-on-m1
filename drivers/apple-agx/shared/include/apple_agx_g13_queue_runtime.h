@@ -152,6 +152,10 @@ typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME {
   /* The pending compute work is a standalone job (submission ComputeOnly). */
   APPLE_AGX_BACKEND_BOOL ComputeTerminal;
   APPLE_AGX_BACKEND_U32 RecoveredFaults, LastRecoveredEventKind;
+  /* G4-recovery: the pending job outlived its deadline (counted once per
+   * job); the deadline is recorded, not terminal. */
+  APPLE_AGX_BACKEND_BOOL DeadlinePassed;
+  APPLE_AGX_BACKEND_U32 DeadlineExpiries;
 } APPLE_AGX_G13_QUEUE_RUNTIME;
 
 APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeInitialize(

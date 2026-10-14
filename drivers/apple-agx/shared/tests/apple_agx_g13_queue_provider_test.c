@@ -510,25 +510,20 @@ static void TestReadyStopWithoutPendingFenceIsNoOp(void) {
   assert(!f.Io.Queues.Stop(f.Io.Context,0u));
   assert(f.Io.Queues.Stop(f.Io.Context,41u));
 }
-static void TestTimeoutRequiresTruthfulQuiesce(void) {
+/* G4-recovery: the deadline poll never quiesces and never completes the
+ * fence; the provider stays Submitted for the firmware or the Windows TDR. */
+static void TestDeadlineKeepsJobPending(void) {
   FIXTURE f;
   APPLE_AGX_G13_QUEUE_PROVIDER_EVENT_BATCH batch;
   Init(&f); Submit(&f);
   assert(AppleAgxG13QueueProviderCheckTimeout(&f.Provider, 1099ULL, &batch));
   assert(batch.ObservationCount == 0u && batch.CompletedFence == 0u);
-  assert(f.Quiesces == 0u);
   assert(AppleAgxG13QueueProviderCheckTimeout(&f.Provider, 1100ULL, &batch));
-  assert(f.Quiesces == 1u);
-  assert(batch.ObservationCount == 1u);
-  assert(batch.Observations[0].Status == AppleAgxBackendObservationTimeout);
-  assert(batch.CompletedFence == 41u);
-  assert(f.Provider.Phase == AppleAgxG13QueueProviderFaulted);
-
-  Init(&f); Submit(&f); f.FailQuiesce = 1u;
-  assert(!AppleAgxG13QueueProviderCheckTimeout(&f.Provider, 1100ULL, &batch));
-  assert(f.Quiesces == 1u);
-  assert(f.Provider.Phase == AppleAgxG13QueueProviderFaulted);
-  assert(!f.Provider.FailureQuiesced);
+  assert(AppleAgxG13QueueProviderCheckTimeout(&f.Provider, 9000ULL, &batch));
+  assert(batch.ObservationCount == 0u && batch.CompletedFence == 0u);
+  assert(f.Quiesces == 0u);
+  assert(f.Provider.Phase == AppleAgxG13QueueProviderSubmitted);
+  assert(f.Provider.Runtime.DeadlineExpiries == 1u);
 }
 
 static void TestProgressReceiptReportsOnlyTheExactPendingFence(void) {
@@ -678,8 +673,8 @@ static void TestStandaloneComputeJob(void) {
   Complete(&f);
 }
 /* EXP1213: the worker polls a submitted compute job for its deadline; the
- * poll before the deadline succeeds (it faulted the worker on hardware) and
- * the deadline reports a timeout for the exact fence. */
+ * poll before the deadline succeeds (it faulted the worker on hardware).
+ * G4-recovery: the expired deadline is recorded and the job stays pending. */
 static void TestComputeJobDeadlinePoll(void) {
   FIXTURE f;
   APPLE_AGX_BACKEND_JOB_IMAGE c;
@@ -704,11 +699,14 @@ static void TestComputeJobDeadlinePoll(void) {
     assert(AppleAgxG13QueueProviderCheckTimeout(&f.Provider,1099ULL,&batch));
     assert(batch.ObservationCount==0u && batch.CompletedFence==0u &&
            f.Quiesces==0u);
+    /* G4-recovery: the expired deadline keeps the compute job pending. */
     assert(AppleAgxG13QueueProviderCheckTimeout(&f.Provider,1100ULL,&batch));
-    assert(f.Quiesces==1u && batch.ObservationCount==1u &&
-           batch.Observations[0].Status==AppleAgxBackendObservationTimeout &&
-           batch.CompletedFence==41u &&
-           f.Provider.Phase==AppleAgxG13QueueProviderFaulted);
+    assert(f.Quiesces==0u && batch.ObservationCount==0u &&
+           batch.CompletedFence==0u &&
+           f.Provider.Runtime.DeadlineExpiries==1u &&
+           f.Provider.Phase==(prelude ?
+               AppleAgxG13QueueProviderComputeSubmitted :
+               AppleAgxG13QueueProviderComputeOnlySubmitted));
   }
 }
 int main(void) {
@@ -725,7 +723,7 @@ int main(void) {
   TestSecondSubmitPublishesOnlyWorkTa();
   TestSuccessfulStopAndResetAreSynchronous();
   TestReadyStopWithoutPendingFenceIsNoOp();
-  TestTimeoutRequiresTruthfulQuiesce();
+  TestDeadlineKeepsJobPending();
   TestProgressReceiptReportsOnlyTheExactPendingFence();
   TestProgressReceiptDetectsAdvancingSample();
   TestProgressReceiptRejectsUnchangedSampleAsNotAdvanced();

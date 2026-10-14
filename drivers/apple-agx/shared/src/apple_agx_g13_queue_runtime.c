@@ -95,6 +95,7 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13PublishPreparedWork(
 static void AppleAgxG13ClearPending(APPLE_AGX_G13_QUEUE_RUNTIME *Runtime) {
   Runtime->PendingFence = 0u;
   Runtime->DeadlineTicks = 0ULL;
+  Runtime->DeadlinePassed = APPLE_AGX_BACKEND_FALSE;
   Runtime->CompletionAvailable = APPLE_AGX_BACKEND_FALSE;
   AppleAgxG13QueueRuntimeZero(
       &Runtime->TaPending,
@@ -246,6 +247,7 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeSubmitCompute(
     return AppleAgxG13QueueRuntimeResultBusy;
   Runtime->PendingFence=Submission->Fence;
   Runtime->DeadlineTicks=Submission->NowTicks+Runtime->Config.TimeoutTicks;
+  Runtime->DeadlinePassed=APPLE_AGX_BACKEND_FALSE;
   if(!AppleAgxG13PublishPreparedWork(Runtime,&Submission->Compute))
     return AppleAgxG13SubmitFailure(Runtime,
         AppleAgxG13QueueRuntimeResultMemoryFailed,visible);
@@ -286,6 +288,7 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueRuntimeBeginRenderAfterCompute(
      !Runtime->ComputePending.Complete || Runtime->ComputeTerminal)
     return APPLE_AGX_BACKEND_FALSE;
   Runtime->PendingFence=0u;Runtime->DeadlineTicks=0ULL;
+  Runtime->DeadlinePassed=APPLE_AGX_BACKEND_FALSE;
   AppleAgxG13QueueRuntimeZero(&Runtime->ComputePending,
       (APPLE_AGX_BACKEND_U32)sizeof(Runtime->ComputePending));
   Runtime->Phase=AppleAgxG13QueueRuntimeReady;
@@ -332,6 +335,7 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeSubmit(
 
   Runtime->PendingFence = Submission->Fence;
   Runtime->DeadlineTicks = Submission->NowTicks + Runtime->Config.TimeoutTicks;
+  Runtime->DeadlinePassed = APPLE_AGX_BACKEND_FALSE;
   if (!AppleAgxG13PublishPreparedWork(Runtime, &Submission->D3) ||
       !AppleAgxG13PublishPreparedWork(Runtime, &Submission->Ta))
     return AppleAgxG13SubmitFailure(
@@ -537,9 +541,17 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeCheckTimeout(
   if ((APPLE_AGX_BACKEND_U64)(NowTicks - Runtime->DeadlineTicks) >=
       (1ULL << 63))
     return AppleAgxG13QueueRuntimeResultOk;
-  return AppleAgxG13TerminalFailure(
-      Runtime, AppleAgxG13QueueCompletionTimedOut,
-      AppleAgxG13QueueRuntimeResultTimedOut);
+  /* G4-recovery (EXP1241/EXP1242): an expired deadline is not a hang verdict.
+   * The firmware reports faulting work itself (Timeout/Fault events, Asahi
+   * handle_timeout/recover) and the Windows TDR owns hang detection
+   * (TdrDelay, DxgkDdiResetEngine). The terminal Quiesce that ran here stopped
+   * a retained firmware that cannot be restarted, so every later TDR was a
+   * 0x116. The expiry is counted once and the job stays pending. */
+  if (!Runtime->DeadlinePassed) {
+    Runtime->DeadlinePassed = APPLE_AGX_BACKEND_TRUE;
+    ++Runtime->DeadlineExpiries;
+  }
+  return AppleAgxG13QueueRuntimeResultOk;
 }
 
 APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeCancel(

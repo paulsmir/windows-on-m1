@@ -277,8 +277,8 @@ static void TestStandaloneComputeCompletes(void) {
 }
 
 /* EXP1213: a submitted compute job (standalone or prelude) is polled for
- * its deadline like a render job; the poll before the deadline is not a
- * failure, and the deadline completes the fence as timed out. */
+ * its deadline like a render job. G4-recovery: the deadline is recorded,
+ * never terminal (no Quiesce), and the job stays pending. */
 static void TestComputeDeadlineIsPolled(void) {
   TEST_FIXTURE f;APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION s;
   APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
@@ -300,12 +300,10 @@ static void TestComputeDeadlineIsPolled(void) {
            f.IoState.Quiesces==0u);
     assert(!AppleAgxG13QueueRuntimeTakeCompletion(&f.Runtime,&completion));
     assert(AppleAgxG13QueueRuntimeCheckTimeout(&f.Runtime,1100ULL)==
-           AppleAgxG13QueueRuntimeResultTimedOut && f.IoState.Quiesces==1u);
-    assert(AppleAgxG13QueueRuntimeTakeCompletion(&f.Runtime,&completion) &&
-           completion.Fence==80u &&
-           completion.Status==AppleAgxG13QueueCompletionTimedOut);
-    assert(AppleAgxG13QueueRuntimeReset(&f.Runtime)==
-           AppleAgxG13QueueRuntimeResultOk);
+           AppleAgxG13QueueRuntimeResultOk && f.IoState.Quiesces==0u &&
+           f.Runtime.Phase==AppleAgxG13QueueRuntimeComputeSubmitted &&
+           f.Runtime.DeadlineExpiries==1u);
+    assert(!AppleAgxG13QueueRuntimeTakeCompletion(&f.Runtime,&completion));
   }
 }
 
@@ -681,36 +679,63 @@ static void TestEventAloneCannotComplete(void) {
                                                &completion));
 }
 
-static void TestTimeoutAndCancelRequireQuiescence(void) {
+/* G4-recovery (EXP1241/EXP1242): the KMD deadline is not a hang verdict.
+ * The firmware reports job faults itself (Timeout/Fault events) and the
+ * Windows TDR owns hang detection; the terminal Quiesce that used to run here
+ * stopped a retained firmware that cannot be restarted. The expiry is counted
+ * once per job, the job stays pending, and a later firmware Timeout still
+ * recovers it. Cancel keeps its quiescing contract. */
+static void TestDeadlineIsRecordedNotTerminal(void) {
   TEST_FIXTURE fixture;
   APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
   APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
+  unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
 
   TestInitialize(&fixture);
+  fixture.Runtime.Io.Recover = TestRecover;
   submission = TestSubmission(&fixture, 44u);
   assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
          AppleAgxG13QueueRuntimeResultOk);
   assert(AppleAgxG13QueueRuntimeCheckTimeout(&fixture.Runtime, 1099ULL) ==
          AppleAgxG13QueueRuntimeResultOk);
+  assert(fixture.Runtime.DeadlineExpiries == 0u);
+  assert(AppleAgxG13QueueRuntimeCheckTimeout(&fixture.Runtime, 1100ULL) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(AppleAgxG13QueueRuntimeCheckTimeout(&fixture.Runtime, 5000ULL) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(fixture.IoState.Quiesces == 0u);
+  assert(fixture.Runtime.DeadlineExpiries == 1u);
+  assert(fixture.Runtime.Phase == AppleAgxG13QueueRuntimeSubmitted);
   assert(!AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime,
                                                 &completion));
-  assert(AppleAgxG13QueueRuntimeCheckTimeout(&fixture.Runtime, 1100ULL) ==
-         AppleAgxG13QueueRuntimeResultTimedOut);
-  assert(fixture.IoState.Quiesces == 1u);
-  assert(AppleAgxG13QueueRuntimeReset(&fixture.Runtime) ==
-         AppleAgxG13QueueRuntimeResultInvalidState);
+  /* The firmware detects the stall later: resume, Recovered, queues usable. */
+  memset(event, 0, sizeof(event));
+  PutU32(event, (unsigned int)AppleAgxG13EventTimeout);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(&fixture.Runtime, event,
+                                            sizeof(event)) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(fixture.IoState.Recovers == 1u && fixture.IoState.Quiesces == 0u);
   assert(AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime,
                                                &completion));
-  assert(completion.Fence == 44u);
-  assert(completion.Status == AppleAgxG13QueueCompletionTimedOut);
-
-  assert(AppleAgxG13QueueRuntimeReset(&fixture.Runtime) ==
-         AppleAgxG13QueueRuntimeResultOk);
+  assert(completion.Fence == 44u &&
+         completion.Status == AppleAgxG13QueueCompletionRecovered);
+  /* The next job arms a fresh deadline and is counted again. */
+  fixture.TaDone = fixture.TaWrite;
+  fixture.D3Done = fixture.D3Write;
   submission = TestSubmission(&fixture, 45u);
+  submission.Ta.GpuAddressCount = 1u;
+  submission.NowTicks = 6000ULL;
   assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
          AppleAgxG13QueueRuntimeResultOk);
+  assert(AppleAgxG13QueueRuntimeCheckTimeout(&fixture.Runtime, 6099ULL) ==
+         AppleAgxG13QueueRuntimeResultOk &&
+         fixture.Runtime.DeadlineExpiries == 1u);
+  assert(AppleAgxG13QueueRuntimeCheckTimeout(&fixture.Runtime, 6100ULL) ==
+         AppleAgxG13QueueRuntimeResultOk &&
+         fixture.Runtime.DeadlineExpiries == 2u);
   assert(AppleAgxG13QueueRuntimeCancel(&fixture.Runtime, 45u) ==
          AppleAgxG13QueueRuntimeResultCancelled);
+  assert(fixture.IoState.Quiesces == 1u);
   assert(AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime,
                                                &completion));
   assert(completion.Status == AppleAgxG13QueueCompletionCancelled);
@@ -847,7 +872,7 @@ unsigned AppleAgxG13QueueRuntimeContractTests(void) {
   TestResetRequiresBufferManagerInitializationAgain();
   TestTwoEntryWrapAndFreeSpace();
   TestEventAloneCannotComplete();
-  TestTimeoutAndCancelRequireQuiescence();
+  TestDeadlineIsRecordedNotTerminal();
   TestPartialTransportFailureFaultsWithoutFence();
   TestReadFailureCannotMasqueradeAsZeroPointer();
   TestFirmwareTimeoutRecovers();
