@@ -1,6 +1,23 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-14T21:18Z (read this first)
+## Current as of 2026-10-14T22:02Z (read this first)
+
+Installed: PACKAGE1285 (D3D BROKEN: every D3D device fails, DWM restarts;
+the next pipeline's rec1285h rollback removes it). m1n1 fa45bc58 r2, INF
+1235 copy, x86 ICD out56 (GL/CS unaffected, 45.2 fps).
+- EXP1285 REJECTED: the D3D-G5 frontend's MSAA caps disagreed with its
+  quality levels (depth formats: levels without MULTISAMPLE_RENDERTARGET;
+  RGBA8/RGBA16F: MULTISAMPLE_LOAD without sampling), and the runtime
+  refused every device after CreateDevice (0x887A0020); dwmcore 0x889800b0.
+  Fixed 16b900e7 (test_d3d10_msaa_caps_consistency). Depth-only, MSAA,
+  predication not reached.
+- EXP1286 candidate (KMD/ARM64 from HEAD after 16b900e7, UMD32 out14 /
+  closure 034): caps fix + MSAA + depth-only + predication + stream output
+  generality (D3D-G8 a2072cc0) + render-target initial data (036c5dcd).
+- Confirmed so far (EXP1284): occlusion queries, D3D depth-stencil, 8 MRT /
+  32x16 utiles. Plan for FL 10_1 / 11_0: investigation/analysis/D3D-H-ddi-plan.md.
+
+## Current as of 2026-10-14T21:18Z
 
 Installed: PACKAGE1284 (integration 12d6a6fd + UMD32 out9/closure 029; the
 next pipeline's rec1284h rollback removes it). m1n1 fa45bc58 r2, INF 1235
