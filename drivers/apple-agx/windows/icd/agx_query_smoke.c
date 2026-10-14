@@ -100,8 +100,11 @@ static ID3D11Texture2D *small_texture(ID3D11Device *device, UINT bind, D3D11_USA
   td.Format = DXGI_FORMAT_R8G8B8A8_UNORM; td.SampleDesc.Count = 1;
   td.Usage = usage; td.BindFlags = bind; td.CPUAccessFlags = cpu;
   init.pSysMem = pixels; init.SysMemPitch = 32; init.SysMemSlicePitch = 0;
-  if (FAILED(ID3D11Device_CreateTexture2D(device, &td, usage == D3D11_USAGE_STAGING ? NULL : &init,
-                                          &texture)))
+  /* Render targets and staging textures start without data (the UMD
+   * admits initial data for sampled textures only); targets are cleared. */
+  if (FAILED(ID3D11Device_CreateTexture2D(device, &td,
+          usage == D3D11_USAGE_STAGING || (bind & D3D11_BIND_RENDER_TARGET) ? NULL : &init,
+          &texture)))
     return NULL;
   return texture;
 }
