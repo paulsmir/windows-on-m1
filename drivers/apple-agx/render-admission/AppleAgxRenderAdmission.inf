@@ -8,7 +8,9 @@ CatalogFile=AppleAgxRenderAdmission.cat
 PnpLockdown=1
 
 [DestinationDirs]
-Admission.KmdCopyFiles=12
+; 13 = the driver store. A Universal INF that uses DIRID 13 must run its
+; service binary from there too (InfVerif 2600, driver package isolation).
+Admission.KmdCopyFiles=13
 Admission.UmdCopyFiles=11
 ; 13 = the driver store: the x86 ICD runs from it (System32\DriverStore is
 ; exempt from WOW64 redirection), as AMD's atiglpxx.dll does.
@@ -36,7 +38,7 @@ DisplayName=%ServiceName%
 ServiceType=1
 StartType=3
 ErrorControl=1
-ServiceBinary=%12%\AppleAgxRenderAdmission.sys
+ServiceBinary=%13%\AppleAgxRenderAdmission.sys
 
 [Admission.KmdCopyFiles]
 AppleAgxRenderAdmission.sys
