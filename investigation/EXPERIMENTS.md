@@ -55017,3 +55017,5 @@ EXP1260 ACTUAL 2026-10-14T02:31Z (newexp-kmd1260.sh; REC-EXP1259 RECOVERY_DONE; 
   - Game placements are small (~3 granules), which bounds what batching alone can give.
 - Verdict: CONFIRMED (batching helps: +1.2 fps, commit cost per granule 778 -> 292 us); gap to fixed 1.26 fps remains.
 - Next: EXP1261, 16 KiB blocks (built 9757a954).
+REC-EXP1260 ACTUAL 2026-10-14T02:33Z: rec1260h/recover.sh RECOVERY_DONE, Preflight PASS {AfterBoot 02:32:08Z, Package Absent}.
+EXP1261 PREPARE-1 ACTUAL 2026-10-14T02:34Z (newexp-kmd1261.sh): REC-EXP1260 done (RECOVERY_DONE 02:33Z, package absent, normal profile). Then prepare.sh stopped at its first step: the builder (192.168.1.24) answers ping but refuses SSH (port 22 refused, ~02:40Z), so scp of the already-local package files failed under set -e. No evidence dir and no rec1261h, so the new check RECOVERY_SCRIPT_NOT_RUNNABLE_STOP stopped the run before any staging or launch. No EXP1261 BEFORE. Fix: prepare.sh copies a package file from the builder only when it is missing locally; the integrity check against kmd-build-receipt.json is unchanged. Next: resume EXP1261 from prepare.
