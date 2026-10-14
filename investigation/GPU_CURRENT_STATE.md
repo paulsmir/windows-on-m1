@@ -1,6 +1,31 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-14T16:55Z (read this first)
+## Current as of 2026-10-14T18:48Z (read this first)
+
+Installed: PACKAGE1279 during EXP1280 setup (EXP1280 = PACKAGE1280 running:
+integration 4984353f; the next pipeline's rec1280h rollback removes it).
+m1n1 fa45bc58 r2, INF 1235 copy, x86 ICD out56, WOW64 UMD32 out5 (closure 025).
+- ONE UMD SOURCE (EXP1279 CONFIRMED): KMD/ARM64 UMD are built from the
+  integration tree (scratchpad mkicd.py with WOW_ICD/WOW_UMD), not
+  build/exp1211-kmd-compute; DWM/ARM64 apps now run the same Mesa batch
+  lifecycle as the x86 ICD/UMD32 (CS 46.7 fps, desktop, BIG, pressure,
+  long-job + hang all as before, same DWM PID).
+- D3D-G1 (compute inside a render submission): v5 envelope admitted, bound
+  and re-proven on hardware (EXP1278), but the CPU-sequenced prelude
+  DEADLOCKED (0x116): the shared Queue notifier threshold counts TA+3D+compute.
+  D3D-G1b (e9f48fe7, implemented): compute, TA and 3D in one submission, the
+  TA queue led by a G13 firmware Barrier on the compute stamp (Asahi
+  queue/mod.rs pattern, captured WorkCommandBarrier layout). EXP1280 tests it
+  with agx_gs_smoke gs/so on x86 and ARM64. ACTIVE HYPOTHESIS.
+- Process: keep each experiment's KMD PDB in its directory (EXP1278's was
+  overwritten; analysis used the identical-source build with SYMOPT_LOAD_ANYTHING).
+- The integration INF now runs the KMD from the driver store (7929519e,
+  InfVerif Universal); installed packages still use the 1235 INF until a
+  driver-store install experiment.
+- Then: stream-output caps (max_stream_output_buffers 0 today), queries,
+  MRT, MSAA, the D3D11 DDI / FL 11_0 / SM5, ARM64X UMD for x64 apps.
+
+## Current as of 2026-10-14T16:55Z
 
 Installed: PACKAGE1277 (build tree 5137c009 = M2 complete + G4-r1 + G4-r2a +
 G4-r2b; the next pipeline's rec1277h rollback removes it). m1n1 fa45bc58 r2.
