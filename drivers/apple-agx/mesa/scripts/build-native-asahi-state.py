@@ -2115,12 +2115,30 @@ UnsupportedDxgi''')
    __in const D3D10DDIARG_STAGE_IO_SIGNATURES *pSignatures)                                              // IN
 {
    Device *windows_device=CastDevice(hDevice);
-   if(!windows_device||!pData||!pData->pShaderCode||
-      !pData->pOutputStreamDecl||pData->NumEntries!=1u||
-      pData->StreamOutputStrideInBytes!=16u||
-      pData->pOutputStreamDecl[0].OutputSlot!=0u||
-      pData->pOutputStreamDecl[0].RegisterIndex!=0u||
-      pData->pOutputStreamDecl[0].RegisterMask!=0xfu) {
+   /* D3D-G8: an FL10_0 declaration -- up to 64 components, slots 0..3,
+    * contiguous component masks, 0xffffffff register holes; one slot is
+    * interleaved at StreamOutputStrideInBytes, several slots are tightly
+    * packed (upstream). Stream output needs geometry shader code. */
+   bool soValid=windows_device&&pData&&pData->pShaderCode&&
+      pData->pOutputStreamDecl&&pData->NumEntries>=1u&&
+      pData->NumEntries<=64u; /* D3D10_SO_SINGLE_BUFFER_COMPONENT_LIMIT */
+   UINT soSlots=0u,soComponents=0u;
+   for(UINT i=0;soValid&&i<pData->NumEntries;++i) {
+      const D3D10DDIARG_STREAM_OUTPUT_DECLARATION_ENTRY *entry=
+         &pData->pOutputStreamDecl[i];
+      UINT mask=entry->RegisterMask,low=0u;
+      while(mask&&!(mask&1u)){mask>>=1;++low;}
+      soValid=entry->OutputSlot<4u&& /* D3D10_SO_BUFFER_SLOT_COUNT */
+         entry->RegisterMask&&!(entry->RegisterMask&~0xfu)&&
+         !(mask&(mask+1u));
+      soSlots|=1u<<entry->OutputSlot;
+      UINT bits=entry->RegisterMask;
+      while(bits){soComponents+=bits&1u;bits>>=1;}
+   }
+   if(soValid&&soSlots==1u)
+      soValid=!(pData->StreamOutputStrideInBytes&3u)&&
+         pData->StreamOutputStrideInBytes>=4u*soComponents;
+   if(!soValid) {
       SetError(hDevice,E_NOTIMPL);return;
    }
    LOG_ENTRYPOINT();'''),
@@ -4161,44 +4179,88 @@ uint32_t AgxWin32NativeBuildPipelineTest(struct agx_batch *batch,
                         : tgsi_to_nir(cso->tokens, pctx->screen, false);'''
         if state_text.count(shader_ir)!=1:
             raise SystemExit('Ambiguous native TGSI stream-output anchor')
+        scan_anchor='#include "gallium/auxiliary/tgsi/tgsi_from_mesa.h"\n'
+        create_anchor='static void *\nagx_create_shader_state('
+        if state_text.count(scan_anchor)!=1 or state_text.count(create_anchor)!=1:
+            raise SystemExit('Ambiguous native stream-output helper anchor')
+        state_text=state_text.replace(scan_anchor,scan_anchor+
+            '#include "gallium/auxiliary/tgsi/tgsi_scan.h"\n')
+        state_text=state_text.replace(create_anchor,'''/* D3D-G8: the NIR slot tgsi_to_nir gives a TGSI output semantic, for the
+ * semantics the D3D10 frontend declares. */
+static bool
+agx_windows_xfb_slot(unsigned name, unsigned index, unsigned *slot)
+{
+   switch (name) {
+   case TGSI_SEMANTIC_POSITION: *slot = VARYING_SLOT_POS; return true;
+   case TGSI_SEMANTIC_GENERIC:
+      if (index >= 32) return false;
+      *slot = VARYING_SLOT_VAR0 + index; return true;
+   case TGSI_SEMANTIC_COLOR:
+      *slot = index ? VARYING_SLOT_COL1 : VARYING_SLOT_COL0; return true;
+   case TGSI_SEMANTIC_PSIZE: *slot = VARYING_SLOT_PSIZ; return true;
+   case TGSI_SEMANTIC_CLIPDIST:
+      *slot = index ? VARYING_SLOT_CLIP_DIST1 : VARYING_SLOT_CLIP_DIST0; return true;
+   case TGSI_SEMANTIC_TEXCOORD:
+      if (index >= 8) return false;
+      *slot = VARYING_SLOT_TEX0 + index; return true;
+   default:
+      return false;
+   }
+}
+
+'''+create_anchor)
         state_text=state_text.replace(shader_ir,shader_ir+'''
 
-   /* The D3D10 frontend carries stream output beside TGSI.  Preserve the
-    * exact admitted FL10_0 declaration when converting TGSI to NIR so Asahi
-    * owns both XFB emission and the DrawAuto byte-stride contract. */
+   /* The D3D10 frontend carries stream output beside TGSI. D3D-G8: rebuild
+    * every declared output as NIR xfb info so Asahi owns both XFB emission
+    * and the DrawAuto byte-stride contract. A pipe_stream_output names a
+    * TGSI output register; its declaration's semantic gives the NIR slot
+    * (the mapping tgsi_to_nir uses). */
    if (cso->stream_output.num_outputs != 0 && !nir->xfb_info) {
       const struct pipe_stream_output_info *pipe_xfb = &cso->stream_output;
-      const struct pipe_stream_output *pipe_out = &pipe_xfb->output[0];
-      bool exact_windows_xfb =
-         pipe_xfb->num_outputs == 1 && pipe_xfb->stride[0] == 4 &&
-         pipe_out->output_buffer == 0 && pipe_out->register_index == 0 &&
-         pipe_out->start_component == 0 && pipe_out->num_components == 4 &&
-         pipe_out->dst_offset == 0 && pipe_out->stream == 0;
-      if (!exact_windows_xfb) {
+      struct tgsi_shader_info scan;
+      bool valid = cso->type == PIPE_SHADER_IR_TGSI &&
+         pipe_xfb->num_outputs <= PIPE_MAX_SO_OUTPUTS;
+      nir_xfb_info *xfb = valid ?
+         rzalloc_size(nir, nir_xfb_info_size(pipe_xfb->num_outputs)) : NULL;
+      if (xfb)
+         tgsi_scan_shader(cso->tokens, &scan);
+      for (unsigned i = 0; xfb && valid && i < pipe_xfb->num_outputs; ++i) {
+         const struct pipe_stream_output *pipe_out = &pipe_xfb->output[i];
+         unsigned reg = pipe_out->register_index, slot = 0;
+         valid = reg < scan.num_outputs &&
+            pipe_out->output_buffer < NIR_MAX_XFB_BUFFERS &&
+            pipe_out->stream == 0 && pipe_out->num_components &&
+            pipe_out->start_component + pipe_out->num_components <= 4 &&
+            agx_windows_xfb_slot(scan.output_semantic_name[reg],
+                                 scan.output_semantic_index[reg], &slot);
+         if (!valid)
+            break;
+         nir_xfb_output_info *xfb_out = &xfb->outputs[i];
+         xfb_out->buffer = pipe_out->output_buffer;
+         xfb_out->offset = pipe_out->dst_offset * 4;
+         xfb_out->location = slot;
+         xfb_out->component_offset = pipe_out->start_component;
+         xfb_out->component_mask =
+            BITFIELD_RANGE(pipe_out->start_component, pipe_out->num_components);
+         xfb->buffers_written |= BITFIELD_BIT(pipe_out->output_buffer);
+         xfb->buffers[pipe_out->output_buffer].varying_count++;
+      }
+      if (!xfb || !valid) {
          ralloc_free(nir);
          ralloc_free(so);
          return NULL;
       }
-
-      nir_xfb_info *xfb = rzalloc_size(nir, nir_xfb_info_size(1));
-      if (!xfb) {
-         ralloc_free(nir);
-         ralloc_free(so);
-         return NULL;
-      }
-      xfb->buffers_written = BITFIELD_BIT(0);
       xfb->streams_written = BITFIELD_BIT(0);
-      xfb->buffers[0].stride = pipe_xfb->stride[0] * 4;
-      xfb->buffers[0].varying_count = 1;
-      xfb->buffer_to_stream[0] = 0;
-      xfb->output_count = 1;
-      xfb->outputs[0].buffer = 0;
-      xfb->outputs[0].offset = 0;
-      xfb->outputs[0].location = pipe_out->register_index;
-      xfb->outputs[0].component_mask = BITFIELD_MASK(4);
-      xfb->outputs[0].component_offset = 0;
+      for (unsigned buffer = 0; buffer < NIR_MAX_XFB_BUFFERS; ++buffer) {
+         xfb->buffer_to_stream[buffer] = 0;
+         if (xfb->buffers_written & BITFIELD_BIT(buffer)) {
+            xfb->buffers[buffer].stride = pipe_xfb->stride[buffer] * 4;
+            nir->info.xfb_stride[buffer] = pipe_xfb->stride[buffer];
+         }
+      }
+      xfb->output_count = pipe_xfb->num_outputs;
       nir->xfb_info = xfb;
-      nir->info.xfb_stride[0] = pipe_xfb->stride[0];
    }''',1)
         state_begin=state_text.index('static uint8_t *\nagx_encode_state(')
         state_end=state_text.index('\n}\n\nstatic enum agx_primitive',state_begin)+3
