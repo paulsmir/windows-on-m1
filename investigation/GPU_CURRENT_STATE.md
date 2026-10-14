@@ -1,6 +1,30 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-14T15:00Z (read this first)
+## Current as of 2026-10-14T16:00Z (read this first)
+
+Installed: PACKAGE1275 (build tree 728f0e47 = M2 complete + G4-r1; the next
+pipeline's rec1275h rollback removes it). m1n1 fa45bc58 r2 (b720f8e0).
+M2 (flexible memory) COMPLETE on hardware:
+- M2-f5 reserve at creation (EXP1265), M2-f6 segment 3 from the RAM-sized
+  m1n1 broker (EXP1273: 2688 MiB on J313), M2-f7 General BO bound (EXP1269),
+  M2-f9a TVB window cap (EXP1270), M2-f10 D3D canonical copies in segment 3
+  (EXP1271), M2-f11 UMD residency trim (EXP1274/EXP1275: budget refusals
+  trimmed and retried, restored content verified 0xffbf8040).
+- M2-f8 stays a hardware limit (CPU-visible class BOs at segment-3 exhaustion).
+G4 (recovery) is the active target:
+- G4-r1 (3ed6a8ee) installed, INCONCLUSIVE: its 500 ms deadline is never
+  reached.
+- G4-r2 OPEN (EXP1275 long-job step): the firmware kills a render that does
+  not yield to a context switch within cl_kill_timeout_ms (Asahi 50 ms;
+  recoveries 5, kind 4 Timeout, max 48 ms). The KMD then resumes the
+  firmware but completes the dropped render to Windows as success (silent
+  loss). Next (offline): the KMD path that requests a context switch during
+  a running job, the preemption granularity reported to dxgkrnl, and the
+  Windows DDI that reports a dropped packet as faulted.
+- Then the resubmission defect, the D3D groundwork and FL 11_0
+  (investigation/analysis/D3D-phase-plan.md).
+
+## Current as of 2026-10-14T15:00Z
 
 Installed: nothing (REC-EXP1272 done: Package Absent, APPL0002 Code 28);
 EXP1273 running (M2-f6 retry). M2 status:
