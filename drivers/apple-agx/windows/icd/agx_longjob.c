@@ -6,7 +6,12 @@
  * duration. Each draw is timed from Flush to its event query (QPC), and
  * GetDeviceRemovedReason is read after it. Every line is written through to
  * the output file before the next draw, so the log survives a bugcheck.
- * Usage: agx_longjob.exe <out.txt> <target-ms>...  (e.g. 100 250 700 1400) */
+ * Calibration takes the fastest of three draws at each loop count, so one
+ * draw delayed behind other GPU work does not skew the rate (EXP1276).
+ * A final argument "hang" runs one draw whose loop never finishes within
+ * TdrDelay: the firmware must report it (G4-r2b), so the device is removed
+ * instead of the draw completing silently.
+ * Usage: agx_longjob.exe <out.txt> <target-ms>... [hang]  (e.g. 100 250 700 1400) */
 #define COBJMACROS
 #define INITGUID
 #include <windows.h>
@@ -187,8 +192,15 @@ int main(int argc, char **argv) {
     ID3D11DeviceContext_PSSetConstantBuffers(ctx, 0, 1, &cb);
   }
   /* Calibration: the first draw also compiles the pipeline. */
+  (void)run(n, 10000u, &removed);
   for (;;) {
-    ms = run(n, 10000u, &removed);
+    double best = -1.0;
+    for (int k = 0; k < 3; ++k) {
+      double sample = run(n, 10000u, &removed);
+      if (sample < 0.0 || removed != S_OK) { best = sample; break; }
+      if (best < 0.0 || sample < best) best = sample;
+    }
+    ms = best;
     say("CALIBRATE n %u ms %.2f removed 0x%08lx", n, ms, (unsigned long)removed);
     if (ms < 0.0 || removed != S_OK) { say("CALIBRATION_FAILED"); return 1; }
     if (ms >= 30.0 || n >= (1u << 28)) break;
@@ -197,7 +209,17 @@ int main(int argc, char **argv) {
   per_iteration = ms / (double)n;
   say("RATE %.9f ms per iteration", per_iteration);
   for (i = 2; i < argc; ++i) {
-    double want_ms = atof(argv[i]), iterations = want_ms / per_iteration;
+    double want_ms, iterations;
+    if (!strcmp(argv[i], "hang")) {
+      /* ~0x7fffffff iterations: far beyond TdrDelay at any measured rate. */
+      say("HANG_START n %u", 0x7fffffffu);
+      ms = run(0x7fffffffu, 15000u, &removed);
+      say("HANG ms %.2f removed 0x%08lx", ms, (unsigned long)removed);
+      say("HANG_AFTER removed 0x%08lx", (unsigned long)ID3D11Device_GetDeviceRemovedReason(device));
+      continue;
+    }
+    want_ms = atof(argv[i]);
+    iterations = want_ms / per_iteration;
     UINT step = iterations >= 4294967295.0 ? 0xffffffffu : (UINT)iterations;
     say("STEP_START target %.0f n %u", want_ms, step);
     ms = run(step, (DWORD)(want_ms * 4.0 + 10000.0), &removed);
