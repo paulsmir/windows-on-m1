@@ -29,6 +29,11 @@
 /* G2: a compute command (Asahi drm_asahi_cmd_compute) with its
  * process-mapped compute preemption buffer. */
 #define APPLE_AGX_G4_PRIVATE_VERSION_COMPUTE 4u
+/* D3D-G1: a render whose submission starts with a compute command it waits
+ * on (Asahi agx_batch_submit: COMPUTE {vdm 0, cdm 0}, optional attachments,
+ * RENDER {vdm NONE, cdm 1}); the v3 header plus the compute preemption
+ * buffer of v4. */
+#define APPLE_AGX_G4_PRIVATE_VERSION_RENDER_COMPUTE 5u
 #define APPLE_AGX_G4_PROCESS_RANGE_COUNT 9u
 #define APPLE_AGX_G4_NATIVE_MAX_BYTES 4096u
 #define APPLE_AGX_G4_RENDER 0u
@@ -161,6 +166,10 @@ typedef struct {
   APPLE_AGX_G4_PRIVATE_HEADER Base;
   APPLE_AGX_G4_PROCESS_RANGE Preemption;
 } APPLE_AGX_G4_PRIVATE_HEADER_COMPUTE;
+typedef struct {
+  APPLE_AGX_G4_PRIVATE_HEADER_V3 V3;
+  APPLE_AGX_G4_PROCESS_RANGE Preemption;
+} APPLE_AGX_G4_PRIVATE_HEADER_V5;
 /* The whole compute envelope as the UMD writes it into the DMA private data
  * (header, then the native command it copies from its DMA buffer) and as the
  * KMD keeps it for the job it builds. */
@@ -351,6 +360,24 @@ static inline int AppleAgxG4ComposeHeaderV3(APPLE_AGX_G4_PRIVATE_HEADER_V3 *head
   return 1;
 }
 
+/* D3D-G1: the v5 header from a composed v3 header (its process ranges, color
+ * format and scene lease) and the compute preemption buffer. */
+static inline int AppleAgxG4ComposeHeaderV5(APPLE_AGX_G4_PRIVATE_HEADER_V5 *header,
+    const APPLE_AGX_G4_PRIVATE_HEADER_V3 *v3, unsigned long long command_va,
+    unsigned command_bytes, const APPLE_AGX_G4_PROCESS_RANGE *preemption) {
+  if (!header || !v3 || !preemption || !preemption->Bytes ||
+      !v3->Lease.ManagerId || !v3->Lease.ManagerGeneration ||
+      !v3->Lease.SceneId || !v3->Lease.SceneGeneration) return 0;
+  header->V3 = *v3;
+  header->V3.V2.Base.Magic = APPLE_AGX_G4_PRIVATE_MAGIC;
+  header->V3.V2.Base.Version = APPLE_AGX_G4_PRIVATE_VERSION_RENDER_COMPUTE;
+  header->V3.V2.Base.HeaderBytes = (unsigned short)sizeof(*header);
+  header->V3.V2.Base.CommandVa = command_va;
+  header->V3.V2.Base.CommandBytes = command_bytes;
+  header->Preemption = *preemption;
+  return 1;
+}
+
 typedef enum {
   AppleAgxG4ParseOk = 0,
   AppleAgxG4ParseInvalid,
@@ -403,6 +430,10 @@ typedef struct {
   /* Set by the KMD, never parsed: TVB blocks backed at the start of
    * Process[2] (0: all of Process[2]). */
   unsigned int HeapBlocks;
+  /* D3D-G1 (v5): the compute command the render waits on. */
+  int HasCompute;
+  APPLE_AGX_G4_NATIVE_COMPUTE Compute;
+  APPLE_AGX_G4_PROCESS_RANGE Preemption;
 } APPLE_AGX_G4_SUBMIT_VIEW;
 
 /* G2: a validated compute envelope. */
@@ -431,6 +462,18 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmit(
     unsigned int UmdPrivateBytes, unsigned long long DmaVa,
     unsigned int DmaBytes, APPLE_AGX_G4_ACCESS Access, void *AccessContext,
     APPLE_AGX_G4_SUBMIT_VIEW *View);
+/* D3D-G1: like AppleAgxG4ParseSubmitEx, and also admits a v5 envelope: one
+ * compute command (validated as by AppleAgxG4ParseComputeEx, preemption buffer
+ * of at least PreemptBytes), optional attachments, then the render, which
+ * must name the compute as its CDM barrier (vdm NONE, cdm 1). A v1-v3 render
+ * parses as with AppleAgxG4ParseSubmitEx (HasCompute 0). */
+APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmitComputeEx(
+    const void *PrivateData, unsigned int PrivateCapacity,
+    unsigned int UmdPrivateBytes, unsigned long long DmaVa,
+    unsigned int DmaBytes, unsigned int PreemptBytes,
+    APPLE_AGX_G4_ACCESS_EX Access, void *AccessContext,
+    APPLE_AGX_G4_SUBMIT_VIEW *View, APPLE_AGX_G4_FAILURE *Failure);
+
 APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmitEx(
     const void *PrivateData, unsigned int PrivateCapacity,
     unsigned int UmdPrivateBytes, unsigned long long DmaVa,
