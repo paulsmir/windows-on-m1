@@ -1,6 +1,28 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-14T04:29Z (read this first)
+## Current as of 2026-10-14T07:48Z (read this first)
+
+Installed: PACKAGE1262 (KMD build tree e49b48aa = integration a15d2aea slabs +
+8861c4a2 cancel-caller receipt, 30.0.1262.0) on m1n1 23d30a32 + Mu 361a2134;
+the guest OS has KB5127648.
+M2-f3 is complete on J313 (EXP1262, investigation/analysis/M2-f3-demand-pool.md).
+Segment 3 (1 GiB declared) is backed on demand from 2 MiB slabs:
+- Idle: ~0.19 GiB, against 1 GiB pinned before.
+- CS benchmark: grows to 0.66 GiB and is given back after the game.
+- Speed: CS 46.07 fps, equal to the fixed pool on the same OS (46.36).
+- 0 failures, 0 Unmapped IPA, every functional check passes.
+- Rejected on the way: churn as a cause (EXP1258), 16 KiB chunks (EXP1261).
+- KB5127648 alone costs ~1.2 fps against the pre-update EXP1255.
+Next causal targets:
+- the M2 follow-ups as separate variables: segment 3 size (demand-backed,
+  so it can follow Windows' TotalSystemMemoryAvailableForGraphics, capped by
+  the broker's 2 GiB of system records) and budget groups;
+- the resubmission defect (branch 7 subsite 0x201; the cancel-caller receipt
+  is in this build);
+- G4-recovery;
+- D3D 11/12.
+
+## Current as of 2026-10-14T04:29Z 
 
 Installed: PACKAGE1261 (16 KiB-block demand pool, rejected; package left for
 the next rollback) on m1n1 23d30a32 + Mu 361a2134; guest OS has KB5127648.
