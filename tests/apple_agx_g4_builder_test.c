@@ -311,6 +311,22 @@ int main(void) {
       assert(objects[39].GpuVa == render.IspDbiasBase);
       assert(objects[40].GpuVa == packet.Attachment.Pointer);
       assert(objects[63].GpuVa == render.SamplerHeap);
+      /* D3D-G2: the 3D microsequence's firmware attachment list is the
+       * submission's, as Asahi build_attachments fills it: address, size in
+       * 128-byte cache lines, 0x17, 1; the count after 16 entries (the
+       * captured template named one 16 KiB colour buffer: 0x80 lines). */
+      {
+        const unsigned char *list = objects[15].Data + 0x94u;
+        unsigned int i;
+        assert(get64(list) == packet.Attachment.Pointer);
+        assert((get64(list + 8u) & 0xffffffffULL) ==
+               (packet.Attachment.Size + 127u) / 128u);
+        assert(((get64(list + 8u) >> 32) & 0xffffu) == 0x17u &&
+               (get64(list + 8u) >> 48) == 1u);
+        for (i = 1u; i < 16u; ++i)
+          assert(get64(list + i * 16u) == 0u && get64(list + i * 16u + 8u) == 0u);
+        assert((get64(list + 16u * 16u) & 0xffffffffULL) == view.AttachmentCount);
+      }
       /* Dynamic TVB (Asahi buffer.rs ensure_blocks): the KMD backs the first
        * HeapBlocks of the 32-block window and the buffer manager, InitBM and
        * BlockControl describe exactly those blocks. A 1280x720 render needs

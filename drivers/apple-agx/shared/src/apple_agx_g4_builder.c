@@ -386,6 +386,48 @@ APPLE_AGX_BOOL AppleAgxG4PatchRenderScalars(
   return APPLE_AGX_TRUE;
 }
 
+/* D3D-G2: the 3D microsequence's attachment list (Start3D, template object
+ * 15 at +0x94: 16 entries {u64 address, u32 size in 128-byte cache lines,
+ * u16 0x17, u16 1}, then the u32 count at +0x194). Asahi queue/mod.rs
+ * build_attachments fills it from every SET_FRAGMENT_ATTACHMENTS entry the
+ * submission names (colour targets, depth, stencil). The captured template
+ * names one 16 KiB colour buffer; the firmware gets the real list. */
+#define G4_FRAGMENT_ATTACHMENTS_OFFSET 0x94u
+#define G4_FRAGMENT_ATTACHMENT_BYTES 16u
+#define G4_FIRMWARE_MAX_ATTACHMENTS 16u
+static APPLE_AGX_BOOL g4_patch_fragment_attachments(
+    const APPLE_AGX_G4_SUBMIT_VIEW *View,
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects) {
+  unsigned char *list = Objects[15].Data;
+  APPLE_AGX_U32 index;
+  if (list == 0 || View->Attachments == 0 || View->AttachmentCount == 0u ||
+      View->AttachmentCount > APPLE_AGX_G4_MAX_ATTACHMENTS ||
+      APPLE_AGX_G4_MAX_ATTACHMENTS > G4_FIRMWARE_MAX_ATTACHMENTS ||
+      Objects[15].Size < G4_FRAGMENT_ATTACHMENTS_OFFSET +
+          G4_FIRMWARE_MAX_ATTACHMENTS * G4_FRAGMENT_ATTACHMENT_BYTES + 4u)
+    return APPLE_AGX_FALSE;
+  list += G4_FRAGMENT_ATTACHMENTS_OFFSET;
+  for (index = 0u; index < G4_FIRMWARE_MAX_ATTACHMENTS; ++index) {
+    unsigned char *entry = list + index * G4_FRAGMENT_ATTACHMENT_BYTES;
+    APPLE_AGX_G4_ATTACHMENT attachment;
+    APPLE_AGX_U64 lines;
+    memset(entry, 0, G4_FRAGMENT_ATTACHMENT_BYTES);
+    if (index >= View->AttachmentCount) continue;
+    memcpy(&attachment, (const unsigned char *)View->Attachments +
+               index * sizeof(attachment), sizeof(attachment));
+    lines = (attachment.Size + 127u) >> 7;
+    if (!attachment.Pointer || !lines || lines > 0xffffffffULL)
+      return APPLE_AGX_FALSE;
+    g4_put64(entry, attachment.Pointer);
+    g4_put32(entry + 8u, (APPLE_AGX_U32)lines);
+    g4_put16(entry + 12u, 0x17u);
+    g4_put16(entry + 14u, 1u);
+  }
+  g4_put32(list + G4_FIRMWARE_MAX_ATTACHMENTS * G4_FRAGMENT_ATTACHMENT_BYTES,
+           View->AttachmentCount);
+  return APPLE_AGX_TRUE;
+}
+
 APPLE_AGX_BOOL AppleAgxG4BuildTa3d(
     const APPLE_AGX_G4_SUBMIT_VIEW *View,
     void *Arena, APPLE_AGX_U32 ArenaBytes,
@@ -404,7 +446,8 @@ APPLE_AGX_BOOL AppleAgxG4BuildTa3d(
           Objects) ||
       !AppleAgxRenderTemplateSelectVmSlot(Arena, ArenaBytes, VmSlot) ||
       !AppleAgxG4ApplySceneRelocations(Objects, ObjectCount) ||
-      !AppleAgxG4PatchRenderScalars(&render, Objects, ObjectCount))
+      !AppleAgxG4PatchRenderScalars(&render, Objects, ObjectCount) ||
+      !g4_patch_fragment_attachments(View, Objects))
     return APPLE_AGX_FALSE;
   return APPLE_AGX_TRUE;
 }
