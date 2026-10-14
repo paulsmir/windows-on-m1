@@ -269,7 +269,7 @@ int main(void) {
   ExFreePoolWithTag(info.hAllocation, ADMISSION_POOL_TAG);
   /* M2-f2: with the pool mapped, a CPU-visible class BO prefers segment 3
    * then the aperture and never lists the local segment (no 2<->3 move);
-   * CPU-invisible class BOs and class0 surfaces keep their shapes. */
+   * class0 surfaces keep their shapes. */
   replay_pool_present = 1;
   native.ClassId = 1; native.CpuVisible = 1; native.Size = 0x10000;
   memset(&info, 0, sizeof(info));
@@ -296,14 +296,34 @@ int main(void) {
   assert(AdmissionCreateAllocationImpl(&context, &args) == STATUS_NO_MEMORY);
   assert(replay_reserved == 0x10000u);
   replay_reserve_fail = 0;
+  /* M2-f10 (EXP1270): a CPU-invisible class BO (the D3D UMD's canonical copy
+   * of a resource above 16 MiB) lives in segment 3 only. Segment 2 is the
+   * fixed firmware reserve (4 x 64 MiB targets exhausted it), and with no
+   * aperture in its set VidMm evicts it to system memory instead of making
+   * it resident in 4 KiB system pages the UAT cannot map. Its pages are
+   * reserved at creation like every segment-3 BO. */
   native.CpuVisible = 0;
+  native.Size = 0x20000;
   memset(&info, 0, sizeof(info));
   info.pPrivateDriverData = &native;
   info.PrivateDriverDataSize = sizeof(native);
   assert(AdmissionCreateAllocationImpl(&context, &args) == STATUS_SUCCESS);
-  assert(info.SupportedWriteSegmentSet == ADMISSION_LOCAL_SEGMENT_SET);
-  assert(info.PreferredSegment.SegmentId0 == ADMISSION_MEMORY_LOCAL_SEGMENT);
+  assert(info.SupportedReadSegmentSet == ADMISSION_POOL_SEGMENT_SET);
+  assert(info.SupportedWriteSegmentSet == ADMISSION_POOL_SEGMENT_SET);
+  assert(info.PreferredSegment.SegmentId0 == ADMISSION_MEMORY_POOL_SEGMENT);
+  assert(info.PreferredSegment.SegmentId1 == 0u);
+  assert(info.EvictionSegmentSet == 0u);
+  assert(info.FlagsWddm2.CpuVisible == 0 && info.FlagsWddm2.AccessedPhysically == 0);
+  assert(replay_reserved == 0x30000u &&
+         ((ADMISSION_ALLOCATION_HANDLE *)info.hAllocation)->PoolReserved == 0x20000u);
   ExFreePoolWithTag(info.hAllocation, ADMISSION_POOL_TAG);
+  replay_reserve_fail = 1;
+  memset(&info, 0, sizeof(info));
+  info.pPrivateDriverData = &native;
+  info.PrivateDriverDataSize = sizeof(native);
+  assert(AdmissionCreateAllocationImpl(&context, &args) == STATUS_NO_MEMORY);
+  assert(info.hAllocation == NULL && replay_reserved == 0x30000u);
+  replay_reserve_fail = 0;
   memset(&info, 0, sizeof(info));
   info.pPrivateDriverData = &legacy;
   info.PrivateDriverDataSize = sizeof(legacy);

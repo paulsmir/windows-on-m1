@@ -507,8 +507,12 @@ static NTSTATUS AdmissionCreateAllocationImpl(
    * aperture is preferred and whatever its size (EXP1265-D, EXP1267,
    * EXP1268), and the submission using it is refused. Segment-3 capacity is
    * the mitigation (M2-f6). */
-  if (classId != 0u && description->CpuVisible != 0u &&
-      AdmissionMemoryPoolView(context, &pool)) {
+  /* M2-f10 (EXP1270): a CPU-invisible class BO (the D3D UMD's canonical copy
+   * of a resource above 16 MiB) is VA-only as well and lives in segment 3
+   * alone. Segment 2 is the fixed firmware reserve; 4 x 64 MiB targets
+   * exhausted it. Without an aperture in its set VidMm evicts it to system
+   * memory (paging TRANSFER) instead of making it resident there. */
+  if (classId != 0u && AdmissionMemoryPoolView(context, &pool)) {
     /* M2-f5: the pages this allocation may occupy in segment 3 are taken
      * from Windows now, so its later placement (UpdatePageTable, also from
      * the paging process) never fails for memory. Microsoft
@@ -522,9 +526,11 @@ static NTSTATUS AdmissionCreateAllocationImpl(
     allocation->PoolReserved = aligned;
     info->PreferredSegment.Value = 0u;
     info->PreferredSegment.SegmentId0 = ADMISSION_MEMORY_POOL_SEGMENT;
-    info->PreferredSegment.SegmentId1 = ADMISSION_MEMORY_APERTURE_SEGMENT;
-    info->SupportedReadSegmentSet =
-        ADMISSION_POOL_SEGMENT_SET | ADMISSION_APERTURE_SEGMENT_SET;
+    info->SupportedReadSegmentSet = ADMISSION_POOL_SEGMENT_SET;
+    if (description->CpuVisible != 0u) {
+      info->PreferredSegment.SegmentId1 = ADMISSION_MEMORY_APERTURE_SEGMENT;
+      info->SupportedReadSegmentSet |= ADMISSION_APERTURE_SEGMENT_SET;
+    }
     info->SupportedWriteSegmentSet = info->SupportedReadSegmentSet;
   }
 #endif
