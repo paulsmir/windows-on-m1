@@ -2,8 +2,8 @@
 
 ## Current as of 2026-10-14T18:48Z (read this first)
 
-Installed: PACKAGE1279 during EXP1280 setup (EXP1280 = PACKAGE1280 running:
-integration 4984353f; the next pipeline's rec1280h rollback removes it).
+Installed: PACKAGE1280 (integration 4984353f; the next pipeline's rec1280h
+rollback removes it).
 m1n1 fa45bc58 r2, INF 1235 copy, x86 ICD out56, WOW64 UMD32 out5 (closure 025).
 - ONE UMD SOURCE (EXP1279 CONFIRMED): KMD/ARM64 UMD are built from the
   integration tree (scratchpad mkicd.py with WOW_ICD/WOW_UMD), not
@@ -15,8 +15,10 @@ m1n1 fa45bc58 r2, INF 1235 copy, x86 ICD out56, WOW64 UMD32 out5 (closure 025).
   DEADLOCKED (0x116): the shared Queue notifier threshold counts TA+3D+compute.
   D3D-G1b (e9f48fe7, implemented): compute, TA and 3D in one submission, the
   TA queue led by a G13 firmware Barrier on the compute stamp (Asahi
-  queue/mod.rs pattern, captured WorkCommandBarrier layout). EXP1280 tests it
-  with agx_gs_smoke gs/so on x86 and ARM64. ACTIVE HYPOTHESIS.
+  queue/mod.rs pattern, captured WorkCommandBarrier layout). EXP1280
+  CONFIRMED: D3D10 geometry shaders and stream output run on the GPU on both
+  the WOW64 UMD32 and the ARM64 UMD (agx_gs_smoke gs/so, 240 frames read
+  back, no stale layout, no recovery, no TDR). Installed: PACKAGE1280.
 - Process: keep each experiment's KMD PDB in its directory (EXP1278's was
   overwritten; analysis used the identical-source build with SYMOPT_LOAD_ANYTHING).
 - The integration INF now runs the KMD from the driver store (7929519e,
