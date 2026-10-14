@@ -2875,10 +2875,12 @@ static BOOLEAN AdmissionNotifyCompletionAtInterrupt(PVOID Context) {
      * runs again. The device-specific code carries the firmware event kind. */
     data.InterruptType = DXGK_INTERRUPT_DMA_PAGE_FAULTED;
     data.DmaPageFaulted.FaultedFenceId = notification->Fence;
-    data.DmaPageFaulted.FaultedPrimitiveAPISequenceNumber =
-        DXGK_PRIMITIVE_API_SEQUENCE_NUMBER_UNKNOWN;
+    /* WDK d3dkmdt.h: DXGK_PRIMITIVE_API_SEQUENCE_NUMBER_UNKNOWN is
+     * ULONGLONG_MAX and DXGK_BIND_TABLE_ENTRY_UNKNOWN is UINT_MAX; neither
+     * limit macro is defined in this kernel translation unit. */
+    data.DmaPageFaulted.FaultedPrimitiveAPISequenceNumber = ~(UINT64)0u;
     data.DmaPageFaulted.FaultedPipelineStage = DXGK_RENDER_PIPELINE_STAGE_UNKNOWN;
-    data.DmaPageFaulted.FaultedBindTableEntry = DXGK_BIND_TABLE_ENTRY_UNKNOWN;
+    data.DmaPageFaulted.FaultedBindTableEntry = ~(UINT)0u;
     data.DmaPageFaulted.PageFaultFlags = (DXGK_PAGE_FAULT_FLAGS)0;
     data.DmaPageFaulted.FaultedVirtualAddress = 0;
     data.DmaPageFaulted.NodeOrdinal = notification->Node;
