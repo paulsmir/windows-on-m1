@@ -240,11 +240,13 @@ static inline unsigned int AppleAgxG4MinTvbBlocks(unsigned int width,
  * allocation extents are 64 KiB multiples for the G1b16 Windows profile. */
 /* D3D-G6: the tile buffer holds every sample of a utile. Mesa
  * agx_tilebuffer.c aligns a sample to 8 bytes and picks the largest utile
- * whose samples fit MAX_BYTES_PER_TILE (32767 bytes). */
+ * whose samples fit MAX_BYTES_PER_TILE (32767 bytes). EXP1287: a
+ * single-sampled render without colour buffers has a zero-byte sample
+ * (Asahi render.rs: no tile-buffer blocks); multisampling always allocates. */
 #define APPLE_AGX_G4_TILE_BUFFER_BYTES 32767u
 static inline int AppleAgxG4TileBufferValid(unsigned int sample_bytes,
     unsigned int samples, unsigned int utile_width, unsigned int utile_height) {
-  return sample_bytes && (sample_bytes & 7u) == 0u && samples &&
+  return (sample_bytes || samples == 1u) && (sample_bytes & 7u) == 0u && samples &&
       (unsigned long long)sample_bytes * samples * utile_width * utile_height <=
           APPLE_AGX_G4_TILE_BUFFER_BYTES;
 }

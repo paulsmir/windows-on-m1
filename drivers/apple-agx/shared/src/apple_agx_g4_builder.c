@@ -161,6 +161,9 @@ APPLE_AGX_BOOL AppleAgxG4BindNativeObjects(
       (!render.Depth.Base || render.Depth.Base < color.Pointer ||
        render.Depth.Base - color.Pointer >= color.Size))
     return APPLE_AGX_FALSE;
+  /* EXP1287: only a render without colour has a zero-byte sample. */
+  if (!render.SampleSizeBytes && View->ColorFormat != APPLE_AGX_G4_COLOR_NONE)
+    return APPLE_AGX_FALSE;
   if (!render.WidthPx || !render.HeightPx || !minimum ||
       render.Layers != 1u || !g4_samples_valid(render.Samples) ||
       !AppleAgxG4TileBufferValid(render.SampleSizeBytes, render.Samples,

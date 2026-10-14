@@ -69,7 +69,9 @@ static APPLE_AGX_G4_PARSE_RESULT validate_render(
         (render.UtileWidthPx == 32u && render.UtileHeightPx == 16u) ||
         (render.UtileWidthPx == 16u && render.UtileHeightPx == 16u)) ||
       (render.Samples != 1u && render.Samples != 2u &&
-       render.Samples != 4u) || !render.SampleSizeBytes)
+       render.Samples != 4u) ||
+      /* EXP1287: zero bytes only for a single-sampled render (Mesa). */
+      (!render.SampleSizeBytes && render.Samples != 1u))
     return AppleAgxG4ParseInvalid;
   if (render.TimestampsVertex.StartHandle ||
       render.TimestampsVertex.EndHandle ||

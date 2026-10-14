@@ -212,6 +212,25 @@ int main(void) {
           assert(AppleAgxG4BindNativeObjects(&depth_only, objects,
               APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
           assert(objects[40].GpuVa == zls.Attachment[1].Pointer);
+          /* EXP1287: a single-sampled depth-only render has a zero-byte
+           * tile-buffer sample (Mesa agx_build_tilebuffer_layout); a
+           * multisampled or colour render never does. */
+          bare.Render.SampleSizeBytes = 0u;
+          depth_only.Render = (const unsigned char *)&bare.Render;
+          assert(AppleAgxG4BindNativeObjects(&depth_only, objects,
+              APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+          bare.Render.Samples = 2u;
+          assert(!AppleAgxG4BindNativeObjects(&depth_only, objects,
+              APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+          bare.Render.Samples = 1u;
+          {
+            APPLE_AGX_G4_SUBMIT_VIEW colour = zview;
+            colour.Render = (const unsigned char *)&bare.Render;
+            assert(!AppleAgxG4BindNativeObjects(&colour, objects,
+                APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+          }
+          bare = zls;
+          depth_only.Render = zview.Render;
           /* Attachment 0 must hold the render's depth buffer. */
           depth_only.Attachments = &zls.Attachment[0];
           assert(!AppleAgxG4BindNativeObjects(&depth_only, objects,

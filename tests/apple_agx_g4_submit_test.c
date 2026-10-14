@@ -96,6 +96,15 @@ int main(void) {
   packet.render_payload.Bg.Usc = 0x20004u;
   assert(parse(&packet, &calls, &view) == AppleAgxG4ParseOk);
   packet.render_payload.Bg.Usc = 0u;
+  /* EXP1287: Mesa gives a single-sampled render without colour buffers a
+   * zero-byte tile-buffer sample (agx_build_tilebuffer_layout); Asahi
+   * render.rs accepts it. Multisampling always allocates (Mesa). */
+  packet.render_payload.SampleSizeBytes = 0u;
+  assert(parse(&packet, &calls, &view) == AppleAgxG4ParseOk);
+  packet.render_payload.Samples = 4u;
+  assert(parse(&packet, &calls, &view) == AppleAgxG4ParseInvalid);
+  packet.render_payload.Samples = 1u;
+  packet.render_payload.SampleSizeBytes = 4u;
 
   bad = packet; bad.header.CommandVa = 0x24000ULL;
   assert(parse(&bad, &calls, &view) == AppleAgxG4ParseInvalid);
