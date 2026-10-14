@@ -1,6 +1,29 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-14T18:48Z (read this first)
+## Current as of 2026-10-14T20:50Z (read this first)
+
+Installed: PACKAGE1283 (integration 17a15a3d + UMD32 out7/closure 027; the
+next pipeline's rec1283h rollback removes it). m1n1 fa45bc58 r2, INF 1235
+copy, x86 ICD out56.
+- EXP1283: every regression step as EXP1282 (CS 46.98 fps, GS/MRT PASS,
+  DWM faults 0). D3D-G3a occlusion queries REJECTED by a UMD projection
+  defect: native-asahi-batch-lifecycle.py deleted agx_init_query_functions,
+  so pipe->create_query was NULL (CreateQuery killed the process) and
+  active_queries false. Fixed in f9014fa3 (test_d3dg3_query_functions); the
+  KMD heap path (05268308: isp_oclqry_base JP1 +0xd0 / JP3 +0x4d8, 256 KiB
+  writable) is still unexercised.
+- Implemented, not yet on hardware (EXP1284 candidate, separate checkpoints):
+  D3D-G3b predication (364bffc2), D3D-G4 D3D depth-stencil (464ad92b: ZLS for
+  the D3D UMD, no 1 MiB bound, ClearDepthStencilView depth/stencil subsets),
+  D3D-G6 tile buffer by Mesa's rule (6516cec6: 8-byte multiples, utile fits
+  32767 bytes; 8 RGBA8 targets = 32x16 utiles), MSAA KMD encoding (5939e809,
+  neutral while the screen keeps AGX_DBG_NOMSAA).
+- NEXT: EXP1284 (queries rerun qx/qa, predication px/pa, depth x24/x32/a24/a16,
+  MRT x8/a8 plus the EXP1283 set), then the MSAA UMD (D3D only; GL keeps
+  NOMSAA, EXP1162), depth-only passes (winsys requires a colour target),
+  SO generality, the D3D11 DDI / FL 11_0 / SM5, ARM64X UMD.
+
+## Current as of 2026-10-14T18:48Z
 
 Installed: PACKAGE1282 (integration f6913c92 + UMD32 out6/closure 026; the next
 pipeline's rec1282h rollback removes it).
