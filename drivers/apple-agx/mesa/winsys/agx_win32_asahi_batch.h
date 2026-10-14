@@ -49,7 +49,9 @@ int AgxWin32AsahiBatchDrawAllowed(struct agx_context *,const struct pipe_draw_in
  * non-zero when the context must be marked faulted. */
 int AgxWin32AsahiBatchDrawRefused(struct agx_context *,const struct pipe_draw_info *,
     const struct pipe_draw_indirect_info *,const struct pipe_draw_start_count_bias *,unsigned);
-int AgxWin32AsahiBatchFinish(struct agx_batch *,const struct drm_asahi_cmd_render *);
+/* The compute command is non-NULL exactly when the batch has a CDM encoder. */
+int AgxWin32AsahiBatchFinish(struct agx_batch *,const struct drm_asahi_cmd_render *,
+                             const struct drm_asahi_cmd_compute *);
 int AgxWin32AsahiBatchFinishCompute(struct agx_batch *,const struct drm_asahi_cmd_compute *);
 int AgxWin32AsahiBatchPoll(struct agx_batch *,APPLE_AGX_U32);
 void AgxWin32AsahiBatchDiagnostic(struct agx_batch *,APPLE_AGX_U32 out[2]);

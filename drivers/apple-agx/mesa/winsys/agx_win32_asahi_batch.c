@@ -343,8 +343,11 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *b,
   (void)c;
   return batch_reject(capsule(b),__LINE__);
 }
-int AgxWin32AsahiBatchFinish(struct agx_batch *b,const struct drm_asahi_cmd_render *r) {
+/* The capture path records its compute encoder itself (MIXED_BATCH). */
+int AgxWin32AsahiBatchFinish(struct agx_batch *b,const struct drm_asahi_cmd_render *r,
+                             const struct drm_asahi_cmd_compute *compute) {
   AGX_WIN32_ASAHI_BATCH *c=capsule(b); AGX_WIN32_ASAHI_BACKEND *d=backend(b);
+  (void)compute;
   if(!c || !d || !r || d->Failed || b->ctx->any_faults || c->Submitted || c->Rejected ||
       b->draws!=1 || b->vs_scratch || b->fs_scratch ||
       agx_tilebuffer_spills(&b->tilebuffer_layout) || r->samples!=1 || r->layers!=1 ||

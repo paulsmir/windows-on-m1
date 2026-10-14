@@ -30,6 +30,14 @@ struct drm_asahi_cmd_render { APPLE_AGX_G4_NATIVE_RENDER native; };
 #define sample_size_B native.SampleSizeBytes
 struct drm_asahi_attachment { uint64_t pointer,size; uint32_t pad,flags; };
 struct drm_asahi_cmd_header { uint16_t cmd_type,size,vdm_barrier,cdm_barrier; };
+/* D3D-G1: the compute command a render batch may carry (none here). */
+struct drm_asahi_cmd_compute {
+  uint32_t flags,sampler_count;
+  uint64_t cdm_ctrl_stream_base,cdm_ctrl_stream_end,sampler_heap;
+  struct { uint32_t binary,cfg; uint64_t data; } helper;
+  struct { struct { uint32_t handle,offset; } start,end; } ts;
+};
+#define AGX_G4_WRITTEN_LIMIT 16u
 struct agx_va { uint64_t addr; };
 struct agx_bo {
   struct agx_va *va;
@@ -69,6 +77,8 @@ struct agx_batch {
   unsigned draws,clear;
   struct { unsigned bit_count, count; unsigned handles[8]; } bo_list;
   struct agx_pool pool,pipeline_pool;
+  struct { struct agx_bo *bo; } sampler_heap;
+  int compute;
   struct {
     unsigned nr_cbufs;
     struct { struct agx_resource *texture; unsigned format; }
@@ -81,6 +91,10 @@ typedef struct {
   APPLE_AGX_G4_PRIVATE_HEADER_V3 Header;
   unsigned char Native[APPLE_AGX_G4_NATIVE_MAX_BYTES];
 } AGX_G4_PRIVATE;
+typedef struct {
+  APPLE_AGX_G4_PRIVATE_HEADER_V5 Header;
+  unsigned char Native[APPLE_AGX_G4_NATIVE_MAX_BYTES];
+} AGX_G4_PRIVATE_V5;
 typedef struct {
   struct agx_bo *Command;
   struct agx_bo *Preemption;
@@ -107,6 +121,10 @@ static struct agx_screen *agx_screen(struct agx_screen *s) { return s; }
 static struct agx_device native_device;
 static struct agx_device *agx_device(struct agx_screen *s) { (void)s;return &native_device; }
 static struct agx_resource *agx_resource(struct agx_resource *r) { return r; }
+static int agx_batch_is_compute(const struct agx_batch *b) { return b->compute; }
+static struct agx_batch *agx_writer_get(struct agx_context *c,unsigned h) {
+  (void)c;(void)h;return NULL;
+}
 static uint64_t agx_map_gpu(struct agx_resource *r) { return r->bo->va->addr; }
 static const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(
     AGX_WIN32_ASAHI_BACKEND *b,struct agx_bo *bo) {
@@ -234,7 +252,7 @@ static void run(unsigned fail,unsigned many,unsigned scenario) {
   }
   /* Set aliases at the actual ABI offsets, checked by the wrapper below. */
   struct drm_asahi_cmd_render native;memcpy(&native,&render,sizeof(render));
-  int result=AgxWin32AsahiBatchFinish(&batch,&native);
+  int result=AgxWin32AsahiBatchFinish(&batch,&native,NULL);
   if(scenario>=2) {
     assert(!result && !submit_count && !resident_count && !eviction_count);
     assert(!owner.Gpuva.Held && !owner.Gpuva.Terminal);

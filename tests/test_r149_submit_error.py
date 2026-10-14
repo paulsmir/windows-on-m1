@@ -63,11 +63,11 @@ static int finish_result;
             '''
 static void native_flush(struct Pipe *p,void *f,unsigned flags) {
   (void)p;(void)f;(void)flags;
-  finish_result=AgxWin32AsahiBatchFinish(active_batch,active_render);
+  finish_result=AgxWin32AsahiBatchFinish(active_batch,active_render,NULL);
 }
 static void FrontendFlush(Device *hDevice) {
 ''' + flush + '\n}\n')
-        source = source.replace("int result=AgxWin32AsahiBatchFinish(&batch,&native);", """
+        source = source.replace("int result=AgxWin32AsahiBatchFinish(&batch,&native,NULL);", """
   active_batch=&batch;active_render=&native;finish_result=0;
   device.Stage=AgxD3d10DeviceReady;
   frontend_errors=0;frontend_error=S_OK;
@@ -85,7 +85,7 @@ static void FrontendFlush(Device *hDevice) {
     assert(AgxWin32AsahiBatchPoll(&batch,0));
   } else { assert(!frontend_errors); }
 """)
-        names = ("batch_refuse", "batch_has_render_work", "submitted_at", "retire_held", "gpuva_color_format_supported", "gpuva_color_class", "add_bo", "append_native", "append_attachments", "prepare_process_buffers", "pool_extent", "publish_shadows",
+        names = ("batch_refuse", "batch_has_render_work", "submitted_at", "retire_held", "gpuva_color_format_supported", "gpuva_color_class", "render_compute", "add_bo", "append_native", "append_attachments", "prepare_process_buffers", "pool_extent", "publish_shadows",
                  "AgxWin32AsahiBatchFinish", "release_lease", "AgxWin32AsahiBatchPoll",
                  "AgxWin32AsahiBatchAbort", "AgxWin32AsahiBatchRelease")
         with tempfile.TemporaryDirectory(prefix="r149-submit-error-") as directory:

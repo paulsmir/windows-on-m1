@@ -134,10 +134,12 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
    return -1;''')
     a,b=function(s,'agx_get_in_sync');start=s.rfind('static int',0,a)
     s=s[:start]+'#ifndef _WIN32\n'+s[start:b]+'\n#endif\n'+s[b:]
-    s=body(s,'agx_batch_submit','''   /* G2: a compute-only batch submits its compute command alone. */
+    s=body(s,'agx_batch_submit','''   /* G2: a compute-only batch submits its compute command alone.
+    * D3D-G1: a render batch's compute command runs first in the same
+    * submission and the render waits on it, as upstream submits both. */
    bool entered = render ?
       ((compute != NULL) == (batch->cdm.bo != NULL)) &&
-         AgxWin32AsahiBatchFinish(batch, render) :
+         AgxWin32AsahiBatchFinish(batch, render, compute) :
       compute != NULL && AgxWin32AsahiBatchFinishCompute(batch, compute);
    if (!entered && !AgxWin32AsahiBatchAbort(batch)) { ctx->any_faults = true; return; }
    agx_batch_mark_submitted(batch);
@@ -349,7 +351,10 @@ extern int AgxWin32AsahiDrawPhasesOn;
          ctx->any_faults = true; return;
       }
       compute = &compute_storage;
-   } else if (!AgxWin32AsahiBatchEnter(batch)) {
+   }
+   /* D3D-G1: the render is finalized inside the batch scope whether or not
+    * its draws launched compute work. */
+   if (!AgxWin32AsahiBatchEnter(batch)) {
       ctx->any_faults = true;
       if (AgxWin32AsahiBatchAbort(batch)) agx_batch_reset(ctx, batch);
       return;

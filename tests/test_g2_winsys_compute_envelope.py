@@ -245,7 +245,7 @@ class WinsysComputeEnvelope(unittest.TestCase):
         start = source.index("typedef struct {\n  struct agx_bo *Command;")
         capsule_type = source[start:source.index("} AGX_G4_BATCH;", start) + len("} AGX_G4_BATCH;")]
         functions = capsule_type + "\n" + "\n".join(body(source, name) for name in (
-            "backend", "capsule", "batch_refuse", "compute_only", "add_bo", "pool_extent",
+            "backend", "capsule", "batch_refuse", "compute_only", "render_compute", "add_bo", "pool_extent",
             "publish_shadows", "AgxWin32AsahiBatchComputeEnter",
             "AgxWin32AsahiBatchComputeLeave", "AgxWin32AsahiBatchComputeFinalize",
             "AgxWin32AsahiBatchFinishCompute", "release_lease", "AgxWin32AsahiBatchRelease"))
