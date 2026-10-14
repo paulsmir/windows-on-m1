@@ -497,15 +497,10 @@ static NTSTATUS AdmissionCreateAllocationImpl(
    * segment is 16 KiB-contiguous and fully UAT-mapped; EXP1026 showed aperture
    * system backing hangs the GPU, so the preference is what places them. */
   /* M2-f2: with the KMD-populated pool (segment 3, Windows memory taken at
-   * start, 16 KiB-contiguous by construction) these BOs live there, and the
+   * start, 16 KiB-contiguous by construction) these BOs live there; the
+   * aperture stays the fallback a CPU-visible set keeps (EXP1027), and the
    * local segment is left out so VidMm never moves a BO between two memory
-   * segments (no memory-to-memory transfer exists). M2-f8 (EXP1265-D): the
-   * aperture is left out too. With segment 3 full, VidMm placed a BO there,
-   * the GPU cannot map its scattered 4 KiB backing (EXP1240-EXP1244), and
-   * the next submission using it was refused (device hung). Without it,
-   * VidMm evicts to system memory and pages back into segment 3. EXP1027
-   * refused a CPU-visible set holding only segment 2; whether a set holding
-   * only segment 3 is admitted is what EXP1266 measures. */
+   * segments (no memory-to-memory transfer exists). */
   if (classId != 0u && description->CpuVisible != 0u &&
       AdmissionMemoryPoolView(context, &pool)) {
     /* M2-f5: the pages this allocation may occupy in segment 3 are taken
@@ -521,7 +516,9 @@ static NTSTATUS AdmissionCreateAllocationImpl(
     allocation->PoolReserved = aligned;
     info->PreferredSegment.Value = 0u;
     info->PreferredSegment.SegmentId0 = ADMISSION_MEMORY_POOL_SEGMENT;
-    info->SupportedReadSegmentSet = ADMISSION_POOL_SEGMENT_SET;
+    info->PreferredSegment.SegmentId1 = ADMISSION_MEMORY_APERTURE_SEGMENT;
+    info->SupportedReadSegmentSet =
+        ADMISSION_POOL_SEGMENT_SET | ADMISSION_APERTURE_SEGMENT_SET;
     info->SupportedWriteSegmentSet = info->SupportedReadSegmentSet;
   }
 #endif
