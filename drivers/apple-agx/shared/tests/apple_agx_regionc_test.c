@@ -64,10 +64,17 @@ static void test_exact_physical_j313_regionc(void) {
   assert(destination[0x1119cu] == 20u && destination[0x1119du] == 0u &&
          destination[0x1119eu] == 0u && destination[0x1119fu] == 0u);
   assert(destination[0x111a0u] == 40u && destination[0x111a4u] == 5u);
+  /* G4-r2a (EXP1275): the 3D progress-check interval is 900 ms (m1n1 and
+   * Asahi 40 ms); the TA (10 ms) and CL (250 ms) intervals are unchanged. */
+  assert(destination[0x11178u] == 0x84u && destination[0x11179u] == 0x03u &&
+         destination[0x1117au] == 0u && destination[0x1117bu] == 0u);
+  assert(destination[0x1117cu] == 10u && destination[0x11180u] == 250u);
   destination[0x1119cu] = 2u;
+  destination[0x11178u] = 40u; destination[0x11179u] = 0u;
   assert(fnv1a64(destination, sizeof(destination)) ==
          0xc3bc91a9acf61290ULL);
   destination[0x1119cu] = 20u;
+  destination[0x11178u] = 0x84u; destination[0x11179u] = 0x03u;
   assert(destination[0x24u] == 0xb8u);
   assert(destination[0x10fdcu] == 1u);
 }

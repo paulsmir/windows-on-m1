@@ -14,6 +14,17 @@
  * unchanged; every other byte equals the m1n1 oracle. */
 #define APPLE_AGX_REGIONC_J313_IDLE_OFF_DELAY_OFFSET 0x1119cu
 #define APPLE_AGX_REGIONC_J313_IDLE_OFF_DELAY_MS 20u
+/* G4-r2a (EXP1275): progress_check_interval_3d (Asahi initdata.rs; m1n1
+ * unk_11020, offset 0x11178 in G13 V13_5). The firmware raises a Timeout and
+ * drops a render that made no progress during one interval. At the default
+ * 40 ms it killed valid long draws (EXP1275: 250-1400 ms draws dropped after
+ * <= 48 ms), far below the Windows TdrDelay of 2 s within which a packet may
+ * run. 900 ms keeps the firmware's own hang detection (one to two intervals
+ * after the last progress) below TdrDelay, so a real hang is still reported
+ * by the firmware before dxgkrnl's TDR. TA (10 ms) and CL (250 ms) keep their
+ * defaults. */
+#define APPLE_AGX_REGIONC_J313_PROGRESS_3D_OFFSET 0x11178u
+#define APPLE_AGX_REGIONC_J313_PROGRESS_3D_MS 900u
 
 typedef struct _APPLE_AGX_REGIONC_WORD {
   unsigned int Offset;
@@ -153,6 +164,8 @@ APPLE_AGX_REGIONC_RESULT AppleAgxRegionCEncodeJ313G13V13_5(
   }
   AppleAgxRegionCWriteU32(Destination + APPLE_AGX_REGIONC_J313_IDLE_OFF_DELAY_OFFSET,
                           APPLE_AGX_REGIONC_J313_IDLE_OFF_DELAY_MS);
+  AppleAgxRegionCWriteU32(Destination + APPLE_AGX_REGIONC_J313_PROGRESS_3D_OFFSET,
+                          APPLE_AGX_REGIONC_J313_PROGRESS_3D_MS);
   Manifest->EncodedSize = DestinationSize;
   Manifest->NonzeroWordCount =
       (unsigned int)(sizeof(AppleAgxRegionCJ313Words) /
