@@ -22,7 +22,9 @@ SRC = ROOT / 'drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c'
 class GpuvaColorFormats(unittest.TestCase):
     def test_formats(self):
         text = SRC.read_text()
-        self.assertIn('!gpuva_color_format_supported(batch->key.cbufs[0].format)', text)
+        # D3D-G2b: every bound colour target of the batch is checked.
+        self.assertIn('!gpuva_color_formats_supported(batch)', text)
+        self.assertIn('!gpuva_color_format_supported(batch->key.cbufs[i].format)', text)
         m = re.search(r'static int gpuva_color_format_supported\(unsigned format\) \{.*?\n\}', text, re.S)
         c = re.search(r'static unsigned gpuva_color_class\(unsigned format\) \{.*?\n\}', text, re.S)
         self.assertIsNotNone(c)

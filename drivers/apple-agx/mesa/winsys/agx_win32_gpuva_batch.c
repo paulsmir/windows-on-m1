@@ -411,6 +411,13 @@ static int gpuva_color_format_supported(unsigned format) {
   }
 }
 
+static int gpuva_color_formats_supported(const struct agx_batch *batch) {
+  for(unsigned i=0;i<batch->key.nr_cbufs;++i)
+    if(batch->key.cbufs[i].texture &&
+       !gpuva_color_format_supported(batch->key.cbufs[i].format)) return 0;
+  return 1;
+}
+
 static unsigned gpuva_color_class(unsigned format) {
   switch(format) {
   case PIPE_FORMAT_R8_UNORM: case PIPE_FORMAT_A8_UNORM:
@@ -492,8 +499,10 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
      !batch_has_render_work(batch) || (compute!=NULL)!=(batch->cdm.bo!=NULL) ||
      compute_refused || g->Submitted || g->Rejected ||
      !batch->vdm.bo ||
-     batch->key.nr_cbufs!=1 || !batch->key.cbufs[0].texture ||
-     !gpuva_color_format_supported(batch->key.cbufs[0].format) ||
+     /* D3D-G2b: up to PIPE_MAX_COLOR_BUFS colour targets; the first is
+      * the KMD's bound output, every bound one a supported format. */
+     batch->key.nr_cbufs<1 || batch->key.nr_cbufs>PIPE_MAX_COLOR_BUFS ||
+     !batch->key.cbufs[0].texture || !gpuva_color_formats_supported(batch) ||
      (batch->key.zsbuf.texture && !b->ZlsAttachments) || render->samples!=1 ||
      (render->sample_size_B!=8 && render->sample_size_B!=16) ||
      batch->bo_list.bit_count>UINT32_MAX-(PIPE_MAX_COLOR_BUFS+fixed_refs))

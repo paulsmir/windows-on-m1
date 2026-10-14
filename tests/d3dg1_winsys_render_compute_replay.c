@@ -323,6 +323,35 @@ int main(void) {
   assert(AgxWin32AsahiBatchPoll(&batch, 1000));
   assert(AgxWin32AsahiBatchRelease(&batch));
   assert(!batch.windows_batch && release_count == 1 && !bos[1].refs && !bos[12].refs);
+
+  /* D3D-G2b: a render batch with two colour targets (no compute work) is one
+   * envelope whose attachments name both (the first is the KMD's bound
+   * output); both are in the written set; the KMD parser admits it. */
+  {
+    struct agx_resource second = {.bo = &bos[15], .layout = {.size_B = 65536}};
+    struct agx_batch mrt = batch;
+    mrt.cdm = (struct agx_encoder){NULL, NULL};
+    mrt.key.nr_cbufs = 2;
+    mrt.key.cbufs[1].texture = &second;
+    mrt.key.cbufs[1].format = PIPE_FORMAT_R8G8B8A8_UNORM;
+    mrt.bo_list.count = 1; mrt.bo_list.handles[0] = 3;
+    writer_of[13] = NULL;
+    mrt.windows_batch = calloc(1, sizeof(AGX_G4_BATCH)); assert(mrt.windows_batch);
+    unsigned before = submit_count;
+    /* an unsupported format on any bound target refuses the batch */
+    mrt.key.cbufs[1].format = 0x7fffu;
+    assert(!AgxWin32AsahiBatchFinish(&mrt, &native, NULL) && submit_count == before);
+    mrt.key.cbufs[1].format = PIPE_FORMAT_R8G8B8A8_UNORM;
+    assert(AgxWin32AsahiBatchFinish(&mrt, &native, NULL));
+    assert(submit_count == before + 1 && sub.v5_result == AppleAgxG4ParseOk &&
+           !sub.view.HasCompute && sub.view.AttachmentCount == 2u);
+    APPLE_AGX_G4_ATTACHMENT a0, a1;
+    memcpy(&a0, sub.view.Attachments, sizeof(a0));
+    memcpy(&a1, (const unsigned char *)sub.view.Attachments + sizeof(a0), sizeof(a1));
+    assert(a0.Pointer == bos[4].view.Va && a1.Pointer == bos[15].view.Va);
+    assert(sub.written_count == 2u && written_has(4) && written_has(15));
+    assert(AgxWin32AsahiBatchPoll(&mrt, 1000) && AgxWin32AsahiBatchRelease(&mrt));
+  }
   puts("D3D-G1 winsys render+compute envelope: PASS");
   return 0;
 }

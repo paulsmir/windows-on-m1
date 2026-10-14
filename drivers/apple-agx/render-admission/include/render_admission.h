@@ -568,10 +568,12 @@ typedef struct _ADMISSION_G4_PENDING {
   APPLE_AGX_G4_SUBMIT_VIEW View;
   ULONGLONG MappingGeneration, DmaBufferVa;
   ULONG DmaBufferBytes;
-  APPLE_AGX_G4_ATTACHMENT Attachment;
+  /* Every attachment of the submission (colour targets, depth, stencil),
+   * named to the firmware when the entry binds (D3D-G2a/G2b). */
+  APPLE_AGX_G4_ATTACHMENT Attachments[APPLE_AGX_G4_MAX_ATTACHMENTS];
   unsigned char Render[sizeof(APPLE_AGX_G4_NATIVE_RENDER)];
   unsigned char Native[APPLE_AGX_G4_NATIVE_MAX_BYTES];
-  /* G2: a compute entry binds this envelope; View, Attachment, Render and
+  /* G2: a compute entry binds this envelope; View, Attachments, Render and
    * Native are unused. */
   BOOLEAN Compute;
   APPLE_AGX_G4_COMPUTE_ENVELOPE ComputeEnvelope;

@@ -3479,10 +3479,11 @@ static BOOLEAN AdmissionG4PendingQueue(ADMISSION_CONTEXT *adapter,
     entry->View.Native = NULL;
     entry->View.Render = NULL;
     entry->View.Attachments = NULL;
-    /* Only the colour target (attachment 0) is bound; ZLS attachments were
-     * proven at parse time and live in the copied native command. */
-    RtlCopyMemory(&entry->Attachment, view->Attachments, sizeof(entry->Attachment));
-    entry->View.AttachmentCount = 1u;
+    /* Attachment 0 (the first colour target) is the bound output; every
+     * attachment is kept, proven at parse time, for the firmware list. */
+    RtlCopyMemory(entry->Attachments, view->Attachments,
+                  view->AttachmentCount * sizeof(entry->Attachments[0]));
+    entry->View.AttachmentCount = view->AttachmentCount;
     RtlCopyMemory(entry->Render, view->Render, sizeof(entry->Render));
     RtlCopyMemory(entry->Native, view->Native, view->CommandBytes);
   }
@@ -3538,7 +3539,7 @@ _Use_decl_annotations_ BOOLEAN AdmissionG4PendingBindHead(
   view = entry->View;
   view.Native = entry->Native;
   view.Render = entry->Render;
-  view.Attachments = &entry->Attachment;
+  view.Attachments = entry->Attachments;
   RtlZeroMemory(&binding, sizeof(binding));
   bound = (entry->Present ?
       AdmissionBackendImageBindPresentCompute(&adapter->BackendImage,

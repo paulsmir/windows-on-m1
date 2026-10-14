@@ -154,7 +154,7 @@ typedef struct {
   APPLE_AGX_G4_SUBMIT_VIEW View;
   ULONGLONG MappingGeneration, DmaBufferVa;
   ULONG DmaBufferBytes;
-  APPLE_AGX_G4_ATTACHMENT Attachment;
+  APPLE_AGX_G4_ATTACHMENT Attachments[APPLE_AGX_G4_MAX_ATTACHMENTS];
   unsigned char Render[sizeof(APPLE_AGX_G4_NATIVE_RENDER)];
   unsigned char Native[APPLE_AGX_G4_NATIVE_MAX_BYTES];
   BOOLEAN Compute;

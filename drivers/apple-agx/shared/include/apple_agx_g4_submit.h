@@ -51,11 +51,13 @@ static inline unsigned int AppleAgxG4ColorBytes(unsigned int color_format) {
 }
 /* Native USC fields are 32-bit offsets within this process execution window.
  * UMD placement, native encoding, parser and firmware work must agree. */
-/* EXP1150: a fragment job lists its colour attachment first, then the
+/* EXP1150: a fragment job lists its colour attachments first, then the
  * depth and separate stencil (ZLS) attachments (Mesa append_attachments).
- * The parser proves each is mapped and writable; only attachment 0, the
- * colour target, is resolved and bound. */
-#define APPLE_AGX_G4_MAX_ATTACHMENTS 3u
+ * The parser proves each is mapped and writable; attachment 0, the first
+ * colour target, is resolved and bound as the output, and every attachment
+ * is named to the firmware (D3D-G2a). D3D-G2b: up to eight colour targets
+ * (PIPE_MAX_COLOR_BUFS) plus depth and stencil; the firmware list holds 16. */
+#define APPLE_AGX_G4_MAX_ATTACHMENTS 10u
 #define APPLE_AGX_G4_USC_EXECUTION_BASE 0x1100000000ULL
 #define APPLE_AGX_G4_USC_WINDOW_BYTES 0x100000000ULL
 /* G2 HW2: the KMD's per-process private range (32 MiB, one leaf table) is

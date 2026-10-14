@@ -26,7 +26,7 @@ class D3dG1WinsysRenderCompute(unittest.TestCase):
     def test_render_batch_with_compute_is_one_admitted_v5_submission(self):
         source = (ROOT / "drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c").read_text()
         names = ("batch_refuse", "batch_has_render_work", "submitted_at", "retire_held",
-                 "gpuva_color_format_supported", "gpuva_color_class", "compute_only",
+                 "gpuva_color_format_supported", "gpuva_color_formats_supported", "gpuva_color_class", "compute_only",
                  "render_compute", "AgxWin32AsahiBatchComputeEnter",
                  "AgxWin32AsahiBatchComputeLeave", "AgxWin32AsahiBatchComputeFinalize",
                  "add_bo", "append_native", "append_attachments", "prepare_process_buffers",
