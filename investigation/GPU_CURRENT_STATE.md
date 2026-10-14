@@ -1,6 +1,26 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-14T10:52Z (read this first)
+## Current as of 2026-10-14T13:04Z (read this first)
+
+Installed: PACKAGE1269 (build tree 7493dffd = c78a3d9d M2-f5 + 83984bc0
+M2-f7; the next pipeline's rec1269h rollback removes it). M2 status:
+- M2-f5 VALIDATED (EXP1265), M2-f7 VALIDATED for BO creation (EXP1269:
+  32 MiB and 64 MiB render targets are created).
+- M2-f8 is a hardware limit (EXP1266-EXP1268): segment-3 exhaustion demotes
+  class BOs to 4 KiB system pages the UAT cannot map -> app DEVICE_HUNG.
+- M2-f9 OPEN (EXP1269): rendering into a target above ~2048x2048 fails in
+  the private scene acquire (escape returns D3DERR_OUTOFVIDEOMEMORY
+  0x8876017C; UMD trace reject-private-escape: 1, W 0x800, H 0x1000/0x2000,
+  0x2020); the private scene storage comes from m1n1's fixed 64 MiB private
+  local pool (HV_AGX_GPUVA_V5_PRIVATE_BACKINGS) and the TVB heap blocks
+  (APPLE_AGX_G3_PRIVATE_HEAP_BLOCKS). Next: find the exact refusing check
+  (PRIVATE_CAPTURE site in gpuva_g3_windows.c private acquire) and size the
+  scene storage per render, from flexible memory.
+- Winsys: the backend also fails after a refused private acquire (26a03fde
+  only covers BO creation).
+- Then M2-f6 (m1n1 broker table sized from RAM), G4-r1 (3ed6a8ee), D3D.
+
+## Current as of 2026-10-14T10:52Z
 
 Installed: PACKAGE1268 (rejected M2-f8c; the next pipeline's rec1268h
 rollback removes it). M2 status:
