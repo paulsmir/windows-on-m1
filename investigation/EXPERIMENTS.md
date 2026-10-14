@@ -55086,3 +55086,21 @@ WINDOWS CONTRACT: DXGK_SEGMENTDESCRIPTOR Size 1792 MiB for segment 3 (CpuTransla
 AGX/ASAHI CONTRACT: window pages up to 1792 MiB of the 4 GiB window; broker records bounded as above.
 TRANSLATION: unchanged except the segment size (granule table 28672 entries).
 WHAT IS STILL UNKNOWN: whether VidMm or DXGI behaves differently with the larger dedicated-system figure (DWM budget, adapter memory reports). Readings: parity means M2-f4a validated and the design is machine-adaptive for other Macs; any regression means revert to 1 GiB and examine the budget. Evidence: evidence/EXP1263 segstats, rcpt-*, umdname, full.log. Recovery: rec1263h.
+EXP1263 ACTUAL 2026-10-14T08:08Z (newexp-kmd1263.sh; package guard PACKAGE_MATCHES_EXP1262_EXCEPT_KMD; REC-EXP1262 done by the pipeline; pipeline log ended 08:08Z; package 30.0.1263.0 left installed; evidence .local/experiments/EXP1263-m2f4a-sized-segment/evidence/EXP1263).
+- Sizing:
+  - Wom1M2PoolDemand v5: segment 1792 MiB sized from RAM 5988 MiB (formula as predicted);
+  - the window reports capacity 1792 MiB (the KMD's segment);
+  - segstats: segment 3 limit 1792 MiB, committed peak 681 MiB, resident peak 702 MiB, last 227 MiB.
+- Pool behaviour:
+  - idle: committed 218 MiB, held 220 MiB;
+  - after the benchmark: committed 228 MiB, held 232 MiB, peak 702 MiB;
+  - end of run: committed 233 MiB, held 244 MiB;
+  - 412 slabs, all contiguous, 0 failures; 151 us per granule average.
+- Functional checks: smoke 49.9 fps (range 49.5-52 across runs); copy x2 PASS; D3D11 PASS MATCH x2; KMT 59.5 fps MATCH x4; DWM 0; no G4SubmitFailure; overlaps 0; Unmapped IPA 0.
+- CS benchmark: 3771 frames in 81.415 s = 46.318 fps (EXP1262 46.072; fixed pool EXP1259 46.355).
+- Reading:
+  - The machine-derived size works and costs nothing.
+  - VidMm keeps slightly more resident with the larger segment (idle +35 MiB, peak +41 MiB), which is expected and still follows use.
+  - No broker pressure.
+- Verdict: CONFIRMED. M2-f4a: segment 3 follows Windows' graphics-memory formula for the machine's RAM, capped by the window and the broker. The memory model now has no machine-specific constant on J313.
+- Next: M2-f4b budget groups (DXGI/D3D12 budgets), then the resubmission defect, G4-recovery, D3D 11/12.
