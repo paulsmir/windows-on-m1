@@ -37,9 +37,11 @@ typedef enum _ADMISSION_POOL_RELEASE {
 
 typedef struct _ADMISSION_POOL_DEMAND_OPS {
   void *Context;
-  /* Backs granule Index with fresh zeroed pages and maps it; nonzero on
-   * success. */
-  int (*Commit)(void *Context, unsigned long long Index);
+  /* Backs granules [First, First + Count) with fresh zeroed pages and maps
+   * them, all or nothing; nonzero on success. M2-f3c: one call per run
+   * (EXP1258: one page allocation per 64 KiB cost 460-875 us). */
+  int (*Commit)(void *Context, unsigned long long First,
+                unsigned long long Count);
   ADMISSION_POOL_RELEASE (*Release)(void *Context, unsigned long long Index);
 } ADMISSION_POOL_DEMAND_OPS;
 
@@ -49,6 +51,7 @@ typedef struct _ADMISSION_POOL_DEMAND_STATS {
   unsigned long long Releases, BusyRetries, ReleaseFailures;
   unsigned long long Places, Moves, Kills, Unplaces;
   unsigned long long PinnedGranules, Unaligned, RefUnderflows;
+  unsigned long long CommitCalls; /* M2-f3c: runs committed */
 } ADMISSION_POOL_DEMAND_STATS;
 
 typedef struct _ADMISSION_POOL_DEMAND {
@@ -63,6 +66,8 @@ typedef struct _ADMISSION_POOL_DEMAND {
    * time unit: VidMm reuses freed ranges at once (EXP1257: 8k commits and
    * releases in one benchmark), and an idle granule is reused for free. */
   unsigned long long ReleaseDelay;
+  /* Most granules one Commit call backs; 0: no limit. */
+  unsigned long long MaxRun;
   ADMISSION_POOL_DEMAND_STATS Stats;
 } ADMISSION_POOL_DEMAND;
 
@@ -76,7 +81,7 @@ typedef enum _ADMISSION_POOL_PLACE {
  * moves by ADMISSION_POOL_DEMAND_RECEIPT_STEP granules or a failure count
  * changes. Times are microseconds of commit (page allocation + MAP_AT) and
  * release (UNMAP_RANGE + page free). */
-#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 2u /* 2: ReleaseDelayMs */
+#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 3u /* 2: ReleaseDelayMs; 3: Stats.CommitCalls */
 #define ADMISSION_POOL_DEMAND_RECEIPT_STEP 256u /* 16 MiB */
 typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   unsigned int Version, Bytes, GranuleBytes, LastWindowResult;
@@ -85,6 +90,9 @@ typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   unsigned long long CommitUs, CommitUsMax, ReleaseUs, ReleaseUsMax;
   unsigned long long Candidates, ExecutedSeq;
   unsigned long long ReleaseDelayMs;
+  /* v3: granules whose pages the driver holds (mapped or awaiting the rest
+   * of their commit run). */
+  unsigned long long HeldGranules;
 } ADMISSION_POOL_DEMAND_RECEIPT;
 
 /* Granules and CandidateList hold Count zeroed entries each. */

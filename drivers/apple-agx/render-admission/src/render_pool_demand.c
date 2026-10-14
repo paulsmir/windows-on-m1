@@ -19,6 +19,7 @@ int AdmissionPoolDemandInit(ADMISSION_POOL_DEMAND *Pool,
   Pool->ExecutedSeq = 0u;
   Pool->AnyExecuted = 0;
   Pool->ReleaseDelay = 0u;
+  Pool->MaxRun = 0u;
   Pool->Stats = zero;
   return 1;
 }
@@ -33,20 +34,30 @@ static void Consider(ADMISSION_POOL_DEMAND *Pool, unsigned long long Index) {
   Pool->CandidateList[Pool->Candidates++] = Index;
 }
 
-static int Commit(ADMISSION_POOL_DEMAND *Pool, unsigned long long Index) {
-  ADMISSION_POOL_GRANULE *g = &Pool->Granules[Index];
-  if (g->Committed) return 1;
-  if (!Pool->Ops.Commit(Pool->Ops.Context, Index)) {
+/* Granules [First, First + Count), all uncommitted, in one call. */
+static int CommitRun(ADMISSION_POOL_DEMAND *Pool, unsigned long long First,
+                     unsigned long long Count) {
+  unsigned long long i;
+  if (!Pool->Ops.Commit(Pool->Ops.Context, First, Count)) {
     ++Pool->Stats.CommitFailures;
     return 0;
   }
-  g->Committed = 1u;
-  g->Recorded = 0u;
-  g->IdleSince = 0u;
-  ++Pool->Stats.Commits;
-  if (++Pool->Stats.CommittedGranules > Pool->Stats.PeakGranules)
+  for (i = First; i < First + Count; ++i) {
+    ADMISSION_POOL_GRANULE *g = &Pool->Granules[i];
+    g->Committed = 1u;
+    g->Recorded = 0u;
+    g->IdleSince = 0u;
+  }
+  Pool->Stats.Commits += Count;
+  ++Pool->Stats.CommitCalls;
+  Pool->Stats.CommittedGranules += Count;
+  if (Pool->Stats.CommittedGranules > Pool->Stats.PeakGranules)
     Pool->Stats.PeakGranules = Pool->Stats.CommittedGranules;
   return 1;
+}
+
+static int Commit(ADMISSION_POOL_DEMAND *Pool, unsigned long long Index) {
+  return Pool->Granules[Index].Committed || CommitRun(Pool, Index, 1u);
 }
 
 /* Owner's granules lose it; the caller decides whether that is a kill. */
@@ -84,15 +95,24 @@ ADMISSION_POOL_PLACE AdmissionPoolDemandPlace(ADMISSION_POOL_DEMAND *Pool,
       ++Pool->Stats.Kills;
     }
   }
-  for (i = first; i < end; ++i) {
-    if (!Commit(Pool, i)) {
-      unsigned long long j;
-      for (j = first; j < i; ++j) {
-        Pool->Granules[j].Owner = 0;
-        Consider(Pool, j);
-      }
+  /* One commit per run of uncommitted granules, before any is owned. */
+  for (i = first; i < end;) {
+    unsigned long long j = i;
+    if (Pool->Granules[i].Committed) {
+      ++i;
+      continue;
+    }
+    while (j < end && !Pool->Granules[j].Committed &&
+           (Pool->MaxRun == 0u || j - i < Pool->MaxRun))
+      ++j;
+    if (!CommitRun(Pool, i, j - i)) {
+      /* Nothing in the range is owned yet: committed granules go back. */
+      for (j = first; j < end; ++j) Consider(Pool, j);
       return AdmissionPoolPlaceNoMemory;
     }
+    i = j;
+  }
+  for (i = first; i < end; ++i) {
     Pool->Granules[i].Owner = Owner;
     Pool->Granules[i].IdleSince = 0u; /* in use: the idle clock restarts */
   }

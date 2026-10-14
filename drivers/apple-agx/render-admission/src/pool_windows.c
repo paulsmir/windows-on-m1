@@ -216,7 +216,10 @@ typedef struct _ADMISSION_POOL_RUNTIME {
   ADMISSION_POOL_DEMAND Demand;
   ADMISSION_POOL_GRANULE *Granules;
   ULONGLONG *Candidates;
-  PMDL *Mdls;
+  /* The pages behind each committed granule. */
+  struct _ADMISSION_POOL_EXTENT **Extents;
+  /* Granules whose pages Windows has given us (mapped or not). */
+  ULONGLONG HeldGranules;
   ULONGLONG CommitUs, CommitUsMax, ReleaseUs, ReleaseUsMax;
   ULONG LastWindowResult;
   /* Receipt staging: committed granules and failure total last staged. */
@@ -230,44 +233,104 @@ static ULONGLONG AdmissionPoolElapsedUs(LARGE_INTEGER Start) {
          (ULONGLONG)frequency.QuadPart;
 }
 
-/* Fresh zeroed Windows pages, one 64 KiB-aligned physically contiguous
- * block (EXP1246), mapped at the granule's window offset. */
-static int AdmissionPoolCommitGranule(void *Opaque, unsigned long long Index) {
+/* M2-f3c: the pages of one commit run, one MDL; freed when the last of its
+ * granules has left the window. */
+typedef struct _ADMISSION_POOL_EXTENT {
+  PMDL Mdl;
+  ULONGLONG Granules; /* the MDL's size in granules */
+  ULONGLONG Live;     /* granules still referencing it */
+} ADMISSION_POOL_EXTENT;
+
+/* Most granules one commit backs (64 MiB): bounds the MDL and the time one
+ * UpdatePageTable spends in the allocator. */
+#define ADMISSION_POOL_MAX_RUN 1024ULL
+
+static VOID AdmissionPoolExtentDrop(ADMISSION_POOL_RUNTIME *Pool,
+                                    ADMISSION_POOL_EXTENT *Extent) {
+  if (--Extent->Live != 0ULL) return;
+  MmFreePagesFromMdl(Extent->Mdl);
+  ExFreePool(Extent->Mdl);
+  Pool->HeldGranules -= Extent->Granules;
+  ExFreePoolWithTag(Extent, ADMISSION_POOL_TAG);
+}
+
+/* Fresh zeroed Windows pages for granules [First, First + Count): one
+ * MmAllocatePagesForMdlEx of 64 KiB-aligned 64 KiB blocks (EXP1246), each
+ * block mapped at its granule's window offset (physically adjacent blocks
+ * in one MAP_AT). All or nothing. */
+static int AdmissionPoolCommitRun(void *Opaque, unsigned long long First,
+                                  unsigned long long Count) {
   ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Opaque;
+  const ULONGLONG pages = ADMISSION_POOL_DEMAND_GRANULE / PAGE_SIZE;
   PHYSICAL_ADDRESS low, high, skip;
   LARGE_INTEGER start = KeQueryPerformanceCounter(NULL);
+  ADMISSION_POOL_EXTENT *extent;
   const PFN_NUMBER *frames;
-  ULONGLONG pa, us;
-  ULONG i;
+  ULONGLONG i, j, mapped = 0ULL, us;
   PMDL mdl;
+  if (Count == 0ULL || Count > ADMISSION_POOL_MAX_RUN) return 0;
+  extent = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*extent),
+                           ADMISSION_POOL_TAG);
+  if (extent == NULL) return 0;
   low.QuadPart = 0;
   high.QuadPart = (LONGLONG)(ADMISSION_HVC_PHYSICAL_LIMIT - 1ULL);
   skip.QuadPart = (LONGLONG)ADMISSION_POOL_DEMAND_GRANULE;
   mdl = MmAllocatePagesForMdlEx(low, high, skip,
-      (SIZE_T)ADMISSION_POOL_DEMAND_GRANULE, MmWriteCombined,
+      (SIZE_T)(Count * ADMISSION_POOL_DEMAND_GRANULE), MmWriteCombined,
       MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS | MM_ALLOCATE_FULLY_REQUIRED);
-  if (mdl == NULL) return 0;
+  if (mdl == NULL) {
+    ExFreePoolWithTag(extent, ADMISSION_POOL_TAG);
+    return 0;
+  }
   frames = MmGetMdlPfnArray(mdl);
-  pa = (ULONGLONG)frames[0] << PAGE_SHIFT;
-  if (MmGetMdlByteCount(mdl) != ADMISSION_POOL_DEMAND_GRANULE ||
-      (pa & (ADMISSION_POOL_DEMAND_GRANULE - 1ULL)) ||
-      pa > ADMISSION_HVC_PHYSICAL_LIMIT - ADMISSION_POOL_DEMAND_GRANULE)
+  if (MmGetMdlByteCount(mdl) != Count * ADMISSION_POOL_DEMAND_GRANULE)
     goto Free;
-  for (i = 1u; i < ADMISSION_POOL_DEMAND_GRANULE / PAGE_SIZE; ++i)
-    if (frames[i] != frames[0] + i) goto Free;
-  pool->LastWindowResult = AdmissionPoolWindowRange(pool->Context,
-      AGX_POOL_WINDOW_CMD_MAP_AT, Index * ADMISSION_POOL_DEMAND_GRANULE, pa,
-      ADMISSION_POOL_DEMAND_GRANULE);
-  if (pool->LastWindowResult != AgxPoolWindowOk) goto Free;
-  pool->Mdls[Index] = mdl;
+  for (i = 0ULL; i < Count; ++i) {
+    ULONGLONG pa = (ULONGLONG)frames[i * pages] << PAGE_SHIFT;
+    if ((pa & (ADMISSION_POOL_DEMAND_GRANULE - 1ULL)) ||
+        pa > ADMISSION_HVC_PHYSICAL_LIMIT - ADMISSION_POOL_DEMAND_GRANULE)
+      goto Free;
+    for (j = 1ULL; j < pages; ++j)
+      if (frames[i * pages + j] != frames[i * pages] + j) goto Free;
+  }
+  while (mapped < Count) {
+    ULONGLONG run = 1ULL;
+    ULONGLONG pa = (ULONGLONG)frames[mapped * pages] << PAGE_SHIFT;
+    while (mapped + run < Count &&
+           ((ULONGLONG)frames[(mapped + run) * pages] << PAGE_SHIFT) ==
+               pa + run * ADMISSION_POOL_DEMAND_GRANULE)
+      ++run;
+    pool->LastWindowResult = AdmissionPoolWindowRange(pool->Context,
+        AGX_POOL_WINDOW_CMD_MAP_AT,
+        (First + mapped) * ADMISSION_POOL_DEMAND_GRANULE, pa,
+        run * ADMISSION_POOL_DEMAND_GRANULE);
+    if (pool->LastWindowResult != AgxPoolWindowOk) goto Unmap;
+    mapped += run;
+  }
+  extent->Mdl = mdl;
+  extent->Granules = Count;
+  extent->Live = Count;
+  for (i = 0ULL; i < Count; ++i) pool->Extents[First + i] = extent;
+  pool->HeldGranules += Count;
   us = AdmissionPoolElapsedUs(start);
   pool->CommitUs += us;
   if (us > pool->CommitUsMax) pool->CommitUsMax = us;
   return 1;
+Unmap:
+  /* Each MAP_AT was all or nothing: undo the runs that were mapped. */
+  if (mapped != 0ULL &&
+      AdmissionPoolWindowRange(pool->Context, AGX_POOL_WINDOW_CMD_UNMAP_RANGE,
+          First * ADMISSION_POOL_DEMAND_GRANULE, 0ULL,
+          mapped * ADMISSION_POOL_DEMAND_GRANULE) != AgxPoolWindowOk) {
+    /* Still aliased: never return these pages to Windows. */
+    InterlockedIncrement(&pool->Context->PoolLeaks);
+    ExFreePoolWithTag(extent, ADMISSION_POOL_TAG);
+    return 0;
+  }
 Free:
-  /* MAP_AT is all or nothing: a refused page was never aliased. */
   MmFreePagesFromMdl(mdl);
   ExFreePool(mdl);
+  ExFreePoolWithTag(extent, ADMISSION_POOL_TAG);
   return 0;
 }
 
@@ -275,9 +338,10 @@ static ADMISSION_POOL_RELEASE AdmissionPoolReleaseGranule(
     void *Opaque, unsigned long long Index) {
   ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Opaque;
   LARGE_INTEGER start = KeQueryPerformanceCounter(NULL);
+  ADMISSION_POOL_EXTENT *extent = pool->Extents[Index];
   ULONGLONG us;
   ULONG result;
-  if (pool->Mdls[Index] == NULL) return AdmissionPoolReleaseFailed;
+  if (extent == NULL) return AdmissionPoolReleaseFailed;
   /* Executed records' write-combined stores complete before the unmap. */
   KeMemoryBarrier();
   result = AdmissionPoolWindowRange(pool->Context,
@@ -286,9 +350,8 @@ static ADMISSION_POOL_RELEASE AdmissionPoolReleaseGranule(
   if (result == AgxPoolWindowBusy) return AdmissionPoolReleaseBusy;
   pool->LastWindowResult = result;
   if (result != AgxPoolWindowOk) return AdmissionPoolReleaseFailed;
-  MmFreePagesFromMdl(pool->Mdls[Index]);
-  ExFreePool(pool->Mdls[Index]);
-  pool->Mdls[Index] = NULL;
+  pool->Extents[Index] = NULL;
+  AdmissionPoolExtentDrop(pool, extent);
   us = AdmissionPoolElapsedUs(start);
   pool->ReleaseUs += us;
   if (us > pool->ReleaseUsMax) pool->ReleaseUsMax = us;
@@ -335,6 +398,7 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *Context
     receipt.Candidates = pool->Demand.Candidates;
     receipt.ExecutedSeq = pool->Demand.ExecutedSeq;
     receipt.ReleaseDelayMs = pool->Demand.ReleaseDelay;
+    receipt.HeldGranules = pool->HeldGranules;
     pool->StagedGranules = stats->CommittedGranules;
     pool->StagedFailures = failures;
   }
@@ -428,7 +492,7 @@ static VOID AdmissionPoolReclaimDpc(_In_ PKDPC Dpc, _In_opt_ PVOID Opaque,
 
 static VOID AdmissionPoolDemandFree(ADMISSION_POOL_RUNTIME *Pool) {
   if (Pool->Work) IoFreeWorkItem(Pool->Work);
-  if (Pool->Mdls) ExFreePoolWithTag(Pool->Mdls, ADMISSION_POOL_TAG);
+  if (Pool->Extents) ExFreePoolWithTag(Pool->Extents, ADMISSION_POOL_TAG);
   if (Pool->Candidates) ExFreePoolWithTag(Pool->Candidates, ADMISSION_POOL_TAG);
   if (Pool->Granules) ExFreePoolWithTag(Pool->Granules, ADMISSION_POOL_TAG);
   ExFreePoolWithTag(Pool, ADMISSION_POOL_TAG);
@@ -466,13 +530,14 @@ static VOID AdmissionPoolDemandStop(ADMISSION_CONTEXT *Context) {
       AdmissionPoolWindowCommand(Context, AGX_POOL_WINDOW_CMD_UNMAP_ALL, 0ULL,
                                  0ULL) == AgxPoolWindowOk;
   for (i = 0ULL; i < pool->Demand.Count; ++i) {
-    if (pool->Mdls[i] == NULL) continue;
+    ADMISSION_POOL_EXTENT *extent = pool->Extents[i];
+    if (extent == NULL) continue;
+    pool->Extents[i] = NULL;
     if (!unmapped) {
       InterlockedIncrement(&Context->PoolLeaks);
       continue;
     }
-    MmFreePagesFromMdl(pool->Mdls[i]);
-    ExFreePool(pool->Mdls[i]);
+    AdmissionPoolExtentDrop(pool, extent);
   }
   AdmissionPoolDemandFree(pool);
   Context->PoolCpu = NULL;
@@ -493,12 +558,12 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
       (SIZE_T)(count * sizeof(*pool->Granules)), ADMISSION_POOL_TAG);
   pool->Candidates = ExAllocatePool2(POOL_FLAG_NON_PAGED,
       (SIZE_T)(count * sizeof(*pool->Candidates)), ADMISSION_POOL_TAG);
-  pool->Mdls = ExAllocatePool2(POOL_FLAG_NON_PAGED,
-      (SIZE_T)(count * sizeof(*pool->Mdls)), ADMISSION_POOL_TAG);
+  pool->Extents = ExAllocatePool2(POOL_FLAG_NON_PAGED,
+      (SIZE_T)(count * sizeof(*pool->Extents)), ADMISSION_POOL_TAG);
   ops.Context = pool;
-  ops.Commit = AdmissionPoolCommitGranule;
+  ops.Commit = AdmissionPoolCommitRun;
   ops.Release = AdmissionPoolReleaseGranule;
-  if (pool->Granules == NULL || pool->Candidates == NULL || pool->Mdls == NULL ||
+  if (pool->Granules == NULL || pool->Candidates == NULL || pool->Extents == NULL ||
       !AdmissionPoolDemandInit(&pool->Demand, pool->Granules, pool->Candidates,
                                count, &ops)) {
     AdmissionPoolDemandFree(pool);
@@ -510,6 +575,7 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
     return FALSE;
   }
   pool->Demand.ReleaseDelay = ADMISSION_POOL_RELEASE_DELAY_MS;
+  pool->Demand.MaxRun = ADMISSION_POOL_MAX_RUN;
   ExInitializeFastMutex(&pool->Lock);
   KeInitializeTimer(&pool->Timer);
   KeInitializeDpc(&pool->Dpc, AdmissionPoolReclaimDpc, pool);

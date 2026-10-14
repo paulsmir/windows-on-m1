@@ -105,11 +105,11 @@ static BOOLEAN m2f3_published(unsigned long long index) {
     if(sys_frame(m2f3_state,m2f3_pool_ipa+index*0x10000ULL+k*0x4000ULL)) return TRUE;
   return FALSE;
 }
-static int m2f3_commit(void *c,unsigned long long index) {
+static int m2f3_commit(void *c,unsigned long long first,unsigned long long count) {
   (void)c;
   /* Committed before any PTE naming the granule is published. */
-  assert(!m2f3_published(index));
-  ++m2f3_commits;
+  for(unsigned long long i=first;i<first+count;++i) assert(!m2f3_published(i));
+  m2f3_commits+=(UINT)count;
   return 1;
 }
 static ADMISSION_POOL_RELEASE m2f3_release(void *c,unsigned long long index) {

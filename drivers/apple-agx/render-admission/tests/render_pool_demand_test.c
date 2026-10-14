@@ -7,17 +7,20 @@
 #define COUNT 64u /* 4 MiB segment */
 
 static unsigned char mapped[COUNT], busy[COUNT], broken[COUNT];
-static unsigned commits, releases, fail_commit_at;
+static unsigned commits, commit_calls, releases, fail_commit_call;
 
-static int fake_commit(void *context, unsigned long long index)
+/* One call backs a run of granules, all or nothing. */
+static int fake_commit(void *context, unsigned long long first, unsigned long long count)
 {
     (void)context;
-    assert(index < COUNT && !mapped[index]);
-    if (fail_commit_at && ++commits == fail_commit_at)
+    assert(count && first < COUNT && count <= COUNT - first);
+    for (unsigned long long i = first; i < first + count; ++i)
+        assert(!mapped[i]);
+    if (++commit_calls == fail_commit_call)
         return 0;
-    if (!fail_commit_at)
-        ++commits;
-    mapped[index] = 1;
+    for (unsigned long long i = first; i < first + count; ++i)
+        mapped[i] = 1;
+    commits += (unsigned)count;
     return 1;
 }
 
@@ -46,7 +49,7 @@ static void reset(void)
     memset(broken, 0, sizeof(broken));
     memset(granules, 0, sizeof(granules));
     memset(candidates, 0, sizeof(candidates));
-    commits = releases = fail_commit_at = 0;
+    commits = commit_calls = releases = fail_commit_call = 0;
     assert(AdmissionPoolDemandInit(&pool, granules, candidates, COUNT, &ops));
 }
 
@@ -98,13 +101,45 @@ static void test_invalid_placements(void)
 
 static void test_commit_failure_owns_nothing(void)
 {
-    ADMISSION_POOL_PLACEMENT a = {0, 0};
+    ADMISSION_POOL_PLACEMENT a = {0, 0}, b = {0, 0};
     reset();
-    fail_commit_at = 3;
+    /* A failed run commits nothing. */
+    fail_commit_call = 1;
     assert(AdmissionPoolDemandPlace(&pool, &a, 0, 4 * G) == AdmissionPoolPlaceNoMemory);
-    assert(a.Bytes == 0 && pool.Stats.CommitFailures == 1);
-    /* The two committed granules are released, not leaked. */
+    assert(a.Bytes == 0 && pool.Stats.CommitFailures == 1 && mapped_count() == 0);
+    /* Granule 1 is already committed: the placement needs runs [0] and [2, 3];
+     * the second run fails and the first run's granule is not leaked. */
+    reset();
+    assert(AdmissionPoolDemandPlace(&pool, &b, G, G) == AdmissionPoolPlaced);
+    AdmissionPoolDemandUnplace(&pool, &b);
+    fail_commit_call = 3;
+    assert(AdmissionPoolDemandPlace(&pool, &a, 0, 4 * G) == AdmissionPoolPlaceNoMemory);
+    assert(a.Bytes == 0 && mapped[0] && mapped[1] && !mapped[2]);
     assert(AdmissionPoolDemandReclaim(&pool) == 2 && mapped_count() == 0);
+}
+
+/* M2-f3c: one commit call per run of uncommitted granules (EXP1258: one
+ * MmAllocatePagesForMdlEx per 64 KiB cost 460-875 us). */
+static void test_commit_runs(void)
+{
+    ADMISSION_POOL_PLACEMENT a = {0, 0}, b = {0, 0}, c = {0, 0};
+    reset();
+    assert(AdmissionPoolDemandPlace(&pool, &a, 2 * G, 6 * G) == AdmissionPoolPlaced);
+    assert(commit_calls == 1 && commits == 6 && pool.Stats.CommitCalls == 1 &&
+           pool.Stats.Commits == 6);
+    /* Granules 4 and 5 stay committed; a placement over [0, 10) needs the
+     * runs [0, 4) and [6, 10) around them... after A's release of the rest. */
+    AdmissionPoolDemandUnplace(&pool, &a);
+    assert(AdmissionPoolDemandPlace(&pool, &b, 4 * G, 2 * G) == AdmissionPoolPlaced);
+    assert(AdmissionPoolDemandReclaim(&pool) == 4 && mapped_count() == 2);
+    commit_calls = 0;
+    assert(AdmissionPoolDemandPlace(&pool, &c, 0, 10 * G) == AdmissionPoolPlaced);
+    assert(commit_calls == 2 && mapped_count() == 10 && b.Bytes == 0 && pool.Stats.Kills == 1);
+    /* A run is capped so no single call backs an unbounded size. */
+    reset();
+    pool.MaxRun = 4;
+    assert(AdmissionPoolDemandPlace(&pool, &a, 0, 10 * G) == AdmissionPoolPlaced);
+    assert(commit_calls == 3 && mapped_count() == 10);
 }
 
 static void test_reused_range_kills_the_stale_placement(void)
@@ -271,6 +306,7 @@ int main(void)
     test_place_commits_once_and_destroy_releases();
     test_invalid_placements();
     test_commit_failure_owns_nothing();
+    test_commit_runs();
     test_reused_range_kills_the_stale_placement();
     test_move_releases_the_old_range();
     test_paging_refs_and_records_hold_a_released_range();
