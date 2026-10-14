@@ -1,6 +1,24 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-14T10:15Z (read this first)
+## Current as of 2026-10-14T10:52Z (read this first)
+
+Installed: PACKAGE1268 (rejected M2-f8c; the next pipeline's rec1268h
+rollback removes it). M2 status:
+- M2-f5 VALIDATED (EXP1265): reservation at CreateAllocation, equals use.
+- M2-f8 CLOSED AS A HARDWARE LIMIT (EXP1266-EXP1268, reverted 6c1177ea):
+  at segment-3 exhaustion VidMm makes a CPU-visible class BO resident in
+  4 KiB system pages; the 16 KiB-page UAT cannot map them; the submission is
+  refused and the app gets DEVICE_HUNG (system stays up). dxgmms2 forces an
+  aperture into CPU-visible sets, and an aperture in the set permits
+  system-memory residency whatever its size or preference. Mitigation:
+  segment-3 capacity (M2-f6). Future: VidMm 64 KiB system pages, or a KMD
+  shadow for demoted BOs.
+- EXP1269 running/next: M2-f7 alone (build tree 7493dffd = c78a3d9d +
+  83984bc0), General BO bound = segment 3; BIG step 8 x 64 MiB RTs.
+- Then: winsys refusal fix (26a03fde, UMD), M2-f6 (m1n1 broker table sized
+  from RAM, capacity register for the KMD), G4-r1 (3ed6a8ee), D3D.
+
+## Current as of 2026-10-14T10:15Z
 
 Installed: PACKAGE1267 (build tree 3ca71538, M2-f8b, rejected; the next
 pipeline's rec1267h rollback removes it). M2 status:
