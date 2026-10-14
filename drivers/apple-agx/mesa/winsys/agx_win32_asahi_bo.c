@@ -347,10 +347,13 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
           (unsigned)cls|((unsigned)(align>>12)<<8));
 #endif
     /* The existing wrapper may retain a buffer if allocation rollback failed.
-     * Stop new native work rather than silently losing that Windows resource. */
-    AGX_WIN32_ASAHI_FAIL(b, 1u);
-    if(bo->Backing.Live) b->UnpublishedBo=bo;
-    else free(bo);
+     * Stop new native work rather than silently losing that Windows resource.
+     * EXP1265-C: a clean refusal (nothing retained) only fails this creation;
+     * the runtime reports E_OUTOFMEMORY and the device keeps working. */
+    if(bo->Backing.Live) {
+      AGX_WIN32_ASAHI_FAIL(b, 1u);
+      b->UnpublishedBo=bo;
+    } else free(bo);
     return NULL;
   }
   }
