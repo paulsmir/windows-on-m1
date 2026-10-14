@@ -55000,3 +55000,20 @@ WINDOWS CONTRACT: unchanged. MmAllocatePagesForMdlEx with SkipBytes 64 KiB, MM_A
 AGX/ASAHI CONTRACT: unchanged. MAP_AT validates every page and refuses busy, duplicate or non-RAM pages.
 TRANSLATION: placement run -> one MDL of N 64 KiB blocks -> MAP_AT spans; release per granule (UNMAP_RANGE), MDL freed with its last granule.
 WHAT IS STILL UNKNOWN: whether per-call cost is the dominant term on hardware (CommitCalls vs CommitUs), and the remaining fps gap to the fixed pool. Readings: fps ~46.4 means M2-f3 is complete with no fps cost; a remaining gap with low commit time means another demand-mode cost (lock or receipt overhead per paging record), measured next. Evidence: evidence/EXP1260 rcpt-*, segstats, full.log. Recovery: rec1260h.
+EXP1260 ACTUAL 2026-10-14T02:31Z (newexp-kmd1260.sh; REC-EXP1259 RECOVERY_DONE; package guard PACKAGE_MATCHES_EXP1259_EXCEPT_KMD; pipeline 02:16-02:30Z; package 30.0.1260.0 left installed; evidence .local/experiments/EXP1260-m2f3c-run-commits/evidence/EXP1260).
+- Functional checks:
+  - smoke 51.9 fps (EXP1259 fixed 52.0; EXP1258 50.4);
+  - copy x2 PASS; D3D11 PASS MATCH x2; KMT 58.9 fps MATCH x4;
+  - DWM 0; overlaps 0; Unmapped IPA 0;
+  - one Wom1G4SubmitFailure: branch 7, status c000000d, subsite 0x201, total 1. This is the known resubmission defect, open since before M2 and not a pool signature.
+- Wom1M2PoolDemand v3:
+  - idle: committed 205.3 MiB, held 215.6 MiB, peak 243.7 MiB; 3923 granules in 789 calls at 242 us per granule (EXP1258 726);
+  - after the benchmark: committed 207.9 MiB, held 218.2 MiB, peak 682.7 MiB; 7689 granules in 2698 calls during the benchmark interval (2.85 granules per call);
+  - end of run: 13587 granules in 4073 calls, 292 us per granule, maximum call 56.7 ms; 0 failures, 10 kills (~10 MiB held in partly released extents).
+- CS benchmark: 3771 frames in 83.617 s = 45.098 fps (EXP1258 43.889; EXP1259 fixed pool 46.355).
+- Reading:
+  - Per-call batching recovered half of the demand-mode cost.
+  - The remaining per-granule cost (~240-300 us) matches EXP1259's ~258 us per 64 KiB-aligned block, so the block search itself dominates.
+  - Game placements are small (~3 granules), which bounds what batching alone can give.
+- Verdict: CONFIRMED (batching helps: +1.2 fps, commit cost per granule 778 -> 292 us); gap to fixed 1.26 fps remains.
+- Next: EXP1261, 16 KiB blocks (built 9757a954).
