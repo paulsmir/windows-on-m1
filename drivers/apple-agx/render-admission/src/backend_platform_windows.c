@@ -480,6 +480,9 @@ typedef struct _ADMISSION_COMPLETION_NOTIFICATION {
   APPLE_AGX_U32 Fence;
   APPLE_AGX_U32 Node;
   APPLE_AGX_U32 Engine;
+  /* G4-r2b: the firmware dropped this job (event kind for the fault code). */
+  BOOLEAN Dropped;
+  APPLE_AGX_U32 DroppedEventKind;
 } ADMISSION_COMPLETION_NOTIFICATION;
 
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
@@ -2862,10 +2865,33 @@ static BOOLEAN AdmissionNotifyCompletionAtInterrupt(PVOID Context) {
           notification->Node, notification->Engine))
     return FALSE;
   RtlZeroMemory(&data, sizeof(data));
-  data.InterruptType = DXGK_INTERRUPT_DMA_COMPLETED;
-  data.DmaCompleted.SubmissionFenceId = notification->Fence;
-  data.DmaCompleted.NodeOrdinal = notification->Node;
-  data.DmaCompleted.EngineOrdinal = notification->Engine;
+  if (notification->Dropped) {
+    /* G4-r2b (EXP1275): the firmware dropped the job after a Timeout/Fault
+     * event and was resumed. Microsoft (DXGK_INTERRUPT_TYPE): DMA_FAULTED is
+     * reserved for system use (EXP896 0x119); DMA_PAGE_FAULTED reports an
+     * error that needs an OS recovery action. The fence is the faulting
+     * packet (no DXGK_PAGE_FAULT_FENCE_INVALID): packets before it complete
+     * and its device is put in error. No reset flag: the firmware already
+     * runs again. The device-specific code carries the firmware event kind. */
+    data.InterruptType = DXGK_INTERRUPT_DMA_PAGE_FAULTED;
+    data.DmaPageFaulted.FaultedFenceId = notification->Fence;
+    data.DmaPageFaulted.FaultedPrimitiveAPISequenceNumber =
+        DXGK_PRIMITIVE_API_SEQUENCE_NUMBER_UNKNOWN;
+    data.DmaPageFaulted.FaultedPipelineStage = DXGK_RENDER_PIPELINE_STAGE_UNKNOWN;
+    data.DmaPageFaulted.FaultedBindTableEntry = DXGK_BIND_TABLE_ENTRY_UNKNOWN;
+    data.DmaPageFaulted.PageFaultFlags = (DXGK_PAGE_FAULT_FLAGS)0;
+    data.DmaPageFaulted.FaultedVirtualAddress = 0;
+    data.DmaPageFaulted.NodeOrdinal = notification->Node;
+    data.DmaPageFaulted.EngineOrdinal = notification->Engine;
+    data.DmaPageFaulted.FaultErrorCode.IsDeviceSpecificCode = 1u;
+    data.DmaPageFaulted.FaultErrorCode.DeviceSpecificCode =
+        notification->DroppedEventKind & 0x7fffffffu;
+  } else {
+    data.InterruptType = DXGK_INTERRUPT_DMA_COMPLETED;
+    data.DmaCompleted.SubmissionFenceId = notification->Fence;
+    data.DmaCompleted.NodeOrdinal = notification->Node;
+    data.DmaCompleted.EngineOrdinal = notification->Engine;
+  }
   runtime->Adapter->Interface.DxgkCbNotifyInterrupt(
       runtime->Adapter->Interface.DeviceHandle, &data);
   AppleAgxCompletionTransactionMarkReported(&runtime->Completion);
@@ -2928,8 +2954,11 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
 
   if (runtime == NULL)
     return APPLE_AGX_BACKEND_FALSE;
+  /* G4-r2b: a job the firmware dropped retires like a completed one in the
+   * KMD and is reported to Windows as faulted. */
   if (Fence == 0u || Node != 0u || Engine != 0u ||
-      Status != AppleAgxBackendCompletionSuccess)
+      (Status != AppleAgxBackendCompletionSuccess &&
+       Status != AppleAgxBackendCompletionDropped))
     return APPLE_AGX_BACKEND_FALSE;
   adapter = runtime->Adapter;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
@@ -3115,6 +3144,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
     notification.Fence = Fence;
     notification.Node = Node;
     notification.Engine = Engine;
+    notification.Dropped = Status == AppleAgxBackendCompletionDropped;
+    notification.DroppedEventKind = runtime->LastFirmwareRecoveryKind;
     sync_status = adapter->Interface.DxgkCbSynchronizeExecution(
         adapter->Interface.DeviceHandle,
         AdmissionNotifyCompletionAtInterrupt, &notification, 0u,

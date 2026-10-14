@@ -340,6 +340,15 @@ APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeAcknowledgeCompletion(
   return result;
 }
 
+/* A natural completion and a firmware-dropped job (G4-r2b) both end the fence
+ * through Io.Complete with their status; every other terminal state is a
+ * teardown-only retirement. */
+static APPLE_AGX_BOOL AppleAgxBackendCompletionEndsFence(
+    APPLE_AGX_BACKEND_COMPLETION_STATUS Status) {
+  return Status == AppleAgxBackendCompletionSuccess ||
+         Status == AppleAgxBackendCompletionDropped;
+}
+
 static APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendTerminal(
     APPLE_AGX_BACKEND_RUNTIME *Runtime,
     APPLE_AGX_BACKEND_COMPLETION_STATUS Status,
@@ -353,7 +362,7 @@ static APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendTerminal(
   Runtime->TerminalStatus = Status;
   Runtime->TerminalNextPhase = NextPhase;
   Runtime->TerminalResult = Result;
-  if (Status != AppleAgxBackendCompletionSuccess)
+  if (!AppleAgxBackendCompletionEndsFence(Status))
     return Result;
   return AppleAgxBackendRuntimeAcknowledgeCompletion(Runtime);
 }
@@ -370,7 +379,7 @@ APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeObserve(
       Observation == APPLE_AGX_BACKEND_NULL)
     return AppleAgxBackendRuntimeResultInvalidArgument;
   if (Runtime->TerminalPending &&
-      Runtime->TerminalStatus != AppleAgxBackendCompletionSuccess)
+      !AppleAgxBackendCompletionEndsFence(Runtime->TerminalStatus))
     return Runtime->TerminalResult;
   if (Runtime->TerminalPending)
     return AppleAgxBackendRuntimeAcknowledgeCompletion(Runtime);
@@ -378,11 +387,12 @@ APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeObserve(
     return AppleAgxBackendRuntimeResultInvalidState;
   if (Observation->Status == AppleAgxBackendObservationRecovered) {
     /* The firmware dropped the job and runs again (queue provider proved
-     * the resume); complete the fence like a natural completion so the
-     * Windows scheduler continues, instead of a queue stop and a TDR. */
+     * the resume). The fence ends without a queue stop or a TDR, but as
+     * Dropped (G4-r2b): the job's work was not done, and the platform must
+     * report it to Windows as faulted, not as completed. */
     Runtime->TaComplete = Runtime->D3Complete = APPLE_AGX_TRUE;
     Runtime->ComputeComplete = APPLE_AGX_TRUE;
-    return AppleAgxBackendTerminal(Runtime, AppleAgxBackendCompletionSuccess,
+    return AppleAgxBackendTerminal(Runtime, AppleAgxBackendCompletionDropped,
                                    AppleAgxBackendRuntimeReady,
                                    AppleAgxBackendRuntimeResultOk);
   }
@@ -474,7 +484,7 @@ APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeStop(
    * retirement after hardware quiesce is proven.
    */
   if (Runtime->TerminalPending &&
-      Runtime->TerminalStatus == AppleAgxBackendCompletionSuccess) {
+      AppleAgxBackendCompletionEndsFence(Runtime->TerminalStatus)) {
     retirementResult = AppleAgxBackendRuntimeAcknowledgeCompletion(Runtime);
     if (retirementResult != AppleAgxBackendRuntimeResultOk) {
       Runtime->Phase = AppleAgxBackendRuntimeFailed;

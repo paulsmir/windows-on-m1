@@ -728,8 +728,10 @@ static void TestFaultWithoutQuiesceDoesNotCompleteOrDropFence(void) {
 }
 
 /* EXP1075: the queue provider resumed the firmware after a Timeout/Fault
- * event; the job completes like a natural completion (Windows fence advances,
- * runtime Ready) without a queue Stop, and the next job can be submitted. */
+ * event; the job ends without a queue Stop (runtime Ready, the next job can be
+ * submitted). G4-r2b (EXP1275): the firmware dropped that job, so it ends as
+ * Dropped, never as a successful completion; the platform reports it to
+ * Windows as a faulted packet. */
 static void TestRecoveredCompletesWithoutStop(void) {
   FAKE_BACKEND fake;
   APPLE_AGX_BACKEND_RUNTIME runtime;
@@ -753,7 +755,7 @@ static void TestRecoveredCompletesWithoutStop(void) {
          AppleAgxBackendRuntimeResultOk);
   assert(runtime.Phase == AppleAgxBackendRuntimeReady);
   assert(fake.CompletionCount == 1u && fake.CompletionFence == 77u);
-  assert(fake.CompletionStatus == AppleAgxBackendCompletionSuccess);
+  assert(fake.CompletionStatus == AppleAgxBackendCompletionDropped);
   fake.FailStop = 0u;
   assert(AppleAgxBackendRuntimeStop(&runtime) ==
          AppleAgxBackendRuntimeResultOk);

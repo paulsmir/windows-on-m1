@@ -20,6 +20,9 @@ typedef enum _APPLE_AGX_BACKEND_COMPLETION_STATUS {
   AppleAgxBackendCompletionTimedOut,
   AppleAgxBackendCompletionReset,
   AppleAgxBackendCompletionCancelled,
+  /* G4-r2b: the firmware dropped the job after a Timeout/Fault event and
+   * was resumed; the queue stays usable, the job's work was not done. */
+  AppleAgxBackendCompletionDropped,
 } APPLE_AGX_BACKEND_COMPLETION_STATUS;
 
 typedef enum _APPLE_AGX_BACKEND_RUNTIME_PHASE {
