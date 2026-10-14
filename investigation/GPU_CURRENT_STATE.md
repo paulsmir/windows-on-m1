@@ -2,8 +2,8 @@
 
 ## Current as of 2026-10-14T18:48Z (read this first)
 
-Installed: PACKAGE1280 (integration 4984353f; the next pipeline's rec1280h
-rollback removes it).
+Installed: PACKAGE1282 (integration f6913c92 + UMD32 out6/closure 026; the next
+pipeline's rec1282h rollback removes it).
 m1n1 fa45bc58 r2, INF 1235 copy, x86 ICD out56, WOW64 UMD32 out5 (closure 025).
 - ONE UMD SOURCE (EXP1279 CONFIRMED): KMD/ARM64 UMD are built from the
   integration tree (scratchpad mkicd.py with WOW_ICD/WOW_UMD), not
@@ -24,8 +24,14 @@ m1n1 fa45bc58 r2, INF 1235 copy, x86 ICD out56, WOW64 UMD32 out5 (closure 025).
 - The integration INF now runs the KMD from the driver store (7929519e,
   InfVerif Universal); installed packages still use the 1235 INF until a
   driver-store install experiment.
-- Then: stream-output caps (max_stream_output_buffers 0 today), queries,
-  MRT, MSAA, the D3D11 DDI / FL 11_0 / SM5, ARM64X UMD for x64 apps.
+- D3D-G2a (EXP1281 CONFIRMED): the firmware fragment attachment list is the
+  submission's (real sizes, depth/stencil). D3D-G2b (EXP1282 CONFIRMED): MRT,
+  2 and 4 RGBA8 targets on both D3D UMDs (tile buffer still 8/16 bytes per
+  sample in the KMD template).
+- NEXT: D3D-G3 queries (isp_oclqry_base in JobParameters1 work+0xd0 and
+  JobParameters3 work+0x4d8, occlusion cap, d3d10umd OCCLUSION/PREDICATE/SO
+  statistics), then MSAA, stream-output generality, wider tile buffers, the
+  D3D11 DDI / FL 11_0 / SM5, ARM64X UMD for x64 apps.
 
 ## Current as of 2026-10-14T16:55Z
 
