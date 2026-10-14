@@ -1,6 +1,25 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-14T08:30Z (read this first)
+## Current as of 2026-10-14T09:13Z (read this first)
+
+Installed: PACKAGE1264 (unchanged). Correction to the 08:30Z entry: M2's core
+is validated (EXP1262-EXP1264), but two gaps keep M2 open (user asked to close
+memory before D3D):
+- M2-f5, backing under memory pressure (investigation/analysis/
+  M2-f5-backing-guarantee.md). Offline: a segment-3 commit failure inside
+  UpdatePageTable poisons the owning process, and for the paging process that
+  is system-wide. Fix e663766a reserves pages at CreateAllocation and returns
+  STATUS_NO_MEMORY there. Build tree c78a3d9d (= 45234b93 + e663766a) is for
+  EXP1265 with agx_mempressure.exe; not run yet.
+- M2-f6, broker capacity: m1n1's static broker table (131072 x 16 KiB = 2 GiB)
+  caps segment 3 at 1792 MiB on every Mac (the J313 RAM formula would give
+  ~3.75 GiB). Next after EXP1265.
+G4-r1 (3ed6a8ee, implemented, not run): the 500 ms KMD deadline no longer
+stops the firmware (the EXP1241/EXP1242 0x116 cause). It needs its own
+experiment (agx_longjob.exe) after M2.
+Order: EXP1265 (M2-f5) -> M2-f6 -> G4-r1/r2 -> resubmission defect -> D3D.
+
+## Current as of 2026-10-14T08:30Z
 
 Installed: PACKAGE1264 (KMD build tree 45234b93, 30.0.1264.0) on m1n1 23d30a32
 + Mu 361a2134; guest OS with KB5127648.
