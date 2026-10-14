@@ -1,6 +1,29 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-14T01:20Z (read this first)
+## Current as of 2026-10-14T04:29Z (read this first)
+
+Installed: PACKAGE1261 (16 KiB-block demand pool, rejected; package left for
+the next rollback) on m1n1 23d30a32 + Mu 361a2134; guest OS has KB5127648.
+M2-f3 demand pool: proven to work in EXP1257-EXP1261 (idle ~0.2 GiB vs 1 GiB
+pinned, peak ~0.68 GiB, returned after use, 0 failures, 0 Unmapped IPA).
+The fps cost was isolated. EXP1259 is the fixed pool on the same OS: 46.36 fps,
+so the OS update costs ~1.2. The remaining cost comes from Windows' per-chunk
+page allocation:
+- per granule: 43.9 fps;
+- run commits: 45.1 fps, valid (EXP1260);
+- 16 KiB chunks: 43.6 fps, rejected (EXP1261).
+Active: M2-f3e, 2 MiB slabs (integration a15d2aea, build tree e49b48aa with the
+receipt-only cancel-caller 8861c4a2); EXP1262 is prepared (before1262.txt,
+newexp-kmd1262.sh).
+BLOCKER: the Windows builder 192.168.1.24 refuses SSH/RDP since ~02:40Z
+(ping TTL 64: the host is up, the VM is probably stopped); the user was
+notified. A bounded wait is in the background.
+Then: segment 3 up to ~1.75 GiB (broker 2 GiB of system records) and budget
+groups as separate variables; the resubmission defect (EXP1260: slot
+cancelled, not preempted; the cancel caller is now in the receipt);
+G4-recovery; D3D 11/12.
+
+## Current as of 2026-10-14T01:20Z
 
 Installed: PACKAGE1257 (KMD build tree f55d89a3 = integration 6d34a70f,
 30.0.1257.0) on m1n1 23d30a32 (macho b122bc5f, pool window MAP_AT/UNMAP_RANGE)
