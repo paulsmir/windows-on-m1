@@ -204,6 +204,12 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
    if (!indirect && num_draws == 1 && draws &&
        (!draws[0].count || !info->instance_count))
       return;
+   /* EXP1287: Asahi's CPU render condition flushes and retires the
+    * predicate's writer -- the very batch this draw would enter. As
+    * upstream, it is evaluated first, here before the batch is taken (the
+    * body no longer evaluates it; DrawAuto and multi-draw re-enter here). */
+   if (unlikely(!agx_render_condition_check(ctx)))
+      return;
    if (indirect && indirect->count_from_stream_output) {
       /* DrawAuto is expanded by upstream Asahi into a direct draw.  The graph
        * gate validates the exact count-from-XFB form before the CPU read; the
@@ -255,6 +261,8 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
     # body -- batch/index setup, shader variants, descriptors and uploads,
     # agx_encode_state (pipelines), VDM emission -- read by the ICD.
     drawbody=s[a:b]
+    drawbody=replace(drawbody,
+        '   if (unlikely(!agx_render_condition_check(ctx)))\n      return;\n\n','')
     def mark(text, line, phase, after):
         i=text.index(line)
         cut=i+len(line) if after else i
@@ -526,6 +534,11 @@ agx_flush(struct pipe_context *pctx,''')
    bool depth_ok = !(buffers & PIPE_CLEAR_DEPTH) || (depth >= 0.0 && depth <= 1.0);
    bool stencil_ok = !(buffers & PIPE_CLEAR_STENCIL) ||
                      stencil_clear_mask == 0 || stencil_clear_mask == 0xff;
+   /* EXP1287: as in agx_draw_vbo, the render condition is evaluated before
+    * the batch is taken (upstream takes the batch first; the check may
+    * retire it). A clear it skips touches no state. */
+   if (!ctx->any_faults && unlikely(!agx_render_condition_check(ctx)))
+      return;
    if (ctx->any_faults || !shape || !color_ok || !depth_ok || !stencil_ok ||
        !color || scissor_state) { ctx->any_faults = true; return; }
    struct agx_batch *batch = agx_get_batch(ctx);
@@ -534,7 +547,9 @@ agx_flush(struct pipe_context *pctx,''')
    if (!AgxWin32AsahiBatchLeave(batch)) ctx->any_faults = true;
 }
 '''
-    s=s[:decl]+signature.replace('agx_clear(','agx_clear_windows_body(')+s[a:b]+'\n'+wrapper+s[b:]
+    clearbody=replace(s[a:b],
+        '   if (unlikely(!agx_render_condition_check(ctx)))\n      return;\n\n','')
+    s=s[:decl]+signature.replace('agx_clear(','agx_clear_windows_body(')+clearbody+'\n'+wrapper+s[b:]
     a,b=function(s,'agx_create_context');part=s[a:b]
     start=part.index('   enum drm_asahi_priority');end=part.index('   pctx->destroy',start)
     part=part[:start]+'   /* Existing Windows context owns queue and synchronization. */\n'+part[end:]

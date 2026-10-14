@@ -34,6 +34,7 @@ PROGRAM = r'''
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
+#define unlikely(x) (x)
 struct pipe_screen { int unused; };
 struct pipe_context { struct pipe_screen *screen; };
 struct agx_device { int unused; };
@@ -67,6 +68,8 @@ static void agx_legalize_feedback_loops(struct agx_context *ctx) {
   }
 }
 static void agx_legalize_xfb(struct agx_context *ctx) { (void)ctx; }
+/* No predicate is bound here (EXP1287: the wrapper evaluates it first). */
+static bool agx_render_condition_check(struct agx_context *ctx) { (void)ctx; return true; }
 static void AgxWin32AsahiBatchTraceDraw(struct agx_context *c, struct agx_batch *b, unsigned p) { (void)c; (void)b; (void)p; }
 static int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx, const struct pipe_draw_info *info,
     unsigned drawid, const struct pipe_draw_indirect_info *indirect,
