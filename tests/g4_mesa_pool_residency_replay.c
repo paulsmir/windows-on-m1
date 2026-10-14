@@ -28,6 +28,8 @@ struct drm_asahi_cmd_render { APPLE_AGX_G4_NATIVE_RENDER native; };
 /* The production function accesses these lowercase UAPI fields only. */
 #define samples native.Samples
 #define sample_size_B native.SampleSizeBytes
+#define utile_width_px native.UtileWidthPx
+#define utile_height_px native.UtileHeightPx
 struct drm_asahi_attachment { uint64_t pointer,size; uint32_t pad,flags; };
 struct drm_asahi_cmd_header { uint16_t cmd_type,size,vdm_barrier,cdm_barrier; };
 /* D3D-G1: the compute command a render batch may carry (none here). */

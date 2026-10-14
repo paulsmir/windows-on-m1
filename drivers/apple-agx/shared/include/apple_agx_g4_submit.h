@@ -231,6 +231,17 @@ static inline unsigned int AppleAgxG4MinTvbBlocks(unsigned int width,
  * TPC reserves the t600x maximum of eight GPU clusters, so the UMD can
  * allocate before the KMD supplies a measured cluster count.  All returned
  * allocation extents are 64 KiB multiples for the G1b16 Windows profile. */
+/* D3D-G6: the tile buffer holds every sample of a utile. Mesa
+ * agx_tilebuffer.c aligns a sample to 8 bytes and picks the largest utile
+ * whose samples fit MAX_BYTES_PER_TILE (32767 bytes). */
+#define APPLE_AGX_G4_TILE_BUFFER_BYTES 32767u
+static inline int AppleAgxG4TileBufferValid(unsigned int sample_bytes,
+    unsigned int samples, unsigned int utile_width, unsigned int utile_height) {
+  return sample_bytes && (sample_bytes & 7u) == 0u && samples &&
+      (unsigned long long)sample_bytes * samples * utile_width * utile_height <=
+          APPLE_AGX_G4_TILE_BUFFER_BYTES;
+}
+
 static inline int AppleAgxG4ProcessRequiredBytes(
     const APPLE_AGX_G4_NATIVE_RENDER *render,
     unsigned int bytes[APPLE_AGX_G4_PROCESS_RANGE_COUNT]) {

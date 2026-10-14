@@ -32,6 +32,8 @@ struct drm_asahi_cmd_render { APPLE_AGX_G4_NATIVE_RENDER native; };
 /* The production function accesses these lowercase UAPI fields only. */
 #define samples native.Samples
 #define sample_size_B native.SampleSizeBytes
+#define utile_width_px native.UtileWidthPx
+#define utile_height_px native.UtileHeightPx
 /* asahi_drm.h subset, laid out as APPLE_AGX_G4_NATIVE_COMPUTE. */
 struct drm_asahi_cmd_compute {
   uint32_t flags, sampler_count;

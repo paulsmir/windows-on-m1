@@ -504,7 +504,9 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
      batch->key.nr_cbufs<1 || batch->key.nr_cbufs>PIPE_MAX_COLOR_BUFS ||
      !batch->key.cbufs[0].texture || !gpuva_color_formats_supported(batch) ||
      (batch->key.zsbuf.texture && !b->ZlsAttachments) || render->samples!=1 ||
-     (render->sample_size_B!=8 && render->sample_size_B!=16) ||
+     /* D3D-G6: any 8-byte multiple whose utile fits the tile buffer. */
+     !AppleAgxG4TileBufferValid(render->sample_size_B,render->samples,
+         render->utile_width_px,render->utile_height_px) ||
      batch->bo_list.bit_count>UINT32_MAX-(PIPE_MAX_COLOR_BUFS+fixed_refs))
     return batch_refuse(2u, __LINE__,
         (batch->key.nr_cbufs & 0xffu) | ((unsigned)(batch->key.zsbuf.texture!=NULL) << 8) |

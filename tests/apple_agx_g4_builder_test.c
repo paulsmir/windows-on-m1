@@ -211,7 +211,9 @@ int main(void) {
             graph_access_zls, &zgraph, &zview) == AppleAgxG4ParseUnmapped);
       }
       /* D3D-G4: 2x and 4x multisampled renders bind when the colour
-       * target holds every sample; other counts never do. */
+       * target holds every sample; other counts never do. 4x at 8 bytes a
+       * sample needs a 32x16 utile (D3D-G6). */
+      packet.Render.UtileHeightPx = 16u;
       packet.Render.Samples = 4u;
       assert(!AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
@@ -229,9 +231,34 @@ int main(void) {
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
       packet.Attachment.Size = 1280ULL * 720ULL * 4ULL;
       packet.Render.Samples = 1u;
+      packet.Render.UtileHeightPx = 32u;
       packet.Render.SampleSizeBytes = 3u;
       assert(!AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      /* D3D-G6: a sample is a multiple of 8 bytes and a utile's samples fit
+       * the 32767-byte tile buffer (Mesa agx_tilebuffer.c). */
+      packet.Render.SampleSizeBytes = 24u;
+      assert(AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Render.SampleSizeBytes = 12u;
+      assert(!AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Render.SampleSizeBytes = 32u;
+      assert(!AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Render.UtileHeightPx = 16u;
+      assert(AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Render.Samples = 4u;
+      packet.Attachment.Size = 1280ULL * 720ULL * 4ULL * 4ULL;
+      assert(!AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Render.SampleSizeBytes = 8u;
+      assert(AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Attachment.Size = 1280ULL * 720ULL * 4ULL;
+      packet.Render.Samples = 1u;
+      packet.Render.UtileHeightPx = 32u;
       packet.Render.SampleSizeBytes = 8u;
       /* D3D-G3: an occlusion heap binds; a misaligned one does not. */
       packet.Render.IspOclQryBase = 0x36000000ULL;

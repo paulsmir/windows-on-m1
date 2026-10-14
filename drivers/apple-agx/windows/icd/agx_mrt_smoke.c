@@ -4,10 +4,10 @@
  * depends on the target index and the iteration (constant buffer). Every
  * target is read back every iteration and checked at its centre and four
  * corners: a target missing from the render (or showing the previous
- * iteration) fails. Four RGBA8 targets are 16 bytes per sample, the tile
- * buffer size the KMD template admits today.
+ * iteration) fails. Four RGBA8 targets are 16 bytes per sample (32x32
+ * utiles); eight are 32 bytes, which Mesa tiles in 32x16 utiles (D3D-G6).
  * Every line is written through to the output file before the next step.
- * Usage: agx_mrt_smoke.exe <out.txt> [targets 2..4] [iterations] */
+ * Usage: agx_mrt_smoke.exe <out.txt> [targets 2..8] [iterations] */
 #define COBJMACROS
 #define INITGUID
 #include <windows.h>
@@ -20,7 +20,7 @@
 #include <string.h>
 
 #define SIZE 64
-#define MAX_TARGETS 4
+#define MAX_TARGETS 8
 
 static HANDLE out = INVALID_HANDLE_VALUE;
 
@@ -60,9 +60,12 @@ static const char ps_source[] =
     "  return float4(r, g, b, 255) / 255.0;\n"
     "}\n"
     "struct O { float4 c0 : SV_Target0; float4 c1 : SV_Target1;\n"
-    "           float4 c2 : SV_Target2; float4 c3 : SV_Target3; };\n"
+    "           float4 c2 : SV_Target2; float4 c3 : SV_Target3;\n"
+    "           float4 c4 : SV_Target4; float4 c5 : SV_Target5;\n"
+    "           float4 c6 : SV_Target6; float4 c7 : SV_Target7; };\n"
     "O main(float4 p : SV_Position) {\n"
     "  O o; o.c0 = colour(0); o.c1 = colour(1); o.c2 = colour(2); o.c3 = colour(3);\n"
+    "  o.c4 = colour(4); o.c5 = colour(5); o.c6 = colour(6); o.c7 = colour(7);\n"
     "  return o;\n"
     "}\n";
 
@@ -104,7 +107,7 @@ int main(int argc, char **argv) {
   int targets, iterations, bad = 0;
 
   if (argc < 2) {
-    printf("usage: agx_mrt_smoke.exe <out.txt> [targets 2..4] [iterations]\n");
+    printf("usage: agx_mrt_smoke.exe <out.txt> [targets 2..8] [iterations]\n");
     return 2;
   }
   targets = argc > 2 ? atoi(argv[2]) : 4;

@@ -156,7 +156,8 @@ APPLE_AGX_BOOL AppleAgxG4BindNativeObjects(
       AppleAgxG4ColorBytes(View->ColorFormat) * render.Samples;
   if (!render.WidthPx || !render.HeightPx || !minimum ||
       render.Layers != 1u || !g4_samples_valid(render.Samples) ||
-      (render.SampleSizeBytes != 8u && render.SampleSizeBytes != 16u) ||
+      !AppleAgxG4TileBufferValid(render.SampleSizeBytes, render.Samples,
+          render.UtileWidthPx, render.UtileHeightPx) ||
       (render.Flags & (1u << 2)) == 0u ||
       (render.Flags & ~((1u << 1) | (1u << 2) | (1u << 18))) != 0u ||
       !render.VdmCtrlStreamBase || !render.IspScissorBase ||
