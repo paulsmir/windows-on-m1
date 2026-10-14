@@ -193,11 +193,22 @@ typedef struct {
 
 /* Asahi queue/render.rs get_tiling_params: the TVB blocks a render of this
  * size needs at least, align(ceil(tiles / 128), 8) for one cluster. */
+/* M2-f9a (EXP1269): the G13 buffer manager owns a 32-block TVB window
+ * (APPLE_AGX_G3_PRIVATE_HEAP_BLOCKS). Asahi buffer.rs: when the heap runs out
+ * of pages, the vertex pass stops and the firmware performs a partial render
+ * transparently; min_tvb_blocks only sizes the heap to avoid that. A render
+ * whose tile count asks for more than the window gets the window, instead
+ * of a refused scene (2048x8192 asked 128 blocks). */
+#define APPLE_AGX_G4_TVB_WINDOW_BLOCKS 32u
+
 static inline unsigned int AppleAgxG4MinTvbBlocks(unsigned int width,
     unsigned int height) {
   unsigned long long tiles = ((width + 31ULL) / 32ULL) * ((height + 31ULL) / 32ULL);
+  unsigned long long blocks;
   if (!width || !height || width > 16384u || height > 16384u) return 0u;
-  return (unsigned int)((((tiles + 127ULL) / 128ULL + 7ULL) / 8ULL) * 8ULL);
+  blocks = (((tiles + 127ULL) / 128ULL + 7ULL) / 8ULL) * 8ULL;
+  return blocks > APPLE_AGX_G4_TVB_WINDOW_BLOCKS
+             ? APPLE_AGX_G4_TVB_WINDOW_BLOCKS : (unsigned int)blocks;
 }
 
 /* The TVB and per-scene capacities follow Asahi buffer.rs/render.rs.  The
@@ -225,10 +236,10 @@ static inline int AppleAgxG4ProcessRequiredBytes(
   per_mtile = mtiles_x * mtiles_y;
   utiles = (32ULL / render->UtileWidthPx) *
            (32ULL / render->UtileHeightPx);
-  blocks = (((tiles_x * tiles_y + 127ULL) / 128ULL + 7ULL) / 8ULL) * 8ULL;
   /* One queue-lifetime G13 buffer manager owns 32 blocks. The recorded
-   * image names the first 16; the UMD page/block lists name all 32. */
-  if (blocks < 32ULL) blocks = 32ULL;
+   * image names the first 16; the UMD page/block lists name all 32. A larger
+   * render uses the same window (M2-f9a: firmware partial renders). */
+  blocks = APPLE_AGX_G4_TVB_WINDOW_BLOCKS;
   tilemap_words = (5ULL * per_mtile * utiles + 3ULL) / 4ULL;
   tilemap = 4ULL * tilemap_words * 16ULL * render->Layers;
   tpc = 8ULL * utiles * per_mtile * 16ULL * render->Layers * 8ULL;

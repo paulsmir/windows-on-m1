@@ -39,6 +39,27 @@ int main(void) {
   assert(!AppleAgxG4ComposeHeaderV2(&header, &render, 0x20000ULL,
                                      248u, APPLE_AGX_G4_COLOR_BGRA8, ranges));
   ranges[4].Va = 0x1000000ULL + 4ULL * 0x1000000ULL;
+  /* M2-f9a (EXP1269): a render above the 32-block TVB window asks for the
+   * window, not its tile-count minimum (2048x8192 asked 16 MiB and was
+   * refused). Asahi buffer.rs: when the heap runs out of pages the firmware
+   * performs a partial render transparently. The scene's tile array and TPC
+   * still scale with the render. */
+  render.UtileWidthPx = render.UtileHeightPx = 32;
+  render.WidthPx = 2048;
+  render.HeightPx = 8192;
+  assert(AppleAgxG4ProcessRequiredBytes(&render, bytes));
+  assert(bytes[2] == APPLE_AGX_G4_TVB_WINDOW_BLOCKS * 0x20000u);
+  assert(bytes[6] == 0x100000u); /* 64 x 256 tiles: TPC grows with the scene */
+  render.WidthPx = render.HeightPx = 8192;
+  assert(AppleAgxG4ProcessRequiredBytes(&render, bytes));
+  assert(bytes[2] == 0x400000u && bytes[6] == 0x400000u);
+  assert(AppleAgxG4MinTvbBlocks(2048, 4096) == 32u &&
+         AppleAgxG4MinTvbBlocks(2048, 8192) == 32u &&
+         AppleAgxG4MinTvbBlocks(16384, 16384) == 32u &&
+         AppleAgxG4MinTvbBlocks(1280, 800) == 8u);
+  render.WidthPx = 2560;
+  render.HeightPx = 1600;
+  render.UtileWidthPx = render.UtileHeightPx = 16;
   render.WidthPx = 0;
   assert(!AppleAgxG4ProcessRequiredBytes(&render, bytes));
   render.WidthPx = 2560;
