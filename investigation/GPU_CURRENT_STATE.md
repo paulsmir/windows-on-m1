@@ -1,6 +1,31 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-14T09:13Z (read this first)
+## Current as of 2026-10-14T10:15Z (read this first)
+
+Installed: PACKAGE1267 (build tree 3ca71538, M2-f8b, rejected; the next
+pipeline's rec1267h rollback removes it). M2 status:
+- M2-f5 VALIDATED (EXP1265): CreateAllocation reserves segment-3 pages;
+  reservation equals use (idle ~200 MiB, CS peak ~680 MiB); CS 46.7 fps.
+- M2-f8 OPEN, the critical gap. At segment-3 exhaustion VidMm demotes a
+  CPU-visible class BO into the aperture. The GPU cannot map its 4 KiB
+  backing, so the next submission is refused (G4 Parse Unmapped) and the app
+  gets DXGI_ERROR_DEVICE_HUNG (EXP1265-D, EXP1267; the system stays up).
+  dxgmms2 rule (primary source, EXP1267 entry): CPU-visible allocations must
+  include an aperture (WDDM >= 3.0). Segment 3 alone was refused (EXP1266);
+  not preferring the aperture still demotes (EXP1267). Next M2-f8c: a
+  dedicated aperture segment smaller than the 64 KiB allocation unit in the
+  class-BO sets, so admission holds and demotion cannot happen.
+- M2-f7 implemented (83984bc0, not run): General BO bound = segment 3
+  (was the 16 MiB legacy arena; EXP1265-C refused 2048x4096 RGBA8).
+- UMD: a refused BO no longer fails the winsys backend (26a03fde, not run).
+- M2-f6 open: m1n1 broker table 2 GiB caps segment 3 at 1792 MiB.
+Tools: agx_mempressure.exe (leave/max/height args), agx_longjob.exe; runner
+scripts mempressure.ps1/arm-mempressure.ps1, longjob.ps1/arm-longjob.ps1.
+Pipelines newexp-kmd1265..1267.sh (pressure step at the end).
+G4-r1 (3ed6a8ee, deadline no longer stops firmware) is still not run.
+Order: M2-f8c -> M2-f7 + winsys fix -> M2-f6 -> G4-r1/r2 -> D3D.
+
+## Current as of 2026-10-14T09:13Z
 
 Installed: PACKAGE1264 (unchanged). Correction to the 08:30Z entry: M2's core
 is validated (EXP1262-EXP1264), but two gaps keep M2 open (user asked to close
