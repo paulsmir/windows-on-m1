@@ -7,8 +7,15 @@
  * missing heap, a heap the CPU cannot see, a slot not zeroed at Begin, or
  * counts landing in the wrong slot all fail). The render target is read back
  * at the end so a query path that broke rendering also fails.
+ * Mode "pred" (D3D-G3b) also predicates, right after the predicates End and
+ * before their data is read: draws into four 8x8 squares under (hidden,
+ * FALSE), (hidden, TRUE), (visible, FALSE), (visible, TRUE) -- only the
+ * second and third may appear -- a clear of a red 8x8 target under (visible,
+ * TRUE) that must be skipped, and copies of a green texture over red ones
+ * under (visible, TRUE) (skipped) and (visible, FALSE) (performed). Both
+ * targets are read back every iteration.
  * Every line is written through to the output file before the next step.
- * Usage: agx_query_smoke.exe <out.txt> [iterations] */
+ * Usage: agx_query_smoke.exe <out.txt> [iterations] [pred] */
 #define COBJMACROS
 #define INITGUID
 #include <windows.h>
@@ -81,6 +88,35 @@ static int set_shift(float shift) {
   return 1;
 }
 
+static ID3D11Texture2D *small_texture(ID3D11Device *device, UINT bind, D3D11_USAGE usage,
+                                      UINT cpu, unsigned fill) {
+  static unsigned pixels[8 * 8];
+  D3D11_TEXTURE2D_DESC td;
+  D3D11_SUBRESOURCE_DATA init;
+  ID3D11Texture2D *texture = NULL;
+  for (int i = 0; i < 64; ++i) pixels[i] = fill;
+  memset(&td, 0, sizeof(td));
+  td.Width = td.Height = 8; td.MipLevels = td.ArraySize = 1;
+  td.Format = DXGI_FORMAT_R8G8B8A8_UNORM; td.SampleDesc.Count = 1;
+  td.Usage = usage; td.BindFlags = bind; td.CPUAccessFlags = cpu;
+  init.pSysMem = pixels; init.SysMemPitch = 32; init.SysMemSlicePitch = 0;
+  if (FAILED(ID3D11Device_CreateTexture2D(device, &td, usage == D3D11_USAGE_STAGING ? NULL : &init,
+                                          &texture)))
+    return NULL;
+  return texture;
+}
+
+/* The centre pixel of an 8x8 texture (through a staging copy). */
+static int centre(ID3D11Texture2D *texture, ID3D11Texture2D *staging, unsigned *pixel) {
+  D3D11_MAPPED_SUBRESOURCE map;
+  ID3D11DeviceContext_CopyResource(ctx, (ID3D11Resource *)staging, (ID3D11Resource *)texture);
+  if (FAILED(ID3D11DeviceContext_Map(ctx, (ID3D11Resource *)staging, 0, D3D11_MAP_READ, 0, &map)))
+    return 0;
+  *pixel = *(const unsigned *)((const unsigned char *)map.pData + 4u * map.RowPitch + 16u);
+  ID3D11DeviceContext_Unmap(ctx, (ID3D11Resource *)staging, 0);
+  return 1;
+}
+
 static void draw_rect(int x, int y, int w, int h) {
   D3D11_VIEWPORT vp;
   memset(&vp, 0, sizeof(vp));
@@ -123,7 +159,9 @@ int main(int argc, char **argv) {
   HMODULE compiler;
   pD3DCompile compile_fn;
   HRESULT hr;
-  int iterations, bad = 0, still = 0;
+  int iterations, bad = 0, still = 0, pred;
+  ID3D11Texture2D *gate = NULL, *green = NULL, *copied[2] = {0}, *small_staging = NULL;
+  ID3D11RenderTargetView *gate_rtv = NULL;
 
   if (argc < 2) {
     printf("usage: agx_query_smoke.exe <out.txt> [iterations]\n");
@@ -131,9 +169,10 @@ int main(int argc, char **argv) {
   }
   iterations = argc > 2 ? atoi(argv[2]) : 30;
   if (iterations < 2) iterations = 2;
+  pred = argc > 3 && !strcmp(argv[3], "pred");
   out = CreateFileA(argv[1], GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS,
                     FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH, NULL);
-  say("QUERIES %d iterations %d", QUERIES, iterations);
+  say("QUERIES %d iterations %d predication %d", QUERIES, iterations, pred);
   compiler = LoadLibraryA("d3dcompiler_47.dll");
   compile_fn = compiler ? (pD3DCompile)(void *)GetProcAddress(compiler, "D3DCompile") : NULL;
   if (!compile_fn) { say("NO_D3DCOMPILER %lu", GetLastError()); return 1; }
@@ -181,6 +220,18 @@ int main(int argc, char **argv) {
     if (SUCCEEDED(hr)) hr = ID3D11Device_CreatePredicate(device, &qd, &visible);
     say("CreatePredicate OCCLUSION_PREDICATE 0x%08lx", (unsigned long)hr);
     if (FAILED(hr)) return 1;
+    if (pred) {
+      gate = small_texture(device, D3D11_BIND_RENDER_TARGET, D3D11_USAGE_DEFAULT, 0, 0xff0000ffu);
+      green = small_texture(device, D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0, 0xff00ff00u);
+      copied[0] = small_texture(device, D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0, 0xff0000ffu);
+      copied[1] = small_texture(device, D3D11_BIND_SHADER_RESOURCE, D3D11_USAGE_DEFAULT, 0, 0xff0000ffu);
+      small_staging = small_texture(device, 0, D3D11_USAGE_STAGING, D3D11_CPU_ACCESS_READ, 0);
+      hr = gate && green && copied[0] && copied[1] && small_staging ? S_OK : E_FAIL;
+      if (SUCCEEDED(hr))
+        hr = ID3D11Device_CreateRenderTargetView(device, (ID3D11Resource *)gate, NULL, &gate_rtv);
+      say("PREDICATION_RESOURCES 0x%08lx", (unsigned long)hr);
+      if (FAILED(hr)) return 1;
+    }
   }
   vsb = compile(compile_fn, vs_source, sizeof(vs_source) - 1, "vs_4_0");
   psb = compile(compile_fn, ps_source, sizeof(ps_source) - 1, "ps_4_0");
@@ -219,6 +270,24 @@ int main(int argc, char **argv) {
     ID3D11DeviceContext_Begin(ctx, (ID3D11Asynchronous *)visible);
     draw_rect(SIZE - 8, SIZE - 8, 8, 8);
     ID3D11DeviceContext_End(ctx, (ID3D11Asynchronous *)visible);
+    if (pred) {
+      /* D3D: an operation is skipped when the predicate's data equals the
+       * predicate value. hidden is FALSE, visible TRUE. */
+      static const float red[4] = {1.0f, 0.0f, 0.0f, 1.0f};
+      static const float blue[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+      ID3D11Predicate *which[4] = {hidden, hidden, visible, visible};
+      ID3D11DeviceContext_ClearRenderTargetView(ctx, gate_rtv, red);
+      for (int k = 0; k < 4; ++k) {
+        ID3D11DeviceContext_SetPredication(ctx, which[k], (k & 1) ? TRUE : FALSE);
+        draw_rect(k * 8, 44, 8, 8);
+      }
+      ID3D11DeviceContext_SetPredication(ctx, visible, TRUE);
+      ID3D11DeviceContext_ClearRenderTargetView(ctx, gate_rtv, blue);
+      ID3D11DeviceContext_CopyResource(ctx, (ID3D11Resource *)copied[0], (ID3D11Resource *)green);
+      ID3D11DeviceContext_SetPredication(ctx, visible, FALSE);
+      ID3D11DeviceContext_CopyResource(ctx, (ID3D11Resource *)copied[1], (ID3D11Resource *)green);
+      ID3D11DeviceContext_SetPredication(ctx, NULL, FALSE);
+    }
     for (int q = 0; q < QUERIES; ++q) {
       UINT64 count = ~0ULL;
       polls = poll((ID3D11Asynchronous *)query[q], &count, sizeof(count));
@@ -248,6 +317,40 @@ int main(int argc, char **argv) {
       if (bad < 8)
         say("WRONG iteration %d predicate hidden %d visible %d", i, seen_hidden, seen_visible);
       ++bad;
+    }
+    if (pred) {
+      /* Squares: (hidden,FALSE) skipped, (hidden,TRUE) drawn, (visible,FALSE)
+       * drawn, (visible,TRUE) skipped. */
+      static const unsigned want_square[4] = {0xff000000u, 0xff00ff00u, 0xff00ff00u, 0xff000000u};
+      unsigned got[4], gate_px = 0, copy_px[2] = {0, 0};
+      D3D11_MAPPED_SUBRESOURCE map;
+      ID3D11DeviceContext_CopyResource(ctx, (ID3D11Resource *)staging, (ID3D11Resource *)target);
+      hr = ID3D11DeviceContext_Map(ctx, (ID3D11Resource *)staging, 0, D3D11_MAP_READ, 0, &map);
+      if (FAILED(hr)) { say("PRED_MAP 0x%08lx at %d", (unsigned long)hr, i); return 1; }
+      for (int k = 0; k < 4; ++k)
+        got[k] = *(const unsigned *)((const unsigned char *)map.pData + 48u * map.RowPitch +
+                                     (size_t)(k * 8 + 4) * 4u);
+      ID3D11DeviceContext_Unmap(ctx, (ID3D11Resource *)staging, 0);
+      if (!centre(gate, small_staging, &gate_px) || !centre(copied[0], small_staging, &copy_px[0]) ||
+          !centre(copied[1], small_staging, &copy_px[1])) {
+        say("PRED_READBACK failed at %d", i);
+        return 1;
+      }
+      for (int k = 0; k < 4; ++k)
+        if (got[k] != want_square[k]) {
+          if (bad < 8) say("WRONG iteration %d predicated draw %d got 0x%08x want 0x%08x", i, k,
+                           got[k], want_square[k]);
+          ++bad;
+        }
+      if (gate_px != 0xff0000ffu || copy_px[0] != 0xff0000ffu || copy_px[1] != 0xff00ff00u) {
+        if (bad < 8) say("WRONG iteration %d predicated clear 0x%08x copies 0x%08x 0x%08x", i,
+                         gate_px, copy_px[0], copy_px[1]);
+        ++bad;
+      }
+      /* Make the performed copy's target red again (copied[0] stayed red). */
+      ID3D11DeviceContext_CopyResource(ctx, (ID3D11Resource *)copied[1], (ID3D11Resource *)copied[0]);
+      if (i < 2) say("PREDICATION iteration %d squares 0x%08x 0x%08x 0x%08x 0x%08x gate 0x%08x", i,
+                     got[0], got[1], got[2], got[3], gate_px);
     }
     if (i < 2 || i == iterations - 1)
       say("ITERATION %d bad %d stillDrawing %d removed 0x%08lx", i, bad, still,

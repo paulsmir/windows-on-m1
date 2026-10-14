@@ -820,6 +820,7 @@ struct Query
    /* D3D-G3: occlusion counters and predicates are Mesa pipe queries; an
     * event query has no pipe query and completes on the Windows fence. */
    D3D10DDI_QUERY Type;
+   UINT Flags;
    struct pipe_query *handle;
 };'''),
         ('''struct Resource
@@ -1412,6 +1413,7 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
    candidate.Phase = QueryCreated;
    candidate.LastError = S_OK;
    candidate.Type = pCreateQuery->Query;
+   candidate.Flags = pCreateQuery->MiscFlags;
    if (occlusion) {
       candidate.handle = pDevice->pipe->create_query(pDevice->pipe,
          pCreateQuery->Query == D3D10DDI_QUERY_OCCLUSION ?
@@ -1498,6 +1500,11 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
          result = AgxD3d10WindowsQueryCollect(pDevice->windows);
    }
    if (pQuery->handle) {
+      if (pDevice->pPredicate == pQuery) {
+         pDevice->pipe->render_condition(pDevice->pipe, NULL, false,
+                                         PIPE_RENDER_COND_WAIT);
+         pDevice->pPredicate = NULL;
+      }
       /* agx_destroy_query waits for the batches writing its heap slot. */
       pDevice->pipe->destroy_query(pDevice->pipe, pQuery->handle);
       pQuery->handle = NULL;
@@ -1666,12 +1673,34 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
    pQuery->LastError = S_OK;
    if (pData) *(BOOL *)pData = TRUE;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Query.cpp','SetPredication','''   Device *device = CastDevice(hDevice);
-   if (!device || hQuery.pDrvPrivate || PredicateValue) {
+   Query *query = CastQuery(hQuery);
+   /* D3D-G3b: an occlusion predicate gates draws and clears through Mesa's
+    * render condition (checked on the CPU at each one) and copies, updates
+    * and mip generation through CheckPredicate. With PREDICATEHINT an
+    * operation runs while the result is not yet available. A NULL predicate
+    * ends predication; its value is kept as the runtime's. */
+   if (!device || (query && (!EventQueryValid(device, query) ||
+       !query->handle || query->Type != D3D10DDI_QUERY_OCCLUSIONPREDICATE))) {
       SetError(hDevice, E_NOTIMPL); return;
    }
-   device->pPredicate = NULL;
-   device->PredicateValue = FALSE;''')
-    replace_function_body('src/gallium/frontends/d3d10umd/Query.cpp','CheckPredicate','''   return pDevice && pDevice->pPredicate == NULL;''')
+   device->pipe->render_condition(device->pipe, query ? query->handle : NULL,
+      PredicateValue ? true : false,
+      query && (query->Flags & D3D10DDI_QUERY_MISCFLAG_PREDICATEHINT) ?
+         PIPE_RENDER_COND_NO_WAIT : PIPE_RENDER_COND_WAIT);
+   device->pPredicate = query;
+   device->PredicateValue = PredicateValue;''')
+    replace_function_body('src/gallium/frontends/d3d10umd/Query.cpp','CheckPredicate','''   /* D3D: an operation is skipped when the predicate's data equals the
+    * predicate value; a hinted predicate that is not ready lets it run. */
+   if (!pDevice) return FALSE;
+   Query *query = pDevice->pPredicate;
+   if (!query || !query->handle) return TRUE;
+   union pipe_query_result result;
+   memset(&result, 0, sizeof(result));
+   bool hint = (query->Flags & D3D10DDI_QUERY_MISCFLAG_PREDICATEHINT) != 0;
+   if (!pDevice->pipe->get_query_result(pDevice->pipe, query->handle, !hint,
+                                        &result))
+      return TRUE;
+   return !!result.b != !!pDevice->PredicateValue;''')
     change('src/gallium/frontends/d3d10umd/DxgiFns.cpp',
         'ecdfee2a652cab9d0604ff3ddcf0fb196778f41d367398aa4fcd080776a47f40',[
         ('HRESULT APIENTRY\n_Present(', '''static HRESULT
@@ -2315,6 +2344,7 @@ UnsupportedDxgi''')
    }
    view->handle = NULL; view->owner_device = NULL; view->owner_resource = NULL;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','GenMips','''   Device *device=CastDevice(hDevice);
+   if(device && !CheckPredicate(device)) return;
    ShaderResourceView *view=CastShaderResourceView(hShaderResourceView);
    if(!device || !view || view->owner_device!=device || !view->handle ||
       !view->owner_resource || view->owner_resource->owner_device!=device) {
@@ -3210,6 +3240,7 @@ AgxD3d10ResourceWithinRequiredLimits(
    SetError(hDevice, E_NOTIMPL);
    return;''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceCopy','''   Device *device = CastDevice(hDevice);
+   if (device && !CheckPredicate(device)) return;
    Resource *destination = CastResource(hDstResource);
    Resource *source = CastResource(hSrcResource);
    if (!device || !destination || !source || destination == source ||
@@ -3288,6 +3319,7 @@ AgxD3d10ResourceWithinRequiredLimits(
    }
    if (FAILED(result)) SetError(hDevice,result);''')
     replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceCopyRegion','''   Device *device=CastDevice(hDevice);
+   if(device && !CheckPredicate(device)) return;
    Resource *source=CastResource(hSrcResource),*destination=CastResource(hDstResource);
    struct pipe_resource *src=source?source->resource:NULL;
    struct pipe_resource *dst=destination?destination->resource:NULL;
@@ -3584,6 +3616,7 @@ AgxD3d10ResourceWithinRequiredLimits(
       return TRUE;
    return AgxWin32AsahiResourceBusy(device->pipe,resource->resource) ? TRUE : FALSE;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceUpdateSubResourceUP','''   Device *pDevice = CastDevice(hDevice);
+   if (pDevice && !CheckPredicate(pDevice)) return;
    Resource *resource = CastResource(hDstResource);
    ULONGLONG owner = 0;
    ULONG generation = 0;
