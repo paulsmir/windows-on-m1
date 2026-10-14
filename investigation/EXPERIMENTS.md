@@ -55031,3 +55031,13 @@ WINDOWS CONTRACT: MmAllocatePagesForMdlEx with SkipBytes 16 KiB, MM_ALLOCATE_REQ
 AGX/ASAHI CONTRACT: unchanged. 16 KiB window pages, each plain guest RAM; the broker resolves each 16 KiB page independently.
 TRANSLATION: granule = 4 blocks; window offset of block b = First * 64 KiB + b * 16 KiB.
 WHAT IS STILL UNKNOWN: Windows' time per 16 KiB block on this guest, and any GPU-side effect of 16 KiB-scattered pages (none expected: the UAT is 16 KiB). Readings: fps ~46.4 with low commit cost means M2-f3 complete; fps unchanged with low commit cost means another demand-mode cost (per-record lock or receipt staging) is next. Evidence: evidence/EXP1261 rcpt-*, segstats, shapes, full.log. Recovery: rec1261h.
+EXP1261 ACTUAL 2026-10-14T02:50Z (resume-kmd1261.sh after PREPARE-1; pipeline 02:36-02:48Z; package 30.0.1261.0 left installed; evidence .local/experiments/EXP1261-m2f3d-16k-blocks/evidence/EXP1261).
+- Functional checks: smoke 49.5 fps (EXP1260 51.9); copy x2 PASS; D3D11 PASS MATCH x2; KMT 58.5 fps MATCH x4; DWM 0; no G4SubmitFailure; overlaps 0; Unmapped IPA 0.
+- Wom1M2PoolDemand v3:
+  - idle: 4142 granules in 836 calls at 520 us per granule (EXP1260 242);
+  - in the benchmark: 722 us per granule;
+  - end of run: 13774 granules, 655 us per granule, 9.0 s total; held 236 MiB for 211 MiB committed.
+- CS benchmark: 3771 frames in 86.476 s = 43.607 fps (EXP1260 45.098).
+- Reading: Windows' cost is per contiguous chunk, not per byte. Four 16 KiB chunks per granule cost about twice one 64 KiB chunk, and 4x the MAP_AT commands add to that. EXP1259's single 1 GiB contiguous chunk took 374 ms, ~23 us per 64 KiB equivalent.
+- Verdict: REJECTED (16 KiB blocks make commits and fps worse).
+- Next: M2-f3e. Pages come in 2 MiB slabs (one contiguous 2 MiB chunk, else 32 x 64 KiB chunks), handed out per granule with the most-used slab first. A slab returns to Windows when its last granule does, with one empty spare. This replaces the per-run allocation (and drops dee6d980's 16 KiB blocks).
