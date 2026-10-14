@@ -500,7 +500,13 @@ static NTSTATUS AdmissionCreateAllocationImpl(
    * start, 16 KiB-contiguous by construction) these BOs live there; the
    * aperture stays the fallback a CPU-visible set keeps (EXP1027), and the
    * local segment is left out so VidMm never moves a BO between two memory
-   * segments (no memory-to-memory transfer exists). */
+   * segments (no memory-to-memory transfer exists). The aperture cannot
+   * leave the sets: dxgmms2 refuses a CPU-visible allocation without one
+   * (EXP1027, EXP1266). At segment-3 exhaustion VidMm makes such a BO
+   * resident in 4 KiB system pages the UAT cannot map, whether or not the
+   * aperture is preferred and whatever its size (EXP1265-D, EXP1267,
+   * EXP1268), and the submission using it is refused. Segment-3 capacity is
+   * the mitigation (M2-f6). */
   if (classId != 0u && description->CpuVisible != 0u &&
       AdmissionMemoryPoolView(context, &pool)) {
     /* M2-f5: the pages this allocation may occupy in segment 3 are taken
