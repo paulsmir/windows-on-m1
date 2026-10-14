@@ -19,6 +19,50 @@ static void Unlink(ADMISSION_POOL_SLABS *Slabs, ADMISSION_POOL_SLAB *Slab) {
   --Slabs->Stats.Slabs;
 }
 
+static unsigned long long Promised(const ADMISSION_POOL_SLABS *Slabs) {
+  return Slabs->Reserved < Slabs->ReserveCap ? Slabs->Reserved : Slabs->ReserveCap;
+}
+
+/* An empty slab may go back to Windows beyond SpareLimit empty slabs, and
+ * only while the rest still covers the promised slots. */
+static int MayFree(const ADMISSION_POOL_SLABS *Slabs) {
+  return Slabs->Empty > Slabs->SpareLimit &&
+         (Slabs->Stats.Slabs - 1u) * ADMISSION_POOL_SLAB_SLOTS >= Promised(Slabs);
+}
+
+static void FreeEmpty(ADMISSION_POOL_SLABS *Slabs, ADMISSION_POOL_SLAB *Slab) {
+  Unlink(Slabs, Slab);
+  --Slabs->Empty;
+  ++Slabs->Stats.FreedSlabs;
+  Slabs->FreeSlab(Slabs->Context, Slab);
+}
+
+static void Trim(ADMISSION_POOL_SLABS *Slabs) {
+  ADMISSION_POOL_SLAB *s = Slabs->List;
+  while (s != 0 && MayFree(Slabs)) {
+    ADMISSION_POOL_SLAB *next = s->Next;
+    if (s->Live == 0u) FreeEmpty(Slabs, s);
+    s = next;
+  }
+}
+
+static ADMISSION_POOL_SLAB *AddSlab(ADMISSION_POOL_SLABS *Slabs) {
+  ADMISSION_POOL_SLAB *slab = Slabs->NewSlab(Slabs->Context);
+  if (slab == 0) {
+    ++Slabs->Stats.NewSlabFailures;
+    return 0;
+  }
+  slab->FreeMask = ALL_SLOTS;
+  slab->Live = 0u;
+  slab->Next = Slabs->List;
+  Slabs->List = slab;
+  ++Slabs->Empty;
+  ++Slabs->Stats.NewSlabs;
+  if (++Slabs->Stats.Slabs > Slabs->Stats.PeakSlabs)
+    Slabs->Stats.PeakSlabs = Slabs->Stats.Slabs;
+  return slab;
+}
+
 void AdmissionPoolSlabGive(ADMISSION_POOL_SLABS *Slabs, ADMISSION_POOL_SLAB *Slab,
                            unsigned int Slot) {
   unsigned int bit;
@@ -27,11 +71,30 @@ void AdmissionPoolSlabGive(ADMISSION_POOL_SLABS *Slabs, ADMISSION_POOL_SLAB *Sla
   if (Slab->FreeMask & bit) return; /* already free */
   Slab->FreeMask |= bit;
   if (--Slab->Live != 0u) return;
-  if (++Slabs->Empty <= Slabs->SpareLimit) return;
-  Unlink(Slabs, Slab);
-  --Slabs->Empty;
-  ++Slabs->Stats.FreedSlabs;
-  Slabs->FreeSlab(Slabs->Context, Slab);
+  ++Slabs->Empty;
+  if (MayFree(Slabs)) FreeEmpty(Slabs, Slab);
+}
+
+int AdmissionPoolSlabReserve(ADMISSION_POOL_SLABS *Slabs, unsigned long long Count) {
+  if (Slabs == 0) return 0;
+  Slabs->Reserved += Count;
+  while (Slabs->Stats.Slabs * ADMISSION_POOL_SLAB_SLOTS < Promised(Slabs)) {
+    if (AddSlab(Slabs) == 0) {
+      Slabs->Reserved -= Count;
+      ++Slabs->Stats.ReserveFailures;
+      Trim(Slabs);
+      return 0;
+    }
+  }
+  if (Slabs->Reserved > Slabs->Stats.PeakReserved)
+    Slabs->Stats.PeakReserved = Slabs->Reserved;
+  return 1;
+}
+
+void AdmissionPoolSlabUnreserve(ADMISSION_POOL_SLABS *Slabs, unsigned long long Count) {
+  if (Slabs == 0) return;
+  Slabs->Reserved = Count < Slabs->Reserved ? Slabs->Reserved - Count : 0u;
+  Trim(Slabs);
 }
 
 int AdmissionPoolSlabTake(ADMISSION_POOL_SLABS *Slabs, unsigned long long Count,
@@ -45,23 +108,14 @@ int AdmissionPoolSlabTake(ADMISSION_POOL_SLABS *Slabs, unsigned long long Count,
     for (s = Slabs->List; s != 0; s = s->Next)
       if (s->FreeMask != 0u && (best == 0 || s->Live > best->Live)) best = s;
     if (best == 0) {
-      best = Slabs->NewSlab(Slabs->Context);
+      best = AddSlab(Slabs);
       if (best == 0) {
-        ++Slabs->Stats.NewSlabFailures;
         while (taken != 0u) {
           --taken;
           AdmissionPoolSlabGive(Slabs, Slab[taken], Slot[taken]);
         }
         return 0;
       }
-      best->FreeMask = ALL_SLOTS;
-      best->Live = 0u;
-      best->Next = Slabs->List;
-      Slabs->List = best;
-      ++Slabs->Empty;
-      ++Slabs->Stats.NewSlabs;
-      if (++Slabs->Stats.Slabs > Slabs->Stats.PeakSlabs)
-        Slabs->Stats.PeakSlabs = Slabs->Stats.Slabs;
     }
     if (best->Live == 0u) --Slabs->Empty;
     while (taken < Count && best->FreeMask != 0u) {

@@ -859,6 +859,8 @@ typedef struct _ADMISSION_ALLOCATION_HANDLE {
   UINT PrimaryRefreshDenominator;
   /* M2-f3: current segment-3 placement, guarded by the pool lock. */
   ADMISSION_POOL_PLACEMENT PoolPlacement;
+  /* M2-f5: segment-3 pages reserved for this allocation at creation. */
+  ULONGLONG PoolReserved;
 } ADMISSION_ALLOCATION_HANDLE;
 
 #define ADMISSION_OPEN_ALLOCATION_MAGIC 0x4f504152u
@@ -1345,6 +1347,15 @@ VOID AdmissionMemoryPoolExecuted(_In_opt_ ADMISSION_CONTEXT *Context,
 /* DestroyAllocation: the placement ends. */
 VOID AdmissionMemoryPoolForget(_In_opt_ ADMISSION_CONTEXT *Context,
                                _Inout_ ADMISSION_POOL_PLACEMENT *Placement);
+/* M2-f5: CreateAllocation reserves the pages a segment-3 allocation may be
+ * placed in (FALSE: Windows has none, the caller returns STATUS_NO_MEMORY);
+ * DestroyAllocation ends the reservation. TRUE without a demand pool. */
+_IRQL_requires_(PASSIVE_LEVEL)
+BOOLEAN AdmissionMemoryPoolReserve(_In_opt_ ADMISSION_CONTEXT *Context,
+                                   ULONGLONG Bytes);
+_IRQL_requires_(PASSIVE_LEVEL)
+VOID AdmissionMemoryPoolUnreserve(_In_opt_ ADMISSION_CONTEXT *Context,
+                                  ULONGLONG Bytes);
 _IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionMemoryPoolReclaim(_In_opt_ ADMISSION_CONTEXT *Context);
 _IRQL_requires_(PASSIVE_LEVEL)

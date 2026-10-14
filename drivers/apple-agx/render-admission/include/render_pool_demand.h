@@ -81,7 +81,7 @@ typedef enum _ADMISSION_POOL_PLACE {
  * moves by ADMISSION_POOL_DEMAND_RECEIPT_STEP granules or a failure count
  * changes. Times are microseconds of commit (page allocation + MAP_AT) and
  * release (UNMAP_RANGE + page free). */
-#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 5u /* 2: ReleaseDelayMs; 3: Stats.CommitCalls; 4: slabs; 5: RamBytes */
+#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 6u /* 2: ReleaseDelayMs; 3: Stats.CommitCalls; 4: slabs; 5: RamBytes; 6: reservations */
 #define ADMISSION_POOL_DEMAND_RECEIPT_STEP 256u /* 16 MiB */
 typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   unsigned int Version, Bytes, GranuleBytes, LastWindowResult;
@@ -98,6 +98,9 @@ typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   unsigned long long SlabContiguous, SlabChunked;
   /* v5 (M2-f4a): the RAM SegmentBytes was derived from. */
   unsigned long long RamBytes;
+  /* v6 (M2-f5): pages promised to live segment-3 allocations at creation,
+   * the peak, and creations refused for want of Windows pages. */
+  unsigned long long ReservedBytes, PeakReservedBytes, ReserveFailures;
 } ADMISSION_POOL_DEMAND_RECEIPT;
 
 /* M2-f4a: the declared size of the demand-backed segment 3 for a machine.

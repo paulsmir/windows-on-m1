@@ -20,6 +20,8 @@ typedef struct _ADMISSION_POOL_SLAB {
 
 typedef struct _ADMISSION_POOL_SLAB_STATS {
   unsigned long long Slabs, PeakSlabs, NewSlabs, NewSlabFailures, FreedSlabs;
+  /* M2-f5: reservations Windows could not back, and the largest total. */
+  unsigned long long ReserveFailures, PeakReserved;
 } ADMISSION_POOL_SLAB_STATS;
 
 typedef struct _ADMISSION_POOL_SLABS {
@@ -30,6 +32,11 @@ typedef struct _ADMISSION_POOL_SLABS {
   void (*FreeSlab)(void *Context, ADMISSION_POOL_SLAB *Slab);
   ADMISSION_POOL_SLAB *List;
   unsigned long long SpareLimit, Empty;
+  /* M2-f5: slots promised to live allocations. The slabs held never fall
+   * below MIN(Reserved, ReserveCap) slots (ReserveCap: the segment, beyond
+   * which VidMm cannot place more), so a reserved placement never waits for
+   * Windows. */
+  unsigned long long Reserved, ReserveCap;
   ADMISSION_POOL_SLAB_STATS Stats;
 } ADMISSION_POOL_SLABS;
 
@@ -38,6 +45,12 @@ int AdmissionPoolSlabTake(ADMISSION_POOL_SLABS *Slabs, unsigned long long Count,
                           ADMISSION_POOL_SLAB **Slab, unsigned int *Slot);
 void AdmissionPoolSlabGive(ADMISSION_POOL_SLABS *Slabs, ADMISSION_POOL_SLAB *Slab,
                            unsigned int Slot);
+/* M2-f5: promise Count more slots, taking slabs from Windows until the held
+ * slots cover MIN(Reserved, ReserveCap). All or nothing: on a refusal the
+ * promise and the slabs taken for it are undone and 0 is returned. */
+int AdmissionPoolSlabReserve(ADMISSION_POOL_SLABS *Slabs, unsigned long long Count);
+/* Ends a promise (clamped at zero) and returns empty slabs it no longer needs. */
+void AdmissionPoolSlabUnreserve(ADMISSION_POOL_SLABS *Slabs, unsigned long long Count);
 /* Frees every slab (stop); slots still handed out are the caller's leak. */
 void AdmissionPoolSlabDrain(ADMISSION_POOL_SLABS *Slabs);
 

@@ -138,6 +138,68 @@ static void test_drain(void)
     assert(frees == 2 && slabs.List == 0 && slabs.Stats.Slabs == 0);
 }
 
+/* M2-f5: a live allocation's pages are reserved when it is created, so a
+ * later placement never needs Windows (the paging path cannot fail for
+ * memory) and a refusal is reported at creation (STATUS_NO_MEMORY). */
+static void test_reserve_backs_later_takes(void)
+{
+    ADMISSION_POOL_SLAB *s[40];
+    unsigned slot[40];
+    reset(0);
+    slabs.ReserveCap = 1000;
+    assert(AdmissionPoolSlabReserve(&slabs, 40));
+    assert(news == 2 && slabs.Stats.Slabs == 2 && slabs.Reserved == 40);
+    fail_new_at = 3; /* Windows has no pages from here on */
+    assert(AdmissionPoolSlabTake(&slabs, 40, s, slot));
+    assert(news == 2 && slabs.Stats.NewSlabFailures == 0);
+    /* Released slots stay held while the reservation covers them. */
+    for (unsigned i = 0; i < 40; ++i)
+        AdmissionPoolSlabGive(&slabs, s[i], slot[i]);
+    assert(frees == 0 && slabs.Stats.Slabs == 2);
+    assert(AdmissionPoolSlabTake(&slabs, 40, s, slot));
+    for (unsigned i = 0; i < 40; ++i)
+        AdmissionPoolSlabGive(&slabs, s[i], slot[i]);
+    /* Ending the reservation returns the slabs beyond the spare. */
+    AdmissionPoolSlabUnreserve(&slabs, 40);
+    assert(slabs.Reserved == 0 && frees == 2 && slabs.Stats.Slabs == 0);
+}
+
+static void test_reserve_failure_is_all_or_nothing(void)
+{
+    reset(0);
+    slabs.ReserveCap = 1000;
+    assert(AdmissionPoolSlabReserve(&slabs, 10));
+    fail_new_at = 3; /* the third slab cannot be had */
+    assert(!AdmissionPoolSlabReserve(&slabs, 60));
+    assert(slabs.Reserved == 10 && slabs.Stats.ReserveFailures == 1);
+    /* The second slab taken for the refused reservation went back. */
+    assert(slabs.Stats.Slabs == 1 && frees == 1);
+}
+
+static void test_reserve_is_capped_at_the_segment(void)
+{
+    ADMISSION_POOL_SLAB *s[64];
+    unsigned slot[64];
+    reset(0);
+    slabs.ReserveCap = 64; /* two slabs: the whole segment */
+    assert(AdmissionPoolSlabReserve(&slabs, 50));
+    fail_new_at = 3;
+    /* Beyond the segment VidMm cannot place more, so no pages are needed. */
+    assert(AdmissionPoolSlabReserve(&slabs, 50));
+    assert(slabs.Reserved == 100 && slabs.Stats.Slabs == 2 && news == 2);
+    assert(slabs.Stats.PeakReserved == 100);
+    assert(AdmissionPoolSlabTake(&slabs, 64, s, slot));
+    for (unsigned i = 0; i < 64; ++i)
+        AdmissionPoolSlabGive(&slabs, s[i], slot[i]);
+    /* 40 reserved slots still need both slabs; 20 need one. */
+    AdmissionPoolSlabUnreserve(&slabs, 60);
+    assert(slabs.Stats.Slabs == 2 && frees == 0);
+    AdmissionPoolSlabUnreserve(&slabs, 20);
+    assert(slabs.Stats.Slabs == 1 && frees == 1);
+    AdmissionPoolSlabUnreserve(&slabs, 100); /* clamps at zero */
+    assert(slabs.Reserved == 0 && slabs.Stats.Slabs == 0);
+}
+
 int main(void)
 {
     test_one_slab_serves_32_granules();
@@ -145,6 +207,9 @@ int main(void)
     test_empty_slabs_return_beyond_the_spare();
     test_take_is_all_or_nothing();
     test_drain();
+    test_reserve_backs_later_takes();
+    test_reserve_failure_is_all_or_nothing();
+    test_reserve_is_capped_at_the_segment();
     reset(0);
     AdmissionPoolSlabDrain(&slabs);
     return 0;

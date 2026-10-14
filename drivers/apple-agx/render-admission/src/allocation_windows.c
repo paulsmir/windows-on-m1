@@ -481,6 +481,17 @@ static NTSTATUS AdmissionCreateAllocationImpl(
    * segments (no memory-to-memory transfer exists). */
   if (classId != 0u && description->CpuVisible != 0u &&
       AdmissionMemoryPoolView(context, &pool)) {
+    /* M2-f5: the pages this allocation may occupy in segment 3 are taken
+     * from Windows now, so its later placement (UpdatePageTable, also from
+     * the paging process) never fails for memory. Microsoft
+     * (DxgkDdiCreateAllocation): STATUS_NO_MEMORY when memory the call needs
+     * cannot be allocated; the runtime reports E_OUTOFMEMORY. */
+    if (!AdmissionMemoryPoolReserve(context, aligned)) {
+      (void)AdmissionAllocationDestroy(&allocation->Object);
+      ExFreePoolWithTag(allocation, ADMISSION_POOL_TAG);
+      return STATUS_NO_MEMORY;
+    }
+    allocation->PoolReserved = aligned;
     info->PreferredSegment.Value = 0u;
     info->PreferredSegment.SegmentId0 = ADMISSION_MEMORY_POOL_SEGMENT;
     info->PreferredSegment.SegmentId1 = ADMISSION_MEMORY_APERTURE_SEGMENT;
@@ -597,6 +608,8 @@ static NTSTATUS AdmissionDestroyAllocationImpl(
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
     /* M2-f3: the segment-3 placement ends with the allocation. */
     AdmissionMemoryPoolForget(context, &allocation->PoolPlacement);
+    /* M2-f5: so does its reservation. */
+    AdmissionMemoryPoolUnreserve(context, allocation->PoolReserved);
 #endif
     (void)AdmissionAllocationDestroy(&allocation->Object);
     ExFreePoolWithTag(allocation, ADMISSION_POOL_TAG);

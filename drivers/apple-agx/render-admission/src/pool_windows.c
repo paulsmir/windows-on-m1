@@ -228,7 +228,7 @@ typedef struct _ADMISSION_POOL_RUNTIME {
   ULONGLONG CommitUs, CommitUsMax, ReleaseUs, ReleaseUsMax;
   ULONG LastWindowResult;
   /* Receipt staging: committed granules and failure total last staged. */
-  ULONGLONG StagedGranules, StagedFailures;
+  ULONGLONG StagedGranules, StagedFailures, StagedReserved;
 } ADMISSION_POOL_RUNTIME;
 
 static ULONGLONG AdmissionPoolElapsedUs(LARGE_INTEGER Start) {
@@ -393,11 +393,16 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *Context
   const ADMISSION_POOL_DEMAND_STATS *stats = &pool->Demand.Stats;
   ADMISSION_POOL_DEMAND_RECEIPT receipt = {0};
   ULONGLONG failures = stats->CommitFailures + stats->ReleaseFailures +
-                       stats->Unaligned + stats->RefUnderflows;
+                       stats->Unaligned + stats->RefUnderflows +
+                       pool->Slabs.Stats.ReserveFailures;
   ULONGLONG moved = stats->CommittedGranules > pool->StagedGranules ?
       stats->CommittedGranules - pool->StagedGranules :
       pool->StagedGranules - stats->CommittedGranules;
+  ULONGLONG reserved = pool->Slabs.Reserved > pool->StagedReserved ?
+      pool->Slabs.Reserved - pool->StagedReserved :
+      pool->StagedReserved - pool->Slabs.Reserved;
   BOOLEAN stage = moved >= ADMISSION_POOL_DEMAND_RECEIPT_STEP ||
+                  reserved >= ADMISSION_POOL_DEMAND_RECEIPT_STEP ||
                   failures != pool->StagedFailures;
   if (stage) {
     receipt.Version = ADMISSION_POOL_DEMAND_RECEIPT_VERSION;
@@ -422,8 +427,14 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *Context
     receipt.SlabContiguous = pool->SlabContiguous;
     receipt.SlabChunked = pool->SlabChunked;
     receipt.RamBytes = pool->RamBytes;
+    receipt.ReservedBytes =
+        pool->Slabs.Reserved * ADMISSION_POOL_DEMAND_GRANULE;
+    receipt.PeakReservedBytes =
+        pool->Slabs.Stats.PeakReserved * ADMISSION_POOL_DEMAND_GRANULE;
+    receipt.ReserveFailures = pool->Slabs.Stats.ReserveFailures;
     pool->StagedGranules = stats->CommittedGranules;
     pool->StagedFailures = failures;
+    pool->StagedReserved = pool->Slabs.Reserved;
   }
   /* Idle granules wait for the periodic reclaim. */
   if (pool->Demand.Candidates != 0u &&
@@ -472,6 +483,30 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolForget(
   demand = AdmissionMemoryPoolLock(Context);
   if (demand == NULL) return;
   AdmissionPoolDemandUnplace(demand, Placement);
+  AdmissionMemoryPoolUnlock(Context);
+}
+
+_Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolReserve(
+    ADMISSION_CONTEXT *Context, ULONGLONG Bytes) {
+  ADMISSION_POOL_RUNTIME *pool;
+  BOOLEAN reserved;
+  if (Bytes == 0ULL || AdmissionMemoryPoolLock(Context) == NULL) return TRUE;
+  pool = (ADMISSION_POOL_RUNTIME *)Context->PoolDemand;
+  reserved = AdmissionPoolSlabReserve(&pool->Slabs,
+      (Bytes + ADMISSION_POOL_DEMAND_GRANULE - 1ULL) /
+          ADMISSION_POOL_DEMAND_GRANULE) ? TRUE : FALSE;
+  AdmissionMemoryPoolUnlock(Context);
+  return reserved;
+}
+
+_Use_decl_annotations_ VOID AdmissionMemoryPoolUnreserve(
+    ADMISSION_CONTEXT *Context, ULONGLONG Bytes) {
+  ADMISSION_POOL_RUNTIME *pool;
+  if (Bytes == 0ULL || AdmissionMemoryPoolLock(Context) == NULL) return;
+  pool = (ADMISSION_POOL_RUNTIME *)Context->PoolDemand;
+  AdmissionPoolSlabUnreserve(&pool->Slabs,
+      (Bytes + ADMISSION_POOL_DEMAND_GRANULE - 1ULL) /
+          ADMISSION_POOL_DEMAND_GRANULE);
   AdmissionMemoryPoolUnlock(Context);
 }
 
@@ -627,6 +662,8 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
   pool->Slabs.NewSlab = AdmissionPoolNewSlab;
   pool->Slabs.FreeSlab = AdmissionPoolFreeSlab;
   pool->Slabs.SpareLimit = ADMISSION_POOL_SPARE_SLABS;
+  /* M2-f5: VidMm never places more than the segment. */
+  pool->Slabs.ReserveCap = count;
   ExInitializeFastMutex(&pool->Lock);
   KeInitializeTimer(&pool->Timer);
   KeInitializeDpc(&pool->Dpc, AdmissionPoolReclaimDpc, pool);
