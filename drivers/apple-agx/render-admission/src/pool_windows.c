@@ -196,10 +196,22 @@ static BOOLEAN AdmissionPoolWindowMap(ADMISSION_CONTEXT *Context, PMDL Mdl,
   return FALSE;
 }
 
+/* M2-f3b: a releasable granule stays committed until it has been idle for
+ * this long (EXP1257: VidMm reuses freed ranges at once; releasing them at
+ * once cost ~8k commits and releases, 6.5 s, per CS benchmark). A periodic
+ * reclaim returns idle granules to Windows when nothing else runs. */
+#define ADMISSION_POOL_RELEASE_DELAY_MS 2000ULL
+#define ADMISSION_POOL_RECLAIM_PERIOD_MS 500LL
+
 /* M2-f3 demand runtime. One FAST_MUTEX guards the granule state, the MDL
  * per granule and the window range commands. */
 typedef struct _ADMISSION_POOL_RUNTIME {
   FAST_MUTEX Lock;
+  /* Periodic aged reclaim: timer -> DPC -> work item (PASSIVE). */
+  KTIMER Timer;
+  KDPC Dpc;
+  PIO_WORKITEM Work;
+  volatile LONG TimerArmed, WorkQueued, WorkPending, Stopping;
   ADMISSION_CONTEXT *Context;
   ADMISSION_POOL_DEMAND Demand;
   ADMISSION_POOL_GRANULE *Granules;
@@ -283,6 +295,10 @@ static ADMISSION_POOL_RELEASE AdmissionPoolReleaseGranule(
   return AdmissionPoolReleased;
 }
 
+static ULONGLONG AdmissionPoolNowMs(VOID) {
+  return KeQueryInterruptTime() / 10000ULL;
+}
+
 _Use_decl_annotations_ ADMISSION_POOL_DEMAND *AdmissionMemoryPoolLock(
     ADMISSION_CONTEXT *Context) {
   ADMISSION_POOL_RUNTIME *pool;
@@ -318,8 +334,17 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *Context
     receipt.ReleaseUsMax = pool->ReleaseUsMax;
     receipt.Candidates = pool->Demand.Candidates;
     receipt.ExecutedSeq = pool->Demand.ExecutedSeq;
+    receipt.ReleaseDelayMs = pool->Demand.ReleaseDelay;
     pool->StagedGranules = stats->CommittedGranules;
     pool->StagedFailures = failures;
+  }
+  /* Idle granules wait for the periodic reclaim. */
+  if (pool->Demand.Candidates != 0u &&
+      InterlockedCompareExchange(&pool->Stopping, 0, 0) == 0 &&
+      InterlockedCompareExchange(&pool->TimerArmed, 1, 0) == 0) {
+    LARGE_INTEGER due;
+    due.QuadPart = -ADMISSION_POOL_RECLAIM_PERIOD_MS * 10000LL;
+    (void)KeSetTimer(&pool->Timer, due, &pool->Dpc);
   }
   ExReleaseFastMutex(&pool->Lock);
   if (stage) AdmissionRecordM2PoolDemand(Context, &receipt);
@@ -349,7 +374,7 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolExecuted(
   ADMISSION_POOL_DEMAND *demand = AdmissionMemoryPoolLock(Context);
   if (demand == NULL) return;
   AdmissionPoolDemandExecuted(demand, Seq);
-  (void)AdmissionPoolDemandReclaim(demand);
+  (void)AdmissionPoolDemandReclaimAged(demand, AdmissionPoolNowMs());
   AdmissionMemoryPoolUnlock(Context);
 }
 
@@ -366,11 +391,43 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolForget(
 _Use_decl_annotations_ VOID AdmissionMemoryPoolReclaim(ADMISSION_CONTEXT *Context) {
   ADMISSION_POOL_DEMAND *demand = AdmissionMemoryPoolLock(Context);
   if (demand == NULL) return;
-  (void)AdmissionPoolDemandReclaim(demand);
+  (void)AdmissionPoolDemandReclaimAged(demand, AdmissionPoolNowMs());
   AdmissionMemoryPoolUnlock(Context);
 }
 
+static IO_WORKITEM_ROUTINE AdmissionPoolReclaimWork;
+static VOID AdmissionPoolReclaimWork(_In_ PDEVICE_OBJECT Device,
+                                     _In_opt_ PVOID Opaque) {
+  ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Opaque;
+  UNREFERENCED_PARAMETER(Device);
+  if (pool == NULL) return;
+  /* From here the DPC may queue the item again. */
+  InterlockedExchange(&pool->WorkQueued, 0);
+  if (InterlockedCompareExchange(&pool->Stopping, 0, 0) == 0)
+    AdmissionMemoryPoolReclaim(pool->Context);
+  InterlockedDecrement(&pool->WorkPending);
+}
+
+static KDEFERRED_ROUTINE AdmissionPoolReclaimDpc;
+static VOID AdmissionPoolReclaimDpc(_In_ PKDPC Dpc, _In_opt_ PVOID Opaque,
+                                    _In_opt_ PVOID Argument1,
+                                    _In_opt_ PVOID Argument2) {
+  ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Opaque;
+  UNREFERENCED_PARAMETER(Dpc);
+  UNREFERENCED_PARAMETER(Argument1);
+  UNREFERENCED_PARAMETER(Argument2);
+  if (pool == NULL) return;
+  InterlockedExchange(&pool->TimerArmed, 0);
+  if (InterlockedCompareExchange(&pool->Stopping, 0, 0) == 0 &&
+      InterlockedCompareExchange(&pool->WorkQueued, 1, 0) == 0) {
+    InterlockedIncrement(&pool->WorkPending);
+    IoQueueWorkItem(pool->Work, AdmissionPoolReclaimWork, DelayedWorkQueue,
+                    pool);
+  }
+}
+
 static VOID AdmissionPoolDemandFree(ADMISSION_POOL_RUNTIME *Pool) {
+  if (Pool->Work) IoFreeWorkItem(Pool->Work);
   if (Pool->Mdls) ExFreePoolWithTag(Pool->Mdls, ADMISSION_POOL_TAG);
   if (Pool->Candidates) ExFreePoolWithTag(Pool->Candidates, ADMISSION_POOL_TAG);
   if (Pool->Granules) ExFreePoolWithTag(Pool->Granules, ADMISSION_POOL_TAG);
@@ -383,7 +440,25 @@ static VOID AdmissionPoolDemandStop(ADMISSION_CONTEXT *Context) {
   ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Context->PoolDemand;
   ULONGLONG i;
   BOOLEAN unmapped;
+  ULONG waited;
   if (pool == NULL) return;
+  /* No reclaim runs past this point: no new arm or queue, the armed timer
+   * cancelled, running DPCs drained, queued work items finished. */
+  InterlockedExchange(&pool->Stopping, 1);
+  KeCancelTimer(&pool->Timer);
+  KeFlushQueuedDpcs();
+  for (waited = 0u; InterlockedCompareExchange(&pool->WorkPending, 0, 0) != 0 &&
+                    waited < 10000u; ++waited) {
+    LARGE_INTEGER delay;
+    delay.QuadPart = -10000LL; /* 1 ms */
+    (void)KeDelayExecutionThread(KernelMode, FALSE, &delay);
+  }
+  if (InterlockedCompareExchange(&pool->WorkPending, 0, 0) != 0) {
+    /* A work item still references the runtime: keep it (and its pages). */
+    InterlockedIncrement(&Context->PoolLeaks);
+    Context->PoolDemand = NULL;
+    return;
+  }
   Context->PoolDemand = NULL;
   if (Context->PoolCpu != NULL)
     MmUnmapIoSpace(Context->PoolCpu, (SIZE_T)Context->PoolBytes);
@@ -429,7 +504,15 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
     AdmissionPoolDemandFree(pool);
     return FALSE;
   }
+  pool->Work = IoAllocateWorkItem(Context->PhysicalDeviceObject);
+  if (pool->Work == NULL) {
+    AdmissionPoolDemandFree(pool);
+    return FALSE;
+  }
+  pool->Demand.ReleaseDelay = ADMISSION_POOL_RELEASE_DELAY_MS;
   ExInitializeFastMutex(&pool->Lock);
+  KeInitializeTimer(&pool->Timer);
+  KeInitializeDpc(&pool->Dpc, AdmissionPoolReclaimDpc, pool);
   pool->Context = Context;
   base.QuadPart = (LONGLONG)Window->SkipBytes;
   Context->PoolCpu = MmMapIoSpaceEx(base, (SIZE_T)ADMISSION_MEMORY_POOL_BYTES,

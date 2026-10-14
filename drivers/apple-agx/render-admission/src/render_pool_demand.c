@@ -18,6 +18,7 @@ int AdmissionPoolDemandInit(ADMISSION_POOL_DEMAND *Pool,
   Pool->Candidates = 0u;
   Pool->ExecutedSeq = 0u;
   Pool->AnyExecuted = 0;
+  Pool->ReleaseDelay = 0u;
   Pool->Stats = zero;
   return 1;
 }
@@ -41,6 +42,7 @@ static int Commit(ADMISSION_POOL_DEMAND *Pool, unsigned long long Index) {
   }
   g->Committed = 1u;
   g->Recorded = 0u;
+  g->IdleSince = 0u;
   ++Pool->Stats.Commits;
   if (++Pool->Stats.CommittedGranules > Pool->Stats.PeakGranules)
     Pool->Stats.PeakGranules = Pool->Stats.CommittedGranules;
@@ -92,6 +94,7 @@ ADMISSION_POOL_PLACE AdmissionPoolDemandPlace(ADMISSION_POOL_DEMAND *Pool,
       return AdmissionPoolPlaceNoMemory;
     }
     Pool->Granules[i].Owner = Owner;
+    Pool->Granules[i].IdleSince = 0u; /* in use: the idle clock restarts */
   }
   Owner->Base = Base;
   Owner->Bytes = Bytes;
@@ -130,6 +133,7 @@ void AdmissionPoolDemandPagingRef(ADMISSION_POOL_DEMAND *Pool,
   g = &Pool->Granules[Offset / G];
   if (Delta > 0) {
     ++g->PagingRefs;
+    g->IdleSince = 0u;
   } else if (Delta < 0) {
     if (g->PagingRefs == 0u) {
       ++Pool->Stats.RefUnderflows;
@@ -163,7 +167,8 @@ void AdmissionPoolDemandExecuted(ADMISSION_POOL_DEMAND *Pool,
   Pool->AnyExecuted = 1;
 }
 
-unsigned long long AdmissionPoolDemandReclaim(ADMISSION_POOL_DEMAND *Pool) {
+static unsigned long long Reclaim(ADMISSION_POOL_DEMAND *Pool, int Aged,
+                                  unsigned long long Now) {
   unsigned long long read, kept = 0u, released = 0u;
   if (Pool == 0) return 0u;
   for (read = 0u; read < Pool->Candidates; ++read) {
@@ -172,6 +177,7 @@ unsigned long long AdmissionPoolDemandReclaim(ADMISSION_POOL_DEMAND *Pool) {
     ADMISSION_POOL_RELEASE result;
     if (!g->Committed || g->Pinned || g->Owner != 0 || g->PagingRefs != 0u) {
       g->Candidate = 0u; /* Consider() puts it back when it qualifies. */
+      g->IdleSince = 0u;
       continue;
     }
     if (g->Recorded &&
@@ -179,11 +185,19 @@ unsigned long long AdmissionPoolDemandReclaim(ADMISSION_POOL_DEMAND *Pool) {
       Pool->CandidateList[kept++] = index;
       continue;
     }
+    if (Aged) {
+      if (g->IdleSince == 0u) g->IdleSince = Now + 1u;
+      if (Now + 1u - g->IdleSince < Pool->ReleaseDelay) {
+        Pool->CandidateList[kept++] = index;
+        continue;
+      }
+    }
     result = Pool->Ops.Release(Pool->Ops.Context, index);
     if (result == AdmissionPoolReleased) {
       g->Committed = 0u;
       g->Recorded = 0u;
       g->Candidate = 0u;
+      g->IdleSince = 0u;
       --Pool->Stats.CommittedGranules;
       ++Pool->Stats.Releases;
       ++released;
@@ -199,4 +213,13 @@ unsigned long long AdmissionPoolDemandReclaim(ADMISSION_POOL_DEMAND *Pool) {
   }
   Pool->Candidates = kept;
   return released;
+}
+
+unsigned long long AdmissionPoolDemandReclaim(ADMISSION_POOL_DEMAND *Pool) {
+  return Reclaim(Pool, 0, 0u);
+}
+
+unsigned long long AdmissionPoolDemandReclaimAged(ADMISSION_POOL_DEMAND *Pool,
+                                                  unsigned long long Now) {
+  return Reclaim(Pool, 1, Now);
 }

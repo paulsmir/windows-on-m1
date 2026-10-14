@@ -213,6 +213,59 @@ static void test_recommit_after_release(void)
     assert(AdmissionPoolDemandReclaim(&pool) == 0 && pool.Candidates == 0 && mapped[0]);
 }
 
+/* M2-f3b (EXP1257: churn cost 8k commits/releases in one benchmark): an idle
+ * granule stays committed for ReleaseDelay, so VidMm's reuse of a freed range
+ * costs nothing; only granules idle that long go back to Windows. */
+static void test_aged_release(void)
+{
+    ADMISSION_POOL_PLACEMENT a = {0, 0}, b = {0, 0};
+    reset();
+    pool.ReleaseDelay = 100;
+    assert(AdmissionPoolDemandPlace(&pool, &a, 0, 2 * G) == AdmissionPoolPlaced);
+    AdmissionPoolDemandUnplace(&pool, &a);
+    /* First seen idle at 1000; not old enough until 1100. */
+    assert(AdmissionPoolDemandReclaimAged(&pool, 1000) == 0 && mapped_count() == 2);
+    assert(AdmissionPoolDemandReclaimAged(&pool, 1099) == 0 && mapped_count() == 2);
+    /* Reused within the delay: no commit, no release. */
+    assert(AdmissionPoolDemandPlace(&pool, &b, 0, G) == AdmissionPoolPlaced);
+    assert(commits == 2);
+    assert(AdmissionPoolDemandReclaimAged(&pool, 1100) == 1 && mapped[0] && !mapped[1]);
+    /* Idle again: the clock restarts at the next pass. */
+    AdmissionPoolDemandUnplace(&pool, &b);
+    assert(AdmissionPoolDemandReclaimAged(&pool, 1150) == 0);
+    assert(AdmissionPoolDemandReclaimAged(&pool, 1249) == 0 && mapped[0]);
+    assert(AdmissionPoolDemandReclaimAged(&pool, 1250) == 1 && mapped_count() == 0);
+    assert(pool.Candidates == 0);
+}
+
+static void test_reuse_between_passes_restarts_the_clock(void)
+{
+    ADMISSION_POOL_PLACEMENT a = {0, 0}, b = {0, 0};
+    reset();
+    pool.ReleaseDelay = 100;
+    assert(AdmissionPoolDemandPlace(&pool, &a, 0, G) == AdmissionPoolPlaced);
+    AdmissionPoolDemandUnplace(&pool, &a);
+    assert(AdmissionPoolDemandReclaimAged(&pool, 1000) == 0);
+    /* Used and freed again between two passes: idle only since 1101. */
+    assert(AdmissionPoolDemandPlace(&pool, &b, 0, G) == AdmissionPoolPlaced);
+    AdmissionPoolDemandUnplace(&pool, &b);
+    assert(AdmissionPoolDemandReclaimAged(&pool, 1101) == 0 && mapped[0]);
+    assert(AdmissionPoolDemandReclaimAged(&pool, 1200) == 0 && mapped[0]);
+    assert(AdmissionPoolDemandReclaimAged(&pool, 1201) == 1 && !mapped[0]);
+    /* A paging reference restarts it too. */
+    assert(AdmissionPoolDemandPlace(&pool, &a, 0, G) == AdmissionPoolPlaced);
+    AdmissionPoolDemandUnplace(&pool, &a);
+    assert(AdmissionPoolDemandReclaimAged(&pool, 2000) == 0);
+    AdmissionPoolDemandPagingRef(&pool, 0x1000, 1);
+    AdmissionPoolDemandPagingRef(&pool, 0x1000, -1);
+    assert(AdmissionPoolDemandReclaimAged(&pool, 2100) == 0 && mapped[0]);
+    assert(AdmissionPoolDemandReclaimAged(&pool, 2200) == 1);
+    /* The immediate pass ignores age. */
+    assert(AdmissionPoolDemandPlace(&pool, &a, 0, G) == AdmissionPoolPlaced);
+    AdmissionPoolDemandUnplace(&pool, &a);
+    assert(AdmissionPoolDemandReclaim(&pool) == 1);
+}
+
 int main(void)
 {
     test_place_commits_once_and_destroy_releases();
@@ -224,5 +277,7 @@ int main(void)
     test_pin_and_ref_underflow();
     test_busy_and_failed_releases();
     test_recommit_after_release();
+    test_aged_release();
+    test_reuse_between_passes_restarts_the_clock();
     return 0;
 }

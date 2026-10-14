@@ -20,6 +20,8 @@ typedef struct _ADMISSION_POOL_PLACEMENT {
 typedef struct _ADMISSION_POOL_GRANULE {
   ADMISSION_POOL_PLACEMENT *Owner;
   unsigned long long RecordSeq; /* last paging record naming the granule */
+  /* Aged reclaim: 1 + the time it was first seen releasable; 0 not yet. */
+  unsigned long long IdleSince;
   unsigned int PagingRefs;      /* paging-process 4 KiB PTEs into it */
   unsigned char Committed;
   unsigned char Pinned;         /* committed until the pool stops */
@@ -56,6 +58,11 @@ typedef struct _ADMISSION_POOL_DEMAND {
   unsigned long long Count, Candidates;
   unsigned long long ExecutedSeq;
   int AnyExecuted;
+  /* M2-f3b: AdmissionPoolDemandReclaimAged keeps a releasable granule
+   * committed (and mapped) until it has been idle this long, in the caller's
+   * time unit: VidMm reuses freed ranges at once (EXP1257: 8k commits and
+   * releases in one benchmark), and an idle granule is reused for free. */
+  unsigned long long ReleaseDelay;
   ADMISSION_POOL_DEMAND_STATS Stats;
 } ADMISSION_POOL_DEMAND;
 
@@ -69,7 +76,7 @@ typedef enum _ADMISSION_POOL_PLACE {
  * moves by ADMISSION_POOL_DEMAND_RECEIPT_STEP granules or a failure count
  * changes. Times are microseconds of commit (page allocation + MAP_AT) and
  * release (UNMAP_RANGE + page free). */
-#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 1u
+#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 2u /* 2: ReleaseDelayMs */
 #define ADMISSION_POOL_DEMAND_RECEIPT_STEP 256u /* 16 MiB */
 typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   unsigned int Version, Bytes, GranuleBytes, LastWindowResult;
@@ -77,6 +84,7 @@ typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   ADMISSION_POOL_DEMAND_STATS Stats;
   unsigned long long CommitUs, CommitUsMax, ReleaseUs, ReleaseUsMax;
   unsigned long long Candidates, ExecutedSeq;
+  unsigned long long ReleaseDelayMs;
 } ADMISSION_POOL_DEMAND_RECEIPT;
 
 /* Granules and CandidateList hold Count zeroed entries each. */
@@ -111,5 +119,8 @@ void AdmissionPoolDemandExecuted(ADMISSION_POOL_DEMAND *Pool,
                                  unsigned long long Seq);
 /* Releases every releasable granule; returns how many were released. */
 unsigned long long AdmissionPoolDemandReclaim(ADMISSION_POOL_DEMAND *Pool);
+/* As Reclaim, for granules releasable for ReleaseDelay by Now (increasing). */
+unsigned long long AdmissionPoolDemandReclaimAged(ADMISSION_POOL_DEMAND *Pool,
+                                                  unsigned long long Now);
 
 #endif
