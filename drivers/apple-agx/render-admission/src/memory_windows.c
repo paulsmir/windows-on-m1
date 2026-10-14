@@ -1,5 +1,23 @@
 #include "render_admission.h"
 
+/* M2-f4b: budget groups. EXP1263 (agx_vidmem): with no group flag every
+ * segment counted as non-budget (2360 MiB) and the LOCAL budget (1081 MiB)
+ * came from the implicit system-memory segment, which the AGX cannot use for
+ * GPU buffers, while CurrentUsage read 0 with 218 MiB resident in segment 3.
+ * The memory segments (2: firmware-reserved DDR, 3: demand-backed pool) are
+ * what this UMA GPU works from, so they form the LOCAL group (DXGI: the
+ * fastest memory, the target of an application's working set; D3D12: on a
+ * UMA adapter L0 and LOCAL are the same memory); the aperture is NON_LOCAL.
+ * Every segment gets a group: VidMm refuses an allocation whose segment set
+ * mixes budgeted and non-budgeted segments (dxgmms2 VerifyBudgetGroups), and
+ * this driver's sets span all three (CPU-visible class BOs: 3 and 1). */
+static VOID AdmissionSegmentBudgetGroup(
+    _In_ const APPLE_AGX_PHYSICAL_SEGMENT *Segment,
+    _Inout_ DXGK_SEGMENTFLAGS *Flags) {
+  Flags->LocalBudgetGroup = Segment->Aperture ? 0u : 1u;
+  Flags->NonLocalBudgetGroup = Segment->Aperture ? 1u : 0u;
+}
+
 static VOID AdmissionDescribeSegment(
     _In_ const APPLE_AGX_PHYSICAL_SEGMENT *Segment,
     _Out_ DXGK_SEGMENTDESCRIPTOR4 *Descriptor) {
@@ -13,6 +31,7 @@ static VOID AdmissionDescribeSegment(
   Descriptor->Flags.CpuVisible = Segment->CpuVisible != APPLE_AGX_FALSE;
   Descriptor->Flags.PopulatedFromSystemMemory =
       Segment->PopulatedFromSystemMemory != APPLE_AGX_FALSE;
+  AdmissionSegmentBudgetGroup(Segment, &Descriptor->Flags);
   Descriptor->BaseAddress.QuadPart = (LONGLONG)Segment->Base;
   Descriptor->Size = (SIZE_T)Segment->Size;
   Descriptor->CommitLimit = (SIZE_T)Segment->CommitLimit;
@@ -31,6 +50,7 @@ static VOID AdmissionDescribeSegment5(
       Segment->PopulatedFromSystemMemory != APPLE_AGX_FALSE;
   Descriptor->Flags.Use64KBPages = Segment->Aperture ? 0u :
                                                       ADMISSION_G1B_USE64K;
+  AdmissionSegmentBudgetGroup(Segment, &Descriptor->Flags);
   Descriptor->BaseAddress.QuadPart = (LONGLONG)Segment->Base;
   Descriptor->Size = Segment->Size;
   Descriptor->SlabSize = Segment->Aperture ? DXGK_PAGESIZE_4KB :
