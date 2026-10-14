@@ -806,6 +806,10 @@ typedef struct _ADMISSION_RENDER_CONTEXT {
    * uses these slot-2 markers; slots are matched by fence, never shifted,
    * so a DPC marking one slot cannot race a PASSIVE clear of the other. */
   volatile LONG GpuvaG3PrivateFence2, GpuvaG3CancelFence2, GpuvaG3PreemptFence2;
+  /* Receipt-only (resubmission defect, branch 7 subsite 0x201): the caller
+   * of the last AdmissionGpuvaG3PrivateCancel per slot, as its address minus
+   * the function's own (resolved with the build's PDB). */
+  volatile LONG GpuvaG3CancelCaller, GpuvaG3CancelCaller2;
   /* Phase 5b: FenceOutstanding is the context's oldest outstanding job;
    * this is the next one (queued after it), promoted when the oldest
    * retires. Changed under SchedulerLock. */
@@ -2004,7 +2008,8 @@ DXGKDDI_ESCAPE AdmissionDdiEscape;
 BOOLEAN AdmissionGpuvaG3PrivateContextBusy(ADMISSION_RENDER_CONTEXT *);
 BOOLEAN AdmissionGpuvaG3PrivateRetireContext(ADMISSION_RENDER_CONTEXT *);
 BOOLEAN AdmissionGpuvaG3PrivateReset(ADMISSION_CONTEXT *);
-VOID AdmissionGpuvaG3PrivateCancel(ADMISSION_RENDER_CONTEXT *, ULONG, BOOLEAN);
+/* noinline: its _ReturnAddress names the cancelling path (receipt). */
+__declspec(noinline) VOID AdmissionGpuvaG3PrivateCancel(ADMISSION_RENDER_CONTEXT *, ULONG, BOOLEAN);
 VOID AdmissionGpuvaG3PrivatePreempt(ADMISSION_RENDER_CONTEXT *, ULONG);
 BOOLEAN AdmissionGpuvaG3PrivateReported(ADMISSION_CONTEXT *, ADMISSION_RENDER_CONTEXT *, ULONG);
 /* Phase 5a: bind the head pending submission into the empty render slot

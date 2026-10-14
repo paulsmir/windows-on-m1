@@ -32,6 +32,7 @@
 #define ADMISSION_WIN32_ALLOCATION_GPU_LOCAL 0x100u
 
 #define APPLE_AGX_GPUVA_G3_QUALIFICATION 1
+#define _ReturnAddress() __builtin_return_address(0)
 #define _Use_decl_annotations_
 #define __try if (1)
 #define __except(x) else
@@ -285,7 +286,7 @@ typedef struct { ULONG Magic; ADMISSION_DEVICE *Device; UINT RuntimeAllocation;
  ULONG Win32Generation,Win32ClassId,Win32Flags; } ADMISSION_OPEN_ALLOCATION;
 typedef struct { int unused; } ADMISSION_SCHEDULER_CONTEXT;
 typedef struct { int unused; } ADMISSION_PREPATCHED_RENDER;
-typedef struct _ADMISSION_RENDER_CONTEXT { ADMISSION_OBJECT_CONTEXT Object; UINT Win32Generation; BOOLEAN Win32Transport,GpuvaG3Poisoned; ADMISSION_SCHEDULER_CONTEXT SchedulerContext; ADMISSION_PREPATCHED_RENDER PrepatchedRender; ADMISSION_G3_PROCESS *GpuvaG3Process; struct _ADMISSION_RENDER_CONTEXT *GpuvaG3NextContext; volatile LONG GpuvaG3PrivateFence,GpuvaG3CancelFence,GpuvaG3CancelUncertain, GpuvaG3PreemptFence; volatile LONG GpuvaG3PrivateFence2,GpuvaG3CancelFence2,GpuvaG3PreemptFence2; ULONG GpuvaG3SecondFence; BOOLEAN GpuvaG3Closing; ULONGLONG GpuvaG3PrivateManagerGeneration; ULONGLONG GpuvaG3LastSetRootIpa; ULONG GpuvaG3SetRootCount; ULONGLONG GpuvaG3RootIpa,GpuvaG3DmaBufferVa,GpuvaG3MappingGeneration; ULONG GpuvaG3DmaBufferBytes; } ADMISSION_RENDER_CONTEXT;
+typedef struct _ADMISSION_RENDER_CONTEXT { ADMISSION_OBJECT_CONTEXT Object; UINT Win32Generation; BOOLEAN Win32Transport,GpuvaG3Poisoned; ADMISSION_SCHEDULER_CONTEXT SchedulerContext; ADMISSION_PREPATCHED_RENDER PrepatchedRender; ADMISSION_G3_PROCESS *GpuvaG3Process; struct _ADMISSION_RENDER_CONTEXT *GpuvaG3NextContext; volatile LONG GpuvaG3PrivateFence,GpuvaG3CancelFence,GpuvaG3CancelUncertain, GpuvaG3PreemptFence; volatile LONG GpuvaG3PrivateFence2,GpuvaG3CancelFence2,GpuvaG3PreemptFence2; volatile LONG GpuvaG3CancelCaller,GpuvaG3CancelCaller2; ULONG GpuvaG3SecondFence; BOOLEAN GpuvaG3Closing; ULONGLONG GpuvaG3PrivateManagerGeneration; ULONGLONG GpuvaG3LastSetRootIpa; ULONG GpuvaG3SetRootCount; ULONGLONG GpuvaG3RootIpa,GpuvaG3DmaBufferVa,GpuvaG3MappingGeneration; ULONG GpuvaG3DmaBufferBytes; } ADMISSION_RENDER_CONTEXT;
 static inline void AdmissionContextRetireFence(ADMISSION_RENDER_CONTEXT *c, ULONG f) {
   if (!c || !f) return;
   if (c->Object.FenceOutstanding == f) { c->Object.FenceOutstanding = c->GpuvaG3SecondFence; c->GpuvaG3SecondFence = 0; }

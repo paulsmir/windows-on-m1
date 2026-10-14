@@ -1,4 +1,5 @@
 #include "gpuva_g3_private.h"
+#include <intrin.h> /* _ReturnAddress (cancel-caller receipt) */
 #include "apple_agx_g3_copy_abi.h"
 #include "apple_agx_g4_submit.h"
 #include "apple_agx_g13_compute_work.h"
@@ -525,15 +526,19 @@ static BOOLEAN AdmissionG3PrivateEvictCached(ADMISSION_G3_PROCESS *p,
  * marker. The matching scene reference pins Context until PASSIVE reaping. */
 VOID AdmissionGpuvaG3PrivateCancel(ADMISSION_RENDER_CONTEXT *context,
     ULONG fence, BOOLEAN uncertain) {
-  volatile LONG *cancel;
+  volatile LONG *cancel, *caller;
   if (!context || !fence) return;
   /* Phase 5b: the marker goes to the slot that holds this fence. */
-  if ((ULONG)InterlockedCompareExchange(&context->GpuvaG3PrivateFence,0,0)==fence)
+  if ((ULONG)InterlockedCompareExchange(&context->GpuvaG3PrivateFence,0,0)==fence) {
     cancel=&context->GpuvaG3CancelFence;
-  else if ((ULONG)InterlockedCompareExchange(&context->GpuvaG3PrivateFence2,0,0)==fence)
+    caller=&context->GpuvaG3CancelCaller;
+  } else if ((ULONG)InterlockedCompareExchange(&context->GpuvaG3PrivateFence2,0,0)==fence) {
     cancel=&context->GpuvaG3CancelFence2;
-  else return;
+    caller=&context->GpuvaG3CancelCaller2;
+  } else return;
   if (uncertain) InterlockedExchange(&context->GpuvaG3CancelUncertain,1);
+  InterlockedExchange(caller,(LONG)((ULONG_PTR)_ReturnAddress() -
+      (ULONG_PTR)AdmissionGpuvaG3PrivateCancel));
   InterlockedExchange(cancel,(LONG)fence);
 }
 
@@ -4070,6 +4075,9 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
           detail.LogicalIpa[3] = (ULONG)InterlockedCompareExchange(&context->GpuvaG3CancelFence,0,0) |
               ((ULONGLONG)(ULONG)InterlockedCompareExchange(&context->GpuvaG3CancelFence2,0,0) << 32);
           detail.LogicalSegment[1] = (ULONG)InterlockedCompareExchange(&adapter->G4SubmitVirtualInFlight,0,0);
+          /* Which cancel path marked each slot (caller - PrivateCancel). */
+          detail.LogicalSegment[2] = (ULONG)InterlockedCompareExchange(&context->GpuvaG3CancelCaller,0,0);
+          detail.LogicalSegment[3] = (ULONG)InterlockedCompareExchange(&context->GpuvaG3CancelCaller2,0,0);
           detail.LogicalFlags[0] = context->Object.FenceOutstanding;
           detail.LogicalFlags[1] = context->GpuvaG3SecondFence;
           detail.LogicalFlags[2] = adapter->G4PendingCount;
