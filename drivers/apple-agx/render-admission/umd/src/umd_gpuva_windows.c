@@ -6,6 +6,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include <d3d10umddi.h>
 #pragma warning(pop)
 #include "umd_internal.h"
+#include "umd_residency_trim.h"
 #include "apple_agx_g3_copy_abi.h"
 #include "apple_agx_g4_submit.h"
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
@@ -247,6 +248,112 @@ static int wait_paging(void *context, uint64_t fence);
 static int wait_paging_at(ADMISSION_UMD_DEVICE *device, uint64_t fence,
                           UINT site, uint64_t token);
 
+/* M2-f11 (EXP1271): drop the persistent residency reference (EXP978) of idle
+ * GPU-local slots, least recently used first, until Want bytes are covered
+ * (umd_residency_trim.h). Returns the bytes dropped and their slot count. */
+static ULONGLONG trim_residency(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
+                                UINT *trimmed) {
+  UINT n=ADMISSION_UMD_SCREEN_BUFFER_SCAN(device), count=0u;
+  ULONGLONG covered=0ull;
+  HRESULT hr=E_FAIL;
+  *trimmed=0u;
+  if(!n || !device->KernelCallbacks->pfnEvictCb) return 0ull;
+  auto *view=(ADMISSION_UMD_TRIM_SLOT *)HeapAlloc(GetProcessHeap(),
+      HEAP_ZERO_MEMORY,(SIZE_T)n*sizeof(ADMISSION_UMD_TRIM_SLOT));
+  auto *chosen=(UINT *)HeapAlloc(GetProcessHeap(),0,(SIZE_T)n*sizeof(UINT));
+  auto *handles=(D3DKMT_HANDLE *)HeapAlloc(GetProcessHeap(),0,
+      (SIZE_T)n*sizeof(D3DKMT_HANDLE));
+  auto *tokens=(uint64_t *)HeapAlloc(GetProcessHeap(),0,(SIZE_T)n*sizeof(uint64_t));
+  if(view && chosen && handles && tokens) {
+    AcquireSRWLockShared(&device->ScreenBufferLock);
+    for(UINT i=0;i<n;++i) {
+      const auto *slot=&device->ScreenBuffers[i];
+      auto *v=&view[i];
+      v->Active=slot->Active;v->Resident=slot->Resident;
+      v->Transition=slot->Transition;v->CopyHeld=slot->CopyHeld;
+      v->Mapped=slot->Mapped;v->Direct=slot->Direct;
+      v->SystemDirect=slot->SystemDirect;v->Borrowed=slot->Borrowed;
+      v->KmtResidencyHeld=slot->KmtResidencyHeld;
+      v->SubmissionHolds=slot->SubmissionHolds;v->SourceHolds=slot->SourceHolds;
+      v->KernelAllocation=slot->KernelAllocation;
+      v->Bytes=slot->Bytes;v->LastUseFence=slot->LastUseFence;
+    }
+    count=AdmissionUmdTrimChoose(view,n,want,chosen,&covered);
+    for(UINT i=0;i<count;++i) {
+      handles[i]=device->ScreenBuffers[chosen[i]].KernelAllocation;
+      tokens[i]=device->ScreenBuffers[chosen[i]].Token;
+    }
+    ReleaseSRWLockShared(&device->ScreenBufferLock);
+  }
+  if(count) {
+    D3DDDICB_EVICT evict={};
+    /* EXP1124: drop the references only; VidMm pages out what it needs. */
+    evict.Flags.EvictOnlyIfNecessary=1u;
+    evict.NumAllocations=count;evict.AllocationList=handles;
+    hr=device->KernelCallbacks->pfnEvictCb(device->RuntimeDevice.handle,&evict);
+    if(SUCCEEDED(hr)) {
+      AcquireSRWLockExclusive(&device->ScreenBufferLock);
+      for(UINT i=0;i<count;++i) {
+        auto *slot=&device->ScreenBuffers[chosen[i]];
+        if(slot->Token==tokens[i] && slot->KernelAllocation==handles[i])
+          slot->Resident=FALSE;
+      }
+      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+      for(UINT i=0;i<count;++i)
+        va_record(device,8u,tokens[i],handles[i],0,view[chosen[i]].Bytes,hr);
+    }
+    UINT values[7]={count,(UINT)covered,(UINT)(covered>>32),(UINT)want,
+        (UINT)(want>>32),(UINT)evict.NumBytesToTrim,
+        (UINT)(evict.NumBytesToTrim>>32)};
+    AdmissionUmdDiagnostic("measure-trim",hr,values,ARRAYSIZE(values));
+  }
+  if(view) HeapFree(GetProcessHeap(),0,view);
+  if(chosen) HeapFree(GetProcessHeap(),0,chosen);
+  if(handles) HeapFree(GetProcessHeap(),0,handles);
+  if(tokens) HeapFree(GetProcessHeap(),0,tokens);
+  if(!count || FAILED(hr)) return 0ull;
+  *trimmed=count;
+  return covered;
+}
+
+/* M2-f11: pfnMakeResidentCb under the budget contract (Microsoft,
+ * PFND3DDDI_MAKERESIDENTCB). E_OUTOFMEMORY changed no residency count; trim
+ * NumBytesToTrim bytes of idle slots and retry, until the request succeeds or
+ * nothing more can be trimmed. The final result is the caller's. */
+static HRESULT residency_request(ADMISSION_UMD_DEVICE *device,
+    D3DDDI_MAKERESIDENT *request, D3DKMT_HANDLE *handles, UINT count,
+    UINT *priorities) {
+  UINT rounds=0u, trimmed=0u;
+  ULONGLONG trimmedBytes=0ull;
+  HRESULT hr;
+  for(;;) {
+    ZeroMemory(request,sizeof(*request));
+    request->hPagingQueue=device->PagingQueue;
+    request->NumAllocations=count;request->AllocationList=handles;
+    request->PriorityList=priorities;
+    hr=device->KernelCallbacks->pfnMakeResidentCb(
+        device->RuntimeDevice.handle,request);
+    if(hr!=E_OUTOFMEMORY || rounds>=ADMISSION_UMD_TRIM_ROUNDS) break;
+    UINT slots=0u;
+    ULONGLONG freed=trim_residency(device,request->NumBytesToTrim,&slots);
+    ++rounds;
+    if(!slots) break;
+    trimmed+=slots;trimmedBytes+=freed;
+  }
+  if(FAILED(hr) && hr!=E_PENDING) {
+    UINT values[8]={count,rounds,trimmed,(UINT)trimmedBytes,
+        (UINT)(trimmedBytes>>32),(UINT)request->NumBytesToTrim,
+        (UINT)(request->NumBytesToTrim>>32),request->NumAllocations};
+    AdmissionUmdDiagnostic("reject-make-resident",hr,values,ARRAYSIZE(values));
+  } else if(rounds) {
+    UINT values[5]={count,rounds,trimmed,(UINT)trimmedBytes,
+        (UINT)(trimmedBytes>>32)};
+    AdmissionUmdDiagnostic("measure-make-resident-trimmed",hr,values,
+                           ARRAYSIZE(values));
+  }
+  return hr;
+}
+
 /* EXP1004: VidMm writes invalid PTEs when it maps a non-resident allocation
  * and, for fresh BOs, did not re-send valid ones after the later persistent
  * MakeResident (EXP1001 leaf ring; EXP1003 touch did not repair them). Take
@@ -262,11 +369,7 @@ static void resident_before_map(ADMISSION_UMD_DEVICE *device, uint64_t token,
   if(!needed || !device->KernelCallbacks->pfnMakeResidentCb) return;
   UINT priority=D3DDDI_ALLOCATIONPRIORITY_NORMAL;
   D3DDDI_MAKERESIDENT request={};
-  request.hPagingQueue=device->PagingQueue;
-  request.NumAllocations=1;request.AllocationList=&handle;
-  request.PriorityList=&priority;
-  HRESULT hr=device->KernelCallbacks->pfnMakeResidentCb(
-      device->RuntimeDevice.handle,&request);
+  HRESULT hr=residency_request(device,&request,&handle,1u,&priority);
   va_record(device,6u,token,handle,0,request.PagingFenceValue,hr);
   if(FAILED(hr) && hr!=E_PENDING) return;
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
@@ -423,12 +526,7 @@ static int make_resident(void *context, const uint64_t *tokens,
     return 1;
   }
   D3DDDI_MAKERESIDENT request = {};
-  request.hPagingQueue = device->PagingQueue;
-  request.NumAllocations = pending;
-  request.AllocationList = handles;
-  request.PriorityList = priorities;
-  HRESULT hr = device->KernelCallbacks->pfnMakeResidentCb(
-      device->RuntimeDevice.handle, &request);
+  HRESULT hr = residency_request(device, &request, handles, pending, priorities);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   measure_g4_phase(1u,phase_start,pending,0u,hr);
 #endif
@@ -708,10 +806,7 @@ static int replace_canonical(ADMISSION_UMD_DEVICE *device,
   if(ok) {
     UINT priority=D3DDDI_ALLOCATIONPRIORITY_NORMAL;
     D3DDDI_MAKERESIDENT request={};
-    request.hPagingQueue=device->PagingQueue;
-    request.NumAllocations=1;request.AllocationList=&fresh;
-    request.PriorityList=&priority;
-    hr=device->KernelCallbacks->pfnMakeResidentCb(device->RuntimeDevice.handle,&request);
+    hr=residency_request(device,&request,&fresh,1u,&priority);
     va_record(device,6u,slot->Token,fresh,0,request.PagingFenceValue,hr);
     ok=(SUCCEEDED(hr) || hr==E_PENDING) &&
         (hr!=E_PENDING || (request.PagingFenceValue &&
@@ -1026,6 +1121,29 @@ int AdmissionUmdGpuvaPublishDirectMap(ADMISSION_UMD_DEVICE *device,
 
 /* EXP995: before the first CPU map of a slot, bring a pending GPU result
  * into its staging. Returns 0 only when that download failed. */
+/* M2-f11: a trimmed slot is made resident again before the CPU copies its
+ * canonical allocation; the copy escape needs its valid PTEs. */
+static int restore_residency(ADMISSION_UMD_DEVICE *device, uint64_t token) {
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  auto *slot=find_slot(device,token);
+  D3DKMT_HANDLE handle=slot && !slot->Resident ? slot->KernelAllocation : 0;
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  if(!handle) return 1;
+  if(!device->KernelCallbacks->pfnMakeResidentCb) return 0;
+  UINT priority=D3DDDI_ALLOCATIONPRIORITY_NORMAL;
+  D3DDDI_MAKERESIDENT request={};
+  HRESULT hr=residency_request(device,&request,&handle,1u,&priority);
+  va_record(device,6u,token,handle,0,request.PagingFenceValue,hr);
+  if((FAILED(hr) && hr!=E_PENDING) || (hr==E_PENDING && !request.PagingFenceValue))
+    return 0;
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  slot=find_slot(device,token);
+  if(slot && slot->KernelAllocation==handle) slot->Resident=TRUE;
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  return hr!=E_PENDING ||
+      wait_paging_at(device,request.PagingFenceValue,6u,token);
+}
+
 int AdmissionUmdGpuvaPrepareCpuMap(ADMISSION_UMD_DEVICE *device,uint64_t token) {
   AcquireSRWLockShared(&device->ScreenBufferLock);
   auto *slot=find_slot(device,token);
@@ -1033,6 +1151,7 @@ int AdmissionUmdGpuvaPrepareCpuMap(ADMISSION_UMD_DEVICE *device,uint64_t token) 
       !slot->SubmissionHolds && slot->GpuWritten;
   ReleaseSRWLockShared(&device->ScreenBufferLock);
   if(!pending) return 1;
+  if(!restore_residency(device,token)) return 0;
   if(!transfer_slot(device,slot,true,NULL,NULL)) return 0;
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
   slot->GpuWritten=FALSE;

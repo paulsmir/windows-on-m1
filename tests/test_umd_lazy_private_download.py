@@ -66,6 +66,9 @@ static SLOT *find_slot(ADMISSION_UMD_DEVICE *d,uint64_t t){
   for(unsigned i=0;i<16;++i) if(d->ScreenBuffers[i].Active && d->ScreenBuffers[i].Token==t) return &d->ScreenBuffers[i];
   return nullptr; }
 static void AdmissionUmdDiagnostic(const char *, HRESULT, const UINT *, UINT) {}
+/* restore_residency (M2-f11) is a no-op for slots that were never trimmed,
+ * as in this replay; the trim loop has its own replay. */
+static int restore_residency(ADMISSION_UMD_DEVICE *, uint64_t) { return 1; }
 @@FUNCS@@
 int main(){
  CB cb={(void*)1,(void*)1}; ADMISSION_UMD_DEVICE d={}; d.KernelCallbacks=&cb;

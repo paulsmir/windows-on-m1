@@ -71,6 +71,16 @@ static int wait_paging(void*, uint64_t f){ order+="W"; return f==9 || f==10; }
 static int wait_paging_at(ADMISSION_UMD_DEVICE *d, uint64_t f, UINT, uint64_t){ return wait_paging(d,f); }
 static void va_record(const void*, UINT, ULONGLONG, D3DKMT_HANDLE, ULONGLONG, ULONGLONG, HRESULT) {}
 static void AdmissionUmdDiagnostic(const char*, HRESULT, const UINT*, UINT) {}
+/* residency_request (M2-f11) is one pfnMakeResidentCb call whenever VidMm
+ * does not refuse for budget, which this replay never does; the trim loop has
+ * its own replay (test_umd_persistent_residency). */
+static HRESULT residency_request(ADMISSION_UMD_DEVICE *device, D3DDDI_MAKERESIDENT *request,
+    D3DKMT_HANDLE *handles, UINT count, UINT *priorities) {
+  memset(request, 0, sizeof(*request));
+  request->hPagingQueue = device->PagingQueue; request->NumAllocations = count;
+  request->AllocationList = handles; request->PriorityList = priorities;
+  return device->KernelCallbacks->pfnMakeResidentCb(device->RuntimeDevice.handle, request);
+}
 @@FUNCS@@
 int main(){
   CB cb={make,map}; ADMISSION_UMD_DEVICE d={}; d.Magic=ADMISSION_UMD_DEVICE_MAGIC; d.KernelCallbacks=&cb; d.PagingQueue=3;

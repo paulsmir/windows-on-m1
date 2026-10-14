@@ -75,6 +75,16 @@ static void AdmissionUmdVaRecordDeallocate(ADMISSION_UMD_DEVICE*, uint64_t, D3DK
 static void AdmissionUmdStagingInvalidate(SYNC *s){ s->Valid=FALSE; }
 static void AdmissionUmdStagingChunksInvalidate(CHUNKS *c){ c->Valid=FALSE; }
 static void AdmissionUmdDiagnostic(const char*, HRESULT, const UINT*, UINT) {}
+/* residency_request (M2-f11) is one pfnMakeResidentCb call whenever VidMm
+ * does not refuse for budget, which this replay never does; the trim loop has
+ * its own replay (test_umd_persistent_residency). */
+static HRESULT residency_request(ADMISSION_UMD_DEVICE *device, D3DDDI_MAKERESIDENT *request,
+    D3DKMT_HANDLE *handles, UINT count, UINT *priorities) {
+  memset(request, 0, sizeof(*request));
+  request->hPagingQueue = device->PagingQueue; request->NumAllocations = count;
+  request->AllocationList = handles; request->PriorityList = priorities;
+  return device->KernelCallbacks->pfnMakeResidentCb(device->RuntimeDevice.handle, request);
+}
 @@FUNCS@@
 static SLOT fresh_slot(){ SLOT s={}; s.Token=7; s.Flags=AppleAgxWin32BufferGpuWrite; s.Bytes=0x30000;
   s.KernelAllocation=0x40; s.CanonicalGpuVa=0x1000000; s.Sync.Valid=s.Chunks.Valid=TRUE; return s; }

@@ -6,6 +6,11 @@ so idle trimming paged the whole working set out and in at the frame rate.
 Invariant: a slot takes exactly one MakeResident reference in its lifetime;
 ending a submission only releases its copy holds; later submissions call
 MakeResident only for slots that are not resident yet.
+
+M2-f11 (EXP1271): a request VidMm refuses for budget (E_OUTOFMEMORY with
+NumBytesToTrim) drops the reference of idle GPU-local slots, least recently
+used first, and is retried; slots held by a submission are never trimmed, and
+the loop ends when nothing more can be trimmed.
 """
 from pathlib import Path
 import re
@@ -39,6 +44,11 @@ typedef unsigned long long ULONGLONG; typedef size_t SIZE_T; typedef void* HANDL
 #define FALSE 0
 #define S_OK 0
 #define E_PENDING ((HRESULT)0x8000000Au)
+#define E_OUTOFMEMORY ((HRESULT)0x8007000Eu)
+#define E_FAIL ((HRESULT)0x80004005u)
+#define HEAP_ZERO_MEMORY 8u
+#define ZeroMemory(p,n) memset((p),0,(n))
+#define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
 #define SUCCEEDED(x) ((x)>=0)
 #define FAILED(x) ((x)<0)
 #define D3DDDI_ALLOCATIONPRIORITY_NORMAL 0x78000000u
@@ -52,21 +62,27 @@ static void HeapFree(void*,unsigned,void*p){free(p);}
 typedef int SRWLOCK;
 static void AcquireSRWLockExclusive(SRWLOCK*){} static void ReleaseSRWLockExclusive(SRWLOCK*){}
 static void AcquireSRWLockShared(SRWLOCK*){} static void ReleaseSRWLockShared(SRWLOCK*){}
-struct D3DDDI_MAKERESIDENT { HANDLE hPagingQueue; UINT NumAllocations; const D3DKMT_HANDLE*AllocationList; const UINT*PriorityList; ULONGLONG PagingFenceValue; };
-struct SLOT { uint64_t Token; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,Mapped,Resident; UINT SourceHolds,SubmissionHolds;
-  D3DKMT_HANDLE KernelAllocation,StagingAllocation; unsigned char *PrivateStaging; uint64_t CanonicalGpuVa; void*NativeBo; void*NativeMapRelease; };
+#include "umd_residency_trim.h"
+struct D3DDDI_MAKERESIDENT { HANDLE hPagingQueue; UINT NumAllocations; const D3DKMT_HANDLE*AllocationList; const UINT*PriorityList; ULONGLONG PagingFenceValue; ULONGLONG NumBytesToTrim; };
+struct SLOT { uint64_t Token; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,Mapped,Resident,Borrowed,KmtResidencyHeld; UINT SourceHolds,SubmissionHolds;
+  D3DKMT_HANDLE KernelAllocation,StagingAllocation; unsigned char *PrivateStaging; uint64_t CanonicalGpuVa,Bytes,LastUseFence; void*NativeBo; void*NativeMapRelease; };
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
-static unsigned made, evicted, made_handles;
-static HRESULT mk(HANDLE,D3DDDI_MAKERESIDENT*r){++made;made_handles+=r->NumAllocations;r->PagingFenceValue=7;return E_PENDING;}
-struct D3DDDICB_EVICT { UINT Flags; UINT NumAllocations; const D3DKMT_HANDLE*AllocationList; ULONGLONG NumBytesToTrim; };
-static HRESULT ev(HANDLE,const D3DDDICB_EVICT*){++evicted;return S_OK;}
+static unsigned made, evicted, made_handles, refusals;  /* refusals: next mk calls refused for budget */
+static D3DKMT_HANDLE last_evicted[16]; static unsigned last_evicted_count;
+static HRESULT mk(HANDLE,D3DDDI_MAKERESIDENT*r){++made;
+  if(refusals){--refusals;r->NumBytesToTrim=16u<<20;return E_OUTOFMEMORY;}
+  made_handles+=r->NumAllocations;r->PagingFenceValue=7;return E_PENDING;}
+struct D3DDDICB_EVICT { struct { UINT EvictOnlyIfNecessary; } Flags; UINT NumAllocations; const D3DKMT_HANDLE*AllocationList; ULONGLONG NumBytesToTrim; };
+static HRESULT ev(HANDLE,const D3DDDICB_EVICT*e){++evicted;assert(e->Flags.EvictOnlyIfNecessary);
+  last_evicted_count=e->NumAllocations;for(UINT i=0;i<e->NumAllocations;++i)last_evicted[i]=e->AllocationList[i];return S_OK;}
+static void AdmissionUmdDiagnostic(const char*,HRESULT,const UINT*,UINT){}
 struct CB { HRESULT(*pfnMakeResidentCb)(HANDLE,D3DDDI_MAKERESIDENT*); HRESULT(*pfnEvictCb)(HANDLE,const D3DDDICB_EVICT*); };
 struct ADMISSION_UMD_DEVICE { UINT Magic; SLOT ScreenBuffers[16]; SRWLOCK ScreenBufferLock; BOOL DrawTerminal,ScreenClosing; HANDLE PagingQueue; CB*KernelCallbacks; struct{HANDLE handle;}RuntimeDevice; };
 static void va_record(const void*,UINT,unsigned long long,D3DKMT_HANDLE,unsigned long long,unsigned long long,HRESULT){}
 @@FUNCS@@
 int main(){
  CB cb={mk,ev}; ADMISSION_UMD_DEVICE d={}; d.Magic=ADMISSION_UMD_DEVICE_MAGIC; d.PagingQueue=(HANDLE)1; d.KernelCallbacks=&cb;
- for(unsigned i=0;i<3;++i){SLOT&s=d.ScreenBuffers[i];s.Active=1;s.Token=10+i;s.KernelAllocation=0x100+i;s.StagingAllocation=0x200+i;s.CanonicalGpuVa=0x10000*(i+1);}
+ for(unsigned i=0;i<6;++i){SLOT&s=d.ScreenBuffers[i];s.Active=1;s.Token=10+i;s.KernelAllocation=0x100+i;s.StagingAllocation=0x200+i;s.CanonicalGpuVa=0x10000*(i+1);s.Bytes=16u<<20;}
  uint64_t t01[2]={10,11}, t012[3]={10,11,12}; uint64_t fence=0;
  /* First submit: both slots become resident with one call. */
  assert(make_resident(&d,t01,2,&fence)==2 && fence==7 && made==1 && made_handles==2);
@@ -79,6 +95,30 @@ int main(){
  /* A new slot joins: only it is made resident. */
  assert(make_resident(&d,t012,3,&fence)==2 && made==2 && made_handles==3 && d.ScreenBuffers[2].Resident);
  assert(evict(&d,t012,3)==1 && made==2);
+ /* M2-f11: slot 13 joins while the budget is full. Slots 10-12 are idle
+  * (last used at fences 5, 3, 9); 11 is the least recently used. */
+ d.ScreenBuffers[0].LastUseFence=5; d.ScreenBuffers[1].LastUseFence=3; d.ScreenBuffers[2].LastUseFence=9;
+ uint64_t t3[1]={13}; refusals=1; made=0; evicted=0;
+ assert(make_resident(&d,t3,1,&fence)==2 && fence==7 && made==2 && evicted==1);
+ assert(last_evicted_count==1 && last_evicted[0]==0x101);
+ assert(!d.ScreenBuffers[1].Resident && d.ScreenBuffers[0].Resident && d.ScreenBuffers[2].Resident && d.ScreenBuffers[3].Resident);
+ assert(evict(&d,t3,1)==1);
+ /* A slot held by an in-flight submission is never trimmed; a trimmed slot
+  * named again is made resident again. */
+ d.ScreenBuffers[3].LastUseFence=12;
+ d.ScreenBuffers[0].SubmissionHolds=1; refusals=1; made=0; evicted=0;
+ uint64_t t4[2]={14,11};
+ assert(make_resident(&d,t4,2,&fence)==2 && made==2 && evicted==1 && last_evicted[0]==0x102);
+ assert(d.ScreenBuffers[0].Resident && d.ScreenBuffers[1].Resident && d.ScreenBuffers[4].Resident && !d.ScreenBuffers[2].Resident);
+ assert(evict(&d,t4,2)==1);
+ /* A budget that never fits: everything idle is trimmed, the request fails,
+  * its copy holds are released and the loop stops. */
+ refusals=100; made=0; evicted=0;
+ uint64_t t5[1]={15};
+ assert(make_resident(&d,t5,1,&fence)==0);
+ assert(!d.ScreenBuffers[5].Resident && !d.ScreenBuffers[5].CopyHeld && !d.ScreenBuffers[5].SubmissionHolds);
+ assert(d.ScreenBuffers[0].Resident);   /* still held in flight */
+ assert(made<=ADMISSION_UMD_TRIM_ROUNDS+1u && evicted>=1);
  puts("EXP978 persistent residency: PASS");
 }
 '''
@@ -89,14 +129,17 @@ class PersistentResidency(unittest.TestCase):
         text = SRC.read_text()
         funcs = '\n'.join(function(text, n) for n in
                           ('find_slot', 'release_copies', 'allocation_handle',
-                           'translate_handles', 'evict', 'make_resident'))
+                           'translate_handles', 'evict', 'trim_residency',
+                           'residency_request', 'make_resident'))
         funcs = funcs.replace('auto *slot', 'SLOT *slot')
         body = BODY.replace('@@FUNCS@@', funcs)
         with tempfile.TemporaryDirectory() as tmp:
             src = Path(tmp) / 'replay.cpp'; exe = Path(tmp) / 'replay'
             src.write_text(body)
             built = subprocess.run(['clang++', '-std=c++17', '-Wall', '-Wno-unused-function',
-                                    '-fsanitize=address,undefined', str(src), '-o', str(exe)],
+                                    '-fsanitize=address,undefined',
+                                    '-I', str(ROOT / 'drivers/apple-agx/render-admission/umd/include'),
+                                    str(src), '-o', str(exe)],
                                    text=True, capture_output=True)
             self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
             ran = subprocess.run([str(exe)], text=True, capture_output=True)
