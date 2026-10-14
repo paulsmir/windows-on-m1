@@ -5,7 +5,9 @@
  * 2. On the AGX adapter, create render-target textures and clear each
  *    (the clear makes VidMm place it) until a creation fails, the device is
  *    removed or <max-MiB> is reached.
- * 3. Clear and read back the first texture to show whether the device still
+ * 3. Read back the first texture as it is (it was cleared first, so a trimmed
+ *    and restored copy must still hold that colour: RESTORE texel 0xffbf8040),
+ *    then clear it red and read it back to show whether the device still
  *    works, then free everything.
  * Each line is written through to <out.txt>, so the log survives a crash.
  * Usage: agx_mempressure.exe <out.txt> <leave-MiB> <max-MiB> [height]
@@ -182,6 +184,17 @@ int main(int argc, char **argv) {
     hr = ID3D11Device_CreateTexture2D(device, &sd, NULL, &staging);
     if (SUCCEEDED(hr)) {
       D3D11_BOX box = {0, 0, 0, 16, 16, 1};
+      /* M2-f11: texture 0 is the least recently used one, the first a budget
+       * trim drops; its content must survive the eviction and restore. */
+      ID3D11DeviceContext_CopySubresourceRegion(ctx, (ID3D11Resource *)staging, 0, 0, 0, 0,
+                                                (ID3D11Resource *)tex[0], 0, &box);
+      hr = ID3D11DeviceContext_Map(ctx, (ID3D11Resource *)staging, 0, D3D11_MAP_READ, 0, &map);
+      if (SUCCEEDED(hr)) {
+        say("RESTORE texel 0x%08lx", (unsigned long)*(const UINT *)map.pData);
+        ID3D11DeviceContext_Unmap(ctx, (ID3D11Resource *)staging, 0);
+      } else {
+        say("RESTORE map 0x%08lx", (unsigned long)hr);
+      }
       ID3D11DeviceContext_ClearRenderTargetView(ctx, rtv[0], colour);
       ID3D11DeviceContext_CopySubresourceRegion(ctx, (ID3D11Resource *)staging, 0, 0, 0, 0,
                                                 (ID3D11Resource *)tex[0], 0, &box);
