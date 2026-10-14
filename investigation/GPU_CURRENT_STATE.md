@@ -1,6 +1,29 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-14T16:00Z (read this first)
+## Current as of 2026-10-14T16:55Z (read this first)
+
+Installed: PACKAGE1277 (build tree 5137c009 = M2 complete + G4-r1 + G4-r2a +
+G4-r2b; the next pipeline's rec1277h rollback removes it). m1n1 fa45bc58 r2.
+- M2 (flexible memory) COMPLETE (see 16:00Z entry).
+- G4 (GPU recovery) COMPLETE for every hang the firmware detects (EXP1277):
+  G4-r1 the KMD deadline never stops the firmware (4 jobs past 500 ms
+  completed); G4-r2a 3D progress interval 900 ms (valid 0.1-1.3 s jobs run);
+  G4-r2b a dropped job is DXGK_INTERRUPT_DMA_PAGE_FAULTED -> only that app's
+  device is removed (DXGI_ERROR_DEVICE_HUNG), DWM/system continue, no TDR,
+  no bugcheck. Remaining (not observed): a hang the firmware does not detect
+  reaches dxgkrnl's TDR, where ResetEngine/ResetFromTimeout cannot restart
+  retained firmware (0x116) -- firmware-preserving ResetEngine is later work.
+- Open side task: paging_windows.c still uses the reserved
+  DXGK_INTERRUPT_DMA_FAULTED (EXP896 0x119) -- proposed as its own session.
+- Resubmission defect: no occurrence in EXP1265-EXP1277 (no
+  Wom1G4SubmitFailure); stays evidence-driven.
+- NEXT: the D3D phase (investigation/analysis/D3D-phase-plan.md step 3,
+  groundwork: compute work inside render submissions, MRT, MSAA, queries,
+  then the D3D11 DDI / FL 11_0 / SM5).
+Tools: agx_longjob 229c110c (fastest-of-three calibration, 'hang' step),
+agx_mempressure 458c5881 (budget lines, RESTORE readback).
+
+## Current as of 2026-10-14T16:00Z
 
 Installed: PACKAGE1275 (build tree 728f0e47 = M2 complete + G4-r1; the next
 pipeline's rec1275h rollback removes it). m1n1 fa45bc58 r2 (b720f8e0).
