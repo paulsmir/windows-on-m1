@@ -218,7 +218,11 @@ int main(void) {
       assert(!AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
       packet.Render.SampleSizeBytes = 8u;
+      /* D3D-G3: an occlusion heap binds; a misaligned one does not. */
       packet.Render.IspOclQryBase = 0x36000000ULL;
+      assert(AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Render.IspOclQryBase = 0x36000004ULL;
       assert(!AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
       packet.Render.IspOclQryBase = 0ULL;
@@ -327,6 +331,27 @@ int main(void) {
           assert(get64(list + i * 16u) == 0u && get64(list + i * 16u + 8u) == 0u);
         assert((get64(list + 16u * 16u) & 0xffffffffULL) == view.AttachmentCount);
       }
+      /* D3D-G3: the occlusion heap is isp_oclqry_base in JobParameters1
+       * (work+0xd0) and JobParameters3 (work+0x4d8), as Asahi
+       * queue/render.rs fills both; a render without one leaves them 0. */
+      assert(get64(objects[18].Data + 0xd0u) == 0u &&
+             get64(objects[18].Data + 0x4d8u) == 0u);
+      assert(AppleAgxRenderTemplateMaterialize(
+          arena, AppleAgxRenderTemplateBytes(), &roots));
+      assert(AppleAgxRenderTemplateBuildRelocationObjectsRebased(
+          arena, AppleAgxRenderTemplateBytes(), 0x800000000ULL,
+          0x1503800000ULL, 0x1503800000ULL,
+          AppleAgxRenderTemplateBytes(), objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT, &roots));
+      packet.Render.IspOclQryBase = 0x36000000ULL;
+      assert(AppleAgxG4BuildTa3d(&view, arena,
+          AppleAgxRenderTemplateBytes(), 1u, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      assert(get64(objects[18].Data + 0xd0u) == 0x36000000ULL &&
+             get64(objects[18].Data + 0x4d8u) == 0x36000000ULL);
+      /* Neighbours: JP1 zls_pixels/zls_ctrl, JP3 scissor array. */
+      assert(get64(objects[18].Data + 0x4c8u) == render.IspScissorBase);
+      packet.Render.IspOclQryBase = 0ULL;
       /* Dynamic TVB (Asahi buffer.rs ensure_blocks): the KMD backs the first
        * HeapBlocks of the 32-block window and the buffer manager, InitBM and
        * BlockControl describe exactly those blocks. A 1280x720 render needs

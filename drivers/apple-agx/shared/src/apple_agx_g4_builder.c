@@ -154,7 +154,7 @@ APPLE_AGX_BOOL AppleAgxG4BindNativeObjects(
       (render.Flags & (1u << 2)) == 0u ||
       (render.Flags & ~((1u << 1) | (1u << 2) | (1u << 18))) != 0u ||
       !render.VdmCtrlStreamBase || !render.IspScissorBase ||
-      !render.IspDbiasBase || render.IspOclQryBase ||
+      !render.IspDbiasBase || (render.IspOclQryBase & 7ULL) ||
       !g4_zls_valid(&render) || color.Pad || color.Flags ||
       color.Pointer < 0x10000ULL || color.Size < minimum ||
       color.Size > 0xffffffffULL)
@@ -282,6 +282,11 @@ APPLE_AGX_BOOL AppleAgxG4PatchRenderScalars(
   g4_put64(work + 0x4c8u, Render->IspScissorBase);
   g4_put64(work + 0xa8u, Render->IspDbiasBase);
   g4_put64(work + 0x4b8u, Render->IspDbiasBase);
+  /* D3D-G3: isp_oclqry_base in JobParameters1 (between isp_zls_pixels and
+   * zls_ctrl) and JobParameters3 (after the dbias and scissor arrays), as
+   * Asahi fw/fragment.rs and queue/render.rs; 0 without occlusion queries. */
+  g4_put64(work + 0xd0u, Render->IspOclQryBase);
+  g4_put64(work + 0x4d8u, Render->IspOclQryBase);
   g4_put64(work + 0x48u, Render->PppMultisampleCtrl);
   g4_put64(work + 0x98u, Render->PppMultisampleCtrl);
   g4_put64(ta + 0x90u, Render->PppMultisampleCtrl);

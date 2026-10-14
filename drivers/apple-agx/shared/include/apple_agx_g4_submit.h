@@ -182,6 +182,11 @@ typedef struct {
 } APPLE_AGX_G4_COMPUTE_ENVELOPE;
 #define APPLE_AGX_G4_SAMPLER_BYTES 16u
 #define APPLE_AGX_G4_MAX_SAMPLERS 1024u
+/* D3D-G3: the ISP writes one u64 per occlusion query at IspOclQryBase +
+ * 8 * index; the PPP FRAGMENT_OCCLUSION_QUERY index is 15 bits (Mesa genxml
+ * cmdbuf.xml, AGX_MAX_OCCLUSION_QUERIES), so the hardware reaches 256 KiB. */
+#define APPLE_AGX_G4_OCCLUSION_QUERIES 32768u
+#define APPLE_AGX_G4_OCCLUSION_HEAP_BYTES (APPLE_AGX_G4_OCCLUSION_QUERIES * 8u)
 #define APPLE_AGX_G4_CDM_STREAM_MAX_BYTES 0x10000000u
 
 /* The current MIT Asahi UAPI render payload. Offset and size assertions in

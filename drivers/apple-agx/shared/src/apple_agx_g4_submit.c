@@ -50,11 +50,15 @@ static int check_access(AGX4_ACCESS_STATE *state, unsigned long long va,
 static APPLE_AGX_G4_PARSE_RESULT validate_render(
     const unsigned char *data, AGX4_ACCESS_STATE *access) {
   APPLE_AGX_G4_NATIVE_RENDER render;
-  struct address { unsigned long long Va; int Write; } addresses[19];
+  struct address {
+    unsigned long long Va; unsigned int Bytes; int Write;
+  } addresses[19];
   unsigned int index, count = 0u;
-#define AGX4_ADDRESS(value, write) do { \
-  addresses[count].Va = (value); addresses[count].Write = (write); ++count; \
+#define AGX4_RANGE(value, bytes, write) do { \
+  addresses[count].Va = (value); addresses[count].Bytes = (bytes); \
+  addresses[count].Write = (write); ++count; \
 } while (0)
+#define AGX4_ADDRESS(value, write) AGX4_RANGE(value, 1u, write)
   memcpy(&render, data, sizeof(render));
   if ((render.Flags & ~((1u << 0) | (1u << 1) | (1u << 2) |
                         (1u << 18))) != 0u ||
@@ -84,7 +88,9 @@ static APPLE_AGX_G4_PARSE_RESULT validate_render(
   AGX4_ADDRESS(render.FragmentHelper.Data, 0);
   AGX4_ADDRESS(render.IspScissorBase, 0);
   AGX4_ADDRESS(render.IspDbiasBase, 0);
-  AGX4_ADDRESS(render.IspOclQryBase, 1);
+  /* D3D-G3: the ISP may write every slot of the occlusion heap. */
+  if (render.IspOclQryBase & 7ULL) return AppleAgxG4ParseInvalid;
+  AGX4_RANGE(render.IspOclQryBase, APPLE_AGX_G4_OCCLUSION_HEAP_BYTES, 1);
   AGX4_ADDRESS(render.Depth.Base, 1);
   AGX4_ADDRESS(render.Depth.CompBase, 1);
   AGX4_ADDRESS(render.Stencil.Base, 1);
@@ -95,14 +101,15 @@ static APPLE_AGX_G4_PARSE_RESULT validate_render(
   AGX4_ADDRESS(usc_va(render.PartialBg.Usc), 0);
   AGX4_ADDRESS(usc_va(render.PartialEot.Usc), 0);
 #undef AGX4_ADDRESS
+#undef AGX4_RANGE
   for (index = 0u; index < count; ++index) {
     if (!addresses[index].Va) {
       if (index == 0u) return AppleAgxG4ParseInvalid;
       continue;
     }
-    if (!valid_va(addresses[index].Va, 1u))
+    if (!valid_va(addresses[index].Va, addresses[index].Bytes))
       return AppleAgxG4ParseInvalid;
-    if (!check_access(access, addresses[index].Va, 1u,
+    if (!check_access(access, addresses[index].Va, addresses[index].Bytes,
                 addresses[index].Write, AppleAgxG4AccessRender))
       return AppleAgxG4ParseUnmapped;
   }

@@ -52,6 +52,19 @@ static int diagnostic_access(void *opaque, unsigned long long va,
   return ++state->Calls != state->FailAt;
 }
 
+/* D3D-G3: the access the parser asks for at the occlusion heap. */
+typedef struct { unsigned long long Va; unsigned int Bytes, Seen; int Write; } HEAP_ACCESS;
+static int heap_access(void *opaque, unsigned long long va,
+    unsigned int bytes, int write, APPLE_AGX_G4_ACCESS_KIND kind,
+    unsigned int ordinal) {
+  HEAP_ACCESS *heap = opaque;
+  (void)ordinal;
+  if (kind == AppleAgxG4AccessRender && va == heap->Va) {
+    ++heap->Seen; heap->Bytes = bytes; heap->Write = write;
+  }
+  return 1;
+}
+
 int main(void) {
   PACKET packet = {0}, bad;
   APPLE_AGX_G4_SUBMIT_VIEW view = {0};
@@ -229,6 +242,27 @@ int main(void) {
       assert(failure.Write == (fail == 2u || fail == 10u ||
           (fail >= 11u && fail <= 14u)));
     }
+  }
+  {
+    /* D3D-G3: every u64 slot a 15-bit query index reaches is written by the
+     * ISP, so the whole heap must be mapped writable and 8-byte aligned. */
+    PACKET heap = packet;
+    HEAP_ACCESS state = {0x100000ULL, 0u, 0u, 0};
+    heap.render_payload.IspOclQryBase = 0x100000ULL;
+    assert(AppleAgxG4ParseSubmitEx(&heap, sizeof(heap), sizeof(heap),
+        0x20000ULL, heap.header.CommandBytes, heap_access, &state, &view,
+        NULL) == AppleAgxG4ParseOk);
+    assert(state.Seen == 1u && state.Write &&
+           state.Bytes == APPLE_AGX_G4_OCCLUSION_HEAP_BYTES);
+    heap.render_payload.IspOclQryBase = 0x100004ULL;
+    state.Va = 0x100004ULL;
+    assert(AppleAgxG4ParseSubmitEx(&heap, sizeof(heap), sizeof(heap),
+        0x20000ULL, heap.header.CommandBytes, heap_access, &state, &view,
+        NULL) == AppleAgxG4ParseInvalid);
+    heap.render_payload.IspOclQryBase = (1ULL << 39) - 0x10000ULL;
+    assert(AppleAgxG4ParseSubmitEx(&heap, sizeof(heap), sizeof(heap),
+        0x20000ULL, heap.header.CommandBytes, heap_access, &state, &view,
+        NULL) == AppleAgxG4ParseInvalid);
   }
   return 0;
 }
