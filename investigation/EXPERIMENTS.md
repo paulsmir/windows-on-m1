@@ -55060,3 +55060,17 @@ WINDOWS CONTRACT: MmAllocatePagesForMdlEx SkipBytes 2 MiB with MM_ALLOCATE_REQUI
 AGX/ASAHI CONTRACT: unchanged (window pages are plain guest RAM; 16 KiB UAT).
 TRANSLATION: granule -> (slab, slot) -> PA = slab.Pa[slot]; MAP_AT spans over adjacent slots.
 WHAT IS STILL UNKNOWN: how often Windows has a free 2 MiB contiguous chunk mid-session (SlabContiguous vs SlabChunked), and the slab slack in memory. Readings: fps ~46.4 with low commit cost means M2-f3 is complete (then the larger segment 3 and budget groups); fps still low with low commit cost means another demand-mode cost. Evidence: evidence/EXP1262 rcpt-*, segstats, full.log. Recovery: rec1262h.
+EXP1262 ACTUAL 2026-10-14T07:48Z (newexp-kmd1262.sh; package guard PACKAGE_MATCHES_EXP1261_EXCEPT_KMD; REC-EXP1261 done by the pipeline; pipeline log ended 07:47Z; package 30.0.1262.0 left installed; evidence .local/experiments/EXP1262-m2f3e-slabs/evidence/EXP1262).
+- Functional checks: smoke 51.9 fps; copy x2 PASS; D3D11 PASS MATCH x2; KMT 58.8 fps MATCH x4; DWM 0; no G4SubmitFailure; overlaps 0; Unmapped IPA 0.
+- Wom1M2PoolDemand v4:
+  - idle: committed 183.5 MiB, held 192 MiB, peak 221.8 MiB; 3823 granules in 816 calls at 39.6 us per granule (EXP1260 242, EXP1258 726); slabs 96 (116 new, all contiguous 2 MiB, 0 failures, 20 freed);
+  - after the benchmark: committed 186.2 MiB, held 196 MiB, peak 660.8 MiB; 159 us per granule including mid-session slab searches (max call 64 ms); slabs 98, peak 331, 351 new, all contiguous, 253 freed;
+  - end of run: committed 193.8 MiB, held 212 MiB; 137.9 us per granule average over the session; 0 failures.
+- Segstats: segment 3 resident peak 660 MiB, last 186 MiB.
+- CS benchmark: 3771 frames in 81.849 s = 46.072 fps. This is the fixed pool on the same OS within noise (EXP1259 46.355, -0.6%); EXP1260 45.098; EXP1258 43.889.
+- Reading: slabs remove the demand-mode fps cost. Windows always had a free contiguous 2 MiB chunk in this session (0 chunked fallbacks). Slab slack is 8-18 MiB.
+- Verdict: CONFIRMED. M2-f3 is complete on J313:
+  - segment 3 is backed on demand: ~0.19 GiB idle instead of 1 GiB pinned;
+  - it grows to the game's working set (0.66 GiB) and returns it after use;
+  - no fps cost against the fixed pool, all functional checks pass.
+- Next: the M2 follow-ups as separate variables (segment 3 size up to ~1.75 GiB, broker capacity 2 GiB; budget groups), then the resubmission defect (the cancel-caller receipt is in this build; no refusal occurred this run), G4-recovery, D3D 11/12.
