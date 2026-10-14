@@ -246,9 +246,17 @@ unsigned long long AdmissionPoolDemandReclaimAged(ADMISSION_POOL_DEMAND *Pool,
 
 unsigned long long AdmissionPoolDemandSegmentBytes(unsigned long long RamBytes,
                                                    unsigned long long WindowBytes) {
+  return AdmissionPoolDemandSegmentBytesEx(RamBytes, WindowBytes, 0u);
+}
+
+unsigned long long AdmissionPoolDemandSegmentBytesEx(unsigned long long RamBytes,
+                                                     unsigned long long WindowBytes,
+                                                     unsigned long long BrokerBytes) {
   const unsigned long long sixteen = 16ULL << 30;
-  unsigned long long cap = ADMISSION_POOL_DEMAND_BROKER_BYTES -
-                           ADMISSION_POOL_DEMAND_BROKER_RESERVE;
+  unsigned long long broker = BrokerBytes ? BrokerBytes
+                                          : ADMISSION_POOL_DEMAND_BROKER_BYTES;
+  unsigned long long cap = broker > ADMISSION_POOL_DEMAND_BROKER_RESERVE
+                               ? broker - ADMISSION_POOL_DEMAND_BROKER_RESERVE : 0u;
   unsigned long long bytes;
   if (WindowBytes < cap) cap = WindowBytes;
   if (RamBytes == 0u) {

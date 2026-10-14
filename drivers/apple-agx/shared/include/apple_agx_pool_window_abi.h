@@ -6,7 +6,7 @@
  * registers live in the AGX power-broker page (HV_AGX_G2_POWER_BROKER_BASE).
  * 32-bit registers take 32-bit accesses, 64-bit registers 64-bit accesses. */
 #define AGX_POOL_WINDOW_OFFSET 0xe00u
-#define AGX_POOL_WINDOW_BYTES 0x48u
+#define AGX_POOL_WINDOW_BYTES 0x50u
 
 #define AGX_POOL_WINDOW_REG_MAGIC 0x00u        /* u32 'AGXW' */
 #define AGX_POOL_WINDOW_REG_VERSION 0x04u      /* u32 */
@@ -19,6 +19,9 @@
 #define AGX_POOL_WINDOW_REG_COMMAND 0x38u      /* u32, write */
 #define AGX_POOL_WINDOW_REG_RESULT 0x3cu       /* u32, last command's result */
 #define AGX_POOL_WINDOW_REG_WINDOW_OFFSET 0x40u /* u64, write: MAP_AT/UNMAP_RANGE offset */
+/* M2-f6 (STATUS_BROKER): u64, read: 16 KiB system pages the GPU broker's
+ * backing table holds (segment 3 and every other GPU-mapped system page). */
+#define AGX_POOL_WINDOW_REG_BROKER_PAGES 0x48u
 
 #define AGX_POOL_WINDOW_MAGIC 0x57584741u /* "AGXW" */
 #define AGX_POOL_WINDOW_VERSION 1u
@@ -26,6 +29,8 @@
 /* M2-f3: MAP_AT and UNMAP_RANGE are implemented (the version stays 1: they
  * extend, and do not change, the version-1 commands). */
 #define AGX_POOL_WINDOW_STATUS_RANGES 2u
+/* M2-f6: REG_BROKER_PAGES is published (the table is sized from guest RAM). */
+#define AGX_POOL_WINDOW_STATUS_BROKER 4u
 #define AGX_POOL_WINDOW_PAGE 0x4000ull
 
 /* MAP_APPEND maps window [MAPPED, MAPPED + SOURCE_BYTES) onto the guest pages

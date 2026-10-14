@@ -589,6 +589,8 @@ typedef struct _ADMISSION_CONTEXT {
   PVOID PoolCpu;
   ULONGLONG PoolIpa; /* hypervisor window base (segment 3 CPU base) */
   ULONGLONG PoolBytes;
+  /* M2-f6: GPU broker table bytes m1n1 published (0: built-in 2 GiB). */
+  ULONGLONG PoolBrokerBytes;
   /* Pool pages kept because the window could not release them. */
   volatile LONG PoolLeaks;
   /* M2-f3: segment 3 backed on demand (pool_windows.c); NULL for the fixed

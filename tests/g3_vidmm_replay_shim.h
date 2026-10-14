@@ -714,7 +714,8 @@ static bool ReplayPrefix(void *opaque) {(void)opaque;return true;}
 static bool ReplayLegacySlot63(void *opaque) {(void)opaque;return false;}
 static void ReplayBrokerInit(REPLAY_BROKER *b) {
   struct hv_agx_gpuva_v5_ops ops={b,ReplayTranslate,ReplayMapPage,ReplayReadSlot,
-      ReplayWriteSlot,ReplaySync,ReplayInvalidate,ReplayPrefix,ReplayLegacySlot63};
+      ReplayWriteSlot,ReplaySync,ReplayInvalidate,ReplayPrefix,ReplayLegacySlot63,
+      NULL,0};
   b->memory.boot.ram_base=local_ipa<system_ipa+0x10000000ULL ? local_ipa : system_ipa+0x10000000ULL;
   ULONGLONG ram_end=local_ipa+local_bytes>system_ipa+0x20000000ULL ?
       local_ipa+local_bytes : system_ipa+0x20000000ULL;

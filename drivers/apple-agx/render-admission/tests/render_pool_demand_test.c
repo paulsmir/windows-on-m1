@@ -320,6 +320,18 @@ static void test_segment_size(void)
     assert(AdmissionPoolDemandSegmentBytes(GiB - 64 * MiB, win) == 0);
     /* 32 GiB: MIN(80%, MAX(16 GiB, 50%)) = 16 GiB, still broker-capped. */
     assert(AdmissionPoolDemandSegmentBytes(32 * GiB, win) == 1792 * MiB);
+    /* M2-f6: with the broker table m1n1 sized from RAM (REG_BROKER_PAGES),
+     * the formula and the window bound segment 3, not the 2 GiB table. J313:
+     * 2.92 GiB - 256 MiB = 2738 MiB, in 64 MiB steps 2688 MiB. */
+    assert(AdmissionPoolDemandSegmentBytesEx(6279270400ULL, win, 4608 * MiB) ==
+           2688 * MiB);
+    /* 16 and 32 GiB Macs: the 4 GiB window bounds it. */
+    assert(AdmissionPoolDemandSegmentBytesEx(16 * GiB, win, 4608 * MiB) == 4 * GiB);
+    assert(AdmissionPoolDemandSegmentBytesEx(32 * GiB, win, 4608 * MiB) == 4 * GiB);
+    /* An unpublished table (0) is the built-in 2 GiB one; a small one caps. */
+    assert(AdmissionPoolDemandSegmentBytesEx(6279270400ULL, win, 0) == 1792 * MiB);
+    assert(AdmissionPoolDemandSegmentBytesEx(6279270400ULL, win, GiB) == 768 * MiB);
+    assert(AdmissionPoolDemandSegmentBytesEx(6279270400ULL, win, 256 * MiB) == 0);
     /* A smaller window caps it. */
     assert(AdmissionPoolDemandSegmentBytes(8 * GiB, GiB) == GiB);
     assert(AdmissionPoolDemandSegmentBytes(8 * GiB, GiB + MiB) == GiB);

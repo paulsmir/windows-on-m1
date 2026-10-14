@@ -98,6 +98,11 @@ static BOOLEAN AdmissionPoolWindowOpen(ADMISSION_CONTEXT *Context,
   status = AdmissionPoolWindowRead32(Context, AGX_POOL_WINDOW_REG_STATUS);
   if (!(status & AGX_POOL_WINDOW_STATUS_AVAILABLE)) return FALSE;
   *Ranges = (status & AGX_POOL_WINDOW_STATUS_RANGES) != 0u;
+  /* M2-f6: the broker table m1n1 sized from RAM; 0 for an older one. */
+  Context->PoolBrokerBytes = (status & AGX_POOL_WINDOW_STATUS_BROKER)
+      ? AdmissionPoolWindowRead64(Context, AGX_POOL_WINDOW_REG_BROKER_PAGES) *
+            AGX_POOL_WINDOW_PAGE
+      : 0ULL;
   base = AdmissionPoolWindowRead64(Context, AGX_POOL_WINDOW_REG_IPA);
   capacity = AdmissionPoolWindowRead64(Context, AGX_POOL_WINDOW_REG_CAPACITY);
   Window->SkipBytes = base;
@@ -432,6 +437,7 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *Context
     receipt.PeakReservedBytes =
         pool->Slabs.Stats.PeakReserved * ADMISSION_POOL_DEMAND_GRANULE;
     receipt.ReserveFailures = pool->Slabs.Stats.ReserveFailures;
+    receipt.BrokerBytes = Context->PoolBrokerBytes;
     pool->StagedGranules = stats->CommittedGranules;
     pool->StagedFailures = failures;
     pool->StagedReserved = pool->Slabs.Reserved;
@@ -623,7 +629,8 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
   ADMISSION_POOL_DEMAND_OPS ops;
   ADMISSION_POOL_RUNTIME *pool;
   ULONGLONG ram = AdmissionPoolRamBytes();
-  ULONGLONG bytes = AdmissionPoolDemandSegmentBytes(ram, Window->RequestedBytes);
+  ULONGLONG bytes = AdmissionPoolDemandSegmentBytesEx(ram, Window->RequestedBytes,
+                                                      Context->PoolBrokerBytes);
   ULONGLONG count = bytes / ADMISSION_POOL_DEMAND_GRANULE;
   PHYSICAL_ADDRESS base;
   if (bytes == 0ULL) {

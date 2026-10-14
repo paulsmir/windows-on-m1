@@ -81,7 +81,7 @@ typedef enum _ADMISSION_POOL_PLACE {
  * moves by ADMISSION_POOL_DEMAND_RECEIPT_STEP granules or a failure count
  * changes. Times are microseconds of commit (page allocation + MAP_AT) and
  * release (UNMAP_RANGE + page free). */
-#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 6u /* 2: ReleaseDelayMs; 3: Stats.CommitCalls; 4: slabs; 5: RamBytes; 6: reservations */
+#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 7u /* 2: ReleaseDelayMs; 3: Stats.CommitCalls; 4: slabs; 5: RamBytes; 6: reservations; 7: BrokerBytes */
 #define ADMISSION_POOL_DEMAND_RECEIPT_STEP 256u /* 16 MiB */
 typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   unsigned int Version, Bytes, GranuleBytes, LastWindowResult;
@@ -101,6 +101,8 @@ typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   /* v6 (M2-f5): pages promised to live segment-3 allocations at creation,
    * the peak, and creations refused for want of Windows pages. */
   unsigned long long ReservedBytes, PeakReservedBytes, ReserveFailures;
+  /* v7 (M2-f6): the broker table the segment size used (0: built-in). */
+  unsigned long long BrokerBytes;
 } ADMISSION_POOL_DEMAND_RECEIPT;
 
 /* M2-f4a: the declared size of the demand-backed segment 3 for a machine.
@@ -122,6 +124,12 @@ typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
 #define ADMISSION_POOL_DEMAND_MIN_BYTES 0x10000000ULL         /* 256 MiB */
 unsigned long long AdmissionPoolDemandSegmentBytes(unsigned long long RamBytes,
                                                    unsigned long long WindowBytes);
+/* M2-f6: BrokerBytes is the GPU broker table m1n1 sized from RAM
+ * (AGX_POOL_WINDOW_REG_BROKER_PAGES x 16 KiB); 0 means the built-in
+ * ADMISSION_POOL_DEMAND_BROKER_BYTES table of an older hypervisor. */
+unsigned long long AdmissionPoolDemandSegmentBytesEx(unsigned long long RamBytes,
+                                                     unsigned long long WindowBytes,
+                                                     unsigned long long BrokerBytes);
 
 /* Granules and CandidateList hold Count zeroed entries each. */
 int AdmissionPoolDemandInit(ADMISSION_POOL_DEMAND *Pool,
