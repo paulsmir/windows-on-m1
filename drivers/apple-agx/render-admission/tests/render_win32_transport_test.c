@@ -405,6 +405,54 @@ static void test_class_allocation_contract(void) {
       AdmissionWin32TransportClass);
 }
 
+/* M2-f7 (EXP1265-C): a General-class BO is bounded by the segment it lives
+ * in, not by the legacy 16 MiB retained-root arena. Shader and encoder BOs
+ * keep the 16 MiB bound; the legacy entry point keeps it for every class. */
+static ADMISSION_WIN32_ALLOCATION_CREATE make_general_allocation(APPLE_AGX_U64 bytes) {
+  ADMISSION_WIN32_ALLOCATION_CREATE create = make_class_allocation();
+  create.ClassId = AgxWin32BufferClassGeneral;
+  create.Flags = AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite |
+                 AppleAgxWin32BufferGpuRead | AppleAgxWin32BufferGpuWrite;
+  assert(AdmissionAllocationDescribe(
+      bytes, 1u, 1u, ADMISSION_WIN32_ALLOCATION_STAGING_CPUVISIBLE,
+      ADMISSION_WIN32_ALLOCATION_FORMAT_A8, 1u, &create.Allocation));
+  return create;
+}
+
+static void test_general_bound_follows_the_segment(void) {
+  const APPLE_AGX_U64 segment = 0x70000000ULL; /* 1792 MiB */
+  ADMISSION_WIN32_ALLOCATION_CREATE create = make_general_allocation(0x2000000ULL);
+  ADMISSION_ALLOCATION_DESCRIPTION description;
+  APPLE_AGX_U32 classId = 0u, flags = 0u;
+  assert(ADMISSION_WIN32_ALLOCATION_LEGACY_MAX_BYTES == 0x01000000ULL);
+  assert(AdmissionWin32AllocationCreateValidate(
+      &create, sizeof(create), &description, &classId, &flags) ==
+      AdmissionWin32TransportClass);
+  assert(AdmissionWin32AllocationCreateValidateEx(
+      &create, sizeof(create), &description, &classId, &flags, segment) ==
+      AdmissionWin32TransportSuccess);
+  assert(description.Size == 0x2000000ULL && classId == AgxWin32BufferClassGeneral);
+  create = make_general_allocation(segment);
+  assert(AdmissionWin32AllocationCreateValidateEx(
+      &create, sizeof(create), &description, &classId, &flags, segment) ==
+      AdmissionWin32TransportSuccess);
+  create = make_general_allocation(segment + 0x4000ULL);
+  assert(AdmissionWin32AllocationCreateValidateEx(
+      &create, sizeof(create), &description, &classId, &flags, segment) ==
+      AdmissionWin32TransportClass);
+  /* A bound below the legacy one never tightens it. */
+  create = make_general_allocation(0x01000000ULL);
+  assert(AdmissionWin32AllocationCreateValidateEx(
+      &create, sizeof(create), &description, &classId, &flags, 0u) ==
+      AdmissionWin32TransportSuccess);
+  create = make_class_allocation();
+  create.Allocation.Size = create.Allocation.Width = create.Allocation.Pitch =
+      0x2000000ULL;
+  assert(AdmissionWin32AllocationCreateValidateEx(
+      &create, sizeof(create), &description, &classId, &flags, segment) ==
+      AdmissionWin32TransportClass);
+}
+
 static void test_draw_role_class_and_relocation_ownership(void) {
   APPLE_AGX_WIN32_COMMAND_HEADER header;
   APPLE_AGX_WIN32_ALLOCATION_REFERENCE references[5];
@@ -723,6 +771,7 @@ int main(void) {
   test_overlapping_writable_ranges_are_rejected();
   test_context_generation_contract();
   test_class_allocation_contract();
+  test_general_bound_follows_the_segment();
   test_draw_role_class_and_relocation_ownership();
   test_v3_general_table_sources_are_narrowly_accepted();
   test_v3_exact_native_source_spans_are_not_word_rounded();

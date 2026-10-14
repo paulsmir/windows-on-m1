@@ -1329,6 +1329,10 @@ _IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionMemoryPoolStart(_Inout_ ADMISSION_CONTEXT *Context);
 _IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionMemoryPoolStop(_Inout_opt_ ADMISSION_CONTEXT *Context);
+/* M2-f7: the largest General-class BO (segment 3's size while the pool is
+ * mapped, else the legacy 16 MiB); reported to the UMD and enforced by
+ * CreateAllocation. */
+ULONGLONG AdmissionGeneralMaximumBytes(_In_opt_ const ADMISSION_CONTEXT *Context);
 BOOLEAN AdmissionMemoryPoolView(_In_opt_ const ADMISSION_CONTEXT *Context,
                                 _Out_ ADMISSION_SCANOUT_MEMORY_VIEW *View);
 /* M2-f3: the demand pool's granule state under its lock; NULL (no lock

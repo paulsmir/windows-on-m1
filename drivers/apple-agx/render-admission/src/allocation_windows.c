@@ -74,6 +74,23 @@ static VOID AdmissionR105RecordEcho(PDEVICE_OBJECT DeviceObject,
   ZwClose(key);
 }
 
+/* M2-f7 (EXP1265-C): the largest General-class BO. Every Mesa BO is
+ * CPU-visible, and while the segment-3 pool is mapped it lives there, so the
+ * segment's size bounds it. Without the pool the legacy 16 MiB arena bound
+ * stays. */
+_Use_decl_annotations_ ULONGLONG AdmissionGeneralMaximumBytes(
+    const ADMISSION_CONTEXT *Context) {
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  ADMISSION_SCANOUT_MEMORY_VIEW pool;
+  if (Context != NULL && AdmissionMemoryPoolView(Context, &pool) &&
+      Context->PoolBytes > ADMISSION_WIN32_ALLOCATION_LEGACY_MAX_BYTES)
+    return Context->PoolBytes &
+           ~(ULONGLONG)(ADMISSION_ALLOCATION_ALIGNMENT - 1u);
+#endif
+  UNREFERENCED_PARAMETER(Context);
+  return ADMISSION_WIN32_ALLOCATION_LEGACY_MAX_BYTES;
+}
+
 /* Create and Open both receive the same 72-byte R105 request. Normalize it
  * identically in both DDIs so the stored and reopened descriptions match. */
 static BOOLEAN AdmissionR105ParsePrivate(
@@ -81,7 +98,8 @@ static BOOLEAN AdmissionR105ParsePrivate(
     ADMISSION_R105_OVERRIDE *Override,
     ADMISSION_ALLOCATION_DESCRIPTION *Description,
     APPLE_AGX_U32 *ClassId, APPLE_AGX_U32 *Flags,
-    ADMISSION_WIN32_TRANSPORT_RESULT *ParseResult) {
+    ADMISSION_WIN32_TRANSPORT_RESULT *ParseResult,
+    ULONGLONG MaximumGeneralBytes) {
   ADMISSION_WIN32_ALLOCATION_CREATE normalized;
   if (!AdmissionR105Decode(PrivateData, PrivateBytes, TRUE, Override))
     return FALSE;
@@ -89,12 +107,13 @@ static BOOLEAN AdmissionR105ParsePrivate(
   normalized.Reserved[0] = 0u;
   normalized.Reserved[1] = 0u;
   if (normalized.ClassId == 0u)
-    *ParseResult = AdmissionWin32AllocationCreateValidate(
+    *ParseResult = AdmissionWin32AllocationCreateValidateEx(
         &normalized.Allocation, sizeof(normalized.Allocation),
-        Description, ClassId, Flags);
+        Description, ClassId, Flags, MaximumGeneralBytes);
   else
-    *ParseResult = AdmissionWin32AllocationCreateValidate(
-        &normalized, sizeof(normalized), Description, ClassId, Flags);
+    *ParseResult = AdmissionWin32AllocationCreateValidateEx(
+        &normalized, sizeof(normalized), Description, ClassId, Flags,
+        MaximumGeneralBytes);
   return TRUE;
 }
 #endif
@@ -377,7 +396,8 @@ static NTSTATUS AdmissionCreateAllocationImpl(
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   r105Enabled = AdmissionR105ParsePrivate(
       info->pPrivateDriverData, info->PrivateDriverDataSize, &r105,
-      &parsedDescription, &classId, &flags, &parseResult);
+      &parsedDescription, &classId, &flags, &parseResult,
+      AdmissionGeneralMaximumBytes(context));
   if (!r105Enabled)
 #endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
@@ -389,18 +409,20 @@ static NTSTATUS AdmissionCreateAllocationImpl(
         info->pPrivateDriverData;
     normalized.Reserved = 0u;
     correlated = TRUE;
-    parseResult = AdmissionWin32AllocationCreateValidate(
+    parseResult = AdmissionWin32AllocationCreateValidateEx(
         &normalized, sizeof(normalized), &parsedDescription,
-        &classId, &flags);
+        &classId, &flags, AdmissionGeneralMaximumBytes(context));
   } else {
-    parseResult = AdmissionWin32AllocationCreateValidate(
+    parseResult = AdmissionWin32AllocationCreateValidateEx(
         info->pPrivateDriverData, info->PrivateDriverDataSize,
-        &parsedDescription, &classId, &flags);
+        &parsedDescription, &classId, &flags,
+        AdmissionGeneralMaximumBytes(context));
   }
 #else
-  parseResult = AdmissionWin32AllocationCreateValidate(
+  parseResult = AdmissionWin32AllocationCreateValidateEx(
       info->pPrivateDriverData, info->PrivateDriverDataSize,
-      &parsedDescription, &classId, &flags);
+      &parsedDescription, &classId, &flags,
+      AdmissionGeneralMaximumBytes(context));
 #endif
   description = &parsedDescription;
   if (parseResult != AdmissionWin32TransportSuccess ||
@@ -796,7 +818,8 @@ static NTSTATUS AdmissionOpenAllocationImpl(
 #endif
     if (!AdmissionR105ParsePrivate(
             info->pPrivateDriverData, info->PrivateDriverDataSize,
-            &openR105, &parsedDescription, &classId, &flags, &parseResult))
+            &openR105, &parsedDescription, &classId, &flags, &parseResult,
+            AdmissionGeneralMaximumBytes(adapter)))
 #endif
     {
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
@@ -808,18 +831,20 @@ static NTSTATUS AdmissionOpenAllocationImpl(
         submittedDescription->Reserved == ADMISSION_UMD_CORRELATION_COOKIE) {
       normalized = *submittedDescription;
       normalized.Reserved = 0u;
-      parseResult = AdmissionWin32AllocationCreateValidate(
+      parseResult = AdmissionWin32AllocationCreateValidateEx(
           &normalized, sizeof(normalized), &parsedDescription,
-          &classId, &flags);
+          &classId, &flags, AdmissionGeneralMaximumBytes(adapter));
     } else {
-      parseResult = AdmissionWin32AllocationCreateValidate(
+      parseResult = AdmissionWin32AllocationCreateValidateEx(
           info->pPrivateDriverData, info->PrivateDriverDataSize,
-          &parsedDescription, &classId, &flags);
+          &parsedDescription, &classId, &flags,
+          AdmissionGeneralMaximumBytes(adapter));
     }
 #else
-    parseResult = AdmissionWin32AllocationCreateValidate(
+    parseResult = AdmissionWin32AllocationCreateValidateEx(
         info->pPrivateDriverData, info->PrivateDriverDataSize,
-        &parsedDescription, &classId, &flags);
+        &parsedDescription, &classId, &flags,
+        AdmissionGeneralMaximumBytes(adapter));
 #endif
     }
     if (parseResult != AdmissionWin32TransportSuccess) {

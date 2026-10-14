@@ -71,10 +71,21 @@ typedef enum _ADMISSION_WIN32_TRANSPORT_RESULT {
   AdmissionWin32TransportClass,
 } ADMISSION_WIN32_TRANSPORT_RESULT;
 
+/* The size bound of the retained-root arenas every class BO once lived in. */
+#define ADMISSION_WIN32_ALLOCATION_LEGACY_MAX_BYTES 0x01000000ULL
+
 ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32AllocationCreateValidate(
     const void *PrivateData, APPLE_AGX_U32 PrivateDataBytes,
     ADMISSION_ALLOCATION_DESCRIPTION *Description,
     APPLE_AGX_U32 *ClassId, APPLE_AGX_U32 *Flags);
+/* M2-f7: as above, but a General-class BO may be as large as
+ * MaximumGeneralBytes (the segment it is placed in) when that exceeds the
+ * legacy bound. Shader and encoder BOs keep the legacy bound. */
+ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32AllocationCreateValidateEx(
+    const void *PrivateData, APPLE_AGX_U32 PrivateDataBytes,
+    ADMISSION_ALLOCATION_DESCRIPTION *Description,
+    APPLE_AGX_U32 *ClassId, APPLE_AGX_U32 *Flags,
+    APPLE_AGX_U64 MaximumGeneralBytes);
 
 APPLE_AGX_BOOL AdmissionWin32AllocationUsesGpuVa(APPLE_AGX_U32 ClassId);
 

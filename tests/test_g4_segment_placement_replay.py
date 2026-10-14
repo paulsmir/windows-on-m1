@@ -144,9 +144,10 @@ static int AdmissionR105ParsePrivate(const void *data, unsigned bytes,
                                      ADMISSION_R105_OVERRIDE *override,
                                      ADMISSION_ALLOCATION_DESCRIPTION *desc,
                                      unsigned *class_id, unsigned *flags,
-                                     ADMISSION_WIN32_TRANSPORT_RESULT *result) {
+                                     ADMISSION_WIN32_TRANSPORT_RESULT *result,
+                                     ULONGLONG maximum) {
   (void)data; (void)bytes; (void)override; (void)desc; (void)class_id;
-  (void)flags; (void)result; return 0;
+  (void)flags; (void)result; (void)maximum; return 0;
 }
 static int AdmissionMemoryReady(int *memory) { return *memory != 0; }
 static ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32AllocationCreateValidate(
@@ -160,6 +161,17 @@ static ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32AllocationCreateValidate(
   *class_id = input->ClassId;
   *flags = 0;
   return AdmissionWin32TransportSuccess;
+}
+/* M2-f7: production bounds General BOs by segment 3 (render_win32_transport.c). */
+static ULONGLONG replay_general_maximum;
+static ULONGLONG AdmissionGeneralMaximumBytes(const ADMISSION_CONTEXT *context) {
+  (void)context; return replay_general_maximum;
+}
+static ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32AllocationCreateValidateEx(
+    const void *data, unsigned bytes, ADMISSION_ALLOCATION_DESCRIPTION *desc,
+    unsigned *class_id, unsigned *flags, ULONGLONG maximum) {
+  replay_general_maximum = maximum;
+  return AdmissionWin32AllocationCreateValidate(data, bytes, desc, class_id, flags);
 }
 static int AdmissionAllocationAlign64K(uint64_t size, uint64_t *aligned) {
   *aligned = (size + 0xffffu) & ~0xffffULL;

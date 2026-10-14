@@ -76,6 +76,14 @@ static ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32AllocationCreateValidate(
  *out=*(const ADMISSION_ALLOCATION_DESCRIPTION *)data;
  *classId=0;*flags=0;return AdmissionWin32TransportSuccess;
 }
+static unsigned long long AdmissionGeneralMaximumBytes(const ADMISSION_CONTEXT *context) {
+ (void)context;return 0x01000000ULL;
+}
+static ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32AllocationCreateValidateEx(
+ const void *data,UINT bytes,ADMISSION_ALLOCATION_DESCRIPTION *out,
+ UINT *classId,UINT *flags,unsigned long long maximum) {
+ (void)maximum;return AdmissionWin32AllocationCreateValidate(data,bytes,out,classId,flags);
+}
 static ADMISSION_ALLOCATION_HANDLE backing;
 static unsigned calls,releases,refs;
 static int failAllocation;

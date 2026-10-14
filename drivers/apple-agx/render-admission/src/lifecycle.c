@@ -680,7 +680,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     info->ClassCount = AGX_WIN32_BUFFER_CLASS_COUNT;
     info->Classes[0].ClassId = AgxWin32BufferClassGeneral;
     info->Classes[0].MinimumAlignment = 0x4000u;
-    info->Classes[0].MaximumBytes = AGX_RR_SHARED_ARENA_BYTES;
+    /* M2-f7: the segment General BOs live in, not the legacy arena. */
+    info->Classes[0].MaximumBytes = AdmissionGeneralMaximumBytes(context);
     info->Classes[0].Flags = AppleAgxWin32BufferCpuRead |
         AppleAgxWin32BufferCpuWrite | AppleAgxWin32BufferGpuRead |
         AppleAgxWin32BufferGpuWrite;

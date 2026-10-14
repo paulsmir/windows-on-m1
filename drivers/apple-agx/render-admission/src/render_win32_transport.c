@@ -22,6 +22,16 @@ ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32AllocationCreateValidate(
     const void *PrivateData, APPLE_AGX_U32 PrivateDataBytes,
     ADMISSION_ALLOCATION_DESCRIPTION *Description,
     APPLE_AGX_U32 *ClassId, APPLE_AGX_U32 *Flags) {
+  return AdmissionWin32AllocationCreateValidateEx(
+      PrivateData, PrivateDataBytes, Description, ClassId, Flags,
+      ADMISSION_WIN32_ALLOCATION_LEGACY_MAX_BYTES);
+}
+
+ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32AllocationCreateValidateEx(
+    const void *PrivateData, APPLE_AGX_U32 PrivateDataBytes,
+    ADMISSION_ALLOCATION_DESCRIPTION *Description,
+    APPLE_AGX_U32 *ClassId, APPLE_AGX_U32 *Flags,
+    APPLE_AGX_U64 MaximumGeneralBytes) {
   const ADMISSION_WIN32_ALLOCATION_CREATE *create =
       (const ADMISSION_WIN32_ALLOCATION_CREATE *)PrivateData;
   const ADMISSION_ALLOCATION_DESCRIPTION *allocation;
@@ -70,7 +80,11 @@ ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32AllocationCreateValidate(
         allocation->Height != 1u ||
         allocation->Width != allocation->Pitch ||
         allocation->Size != allocation->Width ||
-        allocation->Size > 0x01000000ULL ||
+        allocation->Size >
+            (create->ClassId == AgxWin32BufferClassGeneral &&
+             MaximumGeneralBytes > ADMISSION_WIN32_ALLOCATION_LEGACY_MAX_BYTES
+                 ? MaximumGeneralBytes
+                 : ADMISSION_WIN32_ALLOCATION_LEGACY_MAX_BYTES) ||
         (allocation->Size & 0x3fffULL) != 0ULL)
       return AdmissionWin32TransportClass;
   }
