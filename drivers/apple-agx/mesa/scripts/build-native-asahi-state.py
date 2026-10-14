@@ -470,10 +470,17 @@ ttn_d3d_sample(struct ttn_compile *c, nir_def **src)
    nir_builder *b = &c->build;
    struct tgsi_full_instruction *ins = &c->token->FullInstruction;
    unsigned texture = ins->Src[1].Register.Index;
-   bool ms = ins->Instruction.Opcode == TGSI_OPCODE_SAMPLE_I_MS;
-   bool fetch = ms || ins->Instruction.Opcode == TGSI_OPCODE_SAMPLE_I;
+   unsigned op = ins->Instruction.Opcode;
+   bool ms = op == TGSI_OPCODE_SAMPLE_I_MS;
+   bool fetch = ms || op == TGSI_OPCODE_SAMPLE_I;
    unsigned sampler = fetch ? 0 : ins->Src[2].Register.Index;
-   bool explicit_lod = ins->Instruction.Opcode == TGSI_OPCODE_SAMPLE_L;
+   bool explicit_lod = op == TGSI_OPCODE_SAMPLE_L;
+   /* D3D-G9: sample_b (bias), sample_c / sample_c_lz (depth comparison,
+    * SampleCmp / SampleCmpLevelZero) and sample_d (gradients). */
+   bool bias = op == TGSI_OPCODE_SAMPLE_B;
+   bool compare = op == TGSI_OPCODE_SAMPLE_C || op == TGSI_OPCODE_SAMPLE_C_LZ;
+   bool level_zero = op == TGSI_OPCODE_SAMPLE_C_LZ;
+   bool grad = op == TGSI_OPCODE_SAMPLE_D;
    assert(ins->Src[1].Register.File == TGSI_FILE_SAMPLER_VIEW);
    assert(!ins->Src[1].Register.Indirect);
    if(!fetch) {
@@ -486,11 +493,14 @@ ttn_d3d_sample(struct ttn_compile *c, nir_def **src)
    get_texture_info(c->samp_targets[texture],&dim,&shadow,&array);
    bool fetch_lod=fetch && !ms && dim!=GLSL_SAMPLER_DIM_BUF && dim!=GLSL_SAMPLER_DIM_RECT;
    nir_tex_instr *tex = nir_tex_instr_create(b->shader,
-      1 + explicit_lod + fetch_lod + ms + ins->Texture.NumOffsets);
+      1 + explicit_lod + level_zero + bias + compare + 2 * grad + fetch_lod +
+      ms + ins->Texture.NumOffsets);
    tex->op = ms ? nir_texop_txf_ms : fetch ? nir_texop_txf :
-      explicit_lod ? nir_texop_txl : nir_texop_tex;
+      explicit_lod || level_zero ? nir_texop_txl : bias ? nir_texop_txb :
+      grad ? nir_texop_txd : nir_texop_tex;
    tex->can_speculate = true;
-   tex->sampler_dim=dim;tex->is_shadow=shadow;tex->is_array=array;
+   tex->sampler_dim=dim;tex->is_shadow=shadow||compare;tex->is_array=array;
+   tex->is_new_style_shadow = compare;
    tex->coord_components = glsl_get_sampler_dim_coordinate_components(tex->sampler_dim) + tex->is_array;
    tex->texture_index = texture;
    tex->sampler_index = sampler;
@@ -500,6 +510,17 @@ ttn_d3d_sample(struct ttn_compile *c, nir_def **src)
       nir_trim_vector(b, src[0], tex->coord_components));
    if (explicit_lod)
       tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_lod, nir_channel(b, src[3], 0));
+   if (level_zero)
+      tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_lod, nir_imm_float(b, 0.0f));
+   if (bias)
+      tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_bias, nir_channel(b, src[3], 0));
+   if (compare)
+      tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_comparator, nir_channel(b, src[3], 0));
+   if (grad) {
+      unsigned grad_components = tex->coord_components - tex->is_array;
+      tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_ddx, nir_trim_vector(b, src[3], grad_components));
+      tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_ddy, nir_trim_vector(b, src[4], grad_components));
+   }
    if(fetch_lod)
       tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_lod,nir_channel(b,src[0],3));
    if(ms)
@@ -521,14 +542,61 @@ ttn_d3d_sample(struct ttn_compile *c, nir_def **src)
    else BITSET_SET(b->shader->info.samplers_used, sampler);
    nir_def_init(&tex->instr, &tex->def, nir_tex_instr_dest_size(tex), 32);
    nir_builder_instr_insert(b, &tex->instr);
+   /* A comparison returns one value; D3D writes it to every component. */
+   if (compare)
+      return nir_replicate(b, &tex->def, 4);
    return nir_pad_vector_imm_int(b, &tex->def, 0, 4);
+}
+
+/* D3D-G9: resinfo (SVIEWINFO): the view's size at a mip level in .xyz and
+ * its level count in .w, as integers (the frontend converts them). */
+static nir_def *
+ttn_d3d_sviewinfo(struct ttn_compile *c, nir_def **src)
+{
+   nir_builder *b = &c->build;
+   struct tgsi_full_instruction *ins = &c->token->FullInstruction;
+   unsigned texture = ins->Src[1].Register.Index;
+   assert(ins->Src[1].Register.File == TGSI_FILE_SAMPLER_VIEW);
+   assert(texture < c->num_samp_types);
+   enum glsl_sampler_dim dim;
+   bool shadow, array;
+   get_texture_info(c->samp_targets[texture], &dim, &shadow, &array);
+   bool has_lod = dim != GLSL_SAMPLER_DIM_BUF && dim != GLSL_SAMPLER_DIM_MS;
+   nir_tex_instr *txs = nir_tex_instr_create(b->shader, has_lod ? 1 : 0);
+   txs->op = nir_texop_txs;
+   txs->sampler_dim = dim; txs->is_array = array; txs->is_shadow = shadow;
+   txs->texture_index = texture; txs->sampler_index = 0;
+   txs->dest_type = nir_type_int32;
+   if (has_lod)
+      txs->src[0] = nir_tex_src_for_ssa(nir_tex_src_lod, nir_channel(b, src[0], 0));
+   nir_def_init(&txs->instr, &txs->def, nir_tex_instr_dest_size(txs), 32);
+   nir_builder_instr_insert(b, &txs->instr);
+   nir_def *levels = nir_imm_int(b, 1);
+   if (has_lod) {
+      nir_tex_instr *query = nir_tex_instr_create(b->shader, 0);
+      query->op = nir_texop_query_levels;
+      query->sampler_dim = dim; query->is_array = array; query->is_shadow = shadow;
+      query->texture_index = texture; query->sampler_index = 0;
+      query->dest_type = nir_type_int32;
+      nir_def_init(&query->instr, &query->def, 1, 32);
+      nir_builder_instr_insert(b, &query->instr);
+      levels = &query->def;
+   }
+   c->num_samplers = MAX2(c->num_samplers, texture + 1);
+   BITSET_SET(b->shader->info.textures_used, texture);
+   nir_def *size = nir_pad_vector_imm_int(b, &txs->def, 0, 3);
+   return nir_vec4(b, nir_channel(b, size, 0), nir_channel(b, size, 1),
+                   nir_channel(b, size, 2), levels);
 }
 
 static nir_def *
 ttn_tex('''),
-        ('''      src[i] = ttn_get_src(c, &tgsi_inst->Src[i], i);''','''      if (((tgsi_op == TGSI_OPCODE_SAMPLE || tgsi_op == TGSI_OPCODE_SAMPLE_L) &&
+        ('''      src[i] = ttn_get_src(c, &tgsi_inst->Src[i], i);''','''      if (((tgsi_op == TGSI_OPCODE_SAMPLE || tgsi_op == TGSI_OPCODE_SAMPLE_L ||
+            tgsi_op == TGSI_OPCODE_SAMPLE_B || tgsi_op == TGSI_OPCODE_SAMPLE_C ||
+            tgsi_op == TGSI_OPCODE_SAMPLE_C_LZ || tgsi_op == TGSI_OPCODE_SAMPLE_D) &&
            (i == 1 || i == 2)) ||
-          ((tgsi_op == TGSI_OPCODE_SAMPLE_I || tgsi_op == TGSI_OPCODE_SAMPLE_I_MS) && i == 1))
+          ((tgsi_op == TGSI_OPCODE_SAMPLE_I || tgsi_op == TGSI_OPCODE_SAMPLE_I_MS ||
+            tgsi_op == TGSI_OPCODE_SVIEWINFO) && i == 1))
          src[i] = NULL; /* Descriptor operands are not ALU values. */
       else
          src[i] = ttn_get_src(c, &tgsi_inst->Src[i], i);'''),
@@ -537,7 +605,15 @@ ttn_tex('''),
    case TGSI_OPCODE_SAMPLE_L:
    case TGSI_OPCODE_SAMPLE_I:
    case TGSI_OPCODE_SAMPLE_I_MS:
+   case TGSI_OPCODE_SAMPLE_B:
+   case TGSI_OPCODE_SAMPLE_C:
+   case TGSI_OPCODE_SAMPLE_C_LZ:
+   case TGSI_OPCODE_SAMPLE_D:
       dst = ttn_d3d_sample(c, src);
+      break;
+
+   case TGSI_OPCODE_SVIEWINFO:
+      dst = ttn_d3d_sviewinfo(c, src);
       break;
 
    case TGSI_OPCODE_TEX:
