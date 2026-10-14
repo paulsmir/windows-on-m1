@@ -120,6 +120,7 @@
     <ClCompile Include="src\render_memory.c" />
     <ClCompile Include="src\render_pool_probe.c" />
     <ClCompile Include="src\render_pool_demand.c" />
+    <ClCompile Include="src\render_pool_slab.c" />
     <ClCompile Include="src\pool_windows.c" />
     <ClCompile Include="src\memory_windows.c" />
     <ClCompile Include="src\render_allocation.c" />

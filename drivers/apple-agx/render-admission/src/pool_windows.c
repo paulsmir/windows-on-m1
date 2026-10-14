@@ -216,10 +216,14 @@ typedef struct _ADMISSION_POOL_RUNTIME {
   ADMISSION_POOL_DEMAND Demand;
   ADMISSION_POOL_GRANULE *Granules;
   ULONGLONG *Candidates;
-  /* The pages behind each committed granule. */
-  struct _ADMISSION_POOL_EXTENT **Extents;
-  /* Granules whose pages Windows has given us (mapped or not). */
-  ULONGLONG HeldGranules;
+  /* M2-f3e: pages come in 2 MiB slabs of 32 granule slots. */
+  ADMISSION_POOL_SLABS Slabs;
+  ADMISSION_POOL_SLAB **SlabOf; /* per granule: its slab, or NULL */
+  UCHAR *SlotOf;                /* per granule: its slot */
+  ULONGLONG SlabContiguous, SlabChunked;
+  /* Scratch for one commit run (under Lock). */
+  ADMISSION_POOL_SLAB *RunSlab[1024];
+  unsigned int RunSlot[1024];
   ULONGLONG CommitUs, CommitUsMax, ReleaseUs, ReleaseUsMax;
   ULONG LastWindowResult;
   /* Receipt staging: committed granules and failure total last staged. */
@@ -233,114 +237,114 @@ static ULONGLONG AdmissionPoolElapsedUs(LARGE_INTEGER Start) {
          (ULONGLONG)frequency.QuadPart;
 }
 
-/* M2-f3c: the pages of one commit run, one MDL; freed when the last of its
- * granules has left the window. */
-typedef struct _ADMISSION_POOL_EXTENT {
-  PMDL Mdl;
-  ULONGLONG Granules; /* the MDL's size in granules */
-  ULONGLONG Live;     /* granules still referencing it */
-} ADMISSION_POOL_EXTENT;
-
-/* Most granules one commit backs (64 MiB): bounds the MDL and the time one
- * UpdatePageTable spends in the allocator. */
+/* Most granules one commit run takes (64 MiB): bounds the scratch arrays and
+ * the time one UpdatePageTable spends here. */
 #define ADMISSION_POOL_MAX_RUN 1024ULL
+#define ADMISSION_POOL_SLAB_BYTES \
+  ((ULONGLONG)ADMISSION_POOL_SLAB_SLOTS * ADMISSION_POOL_DEMAND_GRANULE)
+/* Empty slabs kept for the next commit. */
+#define ADMISSION_POOL_SPARE_SLABS 1ULL
+C_ASSERT(ADMISSION_POOL_MAX_RUN <= 1024ULL);
 
-static VOID AdmissionPoolExtentDrop(ADMISSION_POOL_RUNTIME *Pool,
-                                    ADMISSION_POOL_EXTENT *Extent) {
-  if (--Extent->Live != 0ULL) return;
-  MmFreePagesFromMdl(Extent->Mdl);
-  ExFreePool(Extent->Mdl);
-  Pool->HeldGranules -= Extent->Granules;
-  ExFreePoolWithTag(Extent, ADMISSION_POOL_TAG);
+/* A 2 MiB slab of fresh zeroed pages: one contiguous 2 MiB chunk when
+ * Windows has one (EXP1259: one contiguous 1 GiB took 374 ms), else 32
+ * 64 KiB-aligned 64 KiB chunks (EXP1246). */
+static ADMISSION_POOL_SLAB *AdmissionPoolNewSlab(void *Opaque) {
+  ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Opaque;
+  const ULONGLONG pages = ADMISSION_POOL_DEMAND_GRANULE / PAGE_SIZE;
+  PHYSICAL_ADDRESS low, high, skip;
+  ADMISSION_POOL_SLAB *slab;
+  const PFN_NUMBER *frames;
+  ULONG attempt;
+  slab = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*slab), ADMISSION_POOL_TAG);
+  if (slab == NULL) return NULL;
+  low.QuadPart = 0;
+  high.QuadPart = (LONGLONG)(ADMISSION_HVC_PHYSICAL_LIMIT - 1ULL);
+  for (attempt = 0u; attempt < 2u; ++attempt) {
+    ULONGLONG i, j;
+    PMDL mdl;
+    skip.QuadPart = (LONGLONG)(attempt == 0u ? ADMISSION_POOL_SLAB_BYTES
+                                             : ADMISSION_POOL_DEMAND_GRANULE);
+    mdl = MmAllocatePagesForMdlEx(low, high, skip,
+        (SIZE_T)ADMISSION_POOL_SLAB_BYTES, MmWriteCombined,
+        MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS | MM_ALLOCATE_FULLY_REQUIRED);
+    if (mdl == NULL) continue;
+    frames = MmGetMdlPfnArray(mdl);
+    if (MmGetMdlByteCount(mdl) != ADMISSION_POOL_SLAB_BYTES) goto Next;
+    for (i = 0ULL; i < ADMISSION_POOL_SLAB_SLOTS; ++i) {
+      ULONGLONG pa = (ULONGLONG)frames[i * pages] << PAGE_SHIFT;
+      if ((pa & (ADMISSION_POOL_DEMAND_GRANULE - 1ULL)) ||
+          pa > ADMISSION_HVC_PHYSICAL_LIMIT - ADMISSION_POOL_DEMAND_GRANULE)
+        goto Next;
+      for (j = 1ULL; j < pages; ++j)
+        if (frames[i * pages + j] != frames[i * pages] + j) goto Next;
+      slab->Pa[i] = pa;
+    }
+    slab->Handle = mdl;
+    if (attempt == 0u) ++pool->SlabContiguous;
+    else ++pool->SlabChunked;
+    return slab;
+Next:
+    MmFreePagesFromMdl(mdl);
+    ExFreePool(mdl);
+  }
+  ExFreePoolWithTag(slab, ADMISSION_POOL_TAG);
+  return NULL;
 }
 
-/* M2-f3d: the window and the UAT map 16 KiB pages, so a granule needs only
- * 16 KiB-aligned 16 KiB blocks; EXP1259 measured ~258 us per 64 KiB-aligned
- * 64 KiB block even in one call, the cost of the allocation itself (the
- * window mapped 16k commands in 71 ms). */
-#define ADMISSION_POOL_DEMAND_BLOCK ((ULONGLONG)AGX_POOL_WINDOW_PAGE)
-C_ASSERT(ADMISSION_POOL_DEMAND_GRANULE % AGX_POOL_WINDOW_PAGE == 0ULL);
+static VOID AdmissionPoolFreeSlab(void *Opaque, ADMISSION_POOL_SLAB *Slab) {
+  PMDL mdl = (PMDL)Slab->Handle;
+  UNREFERENCED_PARAMETER(Opaque);
+  MmFreePagesFromMdl(mdl);
+  ExFreePool(mdl);
+  ExFreePoolWithTag(Slab, ADMISSION_POOL_TAG);
+}
 
-/* Fresh zeroed Windows pages for granules [First, First + Count): one
- * MmAllocatePagesForMdlEx of 16 KiB-aligned 16 KiB blocks, each block mapped
- * at its place in the window (physically adjacent blocks in one MAP_AT). All
- * or nothing. */
+/* Granules [First, First + Count) take slab slots and are mapped (adjacent
+ * slots of adjacent granules in one MAP_AT). All or nothing. */
 static int AdmissionPoolCommitRun(void *Opaque, unsigned long long First,
                                   unsigned long long Count) {
   ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Opaque;
-  const ULONGLONG pages = ADMISSION_POOL_DEMAND_BLOCK / PAGE_SIZE;
-  ULONGLONG blocks;
-  PHYSICAL_ADDRESS low, high, skip;
   LARGE_INTEGER start = KeQueryPerformanceCounter(NULL);
-  ADMISSION_POOL_EXTENT *extent;
-  const PFN_NUMBER *frames;
-  ULONGLONG i, j, mapped = 0ULL, us;
-  PMDL mdl;
-  if (Count == 0ULL || Count > ADMISSION_POOL_MAX_RUN) return 0;
-  extent = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*extent),
-                           ADMISSION_POOL_TAG);
-  if (extent == NULL) return 0;
-  low.QuadPart = 0;
-  high.QuadPart = (LONGLONG)(ADMISSION_HVC_PHYSICAL_LIMIT - 1ULL);
-  skip.QuadPart = (LONGLONG)ADMISSION_POOL_DEMAND_BLOCK;
-  blocks = Count * (ADMISSION_POOL_DEMAND_GRANULE / ADMISSION_POOL_DEMAND_BLOCK);
-  mdl = MmAllocatePagesForMdlEx(low, high, skip,
-      (SIZE_T)(Count * ADMISSION_POOL_DEMAND_GRANULE), MmWriteCombined,
-      MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS | MM_ALLOCATE_FULLY_REQUIRED);
-  if (mdl == NULL) {
-    ExFreePoolWithTag(extent, ADMISSION_POOL_TAG);
+  ULONGLONG i, mapped = 0ULL, us;
+  if (Count == 0ULL || Count > ADMISSION_POOL_MAX_RUN ||
+      !AdmissionPoolSlabTake(&pool->Slabs, Count, pool->RunSlab, pool->RunSlot))
     return 0;
-  }
-  frames = MmGetMdlPfnArray(mdl);
-  if (MmGetMdlByteCount(mdl) != Count * ADMISSION_POOL_DEMAND_GRANULE)
-    goto Free;
-  for (i = 0ULL; i < blocks; ++i) {
-    ULONGLONG pa = (ULONGLONG)frames[i * pages] << PAGE_SHIFT;
-    if ((pa & (ADMISSION_POOL_DEMAND_BLOCK - 1ULL)) ||
-        pa > ADMISSION_HVC_PHYSICAL_LIMIT - ADMISSION_POOL_DEMAND_BLOCK)
-      goto Free;
-    for (j = 1ULL; j < pages; ++j)
-      if (frames[i * pages + j] != frames[i * pages] + j) goto Free;
-  }
-  /* mapped counts blocks: window offset First * granule + mapped * block. */
-  while (mapped < blocks) {
+  while (mapped < Count) {
     ULONGLONG run = 1ULL;
-    ULONGLONG pa = (ULONGLONG)frames[mapped * pages] << PAGE_SHIFT;
-    while (mapped + run < blocks &&
-           ((ULONGLONG)frames[(mapped + run) * pages] << PAGE_SHIFT) ==
-               pa + run * ADMISSION_POOL_DEMAND_BLOCK)
+    ULONGLONG pa = pool->RunSlab[mapped]->Pa[pool->RunSlot[mapped]];
+    while (mapped + run < Count &&
+           pool->RunSlab[mapped + run]->Pa[pool->RunSlot[mapped + run]] ==
+               pa + run * ADMISSION_POOL_DEMAND_GRANULE)
       ++run;
     pool->LastWindowResult = AdmissionPoolWindowRange(pool->Context,
-        AGX_POOL_WINDOW_CMD_MAP_AT,
-        First * ADMISSION_POOL_DEMAND_GRANULE + mapped * ADMISSION_POOL_DEMAND_BLOCK,
-        pa, run * ADMISSION_POOL_DEMAND_BLOCK);
+        AGX_POOL_WINDOW_CMD_MAP_AT, (First + mapped) * ADMISSION_POOL_DEMAND_GRANULE,
+        pa, run * ADMISSION_POOL_DEMAND_GRANULE);
     if (pool->LastWindowResult != AgxPoolWindowOk) goto Unmap;
     mapped += run;
   }
-  extent->Mdl = mdl;
-  extent->Granules = Count;
-  extent->Live = Count;
-  for (i = 0ULL; i < Count; ++i) pool->Extents[First + i] = extent;
-  pool->HeldGranules += Count;
+  for (i = 0ULL; i < Count; ++i) {
+    pool->SlabOf[First + i] = pool->RunSlab[i];
+    pool->SlotOf[First + i] = (UCHAR)pool->RunSlot[i];
+  }
   us = AdmissionPoolElapsedUs(start);
   pool->CommitUs += us;
   if (us > pool->CommitUsMax) pool->CommitUsMax = us;
   return 1;
 Unmap:
-  /* Each MAP_AT was all or nothing: undo the runs that were mapped. */
+  /* Each MAP_AT was all or nothing: undo the spans that were mapped. */
   if (mapped != 0ULL &&
       AdmissionPoolWindowRange(pool->Context, AGX_POOL_WINDOW_CMD_UNMAP_RANGE,
           First * ADMISSION_POOL_DEMAND_GRANULE, 0ULL,
-          mapped * ADMISSION_POOL_DEMAND_BLOCK) != AgxPoolWindowOk) {
-    /* Still aliased: never return these pages to Windows. */
+          mapped * ADMISSION_POOL_DEMAND_GRANULE) != AgxPoolWindowOk) {
+    /* Still aliased: these slots never return (their slab stays held). */
     InterlockedIncrement(&pool->Context->PoolLeaks);
-    ExFreePoolWithTag(extent, ADMISSION_POOL_TAG);
+    for (i = mapped; i < Count; ++i)
+      AdmissionPoolSlabGive(&pool->Slabs, pool->RunSlab[i], pool->RunSlot[i]);
     return 0;
   }
-Free:
-  MmFreePagesFromMdl(mdl);
-  ExFreePool(mdl);
-  ExFreePoolWithTag(extent, ADMISSION_POOL_TAG);
+  for (i = 0ULL; i < Count; ++i)
+    AdmissionPoolSlabGive(&pool->Slabs, pool->RunSlab[i], pool->RunSlot[i]);
   return 0;
 }
 
@@ -348,10 +352,10 @@ static ADMISSION_POOL_RELEASE AdmissionPoolReleaseGranule(
     void *Opaque, unsigned long long Index) {
   ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Opaque;
   LARGE_INTEGER start = KeQueryPerformanceCounter(NULL);
-  ADMISSION_POOL_EXTENT *extent = pool->Extents[Index];
+  ADMISSION_POOL_SLAB *slab = pool->SlabOf[Index];
   ULONGLONG us;
   ULONG result;
-  if (extent == NULL) return AdmissionPoolReleaseFailed;
+  if (slab == NULL) return AdmissionPoolReleaseFailed;
   /* Executed records' write-combined stores complete before the unmap. */
   KeMemoryBarrier();
   result = AdmissionPoolWindowRange(pool->Context,
@@ -360,8 +364,8 @@ static ADMISSION_POOL_RELEASE AdmissionPoolReleaseGranule(
   if (result == AgxPoolWindowBusy) return AdmissionPoolReleaseBusy;
   pool->LastWindowResult = result;
   if (result != AgxPoolWindowOk) return AdmissionPoolReleaseFailed;
-  pool->Extents[Index] = NULL;
-  AdmissionPoolExtentDrop(pool, extent);
+  pool->SlabOf[Index] = NULL;
+  AdmissionPoolSlabGive(&pool->Slabs, slab, pool->SlotOf[Index]);
   us = AdmissionPoolElapsedUs(start);
   pool->ReleaseUs += us;
   if (us > pool->ReleaseUsMax) pool->ReleaseUsMax = us;
@@ -408,7 +412,14 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *Context
     receipt.Candidates = pool->Demand.Candidates;
     receipt.ExecutedSeq = pool->Demand.ExecutedSeq;
     receipt.ReleaseDelayMs = pool->Demand.ReleaseDelay;
-    receipt.HeldGranules = pool->HeldGranules;
+    receipt.HeldGranules = pool->Slabs.Stats.Slabs * ADMISSION_POOL_SLAB_SLOTS;
+    receipt.Slabs = pool->Slabs.Stats.Slabs;
+    receipt.PeakSlabs = pool->Slabs.Stats.PeakSlabs;
+    receipt.NewSlabs = pool->Slabs.Stats.NewSlabs;
+    receipt.NewSlabFailures = pool->Slabs.Stats.NewSlabFailures;
+    receipt.FreedSlabs = pool->Slabs.Stats.FreedSlabs;
+    receipt.SlabContiguous = pool->SlabContiguous;
+    receipt.SlabChunked = pool->SlabChunked;
     pool->StagedGranules = stats->CommittedGranules;
     pool->StagedFailures = failures;
   }
@@ -502,7 +513,8 @@ static VOID AdmissionPoolReclaimDpc(_In_ PKDPC Dpc, _In_opt_ PVOID Opaque,
 
 static VOID AdmissionPoolDemandFree(ADMISSION_POOL_RUNTIME *Pool) {
   if (Pool->Work) IoFreeWorkItem(Pool->Work);
-  if (Pool->Extents) ExFreePoolWithTag(Pool->Extents, ADMISSION_POOL_TAG);
+  if (Pool->SlotOf) ExFreePoolWithTag(Pool->SlotOf, ADMISSION_POOL_TAG);
+  if (Pool->SlabOf) ExFreePoolWithTag(Pool->SlabOf, ADMISSION_POOL_TAG);
   if (Pool->Candidates) ExFreePoolWithTag(Pool->Candidates, ADMISSION_POOL_TAG);
   if (Pool->Granules) ExFreePoolWithTag(Pool->Granules, ADMISSION_POOL_TAG);
   ExFreePoolWithTag(Pool, ADMISSION_POOL_TAG);
@@ -539,15 +551,13 @@ static VOID AdmissionPoolDemandStop(ADMISSION_CONTEXT *Context) {
   unmapped = Context->BrokerBase != NULL &&
       AdmissionPoolWindowCommand(Context, AGX_POOL_WINDOW_CMD_UNMAP_ALL, 0ULL,
                                  0ULL) == AgxPoolWindowOk;
-  for (i = 0ULL; i < pool->Demand.Count; ++i) {
-    ADMISSION_POOL_EXTENT *extent = pool->Extents[i];
-    if (extent == NULL) continue;
-    pool->Extents[i] = NULL;
-    if (!unmapped) {
-      InterlockedIncrement(&Context->PoolLeaks);
-      continue;
-    }
-    AdmissionPoolExtentDrop(pool, extent);
+  if (unmapped) {
+    /* Every window page is gone: all slabs return to Windows. */
+    for (i = 0ULL; i < pool->Demand.Count; ++i) pool->SlabOf[i] = NULL;
+    AdmissionPoolSlabDrain(&pool->Slabs);
+  } else {
+    /* Still aliased: keep every slab (and its pages) for good. */
+    InterlockedIncrement(&Context->PoolLeaks);
   }
   AdmissionPoolDemandFree(pool);
   Context->PoolCpu = NULL;
@@ -568,12 +578,15 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
       (SIZE_T)(count * sizeof(*pool->Granules)), ADMISSION_POOL_TAG);
   pool->Candidates = ExAllocatePool2(POOL_FLAG_NON_PAGED,
       (SIZE_T)(count * sizeof(*pool->Candidates)), ADMISSION_POOL_TAG);
-  pool->Extents = ExAllocatePool2(POOL_FLAG_NON_PAGED,
-      (SIZE_T)(count * sizeof(*pool->Extents)), ADMISSION_POOL_TAG);
+  pool->SlabOf = ExAllocatePool2(POOL_FLAG_NON_PAGED,
+      (SIZE_T)(count * sizeof(*pool->SlabOf)), ADMISSION_POOL_TAG);
+  pool->SlotOf = ExAllocatePool2(POOL_FLAG_NON_PAGED,
+      (SIZE_T)(count * sizeof(*pool->SlotOf)), ADMISSION_POOL_TAG);
   ops.Context = pool;
   ops.Commit = AdmissionPoolCommitRun;
   ops.Release = AdmissionPoolReleaseGranule;
-  if (pool->Granules == NULL || pool->Candidates == NULL || pool->Extents == NULL ||
+  if (pool->Granules == NULL || pool->Candidates == NULL || pool->SlabOf == NULL ||
+      pool->SlotOf == NULL ||
       !AdmissionPoolDemandInit(&pool->Demand, pool->Granules, pool->Candidates,
                                count, &ops)) {
     AdmissionPoolDemandFree(pool);
@@ -586,6 +599,10 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
   }
   pool->Demand.ReleaseDelay = ADMISSION_POOL_RELEASE_DELAY_MS;
   pool->Demand.MaxRun = ADMISSION_POOL_MAX_RUN;
+  pool->Slabs.Context = pool;
+  pool->Slabs.NewSlab = AdmissionPoolNewSlab;
+  pool->Slabs.FreeSlab = AdmissionPoolFreeSlab;
+  pool->Slabs.SpareLimit = ADMISSION_POOL_SPARE_SLABS;
   ExInitializeFastMutex(&pool->Lock);
   KeInitializeTimer(&pool->Timer);
   KeInitializeDpc(&pool->Dpc, AdmissionPoolReclaimDpc, pool);

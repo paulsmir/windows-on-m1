@@ -18,6 +18,7 @@
 #include "render_allocation.h"
 #include "render_pool_probe.h"
 #include "render_pool_demand.h"
+#include "render_pool_slab.h"
 #include "render_hvc.h"
 #include "apple_agx_memory.h"
 #include "apple_agx_g3_private_failure.h"

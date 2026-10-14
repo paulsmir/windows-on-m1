@@ -81,7 +81,7 @@ typedef enum _ADMISSION_POOL_PLACE {
  * moves by ADMISSION_POOL_DEMAND_RECEIPT_STEP granules or a failure count
  * changes. Times are microseconds of commit (page allocation + MAP_AT) and
  * release (UNMAP_RANGE + page free). */
-#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 3u /* 2: ReleaseDelayMs; 3: Stats.CommitCalls */
+#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 4u /* 2: ReleaseDelayMs; 3: Stats.CommitCalls; 4: slabs */
 #define ADMISSION_POOL_DEMAND_RECEIPT_STEP 256u /* 16 MiB */
 typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   unsigned int Version, Bytes, GranuleBytes, LastWindowResult;
@@ -93,6 +93,9 @@ typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   /* v3: granules whose pages the driver holds (mapped or awaiting the rest
    * of their commit run). */
   unsigned long long HeldGranules;
+  /* v4 (M2-f3e): 2 MiB slabs; contiguous or 32 x 64 KiB chunks. */
+  unsigned long long Slabs, PeakSlabs, NewSlabs, NewSlabFailures, FreedSlabs;
+  unsigned long long SlabContiguous, SlabChunked;
 } ADMISSION_POOL_DEMAND_RECEIPT;
 
 /* Granules and CandidateList hold Count zeroed entries each. */
