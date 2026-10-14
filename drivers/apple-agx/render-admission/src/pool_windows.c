@@ -731,11 +731,9 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolStart(ADMISSION_CONTEXT *Context)
   }
   if (ranges) {
     if (AdmissionPoolDemandStart(Context, window) &&
-        (AppleAgxPhysicalTopologyAddPool(&Context->Memory.Topology,
-             ADMISSION_MEMORY_POOL_GPU_VA, Context->PoolBytes) !=
-             AppleAgxPhysicalTopologyOk ||
-         AppleAgxPhysicalTopologyAddGate(&Context->Memory.Topology) !=
-             AppleAgxPhysicalTopologyOk)) {
+        AppleAgxPhysicalTopologyAddPool(&Context->Memory.Topology,
+            ADMISSION_MEMORY_POOL_GPU_VA, Context->PoolBytes) !=
+            AppleAgxPhysicalTopologyOk) {
       window->Status = 6u;
       AdmissionMemoryPoolRelease(Context);
     }
@@ -778,9 +776,7 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolStart(ADMISSION_CONTEXT *Context)
   Context->PoolBytes = ADMISSION_MEMORY_POOL_BYTES;
   if (AppleAgxPhysicalTopologyAddPool(&Context->Memory.Topology,
           ADMISSION_MEMORY_POOL_GPU_VA, Context->PoolBytes) !=
-          AppleAgxPhysicalTopologyOk ||
-      AppleAgxPhysicalTopologyAddGate(&Context->Memory.Topology) !=
-          AppleAgxPhysicalTopologyOk) {
+      AppleAgxPhysicalTopologyOk) {
     window->Status = 6u;
     AdmissionMemoryPoolRelease(Context);
   }
@@ -792,18 +788,8 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolStop(ADMISSION_CONTEXT *Context) 
   AdmissionMemoryPoolRelease(Context);
   RtlZeroMemory(&Context->Memory.Topology.Pool,
                 sizeof(Context->Memory.Topology.Pool));
-  RtlZeroMemory(&Context->Memory.Topology.Gate,
-                sizeof(Context->Memory.Topology.Gate));
-  if (Context->Memory.Topology.SegmentCount > 2u)
+  if (Context->Memory.Topology.SegmentCount == 3u)
     Context->Memory.Topology.SegmentCount = 2u;
-}
-
-_Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolGate(
-    const ADMISSION_CONTEXT *Context) {
-  return Context != NULL &&
-         Context->Memory.Topology.Pool.Id == ADMISSION_MEMORY_POOL_SEGMENT &&
-         Context->Memory.Topology.Gate.Id == ADMISSION_MEMORY_GATE_SEGMENT
-             ? TRUE : FALSE;
 }
 
 _Use_decl_annotations_ BOOLEAN AdmissionMemoryPoolView(
