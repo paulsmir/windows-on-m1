@@ -2163,17 +2163,26 @@ UnsupportedDxgi''')
    unsigned i;
    Device *windows_device=CastDevice(hDevice);
    if(!windows_device) { SetError(hDevice,E_INVALIDARG); return; }
-   Resource *windows_resource=(SOTargets==1u&&ClearTargets==0u&&phResource)?
-      CastResource(phResource[0]):NULL;
-   if(SOTargets==1u&&ClearTargets==0u) {
-      if(!windows_resource||!pOffsets||pOffsets[0]!=0u||
-         windows_resource->owner_device!=windows_device||
-         windows_resource->bind_flags!=
-           (D3D10_DDI_BIND_VERTEX_BUFFER|D3D10_DDI_BIND_STREAM_OUTPUT)||
-         !windows_resource->resource) { SetError(hDevice,E_NOTIMPL); return; }
-   } else if(!((SOTargets==0u&&ClearTargets==0u)||
-               (SOTargets==0u&&ClearTargets==1u))) {
-      SetError(hDevice,E_NOTIMPL);return;
+   /* EXP1287: the D3D10 DDI contract -- at most four slots
+    * (D3D10_SO_BUFFER_SLOT_COUNT); a NULL handle unbinds its slot; every
+    * bound buffer belongs to this device and was created with the
+    * stream-output bind flag (any other bind flags too); an offset is a
+    * 4-byte-aligned byte offset or ~0u, append (Gallium's -1, which Asahi
+    * agx_set_stream_output_targets honours). The EXP-era guard admitted
+    * only one VERTEX_BUFFER|STREAM_OUTPUT buffer at offset 0. */
+   if(SOTargets+ClearTargets>4u||(SOTargets&&(!phResource||!pOffsets))) {
+      SetError(hDevice,E_INVALIDARG); return;
+   }
+   for(i=0;i<SOTargets;++i) {
+      Resource *windows_resource=CastResource(phResource[i]);
+      if(!windows_resource) continue;
+      if(windows_resource->owner_device!=windows_device||
+         !(windows_resource->bind_flags&D3D10_DDI_BIND_STREAM_OUTPUT)||
+         !windows_resource->resource||
+         windows_resource->resource->target!=PIPE_BUFFER||
+         (pOffsets[i]!=~0u&&(pOffsets[i]&3u))) {
+         SetError(hDevice,E_INVALIDARG); return;
+      }
    }
 
    Device *pDevice = windows_device;
