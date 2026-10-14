@@ -153,7 +153,14 @@ int main(int argc, char **argv) {
     td.Width = td.Height = 64; td.MipLevels = td.ArraySize = 1;
     td.Format = DXGI_FORMAT_R8G8B8A8_UNORM; td.SampleDesc.Count = 1;
     td.Usage = D3D11_USAGE_DEFAULT; td.BindFlags = D3D11_BIND_RENDER_TARGET;
-    hr = ID3D11Device_CreateTexture2D(device, &td, NULL, &target);
+    {
+      /* EXP1284: a render target created with initial data. */
+      static unsigned black_pixels[64 * 64];
+      D3D11_SUBRESOURCE_DATA init = {black_pixels, 64 * 4, 0};
+      for (int p = 0; p < 64 * 64; ++p) black_pixels[p] = 0xff000000u;
+      hr = ID3D11Device_CreateTexture2D(device, &td, &init, &target);
+      say("CreateTexture2D render target with data 0x%08lx", (unsigned long)hr);
+    }
     if (SUCCEEDED(hr))
       hr = ID3D11Device_CreateRenderTargetView(device, (ID3D11Resource *)target, NULL, &rtv);
     for (UINT b = 0; b < buffers && SUCCEEDED(hr); ++b) {

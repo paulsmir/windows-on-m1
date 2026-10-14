@@ -3131,7 +3131,10 @@ AgxD3d10ResourceWithinRequiredLimits(
           pCreateResource->BindFlags == (D3D10_DDI_BIND_RENDER_TARGET |
               D3D10_DDI_BIND_SHADER_RESOURCE)) &&
          (pCreateResource->MiscFlags == 0 || bgr_auto) && !pCreateResource->pPrimaryDesc &&
-         (!pCreateResource->pInitialDataUP || bgr_auto);
+         /* EXP1284: D3D allows initial data for render targets; the
+          * upstream texture-map upload below writes it. Multisampled
+          * targets take no initial data (D3D). */
+         (!pCreateResource->pInitialDataUP || pCreateResource->SampleDesc.Count == 1);
       if (!private_rt || !screen->resource_create_with_modifiers) {
          LOG_UNSUPPORTED("Only a private uncompressed admitted render target is supported");
          SetError(hDevice, E_NOTIMPL);
