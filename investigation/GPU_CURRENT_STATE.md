@@ -1,6 +1,25 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-14T13:04Z (read this first)
+## Current as of 2026-10-14T14:10Z (read this first)
+
+Installed: PACKAGE1270 (build tree 23a6b18b = EXP1269 + M2-f9a; the next
+pipeline's rec1270h rollback removes it). M2 status:
+- M2-f5 VALIDATED (EXP1265), M2-f7 VALIDATED for creation (EXP1269),
+  M2-f9a VALIDATED (EXP1270: 2048x8192 targets render; TVB capped at the
+  32-block buffer-manager window, firmware partial renders, no fault).
+- M2-f8 is a hardware limit (CPU-visible class BOs demote to 4 KiB system
+  pages at segment-3 exhaustion).
+- M2-f10 OPEN (EXP1270): the D3D UMD gives every resource above 16 MiB
+  (ADMISSION_UMD_SYSTEM_DIRECT_BYTES) a GPU-local class canonical BO plus
+  staging, and CPU-invisible class BOs were confined to segment 2 (312 MiB
+  firmware reserve): 4 x 64 MiB or 7 x 32 MiB targets exhausted it (copy
+  QUERY predicate 56, NoTable -> device reset). Fix f3c20566: segment 3 only,
+  reserved at creation. Build tree 9da91ab6 for EXP1271 (KMD only).
+- Then M2-f6 (m1n1 fa45bc58 + KMD e0b1b4b4) as EXP1272 (pipeline
+  newexp-kmd1272-m2f6.sh, needs post-clone.sh for the macho swap), G4-r1
+  (3ed6a8ee), D3D.
+
+## Current as of 2026-10-14T13:04Z
 
 Installed: PACKAGE1269 (build tree 7493dffd = c78a3d9d M2-f5 + 83984bc0
 M2-f7; the next pipeline's rec1269h rollback removes it). M2 status:
