@@ -2,13 +2,14 @@
  * 1. Lock system memory (VirtualLock, working set raised to match) until
  *    GlobalMemoryStatusEx reports at most <leave-MiB> available, so Windows
  *    cannot hand those pages to the driver.
- * 2. On the AGX adapter, create 32 MiB render-target textures and clear each
+ * 2. On the AGX adapter, create render-target textures and clear each
  *    (the clear makes VidMm place it) until a creation fails, the device is
  *    removed or <max-MiB> is reached.
  * 3. Clear and read back the first texture to show whether the device still
  *    works, then free everything.
  * Each line is written through to <out.txt>, so the log survives a crash.
- * Usage: agx_mempressure.exe <out.txt> <leave-MiB> <max-MiB> */
+ * Usage: agx_mempressure.exe <out.txt> <leave-MiB> <max-MiB> [height]
+ * (textures are 2048 x height RGBA8, default 4096 = 32 MiB). */
 #define COBJMACROS
 #define INITGUID
 #include <windows.h>
@@ -67,7 +68,8 @@ int main(int argc, char **argv) {
                                     D3D_FEATURE_LEVEL_10_0};
   D3D11_TEXTURE2D_DESC td;
   HRESULT hr, first_failure = S_OK;
-  unsigned count = 0, i;
+  unsigned count = 0, i, height = 4096;
+  unsigned long long texture_bytes;
   SIZE_T wsmin, wsmax;
 
   if (argc < 4) {
@@ -78,6 +80,9 @@ int main(int argc, char **argv) {
                     FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH, NULL);
   leave = strtoull(argv[2], NULL, 10) << 20;
   max_bytes = strtoull(argv[3], NULL, 10) << 20;
+  if (argc > 4) height = (unsigned)strtoul(argv[4], NULL, 10);
+  if (height == 0 || height > 8192) height = 4096;
+  texture_bytes = 2048ull * height * 4ull;
 
   hr = CreateDXGIFactory1(&IID_IDXGIFactory1, (void **)&factory);
   if (FAILED(hr)) { say("CreateDXGIFactory1 0x%08lx", (unsigned long)hr); return 1; }
@@ -115,9 +120,10 @@ int main(int argc, char **argv) {
   }
   say("LOCKED %llu MiB available %llu MiB", MIB(locked), MIB(available()));
 
-  /* 2. Fill. 2048 x 4096 RGBA8 = 32 MiB. */
+  /* 2. Fill: 2048 x height RGBA8. */
+  say("TEXTURE 2048x%u %llu MiB", height, MIB(texture_bytes));
   memset(&td, 0, sizeof(td));
-  td.Width = 2048; td.Height = 4096; td.MipLevels = td.ArraySize = 1;
+  td.Width = 2048; td.Height = height; td.MipLevels = td.ArraySize = 1;
   td.Format = DXGI_FORMAT_R8G8B8A8_UNORM; td.SampleDesc.Count = 1;
   td.Usage = D3D11_USAGE_DEFAULT; td.BindFlags = D3D11_BIND_RENDER_TARGET;
   while (count < MAX_TEXTURES && filled < max_bytes) {
@@ -135,7 +141,7 @@ int main(int argc, char **argv) {
     ID3D11DeviceContext_ClearRenderTargetView(ctx, rtv[count], colour);
     ID3D11DeviceContext_Flush(ctx);
     ++count;
-    filled += 32ull << 20;
+    filled += texture_bytes;
     hr = ID3D11Device_GetDeviceRemovedReason(device);
     if (hr != S_OK) { first_failure = hr; break; }
     if (count % 8 == 0)
