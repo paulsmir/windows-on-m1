@@ -18,9 +18,9 @@ Admission.WowIcdCopyFiles=13
 Admission.WowUmdCopyFiles=10,SysWOW64
 
 [Manufacturer]
-%ManufacturerName%=Models,NTarm64
+%ManufacturerName%=Models,NTarm64.10.0...22000
 
-[Models.NTarm64]
+[Models.NTarm64.10.0...22000]
 %DeviceName%=Admission_Install,ACPI\APPL0002
 
 [Admission_Install]
