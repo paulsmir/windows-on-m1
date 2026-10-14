@@ -1,6 +1,25 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-14T22:02Z (read this first)
+## Current as of 2026-10-14T23:12Z (read this first)
+
+Installed: PACKAGE1287 (D3D works with MSAA off; the MSAA switches are
+default off; the next pipeline's rec1287h rollback removes it). m1n1 fa45bc58
+r2, INF 1235 copy, x86 ICD out56 (CS 45.5 fps, DWM faults 0).
+- EXP1287 CONFIRMED (C): the multisample caps/quality reporting alone makes
+  the runtime refuse D3D devices (0x887A0020); the screen's multisampling is
+  not a cause. The runtime's rule is undocumented in the pages read; the
+  EXP1287 answers cover only some members of each cast family and give 0
+  levels for SampleCount 1 (the DDI page requires 1).
+- EXP1287 found four defects (fixes = EXP1288 candidate, one checkpoint
+  each): predication (CPU render condition retires the batch the draw wrapper
+  entered: evaluate it before taking the batch), depth-only prepass (zero-byte
+  tile-buffer sample refused; Mesa/Asahi allow 0), SoSetTargets (EXP-era
+  one-VB|SO guard), fragment exports inside control flow (tgsi_to_nir stores
+  before every RET; lower outputs to temporaries as HK does).
+- Confirmed (EXP1284, again EXP1287): occlusion queries, D3D depth-stencil,
+  8 MRT, GS SO, every regression.
+
+## Current as of 2026-10-14T22:02Z
 
 Installed: PACKAGE1285 (D3D BROKEN: every D3D device fails, DWM restarts;
 the next pipeline's rec1285h rollback removes it). m1n1 fa45bc58 r2, INF
