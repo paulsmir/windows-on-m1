@@ -254,14 +254,22 @@ static VOID AdmissionPoolExtentDrop(ADMISSION_POOL_RUNTIME *Pool,
   ExFreePoolWithTag(Extent, ADMISSION_POOL_TAG);
 }
 
+/* M2-f3d: the window and the UAT map 16 KiB pages, so a granule needs only
+ * 16 KiB-aligned 16 KiB blocks; EXP1259 measured ~258 us per 64 KiB-aligned
+ * 64 KiB block even in one call, the cost of the allocation itself (the
+ * window mapped 16k commands in 71 ms). */
+#define ADMISSION_POOL_DEMAND_BLOCK ((ULONGLONG)AGX_POOL_WINDOW_PAGE)
+C_ASSERT(ADMISSION_POOL_DEMAND_GRANULE % AGX_POOL_WINDOW_PAGE == 0ULL);
+
 /* Fresh zeroed Windows pages for granules [First, First + Count): one
- * MmAllocatePagesForMdlEx of 64 KiB-aligned 64 KiB blocks (EXP1246), each
- * block mapped at its granule's window offset (physically adjacent blocks
- * in one MAP_AT). All or nothing. */
+ * MmAllocatePagesForMdlEx of 16 KiB-aligned 16 KiB blocks, each block mapped
+ * at its place in the window (physically adjacent blocks in one MAP_AT). All
+ * or nothing. */
 static int AdmissionPoolCommitRun(void *Opaque, unsigned long long First,
                                   unsigned long long Count) {
   ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Opaque;
-  const ULONGLONG pages = ADMISSION_POOL_DEMAND_GRANULE / PAGE_SIZE;
+  const ULONGLONG pages = ADMISSION_POOL_DEMAND_BLOCK / PAGE_SIZE;
+  ULONGLONG blocks;
   PHYSICAL_ADDRESS low, high, skip;
   LARGE_INTEGER start = KeQueryPerformanceCounter(NULL);
   ADMISSION_POOL_EXTENT *extent;
@@ -274,7 +282,8 @@ static int AdmissionPoolCommitRun(void *Opaque, unsigned long long First,
   if (extent == NULL) return 0;
   low.QuadPart = 0;
   high.QuadPart = (LONGLONG)(ADMISSION_HVC_PHYSICAL_LIMIT - 1ULL);
-  skip.QuadPart = (LONGLONG)ADMISSION_POOL_DEMAND_GRANULE;
+  skip.QuadPart = (LONGLONG)ADMISSION_POOL_DEMAND_BLOCK;
+  blocks = Count * (ADMISSION_POOL_DEMAND_GRANULE / ADMISSION_POOL_DEMAND_BLOCK);
   mdl = MmAllocatePagesForMdlEx(low, high, skip,
       (SIZE_T)(Count * ADMISSION_POOL_DEMAND_GRANULE), MmWriteCombined,
       MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS | MM_ALLOCATE_FULLY_REQUIRED);
@@ -285,25 +294,26 @@ static int AdmissionPoolCommitRun(void *Opaque, unsigned long long First,
   frames = MmGetMdlPfnArray(mdl);
   if (MmGetMdlByteCount(mdl) != Count * ADMISSION_POOL_DEMAND_GRANULE)
     goto Free;
-  for (i = 0ULL; i < Count; ++i) {
+  for (i = 0ULL; i < blocks; ++i) {
     ULONGLONG pa = (ULONGLONG)frames[i * pages] << PAGE_SHIFT;
-    if ((pa & (ADMISSION_POOL_DEMAND_GRANULE - 1ULL)) ||
-        pa > ADMISSION_HVC_PHYSICAL_LIMIT - ADMISSION_POOL_DEMAND_GRANULE)
+    if ((pa & (ADMISSION_POOL_DEMAND_BLOCK - 1ULL)) ||
+        pa > ADMISSION_HVC_PHYSICAL_LIMIT - ADMISSION_POOL_DEMAND_BLOCK)
       goto Free;
     for (j = 1ULL; j < pages; ++j)
       if (frames[i * pages + j] != frames[i * pages] + j) goto Free;
   }
-  while (mapped < Count) {
+  /* mapped counts blocks: window offset First * granule + mapped * block. */
+  while (mapped < blocks) {
     ULONGLONG run = 1ULL;
     ULONGLONG pa = (ULONGLONG)frames[mapped * pages] << PAGE_SHIFT;
-    while (mapped + run < Count &&
+    while (mapped + run < blocks &&
            ((ULONGLONG)frames[(mapped + run) * pages] << PAGE_SHIFT) ==
-               pa + run * ADMISSION_POOL_DEMAND_GRANULE)
+               pa + run * ADMISSION_POOL_DEMAND_BLOCK)
       ++run;
     pool->LastWindowResult = AdmissionPoolWindowRange(pool->Context,
         AGX_POOL_WINDOW_CMD_MAP_AT,
-        (First + mapped) * ADMISSION_POOL_DEMAND_GRANULE, pa,
-        run * ADMISSION_POOL_DEMAND_GRANULE);
+        First * ADMISSION_POOL_DEMAND_GRANULE + mapped * ADMISSION_POOL_DEMAND_BLOCK,
+        pa, run * ADMISSION_POOL_DEMAND_BLOCK);
     if (pool->LastWindowResult != AgxPoolWindowOk) goto Unmap;
     mapped += run;
   }
@@ -321,7 +331,7 @@ Unmap:
   if (mapped != 0ULL &&
       AdmissionPoolWindowRange(pool->Context, AGX_POOL_WINDOW_CMD_UNMAP_RANGE,
           First * ADMISSION_POOL_DEMAND_GRANULE, 0ULL,
-          mapped * ADMISSION_POOL_DEMAND_GRANULE) != AgxPoolWindowOk) {
+          mapped * ADMISSION_POOL_DEMAND_BLOCK) != AgxPoolWindowOk) {
     /* Still aliased: never return these pages to Windows. */
     InterlockedIncrement(&pool->Context->PoolLeaks);
     ExFreePoolWithTag(extent, ADMISSION_POOL_TAG);
