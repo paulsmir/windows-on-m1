@@ -1256,7 +1256,9 @@ static void test_mesa_d3d10_frontend_open(void) {
     D3D10DDIARG_CREATEQUERY unsupportedQuery={0};
     D3D10DDI_HQUERY unsupportedQueryHandle={0};
     D3D10DDI_HRTQUERY unsupportedQueryRuntime={0};
-    unsupportedQuery.Query=D3D10DDI_QUERY_OCCLUSION;
+    /* D3D-G3: occlusion counters and predicates are pipe queries now;
+     * pipeline statistics remain fail-closed. */
+    unsupportedQuery.Query=D3D10DDI_QUERY_PIPELINESTATS;
     SIZE_T unsupportedQueryBytes=deviceFunctions.pfnCalcPrivateQuerySize(
         device,&unsupportedQuery);
     unsupportedQueryHandle.pDrvPrivate=malloc(unsupportedQueryBytes);

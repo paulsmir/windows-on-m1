@@ -803,7 +803,8 @@ AgxD3d10NoTargetReceipt(Device *pDevice, UINT kind, UINT count)
 
    D3D10_DDI_QUERY_DATA_PIPELINE_STATISTICS Statistics;
 };''','''enum QueryPhase {
-   QueryCreated, QueryIssued, QuerySignaled, QueryFailed, QueryDestroyed
+   QueryCreated, QueryBuilding, QueryIssued, QuerySignaled, QueryFailed,
+   QueryDestroyed
 };
 
 struct Query
@@ -816,6 +817,10 @@ struct Query
    UINT FenceToken;
    QueryPhase Phase;
    HRESULT LastError;
+   /* D3D-G3: occlusion counters and predicates are Mesa pipe queries; an
+    * event query has no pipe query and completes on the Windows fence. */
+   D3D10DDI_QUERY Type;
+   struct pipe_query *handle;
 };'''),
         ('''struct Resource
 {
@@ -887,10 +892,7 @@ struct Query
    D3D10DDI_HRTRENDERTARGETVIEW hRTRenderTargetView;
    Resource *owner_resource;
    RenderTargetView *next_presentation;
-};'''),
-        ('''   Query *pQuery = CastQuery(hQuery);
-   return pQuery ? pQuery->handle : NULL;''','''   (void)hQuery;
-   return NULL;''')])
+};''')])
     change('src/gallium/frontends/d3d10umd/Device.cpp',
         'dcf950aec993d40743671e1f208655e151158a9b4647bc3581dcd134962086aa',[
         ('#include "Format.h"', '''#include "Format.h"
@@ -1384,8 +1386,16 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
    Query *pQuery = CastQuery(hQuery);
    ULONGLONG owner = 0;
    ULONG generation = 0;
-   if (!pCreateQuery || pCreateQuery->Query != D3D10DDI_QUERY_EVENT ||
-       pCreateQuery->MiscFlags || !pQuery) {
+   /* D3D-G3: the ISP counts samples into the occlusion heap the KMD names
+    * as isp_oclqry_base; a predicate may carry the PREDICATEHINT flag. */
+   const bool occlusion = pCreateQuery &&
+      (pCreateQuery->Query == D3D10DDI_QUERY_OCCLUSION ||
+       pCreateQuery->Query == D3D10DDI_QUERY_OCCLUSIONPREDICATE);
+   if (!pCreateQuery || !pQuery ||
+       (pCreateQuery->Query != D3D10DDI_QUERY_EVENT && !occlusion) ||
+       (pCreateQuery->MiscFlags &&
+        !(pCreateQuery->Query == D3D10DDI_QUERY_OCCLUSIONPREDICATE &&
+          pCreateQuery->MiscFlags == D3D10DDI_QUERY_MISCFLAG_PREDICATEHINT))) {
       SetError(hDevice, E_NOTIMPL);
       return;
    }
@@ -1401,6 +1411,16 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
    candidate.DeviceGeneration = generation;
    candidate.Phase = QueryCreated;
    candidate.LastError = S_OK;
+   candidate.Type = pCreateQuery->Query;
+   if (occlusion) {
+      candidate.handle = pDevice->pipe->create_query(pDevice->pipe,
+         pCreateQuery->Query == D3D10DDI_QUERY_OCCLUSION ?
+            PIPE_QUERY_OCCLUSION_COUNTER : PIPE_QUERY_OCCLUSION_PREDICATE, 0);
+      if (!candidate.handle) {
+         SetError(hDevice, E_OUTOFMEMORY);
+         return;
+      }
+   }
    *pQuery = candidate;
    (void)hRTQuery;'''),
         ('''DestroyQuery(D3D10DDI_HDEVICE hDevice, // IN
@@ -1477,6 +1497,11 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
       if (SUCCEEDED(result))
          result = AgxD3d10WindowsQueryCollect(pDevice->windows);
    }
+   if (pQuery->handle) {
+      /* agx_destroy_query waits for the batches writing its heap slot. */
+      pDevice->pipe->destroy_query(pDevice->pipe, pQuery->handle);
+      pQuery->handle = NULL;
+   }
    pQuery->Magic = 0;
    pQuery->OwnerDevice = NULL;
    pQuery->OwnerCookie = 0;
@@ -1491,12 +1516,37 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
       SetError(hDevice, E_INVALIDARG);
       return;
    }
+   if (pQuery->handle) {
+      /* agx_begin_query makes it the context's occlusion query and zeroes
+       * its heap slot once the batches still writing it completed. */
+      if (!pDevice->pipe->begin_query(pDevice->pipe, pQuery->handle)) {
+         pQuery->Phase = QueryFailed;
+         pQuery->LastError = E_FAIL;
+         SetError(hDevice, E_FAIL);
+         return;
+      }
+      pQuery->Phase = QueryBuilding;
+      pQuery->LastError = S_OK;
+      return;
+   }
    if (pQuery->Phase == QueryFailed)
       SetError(hDevice, FAILED(pQuery->LastError) ? pQuery->LastError : E_FAIL);''')
     replace_function_body('src/gallium/frontends/d3d10umd/Query.cpp','QueryEnd','''   Device *pDevice = CastDevice(hDevice);
    Query *pQuery = CastQuery(hQuery);
    if (!EventQueryValid(pDevice, pQuery)) {
       SetError(hDevice, E_INVALIDARG);
+      return;
+   }
+   if (pQuery->handle) {
+      /* Only the query this one began; the draws since carry its index. */
+      if (pQuery->Phase != QueryBuilding) return;
+      if (!pDevice->pipe->end_query(pDevice->pipe, pQuery->handle)) {
+         pQuery->Phase = QueryFailed;
+         pQuery->LastError = E_FAIL;
+         SetError(hDevice, E_FAIL);
+         return;
+      }
+      pQuery->Phase = QueryIssued;
       return;
    }
    if (pQuery->Phase == QueryFailed || pQuery->IssueSerial == UINT_MAX) {
@@ -1533,11 +1583,47 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
    pQuery->Phase = QueryIssued;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Query.cpp','QueryGetData','''   Device *pDevice = CastDevice(hDevice);
    Query *pQuery = CastQuery(hQuery);
+   const UINT dataBytes = pQuery && pQuery->handle &&
+      pQuery->Type == D3D10DDI_QUERY_OCCLUSION ? sizeof(UINT64) : sizeof(BOOL);
    if (!EventQueryValid(pDevice, pQuery) ||
        !((pData == NULL && DataSize == 0) ||
-         (pData != NULL && DataSize == sizeof(BOOL))) ||
+         (pData != NULL && DataSize == dataBytes)) ||
        (Flags & ~D3D10_DDI_GET_DATA_DO_NOT_FLUSH)) {
       SetError(hDevice, E_INVALIDARG);
+      return;
+   }
+   if (pQuery->handle) {
+      if (pQuery->Phase == QueryFailed) {
+         SetError(hDevice, FAILED(pQuery->LastError) ? pQuery->LastError : E_FAIL);
+         return;
+      }
+      if (pQuery->Phase != QueryIssued && pQuery->Phase != QuerySignaled) {
+         SetError(hDevice, E_INVALIDARG);
+         return;
+      }
+      /* The native agx_get_query_result submits the query's writers and,
+       * without wait, reports not-ready until they completed. Submitting
+       * under DO_NOT_FLUSH too keeps a polling caller from never finishing. */
+      union pipe_query_result value;
+      memset(&value, 0, sizeof(value));
+      bool ready = pDevice->pipe->get_query_result(pDevice->pipe,
+         pQuery->handle, false, &value);
+      HRESULT status = AgxD3d10WindowsFlushStatus(pDevice->windows);
+      if (FAILED(status)) {
+         pQuery->Phase = QueryFailed;
+         pQuery->LastError = status;
+         SetError(hDevice, status);
+         return;
+      }
+      if (!ready) {
+         SetError(hDevice, DXGI_DDI_ERR_WASSTILLDRAWING);
+         return;
+      }
+      if (pData && pQuery->Type == D3D10DDI_QUERY_OCCLUSION)
+         *(UINT64 *)pData = value.u64;
+      else if (pData)
+         *(BOOL *)pData = value.b ? TRUE : FALSE;
+      pQuery->Phase = QuerySignaled;
       return;
    }
    if (pQuery->Phase == QuerySignaled) {

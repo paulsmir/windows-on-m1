@@ -175,7 +175,20 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
       return true;
    }'''
     part=replace(part,old,'   case PIPE_QUERY_TIMESTAMP:\n      return false; /* Windows GPU timestamp source is not implemented. */')
-    save(qp,query[:a]+part+query[b:])
+    query=query[:a]+part+query[b:]
+    # D3D-G3: D3D GetData polls. Without `wait`, submit the query's writers
+    # and report not-ready until every one completed (polled, then retired
+    # by agx_cleanup_batches) instead of blocking the caller.
+    query=replace(query,'''   /* TODO: Honour `wait` */
+   sync_query_writers(ctx, query, "Reading query results");''','''   if (!wait) {
+      flush_query_writers(ctx, query, "Polling query results");
+      while (is_query_busy(ctx, query) && agx_cleanup_batches(ctx) >= 0)
+         ;
+      if (is_query_busy(ctx, query))
+         return false;
+   }
+   sync_query_writers(ctx, query, "Reading query results");''')
+    save(qp,query)
     # Real draw entrypoint is wrapped so every native early return unwinds the
     # stable root. No manually constructed command/capture substitutes this call.
     sp='src/gallium/drivers/asahi/agx_state.c';s=(out/sp).read_text()
@@ -586,7 +599,7 @@ AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *backend, AGX_WIN32_SCREEN *wi
     original=original.replace('   agx_init_compute_caps(screen);','')
     original=replace(original,'   agx_init_screen_caps(screen);','''   agx_init_screen_caps(screen);
    struct pipe_caps *windows_caps = (struct pipe_caps *)&screen->caps;
-   windows_caps->occlusion_query = false;
+   windows_caps->occlusion_query = true;
    windows_caps->query_timestamp = false;
    windows_caps->query_time_elapsed = false;
    windows_caps->query_so_overflow = false;
