@@ -54972,3 +54972,18 @@ Single variable against EXP1258: demand vs fixed backing of segment 3 (the m1n1 
 WHY THIS HYPOTHESIS: (1) EXP1258 rejected churn: aging left the benchmark commits unchanged (7677) and fps unchanged (43.9); (2) two candidates remain that offline analysis cannot separate: commit cost inside the timed demo (460-875 us per 64 KiB granule, ~7.7k granules per game) and the OS update installed between EXP1256 and EXP1257; (3) this run changes only the backing mode on the same OS, so its fps assigns the regression to one of them.
 WINDOWS CONTRACT / AGX CONTRACT / TRANSLATION: EXP1255's fixed pool, as validated in EXP1253-EXP1255 (1 GiB MDL mapped by MAP_APPEND at StartDevice), executed by the 06a1d580 KMD's unchanged fixed path.
 WHAT IS STILL UNKNOWN: only the fps attribution above. Evidence: evidence/EXP1259 bench, rcpt-after (Wom1M2PoolProbe), segstats. Recovery: rec1259h (servicing guard).
+EXP1259 ACTUAL 2026-10-14T02:15Z (resume-kmd1259.sh after REC-EXP1258; pipeline 02:03-02:14Z; package 30.0.1259.0 left installed; evidence .local/experiments/EXP1259-m2f3-fixed-baseline/evidence/EXP1259).
+- Setup: KMD source 06a1d580 (= EXP1258), rebuilt as 1259, on m1n1 3b2b9c06. The window has no STATUS_RANGES, so the fixed pool was used.
+- Wom1M2PoolProbe:
+  - the 1 GiB block was granted in 374 ms but rejected (start 0x94002e000 is not 64 KiB-aligned);
+  - 64 KiB chunks: 1024 MiB in 16308 runs, 4227 ms (~258 us per block in one call; EXP1255 1.2-1.8 s);
+  - window mapped 1024 MiB with 16308 MAP_APPEND commands in 70.8 ms (~4 us per command).
+  - No Wom1M2PoolDemand.
+- Functional checks: smoke 52.0 fps; copy x2 PASS; D3D11 PASS MATCH x2; KMT 58.9 fps MATCH x4; DWM 0; no G4SubmitFailure; overlaps 0; Unmapped IPA 0. Segment 3 resident peak 676 MiB.
+- CS benchmark: 3771 frames in 81.351 s = 46.355 fps.
+- Reading:
+  - On the same OS and KMD source, demand backing costs ~2.2-2.5 fps (EXP1257 44.336, EXP1258 43.889). The OS update KB5127648 costs ~1.2 fps against EXP1255's 47.582.
+  - Smoke shows the same split: fixed 52.0 vs demand 50.4-50.9.
+  - In the pool probe, page allocation dominates commit cost, not MAP: ~258 us per 64 KiB block even in one call, against ~4 us per window command.
+- Verdict: CONFIRMED that the demand-mode regression is real and separate from the OS update.
+- Next: EXP1260 (built: run commits) measures the per-call share. Prepared offline as the following single variable: back each granule with 16 KiB-aligned 16 KiB blocks (the window and UAT need only 16 KiB contiguity), which Windows can find far more cheaply than 64 KiB-aligned blocks.
