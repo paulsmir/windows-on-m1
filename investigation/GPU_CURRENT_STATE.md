@@ -1,6 +1,29 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-14T20:50Z (read this first)
+## Current as of 2026-10-14T21:18Z (read this first)
+
+Installed: PACKAGE1284 (integration 12d6a6fd + UMD32 out9/closure 029; the
+next pipeline's rec1284h rollback removes it). m1n1 fa45bc58 r2, INF 1235
+copy, x86 ICD out56.
+- EXP1284 CONFIRMED on both D3D UMDs: occlusion queries (D3D-G3a, exact
+  counts; KMD isp_oclqry_base JP1 +0xd0 / JP3 +0x4d8 + query-function fix
+  f9014fa3), D3D depth-stencil (D3D-G4: D24S8 stencil, D32, D16, 1024x768,
+  depth-only clears), tile buffer by Mesa's rule (D3D-G6: 8 RGBA8 targets,
+  32 B/sample, 32x16 utiles). Regressions unchanged (CS 46.05 fps).
+  Predication (D3D-G3b) not reached (tool defect, fixed 93e9a742).
+- Implemented, EXP1285 candidate (package built: KMD/ARM64 704fb754,
+  UMD32 out11/closure 031): D3D MSAA 2x/4x + resolve (D3D-G5: 5939e809,
+  dfc039cc, DDI-bit fix f36213d7; GL ICD keeps AGX_DBG_NOMSAA), depth-only
+  passes (D3D-G7 88186697: NONE colour class, depth buffer as attachment 0),
+  predication rerun.
+- Known UMD gaps: render targets with initial data (E_NOTIMPL), copies of
+  multisampled resources, SO beyond one POSITION output (plan: map TGSI
+  output semantics to NIR slots for every pipe_stream_output), timestamp /
+  pipeline-statistics queries.
+- NEXT: EXP1285, then SO generality (D3D-G8), then the D3D11 DDI / FL 11_0 /
+  SM5, ARM64X UMD.
+
+## Current as of 2026-10-14T20:50Z
 
 Installed: PACKAGE1283 (integration 17a15a3d + UMD32 out7/closure 027; the
 next pipeline's rec1283h rollback removes it). m1n1 fa45bc58 r2, INF 1235
