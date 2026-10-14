@@ -2661,16 +2661,44 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
     ADMISSION_BACKEND_IMAGE *image = &adapter->BackendImage;
     if (image->G4Lease.SceneId)
       private_scene=AdmissionG4FindPrivateScene(process,context,&image->G4Lease,fence,TRUE);
+    BOOLEAN prelude_valid = TRUE;
+    if (image->G4WithCompute) {
+      /* D3D-G1: re-prove the whole v5 stream, compute prelude included. */
+      APPLE_AGX_G4_PRIVATE_HEADER_V3 v3;
+      RtlZeroMemory(&v3, sizeof(v3));
+      v3.V2 = image->G4Header;
+      v3.Lease = image->G4Lease;
+      prelude_valid = image->G4CommandBytes != 0u &&
+          image->G4CommandBytes <= APPLE_AGX_G4_NATIVE_MAX_BYTES &&
+          AppleAgxG4ComposeHeaderV5(&state->G4ReparseV5.Header, &v3,
+              image->G4Header.Base.CommandVa, image->G4CommandBytes,
+              &image->G4PreludePreemption);
+      if (prelude_valid) {
+        RtlCopyMemory(state->G4ReparseV5.Command, image->G4Command,
+                      image->G4CommandBytes);
+        prelude_valid = AppleAgxG4ParseSubmitComputeEx(&state->G4ReparseV5,
+            (unsigned int)sizeof(state->G4ReparseV5.Header) + image->G4CommandBytes,
+            (unsigned int)sizeof(state->G4ReparseV5.Header) + image->G4CommandBytes,
+            image->G4Header.Base.CommandVa, image->G4CommandBytes,
+            APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES,
+            private_scene ? AdmissionG4PrivateGraphAccess : AdmissionG4GraphAccessTyped,
+            private_scene ? (void *)private_scene : (void *)process,
+            &g4_view, NULL) == AppleAgxG4ParseOk && g4_view.HasCompute &&
+            RtlCompareMemory(&g4_view.Compute, &image->G4PreludeCompute,
+                             sizeof(g4_view.Compute)) == sizeof(g4_view.Compute);
+      }
+    }
     if ((image->G4Lease.SceneId && !private_scene) || image->BoundFence != fence ||
         image->G4CommandBytes == 0u ||
         image->G4CommandBytes > APPLE_AGX_G4_NATIVE_MAX_BYTES ||
-        AppleAgxG4ParseSubmitEx(&image->G4Header,
+        !prelude_valid ||
+        (!image->G4WithCompute && AppleAgxG4ParseSubmitEx(&image->G4Header,
             (unsigned int)sizeof(image->G4Header) + image->G4CommandBytes,
             (unsigned int)sizeof(image->G4Header) + image->G4CommandBytes,
             image->G4Header.Base.CommandVa, image->G4CommandBytes,
             private_scene ? AdmissionG4PrivateGraphAccess : AdmissionG4GraphAccessTyped,
             private_scene ? (void *)private_scene : (void *)process,
-            &g4_view, NULL) != AppleAgxG4ParseOk ||
+            &g4_view, NULL) != AppleAgxG4ParseOk) ||
         (private_scene && !AdmissionG4PrivateGeometry(private_scene,&g4_view)) ||
         image->G4Header.Base.CommandVa != context->GpuvaG3DmaBufferVa ||
         image->G4CommandBytes != context->GpuvaG3DmaBufferBytes)
@@ -4031,7 +4059,9 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   if (args->pDmaBufferPrivateData && args->DmaBufferUmdPrivateDataSize>=sizeof(private_header) &&
       args->DmaBufferPrivateDataSize>=args->DmaBufferUmdPrivateDataSize) {
     RtlCopyMemory(&private_header,args->pDmaBufferPrivateData,sizeof(private_header));
-    if (private_header.Version==APPLE_AGX_G4_PRIVATE_VERSION_PRIVATE_VA &&
+    /* D3D-G1: a v5 render (compute prelude) starts with the v3 header. */
+    if ((private_header.Version==APPLE_AGX_G4_PRIVATE_VERSION_PRIVATE_VA ||
+         private_header.Version==APPLE_AGX_G4_PRIVATE_VERSION_RENDER_COMPUTE) &&
         args->DmaBufferUmdPrivateDataSize>=sizeof(private_v3)) {
       RtlCopyMemory(&private_v3,args->pDmaBufferPrivateData,sizeof(private_v3));
       private_scene=args->Flags.Resubmission ?
@@ -4089,10 +4119,10 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
       }
     }
   }
-  result = AppleAgxG4ParseSubmitEx(
+  result = AppleAgxG4ParseSubmitComputeEx(
       args->pDmaBufferPrivateData, args->DmaBufferPrivateDataSize,
       args->DmaBufferUmdPrivateDataSize, args->DmaBufferVirtualAddress,
-      args->DmaBufferSize,
+      args->DmaBufferSize, APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES,
       private_scene ? AdmissionG4PrivateGraphAccess : AdmissionG4GraphAccessTyped,
       private_scene ? (void *)private_scene : (void *)process, &view, &failure);
   if (result==AppleAgxG4ParseOk &&

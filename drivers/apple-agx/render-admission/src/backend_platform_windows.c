@@ -2500,6 +2500,45 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     Job->ComputeExpectedStamp=input.StampValue;
     Job->ComputeExpectedDonePointer=Plan->ComputeExpectedDonePointer;
   }
+  /* D3D-G1: a v5 render's compute prelude. The queue provider runs it
+   * first and publishes TA/3D once its stamp is seen (Asahi: the render's
+   * barrier on the submission's compute command). The render builder above
+   * set the notifier threshold for the render; the compute build adds its
+   * own notification. */
+  if (runtime->Adapter->BackendImage.G4Native &&
+      runtime->Adapter->BackendImage.G4WithCompute) {
+    const ADMISSION_BACKEND_IMAGE *image = &runtime->Adapter->BackendImage;
+    APPLE_AGX_RENDER_COMPUTE_INPUT input;
+    APPLE_AGX_RENDER_COMPUTE_OUTPUT output;
+    ULONGLONG streamBytes;
+    if (!runtime->Provider.QueueProvider.Config.HasCompute ||
+        image->G4PreludeCompute.CdmCtrlStreamEnd <=
+            image->G4PreludeCompute.CdmCtrlStreamBase)
+      goto BuildFailure;
+    streamBytes = image->G4PreludeCompute.CdmCtrlStreamEnd -
+        image->G4PreludeCompute.CdmCtrlStreamBase;
+    if (streamBytes > APPLE_AGX_G4_CDM_STREAM_MAX_BYTES) goto BuildFailure;
+    RtlZeroMemory(&input, sizeof(input));
+    RtlZeroMemory(&output, sizeof(output));
+    input.CdmStreamBase = image->G4PreludeCompute.CdmCtrlStreamBase;
+    input.CdmStreamBytes = (APPLE_AGX_U32)streamBytes;
+    input.Counter = Submission->Submission.Fence;
+    input.UscExecutionBase = APPLE_AGX_G4_USC_EXECUTION_BASE;
+    input.VmSlot = ADMISSION_GPUVA_G3_JOB_VM_SLOT;
+    input.EventNumber = runtime->Provider.QueueProvider.Config.Compute.EventNumber;
+    input.StampValue = Submission->Submission.Fence;
+    input.EventSequence = Submission->Submission.Fence;
+    input.ClientSequence = Submission->Submission.Fence & 0xffu;
+    input.PreemptionGpuAddress = image->G4PreludePreemption.Va;
+    if (!AppleAgxRenderSharedMemoryBuildCompute(
+            &runtime->Initdata.RenderSharedMemory, &input, &output))
+      goto BuildFailure;
+    Job->ComputeWorkAddresses[0] = output.WorkGpuAddress;
+    Job->ComputeWorkAddressCount = 1u;
+    Job->ComputeEvent = input.EventNumber;
+    Job->ComputeExpectedStamp = input.StampValue;
+    Job->ComputeExpectedDonePointer = Plan->ComputeExpectedDonePointer;
+  }
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   if (dynamic && !APPLE_AGX_WIN32_COMMAND_IS_NATIVE(dynamicView.Bindings->CommandVersion))
     (void)AdmissionDynamicOverlayCaptureStoreGraph(

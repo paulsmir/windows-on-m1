@@ -70,6 +70,13 @@ typedef struct _ADMISSION_G3_STATE {
   LONG PresentPath[ADMISSION_G2_PRESENT_PATH_REASONS];
   LONG PresentPathLast, PresentPathFence;
   LONGLONG PresentPathQpc;
+  /* D3D-G1: BeginJob re-parses a bound v5 render (compute prelude) from a
+   * contiguous envelope it composes here under Lock: the backend image keeps
+   * a v2 header next to its command copy. */
+  struct {
+    APPLE_AGX_G4_PRIVATE_HEADER_V5 Header;
+    unsigned char Command[APPLE_AGX_G4_NATIVE_MAX_BYTES];
+  } G4ReparseV5;
 } ADMISSION_G3_STATE;
 enum {
   ADMISSION_G3_PRIVATE_STAT_HIT, ADMISSION_G3_PRIVATE_STAT_MISS,

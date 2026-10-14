@@ -1093,6 +1093,43 @@ static void test_g4_compute_binds_without_touching_arena(void) {
   free(target);free(before);free(arena);
 }
 
+/* D3D-G1: a v5 render binds its compute prelude with the render, and the
+ * next plain render does not inherit it (the job builder would otherwise run
+ * a stale compute command before an unrelated render). */
+static void test_g4_render_compute_prelude_binds_and_clears(void) {
+  unsigned char *arena=malloc(TEST_BACKEND_BYTES);
+  unsigned char *target=malloc(1280u*720u*4u);
+  static ADMISSION_BACKEND_IMAGE image;
+  ADMISSION_LOCAL_MEMORY_VIEW backend={0};
+  ADMISSION_RENDER_PACKET_DESCRIPTION packet;
+  APPLE_AGX_G4_SUBMIT_VIEW view;
+  TEST_G4_NATIVE native;
+  APPLE_AGX_EXP208_GDI_BINDING binding;
+  assert(arena && target);
+  memset(arena,0xa5,TEST_BACKEND_BYTES);
+  backend.CpuAddress=arena;backend.HostPhysicalAddress=TEST_BACKEND_PHYSICAL;
+  backend.GpuVirtualAddress=TEST_BACKEND_GPU;backend.Bytes=TEST_BACKEND_BYTES;
+  assert(AdmissionBackendImagePrepare(&image,&backend));
+  g4_fixture(&native,&view,&packet,target,81u);
+  view.HasCompute=1;
+  view.Compute.CdmCtrlStreamBase=0x14000000ULL;
+  view.Compute.CdmCtrlStreamEnd=0x14000040ULL;
+  view.Preemption.Va=0x15000000ULL;view.Preemption.Bytes=0x10000u;
+  assert(AdmissionBackendImageBindG4Submission(
+      &image,&packet,target,&view,&binding));
+  assert(image.G4Native && image.G4WithCompute && image.BoundFence==81u &&
+         memcmp(&image.G4PreludeCompute,&view.Compute,sizeof(view.Compute))==0 &&
+         memcmp(&image.G4PreludePreemption,&view.Preemption,
+                sizeof(view.Preemption))==0);
+  assert(AdmissionBackendImageReleaseSubmission(&image,81u));
+  g4_fixture(&native,&view,&packet,target,82u);
+  assert(AdmissionBackendImageBindG4Submission(
+      &image,&packet,target,&view,&binding));
+  assert(image.G4Native && !image.G4WithCompute && image.BoundFence==82u);
+  assert(AdmissionBackendImageReleaseSubmission(&image,82u));
+  free(target);free(arena);
+}
+
 int main(void) {
   test_materializes_and_relocates_exact_rebased_image();
   test_rejects_invalid_tail_atomically();
@@ -1107,5 +1144,6 @@ int main(void) {
   test_vm_slot_selection_after_prepare_forces_rematerialization();
   test_g4_release_restores_prepare_image_from_snapshot();
   test_g4_compute_binds_without_touching_arena();
+  test_g4_render_compute_prelude_binds_and_clears();
   return 0;
 }

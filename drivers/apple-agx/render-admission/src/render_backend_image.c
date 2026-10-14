@@ -366,6 +366,11 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
   memcpy(Image->G4Command, View->Native, View->CommandBytes);
   Image->G4CommandBytes = View->CommandBytes;
   Image->G4Lease = View->Lease;
+  Image->G4WithCompute = View->HasCompute ? APPLE_AGX_TRUE : APPLE_AGX_FALSE;
+  if (View->HasCompute) {
+    Image->G4PreludeCompute = View->Compute;
+    Image->G4PreludePreemption = View->Preemption;
+  }
   AdmissionBackendBindingZero(&candidate);
   candidate.OutputObject = APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT;
   candidate.DestinationGpuVa = Packet->DestinationGpuVa;
