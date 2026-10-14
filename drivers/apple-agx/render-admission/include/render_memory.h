@@ -18,6 +18,11 @@
  * allocated at start; its pages, like system pages, are tracked by registry
  * frames and published as System backings (not local-reserve grants). */
 #define ADMISSION_MEMORY_POOL_SEGMENT 3u
+/* M2-f8c: the gate aperture (APPLE_AGX_TOPOLOGY_GATE_BYTES), smaller than
+ * any allocation: it only completes the CPU-visible class BOs' segment set,
+ * which dxgmms2 requires to contain an aperture. Nothing is ever placed in
+ * it, so its paging operations map nothing. */
+#define ADMISSION_MEMORY_GATE_SEGMENT 4u
 #define ADMISSION_G3_FRAME_SEGMENT(segment) \
   ((segment) == 0u || (segment) == ADMISSION_MEMORY_POOL_SEGMENT)
 

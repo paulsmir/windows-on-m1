@@ -84,3 +84,29 @@ APPLE_AGX_PHYSICAL_TOPOLOGY_RESULT AppleAgxPhysicalTopologyAddPool(
   Topology->SegmentCount = 3u;
   return AppleAgxPhysicalTopologyOk;
 }
+
+APPLE_AGX_PHYSICAL_TOPOLOGY_RESULT AppleAgxPhysicalTopologyAddGate(
+    APPLE_AGX_PHYSICAL_TOPOLOGY *Topology) {
+  APPLE_AGX_U64 base;
+  if (Topology == (APPLE_AGX_PHYSICAL_TOPOLOGY *)0 ||
+      Topology->SegmentCount != 3u || Topology->Pool.Id != 3u ||
+      Topology->Gate.Id != 0u)
+    return AppleAgxPhysicalTopologyInvalidArgument;
+  if (Topology->Aperture.Base >
+      APPLE_AGX_TOPOLOGY_U64_MAX - Topology->Aperture.Size -
+          APPLE_AGX_TOPOLOGY_GATE_BYTES)
+    return AppleAgxPhysicalTopologyOverflow;
+  base = Topology->Aperture.Base + Topology->Aperture.Size;
+  if (AppleAgxPhysicalTopologyOverlaps(&Topology->Local, base,
+                                       APPLE_AGX_TOPOLOGY_GATE_BYTES) ||
+      AppleAgxPhysicalTopologyOverlaps(&Topology->Pool, base,
+                                       APPLE_AGX_TOPOLOGY_GATE_BYTES))
+    return AppleAgxPhysicalTopologyInvalidArgument;
+  Topology->Gate.Id = 4u;
+  Topology->Gate.Base = base;
+  Topology->Gate.Size = APPLE_AGX_TOPOLOGY_GATE_BYTES;
+  Topology->Gate.CommitLimit = APPLE_AGX_TOPOLOGY_GATE_BYTES;
+  Topology->Gate.Aperture = APPLE_AGX_TRUE;
+  Topology->SegmentCount = 4u;
+  return AppleAgxPhysicalTopologyOk;
+}

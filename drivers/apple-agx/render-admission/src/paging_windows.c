@@ -55,6 +55,12 @@ static NTSTATUS AdmissionBuildPagingBuffer(
 #endif
   switch (Args->Operation) {
   case DXGK_OPERATION_MAP_APERTURE_SEGMENT:
+    /* M2-f8c: no allocation fits the gate; anything VidMm maps there (a
+     * guard or dummy page) is never addressed by the GPU, so nothing is
+     * mapped. BuildPagingBuffer must not fail it (EXP1026). */
+    if (Args->MapApertureSegment.SegmentId == ADMISSION_MEMORY_GATE_SEGMENT &&
+        context->Memory.Topology.Gate.Id == ADMISSION_MEMORY_GATE_SEGMENT)
+      return STATUS_SUCCESS;
     if (Args->MapApertureSegment.SegmentId !=
             ADMISSION_MEMORY_APERTURE_SEGMENT ||
         Args->MapApertureSegment.OffsetInPages >
@@ -68,6 +74,9 @@ static NTSTATUS AdmissionBuildPagingBuffer(
         Args->MapApertureSegment.MdlOffset,
         (UINT)Args->MapApertureSegment.NumberOfPages);
   case DXGK_OPERATION_UNMAP_APERTURE_SEGMENT:
+    if (Args->UnmapApertureSegment.SegmentId == ADMISSION_MEMORY_GATE_SEGMENT &&
+        context->Memory.Topology.Gate.Id == ADMISSION_MEMORY_GATE_SEGMENT)
+      return STATUS_SUCCESS;
     if (Args->UnmapApertureSegment.SegmentId !=
             ADMISSION_MEMORY_APERTURE_SEGMENT ||
         Args->UnmapApertureSegment.OffsetInPages >

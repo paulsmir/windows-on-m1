@@ -110,7 +110,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment5(
   output->SegmentDescriptors[1].Flags.PopulatedByReservedDDRByFirmware = 1u;
   /* M2-f2: segment 3 is Windows memory this driver allocated at start, so it
    * is PopulatedFromSystemMemory; the CPU sees it at the block's address. */
-  if (Context->Memory.Topology.SegmentCount == 3u &&
+  if (Context->Memory.Topology.SegmentCount >= 3u &&
       Context->Memory.Topology.Pool.Id == 3u) {
     ADMISSION_SCANOUT_MEMORY_VIEW pool;
     if (!AdmissionMemoryPoolView(Context, &pool))
@@ -120,6 +120,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment5(
     output->SegmentDescriptors[2].CpuTranslatedAddress.QuadPart =
         (LONGLONG)pool.GuestIpaAddress;
   }
+  /* M2-f8c: the gate aperture follows the pool. */
+  if (Context->Memory.Topology.SegmentCount == 4u &&
+      Context->Memory.Topology.Pool.Id == 3u &&
+      Context->Memory.Topology.Gate.Id == 4u)
+    AdmissionDescribeSegment5(&Context->Memory.Topology.Gate,
+                              &output->SegmentDescriptors[3]);
 #endif
   return STATUS_SUCCESS;
 }
@@ -183,7 +189,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment4(
   local->CpuTranslatedAddress.QuadPart = (LONGLONG)cpuTranslated;
   local->Flags.PopulatedFromSystemMemory = 0u;
   local->Flags.PopulatedByReservedDDRByFirmware = 1u;
-  if (Context->Memory.Topology.SegmentCount == 3u &&
+  if (Context->Memory.Topology.SegmentCount >= 3u &&
       Context->Memory.Topology.Pool.Id == 3u) {
     DXGK_SEGMENTDESCRIPTOR4 *pool_descriptor = (DXGK_SEGMENTDESCRIPTOR4 *)(
         (PUCHAR)output->pSegmentDescriptor +
@@ -195,6 +201,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment4(
     pool_descriptor->CpuTranslatedAddress.QuadPart =
         (LONGLONG)pool.GuestIpaAddress;
   }
+  /* M2-f8c: the gate aperture follows the pool. */
+  if (Context->Memory.Topology.SegmentCount == 4u &&
+      Context->Memory.Topology.Pool.Id == 3u &&
+      Context->Memory.Topology.Gate.Id == 4u)
+    AdmissionDescribeSegment(&Context->Memory.Topology.Gate,
+        (DXGK_SEGMENTDESCRIPTOR4 *)((PUCHAR)output->pSegmentDescriptor +
+                                    3u * output->SegmentDescriptorStride));
 #endif
   output->NbSegment = Context->Memory.Topology.SegmentCount;
   output->PagingBufferSegmentId =

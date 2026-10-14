@@ -11,6 +11,8 @@
   (ADMISSION_APERTURE_SEGMENT_SET | ADMISSION_LOCAL_SEGMENT_SET)
 #define ADMISSION_POOL_SEGMENT_SET \
   (1u << (ADMISSION_MEMORY_POOL_SEGMENT - 1u))
+#define ADMISSION_GATE_SEGMENT_SET \
+  (1u << (ADMISSION_MEMORY_GATE_SEGMENT - 1u))
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 static VOID AdmissionR105Apply(DXGK_ALLOCATIONINFO *Info,
@@ -505,8 +507,9 @@ static NTSTATUS AdmissionCreateAllocationImpl(
    * E_INVALIDARG). M2-f8b (EXP1265-D): the aperture is no longer a preferred
    * segment. With segment 3 full, VidMm placed a BO there, the GPU cannot map
    * its scattered 4 KiB backing (EXP1240-EXP1244), and the next submission
-   * using it was refused (device hung). EXP1267 measures whether, preferring
-   * segment 3 alone, VidMm evicts from it instead. */
+   * using it was refused (device hung). EXP1267: not preferring the aperture
+   * still demotes. M2-f8c: the set's aperture is the gate (segment 4), which
+   * no class BO fits, so VidMm can only page them into segment 3. */
   if (classId != 0u && description->CpuVisible != 0u &&
       AdmissionMemoryPoolView(context, &pool)) {
     /* M2-f5: the pages this allocation may occupy in segment 3 are taken
@@ -523,7 +526,9 @@ static NTSTATUS AdmissionCreateAllocationImpl(
     info->PreferredSegment.Value = 0u;
     info->PreferredSegment.SegmentId0 = ADMISSION_MEMORY_POOL_SEGMENT;
     info->SupportedReadSegmentSet =
-        ADMISSION_POOL_SEGMENT_SET | ADMISSION_APERTURE_SEGMENT_SET;
+        ADMISSION_POOL_SEGMENT_SET |
+        (AdmissionMemoryPoolGate(context) ? ADMISSION_GATE_SEGMENT_SET
+                                          : ADMISSION_APERTURE_SEGMENT_SET);
     info->SupportedWriteSegmentSet = info->SupportedReadSegmentSet;
   }
 #endif

@@ -1333,6 +1333,8 @@ VOID AdmissionMemoryPoolStop(_Inout_opt_ ADMISSION_CONTEXT *Context);
  * mapped, else the legacy 16 MiB); reported to the UMD and enforced by
  * CreateAllocation. */
 ULONGLONG AdmissionGeneralMaximumBytes(_In_opt_ const ADMISSION_CONTEXT *Context);
+/* M2-f8c: TRUE while the gate aperture (segment 4) follows the pool. */
+BOOLEAN AdmissionMemoryPoolGate(_In_opt_ const ADMISSION_CONTEXT *Context);
 BOOLEAN AdmissionMemoryPoolView(_In_opt_ const ADMISSION_CONTEXT *Context,
                                 _Out_ ADMISSION_SCANOUT_MEMORY_VIEW *View);
 /* M2-f3: the demand pool's granule state under its lock; NULL (no lock

@@ -37,7 +37,9 @@ SHIM = r"""
 #define ADMISSION_APERTURE_SEGMENT_SET 1u
 #define ADMISSION_MEMORY_APERTURE_SEGMENT 1u
 #define ADMISSION_MEMORY_POOL_SEGMENT 3u
+#define ADMISSION_MEMORY_GATE_SEGMENT 4u
 #define ADMISSION_POOL_SEGMENT_SET 4u
+#define ADMISSION_GATE_SEGMENT_SET 8u
 #define ADMISSION_ALLOCATION_ALIGNMENT 0x10000u
 #define ADMISSION_POOL_TAG 0u
 #define POOL_FLAG_NON_PAGED 0u
@@ -82,6 +84,11 @@ static int AdmissionMemoryPoolView(const ADMISSION_CONTEXT *context,
                                    ADMISSION_SCANOUT_MEMORY_VIEW *view) {
   (void)context; memset(view, 0, sizeof(*view));
   return replay_pool_present;
+}
+/* M2-f8c: pool_windows.c reports whether the gate aperture follows the pool. */
+static int replay_gate_present;
+static int AdmissionMemoryPoolGate(const ADMISSION_CONTEXT *context) {
+  (void)context; return replay_gate_present;
 }
 /* M2-f5: pool_windows.c reserves a segment-3 allocation's pages. */
 static int replay_reserve_fail;
@@ -283,6 +290,22 @@ int main(void) {
   assert(info.PreferredSegment.SegmentId1 == 0u);
   assert(info.SupportedReadSegmentSet ==
          (ADMISSION_POOL_SEGMENT_SET | ADMISSION_APERTURE_SEGMENT_SET));
+  ExFreePoolWithTag(info.hAllocation, ADMISSION_POOL_TAG);
+  /* M2-f8c (EXP1267): with the gate aperture present, it replaces the
+   * aperture in the set; no class BO fits it, so VidMm cannot demote one. */
+  replay_gate_present = 1;
+  replay_reserved = 0;
+  memset(&info, 0, sizeof(info));
+  info.pPrivateDriverData = &native;
+  info.PrivateDriverDataSize = sizeof(native);
+  assert(AdmissionCreateAllocationImpl(&context, &args) == STATUS_SUCCESS);
+  assert(info.PreferredSegment.SegmentId0 == ADMISSION_MEMORY_POOL_SEGMENT &&
+         info.PreferredSegment.SegmentId1 == 0u);
+  assert(info.SupportedReadSegmentSet ==
+         (ADMISSION_POOL_SEGMENT_SET | ADMISSION_GATE_SEGMENT_SET));
+  assert(!(info.SupportedReadSegmentSet & ADMISSION_APERTURE_SEGMENT_SET));
+  assert(info.SupportedWriteSegmentSet == info.SupportedReadSegmentSet);
+  replay_gate_present = 0;
   assert(info.SupportedWriteSegmentSet == info.SupportedReadSegmentSet);
   assert(!(info.SupportedReadSegmentSet & ADMISSION_LOCAL_SEGMENT_SET));
   assert(info.FlagsWddm2.CpuVisible == 1 && info.FlagsWddm2.AccessedPhysically == 0);

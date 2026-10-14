@@ -156,9 +156,14 @@ _Use_decl_annotations_ BOOLEAN AdmissionGpuvaG3DeclarationReady(
                                model.LocalUse64KBPages ||
                                model.SysMem64KBPageSupported, 0u))
     return FALSE;
-  /* M2-f2: an optional third segment is the KMD-populated pool. */
+  /* M2-f2: an optional third segment is the KMD-populated pool; M2-f8c: a
+   * fourth, the gate aperture, only with the pool. */
   return (context->Memory.Topology.SegmentCount == model.SegmentCount ||
-          (context->Memory.Topology.SegmentCount == model.SegmentCount + 1u &&
+          ((context->Memory.Topology.SegmentCount == model.SegmentCount + 1u ||
+            (context->Memory.Topology.SegmentCount == model.SegmentCount + 2u &&
+             context->Memory.Topology.Gate.Id == model.SegmentCount + 2u &&
+             context->Memory.Topology.Gate.Aperture != APPLE_AGX_FALSE &&
+             context->Memory.Topology.Gate.Size == APPLE_AGX_TOPOLOGY_GATE_BYTES)) &&
            context->Memory.Topology.Pool.Id == model.SegmentCount + 1u &&
            context->Memory.Topology.Pool.Aperture == APPLE_AGX_FALSE)) &&
          context->Memory.Topology.Aperture.Id == model.ApertureSegmentId &&
