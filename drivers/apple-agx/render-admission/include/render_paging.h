@@ -44,6 +44,8 @@ typedef struct _ADMISSION_PAGING_RECORD {
   unsigned int Bytes;
   unsigned int FillPattern;
   unsigned long long FenceValue;
+  /* M2-f3: encode order of virtual records (physical records keep 0). */
+  unsigned long long Seq;
 } ADMISSION_PAGING_RECORD;
 
 int AdmissionPagingFenceCanSubmit(unsigned int LastSubmitted,

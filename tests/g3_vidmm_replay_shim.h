@@ -28,6 +28,7 @@
 #include "apple_agx_g3_copy_abi.h"
 #include "apple_agx_win32_device_info.h"
 #include "../drivers/apple-agx/render-admission/include/render_allocation.h"
+#include "../drivers/apple-agx/render-admission/include/render_pool_demand.h"
 #define ADMISSION_WIN32_ALLOCATION_GPU_LOCAL 0x100u
 
 #define APPLE_AGX_GPUVA_G3_QUALIFICATION 1
@@ -201,6 +202,7 @@ typedef struct { ADMISSION_PAGING_MARKER Header; APPLE_AGX_PHYSICAL_PAGING_PLAN 
   void *SystemMdl; UINT Kind,SourceSegment,DestinationSegment,PatternOffset;
   ULONGLONG SourceIpa,DestinationIpa; UINT Bytes,FillPattern;
   ULONGLONG FenceValue;
+  ULONGLONG Seq;
 } ADMISSION_PAGING_RECORD;
 #define ADMISSION_PAGING_MAGIC 0x504d4152u
 #define ADMISSION_PAGING_VERSION 1u
@@ -274,7 +276,7 @@ typedef struct _ADMISSION_OBJECT_DEVICE { UINT Magic; void *Adapter; } ADMISSION
 typedef struct { UINT Magic,Flags; ADMISSION_OBJECT_DEVICE *Device;
   UINT FenceOutstanding; } ADMISSION_OBJECT_CONTEXT;
 typedef struct _ADMISSION_DEVICE { ADMISSION_OBJECT_DEVICE Object; LONG Win32Generation; ADMISSION_G3_PROCESS *GpuvaG3Process; } ADMISSION_DEVICE;
-typedef struct { ADMISSION_ALLOCATION_OBJECT Object; ULONG QualificationCookie,Win32ClassId,Win32Flags,WrittenPrimary,Presentation; } ADMISSION_ALLOCATION_HANDLE;
+typedef struct { ADMISSION_ALLOCATION_OBJECT Object; ULONG QualificationCookie,Win32ClassId,Win32Flags,WrittenPrimary,Presentation; UINT PrimaryRefreshNumerator,PrimaryRefreshDenominator; ADMISSION_POOL_PLACEMENT PoolPlacement; } ADMISSION_ALLOCATION_HANDLE;
 #define ADMISSION_G3_SYSTEM_SHAPE_COUNT 16u
 typedef struct { ULONG ClassId,Win32Flags,Traits,SizeLog2; ULONGLONG Groups[4]; ULONGLONG UnpublishedVa,UnpublishedIpa; } ADMISSION_G3_SYSTEM_SHAPE;
 #define ADMISSION_OPEN_ALLOCATION_MAGIC 0x4f504152u
@@ -471,6 +473,10 @@ struct _ADMISSION_CONTEXT { REPLAY_PACKET RenderPacket; BOOLEAN InterfaceValid; 
   ADMISSION_BACKEND_IMAGE BackendImage;
   ADMISSION_BACKEND_IMAGE_SNAPSHOT BackendSnapshot;
   struct { REPLAY_APERTURE Aperture; } Memory;
+  /* M2-f3 demand pool. */
+  void *PoolDemand;
+  ULONGLONG PoolIpa;
+  volatile long long PagingRecordSeq;
 };
 static NTSTATUS AdmissionDwmDdiProbeQueryWindows(ADMISSION_CONTEXT *context,
     ADMISSION_DWM_DDI_PROBE *query) {
@@ -609,6 +615,21 @@ static NTSTATUS replay_local_view_status;
 /* M2-f2: the segment-3 pool (absent unless a case sets it). */
 static unsigned char *replay_pool_cpu; static ULONGLONG replay_pool_ipa, replay_pool_bytes;
 static BOOLEAN AdmissionMemoryPoolView(const ADMISSION_CONTEXT *a,ADMISSION_SCANOUT_MEMORY_VIEW *v) {(void)a;memset(v,0,sizeof(*v));if(!replay_pool_bytes)return FALSE;v->CpuAddress=replay_pool_cpu;v->GuestIpaAddress=replay_pool_ipa;v->Bytes=replay_pool_bytes;return TRUE;}
+/* M2-f3: a case sets replay_pool_demand (and the adapter's PoolDemand) to run
+ * the real granule state machine under the paging code. */
+static ADMISSION_POOL_DEMAND *replay_pool_demand;
+static ADMISSION_POOL_DEMAND *AdmissionMemoryPoolLock(ADMISSION_CONTEXT *a) {return a&&a->PoolDemand?replay_pool_demand:NULL;}
+static VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *a) {(void)a;}
+static VOID AdmissionMemoryPoolNoteRecord(ADMISSION_CONTEXT *a,ADMISSION_PAGING_RECORD *r) {
+  ADMISSION_POOL_DEMAND *d;
+  if(!a||!r)return;
+  r->Seq=(ULONGLONG)++a->PagingRecordSeq;
+  if(!(d=AdmissionMemoryPoolLock(a)))return;
+  if(r->DestinationSegment==ADMISSION_MEMORY_POOL_SEGMENT&&r->DestinationIpa>=a->PoolIpa)
+    AdmissionPoolDemandRecord(d,r->DestinationIpa-a->PoolIpa,r->Bytes,r->Seq);
+  if(r->Kind==AdmissionPagingVirtualTransfer&&r->SourceSegment==ADMISSION_MEMORY_POOL_SEGMENT&&r->SourceIpa>=a->PoolIpa)
+    AdmissionPoolDemandRecord(d,r->SourceIpa-a->PoolIpa,r->Bytes,r->Seq);
+}
 static NTSTATUS AdmissionMemoryRuntimeLocalView(ADMISSION_CONTEXT *a,ADMISSION_SCANOUT_MEMORY_VIEW *v) {(void)a;memset(v,0,sizeof(*v));v->GuestIpaAddress=local_ipa;v->Bytes=vidmm_local_bytes;v->CpuAddress=local_cpu;return replay_local_view_status;}
 #ifdef G3_REPLAY_FULL_LOCAL
 #define APPLE_AGX_SCANOUT_J313_POOL_SIZE (56ULL<<20)

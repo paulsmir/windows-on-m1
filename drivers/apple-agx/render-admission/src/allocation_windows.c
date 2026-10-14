@@ -594,9 +594,16 @@ static NTSTATUS AdmissionDestroyAllocationImpl(
   for (index = 0u; index < Args->NumAllocations; ++index) {
     ADMISSION_ALLOCATION_HANDLE *allocation =
         (ADMISSION_ALLOCATION_HANDLE *)Args->pAllocationList[index];
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    /* M2-f3: the segment-3 placement ends with the allocation. */
+    AdmissionMemoryPoolForget(context, &allocation->PoolPlacement);
+#endif
     (void)AdmissionAllocationDestroy(&allocation->Object);
     ExFreePoolWithTag(allocation, ADMISSION_POOL_TAG);
   }
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  AdmissionMemoryPoolReclaim(context);
+#endif
   return STATUS_SUCCESS;
 }
 

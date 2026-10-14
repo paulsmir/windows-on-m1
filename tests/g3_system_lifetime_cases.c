@@ -1,8 +1,10 @@
 /* Real KMD DDI + graph + wire + broker; only OS memory/CPU and stage-2 I/O
  * are host models. Expectations are independent descriptor/ref-count facts. */
 static void *sys_no_nodes(void *p,unsigned long long n) {(void)p;(void)n;return NULL;}
-/* The hAllocation VidMm names in the next update (NULL: no allocation). */
+/* The hAllocation VidMm names in the next update (NULL: no allocation) and
+ * the allocation offset of its first PTE. */
 static void *sys_allocation;
+static ULONGLONG sys_allocation_offset;
 static NTSTATUS sys_update(ADMISSION_CONTEXT *a, ADMISSION_G3_PROCESS *p,
     void *table, UINT level, UINT start, UINT count, DXGK_PTE *ptes,
     UINT wide, UINT repeat) {
@@ -10,6 +12,7 @@ static NTSTATUS sys_update(ADMISSION_CONTEXT *a, ADMISSION_G3_PROCESS *p,
   x.Operation=DXGK_OPERATION_UPDATE_PAGE_TABLE;
   x.UpdatePageTable.hProcess=p;
   x.UpdatePageTable.hAllocation=sys_allocation;
+  x.UpdatePageTable.AllocationOffsetInBytes=sys_allocation_offset;
   x.UpdatePageTable.PageTableAddress.CpuVirtual=table;
   x.UpdatePageTable.UpdateMode=DXGK_PAGETABLEUPDATE_CPU_VIRTUAL;
   x.UpdatePageTable.PageTableLevel=level;
@@ -91,6 +94,105 @@ static void m2f2_pool_segment_cases(ADMISSION_CONTEXT *a, ADMISSION_G3_STATE *st
   replay_pool_ipa=replay_pool_bytes=0;
   puts("M2-f2 pool segment: PASS");
 }
+/* M2-f3: segment-3 PTEs drive the real granule state machine through the
+ * real UpdatePageTable DDI. The release model is m1n1's rule: a window page
+ * with a published backing frame is busy. */
+static ADMISSION_G3_STATE *m2f3_state;
+static ULONGLONG m2f3_pool_ipa;
+static UINT m2f3_commits, m2f3_releases;
+static BOOLEAN m2f3_published(unsigned long long index) {
+  for(UINT k=0;k<4;++k)
+    if(sys_frame(m2f3_state,m2f3_pool_ipa+index*0x10000ULL+k*0x4000ULL)) return TRUE;
+  return FALSE;
+}
+static int m2f3_commit(void *c,unsigned long long index) {
+  (void)c;
+  /* Committed before any PTE naming the granule is published. */
+  assert(!m2f3_published(index));
+  ++m2f3_commits;
+  return 1;
+}
+static ADMISSION_POOL_RELEASE m2f3_release(void *c,unsigned long long index) {
+  (void)c;
+  if(m2f3_published(index)) return AdmissionPoolReleaseBusy;
+  ++m2f3_releases;
+  return AdmissionPoolReleased;
+}
+static void m2f3_demand_pool_cases(ADMISSION_CONTEXT *a, ADMISSION_G3_STATE *state,
+                                   ADMISSION_G3_PROCESS *p, void *leaf) {
+  static ADMISSION_POOL_GRANULE granules[16];
+  static unsigned long long candidates[16];
+  const ADMISSION_POOL_DEMAND_OPS ops={0,m2f3_commit,m2f3_release};
+  ADMISSION_POOL_DEMAND demand;
+  ADMISSION_ALLOCATION_HANDLE bo={0}, bo2={0};
+  ADMISSION_ALLOCATION_DESCRIPTION shape;
+  DXGK_PTE four[4]={0}, pte={0}, zero={0};
+  const ULONGLONG pool_ipa=system_ipa+0x1000000ULL;
+  memset(granules,0,sizeof(granules));
+  memset(candidates,0,sizeof(candidates));
+  assert(AdmissionPoolDemandInit(&demand,granules,candidates,16u,&ops));
+  m2f3_state=state; m2f3_pool_ipa=pool_ipa; m2f3_commits=m2f3_releases=0u;
+  replay_pool_ipa=pool_ipa; replay_pool_bytes=0x100000ULL;
+  a->PoolDemand=&demand; a->PoolIpa=pool_ipa; replay_pool_demand=&demand;
+  /* A 128 KiB BO placed at segment offset 0x40000: its first 16 KiB, mapped
+   * with 4K PTEs, commits the whole placement (two granules). */
+  assert(AdmissionAllocationDescribe(0x20000u,1u,1u,2u,28u,1u,&shape));
+  assert(AdmissionAllocationCreate(&shape,&bo.Object));
+  sys_allocation=&bo; sys_allocation_offset=0;
+  for(UINT i=0;i<4;++i) {four[i].Valid=1;four[i].Segment=ADMISSION_MEMORY_POOL_SEGMENT;four[i].PageAddress=(0x40000ULL>>12)+i;}
+  expect_ok("M2-f3 place",sys_update(a,p,leaf,0,64,4,four,0,0));
+  assert(bo.PoolPlacement.Base==0x40000ULL && bo.PoolPlacement.Bytes==0x20000ULL);
+  assert(m2f3_commits==2u && granules[4].Owner==&bo.PoolPlacement &&
+         granules[5].Owner==&bo.PoolPlacement && m2f3_published(4));
+  /* Its second half as one 64K PTE: the same placement, nothing new. */
+  sys_allocation_offset=0x10000ULL;
+  pte.Valid=1;pte.Segment=ADMISSION_MEMORY_POOL_SEGMENT;pte.PageAddress=0x50000ULL>>12;
+  expect_ok("M2-f3 same placement",sys_update(a,p,leaf,0,8,1,&pte,1,0));
+  assert(m2f3_commits==2u && demand.Stats.Places==1u && m2f3_published(5));
+  /* PTEs that disagree on the base pin their own pages. */
+  sys_allocation_offset=0;
+  memset(four,0,sizeof(four));
+  four[0].Valid=four[1].Valid=1;
+  four[0].Segment=four[1].Segment=ADMISSION_MEMORY_POOL_SEGMENT;
+  four[0].PageAddress=0x60000ULL>>12; four[1].PageAddress=0x90000ULL>>12;
+  expect_ok("M2-f3 inconsistent",sys_update(a,p,leaf,0,72,4,four,0,0));
+  assert(demand.Stats.Unaligned==1u && granules[6].Pinned && granules[9].Pinned &&
+         m2f3_commits==4u && bo.PoolPlacement.Bytes==0x20000ULL);
+  /* The user process maps the BO in system memory: it left segment 3. */
+  pte.Flags=0;pte.Valid=1;pte.Segment=0;pte.PageAddress=system_ipa>>12;
+  expect_ok("M2-f3 move out",sys_update(a,p,leaf,0,9,1,&pte,1,0));
+  assert(bo.PoolPlacement.Bytes==0u && !granules[4].Owner && !granules[5].Owner);
+  /* Its old PTEs still publish both granules: the window refuses. */
+  assert(AdmissionPoolDemandReclaim(&demand)==0u && demand.Stats.BusyRetries==2u &&
+         m2f3_releases==0u);
+  expect_ok("M2-f3 unmap 64K",sys_update(a,p,leaf,0,8,1,&zero,1,0));
+  memset(four,0,sizeof(four));
+  expect_ok("M2-f3 unmap 4K",sys_update(a,p,leaf,0,64,4,four,0,0));
+  assert(AdmissionPoolDemandReclaim(&demand)==2u && m2f3_releases==2u &&
+         !granules[4].Committed && !granules[5].Committed && granules[6].Committed);
+  expect_ok("M2-f3 unmap system",sys_update(a,p,leaf,0,9,1,&zero,1,0));
+  /* The paging process's PTEs hold their granule after the BO is gone. */
+  ADMISSION_G3_PROCESS *pp=sys_process(a,0x20000,1);
+  void *paging_leaf=local_cpu+0x28000;
+  assert(AdmissionAllocationCreate(&shape,&bo2.Object));
+  sys_allocation=&bo2;
+  for(UINT i=0;i<4;++i) {four[i].Valid=1;four[i].Segment=ADMISSION_MEMORY_POOL_SEGMENT;four[i].PageAddress=(0xa0000ULL>>12)+i;}
+  expect_ok("M2-f3 paging map",sys_update(a,pp,paging_leaf,0,16,4,four,0,0));
+  assert(bo2.PoolPlacement.Base==0xa0000ULL && granules[10].PagingRefs==4u &&
+         granules[11].PagingRefs==0u && m2f3_commits==6u);
+  AdmissionPoolDemandUnplace(&demand,&bo2.PoolPlacement); /* DestroyAllocation */
+  assert(AdmissionPoolDemandReclaim(&demand)==1u && !granules[11].Committed &&
+         granules[10].Committed);
+  memset(four,0,sizeof(four));
+  expect_ok("M2-f3 paging unmap",sys_update(a,pp,paging_leaf,0,16,4,four,0,0));
+  assert(granules[10].PagingRefs==0u && AdmissionPoolDemandReclaim(&demand)==1u &&
+         !granules[10].Committed && demand.Stats.RefUnderflows==0u);
+  expect_ok("M2-f3 paging destroy",AdmissionDdiDestroyProcess(a,pp));
+  sys_allocation=NULL; sys_allocation_offset=0;
+  a->PoolDemand=NULL; a->PoolIpa=0; replay_pool_demand=NULL;
+  replay_pool_ipa=replay_pool_bytes=0;
+  puts("M2-f3 demand pool: PASS");
+}
 static void r134_system_64k_cases(void) {
   ADMISSION_CONTEXT a={0}; ADMISSION_G3_STATE state={0}; REPLAY_BROKER b={0};
   APPLE_AGX_GPUVA_V5_IO io={&b,ReplayWrite64,ReplayRead64,ReplayWrite32,ReplayBarrier, 0};
@@ -168,6 +270,7 @@ static void r134_system_64k_cases(void) {
   /* R131: a 64K unmap leaves no CPU envelope to trust. */
   for(UINT j=16;j<32;++j) assert(!s->LogicalPtes[j].Flags);
   m2f2_pool_segment_cases(&a,&state,p,leaf);
+  m2f3_demand_pool_cases(&a,&state,p,leaf);
   expect_ok("R134 destroy",AdmissionDdiDestroyProcess(&a,p));
   free(local_cpu);local_cpu=NULL;
   puts("R134 system 64K outer DDI: PASS");

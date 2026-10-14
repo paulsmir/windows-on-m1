@@ -51,6 +51,36 @@ static VOID AdmissionG3RecordTableEvent(ADMISSION_G3_PROCESS *process,
   h->FirstSegment = MAXULONG;
 }
 
+/* M2-f3: paging-process PTEs into segment 3 hold their granules. After is
+ * NULL when the entries are dropped without replacement. */
+static VOID AdmissionG3PoolPagingRefs(ADMISSION_CONTEXT *adapter,
+    const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *before,
+    const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *after, UINT first, UINT count) {
+  ADMISSION_POOL_DEMAND *demand;
+  BOOLEAN any = FALSE;
+  UINT i;
+  if (adapter == NULL || before == NULL) return;
+  for (i = first; i < first + count && !any; ++i)
+    any = (before[i].Flags &&
+           before[i].SegmentId == ADMISSION_MEMORY_POOL_SEGMENT) ||
+          (after != NULL && after[i].Flags &&
+           after[i].SegmentId == ADMISSION_MEMORY_POOL_SEGMENT);
+  if (!any) return;
+  demand = AdmissionMemoryPoolLock(adapter);
+  if (demand == NULL) return;
+  for (i = first; i < first + count; ++i) {
+    if (after != NULL && after[i].Flags &&
+        after[i].SegmentId == ADMISSION_MEMORY_POOL_SEGMENT)
+      AdmissionPoolDemandPagingRef(demand,
+          after[i].GuestIpa - adapter->PoolIpa, 1);
+    if (before[i].Flags &&
+        before[i].SegmentId == ADMISSION_MEMORY_POOL_SEGMENT)
+      AdmissionPoolDemandPagingRef(demand,
+          before[i].GuestIpa - adapter->PoolIpa, -1);
+  }
+  AdmissionMemoryPoolUnlock(adapter);
+}
+
 static BOOLEAN AdmissionG3RetireSystemSubtree(ADMISSION_G3_PROCESS *process,
     ULONGLONG table_ipa, ULONGLONG retired_parent, UINT depth) {
   APPLE_AGX_GPUVA_G3_NODE *edge;
@@ -77,6 +107,9 @@ static BOOLEAN AdmissionG3RetireSystemSubtree(ADMISSION_G3_PROCESS *process,
                               ADMISSION_G3_LEAF_EVENT_SYSTEM_RETIRE);
   for (shadow = process->TableShadows; shadow; shadow = shadow->Next) {
     if (shadow->BrokerIpa != table_ipa) continue;
+    if (process->CpuOnlyMappings)
+      AdmissionG3PoolPagingRefs(process->State->Adapter, shadow->LogicalPtes,
+                                NULL, 0u, 8192u);
     for (UINT i = 0u; i < 8192u; ++i) {
       if (shadow->ResidentPtes && shadow->ResidentPtes[i].Flags &&
           ADMISSION_G3_FRAME_SEGMENT(shadow->ResidentPtes[i].SegmentId)) {
@@ -116,6 +149,9 @@ static void AdmissionG3ResetTableShadow(ADMISSION_G3_PROCESS *process,
           AppleAgxGpuvaG3MappingRelease(&process->Graph, s->ResidentPtes[i].GuestIpa);
       RtlZeroMemory(s->ResidentPtes, 8192u * sizeof(*s->ResidentPtes));
     }
+    if (s->LogicalPtes && process->CpuOnlyMappings)
+      AdmissionG3PoolPagingRefs(process->State->Adapter, s->LogicalPtes, NULL,
+                                0u, 8192u);
     if (s->LogicalPtes) RtlZeroMemory(s->LogicalPtes, 8192u * sizeof(*s->LogicalPtes));
   }
 }
@@ -401,6 +437,77 @@ static VOID AdmissionG3NoteSystemShape(ADMISSION_G3_STATE *state,
   ++state->SystemShapesGeneration;
 }
 
+/* M2-f3: before an update is published, the segment-3 pages it maps are
+ * committed: the allocation's whole placement when every segment-3 PTE
+ * describes the same one (base = segment offset - allocation offset), else
+ * the referenced pages for good. A user process that maps the allocation
+ * outside segment 3 ends its placement there; the paging process maps
+ * eviction destinations before anything is decided and is ignored. */
+static NTSTATUS AdmissionG3PoolPlace(ADMISSION_CONTEXT *adapter,
+    const ADMISSION_G3_PROCESS *process,
+    const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update,
+    const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *ptes, UINT first, UINT count) {
+  ADMISSION_ALLOCATION_HANDLE *handle =
+      (ADMISSION_ALLOCATION_HANDLE *)update->hAllocation;
+  ULONGLONG key = (ULONGLONG)(ULONG_PTR)update->hAllocation;
+  ULONGLONG base = MAXULONGLONG, bytes = 0ULL, pool_ipa = adapter->PoolIpa;
+  BOOLEAN pool_pages = FALSE, elsewhere = FALSE, consistent = TRUE;
+  ADMISSION_POOL_PLACE placed = AdmissionPoolPlaceInvalid;
+  ADMISSION_POOL_DEMAND *demand;
+  NTSTATUS status = STATUS_SUCCESS;
+  UINT i;
+  if (adapter->PoolDemand == NULL) return STATUS_SUCCESS;
+  /* hAllocation is the KMD's own allocation pointer; anything else is never
+   * dereferenced beyond the magic (as AdmissionG3NoteSystemShape). */
+  if (handle != NULL &&
+      ((key & (ULONGLONG)(sizeof(ULONG_PTR) - 1u)) != 0ULL ||
+       handle->Object.Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC))
+    handle = NULL;
+  for (i = first; i < first + count; ++i) {
+    ULONGLONG offset;
+    if (!ptes[i].Flags) continue;
+    if (ptes[i].SegmentId != ADMISSION_MEMORY_POOL_SEGMENT) {
+      elsewhere = TRUE;
+      continue;
+    }
+    pool_pages = TRUE;
+    offset = ptes[i].GuestIpa - pool_ipa;
+    if (ptes[i].AllocationOffset > offset)
+      consistent = FALSE;
+    else if (base == MAXULONGLONG)
+      base = offset - ptes[i].AllocationOffset;
+    else if (base != offset - ptes[i].AllocationOffset)
+      consistent = FALSE;
+  }
+  if (!pool_pages &&
+      (!elsewhere || handle == NULL || process->CpuOnlyMappings ||
+       handle->PoolPlacement.Bytes == 0ULL))
+    return STATUS_SUCCESS;
+  demand = AdmissionMemoryPoolLock(adapter);
+  if (demand == NULL) return STATUS_SUCCESS;
+  if (!pool_pages) {
+    AdmissionPoolDemandUnplace(demand, &handle->PoolPlacement);
+  } else {
+    if (handle != NULL && consistent &&
+        AdmissionAllocationAlign64K(handle->Object.Description.Size, &bytes))
+      placed = AdmissionPoolDemandPlace(demand, &handle->PoolPlacement, base,
+                                        bytes);
+    if (placed == AdmissionPoolPlaceNoMemory) {
+      status = STATUS_INSUFFICIENT_RESOURCES;
+    } else if (placed == AdmissionPoolPlaceInvalid) {
+      ++demand->Stats.Unaligned;
+      for (i = first; i < first + count && NT_SUCCESS(status); ++i)
+        if (ptes[i].Flags &&
+            ptes[i].SegmentId == ADMISSION_MEMORY_POOL_SEGMENT &&
+            !AdmissionPoolDemandPin(demand, ptes[i].GuestIpa - pool_ipa,
+                                    0x1000ULL))
+          status = STATUS_INSUFFICIENT_RESOURCES;
+    }
+  }
+  AdmissionMemoryPoolUnlock(adapter);
+  return status;
+}
+
 static NTSTATUS AdmissionG3UpdateLeaf(
     ADMISSION_G3_PROCESS *process, ULONGLONG table_ipa,
     const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update,
@@ -495,11 +602,17 @@ static NTSTATUS AdmissionG3UpdateLeaf(
     status = STATUS_INTEGER_OVERFLOW;
     goto Done;
   }
+  status = AdmissionG3PoolPlace(adapter, process, update, candidate, first,
+                                count);
+  if (!NT_SUCCESS(status)) goto Done;
+  status = STATUS_INVALID_PARAMETER;
   if (process->CpuOnlyMappings) {
     /* Only the CPU paging executor reads paging-process VAs (it resolves
      * them through LogicalPtes). Publish no leaf, take no grant or mapping
      * reference, and keep ResidentPtes empty so no release path runs. */
     if (shadow->ResidentPtes) { status = STATUS_INVALID_DEVICE_STATE; goto Done; }
+    AdmissionG3PoolPagingRefs(adapter, shadow->LogicalPtes, candidate, first,
+                              count);
     RtlCopyMemory(shadow->LogicalPtes + first, candidate + first,
                   count * sizeof(*shadow->LogicalPtes));
     ++process->Graph.MappingGeneration;
@@ -924,6 +1037,9 @@ static NTSTATUS AdmissionG3EncodeVirtualPaging(
       ExReleaseFastMutex(&state->Lock);
       record.Bytes = bytes;
     }
+    /* M2-f3: segment-3 pages this record names stay committed until it has
+     * executed. */
+    AdmissionMemoryPoolNoteRecord(adapter, &record);
     RtlCopyMemory(args->pDmaBuffer, &marker, sizeof(marker));
     RtlCopyMemory(args->pDmaBufferPrivateData, &record, sizeof(record));
     args->pDmaBuffer = (PUCHAR)args->pDmaBuffer + sizeof(marker);

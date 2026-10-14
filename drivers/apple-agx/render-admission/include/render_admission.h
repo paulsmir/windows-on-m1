@@ -17,6 +17,7 @@
 #include "render_memory.h"
 #include "render_allocation.h"
 #include "render_pool_probe.h"
+#include "render_pool_demand.h"
 #include "render_hvc.h"
 #include "apple_agx_memory.h"
 #include "apple_agx_g3_private_failure.h"
@@ -589,6 +590,11 @@ typedef struct _ADMISSION_CONTEXT {
   ULONGLONG PoolBytes;
   /* Pool pages kept because the window could not release them. */
   volatile LONG PoolLeaks;
+  /* M2-f3: segment 3 backed on demand (pool_windows.c); NULL for the fixed
+   * pool or no pool. */
+  PVOID PoolDemand;
+  /* Sequence number of the last encoded paging record. */
+  volatile LONG64 PagingRecordSeq;
   PVOID PlatformRuntime;
   PVOID ScanoutRuntime;
   APPLE_AGX_SOFTWARE_APERTURE_ENTRY *ApertureEntries;
@@ -846,6 +852,8 @@ typedef struct _ADMISSION_ALLOCATION_HANDLE {
   /* Created-with refresh rate reported by DxgkDdiDescribeAllocation. */
   UINT PrimaryRefreshNumerator;
   UINT PrimaryRefreshDenominator;
+  /* M2-f3: current segment-3 placement, guarded by the pool lock. */
+  ADMISSION_POOL_PLACEMENT PoolPlacement;
 } ADMISSION_ALLOCATION_HANDLE;
 
 #define ADMISSION_OPEN_ALLOCATION_MAGIC 0x4f504152u
@@ -1316,9 +1324,31 @@ _IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionMemoryPoolStop(_Inout_opt_ ADMISSION_CONTEXT *Context);
 BOOLEAN AdmissionMemoryPoolView(_In_opt_ const ADMISSION_CONTEXT *Context,
                                 _Out_ ADMISSION_SCANOUT_MEMORY_VIEW *View);
+/* M2-f3: the demand pool's granule state under its lock; NULL (no lock
+ * taken) when segment 3 is not demand-backed. PASSIVE or APC level; the G3
+ * lock, when held, is taken first. */
+ADMISSION_POOL_DEMAND *AdmissionMemoryPoolLock(_In_opt_ ADMISSION_CONTEXT *Context);
+VOID AdmissionMemoryPoolUnlock(_In_ ADMISSION_CONTEXT *Context);
+/* Stamps Record->Seq; a record naming segment-3 pages holds them until it
+ * has executed. */
+VOID AdmissionMemoryPoolNoteRecord(_In_opt_ ADMISSION_CONTEXT *Context,
+                                   _Inout_ ADMISSION_PAGING_RECORD *Record);
+/* Every record up to Seq has executed; releases what became releasable. */
+_IRQL_requires_(PASSIVE_LEVEL)
+VOID AdmissionMemoryPoolExecuted(_In_opt_ ADMISSION_CONTEXT *Context,
+                                 ULONGLONG Seq);
+/* DestroyAllocation: the placement ends. */
+VOID AdmissionMemoryPoolForget(_In_opt_ ADMISSION_CONTEXT *Context,
+                               _Inout_ ADMISSION_POOL_PLACEMENT *Placement);
+_IRQL_requires_(PASSIVE_LEVEL)
+VOID AdmissionMemoryPoolReclaim(_In_opt_ ADMISSION_CONTEXT *Context);
 _IRQL_requires_(PASSIVE_LEVEL)
 void AdmissionRecordM2PoolProbe(_In_opt_ ADMISSION_CONTEXT *Context,
                                 _In_ const ADMISSION_POOL_PROBE *Probe);
+/* M2-f3 receipt Wom1M2PoolDemand (staged; written by a work item). */
+void AdmissionRecordM2PoolDemand(
+    _In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_POOL_DEMAND_RECEIPT *Receipt);
 void AdmissionRecordGpuvaG3SystemShapes(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_reads_(ADMISSION_G3_SYSTEM_SHAPE_COUNT)

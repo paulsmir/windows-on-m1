@@ -320,6 +320,7 @@ static VOID AdmissionPagingWorker(_In_ PDEVICE_OBJECT DeviceObject,
   NTSTATUS status = STATUS_SUCCESS;
   ULONG index;
   ULONGLONG copiedBytes = 0ULL;
+  ULONGLONG executedSeq = 0ULL;
   KIRQL oldIrql;
 
   LONGLONG workerStart;
@@ -347,6 +348,8 @@ static VOID AdmissionPagingWorker(_In_ PDEVICE_OBJECT DeviceObject,
         context, &context->PagingRecords[index]);
     if (!NT_SUCCESS(status))
       break;
+    if (context->PagingRecords[index].Seq > executedSeq)
+      executedSeq = context->PagingRecords[index].Seq;
   }
   if (context->PresentCopyBytes != 0u)
     AdmissionRecordPresentTransfer(context, context->PagingFence,
@@ -378,6 +381,10 @@ static VOID AdmissionPagingWorker(_In_ PDEVICE_OBJECT DeviceObject,
   InterlockedDecrement(&context->PagingWorkersActive);
   AdmissionPagingUpdateIdleLocked(context);
   KeReleaseSpinLock(&context->PagingLock, oldIrql);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* M2-f3: after the fence is signalled; the batch ran in record order. */
+  if (executedSeq != 0ULL) AdmissionMemoryPoolExecuted(context, executedSeq);
+#endif
 }
 
 _Use_decl_annotations_ void AdmissionPagingQueueActive(ADMISSION_CONTEXT *Context) {

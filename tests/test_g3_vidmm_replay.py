@@ -136,6 +136,7 @@ class G3VidMmReplayTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("R134 system 64K outer DDI: PASS", result.stdout)
         self.assertIn("M2-f2 pool segment: PASS", result.stdout)
+        self.assertIn("M2-f3 demand pool: PASS", result.stdout)
 
     def test_exp852_protected_system_group_stays_unpublished(self):
         env = dict(os.environ, G3_REPLAY_R133="1")
