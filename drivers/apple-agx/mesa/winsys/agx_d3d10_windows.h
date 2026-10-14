@@ -65,6 +65,10 @@ struct pipe_context *AgxD3d10WindowsContext(AGX_D3D10_WINDOWS_DEVICE *Device);
 BOOL AgxD3d10WindowsIdentity(AGX_D3D10_WINDOWS_DEVICE *Device,
                              ULONGLONG *OwnerCookie,
                              ULONG *DeviceGeneration);
+/* EXP1287 diagnostic switches (environment of the calling process, default
+ * off = the EXP1284 answers): the D3D screen's multisampling and the
+ * frontend's multisample caps/quality reporting. */
+BOOL AgxD3d10WindowsDiagnosticSwitch(const char *Name);
 HRESULT AgxD3d10WindowsFlushStatus(AGX_D3D10_WINDOWS_DEVICE *Device);
 HRESULT AgxD3d10WindowsFlushDeferredResources(AGX_D3D10_WINDOWS_DEVICE *Device);
 HRESULT AgxD3d10WindowsFlushRetire(AGX_D3D10_WINDOWS_DEVICE *Device);

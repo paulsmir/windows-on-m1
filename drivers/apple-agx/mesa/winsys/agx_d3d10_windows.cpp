@@ -525,7 +525,8 @@ HRESULT AgxD3d10WindowsCreateDevice(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
   /* D3D-G4: D3D depth-stencil views submit ZLS attachments through the same
    * winsys/KMD path the GL ICD validated (EXP1149). */
   owner->Backend.ZlsAttachments=1;
-  owner->Backend.Multisample=1;
+  owner->Backend.Multisample=
+      AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D_SCREEN_MSAA") ? 1 : 0;
   owner->Screen=AgxWin32AsahiScreenCreateForWindows(&owner->Backend,&owner->Runtime.Screen,
       &owner->OwnerOperations,&owner->Owner,AdmissionUmdAsahiBatchOperations());
   {
@@ -656,6 +657,12 @@ HRESULT AgxD3d10WindowsDestroyDeviceDdi(AGX_D3D10_WINDOWS_DEVICE **Device,
 
 struct pipe_context *AgxD3d10WindowsContext(AGX_D3D10_WINDOWS_DEVICE *Device) {
   return Device != NULL && Device->Stage==AgxD3d10DeviceReady ? Device->Context : NULL;
+}
+
+BOOL AgxD3d10WindowsDiagnosticSwitch(const char *Name) {
+  char value[8];
+  DWORD length = Name ? GetEnvironmentVariableA(Name, value, sizeof(value)) : 0;
+  return length == 1 && value[0] == '1';
 }
 
 BOOL AgxD3d10WindowsIdentity(AGX_D3D10_WINDOWS_DEVICE *Device,

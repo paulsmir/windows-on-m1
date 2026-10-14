@@ -42,7 +42,9 @@ class MsaaCapsConsistency(unittest.TestCase):
         names = sorted(set(re.findall(r"\bDXGI_FORMAT_\w+", caps + quality)))
         flags = dict(re.findall(r"#define (D3D10_DDI_FORMAT_SUPPORT_\w+)\s+(0x[0-9A-Fa-f]+)",
                                 WDK.read_text(errors="replace")))
-        program = ["#include <stdio.h>", "typedef unsigned UINT;", "typedef void *D3D10DDI_HDEVICE;"]
+        program = ["#include <stdio.h>", "typedef unsigned UINT;", "typedef void *D3D10DDI_HDEVICE;",
+                   "static int diagnostic_on;",
+                   "static int AgxD3d10WindowsDiagnosticSwitch(const char *name) { (void)name; return diagnostic_on; }"]
         program += ["#define %s %s" % item for item in flags.items()]
         program.append("typedef enum { DXGI_FORMAT_UNKNOWN_TEST = 0, %s, FORMAT_COUNT } DXGI_FORMAT;"
                        % ", ".join(names))
@@ -52,6 +54,7 @@ class MsaaCapsConsistency(unittest.TestCase):
                        "UINT *pNumQualityLevels) {\n" + quality + "\n}")
         program.append(r'''int main(void) {
   int bad = 0;
+  for (diagnostic_on = 0; diagnostic_on < 2; ++diagnostic_on)
   for (int f = 0; f <= FORMAT_COUNT + 2; ++f) {
     UINT c = 0, q2 = 0, q4 = 0;
     caps(0, (DXGI_FORMAT)f, &c);

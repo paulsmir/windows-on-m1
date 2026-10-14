@@ -1178,7 +1178,11 @@ void APIENTRY
       *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_NOT_SUPPORTED;
    } else {
       *pFormatCaps = 0;
-   }'''),
+   }
+   /* EXP1287 diagnostic: without APPLE_AGX_D3D_MSAA_CAPS=1 the EXP1284
+    * answers (no multisample render targets). */
+   if (!AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D_MSAA_CAPS"))
+      *pFormatCaps &= ~(UINT)D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET;'''),
         ('''   /* XXX: Disable MSAA */
    *pNumQualityLevels = 0;''','''   (void)hDevice;
    *pNumQualityLevels =
@@ -1211,7 +1215,8 @@ void APIENTRY
        Format == DXGI_FORMAT_D16_UNORM ||
        Format == DXGI_FORMAT_D24_UNORM_S8_UINT ||
        Format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT) &&
-      (SampleCount == 2 || SampleCount == 4) ? 1 : 0;''')])
+      (SampleCount == 2 || SampleCount == 4) &&
+      AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D_MSAA_CAPS") ? 1 : 0;''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Device.cpp','Flush','''   Device *pDevice = CastDevice(hDevice);
    HRESULT result = AgxD3d10WindowsQueryCollect(pDevice->windows);
    UINT stage[1] = {1u};

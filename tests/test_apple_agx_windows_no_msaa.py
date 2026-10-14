@@ -30,7 +30,10 @@ class OnlyD3dAdvertisesMsaa(unittest.TestCase):
 
     def test_only_the_d3d_owner_asks_for_msaa_before_the_screen(self):
         d3d = D3D.read_text()
-        self.assertLess(d3d.index("owner->Backend.Multisample=1;"),
+        # EXP1287 diagnostic: the D3D owner may gate the request by a switch.
+        ask = "owner->Backend.Multisample=" if "owner->Backend.Multisample=" in d3d else None
+        self.assertIsNotNone(ask)
+        self.assertLess(d3d.index(ask),
                         d3d.index("owner->Screen=AgxWin32AsahiScreenCreateForWindows("))
         self.assertNotIn("Multisample", WGL.read_text())
 
