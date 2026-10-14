@@ -2364,6 +2364,31 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildComputeJob(
   return APPLE_AGX_BACKEND_TRUE;
 }
 
+/* D3D-G1b: a render's compute work is ordered in firmware: the TA queue
+ * leads with a Barrier on the compute stamp (Asahi queue/mod.rs explicit
+ * barrier), and compute, TA and 3D are submitted together. The Barrier stamps
+ * the TA queue with the TA job's own stamp value. */
+static APPLE_AGX_BACKEND_BOOL AdmissionBuildTaComputeBarrier(
+    ADMISSION_PLATFORM_RUNTIME *runtime,
+    const APPLE_AGX_RENDER_COMPUTE_INPUT *Input,
+    const APPLE_AGX_RENDER_COMPUTE_OUTPUT *Output,
+    const APPLE_AGX_G13_QUEUE_JOB_PLAN *Plan,
+    APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
+  APPLE_AGX_RENDER_BARRIER_INPUT barrier;
+  APPLE_AGX_U64 address = 0ULL;
+  RtlZeroMemory(&barrier, sizeof(barrier));
+  barrier.WaitStampGpuAddress = Output->FirmwareStampGpuAddress;
+  barrier.WaitValue = Input->StampValue;
+  barrier.WaitSlot = Input->EventNumber;
+  barrier.StampSelf = Job->TaExpectedStamp;
+  if (!AppleAgxRenderSharedMemoryBuildComputeBarrier(
+          &runtime->Initdata.RenderSharedMemory, &barrier, &address))
+    return APPLE_AGX_BACKEND_FALSE;
+  Job->TaBarrierAddress = address;
+  Job->TaExpectedDonePointer = Plan->TaBarrierExpectedDonePointer;
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
 static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     void *Context, const unsigned char *SubmissionBytes,
     APPLE_AGX_BACKEND_U32 SubmissionByteCount,
@@ -2499,12 +2524,14 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     Job->ComputeEvent=input.EventNumber;
     Job->ComputeExpectedStamp=input.StampValue;
     Job->ComputeExpectedDonePointer=Plan->ComputeExpectedDonePointer;
+    if(!AdmissionBuildTaComputeBarrier(runtime,&input,&output,Plan,Job))
+      goto BuildFailure;
   }
-  /* D3D-G1: a v5 render's compute prelude. The queue provider runs it
-   * first and publishes TA/3D once its stamp is seen (Asahi: the render's
-   * barrier on the submission's compute command). The render builder above
-   * set the notifier threshold for the render; the compute build adds its
-   * own notification. */
+  /* D3D-G1: a v5 render's compute work. The render builder above set the
+   * notifier threshold for the render's TA and 3D, the compute build adds
+   * its own notification, and the TA barrier orders the render after it
+   * (D3D-G1b: one submission, as Asahi; EXP1278 showed that publishing TA/3D
+   * only after a CPU-observed compute event deadlocks on that threshold). */
   if (runtime->Adapter->BackendImage.G4Native &&
       runtime->Adapter->BackendImage.G4WithCompute) {
     const ADMISSION_BACKEND_IMAGE *image = &runtime->Adapter->BackendImage;
@@ -2538,6 +2565,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     Job->ComputeEvent = input.EventNumber;
     Job->ComputeExpectedStamp = input.StampValue;
     Job->ComputeExpectedDonePointer = Plan->ComputeExpectedDonePointer;
+    if (!AdmissionBuildTaComputeBarrier(runtime, &input, &output, Plan, Job))
+      goto BuildFailure;
   }
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   if (dynamic && !APPLE_AGX_WIN32_COMMAND_IS_NATIVE(dynamicView.Bindings->CommandVersion))

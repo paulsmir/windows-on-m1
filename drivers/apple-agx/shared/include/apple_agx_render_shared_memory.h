@@ -30,6 +30,16 @@
 #define APPLE_AGX_COMPUTE_STATISTICS_OFFSET 0x8600u
 #define APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET 0x8780u
 #define APPLE_AGX_COMPUTE_GPU_BUFFER_OFFSET 0xc000u
+/* D3D-G1b: the TA queue's Barrier on the compute stamp (a render waiting on
+ * its submission's compute), after the work-queue owned words. */
+#define APPLE_AGX_COMPUTE_TA_BARRIER_OFFSET 0x8800u
+/* The G13 firmware Barrier work item: the captured WorkCommandBarrier (render
+ * template object 14) and Asahi fw/workqueue.rs raw::Barrier without the
+ * G14X internal_barrier_type: tag 4 at 0x00, wait stamp pointer (u64) at
+ * 0x04, wait value 0x0c, wait slot 0x10, the waiting queue's own stamp 0x14,
+ * uuid 0x18, external barrier 0x1c. */
+#define APPLE_AGX_G13_BARRIER_BYTES 0x20u
+#define APPLE_AGX_G13_BARRIER_TAG 4u
 
 typedef struct _APPLE_AGX_RENDER_COMPUTE_INPUT {
   APPLE_AGX_U64 CdmStreamBase;
@@ -49,7 +59,14 @@ typedef struct _APPLE_AGX_RENDER_COMPUTE_OUTPUT {
   const void *SidecarCpuAddress;
   APPLE_AGX_U32 SidecarBytes;
   APPLE_AGX_U32 NotifierThreshold;
+  /* The firmware stamp the compute work writes (a Barrier waits on it). */
+  APPLE_AGX_U64 FirmwareStampGpuAddress;
 } APPLE_AGX_RENDER_COMPUTE_OUTPUT;
+
+typedef struct _APPLE_AGX_RENDER_BARRIER_INPUT {
+  APPLE_AGX_U64 WaitStampGpuAddress;
+  APPLE_AGX_U32 WaitValue, WaitSlot, StampSelf;
+} APPLE_AGX_RENDER_BARRIER_INPUT;
 
 typedef struct _APPLE_AGX_RENDER_RUNTIME_BINDINGS {
   APPLE_AGX_U64 StatsTaOwnerGpuAddress;
@@ -143,6 +160,14 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
     APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
     const APPLE_AGX_RENDER_COMPUTE_INPUT *Input,
     APPLE_AGX_RENDER_COMPUTE_OUTPUT *Output);
+/* D3D-G1b: builds the TA queue's Barrier on a compute stamp in the compute
+ * sidecar (published with the compute work) and returns its firmware VA. The
+ * Barrier stamps the TA queue with StampSelf, the TA job's own stamp value,
+ * as Asahi's render barrier stamps ev_frag.value.next(). */
+APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildComputeBarrier(
+    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    const APPLE_AGX_RENDER_BARRIER_INPUT *Input,
+    APPLE_AGX_U64 *BarrierGpuAddress);
 
 /* Refresh the firmware-visible context-0 objects from the dynamically patched
  * template arena, then build the job from that active relocation graph. */

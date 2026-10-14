@@ -248,6 +248,58 @@ int main(void) {
       input.PreemptionGpuAddress=0x1500600020ULL;
       assert(!AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
     }
+    {
+      /* D3D-G1b: the TA queue's Barrier on the compute stamp has the G13
+       * layout of the captured WorkCommandBarrier (template object 14, the
+       * 3D queue's barrier on TA): built with that object's own wait stamp,
+       * value, slot and self stamp it reproduces its first 0x18 bytes; uuid
+       * is Asahi's explicit-barrier tag and external_barrier stays 0. */
+      const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *l=
+          AppleAgxRenderTemplateObjectLayouts();
+      unsigned char *arena=calloc(1,AppleAgxRenderTemplateBytes());
+      APPLE_AGX_RENDER_TEMPLATE_ROOTS roots;
+      APPLE_AGX_RENDER_BARRIER_INPUT barrier={0};
+      APPLE_AGX_U64 address=0u,stamp=0u;
+      const unsigned char *built,*captured;
+      APPLE_AGX_U32 word=0u;
+      assert(arena && AppleAgxRenderTemplateMaterialize(
+          arena,AppleAgxRenderTemplateBytes(),&roots));
+      captured=arena+l[14].ArenaOffset;
+      assert(l[14].Size==APPLE_AGX_G13_BARRIER_BYTES);
+      memcpy(&word,captured,4u); assert(word==APPLE_AGX_G13_BARRIER_TAG);
+      memcpy(&stamp,captured+0x04u,8u);
+      barrier.WaitStampGpuAddress=stamp;
+      memcpy(&barrier.WaitValue,captured+0x0cu,4u);
+      memcpy(&barrier.WaitSlot,captured+0x10u,4u);
+      memcpy(&barrier.StampSelf,captured+0x14u,4u);
+      assert(AppleAgxRenderSharedMemoryBuildComputeBarrier(&owner,&barrier,&address));
+      assert(address==owner.VirtualAddresses[
+          APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR]+
+          APPLE_AGX_COMPUTE_TA_BARRIER_OFFSET && (address&0x1fu)==0u);
+      built=(const unsigned char *)owner.Objects[
+          APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR].CpuAddress+
+          APPLE_AGX_COMPUTE_TA_BARRIER_OFFSET;
+      assert(memcmp(built,captured,0x18u)==0);
+      memcpy(&word,built+0x18u,4u); assert(word==0xffffbbbbu);
+      memcpy(&word,built+0x1cu,4u); assert(word==0u);
+      /* The barrier sits outside the work words a compute rebuild zeroes. */
+      assert(APPLE_AGX_COMPUTE_TA_BARRIER_OFFSET>=
+             APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET+8u &&
+             APPLE_AGX_COMPUTE_TA_BARRIER_OFFSET+APPLE_AGX_G13_BARRIER_BYTES<=
+             APPLE_AGX_COMPUTE_GPU_BUFFER_OFFSET);
+      input.PreemptionGpuAddress=0u;
+      assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output) &&
+             memcmp(built,captured,0x18u)==0);
+      /* The compute output names the stamp the barrier waits on. */
+      assert(output.FirmwareStampGpuAddress==owner.VirtualAddresses[
+          APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR]+
+          APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET);
+      barrier.WaitSlot=0x80u;
+      assert(!AppleAgxRenderSharedMemoryBuildComputeBarrier(&owner,&barrier,&address));
+      barrier.WaitSlot=0u;barrier.WaitStampGpuAddress=0u;
+      assert(!AppleAgxRenderSharedMemoryBuildComputeBarrier(&owner,&barrier,&address));
+      free(arena);
+    }
   }
   layouts = AppleAgxRenderTemplateObjectLayouts();
   for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_TEMPLATE_OBJECT_COUNT;

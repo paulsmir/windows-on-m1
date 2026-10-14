@@ -87,11 +87,16 @@ typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME_IO {
                                     APPLE_AGX_BACKEND_U32 EventKind);
 } APPLE_AGX_G13_QUEUE_RUNTIME_IO;
 
+/* D3D-G1b: a TA submission may lead with a firmware Barrier work item
+ * (render waiting on its submission's compute), one entry more than the
+ * job's TA/3D work items. */
+#define APPLE_AGX_G13_QUEUE_PUBLISH_MAX (APPLE_AGX_BACKEND_QUEUE_WORK_COUNT + 1u)
+
 typedef struct _APPLE_AGX_G13_WORK_PUBLICATION {
   struct {
     const void *Address;
     APPLE_AGX_BACKEND_U32 Bytes;
-  } PreparedRanges[APPLE_AGX_BACKEND_QUEUE_WORK_COUNT];
+  } PreparedRanges[APPLE_AGX_G13_QUEUE_PUBLISH_MAX];
   APPLE_AGX_BACKEND_U32 PreparedRangeCount;
   /* Legacy copy path retained for qualification fixtures. Production
    * submissions use PreparedRanges and never copy already-relocated work. */
@@ -99,7 +104,7 @@ typedef struct _APPLE_AGX_G13_WORK_PUBLICATION {
   unsigned char *Destination;
   APPLE_AGX_BACKEND_U32 Bytes;
   APPLE_AGX_BACKEND_U64
-      GpuAddresses[APPLE_AGX_BACKEND_QUEUE_WORK_COUNT];
+      GpuAddresses[APPLE_AGX_G13_QUEUE_PUBLISH_MAX];
   APPLE_AGX_BACKEND_U32 GpuAddressCount;
   APPLE_AGX_BACKEND_U32 ExpectedStamp;
 } APPLE_AGX_G13_WORK_PUBLICATION;
@@ -112,8 +117,12 @@ typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION {
   APPLE_AGX_G13_WORK_PUBLICATION D3;
   APPLE_AGX_G13_WORK_PUBLICATION Compute;
   /* G2: a standalone compute job. Its compute completion is the job's
-   * completion (no TA/3D follows, BeginRenderAfterCompute refuses). */
+   * completion (no TA/3D follows). */
   APPLE_AGX_BACKEND_BOOL ComputeOnly;
+  /* D3D-G1b: Ta.GpuAddresses[0] is a firmware Barrier that holds the TA
+   * queue until the submission's compute stamp is written (Asahi
+   * queue/mod.rs explicit barrier); only SubmitRenderWithCompute takes it. */
+  APPLE_AGX_BACKEND_BOOL TaLeadingBarrier;
 } APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION;
 
 typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION {
@@ -151,6 +160,9 @@ typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME {
   APPLE_AGX_G13_QUEUE_PENDING ComputePending;
   /* The pending compute work is a standalone job (submission ComputeOnly). */
   APPLE_AGX_BACKEND_BOOL ComputeTerminal;
+  /* D3D-G1b: the pending render also waits for its compute work (one
+   * submission; the notifier fires once all three queues are done). */
+  APPLE_AGX_BACKEND_BOOL ComputeInRender;
   APPLE_AGX_BACKEND_U32 RecoveredFaults, LastRecoveredEventKind;
   /* G4-recovery: the pending job outlived its deadline (counted once per
    * job); the deadline is recorded, not terminal. */
@@ -168,8 +180,14 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeSubmit(
 APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeSubmitCompute(
     APPLE_AGX_G13_QUEUE_RUNTIME *Runtime,
     const APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION *Submission);
-APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueRuntimeBeginRenderAfterCompute(
-    APPLE_AGX_G13_QUEUE_RUNTIME *Runtime, APPLE_AGX_BACKEND_U32 Fence);
+/* D3D-G1b: one submission of compute and TA/3D. The TA queue's first entry
+ * is a firmware Barrier on the compute stamp, so the firmware orders the
+ * render after the compute (Asahi); the shared notifier threshold counts all
+ * three notifications, so a CPU wait for the compute alone would deadlock
+ * (EXP1278). */
+APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeSubmitRenderWithCompute(
+    APPLE_AGX_G13_QUEUE_RUNTIME *Runtime,
+    const APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION *Submission);
 APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeHandleEvent(
     APPLE_AGX_G13_QUEUE_RUNTIME *Runtime, const unsigned char *Message,
     APPLE_AGX_BACKEND_U32 MessageBytes);

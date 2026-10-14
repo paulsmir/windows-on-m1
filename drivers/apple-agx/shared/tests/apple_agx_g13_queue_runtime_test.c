@@ -197,34 +197,74 @@ static void TestCompleteSubmission(
 static void TestEvent(unsigned char [APPLE_AGX_G13_EVENT_MESSAGE_SIZE],
                       unsigned int,unsigned int);
 
-static void TestComputeThenRenderDependency(void) {
-  TEST_FIXTURE f;APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION s;
+/* D3D-G1b (EXP1278): a render's compute work is one submission with it.
+ * Compute, TA (led by the firmware Barrier on the compute stamp) and 3D are
+ * published and kicked together, and the fence completes only when all three
+ * are done: the shared notifier counts every notification, so waiting for the
+ * compute alone before publishing TA/3D deadlocked on hardware. */
+static void TestRenderWithComputeOneSubmission(void) {
+  TEST_FIXTURE f;APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION s,bad,next;
+  APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
   unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
   TestInitialize(&f);TestEnableCompute(&f);s=TestSubmission(&f,60u);
   s.Compute.Source=f.ComputeSource;s.Compute.Destination=f.ComputeDestination;
   s.Compute.Bytes=sizeof(f.ComputeSource);
   s.Compute.GpuAddresses[0]=0x1500300000ULL;
   s.Compute.GpuAddressCount=1u;s.Compute.ExpectedStamp=0x600u;
+  s.Ta.GpuAddresses[2]=s.Ta.GpuAddresses[1];
+  s.Ta.GpuAddresses[1]=s.Ta.GpuAddresses[0];
+  s.Ta.GpuAddresses[0]=0x1500308800ULL;s.Ta.GpuAddressCount=3u;
+  s.TaLeadingBarrier=APPLE_AGX_BACKEND_TRUE;
+  /* Refused before anything is visible: no barrier, the plain render or
+   * compute entry points, a TA list without the barrier slot. */
+  bad=s;bad.TaLeadingBarrier=APPLE_AGX_BACKEND_FALSE;
+  assert(AppleAgxG13QueueRuntimeSubmitRenderWithCompute(&f.Runtime,&bad)==
+         AppleAgxG13QueueRuntimeResultInvalidArgument);
+  assert(AppleAgxG13QueueRuntimeSubmit(&f.Runtime,&s)==
+         AppleAgxG13QueueRuntimeResultInvalidArgument);
   assert(AppleAgxG13QueueRuntimeSubmitCompute(&f.Runtime,&s)==
+         AppleAgxG13QueueRuntimeResultInvalidArgument);
+  bad=s;bad.Ta.GpuAddressCount=2u;
+  assert(AppleAgxG13QueueRuntimeSubmitRenderWithCompute(&f.Runtime,&bad)==
+         AppleAgxG13QueueRuntimeResultInvalidArgument);
+  assert(f.IoState.Sends==0u && f.Runtime.Phase==AppleAgxG13QueueRuntimeReady &&
+         f.ComputeWrite==0u && f.TaWrite==0u && f.D3Write==0u);
+  assert(AppleAgxG13QueueRuntimeSubmitRenderWithCompute(&f.Runtime,&s)==
          AppleAgxG13QueueRuntimeResultOk);
-  assert(f.Runtime.Phase==AppleAgxG13QueueRuntimeComputeSubmitted &&
+  assert(f.Runtime.Phase==AppleAgxG13QueueRuntimeSubmitted &&
+         f.Runtime.ComputeInRender && !f.Runtime.ComputeTerminal &&
          f.ComputeRing[0]==s.Compute.GpuAddresses[0] && f.ComputeWrite==1u &&
-         f.IoState.Sends==1u &&
-         f.IoState.SendOrder[0]==(unsigned)AppleAgxG13QueueCompute);
+         f.TaRing[0]==0x1500308800ULL && f.TaRing[1]==s.Ta.GpuAddresses[1] &&
+         f.TaRing[2]==s.Ta.GpuAddresses[2] && f.TaWrite==3u &&
+         f.D3Write==2u && f.IoState.Sends==3u &&
+         f.IoState.SendOrder[0]==(unsigned)AppleAgxG13QueueCompute &&
+         f.IoState.SendOrder[1]==(unsigned)AppleAgxG13Queue3d &&
+         f.IoState.SendOrder[2]==(unsigned)AppleAgxG13QueueTa);
+  /* TA and 3D reported but the compute not: the fence stays pending. */
+  f.D3Stamp=s.D3.ExpectedStamp;f.D3Done=f.D3Write;
+  f.TaStamp=s.Ta.ExpectedStamp;f.TaDone=f.TaWrite;
   TestEvent(event,7u,9u);
   assert(AppleAgxG13QueueRuntimeHandleEvent(&f.Runtime,event,sizeof(event))==
          AppleAgxG13QueueRuntimeResultOk &&
-         f.Runtime.Phase==AppleAgxG13QueueRuntimeComputeSubmitted);
+         f.Runtime.Phase==AppleAgxG13QueueRuntimeSubmitted &&
+         !AppleAgxG13QueueRuntimeTakeCompletion(&f.Runtime,&completion));
   f.ComputeStamp=s.Compute.ExpectedStamp;f.ComputeDone=f.ComputeWrite;
   TestEvent(event,11u,APPLE_AGX_G13_EVENT_COUNT);
   assert(AppleAgxG13QueueRuntimeHandleEvent(&f.Runtime,event,sizeof(event))==
          AppleAgxG13QueueRuntimeResultOk &&
-         f.Runtime.Phase==AppleAgxG13QueueRuntimeComputeComplete);
-  assert(!AppleAgxG13QueueRuntimeBeginRenderAfterCompute(&f.Runtime,59u));
-  assert(AppleAgxG13QueueRuntimeBeginRenderAfterCompute(&f.Runtime,60u));
-  assert(AppleAgxG13QueueRuntimeSubmit(&f.Runtime,&s)==
-         AppleAgxG13QueueRuntimeResultOk);
-  TestCompleteSubmission(&f,&s);
+         f.Runtime.Phase==AppleAgxG13QueueRuntimeCompletionPending);
+  assert(AppleAgxG13QueueRuntimeTakeCompletion(&f.Runtime,&completion) &&
+         completion.Fence==60u &&
+         completion.Status==AppleAgxG13QueueCompletionSuccess &&
+         f.Runtime.Phase==AppleAgxG13QueueRuntimeReady &&
+         !f.Runtime.ComputeInRender);
+  /* With the manager initialized, the TA list is the barrier and the root. */
+  next=s;next.Fence=61u;next.Ta.GpuAddresses[1]=s.Ta.GpuAddresses[2];
+  next.Ta.GpuAddressCount=2u;next.Compute.ExpectedStamp=0x601u;
+  assert(AppleAgxG13QueueRuntimeSubmitRenderWithCompute(&f.Runtime,&next)==
+         AppleAgxG13QueueRuntimeResultOk &&
+         f.TaRing[3]==0x1500308800ULL && f.TaRing[4]==s.Ta.GpuAddresses[2] &&
+         f.TaWrite==5u && f.ComputeWrite==2u);
 }
 
 /* G2: a standalone compute job completes its fence on the compute event;
@@ -255,7 +295,6 @@ static void TestStandaloneComputeCompletes(void) {
   assert(AppleAgxG13QueueRuntimeHandleEvent(&f.Runtime,event,sizeof(event))==
          AppleAgxG13QueueRuntimeResultOk &&
          f.Runtime.Phase==AppleAgxG13QueueRuntimeCompletionPending);
-  assert(!AppleAgxG13QueueRuntimeBeginRenderAfterCompute(&f.Runtime,70u));
   assert(AppleAgxG13QueueRuntimeTakeCompletion(&f.Runtime,&completion) &&
          completion.Fence==70u &&
          completion.Status==AppleAgxG13QueueCompletionSuccess &&
@@ -266,24 +305,20 @@ static void TestStandaloneComputeCompletes(void) {
   assert(AppleAgxG13QueueRuntimeSubmit(&f.Runtime,&r)==
          AppleAgxG13QueueRuntimeResultOk);
   TestCompleteSubmission(&f,&r);
-  /* a prelude (not ComputeOnly) still waits for the render submission */
+  /* D3D-G1b: compute that is not a standalone job never runs alone. */
   s.Fence=72u;s.ComputeOnly=APPLE_AGX_BACKEND_FALSE;s.Compute.ExpectedStamp=0x701u;
   assert(AppleAgxG13QueueRuntimeSubmitCompute(&f.Runtime,&s)==
-         AppleAgxG13QueueRuntimeResultOk && !f.Runtime.ComputeTerminal);
-  f.ComputeStamp=s.Compute.ExpectedStamp;f.ComputeDone=f.ComputeWrite;
-  assert(AppleAgxG13QueueRuntimeHandleEvent(&f.Runtime,event,sizeof(event))==
-         AppleAgxG13QueueRuntimeResultOk &&
-         f.Runtime.Phase==AppleAgxG13QueueRuntimeComputeComplete);
+         AppleAgxG13QueueRuntimeResultInvalidArgument);
 }
 
-/* EXP1213: a submitted compute job (standalone or prelude) is polled for
- * its deadline like a render job. G4-recovery: the deadline is recorded,
+/* EXP1213: a submitted standalone compute job is polled for its deadline
+ * like a render job. G4-recovery: the deadline is recorded,
  * never terminal (no Quiesce), and the job stays pending. */
 static void TestComputeDeadlineIsPolled(void) {
   TEST_FIXTURE f;APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION s;
   APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
   int prelude;
-  for(prelude=0;prelude<2;++prelude) {
+  for(prelude=0;prelude<1;++prelude) {
     TestInitialize(&f);TestEnableCompute(&f);
     memset(&s,0,sizeof(s));
     s.Fence=80u;s.Timestamp=0x1122334455667788ULL;s.NowTicks=1000ULL;
@@ -860,7 +895,7 @@ static void TestReadFailureCannotMasqueradeAsZeroPointer(void) {
 }
 
 unsigned AppleAgxG13QueueRuntimeContractTests(void) {
-  TestComputeThenRenderDependency();
+  TestRenderWithComputeOneSubmission();
   TestStandaloneComputeCompletes();
   TestComputeDeadlineIsPolled();
   TestJoinedPublishAndExactCompletion();

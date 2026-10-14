@@ -117,3 +117,60 @@ tessellation and SM5 (FL 11_0), and GL 3.2+ all depend on it.
      back and verified;
    - every existing check unchanged (CS, D3D11 smoke, KMT, BIG, pressure, long-job).
    - Recovery: the standard rollback.
+
+## D3D-G1b: the firmware Barrier (after EXP1278)
+
+EXP1278 showed that the CPU-sequenced prelude deadlocks. The KMD submitted the compute and waited for its event
+before publishing TA/3D, but the event never came. The Queue notifier is shared by TA, 3D and compute, and its
+threshold already counts this job's TA and 3D notifications (`threshold = NotifierRenderCount +
+NotifierComputeCount`). The firmware signals only when the threshold is reached, so the result was TDR → 0x116.
+
+**Asahi (primary source):**
+- `queue/mod.rs` sets `notification_count = 2*nr_render + nr_compute` and raises the threshold once when the job
+  runs.
+- Every queue of the submission is kicked at once.
+- A render that waits on a compute command gets an explicit `fw::workqueue::Barrier` on its vertex queue:
+  - `wait_stamp`, `wait_value` and `wait_slot` come from the compute event;
+  - `stamp_self` is the vertex job's own next value;
+  - `uuid` is 0xffffbbbb.
+- The fragment queue's barrier on the vertex stamp is the same pattern: `stamp_self = ev_frag.value.next()`.
+
+**G13 layout (captured `WorkCommandBarrier`, render template object 14, 32 bytes):**
+
+| Offset | Field |
+|---|---|
+| 0x00 | tag 4 |
+| 0x04 | wait stamp pointer (u64) |
+| 0x0c | wait value |
+| 0x10 | wait slot |
+| 0x14 | stamp_self |
+| 0x18 | uuid |
+| 0x1c | external |
+
+There is no G14X `internal_barrier_type`.
+
+**Translation:**
+- `AppleAgxRenderSharedMemoryBuildComputeBarrier` writes the barrier at compute sidecar +0x8800:
+  - it waits on the compute work's firmware stamp (sidecar +0x8780), with value = the compute stamp value and
+    slot = the compute event;
+  - `stamp_self` is the TA job's stamp.
+- The job builder sets `Job->TaBarrierAddress`, and `TaExpectedDonePointer` comes from the plan's
+  `TaBarrierExpectedDonePointer` (one more TA ring entry).
+- The provider leads the TA list with the barrier; its prepared range is the sidecar, which the compute
+  publication flushes.
+- `AppleAgxG13QueueRuntimeSubmitRenderWithCompute`:
+  - publishes compute, 3D and TA, then sends their Run messages in that order;
+  - the fence completes when TA, 3D and compute are all done.
+- Compute work without the barrier, or a barrier without compute, is refused:
+  - backend job validity;
+  - provider guard `AppleAgxG13ComputeGuardBarrier`;
+  - `Submit`/`SubmitCompute` refuse `TaLeadingBarrier`.
+- The CPU-sequenced path (`BeginRenderAfterCompute`, `ComputeComplete`) is removed.
+
+**WHAT IS STILL UNKNOWN:**
+- Whether G13 firmware accepts a barrier on the TA queue that waits on a compute stamp; macOS's captured barrier
+  waits across the TA → 3D queues, Asahi's across compute → vertex.
+- Whether the compute firmware stamp holds the raw stamp value the barrier compares.
+
+**Checkpoint:** `agx_gs_smoke` gs/so on both the x86 and ARM64 builds. Recovery: the standard rollback, dump first
+on a bugcheck.

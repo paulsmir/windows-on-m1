@@ -47,6 +47,8 @@ typedef struct _APPLE_AGX_G13_QUEUE_JOB_PLAN {
   APPLE_AGX_BACKEND_U32 TaExpectedDonePointer;
   APPLE_AGX_BACKEND_U32 D3ExpectedDonePointer;
   APPLE_AGX_BACKEND_U32 ComputeExpectedDonePointer;
+  /* D3D-G1b: the TA done pointer when the TA queue leads with a Barrier. */
+  APPLE_AGX_BACKEND_U32 TaBarrierExpectedDonePointer;
   APPLE_AGX_BACKEND_BOOL IncludeInitBm;
   APPLE_AGX_BACKEND_BOOL InitializeQueues;
 } APPLE_AGX_G13_QUEUE_JOB_PLAN;
@@ -162,6 +164,8 @@ enum {
   AppleAgxG13ComputeGuardEvent,
   AppleAgxG13ComputeGuardStamp,
   AppleAgxG13ComputeGuardDonePointer,
+  /* D3D-G1b: compute work without the TA barrier, or a barrier without it. */
+  AppleAgxG13ComputeGuardBarrier,
 };
 
 enum {

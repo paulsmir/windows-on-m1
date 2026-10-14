@@ -203,10 +203,14 @@ AppleAgxBackendJobValid(const APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
   if (Job->Kind == AppleAgxBackendJobCompute)
     return Job->ComputeWorkAddressCount == 1u &&
            Job->ComputeWorkAddresses[0] != 0ULL &&
-           Job->ComputeExpectedStamp != 0u &&
+           Job->ComputeExpectedStamp != 0u && Job->TaBarrierAddress == 0ULL &&
            Job->TaWorkAddressCount == 0u && Job->D3WorkAddressCount == 0u
                ? APPLE_AGX_TRUE : APPLE_AGX_FALSE;
   if (Job->Kind != AppleAgxBackendJobRender) return APPLE_AGX_FALSE;
+  /* D3D-G1b: a render's compute work runs only behind the TA barrier (the
+   * firmware orders the render after it; EXP1278). */
+  if ((Job->ComputeWorkAddressCount != 0u) != (Job->TaBarrierAddress != 0ULL))
+    return APPLE_AGX_FALSE;
   if (Job->TaWorkAddressCount != APPLE_AGX_BACKEND_QUEUE_WORK_COUNT ||
       Job->D3WorkAddressCount != APPLE_AGX_BACKEND_QUEUE_WORK_COUNT ||
       Job->TaExpectedStamp == 0u || Job->D3ExpectedStamp == 0u)

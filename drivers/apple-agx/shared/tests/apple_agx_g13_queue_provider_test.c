@@ -171,6 +171,9 @@ static void InitMode(FIXTURE *f,int compute) {
     f->Job.ComputeWorkAddressCount=1u;
     f->Job.ComputeEvent=11u;f->Job.ComputeExpectedStamp=0x600u;
     f->Job.ComputeExpectedDonePointer=1u;
+    /* D3D-G1b: the TA queue leads with the Barrier on the compute stamp. */
+    f->Job.TaBarrierAddress=0x1500308800ULL;
+    f->Job.TaExpectedDonePointer=3u;
   }
   assert(AppleAgxG13QueueProviderInitialize(&f->Provider, &f->Config,
                                              &f->RuntimeIo, &f->ProviderIo));
@@ -600,31 +603,48 @@ static void TestProgressReceiptFailsClosedForInvalidStateAndRead(void) {
   assert(!AppleAgxG13QueueProviderQueryProgress(&f.Provider, &progress));
   assert(memcmp(&f.Provider, &before, sizeof(before)) == 0);
 }
-static void TestComputeCompletesBeforeRenderPublication(void) {
+/* D3D-G1b (EXP1278): a render's compute work is submitted with it: compute,
+ * TA led by the Barrier on the compute stamp, and 3D, kicked together; the
+ * fence completes only once all three are done. Compute without the barrier
+ * (the CPU-sequenced prelude that deadlocked on hardware) or a barrier
+ * without compute never reaches the queues. */
+static void TestRenderWithComputeSubmitsTogether(void) {
   FIXTURE f;
+  APPLE_AGX_BACKEND_JOB_IMAGE bad;
   APPLE_AGX_G13_QUEUE_PROVIDER_EVENT_BATCH batch;
   unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
   InitMode(&f,1);
   assert(f.Io.Queues.Create(f.Io.Context));
   assert(f.Io.Queues.Run3d(f.Io.Context,&f.Job,41u));
+  bad=f.Job; bad.TaBarrierAddress=0ULL; bad.TaExpectedDonePointer=2u;
+  assert(!f.Io.Queues.RunTa(f.Io.Context,&bad,41u));
+  assert(f.Provider.LastSubmitGuard==AppleAgxG13SubmitGuardCompute &&
+         f.Provider.LastSubmitRuntimeResult==AppleAgxG13ComputeGuardBarrier);
+  bad=f.Job; bad.ComputeWorkAddressCount=0u;
+  assert(!f.Io.Queues.RunTa(f.Io.Context,&bad,41u));
+  assert(f.Sends==0u && f.TaWrite==0u && f.ComputeWrite==0u);
   assert(f.Io.Queues.RunTa(f.Io.Context,&f.Job,41u));
-  assert(f.Provider.Phase==AppleAgxG13QueueProviderComputeSubmitted);
-  assert(f.Sends==1u && f.SendOrder[0]==(unsigned)AppleAgxG13QueueCompute);
-  assert(f.ComputeWrite==1u && f.TaWrite==0u && f.D3Write==0u);
-  Event(event,9u);
-  assert(AppleAgxG13QueueProviderIngestEvent(
-      &f.Provider,event,sizeof(event),&batch));
-  assert(f.Provider.Phase==AppleAgxG13QueueProviderComputeSubmitted &&
-         f.Sends==1u && batch.CompletedFence==0u);
-  f.ComputeStamp=0x600u; f.ComputeDone=1u; Event(event,11u);
-  assert(AppleAgxG13QueueProviderIngestEvent(
-      &f.Provider,event,sizeof(event),&batch));
-  assert(f.Provider.Phase==AppleAgxG13QueueProviderSubmitted);
-  assert(f.Sends==3u &&
+  assert(f.Provider.Phase==AppleAgxG13QueueProviderSubmitted &&
+         f.Provider.Runtime.ComputeInRender);
+  assert(f.Sends==3u && f.SendOrder[0]==(unsigned)AppleAgxG13QueueCompute &&
          f.SendOrder[1]==(unsigned)AppleAgxG13Queue3d &&
          f.SendOrder[2]==(unsigned)AppleAgxG13QueueTa);
-  assert(f.TaWrite==2u && f.D3Write==2u && batch.CompletedFence==0u);
-  Complete(&f);
+  assert(f.ComputeWrite==1u && f.TaWrite==3u && f.D3Write==2u &&
+         f.TaRing[0]==f.Job.TaBarrierAddress &&
+         f.TaRing[1]==f.Job.TaWorkAddresses[0] &&
+         f.TaRing[2]==f.Job.TaWorkAddresses[1]);
+  /* TA and 3D done, compute not yet: no completion. */
+  f.D3Stamp=f.Job.D3ExpectedStamp; f.D3Done=f.D3Write; Event(event,9u);
+  assert(AppleAgxG13QueueProviderIngestEvent(&f.Provider,event,sizeof(event),&batch) &&
+         batch.CompletedFence==0u);
+  f.TaStamp=f.Job.TaExpectedStamp; f.TaDone=f.TaWrite; Event(event,7u);
+  assert(AppleAgxG13QueueProviderIngestEvent(&f.Provider,event,sizeof(event),&batch) &&
+         batch.CompletedFence==0u &&
+         f.Provider.Phase==AppleAgxG13QueueProviderSubmitted);
+  f.ComputeStamp=0x600u; f.ComputeDone=1u; Event(event,11u);
+  assert(AppleAgxG13QueueProviderIngestEvent(&f.Provider,event,sizeof(event),&batch) &&
+         batch.CompletedFence==41u &&
+         f.Provider.Phase==AppleAgxG13QueueProviderCreated);
 }
 /* G2: a standalone compute job runs alone on the compute queue and its
  * compute stamp completes the fence; the queues then take a render job. */
@@ -666,8 +686,9 @@ static void TestStandaloneComputeJob(void) {
          batch.Observations[0].DonePointer==1u &&
          batch.Observations[0].Status==AppleAgxBackendObservationComplete);
   assert(f.Provider.Phase==AppleAgxG13QueueProviderCreated && f.Provider.PendingFence==0u);
-  /* a render job without a compute prelude follows */
+  /* a render job without compute work follows (no TA barrier) */
   f.Job.ComputeWorkAddressCount=0u;
+  f.Job.TaBarrierAddress=0ULL; f.Job.TaExpectedDonePointer=2u;
   assert(f.Io.Queues.Run3d(f.Io.Context,&f.Job,41u));
   assert(f.Io.Queues.RunTa(f.Io.Context,&f.Job,41u));
   Complete(&f);
@@ -686,7 +707,7 @@ static void TestComputeJobDeadlinePoll(void) {
     if(prelude) {
       assert(f.Io.Queues.Run3d(f.Io.Context,&f.Job,41u));
       assert(f.Io.Queues.RunTa(f.Io.Context,&f.Job,41u));
-      assert(f.Provider.Phase==AppleAgxG13QueueProviderComputeSubmitted);
+      assert(f.Provider.Phase==AppleAgxG13QueueProviderSubmitted);
     } else {
       memset(&c,0,sizeof(c));
       c.Kind=AppleAgxBackendJobCompute;
@@ -705,7 +726,7 @@ static void TestComputeJobDeadlinePoll(void) {
            batch.CompletedFence==0u &&
            f.Provider.Runtime.DeadlineExpiries==1u &&
            f.Provider.Phase==(prelude ?
-               AppleAgxG13QueueProviderComputeSubmitted :
+               AppleAgxG13QueueProviderSubmitted :
                AppleAgxG13QueueProviderComputeOnlySubmitted));
   }
 }
@@ -728,7 +749,7 @@ int main(void) {
   TestProgressReceiptDetectsAdvancingSample();
   TestProgressReceiptRejectsUnchangedSampleAsNotAdvanced();
   TestProgressReceiptFailsClosedForInvalidStateAndRead();
-  TestComputeCompletesBeforeRenderPublication();
+  TestRenderWithComputeSubmitsTogether();
   TestStandaloneComputeJob();
   TestComputeJobDeadlinePoll();
   puts("apple_agx_g13_queue_provider_test: ok"); return 0;

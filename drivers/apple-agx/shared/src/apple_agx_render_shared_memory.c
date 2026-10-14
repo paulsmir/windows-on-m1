@@ -622,6 +622,34 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
   Output->WorkGpuAddress=gpu+APPLE_AGX_COMPUTE_WORK_OFFSET;
   Output->SidecarGpuAddress=gpu;Output->SidecarCpuAddress=sidecar;
   Output->SidecarBytes=0x10000u;
+  Output->FirmwareStampGpuAddress=gpu+APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET;
+  return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildComputeBarrier(
+    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    const APPLE_AGX_RENDER_BARRIER_INPUT *Input,
+    APPLE_AGX_U64 *BarrierGpuAddress) {
+  unsigned char *barrier;
+  if(!Owner||!Input||!BarrierGpuAddress||!Input->WaitStampGpuAddress||
+     (Input->WaitStampGpuAddress&3u)||!Input->WaitValue||!Input->StampSelf||
+     Input->WaitSlot>=0x80u||
+     !queue_object_valid(Owner,APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR,
+                         0x10000u,APPLE_AGX_FALSE)) return APPLE_AGX_FALSE;
+  barrier=(unsigned char *)Owner->Objects[
+      APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR].CpuAddress+
+      APPLE_AGX_COMPUTE_TA_BARRIER_OFFSET;
+  zero_bytes(barrier,APPLE_AGX_G13_BARRIER_BYTES);
+  put_u32(barrier,APPLE_AGX_G13_BARRIER_TAG);
+  put_u64(barrier+0x04u,Input->WaitStampGpuAddress);
+  put_u32(barrier+0x0cu,Input->WaitValue);
+  put_u32(barrier+0x10u,Input->WaitSlot);
+  put_u32(barrier+0x14u,Input->StampSelf);
+  /* Asahi's explicit barriers carry uuid 0xffffbbbb; external is 0. */
+  put_u32(barrier+0x18u,0xffffbbbbu);
+  *BarrierGpuAddress=Owner->VirtualAddresses[
+      APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR]+
+      APPLE_AGX_COMPUTE_TA_BARRIER_OFFSET;
   return APPLE_AGX_TRUE;
 }
 

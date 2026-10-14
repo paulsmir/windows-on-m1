@@ -107,6 +107,9 @@ typedef struct _APPLE_AGX_BACKEND_JOB_IMAGE {
   APPLE_AGX_U32 D3ExpectedDonePointer;
   APPLE_AGX_U32 ComputeExpectedDonePointer;
   APPLE_AGX_BACKEND_JOB_KIND Kind;
+  /* D3D-G1b: a render with compute work leads its TA queue with this
+   * firmware Barrier on the compute stamp; zero for every other job. */
+  APPLE_AGX_U64 TaBarrierAddress;
 } APPLE_AGX_BACKEND_JOB_IMAGE;
 
 typedef struct _APPLE_AGX_BACKEND_OBSERVATION {
