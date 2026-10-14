@@ -1077,9 +1077,10 @@ void APIENTRY
        * runtime derives resolve support, ResolveSubresource blits. */
    } else if (Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
        Format == DXGI_FORMAT_R16G16B16A16_FLOAT) {
+      /* EXP1285: MULTISAMPLE_LOAD only where the frontend admits a sampled
+       * view (the BGRA8 family); these targets are not sampled here. */
       *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET |
                      D3D10_DDI_FORMAT_SUPPORT_BLENDABLE |
-                     D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD |
                      D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET;
    } else if (Format == DXGI_FORMAT_R8_UNORM || Format == DXGI_FORMAT_R16_FLOAT ||
        Format == DXGI_FORMAT_R32G32B32A32_FLOAT ||
@@ -1088,8 +1089,15 @@ void APIENTRY
        Format == DXGI_FORMAT_B5G6R5_UNORM || Format == DXGI_FORMAT_A8_UNORM) {
       *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET |
                      D3D10_DDI_FORMAT_SUPPORT_BLENDABLE;
-   } else if (Format == DXGI_FORMAT_D32_FLOAT) {
-      *pFormatCaps = 0; /* Depth support is base-assumed, not an optional DDI bit. */
+   } else if (Format == DXGI_FORMAT_D32_FLOAT ||
+              Format == DXGI_FORMAT_D16_UNORM ||
+              Format == DXGI_FORMAT_D24_UNORM_S8_UINT ||
+              Format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT) {
+      /* Depth support is base-assumed, not an optional DDI bit. EXP1285:
+       * multisampled depth is optional at FL 10_0 and must be reported here
+       * for every depth format CheckMultisampleQualityLevels gives 2x/4x
+       * levels (the runtime refused the device when the two disagreed). */
+      *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET;
    } else if (Format == DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM) {
       *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_NOT_SUPPORTED;
    } else {
