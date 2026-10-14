@@ -50,7 +50,8 @@ typedef unsigned UINT;
 typedef unsigned APPLE_AGX_U32;
 typedef long NTSTATUS;
 enum { STATUS_SUCCESS=0, STATUS_INVALID_PARAMETER=-1,
-       STATUS_NOT_SUPPORTED=-2, STATUS_INSUFFICIENT_RESOURCES=-3 };
+       STATUS_NOT_SUPPORTED=-2, STATUS_INSUFFICIENT_RESOURCES=-3,
+       STATUS_NO_MEMORY=-4 };
 #define D3DDDIFMT_A8R8G8B8 21u
 #define D3DKMDT_GDISURFACE_TEXTURE 2u
 typedef struct { unsigned Type, Format; uint64_t Size; unsigned CpuVisible, Reserved; }
@@ -58,7 +59,8 @@ typedef struct { unsigned Type, Format; uint64_t Size; unsigned CpuVisible, Rese
 typedef struct { ADMISSION_ALLOCATION_DESCRIPTION Description; } ALLOCATION_OBJECT;
 typedef struct { ALLOCATION_OBJECT Object; unsigned Win32ClassId, Win32Flags;
                  int WrittenPrimary, Presentation;
-                 unsigned PrimaryRefreshNumerator, PrimaryRefreshDenominator; }
+                 unsigned PrimaryRefreshNumerator, PrimaryRefreshDenominator;
+                 ULONGLONG PoolReserved; }
     ADMISSION_ALLOCATION_HANDLE;
 #define ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY 1u
 typedef struct { unsigned Magic, Version, Bytes, Flags, Reserved,
@@ -80,6 +82,15 @@ static int AdmissionMemoryPoolView(const ADMISSION_CONTEXT *context,
                                    ADMISSION_SCANOUT_MEMORY_VIEW *view) {
   (void)context; memset(view, 0, sizeof(*view));
   return replay_pool_present;
+}
+/* M2-f5: pool_windows.c reserves a segment-3 allocation's pages. */
+static int replay_reserve_fail;
+static ULONGLONG replay_reserved;
+static int AdmissionMemoryPoolReserve(ADMISSION_CONTEXT *context, ULONGLONG bytes) {
+  (void)context;
+  if (replay_reserve_fail) return 0;
+  replay_reserved += bytes;
+  return 1;
 }
 typedef struct { unsigned Value, CpuVisible, AccessedPhysically; } WDDM_FLAGS;
 typedef struct {
@@ -180,6 +191,10 @@ static int AdmissionAllocationCreate(const ADMISSION_ALLOCATION_DESCRIPTION *des
   object->Description = *desc;
   return 1;
 }
+static int AdmissionAllocationDestroy(ALLOCATION_OBJECT *object) {
+  (void)object;
+  return 1;
+}
 """
 
 
@@ -256,7 +271,19 @@ int main(void) {
   assert(info.SupportedWriteSegmentSet == info.SupportedReadSegmentSet);
   assert(!(info.SupportedReadSegmentSet & ADMISSION_LOCAL_SEGMENT_SET));
   assert(info.FlagsWddm2.CpuVisible == 1 && info.FlagsWddm2.AccessedPhysically == 0);
+  /* M2-f5: its pages were reserved at creation ... */
+  assert(replay_reserved == 0x10000u &&
+         ((ADMISSION_ALLOCATION_HANDLE *)info.hAllocation)->PoolReserved == 0x10000u);
   ExFreePoolWithTag(info.hAllocation, ADMISSION_POOL_TAG);
+  /* ... and a refused reservation is STATUS_NO_MEMORY from CreateAllocation,
+   * never a later paging failure. */
+  replay_reserve_fail = 1;
+  memset(&info, 0, sizeof(info));
+  info.pPrivateDriverData = &native;
+  info.PrivateDriverDataSize = sizeof(native);
+  assert(AdmissionCreateAllocationImpl(&context, &args) == STATUS_NO_MEMORY);
+  assert(replay_reserved == 0x10000u);
+  replay_reserve_fail = 0;
   native.CpuVisible = 0;
   memset(&info, 0, sizeof(info));
   info.pPrivateDriverData = &native;
