@@ -122,3 +122,26 @@ One variable: demand commit instead of the pinned 1 GiB, with the same segment s
 | Throughout | No `Unmapped IPA`, no window refusals other than Busy retries, no commit failures |
 
 Recovery is the existing package-absent rollback.
+
+## Hardware results (2026-10-14)
+
+| Experiment | Change | Idle commit | Commit cost per granule | CS fps |
+|---|---|---|---|---|
+| EXP1255 (old OS) | fixed 1 GiB pool | 1024 MiB pinned | (start: 1 GiB in 1.2-1.8 s) | 47.58 |
+| EXP1257 | demand, per-granule allocation | 195 MiB | 368-460 us | 44.34 |
+| EXP1258 | + 2 s aged release | 203 MiB | 726-875 us | 43.89 |
+| EXP1259 (same OS) | fixed pool, same KMD source | 1024 MiB pinned | (start: 1 GiB in 4.2 s, 16k chunks) | 46.36 |
+| EXP1260 | + run commits (64 KiB chunks) | 205 MiB | 242-292 us | 45.10 |
+| EXP1261 | + 16 KiB chunks | 204 MiB | 520-722 us | 43.61 |
+
+- The OS update KB5127648 (installed between EXP1256 and EXP1257) costs ~1.2 fps on its own; compare EXP1259 with EXP1255.
+- In every demand run, memory returns after the game: peak ~0.68-0.69 GiB, back to ~0.2 GiB.
+- No run had a pool failure or an Unmapped IPA.
+- The benchmark's commits (~7.7k granules) are the game's working set loading, not churn. Aged release does not change them (EXP1258), but it halves idle releases.
+- Windows charges per contiguous chunk, not per byte: a contiguous 1 GiB took 374 ms in EXP1259. Larger chunks are cheap; more chunks are expensive.
+
+Decision (M2-f3e, a15d2aea): pages come in 2 MiB slabs of 32 granule slots.
+- A slab is one contiguous chunk when available, else 32 x 64 KiB chunks.
+- Slots of the most used slab are handed out first, and one empty slab is kept spare.
+- A slab returns to Windows when its last slot does.
+- The allocation unit is no longer tied to placement size: game placements average 2.85 granules per commit (EXP1260).
