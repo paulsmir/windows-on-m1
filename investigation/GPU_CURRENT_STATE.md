@@ -1,6 +1,28 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-13T23:00Z (read this first)
+## Current as of 2026-10-14T01:20Z (read this first)
+
+Installed: PACKAGE1257 (KMD build tree f55d89a3 = integration 6d34a70f,
+30.0.1257.0) on m1n1 23d30a32 (macho b122bc5f, pool window MAP_AT/UNMAP_RANGE)
++ Mu 361a2134. The guest OS gained KB5127648 at 2026-10-14T00:55Z.
+M2-f3 proven (EXP1257, investigation/analysis/M2-f3-demand-pool.md):
+- Segment 3 (1 GiB) is backed on demand, one 64 KiB granule at a time.
+  A granule is committed before the first PTE referencing it is published.
+  It is released only when it has no owner placement, no paging-process PTE
+  and no unexecuted record, and the window unmaps it.
+- Idle desktop: 195 MiB committed instead of 1 GiB pinned. CS peak 691 MiB,
+  back to 220 MiB after the game. 0 failures, 0 Unmapped IPA; all checks pass.
+- CS 44.3 fps vs 47.6 (EXP1255). Commit/release churn: VidMm reuses freed
+  ranges at once, ~8k commits and releases per benchmark, 6.5 s of commit time.
+Rejected: EXP1256 pinned-pool sizing policy (memory pressure, reverted).
+REC lesson: a Windows servicing restart preempted rec1256h; see
+REC-EXP1256-B and memory rollback-servicing-restart.
+Next causal target: M2-f3b, aged release (a granule is released only after
+2 s idle; periodic reclaim timer). Its fps separates churn from the OS
+update. Then the larger segment 3 and budget groups as separate variables;
+the resubmission defect (branch 7 subsite 0x201), G4-recovery, D3D 11/12.
+
+## Current as of 2026-10-13T23:00Z
 
 Installed: PACKAGE1255 (KMD 32fde092 = production pool + receipt-sized
 reserve, 30.0.1255.0) on m1n1 3b2b9c06 (macho 283a2354, 384 MiB reserve) +
