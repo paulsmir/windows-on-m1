@@ -37,6 +37,8 @@ typedef struct _ADMISSION_POOL_ATTEMPT {
 /* M2-f3: the window maps ranges, segment 3 is backed on demand: no block or
  * chunk attempt runs, ObtainedBytes is 0 and RequestedBytes the segment. */
 #define ADMISSION_POOL_WINDOW_DEMAND 10u
+/* M2-f4a: this machine's RAM allows less than the minimum segment 3. */
+#define ADMISSION_POOL_WINDOW_DEMAND_TOO_SMALL 11u
 
 typedef struct _ADMISSION_POOL_PROBE {
   unsigned int Version, Bytes, Count, Reserved;

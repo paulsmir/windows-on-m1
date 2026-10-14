@@ -301,6 +301,33 @@ static void test_reuse_between_passes_restarts_the_clock(void)
     assert(AdmissionPoolDemandReclaim(&pool) == 1);
 }
 
+/* M2-f4a: segment-3 size from Windows' own graphics-memory formula. */
+static void test_segment_size(void)
+{
+    const unsigned long long MiB = 1ULL << 20, GiB = 1ULL << 30, win = 4 * GiB;
+    /* J313: 6,279,270,400 B -> 50% = 2.92 GiB - 256 MiB, capped by the broker
+     * at 2 GiB - 256 MiB. */
+    assert(AdmissionPoolDemandSegmentBytes(6279270400ULL, win) == 1792 * MiB);
+    /* 4 GiB of RAM: 2 GiB - 256 MiB = the broker cap too. */
+    assert(AdmissionPoolDemandSegmentBytes(4 * GiB, win) == 1792 * MiB);
+    /* 2 GiB: 1 GiB - 256 MiB. */
+    assert(AdmissionPoolDemandSegmentBytes(2 * GiB, win) == 768 * MiB);
+    /* 3 GiB - 1 MiB: 1.5 GiB - 0.5 MiB - 256 MiB, rounded down to 64 MiB. */
+    assert(AdmissionPoolDemandSegmentBytes(3 * GiB - MiB, win) == 1216 * MiB);
+    /* 1 GiB: 512 MiB - 256 MiB = 256 MiB, the minimum. */
+    assert(AdmissionPoolDemandSegmentBytes(GiB, win) == 256 * MiB);
+    /* Smaller machines get no pool. */
+    assert(AdmissionPoolDemandSegmentBytes(GiB - 64 * MiB, win) == 0);
+    /* 32 GiB: MIN(80%, MAX(16 GiB, 50%)) = 16 GiB, still broker-capped. */
+    assert(AdmissionPoolDemandSegmentBytes(32 * GiB, win) == 1792 * MiB);
+    /* A smaller window caps it. */
+    assert(AdmissionPoolDemandSegmentBytes(8 * GiB, GiB) == GiB);
+    assert(AdmissionPoolDemandSegmentBytes(8 * GiB, GiB + MiB) == GiB);
+    /* Unknown RAM keeps the validated 1 GiB (within the window). */
+    assert(AdmissionPoolDemandSegmentBytes(0, win) == GiB);
+    assert(AdmissionPoolDemandSegmentBytes(0, 512 * MiB) == 512 * MiB);
+}
+
 int main(void)
 {
     test_place_commits_once_and_destroy_releases();
@@ -315,5 +342,6 @@ int main(void)
     test_recommit_after_release();
     test_aged_release();
     test_reuse_between_passes_restarts_the_clock();
+    test_segment_size();
     return 0;
 }

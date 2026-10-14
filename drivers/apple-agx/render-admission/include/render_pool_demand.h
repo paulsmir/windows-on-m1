@@ -81,7 +81,7 @@ typedef enum _ADMISSION_POOL_PLACE {
  * moves by ADMISSION_POOL_DEMAND_RECEIPT_STEP granules or a failure count
  * changes. Times are microseconds of commit (page allocation + MAP_AT) and
  * release (UNMAP_RANGE + page free). */
-#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 4u /* 2: ReleaseDelayMs; 3: Stats.CommitCalls; 4: slabs */
+#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 5u /* 2: ReleaseDelayMs; 3: Stats.CommitCalls; 4: slabs; 5: RamBytes */
 #define ADMISSION_POOL_DEMAND_RECEIPT_STEP 256u /* 16 MiB */
 typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   unsigned int Version, Bytes, GranuleBytes, LastWindowResult;
@@ -96,7 +96,29 @@ typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   /* v4 (M2-f3e): 2 MiB slabs; contiguous or 32 x 64 KiB chunks. */
   unsigned long long Slabs, PeakSlabs, NewSlabs, NewSlabFailures, FreedSlabs;
   unsigned long long SlabContiguous, SlabChunked;
+  /* v5 (M2-f4a): the RAM SegmentBytes was derived from. */
+  unsigned long long RamBytes;
 } ADMISSION_POOL_DEMAND_RECEIPT;
+
+/* M2-f4a: the declared size of the demand-backed segment 3 for a machine.
+ * Backing follows use, so the size only bounds what VidMm may place there.
+ * Windows lets PopulatedFromSystemMemory segments total at most
+ * TotalSystemMemoryAvailableForGraphics = MIN(80%, MAX(RAM - 16 GB, 50%)) of
+ * RAM (Microsoft, "Calculating graphics memory"); the aperture keeps
+ * ADMISSION_POOL_DEMAND_APERTURE_RESERVE of shared system memory. Every
+ * published segment-3 page is one m1n1 GPU-broker system record
+ * (HV_AGX_GPUVA_V5_BACKINGS x 16 KiB = 2 GiB, shared with VidMm's system
+ * pages, which keep ADMISSION_POOL_DEMAND_BROKER_RESERVE). Result in 64 MiB
+ * steps, at most WindowBytes; 0 below 256 MiB (no pool); RamBytes 0 (unknown)
+ * gives ADMISSION_POOL_DEMAND_DEFAULT_BYTES. */
+#define ADMISSION_POOL_DEMAND_BROKER_BYTES 0x80000000ULL      /* 2 GiB */
+#define ADMISSION_POOL_DEMAND_BROKER_RESERVE 0x10000000ULL    /* 256 MiB */
+#define ADMISSION_POOL_DEMAND_APERTURE_RESERVE 0x10000000ULL  /* 256 MiB */
+#define ADMISSION_POOL_DEMAND_DEFAULT_BYTES 0x40000000ULL     /* 1 GiB (EXP1262) */
+#define ADMISSION_POOL_DEMAND_SIZE_STEP 0x4000000ULL          /* 64 MiB */
+#define ADMISSION_POOL_DEMAND_MIN_BYTES 0x10000000ULL         /* 256 MiB */
+unsigned long long AdmissionPoolDemandSegmentBytes(unsigned long long RamBytes,
+                                                   unsigned long long WindowBytes);
 
 /* Granules and CandidateList hold Count zeroed entries each. */
 int AdmissionPoolDemandInit(ADMISSION_POOL_DEMAND *Pool,

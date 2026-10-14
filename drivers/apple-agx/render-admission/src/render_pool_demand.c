@@ -243,3 +243,26 @@ unsigned long long AdmissionPoolDemandReclaimAged(ADMISSION_POOL_DEMAND *Pool,
                                                   unsigned long long Now) {
   return Reclaim(Pool, 1, Now);
 }
+
+unsigned long long AdmissionPoolDemandSegmentBytes(unsigned long long RamBytes,
+                                                   unsigned long long WindowBytes) {
+  const unsigned long long sixteen = 16ULL << 30;
+  unsigned long long cap = ADMISSION_POOL_DEMAND_BROKER_BYTES -
+                           ADMISSION_POOL_DEMAND_BROKER_RESERVE;
+  unsigned long long bytes;
+  if (WindowBytes < cap) cap = WindowBytes;
+  if (RamBytes == 0u) {
+    bytes = ADMISSION_POOL_DEMAND_DEFAULT_BYTES;
+  } else {
+    unsigned long long half = RamBytes / 2u;
+    unsigned long long eighty = RamBytes / 5u * 4u + RamBytes % 5u * 4u / 5u;
+    unsigned long long above = RamBytes > sixteen ? RamBytes - sixteen : 0u;
+    unsigned long long avail = above > half ? above : half;
+    if (avail > eighty) avail = eighty;
+    if (avail <= ADMISSION_POOL_DEMAND_APERTURE_RESERVE) return 0u;
+    bytes = avail - ADMISSION_POOL_DEMAND_APERTURE_RESERVE;
+  }
+  if (bytes > cap) bytes = cap;
+  bytes &= ~(ADMISSION_POOL_DEMAND_SIZE_STEP - 1u);
+  return bytes < ADMISSION_POOL_DEMAND_MIN_BYTES ? 0u : bytes;
+}

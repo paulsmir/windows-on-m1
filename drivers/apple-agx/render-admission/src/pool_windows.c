@@ -221,6 +221,7 @@ typedef struct _ADMISSION_POOL_RUNTIME {
   ADMISSION_POOL_SLAB **SlabOf; /* per granule: its slab, or NULL */
   UCHAR *SlotOf;                /* per granule: its slot */
   ULONGLONG SlabContiguous, SlabChunked;
+  ULONGLONG RamBytes; /* what the segment size was derived from */
   /* Scratch for one commit run (under Lock). */
   ADMISSION_POOL_SLAB *RunSlab[1024];
   unsigned int RunSlot[1024];
@@ -420,6 +421,7 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *Context
     receipt.FreedSlabs = pool->Slabs.Stats.FreedSlabs;
     receipt.SlabContiguous = pool->SlabContiguous;
     receipt.SlabChunked = pool->SlabChunked;
+    receipt.RamBytes = pool->RamBytes;
     pool->StagedGranules = stats->CommittedGranules;
     pool->StagedFailures = failures;
   }
@@ -565,15 +567,37 @@ static VOID AdmissionPoolDemandStop(ADMISSION_CONTEXT *Context) {
   Context->PoolBytes = 0ULL;
 }
 
-/* An empty segment over the window; FALSE leaves no state behind. */
+/* The RAM Windows manages (MmGetPhysicalMemoryRangesEx2, PASSIVE: base/length
+ * pairs, a zero pair ends the block, the caller frees it); 0 when unknown. */
+static ULONGLONG AdmissionPoolRamBytes(VOID) {
+  PPHYSICAL_MEMORY_RANGE ranges = MmGetPhysicalMemoryRangesEx2(NULL, 0u);
+  ULONGLONG total = 0ULL;
+  ULONG i;
+  if (ranges == NULL) return 0ULL;
+  for (i = 0u; ranges[i].BaseAddress.QuadPart != 0 ||
+               ranges[i].NumberOfBytes.QuadPart != 0; ++i)
+    total += (ULONGLONG)ranges[i].NumberOfBytes.QuadPart;
+  ExFreePool(ranges);
+  return total;
+}
+
+/* An empty segment over the window, sized for this machine (M2-f4a,
+ * AdmissionPoolDemandSegmentBytes); FALSE leaves no state behind. */
 static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
                                         ADMISSION_POOL_ATTEMPT *Window) {
   ADMISSION_POOL_DEMAND_OPS ops;
   ADMISSION_POOL_RUNTIME *pool;
-  ULONGLONG count = ADMISSION_MEMORY_POOL_BYTES / ADMISSION_POOL_DEMAND_GRANULE;
+  ULONGLONG ram = AdmissionPoolRamBytes();
+  ULONGLONG bytes = AdmissionPoolDemandSegmentBytes(ram, Window->RequestedBytes);
+  ULONGLONG count = bytes / ADMISSION_POOL_DEMAND_GRANULE;
   PHYSICAL_ADDRESS base;
+  if (bytes == 0ULL) {
+    Window->Status = ADMISSION_POOL_WINDOW_DEMAND_TOO_SMALL;
+    return FALSE;
+  }
   pool = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*pool), ADMISSION_POOL_TAG);
   if (pool == NULL) return FALSE;
+  pool->RamBytes = ram;
   pool->Granules = ExAllocatePool2(POOL_FLAG_NON_PAGED,
       (SIZE_T)(count * sizeof(*pool->Granules)), ADMISSION_POOL_TAG);
   pool->Candidates = ExAllocatePool2(POOL_FLAG_NON_PAGED,
@@ -608,7 +632,7 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
   KeInitializeDpc(&pool->Dpc, AdmissionPoolReclaimDpc, pool);
   pool->Context = Context;
   base.QuadPart = (LONGLONG)Window->SkipBytes;
-  Context->PoolCpu = MmMapIoSpaceEx(base, (SIZE_T)ADMISSION_MEMORY_POOL_BYTES,
+  Context->PoolCpu = MmMapIoSpaceEx(base, (SIZE_T)bytes,
                                     PAGE_READWRITE | PAGE_WRITECOMBINE);
   if (Context->PoolCpu == NULL) {
     Window->Status = 5u;
@@ -616,10 +640,10 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
     return FALSE;
   }
   Context->PoolIpa = Window->SkipBytes;
-  Context->PoolBytes = ADMISSION_MEMORY_POOL_BYTES;
+  Context->PoolBytes = bytes;
   Context->PoolDemand = pool;
   Window->Status = ADMISSION_POOL_WINDOW_DEMAND;
-  Window->RequestedBytes = ADMISSION_MEMORY_POOL_BYTES;
+  Window->RequestedBytes = bytes;
   Window->ObtainedBytes = 0ULL;
   return TRUE;
 }
