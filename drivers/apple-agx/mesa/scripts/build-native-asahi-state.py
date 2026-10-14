@@ -1316,13 +1316,17 @@ SetRenderTargets(D3D10DDI_HDEVICE hDevice,'''),
    bool packed_depth_stencil = resource &&
       (resource->format == PIPE_FORMAT_Z24_UNORM_S8_UINT ||
        resource->format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT);
-   unsigned clear_flags = packed_depth_stencil ?
-      PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL : PIPE_CLEAR_DEPTH;
+   /* D3D-G4: D3D clears depth, stencil or both (stencil only where the
+    * format has it) and clamps the depth value to [0, 1]. */
+   unsigned clear_flags =
+      ((Flags & D3D10_DDI_CLEAR_DEPTH) ? PIPE_CLEAR_DEPTH : 0u) |
+      (packed_depth_stencil && (Flags & D3D10_DDI_CLEAR_STENCIL) ?
+          PIPE_CLEAR_STENCIL : 0u);
+   if (!(Depth >= 0.0f)) Depth = 0.0f;
+   if (Depth > 1.0f) Depth = 1.0f;
    if (!pipe || !pipe->clear || !surface || !resource || !bound ||
-       Flags != (packed_depth_stencil ?
-          D3D10_DDI_CLEAR_DEPTH | D3D10_DDI_CLEAR_STENCIL :
-          D3D10_DDI_CLEAR_DEPTH) || (!packed_depth_stencil && Stencil != 0) ||
-       Depth < 0.0f || Depth > 1.0f ||
+       !clear_flags ||
+       (Flags & ~(UINT)(D3D10_DDI_CLEAR_DEPTH | D3D10_DDI_CLEAR_STENCIL)) ||
        resource->target != PIPE_TEXTURE_2D ||
        (resource->format != PIPE_FORMAT_Z32_FLOAT &&
         resource->format != PIPE_FORMAT_Z16_UNORM &&
@@ -3105,11 +3109,9 @@ AgxD3d10ResourceWithinRequiredLimits(
           pCreateResource->Format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT) &&
          pCreateResource->MipLevels == 1 && pCreateResource->ArraySize == 1 && mip &&
          mip[0].TexelWidth > 0 && mip[0].TexelHeight > 0 && mip[0].TexelDepth == 1 &&
-         mip[0].TexelWidth <= 4096 && mip[0].TexelHeight <= 4096 &&
-         ((uint64_t)mip[0].TexelWidth * mip[0].TexelHeight *
-          (pCreateResource->Format == DXGI_FORMAT_D16_UNORM ? 2u :
-           pCreateResource->Format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT ? 8u : 4u)) <=
-            0x100000 &&
+         /* D3D-G4: AgxD3d10ResourceWithinRequiredLimits already checked the
+          * dimensions and byte size against the pinned D3D10 limits; the old
+          * 4096^2 / 1 MiB bound was the physical patch-list class size. */
          pCreateResource->SampleDesc.Count == 1 &&
          pCreateResource->SampleDesc.Quality == 0 &&
          pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT &&

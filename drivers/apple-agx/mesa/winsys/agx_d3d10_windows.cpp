@@ -522,6 +522,9 @@ HRESULT AgxD3d10WindowsCreateDevice(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
   owner->Owner.Device=&owner->Runtime;
   owner->Owner.Backend=&owner->Backend;
   AdmissionUmdAsahiOwnerOperations(&owner->OwnerOperations);
+  /* D3D-G4: D3D depth-stencil views submit ZLS attachments through the same
+   * winsys/KMD path the GL ICD validated (EXP1149). */
+  owner->Backend.ZlsAttachments=1;
   owner->Screen=AgxWin32AsahiScreenCreateForWindows(&owner->Backend,&owner->Runtime.Screen,
       &owner->OwnerOperations,&owner->Owner,AdmissionUmdAsahiBatchOperations());
   {
