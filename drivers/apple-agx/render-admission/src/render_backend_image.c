@@ -381,8 +381,10 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
   Image->G4Native = APPLE_AGX_TRUE;
   Image->NativeWidth = render.WidthPx;
   Image->NativeHeight = render.HeightPx;
+  /* D3D-G7: a depth-only render reports a 4-byte pitch. */
   Image->NativePitch = (APPLE_AGX_U32)render.WidthPx *
-      AppleAgxG4ColorBytes(View->ColorFormat);
+      (AppleAgxG4ColorBytes(View->ColorFormat) ?
+       AppleAgxG4ColorBytes(View->ColorFormat) : 4u);
   Image->Binding = candidate;
   Image->BoundFence = Packet->Fence;
   *Binding = candidate;

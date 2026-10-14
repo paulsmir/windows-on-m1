@@ -172,6 +172,16 @@ int main(void) {
     assert(AppleAgxG4ParseSubmit(&changed, sizeof(changed), sizeof(changed),
         0x50000ULL, changed.header.Base.CommandBytes, mapped, &calls,
         &view) == AppleAgxG4ParseUnsupported);
+    /* D3D-G7: a depth-only render names the NONE colour class. */
+    changed.header.Base.Reserved = APPLE_AGX_G4_COLOR_NONE;
+    assert(AppleAgxG4ParseSubmit(&changed, sizeof(changed), sizeof(changed),
+        0x50000ULL, changed.header.Base.CommandBytes, mapped, &calls,
+        &view) == AppleAgxG4ParseOk);
+    assert(view.ColorFormat == APPLE_AGX_G4_COLOR_NONE);
+    changed.header.Base.Reserved = APPLE_AGX_G4_COLOR_NONE + 1u;
+    assert(AppleAgxG4ParseSubmit(&changed, sizeof(changed), sizeof(changed),
+        0x50000ULL, changed.header.Base.CommandBytes, mapped, &calls,
+        &view) == AppleAgxG4ParseUnsupported);
     changed = native;
     changed.render_payload.WidthPx = 2560u;
     changed.render_payload.HeightPx = 1600u;

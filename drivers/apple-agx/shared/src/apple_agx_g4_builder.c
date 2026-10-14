@@ -146,14 +146,21 @@ APPLE_AGX_BOOL AppleAgxG4BindNativeObjects(
       View->RenderBytes != sizeof(render) || View->Attachments == 0 ||
       View->AttachmentCount == 0u ||
       View->AttachmentCount > APPLE_AGX_G4_MAX_ATTACHMENTS ||
-      !AppleAgxG4ColorBytes(View->ColorFormat) ||
+      !AppleAgxG4ColorClassValid(View->ColorFormat) ||
       ObjectCount < APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)
     return APPLE_AGX_FALSE;
   memcpy(&render, View->Render, sizeof(render));
   memcpy(&color, View->Attachments, sizeof(color));
-  /* A multisampled colour target holds every sample. */
-  minimum = (APPLE_AGX_U64)render.WidthPx * render.HeightPx *
+  /* A multisampled colour target holds every sample. D3D-G7: a depth-only
+   * render's attachment 0 is the buffer holding its depth (the template
+   * names object 40 only in the firmware attachment list). */
+  minimum = View->ColorFormat == APPLE_AGX_G4_COLOR_NONE ? 1u :
+      (APPLE_AGX_U64)render.WidthPx * render.HeightPx *
       AppleAgxG4ColorBytes(View->ColorFormat) * render.Samples;
+  if (View->ColorFormat == APPLE_AGX_G4_COLOR_NONE &&
+      (!render.Depth.Base || render.Depth.Base < color.Pointer ||
+       render.Depth.Base - color.Pointer >= color.Size))
+    return APPLE_AGX_FALSE;
   if (!render.WidthPx || !render.HeightPx || !minimum ||
       render.Layers != 1u || !g4_samples_valid(render.Samples) ||
       !AppleAgxG4TileBufferValid(render.SampleSizeBytes, render.Samples,

@@ -10,8 +10,12 @@
  *   (colour yellow), then draws white at z 0.1 with stencil EQUAL 1, so only
  *   the square turns white.
  * The target is read back every iteration and checked at four points.
+ * Mode "prepass" (D3D-G7) instead renders a depth-only pass first (no render
+ * target bound) that writes z 0.3 over one half, then binds the colour
+ * target and draws red at z 0.5 over everything: only the other half may
+ * turn red, so the depth-only pass must have written depth.
  * Every line is written through to the output file before the next step.
- * Usage: agx_depth_smoke.exe <out.txt> [d24|d32|d16] [iterations] */
+ * Usage: agx_depth_smoke.exe <out.txt> [d24|d32|d16] [iterations] [prepass] */
 #define COBJMACROS
 #define INITGUID
 #include <windows.h>
@@ -109,7 +113,7 @@ int main(int argc, char **argv) {
   HRESULT hr;
   DXGI_FORMAT format = DXGI_FORMAT_D24_UNORM_S8_UINT;
   const char *mode = argc > 2 ? argv[2] : "d24";
-  int iterations, bad = 0, stencil;
+  int iterations, bad = 0, stencil, prepass;
 
   if (argc < 2) {
     printf("usage: agx_depth_smoke.exe <out.txt> [d24|d32|d16] [iterations]\n");
@@ -120,9 +124,11 @@ int main(int argc, char **argv) {
   stencil = format == DXGI_FORMAT_D24_UNORM_S8_UINT;
   iterations = argc > 3 ? atoi(argv[3]) : 30;
   if (iterations < 2) iterations = 2;
+  prepass = argc > 4 && !strcmp(argv[4], "prepass");
   out = CreateFileA(argv[1], GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS,
                     FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH, NULL);
-  say("DEPTH %s %dx%d stencil %d iterations %d", mode, WIDTH, HEIGHT, stencil, iterations);
+  say("DEPTH %s %dx%d stencil %d iterations %d prepass %d", mode, WIDTH, HEIGHT, stencil,
+      iterations, prepass);
   compiler = LoadLibraryA("d3dcompiler_47.dll");
   compile_fn = compiler ? (pD3DCompile)(void *)GetProcAddress(compiler, "D3DCompile") : NULL;
   if (!compile_fn) { say("NO_D3DCOMPILER %lu", GetLastError()); return 1; }
@@ -223,6 +229,22 @@ int main(int argc, char **argv) {
     unsigned want_px[4], got[4];
     D3D11_MAPPED_SUBRESOURCE map;
     UINT clear = D3D11_CLEAR_DEPTH | (stencil && !(i & 1) ? D3D11_CLEAR_STENCIL : 0u);
+    if (prepass) {
+      /* Depth-only pass over the front half, then colour over everything. */
+      ID3D11DeviceContext_OMSetRenderTargets(ctx, 0, NULL, dsv);
+      ID3D11DeviceContext_ClearDepthStencilView(ctx, dsv, clear, 1.0f, 0);
+      ID3D11DeviceContext_OMSetDepthStencilState(ctx, less, 0);
+      if (!quad(left_front ? -1.0f : 0.0f, -1.0f, left_front ? 0.0f : 1.0f, 1.0f, 0.3f, blue))
+        return 1;
+      ID3D11DeviceContext_OMSetRenderTargets(ctx, 1, &rtv, dsv);
+      ID3D11DeviceContext_ClearRenderTargetView(ctx, rtv, black);
+      if (!quad(-1.0f, -1.0f, 1.0f, 1.0f, 0.5f, red)) return 1;
+      want_px[0] = left_front ? 0xff000000u : red;
+      want_px[1] = left_front ? red : 0xff000000u;
+      want_px[2] = left_front ? red : 0xff000000u;
+      want_px[3] = want_px[2];
+      goto readback;
+    }
     ID3D11DeviceContext_ClearRenderTargetView(ctx, rtv, black);
     ID3D11DeviceContext_ClearDepthStencilView(ctx, dsv, clear, 1.0f, 0);
     ID3D11DeviceContext_OMSetDepthStencilState(ctx, less, 0);
@@ -241,6 +263,7 @@ int main(int argc, char **argv) {
     want_px[1] = left_front ? red : blue;
     want_px[2] = stencil ? white : (left_front ? red : blue);
     want_px[3] = left_front ? red : blue;
+  readback:
     ID3D11DeviceContext_CopyResource(ctx, (ID3D11Resource *)staging, (ID3D11Resource *)target);
     hr = ID3D11DeviceContext_Map(ctx, (ID3D11Resource *)staging, 0, D3D11_MAP_READ, 0, &map);
     if (FAILED(hr)) {

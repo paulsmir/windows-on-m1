@@ -500,9 +500,11 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
      compute_refused || g->Submitted || g->Rejected ||
      !batch->vdm.bo ||
      /* D3D-G2b: up to PIPE_MAX_COLOR_BUFS colour targets; the first is
-      * the KMD's bound output, every bound one a supported format. */
-     batch->key.nr_cbufs<1 || batch->key.nr_cbufs>PIPE_MAX_COLOR_BUFS ||
-     !batch->key.cbufs[0].texture || !gpuva_color_formats_supported(batch) ||
+      * the KMD's bound output, every bound one a supported format.
+      * D3D-G7: or none, when a depth buffer is bound (depth-only pass). */
+     (batch->key.nr_cbufs==0 ? !batch->key.zsbuf.texture :
+      (batch->key.nr_cbufs>PIPE_MAX_COLOR_BUFS ||
+       !batch->key.cbufs[0].texture || !gpuva_color_formats_supported(batch))) ||
      (batch->key.zsbuf.texture && !b->ZlsAttachments) ||
      /* D3D-G5: the KMD encodes 1, 2 and 4 samples (Asahi render.rs). */
      (render->samples!=1 && render->samples!=2 && render->samples!=4) ||
@@ -570,7 +572,8 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   memcpy(cpu,packet.Native,packet.Header.V2.Base.CommandBytes);
   if(!AppleAgxG4ComposeHeaderV3(&packet.Header,&native_render,
       g->Command->va->addr,packet.Header.V2.Base.CommandBytes,
-      gpuva_color_class(batch->key.cbufs[0].format),ranges,&g->Lease)) {
+      batch->key.nr_cbufs ? gpuva_color_class(batch->key.cbufs[0].format) :
+          APPLE_AGX_G4_COLOR_NONE,ranges,&g->Lease)) {
     fail_site=__LINE__; goto fail;
   }
   private_bytes=packet.Header.V2.Base.HeaderBytes+packet.Header.V2.Base.CommandBytes;

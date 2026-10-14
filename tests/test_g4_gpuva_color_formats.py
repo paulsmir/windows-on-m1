@@ -28,7 +28,9 @@ class GpuvaColorFormats(unittest.TestCase):
         m = re.search(r'static int gpuva_color_format_supported\(unsigned format\) \{.*?\n\}', text, re.S)
         c = re.search(r'static unsigned gpuva_color_class\(unsigned format\) \{.*?\n\}', text, re.S)
         self.assertIsNotNone(c)
-        self.assertIn('gpuva_color_class(batch->key.cbufs[0].format),ranges,&g->Lease)', text)
+        # D3D-G7: a depth-only batch (no colour target) names the NONE class.
+        self.assertIn('batch->key.nr_cbufs ? gpuva_color_class(batch->key.cbufs[0].format) :\n'
+                      '          APPLE_AGX_G4_COLOR_NONE,ranges,&g->Lease)', text)
         self.assertIsNotNone(m)
         body = ('#include <assert.h>\n#include <stdio.h>\nenum { PIPE_FORMAT_NONE, PIPE_FORMAT_B8G8R8A8_UNORM, '
                 'PIPE_FORMAT_B8G8R8A8_SRGB, PIPE_FORMAT_B8G8R8X8_UNORM, PIPE_FORMAT_B8G8R8X8_SRGB, '

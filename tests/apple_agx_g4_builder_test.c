@@ -200,6 +200,31 @@ int main(void) {
         assert(AppleAgxG4BindNativeObjects(&zview, objects,
             APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
         assert(objects[40].GpuVa == zls.Attachment[0].Pointer);
+        /* D3D-G7: a depth-only render (NONE colour class) binds its depth
+         * attachment as attachment 0 -- the template names object 40 only
+         * in the firmware attachment list, which carries the real list. */
+        {
+          APPLE_AGX_G4_SUBMIT_VIEW depth_only = zview;
+          G4_PACKET_ZLS bare = zls;
+          depth_only.ColorFormat = APPLE_AGX_G4_COLOR_NONE;
+          depth_only.Attachments = &zls.Attachment[1];
+          depth_only.AttachmentCount = 1u;
+          assert(AppleAgxG4BindNativeObjects(&depth_only, objects,
+              APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+          assert(objects[40].GpuVa == zls.Attachment[1].Pointer);
+          /* Attachment 0 must hold the render's depth buffer. */
+          depth_only.Attachments = &zls.Attachment[0];
+          assert(!AppleAgxG4BindNativeObjects(&depth_only, objects,
+              APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+          /* A depth-only render without depth is no render. */
+          bare.Render.Depth.Base = 0ULL;
+          bare.Render.ZlsCtrl = 0ULL;
+          bare.Render.IspZlsPixels = 0u;
+          depth_only.Render = (const unsigned char *)&bare.Render;
+          depth_only.Attachments = &zls.Attachment[1];
+          assert(!AppleAgxG4BindNativeObjects(&depth_only, objects,
+              APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+        }
         zview.AttachmentCount = APPLE_AGX_G4_MAX_ATTACHMENTS + 1u;
         assert(!AppleAgxG4BindNativeObjects(&zview, objects,
             APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
