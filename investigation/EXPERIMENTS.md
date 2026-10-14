@@ -55041,3 +55041,9 @@ EXP1261 ACTUAL 2026-10-14T02:50Z (resume-kmd1261.sh after PREPARE-1; pipeline 02
 - Reading: Windows' cost is per contiguous chunk, not per byte. Four 16 KiB chunks per granule cost about twice one 64 KiB chunk, and 4x the MAP_AT commands add to that. EXP1259's single 1 GiB contiguous chunk took 374 ms, ~23 us per 64 KiB equivalent.
 - Verdict: REJECTED (16 KiB blocks make commits and fps worse).
 - Next: M2-f3e. Pages come in 2 MiB slabs (one contiguous 2 MiB chunk, else 32 x 64 KiB chunks), handed out per granule with the most-used slab first. A slab returns to Windows when its last granule does, with one empty spare. This replaces the per-run allocation (and drops dee6d980's 16 KiB blocks).
+TIMESTAMP CORRECTION 2026-10-14T02:46Z: I wrote the ACTUAL stamps of EXP1258-EXP1261 by hand, and they run 3-6 minutes late. Two of them (02:50Z, and 02:55Z in CHANGES) were in the future when written. Correct times, from the ledger commits (UTC) and the pipeline log mtimes:
+- EXP1258 ACTUAL written 01:38Z (pipeline log ended 01:38Z; recorded 01:42Z).
+- EXP1259 ACTUAL written 02:12Z (resume1259.log ended 02:11Z; recorded 02:15Z).
+- EXP1260 ACTUAL written 02:26Z (newexp1260.log ended 02:26Z; recorded 02:31Z).
+- EXP1261 ACTUAL written 02:44Z (newexp1261.log ended 02:43Z; recorded 02:50Z).
+The pipeline ranges quoted in those entries are approximate; the BEFORE lines carry the pipeline's own date -u. Results are unchanged. From here on every stamp comes from date -u.
