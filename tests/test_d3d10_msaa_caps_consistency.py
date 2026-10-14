@@ -7,7 +7,8 @@ the runtime refused every D3D device (D3D11CreateDevice 0x887A0020
 DXGI_ERROR_DRIVER_INTERNAL_ERROR before the first resource) and DWM failed
 in dwmcore. For every format: quality levels at 2 or 4 samples exist exactly
 when MULTISAMPLE_RENDERTARGET is reported, MULTISAMPLE_RENDERTARGET needs
-4x, and MULTISAMPLE_LOAD needs SHADER_SAMPLE.
+4x, and MULTISAMPLE_LOAD needs SHADER_SAMPLE -- for every EXP1288 probe mask
+(the real AgxD3d10WindowsMsaaFormat groups are compiled in).
 """
 from pathlib import Path
 import os
@@ -18,6 +19,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "drivers/apple-agx/mesa/scripts/build-native-asahi-state.py"
+WINSYS = ROOT / "drivers/apple-agx/mesa/winsys/agx_d3d10_windows.cpp"
 WDK = ROOT / ".local/reference/wdk26100/d3d10umddi.h"
 
 
@@ -39,33 +41,43 @@ class MsaaCapsConsistency(unittest.TestCase):
         caps = text[caps_start:text.index("'''", caps_start)]
         quality_start = text.index("   (void)hDevice;\n   *pNumQualityLevels =")
         quality = text[quality_start:text.index("'''", quality_start)]
-        names = sorted(set(re.findall(r"\bDXGI_FORMAT_\w+", caps + quality)))
+        winsys = WINSYS.read_text()
+        group_start = winsys.index("BOOL AgxD3d10WindowsMsaaFormat(DXGI_FORMAT Format, UINT Probe) {")
+        group = winsys[group_start:winsys.index("\n}\n", group_start) + 3]
+        names = sorted(set(re.findall(r"\bDXGI_FORMAT_\w+", caps + quality + group)))
         flags = dict(re.findall(r"#define (D3D10_DDI_FORMAT_SUPPORT_\w+)\s+(0x[0-9A-Fa-f]+)",
                                 WDK.read_text(errors="replace")))
         program = ["#include <stdio.h>", "typedef unsigned UINT;", "typedef void *D3D10DDI_HDEVICE;",
-                   "static int diagnostic_on;",
-                   "static int AgxD3d10WindowsDiagnosticSwitch(const char *name) { (void)name; return diagnostic_on; }"]
+                   "typedef int BOOL;", "#define TRUE 1", "#define FALSE 0", "#define VOID void",
+                   "static UINT probe;",
+                   "static UINT AgxD3d10WindowsMsaaProbe(void) { return probe; }",
+                   "static void AgxD3d10WindowsMsaaReceipt(UINT k, UINT f, UINT c, UINT a) "
+                   "{ (void)k; (void)f; (void)c; (void)a; }"]
         program += ["#define %s %s" % item for item in flags.items()]
         program.append("typedef enum { DXGI_FORMAT_UNKNOWN_TEST = 0, %s, FORMAT_COUNT } DXGI_FORMAT;"
                        % ", ".join(names))
+        program.append(group)
         program.append("static void caps(D3D10DDI_HDEVICE hDevice, DXGI_FORMAT Format, UINT *pFormatCaps) {\n"
                        + caps + "\n}")
         program.append("static void quality(D3D10DDI_HDEVICE hDevice, DXGI_FORMAT Format, UINT SampleCount, "
                        "UINT *pNumQualityLevels) {\n" + quality + "\n}")
         program.append(r'''int main(void) {
-  int bad = 0;
-  for (diagnostic_on = 0; diagnostic_on < 2; ++diagnostic_on)
+  int bad = 0, reported = 0;
+  for (probe = 0; probe < 16; ++probe)
   for (int f = 0; f <= FORMAT_COUNT + 2; ++f) {
     UINT c = 0, q2 = 0, q4 = 0;
     caps(0, (DXGI_FORMAT)f, &c);
     quality(0, (DXGI_FORMAT)f, 2, &q2);
     quality(0, (DXGI_FORMAT)f, 4, &q4);
     int ms = (c & D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET) != 0;
-    if (ms != (q2 || q4)) { printf("MS_MISMATCH %d caps %x q2 %u q4 %u\n", f, c, q2, q4); ++bad; }
+    if (ms != (q2 || q4)) { printf("MS_MISMATCH probe %x format %d caps %x q2 %u q4 %u\n", probe, f, c, q2, q4); ++bad; }
     if (ms && !q4) { printf("MS_WITHOUT_4X %d\n", f); ++bad; }
+    if (probe == 0 && ms) { printf("MS_WITHOUT_PROBE %d\n", f); ++bad; }
+    reported += ms;
     if ((c & D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD) && !(c & D3D10_DDI_FORMAT_SUPPORT_SHADER_SAMPLE)) {
       printf("LOAD_WITHOUT_SAMPLE %d caps %x\n", f, c); ++bad; }
   }
+  if (!reported) { printf("NO_PROBE_REPORTS\n"); ++bad; }
   printf("MSAA_CAPS %s\n", bad ? "BAD" : "CONSISTENT");
   return bad != 0;
 }''')

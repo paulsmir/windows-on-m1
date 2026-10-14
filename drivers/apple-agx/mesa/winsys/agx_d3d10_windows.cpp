@@ -665,6 +665,72 @@ BOOL AgxD3d10WindowsDiagnosticSwitch(const char *Name) {
   return length == 1 && value[0] == '1';
 }
 
+UINT AgxD3d10WindowsMsaaProbe(VOID) {
+  static volatile LONG cached = -1;
+  LONG value = InterlockedCompareExchange(&cached, -1, -1);
+  if (value < 0) {
+    char text[16];
+    DWORD length = GetEnvironmentVariableA("APPLE_AGX_D3D_MSAA_CAPS", text, sizeof(text));
+    value = 0;
+    for (DWORD i = 0; length && length < sizeof(text) && i < length; ++i) {
+      char c = text[i];
+      int digit = c >= '0' && c <= '9' ? c - '0' :
+                  c >= 'a' && c <= 'f' ? c - 'a' + 10 :
+                  c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+      if (digit < 0) { value = 0; break; }
+      value = ((value << 4) | digit) & 0xff;
+    }
+    InterlockedExchange(&cached, value);
+  }
+  return (UINT)value;
+}
+
+BOOL AgxD3d10WindowsMsaaFormat(DXGI_FORMAT Format, UINT Probe) {
+  const BOOL bgra = Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
+      Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB ||
+      Format == DXGI_FORMAT_B8G8R8X8_UNORM ||
+      Format == DXGI_FORMAT_B8G8R8X8_UNORM_SRGB;
+  const BOOL exp1287 = bgra || Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
+      Format == DXGI_FORMAT_R16G16B16A16_FLOAT ||
+      Format == DXGI_FORMAT_D32_FLOAT || Format == DXGI_FORMAT_D16_UNORM ||
+      Format == DXGI_FORMAT_D24_UNORM_S8_UINT ||
+      Format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+  const BOOL family = exp1287 ||
+      Format == DXGI_FORMAT_B8G8R8A8_TYPELESS ||
+      Format == DXGI_FORMAT_B8G8R8X8_TYPELESS ||
+      Format == DXGI_FORMAT_R8G8B8A8_TYPELESS ||
+      Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB ||
+      Format == DXGI_FORMAT_R8G8B8A8_UINT ||
+      Format == DXGI_FORMAT_R8G8B8A8_SNORM ||
+      Format == DXGI_FORMAT_R8G8B8A8_SINT ||
+      Format == DXGI_FORMAT_R16G16B16A16_TYPELESS ||
+      Format == DXGI_FORMAT_R16G16B16A16_UNORM ||
+      Format == DXGI_FORMAT_R16G16B16A16_UINT ||
+      Format == DXGI_FORMAT_R16G16B16A16_SNORM ||
+      Format == DXGI_FORMAT_R16G16B16A16_SINT ||
+      Format == DXGI_FORMAT_R32_TYPELESS || Format == DXGI_FORMAT_R32_FLOAT ||
+      Format == DXGI_FORMAT_R32_UINT || Format == DXGI_FORMAT_R32_SINT ||
+      Format == DXGI_FORMAT_R24G8_TYPELESS ||
+      Format == DXGI_FORMAT_R24_UNORM_X8_TYPELESS ||
+      Format == DXGI_FORMAT_X24_TYPELESS_G8_UINT ||
+      Format == DXGI_FORMAT_R16_TYPELESS || Format == DXGI_FORMAT_R16_UNORM ||
+      Format == DXGI_FORMAT_R16_UINT || Format == DXGI_FORMAT_R16_SNORM ||
+      Format == DXGI_FORMAT_R16_SINT || Format == DXGI_FORMAT_R16_FLOAT ||
+      Format == DXGI_FORMAT_R32G8X24_TYPELESS ||
+      Format == DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS ||
+      Format == DXGI_FORMAT_X32_TYPELESS_G8X24_UINT;
+  if (!(Probe & 1u)) return FALSE;
+  if (Probe & 8u) return bgra;
+  if (Probe & 4u) return family;
+  return exp1287;
+}
+
+VOID AgxD3d10WindowsMsaaReceipt(UINT Kind, UINT Format, UINT SampleCount,
+                                UINT Answer) {
+  UINT values[4]={Kind,Format,SampleCount,Answer};
+  AgxD3d10WindowsDiagnostic("measure-msaa-check",S_OK,values,4u);
+}
+
 BOOL AgxD3d10WindowsIdentity(AGX_D3D10_WINDOWS_DEVICE *Device,
                              ULONGLONG *OwnerCookie,
                              ULONG *DeviceGeneration) {
