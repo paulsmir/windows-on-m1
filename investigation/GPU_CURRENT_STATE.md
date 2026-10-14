@@ -1,6 +1,27 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-14T07:48Z (read this first)
+## Current as of 2026-10-14T08:30Z (read this first)
+
+Installed: PACKAGE1264 (KMD build tree 45234b93, 30.0.1264.0) on m1n1 23d30a32
++ Mu 361a2134; guest OS with KB5127648.
+M2 (flexible memory) is COMPLETE on J313 (EXP1262-EXP1264):
+- Segment 3 is backed on demand from 2 MiB slabs: idle ~0.2 GiB, CS peak
+  ~0.68 GiB, given back after use.
+- Its declared size follows Windows' graphics-memory formula for the machine:
+  1792 MiB on J313, capped by m1n1's 2 GiB broker.
+- Segments 2+3 are the LOCAL budget group and the aperture is NON_LOCAL
+  (DXGI LOCAL budget 1788 MiB).
+- CS 46.2-46.3 fps, equal to the fixed pool on the same OS; every functional
+  check passes.
+Tools: agx_vidmem (DXGI/KMT accounting) and agx_segstats, in the scratchpad
+and in .local/scratchpad-tools-backup.
+Next causal targets:
+1. The resubmission defect (branch 7 subsite 0x201). The cancel-caller
+   receipt is in the build; it needs a refusal to occur.
+2. G4-recovery/TDR.
+3. D3D 11/12 (survey the UMD/DDI state first).
+
+## Current as of 2026-10-14T07:48Z
 
 Installed: PACKAGE1262 (KMD build tree e49b48aa = integration a15d2aea slabs +
 8861c4a2 cancel-caller receipt, 30.0.1262.0) on m1n1 23d30a32 + Mu 361a2134;
