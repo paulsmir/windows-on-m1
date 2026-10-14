@@ -1,6 +1,23 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-14T14:10Z (read this first)
+## Current as of 2026-10-14T15:00Z (read this first)
+
+Installed: nothing (REC-EXP1272 done: Package Absent, APPL0002 Code 28);
+EXP1273 running (M2-f6 retry). M2 status:
+- M2-f5, M2-f7, M2-f9a VALIDATED; M2-f10 VALIDATED (EXP1271: D3D canonical
+  copies in segment 3; 8 x 64 MiB targets render; pressure 46 x 32 MiB).
+- M2-f8 hardware limit (CPU-visible class BOs at segment-3 exhaustion).
+- M2-f6: EXP1272 INCONCLUSIVE (my m1n1 build lacked AGX_LOCAL_RESERVE_V2;
+  Mu PrePi "reserve receipt v3 required"); build script fixed (88429cd0),
+  m1n1 fa45bc58 r2 macho b720f8e0; EXP1273 = KMD dc9b14e7 + r2.
+- M2-f11 implemented (f9d2704f, not run): UMD residency trim loop on
+  MakeResident E_OUTOFMEMORY (EXP1271 pressure ended in a refused batch).
+  Next hardware run after EXP1273: build tree + f9d2704f.
+- Then G4-r1 (3ed6a8ee), D3D.
+Recovery note: a firmware stop after staging needs the staged-only cleanup
+in the hidden profile (REC-EXP1272, memory firmware-stop-staged-only-recovery).
+
+## Current as of 2026-10-14T14:10Z
 
 Installed: PACKAGE1270 (build tree 23a6b18b = EXP1269 + M2-f9a; the next
 pipeline's rec1270h rollback removes it). M2 status:
