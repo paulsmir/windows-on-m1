@@ -210,9 +210,24 @@ int main(void) {
             zls.Header.Base.CommandVa, zls.Header.Base.CommandBytes,
             graph_access_zls, &zgraph, &zview) == AppleAgxG4ParseUnmapped);
       }
+      /* D3D-G4: 2x and 4x multisampled renders bind when the colour
+       * target holds every sample; other counts never do. */
       packet.Render.Samples = 4u;
       assert(!AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Attachment.Size = 1280ULL * 720ULL * 4ULL * 4ULL;
+      assert(AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Render.Samples = 2u;
+      assert(AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Render.Samples = 3u;
+      assert(!AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Render.Samples = 8u;
+      assert(!AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Attachment.Size = 1280ULL * 720ULL * 4ULL;
       packet.Render.Samples = 1u;
       packet.Render.SampleSizeBytes = 3u;
       assert(!AppleAgxG4BindNativeObjects(&view, objects,
@@ -430,6 +445,35 @@ int main(void) {
       assert(get64(objects[18].Data + 0x3e0u) == 0ULL);
       assert(AppleAgxG4PatchRenderScalars(&render, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+    }
+    /* D3D-G4: multisampling (Asahi queue/render.rs). utile_config carries
+     * log2(samples) in the 3D and TA jobs, tib_blocks covers sample_size
+     * x pixels per utile x samples in 2 KiB blocks, and the 3D job's sample
+     * count is the render's. */
+    {
+      APPLE_AGX_G4_NATIVE_RENDER ms = render;
+      const unsigned long long utile = (2u << 12) | (1u << 14);
+      ms.UtileWidthPx = 32u; ms.UtileHeightPx = 16u; ms.SampleSizeBytes = 8u;
+      ms.Samples = 4u;
+      assert(AppleAgxG4PatchRenderScalars(&ms, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      assert((get64(objects[18].Data + 0x80u) & 0xffffffffULL) == (utile | 2u));
+      assert((get64(objects[19].Data + 0x88u) & 0xffffffffULL) == (utile | 2u));
+      assert((get64(objects[18].Data + 0x3f4u) & 0xffffffffULL) == 8u);
+      assert((get64(objects[18].Data + 0x6d0u) & 0xffffffffULL) == 8u);
+      assert((get64(objects[18].Data + 0x50u) & 0xffffffffULL) == 4u);
+      ms.Samples = 2u;
+      assert(AppleAgxG4PatchRenderScalars(&ms, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      assert((get64(objects[18].Data + 0x80u) & 0xffffffffULL) == (utile | 1u));
+      assert((get64(objects[18].Data + 0x3f4u) & 0xffffffffULL) == 4u);
+      assert((get64(objects[18].Data + 0x50u) & 0xffffffffULL) == 2u);
+      ms.Samples = 3u;
+      assert(!AppleAgxG4PatchRenderScalars(&ms, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      assert(AppleAgxG4PatchRenderScalars(&render, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      assert((get64(objects[18].Data + 0x80u) & 3u) == 0u);
     }
     /* Without ZLS the depth/stencil fields keep the template's bytes (the
      * validated colour-only path is unchanged). */

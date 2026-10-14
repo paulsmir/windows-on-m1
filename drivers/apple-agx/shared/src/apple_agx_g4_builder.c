@@ -14,6 +14,11 @@ static APPLE_AGX_BOOL g4_range_valid(
       range->Bytes <= (1ULL << 39) - range->Va;
 }
 
+/* D3D-G4: Asahi queue/render.rs accepts 1, 2 and 4 samples. */
+static APPLE_AGX_BOOL g4_samples_valid(unsigned int samples) {
+  return samples == 1u || samples == 2u || samples == 4u;
+}
+
 APPLE_AGX_BOOL AppleAgxG4BindProcessObjects(
     const APPLE_AGX_G4_NATIVE_RENDER *Render,
     const APPLE_AGX_G4_PROCESS_RANGE
@@ -25,7 +30,7 @@ APPLE_AGX_BOOL AppleAgxG4BindProcessObjects(
   if (Render == 0 || Process == 0 || Objects == 0 ||
       ObjectCount < APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT ||
       !AppleAgxG4ProcessRequiredBytes(Render, required) ||
-      Render->Layers != 1u || Render->Samples != 1u ||
+      Render->Layers != 1u || !g4_samples_valid(Render->Samples) ||
       (Render->Flags & (1u << 2)) == 0u)
     return APPLE_AGX_FALSE;
   for (i = 0u; i < APPLE_AGX_G4_PROCESS_RANGE_COUNT; ++i) {
@@ -146,10 +151,11 @@ APPLE_AGX_BOOL AppleAgxG4BindNativeObjects(
     return APPLE_AGX_FALSE;
   memcpy(&render, View->Render, sizeof(render));
   memcpy(&color, View->Attachments, sizeof(color));
+  /* A multisampled colour target holds every sample. */
   minimum = (APPLE_AGX_U64)render.WidthPx * render.HeightPx *
-      AppleAgxG4ColorBytes(View->ColorFormat);
+      AppleAgxG4ColorBytes(View->ColorFormat) * render.Samples;
   if (!render.WidthPx || !render.HeightPx || !minimum ||
-      render.Layers != 1u || render.Samples != 1u ||
+      render.Layers != 1u || !g4_samples_valid(render.Samples) ||
       (render.SampleSizeBytes != 8u && render.SampleSizeBytes != 16u) ||
       (render.Flags & (1u << 2)) == 0u ||
       (render.Flags & ~((1u << 1) | (1u << 2) | (1u << 18))) != 0u ||
@@ -229,13 +235,13 @@ APPLE_AGX_BOOL AppleAgxG4PatchRenderScalars(
   unsigned char *work, *ta;
   APPLE_AGX_U32 tiles_x, tiles_y, mtile_x, mtile_y, utiles_x, utiles_y;
   APPLE_AGX_U32 utile, blocks, tile_config, tile_counts, rgn_size, tpc_stride;
-  APPLE_AGX_U32 mtile1, mtile2;
+  APPLE_AGX_U32 mtile1, mtile2, samples_log2;
   if (Render == 0 || Objects == 0 ||
       ObjectCount < APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT ||
       Objects[18].Data == 0 || Objects[18].Size < 0x900u ||
       Objects[19].Data == 0 || Objects[19].Size < 0x550u ||
       !Render->WidthPx || !Render->HeightPx || Render->Layers != 1u ||
-      Render->Samples != 1u || !Render->UtileWidthPx ||
+      !g4_samples_valid(Render->Samples) || !Render->UtileWidthPx ||
       !Render->UtileHeightPx ||
       (Render->Flags & (1u << 2)) == 0u)
     return APPLE_AGX_FALSE;
@@ -247,10 +253,14 @@ APPLE_AGX_BOOL AppleAgxG4PatchRenderScalars(
   mtile_y = g4_align4((tiles_y + 3u) / 4u);
   utiles_x = mtile_x * (32u / Render->UtileWidthPx);
   utiles_y = mtile_y * (32u / Render->UtileHeightPx);
+  /* D3D-G4 (Asahi queue/render.rs): utile_config carries log2(samples);
+   * the tile buffer holds every sample of a utile, in 2 KiB blocks. */
+  samples_log2 = Render->Samples == 4u ? 2u : Render->Samples == 2u ? 1u : 0u;
   utile = ((Render->UtileWidthPx / 16u) << 12) |
-      ((Render->UtileHeightPx / 16u) << 14);
-  blocks = ((APPLE_AGX_U32)Render->SampleSizeBytes *
-      Render->UtileWidthPx * Render->UtileHeightPx + 2047u) / 2048u;
+      ((Render->UtileHeightPx / 16u) << 14) | samples_log2;
+  blocks = ((((APPLE_AGX_U32)Render->SampleSizeBytes *
+      Render->UtileWidthPx * Render->UtileHeightPx) << samples_log2) +
+      2047u) / 2048u;
   tile_config = 0x280u | ((Render->Flags & (1u << 1)) ? 0x10000u : 0u);
   tile_counts = ((tiles_y - 1u) << 12) | (tiles_x - 1u);
   rgn_size = g4_align4(5u * mtile_x * mtile_y *

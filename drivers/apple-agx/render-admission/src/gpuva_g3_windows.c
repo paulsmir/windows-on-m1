@@ -1798,7 +1798,8 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
     goto Done;
   }
   if (q.SceneId || q.SceneGeneration || q.Width>16384u || q.Height>16384u ||
-      q.Layers!=1u || q.Samples!=1u || q.UtileWidth>32u || q.UtileHeight>32u)
+      q.Layers!=1u || (q.Samples!=1u && q.Samples!=2u && q.Samples!=4u) ||
+      q.UtileWidth>32u || q.UtileHeight>32u)
     {PRIVATE_CAPTURE(5u,~0u,NULL);goto Done;}
   if (q.Operation==APPLE_AGX_G3_PRIVATE_ACQUIRE) {
     if (q.ManagerId || q.ManagerGeneration) {PRIVATE_CAPTURE(6u,~0u,NULL);goto Done;}
