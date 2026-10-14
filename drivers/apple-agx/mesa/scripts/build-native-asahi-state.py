@@ -1070,12 +1070,20 @@ void APIENTRY
       *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET |
                      D3D10_DDI_FORMAT_SUPPORT_BLENDABLE |
                      D3D10_DDI_FORMAT_SUPPORT_SHADER_SAMPLE |
-                     D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD;
-      /* EXP749: runtime admits a one-sample TEXTURE2DMS view; real ld2dms
-       * preserves sample index and reaches native txf_ms. No >1 sample RT. */
+                     D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD |
+                     D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET |
+                     D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_RESOLVE;
+      /* EXP749: ld2dms preserves the sample index and reaches native txf_ms.
+       * D3D-G5: 2x/4x render targets (KMD utile_config/tib_blocks) resolve
+       * through the Gallium blit. */
    } else if (Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
-       Format == DXGI_FORMAT_R16G16B16A16_FLOAT ||
-       Format == DXGI_FORMAT_R8_UNORM || Format == DXGI_FORMAT_R16_FLOAT ||
+       Format == DXGI_FORMAT_R16G16B16A16_FLOAT) {
+      *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET |
+                     D3D10_DDI_FORMAT_SUPPORT_BLENDABLE |
+                     D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD |
+                     D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET |
+                     D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_RESOLVE;
+   } else if (Format == DXGI_FORMAT_R8_UNORM || Format == DXGI_FORMAT_R16_FLOAT ||
        Format == DXGI_FORMAT_R32G32B32A32_FLOAT ||
        Format == DXGI_FORMAT_R10G10B10A2_UNORM ||
        Format == DXGI_FORMAT_R11G11B10_FLOAT ||
@@ -1109,7 +1117,19 @@ void APIENTRY
        Format == DXGI_FORMAT_R11G11B10_FLOAT ||
        Format == DXGI_FORMAT_B5G6R5_UNORM ||
        Format == DXGI_FORMAT_A8_UNORM ||
-       Format == DXGI_FORMAT_R16_UINT) && SampleCount == 1 ? 1 : 0;''')])
+       Format == DXGI_FORMAT_R16_UINT) && SampleCount == 1 ? 1 :
+      /* D3D-G5: 2x and 4x for the multisampled render-target and depth set. */
+      (Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
+       Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB ||
+       Format == DXGI_FORMAT_B8G8R8X8_UNORM ||
+       Format == DXGI_FORMAT_B8G8R8X8_UNORM_SRGB ||
+       Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
+       Format == DXGI_FORMAT_R16G16B16A16_FLOAT ||
+       Format == DXGI_FORMAT_D32_FLOAT ||
+       Format == DXGI_FORMAT_D16_UNORM ||
+       Format == DXGI_FORMAT_D24_UNORM_S8_UINT ||
+       Format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT) &&
+      (SampleCount == 2 || SampleCount == 4) ? 1 : 0;''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Device.cpp','Flush','''   Device *pDevice = CastDevice(hDevice);
    HRESULT result = AgxD3d10WindowsQueryCollect(pDevice->windows);
    UINT stage[1] = {1u};
@@ -1267,7 +1287,7 @@ SetRenderTargets(D3D10DDI_HDEVICE hDevice,'''),
         resource->format != PIPE_FORMAT_R10G10B10A2_UNORM &&
         resource->format != PIPE_FORMAT_R11G11B10_FLOAT &&
         resource->format != PIPE_FORMAT_B5G6R5_UNORM) ||
-       resource->nr_samples != 1 || resource->array_size != 1 ||
+       resource->nr_samples > 4 || resource->array_size != 1 ||
        resource->last_level != 0 ||
        util_format_linear(surface->format) != util_format_linear(resource->format) ||
        surface->level != 0 || surface->first_layer != 0 || surface->last_layer != 0) {
@@ -1332,7 +1352,7 @@ SetRenderTargets(D3D10DDI_HDEVICE hDevice,'''),
         resource->format != PIPE_FORMAT_Z16_UNORM &&
         resource->format != PIPE_FORMAT_Z24_UNORM_S8_UINT &&
         resource->format != PIPE_FORMAT_Z32_FLOAT_S8X24_UINT) ||
-       resource->nr_samples != 1 || resource->array_size != 1 ||
+       resource->nr_samples > 4 || resource->array_size != 1 ||
        resource->last_level != 0 ||
        util_format_linear(surface->format) != util_format_linear(resource->format) ||
        surface->level != 0 || surface->first_layer != 0 ||
@@ -3084,7 +3104,12 @@ AgxD3d10ResourceWithinRequiredLimits(
          (mip[0].TexelDepth == 1 || bgr_auto) &&
          /* AgxD3d10ResourceWithinRequiredLimits already checked dimensions,
           * complete byte size and overflow against the pinned D3D10 limits. */
-         pCreateResource->SampleDesc.Count == 1 && pCreateResource->SampleDesc.Quality == 0 &&
+         /* D3D-G5: 2x/4x single-level 2D targets. */
+         (pCreateResource->SampleDesc.Count == 1 ||
+          ((pCreateResource->SampleDesc.Count == 2 || pCreateResource->SampleDesc.Count == 4) &&
+           pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE2D &&
+           pCreateResource->MipLevels == 1 && pCreateResource->ArraySize == 1 && !bgr_auto)) &&
+         pCreateResource->SampleDesc.Quality == 0 &&
          pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT && pCreateResource->MapFlags == 0 &&
          (pCreateResource->BindFlags == D3D10_DDI_BIND_RENDER_TARGET ||
           pCreateResource->BindFlags == (D3D10_DDI_BIND_RENDER_TARGET |
@@ -3111,8 +3136,10 @@ AgxD3d10ResourceWithinRequiredLimits(
          mip[0].TexelWidth > 0 && mip[0].TexelHeight > 0 && mip[0].TexelDepth == 1 &&
          /* D3D-G4: AgxD3d10ResourceWithinRequiredLimits already checked the
           * dimensions and byte size against the pinned D3D10 limits; the old
-          * 4096^2 / 1 MiB bound was the physical patch-list class size. */
-         pCreateResource->SampleDesc.Count == 1 &&
+          * 4096^2 / 1 MiB bound was the physical patch-list class size.
+          * D3D-G5: 2x/4x depth targets. */
+         (pCreateResource->SampleDesc.Count == 1 || pCreateResource->SampleDesc.Count == 2 ||
+          pCreateResource->SampleDesc.Count == 4) &&
          pCreateResource->SampleDesc.Quality == 0 &&
          pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT &&
          pCreateResource->MapFlags == 0 &&
@@ -3241,6 +3268,44 @@ AgxD3d10ResourceWithinRequiredLimits(
 {
    SetError(hDevice, E_NOTIMPL);
    return;''')])
+    replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceResolveSubResource','''   Device *device = CastDevice(hDevice);
+   if (device && !CheckPredicate(device)) return;
+   Resource *destination = CastResource(hDstResource);
+   Resource *source = CastResource(hSrcResource);
+   struct pipe_resource *dst = destination ? destination->resource : NULL;
+   struct pipe_resource *src = source ? source->resource : NULL;
+   /* D3D-G5: one multisampled 2D subresource resolves into a single-sample
+    * subresource of the same size; u_blitter averages the samples. */
+   if (!device || !destination || !source || !dst || !src ||
+       destination->owner_device != device || source->owner_device != device ||
+       src->target != PIPE_TEXTURE_2D || dst->target != PIPE_TEXTURE_2D ||
+       src->nr_samples < 2 || dst->nr_samples > 1 ||
+       !source->MipLevels || !destination->MipLevels ||
+       SrcSubResource >= source->NumSubResources ||
+       DstSubResource >= destination->NumSubResources) {
+      SetError(hDevice, E_INVALIDARG); return;
+   }
+   unsigned dstLevel = DstSubResource % destination->MipLevels;
+   unsigned dstLayer = DstSubResource / destination->MipLevels;
+   unsigned srcLayer = SrcSubResource / source->MipLevels;
+   unsigned width = u_minify(dst->width0, dstLevel);
+   unsigned height = u_minify(dst->height0, dstLevel);
+   enum pipe_format format = FormatTranslate(ResolveFormat, FALSE);
+   if (width != src->width0 || height != src->height0 ||
+       format == PIPE_FORMAT_NONE) {
+      SetError(hDevice, E_INVALIDARG); return;
+   }
+   struct pipe_blit_info info;
+   memset(&info, 0, sizeof(info));
+   info.src.resource = src; info.src.level = 0; info.src.format = format;
+   info.src.box.z = (int)srcLayer; info.src.box.width = (int)width;
+   info.src.box.height = (int)height; info.src.box.depth = 1;
+   info.dst.resource = dst; info.dst.level = dstLevel; info.dst.format = format;
+   info.dst.box.z = (int)dstLayer; info.dst.box.width = (int)width;
+   info.dst.box.height = (int)height; info.dst.box.depth = 1;
+   info.mask = PIPE_MASK_RGBA;
+   info.filter = PIPE_TEX_FILTER_NEAREST;
+   device->pipe->blit(device->pipe, &info);''')
     replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceCopy','''   Device *device = CastDevice(hDevice);
    if (device && !CheckPredicate(device)) return;
    Resource *destination = CastResource(hDstResource);

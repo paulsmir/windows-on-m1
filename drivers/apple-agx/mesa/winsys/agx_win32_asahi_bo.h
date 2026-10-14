@@ -49,6 +49,9 @@ typedef struct {
   /* Depth/stencil (ZLS) attachments may be submitted: set by the OpenGL ICD
    * (CS 1.6, EXP1149) and the D3D UMD (D3D-G4). */
   int ZlsAttachments;
+  /* D3D-G5: the screen advertises 2x/4x multisampling (D3D UMD only; the
+   * OpenGL ICD keeps AGX_DBG_NOMSAA, EXP1162). */
+  int Multisample;
   int Failed;
   struct pipe_context *(*ContextCreate)(struct pipe_screen *, void *, unsigned);
   void (*ContextDestroy)(struct pipe_context *);

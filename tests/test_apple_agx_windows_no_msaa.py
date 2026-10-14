@@ -1,11 +1,14 @@
-"""EXP1162: the Windows Asahi screen must not advertise multisampling.
+"""EXP1162 / D3D-G5: only the D3D UMD's screen advertises multisampling.
 
-CS 1.6 (GoldSrc) drew into a 4x MSAA framebuffer because the Asahi screen
-reported sample counts 2/4 as supported, and the G4 batch gate refused every
-batch (render->samples must be 1): a black window. Until the G4 builder
-encodes multisampled targets, the Windows screen sets Asahi's own
-AGX_DBG_NOMSAA, so is_format_supported refuses sample_count > 1 and st/mesa
-exposes no multisample framebuffer. Both sides must change together.
+CS 1.6 (GoldSrc) drew into a 4x MSAA framebuffer as soon as the Asahi screen
+reported sample counts 2/4, and the G4 batch gate then refused every batch:
+a black window. The OpenGL ICD therefore keeps Asahi's AGX_DBG_NOMSAA, so
+is_format_supported refuses sample_count > 1 and st/mesa exposes no
+multisample framebuffer. D3D-G5: the KMD encodes 2x/4x renders, the gate
+admits them, and the D3D UMD (and only it) sets Backend.Multisample before
+the screen exists, so its screen advertises 2x/4x for D3D resources.
+Bug caught: a GL ICD screen advertising MSAA (the EXP1162 black window back),
+or a D3D screen advertising MSAA the gate refuses.
 """
 from pathlib import Path
 import unittest
@@ -13,16 +16,28 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 GENERATOR = ROOT / "drivers/apple-agx/mesa/scripts/native-asahi-batch-lifecycle.py"
 BATCH = ROOT / "drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c"
+D3D = ROOT / "drivers/apple-agx/mesa/winsys/agx_d3d10_windows.cpp"
+WGL = ROOT / "drivers/apple-agx/windows/icd/agx_wgl_icd.cpp"
 
 
-class WindowsScreenAdvertisesNoMsaa(unittest.TestCase):
-    def test_screen_refuses_samples_the_g4_gate_refuses(self):
-        gate = BATCH.read_text()
+class OnlyD3dAdvertisesMsaa(unittest.TestCase):
+    def test_screen_refuses_msaa_unless_the_owner_asked(self):
         projection = GENERATOR.read_text()
-        if "render->samples!=1" in gate:
-            self.assertIn("agx_screen->dev.debug |= AGX_DBG_NOMSAA;", projection)
-            create = projection[projection.index("AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND"):]
-            self.assertLess(create.index("AGX_DBG_NOMSAA"), create.index("agx_init_screen_caps(screen);"))
+        create = projection[projection.index("AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND"):]
+        line = "if (!backend->Multisample) agx_screen->dev.debug |= AGX_DBG_NOMSAA;"
+        self.assertIn(line, create)
+        self.assertLess(create.index(line), create.index("agx_init_screen_caps(screen);"))
+
+    def test_only_the_d3d_owner_asks_for_msaa_before_the_screen(self):
+        d3d = D3D.read_text()
+        self.assertLess(d3d.index("owner->Backend.Multisample=1;"),
+                        d3d.index("owner->Screen=AgxWin32AsahiScreenCreateForWindows("))
+        self.assertNotIn("Multisample", WGL.read_text())
+
+    def test_gate_admits_the_counts_the_screen_advertises(self):
+        gate = BATCH.read_text()
+        self.assertNotIn("render->samples!=1 ||", gate)
+        self.assertIn("(render->samples!=1 && render->samples!=2 && render->samples!=4)", gate)
 
 
 if __name__ == "__main__":

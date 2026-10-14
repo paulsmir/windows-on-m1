@@ -503,7 +503,9 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
       * the KMD's bound output, every bound one a supported format. */
      batch->key.nr_cbufs<1 || batch->key.nr_cbufs>PIPE_MAX_COLOR_BUFS ||
      !batch->key.cbufs[0].texture || !gpuva_color_formats_supported(batch) ||
-     (batch->key.zsbuf.texture && !b->ZlsAttachments) || render->samples!=1 ||
+     (batch->key.zsbuf.texture && !b->ZlsAttachments) ||
+     /* D3D-G5: the KMD encodes 1, 2 and 4 samples (Asahi render.rs). */
+     (render->samples!=1 && render->samples!=2 && render->samples!=4) ||
      /* D3D-G6: any 8-byte multiple whose utile fits the tile buffer. */
      !AppleAgxG4TileBufferValid(render->sample_size_B,render->samples,
          render->utile_width_px,render->utile_height_px) ||

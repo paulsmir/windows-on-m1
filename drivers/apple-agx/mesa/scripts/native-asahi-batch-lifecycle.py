@@ -579,10 +579,11 @@ AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *backend, AGX_WIN32_SCREEN *wi
    }
    agx_screen->dev.params = *params;
    agx_screen->dev.chip = AGX_CHIP_G13G;
-   /* EXP1162: the Windows G4 builder encodes single-sample targets only
-    * (the batch gate requires render->samples == 1); advertise no
-    * multisampling, so st/mesa exposes no multisample framebuffer. */
-   agx_screen->dev.debug |= AGX_DBG_NOMSAA;
+   /* EXP1162: GoldSrc picked a 4x multisampled GL framebuffer as soon as
+    * the screen advertised one; the OpenGL ICD keeps advertising none.
+    * D3D-G5: the D3D UMD (Backend.Multisample) advertises 2x/4x, which the
+    * KMD encodes (utile_config log2, tib_blocks). */
+   if (!backend->Multisample) agx_screen->dev.debug |= AGX_DBG_NOMSAA;
    /* GL_RENDERER / adapter name: Linux builds it from the kernel's
     * parameters (agx_device.c); the compiled Windows contract is G13G. */
    snprintf(agx_screen->dev.name, sizeof(agx_screen->dev.name), "Apple M1 (G13G)");
