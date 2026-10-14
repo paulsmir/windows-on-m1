@@ -54943,3 +54943,21 @@ WINDOWS CONTRACT: unchanged from EXP1257. The KTIMER/KDPC/IO_WORKITEM reclaim ru
 AGX/ASAHI CONTRACT: unchanged. An idle granule stays mapped in the window with its pages; a later placement over it is a new allocation, which VidMm zero-fills through FillVirtual, as with the validated fixed pool.
 TRANSLATION: unchanged except release timing.
 WHAT IS STILL UNKNOWN: (a) whether the fps loss was churn or KB5127648. Fps back near 47.6 means churn; still ~44 points at the OS update, and the follow-up is a fixed-pool baseline on this OS. (b) How much stays committed 2 s after the game: receipts taken minutes later should be near idle. Evidence: evidence/EXP1258 rcpt-idle/rcpt-bench/rcpt-after, segstats.txt, full.log. Recovery: rec1258h (servicing-restart guard added).
+EXP1258 ACTUAL 2026-10-14T01:42Z (newexp-kmd1258.sh; pipeline 01:20-01:41Z; package guard PACKAGE_MATCHES_EXP1257_EXCEPT_KMD; REC-EXP1257 RECOVERY_DONE, no servicing restart; package 30.0.1258.0 left installed; evidence .local/experiments/EXP1258-m2f3b-aged-release/evidence/EXP1258).
+- Functional checks:
+  - stage pass, CM_PROB_NONE; GL smoke 300 frames at 50.4 fps;
+  - copy x2 PASS; D3D11 PASS with MATCH x2; KMT 2400 frames at 59.0 fps, MATCH x4;
+  - DWM faults 0; no Wom1G4SubmitFailure; overlaps 0; Unmapped IPA 0.
+- Wom1M2PoolDemand v2 (ReleaseDelayMs 2000):
+  - idle: committed 203.3 MiB, peak 241.7 MiB; 4066 commits, 813 releases;
+  - after the benchmark: committed 204.9 MiB, peak 679.4 MiB; 11743 commits, 8464 releases, 0 failures;
+  - end of run: committed 212.7 MiB; 13720 commits, 10317 releases;
+  - commit time: 10.68 s total, 778 us average, 6.5 ms maximum. Release time: 0.11 s total, 195 us maximum.
+- Segstats: segment 2 peak 161 MiB; segment 3 committed peak 670 MiB, resident peak 679 MiB, last 204 MiB.
+- CS benchmark: 3771 frames in 85.920 s = 43.889 fps (EXP1257 44.336, EXP1255 47.582).
+- Reading:
+  - Aging did not change the counts: 7677 commits and 7651 releases in the benchmark interval, against 8061/7662 in EXP1257. So EXP1257's "churn" reading is REJECTED. Those counts are the game's ~480 MiB working set committed at load and released after exit, not repeated reuse of freed ranges.
+  - Aged release keeps working: memory returns after use, and idle sits near 0.2 GiB.
+  - fps did not recover. What remains is either the per-granule commit cost (MmAllocatePagesForMdlEx per 64 KiB + MAP_AT; 460-875 us per granule against ~92 us per 64 KiB block when EXP1255 allocated 1 GiB in one call) landing inside the timed demo, or the KB5127648 OS update.
+- Verdict: aged release implemented and working (no regression in function, memory behaviour as intended); its fps hypothesis REJECTED.
+- Next: EXP1259, the same KMD source (06a1d580, rebuilt as 1259) on m1n1 3b2b9c06 (no STATUS_RANGES), so the KMD takes its fixed 1 GiB pool path on the same OS. Fixed ~47.6 means demand commit cost is the regression; fixed ~44 means the OS update. In parallel, offline: batch the commit of a placement (one MmAllocatePagesForMdlEx per run of uncommitted granules).
