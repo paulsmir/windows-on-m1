@@ -55116,3 +55116,20 @@ WINDOWS CONTRACT: DXGK_SEGMENTFLAGS.LocalBudgetGroup on segments 2 and 3, NonLoc
 AGX/ASAHI CONTRACT: none changed (accounting only).
 TRANSLATION: none changed.
 WHAT IS STILL UNKNOWN: the budget VidMm computes for the new groups and whether its trimming policy changes residency (e.g., DWM or game evictions under the LOCAL budget). Readings: the budgets reflect segments 2+3 with real usage and everything else is unchanged, so M2-f4b is validated; allocation refusals mean revert and decode which set VidMm refused; a residency or fps change means examine the budget policy. Evidence: evidence/EXP1264 vidmem-idle.txt, vidmem-bench.txt, rcpt-*, segstats, full.log. Recovery: rec1264h.
+EXP1264 ACTUAL 2026-10-14T08:29Z (newexp-kmd1264.sh; package guard PACKAGE_MATCHES_EXP1263_EXCEPT_KMD; REC-EXP1263 done by the pipeline; pipeline log ended ~08:29Z; package 30.0.1264.0 left installed; evidence .local/experiments/EXP1264-m2f4b-budget-groups/evidence/EXP1264).
+- agx_vidmem, idle and after the benchmark:
+  - KMT SEGMENTGROUPSIZE local 2104 MiB (312 + 1792), non-local 1202 MiB, non-budget 0 (EXP1263: local 1202, non-local 0, non-budget 2360);
+  - DXGI LOCAL budget 1788 MiB, NON_LOCAL budget 1081 MiB;
+  - DXGI_ADAPTER_DESC unchanged (dedicated-video 312, dedicated-system 1792, shared-system 1202).
+  - Correction to the EXP1263 reading: QueryVideoMemoryInfo CurrentUsage is per process, so a probe process with no allocations reads 0 by design. That reading was not a defect.
+- Admission and placement unchanged: CM_PROB_NONE; system shapes and groups as EXP1263 (pool shapes all published; SystemGroups 0:167 1:898); no allocation refusal.
+- Functional checks: copy x2 PASS; D3D11 PASS MATCH x2; KMT 59.6 fps MATCH x4; DWM 0; no G4SubmitFailure; overlaps 0; Unmapped IPA 0.
+- The probe's first GL smoke ran 300 frames in 12.269 s (24.5 fps). Two reruns of the same smoke on the installed package afterwards (smoke-rerun/) gave 57.5 fps each, so this was a one-off first-launch stall.
+- Pool: idle committed 200 MiB, after the benchmark 203 MiB, peak 678 MiB.
+- CS benchmark: 3771 frames in 81.677 s = 46.170 fps (EXP1263 46.318).
+- Verdict: CONFIRMED. M2-f4b: the memory segments form the LOCAL budget group and the aperture the NON_LOCAL one, with no non-budget memory; VidMm admits the same allocations and the performance is unchanged.
+- M2 is complete on J313:
+  - demand-backed segment 3, sized for the machine;
+  - slab allocation;
+  - correct budget groups.
+- Next: the resubmission defect (cancel-caller receipt active), G4-recovery/TDR, then D3D 11/12.
