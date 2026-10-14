@@ -77,6 +77,17 @@ This document is step 4 of D3D-phase-plan.md, option A: extend the Mesa d3d10umd
    - First check every FL 11_0 requirement against the Microsoft feature-level table: formats, 16K textures, UAVs, CS 5.0, tessellation, BC6H/BC7.
    - Acceptance: DWM DDisplay without `DisableDDisplay` (EXP952), then CS2 (x64, needs the ARM64X UMD).
 
+## Multisampling requirements per feature level (EXP1287 reading)
+
+Microsoft's ID3D11Device::CheckMultisampleQualityLevels page states that FL 10_1 devices must support 4x MSAA for every render-target format except R32G32B32A32 and R32G32B32, and FL 11_0 devices must support 4x for every render-target format and 8x for every render-target format except R32G32B32A32.
+
+AGX supports 1, 2 and 4 samples only (Asahi `agx_is_format_supported` refuses other counts; Honeykrisp reports `VK_SAMPLE_COUNT_1|2|4`; `render.rs` encodes samples_log2 0..2).
+
+Consequences:
+- FL 10_1 needs 4x reported (and rendered) for every render-target format, not only the D3D-G5 set. That widens the UMD format/caps set and the gate's colour formats (`gpuva_color_formats_supported`).
+- FL 11_0's 8x requirement cannot be met by the hardware. D3D-H5 must measure whether the runtime enforces it when the device is created, report 0 quality levels at 8x truthfully, and rely on applications querying CheckMultisampleQualityLevels.
+- The EXP1287/EXP1288 caps rule (undocumented runtime refusal) is resolved before either feature level is reported.
+
 ## Known UMD gaps carried into D3D-H
 
 These remain from the groundwork:
