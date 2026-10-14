@@ -9,12 +9,15 @@
  *    works, then free everything.
  * Each line is written through to <out.txt>, so the log survives a crash.
  * Usage: agx_mempressure.exe <out.txt> <leave-MiB> <max-MiB> [height]
- * (textures are 2048 x height RGBA8, default 4096 = 32 MiB). */
+ * (textures are 2048 x height RGBA8, default 4096 = 32 MiB).
+ * M2-f11: the LOCAL segment-group budget and usage (DXGI
+ * QueryVideoMemoryInfo) are printed with the fill progress, so a run shows
+ * whether it crossed the process residency budget. */
 #define COBJMACROS
 #define INITGUID
 #include <windows.h>
 #include <d3d11.h>
-#include <dxgi1_2.h>
+#include <dxgi1_4.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,6 +28,18 @@
 #define MAX_TEXTURES 256
 
 static HANDLE out = INVALID_HANDLE_VALUE;
+static IDXGIAdapter3 *adapter3;
+
+static const char *budget(char *text, size_t bytes) {
+  DXGI_QUERY_VIDEO_MEMORY_INFO info;
+  if (adapter3 && SUCCEEDED(IDXGIAdapter3_QueryVideoMemoryInfo(
+                      adapter3, 0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &info)))
+    snprintf(text, bytes, "budget %llu MiB usage %llu MiB",
+             MIB(info.Budget), MIB(info.CurrentUsage));
+  else
+    snprintf(text, bytes, "budget n/a");
+  return text;
+}
 
 static void say(const char *format, ...) {
   char line[512];
@@ -71,6 +86,7 @@ int main(int argc, char **argv) {
   unsigned count = 0, i, height = 4096;
   unsigned long long texture_bytes;
   SIZE_T wsmin, wsmax;
+  char text[64];
 
   if (argc < 4) {
     printf("usage: agx_mempressure.exe <out.txt> <leave-MiB> <max-MiB>\n");
@@ -93,6 +109,8 @@ int main(int argc, char **argv) {
     IDXGIAdapter1_Release(adapter);
   }
   if (!pick) { say("NO_HARDWARE_ADAPTER"); return 1; }
+  if (FAILED(IDXGIAdapter1_QueryInterface(pick, &IID_IDXGIAdapter3, (void **)&adapter3)))
+    adapter3 = NULL;
   hr = D3D11CreateDevice((IDXGIAdapter *)pick, D3D_DRIVER_TYPE_UNKNOWN, NULL, 0, want, 3,
                          D3D11_SDK_VERSION, &device, &level, &ctx);
   say("D3D11CreateDevice 0x%08lx FEATURE_LEVEL 0x%x", (unsigned long)hr, level);
@@ -118,7 +136,8 @@ int main(int argc, char **argv) {
     chunks[nchunks++] = p;
     locked += LOCK_CHUNK;
   }
-  say("LOCKED %llu MiB available %llu MiB", MIB(locked), MIB(available()));
+  say("LOCKED %llu MiB available %llu MiB %s", MIB(locked), MIB(available()),
+      budget(text, sizeof(text)));
 
   /* 2. Fill: 2048 x height RGBA8. */
   say("TEXTURE 2048x%u %llu MiB", height, MIB(texture_bytes));
@@ -145,11 +164,13 @@ int main(int argc, char **argv) {
     hr = ID3D11Device_GetDeviceRemovedReason(device);
     if (hr != S_OK) { first_failure = hr; break; }
     if (count % 8 == 0)
-      say("FILLED %u textures %llu MiB available %llu MiB", count, MIB(filled), MIB(available()));
+      say("FILLED %u textures %llu MiB available %llu MiB %s", count, MIB(filled),
+          MIB(available()), budget(text, sizeof(text)));
   }
-  say("FILL_END textures %u %llu MiB first-failure 0x%08lx removed 0x%08lx available %llu MiB",
+  say("FILL_END textures %u %llu MiB first-failure 0x%08lx removed 0x%08lx available %llu MiB %s",
       count, MIB(filled), (unsigned long)first_failure,
-      (unsigned long)ID3D11Device_GetDeviceRemovedReason(device), MIB(available()));
+      (unsigned long)ID3D11Device_GetDeviceRemovedReason(device), MIB(available()),
+      budget(text, sizeof(text)));
 
   /* 3. Does the device still work? */
   if (count) {
