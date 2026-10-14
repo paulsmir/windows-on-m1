@@ -539,7 +539,10 @@ agx_flush(struct pipe_context *pctx,''')
     start=part.index('   enum drm_asahi_priority');end=part.index('   pctx->destroy',start)
     part=part[:start]+'   /* Existing Windows context owns queue and synchronization. */\n'+part[end:]
     part=part.replace('   int ret;','')
-    for line in ('   pctx->create_fence_fd = agx_create_fence_fd;','   pctx->fence_server_sync = agx_fence_server_sync;','   agx_init_query_functions(pctx);'):
+    # D3D-G3 (EXP1283): the context keeps Mesa's query functions; without
+    # them pipe->create_query is NULL (CreateQuery crashed) and
+    # active_queries stays false (no draw would count).
+    for line in ('   pctx->create_fence_fd = agx_create_fence_fd;','   pctx->fence_server_sync = agx_fence_server_sync;'):
         part=part.replace(line,'')
     start=part.index('   struct agx_device *dev = agx_device(screen);');end=part.index('   /* By default all samples',start)
     part=part[:start]+'   ctx->in_sync_fd = -1;\n'+part[end:]
@@ -683,16 +686,7 @@ AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *backend, AGX_WIN32_SCREEN *wi
    pscreen->transfer_helper = NULL;
    glsl_type_singleton_decref();''')
     s=s[:a]+part+s[b:]
-    s=replace(s,'static struct pipe_context *\nagx_create_context(','''static void
-agx_windows_set_active_query_state(struct pipe_context *pctx, bool enable)
-{
-   (void)pctx; (void)enable;
-}
-
-static struct pipe_context *
-agx_create_context(''')
     s=replace(s,'   ctx->blitter = util_blitter_create(pctx);','''   ctx->blitter = util_blitter_create(pctx);
-   pctx->set_active_query_state = agx_windows_set_active_query_state;
    if (ctx->blitter) ctx->blitter->use_single_triangle = true;''')
     save(pp,s)
 
