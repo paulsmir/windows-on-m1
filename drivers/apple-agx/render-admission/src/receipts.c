@@ -2949,3 +2949,19 @@ _Use_decl_annotations_ void AdmissionRecordM2PoolProbe(
   ZwClose(key);
 }
 #endif
+
+/* G4-r3 (EXP1296): Wom1GpuReset, flushed: a failed adapter reset bugchecks
+ * right after it (VIDEO_TDR_FAILURE). */
+_Use_decl_annotations_ void AdmissionRecordGpuReset(ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, L"Wom1GpuReset", &Context->GpuReset,
+              sizeof(Context->GpuReset));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}

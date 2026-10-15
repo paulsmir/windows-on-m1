@@ -52,7 +52,7 @@ static LONG InterlockedExchange(volatile LONG*p,LONG v){LONG o=*p;*p=v;return o;
 static LONG64 InterlockedExchange64(volatile LONG64*p,LONG64 v){LONG64 o=*p;*p=v;return o;}
 static void InterlockedIncrement(volatile LONG*p){++*p;}
 typedef struct {int InterruptType;struct{unsigned VidPnTargetId;struct{LONG64 QuadPart;} PhysicalAddress;}CrtcVsync;struct{unsigned VidPnTargetId,PhysicalAdapterMask,MultiPlaneOverlayVsyncInfoCount;DXGK_MULTIPLANE_OVERLAY_VSYNC_INFO2*pMultiPlaneOverlayVsyncInfo;unsigned long long GpuFrequency,GpuClockCounter;}CrtcVsyncWithMultiPlaneOverlay2;} DXGKARGCB_NOTIFY_INTERRUPT_DATA;
-typedef struct {void*ScanoutRuntime;int InterfaceValid;struct{void*DeviceHandle;void(*DxgkCbNotifyInterrupt)(void*,DXGKARGCB_NOTIFY_INTERRUPT_DATA*);int(*DxgkCbQueueDpc)(void*);void(*DxgkCbNotifyDpc)(void*);NTSTATUS(*DxgkCbSynchronizeExecution)(void*,BOOLEAN(*)(void*),void*,ULONG,BOOLEAN*);}Interface;volatile LONG LastInterruptStatus,InterruptCount,InterruptAckCount,SchedulerDpcPending,RenderDpcFence,DpcCount,SchedulerInitialized,SchedulerFaulted;} ADMISSION_CONTEXT;
+typedef struct {void*ScanoutRuntime;int InterfaceValid;struct{void*DeviceHandle;void(*DxgkCbNotifyInterrupt)(void*,DXGKARGCB_NOTIFY_INTERRUPT_DATA*);int(*DxgkCbQueueDpc)(void*);void(*DxgkCbNotifyDpc)(void*);NTSTATUS(*DxgkCbSynchronizeExecution)(void*,BOOLEAN(*)(void*),void*,ULONG,BOOLEAN*);}Interface;volatile LONG LastInterruptStatus,InterruptCount,InterruptAckCount,SchedulerDpcPending,RenderDpcFence,DpcCount,SchedulerInitialized,SchedulerFaulted;KSPIN_LOCK SchedulerLock;struct{ULONG CompletedFence,LastSubmittedFence;}Scheduler;} ADMISSION_CONTEXT;
 static unsigned notifications,dpcs,notified_dpcs;static LONG64 last_address;static int last_type;static unsigned long long last_present_id;
 static void notify(void*c,DXGKARGCB_NOTIFY_INTERRUPT_DATA*d){(void)c;notifications++;last_type=d->InterruptType;if(d->InterruptType==DXGK_INTERRUPT_CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY2){assert(d->CrtcVsyncWithMultiPlaneOverlay2.MultiPlaneOverlayVsyncInfoCount==1&&d->CrtcVsyncWithMultiPlaneOverlay2.pMultiPlaneOverlayVsyncInfo->LayerIndex==0);last_present_id=d->CrtcVsyncWithMultiPlaneOverlay2.pMultiPlaneOverlayVsyncInfo->PresentId;}else last_address=d->CrtcVsync.PhysicalAddress.QuadPart;}
 static void notify_dpc(void*c){(void)c;notified_dpcs++;}
@@ -78,3 +78,5 @@ static ULONGLONG KeQueryInterruptTime(void){return fakeNow;}
 typedef struct {ULONG NodeOrdinal,EngineOrdinal,LastAbortedFenceId;} DXGKARG_RESETENGINE;
 static NTSTATUS reset_status;
 static NTSTATUS AdmissionDdiResetEngine(HANDLE c,DXGKARG_RESETENGINE*a){(void)a;ADMISSION_SCANOUT_RUNTIME*r=((ADMISSION_CONTEXT*)c)->ScanoutRuntime;assert(!r->Timeline.Running&&!r->VsyncTimer.Armed&&flushed);return reset_status;}
+#define ADMISSION_GPU_RESET_ADAPTER 2u
+static NTSTATUS AdmissionResetEngineEntry(HANDLE c,DXGKARG_RESETENGINE*a,ULONG e){(void)e;return AdmissionDdiResetEngine(c,a);}

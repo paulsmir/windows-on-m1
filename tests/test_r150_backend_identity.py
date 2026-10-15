@@ -1,6 +1,6 @@
 """Catch a worker overwriting backend ownership with a process UAT slot.
 
-Compile the actual start/reset initializers and worker construction/submit block
+Compile the actual start initializer and worker construction/submit block
 against the real portable runtime. Only firmware/Windows boundaries are doubled.
 B1 exercises its separate production submission constructor, not the G3 worker.
 """
@@ -22,8 +22,9 @@ def replay_source(source=None):
     initializers = re.findall(
         r"  AppleAgxBackendRuntimeInitialize\(\n#if.*?\n#endif", source, re.S
     )
-    if len(initializers) != 2:
-        raise ValueError("Expected separate start/reset runtime initializer blocks")
+    # G4-r3 (EXP1296): the TDR path no longer reinitializes the backend.
+    if len(initializers) != 1:
+        raise ValueError("Expected exactly one (start) runtime initializer block")
     begin = source.index("  submission.Submission.Kind = AppleAgxSubmissionGdi;")
     end = source.index("  result = AppleAgxBackendRuntimeSubmit(", begin)
     worker = source[begin:source.index(";", end) + 1]
@@ -31,7 +32,7 @@ def replay_source(source=None):
     end = source.index("    return STATUS_INVALID_BUFFER_SIZE;", begin)
     b1 = source[begin:end + len("    return STATUS_INVALID_BUFFER_SIZE;")]
     return HARNESS.replace("@START@", initializers[0]).replace(
-        "@RESET@", initializers[1]).replace("@WORKER@", worker).replace("@B1@", b1)
+        "@WORKER@", worker).replace("@B1@", b1)
 
 
 HARNESS = r'''
@@ -72,9 +73,6 @@ int AdmissionGpuvaG3BeginJob(ADAPTER *a, ADMISSION_RENDER_CONTEXT *c, ULONG f) {
 }
 static void InitializeStart(PLATFORM *runtime) {
 @START@
-}
-static void InitializeReset(PLATFORM *runtime) {
-@RESET@
 }
 static void Worker(PLATFORM *runtime, ADAPTER *adapter,
     ADMISSION_RENDER_PACKET_DESCRIPTION description,
@@ -183,10 +181,8 @@ static void Check(void (*initialize)(PLATFORM *), const char *site, int has_proc
 }
 int main(void) {
   Check(InitializeStart, "start", 1);
-  Check(InitializeReset, "reset", 1);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   Check(InitializeStart, "start/non-gpuva", 0);
-  Check(InitializeReset, "reset/non-gpuva", 0);
 #endif
   puts("backend ownership identity: PASS");
   return 0;

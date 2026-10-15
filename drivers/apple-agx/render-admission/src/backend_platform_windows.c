@@ -225,6 +225,10 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ULONGLONG JobSubmitMs;
   ULONG LastFirmwareRecoveryMs, MaxFirmwareRecoveryMs;
   ULONG LongestJobMs, LongestJobFence, PublishedDeadlineExpiries;
+  /* G4-r3 (EXP1296): Wom1GpuFault and its opt-in FAULT_INFO read. */
+  ADMISSION_GPU_FAULT_RECEIPT GpuFault;
+  BOOLEAN GpuFaultUnpublished;
+  BOOLEAN ReadFaultInfo;
 } ADMISSION_PLATFORM_RUNTIME;
 
 /* 1 ms in 100-ns units (ExSetTimerResolution). */
@@ -2075,9 +2079,54 @@ static APPLE_AGX_BACKEND_BOOL AdmissionTransportReadU32(
  * work and continues with the queues. FW status layout (m1n1
  * InitData_FWStatus): halt_count +0x10, halted +0x20, resume +0x30. The
  * firmware-shared mapping is coherent (AdmissionTransportFlush is a barrier). */
+/* G4-r3 (EXP1296): the event's job, captured before the firmware is resumed
+ * (Asahi handle_timeout/handle_fault read FAULT_INFO, then recover()). The
+ * FAULT_INFO read is opt-in: it aborted under earlier mappings (EXP592,
+ * EXP671). Layout (Asahi regs.rs get_fault_info, G13): bit 0 valid, 1-3
+ * reason, 4 read, 7-8 level, 9-16 unit, 17-22 VM slot, 30+ address >> 6. */
+static VOID AdmissionGpuFaultCapture(ADMISSION_PLATFORM_RUNTIME *Runtime,
+    ULONG Fence, ULONG EventKind, const volatile ULONG *Status,
+    ADMISSION_GPU_FAULT_EVENT *Event) {
+  ADMISSION_CONTEXT *adapter = Runtime->Adapter;
+  KIRQL oldIrql;
+  RtlZeroMemory(Event, sizeof(*Event));
+  Event->EventKind = EventKind;
+  Event->Fence = Fence;
+  Event->SubmitToEventMs = Runtime->JobSubmitMs != 0ULL
+      ? (ULONG)(AdmissionPlatformNowMs() - Runtime->JobSubmitMs) : 0u;
+  Event->HaltCount = Status[0x10u / 4u];
+  Event->FaultInfo = ADMISSION_GPU_FAULT_INFO_NOT_READ;
+  KeAcquireSpinLock(&adapter->SchedulerLock, &oldIrql);
+  if (AdmissionRenderPacketState(&adapter->RenderPacket) ==
+          AdmissionRenderPacketActive &&
+      adapter->RenderPacket.Description.Fence == Fence) {
+    Event->ContextToken = adapter->RenderPacket.Description.ContextToken;
+    Event->Flags |= ADMISSION_GPU_FAULT_JOB_KNOWN;
+  }
+  KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  {
+    const ADMISSION_JOB_TIMING_SLOT *slot;
+    KeAcquireSpinLock(&Runtime->JobTimingLock, &oldIrql);
+    slot = AdmissionJobTimingFind(&Runtime->JobTiming, Fence);
+    if (slot != NULL)
+      Event->ProcessId = slot->ProcessId;
+    KeReleaseSpinLock(&Runtime->JobTimingLock, oldIrql);
+  }
+#endif
+  if (Runtime->ReadFaultInfo && Runtime->SgxBase != NULL) {
+    Event->FaultInfo = READ_REGISTER_ULONG64((volatile ULONG64 *)(
+        Runtime->SgxBase + ADMISSION_PLATFORM_SGX_FAULT_INFO_OFFSET));
+    Event->Flags |= ADMISSION_GPU_FAULT_INFO_READ;
+    if ((Event->FaultInfo & 1ULL) != 0ULL)
+      Event->Flags |= ADMISSION_GPU_FAULT_INFO_VALID;
+  }
+}
+
 static APPLE_AGX_BACKEND_BOOL AdmissionTransportRecover(
     void *Context, APPLE_AGX_BACKEND_U32 Fence, APPLE_AGX_BACKEND_U32 EventKind) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  ADMISSION_GPU_FAULT_EVENT event;
   volatile ULONG *status;
   ULONGLONG deadline;
   if (runtime == NULL || Fence == 0u ||
@@ -2087,10 +2136,15 @@ static APPLE_AGX_BACKEND_BOOL AdmissionTransportRecover(
   status = (volatile ULONG *)runtime->Initdata
       .DataObjects[AppleAgxInitdataMemoryFirmwareStatus].CpuAddress;
   if (status == NULL) return APPLE_AGX_BACKEND_FALSE;
+  AdmissionGpuFaultCapture(runtime, Fence, EventKind, status, &event);
   deadline = AdmissionPlatformNowMs() + 100u;
   KeMemoryBarrier();
   while (status[0x20u / 4u] == 0u) {
-    if (AdmissionPlatformNowMs() >= deadline) return APPLE_AGX_BACKEND_FALSE;
+    if (AdmissionPlatformNowMs() >= deadline) {
+      AdmissionGpuFaultReceiptRecord(&runtime->GpuFault, &event);
+      runtime->GpuFaultUnpublished = TRUE;
+      return APPLE_AGX_BACKEND_FALSE;
+    }
     KeStallExecutionProcessor(50u);
     KeMemoryBarrier();
   }
@@ -2098,6 +2152,9 @@ static APPLE_AGX_BACKEND_BOOL AdmissionTransportRecover(
   KeMemoryBarrier();
   status[0x30u / 4u] = 1u;
   KeMemoryBarrier();
+  event.Flags |= ADMISSION_GPU_FAULT_RESUMED;
+  AdmissionGpuFaultReceiptRecord(&runtime->GpuFault, &event);
+  runtime->GpuFaultUnpublished = TRUE;
   InterlockedIncrement(&runtime->FirmwareRecoveries);
   runtime->LastFirmwareRecoveryKind = EventKind;
   runtime->LastFirmwareRecoveryFence = Fence;
@@ -3512,6 +3569,50 @@ _Use_decl_annotations_ VOID AdmissionPlatformRuntimeSlotChanged(
     KeSetEvent(&runtime->SlotEvent, IO_NO_INCREMENT, FALSE);
 }
 
+/* PASSIVE_LEVEL, after a worker or a reset polled the provider. EXP1075
+ * receipt: {recoveries, last event kind, last fence}; G4-recovery adds {last
+ * and max submit-to-recovery ms, jobs past the KMD deadline, longest job ms,
+ * its fence}; G4-r3 adds Wom1GpuFault. */
+static VOID AdmissionPublishFirmwareRecovery(
+    ADMISSION_PLATFORM_RUNTIME *runtime) {
+  ADMISSION_CONTEXT *adapter = runtime->Adapter;
+  BOOLEAN recovery = runtime->FirmwareRecoveryUnpublished ||
+      runtime->Provider.QueueProvider.Runtime.DeadlineExpiries !=
+          runtime->PublishedDeadlineExpiries;
+  BOOLEAN fault = runtime->GpuFaultUnpublished;
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG value[8];
+  ADMISSION_GPU_FAULT_RECEIPT receipt;
+  if (!recovery && !fault)
+    return;
+  runtime->FirmwareRecoveryUnpublished = FALSE;
+  runtime->GpuFaultUnpublished = FALSE;
+  runtime->PublishedDeadlineExpiries =
+      runtime->Provider.QueueProvider.Runtime.DeadlineExpiries;
+  value[0] = (ULONG)InterlockedCompareExchange(&runtime->FirmwareRecoveries, 0, 0);
+  value[1] = runtime->LastFirmwareRecoveryKind;
+  value[2] = runtime->LastFirmwareRecoveryFence;
+  value[3] = runtime->LastFirmwareRecoveryMs;
+  value[4] = runtime->MaxFirmwareRecoveryMs;
+  value[5] = runtime->PublishedDeadlineExpiries;
+  value[6] = runtime->LongestJobMs;
+  value[7] = runtime->LongestJobFence;
+  receipt = runtime->GpuFault;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(adapter->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key)))
+    return;
+  RtlInitUnicodeString(&name, L"Wom1FirmwareRecovery");
+  if (recovery)
+    (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, value, sizeof(value));
+  RtlInitUnicodeString(&name, L"Wom1GpuFault");
+  if (fault)
+    (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &receipt,
+                        sizeof(receipt));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
 static VOID AdmissionPlatformWorker(
     _In_ PDEVICE_OBJECT DeviceObject, _In_opt_ PVOID Context) {
   ADMISSION_CONTEXT *adapter = Context;
@@ -4134,35 +4235,7 @@ static VOID AdmissionPlatformWorker(
     }
     runtime->JobSubmitMs = 0ULL;
   }
-  if (runtime->FirmwareRecoveryUnpublished ||
-      runtime->Provider.QueueProvider.Runtime.DeadlineExpiries !=
-          runtime->PublishedDeadlineExpiries) {
-    /* EXP1075 receipt: {recoveries, last event kind, last fence}; G4-recovery
-     * adds {last and max submit-to-recovery ms, jobs past the KMD deadline,
-     * longest job ms, its fence}. */
-    HANDLE key = NULL;
-    UNICODE_STRING name;
-    ULONG value[8];
-    runtime->FirmwareRecoveryUnpublished = FALSE;
-    runtime->PublishedDeadlineExpiries =
-        runtime->Provider.QueueProvider.Runtime.DeadlineExpiries;
-    value[0] = (ULONG)InterlockedCompareExchange(&runtime->FirmwareRecoveries, 0, 0);
-    value[1] = runtime->LastFirmwareRecoveryKind;
-    value[2] = runtime->LastFirmwareRecoveryFence;
-    value[3] = runtime->LastFirmwareRecoveryMs;
-    value[4] = runtime->MaxFirmwareRecoveryMs;
-    value[5] = runtime->PublishedDeadlineExpiries;
-    value[6] = runtime->LongestJobMs;
-    value[7] = runtime->LongestJobFence;
-    if (NT_SUCCESS(IoOpenDeviceRegistryKey(adapter->PhysicalDeviceObject,
-            PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
-      RtlInitUnicodeString(&name, L"Wom1FirmwareRecovery");
-      if (NT_SUCCESS(ZwSetValueKey(key, &name, 0u, REG_BINARY, value,
-                                   sizeof(value))))
-        (void)ZwFlushKey(key);
-      ZwClose(key);
-    }
-  }
+  AdmissionPublishFirmwareRecovery(runtime);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   AdmissionJobTimingExportWindows(runtime);
 #endif
@@ -4291,6 +4364,33 @@ static NTSTATUS AdmissionPlatformDestroy(
     Runtime->SgxBase = NULL;
   }
   return STATUS_SUCCESS;
+}
+
+/* G4-r3 (EXP1296): device value Wom1GpuFaultInfoRead = 1 enables the
+ * FAULT_INFO read at a firmware fault event (AdmissionGpuFaultCapture). */
+static BOOLEAN AdmissionPlatformFaultInfoReadEnabled(ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  BOOLEAN enabled = FALSE;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return FALSE;
+  RtlInitUnicodeString(&name, L"Wom1GpuFaultInfoRead");
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG) &&
+      *(const ULONG *)value->Data == 1u)
+    enabled = TRUE;
+  ZwClose(key);
+  return enabled;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
@@ -4591,6 +4691,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->RuntimeIo.Complete = AdmissionBackendComplete;
   runtime->RuntimeIo.Retire = AdmissionBackendRetire;
   AppleAgxCompletionTransactionInitialize(&runtime->Completion);
+  AdmissionGpuFaultReceiptInitialize(&runtime->GpuFault);
+  runtime->GpuFaultUnpublished = FALSE;
+  runtime->ReadFaultInfo = AdmissionPlatformFaultInfoReadEnabled(Context);
   KeInitializeEvent(&runtime->WorkIdle, NotificationEvent, TRUE);
   KeInitializeEvent(&runtime->SlotEvent, NotificationEvent, FALSE);
   InterlockedExchange(&runtime->WorkScheduled, 0);
@@ -4698,112 +4801,141 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStop(
   return STATUS_SUCCESS;
 }
 
-_Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeReset(
-    ADMISSION_CONTEXT *Context, APPLE_AGX_U32 *LastAbortedFence) {
+/* G4-r3 (EXP1296): the retained firmware cannot be stopped and restarted
+ * (EXP1241, EXP1278): the former reset stopped RTKit and then refused, a
+ * 0x116 on every TDR with a job active. Resetting keeps a new worker from
+ * starting and makes the running one leave its poll loop; this thread then
+ * polls the provider itself, so a worker that left early (SchedulerFaulted)
+ * cannot strand the job. The job leaves the active slot only through
+ * AdmissionBackendComplete: natural completion, or the firmware's drop after
+ * a Timeout/Fault event and resume (AdmissionTransportRecover). */
+_Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeQuiesceActive(
+    ADMISSION_CONTEXT *Context, ULONG Fence, ULONG TimeoutMs,
+    ADMISSION_GPU_RESET_RECEIPT *Receipt) {
   ADMISSION_PLATFORM_RUNTIME *runtime;
-  APPLE_AGX_U32 active;
-  NTSTATUS status = STATUS_SUCCESS;
-  KIRQL old_irql;
+  ADMISSION_GPU_RESET_QUIESCE outcome = AdmissionGpuResetQuiesceState;
+  LARGE_INTEGER interval;
+  ULONGLONG start;
+  ULONGLONG deadline;
+  NTSTATUS status;
+  BOOLEAN active;
+  KIRQL oldIrql;
 
-  if (Context == NULL || LastAbortedFence == NULL ||
+  if (Receipt != NULL)
+    Receipt->Quiesce = (ULONG)AdmissionGpuResetQuiesceState;
+  if (Context == NULL || Fence == 0u || TimeoutMs == 0u ||
       KeGetCurrentIrql() != PASSIVE_LEVEL)
     return STATUS_INVALID_PARAMETER;
-  *LastAbortedFence = 0u;
   runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
   if (runtime == NULL || !runtime->BackendStarted ||
       InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0 ||
       InterlockedCompareExchange(&runtime->Resetting, 1, 0) != 0)
     return STATUS_INVALID_DEVICE_STATE;
-  if (InterlockedCompareExchange(&runtime->WorkScheduled, 0, 0) != 0 ||
-      InterlockedCompareExchange(&runtime->WorkersActive, 0, 0) != 0)
-    KeWaitForSingleObject(&runtime->WorkIdle, Executive, KernelMode,
-                          FALSE, NULL);
-  KeAcquireSpinLock(&Context->SchedulerLock, &old_irql);
-  active = AppleAgxSchedulerActiveFence(&Context->Scheduler, 0u, 0u);
-  if (active == 0u ||
-      AdmissionRenderPacketState(&Context->RenderPacket) !=
-          AdmissionRenderPacketActive ||
-      Context->RenderPacket.Description.Fence != active) {
-    KeReleaseSpinLock(&Context->SchedulerLock, old_irql);
-    status = STATUS_INVALID_DEVICE_STATE;
+  start = AdmissionPlatformNowMs();
+  deadline = start + TimeoutMs;
+  interval.QuadPart = -10000LL * (LONGLONG)TimeoutMs;
+  if (KeWaitForSingleObject(&runtime->WorkIdle, Executive, KernelMode,
+                            FALSE, &interval) != STATUS_SUCCESS) {
+    outcome = AdmissionGpuResetQuiesceWorker;
+    status = STATUS_DEVICE_BUSY;
     goto Exit;
   }
-  KeReleaseSpinLock(&Context->SchedulerLock, old_irql);
-  *LastAbortedFence = active;
-  if (AppleAgxBackendRuntimeStop(&runtime->Backend) !=
-      AppleAgxBackendRuntimeResultOk) {
-    status = STATUS_DEVICE_HARDWARE_ERROR;
-    goto Exit;
-  }
-  runtime->BackendStarted = FALSE;
-  if (!AppleAgxPlatformProviderDestroy(&runtime->Provider)) {
-    status = STATUS_DEVICE_HARDWARE_ERROR;
-    goto Exit;
-  }
-  runtime->ProviderReady = FALSE;
-  if (!AdmissionBackendImageRestartQueueLifetime(&Context->BackendImage)) {
-    status = STATUS_INVALID_DEVICE_STATE;
-    goto Exit;
-  }
-
-  /* The stopped firmware lifetime must not donate its copied private prefix
-   * to the next boot. Rebuild only our owned graph before channel providers
-   * borrow any addresses; context63 and its physical owner are unchanged. */
-  if (runtime->RetainedPrepared || runtime->Context0Lease.Count || runtime->Rtkit.Running ||
-      AppleAgxInitdataMemoryDestroy(&runtime->Initdata) !=
-          AppleAgxInitdataMemoryResultOk ||
-      AppleAgxInitdataMemoryPrepareBroker(&runtime->Initdata, &runtime->MemoryIo,
-          &runtime->Snapshot) != AppleAgxInitdataMemoryResultOk) {
-    status = STATUS_DEVICE_HARDWARE_ERROR;
-    goto Exit;
-  }
-
-  AppleAgxBackendRuntimeInitialize(
-#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
-      &runtime->Backend, 1u);
-#else
-      &runtime->Backend, ADMISSION_MEMORY_UAT_CONTEXT);
+  for (;;) {
+    APPLE_AGX_BACKEND_U32 drained = 0u;
+    APPLE_AGX_BACKEND_U32 completed = 0u;
+    KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
+    active = AdmissionRenderPacketState(&Context->RenderPacket) ==
+                 AdmissionRenderPacketActive &&
+             Context->RenderPacket.Description.Fence == Fence &&
+             AppleAgxSchedulerActiveFence(&Context->Scheduler, 0u, 0u) == Fence;
+    KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
+    if (!active) {
+      outcome = AdmissionGpuResetQuiesceEnded;
+      status = STATUS_SUCCESS;
+      break;
+    }
+    if (runtime->Backend.Phase != AppleAgxBackendRuntimeSubmitted) {
+      outcome = AdmissionGpuResetQuiesceBackend;
+      status = STATUS_DEVICE_HARDWARE_ERROR;
+      break;
+    }
+    if (AdmissionPlatformNowMs() >= deadline) {
+      outcome = AdmissionGpuResetQuiesceTimeout;
+      status = STATUS_IO_TIMEOUT;
+      break;
+    }
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    {
+      APPLE_AGX_RTKIT_U32 notifications = 0u;
+      if (AppleAgxRtkitSessionDrainRuntime(&runtime->Rtkit, &runtime->AscIo,
+              APPLE_AGX_RTKIT_RUNTIME_DRAIN_LIMIT, &notifications) !=
+          AppleAgxRtkitSessionResultOk) {
+        outcome = AdmissionGpuResetQuiescePoll;
+        status = STATUS_DEVICE_HARDWARE_ERROR;
+        break;
+      }
+    }
 #endif
-  runtime->ProviderConfig.Runtime = &runtime->Backend;
-  RtlZeroMemory(&runtime->PlatformIo, sizeof(runtime->PlatformIo));
-  if (!AppleAgxPlatformProviderInitialize(
-          &runtime->Provider, &runtime->ProviderConfig,
-          &runtime->PlatformIo)) {
-    status = STATUS_DEVICE_CONFIGURATION_ERROR;
-    goto Exit;
+    if (!AppleAgxPlatformProviderPoll(
+            &runtime->Provider, 64u, &drained, &completed)) {
+      outcome = AdmissionGpuResetQuiescePoll;
+      status = STATUS_DEVICE_HARDWARE_ERROR;
+      break;
+    }
+    if (runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted) {
+      interval.QuadPart = -10000LL;
+      (void)KeDelayExecutionThread(KernelMode, FALSE, &interval);
+    }
   }
-  runtime->ProviderReady = TRUE;
-  runtime->RuntimeIo.Firmware = runtime->PlatformIo.Firmware;
-  AppleAgxCompletionTransactionInitialize(&runtime->Completion);
-  AdmissionDynamicOverlayStateInitialize(&runtime->DynamicOverlayState);
-  RtlZeroMemory(&runtime->DynamicOverlayPlan,
-                sizeof(runtime->DynamicOverlayPlan));
-  runtime->DynamicJob = NULL;
-  runtime->DynamicStorage = NULL;
-  runtime->DynamicStorageBytes = 0u;
-#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
-  runtime->NativeCommandHash=0;
-  RtlZeroMemory(&runtime->NativeBindings,sizeof(runtime->NativeBindings));
-  RtlZeroMemory(&runtime->NativeGraphReceipt,sizeof(runtime->NativeGraphReceipt));
-#endif
-  runtime->CompletionContext = NULL;
-  RtlZeroMemory(&runtime->Progress, sizeof(runtime->Progress));
-  runtime->ProgressValid = FALSE;
-  InterlockedExchange64(&runtime->LastProgressMs, 0);
-  if (AppleAgxBackendRuntimeStart(
-          &runtime->Backend, &runtime->RuntimeIo) !=
-      AppleAgxBackendRuntimeResultOk) {
-    status = STATUS_DEVICE_HARDWARE_ERROR;
-    goto Exit;
-  }
-  runtime->BackendStarted = TRUE;
-  InterlockedExchange(&Context->SchedulerFaulted, 0);
-
 Exit:
+  if (Receipt != NULL) {
+    Receipt->Quiesce = (ULONG)outcome;
+    Receipt->WaitMs = (ULONG)(AdmissionPlatformNowMs() - start);
+    Receipt->FirmwareRecoveries =
+        (ULONG)InterlockedCompareExchange(&runtime->FirmwareRecoveries, 0, 0);
+  }
+  /* Recoveries this thread ran are published like the worker's; a worker
+   * that did not leave still owns the provider and its receipts. */
+  if (outcome != AdmissionGpuResetQuiesceWorker)
+    AdmissionPublishFirmwareRecovery(runtime);
   InterlockedExchange(&runtime->Resetting, 0);
-  if (!NT_SUCCESS(status))
-    InterlockedCompareExchange(&Context->SchedulerFaulted, 0x40000L | __LINE__, 0);
   return status;
+}
+
+_Use_decl_annotations_ VOID AdmissionPlatformRuntimeResetState(
+    ADMISSION_CONTEXT *Context, ADMISSION_GPU_RESET_RECEIPT *Receipt) {
+  ADMISSION_PLATFORM_RUNTIME *runtime;
+  const volatile ULONG *status;
+  if (Context == NULL || Receipt == NULL)
+    return;
+  runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
+  if (runtime == NULL)
+    return;
+  Receipt->BackendPhase = (ULONG)runtime->Backend.Phase;
+  Receipt->ProviderPhase = (ULONG)runtime->Provider.QueueProvider.Phase;
+  Receipt->LastPollGuard = (ULONG)runtime->Provider.LastPollGuard;
+  Receipt->WorkerBusy =
+      (InterlockedCompareExchange(&runtime->WorkScheduled, 0, 0) != 0 ? 1u : 0u) |
+      (InterlockedCompareExchange(&runtime->WorkersActive, 0, 0) != 0 ? 2u : 0u);
+  status = (const volatile ULONG *)runtime->Initdata
+      .DataObjects[AppleAgxInitdataMemoryFirmwareStatus].CpuAddress;
+  Receipt->Halted = status != NULL ? status[0x20u / 4u] : MAXULONG;
+  Receipt->FirmwareRecoveries =
+      (ULONG)InterlockedCompareExchange(&runtime->FirmwareRecoveries, 0, 0);
+}
+
+_Use_decl_annotations_ ULONG AdmissionPlatformRuntimeDebugState(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context != NULL
+      ? (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime : NULL;
+  if (runtime == NULL)
+    return MAXULONG;
+  return ((ULONG)runtime->Backend.Phase & 0xffu) |
+      (((ULONG)runtime->Provider.QueueProvider.Phase & 0xffu) << 8) |
+      (((ULONG)runtime->Provider.LastPollGuard & 0xffu) << 16) |
+      (InterlockedCompareExchange(&runtime->WorkScheduled, 0, 0) != 0 ? 1u << 24 : 0u) |
+      (InterlockedCompareExchange(&runtime->Resetting, 0, 0) != 0 ? 1u << 25 : 0u) |
+      (InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0 ? 1u << 26 : 0u);
 }
 
 _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeResponsive(

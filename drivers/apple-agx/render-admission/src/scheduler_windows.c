@@ -26,9 +26,17 @@ typedef struct _ADMISSION_SCHEDULER_DEBUG_SNAPSHOT {
   ULONG PreemptionPhase;
   ULONG ContextCount;
   ULONG Flags;
+  /* Version 2 (G4-r3): the EXP1296 minidump blackbox held only the Faulted
+   * flag; the code names its setter (file tag << 16 | line). */
+  ULONG SchedulerFaultedCode;
+  ULONG RenderPacketState;
+  ULONG RenderPacketFence;
+  ULONG PlatformState; /* AdmissionPlatformRuntimeDebugState */
+  ULONG Resets, ResetsSucceeded;
 } ADMISSION_SCHEDULER_DEBUG_SNAPSHOT;
 
-#define ADMISSION_SCHEDULER_DEBUG_VERSION 1u
+#define ADMISSION_SCHEDULER_DEBUG_VERSION 2u
+#define ADMISSION_SCHEDULER_DEBUG_V1_SIZE (8u * sizeof(ULONG))
 #define ADMISSION_SCHEDULER_DEBUG_FAULTED (1u << 0)
 #define ADMISSION_SCHEDULER_DEBUG_PAGING_PENDING (1u << 1)
 
@@ -458,6 +466,40 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryEngineStatus(
   return STATUS_SUCCESS;
 }
 
+/* G4-r3 (EXP1296 0x116): no host operation stops a running AGX job. The
+ * retained firmware ends hung or faulting work itself (Timeout/Fault event,
+ * halt) and drops it when resumed (Asahi gpu.rs handle_timeout, recover), and
+ * an RTKit stop cannot be undone on it. So the reset waits, bounded, for the
+ * firmware to end the active job through the ordinary completion path; that
+ * end is the proof that the GPU no longer accesses the job's memory, and the
+ * job's fence becomes LastAbortedFenceId (Microsoft: TDR in Windows 8 and
+ * later, packet completed before the engine reset). The owning context is
+ * faulted first; dispatch stays frozen (SchedulerFaulted) until the reset
+ * succeeds. */
+static NTSTATUS AdmissionResetQuiesceActive(ADMISSION_CONTEXT *Context) {
+  ULONG fence;
+  KIRQL oldIrql;
+  KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
+  if (AdmissionRenderPacketState(&Context->RenderPacket) !=
+      AdmissionRenderPacketActive) {
+    KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
+    return STATUS_SUCCESS;
+  }
+  fence = Context->RenderPacket.Description.Fence;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  {
+    ADMISSION_RENDER_CONTEXT *owner = (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
+        Context->RenderPacket.Description.ContextToken;
+    if (owner != NULL && owner->Object.FenceOutstanding == fence)
+      owner->GpuvaG3Poisoned = TRUE;
+  }
+#endif
+  InterlockedCompareExchange(&Context->SchedulerFaulted, 0x10000L | __LINE__, 0);
+  KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
+  return AdmissionPlatformRuntimeQuiesceActive(
+      Context, fence, ADMISSION_RESET_QUIESCE_TIMEOUT_MS, &Context->GpuReset);
+}
+
 /* Lock-bearing code stays in .text even when the PASSIVE wrapper is pageable.
  * noinline prevents optimization from moving these sections back into PAGE. */
 static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
@@ -475,6 +517,8 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
       ResetEngine->EngineOrdinal != ADMISSION_SCHEDULER_ENGINE ||
       InterlockedCompareExchange(&context->SchedulerInitialized, 0, 0) == 0)
     return STATUS_INVALID_PARAMETER;
+  if (!NT_SUCCESS(AdmissionResetQuiesceActive(context)))
+    return STATUS_DEVICE_HARDWARE_ERROR;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   {
     BOOLEAN privateReset = AdmissionGpuvaG3PrivateReset(context);
@@ -494,40 +538,11 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
   KeAcquireSpinLockAtDpcLevel(&context->SchedulerLock);
   packetState = AdmissionRenderPacketState(&context->RenderPacket);
   if (packetState == AdmissionRenderPacketActive) {
-#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-    packetContext=(ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
-        context->RenderPacket.Description.ContextToken;
-    packetFence=context->RenderPacket.Description.Fence;
-    if (packetContext != NULL &&
-        ((ULONG)InterlockedCompareExchange(&packetContext->GpuvaG3PrivateFence,0,0)==packetFence ||
-         (ULONG)InterlockedCompareExchange(&packetContext->GpuvaG3PrivateFence2,0,0)==packetFence)) {
-      AdmissionGpuvaG3PrivateCancel(packetContext,packetFence,TRUE);
-      InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
-      KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
-      KeReleaseSpinLock(&context->PagingLock,oldIrql);
-      return STATUS_DEVICE_HARDWARE_ERROR;
-    }
-#endif
+    /* Activated after the quiescence proof above: nothing proves its end. */
     InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
     KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
     KeReleaseSpinLock(&context->PagingLock, oldIrql);
-    if (!NT_SUCCESS(AdmissionPlatformRuntimeReset(
-            context, &lastAborted)))
-      return STATUS_DEVICE_HARDWARE_ERROR;
-    KeAcquireSpinLock(&context->PagingLock, &oldIrql);
-    KeAcquireSpinLockAtDpcLevel(&context->SchedulerLock);
-    AdmissionCpuQueueReleaseContextsLocked(context);
-#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-    AdmissionG4PendingDropLocked(context, FALSE);
-#endif
-    context->CpuQueueHead = context->CpuQueueCount = context->DispatchedFence = 0u;
-    InterlockedExchange(&context->RenderDpcFence, 0);
-    InterlockedExchange(&context->SchedulerFaulted, 0);
-    AdmissionPagingUpdateIdleLocked(context);
-    KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
-    KeReleaseSpinLock(&context->PagingLock, oldIrql);
-    ResetEngine->LastAbortedFenceId = lastAborted;
-    return STATUS_SUCCESS;
+    return STATUS_DEVICE_HARDWARE_ERROR;
   }
   if (packetState == AdmissionRenderPacketQueued) {
     packetFence = context->RenderPacket.Description.Fence;
@@ -579,18 +594,64 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
   return STATUS_SUCCESS;
 }
 
-_Use_decl_annotations_ NTSTATUS AdmissionDdiResetEngine(
-    HANDLE Adapter, DXGKARG_RESETENGINE *ResetEngine) {
+/* G4-r3 (EXP1296): Wom1GpuReset records every reset, the state it found and
+ * its result; flushed before a failed adapter reset bugchecks. */
+static __declspec(noinline) NTSTATUS AdmissionResetEngineRecorded(
+    HANDLE Adapter, DXGKARG_RESETENGINE *ResetEngine, ULONG Entry) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
+  ADMISSION_GPU_RESET_RECEIPT *receipt;
+  NTSTATUS status;
+  KIRQL oldIrql;
+  if (context == NULL)
+    return AdmissionResetEngineInternal(Adapter, ResetEngine);
+  receipt = &context->GpuReset;
+  receipt->Version = ADMISSION_GPU_RESET_RECEIPT_VERSION;
+  receipt->Bytes = sizeof(*receipt);
+  ++receipt->Resets;
+  receipt->Entry = Entry;
+  receipt->SchedulerFaulted =
+      (ULONG)InterlockedCompareExchange(&context->SchedulerFaulted, 0, 0);
+  KeAcquireSpinLock(&context->SchedulerLock, &oldIrql);
+  receipt->PacketState =
+      (ULONG)AdmissionRenderPacketState(&context->RenderPacket);
+  receipt->PacketFence = context->RenderPacket.Description.Fence;
+  receipt->ContextToken = context->RenderPacket.Description.ContextToken;
+  receipt->ActiveFence = context->Scheduler.ActiveFence;
+  receipt->CompletedFence = context->Scheduler.CompletedFence;
+  receipt->LastSubmittedFence = context->Scheduler.LastSubmittedFence;
+  receipt->PreemptionPhase = (ULONG)context->Scheduler.PreemptionPhase;
+  KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
+  receipt->Quiesce = (ULONG)AdmissionGpuResetQuiesceNone;
+  receipt->WaitMs = 0u;
+  AdmissionPlatformRuntimeResetState(context, receipt);
+  status = AdmissionResetEngineInternal(Adapter, ResetEngine);
+  receipt->Status = (ULONG)status;
+  receipt->LastAbortedFence =
+      NT_SUCCESS(status) ? ResetEngine->LastAbortedFenceId : 0u;
+  if (NT_SUCCESS(status))
+    ++receipt->Succeeded;
+  AdmissionRecordGpuReset(context);
+  return status;
+}
+
+static NTSTATUS AdmissionResetEngineEntry(
+    HANDLE Adapter, DXGKARG_RESETENGINE *ResetEngine, ULONG Entry) {
   DXGKARG_RESETENGINE local;
   NTSTATUS status;
-  PAGED_CODE();
   if (ResetEngine == NULL)
     return STATUS_INVALID_PARAMETER;
   local = *ResetEngine;
-  status = AdmissionResetEngineInternal(Adapter, &local);
+  status = AdmissionResetEngineRecorded(Adapter, &local, Entry);
   if (NT_SUCCESS(status))
     ResetEngine->LastAbortedFenceId = local.LastAbortedFenceId;
   return status;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionDdiResetEngine(
+    HANDLE Adapter, DXGKARG_RESETENGINE *ResetEngine) {
+  PAGED_CODE();
+  return AdmissionResetEngineEntry(Adapter, ResetEngine,
+                                   ADMISSION_GPU_RESET_ENGINE);
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiResetFromTimeout(HANDLE Adapter) {
@@ -607,7 +668,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiResetFromTimeout(HANDLE Adapter) {
    * remain owned by the retained display layer. Restart resumes that phase. */
   status = AdmissionScanoutSetTimelinePaused(context, TRUE);
   if (NT_SUCCESS(status))
-    status = AdmissionDdiResetEngine(context, &reset);
+    status = AdmissionResetEngineEntry(context, &reset,
+                                       ADMISSION_GPU_RESET_ADAPTER);
+  if (NT_SUCCESS(status)) {
+    KIRQL oldIrql;
+    /* Microsoft (TDR in Windows 8 and later): an adapter-wide reset advances
+     * the last completed fence to the last submitted fence at the reset. */
+    KeAcquireSpinLock(&context->SchedulerLock, &oldIrql);
+    context->Scheduler.CompletedFence = context->Scheduler.LastSubmittedFence;
+    KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
+  }
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   AdmissionDwmFrameRecordTdr(context, status, TRUE);
 #endif
@@ -635,7 +705,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCollectDbgInfo(
   if (CollectDbgInfo->BufferSize == 0u)
     return STATUS_SUCCESS;
   RtlZeroMemory(CollectDbgInfo->pBuffer, CollectDbgInfo->BufferSize);
-  if (CollectDbgInfo->BufferSize < sizeof(snapshot))
+  /* A buffer that held version 1 keeps receiving its prefix. */
+  if (CollectDbgInfo->BufferSize < ADMISSION_SCHEDULER_DEBUG_V1_SIZE)
     return STATUS_BUFFER_TOO_SMALL;
   RtlZeroMemory(&snapshot, sizeof(snapshot));
   snapshot.Version = ADMISSION_SCHEDULER_DEBUG_VERSION;
@@ -646,12 +717,22 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCollectDbgInfo(
   snapshot.ActiveFence = context->Scheduler.ActiveFence;
   snapshot.PreemptionPhase = context->Scheduler.PreemptionPhase;
   snapshot.ContextCount = context->Scheduler.ContextCount;
+  snapshot.RenderPacketState =
+      (ULONG)AdmissionRenderPacketState(&context->RenderPacket);
+  snapshot.RenderPacketFence = context->RenderPacket.Description.Fence;
   KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
-  if (InterlockedCompareExchange(&context->SchedulerFaulted, 0, 0) != 0)
+  snapshot.SchedulerFaultedCode =
+      (ULONG)InterlockedCompareExchange(&context->SchedulerFaulted, 0, 0);
+  snapshot.PlatformState = AdmissionPlatformRuntimeDebugState(context);
+  snapshot.Resets = context->GpuReset.Resets;
+  snapshot.ResetsSucceeded = context->GpuReset.Succeeded;
+  if (snapshot.SchedulerFaultedCode != 0u)
     snapshot.Flags |= ADMISSION_SCHEDULER_DEBUG_FAULTED;
   if (InterlockedCompareExchange(&context->PagingPending, 0, 0) != 0)
     snapshot.Flags |= ADMISSION_SCHEDULER_DEBUG_PAGING_PENDING;
-  RtlCopyMemory(CollectDbgInfo->pBuffer, &snapshot, sizeof(snapshot));
+  RtlCopyMemory(CollectDbgInfo->pBuffer, &snapshot,
+                CollectDbgInfo->BufferSize < sizeof(snapshot)
+                    ? CollectDbgInfo->BufferSize : sizeof(snapshot));
   if (CollectDbgInfo->pExtension != NULL) {
     RtlZeroMemory(CollectDbgInfo->pExtension,
                   sizeof(*CollectDbgInfo->pExtension));

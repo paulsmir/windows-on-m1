@@ -46,6 +46,7 @@
 #include "render_completed_output.h"
 #include "render_qualification.h"
 #include "render_output_queue.h"
+#include "render_gpu_fault.h"
 #include "apple_agx_wddm_feature_contract.h"
 #include "apple_agx_scheduler.h"
 #include "apple_agx_platform_provider.h"
@@ -785,6 +786,9 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG RenderDpcFence;
   ULONG Win32BootGeneration;
   volatile LONG FeatureReadyMask;
+  /* G4-r3 (EXP1296): Wom1GpuReset; written by the reset thread only
+   * (first-level synchronization). */
+  ADMISSION_GPU_RESET_RECEIPT GpuReset;
 } ADMISSION_CONTEXT;
 
 typedef struct _ADMISSION_DEVICE {
@@ -1869,9 +1873,25 @@ VOID AdmissionJobTimingStartWindows(ADMISSION_CONTEXT *Adapter,
     ADMISSION_RENDER_CONTEXT *RenderContext, ULONG ProcessId,
     ULONG Fence, ULONG DmaBytes);
 #endif
-NTSTATUS AdmissionPlatformRuntimeReset(
-    _Inout_ ADMISSION_CONTEXT *Context,
-    _Out_ APPLE_AGX_U32 *LastAbortedFence);
+/* G4-r3 (EXP1296): bound of the reset's wait for the firmware to end the
+ * active job; DxgkDdiResetFromTimeout repeats it after a failed engine reset. */
+#define ADMISSION_RESET_QUIESCE_TIMEOUT_MS 1000u
+/* PASSIVE_LEVEL. STATUS_SUCCESS once the job with Fence has left the active
+ * slot through the backend completion path (natural completion or firmware
+ * drop); never stops RTKit. Fails when the bound passes, the worker does not
+ * leave, or the provider cannot be polled. */
+NTSTATUS AdmissionPlatformRuntimeQuiesceActive(
+    _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONG Fence,
+    _In_ ULONG TimeoutMs, _Inout_opt_ ADMISSION_GPU_RESET_RECEIPT *Receipt);
+/* Any IRQL, no locks: the platform half of Wom1GpuReset (backend/provider
+ * phases, worker, firmware halted flag, recoveries). */
+VOID AdmissionPlatformRuntimeResetState(_In_ ADMISSION_CONTEXT *Context,
+    _Inout_ ADMISSION_GPU_RESET_RECEIPT *Receipt);
+/* Any IRQL, no locks: backend phase | provider phase << 8 | last poll guard
+ * << 16 | WorkScheduled << 24 | Resetting << 25 | Stopping << 26. */
+ULONG AdmissionPlatformRuntimeDebugState(_In_ ADMISSION_CONTEXT *Context);
+/* G4-r3 (EXP1296): Wom1GpuReset (PASSIVE_LEVEL, flushed). */
+void AdmissionRecordGpuReset(_In_opt_ ADMISSION_CONTEXT *Context);
 BOOLEAN AdmissionPlatformRuntimeResponsive(
     _Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionWin32SnapshotRenderCommand(

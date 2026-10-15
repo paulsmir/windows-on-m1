@@ -152,6 +152,7 @@
     <ClCompile Include="src\render_gdi_receipt.c" />
     <ClCompile Include="src\render_call_correlation.c" />
     <ClCompile Include="src\render_job_timing.c" />
+    <ClCompile Include="src\render_gpu_fault.c" />
     <ClCompile Include="src\render_wow64.c" />
     <ClCompile Include="src\render_call_correlation_windows.c" />
     <ClCompile Include="src\gdi_receipt_windows.c" />
@@ -237,6 +238,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\render_admission.h" />
+    <ClInclude Include="include\render_gpu_fault.h" />
     <ClInclude Include="include\render_win32_transport.h" />
     <ClInclude Include="include\apple_agx_dynamic_job.h" />
     <ClInclude Include="include\render_dynamic_overlay.h" />

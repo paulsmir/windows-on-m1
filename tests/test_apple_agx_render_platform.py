@@ -123,23 +123,26 @@ class AppleAgxRenderPlatformTests(unittest.TestCase):
         for irq in range(880, 889):
             self.assertNotIn(str(irq), source)
 
-    def test_per_engine_tdr_quiesces_retires_and_restarts_same_backend(self):
+    def test_per_engine_tdr_waits_for_the_firmware_without_rtkit_stop(self):
+        # G4-r3 (EXP1296): the retained firmware cannot be stopped and
+        # restarted, so the reset proves quiescence by the job's own end.
         platform = (RENDER / "src" / "backend_platform_windows.c").read_text()
         scheduler = (RENDER / "src" / "scheduler_windows.c").read_text()
 
-        self.assertIn("AdmissionPlatformRuntimeReset", scheduler)
+        self.assertIn("AdmissionPlatformRuntimeQuiesceActive", scheduler)
         self.assertIn("AdmissionPlatformRuntimeResponsive", scheduler)
-        self.assertIn("AppleAgxBackendRuntimeStop", platform)
-        self.assertIn("AppleAgxPlatformProviderDestroy", platform)
-        self.assertIn("AppleAgxPlatformProviderInitialize", platform)
-        self.assertIn("AppleAgxBackendRuntimeStart", platform)
-        self.assertIn("AdmissionBackendRetire", platform)
-        self.assertIn("runtime->Backend.QueuesQuiesced", platform)
+        self.assertNotRegex(scheduler + platform, r"AdmissionPlatformRuntimeReset\(")
+        quiesce = platform[platform.index(
+            "NTSTATUS AdmissionPlatformRuntimeQuiesceActive("):platform.index(
+            "BOOLEAN AdmissionPlatformRuntimeResponsive(")]
+        for stop in ("AppleAgxRtkitSessionStop", "AppleAgxBackendRuntimeStop",
+                     "AppleAgxPlatformProviderDestroy", "Queues.Stop"):
+            self.assertNotIn(stop, quiesce)
+        self.assertIn("AppleAgxPlatformProviderPoll", quiesce)
         active = scheduler[scheduler.index(
             "if (packetState == AdmissionRenderPacketActive)"):]
         self.assertNotIn("return STATUS_DEVICE_BUSY", active.split(
             "if (packetState == AdmissionRenderPacketQueued)")[0])
-
 
 if __name__ == "__main__":
     unittest.main()
