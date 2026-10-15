@@ -27,9 +27,10 @@ static DWORD WINAPI watchdog(void *unused) {
   } }
 }
 static const char vs_hlsl[] =
+  /* On the render target, the left triangle is clockwise; the right is counter-clockwise. */
   "float4 main(uint id : SV_VertexID) : SV_Position {\n"
-  "  float2 p[6] = { float2(-0.9,-0.7), float2(-0.1,-0.7), float2(-0.5,0.7),\n"
-  "                  float2(0.1,-0.7), float2(0.5,0.7), float2(0.9,-0.7) };\n"
+  "  float2 p[6] = { float2(-0.9,-0.7), float2(-0.5,0.7), float2(-0.1,-0.7),\n"
+  "                  float2(0.1,-0.7), float2(0.9,-0.7), float2(0.5,0.7) };\n"
   "  return float4(p[id],0,1); }\n";
 static const char ps_hlsl[] =
   "float4 main(float4 p : SV_Position, bool f : SV_IsFrontFace) : SV_Target {\n"
