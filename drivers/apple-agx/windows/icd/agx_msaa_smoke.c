@@ -18,8 +18,12 @@
  * The optional fifth argument also accepts full, mask1, mask5, sampleindex,
  * or copyinit. Those modes draw a full-screen triangle and print centre/edge
  * samples; copyinit copies a blue multisampled pattern texture before drawing.
+ * EXP1301 (D3D-G5): nodepth draws the full-screen triangle with no depth
+ * buffer bound, depthoff with the 4x depth buffer bound and the depth test
+ * off: together with full they separate a failing depth test, a broken
+ * pass with a multisampled depth attachment, and the colour path.
  * Usage: agx_msaa_smoke.exe <out.txt> [2|4] [iterations] [rgba|bgra]
- *                                   [samples|full|mask1|mask5|sampleindex|copyinit] */
+ *                                   [samples|full|mask1|mask5|sampleindex|copyinit|nodepth|depthoff] */
 #define COBJMACROS
 #define INITGUID
 #include <windows.h>
@@ -162,7 +166,7 @@ int main(int argc, char **argv) {
   int iterations, bad = 0;
 
   if (argc < 2) {
-    printf("usage: agx_msaa_smoke.exe <out.txt> [2|4] [iterations] [rgba|bgra] [samples|full|mask1|mask5|sampleindex|copyinit]\n");
+    printf("usage: agx_msaa_smoke.exe <out.txt> [2|4] [iterations] [rgba|bgra] [samples|full|mask1|mask5|sampleindex|copyinit|nodepth|depthoff]\n");
     return 2;
   }
   samples = argc > 2 && atoi(argv[2]) == 2 ? 2u : 4u;
@@ -174,6 +178,8 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[5], "mask5")) mode = 3;
     else if (!strcmp(argv[5], "sampleindex")) mode = 4;
     else if (!strcmp(argv[5], "copyinit")) mode = 5;
+    else if (!strcmp(argv[5], "nodepth")) mode = 6;
+    else if (!strcmp(argv[5], "depthoff")) mode = 7;
     else if (strcmp(argv[5], "samples")) { printf("unknown mode: %s\n", argv[5]); return 2; }
   }
   probe = argc > 5 && (!strcmp(argv[5], "samples") || mode);
@@ -350,6 +356,8 @@ int main(int argc, char **argv) {
     }
     ID3D11DeviceContext_ClearDepthStencilView(ctx, dsv, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL,
                                               1.0f, 0);
+    if (mode == 6) ID3D11DeviceContext_OMSetRenderTargets(ctx, 1, &rtv, NULL);
+    if (mode == 7) ID3D11DeviceContext_OMSetDepthStencilState(ctx, NULL, 0);
     if (mode) {
       if (masked_blend) ID3D11DeviceContext_OMSetBlendState(ctx, masked_blend, NULL,
                                                               mode == 2 ? 0x1u : 0x5u);
@@ -360,6 +368,8 @@ int main(int argc, char **argv) {
       if (ps_per_sample) ID3D11DeviceContext_PSSetShader(ctx, ps, NULL, 0);
       ID3D11DeviceContext_VSSetShader(ctx, vs, NULL, 0);
       if (masked_blend) ID3D11DeviceContext_OMSetBlendState(ctx, NULL, NULL, 0xffffffffu);
+      if (mode == 6) ID3D11DeviceContext_OMSetRenderTargets(ctx, 1, &rtv, dsv);
+      if (mode == 7) ID3D11DeviceContext_OMSetDepthStencilState(ctx, less, 0);
     } else if (!draw(1, 0.5f, 0xff00ff00u) || !draw(0, 0.6f, 0xff0000ffu)) return 1;
     ID3D11DeviceContext_ResolveSubresource(ctx, (ID3D11Resource *)resolved, 0,
                                            (ID3D11Resource *)msaa, 0,
