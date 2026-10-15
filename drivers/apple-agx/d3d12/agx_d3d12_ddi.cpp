@@ -2,6 +2,7 @@
 #include <windows.h>
 /* d3dkmddi.h expects NTSTATUS, which user-mode windows.h does not define. */
 typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
+#pragma warning(disable : 4201)
 #include <d3d12umddi.h>
 #include <type_traits>
 
