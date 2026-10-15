@@ -1,6 +1,25 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-15T07:53Z (read this first)
+## Current as of 2026-10-15T08:41Z (read this first)
+
+Installed: PACKAGE1290 (D3D FL10_0; the next pipeline's rec1290h rollback
+removes it). CS 46.6 fps, DWM faults 0; every earlier smoke unchanged with
+the D3D-G10a/b generality (EXP1290).
+- MSAA reporting SOLVED: the runtime creates devices under the cast-family
+  policies (0x10, 0x20) and the screen caps probe (0x40).
+- EXP1290 defects, fixed offline (EXP1291 candidate): every 4x render was
+  refused at KMD submit branch 9 (the scene ACQUIRE records 1 sample and
+  AdmissionG4PrivateGeometry compared it; scene storage is sample
+  independent) -> 44682cf6; Map of a staging texture outside the bring-up
+  format list removed the device (format matrix stopped after its first
+  format) -> bfd3fed7.
+- EXP1291 = the two fixes + adjacency (gs_smoke2 adj), statistics
+  (stats_smoke), VS-only SO (so_smoke2 v): newexp-kmd1291.sh, closure 041,
+  UMD32 out20.
+- Pre-existing offline failures (not this work): test_g3_vidmm_replay (stale
+  shim, 44), test_g4_primary_import_alignment, test_g4_r105_open_normalization.
+
+## Current as of 2026-10-15T07:53Z
 
 Installed: PACKAGE1289 (D3D FL10_0; MSAA reporting off by default; the next
 pipeline's rec1289h rollback removes it). CS 46.6 fps, DWM faults 0.
