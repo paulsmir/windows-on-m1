@@ -4698,111 +4698,82 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStop(
   return STATUS_SUCCESS;
 }
 
-_Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeReset(
-    ADMISSION_CONTEXT *Context, APPLE_AGX_U32 *LastAbortedFence) {
+/* G4-r3 (EXP1296): the retained firmware cannot be stopped and restarted
+ * (EXP1241, EXP1278): the former reset stopped RTKit and then refused, a
+ * 0x116 on every TDR with a job active. Resetting keeps a new worker from
+ * starting and makes the running one leave its poll loop; this thread then
+ * polls the provider itself, so a worker that left early (SchedulerFaulted)
+ * cannot strand the job. The job leaves the active slot only through
+ * AdmissionBackendComplete: natural completion, or the firmware's drop after
+ * a Timeout/Fault event and resume (AdmissionTransportRecover). */
+_Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeQuiesceActive(
+    ADMISSION_CONTEXT *Context, ULONG Fence, ULONG TimeoutMs) {
   ADMISSION_PLATFORM_RUNTIME *runtime;
-  APPLE_AGX_U32 active;
-  NTSTATUS status = STATUS_SUCCESS;
-  KIRQL old_irql;
+  LARGE_INTEGER interval;
+  ULONGLONG deadline;
+  NTSTATUS status;
+  BOOLEAN active;
+  KIRQL oldIrql;
 
-  if (Context == NULL || LastAbortedFence == NULL ||
+  if (Context == NULL || Fence == 0u || TimeoutMs == 0u ||
       KeGetCurrentIrql() != PASSIVE_LEVEL)
     return STATUS_INVALID_PARAMETER;
-  *LastAbortedFence = 0u;
   runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
   if (runtime == NULL || !runtime->BackendStarted ||
       InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0 ||
       InterlockedCompareExchange(&runtime->Resetting, 1, 0) != 0)
     return STATUS_INVALID_DEVICE_STATE;
-  if (InterlockedCompareExchange(&runtime->WorkScheduled, 0, 0) != 0 ||
-      InterlockedCompareExchange(&runtime->WorkersActive, 0, 0) != 0)
-    KeWaitForSingleObject(&runtime->WorkIdle, Executive, KernelMode,
-                          FALSE, NULL);
-  KeAcquireSpinLock(&Context->SchedulerLock, &old_irql);
-  active = AppleAgxSchedulerActiveFence(&Context->Scheduler, 0u, 0u);
-  if (active == 0u ||
-      AdmissionRenderPacketState(&Context->RenderPacket) !=
-          AdmissionRenderPacketActive ||
-      Context->RenderPacket.Description.Fence != active) {
-    KeReleaseSpinLock(&Context->SchedulerLock, old_irql);
-    status = STATUS_INVALID_DEVICE_STATE;
+  deadline = AdmissionPlatformNowMs() + TimeoutMs;
+  interval.QuadPart = -10000LL * (LONGLONG)TimeoutMs;
+  if (KeWaitForSingleObject(&runtime->WorkIdle, Executive, KernelMode,
+                            FALSE, &interval) != STATUS_SUCCESS) {
+    status = STATUS_DEVICE_BUSY;
     goto Exit;
   }
-  KeReleaseSpinLock(&Context->SchedulerLock, old_irql);
-  *LastAbortedFence = active;
-  if (AppleAgxBackendRuntimeStop(&runtime->Backend) !=
-      AppleAgxBackendRuntimeResultOk) {
-    status = STATUS_DEVICE_HARDWARE_ERROR;
-    goto Exit;
-  }
-  runtime->BackendStarted = FALSE;
-  if (!AppleAgxPlatformProviderDestroy(&runtime->Provider)) {
-    status = STATUS_DEVICE_HARDWARE_ERROR;
-    goto Exit;
-  }
-  runtime->ProviderReady = FALSE;
-  if (!AdmissionBackendImageRestartQueueLifetime(&Context->BackendImage)) {
-    status = STATUS_INVALID_DEVICE_STATE;
-    goto Exit;
-  }
-
-  /* The stopped firmware lifetime must not donate its copied private prefix
-   * to the next boot. Rebuild only our owned graph before channel providers
-   * borrow any addresses; context63 and its physical owner are unchanged. */
-  if (runtime->RetainedPrepared || runtime->Context0Lease.Count || runtime->Rtkit.Running ||
-      AppleAgxInitdataMemoryDestroy(&runtime->Initdata) !=
-          AppleAgxInitdataMemoryResultOk ||
-      AppleAgxInitdataMemoryPrepareBroker(&runtime->Initdata, &runtime->MemoryIo,
-          &runtime->Snapshot) != AppleAgxInitdataMemoryResultOk) {
-    status = STATUS_DEVICE_HARDWARE_ERROR;
-    goto Exit;
-  }
-
-  AppleAgxBackendRuntimeInitialize(
-#if defined(APPLE_AGX_GPUVA_B1_QUALIFICATION)
-      &runtime->Backend, 1u);
-#else
-      &runtime->Backend, ADMISSION_MEMORY_UAT_CONTEXT);
+  for (;;) {
+    APPLE_AGX_BACKEND_U32 drained = 0u;
+    APPLE_AGX_BACKEND_U32 completed = 0u;
+    KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
+    active = AdmissionRenderPacketState(&Context->RenderPacket) ==
+                 AdmissionRenderPacketActive &&
+             Context->RenderPacket.Description.Fence == Fence &&
+             AppleAgxSchedulerActiveFence(&Context->Scheduler, 0u, 0u) == Fence;
+    KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
+    if (!active) {
+      status = STATUS_SUCCESS;
+      break;
+    }
+    if (runtime->Backend.Phase != AppleAgxBackendRuntimeSubmitted) {
+      status = STATUS_DEVICE_HARDWARE_ERROR;
+      break;
+    }
+    if (AdmissionPlatformNowMs() >= deadline) {
+      status = STATUS_IO_TIMEOUT;
+      break;
+    }
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    {
+      APPLE_AGX_RTKIT_U32 notifications = 0u;
+      if (AppleAgxRtkitSessionDrainRuntime(&runtime->Rtkit, &runtime->AscIo,
+              APPLE_AGX_RTKIT_RUNTIME_DRAIN_LIMIT, &notifications) !=
+          AppleAgxRtkitSessionResultOk) {
+        status = STATUS_DEVICE_HARDWARE_ERROR;
+        break;
+      }
+    }
 #endif
-  runtime->ProviderConfig.Runtime = &runtime->Backend;
-  RtlZeroMemory(&runtime->PlatformIo, sizeof(runtime->PlatformIo));
-  if (!AppleAgxPlatformProviderInitialize(
-          &runtime->Provider, &runtime->ProviderConfig,
-          &runtime->PlatformIo)) {
-    status = STATUS_DEVICE_CONFIGURATION_ERROR;
-    goto Exit;
+    if (!AppleAgxPlatformProviderPoll(
+            &runtime->Provider, 64u, &drained, &completed)) {
+      status = STATUS_DEVICE_HARDWARE_ERROR;
+      break;
+    }
+    if (runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted) {
+      interval.QuadPart = -10000LL;
+      (void)KeDelayExecutionThread(KernelMode, FALSE, &interval);
+    }
   }
-  runtime->ProviderReady = TRUE;
-  runtime->RuntimeIo.Firmware = runtime->PlatformIo.Firmware;
-  AppleAgxCompletionTransactionInitialize(&runtime->Completion);
-  AdmissionDynamicOverlayStateInitialize(&runtime->DynamicOverlayState);
-  RtlZeroMemory(&runtime->DynamicOverlayPlan,
-                sizeof(runtime->DynamicOverlayPlan));
-  runtime->DynamicJob = NULL;
-  runtime->DynamicStorage = NULL;
-  runtime->DynamicStorageBytes = 0u;
-#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
-  runtime->NativeCommandHash=0;
-  RtlZeroMemory(&runtime->NativeBindings,sizeof(runtime->NativeBindings));
-  RtlZeroMemory(&runtime->NativeGraphReceipt,sizeof(runtime->NativeGraphReceipt));
-#endif
-  runtime->CompletionContext = NULL;
-  RtlZeroMemory(&runtime->Progress, sizeof(runtime->Progress));
-  runtime->ProgressValid = FALSE;
-  InterlockedExchange64(&runtime->LastProgressMs, 0);
-  if (AppleAgxBackendRuntimeStart(
-          &runtime->Backend, &runtime->RuntimeIo) !=
-      AppleAgxBackendRuntimeResultOk) {
-    status = STATUS_DEVICE_HARDWARE_ERROR;
-    goto Exit;
-  }
-  runtime->BackendStarted = TRUE;
-  InterlockedExchange(&Context->SchedulerFaulted, 0);
-
 Exit:
   InterlockedExchange(&runtime->Resetting, 0);
-  if (!NT_SUCCESS(status))
-    InterlockedCompareExchange(&Context->SchedulerFaulted, 0x40000L | __LINE__, 0);
   return status;
 }
 

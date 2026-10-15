@@ -39,7 +39,7 @@ class AppleAgxRenderPlatformStageTests(unittest.TestCase):
         self.assertIn('L"Wom1PlatformStage"', receipts)
         self.assertIn('L"Wom1PlatformStatus"', receipts)
         stop = platform[platform.index("AdmissionPlatformRuntimeStop("):
-                        platform.index("AdmissionPlatformRuntimeReset(")]
+                        platform.index("AdmissionPlatformRuntimeQuiesceActive(")]
         self.assertNotIn("AdmissionRecordPlatformStage", stop)
 
     def test_translated_interrupt_is_a_runtime_vector_not_firmware_gsi(self):

@@ -458,6 +458,40 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryEngineStatus(
   return STATUS_SUCCESS;
 }
 
+/* G4-r3 (EXP1296 0x116): no host operation stops a running AGX job. The
+ * retained firmware ends hung or faulting work itself (Timeout/Fault event,
+ * halt) and drops it when resumed (Asahi gpu.rs handle_timeout, recover), and
+ * an RTKit stop cannot be undone on it. So the reset waits, bounded, for the
+ * firmware to end the active job through the ordinary completion path; that
+ * end is the proof that the GPU no longer accesses the job's memory, and the
+ * job's fence becomes LastAbortedFenceId (Microsoft: TDR in Windows 8 and
+ * later, packet completed before the engine reset). The owning context is
+ * faulted first; dispatch stays frozen (SchedulerFaulted) until the reset
+ * succeeds. */
+static NTSTATUS AdmissionResetQuiesceActive(ADMISSION_CONTEXT *Context) {
+  ULONG fence;
+  KIRQL oldIrql;
+  KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
+  if (AdmissionRenderPacketState(&Context->RenderPacket) !=
+      AdmissionRenderPacketActive) {
+    KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
+    return STATUS_SUCCESS;
+  }
+  fence = Context->RenderPacket.Description.Fence;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  {
+    ADMISSION_RENDER_CONTEXT *owner = (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
+        Context->RenderPacket.Description.ContextToken;
+    if (owner != NULL && owner->Object.FenceOutstanding == fence)
+      owner->GpuvaG3Poisoned = TRUE;
+  }
+#endif
+  InterlockedCompareExchange(&Context->SchedulerFaulted, 0x10000L | __LINE__, 0);
+  KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
+  return AdmissionPlatformRuntimeQuiesceActive(
+      Context, fence, ADMISSION_RESET_QUIESCE_TIMEOUT_MS);
+}
+
 /* Lock-bearing code stays in .text even when the PASSIVE wrapper is pageable.
  * noinline prevents optimization from moving these sections back into PAGE. */
 static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
@@ -475,6 +509,8 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
       ResetEngine->EngineOrdinal != ADMISSION_SCHEDULER_ENGINE ||
       InterlockedCompareExchange(&context->SchedulerInitialized, 0, 0) == 0)
     return STATUS_INVALID_PARAMETER;
+  if (!NT_SUCCESS(AdmissionResetQuiesceActive(context)))
+    return STATUS_DEVICE_HARDWARE_ERROR;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   {
     BOOLEAN privateReset = AdmissionGpuvaG3PrivateReset(context);
@@ -494,40 +530,11 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
   KeAcquireSpinLockAtDpcLevel(&context->SchedulerLock);
   packetState = AdmissionRenderPacketState(&context->RenderPacket);
   if (packetState == AdmissionRenderPacketActive) {
-#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-    packetContext=(ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
-        context->RenderPacket.Description.ContextToken;
-    packetFence=context->RenderPacket.Description.Fence;
-    if (packetContext != NULL &&
-        ((ULONG)InterlockedCompareExchange(&packetContext->GpuvaG3PrivateFence,0,0)==packetFence ||
-         (ULONG)InterlockedCompareExchange(&packetContext->GpuvaG3PrivateFence2,0,0)==packetFence)) {
-      AdmissionGpuvaG3PrivateCancel(packetContext,packetFence,TRUE);
-      InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
-      KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
-      KeReleaseSpinLock(&context->PagingLock,oldIrql);
-      return STATUS_DEVICE_HARDWARE_ERROR;
-    }
-#endif
+    /* Activated after the quiescence proof above: nothing proves its end. */
     InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
     KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
     KeReleaseSpinLock(&context->PagingLock, oldIrql);
-    if (!NT_SUCCESS(AdmissionPlatformRuntimeReset(
-            context, &lastAborted)))
-      return STATUS_DEVICE_HARDWARE_ERROR;
-    KeAcquireSpinLock(&context->PagingLock, &oldIrql);
-    KeAcquireSpinLockAtDpcLevel(&context->SchedulerLock);
-    AdmissionCpuQueueReleaseContextsLocked(context);
-#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-    AdmissionG4PendingDropLocked(context, FALSE);
-#endif
-    context->CpuQueueHead = context->CpuQueueCount = context->DispatchedFence = 0u;
-    InterlockedExchange(&context->RenderDpcFence, 0);
-    InterlockedExchange(&context->SchedulerFaulted, 0);
-    AdmissionPagingUpdateIdleLocked(context);
-    KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
-    KeReleaseSpinLock(&context->PagingLock, oldIrql);
-    ResetEngine->LastAbortedFenceId = lastAborted;
-    return STATUS_SUCCESS;
+    return STATUS_DEVICE_HARDWARE_ERROR;
   }
   if (packetState == AdmissionRenderPacketQueued) {
     packetFence = context->RenderPacket.Description.Fence;
@@ -608,6 +615,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiResetFromTimeout(HANDLE Adapter) {
   status = AdmissionScanoutSetTimelinePaused(context, TRUE);
   if (NT_SUCCESS(status))
     status = AdmissionDdiResetEngine(context, &reset);
+  if (NT_SUCCESS(status)) {
+    KIRQL oldIrql;
+    /* Microsoft (TDR in Windows 8 and later): an adapter-wide reset advances
+     * the last completed fence to the last submitted fence at the reset. */
+    KeAcquireSpinLock(&context->SchedulerLock, &oldIrql);
+    context->Scheduler.CompletedFence = context->Scheduler.LastSubmittedFence;
+    KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
+  }
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   AdmissionDwmFrameRecordTdr(context, status, TRUE);
 #endif

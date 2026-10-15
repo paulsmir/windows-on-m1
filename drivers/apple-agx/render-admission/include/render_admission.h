@@ -1869,9 +1869,16 @@ VOID AdmissionJobTimingStartWindows(ADMISSION_CONTEXT *Adapter,
     ADMISSION_RENDER_CONTEXT *RenderContext, ULONG ProcessId,
     ULONG Fence, ULONG DmaBytes);
 #endif
-NTSTATUS AdmissionPlatformRuntimeReset(
-    _Inout_ ADMISSION_CONTEXT *Context,
-    _Out_ APPLE_AGX_U32 *LastAbortedFence);
+/* G4-r3 (EXP1296): bound of the reset's wait for the firmware to end the
+ * active job; DxgkDdiResetFromTimeout repeats it after a failed engine reset. */
+#define ADMISSION_RESET_QUIESCE_TIMEOUT_MS 1000u
+/* PASSIVE_LEVEL. STATUS_SUCCESS once the job with Fence has left the active
+ * slot through the backend completion path (natural completion or firmware
+ * drop); never stops RTKit. Fails when the bound passes, the worker does not
+ * leave, or the provider cannot be polled. */
+NTSTATUS AdmissionPlatformRuntimeQuiesceActive(
+    _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONG Fence,
+    _In_ ULONG TimeoutMs);
 BOOLEAN AdmissionPlatformRuntimeResponsive(
     _Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionWin32SnapshotRenderCommand(
