@@ -55,7 +55,7 @@ class MsaaCapsConsistency(unittest.TestCase):
         if not WDK.exists():
             self.skipTest("pinned WDK headers are not present")
         text = SOURCE.read_text()
-        caps = body_after(text, "   (void)hDevice;\n   if (Format == DXGI_FORMAT_B8G8R8A8_UNORM ||")
+        caps = body_after(text, "   /* D3D-G10a probe (APPLE_AGX_D3D_MSAA_CAPS bit 0x40): the screen's")
         quality = body_after(text, "   (void)hDevice;\n   *pNumQualityLevels =")
         winsys = WINSYS.read_text()
         start = winsys.index("enum AgxD3d10CastRole {")
@@ -71,6 +71,18 @@ class MsaaCapsConsistency(unittest.TestCase):
         program = ["#include <stdio.h>", "typedef unsigned UINT;", "typedef void *D3D10DDI_HDEVICE;",
                    "typedef int BOOL;", "#define TRUE 1", "#define FALSE 0", "#define VOID void",
                    "static UINT probe;",
+                   "typedef int bool;", "#define true 1", "#define false 0",
+                   "enum pipe_format { PIPE_FORMAT_NONE, PIPE_FORMAT_COLOUR, PIPE_FORMAT_INTEGER, PIPE_FORMAT_DEPTH };",
+                   "enum { PIPE_TEXTURE_2D = 2, PIPE_BIND_RENDER_TARGET = 2, PIPE_BIND_SAMPLER_VIEW = 8 };",
+                   "struct pipe_screen { bool (*is_format_supported)(struct pipe_screen *, enum pipe_format, unsigned, unsigned, unsigned, unsigned); };",
+                   "struct pipe_context { struct pipe_screen *screen; };",
+                   "static bool screen_supports(struct pipe_screen *s, enum pipe_format f, unsigned t, unsigned a, unsigned b, unsigned bind)"
+                   " { (void)s; (void)t; (void)a; (void)b; (void)bind; return f != PIPE_FORMAT_NONE; }",
+                   "static struct pipe_screen the_screen = { screen_supports };",
+                   "static struct pipe_context the_pipe = { &the_screen };",
+                   "static struct pipe_context *CastPipeContext(D3D10DDI_HDEVICE h) { (void)h; return &the_pipe; }",
+                   "static bool util_format_is_pure_integer(enum pipe_format f) { return f == PIPE_FORMAT_INTEGER; }",
+                   "static bool util_format_is_depth_or_stencil(enum pipe_format f) { return f == PIPE_FORMAT_DEPTH; }",
                    "static UINT AgxD3d10WindowsMsaaProbe(void) { return probe; }",
                    "static void AgxD3d10WindowsMsaaReceipt(UINT k, UINT f, UINT c, UINT a) "
                    "{ (void)k; (void)f; (void)c; (void)a; }"]
@@ -78,6 +90,16 @@ class MsaaCapsConsistency(unittest.TestCase):
         program.append("typedef enum { DXGI_FORMAT_UNKNOWN = 0, %s, FORMAT_COUNT } DXGI_FORMAT;"
                        % ", ".join(names))
         program.append(policy)
+        program.append("static enum pipe_format FormatTranslate(DXGI_FORMAT f, BOOL depth) { (void)depth;"
+                       " return f == DXGI_FORMAT_UNKNOWN ? PIPE_FORMAT_NONE :"
+                       " (f == DXGI_FORMAT_D32_FLOAT || f == DXGI_FORMAT_D16_UNORM ||"
+                       " f == DXGI_FORMAT_D24_UNORM_S8_UINT || f == DXGI_FORMAT_D32_FLOAT_S8X24_UINT ||"
+                       " f == DXGI_FORMAT_R24_UNORM_X8_TYPELESS || f == DXGI_FORMAT_X24_TYPELESS_G8_UINT ||"
+                       " f == DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS || f == DXGI_FORMAT_X32_TYPELESS_G8X24_UINT) ?"
+                       " PIPE_FORMAT_DEPTH : (f == DXGI_FORMAT_R8G8B8A8_UINT || f == DXGI_FORMAT_R16_UINT) ?"
+                       " PIPE_FORMAT_INTEGER : PIPE_FORMAT_COLOUR; }")
+        program.append("static enum pipe_format AgxD3d10LoweredTextureFormat(DXGI_FORMAT f) { (void)f; return PIPE_FORMAT_NONE; }")
+        program.append("#define DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM_TEST 0")
         program.append("static void caps(D3D10DDI_HDEVICE hDevice, DXGI_FORMAT Format, UINT *pFormatCaps) {\n"
                        + caps + "\n}")
         program.append("static void quality(D3D10DDI_HDEVICE hDevice, DXGI_FORMAT Format, UINT SampleCount, "
@@ -93,7 +115,7 @@ class MsaaCapsConsistency(unittest.TestCase):
         program.append(r'''static UINT levels(DXGI_FORMAT f, UINT n) { UINT q = 0; quality(0, f, n, &q); return q; }
 int main(void) {
   int bad = 0, reported = 0;
-  for (probe = 0; probe < 0x40; ++probe)
+  for (probe = 0; probe < 0x80; ++probe)
   for (int f = 0; f < FORMAT_COUNT; ++f) {
     UINT c = 0;
     caps(0, (DXGI_FORMAT)f, &c);

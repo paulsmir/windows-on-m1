@@ -1138,7 +1138,47 @@ void APIENTRY
          *pFormatCaps |= D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD;
       }
 #endif
-   }''','''   (void)hDevice;
+   }''','''   /* D3D-G10a probe (APPLE_AGX_D3D_MSAA_CAPS bit 0x40): the screen's
+    * answers, as the upstream frontend gives them -- render target and
+    * blending where the screen renders the format (no blending for pure
+    * integers), filtered sampling where it samples it (not pure integers,
+    * not the depth-stencil formats); typeless parents answer only the
+    * multisample bits below. Without the bit the EXP1284 list. */
+   struct pipe_context *agx_pipe = CastPipeContext(hDevice);
+   struct pipe_screen *agx_screen = agx_pipe ? agx_pipe->screen : NULL;
+   if ((AgxD3d10WindowsMsaaProbe() & 0x40u) && agx_screen) {
+      enum pipe_format format = FormatTranslate(Format, false);
+      bool depth_target = Format == DXGI_FORMAT_D32_FLOAT ||
+         Format == DXGI_FORMAT_D16_UNORM || Format == DXGI_FORMAT_D24_UNORM_S8_UINT ||
+         Format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+      bool lowered = AgxD3d10LoweredTextureFormat(Format) != PIPE_FORMAT_NONE;
+      *pFormatCaps = 0;
+      if (Format == DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM) {
+         *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_NOT_SUPPORTED;
+      } else if (format != PIPE_FORMAT_NONE &&
+                 AgxD3d10WindowsCastParent(Format, NULL) != Format) {
+         bool integer = util_format_is_pure_integer(format);
+         if (!depth_target && !lowered &&
+             !util_format_is_depth_or_stencil(format) &&
+             agx_screen->is_format_supported(agx_screen, format, PIPE_TEXTURE_2D, 0, 0,
+                                             PIPE_BIND_RENDER_TARGET)) {
+            *pFormatCaps |= D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET;
+            if (!integer)
+               *pFormatCaps |= D3D10_DDI_FORMAT_SUPPORT_BLENDABLE;
+         }
+         if (!depth_target && !integer &&
+             agx_screen->is_format_supported(agx_screen,
+                lowered ? AgxD3d10LoweredTextureFormat(Format) : format,
+                PIPE_TEXTURE_2D, 0, 0, PIPE_BIND_SAMPLER_VIEW))
+            *pFormatCaps |= D3D10_DDI_FORMAT_SUPPORT_SHADER_SAMPLE;
+         if ((*pFormatCaps & D3D10_DDI_FORMAT_SUPPORT_SHADER_SAMPLE) &&
+             (Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
+              Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB ||
+              Format == DXGI_FORMAT_B8G8R8X8_UNORM ||
+              Format == DXGI_FORMAT_B8G8R8X8_UNORM_SRGB))
+            *pFormatCaps |= D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD;
+      }
+   } else
    if (Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
        Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB ||
        Format == DXGI_FORMAT_B8G8R8X8_UNORM ||
