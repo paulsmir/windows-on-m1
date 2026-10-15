@@ -3962,10 +3962,12 @@ AgxD3d10ResourceWithinRequiredLimits(
          pResource->resource = screen->resource_create_with_modifiers(
             screen, &templat, &modifier, 1);
       }
-   } else if (pCreateResource->BindFlags & D3D11_DDI_BIND_UNORDERED_ACCESS) {
+   } else if ((pCreateResource->BindFlags & D3D11_DDI_BIND_UNORDERED_ACCESS) &&
+              pCreateResource->ResourceDimension != D3D10DDIRESOURCE_BUFFER) {
       /* D3D-H5: typed unordered-access textures (D3D11 runtime validated:
        * single-sampled, DEFAULT usage) are images: tiled, uncompressed, as
-       * the render targets */
+       * the render targets.  Buffers stay linear (EXP1297: a tiled buffer
+       * has no Asahi modifier, creation returned NULL). */
       if (pCreateResource->SampleDesc.Count != 1 ||
           pCreateResource->Usage != D3D10_DDI_USAGE_DEFAULT || pCreateResource->MapFlags ||
           !screen->resource_create_with_modifiers) {

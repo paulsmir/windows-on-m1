@@ -176,9 +176,16 @@ class D3d11DdiTable(unittest.TestCase):
             resource = (out / "src/gallium/frontends/d3d10umd/Resource.cpp").read_text()
             self.assertIn("PIPE_BIND_SHADER_BUFFER | PIPE_BIND_SHADER_IMAGE",
                           function_body(resource, "translate_resource_flags"))
+            # EXP1297: the tiled image branch for unordered-access textures
+            # caught UAV buffers too; Asahi has no tiled buffer modifier, so
+            # resource creation returned NULL (CreateBuffer E_OUTOFMEMORY,
+            # compute smoke FAIL (buffers) on x86 and ARM64).
+            create = function_body(resource, "CreateResource")
+            self.assertIn("} else if ((pCreateResource->BindFlags & D3D11_DDI_BIND_UNORDERED_ACCESS) &&\n"
+                          "              pCreateResource->ResourceDimension != D3D10DDIRESOURCE_BUFFER) {",
+                          create)
             create = function_body(resource, "CreateResource")
             self.assertIn("(pCreateResource->BindFlags & ~D3D11_DDI_BIND_UNORDERED_ACCESS) ==", create)
-            self.assertIn("else if (pCreateResource->BindFlags & D3D11_DDI_BIND_UNORDERED_ACCESS)", create)
 
     def test_bc6h_bc7_are_formats(self):
         # FL 11_0 requires sampling BC6H/BC7; FormatTranslate returning
