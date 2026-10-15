@@ -169,6 +169,26 @@ class D3d11DdiTable(unittest.TestCase):
             self.assertIn("(pCreateResource->BindFlags & ~D3D11_DDI_BIND_UNORDERED_ACCESS) ==", create)
             self.assertIn("else if (pCreateResource->BindFlags & D3D11_DDI_BIND_UNORDERED_ACCESS)", create)
 
+    def test_bc6h_bc7_are_formats(self):
+        # FL 11_0 requires sampling BC6H/BC7; FormatTranslate returning
+        # PIPE_FORMAT_NONE fails their resource creation.  Typeless parents
+        # admit the typed views (cast families).
+        with tempfile.TemporaryDirectory(prefix="d3d11-bptc-") as tmp:
+            out = project(Path(tmp) / "out")
+            if out is None:
+                self.skipTest("reference Mesa tree not available")
+            translate = function_body((out / "src/gallium/frontends/d3d10umd/Format.cpp").read_text(),
+                                      "FormatTranslate")
+            for dxgi, pipe in (("BC6H_UF16", "BPTC_RGB_UFLOAT"), ("BC6H_SF16", "BPTC_RGB_FLOAT"),
+                               ("BC7_UNORM", "BPTC_RGBA_UNORM"), ("BC7_UNORM_SRGB", "BPTC_SRGBA")):
+                with self.subTest(format=dxgi):
+                    case = translate[translate.index("case DXGI_FORMAT_" + dxgi + ":"):]
+                    self.assertTrue(case[:case.index(";")].endswith("PIPE_FORMAT_" + pipe))
+        casts = (ROOT / "drivers/apple-agx/mesa/winsys/agx_d3d10_windows.cpp").read_text()
+        for member in ("R(BC6H_UF16,BC6H_TYPELESS)", "R(BC6H_SF16,BC6H_TYPELESS)",
+                       "R(BC7_UNORM,BC7_TYPELESS)", "R(BC7_UNORM_SRGB,BC7_TYPELESS)"):
+            self.assertIn(member, casts)
+
     def test_tessellation_stages_reach_asahi(self):
         # D3D-H4: hull/domain shaders through the translator, their setters
         # on the common frontend setters, patch topologies, and the winding

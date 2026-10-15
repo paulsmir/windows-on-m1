@@ -3050,6 +3050,22 @@ enum pipe_format AgxD3d10LoweredTextureFormat(DXGI_FORMAT Format);''')])
       return PIPE_FORMAT_B4G4R4A4_UNORM;
    case DXGI_FORMAT_B5G6R5_UNORM:
       return PIPE_FORMAT_B5G6R5_UNORM;'''),
+        # D3D-H5: BC6H/BC7 (FL 11_0), BPTC in Gallium, sampled natively by AGX
+        ('''   case DXGI_FORMAT_BC5_SNORM:
+      return PIPE_FORMAT_RGTC2_SNORM;
+''','''   case DXGI_FORMAT_BC5_SNORM:
+      return PIPE_FORMAT_RGTC2_SNORM;
+   case DXGI_FORMAT_BC6H_TYPELESS:
+   case DXGI_FORMAT_BC6H_UF16:
+      return PIPE_FORMAT_BPTC_RGB_UFLOAT;
+   case DXGI_FORMAT_BC6H_SF16:
+      return PIPE_FORMAT_BPTC_RGB_FLOAT;
+   case DXGI_FORMAT_BC7_TYPELESS:
+   case DXGI_FORMAT_BC7_UNORM:
+      return PIPE_FORMAT_BPTC_RGBA_UNORM;
+   case DXGI_FORMAT_BC7_UNORM_SRGB:
+      return PIPE_FORMAT_BPTC_SRGBA;
+'''),
         ('#include "Format.h"','''#include "Format.h"
 
 extern "C" DXGI_FORMAT AgxD3d10WindowsCastParent(DXGI_FORMAT Format, UINT *ReadOnly);
