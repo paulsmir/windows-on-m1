@@ -9,7 +9,10 @@ pass D3D11DDI_CORELAYER_DEVICECALLBACKS in the same union
 
 Invariant: AdmissionUmdRuntimeErrorCallback takes pfnSetErrorCb from
 pUMCallbacks for D3D10_0/_x/_7, from p11UMCallbacks for D3D11_0/_7 and WDDM
-1.3, and refuses other interfaces and missing callback tables.  The function
+1.3, from pWDDM2_0UMCallbacks for WDDM 2.0 (EXP1303: the runtime chose
+D3DWDDM2_0_DDI_INTERFACE_VERSION once the FL 11_0 adapter reported 4.x
+compute, and D3D11CreateDevice returned E_INVALIDARG from this function),
+and refuses other interfaces and missing callback tables.  The function
 is compiled from the source with the interface constants of the local WDK
 header copy (skipped where absent).
 """
@@ -35,6 +38,9 @@ class UmdD3d11InterfaceCallbacks(unittest.TestCase):
             r"(?m)^#define (?:D3D1[01]|D3DWDDM1_3)\w*_(?:MAJOR|MINOR)_VERSION .*$|"
             r"^#define (?:D3D1[01]|D3DWDDM1_3)\w*_DDI_INTERFACE_VERSION .*$",
             header.read_text(errors="replace")))
+        # the build's header (minor 6+) redefines WDDM 2.0 as 11.32
+        self.assertIn("#define D3DWDDM2_0_DDI_MINOR_VERSION 32", header.read_text(errors="replace"))
+        defines += "\n#define D3DWDDM2_0_DDI_INTERFACE_VERSION ((D3D11_DDI_MAJOR_VERSION << 16) | 32)\n"
         source = SOURCE.read_text()
         start = source.index("static BOOL\nAdmissionUmdRuntimeErrorCallback(")
         function = source[start:source.index("\n}\n", start) + 2]
@@ -48,14 +54,17 @@ typedef unsigned UINT;
 typedef void (*PFND3D10DDI_SETERROR_CB)(void);
 typedef struct { PFND3D10DDI_SETERROR_CB pfnSetErrorCb; void *pfnStateVsConstBufCb; } D3D10DDI_CORELAYER_DEVICECALLBACKS;
 typedef struct { PFND3D10DDI_SETERROR_CB pfnSetErrorCb; void *pfnStateVsConstBufCb; void *pfnStateCsUavCb; } D3D11DDI_CORELAYER_DEVICECALLBACKS;
+typedef struct { PFND3D10DDI_SETERROR_CB pfnSetErrorCb; void *pfnStateVsConstBufCb; void *pfnStateCsUavCb; void *pfnCreateContextCb; } D3DWDDM2_0DDI_CORELAYER_DEVICECALLBACKS;
 typedef struct {
   UINT Interface;
   union { const D3D10DDI_CORELAYER_DEVICECALLBACKS *pUMCallbacks;
-          const D3D11DDI_CORELAYER_DEVICECALLBACKS *p11UMCallbacks; };
+          const D3D11DDI_CORELAYER_DEVICECALLBACKS *p11UMCallbacks;
+          const D3DWDDM2_0DDI_CORELAYER_DEVICECALLBACKS *pWDDM2_0UMCallbacks; };
 } D3D10DDIARG_CREATEDEVICE;
 ''' + function + r'''
 static void ten(void) {}
 static void eleven(void) {}
+static void wddm2(void) {}
 int main(void) {
   D3D10DDI_CORELAYER_DEVICECALLBACKS c10 = {ten, NULL};
   D3D11DDI_CORELAYER_DEVICECALLBACKS c11 = {eleven, NULL, NULL};
@@ -75,6 +84,11 @@ int main(void) {
     a.p11UMCallbacks = NULL;
     assert(!AdmissionUmdRuntimeErrorCallback(&a, &cb));
   }
+  D3DWDDM2_0DDI_CORELAYER_DEVICECALLBACKS c20 = {wddm2, NULL, NULL, NULL};
+  a.Interface = D3DWDDM2_0_DDI_INTERFACE_VERSION; a.pWDDM2_0UMCallbacks = &c20; cb = NULL;
+  assert(AdmissionUmdRuntimeErrorCallback(&a, &cb) && cb == wddm2);
+  a.pWDDM2_0UMCallbacks = NULL;
+  assert(!AdmissionUmdRuntimeErrorCallback(&a, &cb));
   a.Interface = 0; a.p11UMCallbacks = &c11;
   assert(!AdmissionUmdRuntimeErrorCallback(&a, &cb));
   return 0;

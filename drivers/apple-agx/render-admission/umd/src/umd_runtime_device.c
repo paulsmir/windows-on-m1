@@ -409,6 +409,14 @@ AdmissionUmdRuntimeErrorCallback(const D3D10DDIARG_CREATEDEVICE *Args,
     *Callback = Args->p11UMCallbacks->pfnSetErrorCb;
     return TRUE;
   }
+  /* D3D-H7 (EXP1303): the WDDM 2.0 table's core-layer callbacks start with
+   * the D3D11 ones (d3d10umddi.h D3DWDDM2_0DDI_CORELAYER_DEVICECALLBACKS). */
+  if (Args->Interface == D3DWDDM2_0_DDI_INTERFACE_VERSION) {
+    if (Args->pWDDM2_0UMCallbacks == NULL)
+      return FALSE;
+    *Callback = Args->pWDDM2_0UMCallbacks->pfnSetErrorCb;
+    return TRUE;
+  }
   return FALSE;
 }
 
