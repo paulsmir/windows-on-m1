@@ -1,0 +1,1649 @@
+/*
+ * DXBC (shader model 4.x) -> NIR.  See dxbc_to_nir.h and
+ * investigation/analysis/D3D-H3-dxbc-nir.md for the contract.
+ *
+ * SPDX-License-Identifier: MIT
+ */
+#include "dxbc_to_nir.h"
+
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
+
+#include "nir.h"
+#include "nir_builder.h"
+
+#define MAX_TEMPS 4096
+#define MAX_REGS 32          /* input/output registers per stage */
+#define MAX_ITEMPS 64
+#define MAX_RESOURCES 128
+#define MAX_SAMPLERS 16
+#define MAX_CF 64
+
+enum cf_kind { CF_IF, CF_LOOP, CF_SWITCH };
+
+struct cf_entry {
+   enum cf_kind kind;
+   nir_if *nif;
+   nir_loop *loop;
+   bool in_else;
+   /* switch */
+   nir_def *selector;
+   nir_variable *fallthrough;   /* bool: an earlier case body ran on */
+   nir_variable *continue_outer;/* bool: 'continue' of the enclosing loop */
+   nir_def *any_case;           /* selector equals some case value */
+   bool case_open;              /* an if for the current case group is open */
+   nir_if *case_if;
+};
+
+/* One destination of an output register: the components 'mask' of the
+ * register feed variable 'var' starting at its component 'first'. */
+struct output_sink {
+   nir_variable *var;
+   uint8_t mask;
+   uint8_t first;
+   bool scalar;   /* store one component as a scalar variable */
+};
+
+struct ctx {
+   nir_builder b;
+   const struct dxbc_program *p;
+   struct dxbc_nir_error *error;
+   bool failed;
+   mesa_shader_stage stage;
+
+   nir_def *temps[MAX_TEMPS];
+   unsigned num_temps;
+   nir_variable *itemps[MAX_ITEMPS];
+   unsigned itemp_count[MAX_ITEMPS];
+   nir_variable *icb;
+   unsigned icb_count;
+
+   /* inputs: a variable per register, or system values per component */
+   nir_variable *inputs[MAX_REGS];
+   nir_def *input_sysval[MAX_REGS][4];
+   uint8_t input_sysval_mask[MAX_REGS];
+   unsigned gs_vertices_in;
+
+   /* outputs: a register each, stored to its sinks */
+   nir_def *outputs[MAX_REGS];
+   struct output_sink sinks[MAX_REGS][4];
+   unsigned num_sinks[MAX_REGS];
+   nir_def *depth_reg, *mask_reg;
+   nir_variable *depth_var, *mask_var;
+   unsigned clip_slots, cull_slots;
+
+   struct {
+      bool declared;
+      uint8_t dim;
+      nir_alu_type type;
+   } res[MAX_RESOURCES];
+   struct {
+      bool declared;
+      bool comparison;
+   } samp[MAX_SAMPLERS];
+
+   struct cf_entry cf[MAX_CF];
+   unsigned cf_depth;
+   unsigned loop_depth;   /* NIR loops, switches included */
+   bool main_done;        /* the top-level ret of the main program */
+};
+
+static void
+fail(struct ctx *c, const struct dxbc_instruction *insn, const char *fmt, ...)
+{
+   va_list args;
+   if (c->failed)
+      return;
+   c->failed = true;
+   va_start(args, fmt);
+   vsnprintf(c->error->message, sizeof(c->error->message), fmt, args);
+   va_end(args);
+   c->error->offset = insn ? insn->offset : 0;
+   c->error->opcode = insn ? insn->opcode : 0;
+}
+
+static nir_def *
+zero4(struct ctx *c)
+{
+   return nir_imm_ivec4(&c->b, 0, 0, 0, 0);
+}
+
+static nir_def *
+vec4_of(struct ctx *c, nir_def *v)
+{
+   nir_def *comp[4];
+   if (v->num_components == 4)
+      return v;
+   for (unsigned i = 0; i < 4; ++i)
+      comp[i] = nir_channel(&c->b, v, MIN2(i, v->num_components - 1u));
+   return nir_vec(&c->b, comp, 4);
+}
+
+static nir_def *
+replicate4(struct ctx *c, nir_def *scalar)
+{
+   return nir_replicate(&c->b, nir_channel(&c->b, scalar, 0), 4);
+}
+
+/* ---------------------------------------------------------------------
+ * Register files
+ */
+
+static nir_def *
+temp_reg(struct ctx *c, unsigned index)
+{
+   if (index >= MAX_TEMPS)
+      return NULL;
+   if (!c->temps[index])
+      c->temps[index] = nir_decl_reg(&c->b, 4, 32, 0);
+   return c->temps[index];
+}
+
+static nir_def *
+output_reg(struct ctx *c, unsigned index)
+{
+   if (index >= MAX_REGS)
+      return NULL;
+   if (!c->outputs[index])
+      c->outputs[index] = nir_decl_reg(&c->b, 4, 32, 0);
+   return c->outputs[index];
+}
+
+static nir_def *read_src(struct ctx *c, const struct dxbc_instruction *insn,
+                         const struct dxbc_operand *o, nir_alu_type type);
+
+/* imm + relative register component, as a 32-bit integer */
+static nir_def *
+index_value(struct ctx *c, const struct dxbc_instruction *insn,
+            const struct dxbc_index *index)
+{
+   nir_def *value = nir_imm_int(&c->b, (int)index->imm);
+   if (index->relative) {
+      nir_def *rel = read_src(c, insn, index->relative, nir_type_int32);
+      value = nir_iadd(&c->b, value, nir_channel(&c->b, rel, 0));
+   }
+   return value;
+}
+
+static bool
+index_direct(const struct dxbc_index *index)
+{
+   return !index->relative;
+}
+
+static nir_def *
+load_cb(struct ctx *c, const struct dxbc_instruction *insn,
+        const struct dxbc_operand *o)
+{
+   nir_def *slot, *offset;
+   if (o->index_dimension != 2 || !index_direct(&o->index[0])) {
+      fail(c, insn, "constant buffer operand form");
+      return zero4(c);
+   }
+   slot = nir_imm_int(&c->b, (int)o->index[0].imm);
+   offset = nir_ishl_imm(&c->b, index_value(c, insn, &o->index[1]), 4);
+   return nir_load_ubo(&c->b, 4, 32, slot, offset, .align_mul = 16,
+                       .align_offset = 0, .range_base = 0, .range = ~0u);
+}
+
+static nir_def *
+load_input(struct ctx *c, const struct dxbc_instruction *insn,
+           const struct dxbc_operand *o)
+{
+   unsigned reg;
+   nir_deref_instr *deref;
+   if (o->index_dimension == 2) {
+      /* geometry shader: v[vertex][register] */
+      if (!index_direct(&o->index[1]) || o->index[1].imm >= MAX_REGS ||
+          !c->inputs[o->index[1].imm]) {
+         fail(c, insn, "geometry input operand");
+         return zero4(c);
+      }
+      reg = (unsigned)o->index[1].imm;
+      deref = nir_build_deref_array(&c->b, nir_build_deref_var(&c->b, c->inputs[reg]),
+                                    index_value(c, insn, &o->index[0]));
+      return nir_load_deref(&c->b, deref);
+   }
+   if (o->index_dimension != 1 || !index_direct(&o->index[0]) ||
+       o->index[0].imm >= MAX_REGS) {
+      fail(c, insn, "input operand form");
+      return zero4(c);
+   }
+   reg = (unsigned)o->index[0].imm;
+   if (c->input_sysval_mask[reg]) {
+      nir_def *comp[4];
+      nir_def *base = c->inputs[reg] ?
+         nir_load_var(&c->b, c->inputs[reg]) : NULL;
+      for (unsigned i = 0; i < 4; ++i) {
+         if (c->input_sysval_mask[reg] & (1u << i))
+            comp[i] = c->input_sysval[reg][i];
+         else
+            comp[i] = base ? nir_channel(&c->b, base, i) : nir_imm_int(&c->b, 0);
+      }
+      return nir_vec(&c->b, comp, 4);
+   }
+   if (!c->inputs[reg]) {
+      fail(c, insn, "undeclared input v%u", reg);
+      return zero4(c);
+   }
+   return nir_load_var(&c->b, c->inputs[reg]);
+}
+
+static nir_def *
+load_file(struct ctx *c, const struct dxbc_instruction *insn,
+          const struct dxbc_operand *o)
+{
+   nir_builder *b = &c->b;
+   switch (o->type) {
+   case DXBC_OPERAND_TEMP:
+      if (o->index_dimension != 1 || !index_direct(&o->index[0]) ||
+          !temp_reg(c, (unsigned)o->index[0].imm)) {
+         fail(c, insn, "temp operand form");
+         return zero4(c);
+      }
+      return nir_load_reg(b, temp_reg(c, (unsigned)o->index[0].imm));
+   case DXBC_OPERAND_INDEXABLE_TEMP: {
+      unsigned x = (unsigned)o->index[0].imm;
+      if (o->index_dimension != 2 || !index_direct(&o->index[0]) ||
+          x >= MAX_ITEMPS || !c->itemps[x]) {
+         fail(c, insn, "indexable temp operand");
+         return zero4(c);
+      }
+      return nir_load_deref(b, nir_build_deref_array(b,
+         nir_build_deref_var(b, c->itemps[x]), index_value(c, insn, &o->index[1])));
+   }
+   case DXBC_OPERAND_INPUT:
+      return load_input(c, insn, o);
+   case DXBC_OPERAND_OUTPUT:
+      if (o->index_dimension == 1 && index_direct(&o->index[0]) &&
+          output_reg(c, (unsigned)o->index[0].imm))
+         return nir_load_reg(b, output_reg(c, (unsigned)o->index[0].imm));
+      fail(c, insn, "output read form");
+      return zero4(c);
+   case DXBC_OPERAND_IMMEDIATE32:
+      if (o->num_components == 1)
+         return nir_imm_ivec4(b, (int)o->imm32[0], (int)o->imm32[0],
+                              (int)o->imm32[0], (int)o->imm32[0]);
+      return nir_imm_ivec4(b, (int)o->imm32[0], (int)o->imm32[1],
+                           (int)o->imm32[2], (int)o->imm32[3]);
+   case DXBC_OPERAND_CONSTANT_BUFFER:
+      return load_cb(c, insn, o);
+   case DXBC_OPERAND_IMMEDIATE_CONSTANT_BUFFER:
+      if (!c->icb || o->index_dimension != 1) {
+         fail(c, insn, "immediate constant buffer operand");
+         return zero4(c);
+      }
+      return nir_load_deref(b, nir_build_deref_array(b,
+         nir_build_deref_var(b, c->icb), index_value(c, insn, &o->index[0])));
+   case DXBC_OPERAND_INPUT_PRIMITIVEID:
+      return replicate4(c, nir_load_primitive_id(b));
+   default:
+      fail(c, insn, "source operand type %u", o->type);
+      return zero4(c);
+   }
+}
+
+static nir_def *
+swizzle4(struct ctx *c, nir_def *v, const struct dxbc_operand *o)
+{
+   unsigned swz[4];
+   if (o->num_components != 4)
+      return v;
+   for (unsigned i = 0; i < 4; ++i)
+      swz[i] = o->swizzle[i];
+   if (o->selection == DXBC_SELECT_MASK)
+      return v; /* a source in mask mode reads in place */
+   return nir_swizzle(&c->b, v, swz, 4);
+}
+
+/* A source operand as a 4-component 32-bit value, swizzled, with its
+ * modifier applied as the instruction's type reads it. */
+static nir_def *
+read_src(struct ctx *c, const struct dxbc_instruction *insn,
+         const struct dxbc_operand *o, nir_alu_type type)
+{
+   nir_def *v = swizzle4(c, vec4_of(c, load_file(c, insn, o)), o);
+   bool is_float = nir_alu_type_get_base_type(type) == nir_type_float;
+   if (o->modifier == DXBC_MOD_ABS || o->modifier == DXBC_MOD_ABSNEG)
+      v = is_float ? nir_fabs(&c->b, v) : nir_iabs(&c->b, v);
+   if (o->modifier == DXBC_MOD_NEG || o->modifier == DXBC_MOD_ABSNEG)
+      v = is_float ? nir_fneg(&c->b, v) : nir_ineg(&c->b, v);
+   return v;
+}
+
+static void
+write_dst(struct ctx *c, const struct dxbc_instruction *insn,
+          const struct dxbc_operand *o, nir_def *value, bool saturate)
+{
+   nir_builder *b = &c->b;
+   unsigned mask = o->num_components == 4 ? o->mask :
+                   o->num_components == 1 ? 1u : 0xfu;
+   value = vec4_of(c, value);
+   if (saturate)
+      value = nir_fsat(b, value);
+   switch (o->type) {
+   case DXBC_OPERAND_NULL:
+      return;
+   case DXBC_OPERAND_TEMP:
+      if (o->index_dimension == 1 && index_direct(&o->index[0]) &&
+          temp_reg(c, (unsigned)o->index[0].imm)) {
+         nir_build_store_reg(b, value, temp_reg(c, (unsigned)o->index[0].imm),
+                             .write_mask = mask);
+         return;
+      }
+      break;
+   case DXBC_OPERAND_OUTPUT:
+      if (o->index_dimension == 1 && index_direct(&o->index[0]) &&
+          output_reg(c, (unsigned)o->index[0].imm)) {
+         nir_build_store_reg(b, value, output_reg(c, (unsigned)o->index[0].imm),
+                             .write_mask = mask);
+         return;
+      }
+      break;
+   case DXBC_OPERAND_INDEXABLE_TEMP: {
+      unsigned x = (unsigned)o->index[0].imm;
+      if (o->index_dimension == 2 && index_direct(&o->index[0]) &&
+          x < MAX_ITEMPS && c->itemps[x]) {
+         nir_store_deref(b, nir_build_deref_array(b,
+            nir_build_deref_var(b, c->itemps[x]), index_value(c, insn, &o->index[1])),
+            value, mask);
+         return;
+      }
+      break;
+   }
+   case DXBC_OPERAND_OUTPUT_DEPTH:
+   case DXBC_OPERAND_OUTPUT_DEPTH_GREATER_EQUAL:
+   case DXBC_OPERAND_OUTPUT_DEPTH_LESS_EQUAL:
+      if (c->depth_reg) {
+         nir_build_store_reg(b, value, c->depth_reg, .write_mask = 1);
+         return;
+      }
+      break;
+   case DXBC_OPERAND_OUTPUT_COVERAGE_MASK:
+      if (c->mask_reg) {
+         nir_build_store_reg(b, value, c->mask_reg, .write_mask = 1);
+         return;
+      }
+      break;
+   default:
+      break;
+   }
+   fail(c, insn, "destination operand type %u", o->type);
+}
+
+/* ---------------------------------------------------------------------
+ * Declarations
+ */
+
+static nir_variable *
+make_var(struct ctx *c, nir_variable_mode mode, const struct glsl_type *type,
+         int location, const char *name)
+{
+   nir_variable *var = nir_variable_create(c->b.shader, mode, type, name);
+   var->data.location = location;
+   return var;
+}
+
+static int
+generic_slot(struct ctx *c, unsigned reg, bool input)
+{
+   if (c->stage == MESA_SHADER_VERTEX && input)
+      return VERT_ATTRIB_GENERIC0 + (int)reg;
+   if (c->stage == MESA_SHADER_FRAGMENT && !input)
+      return FRAG_RESULT_DATA0 + (int)reg;
+   return VARYING_SLOT_VAR0 + (int)reg;
+}
+
+static enum glsl_interp_mode
+interp_mode(uint32_t mode, bool *centroid, bool *sample)
+{
+   *centroid = mode == 3 || mode == 5;
+   *sample = mode == 6 || mode == 7;
+   switch (mode) {
+   case 1: return INTERP_MODE_FLAT;
+   case 4: case 5: case 7: return INTERP_MODE_NOPERSPECTIVE;
+   default: return INTERP_MODE_SMOOTH;
+   }
+}
+
+static void
+declare_input(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   const struct dxbc_operand *o = &insn->operands[0];
+   nir_builder *b = &c->b;
+   unsigned name = insn->num_payload ? insn->payload[0] : 0;
+   unsigned reg, mask = o->num_components == 4 ? o->mask : 1u;
+   bool ps = c->stage == MESA_SHADER_FRAGMENT;
+
+   switch (o->type) {
+   case DXBC_OPERAND_INPUT:
+      break;
+   case DXBC_OPERAND_INPUT_PRIMITIVEID:
+   case DXBC_OPERAND_INPUT_COVERAGE_MASK:
+   case DXBC_OPERAND_INPUT_GS_INSTANCE_ID:
+      return; /* read through system values at use */
+   default:
+      fail(c, insn, "input declaration of operand type %u", o->type);
+      return;
+   }
+
+   if (o->index_dimension == 2) {
+      /* geometry shader input array v[n][reg] */
+      if (!index_direct(&o->index[1]) || o->index[1].imm >= MAX_REGS) {
+         fail(c, insn, "geometry input declaration");
+         return;
+      }
+      reg = (unsigned)o->index[1].imm;
+      c->gs_vertices_in = (unsigned)o->index[0].imm;
+      if (!c->inputs[reg]) {
+         int slot = (insn->opcode == DXBC_OP_DCL_INPUT_SIV && name == 1) ?
+            VARYING_SLOT_POS : generic_slot(c, reg, true);
+         c->inputs[reg] = make_var(c, nir_var_shader_in,
+            glsl_array_type(glsl_vec4_type(), c->gs_vertices_in, 0), slot, "vin");
+      }
+      return;
+   }
+   if (o->index_dimension != 1 || o->index[0].imm >= MAX_REGS) {
+      fail(c, insn, "input declaration form");
+      return;
+   }
+   reg = (unsigned)o->index[0].imm;
+
+   if (insn->opcode == DXBC_OP_DCL_INPUT_SGV || insn->opcode == DXBC_OP_DCL_INPUT_SIV ||
+       insn->opcode == DXBC_OP_DCL_INPUT_PS_SGV || insn->opcode == DXBC_OP_DCL_INPUT_PS_SIV) {
+      nir_def *value = NULL;
+      int slot = -1;
+      switch (name) {
+      case 1: /* position */
+         if (ps) {
+            nir_def *fc = nir_load_frag_coord(b);
+            for (unsigned i = 0; i < 4; ++i)
+               if (mask & (1u << i))
+                  c->input_sysval[reg][i] = nir_channel(b, fc, i);
+            c->input_sysval_mask[reg] |= (uint8_t)mask;
+            return;
+         }
+         slot = VARYING_SLOT_POS;
+         break;
+      case 2: slot = VARYING_SLOT_CLIP_DIST0; break;
+      case 3: slot = VARYING_SLOT_CULL_DIST0; break;
+      case 4: slot = VARYING_SLOT_LAYER; break;
+      case 5: slot = VARYING_SLOT_VIEWPORT; break;
+      case 6: value = nir_load_vertex_id_zero_base(b); break;
+      case 7: value = nir_load_primitive_id(b); break;
+      case 8: value = nir_load_instance_id(b); break;
+      case 9: value = nir_ineg(b, nir_b2i32(b, nir_load_front_face(b, 1))); break;
+      case 10: value = nir_load_sample_id(b); break;
+      default:
+         fail(c, insn, "input system value %u", name);
+         return;
+      }
+      if (value) {
+         for (unsigned i = 0; i < 4; ++i)
+            if (mask & (1u << i))
+               c->input_sysval[reg][i] = value;
+         c->input_sysval_mask[reg] |= (uint8_t)mask;
+         return;
+      }
+      if (!c->inputs[reg]) {
+         c->inputs[reg] = make_var(c, nir_var_shader_in, glsl_vec4_type(), slot, "vin");
+         if (ps) {
+            bool centroid, sample;
+            c->inputs[reg]->data.interpolation =
+               interp_mode((insn->token0 >> 11) & 0xfu, &centroid, &sample);
+            c->inputs[reg]->data.centroid = centroid;
+            c->inputs[reg]->data.sample = sample;
+         }
+      }
+      return;
+   }
+
+   if (c->inputs[reg])
+      return; /* several declarations of one register (component sets) */
+   c->inputs[reg] = make_var(c, nir_var_shader_in, glsl_vec4_type(),
+                             generic_slot(c, reg, true), "vin");
+   if (ps) {
+      bool centroid, sample;
+      c->inputs[reg]->data.interpolation =
+         interp_mode((insn->token0 >> 11) & 0xfu, &centroid, &sample);
+      c->inputs[reg]->data.centroid = centroid;
+      c->inputs[reg]->data.sample = sample;
+   }
+}
+
+static void
+add_sink(struct ctx *c, unsigned reg, nir_variable *var, unsigned mask,
+         unsigned first, bool scalar)
+{
+   if (c->num_sinks[reg] < 4) {
+      struct output_sink *s = &c->sinks[reg][c->num_sinks[reg]++];
+      s->var = var;
+      s->mask = (uint8_t)mask;
+      s->first = (uint8_t)first;
+      s->scalar = scalar;
+   }
+}
+
+static nir_variable *
+find_output(struct ctx *c, int location)
+{
+   nir_foreach_shader_out_variable(var, c->b.shader)
+      if (var->data.location == location)
+         return var;
+   return NULL;
+}
+
+static void
+declare_output(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   const struct dxbc_operand *o = &insn->operands[0];
+   unsigned name = insn->num_payload ? insn->payload[0] : 0;
+   unsigned reg, mask = o->num_components == 4 ? o->mask : 1u;
+   nir_variable *var;
+
+   switch (o->type) {
+   case DXBC_OPERAND_OUTPUT:
+      break;
+   case DXBC_OPERAND_OUTPUT_DEPTH:
+   case DXBC_OPERAND_OUTPUT_DEPTH_GREATER_EQUAL:
+   case DXBC_OPERAND_OUTPUT_DEPTH_LESS_EQUAL:
+      if (!c->depth_reg) {
+         c->depth_reg = nir_decl_reg(&c->b, 4, 32, 0);
+         c->depth_var = make_var(c, nir_var_shader_out, glsl_float_type(),
+                                 FRAG_RESULT_DEPTH, "depth");
+         c->b.shader->info.fs.depth_layout =
+            o->type == DXBC_OPERAND_OUTPUT_DEPTH_GREATER_EQUAL ? FRAG_DEPTH_LAYOUT_GREATER :
+            o->type == DXBC_OPERAND_OUTPUT_DEPTH_LESS_EQUAL ? FRAG_DEPTH_LAYOUT_LESS :
+            FRAG_DEPTH_LAYOUT_ANY;
+      }
+      return;
+   case DXBC_OPERAND_OUTPUT_COVERAGE_MASK:
+      if (!c->mask_reg) {
+         c->mask_reg = nir_decl_reg(&c->b, 4, 32, 0);
+         c->mask_var = make_var(c, nir_var_shader_out, glsl_uint_type(),
+                                FRAG_RESULT_SAMPLE_MASK, "mask");
+      }
+      return;
+   default:
+      fail(c, insn, "output declaration of operand type %u", o->type);
+      return;
+   }
+   if (o->index_dimension != 1 || o->index[0].imm >= MAX_REGS) {
+      fail(c, insn, "output declaration form");
+      return;
+   }
+   reg = (unsigned)o->index[0].imm;
+   output_reg(c, reg);
+
+   if (insn->opcode == DXBC_OP_DCL_OUTPUT || name == 0) {
+      int slot = generic_slot(c, reg, false);
+      var = find_output(c, slot);
+      if (!var)
+         var = make_var(c, nir_var_shader_out, glsl_vec4_type(), slot, "vout");
+      add_sink(c, reg, var, mask, 0, false);
+      return;
+   }
+   switch (name) {
+   case 1: /* position */
+      var = make_var(c, nir_var_shader_out, glsl_vec4_type(), VARYING_SLOT_POS, "pos");
+      add_sink(c, reg, var, mask, 0, false);
+      return;
+   case 2: /* clip distance: registers fill CLIP_DIST0 then CLIP_DIST1 */
+   case 3: { /* cull distance */
+      bool clip = name == 2;
+      unsigned *slots = clip ? &c->clip_slots : &c->cull_slots;
+      unsigned n = (unsigned)util_bitcount(mask), first = 0;
+      int base = clip ? VARYING_SLOT_CLIP_DIST0 : VARYING_SLOT_CULL_DIST0;
+      var = make_var(c, nir_var_shader_out, glsl_vec4_type(), base + (int)*slots,
+                     clip ? "clip" : "cull");
+      (void)first;
+      add_sink(c, reg, var, mask, 0, false);
+      if (clip)
+         c->b.shader->info.clip_distance_array_size += (uint8_t)n;
+      else
+         c->b.shader->info.cull_distance_array_size += (uint8_t)n;
+      ++*slots;
+      return;
+   }
+   case 4: /* render target array index */
+      var = make_var(c, nir_var_shader_out, glsl_int_type(), VARYING_SLOT_LAYER, "layer");
+      add_sink(c, reg, var, mask, 0, true);
+      return;
+   case 5: /* viewport array index */
+      var = make_var(c, nir_var_shader_out, glsl_int_type(), VARYING_SLOT_VIEWPORT, "viewport");
+      add_sink(c, reg, var, mask, 0, true);
+      return;
+   default:
+      fail(c, insn, "output system value %u", name);
+      return;
+   }
+}
+
+static nir_alu_type
+return_type(uint32_t token)
+{
+   switch (token & 0xfu) {
+   case DXBC_RETURN_SINT: return nir_type_int32;
+   case DXBC_RETURN_UINT: return nir_type_uint32;
+   default: return nir_type_float32;
+   }
+}
+
+static void
+declare(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   const struct dxbc_operand *o = insn->num_operands ? &insn->operands[0] : NULL;
+   nir_builder *b = &c->b;
+   switch (insn->opcode) {
+   case DXBC_OP_DCL_GLOBAL_FLAGS:
+      if (insn->token0 & (1u << 13)) /* forceEarlyDepthStencil */
+         b->shader->info.fs.early_fragment_tests = true;
+      return;
+   case DXBC_OP_DCL_TEMPS:
+      c->num_temps = insn->num_payload ? insn->payload[0] : 0;
+      if (c->num_temps > MAX_TEMPS)
+         fail(c, insn, "%u temps", c->num_temps);
+      return;
+   case DXBC_OP_DCL_INDEXABLE_TEMP: {
+      unsigned x = insn->num_payload >= 3 ? insn->payload[0] : MAX_ITEMPS;
+      if (x >= MAX_ITEMPS || !insn->payload[1]) {
+         fail(c, insn, "indexable temp declaration");
+         return;
+      }
+      c->itemp_count[x] = insn->payload[1];
+      c->itemps[x] = nir_local_variable_create(b->impl,
+         glsl_array_type(glsl_uvec4_type(), insn->payload[1], 0), "x");
+      return;
+   }
+   case DXBC_OP_CUSTOMDATA:
+      if ((insn->token0 >> 11) == DXBC_CUSTOMDATA_IMMEDIATE_CONSTANT_BUFFER) {
+         unsigned n = insn->num_payload / 4;
+         if (!n || c->icb) {
+            fail(c, insn, "immediate constant buffer");
+            return;
+         }
+         c->icb_count = n;
+         c->icb = nir_local_variable_create(b->impl,
+            glsl_array_type(glsl_uvec4_type(), n, 0), "icb");
+         for (unsigned i = 0; i < n; ++i)
+            nir_store_deref(b, nir_build_deref_array_imm(b,
+               nir_build_deref_var(b, c->icb), i),
+               nir_imm_ivec4(b, (int)insn->payload[4 * i], (int)insn->payload[4 * i + 1],
+                             (int)insn->payload[4 * i + 2], (int)insn->payload[4 * i + 3]),
+               0xf);
+      }
+      return; /* comments, debug info */
+   case DXBC_OP_DCL_CONSTANT_BUFFER:
+      if (!o || o->index_dimension != 2 || o->index[0].imm >= 15) {
+         fail(c, insn, "constant buffer declaration");
+         return;
+      }
+      b->shader->info.num_ubos = MAX2(b->shader->info.num_ubos, (uint8_t)(o->index[0].imm + 1));
+      return;
+   case DXBC_OP_DCL_SAMPLER:
+      if (!o || o->index[0].imm >= MAX_SAMPLERS) {
+         fail(c, insn, "sampler declaration");
+         return;
+      }
+      c->samp[o->index[0].imm].declared = true;
+      BITSET_SET(b->shader->info.samplers_used, (unsigned)o->index[0].imm);
+      c->samp[o->index[0].imm].comparison = ((insn->token0 >> 11) & 0xfu) == 1;
+      return;
+   case DXBC_OP_DCL_RESOURCE:
+      if (!o || o->index[0].imm >= MAX_RESOURCES || !insn->num_payload) {
+         fail(c, insn, "resource declaration");
+         return;
+      }
+      c->res[o->index[0].imm].declared = true;
+      BITSET_SET(b->shader->info.textures_used, (unsigned)o->index[0].imm);
+      c->res[o->index[0].imm].dim = (uint8_t)((insn->token0 >> 11) & 0x1fu);
+      c->res[o->index[0].imm].type = return_type(insn->payload[0]);
+      return;
+   case DXBC_OP_DCL_INPUT:
+   case DXBC_OP_DCL_INPUT_SGV:
+   case DXBC_OP_DCL_INPUT_SIV:
+   case DXBC_OP_DCL_INPUT_PS:
+   case DXBC_OP_DCL_INPUT_PS_SGV:
+   case DXBC_OP_DCL_INPUT_PS_SIV:
+      declare_input(c, insn);
+      return;
+   case DXBC_OP_DCL_OUTPUT:
+   case DXBC_OP_DCL_OUTPUT_SGV:
+   case DXBC_OP_DCL_OUTPUT_SIV:
+      declare_output(c, insn);
+      return;
+   case DXBC_OP_DCL_INDEX_RANGE:
+      return; /* indexing is resolved per access */
+   case DXBC_OP_DCL_GS_INPUT_PRIMITIVE: {
+      static const uint8_t prim[] = {
+         [1] = MESA_PRIM_POINTS, [2] = MESA_PRIM_LINES, [3] = MESA_PRIM_TRIANGLES,
+         [6] = MESA_PRIM_LINES_ADJACENCY, [7] = MESA_PRIM_TRIANGLES_ADJACENCY };
+      static const uint8_t vertices[] = { [1] = 1, [2] = 2, [3] = 3, [6] = 4, [7] = 6 };
+      unsigned p = (insn->token0 >> 11) & 0x3fu;
+      if (p >= ARRAY_SIZE(prim) || !vertices[p]) {
+         fail(c, insn, "geometry input primitive %u", p);
+         return;
+      }
+      b->shader->info.gs.input_primitive = prim[p];
+      b->shader->info.gs.vertices_in = vertices[p];
+      return;
+   }
+   case DXBC_OP_DCL_GS_OUTPUT_PRIMITIVE_TOPOLOGY: {
+      unsigned t = (insn->token0 >> 11) & 0x7fu;
+      b->shader->info.gs.output_primitive =
+         t == 1 ? MESA_PRIM_POINTS : (t == 2 || t == 3) ? MESA_PRIM_LINE_STRIP :
+         MESA_PRIM_TRIANGLE_STRIP;
+      return;
+   }
+   case DXBC_OP_DCL_MAX_OUTPUT_VERTEX_COUNT:
+      b->shader->info.gs.vertices_out = insn->num_payload ? insn->payload[0] : 0;
+      return;
+   default:
+      fail(c, insn, "declaration %s", dxbc_opcode_name(insn->opcode));
+      return;
+   }
+}
+
+/* ---------------------------------------------------------------------
+ * Output stores (end of program, before returns and emits)
+ */
+
+static void
+store_outputs(struct ctx *c)
+{
+   nir_builder *b = &c->b;
+   for (unsigned reg = 0; reg < MAX_REGS; ++reg) {
+      nir_def *value;
+      if (!c->outputs[reg] || !c->num_sinks[reg])
+         continue;
+      value = nir_load_reg(b, c->outputs[reg]);
+      for (unsigned s = 0; s < c->num_sinks[reg]; ++s) {
+         const struct output_sink *sink = &c->sinks[reg][s];
+         if (sink->scalar) {
+            nir_store_var(b, sink->var,
+                          nir_channel(b, value, (unsigned)ffs(sink->mask) - 1), 1);
+         } else {
+            nir_store_var(b, sink->var, value, sink->mask);
+         }
+      }
+   }
+   if (c->depth_reg)
+      nir_store_var(b, c->depth_var, nir_channel(b, nir_load_reg(b, c->depth_reg), 0), 1);
+   if (c->mask_reg)
+      nir_store_var(b, c->mask_var, nir_channel(b, nir_load_reg(b, c->mask_reg), 0), 1);
+}
+
+/* ---------------------------------------------------------------------
+ * ALU
+ */
+
+static nir_def *
+truth(struct ctx *c, nir_def *cond)
+{
+   return nir_bcsel(&c->b, cond, nir_imm_int(&c->b, -1), nir_imm_int(&c->b, 0));
+}
+
+static nir_def *
+nonzero(struct ctx *c, nir_def *v)
+{
+   return nir_ine_imm(&c->b, nir_channel(&c->b, v, 0), 0);
+}
+
+#define SRC(i, t) read_src(c, insn, &insn->operands[(i)], (t))
+#define F nir_type_float32
+#define I nir_type_int32
+#define U nir_type_uint32
+
+static bool
+emit_alu(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   nir_builder *b = &c->b;
+   nir_def *r = NULL, *s0, *s1, *s2;
+   bool sat = insn->saturate;
+
+   switch (insn->opcode) {
+   /* float */
+   case DXBC_OP_ADD: r = nir_fadd(b, SRC(1, F), SRC(2, F)); break;
+   case DXBC_OP_MUL: r = nir_fmul(b, SRC(1, F), SRC(2, F)); break;
+   case DXBC_OP_MAD: r = nir_ffma(b, SRC(1, F), SRC(2, F), SRC(3, F)); break;
+   case DXBC_OP_DIV: r = nir_fdiv(b, SRC(1, F), SRC(2, F)); break;
+   case DXBC_OP_MIN: r = nir_fmin(b, SRC(1, F), SRC(2, F)); break;
+   case DXBC_OP_MAX: r = nir_fmax(b, SRC(1, F), SRC(2, F)); break;
+   case DXBC_OP_DP2:
+      r = replicate4(c, nir_fdot2(b, nir_trim_vector(b, SRC(1, F), 2),
+                                  nir_trim_vector(b, SRC(2, F), 2)));
+      break;
+   case DXBC_OP_DP3:
+      r = replicate4(c, nir_fdot3(b, nir_trim_vector(b, SRC(1, F), 3),
+                                  nir_trim_vector(b, SRC(2, F), 3)));
+      break;
+   case DXBC_OP_DP4: r = replicate4(c, nir_fdot4(b, SRC(1, F), SRC(2, F))); break;
+   case DXBC_OP_EXP: r = nir_fexp2(b, SRC(1, F)); break;
+   case DXBC_OP_LOG: r = nir_flog2(b, SRC(1, F)); break;
+   case DXBC_OP_FRC: r = nir_ffract(b, SRC(1, F)); break;
+   case DXBC_OP_RSQ: r = nir_frsq(b, SRC(1, F)); break;
+   case DXBC_OP_RCP: r = nir_frcp(b, SRC(1, F)); break;
+   case DXBC_OP_SQRT: r = nir_fsqrt(b, SRC(1, F)); break;
+   case DXBC_OP_ROUND_NE: r = nir_fround_even(b, SRC(1, F)); break;
+   case DXBC_OP_ROUND_NI: r = nir_ffloor(b, SRC(1, F)); break;
+   case DXBC_OP_ROUND_PI: r = nir_fceil(b, SRC(1, F)); break;
+   case DXBC_OP_ROUND_Z: r = nir_ftrunc(b, SRC(1, F)); break;
+   case DXBC_OP_MOV: r = SRC(1, insn->saturate ? F : U); break;
+   case DXBC_OP_DERIV_RTX: case DXBC_OP_DERIV_RTX_COARSE:
+      r = nir_ddx_coarse(b, SRC(1, F)); break;
+   case DXBC_OP_DERIV_RTY: case DXBC_OP_DERIV_RTY_COARSE:
+      r = nir_ddy_coarse(b, SRC(1, F)); break;
+   case DXBC_OP_DERIV_RTX_FINE: r = nir_ddx_fine(b, SRC(1, F)); break;
+   case DXBC_OP_DERIV_RTY_FINE: r = nir_ddy_fine(b, SRC(1, F)); break;
+   /* comparisons: ~0 or 0 */
+   case DXBC_OP_EQ: r = truth(c, nir_feq(b, SRC(1, F), SRC(2, F))); break;
+   case DXBC_OP_NE: r = truth(c, nir_fneu(b, SRC(1, F), SRC(2, F))); break;
+   case DXBC_OP_LT: r = truth(c, nir_flt(b, SRC(1, F), SRC(2, F))); break;
+   case DXBC_OP_GE: r = truth(c, nir_fge(b, SRC(1, F), SRC(2, F))); break;
+   case DXBC_OP_IEQ: r = truth(c, nir_ieq(b, SRC(1, I), SRC(2, I))); break;
+   case DXBC_OP_INE: r = truth(c, nir_ine(b, SRC(1, I), SRC(2, I))); break;
+   case DXBC_OP_ILT: r = truth(c, nir_ilt(b, SRC(1, I), SRC(2, I))); break;
+   case DXBC_OP_IGE: r = truth(c, nir_ige(b, SRC(1, I), SRC(2, I))); break;
+   case DXBC_OP_ULT: r = truth(c, nir_ult(b, SRC(1, U), SRC(2, U))); break;
+   case DXBC_OP_UGE: r = truth(c, nir_uge(b, SRC(1, U), SRC(2, U))); break;
+   /* integer */
+   case DXBC_OP_IADD: r = nir_iadd(b, SRC(1, I), SRC(2, I)); break;
+   case DXBC_OP_IMAD: r = nir_iadd(b, nir_imul(b, SRC(1, I), SRC(2, I)), SRC(3, I)); break;
+   case DXBC_OP_UMAD: r = nir_iadd(b, nir_imul(b, SRC(1, U), SRC(2, U)), SRC(3, U)); break;
+   case DXBC_OP_IMAX: r = nir_imax(b, SRC(1, I), SRC(2, I)); break;
+   case DXBC_OP_IMIN: r = nir_imin(b, SRC(1, I), SRC(2, I)); break;
+   case DXBC_OP_UMAX: r = nir_umax(b, SRC(1, U), SRC(2, U)); break;
+   case DXBC_OP_UMIN: r = nir_umin(b, SRC(1, U), SRC(2, U)); break;
+   case DXBC_OP_INEG: r = nir_ineg(b, SRC(1, I)); break;
+   case DXBC_OP_NOT: r = nir_inot(b, SRC(1, U)); break;
+   case DXBC_OP_AND: r = nir_iand(b, SRC(1, U), SRC(2, U)); break;
+   case DXBC_OP_OR: r = nir_ior(b, SRC(1, U), SRC(2, U)); break;
+   case DXBC_OP_XOR: r = nir_ixor(b, SRC(1, U), SRC(2, U)); break;
+   case DXBC_OP_ISHL: r = nir_ishl(b, SRC(1, I), SRC(2, U)); break;
+   case DXBC_OP_ISHR: r = nir_ishr(b, SRC(1, I), SRC(2, U)); break;
+   case DXBC_OP_USHR: r = nir_ushr(b, SRC(1, U), SRC(2, U)); break;
+   case DXBC_OP_ITOF: r = nir_i2f32(b, SRC(1, I)); break;
+   case DXBC_OP_UTOF: r = nir_u2f32(b, SRC(1, U)); break;
+   case DXBC_OP_FTOI: r = nir_f2i32(b, SRC(1, F)); break;
+   case DXBC_OP_FTOU: r = nir_f2u32(b, SRC(1, F)); break;
+   case DXBC_OP_MOVC:
+      s0 = SRC(1, U);
+      s1 = SRC(2, U);
+      s2 = SRC(3, U);
+      r = nir_bcsel(b, nir_ine_imm(b, s0, 0), s1, s2);
+      break;
+   case DXBC_OP_IMUL: case DXBC_OP_UMUL: {
+      bool sign = insn->opcode == DXBC_OP_IMUL;
+      s0 = SRC(2, sign ? I : U);
+      s1 = SRC(3, sign ? I : U);
+      write_dst(c, insn, &insn->operands[0],
+                sign ? nir_imul_high(b, s0, s1) : nir_umul_high(b, s0, s1), false);
+      write_dst(c, insn, &insn->operands[1], nir_imul(b, s0, s1), false);
+      return true;
+   }
+   case DXBC_OP_UDIV:
+      s0 = SRC(2, U);
+      s1 = SRC(3, U);
+      /* D3D: division by zero gives 0xffffffff for both results */
+      write_dst(c, insn, &insn->operands[0],
+                nir_bcsel(b, nir_ieq_imm(b, s1, 0), nir_imm_int(b, -1), nir_udiv(b, s0, s1)), false);
+      write_dst(c, insn, &insn->operands[1],
+                nir_bcsel(b, nir_ieq_imm(b, s1, 0), nir_imm_int(b, -1), nir_umod(b, s0, s1)), false);
+      return true;
+   case DXBC_OP_SINCOS:
+      s0 = SRC(2, F);
+      write_dst(c, insn, &insn->operands[0], nir_fsin(b, s0), sat);
+      write_dst(c, insn, &insn->operands[1], nir_fcos(b, s0), sat);
+      return true;
+   default:
+      return false;
+   }
+   write_dst(c, insn, &insn->operands[0], r, sat);
+   return true;
+}
+
+/* ---------------------------------------------------------------------
+ * Control flow
+ */
+
+static struct cf_entry *
+cf_push(struct ctx *c, const struct dxbc_instruction *insn, enum cf_kind kind)
+{
+   struct cf_entry *e;
+   if (c->cf_depth == MAX_CF) {
+      fail(c, insn, "control flow nesting");
+      return NULL;
+   }
+   e = &c->cf[c->cf_depth++];
+   memset(e, 0, sizeof(*e));
+   e->kind = kind;
+   return e;
+}
+
+static struct cf_entry *
+cf_top(struct ctx *c, const struct dxbc_instruction *insn, enum cf_kind kind)
+{
+   if (!c->cf_depth || c->cf[c->cf_depth - 1].kind != kind) {
+      fail(c, insn, "unbalanced control flow");
+      return NULL;
+   }
+   return &c->cf[c->cf_depth - 1];
+}
+
+/* the innermost loop or switch */
+static struct cf_entry *
+cf_breakable(struct ctx *c)
+{
+   for (unsigned i = c->cf_depth; i-- > 0;)
+      if (c->cf[i].kind != CF_IF)
+         return &c->cf[i];
+   return NULL;
+}
+
+/* A jump ends its NIR block; DXBC may place code after it, so every jump
+ * sits in its own if (true) and later instructions start a new block. */
+static void
+jump(struct ctx *c, nir_jump_type type)
+{
+   nir_if *nif = nir_push_if(&c->b, nir_imm_true(&c->b));
+   nir_jump(&c->b, type);
+   nir_pop_if(&c->b, nif);
+}
+
+static void
+emit_break(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   if (!cf_breakable(c)) {
+      fail(c, insn, "break outside a loop or switch");
+      return;
+   }
+   jump(c, nir_jump_break);
+}
+
+static void
+emit_continue(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   /* inside a switch, flag the enclosing loop and leave the switch loop */
+   for (unsigned i = c->cf_depth; i-- > 0;) {
+      if (c->cf[i].kind == CF_LOOP) {
+         jump(c, nir_jump_continue);
+         return;
+      }
+      if (c->cf[i].kind == CF_SWITCH) {
+         if (!c->cf[i].continue_outer)
+            break;
+         nir_store_var(&c->b, c->cf[i].continue_outer, nir_imm_true(&c->b), 1);
+         jump(c, nir_jump_break);
+         return;
+      }
+   }
+   fail(c, insn, "continue outside a loop");
+}
+
+static void
+emit_return(struct ctx *c)
+{
+   if (c->stage != MESA_SHADER_GEOMETRY)
+      store_outputs(c);
+   jump(c, nir_jump_return);
+}
+
+static bool
+inside_loop(struct ctx *c)
+{
+   for (unsigned i = 0; i < c->cf_depth; ++i)
+      if (c->cf[i].kind == CF_LOOP)
+         return true;
+   return false;
+}
+
+/* case values of the switch starting after instruction 'start', to the
+ * matching endswitch (nested switches skipped) */
+static nir_def *
+switch_any_case(struct ctx *c, unsigned start, nir_def *selector)
+{
+   nir_def *any = nir_imm_false(&c->b);
+   unsigned depth = 0;
+   for (unsigned i = start + 1; i < c->p->num_instructions; ++i) {
+      const struct dxbc_instruction *insn = &c->p->instructions[i];
+      if (insn->opcode == DXBC_OP_SWITCH) {
+         ++depth;
+      } else if (insn->opcode == DXBC_OP_ENDSWITCH) {
+         if (!depth--)
+            break;
+      } else if (insn->opcode == DXBC_OP_CASE && !depth) {
+         nir_def *v = nir_channel(&c->b, read_src(c, insn, &insn->operands[0], U), 0);
+         any = nir_ior(&c->b, any, nir_ieq(&c->b, selector, v));
+      }
+   }
+   return any;
+}
+
+static void
+close_case(struct ctx *c, struct cf_entry *e)
+{
+   if (e->case_open) {
+      nir_pop_if(&c->b, e->case_if);
+      e->case_open = false;
+   }
+}
+
+/* A run of consecutive case/default labels opens one case group. */
+static void
+open_case(struct ctx *c, unsigned index, struct cf_entry *e)
+{
+   nir_builder *b = &c->b;
+   nir_def *cond = nir_load_var(b, e->fallthrough);
+   unsigned i = index;
+   for (; i < c->p->num_instructions; ++i) {
+      const struct dxbc_instruction *insn = &c->p->instructions[i];
+      if (insn->opcode == DXBC_OP_CASE) {
+         nir_def *v = nir_channel(b, read_src(c, insn, &insn->operands[0], U), 0);
+         cond = nir_ior(b, cond, nir_ieq(b, e->selector, v));
+      } else if (insn->opcode == DXBC_OP_DEFAULT) {
+         cond = nir_ior(b, cond, nir_inot(b, e->any_case));
+      } else {
+         break;
+      }
+   }
+   e->case_if = nir_push_if(b, cond);
+   e->case_open = true;
+   nir_store_var(b, e->fallthrough, nir_imm_true(b), 1);
+}
+
+static bool
+emit_flow(struct ctx *c, unsigned index)
+{
+   const struct dxbc_instruction *insn = &c->p->instructions[index];
+   nir_builder *b = &c->b;
+   struct cf_entry *e;
+   nir_def *cond;
+
+   switch (insn->opcode) {
+   case DXBC_OP_IF:
+      cond = nonzero(c, SRC(0, U));
+      if (!insn->test_nonzero)
+         cond = nir_inot(b, cond);
+      if ((e = cf_push(c, insn, CF_IF)))
+         e->nif = nir_push_if(b, cond);
+      return true;
+   case DXBC_OP_ELSE:
+      if ((e = cf_top(c, insn, CF_IF))) {
+         nir_push_else(b, e->nif);
+         e->in_else = true;
+      }
+      return true;
+   case DXBC_OP_ENDIF:
+      if ((e = cf_top(c, insn, CF_IF))) {
+         nir_pop_if(b, e->nif);
+         --c->cf_depth;
+      }
+      return true;
+   case DXBC_OP_LOOP:
+      if ((e = cf_push(c, insn, CF_LOOP)))
+         e->loop = nir_push_loop(b);
+      return true;
+   case DXBC_OP_ENDLOOP:
+      if ((e = cf_top(c, insn, CF_LOOP))) {
+         nir_pop_loop(b, e->loop);
+         --c->cf_depth;
+      }
+      return true;
+   case DXBC_OP_BREAK:
+      emit_break(c, insn);
+      return true;
+   case DXBC_OP_CONTINUE:
+      emit_continue(c, insn);
+      return true;
+   case DXBC_OP_BREAKC:
+   case DXBC_OP_CONTINUEC:
+   case DXBC_OP_RETC: {
+      nir_if *nif;
+      cond = nonzero(c, SRC(0, U));
+      if (!insn->test_nonzero)
+         cond = nir_inot(b, cond);
+      nif = nir_push_if(b, cond);
+      if (insn->opcode == DXBC_OP_BREAKC)
+         emit_break(c, insn);
+      else if (insn->opcode == DXBC_OP_CONTINUEC)
+         emit_continue(c, insn);
+      else
+         emit_return(c);
+      nir_pop_if(b, nif);
+      return true;
+   }
+   case DXBC_OP_RET:
+      if (!c->cf_depth) {
+         c->main_done = true; /* outputs are stored after the loop */
+         return true;
+      }
+      emit_return(c);
+      return true;
+   case DXBC_OP_DISCARD:
+      cond = nonzero(c, SRC(0, U));
+      if (!insn->test_nonzero)
+         cond = nir_inot(b, cond);
+      nir_demote_if(b, cond);
+      return true;
+   case DXBC_OP_SWITCH:
+      if ((e = cf_push(c, insn, CF_SWITCH))) {
+         e->selector = nir_channel(b, SRC(0, U), 0);
+         e->fallthrough = nir_local_variable_create(b->impl, glsl_bool_type(), "fallthrough");
+         nir_store_var(b, e->fallthrough, nir_imm_false(b), 1);
+         if (inside_loop(c)) {
+            e->continue_outer = nir_local_variable_create(b->impl, glsl_bool_type(), "cont");
+            nir_store_var(b, e->continue_outer, nir_imm_false(b), 1);
+         }
+         e->any_case = switch_any_case(c, index, e->selector);
+         e->loop = nir_push_loop(b);
+      }
+      return true;
+   case DXBC_OP_CASE:
+   case DXBC_OP_DEFAULT:
+      if ((e = cf_top(c, insn, CF_SWITCH))) {
+         /* only the first label of a run opens the group */
+         const struct dxbc_instruction *prev = index ? &c->p->instructions[index - 1] : NULL;
+         if (prev && (prev->opcode == DXBC_OP_CASE || prev->opcode == DXBC_OP_DEFAULT) &&
+             e->case_open)
+            return true;
+         close_case(c, e);
+         open_case(c, index, e);
+      }
+      return true;
+   case DXBC_OP_ENDSWITCH:
+      if ((e = cf_top(c, insn, CF_SWITCH))) {
+         nir_variable *cont = e->continue_outer;
+         close_case(c, e);
+         jump(c, nir_jump_break);
+         nir_pop_loop(b, e->loop);
+         --c->cf_depth;
+         if (cont) {
+            nir_if *nif = nir_push_if(b, nir_load_var(b, cont));
+            emit_continue(c, insn);
+            nir_pop_if(b, nif);
+         }
+      }
+      return true;
+   default:
+      return false;
+   }
+}
+
+/* ---------------------------------------------------------------------
+ * Resources
+ */
+
+struct tex_shape {
+   enum glsl_sampler_dim dim;
+   bool array;
+   unsigned coords;     /* including the array index */
+};
+
+static bool
+tex_shape(unsigned dim, struct tex_shape *s)
+{
+   memset(s, 0, sizeof(*s));
+   switch (dim) {
+   case DXBC_DIM_BUFFER: s->dim = GLSL_SAMPLER_DIM_BUF; s->coords = 1; return true;
+   case DXBC_DIM_TEXTURE1D: s->dim = GLSL_SAMPLER_DIM_1D; s->coords = 1; return true;
+   case DXBC_DIM_TEXTURE1DARRAY: s->dim = GLSL_SAMPLER_DIM_1D; s->array = true; s->coords = 2; return true;
+   case DXBC_DIM_TEXTURE2D: s->dim = GLSL_SAMPLER_DIM_2D; s->coords = 2; return true;
+   case DXBC_DIM_TEXTURE2DARRAY: s->dim = GLSL_SAMPLER_DIM_2D; s->array = true; s->coords = 3; return true;
+   case DXBC_DIM_TEXTURE2DMS: s->dim = GLSL_SAMPLER_DIM_MS; s->coords = 2; return true;
+   case DXBC_DIM_TEXTURE2DMSARRAY: s->dim = GLSL_SAMPLER_DIM_MS; s->array = true; s->coords = 3; return true;
+   case DXBC_DIM_TEXTURE3D: s->dim = GLSL_SAMPLER_DIM_3D; s->coords = 3; return true;
+   case DXBC_DIM_TEXTURECUBE: s->dim = GLSL_SAMPLER_DIM_CUBE; s->coords = 3; return true;
+   case DXBC_DIM_TEXTURECUBEARRAY: s->dim = GLSL_SAMPLER_DIM_CUBE; s->array = true; s->coords = 4; return true;
+   default: return false;
+   }
+}
+
+static unsigned
+resource_index(struct ctx *c, const struct dxbc_instruction *insn,
+               const struct dxbc_operand *o)
+{
+   if (o->type != DXBC_OPERAND_RESOURCE || o->index_dimension != 1 ||
+       !index_direct(&o->index[0]) || o->index[0].imm >= MAX_RESOURCES ||
+       !c->res[o->index[0].imm].declared) {
+      fail(c, insn, "resource operand");
+      return 0;
+   }
+   return (unsigned)o->index[0].imm;
+}
+
+static unsigned
+sampler_index(struct ctx *c, const struct dxbc_instruction *insn,
+              const struct dxbc_operand *o)
+{
+   if (o->type != DXBC_OPERAND_SAMPLER || o->index_dimension != 1 ||
+       !index_direct(&o->index[0]) || o->index[0].imm >= MAX_SAMPLERS) {
+      fail(c, insn, "sampler operand");
+      return 0;
+   }
+   return (unsigned)o->index[0].imm;
+}
+
+static nir_tex_instr *
+tex_begin(struct ctx *c, nir_texop op, unsigned t, unsigned s, bool sampler,
+          unsigned num_srcs, const struct tex_shape *shape, nir_alu_type type)
+{
+   nir_tex_instr *tex = nir_tex_instr_create(c->b.shader, num_srcs);
+   tex->op = op;
+   tex->sampler_dim = shape->dim;
+   tex->is_array = shape->array;
+   tex->texture_index = t;
+   tex->sampler_index = sampler ? s : 0;
+   tex->dest_type = type;
+   tex->coord_components = 0;
+   (void)s;
+   return tex;
+}
+
+static nir_def *
+tex_finish(struct ctx *c, nir_tex_instr *tex, unsigned num_srcs, unsigned components)
+{
+   tex->num_srcs = num_srcs;
+   nir_def_init(&tex->instr, &tex->def, components, 32);
+   nir_builder_instr_insert(&c->b, &tex->instr);
+   return &tex->def;
+}
+
+static nir_def *
+offset_src(struct ctx *c, const struct dxbc_instruction *insn, unsigned n)
+{
+   return nir_trim_vector(&c->b, nir_imm_ivec4(&c->b, insn->texel_offset[0],
+                          insn->texel_offset[1], insn->texel_offset[2], 0), n);
+}
+
+static bool
+has_offset(const struct dxbc_instruction *insn)
+{
+   return insn->texel_offset[0] || insn->texel_offset[1] || insn->texel_offset[2];
+}
+
+static unsigned
+offset_components(const struct tex_shape *s)
+{
+   return s->dim == GLSL_SAMPLER_DIM_3D ? 3 : s->dim == GLSL_SAMPLER_DIM_1D ? 1 : 2;
+}
+
+/* the result swizzled by the resource operand */
+static nir_def *
+resource_swizzle(struct ctx *c, nir_def *v, const struct dxbc_operand *res)
+{
+   return swizzle4(c, vec4_of(c, v), res);
+}
+
+static bool
+emit_sample(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   nir_builder *b = &c->b;
+   const struct dxbc_operand *res = &insn->operands[2];
+   unsigned t = resource_index(c, insn, res), s = sampler_index(c, insn, &insn->operands[3]);
+   struct tex_shape shape;
+   nir_tex_instr *tex;
+   unsigned n = 0;
+   nir_texop op = nir_texop_tex;
+   bool shadow = false;
+   nir_def *coord;
+
+   if (c->failed || !tex_shape(c->res[t].dim, &shape)) {
+      fail(c, insn, "sample resource dimension");
+      return true;
+   }
+   switch (insn->opcode) {
+   case DXBC_OP_SAMPLE: op = c->stage == MESA_SHADER_FRAGMENT ? nir_texop_tex : nir_texop_txl; break;
+   case DXBC_OP_SAMPLE_B: op = nir_texop_txb; break;
+   case DXBC_OP_SAMPLE_L: op = nir_texop_txl; break;
+   case DXBC_OP_SAMPLE_D: op = nir_texop_txd; break;
+   case DXBC_OP_SAMPLE_C: op = c->stage == MESA_SHADER_FRAGMENT ? nir_texop_tex : nir_texop_txl;
+      shadow = true; break;
+   case DXBC_OP_SAMPLE_C_LZ: op = nir_texop_txl; shadow = true; break;
+   default: return false;
+   }
+   tex = tex_begin(c, op, t, s, true, 6, &shape, shadow ? nir_type_float32 : c->res[t].type);
+   tex->is_shadow = shadow;
+   tex->is_new_style_shadow = shadow;
+   coord = nir_trim_vector(b, SRC(1, F), shape.coords);
+   tex->coord_components = shape.coords;
+   tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_coord, coord);
+   if (insn->opcode == DXBC_OP_SAMPLE_B)
+      tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_bias, nir_channel(b, SRC(4, F), 0));
+   if (insn->opcode == DXBC_OP_SAMPLE_L)
+      tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_lod, nir_channel(b, SRC(4, F), 0));
+   if (op == nir_texop_txl && insn->opcode != DXBC_OP_SAMPLE_L)
+      tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_lod, nir_imm_float(b, 0));
+   if (insn->opcode == DXBC_OP_SAMPLE_D) {
+      unsigned d = shape.dim == GLSL_SAMPLER_DIM_1D ? 1 : shape.dim == GLSL_SAMPLER_DIM_2D ? 2 : 3;
+      tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_ddx, nir_trim_vector(b, SRC(4, F), d));
+      tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_ddy, nir_trim_vector(b, SRC(5, F), d));
+   }
+   if (shadow)
+      tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_comparator, nir_channel(b, SRC(4, F), 0));
+   if (has_offset(insn))
+      tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_offset,
+                                          offset_src(c, insn, offset_components(&shape)));
+   if (shadow) {
+      nir_def *v = tex_finish(c, tex, n, 1);
+      write_dst(c, insn, &insn->operands[0], replicate4(c, v), insn->saturate);
+   } else {
+      write_dst(c, insn, &insn->operands[0],
+                resource_swizzle(c, tex_finish(c, tex, n, 4), res), insn->saturate);
+   }
+   return true;
+}
+
+static void
+emit_ld(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   nir_builder *b = &c->b;
+   const struct dxbc_operand *res = &insn->operands[2];
+   unsigned t = resource_index(c, insn, res), n = 0;
+   struct tex_shape shape;
+   nir_tex_instr *tex;
+   nir_def *address;
+   bool ms = insn->opcode == DXBC_OP_LD_MS;
+
+   if (c->failed || !tex_shape(c->res[t].dim, &shape)) {
+      fail(c, insn, "ld resource dimension");
+      return;
+   }
+   BITSET_SET(b->shader->info.textures_used_by_txf, t);
+   tex = tex_begin(c, ms ? nir_texop_txf_ms : nir_texop_txf, t, 0, false, 4,
+                   &shape, c->res[t].type);
+   address = SRC(1, I);
+   tex->coord_components = shape.coords;
+   tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_coord, nir_trim_vector(b, address, shape.coords));
+   if (ms)
+      tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_ms_index, nir_channel(b, SRC(3, I), 0));
+   else if (shape.dim != GLSL_SAMPLER_DIM_BUF)
+      tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_lod, nir_channel(b, address, 3));
+   if (has_offset(insn))
+      tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_offset,
+                                          offset_src(c, insn, offset_components(&shape)));
+   write_dst(c, insn, &insn->operands[0], resource_swizzle(c, tex_finish(c, tex, n, 4), res),
+             insn->saturate);
+}
+
+static void
+emit_resinfo(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   nir_builder *b = &c->b;
+   const struct dxbc_operand *res = &insn->operands[2];
+   unsigned t = resource_index(c, insn, res), mode = (insn->token0 >> 11) & 3u;
+   struct tex_shape shape;
+   nir_tex_instr *tex;
+   nir_def *lod, *size, *levels, *comp[4], *value;
+   unsigned dims;
+
+   if (c->failed || !tex_shape(c->res[t].dim, &shape)) {
+      fail(c, insn, "resinfo resource dimension");
+      return;
+   }
+   lod = nir_channel(b, SRC(1, U), 0);
+   dims = shape.coords - (shape.dim == GLSL_SAMPLER_DIM_CUBE ? 1 : 0);
+   if (shape.dim == GLSL_SAMPLER_DIM_CUBE)
+      dims = shape.array ? 3 : 2;
+   tex = tex_begin(c, nir_texop_txs, t, 0, false, 1, &shape, nir_type_uint32);
+   tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_lod, lod);
+   size = tex_finish(c, tex, 1, dims);
+   tex = tex_begin(c, nir_texop_query_levels, t, 0, false, 0, &shape, nir_type_uint32);
+   levels = tex_finish(c, tex, 0, 1);
+   for (unsigned i = 0; i < 3; ++i)
+      comp[i] = i < dims ? nir_channel(b, size, i) : nir_imm_int(b, 0);
+   comp[3] = levels;
+   value = nir_vec(b, comp, 4);
+   if (mode != 2) { /* float or rcpfloat (dimensions only) */
+      nir_def *f = nir_u2f32(b, value);
+      if (mode == 1) {
+         nir_def *r[4];
+         for (unsigned i = 0; i < 4; ++i)
+            r[i] = i < 3 ? nir_frcp(b, nir_channel(b, f, i)) : nir_channel(b, f, i);
+         f = nir_vec(b, r, 4);
+      }
+      value = f;
+   }
+   write_dst(c, insn, &insn->operands[0], resource_swizzle(c, value, res), insn->saturate);
+}
+
+static void
+emit_gather(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   nir_builder *b = &c->b;
+   const struct dxbc_operand *res = &insn->operands[2], *samp = &insn->operands[3];
+   unsigned t = resource_index(c, insn, res), s = sampler_index(c, insn, samp), n = 0;
+   struct tex_shape shape;
+   nir_tex_instr *tex;
+
+   if (c->failed || !tex_shape(c->res[t].dim, &shape)) {
+      fail(c, insn, "gather resource dimension");
+      return;
+   }
+   tex = tex_begin(c, nir_texop_tg4, t, s, true, 3, &shape, c->res[t].type);
+   tex->component = samp->swizzle[0];
+   tex->coord_components = shape.coords;
+   tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_coord, nir_trim_vector(b, SRC(1, F), shape.coords));
+   if (has_offset(insn))
+      tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_offset, offset_src(c, insn, 2));
+   write_dst(c, insn, &insn->operands[0], resource_swizzle(c, tex_finish(c, tex, n, 4), res),
+             insn->saturate);
+}
+
+static void
+emit_lod(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   nir_builder *b = &c->b;
+   const struct dxbc_operand *res = &insn->operands[2];
+   unsigned t = resource_index(c, insn, res), s = sampler_index(c, insn, &insn->operands[3]);
+   struct tex_shape shape;
+   nir_tex_instr *tex;
+   nir_def *lod, *comp[4];
+
+   if (c->failed || !tex_shape(c->res[t].dim, &shape)) {
+      fail(c, insn, "lod resource dimension");
+      return;
+   }
+   tex = tex_begin(c, nir_texop_lod, t, s, true, 1, &shape, nir_type_float32);
+   tex->is_array = false; /* the lod query ignores the array index */
+   tex->coord_components = shape.coords - (shape.array ? 1 : 0);
+   tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_coord,
+                                     nir_trim_vector(b, SRC(1, F), tex->coord_components));
+   lod = tex_finish(c, tex, 1, 2);
+   /* D3D: x clamped, y unclamped, z and w undefined (0) */
+   comp[0] = nir_channel(b, lod, 0);
+   comp[1] = nir_channel(b, lod, 1);
+   comp[2] = comp[3] = nir_imm_float(b, 0);
+   write_dst(c, insn, &insn->operands[0], resource_swizzle(c, nir_vec(b, comp, 4), res),
+             insn->saturate);
+}
+
+static nir_def *
+resource_samples(struct ctx *c, const struct dxbc_instruction *insn,
+                 const struct dxbc_operand *res)
+{
+   unsigned t = resource_index(c, insn, res);
+   struct tex_shape shape;
+   nir_tex_instr *tex;
+   if (c->failed || !tex_shape(c->res[t].dim, &shape) ||
+       shape.dim != GLSL_SAMPLER_DIM_MS) {
+      fail(c, insn, "sample query on a single-sampled resource");
+      return nir_imm_int(&c->b, 1);
+   }
+   tex = tex_begin(c, nir_texop_texture_samples, t, 0, false, 0, &shape, nir_type_uint32);
+   return tex_finish(c, tex, 0, 1);
+}
+
+/* sampleinfo: the sample count, as float or (_uint) integer, in x */
+static void
+emit_sampleinfo(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   nir_builder *b = &c->b;
+   const struct dxbc_operand *res = &insn->operands[1];
+   nir_def *count, *comp[4];
+   if (res->type == DXBC_OPERAND_RASTERIZER) {
+      fail(c, insn, "sampleinfo of the rasterizer");
+      return;
+   }
+   count = resource_samples(c, insn, res);
+   if (((insn->token0 >> 11) & 3u) != 1)
+      count = nir_u2f32(b, count);
+   comp[0] = count;
+   comp[1] = comp[2] = comp[3] = nir_imm_int(b, 0);
+   write_dst(c, insn, &insn->operands[0], swizzle4(c, nir_vec(b, comp, 4), res),
+             insn->saturate);
+}
+
+/* samplepos: the standard D3D sample positions (AGX uses the same
+ * patterns), in 1/16 pixel from the centre; 0 outside the count */
+static void
+emit_samplepos(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   nir_builder *b = &c->b;
+   static const int8_t pos2[2][2] = { { 4, 4 }, { -4, -4 } };
+   static const int8_t pos4[4][2] = { { -2, -6 }, { 6, -2 }, { -6, 2 }, { 2, 6 } };
+   const struct dxbc_operand *res = &insn->operands[1];
+   nir_def *count, *index, *x = nir_imm_float(b, 0), *y = nir_imm_float(b, 0), *comp[4];
+   if (res->type == DXBC_OPERAND_RASTERIZER) {
+      fail(c, insn, "samplepos of the rasterizer");
+      return;
+   }
+   count = resource_samples(c, insn, res);
+   index = nir_channel(b, SRC(2, U), 0);
+   for (unsigned i = 0; i < 2; ++i) {
+      nir_def *hit = nir_iand(b, nir_ieq_imm(b, count, 2), nir_ieq_imm(b, index, i));
+      x = nir_bcsel(b, hit, nir_imm_float(b, pos2[i][0] / 16.0f), x);
+      y = nir_bcsel(b, hit, nir_imm_float(b, pos2[i][1] / 16.0f), y);
+   }
+   for (unsigned i = 0; i < 4; ++i) {
+      nir_def *hit = nir_iand(b, nir_ieq_imm(b, count, 4), nir_ieq_imm(b, index, i));
+      x = nir_bcsel(b, hit, nir_imm_float(b, pos4[i][0] / 16.0f), x);
+      y = nir_bcsel(b, hit, nir_imm_float(b, pos4[i][1] / 16.0f), y);
+   }
+   comp[0] = x;
+   comp[1] = y;
+   comp[2] = comp[3] = nir_imm_float(b, 0);
+   write_dst(c, insn, &insn->operands[0], swizzle4(c, nir_vec(b, comp, 4), res),
+             insn->saturate);
+}
+
+/* ---------------------------------------------------------------------
+ * Driver
+ */
+
+static void
+emit_instruction(struct ctx *c, unsigned index)
+{
+   const struct dxbc_instruction *insn = &c->p->instructions[index];
+   nir_builder *b = &c->b;
+
+   if (dxbc_opcode_is_declaration(insn->opcode)) {
+      declare(c, insn);
+      return;
+   }
+   if (emit_flow(c, index) || emit_alu(c, insn))
+      return;
+   switch (insn->opcode) {
+   case DXBC_OP_NOP:
+      return;
+   case DXBC_OP_SAMPLE: case DXBC_OP_SAMPLE_B: case DXBC_OP_SAMPLE_L:
+   case DXBC_OP_SAMPLE_D: case DXBC_OP_SAMPLE_C: case DXBC_OP_SAMPLE_C_LZ:
+      emit_sample(c, insn);
+      return;
+   case DXBC_OP_LD: case DXBC_OP_LD_MS:
+      emit_ld(c, insn);
+      return;
+   case DXBC_OP_RESINFO:
+      emit_resinfo(c, insn);
+      return;
+   case DXBC_OP_GATHER4:
+      emit_gather(c, insn);
+      return;
+   case DXBC_OP_LOD:
+      emit_lod(c, insn);
+      return;
+   case DXBC_OP_SAMPLE_INFO:
+      emit_sampleinfo(c, insn);
+      return;
+   case DXBC_OP_SAMPLE_POS:
+      emit_samplepos(c, insn);
+      return;
+   case DXBC_OP_EMIT:
+   case DXBC_OP_EMITTHENCUT:
+      store_outputs(c);
+      nir_emit_vertex(b, .stream_id = 0);
+      if (insn->opcode == DXBC_OP_EMITTHENCUT)
+         nir_end_primitive(b, .stream_id = 0);
+      return;
+   case DXBC_OP_CUT:
+      nir_end_primitive(b, .stream_id = 0);
+      return;
+   default:
+      fail(c, insn, "instruction %s", dxbc_opcode_name(insn->opcode));
+      return;
+   }
+}
+
+struct nir_shader *
+dxbc_to_nir(const struct dxbc_program *program,
+            const struct nir_shader_compiler_options *options,
+            struct dxbc_nir_error *error)
+{
+   static struct dxbc_nir_error ignored;
+   struct ctx *c;
+   mesa_shader_stage stage;
+   nir_shader *nir;
+
+   if (!error)
+      error = &ignored;
+   memset(error, 0, sizeof(*error));
+   switch (program->type) {
+   case DXBC_PROGRAM_VERTEX: stage = MESA_SHADER_VERTEX; break;
+   case DXBC_PROGRAM_PIXEL: stage = MESA_SHADER_FRAGMENT; break;
+   case DXBC_PROGRAM_GEOMETRY: stage = MESA_SHADER_GEOMETRY; break;
+   default:
+      snprintf(error->message, sizeof(error->message), "program type %u", program->type);
+      return NULL;
+   }
+   c = calloc(1, sizeof(*c));
+   if (!c)
+      return NULL;
+   c->p = program;
+   c->error = error;
+   c->stage = stage;
+   c->b = nir_builder_init_simple_shader(stage, options, "dxbc");
+   nir = c->b.shader;
+   /* D3D binds each stage separately (tgsi_to_nir sets the same) */
+   nir->info.separate_shader = true;
+   nir->info.internal = false;
+   if (stage == MESA_SHADER_GEOMETRY) {
+      nir->info.gs.invocations = 1;
+      nir->info.gs.active_stream_mask = 1;
+   }
+
+   for (unsigned i = 0; i < program->num_instructions && !c->failed && !c->main_done; ++i) {
+      const struct dxbc_instruction *insn = &program->instructions[i];
+      if (insn->opcode == DXBC_OP_LABEL || insn->opcode == DXBC_OP_CALL ||
+          insn->opcode == DXBC_OP_CALLC || insn->opcode == DXBC_OP_INTERFACE_CALL) {
+         fail(c, insn, "subroutines");
+         break;
+      }
+      emit_instruction(c, i);
+   }
+   if (!c->failed && c->cf_depth)
+      fail(c, NULL, "unterminated control flow");
+   if (!c->failed && stage != MESA_SHADER_GEOMETRY)
+      store_outputs(c);
+
+   if (c->failed) {
+      ralloc_free(nir);
+      free(c);
+      return NULL;
+   }
+   nir->info.num_textures = 0;
+   for (unsigned i = 0; i < MAX_RESOURCES; ++i)
+      if (c->res[i].declared)
+         nir->info.num_textures = i + 1;
+   free(c);
+   return nir;
+}
