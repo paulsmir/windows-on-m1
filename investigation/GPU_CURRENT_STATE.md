@@ -1,6 +1,28 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-15T12:20Z (read this first)
+## Current as of 2026-10-15T13:17Z (read this first)
+
+Next: EXP1297 (newexp-kmd1297.sh, before1297.txt; KMD/ARM64 UMD from
+49543b42, UMD32 out36 = closure 058, GL ICD out56): TGSI default, D3D11
+interface default (DWM on the D3D11 table), timestamp queries, F/C/P
+checkpoints carried from EXP1296. Installed: none (rec1296h done).
+- EXP1296 REJECTED the translator as the default: DWM's translated shaders
+  make GPU jobs time out (Wom1FirmwareRecovery 2435, kind 4 = firmware
+  EventMsg::Timeout, not a page fault; DWM device removed), ending in
+  bugcheck 0x116 from AdmissionDdiResetFromTimeout. Translator opt-in again
+  (0a77b52c). Offline: texture/sampler indices, relative cbuffers, ICB
+  sizes (64 B, no scratch) and the control-flow translation checked, no
+  cause found -> the next causal target is the hanging shader itself:
+  agx_corpus_smoke (being written) draws every corpus shader through TGSI
+  and the translator in one process and names NIR-only hangs.
+- Secondary defects found: agx_transfer_map dereferenced a failed staging
+  allocation (fixed 0dd1e86c); a fault storm ends in 0x116 instead of
+  device removal (KMD reset path; analysis in scratchpad codex-tdr-report:
+  the KMD reads SGX fault info 0x17030 but not at the event).
+- WHY CLEAN RECONSTRUCTION: n/a (current boundary is a translator
+  correctness defect, localized by hardware differential, not archaeology).
+
+## Current as of 2026-10-15T12:20Z
 
 Running: EXP1295 (newexp-kmd1295.sh; KMD e93bb539, UMD32 out30), next
 EXP1296 (newexp-kmd1296.sh, before1296.txt; KMD/UMD from b7504a5a).
