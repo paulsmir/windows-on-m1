@@ -34,7 +34,10 @@ TRANSLATED = {"vs40": "MESA_SHADER_VERTEX", "ps40": "MESA_SHADER_FRAGMENT",
               # SM 5: UAVs, groupshared memory, atomics, counters, sync, bit ops
               "cs50": "MESA_SHADER_COMPUTE",
               # SM 5: geometry instancing and two output streams
-              "gs50": "MESA_SHADER_GEOMETRY"}
+              "gs50": "MESA_SHADER_GEOMETRY",
+              # SM 5 pixel: attribute evaluation, gather4_c/_po, UAV atomics,
+              # coverage in and out, conservative depth
+              "ps50b": "MESA_SHADER_FRAGMENT"}
 # tessellation stages, class linkage / doubles / evaluation, SM 5.1 ranges
 REFUSED = ["hs50", "ds50", "ps50", "ps51"]
 # the shaders the D3D smoke tools compile at run time (tools/dxbc/extract-smoke-shaders.py)

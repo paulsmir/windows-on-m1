@@ -1615,11 +1615,16 @@ emit_resinfo(struct ctx *c, const struct dxbc_instruction *insn)
    write_dst(c, insn, &insn->operands[0], resource_swizzle(c, value, res), insn->saturate);
 }
 
+/* gather4 dst, address, t, s; gather4_c adds the reference; the _po forms
+ * take a programmable offset operand after the address */
 static void
 emit_gather(struct ctx *c, const struct dxbc_instruction *insn)
 {
    nir_builder *b = &c->b;
-   const struct dxbc_operand *res = &insn->operands[2], *samp = &insn->operands[3];
+   bool po = insn->opcode == DXBC_OP_GATHER4_PO || insn->opcode == DXBC_OP_GATHER4_PO_C;
+   bool cmp = insn->opcode == DXBC_OP_GATHER4_C || insn->opcode == DXBC_OP_GATHER4_PO_C;
+   unsigned r = po ? 3 : 2;
+   const struct dxbc_operand *res = &insn->operands[r], *samp = &insn->operands[r + 1];
    unsigned t = resource_index(c, insn, res), s = sampler_index(c, insn, samp), n = 0;
    struct tex_shape shape;
    nir_tex_instr *tex;
@@ -1628,11 +1633,17 @@ emit_gather(struct ctx *c, const struct dxbc_instruction *insn)
       fail(c, insn, "gather resource dimension");
       return;
    }
-   tex = tex_begin(c, nir_texop_tg4, t, s, true, 3, &shape, c->res[t].type);
-   tex->component = samp->swizzle[0];
+   tex = tex_begin(c, nir_texop_tg4, t, s, true, 4, &shape, cmp ? nir_type_float32 : c->res[t].type);
+   tex->component = cmp ? 0 : samp->swizzle[0];
+   /* a comparison gather returns four results (no new-style scalar) */
+   tex->is_shadow = cmp;
    tex->coord_components = shape.coords;
    tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_coord, nir_trim_vector(b, SRC(1, F), shape.coords));
-   if (has_offset(insn))
+   if (cmp)
+      tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_comparator, nir_channel(b, SRC(r + 2, F), 0));
+   if (po)
+      tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_offset, nir_trim_vector(b, SRC(2, I), 2));
+   else if (has_offset(insn))
       tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_offset, offset_src(c, insn, 2));
    write_dst(c, insn, &insn->operands[0], resource_swizzle(c, tex_finish(c, tex, n, 4), res),
              insn->saturate);
@@ -2070,6 +2081,40 @@ emit_bufinfo(struct ctx *c, const struct dxbc_instruction *insn)
    write_dst(c, insn, &insn->operands[0], replicate4(c, count), false);
 }
 
+/* eval_sample_index / eval_centroid / eval_snapped: re-interpolate a pixel
+ * shader input register (D3D snapped offsets are in 1/16 pixel) */
+static void
+emit_eval(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   nir_builder *b = &c->b;
+   const struct dxbc_operand *src = &insn->operands[1];
+   unsigned reg = (unsigned)src->index[0].imm;
+   nir_deref_instr *deref;
+   nir_def *v;
+   if (c->stage != MESA_SHADER_FRAGMENT || src->type != DXBC_OPERAND_INPUT ||
+       src->index_dimension != 1 || !index_direct(&src->index[0]) || reg >= MAX_REGS ||
+       !c->inputs[reg] || c->input_sysval_mask[reg] ||
+       c->inputs[reg]->data.interpolation == INTERP_MODE_FLAT) {
+      fail(c, insn, "attribute evaluation operand");
+      return;
+   }
+   deref = nir_build_deref_var(b, c->inputs[reg]);
+   switch (insn->opcode) {
+   case DXBC_OP_EVAL_SAMPLE_INDEX:
+      v = nir_interp_deref_at_sample(b, 4, 32, &deref->def, nir_channel(b, SRC(2, U), 0));
+      break;
+   case DXBC_OP_EVAL_CENTROID:
+      v = nir_interp_deref_at_centroid(b, 4, 32, &deref->def);
+      break;
+   default: {
+      nir_def *offset = nir_i2f32(b, nir_trim_vector(b, SRC(2, I), 2));
+      v = nir_interp_deref_at_offset(b, 4, 32, &deref->def, nir_fmul_imm(b, offset, 1.0 / 16.0));
+      break;
+   }
+   }
+   write_dst(c, insn, &insn->operands[0], swizzle4(c, v, src), insn->saturate);
+}
+
 /* ---------------------------------------------------------------------
  * Driver
  */
@@ -2099,7 +2144,8 @@ emit_instruction(struct ctx *c, unsigned index)
    case DXBC_OP_RESINFO:
       emit_resinfo(c, insn);
       return;
-   case DXBC_OP_GATHER4:
+   case DXBC_OP_GATHER4: case DXBC_OP_GATHER4_C:
+   case DXBC_OP_GATHER4_PO: case DXBC_OP_GATHER4_PO_C:
       emit_gather(c, insn);
       return;
    case DXBC_OP_LOD:
@@ -2160,6 +2206,9 @@ emit_instruction(struct ctx *c, unsigned index)
       return;
    case DXBC_OP_BUFINFO:
       emit_bufinfo(c, insn);
+      return;
+   case DXBC_OP_EVAL_SAMPLE_INDEX: case DXBC_OP_EVAL_CENTROID: case DXBC_OP_EVAL_SNAPPED:
+      emit_eval(c, insn);
       return;
    default:
       fail(c, insn, "instruction %s", dxbc_opcode_name(insn->opcode));
