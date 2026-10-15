@@ -789,6 +789,9 @@ typedef struct _ADMISSION_CONTEXT {
   /* G4-r3 (EXP1296): Wom1GpuReset; written by the reset thread only
    * (first-level synchronization). */
   ADMISSION_GPU_RESET_RECEIPT GpuReset;
+  /* G4-r3 TDR drill (ADMISSION_TDR_DRILL): armed by escape for one process. */
+  BOOLEAN TdrDrillAllowed;
+  volatile LONG TdrDrillPid, TdrDrillJobs, TdrDrillFence;
 } ADMISSION_CONTEXT;
 
 typedef struct _ADMISSION_DEVICE {
@@ -1892,6 +1895,9 @@ VOID AdmissionPlatformRuntimeResetState(_In_ ADMISSION_CONTEXT *Context,
 ULONG AdmissionPlatformRuntimeDebugState(_In_ ADMISSION_CONTEXT *Context);
 /* G4-r3 (EXP1296): Wom1GpuReset (PASSIVE_LEVEL, flushed). */
 void AdmissionRecordGpuReset(_In_opt_ ADMISSION_CONTEXT *Context);
+/* G4-r3 TDR drill escape (ADMISSION_TDR_DRILL), in the caller's process. */
+NTSTATUS AdmissionPlatformTdrDrillEscape(_Inout_ ADMISSION_CONTEXT *Context,
+    _In_ const DXGKARG_ESCAPE *Args);
 BOOLEAN AdmissionPlatformRuntimeResponsive(
     _Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionWin32SnapshotRenderCommand(

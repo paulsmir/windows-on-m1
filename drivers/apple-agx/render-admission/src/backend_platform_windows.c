@@ -3613,6 +3613,52 @@ static VOID AdmissionPublishFirmwareRecovery(
   ZwClose(key);
 }
 
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+/* G4-r3 TDR drill: TRUE for a job of the armed process; consumes one. */
+static BOOLEAN AdmissionTdrDrillTake(ADMISSION_CONTEXT *Adapter,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *Description) {
+  ADMISSION_RENDER_CONTEXT *context =
+      (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)Description->ContextToken;
+  LONG jobs;
+  if (InterlockedCompareExchange(&Adapter->TdrDrillJobs, 0, 0) <= 0 ||
+      context == NULL || context->GpuvaG3Process == NULL ||
+      ((ADMISSION_G3_PROCESS *)context->GpuvaG3Process)->OsProcessId !=
+          (ULONG)InterlockedCompareExchange(&Adapter->TdrDrillPid, 0, 0))
+    return FALSE;
+  do {
+    jobs = InterlockedCompareExchange(&Adapter->TdrDrillJobs, 0, 0);
+    if (jobs <= 0)
+      return FALSE;
+  } while (InterlockedCompareExchange(&Adapter->TdrDrillJobs, jobs - 1,
+                                      jobs) != jobs);
+  InterlockedExchange(&Adapter->TdrDrillFence, (LONG)Description->Fence);
+  return TRUE;
+}
+#endif
+
+_Use_decl_annotations_ NTSTATUS AdmissionPlatformTdrDrillEscape(
+    ADMISSION_CONTEXT *Context, const DXGKARG_ESCAPE *Args) {
+  ADMISSION_TDR_DRILL drill;
+  if (Context == NULL || Args == NULL || Args->pPrivateDriverData == NULL ||
+      Args->PrivateDriverDataSize != sizeof(drill))
+    return STATUS_INVALID_PARAMETER;
+  if (!Context->TdrDrillAllowed)
+    return STATUS_NOT_SUPPORTED;
+  RtlCopyMemory(&drill, Args->pPrivateDriverData, sizeof(drill));
+  if (drill.Magic != ADMISSION_TDR_DRILL_MAGIC ||
+      drill.Version != ADMISSION_TDR_DRILL_VERSION ||
+      drill.Bytes != sizeof(drill) || drill.Jobs == 0u ||
+      drill.Jobs > ADMISSION_TDR_DRILL_MAX_JOBS)
+    return STATUS_INVALID_PARAMETER;
+  /* The escape runs in the caller's process: its jobs are the drilled ones. */
+  InterlockedExchange(&Context->TdrDrillJobs, 0);
+  InterlockedExchange(&Context->TdrDrillFence, 0);
+  InterlockedExchange(&Context->TdrDrillPid,
+                      (LONG)HandleToULong(PsGetCurrentProcessId()));
+  InterlockedExchange(&Context->TdrDrillJobs, (LONG)drill.Jobs);
+  return STATUS_SUCCESS;
+}
+
 static VOID AdmissionPlatformWorker(
     _In_ PDEVICE_OBJECT DeviceObject, _In_opt_ PVOID Context) {
   ADMISSION_CONTEXT *adapter = Context;
@@ -3626,6 +3672,7 @@ static VOID AdmissionPlatformWorker(
   BOOLEAN activated = FALSE;
   BOOLEAN cancelled = FALSE;
   BOOLEAN deferred = FALSE;
+  BOOLEAN drilled = FALSE;
   LARGE_INTEGER pollStart, pollFrequency;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   APPLE_AGX_G13_QUEUE_PROGRESS finalProgress;
@@ -3929,8 +3976,15 @@ static VOID AdmissionPlatformWorker(
   runtime->FwTs1Kick = AdmissionFwTs1Read(runtime);
   runtime->FwTs1First = 0ULL;
   runtime->FwTs1FirstQpc = 0ULL;
+  /* G4-r3 TDR drill: leave as a failed poll would; the job stays with the
+   * firmware and its end reaches only the reset's quiescence poll. */
+  if (AdmissionTdrDrillTake(adapter, &description)) {
+    drilled = TRUE;
+    InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x40000L | __LINE__, 0);
+  }
 #endif
   while (runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted &&
+         !drilled &&
          InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 &&
          InterlockedCompareExchange(&runtime->Resetting, 0, 0) == 0) {
     APPLE_AGX_BACKEND_U32 drained = 0u;
@@ -4366,9 +4420,11 @@ static NTSTATUS AdmissionPlatformDestroy(
   return STATUS_SUCCESS;
 }
 
-/* G4-r3 (EXP1296): device value Wom1GpuFaultInfoRead = 1 enables the
- * FAULT_INFO read at a firmware fault event (AdmissionGpuFaultCapture). */
-static BOOLEAN AdmissionPlatformFaultInfoReadEnabled(ADMISSION_CONTEXT *Context) {
+/* G4-r3 (EXP1296): opt-in device values, read once at start: =1 enables.
+ * Wom1GpuFaultInfoRead: the FAULT_INFO read (AdmissionGpuFaultCapture);
+ * Wom1TdrDrillAllowed: the TDR drill escape (AdmissionPlatformTdrDrillEscape). */
+static BOOLEAN AdmissionPlatformSwitchEnabled(ADMISSION_CONTEXT *Context,
+                                             PCWSTR ValueName) {
   HANDLE key = NULL;
   UNICODE_STRING name;
   ULONG bytes = 0u;
@@ -4383,7 +4439,7 @@ static BOOLEAN AdmissionPlatformFaultInfoReadEnabled(ADMISSION_CONTEXT *Context)
       !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
           PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
     return FALSE;
-  RtlInitUnicodeString(&name, L"Wom1GpuFaultInfoRead");
+  RtlInitUnicodeString(&name, ValueName);
   if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
                                  value, sizeof(data.Buffer), &bytes)) &&
       value->Type == REG_DWORD && value->DataLength == sizeof(ULONG) &&
@@ -4693,7 +4749,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   AppleAgxCompletionTransactionInitialize(&runtime->Completion);
   AdmissionGpuFaultReceiptInitialize(&runtime->GpuFault);
   runtime->GpuFaultUnpublished = FALSE;
-  runtime->ReadFaultInfo = AdmissionPlatformFaultInfoReadEnabled(Context);
+  runtime->ReadFaultInfo =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1GpuFaultInfoRead");
+  InterlockedExchange(&Context->TdrDrillJobs, 0);
+  Context->TdrDrillAllowed =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1TdrDrillAllowed");
   KeInitializeEvent(&runtime->WorkIdle, NotificationEvent, TRUE);
   KeInitializeEvent(&runtime->SlotEvent, NotificationEvent, FALSE);
   InterlockedExchange(&runtime->WorkScheduled, 0);

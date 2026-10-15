@@ -327,6 +327,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEscape(
       return AdmissionGpuvaG3PrivateEscape((ADMISSION_CONTEXT *)Adapter, Args);
     if (private_magic == 0x43565041u)
       return AdmissionGpuvaG3CopyEscape((ADMISSION_CONTEXT *)Adapter, Args);
+    if (private_magic == ADMISSION_TDR_DRILL_MAGIC)
+      return AdmissionPlatformTdrDrillEscape((ADMISSION_CONTEXT *)Adapter, Args);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
     if (private_magic == ADMISSION_DWM_FRAME_ARM_MAGIC)
       return AdmissionGpuvaG3FrameArmEscape((ADMISSION_CONTEXT *)Adapter, Args);

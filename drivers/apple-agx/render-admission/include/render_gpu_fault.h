@@ -83,4 +83,16 @@ typedef struct _ADMISSION_GPU_RESET_RECEIPT {
   unsigned long long ContextToken;
 } ADMISSION_GPU_RESET_RECEIPT;
 
+/* TDR drill (DxgkDdiEscape payload): the KMD strands the next Jobs render
+ * jobs of the calling process in the worker, as a worker that left its poll
+ * loop would (the EXP1296 state): the job stays with the firmware, dispatch
+ * freezes, VidSch's TDR runs the reset's quiescence wait. Refused unless the
+ * device value Wom1TdrDrillAllowed = 1. Tool: windows/icd/agx_tdr_drill.c. */
+#define ADMISSION_TDR_DRILL_MAGIC 0x44524454u /* "TDRD" */
+#define ADMISSION_TDR_DRILL_VERSION 1u
+#define ADMISSION_TDR_DRILL_MAX_JOBS 4u
+typedef struct _ADMISSION_TDR_DRILL {
+  unsigned int Magic, Version, Bytes, Jobs;
+} ADMISSION_TDR_DRILL;
+
 #endif /* APPLE_AGX_RENDER_GPU_FAULT_H */
