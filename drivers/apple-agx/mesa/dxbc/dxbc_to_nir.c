@@ -20,6 +20,16 @@
 #define MAX_RESOURCES 128
 #define MAX_SAMPLERS 16
 #define MAX_CF 64
+#define MAX_UAVS 64
+#define MAX_TGSM 32
+
+enum mem_kind { MEM_NONE, MEM_TYPED, MEM_RAW, MEM_STRUCTURED };
+
+struct tex_shape {
+   enum glsl_sampler_dim dim;
+   bool array;
+   unsigned coords;     /* including the array index */
+};
 
 enum cf_kind { CF_IF, CF_LOOP, CF_SWITCH };
 
@@ -83,6 +93,22 @@ struct ctx {
       bool declared;
       bool comparison;
    } samp[MAX_SAMPLERS];
+
+   /* shader model 5 memory: u# views, g# groupshared, raw/structured t# */
+   struct {
+      uint8_t kind;          /* enum mem_kind */
+      uint32_t stride;
+      nir_variable *image;   /* MEM_TYPED */
+      uint8_t dim;
+      nir_alu_type type;
+   } uav[MAX_UAVS];
+   struct {
+      nir_variable *var;     /* uint array */
+      uint32_t stride;       /* 0: raw */
+   } tgsm[MAX_TGSM];
+   uint8_t res_kind[MAX_RESOURCES];
+   uint32_t res_stride[MAX_RESOURCES];
+   unsigned gs_stream;    /* the stream later output declarations belong to */
 
    struct cf_entry cf[MAX_CF];
    unsigned cf_depth;
@@ -153,6 +179,7 @@ output_reg(struct ctx *c, unsigned index)
 
 static nir_def *read_src(struct ctx *c, const struct dxbc_instruction *insn,
                          const struct dxbc_operand *o, nir_alu_type type);
+static bool tex_shape(unsigned dim, struct tex_shape *s);
 
 /* imm + relative register component, as a 32-bit integer */
 static nir_def *
@@ -279,6 +306,18 @@ load_file(struct ctx *c, const struct dxbc_instruction *insn,
          nir_build_deref_var(b, c->icb), index_value(c, insn, &o->index[0])));
    case DXBC_OPERAND_INPUT_PRIMITIVEID:
       return replicate4(c, nir_load_primitive_id(b));
+   case DXBC_OPERAND_INPUT_THREAD_ID:
+      return nir_pad_vector_imm_int(b, nir_load_global_invocation_id(b, 32), 0, 4);
+   case DXBC_OPERAND_INPUT_THREAD_GROUP_ID:
+      return nir_pad_vector_imm_int(b, nir_load_workgroup_id(b), 0, 4);
+   case DXBC_OPERAND_INPUT_THREAD_ID_IN_GROUP:
+      return nir_pad_vector_imm_int(b, nir_load_local_invocation_id(b), 0, 4);
+   case DXBC_OPERAND_INPUT_THREAD_ID_IN_GROUP_FLATTENED:
+      return replicate4(c, nir_load_local_invocation_index(b));
+   case DXBC_OPERAND_INPUT_COVERAGE_MASK:
+      return replicate4(c, nir_load_sample_mask_in(b));
+   case DXBC_OPERAND_INPUT_GS_INSTANCE_ID:
+      return replicate4(c, nir_load_invocation_id(b));
    default:
       fail(c, insn, "source operand type %u", o->type);
       return zero4(c);
@@ -423,6 +462,10 @@ declare_input(struct ctx *c, const struct dxbc_instruction *insn)
    case DXBC_OPERAND_INPUT_PRIMITIVEID:
    case DXBC_OPERAND_INPUT_COVERAGE_MASK:
    case DXBC_OPERAND_INPUT_GS_INSTANCE_ID:
+   case DXBC_OPERAND_INPUT_THREAD_ID:
+   case DXBC_OPERAND_INPUT_THREAD_GROUP_ID:
+   case DXBC_OPERAND_INPUT_THREAD_ID_IN_GROUP:
+   case DXBC_OPERAND_INPUT_THREAD_ID_IN_GROUP_FLATTENED:
       return; /* read through system values at use */
    default:
       fail(c, insn, "input declaration of operand type %u", o->type);
@@ -601,6 +644,7 @@ declare_output(struct ctx *c, const struct dxbc_instruction *insn)
       var = find_output(c, slot);
       if (!var)
          var = make_var(c, nir_var_shader_out, glsl_vec4_type(), slot, "vout");
+      var->data.stream = c->gs_stream;
       add_sink(c, reg, var, mask, 0, false);
       return;
    }
@@ -759,6 +803,96 @@ declare(struct ctx *c, const struct dxbc_instruction *insn)
    case DXBC_OP_DCL_MAX_OUTPUT_VERTEX_COUNT:
       b->shader->info.gs.vertices_out = insn->num_payload ? insn->payload[0] : 0;
       return;
+   case DXBC_OP_DCL_GS_INSTANCE_COUNT:
+      b->shader->info.gs.invocations = insn->num_payload ? insn->payload[0] : 1;
+      return;
+   case DXBC_OP_DCL_STREAM:
+      if (!o || o->type != DXBC_OPERAND_STREAM || o->index[0].imm >= 4) {
+         fail(c, insn, "stream declaration");
+         return;
+      }
+      c->gs_stream = (unsigned)o->index[0].imm;
+      b->shader->info.gs.active_stream_mask |= (uint8_t)(1u << c->gs_stream);
+      return;
+   case DXBC_OP_DCL_THREAD_GROUP:
+      if (insn->num_payload < 3 || !insn->payload[0] || !insn->payload[1] || !insn->payload[2]) {
+         fail(c, insn, "thread group declaration");
+         return;
+      }
+      for (unsigned i = 0; i < 3; ++i)
+         b->shader->info.workgroup_size[i] = (uint16_t)insn->payload[i];
+      return;
+   case DXBC_OP_DCL_TGSM_RAW:
+   case DXBC_OP_DCL_TGSM_STRUCTURED: {
+      unsigned g = o ? (unsigned)o->index[0].imm : MAX_TGSM;
+      bool structured = insn->opcode == DXBC_OP_DCL_TGSM_STRUCTURED;
+      uint64_t bytes = !insn->num_payload ? 0 : structured ?
+         (insn->num_payload >= 2 ? (uint64_t)insn->payload[0] * insn->payload[1] : 0) :
+         insn->payload[0];
+      if (g >= MAX_TGSM || !bytes || (bytes & 3) || bytes > 32768 || c->tgsm[g].var) {
+         fail(c, insn, "groupshared declaration");
+         return;
+      }
+      c->tgsm[g].stride = structured ? insn->payload[0] : 0;
+      c->tgsm[g].var = nir_variable_create(b->shader, nir_var_mem_shared,
+         glsl_array_type(glsl_uint_type(), (unsigned)(bytes / 4), 4), "g");
+      return;
+   }
+   case DXBC_OP_DCL_UAV_TYPED: {
+      unsigned u = o ? (unsigned)o->index[0].imm : MAX_UAVS;
+      struct tex_shape shape;
+      nir_alu_type type;
+      if (u >= MAX_UAVS || !insn->num_payload ||
+          !tex_shape((insn->token0 >> 11) & 0x1fu, &shape) || shape.dim == GLSL_SAMPLER_DIM_MS ||
+          shape.dim == GLSL_SAMPLER_DIM_CUBE) {
+         fail(c, insn, "typed UAV declaration");
+         return;
+      }
+      type = return_type(insn->payload[0]);
+      c->uav[u].kind = MEM_TYPED;
+      c->uav[u].dim = (uint8_t)((insn->token0 >> 11) & 0x1fu);
+      c->uav[u].type = type;
+      c->uav[u].image = nir_variable_create(b->shader, nir_var_image,
+         glsl_image_type(shape.dim, shape.array, nir_get_glsl_base_type_for_nir_type(type)), "u");
+      c->uav[u].image->data.binding = u;
+      c->uav[u].image->data.image.format = PIPE_FORMAT_NONE;
+      BITSET_SET(b->shader->info.images_used, u);
+      b->shader->info.num_images = MAX2(b->shader->info.num_images, (uint8_t)(u + 1));
+      return;
+   }
+   case DXBC_OP_DCL_UAV_RAW:
+   case DXBC_OP_DCL_UAV_STRUCTURED: {
+      unsigned u = o ? (unsigned)o->index[0].imm : MAX_UAVS;
+      bool structured = insn->opcode == DXBC_OP_DCL_UAV_STRUCTURED;
+      if (u >= MAX_UAVS || (structured && (!insn->num_payload || !insn->payload[0] ||
+                                           (insn->payload[0] & 3)))) {
+         fail(c, insn, "buffer UAV declaration");
+         return;
+      }
+      c->uav[u].kind = structured ? MEM_STRUCTURED : MEM_RAW;
+      c->uav[u].stride = structured ? insn->payload[0] : 0;
+      b->shader->info.num_ssbos = MAX2(b->shader->info.num_ssbos, (uint8_t)(u + 1));
+      return;
+   }
+   case DXBC_OP_DCL_RESOURCE_RAW:
+   case DXBC_OP_DCL_RESOURCE_STRUCTURED: {
+      unsigned t = o ? (unsigned)o->index[0].imm : MAX_RESOURCES;
+      bool structured = insn->opcode == DXBC_OP_DCL_RESOURCE_STRUCTURED;
+      if (t >= MAX_RESOURCES || (structured && (!insn->num_payload || !insn->payload[0] ||
+                                                (insn->payload[0] & 3)))) {
+         fail(c, insn, "buffer SRV declaration");
+         return;
+      }
+      /* read as a 32-bit texel buffer view (one dword per texel) */
+      c->res[t].declared = true;
+      c->res[t].dim = DXBC_DIM_BUFFER;
+      c->res[t].type = nir_type_uint32;
+      c->res_kind[t] = structured ? MEM_STRUCTURED : MEM_RAW;
+      c->res_stride[t] = structured ? insn->payload[0] : 0;
+      BITSET_SET(b->shader->info.textures_used, t);
+      BITSET_SET(b->shader->info.textures_used_by_txf, t);
+      return;
+   }
    default:
       fail(c, insn, "declaration %s", dxbc_opcode_name(insn->opcode));
       return;
@@ -912,6 +1046,64 @@ emit_alu(struct ctx *c, const struct dxbc_instruction *insn)
                 nir_bcsel(b, nir_ieq_imm(b, s1, 0), nir_imm_int(b, -1), nir_udiv(b, s0, s1)), false);
       write_dst(c, insn, &insn->operands[1],
                 nir_bcsel(b, nir_ieq_imm(b, s1, 0), nir_imm_int(b, -1), nir_umod(b, s0, s1)), false);
+      return true;
+   /* shader model 5 bit operations */
+   case DXBC_OP_COUNTBITS: r = nir_bit_count(b, SRC(1, U)); break;
+   case DXBC_OP_FIRSTBIT_LO: r = nir_find_lsb(b, SRC(1, U)); break;
+   case DXBC_OP_FIRSTBIT_HI:
+   case DXBC_OP_FIRSTBIT_SHI: {
+      /* D3D counts from the most significant bit; NIR from the least */
+      nir_def *msb = insn->opcode == DXBC_OP_FIRSTBIT_HI ?
+         nir_ufind_msb(b, SRC(1, U)) : nir_ifind_msb(b, SRC(1, I));
+      r = nir_bcsel(b, nir_ilt_imm(b, msb, 0), nir_imm_int(b, -1), nir_isub_imm(b, 31, msb));
+      break;
+   }
+   case DXBC_OP_UBFE: r = nir_ubfe(b, SRC(3, U), SRC(2, U), SRC(1, U)); break;
+   case DXBC_OP_IBFE: r = nir_ibfe(b, SRC(3, I), SRC(2, U), SRC(1, U)); break;
+   case DXBC_OP_BFI:
+      r = nir_bfi(b, nir_bfm(b, SRC(1, U), SRC(2, U)), SRC(3, U), SRC(4, U));
+      break;
+   case DXBC_OP_BFREV: r = nir_bitfield_reverse(b, SRC(1, U)); break;
+   case DXBC_OP_F32TOF16: {
+      nir_def *v = SRC(1, F), *comp[4];
+      for (unsigned i = 0; i < 4; ++i)
+         comp[i] = nir_pack_half_2x16_split(b, nir_channel(b, v, i), nir_imm_float(b, 0));
+      r = nir_vec(b, comp, 4);
+      break;
+   }
+   case DXBC_OP_F16TOF32: {
+      nir_def *v = SRC(1, U), *comp[4];
+      for (unsigned i = 0; i < 4; ++i)
+         comp[i] = nir_channel(b, nir_unpack_half_2x16(b, nir_channel(b, v, i)), 0);
+      r = nir_vec(b, comp, 4);
+      break;
+   }
+   case DXBC_OP_MSAD: {
+      /* sum of |ref byte - src byte| over the reference's nonzero bytes */
+      nir_def *ref = SRC(1, U), *src = SRC(2, U), *acc = SRC(3, U);
+      for (unsigned i = 0; i < 4; ++i) {
+         nir_def *rb = nir_ubfe_imm(b, ref, 8 * i, 8);
+         nir_def *sb = nir_ubfe_imm(b, src, 8 * i, 8);
+         nir_def *d = nir_iabs(b, nir_isub(b, rb, sb));
+         acc = nir_iadd(b, acc, nir_bcsel(b, nir_ieq_imm(b, rb, 0), nir_imm_int(b, 0), d));
+      }
+      r = acc;
+      break;
+   }
+   case DXBC_OP_UADDC: case DXBC_OP_USUBB: {
+      bool add = insn->opcode == DXBC_OP_UADDC;
+      s0 = SRC(2, U);
+      s1 = SRC(3, U);
+      write_dst(c, insn, &insn->operands[0], add ? nir_iadd(b, s0, s1) : nir_isub(b, s0, s1), false);
+      write_dst(c, insn, &insn->operands[1], add ? nir_uadd_carry(b, s0, s1) : nir_usub_borrow(b, s0, s1), false);
+      return true;
+   }
+   case DXBC_OP_SWAPC:
+      s0 = nir_ine_imm(b, SRC(2, U), 0);
+      s1 = SRC(3, U);
+      s2 = SRC(4, U);
+      write_dst(c, insn, &insn->operands[0], nir_bcsel(b, s0, s2, s1), false);
+      write_dst(c, insn, &insn->operands[1], nir_bcsel(b, s0, s1, s2), false);
       return true;
    case DXBC_OP_SINCOS:
       s0 = SRC(2, F);
@@ -1195,12 +1387,6 @@ emit_flow(struct ctx *c, unsigned index)
 /* ---------------------------------------------------------------------
  * Resources
  */
-
-struct tex_shape {
-   enum glsl_sampler_dim dim;
-   bool array;
-   unsigned coords;     /* including the array index */
-};
 
 static bool
 tex_shape(unsigned dim, struct tex_shape *s)
@@ -1550,6 +1736,341 @@ emit_samplepos(struct ctx *c, const struct dxbc_instruction *insn)
 }
 
 /* ---------------------------------------------------------------------
+ * Shader model 5 memory: UAVs (u#), groupshared memory (g#), raw and
+ * structured SRVs (t#)
+ */
+
+static nir_def *
+mem_dword_index(struct ctx *c, nir_def *byte_address)
+{
+   return nir_ushr_imm(&c->b, byte_address, 2);
+}
+
+/* the byte address of an access: raw buffers take address.x, structured
+ * ones element address.x at byte address.y */
+static nir_def *
+mem_address(struct ctx *c, const struct dxbc_instruction *insn,
+            const struct dxbc_operand *target, nir_def *address)
+{
+   uint32_t stride = 0;
+   unsigned index = (unsigned)target->index[0].imm;
+   switch (target->type) {
+   case DXBC_OPERAND_UNORDERED_ACCESS_VIEW:
+      if (index >= MAX_UAVS || c->uav[index].kind < MEM_RAW) {
+         fail(c, insn, "buffer UAV u%u", index);
+         return nir_imm_int(&c->b, 0);
+      }
+      stride = c->uav[index].stride;
+      break;
+   case DXBC_OPERAND_THREAD_GROUP_SHARED_MEMORY:
+      if (index >= MAX_TGSM || !c->tgsm[index].var) {
+         fail(c, insn, "groupshared g%u", index);
+         return nir_imm_int(&c->b, 0);
+      }
+      stride = c->tgsm[index].stride;
+      break;
+   case DXBC_OPERAND_RESOURCE:
+      if (index >= MAX_RESOURCES || c->res_kind[index] < MEM_RAW) {
+         fail(c, insn, "buffer SRV t%u", index);
+         return nir_imm_int(&c->b, 0);
+      }
+      stride = c->res_stride[index];
+      break;
+   default:
+      fail(c, insn, "memory operand type %u", target->type);
+      return nir_imm_int(&c->b, 0);
+   }
+   if (!stride)
+      return nir_channel(&c->b, address, 0);
+   return nir_iadd(&c->b, nir_imul_imm(&c->b, nir_channel(&c->b, address, 0), stride),
+                   nir_channel(&c->b, address, 1));
+}
+
+static nir_def *
+mem_load(struct ctx *c, const struct dxbc_instruction *insn,
+         const struct dxbc_operand *target, nir_def *byte_address, unsigned n)
+{
+   nir_builder *b = &c->b;
+   unsigned index = (unsigned)target->index[0].imm;
+   nir_def *comp[4];
+   if (c->failed)
+      return nir_imm_zero(b, n, 32);
+   if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW)
+      return nir_load_ssbo(b, n, 32, nir_imm_int(b, (int)index), byte_address,
+                           .align_mul = 4, .align_offset = 0);
+   for (unsigned i = 0; i < n; ++i) {
+      nir_def *dword = nir_iadd_imm(b, mem_dword_index(c, byte_address), i);
+      if (target->type == DXBC_OPERAND_THREAD_GROUP_SHARED_MEMORY) {
+         comp[i] = nir_load_deref(b, nir_build_deref_array(b,
+            nir_build_deref_var(b, c->tgsm[index].var), dword));
+      } else {
+         struct tex_shape shape;
+         nir_tex_instr *tex;
+         tex_shape(DXBC_DIM_BUFFER, &shape);
+         tex = tex_begin(c, nir_texop_txf, index, 0, false, 1, &shape, nir_type_uint32);
+         tex->coord_components = 1;
+         tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_coord, dword);
+         comp[i] = nir_channel(b, tex_finish(c, tex, 1, 4), 0);
+      }
+   }
+   return nir_vec(b, comp, n);
+}
+
+static void
+mem_store(struct ctx *c, const struct dxbc_instruction *insn,
+          const struct dxbc_operand *target, nir_def *byte_address, nir_def *value,
+          unsigned n)
+{
+   nir_builder *b = &c->b;
+   unsigned index = (unsigned)target->index[0].imm;
+   if (c->failed)
+      return;
+   if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW) {
+      nir_store_ssbo(b, nir_trim_vector(b, value, n), nir_imm_int(b, (int)index), byte_address,
+                     .write_mask = BITFIELD_MASK(n), .align_mul = 4, .align_offset = 0);
+      return;
+   }
+   if (target->type != DXBC_OPERAND_THREAD_GROUP_SHARED_MEMORY) {
+      fail(c, insn, "store to operand type %u", target->type);
+      return;
+   }
+   for (unsigned i = 0; i < n; ++i)
+      nir_store_deref(b, nir_build_deref_array(b, nir_build_deref_var(b, c->tgsm[index].var),
+                      nir_iadd_imm(b, mem_dword_index(c, byte_address), i)),
+                      nir_channel(b, value, i), 1);
+}
+
+/* ld_raw / ld_structured: dst.c = memory[address + 4 * src.swizzle[c]] */
+static void
+emit_mem_load(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   bool structured = insn->opcode == DXBC_OP_LD_STRUCTURED;
+   const struct dxbc_operand *dst = &insn->operands[0];
+   const struct dxbc_operand *src = &insn->operands[structured ? 3 : 2];
+   nir_def *address, *byte_address, *v;
+   unsigned mask = dst->num_components == 4 ? dst->mask : 1u, n = 1;
+   for (unsigned i = 0; i < 4; ++i)
+      if (mask & (1u << i))
+         n = MAX2(n, (unsigned)src->swizzle[i] + 1u);
+   if (structured) {
+      address = nir_vec2(&c->b, nir_channel(&c->b, SRC(1, U), 0), nir_channel(&c->b, SRC(2, U), 0));
+   } else {
+      address = SRC(1, U);
+   }
+   byte_address = mem_address(c, insn, src, address);
+   v = nir_pad_vector_imm_int(&c->b, mem_load(c, insn, src, byte_address, n), 0, 4);
+   write_dst(c, insn, dst, swizzle4(c, v, src), false);
+}
+
+/* store_raw / store_structured: the destination mask (.x .. .xyzw) names
+ * the dwords written from the value's first components */
+static void
+emit_mem_store(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   bool structured = insn->opcode == DXBC_OP_STORE_STRUCTURED;
+   const struct dxbc_operand *dst = &insn->operands[0];
+   nir_def *address, *value;
+   unsigned mask = dst->num_components == 4 ? dst->mask : 1u;
+   unsigned n = (unsigned)util_last_bit(mask);
+   if (mask != BITFIELD_MASK(n)) {
+      fail(c, insn, "non-contiguous store mask");
+      return;
+   }
+   address = structured ?
+      nir_vec2(&c->b, nir_channel(&c->b, SRC(1, U), 0), nir_channel(&c->b, SRC(2, U), 0)) :
+      SRC(1, U);
+   value = SRC(structured ? 3 : 2, U);
+   mem_store(c, insn, dst, mem_address(c, insn, dst, address), value, n);
+}
+
+static nir_deref_instr *
+uav_image(struct ctx *c, const struct dxbc_instruction *insn, const struct dxbc_operand *o,
+          struct tex_shape *shape)
+{
+   unsigned u = (unsigned)o->index[0].imm;
+   if (o->type != DXBC_OPERAND_UNORDERED_ACCESS_VIEW || o->index_dimension != 1 ||
+       !index_direct(&o->index[0]) || u >= MAX_UAVS || c->uav[u].kind != MEM_TYPED) {
+      fail(c, insn, "typed UAV operand");
+      return NULL;
+   }
+   tex_shape(c->uav[u].dim, shape);
+   return nir_build_deref_var(&c->b, c->uav[u].image);
+}
+
+static void
+emit_typed_load(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   struct tex_shape shape;
+   const struct dxbc_operand *uav = &insn->operands[2];
+   nir_deref_instr *image = uav_image(c, insn, uav, &shape);
+   nir_def *v;
+   if (!image)
+      return;
+   v = nir_image_deref_load(&c->b, 4, 32, &image->def, SRC(1, U), nir_imm_int(&c->b, 0),
+                            nir_imm_int(&c->b, 0), .image_dim = shape.dim,
+                            .image_array = shape.array,
+                            .dest_type = c->uav[uav->index[0].imm].type);
+   write_dst(c, insn, &insn->operands[0], swizzle4(c, v, uav), insn->saturate);
+}
+
+static void
+emit_typed_store(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   struct tex_shape shape;
+   const struct dxbc_operand *uav = &insn->operands[0];
+   nir_deref_instr *image = uav_image(c, insn, uav, &shape);
+   if (!image)
+      return;
+   nir_image_deref_store(&c->b, &image->def, SRC(1, U), nir_imm_int(&c->b, 0), SRC(2, U),
+                         nir_imm_int(&c->b, 0), .image_dim = shape.dim,
+                         .image_array = shape.array,
+                         .src_type = c->uav[uav->index[0].imm].type);
+}
+
+static nir_atomic_op
+atomic_op(uint32_t opcode)
+{
+   switch (opcode) {
+   case DXBC_OP_ATOMIC_AND: case DXBC_OP_IMM_ATOMIC_AND: return nir_atomic_op_iand;
+   case DXBC_OP_ATOMIC_OR: case DXBC_OP_IMM_ATOMIC_OR: return nir_atomic_op_ior;
+   case DXBC_OP_ATOMIC_XOR: case DXBC_OP_IMM_ATOMIC_XOR: return nir_atomic_op_ixor;
+   case DXBC_OP_ATOMIC_IADD: case DXBC_OP_IMM_ATOMIC_IADD: return nir_atomic_op_iadd;
+   case DXBC_OP_ATOMIC_IMAX: case DXBC_OP_IMM_ATOMIC_IMAX: return nir_atomic_op_imax;
+   case DXBC_OP_ATOMIC_IMIN: case DXBC_OP_IMM_ATOMIC_IMIN: return nir_atomic_op_imin;
+   case DXBC_OP_ATOMIC_UMAX: case DXBC_OP_IMM_ATOMIC_UMAX: return nir_atomic_op_umax;
+   case DXBC_OP_ATOMIC_UMIN: case DXBC_OP_IMM_ATOMIC_UMIN: return nir_atomic_op_umin;
+   case DXBC_OP_IMM_ATOMIC_EXCH: return nir_atomic_op_xchg;
+   default: return nir_atomic_op_cmpxchg;
+   }
+}
+
+/* atomic_* target, address, value[, value]; imm_atomic_* result, target,
+ * address, value[, value] (cmp forms: compare, then value) */
+static void
+emit_atomic(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   nir_builder *b = &c->b;
+   bool imm = insn->opcode >= DXBC_OP_IMM_ATOMIC_ALLOC && insn->opcode <= DXBC_OP_IMM_ATOMIC_UMIN;
+   bool swap = insn->opcode == DXBC_OP_ATOMIC_CMP_STORE || insn->opcode == DXBC_OP_IMM_ATOMIC_CMP_EXCH;
+   unsigned first = imm ? 1 : 0;
+   const struct dxbc_operand *target = &insn->operands[first];
+   nir_atomic_op op = atomic_op(insn->opcode);
+   nir_def *address = SRC(first + 1, U), *data, *compare = NULL, *result = NULL;
+   unsigned index = (unsigned)target->index[0].imm;
+
+   if (swap) {
+      compare = nir_channel(b, SRC(first + 2, U), 0);
+      data = nir_channel(b, SRC(first + 3, U), 0);
+   } else {
+      data = nir_channel(b, SRC(first + 2, U), 0);
+   }
+   if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW && index < MAX_UAVS &&
+       c->uav[index].kind == MEM_TYPED) {
+      struct tex_shape shape;
+      nir_deref_instr *image = uav_image(c, insn, target, &shape);
+      if (!image)
+         return;
+      result = swap ?
+         nir_image_deref_atomic_swap(b, 32, &image->def, address, nir_imm_int(b, 0), compare, data,
+                                     .image_dim = shape.dim, .image_array = shape.array,
+                                     .atomic_op = op, .format = PIPE_FORMAT_R32_UINT) :
+         nir_image_deref_atomic(b, 32, &image->def, address, nir_imm_int(b, 0), data,
+                                .image_dim = shape.dim, .image_array = shape.array,
+                                .atomic_op = op, .format = PIPE_FORMAT_R32_UINT);
+   } else {
+      nir_def *byte_address = mem_address(c, insn, target, address);
+      if (c->failed)
+         return;
+      if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW) {
+         nir_def *slot = nir_imm_int(b, (int)index);
+         result = swap ? nir_ssbo_atomic_swap(b, 32, slot, byte_address, compare, data, .atomic_op = op) :
+                         nir_ssbo_atomic(b, 32, slot, byte_address, data, .atomic_op = op);
+      } else if (target->type == DXBC_OPERAND_THREAD_GROUP_SHARED_MEMORY) {
+         nir_deref_instr *d = nir_build_deref_array(b, nir_build_deref_var(b, c->tgsm[index].var),
+                                                    mem_dword_index(c, byte_address));
+         result = swap ? nir_deref_atomic_swap(b, 32, &d->def, compare, data, .atomic_op = op) :
+                         nir_deref_atomic(b, 32, &d->def, data, .atomic_op = op);
+      } else {
+         fail(c, insn, "atomic on operand type %u", target->type);
+         return;
+      }
+   }
+   if (imm)
+      write_dst(c, insn, &insn->operands[0], replicate4(c, result), false);
+}
+
+/* imm_atomic_alloc / imm_atomic_consume: the UAV's hidden counter
+ * (DXBC_NIR_UAV_COUNTER_SLOT + u#); alloc returns the old count, consume the
+ * new one */
+static void
+emit_counter(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   nir_builder *b = &c->b;
+   const struct dxbc_operand *uav = &insn->operands[1];
+   unsigned u = (unsigned)uav->index[0].imm;
+   bool alloc = insn->opcode == DXBC_OP_IMM_ATOMIC_ALLOC;
+   nir_def *slot, *old;
+   if (uav->type != DXBC_OPERAND_UNORDERED_ACCESS_VIEW || u >= MAX_UAVS ||
+       c->uav[u].kind != MEM_STRUCTURED) {
+      fail(c, insn, "counter of a non-structured UAV");
+      return;
+   }
+   slot = nir_imm_int(b, DXBC_NIR_UAV_COUNTER_SLOT + (int)u);
+   b->shader->info.num_ssbos = MAX2(b->shader->info.num_ssbos,
+                                    (uint8_t)(DXBC_NIR_UAV_COUNTER_SLOT + u + 1));
+   old = nir_ssbo_atomic(b, 32, slot, nir_imm_int(b, 0), nir_imm_int(b, alloc ? 1 : -1),
+                         .atomic_op = nir_atomic_op_iadd);
+   write_dst(c, insn, &insn->operands[0], replicate4(c, alloc ? old : nir_iadd_imm(b, old, -1)),
+             false);
+}
+
+static void
+emit_sync(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   uint32_t flags = insn->token0 & 0x7800u;
+   bool threads = flags & 0x800u, tgsm = flags & 0x1000u;
+   bool uav_group = flags & 0x2000u, uav_global = flags & 0x4000u;
+   nir_variable_mode modes = (tgsm ? nir_var_mem_shared : 0) |
+      ((uav_group || uav_global) ? (nir_var_mem_ssbo | nir_var_image) : 0);
+   nir_barrier(&c->b, .execution_scope = threads ? SCOPE_WORKGROUP : SCOPE_NONE,
+               .memory_scope = uav_global ? SCOPE_DEVICE : SCOPE_WORKGROUP,
+               .memory_semantics = modes ? NIR_MEMORY_ACQ_REL : 0,
+               .memory_modes = modes);
+}
+
+/* bufinfo: the element count of a buffer resource or UAV (bytes for raw) */
+static void
+emit_bufinfo(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   nir_builder *b = &c->b;
+   const struct dxbc_operand *o = &insn->operands[1];
+   unsigned index = (unsigned)o->index[0].imm;
+   nir_def *count = NULL;
+   if (o->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW && index < MAX_UAVS &&
+       c->uav[index].kind >= MEM_RAW) {
+      count = nir_get_ssbo_size(b, 32, nir_imm_int(b, (int)index));
+      if (c->uav[index].kind == MEM_STRUCTURED)
+         count = nir_udiv_imm(b, count, c->uav[index].stride);
+   } else if (o->type == DXBC_OPERAND_RESOURCE && index < MAX_RESOURCES &&
+              c->res[index].declared && c->res[index].dim == DXBC_DIM_BUFFER) {
+      struct tex_shape shape;
+      nir_tex_instr *tex;
+      tex_shape(DXBC_DIM_BUFFER, &shape);
+      tex = tex_begin(c, nir_texop_txs, index, 0, false, 1, &shape, nir_type_uint32);
+      tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_lod, nir_imm_int(b, 0));
+      count = tex_finish(c, tex, 1, 1);
+      if (c->res_kind[index] == MEM_RAW)
+         count = nir_imul_imm(b, count, 4);
+      else if (c->res_kind[index] == MEM_STRUCTURED)
+         count = nir_udiv_imm(b, nir_imul_imm(b, count, 4), c->res_stride[index]);
+   } else {
+      fail(c, insn, "bufinfo operand");
+      return;
+   }
+   write_dst(c, insn, &insn->operands[0], replicate4(c, count), false);
+}
+
+/* ---------------------------------------------------------------------
  * Driver
  */
 
@@ -1592,13 +2113,53 @@ emit_instruction(struct ctx *c, unsigned index)
       return;
    case DXBC_OP_EMIT:
    case DXBC_OP_EMITTHENCUT:
+   case DXBC_OP_EMIT_STREAM:
+   case DXBC_OP_EMITTHENCUT_STREAM: {
+      unsigned stream = 0;
+      if (insn->opcode == DXBC_OP_EMIT_STREAM || insn->opcode == DXBC_OP_EMITTHENCUT_STREAM)
+         stream = (unsigned)insn->operands[0].index[0].imm & 3u;
       store_outputs(c);
-      nir_emit_vertex(b, .stream_id = 0);
-      if (insn->opcode == DXBC_OP_EMITTHENCUT)
-         nir_end_primitive(b, .stream_id = 0);
+      nir_emit_vertex(b, .stream_id = stream);
+      if (insn->opcode == DXBC_OP_EMITTHENCUT || insn->opcode == DXBC_OP_EMITTHENCUT_STREAM)
+         nir_end_primitive(b, .stream_id = stream);
       return;
+   }
    case DXBC_OP_CUT:
-      nir_end_primitive(b, .stream_id = 0);
+   case DXBC_OP_CUT_STREAM: {
+      unsigned stream = insn->opcode == DXBC_OP_CUT_STREAM ?
+         (unsigned)insn->operands[0].index[0].imm & 3u : 0;
+      nir_end_primitive(b, .stream_id = stream);
+      return;
+   }
+   case DXBC_OP_LD_RAW: case DXBC_OP_LD_STRUCTURED:
+      emit_mem_load(c, insn);
+      return;
+   case DXBC_OP_STORE_RAW: case DXBC_OP_STORE_STRUCTURED:
+      emit_mem_store(c, insn);
+      return;
+   case DXBC_OP_LD_UAV_TYPED:
+      emit_typed_load(c, insn);
+      return;
+   case DXBC_OP_STORE_UAV_TYPED:
+      emit_typed_store(c, insn);
+      return;
+   case DXBC_OP_ATOMIC_AND: case DXBC_OP_ATOMIC_OR: case DXBC_OP_ATOMIC_XOR:
+   case DXBC_OP_ATOMIC_CMP_STORE: case DXBC_OP_ATOMIC_IADD: case DXBC_OP_ATOMIC_IMAX:
+   case DXBC_OP_ATOMIC_IMIN: case DXBC_OP_ATOMIC_UMAX: case DXBC_OP_ATOMIC_UMIN:
+   case DXBC_OP_IMM_ATOMIC_IADD: case DXBC_OP_IMM_ATOMIC_AND: case DXBC_OP_IMM_ATOMIC_OR:
+   case DXBC_OP_IMM_ATOMIC_XOR: case DXBC_OP_IMM_ATOMIC_EXCH: case DXBC_OP_IMM_ATOMIC_CMP_EXCH:
+   case DXBC_OP_IMM_ATOMIC_IMAX: case DXBC_OP_IMM_ATOMIC_IMIN: case DXBC_OP_IMM_ATOMIC_UMAX:
+   case DXBC_OP_IMM_ATOMIC_UMIN:
+      emit_atomic(c, insn);
+      return;
+   case DXBC_OP_SYNC:
+      emit_sync(c, insn);
+      return;
+   case DXBC_OP_IMM_ATOMIC_ALLOC: case DXBC_OP_IMM_ATOMIC_CONSUME:
+      emit_counter(c, insn);
+      return;
+   case DXBC_OP_BUFINFO:
+      emit_bufinfo(c, insn);
       return;
    default:
       fail(c, insn, "instruction %s", dxbc_opcode_name(insn->opcode));
@@ -1623,6 +2184,7 @@ dxbc_to_nir(const struct dxbc_program *program,
    case DXBC_PROGRAM_VERTEX: stage = MESA_SHADER_VERTEX; break;
    case DXBC_PROGRAM_PIXEL: stage = MESA_SHADER_FRAGMENT; break;
    case DXBC_PROGRAM_GEOMETRY: stage = MESA_SHADER_GEOMETRY; break;
+   case DXBC_PROGRAM_COMPUTE: stage = MESA_SHADER_COMPUTE; break;
    default:
       snprintf(error->message, sizeof(error->message), "program type %u", program->type);
       return NULL;

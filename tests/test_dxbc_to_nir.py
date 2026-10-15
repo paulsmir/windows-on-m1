@@ -2,11 +2,14 @@
 
 Every shader model 4.0/4.1 fixture (VS, PS, GS; constant buffers, the
 immediate constant buffer, indexable temporaries, loops, switch, discard,
-every 4.x texture operation, system values, geometry emit) must translate
+every 4.x texture operation, system values, geometry emit) and the SM 5
+compute and geometry fixtures (UAVs, groupshared memory, atomics, counters,
+barriers, bit operations; instancing and streams) must translate
 into NIR that validates after the tgsi_to_nir finalization sequence,
 Asahi's I/O lowering and agx_preprocess_nir, using the AGX compiler's NIR
-options.  Shader model 5 fixtures must be refused cleanly (the frontend
-keeps its TGSI path for them) until the translator grows to cover them.
+options.  The remaining SM 5 fixtures (tessellation, class linkage,
+doubles, attribute evaluation, SM 5.1 ranges) must be refused cleanly until
+the translator grows to cover them.
 
 Invariant caught: invalid NIR (code after a jump, component-count or type
 mismatches, unbalanced control flow, undeclared registers) or a crash on a
@@ -27,8 +30,13 @@ ROOT = Path(__file__).resolve().parents[1]
 DXBC = ROOT / "drivers/apple-agx/mesa/dxbc"
 FIXTURES = ROOT / "tests/fixtures/dxbc"
 TRANSLATED = {"vs40": "MESA_SHADER_VERTEX", "ps40": "MESA_SHADER_FRAGMENT",
-              "gs40": "MESA_SHADER_GEOMETRY", "ps41": "MESA_SHADER_FRAGMENT"}
-REFUSED = ["cs50", "hs50", "ds50", "ps50", "gs50", "ps51"]
+              "gs40": "MESA_SHADER_GEOMETRY", "ps41": "MESA_SHADER_FRAGMENT",
+              # SM 5: UAVs, groupshared memory, atomics, counters, sync, bit ops
+              "cs50": "MESA_SHADER_COMPUTE",
+              # SM 5: geometry instancing and two output streams
+              "gs50": "MESA_SHADER_GEOMETRY"}
+# tessellation stages, class linkage / doubles / evaluation, SM 5.1 ranges
+REFUSED = ["hs50", "ds50", "ps50", "ps51"]
 # the shaders the D3D smoke tools compile at run time (tools/dxbc/extract-smoke-shaders.py)
 STAGES = {"vs": "MESA_SHADER_VERTEX", "gs": "MESA_SHADER_GEOMETRY", "ps": "MESA_SHADER_FRAGMENT"}
 for line in (FIXTURES / "smoke/targets.txt").read_text().splitlines():

@@ -23,6 +23,14 @@ extern "C" {
 struct nir_shader;
 struct nir_shader_compiler_options;
 
+/* Binding conventions for shader model 5 resources (the frontend binds to
+ * match): a typed UAV u# is image slot #, a raw or structured UAV u# is
+ * shader-buffer slot #, its hidden append/consume counter (one 32-bit word
+ * at offset 0) is shader-buffer slot DXBC_NIR_UAV_COUNTER_SLOT + #, and a
+ * raw or structured SRV t# is texel-buffer sampler view # read one 32-bit
+ * dword per texel. */
+#define DXBC_NIR_UAV_COUNTER_SLOT 64
+
 struct dxbc_nir_error {
    char message[160];
    uint32_t offset;     /* DWORD offset of the instruction refused */
