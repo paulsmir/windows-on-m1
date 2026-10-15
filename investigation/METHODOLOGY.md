@@ -130,19 +130,20 @@ wins on any conflict. Every agent (Claude or Codex) works this way.
 - Before a task: what exactly will be fixed and where the work stands on the
   road to the full driver (D3D11 FL 11_0 default, flexible memory, D3D12).
 
-## 9a. Division of labour (user decision 2026-10-15)
+## 9a. Division of labour (user decisions 2026-10-15)
 
-- Codex writes code only: fixes, new features, tool code and the test
-  code that checks them, following the contract and the owning layer the
-  integrator names in the brief. Codex does not compile, run tests, run
-  tools or touch hardware; it reports the diff, the intended RED/GREEN
-  behaviour of its tests and its evidence (file:line).
-- The integrator (Claude) designs and decides (contract, owning layer,
-  architecture), compiles (Mac clang with the local Windows headers,
-  builder clang-cl/MSBuild), runs every test (RED before the fix where
-  the contract allows, GREEN after, neighbouring suites), dry-runs tools
-  on the builder's adapter, runs the hardware pipelines, keeps the
-  ledgers, commits and merges, and reports per experiment.
+- Afternoon: Codex wrote code, the integrator compiled, tested and ran
+  hardware. Evening: reversed by the user ("only you again, as before"):
+  each Codex round trip cost 3-5 minutes even for one-line fixes, and
+  branches merged without real-toolchain builds surfaced build errors one
+  at a time on the builder (EXP1299: x86 UMD without the D3D12 unit,
+  NTSTATUS, MSVC /W4 /WX C4201, C++14 default for a C++17 unit).
+- The integrator (Claude) now implements, compiles, tests, runs hardware,
+  keeps the ledgers and reports per experiment. Codex only on the user's
+  request.
+- Before merging any branch, build it with the real toolchains in one
+  pass: the ARM64 UMD vcxproj (cl /W4 /WX, its C++ standard) and the x86
+  WOW64 UMD (build-umd-x86.ps1); a Mac clang syntax check is not enough.
 
 ## 10. Environment quirks
 
