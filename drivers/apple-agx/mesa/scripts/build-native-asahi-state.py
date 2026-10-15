@@ -952,6 +952,8 @@ struct Query
    struct pipe_query *handle;
    struct pipe_query *extra[7];
    UINT extra_count;
+   /* D3D-H5: a timestamp query's value, taken when its fence completed */
+   UINT64 agx_timestamp;
 };'''),
         ('''struct Resource
 {
@@ -1637,8 +1639,8 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
     * as isp_oclqry_base; a predicate may carry the PREDICATEHINT flag.
     * D3D-G10d: pipeline statistics, stream-output statistics and the
     * stream-overflow predicate are Asahi queries too (single statistics,
-    * primitives emitted/generated, SO overflow). Timestamps need the
-    * firmware timestamp path and stay refused. */
+    * primitives emitted/generated, SO overflow).  D3D-H5: timestamp and
+    * timestamp-disjoint queries complete on the event fence (GetData). */
    const bool occlusion = pCreateQuery &&
       (pCreateQuery->Query == D3D10DDI_QUERY_OCCLUSION ||
        pCreateQuery->Query == D3D10DDI_QUERY_OCCLUSIONPREDICATE);
@@ -1650,7 +1652,9 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
       (pCreateQuery->Query == D3D10DDI_QUERY_OCCLUSIONPREDICATE ||
        pCreateQuery->Query == D3D10DDI_QUERY_STREAMOVERFLOWPREDICATE);
    if (!pCreateQuery || !pQuery ||
-       (pCreateQuery->Query != D3D10DDI_QUERY_EVENT && !occlusion && !statistics) ||
+       (pCreateQuery->Query != D3D10DDI_QUERY_EVENT && !occlusion && !statistics &&
+        pCreateQuery->Query != D3D10DDI_QUERY_TIMESTAMP &&
+        pCreateQuery->Query != D3D10DDI_QUERY_TIMESTAMPDISJOINT) ||
        (pCreateQuery->MiscFlags &&
         !(predicate &&
           pCreateQuery->MiscFlags == D3D10DDI_QUERY_MISCFLAG_PREDICATEHINT))) {
@@ -1884,7 +1888,31 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
    pQuery->Phase = QueryIssued;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Query.cpp','QueryGetData','''   Device *pDevice = CastDevice(hDevice);
    Query *pQuery = CastQuery(hQuery);
-   const UINT dataBytes = !pQuery || !pQuery->handle ? sizeof(BOOL) :
+   /* D3D-H5: timestamp queries complete on the event fence.  No GPU
+    * timestamps reach this UMD yet, so a timestamp is the CPU counter when
+    * its fence was seen complete and every disjoint query reports TRUE:
+    * D3D documents timestamps of a disjoint interval as unreliable, which
+    * applications check before using them. */
+   auto event_data = [&](void *out) {
+      if (!out) return;
+      if (pQuery->Type == D3D10DDI_QUERY_TIMESTAMP) {
+         *(UINT64 *)out = pQuery->agx_timestamp;
+      } else if (pQuery->Type == D3D10DDI_QUERY_TIMESTAMPDISJOINT) {
+         LARGE_INTEGER frequency;
+         QueryPerformanceFrequency(&frequency);
+         D3D10_DDI_QUERY_DATA_TIMESTAMP_DISJOINT *disjoint =
+            (D3D10_DDI_QUERY_DATA_TIMESTAMP_DISJOINT *)out;
+         disjoint->Frequency = (UINT64)frequency.QuadPart;
+         disjoint->Disjoint = TRUE;
+      } else {
+         *(BOOL *)out = TRUE;
+      }
+   };
+   const UINT dataBytes = !pQuery ? sizeof(BOOL) :
+      !pQuery->handle ?
+         (pQuery->Type == D3D10DDI_QUERY_TIMESTAMP ? sizeof(UINT64) :
+          pQuery->Type == D3D10DDI_QUERY_TIMESTAMPDISJOINT ?
+             sizeof(D3D10_DDI_QUERY_DATA_TIMESTAMP_DISJOINT) : sizeof(BOOL)) :
       pQuery->Type == D3D10DDI_QUERY_OCCLUSION ? sizeof(UINT64) :
       pQuery->Type == D3D10DDI_QUERY_PIPELINESTATS ?
          sizeof(D3D10_DDI_QUERY_DATA_PIPELINE_STATISTICS) :
@@ -1951,7 +1979,7 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
       return;
    }
    if (pQuery->Phase == QuerySignaled) {
-      if (pData) *(BOOL *)pData = TRUE;
+      event_data(pData);
       return;
    }
    if (pQuery->Phase == QueryFailed) {
@@ -1988,7 +2016,12 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
    pQuery->FenceToken = 0;
    pQuery->Phase = QuerySignaled;
    pQuery->LastError = S_OK;
-   if (pData) *(BOOL *)pData = TRUE;''')
+   {
+      LARGE_INTEGER now;
+      QueryPerformanceCounter(&now);
+      pQuery->agx_timestamp = (UINT64)now.QuadPart;
+   }
+   event_data(pData);''')
     replace_function_body('src/gallium/frontends/d3d10umd/Query.cpp','SetPredication','''   Device *device = CastDevice(hDevice);
    Query *query = CastQuery(hQuery);
    /* D3D-G3b: an occlusion predicate gates draws and clears through Mesa's

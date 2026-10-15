@@ -262,6 +262,29 @@ class D3d11DdiTable(unittest.TestCase):
             self.assertIn("params.ccw = !(tes->tess.ccw || tcs->tess.ccw);", state)
             self.assertIn("ctx->stage[MESA_SHADER_TESS_CTRL].shader->tess.ccw));", state)
 
+    def test_timestamp_queries_report_their_own_data(self):
+        # D3D-H5: FL 10_0+ applications create TIMESTAMP and
+        # TIMESTAMP_DISJOINT queries; the runtime passes a UINT64 or a
+        # D3D10_DDI_QUERY_DATA_TIMESTAMP_DISJOINT buffer, so an event BOOL
+        # leaves it partly unwritten, and CPU-counter timestamps must be
+        # marked disjoint (applications discard disjoint intervals).
+        with tempfile.TemporaryDirectory(prefix="d3d11-timestamp-") as tmp:
+            out = project(Path(tmp) / "out")
+            if out is None:
+                self.skipTest("reference Mesa tree not available")
+            query = (out / "src/gallium/frontends/d3d10umd/Query.cpp").read_text()
+            create = function_body(query, "CreateQuery")
+            self.assertIn("pCreateQuery->Query != D3D10DDI_QUERY_TIMESTAMP &&", create)
+            self.assertIn("pCreateQuery->Query != D3D10DDI_QUERY_TIMESTAMPDISJOINT)", create)
+            data = function_body(query, "QueryGetData")
+            self.assertIn("pQuery->Type == D3D10DDI_QUERY_TIMESTAMP ? sizeof(UINT64)", data)
+            self.assertIn("sizeof(D3D10_DDI_QUERY_DATA_TIMESTAMP_DISJOINT)", data)
+            self.assertIn("disjoint->Disjoint = TRUE;", data)
+            self.assertNotIn("*(BOOL *)pData = TRUE", data)
+            complete = data[data.rindex("pQuery->Phase = QuerySignaled;"):]
+            self.assertLess(complete.index("pQuery->agx_timestamp = "),
+                            complete.index("event_data(pData);"))
+
 
 if __name__ == "__main__":
     unittest.main()
