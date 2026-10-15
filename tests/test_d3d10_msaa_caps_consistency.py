@@ -7,9 +7,9 @@ EXP1288 measured why (measure-msaa-check receipts): the runtime walks each
 DXGI cast family, typeless parent first, asks sample counts 2..31, and
 refuses the device when a member answers levels its typeless parent does
 not, or when a read-only member (neither a render nor a depth target)
-answers MULTISAMPLE_RENDERTARGET.
-Bug caught, for every probe policy: a member whose levels differ from its
-parent's, MULTISAMPLE_RENDERTARGET on a read-only member or without 4x
+answers MULTISAMPLE_RENDERTARGET; EXP1289: or any levels.
+Bug caught, for every probe policy: a render/depth member whose levels
+differ from its parent's, a read-only member with levels, MULTISAMPLE_RENDERTARGET on a read-only member or without 4x
 levels, a render/depth member with levels but no MULTISAMPLE_RENDERTARGET,
 any multisample answer with the policy off, MULTISAMPLE_LOAD without
 SHADER_SAMPLE.
@@ -128,9 +128,11 @@ int main(void) {
       printf("LOAD_WITHOUT_SAMPLE %d caps %x\n", f, c); ++bad; }
     for (unsigned i = 0; i < sizeof(family) / sizeof(family[0]); ++i) {
       if (family[i].f != (DXGI_FORMAT)f) continue;
-      for (UINT n = 2; n < 32; ++n)
-        if (levels((DXGI_FORMAT)f, n) != levels(family[i].parent, n)) {
+      for (UINT n = 2; n < 32; ++n) {
+        UINT want = family[i].readonly ? 0 : levels(family[i].parent, n);
+        if (levels((DXGI_FORMAT)f, n) != want) {
           printf("MEMBER_DIFFERS probe %x format %d count %u\n", probe, f, n); ++bad; }
+      }
       if (family[i].readonly && ms) { printf("READONLY_MS probe %x format %d\n", probe, f); ++bad; }
       if (!family[i].readonly && (q2 || q4) && !ms) { printf("LEVELS_WITHOUT_MS probe %x format %d\n", probe, f); ++bad; }
     }

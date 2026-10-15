@@ -777,10 +777,17 @@ static BOOL AgxD3d10MsaaFamily(DXGI_FORMAT Parent, UINT Probe) {
   return FALSE;
 }
 
+/* EXP1289: a read-only member answering levels was refused as well (its
+ * caps had no MULTISAMPLE_RENDERTARGET), so read-only members answer none;
+ * the parent, render and depth members answer the family's levels. The
+ * rule the six EXP1285-EXP1289 refusals agree with: levels need
+ * MULTISAMPLE_RENDERTARGET on a typed format, which a read-only member may
+ * not answer, and a member may not answer more than its typeless parent. */
 BOOL AgxD3d10WindowsMsaaFormat(DXGI_FORMAT Format, UINT Probe) {
   enum AgxD3d10CastRole role;
   DXGI_FORMAT parent = AgxD3d10CastParent(Format, &role);
-  return role != AgxCastNone && AgxD3d10MsaaFamily(parent, Probe);
+  return role != AgxCastNone && role != AgxCastReadOnly &&
+         AgxD3d10MsaaFamily(parent, Probe);
 }
 
 BOOL AgxD3d10WindowsMsaaRenderTarget(DXGI_FORMAT Format, UINT Probe) {
