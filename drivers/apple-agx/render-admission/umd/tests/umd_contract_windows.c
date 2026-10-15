@@ -764,7 +764,9 @@ static VOID APIENTRY BridgeSetError(D3D10DDI_HRTCORELAYER Core, HRESULT Error) {
 
 static void test_runtime_device_bridge(ADMISSION_UMD_ADAPTER *Adapter,
                                        D3D10DDIARG_CREATEDEVICE Template) {
-  ADMISSION_UMD_DEVICE devices[2];
+  /* Static: two 4096-slot devices exceed the 1 MiB default stack
+   * (0xC00000FD since d3a5ce63 raised ADMISSION_UMD_SCREEN_BUFFER_LIMIT). */
+  static ADMISSION_UMD_DEVICE devices[2];
   D3DDDI_DEVICECALLBACKS callbacks = *Template.pKTCallbacks;
   D3D10DDI_CORELAYER_DEVICECALLBACKS core10 = {0};
   D3D11DDI_CORELAYER_DEVICECALLBACKS core11 = {0};
