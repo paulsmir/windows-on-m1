@@ -14,11 +14,18 @@ while the job is still owned by the firmware, and it never stops RTKit. A
 paging packet queued behind that job never ran: after the reset the original
 fence is accepted again exactly once as a resubmission (Microsoft, TDR in
 Windows 8 and later, packets unaffected by engine reset); completed, aborted
-and never-queued fences stay refused.
+and never-queued fences stay refused. A render that never ran (the queued
+render packet, every G4 pending submission including a context's second job)
+keeps its private scene preempted, so VidSch's resubmission with a new fence
+and Resubmission set finds it (EXP1303: a cancelled scene refused it,
+Wom1G4SubmitFailure branch 7 subsite 0x201); the aborted job's scene and a
+cancelled scene stay refused.
 
 The real reset functions are compiled with the real shared scheduler and
-render-packet state machines; the firmware/provider is a scripted model of
-what AdmissionBackendComplete does to the adapter when a job ends.
+render-packet state machines and the real private-scene preempt/cancel
+markers, G4 pending drop and resubmission lookup; the firmware/provider is a
+scripted model of what AdmissionBackendComplete does to the adapter when a
+job ends.
 """
 from pathlib import Path
 import os
@@ -54,12 +61,21 @@ class TdrResetQuiesce(unittest.TestCase):
         scheduler = (RENDER / 'src/scheduler_windows.c').read_text()
         backend = (RENDER / 'src/backend_platform_windows.c').read_text()
         queue = (RENDER / 'src/work_queue_windows.c').read_text()
+        gpuva = (RENDER / 'src/gpuva_g3_windows.c').read_text()
         header = (RENDER / 'include/render_admission.h').read_text()
         timeout = re.search(r'#define ADMISSION_RESET_QUIESCE_TIMEOUT_MS (\d+)u', header)
         packet = re.search(r'typedef struct _ADMISSION_CPU_PACKET.*?} ADMISSION_CPU_PACKET;',
                            header, re.S).group(0)
+        pending = (re.search(r'#define ADMISSION_G4_PENDING_CAPACITY \d+u', header).group(0) +
+                   '\n' + re.search(r'typedef enum _ADMISSION_G4_PENDING_STATE.*?'
+                                    r'} ADMISSION_G4_PENDING_STATE;', header, re.S).group(0))
         body = (SHIM.replace('/*TIMEOUT*/', timeout.group(1) if timeout else '1000')
-                    .replace('/*PACKET*/', packet) +
+                    .replace('/*PACKET*/', packet).replace('/*PENDING*/', pending) +
+                '\n'.join(function_body(gpuva, n) for n in (
+                    'AdmissionGpuvaG3PrivateCancel', 'AdmissionGpuvaG3PrivatePreempt',
+                    'AdmissionG3PrivateSlotPreempted', 'AdmissionG3PrivateSlotCancelled',
+                    'AdmissionG4FindPrivateScene', 'AdmissionG4FindPrivateResubmission',
+                    'AdmissionG4PendingDropLocked')) + '\n' +
                 function_body(queue, 'AdmissionCpuQueueSubmit') + '\n' +
                 function_body(scheduler, 'AdmissionCpuQueueReleaseContextsLocked') + '\n' +
                 optional_body(backend, 'AdmissionPlatformRuntimeQuiesceActive') + '\n' +
@@ -93,8 +109,10 @@ SHIM = r'''
 #include "render_gpu_fault.h"
 #include "render_paging.h"
 #include "render_present.h"
+#include "apple_agx_g4_submit.h"
 #define APPLE_AGX_GPUVA_G3_QUALIFICATION 1
 #define _Use_decl_annotations_
+#define _ReturnAddress() ((void *)0)
 #define __declspec(x)
 #define PAGED_CODE() ((void)0)
 #define UNREFERENCED_PARAMETER(x) ((void)(x))
@@ -143,10 +161,32 @@ typedef struct { int Signaled; } KEVENT;
 typedef struct _ADMISSION_RENDER_CONTEXT {
   struct { ULONG FenceOutstanding; } Object;
   ULONG GpuvaG3SecondFence;
-  volatile LONG GpuvaG3PrivateFence, GpuvaG3PrivateFence2;
-  BOOLEAN GpuvaG3Poisoned;
+  volatile LONG GpuvaG3PrivateFence, GpuvaG3CancelFence, GpuvaG3CancelUncertain,
+      GpuvaG3PreemptFence;
+  volatile LONG GpuvaG3PrivateFence2, GpuvaG3CancelFence2, GpuvaG3PreemptFence2;
+  volatile LONG GpuvaG3CancelCaller, GpuvaG3CancelCaller2;
+  BOOLEAN GpuvaG3Closing, GpuvaG3Poisoned;
+  ULONGLONG GpuvaG3PrivateManagerGeneration;
 } ADMISSION_RENDER_CONTEXT;
+/* The scene and process fields the private-scene lookups read. */
+typedef struct _ADMISSION_G3_PRIVATE_SCENE {
+  struct _ADMISSION_G3_PRIVATE_SCENE *Next;
+  ADMISSION_RENDER_CONTEXT *Context;
+  struct { ULONGLONG Generation; } Storage;
+  ULONG Fence, Submitting, Queued, Started, ReleaseRequested, Quarantined;
+} ADMISSION_G3_PRIVATE_SCENE;
+typedef struct {
+  ADMISSION_G3_PRIVATE_SCENE *PrivateScenes;
+  struct { ULONGLONG ProcessId; } Graph;
+  struct { ULONGLONG Generation; } PrivateManager;
+} ADMISSION_G3_PROCESS;
 /*PACKET*/
+/*PENDING*/
+typedef struct {
+  ADMISSION_G4_PENDING_STATE State;
+  ULONG Fence;
+  ADMISSION_RENDER_CONTEXT *Context;
+} ADMISSION_G4_PENDING;
 typedef struct { int Provider; } APPLE_AGX_PLATFORM_PROVIDER;
 typedef struct { int Phase; } APPLE_AGX_BACKEND_RUNTIME;
 typedef struct _ADMISSION_CONTEXT ADMISSION_CONTEXT;
@@ -171,6 +211,8 @@ struct _ADMISSION_CONTEXT {
   ADMISSION_CPU_PACKET CpuQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
   APPLE_AGX_SCHEDULER Scheduler;
   ADMISSION_RENDER_PACKET RenderPacket;
+  ADMISSION_G4_PENDING G4Pending[ADMISSION_G4_PENDING_CAPACITY];
+  ULONG G4PendingHead, G4PendingCount;
   PVOID PlatformRuntime;
   ADMISSION_GPU_RESET_RECEIPT GpuReset;
 };
@@ -182,10 +224,11 @@ typedef struct {
 
 static int lock_depth, rtkit_stops, polls, drop_at_poll, fail_poll, worker_busy,
     worker_completes, paused, private_resets, scene_queued, scene_started,
-    scene_quarantined, cancels, preempts, pending_drops, pending_preempt;
+    scene_quarantined;
 static ULONGLONG now_ms;
 static ADMISSION_CONTEXT *model_adapter;
 static ADMISSION_PLATFORM_RUNTIME *model_runtime;
+static ADMISSION_G3_PRIVATE_SCENE *model_active_scene;
 
 static LONG InterlockedCompareExchange(volatile LONG *p, LONG v, LONG e) {
   LONG o = *p; if (o == e) *p = v; return o; }
@@ -224,6 +267,7 @@ static void model_job_ends(void) {
   AdmissionContextRetireFence(owner, fence);
   if (owner->GpuvaG3PrivateFence == (LONG)fence) owner->GpuvaG3PrivateFence = 0;
   scene_queued = 0; /* AdmissionGpuvaG3PrivateReported */
+  if (model_active_scene != NULL) model_active_scene->Queued = 0u;
   ++model_runtime->FirmwareRecoveries; /* a drop after Timeout + resume */
   model_runtime->Backend.Phase = AppleAgxBackendRuntimeReady;
 }
@@ -259,12 +303,6 @@ static BOOLEAN AdmissionGpuvaG3PrivateReset(ADMISSION_CONTEXT *c) {
   if (scene_queued && scene_started) { scene_quarantined = 1; return FALSE; }
   return TRUE;
 }
-static void AdmissionGpuvaG3PrivateCancel(ADMISSION_RENDER_CONTEXT *c, ULONG f, BOOLEAN u) {
-  (void)c; (void)f; (void)u; ++cancels; }
-static void AdmissionG4PendingDropLocked(ADMISSION_CONTEXT *c, BOOLEAN p) {
-  (void)c; assert(lock_depth); ++pending_drops; pending_preempt = p; }
-static void AdmissionGpuvaG3PrivatePreempt(ADMISSION_RENDER_CONTEXT *c, ULONG f) {
-  (void)c; (void)f; ++preempts; }
 static void AdmissionPagingUpdateIdleLocked(ADMISSION_CONTEXT *c) { (void)c; assert(lock_depth); }
 static BOOLEAN AdmissionBackendImageReleaseSubmission(int *i, ULONG f) { (void)i; (void)f; return TRUE; }
 static NTSTATUS AdmissionScanoutSetTimelinePaused(ADMISSION_CONTEXT *c, BOOLEAN p) {
@@ -285,8 +323,46 @@ static void AdmissionRecordGpuReset(ADMISSION_CONTEXT *c) {
 CASES = r'''
 static ADMISSION_CONTEXT adapter;
 static ADMISSION_PLATFORM_RUNTIME runtime;
-static ADMISSION_RENDER_CONTEXT owner;
+/* owner runs the hung job; other has renders queued behind it; cancelled
+ * holds a scene whose job the KMD cancelled before the reset. */
+static ADMISSION_RENDER_CONTEXT owner, other, cancelled;
 static ADMISSION_PAGING_RECORD paging_record;
+static ADMISSION_G3_PROCESS process;
+static ADMISSION_G3_PRIVATE_SCENE scene_owner, scene_first, scene_second, scene_cancelled;
+static const APPLE_AGX_G4_PRIVATE_LEASE lease_owner = {17u, 5u, 9u, 9u},
+    lease_first = {17u, 5u, 11u, 11u}, lease_second = {17u, 5u, 13u, 13u},
+    lease_cancelled = {17u, 5u, 15u, 15u};
+
+static void scene_init(ADMISSION_G3_PRIVATE_SCENE *s, ADMISSION_RENDER_CONTEXT *c,
+                       const APPLE_AGX_G4_PRIVATE_LEASE *l, ADMISSION_G3_PRIVATE_SCENE *next) {
+  memset(s, 0, sizeof(*s));
+  s->Context = c; s->Storage.Generation = l->SceneId; s->Next = next;
+  c->GpuvaG3PrivateManagerGeneration = l->ManagerGeneration;
+}
+
+/* A private job as AdmissionG4SubmitVirtualEnvelope leaves it: the scene
+ * queued with the fence, which takes slot 1, or slot 2 when slot 1 is busy. */
+static void private_job(ADMISSION_RENDER_CONTEXT *c, ADMISSION_G3_PRIVATE_SCENE *s, ULONG fence) {
+  s->Queued = 1u; s->Fence = fence;
+  if (c->GpuvaG3PrivateFence != 0) c->GpuvaG3PrivateFence2 = (LONG)fence;
+  else c->GpuvaG3PrivateFence = (LONG)fence;
+}
+
+/* A private render queued behind the render slot (AdmissionG4PendingQueue):
+ * the context's oldest job, or its second job (GpuvaG3SecondFence). */
+static void pend(ULONG fence, ADMISSION_RENDER_CONTEXT *c, ADMISSION_G3_PRIVATE_SCENE *s) {
+  ADMISSION_G4_PENDING *e = &adapter.G4Pending[
+      (adapter.G4PendingHead + adapter.G4PendingCount) % ADMISSION_G4_PENDING_CAPACITY];
+  assert(adapter.G4PendingCount < ADMISSION_G4_PENDING_CAPACITY &&
+         e->State == AdmissionG4PendingFree);
+  assert(c->Object.FenceOutstanding == 0u || c->GpuvaG3SecondFence == 0u);
+  if (c->Object.FenceOutstanding == 0u) c->Object.FenceOutstanding = fence;
+  else c->GpuvaG3SecondFence = fence;
+  private_job(c, s, fence);
+  assert(AppleAgxSchedulerQueueFence(&adapter.Scheduler, 0, 0, fence));
+  e->State = AdmissionG4PendingQueued; e->Fence = fence; e->Context = c;
+  ++adapter.G4PendingCount;
+}
 
 /* A one-record paging packet as AdmissionGpuvaG3SubmitVirtualPaging forwards it. */
 static NTSTATUS submit_paging(ULONG fence, UINT resubmission) {
@@ -298,10 +374,10 @@ static NTSTATUS submit_paging(ULONG fence, UINT resubmission) {
 }
 
 /* A G4 render the worker has queued (Prepare/Queue as SubmitCommandVirtual). */
-static void queue_packet(ULONG fence) {
+static void queue_packet(ULONG fence, ADMISSION_RENDER_CONTEXT *c) {
   ADMISSION_RENDER_PACKET_DESCRIPTION d;
   memset(&d, 0, sizeof(d));
-  d.Fence = fence; d.AllocationCount = 1u; d.ContextToken = (unsigned long long)(uintptr_t)&owner;
+  d.Fence = fence; d.AllocationCount = 1u; d.ContextToken = (unsigned long long)(uintptr_t)c;
   d.AllocationToken = d.PrivateDataToken = 1u; d.PrivateDataBytes = d.PrivateDataEnd = 64u;
   d.DmaEnd = 64u; d.DestinationGpuVa = 0x1500fa0000ull; d.DestinationBytes = 0x4000u;
   d.Kind = ADMISSION_RENDER_PACKET_KIND_RENDER;
@@ -313,33 +389,57 @@ static void queue_packet(ULONG fence) {
  * waiting on its boundary, a started private scene. */
 static void setup(int worker, int queued) {
   memset(&adapter, 0, sizeof(adapter)); memset(&runtime, 0, sizeof(runtime));
-  memset(&owner, 0, sizeof(owner));
+  memset(&owner, 0, sizeof(owner)); memset(&other, 0, sizeof(other));
+  memset(&cancelled, 0, sizeof(cancelled)); memset(&process, 0, sizeof(process));
   rtkit_stops = polls = drop_at_poll = fail_poll = worker_completes = 0;
   published = recorded = 0; memset(&last_recorded, 0, sizeof(last_recorded));
-  private_resets = scene_quarantined = cancels = paused = 0;
-  preempts = pending_drops = pending_preempt = 0;
+  private_resets = scene_quarantined = paused = 0;
   scene_queued = scene_started = 1; now_ms = 1000u;
   model_adapter = &adapter; model_runtime = &runtime;
   adapter.SchedulerInitialized = 1; adapter.PlatformRuntime = &runtime;
   adapter.PagingWorkItem = &adapter;
   runtime.Adapter = &adapter; runtime.BackendStarted = TRUE;
+  process.Graph.ProcessId = lease_owner.ManagerId;
+  process.PrivateManager.Generation = lease_owner.ManagerGeneration;
+  scene_init(&scene_cancelled, &cancelled, &lease_cancelled, NULL);
+  scene_init(&scene_second, &other, &lease_second, &scene_cancelled);
+  scene_init(&scene_first, &other, &lease_first, &scene_second);
+  scene_init(&scene_owner, &owner, &lease_owner, &scene_first);
+  process.PrivateScenes = &scene_owner;
+  model_active_scene = &scene_owner;
   AppleAgxSchedulerInitialize(&adapter.Scheduler);
   AdmissionRenderPacketInitialize(&adapter.RenderPacket);
   adapter.Scheduler.CompletedFence = adapter.Scheduler.LastSubmittedFence = 0xce71bu;
   assert(AppleAgxSchedulerQueueFence(&adapter.Scheduler, 0, 0, 0xce71cu));
   assert(AppleAgxSchedulerActivateFence(&adapter.Scheduler, 0, 0, 0xce71cu));
-  queue_packet(0xce71cu);
+  queue_packet(0xce71cu, &owner);
   assert(AdmissionRenderPacketActivate(&adapter.RenderPacket, 0xce71cu));
   adapter.DispatchedFence = 0xce71cu;
-  owner.Object.FenceOutstanding = 0xce71cu; owner.GpuvaG3PrivateFence = (LONG)0xce71cu;
+  owner.Object.FenceOutstanding = 0xce71cu;
+  private_job(&owner, &scene_owner, 0xce71cu); scene_owner.Started = 1u;
   /* A later submission accepted before the preemption request: a render
    * fence (1) or a paging packet waiting in the CPU queue (2). */
   if (queued == 1) assert(AppleAgxSchedulerQueueFence(&adapter.Scheduler, 0, 0, 0xce71eu));
   if (queued == 2)
     assert(submit_paging(0xce71eu, 0u) == STATUS_SUCCESS && adapter.CpuQueueCount == 1u);
-  assert(AppleAgxSchedulerBeginBoundaryPreemption(&adapter.Scheduler, 0, 0, 0xce71fu,
-      adapter.Scheduler.LastSubmittedFence, 0xce71cu));
-  assert(adapter.Scheduler.PreemptionPhase == AppleAgxPreemptionWaitCurrentBoundary);
+  if (queued == 3) {
+    /* EXP1303: DxgkDdiPreemptCommand was refused (SchedulerFaulted
+     * 0x1018f), so nothing was preempted. Context other's oldest and second
+     * private renders wait in the G4 pending queue behind the hung job; a
+     * third context's scene was cancelled earlier (a failed bind). */
+    pend(0xce71du, &other, &scene_first);
+    pend(0xce71eu, &other, &scene_second);
+    assert(other.Object.FenceOutstanding == 0xce71du && other.GpuvaG3SecondFence == 0xce71eu &&
+           other.GpuvaG3PrivateFence == (LONG)0xce71du &&
+           other.GpuvaG3PrivateFence2 == (LONG)0xce71eu);
+    private_job(&cancelled, &scene_cancelled, 0xce71au);
+    AdmissionGpuvaG3PrivateCancel(&cancelled, 0xce71au, FALSE);
+    adapter.SchedulerFaulted = 0x1018f;
+  } else {
+    assert(AppleAgxSchedulerBeginBoundaryPreemption(&adapter.Scheduler, 0, 0, 0xce71fu,
+        adapter.Scheduler.LastSubmittedFence, 0xce71cu));
+    assert(adapter.Scheduler.PreemptionPhase == AppleAgxPreemptionWaitCurrentBoundary);
+  }
   runtime.Backend.Phase = AppleAgxBackendRuntimeSubmitted;
   worker_busy = worker;
   runtime.WorkIdle.Signaled = !worker; runtime.WorkScheduled = runtime.WorkersActive = worker;
@@ -453,20 +553,24 @@ int main(void) {
   setup(0, 0); drop_at_poll = 1;
   assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS); /* ends 0xce71c */
   assert(AppleAgxSchedulerQueueFence(&adapter.Scheduler, 0, 0, 0xce71eu));
-  queue_packet(0xce71eu);
-  owner.Object.FenceOutstanding = 0xce71eu; polls = 0;
+  queue_packet(0xce71eu, &other);
+  other.Object.FenceOutstanding = 0xce71eu; private_job(&other, &scene_first, 0xce71eu);
+  polls = 0;
   memset(&reset, 0, sizeof(reset));
   assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS);
   assert(reset.LastAbortedFenceId == 0xce71cu && polls == 0);
-  /* EXP1303: VidSch resubmits never-started renders after an engine reset
-   * with new fences, as after a preemption; a cancelled private scene made
-   * that resubmission fail (Wom1G4SubmitFailure branch 7, subsite 0x201). */
-  assert(preempts == 1 && cancels == 0);
-  assert(pending_drops >= 1 && pending_preempt);
   assert(last_recorded.Quiesce == AdmissionGpuResetQuiesceNone &&
          last_recorded.PacketState == AdmissionRenderPacketQueued);
   assert(AdmissionRenderPacketState(&adapter.RenderPacket) == AdmissionRenderPacketEmpty);
-  assert(owner.Object.FenceOutstanding == 0u && adapter.Scheduler.QueuedFence == 0u);
+  assert(other.Object.FenceOutstanding == 0u && adapter.Scheduler.QueuedFence == 0u);
+  /* EXP1303: VidSch resubmits never-started renders after an engine reset
+   * with new fences and Resubmission set, as after a preemption; a cancelled
+   * private scene made that resubmission fail (Wom1G4SubmitFailure branch 7,
+   * subsite 0x201, cancel marker = the queued fence). */
+  assert(other.GpuvaG3PreemptFence == (LONG)0xce71eu && other.GpuvaG3CancelFence == 0);
+  assert(AdmissionG4FindPrivateResubmission(&process, &other, &lease_first, 0xce720u) ==
+         &scene_first);
+  assert(AdmissionG4FindPrivateResubmission(&process, &other, &lease_first, 0xce71eu) == NULL);
 
   /* 8. Microsoft (TDR in Windows 8 and later, packets unaffected by engine
    * reset): the paging packet queued behind the active render never ran. The
@@ -488,6 +592,43 @@ int main(void) {
   assert(submit_paging(0xce71eu, 1u) == STATUS_DEVICE_BUSY); /* once */
   assert(submit_paging(0xce720u, 0u) == STATUS_SUCCESS);
   assert(adapter.CpuQueueCount == 2u && adapter.Scheduler.LastSubmittedFence == 0xce720u);
+
+  /* 9. Renders queued behind the hung job in the G4 pending queue (the
+   * other context's oldest job and its second job) never ran either. The
+   * reset empties the queue and preempts both scenes in their own slots, so
+   * VidSch's resubmissions with new fences find them; the aborted job's
+   * scene and a scene cancelled before the reset stay refused. */
+  setup(0, 3); drop_at_poll = 1;
+  memset(&reset, 0, sizeof(reset));
+  assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS);
+  expect_aborted(&reset);
+  assert(last_recorded.SchedulerFaulted == 0x1018fu);
+  assert(adapter.G4PendingCount == 0u &&
+         adapter.G4Pending[0].State == AdmissionG4PendingFree &&
+         adapter.G4Pending[1].State == AdmissionG4PendingFree);
+  assert(other.Object.FenceOutstanding == 0u && other.GpuvaG3SecondFence == 0u);
+  assert(other.GpuvaG3PreemptFence == (LONG)0xce71du &&
+         other.GpuvaG3PreemptFence2 == (LONG)0xce71eu);
+  assert(other.GpuvaG3CancelFence == 0 && other.GpuvaG3CancelFence2 == 0 &&
+         other.GpuvaG3CancelUncertain == 0);
+  /* New fences, in order, after the last submitted one. */
+  assert(AdmissionG4FindPrivateResubmission(&process, &other, &lease_first, 0xce721u) ==
+         &scene_first);
+  assert(AdmissionG4FindPrivateResubmission(&process, &other, &lease_second, 0xce722u) ==
+         &scene_second);
+  assert(AppleAgxSchedulerQueueFence(&adapter.Scheduler, 0, 0, 0xce721u) &&
+         AppleAgxSchedulerQueueFence(&adapter.Scheduler, 0, 0, 0xce722u));
+  /* The original fence is no resubmission, and without Resubmission the
+   * scene still awaits its preempted job (the EXP911 contract). */
+  assert(AdmissionG4FindPrivateResubmission(&process, &other, &lease_first, 0xce71du) == NULL);
+  assert(AdmissionG4FindPrivateScene(&process, &other, &lease_second, 0xce723u, FALSE) == NULL);
+  /* The aborted job's context is faulted and its scene was not preempted. */
+  assert(owner.GpuvaG3PreemptFence == 0 && owner.GpuvaG3PreemptFence2 == 0);
+  assert(AdmissionG4FindPrivateResubmission(&process, &owner, &lease_owner, 0xce723u) == NULL);
+  /* A reset never turns a cancellation into a preemption. */
+  assert(cancelled.GpuvaG3CancelFence == (LONG)0xce71au && cancelled.GpuvaG3PreemptFence == 0);
+  assert(AdmissionG4FindPrivateResubmission(&process, &cancelled, &lease_cancelled,
+                                            0xce723u) == NULL);
   assert(lock_depth == 0);
   puts("reset quiesce replay ok");
   return 0;
