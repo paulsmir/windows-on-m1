@@ -2789,19 +2789,20 @@ extern "C" VOID AgxD3d10WindowsDiagnostic(PCSTR Stage, HRESULT Status,
                               const UINT *Values, UINT Count);
 extern "C" BOOL AgxD3d10WindowsDiagnosticSwitch(const char *Name);
 
-/* D3D-H3: with APPLE_AGX_D3D_SHADER_NIR=1 in the process environment the
- * pipe shader state comes from the DXBC -> NIR translator
- * (drivers/apple-agx/mesa/dxbc). The TGSI tokens stay the frontend's
- * record (output mapping, stream-output variants) and the state for every
- * program the translator refuses; stream-output shaders keep TGSI, whose
- * xfb rebuild Asahi's state creation owns. */
+/* D3D-H3: the pipe shader state comes from the DXBC -> NIR translator
+ * (drivers/apple-agx/mesa/dxbc; EXP1294/EXP1295: every D3D smoke passes on
+ * it), unless APPLE_AGX_D3D_SHADER_TGSI=1 in the process environment.  The
+ * TGSI tokens stay the frontend's record (output mapping, stream-output
+ * variants) and the state for every program the translator refuses;
+ * stream-output shaders keep TGSI, whose xfb rebuild Asahi's state
+ * creation owns. */
 static void *
 AgxD3d10CreateShaderState(struct pipe_context *pipe, Shader *shader,
                           const UINT *code)
 {
    struct pipe_shader_state state = shader->state;
    if (code && !state.stream_output.num_outputs &&
-       AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D_SHADER_NIR")) {
+       !AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D_SHADER_TGSI")) {
       struct dxbc_nir_error error = {};
       struct nir_shader *nir = dxbc_translate_tokens(code,
          pipe->screen->nir_options[shader->type], &error);
