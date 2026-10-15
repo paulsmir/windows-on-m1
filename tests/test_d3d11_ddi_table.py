@@ -49,7 +49,7 @@ class D3d11DdiTable(unittest.TestCase):
         members = struct_members(header, "D3D11DDI_DEVICEFUNCS")
         self.assertGreater(len(members), 140)
         fill = MODULE.read_text()
-        fill = fill[fill.index("AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f)"):]
+        fill = fill[fill.index("AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f,"):]
         assigned = re.findall(r"\bf->(pfn\w+)\s*=", fill)
         self.assertEqual(len(assigned), len(set(assigned)), "an entry is assigned twice")
         for member in members:
@@ -59,6 +59,11 @@ class D3d11DdiTable(unittest.TestCase):
                 else:
                     self.assertIn(member, assigned)
         self.assertFalse(set(assigned) - set(members), "assigned names outside the table")
+        # the D3D10-typed entries come from the filled 10.0 table
+        base = set(re.findall(r"\bbase->(pfn\w+)", fill))
+        self.assertTrue(base)
+        self.assertFalse(base - set(struct_members(header, "D3D10DDI_DEVICEFUNCS")),
+                         "base entries outside the D3D10 table")
 
     def test_interface_is_advertised_and_filled_under_the_switch(self):
         with tempfile.TemporaryDirectory(prefix="d3d11-ddi-") as tmp:
@@ -75,7 +80,8 @@ class D3d11DdiTable(unittest.TestCase):
             self.assertIn("AgxD3d11DdiEnabled() ? 0u : 1u", supported)
             create = function_body(device, "CreateDevice")
             self.assertIn("case D3D11_0_DDI_INTERFACE_VERSION:", create)
-            self.assertIn("AgxD3d11FillDeviceFuncs(pCreateData->p11DeviceFuncs);", create)
+            self.assertIn("const D3D10DDI_DEVICEFUNCS base = *pDeviceFuncs;", create)
+            self.assertIn("AgxD3d11FillDeviceFuncs(pCreateData->p11DeviceFuncs, &base);", create)
 
 
 if __name__ == "__main__":

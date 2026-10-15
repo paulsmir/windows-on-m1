@@ -1328,8 +1328,10 @@ void APIENTRY
    /* D3D-H2a: the D3D11 table (agx_d3d11_ddi.cpp) replaces the 10.0 entries
     * written above into the same, larger, runtime-owned table. */
    if (pCreateData->Interface == D3D11_0_DDI_INTERFACE_VERSION ||
-       pCreateData->Interface == D3D11_0_7_DDI_INTERFACE_VERSION)
-      AgxD3d11FillDeviceFuncs(pCreateData->p11DeviceFuncs);''')])
+       pCreateData->Interface == D3D11_0_7_DDI_INTERFACE_VERSION) {
+      const D3D10DDI_DEVICEFUNCS base = *pDeviceFuncs;
+      AgxD3d11FillDeviceFuncs(pCreateData->p11DeviceFuncs, &base);
+   }''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Device.cpp','Flush','''   Device *pDevice = CastDevice(hDevice);
    HRESULT result = AgxD3d10WindowsQueryCollect(pDevice->windows);
    UINT stage[1] = {1u};
