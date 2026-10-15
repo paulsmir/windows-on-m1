@@ -10,7 +10,12 @@
  * Every line is written through to the output file before the next step.
  * EXP1289: an optional fourth argument "bgra" uses B8G8R8A8_UNORM targets
  * (readback normalized to R8G8B8A8 order).
- * Usage: agx_msaa_smoke.exe <out.txt> [2|4] [iterations] [rgba|bgra] */
+ * EXP1294 diagnostic: a fifth argument "samples" also reads every sample of
+ * the multisampled target through Texture2DMS.Load (first and last
+ * iteration): triangle colours there and the clear colour after the resolve
+ * place the interior-pixel defect in the resolve, the clear colour there in
+ * rendering or storing the samples.
+ * Usage: agx_msaa_smoke.exe <out.txt> [2|4] [iterations] [rgba|bgra] [samples] */
 #define COBJMACROS
 #define INITGUID
 #include <windows.h>
@@ -59,6 +64,14 @@ static const char vs_source[] =
 static const char ps_source[] =
     "cbuffer C : register(b0) { float4 rect; float4 zc; float4 colour; };\n"
     "float4 main(float4 p : SV_Position) : SV_Target { return colour; }\n";
+static const char vs_full[] =
+    "float4 main(uint id : SV_VertexID) : SV_Position {\n"
+    "  return float4(id == 1 ? 3.0 : -1.0, id == 2 ? -3.0 : 1.0, 0, 1);\n"
+    "}\n";
+static const char ps_probe[] =
+    "Texture2DMS<float4> m : register(t0);\n"
+    "cbuffer P : register(b1) { uint4 s; };\n"
+    "float4 main(float4 p : SV_Position) : SV_Target { return m.Load(int2(p.xy), s.x); }\n";
 
 static ID3DBlob *compile(pD3DCompile fn, const char *src, size_t len, const char *target) {
   ID3DBlob *code = NULL, *errors = NULL;
@@ -110,6 +123,14 @@ int main(int argc, char **argv) {
   ID3D11VertexShader *vs = NULL;
   ID3D11PixelShader *ps = NULL;
   ID3DBlob *vsb, *psb;
+  /* the "samples" diagnostic */
+  ID3D11Texture2D *probe_tex = NULL;
+  ID3D11RenderTargetView *probe_rtv = NULL;
+  ID3D11ShaderResourceView *msaa_srv = NULL;
+  ID3D11Buffer *probe_cb = NULL;
+  ID3D11VertexShader *vs_probe = NULL;
+  ID3D11PixelShader *ps_probe_shader = NULL;
+  int probe;
   D3D_FEATURE_LEVEL level = 0;
   const D3D_FEATURE_LEVEL want[] = {D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1,
                                     D3D_FEATURE_LEVEL_10_0};
@@ -120,12 +141,13 @@ int main(int argc, char **argv) {
   int iterations, bad = 0;
 
   if (argc < 2) {
-    printf("usage: agx_msaa_smoke.exe <out.txt> [2|4] [iterations] [rgba|bgra]\n");
+    printf("usage: agx_msaa_smoke.exe <out.txt> [2|4] [iterations] [rgba|bgra] [samples]\n");
     return 2;
   }
   samples = argc > 2 && atoi(argv[2]) == 2 ? 2u : 4u;
   iterations = argc > 3 ? atoi(argv[3]) : 30;
   if (argc > 4 && !strcmp(argv[4], "bgra")) target_format = DXGI_FORMAT_B8G8R8A8_UNORM;
+  probe = argc > 5 && !strcmp(argv[5], "samples");
   if (iterations < 2) iterations = 2;
   out = CreateFileA(argv[1], GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS,
                     FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH, NULL);
@@ -163,7 +185,8 @@ int main(int argc, char **argv) {
     memset(&td, 0, sizeof(td));
     td.Width = td.Height = SIZE; td.MipLevels = td.ArraySize = 1;
     td.Format = target_format; td.SampleDesc.Count = samples;
-    td.Usage = D3D11_USAGE_DEFAULT; td.BindFlags = D3D11_BIND_RENDER_TARGET;
+    td.Usage = D3D11_USAGE_DEFAULT;
+    td.BindFlags = D3D11_BIND_RENDER_TARGET | (probe ? D3D11_BIND_SHADER_RESOURCE : 0);
     hr = ID3D11Device_CreateTexture2D(device, &td, NULL, &msaa);
     say("CreateTexture2D msaa 0x%08lx", (unsigned long)hr);
     if (FAILED(hr)) return 1;
@@ -209,6 +232,35 @@ int main(int argc, char **argv) {
                                        ID3D10Blob_GetBufferSize(psb), NULL, &ps);
   say("SHADERS 0x%08lx", (unsigned long)hr);
   if (FAILED(hr)) return 1;
+  if (probe) {
+    D3D11_TEXTURE2D_DESC td;
+    D3D11_SHADER_RESOURCE_VIEW_DESC sd;
+    D3D11_BUFFER_DESC bd;
+    ID3DBlob *a = compile(compile_fn, vs_full, sizeof(vs_full) - 1, "vs_4_0");
+    ID3DBlob *b = compile(compile_fn, ps_probe, sizeof(ps_probe) - 1, "ps_4_0");
+    if (!a || !b) return 1;
+    hr = ID3D11Device_CreateVertexShader(device, ID3D10Blob_GetBufferPointer(a),
+                                         ID3D10Blob_GetBufferSize(a), NULL, &vs_probe);
+    if (SUCCEEDED(hr)) hr = ID3D11Device_CreatePixelShader(device, ID3D10Blob_GetBufferPointer(b),
+                                         ID3D10Blob_GetBufferSize(b), NULL, &ps_probe_shader);
+    memset(&td, 0, sizeof(td));
+    td.Width = td.Height = SIZE; td.MipLevels = td.ArraySize = 1;
+    td.Format = target_format; td.SampleDesc.Count = 1;
+    td.Usage = D3D11_USAGE_DEFAULT; td.BindFlags = D3D11_BIND_RENDER_TARGET;
+    if (SUCCEEDED(hr)) hr = ID3D11Device_CreateTexture2D(device, &td, NULL, &probe_tex);
+    if (SUCCEEDED(hr)) hr = ID3D11Device_CreateRenderTargetView(device, (ID3D11Resource *)probe_tex,
+                                                               NULL, &probe_rtv);
+    memset(&sd, 0, sizeof(sd));
+    sd.Format = target_format; sd.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DMS;
+    if (SUCCEEDED(hr)) hr = ID3D11Device_CreateShaderResourceView(device, (ID3D11Resource *)msaa,
+                                                                 &sd, &msaa_srv);
+    memset(&bd, 0, sizeof(bd));
+    bd.ByteWidth = 16; bd.Usage = D3D11_USAGE_DYNAMIC;
+    bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER; bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    if (SUCCEEDED(hr)) hr = ID3D11Device_CreateBuffer(device, &bd, NULL, &probe_cb);
+    say("PROBE 0x%08lx", (unsigned long)hr);
+    if (FAILED(hr)) return 1;
+  }
   {
     D3D11_VIEWPORT vp;
     memset(&vp, 0, sizeof(vp));
@@ -254,6 +306,36 @@ int main(int argc, char **argv) {
       }
     }
     ID3D11DeviceContext_Unmap(ctx, (ID3D11Resource *)staging, 0);
+    if (probe && (i == 0 || i == iterations - 1)) {
+      ID3D11ShaderResourceView *none = NULL;
+      for (UINT s = 0; s < samples; ++s) {
+        D3D11_MAPPED_SUBRESOURCE m;
+        hr = ID3D11DeviceContext_Map(ctx, (ID3D11Resource *)probe_cb, 0, D3D11_MAP_WRITE_DISCARD,
+                                     0, &m);
+        if (FAILED(hr)) { say("PROBE_CB_MAP 0x%08lx", (unsigned long)hr); return 1; }
+        memset(m.pData, 0, 16);
+        *(UINT *)m.pData = s;
+        ID3D11DeviceContext_Unmap(ctx, (ID3D11Resource *)probe_cb, 0);
+        ID3D11DeviceContext_OMSetRenderTargets(ctx, 1, &probe_rtv, NULL);
+        ID3D11DeviceContext_VSSetShader(ctx, vs_probe, NULL, 0);
+        ID3D11DeviceContext_PSSetShader(ctx, ps_probe_shader, NULL, 0);
+        ID3D11DeviceContext_PSSetShaderResources(ctx, 0, 1, &msaa_srv);
+        ID3D11DeviceContext_PSSetConstantBuffers(ctx, 1, 1, &probe_cb);
+        ID3D11DeviceContext_Draw(ctx, 3, 0);
+        ID3D11DeviceContext_PSSetShaderResources(ctx, 0, 1, &none);
+        ID3D11DeviceContext_CopyResource(ctx, (ID3D11Resource *)staging, (ID3D11Resource *)probe_tex);
+        hr = ID3D11DeviceContext_Map(ctx, (ID3D11Resource *)staging, 0, D3D11_MAP_READ, 0, &m);
+        if (FAILED(hr)) { say("PROBE_MAP 0x%08lx", (unsigned long)hr); return 1; }
+        say("SAMPLE %u iteration %d lower 0x%08x upper 0x%08x diagonal 0x%08x", s, i,
+            rgba(*(const unsigned *)((const unsigned char *)m.pData + 224u * m.RowPitch + 32u * 4u)),
+            rgba(*(const unsigned *)((const unsigned char *)m.pData + 32u * m.RowPitch + 224u * 4u)),
+            rgba(*(const unsigned *)((const unsigned char *)m.pData + 128u * m.RowPitch + 128u * 4u)));
+        ID3D11DeviceContext_Unmap(ctx, (ID3D11Resource *)staging, 0);
+      }
+      ID3D11DeviceContext_OMSetRenderTargets(ctx, 1, &rtv, dsv);
+      ID3D11DeviceContext_VSSetShader(ctx, vs, NULL, 0);
+      ID3D11DeviceContext_PSSetShader(ctx, ps, NULL, 0);
+    }
     if (lower != 0xff00ff00u || upper != 0xff0000ffu || mixed < (SIZE - 16) / 2) {
       if (bad < 8)
         say("WRONG iteration %d lower 0x%08x upper 0x%08x mixed-edge rows %d", i, lower, upper,
