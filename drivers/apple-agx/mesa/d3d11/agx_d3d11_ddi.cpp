@@ -58,6 +58,12 @@ AgxD3d11ComputeEnabled(void)
    return AgxD3d11DdiEnabled() && AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D11_COMPUTE");
 }
 
+BOOL
+AgxD3d11Fl11Enabled(void)
+{
+   return AgxD3d11DdiEnabled() && AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D11_FL11");
+}
+
 /* The D3D11 binding and misc flags without a behaviour here: unordered
  * access is implemented for buffers only (raw and structured views), raw and
  * structured layouts for buffers only. */

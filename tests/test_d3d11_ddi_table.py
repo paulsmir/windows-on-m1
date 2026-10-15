@@ -117,6 +117,12 @@ class D3d11DdiTable(unittest.TestCase):
             caps = adapter[adapter.index("case D3D11DDICAPS_SHADER:"):]
             caps = caps[:caps.index("return S_OK;")]
             self.assertIn("AgxD3d11ComputeEnabled() ?", caps)
+            levels = adapter[adapter.index("case D3D11DDICAPS_3DPIPELINESUPPORT:"):]
+            levels = levels[:levels.index("return S_OK;")]
+            self.assertIn("AgxD3d11Fl11Enabled() ?", levels)
+            self.assertIn("D3D11DDI_3DPIPELINELEVEL_11_0", levels)
+            fl11 = function_body(fill, "AgxD3d11Fl11Enabled")
+            self.assertIn("AgxD3d11DdiEnabled()", fl11)
             self.assertIn("COMPUTE_PLUS_RAW_AND_STRUCTURED_BUFFERS_IN_SHADER_4_X", caps)
             shader = (frontend / "Shader.cpp").read_text()
             for setter in ("SetShaderResources", "SetSamplers", "SetConstantBuffers"):

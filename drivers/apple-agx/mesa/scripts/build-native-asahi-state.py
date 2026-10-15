@@ -796,9 +796,16 @@ SupportedDDIInterfaceVersions[] = {
    case D3D11DDICAPS_3DPIPELINESUPPORT:
       if (pData->DataSize != sizeof(D3D11DDI_3DPIPELINESUPPORT_CAPS))
          return E_INVALIDARG;
+      /* D3D-H5: 10_1 and 11_0 per process (APPLE_AGX_D3D11_FL11) while
+       * their checkpoints are measured: 8x MSAA, which FL 11_0 lists for
+       * most render-target formats, is absent on AGX and reported as 0
+       * quality levels */
       ((D3D11DDI_3DPIPELINESUPPORT_CAPS *)pData->pData)->Caps =
          D3D11DDI_ENCODE_3DPIPELINESUPPORT_CAP(
-            D3D11DDI_3DPIPELINELEVEL_10_0);
+            D3D11DDI_3DPIPELINELEVEL_10_0) |
+         (AgxD3d11Fl11Enabled() ?
+          (D3D11DDI_ENCODE_3DPIPELINESUPPORT_CAP(D3D11DDI_3DPIPELINELEVEL_10_1) |
+           D3D11DDI_ENCODE_3DPIPELINESUPPORT_CAP(D3D11DDI_3DPIPELINELEVEL_11_0)) : 0u);
       return S_OK;
    default:
       return E_NOTIMPL;
