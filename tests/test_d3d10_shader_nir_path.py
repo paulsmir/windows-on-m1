@@ -2,9 +2,8 @@
 
 Invariants caught:
 - every ordinary Create{Vertex,Geometry,Pixel}Shader builds its pipe state
-  through AgxD3d10CreateShaderState, so the translator is used for each of
-  them by default (EXP1295; APPLE_AGX_D3D_SHADER_TGSI=1 opts a process out)
-  and TGSI stays the fallback for programs the translator refuses;
+  through AgxD3d10CreateShaderState, so the translator is used (behind
+  APPLE_AGX_D3D_SHADER_NIR) for each of them and TGSI stays the fallback;
 - a shader with stream output never takes the NIR path: Asahi's state
   creation rebuilds nir_xfb_info only from TGSI output declarations and
   refuses a NIR state carrying pipe stream output (state creation would
@@ -30,7 +29,7 @@ class ShaderNirPath(unittest.TestCase):
             shader = (out / "src/gallium/frontends/d3d10umd/Shader.cpp").read_text()
             helper = function_body(shader, "AgxD3d10CreateShaderState")
             self.assertRegex(helper, r"!state\.stream_output\.num_outputs\s*&&")
-            self.assertIn('!AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D_SHADER_TGSI")', helper)
+            self.assertIn('AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D_SHADER_NIR")', helper)
             self.assertIn("state.type = PIPE_SHADER_IR_NIR;", helper)
             for name in ("CreateVertexShader", "CreateGeometryShader", "CreatePixelShader"):
                 body = function_body(shader, name)
