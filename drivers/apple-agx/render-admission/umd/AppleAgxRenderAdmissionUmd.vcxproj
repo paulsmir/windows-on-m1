@@ -47,7 +47,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\umd.c" />
-    <ClCompile Include="..\..\d3d12\agx_d3d12_ddi.cpp" />
+    <ClCompile Include="..\..\d3d12\agx_d3d12_ddi.cpp">
+      <LanguageStandard>stdcpp17</LanguageStandard>
+    </ClCompile>
     <ClCompile Include="src\umd_runtime_device.c">
       <CompileAs>CompileAsCpp</CompileAs>
     </ClCompile>
