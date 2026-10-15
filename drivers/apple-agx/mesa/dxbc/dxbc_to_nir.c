@@ -13,6 +13,7 @@
 
 #include "nir.h"
 #include "nir_builder.h"
+#include "nir_xfb_info.h"
 
 #define MAX_TEMPS 4096
 #define MAX_REGS 32          /* input/output registers per stage */
@@ -2670,10 +2671,70 @@ hs_build_main(struct ctx *c)
    hs_store_patch_constants(c);
    nir_pop_if(b, NULL);
 }
+/* Stream output: every captured register feeds a vec4 output variable at a
+ * generic or position location (add_sink in declare_output); the xfb info
+ * names that location and component range, as the projection does for the
+ * TGSI path from TGSI semantics (the order of the D3D declaration kept). */
+static bool
+build_xfb(struct ctx *c, const struct dxbc_nir_xfb *xfb)
+{
+   nir_shader *nir = c->b.shader;
+   nir_xfb_info *info;
+
+   if (!xfb->num_outputs || xfb->num_outputs > DXBC_NIR_MAX_XFB_OUTPUTS ||
+       (c->stage != MESA_SHADER_VERTEX && c->stage != MESA_SHADER_GEOMETRY)) {
+      fail(c, NULL, "stream output of stage %u", c->stage);
+      return false;
+   }
+   info = rzalloc_size(nir, nir_xfb_info_size(xfb->num_outputs));
+   if (!info)
+      return false;
+   for (unsigned i = 0; i < xfb->num_outputs; ++i) {
+      const struct dxbc_nir_xfb_output *o = &xfb->outputs[i];
+      const struct output_sink *sink = NULL;
+      unsigned want = o->num_components && o->num_components <= 4 ?
+         ((1u << o->num_components) - 1u) << o->start_component : 0u;
+      if (o->reg < MAX_REGS && want && o->start_component + o->num_components <= 4)
+         for (unsigned s = 0; s < c->num_sinks[o->reg] && !sink; ++s) {
+            const struct output_sink *k = &c->sinks[o->reg][s];
+            int loc = k->var->data.location;
+            if (!k->scalar && !k->first && (k->mask & want) == want &&
+                k->var->data.stream == 0 &&
+                (loc == VARYING_SLOT_POS ||
+                 (loc >= VARYING_SLOT_VAR0 && loc < VARYING_SLOT_VAR0 + MAX_REGS)))
+               sink = k;
+         }
+      if (!sink || o->stream || o->buffer >= DXBC_NIR_MAX_XFB_BUFFERS) {
+         fail(c, NULL, "stream output %u (register %u)", i, o->reg);
+         return false;
+      }
+      nir_xfb_output_info *out = &info->outputs[i];
+      out->buffer = o->buffer;
+      out->offset = o->dst_offset * 4u;
+      out->location = (uint8_t)sink->var->data.location;
+      out->component_offset = o->start_component;
+      out->component_mask = (uint8_t)want;
+      info->buffers_written |= (uint8_t)BITFIELD_BIT(o->buffer);
+      info->buffers[o->buffer].varying_count++;
+   }
+   info->streams_written = BITFIELD_BIT(0);
+   for (unsigned buffer = 0; buffer < DXBC_NIR_MAX_XFB_BUFFERS; ++buffer) {
+      info->buffer_to_stream[buffer] = 0;
+      if (info->buffers_written & BITFIELD_BIT(buffer)) {
+         info->buffers[buffer].stride = (uint16_t)(xfb->stride[buffer] * 4u);
+         nir->info.xfb_stride[buffer] = (uint8_t)xfb->stride[buffer];
+      }
+   }
+   info->output_count = (uint16_t)xfb->num_outputs;
+   nir->xfb_info = info;
+   nir->info.has_transform_feedback_varyings = true;
+   return true;
+}
+
 static struct nir_shader *
 translate(const struct dxbc_program *program, const struct nir_shader_compiler_options *options,
           uint32_t passthrough_registers, uint32_t passthrough_positions,
-          struct dxbc_nir_error *error)
+          const struct dxbc_nir_xfb *xfb, struct dxbc_nir_error *error)
 {
    static struct dxbc_nir_error ignored;
    struct ctx *c;
@@ -2757,6 +2818,8 @@ translate(const struct dxbc_program *program, const struct nir_shader_compiler_o
    } else if (!c->failed && stage != MESA_SHADER_GEOMETRY) {
       store_outputs(c);
    }
+   if (!c->failed && xfb)
+      build_xfb(c, xfb);
 
    if (c->failed) {
       ralloc_free(nir);
@@ -2776,7 +2839,7 @@ dxbc_to_nir(const struct dxbc_program *program,
             const struct nir_shader_compiler_options *options,
             struct dxbc_nir_error *error)
 {
-   return translate(program, options, 0, 0, error);
+   return translate(program, options, 0, 0, NULL, error);
 }
 
 struct nir_shader *
@@ -2785,7 +2848,7 @@ dxbc_to_nir_hs(const struct dxbc_program *program,
                uint32_t passthrough_registers, uint32_t passthrough_positions,
                struct dxbc_nir_error *error)
 {
-   return translate(program, options, passthrough_registers, passthrough_positions, error);
+   return translate(program, options, passthrough_registers, passthrough_positions, NULL, error);
 }
 
 void
@@ -2861,11 +2924,42 @@ dxbc_translate_tokens(const uint32_t *tokens,
    return dxbc_translate_tokens_hs(tokens, options, 0, 0, error);
 }
 
+static struct nir_shader *
+translate_tokens(const uint32_t *tokens, const struct nir_shader_compiler_options *options,
+                 uint32_t passthrough_registers, uint32_t passthrough_positions,
+                 const struct dxbc_nir_xfb *xfb, struct dxbc_nir_error *error);
+
 struct nir_shader *
 dxbc_translate_tokens_hs(const uint32_t *tokens,
                          const struct nir_shader_compiler_options *options,
                          uint32_t passthrough_registers, uint32_t passthrough_positions,
                          struct dxbc_nir_error *error)
+{
+   return translate_tokens(tokens, options, passthrough_registers, passthrough_positions,
+                           NULL, error);
+}
+
+struct nir_shader *
+dxbc_translate_tokens_xfb(const uint32_t *tokens,
+                          const struct nir_shader_compiler_options *options,
+                          const struct dxbc_nir_xfb *xfb,
+                          struct dxbc_nir_error *error)
+{
+   static struct dxbc_nir_error ignored;
+   if (!xfb) {
+      if (!error)
+         error = &ignored;
+      memset(error, 0, sizeof(*error));
+      snprintf(error->message, sizeof(error->message), "no stream output");
+      return NULL;
+   }
+   return translate_tokens(tokens, options, 0, 0, xfb, error);
+}
+
+static struct nir_shader *
+translate_tokens(const uint32_t *tokens, const struct nir_shader_compiler_options *options,
+                 uint32_t passthrough_registers, uint32_t passthrough_positions,
+                 const struct dxbc_nir_xfb *xfb, struct dxbc_nir_error *error)
 {
    static struct dxbc_nir_error ignored;
    struct dxbc_program program;
@@ -2887,7 +2981,7 @@ dxbc_translate_tokens_hs(const uint32_t *tokens,
       error->offset = perr.offset;
       return NULL;
    }
-   nir = translate(&program, options, passthrough_registers, passthrough_positions, error);
+   nir = translate(&program, options, passthrough_registers, passthrough_positions, xfb, error);
    dxbc_program_free(&program);
    if (nir)
       dxbc_nir_finalize(nir);

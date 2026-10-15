@@ -13,7 +13,11 @@ the translator grows to cover them.
 
 Invariant caught: invalid NIR (code after a jump, component-count or type
 mismatches, unbalanced control flow, undeclared registers) or a crash on a
-program the frontend would hand over.
+program the frontend would hand over.  D3D-H5 stream output: the xfb info
+the translator attaches names its own output locations (position, VAR0 +
+register) with D3D's component ranges, dword offsets and strides, survives
+Asahi's lowering, and a capture it cannot express (a clip-distance
+register) is refused instead of capturing the wrong varying.
 
 Built against the host Mesa tree the UMD's Mesa is cut from (26.3.0-devel
 9aa1215f, .local/accelerated-desktop-ad03/mesa-build); skipped where absent.
@@ -170,6 +174,28 @@ class DxbcToNir(unittest.TestCase):
                 result = self.run_fixture(name)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr[-3000:])
                 self.assertTrue(result.stdout.startswith("REFUSED "), result.stdout)
+
+    def run_xfb(self, name, outputs, strides):
+        return subprocess.run([str(self.binary), str(FIXTURES / f"{name}.dxbc"), "--xfb",
+                               outputs, strides], capture_output=True, text=True, timeout=60)
+
+    def test_stream_output_xfb_info(self):
+        result = self.run_xfb("vs40", "0.0.4.0.0/1.0.2.0.4/3.2.2.1.0", "6,2,0,0")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr[-3000:])
+        for line in ("XFB outputs 3 buffers 0x3 streams 0x1 strides 24,8,0,0 info-strides 6,2,0,0",
+                     "XFB 0 buffer 0 offset 0 location VARYING_SLOT_POS component 0 mask 0xf",
+                     "XFB 1 buffer 0 offset 16 location VARYING_SLOT_VAR1 component 0 mask 0x3",
+                     "XFB 2 buffer 1 offset 0 location VARYING_SLOT_VAR3 component 2 mask 0xc"):
+            with self.subTest(line=line):
+                self.assertIn(line, result.stdout)
+        # SM 5 geometry shader: stream 0's o0 is the position
+        result = self.run_xfb("gs50", "0.0.4.0.0", "4,0,0,0")
+        self.assertIn("XFB 0 buffer 0 offset 0 location VARYING_SLOT_POS component 0 mask 0xf",
+                      result.stdout, result.stdout + result.stderr[-3000:])
+        # o4 is a clip distance: no generic or position location to name
+        result = self.run_xfb("vs40", "4.0.1.0.0", "1,0,0,0")
+        self.assertTrue(result.stdout.startswith("REFUSED stream output 0 (register 4)"),
+                        result.stdout + result.stderr[-3000:])
 
 
 if __name__ == "__main__":

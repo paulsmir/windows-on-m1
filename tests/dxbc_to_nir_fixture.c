@@ -1,7 +1,10 @@
 /* Translate a DXBC fixture to NIR with the AGX compiler's NIR options, run
  * the tgsi_to_nir finalization sequence, Asahi's I/O lowering and
  * agx_preprocess_nir, validating the shader after each step.
- * usage: dxbc_to_nir_fixture <object.dxbc> [--print] */
+ * usage: dxbc_to_nir_fixture <object.dxbc> [--print]
+ *        dxbc_to_nir_fixture <object.dxbc> --xfb <reg.start.count.buffer.offset/...> <s0,s1,s2,s3>
+ * (stream output: dxbc_translate_tokens_xfb, then the same lowering, and
+ * the nir_xfb_info Asahi's state creation reads) */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,6 +14,7 @@
 
 #include "nir.h"
 #include "nir_builder.h"
+#include "nir_xfb_info.h"
 #include "asahi/compiler/agx_compile.h"
 
 static unsigned
@@ -52,6 +56,57 @@ main(int argc, char **argv)
    }
 
    glsl_type_singleton_init_or_ref();
+   if (argc > 4 && !strcmp(argv[2], "--xfb")) {
+      struct dxbc_nir_xfb xfb;
+      const char *spec = argv[3];
+      memset(&xfb, 0, sizeof(xfb));
+      while (*spec && xfb.num_outputs < DXBC_NIR_MAX_XFB_OUTPUTS) {
+         unsigned reg, start, count, buffer, offset;
+         int used = 0;
+         if (sscanf(spec, "%u.%u.%u.%u.%u%n", &reg, &start, &count, &buffer, &offset, &used) != 5)
+            return 2;
+         struct dxbc_nir_xfb_output *o = &xfb.outputs[xfb.num_outputs++];
+         o->reg = reg;
+         o->start_component = (uint8_t)start;
+         o->num_components = (uint8_t)count;
+         o->buffer = (uint8_t)buffer;
+         o->dst_offset = offset;
+         spec += used;
+         if (*spec == '/')
+            ++spec;
+      }
+      if (sscanf(argv[4], "%u,%u,%u,%u", &xfb.stride[0], &xfb.stride[1], &xfb.stride[2],
+                 &xfb.stride[3]) != 4)
+         return 2;
+      nir = dxbc_translate_tokens_xfb(chunk, &agx_nir_options, &xfb, &terr);
+      if (!nir) {
+         printf("REFUSED %s\n", terr.message);
+         return 0;
+      }
+      NIR_PASS(_, nir, nir_lower_io, nir_var_shader_in | nir_var_shader_out,
+               type_size_vec4, nir_lower_io_lower_64bit_to_32 |
+               nir_lower_io_use_interpolated_input_intrinsics);
+      nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+      agx_preprocess_nir(nir);
+      nir_validate_shader(nir, "agx_preprocess_nir");
+      const nir_xfb_info *x = nir->xfb_info;
+      if (!x) {
+         printf("XFB none\n");
+         return 1;
+      }
+      printf("XFB outputs %u buffers 0x%x streams 0x%x strides %u,%u,%u,%u info-strides %u,%u,%u,%u\n",
+             x->output_count, x->buffers_written, x->streams_written, x->buffers[0].stride,
+             x->buffers[1].stride, x->buffers[2].stride, x->buffers[3].stride,
+             nir->info.xfb_stride[0], nir->info.xfb_stride[1], nir->info.xfb_stride[2],
+             nir->info.xfb_stride[3]);
+      for (unsigned i = 0; i < x->output_count; ++i)
+         printf("XFB %u buffer %u offset %u location %s component %u mask 0x%x\n", i,
+                x->outputs[i].buffer, x->outputs[i].offset,
+                gl_varying_slot_name_for_stage(x->outputs[i].location, nir->info.stage),
+                x->outputs[i].component_offset, x->outputs[i].component_mask);
+      ralloc_free(nir);
+      return 0;
+   }
    if (program.type == DXBC_PROGRAM_HULL) {
       /* the output signature (OSGN: count, 8, then 24-byte entries with
        * the system value at +8 and the register at +16) names the control

@@ -81,6 +81,33 @@ dxbc_translate_tokens_hs(const uint32_t *tokens,
                          uint32_t passthrough_registers, uint32_t passthrough_positions,
                          struct dxbc_nir_error *error);
 
+/* D3D stream output of a vertex or geometry shader (D3D-H5): each output
+ * names a D3D output register, its components and a buffer offset in
+ * dwords; the frontend resolves the declaration's holes and strides. */
+#define DXBC_NIR_MAX_XFB_OUTPUTS 64
+#define DXBC_NIR_MAX_XFB_BUFFERS 4
+struct dxbc_nir_xfb_output {
+   uint32_t reg;
+   uint8_t start_component, num_components, buffer, stream;
+   uint32_t dst_offset;   /* dwords */
+};
+struct dxbc_nir_xfb {
+   uint32_t num_outputs;
+   struct dxbc_nir_xfb_output outputs[DXBC_NIR_MAX_XFB_OUTPUTS];
+   uint32_t stride[DXBC_NIR_MAX_XFB_BUFFERS];   /* dwords */
+};
+
+/* dxbc_translate_tokens for a vertex or geometry shader whose outputs are
+ * also captured: the NIR carries nir_xfb_info built from the translator's
+ * own output locations (the TGSI path rebuilds it from TGSI semantics in
+ * Asahi's state creation).  Stream 0 only; system-value outputs other
+ * than the position are refused. */
+struct nir_shader *
+dxbc_translate_tokens_xfb(const uint32_t *tokens,
+                          const struct nir_shader_compiler_options *options,
+                          const struct dxbc_nir_xfb *xfb,
+                          struct dxbc_nir_error *error);
+
 /* The thread-group size (dcl_thread_group) and groupshared bytes of a
  * translated compute shader: the block the frontend's Dispatch launches and
  * the static shared memory of its pipe_compute_state. */
