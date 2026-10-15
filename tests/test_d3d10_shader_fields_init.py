@@ -69,6 +69,18 @@ def function_body(text, name):
 
 
 class ShaderFieldsInit(unittest.TestCase):
+    def test_uav_buffer_bind_is_not_shader_image(self):
+        with tempfile.TemporaryDirectory(prefix="d3d11-uav-buffer-") as tmp:
+            out = project(Path(tmp) / "out")
+            if out is None:
+                self.skipTest("reference Mesa tree not available")
+            resource = (out / "src/gallium/frontends/d3d10umd/Resource.cpp").read_text()
+            flags = function_body(resource, "translate_resource_flags")
+            self.assertIn("PIPE_BIND_SHADER_BUFFER | PIPE_BIND_SHADER_IMAGE", flags)
+            body = function_body(resource, "CreateResource")
+            bind_setup = body.split("templat.bind       = translate_resource_flags(pCreateResource->BindFlags);", 1)[1].split("templat.usage", 1)[0]
+            self.assertIn("if (pCreateResource->ResourceDimension == D3D10DDIRESOURCE_BUFFER)\n      templat.bind &= ~PIPE_BIND_SHADER_IMAGE;", bind_setup)
+
     def test_creators_initialize_destroyed_fields(self):
         with tempfile.TemporaryDirectory(prefix="d3d10-shader-fields-") as tmp:
             out = project(Path(tmp) / "out")
