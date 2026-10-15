@@ -5237,6 +5237,31 @@ agx_shader_initialize("""
                 target.write_text(content)
                 overlays.setdefault(path, {})['after_first_fault_receipt'] = (
                     hashlib.sha256(target.read_bytes()).hexdigest())
+            # EXP1296: once the device is lost the staging allocation fails and
+            # agx_transfer_map dereferenced it (its assert is compiled out):
+            # the x86 GL smoke crashed in glReadPixels.  The map fails
+            # instead, which the state trackers report to the application.
+            pipe_target = out/'src/gallium/drivers/asahi/agx_pipe.c'
+            pipe_text = pipe_target.read_text()
+            staging_alloc = """      struct agx_resource *staging =
+         agx_alloc_staging(pctx->screen, rsrc, level, box);
+      assert(staging);
+"""
+            if pipe_text.count(staging_alloc) != 1:
+                raise SystemExit('Ambiguous transfer staging anchor')
+            pipe_text = pipe_text.replace(staging_alloc, """      struct agx_resource *staging =
+         agx_alloc_staging(pctx->screen, rsrc, level, box);
+      if (!staging) {
+         *out_transfer = NULL;
+         pipe_resource_reference(&transfer->base.resource, NULL);
+         FREE(transfer);
+         return NULL;
+      }
+""", 1)
+            pipe_target.write_text(pipe_text)
+            overlays.setdefault('src/gallium/drivers/asahi/agx_pipe.c', {})[
+                'after_staging_failure'] = hashlib.sha256(
+                    pipe_target.read_bytes()).hexdigest()
             # The last source transform is authoritative for runtime compilation.
             for key, record in overlays.items():
                 path = out/key
