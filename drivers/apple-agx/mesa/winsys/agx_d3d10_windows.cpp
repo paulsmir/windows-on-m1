@@ -525,6 +525,9 @@ HRESULT AgxD3d10WindowsCreateDevice(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
   /* D3D-G4: D3D depth-stencil views submit ZLS attachments through the same
    * winsys/KMD path the GL ICD validated (EXP1149). */
   owner->Backend.ZlsAttachments=1;
+  /* D3D-H6: out-of-bounds constant-buffer, UAV and vertex reads return 0
+   * and out-of-bounds UAV writes are dropped (D3D11.3 7.5, 8.19.2). */
+  owner->Backend.D3dRobustness=1;
   owner->Backend.Multisample=
       AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D_SCREEN_MSAA") ? 1 : 0;
   owner->Screen=AgxWin32AsahiScreenCreateForWindows(&owner->Backend,&owner->Runtime.Screen,

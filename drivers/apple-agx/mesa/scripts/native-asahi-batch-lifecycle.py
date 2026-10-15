@@ -719,3 +719,107 @@ AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *backend, AGX_WIN32_SCREEN *wi
     blit=replace(blit,'   if (asahi_compute_blit_supported(info)) {','''   if (!agx_device(pipe->screen)->windows_private &&
        asahi_compute_blit_supported(info)) {''')
     save(blit_path,blit)
+    project_d3d_robustness(out,save)
+
+
+def project_d3d_robustness(out,save):
+    """D3D-H6: D3D10/11 out-of-bounds buffer semantics for the D3D UMD.
+
+    The D3D device's context was created with flags 0 (no robustness at
+    all), and Asahi's only robustness is GL's: an out-of-bounds UBO/SSBO
+    load reads offset 0, a store whose last component is out of bounds is
+    dropped whole, vertex fetch clamps to element 0 and an unbound constant
+    buffer slot keeps its previous base. A backend whose D3dRobustness is
+    set (the D3D UMD, agx_d3d10_windows.cpp) makes its contexts robust with
+    the D3D lowering (winsys/agx_win32_d3d_robustness.h), AGX_ROBUSTNESS_D3D
+    vertex fetch and unbound constant buffers on the zero page. The OpenGL
+    ICD keeps the robustness its contexts ask for.
+    """
+    hp='src/gallium/drivers/asahi/agx_state.h';h=(out/hp).read_text()
+    h=replace(h,'''   bool support_lod_bias;
+   bool robust;
+''','''   bool support_lod_bias;
+   bool robust;
+   /* D3D-H6: D3D10/11 out-of-bounds semantics (implies robust) */
+   bool windows_d3d_robust;
+''')
+    save(hp,h)
+    pp='src/gallium/drivers/asahi/agx_pipe.c';pipe=(out/pp).read_text()
+    pipe=replace(pipe,'''   ctx->robust = (flags & PIPE_CONTEXT_ROBUST_BUFFER_ACCESS);
+''','''   ctx->robust = (flags & PIPE_CONTEXT_ROBUST_BUFFER_ACCESS);
+   {
+      AGX_WIN32_ASAHI_BACKEND *windows = agx_device(screen)->windows_private;
+      ctx->windows_d3d_robust = windows && windows->D3dRobustness;
+      if (ctx->windows_d3d_robust)
+         ctx->robust = true;
+   }
+''')
+    save(pp,pipe)
+    sp='src/gallium/drivers/asahi/agx_state.c';state=(out/sp).read_text()
+    state=replace(state,'#include "agx_state.h"\n',
+        '#include "agx_state.h"\n#include "agx_win32_d3d_robustness.h"\n')
+    a,b=function(state,'should_lower_robustness')
+    state=state[:b]+'''
+
+/* D3D-H6: UBO/SSBO loads and SSBO stores are lowered by
+ * agx_win32_lower_d3d_buffer_access; buffer images and atomics as for GL
+ * robustness, which gives D3D's rules (nothing written, result 0). */
+static bool
+agx_win32_should_lower_robustness_d3d(const nir_intrinsic_instr *intr,
+                                      const void *data)
+{
+   const bool robust = true;
+
+   switch (intr->intrinsic) {
+   case nir_intrinsic_load_ubo:
+   case nir_intrinsic_load_ssbo:
+   case nir_intrinsic_store_ssbo:
+      return false;
+   default:
+      return should_lower_robustness(intr, &robust);
+   }
+}'''+state[b:]
+    state=replace(state,'''                      nir_shader *nir, bool support_lod_bias, bool robust)''',
+        '''                      nir_shader *nir, bool support_lod_bias, bool robust,
+                      bool d3d_robust)''')
+    state=replace(state,'''   NIR_PASS(_, nir, nir_lower_robust_access, should_lower_robustness, &robust);''',
+        '''   if (d3d_robust)
+      NIR_PASS(_, nir, agx_win32_lower_d3d_buffer_access);
+   NIR_PASS(_, nir, nir_lower_robust_access,
+            d3d_robust ? agx_win32_should_lower_robustness_d3d : should_lower_robustness,
+            &robust);''')
+    call='   agx_shader_initialize(dev, so, nir, ctx->support_lod_bias, ctx->robust);'
+    if state.count(call)!=2:
+        raise RuntimeError('Native shader initialization callers changed')
+    state=state.replace(call,'''   agx_shader_initialize(dev, so, nir, ctx->support_lod_bias, ctx->robust,
+                         ctx->windows_d3d_robust);''')
+    a,b=function(state,'agx_update_vs')
+    state=state[:a]+replace(state[a:b],'''      .prolog.vs.robustness.level =
+         ctx->robust ? AGX_ROBUSTNESS_GL : AGX_ROBUSTNESS_DISABLED,''','''      .prolog.vs.robustness.level =
+         ctx->windows_d3d_robust ? AGX_ROBUSTNESS_D3D :
+         ctx->robust ? AGX_ROBUSTNESS_GL : AGX_ROBUSTNESS_DISABLED,''')+state[b:]
+    save(sp,state)
+    up='src/gallium/drivers/asahi/agx_uniforms.c';uniforms=(out/up).read_text()
+    a,b=function(uniforms,'agx_set_cbuf_uniforms')
+    uniforms=uniforms[:a]+replace(uniforms[a:b],'''      unif->ubo_size[cb] = st->cb[cb].buffer_size;
+   }
+''','''      unif->ubo_size[cb] = st->cb[cb].buffer_size;
+   }
+
+   /* D3D-H6 (D3D11.3 7.5): a slot with nothing bound reads 0. The D3D
+    * lowering clamps the offset to 0 and selects 0, but the load still reads
+    * the slot's base: point every unbound slot at the device zero page with
+    * size 0 on every upload (Asahi keeps an unbound slot's previous base and
+    * size, or 0, an unmapped VA). */
+   if (batch->ctx->windows_d3d_robust) {
+      struct agx_bo *zero = agx_device(batch->ctx->base.screen)->zero_bo;
+
+      for (unsigned cb = 0; cb < PIPE_MAX_CONSTANT_BUFFERS; ++cb) {
+         if (!(st->cb_mask & BITFIELD_BIT(cb)) || !st->cb[cb].buffer) {
+            unif->ubo_base[cb] = zero->va->addr;
+            unif->ubo_size[cb] = 0;
+         }
+      }
+   }
+''')+uniforms[b:]
+    save(up,uniforms)
