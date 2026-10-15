@@ -48,6 +48,23 @@ wins on any conflict. Every agent (Claude or Codex) works this way.
   test_d3d10_shader_fields_init test_dxbc_to_nir ...`).
 - A test must catch a real bug or a deterministic contract (AGENTS.md
   "WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?").
+- Prefer behavioural tests: when an executing harness exists (the
+  translator fixture runs NIR through Asahi's lowering; KMD/UMD C code
+  compiles on the host with stubs; a smoke tool dry-runs on the builder's
+  adapter), assert on what the code computes (e.g. the io bases after
+  lowering, bytes at offsets, a returned status), not on the presence of
+  a source string. Source-string assertions are for pure wiring only
+  (a table entry assigned, an export listed), and a RED that only says
+  "string not found" does not prove the behaviour.
+- Compile every Windows source you touch before reporting: Windows SDK
+  10.0.26100 and MSVC 14.44 headers are unpacked (outside the repo) in
+  `.local/reference/winsdk26100/{um,shared,ucrt,km,msvc}`; check with
+  `/opt/homebrew/opt/llvm/bin/clang --target=aarch64-pc-windows-msvc
+  -fms-extensions -fms-compatibility -fsyntax-only -isystem
+  <ref>/msvc -isystem <ref>/ucrt -isystem <ref>/shared -isystem <ref>/um
+  -D_ARM64_ -DWIN32 [-std=c++17] <file>` (add `-isystem <ref>/km` and the
+  project include directories as the vcxproj does). The integrator still
+  links and runs on the builder.
 
 ## 4. Small commits, ledger immediately
 
@@ -124,6 +141,6 @@ wins on any conflict. Every agent (Claude or Codex) works this way.
   working directory inside that worktree (`cd <worktree>` before invoking
   the companion): Codex's writable roots follow its start directory, and a
   task started elsewhere fails every write with "Operation not permitted".
-  Codex has no Windows SDK headers: the integrator compiles natively on
-  the builder (clang-cl /Zs) before committing. Codex has no SSH to the builder
+  Codex compiles with the local Windows headers (section 3); linking,
+  packaging and running stay with the integrator on the builder. Codex has no SSH to the builder
   or the guest: builder and hardware steps stay with the integrator.
