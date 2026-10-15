@@ -384,6 +384,34 @@ HRESULT AdmissionUmdRuntimeAdapterInitialize(
   return S_OK;
 }
 
+/* The runtime's SetError callback for the device interface: the D3D10.0
+ * interfaces pass the 10.0 core-layer callbacks; the D3D11.0 interfaces
+ * (D3D-H2a, EXP1294) and WDDM 1.3 pass the 11.0 ones, which extend the 10.0
+ * struct, in the same union.  FALSE for any other interface or a missing
+ * table. */
+static BOOL
+AdmissionUmdRuntimeErrorCallback(const D3D10DDIARG_CREATEDEVICE *Args,
+                                 PFND3D10DDI_SETERROR_CB *Callback)
+{
+  if (Args->Interface == D3D10_0_DDI_INTERFACE_VERSION ||
+      Args->Interface == D3D10_0_x_DDI_INTERFACE_VERSION ||
+      Args->Interface == D3D10_0_7_DDI_INTERFACE_VERSION) {
+    if (Args->pUMCallbacks == NULL)
+      return FALSE;
+    *Callback = Args->pUMCallbacks->pfnSetErrorCb;
+    return TRUE;
+  }
+  if (Args->Interface == D3D11_0_DDI_INTERFACE_VERSION ||
+      Args->Interface == D3D11_0_7_DDI_INTERFACE_VERSION ||
+      Args->Interface == D3DWDDM1_3_DDI_INTERFACE_VERSION) {
+    if (Args->p11UMCallbacks == NULL)
+      return FALSE;
+    *Callback = Args->p11UMCallbacks->pfnSetErrorCb;
+    return TRUE;
+  }
+  return FALSE;
+}
+
 HRESULT AdmissionUmdRuntimeDeviceInitialize(
     ADMISSION_UMD_DEVICE *device, ADMISSION_UMD_ADAPTER *adapter,
     const D3D10DDIARG_CREATEDEVICE *Args) {
@@ -428,19 +456,8 @@ HRESULT AdmissionUmdRuntimeDeviceInitialize(
 #endif
       Args->DXGIBaseDDI.pDXGIBaseCallbacks == NULL)
     return E_INVALIDARG;
-  if (Args->Interface == D3D10_0_DDI_INTERFACE_VERSION ||
-      Args->Interface == D3D10_0_x_DDI_INTERFACE_VERSION ||
-      Args->Interface == D3D10_0_7_DDI_INTERFACE_VERSION) {
-    if (Args->pUMCallbacks == NULL)
-      return E_INVALIDARG;
-    errorCallback = Args->pUMCallbacks->pfnSetErrorCb;
-  } else if (Args->Interface == D3DWDDM1_3_DDI_INTERFACE_VERSION) {
-    if (Args->p11UMCallbacks == NULL)
-      return E_INVALIDARG;
-    errorCallback = Args->p11UMCallbacks->pfnSetErrorCb;
-  } else {
+  if (!AdmissionUmdRuntimeErrorCallback(Args, &errorCallback))
     return E_INVALIDARG;
-  }
   ZeroMemory(device, sizeof(*device));
   device->Magic = ADMISSION_UMD_DEVICE_MAGIC;
   device->Adapter = adapter;

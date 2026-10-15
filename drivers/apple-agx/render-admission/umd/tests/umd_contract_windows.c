@@ -842,6 +842,29 @@ static void test_runtime_device_bridge(ADMISSION_UMD_ADAPTER *Adapter,
   CHECK(AdmissionUmdRuntimeDeviceInitialize(&devices[0], Adapter,
                                             &Template) == E_INVALIDARG);
   CHECK(BridgeCreates == before);
+  /* D3D-H2a (EXP1294: D3D11CreateDevice E_INVALIDARG): the D3D11.0
+   * interfaces carry the 11.0 core-layer callbacks. */
+  {
+    const UINT interfaces[2] = {D3D11_0_DDI_INTERFACE_VERSION,
+                                D3D11_0_7_DDI_INTERFACE_VERSION};
+    unsigned creates = BridgeCreates, destroys = BridgeDestroys;
+    for (UINT i = 0u; i < 2u; ++i) {
+      D3D10DDIARG_CREATEDEVICE d3d11 = Template;
+      BOOL consumed = FALSE;
+      d3d11.Interface = interfaces[i];
+      d3d11.p11UMCallbacks = &core11;
+      d3d11.hDrvDevice.pDrvPrivate = &devices[1];
+      d3d11.hRTDevice.handle = (VOID *)(UINT_PTR)0x901u;
+      d3d11.hRTCoreLayer.handle = (VOID *)(UINT_PTR)0xb01u;
+      CHECK(AdmissionUmdRuntimeDeviceInitialize(&devices[1], Adapter,
+                                                &d3d11) == S_OK);
+      AdmissionUmdSetError(&devices[1], E_FAIL);
+      CHECK(BridgeErrorOwner == 0xb01u);
+      CHECK(AdmissionUmdRuntimeDeviceFinalize(&devices[1], &consumed) == S_OK);
+      CHECK(consumed);
+    }
+    CHECK(BridgeCreates == creates + 2u && BridgeDestroys == destroys + 2u);
+  }
 }
 
 #if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
