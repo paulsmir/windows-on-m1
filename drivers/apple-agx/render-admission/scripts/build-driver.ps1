@@ -22,6 +22,7 @@ param(
     [string]$SourceManifestPath,
     [string]$NativeRuntimeProps,
     [string]$NativeProvenancePython,
+    [switch]$AllowAssertBuild,
     [string]$MesaSourceRoot = 'C:\Users\pauls\AD04-d3d10-frontend-build\mesa',
     [string]$MesaGeneratedRoot = 'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated',
     [ValidateRange(0,65535)]
@@ -188,6 +189,20 @@ $umd = Join-Path $root "umd\ARM64\$Configuration\AppleAgxRenderAdmissionUmd.dll"
 if (-not (Test-Path $umd)) {
     throw "Clean render-admission ARM64 UMD output was not found: $umd"
 }
+$assertPython = if (-not [string]::IsNullOrWhiteSpace($NativeProvenancePython)) {
+    $NativeProvenancePython
+} else {
+    (Get-Command python -ErrorAction Stop).Source
+}
+$assertGate = Join-Path (Resolve-Path (Join-Path $root '..\..\..')).Path 'tools\check_no_crt_asserts.py'
+$assertInputs = @($umd, $WowUmd, $WowOpenGLIcd)
+$assertArgs = @($assertGate) + $assertInputs
+if ($AllowAssertBuild) { $assertArgs += '--allow' }
+$assertOutput = & $assertPython @assertArgs
+$assertExit = $LASTEXITCODE
+@{ allow_assert_build = [bool]$AllowAssertBuild; files = @($assertOutput | ForEach-Object { $_ | ConvertFrom-Json }) } |
+    ConvertTo-Json -Depth 5 | Set-Content (Join-Path $root 'assert-gate-result.json')
+if ($assertExit -ne 0) { throw "Mesa package assertion gate failed with exit code $assertExit" }
 Copy-Item -Force $umd (Join-Path $root "AppleAgxRenderAdmissionUmd.dll")
 Copy-Item -Force $WowOpenGLIcd (Join-Path $root "AppleAgxOpenGL32.dll")
 Copy-Item -Force $WowUmd (Join-Path $root "AppleAgxRenderAdmissionUmd32.dll")
