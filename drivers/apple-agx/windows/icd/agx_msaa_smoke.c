@@ -15,7 +15,15 @@
  * iteration): triangle colours there and the clear colour after the resolve
  * place the interior-pixel defect in the resolve, the clear colour there in
  * rendering or storing the samples.
- * Usage: agx_msaa_smoke.exe <out.txt> [2|4] [iterations] [rgba|bgra] [samples] */
+ * The optional fifth argument also accepts full, mask1, mask5, sampleindex,
+ * or copyinit. Those modes draw a full-screen triangle and print centre/edge
+ * samples; copyinit copies a blue multisampled pattern texture before drawing.
+ * EXP1301 (D3D-G5): nodepth draws the full-screen triangle with no depth
+ * buffer bound, depthoff with the 4x depth buffer bound and the depth test
+ * off: together with full they separate a failing depth test, a broken
+ * pass with a multisampled depth attachment, and the colour path.
+ * Usage: agx_msaa_smoke.exe <out.txt> [2|4] [iterations] [rgba|bgra]
+ *                                   [samples|full|mask1|mask5|sampleindex|copyinit|nodepth|depthoff] */
 #define COBJMACROS
 #define INITGUID
 #include <windows.h>
@@ -64,6 +72,9 @@ static const char vs_source[] =
 static const char ps_source[] =
     "cbuffer C : register(b0) { float4 rect; float4 zc; float4 colour; };\n"
     "float4 main(float4 p : SV_Position) : SV_Target { return colour; }\n";
+static const char ps_sample_index[] =
+    "float4 main(uint sample : SV_SampleIndex) : SV_Target {\n"
+    "  return (sample & 1) ? float4(1, 0, 0, 1) : float4(0, 1, 0, 1); }\n";
 static const char vs_full[] =
     "float4 main(uint id : SV_VertexID) : SV_Position {\n"
     "  return float4(id == 1 ? 3.0 : -1.0, id == 2 ? -3.0 : 1.0, 0, 1);\n"
@@ -132,6 +143,10 @@ int main(int argc, char **argv) {
   ID3D11RasterizerState *raster = NULL;
   ID3D11VertexShader *vs = NULL;
   ID3D11PixelShader *ps = NULL;
+  ID3D11PixelShader *ps_per_sample = NULL;
+  ID3D11BlendState *masked_blend = NULL;
+  ID3D11Texture2D *pattern = NULL;
+  ID3D11RenderTargetView *pattern_rtv = NULL;
   ID3DBlob *vsb, *psb;
   /* the "samples" diagnostic */
   ID3D11Texture2D *probe_tex = NULL;
@@ -140,7 +155,7 @@ int main(int argc, char **argv) {
   ID3D11Buffer *probe_cb = NULL;
   ID3D11VertexShader *vs_probe = NULL;
   ID3D11PixelShader *ps_probe_shader = NULL;
-  int probe;
+  int probe, mode = 0;
   D3D_FEATURE_LEVEL level = 0;
   const D3D_FEATURE_LEVEL want[] = {D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1,
                                     D3D_FEATURE_LEVEL_10_0};
@@ -151,13 +166,23 @@ int main(int argc, char **argv) {
   int iterations, bad = 0;
 
   if (argc < 2) {
-    printf("usage: agx_msaa_smoke.exe <out.txt> [2|4] [iterations] [rgba|bgra] [samples]\n");
+    printf("usage: agx_msaa_smoke.exe <out.txt> [2|4] [iterations] [rgba|bgra] [samples|full|mask1|mask5|sampleindex|copyinit|nodepth|depthoff]\n");
     return 2;
   }
   samples = argc > 2 && atoi(argv[2]) == 2 ? 2u : 4u;
   iterations = argc > 3 ? atoi(argv[3]) : 30;
   if (argc > 4 && !strcmp(argv[4], "bgra")) target_format = DXGI_FORMAT_B8G8R8A8_UNORM;
-  probe = argc > 5 && !strcmp(argv[5], "samples");
+  if (argc > 5) {
+    if (!strcmp(argv[5], "full")) mode = 1;
+    else if (!strcmp(argv[5], "mask1")) mode = 2;
+    else if (!strcmp(argv[5], "mask5")) mode = 3;
+    else if (!strcmp(argv[5], "sampleindex")) mode = 4;
+    else if (!strcmp(argv[5], "copyinit")) mode = 5;
+    else if (!strcmp(argv[5], "nodepth")) mode = 6;
+    else if (!strcmp(argv[5], "depthoff")) mode = 7;
+    else if (strcmp(argv[5], "samples")) { printf("unknown mode: %s\n", argv[5]); return 2; }
+  }
+  probe = argc > 5 && (!strcmp(argv[5], "samples") || mode);
   if (iterations < 2) iterations = 2;
   out = CreateFileA(argv[1], GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS,
                     FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH, NULL);
@@ -242,6 +267,32 @@ int main(int argc, char **argv) {
                                        ID3D10Blob_GetBufferSize(psb), NULL, &ps);
   say("SHADERS 0x%08lx", (unsigned long)hr);
   if (FAILED(hr)) return 1;
+  if (mode == 4) {
+    ID3DBlob *b = compile(compile_fn, ps_sample_index, sizeof(ps_sample_index) - 1, "ps_4_1");
+    if (!b) return 1;
+    hr = ID3D11Device_CreatePixelShader(device, ID3D10Blob_GetBufferPointer(b),
+                                       ID3D10Blob_GetBufferSize(b), NULL, &ps_per_sample);
+    say("SAMPLE_INDEX_SHADER 0x%08lx", (unsigned long)hr);
+    if (FAILED(hr)) return 1;
+  }
+  if (mode == 2 || mode == 3) {
+    D3D11_BLEND_DESC bd;
+    memset(&bd, 0, sizeof(bd));
+    bd.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+    hr = ID3D11Device_CreateBlendState(device, &bd, &masked_blend);
+    say("MASK_BLEND 0x%08lx", (unsigned long)hr);
+    if (FAILED(hr)) return 1;
+  }
+  if (mode == 5) {
+    D3D11_TEXTURE2D_DESC td;
+    ID3D11Texture2D_GetDesc(msaa, &td);
+    td.BindFlags = D3D11_BIND_RENDER_TARGET;
+    hr = ID3D11Device_CreateTexture2D(device, &td, NULL, &pattern);
+    if (SUCCEEDED(hr)) hr = ID3D11Device_CreateRenderTargetView(device,
+                                       (ID3D11Resource *)pattern, NULL, &pattern_rtv);
+    say("PATTERN_TEXTURE 0x%08lx", (unsigned long)hr);
+    if (FAILED(hr)) return 1;
+  }
   if (probe) {
     D3D11_TEXTURE2D_DESC td;
     D3D11_SHADER_RESOURCE_VIEW_DESC sd;
@@ -290,13 +341,36 @@ int main(int argc, char **argv) {
   ID3D11DeviceContext_PSSetConstantBuffers(ctx, 0, 1, &cb);
   for (int i = 0; i < iterations; ++i) {
     const float black[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+    const float pattern_colour[4] = {0.0f, 0.0f, 1.0f, 1.0f};
     D3D11_MAPPED_SUBRESOURCE map;
     unsigned lower, upper;
     int mixed = 0;
-    ID3D11DeviceContext_ClearRenderTargetView(ctx, rtv, black);
+    if (mode == 5) {
+      ID3D11DeviceContext_OMSetRenderTargets(ctx, 0, NULL, NULL);
+      ID3D11DeviceContext_ClearRenderTargetView(ctx, pattern_rtv, pattern_colour);
+      ID3D11DeviceContext_CopyResource(ctx, (ID3D11Resource *)msaa,
+                                       (ID3D11Resource *)pattern);
+      ID3D11DeviceContext_OMSetRenderTargets(ctx, 1, &rtv, dsv);
+    } else {
+      ID3D11DeviceContext_ClearRenderTargetView(ctx, rtv, black);
+    }
     ID3D11DeviceContext_ClearDepthStencilView(ctx, dsv, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL,
                                               1.0f, 0);
-    if (!draw(1, 0.5f, 0xff00ff00u) || !draw(0, 0.6f, 0xff0000ffu)) return 1;
+    if (mode == 6) ID3D11DeviceContext_OMSetRenderTargets(ctx, 1, &rtv, NULL);
+    if (mode == 7) ID3D11DeviceContext_OMSetDepthStencilState(ctx, NULL, 0);
+    if (mode) {
+      if (masked_blend) ID3D11DeviceContext_OMSetBlendState(ctx, masked_blend, NULL,
+                                                              mode == 2 ? 0x1u : 0x5u);
+      ID3D11DeviceContext_VSSetShader(ctx, vs_probe, NULL, 0);
+      if (ps_per_sample) ID3D11DeviceContext_PSSetShader(ctx, ps_per_sample, NULL, 0);
+      if (mode == 4) ID3D11DeviceContext_Draw(ctx, 3, 0);
+      else if (!draw(1, 0.5f, 0xff00ff00u)) return 1;
+      if (ps_per_sample) ID3D11DeviceContext_PSSetShader(ctx, ps, NULL, 0);
+      ID3D11DeviceContext_VSSetShader(ctx, vs, NULL, 0);
+      if (masked_blend) ID3D11DeviceContext_OMSetBlendState(ctx, NULL, NULL, 0xffffffffu);
+      if (mode == 6) ID3D11DeviceContext_OMSetRenderTargets(ctx, 1, &rtv, dsv);
+      if (mode == 7) ID3D11DeviceContext_OMSetDepthStencilState(ctx, less, 0);
+    } else if (!draw(1, 0.5f, 0xff00ff00u) || !draw(0, 0.6f, 0xff0000ffu)) return 1;
     ID3D11DeviceContext_ResolveSubresource(ctx, (ID3D11Resource *)resolved, 0,
                                            (ID3D11Resource *)msaa, 0,
                                            target_format);
@@ -343,13 +417,17 @@ int main(int argc, char **argv) {
             rgba(*(const unsigned *)((const unsigned char *)m.pData + 224u * m.RowPitch + 32u * 4u)),
             rgba(*(const unsigned *)((const unsigned char *)m.pData + 32u * m.RowPitch + 224u * 4u)),
             rgba(*(const unsigned *)((const unsigned char *)m.pData + 128u * m.RowPitch + 128u * 4u)));
+        if (mode) say("MODE %s SAMPLE %u iteration %d centre 0x%08x edge 0x%08x", argv[5],
+                      s, i,
+                      rgba(*(const unsigned *)((const unsigned char *)m.pData + 128u * m.RowPitch + 128u * 4u)),
+                      rgba(*(const unsigned *)((const unsigned char *)m.pData + 128u * m.RowPitch)));
         ID3D11DeviceContext_Unmap(ctx, (ID3D11Resource *)staging, 0);
       }
       ID3D11DeviceContext_OMSetRenderTargets(ctx, 1, &rtv, dsv);
       ID3D11DeviceContext_VSSetShader(ctx, vs, NULL, 0);
       ID3D11DeviceContext_PSSetShader(ctx, ps, NULL, 0);
     }
-    if (lower != 0xff00ff00u || upper != 0xff0000ffu || mixed < (SIZE - 16) / 2) {
+    if (!mode && (lower != 0xff00ff00u || upper != 0xff0000ffu || mixed < (SIZE - 16) / 2)) {
       if (bad < 8)
         say("WRONG iteration %d lower 0x%08x upper 0x%08x mixed-edge rows %d", i, lower, upper,
             mixed);

@@ -123,6 +123,32 @@ class DxbcToNir(unittest.TestCase):
         return subprocess.run([str(self.binary), str(FIXTURES / f"{name}.dxbc")],
                               capture_output=True, text=True, timeout=60)
 
+    def test_windows_dxbc_corpus_does_not_crash(self):
+        corpus = local_tree("dxbc-corpus")
+        if corpus is None:
+            self.skipTest("Windows DXBC corpus not available")
+        files = sorted(corpus.glob("*.dxbc"))
+        self.assertTrue(files, "DXBC corpus is empty")
+        ok, refused, crashed = [], [], []
+        for path in files:
+            try:
+                result = subprocess.run([str(self.binary), str(path)],
+                                        capture_output=True, text=True, timeout=30)
+            except subprocess.TimeoutExpired:
+                crashed.append(f"{path.name}: timeout")
+                continue
+            if result.returncode < 0:
+                crashed.append(f"{path.name}: signal {-result.returncode}")
+            elif result.stdout.startswith("TRANSLATED ") and result.returncode == 0:
+                ok.append(path.name)
+            elif result.stdout.startswith(("REFUSED ", "PARSE_ERROR ")) or result.returncode > 0:
+                refused.append(path.name)
+            else:
+                crashed.append(f"{path.name}: unexpected output {result.stdout[:80]!r}")
+        print(f"DXBC corpus: OK={len(ok)} REFUSED={len(refused)} CRASH={len(crashed)} "
+              f"CRASH={','.join(crashed)} REFUSED={','.join(refused)}")
+        self.assertFalse(crashed, "DXBC corpus fixture crashed: " + ", ".join(crashed))
+
     def test_shader_model_4_fixtures_translate_and_validate(self):
         for name, stage in TRANSLATED.items():
             with self.subTest(name=name):
@@ -196,6 +222,15 @@ class DxbcToNir(unittest.TestCase):
         result = self.run_xfb("vs40", "4.0.1.0.0", "1,0,0,0")
         self.assertTrue(result.stdout.startswith("REFUSED stream output 0 (register 4)"),
                         result.stdout + result.stderr[-3000:])
+
+    def test_vertex_inputs_read_their_own_attribute(self):
+        # EXP1297: every translated vertex input reached Asahi with io base
+        # 0 (no driver_location), and agx_nir_lower_vs_input_to_prolog
+        # selects the attribute by base: a second input read the first
+        # one's data (d2d1/DWM vertex shaders indexed constant buffers with
+        # position bits and timed out the GPU; 84 corpus shaders drew wrong
+        # pixels).  vs40 reads v0..v2 (v3/v4 are vertex/instance id).
+        self.assertIn("vs-input-bases 0x7", self.run_fixture("vs40").stdout)
 
 
 if __name__ == "__main__":

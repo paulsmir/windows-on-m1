@@ -442,6 +442,10 @@ static HRESULT close_device(AGX_D3D10_WINDOWS_DEVICE **inout) {
 HRESULT AgxD3d10WindowsOpenAdapter(const D3D10DDIARG_OPENADAPTER *Args,
                                   AGX_D3D10_WINDOWS_ADAPTER **Adapter) {
   AdmissionUmdDiagnostic("g4-open-adapter-enter",S_OK,NULL,0u);
+  if (Args) {
+    UINT values[2] = {Args->Interface, Args->Version};
+    AdmissionUmdDiagnostic("g4-open-adapter-args",S_OK,values,2u);
+  }
   if (Adapter == NULL || *Adapter != NULL) {
     AdmissionUmdDiagnostic("g4-open-adapter-exit",E_INVALIDARG,NULL,0u);
     return E_INVALIDARG;
@@ -489,6 +493,10 @@ HRESULT AgxD3d10WindowsCreateDevice(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
                                    const D3D10DDIARG_CREATEDEVICE *Args,
                                    AGX_D3D10_WINDOWS_DEVICE **Device) {
   AdmissionUmdDiagnostic("g4-create-device-enter",S_OK,NULL,0u);
+  if (Args) {
+    UINT values[2] = {Args->Interface, Args->Version};
+    AdmissionUmdDiagnostic("g4-create-device-args",S_OK,values,2u);
+  }
   if (Adapter == NULL || Device == NULL || *Device != NULL) {
     AdmissionUmdDiagnostic("g4-create-device-exit",E_INVALIDARG,NULL,0u);
     return E_INVALIDARG;
@@ -525,6 +533,9 @@ HRESULT AgxD3d10WindowsCreateDevice(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
   /* D3D-G4: D3D depth-stencil views submit ZLS attachments through the same
    * winsys/KMD path the GL ICD validated (EXP1149). */
   owner->Backend.ZlsAttachments=1;
+  /* D3D-H6: out-of-bounds constant-buffer, UAV and vertex reads return 0
+   * and out-of-bounds UAV writes are dropped (D3D11.3 7.5, 8.19.2). */
+  owner->Backend.D3dRobustness=1;
   owner->Backend.Multisample=
       AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D_SCREEN_MSAA") ? 1 : 0;
   owner->Screen=AgxWin32AsahiScreenCreateForWindows(&owner->Backend,&owner->Runtime.Screen,

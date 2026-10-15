@@ -86,12 +86,19 @@ class D3d11DdiTable(unittest.TestCase):
             device = (frontend / "Device.cpp").read_text()
             versions = adapter[adapter.index("SupportedDDIInterfaceVersions[] = {"):]
             versions = versions[:versions.index("};")]
-            self.assertTrue(versions.rstrip().rstrip(",").endswith("D3D11_0_DDI_SUPPORTED"))
+            # D3D-H7: 11.0, then WDDM 2.0 last, each behind its switch
+            self.assertTrue(versions.rstrip().rstrip(",").endswith(
+                "D3D11_0_DDI_SUPPORTED,\n   /* D3D-H7: last, advertised only under AgxWddm2_0DdiEnabled() */\n"
+                "   D3DWDDM2_0_DDI_SUPPORTED"))
             supported = function_body(adapter, "GetSupportedVersions")
-            self.assertIn("AgxD3d11DdiEnabled() ? 0u : 1u", supported)
+            self.assertIn("(AgxD3d11DdiEnabled() ? 1u + (AgxWddm2_0DdiEnabled() ? 1u : 0u) : 0u)",
+                          supported)
             # EXP1297: FL 11_0 was refused after OpenAdapter alone; every
             # adapter query is a receipt with its answer
-            self.assertIn('AgxD3d10WindowsDiagnostic("measure-getversions", S_OK, values, 2u);', supported)
+            self.assertIn('AgxD3d10WindowsDiagnostic("measure-getversions", S_OK, values, 2u + (count < 8u ? count : 8u));',
+                          supported)
+            # EXP1302: the probe list exists only in FL 11_0 processes
+            self.assertIn('AgxD3d11Fl11Enabled() ?\n      GetEnvironmentVariableA("APPLE_AGX_D3D11_DDI_PROBE"', supported)
             caps = function_body(adapter, "GetCaps")
             self.assertIn("const HRESULT hr = caps();", caps)
             self.assertIn('AgxD3d10WindowsDiagnostic("measure-getcaps", hr, values, 2u);', caps)
@@ -136,7 +143,7 @@ class D3d11DdiTable(unittest.TestCase):
             self.assertIn("AgxD3d11DdiEnabled()", fl11)
             self.assertIn("COMPUTE_PLUS_RAW_AND_STRUCTURED_BUFFERS_IN_SHADER_4_X", caps)
             shader = (frontend / "Shader.cpp").read_text()
-            for setter in ("SetShaderResources", "SetSamplers", "SetConstantBuffers"):
+            for setter in ("SetShaderResources", "SetSamplers", "AgxSetConstantBuffersRange"):
                 with self.subTest(setter=setter):
                     self.assertIn("shader_type == MESA_SHADER_COMPUTE", function_body(shader, setter))
             for wrapper, setter in (("CsSetShaderResources", "SetShaderResources"),
@@ -267,7 +274,7 @@ class D3d11DdiTable(unittest.TestCase):
                 self.skipTest("reference Mesa tree not available")
             frontend = out / "src/gallium/frontends/d3d10umd"
             shader = (frontend / "Shader.cpp").read_text()
-            for setter in ("SetShaderResources", "SetSamplers", "SetConstantBuffers"):
+            for setter in ("SetShaderResources", "SetSamplers", "AgxSetConstantBuffersRange"):
                 with self.subTest(setter=setter):
                     body = function_body(shader, setter)
                     self.assertIn("MESA_SHADER_TESS_CTRL", body)

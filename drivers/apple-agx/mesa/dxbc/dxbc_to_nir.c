@@ -800,6 +800,13 @@ declare_input(struct ctx *c, const struct dxbc_instruction *insn)
       return; /* several declarations of one register (component sets) */
    c->inputs[reg] = make_var(c, nir_var_shader_in, glsl_vec4_type(),
                              generic_slot(c, reg, true), "vin");
+   /* A vertex input reads vertex element 'reg' (the frontend places each
+    * element at its D3D input register): its io base, which Asahi's vertex
+    * prolog maps to an attribute (agx_nir_lower_vs_input_to_prolog), as
+    * tgsi_to_nir's driver_location.  EXP1297: without it every input read
+    * attribute 0. */
+   if (c->stage == MESA_SHADER_VERTEX)
+      c->inputs[reg]->data.driver_location = reg;
    if (ps) {
       bool centroid, sample;
       c->inputs[reg]->data.interpolation =

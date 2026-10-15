@@ -168,6 +168,10 @@ main(int argc, char **argv)
     * exports, which must end the shader (agx_validate block form, EXP1294) */
    unsigned early_stores = 0;
    unsigned instrs = 0;
+   /* vertex inputs: the attribute each load_input reads (its io base,
+    * which Asahi's agx_nir_lower_vs_input_to_prolog turns into the
+    * prolog export), bit per base */
+   unsigned vs_input_bases = 0;
    nir_foreach_function_impl(impl, nir) {
       nir_block *last = nir_impl_last_block(impl);
       nir_foreach_block(blk, impl)
@@ -180,14 +184,20 @@ main(int argc, char **argv)
                 nir->info.stage == MESA_SHADER_FRAGMENT &&
                 nir_instr_as_intrinsic(instr)->intrinsic == nir_intrinsic_store_output)
                ++early_stores;
+            if (instr->type == nir_instr_type_intrinsic &&
+                nir->info.stage == MESA_SHADER_VERTEX &&
+                nir_instr_as_intrinsic(instr)->intrinsic == nir_intrinsic_load_input)
+               vs_input_bases |= 1u << (nir_intrinsic_base(nir_instr_as_intrinsic(instr)) & 31u);
          }
    }
    printf("TRANSLATED stage %s instructions %u inputs 0x%llx outputs 0x%llx textures %u "
-          "ssbos %u images %u block %ux%ux%u shared %u shared-derefs %u early-output-stores %u\n",
+          "ssbos %u images %u block %ux%ux%u shared %u shared-derefs %u early-output-stores %u "
+          "vs-input-bases 0x%x\n",
           mesa_shader_stage_name(nir->info.stage), instrs,
           (unsigned long long)nir->info.inputs_read,
           (unsigned long long)nir->info.outputs_written, BITSET_LAST_BIT(nir->info.textures_used),
-          ssbos, images, block[0], block[1], block[2], shared, shared_derefs, early_stores);
+          ssbos, images, block[0], block[1], block[2], shared, shared_derefs, early_stores,
+          vs_input_bases);
    ralloc_free(nir);
    glsl_type_singleton_decref();
    dxbc_program_free(&program);

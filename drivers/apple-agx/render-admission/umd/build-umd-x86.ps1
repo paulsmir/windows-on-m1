@@ -39,7 +39,7 @@ $includes = @($result.compiler.includes) + @(
 $cpp = @('render-admission\umd\src\umd_runtime_device.c', 'render-admission\umd\src\umd_win32_screen.c',
   'render-admission\umd\src\umd_draw_composer.c', 'render-admission\umd\src\umd_asahi_batch_adapter.c',
   'render-admission\umd\src\umd_asahi_owner.c', 'render-admission\umd\src\umd_gpuva_windows.c',
-  'mesa\winsys\agx_d3d10_windows.cpp')
+  'mesa\winsys\agx_d3d10_windows.cpp', 'd3d12\agx_d3d12_ddi.cpp')
 $c = @('render-admission\umd\src\umd.c', 'render-admission\umd\src\umd_resource_lifetime.c',
   'render-admission\umd\src\direct_flip_contract.c', 'render-admission\src\render_win32_transport.c',
   'render-admission\src\render_allocation.c', 'shared\src\apple_agx_win32_abi.c',
