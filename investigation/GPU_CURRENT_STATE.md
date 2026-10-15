@@ -1,6 +1,26 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-15T08:41Z (read this first)
+## Current as of 2026-10-15T10:14Z (read this first)
+
+Running: EXP1293 (newexp-kmd1293.sh; KMD 5be15abc = code 7dc938f2, UMD32
+out25). Installed before it: PACKAGE1292 (rolled back by the pipeline).
+- EXP1292 CONFIRMED: DWM faults 0 (2e8e1118 shader fields), 4x renders
+  submit (44682cf6), Map of every format (41/42 exact, the 42nd saturates
+  as D3D specifies), adjacency, VS-only stream output; CS 47.0 fps.
+- OPEN: 4x MSAA resolves interior pixels to the clear colour while edges
+  mix correctly; EXP1293 runs it with ASAHI_MESA_DEBUG=nocompress (c389e103)
+  to test the lossless-compression hypothesis (one variable).
+- D3D-H3 (investigation/analysis/D3D-H3-dxbc-nir.md): own DXBC parser
+  (fxc-listing equal on 37 fixtures) and DXBC -> NIR translator (SM 4.x
+  VS/PS/GS, SM 5 CS/UAV/TGSM/atomics/GS streams); 437 of 452 Windows system
+  shaders (d2d1, dwmcore, dwmscene) translate and validate; wired behind
+  APPLE_AGX_D3D_SHADER_NIR (per process); EXP1293's NIR block is its first
+  hardware run. Next: NIR default -> D3D10.1 DDI (upstream SUPPORT_D3D10_1
+  wiring exists) -> D3D11 DDI (H2).
+- Recovery note: rec<X>h/recover.sh is not idempotent (a second run after a
+  successful removal stops at the hidden phantom); see REC-EXP1291.
+
+## Current as of 2026-10-15T08:41Z
 
 Installed: PACKAGE1290 (D3D FL10_0; the next pipeline's rec1290h rollback
 removes it). CS 46.6 fps, DWM faults 0; every earlier smoke unchanged with
