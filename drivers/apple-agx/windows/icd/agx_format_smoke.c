@@ -150,10 +150,16 @@ static int check_texel(const struct format *f, const unsigned char *p, char *got
       value = s / (double)((1ull << (b - 1)) - 1); if (value < -1.0) value = -1.0;
       want = clear_float[logical]; tolerance = 1.5 / ((1ull << (b - 1)) - 1); break;
     }
-    case UINT_: value = (double)raw; want = clear_int[logical]; tolerance = 0.0; break;
+    /* Integer clears saturate to the channel's range (EXP1292: a 2-bit
+     * alpha holds 3, not the cleared 4). */
+    case UINT_: value = (double)raw; want = clear_int[logical];
+      if (want > (double)((1ull << b) - 1)) want = (double)((1ull << b) - 1);
+      tolerance = 0.0; break;
     case SINT_: {
       long long s = (raw & (1ull << (b - 1))) ? (long long)raw - (1ll << b) : (long long)raw;
-      value = (double)s; want = clear_int[logical]; tolerance = 0.0; break;
+      value = (double)s; want = clear_int[logical];
+      if (want > (double)((1ll << (b - 1)) - 1)) want = (double)((1ll << (b - 1)) - 1);
+      tolerance = 0.0; break;
     }
     case FLOAT_: {
       if (b == 32) { unsigned u = (unsigned)raw; float fv; memcpy(&fv, &u, 4); value = fv; }

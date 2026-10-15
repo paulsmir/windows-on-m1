@@ -138,7 +138,8 @@ int main(int argc, char **argv) {
     if (SUCCEEDED(hr)) hr = ID3D11Device_CreateVertexShader(device, ID3D10Blob_GetBufferPointer(b3), ID3D10Blob_GetBufferSize(b3), NULL, &vsp);
     if (SUCCEEDED(hr)) hr = ID3D11Device_CreateGeometryShaderWithStreamOutput(device,
         ID3D10Blob_GetBufferPointer(b4), ID3D10Blob_GetBufferSize(b4), &decl, 1, &stride, 1,
-        D3D11_SO_NO_RASTERIZED_STREAM, NULL, &gs);
+        0 /* FL 10_x requires stream 0 rasterized (EXP1292: NO_RASTERIZED_STREAM -> E_INVALIDARG) */,
+        NULL, &gs);
     say("SHADERS 0x%08lx", (unsigned long)hr);
     if (FAILED(hr)) return 1;
   }
