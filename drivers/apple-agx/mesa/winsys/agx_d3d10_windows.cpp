@@ -442,6 +442,10 @@ static HRESULT close_device(AGX_D3D10_WINDOWS_DEVICE **inout) {
 HRESULT AgxD3d10WindowsOpenAdapter(const D3D10DDIARG_OPENADAPTER *Args,
                                   AGX_D3D10_WINDOWS_ADAPTER **Adapter) {
   AdmissionUmdDiagnostic("g4-open-adapter-enter",S_OK,NULL,0u);
+  if (Args) {
+    UINT values[2] = {Args->Interface, Args->Version};
+    AdmissionUmdDiagnostic("g4-open-adapter-args",S_OK,values,2u);
+  }
   if (Adapter == NULL || *Adapter != NULL) {
     AdmissionUmdDiagnostic("g4-open-adapter-exit",E_INVALIDARG,NULL,0u);
     return E_INVALIDARG;
@@ -489,6 +493,10 @@ HRESULT AgxD3d10WindowsCreateDevice(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
                                    const D3D10DDIARG_CREATEDEVICE *Args,
                                    AGX_D3D10_WINDOWS_DEVICE **Device) {
   AdmissionUmdDiagnostic("g4-create-device-enter",S_OK,NULL,0u);
+  if (Args) {
+    UINT values[2] = {Args->Interface, Args->Version};
+    AdmissionUmdDiagnostic("g4-create-device-args",S_OK,values,2u);
+  }
   if (Adapter == NULL || Device == NULL || *Device != NULL) {
     AdmissionUmdDiagnostic("g4-create-device-exit",E_INVALIDARG,NULL,0u);
     return E_INVALIDARG;
