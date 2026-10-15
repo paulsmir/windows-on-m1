@@ -413,8 +413,9 @@ static ADMISSION_WIN32_ALLOCATION_CREATE make_general_allocation(APPLE_AGX_U64 b
   create.ClassId = AgxWin32BufferClassGeneral;
   create.Flags = AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite |
                  AppleAgxWin32BufferGpuRead | AppleAgxWin32BufferGpuWrite;
+  assert(bytes <= 0xffffffffULL);
   assert(AdmissionAllocationDescribe(
-      bytes, 1u, 1u, ADMISSION_WIN32_ALLOCATION_STAGING_CPUVISIBLE,
+      (unsigned int)bytes, 1u, 1u, ADMISSION_WIN32_ALLOCATION_STAGING_CPUVISIBLE,
       ADMISSION_WIN32_ALLOCATION_FORMAT_A8, 1u, &create.Allocation));
   return create;
 }

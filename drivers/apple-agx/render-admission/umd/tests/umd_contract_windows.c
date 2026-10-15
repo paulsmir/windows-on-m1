@@ -93,6 +93,9 @@ typedef struct _TEST_STATE {
   unsigned int SetErrorCalls;
   unsigned int FailAllocations;
   unsigned int FailDeallocations;
+  /* TestAllocate returns no KM resource: the resource is released by its
+   * allocation handle (EXP963), the one deallocation that may be deferred. */
+  BOOL NoKmResource;
   unsigned int CreatedKernelResources;
   unsigned int ReleasedKernelResources;
   unsigned int OutstandingKernelResources;
@@ -100,10 +103,10 @@ typedef struct _TEST_STATE {
   BOOL RuntimeTerminal;
   HRESULT LastSetError;
   HANDLE LastAllocateResource;
-  HANDLE DeallocateResources[16];
-  HRESULT DeallocateResults[16];
-  HRESULT SetErrors[8];
-  unsigned int SetErrorDdis[8];
+  HANDLE DeallocateResources[32];
+  HRESULT DeallocateResults[32];
+  HRESULT SetErrors[16];
+  unsigned int SetErrorDdis[16];
   unsigned int ContextGeneration;
   unsigned int RenderCalls;
   unsigned int QueryAdapterCalls;
@@ -131,6 +134,7 @@ enum {
   TEST_DDI_FLUSH = 1u,
   TEST_DDI_DESTROY_DEVICE = 2u,
   TEST_DDI_CREATE_RESOURCE = 3u,
+  TEST_DDI_DESTROY_RESOURCE = 4u,
 };
 
 static TEST_STATE State;
@@ -450,7 +454,8 @@ static HRESULT APIENTRY TestAllocate(HANDLE Device,
     --State.FailAllocations;
     return E_OUTOFMEMORY;
   }
-  Allocate->hKMResource = 0x700u + State.AllocateCalls;
+  Allocate->hKMResource =
+      State.NoKmResource ? 0u : 0x700u + State.AllocateCalls;
   if (Allocate->pAllocationInfo != NULL) {
     Allocate->pAllocationInfo[0].hAllocation = 0x800u + State.AllocateCalls;
     ++State.CreatedKernelResources;
@@ -471,18 +476,24 @@ static HRESULT APIENTRY TestDeallocate(
     if (Deallocate->NumAllocations != 1u ||
         Deallocate->HandleList == NULL)
       return E_INVALIDARG;
-    CHECK(Deallocate->HandleList[0] == State.InternalAllocation);
-    ++State.InternalDeallocateCalls;
-    return S_OK;
+    /* Runtime resources get 0x800 + n from TestAllocate; anything else is an
+     * internal screen allocation. */
+    if ((Deallocate->HandleList[0] & ~0xffu) != 0x800u) {
+      CHECK(Deallocate->HandleList[0] == State.InternalAllocation);
+      ++State.InternalDeallocateCalls;
+      return S_OK;
+    }
   }
   {
   unsigned int index = State.DeallocateCalls++;
   CHECK(index < ARRAYSIZE(State.DeallocateResources));
+  /* A HandleList deallocation is recorded by its allocation handle. */
   if (index < ARRAYSIZE(State.DeallocateResources))
-    State.DeallocateResources[index] = Deallocate->hResource;
-  CHECK(Deallocate->hResource != NULL);
-  CHECK(Deallocate->NumAllocations == 0u);
-  CHECK(Deallocate->HandleList == NULL);
+    State.DeallocateResources[index] = Deallocate->hResource != NULL
+        ? Deallocate->hResource
+        : (HANDLE)(UINT_PTR)Deallocate->HandleList[0];
+  CHECK((Deallocate->hResource != NULL) ==
+        (Deallocate->NumAllocations == 0u && Deallocate->HandleList == NULL));
   if (State.FailDeallocations != 0u) {
     --State.FailDeallocations;
     result = E_FAIL;
@@ -668,6 +679,29 @@ static D3D10DDI_HRESOURCE open_resource(
   return resource;
 }
 
+static HANDLE resource_allocation(D3D10DDI_HRESOURCE Resource) {
+  const ADMISSION_UMD_RESOURCE *state =
+      (const ADMISSION_UMD_RESOURCE *)Resource.pDrvPrivate;
+  return state != NULL && state->Magic == ADMISSION_UMD_RESOURCE_MAGIC
+             ? (HANDLE)(UINT_PTR)state->KernelAllocation
+             : NULL;
+}
+
+/* EXP963: a non-shared resource without a KM resource is released by its
+ * allocation handle. EXP976: that is the only deallocation DestroyResource
+ * may defer to Flush or DestroyDevice; all others name hRTResource. */
+static D3D10DDI_HRESOURCE create_deferred_resource(
+    D3DWDDM1_3DDI_DEVICEFUNCS *Functions, D3D10DDI_HDEVICE Device,
+    D3D10DDI_HRTRESOURCE RuntimeResource, HANDLE *Allocation) {
+  D3D10DDI_HRESOURCE resource;
+  State.NoKmResource = TRUE;
+  resource = create_resource(Functions, Device, RuntimeResource, FALSE, FALSE);
+  State.NoKmResource = FALSE;
+  *Allocation = resource_allocation(resource);
+  CHECK(*Allocation != NULL);
+  return resource;
+}
+
 static unsigned BridgeCreates, BridgeDestroys;
 static unsigned BridgeQueries;
 static BOOL BridgeBadInfo;
@@ -764,7 +798,9 @@ static VOID APIENTRY BridgeSetError(D3D10DDI_HRTCORELAYER Core, HRESULT Error) {
 
 static void test_runtime_device_bridge(ADMISSION_UMD_ADAPTER *Adapter,
                                        D3D10DDIARG_CREATEDEVICE Template) {
-  ADMISSION_UMD_DEVICE devices[2];
+  /* Static: two 4096-slot devices exceed the 1 MiB default stack
+   * (0xC00000FD since d3a5ce63 raised ADMISSION_UMD_SCREEN_BUFFER_LIMIT). */
+  static ADMISSION_UMD_DEVICE devices[2];
   D3DDDI_DEVICECALLBACKS callbacks = *Template.pKTCallbacks;
   D3D10DDI_CORELAYER_DEVICECALLBACKS core10 = {0};
   D3D11DDI_CORELAYER_DEVICECALLBACKS core11 = {0};
@@ -5309,7 +5345,11 @@ static void test_displayable_composition_buffer(void) {
   CHECK(memcmp(&observed,&reference,sizeof(observed))==0);
   create.MiscFlags|=D3DWDDM2_0DDI_RESOURCE_MISC_DISPLAYABLE_SURFACE;
   create.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
-  CHECK(!AdmissionUmdDescribePrimary(&create,&observed));
+  /* EXP1038: WinUI flip-model RGBA8 back buffers carry the displayable flag
+   * (no DisplayableSupport cap); they stay a non-scanout RGBA allocation. */
+  CHECK(AdmissionUmdDescribePrimary(&create,&observed));
+  CHECK(observed.Displayable==0u &&
+        observed.Allocation.Format==(UINT)D3DDDIFMT_A8B8G8R8);
   create.Format=DXGI_FORMAT_B8G8R8A8_UNORM;
   create.MiscFlags|=D3DWDDM2_0DDI_RESOURCE_MISC_HW_PROTECTED;
   CHECK(!AdmissionUmdDescribePrimary(&create,&observed));
@@ -5361,6 +5401,7 @@ int main(void) {
   D3D10DDI_HRTRESOURCE retryRuntime;
   D3D10DDI_HRTRESOURCE permanentRuntime1;
   D3D10DDI_HRTRESOURCE permanentRuntime2;
+  D3D10DDI_HRTRESOURCE immediateRuntime;
   D3D10DDI_HRESOURCE primary;
   D3D10DDI_HRESOURCE opened;
   D3D10DDI_HRESOURCE shared;
@@ -5369,6 +5410,10 @@ int main(void) {
   D3D10DDI_HRESOURCE retry;
   D3D10DDI_HRESOURCE permanent1;
   D3D10DDI_HRESOURCE permanent2;
+  D3D10DDI_HRESOURCE immediate;
+  HANDLE retryAllocation;
+  HANDLE permanentAllocation1;
+  HANDLE permanentAllocation2;
   SIZE_T deviceBytes;
   UINT formatSupport;
   UINT32 versionCount;
@@ -5700,14 +5745,17 @@ int main(void) {
       free(peer.pDrvPrivate);
     }
   }
+  /* EXP975/EXP976: the runtime frees hRTResource when DestroyResource
+   * returns, so a deallocation naming it (a KM resource here) runs inside
+   * DestroyResource and leaves nothing for Flush. */
   deallocationsBefore = State.DeallocateCalls;
   if (nonPrimary.pDrvPrivate != NULL)
     deviceFunctions.pfnDestroyResource(device, nonPrimary);
-  CHECK(State.DeallocateCalls == deallocationsBefore);
-  CHECK(deviceFunctions.pfnFlush(device, 0u));
   CHECK(State.DeallocateCalls == deallocationsBefore + 1u);
   CHECK(State.DeallocateResources[deallocationsBefore] ==
         nonPrimaryRuntime.handle);
+  CHECK(deviceFunctions.pfnFlush(device, 0u));
+  CHECK(State.DeallocateCalls == deallocationsBefore + 1u);
   free(shared.pDrvPrivate);
   free(nonPrimary.pDrvPrivate);
 
@@ -5716,7 +5764,8 @@ int main(void) {
   deallocationsBefore = State.DeallocateCalls;
   if (opened.pDrvPrivate != NULL)
     deviceFunctions.pfnDestroyResource(device, opened);
-  CHECK(State.DeallocateCalls == deallocationsBefore);
+  /* EXP976: an opened resource's deallocation names hRTResource. */
+  CHECK(State.DeallocateCalls == deallocationsBefore + 1u);
   CHECK(deviceFunctions.pfnFlush != NULL);
   if (deviceFunctions.pfnFlush != NULL)
     CHECK(deviceFunctions.pfnFlush(device, 0u));
@@ -5725,11 +5774,13 @@ int main(void) {
   free(opened.pDrvPrivate);
 
   retryRuntime.handle = (VOID *)(UINT_PTR)0x500u;
-  retry = open_resource(&deviceFunctions, device, retryRuntime, 0x901u, 0xa01u);
+  retry = create_deferred_resource(&deviceFunctions, device, retryRuntime,
+                                   &retryAllocation);
+  deallocationsBefore = State.DeallocateCalls;
   if (retry.pDrvPrivate != NULL)
     deviceFunctions.pfnDestroyResource(device, retry);
+  CHECK(State.DeallocateCalls == deallocationsBefore);
   State.FailDeallocations = 1u;
-  deallocationsBefore = State.DeallocateCalls;
   errorsBefore = State.SetErrorCalls;
   State.ActiveDdi = TEST_DDI_FLUSH;
   if (deviceFunctions.pfnFlush != NULL) {
@@ -5737,6 +5788,7 @@ int main(void) {
   }
   State.ActiveDdi = TEST_DDI_NONE;
   CHECK(State.DeallocateCalls == deallocationsBefore + 1u);
+  CHECK(State.DeallocateResources[deallocationsBefore] == retryAllocation);
   CHECK(State.SetErrorCalls == errorsBefore + 1u);
   CHECK(State.RuntimeTerminal);
   CHECK(State.LastSetError == E_FAIL);
@@ -5768,7 +5820,7 @@ int main(void) {
   State.ActiveDdi = TEST_DDI_NONE;
   CHECK(State.DeallocateCalls == deallocationsBefore + 2u);
   CHECK(State.DeallocateResources[deallocationsBefore + 1u] ==
-        retryRuntime.handle);
+        retryAllocation);
   CHECK(State.DestroyContextCalls == 2u);
   CHECK(State.UnlockCalls == 3u);
   CHECK(State.InternalDeallocateCalls == 3u);
@@ -5820,29 +5872,32 @@ int main(void) {
                                          &createDevice) == S_OK);
 
   permanentRuntime1.handle = (VOID *)(UINT_PTR)0x600u;
-  permanent1 = open_resource(&deviceFunctions, device, permanentRuntime1,
-                             0x902u, 0xa02u);
+  permanent1 = create_deferred_resource(&deviceFunctions, device,
+                                        permanentRuntime1,
+                                        &permanentAllocation1);
   permanentRuntime2.handle = (VOID *)(UINT_PTR)0x601u;
-  permanent2 = open_resource(&deviceFunctions, device, permanentRuntime2,
-                             0x903u, 0xa03u);
+  permanent2 = create_deferred_resource(&deviceFunctions, device,
+                                        permanentRuntime2,
+                                        &permanentAllocation2);
+  deallocationsBefore = State.DeallocateCalls;
   if (permanent1.pDrvPrivate != NULL)
     deviceFunctions.pfnDestroyResource(device, permanent1);
   if (permanent2.pDrvPrivate != NULL)
     deviceFunctions.pfnDestroyResource(device, permanent2);
+  CHECK(State.DeallocateCalls == deallocationsBefore);
   free(permanent1.pDrvPrivate);
   free(permanent2.pDrvPrivate);
 
   State.FailDeallocations = 2u;
-  deallocationsBefore = State.DeallocateCalls;
   errorsBefore = State.SetErrorCalls;
   State.ActiveDdi = TEST_DDI_DESTROY_DEVICE;
   deviceFunctions.pfnDestroyDevice(device);
   State.ActiveDdi = TEST_DDI_NONE;
   CHECK(State.DeallocateCalls == deallocationsBefore + 2u);
   CHECK(State.DeallocateResources[deallocationsBefore] ==
-        permanentRuntime1.handle);
+        permanentAllocation1);
   CHECK(State.DeallocateResources[deallocationsBefore + 1u] ==
-        permanentRuntime2.handle);
+        permanentAllocation2);
   CHECK(State.DeallocateResults[deallocationsBefore] == E_FAIL);
   CHECK(State.DeallocateResults[deallocationsBefore + 1u] == E_FAIL);
   CHECK(State.SetErrorCalls == errorsBefore + 1u);
@@ -5853,6 +5908,47 @@ int main(void) {
   CHECK(State.CreatedKernelResources == State.ReleasedKernelResources +
                                             State.OutstandingKernelResources);
   CHECK(State.OutstandingKernelResources == 2u);
+  free(device.pDrvPrivate);
+
+  /* EXP975: a failed deallocation that names hRTResource is reported from
+   * DestroyResource and never retried; the runtime frees the handle when
+   * DestroyResource returns (PageHeap: DeallocateCB on a freed hResource). */
+  State.RuntimeTerminal = FALSE;
+  State.LastSetError = S_OK;
+  device.pDrvPrivate = calloc(1u, deviceBytes);
+  CHECK(device.pDrvPrivate != NULL);
+  createDevice.hDrvDevice = device;
+  memset(&deviceFunctions, 0, sizeof(deviceFunctions));
+  memset(&dxgiFunctions, 0, sizeof(dxgiFunctions));
+  CHECK(adapterFunctions.pfnCreateDevice(openAdapter.hAdapter,
+                                         &createDevice) == S_OK);
+  immediateRuntime.handle = (VOID *)(UINT_PTR)0x650u;
+  immediate = open_resource(&deviceFunctions, device, immediateRuntime,
+                            0x904u, 0xa04u);
+  State.FailDeallocations = 1u;
+  deallocationsBefore = State.DeallocateCalls;
+  errorsBefore = State.SetErrorCalls;
+  State.ActiveDdi = TEST_DDI_DESTROY_RESOURCE;
+  if (immediate.pDrvPrivate != NULL)
+    deviceFunctions.pfnDestroyResource(device, immediate);
+  State.ActiveDdi = TEST_DDI_NONE;
+  CHECK(State.DeallocateCalls == deallocationsBefore + 1u);
+  CHECK(State.DeallocateResources[deallocationsBefore] ==
+        immediateRuntime.handle);
+  CHECK(State.DeallocateResults[deallocationsBefore] == E_FAIL);
+  CHECK(State.SetErrorCalls == errorsBefore + 1u);
+  CHECK(State.SetErrors[errorsBefore] == E_FAIL);
+  CHECK(State.SetErrorDdis[errorsBefore] == TEST_DDI_DESTROY_RESOURCE);
+  CHECK(State.RuntimeTerminal);
+  CHECK(deviceFunctions.pfnFlush(device, 0u));
+  State.ActiveDdi = TEST_DDI_DESTROY_DEVICE;
+  deviceFunctions.pfnDestroyDevice(device);
+  State.ActiveDdi = TEST_DDI_NONE;
+  CHECK(State.DeallocateCalls == deallocationsBefore + 1u);
+  CHECK(State.SetErrorCalls == errorsBefore + 1u);
+  CHECK(State.CreatedKernelResources == State.ReleasedKernelResources +
+                                            State.OutstandingKernelResources);
+  free(immediate.pDrvPrivate);
   free(device.pDrvPrivate);
   test_runtime_device_bridge(AdmissionUmdAdapterFromHandle(openAdapter.hAdapter),
                              createDevice);
