@@ -3,9 +3,11 @@
  * APPLE_AGX_D3D11_FL11=1 in this process); every case runs and reports on
  * its own:
  * - U (cs_5_0): a 2x2 grid of 8x8 groups writes a typed R32_UINT UAV
- *   texture, InterlockedAdd/InterlockedMax on a raw UAV, and appends to an
- *   append buffer; the texture, the two words, CopyStructureCount and the
- *   appended values (sorted) equal the expectation;
+ *   texture, InterlockedAdd (constant and per-thread values) and
+ *   InterlockedMax on a raw UAV, and appends to an append buffer; the
+ *   texture, the three words, CopyStructureCount and the appended values
+ *   (sorted) equal the expectation (the per-thread add is the subgroup
+ *   reduction Asahi's uniform-atomic optimisation emits, EXP1294 STATS);
  * - T (hs_5_0/ds_5_0): one triangle patch, integer partitioning, factor 4,
  *   the domain shader placing uvw-weighted control points and passing uvw as
  *   colour: a pixel inside is covered, one outside is not, the pixel next to
@@ -61,6 +63,7 @@ static const char cs_uav[] =
     "  uint old;\n"
     "  words.InterlockedAdd(0, 1, old);\n"
     "  words.InterlockedMax(4, id.x * 100 + id.y);\n"
+    "  words.InterlockedAdd(8, id.x);\n"
     "  if ((id.x + id.y) % 3 == 0) app.Append(id.x * 16 + id.y);\n"
     "}\n";
 static const char cs_marker[] =
@@ -208,8 +211,8 @@ static int case_uav(int iteration) {
   static ID3D11Buffer *words, *app, *count;
   static ID3D11UnorderedAccessView *uavs[3];
   static int ready = -1;
-  UINT texels[256], w[2], appended[256], n = 0, expect_n = 0, expect_vals[256], bad = 0;
-  UINT zero_words[2] = {0, 0}, initial[3] = {~0u, ~0u, 0};
+  UINT texels[256], w[3], appended[256], n = 0, expect_n = 0, expect_vals[256], bad = 0;
+  UINT zero_words[3] = {0, 0, 0}, initial[3] = {~0u, ~0u, 0};
   ID3D11UnorderedAccessView *none[3] = {NULL, NULL, NULL};
   if (ready < 0) {
     D3D11_UNORDERED_ACCESS_VIEW_DESC d;
@@ -217,7 +220,7 @@ static int case_uav(int iteration) {
     ready = 0;
     SHADER(compute, Compute, cs_uav, "cs_5_0", cs);
     img = texture(16, 16, DXGI_FORMAT_R32_UINT, D3D11_BIND_UNORDERED_ACCESS, D3D11_USAGE_DEFAULT, 0, NULL);
-    words = buffer(8, D3D11_BIND_UNORDERED_ACCESS, D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS, 0, NULL,
+    words = buffer(12, D3D11_BIND_UNORDERED_ACCESS, D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS, 0, NULL,
                    D3D11_USAGE_DEFAULT, 0);
     app = buffer(256 * 4, D3D11_BIND_UNORDERED_ACCESS, D3D11_RESOURCE_MISC_BUFFER_STRUCTURED, 4, NULL,
                  D3D11_USAGE_DEFAULT, 0);
@@ -226,7 +229,7 @@ static int case_uav(int iteration) {
     hr = ID3D11Device_CreateUnorderedAccessView(device, (ID3D11Resource *)img, NULL, &uavs[0]);
     memset(&d, 0, sizeof(d));
     d.Format = DXGI_FORMAT_R32_TYPELESS; d.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
-    d.Buffer.NumElements = 2; d.Buffer.Flags = D3D11_BUFFER_UAV_FLAG_RAW;
+    d.Buffer.NumElements = 3; d.Buffer.Flags = D3D11_BUFFER_UAV_FLAG_RAW;
     if (SUCCEEDED(hr)) hr = ID3D11Device_CreateUnorderedAccessView(device, (ID3D11Resource *)words, &d, &uavs[1]);
     memset(&d, 0, sizeof(d));
     d.Format = DXGI_FORMAT_UNKNOWN; d.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
@@ -243,7 +246,7 @@ static int case_uav(int iteration) {
   ID3D11DeviceContext_Dispatch(ctx, 2, 2, 1);
   ID3D11DeviceContext_CSSetUnorderedAccessViews(ctx, 0, 3, none, NULL);
   ID3D11DeviceContext_CopyStructureCount(ctx, count, 0, uavs[2]);
-  if (!read_texels(img, 16, 16, DXGI_FORMAT_R32_UINT, texels) || !read_buffer(words, 8, w) ||
+  if (!read_texels(img, 16, 16, DXGI_FORMAT_R32_UINT, texels) || !read_buffer(words, 12, w) ||
       !read_buffer(count, 4, &n) || !read_buffer(app, sizeof(appended), appended)) {
     say("U READBACK failed at %d", iteration);
     return 1;
@@ -254,7 +257,10 @@ static int case_uav(int iteration) {
         say("U WRONG texel %u,%u got %u", x, y, texels[y * 16 + x]);
       if ((x + y) % 3 == 0) expect_vals[expect_n++] = x * 16 + y;
     }
-  if (w[0] != 256 || w[1] != 1515) { say("U WRONG atomics add %u max %u", w[0], w[1]); ++bad; }
+  if (w[0] != 256 || w[1] != 1515 || w[2] != 1920) {
+    say("U WRONG atomics add %u max %u add-x %u (expect 256 1515 1920)", w[0], w[1], w[2]);
+    ++bad;
+  }
   if (n != expect_n) { say("U WRONG append count %u expect %u", n, expect_n); ++bad; }
   else {
     qsort(appended, n, 4, compare_uint);
@@ -262,7 +268,8 @@ static int case_uav(int iteration) {
     if (memcmp(appended, expect_vals, n * 4)) { say("U WRONG appended values"); ++bad; }
   }
   if (bad || iteration == 0)
-    say("U %s iteration %d atomics %u/%u append %u", bad ? "WRONG" : "ok", iteration, w[0], w[1], n);
+    say("U %s iteration %d atomics %u/%u/%u append %u", bad ? "WRONG" : "ok", iteration, w[0], w[1],
+        w[2], n);
   return bad != 0;
 }
 
