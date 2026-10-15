@@ -194,7 +194,7 @@ $assertPython = if (-not [string]::IsNullOrWhiteSpace($NativeProvenancePython)) 
 } else {
     (Get-Command python -ErrorAction Stop).Source
 }
-$assertGate = Join-Path (Resolve-Path (Join-Path $root '..\..\..')).Path 'tools\check_no_crt_asserts.py'
+$assertGate = Join-Path $PSScriptRoot 'check_no_crt_asserts.py'
 $assertInputs = @($umd, $WowUmd, $WowOpenGLIcd)
 $assertArgs = @($assertGate) + $assertInputs
 if ($AllowAssertBuild) { $assertArgs += '--allow' }

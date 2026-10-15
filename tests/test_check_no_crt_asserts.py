@@ -9,7 +9,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-TOOL = ROOT / "tools/check_no_crt_asserts.py"
+TOOL = ROOT / "drivers/apple-agx/render-admission/scripts/check_no_crt_asserts.py"
 BUILD_SCRIPT = ROOT / "drivers/apple-agx/render-admission/scripts/build-driver.ps1"
 
 
