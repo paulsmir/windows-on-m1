@@ -8,7 +8,9 @@
  * - pixels along the diagonal edge are mixed (green and red both strictly
  *   between 0 and 255), which only averaged samples produce.
  * Every line is written through to the output file before the next step.
- * Usage: agx_msaa_smoke.exe <out.txt> [2|4] [iterations] */
+ * EXP1289: an optional fourth argument "bgra" uses B8G8R8A8_UNORM targets
+ * (readback normalized to R8G8B8A8 order).
+ * Usage: agx_msaa_smoke.exe <out.txt> [2|4] [iterations] [rgba|bgra] */
 #define COBJMACROS
 #define INITGUID
 #include <windows.h>
@@ -88,6 +90,14 @@ static int draw(int triangle, float z, unsigned rgba) {
   return 1;
 }
 
+static DXGI_FORMAT target_format = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+/* B8G8R8A8 memory read as a 32-bit value, in R8G8B8A8 order. */
+static unsigned rgba(unsigned px) {
+  return target_format == DXGI_FORMAT_B8G8R8A8_UNORM ?
+      (px & 0xff00ff00u) | ((px & 0xffu) << 16) | ((px >> 16) & 0xffu) : px;
+}
+
 int main(int argc, char **argv) {
   IDXGIFactory1 *factory = NULL;
   IDXGIAdapter1 *adapter = NULL, *pick = NULL;
@@ -110,15 +120,17 @@ int main(int argc, char **argv) {
   int iterations, bad = 0;
 
   if (argc < 2) {
-    printf("usage: agx_msaa_smoke.exe <out.txt> [2|4] [iterations]\n");
+    printf("usage: agx_msaa_smoke.exe <out.txt> [2|4] [iterations] [rgba|bgra]\n");
     return 2;
   }
   samples = argc > 2 && atoi(argv[2]) == 2 ? 2u : 4u;
   iterations = argc > 3 ? atoi(argv[3]) : 30;
+  if (argc > 4 && !strcmp(argv[4], "bgra")) target_format = DXGI_FORMAT_B8G8R8A8_UNORM;
   if (iterations < 2) iterations = 2;
   out = CreateFileA(argv[1], GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS,
                     FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH, NULL);
-  say("MSAA samples %u %dx%d iterations %d", samples, SIZE, SIZE, iterations);
+  say("MSAA samples %u %dx%d iterations %d format %u", samples, SIZE, SIZE, iterations,
+      (unsigned)target_format);
   compiler = LoadLibraryA("d3dcompiler_47.dll");
   compile_fn = compiler ? (pD3DCompile)(void *)GetProcAddress(compiler, "D3DCompile") : NULL;
   if (!compile_fn) { say("NO_D3DCOMPILER %lu", GetLastError()); return 1; }
@@ -136,7 +148,7 @@ int main(int argc, char **argv) {
                          D3D11_SDK_VERSION, &device, &level, &ctx);
   say("D3D11CreateDevice 0x%08lx FEATURE_LEVEL 0x%x", (unsigned long)hr, level);
   if (FAILED(hr)) return 1;
-  ID3D11Device_CheckMultisampleQualityLevels(device, DXGI_FORMAT_R8G8B8A8_UNORM, samples, &quality);
+  ID3D11Device_CheckMultisampleQualityLevels(device, target_format, samples, &quality);
   ID3D11Device_CheckMultisampleQualityLevels(device, DXGI_FORMAT_D24_UNORM_S8_UINT, samples,
                                              &depth_quality);
   say("QUALITY colour %u depth %u", quality, depth_quality);
@@ -150,7 +162,7 @@ int main(int argc, char **argv) {
     D3D11_DEPTH_STENCIL_VIEW_DESC dv;
     memset(&td, 0, sizeof(td));
     td.Width = td.Height = SIZE; td.MipLevels = td.ArraySize = 1;
-    td.Format = DXGI_FORMAT_R8G8B8A8_UNORM; td.SampleDesc.Count = samples;
+    td.Format = target_format; td.SampleDesc.Count = samples;
     td.Usage = D3D11_USAGE_DEFAULT; td.BindFlags = D3D11_BIND_RENDER_TARGET;
     hr = ID3D11Device_CreateTexture2D(device, &td, NULL, &msaa);
     say("CreateTexture2D msaa 0x%08lx", (unsigned long)hr);
@@ -165,7 +177,7 @@ int main(int argc, char **argv) {
     if (SUCCEEDED(hr)) hr = ID3D11Device_CreateDepthStencilView(device, (ID3D11Resource *)depth, &dv, &dsv);
     say("VIEWS 0x%08lx", (unsigned long)hr);
     if (FAILED(hr)) return 1;
-    td.Format = DXGI_FORMAT_R8G8B8A8_UNORM; td.SampleDesc.Count = 1;
+    td.Format = target_format; td.SampleDesc.Count = 1;
     td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
     hr = ID3D11Device_CreateTexture2D(device, &td, NULL, &resolved);
     td.Usage = D3D11_USAGE_STAGING; td.BindFlags = 0; td.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
@@ -222,7 +234,7 @@ int main(int argc, char **argv) {
     if (!draw(1, 0.5f, 0xff00ff00u) || !draw(0, 0.6f, 0xff0000ffu)) return 1;
     ID3D11DeviceContext_ResolveSubresource(ctx, (ID3D11Resource *)resolved, 0,
                                            (ID3D11Resource *)msaa, 0,
-                                           DXGI_FORMAT_R8G8B8A8_UNORM);
+                                           target_format);
     ID3D11DeviceContext_CopyResource(ctx, (ID3D11Resource *)staging, (ID3D11Resource *)resolved);
     hr = ID3D11DeviceContext_Map(ctx, (ID3D11Resource *)staging, 0, D3D11_MAP_READ, 0, &map);
     if (FAILED(hr)) {
@@ -230,13 +242,13 @@ int main(int argc, char **argv) {
           (unsigned long)ID3D11Device_GetDeviceRemovedReason(device));
       return 1;
     }
-    lower = *(const unsigned *)((const unsigned char *)map.pData + 224u * map.RowPitch + 32u * 4u);
-    upper = *(const unsigned *)((const unsigned char *)map.pData + 32u * map.RowPitch + 224u * 4u);
+    lower = rgba(*(const unsigned *)((const unsigned char *)map.pData + 224u * map.RowPitch + 32u * 4u));
+    upper = rgba(*(const unsigned *)((const unsigned char *)map.pData + 32u * map.RowPitch + 224u * 4u));
     /* The edge runs from the top-left to the bottom-right corner. */
     for (int y = 8; y < SIZE - 8; ++y) {
       for (int dx = -1; dx <= 1; ++dx) {
-        unsigned px = *(const unsigned *)((const unsigned char *)map.pData +
-            (size_t)y * map.RowPitch + (size_t)(y + dx) * 4u);
+        unsigned px = rgba(*(const unsigned *)((const unsigned char *)map.pData +
+            (size_t)y * map.RowPitch + (size_t)(y + dx) * 4u));
         unsigned r = px & 0xffu, g = (px >> 8) & 0xffu;
         if (r > 8u && r < 247u && g > 8u && g < 247u) { ++mixed; break; }
       }

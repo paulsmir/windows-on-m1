@@ -1179,13 +1179,13 @@ void APIENTRY
    } else {
       *pFormatCaps = 0;
    }
-   /* EXP1288 diagnostic: the APPLE_AGX_D3D_MSAA_CAPS mask selects the
-    * formats answering MULTISAMPLE_RENDERTARGET (0: the EXP1284 answers,
-    * none); with a mask set every answer is receipted. */
+   /* EXP1289 probe: the APPLE_AGX_D3D_MSAA_CAPS policy selects the formats
+    * answering MULTISAMPLE_RENDERTARGET (0: the EXP1284 answers, none); with
+    * a mask set every answer is receipted. */
    {
       UINT probe = AgxD3d10WindowsMsaaProbe();
       *pFormatCaps &= ~(UINT)D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET;
-      if (AgxD3d10WindowsMsaaFormat(Format, probe))
+      if (AgxD3d10WindowsMsaaRenderTarget(Format, probe))
          *pFormatCaps |= D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET;
       if (probe)
          AgxD3d10WindowsMsaaReceipt(1u, (UINT)Format, 0u, *pFormatCaps);
@@ -1213,7 +1213,7 @@ void APIENTRY
        Format == DXGI_FORMAT_R16_UINT ||
        (AgxD3d10WindowsMsaaProbe() & 2u)) && SampleCount == 1 ? 1 :
       /* D3D-G5: 2x and 4x for the multisampled render-target and depth set
-       * (EXP1288 diagnostic: the APPLE_AGX_D3D_MSAA_CAPS mask selects it). */
+       * (EXP1289 probe: the APPLE_AGX_D3D_MSAA_CAPS policy selects it). */
       AgxD3d10WindowsMsaaFormat(Format, AgxD3d10WindowsMsaaProbe()) &&
       (SampleCount == 2 || SampleCount == 4) ? 1 : 0;
    if (AgxD3d10WindowsMsaaProbe())

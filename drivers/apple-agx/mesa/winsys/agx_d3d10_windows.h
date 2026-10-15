@@ -69,18 +69,17 @@ BOOL AgxD3d10WindowsIdentity(AGX_D3D10_WINDOWS_DEVICE *Device,
  * off = the EXP1284 answers): the D3D screen's multisampling and the
  * frontend's multisample caps/quality reporting. */
 BOOL AgxD3d10WindowsDiagnosticSwitch(const char *Name);
-/* EXP1288 diagnostic (default 0 = the EXP1284 answers): the hex mask
- * APPLE_AGX_D3D_MSAA_CAPS selects the multisample caps/quality reporting --
- * 0x01 the EXP1287 set (2x/4x on BGRA8/BGRX8 UNORM/SRGB, RGBA8_UNORM,
- * RGBA16_FLOAT, D16, D24S8, D32, D32S8; "1" keeps the EXP1287 switch),
- * 0x02 one quality level at SampleCount 1 for every format (the DDI page),
- * 0x04 with 0x01 every member of those formats' cast families (TYPELESS and
- * the depth families' colour formats), 0x08 with 0x01 the BGRA8/BGRX8
- * family only. With any bit set every Check* answer is receipted
- * (measure-msaa-check: kind 1 caps / 2 levels, format, sample count,
- * answer). */
+/* EXP1289 probe (default 0 = the EXP1284 answers): the hex mask
+ * APPLE_AGX_D3D_MSAA_CAPS selects a multisample reporting policy by cast
+ * family (agx_d3d10_windows.cpp; EXP1288 measured the runtime's rule) --
+ * 0x10 BGRA8/BGRX8/D24S8/D32S8, 0x20 also RGBA8/RGBA16/R32/R16; 0x02 one
+ * quality level at sample count 1 for every format. With any bit set every
+ * Check* answer is receipted (measure-msaa-check: kind 1 caps / 2 levels,
+ * format, sample count, answer). MsaaFormat: the format answers 2x/4x
+ * levels; MsaaRenderTarget: it answers MULTISAMPLE_RENDERTARGET. */
 UINT AgxD3d10WindowsMsaaProbe(VOID);
 BOOL AgxD3d10WindowsMsaaFormat(DXGI_FORMAT Format, UINT Probe);
+BOOL AgxD3d10WindowsMsaaRenderTarget(DXGI_FORMAT Format, UINT Probe);
 VOID AgxD3d10WindowsMsaaReceipt(UINT Kind, UINT Format, UINT SampleCount,
                                 UINT Answer);
 HRESULT AgxD3d10WindowsFlushStatus(AGX_D3D10_WINDOWS_DEVICE *Device);

@@ -685,44 +685,83 @@ UINT AgxD3d10WindowsMsaaProbe(VOID) {
   return (UINT)value;
 }
 
+/* EXP1288 measured the runtime's rule for multisample reporting (it is not
+ * documented): it walks every cast family, typeless parent first, asks
+ * sample counts 2..31, and refuses the device when a member answers levels
+ * its typeless parent does not, or when a read-only member (one that can be
+ * neither a render nor a depth target) answers MULTISAMPLE_RENDERTARGET.
+ * The families below are the DXGI cast families the runtime walked; Role
+ * says what a member can be bound as. */
+enum AgxD3d10CastRole { AgxCastNone, AgxCastParent, AgxCastTarget,
+                        AgxCastDepth, AgxCastReadOnly };
+static DXGI_FORMAT AgxD3d10CastParent(DXGI_FORMAT Format, enum AgxD3d10CastRole *Role) {
+  struct member { DXGI_FORMAT Format, Parent; enum AgxD3d10CastRole Role; };
+  static const struct member members[] = {
+#define P(f) {DXGI_FORMAT_##f, DXGI_FORMAT_##f, AgxCastParent}
+#define T(f,p) {DXGI_FORMAT_##f, DXGI_FORMAT_##p, AgxCastTarget}
+#define D(f,p) {DXGI_FORMAT_##f, DXGI_FORMAT_##p, AgxCastDepth}
+#define R(f,p) {DXGI_FORMAT_##f, DXGI_FORMAT_##p, AgxCastReadOnly}
+    P(R16G16B16A16_TYPELESS), T(R16G16B16A16_FLOAT,R16G16B16A16_TYPELESS),
+    T(R16G16B16A16_UNORM,R16G16B16A16_TYPELESS), T(R16G16B16A16_UINT,R16G16B16A16_TYPELESS),
+    T(R16G16B16A16_SNORM,R16G16B16A16_TYPELESS), T(R16G16B16A16_SINT,R16G16B16A16_TYPELESS),
+    P(R32G8X24_TYPELESS), D(D32_FLOAT_S8X24_UINT,R32G8X24_TYPELESS),
+    R(R32_FLOAT_X8X24_TYPELESS,R32G8X24_TYPELESS), R(X32_TYPELESS_G8X24_UINT,R32G8X24_TYPELESS),
+    P(R8G8B8A8_TYPELESS), T(R8G8B8A8_UNORM,R8G8B8A8_TYPELESS),
+    T(R8G8B8A8_UNORM_SRGB,R8G8B8A8_TYPELESS), T(R8G8B8A8_UINT,R8G8B8A8_TYPELESS),
+    T(R8G8B8A8_SNORM,R8G8B8A8_TYPELESS), T(R8G8B8A8_SINT,R8G8B8A8_TYPELESS),
+    P(R32_TYPELESS), D(D32_FLOAT,R32_TYPELESS), T(R32_FLOAT,R32_TYPELESS),
+    T(R32_UINT,R32_TYPELESS), T(R32_SINT,R32_TYPELESS),
+    P(R24G8_TYPELESS), D(D24_UNORM_S8_UINT,R24G8_TYPELESS),
+    R(R24_UNORM_X8_TYPELESS,R24G8_TYPELESS), R(X24_TYPELESS_G8_UINT,R24G8_TYPELESS),
+    P(R16_TYPELESS), T(R16_FLOAT,R16_TYPELESS), D(D16_UNORM,R16_TYPELESS),
+    T(R16_UNORM,R16_TYPELESS), T(R16_UINT,R16_TYPELESS), T(R16_SNORM,R16_TYPELESS),
+    T(R16_SINT,R16_TYPELESS),
+    P(B8G8R8A8_TYPELESS), T(B8G8R8A8_UNORM,B8G8R8A8_TYPELESS),
+    T(B8G8R8A8_UNORM_SRGB,B8G8R8A8_TYPELESS),
+    P(B8G8R8X8_TYPELESS), T(B8G8R8X8_UNORM,B8G8R8X8_TYPELESS),
+    T(B8G8R8X8_UNORM_SRGB,B8G8R8X8_TYPELESS),
+#undef P
+#undef T
+#undef D
+#undef R
+  };
+  for (UINT i = 0; i < sizeof(members) / sizeof(members[0]); ++i)
+    if (members[i].Format == Format) { *Role = members[i].Role; return members[i].Parent; }
+  *Role = AgxCastNone;
+  return DXGI_FORMAT_UNKNOWN;
+}
+
+/* EXP1289 probe policies (APPLE_AGX_D3D_MSAA_CAPS; 0 = the EXP1284 answers):
+ * 0x10 the BGRA8, BGRX8, D24S8 and D32S8 families; 0x20 also the RGBA8,
+ * RGBA16, R32/D32 and R16/D16 families. A family answers 2x/4x for its
+ * parent and every member. */
+static BOOL AgxD3d10MsaaFamily(DXGI_FORMAT Parent, UINT Probe) {
+  if (Probe & 0x30u) {
+    if (Parent == DXGI_FORMAT_B8G8R8A8_TYPELESS || Parent == DXGI_FORMAT_B8G8R8X8_TYPELESS ||
+        Parent == DXGI_FORMAT_R24G8_TYPELESS || Parent == DXGI_FORMAT_R32G8X24_TYPELESS)
+      return TRUE;
+  }
+  if (Probe & 0x20u) {
+    if (Parent == DXGI_FORMAT_R8G8B8A8_TYPELESS || Parent == DXGI_FORMAT_R16G16B16A16_TYPELESS ||
+        Parent == DXGI_FORMAT_R32_TYPELESS || Parent == DXGI_FORMAT_R16_TYPELESS)
+      return TRUE;
+  }
+  return FALSE;
+}
+
 BOOL AgxD3d10WindowsMsaaFormat(DXGI_FORMAT Format, UINT Probe) {
-  const BOOL bgra = Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
-      Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB ||
-      Format == DXGI_FORMAT_B8G8R8X8_UNORM ||
-      Format == DXGI_FORMAT_B8G8R8X8_UNORM_SRGB;
-  const BOOL exp1287 = bgra || Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
-      Format == DXGI_FORMAT_R16G16B16A16_FLOAT ||
-      Format == DXGI_FORMAT_D32_FLOAT || Format == DXGI_FORMAT_D16_UNORM ||
-      Format == DXGI_FORMAT_D24_UNORM_S8_UINT ||
-      Format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
-  const BOOL family = exp1287 ||
-      Format == DXGI_FORMAT_B8G8R8A8_TYPELESS ||
-      Format == DXGI_FORMAT_B8G8R8X8_TYPELESS ||
-      Format == DXGI_FORMAT_R8G8B8A8_TYPELESS ||
-      Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB ||
-      Format == DXGI_FORMAT_R8G8B8A8_UINT ||
-      Format == DXGI_FORMAT_R8G8B8A8_SNORM ||
-      Format == DXGI_FORMAT_R8G8B8A8_SINT ||
-      Format == DXGI_FORMAT_R16G16B16A16_TYPELESS ||
-      Format == DXGI_FORMAT_R16G16B16A16_UNORM ||
-      Format == DXGI_FORMAT_R16G16B16A16_UINT ||
-      Format == DXGI_FORMAT_R16G16B16A16_SNORM ||
-      Format == DXGI_FORMAT_R16G16B16A16_SINT ||
-      Format == DXGI_FORMAT_R32_TYPELESS || Format == DXGI_FORMAT_R32_FLOAT ||
-      Format == DXGI_FORMAT_R32_UINT || Format == DXGI_FORMAT_R32_SINT ||
-      Format == DXGI_FORMAT_R24G8_TYPELESS ||
-      Format == DXGI_FORMAT_R24_UNORM_X8_TYPELESS ||
-      Format == DXGI_FORMAT_X24_TYPELESS_G8_UINT ||
-      Format == DXGI_FORMAT_R16_TYPELESS || Format == DXGI_FORMAT_R16_UNORM ||
-      Format == DXGI_FORMAT_R16_UINT || Format == DXGI_FORMAT_R16_SNORM ||
-      Format == DXGI_FORMAT_R16_SINT || Format == DXGI_FORMAT_R16_FLOAT ||
-      Format == DXGI_FORMAT_R32G8X24_TYPELESS ||
-      Format == DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS ||
-      Format == DXGI_FORMAT_X32_TYPELESS_G8X24_UINT;
-  if (!(Probe & 1u)) return FALSE;
-  if (Probe & 8u) return bgra;
-  if (Probe & 4u) return family;
-  return exp1287;
+  enum AgxD3d10CastRole role;
+  DXGI_FORMAT parent = AgxD3d10CastParent(Format, &role);
+  return role != AgxCastNone && AgxD3d10MsaaFamily(parent, Probe);
+}
+
+BOOL AgxD3d10WindowsMsaaRenderTarget(DXGI_FORMAT Format, UINT Probe) {
+  enum AgxD3d10CastRole role;
+  DXGI_FORMAT parent = AgxD3d10CastParent(Format, &role);
+  /* EXP1288: typeless parents with the bit passed (R16G16B16A16, R32G8X24);
+   * a read-only member with it was refused. */
+  return role != AgxCastNone && role != AgxCastReadOnly &&
+         AgxD3d10MsaaFamily(parent, Probe);
 }
 
 VOID AgxD3d10WindowsMsaaReceipt(UINT Kind, UINT Format, UINT SampleCount,
