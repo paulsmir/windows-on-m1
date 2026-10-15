@@ -42,8 +42,23 @@ class D3d12AbiGate(unittest.TestCase):
 
     def test_package_and_receipts(self):
         package = ROOT / 'drivers/apple-agx/render-admission/umd'
-        self.assertRegex((package / 'AppleAgxRenderAdmissionUmd.def').read_text(), r'(?m)^\s*OpenAdapter12\s*$')
-        self.assertIn(r'..\..\d3d12\agx_d3d12_ddi.cpp', (package / 'AppleAgxRenderAdmissionUmd.vcxproj').read_text())
+        exports = re.findall(r'(?m)^\s*(OpenAdapter\w+)\s*$',
+                             (package / 'AppleAgxRenderAdmissionUmd.def').read_text())
+        native = (package / 'AppleAgxRenderAdmissionUmd.vcxproj').read_text()
+        wow64 = (package / 'build-umd-x86.ps1').read_text()
+        implementations = {
+            'OpenAdapter10_2': (r'render-admission\umd\src\umd.c', r'src\umd.c',
+                                ROOT / 'drivers/apple-agx/render-admission/umd/src/umd.c'),
+            'OpenAdapter12': (r'd3d12\agx_d3d12_ddi.cpp',
+                              r'..\..\d3d12\agx_d3d12_ddi.cpp', SOURCE),
+        }
+        self.assertEqual(set(exports), set(implementations))
+        for export, (wow64_unit, native_unit, implementation) in implementations.items():
+            with self.subTest(export=export):
+                self.assertIn(wow64_unit, wow64)
+                self.assertIn(native_unit, native)
+                self.assertRegex(implementation.read_text(),
+                                 r'\bHRESULT APIENTRY ' + export + r'\s*\(')
         source = SOURCE.read_text()
         opened = source.split('extern "C" HRESULT APIENTRY OpenAdapter12', 1)[1]
         self.assertLess(opened.index('GetEnvironmentVariableA("APPLE_AGX_D3D12"'), opened.index('FillD3D12DDI_ADAPTERFUNCS'))
