@@ -9,9 +9,13 @@
  * Mode "so" also captures the geometry shader's positions with stream output
  * (one 16-byte position per vertex, the shape the UMD admits) and checks that
  * the two triangles of each quad name exactly its four corners.
+ * Mode "adj" (D3D-G10c) draws the four points as TRIANGLELIST_ADJ
+ * primitives (six vertices each): the triangle vertices 0, 2 and 4 average
+ * to the point, the adjacency vertices 1, 3 and 5 lie 0.5 away, so a
+ * geometry shader fed the wrong vertices draws its quad off target.
  * Every line is written through to the output file before the next step, so
  * the log survives a bugcheck.
- * Usage: agx_gs_smoke.exe <out.txt> [gs|so] [iterations] */
+ * Usage: agx_gs_smoke.exe <out.txt> [gs|so|adj] [iterations] */
 #define COBJMACROS
 #define INITGUID
 #include <windows.h>
@@ -70,6 +74,31 @@ static const char gs_source[] =
     "  o.p = input[0].p + float4( h,  h, 0, 0); s.Append(o);\n"
     "  o.p = input[0].p + float4(-h, -h, 0, 0); s.Append(o);\n"
     "  o.p = input[0].p + float4( h, -h, 0, 0); s.Append(o);\n"
+    "}\n";
+static const char vs_adj_source[] =
+    "cbuffer C : register(b0) { float4 offset; };\n"
+    "struct V { float4 p : SV_Position; float4 c : COLOR0; };\n"
+    "V main(uint vertex : SV_VertexID) {\n"
+    "  V v; uint id = vertex / 6, j = vertex % 6;\n"
+    "  float2 centre = float2((id & 1) ? 0.5 : -0.5, (id & 2) ? -0.5 : 0.5);\n"
+    "  float2 d = j == 0 ? float2(0.03, 0) : j == 2 ? float2(-0.03, 0) :\n"
+    "             j == 4 ? float2(0, 0) : float2(0.5, 0.5);\n"
+    "  v.p = float4(centre + d + offset.xy, 0, 1);\n"
+    "  v.c = float4((id == 0 || id == 3) ? 1 : 0, (id == 1 || id == 3) ? 1 : 0,\n"
+    "               id == 2 ? 1 : 0, 1);\n"
+    "  return v;\n"
+    "}\n";
+static const char gs_adj_source[] =
+    "struct V { float4 p : SV_Position; float4 c : COLOR0; };\n"
+    "[maxvertexcount(4)]\n"
+    "void main(triangleadj V input[6], inout TriangleStream<V> s) {\n"
+    "  const float h = 0.25;\n"
+    "  float4 centre = (input[0].p + input[2].p + input[4].p) / 3;\n"
+    "  V o; o.c = input[0].c;\n"
+    "  o.p = centre + float4(-h,  h, 0, 0); s.Append(o);\n"
+    "  o.p = centre + float4( h,  h, 0, 0); s.Append(o);\n"
+    "  o.p = centre + float4(-h, -h, 0, 0); s.Append(o);\n"
+    "  o.p = centre + float4( h, -h, 0, 0); s.Append(o);\n"
     "}\n";
 static const char ps_source[] =
     "float4 main(float4 p : SV_Position, float4 c : COLOR0) : SV_Target { return c; }\n";
@@ -175,18 +204,19 @@ int main(int argc, char **argv) {
   HMODULE compiler;
   pD3DCompile compile_fn;
   HRESULT hr;
-  int stream, iterations, bad_frames = 0, bad_streams = 0;
+  int stream, adjacency, iterations, bad_frames = 0, bad_streams = 0;
 
   if (argc < 2) {
-    printf("usage: agx_gs_smoke.exe <out.txt> [gs|so] [iterations]\n");
+    printf("usage: agx_gs_smoke.exe <out.txt> [gs|so|adj] [iterations]\n");
     return 2;
   }
   stream = argc > 2 && !strcmp(argv[2], "so");
+  adjacency = argc > 2 && !strcmp(argv[2], "adj");
   iterations = argc > 3 ? atoi(argv[3]) : 60;
   if (iterations < 2) iterations = 2;
   out = CreateFileA(argv[1], GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS,
                     FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH, NULL);
-  say("MODE %s iterations %d", stream ? "so" : "gs", iterations);
+  say("MODE %s iterations %d", stream ? "so" : adjacency ? "adj" : "gs", iterations);
   compiler = LoadLibraryA("d3dcompiler_47.dll");
   compile_fn = compiler ? (pD3DCompile)(void *)GetProcAddress(compiler, "D3DCompile") : NULL;
   if (!compile_fn) { say("NO_D3DCOMPILER %lu", GetLastError()); return 1; }
@@ -230,8 +260,10 @@ int main(int argc, char **argv) {
     say("RESOURCES 0x%08lx", (unsigned long)hr);
     if (FAILED(hr)) return 1;
   }
-  vsb = compile(compile_fn, vs_source, sizeof(vs_source) - 1, "vs_4_0");
-  gsb = compile(compile_fn, gs_source, sizeof(gs_source) - 1, "gs_4_0");
+  vsb = adjacency ? compile(compile_fn, vs_adj_source, sizeof(vs_adj_source) - 1, "vs_4_0")
+                  : compile(compile_fn, vs_source, sizeof(vs_source) - 1, "vs_4_0");
+  gsb = adjacency ? compile(compile_fn, gs_adj_source, sizeof(gs_adj_source) - 1, "gs_4_0")
+                  : compile(compile_fn, gs_source, sizeof(gs_source) - 1, "gs_4_0");
   psb = compile(compile_fn, ps_source, sizeof(ps_source) - 1, "ps_4_0");
   if (!vsb || !gsb || !psb) return 1;
   hr = ID3D11Device_CreateVertexShader(device, ID3D10Blob_GetBufferPointer(vsb),
@@ -257,7 +289,8 @@ int main(int argc, char **argv) {
     ID3D11DeviceContext_RSSetViewports(ctx, 1, &vp);
   }
   ID3D11DeviceContext_OMSetRenderTargets(ctx, 1, &rtv, NULL);
-  ID3D11DeviceContext_IASetPrimitiveTopology(ctx, D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
+  ID3D11DeviceContext_IASetPrimitiveTopology(ctx, adjacency ?
+      D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST_ADJ : D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
   ID3D11DeviceContext_VSSetShader(ctx, vs, NULL, 0);
   ID3D11DeviceContext_VSSetConstantBuffers(ctx, 0, 1, &cb);
   ID3D11DeviceContext_GSSetShader(ctx, gs, NULL, 0);
@@ -278,7 +311,7 @@ int main(int argc, char **argv) {
       UINT zero = 0;
       ID3D11DeviceContext_SOSetTargets(ctx, 1, &so, &zero);
     }
-    ID3D11DeviceContext_Draw(ctx, 4, 0);
+    ID3D11DeviceContext_Draw(ctx, adjacency ? 24 : 4, 0);
     if (stream) {
       ID3D11DeviceContext_SOSetTargets(ctx, 0, NULL, NULL);
       ID3D11DeviceContext_CopyResource(ctx, (ID3D11Resource *)so_staging, (ID3D11Resource *)so);
