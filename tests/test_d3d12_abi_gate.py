@@ -39,3 +39,15 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('return E_NOTIMPL;', source)
         self.assertIn('pfnSetErrorCb', source)
         self.assertIn('pfnSetCommandListErrorCb', source)
+
+    def test_package_and_receipts(self):
+        package = ROOT / 'drivers/apple-agx/render-admission/umd'
+        self.assertRegex((package / 'AppleAgxRenderAdmissionUmd.def').read_text(), r'(?m)^\s*OpenAdapter12\s*$')
+        self.assertIn(r'..\..\d3d12\agx_d3d12_ddi.cpp', (package / 'AppleAgxRenderAdmissionUmd.vcxproj').read_text())
+        source = SOURCE.read_text()
+        opened = source.split('extern "C" HRESULT APIENTRY OpenAdapter12', 1)[1]
+        self.assertLess(opened.index('GetEnvironmentVariableA("APPLE_AGX_D3D12"'), opened.index('FillD3D12DDI_ADAPTERFUNCS'))
+        for stage in ('d3d12-open-adapter', 'd3d12-versions', 'd3d12-caps',
+                      'd3d12-create-device', 'd3d12-close-adapter'):
+            with self.subTest(stage=stage):
+                self.assertIn(f'AdmissionUmdDiagnostic("{stage}"', source)

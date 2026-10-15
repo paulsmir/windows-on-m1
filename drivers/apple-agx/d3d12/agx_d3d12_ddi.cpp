@@ -3,6 +3,9 @@
 #include <d3d12umddi.h>
 #include <type_traits>
 
+/* the UMD trace logger (umd_runtime_device.c; C linkage through umd_internal.h) */
+extern "C" VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status, const UINT *Values, UINT Count);
+
 namespace {
 static const D3D12DDI_CORELAYER_DEVICECALLBACKS_0003 *callbacks;
 static D3D12DDI_HRTDEVICE runtime_device;
@@ -22,6 +25,8 @@ template<class R, class... A> struct Rejected<R (APIENTRY *)(A...)> {
 #define AGX_ASSIGN(T, M, F) (f).M = &F
 
 static HRESULT APIENTRY GetVersions(D3D12DDI_HADAPTER, UINT32 *count, UINT64 *versions) {
+    const UINT receipt[] = {count ? *count : 0, versions != nullptr};
+    AdmissionUmdDiagnostic("d3d12-versions", count ? S_OK : E_INVALIDARG, receipt, 2);
     if (!count) return E_INVALIDARG;
     if (!versions) { *count = 1; return S_OK; }
     if (*count < 1) { *count = 1; return E_INVALIDARG; }
@@ -29,29 +34,35 @@ static HRESULT APIENTRY GetVersions(D3D12DDI_HADAPTER, UINT32 *count, UINT64 *ve
     *count = 1;
     return S_OK;
 }
-static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *) {
-    OutputDebugStringA("AGX D3D12 ABI gate: caps unavailable\n");
+static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *arg) {
+    const UINT receipt[] = {arg ? static_cast<UINT>(arg->Type) : 0, arg ? arg->DataSize : 0};
+    AdmissionUmdDiagnostic("d3d12-caps", E_NOTIMPL, receipt, 2);
     return E_NOTIMPL;
 }
 static HRESULT APIENTRY CreateDevice(D3D12DDI_HADAPTER,
                                      const D3D12DDIARG_CREATEDEVICE_0003 *arg) {
     if (arg) { callbacks = arg->p12UMCallbacks; runtime_device = arg->hRTDevice; }
-    OutputDebugStringA("AGX D3D12 ABI gate: device rejected\n");
+    const UINT receipt[] = {arg ? arg->Interface : 0, arg ? arg->Version : 0};
+    AdmissionUmdDiagnostic("d3d12-create-device", E_NOTIMPL, receipt, 2);
     if (callbacks && callbacks->pfnSetErrorCb)
         callbacks->pfnSetErrorCb(runtime_device, E_NOTIMPL);
     return E_NOTIMPL;
 }
+static HRESULT APIENTRY CloseAdapter(D3D12DDI_HADAPTER) {
+    AdmissionUmdDiagnostic("d3d12-close-adapter", S_OK, nullptr, 0);
+    return S_OK;
+}
 static void FillD3D12DDI_ADAPTERFUNCS(D3D12DDI_ADAPTERFUNCS &f) {
     AGX_ASSIGN(D3D12DDI_ADAPTERFUNCS, pfnCalcPrivateDeviceSize, Rejected<decltype(((D3D12DDI_ADAPTERFUNCS *)0)->pfnCalcPrivateDeviceSize)>::call);
     AGX_ASSIGN(D3D12DDI_ADAPTERFUNCS, pfnCreateDevice, CreateDevice);
-    AGX_ASSIGN(D3D12DDI_ADAPTERFUNCS, pfnCloseAdapter, Rejected<decltype(((D3D12DDI_ADAPTERFUNCS *)0)->pfnCloseAdapter)>::call);
+    AGX_ASSIGN(D3D12DDI_ADAPTERFUNCS, pfnCloseAdapter, CloseAdapter);
     AGX_ASSIGN(D3D12DDI_ADAPTERFUNCS, pfnGetSupportedVersions, GetVersions);
     AGX_ASSIGN(D3D12DDI_ADAPTERFUNCS, pfnGetCaps, GetCaps);
     AGX_ASSIGN(D3D12DDI_ADAPTERFUNCS, pfnGetOptionalDDITables, Rejected<decltype(((D3D12DDI_ADAPTERFUNCS *)0)->pfnGetOptionalDDITables)>::call);
     AGX_ASSIGN(D3D12DDI_ADAPTERFUNCS, pfnFillDDITable, Rejected<decltype(((D3D12DDI_ADAPTERFUNCS *)0)->pfnFillDDITable)>::call);
     AGX_ASSIGN(D3D12DDI_ADAPTERFUNCS, pfnDestroyDevice, Rejected<decltype(((D3D12DDI_ADAPTERFUNCS *)0)->pfnDestroyDevice)>::call);
 }
-static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 &f) {
+[[maybe_unused]] static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 &f) {
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckFormatSupport, Rejected<decltype(((D3D12DDI_DEVICE_FUNCS_CORE_0003 *)0)->pfnCheckFormatSupport)>::call);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckMultisampleQualityLevels, Rejected<decltype(((D3D12DDI_DEVICE_FUNCS_CORE_0003 *)0)->pfnCheckMultisampleQualityLevels)>::call);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetMipPacking, Rejected<decltype(((D3D12DDI_DEVICE_FUNCS_CORE_0003 *)0)->pfnGetMipPacking)>::call);
@@ -142,7 +153,7 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnRetrieveShaderComment, Rejected<decltype(((D3D12DDI_DEVICE_FUNCS_CORE_0003 *)0)->pfnRetrieveShaderComment)>::call);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckResourceAllocationHandle, Rejected<decltype(((D3D12DDI_DEVICE_FUNCS_CORE_0003 *)0)->pfnCheckResourceAllocationHandle)>::call);
 }
-static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003 &f) {
+[[maybe_unused]] static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003 &f) {
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCloseCommandList, Rejected<decltype(((D3D12DDI_COMMAND_LIST_FUNCS_3D_0003 *)0)->pfnCloseCommandList)>::call);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResetCommandList, Rejected<decltype(((D3D12DDI_COMMAND_LIST_FUNCS_3D_0003 *)0)->pfnResetCommandList)>::call);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawInstanced, Rejected<decltype(((D3D12DDI_COMMAND_LIST_FUNCS_3D_0003 *)0)->pfnDrawInstanced)>::call);
@@ -195,7 +206,7 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetMarker, Rejected<decltype(((D3D12DDI_COMMAND_LIST_FUNCS_3D_0003 *)0)->pfnSetMarker)>::call);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearRootArguments, Rejected<decltype(((D3D12DDI_COMMAND_LIST_FUNCS_3D_0003 *)0)->pfnClearRootArguments)>::call);
 }
-static void FillD3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001 &f) {
+[[maybe_unused]] static void FillD3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001 &f) {
     AGX_ASSIGN(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnExecuteCommandLists, Rejected<decltype(((D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001 *)0)->pfnExecuteCommandLists)>::call);
     f.pfnUnused = nullptr;
     f.pfnUnused2 = nullptr;
@@ -206,9 +217,14 @@ static void FillD3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001(D3D12DDI_COMMAND_QUEUE_FU
 }
 } // namespace
 extern "C" HRESULT APIENTRY OpenAdapter12(D3D12DDIARG_OPENADAPTER *arg) {
+    char enabled[2] = {};
+    if (GetEnvironmentVariableA("APPLE_AGX_D3D12", enabled, sizeof(enabled)) != 1 || enabled[0] != '1')
+        return E_NOTIMPL;
+    const UINT receipt[] = {arg != nullptr, arg && arg->pAdapterFuncs != nullptr,
+                            arg && arg->pAdapterCallbacks != nullptr};
+    AdmissionUmdDiagnostic("d3d12-open-adapter", arg && arg->pAdapterFuncs ? S_OK : E_INVALIDARG, receipt, 3);
     if (!arg || !arg->pAdapterFuncs) return E_INVALIDARG;
     arg->hAdapter.pDrvPrivate = nullptr;
     FillD3D12DDI_ADAPTERFUNCS(*arg->pAdapterFuncs);
-    OutputDebugStringA("AGX D3D12 ABI gate: OpenAdapter12\n");
     return S_OK;
 }
