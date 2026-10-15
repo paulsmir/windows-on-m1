@@ -131,7 +131,7 @@ class AppleAgxRenderPlatformTests(unittest.TestCase):
 
         self.assertIn("AdmissionPlatformRuntimeQuiesceActive", scheduler)
         self.assertIn("AdmissionPlatformRuntimeResponsive", scheduler)
-        self.assertNotIn("AdmissionPlatformRuntimeReset", scheduler + platform)
+        self.assertNotRegex(scheduler + platform, r"AdmissionPlatformRuntimeReset\(")
         quiesce = platform[platform.index(
             "NTSTATUS AdmissionPlatformRuntimeQuiesceActive("):platform.index(
             "BOOLEAN AdmissionPlatformRuntimeResponsive(")]

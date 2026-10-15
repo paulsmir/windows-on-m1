@@ -78,3 +78,5 @@ static ULONGLONG KeQueryInterruptTime(void){return fakeNow;}
 typedef struct {ULONG NodeOrdinal,EngineOrdinal,LastAbortedFenceId;} DXGKARG_RESETENGINE;
 static NTSTATUS reset_status;
 static NTSTATUS AdmissionDdiResetEngine(HANDLE c,DXGKARG_RESETENGINE*a){(void)a;ADMISSION_SCANOUT_RUNTIME*r=((ADMISSION_CONTEXT*)c)->ScanoutRuntime;assert(!r->Timeline.Running&&!r->VsyncTimer.Armed&&flushed);return reset_status;}
+#define ADMISSION_GPU_RESET_ADAPTER 2u
+static NTSTATUS AdmissionResetEngineEntry(HANDLE c,DXGKARG_RESETENGINE*a,ULONG e){(void)e;return AdmissionDdiResetEngine(c,a);}

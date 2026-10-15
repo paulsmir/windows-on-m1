@@ -56,8 +56,10 @@ class TdrResetQuiesce(unittest.TestCase):
                 optional_body(backend, 'AdmissionPlatformRuntimeQuiesceActive') + '\n' +
                 optional_body(scheduler, 'AdmissionResetQuiesceActive') + '\n' +
                 noinline_body(scheduler, 'AdmissionResetEngineInternal') + '\n' +
+                noinline_body(scheduler, 'AdmissionResetEngineRecorded') + '\n' +
                 '\n'.join(function_body(scheduler, n) for n in (
-                    'AdmissionDdiResetEngine', 'AdmissionDdiResetFromTimeout',
+                    'AdmissionResetEngineEntry', 'AdmissionDdiResetEngine',
+                    'AdmissionDdiResetFromTimeout',
                     'AdmissionDdiRestartFromTimeout')) + CASES)
         with tempfile.TemporaryDirectory() as tmp:
             program = Path(tmp) / 'reset.c'
@@ -79,6 +81,7 @@ SHIM = r'''
 #include <string.h>
 #include "apple_agx_scheduler.h"
 #include "render_submission.h"
+#include "render_gpu_fault.h"
 #define APPLE_AGX_GPUVA_G3_QUALIFICATION 1
 #define _Use_decl_annotations_
 #define __declspec(x)
@@ -138,6 +141,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   APPLE_AGX_BACKEND_RUNTIME Backend;
   APPLE_AGX_PLATFORM_PROVIDER Provider;
   int Rtkit, AscIo;
+  volatile LONG FirmwareRecoveries;
 } ADMISSION_PLATFORM_RUNTIME;
 struct _ADMISSION_CONTEXT {
   int SchedulerLock, PagingLock, BackendImage;
@@ -148,6 +152,7 @@ struct _ADMISSION_CONTEXT {
   APPLE_AGX_SCHEDULER Scheduler;
   ADMISSION_RENDER_PACKET RenderPacket;
   PVOID PlatformRuntime;
+  ADMISSION_GPU_RESET_RECEIPT GpuReset;
 };
 typedef struct { UINT NodeOrdinal, EngineOrdinal, LastAbortedFenceId; } DXGKARG_RESETENGINE;
 
@@ -190,6 +195,7 @@ static void model_job_ends(void) {
   AdmissionContextRetireFence(owner, fence);
   if (owner->GpuvaG3PrivateFence == (LONG)fence) owner->GpuvaG3PrivateFence = 0;
   scene_queued = 0; /* AdmissionGpuvaG3PrivateReported */
+  ++model_runtime->FirmwareRecoveries; /* a drop after Timeout + resume */
   model_runtime->Backend.Phase = AppleAgxBackendRuntimeReady;
 }
 
@@ -231,7 +237,16 @@ static void AdmissionPagingUpdateIdleLocked(ADMISSION_CONTEXT *c) { (void)c; ass
 static BOOLEAN AdmissionBackendImageReleaseSubmission(int *i, ULONG f) { (void)i; (void)f; return TRUE; }
 static NTSTATUS AdmissionScanoutSetTimelinePaused(ADMISSION_CONTEXT *c, BOOLEAN p) {
   (void)c; assert(!lock_depth); paused = p; return STATUS_SUCCESS; }
-static NTSTATUS AdmissionPlatformRuntimeQuiesceActive(ADMISSION_CONTEXT *, ULONG, ULONG);
+static int published, recorded;
+static ADMISSION_GPU_RESET_RECEIPT last_recorded;
+static void AdmissionPublishFirmwareRecovery(ADMISSION_PLATFORM_RUNTIME *r) {
+  (void)r; assert(!lock_depth); ++published; }
+static void AdmissionPlatformRuntimeResetState(ADMISSION_CONTEXT *c, ADMISSION_GPU_RESET_RECEIPT *r) {
+  ADMISSION_PLATFORM_RUNTIME *p = c->PlatformRuntime;
+  r->BackendPhase = (ULONG)p->Backend.Phase; r->WorkerBusy = p->WorkScheduled ? 1u : 0u;
+  r->Halted = 0u; r->FirmwareRecoveries = (ULONG)p->FirmwareRecoveries; }
+static void AdmissionRecordGpuReset(ADMISSION_CONTEXT *c) {
+  assert(!lock_depth); ++recorded; last_recorded = c->GpuReset; }
 '''
 
 CASES = r'''
@@ -257,6 +272,7 @@ static void setup(int worker, int queued) {
   memset(&adapter, 0, sizeof(adapter)); memset(&runtime, 0, sizeof(runtime));
   memset(&owner, 0, sizeof(owner));
   rtkit_stops = polls = drop_at_poll = fail_poll = worker_completes = 0;
+  published = recorded = 0; memset(&last_recorded, 0, sizeof(last_recorded));
   private_resets = scene_quarantined = cancels = paused = 0;
   scene_queued = scene_started = 1; now_ms = 1000u;
   model_adapter = &adapter; model_runtime = &runtime;
@@ -300,6 +316,22 @@ int main(void) {
   memset(&reset, 0, sizeof(reset));
   assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS);
   expect_aborted(&reset); assert(polls == 3);
+  /* Wom1GpuReset names the setter of SchedulerFaulted and the end of the job. */
+  assert(recorded == 1 && published == 1);
+  assert(last_recorded.Version == ADMISSION_GPU_RESET_RECEIPT_VERSION &&
+         last_recorded.Bytes == sizeof(ADMISSION_GPU_RESET_RECEIPT));
+  assert(last_recorded.Resets == 1u && last_recorded.Succeeded == 1u &&
+         last_recorded.Entry == ADMISSION_GPU_RESET_ENGINE && last_recorded.Status == 0u);
+  assert(last_recorded.SchedulerFaulted == (0x40000u | 3930u));
+  assert(last_recorded.PacketState == AdmissionRenderPacketActive &&
+         last_recorded.PacketFence == 0xce71cu && last_recorded.ActiveFence == 0xce71cu &&
+         last_recorded.CompletedFence == 0xce71bu &&
+         last_recorded.PreemptionPhase == AppleAgxPreemptionWaitCurrentBoundary);
+  assert(last_recorded.ContextToken == (unsigned long long)(uintptr_t)&owner);
+  assert(last_recorded.Quiesce == AdmissionGpuResetQuiesceEnded &&
+         last_recorded.WaitMs == 2u && last_recorded.LastAbortedFence == 0xce71cu &&
+         last_recorded.BackendPhase == AppleAgxBackendRuntimeSubmitted &&
+         last_recorded.FirmwareRecoveries == 1u);
 
   /* 2. The same storm promoted to an adapter reset: success, the last
    * completed fence advances to the last submitted one, restart resumes. */
@@ -309,6 +341,7 @@ int main(void) {
          adapter.Scheduler.LastSubmittedFence == 0xce71eu);
   assert(owner.GpuvaG3Poisoned && rtkit_stops == 0 && adapter.SchedulerFaulted == 0);
   assert(AdmissionDdiRestartFromTimeout(&adapter) == STATUS_SUCCESS && !paused);
+  assert(last_recorded.Entry == ADMISSION_GPU_RESET_ADAPTER && last_recorded.Succeeded == 1u);
 
   /* 3. The worker is still polling and the job ends naturally on its way out:
    * no RTKit stop, success (a non-private job reaches the runtime path). */
@@ -329,14 +362,21 @@ int main(void) {
   assert(adapter.Scheduler.ActiveFence == 0xce71cu && rtkit_stops == 0);
   assert(AdmissionRenderPacketState(&adapter.RenderPacket) == AdmissionRenderPacketActive);
   assert(adapter.SchedulerFaulted != 0 && runtime.Resetting == 0 && owner.GpuvaG3Poisoned);
+  assert(last_recorded.Quiesce == AdmissionGpuResetQuiesceTimeout &&
+         last_recorded.Status == (ULONG)STATUS_DEVICE_HARDWARE_ERROR &&
+         last_recorded.Succeeded == 0u && last_recorded.LastAbortedFence == 0u);
   assert(AdmissionDdiResetFromTimeout(&adapter) == STATUS_DEVICE_HARDWARE_ERROR);
   assert(rtkit_stops == 0 && adapter.Scheduler.ActiveFence == 0xce71cu);
+  /* The reset's own fault code is what the next attempt finds. */
+  assert(last_recorded.Resets == 2u && last_recorded.Entry == ADMISSION_GPU_RESET_ADAPTER &&
+         (last_recorded.SchedulerFaulted >> 16) == 1u);
 
   /* 5. A provider that cannot be polled proves nothing. */
   setup(0, 0); fail_poll = 1;
   memset(&reset, 0, sizeof(reset));
   assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_DEVICE_HARDWARE_ERROR);
   assert(adapter.Scheduler.ActiveFence == 0xce71cu && rtkit_stops == 0 && runtime.Resetting == 0);
+  assert(last_recorded.Quiesce == AdmissionGpuResetQuiescePoll);
 
   /* 6. A worker that never leaves: no exclusive poll ownership, no success. */
   setup(1, 0); runtime.Resetting = 0;
@@ -344,6 +384,7 @@ int main(void) {
   memset(&reset, 0, sizeof(reset));
   assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_DEVICE_HARDWARE_ERROR);
   assert(polls == 0 && adapter.Scheduler.ActiveFence == 0xce71cu && runtime.Resetting == 0);
+  assert(last_recorded.Quiesce == AdmissionGpuResetQuiesceWorker && published == 0);
 
   /* 7. Nothing active (a queued render): unchanged engine reset. */
   setup(0, 0); drop_at_poll = 1;
@@ -354,6 +395,8 @@ int main(void) {
   memset(&reset, 0, sizeof(reset));
   assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS);
   assert(reset.LastAbortedFenceId == 0xce71cu && polls == 0);
+  assert(last_recorded.Quiesce == AdmissionGpuResetQuiesceNone &&
+         last_recorded.PacketState == AdmissionRenderPacketQueued);
   assert(AdmissionRenderPacketState(&adapter.RenderPacket) == AdmissionRenderPacketEmpty);
   assert(owner.Object.FenceOutstanding == 0u && adapter.Scheduler.QueuedFence == 0u);
   assert(lock_depth == 0);
