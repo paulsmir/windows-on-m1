@@ -1,6 +1,23 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-15T07:02Z (read this first)
+## Current as of 2026-10-15T07:53Z (read this first)
+
+Installed: PACKAGE1289 (D3D FL10_0; MSAA reporting off by default; the next
+pipeline's rec1289h rollback removes it). CS 46.6 fps, DWM faults 0.
+- CONFIRMED (EXP1288/1289): predication, general SO, pixel-shader exports
+  at the end, every D3D-G9 sampling op, depth-only prepasses (D3D-G7).
+- MSAA: the runtime's undocumented rule, from six refusals: levels need
+  MULTISAMPLE_RENDERTARGET on a typed format; read-only cast-family members
+  answer neither; a member may not exceed its typeless parent. Corrected
+  policy ad01c0e3, to be probed in EXP1290.
+- D3D-G10 (investigation/analysis/D3D-G10-generality.md): G10a/G10b
+  committed (targets, views, clears, copies, gate formats, KMD 8/16-byte
+  classes, screen caps behind probe bit 0x40); EXP1290 = agx_format_smoke.
+- Pipeline helpers vanish from the scratchpad: copies in
+  .local/tandem/gpu-pipeline and .local/agx-lab/bin; resume from the probe
+  step without reinstalling (resume1289b.sh pattern).
+
+## Current as of 2026-10-15T07:02Z
 
 Installed: PACKAGE1288 (D3D FL10_0 works, MSAA reporting off by default;
 the next pipeline's rec1288h rollback removes it). CS 46.0 fps, DWM faults 0.
