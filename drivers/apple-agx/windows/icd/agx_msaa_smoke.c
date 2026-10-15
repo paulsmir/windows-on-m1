@@ -68,8 +68,9 @@ static const char vs_full[] =
     "float4 main(uint id : SV_VertexID) : SV_Position {\n"
     "  return float4(id == 1 ? 3.0 : -1.0, id == 2 ? -3.0 : 1.0, 0, 1);\n"
     "}\n";
-static const char ps_probe[] =
-    "Texture2DMS<float4> m : register(t0);\n"
+/* ps_4_0 needs the sample count in the type (X4539): %u is the count */
+static const char ps_probe_format[] =
+    "Texture2DMS<float4, %u> m : register(t0);\n"
     "cbuffer P : register(b1) { uint4 s; };\n"
     "float4 main(float4 p : SV_Position) : SV_Target { return m.Load(int2(p.xy), s.x); }\n";
 
@@ -236,8 +237,10 @@ int main(int argc, char **argv) {
     D3D11_TEXTURE2D_DESC td;
     D3D11_SHADER_RESOURCE_VIEW_DESC sd;
     D3D11_BUFFER_DESC bd;
+    char ps_probe[256];
+    int ps_probe_len = snprintf(ps_probe, sizeof(ps_probe), ps_probe_format, samples);
     ID3DBlob *a = compile(compile_fn, vs_full, sizeof(vs_full) - 1, "vs_4_0");
-    ID3DBlob *b = compile(compile_fn, ps_probe, sizeof(ps_probe) - 1, "ps_4_0");
+    ID3DBlob *b = compile(compile_fn, ps_probe, (size_t)ps_probe_len, "ps_4_0");
     if (!a || !b) return 1;
     hr = ID3D11Device_CreateVertexShader(device, ID3D10Blob_GetBufferPointer(a),
                                          ID3D10Blob_GetBufferSize(a), NULL, &vs_probe);
