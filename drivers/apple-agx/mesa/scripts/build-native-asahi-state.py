@@ -3213,37 +3213,17 @@ AgxD3d10CopyRawFormat(const Resource *source, const Resource *destination,
    }
 }
 
-static unsigned
-AgxD3d10ColorBytes(DXGI_FORMAT format)
-{
-   switch (format) {
-   case DXGI_FORMAT_R8_UNORM:
-   case DXGI_FORMAT_A8_UNORM: return 1; /* EXP1030: one byte per texel */
-   case DXGI_FORMAT_R16_FLOAT:
-   case DXGI_FORMAT_B5G6R5_UNORM: return 2;
-   case DXGI_FORMAT_B8G8R8A8_TYPELESS:
-   case DXGI_FORMAT_B8G8R8X8_TYPELESS:
-   case DXGI_FORMAT_B8G8R8A8_UNORM:
-   case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
-   case DXGI_FORMAT_B8G8R8X8_UNORM:
-   case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB:
-   case DXGI_FORMAT_R8G8B8A8_UNORM:
-   case DXGI_FORMAT_R10G10B10A2_UNORM:
-   case DXGI_FORMAT_R11G11B10_FLOAT: return 4;
-   case DXGI_FORMAT_R16G16B16A16_FLOAT: return 8;
-   case DXGI_FORMAT_R32G32B32A32_FLOAT: return 16;
-   default: return 0;
-   }
-}
-
-/* EXP1030: CPU Map/Unmap of a texture needs only a known texel layout; the
- * copy families gate CopyResource compatibility. EXP1029 text probe: Map of
- * a dynamic A8 glyph texture returned E_INVALIDARG (no copy family), so
- * Direct2D/DirectWrite text never reached the GPU. */
+/* EXP1030: CPU Map/Unmap of a texture needs only a known texel layout.
+ * EXP1029 text probe: Map of a dynamic A8 glyph texture returned
+ * E_INVALIDARG, so Direct2D/DirectWrite text never reached the GPU.
+ * EXP1290: the bring-up list (ten colour formats and the byte copy families)
+ * refused Map of an R32G32B32A32_UINT staging texture and removed the device;
+ * every format the frontend translates has a layout (a format the resource
+ * stores differently goes through the client map). */
 static bool
 AgxD3d10MapFormat(DXGI_FORMAT format)
 {
-   return AgxD3d10ColorBytes(format) != 0 || AgxD3d10CopyFamily(format) != 0;
+   return FormatTranslate(format, false) != PIPE_FORMAT_NONE;
 }
 
 static bool
