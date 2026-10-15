@@ -53,7 +53,7 @@ FRONTEND_C = ('ShaderParse.c','ShaderTGSI.c')
 # the frontend uses behind APPLE_AGX_D3D_SHADER_NIR.
 DXBC_C = ('dxbc_parse.c','dxbc_to_nir.c')
 # D3D-H2a: the D3D11 DDI table over the D3D10 frontend (drivers/apple-agx/mesa/d3d11).
-D3D11_CPP = ('agx_d3d11_ddi.cpp',)
+D3D11_CPP = ('agx_d3d11_ddi.cpp', 'agx_wddm2_ddi.cpp')
 # Actual Gallium helpers required by native context/resource/state construction.
 # Further additions must follow real compile/link diagnostics, not dummy symbols.
 AUX_UNITS = ('util/u_framebuffer.c', 'util/u_helpers.c', 'util/u_prim.c',

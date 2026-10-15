@@ -779,14 +779,17 @@ SupportedDDIInterfaceVersions[] = {
 SupportedDDIInterfaceVersions[] = {
    D3D10_0_DDI_SUPPORTED,
    D3D10_0_x_DDI_SUPPORTED,
-   /* D3D-H2a: last, advertised only under AgxD3d11DdiEnabled() */
+   /* D3D-H2a: advertised only under AgxD3d11DdiEnabled() */
    D3D11_0_DDI_SUPPORTED,
+   /* D3D-H7: last, advertised only under AgxWddm2_0DdiEnabled() */
+   D3DWDDM2_0_DDI_SUPPORTED,
 };'''),
         ('''#include "Device.h"
 #include "State.h"''','''#include "Device.h"
 #include "State.h"
 #include "agx_d3d11_ddi.h"''')])
-    replace_function_body('src/gallium/frontends/d3d10umd/Adapter.cpp','GetSupportedVersions','''   UINT count = ARRAYSIZE(SupportedDDIInterfaceVersions) - (AgxD3d11DdiEnabled() ? 0u : 1u);
+    replace_function_body('src/gallium/frontends/d3d10umd/Adapter.cpp','GetSupportedVersions','''   UINT count = ARRAYSIZE(SupportedDDIInterfaceVersions) - 2u +
+      (AgxD3d11DdiEnabled() ? 1u + (AgxWddm2_0DdiEnabled() ? 1u : 0u) : 0u);
    if (!puEntries)
       return E_INVALIDARG;
    if (pSupportedDDIInterfaceVersions && *puEntries < count)
@@ -833,6 +836,68 @@ SupportedDDIInterfaceVersions[] = {
          (AgxD3d11Fl11Enabled() ?
           (D3D11DDI_ENCODE_3DPIPELINESUPPORT_CAP(D3D11DDI_3DPIPELINELEVEL_10_1) |
            D3D11DDI_ENCODE_3DPIPELINESUPPORT_CAP(D3D11DDI_3DPIPELINELEVEL_11_0)) : 0u);
+      return S_OK;
+   /* D3D-H7: the 11.1 to WDDM 2.0 caps (agx_wddm2_ddi.cpp implements or
+    * fails closed each entry these caps leave reachable) */
+   case D3D11_1DDICAPS_D3D11_OPTIONS:
+      if (pData->DataSize != sizeof(D3D11_1DDI_D3D11_OPTIONS_DATA))
+         return E_INVALIDARG;
+      ((D3D11_1DDI_D3D11_OPTIONS_DATA *)pData->pData)->OutputMergerLogicOp = FALSE;
+      ((D3D11_1DDI_D3D11_OPTIONS_DATA *)pData->pData)->AssignDebugBinarySupport = FALSE;
+      return S_OK;
+   case D3D11_1DDICAPS_ARCHITECTURE_INFO:
+      if (pData->DataSize != sizeof(D3D11_1DDI_ARCHITECTURE_INFO_DATA))
+         return E_INVALIDARG;
+      /* AGX renders tile by tile (deferred) */
+      ((D3D11_1DDI_ARCHITECTURE_INFO_DATA *)pData->pData)->TileBasedDeferredRenderer = TRUE;
+      return S_OK;
+   case D3D11_1DDICAPS_SHADER_MIN_PRECISION_SUPPORT:
+      if (pData->DataSize != sizeof(D3D11_DDI_SHADER_MIN_PRECISION_SUPPORT_DATA))
+         return E_INVALIDARG;
+      /* full precision only: min-precision types run as 32 bits */
+      ((D3D11_DDI_SHADER_MIN_PRECISION_SUPPORT_DATA *)pData->pData)->PixelShaderMinPrecision = 0;
+      ((D3D11_DDI_SHADER_MIN_PRECISION_SUPPORT_DATA *)pData->pData)->AllOtherStagesMinPrecision = 0;
+      return S_OK;
+   case D3DWDDM1_3DDICAPS_D3D11_OPTIONS1:
+      if (pData->DataSize != sizeof(D3DWDDM1_3DDI_D3D11_OPTIONS_DATA1))
+         return E_INVALIDARG;
+      ((D3DWDDM1_3DDI_D3D11_OPTIONS_DATA1 *)pData->pData)->TiledResourcesSupportFlags = 0;
+      return S_OK;
+   case D3DWDDM1_3DDICAPS_MARKER:
+      if (pData->DataSize != sizeof(D3DWDDM1_3DDI_MARKER_TYPE))
+         return E_INVALIDARG;
+      *(D3DWDDM1_3DDI_MARKER_TYPE *)pData->pData = D3DWDDM1_3DDI_MARKER_TYPE_NONE;
+      return S_OK;
+   case D3DWDDM2_0DDICAPS_D3D11_OPTIONS2:
+      if (pData->DataSize != sizeof(D3DWDDM2_0DDI_D3D11_OPTIONS2_DATA) &&
+          pData->DataSize != sizeof(D3DWDDM2_0DDI_D3D11_OPTIONS2_DATA_LEGACY_ASTC))
+         return E_INVALIDARG;
+      memset(pData->pData, 0, pData->DataSize); /* no conservative rasterization, no ASTC */
+      return S_OK;
+   case D3DWDDM2_0DDICAPS_D3D11_OPTIONS3:
+      if (pData->DataSize != sizeof(D3DWDDM2_0DDI_D3D11_OPTIONS3_DATA))
+         return E_INVALIDARG;
+      ((D3DWDDM2_0DDI_D3D11_OPTIONS3_DATA *)pData->pData)->
+         VPAndRTArrayIndexFromAnyShaderFeedingRasterizer = FALSE;
+      return S_OK;
+   case D3DWDDM2_0DDICAPS_MEMORY_ARCHITECTURE:
+      if (pData->DataSize != sizeof(D3DWDDM2_0DDI_MEMORY_ARCHITECTURE_CAPS))
+         return E_INVALIDARG;
+      /* one memory shared with the CPU; coherence is not promised */
+      ((D3DWDDM2_0DDI_MEMORY_ARCHITECTURE_CAPS *)pData->pData)->UMA = TRUE;
+      ((D3DWDDM2_0DDI_MEMORY_ARCHITECTURE_CAPS *)pData->pData)->CacheCoherent = FALSE;
+      return S_OK;
+   case D3DWDDM2_0DDICAPS_TEXTURE_LAYOUT:
+      if (pData->DataSize != sizeof(D3DWDDM2_0DDI_TEXTURE_LAYOUT_CAPS))
+         return E_INVALIDARG;
+      /* no device-dependent layout is exposed (GetResourceLayout fails closed) */
+      ((D3DWDDM2_0DDI_TEXTURE_LAYOUT_CAPS *)pData->pData)->DeviceDependentLayoutCount = 0;
+      return S_OK;
+   case D3DWDDM2_0DDICAPS_GPUVA_CAPS:
+      if (pData->DataSize != sizeof(D3DWDDM2_0DDI_GPUVA_CAPS_DATA))
+         return E_INVALIDARG;
+      /* 39-bit GPU VA (apple_agx_gpuva_g3_caps.h); a resource spans < 4 GiB */
+      ((D3DWDDM2_0DDI_GPUVA_CAPS_DATA *)pData->pData)->MaxGPUVirtualAddressBitsPerResource = 32;
       return S_OK;
    default:
       return E_NOTIMPL;
@@ -1392,6 +1457,7 @@ void APIENTRY
 #endif
    case D3D11_0_DDI_INTERFACE_VERSION:
    case D3D11_0_7_DDI_INTERFACE_VERSION:
+   case D3DWDDM2_0_DDI_INTERFACE_VERSION:
       break;
    default:
       DebugPrintf("%s: unsupported interface version 0x%08x\\n",'''),
@@ -1406,6 +1472,16 @@ void APIENTRY
        pCreateData->Interface == D3D11_0_7_DDI_INTERFACE_VERSION) {
       const D3D10DDI_DEVICEFUNCS base = *pDeviceFuncs;
       AgxD3d11FillDeviceFuncs(pCreateData->p11DeviceFuncs, &base);
+   }
+   /* D3D-H7: the WDDM 2.0 table (agx_wddm2_ddi.cpp) over the same memory,
+    * its DXGI 1.2-1.4 entries and the (absent) video sub-device */
+   if (pCreateData->Interface == D3DWDDM2_0_DDI_INTERFACE_VERSION) {
+      const D3D10DDI_DEVICEFUNCS base = *pDeviceFuncs;
+      AgxWddm2_0FillDeviceFuncs(pCreateData->pWDDM2_0DeviceFuncs, &base);
+      if (IS_DXGI1_4_BASE_FUNCTIONS(pCreateData->Interface, pCreateData->Version))
+         AgxWddm2_0FillDxgiFuncs(pCreateData->DXGIBaseDDI.pDXGIDDIBaseFunctions5);
+      if (pCreateData->ppfnRetrieveSubObject)
+         *pCreateData->ppfnRetrieveSubObject = AgxWddm2_0RetrieveSubObject;
    }''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Device.cpp','Flush','''   Device *pDevice = CastDevice(hDevice);
    HRESULT result = AgxD3d10WindowsQueryCollect(pDevice->windows);
@@ -2495,7 +2571,79 @@ UnsupportedDxgi''')
         ('''/*
  * ----------------------------------------------------------------------
  *
- * CalcPrivateShaderSize --''','''void APIENTRY
+ * CalcPrivateShaderSize --''','''/* D3D-H7: constant buffers with optional 11.1 windows (agx_d3d11_ddi.h) */
+void
+AgxSetConstantBuffersRange(mesa_shader_stage shader_type, D3D10DDI_HDEVICE hDevice,
+                           UINT StartBuffer, UINT NumBuffers,
+                           const D3D10DDI_HRESOURCE *phBuffers,
+                           const UINT *firstConstant, const UINT *numConstants)
+{
+   Device *pDevice = CastDevice(hDevice);
+   ULONGLONG owner = 0;
+   ULONG generation = 0;
+   const UINT slots=D3D10_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT;
+   static_assert(PIPE_MAX_CONSTANT_BUFFERS>=
+                 D3D10_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT,
+                 "D3D10 constant buffers must fit the native array");
+   bool valid = pDevice && pDevice->pipe &&
+      (shader_type == MESA_SHADER_VERTEX ||
+       shader_type == MESA_SHADER_FRAGMENT ||
+       shader_type == MESA_SHADER_GEOMETRY ||
+       shader_type == MESA_SHADER_COMPUTE ||
+       shader_type == MESA_SHADER_TESS_CTRL || shader_type == MESA_SHADER_TESS_EVAL) &&
+      (NumBuffers == 0 || phBuffers) && StartBuffer <= slots &&
+      NumBuffers <= slots - StartBuffer &&
+      AgxD3d10WindowsIdentity(pDevice->windows, &owner, &generation);
+   for (UINT i = 0; valid && i < NumBuffers; ++i) {
+      Resource *resource = CastResource(phBuffers[i]);
+      if (!resource) continue;
+      valid = resource->constant_buffer && resource->owner_device == pDevice &&
+         resource->owner_cookie == owner &&
+         resource->device_generation == generation && resource->resource &&
+         resource->resource->target == PIPE_BUFFER &&
+         (resource->resource->bind & PIPE_BIND_CONSTANT_BUFFER) &&
+         !(resource->resource->bind &
+           ~(PIPE_BIND_CONSTANT_BUFFER | PIPE_BIND_SHADER_IMAGE)) &&
+         resource->logical_bytes >= 16 &&
+         (firstConstant || resource->logical_bytes <= 65536) &&
+         (resource->logical_bytes & 15) == 0 &&
+         resource->resource->width0 == resource->logical_bytes;
+   }
+   for (UINT i = 0; valid && firstConstant && numConstants && i < NumBuffers; ++i)
+      valid = (firstConstant[i] & 15u) == 0 && (numConstants[i] & 15u) == 0 &&
+              numConstants[i] >= 16u && numConstants[i] <= 4096u;
+   if (!valid) {
+      SetError(hDevice, E_NOTIMPL);
+      return;
+   }
+   for (UINT i = 0; i < NumBuffers; ++i) {
+      Resource *resource = CastResource(phBuffers[i]);
+      if (!resource) {
+         pDevice->pipe->set_constant_buffer(pDevice->pipe, shader_type,
+                                             StartBuffer + i, NULL);
+         continue;
+      }
+      /* D3D11.1: the window starts at a multiple of 16 constants and
+       * holds 16..4096 of them (the runtime validates both); reads past
+       * the buffer's end return 0 (robust context), so the bound size is
+       * clipped to the buffer and an empty window unbinds the slot. */
+      UINT offset = firstConstant ? firstConstant[i] * 16u : 0u;
+      UINT window = numConstants ? numConstants[i] * 16u : 65536u;
+      if (offset >= resource->logical_bytes) {
+         pDevice->pipe->set_constant_buffer(pDevice->pipe, shader_type,
+                                             StartBuffer + i, NULL);
+         continue;
+      }
+      struct pipe_constant_buffer cb = {};
+      cb.buffer = resource->resource;
+      cb.buffer_offset = offset;
+      cb.buffer_size = MIN2(window, resource->logical_bytes - offset);
+      pDevice->pipe->set_constant_buffer(pDevice->pipe, shader_type,
+                                          StartBuffer + i, &cb);
+   }
+}
+
+void APIENTRY
 CsSetShaderResources(D3D10DDI_HDEVICE hDevice, UINT Offset, UINT NumViews,
                      const D3D10DDI_HSHADERRESOURCEVIEW *phShaderResourceViews)
 {
@@ -3177,54 +3325,11 @@ AgxD3d10CreateXfbState(struct pipe_context *pipe, Shader *shader,
       pipe_resource_reference(&source,NULL);
       if(FAILED(status)) {SetError(hDevice,status);return;}
    }''')
-    replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','SetConstantBuffers','''   Device *pDevice = CastDevice(hDevice);
-   ULONGLONG owner = 0;
-   ULONG generation = 0;
-   const UINT slots=D3D10_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT;
-   static_assert(PIPE_MAX_CONSTANT_BUFFERS>=
-                 D3D10_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT,
-                 "D3D10 constant buffers must fit the native array");
-   bool valid = pDevice && pDevice->pipe &&
-      (shader_type == MESA_SHADER_VERTEX ||
-       shader_type == MESA_SHADER_FRAGMENT ||
-       shader_type == MESA_SHADER_GEOMETRY ||
-       shader_type == MESA_SHADER_COMPUTE ||
-       shader_type == MESA_SHADER_TESS_CTRL || shader_type == MESA_SHADER_TESS_EVAL) &&
-      (NumBuffers == 0 || phBuffers) && StartBuffer <= slots &&
-      NumBuffers <= slots - StartBuffer &&
-      AgxD3d10WindowsIdentity(pDevice->windows, &owner, &generation);
-   for (UINT i = 0; valid && i < NumBuffers; ++i) {
-      Resource *resource = CastResource(phBuffers[i]);
-      if (!resource) continue;
-      valid = resource->constant_buffer && resource->owner_device == pDevice &&
-         resource->owner_cookie == owner &&
-         resource->device_generation == generation && resource->resource &&
-         resource->resource->target == PIPE_BUFFER &&
-         (resource->resource->bind & PIPE_BIND_CONSTANT_BUFFER) &&
-         !(resource->resource->bind &
-           ~(PIPE_BIND_CONSTANT_BUFFER | PIPE_BIND_SHADER_IMAGE)) &&
-         resource->logical_bytes >= 16 && resource->logical_bytes <= 65536 &&
-         (resource->logical_bytes & 15) == 0 &&
-         resource->resource->width0 == resource->logical_bytes;
-   }
-   if (!valid) {
-      SetError(hDevice, E_NOTIMPL);
-      return;
-   }
-   for (UINT i = 0; i < NumBuffers; ++i) {
-      Resource *resource = CastResource(phBuffers[i]);
-      if (!resource) {
-         pDevice->pipe->set_constant_buffer(pDevice->pipe, shader_type,
-                                             StartBuffer + i, NULL);
-         continue;
-      }
-      struct pipe_constant_buffer cb = {};
-      cb.buffer = resource->resource;
-      cb.buffer_offset = 0;
-      cb.buffer_size = resource->logical_bytes;
-      pDevice->pipe->set_constant_buffer(pDevice->pipe, shader_type,
-                                          StartBuffer + i, &cb);
-   }''')
+    replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','SetConstantBuffers','''   /* D3D-H7: whole buffers; the 11.1 table binds ranges (agx_wddm2_ddi.cpp) */
+   void AgxSetConstantBuffersRange(mesa_shader_stage, D3D10DDI_HDEVICE, UINT, UINT,
+                                   const D3D10DDI_HRESOURCE *, const UINT *, const UINT *);
+   AgxSetConstantBuffersRange(shader_type, hDevice, StartBuffer, NumBuffers, phBuffers,
+                              NULL, NULL);''')
     change('src/gallium/frontends/d3d10umd/Format.h',
         'e6118737e8a3f3f92e2d30043a648e7b79b31d969aa835d85de3f2b71c7db4dd',[
         ('const char *\nFormatToName(DXGI_FORMAT Format);',

@@ -43,4 +43,30 @@ void APIENTRY DsSetSamplers(D3D10DDI_HDEVICE, UINT, UINT, const D3D10DDI_HSAMPLE
  * same table share memory, so the caller passes a copy). */
 void AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *funcs, const D3D10DDI_DEVICEFUNCS *base);
 
+/* D3D-H7: advertise D3DWDDM2_0_DDI_SUPPORTED (the 11.1 / WDDM 1.3 / WDDM 2.0
+ * device table, agx_wddm2_ddi.cpp): with the FL 11_0 switch, per process
+ * while its checkpoints are measured (EXP1299: the runtime asks for the
+ * WDDM 2.0 interface and refuses FL 11_0 without it). */
+BOOL AgxWddm2_0DdiEnabled(void);
+
+/* Fill the WDDM 2.0 table: the D3D11 entries, adapters for the entries
+ * whose types changed, and the 11.1 to WDDM 2.0 additions. */
+void AgxWddm2_0FillDeviceFuncs(D3DWDDM2_0DDI_DEVICEFUNCS *funcs,
+                               const D3D10DDI_DEVICEFUNCS *base);
+
+/* The DXGI 1.2 to 1.4 entries of the base-function table (after the DXGI
+ * 1.1 entries the frontend wrote): IS_DXGI1_4_BASE_FUNCTIONS. */
+void AgxWddm2_0FillDxgiFuncs(DXGI1_4_DDI_BASE_FUNCTIONS *funcs);
+
+/* D3D10DDIARG_CREATEDEVICE::ppfnRetrieveSubObject: no video sub-device. */
+HRESULT APIENTRY AgxWddm2_0RetrieveSubObject(D3D10DDI_HDEVICE, UINT32, SIZE_T, void *,
+                                             SIZE_T, void *);
+
+/* D3D-H7: bind constant buffers with optional 11.1 ranges (first constant
+ * and constant count per slot, in 16-byte constants; NULL: whole buffers),
+ * Shader.cpp. */
+void AgxSetConstantBuffersRange(mesa_shader_stage stage, D3D10DDI_HDEVICE hDevice, UINT start,
+                                UINT count, const D3D10DDI_HRESOURCE *buffers,
+                                const UINT *firstConstant, const UINT *numConstants);
+
 #endif /* AGX_D3D11_DDI_H */
