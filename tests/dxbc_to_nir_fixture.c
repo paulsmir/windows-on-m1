@@ -78,17 +78,27 @@ main(int argc, char **argv)
    agx_preprocess_nir(nir);
    nir_validate_shader(nir, "agx_preprocess_nir");
 
+   /* the block size Dispatch launches, the groupshared bytes the AGX
+    * backend allocates, and groupshared accesses left as derefs (the
+    * backend has no deref lowering for them) */
+   unsigned block[3] = {nir->info.workgroup_size[0], nir->info.workgroup_size[1],
+                        nir->info.workgroup_size[2]};
+   unsigned shared = nir->info.shared_size, shared_derefs = 0;
    unsigned instrs = 0;
    nir_foreach_function_impl(impl, nir)
-      nir_foreach_block(block, impl)
-         nir_foreach_instr(instr, block)
+      nir_foreach_block(blk, impl)
+         nir_foreach_instr(instr, blk) {
             ++instrs;
+            if (instr->type == nir_instr_type_deref &&
+                nir_deref_mode_is(nir_instr_as_deref(instr), nir_var_mem_shared))
+               ++shared_derefs;
+         }
    printf("TRANSLATED stage %s instructions %u inputs 0x%llx outputs 0x%llx textures %u "
-          "ssbos %u images %u\n",
+          "ssbos %u images %u block %ux%ux%u shared %u shared-derefs %u\n",
           mesa_shader_stage_name(nir->info.stage), instrs,
           (unsigned long long)nir->info.inputs_read,
           (unsigned long long)nir->info.outputs_written, BITSET_LAST_BIT(nir->info.textures_used),
-          ssbos, images);
+          ssbos, images, block[0], block[1], block[2], shared, shared_derefs);
    ralloc_free(nir);
    glsl_type_singleton_decref();
    dxbc_program_free(&program);

@@ -2303,6 +2303,15 @@ dxbc_nir_finalize(nir_shader *nir)
    NIR_PASS(_, nir, nir_lower_var_copies);
    NIR_PASS(_, nir, nir_lower_system_values);
    NIR_PASS(_, nir, nir_lower_compute_system_values, NULL);
+   if (nir->info.stage == MESA_SHADER_COMPUTE) {
+      /* groupshared memory gets explicit offsets and the threadgroup size
+       * (shared_size) here, in the frontend, as st and rusticl do it: the
+       * AGX backend allocates shared_size and has no deref lowering for it */
+      NIR_PASS(_, nir, nir_lower_vars_to_explicit_types, nir_var_mem_shared,
+               glsl_get_natural_size_align_bytes);
+      NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_shared,
+               nir_address_format_32bit_offset);
+   }
    do {
       progress = false;
       NIR_PASS(progress, nir, nir_lower_vars_to_ssa);

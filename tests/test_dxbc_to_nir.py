@@ -32,6 +32,9 @@ DXBC = ROOT / "drivers/apple-agx/mesa/dxbc"
 FIXTURES = ROOT / "tests/fixtures/dxbc"
 TRANSLATED = {"vs40": "MESA_SHADER_VERTEX", "ps40": "MESA_SHADER_FRAGMENT",
               "gs40": "MESA_SHADER_GEOMETRY", "ps41": "MESA_SHADER_FRAGMENT",
+              # cs_4_x (compute on 10.x hardware): raw/structured buffers,
+              # groupshared memory written at SV_GroupIndex, group sync
+              "cs40": "MESA_SHADER_COMPUTE", "cs41": "MESA_SHADER_COMPUTE",
               # SM 5: UAVs, groupshared memory, atomics, counters, sync, bit ops
               "cs50": "MESA_SHADER_COMPUTE",
               # SM 5: geometry instancing and two output streams
@@ -130,6 +133,16 @@ class DxbcToNir(unittest.TestCase):
         # cs50 uses an append/consume counter
         m = re.search(r"ssbos (\d+)", self.run_fixture("cs50").stdout)
         self.assertGreater(int(m.group(1)), 8)
+
+    def test_compute_block_and_groupshared_size(self):
+        # Dispatch launches the shader's own numthreads block
+        # (pipe_grid_info.block) and Asahi sizes threadgroup memory from
+        # shared_size: both come from dcl_thread_group / dcl_tgsm_*.
+        for name, expected in {"cs40": "block 64x1x1 shared 256 shared-derefs 0",
+                               "cs41": "block 8x4x1 shared 0 shared-derefs 0",
+                               "cs50": "block 8x8x1 shared 1028 shared-derefs 0"}.items():
+            with self.subTest(name=name):
+                self.assertIn(expected, self.run_fixture(name).stdout)
 
     def test_shader_model_5_fixtures_are_refused_cleanly(self):
         for name in REFUSED:
