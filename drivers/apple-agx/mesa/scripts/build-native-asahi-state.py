@@ -3286,6 +3286,21 @@ AgxD3d10CopyFamily(DXGI_FORMAT format)
  * format of their block size. Compressed formats copy through
  * resource_copy_region (PIPE_FORMAT_NONE here); depth formats only to
  * themselves. */
+/* D3D copies between subresources of one resource type; a pipe target
+ * only records the slice count or cube-ness of a 1D/2D resource (EXP1292:
+ * a Texture2DArray slice into a Texture2D staging copy was refused). */
+static unsigned
+AgxD3d10CopyTargetFamily(enum pipe_texture_target target)
+{
+   switch (target) {
+   case PIPE_TEXTURE_1D: case PIPE_TEXTURE_1D_ARRAY: return 1;
+   case PIPE_TEXTURE_2D: case PIPE_TEXTURE_2D_ARRAY: case PIPE_TEXTURE_RECT:
+   case PIPE_TEXTURE_CUBE: case PIPE_TEXTURE_CUBE_ARRAY: return 2;
+   case PIPE_TEXTURE_3D: return 3;
+   default: return 0;
+   }
+}
+
 static enum pipe_format
 AgxD3d10CopyRawFormat(const Resource *source, const Resource *destination,
                       const struct pipe_resource *src, const struct pipe_resource *dst)
@@ -3894,7 +3909,9 @@ AgxD3d10ResourceWithinRequiredLimits(
    UINT front = pSrcBox ? pSrcBox->front : 0, back = pSrcBox ? pSrcBox->back : srcD;
    if (pSrcBox && (right <= left || bottom <= top || back <= front))
       return; /* empty box: D3D no-op */
-   bool valid = (raw != PIPE_FORMAT_NONE || compressed) && src->target == dst->target &&
+   bool valid = (raw != PIPE_FORMAT_NONE || compressed) &&
+      AgxD3d10CopyTargetFamily(src->target) &&
+      AgxD3d10CopyTargetFamily(src->target) == AgxD3d10CopyTargetFamily(dst->target) &&
       src->nr_samples <= 1 && dst->nr_samples <= 1 &&
       right <= srcW && bottom <= srcH && back <= srcD &&
       DstX <= dstW && right - left <= dstW - DstX &&
