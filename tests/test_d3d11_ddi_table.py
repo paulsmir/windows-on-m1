@@ -89,6 +89,12 @@ class D3d11DdiTable(unittest.TestCase):
             self.assertTrue(versions.rstrip().rstrip(",").endswith("D3D11_0_DDI_SUPPORTED"))
             supported = function_body(adapter, "GetSupportedVersions")
             self.assertIn("AgxD3d11DdiEnabled() ? 0u : 1u", supported)
+            # EXP1297: FL 11_0 was refused after OpenAdapter alone; every
+            # adapter query is a receipt with its answer
+            self.assertIn('AgxD3d10WindowsDiagnostic("measure-getversions", S_OK, values, 2u);', supported)
+            caps = function_body(adapter, "GetCaps")
+            self.assertIn("const HRESULT hr = caps();", caps)
+            self.assertIn('AgxD3d10WindowsDiagnostic("measure-getcaps", hr, values, 2u);', caps)
             create = function_body(device, "CreateDevice")
             self.assertIn("case D3D11_0_DDI_INTERFACE_VERSION:", create)
             self.assertIn("const D3D10DDI_DEVICEFUNCS base = *pDeviceFuncs;", create)

@@ -775,8 +775,15 @@ SupportedDDIInterfaceVersions[] = {
    if (pSupportedDDIInterfaceVersions)
       memcpy(pSupportedDDIInterfaceVersions, SupportedDDIInterfaceVersions,
              count * sizeof(SupportedDDIInterfaceVersions[0]));
+   /* EXP1297: adapter queries before a refused FL 11_0 device (receipt) */
+   UINT values[2] = {count, pSupportedDDIInterfaceVersions ? 1u : 0u};
+   AgxD3d10WindowsDiagnostic("measure-getversions", S_OK, values, 2u);
    return S_OK;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Adapter.cpp','GetCaps','''   Adapter *pAdapter = CastAdapter(hAdapter);
+   /* EXP1297: the runtime refused a FL 11_0 device (DXGI_ERROR_DRIVER_
+    * INTERNAL_ERROR) after OpenAdapter alone; every caps query is logged
+    * with its answer (receipt only). */
+   auto caps = [&]() -> HRESULT {
    if (!pAdapter || !pData || !pData->pData)
       return E_INVALIDARG;
    switch (pData->Type) {
@@ -809,7 +816,12 @@ SupportedDDIInterfaceVersions[] = {
       return S_OK;
    default:
       return E_NOTIMPL;
-   }''')
+   }
+   };
+   const HRESULT hr = caps();
+   UINT values[2] = {pData ? (UINT)pData->Type : ~0u, pData ? (UINT)pData->DataSize : 0u};
+   AgxD3d10WindowsDiagnostic("measure-getcaps", hr, values, 2u);
+   return hr;''')
     # EXP1080 diagnostic: DWM is CPU-bound (EXP1078 CSwitch trace) and this
     # guest has no ETW sampling source. Time every d3d10umd DDI entry
     # (LOG_ENTRYPOINT) with a scoped QPC timer; agx_d3d10_windows.cpp sums
