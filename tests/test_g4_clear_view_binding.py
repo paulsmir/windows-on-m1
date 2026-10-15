@@ -2,6 +2,8 @@
 
 Catches the observed valid ClearRenderTargetView -> E_NOTIMPL device failure,
 and clearing/leaking the caller's existing MRT/depth framebuffer instead.
+D3D-G10a: views of any mip level and slice range clear (slice by slice);
+only a non-texture view is refused.
 """
 import ast
 import os
@@ -27,7 +29,7 @@ SHIM = r'''
 #include <cassert>
 #include <cstring>
 #include <cstdint>
-enum { PIPE_TEXTURE_2D=1, PIPE_CLEAR_COLOR0=1, E_NOTIMPL=1 };
+enum { PIPE_BUFFER=0, PIPE_TEXTURE_2D=1, PIPE_CLEAR_COLOR0=1, E_NOTIMPL=1 };
 enum { PIPE_FORMAT_B8G8R8A8_UNORM=1, PIPE_FORMAT_B8G8R8A8_SRGB,
  PIPE_FORMAT_B8G8R8X8_UNORM,PIPE_FORMAT_B8G8R8X8_SRGB,
  PIPE_FORMAT_R8G8B8A8_UNORM,PIPE_FORMAT_R16G16B16A16_FLOAT,
@@ -56,6 +58,7 @@ static unsigned clears;
 static void native_clear(pipe_context*p,unsigned mask,uint32_t channels,uint8_t stencil,const void*scissor,const pipe_color_union*c,double,unsigned){
  assert(mask==PIPE_CLEAR_COLOR0 && channels==15 && stencil==0 && !scissor);
  assert(p->active.nr_cbufs==1 && !p->active.zsbuf.texture);
+ assert(p->active.cbufs[0].first_layer==p->active.cbufs[0].last_layer);
  auto *r=p->active.cbufs[0].texture;
  assert(p->active.width==r->width && p->active.height==r->height);
  r->pixel=c->f[1];clears++;
@@ -85,9 +88,17 @@ int main(){
  assert(other.pixel==-2 && depth.pixel==-3);
  assert(memcmp(&pipe.active,&saved,sizeof(saved))==0);
  assert(memcmp(&d.fb,&saved,sizeof(saved))==0);
- // Invalid view descriptors still fail without modifying framebuffer state.
+ // D3D-G10a: a mip level and a slice range clear, one slice at a time.
  view.level=1;target.pixel=-1;clear_view(&d,&view,green);
- assert(d.error==E_NOTIMPL && clears==2 && target.pixel==-1);
+ assert(d.error==0 && clears==3 && target.pixel==0.55f);
+ view.level=0;view.first_layer=1;view.last_layer=3;clear_view(&d,&view,green);
+ assert(d.error==0 && clears==6);
+ assert(memcmp(&pipe.active,&saved,sizeof(saved))==0);
+ // A non-texture view still fails without modifying framebuffer state.
+ pipe_resource buffer=target;buffer.target=PIPE_BUFFER;
+ pipe_surface bad={&buffer,buffer.format,0,0,0};
+ clear_view(&d,&bad,green);
+ assert(d.error==E_NOTIMPL && clears==6);
  assert(memcmp(&pipe.active,&saved,sizeof(saved))==0);
 }
 '''

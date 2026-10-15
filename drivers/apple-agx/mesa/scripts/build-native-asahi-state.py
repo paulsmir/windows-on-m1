@@ -1360,40 +1360,32 @@ SetRenderTargets(D3D10DDI_HDEVICE hDevice,'''),
    }
    Device *pDevice = CastDevice(hDevice);
    struct pipe_resource *resource = surface ? surface->texture : NULL;
+   /* D3D-G10a: any render-target view -- any format the resource was
+    * created in, any mip level, array slice, cube face or 3D slice range.
+    * The native batch renders one layer, so a view of several slices is
+    * cleared slice by slice. */
    if (!pDevice || !pipe->clear || !pipe->set_framebuffer_state ||
-       !surface || !resource ||
-       resource->target != PIPE_TEXTURE_2D ||
-       (resource->format != PIPE_FORMAT_B8G8R8A8_UNORM &&
-        resource->format != PIPE_FORMAT_B8G8R8A8_SRGB &&
-        resource->format != PIPE_FORMAT_B8G8R8X8_UNORM &&
-        resource->format != PIPE_FORMAT_B8G8R8X8_SRGB &&
-       resource->format != PIPE_FORMAT_R8G8B8A8_UNORM &&
-        resource->format != PIPE_FORMAT_R16G16B16A16_FLOAT &&
-        resource->format != PIPE_FORMAT_R8_UNORM &&
-        resource->format != PIPE_FORMAT_R16_FLOAT &&
-        resource->format != PIPE_FORMAT_R32G32B32A32_FLOAT &&
-        resource->format != PIPE_FORMAT_R10G10B10A2_UNORM &&
-        resource->format != PIPE_FORMAT_R11G11B10_FLOAT &&
-        resource->format != PIPE_FORMAT_B5G6R5_UNORM) ||
-       resource->nr_samples > 4 || resource->array_size != 1 ||
-       resource->last_level != 0 ||
-       util_format_linear(surface->format) != util_format_linear(resource->format) ||
-       surface->level != 0 || surface->first_layer != 0 || surface->last_layer != 0) {
-      LOG_UNSUPPORTED("ClearRenderTargetView requires an admitted color view");
+       !surface || !resource || resource->target == PIPE_BUFFER ||
+       resource->nr_samples > 4 || surface->last_layer < surface->first_layer) {
+      LOG_UNSUPPORTED("ClearRenderTargetView of a view outside the D3D10 contract");
       SetError(hDevice, E_NOTIMPL);
       return;
    }
    /* D3D clears the supplied view even when it is not bound for drawing.
     * Asahi clear uses a framebuffer-keyed batch, so supply that view only
     * for the clear and restore the application's complete binding state. */
-   struct pipe_framebuffer_state clear_fb = {};
-   clear_fb.width = pipe_surface_width(surface);
-   clear_fb.height = pipe_surface_height(surface);
-   clear_fb.nr_cbufs = 1;
-   clear_fb.cbufs[0] = *surface;
-   pipe->set_framebuffer_state(pipe, &clear_fb);
-   pipe->clear(pipe, PIPE_CLEAR_COLOR0, 0xf, 0, NULL,
-               &clear_color, 0.0, 0);
+   for (unsigned layer = surface->first_layer; layer <= surface->last_layer; ++layer) {
+      struct pipe_framebuffer_state clear_fb = {};
+      struct pipe_surface slice = *surface;
+      slice.first_layer = slice.last_layer = layer;
+      clear_fb.width = pipe_surface_width(&slice);
+      clear_fb.height = pipe_surface_height(&slice);
+      clear_fb.nr_cbufs = 1;
+      clear_fb.cbufs[0] = slice;
+      pipe->set_framebuffer_state(pipe, &clear_fb);
+      pipe->clear(pipe, PIPE_CLEAR_COLOR0, 0xf, 0, NULL,
+                  &clear_color, 0.0, 0);
+   }
    pipe->set_framebuffer_state(pipe, &pDevice->fb);
    if (traceDevice) AgxD3d10WindowsDiagnosticState(traceDevice->windows, "clear-after");'''),
         ('''   struct pipe_context *pipe = CastPipeContext(hDevice);
@@ -1419,44 +1411,54 @@ SetRenderTargets(D3D10DDI_HDEVICE hDevice,'''),
    struct pipe_context *pipe = CastPipeContext(hDevice);
    struct pipe_surface *surface = CastPipeDepthStencilView(hDepthStencilView);
    struct pipe_resource *resource = surface ? surface->texture : NULL;
-   struct pipe_surface *bound = pDevice && pDevice->fb.zsbuf.texture ?
-      &pDevice->fb.zsbuf : NULL;
-   bool packed_depth_stencil = resource &&
-      (resource->format == PIPE_FORMAT_Z24_UNORM_S8_UINT ||
-       resource->format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT);
    /* D3D-G4: D3D clears depth, stencil or both (stencil only where the
-    * format has it) and clamps the depth value to [0, 1]. */
+    * format has it) and clamps the depth value to [0, 1].
+    * D3D-G10a: any depth-stencil view, bound or not (shadow maps are
+    * cleared before they are bound): any depth format, mip level and slice
+    * range, cleared slice by slice through a depth-only framebuffer. */
    unsigned clear_flags =
       ((Flags & D3D10_DDI_CLEAR_DEPTH) ? PIPE_CLEAR_DEPTH : 0u) |
-      (packed_depth_stencil && (Flags & D3D10_DDI_CLEAR_STENCIL) ?
-          PIPE_CLEAR_STENCIL : 0u);
+      (resource && util_format_has_stencil(util_format_description(resource->format)) &&
+       (Flags & D3D10_DDI_CLEAR_STENCIL) ? PIPE_CLEAR_STENCIL : 0u);
    if (!(Depth >= 0.0f)) Depth = 0.0f;
    if (Depth > 1.0f) Depth = 1.0f;
-   if (!pipe || !pipe->clear || !surface || !resource || !bound ||
-       !clear_flags ||
+   if (!pDevice || !pipe || !pipe->clear || !pipe->set_framebuffer_state ||
+       !surface || !resource || resource->target == PIPE_BUFFER ||
        (Flags & ~(UINT)(D3D10_DDI_CLEAR_DEPTH | D3D10_DDI_CLEAR_STENCIL)) ||
-       resource->target != PIPE_TEXTURE_2D ||
-       (resource->format != PIPE_FORMAT_Z32_FLOAT &&
-        resource->format != PIPE_FORMAT_Z16_UNORM &&
-        resource->format != PIPE_FORMAT_Z24_UNORM_S8_UINT &&
-        resource->format != PIPE_FORMAT_Z32_FLOAT_S8X24_UINT) ||
-       resource->nr_samples > 4 || resource->array_size != 1 ||
-       resource->last_level != 0 ||
-       util_format_linear(surface->format) != util_format_linear(resource->format) ||
-       surface->level != 0 || surface->first_layer != 0 ||
-       surface->last_layer != 0 || bound->texture != resource ||
-       bound->format != surface->format || bound->level != surface->level ||
-       bound->first_layer != surface->first_layer ||
-       bound->last_layer != surface->last_layer ||
-       pDevice->fb.width != pipe_surface_width(surface) ||
-       pDevice->fb.height != pipe_surface_height(surface)) {
-      LOG_UNSUPPORTED("ClearDepthStencilView requires one bound full admitted depth target");
+       !util_format_is_depth_or_stencil(resource->format) ||
+       resource->nr_samples > 4 || surface->last_layer < surface->first_layer) {
+      LOG_UNSUPPORTED("ClearDepthStencilView of a view outside the D3D10 contract");
       SetError(hDevice, E_NOTIMPL);
       return;
    }
+   if (!clear_flags)
+      return;
    union pipe_color_union color;
    memset(&color, 0, sizeof(color));
-   pipe->clear(pipe, clear_flags, 0, 0, NULL, &color, Depth, Stencil);''')])
+   /* The view bound whole as the framebuffer's depth target clears in the
+    * current batch (no extra render pass, the EXP1284 path). */
+   const struct pipe_surface *bound = &pDevice->fb.zsbuf;
+   if (bound->texture == resource && bound->format == surface->format &&
+       bound->level == surface->level &&
+       bound->first_layer == surface->first_layer &&
+       bound->last_layer == surface->last_layer &&
+       surface->first_layer == surface->last_layer &&
+       pDevice->fb.width == pipe_surface_width(surface) &&
+       pDevice->fb.height == pipe_surface_height(surface)) {
+      pipe->clear(pipe, clear_flags, 0, 0, NULL, &color, Depth, Stencil);
+      return;
+   }
+   for (unsigned layer = surface->first_layer; layer <= surface->last_layer; ++layer) {
+      struct pipe_framebuffer_state clear_fb = {};
+      struct pipe_surface slice = *surface;
+      slice.first_layer = slice.last_layer = layer;
+      clear_fb.width = pipe_surface_width(&slice);
+      clear_fb.height = pipe_surface_height(&slice);
+      clear_fb.zsbuf = slice;
+      pipe->set_framebuffer_state(pipe, &clear_fb);
+      pipe->clear(pipe, clear_flags, 0, 0, NULL, &color, Depth, Stencil);
+   }
+   pipe->set_framebuffer_state(pipe, &pDevice->fb);''')])
     change('src/gallium/frontends/d3d10umd/Query.cpp',
         '8456801b1614e79ad9ce307035a76a5f5f642eb83a40e4c066a8946f44d620b4',[
         ('#include "State.h"', '''#include "State.h"
@@ -2626,6 +2628,8 @@ enum pipe_format AgxD3d10LoweredTextureFormat(DXGI_FORMAT Format);''')])
       return PIPE_FORMAT_B5G6R5_UNORM;'''),
         ('#include "Format.h"','''#include "Format.h"
 
+extern "C" DXGI_FORMAT AgxD3d10WindowsCastParent(DXGI_FORMAT Format, UINT *ReadOnly);
+
 extern "C" BOOL AgxD3d10FormatViewCompatible(
    DXGI_FORMAT resource, DXGI_FORMAT view, BOOL depth, BOOL backbuffer)
 {
@@ -2638,31 +2642,12 @@ extern "C" BOOL AgxD3d10FormatViewCompatible(
          resource = DXGI_FORMAT_R8G8B8A8_TYPELESS;
    }
    if (resource == view) return FormatTranslate(view, depth) != PIPE_FORMAT_NONE;
-   if (resource == DXGI_FORMAT_B8G8R8A8_TYPELESS)
-      return !depth && (view == DXGI_FORMAT_B8G8R8A8_UNORM ||
-                        view == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB);
-   if (resource == DXGI_FORMAT_B8G8R8X8_TYPELESS)
-      return !depth && (view == DXGI_FORMAT_B8G8R8X8_UNORM ||
-                        view == DXGI_FORMAT_B8G8R8X8_UNORM_SRGB);
-   if (resource == DXGI_FORMAT_R8G8B8A8_TYPELESS)
-      return view == DXGI_FORMAT_R8G8B8A8_UNORM ||
-             view == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB ||
-             view == DXGI_FORMAT_R8G8B8A8_UINT ||
-             view == DXGI_FORMAT_R8G8B8A8_SNORM ||
-             view == DXGI_FORMAT_R8G8B8A8_SINT;
-   if (resource == DXGI_FORMAT_BC1_TYPELESS)
-      return view == DXGI_FORMAT_BC1_UNORM ||
-             view == DXGI_FORMAT_BC1_UNORM_SRGB;
-   if (resource == DXGI_FORMAT_BC2_TYPELESS)
-      return view == DXGI_FORMAT_BC2_UNORM ||
-             view == DXGI_FORMAT_BC2_UNORM_SRGB;
-   if (resource == DXGI_FORMAT_BC3_TYPELESS)
-      return view == DXGI_FORMAT_BC3_UNORM ||
-             view == DXGI_FORMAT_BC3_UNORM_SRGB;
-   if (resource == DXGI_FORMAT_BC4_TYPELESS)
-      return view == DXGI_FORMAT_BC4_UNORM || view == DXGI_FORMAT_BC4_SNORM;
-   if (resource == DXGI_FORMAT_BC5_TYPELESS)
-      return view == DXGI_FORMAT_BC5_UNORM || view == DXGI_FORMAT_BC5_SNORM;
+   /* D3D-G10a: a typeless resource admits a view in any format of its DXGI
+    * cast family (the winsys cast-family table, which also decides the
+    * multisample reporting); a fully typed resource only its own format. */
+   if (AgxD3d10WindowsCastParent(resource, NULL) == resource &&
+       AgxD3d10WindowsCastParent(view, NULL) == resource)
+      return FormatTranslate(view, depth) != PIPE_FORMAT_NONE;
    return FALSE;
 }
 
@@ -3204,38 +3189,36 @@ AgxD3d10ResourceWithinRequiredLimits(
       pResource->resource = screen->resource_create(screen, &templat);
    } else if (pCreateResource->BindFlags & D3D10_DDI_BIND_RENDER_TARGET) {
       const D3D10DDI_MIPINFO *mip = pCreateResource->pMipInfoList;
-      bool bgr_auto=pCreateResource->MiscFlags==D3D10_DDI_RESOURCE_AUTO_GEN_MIP_MAP &&
-         (AgxD3d10CopyFamily(pCreateResource->Format)==1 || AgxD3d10CopyFamily(pCreateResource->Format)==2) &&
-         pCreateResource->BindFlags==(D3D10_DDI_BIND_RENDER_TARGET|D3D10_DDI_BIND_SHADER_RESOURCE);
-      bool private_rt = (pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE2D ||
-         (bgr_auto && (pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE1D ||
-          pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE3D ||
-          pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURECUBE))) &&
-         (AgxD3d10ColorBytes(pCreateResource->Format) != 0 ||
-          pCreateResource->Format == DXGI_FORMAT_R8G8B8A8_TYPELESS) &&
-         (pCreateResource->MipLevels == 1 || bgr_auto) &&
-         (pCreateResource->ArraySize == 1 || bgr_auto) && mip &&
-         mip[0].TexelWidth > 0 && mip[0].TexelHeight > 0 &&
-         (mip[0].TexelDepth == 1 || bgr_auto) &&
-         /* AgxD3d10ResourceWithinRequiredLimits already checked dimensions,
-          * complete byte size and overflow against the pinned D3D10 limits. */
-         /* D3D-G5: 2x/4x single-level 2D targets. */
+      /* D3D-G10a: the D3D10 render-target contract replaces the bring-up
+       * admission (2D, one level, one slice, a format list). The format and
+       * bind flags were checked against the screen above; dimensions and
+       * byte size against the pinned D3D10 limits
+       * (AgxD3d10ResourceWithinRequiredLimits). Any dimension, mip chain and
+       * array size; multisampling only for single-level 2D (arrays too);
+       * DEFAULT usage without CPU access; RT alone or with SRV;
+       * AUTO_GEN_MIP_MAP only with RT|SRV; initial data only single-sampled. */
+      bool autogen = pCreateResource->MiscFlags == D3D10_DDI_RESOURCE_AUTO_GEN_MIP_MAP;
+      bool private_rt = mip && mip[0].TexelWidth > 0 && mip[0].TexelHeight > 0 &&
+         mip[0].TexelDepth > 0 &&
          (pCreateResource->SampleDesc.Count == 1 ||
           ((pCreateResource->SampleDesc.Count == 2 || pCreateResource->SampleDesc.Count == 4) &&
            pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE2D &&
-           pCreateResource->MipLevels == 1 && pCreateResource->ArraySize == 1 && !bgr_auto)) &&
+           pCreateResource->MipLevels == 1)) &&
          pCreateResource->SampleDesc.Quality == 0 &&
          pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT && pCreateResource->MapFlags == 0 &&
          (pCreateResource->BindFlags == D3D10_DDI_BIND_RENDER_TARGET ||
           pCreateResource->BindFlags == (D3D10_DDI_BIND_RENDER_TARGET |
               D3D10_DDI_BIND_SHADER_RESOURCE)) &&
-         (pCreateResource->MiscFlags == 0 || bgr_auto) && !pCreateResource->pPrimaryDesc &&
+         (pCreateResource->MiscFlags == 0 ||
+          (autogen && pCreateResource->BindFlags == (D3D10_DDI_BIND_RENDER_TARGET |
+              D3D10_DDI_BIND_SHADER_RESOURCE))) &&
+         !pCreateResource->pPrimaryDesc &&
          /* EXP1284: D3D allows initial data for render targets; the
           * upstream texture-map upload below writes it. Multisampled
           * targets take no initial data (D3D). */
          (!pCreateResource->pInitialDataUP || pCreateResource->SampleDesc.Count == 1);
       if (!private_rt || !screen->resource_create_with_modifiers) {
-         LOG_UNSUPPORTED("Only a private uncompressed admitted render target is supported");
+         LOG_UNSUPPORTED("A render target outside the D3D10 contract");
          SetError(hDevice, E_NOTIMPL);
          return;
       }
@@ -3244,33 +3227,35 @@ AgxD3d10ResourceWithinRequiredLimits(
          screen, &templat, &modifier, 1);
    } else if (pCreateResource->BindFlags & D3D10_DDI_BIND_DEPTH_STENCIL) {
       const D3D10DDI_MIPINFO *mip = pCreateResource->pMipInfoList;
-      bool private_depth =
-         pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE2D &&
-         (pCreateResource->Format == DXGI_FORMAT_D32_FLOAT ||
-          pCreateResource->Format == DXGI_FORMAT_D16_UNORM ||
-          pCreateResource->Format == DXGI_FORMAT_D24_UNORM_S8_UINT ||
-          pCreateResource->Format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT) &&
-         pCreateResource->MipLevels == 1 && pCreateResource->ArraySize == 1 && mip &&
-         mip[0].TexelWidth > 0 && mip[0].TexelHeight > 0 && mip[0].TexelDepth == 1 &&
-         /* D3D-G4: AgxD3d10ResourceWithinRequiredLimits already checked the
-          * dimensions and byte size against the pinned D3D10 limits; the old
-          * 4096^2 / 1 MiB bound was the physical patch-list class size.
-          * D3D-G5: 2x/4x depth targets. */
-         (pCreateResource->SampleDesc.Count == 1 || pCreateResource->SampleDesc.Count == 2 ||
-          pCreateResource->SampleDesc.Count == 4) &&
+      /* D3D-G10a: the D3D10 depth-stencil contract: 1D, 2D and cube
+       * targets (arrays too) in any format the screen takes as depth/stencil
+       * (typeless families included: FormatTranslate with the depth bind),
+       * mip chains, multisampling for single-level 2D, DS alone or with SRV
+       * (shadow maps), DEFAULT usage without CPU access or initial data. */
+      bool private_depth = mip && mip[0].TexelWidth > 0 && mip[0].TexelHeight > 0 &&
+         mip[0].TexelDepth == 1 &&
+         (pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE1D ||
+          pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE2D ||
+          pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURECUBE) &&
+         util_format_is_depth_or_stencil(templat.format) &&
+         (pCreateResource->SampleDesc.Count == 1 ||
+          ((pCreateResource->SampleDesc.Count == 2 || pCreateResource->SampleDesc.Count == 4) &&
+           pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE2D &&
+           pCreateResource->MipLevels == 1)) &&
          pCreateResource->SampleDesc.Quality == 0 &&
          pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT &&
          pCreateResource->MapFlags == 0 &&
-         pCreateResource->BindFlags == D3D10_DDI_BIND_DEPTH_STENCIL &&
+         (pCreateResource->BindFlags == D3D10_DDI_BIND_DEPTH_STENCIL ||
+          pCreateResource->BindFlags == (D3D10_DDI_BIND_DEPTH_STENCIL |
+              D3D10_DDI_BIND_SHADER_RESOURCE)) &&
          pCreateResource->MiscFlags == 0 && !pCreateResource->pPrimaryDesc &&
          !pCreateResource->pInitialDataUP;
       if (!private_depth || !screen->resource_create_with_modifiers) {
-         LOG_UNSUPPORTED("Only a private uncompressed D16/D32 depth target is admitted");
+         LOG_UNSUPPORTED("A depth-stencil target outside the D3D10 contract");
          SetError(hDevice, E_NOTIMPL);
          return;
       }
-      if(pCreateResource->Format==DXGI_FORMAT_D24_UNORM_S8_UINT ||
-         pCreateResource->Format==DXGI_FORMAT_D32_FLOAT_S8X24_UINT) {
+      if(util_format_is_depth_and_stencil(templat.format)) {
          pResource->resource=AgxWin32AsahiCreateUncompressedDepthStencil(
             screen,&templat);
       } else {

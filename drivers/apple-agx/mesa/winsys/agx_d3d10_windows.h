@@ -80,6 +80,10 @@ BOOL AgxD3d10WindowsDiagnosticSwitch(const char *Name);
 UINT AgxD3d10WindowsMsaaProbe(VOID);
 BOOL AgxD3d10WindowsMsaaFormat(DXGI_FORMAT Format, UINT Probe);
 BOOL AgxD3d10WindowsMsaaRenderTarget(DXGI_FORMAT Format, UINT Probe);
+/* D3D-G10a: the DXGI cast family of Format (its typeless parent; a parent
+ * names itself), DXGI_FORMAT_UNKNOWN for a format without one; ReadOnly is
+ * set for members that cannot be render or depth targets. */
+DXGI_FORMAT AgxD3d10WindowsCastParent(DXGI_FORMAT Format, UINT *ReadOnly);
 VOID AgxD3d10WindowsMsaaReceipt(UINT Kind, UINT Format, UINT SampleCount,
                                 UINT Answer);
 HRESULT AgxD3d10WindowsFlushStatus(AGX_D3D10_WINDOWS_DEVICE *Device);
