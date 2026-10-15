@@ -864,7 +864,16 @@ struct AgxDdiTimer {
    /* D3D-H2b: a compute shader's thread-group size (dcl_thread_group),
     * the block every Dispatch launches. */
    UINT agx_block[3];
-};'''),
+   /* D3D-H5: an SM 5 vertex shader's tokens (it has no TGSI record), the
+    * source of its stream-output variant. */
+   UINT *agx_code;
+};
+
+/* D3D-H5: a vertex or geometry shader state with stream output from the
+ * DXBC -> NIR translator (registers are D3D output registers). */
+void *AgxD3d10CreateXfbState(struct pipe_context *pipe, Shader *shader,
+                             const UINT *code,
+                             const struct pipe_stream_output_info *so);'''),
         ('struct pipe_screen *screen;',
          'AGX_D3D10_WINDOWS_ADAPTER *windows;'),
         ('struct pipe_context *pipe;','''struct pipe_context *pipe;
@@ -2398,6 +2407,11 @@ UnsupportedDxgi''')
       pipe->delete_vs_state(pipe, pShader->so_vs_handle);
       pShader->so_vs_handle = NULL;
    }
+   /* D3D-H5: an SM 5 vertex shader's tokens */
+   if (pShader->type == MESA_SHADER_VERTEX) {
+      free(pShader->agx_code);
+      pShader->agx_code = NULL;
+   }
    if (pShader->handle) {
       switch (pShader->type) {
       case MESA_SHADER_FRAGMENT:'''),
@@ -2483,8 +2497,14 @@ AGX_D3D11_STAGE_SETTERS(Ds, MESA_SHADER_TESS_EVAL)
     * binds a vertex-shader variant carrying this stream output instead. */
    pShader->so_vs_handle = NULL;
    pShader->so_vs_serial = 0;
+   /* D3D-H5: SM 5 code has no TGSI record; the translator captures. */
    pShader->handle = pShader->state.tokens ?
-      pipe->create_gs_state(pipe, &pShader->state) : NULL;
+      pipe->create_gs_state(pipe, &pShader->state) :
+      AgxD3d10ShaderModel5(pData->pShaderCode) ?
+      AgxD3d10CreateXfbState(pipe, pShader, pData->pShaderCode,
+                             &pShader->state.stream_output) : NULL;
+   if (pData->pShaderCode && !pShader->handle)
+      SetError(hDevice, E_INVALIDARG);
 }'''),
         ('''   if (pShader && !pShader->state.tokens) {
       pDevice->bound_empty_gs = pShader;
@@ -2504,7 +2524,8 @@ AGX_D3D11_STAGE_SETTERS(Ds, MESA_SHADER_TESS_EVAL)
    }'''),
         ('''   pDevice->bound_vs = pShader;
    if (!state) {''','''   pDevice->bound_vs = pShader;
-   if (pShader && pShader->state.tokens && !pShader->agx_serial)
+   if (pShader && (pShader->state.tokens || pShader->agx_code) &&
+       !pShader->agx_serial)
       pShader->agx_serial = ++pDevice->agx_shader_serial;
    if (!state) {'''),
         ('#include "util/u_gen_mipmap.h"', '#include "util/u_gen_mipmap.h"\n#include "drm-uapi/drm_fourcc.h"'),
@@ -2594,13 +2615,18 @@ AGX_D3D11_STAGE_SETTERS(Ds, MESA_SHADER_TESS_EVAL)
    if(soValid&&soSlots==1u)
       soValid=!(pData->StreamOutputStrideInBytes&3u)&&
          pData->StreamOutputStrideInBytes>=4u*soComponents;
-   /* D3D-H5: stream output keeps the TGSI path, which parses SM 4 only. */
-   if(soValid&&AgxD3d10ShaderModel5(pData->pShaderCode))
-      soValid=false;
    if(!soValid) {
       SetError(hDevice,E_NOTIMPL);return;
    }
    LOG_ENTRYPOINT();'''),
+        # D3D-H5: SM 5 code never reaches the SM 4 parser.
+        ('''   if (pData->pShaderCode) {
+      pShader->state.tokens = Shader_tgsi_translate(pData->pShaderCode,
+                                                    pShader->output_mapping);
+   }''','''   if (pData->pShaderCode && !AgxD3d10ShaderModel5(pData->pShaderCode)) {
+      pShader->state.tokens = Shader_tgsi_translate(pData->pShaderCode,
+                                                    pShader->output_mapping);
+   }'''),
         ('''CreateShaderResourceView(
    D3D10DDI_HDEVICE hDevice,                                                     // IN
    __in const D3D10DDIARG_CREATESHADERRESOURCEVIEW *pCreateSRView,   // IN
@@ -2869,16 +2895,62 @@ AgxD3d10CreateShaderState(struct pipe_context *pipe, Shader *shader,
    default: return pipe->create_fs_state(pipe, &state);
    }
 }
+
+void *
+AgxD3d10CreateXfbState(struct pipe_context *pipe, Shader *shader,
+                       const UINT *code, const struct pipe_stream_output_info *so)
+{
+   struct dxbc_nir_xfb xfb = {};
+   struct dxbc_nir_error error = {};
+   if (!code || !so || !so->num_outputs || so->num_outputs > DXBC_NIR_MAX_XFB_OUTPUTS ||
+       (shader->type != MESA_SHADER_VERTEX && shader->type != MESA_SHADER_GEOMETRY))
+      return NULL;
+   xfb.num_outputs = so->num_outputs;
+   for (unsigned i = 0; i < so->num_outputs; ++i) {
+      const struct pipe_stream_output *o = &so->output[i];
+      xfb.outputs[i].reg = o->register_index;
+      xfb.outputs[i].start_component = (uint8_t)o->start_component;
+      xfb.outputs[i].num_components = (uint8_t)o->num_components;
+      xfb.outputs[i].buffer = (uint8_t)o->output_buffer;
+      xfb.outputs[i].stream = (uint8_t)o->stream;
+      xfb.outputs[i].dst_offset = o->dst_offset;
+   }
+   for (unsigned b = 0; b < DXBC_NIR_MAX_XFB_BUFFERS && b < PIPE_MAX_SO_BUFFERS; ++b)
+      xfb.stride[b] = so->stride[b];
+   struct nir_shader *nir = dxbc_translate_tokens_xfb(code,
+      pipe->screen->nir_options[shader->type], &xfb, &error);
+   UINT values[4] = {(UINT)shader->type, nir ? 1u : 0u, error.opcode, error.offset};
+   AgxD3d10WindowsDiagnostic("measure-shader-nir-xfb", nir ? S_OK : E_NOTIMPL, values, 4u);
+   if (!nir)
+      return NULL;
+   struct pipe_shader_state state = {};
+   state.type = PIPE_SHADER_IR_NIR;
+   state.ir.nir = nir;
+   return shader->type == MESA_SHADER_VERTEX ? pipe->create_vs_state(pipe, &state) :
+                                               pipe->create_gs_state(pipe, &state);
+}
 '''),
         ('''   pShader->state.tokens = Shader_tgsi_translate(pCode, pShader->output_mapping);
 
    pShader->handle = pipe->create_vs_state(pipe, &pShader->state);
-''','''   pShader->state.tokens = AgxD3d10ShaderModel5(pCode) ? NULL :
+''','''   pShader->agx_code = NULL;
+   pShader->state.tokens = AgxD3d10ShaderModel5(pCode) ? NULL :
       Shader_tgsi_translate(pCode, pShader->output_mapping);
 
    pShader->handle = AgxD3d10CreateShaderState(pipe, pShader, pCode);
-   if (!pShader->handle)
+   if (!pShader->handle) {
       SetError(hDevice, E_INVALIDARG);
+   } else if (AgxD3d10ShaderModel5(pCode)) {
+      /* the source of a stream-output variant (an empty GS) */
+      pShader->agx_code = (UINT *)malloc((size_t)pCode[1] * sizeof(UINT));
+      if (pShader->agx_code) {
+         memcpy(pShader->agx_code, pCode, (size_t)pCode[1] * sizeof(UINT));
+      } else {
+         pipe->delete_vs_state(pipe, pShader->handle);
+         pShader->handle = NULL;
+         SetError(hDevice, E_OUTOFMEMORY);
+      }
+   }
 '''),
         ('''   pShader->state.tokens = Shader_tgsi_translate(pShaderCode, pShader->output_mapping);
 
@@ -3215,19 +3287,26 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
     * passthrough GS (agx_needs_passthrough_gs). Upstream created a GS state
     * without tokens, which the Asahi driver cannot take. */
    if (pDevice->bound_empty_gs && pDevice->bound_vs &&
-       pDevice->bound_vs->state.tokens) {
+       (pDevice->bound_vs->state.tokens || pDevice->bound_vs->agx_code)) {
       Shader *gs = pDevice->bound_empty_gs;
       Shader *vs = pDevice->bound_vs;
       struct pipe_context *pipe = pDevice->pipe;
       if (!gs->so_vs_handle || gs->so_vs_serial != vs->agx_serial) {
          if (gs->so_vs_handle)
             pipe->delete_vs_state(pipe, gs->so_vs_handle);
-         struct pipe_shader_state variant = vs->state;
-         variant.stream_output = gs->state.stream_output;
-         for (unsigned i = 0; i < variant.stream_output.num_outputs; ++i)
-            variant.stream_output.output[i].register_index = ShaderFindOutputMapping(
-               vs, gs->state.stream_output.output[i].register_index);
-         gs->so_vs_handle = pipe->create_vs_state(pipe, &variant);
+         if (vs->state.tokens) {
+            struct pipe_shader_state variant = vs->state;
+            variant.stream_output = gs->state.stream_output;
+            for (unsigned i = 0; i < variant.stream_output.num_outputs; ++i)
+               variant.stream_output.output[i].register_index = ShaderFindOutputMapping(
+                  vs, gs->state.stream_output.output[i].register_index);
+            gs->so_vs_handle = pipe->create_vs_state(pipe, &variant);
+         } else {
+            /* D3D-H5: an SM 5 vertex shader (no TGSI record) captures
+             * through the translator; the declaration names D3D registers. */
+            gs->so_vs_handle = AgxD3d10CreateXfbState(pipe, vs, vs->agx_code,
+                                                      &gs->state.stream_output);
+         }
          gs->so_vs_serial = vs->agx_serial;
       }
       pipe->bind_gs_state(pipe, NULL);
