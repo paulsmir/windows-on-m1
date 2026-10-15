@@ -68,11 +68,20 @@ static const char vs_full[] =
     "float4 main(uint id : SV_VertexID) : SV_Position {\n"
     "  return float4(id == 1 ? 3.0 : -1.0, id == 2 ? -3.0 : 1.0, 0, 1);\n"
     "}\n";
-/* ps_4_0 needs the sample count in the type (X4539): %u is the count */
+/* ps_4_0 needs the sample count in the type (X4539) and a literal sample
+ * index (X4566, EXP1297): %u is the count; the cbuffer selects one of the
+ * literal loads (the 2x build reads samples 0..1 only) */
 static const char ps_probe_format[] =
     "Texture2DMS<float4, %u> m : register(t0);\n"
     "cbuffer P : register(b1) { uint4 s; };\n"
-    "float4 main(float4 p : SV_Position) : SV_Target { return m.Load(int2(p.xy), s.x); }\n";
+    "float4 main(float4 p : SV_Position) : SV_Target {\n"
+    "  int2 c = int2(p.xy); float4 r = m.Load(c, 0);\n"
+    "  if (s.x == 1) r = m.Load(c, 1);\n"
+    "%s"
+    "  return r; }\n";
+static const char ps_probe_four[] =
+    "  if (s.x == 2) r = m.Load(c, 2);\n"
+    "  if (s.x == 3) r = m.Load(c, 3);\n";
 
 static ID3DBlob *compile(pD3DCompile fn, const char *src, size_t len, const char *target) {
   ID3DBlob *code = NULL, *errors = NULL;
@@ -237,8 +246,9 @@ int main(int argc, char **argv) {
     D3D11_TEXTURE2D_DESC td;
     D3D11_SHADER_RESOURCE_VIEW_DESC sd;
     D3D11_BUFFER_DESC bd;
-    char ps_probe[256];
-    int ps_probe_len = snprintf(ps_probe, sizeof(ps_probe), ps_probe_format, samples);
+    char ps_probe[512];
+    int ps_probe_len = snprintf(ps_probe, sizeof(ps_probe), ps_probe_format, samples,
+                                samples == 4u ? ps_probe_four : "");
     ID3DBlob *a = compile(compile_fn, vs_full, sizeof(vs_full) - 1, "vs_4_0");
     ID3DBlob *b = compile(compile_fn, ps_probe, (size_t)ps_probe_len, "ps_4_0");
     if (!a || !b) return 1;
