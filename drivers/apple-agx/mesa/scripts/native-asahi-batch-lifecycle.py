@@ -599,6 +599,14 @@ AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *backend, AGX_WIN32_SCREEN *wi
     * D3D-G5: the D3D UMD (Backend.Multisample) advertises 2x/4x, which the
     * KMD encodes (utile_config log2, tib_blocks). */
    if (!backend->Multisample) agx_screen->dev.debug |= AGX_DBG_NOMSAA;
+   /* The Linux driver's ASAHI_MESA_DEBUG=nocompress (agx_open_device, which
+    * this Windows screen does not call): no lossless compression for the
+    * resources this process creates (EXP1292 MSAA diagnosis). */
+   {
+      const char *asahi_debug = getenv("ASAHI_MESA_DEBUG");
+      if (asahi_debug && strstr(asahi_debug, "nocompress"))
+         agx_screen->dev.debug |= AGX_DBG_NOCOMPRESS;
+   }
    /* GL_RENDERER / adapter name: Linux builds it from the kernel's
     * parameters (agx_device.c); the compiled Windows contract is G13G. */
    snprintf(agx_screen->dev.name, sizeof(agx_screen->dev.name), "Apple M1 (G13G)");
