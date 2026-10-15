@@ -892,6 +892,8 @@ void *AgxD3d10CreateXfbState(struct pipe_context *pipe, Shader *shader,
    AGX_D3D10_WINDOWS_DEVICE *windows;
    HRESULT cleanup_result;
    bool frontend_ready;
+   /* The 10.0 DDI keeps the legacy MultisampleEnable triangle rule. */
+   bool agx_d3d10_0_interface;
    /* EXP994: D3D disables depth/stencil while no DSV is bound. */
    void *app_dsa;
    void *no_depth_dsa;
@@ -1130,6 +1132,10 @@ AgxResolveSharedResource(DXGI_DDI_ARG_RESOLVESHAREDRESOURCE *args)
    }
    struct pipe_screen *screen = pipe->screen;
    pDevice->pipe = pipe;
+   pDevice->agx_d3d10_0_interface =
+      pCreateData->Interface == D3D10_0_DDI_INTERFACE_VERSION ||
+      pCreateData->Interface == D3D10_0_x_DDI_INTERFACE_VERSION ||
+      pCreateData->Interface == D3D10_0_7_DDI_INTERFACE_VERSION;
    pDevice->cso = cso_create_context(pipe, CSO_NO_VBUF);
    if (!pDevice->cso) {
       BOOL consumed = FALSE;
@@ -1402,6 +1408,20 @@ void APIENTRY
       AgxD3d10WindowsPresentMeasure(AdmissionUmdMeasureNativeFlushStage,result,stage,1u);
    }
    if (FAILED(result)) SetError(hDevice, result);''')
+    change('src/gallium/frontends/d3d10umd/Rasterizer.cpp',
+        'ac147983d5e22231be020606d395278a07fd7f8222297102ba5fd5baf237cd0d',[
+        ('''   state.line_smooth = (pRasterizerDesc->AntialiasedLineEnable ? 1 : 0);''',
+         '''   /* D3D10.1+/11: MultisampleEnable selects the line algorithm.
+    * D3D10.0 keeps its legacy all-primitives switch. */
+   Device *pDevice = CastDevice(hDevice);
+   state.line_smooth = !pDevice->agx_d3d10_0_interface &&
+                       !pRasterizerDesc->MultisampleEnable &&
+                       pRasterizerDesc->AntialiasedLineEnable;'''),
+        ('''   state.multisample = /* pRasterizerDesc->MultisampleEnable */ 0;''',
+         '''   state.multisample = !pDevice->agx_d3d10_0_interface ||
+                       pRasterizerDesc->MultisampleEnable;'''),
+        ('''   state.line_rectangular = 0;''',
+         '''   state.line_rectangular = pRasterizerDesc->MultisampleEnable ? 1 : 0;''')])
     change('src/gallium/frontends/d3d10umd/OutputMerger.cpp',
         'fefcbe8754fd1042b7bf091feab767844cc71a8fe4cbe9f0b41d76dc9dd4fd04',[
         # EXP994: D3D10/11 disable depth and stencil tests while no depth-
