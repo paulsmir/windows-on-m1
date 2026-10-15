@@ -2636,6 +2636,67 @@ UnsupportedDxgi''')
    pShader->agx_serial = 0;
    pShader->so_vs_handle = NULL;
    pShader->so_vs_serial = 0;
+'''),
+        ('''#include "util/u_gen_mipmap.h"
+#include "drm-uapi/drm_fourcc.h"
+''','''#include "util/u_gen_mipmap.h"
+#include "drm-uapi/drm_fourcc.h"
+#include "dxbc_to_nir.h"
+extern "C" VOID AgxD3d10WindowsDiagnostic(PCSTR Stage, HRESULT Status,
+                              const UINT *Values, UINT Count);
+extern "C" BOOL AgxD3d10WindowsDiagnosticSwitch(const char *Name);
+
+/* D3D-H3: with APPLE_AGX_D3D_SHADER_NIR=1 in the process environment the
+ * pipe shader state comes from the DXBC -> NIR translator
+ * (drivers/apple-agx/mesa/dxbc). The TGSI tokens stay the frontend's
+ * record (output mapping, stream-output variants) and the state for every
+ * program the translator refuses; stream-output shaders keep TGSI, whose
+ * xfb rebuild Asahi's state creation owns. */
+static void *
+AgxD3d10CreateShaderState(struct pipe_context *pipe, Shader *shader,
+                          const UINT *code)
+{
+   struct pipe_shader_state state = shader->state;
+   if (code && !state.stream_output.num_outputs &&
+       AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D_SHADER_NIR")) {
+      struct dxbc_nir_error error = {};
+      struct nir_shader *nir = dxbc_translate_tokens(code,
+         pipe->screen->nir_options[shader->type], &error);
+      UINT values[4] = {(UINT)shader->type, nir ? 1u : 0u, error.opcode, error.offset};
+      AgxD3d10WindowsDiagnostic("measure-shader-nir", nir ? S_OK : E_NOTIMPL, values, 4u);
+      if (nir) {
+         state.type = PIPE_SHADER_IR_NIR;
+         state.tokens = NULL;
+         state.ir.nir = nir;
+      }
+   }
+   switch (shader->type) {
+   case MESA_SHADER_VERTEX: return pipe->create_vs_state(pipe, &state);
+   case MESA_SHADER_GEOMETRY: return pipe->create_gs_state(pipe, &state);
+   default: return pipe->create_fs_state(pipe, &state);
+   }
+}
+'''),
+        ('''   pShader->state.tokens = Shader_tgsi_translate(pCode, pShader->output_mapping);
+
+   pShader->handle = pipe->create_vs_state(pipe, &pShader->state);
+''','''   pShader->state.tokens = Shader_tgsi_translate(pCode, pShader->output_mapping);
+
+   pShader->handle = AgxD3d10CreateShaderState(pipe, pShader, pCode);
+'''),
+        ('''   pShader->state.tokens = Shader_tgsi_translate(pShaderCode, pShader->output_mapping);
+
+   pShader->handle = pipe->create_gs_state(pipe, &pShader->state);
+''','''   pShader->state.tokens = Shader_tgsi_translate(pShaderCode, pShader->output_mapping);
+
+   pShader->handle = AgxD3d10CreateShaderState(pipe, pShader, pShaderCode);
+'''),
+        ('''                                                 pShader->output_mapping);
+
+   pShader->handle = pipe->create_fs_state(pipe, &pShader->state);
+''','''                                                 pShader->output_mapping);
+
+   pShader->handle = AgxD3d10CreateShaderState(pipe, pShader, pShaderCode);
 ''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','SetSamplers','''   Device *pDevice = CastDevice(hDevice);
    const UINT slots = D3D10_COMMONSHADER_SAMPLER_SLOT_COUNT;

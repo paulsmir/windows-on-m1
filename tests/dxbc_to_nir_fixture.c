@@ -63,16 +63,8 @@ main(int argc, char **argv)
    if (print)
       nir_print_shader(nir, stdout);
 
-   /* tgsi_to_nir's ttn_finalize_nir (screen-independent part) */
-   NIR_PASS(_, nir, nir_lower_continue_constructs);
-   NIR_PASS(_, nir, nir_lower_returns);
-   NIR_PASS(_, nir, nir_lower_vars_to_ssa);
-   NIR_PASS(_, nir, nir_lower_reg_intrinsics_to_ssa);
-   NIR_PASS(_, nir, nir_lower_global_vars_to_local);
-   NIR_PASS(_, nir, nir_split_var_copies);
-   NIR_PASS(_, nir, nir_lower_var_copies);
-   NIR_PASS(_, nir, nir_lower_system_values);
-   nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+   /* the frontend's finalization (tgsi_to_nir's sequence) */
+   dxbc_nir_finalize(nir);
    nir_validate_shader(nir, "finalize");
 
    /* agx_shader_initialize: I/O lowering, then agx_preprocess_nir */

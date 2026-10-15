@@ -36,6 +36,20 @@ dxbc_to_nir(const struct dxbc_program *program,
             const struct nir_shader_compiler_options *options,
             struct dxbc_nir_error *error);
 
+/* The finalization tgsi_to_nir applies before handing NIR to a driver
+ * without screen->finalize_nir (Asahi): lower returns and continue
+ * constructs, registers and variables to SSA, system values, then a
+ * standard optimization loop; the shader info is gathered and validated. */
+void dxbc_nir_finalize(struct nir_shader *nir);
+
+/* Parse a tokenized program (version and length tokens first), translate
+ * and finalize it.  NULL when the program is malformed (error->opcode is
+ * 0x10000 | the dxbc_status) or not handled yet. */
+struct nir_shader *
+dxbc_translate_tokens(const uint32_t *tokens,
+                      const struct nir_shader_compiler_options *options,
+                      struct dxbc_nir_error *error);
+
 #ifdef __cplusplus
 }
 #endif

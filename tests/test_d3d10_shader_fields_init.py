@@ -79,7 +79,8 @@ class ShaderFieldsInit(unittest.TestCase):
             for name in CREATORS:
                 body = function_body(shader, name)
                 first_state = min(i for i in (body.find("create_vs_state"), body.find("create_gs_state"),
-                                              body.find("create_fs_state")) if i >= 0)
+                                              body.find("create_fs_state"),
+                                              body.find("AgxD3d10CreateShaderState(")) if i >= 0)
                 for field in FIELDS:
                     with self.subTest(creator=name, field=field):
                         m = re.search(r"pShader->" + field + r"\s*=", body)

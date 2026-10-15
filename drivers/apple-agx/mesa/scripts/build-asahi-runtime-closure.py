@@ -49,6 +49,9 @@ FRONTEND_CPP = ('Adapter.cpp','Debug.cpp','Device.cpp','Draw.cpp','DxgiFns.cpp',
                 'Format.cpp','InputAssembly.cpp','OutputMerger.cpp','Query.cpp',
                 'Rasterizer.cpp','Resource.cpp','Shader.cpp','ShaderDump.cpp')
 FRONTEND_C = ('ShaderParse.c','ShaderTGSI.c')
+# D3D-H3: the DXBC parser and DXBC -> NIR translator (drivers/apple-agx/mesa/dxbc)
+# the frontend uses behind APPLE_AGX_D3D_SHADER_NIR.
+DXBC_C = ('dxbc_parse.c','dxbc_to_nir.c')
 # Actual Gallium helpers required by native context/resource/state construction.
 # Further additions must follow real compile/link diagnostics, not dummy symbols.
 AUX_UNITS = ('util/u_framebuffer.c', 'util/u_helpers.c', 'util/u_prim.c',
@@ -369,6 +372,7 @@ def main():
                     native / 'src/asahi/layout', native / 'src/asahi/compiler',
                     native / 'src/asahi/libagx', native / 'src/gallium/drivers/asahi',
                     args.project / 'drivers/apple-agx/mesa/winsys',
+                    args.project / 'drivers/apple-agx/mesa/dxbc',
                     args.project / 'drivers/apple-agx/shared/include',
                     Path(r'C:\Users\pauls\AD04-uatomic\include'),
                     evidence / 'src', evidence / 'src/asahi/compiler',
@@ -433,6 +437,7 @@ def main():
                     for name in (GPUVA_BRIDGES if args.gpuva else BRIDGES)]
         runtime += [native / 'src/gallium/frontends/d3d10umd' / name
                     for name in FRONTEND_CPP + FRONTEND_C]
+        runtime += [args.project / 'drivers/apple-agx/mesa/dxbc' / name for name in DXBC_C]
         generated_c = OWNER_GENERATED / 'src/asahi/lib/libagx_shaders.c'
         record(generated_c, kind='native-generated-source')
         # Quoted includes must resolve beside the accepted projected header,

@@ -8,6 +8,7 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "nir.h"
@@ -1645,5 +1646,68 @@ dxbc_to_nir(const struct dxbc_program *program,
       if (c->res[i].declared)
          nir->info.num_textures = i + 1;
    free(c);
+   return nir;
+}
+
+void
+dxbc_nir_finalize(nir_shader *nir)
+{
+   bool progress;
+
+   NIR_PASS(_, nir, nir_lower_continue_constructs);
+   NIR_PASS(_, nir, nir_lower_returns);
+   NIR_PASS(_, nir, nir_lower_vars_to_ssa);
+   NIR_PASS(_, nir, nir_lower_reg_intrinsics_to_ssa);
+   NIR_PASS(_, nir, nir_lower_global_vars_to_local);
+   NIR_PASS(_, nir, nir_split_var_copies);
+   NIR_PASS(_, nir, nir_lower_var_copies);
+   NIR_PASS(_, nir, nir_lower_system_values);
+   NIR_PASS(_, nir, nir_lower_compute_system_values, NULL);
+   do {
+      progress = false;
+      NIR_PASS(progress, nir, nir_lower_vars_to_ssa);
+      NIR_PASS(progress, nir, nir_opt_copy_prop_vars);
+      NIR_PASS(progress, nir, nir_opt_dead_write_vars);
+      NIR_PASS(progress, nir, nir_opt_copy_prop);
+      NIR_PASS(progress, nir, nir_opt_remove_phis);
+      NIR_PASS(progress, nir, nir_opt_dce);
+      NIR_PASS(progress, nir, nir_opt_dead_cf);
+      NIR_PASS(progress, nir, nir_opt_cse);
+      NIR_PASS(progress, nir, nir_opt_algebraic);
+      NIR_PASS(progress, nir, nir_opt_constant_folding);
+   } while (progress);
+   nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+   nir_validate_shader(nir, "dxbc_nir_finalize");
+}
+
+struct nir_shader *
+dxbc_translate_tokens(const uint32_t *tokens,
+                      const struct nir_shader_compiler_options *options,
+                      struct dxbc_nir_error *error)
+{
+   static struct dxbc_nir_error ignored;
+   struct dxbc_program program;
+   struct dxbc_error perr;
+   enum dxbc_status status;
+   nir_shader *nir;
+
+   if (!error)
+      error = &ignored;
+   memset(error, 0, sizeof(*error));
+   if (!tokens || !options) {
+      error->opcode = 0x10000u | DXBC_ERROR_TRUNCATED;
+      return NULL;
+   }
+   status = dxbc_parse_program(tokens, tokens[1], &program, &perr);
+   if (status != DXBC_OK) {
+      snprintf(error->message, sizeof(error->message), "parse status %d", status);
+      error->opcode = 0x10000u | (uint32_t)status;
+      error->offset = perr.offset;
+      return NULL;
+   }
+   nir = dxbc_to_nir(&program, options, error);
+   dxbc_program_free(&program);
+   if (nir)
+      dxbc_nir_finalize(nir);
    return nir;
 }
