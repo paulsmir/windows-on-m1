@@ -187,7 +187,17 @@ int main(void) {
         0x50000ULL, changed.header.Base.CommandBytes, mapped, &calls,
         &view) == AppleAgxG4ParseOk);
     assert(view.ColorFormat == APPLE_AGX_G4_COLOR_NONE);
-    changed.header.Base.Reserved = APPLE_AGX_G4_COLOR_NONE + 1u;
+    /* D3D-G10a: 8- and 16-byte colour classes (RGBA16, RG32, RGBA32). */
+    changed.header.Base.Reserved = APPLE_AGX_G4_COLOR_8BYTE;
+    assert(AppleAgxG4ParseSubmit(&changed, sizeof(changed), sizeof(changed),
+        0x50000ULL, changed.header.Base.CommandBytes, mapped, &calls,
+        &view) == AppleAgxG4ParseOk);
+    assert(view.ColorFormat == APPLE_AGX_G4_COLOR_8BYTE);
+    changed.header.Base.Reserved = APPLE_AGX_G4_COLOR_16BYTE;
+    assert(AppleAgxG4ParseSubmit(&changed, sizeof(changed), sizeof(changed),
+        0x50000ULL, changed.header.Base.CommandBytes, mapped, &calls,
+        &view) == AppleAgxG4ParseOk);
+    changed.header.Base.Reserved = APPLE_AGX_G4_COLOR_16BYTE + 1u;
     assert(AppleAgxG4ParseSubmit(&changed, sizeof(changed), sizeof(changed),
         0x50000ULL, changed.header.Base.CommandBytes, mapped, &calls,
         &view) == AppleAgxG4ParseUnsupported);

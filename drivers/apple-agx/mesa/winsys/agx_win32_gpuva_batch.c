@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "util/os_time.h"
+#include "util/format/u_format.h"
 
 #ifndef APPLE_AGX_GPUVA_WINSYS
 #error This batch path is only for APPLE_AGX_GPUVA_WINSYS
@@ -422,14 +423,14 @@ static int gpuva_color_formats_supported(const struct agx_batch *batch) {
   return 1;
 }
 
+/* D3D-G10a: the KMD sizes attachment 0 by its format's block size. */
 static unsigned gpuva_color_class(unsigned format) {
-  switch(format) {
-  case PIPE_FORMAT_R8_UNORM: case PIPE_FORMAT_A8_UNORM:
-    return APPLE_AGX_G4_COLOR_1BYTE;
-  case PIPE_FORMAT_R8G8_UNORM:
-    return APPLE_AGX_G4_COLOR_2BYTE;
-  default:
-    return APPLE_AGX_G4_COLOR_BGRA8;
+  switch(util_format_get_blocksize(format)) {
+  case 1: return APPLE_AGX_G4_COLOR_1BYTE;
+  case 2: return APPLE_AGX_G4_COLOR_2BYTE;
+  case 8: return APPLE_AGX_G4_COLOR_8BYTE;
+  case 16: return APPLE_AGX_G4_COLOR_16BYTE;
+  default: return APPLE_AGX_G4_COLOR_BGRA8;
   }
 }
 

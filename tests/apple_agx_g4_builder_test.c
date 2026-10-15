@@ -375,6 +375,21 @@ int main(void) {
         narrow_view.ColorFormat = APPLE_AGX_G4_COLOR_BGRA8;
         assert(!AppleAgxG4BindNativeObjects(&narrow_view, objects,
             APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+        /* D3D-G10a: 8- and 16-byte classes bind only a target that holds
+         * 8 or 16 bytes per pixel. */
+        narrow_view.ColorFormat = APPLE_AGX_G4_COLOR_8BYTE;
+        narrow.Attachment.Size = 1280ULL * 720ULL * 4ULL;
+        assert(!AppleAgxG4BindNativeObjects(&narrow_view, objects,
+            APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+        narrow.Attachment.Size = 1280ULL * 720ULL * 8ULL;
+        assert(AppleAgxG4BindNativeObjects(&narrow_view, objects,
+            APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+        narrow_view.ColorFormat = APPLE_AGX_G4_COLOR_16BYTE;
+        assert(!AppleAgxG4BindNativeObjects(&narrow_view, objects,
+            APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+        narrow.Attachment.Size = 1280ULL * 720ULL * 16ULL;
+        assert(AppleAgxG4BindNativeObjects(&narrow_view, objects,
+            APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
         narrow_view.ColorFormat = 7u;
         narrow.Attachment.Size = 1280ULL * 720ULL * 4ULL;
         assert(!AppleAgxG4BindNativeObjects(&narrow_view, objects,

@@ -44,10 +44,16 @@
  * 4-byte (and wider) class; R8/A8 upload blits render 1- or 2-byte targets. */
 #define APPLE_AGX_G4_COLOR_1BYTE 2u
 #define APPLE_AGX_G4_COLOR_2BYTE 3u
+/* D3D-G10a: 8- and 16-byte colour targets (RGBA16, RG32, RGBA32). Class 4
+ * is APPLE_AGX_G4_COLOR_NONE (D3D-G7). */
+#define APPLE_AGX_G4_COLOR_8BYTE 5u
+#define APPLE_AGX_G4_COLOR_16BYTE 6u
 static inline unsigned int AppleAgxG4ColorBytes(unsigned int color_format) {
   return color_format == APPLE_AGX_G4_COLOR_BGRA8 ? 4u :
       color_format == APPLE_AGX_G4_COLOR_1BYTE ? 1u :
-      color_format == APPLE_AGX_G4_COLOR_2BYTE ? 2u : 0u;
+      color_format == APPLE_AGX_G4_COLOR_2BYTE ? 2u :
+      color_format == APPLE_AGX_G4_COLOR_8BYTE ? 8u :
+      color_format == APPLE_AGX_G4_COLOR_16BYTE ? 16u : 0u;
 }
 /* D3D-G7: a depth-only render (shadow maps, depth pre-passes) has no colour
  * target; its attachment 0 is the depth buffer. */

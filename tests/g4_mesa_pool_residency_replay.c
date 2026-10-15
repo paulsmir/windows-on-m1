@@ -21,6 +21,12 @@ typedef unsigned APPLE_AGX_U32;
 #define PIPE_FORMAT_R8_UNORM 8
 #define PIPE_FORMAT_A8_UNORM 9
 #define PIPE_FORMAT_R8G8_UNORM 10
+/* D3D-G10a: the colour class follows the block size. */
+static unsigned util_format_get_blocksize(unsigned format) {
+  return format == PIPE_FORMAT_R8_UNORM || format == PIPE_FORMAT_A8_UNORM ? 1u :
+      format == PIPE_FORMAT_R8G8_UNORM ? 2u :
+      format == PIPE_FORMAT_R16G16B16A16_FLOAT ? 8u : 4u;
+}
 #define DRM_ASAHI_SET_FRAGMENT_ATTACHMENTS 3u
 #define DRM_ASAHI_BARRIER_NONE 0xffffu
 #define drm_asahi_cmd_render _APPLE_AGX_G4_NATIVE_RENDER_HOST

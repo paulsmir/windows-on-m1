@@ -8,6 +8,8 @@ own PBE/EOT state and the KMD treats attachments as pointer ranges.
 EXP1035: R8/A8 texture uploads blit through 1-byte render passes. EXP1034
 showed the KMD binding sized attachments as 4 bytes per pixel, so the batch
 now also names the colour class (bytes per pixel) in the private header.
+D3D-G10a: the class follows the format's block size (1, 2, 4, 8, 16), so
+8- and 16-byte targets are bound with their exact size.
 """
 from pathlib import Path
 import re
@@ -36,7 +38,13 @@ class GpuvaColorFormats(unittest.TestCase):
                 'PIPE_FORMAT_B8G8R8A8_SRGB, PIPE_FORMAT_B8G8R8X8_UNORM, PIPE_FORMAT_B8G8R8X8_SRGB, '
                 'PIPE_FORMAT_R8G8B8A8_UNORM, PIPE_FORMAT_R16G16B16A16_FLOAT, PIPE_FORMAT_R10G10B10A2_UNORM, '
                 'PIPE_FORMAT_Z24_UNORM_S8_UINT, PIPE_FORMAT_R8_UNORM, PIPE_FORMAT_A8_UNORM, PIPE_FORMAT_R8G8_UNORM };\n'
-                'enum { APPLE_AGX_G4_COLOR_BGRA8 = 1, APPLE_AGX_G4_COLOR_1BYTE, APPLE_AGX_G4_COLOR_2BYTE };\n' + m.group(0) + '\n' + c.group(0) +
+                'enum { APPLE_AGX_G4_COLOR_BGRA8 = 1, APPLE_AGX_G4_COLOR_1BYTE, APPLE_AGX_G4_COLOR_2BYTE,'
+                ' APPLE_AGX_G4_COLOR_8BYTE = 5, APPLE_AGX_G4_COLOR_16BYTE };\n'
+                'enum { PIPE_FORMAT_R32G32B32A32_FLOAT = 100 };\n'
+                'static unsigned util_format_get_blocksize(unsigned f) {'
+                ' return f == PIPE_FORMAT_R8_UNORM || f == PIPE_FORMAT_A8_UNORM ? 1 :'
+                ' f == PIPE_FORMAT_R8G8_UNORM ? 2 : f == PIPE_FORMAT_R16G16B16A16_FLOAT ? 8 :'
+                ' f == PIPE_FORMAT_R32G32B32A32_FLOAT ? 16 : 4; }\n' + m.group(0) + '\n' + c.group(0) +
                 '\nint main(void){ assert(gpuva_color_format_supported(PIPE_FORMAT_R8G8B8A8_UNORM));'
                 ' assert(gpuva_color_format_supported(PIPE_FORMAT_B8G8R8A8_UNORM));'
                 ' assert(!gpuva_color_format_supported(PIPE_FORMAT_Z24_UNORM_S8_UINT));'
@@ -45,6 +53,8 @@ class GpuvaColorFormats(unittest.TestCase):
                 ' assert(gpuva_color_class(PIPE_FORMAT_A8_UNORM) == APPLE_AGX_G4_COLOR_1BYTE);'
                 ' assert(gpuva_color_class(PIPE_FORMAT_R8G8_UNORM) == APPLE_AGX_G4_COLOR_2BYTE);'
                 ' assert(gpuva_color_class(PIPE_FORMAT_R8G8B8A8_UNORM) == APPLE_AGX_G4_COLOR_BGRA8);'
+                ' assert(gpuva_color_class(PIPE_FORMAT_R16G16B16A16_FLOAT) == APPLE_AGX_G4_COLOR_8BYTE);'
+                ' assert(gpuva_color_class(PIPE_FORMAT_R32G32B32A32_FLOAT) == APPLE_AGX_G4_COLOR_16BYTE);'
                 ' assert(!gpuva_color_format_supported(PIPE_FORMAT_NONE)); puts("PASS"); return 0; }\n')
         with tempfile.TemporaryDirectory() as tmp:
             src = Path(tmp) / 'f.c'; exe = Path(tmp) / 'f'
