@@ -847,7 +847,12 @@ SupportedDDIInterfaceVersions[] = {
        * buffers at SM 4.x (cs_4_0/cs_4_1) once its switch is on. */
       if (pData->DataSize != sizeof(D3D11DDI_SHADER_CAPS))
          return E_INVALIDARG;
-      ((D3D11DDI_SHADER_CAPS *)pData->pData)->Caps = AgxD3d11ComputeEnabled() ?
+      /* EXP1303: the runtime refuses a FL 11_0 adapter whose shader caps
+       * deny 4.x compute (0x887a0020 right after this query; with the bit
+       * it goes on to CreateDevice); FL 11_0 implies it, and cs_4_x passes
+       * on hardware since EXP1299. */
+      ((D3D11DDI_SHADER_CAPS *)pData->pData)->Caps =
+         (AgxD3d11ComputeEnabled() || AgxD3d11Fl11Enabled()) ?
          D3D11DDICAPS_SHADER_COMPUTE_PLUS_RAW_AND_STRUCTURED_BUFFERS_IN_SHADER_4_X : 0;
       return S_OK;
    case D3D11DDICAPS_3DPIPELINESUPPORT:

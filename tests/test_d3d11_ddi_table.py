@@ -134,7 +134,8 @@ class D3d11DdiTable(unittest.TestCase):
             adapter = (frontend / "Adapter.cpp").read_text()
             caps = adapter[adapter.index("case D3D11DDICAPS_SHADER:"):]
             caps = caps[:caps.index("return S_OK;")]
-            self.assertIn("AgxD3d11ComputeEnabled() ?", caps)
+            # EXP1303: FL 11_0 implies 4.x compute in the shader caps
+            self.assertIn("(AgxD3d11ComputeEnabled() || AgxD3d11Fl11Enabled()) ?", caps)
             levels = adapter[adapter.index("case D3D11DDICAPS_3DPIPELINESUPPORT:"):]
             levels = levels[:levels.index("return S_OK;")]
             self.assertIn("AgxD3d11Fl11Enabled() ?", levels)
