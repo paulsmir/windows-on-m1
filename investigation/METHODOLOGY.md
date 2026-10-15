@@ -130,6 +130,20 @@ wins on any conflict. Every agent (Claude or Codex) works this way.
 - Before a task: what exactly will be fixed and where the work stands on the
   road to the full driver (D3D11 FL 11_0 default, flexible memory, D3D12).
 
+## 9a. Division of labour (user decision 2026-10-15)
+
+- Codex writes code only: fixes, new features, tool code and the test
+  code that checks them, following the contract and the owning layer the
+  integrator names in the brief. Codex does not compile, run tests, run
+  tools or touch hardware; it reports the diff, the intended RED/GREEN
+  behaviour of its tests and its evidence (file:line).
+- The integrator (Claude) designs and decides (contract, owning layer,
+  architecture), compiles (Mac clang with the local Windows headers,
+  builder clang-cl/MSBuild), runs every test (RED before the fix where
+  the contract allows, GREEN after, neighbouring suites), dry-runs tools
+  on the builder's adapter, runs the hardware pipelines, keeps the
+  ledgers, commits and merges, and reports per experiment.
+
 ## 10. Environment quirks
 
 - `grep` is ugrep: use `grep -a` on logs.
