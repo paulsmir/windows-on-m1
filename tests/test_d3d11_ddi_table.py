@@ -72,6 +72,11 @@ class D3d11DdiTable(unittest.TestCase):
                          "base entries outside the D3D10 table")
 
     def test_interface_is_advertised_and_filled_under_the_switch(self):
+        # Default on since EXP1295 (every smoke passed through the D3D11
+        # interface); only APPLE_AGX_D3D11_DDI=0 keeps a process on 10.0.
+        enabled = function_body(MODULE.read_text(), "AgxD3d11DdiEnabled")
+        self.assertIn('GetEnvironmentVariableA("APPLE_AGX_D3D11_DDI"', enabled)
+        self.assertIn("return !(length == 1 && value[0] == '0');", enabled)
         with tempfile.TemporaryDirectory(prefix="d3d11-ddi-") as tmp:
             out = project(Path(tmp) / "out")
             if out is None:

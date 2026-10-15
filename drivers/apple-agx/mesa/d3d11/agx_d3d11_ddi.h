@@ -6,8 +6,8 @@
 #ifndef AGX_D3D11_DDI_H
 #define AGX_D3D11_DDI_H
 
-/* Advertise D3D11_0_DDI_INTERFACE_VERSION: APPLE_AGX_D3D11_DDI=1 in the
- * process environment (per process while the D3D11 table is qualified). */
+/* Advertise D3D11_0_DDI_INTERFACE_VERSION: by default; APPLE_AGX_D3D11_DDI=0
+ * in the process environment keeps the process on the 10.0 interface. */
 BOOL AgxD3d11DdiEnabled(void);
 
 /* D3D-H2b: report compute with raw and structured buffers at SM 4.x

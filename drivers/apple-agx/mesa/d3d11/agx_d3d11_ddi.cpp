@@ -47,10 +47,14 @@ extern "C" VOID AgxD3d10WindowsDiagnostic(PCSTR Stage, HRESULT Status,
                                           const UINT *Values, UINT Count);
 extern "C" BOOL AgxD3d10WindowsDiagnosticSwitch(const char *Name);
 
+/* D3D-H2a: advertised by default (EXP1295: every D3D smoke passes through
+ * the D3D11 interface); APPLE_AGX_D3D11_DDI=0 keeps a process on 10.0. */
 BOOL
 AgxD3d11DdiEnabled(void)
 {
-   return AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D11_DDI");
+   char value[4];
+   DWORD length = GetEnvironmentVariableA("APPLE_AGX_D3D11_DDI", value, sizeof(value));
+   return !(length == 1 && value[0] == '0');
 }
 
 BOOL
