@@ -379,18 +379,43 @@ APPLE_AGX_BOOL AppleAgxSchedulerAbortPreemption(
   return APPLE_AGX_TRUE;
 }
 
+/* Microsoft (TDR in Windows 8 and later, packets unaffected by engine reset):
+ * VidSch resubmits the packets after LastAbortedFence, paging packets with
+ * their original fence IDs in their original order before new packets, render
+ * packets with new IDs. As at a boundary preemption, every fence that never
+ * ran stays resubmittable once: the discarded queue, then the preempted fences
+ * still waiting behind it. A preempted fence at or before the queue tail was
+ * skipped by VidSch (a render given a new ID) and is not revived. */
 APPLE_AGX_BOOL AppleAgxSchedulerResetEngine(
     APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 *LastAbortedFence) {
+  APPLE_AGX_U32 index, kept, after;
   if (!AppleAgxSchedulerValidateEngine(Scheduler, NodeOrdinal, EngineOrdinal) ||
       LastAbortedFence == APPLE_AGX_NULL)
     return APPLE_AGX_FALSE;
   *LastAbortedFence = Scheduler->ActiveFence != 0u
                           ? Scheduler->ActiveFence
                           : Scheduler->CompletedFence;
+  after = Scheduler->QueueCount != 0u
+              ? Scheduler->FenceQueue[(Scheduler->QueueHead +
+                    Scheduler->QueueCount - 1u) % APPLE_AGX_SCHEDULER_QUEUE_CAPACITY]
+              : *LastAbortedFence;
+  kept = 0u;
+  for (index = 0u; index < Scheduler->PreemptedFenceCount &&
+       kept < APPLE_AGX_SCHEDULER_QUEUE_CAPACITY - Scheduler->QueueCount; ++index)
+    if (AppleAgxSchedulerFenceAfter(Scheduler->PreemptedFenceQueue[index], after)) {
+      after = Scheduler->PreemptedFenceQueue[index];
+      Scheduler->PreemptedFenceQueue[kept++] = after;
+    }
+  for (index = kept; index-- > 0u;)
+    Scheduler->PreemptedFenceQueue[index + Scheduler->QueueCount] =
+        Scheduler->PreemptedFenceQueue[index];
+  for (index = 0u; index < Scheduler->QueueCount; ++index)
+    Scheduler->PreemptedFenceQueue[index] = Scheduler->FenceQueue[
+        (Scheduler->QueueHead + index) % APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
+  Scheduler->PreemptedFenceCount = Scheduler->QueueCount + kept;
   Scheduler->QueuedFence = 0u;
   Scheduler->QueueHead = Scheduler->QueueCount = 0u;
-  Scheduler->PreemptedFenceCount = 0u;
   Scheduler->ActiveFence = 0u;
   Scheduler->PendingPreemptionFence = 0;
   Scheduler->PreemptionCutoffFence = 0;
