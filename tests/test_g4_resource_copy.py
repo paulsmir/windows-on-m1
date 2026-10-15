@@ -26,11 +26,17 @@ class ResourceCopyOverlay(unittest.TestCase):
         self.assertIn("u_minify(src->width0,level)", b)
 
     def test_same_format_and_views_are_raw(self):
+        # D3D-G10b: the stored-bits blit format comes from AgxD3d10CopyRawFormat
+        # (tests/test_d3d10_copy_raw_format.py checks its rule); compressed
+        # formats copy through resource_copy_region.
         b = body()
-        self.assertIn("src->format==dst->format", b)
-        self.assertIn("util_format_linear(src->format)", b)
-        self.assertIn("!util_format_is_compressed(src->format)", b)
+        self.assertIn("AgxD3d10CopyRawFormat(source, destination, src, dst)", b)
+        self.assertIn("util_format_is_compressed(src->format)", b)
+        self.assertIn("resource_copy_region", b)
         self.assertIn("PIPE_TEX_FILTER_NEAREST", b)
+        helper = SCRIPT.read_text()
+        helper = helper[helper.index("AgxD3d10CopyRawFormat(const Resource *source"):]
+        self.assertIn("util_format_linear(src->format)", helper[:helper.index("\n}\n")])
 
     def test_shape_contract_and_diagnostic_remain(self):
         b = body()
