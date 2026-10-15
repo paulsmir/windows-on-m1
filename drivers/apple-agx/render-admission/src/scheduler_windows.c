@@ -570,10 +570,13 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
   if (reset) {
     /* Nothing may remain queued once the reset returns (DxgkDdiResetEngine).
      * VidSch resubmits these packets with their data: paging packets with
-     * their original fences, which the scheduler reset kept resubmittable. */
+     * their original fences, which the scheduler reset kept resubmittable,
+     * and renders with new fences, so a never-started render keeps its
+     * private scene as after a preemption (EXP1303: a cancelled scene made
+     * that resubmission fail). */
     AdmissionCpuQueueReleaseContextsLocked(context);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-    AdmissionG4PendingDropLocked(context, FALSE);
+    AdmissionG4PendingDropLocked(context, TRUE);
 #endif
     context->CpuQueueHead = context->CpuQueueCount = context->DispatchedFence = 0u;
     InterlockedExchange(&context->RenderDpcFence, 0);
@@ -587,7 +590,7 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
   if (packetContext != NULL &&
       packetContext->Object.FenceOutstanding == packetFence) {
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-    AdmissionGpuvaG3PrivateCancel(packetContext,packetFence,FALSE);
+    AdmissionGpuvaG3PrivatePreempt(packetContext, packetFence);
 #endif
     KeAcquireSpinLock(&context->SchedulerLock, &oldIrql);
     AdmissionContextRetireFence(packetContext, packetFence);
@@ -626,6 +629,8 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineRecorded(
   KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
   receipt->Quiesce = (ULONG)AdmissionGpuResetQuiesceNone;
   receipt->WaitMs = 0u;
+  receipt->EntryMs = receipt->JobAgeMs = 0u;
+  receipt->PollAgeMs = MAXULONG;
   AdmissionPlatformRuntimeResetState(context, receipt);
   status = AdmissionResetEngineInternal(Adapter, ResetEngine);
   receipt->Status = (ULONG)status;
@@ -633,6 +638,24 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineRecorded(
       NT_SUCCESS(status) ? ResetEngine->LastAbortedFenceId : 0u;
   if (NT_SUCCESS(status))
     ++receipt->Succeeded;
+  {
+    ADMISSION_GPU_RESET_ENTRY *entry = &receipt->History[
+        (receipt->Resets - 1u) % ADMISSION_GPU_RESET_HISTORY];
+    entry->EntryMs = receipt->EntryMs;
+    entry->Entry = Entry;
+    entry->Status = receipt->Status;
+    entry->Quiesce = receipt->Quiesce;
+    entry->WaitMs = receipt->WaitMs;
+    entry->PacketState = receipt->PacketState;
+    entry->PacketFence = receipt->PacketFence;
+    entry->LastAbortedFence = receipt->LastAbortedFence;
+    entry->SchedulerFaulted = receipt->SchedulerFaulted;
+    entry->JobAgeMs = receipt->JobAgeMs;
+    entry->PollAgeMs = receipt->PollAgeMs;
+    entry->FirmwareRecoveries = receipt->FirmwareRecoveries;
+    if (receipt->HistoryCount < ADMISSION_GPU_RESET_HISTORY)
+      ++receipt->HistoryCount;
+  }
   AdmissionRecordGpuReset(context);
   return status;
 }

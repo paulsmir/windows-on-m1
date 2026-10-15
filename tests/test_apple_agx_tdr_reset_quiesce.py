@@ -108,6 +108,7 @@ SHIM = r'''
 #define STATUS_DEVICE_HARDWARE_ERROR ((NTSTATUS)0xC0000483u)
 #define STATUS_DEVICE_NOT_READY ((NTSTATUS)0xC00000A3u)
 #define STATUS_IO_TIMEOUT ((NTSTATUS)0xC00000B5u)
+#define MAXULONG 0xffffffffu
 #define NT_SUCCESS(s) ((NTSTATUS)(s) >= 0)
 #define PASSIVE_LEVEL 0
 #define Executive 0
@@ -181,7 +182,7 @@ typedef struct {
 
 static int lock_depth, rtkit_stops, polls, drop_at_poll, fail_poll, worker_busy,
     worker_completes, paused, private_resets, scene_queued, scene_started,
-    scene_quarantined, cancels;
+    scene_quarantined, cancels, preempts, pending_drops, pending_preempt;
 static ULONGLONG now_ms;
 static ADMISSION_CONTEXT *model_adapter;
 static ADMISSION_PLATFORM_RUNTIME *model_runtime;
@@ -260,7 +261,10 @@ static BOOLEAN AdmissionGpuvaG3PrivateReset(ADMISSION_CONTEXT *c) {
 }
 static void AdmissionGpuvaG3PrivateCancel(ADMISSION_RENDER_CONTEXT *c, ULONG f, BOOLEAN u) {
   (void)c; (void)f; (void)u; ++cancels; }
-static void AdmissionG4PendingDropLocked(ADMISSION_CONTEXT *c, BOOLEAN p) { (void)c; (void)p; assert(lock_depth); }
+static void AdmissionG4PendingDropLocked(ADMISSION_CONTEXT *c, BOOLEAN p) {
+  (void)c; assert(lock_depth); ++pending_drops; pending_preempt = p; }
+static void AdmissionGpuvaG3PrivatePreempt(ADMISSION_RENDER_CONTEXT *c, ULONG f) {
+  (void)c; (void)f; ++preempts; }
 static void AdmissionPagingUpdateIdleLocked(ADMISSION_CONTEXT *c) { (void)c; assert(lock_depth); }
 static BOOLEAN AdmissionBackendImageReleaseSubmission(int *i, ULONG f) { (void)i; (void)f; return TRUE; }
 static NTSTATUS AdmissionScanoutSetTimelinePaused(ADMISSION_CONTEXT *c, BOOLEAN p) {
@@ -272,7 +276,8 @@ static void AdmissionPublishFirmwareRecovery(ADMISSION_PLATFORM_RUNTIME *r) {
 static void AdmissionPlatformRuntimeResetState(ADMISSION_CONTEXT *c, ADMISSION_GPU_RESET_RECEIPT *r) {
   ADMISSION_PLATFORM_RUNTIME *p = c->PlatformRuntime;
   r->BackendPhase = (ULONG)p->Backend.Phase; r->WorkerBusy = p->WorkScheduled ? 1u : 0u;
-  r->Halted = 0u; r->FirmwareRecoveries = (ULONG)p->FirmwareRecoveries; }
+  r->Halted = 0u; r->FirmwareRecoveries = (ULONG)p->FirmwareRecoveries;
+  r->EntryMs = (ULONG)now_ms; r->JobAgeMs = 2100u; r->PollAgeMs = 7u; }
 static void AdmissionRecordGpuReset(ADMISSION_CONTEXT *c) {
   assert(!lock_depth); ++recorded; last_recorded = c->GpuReset; }
 '''
@@ -312,6 +317,7 @@ static void setup(int worker, int queued) {
   rtkit_stops = polls = drop_at_poll = fail_poll = worker_completes = 0;
   published = recorded = 0; memset(&last_recorded, 0, sizeof(last_recorded));
   private_resets = scene_quarantined = cancels = paused = 0;
+  preempts = pending_drops = pending_preempt = 0;
   scene_queued = scene_started = 1; now_ms = 1000u;
   model_adapter = &adapter; model_runtime = &runtime;
   adapter.SchedulerInitialized = 1; adapter.PlatformRuntime = &runtime;
@@ -374,6 +380,16 @@ int main(void) {
          last_recorded.WaitMs == 2u && last_recorded.LastAbortedFence == 0xce71cu &&
          last_recorded.BackendPhase == AppleAgxBackendRuntimeSubmitted &&
          last_recorded.FirmwareRecoveries == 1u);
+  /* Version 2: the timed history entry mirrors the attempt. */
+  assert(last_recorded.Version == 2u && last_recorded.HistoryCount == 1u &&
+         last_recorded.EntryMs == 1000u && last_recorded.JobAgeMs == 2100u &&
+         last_recorded.PollAgeMs == 7u);
+  assert(last_recorded.History[0].EntryMs == 1000u &&
+         last_recorded.History[0].Quiesce == AdmissionGpuResetQuiesceEnded &&
+         last_recorded.History[0].PacketFence == 0xce71cu &&
+         last_recorded.History[0].LastAbortedFence == 0xce71cu &&
+         last_recorded.History[0].SchedulerFaulted == (0x40000u | 3930u) &&
+         last_recorded.History[0].JobAgeMs == 2100u);
 
   /* 2. The same storm promoted to an adapter reset: success, the last
    * completed fence advances to the last submitted one, restart resumes. */
@@ -412,6 +428,11 @@ int main(void) {
   /* The reset's own fault code is what the next attempt finds. */
   assert(last_recorded.Resets == 2u && last_recorded.Entry == ADMISSION_GPU_RESET_ADAPTER &&
          (last_recorded.SchedulerFaulted >> 16) == 1u);
+  assert(last_recorded.HistoryCount == 2u &&
+         last_recorded.History[0].Entry == ADMISSION_GPU_RESET_ENGINE &&
+         last_recorded.History[1].Entry == ADMISSION_GPU_RESET_ADAPTER &&
+         last_recorded.History[1].Quiesce == AdmissionGpuResetQuiesceTimeout &&
+         last_recorded.History[1].EntryMs > last_recorded.History[0].EntryMs);
 
   /* 5. A provider that cannot be polled proves nothing. */
   setup(0, 0); fail_poll = 1;
@@ -437,6 +458,11 @@ int main(void) {
   memset(&reset, 0, sizeof(reset));
   assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS);
   assert(reset.LastAbortedFenceId == 0xce71cu && polls == 0);
+  /* EXP1303: VidSch resubmits never-started renders after an engine reset
+   * with new fences, as after a preemption; a cancelled private scene made
+   * that resubmission fail (Wom1G4SubmitFailure branch 7, subsite 0x201). */
+  assert(preempts == 1 && cancels == 0);
+  assert(pending_drops >= 1 && pending_preempt);
   assert(last_recorded.Quiesce == AdmissionGpuResetQuiesceNone &&
          last_recorded.PacketState == AdmissionRenderPacketQueued);
   assert(AdmissionRenderPacketState(&adapter.RenderPacket) == AdmissionRenderPacketEmpty);

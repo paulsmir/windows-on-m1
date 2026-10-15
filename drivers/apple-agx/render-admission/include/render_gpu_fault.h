@@ -48,8 +48,13 @@ void AdmissionGpuFaultReceiptInitialize(ADMISSION_GPU_FAULT_RECEIPT *Receipt);
 void AdmissionGpuFaultReceiptRecord(ADMISSION_GPU_FAULT_RECEIPT *Receipt,
     ADMISSION_GPU_FAULT_EVENT *Event);
 
-/* Wom1GpuReset: the last engine or adapter reset and the state it found. */
-#define ADMISSION_GPU_RESET_RECEIPT_VERSION 1u
+/* Wom1GpuReset: the last engine or adapter reset and the state it found;
+ * version 2 appends timing and the last ADMISSION_GPU_RESET_HISTORY resets
+ * (EXP1303: LONGJOB jobs completed seconds late with four resets, and one
+ * receipt could not tell a worker that stopped polling from a job still
+ * running on the firmware). */
+#define ADMISSION_GPU_RESET_RECEIPT_VERSION 2u
+#define ADMISSION_GPU_RESET_HISTORY 8u
 #define ADMISSION_GPU_RESET_ENGINE 1u   /* DxgkDdiResetEngine */
 #define ADMISSION_GPU_RESET_ADAPTER 2u  /* DxgkDdiResetFromTimeout */
 typedef enum _ADMISSION_GPU_RESET_QUIESCE {
@@ -61,6 +66,16 @@ typedef enum _ADMISSION_GPU_RESET_QUIESCE {
   AdmissionGpuResetQuiesceBackend,  /* backend left Submitted, job still active */
   AdmissionGpuResetQuiesceState,    /* runtime absent, stopping or resetting */
 } ADMISSION_GPU_RESET_QUIESCE;
+
+typedef struct _ADMISSION_GPU_RESET_ENTRY {
+  unsigned int EntryMs;          /* interrupt time at entry, ms */
+  unsigned int Entry, Status, Quiesce, WaitMs;
+  unsigned int PacketState, PacketFence, LastAbortedFence;
+  unsigned int SchedulerFaulted;
+  unsigned int JobAgeMs;         /* active job's kick to entry; 0 none */
+  unsigned int PollAgeMs;        /* worker's last poll to entry */
+  unsigned int FirmwareRecoveries;
+} ADMISSION_GPU_RESET_ENTRY;
 
 typedef struct _ADMISSION_GPU_RESET_RECEIPT {
   unsigned int Version, Bytes;
@@ -81,6 +96,11 @@ typedef struct _ADMISSION_GPU_RESET_RECEIPT {
   unsigned int Halted;           /* firmware status halted (+0x20) */
   unsigned int FirmwareRecoveries;
   unsigned long long ContextToken;
+  /* Version 2. */
+  unsigned int EntryMs, JobAgeMs, PollAgeMs;
+  unsigned int HistoryCount;     /* valid entries; the last is at
+                                    (Resets - 1) % ADMISSION_GPU_RESET_HISTORY */
+  ADMISSION_GPU_RESET_ENTRY History[ADMISSION_GPU_RESET_HISTORY];
 } ADMISSION_GPU_RESET_RECEIPT;
 
 /* TDR drill (DxgkDdiEscape payload): the KMD strands the next Jobs render
