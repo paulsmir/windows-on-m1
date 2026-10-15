@@ -9,7 +9,9 @@ EXP1035: R8/A8 texture uploads blit through 1-byte render passes. EXP1034
 showed the KMD binding sized attachments as 4 bytes per pixel, so the batch
 now also names the colour class (bytes per pixel) in the private header.
 D3D-G10a: the class follows the format's block size (1, 2, 4, 8, 16), so
-8- and 16-byte targets are bound with their exact size.
+8- and 16-byte targets are bound with their exact size, and the admitted
+formats are the ones the screen renders (the bring-up list refused D3D
+targets such as R8G8B8A8_UINT).
 """
 from pathlib import Path
 import re
@@ -26,8 +28,8 @@ class GpuvaColorFormats(unittest.TestCase):
         text = SRC.read_text()
         # D3D-G2b: every bound colour target of the batch is checked.
         self.assertIn('!gpuva_color_formats_supported(batch)', text)
-        self.assertIn('!gpuva_color_format_supported(batch->key.cbufs[i].format)', text)
-        m = re.search(r'static int gpuva_color_format_supported\(unsigned format\) \{.*?\n\}', text, re.S)
+        self.assertIn('!gpuva_color_format_supported(batch, batch->key.cbufs[i].format)', text)
+        m = re.search(r'static int gpuva_color_format_supported\(const struct agx_batch \*batch, unsigned format\) \{.*?\n\}', text, re.S)
         c = re.search(r'static unsigned gpuva_color_class\(unsigned format\) \{.*?\n\}', text, re.S)
         self.assertIsNotNone(c)
         # D3D-G7: a depth-only batch (no colour target) names the NONE class.
@@ -41,21 +43,29 @@ class GpuvaColorFormats(unittest.TestCase):
                 'enum { APPLE_AGX_G4_COLOR_BGRA8 = 1, APPLE_AGX_G4_COLOR_1BYTE, APPLE_AGX_G4_COLOR_2BYTE,'
                 ' APPLE_AGX_G4_COLOR_8BYTE = 5, APPLE_AGX_G4_COLOR_16BYTE };\n'
                 'enum { PIPE_FORMAT_R32G32B32A32_FLOAT = 100 };\n'
+                'enum { PIPE_FORMAT_R8G8B8A8_UINT = 101, PIPE_FORMAT_R32G32B32_FLOAT = 102 };\n'
+                'struct agx_batch { int unused; };\n'
+                '/* The screen renders everything but depth and RGB32 here. */\n'
+                'static int AgxWin32AsahiRenderableFormat(const struct agx_batch *b, unsigned f) {'
+                ' (void)b; return f != PIPE_FORMAT_Z24_UNORM_S8_UINT && f != PIPE_FORMAT_R32G32B32_FLOAT; }\n'
                 'static unsigned util_format_get_blocksize(unsigned f) {'
                 ' return f == PIPE_FORMAT_R8_UNORM || f == PIPE_FORMAT_A8_UNORM ? 1 :'
                 ' f == PIPE_FORMAT_R8G8_UNORM ? 2 : f == PIPE_FORMAT_R16G16B16A16_FLOAT ? 8 :'
-                ' f == PIPE_FORMAT_R32G32B32A32_FLOAT ? 16 : 4; }\n' + m.group(0) + '\n' + c.group(0) +
-                '\nint main(void){ assert(gpuva_color_format_supported(PIPE_FORMAT_R8G8B8A8_UNORM));'
-                ' assert(gpuva_color_format_supported(PIPE_FORMAT_B8G8R8A8_UNORM));'
-                ' assert(!gpuva_color_format_supported(PIPE_FORMAT_Z24_UNORM_S8_UINT));'
-                ' assert(gpuva_color_format_supported(PIPE_FORMAT_R8_UNORM));'
-                ' assert(gpuva_color_format_supported(PIPE_FORMAT_A8_UNORM));'
+                ' f == PIPE_FORMAT_R32G32B32A32_FLOAT ? 16 : f == PIPE_FORMAT_R32G32B32_FLOAT ? 12 : 4; }\n' + m.group(0) + '\n' + c.group(0) +
+                '\nint main(void){ struct agx_batch b = {0}; struct agx_batch *batch = &b;'
+                ' assert(gpuva_color_format_supported(batch, PIPE_FORMAT_R8G8B8A8_UNORM));'
+                ' assert(gpuva_color_format_supported(batch, PIPE_FORMAT_R8G8B8A8_UINT));'
+                ' assert(!gpuva_color_format_supported(batch, PIPE_FORMAT_R32G32B32_FLOAT));'
+                ' assert(gpuva_color_format_supported(batch, PIPE_FORMAT_B8G8R8A8_UNORM));'
+                ' assert(!gpuva_color_format_supported(batch, PIPE_FORMAT_Z24_UNORM_S8_UINT));'
+                ' assert(gpuva_color_format_supported(batch, PIPE_FORMAT_R8_UNORM));'
+                ' assert(gpuva_color_format_supported(batch, PIPE_FORMAT_A8_UNORM));'
                 ' assert(gpuva_color_class(PIPE_FORMAT_A8_UNORM) == APPLE_AGX_G4_COLOR_1BYTE);'
                 ' assert(gpuva_color_class(PIPE_FORMAT_R8G8_UNORM) == APPLE_AGX_G4_COLOR_2BYTE);'
                 ' assert(gpuva_color_class(PIPE_FORMAT_R8G8B8A8_UNORM) == APPLE_AGX_G4_COLOR_BGRA8);'
                 ' assert(gpuva_color_class(PIPE_FORMAT_R16G16B16A16_FLOAT) == APPLE_AGX_G4_COLOR_8BYTE);'
                 ' assert(gpuva_color_class(PIPE_FORMAT_R32G32B32A32_FLOAT) == APPLE_AGX_G4_COLOR_16BYTE);'
-                ' assert(!gpuva_color_format_supported(PIPE_FORMAT_NONE)); puts("PASS"); return 0; }\n')
+                ' assert(!gpuva_color_format_supported(batch, PIPE_FORMAT_NONE)); puts("PASS"); return 0; }\n')
         with tempfile.TemporaryDirectory() as tmp:
             src = Path(tmp) / 'f.c'; exe = Path(tmp) / 'f'
             src.write_text(body)

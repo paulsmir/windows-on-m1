@@ -397,30 +397,29 @@ static int prepare_process_buffers(AGX_WIN32_ASAHI_BACKEND *b,AGX_G4_BATCH *g,
 
 /* EXP1029: the native batch encodes the colour format in its own PBE/EOT
  * state and the KMD treats attachments as format-agnostic pointer ranges.
- * EXP1028: RGBA8 render targets (shell UI) were refused here. Accept the
- * formats the Asahi batch path encodes whose tile-buffer sample fits the
- * 8/16-byte native layout checked below. */
-static int gpuva_color_format_supported(unsigned format) {
-  switch(format) {
-  case PIPE_FORMAT_B8G8R8A8_UNORM: case PIPE_FORMAT_B8G8R8A8_SRGB:
-  case PIPE_FORMAT_B8G8R8X8_UNORM: case PIPE_FORMAT_B8G8R8X8_SRGB:
-  case PIPE_FORMAT_R8G8B8A8_UNORM: case PIPE_FORMAT_R16G16B16A16_FLOAT:
-  case PIPE_FORMAT_R10G10B10A2_UNORM:
-  /* EXP1035: R8/A8 texture uploads blit through 1-byte render passes; the
-   * private header carries the colour class the KMD binding sizes by. */
-  case PIPE_FORMAT_R8_UNORM: case PIPE_FORMAT_A8_UNORM:
-  case PIPE_FORMAT_R8G8_UNORM:
-    return 1;
-  default:
-    return 0;
-  }
+ * EXP1028: RGBA8 render targets (shell UI) were refused here.
+ * D3D-G10a: every format the Asahi screen renders whose block size has a
+ * KMD colour class (1, 2, 4, 8 or 16 bytes) -- the bring-up list of ten
+ * formats refused D3D render targets the screen supports. */
+static int gpuva_color_format_supported(const struct agx_batch *batch, unsigned format) {
+  unsigned bytes = util_format_get_blocksize(format);
+  return format != PIPE_FORMAT_NONE &&
+      (bytes == 1u || bytes == 2u || bytes == 4u || bytes == 8u || bytes == 16u) &&
+      AgxWin32AsahiRenderableFormat(batch, format);
 }
 
 static int gpuva_color_formats_supported(const struct agx_batch *batch) {
   for(unsigned i=0;i<batch->key.nr_cbufs;++i)
     if(batch->key.cbufs[i].texture &&
-       !gpuva_color_format_supported(batch->key.cbufs[i].format)) return 0;
+       !gpuva_color_format_supported(batch, batch->key.cbufs[i].format)) return 0;
   return 1;
+}
+
+/* D3D-G10a: the screen's render-target answer for a batch's format. */
+int AgxWin32AsahiRenderableFormat(const struct agx_batch *batch, unsigned format) {
+  struct pipe_screen *screen = batch && batch->ctx ? batch->ctx->base.screen : NULL;
+  return screen && screen->is_format_supported(screen, (enum pipe_format)format,
+      PIPE_TEXTURE_2D, 0, 0, PIPE_BIND_RENDER_TARGET);
 }
 
 /* D3D-G10a: the KMD sizes attachment 0 by its format's block size. */

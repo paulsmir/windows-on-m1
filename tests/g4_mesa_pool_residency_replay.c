@@ -11,6 +11,7 @@
 typedef unsigned APPLE_AGX_U32;
 
 #define PIPE_MAX_COLOR_BUFS 8
+#define PIPE_FORMAT_NONE 0
 #define PIPE_FORMAT_B8G8R8A8_UNORM 1
 #define PIPE_FORMAT_B8G8R8A8_SRGB 2
 #define PIPE_FORMAT_B8G8R8X8_UNORM 3
@@ -208,6 +209,11 @@ static int evict(void *ctx,const uint64_t *tokens,unsigned count) {
   return 1;
 }
 int AgxWin32AsahiBatchPoll(struct agx_batch *batch,unsigned timeout);
+/* D3D-G10a: the screen renders the colour formats defined above and no
+ * others. */
+static int AgxWin32AsahiRenderableFormat(const struct agx_batch *batch, unsigned format) {
+  (void)batch; return format != PIPE_FORMAT_NONE && format <= PIPE_FORMAT_R8G8_UNORM;
+}
 #include "g4_mesa_pool_functions.inc"
 
 /* scenario: normal, empty pools, null pool entry, invalid identity,

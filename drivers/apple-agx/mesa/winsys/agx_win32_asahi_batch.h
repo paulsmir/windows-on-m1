@@ -43,6 +43,8 @@ int AgxWin32AsahiBatchLeave(struct agx_batch *);
 int AgxWin32AsahiBatchComputeEnter(struct agx_batch *);
 int AgxWin32AsahiBatchComputeLeave(struct agx_batch *);
 int AgxWin32AsahiBatchComputeFinalize(struct agx_batch *,const void *);
+/* D3D-G10a: the screen renders this colour format (the batch gate). */
+int AgxWin32AsahiRenderableFormat(const struct agx_batch *batch, unsigned format);
 int AgxWin32AsahiBatchDrawAllowed(struct agx_context *,const struct pipe_draw_info *,
     unsigned,const struct pipe_draw_indirect_info *,const struct pipe_draw_start_count_bias *,unsigned);
 /* Called for a draw DrawAllowed refused before any batch work; returns
