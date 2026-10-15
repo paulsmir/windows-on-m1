@@ -151,6 +151,13 @@ class D3d11DdiTable(unittest.TestCase):
         body = fill[fill.index("AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f,"):]
         assigned = dict(re.findall(r"\bf->(pfn\w+)\s*=\s*(\w+);", body))
         self.assertEqual(assigned["pfnCopyStructureCount"], "CopyStructureCount11")
+        for entry in ("pfnDrawInstancedIndirect", "pfnDrawIndexedInstancedIndirect",
+                      "pfnDispatchIndirect"):
+            with self.subTest(entry=entry):
+                self.assertFalse(assigned[entry].endswith("None"), assigned[entry])
+        # Asahi fetches indirect indices from the buffer start: an
+        # IASetIndexBuffer offset must not be dropped
+        self.assertIn("device->ib_offset", function_body(fill, "draw_indirect"))
         with tempfile.TemporaryDirectory(prefix="d3d11-uav-") as tmp:
             out = project(Path(tmp) / "out")
             if out is None:

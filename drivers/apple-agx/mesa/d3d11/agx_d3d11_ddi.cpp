@@ -11,8 +11,8 @@
  * UAVs, Dispatch, buffer UAV clears), reported only under its switch.
  * D3D-H4/H5 (reachable once FL 11_0 is reported): hull and domain shaders,
  * typed UAVs of buffers and textures, pixel-stage UAVs, append/consume
- * counters and CopyStructureCount, typed UAV clears.  Indirect arguments
- * fail closed (unbinding with NULL is accepted).
+ * counters and CopyStructureCount, typed UAV clears, indirect draws and
+ * dispatch.
  * Deferred contexts are left NULL: D3D11DDICAPS_THREADING reports no
  * command lists, so the runtime emulates them.
  *
@@ -33,11 +33,14 @@
 
 #include "util/bitscan.h"
 #include "util/format/u_format.h"
-#include "util/u_box.h"
+#include "util/u_draw.h"
 #include "util/u_inlines.h"
 
 #include "agx_d3d11_ddi.h"
 #include "dxbc_to_nir.h"
+
+/* Draw.cpp (projection): the frontend's draw-time state resolution */
+void AgxD3d11ResolveState(Device *pDevice);
 
 extern "C" VOID AgxD3d10WindowsDiagnostic(PCSTR Stage, HRESULT Status,
                                           const UINT *Values, UINT Count);
@@ -59,8 +62,7 @@ AgxD3d11ComputeEnabled(void)
  * access is implemented for buffers only (raw and structured views), raw and
  * structured layouts for buffers only. */
 #define AGX_D3D11_UNSUPPORTED_BIND (~(UINT)(D3D10_DDI_BIND_MASK | D3D11_DDI_BIND_UNORDERED_ACCESS))
-#define AGX_D3D11_UNSUPPORTED_MISC \
-   (D3D11_DDI_RESOURCE_MISC_DRAWINDIRECT_ARGS | D3D11_DDI_RESOURCE_MISC_RESOURCE_CLAMP)
+#define AGX_D3D11_UNSUPPORTED_MISC D3D11_DDI_RESOURCE_MISC_RESOURCE_CLAMP
 #define AGX_D3D11_BUFFER_MISC \
    (D3D11_DDI_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS | D3D11_DDI_RESOURCE_MISC_BUFFER_STRUCTURED)
 /* D3D11_REQ_MULTI_ELEMENT_STRUCTURE_SIZE_IN_BYTES */
@@ -89,8 +91,11 @@ resource_supported(const D3D11DDIARG_CREATERESOURCE *args)
    UINT layout = args->MiscFlags & AGX_D3D11_BUFFER_MISC;
    if (!buffer)
       return !layout && !args->ByteStride &&
+             !(args->MiscFlags & D3D11_DDI_RESOURCE_MISC_DRAWINDIRECT_ARGS) &&
              (!(args->BindFlags & D3D11_DDI_BIND_UNORDERED_ACCESS) || args->SampleDesc.Count <= 1);
-   if (layout == AGX_D3D11_BUFFER_MISC)
+   if (layout == AGX_D3D11_BUFFER_MISC ||
+       (layout == D3D11_DDI_RESOURCE_MISC_BUFFER_STRUCTURED &&
+        (args->MiscFlags & D3D11_DDI_RESOURCE_MISC_DRAWINDIRECT_ARGS)))
       return false;
    if (layout == D3D11_DDI_RESOURCE_MISC_BUFFER_STRUCTURED)
       return args->ByteStride && !(args->ByteStride & 3u) &&
@@ -123,9 +128,10 @@ CreateResource11(D3D10DDI_HDEVICE hDevice, const D3D11DDIARG_CREATERESOURCE *arg
    /* D3D-H2b: the layout raw and structured views read */
    Resource *resource = CastResource(hResource);
    if (resource && resource->resource) {
-      resource->agx_misc_flags = args->MiscFlags & AGX_D3D11_BUFFER_MISC;
+      resource->agx_misc_flags = args->MiscFlags &
+         (AGX_D3D11_BUFFER_MISC | D3D11_DDI_RESOURCE_MISC_DRAWINDIRECT_ARGS);
       resource->agx_structure_stride =
-         resource->agx_misc_flags == D3D11_DDI_RESOURCE_MISC_BUFFER_STRUCTURED ? args->ByteStride : 0;
+         (resource->agx_misc_flags & D3D11_DDI_RESOURCE_MISC_BUFFER_STRUCTURED) ? args->ByteStride : 0;
    }
 }
 
@@ -140,9 +146,9 @@ buffer_view_stride(const Resource *resource, DXGI_FORMAT format, bool raw)
       return 0;
    if (raw)
       return format == DXGI_FORMAT_R32_TYPELESS &&
-             resource->agx_misc_flags == D3D11_DDI_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS ? 4u : 0u;
+             (resource->agx_misc_flags & D3D11_DDI_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS) ? 4u : 0u;
    return format == DXGI_FORMAT_UNKNOWN &&
-          resource->agx_misc_flags == D3D11_DDI_RESOURCE_MISC_BUFFER_STRUCTURED ?
+          (resource->agx_misc_flags & D3D11_DDI_RESOURCE_MISC_BUFFER_STRUCTURED) ?
           resource->agx_structure_stride : 0u;
 }
 
@@ -724,6 +730,104 @@ Dispatch11(D3D10DDI_HDEVICE hDevice, UINT x, UINT y, UINT z)
    device->pipe->memory_barrier(device->pipe, PIPE_BARRIER_ALL);
 }
 
+/* D3D-H5: indirect arguments: a DRAWINDIRECT_ARGS buffer, a 4-byte aligned
+ * offset and room for the argument structure. */
+static Resource *
+indirect_args(Device *device, D3D10DDI_HRESOURCE hArgs, UINT offset, UINT bytes)
+{
+   Resource *args = CastResource(hArgs);
+   if (!device || !args || args->owner_device != device || !args->resource || !args->buffer ||
+       !(args->agx_misc_flags & D3D11_DDI_RESOURCE_MISC_DRAWINDIRECT_ARGS) || (offset & 3u) ||
+       offset > args->logical_bytes || args->logical_bytes - offset < bytes)
+      return NULL;
+   return args;
+}
+
+static void
+draw_indirect(D3D10DDI_HDEVICE hDevice, D3D10DDI_HRESOURCE hArgs, UINT offset, bool indexed)
+{
+   Device *device = CastDevice(hDevice);
+   Resource *args = indirect_args(device, hArgs, offset, indexed ? 20u : 16u);
+   struct pipe_resource *indices = NULL;
+   if (!args || device->primitive >= MESA_PRIM_COUNT ||
+       (indexed && (!device->index_buffer || (device->index_size != 2 && device->index_size != 4)))) {
+      refuse(hDevice, "reject-d3d11-draw-indirect", indexed, offset);
+      return;
+   }
+   if (!CheckPredicate(device))
+      return;
+   struct pipe_context *pipe = device->pipe;
+   struct pipe_draw_info info;
+   struct pipe_draw_indirect_info indirect = {};
+   struct pipe_draw_start_count_bias draw = {};
+   util_draw_init_info(&info);
+   info.mode = device->primitive;
+   indirect.buffer = args->resource;
+   indirect.offset = offset;
+   indirect.stride = indexed ? 20u : 16u;
+   indirect.draw_count = 1;
+   if (indexed) {
+      /* indirect index fetch starts at the buffer (StartIndexLocation is in
+       * the arguments): an IASetIndexBuffer offset takes a copy */
+      pipe_resource_reference(&indices, device->index_buffer);
+      if (device->ib_offset) {
+         struct pipe_box box;
+         unsigned bytes = device->index_buffer->width0 > device->ib_offset ?
+                          device->index_buffer->width0 - device->ib_offset : 0;
+         pipe_resource_reference(&indices, NULL);
+         if (!bytes)
+            return;
+         indices = pipe_buffer_create(pipe->screen, PIPE_BIND_INDEX_BUFFER, PIPE_USAGE_DEFAULT, bytes);
+         if (!indices) {
+            SetError(hDevice, E_OUTOFMEMORY);
+            return;
+         }
+         u_box_1d(device->ib_offset, bytes, &box);
+         pipe->resource_copy_region(pipe, indices, 0, 0, 0, 0, device->index_buffer, 0, &box);
+      }
+      info.index_size = device->index_size;
+      info.index.resource = indices;
+      info.primitive_restart = true;
+      info.restart_index = device->restart_index;
+   }
+   AgxD3d11ResolveState(device);
+   pipe->draw_vbo(pipe, &info, 0, &indirect, &draw, 1);
+   pipe_resource_reference(&indices, NULL);
+}
+
+static void APIENTRY
+DrawInstancedIndirect11(D3D10DDI_HDEVICE hDevice, D3D10DDI_HRESOURCE hArgs, UINT offset)
+{
+   draw_indirect(hDevice, hArgs, offset, false);
+}
+
+static void APIENTRY
+DrawIndexedInstancedIndirect11(D3D10DDI_HDEVICE hDevice, D3D10DDI_HRESOURCE hArgs, UINT offset)
+{
+   draw_indirect(hDevice, hArgs, offset, true);
+}
+
+static void APIENTRY
+DispatchIndirect11(D3D10DDI_HDEVICE hDevice, D3D10DDI_HRESOURCE hArgs, UINT offset)
+{
+   Device *device = CastDevice(hDevice);
+   Resource *args = indirect_args(device, hArgs, offset, 12u);
+   if (!args) {
+      refuse(hDevice, "reject-d3d11-dispatch", 1, offset);
+      return;
+   }
+   if (!CheckPredicate(device) || !device->agx_cs_block[0])
+      return;
+   struct pipe_grid_info info = {};
+   info.work_dim = 3;
+   for (unsigned i = 0; i < 3; ++i)
+      info.block[i] = device->agx_cs_block[i];
+   info.indirect = args->resource;
+   info.indirect_offset = offset;
+   device->pipe->launch_grid(device->pipe, &info);
+   device->pipe->memory_barrier(device->pipe, PIPE_BARRIER_ALL);
+}
+
 /* ------------------------------------------------------------------ */
 /* D3D-H4: hull and domain shaders (reachable once FL 11_0 is reported)  */
 
@@ -915,18 +1019,6 @@ CalcPrivateTessellationShaderSize11(D3D10DDI_HDEVICE, const UINT *, const D3D11D
    return sizeof(Shader);
 }
 
-static void APIENTRY
-DrawIndirectNone(D3D10DDI_HDEVICE hDevice, D3D10DDI_HRESOURCE, UINT)
-{
-   refuse(hDevice, "reject-d3d11-draw-indirect", 0, 0);
-}
-
-static void APIENTRY
-DispatchIndirectNone(D3D10DDI_HDEVICE hDevice, D3D10DDI_HRESOURCE, UINT)
-{
-   refuse(hDevice, "reject-d3d11-dispatch", 1, 0);
-}
-
 /* A minimum LOD clamp is a hint for residency management; sampling stays
  * correct without it (no tiled resources here). */
 static void APIENTRY
@@ -1064,6 +1156,9 @@ AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f, const D3D10DDI_DEVICEFUNCS *bas
    f->pfnClearUnorderedAccessViewFloat = ClearUnorderedAccessViewFloat11;
    f->pfnDispatch = Dispatch11;
    f->pfnCopyStructureCount = CopyStructureCount11;
+   f->pfnDrawInstancedIndirect = DrawInstancedIndirect11;
+   f->pfnDrawIndexedInstancedIndirect = DrawIndexedInstancedIndirect11;
+   f->pfnDispatchIndirect = DispatchIndirect11;
    /* D3D-H4: hull and domain shaders, patch topologies */
    f->pfnCreateHullShader = CreateHullShader11;
    f->pfnCreateDomainShader = CreateDomainShader11;
@@ -1079,8 +1174,5 @@ AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f, const D3D10DDI_DEVICEFUNCS *bas
    f->pfnDsSetConstantBuffers = DsSetConstantBuffers;
    /* not provided yet: fail closed, unbinding accepted */
    f->pfnCalcPrivateTessellationShaderSize = CalcPrivateTessellationShaderSize11;
-   f->pfnDrawIndexedInstancedIndirect = DrawIndirectNone;
-   f->pfnDrawInstancedIndirect = DrawIndirectNone;
-   f->pfnDispatchIndirect = DispatchIndirectNone;
    /* deferred contexts and command lists stay NULL (THREADING caps 0) */
 }

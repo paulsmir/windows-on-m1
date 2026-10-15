@@ -3284,6 +3284,13 @@ MesaD3d10FrontendSetSoOffsetForTest(D3D10DDI_HDEVICE hDevice,
       AgxWin32AsahiSetStreamOutputTargetOffsetForTest(
          resource->so_target,value) ? TRUE : FALSE;
 }
+
+/* D3D-H5: the D3D11 table's indirect draws resolve the same state */
+void
+AgxD3d11ResolveState(Device *pDevice)
+{
+   ResolveState(pDevice);
+}
 '''
     draw_path.write_text(draw_text)
     overlays['src/gallium/frontends/d3d10umd/Draw.cpp']['after']=hashlib.sha256(
@@ -3609,8 +3616,9 @@ AgxD3d10ResourceWithinRequiredLimits(
       D3D10_DDI_BIND_RENDER_TARGET | D3D11_DDI_BIND_UNORDERED_ACCESS;
    /* D3D-H2b: raw-view and structured buffers (D3D11 DDI) */
    const UINT bufferMisc = pCreateResource->MiscFlags;
-   bool bufferMiscOK = bufferMisc == 0 ||
-      bufferMisc == D3D11_DDI_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS ||
+   bool bufferMiscOK = (bufferMisc & ~D3D11_DDI_RESOURCE_MISC_DRAWINDIRECT_ARGS) == 0 ||
+      (bufferMisc & ~D3D11_DDI_RESOURCE_MISC_DRAWINDIRECT_ARGS) ==
+         D3D11_DDI_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS ||
       bufferMisc == D3D11_DDI_RESOURCE_MISC_BUFFER_STRUCTURED;
    bool wantsConstant =
       (pCreateResource->BindFlags & D3D10_DDI_BIND_CONSTANT_BUFFER) != 0;
