@@ -7,11 +7,16 @@
  *   PrimitivesStorageNeeded 8, the stream-overflow predicate TRUE (and FALSE
  *   for a buffer with room for eight).
  * Every line is written through to the output file before the next step.
- * Usage: agx_stats_smoke.exe <out.txt> [iterations] */
+ * Usage: agx_stats_smoke.exe <out.txt> [iterations]
+ *        agx_stats_smoke.exe <out.txt> sizes
+ * sizes prints PSINV case <name> pixels <expected> ps <measured> ia <v>/<p>
+ * vs <n> c <ci>/<cp>, then SOSTAT api <name> prims <N> capacity 3
+ * written <w> needed <n>. The discard case also prints covered/surviving. */
 #define COBJMACROS
 #define INITGUID
 #include <windows.h>
 #include <d3d11.h>
+#include <d3d10.h>
 #include <d3dcompiler.h>
 #include <dxgi1_2.h>
 #include <stdarg.h>
@@ -56,6 +61,13 @@ static const char gs_points[] =
     "struct V { float4 p : SV_Position; };\n"
     "[maxvertexcount(1)]\n"
     "void main(point V i[1], inout PointStream<V> s) { s.Append(i[0]); }\n";
+static const char ps_discard[] =
+    "float4 main(float4 p : SV_Position) : SV_Target {\n"
+    "  if (((uint(p.x) + uint(p.y)) & 1) != 0) discard;\n"
+    "  return float4(1, 1, 1, 1); }\n";
+static const char vs_so_sizes[] =
+    "float4 main(uint id : SV_VertexID) : SV_Position {\n"
+    "  return float4(0, 0, 0, 1); }\n";
 
 static ID3D11Device *device;
 static ID3D11DeviceContext *ctx;
@@ -79,6 +91,158 @@ static HRESULT wait_data(ID3D11Asynchronous *q, void *data, UINT size) {
     Sleep(0);
   }
   return S_FALSE;
+}
+
+/* Each viewport begins on an integer pixel boundary and covers exactly w*h
+ * pixel centers. The two full-viewport triangles share only an edge. */
+static int run_sizes(pD3DCompile compile_fn) {
+  static const struct { const char *name; UINT w, h; int tiled, discard; } cases[] = {
+      {"square1", 1, 1, 0, 0}, {"square2", 2, 2, 0, 0},
+      {"square4", 4, 4, 0, 0}, {"square8", 8, 8, 0, 0},
+      {"square16", 16, 16, 0, 0}, {"square32", 32, 32, 0, 0},
+      {"square64", 64, 64, 0, 0}, {"strip64x1", 64, 1, 0, 0},
+      {"strip1x64", 1, 64, 0, 0}, {"square64_8x8draws", 64, 64, 1, 0},
+      {"square64_discard_half", 64, 64, 0, 1}};
+  const UINT prims[] = {1, 3, 5};
+  ID3DBlob *bvs = NULL, *bps = NULL, *bdiscard = NULL, *bso = NULL;
+  ID3D11VertexShader *vs = NULL, *vsso = NULL;
+  ID3D11PixelShader *ps = NULL, *pshalf = NULL;
+  ID3D11GeometryShader *gsso = NULL;
+  ID3D11Texture2D *target = NULL;
+  ID3D11RenderTargetView *rtv = NULL;
+  ID3D11RasterizerState *raster = NULL;
+  ID3D11Buffer *buffer = NULL;
+  ID3D11Query *qps = NULL, *qso = NULL, *qs0 = NULL;
+  D3D11_TEXTURE2D_DESC td;
+  D3D11_BUFFER_DESC bd;
+  D3D11_QUERY_DESC qd;
+  D3D11_RASTERIZER_DESC rd;
+  D3D11_SO_DECLARATION_ENTRY decl = {0, "SV_Position", 0, 0, 4, 0};
+  UINT stride = 16, zero = 0;
+  HRESULT hr;
+  int bad = 0;
+
+  bvs = compile(compile_fn, vs_quad, sizeof(vs_quad) - 1, "vs_4_0");
+  bps = compile(compile_fn, ps_white, sizeof(ps_white) - 1, "ps_4_0");
+  bdiscard = compile(compile_fn, ps_discard, sizeof(ps_discard) - 1, "ps_4_0");
+  bso = compile(compile_fn, vs_so_sizes, sizeof(vs_so_sizes) - 1, "vs_4_0");
+  if (!bvs || !bps || !bdiscard || !bso) { bad = 1; goto done; }
+  hr = ID3D11Device_CreateVertexShader(device, ID3D10Blob_GetBufferPointer(bvs), ID3D10Blob_GetBufferSize(bvs), NULL, &vs);
+  if (SUCCEEDED(hr)) hr = ID3D11Device_CreatePixelShader(device, ID3D10Blob_GetBufferPointer(bps), ID3D10Blob_GetBufferSize(bps), NULL, &ps);
+  if (SUCCEEDED(hr)) hr = ID3D11Device_CreatePixelShader(device, ID3D10Blob_GetBufferPointer(bdiscard), ID3D10Blob_GetBufferSize(bdiscard), NULL, &pshalf);
+  if (SUCCEEDED(hr)) hr = ID3D11Device_CreateVertexShader(device, ID3D10Blob_GetBufferPointer(bso), ID3D10Blob_GetBufferSize(bso), NULL, &vsso);
+  if (SUCCEEDED(hr)) hr = ID3D11Device_CreateGeometryShaderWithStreamOutput(device,
+      ID3D10Blob_GetBufferPointer(bso), ID3D10Blob_GetBufferSize(bso), &decl, 1,
+      &stride, 1, 0, NULL, &gsso);
+  if (FAILED(hr)) { say("SIZES shaders 0x%08lx", (unsigned long)hr); bad = 1; goto done; }
+  memset(&td, 0, sizeof(td));
+  td.Width = td.Height = 64; td.MipLevels = td.ArraySize = 1;
+  td.Format = DXGI_FORMAT_R8G8B8A8_UNORM; td.SampleDesc.Count = 1;
+  td.Usage = D3D11_USAGE_DEFAULT; td.BindFlags = D3D11_BIND_RENDER_TARGET;
+  hr = ID3D11Device_CreateTexture2D(device, &td, NULL, &target);
+  if (SUCCEEDED(hr)) hr = ID3D11Device_CreateRenderTargetView(device, (ID3D11Resource *)target, NULL, &rtv);
+  memset(&rd, 0, sizeof(rd));
+  rd.FillMode = D3D11_FILL_SOLID; rd.CullMode = D3D11_CULL_NONE;
+  rd.DepthClipEnable = TRUE; rd.ScissorEnable = TRUE;
+  if (SUCCEEDED(hr)) hr = ID3D11Device_CreateRasterizerState(device, &rd, &raster);
+  memset(&bd, 0, sizeof(bd));
+  bd.ByteWidth = 3 * stride; bd.Usage = D3D11_USAGE_DEFAULT; bd.BindFlags = D3D11_BIND_STREAM_OUTPUT;
+  if (SUCCEEDED(hr)) hr = ID3D11Device_CreateBuffer(device, &bd, NULL, &buffer);
+  memset(&qd, 0, sizeof(qd)); qd.Query = D3D11_QUERY_PIPELINE_STATISTICS;
+  if (SUCCEEDED(hr)) hr = ID3D11Device_CreateQuery(device, &qd, &qps);
+  qd.Query = D3D11_QUERY_SO_STATISTICS;
+  if (SUCCEEDED(hr)) hr = ID3D11Device_CreateQuery(device, &qd, &qso);
+  if (FAILED(hr)) { say("SIZES resources/queries 0x%08lx", (unsigned long)hr); bad = 1; goto done; }
+  qd.Query = D3D11_QUERY_SO_STATISTICS_STREAM0;
+  hr = ID3D11Device_CreateQuery(device, &qd, &qs0);
+  if (FAILED(hr)) say("SOSTAT api d3d11s0 unavailable 0x%08lx", (unsigned long)hr);
+
+  ID3D11DeviceContext_OMSetRenderTargets(ctx, 1, &rtv, NULL);
+  ID3D11DeviceContext_RSSetState(ctx, raster);
+  ID3D11DeviceContext_IASetPrimitiveTopology(ctx, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+  ID3D11DeviceContext_VSSetShader(ctx, vs, NULL, 0);
+  ID3D11DeviceContext_GSSetShader(ctx, NULL, NULL, 0);
+  for (UINT i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+    D3D11_QUERY_DATA_PIPELINE_STATISTICS data;
+    UINT draws = cases[i].tiled ? 64 : 1;
+    ID3D11DeviceContext_PSSetShader(ctx, cases[i].discard ? pshalf : ps, NULL, 0);
+    ID3D11DeviceContext_Begin(ctx, (ID3D11Asynchronous *)qps);
+    for (UINT j = 0; j < draws; ++j) {
+      D3D11_VIEWPORT vp;
+      D3D11_RECT rect;
+      UINT x = cases[i].tiled ? (j % 8) * 8 : 0;
+      UINT y = cases[i].tiled ? (j / 8) * 8 : 0;
+      UINT w = cases[i].tiled ? 8 : cases[i].w;
+      UINT h = cases[i].tiled ? 8 : cases[i].h;
+      memset(&vp, 0, sizeof(vp));
+      vp.TopLeftX = (FLOAT)x; vp.TopLeftY = (FLOAT)y;
+      vp.Width = (FLOAT)w; vp.Height = (FLOAT)h; vp.MaxDepth = 1.0f;
+      rect.left = (LONG)x; rect.top = (LONG)y;
+      rect.right = (LONG)(x + w); rect.bottom = (LONG)(y + h);
+      ID3D11DeviceContext_RSSetViewports(ctx, 1, &vp);
+      ID3D11DeviceContext_RSSetScissorRects(ctx, 1, &rect);
+      ID3D11DeviceContext_Draw(ctx, 6, 0);
+    }
+    ID3D11DeviceContext_End(ctx, (ID3D11Asynchronous *)qps);
+    hr = wait_data((ID3D11Asynchronous *)qps, &data, sizeof(data));
+    if (hr != S_OK) { say("PSINV GetData case %s 0x%08lx", cases[i].name, (unsigned long)hr); bad = 1; break; }
+    say("PSINV case %s pixels %u ps %llu ia %llu/%llu vs %llu c %llu/%llu",
+        cases[i].name, cases[i].w * cases[i].h,
+        data.PSInvocations, data.IAVertices, data.IAPrimitives,
+        data.VSInvocations, data.CInvocations, data.CPrimitives);
+    if (cases[i].discard) say("PSINVNOTE case %s covered 4096 surviving 2048 discarded 2048", cases[i].name);
+  }
+  ID3D11DeviceContext_OMSetRenderTargets(ctx, 0, NULL, NULL);
+  ID3D11DeviceContext_IASetPrimitiveTopology(ctx, D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
+  ID3D11DeviceContext_VSSetShader(ctx, vsso, NULL, 0);
+  ID3D11DeviceContext_GSSetShader(ctx, gsso, NULL, 0);
+  ID3D11DeviceContext_PSSetShader(ctx, NULL, NULL, 0);
+  for (UINT i = 0; !bad && i < sizeof(prims) / sizeof(prims[0]); ++i) {
+    D3D10_QUERY_DATA_SO_STATISTICS d10;
+    D3D11_QUERY_DATA_SO_STATISTICS d11;
+    ID3D11DeviceContext_SOSetTargets(ctx, 1, &buffer, &zero);
+    ID3D11DeviceContext_Begin(ctx, (ID3D11Asynchronous *)qso);
+    if (qs0) ID3D11DeviceContext_Begin(ctx, (ID3D11Asynchronous *)qs0);
+    ID3D11DeviceContext_Draw(ctx, prims[i], 0);
+    if (qs0) ID3D11DeviceContext_End(ctx, (ID3D11Asynchronous *)qs0);
+    ID3D11DeviceContext_End(ctx, (ID3D11Asynchronous *)qso);
+    ID3D11DeviceContext_SOSetTargets(ctx, 0, NULL, NULL);
+    hr = wait_data((ID3D11Asynchronous *)qso, &d10, sizeof(d10));
+    if (hr != S_OK) { say("SOSTAT GetData d3d10 prims %u 0x%08lx", prims[i], (unsigned long)hr); bad = 1; break; }
+    say("SOSTAT api d3d10 prims %u capacity 3 written %llu needed %llu",
+        prims[i], d10.NumPrimitivesWritten, d10.PrimitivesStorageNeeded);
+    if (qs0) {
+      hr = wait_data((ID3D11Asynchronous *)qs0, &d11, sizeof(d11));
+      if (hr != S_OK) { say("SOSTAT GetData d3d11s0 prims %u 0x%08lx", prims[i], (unsigned long)hr); bad = 1; break; }
+      say("SOSTAT api d3d11s0 prims %u capacity 3 written %llu needed %llu",
+          prims[i], d11.NumPrimitivesWritten, d11.PrimitivesStorageNeeded);
+    }
+  }
+done:
+  ID3D11DeviceContext_SOSetTargets(ctx, 0, NULL, NULL);
+  ID3D11DeviceContext_OMSetRenderTargets(ctx, 0, NULL, NULL);
+  ID3D11DeviceContext_RSSetState(ctx, NULL);
+  ID3D11DeviceContext_VSSetShader(ctx, NULL, NULL, 0);
+  ID3D11DeviceContext_GSSetShader(ctx, NULL, NULL, 0);
+  ID3D11DeviceContext_PSSetShader(ctx, NULL, NULL, 0);
+  if (qs0) ID3D11Query_Release(qs0);
+  if (qso) ID3D11Query_Release(qso);
+  if (qps) ID3D11Query_Release(qps);
+  if (buffer) ID3D11Buffer_Release(buffer);
+  if (rtv) ID3D11RenderTargetView_Release(rtv);
+  if (raster) ID3D11RasterizerState_Release(raster);
+  if (target) ID3D11Texture2D_Release(target);
+  if (gsso) ID3D11GeometryShader_Release(gsso);
+  if (pshalf) ID3D11PixelShader_Release(pshalf);
+  if (ps) ID3D11PixelShader_Release(ps);
+  if (vsso) ID3D11VertexShader_Release(vsso);
+  if (vs) ID3D11VertexShader_Release(vs);
+  if (bso) ID3D10Blob_Release(bso);
+  if (bdiscard) ID3D10Blob_Release(bdiscard);
+  if (bps) ID3D10Blob_Release(bps);
+  if (bvs) ID3D10Blob_Release(bvs);
+  say("SIZES RESULT %s", bad ? "FAIL" : "DONE");
+  return bad ? 1 : 0;
 }
 
 int main(int argc, char **argv) {
@@ -108,7 +272,8 @@ int main(int argc, char **argv) {
   if (iterations < 1) iterations = 1;
   out = CreateFileA(argv[1], GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS,
                     FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH, NULL);
-  say("STATS iterations %d", iterations);
+  if (argc <= 2 || strcmp(argv[2], "sizes") != 0)
+    say("STATS iterations %d", iterations);
   compiler = LoadLibraryA("d3dcompiler_47.dll");
   compile_fn = compiler ? (pD3DCompile)(void *)GetProcAddress(compiler, "D3DCompile") : NULL;
   if (!compile_fn) { say("NO_D3DCOMPILER %lu", GetLastError()); return 1; }
@@ -125,6 +290,7 @@ int main(int argc, char **argv) {
                          D3D11_SDK_VERSION, &device, &level, &ctx);
   say("D3D11CreateDevice 0x%08lx FEATURE_LEVEL 0x%x", (unsigned long)hr, level);
   if (FAILED(hr)) return 1;
+  if (argc > 2 && strcmp(argv[2], "sizes") == 0) return run_sizes(compile_fn);
   b1 = compile(compile_fn, vs_quad, sizeof(vs_quad) - 1, "vs_4_0");
   b2 = compile(compile_fn, ps_white, sizeof(ps_white) - 1, "ps_4_0");
   b3 = compile(compile_fn, vs_points, sizeof(vs_points) - 1, "vs_4_0");
