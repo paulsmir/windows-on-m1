@@ -2752,11 +2752,9 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
    pDevice->velems_changed = false;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','Draw','''   LOG_ENTRYPOINT();
    Device *pDevice = CastDevice(hDevice);
-   if(pDevice->primitive>=MESA_PRIM_LINES_ADJACENCY) {
-      AgxD3d10WindowsDiagnostic("reject-capture reason=adjacency",
-          E_NOTIMPL,NULL,0);
-      SetError(hDevice,E_NOTIMPL);return;
-   }
+   /* D3D-G10c: adjacency topologies are drawn natively; Asahi feeds them
+    * to the bound geometry shader or a passthrough one (agx_state.c
+    * agx_needs_passthrough_gs). The graph-capture era refused them. */
    if (pDevice && AgxWin32AsahiContextDrawReceipt(pDevice->pipe)) {
       HRESULT status=AgxD3d10WindowsFlushRetire(pDevice->windows);
       if(FAILED(status)) { SetError(hDevice,status); return; }
@@ -2779,11 +2777,9 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
       SetError(hDevice, E_NOTIMPL);
       return;
    }
-   if(pDevice->primitive>=MESA_PRIM_LINES_ADJACENCY) {
-      AgxD3d10WindowsDiagnostic("reject-capture reason=adjacency",
-          E_NOTIMPL,NULL,0);
-      SetError(hDevice,E_NOTIMPL);return;
-   }
+   /* D3D-G10c: adjacency topologies are drawn natively; Asahi feeds them
+    * to the bound geometry shader or a passthrough one (agx_state.c
+    * agx_needs_passthrough_gs). The graph-capture era refused them. */
    if (AgxWin32AsahiContextDrawReceipt(pDevice->pipe)) {
       HRESULT status=AgxD3d10WindowsFlushRetire(pDevice->windows);
       if(FAILED(status)) { SetError(hDevice,status); return; }
@@ -2809,11 +2805,9 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
       pDevice->primitive>=MESA_PRIM_COUNT) {
       SetError(hDevice,E_NOTIMPL);return;
    }
-   if(pDevice->primitive>=MESA_PRIM_LINES_ADJACENCY) {
-      AgxD3d10WindowsDiagnostic("reject-capture reason=adjacency",
-          E_NOTIMPL,NULL,0);
-      SetError(hDevice,E_NOTIMPL);return;
-   }
+   /* D3D-G10c: adjacency topologies are drawn natively; Asahi feeds them
+    * to the bound geometry shader or a passthrough one (agx_state.c
+    * agx_needs_passthrough_gs). The graph-capture era refused them. */
    if(!InstanceCount || !IndexCountPerInstance) return;
    if(AgxWin32AsahiContextDrawReceipt(pDevice->pipe)) {
       HRESULT status=AgxD3d10WindowsFlushRetire(pDevice->windows);
@@ -2833,11 +2827,9 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
    if(!pDevice || pDevice->primitive>=MESA_PRIM_COUNT) {
       SetError(hDevice,E_NOTIMPL);return;
    }
-   if(pDevice->primitive>=MESA_PRIM_LINES_ADJACENCY) {
-      AgxD3d10WindowsDiagnostic("reject-capture reason=adjacency",
-          E_NOTIMPL,NULL,0);
-      SetError(hDevice,E_NOTIMPL);return;
-   }
+   /* D3D-G10c: adjacency topologies are drawn natively; Asahi feeds them
+    * to the bound geometry shader or a passthrough one (agx_state.c
+    * agx_needs_passthrough_gs). The graph-capture era refused them. */
    if(!InstanceCount || !VertexCountPerInstance) return;
    if(AgxWin32AsahiContextDrawReceipt(pDevice->pipe)) {
       HRESULT status=AgxD3d10WindowsFlushRetire(pDevice->windows);
