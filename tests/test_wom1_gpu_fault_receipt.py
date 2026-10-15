@@ -187,6 +187,30 @@ int main(int argc, char **argv) {
             'worker_scheduled': False, 'resetting': True, 'stopping': False})
         self.assertEqual((snapshot['resets'], snapshot['resets_succeeded']), (1, 0))
 
+    def test_enumtag_extraction_finds_the_driver_section(self):
+        # EXP1296 watchdog secondary data: header dwords, (offset, id) pairs,
+        # section 1 = the KMD buffer, followed by section 2 (driver version).
+        table = [0x27, 0x53a5, 0x140, 0xffff, 0xbec, 0x11, 0x4ba9, 0x18, 0x53a5, 0x01,
+                 0x53c2, 0x02, 0x5401, 0x06, 0, 0]
+        blob = bytearray(0x5410)
+        blob[:4 * len(table)] = b''.join(v.to_bytes(4, 'little') for v in table)
+        blob[0x53a5:0x53c2] = bytes.fromhex(EXP1296_DBGINFO)
+        blob[0x53c2:0x53d0] = b'Apple Silicon '
+        lines = ['{65755A40-F146-43EA-8C9136B85728FD35} - 0x0 bytes',
+                 '{270A33FD-3DA6-460D-BA893C1BAE21E39B} - 0x5410 bytes']
+        for at in range(0, len(blob), 16):
+            chunk = blob[at:at + 16]
+            lines.append('  ' + ' '.join(f'{b:02X}' for b in chunk) + '  ' + '.' * len(chunk))
+        lines.append('{F87E4A4C-C5A1-4D2F-BFF0D5DE63A5E4C3} - 0x10 bytes')
+        lines.append('  FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF  ................')
+        data = DECODER.read_enumtag('\n'.join(lines))
+        self.assertEqual(len(data), len(blob))
+        section = DECODER.dbginfo_from_blackbox(data)
+        self.assertEqual(section, bytes.fromhex(EXP1296_DBGINFO))
+        self.assertEqual(DECODER.decode_dbginfo(section)['active'], '0xce71c')
+        with self.assertRaises(ValueError):
+            DECODER.read_enumtag('{F87E4A4C-C5A1-4D2F-BFF0D5DE63A5E4C3} - 0x0 bytes')
+
     def test_fault_info_layout_matches_asahi_g13(self):
         self.assertEqual(DECODER.decode_fault_info(DECODER.FAULT_INFO_NOT_READ), {'read': False})
         self.assertEqual(DECODER.decode_fault_info(0)['valid'], False)

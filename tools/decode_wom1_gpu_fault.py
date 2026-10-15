@@ -12,6 +12,8 @@ Dump blackbox:
   --dbginfo HEX         the DxgkDdiCollectDbgInfo snapshot (v1 32 or v2 56
                         bytes; dxgkrnl trims trailing zero bytes) from the
                         {270A33FD-...} secondary dump data.
+  --enumtag FILE        cdb ".enumtag" output of a VIDEO_TDR_FAILURE dump:
+                        the snapshot is taken from that secondary data.
 
 Input: raw .bin files (named after the value), a collector state.json with a
 Receipts map, or a devnode .reg export.  No live registry access.
@@ -209,6 +211,48 @@ def decode_dbginfo(data):
     return result
 
 
+WATCHDOG_TAG = '{270A33FD-3DA6-460D-BA893C1BAE21E39B}'
+
+
+def read_enumtag(text, tag=WATCHDOG_TAG):
+    """Bytes of one secondary-data tag from cdb ".enumtag" output."""
+    data = bytearray()
+    inside = False
+    for line in text.splitlines():
+        if line.startswith('{'):
+            if inside:
+                break
+            inside = line.upper().startswith(tag)
+            continue
+        if inside:
+            match = re.match(r'\s+((?:[0-9A-Fa-f]{2} ){1,16})', line + ' ')
+            if match:
+                data += bytes.fromhex(match.group(1).replace(' ', ''))
+    if not data:
+        raise ValueError(f'{tag} not in the .enumtag output')
+    return bytes(data)
+
+
+def dbginfo_from_blackbox(data):
+    """The KMD's CollectDbgInfo bytes in dxgkrnl's watchdog secondary data.
+
+    Undocumented layout, read from the EXP1296 dump: two dwords, then
+    (offset, section id) dword pairs up to a zero offset; section 1 is the
+    driver's buffer (trailing zero bytes dropped) and ends where the next
+    section starts."""
+    sections = []
+    for at in range(8, len(data) - 7, 8):
+        offset, ident = struct.unpack_from('<2I', data, at)
+        if offset == 0:
+            break
+        sections.append((offset, ident))
+    starts = sorted({offset for offset, _ in sections} | {len(data)})
+    for offset, ident in sections:
+        if ident == 1 and offset < len(data):
+            return data[offset:min(o for o in starts if o > offset)]
+    raise ValueError('no driver section in the watchdog secondary data')
+
+
 DECODERS = {FAULT_NAME: decode_fault, RESET_NAME: decode_reset,
             RECOVERY_NAME: decode_recovery}
 
@@ -241,6 +285,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('inputs', nargs='*', type=Path)
     parser.add_argument('--dbginfo', help='CollectDbgInfo snapshot bytes as hex')
+    parser.add_argument('--enumtag', type=Path, help='cdb .enumtag output of a 0x116 dump')
     args = parser.parse_args()
     result = {}
     for path in args.inputs:
@@ -248,6 +293,10 @@ def main():
             result[name] = DECODERS[name](data)
     if args.dbginfo:
         result['CollectDbgInfo'] = decode_dbginfo(bytes.fromhex(re.sub(r'\s', '', args.dbginfo)))
+    if args.enumtag:
+        raw = args.enumtag.read_bytes()
+        text = raw.decode('utf-16' if raw.startswith((b'\xff\xfe', b'\xfe\xff')) else 'utf-8-sig')
+        result['CollectDbgInfo'] = decode_dbginfo(dbginfo_from_blackbox(read_enumtag(text)))
     if not result:
         parser.error('nothing to decode')
     print(json.dumps(result, indent=2))
