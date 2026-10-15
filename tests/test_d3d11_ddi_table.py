@@ -214,6 +214,18 @@ class D3d11DdiTable(unittest.TestCase):
                 with self.subTest(define=define):
                     self.assertIn("#define " + define + " " + value, resource)
 
+    def test_cube_family_views(self):
+        # FL 10_1: cube-array SRVs (and cube or 2D-array views of cube-array
+        # resources) take their own sampler view; the 10.0 path describes
+        # only one cube of a six-slice resource and refuses the rest.
+        fill = MODULE.read_text()
+        cube = function_body(fill, "srv_cube_family")
+        self.assertIn("PIPE_TEXTURE_CUBE_ARRAY", cube)
+        self.assertIn("PIPE_TEXTURE_2D_ARRAY", cube)
+        self.assertLess(cube.index("memset(view"), cube.index("return false;\n   enum pipe_format"))
+        create = function_body(fill, "CreateShaderResourceView11")
+        self.assertLess(create.index("srv_cube_family"), create.index("srv_10"))
+
     def test_tessellation_stages_reach_asahi(self):
         # D3D-H4: hull/domain shaders through the translator, their setters
         # on the common frontend setters, patch topologies, and the winding

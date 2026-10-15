@@ -35,6 +35,7 @@
 #include "util/format/u_format.h"
 #include "util/u_draw.h"
 #include "util/u_inlines.h"
+#include "util/u_sampler.h"
 
 #include "agx_d3d11_ddi.h"
 #include "dxbc_to_nir.h"
@@ -214,6 +215,64 @@ CalcPrivateShaderResourceViewSize11(D3D10DDI_HDEVICE hDevice,
    return CalcPrivateShaderResourceViewSize(hDevice, &view);
 }
 
+/* D3D-H5 (FL 10_1): cube-array views, cube views at any face of a cube-array
+ * resource and 2D-array views of cube resources -- the sampler views the
+ * 10.0 path does not describe (it takes one cube of a six-slice resource).
+ * Returns false with *handled false for every other view. */
+static bool
+srv_cube_family(D3D10DDI_HDEVICE hDevice, const D3D11DDIARG_CREATESHADERRESOURCEVIEW *args,
+                D3D10DDI_HSHADERRESOURCEVIEW hView, bool *handled)
+{
+   Device *device = CastDevice(hDevice);
+   Resource *res = args ? CastResource(args->hDrvResource) : NULL;
+   struct pipe_resource *tex = res ? res->resource : NULL;
+   *handled = false;
+   if (!device || !tex || (tex->target != PIPE_TEXTURE_CUBE && tex->target != PIPE_TEXTURE_CUBE_ARRAY))
+      return false;
+   bool cube = args->ResourceDimension == D3D10DDIRESOURCE_TEXTURECUBE;
+   if (!cube && args->ResourceDimension != D3D10DDIRESOURCE_TEXTURE2D)
+      return false;
+   if (cube && tex->target == PIPE_TEXTURE_CUBE && args->TexCube.First2DArrayFace == 0 &&
+       args->TexCube.NumCubes == 1)
+      return false;
+   *handled = true;
+   ShaderResourceView *view = CastShaderResourceView(hView);
+   memset(view, 0, sizeof(*view));
+   UINT level = cube ? args->TexCube.MostDetailedMip : args->Tex2D.MostDetailedMip;
+   UINT levels = cube ? args->TexCube.MipLevels : args->Tex2D.MipLevels;
+   UINT first = cube ? args->TexCube.First2DArrayFace : args->Tex2D.FirstArraySlice;
+   UINT count = cube ? 6u * args->TexCube.NumCubes : args->Tex2D.ArraySize;
+   if (levels == ~0u && level <= tex->last_level)
+      levels = tex->last_level + 1u - level;
+   if (res->owner_device != device || !(res->bind_flags & D3D10_DDI_BIND_SHADER_RESOURCE) ||
+       !count || !levels || level > tex->last_level || levels > tex->last_level + 1u - level ||
+       first >= tex->array_size || count > tex->array_size - first ||
+       !AgxD3d10FormatViewCompatible(res->Format, args->Format, FALSE, FALSE))
+      return false;
+   enum pipe_format format = FormatTranslate(args->Format, FALSE);
+   enum pipe_format lowered = AgxD3d10LoweredTextureFormat(args->Format);
+   if (lowered != PIPE_FORMAT_NONE)
+      format = lowered;
+   if (format == PIPE_FORMAT_NONE)
+      return false;
+   struct pipe_sampler_view desc;
+   u_sampler_view_default_template(&desc, tex, format);
+   desc.target = !cube ? PIPE_TEXTURE_2D_ARRAY : count == 6u ? PIPE_TEXTURE_CUBE : PIPE_TEXTURE_CUBE_ARRAY;
+   desc.u.tex.first_level = level;
+   desc.u.tex.last_level = level + levels - 1u;
+   desc.u.tex.first_layer = first;
+   desc.u.tex.last_layer = first + count - 1u;
+   view->handle = device->pipe->create_sampler_view(device->pipe, tex, &desc);
+   if (!view->handle)
+      return false;
+   view->owner_device = device;
+   view->owner_resource = res;
+   res->sample_format = args->Format;
+   res->sample_level = level;
+   res->sample_layer = first;
+   return true;
+}
+
 static void APIENTRY
 CreateShaderResourceView11(D3D10DDI_HDEVICE hDevice,
                            const D3D11DDIARG_CREATESHADERRESOURCEVIEW *args,
@@ -221,6 +280,12 @@ CreateShaderResourceView11(D3D10DDI_HDEVICE hDevice,
                            D3D10DDI_HRTSHADERRESOURCEVIEW hRTView)
 {
    D3D10DDIARG_CREATESHADERRESOURCEVIEW view;
+   bool handled = false;
+   if (srv_cube_family(hDevice, args, hView, &handled) || handled) {
+      if (!CastShaderResourceView(hView)->handle)
+         refuse(hDevice, "reject-d3d11-create-srv", (UINT)args->ResourceDimension, (UINT)args->Format);
+      return;
+   }
    if (!args || !srv_10(args, &view)) {
       refuse(hDevice, "reject-d3d11-create-srv", args ? (UINT)args->ResourceDimension : ~0u,
              args ? (UINT)args->Format : ~0u);
