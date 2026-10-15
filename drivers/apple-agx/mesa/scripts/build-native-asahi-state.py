@@ -2496,7 +2496,7 @@ AGX_D3D11_STAGE_SETTERS(Ds, MESA_SHADER_TESS_EVAL)
    if (pDevice->bound_empty_gs && pShader != pDevice->bound_empty_gs)
       pipe->bind_vs_state(pipe, pDevice->bound_vs && pDevice->bound_vs->handle ?
          pDevice->bound_vs->handle : pDevice->empty_vs);
-   if (pShader && !pShader->state.tokens) {
+   if (pShader && !pShader->state.tokens && !pShader->handle) {
       pDevice->bound_empty_gs = pShader;
    } else {
       pDevice->bound_empty_gs = NULL;
@@ -2594,6 +2594,9 @@ AGX_D3D11_STAGE_SETTERS(Ds, MESA_SHADER_TESS_EVAL)
    if(soValid&&soSlots==1u)
       soValid=!(pData->StreamOutputStrideInBytes&3u)&&
          pData->StreamOutputStrideInBytes>=4u*soComponents;
+   /* D3D-H5: stream output keeps the TGSI path, which parses SM 4 only. */
+   if(soValid&&AgxD3d10ShaderModel5(pData->pShaderCode))
+      soValid=false;
    if(!soValid) {
       SetError(hDevice,E_NOTIMPL);return;
    }
@@ -2830,13 +2833,23 @@ extern "C" BOOL AgxD3d10WindowsDiagnosticSwitch(const char *Name);
  * xfb rebuild Asahi's state creation owns.  EXP1296: as the default it
  * faulted the GPU from DWM (2435 firmware recoveries), so it stays opt-in
  * until that translation is found. */
+/* D3D-H5: Mesa's DXBC parser (ShaderParse.c) knows the SM 4 opcodes only
+ * and indexes its opcode table with an assert; an SM 5 program (FL 11_0)
+ * never reaches it and always takes the translator. */
+static inline bool
+AgxD3d10ShaderModel5(const UINT *code)
+{
+   return code && ((code[0] >> 4) & 0xfu) >= 5u;
+}
+
 static void *
 AgxD3d10CreateShaderState(struct pipe_context *pipe, Shader *shader,
                           const UINT *code)
 {
    struct pipe_shader_state state = shader->state;
+   const bool sm5 = AgxD3d10ShaderModel5(code);
    if (code && !state.stream_output.num_outputs &&
-       AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D_SHADER_NIR")) {
+       (sm5 || AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D_SHADER_NIR"))) {
       struct dxbc_nir_error error = {};
       struct nir_shader *nir = dxbc_translate_tokens(code,
          pipe->screen->nir_options[shader->type], &error);
@@ -2848,6 +2861,8 @@ AgxD3d10CreateShaderState(struct pipe_context *pipe, Shader *shader,
          state.ir.nir = nir;
       }
    }
+   if (state.type != PIPE_SHADER_IR_NIR && !state.tokens)
+      return NULL;
    switch (shader->type) {
    case MESA_SHADER_VERTEX: return pipe->create_vs_state(pipe, &state);
    case MESA_SHADER_GEOMETRY: return pipe->create_gs_state(pipe, &state);
@@ -2858,23 +2873,33 @@ AgxD3d10CreateShaderState(struct pipe_context *pipe, Shader *shader,
         ('''   pShader->state.tokens = Shader_tgsi_translate(pCode, pShader->output_mapping);
 
    pShader->handle = pipe->create_vs_state(pipe, &pShader->state);
-''','''   pShader->state.tokens = Shader_tgsi_translate(pCode, pShader->output_mapping);
+''','''   pShader->state.tokens = AgxD3d10ShaderModel5(pCode) ? NULL :
+      Shader_tgsi_translate(pCode, pShader->output_mapping);
 
    pShader->handle = AgxD3d10CreateShaderState(pipe, pShader, pCode);
+   if (!pShader->handle)
+      SetError(hDevice, E_INVALIDARG);
 '''),
         ('''   pShader->state.tokens = Shader_tgsi_translate(pShaderCode, pShader->output_mapping);
 
    pShader->handle = pipe->create_gs_state(pipe, &pShader->state);
-''','''   pShader->state.tokens = Shader_tgsi_translate(pShaderCode, pShader->output_mapping);
+''','''   pShader->state.tokens = AgxD3d10ShaderModel5(pShaderCode) ? NULL :
+      Shader_tgsi_translate(pShaderCode, pShader->output_mapping);
 
    pShader->handle = AgxD3d10CreateShaderState(pipe, pShader, pShaderCode);
+   if (!pShader->handle)
+      SetError(hDevice, E_INVALIDARG);
 '''),
-        ('''                                                 pShader->output_mapping);
+        ('''   pShader->state.tokens = Shader_tgsi_translate(pShaderCode,
+                                                 pShader->output_mapping);
 
    pShader->handle = pipe->create_fs_state(pipe, &pShader->state);
-''','''                                                 pShader->output_mapping);
+''','''   pShader->state.tokens = AgxD3d10ShaderModel5(pShaderCode) ? NULL :
+      Shader_tgsi_translate(pShaderCode, pShader->output_mapping);
 
    pShader->handle = AgxD3d10CreateShaderState(pipe, pShader, pShaderCode);
+   if (!pShader->handle)
+      SetError(hDevice, E_INVALIDARG);
 ''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','SetSamplers','''   Device *pDevice = CastDevice(hDevice);
    const UINT slots = D3D10_COMMONSHADER_SAMPLER_SLOT_COUNT;
