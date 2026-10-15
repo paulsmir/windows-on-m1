@@ -894,10 +894,15 @@ struct Query
    QueryPhase Phase;
    HRESULT LastError;
    /* D3D-G3: occlusion counters and predicates are Mesa pipe queries; an
-    * event query has no pipe query and completes on the Windows fence. */
+    * event query has no pipe query and completes on the Windows fence.
+    * D3D-G10d: pipeline statistics are eight single-statistic pipe queries
+    * and stream-output statistics two (written, generated): handle is the
+    * first, extra the rest. */
    D3D10DDI_QUERY Type;
    UINT Flags;
    struct pipe_query *handle;
+   struct pipe_query *extra[7];
+   UINT extra_count;
 };'''),
         ('''struct Resource
 {
@@ -1542,14 +1547,25 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
    ULONGLONG owner = 0;
    ULONG generation = 0;
    /* D3D-G3: the ISP counts samples into the occlusion heap the KMD names
-    * as isp_oclqry_base; a predicate may carry the PREDICATEHINT flag. */
+    * as isp_oclqry_base; a predicate may carry the PREDICATEHINT flag.
+    * D3D-G10d: pipeline statistics, stream-output statistics and the
+    * stream-overflow predicate are Asahi queries too (single statistics,
+    * primitives emitted/generated, SO overflow). Timestamps need the
+    * firmware timestamp path and stay refused. */
    const bool occlusion = pCreateQuery &&
       (pCreateQuery->Query == D3D10DDI_QUERY_OCCLUSION ||
        pCreateQuery->Query == D3D10DDI_QUERY_OCCLUSIONPREDICATE);
+   const bool statistics = pCreateQuery &&
+      (pCreateQuery->Query == D3D10DDI_QUERY_PIPELINESTATS ||
+       pCreateQuery->Query == D3D10DDI_QUERY_STREAMOUTPUTSTATS ||
+       pCreateQuery->Query == D3D10DDI_QUERY_STREAMOVERFLOWPREDICATE);
+   const bool predicate = pCreateQuery &&
+      (pCreateQuery->Query == D3D10DDI_QUERY_OCCLUSIONPREDICATE ||
+       pCreateQuery->Query == D3D10DDI_QUERY_STREAMOVERFLOWPREDICATE);
    if (!pCreateQuery || !pQuery ||
-       (pCreateQuery->Query != D3D10DDI_QUERY_EVENT && !occlusion) ||
+       (pCreateQuery->Query != D3D10DDI_QUERY_EVENT && !occlusion && !statistics) ||
        (pCreateQuery->MiscFlags &&
-        !(pCreateQuery->Query == D3D10DDI_QUERY_OCCLUSIONPREDICATE &&
+        !(predicate &&
           pCreateQuery->MiscFlags == D3D10DDI_QUERY_MISCFLAG_PREDICATEHINT))) {
       SetError(hDevice, E_NOTIMPL);
       return;
@@ -1576,6 +1592,34 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
          SetError(hDevice, E_OUTOFMEMORY);
          return;
       }
+   } else if (statistics) {
+      struct pipe_query *queries[8] = {};
+      unsigned count = 0;
+      bool made = true;
+      if (pCreateQuery->Query == D3D10DDI_QUERY_PIPELINESTATS) {
+         /* PIPE_STAT_QUERY_IA_VERTICES..PS_INVOCATIONS: the order of
+          * D3D10_DDI_QUERY_DATA_PIPELINE_STATISTICS. */
+         for (unsigned i = 0; made && i < 8; ++i)
+            made = (queries[count++] = pDevice->pipe->create_query(pDevice->pipe,
+               PIPE_QUERY_PIPELINE_STATISTICS_SINGLE, i)) != NULL;
+      } else if (pCreateQuery->Query == D3D10DDI_QUERY_STREAMOUTPUTSTATS) {
+         made = (queries[count++] = pDevice->pipe->create_query(pDevice->pipe,
+            PIPE_QUERY_PRIMITIVES_EMITTED, 0)) != NULL &&
+            (queries[count++] = pDevice->pipe->create_query(pDevice->pipe,
+            PIPE_QUERY_PRIMITIVES_GENERATED, 0)) != NULL;
+      } else {
+         made = (queries[count++] = pDevice->pipe->create_query(pDevice->pipe,
+            PIPE_QUERY_SO_OVERFLOW_PREDICATE, 0)) != NULL;
+      }
+      if (!made) {
+         for (unsigned i = 0; i < count; ++i)
+            if (queries[i]) pDevice->pipe->destroy_query(pDevice->pipe, queries[i]);
+         SetError(hDevice, E_OUTOFMEMORY);
+         return;
+      }
+      candidate.handle = queries[0];
+      for (unsigned i = 1; i < count; ++i)
+         candidate.extra[candidate.extra_count++] = queries[i];
    }
    *pQuery = candidate;
    (void)hRTQuery;'''),
@@ -1662,6 +1706,9 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
       /* agx_destroy_query waits for the batches writing its heap slot. */
       pDevice->pipe->destroy_query(pDevice->pipe, pQuery->handle);
       pQuery->handle = NULL;
+      for (UINT i = 0; i < pQuery->extra_count; ++i)
+         pDevice->pipe->destroy_query(pDevice->pipe, pQuery->extra[i]);
+      pQuery->extra_count = 0;
    }
    pQuery->Magic = 0;
    pQuery->OwnerDevice = NULL;
@@ -1680,7 +1727,10 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
    if (pQuery->handle) {
       /* agx_begin_query makes it the context's occlusion query and zeroes
        * its heap slot once the batches still writing it completed. */
-      if (!pDevice->pipe->begin_query(pDevice->pipe, pQuery->handle)) {
+      bool begun = pDevice->pipe->begin_query(pDevice->pipe, pQuery->handle);
+      for (UINT i = 0; begun && i < pQuery->extra_count; ++i)
+         begun = pDevice->pipe->begin_query(pDevice->pipe, pQuery->extra[i]);
+      if (!begun) {
          pQuery->Phase = QueryFailed;
          pQuery->LastError = E_FAIL;
          SetError(hDevice, E_FAIL);
@@ -1701,7 +1751,10 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
    if (pQuery->handle) {
       /* Only the query this one began; the draws since carry its index. */
       if (pQuery->Phase != QueryBuilding) return;
-      if (!pDevice->pipe->end_query(pDevice->pipe, pQuery->handle)) {
+      bool ended = pDevice->pipe->end_query(pDevice->pipe, pQuery->handle);
+      for (UINT i = 0; ended && i < pQuery->extra_count; ++i)
+         ended = pDevice->pipe->end_query(pDevice->pipe, pQuery->extra[i]);
+      if (!ended) {
          pQuery->Phase = QueryFailed;
          pQuery->LastError = E_FAIL;
          SetError(hDevice, E_FAIL);
@@ -1744,8 +1797,12 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
    pQuery->Phase = QueryIssued;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Query.cpp','QueryGetData','''   Device *pDevice = CastDevice(hDevice);
    Query *pQuery = CastQuery(hQuery);
-   const UINT dataBytes = pQuery && pQuery->handle &&
-      pQuery->Type == D3D10DDI_QUERY_OCCLUSION ? sizeof(UINT64) : sizeof(BOOL);
+   const UINT dataBytes = !pQuery || !pQuery->handle ? sizeof(BOOL) :
+      pQuery->Type == D3D10DDI_QUERY_OCCLUSION ? sizeof(UINT64) :
+      pQuery->Type == D3D10DDI_QUERY_PIPELINESTATS ?
+         sizeof(D3D10_DDI_QUERY_DATA_PIPELINE_STATISTICS) :
+      pQuery->Type == D3D10DDI_QUERY_STREAMOUTPUTSTATS ?
+         sizeof(D3D10_DDI_QUERY_DATA_SO_STATISTICS) : sizeof(BOOL);
    if (!EventQueryValid(pDevice, pQuery) ||
        !((pData == NULL && DataSize == 0) ||
          (pData != NULL && DataSize == dataBytes)) ||
@@ -1765,10 +1822,16 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
       /* The native agx_get_query_result submits the query's writers and,
        * without wait, reports not-ready until they completed. Submitting
        * under DO_NOT_FLUSH too keeps a polling caller from never finishing. */
-      union pipe_query_result value;
+      union pipe_query_result value, values[8];
       memset(&value, 0, sizeof(value));
+      memset(values, 0, sizeof(values));
       bool ready = pDevice->pipe->get_query_result(pDevice->pipe,
          pQuery->handle, false, &value);
+      values[0] = value;
+      /* D3D-G10d: every part of a composite query must be ready. */
+      for (UINT i = 0; ready && i < pQuery->extra_count; ++i)
+         ready = pDevice->pipe->get_query_result(pDevice->pipe,
+            pQuery->extra[i], false, &values[i + 1]);
       HRESULT status = AgxD3d10WindowsFlushStatus(pDevice->windows);
       if (FAILED(status)) {
          pQuery->Phase = QueryFailed;
@@ -1780,10 +1843,23 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
          SetError(hDevice, DXGI_DDI_ERR_WASSTILLDRAWING);
          return;
       }
-      if (pData && pQuery->Type == D3D10DDI_QUERY_OCCLUSION)
+      if (pData && pQuery->Type == D3D10DDI_QUERY_OCCLUSION) {
          *(UINT64 *)pData = value.u64;
-      else if (pData)
+      } else if (pData && pQuery->Type == D3D10DDI_QUERY_PIPELINESTATS) {
+         D3D10_DDI_QUERY_DATA_PIPELINE_STATISTICS *stats =
+            (D3D10_DDI_QUERY_DATA_PIPELINE_STATISTICS *)pData;
+         stats->IAVertices = values[0].u64; stats->IAPrimitives = values[1].u64;
+         stats->VSInvocations = values[2].u64; stats->GSInvocations = values[3].u64;
+         stats->GSPrimitives = values[4].u64; stats->CInvocations = values[5].u64;
+         stats->CPrimitives = values[6].u64; stats->PSInvocations = values[7].u64;
+      } else if (pData && pQuery->Type == D3D10DDI_QUERY_STREAMOUTPUTSTATS) {
+         D3D10_DDI_QUERY_DATA_SO_STATISTICS *so =
+            (D3D10_DDI_QUERY_DATA_SO_STATISTICS *)pData;
+         so->NumPrimitivesWritten = values[0].u64;
+         so->PrimitivesStorageNeeded = values[1].u64;
+      } else if (pData) {
          *(BOOL *)pData = value.b ? TRUE : FALSE;
+      }
       pQuery->Phase = QuerySignaled;
       return;
    }
@@ -1833,8 +1909,10 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
     * and mip generation through CheckPredicate. With PREDICATEHINT an
     * operation runs while the result is not yet available. A NULL predicate
     * ends predication; its value is kept as the runtime's. */
+   /* D3D-G10d: the stream-overflow predicate predicates too. */
    if (!device || (query && (!EventQueryValid(device, query) ||
-       !query->handle || query->Type != D3D10DDI_QUERY_OCCLUSIONPREDICATE))) {
+       !query->handle || (query->Type != D3D10DDI_QUERY_OCCLUSIONPREDICATE &&
+                          query->Type != D3D10DDI_QUERY_STREAMOVERFLOWPREDICATE)))) {
       SetError(hDevice, E_NOTIMPL); return;
    }
    device->pipe->render_condition(device->pipe, query ? query->handle : NULL,
