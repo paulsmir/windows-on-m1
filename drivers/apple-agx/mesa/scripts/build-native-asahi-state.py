@@ -409,10 +409,30 @@ if args.windows_platform_declarations:
       ureg_property(ureg, TGSI_PROPERTY_FS_COORD_PIXEL_CENTER,
                     TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER);
       reg = ureg_DECL_system_value(ureg, TGSI_SEMANTIC_POSITION, 0);
+   } else if (dcl_siv_name == D3D10_SB_NAME_IS_FRONT_FACE) {
+      /* EXP1298: Asahi's fs_face_is_integer_sysval requires a system value;
+       * tgsi_to_nir rejects a FACE input (agx_pipe.c:2125,
+       * tgsi_to_nir.c:601-604,645). */
+      reg = ureg_DECL_system_value(ureg, TGSI_SEMANTIC_FACE, 0);
    } else {
       reg = ureg_DECL_fs_input(ureg, translate_system_name(dcl_siv_name),
                               0, TGSI_INTERPOLATE_CONSTANT);
    }'''),
+        ('''      /* We need to map gallium's front_face to the one expected
+       * by D3D10 */
+      struct ureg_dst tmp = ureg_DECL_temporary(ureg);
+
+      tmp = ureg_writemask(tmp, TGSI_WRITEMASK_X);
+
+      ureg_CMP(ureg, tmp, reg,
+               ureg_imm1i(ureg, 0), ureg_imm1i(ureg, -1));''','''      /* EXP1298: tgsi_to_nir.c:505-521 supplies integer 0xffffffff/0
+       * for Asahi's FACE sysval; D3D's SV_IsFrontFace has that encoding. */
+      struct ureg_dst tmp = ureg_DECL_temporary(ureg);
+
+      tmp = ureg_writemask(tmp, TGSI_WRITEMASK_X);
+
+      ureg_USNE(ureg, tmp, ureg_scalar(reg, TGSI_SWIZZLE_X),
+                ureg_imm1u(ureg, 0));'''),
         ('''   reg = ureg_DECL_fs_input(ureg,
                             translate_system_name(dcl_siv_name),
                             0,

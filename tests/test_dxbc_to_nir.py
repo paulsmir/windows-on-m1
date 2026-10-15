@@ -123,6 +123,32 @@ class DxbcToNir(unittest.TestCase):
         return subprocess.run([str(self.binary), str(FIXTURES / f"{name}.dxbc")],
                               capture_output=True, text=True, timeout=60)
 
+    def test_windows_dxbc_corpus_does_not_crash(self):
+        corpus = local_tree("dxbc-corpus")
+        if corpus is None:
+            self.skipTest("Windows DXBC corpus not available")
+        files = sorted(corpus.glob("*.dxbc"))
+        self.assertTrue(files, "DXBC corpus is empty")
+        ok, refused, crashed = [], [], []
+        for path in files:
+            try:
+                result = subprocess.run([str(self.binary), str(path)],
+                                        capture_output=True, text=True, timeout=30)
+            except subprocess.TimeoutExpired:
+                crashed.append(f"{path.name}: timeout")
+                continue
+            if result.returncode < 0:
+                crashed.append(f"{path.name}: signal {-result.returncode}")
+            elif result.stdout.startswith("TRANSLATED ") and result.returncode == 0:
+                ok.append(path.name)
+            elif result.stdout.startswith(("REFUSED ", "PARSE_ERROR ")) or result.returncode > 0:
+                refused.append(path.name)
+            else:
+                crashed.append(f"{path.name}: unexpected output {result.stdout[:80]!r}")
+        print(f"DXBC corpus: OK={len(ok)} REFUSED={len(refused)} CRASH={len(crashed)} "
+              f"CRASH={','.join(crashed)} REFUSED={','.join(refused)}")
+        self.assertFalse(crashed, "DXBC corpus fixture crashed: " + ", ".join(crashed))
+
     def test_shader_model_4_fixtures_translate_and_validate(self):
         for name, stage in TRANSLATED.items():
             with self.subTest(name=name):
