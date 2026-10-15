@@ -33,8 +33,8 @@ typedef struct _APPLE_AGX_SCHEDULER {
   APPLE_AGX_U32 QueuedFence;
   APPLE_AGX_U32 QueueHead, QueueCount;
   APPLE_AGX_U32 FenceQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
-  /* Fence IDs accepted before preemption but discarded from the queue.
-   * Dxgkrnl may resubmit an old paging packet with its original ID. */
+  /* Fence IDs accepted before a preemption or engine reset but discarded from
+   * the queue. Dxgkrnl may resubmit an old paging packet with its original ID. */
   APPLE_AGX_U32 PreemptedFenceQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
   APPLE_AGX_U32 PreemptedFenceCount;
   APPLE_AGX_U32 ActiveFence;
