@@ -28,8 +28,12 @@ struct nir_shader_compiler_options;
  * shader-buffer slot #, its hidden append/consume counter (one 32-bit word
  * at offset 0) is shader-buffer slot DXBC_NIR_UAV_COUNTER_SLOT + #, and a
  * raw or structured SRV t# is texel-buffer sampler view # read one 32-bit
- * dword per texel. */
-#define DXBC_NIR_UAV_COUNTER_SLOT 64
+ * dword per texel.
+ * UAV registers are u0..u7 (D3D11_PS_CS_UAV_REGISTER_COUNT, the D3D11.0
+ * DDI), so buffers and counters fill shader-buffer slots 0..15 of Gallium's
+ * 32.  The 64 slots of the D3D11.1 DDI need per-shader slot compaction. */
+#define DXBC_NIR_MAX_UAVS 8
+#define DXBC_NIR_UAV_COUNTER_SLOT DXBC_NIR_MAX_UAVS
 
 struct dxbc_nir_error {
    char message[160];

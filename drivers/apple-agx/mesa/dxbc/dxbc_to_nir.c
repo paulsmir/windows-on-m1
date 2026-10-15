@@ -20,7 +20,7 @@
 #define MAX_RESOURCES 128
 #define MAX_SAMPLERS 16
 #define MAX_CF 64
-#define MAX_UAVS 64
+#define MAX_UAVS DXBC_NIR_MAX_UAVS
 #define MAX_TGSM 32
 
 enum mem_kind { MEM_NONE, MEM_TYPED, MEM_RAW, MEM_STRUCTURED };

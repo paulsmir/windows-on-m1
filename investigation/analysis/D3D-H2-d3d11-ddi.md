@@ -42,9 +42,11 @@ compute, UAVs, indirect draws and tessellation towards FL 11_0.
 
 ## Binding model additions (frontend owns, translator conventions)
 
-- UAV slots u0..u7 (pixel stage, bound with RTVs) and u0..u63 (compute):
-  typed UAVs -> pipe images, raw/structured UAVs -> pipe shader buffers at
-  slot #, hidden append/consume counters -> shader buffer 64 + #.
+- UAV slots u0..u7 in the pixel stage (bound with RTVs) and in compute
+  (D3D11_PS_CS_UAV_REGISTER_COUNT on the D3D11.0 DDI): typed UAVs -> pipe
+  images, raw/structured UAVs -> pipe shader buffers at slot #, hidden
+  append/consume counters -> shader buffer 8 + # (slots 0..15 of Gallium's
+  32; the D3D11.1 DDI's 64 slots need per-shader slot compaction).
 - Raw/structured SRVs: texel-buffer sampler views read one dword per texel.
 - Compute: pipe->create_compute_state from the translator's NIR (no TGSI
   path exists for SM 5), launch_grid for Dispatch/DispatchIndirect.

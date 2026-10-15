@@ -23,6 +23,7 @@ from pathlib import Path
 import shlex
 import subprocess
 import json
+import re
 import tempfile
 import unittest
 
@@ -112,6 +113,23 @@ class DxbcToNir(unittest.TestCase):
                 result = self.run_fixture(name)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr[-3000:])
                 self.assertIn(f"TRANSLATED stage {stage}", result.stdout)
+
+    def test_resource_bindings_fit_the_gallium_ranges(self):
+        # A shader buffer or image slot beyond PIPE_MAX_SHADER_BUFFERS (32) /
+        # PIPE_MAX_SHADER_IMAGES (64) cannot be bound through
+        # set_shader_buffers / set_shader_images: an append/consume counter
+        # placed there is never backed.  UAV registers are u0..u7 on the
+        # D3D11.0 DDI (D3D11_PS_CS_UAV_REGISTER_COUNT).
+        for name in TRANSLATED:
+            with self.subTest(name=name):
+                result = self.run_fixture(name)
+                m = re.search(r"ssbos (\d+) images (\d+)", result.stdout)
+                self.assertTrue(m, result.stdout + result.stderr[-2000:])
+                self.assertLessEqual(int(m.group(1)), 16, "shader buffers: 8 UAVs + 8 counters")
+                self.assertLessEqual(int(m.group(2)), 8, "images: 8 typed UAVs")
+        # cs50 uses an append/consume counter
+        m = re.search(r"ssbos (\d+)", self.run_fixture("cs50").stdout)
+        self.assertGreater(int(m.group(1)), 8)
 
     def test_shader_model_5_fixtures_are_refused_cleanly(self):
         for name in REFUSED:

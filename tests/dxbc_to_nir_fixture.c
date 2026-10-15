@@ -60,6 +60,9 @@ main(int argc, char **argv)
       return 0;
    }
    nir_validate_shader(nir, "dxbc_to_nir");
+   /* the binding ranges the frontend sizes its set_shader_buffers /
+    * set_shader_images calls from */
+   unsigned ssbos = nir->info.num_ssbos, images = nir->info.num_images;
    if (print)
       nir_print_shader(nir, stdout);
 
@@ -80,10 +83,12 @@ main(int argc, char **argv)
       nir_foreach_block(block, impl)
          nir_foreach_instr(instr, block)
             ++instrs;
-   printf("TRANSLATED stage %s instructions %u inputs 0x%llx outputs 0x%llx textures %u\n",
+   printf("TRANSLATED stage %s instructions %u inputs 0x%llx outputs 0x%llx textures %u "
+          "ssbos %u images %u\n",
           mesa_shader_stage_name(nir->info.stage), instrs,
           (unsigned long long)nir->info.inputs_read,
-          (unsigned long long)nir->info.outputs_written, BITSET_LAST_BIT(nir->info.textures_used));
+          (unsigned long long)nir->info.outputs_written, BITSET_LAST_BIT(nir->info.textures_used),
+          ssbos, images);
    ralloc_free(nir);
    glsl_type_singleton_decref();
    dxbc_program_free(&program);
