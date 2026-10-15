@@ -1053,6 +1053,14 @@ struct Query
 };''')])
     change('src/gallium/frontends/d3d10umd/Device.cpp',
         'dcf950aec993d40743671e1f208655e151158a9b4647bc3581dcd134962086aa',[
+        ('''   return sizeof(Device);
+}''', '''   SIZE_T size = sizeof(Device);
+   UINT values[4] = {pData->Interface, pData->Version, pData->Flags,
+                     (UINT)size};
+   AgxD3d10WindowsDiagnostic("measure-calc-private-device-size", S_OK,
+                             values, 4u);
+   return size;
+}'''),
         ('#include "Format.h"', '''#include "Format.h"
 static HRESULT
 AgxNativeSharedPresentationStatus(UINT interfaceVersion, UINT runtimeVersion)
