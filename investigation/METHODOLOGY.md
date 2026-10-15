@@ -120,5 +120,10 @@ wins on any conflict. Every agent (Claude or Codex) works this way.
 - Never use bare `git stash`; `rm` only with `"${VAR:?}"`.
 - The Codex sandbox cannot write the shared `.git`: Codex edits files and
   runs tests inside the worktree the integrator created, then reports; the
-  integrator reviews the diff and commits. Codex has no SSH to the builder
+  integrator reviews the diff and commits. Start each Codex task with its
+  working directory inside that worktree (`cd <worktree>` before invoking
+  the companion): Codex's writable roots follow its start directory, and a
+  task started elsewhere fails every write with "Operation not permitted".
+  Codex has no Windows SDK headers: the integrator compiles natively on
+  the builder (clang-cl /Zs) before committing. Codex has no SSH to the builder
   or the guest: builder and hardware steps stay with the integrator.
