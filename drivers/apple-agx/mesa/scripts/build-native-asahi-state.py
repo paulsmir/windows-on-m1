@@ -3297,7 +3297,7 @@ MesaD3d10FrontendSetSoOffsetForTest(D3D10DDI_HDEVICE hDevice,
       bind |= PIPE_BIND_DISPLAY_TARGET;
 
    if (flags & D3D11_DDI_BIND_UNORDERED_ACCESS)
-      bind |= PIPE_BIND_SHADER_BUFFER;
+      bind |= PIPE_BIND_SHADER_BUFFER | PIPE_BIND_SHADER_IMAGE;
 '''),
         ('''   } else {
       BOOL bindDepthStencil = !!(pCreateResource->BindFlags & D3D10_DDI_BIND_DEPTH_STENCIL);
@@ -3719,9 +3719,13 @@ AgxD3d10ResourceWithinRequiredLimits(
            pCreateResource->MipLevels == 1)) &&
          pCreateResource->SampleDesc.Quality == 0 &&
          pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT && pCreateResource->MapFlags == 0 &&
-         (pCreateResource->BindFlags == D3D10_DDI_BIND_RENDER_TARGET ||
-          pCreateResource->BindFlags == (D3D10_DDI_BIND_RENDER_TARGET |
-              D3D10_DDI_BIND_SHADER_RESOURCE)) &&
+         /* D3D-H5: unordered access with a single-sampled render target */
+         ((pCreateResource->BindFlags & ~D3D11_DDI_BIND_UNORDERED_ACCESS) ==
+             D3D10_DDI_BIND_RENDER_TARGET ||
+          (pCreateResource->BindFlags & ~D3D11_DDI_BIND_UNORDERED_ACCESS) ==
+             (D3D10_DDI_BIND_RENDER_TARGET | D3D10_DDI_BIND_SHADER_RESOURCE)) &&
+         (!(pCreateResource->BindFlags & D3D11_DDI_BIND_UNORDERED_ACCESS) ||
+          pCreateResource->SampleDesc.Count == 1) &&
          (pCreateResource->MiscFlags == 0 ||
           (autogen && pCreateResource->BindFlags == (D3D10_DDI_BIND_RENDER_TARGET |
               D3D10_DDI_BIND_SHADER_RESOURCE))) &&
@@ -3776,6 +3780,19 @@ AgxD3d10ResourceWithinRequiredLimits(
          pResource->resource = screen->resource_create_with_modifiers(
             screen, &templat, &modifier, 1);
       }
+   } else if (pCreateResource->BindFlags & D3D11_DDI_BIND_UNORDERED_ACCESS) {
+      /* D3D-H5: typed unordered-access textures (D3D11 runtime validated:
+       * single-sampled, DEFAULT usage) are images: tiled, uncompressed, as
+       * the render targets */
+      if (pCreateResource->SampleDesc.Count != 1 ||
+          pCreateResource->Usage != D3D10_DDI_USAGE_DEFAULT || pCreateResource->MapFlags ||
+          !screen->resource_create_with_modifiers) {
+         SetError(hDevice, E_NOTIMPL);
+         return;
+      }
+      const uint64_t modifier = DRM_FORMAT_MOD_APPLE_GPU_TILED;
+      pResource->resource = screen->resource_create_with_modifiers(
+         screen, &templat, &modifier, 1);
    } else if ((pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE1D ||
                pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE2D ||
                pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE3D ||

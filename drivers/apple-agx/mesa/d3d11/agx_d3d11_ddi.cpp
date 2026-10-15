@@ -9,9 +9,10 @@
  * behaviour is not implemented.  D3D-H2b: compute on 10.x hardware (cs_4_x
  * through the DXBC -> NIR translator, raw and structured buffer SRVs and
  * UAVs, Dispatch, buffer UAV clears), reported only under its switch.
- * Typed UAVs, append/consume counters, indirect arguments, tessellation and
- * pixel-stage UAVs fail closed (the capabilities report FL 10_0, so the
- * runtime does not create them; unbinding them with NULL is accepted).
+ * D3D-H4/H5 (reachable once FL 11_0 is reported): hull and domain shaders,
+ * typed UAVs of buffers and textures, pixel-stage UAVs, append/consume
+ * counters and CopyStructureCount, typed UAV clears.  Indirect arguments
+ * fail closed (unbinding with NULL is accepted).
  * Deferred contexts are left NULL: D3D11DDICAPS_THREADING reports no
  * command lists, so the runtime emulates them.
  *
@@ -19,6 +20,7 @@
  */
 #include "gallium/frontends/d3d10umd/Draw.h"
 #include "gallium/frontends/d3d10umd/Device.h"
+#include "gallium/frontends/d3d10umd/Format.h"
 #include "gallium/frontends/d3d10umd/InputAssembly.h"
 #include "gallium/frontends/d3d10umd/OutputMerger.h"
 #include "gallium/frontends/d3d10umd/Query.h"
@@ -30,6 +32,8 @@
 #include <stddef.h>
 
 #include "util/bitscan.h"
+#include "util/format/u_format.h"
+#include "util/u_box.h"
 #include "util/u_inlines.h"
 
 #include "agx_d3d11_ddi.h"
@@ -84,7 +88,8 @@ resource_supported(const D3D11DDIARG_CREATERESOURCE *args)
    bool buffer = args->ResourceDimension == D3D10DDIRESOURCE_BUFFER;
    UINT layout = args->MiscFlags & AGX_D3D11_BUFFER_MISC;
    if (!buffer)
-      return !(args->BindFlags & D3D11_DDI_BIND_UNORDERED_ACCESS) && !layout && !args->ByteStride;
+      return !layout && !args->ByteStride &&
+             (!(args->BindFlags & D3D11_DDI_BIND_UNORDERED_ACCESS) || args->SampleDesc.Count <= 1);
    if (layout == AGX_D3D11_BUFFER_MISC)
       return false;
    if (layout == D3D11_DDI_RESOURCE_MISC_BUFFER_STRUCTURED)
@@ -252,22 +257,6 @@ CreateDepthStencilView11(D3D10DDI_HDEVICE hDevice, const D3D11DDIARG_CREATEDEPTH
    CreateDepthStencilView(hDevice, &view, hView, hRTView);
 }
 
-static void APIENTRY
-SetRenderTargets11(D3D10DDI_HDEVICE hDevice, const D3D10DDI_HRENDERTARGETVIEW *phRTVs,
-                   UINT NumRTVs, UINT ClearSlots, D3D10DDI_HDEPTHSTENCILVIEW hDSV,
-                   const D3D11DDI_HUNORDEREDACCESSVIEW *phUAVs, const UINT *pInitialCounts,
-                   UINT UAVStartSlot, UINT NumUAVs, UINT UAVRangeStart, UINT UAVRangeSize)
-{
-   (void)pInitialCounts; (void)UAVStartSlot; (void)UAVRangeStart; (void)UAVRangeSize;
-   for (UINT i = 0; phUAVs && i < NumUAVs; ++i) {
-      if (phUAVs[i].pDrvPrivate) {
-         refuse(hDevice, "reject-d3d11-pixel-uav", i, NumUAVs);
-         return;
-      }
-   }
-   SetRenderTargets(hDevice, phRTVs, NumRTVs, ClearSlots, hDSV);
-}
-
 /* ------------------------------------------------------------------ */
 /* Stream output                                                      */
 
@@ -338,13 +327,17 @@ CreateGeometryShaderWithStreamOutput11(
 /* ------------------------------------------------------------------ */
 /* D3D-H2b: compute (cs_4_x) and buffer unordered-access views        */
 
-/* A raw or structured buffer view bound as shader buffer u# (dxbc_to_nir.h
- * binding conventions).  Typed views and the append/consume counter flags
- * (SM 5) are refused until implemented. */
+/* An unordered-access view (dxbc_to_nir.h binding conventions): a raw or
+ * structured buffer view is shader buffer u#, a typed view (buffer or
+ * texture) image u#, an append/consume or counter view's hidden counter
+ * (one 32-bit word) shader buffer AGX_D3D11_UAV_SLOTS + u#. */
 struct AgxUnorderedAccessView {
    Device *owner_device;
    Resource *owner_resource;
+   bool typed;
    struct pipe_shader_buffer buffer;
+   struct pipe_image_view image;
+   struct pipe_resource *counter;
 };
 
 static inline AgxUnorderedAccessView *
@@ -359,6 +352,61 @@ CalcPrivateUnorderedAccessViewSize11(D3D10DDI_HDEVICE, const D3D11DDIARG_CREATEU
    return sizeof(AgxUnorderedAccessView);
 }
 
+/* A typed view of a texture or a buffer: the pipe image of its format,
+ * level and slices (D3D11DDIARG_TEX*_UNORDEREDACCESSVIEW). */
+static bool
+uav_image(const D3D11DDIARG_CREATEUNORDEREDACCESSVIEW *args, Resource *resource,
+          struct pipe_image_view *image)
+{
+   struct pipe_resource *res = resource->resource;
+   enum pipe_format format = FormatTranslate(args->Format, FALSE);
+   unsigned level = 0, first = 0, count = 1, layers = 1;
+   memset(image, 0, sizeof(*image));
+   if (format == PIPE_FORMAT_NONE)
+      return false;
+   image->resource = res;
+   image->format = format;
+   image->access = image->shader_access = PIPE_IMAGE_ACCESS_READ_WRITE;
+   switch (args->ResourceDimension) {
+   case D3D10DDIRESOURCE_BUFFER:
+   case D3D11DDIRESOURCE_BUFFEREX: {
+      UINT64 element = util_format_get_blocksize(format);
+      UINT64 offset = (UINT64)args->Buffer.FirstElement * element;
+      UINT64 bytes = (UINT64)args->Buffer.NumElements * element;
+      if (res->target != PIPE_BUFFER || args->Buffer.Flags || !bytes ||
+          offset > resource->logical_bytes || bytes > resource->logical_bytes - offset)
+         return false;
+      image->u.buf.offset = (unsigned)offset;
+      image->u.buf.size = (unsigned)bytes;
+      return true;
+   }
+   case D3D10DDIRESOURCE_TEXTURE1D:
+      level = args->Tex1D.MipSlice; first = args->Tex1D.FirstArraySlice;
+      count = args->Tex1D.ArraySize; layers = res->array_size;
+      break;
+   case D3D10DDIRESOURCE_TEXTURE2D:
+      level = args->Tex2D.MipSlice; first = args->Tex2D.FirstArraySlice;
+      count = args->Tex2D.ArraySize; layers = res->array_size;
+      break;
+   case D3D10DDIRESOURCE_TEXTURE3D:
+      level = args->Tex3D.MipSlice; first = args->Tex3D.FirstW;
+      count = args->Tex3D.WSize;
+      layers = level <= res->last_level ? u_minify(res->depth0, level) : 0;
+      if (count == ~0u && first < layers)
+         count = layers - first;
+      break;
+   default:
+      return false;
+   }
+   if (res->target == PIPE_BUFFER || res->nr_samples > 1 || level > res->last_level || !count ||
+       first >= layers || count > layers - first)
+      return false;
+   image->u.tex.level = level;
+   image->u.tex.first_layer = first;
+   image->u.tex.last_layer = first + count - 1;
+   return true;
+}
+
 static void APIENTRY
 CreateUnorderedAccessView11(D3D10DDI_HDEVICE hDevice, const D3D11DDIARG_CREATEUNORDEREDACCESSVIEW *args,
                             D3D11DDI_HUNORDEREDACCESSVIEW hView, D3D11DDI_HRTUNORDEREDACCESSVIEW)
@@ -369,23 +417,52 @@ CreateUnorderedAccessView11(D3D10DDI_HDEVICE hDevice, const D3D11DDIARG_CREATEUN
    Resource *resource = args ? CastResource(args->hDrvResource) : NULL;
    bool buffer = args && (args->ResourceDimension == D3D10DDIRESOURCE_BUFFER ||
                           args->ResourceDimension == D3D11DDIRESOURCE_BUFFEREX);
-   UINT flags = buffer ? args->Buffer.Flags : ~0u;
-   UINT stride = buffer && !(flags & ~(UINT)D3D11_DDI_BUFFER_UAV_FLAG_RAW) ?
-      buffer_view_stride(resource, args->Format, flags != 0) : 0u;
-   UINT64 offset = stride ? (UINT64)args->Buffer.FirstElement * stride : 0;
-   UINT64 bytes = stride ? (UINT64)args->Buffer.NumElements * stride : 0;
-   if (!device || !stride || resource->owner_device != device || !resource->resource ||
-       !(resource->bind_flags & D3D11_DDI_BIND_UNORDERED_ACCESS) || !bytes ||
-       offset > resource->logical_bytes || bytes > resource->logical_bytes - offset) {
+   UINT flags = buffer ? args->Buffer.Flags : 0;
+   bool raw = flags & D3D11_DDI_BUFFER_UAV_FLAG_RAW;
+   bool counter = flags & (D3D11_DDI_BUFFER_UAV_FLAG_APPEND | D3D11_DDI_BUFFER_UAV_FLAG_COUNTER);
+   bool valid = device && resource && resource->owner_device == device && resource->resource &&
+                (resource->bind_flags & D3D11_DDI_BIND_UNORDERED_ACCESS);
+   if (valid && buffer && (raw || args->Format == DXGI_FORMAT_UNKNOWN)) {
+      /* raw (32-bit elements) or structured (the resource's stride) */
+      UINT stride = !(flags & ~(UINT)(D3D11_DDI_BUFFER_UAV_FLAG_RAW | D3D11_DDI_BUFFER_UAV_FLAG_APPEND |
+                                      D3D11_DDI_BUFFER_UAV_FLAG_COUNTER)) && !(raw && counter) ?
+         buffer_view_stride(resource, args->Format, raw) : 0u;
+      UINT64 offset = (UINT64)args->Buffer.FirstElement * stride;
+      UINT64 bytes = (UINT64)args->Buffer.NumElements * stride;
+      valid = stride && bytes && offset <= resource->logical_bytes &&
+              bytes <= resource->logical_bytes - offset;
+      if (valid) {
+         pipe_resource_reference(&view->buffer.buffer, resource->resource);
+         view->buffer.buffer_offset = (unsigned)offset;
+         view->buffer.buffer_size = (unsigned)bytes;
+      }
+      if (valid && counter) {
+         static const UINT zero = 0;
+         view->counter = pipe_buffer_create(device->pipe->screen, PIPE_BIND_SHADER_BUFFER,
+                                            PIPE_USAGE_DEFAULT, 4);
+         valid = view->counter != NULL;
+         if (valid)
+            device->pipe->buffer_subdata(device->pipe, view->counter, PIPE_MAP_WRITE, 0, 4, &zero);
+      }
+   } else if (valid) {
+      struct pipe_image_view image;
+      valid = uav_image(args, resource, &image);
+      if (valid) {
+         view->typed = true;
+         view->image = image;
+         view->image.resource = NULL;
+         pipe_resource_reference(&view->image.resource, resource->resource);
+      }
+   }
+   if (!valid) {
+      pipe_resource_reference(&view->buffer.buffer, NULL);
+      pipe_resource_reference(&view->counter, NULL);
       refuse(hDevice, "reject-d3d11-uav", args ? (UINT)args->ResourceDimension : ~0u,
              args ? (UINT)args->Format : ~0u);
       return;
    }
    view->owner_device = device;
    view->owner_resource = resource;
-   pipe_resource_reference(&view->buffer.buffer, resource->resource);
-   view->buffer.buffer_offset = (unsigned)offset;
-   view->buffer.buffer_size = (unsigned)bytes;
 }
 
 static void APIENTRY
@@ -395,60 +472,181 @@ DestroyUnorderedAccessView11(D3D10DDI_HDEVICE, D3D11DDI_HUNORDEREDACCESSVIEW hVi
    if (!view)
       return;
    pipe_resource_reference(&view->buffer.buffer, NULL);
+   pipe_resource_reference(&view->image.resource, NULL);
+   pipe_resource_reference(&view->counter, NULL);
    view->owner_device = NULL;
    view->owner_resource = NULL;
 }
 
-/* The views of slots [start, start + n); the initial counts apply to
- * counter views only, which are not created. */
+/* Binds slots [first, first + count) of a stage: views[i - start] for the
+ * slots in [start, start + n), nothing for the others; an initial count other
+ * than ~0 sets a counter view's hidden counter. */
+static bool
+bind_uavs(Device *device, mesa_shader_stage stage, UINT first, UINT count, UINT start, UINT n,
+          const D3D11DDI_HUNORDEREDACCESSVIEW *views, const UINT *initial_counts)
+{
+   struct pipe_shader_buffer buffers[AGX_D3D11_UAV_SLOTS] = {};
+   struct pipe_shader_buffer counters[AGX_D3D11_UAV_SLOTS] = {};
+   struct pipe_image_view images[AGX_D3D11_UAV_SLOTS] = {};
+   struct pipe_context *pipe = device->pipe;
+   if (first > AGX_D3D11_UAV_SLOTS || count > AGX_D3D11_UAV_SLOTS - first ||
+       start < first || n > count - (start - first) || (n && !views))
+      return false;
+   for (UINT i = 0; i < n; ++i) {
+      AgxUnorderedAccessView *view = CastUnorderedAccessView(views[i]);
+      UINT slot = start - first + i;
+      if (!view)
+         continue;
+      if (view->owner_device != device || (!view->typed && !view->buffer.buffer))
+         return false;
+      if (view->typed) {
+         images[slot] = view->image;
+      } else {
+         buffers[slot] = view->buffer;
+         if (view->counter) {
+            counters[slot].buffer = view->counter;
+            counters[slot].buffer_size = 4;
+            if (initial_counts && initial_counts[i] != ~0u)
+               pipe->buffer_subdata(pipe, view->counter, PIPE_MAP_WRITE, 0, 4, &initial_counts[i]);
+         }
+      }
+   }
+   if (!count)
+      return true;
+   pipe->set_shader_buffers(pipe, stage, first, count, buffers, BITFIELD_MASK(count));
+   pipe->set_shader_buffers(pipe, stage, AGX_D3D11_UAV_SLOTS + first, count, counters,
+                            BITFIELD_MASK(count));
+   pipe->set_shader_images(pipe, stage, first, count, 0, images);
+   return true;
+}
+
 static void APIENTRY
 CsSetUnorderedAccessViews11(D3D10DDI_HDEVICE hDevice, UINT start, UINT n,
                             const D3D11DDI_HUNORDEREDACCESSVIEW *views, const UINT *initial_counts)
 {
-   (void)initial_counts;
    Device *device = CastDevice(hDevice);
-   struct pipe_shader_buffer buffers[AGX_D3D11_UAV_SLOTS] = {};
-   bool valid = device && start <= AGX_D3D11_UAV_SLOTS && n <= AGX_D3D11_UAV_SLOTS - start &&
-                (!n || views);
-   for (UINT i = 0; valid && i < n; ++i) {
-      AgxUnorderedAccessView *view = CastUnorderedAccessView(views[i]);
-      if (!view)
-         continue;
-      valid = view->owner_device == device && view->buffer.buffer;
-      if (valid)
-         buffers[i] = view->buffer;
-   }
-   if (!valid) {
+   if (!device || !bind_uavs(device, MESA_SHADER_COMPUTE, start, n, start, n, views, initial_counts))
       refuse(hDevice, "reject-d3d11-cs-uav", start, n);
-      return;
-   }
-   if (n)
-      device->pipe->set_shader_buffers(device->pipe, MESA_SHADER_COMPUTE, start, n, buffers,
-                                       BITFIELD_MASK(n));
 }
 
-/* Raw and structured views: every 32-bit word takes values[0]. */
+/* The bits a uint clear writes: the low bits of values[c] in channel c. */
+static void
+pack_uint_bits(enum pipe_format format, const UINT values[4], uint8_t out[16])
+{
+   const struct util_format_description *desc = util_format_description(format);
+   memset(out, 0, 16);
+   for (unsigned c = 0; c < desc->nr_channels && c < 4; ++c) {
+      unsigned size = desc->channel[c].size, shift = desc->channel[c].shift;
+      uint64_t bits = size >= 32 ? values[c] : (values[c] & ((1u << size) - 1u));
+      for (unsigned b = 0; b < size && shift + b < 128; ++b)
+         if (bits & (1ull << b))
+            out[(shift + b) / 8] |= (uint8_t)(1u << ((shift + b) % 8));
+   }
+}
+
+/* Typed views: one pixel of the view's format over the view's level and
+ * slices (buffers: every element). */
+static void
+clear_typed(Device *device, AgxUnorderedAccessView *view, const uint8_t pixel[16])
+{
+   struct pipe_context *pipe = device->pipe;
+   struct pipe_resource *res = view->image.resource;
+   if (res->target == PIPE_BUFFER) {
+      pipe->clear_buffer(pipe, res, view->image.u.buf.offset, view->image.u.buf.size, pixel,
+                         util_format_get_blocksize(view->image.format));
+      return;
+   }
+   unsigned level = view->image.u.tex.level;
+   struct pipe_box box;
+   u_box_3d(0, 0, 0, u_minify(res->width0, level), u_minify(res->height0, level), 1, &box);
+   if (res->target == PIPE_TEXTURE_3D || res->array_size > 1) {
+      box.z = view->image.u.tex.first_layer;
+      box.depth = view->image.u.tex.last_layer - view->image.u.tex.first_layer + 1;
+   }
+   pipe->clear_texture(pipe, res, level, &box, pixel);
+}
+
+/* Raw and structured views: every 32-bit word takes values[0]; typed views:
+ * the low bits of each value in its channel. */
 static void APIENTRY
 ClearUnorderedAccessViewUint11(D3D10DDI_HDEVICE hDevice, D3D11DDI_HUNORDEREDACCESSVIEW hView,
                                const UINT values[4])
 {
    Device *device = CastDevice(hDevice);
    AgxUnorderedAccessView *view = CastUnorderedAccessView(hView);
-   if (!device || !view || view->owner_device != device || !view->buffer.buffer || !values) {
+   if (!device || !view || view->owner_device != device || !values ||
+       (!view->typed && !view->buffer.buffer)) {
       refuse(hDevice, "reject-d3d11-clear-uav", 0, 0);
       return;
    }
    if (!CheckPredicate(device))
       return;
+   if (view->typed) {
+      uint8_t pixel[16];
+      pack_uint_bits(view->image.format, values, pixel);
+      clear_typed(device, view, pixel);
+      return;
+   }
    device->pipe->clear_buffer(device->pipe, view->buffer.buffer, view->buffer.buffer_offset,
                               view->buffer.buffer_size, &values[0], 4);
 }
 
-/* Float clears exist for typed views only. */
+/* Typed views only: the values converted to the view's format. */
 static void APIENTRY
-ClearUnorderedAccessViewFloat11(D3D10DDI_HDEVICE hDevice, D3D11DDI_HUNORDEREDACCESSVIEW, const FLOAT[4])
+ClearUnorderedAccessViewFloat11(D3D10DDI_HDEVICE hDevice, D3D11DDI_HUNORDEREDACCESSVIEW hView,
+                                const FLOAT values[4])
 {
-   refuse(hDevice, "reject-d3d11-clear-uav", 1, 0);
+   Device *device = CastDevice(hDevice);
+   AgxUnorderedAccessView *view = CastUnorderedAccessView(hView);
+   uint8_t pixel[16] = {};
+   if (!device || !view || view->owner_device != device || !values || !view->typed) {
+      refuse(hDevice, "reject-d3d11-clear-uav", 1, 0);
+      return;
+   }
+   if (!CheckPredicate(device))
+      return;
+   util_format_pack_rgba(view->image.format, pixel, values, 1);
+   clear_typed(device, view, pixel);
+}
+
+/* The hidden counter of an append/consume or counter view, as 32 bits at
+ * an aligned offset of a buffer. */
+static void APIENTRY
+CopyStructureCount11(D3D10DDI_HDEVICE hDevice, D3D10DDI_HRESOURCE hDst, UINT offset,
+                     D3D11DDI_HUNORDEREDACCESSVIEW hView)
+{
+   Device *device = CastDevice(hDevice);
+   Resource *dst = CastResource(hDst);
+   AgxUnorderedAccessView *view = CastUnorderedAccessView(hView);
+   struct pipe_box box;
+   if (!device || !dst || !dst->resource || dst->owner_device != device || !dst->buffer ||
+       !view || view->owner_device != device || !view->counter || (offset & 3u) ||
+       offset > dst->logical_bytes || dst->logical_bytes - offset < 4) {
+      refuse(hDevice, "reject-d3d11-copy-structure-count", offset, 0);
+      return;
+   }
+   u_box_1d(0, 4, &box);
+   device->pipe->resource_copy_region(device->pipe, dst->resource, 0, offset, 0, 0, view->counter,
+                                      0, &box);
+}
+
+static void APIENTRY
+SetRenderTargets11(D3D10DDI_HDEVICE hDevice, const D3D10DDI_HRENDERTARGETVIEW *phRTVs,
+                   UINT NumRTVs, UINT ClearSlots, D3D10DDI_HDEPTHSTENCILVIEW hDSV,
+                   const D3D11DDI_HUNORDEREDACCESSVIEW *phUAVs, const UINT *pInitialCounts,
+                   UINT UAVStartSlot, UINT NumUAVs, UINT UAVRangeStart, UINT UAVRangeSize)
+{
+   /* D3D-H5: pixel-stage UAVs share the slot space with the render targets
+    * (UAVStartSlot >= NumRTVs); the range updated includes unbinds */
+   SetRenderTargets(hDevice, phRTVs, NumRTVs, ClearSlots, hDSV);
+   Device *device = CastDevice(hDevice);
+   UINT first = MIN2(UAVRangeStart, UAVStartSlot);
+   UINT end = MAX2(UAVRangeStart + UAVRangeSize, UAVStartSlot + NumUAVs);
+   if (!NumUAVs && !UAVRangeSize)
+      return;
+   if (!device || !bind_uavs(device, MESA_SHADER_FRAGMENT, first, end - first, UAVStartSlot,
+                             NumUAVs, phUAVs, pInitialCounts))
+      refuse(hDevice, "reject-d3d11-pixel-uav", UAVStartSlot, NumUAVs);
 }
 
 static void APIENTRY
@@ -729,12 +927,6 @@ DispatchIndirectNone(D3D10DDI_HDEVICE hDevice, D3D10DDI_HRESOURCE, UINT)
    refuse(hDevice, "reject-d3d11-dispatch", 1, 0);
 }
 
-static void APIENTRY
-CopyStructureCountNone(D3D10DDI_HDEVICE hDevice, D3D10DDI_HRESOURCE, UINT, D3D11DDI_HUNORDEREDACCESSVIEW)
-{
-   refuse(hDevice, "reject-d3d11-copy-structure-count", 0, 0);
-}
-
 /* A minimum LOD clamp is a hint for residency management; sampling stays
  * correct without it (no tiled resources here). */
 static void APIENTRY
@@ -871,6 +1063,7 @@ AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f, const D3D10DDI_DEVICEFUNCS *bas
    f->pfnClearUnorderedAccessViewUint = ClearUnorderedAccessViewUint11;
    f->pfnClearUnorderedAccessViewFloat = ClearUnorderedAccessViewFloat11;
    f->pfnDispatch = Dispatch11;
+   f->pfnCopyStructureCount = CopyStructureCount11;
    /* D3D-H4: hull and domain shaders, patch topologies */
    f->pfnCreateHullShader = CreateHullShader11;
    f->pfnCreateDomainShader = CreateDomainShader11;
@@ -889,6 +1082,5 @@ AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f, const D3D10DDI_DEVICEFUNCS *bas
    f->pfnDrawIndexedInstancedIndirect = DrawIndirectNone;
    f->pfnDrawInstancedIndirect = DrawIndirectNone;
    f->pfnDispatchIndirect = DispatchIndirectNone;
-   f->pfnCopyStructureCount = CopyStructureCountNone;
    /* deferred contexts and command lists stay NULL (THREADING caps 0) */
 }

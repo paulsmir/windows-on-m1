@@ -134,6 +134,34 @@ class D3d11DdiTable(unittest.TestCase):
             self.assertIn("D3D11_DDI_BIND_UNORDERED_ACCESS", create)
             self.assertIn("D3D11_DDI_RESOURCE_MISC_BUFFER_STRUCTURED", create)
 
+    def test_uav_bindings_match_the_translator(self):
+        # The frontend binds what the translated shaders read: raw/structured
+        # views at shader buffer u#, typed views at image u#, hidden counters
+        # at DXBC_NIR_UAV_COUNTER_SLOT + u#.  A different counter base binds
+        # every append/consume counter to a slot the shader never reads.
+        header = (ROOT / "drivers/apple-agx/mesa/dxbc/dxbc_to_nir.h").read_text()
+        self.assertIn("#define DXBC_NIR_UAV_COUNTER_SLOT DXBC_NIR_MAX_UAVS", header)
+        fill = MODULE.read_text()
+        self.assertIn("#define AGX_D3D11_UAV_SLOTS DXBC_NIR_MAX_UAVS", fill)
+        bind = function_body(fill, "bind_uavs")
+        self.assertIn("set_shader_buffers(pipe, stage, first, count, buffers", bind)
+        self.assertIn("set_shader_buffers(pipe, stage, AGX_D3D11_UAV_SLOTS + first, count, counters", bind)
+        self.assertIn("set_shader_images(pipe, stage, first, count, 0, images)", bind)
+        self.assertIn("bind_uavs(device, MESA_SHADER_FRAGMENT", function_body(fill, "SetRenderTargets11"))
+        body = fill[fill.index("AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f,"):]
+        assigned = dict(re.findall(r"\bf->(pfn\w+)\s*=\s*(\w+);", body))
+        self.assertEqual(assigned["pfnCopyStructureCount"], "CopyStructureCount11")
+        with tempfile.TemporaryDirectory(prefix="d3d11-uav-") as tmp:
+            out = project(Path(tmp) / "out")
+            if out is None:
+                self.skipTest("reference Mesa tree not available")
+            resource = (out / "src/gallium/frontends/d3d10umd/Resource.cpp").read_text()
+            self.assertIn("PIPE_BIND_SHADER_BUFFER | PIPE_BIND_SHADER_IMAGE",
+                          function_body(resource, "translate_resource_flags"))
+            create = function_body(resource, "CreateResource")
+            self.assertIn("(pCreateResource->BindFlags & ~D3D11_DDI_BIND_UNORDERED_ACCESS) ==", create)
+            self.assertIn("else if (pCreateResource->BindFlags & D3D11_DDI_BIND_UNORDERED_ACCESS)", create)
+
     def test_tessellation_stages_reach_asahi(self):
         # D3D-H4: hull/domain shaders through the translator, their setters
         # on the common frontend setters, patch topologies, and the winding
