@@ -1,6 +1,30 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-15T10:14Z (read this first)
+## Current as of 2026-10-15T12:20Z (read this first)
+
+Running: EXP1295 (newexp-kmd1295.sh; KMD e93bb539, UMD32 out30), next
+EXP1296 (newexp-kmd1296.sh, before1296.txt; KMD/UMD from b7504a5a).
+- EXP1295 CONFIRMED (before its memory tests): compute on 10.x hardware
+  through the D3D11 interface (cs_4_0 structured/raw/chained dispatches
+  exact, x86 + ARM64); the D3D11 interface itself (8caf0e8e: the UMD runtime
+  accepts D3D11.0) with every smoke PASS; every NIR smoke PASS including
+  sample (5043da49: outputs stored once at the end).
+- Since (offline, compiled in closures 053/055): the translator is the
+  default shader path (937de32b; APPLE_AGX_D3D_SHADER_TGSI=1 opts out); hull
+  and domain shaders (D3D-H4-tessellation.md) translated and wired;
+  FL 11_0 pieces: typed/pixel/counter UAVs, CopyStructureCount, indirect
+  draws/dispatch, BC6H/BC7, and a per-process FL 11_0 switch
+  (APPLE_AGX_D3D11_FL11) with agx_fl11_smoke as its checkpoint.
+- OPEN: MSAA interior pixels resolve to the clear colour (EXP1294:
+  compression ruled out; the per-sample probe runs in EXP1296); STATS:
+  PSInvocations 132 for 4096 pixels (one per SIMD group: suspected
+  subgroup reduction of Asahi's uniform-atomic optimisation; EXP1296 case U
+  discriminates) and SO statistics 0; PRESSURE intermittently hangs or runs
+  16+ min (memory tests now last); FL 11_0 lists 8x MSAA, which AGX lacks
+  (reported as 0 quality levels; whether the runtime enforces it is
+  measured by EXP1296 F).
+
+## Current as of 2026-10-15T10:14Z
 
 Running: EXP1293 (newexp-kmd1293.sh; KMD 5be15abc = code 7dc938f2, UMD32
 out25). Installed before it: PACKAGE1292 (rolled back by the pipeline).
