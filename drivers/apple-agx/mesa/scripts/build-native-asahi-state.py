@@ -2994,6 +2994,46 @@ AgxD3d10CopyFamily(DXGI_FORMAT format)
    }
 }
 
+#include "util/u_box.h"
+
+/* D3D-G10b: the format a ResourceCopy / ResourceCopyRegion blit reads and
+ * writes so that the stored bits survive: the bring-up byte families first
+ * (BGRA8, BGRX8, RGBA8 as UNORM), then the source format itself (linear;
+ * snorm as sint, since snorm does not round-trip -- Asahi agx_blit.c),
+ * then any other pair of one DXGI cast family as the unsigned-integer
+ * format of their block size. Compressed formats copy through
+ * resource_copy_region (PIPE_FORMAT_NONE here); depth formats only to
+ * themselves. */
+static enum pipe_format
+AgxD3d10CopyRawFormat(const Resource *source, const Resource *destination,
+                      const struct pipe_resource *src, const struct pipe_resource *dst)
+{
+   unsigned family = AgxD3d10CopyFamily(source->Format);
+   if (family && family == AgxD3d10CopyFamily(destination->Format))
+      return family == 3 ? PIPE_FORMAT_R8G8B8A8_UNORM : PIPE_FORMAT_B8G8R8A8_UNORM;
+   if (util_format_is_compressed(src->format) || util_format_is_compressed(dst->format))
+      return PIPE_FORMAT_NONE;
+   if (src->format == dst->format) {
+      enum pipe_format linear = util_format_linear(src->format);
+      return util_format_is_snorm(linear) ? util_format_snorm_to_sint(linear) : linear;
+   }
+   DXGI_FORMAT parent = AgxD3d10WindowsCastParent(source->Format, NULL);
+   if (parent == DXGI_FORMAT_UNKNOWN ||
+       parent != AgxD3d10WindowsCastParent(destination->Format, NULL) ||
+       util_format_is_depth_or_stencil(src->format) ||
+       util_format_is_depth_or_stencil(dst->format) ||
+       util_format_get_blocksize(src->format) != util_format_get_blocksize(dst->format))
+      return PIPE_FORMAT_NONE;
+   switch (util_format_get_blocksize(src->format)) {
+   case 1: return PIPE_FORMAT_R8_UINT;
+   case 2: return PIPE_FORMAT_R16_UINT;
+   case 4: return PIPE_FORMAT_R32_UINT;
+   case 8: return PIPE_FORMAT_R32G32_UINT;
+   case 16: return PIPE_FORMAT_R32G32B32A32_UINT;
+   default: return PIPE_FORMAT_NONE;
+   }
+}
+
 static unsigned
 AgxD3d10ColorBytes(DXGI_FORMAT format)
 {
@@ -3481,18 +3521,18 @@ AgxD3d10ResourceWithinRequiredLimits(
    }
    /* D3D10 ResourceCopy: identical type, dimensions, mip count, array size
     * and sample count; formats of one copy group. Copy every subresource. */
-   unsigned family=AgxD3d10CopyFamily(source->Format);
-   enum pipe_format raw=PIPE_FORMAT_NONE;
-   if (dst && src && family && family==AgxD3d10CopyFamily(destination->Format))
-      raw=family==3 ? PIPE_FORMAT_R8G8B8A8_UNORM : PIPE_FORMAT_B8G8R8A8_UNORM;
-   else if (dst && src && src->format==dst->format &&
-            !util_format_is_compressed(src->format))
-      raw=util_format_linear(src->format);
-   if (!dst || !src || raw==PIPE_FORMAT_NONE ||
+   enum pipe_format raw = dst && src ?
+      AgxD3d10CopyRawFormat(source, destination, src, dst) : PIPE_FORMAT_NONE;
+   bool compressed = dst && src && src->format == dst->format &&
+      util_format_is_compressed(src->format);
+   if (!dst || !src || (raw==PIPE_FORMAT_NONE && !compressed) ||
        dst->target!=src->target || dst->target==PIPE_BUFFER ||
        dst->width0!=src->width0 || dst->height0!=src->height0 ||
        dst->depth0!=src->depth0 || dst->array_size!=src->array_size ||
-       dst->last_level!=src->last_level || dst->nr_samples>1 || src->nr_samples>1) {
+       dst->last_level!=src->last_level ||
+       /* D3D-G10b: multisampled resources copy at their sample count. */
+       MAX2(dst->nr_samples,1)!=MAX2(src->nr_samples,1) ||
+       (compressed && src->nr_samples>1)) {
       UINT values[14]={(UINT)source->Format,(UINT)destination->Format,
          src?(UINT)src->target:~0u,dst?(UINT)dst->target:~0u,
          src?src->width0:0u,src?src->height0:0u,dst?dst->width0:0u,dst?dst->height0:0u,
@@ -3512,6 +3552,15 @@ AgxD3d10ResourceWithinRequiredLimits(
       unsigned layers=dst->target==PIPE_TEXTURE_3D ? 1u : dst->array_size;
       for (unsigned layer=0; layer<layers; ++layer) {
          for (unsigned level=0; level<=dst->last_level; ++level) {
+            if (compressed) {
+               struct pipe_box box;
+               u_box_3d(0,0,dst->target==PIPE_TEXTURE_3D ? 0 : (int)layer,
+                        u_minify(src->width0,level),u_minify(src->height0,level),
+                        dst->target==PIPE_TEXTURE_3D ? u_minify(src->depth0,level) : 1,&box);
+               device->pipe->resource_copy_region(device->pipe,dst,level,0,0,
+                  dst->target==PIPE_TEXTURE_3D ? 0 : layer,src,level,&box);
+               continue;
+            }
             struct pipe_blit_info info={};
             info.src.resource=src;info.src.format=raw;info.src.level=level;
             info.dst.resource=dst;info.dst.format=raw;info.dst.level=level;
@@ -3572,12 +3621,8 @@ AgxD3d10ResourceWithinRequiredLimits(
    unsigned srcLayer = SrcSubResource / source->MipLevels;
    unsigned dstLevel = DstSubResource % destination->MipLevels;
    unsigned dstLayer = DstSubResource / destination->MipLevels;
-   unsigned family = AgxD3d10CopyFamily(source->Format);
-   enum pipe_format raw = PIPE_FORMAT_NONE;
-   if (family && family == AgxD3d10CopyFamily(destination->Format))
-      raw = family == 3 ? PIPE_FORMAT_R8G8B8A8_UNORM : PIPE_FORMAT_B8G8R8A8_UNORM;
-   else if (src->format == dst->format && !util_format_is_compressed(src->format))
-      raw = util_format_linear(src->format);
+   enum pipe_format raw = AgxD3d10CopyRawFormat(source, destination, src, dst);
+   bool compressed = src->format == dst->format && util_format_is_compressed(src->format);
    unsigned srcW = u_minify(src->width0, srcLevel), srcH = u_minify(src->height0, srcLevel);
    unsigned srcD = src->target == PIPE_TEXTURE_3D ? u_minify(src->depth0, srcLevel) : 1;
    unsigned dstW = u_minify(dst->width0, dstLevel), dstH = u_minify(dst->height0, dstLevel);
@@ -3587,7 +3632,7 @@ AgxD3d10ResourceWithinRequiredLimits(
    UINT front = pSrcBox ? pSrcBox->front : 0, back = pSrcBox ? pSrcBox->back : srcD;
    if (pSrcBox && (right <= left || bottom <= top || back <= front))
       return; /* empty box: D3D no-op */
-   bool valid = raw != PIPE_FORMAT_NONE && src->target == dst->target &&
+   bool valid = (raw != PIPE_FORMAT_NONE || compressed) && src->target == dst->target &&
       src->nr_samples <= 1 && dst->nr_samples <= 1 &&
       right <= srcW && bottom <= srcH && back <= srcD &&
       DstX <= dstW && right - left <= dstW - DstX &&
@@ -3601,6 +3646,13 @@ AgxD3d10ResourceWithinRequiredLimits(
       AgxD3d10WindowsDiagnostic("reject-resource-copy-region",E_NOTIMPL,values,14u);
       SetError(hDevice, E_NOTIMPL); return;
    }
+   if (compressed) {
+      struct pipe_box box;
+      u_box_3d((int)left,(int)top,(int)(src->target==PIPE_TEXTURE_3D ? front : srcLayer),
+               (int)(right-left),(int)(bottom-top),(int)(back-front),&box);
+      device->pipe->resource_copy_region(device->pipe,dst,dstLevel,DstX,DstY,
+         dst->target==PIPE_TEXTURE_3D ? DstZ : dstLayer,src,srcLevel,&box);
+   } else {
    struct pipe_blit_info info={};
    info.src.resource=src;info.src.format=raw;info.src.level=srcLevel;
    info.dst.resource=dst;info.dst.format=raw;info.dst.level=dstLevel;
@@ -3613,6 +3665,7 @@ AgxD3d10ResourceWithinRequiredLimits(
    info.src.box.depth=info.dst.box.depth=(int)(back-front);
    info.mask=util_format_get_mask(raw);info.filter=PIPE_TEX_FILTER_NEAREST;
    device->pipe->blit(device->pipe,&info);
+   }
    device->pipe->flush(device->pipe,NULL,0);
    HRESULT result=AgxD3d10WindowsFlushStatus(device->windows);
    if (FAILED(result)) SetError(hDevice,result);''')
