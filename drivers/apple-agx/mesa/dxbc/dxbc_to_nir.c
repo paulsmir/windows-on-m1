@@ -2329,6 +2329,14 @@ dxbc_nir_finalize(nir_shader *nir)
    nir_validate_shader(nir, "dxbc_nir_finalize");
 }
 
+void
+dxbc_nir_compute_info(const nir_shader *nir, unsigned block[3], unsigned *shared_bytes)
+{
+   for (unsigned i = 0; i < 3; ++i)
+      block[i] = nir->info.workgroup_size[i];
+   *shared_bytes = nir->info.shared_size;
+}
+
 struct nir_shader *
 dxbc_translate_tokens(const uint32_t *tokens,
                       const struct nir_shader_compiler_options *options,

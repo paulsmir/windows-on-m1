@@ -62,6 +62,13 @@ dxbc_translate_tokens(const uint32_t *tokens,
                       const struct nir_shader_compiler_options *options,
                       struct dxbc_nir_error *error);
 
+/* The thread-group size (dcl_thread_group) and groupshared bytes of a
+ * translated compute shader: the block the frontend's Dispatch launches and
+ * the static shared memory of its pipe_compute_state. */
+void
+dxbc_nir_compute_info(const struct nir_shader *nir, unsigned block[3],
+                      unsigned *shared_bytes);
+
 #ifdef __cplusplus
 }
 #endif

@@ -6,8 +6,11 @@
  * frontend's 10.0 implementations; the two 10.1-typed blend entries use
  * its 10.1 ones; the D3D11-typed entries with a 10.x meaning are adapters
  * onto the same implementations, refusing only argument fields whose
- * behaviour is not implemented; compute, UAVs, tessellation and indirect
- * draws fail closed (the capabilities report FL 10_0 and no compute, so the
+ * behaviour is not implemented.  D3D-H2b: compute on 10.x hardware (cs_4_x
+ * through the DXBC -> NIR translator, raw and structured buffer SRVs and
+ * UAVs, Dispatch, buffer UAV clears), reported only under its switch.
+ * Typed UAVs, append/consume counters, indirect arguments, tessellation and
+ * pixel-stage UAVs fail closed (the capabilities report FL 10_0, so the
  * runtime does not create them; unbinding them with NULL is accepted).
  * Deferred contexts are left NULL: D3D11DDICAPS_THREADING reports no
  * command lists, so the runtime emulates them.
@@ -27,8 +30,10 @@
 #include <stddef.h>
 
 #include "util/bitscan.h"
+#include "util/u_inlines.h"
 
 #include "agx_d3d11_ddi.h"
+#include "dxbc_to_nir.h"
 
 extern "C" VOID AgxD3d10WindowsDiagnostic(PCSTR Stage, HRESULT Status,
                                           const UINT *Values, UINT Count);
@@ -40,11 +45,24 @@ AgxD3d11DdiEnabled(void)
    return AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D11_DDI");
 }
 
-/* The D3D11 binding and misc flags without a 10.x behaviour here. */
-#define AGX_D3D11_UNSUPPORTED_BIND (~(UINT)D3D10_DDI_BIND_MASK)
+BOOL
+AgxD3d11ComputeEnabled(void)
+{
+   return AgxD3d11DdiEnabled() && AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D11_COMPUTE");
+}
+
+/* The D3D11 binding and misc flags without a behaviour here: unordered
+ * access is implemented for buffers only (raw and structured views), raw and
+ * structured layouts for buffers only. */
+#define AGX_D3D11_UNSUPPORTED_BIND (~(UINT)(D3D10_DDI_BIND_MASK | D3D11_DDI_BIND_UNORDERED_ACCESS))
 #define AGX_D3D11_UNSUPPORTED_MISC \
-   (D3D11_DDI_RESOURCE_MISC_DRAWINDIRECT_ARGS | D3D11_DDI_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS | \
-    D3D11_DDI_RESOURCE_MISC_BUFFER_STRUCTURED | D3D11_DDI_RESOURCE_MISC_RESOURCE_CLAMP)
+   (D3D11_DDI_RESOURCE_MISC_DRAWINDIRECT_ARGS | D3D11_DDI_RESOURCE_MISC_RESOURCE_CLAMP)
+#define AGX_D3D11_BUFFER_MISC \
+   (D3D11_DDI_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS | D3D11_DDI_RESOURCE_MISC_BUFFER_STRUCTURED)
+/* D3D11_REQ_MULTI_ELEMENT_STRUCTURE_SIZE_IN_BYTES */
+#define AGX_D3D11_MAX_STRUCTURE_STRIDE 2048u
+/* D3D11_PS_CS_UAV_REGISTER_COUNT (D3D11.0 DDI); the translator's u# range */
+#define AGX_D3D11_UAV_SLOTS DXBC_NIR_MAX_UAVS
 
 static void
 refuse(D3D10DDI_HDEVICE hDevice, const char *what, UINT a, UINT b)
@@ -58,10 +76,21 @@ refuse(D3D10DDI_HDEVICE hDevice, const char *what, UINT a, UINT b)
 /* Resources and views                                                */
 
 static bool
-resource_10x(const D3D11DDIARG_CREATERESOURCE *args)
+resource_supported(const D3D11DDIARG_CREATERESOURCE *args)
 {
-   return args && !(args->BindFlags & AGX_D3D11_UNSUPPORTED_BIND) &&
-          !(args->MiscFlags & AGX_D3D11_UNSUPPORTED_MISC) && !args->ByteStride;
+   if (!args || (args->BindFlags & AGX_D3D11_UNSUPPORTED_BIND) ||
+       (args->MiscFlags & AGX_D3D11_UNSUPPORTED_MISC))
+      return false;
+   bool buffer = args->ResourceDimension == D3D10DDIRESOURCE_BUFFER;
+   UINT layout = args->MiscFlags & AGX_D3D11_BUFFER_MISC;
+   if (!buffer)
+      return !(args->BindFlags & D3D11_DDI_BIND_UNORDERED_ACCESS) && !layout && !args->ByteStride;
+   if (layout == AGX_D3D11_BUFFER_MISC)
+      return false;
+   if (layout == D3D11_DDI_RESOURCE_MISC_BUFFER_STRUCTURED)
+      return args->ByteStride && !(args->ByteStride & 3u) &&
+             args->ByteStride <= AGX_D3D11_MAX_STRUCTURE_STRIDE;
+   return !args->ByteStride;
 }
 
 /* D3D11DDIARG_CREATERESOURCE begins with every D3D10DDIARG_CREATERESOURCE
@@ -80,15 +109,41 @@ static void APIENTRY
 CreateResource11(D3D10DDI_HDEVICE hDevice, const D3D11DDIARG_CREATERESOURCE *args,
                  D3D10DDI_HRESOURCE hResource, D3D10DDI_HRTRESOURCE hRTResource)
 {
-   if (!resource_10x(args)) {
+   if (!resource_supported(args)) {
       refuse(hDevice, "reject-d3d11-create-resource", args ? args->BindFlags : ~0u,
              args ? args->MiscFlags : ~0u);
       return;
    }
    CreateResource(hDevice, (const D3D10DDIARG_CREATERESOURCE *)args, hResource, hRTResource);
+   /* D3D-H2b: the layout raw and structured views read */
+   Resource *resource = CastResource(hResource);
+   if (resource && resource->resource) {
+      resource->agx_misc_flags = args->MiscFlags & AGX_D3D11_BUFFER_MISC;
+      resource->agx_structure_stride =
+         resource->agx_misc_flags == D3D11_DDI_RESOURCE_MISC_BUFFER_STRUCTURED ? args->ByteStride : 0;
+   }
 }
 
-/* An SRV the 10.0 implementation describes: no raw buffer, no cube array. */
+/* D3D-H2b: a raw or structured view of a buffer as 32-bit words: a raw view
+ * counts 32-bit elements (format R32_TYPELESS, a buffer allowing raw views),
+ * a structured view counts structures of the resource's stride (format
+ * UNKNOWN, a structured buffer).  Returns the element size, 0 otherwise. */
+static UINT
+buffer_view_stride(const Resource *resource, DXGI_FORMAT format, bool raw)
+{
+   if (!resource || !resource->buffer)
+      return 0;
+   if (raw)
+      return format == DXGI_FORMAT_R32_TYPELESS &&
+             resource->agx_misc_flags == D3D11_DDI_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS ? 4u : 0u;
+   return format == DXGI_FORMAT_UNKNOWN &&
+          resource->agx_misc_flags == D3D11_DDI_RESOURCE_MISC_BUFFER_STRUCTURED ?
+          resource->agx_structure_stride : 0u;
+}
+
+/* An SRV the 10.0 implementation describes: no cube array.  D3D-H2b: raw
+ * and structured buffer views become R32_UINT buffer views of the same
+ * bytes, which the translator reads one 32-bit word per texel. */
 static bool
 srv_10(const D3D11DDIARG_CREATESHADERRESOURCEVIEW *args, D3D10DDIARG_CREATESHADERRESOURCEVIEW *out)
 {
@@ -97,14 +152,27 @@ srv_10(const D3D11DDIARG_CREATESHADERRESOURCEVIEW *args, D3D10DDIARG_CREATESHADE
    out->Format = args->Format;
    out->ResourceDimension = args->ResourceDimension;
    switch (args->ResourceDimension) {
-   case D3D10DDIRESOURCE_BUFFER: out->Buffer = args->Buffer; return true;
-   case D3D11DDIRESOURCE_BUFFEREX:
-      if (args->BufferEx.Flags)
-         return false;
+   case D3D10DDIRESOURCE_BUFFER:
+   case D3D11DDIRESOURCE_BUFFEREX: {
+      bool ex = args->ResourceDimension == D3D11DDIRESOURCE_BUFFEREX;
+      UINT flags = ex ? args->BufferEx.Flags : 0;
+      UINT first = ex ? args->BufferEx.FirstElement : args->Buffer.FirstElement;
+      UINT count = ex ? args->BufferEx.NumElements : args->Buffer.NumElements;
       out->ResourceDimension = D3D10DDIRESOURCE_BUFFER;
-      out->Buffer.FirstElement = args->BufferEx.FirstElement;
-      out->Buffer.NumElements = args->BufferEx.NumElements;
+      if (flags & ~(UINT)D3D11_DDI_BUFFEREX_SRV_FLAG_RAW)
+         return false;
+      if (flags || args->Format == DXGI_FORMAT_UNKNOWN) {
+         UINT stride = buffer_view_stride(CastResource(args->hDrvResource), args->Format, flags != 0);
+         if (!stride || (UINT64)first * stride / 4u > UINT_MAX || (UINT64)count * stride / 4u > UINT_MAX)
+            return false;
+         out->Format = DXGI_FORMAT_R32_UINT;
+         first = (UINT)((UINT64)first * stride / 4u);
+         count = (UINT)((UINT64)count * stride / 4u);
+      }
+      out->Buffer.FirstElement = first;
+      out->Buffer.NumElements = count;
       return true;
+   }
    case D3D10DDIRESOURCE_TEXTURE1D: out->Tex1D = args->Tex1D; return true;
    case D3D10DDIRESOURCE_TEXTURE2D: out->Tex2D = args->Tex2D; return true;
    case D3D10DDIRESOURCE_TEXTURE3D: out->Tex3D = args->Tex3D; return true;
@@ -268,6 +336,197 @@ CreateGeometryShaderWithStreamOutput11(
 }
 
 /* ------------------------------------------------------------------ */
+/* D3D-H2b: compute (cs_4_x) and buffer unordered-access views        */
+
+/* A raw or structured buffer view bound as shader buffer u# (dxbc_to_nir.h
+ * binding conventions).  Typed views and the append/consume counter flags
+ * (SM 5) are refused until implemented. */
+struct AgxUnorderedAccessView {
+   Device *owner_device;
+   Resource *owner_resource;
+   struct pipe_shader_buffer buffer;
+};
+
+static inline AgxUnorderedAccessView *
+CastUnorderedAccessView(D3D11DDI_HUNORDEREDACCESSVIEW hView)
+{
+   return static_cast<AgxUnorderedAccessView *>(hView.pDrvPrivate);
+}
+
+static SIZE_T APIENTRY
+CalcPrivateUnorderedAccessViewSize11(D3D10DDI_HDEVICE, const D3D11DDIARG_CREATEUNORDEREDACCESSVIEW *)
+{
+   return sizeof(AgxUnorderedAccessView);
+}
+
+static void APIENTRY
+CreateUnorderedAccessView11(D3D10DDI_HDEVICE hDevice, const D3D11DDIARG_CREATEUNORDEREDACCESSVIEW *args,
+                            D3D11DDI_HUNORDEREDACCESSVIEW hView, D3D11DDI_HRTUNORDEREDACCESSVIEW)
+{
+   Device *device = CastDevice(hDevice);
+   AgxUnorderedAccessView *view = CastUnorderedAccessView(hView);
+   memset(view, 0, sizeof(*view));
+   Resource *resource = args ? CastResource(args->hDrvResource) : NULL;
+   bool buffer = args && (args->ResourceDimension == D3D10DDIRESOURCE_BUFFER ||
+                          args->ResourceDimension == D3D11DDIRESOURCE_BUFFEREX);
+   UINT flags = buffer ? args->Buffer.Flags : ~0u;
+   UINT stride = buffer && !(flags & ~(UINT)D3D11_DDI_BUFFER_UAV_FLAG_RAW) ?
+      buffer_view_stride(resource, args->Format, flags != 0) : 0u;
+   UINT64 offset = stride ? (UINT64)args->Buffer.FirstElement * stride : 0;
+   UINT64 bytes = stride ? (UINT64)args->Buffer.NumElements * stride : 0;
+   if (!device || !stride || resource->owner_device != device || !resource->resource ||
+       !(resource->bind_flags & D3D11_DDI_BIND_UNORDERED_ACCESS) || !bytes ||
+       offset > resource->logical_bytes || bytes > resource->logical_bytes - offset) {
+      refuse(hDevice, "reject-d3d11-uav", args ? (UINT)args->ResourceDimension : ~0u,
+             args ? (UINT)args->Format : ~0u);
+      return;
+   }
+   view->owner_device = device;
+   view->owner_resource = resource;
+   pipe_resource_reference(&view->buffer.buffer, resource->resource);
+   view->buffer.buffer_offset = (unsigned)offset;
+   view->buffer.buffer_size = (unsigned)bytes;
+}
+
+static void APIENTRY
+DestroyUnorderedAccessView11(D3D10DDI_HDEVICE, D3D11DDI_HUNORDEREDACCESSVIEW hView)
+{
+   AgxUnorderedAccessView *view = CastUnorderedAccessView(hView);
+   if (!view)
+      return;
+   pipe_resource_reference(&view->buffer.buffer, NULL);
+   view->owner_device = NULL;
+   view->owner_resource = NULL;
+}
+
+/* The views of slots [start, start + n); the initial counts apply to
+ * counter views only, which are not created. */
+static void APIENTRY
+CsSetUnorderedAccessViews11(D3D10DDI_HDEVICE hDevice, UINT start, UINT n,
+                            const D3D11DDI_HUNORDEREDACCESSVIEW *views, const UINT *initial_counts)
+{
+   (void)initial_counts;
+   Device *device = CastDevice(hDevice);
+   struct pipe_shader_buffer buffers[AGX_D3D11_UAV_SLOTS] = {};
+   bool valid = device && start <= AGX_D3D11_UAV_SLOTS && n <= AGX_D3D11_UAV_SLOTS - start &&
+                (!n || views);
+   for (UINT i = 0; valid && i < n; ++i) {
+      AgxUnorderedAccessView *view = CastUnorderedAccessView(views[i]);
+      if (!view)
+         continue;
+      valid = view->owner_device == device && view->buffer.buffer;
+      if (valid)
+         buffers[i] = view->buffer;
+   }
+   if (!valid) {
+      refuse(hDevice, "reject-d3d11-cs-uav", start, n);
+      return;
+   }
+   if (n)
+      device->pipe->set_shader_buffers(device->pipe, MESA_SHADER_COMPUTE, start, n, buffers,
+                                       BITFIELD_MASK(n));
+}
+
+/* Raw and structured views: every 32-bit word takes values[0]. */
+static void APIENTRY
+ClearUnorderedAccessViewUint11(D3D10DDI_HDEVICE hDevice, D3D11DDI_HUNORDEREDACCESSVIEW hView,
+                               const UINT values[4])
+{
+   Device *device = CastDevice(hDevice);
+   AgxUnorderedAccessView *view = CastUnorderedAccessView(hView);
+   if (!device || !view || view->owner_device != device || !view->buffer.buffer || !values) {
+      refuse(hDevice, "reject-d3d11-clear-uav", 0, 0);
+      return;
+   }
+   if (!CheckPredicate(device))
+      return;
+   device->pipe->clear_buffer(device->pipe, view->buffer.buffer, view->buffer.buffer_offset,
+                              view->buffer.buffer_size, &values[0], 4);
+}
+
+/* Float clears exist for typed views only. */
+static void APIENTRY
+ClearUnorderedAccessViewFloat11(D3D10DDI_HDEVICE hDevice, D3D11DDI_HUNORDEREDACCESSVIEW, const FLOAT[4])
+{
+   refuse(hDevice, "reject-d3d11-clear-uav", 1, 0);
+}
+
+static void APIENTRY
+CreateComputeShader11(D3D10DDI_HDEVICE hDevice, const UINT *code, D3D10DDI_HSHADER hShader,
+                      D3D10DDI_HRTSHADER)
+{
+   Device *device = CastDevice(hDevice);
+   Shader *shader = CastShader(hShader);
+   memset(shader, 0, sizeof(*shader));
+   shader->type = MESA_SHADER_COMPUTE;
+   if (!device || !code) {
+      SetError(hDevice, E_INVALIDARG);
+      return;
+   }
+   struct pipe_context *pipe = device->pipe;
+   struct dxbc_nir_error error = {};
+   struct nir_shader *nir = dxbc_translate_tokens(code, pipe->screen->nir_options[MESA_SHADER_COMPUTE],
+                                                  &error);
+   UINT values[4] = {(UINT)MESA_SHADER_COMPUTE, nir ? 1u : 0u, error.opcode, error.offset};
+   AgxD3d10WindowsDiagnostic("measure-shader-nir", nir ? S_OK : E_NOTIMPL, values, 4u);
+   if (!nir) {
+      SetError(hDevice, E_NOTIMPL);
+      return;
+   }
+   unsigned block[3], shared = 0;
+   dxbc_nir_compute_info(nir, block, &shared);
+   struct pipe_compute_state state = {};
+   state.ir_type = PIPE_SHADER_IR_NIR;
+   state.prog = nir;
+   state.static_shared_mem = shared;
+   shader->handle = pipe->create_compute_state(pipe, &state);
+   if (!shader->handle) {
+      SetError(hDevice, E_OUTOFMEMORY);
+      return;
+   }
+   for (unsigned i = 0; i < 3; ++i)
+      shader->agx_block[i] = block[i];
+}
+
+static void APIENTRY
+CsSetShader11(D3D10DDI_HDEVICE hDevice, D3D10DDI_HSHADER hShader)
+{
+   Device *device = CastDevice(hDevice);
+   Shader *shader = CastShader(hShader);
+   if (!device || (shader && (shader->type != MESA_SHADER_COMPUTE || !shader->handle))) {
+      refuse(hDevice, "reject-d3d11-cs-shader", shader ? shader->type : 0u, 0);
+      return;
+   }
+   device->pipe->bind_compute_state(device->pipe, shader ? shader->handle : NULL);
+   for (unsigned i = 0; i < 3; ++i)
+      device->agx_cs_block[i] = shader ? shader->agx_block[i] : 0u;
+}
+
+/* D3D11 orders a Dispatch's unordered-access writes before every later
+ * command (no API barrier exists): the barrier ends the compute batch. */
+static void APIENTRY
+Dispatch11(D3D10DDI_HDEVICE hDevice, UINT x, UINT y, UINT z)
+{
+   Device *device = CastDevice(hDevice);
+   if (!device || !CheckPredicate(device) || !x || !y || !z)
+      return;
+   if (!device->agx_cs_block[0]) {
+      UINT values[3] = {x, y, z};
+      AgxD3d10WindowsDiagnostic("dispatch-without-shader", S_OK, values, 3u);
+      return;
+   }
+   struct pipe_grid_info info = {};
+   info.work_dim = 3;
+   for (unsigned i = 0; i < 3; ++i)
+      info.block[i] = device->agx_cs_block[i];
+   info.grid[0] = x;
+   info.grid[1] = y;
+   info.grid[2] = z;
+   device->pipe->launch_grid(device->pipe, &info);
+   device->pipe->memory_barrier(device->pipe, PIPE_BARRIER_ALL);
+}
+
+/* ------------------------------------------------------------------ */
 /* Stages and features not provided yet: fail closed, accept unbinds  */
 
 static void APIENTRY
@@ -305,6 +564,7 @@ SetShaderWithIfacesNone(D3D10DDI_HDEVICE hDevice, D3D10DDI_HSHADER hShader, UINT
 AGX_D3D11_WITH_IFACES(VsSetShaderWithIfaces11, VsSetShader)
 AGX_D3D11_WITH_IFACES(GsSetShaderWithIfaces11, GsSetShader)
 AGX_D3D11_WITH_IFACES(PsSetShaderWithIfaces11, PsSetShader)
+AGX_D3D11_WITH_IFACES(CsSetShaderWithIfaces11, CsSetShader11)
 
 static void APIENTRY
 SetShaderResourcesNone(D3D10DDI_HDEVICE hDevice, UINT, UINT n, const D3D10DDI_HSHADERRESOURCEVIEW *views)
@@ -336,17 +596,6 @@ SetConstantBuffersNone(D3D10DDI_HDEVICE hDevice, UINT, UINT n, const D3D10DDI_HR
       }
 }
 
-static void APIENTRY
-SetUnorderedAccessViewsNone(D3D10DDI_HDEVICE hDevice, UINT, UINT n,
-                            const D3D11DDI_HUNORDEREDACCESSVIEW *views, const UINT *)
-{
-   for (UINT i = 0; views && i < n; ++i)
-      if (views[i].pDrvPrivate) {
-         refuse(hDevice, "reject-d3d11-cs-uav", i, n);
-         return;
-      }
-}
-
 static SIZE_T APIENTRY
 CalcPrivateTessellationShaderSize11(D3D10DDI_HDEVICE, const UINT *, const D3D11DDIARG_TESSELLATION_IO_SIGNATURES *)
 {
@@ -361,51 +610,9 @@ CreateTessellationShaderNone(D3D10DDI_HDEVICE hDevice, const UINT *, D3D10DDI_HS
 }
 
 static void APIENTRY
-CreateComputeShaderNone(D3D10DDI_HDEVICE hDevice, const UINT *, D3D10DDI_HSHADER, D3D10DDI_HRTSHADER)
-{
-   refuse(hDevice, "reject-d3d11-compute", 0, 0);
-}
-
-static SIZE_T APIENTRY
-CalcPrivateUnorderedAccessViewSize11(D3D10DDI_HDEVICE, const D3D11DDIARG_CREATEUNORDEREDACCESSVIEW *)
-{
-   return sizeof(void *);
-}
-
-static void APIENTRY
-CreateUnorderedAccessViewNone(D3D10DDI_HDEVICE hDevice, const D3D11DDIARG_CREATEUNORDEREDACCESSVIEW *,
-                              D3D11DDI_HUNORDEREDACCESSVIEW, D3D11DDI_HRTUNORDEREDACCESSVIEW)
-{
-   refuse(hDevice, "reject-d3d11-uav", 0, 0);
-}
-
-static void APIENTRY
-DestroyUnorderedAccessViewNone(D3D10DDI_HDEVICE, D3D11DDI_HUNORDEREDACCESSVIEW)
-{
-}
-
-static void APIENTRY
-ClearUnorderedAccessViewUintNone(D3D10DDI_HDEVICE hDevice, D3D11DDI_HUNORDEREDACCESSVIEW, const UINT[4])
-{
-   refuse(hDevice, "reject-d3d11-clear-uav", 0, 0);
-}
-
-static void APIENTRY
-ClearUnorderedAccessViewFloatNone(D3D10DDI_HDEVICE hDevice, D3D11DDI_HUNORDEREDACCESSVIEW, const FLOAT[4])
-{
-   refuse(hDevice, "reject-d3d11-clear-uav", 1, 0);
-}
-
-static void APIENTRY
 DrawIndirectNone(D3D10DDI_HDEVICE hDevice, D3D10DDI_HRESOURCE, UINT)
 {
    refuse(hDevice, "reject-d3d11-draw-indirect", 0, 0);
-}
-
-static void APIENTRY
-DispatchNone(D3D10DDI_HDEVICE hDevice, UINT, UINT, UINT)
-{
-   refuse(hDevice, "reject-d3d11-dispatch", 0, 0);
 }
 
 static void APIENTRY
@@ -541,6 +748,20 @@ AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f, const D3D10DDI_DEVICEFUNCS *bas
    f->pfnGsSetShaderWithIfaces = GsSetShaderWithIfaces11;
    f->pfnPsSetShaderWithIfaces = PsSetShaderWithIfaces11;
    f->pfnSetResourceMinLOD = SetResourceMinLOD11;
+   /* D3D-H2b: compute on 10.x hardware, buffer unordered-access views */
+   f->pfnCreateComputeShader = CreateComputeShader11;
+   f->pfnCsSetShader = CsSetShader11;
+   f->pfnCsSetShaderWithIfaces = CsSetShaderWithIfaces11;
+   f->pfnCsSetShaderResources = CsSetShaderResources;
+   f->pfnCsSetSamplers = CsSetSamplers;
+   f->pfnCsSetConstantBuffers = CsSetConstantBuffers;
+   f->pfnCalcPrivateUnorderedAccessViewSize = CalcPrivateUnorderedAccessViewSize11;
+   f->pfnCreateUnorderedAccessView = CreateUnorderedAccessView11;
+   f->pfnDestroyUnorderedAccessView = DestroyUnorderedAccessView11;
+   f->pfnCsSetUnorderedAccessViews = CsSetUnorderedAccessViews11;
+   f->pfnClearUnorderedAccessViewUint = ClearUnorderedAccessViewUint11;
+   f->pfnClearUnorderedAccessViewFloat = ClearUnorderedAccessViewFloat11;
+   f->pfnDispatch = Dispatch11;
    /* not provided yet: fail closed, unbinding accepted */
    f->pfnHsSetShaderResources = SetShaderResourcesNone;
    f->pfnHsSetShader = SetShaderNone;
@@ -550,26 +771,13 @@ AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f, const D3D10DDI_DEVICEFUNCS *bas
    f->pfnDsSetShader = SetShaderNone;
    f->pfnDsSetSamplers = SetSamplersNone;
    f->pfnDsSetConstantBuffers = SetConstantBuffersNone;
-   f->pfnCsSetShaderResources = SetShaderResourcesNone;
-   f->pfnCsSetShader = SetShaderNone;
-   f->pfnCsSetSamplers = SetSamplersNone;
-   f->pfnCsSetConstantBuffers = SetConstantBuffersNone;
    f->pfnHsSetShaderWithIfaces = SetShaderWithIfacesNone;
    f->pfnDsSetShaderWithIfaces = SetShaderWithIfacesNone;
-   f->pfnCsSetShaderWithIfaces = SetShaderWithIfacesNone;
    f->pfnCalcPrivateTessellationShaderSize = CalcPrivateTessellationShaderSize11;
    f->pfnCreateHullShader = CreateTessellationShaderNone;
    f->pfnCreateDomainShader = CreateTessellationShaderNone;
-   f->pfnCreateComputeShader = CreateComputeShaderNone;
-   f->pfnCalcPrivateUnorderedAccessViewSize = CalcPrivateUnorderedAccessViewSize11;
-   f->pfnCreateUnorderedAccessView = CreateUnorderedAccessViewNone;
-   f->pfnDestroyUnorderedAccessView = DestroyUnorderedAccessViewNone;
-   f->pfnClearUnorderedAccessViewUint = ClearUnorderedAccessViewUintNone;
-   f->pfnClearUnorderedAccessViewFloat = ClearUnorderedAccessViewFloatNone;
-   f->pfnCsSetUnorderedAccessViews = SetUnorderedAccessViewsNone;
    f->pfnDrawIndexedInstancedIndirect = DrawIndirectNone;
    f->pfnDrawInstancedIndirect = DrawIndirectNone;
-   f->pfnDispatch = DispatchNone;
    f->pfnDispatchIndirect = DispatchIndirectNone;
    f->pfnCopyStructureCount = CopyStructureCountNone;
    /* deferred contexts and command lists stay NULL (THREADING caps 0) */

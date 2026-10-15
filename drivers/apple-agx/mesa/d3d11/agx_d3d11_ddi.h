@@ -10,6 +10,18 @@
  * process environment (per process while the D3D11 table is qualified). */
 BOOL AgxD3d11DdiEnabled(void);
 
+/* D3D-H2b: report compute with raw and structured buffers at SM 4.x
+ * (D3D11DDICAPS_SHADER_COMPUTE_PLUS_RAW_AND_STRUCTURED_BUFFERS_IN_SHADER_4_X):
+ * the D3D11 interface and APPLE_AGX_D3D11_COMPUTE=1, per process while the
+ * compute path is qualified. */
+BOOL AgxD3d11ComputeEnabled(void);
+
+/* D3D-H2b: the compute stage's common-shader setters (Shader.cpp). */
+void APIENTRY CsSetShaderResources(D3D10DDI_HDEVICE, UINT, UINT,
+                                   const D3D10DDI_HSHADERRESOURCEVIEW *);
+void APIENTRY CsSetConstantBuffers(D3D10DDI_HDEVICE, UINT, UINT, const D3D10DDI_HRESOURCE *);
+void APIENTRY CsSetSamplers(D3D10DDI_HDEVICE, UINT, UINT, const D3D10DDI_HSAMPLER *);
+
 /* Fill every D3D11 entry this driver provides (see agx_d3d11_ddi.cpp);
  * 'base' is a copy of the D3D10 table CreateDevice filled, whose entries the
  * D3D10-typed D3D11 entries take (funcs and the runtime's 10.0 view of the

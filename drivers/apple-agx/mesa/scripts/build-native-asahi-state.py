@@ -786,10 +786,12 @@ SupportedDDIInterfaceVersions[] = {
       ((D3D11DDI_THREADING_CAPS *)pData->pData)->Caps = 0;
       return S_OK;
    case D3D11DDICAPS_SHADER:
-      /* D3D-H2a: no doubles, no compute or raw/structured buffers at SM 4.x */
+      /* D3D-H2a: no doubles.  D3D-H2b: compute with raw and structured
+       * buffers at SM 4.x (cs_4_0/cs_4_1) once its switch is on. */
       if (pData->DataSize != sizeof(D3D11DDI_SHADER_CAPS))
          return E_INVALIDARG;
-      ((D3D11DDI_SHADER_CAPS *)pData->pData)->Caps = 0;
+      ((D3D11DDI_SHADER_CAPS *)pData->pData)->Caps = AgxD3d11ComputeEnabled() ?
+         D3D11DDICAPS_SHADER_COMPUTE_PLUS_RAW_AND_STRUCTURED_BUFFERS_IN_SHADER_4_X : 0;
       return S_OK;
    case D3D11DDICAPS_3DPIPELINESUPPORT:
       if (pData->DataSize != sizeof(D3D11DDI_3DPIPELINESUPPORT_CAPS))
@@ -852,6 +854,9 @@ struct AgxDdiTimer {
    uint64_t agx_serial;
    void *so_vs_handle;
    uint64_t so_vs_serial;
+   /* D3D-H2b: a compute shader's thread-group size (dcl_thread_group),
+    * the block every Dispatch launches. */
+   UINT agx_block[3];
 };'''),
         ('struct pipe_screen *screen;',
          'AGX_D3D10_WINDOWS_ADAPTER *windows;'),
@@ -868,7 +873,9 @@ struct AgxDdiTimer {
    /* EXP1065: vertex elements were bound at least once (see update_velems). */
    BOOL agx_velems_bound;
    /* D3D-G10e: serials of bound vertex shaders (stream-output variants). */
-   uint64_t agx_shader_serial;'''),
+   uint64_t agx_shader_serial;
+   /* D3D-H2b: the bound compute shader's thread-group size (0: none). */
+   UINT agx_cs_block[3];'''),
         ('''static inline void
 SetError(D3D10DDI_HDEVICE hDevice, HRESULT hr)
 {
@@ -980,6 +987,10 @@ struct Query
    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *presentation;
    struct ShaderResourceView *first_presentation_srv;
    struct RenderTargetView *first_presentation_rtv;
+   /* D3D-H2b: D3D11 buffer misc flags (raw views / structured) and the
+    * structure stride (D3D11DDIARG_CREATERESOURCE::ByteStride). */
+   UINT agx_misc_flags;
+   UINT agx_structure_stride;
 };'''),
         ('''struct SamplerState
 {
@@ -2350,6 +2361,49 @@ UnsupportedDxgi''')
    if (pShader->handle) {
       switch (pShader->type) {
       case MESA_SHADER_FRAGMENT:'''),
+        # D3D-H2b: compute shaders (agx_d3d11_ddi.cpp CreateComputeShader11)
+        ('''      case MESA_SHADER_GEOMETRY:
+         pipe->delete_gs_state(pipe, pShader->handle);
+         break;''','''      case MESA_SHADER_GEOMETRY:
+         pipe->delete_gs_state(pipe, pShader->handle);
+         break;
+      case MESA_SHADER_COMPUTE:
+         pipe->delete_compute_state(pipe, pShader->handle);
+         break;'''),
+        # D3D-H2b: the compute stage's common-shader setters for the D3D11
+        # table (declared in agx_d3d11_ddi.h)
+        ('''/*
+ * ----------------------------------------------------------------------
+ *
+ * CalcPrivateShaderSize --''','''void APIENTRY
+CsSetShaderResources(D3D10DDI_HDEVICE hDevice, UINT Offset, UINT NumViews,
+                     const D3D10DDI_HSHADERRESOURCEVIEW *phShaderResourceViews)
+{
+   LOG_ENTRYPOINT();
+   SetShaderResources(MESA_SHADER_COMPUTE, hDevice, Offset, NumViews, phShaderResourceViews);
+}
+
+void APIENTRY
+CsSetConstantBuffers(D3D10DDI_HDEVICE hDevice, UINT StartBuffer, UINT NumBuffers,
+                     const D3D10DDI_HRESOURCE *phBuffers)
+{
+   LOG_ENTRYPOINT();
+   SetConstantBuffers(MESA_SHADER_COMPUTE, hDevice, StartBuffer, NumBuffers, phBuffers);
+}
+
+void APIENTRY
+CsSetSamplers(D3D10DDI_HDEVICE hDevice, UINT Offset, UINT NumSamplers,
+              const D3D10DDI_HSAMPLER *phSamplers)
+{
+   LOG_ENTRYPOINT();
+   SetSamplers(MESA_SHADER_COMPUTE, hDevice, Offset, NumSamplers, phSamplers);
+}
+
+
+/*
+ * ----------------------------------------------------------------------
+ *
+ * CalcPrivateShaderSize --'''),
         ('''         pShader->state.stream_output.stride[i] = total_components[i];
       }
    }
@@ -2760,7 +2814,8 @@ AgxD3d10CreateShaderState(struct pipe_context *pipe, Shader *shader,
                  "D3D10 sampler state must fit the native array");
    bool valid = pDevice && pDevice->pipe &&
       (shader_type == MESA_SHADER_VERTEX || shader_type == MESA_SHADER_FRAGMENT ||
-       shader_type == MESA_SHADER_GEOMETRY) && Offset <= slots &&
+       shader_type == MESA_SHADER_GEOMETRY || shader_type == MESA_SHADER_COMPUTE) &&
+      Offset <= slots &&
       NumSamplers <= slots - Offset && (NumSamplers == 0 || phSamplers);
    void *states[D3D10_COMMONSHADER_SAMPLER_SLOT_COUNT] = {};
    UINT nonnull = 0;
@@ -2788,7 +2843,8 @@ AgxD3d10CreateShaderState(struct pipe_context *pipe, Shader *shader,
                  "D3D10 SRV state must fit the native array");
    bool valid = pDevice && pDevice->pipe &&
       (shader_type == MESA_SHADER_VERTEX || shader_type == MESA_SHADER_FRAGMENT ||
-       shader_type == MESA_SHADER_GEOMETRY) && Offset<=slots &&
+       shader_type == MESA_SHADER_GEOMETRY || shader_type == MESA_SHADER_COMPUTE) &&
+      Offset<=slots &&
       NumViews<=slots-Offset && (NumViews == 0 || phShaderResourceViews);
    struct pipe_sampler_view *views[D3D10_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT]={};
    for (UINT i = 0; valid && i < NumViews; ++i) {
@@ -2904,7 +2960,8 @@ AgxD3d10CreateShaderState(struct pipe_context *pipe, Shader *shader,
    bool valid = pDevice && pDevice->pipe &&
       (shader_type == MESA_SHADER_VERTEX ||
        shader_type == MESA_SHADER_FRAGMENT ||
-       shader_type == MESA_SHADER_GEOMETRY) &&
+       shader_type == MESA_SHADER_GEOMETRY ||
+       shader_type == MESA_SHADER_COMPUTE) &&
       (NumBuffers == 0 || phBuffers) && StartBuffer <= slots &&
       NumBuffers <= slots - StartBuffer &&
       AgxD3d10WindowsIdentity(pDevice->windows, &owner, &generation);
@@ -3204,6 +3261,15 @@ MesaD3d10FrontendSetSoOffsetForTest(D3D10DDI_HDEVICE hDevice,
         draw_path.read_bytes()).hexdigest()
     change('src/gallium/frontends/d3d10umd/Resource.cpp',
         'ae2d60a798ff0d9da6e55171013f133d1d99bc91ef2760875d126aa5b96fcf48',[
+        # D3D-H2b: unordered-access buffers are shader buffers
+        ('''   if (flags & D3D10_DDI_BIND_PRESENT)
+      bind |= PIPE_BIND_DISPLAY_TARGET;
+''','''   if (flags & D3D10_DDI_BIND_PRESENT)
+      bind |= PIPE_BIND_DISPLAY_TARGET;
+
+   if (flags & D3D11_DDI_BIND_UNORDERED_ACCESS)
+      bind |= PIPE_BIND_SHADER_BUFFER;
+'''),
         ('''   } else {
       BOOL bindDepthStencil = !!(pCreateResource->BindFlags & D3D10_DDI_BIND_DEPTH_STENCIL);
       templat.format = FormatTranslate(pCreateResource->Format, bindDepthStencil);
@@ -3511,7 +3577,12 @@ AgxD3d10ResourceWithinRequiredLimits(
    const UINT bufferBindMask = D3D10_DDI_BIND_VERTEX_BUFFER |
       D3D10_DDI_BIND_INDEX_BUFFER | D3D10_DDI_BIND_CONSTANT_BUFFER |
       D3D10_DDI_BIND_SHADER_RESOURCE | D3D10_DDI_BIND_STREAM_OUTPUT |
-      D3D10_DDI_BIND_RENDER_TARGET;
+      D3D10_DDI_BIND_RENDER_TARGET | D3D11_DDI_BIND_UNORDERED_ACCESS;
+   /* D3D-H2b: raw-view and structured buffers (D3D11 DDI) */
+   const UINT bufferMisc = pCreateResource->MiscFlags;
+   bool bufferMiscOK = bufferMisc == 0 ||
+      bufferMisc == D3D11_DDI_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS ||
+      bufferMisc == D3D11_DDI_RESOURCE_MISC_BUFFER_STRUCTURED;
    bool wantsConstant =
       (pCreateResource->BindFlags & D3D10_DDI_BIND_CONSTANT_BUFFER) != 0;
    bool wantsIndex =
@@ -3526,7 +3597,7 @@ AgxD3d10ResourceWithinRequiredLimits(
    bool bufferShape = bufferResource && pResource && pDevice && resourceMip &&
       pCreateResource->Format == DXGI_FORMAT_UNKNOWN &&
       !(pCreateResource->BindFlags & ~bufferBindMask) &&
-      pCreateResource->MiscFlags == 0 && !pCreateResource->pPrimaryDesc &&
+      bufferMiscOK && !pCreateResource->pPrimaryDesc &&
       pCreateResource->MipLevels == 1 && pCreateResource->ArraySize == 1 &&
       resourceMip[0].TexelWidth > 0 && resourceMip[0].TexelHeight == 1 &&
       resourceMip[0].TexelDepth == 1 && pCreateResource->SampleDesc.Count == 1 &&

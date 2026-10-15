@@ -66,3 +66,30 @@ compute, UAVs, indirect draws and tessellation towards FL 11_0.
 
 Smallest falsifiable checkpoint for H2a: the D3D11 smoke on the D3D11 DDI
 interface draws the same pixels as on the 10.0 interface.
+
+## H2b first checkpoint: compute on 10.x hardware (2026-10-15)
+
+SM 5 compute (cs_5_0) needs a FL 11_0 device; the D3D11 runtime creates it
+only when the driver reports 11_0, which needs tessellation and the FL 11_0
+format/MSAA set first (D3D-H5). A FL 10_x device runs compute when the driver
+reports `D3D11DDICAPS_SHADER_COMPUTE_PLUS_RAW_AND_STRUCTURED_BUFFERS_IN_SHADER_4_X`
+(d3d10umddi.h 0x2): cs_4_0 (cs_4_1 on 10_1) with raw and structured buffers,
+one UAV slot, groupshared memory written at SV_GroupIndex, no atomics, no
+typed UAVs, no append/consume. That is the first truthful hardware checkpoint
+for the compute plumbing every later stage reuses.
+
+| Layer | Contract |
+|---|---|
+| Windows (d3d10umddi.h 10.0.26100) | CreateResource with `D3D11_DDI_BIND_UNORDERED_ACCESS`, `BUFFER_ALLOW_RAW_VIEWS`/`BUFFER_STRUCTURED` + `ByteStride`; SRV `BUFFEREX` with `D3D11_DDI_BUFFEREX_SRV_FLAG_RAW` (format R32_TYPELESS) or a structured view (format UNKNOWN); `D3D11DDIARG_CREATEUNORDEREDACCESSVIEW` Buffer {First, Num, Flags RAW/APPEND/COUNTER}; CreateComputeShader, CsSet*, CsSetUnorderedAccessViews (initial counts for counter views), Dispatch, ClearUnorderedAccessViewUint (raw/structured: values[0] in every word). D3D11 orders a Dispatch's writes before later commands without an API barrier. |
+| Translator (D3D-H3) | cs_4_x and cs_5_0 -> NIR compute: workgroup size from dcl_thread_group, groupshared with explicit offsets and `shared_size` (dxbc_nir_finalize), raw/structured SRVs as R32 texel buffers, UAVs as shader buffers u# (counters at 8 + u#). |
+| Frontend (projection + agx_d3d11_ddi.cpp) | buffers with unordered access / raw views / structured layout admitted (`PIPE_BIND_SHADER_BUFFER`), stride recorded; raw/structured SRVs become R32_UINT buffer views of the same bytes; UAV objects hold a `pipe_shader_buffer`; CreateComputeShader translates (no TGSI path) and records the block; Dispatch = `launch_grid` (block = numthreads) + `memory_barrier(ALL)`; ClearUAV = `clear_buffer` (libagx fill kernels, as GS already uses). Typed UAVs, counters, DispatchIndirect, CopyStructureCount and pixel-stage UAVs stay fail-closed. |
+| Asahi | `create_compute_state` (NIR only), `set_shader_buffers`, `launch_grid` into a compute batch (G2 compute-only submission), `memory_barrier` flushes batches with incoherent writes. |
+
+Capability: reported only with `APPLE_AGX_D3D11_DDI=1` and
+`APPLE_AGX_D3D11_COMPUTE=1` in the process until the checkpoint is confirmed.
+Checkpoint (agx_compute_smoke.c): the device reports
+ComputeShaders_Plus_RawAndStructuredBuffers_Via_Shader_4_x; cs_4_0 structured
+(structured + raw SRV, CB, groupshared + barrier), raw (2-D groups, byte
+addresses) and chained (ClearUAV, dispatch, dispatch reading the first
+through an SRV) results equal the CPU expectation word for word, x86 and
+ARM64, every iteration.

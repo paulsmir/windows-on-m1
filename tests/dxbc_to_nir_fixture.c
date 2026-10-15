@@ -81,9 +81,8 @@ main(int argc, char **argv)
    /* the block size Dispatch launches, the groupshared bytes the AGX
     * backend allocates, and groupshared accesses left as derefs (the
     * backend has no deref lowering for them) */
-   unsigned block[3] = {nir->info.workgroup_size[0], nir->info.workgroup_size[1],
-                        nir->info.workgroup_size[2]};
-   unsigned shared = nir->info.shared_size, shared_derefs = 0;
+   unsigned block[3], shared, shared_derefs = 0;
+   dxbc_nir_compute_info(nir, block, &shared);
    unsigned instrs = 0;
    nir_foreach_function_impl(impl, nir)
       nir_foreach_block(blk, impl)

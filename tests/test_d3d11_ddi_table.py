@@ -9,7 +9,13 @@ Invariants caught:
 - no entry is assigned twice (a later assignment would silently replace an
   adapter with a 10.0 function of another signature);
 - the projected adapter advertises D3D11_0 only under AgxD3d11DdiEnabled()
-  and the projected CreateDevice fills the D3D11 table for that interface.
+  and the projected CreateDevice fills the D3D11 table for that interface;
+- D3D-H2b: compute on 10.x hardware is reported only under its switch and
+  only while every entry the runtime calls for it is implemented (a
+  fail-closed entry behind an advertised capability fails the application's
+  CreateComputeShader/Dispatch), and the projected frontend accepts the
+  compute stage in its setters, deletes compute states and admits
+  unordered-access, raw-view and structured buffers.
 The header comes from the local SDK reference copy; the member check is
 skipped where it is absent.
 """
@@ -82,6 +88,51 @@ class D3d11DdiTable(unittest.TestCase):
             self.assertIn("case D3D11_0_DDI_INTERFACE_VERSION:", create)
             self.assertIn("const D3D10DDI_DEVICEFUNCS base = *pDeviceFuncs;", create)
             self.assertIn("AgxD3d11FillDeviceFuncs(pCreateData->p11DeviceFuncs, &base);", create)
+
+    def test_compute_is_reported_only_with_its_entries_implemented(self):
+        fill = MODULE.read_text()
+        enabled = function_body(fill, "AgxD3d11ComputeEnabled")
+        self.assertIn("AgxD3d11DdiEnabled()", enabled)
+        self.assertIn('"APPLE_AGX_D3D11_COMPUTE"', enabled)
+        body = fill[fill.index("AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f,"):]
+        assigned = dict(re.findall(r"\bf->(pfn\w+)\s*=\s*(\w+);", body))
+        for entry in ("pfnCreateComputeShader", "pfnCsSetShader", "pfnCsSetShaderWithIfaces",
+                      "pfnCsSetShaderResources", "pfnCsSetSamplers", "pfnCsSetConstantBuffers",
+                      "pfnCalcPrivateUnorderedAccessViewSize", "pfnCreateUnorderedAccessView",
+                      "pfnDestroyUnorderedAccessView", "pfnCsSetUnorderedAccessViews",
+                      "pfnClearUnorderedAccessViewUint", "pfnDispatch"):
+            with self.subTest(entry=entry):
+                self.assertFalse(assigned[entry].endswith("None"), assigned[entry])
+        create = function_body(fill, "CreateComputeShader11")
+        self.assertIn("memset(shader, 0, sizeof(*shader));", create)
+        self.assertLess(create.index("memset"), create.index("create_compute_state"))
+        dispatch = function_body(fill, "Dispatch11")
+        self.assertLess(dispatch.index("launch_grid"), dispatch.index("memory_barrier"))
+        with tempfile.TemporaryDirectory(prefix="d3d11-compute-") as tmp:
+            out = project(Path(tmp) / "out")
+            if out is None:
+                self.skipTest("reference Mesa tree not available")
+            frontend = out / "src/gallium/frontends/d3d10umd"
+            adapter = (frontend / "Adapter.cpp").read_text()
+            caps = adapter[adapter.index("case D3D11DDICAPS_SHADER:"):]
+            caps = caps[:caps.index("return S_OK;")]
+            self.assertIn("AgxD3d11ComputeEnabled() ?", caps)
+            self.assertIn("COMPUTE_PLUS_RAW_AND_STRUCTURED_BUFFERS_IN_SHADER_4_X", caps)
+            shader = (frontend / "Shader.cpp").read_text()
+            for setter in ("SetShaderResources", "SetSamplers", "SetConstantBuffers"):
+                with self.subTest(setter=setter):
+                    self.assertIn("shader_type == MESA_SHADER_COMPUTE", function_body(shader, setter))
+            for wrapper, setter in (("CsSetShaderResources", "SetShaderResources"),
+                                    ("CsSetSamplers", "SetSamplers"),
+                                    ("CsSetConstantBuffers", "SetConstantBuffers")):
+                with self.subTest(wrapper=wrapper):
+                    self.assertIn(setter + "(MESA_SHADER_COMPUTE,", function_body(shader, wrapper))
+            self.assertIn("delete_compute_state", function_body(shader, "DestroyShader"))
+            resource = (frontend / "Resource.cpp").read_text()
+            self.assertIn("PIPE_BIND_SHADER_BUFFER", function_body(resource, "translate_resource_flags"))
+            create = function_body(resource, "CreateResource")
+            self.assertIn("D3D11_DDI_BIND_UNORDERED_ACCESS", create)
+            self.assertIn("D3D11_DDI_RESOURCE_MISC_BUFFER_STRUCTURED", create)
 
 
 if __name__ == "__main__":
