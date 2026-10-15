@@ -820,6 +820,17 @@ struct AgxDdiTimer {
         '4280c406ca8c1c199d09a0d062f8b52fb0baaec43a2ca7482e0d1a3acc7c4dd3',[
         ('#include "DriverIncludes.h"',
          '#include "DriverIncludes.h"\n#include "agx_d3d10_windows.h"'),
+        ('''   unsigned output_mapping[PIPE_MAX_SHADER_OUTPUTS];
+   bool output_resolved;
+};''','''   unsigned output_mapping[PIPE_MAX_SHADER_OUTPUTS];
+   bool output_resolved;
+   /* D3D-G10e: a vertex shader's serial; a stream output without geometry
+    * shader code (an "empty" GS) keeps the vertex-shader variant carrying
+    * its stream output, made for the VS of serial so_vs_serial. */
+   uint64_t agx_serial;
+   void *so_vs_handle;
+   uint64_t so_vs_serial;
+};'''),
         ('struct pipe_screen *screen;',
          'AGX_D3D10_WINDOWS_ADAPTER *windows;'),
         ('struct pipe_context *pipe;','''struct pipe_context *pipe;
@@ -833,7 +844,9 @@ struct AgxDdiTimer {
     * views without a texture, DSV present). */
    UINT agx_rt_args[4];
    /* EXP1065: vertex elements were bound at least once (see update_velems). */
-   BOOL agx_velems_bound;'''),
+   BOOL agx_velems_bound;
+   /* D3D-G10e: serials of bound vertex shaders (stream-output variants). */
+   uint64_t agx_shader_serial;'''),
         ('''static inline void
 SetError(D3D10DDI_HDEVICE hDevice, HRESULT hr)
 {
@@ -2271,6 +2284,53 @@ UnsupportedDxgi''')
 
     change('src/gallium/frontends/d3d10umd/Shader.cpp',
         '48a7de2a42b25abac677cd903c10f21fc91b86aef167266a32a6d7d9da21097c',[
+        ('''   if (pShader->handle) {
+      switch (pShader->type) {
+      case MESA_SHADER_FRAGMENT:''','''   /* D3D-G10e: the stream-output VS variant of a GS without code. */
+   if (pShader->so_vs_handle) {
+      pipe->delete_vs_state(pipe, pShader->so_vs_handle);
+      pShader->so_vs_handle = NULL;
+   }
+   if (pShader->handle) {
+      switch (pShader->type) {
+      case MESA_SHADER_FRAGMENT:'''),
+        ('''         pShader->state.stream_output.stride[i] = total_components[i];
+      }
+   }
+
+   pShader->handle = pipe->create_gs_state(pipe, &pShader->state);
+}''','''         pShader->state.stream_output.stride[i] = total_components[i];
+      }
+   }
+
+   /* D3D-G10e: without geometry shader code no GS state exists; the draw
+    * binds a vertex-shader variant carrying this stream output instead. */
+   pShader->so_vs_handle = NULL;
+   pShader->so_vs_serial = 0;
+   pShader->handle = pShader->state.tokens ?
+      pipe->create_gs_state(pipe, &pShader->state) : NULL;
+}'''),
+        ('''   if (pShader && !pShader->state.tokens) {
+      pDevice->bound_empty_gs = pShader;
+   } else {
+      pDevice->bound_empty_gs = NULL;
+      pipe->bind_gs_state(pipe, state);
+   }''','''   /* D3D-G10e: leaving a stream output without GS code rebinds the plain
+    * vertex shader (the draw bound its stream-output variant). */
+   if (pDevice->bound_empty_gs && pShader != pDevice->bound_empty_gs)
+      pipe->bind_vs_state(pipe, pDevice->bound_vs && pDevice->bound_vs->handle ?
+         pDevice->bound_vs->handle : pDevice->empty_vs);
+   if (pShader && !pShader->state.tokens) {
+      pDevice->bound_empty_gs = pShader;
+   } else {
+      pDevice->bound_empty_gs = NULL;
+      pipe->bind_gs_state(pipe, state);
+   }'''),
+        ('''   pDevice->bound_vs = pShader;
+   if (!state) {''','''   pDevice->bound_vs = pShader;
+   if (pShader && pShader->state.tokens && !pShader->agx_serial)
+      pShader->agx_serial = ++pDevice->agx_shader_serial;
+   if (!state) {'''),
         ('#include "util/u_gen_mipmap.h"', '#include "util/u_gen_mipmap.h"\n#include "drm-uapi/drm_fourcc.h"'),
         ('''{
    unsigned i;
@@ -2337,8 +2397,9 @@ UnsupportedDxgi''')
    /* D3D-G8: an FL10_0 declaration -- up to 64 components, slots 0..3,
     * contiguous component masks, 0xffffffff register holes; one slot is
     * interleaved at StreamOutputStrideInBytes, several slots are tightly
-    * packed (upstream). Stream output needs geometry shader code. */
-   bool soValid=windows_device&&pData&&pData->pShaderCode&&
+    * packed (upstream). D3D-G10e: without geometry shader code the
+    * declaration names vertex-shader outputs (stream output from the VS). */
+   bool soValid=windows_device&&pData&&
       pData->pOutputStreamDecl&&pData->NumEntries>=1u&&
       pData->NumEntries<=64u; /* D3D10_SO_SINGLE_BUFFER_COMPONENT_LIMIT */
    UINT soSlots=0u,soComponents=0u;
@@ -2797,6 +2858,54 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
 }''')])
     change('src/gallium/frontends/d3d10umd/Draw.cpp',
         'da5904f2ac6b8a79373bcc60d2cef0546e8da0bc1ba92d21812aff3ea2338f7e',[
+        ('''   if (pDevice->bound_empty_gs && pDevice->bound_vs &&
+       pDevice->bound_vs->state.tokens) {
+      Shader *gs = pDevice->bound_empty_gs;
+      Shader *vs = pDevice->bound_vs;
+      bool remapped = false;
+      struct pipe_context *pipe = pDevice->pipe;
+      if (!gs->output_resolved) {
+         for (unsigned i = 0; i < gs->state.stream_output.num_outputs; ++i) {
+            unsigned mapping =
+               ShaderFindOutputMapping(vs, gs->state.stream_output.output[i].register_index);
+            if (mapping != gs->state.stream_output.output[i].register_index) {
+               gs->state.stream_output.output[i].register_index = mapping;
+               remapped = true;
+            }
+         }
+         if (remapped) {
+            pipe->delete_gs_state(pipe, gs->handle);
+            gs->handle = pipe->create_gs_state(pipe, &gs->state);
+         }
+         gs->output_resolved = true;
+      }
+      pipe->bind_gs_state(pipe, gs->handle);
+   }''','''   /* D3D-G10e: stream output without geometry shader code is the bound
+    * vertex shader's stream output. The variant -- the VS tokens with the
+    * declaration's registers mapped to its outputs -- is made once per VS
+    * (serial) and bound with no GS; Asahi then captures through its
+    * passthrough GS (agx_needs_passthrough_gs). Upstream created a GS state
+    * without tokens, which the Asahi driver cannot take. */
+   if (pDevice->bound_empty_gs && pDevice->bound_vs &&
+       pDevice->bound_vs->state.tokens) {
+      Shader *gs = pDevice->bound_empty_gs;
+      Shader *vs = pDevice->bound_vs;
+      struct pipe_context *pipe = pDevice->pipe;
+      if (!gs->so_vs_handle || gs->so_vs_serial != vs->agx_serial) {
+         if (gs->so_vs_handle)
+            pipe->delete_vs_state(pipe, gs->so_vs_handle);
+         struct pipe_shader_state variant = vs->state;
+         variant.stream_output = gs->state.stream_output;
+         for (unsigned i = 0; i < variant.stream_output.num_outputs; ++i)
+            variant.stream_output.output[i].register_index = ShaderFindOutputMapping(
+               vs, gs->state.stream_output.output[i].register_index);
+         gs->so_vs_handle = pipe->create_vs_state(pipe, &variant);
+         gs->so_vs_serial = vs->agx_serial;
+      }
+      pipe->bind_gs_state(pipe, NULL);
+      if (gs->so_vs_handle)
+         pipe->bind_vs_state(pipe, gs->so_vs_handle);
+   }'''),
         ('#include "State.h"',
          '#include "State.h"\n#include "agx_win32_asahi_scene.h"'),
         ('''DrawAuto(D3D10DDI_HDEVICE hDevice)  // IN
