@@ -10,6 +10,10 @@
  *   x6 Sample at lod 0            -> red   (mip 0)
  * The texture is B8G8R8A8 4x4 with three mips (red, green, blue), the
  * comparison texture R32_FLOAT 2x2 (0.25, 0.5, 0.75, 1.0), point sampling.
+ * Implicit-LOD samples (x1, x4, x6) are taken in uniform control flow at a
+ * coordinate whose derivatives give LOD 0 (EXP1288: inside the branches the
+ * derivatives were undefined); the explicit ones stay in early-returning
+ * branches (EXP1287: fragment exports inside control flow).
  * Every line is written through to the output file before the next step.
  * Usage: agx_sample_smoke.exe <out.txt> [iterations] */
 #define COBJMACROS
@@ -58,14 +62,21 @@ static const char ps_source[] =
     "float4 main(float4 p : SV_Position) : SV_Target {\n"
     "  int x = (int)p.x;\n"
     "  float2 centre = float2(0.5, 0.5);\n"
+    /* EXP1288: implicit-LOD samples run in uniform control flow (D3D leaves
+     * derivatives in non-uniform flow undefined); uv moves one texel of
+     * mip 0 per pixel in x and y, so the implicit LOD is 0. */
+    "  float2 uv = p.xy / 4.0;\n"
+    "  float4 biased = t.SampleBias(s, uv, 2.0);\n"
+    "  float4 implicit = t.Sample(s, uv);\n"
+    "  float4 compared = d.SampleCmp(c, float2(0.25, 0.25), 0.5).xxxx;\n"
     "  if (x == 0) return t.SampleLevel(s, centre, 1);\n"
-    "  if (x == 1) return t.SampleBias(s, centre, 2.0);\n"
+    "  if (x == 1) return biased;\n"
     "  if (x == 2) return t.SampleGrad(s, centre, float2(0.5, 0), float2(0, 0.5));\n"
     "  if (x == 3) { uint w, h, l; t.GetDimensions(1, w, h, l);\n"
     "                return float4(w / 4.0, h / 4.0, l / 4.0, 1); }\n"
-    "  if (x == 4) return d.SampleCmp(c, float2(0.25, 0.25), 0.5).xxxx;\n"
+    "  if (x == 4) return compared;\n"
     "  if (x == 5) return d.SampleCmpLevelZero(c, float2(0.75, 0.75), 0.5).xxxx;\n"
-    "  if (x == 6) return t.Sample(s, centre);\n"
+    "  if (x == 6) return implicit;\n"
     "  return float4(0, 0, 0, 1);\n"
     "}\n";
 
