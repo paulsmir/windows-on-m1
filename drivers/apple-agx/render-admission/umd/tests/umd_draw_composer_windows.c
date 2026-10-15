@@ -176,6 +176,9 @@ static void Composer_setup(void) {
     b->ClassId=i==2?AgxWin32BufferClassShader:
       (i>=3?AgxWin32BufferClassEncoder:AgxWin32BufferClassGeneral);
   }
+  /* EXP1061: slot scans stop at the high-water mark that FreeSlot keeps;
+   * these slots are filled directly, so publish the mark FreeSlot would. */
+  Composer_device.ScreenBufferHighWater=8u;
 }
 
 unsigned AdmissionUmdDrawComposerTests(void) {
