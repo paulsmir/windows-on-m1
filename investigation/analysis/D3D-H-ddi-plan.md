@@ -77,6 +77,33 @@ This document is step 4 of D3D-phase-plan.md, option A: extend the Mesa d3d10umd
    - First check every FL 11_0 requirement against the Microsoft feature-level table: formats, 16K textures, UAVs, CS 5.0, tessellation, BC6H/BC7.
    - Acceptance: DWM DDisplay without `DisableDDisplay` (EXP952), then CS2 (x64, needs the ARM64X UMD).
 
+## Correction (2026-10-15, D3D-G10)
+
+Upstream d3d10umd already implements the 10.1 entry points: CreateBlendState1, CreateShaderResourceView1, RelocateDeviceFuncs1, and ResourceConvert(Region) mapped to the copies. They are compiled out by `SUPPORT_D3D10_1 0`. D3D-H1 therefore means enabling them and routing them through the projection's admission and diagnostics. It does not mean writing them.
+
+## Shader translation for SM 4.1 and SM 5 (decision record, 2026-10-15)
+
+The frontend translates DXBC to TGSI (ShaderParse/ShaderTGSI), then tgsi_to_nir runs. Two facts limit this path:
+- TGSI has no D3D-style opcode for `lod` (separate resource and sampler).
+- TGSI's opcode tables come from the prebuilt Mesa archive. A new opcode would need a Mesa rebuild outside the projection.
+
+SM 5 adds UAVs (typed, raw, structured), atomics, groupshared memory, hull/domain phases and interfaces. TGSI expresses most of these only through GL-shaped files.
+
+Options:
+- (a) Extend ShaderParse/ShaderTGSI.
+- (b) DXBC to SPIR-V through an external translator, then spirv_to_nir. This needs a licence review and adapts another project's binding model.
+- (c) A DXBC to NIR translator in the frontend, owned here, replacing ShaderTGSI.
+
+Recommendation: (c).
+- NIR is what Asahi consumes and what tgsi_to_nir already produces, so translation and lowering bugs stay in one layer.
+- D3D semantics (separate texture and sampler, `lod`, sample positions, UAV kinds) map directly onto NIR texture and image intrinsics.
+- It is reusable by any Mesa driver behind a D3D10/11 UMD.
+- Staging:
+  1. SM 4.0/4.1 parity with today's TGSI path, checked against every existing smoke.
+  2. SM 5 compute: UAV, atomics, groupshared.
+  3. Tessellation.
+- Until (c) reaches parity, gather4, sample_pos and sample_info can still go through the existing TGSI opcodes (GATHER4, SAMPLE_POS, SAMPLE_INFO). `lod` waits for (c).
+
 ## Multisampling requirements per feature level (EXP1287 reading)
 
 Microsoft's ID3D11Device::CheckMultisampleQualityLevels page states that FL 10_1 devices must support 4x MSAA for every render-target format except R32G32B32A32 and R32G32B32, and FL 11_0 devices must support 4x for every render-target format and 8x for every render-target format except R32G32B32A32.
