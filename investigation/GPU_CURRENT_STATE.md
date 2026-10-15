@@ -1,6 +1,22 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-14T23:12Z (read this first)
+## Current as of 2026-10-15T07:02Z (read this first)
+
+Installed: PACKAGE1288 (D3D FL10_0 works, MSAA reporting off by default;
+the next pipeline's rec1288h rollback removes it). CS 46.0 fps, DWM faults 0.
+- EXP1288 CONFIRMED: predication (render condition before the batch),
+  general stream output (SoSetTargets per DDI; three-slot SO still refused by
+  the runtime), pixel-shader exports at the end (outputs to temporaries) and
+  the D3D-G9 explicit-LOD/gradient/comparison/size sampling ops.
+- EXP1288 measured the runtime's MSAA reporting rule (undocumented): every
+  cast-family member answers its typeless parent's levels; no
+  MULTISAMPLE_RENDERTARGET on read-only members; count 1 never asked.
+- Open: depth-only draws dropped by AgxWin32AsahiBatchDrawAllowed (needs a
+  colour buffer); the sampling tool's implicit-LOD op is invalid (non-uniform
+  flow). FL10_1 needs 4x on every RT format, FL11_0 also 8x (AGX max 4x):
+  investigation/analysis/D3D-H-ddi-plan.md.
+
+## Current as of 2026-10-14T23:12Z
 
 Installed: PACKAGE1287 (D3D works with MSAA off; the MSAA switches are
 default off; the next pipeline's rec1287h rollback removes it). m1n1 fa45bc58
