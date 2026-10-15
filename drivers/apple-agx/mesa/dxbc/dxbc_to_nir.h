@@ -48,6 +48,17 @@ dxbc_to_nir(const struct dxbc_program *program,
             const struct nir_shader_compiler_options *options,
             struct dxbc_nir_error *error);
 
+/* A hull shader whose control points pass through (no control-point
+ * phase): the D3D runtime's output signature names the registers the phase
+ * copies ('registers') and those holding SV_Position ('positions').
+ * dxbc_to_nir translates every other program; a pass-through hull shader
+ * there copies no register. */
+struct nir_shader *
+dxbc_to_nir_hs(const struct dxbc_program *program,
+               const struct nir_shader_compiler_options *options,
+               uint32_t passthrough_registers, uint32_t passthrough_positions,
+               struct dxbc_nir_error *error);
+
 /* The finalization tgsi_to_nir applies before handing NIR to a driver
  * without screen->finalize_nir (Asahi): lower returns and continue
  * constructs, registers and variables to SSA, system values, then a

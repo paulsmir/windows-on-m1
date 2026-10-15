@@ -52,7 +52,33 @@ main(int argc, char **argv)
    }
 
    glsl_type_singleton_init_or_ref();
-   nir = dxbc_to_nir(&program, &agx_nir_options, &terr);
+   if (program.type == DXBC_PROGRAM_HULL) {
+      /* the output signature (OSGN: count, 8, then 24-byte entries with
+       * the system value at +8 and the register at +16) names the control
+       * point registers a pass-through phase copies, as the runtime's
+       * D3D11DDIARG_TESSELLATION_IO_SIGNATURES do for the UMD */
+      const void *sig;
+      uint32_t sig_bytes, regs = 0, positions = 0;
+      if (dxbc_container_find_chunk(bytes, (size_t)size, DXBC_FOURCC('O', 'S', 'G', 'N'), &sig,
+                                    &sig_bytes) && sig_bytes >= 8) {
+         const uint8_t *s = sig;
+         uint32_t count;
+         memcpy(&count, s, 4);
+         for (uint32_t i = 0; i < count && 8 + 24 * (i + 1) <= sig_bytes; ++i) {
+            uint32_t sv, reg;
+            memcpy(&sv, s + 8 + 24 * i + 8, 4);
+            memcpy(&reg, s + 8 + 24 * i + 16, 4);
+            if (reg < 32) {
+               regs |= 1u << reg;
+               if (sv == 1)
+                  positions |= 1u << reg;
+            }
+         }
+      }
+      nir = dxbc_to_nir_hs(&program, &agx_nir_options, regs, positions, &terr);
+   } else {
+      nir = dxbc_to_nir(&program, &agx_nir_options, &terr);
+   }
    if (!nir) {
       printf("REFUSED %s (%s at %u)\n", terr.message, dxbc_opcode_name(terr.opcode) ?
              dxbc_opcode_name(terr.opcode) : "-", terr.offset);

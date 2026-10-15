@@ -22,8 +22,15 @@
 #define MAX_CF 64
 #define MAX_UAVS DXBC_NIR_MAX_UAVS
 #define MAX_TGSM 32
+#define MAX_PHASES 64
+
+/* hull shader phases */
+enum { HS_PHASE_NONE, HS_PHASE_DECLS, HS_PHASE_CP, HS_PHASE_FORK, HS_PHASE_JOIN };
 
 enum mem_kind { MEM_NONE, MEM_TYPED, MEM_RAW, MEM_STRUCTURED };
+
+/* a tess factor: an outer (gl_TessLevelOuter) or inner level and its index */
+#define TESS_FACTOR_INNER 0x80u
 
 struct tex_shape {
    enum glsl_sampler_dim dim;
@@ -110,6 +117,31 @@ struct ctx {
    uint32_t res_stride[MAX_RESOURCES];
    unsigned gs_stream;    /* the stream later output declarations belong to */
 
+   /* tessellation: patch constants vpc# (inputs of the domain shader), each
+    * component a patch varying (PATCH0 + #) or a tess factor */
+   nir_variable *patch_vars[MAX_REGS];
+   uint8_t pc_factor_mask[MAX_REGS];
+   uint8_t pc_factor[MAX_REGS][4];   /* TESS_FACTOR_INNER | level index */
+
+   /* hull shader: one nir_function per phase, called from main; the
+    * patch constants the fork/join phases write live in pc_regs */
+   unsigned hs_phase;
+   struct {
+      nir_function *func;
+      unsigned kind;
+      unsigned instances;
+   } phases[MAX_PHASES];
+   unsigned num_phases;
+   bool hs_had_cp;
+   nir_function_impl *main_impl;
+   nir_variable *pc_regs;
+   uint8_t pc_generic_mask[MAX_REGS];
+   nir_variable *cp_out[MAX_REGS];   /* per-vertex outputs */
+   uint8_t cp_out_mask[MAX_REGS];
+   unsigned cp_in;                   /* input control point count */
+   uint32_t passthrough_registers;   /* a pass-through phase copies these */
+   uint32_t passthrough_positions;   /* of which these hold SV_Position */
+
    struct cf_entry cf[MAX_CF];
    unsigned cf_depth;
    unsigned loop_depth;   /* NIR loops, switches included */
@@ -180,6 +212,11 @@ output_reg(struct ctx *c, unsigned index)
 static nir_def *read_src(struct ctx *c, const struct dxbc_instruction *insn,
                          const struct dxbc_operand *o, nir_alu_type type);
 static bool tex_shape(unsigned dim, struct tex_shape *s);
+static nir_def *load_patch_constant(struct ctx *c, const struct dxbc_instruction *insn,
+                                    const struct dxbc_operand *o);
+static nir_deref_instr *hs_pc_reg(struct ctx *c, const struct dxbc_instruction *insn,
+                                  const struct dxbc_index *index);
+static void hs_store_cp_outputs(struct ctx *c);
 
 /* imm + relative register component, as a 32-bit integer */
 static nir_def *
@@ -284,6 +321,9 @@ load_file(struct ctx *c, const struct dxbc_instruction *insn,
    case DXBC_OPERAND_INPUT:
       return load_input(c, insn, o);
    case DXBC_OPERAND_OUTPUT:
+      if (c->stage == MESA_SHADER_TESS_CTRL && c->hs_phase >= HS_PHASE_FORK &&
+          o->index_dimension == 1)
+         return nir_load_deref(b, hs_pc_reg(c, insn, &o->index[0]));
       if (o->index_dimension == 1 && index_direct(&o->index[0]) &&
           output_reg(c, (unsigned)o->index[0].imm))
          return nir_load_reg(b, output_reg(c, (unsigned)o->index[0].imm));
@@ -318,6 +358,34 @@ load_file(struct ctx *c, const struct dxbc_instruction *insn,
       return replicate4(c, nir_load_sample_mask_in(b));
    case DXBC_OPERAND_INPUT_GS_INSTANCE_ID:
       return replicate4(c, nir_load_invocation_id(b));
+   case DXBC_OPERAND_INPUT_CONTROL_POINT:
+      return load_input(c, insn, o);
+   case DXBC_OPERAND_INPUT_PATCH_CONSTANT:
+      if (c->stage == MESA_SHADER_TESS_CTRL) {
+         if (o->index_dimension != 1) {
+            fail(c, insn, "patch constant operand form");
+            return zero4(c);
+         }
+         return nir_load_deref(b, hs_pc_reg(c, insn, &o->index[0]));
+      }
+      return load_patch_constant(c, insn, o);
+   case DXBC_OPERAND_OUTPUT_CONTROL_POINT_ID:
+      return replicate4(c, nir_load_invocation_id(b));
+   case DXBC_OPERAND_INPUT_FORK_INSTANCE_ID:
+   case DXBC_OPERAND_INPUT_JOIN_INSTANCE_ID:
+      return replicate4(c, nir_load_param(b, 0));
+   case DXBC_OPERAND_OUTPUT_CONTROL_POINT: {
+      unsigned reg = (unsigned)o->index[1].imm;
+      if (o->index_dimension != 2 || !index_direct(&o->index[1]) || reg >= MAX_REGS ||
+          !c->cp_out[reg]) {
+         fail(c, insn, "output control point operand");
+         return zero4(c);
+      }
+      return nir_load_deref(b, nir_build_deref_array(b, nir_build_deref_var(b, c->cp_out[reg]),
+                                                     index_value(c, insn, &o->index[0])));
+   }
+   case DXBC_OPERAND_INPUT_DOMAIN_POINT:
+      return nir_pad_vector_imm_int(b, nir_load_tess_coord(b), 0, 4);
    default:
       fail(c, insn, "source operand type %u", o->type);
       return zero4(c);
@@ -374,6 +442,12 @@ write_dst(struct ctx *c, const struct dxbc_instruction *insn,
       }
       break;
    case DXBC_OPERAND_OUTPUT:
+      if (c->stage == MESA_SHADER_TESS_CTRL && c->hs_phase >= HS_PHASE_FORK &&
+          o->index_dimension == 1) {
+         /* patch constants, relative indexing included (dcl_indexrange) */
+         nir_store_deref(b, hs_pc_reg(c, insn, &o->index[0]), value, mask);
+         return;
+      }
       if (o->index_dimension == 1 && index_direct(&o->index[0]) &&
           output_reg(c, (unsigned)o->index[0].imm)) {
          nir_build_store_reg(b, value, output_reg(c, (unsigned)o->index[0].imm),
@@ -447,6 +521,150 @@ interp_mode(uint32_t mode, bool *centroid, bool *sample)
    }
 }
 
+/* the patch-constant register file of a hull shader's fork/join phases */
+static nir_variable *
+hs_pc_regs(struct ctx *c)
+{
+   if (!c->pc_regs)
+      c->pc_regs = nir_variable_create(c->b.shader, nir_var_shader_temp,
+                                       glsl_array_type(glsl_uvec4_type(), MAX_REGS, 0), "pc");
+   return c->pc_regs;
+}
+
+static nir_deref_instr *
+hs_pc_reg(struct ctx *c, const struct dxbc_instruction *insn, const struct dxbc_index *index)
+{
+   nir_builder *b = &c->b;
+   return nir_build_deref_array(b, nir_build_deref_var(b, hs_pc_regs(c)),
+                                index_value(c, insn, index));
+}
+
+/* the per-vertex output array of control point register 'reg' */
+static nir_variable *
+hs_cp_output(struct ctx *c, unsigned reg, int slot)
+{
+   unsigned n = c->b.shader->info.tess.tcs_vertices_out;
+   if (!c->cp_out[reg] && n)
+      c->cp_out[reg] = make_var(c, nir_var_shader_out,
+                                glsl_array_type(glsl_vec4_type(), n, 0), slot, "vocp");
+   return c->cp_out[reg];
+}
+
+/* the per-vertex input array of control point register 'reg' */
+static nir_variable *
+hs_cp_input(struct ctx *c, unsigned reg, int slot)
+{
+   if (!c->inputs[reg])
+      c->inputs[reg] = make_var(c, nir_var_shader_in,
+                                glsl_array_type(glsl_vec4_type(), c->cp_in ? c->cp_in : 32, 0),
+                                slot, "vicp");
+   return c->inputs[reg];
+}
+
+/* the control point phase's outputs, to gl_out[invocation] */
+static void
+hs_store_cp_outputs(struct ctx *c)
+{
+   nir_builder *b = &c->b;
+   nir_def *id = NULL;
+   for (unsigned reg = 0; reg < MAX_REGS; ++reg) {
+      if (!c->cp_out[reg] || !c->outputs[reg] || !c->cp_out_mask[reg])
+         continue;
+      if (!id)
+         id = nir_load_invocation_id(b);
+      nir_store_deref(b, nir_build_deref_array(b, nir_build_deref_var(b, c->cp_out[reg]), id),
+                      nir_load_reg(b, c->outputs[reg]), c->cp_out_mask[reg]);
+   }
+}
+
+/* D3D11_SB_NAME_FINAL_*_TESSFACTOR (11..22) -> TESS_FACTOR_INNER | index;
+ * 0xff for other names.  Triangle and quad edges and insides map index for
+ * index (as Mesa's GL -> DXIL path, dxil_nir_tess.c); isoline density is
+ * gl_TessLevelOuter[0] (number of lines), detail [1] (segments per line). */
+static unsigned
+tess_factor(unsigned name)
+{
+   switch (name) {
+   case 11: return 0;                       /* quad U == 0 edge */
+   case 12: return 1;                       /* quad V == 0 edge */
+   case 13: return 2;                       /* quad U == 1 edge */
+   case 14: return 3;                       /* quad V == 1 edge */
+   case 15: return TESS_FACTOR_INNER | 0;   /* quad U inside */
+   case 16: return TESS_FACTOR_INNER | 1;   /* quad V inside */
+   case 17: return 0;                       /* tri U == 0 edge */
+   case 18: return 1;                       /* tri V == 0 edge */
+   case 19: return 2;                       /* tri W == 0 edge */
+   case 20: return TESS_FACTOR_INNER | 0;   /* tri inside */
+   case 21: return 1;                       /* line detail */
+   case 22: return 0;                       /* line density */
+   default: return 0xffu;
+   }
+}
+
+/* dcl_input(_siv) vpc#: a domain shader's patch constants */
+static void
+declare_patch_input(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   const struct dxbc_operand *o = &insn->operands[0];
+   unsigned name = insn->num_payload ? insn->payload[0] : 0;
+   unsigned mask = o->num_components == 4 ? o->mask : 1u, reg;
+   if (o->index_dimension != 1 || o->index[0].imm >= MAX_REGS) {
+      fail(c, insn, "patch constant declaration");
+      return;
+   }
+   reg = (unsigned)o->index[0].imm;
+   if (insn->opcode == DXBC_OP_DCL_INPUT_SIV && tess_factor(name) != 0xffu) {
+      for (unsigned i = 0; i < 4; ++i)
+         if (mask & (1u << i))
+            c->pc_factor[reg][i] = (uint8_t)tess_factor(name);
+      c->pc_factor_mask[reg] |= (uint8_t)mask;
+      return;
+   }
+   if (insn->opcode != DXBC_OP_DCL_INPUT) {
+      fail(c, insn, "patch constant system value %u", name);
+      return;
+   }
+   if (!c->patch_vars[reg]) {
+      c->patch_vars[reg] = make_var(c, nir_var_shader_in, glsl_vec4_type(),
+                                    VARYING_SLOT_PATCH0 + (int)reg, "vpc");
+      c->patch_vars[reg]->data.patch = true;
+   }
+}
+
+static nir_def *
+load_patch_constant(struct ctx *c, const struct dxbc_instruction *insn,
+                    const struct dxbc_operand *o)
+{
+   nir_builder *b = &c->b;
+   nir_def *comp[4], *base = NULL, *outer = NULL, *inner = NULL;
+   unsigned reg;
+   if (o->index_dimension != 1 || !index_direct(&o->index[0]) ||
+       o->index[0].imm >= MAX_REGS) {
+      fail(c, insn, "patch constant operand form");
+      return zero4(c);
+   }
+   reg = (unsigned)o->index[0].imm;
+   if (c->patch_vars[reg])
+      base = nir_load_var(b, c->patch_vars[reg]);
+   for (unsigned i = 0; i < 4; ++i) {
+      if (c->pc_factor_mask[reg] & (1u << i)) {
+         unsigned f = c->pc_factor[reg][i];
+         if (f & TESS_FACTOR_INNER) {
+            if (!inner)
+               inner = nir_load_tess_level_inner(b);
+            comp[i] = nir_channel(b, inner, f & 1u);
+         } else {
+            if (!outer)
+               outer = nir_load_tess_level_outer(b);
+            comp[i] = nir_channel(b, outer, f & 3u);
+         }
+      } else {
+         comp[i] = base ? nir_channel(b, base, i) : nir_imm_int(b, 0);
+      }
+   }
+   return nir_vec(b, comp, 4);
+}
+
 static void
 declare_input(struct ctx *c, const struct dxbc_instruction *insn)
 {
@@ -466,20 +684,35 @@ declare_input(struct ctx *c, const struct dxbc_instruction *insn)
    case DXBC_OPERAND_INPUT_THREAD_GROUP_ID:
    case DXBC_OPERAND_INPUT_THREAD_ID_IN_GROUP:
    case DXBC_OPERAND_INPUT_THREAD_ID_IN_GROUP_FLATTENED:
-      return; /* read through system values at use */
+   case DXBC_OPERAND_INPUT_DOMAIN_POINT:
+   case DXBC_OPERAND_OUTPUT_CONTROL_POINT_ID:
+   case DXBC_OPERAND_INPUT_FORK_INSTANCE_ID:
+   case DXBC_OPERAND_INPUT_JOIN_INSTANCE_ID:
+   case DXBC_OPERAND_OUTPUT_CONTROL_POINT:
+      return; /* read through system values or the phase's outputs at use */
+   case DXBC_OPERAND_INPUT_PATCH_CONSTANT:
+      if (c->stage == MESA_SHADER_TESS_CTRL)
+         return; /* a join phase reads the patch-constant registers */
+      declare_patch_input(c, insn);
+      return;
+   case DXBC_OPERAND_INPUT_CONTROL_POINT:
+      break;
    default:
       fail(c, insn, "input declaration of operand type %u", o->type);
       return;
    }
 
    if (o->index_dimension == 2) {
-      /* geometry shader input array v[n][reg] */
+      /* geometry shader input array v[n][reg]; the control points of a
+       * hull or domain shader, vicp[n][reg] */
       if (!index_direct(&o->index[1]) || o->index[1].imm >= MAX_REGS) {
          fail(c, insn, "geometry input declaration");
          return;
       }
       reg = (unsigned)o->index[1].imm;
       c->gs_vertices_in = (unsigned)o->index[0].imm;
+      if (c->stage == MESA_SHADER_TESS_CTRL && !c->cp_in)
+         c->cp_in = c->gs_vertices_in;
       if (!c->inputs[reg]) {
          int slot = (insn->opcode == DXBC_OP_DCL_INPUT_SIV && name == 1) ?
             VARYING_SLOT_POS : generic_slot(c, reg, true);
@@ -637,7 +870,31 @@ declare_output(struct ctx *c, const struct dxbc_instruction *insn)
       return;
    }
    reg = (unsigned)o->index[0].imm;
+   if (c->stage == MESA_SHADER_TESS_CTRL && c->hs_phase >= HS_PHASE_FORK) {
+      /* patch constants: tess factors by name, the rest patch varyings */
+      if (insn->opcode == DXBC_OP_DCL_OUTPUT_SIV && tess_factor(name) != 0xffu) {
+         for (unsigned i = 0; i < 4; ++i)
+            if (mask & (1u << i))
+               c->pc_factor[reg][i] = (uint8_t)tess_factor(name);
+         c->pc_factor_mask[reg] |= (uint8_t)mask;
+      } else if (insn->opcode == DXBC_OP_DCL_OUTPUT) {
+         c->pc_generic_mask[reg] |= (uint8_t)mask;
+      } else {
+         fail(c, insn, "patch constant output system value %u", name);
+      }
+      return;
+   }
    output_reg(c, reg);
+   if (c->stage == MESA_SHADER_TESS_CTRL) {
+      /* control points: gl_out[invocation] */
+      if (!(insn->opcode == DXBC_OP_DCL_OUTPUT || name == 0 || name == 1) ||
+          !hs_cp_output(c, reg, name == 1 ? VARYING_SLOT_POS : VARYING_SLOT_VAR0 + (int)reg)) {
+         fail(c, insn, "control point output");
+         return;
+      }
+      c->cp_out_mask[reg] |= (uint8_t)mask;
+      return;
+   }
 
    if (insn->opcode == DXBC_OP_DCL_OUTPUT || name == 0) {
       int slot = generic_slot(c, reg, false);
@@ -728,7 +985,7 @@ declare(struct ctx *c, const struct dxbc_instruction *insn)
             return;
          }
          c->icb_count = n;
-         c->icb = nir_local_variable_create(b->impl,
+         c->icb = nir_variable_create(b->shader, nir_var_shader_temp,
             glsl_array_type(glsl_uvec4_type(), n, 0), "icb");
          for (unsigned i = 0; i < n; ++i)
             nir_store_deref(b, nir_build_deref_array_imm(b,
@@ -814,6 +1071,58 @@ declare(struct ctx *c, const struct dxbc_instruction *insn)
       c->gs_stream = (unsigned)o->index[0].imm;
       b->shader->info.gs.active_stream_mask |= (uint8_t)(1u << c->gs_stream);
       return;
+   case DXBC_OP_DCL_INPUT_CONTROL_POINT_COUNT:
+      c->cp_in = (insn->token0 >> 11) & 0x3fu;
+      return;
+   case DXBC_OP_DCL_HS_FORK_PHASE_INSTANCE_COUNT:
+   case DXBC_OP_DCL_HS_JOIN_PHASE_INSTANCE_COUNT:
+      if (!c->num_phases || !insn->num_payload || !insn->payload[0] || insn->payload[0] > 128) {
+         fail(c, insn, "phase instance count");
+         return;
+      }
+      c->phases[c->num_phases - 1].instances = insn->payload[0];
+      return;
+   case DXBC_OP_DCL_OUTPUT_CONTROL_POINT_COUNT:
+      b->shader->info.tess.tcs_vertices_out = (uint8_t)((insn->token0 >> 11) & 0x3fu);
+      return;
+   case DXBC_OP_DCL_TESS_DOMAIN: {
+      static const uint8_t prim[] = {[1] = TESS_PRIMITIVE_ISOLINES,
+                                     [2] = TESS_PRIMITIVE_TRIANGLES,
+                                     [3] = TESS_PRIMITIVE_QUADS};
+      unsigned d = (insn->token0 >> 11) & 3u;
+      if (!d) {
+         fail(c, insn, "tessellator domain %u", d);
+         return;
+      }
+      b->shader->info.tess._primitive_mode = prim[d];
+      return;
+   }
+   case DXBC_OP_DCL_TESS_PARTITIONING: {
+      /* pow2 rounds the factors up to powers of two before an integer
+       * tessellation; not handled yet */
+      unsigned p = (insn->token0 >> 11) & 7u;
+      if (p == 1)
+         b->shader->info.tess.spacing = TESS_SPACING_EQUAL;
+      else if (p == 3)
+         b->shader->info.tess.spacing = TESS_SPACING_FRACTIONAL_ODD;
+      else if (p == 4)
+         b->shader->info.tess.spacing = TESS_SPACING_FRACTIONAL_EVEN;
+      else
+         fail(c, insn, "tessellator partitioning %u", p);
+      return;
+   }
+   case DXBC_OP_DCL_TESS_OUTPUT_PRIMITIVE: {
+      unsigned p = (insn->token0 >> 11) & 7u;
+      if (p < 1 || p > 4) {
+         fail(c, insn, "tessellator output primitive %u", p);
+         return;
+      }
+      b->shader->info.tess.point_mode = p == 1;
+      b->shader->info.tess.ccw = p == 4;
+      return;
+   }
+   case DXBC_OP_DCL_HS_MAX_TESSFACTOR:
+      return; /* a hint: fxc writes the clamp into the code */
    case DXBC_OP_DCL_THREAD_GROUP:
       if (insn->num_payload < 3 || !insn->payload[0] || !insn->payload[1] || !insn->payload[2]) {
          fail(c, insn, "thread group declaration");
@@ -1198,8 +1507,13 @@ emit_continue(struct ctx *c, const struct dxbc_instruction *insn)
 static void
 emit_return(struct ctx *c)
 {
-   if (c->stage != MESA_SHADER_GEOMETRY)
+   if (c->stage == MESA_SHADER_TESS_CTRL) {
+      /* a return ends the phase (its function) */
+      if (c->hs_phase == HS_PHASE_CP)
+         hs_store_cp_outputs(c);
+   } else if (c->stage != MESA_SHADER_GEOMETRY) {
       store_outputs(c);
+   }
    jump(c, nir_jump_return);
 }
 
@@ -2216,10 +2530,150 @@ emit_instruction(struct ctx *c, unsigned index)
    }
 }
 
-struct nir_shader *
-dxbc_to_nir(const struct dxbc_program *program,
-            const struct nir_shader_compiler_options *options,
-            struct dxbc_nir_error *error)
+static void
+hs_end_phase(struct ctx *c)
+{
+   if (c->hs_phase == HS_PHASE_CP)
+      hs_store_cp_outputs(c);
+}
+
+/* pass-through control points: the input registers of the signature */
+static void
+hs_passthrough_vars(struct ctx *c)
+{
+   for (unsigned reg = 0; reg < MAX_REGS; ++reg) {
+      int slot;
+      if (!(c->passthrough_registers & (1u << reg)))
+         continue;
+      slot = (c->passthrough_positions & (1u << reg)) ? VARYING_SLOT_POS :
+             VARYING_SLOT_VAR0 + (int)reg;
+      if (!hs_cp_input(c, reg, slot) || !hs_cp_output(c, reg, slot))
+         fail(c, NULL, "pass-through control point register %u", reg);
+      c->cp_out_mask[reg] = 0xfu;
+   }
+}
+
+static void
+hs_begin_phase(struct ctx *c, const struct dxbc_instruction *insn, unsigned kind)
+{
+   static const char *const names[] = {[HS_PHASE_CP] = "control_point_phase",
+                                       [HS_PHASE_FORK] = "fork_phase",
+                                       [HS_PHASE_JOIN] = "join_phase"};
+   nir_function *f;
+   hs_end_phase(c);
+   if (c->failed)
+      return;
+   if (c->cf_depth || c->num_phases >= MAX_PHASES ||
+       (kind == HS_PHASE_CP && (c->hs_had_cp || c->num_phases))) {
+      fail(c, insn, "hull shader phase order");
+      return;
+   }
+   if (!c->b.shader->info.tess.tcs_vertices_out) {
+      fail(c, insn, "hull shader without an output control point count");
+      return;
+   }
+   if (kind != HS_PHASE_CP && !c->hs_had_cp && !c->num_phases)
+      hs_passthrough_vars(c);
+   f = nir_function_create(c->b.shader, names[kind]);
+   if (kind != HS_PHASE_CP) {
+      f->num_params = 1;
+      f->params = rzalloc_array(c->b.shader, nir_parameter, 1);
+      f->params[0].num_components = 1;
+      f->params[0].bit_size = 32;
+   }
+   c->b = nir_builder_at(nir_after_impl(nir_function_impl_create(f)));
+   c->phases[c->num_phases].func = f;
+   c->phases[c->num_phases].kind = kind;
+   c->phases[c->num_phases].instances = 1;
+   ++c->num_phases;
+   c->hs_had_cp |= kind == HS_PHASE_CP;
+   c->hs_phase = kind;
+   /* registers and indexable temporaries are phase-local */
+   memset(c->temps, 0, sizeof(c->temps));
+   memset(c->outputs, 0, sizeof(c->outputs));
+   memset(c->itemps, 0, sizeof(c->itemps));
+   c->num_temps = 0;
+   c->main_done = false;
+}
+
+/* gl_TessLevelOuter/Inner and the patch varyings from the patch-constant
+ * registers (invocation 0, after every fork/join phase) */
+static void
+hs_store_patch_constants(struct ctx *c)
+{
+   nir_builder *b = &c->b;
+   nir_variable *outer = NULL, *inner = NULL;
+   for (unsigned reg = 0; reg < MAX_REGS; ++reg) {
+      nir_def *v;
+      if (!c->pc_generic_mask[reg] && !c->pc_factor_mask[reg])
+         continue;
+      v = nir_load_deref(b, nir_build_deref_array_imm(b, nir_build_deref_var(b, hs_pc_regs(c)), reg));
+      if (c->pc_generic_mask[reg]) {
+         nir_variable *var = make_var(c, nir_var_shader_out, glsl_vec4_type(),
+                                      VARYING_SLOT_PATCH0 + (int)reg, "pc");
+         var->data.patch = true;
+         nir_store_var(b, var, v, c->pc_generic_mask[reg]);
+      }
+      for (unsigned i = 0; i < 4; ++i) {
+         unsigned f = c->pc_factor[reg][i];
+         nir_variable **level;
+         if (!(c->pc_factor_mask[reg] & (1u << i)))
+            continue;
+         level = (f & TESS_FACTOR_INNER) ? &inner : &outer;
+         if (!*level) {
+            bool in = level == &inner;
+            *level = make_var(c, nir_var_shader_out,
+                              glsl_array_type(glsl_float_type(), in ? 2 : 4, 0),
+                              in ? VARYING_SLOT_TESS_LEVEL_INNER : VARYING_SLOT_TESS_LEVEL_OUTER,
+                              in ? "inner" : "outer");
+            (*level)->data.patch = true;
+            (*level)->data.compact = true;
+         }
+         nir_store_deref(b, nir_build_deref_array_imm(b, nir_build_deref_var(b, *level),
+                                                      f & ~TESS_FACTOR_INNER),
+                         nir_channel(b, v, i), 1);
+      }
+   }
+}
+
+/* main: the control point phase in every invocation (or the pass-through
+ * copy), a barrier, then invocation 0 runs every fork/join phase instance
+ * and writes the patch constants */
+static void
+hs_build_main(struct ctx *c)
+{
+   nir_builder *b = &c->b;
+   *b = nir_builder_at(nir_after_impl(c->main_impl));
+   if (c->hs_had_cp) {
+      nir_build_call(b, c->phases[0].func, 0, NULL);
+   } else {
+      nir_def *id = nir_load_invocation_id(b);
+      if (!c->num_phases)
+         hs_passthrough_vars(c);
+      for (unsigned reg = 0; reg < MAX_REGS; ++reg)
+         if (c->passthrough_registers & (1u << reg))
+            nir_store_deref(b, nir_build_deref_array(b, nir_build_deref_var(b, c->cp_out[reg]), id),
+                            nir_load_deref(b, nir_build_deref_array(b,
+                               nir_build_deref_var(b, c->inputs[reg]), id)), 0xfu);
+   }
+   nir_barrier(b, .execution_scope = SCOPE_WORKGROUP, .memory_scope = SCOPE_WORKGROUP,
+               .memory_semantics = NIR_MEMORY_ACQ_REL, .memory_modes = nir_var_shader_out);
+   nir_push_if(b, nir_ieq_imm(b, nir_load_invocation_id(b), 0));
+   for (unsigned p = 0; p < c->num_phases; ++p) {
+      if (c->phases[p].kind == HS_PHASE_CP)
+         continue;
+      for (unsigned i = 0; i < c->phases[p].instances; ++i) {
+         nir_def *arg = nir_imm_int(b, (int)i);
+         nir_build_call(b, c->phases[p].func, 1, &arg);
+      }
+   }
+   hs_store_patch_constants(c);
+   nir_pop_if(b, NULL);
+}
+static struct nir_shader *
+translate(const struct dxbc_program *program, const struct nir_shader_compiler_options *options,
+          uint32_t passthrough_registers, uint32_t passthrough_positions,
+          struct dxbc_nir_error *error)
 {
    static struct dxbc_nir_error ignored;
    struct ctx *c;
@@ -2234,6 +2688,8 @@ dxbc_to_nir(const struct dxbc_program *program,
    case DXBC_PROGRAM_PIXEL: stage = MESA_SHADER_FRAGMENT; break;
    case DXBC_PROGRAM_GEOMETRY: stage = MESA_SHADER_GEOMETRY; break;
    case DXBC_PROGRAM_COMPUTE: stage = MESA_SHADER_COMPUTE; break;
+   case DXBC_PROGRAM_DOMAIN: stage = MESA_SHADER_TESS_EVAL; break;
+   case DXBC_PROGRAM_HULL: stage = MESA_SHADER_TESS_CTRL; break;
    default:
       snprintf(error->message, sizeof(error->message), "program type %u", program->type);
       return NULL;
@@ -2243,6 +2699,8 @@ dxbc_to_nir(const struct dxbc_program *program,
       return NULL;
    c->p = program;
    c->error = error;
+   c->passthrough_registers = passthrough_registers;
+   c->passthrough_positions = passthrough_positions;
    c->stage = stage;
    c->b = nir_builder_init_simple_shader(stage, options, "dxbc");
    nir = c->b.shader;
@@ -2262,8 +2720,27 @@ dxbc_to_nir(const struct dxbc_program *program,
       nir->info.gs.active_stream_mask = 1;
    }
 
-   for (unsigned i = 0; i < program->num_instructions && !c->failed && !c->main_done; ++i) {
+   if (stage == MESA_SHADER_TESS_CTRL)
+      c->main_impl = c->b.impl;
+   for (unsigned i = 0; i < program->num_instructions && !c->failed; ++i) {
       const struct dxbc_instruction *insn = &program->instructions[i];
+      if (stage == MESA_SHADER_TESS_CTRL) {
+         if (insn->opcode == DXBC_OP_HS_DECLS) {
+            c->hs_phase = HS_PHASE_DECLS;
+            continue;
+         }
+         if (insn->opcode == DXBC_OP_HS_CONTROL_POINT_PHASE ||
+             insn->opcode == DXBC_OP_HS_FORK_PHASE || insn->opcode == DXBC_OP_HS_JOIN_PHASE) {
+            hs_begin_phase(c, insn, insn->opcode == DXBC_OP_HS_CONTROL_POINT_PHASE ? HS_PHASE_CP :
+                                    insn->opcode == DXBC_OP_HS_FORK_PHASE ? HS_PHASE_FORK :
+                                    HS_PHASE_JOIN);
+            continue;
+         }
+         if (c->main_done)
+            continue; /* after a phase's top-level ret */
+      } else if (c->main_done) {
+         break;
+      }
       if (insn->opcode == DXBC_OP_LABEL || insn->opcode == DXBC_OP_CALL ||
           insn->opcode == DXBC_OP_CALLC || insn->opcode == DXBC_OP_INTERFACE_CALL) {
          fail(c, insn, "subroutines");
@@ -2273,8 +2750,13 @@ dxbc_to_nir(const struct dxbc_program *program,
    }
    if (!c->failed && c->cf_depth)
       fail(c, NULL, "unterminated control flow");
-   if (!c->failed && stage != MESA_SHADER_GEOMETRY)
+   if (!c->failed && stage == MESA_SHADER_TESS_CTRL) {
+      hs_end_phase(c);
+      if (!c->failed)
+         hs_build_main(c);
+   } else if (!c->failed && stage != MESA_SHADER_GEOMETRY) {
       store_outputs(c);
+   }
 
    if (c->failed) {
       ralloc_free(nir);
@@ -2289,6 +2771,23 @@ dxbc_to_nir(const struct dxbc_program *program,
    return nir;
 }
 
+struct nir_shader *
+dxbc_to_nir(const struct dxbc_program *program,
+            const struct nir_shader_compiler_options *options,
+            struct dxbc_nir_error *error)
+{
+   return translate(program, options, 0, 0, error);
+}
+
+struct nir_shader *
+dxbc_to_nir_hs(const struct dxbc_program *program,
+               const struct nir_shader_compiler_options *options,
+               uint32_t passthrough_registers, uint32_t passthrough_positions,
+               struct dxbc_nir_error *error)
+{
+   return translate(program, options, passthrough_registers, passthrough_positions, error);
+}
+
 void
 dxbc_nir_finalize(nir_shader *nir)
 {
@@ -2298,6 +2797,12 @@ dxbc_nir_finalize(nir_shader *nir)
    NIR_PASS(_, nir, nir_lower_returns);
    NIR_PASS(_, nir, nir_lower_vars_to_ssa);
    NIR_PASS(_, nir, nir_lower_reg_intrinsics_to_ssa);
+   if (nir->info.stage == MESA_SHADER_TESS_CTRL) {
+      /* hull shader phases: one function each, called from main */
+      NIR_PASS(_, nir, nir_inline_functions);
+      nir_remove_non_entrypoints(nir);
+      NIR_PASS(_, nir, nir_lower_vars_to_ssa);
+   }
    NIR_PASS(_, nir, nir_lower_global_vars_to_local);
    NIR_PASS(_, nir, nir_split_var_copies);
    NIR_PASS(_, nir, nir_lower_var_copies);

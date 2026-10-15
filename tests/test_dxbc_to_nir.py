@@ -41,9 +41,18 @@ TRANSLATED = {"vs40": "MESA_SHADER_VERTEX", "ps40": "MESA_SHADER_FRAGMENT",
               "gs50": "MESA_SHADER_GEOMETRY",
               # SM 5 pixel: attribute evaluation, gather4_c/_po, UAV atomics,
               # coverage in and out, conservative depth
-              "ps50b": "MESA_SHADER_FRAGMENT"}
+              "ps50b": "MESA_SHADER_FRAGMENT",
+              # SM 5 domain: domain point, control points, patch constants
+              # (generic and tess factors sharing a register)
+              "ds50": "MESA_SHADER_TESS_EVAL",
+              # SM 5 hull: control-point phase, fork phases with instances,
+              # relative patch-constant writes, an immediate constant buffer
+              "hs50": "MESA_SHADER_TESS_CTRL",
+              # SM 5 hull without a control-point phase (pass-through by
+              # the output signature), isolines
+              "hs50p": "MESA_SHADER_TESS_CTRL"}
 # tessellation stages, class linkage / doubles / evaluation, SM 5.1 ranges
-REFUSED = ["hs50", "ds50", "ps50", "ps51"]
+REFUSED = ["ps50", "ps51"]
 # the shaders the D3D smoke tools compile at run time (tools/dxbc/extract-smoke-shaders.py)
 STAGES = {"vs": "MESA_SHADER_VERTEX", "gs": "MESA_SHADER_GEOMETRY", "ps": "MESA_SHADER_FRAGMENT"}
 for line in (FIXTURES / "smoke/targets.txt").read_text().splitlines():
