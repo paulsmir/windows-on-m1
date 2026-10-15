@@ -472,7 +472,14 @@ declare_input(struct ctx *c, const struct dxbc_instruction *insn)
       case 4: slot = VARYING_SLOT_LAYER; break;
       case 5: slot = VARYING_SLOT_VIEWPORT; break;
       case 6: value = nir_load_vertex_id_zero_base(b); break;
-      case 7: value = nir_load_primitive_id(b); break;
+      case 7:
+         /* a pixel shader reads the primitive id as a flat varying (the
+          * TGSI path's PRIMID input); other stages as a system value */
+         if (ps)
+            slot = VARYING_SLOT_PRIMITIVE_ID;
+         else
+            value = nir_load_primitive_id(b);
+         break;
       case 8: value = nir_load_instance_id(b); break;
       case 9: value = nir_ineg(b, nir_b2i32(b, nir_load_front_face(b, 1))); break;
       case 10: value = nir_load_sample_id(b); break;
@@ -484,6 +491,18 @@ declare_input(struct ctx *c, const struct dxbc_instruction *insn)
          for (unsigned i = 0; i < 4; ++i)
             if (mask & (1u << i))
                c->input_sysval[reg][i] = value;
+         c->input_sysval_mask[reg] |= (uint8_t)mask;
+         return;
+      }
+      if (!c->inputs[reg] && slot == VARYING_SLOT_PRIMITIVE_ID) {
+         /* one 32-bit component: v#.c reads it in its declared component */
+         nir_variable *var = make_var(c, nir_var_shader_in, glsl_uint_type(), slot, "primid");
+         nir_def *id;
+         var->data.interpolation = INTERP_MODE_FLAT;
+         id = nir_load_var(b, var);
+         for (unsigned i = 0; i < 4; ++i)
+            if (mask & (1u << i))
+               c->input_sysval[reg][i] = id;
          c->input_sysval_mask[reg] |= (uint8_t)mask;
          return;
       }
@@ -831,10 +850,12 @@ emit_alu(struct ctx *c, const struct dxbc_instruction *insn)
    case DXBC_OP_ROUND_PI: r = nir_fceil(b, SRC(1, F)); break;
    case DXBC_OP_ROUND_Z: r = nir_ftrunc(b, SRC(1, F)); break;
    case DXBC_OP_MOV: r = SRC(1, insn->saturate ? F : U); break;
-   case DXBC_OP_DERIV_RTX: case DXBC_OP_DERIV_RTX_COARSE:
-      r = nir_ddx_coarse(b, SRC(1, F)); break;
-   case DXBC_OP_DERIV_RTY: case DXBC_OP_DERIV_RTY_COARSE:
-      r = nir_ddy_coarse(b, SRC(1, F)); break;
+   /* SM 4 leaves the derivative precision to the implementation (TGSI
+    * DDX/DDY -> generic ddx/ddy); SM 5 names it */
+   case DXBC_OP_DERIV_RTX: r = nir_ddx(b, SRC(1, F)); break;
+   case DXBC_OP_DERIV_RTY: r = nir_ddy(b, SRC(1, F)); break;
+   case DXBC_OP_DERIV_RTX_COARSE: r = nir_ddx_coarse(b, SRC(1, F)); break;
+   case DXBC_OP_DERIV_RTY_COARSE: r = nir_ddy_coarse(b, SRC(1, F)); break;
    case DXBC_OP_DERIV_RTX_FINE: r = nir_ddx_fine(b, SRC(1, F)); break;
    case DXBC_OP_DERIV_RTY_FINE: r = nir_ddy_fine(b, SRC(1, F)); break;
    /* comparisons: ~0 or 0 */
@@ -1617,6 +1638,14 @@ dxbc_to_nir(const struct dxbc_program *program,
    /* D3D binds each stage separately (tgsi_to_nir sets the same) */
    nir->info.separate_shader = true;
    nir->info.internal = false;
+   if (stage == MESA_SHADER_FRAGMENT) {
+      /* D3D: upper-left origin, pixel centres at half integers; colour
+       * outputs carry raw bits for integer targets (the TGSI path's
+       * properties and tgsi_to_nir's untyped outputs) */
+      nir->info.fs.origin_upper_left = true;
+      nir->info.fs.pixel_center_integer = false;
+      nir->info.fs.untyped_color_outputs = true;
+   }
    if (stage == MESA_SHADER_GEOMETRY) {
       nir->info.gs.invocations = 1;
       nir->info.gs.active_stream_mask = 1;
