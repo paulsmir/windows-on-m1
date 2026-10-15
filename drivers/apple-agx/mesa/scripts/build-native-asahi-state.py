@@ -2994,7 +2994,7 @@ AgxD3d10CopyFamily(DXGI_FORMAT format)
    }
 }
 
-#include "util/u_box.h"
+#include "util/box.h"
 
 /* D3D-G10b: the format a ResourceCopy / ResourceCopyRegion blit reads and
  * writes so that the stored bits survive: the bring-up byte families first
