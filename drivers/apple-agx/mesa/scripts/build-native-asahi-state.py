@@ -2594,7 +2594,49 @@ UnsupportedDxgi''')
    pSRView->next_presentation=NULL;
    pipe->sampler_view_release(pipe, pSRView->handle);
    pSRView->handle = NULL;
-}''')])
+}'''),
+        ('''   pShader->type = MESA_SHADER_VERTEX;
+   pShader->output_resolved = true;
+''','''   pShader->type = MESA_SHADER_VERTEX;
+   pShader->output_resolved = true;
+   /* EXP1291: the runtime hands over uninitialized private memory, and
+    * DestroyShader/ResolveState read these D3D-G10e fields of every shader. */
+   pShader->agx_serial = 0;
+   pShader->so_vs_handle = NULL;
+   pShader->so_vs_serial = 0;
+'''),
+        ('''   pShader->type = MESA_SHADER_GEOMETRY;
+   pShader->output_resolved = true;
+''','''   pShader->type = MESA_SHADER_GEOMETRY;
+   pShader->output_resolved = true;
+   /* EXP1291: the runtime hands over uninitialized private memory, and
+    * DestroyShader/ResolveState read these D3D-G10e fields of every shader. */
+   pShader->agx_serial = 0;
+   pShader->so_vs_handle = NULL;
+   pShader->so_vs_serial = 0;
+'''),
+        ('''   bool all_slot_zero = true;
+
+   pShader->type = MESA_SHADER_GEOMETRY;
+''','''   bool all_slot_zero = true;
+
+   pShader->type = MESA_SHADER_GEOMETRY;
+   /* EXP1291: the runtime hands over uninitialized private memory, and
+    * DestroyShader/ResolveState read these D3D-G10e fields of every shader. */
+   pShader->agx_serial = 0;
+   pShader->so_vs_handle = NULL;
+   pShader->so_vs_serial = 0;
+'''),
+        ('''   pShader->type = MESA_SHADER_FRAGMENT;
+   pShader->output_resolved = true;
+''','''   pShader->type = MESA_SHADER_FRAGMENT;
+   pShader->output_resolved = true;
+   /* EXP1291: the runtime hands over uninitialized private memory, and
+    * DestroyShader/ResolveState read these D3D-G10e fields of every shader. */
+   pShader->agx_serial = 0;
+   pShader->so_vs_handle = NULL;
+   pShader->so_vs_serial = 0;
+''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','SetSamplers','''   Device *pDevice = CastDevice(hDevice);
    const UINT slots = D3D10_COMMONSHADER_SAMPLER_SLOT_COUNT;
    static_assert(PIPE_MAX_SAMPLERS >= D3D10_COMMONSHADER_SAMPLER_SLOT_COUNT,
