@@ -181,7 +181,7 @@ typedef struct {
 
 static int lock_depth, rtkit_stops, polls, drop_at_poll, fail_poll, worker_busy,
     worker_completes, paused, private_resets, scene_queued, scene_started,
-    scene_quarantined, cancels;
+    scene_quarantined, cancels, preempts, pending_drops, pending_preempt;
 static ULONGLONG now_ms;
 static ADMISSION_CONTEXT *model_adapter;
 static ADMISSION_PLATFORM_RUNTIME *model_runtime;
@@ -260,7 +260,10 @@ static BOOLEAN AdmissionGpuvaG3PrivateReset(ADMISSION_CONTEXT *c) {
 }
 static void AdmissionGpuvaG3PrivateCancel(ADMISSION_RENDER_CONTEXT *c, ULONG f, BOOLEAN u) {
   (void)c; (void)f; (void)u; ++cancels; }
-static void AdmissionG4PendingDropLocked(ADMISSION_CONTEXT *c, BOOLEAN p) { (void)c; (void)p; assert(lock_depth); }
+static void AdmissionG4PendingDropLocked(ADMISSION_CONTEXT *c, BOOLEAN p) {
+  (void)c; assert(lock_depth); ++pending_drops; pending_preempt = p; }
+static void AdmissionGpuvaG3PrivatePreempt(ADMISSION_RENDER_CONTEXT *c, ULONG f) {
+  (void)c; (void)f; ++preempts; }
 static void AdmissionPagingUpdateIdleLocked(ADMISSION_CONTEXT *c) { (void)c; assert(lock_depth); }
 static BOOLEAN AdmissionBackendImageReleaseSubmission(int *i, ULONG f) { (void)i; (void)f; return TRUE; }
 static NTSTATUS AdmissionScanoutSetTimelinePaused(ADMISSION_CONTEXT *c, BOOLEAN p) {
@@ -312,6 +315,7 @@ static void setup(int worker, int queued) {
   rtkit_stops = polls = drop_at_poll = fail_poll = worker_completes = 0;
   published = recorded = 0; memset(&last_recorded, 0, sizeof(last_recorded));
   private_resets = scene_quarantined = cancels = paused = 0;
+  preempts = pending_drops = pending_preempt = 0;
   scene_queued = scene_started = 1; now_ms = 1000u;
   model_adapter = &adapter; model_runtime = &runtime;
   adapter.SchedulerInitialized = 1; adapter.PlatformRuntime = &runtime;
@@ -437,6 +441,11 @@ int main(void) {
   memset(&reset, 0, sizeof(reset));
   assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS);
   assert(reset.LastAbortedFenceId == 0xce71cu && polls == 0);
+  /* EXP1303: VidSch resubmits never-started renders after an engine reset
+   * with new fences, as after a preemption; a cancelled private scene made
+   * that resubmission fail (Wom1G4SubmitFailure branch 7, subsite 0x201). */
+  assert(preempts == 1 && cancels == 0);
+  assert(pending_drops >= 1 && pending_preempt);
   assert(last_recorded.Quiesce == AdmissionGpuResetQuiesceNone &&
          last_recorded.PacketState == AdmissionRenderPacketQueued);
   assert(AdmissionRenderPacketState(&adapter.RenderPacket) == AdmissionRenderPacketEmpty);

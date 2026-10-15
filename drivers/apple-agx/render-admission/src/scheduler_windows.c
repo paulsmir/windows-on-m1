@@ -570,10 +570,13 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
   if (reset) {
     /* Nothing may remain queued once the reset returns (DxgkDdiResetEngine).
      * VidSch resubmits these packets with their data: paging packets with
-     * their original fences, which the scheduler reset kept resubmittable. */
+     * their original fences, which the scheduler reset kept resubmittable,
+     * and renders with new fences, so a never-started render keeps its
+     * private scene as after a preemption (EXP1303: a cancelled scene made
+     * that resubmission fail). */
     AdmissionCpuQueueReleaseContextsLocked(context);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-    AdmissionG4PendingDropLocked(context, FALSE);
+    AdmissionG4PendingDropLocked(context, TRUE);
 #endif
     context->CpuQueueHead = context->CpuQueueCount = context->DispatchedFence = 0u;
     InterlockedExchange(&context->RenderDpcFence, 0);
@@ -587,7 +590,7 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
   if (packetContext != NULL &&
       packetContext->Object.FenceOutstanding == packetFence) {
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-    AdmissionGpuvaG3PrivateCancel(packetContext,packetFence,FALSE);
+    AdmissionGpuvaG3PrivatePreempt(packetContext, packetFence);
 #endif
     KeAcquireSpinLock(&context->SchedulerLock, &oldIrql);
     AdmissionContextRetireFence(packetContext, packetFence);
