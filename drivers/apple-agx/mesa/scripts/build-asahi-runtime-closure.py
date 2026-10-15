@@ -52,6 +52,8 @@ FRONTEND_C = ('ShaderParse.c','ShaderTGSI.c')
 # D3D-H3: the DXBC parser and DXBC -> NIR translator (drivers/apple-agx/mesa/dxbc)
 # the frontend uses behind APPLE_AGX_D3D_SHADER_NIR.
 DXBC_C = ('dxbc_parse.c','dxbc_to_nir.c')
+# D3D-H2a: the D3D11 DDI table over the D3D10 frontend (drivers/apple-agx/mesa/d3d11).
+D3D11_CPP = ('agx_d3d11_ddi.cpp',)
 # Actual Gallium helpers required by native context/resource/state construction.
 # Further additions must follow real compile/link diagnostics, not dummy symbols.
 AUX_UNITS = ('util/u_framebuffer.c', 'util/u_helpers.c', 'util/u_prim.c',
@@ -373,6 +375,7 @@ def main():
                     native / 'src/asahi/libagx', native / 'src/gallium/drivers/asahi',
                     args.project / 'drivers/apple-agx/mesa/winsys',
                     args.project / 'drivers/apple-agx/mesa/dxbc',
+                    args.project / 'drivers/apple-agx/mesa/d3d11',
                     args.project / 'drivers/apple-agx/shared/include',
                     Path(r'C:\Users\pauls\AD04-uatomic\include'),
                     evidence / 'src', evidence / 'src/asahi/compiler',
@@ -438,6 +441,7 @@ def main():
         runtime += [native / 'src/gallium/frontends/d3d10umd' / name
                     for name in FRONTEND_CPP + FRONTEND_C]
         runtime += [args.project / 'drivers/apple-agx/mesa/dxbc' / name for name in DXBC_C]
+        runtime += [args.project / 'drivers/apple-agx/mesa/d3d11' / name for name in D3D11_CPP]
         generated_c = OWNER_GENERATED / 'src/asahi/lib/libagx_shaders.c'
         record(generated_c, kind='native-generated-source')
         # Quoted includes must resolve beside the accepted projected header,
@@ -496,7 +500,8 @@ def main():
             # Actual-body test exports live in agx_state; no duplicate fixture
             # definition is included in this archive or its dependency list.
             exports = ['/DAGX_WIN32_NATIVE_PIPELINE_TEST=1'] if source.name == 'agx_state.c' else []
-            if 'frontends/d3d10umd' in source.as_posix():
+            # the D3D11 table shares the frontend's headers and must see them alike
+            if 'frontends/d3d10umd' in source.as_posix() or 'mesa/d3d11/' in source.as_posix():
                 exports.append('/DADMISSION_UMD_PIPE_FACTORY_TEST=1')
             command, command_hash = compile_command(CLANG / 'clang-cl.exe',
                 [*flags, *exports], includes, source, obj)

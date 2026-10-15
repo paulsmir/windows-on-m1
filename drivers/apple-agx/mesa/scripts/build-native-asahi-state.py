@@ -759,7 +759,23 @@ SupportedDDIInterfaceVersions[] = {
 SupportedDDIInterfaceVersions[] = {
    D3D10_0_DDI_SUPPORTED,
    D3D10_0_x_DDI_SUPPORTED,
-};''')])
+   /* D3D-H2a: last, advertised only under AgxD3d11DdiEnabled() */
+   D3D11_0_DDI_SUPPORTED,
+};'''),
+        ('''#include "Device.h"
+#include "State.h"''','''#include "Device.h"
+#include "State.h"
+#include "agx_d3d11_ddi.h"''')])
+    replace_function_body('src/gallium/frontends/d3d10umd/Adapter.cpp','GetSupportedVersions','''   UINT count = ARRAYSIZE(SupportedDDIInterfaceVersions) - (AgxD3d11DdiEnabled() ? 0u : 1u);
+   if (!puEntries)
+      return E_INVALIDARG;
+   if (pSupportedDDIInterfaceVersions && *puEntries < count)
+      return E_OUTOFMEMORY;
+   *puEntries = count;
+   if (pSupportedDDIInterfaceVersions)
+      memcpy(pSupportedDDIInterfaceVersions, SupportedDDIInterfaceVersions,
+             count * sizeof(SupportedDDIInterfaceVersions[0]));
+   return S_OK;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Adapter.cpp','GetCaps','''   Adapter *pAdapter = CastAdapter(hAdapter);
    if (!pAdapter || !pData || !pData->pData)
       return E_INVALIDARG;
@@ -768,6 +784,12 @@ SupportedDDIInterfaceVersions[] = {
       if (pData->DataSize != sizeof(D3D11DDI_THREADING_CAPS))
          return E_INVALIDARG;
       ((D3D11DDI_THREADING_CAPS *)pData->pData)->Caps = 0;
+      return S_OK;
+   case D3D11DDICAPS_SHADER:
+      /* D3D-H2a: no doubles, no compute or raw/structured buffers at SM 4.x */
+      if (pData->DataSize != sizeof(D3D11DDI_SHADER_CAPS))
+         return E_INVALIDARG;
+      ((D3D11DDI_SHADER_CAPS *)pData->pData)->Caps = 0;
       return S_OK;
    case D3D11DDICAPS_3DPIPELINESUPPORT:
       if (pData->DataSize != sizeof(D3D11DDI_3DPIPELINESUPPORT_CAPS))
@@ -1275,7 +1297,39 @@ void APIENTRY
       AgxD3d10WindowsMsaaFormat(Format, AgxD3d10WindowsMsaaProbe()) &&
       (SampleCount == 2 || SampleCount == 4) ? 1 : 0;
    if (AgxD3d10WindowsMsaaProbe())
-      AgxD3d10WindowsMsaaReceipt(2u, (UINT)Format, SampleCount, *pNumQualityLevels);''')])
+      AgxD3d10WindowsMsaaReceipt(2u, (UINT)Format, SampleCount, *pNumQualityLevels);'''),
+        # D3D-H2a: accept the D3D11 interface and fill its table
+        ('''#include "Draw.h"
+#include "DxgiFns.h"''','''#include "Draw.h"
+#include "DxgiFns.h"
+#include "agx_d3d11_ddi.h"'''),
+        ('''#if SUPPORT_D3D10_1
+   case D3D10_1_DDI_INTERFACE_VERSION:
+   case D3D10_1_x_DDI_INTERFACE_VERSION:
+   case D3D10_1_7_DDI_INTERFACE_VERSION:
+#endif
+      break;
+   default:
+      DebugPrintf("%s: unsupported interface version 0x%08x\\n",''','''#if SUPPORT_D3D10_1
+   case D3D10_1_DDI_INTERFACE_VERSION:
+   case D3D10_1_x_DDI_INTERFACE_VERSION:
+   case D3D10_1_7_DDI_INTERFACE_VERSION:
+#endif
+   case D3D11_0_DDI_INTERFACE_VERSION:
+   case D3D11_0_7_DDI_INTERFACE_VERSION:
+      break;
+   default:
+      DebugPrintf("%s: unsupported interface version 0x%08x\\n",'''),
+        ('''      p10_1DeviceFuncs->pfnResourceConvert = ResourceCopy;
+      p10_1DeviceFuncs->pfnResourceConvertRegion = ResourceCopyRegion;
+   }''','''      p10_1DeviceFuncs->pfnResourceConvert = ResourceCopy;
+      p10_1DeviceFuncs->pfnResourceConvertRegion = ResourceCopyRegion;
+   }
+   /* D3D-H2a: the D3D11 table (agx_d3d11_ddi.cpp) replaces the 10.0 entries
+    * written above into the same, larger, runtime-owned table. */
+   if (pCreateData->Interface == D3D11_0_DDI_INTERFACE_VERSION ||
+       pCreateData->Interface == D3D11_0_7_DDI_INTERFACE_VERSION)
+      AgxD3d11FillDeviceFuncs(pCreateData->p11DeviceFuncs);''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Device.cpp','Flush','''   Device *pDevice = CastDevice(hDevice);
    HRESULT result = AgxD3d10WindowsQueryCollect(pDevice->windows);
    UINT stage[1] = {1u};
