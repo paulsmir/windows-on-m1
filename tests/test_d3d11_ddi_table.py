@@ -195,6 +195,25 @@ class D3d11DdiTable(unittest.TestCase):
                        "R(BC7_UNORM,BC7_TYPELESS)", "R(BC7_UNORM_SRGB,BC7_TYPELESS)"):
             self.assertIn(member, casts)
 
+    def test_fl11_resource_limits_are_admitted(self):
+        # FL 11_0 creates 16384-texel 1D/2D/cube textures with 15 mips and
+        # 2048-slice arrays; the driver's own limit check refusing them
+        # (D3D10's 8192/14/512) fails CreateResource at FL 11_0.
+        with tempfile.TemporaryDirectory(prefix="d3d11-limits-") as tmp:
+            out = project(Path(tmp) / "out")
+            if out is None:
+                self.skipTest("reference Mesa tree not available")
+            resource = (out / "src/gallium/frontends/d3d10umd/Resource.cpp").read_text()
+            limits = function_body(resource, "AgxD3d10ResourceWithinRequiredLimits")
+            self.assertNotIn("D3D10_REQ_TEXTURE", limits)
+            self.assertNotIn("D3D10_REQ_MIP_LEVELS", limits)
+            for define, value in (("AGX_D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION", "16384u"),
+                                  ("AGX_D3D11_REQ_TEXTURECUBE_DIMENSION", "16384u"),
+                                  ("AGX_D3D11_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION", "2048u"),
+                                  ("AGX_D3D11_REQ_MIP_LEVELS", "15u")):
+                with self.subTest(define=define):
+                    self.assertIn("#define " + define + " " + value, resource)
+
     def test_tessellation_stages_reach_asahi(self):
         # D3D-H4: hull/domain shaders through the translator, their setters
         # on the common frontend setters, patch topologies, and the winding

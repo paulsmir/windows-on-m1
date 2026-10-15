@@ -3552,12 +3552,24 @@ AgxD3d10ExpandPackedPair(enum pipe_format format, void *destination,
    return true;
 }
 
+/* D3D-H5: the D3D11 limits (d3d11.h D3D11_REQ_*, a superset of D3D10's;
+ * the runtime enforces each feature level's own before calling the driver,
+ * and the resource-size formula min(max(128, 0.25 x video memory), 2048) MB) */
+#define AGX_D3D11_REQ_MIP_LEVELS 15u
+#define AGX_D3D11_REQ_RESOURCE_SIZE_IN_MEGABYTES 2048u
+#define AGX_D3D11_REQ_TEXTURE1D_U_DIMENSION 16384u
+#define AGX_D3D11_REQ_TEXTURE1D_ARRAY_AXIS_DIMENSION 2048u
+#define AGX_D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION 16384u
+#define AGX_D3D11_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION 2048u
+#define AGX_D3D11_REQ_TEXTURECUBE_DIMENSION 16384u
+#define AGX_D3D11_REQ_TEXTURE3D_U_V_OR_W_DIMENSION 2048u
+
 static bool
 AgxD3d10ResourceWithinRequiredLimits(
    const D3D10DDIARG_CREATERESOURCE *resource)
 {
    if (!resource || !resource->pMipInfoList || !resource->MipLevels ||
-       resource->MipLevels > D3D10_REQ_MIP_LEVELS || !resource->ArraySize)
+       resource->MipLevels > AGX_D3D11_REQ_MIP_LEVELS || !resource->ArraySize)
       return false;
 
    const D3D10DDI_MIPINFO *mip = resource->pMipInfoList;
@@ -3572,25 +3584,25 @@ AgxD3d10ResourceWithinRequiredLimits(
    case D3D10DDIRESOURCE_BUFFER:
       return resource->MipLevels == 1 && array == 1 && height == 1 && depth == 1 &&
          width <= (1ULL << D3D10_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP) &&
-         width <= (uint64_t)D3D10_REQ_RESOURCE_SIZE_IN_MEGABYTES * 1024u * 1024u;
+         width <= (uint64_t)AGX_D3D11_REQ_RESOURCE_SIZE_IN_MEGABYTES * 1024u * 1024u;
    case D3D10DDIRESOURCE_TEXTURE1D:
-      if (width > D3D10_REQ_TEXTURE1D_U_DIMENSION || height != 1 || depth != 1 ||
-          array > D3D10_REQ_TEXTURE1D_ARRAY_AXIS_DIMENSION) return false;
+      if (width > AGX_D3D11_REQ_TEXTURE1D_U_DIMENSION || height != 1 || depth != 1 ||
+          array > AGX_D3D11_REQ_TEXTURE1D_ARRAY_AXIS_DIMENSION) return false;
       break;
    case D3D10DDIRESOURCE_TEXTURE2D:
-      if (width > D3D10_REQ_TEXTURE2D_U_OR_V_DIMENSION ||
-          height > D3D10_REQ_TEXTURE2D_U_OR_V_DIMENSION || depth != 1 ||
-          array > D3D10_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION) return false;
+      if (width > AGX_D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION ||
+          height > AGX_D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION || depth != 1 ||
+          array > AGX_D3D11_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION) return false;
       break;
    case D3D10DDIRESOURCE_TEXTURE3D:
-      if (width > D3D10_REQ_TEXTURE3D_U_V_OR_W_DIMENSION ||
-          height > D3D10_REQ_TEXTURE3D_U_V_OR_W_DIMENSION ||
-          depth > D3D10_REQ_TEXTURE3D_U_V_OR_W_DIMENSION || array != 1)
+      if (width > AGX_D3D11_REQ_TEXTURE3D_U_V_OR_W_DIMENSION ||
+          height > AGX_D3D11_REQ_TEXTURE3D_U_V_OR_W_DIMENSION ||
+          depth > AGX_D3D11_REQ_TEXTURE3D_U_V_OR_W_DIMENSION || array != 1)
          return false;
       break;
    case D3D10DDIRESOURCE_TEXTURECUBE:
-      if (width != height || width > D3D10_REQ_TEXTURECUBE_DIMENSION || depth != 1 ||
-          array > D3D10_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION) return false;
+      if (width != height || width > AGX_D3D11_REQ_TEXTURECUBE_DIMENSION || depth != 1 ||
+          array > AGX_D3D11_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION) return false;
       break;
    default:
       return false;
@@ -3601,7 +3613,7 @@ AgxD3d10ResourceWithinRequiredLimits(
    uint64_t blockWidth = util_format_get_blockwidth(format);
    uint64_t blockHeight = util_format_get_blockheight(format);
    uint64_t maximum =
-      (uint64_t)D3D10_REQ_RESOURCE_SIZE_IN_MEGABYTES * 1024u * 1024u;
+      (uint64_t)AGX_D3D11_REQ_RESOURCE_SIZE_IN_MEGABYTES * 1024u * 1024u;
    if (!element || !blockWidth || !blockHeight) return false;
    uint64_t total = 0;
    for (unsigned level = 0; level < resource->MipLevels; ++level) {
