@@ -788,19 +788,46 @@ SupportedDDIInterfaceVersions[] = {
 #include "State.h"''','''#include "Device.h"
 #include "State.h"
 #include "agx_d3d11_ddi.h"''')])
-    replace_function_body('src/gallium/frontends/d3d10umd/Adapter.cpp','GetSupportedVersions','''   UINT count = ARRAYSIZE(SupportedDDIInterfaceVersions) - 2u +
+    replace_function_body('src/gallium/frontends/d3d10umd/Adapter.cpp','GetSupportedVersions','''   UINT64 versions[8];
+   UINT count = ARRAYSIZE(SupportedDDIInterfaceVersions) - 2u +
       (AgxD3d11DdiEnabled() ? 1u + (AgxWddm2_0DdiEnabled() ? 1u : 0u) : 0u);
+   memcpy(versions, SupportedDDIInterfaceVersions, count * sizeof(versions[0]));
+   /* EXP1302 diagnostic (FL 11_0 processes only): EXP1301's runtime opened
+    * the adapter with 11.17 and refused the list 10.0/10.0x/11.0/11.32 before
+    * CreateDevice; APPLE_AGX_D3D11_DDI_PROBE replaces the D3D11 part of the
+    * list (letters, in order: 0 = 11.0, a = 11.1, b = WDDM 1.3, c = WDDM 2.0
+    * as header minor 5 encodes it (11.17 build 5), w = WDDM 2.0 (header 9+))
+    * so g4-create-device-args names the interface the runtime picks. */
+   char probe[8];
+   DWORD probe_length = AgxD3d11Fl11Enabled() ?
+      GetEnvironmentVariableA("APPLE_AGX_D3D11_DDI_PROBE", probe, sizeof(probe)) : 0u;
+   if (probe_length && probe_length < sizeof(probe)) {
+      count = 2u;
+      for (DWORD i = 0; i < probe_length && count < ARRAYSIZE(versions); ++i) {
+         switch (probe[i]) {
+         case '0': versions[count++] = D3D11_0_DDI_SUPPORTED; break;
+         case 'a': versions[count++] = D3D11_1_DDI_SUPPORTED; break;
+         case 'b': versions[count++] = D3DWDDM1_3_DDI_SUPPORTED; break;
+         case 'c': versions[count++] = (((UINT64)((D3D11_DDI_MAJOR_VERSION << 16) | 17u)) << 32) |
+                                       (((UINT64)5u) << 16); break;
+         case 'w': versions[count++] = D3DWDDM2_0_DDI_SUPPORTED; break;
+         default: break;
+         }
+      }
+   }
    if (!puEntries)
       return E_INVALIDARG;
    if (pSupportedDDIInterfaceVersions && *puEntries < count)
       return E_OUTOFMEMORY;
    *puEntries = count;
    if (pSupportedDDIInterfaceVersions)
-      memcpy(pSupportedDDIInterfaceVersions, SupportedDDIInterfaceVersions,
-             count * sizeof(SupportedDDIInterfaceVersions[0]));
-   /* EXP1297: adapter queries before a refused FL 11_0 device (receipt) */
-   UINT values[2] = {count, pSupportedDDIInterfaceVersions ? 1u : 0u};
-   AgxD3d10WindowsDiagnostic("measure-getversions", S_OK, values, 2u);
+      memcpy(pSupportedDDIInterfaceVersions, versions, count * sizeof(versions[0]));
+   /* EXP1297: adapter queries before a refused FL 11_0 device (receipt);
+    * EXP1302: with each listed interface (high word) and build (low word) */
+   UINT values[10] = {count, pSupportedDDIInterfaceVersions ? 1u : 0u};
+   for (UINT i = 0; i < count && i < 8u; ++i)
+      values[2u + i] = (UINT)(versions[i] >> 32) << 8 | (UINT)((versions[i] >> 16) & 0xffu);
+   AgxD3d10WindowsDiagnostic("measure-getversions", S_OK, values, 2u + (count < 8u ? count : 8u));
    return S_OK;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Adapter.cpp','GetCaps','''   Adapter *pAdapter = CastAdapter(hAdapter);
    /* EXP1297: the runtime refused a FL 11_0 device (DXGI_ERROR_DRIVER_
@@ -1459,7 +1486,11 @@ void APIENTRY
    case D3D11_0_7_DDI_INTERFACE_VERSION:
    case D3DWDDM2_0_DDI_INTERFACE_VERSION:
       break;
-   default:
+   default: {
+      /* EXP1302: the interface the runtime chose from the probe list */
+      UINT chosen[2] = {pCreateData->Interface, pCreateData->Version};
+      AgxD3d10WindowsDiagnostic("reject-createdevice-interface", E_FAIL, chosen, 2u);
+      }
       DebugPrintf("%s: unsupported interface version 0x%08x\\n",'''),
         ('''      p10_1DeviceFuncs->pfnResourceConvert = ResourceCopy;
       p10_1DeviceFuncs->pfnResourceConvertRegion = ResourceCopyRegion;

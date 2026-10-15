@@ -95,7 +95,10 @@ class D3d11DdiTable(unittest.TestCase):
                           supported)
             # EXP1297: FL 11_0 was refused after OpenAdapter alone; every
             # adapter query is a receipt with its answer
-            self.assertIn('AgxD3d10WindowsDiagnostic("measure-getversions", S_OK, values, 2u);', supported)
+            self.assertIn('AgxD3d10WindowsDiagnostic("measure-getversions", S_OK, values, 2u + (count < 8u ? count : 8u));',
+                          supported)
+            # EXP1302: the probe list exists only in FL 11_0 processes
+            self.assertIn('AgxD3d11Fl11Enabled() ?\n      GetEnvironmentVariableA("APPLE_AGX_D3D11_DDI_PROBE"', supported)
             caps = function_body(adapter, "GetCaps")
             self.assertIn("const HRESULT hr = caps();", caps)
             self.assertIn('AgxD3d10WindowsDiagnostic("measure-getcaps", hr, values, 2u);', caps)
