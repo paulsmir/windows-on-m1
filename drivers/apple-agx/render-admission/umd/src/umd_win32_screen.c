@@ -81,6 +81,7 @@ static ADMISSION_UMD_SOURCE_HOLD_RECORD *AdmissionUmdScreenFreeHold(
  * rebuilt its device, blanking the screen, on every Settings close. */
 VOID AdmissionUmdScreenForgetAllocation(ADMISSION_UMD_DEVICE *Device,
                                         D3DKMT_HANDLE Allocation) {
+#ifdef APPLE_AGX_GPUVA_WINSYS
   UINT index;
   if (Device == NULL || Allocation == 0u)
     return;
@@ -94,6 +95,10 @@ VOID AdmissionUmdScreenForgetAllocation(ADMISSION_UMD_DEVICE *Device,
     }
   }
   ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+#else
+  UNREFERENCED_PARAMETER(Device);
+  UNREFERENCED_PARAMETER(Allocation);
+#endif
 }
 
 static ADMISSION_UMD_SOURCE_HOLD_RECORD *AdmissionUmdScreenFindHold(
