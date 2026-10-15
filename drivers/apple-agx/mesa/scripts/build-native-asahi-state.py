@@ -2369,6 +2369,12 @@ UnsupportedDxgi''')
          break;
       case MESA_SHADER_COMPUTE:
          pipe->delete_compute_state(pipe, pShader->handle);
+         break;
+      case MESA_SHADER_TESS_CTRL:
+         pipe->delete_tcs_state(pipe, pShader->handle);
+         break;
+      case MESA_SHADER_TESS_EVAL:
+         pipe->delete_tes_state(pipe, pShader->handle);
          break;'''),
         # D3D-H2b: the compute stage's common-shader setters for the D3D11
         # table (declared in agx_d3d11_ddi.h)
@@ -2398,6 +2404,26 @@ CsSetSamplers(D3D10DDI_HDEVICE hDevice, UINT Offset, UINT NumSamplers,
    LOG_ENTRYPOINT();
    SetSamplers(MESA_SHADER_COMPUTE, hDevice, Offset, NumSamplers, phSamplers);
 }
+
+/* D3D-H4: the hull and domain stages' common-shader setters */
+#define AGX_D3D11_STAGE_SETTERS(prefix, stage)                                       \
+   void APIENTRY prefix##SetShaderResources(D3D10DDI_HDEVICE hDevice, UINT Offset,  \
+      UINT NumViews, const D3D10DDI_HSHADERRESOURCEVIEW *phViews)                    \
+   {                                                                                 \
+      SetShaderResources(stage, hDevice, Offset, NumViews, phViews);                 \
+   }                                                                                 \
+   void APIENTRY prefix##SetConstantBuffers(D3D10DDI_HDEVICE hDevice, UINT Start,   \
+      UINT NumBuffers, const D3D10DDI_HRESOURCE *phBuffers)                          \
+   {                                                                                 \
+      SetConstantBuffers(stage, hDevice, Start, NumBuffers, phBuffers);              \
+   }                                                                                 \
+   void APIENTRY prefix##SetSamplers(D3D10DDI_HDEVICE hDevice, UINT Offset,         \
+      UINT NumSamplers, const D3D10DDI_HSAMPLER *phSamplers)                         \
+   {                                                                                 \
+      SetSamplers(stage, hDevice, Offset, NumSamplers, phSamplers);                  \
+   }
+AGX_D3D11_STAGE_SETTERS(Hs, MESA_SHADER_TESS_CTRL)
+AGX_D3D11_STAGE_SETTERS(Ds, MESA_SHADER_TESS_EVAL)
 
 
 /*
@@ -2814,7 +2840,8 @@ AgxD3d10CreateShaderState(struct pipe_context *pipe, Shader *shader,
                  "D3D10 sampler state must fit the native array");
    bool valid = pDevice && pDevice->pipe &&
       (shader_type == MESA_SHADER_VERTEX || shader_type == MESA_SHADER_FRAGMENT ||
-       shader_type == MESA_SHADER_GEOMETRY || shader_type == MESA_SHADER_COMPUTE) &&
+       shader_type == MESA_SHADER_GEOMETRY || shader_type == MESA_SHADER_COMPUTE ||
+       shader_type == MESA_SHADER_TESS_CTRL || shader_type == MESA_SHADER_TESS_EVAL) &&
       Offset <= slots &&
       NumSamplers <= slots - Offset && (NumSamplers == 0 || phSamplers);
    void *states[D3D10_COMMONSHADER_SAMPLER_SLOT_COUNT] = {};
@@ -2843,7 +2870,8 @@ AgxD3d10CreateShaderState(struct pipe_context *pipe, Shader *shader,
                  "D3D10 SRV state must fit the native array");
    bool valid = pDevice && pDevice->pipe &&
       (shader_type == MESA_SHADER_VERTEX || shader_type == MESA_SHADER_FRAGMENT ||
-       shader_type == MESA_SHADER_GEOMETRY || shader_type == MESA_SHADER_COMPUTE) &&
+       shader_type == MESA_SHADER_GEOMETRY || shader_type == MESA_SHADER_COMPUTE ||
+       shader_type == MESA_SHADER_TESS_CTRL || shader_type == MESA_SHADER_TESS_EVAL) &&
       Offset<=slots &&
       NumViews<=slots-Offset && (NumViews == 0 || phShaderResourceViews);
    struct pipe_sampler_view *views[D3D10_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT]={};
@@ -2961,7 +2989,8 @@ AgxD3d10CreateShaderState(struct pipe_context *pipe, Shader *shader,
       (shader_type == MESA_SHADER_VERTEX ||
        shader_type == MESA_SHADER_FRAGMENT ||
        shader_type == MESA_SHADER_GEOMETRY ||
-       shader_type == MESA_SHADER_COMPUTE) &&
+       shader_type == MESA_SHADER_COMPUTE ||
+       shader_type == MESA_SHADER_TESS_CTRL || shader_type == MESA_SHADER_TESS_EVAL) &&
       (NumBuffers == 0 || phBuffers) && StartBuffer <= slots &&
       NumBuffers <= slots - StartBuffer &&
       AgxD3d10WindowsIdentity(pDevice->windows, &owner, &generation);
@@ -5028,6 +5057,19 @@ agx_shader_initialize("""
 
    agx_preprocess_nir(nir);
 ''',1)
+        # D3D-H4: the tessellated winding of either stage (D3D declares it in
+        # the hull shader, GLSL only in the TES).
+        winding_front='''            cfg.front_face_ccw ^=
+               !ctx->stage[MESA_SHADER_TESS_EVAL].shader->tess.ccw;'''
+        winding_params='''      params.ccw = !tes->tess.ccw;'''
+        if state_text.count(winding_front)!=1 or state_text.count(winding_params)!=1:
+            raise SystemExit('Ambiguous tessellation winding anchors')
+        state_text=state_text.replace(winding_front,'''            cfg.front_face_ccw ^=
+               !(ctx->stage[MESA_SHADER_TESS_EVAL].shader->tess.ccw ||
+                 (ctx->stage[MESA_SHADER_TESS_CTRL].shader &&
+                  ctx->stage[MESA_SHADER_TESS_CTRL].shader->tess.ccw));''')
+        state_text=state_text.replace(winding_params,
+            '''      params.ccw = !(tes->tess.ccw || tcs->tess.ccw);''')
         state_target.write_text(state_text)
         overlays['src/gallium/drivers/asahi/agx_state.c']['after_state_capture']=hashlib.sha256(state_target.read_bytes()).hexdigest()
         # EXP844/845: StartMenuExperienceHost and Explorer faulted in

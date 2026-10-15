@@ -527,6 +527,119 @@ Dispatch11(D3D10DDI_HDEVICE hDevice, UINT x, UINT y, UINT z)
 }
 
 /* ------------------------------------------------------------------ */
+/* D3D-H4: hull and domain shaders (reachable once FL 11_0 is reported)  */
+
+/* The control point registers of a hull shader's output signature: what a
+ * pass-through control point phase copies, and which hold SV_Position. */
+static void
+hs_passthrough(const D3D11DDIARG_TESSELLATION_IO_SIGNATURES *sig, uint32_t *registers,
+               uint32_t *positions)
+{
+   *registers = *positions = 0;
+   for (UINT i = 0; sig && sig->pOutputSignature && i < sig->NumOutputSignatureEntries; ++i) {
+      UINT reg = sig->pOutputSignature[i].Register;
+      if (reg >= 32)
+         continue;
+      *registers |= 1u << reg;
+      if (sig->pOutputSignature[i].SystemValue == D3D10_SB_NAME_POSITION)
+         *positions |= 1u << reg;
+   }
+}
+
+static void
+create_tessellation_shader(D3D10DDI_HDEVICE hDevice, const UINT *code, D3D10DDI_HSHADER hShader,
+                           const D3D11DDIARG_TESSELLATION_IO_SIGNATURES *sig, mesa_shader_stage stage)
+{
+   Device *device = CastDevice(hDevice);
+   Shader *shader = CastShader(hShader);
+   uint32_t registers = 0, positions = 0;
+   memset(shader, 0, sizeof(*shader));
+   shader->type = stage;
+   if (!device || !code) {
+      SetError(hDevice, E_INVALIDARG);
+      return;
+   }
+   struct pipe_context *pipe = device->pipe;
+   struct dxbc_nir_error error = {};
+   if (stage == MESA_SHADER_TESS_CTRL)
+      hs_passthrough(sig, &registers, &positions);
+   struct nir_shader *nir = dxbc_translate_tokens_hs(code, pipe->screen->nir_options[stage],
+                                                     registers, positions, &error);
+   UINT values[4] = {(UINT)stage, nir ? 1u : 0u, error.opcode, error.offset};
+   AgxD3d10WindowsDiagnostic("measure-shader-nir", nir ? S_OK : E_NOTIMPL, values, 4u);
+   if (!nir) {
+      SetError(hDevice, E_NOTIMPL);
+      return;
+   }
+   struct pipe_shader_state state = {};
+   state.type = PIPE_SHADER_IR_NIR;
+   state.ir.nir = nir;
+   shader->handle = stage == MESA_SHADER_TESS_CTRL ? pipe->create_tcs_state(pipe, &state) :
+                                                     pipe->create_tes_state(pipe, &state);
+   if (!shader->handle)
+      SetError(hDevice, E_OUTOFMEMORY);
+}
+
+static void APIENTRY
+CreateHullShader11(D3D10DDI_HDEVICE hDevice, const UINT *code, D3D10DDI_HSHADER hShader,
+                   D3D10DDI_HRTSHADER, const D3D11DDIARG_TESSELLATION_IO_SIGNATURES *sig)
+{
+   create_tessellation_shader(hDevice, code, hShader, sig, MESA_SHADER_TESS_CTRL);
+}
+
+static void APIENTRY
+CreateDomainShader11(D3D10DDI_HDEVICE hDevice, const UINT *code, D3D10DDI_HSHADER hShader,
+                     D3D10DDI_HRTSHADER, const D3D11DDIARG_TESSELLATION_IO_SIGNATURES *sig)
+{
+   create_tessellation_shader(hDevice, code, hShader, sig, MESA_SHADER_TESS_EVAL);
+}
+
+static void
+bind_tessellation_shader(D3D10DDI_HDEVICE hDevice, D3D10DDI_HSHADER hShader, mesa_shader_stage stage)
+{
+   Device *device = CastDevice(hDevice);
+   Shader *shader = CastShader(hShader);
+   if (!device || (shader && (shader->type != stage || !shader->handle))) {
+      refuse(hDevice, "reject-d3d11-tess-shader", shader ? shader->type : 0u, stage);
+      return;
+   }
+   if (stage == MESA_SHADER_TESS_CTRL)
+      device->pipe->bind_tcs_state(device->pipe, shader ? shader->handle : NULL);
+   else
+      device->pipe->bind_tes_state(device->pipe, shader ? shader->handle : NULL);
+}
+
+static void APIENTRY
+HsSetShader11(D3D10DDI_HDEVICE hDevice, D3D10DDI_HSHADER hShader)
+{
+   bind_tessellation_shader(hDevice, hShader, MESA_SHADER_TESS_CTRL);
+}
+
+static void APIENTRY
+DsSetShader11(D3D10DDI_HDEVICE hDevice, D3D10DDI_HSHADER hShader)
+{
+   bind_tessellation_shader(hDevice, hShader, MESA_SHADER_TESS_EVAL);
+}
+
+/* D3D11 adds 1..32 control-point patch lists (33..64) to the 10.0
+ * topologies, which the 10.0 entry keeps. */
+static PFND3D10DDI_IA_SETTOPOLOGY ia_set_topology_10;
+
+static void APIENTRY
+IaSetTopology11(D3D10DDI_HDEVICE hDevice, D3D10_DDI_PRIMITIVE_TOPOLOGY topology)
+{
+   Device *device = CastDevice(hDevice);
+   if (device && topology >= D3D11_DDI_PRIMITIVE_TOPOLOGY_1_CONTROL_POINT_PATCHLIST &&
+       topology <= D3D11_DDI_PRIMITIVE_TOPOLOGY_32_CONTROL_POINT_PATCHLIST) {
+      device->primitive = MESA_PRIM_PATCHES;
+      device->pipe->set_patch_vertices(device->pipe,
+         (uint8_t)(topology - D3D11_DDI_PRIMITIVE_TOPOLOGY_1_CONTROL_POINT_PATCHLIST + 1));
+      return;
+   }
+   ia_set_topology_10(hDevice, topology);
+}
+
+/* ------------------------------------------------------------------ */
 /* Stages and features not provided yet: fail closed, accept unbinds  */
 
 static void APIENTRY
@@ -565,6 +678,8 @@ AGX_D3D11_WITH_IFACES(VsSetShaderWithIfaces11, VsSetShader)
 AGX_D3D11_WITH_IFACES(GsSetShaderWithIfaces11, GsSetShader)
 AGX_D3D11_WITH_IFACES(PsSetShaderWithIfaces11, PsSetShader)
 AGX_D3D11_WITH_IFACES(CsSetShaderWithIfaces11, CsSetShader11)
+AGX_D3D11_WITH_IFACES(HsSetShaderWithIfaces11, HsSetShader11)
+AGX_D3D11_WITH_IFACES(DsSetShaderWithIfaces11, DsSetShader11)
 
 static void APIENTRY
 SetShaderResourcesNone(D3D10DDI_HDEVICE hDevice, UINT, UINT n, const D3D10DDI_HSHADERRESOURCEVIEW *views)
@@ -600,13 +715,6 @@ static SIZE_T APIENTRY
 CalcPrivateTessellationShaderSize11(D3D10DDI_HDEVICE, const UINT *, const D3D11DDIARG_TESSELLATION_IO_SIGNATURES *)
 {
    return sizeof(Shader);
-}
-
-static void APIENTRY
-CreateTessellationShaderNone(D3D10DDI_HDEVICE hDevice, const UINT *, D3D10DDI_HSHADER, D3D10DDI_HRTSHADER,
-                             const D3D11DDIARG_TESSELLATION_IO_SIGNATURES *)
-{
-   refuse(hDevice, "reject-d3d11-tessellation", 0, 0);
 }
 
 static void APIENTRY
@@ -662,7 +770,8 @@ AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f, const D3D10DDI_DEVICEFUNCS *bas
    f->pfnDynamicResourceUnmap = base->pfnDynamicResourceUnmap;
    f->pfnGsSetConstantBuffers = base->pfnGsSetConstantBuffers;
    f->pfnGsSetShader = base->pfnGsSetShader;
-   f->pfnIaSetTopology = base->pfnIaSetTopology;
+   ia_set_topology_10 = base->pfnIaSetTopology;
+   f->pfnIaSetTopology = IaSetTopology11;
    f->pfnStagingResourceMap = base->pfnStagingResourceMap;
    f->pfnStagingResourceUnmap = base->pfnStagingResourceUnmap;
    f->pfnVsSetShaderResources = base->pfnVsSetShaderResources;
@@ -762,20 +871,21 @@ AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f, const D3D10DDI_DEVICEFUNCS *bas
    f->pfnClearUnorderedAccessViewUint = ClearUnorderedAccessViewUint11;
    f->pfnClearUnorderedAccessViewFloat = ClearUnorderedAccessViewFloat11;
    f->pfnDispatch = Dispatch11;
+   /* D3D-H4: hull and domain shaders, patch topologies */
+   f->pfnCreateHullShader = CreateHullShader11;
+   f->pfnCreateDomainShader = CreateDomainShader11;
+   f->pfnHsSetShader = HsSetShader11;
+   f->pfnDsSetShader = DsSetShader11;
+   f->pfnHsSetShaderWithIfaces = HsSetShaderWithIfaces11;
+   f->pfnDsSetShaderWithIfaces = DsSetShaderWithIfaces11;
+   f->pfnHsSetShaderResources = HsSetShaderResources;
+   f->pfnHsSetSamplers = HsSetSamplers;
+   f->pfnHsSetConstantBuffers = HsSetConstantBuffers;
+   f->pfnDsSetShaderResources = DsSetShaderResources;
+   f->pfnDsSetSamplers = DsSetSamplers;
+   f->pfnDsSetConstantBuffers = DsSetConstantBuffers;
    /* not provided yet: fail closed, unbinding accepted */
-   f->pfnHsSetShaderResources = SetShaderResourcesNone;
-   f->pfnHsSetShader = SetShaderNone;
-   f->pfnHsSetSamplers = SetSamplersNone;
-   f->pfnHsSetConstantBuffers = SetConstantBuffersNone;
-   f->pfnDsSetShaderResources = SetShaderResourcesNone;
-   f->pfnDsSetShader = SetShaderNone;
-   f->pfnDsSetSamplers = SetSamplersNone;
-   f->pfnDsSetConstantBuffers = SetConstantBuffersNone;
-   f->pfnHsSetShaderWithIfaces = SetShaderWithIfacesNone;
-   f->pfnDsSetShaderWithIfaces = SetShaderWithIfacesNone;
    f->pfnCalcPrivateTessellationShaderSize = CalcPrivateTessellationShaderSize11;
-   f->pfnCreateHullShader = CreateTessellationShaderNone;
-   f->pfnCreateDomainShader = CreateTessellationShaderNone;
    f->pfnDrawIndexedInstancedIndirect = DrawIndirectNone;
    f->pfnDrawInstancedIndirect = DrawIndirectNone;
    f->pfnDispatchIndirect = DispatchIndirectNone;

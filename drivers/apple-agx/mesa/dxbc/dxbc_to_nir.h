@@ -73,6 +73,14 @@ dxbc_translate_tokens(const uint32_t *tokens,
                       const struct nir_shader_compiler_options *options,
                       struct dxbc_nir_error *error);
 
+/* dxbc_translate_tokens for a hull shader with the pass-through registers
+ * of its output signature (see dxbc_to_nir_hs). */
+struct nir_shader *
+dxbc_translate_tokens_hs(const uint32_t *tokens,
+                         const struct nir_shader_compiler_options *options,
+                         uint32_t passthrough_registers, uint32_t passthrough_positions,
+                         struct dxbc_nir_error *error);
+
 /* The thread-group size (dcl_thread_group) and groupshared bytes of a
  * translated compute shader: the block the frontend's Dispatch launches and
  * the static shared memory of its pipe_compute_state. */

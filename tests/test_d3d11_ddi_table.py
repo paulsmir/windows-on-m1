@@ -134,6 +134,42 @@ class D3d11DdiTable(unittest.TestCase):
             self.assertIn("D3D11_DDI_BIND_UNORDERED_ACCESS", create)
             self.assertIn("D3D11_DDI_RESOURCE_MISC_BUFFER_STRUCTURED", create)
 
+    def test_tessellation_stages_reach_asahi(self):
+        # D3D-H4: hull/domain shaders through the translator, their setters
+        # on the common frontend setters, patch topologies, and the winding
+        # D3D declares in the hull shader reaching Asahi's tessellator and
+        # front face (Asahi read it from the TES only).
+        fill = MODULE.read_text()
+        body = fill[fill.index("AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f,"):]
+        assigned = dict(re.findall(r"\bf->(pfn\w+)\s*=\s*(\w+);", body))
+        for entry in ("pfnCreateHullShader", "pfnCreateDomainShader", "pfnHsSetShader",
+                      "pfnDsSetShader", "pfnHsSetShaderResources", "pfnDsSetShaderResources",
+                      "pfnHsSetSamplers", "pfnDsSetSamplers", "pfnHsSetConstantBuffers",
+                      "pfnDsSetConstantBuffers", "pfnIaSetTopology"):
+            with self.subTest(entry=entry):
+                self.assertFalse(assigned[entry].endswith("None"), assigned[entry])
+        self.assertIn("set_patch_vertices", function_body(fill, "IaSetTopology11"))
+        create = function_body(fill, "create_tessellation_shader")
+        self.assertLess(create.index("memset"), create.index("dxbc_translate_tokens_hs"))
+        with tempfile.TemporaryDirectory(prefix="d3d11-tess-") as tmp:
+            out = project(Path(tmp) / "out")
+            if out is None:
+                self.skipTest("reference Mesa tree not available")
+            frontend = out / "src/gallium/frontends/d3d10umd"
+            shader = (frontend / "Shader.cpp").read_text()
+            for setter in ("SetShaderResources", "SetSamplers", "SetConstantBuffers"):
+                with self.subTest(setter=setter):
+                    body = function_body(shader, setter)
+                    self.assertIn("MESA_SHADER_TESS_CTRL", body)
+                    self.assertIn("MESA_SHADER_TESS_EVAL", body)
+            destroy = function_body(shader, "DestroyShader")
+            self.assertIn("delete_tcs_state", destroy)
+            self.assertIn("delete_tes_state", destroy)
+            self.assertIn("AGX_D3D11_STAGE_SETTERS(Hs, MESA_SHADER_TESS_CTRL)", shader)
+            state = (out / "src/gallium/drivers/asahi/agx_state.c").read_text()
+            self.assertIn("params.ccw = !(tes->tess.ccw || tcs->tess.ccw);", state)
+            self.assertIn("ctx->stage[MESA_SHADER_TESS_CTRL].shader->tess.ccw));", state)
+
 
 if __name__ == "__main__":
     unittest.main()

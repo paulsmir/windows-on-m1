@@ -22,6 +22,16 @@ void APIENTRY CsSetShaderResources(D3D10DDI_HDEVICE, UINT, UINT,
 void APIENTRY CsSetConstantBuffers(D3D10DDI_HDEVICE, UINT, UINT, const D3D10DDI_HRESOURCE *);
 void APIENTRY CsSetSamplers(D3D10DDI_HDEVICE, UINT, UINT, const D3D10DDI_HSAMPLER *);
 
+/* D3D-H4: the hull and domain stages' common-shader setters (Shader.cpp). */
+void APIENTRY HsSetShaderResources(D3D10DDI_HDEVICE, UINT, UINT,
+                                   const D3D10DDI_HSHADERRESOURCEVIEW *);
+void APIENTRY HsSetConstantBuffers(D3D10DDI_HDEVICE, UINT, UINT, const D3D10DDI_HRESOURCE *);
+void APIENTRY HsSetSamplers(D3D10DDI_HDEVICE, UINT, UINT, const D3D10DDI_HSAMPLER *);
+void APIENTRY DsSetShaderResources(D3D10DDI_HDEVICE, UINT, UINT,
+                                   const D3D10DDI_HSHADERRESOURCEVIEW *);
+void APIENTRY DsSetConstantBuffers(D3D10DDI_HDEVICE, UINT, UINT, const D3D10DDI_HRESOURCE *);
+void APIENTRY DsSetSamplers(D3D10DDI_HDEVICE, UINT, UINT, const D3D10DDI_HSAMPLER *);
+
 /* Fill every D3D11 entry this driver provides (see agx_d3d11_ddi.cpp);
  * 'base' is a copy of the D3D10 table CreateDevice filled, whose entries the
  * D3D10-typed D3D11 entries take (funcs and the runtime's 10.0 view of the

@@ -68,6 +68,14 @@ declares vertex order only in the TES, so a GL TCS never sets it).
   are tested offline (translation + Asahi lowering of the fixtures) and on
   hardware once 11_0 is reported.
 
+Implemented (offline): translator (c8d90f67), D3D11 table entries, the
+common setters for TESS_CTRL/TESS_EVAL, DestroyShader, patch topologies
+33..64 (`set_patch_vertices`, MESA_PRIM_PATCHES) and the Asahi winding merge
+in the projection.  Unknown until hardware: whether GL's winding convention
+(Asahi's "OpenGL is backwards" front-face flip) equals D3D's for the same
+`ccw` value -- Mesa's GL -> DXIL path maps it unchanged, so the first
+tessellation smoke checks culling of a cw and a ccw domain.
+
 ## Checkpoints
 
 1. Offline: hs50/ds50, an isoline HS, a quad HS with join phase and a

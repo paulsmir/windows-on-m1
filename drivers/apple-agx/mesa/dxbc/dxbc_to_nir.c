@@ -2858,6 +2858,15 @@ dxbc_translate_tokens(const uint32_t *tokens,
                       const struct nir_shader_compiler_options *options,
                       struct dxbc_nir_error *error)
 {
+   return dxbc_translate_tokens_hs(tokens, options, 0, 0, error);
+}
+
+struct nir_shader *
+dxbc_translate_tokens_hs(const uint32_t *tokens,
+                         const struct nir_shader_compiler_options *options,
+                         uint32_t passthrough_registers, uint32_t passthrough_positions,
+                         struct dxbc_nir_error *error)
+{
    static struct dxbc_nir_error ignored;
    struct dxbc_program program;
    struct dxbc_error perr;
@@ -2878,7 +2887,7 @@ dxbc_translate_tokens(const uint32_t *tokens,
       error->offset = perr.offset;
       return NULL;
    }
-   nir = dxbc_to_nir(&program, options, error);
+   nir = translate(&program, options, passthrough_registers, passthrough_positions, error);
    dxbc_program_free(&program);
    if (nir)
       dxbc_nir_finalize(nir);
