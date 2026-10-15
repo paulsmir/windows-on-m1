@@ -1,6 +1,6 @@
 /* D3D12 ABI gate. Deliberately no GPU access and no feature-level admission. */
-#include <d3d12umddi.h>
 #include <windows.h>
+#include <d3d12umddi.h>
 #include <type_traits>
 
 namespace {
