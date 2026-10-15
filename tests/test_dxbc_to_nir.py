@@ -197,6 +197,15 @@ class DxbcToNir(unittest.TestCase):
         self.assertTrue(result.stdout.startswith("REFUSED stream output 0 (register 4)"),
                         result.stdout + result.stderr[-3000:])
 
+    def test_vertex_inputs_read_their_own_attribute(self):
+        # EXP1297: every translated vertex input reached Asahi with io base
+        # 0 (no driver_location), and agx_nir_lower_vs_input_to_prolog
+        # selects the attribute by base: a second input read the first
+        # one's data (d2d1/DWM vertex shaders indexed constant buffers with
+        # position bits and timed out the GPU; 84 corpus shaders drew wrong
+        # pixels).  vs40 reads v0..v2 (v3/v4 are vertex/instance id).
+        self.assertIn("vs-input-bases 0x7", self.run_fixture("vs40").stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
