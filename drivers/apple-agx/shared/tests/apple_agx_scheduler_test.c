@@ -330,7 +330,65 @@ static void test_preempted_paging_fence_replays_once_without_reordering(void) {
   assert(AppleAgxSchedulerCompleteActiveFence(&scheduler,0u,0u,0x1d40u));
   assert(AppleAgxSchedulerQueueFence(&scheduler,0u,0u,0x1d41u));
   assert(AppleAgxSchedulerResetEngine(&scheduler,0u,0u,&aborted));
+  /* 0x1d41 never ran: an engine reset leaves it resubmittable (once). */
+  assert(!AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,0x1d40u));
+  assert(AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,0x1d41u));
   assert(!AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,0x1d41u));
+}
+
+/* Microsoft, TDR in Windows 8 and later (packets unaffected by engine reset):
+ * VidSch resubmits the paging packets that never ran with their original
+ * fence IDs, in order, before new packets; render packets get new IDs. */
+static void test_engine_reset_keeps_unexecuted_fences_resubmittable(void) {
+  APPLE_AGX_SCHEDULER scheduler;
+  APPLE_AGX_PREEMPTION preemption = {0};
+  APPLE_AGX_U32 aborted = 0u;
+
+  /* Queued behind the active packet. */
+  AppleAgxSchedulerInitialize(&scheduler);
+  assert(AppleAgxSchedulerQueueFence(&scheduler,0u,0u,10u));
+  assert(AppleAgxSchedulerActivateFence(&scheduler,0u,0u,10u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler,0u,0u,11u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler,0u,0u,12u));
+  assert(AppleAgxSchedulerResetEngine(&scheduler,0u,0u,&aborted));
+  assert(aborted==10u && !AppleAgxSchedulerHasOutstandingFence(&scheduler,0u,0u));
+  assert(!AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,10u));
+  assert(!AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,13u));
+  assert(AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,11u));
+  assert(!AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,11u));
+  assert(AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,12u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler,0u,0u,13u));
+  assert(AppleAgxSchedulerActivateFence(&scheduler,0u,0u,11u));
+
+  /* EXP1296 order: the preemption waits on the active boundary, the firmware
+   * ends the packet, then the reset. */
+  AppleAgxSchedulerInitialize(&scheduler);
+  assert(AppleAgxSchedulerQueueFence(&scheduler,0u,0u,20u));
+  assert(AppleAgxSchedulerActivateFence(&scheduler,0u,0u,20u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler,0u,0u,21u));
+  assert(AppleAgxSchedulerBeginBoundaryPreemption(&scheduler,0u,0u,30u,21u,20u));
+  assert(AppleAgxSchedulerCompleteActiveFence(&scheduler,0u,0u,20u));
+  assert(AppleAgxSchedulerResetEngine(&scheduler,0u,0u,&aborted));
+  assert(aborted==20u && AppleAgxSchedulerPreemptionPhase(&scheduler)==AppleAgxPreemptionIdle);
+  assert(!AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,20u));
+  assert(AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,21u));
+
+  /* After a preemption VidSch gave render 40 a new ID and resubmitted paging
+   * 41; the reset keeps 41 resubmittable and does not revive 40. */
+  AppleAgxSchedulerInitialize(&scheduler);
+  assert(AppleAgxSchedulerQueueFence(&scheduler,0u,0u,39u));
+  assert(AppleAgxSchedulerActivateFence(&scheduler,0u,0u,39u));
+  assert(AppleAgxSchedulerCompleteActiveFence(&scheduler,0u,0u,39u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler,0u,0u,40u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler,0u,0u,41u));
+  assert(AppleAgxSchedulerBeginBoundaryPreemption(&scheduler,0u,0u,50u,41u,0u));
+  assert(AppleAgxSchedulerClaimBoundaryPreemption(&scheduler,&preemption));
+  assert(AppleAgxSchedulerCommitBoundaryPreemption(&scheduler,50u));
+  assert(AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,41u));
+  assert(AppleAgxSchedulerResetEngine(&scheduler,0u,0u,&aborted));
+  assert(aborted==39u && scheduler.PreemptedFenceCount==1u);
+  assert(!AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,40u));
+  assert(AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,41u));
 }
 
 int main(void) {
@@ -350,6 +408,7 @@ int main(void) {
   test_reset_reports_last_aborted_fence_and_restores_progress();
   test_reset_without_active_packet_reports_completed_boundary();
   test_preempted_paging_fence_replays_once_without_reordering();
+  test_engine_reset_keeps_unexecuted_fences_resubmittable();
   test_aborted_preemption_cannot_replay_discarded_fence();
   return 0;
 }

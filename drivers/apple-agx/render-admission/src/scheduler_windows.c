@@ -568,6 +568,9 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
               ? TRUE
               : FALSE;
   if (reset) {
+    /* Nothing may remain queued once the reset returns (DxgkDdiResetEngine).
+     * VidSch resubmits these packets with their data: paging packets with
+     * their original fences, which the scheduler reset kept resubmittable. */
     AdmissionCpuQueueReleaseContextsLocked(context);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
     AdmissionG4PendingDropLocked(context, FALSE);

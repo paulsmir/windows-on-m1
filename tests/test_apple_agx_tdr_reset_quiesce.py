@@ -10,7 +10,11 @@ private scene and AdmissionPlatformRuntimeReset stopped the retained firmware
 INVARIANTS: the reset succeeds once the firmware has ended the active job
 through the completion path (natural completion or drop after Timeout/Fault),
 reports that fence as aborted and faults its context; it never reports success
-while the job is still owned by the firmware, and it never stops RTKit.
+while the job is still owned by the firmware, and it never stops RTKit. A
+paging packet queued behind that job never ran: after the reset the original
+fence is accepted again exactly once as a resubmission (Microsoft, TDR in
+Windows 8 and later, packets unaffected by engine reset); completed, aborted
+and never-queued fences stay refused.
 
 The real reset functions are compiled with the real shared scheduler and
 render-packet state machines; the firmware/provider is a scripted model of
@@ -49,9 +53,14 @@ class TdrResetQuiesce(unittest.TestCase):
     def test_reset_succeeds_only_after_firmware_ends_the_active_job(self):
         scheduler = (RENDER / 'src/scheduler_windows.c').read_text()
         backend = (RENDER / 'src/backend_platform_windows.c').read_text()
+        queue = (RENDER / 'src/work_queue_windows.c').read_text()
         header = (RENDER / 'include/render_admission.h').read_text()
         timeout = re.search(r'#define ADMISSION_RESET_QUIESCE_TIMEOUT_MS (\d+)u', header)
-        body = (SHIM.replace('/*TIMEOUT*/', timeout.group(1) if timeout else '1000') +
+        packet = re.search(r'typedef struct _ADMISSION_CPU_PACKET.*?} ADMISSION_CPU_PACKET;',
+                           header, re.S).group(0)
+        body = (SHIM.replace('/*TIMEOUT*/', timeout.group(1) if timeout else '1000')
+                    .replace('/*PACKET*/', packet) +
+                function_body(queue, 'AdmissionCpuQueueSubmit') + '\n' +
                 function_body(scheduler, 'AdmissionCpuQueueReleaseContextsLocked') + '\n' +
                 optional_body(backend, 'AdmissionPlatformRuntimeQuiesceActive') + '\n' +
                 optional_body(scheduler, 'AdmissionResetQuiesceActive') + '\n' +
@@ -82,6 +91,8 @@ SHIM = r'''
 #include "apple_agx_scheduler.h"
 #include "render_submission.h"
 #include "render_gpu_fault.h"
+#include "render_paging.h"
+#include "render_present.h"
 #define APPLE_AGX_GPUVA_G3_QUALIFICATION 1
 #define _Use_decl_annotations_
 #define __declspec(x)
@@ -110,6 +121,11 @@ SHIM = r'''
 #define AppleAgxBackendRuntimeSubmitted 3
 #define AppleAgxBackendRuntimeFailed 6
 #define RtlZeroMemory(p, n) memset((p), 0, (n))
+#define RtlCopyMemory memcpy
+#define ADMISSION_MAX_PAGING_RECORDS 64u
+#define ADMISSION_CPU_PACKET_PAGING 1u
+#define ADMISSION_CPU_PACKET_PRESENT 2u
+#define ADMISSION_CPU_PACKET_NOP 3u
 typedef void VOID;
 typedef void *PVOID, *HANDLE;
 typedef int32_t LONG, NTSTATUS;
@@ -129,7 +145,7 @@ typedef struct _ADMISSION_RENDER_CONTEXT {
   volatile LONG GpuvaG3PrivateFence, GpuvaG3PrivateFence2;
   BOOLEAN GpuvaG3Poisoned;
 } ADMISSION_RENDER_CONTEXT;
-typedef struct { ULONG Fence; ADMISSION_RENDER_CONTEXT *PresentContext; } ADMISSION_CPU_PACKET;
+/*PACKET*/
 typedef struct { int Provider; } APPLE_AGX_PLATFORM_PROVIDER;
 typedef struct { int Phase; } APPLE_AGX_BACKEND_RUNTIME;
 typedef struct _ADMISSION_CONTEXT ADMISSION_CONTEXT;
@@ -147,6 +163,9 @@ struct _ADMISSION_CONTEXT {
   int SchedulerLock, PagingLock, BackendImage;
   volatile LONG SchedulerInitialized, SchedulerFaulted, RenderDpcFence;
   volatile LONG PagingPending, PagingWorkersActive, PagingDpcsActive;
+  volatile LONG PagingStopping, PagingRecordsUnsubmitted;
+  PVOID PagingWorkItem;
+  KEVENT PagingIdle;
   ULONG CpuQueueHead, CpuQueueCount, DispatchedFence;
   ADMISSION_CPU_PACKET CpuQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
   APPLE_AGX_SCHEDULER Scheduler;
@@ -155,6 +174,10 @@ struct _ADMISSION_CONTEXT {
   ADMISSION_GPU_RESET_RECEIPT GpuReset;
 };
 typedef struct { UINT NodeOrdinal, EngineOrdinal, LastAbortedFenceId; } DXGKARG_RESETENGINE;
+typedef struct {
+  HANDLE hContext; UINT SubmissionFenceId;
+  struct { UINT Paging : 1, Resubmission : 1; } Flags;
+} DXGKARG_SUBMITCOMMAND;
 
 static int lock_depth, rtkit_stops, polls, drop_at_poll, fail_poll, worker_busy,
     worker_completes, paused, private_resets, scene_queued, scene_started,
@@ -166,6 +189,11 @@ static ADMISSION_PLATFORM_RUNTIME *model_runtime;
 static LONG InterlockedCompareExchange(volatile LONG *p, LONG v, LONG e) {
   LONG o = *p; if (o == e) *p = v; return o; }
 static LONG InterlockedExchange(volatile LONG *p, LONG v) { LONG o = *p; *p = v; return o; }
+static void KeClearEvent(KEVENT *e) { e->Signaled = 0; }
+static LARGE_INTEGER KeQueryPerformanceCounter(PVOID f) {
+  LARGE_INTEGER t; (void)f; t.QuadPart = (LONGLONG)now_ms; return t; }
+static int dispatches;
+static void AdmissionDispatchQueuedWork(ADMISSION_CONTEXT *c) { (void)c; assert(!lock_depth); ++dispatches; }
 static void KeAcquireSpinLock(int *l, KIRQL *i) { (void)l; *i = 2; ++lock_depth; }
 static void KeReleaseSpinLock(int *l, KIRQL i) { (void)l; (void)i; --lock_depth; }
 static void KeAcquireSpinLockAtDpcLevel(int *l) { (void)l; ++lock_depth; }
@@ -253,6 +281,16 @@ CASES = r'''
 static ADMISSION_CONTEXT adapter;
 static ADMISSION_PLATFORM_RUNTIME runtime;
 static ADMISSION_RENDER_CONTEXT owner;
+static ADMISSION_PAGING_RECORD paging_record;
+
+/* A one-record paging packet as AdmissionGpuvaG3SubmitVirtualPaging forwards it. */
+static NTSTATUS submit_paging(ULONG fence, UINT resubmission) {
+  DXGKARG_SUBMITCOMMAND args;
+  memset(&args, 0, sizeof(args));
+  args.SubmissionFenceId = fence; args.Flags.Paging = 1u; args.Flags.Resubmission = resubmission;
+  return AdmissionCpuQueueSubmit(&adapter, &args, ADMISSION_CPU_PACKET_PAGING,
+                                 &paging_record, sizeof(paging_record));
+}
 
 /* A G4 render the worker has queued (Prepare/Queue as SubmitCommandVirtual). */
 static void queue_packet(ULONG fence) {
@@ -277,6 +315,7 @@ static void setup(int worker, int queued) {
   scene_queued = scene_started = 1; now_ms = 1000u;
   model_adapter = &adapter; model_runtime = &runtime;
   adapter.SchedulerInitialized = 1; adapter.PlatformRuntime = &runtime;
+  adapter.PagingWorkItem = &adapter;
   runtime.Adapter = &adapter; runtime.BackendStarted = TRUE;
   AppleAgxSchedulerInitialize(&adapter.Scheduler);
   AdmissionRenderPacketInitialize(&adapter.RenderPacket);
@@ -287,8 +326,11 @@ static void setup(int worker, int queued) {
   assert(AdmissionRenderPacketActivate(&adapter.RenderPacket, 0xce71cu));
   adapter.DispatchedFence = 0xce71cu;
   owner.Object.FenceOutstanding = 0xce71cu; owner.GpuvaG3PrivateFence = (LONG)0xce71cu;
-  /* A later submission accepted before the preemption request. */
-  if (queued) assert(AppleAgxSchedulerQueueFence(&adapter.Scheduler, 0, 0, 0xce71eu));
+  /* A later submission accepted before the preemption request: a render
+   * fence (1) or a paging packet waiting in the CPU queue (2). */
+  if (queued == 1) assert(AppleAgxSchedulerQueueFence(&adapter.Scheduler, 0, 0, 0xce71eu));
+  if (queued == 2)
+    assert(submit_paging(0xce71eu, 0u) == STATUS_SUCCESS && adapter.CpuQueueCount == 1u);
   assert(AppleAgxSchedulerBeginBoundaryPreemption(&adapter.Scheduler, 0, 0, 0xce71fu,
       adapter.Scheduler.LastSubmittedFence, 0xce71cu));
   assert(adapter.Scheduler.PreemptionPhase == AppleAgxPreemptionWaitCurrentBoundary);
@@ -399,6 +441,27 @@ int main(void) {
          last_recorded.PacketState == AdmissionRenderPacketQueued);
   assert(AdmissionRenderPacketState(&adapter.RenderPacket) == AdmissionRenderPacketEmpty);
   assert(owner.Object.FenceOutstanding == 0u && adapter.Scheduler.QueuedFence == 0u);
+
+  /* 8. Microsoft (TDR in Windows 8 and later, packets unaffected by engine
+   * reset): the paging packet queued behind the active render never ran. The
+   * reset empties the queue; VidSch resubmits the packet with its original
+   * fence, before new packets. */
+  setup(0, 2); drop_at_poll = 1;
+  memset(&reset, 0, sizeof(reset));
+  assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS);
+  expect_aborted(&reset);
+  assert(adapter.CpuQueueCount == 0u && adapter.Scheduler.QueuedFence == 0u);
+  /* The completed, the aborted and a never-queued fence stay refused. */
+  assert(submit_paging(0xce71bu, 1u) == STATUS_DEVICE_BUSY);
+  assert(submit_paging(0xce71cu, 1u) == STATUS_DEVICE_BUSY);
+  assert(submit_paging(0xce71du, 1u) == STATUS_DEVICE_BUSY);
+  assert(submit_paging(0xce71eu, 1u) == STATUS_SUCCESS);
+  assert(adapter.CpuQueueCount == 1u &&
+         adapter.CpuQueue[adapter.CpuQueueHead].Fence == 0xce71eu &&
+         adapter.Scheduler.QueuedFence == 0xce71eu);
+  assert(submit_paging(0xce71eu, 1u) == STATUS_DEVICE_BUSY); /* once */
+  assert(submit_paging(0xce720u, 0u) == STATUS_SUCCESS);
+  assert(adapter.CpuQueueCount == 2u && adapter.Scheduler.LastSubmittedFence == 0xce720u);
   assert(lock_depth == 0);
   puts("reset quiesce replay ok");
   return 0;
