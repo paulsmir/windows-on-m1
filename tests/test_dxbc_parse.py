@@ -24,6 +24,9 @@ ROOT = Path(__file__).resolve().parents[1]
 DXBC = ROOT / "drivers/apple-agx/mesa/dxbc"
 FIXTURES = ROOT / "tests/fixtures/dxbc"
 NAMES = ["vs40", "ps40", "gs40", "ps41", "cs50", "hs50", "ds50", "ps50", "gs50", "ps51"]
+# the shaders the D3D smoke tools compile at run time (tools/dxbc/extract-smoke-shaders.py)
+NAMES += ["smoke/" + line.split()[0] for line in
+          (FIXTURES / "smoke/targets.txt").read_text().splitlines() if line.strip()]
 TESTS = {"if", "breakc", "continuec", "retc", "discard", "callc"}
 
 

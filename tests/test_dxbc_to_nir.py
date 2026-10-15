@@ -29,6 +29,12 @@ FIXTURES = ROOT / "tests/fixtures/dxbc"
 TRANSLATED = {"vs40": "MESA_SHADER_VERTEX", "ps40": "MESA_SHADER_FRAGMENT",
               "gs40": "MESA_SHADER_GEOMETRY", "ps41": "MESA_SHADER_FRAGMENT"}
 REFUSED = ["cs50", "hs50", "ds50", "ps50", "gs50", "ps51"]
+# the shaders the D3D smoke tools compile at run time (tools/dxbc/extract-smoke-shaders.py)
+STAGES = {"vs": "MESA_SHADER_VERTEX", "gs": "MESA_SHADER_GEOMETRY", "ps": "MESA_SHADER_FRAGMENT"}
+for line in (FIXTURES / "smoke/targets.txt").read_text().splitlines():
+    if line.strip():
+        name, target = line.split()
+        TRANSLATED["smoke/" + name] = STAGES[target[:2]]
 
 
 def local_tree(*parts):
