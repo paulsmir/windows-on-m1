@@ -7,10 +7,12 @@
  *   interleaved (32 bytes a vertex);
  * - mode "h": one buffer, position.xyzw, a two-component hole, TEXCOORD0.xy
  *   (the hole is not checked);
- * - mode "m": three buffers, position / TEXCOORD0.xy / TEXCOORD1.xyzw.
+ * - mode "m": three buffers, position / TEXCOORD0.xy / TEXCOORD1.xyzw;
+ * - mode "v" (D3D-G10e): the "i" layout written by the vertex shader, the
+ *   stream output created from the vertex shader's bytecode (no GS).
  * A 64x64 render target stays bound (rasterized stream 0).
  * Every line is written through to the output file before the next step.
- * Usage: agx_so_smoke.exe <out.txt> [i|h|m] [iterations] */
+ * Usage: agx_so_smoke.exe <out.txt> [i|h|m|v] [iterations] */
 #define COBJMACROS
 #define INITGUID
 #include <windows.h>
@@ -50,6 +52,17 @@ static void say(const char *format, ...) {
 static const char vs_source[] =
     "struct VI { uint id : ID; };\n"
     "VI main(uint id : SV_VertexID) { VI o; o.id = id; return o; }\n";
+/* D3D-G10e mode "v": the vertex shader writes the outputs itself and the
+ * stream output is created from its bytecode (no geometry shader). */
+static const char vs_so_source[] =
+    "cbuffer C : register(b0) { float base; float3 pad; };\n"
+    "struct V { float4 pos : SV_Position; float2 a : TEXCOORD0; float4 b : TEXCOORD1; };\n"
+    "V main(uint id : SV_VertexID) {\n"
+    "  V v; float f = (float)id + base;\n"
+    "  v.pos = float4(f, f * 2, 0.5, 1); v.a = float2(f + 0.25, f + 0.5);\n"
+    "  v.b = float4(f * 10, f * 10 + 1, f * 10 + 2, f * 10 + 3);\n"
+    "  return v;\n"
+    "}\n";
 static const char gs_source[] =
     "cbuffer C : register(b0) { float base; float3 pad; };\n"
     "struct VI { uint id : ID; };\n"
@@ -98,12 +111,13 @@ int main(int argc, char **argv) {
   pD3DCompile compile_fn;
   HRESULT hr;
   const char *mode = argc > 2 ? argv[2] : "i";
+  int vertex_so = !strcmp(mode, "v");
   D3D11_SO_DECLARATION_ENTRY decl[3];
   UINT strides[BUFFERS] = {0}, buffers = 1, entries = 3;
   int iterations, bad = 0;
 
   if (argc < 2) {
-    printf("usage: agx_so_smoke.exe <out.txt> [i|h|m] [iterations]\n");
+    printf("usage: agx_so_smoke.exe <out.txt> [i|h|m|v] [iterations]\n");
     return 2;
   }
   iterations = argc > 3 ? atoi(argv[3]) : 30;
@@ -120,7 +134,7 @@ int main(int argc, char **argv) {
     decl[2].SemanticName = "TEXCOORD"; decl[2].ComponentCount = 2;
     strides[0] = 32;
   } else {
-    mode = "i";
+    mode = vertex_so ? "v" : "i";
     decl[1].SemanticName = "TEXCOORD"; decl[1].ComponentCount = 2;
     decl[2].SemanticName = "TEXCOORD"; decl[2].SemanticIndex = 1;
     decl[2].StartComponent = 2; decl[2].ComponentCount = 2;
@@ -178,7 +192,8 @@ int main(int argc, char **argv) {
     say("RESOURCES 0x%08lx", (unsigned long)hr);
     if (FAILED(hr)) return 1;
   }
-  vsb = compile(compile_fn, vs_source, sizeof(vs_source) - 1, "vs_4_0");
+  vsb = vertex_so ? compile(compile_fn, vs_so_source, sizeof(vs_so_source) - 1, "vs_4_0")
+                  : compile(compile_fn, vs_source, sizeof(vs_source) - 1, "vs_4_0");
   gsb = compile(compile_fn, gs_source, sizeof(gs_source) - 1, "gs_4_0");
   psb = compile(compile_fn, ps_source, sizeof(ps_source) - 1, "ps_4_0");
   if (!vsb || !gsb || !psb) return 1;
@@ -187,8 +202,9 @@ int main(int argc, char **argv) {
   if (SUCCEEDED(hr)) hr = ID3D11Device_CreatePixelShader(device, ID3D10Blob_GetBufferPointer(psb),
                                        ID3D10Blob_GetBufferSize(psb), NULL, &ps);
   if (SUCCEEDED(hr))
-    hr = ID3D11Device_CreateGeometryShaderWithStreamOutput(device, ID3D10Blob_GetBufferPointer(gsb),
-        ID3D10Blob_GetBufferSize(gsb), decl, entries, strides, buffers, 0, NULL, &gs);
+    hr = ID3D11Device_CreateGeometryShaderWithStreamOutput(device,
+        ID3D10Blob_GetBufferPointer(vertex_so ? vsb : gsb),
+        ID3D10Blob_GetBufferSize(vertex_so ? vsb : gsb), decl, entries, strides, buffers, 0, NULL, &gs);
   say("SHADERS 0x%08lx", (unsigned long)hr);
   if (FAILED(hr)) return 1;
   {
@@ -203,6 +219,7 @@ int main(int argc, char **argv) {
   ID3D11DeviceContext_GSSetShader(ctx, gs, NULL, 0);
   ID3D11DeviceContext_PSSetShader(ctx, ps, NULL, 0);
   ID3D11DeviceContext_GSSetConstantBuffers(ctx, 0, 1, &cb);
+  ID3D11DeviceContext_VSSetConstantBuffers(ctx, 0, 1, &cb); /* mode v */
   for (int i = 0; i < iterations; ++i) {
     const float black[4] = {0.0f, 0.0f, 0.0f, 1.0f};
     const UINT zero[BUFFERS] = {0, 0, 0};
