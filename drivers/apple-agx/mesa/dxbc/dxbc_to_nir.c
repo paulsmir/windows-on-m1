@@ -2303,6 +2303,17 @@ dxbc_nir_finalize(nir_shader *nir)
    NIR_PASS(_, nir, nir_lower_var_copies);
    NIR_PASS(_, nir, nir_lower_system_values);
    NIR_PASS(_, nir, nir_lower_compute_system_values, NULL);
+   if (nir->info.stage != MESA_SHADER_COMPUTE && nir->info.stage != MESA_SHADER_TESS_CTRL) {
+      /* outputs written once, at the end of the shader (and before each
+       * geometry emit), after the returns are lowered: AGX turns fragment
+       * outputs into exports that must end the shader (EXP1294; Honeykrisp
+       * lowers every stage's outputs the same way, hk_shader.c) */
+      NIR_PASS(_, nir, nir_lower_io_vars_to_temporaries, nir_shader_get_entrypoint(nir),
+               nir_var_shader_out);
+      NIR_PASS(_, nir, nir_lower_global_vars_to_local);
+      NIR_PASS(_, nir, nir_split_var_copies);
+      NIR_PASS(_, nir, nir_lower_var_copies);
+   }
    if (nir->info.stage == MESA_SHADER_COMPUTE) {
       /* groupshared memory gets explicit offsets and the threadgroup size
        * (shared_size) here, in the frontend, as st and rusticl do it: the

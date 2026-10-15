@@ -83,21 +83,30 @@ main(int argc, char **argv)
     * backend has no deref lowering for them) */
    unsigned block[3], shared, shared_derefs = 0;
    dxbc_nir_compute_info(nir, block, &shared);
+   /* fragment outputs stored outside the last block: AGX turns them into
+    * exports, which must end the shader (agx_validate block form, EXP1294) */
+   unsigned early_stores = 0;
    unsigned instrs = 0;
-   nir_foreach_function_impl(impl, nir)
+   nir_foreach_function_impl(impl, nir) {
+      nir_block *last = nir_impl_last_block(impl);
       nir_foreach_block(blk, impl)
          nir_foreach_instr(instr, blk) {
             ++instrs;
             if (instr->type == nir_instr_type_deref &&
                 nir_deref_mode_is(nir_instr_as_deref(instr), nir_var_mem_shared))
                ++shared_derefs;
+            if (instr->type == nir_instr_type_intrinsic && blk != last &&
+                nir->info.stage == MESA_SHADER_FRAGMENT &&
+                nir_instr_as_intrinsic(instr)->intrinsic == nir_intrinsic_store_output)
+               ++early_stores;
          }
+   }
    printf("TRANSLATED stage %s instructions %u inputs 0x%llx outputs 0x%llx textures %u "
-          "ssbos %u images %u block %ux%ux%u shared %u shared-derefs %u\n",
+          "ssbos %u images %u block %ux%ux%u shared %u shared-derefs %u early-output-stores %u\n",
           mesa_shader_stage_name(nir->info.stage), instrs,
           (unsigned long long)nir->info.inputs_read,
           (unsigned long long)nir->info.outputs_written, BITSET_LAST_BIT(nir->info.textures_used),
-          ssbos, images, block[0], block[1], block[2], shared, shared_derefs);
+          ssbos, images, block[0], block[1], block[2], shared, shared_derefs, early_stores);
    ralloc_free(nir);
    glsl_type_singleton_decref();
    dxbc_program_free(&program);

@@ -134,6 +134,17 @@ class DxbcToNir(unittest.TestCase):
         m = re.search(r"ssbos (\d+)", self.run_fixture("cs50").stdout)
         self.assertGreater(int(m.group(1)), 8)
 
+    def test_fragment_outputs_are_stored_at_the_end(self):
+        # EXP1294: the sample smoke's pixel shader returns early in every
+        # branch; storing its outputs before each return put AGX exports in
+        # non-final blocks (agx_validate: "Invalid block form after IR
+        # translation" on ARM64, wrong colours on x86).
+        for name, stage in TRANSLATED.items():
+            if stage != "MESA_SHADER_FRAGMENT":
+                continue
+            with self.subTest(name=name):
+                self.assertIn("early-output-stores 0", self.run_fixture(name).stdout)
+
     def test_compute_block_and_groupshared_size(self):
         # Dispatch launches the shader's own numthreads block
         # (pipe_grid_info.block) and Asahi sizes threadgroup memory from
