@@ -629,6 +629,8 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineRecorded(
   KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
   receipt->Quiesce = (ULONG)AdmissionGpuResetQuiesceNone;
   receipt->WaitMs = 0u;
+  receipt->EntryMs = receipt->JobAgeMs = 0u;
+  receipt->PollAgeMs = MAXULONG;
   AdmissionPlatformRuntimeResetState(context, receipt);
   status = AdmissionResetEngineInternal(Adapter, ResetEngine);
   receipt->Status = (ULONG)status;
@@ -636,6 +638,24 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineRecorded(
       NT_SUCCESS(status) ? ResetEngine->LastAbortedFenceId : 0u;
   if (NT_SUCCESS(status))
     ++receipt->Succeeded;
+  {
+    ADMISSION_GPU_RESET_ENTRY *entry = &receipt->History[
+        (receipt->Resets - 1u) % ADMISSION_GPU_RESET_HISTORY];
+    entry->EntryMs = receipt->EntryMs;
+    entry->Entry = Entry;
+    entry->Status = receipt->Status;
+    entry->Quiesce = receipt->Quiesce;
+    entry->WaitMs = receipt->WaitMs;
+    entry->PacketState = receipt->PacketState;
+    entry->PacketFence = receipt->PacketFence;
+    entry->LastAbortedFence = receipt->LastAbortedFence;
+    entry->SchedulerFaulted = receipt->SchedulerFaulted;
+    entry->JobAgeMs = receipt->JobAgeMs;
+    entry->PollAgeMs = receipt->PollAgeMs;
+    entry->FirmwareRecoveries = receipt->FirmwareRecoveries;
+    if (receipt->HistoryCount < ADMISSION_GPU_RESET_HISTORY)
+      ++receipt->HistoryCount;
+  }
   AdmissionRecordGpuReset(context);
   return status;
 }

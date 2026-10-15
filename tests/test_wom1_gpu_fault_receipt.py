@@ -89,6 +89,17 @@ int main(int argc, char **argv) {
   reset.WaitMs = 2u; reset.BackendPhase = 3u; reset.ProviderPhase = 4u;
   reset.LastPollGuard = 1u; reset.WorkerBusy = 0u; reset.Halted = 1u;
   reset.FirmwareRecoveries = 2436u; reset.ContextToken = 0xffff8d02cced4000ull;
+  /* Ten resets: the ring keeps the last eight, the newest at (10 - 1) % 8. */
+  reset.Resets = 10u; reset.HistoryCount = ADMISSION_GPU_RESET_HISTORY;
+  reset.EntryMs = 5000u; reset.JobAgeMs = 2100u; reset.PollAgeMs = 1900u;
+  for (index = 0u; index < 10u; ++index) {
+    ADMISSION_GPU_RESET_ENTRY *h = &reset.History[index % ADMISSION_GPU_RESET_HISTORY];
+    memset(h, 0, sizeof(*h));
+    h->EntryMs = 1000u + index; h->Entry = ADMISSION_GPU_RESET_ENGINE;
+    h->Quiesce = AdmissionGpuResetQuiesceEnded; h->PacketState = 3u;
+    h->PacketFence = 0x100u + index; h->LastAbortedFence = 0x100u + index;
+    h->JobAgeMs = 2000u + index; h->PollAgeMs = index == 9u ? 0xffffffffu : index;
+  }
   dump(argv[1], "Wom1GpuReset", &reset, sizeof(reset));
   return 0;
 }
@@ -113,7 +124,7 @@ class Wom1GpuFaultReceipt(unittest.TestCase):
                                    capture_output=True, text=True).stdout.split()
             self.assertEqual([int(v) for v in sizes],
                              [DECODER.EVENT.size, DECODER.FAULT_HEADER.size + 3 * DECODER.EVENT.size,
-                              DECODER.FAULT_HEADER.size, DECODER.RESET.size])
+                              DECODER.FAULT_HEADER.size, DECODER.RESET_V2])
             fault = DECODER.decode_fault((tmp / 'Wom1GpuFault.bin').read_bytes())
             reset = DECODER.decode_reset((tmp / 'Wom1GpuReset.bin').read_bytes())
 
@@ -140,6 +151,23 @@ class Wom1GpuFaultReceipt(unittest.TestCase):
         self.assertEqual((reset['packet']['state'], reset['fences']['last_aborted'],
                           reset['preemption'], reset['firmware_recoveries']),
                          ('active', '0xce71c', 'wait-current-boundary', 2436))
+        self.assertEqual((reset['entry_ms'], reset['job_age_ms'], reset['poll_age_ms']),
+                         (5000, 2100, 1900))
+        history = reset['history']
+        self.assertEqual([h['entry_ms'] for h in history], list(range(1002, 1010)))
+        self.assertEqual((history[-1]['packet'], history[-1]['job_age_ms'],
+                          history[-1]['poll_age_ms'], history[0]['poll_age_ms']),
+                         ('active/0x109', 2009, None, 2))
+
+    def test_exp1303_v1_reset_receipt_still_decodes(self):
+        v1 = bytearray(DECODER.RESET.size)
+        DECODER.RESET.pack_into(v1, 0, 1, DECODER.RESET.size, 6, 6, 1, 0, 0x40f8f, 3,
+                                0x22f67, 0x22f67, 0x22f66, 0x22f67, 1, 0x22f67, 1, 0,
+                                3, 4, 1, 0, 0, 5, 0)
+        reset = DECODER.decode_reset(bytes(v1))
+        self.assertEqual((reset['version'], reset['quiesce'], reset['fences']['last_aborted']),
+                         (1, 'ended', '0x22f67'))
+        self.assertNotIn('history', reset)
 
     def test_exp1296_minidump_debug_snapshot(self):
         snapshot = DECODER.decode_dbginfo(bytes.fromhex(EXP1296_DBGINFO))

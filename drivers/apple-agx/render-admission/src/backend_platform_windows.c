@@ -225,6 +225,8 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ULONGLONG JobSubmitMs;
   ULONG LastFirmwareRecoveryMs, MaxFirmwareRecoveryMs;
   ULONG LongestJobMs, LongestJobFence, PublishedDeadlineExpiries;
+  /* G4-r3 (EXP1303): the last provider poll of a job (Wom1GpuReset). */
+  volatile LONG64 LastPollMs;
   /* G4-r3 (EXP1296): Wom1GpuFault and its opt-in FAULT_INFO read. */
   ADMISSION_GPU_FAULT_RECEIPT GpuFault;
   BOOLEAN GpuFaultUnpublished;
@@ -3990,6 +3992,8 @@ static VOID AdmissionPlatformWorker(
     APPLE_AGX_BACKEND_U32 drained = 0u;
     APPLE_AGX_BACKEND_U32 completed = 0u;
     LARGE_INTEGER interval;
+    InterlockedExchange64(&runtime->LastPollMs,
+                          (LONG64)AdmissionPlatformNowMs());
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
     {
       APPLE_AGX_RTKIT_U32 notifications = 0u;
@@ -4982,6 +4986,17 @@ _Use_decl_annotations_ VOID AdmissionPlatformRuntimeResetState(
   Receipt->Halted = status != NULL ? status[0x20u / 4u] : MAXULONG;
   Receipt->FirmwareRecoveries =
       (ULONG)InterlockedCompareExchange(&runtime->FirmwareRecoveries, 0, 0);
+  {
+    ULONGLONG now = AdmissionPlatformNowMs();
+    ULONGLONG submitted = runtime->JobSubmitMs;
+    ULONGLONG polled = (ULONGLONG)InterlockedCompareExchange64(
+        &runtime->LastPollMs, 0, 0);
+    Receipt->EntryMs = (ULONG)now;
+    Receipt->JobAgeMs = submitted != 0ULL && now >= submitted
+        ? (ULONG)(now - submitted) : 0u;
+    Receipt->PollAgeMs = polled != 0ULL && now >= polled
+        ? (ULONG)(now - polled) : MAXULONG;
+  }
 }
 
 _Use_decl_annotations_ ULONG AdmissionPlatformRuntimeDebugState(

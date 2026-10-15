@@ -108,6 +108,7 @@ SHIM = r'''
 #define STATUS_DEVICE_HARDWARE_ERROR ((NTSTATUS)0xC0000483u)
 #define STATUS_DEVICE_NOT_READY ((NTSTATUS)0xC00000A3u)
 #define STATUS_IO_TIMEOUT ((NTSTATUS)0xC00000B5u)
+#define MAXULONG 0xffffffffu
 #define NT_SUCCESS(s) ((NTSTATUS)(s) >= 0)
 #define PASSIVE_LEVEL 0
 #define Executive 0
@@ -275,7 +276,8 @@ static void AdmissionPublishFirmwareRecovery(ADMISSION_PLATFORM_RUNTIME *r) {
 static void AdmissionPlatformRuntimeResetState(ADMISSION_CONTEXT *c, ADMISSION_GPU_RESET_RECEIPT *r) {
   ADMISSION_PLATFORM_RUNTIME *p = c->PlatformRuntime;
   r->BackendPhase = (ULONG)p->Backend.Phase; r->WorkerBusy = p->WorkScheduled ? 1u : 0u;
-  r->Halted = 0u; r->FirmwareRecoveries = (ULONG)p->FirmwareRecoveries; }
+  r->Halted = 0u; r->FirmwareRecoveries = (ULONG)p->FirmwareRecoveries;
+  r->EntryMs = (ULONG)now_ms; r->JobAgeMs = 2100u; r->PollAgeMs = 7u; }
 static void AdmissionRecordGpuReset(ADMISSION_CONTEXT *c) {
   assert(!lock_depth); ++recorded; last_recorded = c->GpuReset; }
 '''
@@ -378,6 +380,16 @@ int main(void) {
          last_recorded.WaitMs == 2u && last_recorded.LastAbortedFence == 0xce71cu &&
          last_recorded.BackendPhase == AppleAgxBackendRuntimeSubmitted &&
          last_recorded.FirmwareRecoveries == 1u);
+  /* Version 2: the timed history entry mirrors the attempt. */
+  assert(last_recorded.Version == 2u && last_recorded.HistoryCount == 1u &&
+         last_recorded.EntryMs == 1000u && last_recorded.JobAgeMs == 2100u &&
+         last_recorded.PollAgeMs == 7u);
+  assert(last_recorded.History[0].EntryMs == 1000u &&
+         last_recorded.History[0].Quiesce == AdmissionGpuResetQuiesceEnded &&
+         last_recorded.History[0].PacketFence == 0xce71cu &&
+         last_recorded.History[0].LastAbortedFence == 0xce71cu &&
+         last_recorded.History[0].SchedulerFaulted == (0x40000u | 3930u) &&
+         last_recorded.History[0].JobAgeMs == 2100u);
 
   /* 2. The same storm promoted to an adapter reset: success, the last
    * completed fence advances to the last submitted one, restart resumes. */
@@ -416,6 +428,11 @@ int main(void) {
   /* The reset's own fault code is what the next attempt finds. */
   assert(last_recorded.Resets == 2u && last_recorded.Entry == ADMISSION_GPU_RESET_ADAPTER &&
          (last_recorded.SchedulerFaulted >> 16) == 1u);
+  assert(last_recorded.HistoryCount == 2u &&
+         last_recorded.History[0].Entry == ADMISSION_GPU_RESET_ENGINE &&
+         last_recorded.History[1].Entry == ADMISSION_GPU_RESET_ADAPTER &&
+         last_recorded.History[1].Quiesce == AdmissionGpuResetQuiesceTimeout &&
+         last_recorded.History[1].EntryMs > last_recorded.History[0].EntryMs);
 
   /* 5. A provider that cannot be polled proves nothing. */
   setup(0, 0); fail_poll = 1;

@@ -5,8 +5,9 @@ Receipts (REG_BINARY under the APPL0002 device key):
   Wom1GpuFault          v1, 168 bytes: firmware Timeout/Fault events, captured
                         before the firmware is resumed (first, first with a
                         valid FAULT_INFO, last).
-  Wom1GpuReset          v1, 96 bytes: the last DxgkDdiResetEngine or
-                        DxgkDdiResetFromTimeout and the state it found.
+  Wom1GpuReset          v1 96 / v2 496 bytes: the last DxgkDdiResetEngine or
+                        DxgkDdiResetFromTimeout and the state it found; v2
+                        adds timing and the last 8 resets.
   Wom1FirmwareRecovery  8 dwords (EXP1075/G4-recovery).
 Dump blackbox:
   --dbginfo HEX         the DxgkDdiCollectDbgInfo snapshot (v1 32 or v2 56
@@ -48,7 +49,7 @@ UNIT_HIGH = ('gPM_SP', 'gVDM_CSD_SP', 'gVDM_SSD_SP', 'gVDM_ILF_SP', 'gVDM_TFP_SP
              'gCDM_KS0_SP', 'gCDM_KS1_SP', 'gCDM_KS2_SP', 'gIPP_SP', 'gIPP_CS_SP',
              'gRDE0_SP', 'gRDE1_SP')
 QUIESCE = ('none', 'ended', 'timeout', 'worker', 'poll', 'backend', 'state')
-RESET_ENTRY = {1: 'DxgkDdiResetEngine', 2: 'DxgkDdiResetFromTimeout'}
+RESET_ENTRY_NAMES = {1: 'DxgkDdiResetEngine', 2: 'DxgkDdiResetFromTimeout'}
 PACKET_STATES = ('empty', 'prepared', 'queued', 'active')
 PREEMPTION_PHASES = ('idle', 'wait-current-boundary', 'ready-to-notify',
                      'notification-claimed')
@@ -58,6 +59,10 @@ FAULT_FILES = {1: 'scheduler_windows.c', 2: 'paging_windows.c',
 EVENT = struct.Struct('<8I2Q')
 FAULT_HEADER = struct.Struct('<6I')
 RESET = struct.Struct('<22IQ')
+RESET_V2_TAIL = struct.Struct('<4I')
+RESET_ENTRY = struct.Struct('<12I')
+RESET_HISTORY = 8
+RESET_V2 = RESET.size + RESET_V2_TAIL.size + RESET_HISTORY * RESET_ENTRY.size
 DBGINFO_V1 = 32
 DBGINFO_V2 = 56
 
@@ -139,18 +144,33 @@ def name_of(table, value):
     return table[value] if value < len(table) else f'unknown({value})'
 
 
+def age(value):
+    return None if value == 0xffffffff else value
+
+
+def decode_reset_entry(data, offset):
+    (entry_ms, entry, status, quiesce, wait_ms, packet_state, packet_fence,
+     aborted, faulted, job_age, poll_age, recoveries) = RESET_ENTRY.unpack_from(data, offset)
+    return {'entry_ms': entry_ms, 'entry': RESET_ENTRY_NAMES.get(entry, f'unknown({entry})'),
+            'status': f'{status:#010x}', 'quiesce': name_of(QUIESCE, quiesce),
+            'wait_ms': wait_ms, 'packet': f'{name_of(PACKET_STATES, packet_state)}/{packet_fence:#x}',
+            'last_aborted': f'{aborted:#x}', 'scheduler_faulted_at_entry': fault_code(faulted),
+            'job_age_ms': job_age, 'poll_age_ms': age(poll_age),
+            'firmware_recoveries': recoveries}
+
+
 def decode_reset(data):
-    if len(data) != RESET.size:
+    if len(data) not in (RESET.size, RESET_V2):
         raise ValueError('unsupported Wom1GpuReset length')
     (version, size, resets, succeeded, entry, status, faulted, packet_state,
      packet_fence, active, completed, submitted, phase, aborted, quiesce,
      wait_ms, backend, provider, poll_guard, worker, halted, recoveries,
-     context) = RESET.unpack(data)
-    if version != 1 or size != RESET.size:
+     context) = RESET.unpack_from(data)
+    if (version, size) not in ((1, RESET.size), (2, RESET_V2)) or size != len(data):
         raise ValueError('unsupported Wom1GpuReset version')
-    return {
+    result = {
         'version': version, 'resets': resets, 'succeeded': succeeded,
-        'entry': RESET_ENTRY.get(entry, f'unknown({entry})'),
+        'entry': RESET_ENTRY_NAMES.get(entry, f'unknown({entry})'),
         'status': f'{status:#010x}',
         'scheduler_faulted_at_entry': fault_code(faulted),
         'packet': {'state': name_of(PACKET_STATES, packet_state),
@@ -166,6 +186,17 @@ def decode_reset(data):
         'firmware_halted': None if halted == 0xffffffff else halted,
         'firmware_recoveries': recoveries,
     }
+    if version == 2:
+        entry_ms, job_age, poll_age, count = RESET_V2_TAIL.unpack_from(data, RESET.size)
+        if count > RESET_HISTORY:
+            raise ValueError('Wom1GpuReset history count out of range')
+        base = RESET.size + RESET_V2_TAIL.size
+        last = (resets - 1) % RESET_HISTORY if resets else 0
+        order = [(last - count + 1 + i) % RESET_HISTORY for i in range(count)]
+        result.update(entry_ms=entry_ms, job_age_ms=job_age, poll_age_ms=age(poll_age),
+                      history=[decode_reset_entry(data, base + i * RESET_ENTRY.size)
+                               for i in order])
+    return result
 
 
 def decode_recovery(data):
