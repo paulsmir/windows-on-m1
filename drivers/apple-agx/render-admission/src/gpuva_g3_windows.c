@@ -2531,10 +2531,13 @@ static BOOLEAN AdmissionG4PrivateGeometry(ADMISSION_G3_PRIVATE_SCENE *scene,
   APPLE_AGX_G4_NATIVE_RENDER r;
   if (!scene || !view->Render || view->RenderBytes!=sizeof(r)) return FALSE;
   RtlCopyMemory(&r,view->Render,sizeof(r));
+  /* EXP1290: no sample count -- scene storage does not depend on it (Asahi
+   * get_tiling_params; the cache key omits it), only the job's utile config
+   * and tile-buffer blocks do, and the builder derives those per render. */
   return r.WidthPx==scene->Geometry.WidthPx && r.HeightPx==scene->Geometry.HeightPx &&
       r.UtileWidthPx==scene->Geometry.UtileWidthPx &&
       r.UtileHeightPx==scene->Geometry.UtileHeightPx &&
-      r.Layers==scene->Geometry.Layers && r.Samples==scene->Geometry.Samples &&
+      r.Layers==scene->Geometry.Layers &&
       RtlCompareMemory(view->Process,scene->Storage.Ranges,sizeof(view->Process))==sizeof(view->Process);
 }
 

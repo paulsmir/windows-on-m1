@@ -1214,7 +1214,12 @@ int main(void) {
   assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)!=STATUS_SUCCESS);
   assert(!scene.Queued && !scene.Started);
   bind_ok=1;
+  /* EXP1290: scene storage does not depend on the sample count (Asahi
+   * get_tiling_params / new_scene); a 4x render used a scene the acquire
+   * recorded as single-sampled and was refused at branch 9. */
+  scene.Geometry.Samples=packet.Render.Samples==4u ? 1u : 4u;
   assert(AdmissionG4SubmitVirtualEnvelope(&adapter,&context,&args)==STATUS_SUCCESS);
+  scene.Geometry.Samples=packet.Render.Samples;
   assert(scene.Queued && scene.Fence==21 && AdmissionGpuvaG3PrivateContextBusy(&context));
   /* Real scheduler boundary + production private publisher/submit transfer. */
   APPLE_AGX_PREEMPTION preempt={0};
