@@ -3480,6 +3480,14 @@ AgxD3d11ResolveState(Device *pDevice)
    if (flags & D3D11_DDI_BIND_UNORDERED_ACCESS)
       bind |= PIPE_BIND_SHADER_BUFFER | PIPE_BIND_SHADER_IMAGE;
 '''),
+        ('''   templat.bind       = translate_resource_flags(pCreateResource->BindFlags);
+''','''   templat.bind       = translate_resource_flags(pCreateResource->BindFlags);
+   /* EXP1297/EXP1298: Mesa bufferobj.c:162-187 binds buffer images as
+    * SHADER_BUFFER resources; SHADER_IMAGE on PIPE_BUFFER blocks linear
+    * allocation in Asahi. Texture UAVs retain SHADER_IMAGE. */
+   if (pCreateResource->ResourceDimension == D3D10DDIRESOURCE_BUFFER)
+      templat.bind &= ~PIPE_BIND_SHADER_IMAGE;
+'''),
         ('''   } else {
       BOOL bindDepthStencil = !!(pCreateResource->BindFlags & D3D10_DDI_BIND_DEPTH_STENCIL);
       templat.format = FormatTranslate(pCreateResource->Format, bindDepthStencil);
