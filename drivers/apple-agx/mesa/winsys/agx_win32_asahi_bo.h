@@ -52,6 +52,10 @@ typedef struct {
   /* D3D-G5: the screen advertises 2x/4x multisampling (D3D UMD only; the
    * OpenGL ICD keeps AGX_DBG_NOMSAA, EXP1162). */
   int Multisample;
+  /* D3D-H6: the screen's contexts give D3D10/11 out-of-bounds buffer
+   * semantics (D3D UMD only; the OpenGL ICD keeps the robustness its
+   * contexts ask for). */
+  int D3dRobustness;
   int Failed;
   struct pipe_context *(*ContextCreate)(struct pipe_screen *, void *, unsigned);
   void (*ContextDestroy)(struct pipe_context *);
