@@ -695,6 +695,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     info->Classes[2].MaximumBytes = AGX_RR_COMMAND_ARENA_BYTES;
     info->Classes[2].Flags = AppleAgxWin32BufferCpuWrite |
         AppleAgxWin32BufferGpuRead;
+    /* EXP1317: 0/0 until the first power-on read a valid topology. */
+    info->CoresPerCluster = context->GpuCoreMask ? context->GpuCoresPerCluster : 0u;
+    info->CoreMask = context->GpuCoreMask;
     status = STATUS_SUCCESS;
     break;
   }

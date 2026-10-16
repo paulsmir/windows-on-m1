@@ -12,6 +12,7 @@
 #endif
 #include "apple_agx_hwdata_profile.h"
 #include "apple_agx_firmware_start_receipt.h"
+#include "apple_agx_core_topology.h"
 
 #define ADMISSION_PLATFORM_TAG 'pRGA'
 #define ADMISSION_PLATFORM_QUEUE_TIMEOUT_MS 500ULL
@@ -1654,6 +1655,25 @@ static unsigned char AdmissionFirmwarePowerOn(
                                            ADMISSION_PLATFORM_SGX_PRE_ASC_OFFSET),
                        ADMISSION_PLATFORM_SGX_PRE_ASC_VALUE);
   KeMemoryBarrier();
+  /* EXP1317: the core topology the UMD reports to Mesa (scratch block
+   * lists per present core), read once from the powered SGX as Asahi
+   * regs.rs get_gpu_id does. */
+  if (runtime->Adapter != NULL && runtime->Adapter->GpuCoreMask == 0u) {
+    static const ULONG offsets[5] = {APPLE_AGX_SGX_ID_VERSION,
+        APPLE_AGX_SGX_ID_COUNTS_1, APPLE_AGX_SGX_ID_CLUSTERS,
+        APPLE_AGX_SGX_CORE_MASK_0, APPLE_AGX_SGX_CORE_MASK_1};
+    ULONG *id = runtime->Adapter->GpuIdRegisters;
+    APPLE_AGX_U32 cores = 0u, mask = 0u;
+    ULONG index;
+    for (index = 0u; index < 5u; ++index)
+      id[index] = READ_REGISTER_ULONG(
+          (volatile ULONG *)(runtime->SgxBase + offsets[index]));
+    if (AppleAgxG13CoreTopology(id[0], id[1], id[2], id[3], id[4],
+            &cores, &mask)) {
+      runtime->Adapter->GpuCoresPerCluster = cores;
+      runtime->Adapter->GpuCoreMask = mask;
+    }
+  }
   runtime->Powered = TRUE;
   return 1u;
 }

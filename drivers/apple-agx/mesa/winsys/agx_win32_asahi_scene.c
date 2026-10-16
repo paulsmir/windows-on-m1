@@ -59,6 +59,12 @@ struct pipe_screen *AgxWin32AsahiScreenCreateForWindows(AGX_WIN32_ASAHI_BACKEND 
    * Core masks, revision and timestamp frequency are not invented. */
   params.num_clusters_total=1;
   params.num_dies=1;
+  /* EXP1317: the cores the SGX reports (KMD, Asahi regs.rs derivation).
+   * Mesa's scratch block list and max_compute_units follow them; without
+   * them a fragment shader using scratch walked an empty list
+   * (dwmcore.dll_003d8800 removed the device on both shader paths). */
+  params.num_cores_per_cluster=windows->Info.CoresPerCluster;
+  params.core_masks[0]=windows->Info.CoreMask;
   params.features=0; /* Optional soft faults are deliberately not enabled. */
   if(windows->Info.PageBytes!=AIL_PAGESIZE) return NULL;
   struct pipe_screen *screen=AgxWin32AsahiScreenCreate(backend,windows,owners,owner,batches,&params);

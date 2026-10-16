@@ -27,7 +27,12 @@ int AgxWin32DeviceInfoValid(const AGX_WIN32_DEVICE_INFO *Info) {
       Info->Bytes != sizeof(*Info) || Info->BootGeneration == 0u ||
       Info->GpuGeneration != 13u || Info->GpuVariant != AgxWin32GpuG13G ||
       Info->PageBytes != 0x4000u ||
-      Info->ClassCount != AGX_WIN32_BUFFER_CLASS_COUNT)
+      Info->ClassCount != AGX_WIN32_BUFFER_CLASS_COUNT ||
+      /* EXP1317: a core mask fits its cluster; none is reported as 0/0. */
+      (Info->CoreMask == 0u ? Info->CoresPerCluster != 0u :
+       (Info->CoresPerCluster == 0u || Info->CoresPerCluster > 32u ||
+        (Info->CoresPerCluster < 32u &&
+         (Info->CoreMask >> Info->CoresPerCluster) != 0u))))
     return 0;
   for (index = 0u; index < Info->ClassCount; ++index) {
     const AGX_WIN32_BUFFER_CLASS_INFO *entry = &Info->Classes[index];

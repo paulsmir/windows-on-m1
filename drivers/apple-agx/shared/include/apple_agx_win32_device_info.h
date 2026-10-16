@@ -4,7 +4,8 @@
 #include "apple_agx_win32_abi.h"
 
 #define AGX_WIN32_DEVICE_INFO_MAGIC 0x49445741u /* AWDI */
-#define AGX_WIN32_DEVICE_INFO_VERSION 1u
+/* Version 2 (EXP1317): the SGX core topology (apple_agx_core_topology.h). */
+#define AGX_WIN32_DEVICE_INFO_VERSION 2u
 #define AGX_WIN32_BUFFER_CLASS_COUNT 3u
 
 typedef enum _AGX_WIN32_GPU_VARIANT {
@@ -36,6 +37,9 @@ typedef struct _AGX_WIN32_DEVICE_INFO {
   APPLE_AGX_U32 Magic, Version, Bytes, BootGeneration;
   APPLE_AGX_U32 GpuGeneration, GpuVariant, PageBytes, ClassCount;
   AGX_WIN32_BUFFER_CLASS_INFO Classes[AGX_WIN32_BUFFER_CLASS_COUNT];
+  /* Cores per cluster and the present-core mask of the one G13G cluster as
+   * the SGX reports them, or both 0 while the KMD has not read them. */
+  APPLE_AGX_U32 CoresPerCluster, CoreMask;
 } AGX_WIN32_DEVICE_INFO;
 
 #endif

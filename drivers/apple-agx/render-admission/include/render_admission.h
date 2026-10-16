@@ -785,6 +785,12 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG SchedulerDpcPending;
   volatile LONG RenderDpcFence;
   ULONG Win32BootGeneration;
+  /* EXP1317: SGX core topology read at the first power-on (Asahi regs.rs
+   * get_gpu_id): ID_VERSION, ID_COUNTS_1, ID_CLUSTERS, CORE_MASK_0/1 as
+   * read, and the derived cores per cluster/mask (0/0 when invalid). */
+  ULONG GpuIdRegisters[5];
+  ULONG GpuCoresPerCluster;
+  ULONG GpuCoreMask;
   volatile LONG FeatureReadyMask;
   /* G4-r3 (EXP1296): Wom1GpuReset; written by the reset thread only
    * (first-level synchronization). */
