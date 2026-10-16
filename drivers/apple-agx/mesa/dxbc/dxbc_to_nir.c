@@ -2216,7 +2216,7 @@ emit_mem_store(struct ctx *c, const struct dxbc_instruction *insn)
    mem_store(c, insn, dst, mem_address(c, insn, dst, address), value, n);
 }
 
-static nir_deref_instr *
+static nir_def *
 uav_image(struct ctx *c, const struct dxbc_instruction *insn, const struct dxbc_operand *o,
           struct tex_shape *shape)
 {
@@ -2227,7 +2227,10 @@ uav_image(struct ctx *c, const struct dxbc_instruction *insn, const struct dxbc_
       return NULL;
    }
    tex_shape(c->uav[u].dim, shape);
-   return nir_build_deref_var(&c->b, c->uav[u].image);
+   /* EXP1304: the image's slot, not a deref: Asahi's binding lowering
+    * (agx_nir_lower_bindings) takes the indexed image_* intrinsics only,
+    * and an image_deref_* reached the backend ("Unhandled intrinsic"). */
+   return nir_imm_int(&c->b, (int)u);
 }
 
 static void
@@ -2235,11 +2238,11 @@ emit_typed_load(struct ctx *c, const struct dxbc_instruction *insn)
 {
    struct tex_shape shape;
    const struct dxbc_operand *uav = &insn->operands[2];
-   nir_deref_instr *image = uav_image(c, insn, uav, &shape);
+   nir_def *image = uav_image(c, insn, uav, &shape);
    nir_def *v;
    if (!image)
       return;
-   v = nir_image_deref_load(&c->b, 4, 32, &image->def, SRC(1, U), nir_imm_int(&c->b, 0),
+   v = nir_image_load(&c->b, 4, 32, image, SRC(1, U), nir_imm_int(&c->b, 0),
                             nir_imm_int(&c->b, 0), .image_dim = shape.dim,
                             .image_array = shape.array,
                             .dest_type = c->uav[uav->index[0].imm].type);
@@ -2251,10 +2254,10 @@ emit_typed_store(struct ctx *c, const struct dxbc_instruction *insn)
 {
    struct tex_shape shape;
    const struct dxbc_operand *uav = &insn->operands[0];
-   nir_deref_instr *image = uav_image(c, insn, uav, &shape);
+   nir_def *image = uav_image(c, insn, uav, &shape);
    if (!image)
       return;
-   nir_image_deref_store(&c->b, &image->def, SRC(1, U), nir_imm_int(&c->b, 0), SRC(2, U),
+   nir_image_store(&c->b, image, SRC(1, U), nir_imm_int(&c->b, 0), SRC(2, U),
                          nir_imm_int(&c->b, 0), .image_dim = shape.dim,
                          .image_array = shape.array,
                          .src_type = c->uav[uav->index[0].imm].type);
@@ -2300,14 +2303,14 @@ emit_atomic(struct ctx *c, const struct dxbc_instruction *insn)
    if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW && index < MAX_UAVS &&
        c->uav[index].kind == MEM_TYPED) {
       struct tex_shape shape;
-      nir_deref_instr *image = uav_image(c, insn, target, &shape);
+      nir_def *image = uav_image(c, insn, target, &shape);
       if (!image)
          return;
       result = swap ?
-         nir_image_deref_atomic_swap(b, 32, &image->def, address, nir_imm_int(b, 0), compare, data,
+         nir_image_atomic_swap(b, 32, image, address, nir_imm_int(b, 0), compare, data,
                                      .image_dim = shape.dim, .image_array = shape.array,
                                      .atomic_op = op, .format = PIPE_FORMAT_R32_UINT) :
-         nir_image_deref_atomic(b, 32, &image->def, address, nir_imm_int(b, 0), data,
+         nir_image_atomic(b, 32, image, address, nir_imm_int(b, 0), data,
                                 .image_dim = shape.dim, .image_array = shape.array,
                                 .atomic_op = op, .format = PIPE_FORMAT_R32_UINT);
    } else {

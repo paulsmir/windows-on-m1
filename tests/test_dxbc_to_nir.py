@@ -156,6 +156,19 @@ class DxbcToNir(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr[-3000:])
                 self.assertIn(f"TRANSLATED stage {stage}", result.stdout)
 
+    def test_typed_uavs_reach_asahi_as_indexed_images(self):
+        # EXP1304: the first FL 11_0 device died in its cs_5_0 case with
+        # "Unhandled intrinsic" (agx_compile.c:1754): Asahi's binding
+        # lowering (agx_nir_lower_bindings) takes the indexed image_*
+        # intrinsics only, while the translator emitted image_deref_*.
+        out = subprocess.run([str(self.binary), str(FIXTURES / "cs50.dxbc"), "--print"],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stderr[-500:])
+        intrinsics = set(re.findall(r"@(\w+)", out.stdout))
+        self.assertFalse({i for i in intrinsics if i.startswith("image_deref")}, sorted(intrinsics))
+        self.assertIn("image_store", intrinsics)
+        self.assertRegex(out.stdout, r"images_used: 0x[0']*1\b")
+
     def test_resource_bindings_fit_the_gallium_ranges(self):
         # A shader buffer or image slot beyond PIPE_MAX_SHADER_BUFFERS (32) /
         # PIPE_MAX_SHADER_IMAGES (64) cannot be bound through
