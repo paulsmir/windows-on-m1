@@ -241,7 +241,7 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
       AgxWin32AsahiBatchTraceDraw(ctx, batch, 2u);
       ctx->any_faults = true; return;
    }
-   if (!AgxWin32AsahiBatchPrepareDraw(batch,info,draws)) {
+   if (!AgxWin32AsahiBatchPrepareDraw(batch,info,indirect,draws)) {
       AgxWin32AsahiBatchTraceDraw(ctx, batch, 2u);
       ctx->any_faults = true; return;
    }

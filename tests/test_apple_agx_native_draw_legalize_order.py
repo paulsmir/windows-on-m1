@@ -83,7 +83,8 @@ static int AgxWin32AsahiBatchDrawRefused(struct agx_context *ctx, const struct p
   (void)ctx; (void)info; (void)indirect; (void)draws; (void)count; return 1;
 }
 static int AgxWin32AsahiBatchPrepareDraw(struct agx_batch *b, const struct pipe_draw_info *info,
-    const struct pipe_draw_start_count_bias *draw) {
+    const struct pipe_draw_indirect_info *indirect, const struct pipe_draw_start_count_bias *draw) {
+  (void)indirect;
   return b->capsule && info && draw && draw->count && info->instance_count;
 }
 /* Mirrors agx_win32_gpuva_batch.c: Enter is a depth; Leave refuses a batch

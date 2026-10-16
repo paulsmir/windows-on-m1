@@ -28,7 +28,9 @@ struct pipe_surface { struct pipe_resource *texture; };
 struct pipe_framebuffer_state { unsigned nr_cbufs; struct pipe_surface cbufs[8]; struct pipe_surface zsbuf; };
 struct agx_context { bool any_faults; struct pipe_framebuffer_state framebuffer; };
 struct pipe_draw_info { unsigned instance_count; };
-struct pipe_draw_indirect_info { int unused; };
+struct pipe_stream_output_target { int unused; };
+struct pipe_draw_indirect_info { struct pipe_resource *buffer;
+  struct pipe_stream_output_target *count_from_stream_output; };
 struct pipe_draw_start_count_bias { unsigned start, count; int index_bias; };
 static unsigned refused_kind, refused_reason;
 static int batch_refuse(unsigned kind, unsigned reason, unsigned a, unsigned b) {
@@ -72,7 +74,8 @@ int main(void) {
 def functions(text):
     allowed = re.search(r"int AgxWin32AsahiBatchDrawAllowed\(.*?\n\}", text, re.S).group(0)
     refused = re.search(r"int AgxWin32AsahiBatchDrawRefused\(.*?\n\}", text, re.S).group(0)
-    return allowed + "\n" + refused
+    helper = re.search(r"static int indirect_arguments\(.*?\n\}", text, re.S).group(0)
+    return helper + "\n" + allowed + "\n" + refused
 
 
 class DepthOnlyDrawGate(unittest.TestCase):

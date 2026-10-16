@@ -38,7 +38,7 @@ void AgxWin32AsahiBatchTraceDraw(struct agx_context *, struct agx_batch *, unsig
 int AgxWin32AsahiBatchBegin(struct agx_batch *);
 int AgxWin32AsahiBatchEnter(struct agx_batch *);
 int AgxWin32AsahiBatchPrepareDraw(struct agx_batch *,const struct pipe_draw_info *,
-    const struct pipe_draw_start_count_bias *);
+    const struct pipe_draw_indirect_info *,const struct pipe_draw_start_count_bias *);
 int AgxWin32AsahiBatchLeave(struct agx_batch *);
 int AgxWin32AsahiBatchComputeEnter(struct agx_batch *);
 int AgxWin32AsahiBatchComputeLeave(struct agx_batch *);

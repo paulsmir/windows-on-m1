@@ -234,11 +234,18 @@ int AgxWin32AsahiBatchLeave(struct agx_batch *batch) {
   --g->Entered;
   return 1;
 }
+/* EXP1308: an indirect draw takes its counts from its argument buffer (or a
+ * stream-output count); Asahi's own indirect draws pass no direct draws. */
+static int indirect_arguments(const struct pipe_draw_indirect_info *indirect) {
+  return indirect->buffer!=NULL || indirect->count_from_stream_output!=NULL;
+}
 int AgxWin32AsahiBatchPrepareDraw(struct agx_batch *batch,
-    const struct pipe_draw_info *info,const struct pipe_draw_start_count_bias *draw) {
+    const struct pipe_draw_info *info,const struct pipe_draw_indirect_info *indirect,
+    const struct pipe_draw_start_count_bias *draw) {
   AGX_G4_BATCH *g=capsule(batch);
-  return g && !g->Submitted && !g->Rejected && info && draw &&
-         draw->count && info->instance_count;
+  return g && !g->Submitted && !g->Rejected && info &&
+         (indirect ? indirect_arguments(indirect) :
+                     draw && draw->count && info->instance_count);
 }
 int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx,
     const struct pipe_draw_info *info,unsigned drawid,
@@ -247,15 +254,17 @@ int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx,
   (void)drawid;
   /* EXP1288: or no colour buffer and a depth buffer -- the depth-only pass
    * the batch gate and the KMD admit (D3D-G7). */
-  return ctx && !ctx->any_faults && info && draws && count && !indirect &&
-         info->instance_count &&
+  return ctx && !ctx->any_faults && info &&
+         (indirect ? indirect_arguments(indirect) :
+                     draws && count && info->instance_count) &&
          (ctx->framebuffer.nr_cbufs ? ctx->framebuffer.cbufs[0].texture != NULL :
           ctx->framebuffer.zsbuf.texture != NULL);
 }
 /* EXP1063: a draw DrawAllowed refuses has touched no batch state, so it is
  * dropped instead of poisoning the context (EXP1062: Notepad lost every
  * later flush after one such draw). The first refusals are reported
- * (reject-batch kind 6): reason bits 1 no draw, 2 indirect, 4 no instances,
+ * (reject-batch kind 6): reason bits 1 no draw, 2 indirect without
+ * arguments (EXP1308; before it every indirect draw), 4 no instances,
  * 8 neither a color nor a depth buffer, 16 color buffer 0 unbound;
  * nr_cbufs | depth << 8; vertex count. */
 int AgxWin32AsahiBatchDrawRefused(struct agx_context *ctx,
@@ -265,9 +274,12 @@ int AgxWin32AsahiBatchDrawRefused(struct agx_context *ctx,
   static unsigned reported;
   unsigned reason=0u;
   if(!ctx) return 1;
-  if(!info || !draws || !count) reason|=1u;
-  if(indirect) reason|=2u;
-  if(info && !info->instance_count) reason|=4u;
+  if(indirect) {
+    if(!indirect_arguments(indirect)) reason|=2u;
+  } else {
+    if(!info || !draws || !count) reason|=1u;
+    if(info && !info->instance_count) reason|=4u;
+  }
   if(!ctx->framebuffer.nr_cbufs) {
     if(!ctx->framebuffer.zsbuf.texture) reason|=8u;
   } else if(!ctx->framebuffer.cbufs[0].texture) reason|=16u;

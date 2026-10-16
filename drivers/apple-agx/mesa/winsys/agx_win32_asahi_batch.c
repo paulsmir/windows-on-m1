@@ -177,10 +177,12 @@ int AgxWin32AsahiBatchEnter(struct agx_batch *b) {
 }
 int AgxWin32AsahiBatchPrepareDraw(struct agx_batch *b,
     const struct pipe_draw_info *info,
+    const struct pipe_draw_indirect_info *indirect,
     const struct pipe_draw_start_count_bias *draws) {
   AGX_WIN32_ASAHI_BATCH *c=capsule(b);
   APPLE_AGX_U32 topology=0;
-  if(!c || !info || !draws || c->Entered || c->Submitted || c->Rejected ||
+  /* the capture path draws direct triangle lists only */
+  if(!c || !info || indirect || !draws || c->Entered || c->Submitted || c->Rejected ||
      draws->count>0x01000000u || !info->instance_count ||
      !draw_contract(info->mode,draws->count,&topology))
     return 0;

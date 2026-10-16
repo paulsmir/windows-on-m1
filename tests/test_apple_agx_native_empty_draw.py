@@ -71,7 +71,8 @@ static int AgxWin32AsahiBatchDrawRefused(struct agx_context *ctx, const struct p
   return ctx->refusal_poisons;
 }
 static int AgxWin32AsahiBatchPrepareDraw(struct agx_batch *b, const struct pipe_draw_info *info,
-    const struct pipe_draw_start_count_bias *draw) {
+    const struct pipe_draw_indirect_info *indirect, const struct pipe_draw_start_count_bias *draw) {
+  (void)indirect;
   (void)b;
   return !current->prepare_fails && info && draw && draw->count && info->instance_count;
 }
