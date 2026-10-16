@@ -234,8 +234,9 @@ typedef struct _ADMISSION_POOL_RUNTIME {
   ULONG LastWindowResult;
   /* Receipt staging: committed granules and failure total last staged. */
   ULONGLONG StagedGranules, StagedFailures, StagedReserved;
-  /* M2-f7: \KernelObjects\LowMemoryCondition (referenced), or NULL. */
-  PKEVENT LowMemory;
+  /* M2-f7: \KernelObjects\HighMemoryCondition and LowMemoryCondition
+   * (referenced), or NULL. */
+  PKEVENT HighMemory, LowMemory;
 } ADMISSION_POOL_RUNTIME;
 
 static ULONGLONG AdmissionPoolElapsedUs(LARGE_INTEGER Start) {
@@ -557,6 +558,7 @@ static VOID AdmissionPoolReclaimDpc(_In_ PKDPC Dpc, _In_opt_ PVOID Opaque,
 }
 
 static VOID AdmissionPoolDemandFree(ADMISSION_POOL_RUNTIME *Pool) {
+  if (Pool->HighMemory) ObDereferenceObject(Pool->HighMemory);
   if (Pool->LowMemory) ObDereferenceObject(Pool->LowMemory);
   if (Pool->Work) IoFreeWorkItem(Pool->Work);
   if (Pool->SlotOf) ExFreePoolWithTag(Pool->SlotOf, ADMISSION_POOL_TAG);
@@ -626,24 +628,29 @@ static ULONGLONG AdmissionPoolRamBytes(VOID) {
 }
 
 /* M2-f7 (EXP1304/EXP1305: the guest starved with 2 GiB of render targets
- * and RAM locked to 384 MiB available): a reservation takes no slab from
- * Windows while free physical memory is below the system's low-memory
- * threshold, so CreateAllocation reports STATUS_NO_MEMORY instead of the
- * pool taking the last free pages (Microsoft: Standard Event Objects). */
+ * and RAM locked to 384 MiB available; EXP1305's tool saw 12 MiB available
+ * and its first E_OUTOFMEMORY at 32 MiB, i.e. at about the low-memory
+ * threshold): a reservation takes a new slab from Windows only while free
+ * physical memory is above the system's high-memory threshold, so
+ * CreateAllocation reports STATUS_NO_MEMORY while Windows still has room to
+ * run (Microsoft: Standard Event Objects). Without that event the
+ * low-memory event is the gate; without either, no gate. */
 static int AdmissionPoolMayGrow(void *Opaque) {
   ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Opaque;
+  if (pool->HighMemory != NULL) return KeReadStateEvent(pool->HighMemory) != 0;
   return pool->LowMemory == NULL || KeReadStateEvent(pool->LowMemory) == 0;
 }
 
-static VOID AdmissionPoolOpenLowMemory(ADMISSION_POOL_RUNTIME *Pool) {
-  UNICODE_STRING name =
-      RTL_CONSTANT_STRING(L"\\KernelObjects\\LowMemoryCondition");
+static PKEVENT AdmissionPoolOpenEvent(PCWSTR Name) {
+  UNICODE_STRING name;
   HANDLE handle = NULL;
-  PKEVENT event = IoCreateNotificationEvent(&name, &handle);
-  if (event == NULL) return;
+  PKEVENT event;
+  RtlInitUnicodeString(&name, Name);
+  event = IoCreateNotificationEvent(&name, &handle);
+  if (event == NULL) return NULL;
   ObReferenceObject(event);
   ZwClose(handle);
-  Pool->LowMemory = event;
+  return event;
 }
 
 /* An empty segment over the window, sized for this machine (M2-f4a,
@@ -692,7 +699,8 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
   pool->Slabs.Context = pool;
   pool->Slabs.NewSlab = AdmissionPoolNewSlab;
   pool->Slabs.FreeSlab = AdmissionPoolFreeSlab;
-  AdmissionPoolOpenLowMemory(pool);
+  pool->HighMemory = AdmissionPoolOpenEvent(L"\\KernelObjects\\HighMemoryCondition");
+  pool->LowMemory = AdmissionPoolOpenEvent(L"\\KernelObjects\\LowMemoryCondition");
   pool->Slabs.MayGrow = AdmissionPoolMayGrow;
   pool->Slabs.SpareLimit = ADMISSION_POOL_SPARE_SLABS;
   /* M2-f5: VidMm never places more than the segment. */

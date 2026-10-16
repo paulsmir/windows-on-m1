@@ -32,8 +32,8 @@ typedef struct _ADMISSION_POOL_SLABS {
    * here), or 0 when Windows has no pages. */
   ADMISSION_POOL_SLAB *(*NewSlab)(void *Context);
   void (*FreeSlab)(void *Context, ADMISSION_POOL_SLAB *Slab);
-  /* M2-f7: 0 while Windows reports low memory (LowMemoryCondition): a
-   * reservation then takes no slab from Windows. Optional; the paging path
+  /* M2-f7: 0 while Windows has too little free memory (pool_windows.c:
+   * HighMemoryCondition not set): a reservation then takes no slab. Optional; the paging path
    * (Take) is not gated, its failure poisons a process (M2-f5). */
   int (*MayGrow)(void *Context);
   ADMISSION_POOL_SLAB *List;

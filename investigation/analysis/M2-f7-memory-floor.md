@@ -28,11 +28,20 @@
 Unchanged. Segment-3 pages are 64 KiB granules in 2 MiB slabs below the HVC limit, mapped through
 the m1n1 pool window (M2-f3).
 
+- EXP1305, collected after the guest recovered by itself: available memory fell to 12 MiB at
+  2048 MiB of textures, and the first E_OUTOFMEMORY came at 71 textures (2272 MiB) with 32 MiB
+  available. That is about the low-memory threshold (Windows Internals: 32-64 MiB; the
+  high-memory threshold is about three times that). The device was not removed, the readback
+  verified, and 3451 MiB was available after release. Gating on LowMemoryCondition alone would
+  therefore refuse at almost the same point as today. The gate is HighMemoryCondition.
+
 ## TRANSLATION
 
 `AdmissionPoolSlabReserve`, the CreateAllocation path, asks `MayGrow` before taking each new slab.
-On Windows, `MayGrow` is `KeReadStateEvent(LowMemoryCondition) == 0`. While the event is set, a
-reservation the held slabs cannot cover is refused. The result is ReserveFailures + 1 and
+On Windows, `MayGrow` is `KeReadStateEvent(HighMemoryCondition) != 0`: free physical memory is
+above the system's high threshold. LowMemoryCondition clear is the fallback when the high event
+cannot be opened. While growth is not allowed, a reservation the held slabs cannot cover is
+refused. The result is ReserveFailures + 1 and
 FloorRefusals + 1, with no NewSlabFailures. CreateAllocation then fails with STATUS_NO_MEMORY.
 
 The paging path (`AdmissionPoolSlabTake`, a move's overlap) is not gated. A refusal there poisons a
