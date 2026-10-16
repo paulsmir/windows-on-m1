@@ -548,6 +548,14 @@ int main(void) {
       assert((get64(objects[18].Data + 0x3f4u) & 0xffffffffULL) == 8u);
       assert((get64(objects[18].Data + 0x6d0u) & 0xffffffffULL) == 8u);
       assert((get64(objects[18].Data + 0x50u) & 0xffffffffULL) == 4u);
+      /* EXP1309: TilingParameters.tiles_per_mtile counts 32x32 tiles, not
+       * utiles (Asahi queue/render.rs get_tiling_params; fw/vertex.rs
+       * offset 0x1c): 1280x720 has 12x8 tiles per macro tile whatever the
+       * utile; the TPC stride counts utiles (2 per 32x16-utile tile). With
+       * the utile count the tiler covered only the top half (32x16) or the
+       * top-left quarter (16x16) of a 4x render. */
+      assert((get64(objects[19].Data + 0x3e0u) & 0xffffffffULL) == 96ULL);
+      assert((get64(objects[19].Data + 0x3e4u) & 0xffffffffULL) == 384ULL);
       ms.Samples = 2u;
       assert(AppleAgxG4PatchRenderScalars(&ms, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));

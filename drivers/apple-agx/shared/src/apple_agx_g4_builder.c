@@ -349,10 +349,13 @@ APPLE_AGX_BOOL AppleAgxG4PatchRenderScalars(
   g4_put32(ta + 0x3d4u, tile_counts);
   g4_put32(ta + 0x3d8u, mtile1);
   g4_put32(ta + 0x3dcu, mtile2);
-  /* TilingParameters size2: macro-tile stride (utiles per macro tile); size3
-   * below is twice it. m1n1 agx/render.py and the EXP208 full-screen template
-   * agree (2560x1600 -> 320). A packed x/y pair broke multi-macro-tile scenes. */
-  g4_put32(ta + 0x3e0u, utiles_x * utiles_y);
+  /* TilingParameters tiles_per_mtile (Asahi fw/vertex.rs, queue/render.rs
+   * get_tiling_params): 32x32 tiles per macro tile -- equal to the utile count
+   * only for 32x32 utiles (EXP208 2560x1600 -> 320). EXP1309: with the utile
+   * count a 4x render (32x16 or 16x16 utiles) was tiled over half or a
+   * quarter of its area. The TPC stride below counts utiles (8 bytes each,
+   * in words). A packed x/y pair broke multi-macro-tile scenes (R163). */
+  g4_put32(ta + 0x3e0u, mtile_x * mtile_y);
   g4_put32(ta + 0x3e4u, tpc_stride);
   g4_put32(ta + 0x3e8u, 0x100u);
   g4_put32(ta + 0x3ecu, 0x8000u);
