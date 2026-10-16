@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <wingdi.h>
+#include <signal.h>
 
 /* d3d10umddi.h includes d3dkmddi.h, which expects this kernel-style type. */
 typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
@@ -425,6 +426,53 @@ static void AdmissionUmdCxxThrowReceipt(EXCEPTION_POINTERS *Info) {
   AdmissionUmdDiagnosticFlush();
 }
 
+/* EXP1333 receipt-only: WindowsTerminal's fail-fast is abort()
+ * (FAST_FAIL_FATAL_APP_EXIT) with no C++ throw before it -- a throw inside a
+ * noexcept function compiles to std::terminate. abort() raises SIGABRT in
+ * the shared ucrtbase first, so this handler records the first eight frames
+ * outside the CRT and this UMD, flushes the trace, and hands over to the
+ * handler it replaced; abort then fails fast exactly as before. */
+typedef void (__cdecl *ADMISSION_UMD_SIGNAL_HANDLER)(int);
+static ADMISSION_UMD_SIGNAL_HANDLER AdmissionUmdPreviousAbort;
+static BOOLEAN AdmissionUmdAbortInstalled;
+
+static void __cdecl AdmissionUmdAbortReceipt(int Signal) {
+  PVOID backtrace[48];
+  UINT frames[13] = {0}, more[13] = {0};
+  UINT found = 0u;
+  HMODULE self = NULL;
+  USHORT count = CaptureStackBackTrace(0u, ARRAYSIZE(backtrace), backtrace, NULL);
+  (void)GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (LPCWSTR)&AdmissionUmdPreviousAbort, &self);
+  frames[0] = more[0] = GetCurrentThreadId();
+  for (USHORT i = 0u; i < count && found < 8u; ++i) {
+    UINT name[2], offset;
+    HMODULE module = NULL;
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (LPCWSTR)backtrace[i], &module) && module == self)
+      continue;
+    AdmissionUmdModuleOffset((ULONG_PTR)backtrace[i], name, &offset);
+    if (name[0] == 0u || AdmissionUmdThrowMachinery(name)) continue;
+    UINT *out = found < 4u ? frames : more;
+    UINT slot = found % 4u;
+    out[1u + 3u * slot] = name[0];
+    out[2u + 3u * slot] = name[1];
+    out[3u + 3u * slot] = offset;
+    ++found;
+  }
+  AdmissionUmdDiagnostic("reject-abort-stack", E_ABORT, frames, 13u);
+  if (found > 4u)
+    AdmissionUmdDiagnostic("reject-abort-stack", E_ABORT, more, 13u);
+  AdmissionUmdDiagnosticFlush();
+  if (AdmissionUmdPreviousAbort != SIG_DFL &&
+      AdmissionUmdPreviousAbort != SIG_IGN &&
+      AdmissionUmdPreviousAbort != SIG_ERR &&
+      AdmissionUmdPreviousAbort != NULL)
+    AdmissionUmdPreviousAbort(Signal);
+}
+
 static LONG CALLBACK AdmissionUmdFaultReceipt(EXCEPTION_POINTERS *Info) {
   if (Info != NULL && Info->ExceptionRecord != NULL && Info->ContextRecord != NULL &&
       Info->ExceptionRecord->ExceptionCode == 0xE06D7363u &&
@@ -440,9 +488,26 @@ BOOL WINAPI DllMain(HINSTANCE Instance, DWORD Reason, LPVOID Reserved) {
   if (Reason == DLL_PROCESS_ATTACH && AdmissionUmdNullCallHandler == NULL)
     AdmissionUmdNullCallHandler =
         AddVectoredExceptionHandler(0u, AdmissionUmdFaultReceipt);
+  if (Reason == DLL_PROCESS_ATTACH && !AdmissionUmdAbortInstalled) {
+    ADMISSION_UMD_SIGNAL_HANDLER previous =
+        signal(SIGABRT, AdmissionUmdAbortReceipt);
+    if (previous != SIG_ERR) {
+      AdmissionUmdPreviousAbort = previous;
+      AdmissionUmdAbortInstalled = TRUE;
+    }
+  }
   if (Reason == DLL_PROCESS_DETACH) {
     if (AdmissionUmdNullCallHandler != NULL && Reserved == NULL)
       RemoveVectoredExceptionHandler(AdmissionUmdNullCallHandler);
+    /* Unloaded while the process runs: give SIGABRT back, keeping a handler
+     * someone installed after ours. */
+    if (AdmissionUmdAbortInstalled && Reserved == NULL) {
+      ADMISSION_UMD_SIGNAL_HANDLER current =
+          signal(SIGABRT, AdmissionUmdPreviousAbort);
+      if (current != AdmissionUmdAbortReceipt && current != SIG_ERR)
+        (void)signal(SIGABRT, current);
+      AdmissionUmdAbortInstalled = FALSE;
+    }
     AdmissionUmdDiagnosticFlush();
   }
   return TRUE;
