@@ -4669,10 +4669,6 @@ AgxD3d10ResourceWithinRequiredLimits(
    Resource *resource = CastResource(hResource);
    bool dynamicBuffer = resource && resource->buffer &&
       resource->usage == D3D10_DDI_USAGE_DYNAMIC;
-   bool noOverwriteBuffer = dynamicBuffer &&
-      (resource->bind_flags &
-       (D3D10_DDI_BIND_VERTEX_BUFFER|D3D10_DDI_BIND_INDEX_BUFFER)) &&
-      !(resource->bind_flags&D3D10_DDI_BIND_SHADER_RESOURCE);
    bool dynamicTexture = resource && !resource->buffer &&
       resource->usage == D3D10_DDI_USAGE_DYNAMIC &&
       resource->bind_flags == D3D10_DDI_BIND_SHADER_RESOURCE &&
@@ -4687,9 +4683,17 @@ AgxD3d10ResourceWithinRequiredLimits(
        (DDIMap == D3D10_DDI_MAP_READWRITE &&
         (resource->cpu_access & D3D10_DDI_CPU_ACCESS_MASK) ==
           D3D10_DDI_CPU_ACCESS_MASK));
+   /* D3D11.1 DDI: the runtime reports ConstantBufferOffsetting with
+    * MapNoOverwriteOnDynamicConstantBuffer (one grouping alongside ClearView)
+    * and MapNoOverwriteOnDynamicBufferSRV with
+    * MultisampleRTVWithForcedSampleCountOne, then sends WRITE_NOOVERWRITE for
+    * dynamic constant and shader-resource buffers too (EXP1325: 5760 maps
+    * refused on the FL 11_0 desktop). Every dynamic buffer is backed the same
+    * way, so NO_OVERWRITE maps its current BO whatever it is bound as; the
+    * runtime validates the API rules. */
    bool mapMode = dynamicBuffer ?
       (DDIMap == D3D10_DDI_MAP_WRITE_DISCARD ||
-       (DDIMap == D3D10_DDI_MAP_WRITE_NOOVERWRITE && noOverwriteBuffer)) :
+       DDIMap == D3D10_DDI_MAP_WRITE_NOOVERWRITE) :
       dynamicTexture ? DDIMap == D3D10_DDI_MAP_WRITE_DISCARD :
       stagingAccess;
    if (!device || !resource || resource->owner_device != device ||
@@ -4699,8 +4703,7 @@ AgxD3d10ResourceWithinRequiredLimits(
        (Flags & ~D3D10_DDI_MAP_FLAG_DONOTWAIT) || !pMappedSubResource || !mapMode ||
        (Flags && (DDIMap == D3D10_DDI_MAP_WRITE_DISCARD ||
                   DDIMap == D3D10_DDI_MAP_WRITE_NOOVERWRITE)) ||
-       resource->transfers[SubResource] ||
-       (resource->constant_buffer && DDIMap != D3D10_DDI_MAP_WRITE_DISCARD)) {
+       resource->transfers[SubResource]) {
       /* EXP1325 receipt-only: the FL 11_0 desktop refused 5760 maps here;
        * the resource and request show which rule fails. */
       static volatile LONG mapRefusals;
