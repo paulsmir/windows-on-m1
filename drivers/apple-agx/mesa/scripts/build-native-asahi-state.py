@@ -1244,6 +1244,14 @@ AgxResolveSharedResource(DXGI_DDI_ARG_RESOLVESHAREDRESOURCE *args)
    if(IS_DXGI1_1_BASE_FUNCTIONS(pCreateData->Interface,pCreateData->Version))
       pCreateData->DXGIBaseDDI.pDXGIDDIBaseFunctions2->pfnResolveSharedResource =
          AgxResolveSharedResource;
+   /* EXP1328: AgxWddm2_0FillDxgiFuncs keeps the DXGI 1.1 entries for Present1
+    * and Blt1, so it runs after they are written. Filled before them, it kept
+    * a NULL pfnPresent and pfnBlt and every Present1 on a WDDM 2.0 (FL 11_0)
+    * device called address 0 (dwm.exe, M365Copilot, opengl32's redirection:
+    * d3d11!NDXGI::CDevice::PresentImpl -> Present1 -> 0). */
+   if(pCreateData->Interface == D3DWDDM2_0_DDI_INTERFACE_VERSION &&
+      IS_DXGI1_4_BASE_FUNCTIONS(pCreateData->Interface,pCreateData->Version))
+      AgxWddm2_0FillDxgiFuncs(pCreateData->DXGIBaseDDI.pDXGIDDIBaseFunctions5);
    UINT present_contract[3] = { (UINT)pCreateData->Interface,
       (UINT)pCreateData->Version,
       IS_DXGI1_3_BASE_FUNCTIONS(pCreateData->Interface,pCreateData->Version) };
@@ -1533,13 +1541,12 @@ void APIENTRY
       const D3D10DDI_DEVICEFUNCS base = *pDeviceFuncs;
       AgxD3d11FillDeviceFuncs(pCreateData->p11DeviceFuncs, &base);
    }
-   /* D3D-H7: the WDDM 2.0 table (agx_wddm2_ddi.cpp) over the same memory,
-    * its DXGI 1.2-1.4 entries and the (absent) video sub-device */
+   /* D3D-H7: the WDDM 2.0 table (agx_wddm2_ddi.cpp) over the same memory
+    * and the (absent) video sub-device; its DXGI 1.2-1.4 entries follow the
+    * DXGI 1.1 ones below */
    if (pCreateData->Interface == D3DWDDM2_0_DDI_INTERFACE_VERSION) {
       const D3D10DDI_DEVICEFUNCS base = *pDeviceFuncs;
       AgxWddm2_0FillDeviceFuncs(pCreateData->pWDDM2_0DeviceFuncs, &base);
-      if (IS_DXGI1_4_BASE_FUNCTIONS(pCreateData->Interface, pCreateData->Version))
-         AgxWddm2_0FillDxgiFuncs(pCreateData->DXGIBaseDDI.pDXGIDDIBaseFunctions5);
       if (pCreateData->ppfnRetrieveSubObject)
          *pCreateData->ppfnRetrieveSubObject = AgxWddm2_0RetrieveSubObject;
    }''')])
