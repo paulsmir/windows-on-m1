@@ -121,6 +121,46 @@ unsigned AppleAgxG13ComputeWorkContractTests(void) {
     assert(get32(seq+0x1c8)==0xfffffe90u);
     assert(get64(seq+0x1dd)==m.WorkGpuAddress+0x305);
     assert(get32(seq+0x1ec)==0x40000018u);
+    {
+      /* GPU timestamps (Asahi queue/compute.rs): Timestamp(start) and
+       * Timestamp(end) around WaitForIdle(Compute), FinalizeCompute and
+       * RetireStamp moved behind them, the back offset recomputed. */
+      unsigned char ts[APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_TIMESTAMP_BYTES];
+      const unsigned long long w=m.WorkGpuAddress;
+      _Static_assert(APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_TIMESTAMP_BYTES==0x268u,
+                     "timestamp microsequence bytes");
+      memset(ts,0xa5,sizeof(ts));
+      assert(AppleAgxG13ComputeMicrosequenceBuildTimestamps(&m,ts));
+      assert(!memcmp(ts,seq,0x16c));
+      for(unsigned k=0;k<2;++k) {
+        const unsigned char *op=ts+(k?0x1ac:0x16c);
+        assert(get32(op)==(k?0x19u:0x80000019u));
+        assert(get64(op+0x04)==w+0x2b0 && get64(op+0x0c)==w+0x2b8);
+        assert(get64(op+0x14)==w+(k?0x2c0:0x2b8));
+        assert(get64(op+0x1c)==m.QueueInfoGpuAddress);
+        assert(get64(op+0x24)==w+0x2c8 && get64(op+0x2c)==w+0x2e1);
+        assert(get32(op+0x34)==0 && get32(op+0x38)==0);
+      }
+      assert(get32(ts+0x1a8)==0x00800001u);
+      assert(!memcmp(ts+0x1e8,seq+0x170,0x58));
+      assert(get32(ts+0x1e8+0x58)==0xfffffe18u);
+      assert(!memcmp(ts+0x1e8+0x5c,seq+0x170+0x5c,0x7c-0x5c));
+      assert(get32(ts+0x264)==0x40000018u);
+    }
+  }
+  {
+    /* The work names the timestamp block when one is requested. */
+    unsigned char before[sizeof(work)];
+    i.CdmStreamEnd=i.CdmStreamBase+0x200;i.TimestampGpuAddress=0x1500800000ULL;
+    assert(AppleAgxG13ComputeWorkBuild(&i,work));
+    assert(get64(work+0x2b8)==0x1500800000ULL && get64(work+0x2c0)==0x1500800008ULL);
+    assert(get64(work+0x2c8)==0x1500800010ULL && get64(work+0x2d0)==0x1500800018ULL);
+    assert(get64(work+0x2b0)==0 && work[0x2d8]==5);
+    memcpy(before,work,sizeof(work));
+    i.TimestampGpuAddress=0x1500800004ULL;
+    assert(!AppleAgxG13ComputeWorkBuild(&i,work) && !memcmp(work,before,sizeof(work)));
+    i.TimestampGpuAddress=0;
+    assert(AppleAgxG13ComputeWorkBuild(&i,work) && get64(work+0x2b8)==0 && get64(work+0x2c8)==0);
   }
   return failures;
 }

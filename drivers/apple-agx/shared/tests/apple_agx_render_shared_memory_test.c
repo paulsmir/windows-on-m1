@@ -262,6 +262,37 @@ int main(void) {
         assert(!AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
         input.HelperProgram=0u;
       }
+      {
+        /* GPU timestamps: the job runs the timestamp microsequence and names
+         * the sidecar timestamp block; the plain job keeps its sequence. */
+        const unsigned char *side=(const unsigned char *)output.SidecarCpuAddress;
+        const APPLE_AGX_U64 gpu=owner.VirtualAddresses[
+            APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR];
+        APPLE_AGX_U64 seq=0u,ts=0u;APPLE_AGX_U32 bytes=0u,op=0u;
+        assert(APPLE_AGX_COMPUTE_TIMESTAMP_MICROSEQUENCE_OFFSET>=
+               APPLE_AGX_COMPUTE_TA_BARRIER_OFFSET+APPLE_AGX_G13_BARRIER_BYTES &&
+               APPLE_AGX_COMPUTE_TIMESTAMP_MICROSEQUENCE_OFFSET+
+               APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_TIMESTAMP_BYTES<=
+               APPLE_AGX_COMPUTE_TIMESTAMP_OFFSET &&
+               APPLE_AGX_COMPUTE_TIMESTAMP_OFFSET+APPLE_AGX_G13_TIMESTAMP_BLOCK_BYTES<=
+               APPLE_AGX_COMPUTE_GPU_BUFFER_OFFSET);
+        assert(output.TimestampCpuAddress==NULL);
+        input.Timestamps=1u;
+        assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+        assert(output.TimestampCpuAddress==side+APPLE_AGX_COMPUTE_TIMESTAMP_OFFSET);
+        memcpy(&seq,work+0x1f0u,8);memcpy(&bytes,work+0x1f8u,4);
+        memcpy(&ts,work+0x2c8u,8);
+        memcpy(&op,side+APPLE_AGX_COMPUTE_TIMESTAMP_MICROSEQUENCE_OFFSET+0x16cu,4);
+        assert(seq==gpu+APPLE_AGX_COMPUTE_TIMESTAMP_MICROSEQUENCE_OFFSET &&
+               bytes==APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_TIMESTAMP_BYTES &&
+               ts==gpu+APPLE_AGX_COMPUTE_TIMESTAMP_OFFSET+0x10u && op==0x80000019u);
+        input.Timestamps=0u;
+        assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+        memcpy(&seq,work+0x1f0u,8);memcpy(&bytes,work+0x1f8u,4);memcpy(&ts,work+0x2c8u,8);
+        assert(seq==gpu+APPLE_AGX_COMPUTE_MICROSEQUENCE_OFFSET &&
+               bytes==APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_BYTES && ts==0u &&
+               output.TimestampCpuAddress==NULL);
+      }
     }
     {
       /* D3D-G1b: the TA queue's Barrier on the compute stamp has the G13

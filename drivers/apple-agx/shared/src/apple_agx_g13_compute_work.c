@@ -36,7 +36,9 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13ComputeWorkBuild(
      ((i->HelperProgram==0u)!=(i->HelperArgument==0u))||
      /* Mesa's configuration is the preamble scratch << 16, 0 when the
       * preamble needs none (EXP1339); never set without a program. */
-     (i->HelperProgram==0u&&i->HelperConfig!=0u))
+     (i->HelperProgram==0u&&i->HelperConfig!=0u)||
+     (i->TimestampGpuAddress&7u)||
+     i->TimestampGpuAddress>~0ULL-APPLE_AGX_G13_TIMESTAMP_BLOCK_BYTES)
     return APPLE_AGX_BACKEND_FALSE;
   if(i->PreemptionGpuAddress>~0ULL-(APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES-8u))
     return APPLE_AGX_BACKEND_FALSE;
@@ -72,14 +74,39 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13ComputeWorkBuild(
   put32(work+0x29cu,i->StampSlot);
   put32(work+0x2a0u,i->EventControlIndex);
   put32(work+0x2acu,i->EventSequence);
+  if(i->TimestampGpuAddress) {
+    /* command_time 0x2b0 stays the firmware's; timestamp_pointers and
+     * user_timestamp_pointers (fw/compute.rs RunCompute). */
+    put64(work+0x2b8u,i->TimestampGpuAddress);
+    put64(work+0x2c0u,i->TimestampGpuAddress+0x08u);
+    put64(work+0x2c8u,i->TimestampGpuAddress+0x10u);
+    put64(work+0x2d0u,i->TimestampGpuAddress+0x18u);
+  }
   work[0x2d8u]=(unsigned char)i->ClientSequence;
   return APPLE_AGX_BACKEND_TRUE;
 }
 
-APPLE_AGX_BACKEND_BOOL AppleAgxG13ComputeMicrosequenceBuild(
+/* microseq::Timestamp::ver<G13,V13_5> (Asahi fw/microseq.rs): header
+ * 0x19 | start << 31, command_time, ts_pointers, update_ts (the start or end
+ * slot of ts_pointers), work_queue, user_ts_pointers, unk_ts
+ * (&context_store_req, 0x2e1), uuid 0, padding. */
+static void timestamp_op(unsigned char *op,
+                         const APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_INPUT *i,
+                         int start) {
+  put32(op+0x00u,0x19u|(start?0x80000000u:0u));
+  put64(op+0x04u,i->WorkGpuAddress+0x2b0u);
+  put64(op+0x0cu,i->WorkGpuAddress+0x2b8u);
+  put64(op+0x14u,i->WorkGpuAddress+(start?0x2b8u:0x2c0u));
+  put64(op+0x1cu,i->QueueInfoGpuAddress);
+  put64(op+0x24u,i->WorkGpuAddress+0x2c8u);
+  put64(op+0x2cu,i->WorkGpuAddress+0x2e1u);
+}
+
+static APPLE_AGX_BACKEND_BOOL build_microsequence(
     const APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_INPUT *i,
-    unsigned char seq[APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_BYTES]) {
-  const APPLE_AGX_BACKEND_U32 finalize=0x170u;
+    unsigned char *seq, int timestamps) {
+  const APPLE_AGX_BACKEND_U32 ts=timestamps?APPLE_AGX_G13_TIMESTAMP_OP_BYTES:0u;
+  const APPLE_AGX_BACKEND_U32 finalize=0x170u+2u*ts;
   if(!i||!seq||!aligned(i->WorkGpuAddress,4u)||
      !aligned(i->StatisticsGpuAddress,4u)||
      !aligned(i->QueueInfoGpuAddress,8u)||
@@ -88,8 +115,8 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13ComputeMicrosequenceBuild(
      !i->EventSequence||i->VmSlot>=0x10u||
      !i->StampValue||i->WorkGpuAddress>~0ULL-0x309u)
     return APPLE_AGX_BACKEND_FALSE;
-  zero(seq,APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_BYTES);
-  /* StartCompute::ver<G13,V13_5>, no attachments or timestamps. */
+  zero(seq,APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_BYTES+2u*ts);
+  /* StartCompute::ver<G13,V13_5>, no attachments. */
   put32(seq+0x000u,0x29u);
   put64(seq+0x004u,i->WorkGpuAddress+0x1cu);
   put64(seq+0x00cu,i->WorkGpuAddress+0x70u);
@@ -102,8 +129,10 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13ComputeMicrosequenceBuild(
   put64(seq+0x154u,i->WorkGpuAddress+0x305u);
   put64(seq+0x15cu,i->Counter);
   put64(seq+0x164u,i->NotifierBufferGpuAddress);
-  /* WaitForIdle(Compute). */
-  put32(seq+0x16cu,0x00800001u);
+  /* [Timestamp(start)] WaitForIdle(Compute) [Timestamp(end)]. */
+  if(timestamps) timestamp_op(seq+0x16cu,i,1);
+  put32(seq+0x16cu+ts,0x00800001u);
+  if(timestamps) timestamp_op(seq+0x170u+ts,i,0);
   /* FinalizeCompute::ver<G13,V13_5>. */
   put32(seq+finalize+0x00u,0x2au);
   put64(seq+finalize+0x04u,i->StatisticsGpuAddress);
@@ -115,6 +144,18 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13ComputeMicrosequenceBuild(
   put32(seq+finalize+0x58u,(APPLE_AGX_BACKEND_U32)(0u-finalize));
   put64(seq+finalize+0x6du,i->WorkGpuAddress+0x305u);
   /* RetireStamp with the source-defined 0x40000000 argument. */
-  put32(seq+0x1ecu,0x40000018u);
+  put32(seq+finalize+0x7cu,0x40000018u);
   return APPLE_AGX_BACKEND_TRUE;
+}
+
+APPLE_AGX_BACKEND_BOOL AppleAgxG13ComputeMicrosequenceBuild(
+    const APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_INPUT *i,
+    unsigned char seq[APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_BYTES]) {
+  return build_microsequence(i,seq,0);
+}
+
+APPLE_AGX_BACKEND_BOOL AppleAgxG13ComputeMicrosequenceBuildTimestamps(
+    const APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_INPUT *i,
+    unsigned char seq[APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_TIMESTAMP_BYTES]) {
+  return build_microsequence(i,seq,1);
 }

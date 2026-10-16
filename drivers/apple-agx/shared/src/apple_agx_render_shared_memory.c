@@ -591,7 +591,14 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
   micro.EventGeneration=get_u32(control+APPLE_AGX_G13_NOTIFIER_GENERATION_OFFSET);
   micro.VmSlot=Input->VmSlot;
   micro.StampValue=Input->StampValue;
-  if(!AppleAgxG13ComputeMicrosequenceBuild(&micro,
+  if(Input->Timestamps) {
+    zero_bytes(sidecar+APPLE_AGX_COMPUTE_TIMESTAMP_MICROSEQUENCE_OFFSET,
+               APPLE_AGX_COMPUTE_TIMESTAMP_OFFSET+APPLE_AGX_G13_TIMESTAMP_BLOCK_BYTES-
+               APPLE_AGX_COMPUTE_TIMESTAMP_MICROSEQUENCE_OFFSET);
+    if(!AppleAgxG13ComputeMicrosequenceBuildTimestamps(&micro,
+        sidecar+APPLE_AGX_COMPUTE_TIMESTAMP_MICROSEQUENCE_OFFSET))
+      return APPLE_AGX_FALSE;
+  } else if(!AppleAgxG13ComputeMicrosequenceBuild(&micro,
       sidecar+APPLE_AGX_COMPUTE_MICROSEQUENCE_OFFSET)) return APPLE_AGX_FALSE;
   work.Counter=Input->Counter;work.VmSlot=Input->VmSlot;
   work.NotifierGpuAddress=notifier;
@@ -600,8 +607,14 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
   work.CdmStreamBase=Input->CdmStreamBase;
   work.CdmStreamEnd=Input->CdmStreamBase+Input->CdmStreamBytes;
   work.UscExecutionBase=Input->UscExecutionBase;
-  work.MicrosequenceGpuAddress=gpu+APPLE_AGX_COMPUTE_MICROSEQUENCE_OFFSET;
-  work.MicrosequenceBytes=APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_BYTES;
+  work.MicrosequenceGpuAddress=gpu+(Input->Timestamps ?
+      APPLE_AGX_COMPUTE_TIMESTAMP_MICROSEQUENCE_OFFSET :
+      APPLE_AGX_COMPUTE_MICROSEQUENCE_OFFSET);
+  work.MicrosequenceBytes=Input->Timestamps ?
+      APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_TIMESTAMP_BYTES :
+      APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_BYTES;
+  work.TimestampGpuAddress=Input->Timestamps ?
+      gpu+APPLE_AGX_COMPUTE_TIMESTAMP_OFFSET : 0u;
   work.StampGpuAddress=stamp;
   work.FirmwareStampGpuAddress=gpu+APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET;
   work.StampValue=Input->StampValue;work.StampSlot=Input->EventNumber;
@@ -626,6 +639,8 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
   Output->SidecarGpuAddress=gpu;Output->SidecarCpuAddress=sidecar;
   Output->SidecarBytes=0x10000u;
   Output->FirmwareStampGpuAddress=gpu+APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET;
+  Output->TimestampCpuAddress=Input->Timestamps ?
+      sidecar+APPLE_AGX_COMPUTE_TIMESTAMP_OFFSET : RENDER_SHARED_NULL;
   return APPLE_AGX_TRUE;
 }
 

@@ -33,6 +33,12 @@
 /* D3D-G1b: the TA queue's Barrier on the compute stamp (a render waiting on
  * its submission's compute), after the work-queue owned words. */
 #define APPLE_AGX_COMPUTE_TA_BARRIER_OFFSET 0x8800u
+/* GPU timestamps: a job that requests them runs the longer microsequence
+ * (Timestamp ops, APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_TIMESTAMP_BYTES) and
+ * the firmware writes the job/requested start and end into the block; both
+ * are job words, rebuilt with the job. */
+#define APPLE_AGX_COMPUTE_TIMESTAMP_MICROSEQUENCE_OFFSET 0x9000u
+#define APPLE_AGX_COMPUTE_TIMESTAMP_OFFSET 0x9400u
 /* The G13 firmware Barrier work item: the captured WorkCommandBarrier (render
  * template object 14) and Asahi fw/workqueue.rs raw::Barrier without the
  * G14X internal_barrier_type: tag 4 at 0x00, wait stamp pointer (u64) at
@@ -56,6 +62,9 @@ typedef struct _APPLE_AGX_RENDER_COMPUTE_INPUT {
    * queue/compute.rs passes it; all zero without one. */
   APPLE_AGX_U32 HelperProgram,HelperConfig;
   APPLE_AGX_U64 HelperArgument;
+  /* Nonzero: the job records GPU timestamps (Asahi drm_asahi_cmd_compute
+   * ts); Output->TimestampCpuAddress names the block. */
+  APPLE_AGX_U32 Timestamps;
 } APPLE_AGX_RENDER_COMPUTE_INPUT;
 
 typedef struct _APPLE_AGX_RENDER_COMPUTE_OUTPUT {
@@ -65,6 +74,9 @@ typedef struct _APPLE_AGX_RENDER_COMPUTE_OUTPUT {
   APPLE_AGX_U32 NotifierThreshold;
   /* The firmware stamp the compute work writes (a Barrier waits on it). */
   APPLE_AGX_U64 FirmwareStampGpuAddress;
+  /* The timestamp block (job start, job end, requested start, requested
+   * end; APPLE_AGX_G13_TIMESTAMP_BLOCK_BYTES), or NULL. */
+  const void *TimestampCpuAddress;
 } APPLE_AGX_RENDER_COMPUTE_OUTPUT;
 
 typedef struct _APPLE_AGX_RENDER_BARRIER_INPUT {
