@@ -3,7 +3,8 @@
  * Each case: TIMESTAMP_DISJOINT begin, TIMESTAMP t0, the work, TIMESTAMP
  * t1, disjoint end, flush, then GetData on all three (5 s bound).
  * - render: a 512x512 full-screen triangle whose pixel shader loops N times;
- * - compute: 256 groups of 64 threads, each looping N times.
+ * - compute: 4096 groups of 64 threads, each looping N times (EXP1341:
+ * 256 groups were lighter than a job round trip).
  * N = 1, 16384, 65536 (EXP1340: N <= 4096 took less GPU time than a job's
  * round trip, so t1 - t0 did not order). With GPU timestamps the disjoint
  * query reports 1 GHz and not disjoint, t1 > t0, and t1 - t0 of the
@@ -11,7 +12,9 @@
  * batch's firmware end when it is later than the CPU clock at End); each
  * line also gives the CPU time from End(t0) to the data. With the CPU
  * emulation it reports the counter frequency and disjoint (verdict CPU).
- * Usage: agx_timestamp_smoke.exe <out.txt> */
+ * EXP1341: compute cases unbind the render target first (keeprt keeps it,
+ * the EXP1340 shape) so the dispatch is a compute-only batch.
+ * Usage: agx_timestamp_smoke.exe <out.txt> [keeprt] */
 #define COBJMACROS
 #define INITGUID
 #include <windows.h>
@@ -24,6 +27,7 @@
 
 #define REL(p) do { if (p) IUnknown_Release((IUnknown *)(p)); } while (0)
 static HANDLE output = INVALID_HANDLE_VALUE;
+static int keep_rt;
 static volatile LONG started;
 static void say(const char *fmt, ...) {
   char line[512]; va_list args; DWORD written; int n;
@@ -93,10 +97,13 @@ static int measure(SETUP *s,int compute,UINT n,unsigned long long *delta) {
   QueryPerformanceCounter(&cpu0);
   ID3D11DeviceContext_End(s->ctx,(ID3D11Asynchronous *)t0);
   if (compute) {
+    /* A bound render target makes the dispatch the render batch's compute
+     * prelude (D3D-G1); "c" keeps it bound, the others unbind it first. */
+    if (!keep_rt) ID3D11DeviceContext_OMSetRenderTargets(s->ctx,0,NULL,NULL);
     ID3D11DeviceContext_CSSetShader(s->ctx,s->cs,NULL,0);
     ID3D11DeviceContext_CSSetConstantBuffers(s->ctx,0,1,&s->cb);
     ID3D11DeviceContext_CSSetUnorderedAccessViews(s->ctx,0,1,&s->uav,NULL);
-    ID3D11DeviceContext_Dispatch(s->ctx,256,1,1);
+    ID3D11DeviceContext_Dispatch(s->ctx,4096,1,1);
   } else {
     D3D11_VIEWPORT vp; const float clear[4]={0,0,1,1};
     memset(&vp,0,sizeof(vp)); vp.Width=512; vp.Height=512; vp.MaxDepth=1;
@@ -135,7 +142,8 @@ int main(int argc,char **argv) {
   SETUP s; ID3DBlob *vsc=NULL,*psc=NULL,*csc=NULL; D3D_FEATURE_LEVEL got; HRESULT hr;
   D3D11_BUFFER_DESC bd; D3D11_TEXTURE2D_DESC td; D3D11_RASTERIZER_DESC rd; D3D11_UNORDERED_ACCESS_VIEW_DESC ud;
   memset(&s,0,sizeof(s));
-  if(argc<2) { printf("usage: agx_timestamp_smoke.exe <out.txt>\n"); return 2; }
+  if(argc<2) { printf("usage: agx_timestamp_smoke.exe <out.txt> [keeprt]\n"); return 2; }
+  keep_rt = argc>2 && !strcmp(argv[2],"keeprt");
   output=CreateFileA(argv[1],GENERIC_WRITE,FILE_SHARE_READ,NULL,CREATE_ALWAYS,
                      FILE_ATTRIBUTE_NORMAL|FILE_FLAG_WRITE_THROUGH,NULL);
   watch=CreateThread(NULL,0,watchdog,NULL,0,NULL); if(watch) CloseHandle(watch);
@@ -164,11 +172,11 @@ int main(int argc,char **argv) {
   }
   memset(&bd,0,sizeof(bd)); bd.ByteWidth=16; bd.Usage=D3D11_USAGE_DEFAULT; bd.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
   hr=ID3D11Device_CreateBuffer(s.dev,&bd,NULL,&s.cb);
-  memset(&bd,0,sizeof(bd)); bd.ByteWidth=256*64*4; bd.Usage=D3D11_USAGE_DEFAULT;
+  memset(&bd,0,sizeof(bd)); bd.ByteWidth=4096*64*4; bd.Usage=D3D11_USAGE_DEFAULT;
   bd.BindFlags=D3D11_BIND_UNORDERED_ACCESS; bd.MiscFlags=D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS;
   if(SUCCEEDED(hr)) hr=ID3D11Device_CreateBuffer(s.dev,&bd,NULL,&s.dst);
   memset(&ud,0,sizeof(ud)); ud.Format=DXGI_FORMAT_R32_TYPELESS; ud.ViewDimension=D3D11_UAV_DIMENSION_BUFFER;
-  ud.Buffer.NumElements=256*64; ud.Buffer.Flags=D3D11_BUFFER_UAV_FLAG_RAW;
+  ud.Buffer.NumElements=4096*64; ud.Buffer.Flags=D3D11_BUFFER_UAV_FLAG_RAW;
   if(SUCCEEDED(hr)) hr=ID3D11Device_CreateUnorderedAccessView(s.dev,(ID3D11Resource *)s.dst,&ud,&s.uav);
   memset(&td,0,sizeof(td)); td.Width=512; td.Height=512; td.MipLevels=td.ArraySize=1;
   td.Format=DXGI_FORMAT_R8G8B8A8_UNORM; td.SampleDesc.Count=1; td.Usage=D3D11_USAGE_DEFAULT;
@@ -194,6 +202,9 @@ int main(int argc,char **argv) {
 done:
   say("AGX_TIMESTAMP_SMOKE: %s",pass?"PASS":"FAIL");
   started=0;
+  /* The UMD trace is flushed every 250 ms: keep the process (and the UMD)
+   * alive long enough for its last lines (EXP1341). */
+  Sleep(1500);
   REL(s.rs); REL(s.rtv); REL(s.rt); REL(s.uav); REL(s.dst); REL(s.cb); REL(s.cs); REL(s.ps); REL(s.vs);
   REL(csc); REL(psc); REL(vsc); REL(s.ctx); REL(s.dev);
   REL(adapter); REL(pick); REL(factory); if(dll) FreeLibrary(dll);
