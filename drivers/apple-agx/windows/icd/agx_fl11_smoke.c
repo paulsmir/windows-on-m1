@@ -263,6 +263,21 @@ static int case_uav(int iteration) {
   ID3D11DeviceContext_Dispatch(ctx, 2, 2, 1);
   ID3D11DeviceContext_CSSetUnorderedAccessViews(ctx, 0, 3, none, NULL);
   ID3D11DeviceContext_CopyStructureCount(ctx, count, 0, uavs[2]);
+  {
+    /* EXP1312: the copy delivers 86 into its destination, but reading the
+     * destination back through CopyResource gives 256. Copy the count
+     * straight into a staging buffer and map it. */
+    static ID3D11Buffer *count_staging;
+    D3D11_MAPPED_SUBRESOURCE m;
+    if (!count_staging) count_staging = buffer(16, 0, 0, 0, NULL, D3D11_USAGE_STAGING, D3D11_CPU_ACCESS_READ);
+    if (count_staging) {
+      ID3D11DeviceContext_CopyStructureCount(ctx, count_staging, 0, uavs[2]);
+      if (SUCCEEDED(ID3D11DeviceContext_Map(ctx, (ID3D11Resource *)count_staging, 0, D3D11_MAP_READ, 0, &m))) {
+        if (iteration == 0) say("U COUNT via staging %u", *(const UINT *)m.pData);
+        ID3D11DeviceContext_Unmap(ctx, (ID3D11Resource *)count_staging, 0);
+      }
+    }
+  }
   if (!read_texels(img, 16, 16, DXGI_FORMAT_R32_UINT, texels) || !read_buffer(words, 12, w) ||
       !read_buffer(count, 4, &n) || !read_buffer(app, sizeof(appended), appended)) {
     say("U READBACK failed at %d", iteration);
