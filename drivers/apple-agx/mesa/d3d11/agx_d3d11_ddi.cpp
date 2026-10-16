@@ -47,6 +47,31 @@ extern "C" VOID AgxD3d10WindowsDiagnostic(PCSTR Stage, HRESULT Status,
                                           const UINT *Values, UINT Count);
 extern "C" BOOL AgxD3d10WindowsDiagnosticSwitch(const char *Name);
 
+/* EXP1310 receipt-only (APPLE_AGX_D3D11_COUNTER_TRACE=1): CopyStructureCount
+ * copied 0 after an initial count of 42 and 256 after 86 compact appends.
+ * Records the hidden counter resource and the value the CPU reads from it
+ * where the initial count is written and where the count is copied. */
+static void
+counter_trace(PCSTR stage, struct pipe_context *pipe, struct pipe_resource *counter, UINT a, UINT b)
+{
+   static volatile LONG records;
+   if (!AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D11_COUNTER_TRACE") ||
+       InterlockedIncrement(&records) > 64 || !counter)
+      return;
+   UINT value = ~0u;
+   struct pipe_transfer *transfer = NULL;
+   struct pipe_box box;
+   u_box_1d(0, 4, &box);
+   const void *map = pipe->buffer_map(pipe, counter, 0, PIPE_MAP_READ, &box, &transfer);
+   if (map) {
+      memcpy(&value, map, 4);
+      pipe->buffer_unmap(pipe, transfer);
+   }
+   UINT values[5] = {(UINT)(uintptr_t)counter, (UINT)((uint64_t)(uintptr_t)counter >> 32), a, b,
+                     value};
+   AgxD3d10WindowsDiagnostic(stage, S_OK, values, 5);
+}
+
 /* D3D-H2a: advertised by default (EXP1295: every D3D smoke passes through
  * the D3D11 interface); APPLE_AGX_D3D11_DDI=0 keeps a process on 10.0. */
 BOOL
@@ -598,8 +623,11 @@ bind_uavs(Device *device, mesa_shader_stage stage, UINT first, UINT count, UINT 
          if (view->counter) {
             counters[slot].buffer = view->counter;
             counters[slot].buffer_size = 4;
-            if (initial_counts && initial_counts[i] != ~0u)
+            if (initial_counts && initial_counts[i] != ~0u) {
                pipe->buffer_subdata(pipe, view->counter, PIPE_MAP_WRITE, 0, 4, &initial_counts[i]);
+               counter_trace("measure-uav-counter-initial", pipe, view->counter, slot,
+                             initial_counts[i]);
+            }
          }
       }
    }
@@ -717,6 +745,8 @@ CopyStructureCount11(D3D10DDI_HDEVICE hDevice, D3D10DDI_HRESOURCE hDst, UINT off
       refuse(hDevice, "reject-d3d11-copy-structure-count", offset, 0);
       return;
    }
+   counter_trace("measure-uav-counter-copy", device->pipe, view->counter, offset,
+                 (UINT)(uintptr_t)dst->resource);
    u_box_1d(0, 4, &box);
    device->pipe->resource_copy_region(device->pipe, dst->resource, 0, offset, 0, 0, view->counter,
                                       0, &box);
