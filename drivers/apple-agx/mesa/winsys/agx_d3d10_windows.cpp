@@ -1069,15 +1069,29 @@ HRESULT AgxD3d10WindowsPresentationSubmit(
     AGX_D3D10_WINDOWS_DEVICE *Device,
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource,
     PVOID DxgiContext) {
+  return AgxD3d10WindowsPresentationSubmitSurfaces(Device,&Resource,1u,DxgiContext);
+}
+
+/* DXGI_DDI_ARG_PRESENT1: with several surfaces (no destination) every one
+ * becomes visible, and only the last source is passed to pfnPresentCb. One
+ * flush covers their rendering; each surface's pending CPU writes are
+ * published before the present. */
+HRESULT AgxD3d10WindowsPresentationSubmitSurfaces(
+    AGX_D3D10_WINDOWS_DEVICE *Device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *const *Resources,
+    UINT Count, PVOID DxgiContext) {
   AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeSubmitEntry,S_OK,NULL,0u);
   AdmissionUmdDiagnostic("g4-present-enter",S_OK,NULL,0u);
-  if(!Device || Device->Stage!=AgxD3d10DeviceReady || !Resource ||
-     Resource->Device!=Device ||
-     Resource->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC) {
+  BOOL valid=Device && Device->Stage==AgxD3d10DeviceReady && Resources && Count;
+  for(UINT i=0;valid && i<Count;++i)
+    valid=Resources[i] && Resources[i]->Device==Device &&
+          Resources[i]->Resource.Magic==ADMISSION_UMD_RESOURCE_MAGIC;
+  if(!valid) {
     AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeSubmitReturn,E_INVALIDARG,NULL,0u);
     AdmissionUmdDiagnostic("g4-present-exit",E_INVALIDARG,NULL,0u);
     return E_INVALIDARG;
   }
+  AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource=Resources[Count-1u];
   InterlockedIncrement(&AgxD3d10Presents);
   InterlockedIncrement(&AgxD3d10DdiWindowPresents);
   APPLE_AGX_U32 before[16],after[16],bindings[16];
@@ -1105,10 +1119,11 @@ HRESULT AgxD3d10WindowsPresentationSubmit(
   AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeFlushStatus,
       result,flushState,ARRAYSIZE(flushState));
 #ifdef APPLE_AGX_GPUVA_WINSYS
-  if(SUCCEEDED(result) && Resource->RenderBuffer.Transport.Token &&
-     !AdmissionUmdGpuvaPublishDirectMap(&Device->Runtime,
-                                        Resource->RenderBuffer.Transport.Token))
-    result=E_FAIL;
+  for(UINT i=0;SUCCEEDED(result) && i<Count;++i)
+    if(Resources[i]->RenderBuffer.Transport.Token &&
+       !AdmissionUmdGpuvaPublishDirectMap(&Device->Runtime,
+                                          Resources[i]->RenderBuffer.Transport.Token))
+      result=E_FAIL;
 #endif
   if(SUCCEEDED(result))
     result=AdmissionUmdSubmitPresent(&Device->Runtime,&Resource->Resource,DxgiContext);

@@ -117,6 +117,10 @@ HRESULT AgxD3d10WindowsPresentationSubmit(
     AGX_D3D10_WINDOWS_DEVICE *Device,
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource,
     PVOID DxgiContext);
+HRESULT AgxD3d10WindowsPresentationSubmitSurfaces(
+    AGX_D3D10_WINDOWS_DEVICE *Device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *const *Resources,
+    UINT Count, PVOID DxgiContext);
 HRESULT AgxD3d10WindowsPresentationSetDisplayMode(
     AGX_D3D10_WINDOWS_DEVICE *Device,
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource);

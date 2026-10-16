@@ -899,15 +899,42 @@ Blt1(DXGI_DDI_ARG_BLT1 *args)
    return dxgi11.pfnBlt(&blt);
 }
 
-/* Present1 presents one or more surfaces; one surface is Present. */
+/* Present1 presents one or more surfaces; one surface is Present. EXP1328:
+ * the FL 11_0 desktop (LogonUI, explorer, StartMenuExperienceHost) presents
+ * two to four composition surfaces at once. DXGI_DDI_ARG_PRESENT1: with
+ * several surfaces hDstResource is NULL and the driver passes only the last
+ * source to pfnPresentCb; the others are made visible with it. The checks
+ * are Present's for every surface. */
 HRESULT APIENTRY
 Present1(DXGI_DDI_ARG_PRESENT1 *args)
 {
    if (!args)
       return E_INVALIDARG;
-   if (args->SurfacesToPresent > 1 || (args->SurfacesToPresent && !args->phSurfacesToPresent)) {
-      dxgi_receipt("reject-dxgi-present1", E_NOTIMPL, args->SurfacesToPresent, 0);
-      return E_NOTIMPL;
+   if (args->SurfacesToPresent && !args->phSurfacesToPresent) {
+      dxgi_receipt("reject-dxgi-present1", E_INVALIDARG, args->SurfacesToPresent, 0);
+      return E_INVALIDARG;
+   }
+   if (args->SurfacesToPresent > 1) {
+      Device *device = CastDevice(args->hDevice);
+      bool valid = device && args->hDstResource == 0 &&
+         (args->Flags.Value == 0x1u || args->Flags.Value == 0x2u) &&
+         (args->FlipInterval == DXGI_DDI_FLIP_INTERVAL_IMMEDIATE ||
+          args->FlipInterval == DXGI_DDI_FLIP_INTERVAL_ONE);
+      std::vector<AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *> surfaces;
+      for (UINT i = 0; valid && i < args->SurfacesToPresent; ++i) {
+         Resource *resource = CastResource(args->phSurfacesToPresent[i].hSurface);
+         valid = resource && resource->owner_device == device &&
+            resource->presentation && args->phSurfacesToPresent[i].SubResourceIndex == 0;
+         if (valid)
+            surfaces.push_back(resource->presentation);
+      }
+      if (!valid) {
+         dxgi_receipt("reject-dxgi-present1", E_INVALIDARG, args->SurfacesToPresent,
+                      args->Flags.Value);
+         return E_INVALIDARG;
+      }
+      return AgxD3d10WindowsPresentationSubmitSurfaces(
+         device->windows, surfaces.data(), (UINT)surfaces.size(), args->pDXGIContext);
    }
    DXGI_DDI_ARG_PRESENT present = {};
    present.hDevice = args->hDevice;
