@@ -2744,7 +2744,7 @@ AGX_D3D11_STAGE_SETTERS(Ds, MESA_SHADER_TESS_EVAL)
    /* D3D-H5: SM 5 code has no TGSI record; the translator captures. */
    pShader->handle = pShader->state.tokens ?
       pipe->create_gs_state(pipe, &pShader->state) :
-      AgxD3d10ShaderModel5(pData->pShaderCode) ?
+      AgxD3d10TranslatorOnly(pData->pShaderCode) ?
       AgxD3d10CreateXfbState(pipe, pShader, pData->pShaderCode,
                              &pShader->state.stream_output) : NULL;
    if (pData->pShaderCode && !pShader->handle)
@@ -2867,7 +2867,7 @@ AGX_D3D11_STAGE_SETTERS(Ds, MESA_SHADER_TESS_EVAL)
         ('''   if (pData->pShaderCode) {
       pShader->state.tokens = Shader_tgsi_translate(pData->pShaderCode,
                                                     pShader->output_mapping);
-   }''','''   if (pData->pShaderCode && !AgxD3d10ShaderModel5(pData->pShaderCode)) {
+   }''','''   if (pData->pShaderCode && !AgxD3d10TranslatorOnly(pData->pShaderCode)) {
       pShader->state.tokens = Shader_tgsi_translate(pData->pShaderCode,
                                                     pShader->output_mapping);
    }'''),
@@ -3104,12 +3104,35 @@ extern "C" BOOL AgxD3d10WindowsDiagnosticSwitch(const char *Name);
  * faulted the GPU from DWM (2435 firmware recoveries), so it stays opt-in
  * until that translation is found. */
 /* D3D-H5: Mesa's DXBC parser (ShaderParse.c) knows the SM 4 opcodes only
- * and indexes its opcode table with an assert; an SM 5 program (FL 11_0)
- * never reaches it and always takes the translator. */
+ * (opcode_info[D3D10_SB_NUM_OPCODES], D3D10_SB_NUM_OPCODES = 0x70) and
+ * indexes its opcode table with an assert; an SM 5 program (FL 11_0)
+ * never reaches it and always takes the translator.  EXP1314: on an FL 11_0
+ * device the runtime also admits 4_x programs using D3D 11 opcodes (raw and
+ * structured buffers, D3D11_SB_GLOBAL_FLAG_ENABLE_RAW_AND_STRUCTURED_BUFFERS;
+ * d2d1's ps_4_0 with dcl_resource_structured/ld_structured crashed in
+ * tgsi_to_nir), so an opcode beyond the table routes the program to the
+ * translator as well, and so does a stream the walk cannot follow. */
 static inline bool
-AgxD3d10ShaderModel5(const UINT *code)
+AgxD3d10TranslatorOnly(const UINT *code)
 {
-   return code && ((code[0] >> 4) & 0xfu) >= 5u;
+   if (!code)
+      return false;
+   if (((code[0] >> 4) & 0xfu) >= 5u)
+      return true;
+   const UINT size = code[1];
+   for (UINT i = 2u; i < size;) {
+      const UINT opcode = code[i] & 0x7ffu;
+      UINT length = (code[i] >> 24) & 0x7fu;
+      if (opcode == 0x35u) { /* D3D10_SB_OPCODE_CUSTOMDATA: length in the next DWORD */
+         if (i + 1u >= size)
+            return true;
+         length = code[i + 1u];
+      }
+      if (opcode >= 0x70u || !length || length > size - i)
+         return true;
+      i += length;
+   }
+   return false;
 }
 
 static void *
@@ -3117,9 +3140,9 @@ AgxD3d10CreateShaderState(struct pipe_context *pipe, Shader *shader,
                           const UINT *code)
 {
    struct pipe_shader_state state = shader->state;
-   const bool sm5 = AgxD3d10ShaderModel5(code);
+   const bool translator = AgxD3d10TranslatorOnly(code);
    if (code && !state.stream_output.num_outputs &&
-       (sm5 || AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D_SHADER_NIR"))) {
+       (translator || AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D_SHADER_NIR"))) {
       struct dxbc_nir_error error = {};
       struct nir_shader *nir = dxbc_translate_tokens(code,
          pipe->screen->nir_options[shader->type], &error);
@@ -3193,13 +3216,13 @@ AgxD3d10CreateXfbState(struct pipe_context *pipe, Shader *shader,
 
    pShader->handle = pipe->create_vs_state(pipe, &pShader->state);
 ''','''   pShader->agx_code = NULL;
-   pShader->state.tokens = AgxD3d10ShaderModel5(pCode) ? NULL :
+   pShader->state.tokens = AgxD3d10TranslatorOnly(pCode) ? NULL :
       Shader_tgsi_translate(pCode, pShader->output_mapping);
 
    pShader->handle = AgxD3d10CreateShaderState(pipe, pShader, pCode);
    if (!pShader->handle) {
       SetError(hDevice, E_INVALIDARG);
-   } else if (AgxD3d10ShaderModel5(pCode)) {
+   } else if (AgxD3d10TranslatorOnly(pCode)) {
       /* the source of a stream-output variant (an empty GS) */
       pShader->agx_code = (UINT *)malloc((size_t)pCode[1] * sizeof(UINT));
       if (pShader->agx_code) {
@@ -3214,7 +3237,7 @@ AgxD3d10CreateXfbState(struct pipe_context *pipe, Shader *shader,
         ('''   pShader->state.tokens = Shader_tgsi_translate(pShaderCode, pShader->output_mapping);
 
    pShader->handle = pipe->create_gs_state(pipe, &pShader->state);
-''','''   pShader->state.tokens = AgxD3d10ShaderModel5(pShaderCode) ? NULL :
+''','''   pShader->state.tokens = AgxD3d10TranslatorOnly(pShaderCode) ? NULL :
       Shader_tgsi_translate(pShaderCode, pShader->output_mapping);
 
    pShader->handle = AgxD3d10CreateShaderState(pipe, pShader, pShaderCode);
@@ -3225,7 +3248,7 @@ AgxD3d10CreateXfbState(struct pipe_context *pipe, Shader *shader,
                                                  pShader->output_mapping);
 
    pShader->handle = pipe->create_fs_state(pipe, &pShader->state);
-''','''   pShader->state.tokens = AgxD3d10ShaderModel5(pShaderCode) ? NULL :
+''','''   pShader->state.tokens = AgxD3d10TranslatorOnly(pShaderCode) ? NULL :
       Shader_tgsi_translate(pShaderCode, pShader->output_mapping);
 
    pShader->handle = AgxD3d10CreateShaderState(pipe, pShader, pShaderCode);

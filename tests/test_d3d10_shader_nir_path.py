@@ -22,14 +22,46 @@ Invariants caught:
   info (AgxD3d10CreateXfbState, D3D registers), the SM 5 vertex shader
   keeps its tokens for that variant and frees them with the shader, and
   receives the serial that keys the variant.
+- EXP1314: a 4_x program using a D3D 11 opcode (an FL 11_0 device admits
+  raw/structured buffers in ps_4_0: d2d1's dcl_resource_structured +
+  ld_structured crashed in tgsi_to_nir) takes the translator as well; a
+  plain 4_0/4_1 program, its immediate constant buffer included, keeps the
+  SM 4 parser.
 Runs the real projection (see test_d3d10_shader_fields_init.py).
 """
 from pathlib import Path
+import os
 import re
+import subprocess
 import tempfile
 import unittest
 
 from test_d3d10_shader_fields_init import function_body, project
+
+
+# The ps_4_0 of EXP1314 (d2d1.dll_00373e10): global flags with raw and
+# structured buffers, dcl_resource_structured t0 (stride 16), ld_structured.
+MAIN = r'''
+int main() {
+  const UINT structured[] = {0x00000040, 21, 0x0100486a, 0x040000a2, 0x00107000, 0, 16,
+                             0x03000065, 0x001020f2, 0, 0x02000068, 1,
+                             0x090000a7, 0x001020f2, 0, 0x0010000a, 0, 0x00004001, 0,
+                             0x00107e46, 0};
+  const UINT plain[] = {0x00000040, 12, 0x01000800 | 0x6a, 0x03000065, 0x001020f2, 0,
+                        0x05000036, 0x001020f2, 0, 0x00004001, 0x3f800000, 0x0100003e};
+  const UINT icb41[] = {0x00000041, 9, 0x00001835, 4, 0x3f800000, 0x40000000,
+                        0x0100003e, 0x0100003e, 0x0100003e};
+  const UINT sm5[] = {0x00000050, 3, 0x0100003e};
+  const UINT truncated[] = {0x00000040, 4, 0x0100003e, 0x05000036};
+  assert(AgxD3d10TranslatorOnly(structured));
+  assert(!AgxD3d10TranslatorOnly(plain));
+  assert(!AgxD3d10TranslatorOnly(icb41));
+  assert(AgxD3d10TranslatorOnly(sm5));
+  assert(AgxD3d10TranslatorOnly(truncated));
+  assert(!AgxD3d10TranslatorOnly(nullptr));
+  return 0;
+}
+'''
 
 
 class ShaderNirPath(unittest.TestCase):
@@ -57,22 +89,38 @@ class ShaderNirPath(unittest.TestCase):
             if out is None:
                 self.skipTest("reference Mesa tree not available")
             shader = (out / "src/gallium/frontends/d3d10umd/Shader.cpp").read_text()
-            model = function_body(shader, "AgxD3d10ShaderModel5")
+            model = function_body(shader, "AgxD3d10TranslatorOnly")
             self.assertIn("((code[0] >> 4) & 0xfu) >= 5u", model)
             helper = function_body(shader, "AgxD3d10CreateShaderState")
-            self.assertIn("(sm5 || AgxD3d10WindowsDiagnosticSwitch(", helper)
+            self.assertIn("(translator || AgxD3d10WindowsDiagnosticSwitch(", helper)
             self.assertLess(helper.index("if (state.type != PIPE_SHADER_IR_NIR && !state.tokens)"),
                             helper.index("switch (shader->type)"))
             for name in ("CreateVertexShader", "CreateGeometryShader", "CreatePixelShader"):
                 body = function_body(shader, name)
                 with self.subTest(name=name):
-                    self.assertRegex(body, r"AgxD3d10ShaderModel5\(\w+\) \? NULL :\s*Shader_tgsi_translate\(")
+                    self.assertRegex(body, r"AgxD3d10TranslatorOnly\(\w+\) \? NULL :\s*Shader_tgsi_translate\(")
                     self.assertRegex(body, r"if \(!pShader->handle\)( \{)?\n      SetError\(hDevice, E_INVALIDARG\);")
             bind = function_body(shader, "GsSetShader")
             self.assertIn("!pShader->state.tokens && !pShader->handle", bind)
             so = function_body(shader, "CreateGeometryShaderWithStreamOutput")
-            self.assertIn("if (pData->pShaderCode && !AgxD3d10ShaderModel5(pData->pShaderCode)) {\n"
+            self.assertIn("if (pData->pShaderCode && !AgxD3d10TranslatorOnly(pData->pShaderCode)) {\n"
                           "      pShader->state.tokens = Shader_tgsi_translate(", so)
+
+    def test_sm4_programs_with_d3d11_opcodes_take_the_translator(self):
+        with tempfile.TemporaryDirectory(prefix="d3d10-shader-4x-") as tmp:
+            out = project(Path(tmp) / "out")
+            if out is None:
+                self.skipTest("reference Mesa tree not available")
+            shader = (out / "src/gallium/frontends/d3d10umd/Shader.cpp").read_text()
+            program = ("#include <assert.h>\ntypedef unsigned int UINT;\n"
+                       "static bool AgxD3d10TranslatorOnly(const UINT *code)\n" +
+                       function_body(shader, "AgxD3d10TranslatorOnly") + "\n" + MAIN)
+            src = Path(tmp) / "route.cpp"; exe = Path(tmp) / "route"
+            src.write_text(program)
+            subprocess.run([os.environ.get("CXX", "clang++"), "-std=c++17", "-Wall", "-Werror",
+                            "-fsanitize=address,undefined", str(src), "-o", str(exe)], check=True)
+            ran = subprocess.run([str(exe)], capture_output=True, text=True)
+            self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
 
     def test_sm5_stream_output_through_the_translator(self):
         with tempfile.TemporaryDirectory(prefix="d3d10-shader-xfb-") as tmp:
