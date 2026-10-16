@@ -16,9 +16,9 @@ BOOL AgxD3d11DdiEnabled(void);
  * compute path is qualified. */
 BOOL AgxD3d11ComputeEnabled(void);
 
-/* D3D-H5: report feature levels 10_1 and 11_0 (D3D11DDICAPS_3DPIPELINESUPPORT):
- * the D3D11 interface and APPLE_AGX_D3D11_FL11=1, per process while the
- * FL 11_0 stages are qualified on hardware. */
+/* D3D-H5: report feature levels 10_1 and 11_0 (D3D11DDICAPS_3DPIPELINESUPPORT)
+ * with the D3D11 interface, by default since EXP1320; APPLE_AGX_D3D11_FL11=0
+ * keeps a process on 10_0. */
 BOOL AgxD3d11Fl11Enabled(void);
 
 /* D3D-H2b: the compute stage's common-shader setters (Shader.cpp). */
