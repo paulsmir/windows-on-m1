@@ -1,5 +1,16 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
+## Current as of 2026-10-16T19:15Z (read this first)
+
+FL 11_0 IS THE DEFAULT on integration (bcb0e9f8, EXP1337: every regression
+matches the FL 10_0 baseline EXP1326; APPLE_AGX_D3D11_FL11=0 opts a process
+out). Installed: PACKAGE1337 (d94ed918 = integration driver sources).
+- The FL 11_0 desktop fixes (all validated, EXP1324-EXP1337): see the
+  previous section; plus D3D 11 query types (1eab272c).
+- Diagnostics kept in the UMD (receipt-only): reject-null-call,
+  reject-cxx-throw/stack, reject-abort-raw/stack + abort minidump.
+- Open: vertex-stage scratch; compute helpers; D3D12; GPU timestamps.
+
 ## Current as of 2026-10-16T18:33Z (read this first)
 
 Installed: PACKAGE1336 (7a73857b: FL 11_0 default branch; rolled back by the
