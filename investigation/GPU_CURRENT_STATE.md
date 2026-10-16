@@ -1,5 +1,22 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
+## Current as of 2026-10-16T07:15Z (read this first)
+
+Installed: PACKAGE1313 (5c062072 KMD/ARM64 UMD, WOW64 UMD out53 and GL ICD
+out59 on closure 073).
+- PROVEN: every FL 11_0 case passes on x86 and ARM64 (agx_fl11_smoke8,
+  EXP1313 same boot: U atomics 256/1515/1920 + append 86, T tessellation,
+  I indirect draw/dispatch, B BC7). The append "defect" of EXP1306-EXP1312
+  was the smoke's own size-mismatched CopyResource (a7623461); counter,
+  CopyStructureCount and their destination were correct (EXP1311/1312).
+- FL 11_0 still opt-in (APPLE_AGX_D3D11_FL11=1). SM 5 shaders always use
+  the DXBC -> NIR translator; SM 4 keep TGSI by default (EXP1296: the
+  translator as default faulted DWM).
+- Running: corpus at FL 11_0 (corpus-af, same boot) -- the 64 SM 5 corpus
+  shaders that FL 10_0 refuses, before making FL 11_0 the default (DWM
+  would request it).
+- Open: SO statistics written 0; dwmcore.dll_003d8800 hangs on both paths.
+
 ## Current as of 2026-10-16T05:30Z (read this first)
 
 Installed: PACKAGE1310 (a690ad72 KMD/ARM64 UMD, WOW64 UMD out50 and GL ICD
