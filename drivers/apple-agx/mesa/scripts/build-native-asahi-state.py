@@ -5215,9 +5215,17 @@ AgxD3d10ResourceWithinRequiredLimits(
       }''')
         # Scratch is not a captured graph yet. Reject before allocating or
         # publishing it; do not supply a successful scratch placeholder.
+        # EXP1319: on the GPUVA winsys there is no graph to capture -- the
+        # scratch buffer reaches the firmware through the render command's
+        # fragment helper (agx_flush_render), not through a USC relocation --
+        # and the rejection returned pipeline address 0, which hung the GPU
+        # for every shader that spills (agx_scratch_smoke n=24,
+        # dwmcore.dll_003d8800). Asahi's allocation is kept there; vertex
+        # and compute helpers stay refused at the batch gates.
         scratch_start=pipeline.index('   if (max_scratch_size > 0) {')
         scratch_end=pipeline.index('\n   if (stage == MESA_SHADER_FRAGMENT)',scratch_start)
-        pipeline=pipeline[:scratch_start]+'''   bool linked_scratch_unsupported = false;
+        asahi_scratch=pipeline[scratch_start:scratch_end]
+        pipeline=pipeline[:scratch_start]+'#ifdef APPLE_AGX_GPUVA_WINSYS\n'+asahi_scratch+'\n#else\n'+'''   bool linked_scratch_unsupported = false;
    if (linked) {
       uint32_t packed_regs;
       struct AGX_USC_REGISTERS regs;
@@ -5231,6 +5239,7 @@ AgxD3d10ResourceWithinRequiredLimits(
       (void)AgxWin32AsahiPipelineFinish(&capture, b.head);
       return 0;
    }
+#endif
 '''+pipeline[scratch_end:]
         emit_replace('      agx_usc_push_packed(&b, SHADER, linked->shader);',
             '''      agx_usc_push_packed(&b, SHADER, linked->shader);
@@ -5246,7 +5255,13 @@ AgxD3d10ResourceWithinRequiredLimits(
          cs->b.info.main_size,
          AppleAgxWin32RoleShader);''')
         emit_replace('         cfg.spill_size = cs->b.info.scratch_size\n                             ? agx_scratch_get_bucket(cs->b.info.scratch_size)\n                             : 0;',
-            '         cfg.spill_size = 0; /* Nonzero scratch rejected above. */')
+            '''#ifdef APPLE_AGX_GPUVA_WINSYS
+         cfg.spill_size = cs->b.info.scratch_size
+                             ? agx_scratch_get_bucket(cs->b.info.scratch_size)
+                             : 0;
+#else
+         cfg.spill_size = 0; /* Nonzero scratch rejected above. */
+#endif''')
         emit_replace('            agx_usc_addr(dev, cs->bo->va->addr + cs->b.info.preamble_offset);\n      }',
             '''            agx_usc_addr(dev, cs->bo->va->addr + cs->b.info.preamble_offset);
       }

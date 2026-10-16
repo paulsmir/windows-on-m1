@@ -575,6 +575,11 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
      (batch->key.zsbuf.texture && !b->ZlsAttachments) ||
      /* D3D-G5: the KMD encodes 1, 2 and 4 samples (Asahi render.rs). */
      (render->samples!=1 && render->samples!=2 && render->samples!=4) ||
+     /* EXP1319: a fragment helper (scratch) is carried by the render; a
+      * vertex-stage helper needs RunVertex uses_scratch, which the KMD does
+      * not encode yet (the G4 builder refuses the flag). */
+     (((const APPLE_AGX_G4_NATIVE_RENDER *)(const void *)render)->Flags &
+      1u /* DRM_ASAHI_RENDER_VERTEX_SCRATCH */) ||
      /* D3D-G6: any 8-byte multiple whose utile fits the tile buffer. */
      !AppleAgxG4TileBufferValid(render->sample_size_B,render->samples,
          render->utile_width_px,render->utile_height_px) ||
