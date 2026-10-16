@@ -172,7 +172,9 @@ APPLE_AGX_BOOL AppleAgxG4BindNativeObjects(
       !AppleAgxG4TileBufferValid(render.SampleSizeBytes, render.Samples,
           render.UtileWidthPx, render.UtileHeightPx) ||
       (render.Flags & (1u << 2)) == 0u ||
-      (render.Flags & ~((1u << 1) | (1u << 2) | (1u << 18))) != 0u ||
+      (render.Flags & ~((1u << 0) | (1u << 1) | (1u << 2) | (1u << 18))) != 0u ||
+      /* A vertex-stage scratch render runs the vertex helper program. */
+      ((render.Flags & (1u << 0)) != 0u && render.VertexHelper.Binary == 0u) ||
       !render.VdmCtrlStreamBase || !render.IspScissorBase ||
       !render.IspDbiasBase || (render.IspOclQryBase & 7ULL) ||
       !g4_zls_valid(&render) || color.Pad || color.Flags ||
@@ -253,7 +255,7 @@ APPLE_AGX_BOOL AppleAgxG4PatchRenderScalars(
   if (Render == 0 || Objects == 0 ||
       ObjectCount < APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT ||
       Objects[18].Data == 0 || Objects[18].Size < 0x900u ||
-      Objects[19].Data == 0 || Objects[19].Size < 0x550u ||
+      Objects[19].Data == 0 || Objects[19].Size < 0x56cu ||
       !Render->WidthPx || !Render->HeightPx || Render->Layers != 1u ||
       !g4_samples_valid(Render->Samples) || !Render->UtileWidthPx ||
       !Render->UtileHeightPx ||
@@ -374,6 +376,13 @@ APPLE_AGX_BOOL AppleAgxG4PatchRenderScalars(
   g4_put32(work + 0x8bcu, (Render->Flags & (1u << 1)) ? 1u : 0u);
   g4_put32(ta + 0x550u, Render->SamplerCount);
   g4_put32(ta + 0x554u, (APPLE_AGX_U32)Render->SamplerCount + 1u);
+  /* RunVertex uses_scratch (Asahi fw/vertex.rs, queue/render.rs: set from
+   * DRM_ASAHI_RENDER_VERTEX_SCRATCH): the fifth word after EncoderParams
+   * (ta+0x530..0x558: sampler_array at +0x18, sampler_count/max above),
+   * just before JobMeta -- m1n1's StartTACmdStruct3 keeps the same six
+   * words (unk_550[6]) between sampler_max and stamp1. EXP1319: the vertex
+   * helper needs it to run with the scratch it was given. */
+  g4_put32(ta + 0x568u, (Render->Flags & (1u << 0)) ? 1u : 0u);
   if (g4_has_zls(Render)) {
     /* G13 (< G14X: no register array), V13_5. Asahi queue/render.rs fills
      * JobParameters1 (work+0x80) and JobParameters3 (work+0x4b8); field

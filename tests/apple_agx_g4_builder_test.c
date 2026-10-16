@@ -276,6 +276,18 @@ int main(void) {
       packet.Render.Samples = 2u;
       assert(AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      /* EXP1337: DRM_ASAHI_RENDER_VERTEX_SCRATCH binds only with the vertex
+       * helper program that uses the scratch. */
+      packet.Render.Flags |= 1u;
+      assert(!AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Render.VertexHelper.Binary = 0x2000u;
+      packet.Render.VertexHelper.Data = 0x35000000ULL;
+      assert(AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Render.Flags &= ~1u;
+      packet.Render.VertexHelper.Binary = 0u;
+      packet.Render.VertexHelper.Data = 0u;
       packet.Render.Samples = 3u;
       assert(!AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
@@ -540,6 +552,22 @@ int main(void) {
       assert(get64(objects[18].Data + 0x3e0u) == 0ULL);
       assert(AppleAgxG4PatchRenderScalars(&render, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+    }
+    /* EXP1337: RunVertex uses_scratch is the word before JobMeta (whose
+     * stamp pointer the template keeps at ta+0x570): 1 with
+     * DRM_ASAHI_RENDER_VERTEX_SCRATCH, 0 (the template's value) without. */
+    {
+      APPLE_AGX_G4_NATIVE_RENDER vs = render;
+      assert((get64(objects[19].Data + 0x568u) & 0xffffffffULL) == 0u);
+      vs.Flags |= 1u;
+      vs.VertexHelper.Binary = 0x2000u;
+      assert(AppleAgxG4PatchRenderScalars(&vs, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      assert((get64(objects[19].Data + 0x568u) & 0xffffffffULL) == 1u);
+      assert((get64(objects[19].Data + 0x56cu) & 0xffffffffULL) == 0u);
+      assert(AppleAgxG4PatchRenderScalars(&render, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      assert((get64(objects[19].Data + 0x568u) & 0xffffffffULL) == 0u);
     }
     /* D3D-G4: multisampling (Asahi queue/render.rs). utile_config carries
      * log2(samples) in the 3D and TA jobs, tib_blocks covers sample_size

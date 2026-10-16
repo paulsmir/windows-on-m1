@@ -6,7 +6,10 @@
  * scratch (agx_compile.c nir_lower_vars_to_scratch). Each case fills the
  * array in a loop and returns element (x + sel) % N; red holds the index.
  * Cases run smallest first so a hang names the first failing size.
- * Usage: agx_scratch_smoke.exe <out.txt> [nir] */
+ * EXP1338 "vs": the array lives in the vertex shader instead (vertex-stage
+ * scratch, DRM_ASAHI_RENDER_VERTEX_SCRATCH); the provoking vertex (id 0)
+ * passes element sel % N flat to the pixel shader, so every pixel holds it.
+ * Usage: agx_scratch_smoke.exe <out.txt> [nir] [vs] */
 #define COBJMACROS
 #define INITGUID
 #include <windows.h>
@@ -38,6 +41,19 @@ static const char vs_hlsl[] =
   "float4 main(uint id : SV_VertexID) : SV_Position {\n"
   "  float2 p = float2((id & 1) ? 3.0 : -1.0, (id & 2) ? -3.0 : 1.0);\n"
   "  return float4(p, 0, 1); }\n";
+static int vertex_mode;
+/* N is substituted per case. */
+static const char vs_template[] =
+  "cbuffer c : register(b0) { uint4 sel; };\n"
+  "struct O { float4 p : SV_Position; nointerpolation float4 c : COLOR; };\n"
+  "O main(uint id : SV_VertexID) {\n"
+  "  O o; float2 p = float2((id & 1) ? 3.0 : -1.0, (id & 2) ? -3.0 : 1.0);\n"
+  "  o.p = float4(p, 0, 1); float4 a[%u];\n"
+  "  [loop] for (uint k = 0; k < %uu; ++k) a[k] = float4(k / 255.0, 0.5, 0, 1);\n"
+  "  o.c = a[(id + sel.x) %% %uu]; return o; }\n";
+static const char ps_flat[] =
+  "struct O { float4 p : SV_Position; nointerpolation float4 c : COLOR; };\n"
+  "float4 main(O i) : SV_Target { return i.c; }\n";
 /* N is substituted per case. */
 static const char ps_template[] =
   "cbuffer c : register(b0) { uint4 sel; };\n"
@@ -77,7 +93,7 @@ static UINT pixel(const D3D11_MAPPED_SUBRESOURCE *m,UINT x,UINT y) {
 static int run(IDXGIAdapter1 *adapter,pD3DCompile fn,UINT n) {
   const D3D_FEATURE_LEVEL levels[]={D3D_FEATURE_LEVEL_10_1,D3D_FEATURE_LEVEL_10_0};
   const float blue[4]={0,0,1,1}; const UINT sel[4]={3,0,0,0};
-  char ps_hlsl[512];
+  char ps_hlsl[512], vs_hlsl_n[640];
   ID3D11Device *dev=NULL; ID3D11DeviceContext *ctx=NULL; ID3D11VertexShader *vs=NULL;
   ID3D11PixelShader *ps=NULL; ID3D11Texture2D *rt=NULL,*readback=NULL; ID3D11Buffer *cb=NULL;
   ID3D11RenderTargetView *rtv=NULL; ID3D11RasterizerState *rs=NULL;
@@ -87,12 +103,14 @@ static int run(IDXGIAdapter1 *adapter,pD3DCompile fn,UINT n) {
   D3D_FEATURE_LEVEL got; HRESULT hr=S_OK; UINT bad=0,first_x=0,first_px=0,expect_first=0,itemp=0;
   int result=-1; DWORD t0;
   snprintf(ps_hlsl,sizeof(ps_hlsl),ps_template,n,n,n);
+  snprintf(vs_hlsl_n,sizeof(vs_hlsl_n),vs_template,n,n,n);
   started=(LONG)GetTickCount();
   hr=D3D11CreateDevice((IDXGIAdapter *)adapter,D3D_DRIVER_TYPE_UNKNOWN,NULL,0,levels,2,
                        D3D11_SDK_VERSION,&dev,&got,&ctx); if(FAILED(hr)) goto done;
-  vscode=compile(fn,vs_hlsl,"vs_4_0"); pscode=compile(fn,ps_hlsl,"ps_4_0");
+  vscode=compile(fn,vertex_mode?vs_hlsl_n:vs_hlsl,"vs_4_0");
+  pscode=compile(fn,vertex_mode?ps_flat:ps_hlsl,"ps_4_0");
   if(!vscode || !pscode) goto done;
-  itemp=indexable_temp_entries(pscode);
+  itemp=indexable_temp_entries(vertex_mode?vscode:pscode);
   hr=ID3D11Device_CreateVertexShader(dev,ID3D10Blob_GetBufferPointer(vscode),ID3D10Blob_GetBufferSize(vscode),NULL,&vs);
   if(FAILED(hr)) goto done;
   hr=ID3D11Device_CreatePixelShader(dev,ID3D10Blob_GetBufferPointer(pscode),ID3D10Blob_GetBufferSize(pscode),NULL,&ps);
@@ -115,6 +133,7 @@ static int run(IDXGIAdapter1 *adapter,pD3DCompile fn,UINT n) {
   ID3D11DeviceContext_RSSetState(ctx,rs); ID3D11DeviceContext_RSSetViewports(ctx,1,&vp);
   ID3D11DeviceContext_VSSetShader(ctx,vs,NULL,0); ID3D11DeviceContext_PSSetShader(ctx,ps,NULL,0);
   ID3D11DeviceContext_PSSetConstantBuffers(ctx,0,1,&cb);
+  ID3D11DeviceContext_VSSetConstantBuffers(ctx,0,1,&cb);
   ID3D11DeviceContext_IASetPrimitiveTopology(ctx,D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
   ID3D11DeviceContext_Draw(ctx,3,0);
   memset(&qd,0,sizeof(qd)); qd.Query=D3D11_QUERY_EVENT;
@@ -131,7 +150,7 @@ static int run(IDXGIAdapter1 *adapter,pD3DCompile fn,UINT n) {
   hr=ID3D11DeviceContext_Map(ctx,(ID3D11Resource *)readback,0,D3D11_MAP_READ,0,&mapped);
   if(FAILED(hr)) goto done;
   for (UINT x=0;x<128;++x) {
-    UINT idx=(x+sel[0])%n, expect=0xff008000u | idx, got_px=pixel(&mapped,x,4);
+    UINT idx=(vertex_mode?sel[0]:x+sel[0])%n, expect=0xff008000u | idx, got_px=pixel(&mapped,x,4);
     if (x==0) { first_px=got_px; expect_first=expect; }
     /* green 0.5 rounds to 0x7f or 0x80 */
     if ((got_px & 0xffff00ffu) != (expect & 0xffff00ffu) ||
@@ -142,8 +161,8 @@ static int run(IDXGIAdapter1 *adapter,pD3DCompile fn,UINT n) {
   ID3D11DeviceContext_Unmap(ctx,(ID3D11Resource *)readback,0);
   result = bad ? 0 : 1;
 done:
-  say("SCRATCH n=%u bytes=%u itemp=%u x0=0x%08x expect0=0x%08x bad=%u first_bad_x=%u removed=0x%08lx hr=0x%08lx verdict=%s",
-      n,n*16u,itemp,first_px,expect_first,bad,first_x,
+  say("SCRATCH%s n=%u bytes=%u itemp=%u x0=0x%08x expect0=0x%08x bad=%u first_bad_x=%u removed=0x%08lx hr=0x%08lx verdict=%s",
+      vertex_mode?"-VS":"",n,n*16u,itemp,first_px,expect_first,bad,first_x,
       dev?(unsigned long)ID3D11Device_GetDeviceRemovedReason(dev):0ul,(unsigned long)hr,
       result>0?"PASS":result==0?"WRONG":"LOST");
   started=0; REL(query); REL(rs); REL(readback); REL(rtv); REL(rt); REL(cb);
@@ -157,7 +176,10 @@ int main(int argc,char **argv) {
   if(argc<2) { printf("usage: agx_scratch_smoke.exe <out.txt> [nir]\n"); return 2; }
   output=CreateFileA(argv[1],GENERIC_WRITE,FILE_SHARE_READ,NULL,CREATE_ALWAYS,
                      FILE_ATTRIBUTE_NORMAL|FILE_FLAG_WRITE_THROUGH,NULL);
-  if(argc>2 && !strcmp(argv[2],"nir")) SetEnvironmentVariableA("APPLE_AGX_D3D_SHADER_NIR","1");
+  for(int a=2;a<argc;++a) {
+    if(!strcmp(argv[a],"nir")) SetEnvironmentVariableA("APPLE_AGX_D3D_SHADER_NIR","1");
+    if(!strcmp(argv[a],"vs")) vertex_mode=1;
+  }
   watch=CreateThread(NULL,0,watchdog,NULL,0,NULL); if(watch) CloseHandle(watch);
   dll=LoadLibraryA("d3dcompiler_47.dll");
   fn=dll?(pD3DCompile)(void *)GetProcAddress(dll,"D3DCompile"):NULL;
