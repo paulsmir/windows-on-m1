@@ -247,6 +247,17 @@ static int case_uav(int iteration) {
     static const UINT sentinel[4] = {0xdeadbeefu, 0xdeadbeefu, 0xdeadbeefu, 0xdeadbeefu};
     ID3D11DeviceContext_UpdateSubresource(ctx, (ID3D11Resource *)count, 0, NULL, sentinel, 0, 0);
   }
+  if (iteration == 0) {
+    /* EXP1310: the copied count is 256 while the appends are compact; with no
+     * dispatch, an initial count of 42 must be copied back as 42. */
+    UINT probe_initial[3] = {~0u, ~0u, 42u}, got = 0, marker_words[3] = {0x777u, 0x888u, 0x999u};
+    ID3D11DeviceContext_UpdateSubresource(ctx, (ID3D11Resource *)words, 0, NULL, marker_words, 0, 0);
+    ID3D11DeviceContext_CSSetUnorderedAccessViews(ctx, 0, 3, uavs, probe_initial);
+    ID3D11DeviceContext_CSSetUnorderedAccessViews(ctx, 0, 3, none, NULL);
+    ID3D11DeviceContext_CopyStructureCount(ctx, count, 0, uavs[2]);
+    if (read_buffer(count, 4, &got)) say("U COUNTCHECK initial 42 copied 0x%x (words[0] 0x777)", got);
+    ID3D11DeviceContext_UpdateSubresource(ctx, (ID3D11Resource *)words, 0, NULL, zero_words, 0, 0);
+  }
   ID3D11DeviceContext_CSSetShader(ctx, cs, NULL, 0);
   ID3D11DeviceContext_CSSetUnorderedAccessViews(ctx, 0, 3, uavs, initial);
   ID3D11DeviceContext_Dispatch(ctx, 2, 2, 1);
