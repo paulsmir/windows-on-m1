@@ -1250,7 +1250,7 @@ AgxResolveSharedResource(DXGI_DDI_ARG_RESOLVESHAREDRESOURCE *args)
     * device called address 0 (dwm.exe, M365Copilot, opengl32's redirection:
     * d3d11!NDXGI::CDevice::PresentImpl -> Present1 -> 0). */
    if(pCreateData->Interface == D3DWDDM2_0_DDI_INTERFACE_VERSION &&
-      IS_DXGI1_4_BASE_FUNCTIONS(pCreateData->Interface,pCreateData->Version))
+      IS_DXGI1_4_BASE_FUNCTIONS(pCreateData->Interface, pCreateData->Version))
       AgxWddm2_0FillDxgiFuncs(pCreateData->DXGIBaseDDI.pDXGIDDIBaseFunctions5);
    UINT present_contract[3] = { (UINT)pCreateData->Interface,
       (UINT)pCreateData->Version,
