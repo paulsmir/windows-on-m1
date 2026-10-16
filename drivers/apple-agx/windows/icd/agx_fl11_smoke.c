@@ -170,6 +170,17 @@ static int read_buffer(ID3D11Buffer *src, UINT bytes, void *dst) {
   return 1;
 }
 
+/* EXP1313: CopyResource needs identical sizes -- reading the 16-byte count
+ * buffer through a 4-byte staging copy was dropped (E_INVALIDARG), so the
+ * smoke read a fresh staging buffer instead of the structure count. */
+static ID3D11Buffer *count;
+static int read_count(UINT *value) {
+  UINT words16[4];
+  if (!read_buffer(count, 16, words16)) return 0;
+  *value = words16[0];
+  return 1;
+}
+
 static ID3D11Texture2D *texture(UINT w, UINT h, DXGI_FORMAT format, UINT bind, UINT usage, UINT cpu,
                                 const D3D11_SUBRESOURCE_DATA *data) {
   D3D11_TEXTURE2D_DESC td;
@@ -208,7 +219,7 @@ static int compare_uint(const void *a, const void *b) {
 static int case_uav(int iteration) {
   static ID3D11ComputeShader *cs;
   static ID3D11Texture2D *img;
-  static ID3D11Buffer *words, *app, *count;
+  static ID3D11Buffer *words, *app; /* count: file scope (read_count) */
   static ID3D11UnorderedAccessView *uavs[3];
   static int ready = -1;
   UINT texels[256], w[3], appended[256], n = 0, expect_n = 0, expect_vals[256], bad = 0;
@@ -255,7 +266,7 @@ static int case_uav(int iteration) {
     ID3D11DeviceContext_CSSetUnorderedAccessViews(ctx, 0, 3, uavs, probe_initial);
     ID3D11DeviceContext_CSSetUnorderedAccessViews(ctx, 0, 3, none, NULL);
     ID3D11DeviceContext_CopyStructureCount(ctx, count, 0, uavs[2]);
-    if (read_buffer(count, 4, &got)) say("U COUNTCHECK initial 42 copied 0x%x (words[0] 0x777)", got);
+    if (read_count(&got)) say("U COUNTCHECK initial 42 copied 0x%x (words[0] 0x777)", got);
     ID3D11DeviceContext_UpdateSubresource(ctx, (ID3D11Resource *)words, 0, NULL, zero_words, 0, 0);
   }
   ID3D11DeviceContext_CSSetShader(ctx, cs, NULL, 0);
@@ -279,7 +290,7 @@ static int case_uav(int iteration) {
     }
   }
   if (!read_texels(img, 16, 16, DXGI_FORMAT_R32_UINT, texels) || !read_buffer(words, 12, w) ||
-      !read_buffer(count, 4, &n) || !read_buffer(app, sizeof(appended), appended)) {
+      !read_count(&n) || !read_buffer(app, sizeof(appended), appended)) {
     say("U READBACK failed at %d", iteration);
     return 1;
   }
