@@ -110,6 +110,39 @@ void (*AgxWin32VdmTraceHook)(uint64_t va, const uint32_t *words,
  * sample while clears and copies reach them): the render fields that carry
  * the sample count, for every multisampled render, as submitted. */
 void (*AgxWin32RenderTraceHook)(const uint32_t *values, unsigned count);
+/* EXP1317 receipt-only: every pixel shader whose indexable temporary Asahi
+ * lowers to scratch (above 256 bytes) hung the GPU (agx_scratch_smoke n=24,
+ * DEVICE_HUNG) with the SGX core topology reported. The fragment helper
+ * fields of the render and the helper header Mesa built (agx_scratch.c;
+ * libagx/helper.h agx_helper_header: u32 subgroups, u32 pad, then 88-byte
+ * agx_helper_core entries {u64 blocklist, alloc_cur, alloc_max,
+ * alloc_failed, pad, alloc_count[16]}) tell whether the helper ever ran:
+ * site 1 at submission, site 2 when the context is destroyed. */
+void (*AgxWin32ScratchTraceHook)(const uint32_t *values, unsigned count);
+void AgxWin32AsahiScratchReceipt(struct agx_context *ctx, unsigned site,
+                                 const struct drm_asahi_cmd_render *render) {
+  uint32_t values[15]={0};
+  const unsigned char *hdr;
+  if(!AgxWin32ScratchTraceHook || !ctx || !ctx->scratch_fs.buf || !ctx->scratch_fs.header)
+    return;
+  hdr=(const unsigned char *)ctx->scratch_fs.header;
+  values[0]=site;
+  memcpy(&values[1],hdr,4);
+  values[2]=render ? render->fragment_helper.binary : 0u;
+  values[3]=render ? (uint32_t)render->fragment_helper.data : (uint32_t)ctx->scratch_fs.buf->va->addr;
+  values[4]=render ? (uint32_t)(render->fragment_helper.data>>32) : (uint32_t)(ctx->scratch_fs.buf->va->addr>>32);
+  values[5]=render ? render->fragment_helper.cfg : ctx->scratch_fs.size_dwords;
+  for(unsigned core=0;core<8u;++core) {
+    const unsigned char *c=hdr+8u+88u*core;
+    uint32_t cur,max,failed,sum=0,count;
+    memcpy(&cur,c+8,4); memcpy(&max,c+12,4); memcpy(&failed,c+16,4);
+    for(unsigned i=0;i<16u;++i) { memcpy(&count,c+24+4*i,4); sum+=count; }
+    values[6+core]=(cur&0xffu)|((max&0xffu)<<8)|((failed>0xffu?0xffu:failed)<<16)|
+        ((sum>0xffu?0xffu:sum)<<24);
+  }
+  memcpy(&values[14],hdr+8u+88u*1u,4); /* core 1 block list, low word */
+  AgxWin32ScratchTraceHook(values,15u);
+}
 void AgxWin32AsahiMarkBatchFault(struct agx_context *ctx,
                                 struct agx_batch *batch,unsigned site) {
   if(!ctx) return;

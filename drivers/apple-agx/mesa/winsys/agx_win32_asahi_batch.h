@@ -73,4 +73,7 @@ void AgxWin32AsahiDrawPhases(APPLE_AGX_U32 out[6]);
 int AgxWin32AsahiFenceSignalled(struct agx_device *,APPLE_AGX_U64);
 int AgxWin32AsahiFenceWait(struct agx_device *,APPLE_AGX_U64);
 void AgxWin32AsahiMarkBatchFault(struct agx_context *,struct agx_batch *,unsigned);
+struct drm_asahi_cmd_render;
+/* EXP1317 receipt-only: the fragment scratch helper header (agx_win32_gpuva_batch.c). */
+void AgxWin32AsahiScratchReceipt(struct agx_context *,unsigned,const struct drm_asahi_cmd_render *);
 #endif

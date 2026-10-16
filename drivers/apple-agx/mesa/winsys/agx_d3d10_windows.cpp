@@ -46,6 +46,14 @@ extern "C" void (*AgxWin32PerfHook)(const char *message);
 extern "C" void (*AgxWin32VdmTraceHook)(uint64_t va,const uint32_t *words,
                                         unsigned count,unsigned draws);
 extern "C" void (*AgxWin32RenderTraceHook)(const uint32_t *values,unsigned count);
+extern "C" void (*AgxWin32ScratchTraceHook)(const uint32_t *values,unsigned count);
+static void AgxD3d10ScratchTrace(const uint32_t *values,unsigned count) {
+  static volatile LONG records;
+  if(InterlockedIncrement(&records)>32 || count>16u) return;
+  UINT copy[16];
+  for(unsigned i=0;i<count;++i) copy[i]=values[i];
+  AdmissionUmdDiagnostic("measure-scratch-helper",S_OK,copy,count);
+}
 static void AgxD3d10RenderTrace(const uint32_t *values,unsigned count) {
   static volatile LONG records;
   if(InterlockedIncrement(&records)>32 || count>16u) return;
@@ -573,6 +581,7 @@ HRESULT AgxD3d10WindowsCreateDevice(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
   AgxWin32BackendFailHook=AgxD3d10BackendFail;
   AgxWin32VdmTraceHook=AgxD3d10VdmTrace;
   AgxWin32RenderTraceHook=AgxD3d10RenderTrace;
+  AgxWin32ScratchTraceHook=AgxD3d10ScratchTrace;
   AgxWin32FirstFaultHook=AgxD3d10FirstFault;
   AgxWin32PerfHook=AgxD3d10PerfNote;
   owner->Stage=AgxD3d10DeviceReady;

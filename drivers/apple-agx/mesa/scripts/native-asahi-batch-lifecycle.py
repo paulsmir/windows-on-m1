@@ -391,6 +391,10 @@ extern int AgxWin32AsahiDrawPhasesOn;
                   batch->clear, batch->key.zsbuf.texture != NULL);
 #endif
    agx_flush_render(ctx, batch, &render);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+   if (render.fragment_helper.binary) /* EXP1317 receipt-only */
+      AgxWin32AsahiScratchReceipt(ctx, 1u, &render);
+#endif
    if (!AgxWin32AsahiBatchLeave(batch)) { ctx->any_faults = true; return; }
    agx_batch_submit(ctx, batch, compute, &render);''')
     # CS 1.6 ICD (EXP1146): Mesa's GL frontend asks for a fence on glFinish
@@ -564,6 +568,9 @@ agx_flush(struct pipe_context *pctx,''')
     s=s[:a]+part+s[b:]
     a,b=function(s,'agx_destroy_context');part=s[a:b]
     part=replace(part,'   agx_sync_all(ctx, "destroy context");','''   agx_sync_all(ctx, "destroy context");
+#ifdef APPLE_AGX_GPUVA_WINSYS
+   AgxWin32AsahiScratchReceipt(ctx, 2u, NULL); /* EXP1317 receipt-only */
+#endif
    for (unsigned i = 0; i < AGX_MAX_BATCHES; ++i)
       if (ctx->batches.slots[i].windows_batch) return; /* retains pending context */''')
     start=part.index('   /* Lock around the syncobj destruction');end=part.index('   pipe_resource_reference(&ctx->heap',start)
