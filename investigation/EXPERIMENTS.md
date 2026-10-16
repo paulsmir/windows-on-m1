@@ -56071,3 +56071,6 @@ WHAT IS STILL UNKNOWN: the Terminal function that calls abort and the failing op
 Expected: reject-abort-stack records from WindowsTerminal.exe naming its abort caller (e.g. Microsoft.Terminal.Control / WindowsTerminal / d2d1 / d3d11 offsets); otherwise EXP1333's behaviour.
 Failure criteria: no record despite Terminal's fail-fast (then Terminal does not reach the shared ucrtbase abort through SIGABRT), a behaviour change, a bugcheck.
 Recovery: rec1334h. Evidence: evidence/EXP1334.
+EXP1334 ACTUAL 2026-10-16T17:28Z (PACKAGE1334 = 7defd4ea (branch exp1334-fl11-abort: 4a7d7e27 abort stack receipt on the EXP1333 tree + FL 11_0 default) + WOW64 UMD out75 on closure 095 + GL ICD out61 on m1n1 5b857603; evidence/EXP1334): behaviour as EXP1333 (smoke exit 0xc000013a after FRAME 0, Terminal fail-fast). One reject-abort-stack record (pid 8996, tid 11224): the SIGABRT handler ran in Terminal's abort(), confirming the abort path, but all eight filtered frame slots are empty (no frame outside the CRT, the system unwinding modules and the UMD was found, or the capture returned none).
+Verdict: CONFIRMED that Terminal reaches abort() through the shared ucrtbase SIGABRT; INCONCLUSIVE for its caller.
+Next: EXP1335 = EXP1334 + a minidump of the process at abort() beside the trace and the raw frame count/frames (7a56ee84).
