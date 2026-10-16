@@ -58,6 +58,13 @@ int main() {
   const UINT doubles[] = {0x00000041, 4, 0x0100106a, 0x0100003e};
   const UINT sm5[] = {0x00000050, 3, 0x0100003e};
   const UINT truncated[] = {0x00000040, 4, 0x0100003e, 0x05000036};
+  /* EXP1335: Windows Terminal's ps_4_0 switches on its shading type; the
+   * TGSI path has no SWITCH in tgsi_to_nir (abort). switch r0.x / case 0 /
+   * break / default / break / endswitch / ret. */
+  const UINT switched[] = {0x00000040, 15, 0x02000068, 1, 0x0300004c, 0x0010000a, 0,
+                           0x03000006, 0x00004001, 0, 0x01000002, 0x0100000a, 0x01000002,
+                           0x01000017, 0x0100003e};
+  assert(AgxD3d10TranslatorOnly(switched));
   assert(AgxD3d10TranslatorOnly(structured));
   assert(!AgxD3d10TranslatorOnly(plain));
   assert(!AgxD3d10TranslatorOnly(icb41));

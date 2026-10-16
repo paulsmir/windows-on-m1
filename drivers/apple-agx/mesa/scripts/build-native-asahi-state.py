@@ -3184,7 +3184,11 @@ extern "C" BOOL AgxD3d10WindowsDiagnosticSwitch(const char *Name);
  * EXP1315: so does any D3D 11 global flag (D3D10_SB_GLOBAL_FLAGS_MASK beyond
  * D3D10_SB_GLOBAL_FLAG_REFACTORING_ALLOWED): d2d1's minimum-precision ps_4_0
  * (D3D11_1_SB_GLOBAL_FLAG_ENABLE_MINIMUM_PRECISION) carries extended operand
- * tokens, which the parser asserts away ("Unknown TGSI texture target"). */
+ * tokens, which the parser asserts away ("Unknown TGSI texture target").
+ * EXP1335: so does a switch (D3D10_SB_OPCODE_SWITCH): the SM 4 parser emits
+ * TGSI SWITCH/CASE/DEFAULT/ENDSWITCH, which tgsi_to_nir does not translate
+ * ("unknown TGSI opcode", abort() -- Windows Terminal's ps_4_0 switches on
+ * its shading type); the translator lowers switch to NIR control flow. */
 static inline bool
 AgxD3d10TranslatorOnly(const UINT *code)
 {
@@ -3202,6 +3206,8 @@ AgxD3d10TranslatorOnly(const UINT *code)
          length = code[i + 1u];
       }
       if (opcode >= 0x70u || !length || length > size - i)
+         return true;
+      if (opcode == 0x4cu) /* D3D10_SB_OPCODE_SWITCH */
          return true;
       if (opcode == 0x6au && (code[i] & 0x00fff800u & ~0x800u))
          return true; /* D3D10_SB_OPCODE_DCL_GLOBAL_FLAGS */
