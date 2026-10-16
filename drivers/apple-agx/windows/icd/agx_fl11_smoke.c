@@ -241,6 +241,12 @@ static int case_uav(int iteration) {
   }
   if (!ready) return 1;
   ID3D11DeviceContext_UpdateSubresource(ctx, (ID3D11Resource *)words, 0, NULL, zero_words, 0, 0);
+  {
+    /* EXP1310: a sentinel the copy must overwrite (count 256 for 86 while
+     * the appended slots are compact) */
+    static const UINT sentinel[4] = {0xdeadbeefu, 0xdeadbeefu, 0xdeadbeefu, 0xdeadbeefu};
+    ID3D11DeviceContext_UpdateSubresource(ctx, (ID3D11Resource *)count, 0, NULL, sentinel, 0, 0);
+  }
   ID3D11DeviceContext_CSSetShader(ctx, cs, NULL, 0);
   ID3D11DeviceContext_CSSetUnorderedAccessViews(ctx, 0, 3, uavs, initial);
   ID3D11DeviceContext_Dispatch(ctx, 2, 2, 1);
@@ -265,14 +271,25 @@ static int case_uav(int iteration) {
     /* EXP1308: count 256 for 86 expected -- tell a counter that adds per
      * SIMD group (the first 86 slots hold the expected values) from a branch
      * that did not mask the append (all 256 thread values present). */
-    UINT i, matching = 0, distinct = 0, nonzero = 0;
+    UINT i, matching = 0, distinct = 0, nonzero = 0, head = 0, tail = 0, groups = 0;
     unsigned char seen[256] = {0};
     for (i = 0; i < 256; ++i) {
       if (appended[i]) ++nonzero;
       if (appended[i] < 256 && !seen[appended[i]]) { seen[appended[i]] = 1; ++distinct; }
       if (appended[i] < 256 && (appended[i] / 16 + appended[i] % 16) % 3 == 0) ++matching;
+      /* EXP1310: compact slots [0, 86) = the counter advanced by the active
+       * lanes and only the count read back is wrong; values spread in blocks
+       * of 32 = the counter advanced by 32 per SIMD group */
+      if (appended[i]) { if (i < expect_n) ++head; else ++tail; }
+    }
+    for (i = 0; i < 256; i += 32) {
+      UINT j, any = 0;
+      for (j = i; j < i + 32; ++j) any |= appended[j];
+      if (any) ++groups;
     }
     say("U WRONG append count %u expect %u", n, expect_n);
+    say("U APPENDED SLOTS head %u tail %u nonempty-32-blocks %u", head, tail, groups);
+    if (n == 0xdeadbeefu) say("U COUNT not written by CopyStructureCount");
     say("U APPENDED nonzero %u distinct %u matching %u first %u %u %u %u %u %u %u %u", nonzero,
         distinct, matching, appended[0], appended[1], appended[2], appended[3], appended[4],
         appended[5], appended[6], appended[7]);
