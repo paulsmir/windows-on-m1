@@ -261,7 +261,23 @@ static int case_uav(int iteration) {
     say("U WRONG atomics add %u max %u add-x %u (expect 256 1515 1920)", w[0], w[1], w[2]);
     ++bad;
   }
-  if (n != expect_n) { say("U WRONG append count %u expect %u", n, expect_n); ++bad; }
+  if (n != expect_n) {
+    /* EXP1308: count 256 for 86 expected -- tell a counter that adds per
+     * SIMD group (the first 86 slots hold the expected values) from a branch
+     * that did not mask the append (all 256 thread values present). */
+    UINT i, matching = 0, distinct = 0, nonzero = 0;
+    unsigned char seen[256] = {0};
+    for (i = 0; i < 256; ++i) {
+      if (appended[i]) ++nonzero;
+      if (appended[i] < 256 && !seen[appended[i]]) { seen[appended[i]] = 1; ++distinct; }
+      if (appended[i] < 256 && (appended[i] / 16 + appended[i] % 16) % 3 == 0) ++matching;
+    }
+    say("U WRONG append count %u expect %u", n, expect_n);
+    say("U APPENDED nonzero %u distinct %u matching %u first %u %u %u %u %u %u %u %u", nonzero,
+        distinct, matching, appended[0], appended[1], appended[2], appended[3], appended[4],
+        appended[5], appended[6], appended[7]);
+    ++bad;
+  }
   else {
     qsort(appended, n, 4, compare_uint);
     qsort(expect_vals, n, 4, compare_uint);
