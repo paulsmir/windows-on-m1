@@ -2019,7 +2019,8 @@ enum {
   AdmissionPagingReceiptLeaf64K = 16u,
   AdmissionPagingReceiptSystemGroups = 32u,
   AdmissionPagingReceiptSystemShapes = 64u,
-  AdmissionPagingReceiptPoolDemand = 128u
+  AdmissionPagingReceiptPoolDemand = 128u,
+  AdmissionPagingReceiptBrokerFailures = 256u
 };
 typedef struct _ADMISSION_PAGING_RECEIPTS {
   KSPIN_LOCK Lock;
@@ -2034,6 +2035,7 @@ typedef struct _ADMISSION_PAGING_RECEIPTS {
   ULONGLONG SystemGroups[8];
   ADMISSION_G3_SYSTEM_SHAPE SystemShapes[ADMISSION_G3_SYSTEM_SHAPE_COUNT];
   ADMISSION_POOL_DEMAND_RECEIPT PoolDemand;
+  ADMISSION_G3_BROKER_FAILURES Broker;
 } ADMISSION_PAGING_RECEIPTS;
 
 static IO_WORKITEM_ROUTINE AdmissionPagingReceiptWorker;
@@ -2061,6 +2063,8 @@ static void AdmissionPagingReceiptStage(ADMISSION_CONTEXT *Context,
       RtlCopyMemory(receipts->SystemShapes, Data, sizeof(receipts->SystemShapes));
     else if (Kind == AdmissionPagingReceiptPoolDemand)
       RtlCopyMemory(&receipts->PoolDemand, Data, sizeof(receipts->PoolDemand));
+    else if (Kind == AdmissionPagingReceiptBrokerFailures)
+      RtlCopyMemory(&receipts->Broker, Data, sizeof(receipts->Broker));
     receipts->Dirty |= Kind;
     if (InterlockedCompareExchange(&receipts->Queued, 1, 0) == 0) {
       KeClearEvent(&receipts->Idle);
@@ -2098,6 +2102,7 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
     ULONGLONG unpublished[32], leaf64k[32], groups[8];
     ADMISSION_G3_SYSTEM_SHAPE shapes[ADMISSION_G3_SYSTEM_SHAPE_COUNT];
     ADMISSION_POOL_DEMAND_RECEIPT pool;
+    ADMISSION_G3_BROKER_FAILURES broker;
     ADMISSION_G3_PAGING_WAIT_RECEIPT wait;
     ULONG dirty;
     KIRQL oldIrql;
@@ -2111,6 +2116,7 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
     RtlCopyMemory(groups, receipts->SystemGroups, sizeof(groups));
     RtlCopyMemory(shapes, receipts->SystemShapes, sizeof(shapes));
     RtlCopyMemory(&pool, &receipts->PoolDemand, sizeof(pool));
+    RtlCopyMemory(&broker, &receipts->Broker, sizeof(broker));
     if (dirty == 0u) {
       /* Cleared under the lock that Stage sets Dirty under: no lost wakeup. */
       InterlockedExchange(&receipts->Queued, 0);
@@ -2125,6 +2131,9 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
     if (dirty & AdmissionPagingReceiptFailure)
       AdmissionPagingReceiptWrite(context, L"Wom1G3PagingFailure", &failure,
                                   sizeof(failure), TRUE);
+    if (dirty & AdmissionPagingReceiptBrokerFailures)
+      AdmissionPagingReceiptWrite(context, L"Wom1G3BrokerFailures", &broker,
+                                  sizeof(broker), TRUE);
     if (dirty & AdmissionPagingReceiptUnpublished)
       AdmissionPagingReceiptWrite(context, L"Wom1G3UnpublishedGroups",
                                   unpublished, sizeof(unpublished), TRUE);
@@ -2214,6 +2223,25 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3PagingFailure(
     return;
   /* Written (and flushed) by AdmissionPagingReceiptWorker. */
   AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptFailure, Failure);
+}
+
+_Use_decl_annotations_ void AdmissionRecordGpuvaG3BrokerFailures(
+    ADMISSION_CONTEXT *Context, const APPLE_AGX_GPUVA_V5_CLIENT *Client) {
+  ADMISSION_G3_BROKER_FAILURES snapshot;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      Client == NULL || Client->FailureCount == 0ULL ||
+      Client->FailureCount == (ULONGLONG)InterlockedCompareExchange64(
+          &Context->G3BrokerFailuresStaged, 0, 0))
+    return;
+  RtlZeroMemory(&snapshot, sizeof(snapshot));
+  snapshot.Version = ADMISSION_G3_BROKER_FAILURES_VERSION;
+  snapshot.Bytes = sizeof(snapshot);
+  snapshot.FailureCount = Client->FailureCount;
+  RtlCopyMemory(snapshot.Ring, Client->Failures, sizeof(snapshot.Ring));
+  InterlockedExchange64(&Context->G3BrokerFailuresStaged,
+                        (LONG64)snapshot.FailureCount);
+  AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptBrokerFailures,
+                              &snapshot);
 }
 
 /* One 16-byte receipt per adapter instance; never overwrite the first cause. */

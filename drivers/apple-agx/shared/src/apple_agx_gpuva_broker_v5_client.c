@@ -18,6 +18,28 @@ static bool ClientCallUntimed(APPLE_AGX_GPUVA_V5_CLIENT *client,
                               const AGX_GPUVA_V5_REQUEST *request,
                               AGX_GPUVA_V5_RESPONSE *response);
 
+static void RecordFailure(APPLE_AGX_GPUVA_V5_CLIENT *client,
+                          const AGX_GPUVA_V5_REQUEST *request,
+                          const AGX_GPUVA_V5_RESPONSE *response, bool ok)
+{
+    APPLE_AGX_GPUVA_V5_FAILURE *f;
+    if (!client || !request || (ok && response && !response->Status && !response->Flags))
+        return;
+    f = &client->Failures[client->FailureCount % APPLE_AGX_GPUVA_V5_FAILURE_RING];
+    ++client->FailureCount;
+    f->Command = request->Command;
+    f->Answered = ok ? 1u : 0u;
+    f->Status = ok && response ? response->Status : ~0u;
+    f->Flags = ok && response ? response->Flags : 0u;
+    f->Slot = request->Slot;
+    f->Index = request->Index;
+    f->Sequence = client->Sequence;
+    f->ProcessId = request->ProcessId;
+    f->ProcessGeneration = request->ProcessGeneration;
+    f->TableIpa = request->TableIpa;
+    f->AuxIpa = request->AuxIpa;
+}
+
 bool AppleAgxGpuvaV5ClientCall(APPLE_AGX_GPUVA_V5_CLIENT *client,
                                const AGX_GPUVA_V5_REQUEST *request,
                                AGX_GPUVA_V5_RESPONSE *response)
@@ -25,10 +47,14 @@ bool AppleAgxGpuvaV5ClientCall(APPLE_AGX_GPUVA_V5_CLIENT *client,
     unsigned long long start, elapsed;
     unsigned command;
     bool ok;
-    if (!client || !client->Io.Now || !request)
-        return ClientCallUntimed(client, request, response);
+    if (!client || !client->Io.Now || !request) {
+        ok = ClientCallUntimed(client, request, response);
+        RecordFailure(client, request, response, ok);
+        return ok;
+    }
     start = client->Io.Now(client->Io.Context);
     ok = ClientCallUntimed(client, request, response);
+    RecordFailure(client, request, response, ok);
     elapsed = client->Io.Now(client->Io.Context) - start;
     command = request->Command < APPLE_AGX_GPUVA_V5_TIMED_COMMANDS ?
         request->Command : 0u;

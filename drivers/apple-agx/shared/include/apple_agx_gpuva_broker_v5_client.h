@@ -14,6 +14,13 @@ typedef struct _APPLE_AGX_GPUVA_V5_IO {
 } APPLE_AGX_GPUVA_V5_IO;
 
 #define APPLE_AGX_GPUVA_V5_TIMED_COMMANDS 32u
+/* EXP1321 receipt-only: the last broker calls that did not succeed (Status
+ * or Flags non-zero, or no response), newest at (FailureCount - 1) % ring. */
+#define APPLE_AGX_GPUVA_V5_FAILURE_RING 8u
+typedef struct _APPLE_AGX_GPUVA_V5_FAILURE {
+    unsigned int Command, Status, Flags, Slot, Index, Answered;
+    unsigned long long Sequence, ProcessId, ProcessGeneration, TableIpa, AuxIpa;
+} APPLE_AGX_GPUVA_V5_FAILURE;
 
 typedef struct _APPLE_AGX_GPUVA_V5_CLIENT {
     APPLE_AGX_GPUVA_V5_IO Io;
@@ -25,6 +32,8 @@ typedef struct _APPLE_AGX_GPUVA_V5_CLIENT {
     unsigned long long Calls[APPLE_AGX_GPUVA_V5_TIMED_COMMANDS];
     unsigned long long Ticks[APPLE_AGX_GPUVA_V5_TIMED_COMMANDS];
     unsigned long long MaxTicks[APPLE_AGX_GPUVA_V5_TIMED_COMMANDS];
+    unsigned long long FailureCount;
+    APPLE_AGX_GPUVA_V5_FAILURE Failures[APPLE_AGX_GPUVA_V5_FAILURE_RING];
 } APPLE_AGX_GPUVA_V5_CLIENT;
 
 bool AppleAgxGpuvaV5ClientInit(APPLE_AGX_GPUVA_V5_CLIENT *,

@@ -1435,6 +1435,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     }
     ExReleaseFastMutex(&state->Lock);
     AdmissionRecordGpuvaG3Flush(adapter, &receipt);
+    AdmissionRecordGpuvaG3BrokerFailures(adapter, &state->Client);
     AdmissionRecordG3PagingWait(adapter);
     if (!NT_SUCCESS(status) && receipt.BrokerStatus != 0u &&
         receipt.Branch != 4u)
@@ -1482,6 +1483,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT *adapter,
     (void)AdmissionG3RejectPaging(&failure,
         AdmissionG3PagingFailureTableAddress, MAXULONG, NULL, 0ULL, status);
     AdmissionRecordGpuvaG3PagingFailure(adapter, &failure);
+    AdmissionRecordGpuvaG3BrokerFailures(adapter, &state->Client);
     AdmissionG3RecordLeafEarly(state, update, 2u, status);
     return status;
   }
@@ -1656,6 +1658,7 @@ PagingDone:
     AdmissionRecordGpuvaG3SystemGroups(adapter, groups_after);
   AdmissionRecordG3PagingWait(adapter);
   AdmissionRecordGpuvaG3PagingFailure(adapter, &failure);
+  AdmissionRecordGpuvaG3BrokerFailures(adapter, &state->Client);
   if (!NT_SUCCESS(status) && failure.Branch != 0u &&
       failure.GraphLastStatus != 0u)
     return STATUS_GRAPHICS_ALLOCATION_BUSY;

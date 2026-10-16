@@ -792,6 +792,8 @@ typedef struct _ADMISSION_CONTEXT {
   ULONG GpuCoresPerCluster;
   ULONG GpuCoreMask;
   volatile LONG FeatureReadyMask;
+  /* EXP1321 receipt-only: broker failure count last staged (Wom1G3BrokerFailures). */
+  volatile LONG64 G3BrokerFailuresStaged;
   /* G4-r3 (EXP1296): Wom1GpuReset; written by the reset thread only
    * (first-level synchronization). */
   ADMISSION_GPU_RESET_RECEIPT GpuReset;
@@ -1235,6 +1237,17 @@ typedef struct _ADMISSION_G3_PAGING_FAILURE {
 void AdmissionRecordGpuvaG3PagingFailure(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_G3_PAGING_FAILURE *Failure);
+/* EXP1321 receipt-only: Wom1G3BrokerFailures, the V5 client's failure ring
+ * (staged by the paging receipt worker when the failure count moved). */
+#define ADMISSION_G3_BROKER_FAILURES_VERSION 1u
+typedef struct _ADMISSION_G3_BROKER_FAILURES {
+  ULONG Version, Bytes;
+  ULONGLONG FailureCount;
+  APPLE_AGX_GPUVA_V5_FAILURE Ring[APPLE_AGX_GPUVA_V5_FAILURE_RING];
+} ADMISSION_G3_BROKER_FAILURES;
+void AdmissionRecordGpuvaG3BrokerFailures(
+    _In_opt_ ADMISSION_CONTEXT *Context,
+    _In_opt_ const APPLE_AGX_GPUVA_V5_CLIENT *Client);
 void AdmissionRenderCorrelationSubmitFailureWindows(
     _In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG4SubmitFailure(_In_opt_ ADMISSION_CONTEXT *Context);
