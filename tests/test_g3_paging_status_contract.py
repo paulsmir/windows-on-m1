@@ -6,8 +6,13 @@ EXP1014 and EXP1025 bugchecked 0x10E/0xB (VIDEO_MEMORY_MANAGEMENT_INTERNAL,
 UpdatePageTable path returned STATUS_INVALID_DEVICE_STATE for a destroyed or
 poisoned process. DXGKDDI_BUILDPAGINGBUFFER permits only STATUS_SUCCESS,
 STATUS_GRAPHICS_ALLOCATION_BUSY and STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER.
+EXP1320 bugchecked 0x10E/0xB with P3 0xC01E0102: STATUS_GRAPHICS_ALLOCATION_BUSY
+from UpdatePageTable (dxgmms2 CommitVirtualAddressRange). The documentation
+permits ALLOCATION_BUSY only for Transfer, DiscardContent and
+SpecialLockTransfer, where VidMm retries with AllocationIsIdle.
 Invariants:
-- permitted statuses pass through unchanged;
+- permitted statuses pass through unchanged (ALLOCATION_BUSY only for the
+  operations VidMm retries);
 - any other status from UpdatePageTable or FlushTlb completes with
   STATUS_SUCCESS and poisons the owning process (its jobs are refused);
 - other operations are not rewritten.
@@ -45,9 +50,11 @@ typedef long NTSTATUS; typedef unsigned char BOOLEAN; typedef void *HANDLE; type
 #define STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER ((NTSTATUS)0xC01E0001L)
 #define STATUS_INVALID_DEVICE_STATE ((NTSTATUS)0xC0000184L)
 #define STATUS_INVALID_PARAMETER ((NTSTATUS)0xC000000DL)
-enum { DXGK_OPERATION_FLUSH_TLB = 12, DXGK_OPERATION_UPDATE_PAGE_TABLE = 11, DXGK_OPERATION_VIRTUAL_FILL = 13 };
+typedef enum { DXGK_OPERATION_TRANSFER = 0, DXGK_OPERATION_DISCARD_CONTENT = 2,
+  DXGK_OPERATION_SPECIAL_LOCK_TRANSFER = 7, DXGK_OPERATION_UPDATE_PAGE_TABLE = 11,
+  DXGK_OPERATION_FLUSH_TLB = 12, DXGK_OPERATION_VIRTUAL_FILL = 13 } DXGK_BUILDPAGINGBUFFER_OPERATION;
 struct UPT { HANDLE hProcess; }; struct FT { HANDLE hProcess; };
-struct DXGKARG_BUILDPAGINGBUFFER { int Operation; UPT UpdatePageTable; FT FlushTlb; };
+struct DXGKARG_BUILDPAGINGBUFFER { DXGK_BUILDPAGINGBUFFER_OPERATION Operation; UPT UpdatePageTable; FT FlushTlb; };
 struct ADMISSION_G3_PROCESS { BOOLEAN Poisoned; ULONG PoisonSite; };
 struct ADMISSION_G3_STATE { int Lock; ADMISSION_G3_PROCESS *only; HANDLE handle; };
 struct ADMISSION_CONTEXT { void *GpuvaG3State; volatile LONG G3PagingContractCompletions, G3PagingContractLastStatus; };
@@ -63,9 +70,21 @@ static NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT*, DXGKARG_BU
 int main(){
   ADMISSION_G3_PROCESS p={0,0}; ADMISSION_G3_STATE st={0,&p,(HANDLE)0x55}; ADMISSION_CONTEXT c={&st,0,0};
   DXGKARG_BUILDPAGINGBUFFER a={DXGK_OPERATION_UPDATE_PAGE_TABLE,{(HANDLE)0x55},{0}};
-  NTSTATUS ok[3]={STATUS_SUCCESS,STATUS_GRAPHICS_ALLOCATION_BUSY,STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER};
-  for(int i=0;i<3;++i){ inner_status=ok[i]; assert(AdmissionGpuvaG3BuildPagingBufferChecked(&c,&a)==ok[i]); }
+  NTSTATUS ok[2]={STATUS_SUCCESS,STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER};
+  for(int i=0;i<2;++i){ inner_status=ok[i]; assert(AdmissionGpuvaG3BuildPagingBufferChecked(&c,&a)==ok[i]); }
   assert(!p.Poisoned && c.G3PagingContractCompletions==0);
+  /* ALLOCATION_BUSY passes only where VidMm retries with AllocationIsIdle. */
+  DXGK_BUILDPAGINGBUFFER_OPERATION retried[3]={DXGK_OPERATION_TRANSFER,
+      DXGK_OPERATION_DISCARD_CONTENT,DXGK_OPERATION_SPECIAL_LOCK_TRANSFER};
+  for(int i=0;i<3;++i){ DXGKARG_BUILDPAGINGBUFFER t={retried[i],{0},{0}};
+    inner_status=STATUS_GRAPHICS_ALLOCATION_BUSY;
+    assert(AdmissionGpuvaG3BuildPagingBufferChecked(&c,&t)==STATUS_GRAPHICS_ALLOCATION_BUSY); }
+  /* EXP1320: from UpdatePageTable it bugchecked 0x10E/0xB. */
+  inner_status=STATUS_GRAPHICS_ALLOCATION_BUSY;
+  NTSTATUS busy=AdmissionGpuvaG3BuildPagingBufferChecked(&c,&a);
+  if(busy!=STATUS_SUCCESS){printf("ALLOCATION_BUSY from UpdatePageTable reached VidMm\n");return 1;}
+  assert(p.Poisoned && c.G3PagingContractCompletions==1);
+  p.Poisoned=0; p.PoisonSite=0; c.G3PagingContractCompletions=0;
   inner_status=STATUS_INVALID_DEVICE_STATE;
   NTSTATUS r=AdmissionGpuvaG3BuildPagingBufferChecked(&c,&a);
   if(r!=STATUS_SUCCESS){printf("disallowed status 0x%lx reached VidMm\n",(unsigned long)r);return 1;}

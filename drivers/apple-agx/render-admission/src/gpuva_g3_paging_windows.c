@@ -1245,9 +1245,18 @@ VOID AdmissionGpuvaG3NoteAllocationPaging(ADMISSION_CONTEXT *adapter,
  * STATUS_INVALID_DEVICE_STATE for a destroyed/poisoned process). A page-table
  * update or TLB flush the KMD cannot apply instead poisons the owning process,
  * whose GPU jobs are then refused, and completes for VidMm. */
-static BOOLEAN AdmissionG3PagingStatusAllowed(NTSTATUS Status) {
+/* EXP1320 (0x10E/0xB, P3 0xC01E0102, dxgmms2 UpdatePageTable from
+ * CommitVirtualAddressRange): STATUS_GRAPHICS_ALLOCATION_BUSY is permitted
+ * only where VidMm retries with AllocationIsIdle -- Transfer, DiscardContent
+ * and SpecialLockTransfer (DXGKDDI_BUILDPAGINGBUFFER remarks); for an
+ * UpdatePageTable or FlushTlb it is an invalid code like any other. */
+static BOOLEAN AdmissionG3PagingStatusAllowed(NTSTATUS Status,
+                                              DXGK_BUILDPAGINGBUFFER_OPERATION Operation) {
+  if (Status == STATUS_GRAPHICS_ALLOCATION_BUSY)
+    return Operation == DXGK_OPERATION_TRANSFER ||
+           Operation == DXGK_OPERATION_DISCARD_CONTENT ||
+           Operation == DXGK_OPERATION_SPECIAL_LOCK_TRANSFER;
   return Status == STATUS_SUCCESS ||
-         Status == STATUS_GRAPHICS_ALLOCATION_BUSY ||
          Status == STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
 }
 
@@ -1257,7 +1266,7 @@ NTSTATUS AdmissionGpuvaG3BuildPagingBufferChecked(ADMISSION_CONTEXT *adapter,
   ADMISSION_G3_PROCESS *process;
   HANDLE handle;
   NTSTATUS status = AdmissionGpuvaG3BuildPagingBuffer(adapter, args);
-  if (AdmissionG3PagingStatusAllowed(status) || args == NULL ||
+  if (args == NULL || AdmissionG3PagingStatusAllowed(status, args->Operation) ||
       (args->Operation != DXGK_OPERATION_UPDATE_PAGE_TABLE &&
        args->Operation != DXGK_OPERATION_FLUSH_TLB))
     return status;
