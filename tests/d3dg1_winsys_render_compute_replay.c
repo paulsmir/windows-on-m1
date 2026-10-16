@@ -84,9 +84,12 @@ struct agx_device { struct agx_bo *zero_bo, *scratch_bo; };
 struct agx_batch;
 struct agx_context { struct { struct agx_screen *screen; } base;
   struct { struct agx_batch *slots; } batches; struct agx_bo *timestamps; };
+struct agx_ptr { void *cpu; };
+struct agx_timestamps { uint64_t vtx_start, vtx_end, frag_start, frag_end, comp_start, comp_end; };
 struct agx_batch {
   struct agx_context *ctx;
   void *windows_batch;
+  struct util_dynarray timestamps;
   struct agx_encoder { struct agx_bo *bo; unsigned char *current; } vdm, cdm;
   unsigned draws, clear;
   struct { unsigned bit_count, count; unsigned handles[8]; } bo_list;
@@ -115,9 +118,6 @@ typedef struct {
   APPLE_AGX_G4_PRIVATE_LEASE Lease;
   uint64_t Fence;
   unsigned Entered, ComputeEntered, Submitted, Retired, Rejected;
-  unsigned TimestampCount;
-  uint32_t TimestampOffset[4];
-  unsigned char TimestampEnd[4];
 } AGX_G4_BATCH;
 
 static AGX_WIN32_ASAHI_BACKEND owner;
@@ -138,6 +138,7 @@ static int AgxWin32AsahiShadowPublish(struct agx_bo *bo, size_t bytes) {
   (void)bytes; assert(bo); ++bo->published; return 1;
 }
 static AGX_WIN32_ASAHI_BACKEND *backend(struct agx_batch *b) { (void)b; return &owner; }
+static unsigned agx_batch_idx(struct agx_batch *b) { (void)b; return 0u; }
 static AGX_G4_BATCH *capsule(struct agx_batch *b) { return b->windows_batch; }
 static struct agx_screen *agx_screen(struct agx_screen *s) { return s; }
 static struct agx_device native_device;
@@ -311,9 +312,8 @@ int main(void) {
   compute.flags = 1u;
   assert(!AgxWin32AsahiBatchFinish(&batch, &native, &compute) && !creates && !g->Rejected);
   compute.flags = 0u;
-  /* GPU timestamps: Mesa's vertex start, fragment end and compute end
-   * offsets stay in the capsule; the envelope names no Mesa handle (the
-   * render job's timestamps come from the KMD). */
+  /* GPU timestamps: the envelope names no Mesa handle (the KMD records
+   * the job's firmware timestamps itself). */
   native.native.TimestampsVertex.StartHandle = 2u;
   native.native.TimestampsFragment.EndHandle = 2u;
   native.native.TimestampsFragment.EndOffset = 0x10u;
@@ -329,9 +329,6 @@ int main(void) {
   assert(submit_count == 1 && g->Submitted && g->Fence == 20 && creates == 2);
   /* The KMD admits the v5 envelope; the render-only parser does not. */
   assert(sub.v5_result == AppleAgxG4ParseOk && sub.v3_result != AppleAgxG4ParseOk);
-  assert(g->TimestampCount == 3u && g->TimestampOffset[0] == 0u && !g->TimestampEnd[0] &&
-         g->TimestampOffset[1] == 0x10u && g->TimestampEnd[1] == 1u &&
-         g->TimestampOffset[2] == 0x18u && g->TimestampEnd[2] == 1u);
   assert(!sub.view.Compute.Timestamps.StartHandle && !sub.view.Compute.Timestamps.EndHandle &&
          !sub.view.Compute.Timestamps.EndOffset);
   assert(sub.view.HasCompute &&
@@ -365,20 +362,26 @@ int main(void) {
   assert(bos[2].published == 1u && bos[6].published == 1u);
   /* Written: the colour buffer and the buffer the compute work writes. */
   assert(sub.written_count == 2u && written_has(4) && written_has(13));
-  /* Retirement writes the KMD's start/end where Mesa's buffer takes them
-   * (vertex start, fragment end, compute end), then returns both job BOs. */
+  /* Retirement writes the KMD's start/end into the batch's slot of Mesa's
+   * timestamp buffer when queries are attached (render: vertex start,
+   * fragment end; its compute: comp start/end), then returns both job BOs. */
   assert(AgxWin32AsahiBatchPoll(&batch, 1000) && timestamp_queries == 0u);
+  assert(AgxWin32AsahiBatchTimestamps(&batch) && timestamp_queries == 0u); /* no query */
+  {
+    struct agx_ptr attached = {NULL};
+    batch.timestamps.data = &attached; batch.timestamps.size = sizeof(attached);
+  }
   assert(AgxWin32AsahiBatchTimestamps(&batch) && timestamp_queries == 1u);
   {
-    uint64_t v0, v1, v2, untouched;
-    memcpy(&v0, bos[15].cpu + 0x00, 8); memcpy(&v1, bos[15].cpu + 0x10, 8);
-    memcpy(&v2, bos[15].cpu + 0x18, 8); memcpy(&untouched, bos[15].cpu + 0x08, 8);
+    struct agx_timestamps slot; memcpy(&slot, bos[15].cpu, sizeof(slot));
     /* nanoseconds of the 24 MHz counter: 0x1111 -> 182041, 0x2222 -> 364083 */
-    assert(v0 == 182041ULL && v1 == 364083ULL && v2 == 364083ULL &&
-           untouched == 0xeeeeeeeeeeeeeeeeULL);
+    assert(slot.vtx_start == 182041ULL && slot.frag_end == 364083ULL &&
+           slot.comp_start == 182041ULL && slot.comp_end == 364083ULL &&
+           slot.vtx_end == 0xeeeeeeeeeeeeeeeeULL && slot.frag_start == 0xeeeeeeeeeeeeeeeeULL);
     assert(owner.TimestampFrequency == 24000000ULL &&
            owner.TimestampOffset == 364083ULL - 21333ULL);
   }
+  batch.timestamps.data = NULL; batch.timestamps.size = 0;
   assert(AgxWin32AsahiBatchRelease(&batch));
   assert(!batch.windows_batch && release_count == 1 && !bos[1].refs && !bos[12].refs);
 

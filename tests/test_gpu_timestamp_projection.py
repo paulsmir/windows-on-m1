@@ -4,6 +4,8 @@ Invariants caught (docs/superpowers/plans/2026-10-16-gpu-timestamps.md):
 - agx_batch_cleanup asks the winsys for the KMD's values after Poll and
   before Release (the capsule that knows the offsets is gone after Release)
   and before it reads the slots;
+- a TIMESTAMP End attaches to active and submitted batches (EXP1341:
+  Dispatch11's memory barrier submits the compute batch first);
 - agx_end_query keeps Asahi's TIMESTAMP path (batches MAX their end in;
   agx_get_gpu_timestamp is the winsys's clock) instead of failing;
 - every context owns the per-batch timestamp buffer with a nonzero marker
@@ -36,6 +38,11 @@ class GpuTimestampProjection(unittest.TestCase):
             self.assertLess(poll, fill)
             self.assertLess(fill, release)
             self.assertLess(release, cleanup.index("agx_batch_timestamps(batch)"))
+            # EXP1341: a TIMESTAMP also attaches to submitted batches (a
+            # Dispatch's barrier flushes its compute batch before the End).
+            attach = function_body(batch, "agx_add_timestamp_end_query")
+            self.assertIn("foreach_active(ctx, idx)", attach)
+            self.assertIn("foreach_submitted(ctx, idx)", attach)
             query = (asahi / "agx_query.c").read_text()
             end = function_body(query, "agx_end_query")
             self.assertIn("agx_add_timestamp_end_query(ctx, query);", end)

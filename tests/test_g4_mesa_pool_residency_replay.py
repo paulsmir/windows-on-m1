@@ -18,7 +18,7 @@ class G4MesaPoolResidencyReplay(unittest.TestCase):
     def test_all_pool_slabs_are_resident_uploaded_and_retired(self):
         source = (ROOT / "drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c").read_text()
         names = ("batch_refuse", "batch_has_render_work", "submitted_at", "retire_held", "gpuva_color_format_supported", "gpuva_color_formats_supported", "gpuva_color_class", "render_compute", "add_bo", "append_native", "append_attachments",
-                 "prepare_process_buffers", "pool_extent", "publish_shadows", "keep_timestamp", "keep_compute_timestamps", "AgxWin32AsahiBatchFinish",
+                 "prepare_process_buffers", "pool_extent", "publish_shadows", "strip_timestamps", "AgxWin32AsahiBatchFinish",
                  "release_lease", "AgxWin32AsahiBatchPoll", "AgxWin32AsahiBatchAbort",
                  "AgxWin32AsahiBatchRelease")
         with tempfile.TemporaryDirectory(prefix="r148-pool-residency-") as directory:

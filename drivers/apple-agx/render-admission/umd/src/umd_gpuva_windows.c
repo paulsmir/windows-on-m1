@@ -1496,7 +1496,8 @@ static int gpu_timestamps(void *context, uint64_t command_va, uint64_t *start,
       device->Adapter->RuntimeAdapter.handle,&request);
   {
     /* EXP1341 receipt-only: each answer and the KMD's newest compute
-     * capture (first 64 per process). */
+     * capture (first 64 per process; measure- lines are outside the
+     * normal 128-record trace budget, which startup lines consume). */
     static volatile LONG traced;
     if(InterlockedIncrement(&traced)<=64) {
       UINT values[14]={(UINT)command_va,(UINT)(command_va>>32),query.Found,query.Kind,
@@ -1504,7 +1505,7 @@ static int gpu_timestamps(void *context, uint64_t command_va, uint64_t *start,
           (UINT)query.ComputeCommandVa,(UINT)(query.ComputeCommandVa>>32),
           (UINT)query.ComputeWords[0],(UINT)query.ComputeWords[1],
           (UINT)query.ComputeWords[2],(UINT)query.ComputeWords[3]};
-      AdmissionUmdDiagnostic("gpu-timestamps",hr,values,ARRAYSIZE(values));
+      AdmissionUmdDiagnostic("measure-gpu-timestamps",hr,values,ARRAYSIZE(values));
     }
   }
   if(FAILED(hr) || !query.Found || !query.End || !query.Frequency) return 0;

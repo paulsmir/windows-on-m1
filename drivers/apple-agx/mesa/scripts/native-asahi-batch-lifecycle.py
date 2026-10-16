@@ -92,6 +92,20 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
     save(ap,abi)
     bp='src/gallium/drivers/asahi/agx_batch.c'
     s=(out/bp).read_text()
+    # GPU timestamps (EXP1341): a D3D TIMESTAMP follows every previous
+    # command, also batches a barrier already submitted (Dispatch11 flushes
+    # its compute batch); the winsys fills their slots from the KMD record
+    # at cleanup (AgxWin32AsahiBatchTimestamps).
+    s=replace(s,'''   foreach_active(ctx, idx) {
+      agx_batch_add_timestamp_query(&ctx->batches.slots[idx], q);
+   }
+}''','''   foreach_active(ctx, idx) {
+      agx_batch_add_timestamp_query(&ctx->batches.slots[idx], q);
+   }
+   foreach_submitted(ctx, idx) {
+      agx_batch_add_timestamp_query(&ctx->batches.slots[idx], q);
+   }
+}''')
     s=s.replace('#include <xf86drm.h>','/* Windows runtime owns synchronization. */')
     s=s.replace('#include "vdrm.h"','')
     s=s.replace('#include "asahi/lib/agx_device_virtio.h"','#include "agx_device.h"')

@@ -2474,9 +2474,10 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildComputeJob(
     input.HelperProgram = envelope->Compute.Helper.Binary;
     input.HelperArgument = envelope->Compute.Helper.Data;
     input.HelperConfig = envelope->Compute.Helper.Cfg;
-    /* GPU timestamps (T1): a request for either end records both. */
-    input.Timestamps = (envelope->Compute.Timestamps.StartHandle ||
-                        envelope->Compute.Timestamps.EndHandle) ? 1u : 0u;
+    /* GPU timestamps: every envelope compute job records its firmware
+     * start/end (EXP1341: a D3D TIMESTAMP may attach to the batch only
+     * after a barrier flush submitted it, so no request reaches the KMD). */
+    input.Timestamps = 1u;
   }
   if (!AppleAgxRenderSharedMemoryBuildCompute(
           &runtime->Initdata.RenderSharedMemory, &input, &output))

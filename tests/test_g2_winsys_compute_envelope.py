@@ -13,6 +13,8 @@ with the KMD's G13 context-store size. Invariants:
   those (the UMD refreshes their CPU copies after the job);
 - flags and timestamps are refused before anything is created, and a
   refused submission rejects the batch without a fence;
+- GPU timestamps: Mesa's timestamp handles are stripped (the KMD records
+  every compute job's firmware start/end);
 - EXP1339: a helper program (compute scratch: a USC program in the
   pipeline pool, a scratch buffer in the batch, Mesa's configuration
   preamble scratch << 16, here 0) travels in the envelope the KMD admits.
@@ -204,8 +206,8 @@ int main(void) {
   command.flags = 1u;
   assert(!AgxWin32AsahiBatchFinishCompute(&batch, &command) && !creates && !g->Rejected);
   command.flags = 0u;
-  /* GPU timestamps: Mesa's handle/offsets become a KMD request; the capsule
-   * keeps the offsets for the values the KMD returns. */
+  /* GPU timestamps: Mesa's handle/offsets never reach the KMD, which
+   * records every compute job's firmware start/end itself. */
   command.ts.start.handle = 3u; command.ts.start.offset = 0x40u;
   command.ts.end.handle = 3u; command.ts.end.offset = 0x48u;
   /* EXP1339: a compute helper (scratch) is submitted. */
@@ -237,11 +239,8 @@ int main(void) {
   assert(view.Compute.CdmCtrlStreamBase == cdm->va->addr && view.Preemption.Va == g->Preemption->va->addr);
   assert(view.Compute.Helper.Binary == 0x40u && view.Compute.Helper.Data == src->va->addr &&
          view.Compute.Helper.Cfg == 0u);
-  assert(view.Compute.Timestamps.StartHandle == APPLE_AGX_G4_TIMESTAMP_REQUEST &&
-         view.Compute.Timestamps.EndHandle == APPLE_AGX_G4_TIMESTAMP_REQUEST &&
+  assert(!view.Compute.Timestamps.StartHandle && !view.Compute.Timestamps.EndHandle &&
          !view.Compute.Timestamps.StartOffset && !view.Compute.Timestamps.EndOffset);
-  assert(g->TimestampCount == 2u && g->TimestampOffset[0] == 0x40u && !g->TimestampEnd[0] &&
-         g->TimestampOffset[1] == 0x48u && g->TimestampEnd[1] == 1u);
   /* Release returns both job BOs once the job retired. */
   g->Retired = 1;
   struct agx_bo *command_bo = g->Command, *preempt_bo = g->Preemption;
@@ -265,7 +264,7 @@ class WinsysComputeEnvelope(unittest.TestCase):
         capsule_type = source[start:source.index("} AGX_G4_BATCH;", start) + len("} AGX_G4_BATCH;")]
         functions = capsule_type + "\n" + "\n".join(body(source, name) for name in (
             "backend", "capsule", "batch_refuse", "compute_only", "render_compute", "add_bo", "pool_extent",
-            "publish_shadows", "keep_timestamp", "keep_compute_timestamps",
+            "publish_shadows", "strip_timestamps",
             "AgxWin32AsahiBatchComputeEnter",
             "AgxWin32AsahiBatchComputeLeave", "AgxWin32AsahiBatchComputeFinalize",
             "AgxWin32AsahiBatchFinishCompute", "release_lease", "AgxWin32AsahiBatchRelease"))
