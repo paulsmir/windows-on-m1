@@ -21,12 +21,16 @@ typedef struct _ADMISSION_ALLOCATION_DESCRIPTION {
 } ADMISSION_ALLOCATION_DESCRIPTION;
 
 /* Per-resource data survives a shared OpenResource independently of each
- * allocation's placement description. Never infer displayability from BGRA. */
+ * allocation's placement description. Never infer displayability from BGRA.
+ * Version 3 (EXP1327): Format is the DXGI_FORMAT the resource was created
+ * with, since D3D10DDIARG_OPENRESOURCE carries none and several DXGI formats
+ * share one storage format (A8_UNORM is stored as RGBA8); the KMD treats it
+ * as opaque. */
 #define ADMISSION_PRESENT_RESOURCE_MAGIC 0x52505241u
-#define ADMISSION_PRESENT_RESOURCE_VERSION 2u
+#define ADMISSION_PRESENT_RESOURCE_VERSION 3u
 #define ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY 1u
 typedef struct _ADMISSION_PRESENT_RESOURCE_DATA {
-  unsigned int Magic, Version, Bytes, Flags, Reserved;
+  unsigned int Magic, Version, Bytes, Flags, Format;
   /* DXGI_DDI_PRIMARY_DESC.ModeDesc.RefreshRate of a primary; 0/0 otherwise. */
   unsigned int RefreshNumerator, RefreshDenominator;
 } ADMISSION_PRESENT_RESOURCE_DATA;

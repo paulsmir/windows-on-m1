@@ -246,6 +246,8 @@ typedef struct _ADMISSION_UMD_RESOURCE {
   ADMISSION_UMD_DIRECT_FLIP_RESOURCE DirectFlip;
   ADMISSION_UMD_RETIREMENT *Retirement;
   BOOL WrittenPrimary;
+  /* The DXGI_FORMAT the resource was created with (EXP1327). */
+  UINT DxgiFormat;
 } ADMISSION_UMD_RESOURCE;
 
 VOID APIENTRY AdmissionUmdOpenResource(

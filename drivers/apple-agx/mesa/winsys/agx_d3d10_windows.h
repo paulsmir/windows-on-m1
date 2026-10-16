@@ -122,6 +122,10 @@ HRESULT AgxD3d10WindowsPresentationSetDisplayMode(
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource);
 struct pipe_resource *AgxD3d10WindowsPresentationPipeResource(
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource);
+/* The DXGI_FORMAT the shared resource was created with (an opened resource
+ * learns it from the creator's resource data). */
+UINT AgxD3d10WindowsPresentationFormat(
+    const AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource);
 HRESULT AgxD3d10WindowsPresentationRotate(
     AGX_D3D10_WINDOWS_DEVICE *Device,
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE **Resources,

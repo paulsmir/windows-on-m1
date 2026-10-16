@@ -11,7 +11,6 @@ int AdmissionPresentResourceDataValid(
       Data->Version == ADMISSION_PRESENT_RESOURCE_VERSION &&
       Data->Bytes == sizeof(*Data) &&
       (Data->Flags & ~ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY) == 0u &&
-      Data->Reserved == 0u &&
       (Data->RefreshDenominator != 0u || Data->RefreshNumerator == 0u);
 }
 

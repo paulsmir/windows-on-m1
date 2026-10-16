@@ -114,6 +114,21 @@ static ADMISSION_UMD_RESOURCE *AdmissionUmdResourceFromDxgi(
 
 
 
+/* The storage AdmissionUmdDescribePrimary gives each shared DXGI format. */
+static BOOLEAN AdmissionUmdSharedFormatStorage(UINT DxgiFormat,
+                                               UINT StorageFormat) {
+  switch (DxgiFormat) {
+  case DXGI_FORMAT_B8G8R8A8_UNORM:
+  case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+    return StorageFormat == (UINT)D3DDDIFMT_A8R8G8B8;
+  case DXGI_FORMAT_R8G8B8A8_UNORM:
+  case DXGI_FORMAT_A8_UNORM:
+    return StorageFormat == (UINT)D3DDDIFMT_A8B8G8R8;
+  default:
+    return FALSE;
+  }
+}
+
 static BOOLEAN AdmissionUmdDescribePrimary(
     const D3D11DDIARG_CREATERESOURCE *CreateResource,
     ADMISSION_UMD_DIRECT_FLIP_RESOURCE *Description) {
@@ -131,8 +146,10 @@ static BOOLEAN AdmissionUmdDescribePrimary(
       CreateResource->ResourceDimension != D3D10DDIRESOURCE_TEXTURE2D ||
       (CreateResource->Format != DXGI_FORMAT_B8G8R8A8_UNORM &&
        CreateResource->Format != DXGI_FORMAT_B8G8R8A8_UNORM_SRGB &&
-       CreateResource->Format != DXGI_FORMAT_R8G8B8A8_UNORM) ||
-      (CreateResource->Format == DXGI_FORMAT_R8G8B8A8_UNORM &&
+       CreateResource->Format != DXGI_FORMAT_R8G8B8A8_UNORM &&
+       CreateResource->Format != DXGI_FORMAT_A8_UNORM) ||
+      (CreateResource->Format != DXGI_FORMAT_B8G8R8A8_UNORM &&
+       CreateResource->Format != DXGI_FORMAT_B8G8R8A8_UNORM_SRGB &&
        CreateResource->pPrimaryDesc != NULL) ||
       !CreateResource->pMipInfoList[0].TexelWidth ||
       !CreateResource->pMipInfoList[0].TexelHeight ||
@@ -158,12 +175,19 @@ static BOOLEAN AdmissionUmdDescribePrimary(
       CreateResource->MipLevels != 1u || CreateResource->ArraySize != 1u ||
       CreateResource->SampleDesc.Count != 1u ||
       CreateResource->SampleDesc.Quality != 0u ||
-      /* A shared BGRA texture with any RT/SRV binds is the same linear
+      /* A shared texture with any RT/SRV binds is the same linear
        * allocation; EXP1226: opengl32's window redirection surface is
-       * SRV-only (the GL ICD writes it, DWM samples it). */
+       * SRV-only (the GL ICD writes it, DWM samples it). EXP1327: D3D11.1
+       * shares R8G8B8A8 Texture2Ds (guaranteed) and A8_UNORM ones
+       * (ExtendedResourceSharing, derived from the DDI version; the FL 11_0
+       * desktop's composition masks); the frontend stores A8_UNORM as
+       * RGBA8 (AgxD3d10LoweredTextureFormat), so both share the RGBA8
+       * allocation. */
       ((CreateResource->BindFlags & D3D10_DDI_BIND_PRESENT) == 0u &&
        (CreateResource->MiscFlags != D3D10_DDI_RESOURCE_MISC_SHARED ||
-        CreateResource->Format != DXGI_FORMAT_B8G8R8A8_UNORM ||
+        (CreateResource->Format != DXGI_FORMAT_B8G8R8A8_UNORM &&
+         CreateResource->Format != DXGI_FORMAT_R8G8B8A8_UNORM &&
+         CreateResource->Format != DXGI_FORMAT_A8_UNORM) ||
         (CreateResource->BindFlags & (D3D10_DDI_BIND_RENDER_TARGET |
                                       D3D10_DDI_BIND_SHADER_RESOURCE)) == 0u)) ||
       CreateResource->pInitialDataUP != NULL)
@@ -175,7 +199,8 @@ static BOOLEAN AdmissionUmdDescribePrimary(
           CreateResource->pMipInfoList[0].TexelWidth,
           CreateResource->pMipInfoList[0].TexelHeight,
           4u, (UINT)D3DKMDT_GDISURFACE_TEXTURE,
-          CreateResource->Format == DXGI_FORMAT_R8G8B8A8_UNORM
+          CreateResource->Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
+          CreateResource->Format == DXGI_FORMAT_A8_UNORM
               ? (UINT)D3DDDIFMT_A8B8G8R8 : (UINT)D3DDDIFMT_A8R8G8B8,
           0u, &Description->Allocation))
     return FALSE;
@@ -488,6 +513,7 @@ VOID APIENTRY AdmissionUmdCreateResource(
   resourceData.Magic = ADMISSION_PRESENT_RESOURCE_MAGIC;
   resourceData.Version = ADMISSION_PRESENT_RESOURCE_VERSION;
   resourceData.Bytes = sizeof(resourceData);
+  resourceData.Format = (UINT)CreateResource->Format;
   /* EXP1038: only scanout-capable (BGRA) resources are written primaries;
    * the KMD admits that flag for A8R8G8B8 GDI-surface allocations only. */
   resourceData.Flags = description.Displayable &&
@@ -536,6 +562,7 @@ VOID APIENTRY AdmissionUmdCreateResource(
   resource->DirectFlip = description;
   resource->WrittenPrimary =
       (resourceData.Flags & ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY) != 0u;
+  resource->DxgiFormat = resourceData.Format;
   retirement->RuntimeResource = RuntimeResource.handle;
   retirement->KernelResource = allocate.hKMResource;
   retirement->KernelAllocation = allocationInfo.hAllocation;
@@ -608,7 +635,10 @@ VOID APIENTRY AdmissionUmdOpenResource(
       description->Width > 8192u || description->Height > 8192u ||
       description->Type != (UINT)D3DKMDT_GDISURFACE_TEXTURE ||
       description->BytesPerPixel != 4u ||
-      description->Size > 0x1000000ULL || info->hAllocation == 0u) {
+      description->Size > 0x1000000ULL || info->hAllocation == 0u ||
+      (resourceData != NULL && resourceData->Format != 0u &&
+       !AdmissionUmdSharedFormatStorage(resourceData->Format,
+                                        description->Format))) {
     AdmissionUmdRetirementFree(retirement);
     AdmissionUmdSetError(device, E_INVALIDARG);
     return;
@@ -626,6 +656,12 @@ VOID APIENTRY AdmissionUmdOpenResource(
       description->Format == (UINT)D3DDDIFMT_A8R8G8B8 ? 1u : 0u;
   resource->WrittenPrimary = resourceData != NULL &&
       (resourceData->Flags & ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY) != 0u;
+  /* Resources created without our resource data (GDI, earlier packages)
+   * keep the format their storage implies. */
+  resource->DxgiFormat = resourceData != NULL && resourceData->Format != 0u
+      ? resourceData->Format
+      : description->Format == (UINT)D3DDDIFMT_A8R8G8B8
+          ? (UINT)DXGI_FORMAT_B8G8R8A8_UNORM : (UINT)DXGI_FORMAT_R8G8B8A8_UNORM;
   retirement->RuntimeResource = RuntimeResource.handle;
   retirement->KernelResource = OpenResource->hKMResource.handle;
   retirement->KernelAllocation = info->hAllocation;

@@ -4630,8 +4630,11 @@ AgxD3d10ResourceWithinRequiredLimits(
       SetError(hDevice, E_FAIL);
       return;
    }
-   pResource->Format = pResource->resource->format == PIPE_FORMAT_R8G8B8A8_UNORM
-      ? DXGI_FORMAT_R8G8B8A8_UNORM : DXGI_FORMAT_B8G8R8A8_UNORM;
+   /* EXP1327: the creator's DXGI format (A8_UNORM shares the RGBA8
+    * storage), so views are checked against the format it was created
+    * with. */
+   pResource->Format = (DXGI_FORMAT)AgxD3d10WindowsPresentationFormat(
+      pResource->presentation);
    pResource->usage = D3D10_DDI_USAGE_DEFAULT;
    pResource->bind_flags = D3D10_DDI_BIND_RENDER_TARGET | D3D10_DDI_BIND_SHADER_RESOURCE;
    pResource->MipLevels = 1;

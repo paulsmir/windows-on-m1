@@ -16,8 +16,8 @@ static void test_displayable_resource_metadata(void) {
   assert(AdmissionPresentResourceDataValid(&opened));
   opened.Flags = 2u;
   assert(!AdmissionPresentResourceDataValid(&opened));
-  opened = data;opened.Reserved = 1u;
-  assert(!AdmissionPresentResourceDataValid(&opened));
+  opened = data;opened.Format = 65u; /* the creator's DXGI format: opaque */
+  assert(AdmissionPresentResourceDataValid(&opened));
   opened = data;opened.Bytes--;
   assert(!AdmissionPresentResourceDataValid(&opened));
   opened = data;opened.Version++;

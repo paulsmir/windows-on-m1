@@ -22,6 +22,8 @@ class DisplayableResourceTests(unittest.TestCase):
     def test_observed_bgra_displayable_buffer_preserves_storage_contract(self):
         source = (RENDER / 'umd/src/umd.c').read_text()
         function = re.search(
+            r'static BOOLEAN AdmissionUmdSharedFormatStorage\(.*?^}',
+            source, re.S | re.M).group(0) + '\n' + re.search(
             r'static BOOLEAN AdmissionUmdDescribePrimary\(.*?^}',
             source, re.S | re.M).group(0)
         # Values are the pinned WDK26100 enum values, including actual PRESENT80.
@@ -39,6 +41,7 @@ typedef unsigned UINT;
 #define DXGI_FORMAT_B8G8R8A8_UNORM 87u
 #define DXGI_FORMAT_B8G8R8A8_UNORM_SRGB 91u
 #define DXGI_FORMAT_R8G8B8A8_UNORM 28u
+#define DXGI_FORMAT_A8_UNORM 65u
 #define D3D10_DDI_BIND_SHADER_RESOURCE 8u
 #define D3D10_DDI_BIND_RENDER_TARGET 32u
 #define D3D10_DDI_BIND_PRESENT 128u
@@ -90,8 +93,8 @@ int main(void) {
  /* EXP1226: opengl32's window redirection surface (PresentBuffers nVersion 2)
     is a shared BGRA texture the GL ICD writes and DWM samples, created with
     only the shader-resource bind; any non-empty RT/SRV subset is the same
-    linear BGRA allocation. Unshared or RGBA non-present resources are not
-    presentation resources. */
+    linear BGRA allocation. Unshared resources are not presentation
+    resources. */
  c.pMipInfoList[0].TexelWidth=656u;c.pMipInfoList[0].TexelHeight=519u;
  c.BindFlags=8u;c.MiscFlags=2u;
  assert(AdmissionUmdDescribePrimary(&c,&observed));
@@ -100,7 +103,35 @@ int main(void) {
  c.BindFlags=32u;assert(AdmissionUmdDescribePrimary(&c,&observed));
  c.BindFlags=0u;assert(!AdmissionUmdDescribePrimary(&c,&observed));
  c.BindFlags=8u;c.MiscFlags=0u;assert(!AdmissionUmdDescribePrimary(&c,&observed));
- c.MiscFlags=2u;c.Format=28u;assert(!AdmissionUmdDescribePrimary(&c,&observed));
+ /* EXP1327: D3D11.1 shares R8G8B8A8 Texture2Ds (guaranteed) and A8_UNORM
+    ones (ExtendedResourceSharing): the FL 11_0 desktop's 32x32 composition
+    masks, PRESENT|RT|SRV or RT|SRV. The frontend stores A8_UNORM as RGBA8,
+    so both take the non-displayable RGBA8 allocation; neither can be a
+    primary or displayable. */
+ c.MiscFlags=2u;c.Format=28u;c.BindFlags=0x28u;
+ assert(AdmissionUmdDescribePrimary(&c,&observed));
+ assert(observed.Displayable==0u && observed.Allocation.Format==32u);
+ c.Format=65u;c.pMipInfoList[0].TexelWidth=32u;c.pMipInfoList[0].TexelHeight=32u;
+ assert(AdmissionUmdDescribePrimary(&c,&observed));
+ assert(observed.Displayable==0u && observed.Allocation.Format==32u &&
+        observed.Allocation.BytesPerPixel==4u && observed.Allocation.Pitch==128u);
+ c.BindFlags=0xa8u;assert(AdmissionUmdDescribePrimary(&c,&observed));
+ assert(observed.Displayable==0u && observed.Allocation.Format==32u);
+ c.MiscFlags=0x20002u;assert(!AdmissionUmdDescribePrimary(&c,&observed));
+ c.MiscFlags=2u;c.pPrimaryDesc=&c;assert(!AdmissionUmdDescribePrimary(&c,&observed));
+ c.pPrimaryDesc=0;c.BindFlags=0x28u;c.MiscFlags=0u;
+ assert(!AdmissionUmdDescribePrimary(&c,&observed));
+ c.MiscFlags=2u;c.Format=61u;/* R8_UNORM: no shared storage yet */
+ assert(!AdmissionUmdDescribePrimary(&c,&observed));
+ /* An opened resource's recorded DXGI format must name its storage. */
+ assert(AdmissionUmdSharedFormatStorage(65u,32u) &&
+        AdmissionUmdSharedFormatStorage(28u,32u) &&
+        AdmissionUmdSharedFormatStorage(87u,21u) &&
+        AdmissionUmdSharedFormatStorage(91u,21u));
+ assert(!AdmissionUmdSharedFormatStorage(65u,21u) &&
+        !AdmissionUmdSharedFormatStorage(87u,32u) &&
+        !AdmissionUmdSharedFormatStorage(61u,32u));
+ c.BindFlags=8u;c.MiscFlags=2u;
  c.Format=87u;c.BindFlags=0xa8u;
  c.pMipInfoList[0].TexelWidth=2560u;c.pMipInfoList[0].TexelHeight=1600u;
  c.MiscFlags=0x20002u;c.ArraySize=2u;

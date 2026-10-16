@@ -1135,6 +1135,11 @@ struct pipe_resource *AgxD3d10WindowsPresentationPipeResource(
   return Resource ? Resource->RenderResource : NULL;
 }
 
+UINT AgxD3d10WindowsPresentationFormat(
+    const AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource) {
+  return Resource ? Resource->Resource.DxgiFormat : 0u;
+}
+
 HRESULT AgxD3d10WindowsPresentationRotate(
     AGX_D3D10_WINDOWS_DEVICE *Device,
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE **Resources,UINT Count) {
