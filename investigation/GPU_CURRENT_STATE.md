@@ -1,5 +1,28 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
+## Current as of 2026-10-16T18:33Z (read this first)
+
+Installed: PACKAGE1336 (7a73857b: FL 11_0 default branch; rolled back by the
+next pipeline). Integration HEAD keeps FL 11_0 opt-in until EXP1337.
+- PROVEN (EXP1336): the FL 11_0 desktop runs -- system GL smoke PASS x4, DWM
+  never restarts, every regression as EXP1326 (FL 10_0) except STATS. The
+  FL 11_0 chain fixed on the way (each RED->GREEN, validated by EXP1336):
+  broker registry 4096 (m1n1 5b857603, EXP1324/1326); ForcedSampleCount 1
+  (2a15290f); NO_OVERWRITE on dynamic CB/SRV buffers (7e8c1405); shared
+  A8_UNORM/RGBA8 Texture2D + resource data v3 DXGI format (e6d1beb9); the
+  WDDM 2.0 DXGI 1.2-1.4 entries filled after the DXGI 1.1 ones -- Present1
+  had forwarded to NULL (0297dd3f); multi-surface Present1 (87718b63);
+  ClearView rectangles via the Asahi blitter, Asahi has no
+  clear_render_target (f837d747; clear_texture fallback 86d24a14); WDDM 2.0
+  ResolveSharedResource/redirection (6d25a3d1); SM 4 switch through the
+  DXBC translator -- tgsi_to_nir aborted on Terminal's ps_4_0 (fd1d5e16).
+- Receipt-only diagnostics now in the UMD: reject-null-call (AV at 0),
+  reject-cxx-throw/stack, reject-abort-raw/stack + <trace>.abort-<pid>.dmp.
+- OPEN: D3D 11 query types (D3D11DDI_QUERY_PIPELINESTATS, SO STREAMn) were
+  refused -> device removed (STATS smoke); fixed in 1eab272c, EXP1337 =
+  HEAD + FL 11_0 default; if the set passes, land the FL 11_0 default.
+- Other open: vertex-stage scratch; compute helpers; D3D12; GPU timestamps.
+
 ## Current as of 2026-10-16T13:02Z (read this first)
 
 Installed: PACKAGE1322 (9a306fe1 KMD/ARM64 UMD, WOW64 UMD out63 on closure
