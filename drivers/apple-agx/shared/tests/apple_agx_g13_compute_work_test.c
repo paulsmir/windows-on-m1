@@ -87,6 +87,18 @@ unsigned AppleAgxG13ComputeWorkContractTests(void) {
   assert(get32(work+0x2a0)==i.EventControlIndex &&
          get32(work+0x2ac)==i.EventSequence && work[0x2d8]==5);
   assert(work[0x2d9]==0 && work[sizeof(work)-1]==0);
+  assert(get32(work+0xb0)==0 && get64(work+0xb8)==0 && get32(work+0xc0)==0);
+  /* EXP1339: a compute helper (scratch) as Asahi queue/compute.rs passes
+   * it; Mesa's configuration (preamble scratch << 16) may be 0. */
+  i.HelperProgram=0x1c0u;i.HelperArgument=0x1500600000ULL;i.HelperConfig=0;
+  assert(AppleAgxG13ComputeWorkBuild(&i,work));
+  assert(get32(work+0xb0)==0x1c0u && get64(work+0xb8)==0x1500600000ULL &&
+         get32(work+0xc0)==0);
+  i.HelperConfig=2u<<16;
+  assert(AppleAgxG13ComputeWorkBuild(&i,work) && get32(work+0xc0)==(2u<<16));
+  i.HelperArgument=0;assert(!AppleAgxG13ComputeWorkBuild(&i,work));
+  i.HelperProgram=0;assert(!AppleAgxG13ComputeWorkBuild(&i,work));
+  i.HelperConfig=0;
   {
     unsigned char before[sizeof(work)];memset(work,0x5a,sizeof(work));
     memcpy(before,work,sizeof(work));i.CdmStreamEnd=i.CdmStreamBase;

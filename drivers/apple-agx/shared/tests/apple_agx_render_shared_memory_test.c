@@ -247,6 +247,21 @@ int main(void) {
       assert(preempt==0x1500600000ULL);
       input.PreemptionGpuAddress=0x1500600020ULL;
       assert(!AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+      input.PreemptionGpuAddress=0x1500600000ULL;
+      {
+        /* EXP1339: the compute helper (scratch) reaches RunCompute. */
+        APPLE_AGX_U32 program=0u,config=1u;APPLE_AGX_U64 argument=0u;
+        input.HelperProgram=0x1c0u;input.HelperArgument=0x1500700000ULL;
+        input.HelperConfig=0u;
+        assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+        memcpy(&program,work+0xb0u,sizeof(program));
+        memcpy(&argument,work+0xb8u,sizeof(argument));
+        memcpy(&config,work+0xc0u,sizeof(config));
+        assert(program==0x1c0u&&argument==0x1500700000ULL&&config==0u);
+        input.HelperArgument=0u;
+        assert(!AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+        input.HelperProgram=0u;
+      }
     }
     {
       /* D3D-G1b: the TA queue's Barrier on the compute stamp has the G13

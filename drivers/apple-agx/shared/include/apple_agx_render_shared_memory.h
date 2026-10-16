@@ -52,6 +52,10 @@ typedef struct _APPLE_AGX_RENDER_COMPUTE_INPUT {
    * APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES. Zero keeps the kernel sidecar
    * area of the render prelude. */
   APPLE_AGX_U64 PreemptionGpuAddress;
+  /* EXP1339: the helper program (compute scratch), as Asahi
+   * queue/compute.rs passes it; all zero without one. */
+  APPLE_AGX_U32 HelperProgram,HelperConfig;
+  APPLE_AGX_U64 HelperArgument;
 } APPLE_AGX_RENDER_COMPUTE_INPUT;
 
 typedef struct _APPLE_AGX_RENDER_COMPUTE_OUTPUT {

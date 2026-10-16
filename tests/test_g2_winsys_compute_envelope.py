@@ -11,8 +11,11 @@ with the KMD's G13 context-store size. Invariants:
   residency set, 64 KiB aligned and at least the G13 size;
 - the written set is every BO the batch is the Mesa writer of, and only
   those (the UMD refreshes their CPU copies after the job);
-- helper programs and timestamps are refused before anything is created,
-  and a refused submission rejects the batch without a fence.
+- flags and timestamps are refused before anything is created, and a
+  refused submission rejects the batch without a fence;
+- EXP1339: a helper program (compute scratch: a USC program in the
+  pipeline pool, a scratch buffer in the batch, Mesa's configuration
+  preamble scratch << 16, here 0) travels in the envelope the KMD admits.
 """
 from pathlib import Path
 import os
@@ -169,7 +172,10 @@ int main(void) {
   screen.dev.windows_private = &b; b.Native = &screen.dev; b.GpuvaReady = 1;
   screen.rodata = make_bo(0x10000); screen.dev.zero_bo = make_bo(0x10000);
   screen.dev.scratch_bo = make_bo(0x10000);
-  struct agx_bo *cdm = make_bo(0x20000), *pool = make_bo(0x40000), *low = make_bo(0x40000);
+  struct agx_bo *cdm = make_bo(0x20000), *pool = make_bo(0x40000);
+  next_va = APPLE_AGX_G4_USC_EXECUTION_BASE; /* the pipeline pool is USC-addressable */
+  struct agx_bo *low = make_bo(0x40000);
+  next_va = 0x3000000ULL;
   struct agx_bo *src = make_bo(0x10000), *dst = make_bo(0x10000), *kernel = make_bo(0x10000);
   struct agx_bo *pools[1] = { pool }, *lows[1] = { low };
   batch.ctx = &ctx; batch.compute = 1;
@@ -192,12 +198,14 @@ int main(void) {
   assert(AgxWin32AsahiBatchComputeLeave(&batch) && !g->ComputeEntered);
   assert(AgxWin32AsahiBatchComputeFinalize(&batch, batch.cdm.current));
   assert(!AgxWin32AsahiBatchComputeFinalize(&batch, (uint8_t *)pool->_map));
-  /* Helper programs and timestamps are refused before anything exists. */
-  command.helper.binary = 0x40u;
+  /* Flags and timestamps are refused before anything exists. */
+  command.flags = 1u;
   assert(!AgxWin32AsahiBatchFinishCompute(&batch, &command) && !creates && !g->Rejected);
-  command.helper.binary = 0u; command.ts.start.handle = 3u;
+  command.flags = 0u; command.ts.start.handle = 3u;
   assert(!AgxWin32AsahiBatchFinishCompute(&batch, &command) && !creates && !g->Rejected);
   command.ts.start.handle = 0u;
+  /* EXP1339: a compute helper (scratch) is submitted. */
+  command.helper.binary = 0x40u; command.helper.cfg = 0u; command.helper.data = src->va->addr;
   assert(AgxWin32AsahiBatchFinishCompute(&batch, &command));
   assert(g->Submitted && g->Fence == 41u && b.NewestFence == 41u && sub.calls == 1u);
   /* The DMA buffer is the command BO; the private data is the envelope. */
@@ -223,6 +231,8 @@ int main(void) {
       sub.command.Va, sub.command_bytes, APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES,
       kmd_access, NULL, &view, &failure) == AppleAgxG4ParseOk);
   assert(view.Compute.CdmCtrlStreamBase == cdm->va->addr && view.Preemption.Va == g->Preemption->va->addr);
+  assert(view.Compute.Helper.Binary == 0x40u && view.Compute.Helper.Data == src->va->addr &&
+         view.Compute.Helper.Cfg == 0u);
   /* Release returns both job BOs once the job retired. */
   g->Retired = 1;
   struct agx_bo *command_bo = g->Command, *preempt_bo = g->Preemption;

@@ -135,6 +135,8 @@ int main(void) {
   assert(parse(&bad, &s, &v) == AppleAgxG4ParseUnsupported);
   /* Compute validation as for a standalone compute envelope. */
   bad = p; bad.Compute.Helper.Binary = 1u;
+  assert(parse(&bad, &s, &v) == AppleAgxG4ParseInvalid);
+  bad = p; bad.Compute.Timestamps.StartHandle = 1u;
   assert(parse(&bad, &s, &v) == AppleAgxG4ParseUnsupported);
   bad = p; bad.Compute.Flags = 1u;
   assert(parse(&bad, &s, &v) == AppleAgxG4ParseInvalid);

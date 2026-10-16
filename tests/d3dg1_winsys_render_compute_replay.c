@@ -288,12 +288,13 @@ int main(void) {
   assert(!AgxWin32AsahiBatchFinish(&batch, &native, &compute) && !creates && !g->Rejected);
   assert(AgxWin32AsahiBatchComputeLeave(&batch));
   assert(AgxWin32AsahiBatchComputeFinalize(&batch, batch.cdm.current));
-  /* A CDM encoder without its command, a command without the encoder, a
-   * helper program or timestamps: refused at entry, batch not rejected. */
+  /* A CDM encoder without its command, a command without the encoder,
+   * flags or timestamps: refused at entry, batch not rejected. (EXP1339: a
+   * helper program, compute scratch, is carried by the command.) */
   assert(!AgxWin32AsahiBatchFinish(&batch, &native, NULL) && !creates && !g->Rejected);
-  compute.helper.binary = 0x40u;
+  compute.flags = 1u;
   assert(!AgxWin32AsahiBatchFinish(&batch, &native, &compute) && !creates && !g->Rejected);
-  compute.helper.binary = 0u; compute.ts.end.handle = 2u;
+  compute.flags = 0u; compute.ts.end.handle = 2u;
   assert(!AgxWin32AsahiBatchFinish(&batch, &native, &compute) && !creates && !g->Rejected);
   compute.ts.end.handle = 0u;
   {

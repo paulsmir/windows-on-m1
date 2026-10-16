@@ -34,7 +34,9 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13ComputeWorkBuild(
      i->StampSlot>=0x80u||i->EventControlIndex>=0x80u||
      i->EventSequence==0u||i->ClientSequence>0xffu||
      ((i->HelperProgram==0u)!=(i->HelperArgument==0u))||
-     ((i->HelperProgram==0u)!=(i->HelperConfig==0u)))
+     /* Mesa's configuration is the preamble scratch << 16, 0 when the
+      * preamble needs none (EXP1339); never set without a program. */
+     (i->HelperProgram==0u&&i->HelperConfig!=0u))
     return APPLE_AGX_BACKEND_FALSE;
   if(i->PreemptionGpuAddress>~0ULL-(APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES-8u))
     return APPLE_AGX_BACKEND_FALSE;

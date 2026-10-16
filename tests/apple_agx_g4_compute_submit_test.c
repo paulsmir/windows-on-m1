@@ -96,8 +96,23 @@ int main(void) {
   make(&e, &s); e.Native.VdmBarrier = 1u; assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseInvalid);
   /* payload */
   make(&e, &s); e.Compute.Flags = 1u; assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseInvalid);
-  make(&e, &s); e.Compute.Helper.Binary = 0x100u; assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseUnsupported);
-  make(&e, &s); e.Compute.Helper.Data = 0x400000ULL; assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseUnsupported);
+  /* EXP1339: a helper (compute scratch) is a mapped USC program with its
+   * mapped argument; its configuration only with a program, and may be 0. */
+  make(&e, &s); e.Compute.Helper.Binary = 0x100u; assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseInvalid);
+  make(&e, &s); e.Compute.Helper.Data = 0x400000ULL; assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseInvalid);
+  make(&e, &s); e.Compute.Helper.Cfg = 1u << 16; assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseInvalid);
+  make(&e, &s); e.Compute.Helper.Binary = 0x100u; e.Compute.Helper.Data = 0x400000ULL;
+  s.Map[4] = (MAPPING){APPLE_AGX_G4_USC_EXECUTION_BASE, 0x1000, 0}; s.Count = 5;
+  assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseOk && s.Calls == 5u &&
+         s.Kinds[2] == AppleAgxG4AccessComputeStream && s.Kinds[3] == AppleAgxG4AccessComputeStream &&
+         v.Compute.Helper.Binary == 0x100u && v.Compute.Helper.Data == 0x400000ULL);
+  e.Compute.Helper.Cfg = 2u << 16; assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseOk);
+  e.Compute.Helper.Data = 0x500000ULL;
+  assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseUnmapped && f.Kind == AppleAgxG4AccessComputeStream &&
+         f.Va == 0x500000ULL);
+  e.Compute.Helper.Data = 0x400000ULL; s.Count = 4;
+  assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseUnmapped &&
+         f.Va == APPLE_AGX_G4_USC_EXECUTION_BASE + 0x100u);
   make(&e, &s); e.Compute.Timestamps.StartHandle = 1u; assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseUnsupported);
   make(&e, &s); e.Compute.Timestamps.EndOffset = 8u; assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseInvalid);
   make(&e, &s); e.Compute.CdmCtrlStreamEnd = e.Compute.CdmCtrlStreamBase; assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseInvalid);

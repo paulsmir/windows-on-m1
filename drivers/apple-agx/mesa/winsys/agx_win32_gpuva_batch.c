@@ -546,10 +546,11 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   AGX_G4_PRIVATE_V5 *with_compute=NULL;
   const void *private_data=&packet;
   unsigned private_bytes;
-  /* Helper programs (scratch) and timestamps need KMD-owned state (G2). */
+  /* Timestamps need KMD-owned state (G2). EXP1339: a helper program
+   * (compute scratch) is carried by the compute command; Mesa adds the
+   * scratch buffer to the batch (agx_flush_compute). */
   const int compute_refused=compute &&
       (!render_compute(batch) || g==NULL || g->ComputeEntered || compute->flags ||
-       compute->helper.binary || compute->helper.cfg || compute->helper.data ||
        compute->ts.start.handle || compute->ts.end.handle);
   APPLE_AGX_G4_PROCESS_RANGE ranges[APPLE_AGX_G4_PROCESS_RANGE_COUNT]={{0}};
   APPLE_AGX_G4_NATIVE_RENDER native_render;
@@ -774,8 +775,9 @@ fail:
  * compute header in the private data, and a per-job context-store buffer.
  * Residency is the render rule (command, stream, device pages, bo_list,
  * pools); the written set is every BO this batch is the Mesa writer of, so
- * the UMD refreshes their CPU copies after the job. Helper programs
- * (scratch) and timestamps need KMD-owned state and are refused. */
+ * the UMD refreshes their CPU copies after the job. Timestamps need
+ * KMD-owned state and are refused; a helper program (compute scratch,
+ * EXP1339) is carried by the command, its buffer by the bo_list. */
 int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
                                     const struct drm_asahi_cmd_compute *compute) {
   AGX_WIN32_ASAHI_BACKEND *b=backend(batch);
@@ -797,11 +799,10 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
   enum { fixed_refs=8u };
   if(!b || !g || !compute || b->Failed || b->Gpuva.Terminal ||
      !compute_only(batch) || g->Submitted || g->Rejected || g->ComputeEntered ||
-     compute->flags || compute->helper.binary || compute->helper.cfg ||
-     compute->helper.data || compute->ts.start.handle || compute->ts.end.handle ||
+     compute->flags || compute->ts.start.handle || compute->ts.end.handle ||
      batch->bo_list.bit_count>UINT32_MAX-fixed_refs)
     return batch_refuse(9u, __LINE__,
-        (unsigned)!compute_only(batch)|((unsigned)(compute && compute->helper.binary)<<1)|
+        (unsigned)!compute_only(batch)|((unsigned)(compute && compute->flags)<<1)|
         ((unsigned)(compute && compute->ts.start.handle)<<2)|
         ((unsigned)(b && b->Failed)<<3)|((unsigned)(b && b->Gpuva.Terminal)<<4),
         compute ? compute->sampler_count : 0u);

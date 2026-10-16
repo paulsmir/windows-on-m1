@@ -133,9 +133,17 @@ static APPLE_AGX_G4_PARSE_RESULT validate_compute_fields(
   unsigned long long stream_bytes;
   if (compute->Flags != 0u)
     return AppleAgxG4ParseInvalid;
-  /* Helper programs (scratch) and timestamps need KMD-owned state. */
-  if (compute->Helper.Binary || compute->Helper.Cfg || compute->Helper.Data ||
-      compute->Timestamps.StartHandle || compute->Timestamps.EndHandle)
+  /* EXP1339: a helper program (compute scratch) runs as Asahi
+   * queue/compute.rs passes it: program and scratch argument together, its
+   * configuration only with a program (Mesa: preamble scratch << 16, which
+   * may be 0). Timestamps still need KMD-owned state. */
+  if ((compute->Helper.Binary == 0u) != (compute->Helper.Data == 0ULL) ||
+      (compute->Helper.Binary == 0u && compute->Helper.Cfg != 0u) ||
+      (compute->Helper.Binary &&
+       (!valid_va(usc_va(compute->Helper.Binary), 1u) ||
+        !valid_va(compute->Helper.Data, 1u))))
+    return AppleAgxG4ParseInvalid;
+  if (compute->Timestamps.StartHandle || compute->Timestamps.EndHandle)
     return AppleAgxG4ParseUnsupported;
   if (compute->Timestamps.StartOffset || compute->Timestamps.EndOffset)
     return AppleAgxG4ParseInvalid;
@@ -173,6 +181,11 @@ static APPLE_AGX_G4_PARSE_RESULT validate_compute_access(
        !check_access(state, compute->SamplerHeap,
                      compute->SamplerCount * APPLE_AGX_G4_SAMPLER_BYTES, 0,
                      AppleAgxG4AccessSamplerHeap)) ||
+      (compute->Helper.Binary &&
+       (!check_access(state, usc_va(compute->Helper.Binary), 1u, 0,
+                      AppleAgxG4AccessComputeStream) ||
+        !check_access(state, compute->Helper.Data, 1u, 0,
+                      AppleAgxG4AccessComputeStream))) ||
       !check_access(state, preemption->Va, preemption->Bytes, 1,
                     AppleAgxG4AccessComputePreemption))
     return AppleAgxG4ParseUnmapped;

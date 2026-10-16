@@ -2416,6 +2416,11 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildComputeJob(
   input.EventSequence = fence;
   input.ClientSequence = fence & 0xffu;
   input.PreemptionGpuAddress = preemption;
+  if (!image->PresentCompute) {
+    input.HelperProgram = envelope->Compute.Helper.Binary;
+    input.HelperArgument = envelope->Compute.Helper.Data;
+    input.HelperConfig = envelope->Compute.Helper.Cfg;
+  }
   if (!AppleAgxRenderSharedMemoryBuildCompute(
           &runtime->Initdata.RenderSharedMemory, &input, &output))
     return APPLE_AGX_BACKEND_FALSE;
@@ -2636,6 +2641,9 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     input.EventSequence = Submission->Submission.Fence;
     input.ClientSequence = Submission->Submission.Fence & 0xffu;
     input.PreemptionGpuAddress = image->G4PreludePreemption.Va;
+    input.HelperProgram = image->G4PreludeCompute.Helper.Binary;
+    input.HelperArgument = image->G4PreludeCompute.Helper.Data;
+    input.HelperConfig = image->G4PreludeCompute.Helper.Cfg;
     if (!AppleAgxRenderSharedMemoryBuildCompute(
             &runtime->Initdata.RenderSharedMemory, &input, &output))
       goto BuildFailure;
