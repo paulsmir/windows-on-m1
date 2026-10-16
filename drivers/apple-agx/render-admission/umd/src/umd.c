@@ -359,12 +359,87 @@ static LONG CALLBACK AdmissionUmdNullCall(EXCEPTION_POINTERS *Info) {
   return EXCEPTION_CONTINUE_SEARCH;
 }
 
+/* EXP1332 receipt-only: on the FL 11_0 desktop WindowsTerminal.exe fails
+ * fast in ucrtbase (abort from std::terminate), closing the consoles it
+ * hosts, with no driver refusal recorded. The unhandled C++ exception passes
+ * the vectored handlers first: record the first 32 MSVC C++ throws of a
+ * process -- the thrown type's name prefix, the object's first words (a
+ * wil::ResultException holds its HRESULT and source line there) and the
+ * first four stack words that point into a module other than the throw
+ * machinery -- and continue the search unchanged. */
+static volatile LONG AdmissionUmdCxxThrows;
+
+static BOOLEAN AdmissionUmdThrowMachinery(const UINT *Name) {
+  UINT lower = Name[0] | 0x20202020u;
+  return lower == 0x6e72656bu /* kern */ || lower == 0x75726376u /* vcru */ ||
+         lower == 0x74726375u /* ucrt */ || lower == 0x6c64746eu /* ntdl */;
+}
+
+static void AdmissionUmdCxxThrowReceipt(EXCEPTION_POINTERS *Info) {
+  const EXCEPTION_RECORD *record = Info->ExceptionRecord;
+  const ULONG_PTR *stack;
+  UINT thrown[11] = {0};
+  UINT frames[13] = {0};
+  UINT found = 0u;
+  if (InterlockedIncrement(&AdmissionUmdCxxThrows) > 32) return;
+  thrown[0] = frames[0] = GetCurrentThreadId();
+  __try {
+    const BYTE *object = (const BYTE *)record->ExceptionInformation[1];
+    const BYTE *info = (const BYTE *)record->ExceptionInformation[2];
+#if defined(_WIN64)
+    const BYTE *base = record->NumberParameters >= 4
+        ? (const BYTE *)record->ExceptionInformation[3] : NULL;
+    const BYTE *types = base + *(const int *)(info + 12);
+    const BYTE *type = base + *(const int *)(types + 4);
+    const char *name = (const char *)(base + *(const int *)(type + 4) + 16);
+#else
+    const BYTE *types = *(const BYTE *const *)(info + 12);
+    const BYTE *type = *(const BYTE *const *)(types + 4);
+    const char *name = *(const char *const *)(type + 4) + 8;
+#endif
+    if (name[0] == '.' && name[1] == '?' && name[2] == 'A') name += 4;
+    for (UINT i = 0u; i < 8u && name[i] != 0; ++i)
+      thrown[1u + i / 4u] |= (UINT)(BYTE)name[i] << (8u * (i % 4u));
+    for (UINT i = 0u; object != NULL && i < 8u; ++i)
+      thrown[3u + i] = ((const UINT *)object)[i];
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
+#if defined(_M_ARM64)
+  stack = (const ULONG_PTR *)Info->ContextRecord->Sp;
+#elif defined(_M_X64)
+  stack = (const ULONG_PTR *)Info->ContextRecord->Rsp;
+#else
+  stack = (const ULONG_PTR *)Info->ContextRecord->Esp;
+#endif
+  for (UINT i = 0u; stack != NULL && i < 192u && found < 4u; ++i) {
+    UINT name[2], offset;
+    AdmissionUmdModuleOffset(stack[i], name, &offset);
+    if (name[0] == 0u || AdmissionUmdThrowMachinery(name)) continue;
+    frames[1u + 3u * found] = name[0];
+    frames[2u + 3u * found] = name[1];
+    frames[3u + 3u * found] = offset;
+    ++found;
+  }
+  AdmissionUmdDiagnostic("reject-cxx-throw", E_UNEXPECTED, thrown, 11u);
+  AdmissionUmdDiagnostic("reject-cxx-stack", E_UNEXPECTED, frames, 13u);
+  AdmissionUmdDiagnosticFlush();
+}
+
+static LONG CALLBACK AdmissionUmdFaultReceipt(EXCEPTION_POINTERS *Info) {
+  if (Info != NULL && Info->ExceptionRecord != NULL && Info->ContextRecord != NULL &&
+      Info->ExceptionRecord->ExceptionCode == 0xE06D7363u &&
+      Info->ExceptionRecord->NumberParameters >= 3u &&
+      Info->ExceptionRecord->ExceptionInformation[0] == 0x19930520u)
+    AdmissionUmdCxxThrowReceipt(Info);
+  return AdmissionUmdNullCall(Info);
+}
+
 BOOL WINAPI DllMain(HINSTANCE Instance, DWORD Reason, LPVOID Reserved) {
   UNREFERENCED_PARAMETER(Instance);
   UNREFERENCED_PARAMETER(Reserved);
   if (Reason == DLL_PROCESS_ATTACH && AdmissionUmdNullCallHandler == NULL)
     AdmissionUmdNullCallHandler =
-        AddVectoredExceptionHandler(0u, AdmissionUmdNullCall);
+        AddVectoredExceptionHandler(0u, AdmissionUmdFaultReceipt);
   if (Reason == DLL_PROCESS_DETACH) {
     if (AdmissionUmdNullCallHandler != NULL && Reserved == NULL)
       RemoveVectoredExceptionHandler(AdmissionUmdNullCallHandler);
