@@ -88,15 +88,10 @@ AgxD3d11ComputeEnabled(void)
    return AgxD3d11DdiEnabled() && AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D11_COMPUTE");
 }
 
-/* D3D-H5: feature levels 10_1 and 11_0 by default (EXP1318: every FL 11_0
- * smoke case passes and the FL 11_0 corpus completes with pixel_diff 0);
- * APPLE_AGX_D3D11_FL11=0 keeps a process on 10_0. */
 BOOL
 AgxD3d11Fl11Enabled(void)
 {
-   char value[4];
-   DWORD length = GetEnvironmentVariableA("APPLE_AGX_D3D11_FL11", value, sizeof(value));
-   return AgxD3d11DdiEnabled() && !(length == 1 && value[0] == '0');
+   return AgxD3d11DdiEnabled() && AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D11_FL11");
 }
 
 /* D3D-H7: the WDDM 2.0 table goes with the FL 11_0 switch (EXP1299: the

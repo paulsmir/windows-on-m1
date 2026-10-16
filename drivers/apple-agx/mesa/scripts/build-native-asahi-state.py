@@ -858,7 +858,8 @@ SupportedDDIInterfaceVersions[] = {
    case D3D11DDICAPS_3DPIPELINESUPPORT:
       if (pData->DataSize != sizeof(D3D11DDI_3DPIPELINESUPPORT_CAPS))
          return E_INVALIDARG;
-      /* D3D-H5: 10_1 and 11_0 unless APPLE_AGX_D3D11_FL11=0 (EXP1320): 8x MSAA, which FL 11_0 lists for
+      /* D3D-H5: 10_1 and 11_0 per process (APPLE_AGX_D3D11_FL11) while
+       * their checkpoints are measured: 8x MSAA, which FL 11_0 lists for
        * most render-target formats, is absent on AGX and reported as 0
        * quality levels */
       ((D3D11DDI_3DPIPELINESUPPORT_CAPS *)pData->pData)->Caps =
