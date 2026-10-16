@@ -252,9 +252,13 @@ bool
 rasterizer10(D3D10DDI_HDEVICE hDevice, const D3DWDDM2_0DDI_RASTERIZER_DESC *in,
              D3D10_DDI_RASTERIZER_DESC *out)
 {
-   /* no forced sample count (UAV-only rendering) and no conservative
-    * rasterization tier are reported */
-   if (!in || in->ForcedSampleCount ||
+   /* No target-independent rasterization (forced counts above 1) and no
+    * conservative rasterization tier are reported. EXP1324: a forced count
+    * of 1 rasterizes single-sampled without depth (D3D11_RASTERIZER_DESC1)
+    * -- what single-sampled and attachment-less renders do; the FL 11_0
+    * desktop creates such states and recreated its devices without end
+    * while they were refused. */
+   if (!in || in->ForcedSampleCount > 1u ||
        in->ConservativeRasterizationMode != D3DWDDM2_0DDI_CONSERVATIVE_RASTERIZATION_OFF) {
       refuse(hDevice, "reject-wddm2-rasterizer", E_NOTIMPL, in ? in->ForcedSampleCount : 0u);
       return false;
