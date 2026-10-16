@@ -126,6 +126,38 @@ def prepare_compiler_selftest_source(source, out):
     return destination, provenance
 
 
+def prepare_opcode_flags_source(table, out):
+    """EXP1306: the generated agx_opcodes.h declares AGX_IMMEDIATE_* as
+    enumerators (1ull << i). Under the MSVC ABI an enumerator is an int, so a
+    flag at bit 32 is 0: AGX_IMMEDIATE_SIMD_OP vanished from the opcode table,
+    agx_pack never packed the reduction op and every simd_reduce/simd_prefix
+    executed as AND. Compile the generated table beside a header that declares
+    the same flags as 64-bit constants (the include directory goes first for
+    every other unit)."""
+    header = table.parent / 'agx_opcodes.h'
+    text = header.read_bytes().decode()
+    match = re.search(r'enum agx_immediate \{\r?\n(.*?)\r?\n\};\r?\n', text, re.S)
+    if not match:
+        raise RuntimeError('Pinned agx_immediate enum anchor missing: ' + str(header))
+    flags = [re.fullmatch(r'\s*(AGX_IMMEDIATE_\w+) = \(1ull << (\d+)\),\r?', line)
+             for line in match.group(1).split('\n')]
+    if not flags or not all(flags) or [int(f.group(2)) for f in flags] != list(range(len(flags))):
+        raise RuntimeError('Unexpected agx_immediate enum layout: ' + str(header))
+    newline = '\r\n' if '\r\n' in match.group(0) else '\n'
+    defines = ''.join('#define %s (1ull << %s)%s' % (f.group(1), f.group(2), newline) for f in flags)
+    destination = out / 'compiler-opcodes'
+    destination.mkdir(parents=True, exist_ok=True)
+    projected = destination / 'agx_opcodes.h'
+    projected.write_bytes((text[:match.start()] + '/* 64-bit flags: an MSVC enumerator is an int */' +
+                           newline + defines + text[match.end():]).encode())
+    unit = destination / table.name
+    shutil.copy2(table, unit)
+    provenance = {'baseline_header': str(header), 'header_before_sha256': sha256(header),
+                  'header_after_sha256': sha256(projected), 'table': str(table),
+                  'table_sha256': sha256(unit), 'flags': len(flags)}
+    return unit, destination, provenance
+
+
 def prepare_parallel_copy_source(source, out):
     """EXP1230: dwm.exe overflowed a worker thread's stack in the UMD; the
     parallel-copy lowering kept 64 KB of per-register state on the stack of
@@ -325,6 +357,13 @@ def main():
         selected_copy, copy_transform = prepare_parallel_copy_source(copy_matches[0], out)
         manifest['compiler_parallel_copy_transform'] = copy_transform
         compiler_units = [selected_copy if p == copy_matches[0] else p for p in compiler_units]
+        table_matches = [p for p in compiler_units if p.name == 'agx_opcodes.c']
+        if len(table_matches) != 1:
+            raise RuntimeError('Ambiguous compiler evidence agx_opcodes.c selection')
+        selected_table, opcode_include, opcode_transform = prepare_opcode_flags_source(
+            table_matches[0], out)
+        manifest['compiler_opcode_flags_transform'] = opcode_transform
+        compiler_units = [selected_table if p == table_matches[0] else p for p in compiler_units]
         libraries = []
         for relative in LIBRARIES:
             library = build / relative
@@ -390,6 +429,7 @@ def main():
                     OWNER_GENERATED / 'src', OWNER_GENERATED / 'src/asahi/genxml',
                     OWNER_GENERATED / 'src/asahi/lib', MESA / 'src/asahi/isa',
                     MESA / 'src/poly', MESA / 'src/poly/nir']
+        includes.insert(0, opcode_include)
         manifest['compiler'] = {'path': str(CLANG / 'clang-cl.exe'),
                                 'sha256': record(CLANG / 'clang-cl.exe', kind='toolchain'),
                                 'c_flags': c_flags, 'cpp_flags': cpp_flags,
