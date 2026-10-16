@@ -1110,11 +1110,12 @@ struct Query
     * event query has no pipe query and completes on the Windows fence.
     * D3D-G10d: pipeline statistics are eight single-statistic pipe queries
     * and stream-output statistics two (written, generated): handle is the
-    * first, extra the rest. */
+    * first, extra the rest. EXP1336: the D3D 11 pipeline statistics are
+    * eleven (HS, DS and CS invocations added). */
    D3D10DDI_QUERY Type;
    UINT Flags;
    struct pipe_query *handle;
-   struct pipe_query *extra[7];
+   struct pipe_query *extra[10];
    UINT extra_count;
    /* D3D-H5: a timestamp query's value, taken when its fence completed */
    UINT64 agx_timestamp;
@@ -1894,13 +1895,25 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
    const bool occlusion = pCreateQuery &&
       (pCreateQuery->Query == D3D10DDI_QUERY_OCCLUSION ||
        pCreateQuery->Query == D3D10DDI_QUERY_OCCLUSIONPREDICATE);
+   /* EXP1336: a D3D 11 (FL 11_0) device asks for D3D11DDI_QUERY_PIPELINESTATS
+    * (the eleven statistics) and the per-stream stream-output statistics and
+    * overflow predicates; refused, the runtime removed the device. */
+   const bool streamStats = pCreateQuery &&
+      pCreateQuery->Query >= D3D11DDI_QUERY_STREAMOUTPUTSTATS_STREAM0 &&
+      pCreateQuery->Query <= D3D11DDI_QUERY_STREAMOUTPUTSTATS_STREAM3;
+   const bool streamOverflow = pCreateQuery &&
+      pCreateQuery->Query >= D3D11DDI_QUERY_STREAMOVERFLOWPREDICATE_STREAM0 &&
+      pCreateQuery->Query <= D3D11DDI_QUERY_STREAMOVERFLOWPREDICATE_STREAM3;
    const bool statistics = pCreateQuery &&
       (pCreateQuery->Query == D3D10DDI_QUERY_PIPELINESTATS ||
+       pCreateQuery->Query == D3D11DDI_QUERY_PIPELINESTATS ||
        pCreateQuery->Query == D3D10DDI_QUERY_STREAMOUTPUTSTATS ||
-       pCreateQuery->Query == D3D10DDI_QUERY_STREAMOVERFLOWPREDICATE);
+       pCreateQuery->Query == D3D10DDI_QUERY_STREAMOVERFLOWPREDICATE ||
+       streamStats || streamOverflow);
    const bool predicate = pCreateQuery &&
       (pCreateQuery->Query == D3D10DDI_QUERY_OCCLUSIONPREDICATE ||
-       pCreateQuery->Query == D3D10DDI_QUERY_STREAMOVERFLOWPREDICATE);
+       pCreateQuery->Query == D3D10DDI_QUERY_STREAMOVERFLOWPREDICATE ||
+       streamOverflow);
    if (!pCreateQuery || !pQuery ||
        (pCreateQuery->Query != D3D10DDI_QUERY_EVENT && !occlusion && !statistics &&
         pCreateQuery->Query != D3D10DDI_QUERY_TIMESTAMP &&
@@ -1934,23 +1947,32 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
          return;
       }
    } else if (statistics) {
-      struct pipe_query *queries[8] = {};
+      struct pipe_query *queries[11] = {};
       unsigned count = 0;
       bool made = true;
-      if (pCreateQuery->Query == D3D10DDI_QUERY_PIPELINESTATS) {
-         /* PIPE_STAT_QUERY_IA_VERTICES..PS_INVOCATIONS: the order of
-          * D3D10_DDI_QUERY_DATA_PIPELINE_STATISTICS. */
-         for (unsigned i = 0; made && i < 8; ++i)
+      if (pCreateQuery->Query == D3D10DDI_QUERY_PIPELINESTATS ||
+          pCreateQuery->Query == D3D11DDI_QUERY_PIPELINESTATS) {
+         /* PIPE_STAT_QUERY_IA_VERTICES..PS_INVOCATIONS (then HS, DS, CS
+          * invocations): the order of D3D10_DDI_QUERY_DATA_PIPELINE_STATISTICS
+          * and D3D11_DDI_QUERY_DATA_PIPELINE_STATISTICS. */
+         const unsigned stats =
+            pCreateQuery->Query == D3D11DDI_QUERY_PIPELINESTATS ? 11u : 8u;
+         for (unsigned i = 0; made && i < stats; ++i)
             made = (queries[count++] = pDevice->pipe->create_query(pDevice->pipe,
                PIPE_QUERY_PIPELINE_STATISTICS_SINGLE, i)) != NULL;
-      } else if (pCreateQuery->Query == D3D10DDI_QUERY_STREAMOUTPUTSTATS) {
+      } else if (pCreateQuery->Query == D3D10DDI_QUERY_STREAMOUTPUTSTATS ||
+                 streamStats) {
+         const unsigned stream = streamStats ? (unsigned)(pCreateQuery->Query -
+            D3D11DDI_QUERY_STREAMOUTPUTSTATS_STREAM0) : 0u;
          made = (queries[count++] = pDevice->pipe->create_query(pDevice->pipe,
-            PIPE_QUERY_PRIMITIVES_EMITTED, 0)) != NULL &&
+            PIPE_QUERY_PRIMITIVES_EMITTED, stream)) != NULL &&
             (queries[count++] = pDevice->pipe->create_query(pDevice->pipe,
-            PIPE_QUERY_PRIMITIVES_GENERATED, 0)) != NULL;
+            PIPE_QUERY_PRIMITIVES_GENERATED, stream)) != NULL;
       } else {
+         const unsigned stream = streamOverflow ? (unsigned)(pCreateQuery->Query -
+            D3D11DDI_QUERY_STREAMOVERFLOWPREDICATE_STREAM0) : 0u;
          made = (queries[count++] = pDevice->pipe->create_query(pDevice->pipe,
-            PIPE_QUERY_SO_OVERFLOW_PREDICATE, 0)) != NULL;
+            PIPE_QUERY_SO_OVERFLOW_PREDICATE, stream)) != NULL;
       }
       if (!made) {
          for (unsigned i = 0; i < count; ++i)
@@ -2166,7 +2188,11 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
       pQuery->Type == D3D10DDI_QUERY_OCCLUSION ? sizeof(UINT64) :
       pQuery->Type == D3D10DDI_QUERY_PIPELINESTATS ?
          sizeof(D3D10_DDI_QUERY_DATA_PIPELINE_STATISTICS) :
-      pQuery->Type == D3D10DDI_QUERY_STREAMOUTPUTSTATS ?
+      pQuery->Type == D3D11DDI_QUERY_PIPELINESTATS ?
+         sizeof(D3D11_DDI_QUERY_DATA_PIPELINE_STATISTICS) :
+      pQuery->Type == D3D10DDI_QUERY_STREAMOUTPUTSTATS ||
+      (pQuery->Type >= D3D11DDI_QUERY_STREAMOUTPUTSTATS_STREAM0 &&
+       pQuery->Type <= D3D11DDI_QUERY_STREAMOUTPUTSTATS_STREAM3) ?
          sizeof(D3D10_DDI_QUERY_DATA_SO_STATISTICS) : sizeof(BOOL);
    if (!EventQueryValid(pDevice, pQuery) ||
        !((pData == NULL && DataSize == 0) ||
@@ -2187,7 +2213,7 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
       /* The native agx_get_query_result submits the query's writers and,
        * without wait, reports not-ready until they completed. Submitting
        * under DO_NOT_FLUSH too keeps a polling caller from never finishing. */
-      union pipe_query_result value, values[8];
+      union pipe_query_result value, values[11];
       memset(&value, 0, sizeof(value));
       memset(values, 0, sizeof(values));
       bool ready = pDevice->pipe->get_query_result(pDevice->pipe,
@@ -2217,7 +2243,18 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
          stats->VSInvocations = values[2].u64; stats->GSInvocations = values[3].u64;
          stats->GSPrimitives = values[4].u64; stats->CInvocations = values[5].u64;
          stats->CPrimitives = values[6].u64; stats->PSInvocations = values[7].u64;
-      } else if (pData && pQuery->Type == D3D10DDI_QUERY_STREAMOUTPUTSTATS) {
+      } else if (pData && pQuery->Type == D3D11DDI_QUERY_PIPELINESTATS) {
+         D3D11_DDI_QUERY_DATA_PIPELINE_STATISTICS *stats =
+            (D3D11_DDI_QUERY_DATA_PIPELINE_STATISTICS *)pData;
+         stats->IAVertices = values[0].u64; stats->IAPrimitives = values[1].u64;
+         stats->VSInvocations = values[2].u64; stats->GSInvocations = values[3].u64;
+         stats->GSPrimitives = values[4].u64; stats->CInvocations = values[5].u64;
+         stats->CPrimitives = values[6].u64; stats->PSInvocations = values[7].u64;
+         stats->HSInvocations = values[8].u64; stats->DSInvocations = values[9].u64;
+         stats->CSInvocations = values[10].u64;
+      } else if (pData && (pQuery->Type == D3D10DDI_QUERY_STREAMOUTPUTSTATS ||
+                           (pQuery->Type >= D3D11DDI_QUERY_STREAMOUTPUTSTATS_STREAM0 &&
+                            pQuery->Type <= D3D11DDI_QUERY_STREAMOUTPUTSTATS_STREAM3))) {
          D3D10_DDI_QUERY_DATA_SO_STATISTICS *so =
             (D3D10_DDI_QUERY_DATA_SO_STATISTICS *)pData;
          so->NumPrimitivesWritten = values[0].u64;
@@ -2282,7 +2319,9 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
    /* D3D-G10d: the stream-overflow predicate predicates too. */
    if (!device || (query && (!EventQueryValid(device, query) ||
        !query->handle || (query->Type != D3D10DDI_QUERY_OCCLUSIONPREDICATE &&
-                          query->Type != D3D10DDI_QUERY_STREAMOVERFLOWPREDICATE)))) {
+                          query->Type != D3D10DDI_QUERY_STREAMOVERFLOWPREDICATE &&
+                          (query->Type < D3D11DDI_QUERY_STREAMOVERFLOWPREDICATE_STREAM0 ||
+                           query->Type > D3D11DDI_QUERY_STREAMOVERFLOWPREDICATE_STREAM3))))) {
       SetError(hDevice, E_NOTIMPL); return;
    }
    device->pipe->render_condition(device->pipe, query ? query->handle : NULL,
