@@ -1,5 +1,25 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
+## Current as of 2026-10-16T23:36Z (read this first)
+
+Installed: PACKAGE1341 (1597dd77: EXP1340's GPU-timestamp sources + a
+receipt; WOW64 UMD out82 on closure 102, GL ICD out61, m1n1 5b857603).
+- PROVEN (EXP1340): render GPU timestamps -- the KMD keeps each job's
+  firmware 3D start/end (template objects 28/29) by (process, command VA),
+  the winsys fetches them by escape into Mesa's slots (ns), D3D TIMESTAMP
+  is Mesa's query and TIMESTAMPDISJOINT reports 1 GHz, not disjoint;
+  t1 - t0 tracks render work (23/67/147 ms) within the CPU interval; no
+  regression.
+- OPEN (EXP1341): compute timestamps never requested -- Dispatch11's
+  memory_barrier flushes the compute batch before the TIMESTAMP End, which
+  attaches to active batches only. Next: attach to submitted batches and
+  fill slots from the KMD record at cleanup; compute needs its firmware end
+  without a flush-time request (timestamp microsequence for every compute
+  job, never yet run on hardware).
+- Scratchpad tools vanish (buildumd.sh, clone.py, manifests.py,
+  patch-cleanup-umd32.py on 2026-10-16): restore from
+  .local/scratchpad-tools-backup (synced 22:45Z) before a pipeline.
+
 ## Current as of 2026-10-16T20:59Z (read this first)
 
 Installed: PACKAGE1339 (88f26491 = integration driver sources; WOW64 UMD out80
