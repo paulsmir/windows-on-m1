@@ -31,7 +31,7 @@ class D3dG1WinsysRenderCompute(unittest.TestCase):
                  "AgxWin32AsahiBatchComputeLeave", "AgxWin32AsahiBatchComputeFinalize",
                  "add_bo", "append_native", "append_attachments", "prepare_process_buffers",
                  "pool_extent", "publish_shadows", "keep_timestamp", "keep_compute_timestamps",
-                 "write_timestamps", "AgxWin32AsahiBatchFinish",
+                 "ticks_to_ns", "write_timestamps", "AgxWin32AsahiBatchFinish",
                  "release_lease", "AgxWin32AsahiBatchPoll", "AgxWin32AsahiBatchTimestamps",
                  "AgxWin32AsahiBatchAbort",
                  "AgxWin32AsahiBatchRelease")

@@ -1982,6 +1982,13 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
       candidate.handle = queries[0];
       for (unsigned i = 1; i < count; ++i)
          candidate.extra[candidate.extra_count++] = queries[i];
+   } else if (pCreateQuery->Query == D3D10DDI_QUERY_TIMESTAMP &&
+              pDevice->pipe->screen->caps.query_timestamp) {
+      /* GPU timestamps (docs/superpowers/plans/2026-10-16-gpu-timestamps.md):
+       * Mesa's TIMESTAMP query, the GPU time its last batch finished, in
+       * nanoseconds; without it the CPU counter below stands in. */
+      candidate.handle = pDevice->pipe->create_query(pDevice->pipe,
+         PIPE_QUERY_TIMESTAMP, 0);
    }
    *pQuery = candidate;
    (void)hRTQuery;'''),
@@ -2111,8 +2118,10 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
       return;
    }
    if (pQuery->handle) {
-      /* Only the query this one began; the draws since carry its index. */
-      if (pQuery->Phase != QueryBuilding) return;
+      /* Only the query this one began; the draws since carry its index. A
+       * TIMESTAMP has no Begin: every End takes a new value. */
+      if (pQuery->Phase != QueryBuilding && pQuery->Type != D3D10DDI_QUERY_TIMESTAMP)
+         return;
       bool ended = pDevice->pipe->end_query(pDevice->pipe, pQuery->handle);
       for (UINT i = 0; ended && i < pQuery->extra_count; ++i)
          ended = pDevice->pipe->end_query(pDevice->pipe, pQuery->extra[i]);
@@ -2159,22 +2168,30 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
    pQuery->Phase = QueryIssued;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Query.cpp','QueryGetData','''   Device *pDevice = CastDevice(hDevice);
    Query *pQuery = CastQuery(hQuery);
-   /* D3D-H5: timestamp queries complete on the event fence.  No GPU
-    * timestamps reach this UMD yet, so a timestamp is the CPU counter when
-    * its fence was seen complete and every disjoint query reports TRUE:
-    * D3D documents timestamps of a disjoint interval as unreliable, which
-    * applications check before using them. */
+   /* D3D-H5: event-fence queries. With GPU timestamps (screen
+    * query_timestamp) a TIMESTAMP is Mesa's query (above) and a disjoint
+    * query reports nanoseconds of the firmware clock, not disjoint.
+    * Without them a timestamp is the CPU counter when its fence was seen
+    * complete and every disjoint query reports TRUE: D3D documents
+    * timestamps of a disjoint interval as unreliable, which applications
+    * check before using them. */
    auto event_data = [&](void *out) {
       if (!out) return;
       if (pQuery->Type == D3D10DDI_QUERY_TIMESTAMP) {
          *(UINT64 *)out = pQuery->agx_timestamp;
       } else if (pQuery->Type == D3D10DDI_QUERY_TIMESTAMPDISJOINT) {
-         LARGE_INTEGER frequency;
-         QueryPerformanceFrequency(&frequency);
          D3D10_DDI_QUERY_DATA_TIMESTAMP_DISJOINT *disjoint =
             (D3D10_DDI_QUERY_DATA_TIMESTAMP_DISJOINT *)out;
-         disjoint->Frequency = (UINT64)frequency.QuadPart;
-         disjoint->Disjoint = TRUE;
+         if (pDevice->pipe->screen->caps.query_timestamp) {
+            /* GPU timestamps are Mesa's nanoseconds of one firmware clock. */
+            disjoint->Frequency = 1000000000ULL;
+            disjoint->Disjoint = FALSE;
+         } else {
+            LARGE_INTEGER frequency;
+            QueryPerformanceFrequency(&frequency);
+            disjoint->Frequency = (UINT64)frequency.QuadPart;
+            disjoint->Disjoint = TRUE;
+         }
       } else {
          *(BOOL *)out = TRUE;
       }
@@ -2184,7 +2201,8 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
          (pQuery->Type == D3D10DDI_QUERY_TIMESTAMP ? sizeof(UINT64) :
           pQuery->Type == D3D10DDI_QUERY_TIMESTAMPDISJOINT ?
              sizeof(D3D10_DDI_QUERY_DATA_TIMESTAMP_DISJOINT) : sizeof(BOOL)) :
-      pQuery->Type == D3D10DDI_QUERY_OCCLUSION ? sizeof(UINT64) :
+      pQuery->Type == D3D10DDI_QUERY_OCCLUSION ||
+      pQuery->Type == D3D10DDI_QUERY_TIMESTAMP ? sizeof(UINT64) :
       pQuery->Type == D3D10DDI_QUERY_PIPELINESTATS ?
          sizeof(D3D10_DDI_QUERY_DATA_PIPELINE_STATISTICS) :
       pQuery->Type == D3D11DDI_QUERY_PIPELINESTATS ?
@@ -2233,7 +2251,8 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
          SetError(hDevice, DXGI_DDI_ERR_WASSTILLDRAWING);
          return;
       }
-      if (pData && pQuery->Type == D3D10DDI_QUERY_OCCLUSION) {
+      if (pData && (pQuery->Type == D3D10DDI_QUERY_OCCLUSION ||
+                    pQuery->Type == D3D10DDI_QUERY_TIMESTAMP)) {
          *(UINT64 *)pData = value.u64;
       } else if (pData && pQuery->Type == D3D10DDI_QUERY_PIPELINESTATS) {
          D3D10_DDI_QUERY_DATA_PIPELINE_STATISTICS *stats =

@@ -106,6 +106,11 @@ static void keep_compute_timestamps(AGX_G4_BATCH *g,APPLE_AGX_G4_TIMESTAMPS *ts,
   ts->EndHandle=request && ts->EndHandle ? APPLE_AGX_G4_TIMESTAMP_REQUEST : 0u;
   ts->StartOffset=ts->EndOffset=0u;
 }
+/* Mesa's timestamps are nanoseconds here (user_timestamp_to_ns 1/1): the
+ * winsys converts the firmware's counter ticks with the KMD's frequency. */
+static uint64_t ticks_to_ns(uint64_t ticks,uint64_t frequency) {
+  return ticks/frequency*1000000000ULL+(ticks%frequency)*1000000000ULL/frequency;
+}
 static void write_timestamps(struct agx_batch *batch,AGX_WIN32_ASAHI_BACKEND *b,
                              AGX_G4_BATCH *g) {
   uint64_t start=0,end=0,frequency=0,qpc=0;
@@ -113,16 +118,25 @@ static void write_timestamps(struct agx_batch *batch,AGX_WIN32_ASAHI_BACKEND *b,
   if(!g->TimestampCount || !g->Command || !g->Command->va ||
      !batch->ctx || !batch->ctx->timestamps || !b->Gpuva.Ops.GpuTimestamps ||
      !b->Gpuva.Ops.GpuTimestamps(b->Gpuva.Context,g->Command->va->addr,
-                                 &start,&end,&frequency,&qpc)) return;
+                                 &start,&end,&frequency,&qpc) || !frequency) return;
   map=(unsigned char *)agx_bo_map(batch->ctx->timestamps);
   if(!map) return;
   for(unsigned i=0;i<g->TimestampCount;++i) {
-    const uint64_t value=g->TimestampEnd[i] ? end : (start ? start : end);
+    const uint64_t value=ticks_to_ns(g->TimestampEnd[i] ? end : (start ? start : end),
+                                     frequency);
     if(g->TimestampOffset[i]>batch->ctx->timestamps->size-sizeof(value)) continue;
     memcpy(map+g->TimestampOffset[i],&value,sizeof(value));
   }
   b->TimestampFrequency=frequency;
-  b->TimestampOffset=end-qpc;
+  b->TimestampOffset=ticks_to_ns(end,frequency)-ticks_to_ns(qpc,frequency);
+}
+
+/* Asahi's DRM_IOCTL_ASAHI_GET_TIME: the firmware clock now, in Mesa's
+ * nanoseconds -- the performance counter (os_time_get_nano) plus the
+ * firmware-minus-counter offset of the newest values the KMD returned. */
+uint64_t agx_get_gpu_timestamp(struct agx_device *dev) {
+  AGX_WIN32_ASAHI_BACKEND *b=dev?(AGX_WIN32_ASAHI_BACKEND *)dev->windows_private:NULL;
+  return (uint64_t)os_time_get_nano()+(b?b->TimestampOffset:0u);
 }
 
 static AGX_WIN32_ASAHI_BACKEND *backend(struct agx_batch *batch) {

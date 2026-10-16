@@ -119,7 +119,10 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
 '''+part[end+len('   agx_batch_mark_active(batch);'):]
     s=s[:a]+part+s[b:]
     a,b=function(s,'agx_batch_cleanup');part=s[a:b]
-    part=replace(part,'   assert(batch->ctx == ctx);','''   if (!AgxWin32AsahiBatchPoll(batch, 0) || !AgxWin32AsahiBatchRelease(batch)) return;
+    part=replace(part,'   assert(batch->ctx == ctx);','''   /* GPU timestamps: the winsys writes the KMD's values into this batch's
+    * slot of ctx->timestamps after Poll, before they are read below. */
+   if (!AgxWin32AsahiBatchPoll(batch, 0) || !AgxWin32AsahiBatchTimestamps(batch) ||
+       !AgxWin32AsahiBatchRelease(batch)) return;
    assert(batch->ctx == ctx);''')
     part=part.replace('      agx_batch_print_stats(dev, batch);','      /* Windows completion is the existing ordered runtime marker. */')
     s=s[:a]+part+s[b:]
@@ -174,7 +177,11 @@ extern __declspec(thread) uint64_t agx_win32_scratch_page_va;
 
       return true;
    }'''
-    part=replace(part,old,'   case PIPE_QUERY_TIMESTAMP:\n      return false; /* Windows GPU timestamp source is not implemented. */')
+    # GPU timestamps (docs/superpowers/plans/2026-10-16-gpu-timestamps.md):
+    # Asahi's TIMESTAMP end stays: the batches' firmware end times come back
+    # from the KMD (AgxWin32AsahiBatchTimestamps) and agx_get_gpu_timestamp
+    # is the winsys's estimate of the firmware clock now.
+    if old not in part: raise RuntimeError('agx_end_query TIMESTAMP changed')
     query=query[:a]+part+query[b:]
     # D3D-G3: D3D GetData polls. Without `wait`, submit the query's writers
     # and report not-ready until every one completed (polled, then retired
@@ -303,6 +310,11 @@ extern int AgxWin32AsahiDrawPhasesOn;
     s=s[:a]+part+s[b:]
     save(sp,s)
     pp='src/gallium/drivers/asahi/agx_pipe.c';s=(out/pp).read_text()
+    # GPU timestamps: upstream agx_flush_compute names comp_start for the
+    # end too, so comp_end -- which agx_batch_cleanup reads -- was never
+    # written; the end goes to comp_end.
+    s=replace(s,'      cmdbuf->ts.end.offset = timestamp_offset(batch, comp_start);',
+              '      cmdbuf->ts.end.offset = timestamp_offset(batch, comp_end);')
     s=s.replace('#include <xf86drm.h>','/* Windows synchronization belongs to UMD. */')
     # u_drm.h contains pure modifier-array helpers and is portable.
     s=s.replace('#include "asahi/lib/decode.h"','#include "agx_device.h"\n#include "libagx_shaders.h"\n#include "asahi/lib/decode.h"')
@@ -314,7 +326,6 @@ extern int AgxWin32AsahiDrawPhasesOn;
     s=s.replace('   if (rsrc->scanout)\n      renderonly_scanout_destroy(rsrc->scanout, agx_screen->dev.ro);','')
     s=s.replace('   if (screen->dev.ro)\n      screen->dev.ro->destroy(screen->dev.ro);','')
     s=s.replace('strcasestr(util_get_process_name(), "ryujinx")', 'windows_strcasestr(util_get_process_name(), "ryujinx")')
-    s=replace(s,'   caps->timer_resolution = agx_gpu_timestamp_to_ns(agx_device(pscreen), 1);','   caps->timer_resolution = 0; /* Timestamp capability is unavailable on this Windows profile. */')
     marker='#include "agx_win32_asahi_batch.h"'
     s=s.replace(marker,marker+'''\nstatic const char *windows_strcasestr(const char *s, const char *needle) {
    if (!s || !needle) return NULL;
@@ -564,7 +575,15 @@ agx_flush(struct pipe_context *pctx,''')
     for line in ('   pctx->create_fence_fd = agx_create_fence_fd;','   pctx->fence_server_sync = agx_fence_server_sync;'):
         part=part.replace(line,'')
     start=part.index('   struct agx_device *dev = agx_device(screen);');end=part.index('   /* By default all samples',start)
-    part=part[:start]+'   ctx->in_sync_fd = -1;\n'+part[end:]
+    part=part[:start]+'''   ctx->in_sync_fd = -1;
+   /* GPU timestamps: Mesa's per-batch timestamp slots. The winsys fills them
+    * from the KMD (AgxWin32AsahiBatchTimestamps), so the object handle Asahi
+    * binds for the kernel is only a nonzero marker the winsys strips. */
+   ctx->timestamps = agx_bo_create(agx_device(screen),
+      sizeof(struct agx_timestamps) * AGX_MAX_BATCHES, 0, AGX_BO_WRITEBACK,
+      "Timestamp buffer");
+   ctx->timestamp_handle = ctx->timestamps ? 1u : 0u;
+'''+part[end:]
     s=s[:a]+part+s[b:]
     a,b=function(s,'agx_destroy_context');part=s[a:b]
     part=replace(part,'   agx_sync_all(ctx, "destroy context");','''   agx_sync_all(ctx, "destroy context");
@@ -574,7 +593,7 @@ agx_flush(struct pipe_context *pctx,''')
    for (unsigned i = 0; i < AGX_MAX_BATCHES; ++i)
       if (ctx->batches.slots[i].windows_batch) return; /* retains pending context */''')
     start=part.index('   /* Lock around the syncobj destruction');end=part.index('   pipe_resource_reference(&ctx->heap',start)
-    part=part[:start]+part[end:]
+    part=part[:start]+'   if (ctx->timestamps) agx_bo_unreference(dev, ctx->timestamps);\n'+part[end:]
     part=part.replace('   agx_destroy_command_queue(dev, ctx->queue_id);','')
     s=s[:a]+part+s[b:]
     # Build-only Linux entry is excluded; expose a Windows-native constructor
@@ -601,6 +620,12 @@ AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *backend, AGX_WIN32_SCREEN *wi
    }
    agx_screen->dev.params = *params;
    agx_screen->dev.chip = AGX_CHIP_G13G;
+   /* GPU timestamps: the winsys hands Mesa nanoseconds (it converts the
+    * firmware's counter ticks with the KMD's frequency), so Asahi's
+    * command_timestamp_frequency_hz is 1 GHz and the conversion 1/1. */
+   agx_screen->dev.params.command_timestamp_frequency_hz = 1000000000ULL;
+   agx_screen->dev.user_timestamp_to_ns.num = 1u;
+   agx_screen->dev.user_timestamp_to_ns.den = 1u;
    /* EXP1162: GoldSrc picked a 4x multisampled GL framebuffer as soon as
     * the screen advertised one; the OpenGL ICD keeps advertising none.
     * D3D-G5: the D3D UMD (Backend.Multisample) advertises 2x/4x, which the
@@ -634,8 +659,9 @@ AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *backend, AGX_WIN32_SCREEN *wi
     original=replace(original,'   agx_init_screen_caps(screen);','''   agx_init_screen_caps(screen);
    struct pipe_caps *windows_caps = (struct pipe_caps *)&screen->caps;
    windows_caps->occlusion_query = true;
-   windows_caps->query_timestamp = false;
-   windows_caps->query_time_elapsed = false;
+   /* GPU timestamps (docs/superpowers/plans/2026-10-16-gpu-timestamps.md). */
+   windows_caps->query_timestamp = true;
+   windows_caps->query_time_elapsed = true;
    windows_caps->query_so_overflow = false;
    windows_caps->query_memory_info = false;
    windows_caps->query_pipeline_statistics_single = false;

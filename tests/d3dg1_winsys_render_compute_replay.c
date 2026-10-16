@@ -373,9 +373,11 @@ int main(void) {
     uint64_t v0, v1, v2, untouched;
     memcpy(&v0, bos[15].cpu + 0x00, 8); memcpy(&v1, bos[15].cpu + 0x10, 8);
     memcpy(&v2, bos[15].cpu + 0x18, 8); memcpy(&untouched, bos[15].cpu + 0x08, 8);
-    assert(v0 == 0x1111ULL && v1 == 0x2222ULL && v2 == 0x2222ULL &&
+    /* nanoseconds of the 24 MHz counter: 0x1111 -> 182041, 0x2222 -> 364083 */
+    assert(v0 == 182041ULL && v1 == 364083ULL && v2 == 364083ULL &&
            untouched == 0xeeeeeeeeeeeeeeeeULL);
-    assert(owner.TimestampFrequency == 24000000ULL && owner.TimestampOffset == 0x2222ULL - 0x200ULL);
+    assert(owner.TimestampFrequency == 24000000ULL &&
+           owner.TimestampOffset == 364083ULL - 21333ULL);
   }
   assert(AgxWin32AsahiBatchRelease(&batch));
   assert(!batch.windows_batch && release_count == 1 && !bos[1].refs && !bos[12].refs);

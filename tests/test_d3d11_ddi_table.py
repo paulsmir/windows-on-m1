@@ -306,6 +306,13 @@ class D3d11DdiTable(unittest.TestCase):
             self.assertIn("pQuery->Type == D3D10DDI_QUERY_TIMESTAMP ? sizeof(UINT64)", data)
             self.assertIn("sizeof(D3D10_DDI_QUERY_DATA_TIMESTAMP_DISJOINT)", data)
             self.assertIn("disjoint->Disjoint = TRUE;", data)
+            # GPU timestamps: Mesa's TIMESTAMP in nanoseconds of one firmware
+            # clock, ended on every End (no Begin), not disjoint.
+            self.assertIn("PIPE_QUERY_TIMESTAMP, 0);", create)
+            self.assertIn("disjoint->Frequency = 1000000000ULL;", data)
+            self.assertIn("disjoint->Disjoint = FALSE;", data)
+            end = function_body(query, "QueryEnd")
+            self.assertIn("pQuery->Type != D3D10DDI_QUERY_TIMESTAMP", end)
             self.assertNotIn("*(BOOL *)pData = TRUE", data)
             complete = data[data.rindex("pQuery->Phase = QuerySignaled;"):]
             self.assertLess(complete.index("pQuery->agx_timestamp = "),

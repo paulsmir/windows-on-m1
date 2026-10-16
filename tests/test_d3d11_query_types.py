@@ -12,7 +12,9 @@ single-statistic queries in the order of
 D3D11_DDI_QUERY_DATA_PIPELINE_STATISTICS (PIPE_STAT_QUERY_IA_VERTICES ..
 CS_INVOCATIONS); a stream's statistics and overflow predicate use that
 stream's index; the D3D 10 types are unchanged. Runs the projected
-CreateQuery against stubs (see test_d3d10_shader_fields_init.py).
+CreateQuery against stubs (see test_d3d10_shader_fields_init.py). GPU
+timestamps: with the screen's query_timestamp a TIMESTAMP creates Mesa's
+PIPE_QUERY_TIMESTAMP; without it the event-fence CPU counter remains.
 """
 from pathlib import Path
 import os
@@ -43,7 +45,9 @@ enum D3D10DDI_QUERY { D3D10DDI_QUERY_EVENT = 0, D3D10DDI_QUERY_OCCLUSION, D3D10D
   D3D11DDI_QUERY_STREAMOVERFLOWPREDICATE_STREAM2, D3D11DDI_QUERY_STREAMOVERFLOWPREDICATE_STREAM3 };
 #define D3D10DDI_QUERY_MISCFLAG_PREDICATEHINT 1u
 enum { PIPE_QUERY_OCCLUSION_COUNTER = 1, PIPE_QUERY_OCCLUSION_PREDICATE, PIPE_QUERY_PIPELINE_STATISTICS_SINGLE,
-  PIPE_QUERY_PRIMITIVES_EMITTED, PIPE_QUERY_PRIMITIVES_GENERATED, PIPE_QUERY_SO_OVERFLOW_PREDICATE };
+  PIPE_QUERY_PRIMITIVES_EMITTED, PIPE_QUERY_PRIMITIVES_GENERATED, PIPE_QUERY_SO_OVERFLOW_PREDICATE,
+  PIPE_QUERY_TIMESTAMP };
+struct pipe_screen { struct { bool query_timestamp; } caps; };
 struct D3D10DDIARG_CREATEQUERY { D3D10DDI_QUERY Query; UINT MiscFlags; };
 struct D3D10DDI_HDEVICE { void *pDrvPrivate; };
 struct D3D10DDI_HQUERY { void *pDrvPrivate; };
@@ -51,6 +55,7 @@ struct D3D10DDI_HRTQUERY { void *handle; };
 struct pipe_query { int type; unsigned index; };
 static std::vector<pipe_query *> made;
 struct pipe_context {
+  pipe_screen *screen;
   pipe_query *(*create_query)(pipe_context *, unsigned, unsigned);
   void (*destroy_query)(pipe_context *, pipe_query *);
 };
@@ -73,8 +78,9 @@ void APIENTRY
 CreateQuery(D3D10DDI_HDEVICE hDevice, __in const D3D10DDIARG_CREATEQUERY *pCreateQuery,
             D3D10DDI_HQUERY hQuery, D3D10DDI_HRTQUERY hRTQuery)
 @@BODY@@
+static pipe_screen screen = {{false}};
 static Query create(D3D10DDI_QUERY type, UINT flags = 0) {
-  static pipe_context pipe = {create_query, destroy_query};
+  static pipe_context pipe = {&screen, create_query, destroy_query};
   static AGX_D3D10_WINDOWS_DEVICE w;
   static Device dev = {&pipe, &w};
   Query q; memset(&q, 0, sizeof(q));
@@ -105,6 +111,16 @@ int main() {
   assert(lastError == E_NOTIMPL && made.empty());
   q = create((D3D10DDI_QUERY)0x1000);
   assert(lastError == E_NOTIMPL && made.empty());
+  /* GPU timestamps: a TIMESTAMP is Mesa's query when the screen has them,
+   * the CPU-counter event otherwise; TIMESTAMPDISJOINT stays an event. */
+  q = create(D3D10DDI_QUERY_TIMESTAMP);
+  assert(lastError == S_OK && made.empty() && !q.handle);
+  screen.caps.query_timestamp = true;
+  q = create(D3D10DDI_QUERY_TIMESTAMP);
+  assert(lastError == S_OK && made.size() == 1 && made[0]->type == PIPE_QUERY_TIMESTAMP &&
+         q.handle == made[0] && q.extra_count == 0);
+  q = create(D3D10DDI_QUERY_TIMESTAMPDISJOINT);
+  assert(lastError == S_OK && made.empty() && !q.handle);
   return 0;
 }
 '''
