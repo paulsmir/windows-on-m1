@@ -4701,6 +4701,25 @@ AgxD3d10ResourceWithinRequiredLimits(
                   DDIMap == D3D10_DDI_MAP_WRITE_NOOVERWRITE)) ||
        resource->transfers[SubResource] ||
        (resource->constant_buffer && DDIMap != D3D10_DDI_MAP_WRITE_DISCARD)) {
+      /* EXP1325 receipt-only: the FL 11_0 desktop refused 5760 maps here;
+       * the resource and request show which rule fails. */
+      static volatile LONG mapRefusals;
+      if (InterlockedIncrement(&mapRefusals) <= 32) {
+         UINT values[8] = {resource ? (UINT)resource->usage : ~0u,
+            resource ? (UINT)resource->bind_flags : 0u,
+            resource ? (UINT)resource->cpu_access : 0u,
+            resource ? (UINT)resource->Format : 0u,
+            (UINT)DDIMap | ((UINT)Flags << 8) |
+               (resource && resource->buffer ? 0x10000u : 0u) |
+               (resource && resource->constant_buffer ? 0x20000u : 0u) |
+               (resource && resource->transfers && SubResource < resource->NumSubResources &&
+                resource->transfers[SubResource] ? 0x40000u : 0u) |
+               (resource && resource->owner_device != device ? 0x80000u : 0u),
+            SubResource, resource ? resource->NumSubResources : 0u,
+            (dynamicBuffer ? 1u : 0u) | (dynamicTexture ? 2u : 0u) |
+               (stagingResource ? 4u : 0u) | (mapMode ? 8u : 0u)};
+         AgxD3d10WindowsDiagnostic("reject-map", E_INVALIDARG, values, 8u);
+      }
       SetError(hDevice, E_INVALIDARG); return;
    }
    pMappedSubResource->pData=NULL;
