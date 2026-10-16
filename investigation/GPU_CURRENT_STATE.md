@@ -1,5 +1,19 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
+## Current as of 2026-10-16T05:30Z (read this first)
+
+Installed: PACKAGE1310 (a690ad72 KMD/ARM64 UMD, WOW64 UMD out50 and GL ICD
+out58 on closure 070).
+- PROVEN in EXP1310: 4x MSAA everywhere (5b081276: TA tiles_per_mtile counts
+  tiles, not utiles -- 4x renders had covered half/quarter of the target);
+  API sample masks exact.
+- OPEN (FL 11_0 default blocked by): CopyStructureCount returns 256 for 86
+  appends; the appended slots are compact (counter advanced correctly) and a
+  sentinel shows the copy writes 256 = w[0] of the raw words buffer -- the
+  copy source (hidden counter identity/address) is the next target. The SR
+  0x3b hypothesis is rejected.
+- Everything in the 04:30Z section below still holds except the MSAA item.
+
 ## Current as of 2026-10-16T04:30Z (read this first)
 
 Installed: PACKAGE1309 (72ff448b KMD/ARM64 UMD, WOW64 UMD out50 and GL ICD
