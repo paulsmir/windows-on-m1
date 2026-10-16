@@ -76,13 +76,14 @@ typedef struct {
   unsigned GpuvaReady, Failed;
   int ZlsAttachments;
   uint64_t NewestFence;
+  uint64_t TimestampFrequency, TimestampOffset;
 } AGX_WIN32_ASAHI_BACKEND;
 struct agx_screen { struct agx_bo *rodata; };
 struct agx_device { struct agx_bo *zero_bo, *scratch_bo; };
 #define AGX_MAX_BATCHES 1
 struct agx_batch;
 struct agx_context { struct { struct agx_screen *screen; } base;
-  struct { struct agx_batch *slots; } batches; };
+  struct { struct agx_batch *slots; } batches; struct agx_bo *timestamps; };
 struct agx_batch {
   struct agx_context *ctx;
   void *windows_batch;
@@ -114,6 +115,9 @@ typedef struct {
   APPLE_AGX_G4_PRIVATE_LEASE Lease;
   uint64_t Fence;
   unsigned Entered, ComputeEntered, Submitted, Retired, Rejected;
+  unsigned TimestampCount;
+  uint32_t TimestampOffset[4];
+  unsigned char TimestampEnd[4];
 } AGX_G4_BATCH;
 
 static AGX_WIN32_ASAHI_BACKEND owner;
@@ -168,6 +172,15 @@ static struct drm_asahi_cmd_header agx_cmd_header(bool compute, unsigned v, unsi
   return (struct drm_asahi_cmd_header){compute ? APPLE_AGX_G4_COMPUTE : APPLE_AGX_G4_RENDER,
       compute ? sizeof(APPLE_AGX_G4_NATIVE_COMPUTE) : sizeof(APPLE_AGX_G4_NATIVE_RENDER),
       (uint16_t)v, (uint16_t)c};
+}
+/* GPU timestamps: the KMD's values for the batch whose command BO is at va. */
+static unsigned timestamp_queries;
+static int gpu_timestamps(void *ctx, uint64_t va, uint64_t *start, uint64_t *end,
+                          uint64_t *frequency, uint64_t *qpc) {
+  (void)ctx; ++timestamp_queries;
+  if (va != vas[1].addr) return 0;
+  *start = 0x1111ULL; *end = 0x2222ULL; *frequency = 24000000ULL; *qpc = 0x200ULL;
+  return 1;
 }
 static int private_escape(void *ctx, APPLE_AGX_G3_PRIVATE_REQUEST *r) {
   (void)ctx;
@@ -230,6 +243,7 @@ static int evict(void *ctx, const uint64_t *tokens, unsigned count) {
   return 1;
 }
 int AgxWin32AsahiBatchPoll(struct agx_batch *batch, unsigned timeout);
+int AgxWin32AsahiBatchTimestamps(struct agx_batch *batch);
 /* D3D-G10a: the screen renders the colour formats defined above and no
  * others. */
 static int AgxWin32AsahiRenderableFormat(const struct agx_batch *batch, unsigned format) {
@@ -254,9 +268,10 @@ int main(void) {
   owner.GpuvaReady = 1;
   owner.Gpuva.Ops = (AGX_WIN32_GPUVA_OPS){.MakeResident = make_resident,
     .WaitPaging = wait_paging, .Submit = submit, .WaitRender = wait_render,
-    .Evict = evict, .PrivateEscape = private_escape};
+    .Evict = evict, .PrivateEscape = private_escape, .GpuTimestamps = gpu_timestamps};
+  bos[15].size = sizeof(bos[15].cpu); memset(bos[15].cpu, 0xee, sizeof(bos[15].cpu));
   struct agx_bo *pool_bos[1] = {&bos[5]}, *pipeline_bos[1] = {&bos[8]};
-  struct agx_screen screen = {&bos[3]}; struct agx_context ctx = {{&screen}, {NULL}};
+  struct agx_screen screen = {&bos[3]}; struct agx_context ctx = {{&screen}, {NULL}, &bos[15]};
   native_device = (struct agx_device){&bos[10], &bos[11]};
   struct agx_resource color = {.bo = &bos[4], .layout = {.size_B = 65536}};
   /* bos[13] is a stream-output buffer the batch's compute work writes;
@@ -288,15 +303,21 @@ int main(void) {
   assert(!AgxWin32AsahiBatchFinish(&batch, &native, &compute) && !creates && !g->Rejected);
   assert(AgxWin32AsahiBatchComputeLeave(&batch));
   assert(AgxWin32AsahiBatchComputeFinalize(&batch, batch.cdm.current));
-  /* A CDM encoder without its command, a command without the encoder,
-   * flags or timestamps: refused at entry, batch not rejected. (EXP1339: a
-   * helper program, compute scratch, is carried by the command.) */
+  /* A CDM encoder without its command, a command without the encoder or
+   * flags: refused at entry, batch not rejected. (EXP1339: a helper
+   * program, compute scratch, is carried by the command; GPU timestamps are
+   * kept by the capsule, below.) */
   assert(!AgxWin32AsahiBatchFinish(&batch, &native, NULL) && !creates && !g->Rejected);
   compute.flags = 1u;
   assert(!AgxWin32AsahiBatchFinish(&batch, &native, &compute) && !creates && !g->Rejected);
-  compute.flags = 0u; compute.ts.end.handle = 2u;
-  assert(!AgxWin32AsahiBatchFinish(&batch, &native, &compute) && !creates && !g->Rejected);
-  compute.ts.end.handle = 0u;
+  compute.flags = 0u;
+  /* GPU timestamps: Mesa's vertex start, fragment end and compute end
+   * offsets stay in the capsule; the envelope names no Mesa handle (the
+   * render job's timestamps come from the KMD). */
+  native.native.TimestampsVertex.StartHandle = 2u;
+  native.native.TimestampsFragment.EndHandle = 2u;
+  native.native.TimestampsFragment.EndOffset = 0x10u;
+  compute.ts.end.handle = 2u; compute.ts.end.offset = 0x18u;
   {
     struct agx_encoder cdm = batch.cdm;
     batch.cdm.bo = NULL;
@@ -308,6 +329,11 @@ int main(void) {
   assert(submit_count == 1 && g->Submitted && g->Fence == 20 && creates == 2);
   /* The KMD admits the v5 envelope; the render-only parser does not. */
   assert(sub.v5_result == AppleAgxG4ParseOk && sub.v3_result != AppleAgxG4ParseOk);
+  assert(g->TimestampCount == 3u && g->TimestampOffset[0] == 0u && !g->TimestampEnd[0] &&
+         g->TimestampOffset[1] == 0x10u && g->TimestampEnd[1] == 1u &&
+         g->TimestampOffset[2] == 0x18u && g->TimestampEnd[2] == 1u);
+  assert(!sub.view.Compute.Timestamps.StartHandle && !sub.view.Compute.Timestamps.EndHandle &&
+         !sub.view.Compute.Timestamps.EndOffset);
   assert(sub.view.HasCompute &&
          sub.view.Compute.CdmCtrlStreamBase == compute.cdm_ctrl_stream_base &&
          sub.view.Compute.CdmCtrlStreamEnd == compute.cdm_ctrl_stream_end &&
@@ -326,7 +352,12 @@ int main(void) {
   memcpy(&last, bos[1].cpu + sub.bytes - sizeof(APPLE_AGX_G4_NATIVE_RENDER) - sizeof(last),
          sizeof(last));
   assert(first.Type == APPLE_AGX_G4_COMPUTE && first.VdmBarrier == 0u && first.CdmBarrier == 0u);
-  assert(memcmp(bos[1].cpu + sizeof(first), &compute, sizeof(compute)) == 0);
+  {
+    /* the compute command as given, its timestamp handles stripped */
+    struct drm_asahi_cmd_compute stripped = compute;
+    stripped.ts.end.handle = 0u; stripped.ts.end.offset = 0u;
+    assert(memcmp(bos[1].cpu + sizeof(first), &stripped, sizeof(stripped)) == 0);
+  }
   assert(last.Type == APPLE_AGX_G4_RENDER && last.VdmBarrier == 0xffffu && last.CdmBarrier == 1u);
   /* Residency: the CDM stream, the context-store buffer and the sampler
    * heap join the render's set; both encoders are published. */
@@ -334,8 +365,18 @@ int main(void) {
   assert(bos[2].published == 1u && bos[6].published == 1u);
   /* Written: the colour buffer and the buffer the compute work writes. */
   assert(sub.written_count == 2u && written_has(4) && written_has(13));
-  /* Retirement returns both job BOs. */
-  assert(AgxWin32AsahiBatchPoll(&batch, 1000));
+  /* Retirement writes the KMD's start/end where Mesa's buffer takes them
+   * (vertex start, fragment end, compute end), then returns both job BOs. */
+  assert(AgxWin32AsahiBatchPoll(&batch, 1000) && timestamp_queries == 0u);
+  assert(AgxWin32AsahiBatchTimestamps(&batch) && timestamp_queries == 1u);
+  {
+    uint64_t v0, v1, v2, untouched;
+    memcpy(&v0, bos[15].cpu + 0x00, 8); memcpy(&v1, bos[15].cpu + 0x10, 8);
+    memcpy(&v2, bos[15].cpu + 0x18, 8); memcpy(&untouched, bos[15].cpu + 0x08, 8);
+    assert(v0 == 0x1111ULL && v1 == 0x2222ULL && v2 == 0x2222ULL &&
+           untouched == 0xeeeeeeeeeeeeeeeeULL);
+    assert(owner.TimestampFrequency == 24000000ULL && owner.TimestampOffset == 0x2222ULL - 0x200ULL);
+  }
   assert(AgxWin32AsahiBatchRelease(&batch));
   assert(!batch.windows_batch && release_count == 1 && !bos[1].refs && !bos[12].refs);
 

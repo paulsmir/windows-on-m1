@@ -73,7 +73,8 @@ struct agx_encoder { struct agx_bo *bo; uint8_t *current, *end; };
 struct agx_device { void *windows_private; struct agx_bo *zero_bo, *scratch_bo; };
 struct agx_screen { struct agx_device dev; struct agx_bo *rodata; };
 struct pipe_screen { int unused; };
-struct agx_context { struct { struct pipe_screen *screen; } base; int any_faults; };
+struct agx_context { struct { struct pipe_screen *screen; } base; int any_faults;
+                     struct agx_bo *timestamps; };
 struct agx_batch {
   struct agx_context *ctx; void *windows_batch; int compute;
   struct agx_encoder vdm, cdm;
@@ -86,6 +87,7 @@ typedef struct {
   AGX_WIN32_GPUVA_SPACE Gpuva;
   int GpuvaReady, Failed;
   uint64_t NewestFence;
+  uint64_t TimestampFrequency, TimestampOffset;
 } AGX_WIN32_ASAHI_BACKEND;
 #define AGX_WIN32_ASAHI_FAIL(b, site) ((b)->Failed = (int)(site))
 static struct agx_screen screen;
@@ -167,7 +169,7 @@ static int in_refs(const struct agx_bo *bo) {
 }
 int main(void) {
   AGX_WIN32_ASAHI_BACKEND b; memset(&b, 0, sizeof(b));
-  struct agx_context ctx = {{&pipe}, 0};
+  struct agx_context ctx = {{&pipe}, 0, NULL};
   struct agx_batch batch; memset(&batch, 0, sizeof(batch));
   screen.dev.windows_private = &b; b.Native = &screen.dev; b.GpuvaReady = 1;
   screen.rodata = make_bo(0x10000); screen.dev.zero_bo = make_bo(0x10000);
@@ -198,12 +200,14 @@ int main(void) {
   assert(AgxWin32AsahiBatchComputeLeave(&batch) && !g->ComputeEntered);
   assert(AgxWin32AsahiBatchComputeFinalize(&batch, batch.cdm.current));
   assert(!AgxWin32AsahiBatchComputeFinalize(&batch, (uint8_t *)pool->_map));
-  /* Flags and timestamps are refused before anything exists. */
+  /* Flags are refused before anything exists. */
   command.flags = 1u;
   assert(!AgxWin32AsahiBatchFinishCompute(&batch, &command) && !creates && !g->Rejected);
-  command.flags = 0u; command.ts.start.handle = 3u;
-  assert(!AgxWin32AsahiBatchFinishCompute(&batch, &command) && !creates && !g->Rejected);
-  command.ts.start.handle = 0u;
+  command.flags = 0u;
+  /* GPU timestamps: Mesa's handle/offsets become a KMD request; the capsule
+   * keeps the offsets for the values the KMD returns. */
+  command.ts.start.handle = 3u; command.ts.start.offset = 0x40u;
+  command.ts.end.handle = 3u; command.ts.end.offset = 0x48u;
   /* EXP1339: a compute helper (scratch) is submitted. */
   command.helper.binary = 0x40u; command.helper.cfg = 0u; command.helper.data = src->va->addr;
   assert(AgxWin32AsahiBatchFinishCompute(&batch, &command));
@@ -233,6 +237,11 @@ int main(void) {
   assert(view.Compute.CdmCtrlStreamBase == cdm->va->addr && view.Preemption.Va == g->Preemption->va->addr);
   assert(view.Compute.Helper.Binary == 0x40u && view.Compute.Helper.Data == src->va->addr &&
          view.Compute.Helper.Cfg == 0u);
+  assert(view.Compute.Timestamps.StartHandle == APPLE_AGX_G4_TIMESTAMP_REQUEST &&
+         view.Compute.Timestamps.EndHandle == APPLE_AGX_G4_TIMESTAMP_REQUEST &&
+         !view.Compute.Timestamps.StartOffset && !view.Compute.Timestamps.EndOffset);
+  assert(g->TimestampCount == 2u && g->TimestampOffset[0] == 0x40u && !g->TimestampEnd[0] &&
+         g->TimestampOffset[1] == 0x48u && g->TimestampEnd[1] == 1u);
   /* Release returns both job BOs once the job retired. */
   g->Retired = 1;
   struct agx_bo *command_bo = g->Command, *preempt_bo = g->Preemption;
@@ -256,7 +265,8 @@ class WinsysComputeEnvelope(unittest.TestCase):
         capsule_type = source[start:source.index("} AGX_G4_BATCH;", start) + len("} AGX_G4_BATCH;")]
         functions = capsule_type + "\n" + "\n".join(body(source, name) for name in (
             "backend", "capsule", "batch_refuse", "compute_only", "render_compute", "add_bo", "pool_extent",
-            "publish_shadows", "AgxWin32AsahiBatchComputeEnter",
+            "publish_shadows", "keep_timestamp", "keep_compute_timestamps",
+            "AgxWin32AsahiBatchComputeEnter",
             "AgxWin32AsahiBatchComputeLeave", "AgxWin32AsahiBatchComputeFinalize",
             "AgxWin32AsahiBatchFinishCompute", "release_lease", "AgxWin32AsahiBatchRelease"))
         written_limit = next(line for line in source.splitlines()

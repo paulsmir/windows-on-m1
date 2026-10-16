@@ -110,6 +110,9 @@ typedef struct {
   APPLE_AGX_G4_PRIVATE_LEASE Lease;
   uint64_t Fence;
   unsigned Entered, ComputeEntered, Submitted, Retired, Rejected;
+  unsigned TimestampCount;
+  uint32_t TimestampOffset[4];
+  unsigned char TimestampEnd[4];
 } AGX_G4_BATCH;
 static AGX_WIN32_ASAHI_BACKEND owner;
 static struct agx_bo bos[16];

@@ -56,6 +56,9 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *,const struct drm_asahi_cmd_rende
                              const struct drm_asahi_cmd_compute *);
 int AgxWin32AsahiBatchFinishCompute(struct agx_batch *,const struct drm_asahi_cmd_compute *);
 int AgxWin32AsahiBatchPoll(struct agx_batch *,APPLE_AGX_U32);
+/* GPU timestamps: after Poll, write the KMD's values where Mesa's timestamp
+ * buffer takes them (always 1; a batch without values keeps Mesa's). */
+int AgxWin32AsahiBatchTimestamps(struct agx_batch *);
 void AgxWin32AsahiBatchDiagnostic(struct agx_batch *,APPLE_AGX_U32 out[2]);
 int AgxWin32AsahiBatchAbort(struct agx_batch *);
 int AgxWin32AsahiBatchRelease(struct agx_batch *);

@@ -81,6 +81,10 @@ typedef struct {
   APPLE_AGX_U32 CacheCount;
   APPLE_AGX_U64 CacheBytes;
   /* InitBM owns these TVB lists and blocks for the queue lifetime. */
+  /* GPU timestamps: the firmware tick frequency and the firmware-minus-QPC
+   * offset of the newest values the KMD returned (0 before the first). */
+  APPLE_AGX_U64 TimestampFrequency;
+  APPLE_AGX_U64 TimestampOffset;
 #endif
 } AGX_WIN32_ASAHI_BACKEND;
 

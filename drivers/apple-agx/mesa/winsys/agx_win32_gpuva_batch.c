@@ -76,7 +76,54 @@ typedef struct {
   APPLE_AGX_G4_PRIVATE_LEASE Lease;
   uint64_t Fence;
   unsigned Entered, ComputeEntered, Submitted, Retired, Rejected;
+  /* GPU timestamps: where Mesa's timestamp buffer takes each value
+   * (TimestampEnd 0: the job's start, 1: its end). */
+  unsigned TimestampCount;
+  uint32_t TimestampOffset[4];
+  unsigned char TimestampEnd[4];
 } AGX_G4_BATCH;
+
+/* GPU timestamps (docs/superpowers/plans/2026-10-16-gpu-timestamps.md).
+ * Asahi names Mesa's timestamp buffer by a bound handle and offset, and the
+ * firmware writes it. Here the KMD keeps the firmware values (render: the
+ * 3D work's start/end; compute: the requested block) and returns them by
+ * escape (Ops.GpuTimestamps), so the G4 command names no Mesa handle -- a
+ * standalone compute job carries APPLE_AGX_G4_TIMESTAMP_REQUEST -- and the
+ * capsule keeps the offsets; AgxWin32AsahiBatchTimestamps writes the values
+ * there after the batch retired, before Mesa reads them (agx_batch_cleanup:
+ * Poll, Timestamps, Release). */
+static void keep_timestamp(AGX_G4_BATCH *g,uint32_t handle,uint32_t offset,
+                           unsigned char end) {
+  if(!handle || g->TimestampCount==4u) return;
+  g->TimestampOffset[g->TimestampCount]=offset;
+  g->TimestampEnd[g->TimestampCount++]=end;
+}
+static void keep_compute_timestamps(AGX_G4_BATCH *g,APPLE_AGX_G4_TIMESTAMPS *ts,
+                                    int request) {
+  keep_timestamp(g,ts->StartHandle,ts->StartOffset,0u);
+  keep_timestamp(g,ts->EndHandle,ts->EndOffset,1u);
+  ts->StartHandle=request && ts->StartHandle ? APPLE_AGX_G4_TIMESTAMP_REQUEST : 0u;
+  ts->EndHandle=request && ts->EndHandle ? APPLE_AGX_G4_TIMESTAMP_REQUEST : 0u;
+  ts->StartOffset=ts->EndOffset=0u;
+}
+static void write_timestamps(struct agx_batch *batch,AGX_WIN32_ASAHI_BACKEND *b,
+                             AGX_G4_BATCH *g) {
+  uint64_t start=0,end=0,frequency=0,qpc=0;
+  unsigned char *map;
+  if(!g->TimestampCount || !g->Command || !g->Command->va ||
+     !batch->ctx || !batch->ctx->timestamps || !b->Gpuva.Ops.GpuTimestamps ||
+     !b->Gpuva.Ops.GpuTimestamps(b->Gpuva.Context,g->Command->va->addr,
+                                 &start,&end,&frequency,&qpc)) return;
+  map=(unsigned char *)agx_bo_map(batch->ctx->timestamps);
+  if(!map) return;
+  for(unsigned i=0;i<g->TimestampCount;++i) {
+    const uint64_t value=g->TimestampEnd[i] ? end : (start ? start : end);
+    if(g->TimestampOffset[i]>batch->ctx->timestamps->size-sizeof(value)) continue;
+    memcpy(map+g->TimestampOffset[i],&value,sizeof(value));
+  }
+  b->TimestampFrequency=frequency;
+  b->TimestampOffset=end-qpc;
+}
 
 static AGX_WIN32_ASAHI_BACKEND *backend(struct agx_batch *batch) {
   return batch && batch->ctx ?
@@ -546,12 +593,12 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   AGX_G4_PRIVATE_V5 *with_compute=NULL;
   const void *private_data=&packet;
   unsigned private_bytes;
-  /* Timestamps need KMD-owned state (G2). EXP1339: a helper program
-   * (compute scratch) is carried by the compute command; Mesa adds the
-   * scratch buffer to the batch (agx_flush_compute). */
+  /* EXP1339: a helper program (compute scratch) is carried by the compute
+   * command; Mesa adds the scratch buffer to the batch (agx_flush_compute).
+   * Its timestamps come back as the render's (keep_compute_timestamps). */
   const int compute_refused=compute &&
-      (!render_compute(batch) || g==NULL || g->ComputeEntered || compute->flags ||
-       compute->ts.start.handle || compute->ts.end.handle);
+      (!render_compute(batch) || g==NULL || g->ComputeEntered || compute->flags);
+  APPLE_AGX_G4_NATIVE_COMPUTE compute_command;
   APPLE_AGX_G4_PROCESS_RANGE ranges[APPLE_AGX_G4_PROCESS_RANGE_COUNT]={{0}};
   APPLE_AGX_G4_NATIVE_RENDER native_render;
   unsigned char *cpu;
@@ -607,6 +654,13 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   if(pipeline_count>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
   limit+=(unsigned)pipeline_count;
   memcpy(&native_render,render,sizeof(native_render));
+  g->TimestampCount=0u;
+  keep_timestamp(g,native_render.TimestampsVertex.StartHandle,
+                 native_render.TimestampsVertex.StartOffset,0u);
+  keep_timestamp(g,native_render.TimestampsFragment.EndHandle,
+                 native_render.TimestampsFragment.EndOffset,1u);
+  memset(&native_render.TimestampsVertex,0,sizeof(native_render.TimestampsVertex));
+  memset(&native_render.TimestampsFragment,0,sizeof(native_render.TimestampsFragment));
   /* The first G13 scene constructor uses one cluster. Asahi selects this
    * firmware path with the UAPI NO_VERTEX_CLUSTERING bit. */
   native_render.Flags|=1u<<2;
@@ -638,8 +692,10 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
     /* The compute command waits on the previous submission on both queues
      * (agx_cmd_header(true, 0, 0)); the render waits on it below. */
     command_header=agx_cmd_header(true,0,0);
+    memcpy(&compute_command,compute,sizeof(compute_command));
+    keep_compute_timestamps(g,&compute_command.Timestamps,0);
     if(!append_native(&packet,&command_header,sizeof(command_header)) ||
-       !append_native(&packet,compute,sizeof(*compute))) { fail_site=__LINE__; goto fail; }
+       !append_native(&packet,&compute_command,sizeof(compute_command))) { fail_site=__LINE__; goto fail; }
   }
   if(!append_attachments(batch,&packet)) { fail_site=__LINE__; goto fail; }
   command_header=compute ? agx_cmd_header(false,DRM_ASAHI_BARRIER_NONE,1) :
@@ -775,9 +831,9 @@ fail:
  * compute header in the private data, and a per-job context-store buffer.
  * Residency is the render rule (command, stream, device pages, bo_list,
  * pools); the written set is every BO this batch is the Mesa writer of, so
- * the UMD refreshes their CPU copies after the job. Timestamps need
- * KMD-owned state and are refused; a helper program (compute scratch,
- * EXP1339) is carried by the command, its buffer by the bo_list. */
+ * the UMD refreshes their CPU copies after the job. A helper program
+ * (compute scratch, EXP1339) is carried by the command, its buffer by the
+ * bo_list; timestamps are a KMD request (keep_compute_timestamps). */
 int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
                                     const struct drm_asahi_cmd_compute *compute) {
   AGX_WIN32_ASAHI_BACKEND *b=backend(batch);
@@ -799,8 +855,7 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
   enum { fixed_refs=8u };
   if(!b || !g || !compute || b->Failed || b->Gpuva.Terminal ||
      !compute_only(batch) || g->Submitted || g->Rejected || g->ComputeEntered ||
-     compute->flags || compute->ts.start.handle || compute->ts.end.handle ||
-     batch->bo_list.bit_count>UINT32_MAX-fixed_refs)
+     compute->flags || batch->bo_list.bit_count>UINT32_MAX-fixed_refs)
     return batch_refuse(9u, __LINE__,
         (unsigned)!compute_only(batch)|((unsigned)(compute && compute->flags)<<1)|
         ((unsigned)(compute && compute->ts.start.handle)<<2)|
@@ -825,6 +880,8 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
   command_header=agx_cmd_header(true,0,0);
   memcpy(&envelope.Native,&command_header,sizeof(envelope.Native));
   memcpy(&envelope.Compute,compute,sizeof(envelope.Compute));
+  g->TimestampCount=0u;
+  keep_compute_timestamps(g,&envelope.Compute.Timestamps,1);
   preemption.Va=g->Preemption->va->addr;
   preemption.Bytes=(unsigned)g->Preemption->size;
   preemption.Reserved=0u;
@@ -947,6 +1004,12 @@ int AgxWin32AsahiBatchPoll(struct agx_batch *batch,APPLE_AGX_U32 timeout) {
             !b->Gpuva.Ops.WaitRender(b->Gpuva.Context,g->Fence)) return 0;
   g->Retired=1;
   (void)release_lease(b,g); /* a failed release is retried by Release */
+  return 1;
+}
+int AgxWin32AsahiBatchTimestamps(struct agx_batch *batch) {
+  AGX_G4_BATCH *g=capsule(batch);
+  AGX_WIN32_ASAHI_BACKEND *b=backend(batch);
+  if(g && b && g->Retired) write_timestamps(batch,b,g);
   return 1;
 }
 int AgxWin32AsahiBatchAbort(struct agx_batch *batch) {
