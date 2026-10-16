@@ -234,6 +234,8 @@ typedef struct _ADMISSION_POOL_RUNTIME {
   ULONG LastWindowResult;
   /* Receipt staging: committed granules and failure total last staged. */
   ULONGLONG StagedGranules, StagedFailures, StagedReserved;
+  /* M2-f7: \KernelObjects\LowMemoryCondition (referenced), or NULL. */
+  PKEVENT LowMemory;
 } ADMISSION_POOL_RUNTIME;
 
 static ULONGLONG AdmissionPoolElapsedUs(LARGE_INTEGER Start) {
@@ -555,6 +557,7 @@ static VOID AdmissionPoolReclaimDpc(_In_ PKDPC Dpc, _In_opt_ PVOID Opaque,
 }
 
 static VOID AdmissionPoolDemandFree(ADMISSION_POOL_RUNTIME *Pool) {
+  if (Pool->LowMemory) ObDereferenceObject(Pool->LowMemory);
   if (Pool->Work) IoFreeWorkItem(Pool->Work);
   if (Pool->SlotOf) ExFreePoolWithTag(Pool->SlotOf, ADMISSION_POOL_TAG);
   if (Pool->SlabOf) ExFreePoolWithTag(Pool->SlabOf, ADMISSION_POOL_TAG);
@@ -622,6 +625,27 @@ static ULONGLONG AdmissionPoolRamBytes(VOID) {
   return total;
 }
 
+/* M2-f7 (EXP1304/EXP1305: the guest starved with 2 GiB of render targets
+ * and RAM locked to 384 MiB available): a reservation takes no slab from
+ * Windows while free physical memory is below the system's low-memory
+ * threshold, so CreateAllocation reports STATUS_NO_MEMORY instead of the
+ * pool taking the last free pages (Microsoft: Standard Event Objects). */
+static int AdmissionPoolMayGrow(void *Opaque) {
+  ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Opaque;
+  return pool->LowMemory == NULL || KeReadStateEvent(pool->LowMemory) == 0;
+}
+
+static VOID AdmissionPoolOpenLowMemory(ADMISSION_POOL_RUNTIME *Pool) {
+  UNICODE_STRING name =
+      RTL_CONSTANT_STRING(L"\\KernelObjects\\LowMemoryCondition");
+  HANDLE handle = NULL;
+  PKEVENT event = IoCreateNotificationEvent(&name, &handle);
+  if (event == NULL) return;
+  ObReferenceObject(event);
+  ZwClose(handle);
+  Pool->LowMemory = event;
+}
+
 /* An empty segment over the window, sized for this machine (M2-f4a,
  * AdmissionPoolDemandSegmentBytes); FALSE leaves no state behind. */
 static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
@@ -668,6 +692,8 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
   pool->Slabs.Context = pool;
   pool->Slabs.NewSlab = AdmissionPoolNewSlab;
   pool->Slabs.FreeSlab = AdmissionPoolFreeSlab;
+  AdmissionPoolOpenLowMemory(pool);
+  pool->Slabs.MayGrow = AdmissionPoolMayGrow;
   pool->Slabs.SpareLimit = ADMISSION_POOL_SPARE_SLABS;
   /* M2-f5: VidMm never places more than the segment. */
   pool->Slabs.ReserveCap = count;

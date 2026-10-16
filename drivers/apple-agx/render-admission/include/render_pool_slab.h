@@ -22,6 +22,8 @@ typedef struct _ADMISSION_POOL_SLAB_STATS {
   unsigned long long Slabs, PeakSlabs, NewSlabs, NewSlabFailures, FreedSlabs;
   /* M2-f5: reservations Windows could not back, and the largest total. */
   unsigned long long ReserveFailures, PeakReserved;
+  /* M2-f7: reservations refused at the Windows memory floor (MayGrow 0). */
+  unsigned long long FloorRefusals;
 } ADMISSION_POOL_SLAB_STATS;
 
 typedef struct _ADMISSION_POOL_SLABS {
@@ -30,6 +32,10 @@ typedef struct _ADMISSION_POOL_SLABS {
    * here), or 0 when Windows has no pages. */
   ADMISSION_POOL_SLAB *(*NewSlab)(void *Context);
   void (*FreeSlab)(void *Context, ADMISSION_POOL_SLAB *Slab);
+  /* M2-f7: 0 while Windows reports low memory (LowMemoryCondition): a
+   * reservation then takes no slab from Windows. Optional; the paging path
+   * (Take) is not gated, its failure poisons a process (M2-f5). */
+  int (*MayGrow)(void *Context);
   ADMISSION_POOL_SLAB *List;
   unsigned long long SpareLimit, Empty;
   /* M2-f5: slots promised to live allocations. The slabs held never fall
@@ -47,7 +53,8 @@ void AdmissionPoolSlabGive(ADMISSION_POOL_SLABS *Slabs, ADMISSION_POOL_SLAB *Sla
                            unsigned int Slot);
 /* M2-f5: promise Count more slots, taking slabs from Windows until the held
  * slots cover MIN(Reserved, ReserveCap). All or nothing: on a refusal the
- * promise and the slabs taken for it are undone and 0 is returned. */
+ * promise and the slabs taken for it are undone and 0 is returned. M2-f7:
+ * a slab is taken only while MayGrow allows it. */
 int AdmissionPoolSlabReserve(ADMISSION_POOL_SLABS *Slabs, unsigned long long Count);
 /* Ends a promise (clamped at zero) and returns empty slabs it no longer needs. */
 void AdmissionPoolSlabUnreserve(ADMISSION_POOL_SLABS *Slabs, unsigned long long Count);

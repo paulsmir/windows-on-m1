@@ -79,9 +79,11 @@ int AdmissionPoolSlabReserve(ADMISSION_POOL_SLABS *Slabs, unsigned long long Cou
   if (Slabs == 0) return 0;
   Slabs->Reserved += Count;
   while (Slabs->Stats.Slabs * ADMISSION_POOL_SLAB_SLOTS < Promised(Slabs)) {
-    if (AddSlab(Slabs) == 0) {
+    int floor = Slabs->MayGrow != 0 && !Slabs->MayGrow(Slabs->Context);
+    if (floor || AddSlab(Slabs) == 0) {
       Slabs->Reserved -= Count;
       ++Slabs->Stats.ReserveFailures;
+      if (floor) ++Slabs->Stats.FloorRefusals;
       Trim(Slabs);
       return 0;
     }

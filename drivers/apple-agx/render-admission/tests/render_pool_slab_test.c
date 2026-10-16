@@ -5,7 +5,7 @@
 #include <string.h>
 
 #define SLOTS ADMISSION_POOL_SLAB_SLOTS
-static unsigned news, frees, fail_new_at;
+static unsigned news, frees, fail_new_at, low_memory;
 static ADMISSION_POOL_SLAB *live_slabs[64];
 
 static ADMISSION_POOL_SLAB *fake_new(void *context)
@@ -35,6 +35,12 @@ static void fake_free(void *context, ADMISSION_POOL_SLAB *slab)
     free(slab);
 }
 
+static int fake_may_grow(void *context)
+{
+    (void)context;
+    return !low_memory;
+}
+
 static ADMISSION_POOL_SLABS slabs;
 
 static void reset(unsigned long long spare)
@@ -42,7 +48,7 @@ static void reset(unsigned long long spare)
     AdmissionPoolSlabDrain(&slabs);
     memset(&slabs, 0, sizeof(slabs));
     memset(live_slabs, 0, sizeof(live_slabs));
-    news = frees = fail_new_at = 0;
+    news = frees = fail_new_at = low_memory = 0;
     slabs.NewSlab = fake_new;
     slabs.FreeSlab = fake_free;
     slabs.SpareLimit = spare;
@@ -200,6 +206,38 @@ static void test_reserve_is_capped_at_the_segment(void)
     assert(slabs.Reserved == 0 && slabs.Stats.Slabs == 0);
 }
 
+/* M2-f7 (EXP1304/EXP1305: the guest starved under PRESSURE): while Windows
+ * reports low memory a reservation takes no slab and is refused, so
+ * CreateAllocation fails with STATUS_NO_MEMORY instead of the pool draining
+ * the last free pages; slabs already held still serve it, and the paging
+ * path (Take) is not gated. */
+static void test_reserve_keeps_the_windows_memory_floor(void)
+{
+    ADMISSION_POOL_SLAB *s[40];
+    unsigned slot[40];
+    reset(0);
+    slabs.ReserveCap = 1000;
+    slabs.MayGrow = fake_may_grow;
+    assert(AdmissionPoolSlabReserve(&slabs, 20));
+    assert(news == 1);
+    low_memory = 1;
+    /* Covered by the slab already held: no Windows pages needed. */
+    assert(AdmissionPoolSlabReserve(&slabs, 10));
+    assert(news == 1 && slabs.Reserved == 30);
+    assert(!AdmissionPoolSlabReserve(&slabs, 40));
+    assert(news == 1 && slabs.Reserved == 30);
+    assert(slabs.Stats.ReserveFailures == 1 && slabs.Stats.FloorRefusals == 1);
+    assert(slabs.Stats.NewSlabFailures == 0);
+    /* A placement beyond the reservation (a move's overlap) still asks. */
+    assert(AdmissionPoolSlabTake(&slabs, 40, s, slot));
+    assert(news == 2);
+    for (unsigned i = 0; i < 40; ++i)
+        AdmissionPoolSlabGive(&slabs, s[i], slot[i]);
+    low_memory = 0;
+    assert(AdmissionPoolSlabReserve(&slabs, 40));
+    assert(slabs.Reserved == 70);
+}
+
 int main(void)
 {
     test_one_slab_serves_32_granules();
@@ -210,6 +248,7 @@ int main(void)
     test_reserve_backs_later_takes();
     test_reserve_failure_is_all_or_nothing();
     test_reserve_is_capped_at_the_segment();
+    test_reserve_keeps_the_windows_memory_floor();
     reset(0);
     AdmissionPoolSlabDrain(&slabs);
     return 0;
