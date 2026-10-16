@@ -2,11 +2,15 @@
  * D3D11 TIMESTAMP queries around GPU work of known relative length.
  * Each case: TIMESTAMP_DISJOINT begin, TIMESTAMP t0, the work, TIMESTAMP
  * t1, disjoint end, flush, then GetData on all three (5 s bound).
- * - render: a 256x256 full-screen triangle whose pixel shader loops N times;
- * - compute: 16 groups of 64 threads, each looping N times.
- * N = 1, 256, 4096: with GPU timestamps the disjoint query reports 1 GHz and
- * not disjoint, t1 > t0, and t1 - t0 grows with N; with the CPU emulation
- * it reports the counter frequency and disjoint (verdict CPU).
+ * - render: a 512x512 full-screen triangle whose pixel shader loops N times;
+ * - compute: 256 groups of 64 threads, each looping N times.
+ * N = 1, 16384, 65536 (EXP1340: N <= 4096 took less GPU time than a job's
+ * round trip, so t1 - t0 did not order). With GPU timestamps the disjoint
+ * query reports 1 GHz and not disjoint, t1 > t0, and t1 - t0 of the
+ * heaviest case exceeds the lightest by > 2 ms (Mesa's TIMESTAMP is the
+ * batch's firmware end when it is later than the CPU clock at End); each
+ * line also gives the CPU time from End(t0) to the data. With the CPU
+ * emulation it reports the counter frequency and disjoint (verdict CPU).
  * Usage: agx_timestamp_smoke.exe <out.txt> */
 #define COBJMACROS
 #define INITGUID
@@ -77,6 +81,7 @@ static int measure(SETUP *s,int compute,UINT n,unsigned long long *delta) {
   const UINT counts[4]={n,0,0,0};
   D3D11_QUERY_DESC qd; ID3D11Query *disjoint=NULL,*t0=NULL,*t1=NULL;
   D3D11_QUERY_DATA_TIMESTAMP_DISJOINT dj; UINT64 v0=0,v1=0; HRESULT hr; int result=-1;
+  LARGE_INTEGER cpu0={0},cpu1={0},freq={0}; unsigned long long cpu_us=0;
   memset(&dj,0,sizeof(dj));
   memset(&qd,0,sizeof(qd)); qd.Query=D3D11_QUERY_TIMESTAMP_DISJOINT;
   hr=ID3D11Device_CreateQuery(s->dev,&qd,&disjoint); if(FAILED(hr)) goto done;
@@ -85,15 +90,16 @@ static int measure(SETUP *s,int compute,UINT n,unsigned long long *delta) {
   hr=ID3D11Device_CreateQuery(s->dev,&qd,&t1); if(FAILED(hr)) goto done;
   ID3D11DeviceContext_UpdateSubresource(s->ctx,(ID3D11Resource *)s->cb,0,NULL,counts,0,0);
   ID3D11DeviceContext_Begin(s->ctx,(ID3D11Asynchronous *)disjoint);
+  QueryPerformanceCounter(&cpu0);
   ID3D11DeviceContext_End(s->ctx,(ID3D11Asynchronous *)t0);
   if (compute) {
     ID3D11DeviceContext_CSSetShader(s->ctx,s->cs,NULL,0);
     ID3D11DeviceContext_CSSetConstantBuffers(s->ctx,0,1,&s->cb);
     ID3D11DeviceContext_CSSetUnorderedAccessViews(s->ctx,0,1,&s->uav,NULL);
-    ID3D11DeviceContext_Dispatch(s->ctx,16,1,1);
+    ID3D11DeviceContext_Dispatch(s->ctx,256,1,1);
   } else {
     D3D11_VIEWPORT vp; const float clear[4]={0,0,1,1};
-    memset(&vp,0,sizeof(vp)); vp.Width=256; vp.Height=256; vp.MaxDepth=1;
+    memset(&vp,0,sizeof(vp)); vp.Width=512; vp.Height=512; vp.MaxDepth=1;
     ID3D11DeviceContext_ClearRenderTargetView(s->ctx,s->rtv,clear);
     ID3D11DeviceContext_OMSetRenderTargets(s->ctx,1,&s->rtv,NULL);
     ID3D11DeviceContext_RSSetState(s->ctx,s->rs); ID3D11DeviceContext_RSSetViewports(s->ctx,1,&vp);
@@ -108,12 +114,14 @@ static int measure(SETUP *s,int compute,UINT n,unsigned long long *delta) {
   hr=wait_data(s->ctx,disjoint,&dj,sizeof(dj)); if(FAILED(hr) || hr!=S_OK) goto done;
   hr=wait_data(s->ctx,t0,&v0,sizeof(v0)); if(FAILED(hr) || hr!=S_OK) goto done;
   hr=wait_data(s->ctx,t1,&v1,sizeof(v1)); if(FAILED(hr) || hr!=S_OK) goto done;
+  QueryPerformanceCounter(&cpu1); QueryPerformanceFrequency(&freq);
+  cpu_us=(unsigned long long)((cpu1.QuadPart-cpu0.QuadPart)*1000000LL/freq.QuadPart);
   *delta=v1>=v0 ? v1-v0 : 0;
   result=(!dj.Disjoint && dj.Frequency==1000000000ULL && v1>v0) ? 1 : 0;
 done:
-  say("TS %s n=%u t0=%llu t1=%llu delta=%llu frequency=%llu disjoint=%d hr=0x%08lx removed=0x%08lx verdict=%s",
+  say("TS %s n=%u t0=%llu t1=%llu delta=%llu cpu_us=%llu frequency=%llu disjoint=%d hr=0x%08lx removed=0x%08lx verdict=%s",
       compute?"compute":"render",n,(unsigned long long)v0,(unsigned long long)v1,
-      (unsigned long long)(v1>=v0?v1-v0:0),(unsigned long long)dj.Frequency,(int)dj.Disjoint,(unsigned long)hr,
+      (unsigned long long)(v1>=v0?v1-v0:0),cpu_us,(unsigned long long)dj.Frequency,(int)dj.Disjoint,(unsigned long)hr,
       (unsigned long)ID3D11Device_GetDeviceRemovedReason(s->dev),
       result>0?"GPU":result==0?"CPU":"FAIL");
   REL(t1); REL(t0); REL(disjoint);
@@ -123,7 +131,7 @@ int main(int argc,char **argv) {
   IDXGIFactory1 *factory=NULL; IDXGIAdapter1 *adapter=NULL,*pick=NULL;
   HMODULE dll=NULL; pD3DCompile fn=NULL; HANDLE watch; int pass=1;
   const D3D_FEATURE_LEVEL levels[]={D3D_FEATURE_LEVEL_11_0,D3D_FEATURE_LEVEL_10_1,D3D_FEATURE_LEVEL_10_0};
-  static const UINT ns[]={1,256,4096};
+  static const UINT ns[]={1,16384,65536};
   SETUP s; ID3DBlob *vsc=NULL,*psc=NULL,*csc=NULL; D3D_FEATURE_LEVEL got; HRESULT hr;
   D3D11_BUFFER_DESC bd; D3D11_TEXTURE2D_DESC td; D3D11_RASTERIZER_DESC rd; D3D11_UNORDERED_ACCESS_VIEW_DESC ud;
   memset(&s,0,sizeof(s));
@@ -156,13 +164,13 @@ int main(int argc,char **argv) {
   }
   memset(&bd,0,sizeof(bd)); bd.ByteWidth=16; bd.Usage=D3D11_USAGE_DEFAULT; bd.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
   hr=ID3D11Device_CreateBuffer(s.dev,&bd,NULL,&s.cb);
-  memset(&bd,0,sizeof(bd)); bd.ByteWidth=16*64*4; bd.Usage=D3D11_USAGE_DEFAULT;
+  memset(&bd,0,sizeof(bd)); bd.ByteWidth=256*64*4; bd.Usage=D3D11_USAGE_DEFAULT;
   bd.BindFlags=D3D11_BIND_UNORDERED_ACCESS; bd.MiscFlags=D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS;
   if(SUCCEEDED(hr)) hr=ID3D11Device_CreateBuffer(s.dev,&bd,NULL,&s.dst);
   memset(&ud,0,sizeof(ud)); ud.Format=DXGI_FORMAT_R32_TYPELESS; ud.ViewDimension=D3D11_UAV_DIMENSION_BUFFER;
-  ud.Buffer.NumElements=16*64; ud.Buffer.Flags=D3D11_BUFFER_UAV_FLAG_RAW;
+  ud.Buffer.NumElements=256*64; ud.Buffer.Flags=D3D11_BUFFER_UAV_FLAG_RAW;
   if(SUCCEEDED(hr)) hr=ID3D11Device_CreateUnorderedAccessView(s.dev,(ID3D11Resource *)s.dst,&ud,&s.uav);
-  memset(&td,0,sizeof(td)); td.Width=256; td.Height=256; td.MipLevels=td.ArraySize=1;
+  memset(&td,0,sizeof(td)); td.Width=512; td.Height=512; td.MipLevels=td.ArraySize=1;
   td.Format=DXGI_FORMAT_R8G8B8A8_UNORM; td.SampleDesc.Count=1; td.Usage=D3D11_USAGE_DEFAULT;
   td.BindFlags=D3D11_BIND_RENDER_TARGET;
   if(SUCCEEDED(hr)) hr=ID3D11Device_CreateTexture2D(s.dev,&td,NULL,&s.rt);
@@ -177,8 +185,8 @@ int main(int argc,char **argv) {
       int r=measure(&s,compute,ns[i],&delta);
       if (r<=0) pass=0;
       if (r<0) break;
-      /* the longest loop must take longer than the shortest */
-      if (i==2 && delta<=previous) { say("TS %s ORDER delta(n=%u)=%llu <= %llu",
+      /* the longest loop must take > 2 ms longer than the shortest */
+      if (i==2 && delta<=previous+2000000ULL) { say("TS %s ORDER delta(n=%u)=%llu <= %llu + 2 ms",
           compute?"compute":"render",ns[i],delta,previous); pass=0; }
       if (i==0) previous=delta;
     }
