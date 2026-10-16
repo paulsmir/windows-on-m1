@@ -293,11 +293,83 @@ static HRESULT AdmissionUmdSubmitClear(
   return S_OK;
 }
 
+/* EXP1329 receipt-only: with FL 11_0 reported, dwm.exe, LogonUI and
+ * M365Copilot fault at address 0 and the buffered trace loses their last
+ * lines. A call to address 0 leaves its return address in LR (ARM64) or at
+ * [ESP]/[RSP] (x86/x64): record that and the first stack words that point
+ * into a module, as module-name prefix and offset, flush, and continue the
+ * search (the process fails exactly as before). */
+static PVOID AdmissionUmdNullCallHandler;
+
+static void AdmissionUmdModuleOffset(ULONG_PTR Address, UINT *Name,
+                                     UINT *Offset) {
+  HMODULE module = NULL;
+  WCHAR path[MAX_PATH];
+  PCWSTR leaf = NULL;
+  Name[0] = Name[1] = 0u;
+  *Offset = (UINT)Address;
+  if (Address == 0u ||
+      !GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                              GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                          (LPCWSTR)Address, &module) ||
+      module == NULL)
+    return;
+  *Offset = (UINT)(Address - (ULONG_PTR)module);
+  if (GetModuleFileNameW(module, path, MAX_PATH) == 0u) return;
+  leaf = path;
+  for (PCWSTR c = path; *c != 0; ++c)
+    if (*c == L'\\') leaf = c + 1;
+  for (UINT i = 0; i < 8u && leaf[i] != 0; ++i)
+    Name[i / 4u] |= (UINT)(leaf[i] & 0x7f) << (8u * (i % 4u));
+}
+
+static LONG CALLBACK AdmissionUmdNullCall(EXCEPTION_POINTERS *Info) {
+  const ULONG_PTR *stack;
+  ULONG_PTR caller;
+  UINT values[16] = {0};
+  UINT found = 0u;
+  if (Info == NULL || Info->ExceptionRecord == NULL ||
+      Info->ContextRecord == NULL ||
+      Info->ExceptionRecord->ExceptionCode != EXCEPTION_ACCESS_VIOLATION ||
+      Info->ExceptionRecord->ExceptionAddress != NULL)
+    return EXCEPTION_CONTINUE_SEARCH;
+#if defined(_M_ARM64)
+  caller = (ULONG_PTR)Info->ContextRecord->Lr;
+  stack = (const ULONG_PTR *)Info->ContextRecord->Sp;
+#elif defined(_M_X64)
+  stack = (const ULONG_PTR *)Info->ContextRecord->Rsp;
+  caller = stack != NULL ? stack[0] : 0u;
+#else
+  stack = (const ULONG_PTR *)Info->ContextRecord->Esp;
+  caller = stack != NULL ? stack[0] : 0u;
+#endif
+  values[0] = GetCurrentThreadId();
+  AdmissionUmdModuleOffset(caller, &values[1], &values[3]);
+  for (UINT i = 1u; stack != NULL && i < 48u && found < 4u; ++i) {
+    UINT name[2], offset;
+    AdmissionUmdModuleOffset(stack[i], name, &offset);
+    if (name[0] == 0u) continue;
+    values[4u + 3u * found] = name[0];
+    values[5u + 3u * found] = name[1];
+    values[6u + 3u * found] = offset;
+    ++found;
+  }
+  AdmissionUmdDiagnostic("reject-null-call", E_POINTER, values, 16u);
+  AdmissionUmdDiagnosticFlush();
+  return EXCEPTION_CONTINUE_SEARCH;
+}
+
 BOOL WINAPI DllMain(HINSTANCE Instance, DWORD Reason, LPVOID Reserved) {
   UNREFERENCED_PARAMETER(Instance);
   UNREFERENCED_PARAMETER(Reserved);
-  if (Reason == DLL_PROCESS_DETACH)
+  if (Reason == DLL_PROCESS_ATTACH && AdmissionUmdNullCallHandler == NULL)
+    AdmissionUmdNullCallHandler =
+        AddVectoredExceptionHandler(0u, AdmissionUmdNullCall);
+  if (Reason == DLL_PROCESS_DETACH) {
+    if (AdmissionUmdNullCallHandler != NULL && Reserved == NULL)
+      RemoveVectoredExceptionHandler(AdmissionUmdNullCallHandler);
     AdmissionUmdDiagnosticFlush();
+  }
   return TRUE;
 }
 
