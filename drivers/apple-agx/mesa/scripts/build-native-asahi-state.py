@@ -1022,7 +1022,9 @@ void *AgxD3d10CreateXfbState(struct pipe_context *pipe, Shader *shader,
    /* D3D-G10e: serials of bound vertex shaders (stream-output variants). */
    uint64_t agx_shader_serial;
    /* D3D-H2b: the bound compute shader's thread-group size (0: none). */
-   UINT agx_cs_block[3];'''),
+   UINT agx_cs_block[3];
+   /* D3D-G11: right/bottom pixel extent of the bound viewports. */
+   UINT agx_viewport_extent[2];'''),
         ('''static inline void
 SetError(D3D10DDI_HDEVICE hDevice, HRESULT hr)
 {
@@ -1055,6 +1057,28 @@ AgxD3d10NoTargetReceipt(Device *pDevice, UINT kind, UINT count)
       pDevice->agx_rt_args[0], pDevice->agx_rt_args[1],
       pDevice->agx_rt_args[2], pDevice->agx_rt_args[3]};
    AgxD3d10WindowsDiagnostic("reject-no-target", S_OK, values, 7u);
+}
+
+/* D3D-G11: with neither a render target nor a depth-stencil view bound the
+ * pass rasterizes within its viewports (stream output, UAV-only pixel
+ * shaders). Gallium sizes such a framebuffer by width/height/layers/samples
+ * (util_framebuffer_get_num_layers, ARB_framebuffer_no_attachments); the
+ * D3D10 frontend left it 0x0. Returns whether the size changed. */
+static inline bool
+AgxD3d10NoAttachmentSize(Device *pDevice)
+{
+   if (pDevice->fb.nr_cbufs || pDevice->fb.zsbuf.texture)
+      return false;
+   const unsigned width = MAX2(pDevice->agx_viewport_extent[0], 1u);
+   const unsigned height = MAX2(pDevice->agx_viewport_extent[1], 1u);
+   const bool changed = pDevice->fb.width != width ||
+      pDevice->fb.height != height || pDevice->fb.layers != 1u ||
+      pDevice->fb.samples != 1u;
+   pDevice->fb.width = width;
+   pDevice->fb.height = height;
+   pDevice->fb.layers = 1u;
+   pDevice->fb.samples = 1u;
+   return changed;
 }'''),
         ('''struct Query
 {
@@ -1553,7 +1577,32 @@ void APIENTRY
          '''   state.multisample = !pDevice->agx_d3d10_0_interface ||
                        pRasterizerDesc->MultisampleEnable;'''),
         ('''   state.line_rectangular = 0;''',
-         '''   state.line_rectangular = pRasterizerDesc->MultisampleEnable ? 1 : 0;''')])
+         '''   state.line_rectangular = pRasterizerDesc->MultisampleEnable ? 1 : 0;'''),
+        # D3D-G11: a framebuffer without attachments follows the viewports.
+        ('''   pipe->set_viewport_states(pipe, 0, NumViewports + ClearViewports,
+                             states);
+}''','''   pipe->set_viewport_states(pipe, 0, NumViewports + ClearViewports,
+                             states);
+   Device *pDevice = CastDevice(hDevice);
+   UINT extent[2] = {0u, 0u};
+   for (UINT i = 0; i < NumViewports; ++i) {
+      const float right = pViewports[i].TopLeftX + pViewports[i].Width;
+      const float bottom = pViewports[i].TopLeftY + pViewports[i].Height;
+      /* Rounded up, at most D3D11_REQ_RENDER_TO_BUFFER_WINDOW_WIDTH; NaN
+       * and negative edges give 0. */
+      const float edge[2] = {right, bottom};
+      for (UINT c = 0; c < 2u; ++c) {
+         if (!(edge[c] > 0.0f)) continue;
+         UINT px = edge[c] >= 16384.0f ? 16384u : (UINT)edge[c];
+         if (px < 16384u && (float)px < edge[c]) ++px;
+         extent[c] = MAX2(extent[c], px);
+      }
+   }
+   pDevice->agx_viewport_extent[0] = extent[0];
+   pDevice->agx_viewport_extent[1] = extent[1];
+   if (AgxD3d10NoAttachmentSize(pDevice))
+      pipe->set_framebuffer_state(pipe, &pDevice->fb);
+}''')])
     change('src/gallium/frontends/d3d10umd/OutputMerger.cpp',
         'fefcbe8754fd1042b7bf091feab767844cc71a8fe4cbe9f0b41d76dc9dd4fd04',[
         # EXP994: D3D10/11 disable depth and stencil tests while no depth-
@@ -1590,6 +1639,7 @@ SetRenderTargets(D3D10DDI_HDEVICE hDevice,'''),
       else if (!view->texture) ++pDevice->agx_rt_args[2];
    }
    pDevice->agx_rt_args[3] = CastPipeDepthStencilView(hDepthStencilView) != NULL;
+   (void)AgxD3d10NoAttachmentSize(pDevice);
    pipe->set_framebuffer_state(pipe, &pDevice->fb);
    AgxD3d10ApplyDepthStencil(pDevice);
 }'''),

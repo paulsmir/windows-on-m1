@@ -235,12 +235,21 @@ int main(void) {
           depth_only.Attachments = &zls.Attachment[0];
           assert(!AppleAgxG4BindNativeObjects(&depth_only, objects,
               APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
-          /* A depth-only render without depth is no render. */
+          /* D3D-G11: a render without colour and depth/stencil binds its
+           * attachment 0 (the device scratch page) as the sink. */
           bare.Render.Depth.Base = 0ULL;
           bare.Render.ZlsCtrl = 0ULL;
           bare.Render.IspZlsPixels = 0u;
+          bare.Render.SampleSizeBytes = 0u;
           depth_only.Render = (const unsigned char *)&bare.Render;
-          depth_only.Attachments = &zls.Attachment[1];
+          depth_only.Attachments = &zls.Attachment[0];
+          assert(AppleAgxG4BindNativeObjects(&depth_only, objects,
+              APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+          assert(objects[40].GpuVa == zls.Attachment[0].Pointer);
+          /* A stencil buffer without depth still needs its depth base. */
+          bare.Render.Stencil.Base = zls.Render.Depth.Base;
+          bare.Render.ZlsCtrl = zls.Render.ZlsCtrl;
+          bare.Render.IspZlsPixels = zls.Render.IspZlsPixels;
           assert(!AppleAgxG4BindNativeObjects(&depth_only, objects,
               APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
         }

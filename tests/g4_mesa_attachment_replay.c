@@ -85,7 +85,16 @@ int main(void) {
   assert(h->Size==48 && h->VdmBarrier==0xffff && h->CdmBarrier==0xffff);
   assert(a[0].Pointer==d.va && a[1].Pointer==s.va);
   assert(!a[0].Pad && !a[0].Flags && !a[1].Pad && !a[1].Flags);
-  memset(&p,0,sizeof(p));memset(&b,0,sizeof(b));
-  assert(append_attachments(&b,&p) && !p.Header.V2.Base.CommandBytes);
+  /* D3D-G11: a render without colour and depth/stencil names the device
+   * scratch page as its single attachment (the KMD's attachment 0). */
+  struct agx_va sva={0x60000};struct agx_bo sink={&sva,16384};
+  struct agx_device dev={&sink};struct pipe_screen screen={&dev};
+  struct agx_context ctx={{&screen}};
+  memset(&p,0,sizeof(p));memset(&b,0,sizeof(b));b.ctx=&ctx;
+  assert(append_attachments(&b,&p));
+  assert(h->Size==24 && a[0].Pointer==0x60000 && a[0].Size==16384 &&
+      !a[0].Pad && !a[0].Flags);
+  memset(&p,0,sizeof(p));dev.scratch_bo=NULL;
+  assert(!append_attachments(&b,&p));
   puts("R141 production attachment serialization: PASS");return 0;
 }

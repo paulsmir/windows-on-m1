@@ -12,7 +12,15 @@ struct agx_resource {
   struct { uint64_t size_B,level_offsets_B[1]; } layout;
   struct agx_resource *separate_stencil;
 };
+/* D3D-G11: the device scratch page, attachment 0 of a target-less render. */
+struct agx_va { uint64_t addr; };
+struct agx_bo { struct agx_va *va; uint64_t size; };
+struct agx_device { struct agx_bo *scratch_bo; };
+struct pipe_screen { struct agx_device *device; };
+struct agx_context { struct { struct pipe_screen *screen; } base; };
+static struct agx_device *agx_device(struct pipe_screen *s) { return s->device; }
 struct agx_batch {
+  struct agx_context *ctx;
   struct {
     unsigned nr_cbufs;
     struct { struct agx_resource *texture; } cbufs[PIPE_MAX_COLOR_BUFS],zsbuf;

@@ -153,11 +153,14 @@ APPLE_AGX_BOOL AppleAgxG4BindNativeObjects(
   memcpy(&color, View->Attachments, sizeof(color));
   /* A multisampled colour target holds every sample. D3D-G7: a depth-only
    * render's attachment 0 is the buffer holding its depth (the template
-   * names object 40 only in the firmware attachment list). */
+   * names object 40 only in the firmware attachment list). D3D-G11: a
+   * render without colour and depth/stencil (stream output, UAV-only pixel
+   * shaders) names the device scratch page as its attachment 0 -- the sink
+   * Asahi gives every unbound output (AGX_SCRATCH_PAGE_ADDRESS). */
   minimum = View->ColorFormat == APPLE_AGX_G4_COLOR_NONE ? 1u :
       (APPLE_AGX_U64)render.WidthPx * render.HeightPx *
       AppleAgxG4ColorBytes(View->ColorFormat) * render.Samples;
-  if (View->ColorFormat == APPLE_AGX_G4_COLOR_NONE &&
+  if (View->ColorFormat == APPLE_AGX_G4_COLOR_NONE && g4_has_zls(&render) &&
       (!render.Depth.Base || render.Depth.Base < color.Pointer ||
        render.Depth.Base - color.Pointer >= color.Size))
     return APPLE_AGX_FALSE;

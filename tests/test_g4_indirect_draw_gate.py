@@ -30,7 +30,7 @@ PROGRAM = r'''
 struct pipe_resource { int unused; };
 struct pipe_stream_output_target { int unused; };
 struct pipe_surface { struct pipe_resource *texture; };
-struct pipe_framebuffer_state { unsigned nr_cbufs; struct pipe_surface cbufs[8]; struct pipe_surface zsbuf; };
+struct pipe_framebuffer_state { unsigned width, height, nr_cbufs; struct pipe_surface cbufs[8]; struct pipe_surface zsbuf; };
 struct agx_context { bool any_faults; struct pipe_framebuffer_state framebuffer; };
 struct agx_batch { int unused; };
 struct pipe_draw_info { unsigned instance_count; };

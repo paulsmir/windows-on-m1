@@ -253,19 +253,22 @@ int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx,
     const struct pipe_draw_start_count_bias *draws,unsigned count) {
   (void)drawid;
   /* EXP1288: or no colour buffer and a depth buffer -- the depth-only pass
-   * the batch gate and the KMD admit (D3D-G7). */
+   * the batch gate and the KMD admit (D3D-G7). D3D-G11: or neither, on a
+   * framebuffer the frontend sized (stream output, UAV-only pixel shaders). */
   return ctx && !ctx->any_faults && info &&
          (indirect ? indirect_arguments(indirect) :
                      draws && count && info->instance_count) &&
          (ctx->framebuffer.nr_cbufs ? ctx->framebuffer.cbufs[0].texture != NULL :
-          ctx->framebuffer.zsbuf.texture != NULL);
+          ctx->framebuffer.zsbuf.texture != NULL ||
+          (ctx->framebuffer.width && ctx->framebuffer.height));
 }
 /* EXP1063: a draw DrawAllowed refuses has touched no batch state, so it is
  * dropped instead of poisoning the context (EXP1062: Notepad lost every
  * later flush after one such draw). The first refusals are reported
  * (reject-batch kind 6): reason bits 1 no draw, 2 indirect without
  * arguments (EXP1308; before it every indirect draw), 4 no instances,
- * 8 neither a color nor a depth buffer, 16 color buffer 0 unbound;
+ * 8 neither a color nor a depth buffer on a zero-sized framebuffer
+ * (D3D-G11), 16 color buffer 0 unbound;
  * nr_cbufs | depth << 8; vertex count. */
 int AgxWin32AsahiBatchDrawRefused(struct agx_context *ctx,
     const struct pipe_draw_info *info,
@@ -281,7 +284,8 @@ int AgxWin32AsahiBatchDrawRefused(struct agx_context *ctx,
     if(info && !info->instance_count) reason|=4u;
   }
   if(!ctx->framebuffer.nr_cbufs) {
-    if(!ctx->framebuffer.zsbuf.texture) reason|=8u;
+    if(!ctx->framebuffer.zsbuf.texture &&
+       (!ctx->framebuffer.width || !ctx->framebuffer.height)) reason|=8u;
   } else if(!ctx->framebuffer.cbufs[0].texture) reason|=16u;
   if(reported<32u) {
     ++reported;
@@ -380,7 +384,16 @@ static int append_attachments(struct agx_batch *batch,AGX_G4_PRIVATE *packet) {
       ++count;
     }
   }
-  if(!count) return 1;
+  if(!count) {
+    /* D3D-G11: a render without colour and depth/stencil (stream output,
+     * UAV-only pixel shaders) names the device scratch page -- the sink
+     * Asahi gives every unbound output -- as the KMD's attachment 0. */
+    const struct agx_bo *sink=agx_device(batch->ctx->base.screen)->scratch_bo;
+    if(!sink || !sink->va || !sink->va->addr || !sink->size) return 0;
+    attachments[0].pointer=sink->va->addr;
+    attachments[0].size=sink->size;
+    count=1;
+  }
   struct drm_asahi_cmd_header header={0};
   header.cmd_type=DRM_ASAHI_SET_FRAGMENT_ATTACHMENTS;
   header.size=count*sizeof(attachments[0]);
@@ -521,8 +534,9 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
      !batch->vdm.bo ||
      /* D3D-G2b: up to PIPE_MAX_COLOR_BUFS colour targets; the first is
       * the KMD's bound output, every bound one a supported format.
-      * D3D-G7: or none, when a depth buffer is bound (depth-only pass). */
-     (batch->key.nr_cbufs==0 ? !batch->key.zsbuf.texture :
+      * D3D-G7: or none, when a depth buffer is bound (depth-only pass).
+      * D3D-G11: or neither (the scratch page is attachment 0). */
+     (batch->key.nr_cbufs!=0 &&
       (batch->key.nr_cbufs>PIPE_MAX_COLOR_BUFS ||
        !batch->key.cbufs[0].texture || !gpuva_color_formats_supported(batch))) ||
      (batch->key.zsbuf.texture && !b->ZlsAttachments) ||

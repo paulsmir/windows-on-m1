@@ -8,6 +8,10 @@ batch gate and in the KMD but left the draw gate requiring colour buffer 0.
 Invariant: a draw with colour buffer 0 bound, or with no colour buffer and a
 depth buffer, is allowed; a draw with neither, or with colour slots but
 buffer 0 unbound, is refused and reported with its reason bits.
+D3D-G11 (EXP1314 stats smoke: every stream-output draw with no RTV/DSV was
+dropped, reason 8, so SO statistics read 0): a draw with neither colour nor
+depth is allowed on a framebuffer the frontend sized; reason 8 now means
+neither on a zero-sized framebuffer.
 """
 from pathlib import Path
 import os
@@ -25,7 +29,7 @@ PROGRAM = r'''
 #include <stdbool.h>
 struct pipe_resource { int unused; };
 struct pipe_surface { struct pipe_resource *texture; };
-struct pipe_framebuffer_state { unsigned nr_cbufs; struct pipe_surface cbufs[8]; struct pipe_surface zsbuf; };
+struct pipe_framebuffer_state { unsigned width, height, nr_cbufs; struct pipe_surface cbufs[8]; struct pipe_surface zsbuf; };
 struct agx_context { bool any_faults; struct pipe_framebuffer_state framebuffer; };
 struct pipe_draw_info { unsigned instance_count; };
 struct pipe_stream_output_target { int unused; };
@@ -48,11 +52,22 @@ int main(void) {
   ctx.framebuffer.nr_cbufs = 0; ctx.framebuffer.cbufs[0].texture = NULL;
   ctx.framebuffer.zsbuf.texture = &tex;
   assert(AgxWin32AsahiBatchDrawAllowed(&ctx, &info, 0, NULL, &draw, 1));
-  /* Neither colour nor depth: refused, reason 8. */
+  /* Neither colour nor depth on a zero-sized framebuffer: refused, reason 8. */
   ctx.framebuffer.zsbuf.texture = NULL;
   assert(!AgxWin32AsahiBatchDrawAllowed(&ctx, &info, 0, NULL, &draw, 1));
   assert(!AgxWin32AsahiBatchDrawRefused(&ctx, &info, NULL, &draw, 1));
   assert(refused_kind == 6u && refused_reason == 8u);
+  ctx.framebuffer.width = 64;
+  assert(!AgxWin32AsahiBatchDrawAllowed(&ctx, &info, 0, NULL, &draw, 1));
+  /* D3D-G11: neither, on a sized framebuffer (stream output, UAV-only). */
+  ctx.framebuffer.height = 32;
+  assert(AgxWin32AsahiBatchDrawAllowed(&ctx, &info, 0, NULL, &draw, 1));
+  refused_reason = 0;
+  info.instance_count = 0;
+  assert(!AgxWin32AsahiBatchDrawRefused(&ctx, &info, NULL, &draw, 1));
+  assert(refused_reason == 4u);
+  info.instance_count = 1;
+  ctx.framebuffer.width = ctx.framebuffer.height = 0;
   /* Colour slots with buffer 0 unbound: refused, reason 16. */
   ctx.framebuffer.nr_cbufs = 2; ctx.framebuffer.cbufs[1].texture = &tex;
   ctx.framebuffer.zsbuf.texture = &tex;
