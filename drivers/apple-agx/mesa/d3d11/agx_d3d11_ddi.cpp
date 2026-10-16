@@ -750,6 +750,21 @@ CopyStructureCount11(D3D10DDI_HDEVICE hDevice, D3D10DDI_HRESOURCE hDst, UINT off
    u_box_1d(0, 4, &box);
    device->pipe->resource_copy_region(device->pipe, dst->resource, 0, offset, 0, 0, view->counter,
                                       0, &box);
+   if (AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D11_COUNTER_TRACE")) {
+      /* EXP1311: the counter held 86 (CPU read) while the copy delivered
+       * 256. Copy the counter on the GPU into a fresh buffer and read both
+       * it and the destination back after the copy. */
+      struct pipe_context *pipe = device->pipe;
+      struct pipe_resource *temp = pipe_buffer_create(pipe->screen, PIPE_BIND_SHADER_BUFFER,
+                                                      PIPE_USAGE_DEFAULT, 4);
+      if (temp) {
+         pipe->resource_copy_region(pipe, temp, 0, 0, 0, 0, view->counter, 0, &box);
+         counter_trace("measure-uav-counter-gpu-copy", pipe, temp, offset, 0);
+         pipe_resource_reference(&temp, NULL);
+      }
+      counter_trace("measure-uav-counter-dst", pipe, dst->resource, offset,
+                    (UINT)(uintptr_t)view->counter);
+   }
 }
 
 static void APIENTRY
