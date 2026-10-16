@@ -69,6 +69,27 @@ static unsigned long long available(void) {
   return GlobalMemoryStatusEx(&m) ? m.ullAvailPhys : 0ull;
 }
 
+/* M2-f7 (EXP1307): the KMD takes a new segment-3 slab only while
+ * HighMemoryCondition is set; record where Windows sets the documented
+ * memory resource notifications (low / mid / high) as available memory
+ * falls, once per change. */
+static HANDLE low_note, high_note;
+static const char *last_state;
+
+static const char *mem_state(void) {
+  BOOL low = FALSE, high = FALSE;
+  if (low_note) QueryMemoryResourceNotification(low_note, &low);
+  if (high_note) QueryMemoryResourceNotification(high_note, &high);
+  return low ? "low" : high ? "high" : "mid";
+}
+
+static void note_state(const char *where) {
+  const char *state = mem_state();
+  if (state == last_state) return;
+  last_state = state;
+  say("MEMSTATE %s at %s available %llu MiB", state, where, MIB(available()));
+}
+
 int main(int argc, char **argv) {
   unsigned long long leave, max_bytes, locked = 0ull, filled = 0ull;
   void *chunks[256];
@@ -119,7 +140,10 @@ int main(int argc, char **argv) {
   if (FAILED(hr)) return 1;
 
   /* 1. Pressure. */
+  low_note = CreateMemoryResourceNotification(LowMemoryResourceNotification);
+  high_note = CreateMemoryResourceNotification(HighMemoryResourceNotification);
   say("AVAILABLE_BEFORE %llu MiB leave %llu MiB", MIB(available()), MIB(leave));
+  note_state("start");
   while (nchunks < 256 && available() > leave + LOCK_CHUNK) {
     void *p = VirtualAlloc(NULL, (SIZE_T)LOCK_CHUNK, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     if (!p) { say("VirtualAlloc stop %lu", GetLastError()); break; }
@@ -137,10 +161,12 @@ int main(int argc, char **argv) {
     }
     chunks[nchunks++] = p;
     locked += LOCK_CHUNK;
+    note_state("lock");
   }
   say("LOCKED %llu MiB available %llu MiB %s", MIB(locked), MIB(available()),
       budget(text, sizeof(text)));
 
+  note_state("locked");
   /* 2. Fill: 2048 x height RGBA8. */
   say("TEXTURE 2048x%u %llu MiB", height, MIB(texture_bytes));
   memset(&td, 0, sizeof(td));
@@ -166,6 +192,7 @@ int main(int argc, char **argv) {
     hr = ID3D11Device_GetDeviceRemovedReason(device);
     if (hr != S_OK) { first_failure = hr; break; }
     if (count % 8 == 0)
+      note_state("fill");
       say("FILLED %u textures %llu MiB available %llu MiB %s", count, MIB(filled),
           MIB(available()), budget(text, sizeof(text)));
   }
