@@ -56023,3 +56023,8 @@ WHAT IS STILL UNKNOWN: whether the native batch takes the blitter rectangle draw
 Expected: no reject-null-call, no dwm/LogonUI/M365Copilot fault at 0, GL smoke PASS, RUN_DONE and every regression as EXP1326 with the desktop at FL 11_0.
 Failure criteria: a reject-null-call or fault at 0 recurs (the record names it), a reject-wddm2-clearview storm, DWM restarts or faults, any regression, a bugcheck.
 Recovery: rec1331h. Evidence: evidence/EXP1331.
+EXP1331b BEFORE 2026-10-16T16:35Z (diagnostic re-run on the installed EXP1331 package, no install or boot; recovery rec1331h, run by the next pipeline): the x86 GL ICD system smoke (C:\Users\pavel\icd-sys\agx_gl_smoke.exe 300 - depthtest, same binary) launched by a copy of icd-sys-smoke.ps1 that caches the process handle ($p.Handle, so ExitCode is reported) and appends the dwm process ids/start times.
+WHY THIS HYPOTHESIS: (1) EXP1327/1329/1330/1331 smokes stopped printing after FRAME 0 within 7-14 s with no CRASH/ABORT/HANG line, while the trace of EXP1331's smoke process shows ~121 presented frames at ~60 fps before it ends; (2) the runner's ExitCode was always empty (a PowerShell Start-Process quirk without a cached handle), so a silent _exit/abort from a statically linked CRT (code 3), a fail-fast (0xc0000409) and an external termination cannot be told apart; (3) EXP1331 had no fault at address 0, no refusal record and dwm 1228 never restarted.
+WHAT IS STILL UNKNOWN: the smoke process's exit code and whether dwm restarts meanwhile.
+Expected: an exit code naming the termination class (3: CRT abort/_exit; 0xc0000409: fail-fast; 6/7: the smoke's own watchdog/abort handler; other: ExitProcess/TerminateProcess code).
+Evidence: evidence/EXP1331/smoke-x-*.
