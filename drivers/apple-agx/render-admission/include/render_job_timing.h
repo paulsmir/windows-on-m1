@@ -91,14 +91,17 @@ int AdmissionGpuTimestampRecord(ADMISSION_GPU_TIMESTAMP_RING *Ring,
     unsigned int Fence, unsigned int ProcessId, unsigned long long CommandVa,
     unsigned int Kind, unsigned long long Start, unsigned long long End,
     unsigned long long Qpc);
-/* The newest record of ProcessId's batch CommandVa. */
+/* The newest record of ProcessId's batch CommandVa; CommandVa 0: the
+ * newest record of any job (calibration: its End and Qpc give the
+ * firmware-minus-counter offset; the UMD gets no other field of it). */
 int AdmissionGpuTimestampFind(const ADMISSION_GPU_TIMESTAMP_RING *Ring,
     unsigned int ProcessId, unsigned long long CommandVa,
     ADMISSION_GPU_TIMESTAMP *Out);
 
 /* The escape the UMD sends after its batch completed (DxgkDdiEscape, in the
  * caller's process). Found 1 with Kind/Start/End in firmware ticks;
- * Frequency is the tick frequency (the system counter). */
+ * Frequency is the tick frequency (the system counter). CommandVa 0
+ * calibrates: End and Qpc of the newest job, Kind and Start 0. */
 #define ADMISSION_GPU_TIMESTAMP_QUERY_MAGIC 0x53545041u /* "APTS" */
 #define ADMISSION_GPU_TIMESTAMP_QUERY_VERSION 1u
 typedef struct _ADMISSION_GPU_TIMESTAMP_QUERY {

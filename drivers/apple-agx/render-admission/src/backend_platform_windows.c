@@ -3734,7 +3734,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformGpuTimestampEscape(
   RtlCopyMemory(&query, Args->pPrivateDriverData, sizeof(query));
   if (query.Magic != ADMISSION_GPU_TIMESTAMP_QUERY_MAGIC ||
       query.Version != ADMISSION_GPU_TIMESTAMP_QUERY_VERSION ||
-      query.Bytes != sizeof(query) || query.CommandVa == 0u)
+      query.Bytes != sizeof(query))
     return STATUS_INVALID_PARAMETER;
   runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
   if (runtime == NULL) return STATUS_DEVICE_NOT_READY;

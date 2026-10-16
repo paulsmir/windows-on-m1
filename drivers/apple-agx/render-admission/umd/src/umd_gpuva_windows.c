@@ -1478,7 +1478,7 @@ static int gpu_timestamps(void *context, uint64_t command_va, uint64_t *start,
   ADMISSION_UMD_DEVICE *device=(ADMISSION_UMD_DEVICE *)context;
   ADMISSION_GPU_TIMESTAMP_QUERY query={};
   D3DDDICB_ESCAPE request={};
-  if(!device || device->Magic!=ADMISSION_UMD_DEVICE_MAGIC || !command_va ||
+  if(!device || device->Magic!=ADMISSION_UMD_DEVICE_MAGIC ||
      !start || !end || !frequency || !qpc ||
      !device->Adapter || device->Adapter->Magic!=ADMISSION_UMD_ADAPTER_MAGIC ||
      !device->Adapter->RuntimeAdapter.handle || !device->RuntimeDevice.handle ||

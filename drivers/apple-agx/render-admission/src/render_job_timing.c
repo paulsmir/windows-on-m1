@@ -111,15 +111,20 @@ int AdmissionGpuTimestampFind(const ADMISSION_GPU_TIMESTAMP_RING *ring,
     ADMISSION_GPU_TIMESTAMP *out) {
   const ADMISSION_GPU_TIMESTAMP *best = 0;
   unsigned int i;
-  if (!ring || !command || !out) return 0;
+  if (!ring || !out) return 0;
   for (i = 0; i < ADMISSION_GPU_TIMESTAMP_CAPACITY; ++i) {
     const ADMISSION_GPU_TIMESTAMP *slot = &ring->Slot[i];
-    if (!slot->Fence || slot->ProcessId != pid || slot->CommandVa != command ||
-        !slot->End) continue;
+    if (!slot->Fence || !slot->End ||
+        (command && (slot->ProcessId != pid || slot->CommandVa != command)))
+      continue;
     /* fences are monotonic; the newest submission of the batch wins */
     if (!best || (int)(slot->Fence - best->Fence) > 0) best = slot;
   }
   if (!best) return 0;
   *out = *best;
+  if (!command) {
+    /* calibration: only the offset's two values */
+    out->ProcessId = 0u; out->Kind = 0u; out->CommandVa = 0u; out->Start = 0u;
+  }
   return 1;
 }

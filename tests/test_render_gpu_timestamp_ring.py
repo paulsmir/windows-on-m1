@@ -49,7 +49,11 @@ int main(void) {
   assert(!AdmissionGpuTimestampRecord(&ring, 6u, 100u, 0u, ADMISSION_GPU_TIMESTAMP_RENDER, 1u, 2u, 0x99ULL));
   assert(!AdmissionGpuTimestampRecord(&ring, 6u, 100u, a, ADMISSION_GPU_TIMESTAMP_RENDER, 1u, 0u, 0x99ULL));
   assert(!AdmissionGpuTimestampRecord(&ring, 6u, 100u, a, 3u, 1u, 2u, 0x99ULL));
-  assert(!AdmissionGpuTimestampFind(&ring, 100u, 0u, &out));
+  /* calibration: the newest job of any process, End and Qpc only */
+  assert(AdmissionGpuTimestampRecord(&ring, 200u, 7u, b, ADMISSION_GPU_TIMESTAMP_RENDER, 0x70ULL, 0x80ULL, 0x77ULL));
+  assert(AdmissionGpuTimestampFind(&ring, 100u, 0u, &out) && out.Fence == 200u &&
+         out.End == 0x80ULL && out.Qpc == 0x77ULL && !out.Start && !out.Kind &&
+         !out.ProcessId && !out.CommandVa);
   return 0;
 }
 '''

@@ -136,6 +136,14 @@ static void write_timestamps(struct agx_batch *batch,AGX_WIN32_ASAHI_BACKEND *b,
  * firmware-minus-counter offset of the newest values the KMD returned. */
 uint64_t agx_get_gpu_timestamp(struct agx_device *dev) {
   AGX_WIN32_ASAHI_BACKEND *b=dev?(AGX_WIN32_ASAHI_BACKEND *)dev->windows_private:NULL;
+  uint64_t start=0,end=0,frequency=0,qpc=0;
+  /* Before this process's first values, the newest job's calibrate. */
+  if(b && !b->TimestampFrequency && b->GpuvaReady && b->Gpuva.Ops.GpuTimestamps &&
+     b->Gpuva.Ops.GpuTimestamps(b->Gpuva.Context,0u,&start,&end,&frequency,&qpc) &&
+     frequency) {
+    b->TimestampFrequency=frequency;
+    b->TimestampOffset=ticks_to_ns(end,frequency)-ticks_to_ns(qpc,frequency);
+  }
   return (uint64_t)os_time_get_nano()+(b?b->TimestampOffset:0u);
 }
 
