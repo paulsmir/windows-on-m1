@@ -15,7 +15,13 @@
  * - DEFAULT: default textures/buffers copied to a zero-initialised staging
  *   resource.
  * Per resource: nonzero bytes, marker words, the first nonzero word.
- * Usage: agx_fresh_alloc_smoke.exe <out.txt> [rounds] */
+ * EXP1306: in one process, fresh resources of a just-released size return
+ * its content (Mesa's BO cache; D3D11 leaves such content undefined). The
+ * cross-process contract is checked by two runs:
+ * - write: 16 marker textures of 4 MiB, written, verified, released, exit;
+ * - scan (a new process): no marker round; fresh resources (the sizes above
+ *   plus 16 textures of 4 MiB) -- any marker word is another process's data.
+ * Usage: agx_fresh_alloc_smoke.exe <out.txt> [rounds] [write|scan] */
 #define COBJMACROS
 #define INITGUID
 #include <windows.h>
@@ -276,13 +282,49 @@ static void fresh_round(int round) {
   ID3D11DeviceContext_Flush(ctx);
 }
 
+static void write_process(void) {
+  UINT word = MARKER, i;
+  SCAN s;
+  ID3D11Texture2D *t[16];
+  for (i = 0; i < 16; ++i) t[i] = texture(1024, 1024, D3D11_USAGE_DEFAULT, &word);
+  {
+    ID3D11Texture2D *st = zeroed_staging_texture(1024, 1024);
+    if (t[15] && st) {
+      ID3D11DeviceContext_CopyResource(ctx, (ID3D11Resource *)st, (ID3D11Resource *)t[15]);
+      if (map_scan((ID3D11Resource *)st, 1024, 4096, &s))
+        say("WRITE marker %llu of %u words in the last texture", s.marker, 1024u * 1024u);
+    }
+    if (st) ID3D11Texture2D_Release(st);
+  }
+  for (i = 0; i < 16; ++i)
+    if (t[i]) ID3D11Texture2D_Release(t[i]);
+  ID3D11DeviceContext_Flush(ctx);
+}
+
+static void scan_process(int round) {
+  UINT i;
+  SCAN s;
+  fresh_round(round);
+  for (i = 0; i < 16; ++i) {
+    ID3D11Texture2D *t = texture(1024, 1024, D3D11_USAGE_DEFAULT, NULL);
+    ID3D11Texture2D *st = zeroed_staging_texture(1024, 1024);
+    if (t && st) {
+      ID3D11DeviceContext_CopyResource(ctx, (ID3D11Resource *)st, (ID3D11Resource *)t);
+      if (map_scan((ID3D11Resource *)st, 1024, 4096, &s))
+        report("SCAN", round, "texture", 1024, 1024, 4194304ull, &s);
+    }
+    if (st) ID3D11Texture2D_Release(st);
+    if (t) ID3D11Texture2D_Release(t);
+  }
+}
+
 int main(int argc, char **argv) {
   IDXGIFactory1 *factory = NULL;
   IDXGIAdapter1 *adapter = NULL, *chosen = NULL;
   D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0};
   D3D_FEATURE_LEVEL got;
   UINT i;
-  int rounds = 3, r;
+  int rounds = 3, r, mode = 0; /* 0 in-process, 1 write, 2 scan */
   HRESULT hr;
   if (argc < 2) {
     printf("usage: agx_fresh_alloc_smoke.exe <out.txt> [rounds]\n");
@@ -292,6 +334,7 @@ int main(int argc, char **argv) {
                     FILE_ATTRIBUTE_NORMAL, NULL);
   if (argc > 2) rounds = atoi(argv[2]);
   if (rounds < 1) rounds = 1;
+  if (argc > 3) mode = !strcmp(argv[3], "write") ? 1 : !strcmp(argv[3], "scan") ? 2 : 0;
   if (SUCCEEDED(CreateDXGIFactory1(&IID_IDXGIFactory1, (void **)&factory))) {
     for (i = 0; IDXGIFactory1_EnumAdapters1(factory, i, &adapter) == S_OK; ++i) {
       DXGI_ADAPTER_DESC1 d;
@@ -308,13 +351,18 @@ int main(int argc, char **argv) {
                          NULL, 0, levels, 2, D3D11_SDK_VERSION, &device, &got, &ctx);
   say("D3D11CreateDevice hr 0x%08lx level 0x%x", (unsigned long)hr, (unsigned)got);
   if (FAILED(hr)) return 1;
-  for (r = 0; r < rounds; ++r) {
-    marker_round();
-    fresh_round(r);
+  if (mode == 1) {
+    write_process();
+  } else {
+    for (r = 0; r < rounds; ++r) {
+      if (mode == 0) marker_round();
+      if (mode == 2) scan_process(r);
+      else fresh_round(r);
+    }
   }
   hr = ID3D11Device_GetDeviceRemovedReason(device);
-  say("RESULT nonzero_resources %u nonzero_bytes %llu marker_words %llu failures %u removed 0x%08lx",
-      nonzero_resources, total_nonzero, total_marker, failures, (unsigned long)hr);
+  say("RESULT mode %d nonzero_resources %u nonzero_bytes %llu marker_words %llu failures %u removed 0x%08lx",
+      mode, nonzero_resources, total_nonzero, total_marker, failures, (unsigned long)hr);
   ID3D11DeviceContext_Release(ctx);
   ID3D11Device_Release(device);
   if (chosen) IDXGIAdapter1_Release(chosen);
