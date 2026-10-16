@@ -3161,7 +3161,11 @@ extern "C" BOOL AgxD3d10WindowsDiagnosticSwitch(const char *Name);
  * structured buffers, D3D11_SB_GLOBAL_FLAG_ENABLE_RAW_AND_STRUCTURED_BUFFERS;
  * d2d1's ps_4_0 with dcl_resource_structured/ld_structured crashed in
  * tgsi_to_nir), so an opcode beyond the table routes the program to the
- * translator as well, and so does a stream the walk cannot follow. */
+ * translator as well, and so does a stream the walk cannot follow.
+ * EXP1315: so does any D3D 11 global flag (D3D10_SB_GLOBAL_FLAGS_MASK beyond
+ * D3D10_SB_GLOBAL_FLAG_REFACTORING_ALLOWED): d2d1's minimum-precision ps_4_0
+ * (D3D11_1_SB_GLOBAL_FLAG_ENABLE_MINIMUM_PRECISION) carries extended operand
+ * tokens, which the parser asserts away ("Unknown TGSI texture target"). */
 static inline bool
 AgxD3d10TranslatorOnly(const UINT *code)
 {
@@ -3180,6 +3184,8 @@ AgxD3d10TranslatorOnly(const UINT *code)
       }
       if (opcode >= 0x70u || !length || length > size - i)
          return true;
+      if (opcode == 0x6au && (code[i] & 0x00fff800u & ~0x800u))
+         return true; /* D3D10_SB_OPCODE_DCL_GLOBAL_FLAGS */
       i += length;
    }
    return false;

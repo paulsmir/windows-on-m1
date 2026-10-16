@@ -24,9 +24,11 @@ Invariants caught:
   receives the serial that keys the variant.
 - EXP1314: a 4_x program using a D3D 11 opcode (an FL 11_0 device admits
   raw/structured buffers in ps_4_0: d2d1's dcl_resource_structured +
-  ld_structured crashed in tgsi_to_nir) takes the translator as well; a
-  plain 4_0/4_1 program, its immediate constant buffer included, keeps the
-  SM 4 parser.
+  ld_structured crashed in tgsi_to_nir) takes the translator as well, and
+  EXP1315: so does one with any D3D 11 global flag (d2d1's minimum-precision
+  ps_4_0, whose extended operand tokens the parser misread); a plain 4_0/4_1
+  program, its immediate constant buffer and refactoring flag included,
+  keeps the SM 4 parser.
 Runs the real projection (see test_d3d10_shader_fields_init.py).
 """
 from pathlib import Path
@@ -51,11 +53,16 @@ int main() {
                         0x05000036, 0x001020f2, 0, 0x00004001, 0x3f800000, 0x0100003e};
   const UINT icb41[] = {0x00000041, 9, 0x00001835, 4, 0x3f800000, 0x40000000,
                         0x0100003e, 0x0100003e, 0x0100003e};
+  const UINT minprec[] = {0x00000040, 8, 0x0101086a, 0x04000065, 0x801020f2, 0x00008001, 0,
+                          0x0100003e};
+  const UINT doubles[] = {0x00000041, 4, 0x0100106a, 0x0100003e};
   const UINT sm5[] = {0x00000050, 3, 0x0100003e};
   const UINT truncated[] = {0x00000040, 4, 0x0100003e, 0x05000036};
   assert(AgxD3d10TranslatorOnly(structured));
   assert(!AgxD3d10TranslatorOnly(plain));
   assert(!AgxD3d10TranslatorOnly(icb41));
+  assert(AgxD3d10TranslatorOnly(minprec));
+  assert(AgxD3d10TranslatorOnly(doubles));
   assert(AgxD3d10TranslatorOnly(sm5));
   assert(AgxD3d10TranslatorOnly(truncated));
   assert(!AgxD3d10TranslatorOnly(nullptr));
