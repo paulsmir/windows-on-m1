@@ -1205,13 +1205,25 @@ struct Query
    return size;
 }'''),
         ('#include "Format.h"', '''#include "Format.h"
+/* EXP1331: the DXGI base table has pfnResolveSharedResource (DXGI 1.1) when
+ * IS_DXGI1_1_BASE_FUNCTIONS holds and in every DXGI 1.2+ table. The WDDM 2.0
+ * runtime passes Version 0x00090000, whose low word fails the 1.1 test, so
+ * the 1.2 test must count too: without it the WDDM 2.0 (FL 11_0) devices
+ * left the entry NULL and returned DXGI_STATUS_NO_REDIRECTION. */
+static bool
+AgxDxgiHasResolveSharedResource(UINT interfaceVersion, UINT runtimeVersion)
+{
+   return IS_DXGI1_1_BASE_FUNCTIONS(interfaceVersion, runtimeVersion) ||
+          IS_DXGI1_2_BASE_FUNCTIONS(interfaceVersion, runtimeVersion);
+}
+
 static HRESULT
 AgxNativeSharedPresentationStatus(UINT interfaceVersion, UINT runtimeVersion)
 {
    /* The native GPUVA implementation has GPU-backed shared allocations and
     * implements the extended table's ResolveSharedResource retirement path.
     * Keep CPU-only/legacy profiles on their original presentation policy. */
-   if (!IS_DXGI1_1_BASE_FUNCTIONS(interfaceVersion, runtimeVersion))
+   if (!AgxDxgiHasResolveSharedResource(interfaceVersion, runtimeVersion))
       return DXGI_STATUS_NO_REDIRECTION;
 #ifdef APPLE_AGX_GPUVA_WINSYS
    return S_OK;
@@ -1241,7 +1253,7 @@ AgxResolveSharedResource(DXGI_DDI_ARG_RESOLVESHAREDRESOURCE *args)
       _Blt;
    /* Version is supplied by the runtime. Never write the extended slot
     * when it supplied only the base table. EXP748 measures this negotiation. */
-   if(IS_DXGI1_1_BASE_FUNCTIONS(pCreateData->Interface,pCreateData->Version))
+   if(AgxDxgiHasResolveSharedResource(pCreateData->Interface,pCreateData->Version))
       pCreateData->DXGIBaseDDI.pDXGIDDIBaseFunctions2->pfnResolveSharedResource =
          AgxResolveSharedResource;
    /* EXP1328: AgxWddm2_0FillDxgiFuncs keeps the DXGI 1.1 entries for Present1

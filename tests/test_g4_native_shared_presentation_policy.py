@@ -20,14 +20,16 @@ def source_parts():
     tails=[s for s in strings if s.startswith('   pDevice->frontend_ready = true;\n')]
     assert len(tails)==1
     helper=''
-    for s in strings:
-        marker='static HRESULT\nAgxNativeSharedPresentationStatus('
-        if marker not in s:
-            continue
-        start=s.index(marker);brace=s.index('{',start);end=brace+1;depth=1
-        while depth:
-            depth+=(s[end]=='{')-(s[end]=='}');end+=1
-        helper=s[start:end]
+    # EXP1331: the status uses AgxDxgiHasResolveSharedResource (1.1 or 1.2+).
+    for marker in ('static bool\nAgxDxgiHasResolveSharedResource(',
+                   'static HRESULT\nAgxNativeSharedPresentationStatus('):
+        for s in strings:
+            if marker not in s:
+                continue
+            start=s.index(marker);brace=s.index('{',start);end=brace+1;depth=1
+            while depth:
+                depth+=(s[end]=='{')-(s[end]=='}');end+=1
+            helper+=s[start:end]+'\n'
     return tails[0],helper,strings
 
 
@@ -45,6 +47,7 @@ using UINT=uint32_t;using HRESULT=int32_t;
 // Model a caller-supplied base versus extended table. The actual WDK predicate
 // is compiled by the ARM64 build; this shim does not duplicate its ABI logic.
 #define IS_DXGI1_1_BASE_FUNCTIONS(i,v) ((void)(v),(i)==0xa0006u)
+#define IS_DXGI1_2_BASE_FUNCTIONS(i,v) ((void)(i),(void)(v),false)
 struct Device {bool frontend_ready;HRESULT cleanup_result;};
 struct Args {UINT Interface,Version;};
 '''+helper+r'''
