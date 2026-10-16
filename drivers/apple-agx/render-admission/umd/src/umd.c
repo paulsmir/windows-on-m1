@@ -1,6 +1,10 @@
 #include <windows.h>
 #include <wingdi.h>
 #include <signal.h>
+#pragma warning(push)
+#pragma warning(disable : 4201)
+#include <dbghelp.h>
+#pragma warning(pop)
 
 /* d3d10umddi.h includes d3dkmddi.h, which expects this kernel-style type. */
 typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
@@ -436,6 +440,45 @@ typedef void (__cdecl *ADMISSION_UMD_SIGNAL_HANDLER)(int);
 static ADMISSION_UMD_SIGNAL_HANDLER AdmissionUmdPreviousAbort;
 static BOOLEAN AdmissionUmdAbortInstalled;
 
+/* EXP1334: the filtered frames came back empty, so the handler also writes
+ * one minidump per process beside the trace file (<trace>.abort-<pid>.dmp)
+ * and records the first raw frames. */
+typedef BOOL (WINAPI *ADMISSION_UMD_MINIDUMP)(HANDLE, DWORD, HANDLE, MINIDUMP_TYPE,
+    PMINIDUMP_EXCEPTION_INFORMATION, PMINIDUMP_USER_STREAM_INFORMATION,
+    PMINIDUMP_CALLBACK_INFORMATION);
+
+static void AdmissionUmdAbortDump(void) {
+  static volatile LONG dumped;
+  WCHAR path[MAX_PATH];
+  WCHAR digits[12];
+  DWORD length, pid = GetCurrentProcessId();
+  UINT count = 0u;
+  HMODULE dbghelp;
+  ADMISSION_UMD_MINIDUMP write;
+  HANDLE file;
+  if (InterlockedExchange(&dumped, 1) != 0) return;
+  length = GetEnvironmentVariableW(L"APPLE_AGX_UMD_TRACE_FILE", path, MAX_PATH);
+  if (length == 0u || length + 32u >= MAX_PATH) return;
+  do { digits[count++] = (WCHAR)(L'0' + pid % 10u); pid /= 10u; } while (pid != 0u);
+  for (PCWSTR suffix = L".abort-"; *suffix != 0; ++suffix) path[length++] = *suffix;
+  while (count != 0u) path[length++] = digits[--count];
+  for (PCWSTR suffix = L".dmp"; *suffix != 0; ++suffix) path[length++] = *suffix;
+  path[length] = 0;
+  dbghelp = LoadLibraryExW(L"dbghelp.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+  write = dbghelp != NULL
+      ? (ADMISSION_UMD_MINIDUMP)GetProcAddress(dbghelp, "MiniDumpWriteDump") : NULL;
+  if (write == NULL) return;
+  file = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+                     FILE_ATTRIBUTE_NORMAL, NULL);
+  if (file == INVALID_HANDLE_VALUE) return;
+  (void)write(GetCurrentProcess(), GetCurrentProcessId(), file,
+              (MINIDUMP_TYPE)(MiniDumpWithThreadInfo |
+                              MiniDumpWithIndirectlyReferencedMemory |
+                              MiniDumpWithUnloadedModules),
+              NULL, NULL, NULL);
+  CloseHandle(file);
+}
+
 static void __cdecl AdmissionUmdAbortReceipt(int Signal) {
   PVOID backtrace[48];
   UINT frames[13] = {0}, more[13] = {0};
@@ -446,6 +489,14 @@ static void __cdecl AdmissionUmdAbortReceipt(int Signal) {
                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                            (LPCWSTR)&AdmissionUmdPreviousAbort, &self);
   frames[0] = more[0] = GetCurrentThreadId();
+  {
+    UINT raw[13] = {0};
+    raw[0] = count;
+    for (USHORT i = 0u; i < count && i < 4u; ++i)
+      AdmissionUmdModuleOffset((ULONG_PTR)backtrace[i], &raw[1u + 3u * i],
+                               &raw[3u + 3u * i]);
+    AdmissionUmdDiagnostic("reject-abort-raw", E_ABORT, raw, 13u);
+  }
   for (USHORT i = 0u; i < count && found < 8u; ++i) {
     UINT name[2], offset;
     HMODULE module = NULL;
@@ -466,6 +517,7 @@ static void __cdecl AdmissionUmdAbortReceipt(int Signal) {
   if (found > 4u)
     AdmissionUmdDiagnostic("reject-abort-stack", E_ABORT, more, 13u);
   AdmissionUmdDiagnosticFlush();
+  AdmissionUmdAbortDump();
   if (AdmissionUmdPreviousAbort != SIG_DFL &&
       AdmissionUmdPreviousAbort != SIG_IGN &&
       AdmissionUmdPreviousAbort != SIG_ERR &&
