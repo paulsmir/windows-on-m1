@@ -1,5 +1,24 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
+## Current as of 2026-10-16T08:19Z (read this first)
+
+Installing: PACKAGE1315 (acbfd8b4 KMD/ARM64 UMD, WOW64 UMD out55 on closure
+075, GL ICD out59).
+- CONFIRMED offline (EXP1314): the FL 11_0 corpus crash is d2d1's ps_4_0
+  with raw/structured buffers (D3D 11 opcodes 0xa2/0xa7), which only the
+  FL 11_0 runtime admits; Mesa's SM 4 parser indexes opcode_info/
+  opcode_xlate[D3D10_SB_NUM_OPCODES = 0x70] with an assert only. EXP1315
+  routes such programs to the translator (854e396c) and runs the whole
+  corpus at FL 11_0 (corpus-af, crash-restarting) as the checkpoint.
+- CAUSE FOUND (offline): SO statistics 0 = the stats smoke's SO pass (no RTV,
+  no DSV, null PS) is dropped at the native draw gate (reason 8); the KMD
+  needs attachment 0. Next (EXP1316, D3D-G11): attachment-less renders --
+  the device scratch page as attachment 0 (Asahi's unbound-output sink),
+  builder admits NONE colour without ZLS, the frontend sizes the
+  framebuffer by the viewports.
+- Open: dwmcore.dll_003d8800 hangs on both paths; FL 11_0 default after
+  EXP1315.
+
 ## Current as of 2026-10-16T07:15Z (read this first)
 
 Installed: PACKAGE1313 (5c062072 KMD/ARM64 UMD, WOW64 UMD out53 and GL ICD
