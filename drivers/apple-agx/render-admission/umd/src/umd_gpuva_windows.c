@@ -1492,9 +1492,22 @@ static int gpu_timestamps(void *context, uint64_t command_va, uint64_t *start,
   request.hContext=device->KernelContext;
   request.Flags.HardwareAccess=0u;
   request.pPrivateDriverData=&query;request.PrivateDriverDataSize=sizeof(query);
-  if(FAILED(device->KernelCallbacks->pfnEscapeCb(
-       device->Adapter->RuntimeAdapter.handle,&request)) ||
-     !query.Found || !query.End || !query.Frequency) return 0;
+  HRESULT hr=device->KernelCallbacks->pfnEscapeCb(
+      device->Adapter->RuntimeAdapter.handle,&request);
+  {
+    /* EXP1341 receipt-only: each answer and the KMD's newest compute
+     * capture (first 64 per process). */
+    static volatile LONG traced;
+    if(InterlockedIncrement(&traced)<=64) {
+      UINT values[14]={(UINT)command_va,(UINT)(command_va>>32),query.Found,query.Kind,
+          (UINT)query.Start,(UINT)query.End,query.ComputeFence,query.ComputeRequested,
+          (UINT)query.ComputeCommandVa,(UINT)(query.ComputeCommandVa>>32),
+          (UINT)query.ComputeWords[0],(UINT)query.ComputeWords[1],
+          (UINT)query.ComputeWords[2],(UINT)query.ComputeWords[3]};
+      AdmissionUmdDiagnostic("gpu-timestamps",hr,values,ARRAYSIZE(values));
+    }
+  }
+  if(FAILED(hr) || !query.Found || !query.End || !query.Frequency) return 0;
   *start=query.Start;*end=query.End;*frequency=query.Frequency;*qpc=query.Qpc;
   return 1;
 }

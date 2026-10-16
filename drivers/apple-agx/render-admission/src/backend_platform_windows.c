@@ -153,6 +153,9 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ADMISSION_FW_TIMING_RING FwTimingSnapshot;
   /* GPU timestamps of completed jobs, by fence (JobTimingLock). */
   ADMISSION_GPU_TIMESTAMP_RING GpuTimestamps;
+  /* EXP1341 receipt-only: the newest compute job's capture. */
+  ULONG ComputeTsFence, ComputeTsRequested;
+  ULONGLONG ComputeTsCommandVa, ComputeTsWords[4];
   ULONG FwTs1Fence, FwTs1Polls;
   ULONGLONG FwTs1Kick, FwTs1First, FwTs1FirstQpc;
 #endif
@@ -425,6 +428,16 @@ static VOID AdmissionGpuTimestampCaptureWindows(
   KIRQL oldIrql;
   if (job->Kind == AppleAgxBackendJobCompute) {
     const UCHAR *block = (const UCHAR *)job->ComputeTimestampBlock;
+    if (job->CommandVa == 0u) return; /* present blits have no envelope */
+    KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+    runtime->ComputeTsFence = fence;
+    runtime->ComputeTsRequested = block != NULL ? 1u : 0u;
+    runtime->ComputeTsCommandVa = job->CommandVa;
+    if (block != NULL)
+      RtlCopyMemory(runtime->ComputeTsWords, block, sizeof(runtime->ComputeTsWords));
+    else
+      RtlZeroMemory(runtime->ComputeTsWords, sizeof(runtime->ComputeTsWords));
+    KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
     if (block == NULL) return;
     RtlCopyMemory(&start, block + 0x10u, sizeof(start));
     RtlCopyMemory(&gpuEnd, block + 0x18u, sizeof(gpuEnd));
@@ -3743,6 +3756,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformGpuTimestampEscape(
   found = AdmissionGpuTimestampFind(&runtime->GpuTimestamps,
       (unsigned int)HandleToULong(PsGetCurrentProcessId()), query.CommandVa,
       &record);
+  query.ComputeFence = runtime->ComputeTsFence;
+  query.ComputeRequested = runtime->ComputeTsRequested;
+  query.ComputeCommandVa = runtime->ComputeTsCommandVa;
+  RtlCopyMemory(query.ComputeWords, runtime->ComputeTsWords, sizeof(query.ComputeWords));
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
   (void)KeQueryPerformanceCounter(&frequency);
   query.Found = found ? 1u : 0u;

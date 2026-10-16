@@ -109,6 +109,11 @@ typedef struct _ADMISSION_GPU_TIMESTAMP_QUERY {
   unsigned long long CommandVa;
   unsigned int Kind, Reserved;
   unsigned long long Start, End, Frequency, Qpc;
+  /* EXP1341 receipt-only: the newest compute job's capture -- its fence,
+   * command VA, whether it carried a timestamp block, and the block's job
+   * start/end and requested start/end as the firmware left them. */
+  unsigned int ComputeFence, ComputeRequested;
+  unsigned long long ComputeCommandVa, ComputeWords[4];
 } ADMISSION_GPU_TIMESTAMP_QUERY;
 
 #endif
