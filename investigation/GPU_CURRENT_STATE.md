@@ -1,5 +1,32 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
+## Current as of 2026-10-16T04:30Z (read this first)
+
+Installed: PACKAGE1309 (72ff448b KMD/ARM64 UMD, WOW64 UMD out50 and GL ICD
+out58 on closure 070). FL 11_0 stays opt-in (APPLE_AGX_D3D11_DDI +
+APPLE_AGX_D3D11_FL11); WDDM 2.0 D3D11 DDI admits FL 11_0 devices.
+- PROVEN since EXP1304: typed UAVs as indexed images (EXP1306, 4bed4b08);
+  AGX immediate flags 64-bit under the MSVC ABI -- every subgroup
+  reduction/scan was AND (EXP1308, 47998c0d: FL11 atomics 256/1515/1920,
+  PSInvocations per pixel); indirect draws and tessellation on the native
+  draw gate (EXP1309, ad3f3351: FL11 I and T ok); memory floor -- segment-3
+  growth only while HighMemoryCondition is set (EXP1307/1308: PRESSURE gives
+  E_OUTOFMEMORY, guest alive; HighMemoryCondition clears at 709-773 MiB
+  available on 6 GiB); no cross-process disclosure in fresh allocations
+  (EXP1307 write/scan).
+- OPEN (FL 11_0 default blocked by): append counter ends at 256 for 86
+  appends -- values correct, count = 32 per SIMD group: the uniform-atomic
+  count in a divergent branch (SR 0x3b total_active_threads) returned 32.
+- OPEN MSAA (EXP1309 msaadbg/msaactl): 4x draws reach the samples, but the
+  lower-left triangle reads at the upper-right probe (180 degrees), large
+  primitives (full-screen quad/triangle) are absent and the resolve is
+  black; render-command sample fields equal Asahi's (measure-render-msaa).
+- Other open: SO statistics written 0; dwmcore.dll_003d8800 hangs on both
+  shader paths (corpus, 5 firmware recoveries); TDR v2 drill not rerun.
+- Process: guest-watchdog.sh with every pipeline; fixphantom.py in
+  prepare.sh removes non-present APPL0002 devnodes during rollback; never
+  send shutdown while recover.sh runs.
+
 ## Current as of 2026-10-15T13:17Z (read this first)
 
 Next: EXP1297 (newexp-kmd1297.sh, before1297.txt; KMD/ARM64 UMD from
