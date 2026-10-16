@@ -661,8 +661,14 @@ ClearView(D3D10DDI_HDEVICE hDevice, D3D11DDI_HANDLETYPE type, VOID *hView, const
          const D3D10_DDI_RECT &r = rects[i];
          if (r.right <= r.left || r.bottom <= r.top)
             continue;
-         device->pipe->clear_render_target(device->pipe, surface, &value, r.left, r.top,
-                                           r.right - r.left, r.bottom - r.top, false);
+         /* EXP1330: Asahi has no clear_render_target (dwm and D2D called
+          * address 0 here at FL 11_0) */
+         if (!AgxD3d10WindowsClearRenderTargetRect(device->pipe, surface, &value,
+                                                   r.left, r.top, r.right - r.left,
+                                                   r.bottom - r.top)) {
+            refuse(hDevice, "reject-wddm2-clearview", E_FAIL, (UINT)type);
+            return;
+         }
       }
       return;
    }

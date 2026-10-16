@@ -137,6 +137,22 @@ struct pipe_resource *AgxWin32AsahiImportLinearColor32(
   }
   return &resource->base;
 }
+/* EXP1330: Asahi has no pipe->clear_render_target (and no scissored
+ * clears), so a rectangle of a render-target view is cleared by the
+ * driver's blitter with the context's state saved around it, unaffected by
+ * any render condition (D3D11.1 ClearView). */
+int AgxWin32AsahiClearRenderTargetRect(
+    struct pipe_context *pctx,struct pipe_surface *surface,
+    const union pipe_color_union *color,unsigned x,unsigned y,
+    unsigned width,unsigned height) {
+  if(!pctx || !surface || !surface->texture || !color || !width || !height)
+    return 0;
+  struct agx_context *ctx=agx_context(pctx);
+  if(!ctx->blitter) return 0;
+  agx_blitter_save(ctx,ctx->blitter,ASAHI_CLEAR|ASAHI_SAVE_FRAMEBUFFER);
+  util_blitter_clear_render_target(ctx->blitter,surface,color,x,y,width,height);
+  return 1;
+}
 void AgxWin32AsahiResourceRelease(struct pipe_resource **resource) {
   if(resource) pipe_resource_reference(resource,NULL);
 }

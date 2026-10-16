@@ -71,6 +71,12 @@ struct pipe_resource *AgxWin32AsahiImportLinearColor32(
     APPLE_AGX_U32 Width, APPLE_AGX_U32 Height, APPLE_AGX_U32 Pitch,
     APPLE_AGX_U64 Bytes, AGX_WIN32_ASAHI_LINEAR_FORMAT);
 void AgxWin32AsahiResourceRelease(struct pipe_resource **);
+struct pipe_surface;
+union pipe_color_union;
+int AgxWin32AsahiClearRenderTargetRect(
+    struct pipe_context *, struct pipe_surface *,
+    const union pipe_color_union *, unsigned x, unsigned y,
+    unsigned width, unsigned height);
 int AgxWin32AsahiResourceIdentity(
     struct pipe_resource *, AGX_WIN32_RELOC_ALLOCATION *);
 struct pipe_resource *AgxWin32AsahiCreateUncompressedDepthStencil(

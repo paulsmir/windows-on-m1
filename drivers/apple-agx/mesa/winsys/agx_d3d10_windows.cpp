@@ -1150,6 +1150,13 @@ struct pipe_resource *AgxD3d10WindowsPresentationPipeResource(
   return Resource ? Resource->RenderResource : NULL;
 }
 
+int AgxD3d10WindowsClearRenderTargetRect(
+    struct pipe_context *Pipe, struct pipe_surface *Surface,
+    const union pipe_color_union *Color, UINT X, UINT Y, UINT Width,
+    UINT Height) {
+  return AgxWin32AsahiClearRenderTargetRect(Pipe,Surface,Color,X,Y,Width,Height);
+}
+
 UINT AgxD3d10WindowsPresentationFormat(
     const AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource) {
   return Resource ? Resource->Resource.DxgiFormat : 0u;
