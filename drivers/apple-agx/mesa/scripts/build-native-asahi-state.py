@@ -3133,6 +3133,21 @@ AgxD3d10CreateShaderState(struct pipe_context *pipe, Shader *shader,
    }
    if (state.type != PIPE_SHADER_IR_NIR && !state.tokens)
       return NULL;
+   if (AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D_SHADER_TRACE")) {
+      /* EXP1313: a ps_4_0 corpus shader crashes in tgsi_to_nir on an FL 11_0
+       * device only; record the DXBC and TGSI the frontend hands over. */
+      UINT code_hash = 2166136261u, tgsi_hash = 2166136261u, tgsi_count = 0u;
+      UINT code_count = code ? MIN2(code[1], 65536u) : 0u;
+      for (UINT i = 0; i < code_count; ++i) code_hash = (code_hash ^ code[i]) * 16777619u;
+      if (state.type != PIPE_SHADER_IR_NIR && state.tokens) {
+         const UINT *t = (const UINT *)state.tokens;
+         tgsi_count = MIN2((t[0] & 0xffu) + (t[0] >> 8), 65536u);
+         for (UINT i = 0; i < tgsi_count; ++i) tgsi_hash = (tgsi_hash ^ t[i]) * 16777619u;
+      }
+      UINT values[7] = {(UINT)shader->type, (UINT)state.type, code ? code[0] : 0u, code_count,
+                        code_hash, tgsi_count, tgsi_hash};
+      AgxD3d10WindowsDiagnostic("measure-shader-state", S_OK, values, 7u);
+   }
    switch (shader->type) {
    case MESA_SHADER_VERTEX: return pipe->create_vs_state(pipe, &state);
    case MESA_SHADER_GEOMETRY: return pipe->create_gs_state(pipe, &state);

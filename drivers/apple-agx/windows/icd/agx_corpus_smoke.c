@@ -25,7 +25,52 @@ typedef struct { const unsigned char *bytes; size_t size; const unsigned char *p
 typedef struct { ID3D11Device *dev; ID3D11DeviceContext *ctx; } Device;
 typedef struct { char label[64]; UINT pixel, checksum; DWORD ms; int hang, ok; } Run;
 static void line(const char *fmt, ...) { va_list a; va_start(a, fmt); vprintf(fmt, a); va_end(a); putchar('\n'); fflush(stdout); }
-static LONG WINAPI crash(EXCEPTION_POINTERS *p) { line("CRASH code %08lx address %p at %s", p->ExceptionRecord->ExceptionCode, p->ExceptionRecord->ExceptionAddress, (const char *)current_file); return EXCEPTION_EXECUTE_HANDLER; }
+/* EXP1313: name the faulting module and offset (the FL 11_0 corpus crashed
+ * at an address in an unidentified DLL). */
+static LONG WINAPI crash(EXCEPTION_POINTERS *p) {
+  HMODULE module = NULL;
+  char name[MAX_PATH] = "?";
+  const void *at = p->ExceptionRecord->ExceptionAddress;
+  if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                         GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)at, &module))
+    GetModuleFileNameA(module, name, sizeof(name));
+  line("CRASH code %08lx address %p module %s+0x%llx info %llx %llx at %s",
+       p->ExceptionRecord->ExceptionCode, at, name,
+       (unsigned long long)((const char *)at - (const char *)module),
+       (unsigned long long)p->ExceptionRecord->ExceptionInformation[0],
+       (unsigned long long)p->ExceptionRecord->ExceptionInformation[1], (const char *)current_file);
+  {
+    /* unwind the faulting context: module+offset per frame */
+    CONTEXT c = *p->ContextRecord;
+    for (int i = 0; i < 24; ++i) {
+      DWORD64 base = 0, pc;
+#if defined(_M_ARM64)
+      pc = c.Pc;
+#elif defined(_M_X64)
+      pc = c.Rip;
+#else
+      pc = 0;
+#endif
+      if (!pc) break;
+      HMODULE fm = NULL;
+      char fname[MAX_PATH] = "?";
+      if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                             GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)(uintptr_t)pc, &fm))
+        GetModuleFileNameA(fm, fname, sizeof(fname));
+      line("FRAME %d %s+0x%llx", i, strrchr(fname, '\\') ? strrchr(fname, '\\') + 1 : fname,
+           (unsigned long long)(pc - (DWORD64)(uintptr_t)fm));
+#if defined(_M_ARM64) || defined(_M_X64)
+      PRUNTIME_FUNCTION fn = RtlLookupFunctionEntry(pc, &base, NULL);
+      if (!fn) break;
+      PVOID handler_data; DWORD64 establisher;
+      RtlVirtualUnwind(UNW_FLAG_NHANDLER, base, pc, fn, &c, &handler_data, &establisher, NULL);
+#else
+      break;
+#endif
+    }
+  }
+  return EXCEPTION_EXECUTE_HANDLER;
+}
 static DWORD WINAPI watchdog(void *ignored) { (void)ignored; for (;;) { Sleep(1000); if (shader_started && (DWORD)(GetTickCount() - (DWORD)shader_started) > 20000) { line("WATCHDOG %s", (const char *)current_file); shader_started = 0; } } }
 static UINT rd(const unsigned char *p) { return (UINT)p[0] | ((UINT)p[1]<<8) | ((UINT)p[2]<<16) | ((UINT)p[3]<<24); }
 static int in_range(size_t off, size_t len, size_t total) { return off <= total && len <= total - off; }
