@@ -1,5 +1,21 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
+## Current as of 2026-10-16T20:59Z (read this first)
+
+Installed: PACKAGE1339 (88f26491 = integration driver sources; WOW64 UMD out80
+on closure 100, GL ICD out61, m1n1 5b857603). FL 11_0 is the default.
+- PROVEN (EXP1338): vertex-stage scratch (RunVertex uses_scratch at
+  ta+0x568, 4871ea13).
+- PROVEN (EXP1339): compute helper programs / compute scratch (f48c6ac3:
+  winsys no longer refuses drm_asahi_cmd_compute.helper; the G4 parser
+  admits a mapped USC program + mapped scratch argument, cfg only with a
+  program and possibly 0; KMD passes them; RunCompute 0xb0/0xb8/0xc0).
+  agx_scratch_smoke cs/vs/fragment PASS n=8..96 on ARM64 and x86; every
+  regression as EXP1338.
+- Open: GPU timestamps (still refused at the winsys/G4 gates; Asahi needs
+  microsequence Timestamp ops around WaitForIdle plus a KMD-owned buffer
+  the firmware writes); D3D12.
+
 ## Current as of 2026-10-16T19:15Z (read this first)
 
 FL 11_0 IS THE DEFAULT on integration (bcb0e9f8, EXP1337: every regression
