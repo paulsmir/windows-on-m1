@@ -1,5 +1,25 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
+## Current as of 2026-10-16T13:02Z (read this first)
+
+Installed: PACKAGE1322 (9a306fe1 KMD/ARM64 UMD, WOW64 UMD out63 on closure
+083, GL ICD out61). FL 11_0 is opt-in (APPLE_AGX_D3D11_FL11=1; 6fb5de84).
+- PROVEN today: FL 11_0 smoke on x86/ARM64 (EXP1313+); SO statistics exact
+  with attachment-less renders (EXP1316, f07ec6b7); SGX core topology 8/0xfe
+  (EXP1317); FL 11_0 corpus complete, pixel_diff 0 (EXP1318: 4_x programs
+  with D3D 11 opcodes or global flags take the translator); shader scratch
+  (EXP1322, f6d56647: the agx_build_pipeline projection had returned pipeline
+  address 0 for every spilling shader -- dwmcore.dll_003d8800 now OK/OK, no
+  corpus hang left, agx_scratch_smoke n<=96 PASS); BuildPagingBuffer never
+  returns ALLOCATION_BUSY for UpdatePageTable/FlushTlb (EXP1321, aec9a109).
+- OPEN (FL 11_0 default blocked): with 11_0 reported by default the desktop
+  makes a broker page-table update fail (V5 STALE, EXP1320/1321); the
+  process is poisoned and pool granules then stay Busy (UNMAP_RANGE loop,
+  m1n1 console flood, boot stalls). Next: EXP1323 = HEAD + the FL 11_0
+  default on a branch, with Wom1G3BrokerFailures (96674816) naming the op.
+- Other open: vertex-stage scratch (refused at the gpuva gate, RunVertex
+  uses_scratch not encoded); compute helpers refused; D3D12; GPU timestamps.
+
 ## Current as of 2026-10-16T08:19Z (read this first)
 
 Installing: PACKAGE1315 (acbfd8b4 KMD/ARM64 UMD, WOW64 UMD out55 on closure
