@@ -36,6 +36,7 @@
 #include "util/u_draw.h"
 #include "util/u_inlines.h"
 #include "util/u_sampler.h"
+#include "util/u_surface.h"
 
 #include "agx_d3d11_ddi.h"
 #include "dxbc_to_nir.h"
@@ -683,7 +684,13 @@ clear_typed(Device *device, AgxUnorderedAccessView *view, const uint8_t pixel[16
       box.z = view->image.u.tex.first_layer;
       box.depth = view->image.u.tex.last_layer - view->image.u.tex.first_layer + 1;
    }
-   pipe->clear_texture(pipe, res, level, &box, pixel);
+   /* Asahi implements no clear_texture (EXP1330: a NULL hook is a call to
+    * address 0); Gallium's default clears through a render target or, where
+    * the driver has none, on the CPU. */
+   if (pipe->clear_texture)
+      pipe->clear_texture(pipe, res, level, &box, pixel);
+   else
+      u_default_clear_texture(pipe, res, level, &box, pixel);
 }
 
 /* Raw and structured views: every 32-bit word takes values[0]; typed views:
