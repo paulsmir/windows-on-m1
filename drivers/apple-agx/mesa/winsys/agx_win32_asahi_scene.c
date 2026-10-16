@@ -220,6 +220,12 @@ int AgxWin32AsahiBufferCopy(struct pipe_context *ctx,
      src_offset>src->width0 || bytes>src->width0-src_offset) return 0;
   struct agx_resource *d=agx_resource(dst),*s=agx_resource(src);
   if(!d->bo || !s->bo) return 0;
+  /* EXP1312: a CPU copy syncs like a CPU transfer (Asahi
+   * agx_prepare_for_map): the source's GPU writer, and every batch using
+   * the destination. CopyStructureCount's compute copy had written the
+   * count on the GPU while this memcpy read the stale CPU contents. */
+  agx_sync_writer(agx_context(ctx),s,"Windows buffer copy source");
+  agx_sync_readers(agx_context(ctx),d,"Windows buffer copy destination");
   unsigned char *dm=(unsigned char *)agx_bo_map(d->bo);
   unsigned char *sm=(unsigned char *)agx_bo_map(s->bo);
   if(!dm || !sm) return 0;
