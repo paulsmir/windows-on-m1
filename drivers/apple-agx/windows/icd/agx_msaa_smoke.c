@@ -132,6 +132,28 @@ static unsigned rgba(unsigned px) {
       (px & 0xff00ff00u) | ((px & 0xffu) << 16) | ((px >> 16) & 0xffu) : px;
 }
 
+/* EXP1309: draws reach the 4x samples but read back rotated and without the
+ * full-screen primitives; AGX_MSAA_DUMP=1 writes each probed image (resolve,
+ * every sample of the first iteration) as a 256x256 binary PPM in the working
+ * directory, so orientation, scale and layout scrambling can be seen. */
+static void dump_ppm(const char *name, const D3D11_MAPPED_SUBRESOURCE *m) {
+  FILE *f;
+  char path[64];
+  if (!getenv("AGX_MSAA_DUMP")) return;
+  snprintf(path, sizeof(path), "%s.ppm", name);
+  f = fopen(path, "wb");
+  if (!f) return;
+  fprintf(f, "P6\n%d %d\n255\n", SIZE, SIZE);
+  for (int y = 0; y < SIZE; ++y)
+    for (int x = 0; x < SIZE; ++x) {
+      unsigned px = rgba(*(const unsigned *)((const unsigned char *)m->pData +
+                                             (size_t)y * m->RowPitch + (size_t)x * 4u));
+      unsigned char rgb[3] = {(unsigned char)px, (unsigned char)(px >> 8), (unsigned char)(px >> 16)};
+      fwrite(rgb, 1, 3, f);
+    }
+  fclose(f);
+}
+
 int main(int argc, char **argv) {
   IDXGIFactory1 *factory = NULL;
   IDXGIAdapter1 *adapter = NULL, *pick = NULL;
@@ -383,6 +405,7 @@ int main(int argc, char **argv) {
     }
     lower = rgba(*(const unsigned *)((const unsigned char *)map.pData + 224u * map.RowPitch + 32u * 4u));
     upper = rgba(*(const unsigned *)((const unsigned char *)map.pData + 32u * map.RowPitch + 224u * 4u));
+    if (i == 0) dump_ppm("msaa-resolve", &map);
     /* The edge runs from the top-left to the bottom-right corner. */
     for (int y = 8; y < SIZE - 8; ++y) {
       for (int dx = -1; dx <= 1; ++dx) {
@@ -417,6 +440,11 @@ int main(int argc, char **argv) {
             rgba(*(const unsigned *)((const unsigned char *)m.pData + 224u * m.RowPitch + 32u * 4u)),
             rgba(*(const unsigned *)((const unsigned char *)m.pData + 32u * m.RowPitch + 224u * 4u)),
             rgba(*(const unsigned *)((const unsigned char *)m.pData + 128u * m.RowPitch + 128u * 4u)));
+        if (i == 0) {
+          char name[32];
+          snprintf(name, sizeof(name), "msaa-sample%u", s);
+          dump_ppm(name, &m);
+        }
         if (mode) say("MODE %s SAMPLE %u iteration %d centre 0x%08x edge 0x%08x", argv[5],
                       s, i,
                       rgba(*(const unsigned *)((const unsigned char *)m.pData + 128u * m.RowPitch + 128u * 4u)),
