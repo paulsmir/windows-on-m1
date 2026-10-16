@@ -1914,6 +1914,9 @@ VOID AdmissionPlatformRuntimeResetState(_In_ ADMISSION_CONTEXT *Context,
 ULONG AdmissionPlatformRuntimeDebugState(_In_ ADMISSION_CONTEXT *Context);
 /* G4-r3 (EXP1296): Wom1GpuReset (PASSIVE_LEVEL, flushed). */
 void AdmissionRecordGpuReset(_In_opt_ ADMISSION_CONTEXT *Context);
+/* GPU timestamps escape (ADMISSION_GPU_TIMESTAMP_QUERY), caller's process. */
+NTSTATUS AdmissionPlatformGpuTimestampEscape(_Inout_ ADMISSION_CONTEXT *Context,
+    _In_ const DXGKARG_ESCAPE *Args);
 /* G4-r3 TDR drill escape (ADMISSION_TDR_DRILL), in the caller's process. */
 NTSTATUS AdmissionPlatformTdrDrillEscape(_Inout_ ADMISSION_CONTEXT *Context,
     _In_ const DXGKARG_ESCAPE *Args);

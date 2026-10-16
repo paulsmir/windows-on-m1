@@ -9,6 +9,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include "umd_residency_trim.h"
 #include "apple_agx_g3_copy_abi.h"
 #include "apple_agx_g4_submit.h"
+#include "render_job_timing.h"
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
 #include "render_qualification.h"
 #endif
@@ -1469,13 +1470,43 @@ static int private_escape(void *context, APPLE_AGX_G3_PRIVATE_REQUEST *payload) 
   return SUCCEEDED(hr);
 }
 
+/* GPU timestamps: the KMD's firmware start/end of this process's completed
+ * batch (ADMISSION_GPU_TIMESTAMP_QUERY, docs/superpowers/plans/
+ * 2026-10-16-gpu-timestamps.md). */
+static int gpu_timestamps(void *context, uint64_t command_va, uint64_t *start,
+                          uint64_t *end, uint64_t *frequency, uint64_t *qpc) {
+  ADMISSION_UMD_DEVICE *device=(ADMISSION_UMD_DEVICE *)context;
+  ADMISSION_GPU_TIMESTAMP_QUERY query={};
+  D3DDDICB_ESCAPE request={};
+  if(!device || device->Magic!=ADMISSION_UMD_DEVICE_MAGIC || !command_va ||
+     !start || !end || !frequency || !qpc ||
+     !device->Adapter || device->Adapter->Magic!=ADMISSION_UMD_ADAPTER_MAGIC ||
+     !device->Adapter->RuntimeAdapter.handle || !device->RuntimeDevice.handle ||
+     !device->KernelContext || !device->KernelCallbacks ||
+     !device->KernelCallbacks->pfnEscapeCb || device->ScreenClosing) return 0;
+  query.Magic=ADMISSION_GPU_TIMESTAMP_QUERY_MAGIC;
+  query.Version=ADMISSION_GPU_TIMESTAMP_QUERY_VERSION;
+  query.Bytes=sizeof(query);
+  query.CommandVa=command_va;
+  request.hDevice=device->RuntimeDevice.handle;
+  request.hContext=device->KernelContext;
+  request.Flags.HardwareAccess=0u;
+  request.pPrivateDriverData=&query;request.PrivateDriverDataSize=sizeof(query);
+  if(FAILED(device->KernelCallbacks->pfnEscapeCb(
+       device->Adapter->RuntimeAdapter.handle,&request)) ||
+     !query.Found || !query.End || !query.Frequency) return 0;
+  *start=query.Start;*end=query.End;*frequency=query.Frequency;*qpc=query.Qpc;
+  return 1;
+}
+
 #ifdef __cplusplus
 extern "C"
 #endif
 const AGX_WIN32_GPUVA_OPS *AdmissionUmdGpuvaOperations(void) {
   static const AGX_WIN32_GPUVA_OPS operations = {
       reserve_va, map_va, free_va, make_resident, wait_paging,
-      submit, wait_render, evict, private_escape, query_render};
+      submit, wait_render, evict, private_escape, query_render,
+      gpu_timestamps};
   return &operations;
 }
 #endif

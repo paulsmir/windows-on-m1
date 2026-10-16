@@ -151,6 +151,8 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ULONGLONG JobTimingExportQpc;
   ADMISSION_FW_TIMING_RING FwTiming;
   ADMISSION_FW_TIMING_RING FwTimingSnapshot;
+  /* GPU timestamps of completed jobs, by fence (JobTimingLock). */
+  ADMISSION_GPU_TIMESTAMP_RING GpuTimestamps;
   ULONG FwTs1Fence, FwTs1Polls;
   ULONGLONG FwTs1Kick, FwTs1First, FwTs1FirstQpc;
 #endif
@@ -408,12 +410,51 @@ static VOID AdmissionFwTimingCaptureWindows(
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
 }
 
+/* GPU timestamps: at a job's completion keep its firmware start/end for the
+ * UMD. A render job's 3D work names template objects 28/29 as its
+ * timestamp_pointers (the captured 3D microsequence brackets the fragment
+ * work with Timestamp ops; EXP1112 decoded them per job); a compute job
+ * that requested timestamps names its sidecar block (requested start/end at
+ * 0x10/0x18). The job is still pending, so its kind and block are valid. */
+static VOID AdmissionGpuTimestampCaptureWindows(
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence) {
+  const APPLE_AGX_BACKEND_JOB_IMAGE *job = &runtime->Backend.PendingJob;
+  const ADMISSION_JOB_TIMING_SLOT *slot;
+  ULONGLONG start = 0u, gpuEnd = 0u, qpc;
+  ULONG kind;
+  KIRQL oldIrql;
+  if (job->Kind == AppleAgxBackendJobCompute) {
+    const UCHAR *block = (const UCHAR *)job->ComputeTimestampBlock;
+    if (block == NULL) return;
+    RtlCopyMemory(&start, block + 0x10u, sizeof(start));
+    RtlCopyMemory(&gpuEnd, block + 0x18u, sizeof(gpuEnd));
+    kind = ADMISSION_GPU_TIMESTAMP_COMPUTE;
+  } else {
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *s = &runtime->QueueObjects[28u];
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *e = &runtime->QueueObjects[29u];
+    if (s->Data == NULL || e->Data == NULL || s->Size != sizeof(start) ||
+        e->Size != sizeof(gpuEnd)) return;
+    RtlCopyMemory(&start, s->Data, sizeof(start));
+    RtlCopyMemory(&gpuEnd, e->Data, sizeof(gpuEnd));
+    kind = ADMISSION_GPU_TIMESTAMP_RENDER;
+  }
+  if (job->CommandVa == 0u) return;
+  qpc = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+  KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+  slot = AdmissionJobTimingFind(&runtime->JobTiming, fence);
+  if (slot != NULL)
+    (void)AdmissionGpuTimestampRecord(&runtime->GpuTimestamps, fence,
+        slot->ProcessId, job->CommandVa, kind, start, gpuEnd, qpc);
+  KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+}
+
 static VOID AdmissionJobTimingFirmwareWindows(
     ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence) {
   const APPLE_AGX_EXP208_RELOCATION_OBJECT *start, *end;
   ADMISSION_JOB_TIMING_SLOT *slot;
   KIRQL oldIrql;
   ULONGLONG taStart, taEnd;
+  AdmissionGpuTimestampCaptureWindows(runtime, fence);
   start = &runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_TA_TIMESTAMP_START];
   end = &runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_TA_TIMESTAMP_END];
   if (start->Data == NULL || end->Data == NULL ||
@@ -2420,6 +2461,9 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildComputeJob(
     input.HelperProgram = envelope->Compute.Helper.Binary;
     input.HelperArgument = envelope->Compute.Helper.Data;
     input.HelperConfig = envelope->Compute.Helper.Cfg;
+    /* GPU timestamps (T1): a request for either end records both. */
+    input.Timestamps = (envelope->Compute.Timestamps.StartHandle ||
+                        envelope->Compute.Timestamps.EndHandle) ? 1u : 0u;
   }
   if (!AppleAgxRenderSharedMemoryBuildCompute(
           &runtime->Initdata.RenderSharedMemory, &input, &output))
@@ -2431,6 +2475,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildComputeJob(
   Job->ComputeEvent = input.EventNumber;
   Job->ComputeExpectedStamp = input.StampValue;
   Job->ComputeExpectedDonePointer = Plan->ComputeExpectedDonePointer;
+  Job->ComputeTimestampBlock = output.TimestampCpuAddress;
   /* The receipt a refused compute submission records. */
   RtlZeroMemory(build, sizeof(*build));
   build->Valid = APPLE_AGX_BACKEND_TRUE;
@@ -2932,11 +2977,19 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendRelocate(
     const APPLE_AGX_BACKEND_SUBMISSION *Submission,
     APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
-  return runtime != NULL && runtime->PlatformIo.Image.Relocate != NULL
-             ? runtime->PlatformIo.Image.Relocate(
-                   runtime->PlatformIo.Context, Arena, ArenaBytes, Roots,
-                   SubmissionBytes, SubmissionByteCount, Submission, Job)
-             : APPLE_AGX_BACKEND_FALSE;
+  const ADMISSION_BACKEND_IMAGE *image;
+  if (runtime == NULL || runtime->PlatformIo.Image.Relocate == NULL ||
+      !runtime->PlatformIo.Image.Relocate(
+          runtime->PlatformIo.Context, Arena, ArenaBytes, Roots,
+          SubmissionBytes, SubmissionByteCount, Submission, Job))
+    return APPLE_AGX_BACKEND_FALSE;
+  /* GPU timestamps: the batch the UMD will ask about. */
+  image = runtime->Adapter != NULL ? &runtime->Adapter->BackendImage : NULL;
+  if (image != NULL && image->G4Compute && !image->PresentCompute)
+    Job->CommandVa = image->G4ComputeEnvelope.Header.Base.CommandVa;
+  else if (image != NULL && image->G4Native)
+    Job->CommandVa = image->G4Header.Base.CommandVa;
+  return APPLE_AGX_BACKEND_TRUE;
 }
 
 #define ADMISSION_DELEGATE_ZERO(name, member)                              \
@@ -3665,6 +3718,42 @@ static BOOLEAN AdmissionTdrDrillTake(ADMISSION_CONTEXT *Adapter,
   return TRUE;
 }
 #endif
+
+/* GPU timestamps: the caller's completed job's firmware start/end. */
+_Use_decl_annotations_ NTSTATUS AdmissionPlatformGpuTimestampEscape(
+    ADMISSION_CONTEXT *Context, const DXGKARG_ESCAPE *Args) {
+  ADMISSION_PLATFORM_RUNTIME *runtime;
+  ADMISSION_GPU_TIMESTAMP_QUERY query;
+  ADMISSION_GPU_TIMESTAMP record;
+  LARGE_INTEGER frequency;
+  KIRQL oldIrql;
+  int found;
+  if (Context == NULL || Args == NULL || Args->pPrivateDriverData == NULL ||
+      Args->PrivateDriverDataSize != sizeof(query))
+    return STATUS_INVALID_PARAMETER;
+  RtlCopyMemory(&query, Args->pPrivateDriverData, sizeof(query));
+  if (query.Magic != ADMISSION_GPU_TIMESTAMP_QUERY_MAGIC ||
+      query.Version != ADMISSION_GPU_TIMESTAMP_QUERY_VERSION ||
+      query.Bytes != sizeof(query) || query.CommandVa == 0u)
+    return STATUS_INVALID_PARAMETER;
+  runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
+  if (runtime == NULL) return STATUS_DEVICE_NOT_READY;
+  RtlZeroMemory(&record, sizeof(record));
+  KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+  found = AdmissionGpuTimestampFind(&runtime->GpuTimestamps,
+      (unsigned int)HandleToULong(PsGetCurrentProcessId()), query.CommandVa,
+      &record);
+  KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+  (void)KeQueryPerformanceCounter(&frequency);
+  query.Found = found ? 1u : 0u;
+  query.Kind = record.Kind;
+  query.Start = record.Start;
+  query.End = record.End;
+  query.Qpc = record.Qpc;
+  query.Frequency = (unsigned long long)frequency.QuadPart;
+  RtlCopyMemory(Args->pPrivateDriverData, &query, sizeof(query));
+  return STATUS_SUCCESS;
+}
 
 _Use_decl_annotations_ NTSTATUS AdmissionPlatformTdrDrillEscape(
     ADMISSION_CONTEXT *Context, const DXGKARG_ESCAPE *Args) {

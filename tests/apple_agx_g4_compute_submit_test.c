@@ -113,7 +113,16 @@ int main(void) {
   e.Compute.Helper.Data = 0x400000ULL; s.Count = 4;
   assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseUnmapped &&
          f.Va == APPLE_AGX_G4_USC_EXECUTION_BASE + 0x100u);
-  make(&e, &s); e.Compute.Timestamps.StartHandle = 1u; assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseUnsupported);
+  /* GPU timestamps: a request per end (handle 1, offsets 0). */
+  make(&e, &s); e.Compute.Timestamps.StartHandle = APPLE_AGX_G4_TIMESTAMP_REQUEST;
+  e.Compute.Timestamps.EndHandle = APPLE_AGX_G4_TIMESTAMP_REQUEST;
+  assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseOk &&
+         v.Compute.Timestamps.StartHandle == 1u && v.Compute.Timestamps.EndHandle == 1u);
+  make(&e, &s); e.Compute.Timestamps.EndHandle = APPLE_AGX_G4_TIMESTAMP_REQUEST;
+  assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseOk);
+  make(&e, &s); e.Compute.Timestamps.StartHandle = 2u; assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseInvalid);
+  make(&e, &s); e.Compute.Timestamps.StartHandle = 1u; e.Compute.Timestamps.StartOffset = 8u;
+  assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseInvalid);
   make(&e, &s); e.Compute.Timestamps.EndOffset = 8u; assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseInvalid);
   make(&e, &s); e.Compute.CdmCtrlStreamEnd = e.Compute.CdmCtrlStreamBase; assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseInvalid);
   make(&e, &s); e.Compute.CdmCtrlStreamBase += 2ULL; assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseInvalid);

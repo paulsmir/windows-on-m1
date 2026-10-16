@@ -65,4 +65,47 @@ unsigned long long AdmissionJobTimingDeltaUs(
     const ADMISSION_JOB_TIMING_SLOT *Slot,
     ADMISSION_JOB_PHASE First, ADMISSION_JOB_PHASE Last);
 
+/* GPU timestamps (docs/superpowers/plans/2026-10-16-gpu-timestamps.md):
+ * the firmware-written start/end of completed jobs until the UMD fetches
+ * them (escape). The UMD names its batch by the G4 envelope's command GPU
+ * VA (unique while the batch is in flight: its command BO returns to the
+ * pool only after the UMD retired it); the record also holds the owning
+ * process and the submission fence (newest record wins). Render jobs: the
+ * 3D work's timestamp_pointers (template objects 28/29); compute jobs that
+ * requested them: the sidecar block's requested start/end. Values are
+ * firmware ticks; Qpc is the KMD's performance counter when it took them
+ * at completion (EXP1112: the firmware timebase runs at the counter's
+ * frequency, offset from the guest's QPC by the hypervisor's stolen time),
+ * so End - Qpc estimates that offset. */
+#define ADMISSION_GPU_TIMESTAMP_CAPACITY 64u
+#define ADMISSION_GPU_TIMESTAMP_RENDER 1u
+#define ADMISSION_GPU_TIMESTAMP_COMPUTE 2u
+typedef struct _ADMISSION_GPU_TIMESTAMP {
+  unsigned int Fence, ProcessId, Kind, Reserved;
+  unsigned long long CommandVa, Start, End, Qpc;
+} ADMISSION_GPU_TIMESTAMP;
+typedef struct _ADMISSION_GPU_TIMESTAMP_RING {
+  ADMISSION_GPU_TIMESTAMP Slot[ADMISSION_GPU_TIMESTAMP_CAPACITY];
+} ADMISSION_GPU_TIMESTAMP_RING;
+int AdmissionGpuTimestampRecord(ADMISSION_GPU_TIMESTAMP_RING *Ring,
+    unsigned int Fence, unsigned int ProcessId, unsigned long long CommandVa,
+    unsigned int Kind, unsigned long long Start, unsigned long long End,
+    unsigned long long Qpc);
+/* The newest record of ProcessId's batch CommandVa. */
+int AdmissionGpuTimestampFind(const ADMISSION_GPU_TIMESTAMP_RING *Ring,
+    unsigned int ProcessId, unsigned long long CommandVa,
+    ADMISSION_GPU_TIMESTAMP *Out);
+
+/* The escape the UMD sends after its batch completed (DxgkDdiEscape, in the
+ * caller's process). Found 1 with Kind/Start/End in firmware ticks;
+ * Frequency is the tick frequency (the system counter). */
+#define ADMISSION_GPU_TIMESTAMP_QUERY_MAGIC 0x53545041u /* "APTS" */
+#define ADMISSION_GPU_TIMESTAMP_QUERY_VERSION 1u
+typedef struct _ADMISSION_GPU_TIMESTAMP_QUERY {
+  unsigned int Magic, Version, Bytes, Found;
+  unsigned long long CommandVa;
+  unsigned int Kind, Reserved;
+  unsigned long long Start, End, Frequency, Qpc;
+} ADMISSION_GPU_TIMESTAMP_QUERY;
+
 #endif

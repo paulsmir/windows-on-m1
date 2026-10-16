@@ -32,6 +32,11 @@ typedef struct {
   int (*PrivateEscape)(void *, APPLE_AGX_G3_PRIVATE_REQUEST *);
   /* EXP1082 (optional): non-blocking, 1 once the render fence is signalled. */
   int (*QueryRender)(void *, uint64_t);
+  /* GPU timestamps (optional): 1 with the firmware start/end ticks, the
+   * tick frequency and the KMD's QPC when it took them, for the completed
+   * batch whose command BO is at the GPU VA; 0 when the KMD holds none. */
+  int (*GpuTimestamps)(void *, uint64_t, uint64_t *, uint64_t *, uint64_t *,
+                       uint64_t *);
 } AGX_WIN32_GPUVA_OPS;
 
 typedef struct {

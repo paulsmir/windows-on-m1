@@ -85,3 +85,41 @@ unsigned int AdmissionJobPollStallUs(unsigned long long ElapsedUs) {
   return ElapsedUs < ADMISSION_JOB_POLL_SPIN_WINDOW_US ?
       ADMISSION_JOB_POLL_SPIN_STEP_US : 0u;
 }
+
+int AdmissionGpuTimestampRecord(ADMISSION_GPU_TIMESTAMP_RING *ring,
+    unsigned int fence, unsigned int pid, unsigned long long command,
+    unsigned int kind, unsigned long long start, unsigned long long end,
+    unsigned long long qpc) {
+  ADMISSION_GPU_TIMESTAMP *slot;
+  if (!ring || !fence || !command || !end ||
+      (kind != ADMISSION_GPU_TIMESTAMP_RENDER &&
+       kind != ADMISSION_GPU_TIMESTAMP_COMPUTE)) return 0;
+  slot = &ring->Slot[fence % ADMISSION_GPU_TIMESTAMP_CAPACITY];
+  slot->Fence = fence;
+  slot->ProcessId = pid;
+  slot->Kind = kind;
+  slot->Reserved = 0u;
+  slot->CommandVa = command;
+  slot->Start = start;
+  slot->End = end;
+  slot->Qpc = qpc;
+  return 1;
+}
+
+int AdmissionGpuTimestampFind(const ADMISSION_GPU_TIMESTAMP_RING *ring,
+    unsigned int pid, unsigned long long command,
+    ADMISSION_GPU_TIMESTAMP *out) {
+  const ADMISSION_GPU_TIMESTAMP *best = 0;
+  unsigned int i;
+  if (!ring || !command || !out) return 0;
+  for (i = 0; i < ADMISSION_GPU_TIMESTAMP_CAPACITY; ++i) {
+    const ADMISSION_GPU_TIMESTAMP *slot = &ring->Slot[i];
+    if (!slot->Fence || slot->ProcessId != pid || slot->CommandVa != command ||
+        !slot->End) continue;
+    /* fences are monotonic; the newest submission of the batch wins */
+    if (!best || (int)(slot->Fence - best->Fence) > 0) best = slot;
+  }
+  if (!best) return 0;
+  *out = *best;
+  return 1;
+}

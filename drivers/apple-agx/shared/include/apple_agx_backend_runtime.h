@@ -110,6 +110,12 @@ typedef struct _APPLE_AGX_BACKEND_JOB_IMAGE {
   /* D3D-G1b: a render with compute work leads its TA queue with this
    * firmware Barrier on the compute stamp; zero for every other job. */
   APPLE_AGX_U64 TaBarrierAddress;
+  /* GPU timestamps (T1): the compute job's KMD timestamp block (job start,
+   * job end, requested start, requested end; firmware-written), or NULL. */
+  const void *ComputeTimestampBlock;
+  /* GPU timestamps: the G4 envelope's command (DMA buffer) GPU VA, which
+   * the UMD names its batch by; 0 for jobs without a G4 envelope. */
+  APPLE_AGX_U64 CommandVa;
 } APPLE_AGX_BACKEND_JOB_IMAGE;
 
 typedef struct _APPLE_AGX_BACKEND_OBSERVATION {

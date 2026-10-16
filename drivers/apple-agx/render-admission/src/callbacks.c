@@ -1,6 +1,7 @@
 #include "render_admission.h"
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #include "apple_agx_gpuva_g3_caps.h"
+#include "render_job_timing.h"
 #endif
 
 #define UNUSED(value) UNREFERENCED_PARAMETER(value)
@@ -329,6 +330,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEscape(
       return AdmissionGpuvaG3CopyEscape((ADMISSION_CONTEXT *)Adapter, Args);
     if (private_magic == ADMISSION_TDR_DRILL_MAGIC)
       return AdmissionPlatformTdrDrillEscape((ADMISSION_CONTEXT *)Adapter, Args);
+    if (private_magic == ADMISSION_GPU_TIMESTAMP_QUERY_MAGIC)
+      return AdmissionPlatformGpuTimestampEscape((ADMISSION_CONTEXT *)Adapter, Args);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
     if (private_magic == ADMISSION_DWM_FRAME_ARM_MAGIC)
       return AdmissionGpuvaG3FrameArmEscape((ADMISSION_CONTEXT *)Adapter, Args);

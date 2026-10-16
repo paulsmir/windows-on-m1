@@ -136,16 +136,17 @@ static APPLE_AGX_G4_PARSE_RESULT validate_compute_fields(
   /* EXP1339: a helper program (compute scratch) runs as Asahi
    * queue/compute.rs passes it: program and scratch argument together, its
    * configuration only with a program (Mesa: preamble scratch << 16, which
-   * may be 0). Timestamps still need KMD-owned state. */
+   * may be 0). */
   if ((compute->Helper.Binary == 0u) != (compute->Helper.Data == 0ULL) ||
       (compute->Helper.Binary == 0u && compute->Helper.Cfg != 0u) ||
       (compute->Helper.Binary &&
        (!valid_va(usc_va(compute->Helper.Binary), 1u) ||
         !valid_va(compute->Helper.Data, 1u))))
     return AppleAgxG4ParseInvalid;
-  if (compute->Timestamps.StartHandle || compute->Timestamps.EndHandle)
-    return AppleAgxG4ParseUnsupported;
-  if (compute->Timestamps.StartOffset || compute->Timestamps.EndOffset)
+  /* GPU timestamps (T1): a request per end, recorded in the KMD block. */
+  if (compute->Timestamps.StartHandle > APPLE_AGX_G4_TIMESTAMP_REQUEST ||
+      compute->Timestamps.EndHandle > APPLE_AGX_G4_TIMESTAMP_REQUEST ||
+      compute->Timestamps.StartOffset || compute->Timestamps.EndOffset)
     return AppleAgxG4ParseInvalid;
   if (compute->CdmCtrlStreamBase >= compute->CdmCtrlStreamEnd ||
       (compute->CdmCtrlStreamBase & 3ULL) || (compute->CdmCtrlStreamEnd & 3ULL))

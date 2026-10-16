@@ -158,6 +158,13 @@ typedef struct {
   unsigned int Usc, ResourceSpec;
 } APPLE_AGX_G4_BG_EOT;
 
+/* drm_asahi_timestamp pairs. Asahi names a timestamp buffer object and an
+ * offset; the KMD owns the memory the firmware writes instead, so on the G4
+ * ABI a handle is APPLE_AGX_G4_TIMESTAMP_REQUEST (record this start/end in
+ * the job's KMD timestamp block) or 0, and the offsets are 0: the UMD keeps
+ * Mesa's buffer and offsets and copies the values back (GPU timestamps
+ * design, docs/superpowers/plans/2026-10-16-gpu-timestamps.md). */
+#define APPLE_AGX_G4_TIMESTAMP_REQUEST 1u
 typedef struct {
   unsigned int StartHandle, StartOffset, EndHandle, EndOffset;
 } APPLE_AGX_G4_TIMESTAMPS;
