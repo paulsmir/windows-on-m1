@@ -106,6 +106,10 @@ void (*AgxWin32FirstFaultHook)(unsigned site, uintptr_t context,
  * for comparison with the KMD's job-time view of the same GPU VA. */
 void (*AgxWin32VdmTraceHook)(uint64_t va, const uint32_t *words,
                              unsigned count, unsigned draws);
+/* MSAA-r1 receipt-only (EXP1299-EXP1305: draws into 4x targets write no
+ * sample while clears and copies reach them): the render fields that carry
+ * the sample count, for every multisampled render, as submitted. */
+void (*AgxWin32RenderTraceHook)(const uint32_t *values, unsigned count);
 void AgxWin32AsahiMarkBatchFault(struct agx_context *ctx,
                                 struct agx_batch *batch,unsigned site) {
   if(!ctx) return;
@@ -545,6 +549,17 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   native_render.Flags|=1u<<2;
   if(!prepare_process_buffers(b,g,&native_render,ranges)) { fail_site=__LINE__; goto fail; }
 #ifdef _MSC_VER
+  if(AgxWin32RenderTraceHook && native_render.Samples>1) {
+    const uint32_t values[14]={native_render.Samples,native_render.SampleSizeBytes,
+        native_render.UtileWidthPx|((uint32_t)native_render.UtileHeightPx<<8),
+        native_render.WidthPx|((uint32_t)native_render.HeightPx<<16),
+        (uint32_t)native_render.PppMultisampleCtrl,
+        (uint32_t)(native_render.PppMultisampleCtrl>>32),native_render.PppCtrl,
+        native_render.Flags,(uint32_t)native_render.ZlsCtrl,native_render.Bg.Usc,
+        native_render.Eot.Usc,native_render.IspBgObjVals,native_render.IspZlsPixels,
+        (uint32_t)batch->draws};
+    AgxWin32RenderTraceHook(values,14u);
+  }
   if(AgxWin32VdmTraceHook && batch->vdm.bo) {
     const struct agx_bo *vbo=batch->vdm.bo;
     const unsigned char *map=(const unsigned char *)agx_bo_map((struct agx_bo *)vbo);
