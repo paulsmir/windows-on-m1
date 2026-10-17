@@ -1165,9 +1165,15 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
                                          const AGX_D3D12_CBV cbvs[AGX_D3D12_CBV_SLOTS],
                                          const AGX_D3D12_SRV srvs[AGX_D3D12_SRV_SLOTS],
                                          const AGX_D3D12_SAMPLER samplers[AGX_D3D12_SAMPLER_SLOTS], unsigned x,
-                                         unsigned y, unsigned z) {
-  if (!owner || !owner->Context || !compute || !compute->State || !uavs || !cbvs || !srvs || !samplers || !x || !y ||
-      !z)
+                                         unsigned y, unsigned z, const AGX_D3D12_INDIRECT *indirect) {
+  if (!owner || !owner->Context || !compute || !compute->State || !uavs || !cbvs || !srvs || !samplers ||
+      (!indirect && (!x || !y || !z)))
+    return E_INVALIDARG;
+  /* C14: indirect grids (D3D12_DISPATCH_ARGUMENTS = Gallium's 3 x uint) */
+  if (indirect && (!indirect->Buffer || !indirect->Buffer->Resource || !indirect->MaxCount || indirect->CountBuffer ||
+                   indirect->Stride < 12u || indirect->Buffer->Bytes > 0xffffffffull ||
+                   indirect->Offset + static_cast<unsigned long long>(indirect->Stride) * (indirect->MaxCount - 1u) + 12u >
+                       indirect->Buffer->Bytes))
     return E_INVALIDARG;
   struct pipe_context *pipe = owner->Context;
   /* C9: sampler states for this dispatch (released after the launch) */
@@ -1197,8 +1203,17 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
   info.grid[0] = x;
   info.grid[1] = y;
   info.grid[2] = z;
-  pipe->launch_grid(pipe, &info);
-  pipe->memory_barrier(pipe, PIPE_BARRIER_ALL);
+  if (indirect) {
+    info.indirect = static_cast<struct pipe_resource *>(indirect->Buffer->Resource);
+    for (unsigned i = 0; i < indirect->MaxCount; ++i) {
+      info.indirect_offset = static_cast<unsigned>(indirect->Offset + static_cast<unsigned long long>(indirect->Stride) * i);
+      pipe->launch_grid(pipe, &info);
+      pipe->memory_barrier(pipe, PIPE_BARRIER_ALL);
+    }
+  } else {
+    pipe->launch_grid(pipe, &info);
+    pipe->memory_barrier(pipe, PIPE_BARRIER_ALL);
+  }
   unbind_stage(pipe, MESA_SHADER_COMPUTE, views, view_count);
   if (state_count) {
     pipe->bind_sampler_states(pipe, MESA_SHADER_COMPUTE, 0, state_count, none);
@@ -1378,7 +1393,31 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
     range.start += static_cast<unsigned>(draw->IndexOffset / draw->IndexSize);
     range.index_bias = draw->BaseVertex;
   }
-  pipe->draw_vbo(pipe, &info, 0, NULL, &range, 1);
+  /* C14: indirect draws read count/instances/start from the argument buffer */
+  struct pipe_draw_indirect_info indirect = {};
+  const AGX_D3D12_INDIRECT *in = &draw->Indirect;
+  if (in->Buffer) {
+    const unsigned args = draw->IndexSize ? 20u : 16u;
+    const bool bad = !in->Buffer->Resource || !in->MaxCount || in->Stride < args || in->Buffer->Bytes > 0xffffffffull ||
+                     in->Offset + static_cast<unsigned long long>(in->Stride) * (in->MaxCount - 1u) + args > in->Buffer->Bytes ||
+                     (draw->IndexSize && draw->IndexOffset) ||
+                     (in->CountBuffer && (!in->CountBuffer->Resource || in->CountOffset + 4u > in->CountBuffer->Bytes));
+    if (bad) {
+      unbind_stage(pipe, MESA_SHADER_VERTEX, vs_views, vs_view_count);
+      unbind_stage(pipe, MESA_SHADER_FRAGMENT, ps_views, ps_view_count);
+      release_samplers(pipe, vs_samplers, vs_sampler_count, ps_samplers, ps_sampler_count);
+      return E_INVALIDARG;
+    }
+    indirect.buffer = static_cast<struct pipe_resource *>(in->Buffer->Resource);
+    indirect.offset = static_cast<unsigned>(in->Offset);
+    indirect.stride = in->Stride;
+    indirect.draw_count = in->MaxCount;
+    if (in->CountBuffer) {
+      indirect.indirect_draw_count = static_cast<struct pipe_resource *>(in->CountBuffer->Resource);
+      indirect.indirect_draw_count_offset = static_cast<unsigned>(in->CountOffset);
+    }
+  }
+  pipe->draw_vbo(pipe, &info, 0, in->Buffer ? &indirect : NULL, &range, 1);
   /* the batch holds what the draw read; drop the stage bindings */
   unbind_stage(pipe, MESA_SHADER_VERTEX, vs_views, vs_view_count);
   unbind_stage(pipe, MESA_SHADER_FRAGMENT, ps_views, ps_view_count);

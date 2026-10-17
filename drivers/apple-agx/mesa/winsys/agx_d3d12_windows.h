@@ -106,14 +106,26 @@ typedef struct {
 /* Records one dispatch of x*y*z groups; its writes are ordered before every
  * later recorded command (D3D12 UAV and transition barriers between them
  * need no further AGX work: the launch ends with a full memory barrier). */
+/* C14 (D3D12-C14-execute-indirect.md): an indirect argument stream --
+ * MaxCount records of Stride bytes at Offset (D3D12_DRAW_ARGUMENTS,
+ * _DRAW_INDEXED_ARGUMENTS or _DISPATCH_ARGUMENTS, the Gallium indirect
+ * layouts), optionally limited by a UINT count at CountOffset. */
+typedef struct {
+  const AGX_D3D12_BUFFER *Buffer; /* NULL = a direct draw/dispatch */
+  unsigned long long Offset;
+  unsigned Stride, MaxCount;
+  const AGX_D3D12_BUFFER *CountBuffer;
+  unsigned long long CountOffset;
+} AGX_D3D12_INDIRECT;
 /* C9: CBVs, SRVs (buffers, typed buffers, textures) and samplers bind as a
- * draw stage's do. */
+ * draw stage's do. C14: Indirect (NULL = direct) launches MaxCount grids
+ * read from the argument buffer (no count buffer). */
 HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *Owner, const AGX_D3D12_COMPUTE *Compute,
                               const AGX_D3D12_UAV Uavs[AGX_D3D12_UAV_SLOTS],
                               const AGX_D3D12_CBV Cbvs[AGX_D3D12_CBV_SLOTS],
                               const AGX_D3D12_SRV Srvs[AGX_D3D12_SRV_SLOTS],
                               const AGX_D3D12_SAMPLER Samplers[AGX_D3D12_SAMPLER_SLOTS], unsigned X, unsigned Y,
-                              unsigned Z);
+                              unsigned Z, const AGX_D3D12_INDIRECT *Indirect);
 /* C6a (investigation/analysis/D3D12-C6-graphics.md): textures. Bytes of
  * one texel block of a DXGI format the owner can create (uncompressed,
  * 1x1 blocks), 0 otherwise. */
@@ -273,6 +285,10 @@ typedef struct {
     AGX_D3D12_SAMPLER Samplers[AGX_D3D12_SAMPLER_SLOTS]; /* C6e */
     AGX_D3D12_UAV Uavs[AGX_D3D12_UAV_SLOTS]; /* C13: graphics UAVs (u# in every stage) */
   } Vs, Ps;
+  /* C14: indirect draws (Indirect.Buffer NULL = direct); an indexed indirect
+   * draw needs IndexOffset 0 (Gallium takes the start index from the
+   * arguments) */
+  AGX_D3D12_INDIRECT Indirect;
 } AGX_D3D12_DRAW;
 /* Records one draw; bindings that reference heaps are dropped by the next
  * AgxD3d12OwnerSubmitAndWait. */

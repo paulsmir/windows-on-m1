@@ -263,11 +263,12 @@ class D3d12AbiGate(unittest.TestCase):
         compute |= {'pfnPresent'}  # C7c
         compute |= {'pfnClearUnorderedAccessViewUint', 'pfnClearUnorderedAccessViewFloat', 'pfnDiscardResource', 'pfnSetMarker'}  # C10
         compute |= {'pfnBeginQuery', 'pfnEndQuery', 'pfnResolveQueryData'}  # C11
+        compute |= {'pfnExecuteIndirect'}  # C14
         self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList', 'pfnCopyBufferRegion',
                                        'pfnResourceBarrier'} | setters | compute)
         for member in setters:
             self.assertIn('AGX_LIST_STATE(%s)' % member, source)
-        for consumer in ('pfnExecuteIndirect', 'pfnExecuteBundle'):
+        for consumer in ('pfnExecuteBundle',):
             self.assertIn('AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, %s)' % consumer, source)
 
     def test_c5_compute_dispatch(self):
@@ -293,7 +294,7 @@ class D3d12AbiGate(unittest.TestCase):
         view = fn('static void SetRootBufferView(')
         self.assertIn('root->parameter[index].type != type', view)
         self.assertIn('index >= root->parameters', view)
-        dispatch = fn('static VOID APIENTRY Dispatch(')
+        dispatch = fn('static void RecordDispatch(')
         self.assertIn('ResolveRoot(list, root, list->compute_root_va, list->compute_root_dwords, kAnyStage, &dispatch)', dispatch)
         resolve = fn('static UINT ResolveRoot(')
         self.assertIn('if (p.shader_register >= kSrvSlots) return 5u;', resolve)
@@ -680,6 +681,33 @@ class D3d12AbiGate(unittest.TestCase):
         q = q[:q.index('\n}\n')]
         self.assertIn('PIPE_QUERY_PIPELINE_STATISTICS_SINGLE, s', q)
         self.assertIn('(heap->Type == 1 && (type != 2u || begin))', q)  # timestamps: EndQuery only
+
+    def test_c14_execute_indirect(self):
+        # C14 invariants: only single Draw/DrawIndexed/Dispatch signatures
+        # (the Gallium indirect layouts) with a stride covering the record;
+        # argument/count placements are resource-relative (+ resource base);
+        # indexed indirect draws need index offset 0; the owner reads the
+        # count buffer on the GPU for draws and refuses it for dispatches.
+        source = SOURCE.read_text()
+        def fn(name):
+            start = source.index(name)
+            return source[start:source.index('\n}\n', start)]
+        create = fn('static HRESULT APIENTRY CreateCommandSignature(')
+        self.assertIn('static const UINT bytes[4] = {0u, 16u, 20u, 12u};', create)
+        self.assertIn('arg->NumArgumentDescs == 1', create)
+        ei = fn('static VOID APIENTRY ExecuteIndirect(')
+        self.assertIn('a->gpuva - a->heap->gpuva + args.BaseAddress.UMD.Offset', ei)
+        self.assertIn('c->gpuva - c->heap->gpuva + count.BaseAddress.UMD.Offset', ei)
+        self.assertIn('indirect && indexed && list->index_offset ? 8u', fn('static void RecordDraw('))
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        d = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerDraw('):]
+        d = d[:d.index('\n}\n')]
+        self.assertIn('indirect.indirect_draw_count = static_cast<struct pipe_resource *>(in->CountBuffer->Resource);', d)
+        self.assertIn('pipe->draw_vbo(pipe, &info, 0, in->Buffer ? &indirect : NULL, &range, 1);', d)
+        c = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerDispatch('):]
+        c = c[:c.index('\n}\n')]
+        self.assertIn('indirect->CountBuffer ||', c)
+        self.assertIn('info.indirect = static_cast<struct pipe_resource *>(indirect->Buffer->Resource);', c)
 
     def test_c8a_growing_lists(self):
         # C8a invariants: a list owns a growing command array (doubling from

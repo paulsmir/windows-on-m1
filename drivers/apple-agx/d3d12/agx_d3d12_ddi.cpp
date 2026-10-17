@@ -1499,6 +1499,16 @@ static_assert(kCbSlots == AGX_D3D12_CBV_SLOTS, "constant buffer slots of the own
 static_assert(kSrvSlots == AGX_D3D12_SRV_SLOTS, "SRV slots of the owner");
 static_assert(kSamplerSlots == AGX_D3D12_SAMPLER_SLOTS, "sampler slots of the owner");
 #endif
+/* C14: an ExecuteIndirect argument stream (args NULL = a direct command):
+ * max_count records of stride bytes at args + args_offset, limited by the
+ * UINT at count + count_offset when count is set */
+struct AgxD3d12Indirect {
+    AgxD3d12Heap *args;
+    UINT64 args_offset;
+    UINT stride, max_count;
+    AgxD3d12Heap *count;
+    UINT64 count_offset;
+};
 struct AgxD3d12Dispatch {
     AgxD3d12PipelineState *pso;
     AgxD3d12Heap *uav_heap[kUavSlots];
@@ -1520,6 +1530,7 @@ struct AgxD3d12Dispatch {
     /* C6e: samplers s# from sampler tables or static samplers */
     const struct AgxD3d12SamplerDescriptor *sampler[kSamplerSlots];
     const D3D12DDI_STATIC_SAMPLER *static_sampler[kSamplerSlots];
+    AgxD3d12Indirect indirect; /* C14 (dispatch commands only) */
 };
 /* C6a: a recorded ClearRenderTargetView (the RTV read at record time) */
 static constexpr UINT kClearRects = 8;
@@ -1566,6 +1577,7 @@ struct AgxD3d12Draw {
     UINT64 index_offset;
     UINT index_size;
     INT base_vertex;
+    AgxD3d12Indirect indirect; /* C14 */
 };
 /* C6f: a recorded ClearDepthStencilView */
 struct AgxD3d12ClearDepth {
@@ -2537,9 +2549,8 @@ static UINT ResolveRoot(AgxD3d12CommandList *list, const AgxD3d12RootSignature *
  * CBVs and root constants (C5b), CBV/UAV descriptor tables (C5c); root SRVs
  * and SRV/sampler ranges refuse the dispatch with a receipt naming the
  * reason. */
-static VOID APIENTRY Dispatch(D3D12DDI_HCOMMANDLIST handle, UINT x, UINT y, UINT z) {
-    AgxD3d12CommandList *list = ListOf(handle);
-    if (!list || !x || !y || !z) return; /* an empty grid does nothing */
+static void RecordDispatch(AgxD3d12CommandList *list, UINT x, UINT y, UINT z, const AgxD3d12Indirect *indirect) {
+    if (!list || (!indirect && (!x || !y || !z))) return; /* an empty grid does nothing */
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     AgxD3d12PipelineState *pso = list->pso;
     const AgxD3d12RootSignature *root = list->compute_root;
@@ -2557,22 +2568,27 @@ static VOID APIENTRY Dispatch(D3D12DDI_HCOMMANDLIST handle, UINT x, UINT y, UINT
     dispatch.groups[0] = x;
     dispatch.groups[1] = y;
     dispatch.groups[2] = z;
+    if (indirect) dispatch.indirect = *indirect;
     AgxD3d12Command *slot = AppendCommand(list);
     if (!slot) return;
     AgxD3d12Command &command = *slot;
     command.kind = kCommandDispatch;
     command.dispatch = dispatch;
 #else
+    (void)indirect;
     ListError(list, E_NOTIMPL);
 #endif
+}
+static VOID APIENTRY Dispatch(D3D12DDI_HCOMMANDLIST handle, UINT x, UINT y, UINT z) {
+    RecordDispatch(ListOf(handle), x, y, z, nullptr);
 }
 /* C6b: DrawInstanced snapshots the graphics state; C6c resolves the
  * graphics root signature for the VS and the PS. Geometry/tessellation
  * stages, graphics UAVs, samplers and depth-stencil views refuse with
  * receipt measure-d3d12-draw {reason}. */
 static void RecordDraw(AgxD3d12CommandList *list, UINT vertices, UINT instances, UINT start_vertex, INT base_vertex,
-                       UINT start_instance, bool indexed) {
-    if (!list || !vertices || !instances) return;
+                       UINT start_instance, bool indexed, const AgxD3d12Indirect *indirect = nullptr) {
+    if (!list || (!indirect && (!vertices || !instances))) return;
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     AgxD3d12PipelineState *pso = list->pso;
     UINT refusal = !pso || !pso->vs_dwords ? 1u
@@ -2580,6 +2596,7 @@ static void RecordDraw(AgxD3d12CommandList *list, UINT vertices, UINT instances,
                            pso->desc.hDomainShader.pDrvPrivate ? 4u
                  : (!list->rtvs || !list->rtv[0].heap) && list->dsv.kind != kDescriptorDsv ? 5u
                  : indexed && !list->index_heap ? 6u
+                 : indirect && indexed && list->index_offset ? 8u /* C14: Gallium takes the start index from the arguments */
                  : list->commands >= kListCommands ? 3u : 0u;
     AgxD3d12Dispatch vs_bind = {}, ps_bind = {};
     if (!refusal) refusal = ResolveRoot(list, list->graphics_root, list->graphics_root_va, list->graphics_root_dwords,
@@ -2620,7 +2637,9 @@ static void RecordDraw(AgxD3d12CommandList *list, UINT vertices, UINT instances,
         draw.index_size = list->index_size;
         draw.base_vertex = base_vertex;
     }
+    if (indirect) draw.indirect = *indirect;
 #else
+    (void)indirect;
     (void)start_vertex;
     (void)base_vertex;
     (void)start_instance;
@@ -2638,6 +2657,69 @@ static VOID APIENTRY DrawIndexedInstanced(D3D12DDI_HCOMMANDLIST handle, UINT ind
                                           INT base_vertex, UINT start_instance) {
     RecordDraw(static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate), indices, instances, start_index, base_vertex,
                start_instance, true);
+}
+/* C14 (D3D12-C14-execute-indirect.md): command signatures of one Draw,
+ * DrawIndexed or Dispatch argument -- the D3D12 argument records are the
+ * Gallium indirect layouts; other argument types refuse. */
+struct AgxD3d12CommandSignature {
+    UINT kind; /* 0 refused, 1 draw, 2 draw indexed, 3 dispatch */
+    UINT stride;
+};
+static SIZE_T APIENTRY CalcPrivateCommandSignatureSize(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_COMMAND_SIGNATURE_0001 *) {
+    return sizeof(AgxD3d12CommandSignature);
+}
+static HRESULT APIENTRY CreateCommandSignature(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_COMMAND_SIGNATURE_0001 *arg,
+                                               D3D12DDI_HCOMMANDSIGNATURE handle) {
+    auto *signature = static_cast<AgxD3d12CommandSignature *>(handle.pDrvPrivate);
+    if (!signature || !arg) return E_INVALIDARG;
+    memset(signature, 0, sizeof(*signature));
+    const UINT type = arg->NumArgumentDescs == 1 && arg->pArgumentDescs ? static_cast<UINT>(arg->pArgumentDescs[0].Type) : ~0u;
+    const UINT kind = type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_DRAW ? 1u
+                    : type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED ? 2u
+                    : type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_DISPATCH ? 3u : 0u;
+    static const UINT bytes[4] = {0u, 16u, 20u, 12u};
+    const HRESULT hr = kind && arg->ByteStride >= bytes[kind] ? S_OK : E_NOTIMPL;
+    if (SUCCEEDED(hr)) {
+        signature->kind = kind;
+        signature->stride = arg->ByteStride;
+    }
+    const UINT receipt[] = {arg->NumArgumentDescs, type, arg->ByteStride};
+    AdmissionUmdDiagnostic("measure-d3d12-command-signature", hr, receipt, 3);
+    return hr;
+}
+static VOID APIENTRY DestroyCommandSignature(D3D12DDI_HDEVICE, D3D12DDI_HCOMMANDSIGNATURE handle) {
+    if (handle.pDrvPrivate) memset(handle.pDrvPrivate, 0, sizeof(AgxD3d12CommandSignature));
+}
+static VOID APIENTRY ExecuteIndirect(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMANDSIGNATURE signature_handle, UINT max_count,
+                                     D3D12DDIARG_BUFFER_PLACEMENT args, D3D12DDIARG_BUFFER_PLACEMENT count) {
+    AgxD3d12CommandList *list = ListOf(handle);
+    if (!list) return;
+    const auto *signature = static_cast<const AgxD3d12CommandSignature *>(signature_handle.pDrvPrivate);
+    const auto *a = static_cast<const AgxD3d12Resource *>(args.BaseAddress.UMD.hResource.pDrvPrivate);
+    const auto *c = static_cast<const AgxD3d12Resource *>(count.BaseAddress.UMD.hResource.pDrvPrivate);
+    const UINT refusal = !signature || !signature->kind ? 1u
+                       : !a || !a->heap || a->type != D3D12DDI_RT_BUFFER ? 2u
+                       : c && (!c->heap || c->type != D3D12DDI_RT_BUFFER) ? 3u : 0u;
+    const UINT receipt[] = {refusal, signature ? signature->kind : 0u, max_count, c ? 1u : 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-execute-indirect", refusal ? E_INVALIDARG : S_OK, receipt, 4);
+    if (refusal) {
+        ListError(list, E_INVALIDARG);
+        return;
+    }
+    if (!max_count) return;
+    AgxD3d12Indirect indirect = {};
+    indirect.args = a->heap;
+    indirect.args_offset = a->gpuva - a->heap->gpuva + args.BaseAddress.UMD.Offset;
+    indirect.stride = signature->stride;
+    indirect.max_count = max_count;
+    if (c) {
+        indirect.count = c->heap;
+        indirect.count_offset = c->gpuva - c->heap->gpuva + count.BaseAddress.UMD.Offset;
+    }
+    if (signature->kind == 3u)
+        RecordDispatch(list, 0, 0, 0, &indirect);
+    else
+        RecordDraw(list, 0, 0, 0, 0, 0, signature->kind == 2u, &indirect);
 }
 /* Between copies on one queue the owner's libagx copies already carry
  * AGX_BARRIER_ALL and execution completes before the next list; transitions
@@ -2758,14 +2840,33 @@ static void OwnerBindings(const AgxD3d12Dispatch &b, AgxD3d12OwnerBindings *o) {
 /* Replay of the large commands in their own (non-inlined) frames, so the
  * owner-binding records of one command kind are live at a time
  * (STACK_FRAMES gate: EXP1369 build measured 12944 bytes before this). */
+/* C14: the owner record of an indirect argument stream */
+static void OwnerIndirect(const AgxD3d12Indirect &in, AGX_D3D12_BUFFER *args, AGX_D3D12_BUFFER *count, AGX_D3D12_INDIRECT *out) {
+    memset(out, 0, sizeof(*out));
+    if (!in.args) return;
+    *args = HeapBuffer(in.args);
+    out->Buffer = args;
+    out->Offset = in.args_offset;
+    out->Stride = in.stride;
+    out->MaxCount = in.max_count;
+    if (in.count) {
+        *count = HeapBuffer(in.count);
+        out->CountBuffer = count;
+        out->CountOffset = in.count_offset;
+    }
+}
 static __declspec(noinline) HRESULT ReplayDispatch(AGX_D3D12_OWNER *owner, const AgxD3d12Dispatch &dispatch) {
     AgxD3d12OwnerBindings bind;
     OwnerBindings(dispatch, &bind);
+    AGX_D3D12_BUFFER args = {}, count = {};
+    AGX_D3D12_INDIRECT indirect;
+    OwnerIndirect(dispatch.indirect, &args, &count, &indirect);
     return AgxD3d12OwnerDispatch(owner, &dispatch.pso->compute, bind.uavs, bind.cbvs, bind.srvs, bind.samplers,
-                                 dispatch.groups[0], dispatch.groups[1], dispatch.groups[2]);
+                                 dispatch.groups[0], dispatch.groups[1], dispatch.groups[2],
+                                 indirect.Buffer ? &indirect : nullptr);
 }
 struct AgxD3d12DrawScratch {
-    AGX_D3D12_BUFFER rtv_textures[8], vb_buffers[kVertexBuffers], dsv_texture, index_buffer;
+    AGX_D3D12_BUFFER rtv_textures[8], vb_buffers[kVertexBuffers], dsv_texture, index_buffer, indirect_args, indirect_count;
     AGX_D3D12_DRAW draw;
     AgxD3d12OwnerBindings vs_bind, ps_bind;
 };
@@ -2839,6 +2940,7 @@ static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const Agx
     memcpy(draw.Ps.Samplers, ps_bind.samplers, sizeof(draw.Ps.Samplers));
     memcpy(draw.Vs.Uavs, vs_bind.uavs, sizeof(draw.Vs.Uavs)); /* C13 */
     memcpy(draw.Ps.Uavs, ps_bind.uavs, sizeof(draw.Ps.Uavs));
+    OwnerIndirect(d.indirect, &scratch->indirect_args, &scratch->indirect_count, &draw.Indirect); /* C14 */
     const HRESULT hr = AgxD3d12OwnerDraw(owner, &draw);
     HeapFree(GetProcessHeap(), 0, scratch);
     return hr;
@@ -3034,9 +3136,9 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateQueryHeapSize, CalcPrivateQueryHeapSize);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateQueryHeap, CreateQueryHeap);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyQueryHeap, DestroyQueryHeap);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandSignatureSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandSignatureSize));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandSignature, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandSignature));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandSignature, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandSignature));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandSignatureSize, CalcPrivateCommandSignatureSize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandSignature, CreateCommandSignature);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandSignature, DestroyCommandSignature);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckResourceVirtualAddress, CheckResourceVirtualAddress);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckResourceAllocationInfo, CheckResourceAllocationInfo);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckSubresourceInfo, CheckSubresourceInfo);
@@ -3066,7 +3168,7 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyBufferRegion, CopyBufferRegion);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceResolveSubresource, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceResolveSubresource));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteBundle, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteBundle));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteIndirect, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteIndirect));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteIndirect, ExecuteIndirect);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceBarrier, ResourceBarrier);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnBlt, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnBlt));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnPresent, Present);
