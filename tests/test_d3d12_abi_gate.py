@@ -513,6 +513,22 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('fb.zsbuf.texture = texture;', owner)
         self.assertIn('->clear_depth_stencil(', owner)
 
+    def test_c8a_growing_lists(self):
+        # C8a invariants: a list owns a growing command array (doubling from
+        # 64), every recorder appends through it and stops with a list error
+        # when the heap refuses; Reset keeps the capacity; DestroyCommandList
+        # frees the array.
+        source = SOURCE.read_text()
+        def fn(name):
+            start = source.index(name)
+            return source[start:source.index('\n}\n', start)]
+        append = fn('static AgxD3d12Command *AppendCommand(')
+        self.assertIn('list->capacity ? list->capacity * 2u : 64u', append)
+        self.assertIn('ListError(list, E_OUTOFMEMORY);', append)
+        self.assertNotIn('list->command[list->commands++];\n', source.replace(append, ''))
+        self.assertIn('HeapFree(GetProcessHeap(), 0, list->command);', fn('static VOID APIENTRY DestroyCommandList('))
+        self.assertNotIn('capacity', fn('static VOID APIENTRY ResetCommandList('))
+
     def test_package_and_receipts(self):
         package = ROOT / 'drivers/apple-agx/render-admission/umd'
         exports = re.findall(r'(?m)^\s*(OpenAdapter\w+)\s*$',

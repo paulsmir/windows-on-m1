@@ -1495,7 +1495,9 @@ struct AgxD3d12Command {
         AgxD3d12ClearDepth clear_depth;
     };
 };
-static constexpr UINT kListCommands = 64;
+/* C8a: commands live in a growing process-heap array owned by the list
+ * (capacity kept across Reset, freed with the list) */
+static constexpr UINT kListCommands = 1u << 20; /* recording limit per list */
 struct AgxD3d12CommandList {
     D3D12DDI_HRTCOMMANDLIST runtime;
     UINT type;
@@ -1525,7 +1527,8 @@ struct AgxD3d12CommandList {
     AgxD3d12Heap *index_heap;
     UINT64 index_offset;
     UINT index_size;
-    AgxD3d12Command command[kListCommands];
+    AgxD3d12Command *command;
+    UINT capacity;
 };
 /* EXP1363: creating/resetting a list makes the runtime set its default
  * state (topology, viewports, scissors, blend factor, stencil ref, PSO,
@@ -1562,7 +1565,13 @@ static HRESULT APIENTRY CreateCommandList(D3D12DDI_HDEVICE handle, const D3D12DD
     AdmissionUmdDiagnostic("measure-d3d12-command-list", S_OK, receipt, 2);
     return S_OK;
 }
-static VOID APIENTRY DestroyCommandList(D3D12DDI_HDEVICE, D3D12DDI_HCOMMANDLIST) {}
+static VOID APIENTRY DestroyCommandList(D3D12DDI_HDEVICE, D3D12DDI_HCOMMANDLIST handle) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    if (!list || !list->command) return;
+    HeapFree(GetProcessHeap(), 0, list->command);
+    list->command = nullptr;
+    list->capacity = list->commands = 0;
+}
 static VOID APIENTRY CloseCommandList(D3D12DDI_HCOMMANDLIST handle) {
     auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
     if (list) list->closed = 1;
@@ -1599,6 +1608,23 @@ static void ListError(AgxD3d12CommandList *list, HRESULT error) {
     if (list && list->device && list->device->callbacks && list->device->callbacks->pfnSetCommandListErrorCb)
         list->device->callbacks->pfnSetCommandListErrorCb(list->runtime, error);
 }
+/* C8a: the next command slot, growing the array by doubling; NULL (and a
+ * list error) when the heap refuses. */
+static AgxD3d12Command *AppendCommand(AgxD3d12CommandList *list) {
+    if (list->commands == list->capacity) {
+        const UINT capacity = list->capacity ? list->capacity * 2u : 64u;
+        void *grown = list->command
+                          ? HeapReAlloc(GetProcessHeap(), 0, list->command, capacity * sizeof(AgxD3d12Command))
+                          : HeapAlloc(GetProcessHeap(), 0, capacity * sizeof(AgxD3d12Command));
+        if (!grown) {
+            ListError(list, E_OUTOFMEMORY);
+            return nullptr;
+        }
+        list->command = static_cast<AgxD3d12Command *>(grown);
+        list->capacity = capacity;
+    }
+    return &list->command[list->commands++];
+}
 static VOID APIENTRY CopyBufferRegion(D3D12DDI_HCOMMANDLIST handle, D3D12DDIARG_BUFFER_PLACEMENT dst,
                                       D3D12DDIARG_BUFFER_PLACEMENT src, UINT64 bytes) {
     auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
@@ -1612,7 +1638,9 @@ static VOID APIENTRY CopyBufferRegion(D3D12DDI_HCOMMANDLIST handle, D3D12DDIARG_
         ListError(list, E_INVALIDARG);
         return;
     }
-    AgxD3d12Command &command = list->command[list->commands++];
+    AgxD3d12Command *slot = AppendCommand(list);
+    if (!slot) return;
+    AgxD3d12Command &command = *slot;
     command.kind = kCommandCopy;
     command.copy = {d->heap, dst_offset, r->heap, src_offset, bytes};
 }
@@ -1629,7 +1657,9 @@ static VOID APIENTRY ClearRenderTargetView(D3D12DDI_HCOMMANDLIST handle, D3D12DD
         ListError(list, E_INVALIDARG);
         return;
     }
-    AgxD3d12Command &command = list->command[list->commands++];
+    AgxD3d12Command *slot = AppendCommand(list);
+    if (!slot) return;
+    AgxD3d12Command &command = *slot;
     command.kind = kCommandClear;
     command.clear.rtv = *rtv;
     memcpy(command.clear.color, color, sizeof(command.clear.color));
@@ -1654,7 +1684,9 @@ static VOID APIENTRY ClearDepthStencilView(D3D12DDI_HCOMMANDLIST handle, D3D12DD
         ListError(list, E_INVALIDARG);
         return;
     }
-    AgxD3d12Command &command = list->command[list->commands++];
+    AgxD3d12Command *slot = AppendCommand(list);
+    if (!slot) return;
+    AgxD3d12Command &command = *slot;
     command.kind = kCommandClearDepth;
     command.clear_depth.dsv = *dsv;
     command.clear_depth.flags = flags & 3u;
@@ -1755,7 +1787,9 @@ static VOID APIENTRY CopyTextureRegion(D3D12DDI_HCOMMANDLIST handle, const D3D12
         ListError(list, refusal == 3u ? E_INVALIDARG : E_NOTIMPL);
         return;
     }
-    AgxD3d12Command &command = list->command[list->commands++];
+    AgxD3d12Command *slot = AppendCommand(list);
+    if (!slot) return;
+    AgxD3d12Command &command = *slot;
     command.kind = kCommandTextureCopy;
     command.texture_copy = copy;
 }
@@ -2173,7 +2207,9 @@ static VOID APIENTRY Dispatch(D3D12DDI_HCOMMANDLIST handle, UINT x, UINT y, UINT
     dispatch.groups[0] = x;
     dispatch.groups[1] = y;
     dispatch.groups[2] = z;
-    AgxD3d12Command &command = list->command[list->commands++];
+    AgxD3d12Command *slot = AppendCommand(list);
+    if (!slot) return;
+    AgxD3d12Command &command = *slot;
     command.kind = kCommandDispatch;
     command.dispatch = dispatch;
 #else
@@ -2207,7 +2243,9 @@ static void RecordDraw(AgxD3d12CommandList *list, UINT vertices, UINT instances,
         ListError(list, refusal == 3u ? E_INVALIDARG : E_NOTIMPL);
         return;
     }
-    AgxD3d12Command &command = list->command[list->commands++];
+    AgxD3d12Command *slot = AppendCommand(list);
+    if (!slot) return;
+    AgxD3d12Command &command = *slot;
     command.kind = kCommandDraw;
     AgxD3d12Draw &draw = command.draw;
     draw.pso = pso;
