@@ -1,8 +1,8 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-17T18:40Z (read this first)
+## Current as of 2026-10-17T19:10Z (read this first)
 
-Installed after recovery: none (rec1366h). Integration HEAD 2bd82a4f.
+Installed after recovery: none (rec1367h). Integration HEAD 8a704b45.
 - PROVEN (EXP1355): D3D12CreateDevice S_OK at FL 11_0 on the AGX adapter
   (APPLE_AGX_D3D12=1 profile only; ordinary processes still E_NOTIMPL).
   The 26100 runtime's device initialisation, measured one refused DDI per
@@ -47,11 +47,17 @@ Installed after recovery: none (rec1366h). Integration HEAD 2bd82a4f.
   binds ONE Win32 generation per kernel device (callbacks.c), so the owner
   and every queue context carry the device's generation (EXP1365 failed
   without it).
-- BUILT, queued: EXP1367 = C5 compute PSO (DXBC->NIR at first dispatch) +
-  root UAV + Dispatch (13c34dbf, package 77fc0b9e, probe b1c6a77e). C5b
-  root constants + root CBV committed (91ef0741, probe ab70174f) for the run
-  after it; C5c CBV/UAV descriptor tables + views + CopyDescriptors in
-  progress. Design: investigation/analysis/D3D12-C5-compute.md.
+- PROVEN (EXP1367): D3D12 C5 -- compute PSO (DXBC -> NIR on the owner at
+  the first dispatch) + root UAV + Dispatch; readback 3i+7 bad=0.
+- QUEUED: EXP1368 (package 2e45ed9d, probe a240db07) = C5b root
+  constants/CBV, C5c CBV/UAV tables + views + CopyDescriptors, C5d buffer
+  SRVs, C6a 2D textures/RTV/clear/CopyTextureRegion, C6b graphics PSO +
+  DrawInstanced (first D3D12 draw); one PASS line per step.
+- COMMITTED after it: C6c graphics root bindings per stage (b691b003), C6d
+  index buffers + DrawIndexedInstanced (5a101ab3); C6e texture SRVs +
+  samplers in progress. Design: investigation/analysis/D3D12-C5-compute.md,
+  D3D12-C6-graphics.md. Build gate learned: no u_format.h inline helpers in
+  the UMD (CRT asserts fail check_no_crt_asserts.py; 5726d41f).
 - Offline tool: guest d3d12core.dll copy + ARM64 disassembly in the
   scratchpad (d3d12core/dis.txt) for runtime validation strings.
 
