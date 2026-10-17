@@ -121,3 +121,21 @@ measure-d3d12-dispatch {0, 256, 1, 1, 1}, measure-d3d12-owner-submit
   CBV k = (7, 3)}, CopyDescriptorsSimple to a shader-visible heap,
   SetDescriptorHeaps + table {UAV u0, CBV b0 APPEND}; PASS = 7i + 3,
   Signal(6).
+
+## C5d: buffer SRVs
+
+- WINDOWS: root SRVs (PFND3D12DDI_SET_ROOT_BUFFER_VIEW, raw/structured,
+  no size) and SRV ranges in tables; pfnCreateShaderResourceView_0002
+  buffer views (FirstElement/NumElements, StructureByteStride or RAW).
+- AGX/ASAHI: create_sampler_view(PIPE_BUFFER, R32_UINT, u.buf offset/size)
+  + set_sampler_views(MESA_SHADER_COMPUTE); agx_set_sampler_views keeps its
+  own references, so views are released after unbinding. dxbc_to_nir reads
+  a raw/structured SRV t# as texel buffer # of 32-bit words (the D3D11
+  path's srv_10 conversion).
+- TRANSLATION: root SRV VA -> (owner heap, offset), to the heap end; SRV
+  descriptor record {heap, offset, bytes}; t0..t15; the owner creates the
+  views per dispatch. Typed buffer and texture SRVs: null descriptor +
+  measure-d3d12-srv {reason}; sampler ranges still refuse (reason 4).
+- Checkpoint: probe C5D (agx_d3d12_probe_cs_srv.hlsl): root SRV t0 raw
+  A = 3i, table {SRV t1 structured B = i + 100} written directly into the
+  shader-visible heap; PASS = 5i + 200, Signal(7).

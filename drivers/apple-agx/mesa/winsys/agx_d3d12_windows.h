@@ -76,12 +76,22 @@ typedef struct {
   const void *Data;
   unsigned Bytes;
 } AGX_D3D12_CBV;
+/* C5d: a raw/structured buffer SRV t#, bound as an R32_UINT texel buffer
+ * (the dxbc_to_nir convention: one 32-bit word per texel); Bytes 0 = to the
+ * buffer end. */
+#define AGX_D3D12_SRV_SLOTS 16
+typedef struct {
+  const AGX_D3D12_BUFFER *Buffer;
+  unsigned long long Offset;
+  unsigned long long Bytes;
+} AGX_D3D12_SRV;
 /* Records one dispatch of x*y*z groups; its writes are ordered before every
  * later recorded command (D3D12 UAV and transition barriers between them
  * need no further AGX work: the launch ends with a full memory barrier). */
 HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *Owner, const AGX_D3D12_COMPUTE *Compute,
                               const AGX_D3D12_UAV Uavs[AGX_D3D12_UAV_SLOTS],
-                              const AGX_D3D12_CBV Cbvs[AGX_D3D12_CBV_SLOTS], unsigned X, unsigned Y, unsigned Z);
+                              const AGX_D3D12_CBV Cbvs[AGX_D3D12_CBV_SLOTS],
+                              const AGX_D3D12_SRV Srvs[AGX_D3D12_SRV_SLOTS], unsigned X, unsigned Y, unsigned Z);
 /* Submits the recorded work and waits for it (C4b orders it before the
  * runtime's later queue signal by completing it first). */
 HRESULT AgxD3d12OwnerSubmitAndWait(AGX_D3D12_OWNER *Owner);

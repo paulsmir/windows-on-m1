@@ -184,9 +184,8 @@ class D3d12AbiGate(unittest.TestCase):
                        'pfnDestroyDescriptorHeap', 'pfnGetCPUDescriptorHandleForHeapStart',
                        'pfnGetGPUDescriptorHandleForHeapStart'):
             self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
-        # C5c implements CBV and buffer UAV views (test_c5c_descriptor_tables)
-        for member in ('pfnCreateShaderResourceView', 'pfnCreateSampler', 'pfnCreateRenderTargetView',
-                       'pfnCreateDepthStencilView'):
+        # C5c/C5d implement CBV and buffer UAV/SRV views (test_c5c_descriptor_tables)
+        for member in ('pfnCreateSampler', 'pfnCreateRenderTargetView', 'pfnCreateDepthStencilView'):
             self.assertIn('AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s)' % member, source)
         heap = source[source.index('static HRESULT APIENTRY CreateDescriptorHeap('):]
         heap = heap[:heap.index('\n}\n')]
@@ -247,7 +246,7 @@ class D3d12AbiGate(unittest.TestCase):
         compute = {'pfnSetPipelineState', 'pfnSetComputeRootSignature', 'pfnSetComputeRootUnorderedAccessView',
                    'pfnDispatch', 'pfnClearRootArguments', 'pfnSetComputeRoot32BitConstant',
                    'pfnSetComputeRoot32BitConstants', 'pfnSetComputeRootConstantBufferView',
-                   'pfnSetComputeRootDescriptorTable'}
+                   'pfnSetComputeRootDescriptorTable', 'pfnSetComputeRootShaderResourceView'}
         self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList', 'pfnCopyBufferRegion',
                                        'pfnResourceBarrier'} | setters | compute)
         for member in setters:
@@ -280,7 +279,7 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('root->parameter[index].type != type', view)
         self.assertIn('index >= root->parameters', view)
         dispatch = fn('static VOID APIENTRY Dispatch(')
-        self.assertIn('refusal = 4u; /* root SRV */', dispatch)
+        self.assertIn('if (p.shader_register >= kSrvSlots) refusal = 5u;', dispatch)
         self.assertIn('refusal = BindTable(list, root, p, list->compute_root_va[i], &dispatch);', dispatch)
         self.assertIn('if (p.shader_register >= kUavSlots) refusal = 5u;', dispatch)
         self.assertIn('HeapAt(list->device, list->compute_root_va[i]', dispatch)
@@ -323,7 +322,8 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('D3D12DDI_DESCRIPTOR_RANGE_OFFSET_APPEND', create)
         self.assertIn('? next : in.OffsetInDescriptorsFromTableStart', create)
         table = fn('static UINT BindTable(')
-        self.assertIn('return 4u;', table)
+        self.assertIn('return 4u; /* sampler */', table)
+        self.assertIn('uav ? kUavSlots : srv ? kSrvSlots : kCbSlots', table)
         self.assertIn('range.space || range.base_register >= slots', table)
         self.assertIn('at + sizeof(AgxD3d12Descriptor) > heap->bytes', table)
         execute = fn('static VOID APIENTRY ExecuteCommandLists(')
@@ -337,8 +337,15 @@ class D3d12AbiGate(unittest.TestCase):
         cbv = fn('static VOID APIENTRY CreateConstantBufferView(')
         self.assertIn('HeapAt(device, desc->BufferLocation, &offset)', cbv)
         self.assertIn('static_cast<SIZE_T>(count) * DescriptorBytes(type)', fn('static VOID APIENTRY CopyDescriptorsSimple('))
+        # C5d: buffer SRVs: raw (4-byte words) or structured; typed and
+        # texture SRVs refuse with a receipt
+        srv = fn('static VOID APIENTRY CreateShaderResourceView(')
+        for reason in ('!= D3D12DDI_RD_BUFFER ? 4u', '!stride ? 5u', 'bytes > resource->bytes - offset'):
+            self.assertIn(reason, srv)
+        self.assertIn('"measure-d3d12-srv"', srv)
+        self.assertIn('view->kind == kDescriptorSrvBuffer', execute)
         for member in ('pfnCreateConstantBufferView', 'pfnCreateUnorderedAccessView', 'pfnCopyDescriptors',
-                       'pfnCopyDescriptorsSimple'):
+                       'pfnCopyDescriptorsSimple', 'pfnCreateShaderResourceView'):
             self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
 
     def test_package_and_receipts(self):

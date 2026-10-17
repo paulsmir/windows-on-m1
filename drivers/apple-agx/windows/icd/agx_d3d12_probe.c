@@ -8,6 +8,7 @@
 #include "agx_d3d12_probe_cs.h"
 #include "agx_d3d12_probe_cs_cb.h"
 #include "agx_d3d12_probe_cs_table.h"
+#include "agx_d3d12_probe_cs_srv.h"
 
 /* C2 checkpoint (D3D12-C-implementation-plan.md): a committed upload buffer
  * and a Map/write/Unmap/Map/read round trip. Runs only after the device
@@ -452,6 +453,125 @@ static int compute_table(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     return !(SUCCEEDED(hr) && bad == 0);
 }
 
+/* C5d (D3D12-C5-compute.md): buffer SRVs -- a root SRV t0 (raw, A[i] = 3i)
+ * and a table {SRV t1, structured uint, B[i] = i + 100} written directly
+ * into the shader-visible heap; agx_d3d12_probe_cs_srv.hlsl writes
+ * A[i] + 2 B[i] = 5i + 200. */
+static int compute_srv(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence) {
+    D3D12_DESCRIPTOR_RANGE range = {D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1, 0, 0};
+    D3D12_ROOT_PARAMETER parameters[3] = {{D3D12_ROOT_PARAMETER_TYPE_UAV}, {D3D12_ROOT_PARAMETER_TYPE_SRV},
+                                          {D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE}};
+    D3D12_ROOT_SIGNATURE_DESC root_desc = {3, parameters};
+    D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE};
+    D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {0};
+    ID3DBlob *blob = NULL, *errors = NULL;
+    ID3D12RootSignature *root = NULL;
+    ID3D12PipelineState *pso = NULL;
+    ID3D12DescriptorHeap *heap = NULL;
+    ID3D12Resource *uav = uav_buffer(device);
+    ID3D12Resource *a = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+    ID3D12Resource *b = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+    ID3D12Resource *readback = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12GraphicsCommandList *list = NULL;
+    UINT *dwords = NULL;
+    unsigned bad = 16384;
+    UINT64 value = 0;
+    parameters[1].Descriptor.ShaderRegister = 0;
+    parameters[2].DescriptorTable.NumDescriptorRanges = 1;
+    parameters[2].DescriptorTable.pDescriptorRanges = &range;
+    HRESULT hr = uav && a && b && readback ? S_OK : E_FAIL;
+    if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(a, 0, NULL, (void **)&dwords);
+    if (SUCCEEDED(hr)) {
+        for (unsigned i = 0; i < 16384; ++i) dwords[i] = 3u * i;
+        ID3D12Resource_Unmap(a, 0, NULL);
+        hr = ID3D12Resource_Map(b, 0, NULL, (void **)&dwords);
+    }
+    if (SUCCEEDED(hr)) {
+        for (unsigned i = 0; i < 16384; ++i) dwords[i] = i + 100u;
+        ID3D12Resource_Unmap(b, 0, NULL);
+        hr = ID3D12Device_CreateDescriptorHeap(device, &heap_desc, &IID_ID3D12DescriptorHeap, (void **)&heap);
+    }
+    D3D12_GPU_DESCRIPTOR_HANDLE gpu_start = {0};
+    if (SUCCEEDED(hr)) {
+        D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc = {DXGI_FORMAT_UNKNOWN, D3D12_SRV_DIMENSION_BUFFER,
+                                                    D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING};
+        D3D12_CPU_DESCRIPTOR_HANDLE cpu_start;
+        ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(heap, &cpu_start);
+        ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(heap, &gpu_start);
+        srv_desc.Buffer.NumElements = 16384;
+        srv_desc.Buffer.StructureByteStride = 4;
+        ID3D12Device_CreateShaderResourceView(device, b, &srv_desc, cpu_start);
+        hr = D3D12SerializeRootSignature(&root_desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &errors);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateRootSignature(device, 0, ID3D10Blob_GetBufferPointer(blob),
+                                              ID3D10Blob_GetBufferSize(blob), &IID_ID3D12RootSignature,
+                                              (void **)&root);
+    printf("C5D CreateRootSignature hr=0x%08lx\n", (unsigned long)hr);
+    if (SUCCEEDED(hr)) {
+        pso_desc.pRootSignature = root;
+        pso_desc.CS.pShaderBytecode = g_agx_d3d12_probe_cs_srv;
+        pso_desc.CS.BytecodeLength = sizeof(g_agx_d3d12_probe_cs_srv);
+        hr = ID3D12Device_CreateComputePipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
+        printf("C5D CreateComputePipelineState hr=0x%08lx\n", (unsigned long)hr);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                 &IID_ID3D12CommandAllocator, (void **)&allocator);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, pso,
+                                            &IID_ID3D12GraphicsCommandList, (void **)&list);
+    if (SUCCEEDED(hr)) {
+        D3D12_RESOURCE_BARRIER barrier = {D3D12_RESOURCE_BARRIER_TYPE_TRANSITION};
+        barrier.Transition.pResource = uav;
+        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+        ID3D12GraphicsCommandList_SetDescriptorHeaps(list, 1, &heap);
+        ID3D12GraphicsCommandList_SetComputeRootSignature(list, root);
+        ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(list, 0, ID3D12Resource_GetGPUVirtualAddress(uav));
+        ID3D12GraphicsCommandList_SetComputeRootShaderResourceView(list, 1, ID3D12Resource_GetGPUVirtualAddress(a));
+        ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(list, 2, gpu_start);
+        ID3D12GraphicsCommandList_Dispatch(list, 256, 1, 1);
+        ID3D12GraphicsCommandList_ResourceBarrier(list, 1, &barrier);
+        ID3D12GraphicsCommandList_CopyBufferRegion(list, readback, 0, uav, 0, 65536);
+        hr = ID3D12GraphicsCommandList_Close(list);
+        printf("C5D record+close hr=0x%08lx\n", (unsigned long)hr);
+    }
+    if (SUCCEEDED(hr)) {
+        ID3D12CommandList *lists[] = {(ID3D12CommandList *)list};
+        ID3D12CommandQueue_ExecuteCommandLists(queue, 1, lists);
+        hr = ID3D12CommandQueue_Signal(queue, fence, 7);
+        for (int i = 0; i < 300 && (value = ID3D12Fence_GetCompletedValue(fence)) < 7; ++i) Sleep(10);
+        printf("C5D execute+signal hr=0x%08lx completed %llu\n", (unsigned long)hr, (unsigned long long)value);
+    }
+    if (SUCCEEDED(hr) && value == 7) {
+        D3D12_RANGE all = {0, 65536};
+        dwords = NULL;
+        hr = ID3D12Resource_Map(readback, 0, &all, (void **)&dwords);
+        if (SUCCEEDED(hr) && dwords) {
+            bad = 0;
+            for (unsigned i = 0; i < 16384; ++i) bad += dwords[i] != i * 5u + 200u;
+            printf("C5D readback bad=%u first=%u,%u last=%u\n", bad, dwords[0], dwords[1], dwords[16383]);
+            ID3D12Resource_Unmap(readback, 0, NULL);
+        }
+    }
+    printf("AGX_D3D12_C5D: %s\n", SUCCEEDED(hr) && value == 7 && bad == 0 ? "PASS" : "FAIL");
+    if (list) ID3D12GraphicsCommandList_Release(list);
+    if (allocator) ID3D12CommandAllocator_Release(allocator);
+    if (pso) ID3D12PipelineState_Release(pso);
+    if (root) ID3D12RootSignature_Release(root);
+    if (errors) ID3D10Blob_Release(errors);
+    if (blob) ID3D10Blob_Release(blob);
+    if (heap) ID3D12DescriptorHeap_Release(heap);
+    if (readback) ID3D12Resource_Release(readback);
+    if (b) ID3D12Resource_Release(b);
+    if (a) ID3D12Resource_Release(a);
+    if (uav) ID3D12Resource_Release(uav);
+    return !(SUCCEEDED(hr) && bad == 0);
+}
+
 /* C3a (D3D12-C3-queue-fences.md): a direct queue, a fence and one Signal;
  * each step prints its HRESULT so the receipts name the DDIs the runtime
  * needs. */
@@ -497,8 +617,9 @@ static int queue_fence_signal(ID3D12Device *device) {
             }
             printf("AGX_D3D12_C4A: %s\n", SUCCEEDED(c4) && value == 2 ? "PASS" : "FAIL");
             if (SUCCEEDED(c4) && value == 2 && gpu_copy(device, queue, fence) == 0 &&
-                compute_dispatch(device, queue, fence) == 0 && compute_constants(device, queue, fence) == 0)
-                (void)compute_table(device, queue, fence);
+                compute_dispatch(device, queue, fence) == 0 && compute_constants(device, queue, fence) == 0 &&
+                compute_table(device, queue, fence) == 0)
+                (void)compute_srv(device, queue, fence);
             if (list) ID3D12GraphicsCommandList_Release(list);
             if (allocator) ID3D12CommandAllocator_Release(allocator);
         }

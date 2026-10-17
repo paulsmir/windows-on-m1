@@ -69,6 +69,14 @@ class NativeOwner(unittest.TestCase):
         self.assertIn('room < 65536ull ? room : 65536ull', dispatch)
         self.assertLess(dispatch.index('set_constant_buffer(pipe, MESA_SHADER_COMPUTE, i,'), dispatch.index('launch_grid'))
         self.assertLess(dispatch.index('launch_grid'), dispatch.index('set_constant_buffer(pipe, MESA_SHADER_COMPUTE, i, NULL)'))
+        # C5d: SRVs are R32_UINT texel-buffer views (dxbc_to_nir: one word per
+        # texel), bound before the launch, unbound and released after it
+        self.assertIn('templ.format = PIPE_FORMAT_R32_UINT;', dispatch)
+        self.assertIn('templ.target = PIPE_BUFFER;', dispatch)
+        order = [dispatch.index(k) for k in ('set_sampler_views(pipe, MESA_SHADER_COMPUTE, 0, view_count, 0, views)',
+                                             'launch_grid', 'set_sampler_views(pipe, MESA_SHADER_COMPUTE, 0, 0, view_count, NULL)')]
+        self.assertEqual(order, sorted(order))
+        self.assertIn('pipe->sampler_view_release(pipe, views[i]);', dispatch)
 
     def test_teardown_order(self):
         text = OWNER.read_text()

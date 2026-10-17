@@ -900,7 +900,7 @@ static UINT APIENTRY GetDescriptorSizeInBytes(D3D12DDI_HDEVICE, D3D12DDI_DESCRIP
 /* C5c: what a CBV/SRV/UAV descriptor holds. Lists replay on the native
  * owner (Gallium bindings), so a descriptor is a CPU record of the view --
  * the buffer heap and byte range -- never read by the GPU. */
-enum : UINT { kDescriptorNone = 0, kDescriptorCbv = 1, kDescriptorUavBuffer = 2 };
+enum : UINT { kDescriptorNone = 0, kDescriptorCbv = 1, kDescriptorUavBuffer = 2, kDescriptorSrvBuffer = 3 };
 struct AgxD3d12Descriptor {
     UINT kind;
     UINT reserved;
@@ -966,6 +966,34 @@ static VOID APIENTRY CreateUnorderedAccessView(D3D12DDI_HDEVICE handle, const D3
         out->bytes = bytes;
     }
     ViewReceipt("measure-d3d12-uav", reason, stride, arg ? arg->Buffer.NumElements : 0u);
+}
+/* C5d: raw and structured buffer SRVs (read as 32-bit words); typed
+ * buffers and textures write a null descriptor with a receipt. */
+static VOID APIENTRY CreateShaderResourceView(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_SHADER_RESOURCE_VIEW_0002 *arg,
+                                              D3D12DDI_CPU_DESCRIPTOR_HANDLE dest) {
+    auto *out = reinterpret_cast<AgxD3d12Descriptor *>(dest.ptr);
+    if (!out) return;
+    memset(out, 0, sizeof(*out));
+    const auto *resource = arg ? static_cast<const AgxD3d12Resource *>(arg->hDrvResource.pDrvPrivate) : nullptr;
+    const bool raw = arg && (arg->Buffer.Flags & D3D12DDI_BUFFER_SRV_FLAG_RAW);
+    const UINT stride = !arg ? 0u : raw ? 4u : arg->Buffer.StructureByteStride;
+    UINT reason = !arg || !resource || !resource->heap ? 1u
+                : arg->ResourceDimension != D3D12DDI_RD_BUFFER ? 4u
+                : !stride ? 5u /* typed buffer SRV */
+                : 0u;
+    const UINT64 offset = reason ? 0 : arg->Buffer.FirstElement * stride;
+    const UINT64 bytes = reason ? 0 : static_cast<UINT64>(arg->Buffer.NumElements) * stride;
+    if (!reason && (offset > resource->bytes || bytes > resource->bytes - offset)) reason = 6u;
+#ifndef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (!reason) reason = 3u;
+#endif
+    if (!reason) {
+        out->kind = kDescriptorSrvBuffer;
+        out->heap = resource->heap;
+        out->offset = resource->gpuva - resource->heap->gpuva + offset;
+        out->bytes = bytes;
+    }
+    ViewReceipt("measure-d3d12-srv", reason, stride, arg ? arg->Buffer.NumElements : 0u);
 }
 /* Descriptors are CPU records, so copies are byte copies of whole
  * descriptors of the heap type's size. */
@@ -1165,9 +1193,11 @@ static_assert(kUavSlots == AGX_D3D12_UAV_SLOTS, "UAV slots of the owner");
  * dispatch's copy of the root DWORDs; the copy keeps 3 DWORDs of slack so
  * a 16-byte-rounded read stays inside it). */
 static constexpr UINT kCbSlots = 14; /* D3D12_COMMONSHADER_CONSTANT_BUFFER_HW_SLOT_COUNT */
+static constexpr UINT kSrvSlots = 16; /* C5d: buffer SRVs t0..t15 */
 static constexpr UINT kRootArguments = 64; /* a root signature costs at most 64 DWORDs */
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 static_assert(kCbSlots == AGX_D3D12_CBV_SLOTS, "constant buffer slots of the owner");
+static_assert(kSrvSlots == AGX_D3D12_SRV_SLOTS, "SRV slots of the owner");
 #endif
 struct AgxD3d12Dispatch {
     AgxD3d12PipelineState *pso;
@@ -1183,6 +1213,10 @@ struct AgxD3d12Dispatch {
      * list executes (root signature 1.0 descriptors are volatile until then) */
     const struct AgxD3d12Descriptor *uav_descriptor[kUavSlots];
     const struct AgxD3d12Descriptor *cb_descriptor[kCbSlots];
+    /* C5d: buffer SRVs t# from root SRVs or tables */
+    AgxD3d12Heap *srv_heap[kSrvSlots];
+    UINT64 srv_offset[kSrvSlots];
+    const struct AgxD3d12Descriptor *srv_descriptor[kSrvSlots];
 };
 enum : UINT { kCommandCopy = 1, kCommandDispatch = 2 };
 struct AgxD3d12Command {
@@ -1320,6 +1354,10 @@ static VOID APIENTRY SetComputeRootConstantBufferView(D3D12DDI_HCOMMANDLIST hand
                                                       D3D12DDI_GPU_VIRTUAL_ADDRESS va) {
     if (AgxD3d12CommandList *list = ListOf(handle)) SetRootBufferView(list, index, va, D3D12DDI_ROOT_PARAMETER_TYPE_CBV);
 }
+static VOID APIENTRY SetComputeRootShaderResourceView(D3D12DDI_HCOMMANDLIST handle, UINT index,
+                                                      D3D12DDI_GPU_VIRTUAL_ADDRESS va) {
+    if (AgxD3d12CommandList *list = ListOf(handle)) SetRootBufferView(list, index, va, D3D12DDI_ROOT_PARAMETER_TYPE_SRV);
+}
 /* C5c: a table argument is the GPU handle of its first descriptor. */
 static VOID APIENTRY SetComputeRootDescriptorTable(D3D12DDI_HCOMMANDLIST handle, UINT index,
                                                    D3D12DDI_GPU_DESCRIPTOR_HANDLE base) {
@@ -1382,8 +1420,9 @@ static UINT BindTable(AgxD3d12CommandList *list, const AgxD3d12RootSignature *ro
     for (UINT r = 0; r < p.ranges; ++r) {
         const AgxD3d12Range &range = ranges[r];
         const bool uav = range.type == D3D12DDI_DESCRIPTOR_RANGE_TYPE_UAV;
-        if (!uav && range.type != D3D12DDI_DESCRIPTOR_RANGE_TYPE_CBV) return 4u;
-        const UINT slots = uav ? kUavSlots : kCbSlots;
+        const bool srv = range.type == D3D12DDI_DESCRIPTOR_RANGE_TYPE_SRV;
+        if (!uav && !srv && range.type != D3D12DDI_DESCRIPTOR_RANGE_TYPE_CBV) return 4u; /* sampler */
+        const UINT slots = uav ? kUavSlots : srv ? kSrvSlots : kCbSlots;
         if (range.space || range.base_register >= slots) return 5u;
         const UINT count = range.count == UINT_MAX || range.count > slots - range.base_register
                                ? slots - range.base_register : range.count;
@@ -1394,7 +1433,8 @@ static UINT BindTable(AgxD3d12CommandList *list, const AgxD3d12RootSignature *ro
                 return 6u;
             }
             auto *descriptor = reinterpret_cast<const AgxD3d12Descriptor *>(static_cast<const BYTE *>(heap->cpu) + at);
-            (uav ? dispatch->uav_descriptor : dispatch->cb_descriptor)[range.base_register + d] = descriptor;
+            (uav ? dispatch->uav_descriptor : srv ? dispatch->srv_descriptor : dispatch->cb_descriptor)[range.base_register + d] =
+                descriptor;
         }
     }
     return 0u;
@@ -1433,8 +1473,13 @@ static VOID APIENTRY Dispatch(D3D12DDI_HCOMMANDLIST handle, UINT x, UINT y, UINT
             }
         } else if (p.type == D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE) {
             refusal = BindTable(list, root, p, list->compute_root_va[i], &dispatch);
+        } else if (p.type == D3D12DDI_ROOT_PARAMETER_TYPE_SRV) {
+            if (p.shader_register >= kSrvSlots) refusal = 5u;
+            else if (!(dispatch.srv_heap[p.shader_register] =
+                           HeapAt(list->device, list->compute_root_va[i], &dispatch.srv_offset[p.shader_register])))
+                refusal = 6u;
         } else {
-            refusal = 4u; /* root SRV */
+            refusal = 4u;
         }
     }
     if (!refusal && FAILED(CompileCompute(list->device, pso))) refusal = 7u;
@@ -1514,7 +1559,22 @@ static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, con
                         cbvs[b].Bytes = (dispatch.cb_count[b] * sizeof(UINT) + 15u) & ~15u;
                     }
                 }
-                hr = AgxD3d12OwnerDispatch(owner, &dispatch.pso->compute, uavs, cbvs, dispatch.groups[0],
+                AGX_D3D12_BUFFER srv_buffers[kSrvSlots] = {};
+                AGX_D3D12_SRV srvs[kSrvSlots] = {};
+                for (UINT t = 0; t < kSrvSlots; ++t) {
+                    const AgxD3d12Descriptor *view = dispatch.srv_descriptor[t];
+                    if (view && view->kind == kDescriptorSrvBuffer && view->heap) {
+                        srv_buffers[t] = HeapBuffer(view->heap);
+                        srvs[t].Buffer = &srv_buffers[t];
+                        srvs[t].Offset = view->offset;
+                        srvs[t].Bytes = view->bytes;
+                    } else if (dispatch.srv_heap[t]) {
+                        srv_buffers[t] = HeapBuffer(dispatch.srv_heap[t]);
+                        srvs[t].Buffer = &srv_buffers[t];
+                        srvs[t].Offset = dispatch.srv_offset[t];
+                    }
+                }
+                hr = AgxD3d12OwnerDispatch(owner, &dispatch.pso->compute, uavs, cbvs, srvs, dispatch.groups[0],
                                            dispatch.groups[1], dispatch.groups[2]);
             }
         }
@@ -1594,7 +1654,7 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetDescriptorSizeInBytes, GetDescriptorSizeInBytes);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetCPUDescriptorHandleForHeapStart, GetCPUDescriptorHandleForHeapStart);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetGPUDescriptorHandleForHeapStart, GetGPUDescriptorHandleForHeapStart);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateShaderResourceView, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateShaderResourceView));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateShaderResourceView, CreateShaderResourceView);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateConstantBufferView, CreateConstantBufferView);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateSampler, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateSampler));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateUnorderedAccessView, CreateUnorderedAccessView);
@@ -1678,7 +1738,7 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRoot32BitConstants, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRoot32BitConstants));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootConstantBufferView, SetComputeRootConstantBufferView);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootConstantBufferView, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootConstantBufferView));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootShaderResourceView, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootShaderResourceView));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootShaderResourceView, SetComputeRootShaderResourceView);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootShaderResourceView, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootShaderResourceView));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootUnorderedAccessView, SetComputeRootUnorderedAccessView);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootUnorderedAccessView, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootUnorderedAccessView));

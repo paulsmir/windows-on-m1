@@ -253,10 +253,16 @@ extern "C" void AgxD3d12OwnerDestroyCompute(AGX_D3D12_OWNER *owner, AGX_D3D12_CO
 
 extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12_COMPUTE *compute,
                                          const AGX_D3D12_UAV uavs[AGX_D3D12_UAV_SLOTS],
-                                         const AGX_D3D12_CBV cbvs[AGX_D3D12_CBV_SLOTS], unsigned x,
+                                         const AGX_D3D12_CBV cbvs[AGX_D3D12_CBV_SLOTS],
+                                         const AGX_D3D12_SRV srvs[AGX_D3D12_SRV_SLOTS], unsigned x,
                                          unsigned y, unsigned z) {
-  if (!owner || !owner->Context || !compute || !compute->State || !uavs || !cbvs || !x || !y || !z)
+  if (!owner || !owner->Context || !compute || !compute->State || !uavs || !cbvs || !srvs || !x || !y || !z)
     return E_INVALIDARG;
+  for (unsigned i = 0; i < AGX_D3D12_SRV_SLOTS; ++i) {
+    const AGX_D3D12_BUFFER *buffer = srvs[i].Buffer;
+    if (buffer && (!buffer->Resource || srvs[i].Offset >= buffer->Bytes || buffer->Bytes > 0xffffffffull))
+      return E_INVALIDARG;
+  }
   struct pipe_constant_buffer constants[AGX_D3D12_CBV_SLOTS] = {};
   for (unsigned i = 0; i < AGX_D3D12_CBV_SLOTS; ++i) {
     const AGX_D3D12_BUFFER *buffer = cbvs[i].Buffer;
@@ -285,7 +291,35 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
     buffers[i].buffer_size = static_cast<unsigned>(uavs[i].Bytes && uavs[i].Bytes < room ? uavs[i].Bytes : room);
   }
   struct pipe_context *pipe = owner->Context;
+  /* C5d: texel-buffer views of the SRV ranges (u_sampler_view_default_template
+   * for PIPE_BUFFER, which the UMD Mesa tree does not provide) */
+  struct pipe_sampler_view *views[AGX_D3D12_SRV_SLOTS] = {};
+  unsigned view_count = 0;
+  HRESULT hr = S_OK;
+  for (unsigned i = 0; i < AGX_D3D12_SRV_SLOTS && SUCCEEDED(hr); ++i) {
+    const AGX_D3D12_BUFFER *buffer = srvs[i].Buffer;
+    if (!buffer) continue;
+    const unsigned long long room = buffer->Bytes - srvs[i].Offset;
+    struct pipe_sampler_view templ = {};
+    templ.format = PIPE_FORMAT_R32_UINT;
+    templ.target = PIPE_BUFFER;
+    templ.swizzle_r = PIPE_SWIZZLE_X;
+    templ.swizzle_g = PIPE_SWIZZLE_Y;
+    templ.swizzle_b = PIPE_SWIZZLE_Z;
+    templ.swizzle_a = PIPE_SWIZZLE_W;
+    templ.u.buf.offset = static_cast<unsigned>(srvs[i].Offset);
+    templ.u.buf.size = static_cast<unsigned>(srvs[i].Bytes && srvs[i].Bytes < room ? srvs[i].Bytes : room) & ~3u;
+    views[i] = pipe->create_sampler_view(pipe, static_cast<struct pipe_resource *>(buffer->Resource), &templ);
+    if (!views[i]) hr = E_OUTOFMEMORY;
+    view_count = i + 1;
+  }
+  if (FAILED(hr)) {
+    for (unsigned i = 0; i < view_count; ++i)
+      if (views[i]) pipe->sampler_view_release(pipe, views[i]);
+    return hr;
+  }
   pipe->bind_compute_state(pipe, compute->State);
+  if (view_count) pipe->set_sampler_views(pipe, MESA_SHADER_COMPUTE, 0, view_count, 0, views);
   pipe->set_shader_buffers(pipe, MESA_SHADER_COMPUTE, 0, AGX_D3D12_UAV_SLOTS, buffers,
                            (1u << AGX_D3D12_UAV_SLOTS) - 1u);
   /* Asahi uploads a user buffer when it is set, so root constants are
@@ -304,6 +338,12 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
   /* the batch holds its buffers; the binding must not outlive the heaps */
   pipe->set_shader_buffers(pipe, MESA_SHADER_COMPUTE, 0, AGX_D3D12_UAV_SLOTS, NULL, 0);
   for (unsigned i = 0; i < AGX_D3D12_CBV_SLOTS; ++i) pipe->set_constant_buffer(pipe, MESA_SHADER_COMPUTE, i, NULL);
+  if (view_count) {
+    /* the context holds its own references while bound */
+    pipe->set_sampler_views(pipe, MESA_SHADER_COMPUTE, 0, 0, view_count, NULL);
+    for (unsigned i = 0; i < view_count; ++i)
+      if (views[i]) pipe->sampler_view_release(pipe, views[i]);
+  }
   ++owner->PendingDispatches;
   return S_OK;
 }
