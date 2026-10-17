@@ -1482,8 +1482,17 @@ struct AgxD3d12ClearDepth {
     UINT rects;
     RECT rect[kClearRects];
 };
+/* C8b: a recorded texture-to-texture copy (whole: every common mip, all
+ * layers, full extents) */
+struct AgxD3d12TextureRegionCopy {
+    AgxD3d12Heap *dst, *src;
+    UINT dst_level, dst_layer, dst_x, dst_y;
+    UINT src_level, src_layer, src_x, src_y;
+    UINT width, height, layers;
+    UINT whole_levels; /* > 0: ResourceCopy of this many levels */
+};
 enum : UINT { kCommandCopy = 1, kCommandDispatch = 2, kCommandClear = 3, kCommandTextureCopy = 4, kCommandDraw = 5,
-              kCommandClearDepth = 6 };
+              kCommandClearDepth = 6, kCommandTextureRegionCopy = 7 };
 struct AgxD3d12Command {
     UINT kind;
     union {
@@ -1493,6 +1502,7 @@ struct AgxD3d12Command {
         AgxD3d12TextureCopy texture_copy;
         AgxD3d12Draw draw;
         AgxD3d12ClearDepth clear_depth;
+        AgxD3d12TextureRegionCopy region_copy;
     };
 };
 /* C8a: commands live in a growing process-heap array owned by the list
@@ -1671,6 +1681,40 @@ static VOID APIENTRY ClearRenderTargetView(D3D12DDI_HCOMMANDLIST handle, D3D12DD
         command.clear.rect[i].bottom = rect[i].bottom;
     }
 }
+/* C8b: CopyResource -- whole buffers (the smaller size) or whole 2D
+ * textures (every common mip and layer) */
+static VOID APIENTRY ResourceCopy(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOURCE dst_handle, D3D12DDI_HRESOURCE src_handle) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    if (!list) return;
+    auto *d = static_cast<AgxD3d12Resource *>(dst_handle.pDrvPrivate);
+    auto *s = static_cast<AgxD3d12Resource *>(src_handle.pDrvPrivate);
+    const UINT refusal = !d || !s || !d->heap || !s->heap || !d->heap->native || !s->heap->native ? 1u
+                       : (d->type == D3D12DDI_RT_TEXTURE2D) != (s->type == D3D12DDI_RT_TEXTURE2D) ? 4u
+                       : list->commands >= kListCommands ? 3u : 0u;
+    const UINT receipt[] = {refusal, d ? d->type : 0u, s ? s->type : 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-resource-copy", refusal ? E_INVALIDARG : S_OK, receipt, 3);
+    if (refusal) {
+        ListError(list, E_INVALIDARG);
+        return;
+    }
+    AgxD3d12Command *slot = AppendCommand(list);
+    if (!slot) return;
+    if (d->type == D3D12DDI_RT_TEXTURE2D) {
+        AgxD3d12TextureRegionCopy rc = {};
+        rc.dst = d->heap;
+        rc.src = s->heap;
+        rc.width = s->width < d->width ? s->width : d->width;
+        rc.height = s->height < d->height ? s->height : d->height;
+        rc.layers = s->layers < d->layers ? s->layers : d->layers;
+        rc.whole_levels = s->levels < d->levels ? s->levels : d->levels;
+        slot->kind = kCommandTextureRegionCopy;
+        slot->region_copy = rc;
+    } else {
+        const UINT64 bytes = d->bytes < s->bytes ? d->bytes : s->bytes;
+        slot->kind = kCommandCopy;
+        slot->copy = {d->heap, d->gpuva - d->heap->gpuva, s->heap, s->gpuva - s->heap->gpuva, bytes};
+    }
+}
 /* C6f */
 static VOID APIENTRY ClearDepthStencilView(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE view, UINT flags,
                                            FLOAT depth, UINT8 stencil, UINT rects, const D3D12DDI_RECT *rect) {
@@ -1726,8 +1770,35 @@ static VOID APIENTRY CopyTextureRegion(D3D12DDI_HCOMMANDLIST handle, const D3D12
     if (!list) return;
     AgxD3d12CopySide dst = {}, src = {};
     UINT refusal = !CopySide(dst_placement, dst_layout, &dst) || !CopySide(src_placement, src_layout, &src) ? 1u
-                 : (dst.footprint != nullptr) == (src.footprint != nullptr) ? 4u /* texture <-> texture, buffer <-> buffer */
+                 : dst.footprint && src.footprint ? 4u /* buffer <-> buffer footprints */
                  : list->commands >= kListCommands ? 3u : 0u;
+    if (!refusal && !dst.footprint && !src.footprint) {
+        /* C8b: texture subresource to texture subresource */
+        AgxD3d12TextureRegionCopy rc = {};
+        const UINT dsub = static_cast<UINT>(dst.offset), ssub = static_cast<UINT>(src.offset);
+        rc.dst = dst.resource->heap;
+        rc.src = src.resource->heap;
+        rc.dst_level = dsub % dst.resource->levels;
+        rc.dst_layer = dsub / dst.resource->levels + dst_z;
+        rc.dst_x = dst_x;
+        rc.dst_y = dst_y;
+        rc.src_level = ssub % src.resource->levels;
+        rc.src_layer = ssub / src.resource->levels + (box ? static_cast<UINT>(box->Front) : 0u);
+        rc.src_x = box ? static_cast<UINT>(box->Left) : 0u;
+        rc.src_y = box ? static_cast<UINT>(box->Top) : 0u;
+        const UINT sw = src.resource->width >> rc.src_level ? src.resource->width >> rc.src_level : 1u;
+        const UINT sh = src.resource->height >> rc.src_level ? src.resource->height >> rc.src_level : 1u;
+        rc.width = box ? static_cast<UINT>(box->Right - box->Left) : sw;
+        rc.height = box ? static_cast<UINT>(box->Bottom - box->Top) : sh;
+        rc.layers = box ? static_cast<UINT>(box->Back - box->Front) : 1u;
+        const UINT receipt[] = {0u, 2u, rc.width, rc.height, rc.layers};
+        AdmissionUmdDiagnostic("measure-d3d12-copy-texture", S_OK, receipt, 5);
+        AgxD3d12Command *slot = AppendCommand(list);
+        if (!slot) return;
+        slot->kind = kCommandTextureRegionCopy;
+        slot->region_copy = rc;
+        return;
+    }
     AgxD3d12TextureCopy copy = {};
     if (!refusal) {
         const bool to_buffer = dst.footprint != nullptr;
@@ -2411,6 +2482,19 @@ static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, con
                 hr = AgxD3d12OwnerClearRenderTarget(owner, &texture, clear.rtv.format, clear.rtv.level,
                                                     clear.rtv.first_layer, clear.rtv.layers, clear.color,
                                                     clear.rects ? clear.rect : nullptr, clear.rects);
+            } else if (command.kind == kCommandTextureRegionCopy) {
+                const AgxD3d12TextureRegionCopy &rc = command.region_copy;
+                AGX_D3D12_BUFFER dst = HeapBuffer(rc.dst), src = HeapBuffer(rc.src);
+                if (rc.whole_levels) {
+                    for (UINT level = 0; SUCCEEDED(hr) && level < rc.whole_levels; ++level) {
+                        const UINT w = rc.width >> level ? rc.width >> level : 1u, h = rc.height >> level ? rc.height >> level : 1u;
+                        hr = AgxD3d12OwnerCopyTextureRegion(owner, &dst, level, 0, 0, 0, &src, level, 0, 0, 0, w, h, rc.layers);
+                    }
+                } else {
+                    hr = AgxD3d12OwnerCopyTextureRegion(owner, &dst, rc.dst_level, rc.dst_layer, rc.dst_x, rc.dst_y, &src,
+                                                        rc.src_level, rc.src_layer, rc.src_x, rc.src_y, rc.width,
+                                                        rc.height, rc.layers);
+                }
             } else if (command.kind == kCommandClearDepth) {
                 const AgxD3d12ClearDepth &clear = command.clear_depth;
                 AGX_D3D12_BUFFER texture = HeapBuffer(clear.dsv.heap);
@@ -2639,7 +2723,7 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearDepthStencilView, ClearDepthStencilView);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDiscardResource, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDiscardResource));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTextureRegion, CopyTextureRegion);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceCopy, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceCopy));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceCopy, ResourceCopy);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTiles, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTiles));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyBufferRegion, CopyBufferRegion);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceResolveSubresource, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceResolveSubresource));

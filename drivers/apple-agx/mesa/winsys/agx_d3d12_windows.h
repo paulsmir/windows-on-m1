@@ -133,6 +133,12 @@ typedef struct {
   int ToBuffer; /* 1: texture -> buffer, 0: buffer -> texture */
 } AGX_D3D12_TEXTURE_COPY;
 HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *Owner, const AGX_D3D12_TEXTURE_COPY *Copy);
+/* C8b: a GPU copy between texture regions of the same format class
+ * (resource_copy_region); Layers counts array layers from each layer start. */
+HRESULT AgxD3d12OwnerCopyTextureRegion(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Dst, unsigned DstLevel,
+                                       unsigned DstLayer, unsigned DstX, unsigned DstY, const AGX_D3D12_BUFFER *Src,
+                                       unsigned SrcLevel, unsigned SrcLayer, unsigned SrcX, unsigned SrcY,
+                                       unsigned Width, unsigned Height, unsigned Layers);
 /* C6f: clears depth (Flags bit 0) and/or stencil (bit 1) of a depth view */
 HRESULT AgxD3d12OwnerClearDepthStencil(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Texture, DXGI_FORMAT ViewFormat,
                                        unsigned Level, unsigned FirstLayer, unsigned Layers, unsigned Flags,

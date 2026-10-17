@@ -258,11 +258,12 @@ class D3d12AbiGate(unittest.TestCase):
                     'pfnSetGraphicsRootDescriptorTable'}
         compute |= {'pfnIASetIndexBuffer', 'pfnDrawIndexedInstanced'}  # C6d
         compute |= {'pfnClearDepthStencilView'}  # C6f
+        compute |= {'pfnResourceCopy'}  # C8b
         self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList', 'pfnCopyBufferRegion',
                                        'pfnResourceBarrier'} | setters | compute)
         for member in setters:
             self.assertIn('AGX_LIST_STATE(%s)' % member, source)
-        for consumer in ('pfnResourceCopy',):
+        for consumer in ('pfnExecuteIndirect', 'pfnExecuteBundle'):
             self.assertIn('AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, %s)' % consumer, source)
 
     def test_c5_compute_dispatch(self):
@@ -386,7 +387,9 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('command.clear.rtv = *rtv;', clear)
         self.assertIn('rtv->kind != kDescriptorRtv', clear)
         copy = fn('static VOID APIENTRY CopyTextureRegion(')
-        self.assertIn('(dst.footprint != nullptr) == (src.footprint != nullptr) ? 4u', copy)
+        self.assertIn('dst.footprint && src.footprint ? 4u /* buffer <-> buffer footprints */', copy)
+        # C8b: texture <-> texture regions record a GPU region copy
+        self.assertIn('slot->kind = kCommandTextureRegionCopy;', copy)
         self.assertIn('copy.level = sub % texture.resource->levels;', copy)
         self.assertIn('copy.layer = sub / texture.resource->levels;', copy)
         self.assertIn('"measure-d3d12-copy-texture"', copy)
@@ -512,6 +515,25 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('FormatTranslate(format, (bind & AGX_D3D12_BIND_DEPTH_STENCIL) ? TRUE : FALSE)', owner)
         self.assertIn('fb.zsbuf.texture = texture;', owner)
         self.assertIn('->clear_depth_stencil(', owner)
+
+    def test_c8b_resource_copy(self):
+        # C8b invariants: CopyResource copies whole buffers (the smaller size)
+        # or every common mip/layer of two 2D textures; buffer <-> texture
+        # refuses; texture copies replay through the owner's GPU region copy.
+        source = SOURCE.read_text()
+        def fn(name):
+            start = source.index(name)
+            return source[start:source.index('\n}\n', start)]
+        rc = fn('static VOID APIENTRY ResourceCopy(')
+        self.assertIn('(d->type == D3D12DDI_RT_TEXTURE2D) != (s->type == D3D12DDI_RT_TEXTURE2D) ? 4u', rc)
+        self.assertIn('rc.whole_levels = s->levels < d->levels ? s->levels : d->levels;', rc)
+        self.assertIn('d->bytes < s->bytes ? d->bytes : s->bytes', rc)
+        self.assertIn('AgxD3d12OwnerCopyTextureRegion(', fn('static VOID APIENTRY ExecuteCommandLists('))
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        region = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerCopyTextureRegion('):]
+        region = region[:region.index('\n}\n')]
+        self.assertIn('->resource_copy_region(', region)
+        self.assertIn('block_bytes(d->format) != block_bytes(s->format)', region)
 
     def test_c8a_growing_lists(self):
         # C8a invariants: a list owns a growing command array (doubling from

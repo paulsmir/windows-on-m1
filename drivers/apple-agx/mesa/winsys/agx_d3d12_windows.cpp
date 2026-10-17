@@ -439,6 +439,34 @@ extern "C" HRESULT AgxD3d12OwnerClearRenderTarget(AGX_D3D12_OWNER *owner, const 
   return S_OK;
 }
 
+/* C8b: texture-to-texture copies on the GPU */
+extern "C" HRESULT AgxD3d12OwnerCopyTextureRegion(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUFFER *dst, unsigned dst_level,
+                                                  unsigned dst_layer, unsigned dst_x, unsigned dst_y,
+                                                  const AGX_D3D12_BUFFER *src, unsigned src_level, unsigned src_layer,
+                                                  unsigned src_x, unsigned src_y, unsigned width, unsigned height,
+                                                  unsigned layers) {
+  if (!owner || !owner->Context || !dst || !dst->Resource || !src || !src->Resource || !width || !height || !layers)
+    return E_INVALIDARG;
+  struct pipe_resource *d = static_cast<struct pipe_resource *>(dst->Resource);
+  struct pipe_resource *s = static_cast<struct pipe_resource *>(src->Resource);
+  if (d->target == PIPE_BUFFER || s->target == PIPE_BUFFER || dst_level > d->last_level || src_level > s->last_level ||
+      block_bytes(d->format) != block_bytes(s->format) || !block_bytes(d->format) ||
+      dst_x + width > level_extent(d->width0, dst_level) || dst_y + height > level_extent(d->height0, dst_level) ||
+      src_x + width > level_extent(s->width0, src_level) || src_y + height > level_extent(s->height0, src_level) ||
+      dst_layer + layers > d->array_size || src_layer + layers > s->array_size)
+    return E_INVALIDARG;
+  struct pipe_box box = {};
+  box.x = static_cast<int>(src_x);
+  box.y = static_cast<int>(src_y);
+  box.z = static_cast<int16_t>(src_layer);
+  box.width = static_cast<int>(width);
+  box.height = static_cast<int>(height);
+  box.depth = static_cast<int16_t>(layers);
+  owner->Context->resource_copy_region(owner->Context, d, dst_level, dst_x, dst_y, dst_layer, s, src_level, &box);
+  ++owner->PendingCopies;
+  return S_OK;
+}
+
 /* C6f: the D3D10 frontend's ClearDepthStencilView (OutputMerger.cpp) */
 extern "C" HRESULT AgxD3d12OwnerClearDepthStencil(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUFFER *texture,
                                                   DXGI_FORMAT view_format, unsigned level, unsigned first_layer,
