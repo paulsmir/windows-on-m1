@@ -120,8 +120,16 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
         });
         break;
     case D3D12DDICAPS_TYPE_TEXTURE_LAYOUT:
-        /* no device-dependent layouts or swizzles, no 64 KiB standard swizzle */
+        /* no device-dependent layouts or swizzles, no 64 KiB standard
+         * swizzle, no row-major textures (EXP1346: asked as the 16-byte
+         * D3D12DDI_TEXTURE_LAYOUT_CAPS_0001) */
         hr = Answer<D3D12DDI_TEXTURE_LAYOUT_CAPS>(arg, [](auto &) {});
+        break;
+    case D3D12DDICAPS_TYPE_TEXTURE_LAYOUT_SETS:
+        /* EXP1346: asked for row-major ({D3D12DDI_TL_ROW_MAJOR, functional
+         * unit}) and creation failed on E_NOTIMPL; zero sub-caps: no
+         * row-major layout, as SupportsRowMajorTexture says. */
+        hr = Answer<D3D12DDI_ROW_MAJOR_LAYOUT_CAPS>(arg, [](auto &) {});
         break;
     default:
         break;

@@ -53,7 +53,8 @@ class D3d12AbiGate(unittest.TestCase):
                          {'D3D12DDICAPS_TYPE_0081_3DPIPELINESUPPORT1', 'D3D12DDICAPS_TYPE_3DPIPELINESUPPORT',
                           'D3D12DDICAPS_TYPE_D3D12_OPTIONS', 'D3D12DDICAPS_TYPE_MEMORY_ARCHITECTURE',
                           'D3D12DDICAPS_TYPE_SHADER', 'D3D12DDICAPS_TYPE_ARCHITECTURE_INFO',
-                          'D3D12DDICAPS_TYPE_GPUVA_CAPS', 'D3D12DDICAPS_TYPE_TEXTURE_LAYOUT'})
+                          'D3D12DDICAPS_TYPE_GPUVA_CAPS', 'D3D12DDICAPS_TYPE_TEXTURE_LAYOUT',
+                          'D3D12DDICAPS_TYPE_TEXTURE_LAYOUT_SETS'})
         # nothing optional is claimed (plan minimum: tier 1, no optional features)
         for claim in ('D3D12DDI_RESOURCE_BINDING_TIER_2', 'D3D12DDI_RESOURCE_HEAP_TIER_2',
                       'Doubles = TRUE', 'ROVs = TRUE', 'OutputMergerLogicOp = TRUE',
