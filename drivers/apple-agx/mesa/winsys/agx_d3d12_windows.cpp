@@ -252,10 +252,26 @@ extern "C" void AgxD3d12OwnerDestroyCompute(AGX_D3D12_OWNER *owner, AGX_D3D12_CO
 }
 
 extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12_COMPUTE *compute,
-                                         const AGX_D3D12_UAV uavs[AGX_D3D12_UAV_SLOTS], unsigned x,
+                                         const AGX_D3D12_UAV uavs[AGX_D3D12_UAV_SLOTS],
+                                         const AGX_D3D12_CBV cbvs[AGX_D3D12_CBV_SLOTS], unsigned x,
                                          unsigned y, unsigned z) {
-  if (!owner || !owner->Context || !compute || !compute->State || !uavs || !x || !y || !z)
+  if (!owner || !owner->Context || !compute || !compute->State || !uavs || !cbvs || !x || !y || !z)
     return E_INVALIDARG;
+  struct pipe_constant_buffer constants[AGX_D3D12_CBV_SLOTS] = {};
+  for (unsigned i = 0; i < AGX_D3D12_CBV_SLOTS; ++i) {
+    const AGX_D3D12_BUFFER *buffer = cbvs[i].Buffer;
+    if (buffer) {
+      if (!buffer->Resource || cbvs[i].Offset >= buffer->Bytes || buffer->Bytes > 0xffffffffull) return E_INVALIDARG;
+      const unsigned long long room = buffer->Bytes - cbvs[i].Offset;
+      constants[i].buffer = static_cast<struct pipe_resource *>(buffer->Resource);
+      constants[i].buffer_offset = static_cast<unsigned>(cbvs[i].Offset);
+      constants[i].buffer_size = static_cast<unsigned>(room < 65536ull ? room : 65536ull);
+    } else if (cbvs[i].Data) {
+      if (!cbvs[i].Bytes || cbvs[i].Bytes > 65536u) return E_INVALIDARG;
+      constants[i].user_buffer = cbvs[i].Data;
+      constants[i].buffer_size = cbvs[i].Bytes;
+    }
+  }
   struct pipe_shader_buffer buffers[AGX_D3D12_UAV_SLOTS] = {};
   for (unsigned i = 0; i < AGX_D3D12_UAV_SLOTS; ++i) {
     const AGX_D3D12_BUFFER *buffer = uavs[i].Buffer;
@@ -270,6 +286,11 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
   pipe->bind_compute_state(pipe, compute->State);
   pipe->set_shader_buffers(pipe, MESA_SHADER_COMPUTE, 0, AGX_D3D12_UAV_SLOTS, buffers,
                            (1u << AGX_D3D12_UAV_SLOTS) - 1u);
+  /* Asahi uploads a user buffer when it is set, so root constants are
+   * captured here */
+  for (unsigned i = 0; i < AGX_D3D12_CBV_SLOTS; ++i)
+    pipe->set_constant_buffer(pipe, MESA_SHADER_COMPUTE, i,
+                              constants[i].buffer || constants[i].user_buffer ? &constants[i] : NULL);
   struct pipe_grid_info info = {};
   info.work_dim = 3;
   for (unsigned i = 0; i < 3; ++i) info.block[i] = compute->Block[i];
@@ -280,6 +301,7 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
   pipe->memory_barrier(pipe, PIPE_BARRIER_ALL);
   /* the batch holds its buffers; the binding must not outlive the heaps */
   pipe->set_shader_buffers(pipe, MESA_SHADER_COMPUTE, 0, AGX_D3D12_UAV_SLOTS, NULL, 0);
+  for (unsigned i = 0; i < AGX_D3D12_CBV_SLOTS; ++i) pipe->set_constant_buffer(pipe, MESA_SHADER_COMPUTE, i, NULL);
   ++owner->PendingDispatches;
   return S_OK;
 }

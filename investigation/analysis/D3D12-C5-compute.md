@@ -74,3 +74,25 @@ Dispatch(256, 1, 1) over 64 KiB, transition, CopyBufferRegion to READBACK,
 Signal(4); PASS = readback bad 0. Receipts: measure-d3d12-compute {block},
 measure-d3d12-dispatch {0, 256, 1, 1, 1}, measure-d3d12-owner-submit
 {copies | dispatches << 16, retired, faulted}.
+
+## C5b: constant buffers from the root
+
+- WINDOWS: PFND3D12DDI_SET_ROOT_32BIT_CONSTANT(S) write DWORDs at
+  DestOffset of a 32-bit-constants parameter (b#); a root CBV
+  (PFND3D12DDI_SET_ROOT_BUFFER_VIEW) is a GPU VA without size (a D3D
+  constant buffer is at most 4096 vec4 = 64 KiB); pfnClearRootArguments
+  (the runtime's list default state) clears argument values.
+- AGX/ASAHI: set_constant_buffer(MESA_SHADER_COMPUTE, b#) with a buffer
+  view or a user buffer; agx_set_constant_buffer uploads a user buffer
+  immediately (const_uploader), so root constants are captured when the
+  dispatch is replayed. dxbc_to_nir reads cb# as UBO #.
+- TRANSLATION: the list keeps the root DWORDs at each parameter's offset;
+  Dispatch copies them into the recorded command, resolves each root CBV
+  VA to (owner heap, offset), and binds b# from either; size = min(64 KiB,
+  heap end) for views, Num32BitValues * 4 rounded to 16 bytes for
+  constants. Root SRVs and tables still refuse (reason 4).
+- UNKNOWN: none beyond C5's (same context, same launch path).
+- Checkpoint: probe C5B (agx_d3d12_probe_cs_cb.hlsl): root {UAV u0,
+  constants b1 x2, CBV b0}, scale 5 via SetComputeRoot32BitConstants, bias
+  11 via SetComputeRoot32BitConstant, CBV extra.y = 1000; PASS = every
+  dword == 5i + 1011, Signal(5).

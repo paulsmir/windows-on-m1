@@ -242,10 +242,10 @@ class D3d12AbiGate(unittest.TestCase):
         # as received state); every state consumer stays fail-closed.
         setters = {'pfnSetPredication', 'pfnIaSetTopology', 'pfnRsSetViewports', 'pfnRsSetScissorRects',
                    'pfnOmSetBlendFactor', 'pfnOmSetStencilRef', 'pfnSetDescriptorHeaps',
-                   'pfnIASetIndexBuffer', 'pfnIASetVertexBuffers', 'pfnSOSetTargets', 'pfnOMSetRenderTargets',
-                   'pfnClearRootArguments'}
+                   'pfnIASetIndexBuffer', 'pfnIASetVertexBuffers', 'pfnSOSetTargets', 'pfnOMSetRenderTargets'}
         compute = {'pfnSetPipelineState', 'pfnSetComputeRootSignature', 'pfnSetComputeRootUnorderedAccessView',
-                   'pfnDispatch'}
+                   'pfnDispatch', 'pfnClearRootArguments', 'pfnSetComputeRoot32BitConstant',
+                   'pfnSetComputeRoot32BitConstants', 'pfnSetComputeRootConstantBufferView'}
         self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList', 'pfnCopyBufferRegion',
                                        'pfnResourceBarrier'} | setters | compute)
         for member in setters:
@@ -273,12 +273,25 @@ class D3d12AbiGate(unittest.TestCase):
         root = fn('static VOID APIENTRY SetComputeRootSignature(')
         self.assertIn('memset(list->compute_root_va, 0, sizeof(list->compute_root_va));', root)
         uav = fn('static VOID APIENTRY SetComputeRootUnorderedAccessView(')
-        self.assertIn('!= D3D12DDI_ROOT_PARAMETER_TYPE_UAV', uav)
-        self.assertIn('index >= root->parameters', uav)
+        self.assertIn('D3D12DDI_ROOT_PARAMETER_TYPE_UAV', uav)
+        view = fn('static void SetRootBufferView(')
+        self.assertIn('root->parameter[index].type != type', view)
+        self.assertIn('index >= root->parameters', view)
         dispatch = fn('static VOID APIENTRY Dispatch(')
-        self.assertIn('if (p.type != D3D12DDI_ROOT_PARAMETER_TYPE_UAV) refusal = 4u;', dispatch)
-        self.assertIn('p.space || p.shader_register >= kUavSlots', dispatch)
+        self.assertIn('refusal = 4u; /* root SRV, descriptor table */', dispatch)
+        self.assertIn('if (p.shader_register >= kUavSlots) refusal = 5u;', dispatch)
         self.assertIn('HeapAt(list->device, list->compute_root_va[i]', dispatch)
+        # C5b: root CBVs resolve like root UAVs; root constants keep their
+        # parameter's DWORD range, copied into the recorded dispatch
+        self.assertIn('if (p.shader_register >= kCbSlots) refusal = 5u;', dispatch)
+        self.assertIn('p.offset + p.dwords > kRootArguments', dispatch)
+        self.assertIn('memcpy(dispatch.root_dwords, list->compute_root_dwords', dispatch)
+        constants = fn('static VOID APIENTRY SetComputeRoot32BitConstants(')
+        self.assertIn('count > root->parameter[index].dwords - offset', constants)
+        self.assertIn('!= D3D12DDI_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS', constants)
+        clear = fn('static VOID APIENTRY ClearRootArguments(')
+        self.assertIn('memset(list->compute_root_dwords, 0', clear)
+        self.assertNotIn('compute_root =', clear)
         self.assertIn('"measure-d3d12-dispatch"', dispatch)
         self.assertIn('list->commands >= kListCommands', dispatch)
         reset = fn('static VOID APIENTRY ResetCommandList(')

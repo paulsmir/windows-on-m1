@@ -64,6 +64,11 @@ class NativeOwner(unittest.TestCase):
                                              'set_shader_buffers(pipe, MESA_SHADER_COMPUTE, 0, AGX_D3D12_UAV_SLOTS, NULL, 0)')]
         self.assertEqual(order, sorted(order))
         self.assertIn('uavs[i].Offset >= buffer->Bytes', dispatch)
+        # C5b: constant buffers bound before the launch, capped at 64 KiB and
+        # the buffer end, and dropped after it
+        self.assertIn('room < 65536ull ? room : 65536ull', dispatch)
+        self.assertLess(dispatch.index('set_constant_buffer(pipe, MESA_SHADER_COMPUTE, i,'), dispatch.index('launch_grid'))
+        self.assertLess(dispatch.index('launch_grid'), dispatch.index('set_constant_buffer(pipe, MESA_SHADER_COMPUTE, i, NULL)'))
 
     def test_teardown_order(self):
         text = OWNER.read_text()

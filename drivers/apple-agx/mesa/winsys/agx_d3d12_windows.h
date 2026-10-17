@@ -64,12 +64,22 @@ typedef struct {
   const AGX_D3D12_BUFFER *Buffer;
   unsigned long long Offset;
 } AGX_D3D12_UAV;
+/* C5b: a constant buffer at UBO slot b#: a buffer view (Buffer, Offset;
+ * up to 64 KiB, the D3D maximum, never past the buffer) or root constants
+ * (Data, Bytes; copied when the dispatch is recorded); both NULL = unbound. */
+#define AGX_D3D12_CBV_SLOTS 14
+typedef struct {
+  const AGX_D3D12_BUFFER *Buffer;
+  unsigned long long Offset;
+  const void *Data;
+  unsigned Bytes;
+} AGX_D3D12_CBV;
 /* Records one dispatch of x*y*z groups; its writes are ordered before every
  * later recorded command (D3D12 UAV and transition barriers between them
  * need no further AGX work: the launch ends with a full memory barrier). */
 HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *Owner, const AGX_D3D12_COMPUTE *Compute,
-                              const AGX_D3D12_UAV Uavs[AGX_D3D12_UAV_SLOTS], unsigned X, unsigned Y,
-                              unsigned Z);
+                              const AGX_D3D12_UAV Uavs[AGX_D3D12_UAV_SLOTS],
+                              const AGX_D3D12_CBV Cbvs[AGX_D3D12_CBV_SLOTS], unsigned X, unsigned Y, unsigned Z);
 /* Submits the recorded work and waits for it (C4b orders it before the
  * runtime's later queue signal by completing it first). */
 HRESULT AgxD3d12OwnerSubmitAndWait(AGX_D3D12_OWNER *Owner);
