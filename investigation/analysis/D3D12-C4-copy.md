@@ -125,11 +125,14 @@ AgxWin32AsahiScreenCreateForWindows(&Backend, &Runtime.Screen, &OwnerOps,
    owner for a D3D12 queue; CopyBuffer(dst VA, src VA, bytes) through the
    Asahi context (libagx_copy_uint4/uchar on a compute batch, the same call
    agx_blit.c makes); Flush + wait for the batch fence.
-3. Heaps: C4b keeps the proven C2a heaps; the copy references their GPU VAs
-   and kernel allocations, so the batch's residency list must include them
-   (owner hook to add external allocation handles), or heaps move to
-   pipe buffers (re-proves C2) -- decide by reading the Asahi batch's BO
-   residency path (agx_batch_add_bo / winsys Held set).
+3. Heaps: decided by source (agx_win32_gpuva.c AgxWin32GpuvaSubmit): a
+   submission's residency list is built only from winsys BOs
+   (AGX_WIN32_GPUVA_BO{Allocation = UMD token resolved by the adapter, Va,
+   Bound}); raw KMT handles of the C2a heaps cannot be referenced. So D3D12
+   heaps move onto the owner's screen as winsys class buffers bound in its
+   GPUVA space (the allocator the D3D11 path uses), keeping the C2a DDI
+   behaviour (row-major buffers, Map via the screen's CPU mapping, GPU VA from
+   the bind); C2 is re-proved on the new allocator in the same run.
 4. ExecuteCommandLists: replay recorded copies on the queue's owner, flush;
    the runtime's later Signal on the same context orders after it.
 5. Offline: RED -> GREEN tests for the initializer contract (no context
