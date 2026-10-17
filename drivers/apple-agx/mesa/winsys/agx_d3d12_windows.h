@@ -64,6 +64,12 @@ typedef struct {
   const AGX_D3D12_BUFFER *Buffer;
   unsigned long long Offset;
   unsigned long long Bytes; /* C5c: a view's size; 0 = to the buffer end */
+  /* C9: a typed view instead -- image slot u# of Format (DXGI, non-zero):
+   * a buffer range, or a 2D (array) texture level and layer range when
+   * Texture (Buffer = the texture) */
+  DXGI_FORMAT Format;
+  int Texture;
+  unsigned Level, FirstLayer, Layers;
 } AGX_D3D12_UAV;
 /* C5b: a constant buffer at UBO slot b#: a buffer view (Buffer, Offset,
  * Bytes (0 = to the end); up to 64 KiB, the D3D maximum, never past the
@@ -78,7 +84,7 @@ typedef struct {
 } AGX_D3D12_CBV;
 /* C5d: a raw/structured buffer SRV t#, bound as an R32_UINT texel buffer
  * (the dxbc_to_nir convention: one 32-bit word per texel); Bytes 0 = to the
- * buffer end. */
+ * buffer end. C9: a typed buffer SRV has its DXGI Format (Texture 0). */
 #define AGX_D3D12_SRV_SLOTS 16
 typedef struct {
   const AGX_D3D12_BUFFER *Buffer;
@@ -100,10 +106,14 @@ typedef struct {
 /* Records one dispatch of x*y*z groups; its writes are ordered before every
  * later recorded command (D3D12 UAV and transition barriers between them
  * need no further AGX work: the launch ends with a full memory barrier). */
+/* C9: CBVs, SRVs (buffers, typed buffers, textures) and samplers bind as a
+ * draw stage's do. */
 HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *Owner, const AGX_D3D12_COMPUTE *Compute,
                               const AGX_D3D12_UAV Uavs[AGX_D3D12_UAV_SLOTS],
                               const AGX_D3D12_CBV Cbvs[AGX_D3D12_CBV_SLOTS],
-                              const AGX_D3D12_SRV Srvs[AGX_D3D12_SRV_SLOTS], unsigned X, unsigned Y, unsigned Z);
+                              const AGX_D3D12_SRV Srvs[AGX_D3D12_SRV_SLOTS],
+                              const AGX_D3D12_SAMPLER Samplers[AGX_D3D12_SAMPLER_SLOTS], unsigned X, unsigned Y,
+                              unsigned Z);
 /* C6a (investigation/analysis/D3D12-C6-graphics.md): textures. Bytes of
  * one texel block of a DXGI format the owner can create (uncompressed,
  * 1x1 blocks), 0 otherwise. */
@@ -111,6 +121,7 @@ unsigned AgxD3d12FormatBlockBytes(DXGI_FORMAT Format);
 #define AGX_D3D12_BIND_RENDER_TARGET 0x1u
 #define AGX_D3D12_BIND_SAMPLER 0x2u
 #define AGX_D3D12_BIND_DEPTH_STENCIL 0x4u /* C6f: also translates typeless formats as depth */
+#define AGX_D3D12_BIND_UNORDERED_ACCESS 0x8u /* C9: shader images */
 /* A 2D texture (array when Layers > 1) of the owner's screen; Texture->Cpu
  * is NULL, Bytes the caller's allocation size. */
 HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *Owner, DXGI_FORMAT Format, unsigned Width, unsigned Height,

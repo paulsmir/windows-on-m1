@@ -912,7 +912,8 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
         AGX_D3D12_BUFFER texture = {};
         const UINT bind = ((resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET) ? AGX_D3D12_BIND_RENDER_TARGET : 0u) |
                           ((resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE) ? AGX_D3D12_BIND_SAMPLER : 0u) |
-                          ((resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_DEPTH_STENCIL) ? AGX_D3D12_BIND_DEPTH_STENCIL : 0u);
+                          ((resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_DEPTH_STENCIL) ? AGX_D3D12_BIND_DEPTH_STENCIL : 0u) |
+                          ((resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0022_UNORDERED_ACCESS) ? AGX_D3D12_BIND_UNORDERED_ACCESS : 0u);
         /* C7b: a 2D render target the runtime can share (DXGI swapchain
          * buffers among them) gets a kernel allocation of the runtime
          * resource -- the D3D10/11 presentation-resource contract (BGRA8 or
@@ -1077,7 +1078,8 @@ static UINT APIENTRY GetDescriptorSizeInBytes(D3D12DDI_HDEVICE, D3D12DDI_DESCRIP
  * owner (Gallium bindings), so a descriptor is a CPU record of the view --
  * the buffer heap and byte range -- never read by the GPU. */
 enum : UINT { kDescriptorNone = 0, kDescriptorCbv = 1, kDescriptorUavBuffer = 2, kDescriptorSrvBuffer = 3,
-              kDescriptorRtv = 4, kDescriptorSrvTexture = 5, kDescriptorSampler = 6, kDescriptorDsv = 7 };
+              kDescriptorRtv = 4, kDescriptorSrvTexture = 5, kDescriptorSampler = 6, kDescriptorDsv = 7,
+              kDescriptorUavTexture = 8, kDescriptorUavTypedBuffer = 9 /* C9: typed UAVs (image u#) */ };
 struct AgxD3d12Descriptor {
     UINT kind;
     UINT reserved;
@@ -1133,12 +1135,36 @@ static VOID APIENTRY CreateUnorderedAccessView(D3D12DDI_HDEVICE handle, const D3
     auto *out = reinterpret_cast<AgxD3d12Descriptor *>(dest.ptr);
     if (!out) return;
     memset(out, 0, sizeof(*out));
+    (void)handle;
     const auto *resource = arg ? static_cast<const AgxD3d12Resource *>(arg->hDrvResource.pDrvPrivate) : nullptr;
+    /* C9: a typed UAV of a 2D (array) texture: one mip, a slice range */
+    if (arg && resource && resource->heap && resource->type == D3D12DDI_RT_TEXTURE2D) {
+        const D3D12DDIARG_TEX2D_UNORDERED_ACCESS_VIEW_0002 &v = arg->Tex2D;
+        const UINT reason = arg->ResourceDimension != D3D12DDI_RD_TEXTURE2D || v.PlaneSlice ? 4u
+                          : v.MipSlice >= resource->levels || v.FirstArraySlice >= resource->layers ? 6u : 0u;
+        if (!reason) {
+            out->kind = kDescriptorUavTexture;
+            out->heap = resource->heap;
+            out->format = arg->Format == DXGI_FORMAT_UNKNOWN ? resource->format : arg->Format;
+            out->level = v.MipSlice;
+            out->levels = 1;
+            out->first_layer = v.FirstArraySlice;
+            out->layers = v.ArraySize == UINT_MAX || v.ArraySize > resource->layers - v.FirstArraySlice
+                              ? resource->layers - v.FirstArraySlice : (v.ArraySize ? v.ArraySize : 1u);
+        }
+        ViewReceipt("measure-d3d12-uav", reason, static_cast<UINT>(arg->Format), 0x80000000u | v.MipSlice);
+        return;
+    }
     const bool raw = arg && (arg->Buffer.Flags & D3D12DDI_BUFFER_UAV_FLAG_RAW);
-    const UINT stride = !arg ? 0u : raw ? 4u : arg->Buffer.StructureByteStride;
+    /* C9: a typed buffer UAV (a format, neither raw nor structured) */
+    const bool typed = arg && !raw && !arg->Buffer.StructureByteStride && arg->Format != DXGI_FORMAT_UNKNOWN;
+    UINT stride = !arg ? 0u : raw ? 4u : arg->Buffer.StructureByteStride;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (typed) stride = AgxD3d12FormatBlockBytes(arg->Format);
+#endif
     UINT reason = !arg || !resource || !resource->heap ? 1u
                 : arg->ResourceDimension != D3D12DDI_RD_BUFFER ? 4u
-                : !stride ? 5u /* typed buffer UAV */
+                : !stride ? 5u /* a typed format the owner cannot address */
                 : arg->Buffer.hDrvCounterResource.pDrvPrivate ? 7u
                 : 0u;
     const UINT64 offset = reason ? 0 : arg->Buffer.FirstElement * stride;
@@ -1147,12 +1173,12 @@ static VOID APIENTRY CreateUnorderedAccessView(D3D12DDI_HDEVICE handle, const D3
 #ifndef APPLE_AGX_D3D12_NATIVE_OWNER
     if (!reason) reason = 3u;
 #endif
-    (void)handle;
     if (!reason) {
-        out->kind = kDescriptorUavBuffer;
+        out->kind = typed ? kDescriptorUavTypedBuffer : kDescriptorUavBuffer;
         out->heap = resource->heap;
         out->offset = resource->gpuva - resource->heap->gpuva + offset;
         out->bytes = bytes;
+        out->format = typed ? arg->Format : DXGI_FORMAT_UNKNOWN;
     }
     ViewReceipt("measure-d3d12-uav", reason, stride, arg ? arg->Buffer.NumElements : 0u);
 }
@@ -1233,10 +1259,15 @@ static VOID APIENTRY CreateShaderResourceView(D3D12DDI_HDEVICE, const D3D12DDIAR
         return;
     }
     const bool raw = arg && (arg->Buffer.Flags & D3D12DDI_BUFFER_SRV_FLAG_RAW);
-    const UINT stride = !arg ? 0u : raw ? 4u : arg->Buffer.StructureByteStride;
+    /* C9: a typed buffer SRV (a format, neither raw nor structured) */
+    const bool typed = arg && !raw && !arg->Buffer.StructureByteStride && arg->Format != DXGI_FORMAT_UNKNOWN;
+    UINT stride = !arg ? 0u : raw ? 4u : arg->Buffer.StructureByteStride;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (typed) stride = AgxD3d12FormatBlockBytes(arg->Format);
+#endif
     UINT reason = !arg || !resource || !resource->heap ? 1u
                 : arg->ResourceDimension != D3D12DDI_RD_BUFFER ? 4u
-                : !stride ? 5u /* typed buffer SRV */
+                : !stride ? 5u /* a typed format the owner cannot address */
                 : 0u;
     const UINT64 offset = reason ? 0 : arg->Buffer.FirstElement * stride;
     const UINT64 bytes = reason ? 0 : static_cast<UINT64>(arg->Buffer.NumElements) * stride;
@@ -1249,6 +1280,7 @@ static VOID APIENTRY CreateShaderResourceView(D3D12DDI_HDEVICE, const D3D12DDIAR
         out->heap = resource->heap;
         out->offset = resource->gpuva - resource->heap->gpuva + offset;
         out->bytes = bytes;
+        out->format = typed ? arg->Format : DXGI_FORMAT_UNKNOWN;
     }
     ViewReceipt("measure-d3d12-srv", reason, stride, arg ? arg->Buffer.NumElements : 0u);
 }
@@ -2345,7 +2377,7 @@ static UINT ResolveRoot(AgxD3d12CommandList *list, const AgxD3d12RootSignature *
             return 4u;
         }
     }
-    /* C6e: static samplers visible to the stage (compute: not yet) */
+    /* C6e: static samplers visible to the stage (C9: compute sees all) */
     const D3D12DDI_STATIC_SAMPLER *statics = root ? StaticSamplersOf(root) : nullptr;
     for (UINT i = 0; root && i < root->static_samplers; ++i) {
         const D3D12DDI_STATIC_SAMPLER &s = statics[i];
@@ -2355,9 +2387,6 @@ static UINT ResolveRoot(AgxD3d12CommandList *list, const AgxD3d12RootSignature *
         if (s.RegisterSpace || s.ShaderRegister >= kSamplerSlots) return 5u;
         out->static_sampler[s.ShaderRegister] = &s;
     }
-    if (stage == kAnyStage)
-        for (UINT s = 0; s < kSamplerSlots; ++s)
-            if (out->sampler[s] || out->static_sampler[s]) return 4u; /* compute samplers: not yet */
     memcpy(out->root_dwords, dwords, kRootArguments * sizeof(UINT));
     return 0u;
 }
@@ -2500,9 +2529,19 @@ static void OwnerBindings(const AgxD3d12Dispatch &b, AgxD3d12OwnerBindings *o) {
     memset(o, 0, sizeof(*o));
     for (UINT u = 0; u < kUavSlots; ++u) {
         const AgxD3d12Descriptor *view = b.uav_descriptor[u];
-        if (view && view->kind == kDescriptorUavBuffer && view->heap) {
+        if (view && (view->kind == kDescriptorUavBuffer || view->kind == kDescriptorUavTypedBuffer) && view->heap) {
             o->uav_buffers[u] = HeapBuffer(view->heap);
             o->uavs[u] = {&o->uav_buffers[u], view->offset, view->bytes};
+            o->uavs[u].Format = view->kind == kDescriptorUavTypedBuffer ? view->format : DXGI_FORMAT_UNKNOWN;
+        } else if (view && view->kind == kDescriptorUavTexture && view->heap) {
+            /* C9: image u# of a texture level and slice range */
+            o->uav_buffers[u] = HeapBuffer(view->heap);
+            o->uavs[u].Buffer = &o->uav_buffers[u];
+            o->uavs[u].Format = view->format;
+            o->uavs[u].Texture = 1;
+            o->uavs[u].Level = view->level;
+            o->uavs[u].FirstLayer = view->first_layer;
+            o->uavs[u].Layers = view->layers;
         }
         if (!b.uav_heap[u]) continue;
         o->uav_buffers[u] = HeapBuffer(b.uav_heap[u]);
@@ -2529,6 +2568,7 @@ static void OwnerBindings(const AgxD3d12Dispatch &b, AgxD3d12OwnerBindings *o) {
         if (view && view->kind == kDescriptorSrvBuffer && view->heap) {
             o->srv_buffers[s] = HeapBuffer(view->heap);
             o->srvs[s] = {&o->srv_buffers[s], view->offset, view->bytes};
+            o->srvs[s].Format = view->format; /* C9: typed buffer SRVs; raw/structured UNKNOWN */
         } else if (view && view->kind == kDescriptorSrvTexture && view->heap) {
             o->srv_buffers[s] = HeapBuffer(view->heap);
             o->srvs[s].Buffer = &o->srv_buffers[s];
@@ -2570,8 +2610,8 @@ static void OwnerBindings(const AgxD3d12Dispatch &b, AgxD3d12OwnerBindings *o) {
 static __declspec(noinline) HRESULT ReplayDispatch(AGX_D3D12_OWNER *owner, const AgxD3d12Dispatch &dispatch) {
     AgxD3d12OwnerBindings bind;
     OwnerBindings(dispatch, &bind);
-    return AgxD3d12OwnerDispatch(owner, &dispatch.pso->compute, bind.uavs, bind.cbvs, bind.srvs, dispatch.groups[0],
-                                 dispatch.groups[1], dispatch.groups[2]);
+    return AgxD3d12OwnerDispatch(owner, &dispatch.pso->compute, bind.uavs, bind.cbvs, bind.srvs, bind.samplers,
+                                 dispatch.groups[0], dispatch.groups[1], dispatch.groups[2]);
 }
 struct AgxD3d12DrawScratch {
     AGX_D3D12_BUFFER rtv_textures[8], vb_buffers[kVertexBuffers], dsv_texture, index_buffer;

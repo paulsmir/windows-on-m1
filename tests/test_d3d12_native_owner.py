@@ -64,19 +64,27 @@ class NativeOwner(unittest.TestCase):
                                              'set_shader_buffers(pipe, MESA_SHADER_COMPUTE, 0, AGX_D3D12_UAV_SLOTS, NULL, 0)')]
         self.assertEqual(order, sorted(order))
         self.assertIn('uavs[i].Offset >= buffer->Bytes', dispatch)
-        # C5b: constant buffers bound before the launch, capped at 64 KiB and
-        # the buffer end, and dropped after it
-        self.assertIn('room < 65536ull ? room : 65536ull', dispatch)
-        self.assertLess(dispatch.index('set_constant_buffer(pipe, MESA_SHADER_COMPUTE, i,'), dispatch.index('launch_grid'))
-        self.assertLess(dispatch.index('launch_grid'), dispatch.index('set_constant_buffer(pipe, MESA_SHADER_COMPUTE, i, NULL)'))
-        # C5d: SRVs are R32_UINT texel-buffer views (dxbc_to_nir: one word per
-        # texel), bound before the launch, unbound and released after it
-        self.assertIn('templ.format = PIPE_FORMAT_R32_UINT;', dispatch)
-        self.assertIn('templ.target = PIPE_BUFFER;', dispatch)
-        order = [dispatch.index(k) for k in ('set_sampler_views(pipe, MESA_SHADER_COMPUTE, 0, view_count, 0, views)',
-                                             'launch_grid', 'set_sampler_views(pipe, MESA_SHADER_COMPUTE, 0, 0, view_count, NULL)')]
+        # C5b/C5d/C9: CBVs (capped at 64 KiB and the buffer end) and SRVs bind
+        # through the draw stages' bind_stage before the launch and unbind
+        # (views released) after it -- EXP1372 offline: the compute path's
+        # own SRV loop made texture SRVs R32_UINT buffer views
+        stage = body(text, 'static HRESULT bind_stage(')
+        self.assertIn('room < 65536ull ? room : 65536ull', stage)
+        self.assertIn('if (srvs[i].Texture) {', stage)
+        self.assertIn('FormatTranslate(srvs[i].Format, FALSE) : PIPE_FORMAT_R32_UINT', stage)
+        order = [dispatch.index(k) for k in ('bind_stage(pipe, MESA_SHADER_COMPUTE, cbvs, srvs, views, &view_count)',
+                                             'launch_grid', 'unbind_stage(pipe, MESA_SHADER_COMPUTE, views, view_count)')]
         self.assertEqual(order, sorted(order))
-        self.assertIn('pipe->sampler_view_release(pipe, views[i]);', dispatch)
+        self.assertNotIn('templ.format = PIPE_FORMAT_R32_UINT;', dispatch)
+        # C9: compute samplers live for one launch; typed UAVs are images u#
+        order = [dispatch.index(k) for k in ('create_sampler(pipe, &samplers[i])', 'bind_sampler_states(pipe, MESA_SHADER_COMPUTE, 0, state_count, states)',
+                                             'set_shader_images(pipe, MESA_SHADER_COMPUTE, 0, image_count, 0, images)', 'launch_grid',
+                                             'set_shader_images(pipe, MESA_SHADER_COMPUTE, 0, 0, image_count, NULL)',
+                                             'bind_sampler_states(pipe, MESA_SHADER_COMPUTE, 0, state_count, none)')]
+        self.assertEqual(order, sorted(order))
+        image = body(text, 'static bool uav_image(')
+        self.assertIn('uav->Layers > resource->array_size - uav->FirstLayer', image)
+        self.assertIn('resource->target != PIPE_BUFFER || !bytes', image)
 
     def test_textures(self):
         # C6a: textures use the D3D10 frontend's DXGI table; footprint copies
