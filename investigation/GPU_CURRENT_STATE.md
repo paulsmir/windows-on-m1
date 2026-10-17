@@ -16,7 +16,11 @@ out84 on closure 104, GL ICD out61, m1n1 5b857603). FL 11_0 default.
   Mesa's query, TIMESTAMPDISJOINT 1 GHz, not disjoint. agx_timestamp_smoke
   PASS ARM64/x86 (compute 36/146 ms, render 50/171 ms tracking the work);
   no regression.
-- Open: D3D12.
+- D3D12 (EXP1344, 2026-10-17T01:57Z): with a driver adapter object the 26100
+  runtime asks GetCaps 3DPIPELINESUPPORT1 (1074) then 3DPIPELINESUPPORT
+  (1007), negotiates 0003 and closes the adapter (caps refused). Plan:
+  investigation/analysis/D3D12-C-implementation-plan.md (C1 = caps +
+  CreateDevice + FillDDITable fail-closed, under APPLE_AGX_D3D12=1 only).
 - Scratchpad tools vanish: restore from .local/scratchpad-tools-backup.
 
 ## Current as of 2026-10-16T23:36Z (read this first)
