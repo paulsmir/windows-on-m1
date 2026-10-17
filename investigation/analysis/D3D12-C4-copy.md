@@ -78,6 +78,16 @@ buffers, verified on the CPU.
   (either a winsys context built from the D3D12 device's kernel callbacks and
   queue context, or a narrow D3D12 implementation of the BO/USC hooks
   agx_bg_eot needs) -- decide after reading agx_win32_gpuva*.c ownership.
+- Decision input (agx_win32_gpuva.h): the winsys already isolates the WDDM
+  side behind AGX_WIN32_GPUVA_OPS {Reserve, Map, Free, MakeResident,
+  WaitPaging, Submit, WaitRender, Evict, PrivateEscape, QueryRender,
+  GpuTimestamps} with an opaque context ("host-testable boundary around WDDM
+  callbacks"); the D3D11 UMD implements it in umd_gpuva_windows.c over
+  ADMISSION_UMD_DEVICE. Plan: the D3D12 device implements the same ops over
+  its own kernel callbacks, paging queue (C2a) and queue context (C3b), and
+  instantiates the same agx_device/screen; the libagx precompiled copy then
+  runs through Mesa's own launch path. Offline: the existing
+  agx_win32_gpuva_test.c harness exercises an ops table without hardware.
 
 ## Checkpoints
 
