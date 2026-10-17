@@ -166,6 +166,9 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckExistingResourceAllocationInfo, '
                       'CheckExistingResourceAllocationInfo);', source)
         self.assertIn('*allocation = resource && resource->heap ? resource->heap->allocation : 0;', source)
+        # EXP1358: a buffer is one subresource at offset 0 spanning its width
+        self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckSubresourceInfo, CheckSubresourceInfo);', source)
+        self.assertIn('if (resource && subresource == 0) info->RowStride = info->DepthStride = resource->bytes;', source)
         self.assertIn('D3D12DDI_RT_BUFFER', create)
         # the paging queue is created with the first heap, not with the device
         device = source[source.index('static HRESULT APIENTRY CreateDevice('):]
