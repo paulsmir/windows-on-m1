@@ -725,6 +725,12 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     /* EXP1369: the indexed mode must build the C6b (empty) root signature */
     const int indexed = mode == 2;
     int rooted = mode == 1;
+    /* C11 (D3D12-C11-queries.md): mode 3 draws the C6b triangle inside an
+     * occlusion, a binary-occlusion and a pipeline-statistics query between
+     * two timestamps and resolves all of them */
+    const int queried = mode == 3;
+    ID3D12QueryHeap *occlusion = NULL, *statistics = NULL, *timestamps = NULL;
+    ID3D12Resource *results = NULL;
     D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
     D3D12_RESOURCE_DESC desc = {0};
     D3D12_DESCRIPTOR_HEAP_DESC rtv_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_NONE};
@@ -734,7 +740,7 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     D3D12_ROOT_PARAMETER parameters[2] = {{D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS}, {D3D12_ROOT_PARAMETER_TYPE_CBV}};
     D3D12_ROOT_SIGNATURE_DESC root_desc = {rooted ? 2u : 0u, rooted ? parameters : NULL, 0, NULL,
                                            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT};
-    const char *step = indexed ? "C6D" : rooted ? "C6C" : "C6B";
+    const char *step = indexed ? "C6D" : rooted ? "C6C" : queried ? "C11" : "C6B";
     const unsigned char want[3] = {(unsigned char)(indexed ? 255 : 0), (unsigned char)(rooted ? 0 : 255),
                                    (unsigned char)(rooted ? 255 : 0)};
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {0};
@@ -861,6 +867,24 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
         ID3D12GraphicsCommandList_RSSetScissorRects(list, 1, &scissor);
         ID3D12GraphicsCommandList_IASetPrimitiveTopology(list, D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         ID3D12GraphicsCommandList_IASetVertexBuffers(list, 0, 1, &vbv);
+        if (queried) {
+            D3D12_QUERY_HEAP_DESC qd = {D3D12_QUERY_HEAP_TYPE_OCCLUSION, 2, 0};
+            HRESULT qh = ID3D12Device_CreateQueryHeap(device, &qd, &IID_ID3D12QueryHeap, (void **)&occlusion);
+            qd.Type = D3D12_QUERY_HEAP_TYPE_PIPELINE_STATISTICS;
+            qd.Count = 1;
+            if (SUCCEEDED(qh)) qh = ID3D12Device_CreateQueryHeap(device, &qd, &IID_ID3D12QueryHeap, (void **)&statistics);
+            qd.Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP;
+            qd.Count = 2;
+            if (SUCCEEDED(qh)) qh = ID3D12Device_CreateQueryHeap(device, &qd, &IID_ID3D12QueryHeap, (void **)&timestamps);
+            results = SUCCEEDED(qh) ? committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST) : NULL;
+            printf("C11 CreateQueryHeap x3 hr=0x%08lx\n", (unsigned long)qh);
+            if (results) {
+                ID3D12GraphicsCommandList_EndQuery(list, timestamps, D3D12_QUERY_TYPE_TIMESTAMP, 0);
+                ID3D12GraphicsCommandList_BeginQuery(list, occlusion, D3D12_QUERY_TYPE_OCCLUSION, 0);
+                ID3D12GraphicsCommandList_BeginQuery(list, occlusion, D3D12_QUERY_TYPE_BINARY_OCCLUSION, 1);
+                ID3D12GraphicsCommandList_BeginQuery(list, statistics, D3D12_QUERY_TYPE_PIPELINE_STATISTICS, 0);
+            }
+        }
         if (indexed) {
             D3D12_INDEX_BUFFER_VIEW ibv = {ID3D12Resource_GetGPUVirtualAddress(vertices) + 512, 12, DXGI_FORMAT_R16_UINT};
             ID3D12GraphicsCommandList_IASetIndexBuffer(list, &ibv);
@@ -868,9 +892,19 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
         } else {
             ID3D12GraphicsCommandList_DrawInstanced(list, 3, 1, 0, 0);
         }
+        if (queried && results) {
+            ID3D12GraphicsCommandList_EndQuery(list, statistics, D3D12_QUERY_TYPE_PIPELINE_STATISTICS, 0);
+            ID3D12GraphicsCommandList_EndQuery(list, occlusion, D3D12_QUERY_TYPE_BINARY_OCCLUSION, 1);
+            ID3D12GraphicsCommandList_EndQuery(list, occlusion, D3D12_QUERY_TYPE_OCCLUSION, 0);
+            ID3D12GraphicsCommandList_EndQuery(list, timestamps, D3D12_QUERY_TYPE_TIMESTAMP, 1);
+            ID3D12GraphicsCommandList_ResolveQueryData(list, occlusion, D3D12_QUERY_TYPE_OCCLUSION, 0, 1, results, 0);
+            ID3D12GraphicsCommandList_ResolveQueryData(list, occlusion, D3D12_QUERY_TYPE_BINARY_OCCLUSION, 1, 1, results, 8);
+            ID3D12GraphicsCommandList_ResolveQueryData(list, statistics, D3D12_QUERY_TYPE_PIPELINE_STATISTICS, 0, 1, results, 64);
+            ID3D12GraphicsCommandList_ResolveQueryData(list, timestamps, D3D12_QUERY_TYPE_TIMESTAMP, 0, 2, results, 256);
+        }
         transition(list, texture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
         ID3D12GraphicsCommandList_CopyTextureRegion(list, &buf_loc, 0, 0, 0, &tex_loc, NULL);
-        hr = run_list(queue, fence, list, base + 1, indexed ? "C6D draw" : rooted ? "C6C draw" : "C6B draw");
+        hr = run_list(queue, fence, list, base + 1, indexed ? "C6D draw" : rooted ? "C6C draw" : queried ? "C11 draw" : "C6B draw");
     }
     if (SUCCEEDED(hr)) {
         D3D12_RANGE all = {0, 16384};
@@ -895,6 +929,35 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     const unsigned low = indexed ? 960u : 448u, high = indexed ? 1088u : 576u;
     const int pass = SUCCEEDED(hr) && centre_ok && corner_ok && other == 0 && green >= low && green <= high;
     printf("AGX_D3D12_%s: %s\n", step, pass ? "PASS" : "FAIL");
+    if (queried) {
+        const UINT64 *q = NULL;
+        D3D12_RANGE all = {0, 512};
+        int occlusion_ok = 0, statistics_ok = 0, timestamps_ok = 0;
+        UINT64 frequency = 0, gpu_clock = 0, cpu_clock = 0;
+        HRESULT fh = ID3D12CommandQueue_GetTimestampFrequency(queue, &frequency);
+        HRESULT ch = ID3D12CommandQueue_GetClockCalibration(queue, &gpu_clock, &cpu_clock);
+        printf("C11 GetTimestampFrequency hr=0x%08lx frequency=%llu GetClockCalibration hr=0x%08lx gpu=%llu cpu=%llu\n",
+               (unsigned long)fh, (unsigned long long)frequency, (unsigned long)ch, (unsigned long long)gpu_clock,
+               (unsigned long long)cpu_clock);
+        if (SUCCEEDED(hr) && results && SUCCEEDED(ID3D12Resource_Map(results, 0, &all, (void **)&q)) && q) {
+            printf("C11 occlusion=%llu binary=%llu drawn=%u\n", (unsigned long long)q[0], (unsigned long long)q[1], green);
+            printf("C11 statistics ia_vertices=%llu ia_primitives=%llu vs=%llu c_invocations=%llu c_primitives=%llu ps=%llu\n",
+                   (unsigned long long)q[8], (unsigned long long)q[9], (unsigned long long)q[10], (unsigned long long)q[13],
+                   (unsigned long long)q[14], (unsigned long long)q[15]);
+            printf("C11 timestamps t0=%llu t1=%llu\n", (unsigned long long)q[32], (unsigned long long)q[33]);
+            occlusion_ok = q[0] == green && q[1] == 1;
+            statistics_ok = q[8] == 3 && q[9] == 1;
+            timestamps_ok = q[32] != 0 && q[33] >= q[32];
+            ID3D12Resource_Unmap(results, 0, NULL);
+        }
+        printf("AGX_D3D12_C11A: %s\n", occlusion_ok ? "PASS" : "FAIL");
+        printf("AGX_D3D12_C11B: %s\n", statistics_ok ? "PASS" : "FAIL");
+        printf("AGX_D3D12_C11C: %s\n", timestamps_ok && SUCCEEDED(fh) && frequency ? "PASS" : "FAIL");
+    }
+    if (results) ID3D12Resource_Release(results);
+    if (timestamps) ID3D12QueryHeap_Release(timestamps);
+    if (statistics) ID3D12QueryHeap_Release(statistics);
+    if (occlusion) ID3D12QueryHeap_Release(occlusion);
     if (list) ID3D12GraphicsCommandList_Release(list);
     if (allocator) ID3D12CommandAllocator_Release(allocator);
     if (pso) ID3D12PipelineState_Release(pso);
@@ -1772,6 +1835,7 @@ static int queue_fence_signal(ID3D12Device *device) {
 typedef int (*probe_step)(ID3D12Device *, ID3D12CommandQueue *, ID3D12Fence *, UINT64);
 static int step_c6c(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 1); }
 static int step_c6d(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 2); }
+static int step_c11(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 3); }
 static int run_isolated(IDXGIAdapter1 *adapter, const char *name, probe_step step) {
     ID3D12Device *device = NULL;
     ID3D12CommandQueue *queue = NULL;
@@ -1815,6 +1879,7 @@ int main(void) {
                 (void)run_isolated(adapter, "C8C", placed_buffer);
                 (void)run_isolated(adapter, "C9", compute_images);
                 (void)run_isolated(adapter, "C10", clear_uavs);
+                (void)run_isolated(adapter, "C11", step_c11);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
             }
             IDXGIAdapter1_Release(adapter);
