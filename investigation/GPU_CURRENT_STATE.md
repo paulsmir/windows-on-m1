@@ -1,5 +1,28 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
+## Current as of 2026-10-17T10:45Z (read this first)
+
+Installed after recovery: none (rec1355h). Integration HEAD 1465fd81.
+- PROVEN (EXP1355): D3D12CreateDevice S_OK at FL 11_0 on the AGX adapter
+  (APPLE_AGX_D3D12=1 profile only; ordinary processes still E_NOTIMPL).
+  The 26100 runtime's device initialisation, measured one refused DDI per
+  run with measure-d3d12-rejected receipts (EXP1348-EXP1355): caps 1074,
+  1007, versions, D3D12_OPTIONS, SHADER, tables, ARCHITECTURE_INFO,
+  CheckFormatSupport x93 / CheckMultisampleQualityLevels x2730 /
+  QueryNodeMap, TEXTURE_LAYOUT(1000), MEMORY_ARCHITECTURE, TEXTURE_LAYOUT_SETS
+  x3 (row-major SubCaps[0] must be valid: d3d12core 26100 rejects
+  MaxElementSize 0 with 0x887a0020; ours {16,16,16,128}), empty root
+  signature, VS 4.0 + blend/DS/rasterizer + graphics PSO, MakeResident(0),
+  CS 5.0 + compute PSO, GPUVA caps, descriptor sizes (64/32).
+- Shaders/PSOs store their descriptions (compile is C5/C6); every command
+  list and view DDI is still fail-closed.
+- OPEN (EXP1355 C2): the first committed 64 KiB upload buffer fails
+  (0x887a0005) after CheckResourceAllocationInfo, before any heap receipt.
+  EXP1356 = entry receipts on CalcPrivateHeapAndResourceSizes /
+  CreateHeapAndResource (1f1ee652, receipt-only).
+- Offline tool: guest d3d12core.dll copy + ARM64 disassembly in the
+  scratchpad (d3d12core/dis.txt) for runtime validation strings.
+
 ## Current as of 2026-10-17T01:07Z (read this first)
 
 Installed: PACKAGE1343 (c99fde69 = integration driver sources; WOW64 UMD
