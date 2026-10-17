@@ -659,6 +659,40 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
 
 /* C6c: one graphics stage's constant buffers and buffer SRVs (the compute
  * path's conversions; views are released after the draw). */
+/* C6e: D3D sampler state as the D3D10 frontend's CreateSamplerState
+ * translates it (filter bits min [5:4], mag [3:2], mip [1:0], anisotropy
+ * bit 6, comparison reduction bits [8:7]). */
+static unsigned wrap_mode(unsigned address) {
+  switch (address) {
+  case 2: return PIPE_TEX_WRAP_MIRROR_REPEAT;
+  case 3: return PIPE_TEX_WRAP_CLAMP_TO_EDGE;
+  case 4: return PIPE_TEX_WRAP_CLAMP_TO_BORDER;
+  case 5: return PIPE_TEX_WRAP_MIRROR_CLAMP_TO_EDGE;
+  default: return PIPE_TEX_WRAP_REPEAT;
+  }
+}
+static void *create_sampler(struct pipe_context *pipe, const AGX_D3D12_SAMPLER *s) {
+  struct pipe_sampler_state state = {};
+  const unsigned filter = s->Filter;
+  const bool aniso = (filter & 0x40u) != 0;
+  state.wrap_s = wrap_mode(s->AddressU);
+  state.wrap_t = wrap_mode(s->AddressV);
+  state.wrap_r = wrap_mode(s->AddressW);
+  state.min_img_filter = aniso || ((filter >> 4) & 3u) ? PIPE_TEX_FILTER_LINEAR : PIPE_TEX_FILTER_NEAREST;
+  state.mag_img_filter = aniso || ((filter >> 2) & 3u) ? PIPE_TEX_FILTER_LINEAR : PIPE_TEX_FILTER_NEAREST;
+  state.min_mip_filter = aniso || (filter & 3u) ? PIPE_TEX_MIPFILTER_LINEAR : PIPE_TEX_MIPFILTER_NEAREST;
+  state.max_anisotropy = aniso ? (s->MaxAnisotropy > 16 ? 16 : s->MaxAnisotropy) : 0;
+  if (((filter >> 7) & 3u) == 1u) {
+    state.compare_mode = PIPE_TEX_COMPARE_R_TO_TEXTURE;
+    state.compare_func = comparison(s->ComparisonFunc);
+  }
+  state.lod_bias = s->MipLodBias;
+  state.min_lod = s->MinLod;
+  state.max_lod = s->MaxLod;
+  for (unsigned i = 0; i < 4; ++i) state.border_color.f[i] = s->BorderColor[i];
+  return pipe->create_sampler_state(pipe, &state);
+}
+
 static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, const AGX_D3D12_CBV *cbvs,
                           const AGX_D3D12_SRV *srvs, struct pipe_sampler_view **views, unsigned *view_count) {
   *view_count = 0;
@@ -681,15 +715,34 @@ static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, co
   for (unsigned i = 0; i < AGX_D3D12_SRV_SLOTS; ++i) {
     const AGX_D3D12_BUFFER *buffer = srvs[i].Buffer;
     if (!buffer) continue;
-    if (!buffer->Resource || srvs[i].Offset >= buffer->Bytes) return E_INVALIDARG;
-    const unsigned long long room = buffer->Bytes - srvs[i].Offset;
     struct pipe_sampler_view templ = {};
-    templ.format = PIPE_FORMAT_R32_UINT;
-    templ.target = PIPE_BUFFER;
     templ.swizzle_r = PIPE_SWIZZLE_X;
     templ.swizzle_g = PIPE_SWIZZLE_Y;
     templ.swizzle_b = PIPE_SWIZZLE_Z;
     templ.swizzle_a = PIPE_SWIZZLE_W;
+    if (srvs[i].Texture) {
+      /* C6e: a texture view (gallium/frontends/d3d10umd CreateShaderResourceView) */
+      struct pipe_resource *texture = static_cast<struct pipe_resource *>(buffer->Resource);
+      const enum pipe_format format = FormatTranslate(srvs[i].Format, FALSE);
+      if (!texture || format == PIPE_FORMAT_NONE || !srvs[i].Levels || !srvs[i].Layers ||
+          srvs[i].FirstLevel + srvs[i].Levels - 1 > texture->last_level ||
+          srvs[i].FirstLayer + srvs[i].Layers > texture->array_size)
+        return E_INVALIDARG;
+      templ.format = format;
+      templ.target = texture->target;
+      templ.u.tex.first_level = static_cast<uint8_t>(srvs[i].FirstLevel);
+      templ.u.tex.last_level = static_cast<uint8_t>(srvs[i].FirstLevel + srvs[i].Levels - 1);
+      templ.u.tex.first_layer = static_cast<uint16_t>(srvs[i].FirstLayer);
+      templ.u.tex.last_layer = static_cast<uint16_t>(srvs[i].FirstLayer + srvs[i].Layers - 1);
+      views[i] = pipe->create_sampler_view(pipe, texture, &templ);
+      if (!views[i]) return E_OUTOFMEMORY;
+      *view_count = i + 1;
+      continue;
+    }
+    if (!buffer->Resource || srvs[i].Offset >= buffer->Bytes) return E_INVALIDARG;
+    const unsigned long long room = buffer->Bytes - srvs[i].Offset;
+    templ.format = PIPE_FORMAT_R32_UINT;
+    templ.target = PIPE_BUFFER;
     templ.u.buf.offset = static_cast<unsigned>(srvs[i].Offset);
     templ.u.buf.size = static_cast<unsigned>(srvs[i].Bytes && srvs[i].Bytes < room ? srvs[i].Bytes : room) & ~3u;
     views[i] = pipe->create_sampler_view(pipe, static_cast<struct pipe_resource *>(buffer->Resource), &templ);
@@ -706,6 +759,16 @@ static void unbind_stage(struct pipe_context *pipe, mesa_shader_stage stage, str
   pipe->set_sampler_views(pipe, stage, 0, 0, view_count, NULL);
   for (unsigned i = 0; i < view_count; ++i)
     if (views[i]) pipe->sampler_view_release(pipe, views[i]);
+}
+
+static void release_samplers(struct pipe_context *pipe, void **vs, unsigned vs_count, void **ps, unsigned ps_count) {
+  void *none[AGX_D3D12_SAMPLER_SLOTS] = {};
+  if (vs_count) pipe->bind_sampler_states(pipe, MESA_SHADER_VERTEX, 0, vs_count, none);
+  if (ps_count) pipe->bind_sampler_states(pipe, MESA_SHADER_FRAGMENT, 0, ps_count, none);
+  for (unsigned i = 0; i < AGX_D3D12_SAMPLER_SLOTS; ++i) {
+    if (vs[i]) pipe->delete_sampler_state(pipe, vs[i]);
+    if (ps[i]) pipe->delete_sampler_state(pipe, ps[i]);
+  }
 }
 
 static enum mesa_prim primitive(unsigned topology) {
@@ -818,6 +881,15 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   ref.ref_value[0] = ref.ref_value[1] = static_cast<uint8_t>(draw->StencilRef);
   pipe->set_stencil_ref(pipe, ref);
   pipe->set_sample_mask(pipe, ~0u);
+  /* C6e: sampler states of each stage for this draw */
+  void *vs_samplers[AGX_D3D12_SAMPLER_SLOTS] = {}, *ps_samplers[AGX_D3D12_SAMPLER_SLOTS] = {};
+  unsigned vs_sampler_count = 0, ps_sampler_count = 0;
+  for (unsigned i = 0; i < AGX_D3D12_SAMPLER_SLOTS; ++i) {
+    if (draw->Vs.Samplers[i].Valid && (vs_samplers[i] = create_sampler(pipe, &draw->Vs.Samplers[i]))) vs_sampler_count = i + 1;
+    if (draw->Ps.Samplers[i].Valid && (ps_samplers[i] = create_sampler(pipe, &draw->Ps.Samplers[i]))) ps_sampler_count = i + 1;
+  }
+  if (vs_sampler_count) pipe->bind_sampler_states(pipe, MESA_SHADER_VERTEX, 0, vs_sampler_count, vs_samplers);
+  if (ps_sampler_count) pipe->bind_sampler_states(pipe, MESA_SHADER_FRAGMENT, 0, ps_sampler_count, ps_samplers);
   struct pipe_sampler_view *vs_views[AGX_D3D12_SRV_SLOTS] = {}, *ps_views[AGX_D3D12_SRV_SLOTS] = {};
   unsigned vs_view_count = 0, ps_view_count = 0;
   HRESULT hr = bind_stage(pipe, MESA_SHADER_VERTEX, draw->Vs.Cbvs, draw->Vs.Srvs, vs_views, &vs_view_count);
@@ -825,6 +897,7 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   if (FAILED(hr)) {
     unbind_stage(pipe, MESA_SHADER_VERTEX, vs_views, AGX_D3D12_SRV_SLOTS);
     unbind_stage(pipe, MESA_SHADER_FRAGMENT, ps_views, AGX_D3D12_SRV_SLOTS);
+    release_samplers(pipe, vs_samplers, vs_sampler_count, ps_samplers, ps_sampler_count);
     return hr;
   }
   struct pipe_draw_info info = {};
@@ -841,6 +914,7 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
         draw->IndexOffset >= ib->Bytes) {
       unbind_stage(pipe, MESA_SHADER_VERTEX, vs_views, vs_view_count);
       unbind_stage(pipe, MESA_SHADER_FRAGMENT, ps_views, ps_view_count);
+      release_samplers(pipe, vs_samplers, vs_sampler_count, ps_samplers, ps_sampler_count);
       return E_INVALIDARG;
     }
     info.index_size = static_cast<uint16_t>(draw->IndexSize);
@@ -854,6 +928,7 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   /* the batch holds what the draw read; drop the stage bindings */
   unbind_stage(pipe, MESA_SHADER_VERTEX, vs_views, vs_view_count);
   unbind_stage(pipe, MESA_SHADER_FRAGMENT, ps_views, ps_view_count);
+  release_samplers(pipe, vs_samplers, vs_sampler_count, ps_samplers, ps_sampler_count);
   ++owner->PendingDraws;
   return S_OK;
 }

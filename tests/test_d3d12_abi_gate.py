@@ -179,13 +179,15 @@ class D3d12AbiGate(unittest.TestCase):
         # written into heaps stay refused until implemented.
         sizes = source[source.index('static UINT DescriptorBytes('):]
         sizes = sizes[:sizes.index('\n}\n')]
-        self.assertIn('D3D12DDI_DESCRIPTOR_HEAP_TYPE_SAMPLER ? 32u : 64u', sizes)
+        # C6e: every descriptor is a 64-byte CPU record (a sampler record is
+        # kind + D3D12DDI_SAMPLER_DESC, 56 bytes)
+        self.assertIn('return 64u;', sizes)
         for member in ('pfnGetDescriptorSizeInBytes', 'pfnCalcPrivateDescriptorHeapSize', 'pfnCreateDescriptorHeap',
                        'pfnDestroyDescriptorHeap', 'pfnGetCPUDescriptorHandleForHeapStart',
                        'pfnGetGPUDescriptorHandleForHeapStart'):
             self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
         # C5c/C5d implement CBV and buffer UAV/SRV views (test_c5c_descriptor_tables)
-        for member in ('pfnCreateSampler', 'pfnCreateDepthStencilView'):
+        for member in ('pfnCreateDepthStencilView',):
             self.assertIn('AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s)' % member, source)
         heap = source[source.index('static HRESULT APIENTRY CreateDescriptorHeap('):]
         heap = heap[:heap.index('\n}\n')]
@@ -331,7 +333,7 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('D3D12DDI_DESCRIPTOR_RANGE_OFFSET_APPEND', create)
         self.assertIn('? next : in.OffsetInDescriptorsFromTableStart', create)
         table = fn('static UINT BindTable(')
-        self.assertIn('return 4u; /* sampler */', table)
+        self.assertIn('range.type != D3D12DDI_DESCRIPTOR_RANGE_TYPE_CBV) return 4u;', table)
         self.assertIn('uav ? kUavSlots : srv ? kSrvSlots : kCbSlots', table)
         self.assertIn('range.space || range.base_register >= slots', table)
         self.assertIn('at + sizeof(AgxD3d12Descriptor) > heap->bytes', table)
@@ -460,6 +462,33 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('draw->IndexOffset % draw->IndexSize', draw)
         self.assertIn('range.start += static_cast<unsigned>(draw->IndexOffset / draw->IndexSize);', draw)
         self.assertIn('range.index_bias = draw->BaseVertex;', draw)
+
+    def test_c6e_textures_and_samplers(self):
+        # C6e invariants: 2D texture SRVs record format/mips/layers (clamped
+        # to the resource); samplers are records of their description; root
+        # signatures keep their static samplers (sized and copied); sampler
+        # tables and static samplers resolve per stage visibility; compute
+        # refuses samplers until supported; static border colours map to
+        # the D3D12 constants.
+        source = SOURCE.read_text()
+        def fn(name):
+            start = source.index(name)
+            return source[start:source.index('\n}\n', start)]
+        srv = fn('static VOID APIENTRY CreateShaderResourceView(')
+        self.assertIn('out->kind = kDescriptorSrvTexture;', srv)
+        self.assertIn('resource->levels - v.MostDetailedMip', srv)
+        self.assertIn('out->desc = *arg->pSamplerDesc;', fn('static VOID APIENTRY CreateSampler('))
+        self.assertIn('samplers * sizeof(D3D12DDI_STATIC_SAMPLER)', fn('static SIZE_T APIENTRY CalcPrivateRootSignatureSize('))
+        self.assertIn('memcpy(StaticSamplersOf(root), desc.pStaticSamplers', fn('static HRESULT APIENTRY CreateRootSignature('))
+        resolve = fn('static UINT ResolveRoot(')
+        self.assertIn('out->static_sampler[s.ShaderRegister] = &s;', resolve)
+        self.assertIn('return 4u; /* compute samplers: not yet */', resolve)
+        table = fn('static UINT BindTable(')
+        self.assertIn('D3D12DDI_DESCRIPTOR_RANGE_TYPE_SAMPLER', table)
+        bindings = fn('static void OwnerBindings(')
+        self.assertIn('view->kind == kDescriptorSrvTexture', bindings)
+        self.assertIn('{0, 0, 0, 0}, {0, 0, 0, 1}, {1, 1, 1, 1}, {0, 0, 0, 1}, {1, 1, 1, 1}', bindings)
+        self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateSampler, CreateSampler);', source)
 
     def test_package_and_receipts(self):
         package = ROOT / 'drivers/apple-agx/render-admission/umd'

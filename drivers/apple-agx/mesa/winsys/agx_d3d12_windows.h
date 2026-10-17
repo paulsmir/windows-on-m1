@@ -84,7 +84,19 @@ typedef struct {
   const AGX_D3D12_BUFFER *Buffer;
   unsigned long long Offset;
   unsigned long long Bytes;
+  /* C6e: a 2D (array) texture view instead (Buffer = the texture) */
+  int Texture;
+  DXGI_FORMAT Format;
+  unsigned FirstLevel, Levels, FirstLayer, Layers;
 } AGX_D3D12_SRV;
+/* C6e: a sampler s# in the D3D10/11/12 DDI encoding (filter bits, address
+ * modes 1..5, comparison 1..8) */
+#define AGX_D3D12_SAMPLER_SLOTS 16
+typedef struct {
+  int Valid;
+  unsigned Filter, AddressU, AddressV, AddressW, MaxAnisotropy, ComparisonFunc;
+  float MipLodBias, MinLod, MaxLod, BorderColor[4];
+} AGX_D3D12_SAMPLER;
 /* Records one dispatch of x*y*z groups; its writes are ordered before every
  * later recorded command (D3D12 UAV and transition barriers between them
  * need no further AGX work: the launch ends with a full memory barrier). */
@@ -192,6 +204,7 @@ typedef struct {
   struct {
     AGX_D3D12_CBV Cbvs[AGX_D3D12_CBV_SLOTS];
     AGX_D3D12_SRV Srvs[AGX_D3D12_SRV_SLOTS];
+    AGX_D3D12_SAMPLER Samplers[AGX_D3D12_SAMPLER_SLOTS]; /* C6e */
   } Vs, Ps;
 } AGX_D3D12_DRAW;
 /* Records one draw; bindings that reference heaps are dropped by the next

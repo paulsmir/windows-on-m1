@@ -294,6 +294,10 @@ static AgxD3d12Range *RangesOf(const AgxD3d12RootSignature *root) {
     return reinterpret_cast<AgxD3d12Range *>(
         const_cast<AgxD3d12RootParameter *>(&root->parameter[root->parameters ? root->parameters : 1]));
 }
+/* C6e: the static samplers follow the ranges */
+static D3D12DDI_STATIC_SAMPLER *StaticSamplersOf(const AgxD3d12RootSignature *root) {
+    return reinterpret_cast<D3D12DDI_STATIC_SAMPLER *>(RangesOf(root) + root->range_count);
+}
 static UINT RootParameterDwords(const D3D12DDI_ROOT_PARAMETER &p) {
     switch (p.ParameterType) {
     case D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE: return 1;
@@ -308,8 +312,9 @@ static SIZE_T APIENTRY CalcPrivateRootSignatureSize(D3D12DDI_HDEVICE,
     for (UINT i = 0; i < count; ++i)
         if (arg->pRootSignature->pRootParameters[i].ParameterType == D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE)
             ranges += arg->pRootSignature->pRootParameters[i].DescriptorTable.NumDescriptorRanges;
+    const SIZE_T samplers = arg && arg->pRootSignature ? arg->pRootSignature->NumStaticSamplers : 0;
     return offsetof(AgxD3d12RootSignature, parameter) + (count ? count : 1) * sizeof(AgxD3d12RootParameter) +
-           ranges * sizeof(AgxD3d12Range);
+           ranges * sizeof(AgxD3d12Range) + samplers * sizeof(D3D12DDI_STATIC_SAMPLER);
 }
 static HRESULT APIENTRY CreateRootSignature(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0001 *arg,
                                             D3D12DDI_HROOTSIGNATURE handle) {
@@ -355,6 +360,10 @@ static HRESULT APIENTRY CreateRootSignature(D3D12DDI_HDEVICE, const D3D12DDIARG_
         }
         root->dwords += out.dwords;
     }
+    if (desc.NumStaticSamplers && desc.pStaticSamplers)
+        memcpy(StaticSamplersOf(root), desc.pStaticSamplers, desc.NumStaticSamplers * sizeof(D3D12DDI_STATIC_SAMPLER));
+    else
+        root->static_samplers = 0;
     const UINT receipt[] = {root->parameters, root->static_samplers, root->flags, root->dwords};
     AdmissionUmdDiagnostic("measure-d3d12-root-signature", S_OK, receipt, 4);
     return S_OK;
@@ -995,8 +1004,8 @@ static D3D12DDI_GPU_VIRTUAL_ADDRESS APIENTRY CheckResourceVirtualAddress(D3D12DD
  * one CPU-visible C2a heap (16 MiB class bound) kept locked, so a CPU
  * handle is its pointer and a GPU handle its VA; other heaps are process
  * memory. The views written into them are not implemented yet. */
-static UINT DescriptorBytes(D3D12DDI_DESCRIPTOR_HEAP_TYPE type) {
-    return type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_SAMPLER ? 32u : 64u;
+static UINT DescriptorBytes(D3D12DDI_DESCRIPTOR_HEAP_TYPE) {
+    return 64u; /* C6e: a sampler record (kind + D3D12DDI_SAMPLER_DESC) needs 56 bytes */
 }
 static UINT APIENTRY GetDescriptorSizeInBytes(D3D12DDI_HDEVICE, D3D12DDI_DESCRIPTOR_HEAP_TYPE type) {
     return DescriptorBytes(type);
@@ -1005,7 +1014,7 @@ static UINT APIENTRY GetDescriptorSizeInBytes(D3D12DDI_HDEVICE, D3D12DDI_DESCRIP
  * owner (Gallium bindings), so a descriptor is a CPU record of the view --
  * the buffer heap and byte range -- never read by the GPU. */
 enum : UINT { kDescriptorNone = 0, kDescriptorCbv = 1, kDescriptorUavBuffer = 2, kDescriptorSrvBuffer = 3,
-              kDescriptorRtv = 4 };
+              kDescriptorRtv = 4, kDescriptorSrvTexture = 5, kDescriptorSampler = 6 };
 struct AgxD3d12Descriptor {
     UINT kind;
     UINT reserved;
@@ -1017,7 +1026,14 @@ struct AgxD3d12Descriptor {
     UINT level;
     UINT first_layer;
     UINT layers;
+    UINT levels; /* C6e: texture SRVs */
 };
+/* C6e: a sampler descriptor */
+struct AgxD3d12SamplerDescriptor {
+    UINT kind; /* kDescriptorSampler */
+    D3D12DDI_SAMPLER_DESC desc;
+};
+static_assert(sizeof(AgxD3d12SamplerDescriptor) <= 64, "fits a sampler descriptor");
 static_assert(sizeof(AgxD3d12Descriptor) <= 64, "fits a CBV/SRV/UAV descriptor");
 static void ViewReceipt(PCSTR stage, UINT reason, UINT a, UINT b) {
     const UINT receipt[] = {reason, a, b};
@@ -1111,6 +1127,25 @@ static VOID APIENTRY CreateShaderResourceView(D3D12DDI_HDEVICE, const D3D12DDIAR
     if (!out) return;
     memset(out, 0, sizeof(*out));
     const auto *resource = arg ? static_cast<const AgxD3d12Resource *>(arg->hDrvResource.pDrvPrivate) : nullptr;
+    /* C6e: 2D (array) texture SRVs of committed textures */
+    if (arg && resource && resource->heap && resource->type == D3D12DDI_RT_TEXTURE2D) {
+        const D3D12DDIARG_TEX2D_SHADER_RESOURCE_VIEW_0002 &v = arg->Tex2D;
+        UINT reason = arg->ResourceDimension != D3D12DDI_RD_TEXTURE2D || v.PlaneSlice ? 4u
+                    : v.MostDetailedMip >= resource->levels || v.FirstArraySlice >= resource->layers ? 6u : 0u;
+        if (!reason) {
+            out->kind = kDescriptorSrvTexture;
+            out->heap = resource->heap;
+            out->format = arg->Format == DXGI_FORMAT_UNKNOWN ? resource->format : arg->Format;
+            out->level = v.MostDetailedMip;
+            out->levels = v.MipLevels == UINT_MAX || v.MipLevels > resource->levels - v.MostDetailedMip
+                              ? resource->levels - v.MostDetailedMip : (v.MipLevels ? v.MipLevels : 1u);
+            out->first_layer = v.FirstArraySlice;
+            out->layers = v.ArraySize == UINT_MAX || v.ArraySize > resource->layers - v.FirstArraySlice
+                              ? resource->layers - v.FirstArraySlice : (v.ArraySize ? v.ArraySize : 1u);
+        }
+        ViewReceipt("measure-d3d12-srv", reason, static_cast<UINT>(arg->Format), 0x80000000u | out->levels);
+        return;
+    }
     const bool raw = arg && (arg->Buffer.Flags & D3D12DDI_BUFFER_SRV_FLAG_RAW);
     const UINT stride = !arg ? 0u : raw ? 4u : arg->Buffer.StructureByteStride;
     UINT reason = !arg || !resource || !resource->heap ? 1u
@@ -1130,6 +1165,15 @@ static VOID APIENTRY CreateShaderResourceView(D3D12DDI_HDEVICE, const D3D12DDIAR
         out->bytes = bytes;
     }
     ViewReceipt("measure-d3d12-srv", reason, stride, arg ? arg->Buffer.NumElements : 0u);
+}
+/* C6e: samplers are CPU records of their description */
+static VOID APIENTRY CreateSampler(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_SAMPLER *arg, D3D12DDI_CPU_DESCRIPTOR_HANDLE dest) {
+    auto *out = reinterpret_cast<AgxD3d12SamplerDescriptor *>(dest.ptr);
+    if (!out) return;
+    memset(out, 0, sizeof(*out));
+    if (!arg || !arg->pSamplerDesc) return;
+    out->kind = kDescriptorSampler;
+    out->desc = *arg->pSamplerDesc;
 }
 /* Descriptors are CPU records, so copies are byte copies of whole
  * descriptors of the heap type's size. */
@@ -1330,10 +1374,12 @@ static_assert(kUavSlots == AGX_D3D12_UAV_SLOTS, "UAV slots of the owner");
  * a 16-byte-rounded read stays inside it). */
 static constexpr UINT kCbSlots = 14; /* D3D12_COMMONSHADER_CONSTANT_BUFFER_HW_SLOT_COUNT */
 static constexpr UINT kSrvSlots = 16; /* C5d: buffer SRVs t0..t15 */
+static constexpr UINT kSamplerSlots = 16; /* C6e: s0..s15 */
 static constexpr UINT kRootArguments = 64; /* a root signature costs at most 64 DWORDs */
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 static_assert(kCbSlots == AGX_D3D12_CBV_SLOTS, "constant buffer slots of the owner");
 static_assert(kSrvSlots == AGX_D3D12_SRV_SLOTS, "SRV slots of the owner");
+static_assert(kSamplerSlots == AGX_D3D12_SAMPLER_SLOTS, "sampler slots of the owner");
 #endif
 struct AgxD3d12Dispatch {
     AgxD3d12PipelineState *pso;
@@ -1353,6 +1399,9 @@ struct AgxD3d12Dispatch {
     AgxD3d12Heap *srv_heap[kSrvSlots];
     UINT64 srv_offset[kSrvSlots];
     const struct AgxD3d12Descriptor *srv_descriptor[kSrvSlots];
+    /* C6e: samplers s# from sampler tables or static samplers */
+    const struct AgxD3d12SamplerDescriptor *sampler[kSamplerSlots];
+    const D3D12DDI_STATIC_SAMPLER *static_sampler[kSamplerSlots];
 };
 /* C6a: a recorded ClearRenderTargetView (the RTV read at record time) */
 static constexpr UINT kClearRects = 8;
@@ -1939,9 +1988,25 @@ static UINT BindTable(AgxD3d12CommandList *list, const AgxD3d12RootSignature *ro
     const AgxD3d12Range *ranges = RangesOf(root) + p.first_range;
     for (UINT r = 0; r < p.ranges; ++r) {
         const AgxD3d12Range &range = ranges[r];
+        if (range.type == D3D12DDI_DESCRIPTOR_RANGE_TYPE_SAMPLER) {
+            /* C6e: a sampler table (sampler heaps hold only samplers) */
+            if (range.space || range.base_register >= kSamplerSlots) return 5u;
+            const UINT count = range.count == UINT_MAX || range.count > kSamplerSlots - range.base_register
+                                   ? kSamplerSlots - range.base_register : range.count;
+            for (UINT d = 0; d < count; ++d) {
+                const UINT64 at = offset + (static_cast<UINT64>(range.offset) + d) * DescriptorBytes(D3D12DDI_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+                if (range.offset == UINT_MAX || at + sizeof(AgxD3d12SamplerDescriptor) > heap->bytes) {
+                    if (range.count == UINT_MAX) break;
+                    return 6u;
+                }
+                dispatch->sampler[range.base_register + d] =
+                    reinterpret_cast<const AgxD3d12SamplerDescriptor *>(static_cast<const BYTE *>(heap->cpu) + at);
+            }
+            continue;
+        }
         const bool uav = range.type == D3D12DDI_DESCRIPTOR_RANGE_TYPE_UAV;
         const bool srv = range.type == D3D12DDI_DESCRIPTOR_RANGE_TYPE_SRV;
-        if (!uav && !srv && range.type != D3D12DDI_DESCRIPTOR_RANGE_TYPE_CBV) return 4u; /* sampler */
+        if (!uav && !srv && range.type != D3D12DDI_DESCRIPTOR_RANGE_TYPE_CBV) return 4u;
         const UINT slots = uav ? kUavSlots : srv ? kSrvSlots : kCbSlots;
         if (range.space || range.base_register >= slots) return 5u;
         const UINT count = range.count == UINT_MAX || range.count > slots - range.base_register
@@ -1999,6 +2064,19 @@ static UINT ResolveRoot(AgxD3d12CommandList *list, const AgxD3d12RootSignature *
             return 4u;
         }
     }
+    /* C6e: static samplers visible to the stage (compute: not yet) */
+    const D3D12DDI_STATIC_SAMPLER *statics = root ? StaticSamplersOf(root) : nullptr;
+    for (UINT i = 0; root && i < root->static_samplers; ++i) {
+        const D3D12DDI_STATIC_SAMPLER &s = statics[i];
+        if (stage != kAnyStage && s.ShaderVisibility != D3D12DDI_SHADER_VISIBILITY_ALL &&
+            static_cast<UINT>(s.ShaderVisibility) != stage)
+            continue;
+        if (s.RegisterSpace || s.ShaderRegister >= kSamplerSlots) return 5u;
+        out->static_sampler[s.ShaderRegister] = &s;
+    }
+    if (stage == kAnyStage)
+        for (UINT s = 0; s < kSamplerSlots; ++s)
+            if (out->sampler[s] || out->static_sampler[s]) return 4u; /* compute samplers: not yet */
     memcpy(out->root_dwords, dwords, kRootArguments * sizeof(UINT));
     return 0u;
 }
@@ -2116,7 +2194,22 @@ struct AgxD3d12OwnerBindings {
     AGX_D3D12_UAV uavs[kUavSlots];
     AGX_D3D12_CBV cbvs[kCbSlots];
     AGX_D3D12_SRV srvs[kSrvSlots];
+    AGX_D3D12_SAMPLER samplers[kSamplerSlots];
 };
+/* C6e: the static border colours of D3D12DDI_STATIC_BORDER_COLOR */
+static void OwnerSampler(const D3D12DDI_SAMPLER_DESC &d, AGX_D3D12_SAMPLER *s) {
+    s->Valid = 1;
+    s->Filter = static_cast<unsigned>(d.Filter);
+    s->AddressU = static_cast<unsigned>(d.AddressU);
+    s->AddressV = static_cast<unsigned>(d.AddressV);
+    s->AddressW = static_cast<unsigned>(d.AddressW);
+    s->MaxAnisotropy = d.MaxAnisotropy;
+    s->ComparisonFunc = static_cast<unsigned>(d.ComparisonFunc);
+    s->MipLodBias = d.MipLODBias;
+    s->MinLod = d.MinLOD;
+    s->MaxLod = d.MaxLOD;
+    memcpy(s->BorderColor, d.BorderColor, sizeof(s->BorderColor));
+}
 static void OwnerBindings(const AgxD3d12Dispatch &b, AgxD3d12OwnerBindings *o) {
     memset(o, 0, sizeof(*o));
     for (UINT u = 0; u < kUavSlots; ++u) {
@@ -2150,9 +2243,38 @@ static void OwnerBindings(const AgxD3d12Dispatch &b, AgxD3d12OwnerBindings *o) {
         if (view && view->kind == kDescriptorSrvBuffer && view->heap) {
             o->srv_buffers[s] = HeapBuffer(view->heap);
             o->srvs[s] = {&o->srv_buffers[s], view->offset, view->bytes};
+        } else if (view && view->kind == kDescriptorSrvTexture && view->heap) {
+            o->srv_buffers[s] = HeapBuffer(view->heap);
+            o->srvs[s].Buffer = &o->srv_buffers[s];
+            o->srvs[s].Texture = 1;
+            o->srvs[s].Format = view->format;
+            o->srvs[s].FirstLevel = view->level;
+            o->srvs[s].Levels = view->levels;
+            o->srvs[s].FirstLayer = view->first_layer;
+            o->srvs[s].Layers = view->layers;
         } else if (b.srv_heap[s]) {
             o->srv_buffers[s] = HeapBuffer(b.srv_heap[s]);
             o->srvs[s] = {&o->srv_buffers[s], b.srv_offset[s], 0};
+        }
+    }
+    for (UINT s = 0; s < kSamplerSlots; ++s) {
+        if (b.sampler[s] && b.sampler[s]->kind == kDescriptorSampler) {
+            OwnerSampler(b.sampler[s]->desc, &o->samplers[s]);
+        } else if (const D3D12DDI_STATIC_SAMPLER *st = b.static_sampler[s]) {
+            static const FLOAT border[5][4] = {{0, 0, 0, 0}, {0, 0, 0, 1}, {1, 1, 1, 1}, {0, 0, 0, 1}, {1, 1, 1, 1}};
+            D3D12DDI_SAMPLER_DESC d = {};
+            d.Filter = st->Filter;
+            d.AddressU = st->AddressU;
+            d.AddressV = st->AddressV;
+            d.AddressW = st->AddressW;
+            d.MipLODBias = st->MipLODBias;
+            d.MaxAnisotropy = st->MaxAnisotropy;
+            d.ComparisonFunc = st->ComparisonFunc;
+            memcpy(d.BorderColor, border[static_cast<UINT>(st->BorderColor) < 5 ? static_cast<UINT>(st->BorderColor) : 0],
+                   sizeof(d.BorderColor));
+            d.MinLOD = st->MinLOD;
+            d.MaxLOD = st->MaxLOD;
+            OwnerSampler(d, &o->samplers[s]);
         }
     }
 }
@@ -2236,6 +2358,8 @@ static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, con
                 memcpy(draw.Vs.Srvs, vs_bind.srvs, sizeof(draw.Vs.Srvs));
                 memcpy(draw.Ps.Cbvs, ps_bind.cbvs, sizeof(draw.Ps.Cbvs));
                 memcpy(draw.Ps.Srvs, ps_bind.srvs, sizeof(draw.Ps.Srvs));
+                memcpy(draw.Vs.Samplers, vs_bind.samplers, sizeof(draw.Vs.Samplers));
+                memcpy(draw.Ps.Samplers, ps_bind.samplers, sizeof(draw.Ps.Samplers));
                 hr = AgxD3d12OwnerDraw(owner, &draw);
             } else if (command.kind == kCommandTextureCopy) {
                 const AgxD3d12TextureCopy &tc = command.texture_copy;
@@ -2341,7 +2465,7 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetGPUDescriptorHandleForHeapStart, GetGPUDescriptorHandleForHeapStart);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateShaderResourceView, CreateShaderResourceView);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateConstantBufferView, CreateConstantBufferView);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateSampler, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateSampler));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateSampler, CreateSampler);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateUnorderedAccessView, CreateUnorderedAccessView);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateRenderTargetView, CreateRenderTargetView);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDepthStencilView, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDepthStencilView));

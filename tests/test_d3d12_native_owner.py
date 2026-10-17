@@ -117,6 +117,13 @@ class NativeOwner(unittest.TestCase):
         self.assertLess(draw.index('->draw_vbo('), draw.rindex('unbind_stage(pipe, MESA_SHADER_FRAGMENT, ps_views, ps_view_count)'))
         submit = body(text, 'extern "C" HRESULT AgxD3d12OwnerSubmitAndWait(')
         self.assertLess(submit.index('set_framebuffer_state(owner->Context, &empty)'), submit.index('->flush('))
+        # C6e: sampler CSOs exist for one draw only (created, bound, released)
+        self.assertLess(draw.index('create_sampler(pipe, &draw->Ps.Samplers[i])'), draw.index('->draw_vbo('))
+        self.assertLess(draw.index('->draw_vbo('), draw.rindex('release_samplers('))
+        sampler = body(text, 'static void *create_sampler(')
+        self.assertIn('state.compare_mode = PIPE_TEX_COMPARE_R_TO_TEXTURE;', sampler)
+        stage = body(text, 'static HRESULT bind_stage(')
+        self.assertIn('templ.target = texture->target;', stage)
 
     def test_teardown_order(self):
         text = OWNER.read_text()

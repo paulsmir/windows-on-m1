@@ -161,3 +161,24 @@ other colours, 448..576 green pixels.
   index size; a misaligned one refuses). Other index formats refuse.
 - Checkpoint: probe C6D: a yellow quad from 4 vertices + 6 R16 indices;
   PASS = centre yellow, 960..1088 pixels.
+
+## C6e: texture SRVs and samplers
+
+- WINDOWS: pfnCreateShaderResourceView_0002 TEXTURE2D (MostDetailedMip,
+  MipLevels, FirstArraySlice, ArraySize); pfnCreateSampler
+  (D3D12DDI_SAMPLER_DESC); root signature static samplers
+  (D3D12DDI_STATIC_SAMPLER, static border colours); sampler descriptor
+  tables in shader-visible sampler heaps.
+- AGX/ASAHI: create_sampler_view(PIPE_TEXTURE_2D[_ARRAY], view format,
+  level/layer range), create_sampler_state/bind_sampler_states per stage;
+  dxbc_to_nir keeps separate texture (t#) and sampler (s#) indices.
+- TRANSLATION: texture SRV record {heap, format, mips, layers}; sampler
+  record {kind, D3D12DDI_SAMPLER_DESC} (descriptor size 64 for every heap
+  type); static samplers copied into the root signature; ResolveRoot binds
+  sampler tables and static samplers visible to the stage; the owner builds
+  sampler CSOs for each draw (filter bits min/mag/mip, anisotropy,
+  comparison reduction) and releases them after draw_vbo. Compute
+  samplers refuse (reason 4).
+- Checkpoint: probe C6E: 2x2 RGBA8 texture (green, blue / white, black)
+  uploaded with CopyTextureRegion, PS SRV table + static point-clamp
+  sampler, full-target triangle strip; PASS = the four quadrants.
