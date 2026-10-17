@@ -83,3 +83,24 @@ probe because a refused swapchain may remove the device.
   record once the allocation is no longer registered.
 - UNKNOWN: whether DXGI then accepts the buffers, and which present DDIs
   follow (pfnPresent of the command-list table is next) -- C7A again.
+
+## C7b result (EXP1371) and C7c
+
+- Measured: CreateSwapChainForHwnd, GetBuffer and a clear of the back
+  buffer succeed with presentation textures; Present failed because the
+  runtime refused at pfnGetPresentPrivateDriverDataSize (device core +0x2a8)
+  and pfnPresent (command list +0x98).
+- C7c: GetPresentPrivateDriverDataSize returns 0 (the D3D11 pfnPresentCb
+  carries no private data). pfnPresent accepts one surface (subresource 0)
+  that is a presentation texture; the owner flushes for present and
+  publishes the allocation's direct map (the D3D11 order before
+  AdmissionUmdSubmitPresent); the output is hSrcAllocation = the buffer's
+  kernel allocation, hContext = the queue's kernel context (the context the
+  runtime submits the present on), AddedGpuWork FALSE,
+  BackBufferMultiplicity 1 (one physical buffer per logical buffer).
+  ExecuteCommandLists retires owner work before it returns, so the
+  rendering is complete when the present is recorded. Anything else sets
+  a list error with receipt measure-d3d12-present {reason}.
+- UNKNOWN: whether the KMD present path accepts a present on a D3D12 queue
+  context (DxgkDdiPresent / flip of a D3D12-created allocation) and what
+  DXGI calls next -- C7A again (EXP1372).

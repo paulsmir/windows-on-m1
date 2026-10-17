@@ -260,6 +260,7 @@ class D3d12AbiGate(unittest.TestCase):
         compute |= {'pfnIASetIndexBuffer', 'pfnDrawIndexedInstanced'}  # C6d
         compute |= {'pfnClearDepthStencilView'}  # C6f
         compute |= {'pfnResourceCopy'}  # C8b
+        compute |= {'pfnPresent'}  # C7c
         self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList', 'pfnCopyBufferRegion',
                                        'pfnResourceBarrier'} | setters | compute)
         for member in setters:
@@ -591,6 +592,29 @@ class D3d12AbiGate(unittest.TestCase):
         d = owner[owner.index('extern "C" void AgxD3d12OwnerDestroyPresentationTexture('):]
         d = d[:d.index('\n}\n')]
         self.assertLess(d.index('AdmissionUmdReleaseRuntimeResource('), d.index('collect_presentations(owner)'))
+
+    def test_c7c_present(self):
+        # C7c invariants (EXP1371: the runtime refused the swapchain present
+        # at pfnGetPresentPrivateDriverDataSize and then pfnPresent): no
+        # private data; the present returns the buffer's kernel allocation
+        # on the queue's context only after the owner flushed for present
+        # and published the direct map, and adds no GPU work.
+        source = SOURCE.read_text()
+        def fn(name):
+            start = source.index(name)
+            return source[start:source.index('\n}\n', start)]
+        self.assertIn('pfnGetPresentPrivateDriverDataSize, GetPresentPrivateDriverDataSize);', source)
+        self.assertIn('return 0;', fn('static UINT APIENTRY GetPresentPrivateDriverDataSize('))
+        present = fn('static VOID APIENTRY Present(')
+        self.assertLess(present.index('AgxD3d12OwnerPreparePresent('), present.index('out->hSrcAllocation = allocation;'))
+        self.assertIn('out->hContext = queue->context;', present)
+        self.assertIn('out->AddedGpuWork = FALSE;', present)
+        self.assertIn('out->BackBufferMultiplicity = 1;', present)
+        self.assertIn('ListError(list, hr)', present)
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        p = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerPreparePresent('):]
+        p = p[:p.index('\n}\n')]
+        self.assertLess(p.index('AgxWin32AsahiContextFlushForPresent('), p.index('AdmissionUmdGpuvaPublishDirectMap('))
 
     def test_c8a_growing_lists(self):
         # C8a invariants: a list owns a growing command array (doubling from

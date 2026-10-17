@@ -1779,6 +1779,50 @@ static VOID APIENTRY ResourceCopy(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOUR
         slot->copy = {d->heap, d->gpuva - d->heap->gpuva, s->heap, s->gpuva - s->heap->gpuva, bytes};
     }
 }
+/* C7c (D3D12-C7-present.md): DXGI presents a swapchain buffer through the
+ * runtime's list; the runtime submits the kernel present with the returned
+ * source allocation on the returned context. ExecuteCommandLists retires
+ * the owner's work before it returns, so the buffer's rendering is complete
+ * here; the owner flushes for present and publishes the buffer's direct map
+ * (the D3D11 present order). No GPU work is added and no private data is
+ * needed (the D3D11 pfnPresentCb carries none). */
+static UINT APIENTRY GetPresentPrivateDriverDataSize(D3D12DDI_HDEVICE, const D3D12DDIARG_PRESENT_0001 *) {
+    return 0;
+}
+static VOID APIENTRY Present(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMANDQUEUE queue_handle,
+                             const D3D12DDIARG_PRESENT_0001 *arg, D3D12DDI_PRESENT_0003 *out) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    auto *queue = static_cast<AgxD3d12CommandQueue *>(queue_handle.pDrvPrivate);
+    if (out) memset(out, 0, sizeof(*out));
+    const AgxD3d12Resource *source = arg && arg->SurfacesToPresent == 1 && arg->phSurfacesToPresent
+                                         ? static_cast<const AgxD3d12Resource *>(arg->phSurfacesToPresent[0].hSurface.pDrvPrivate)
+                                         : nullptr;
+    UINT reason = !list || !list->device || !queue || !queue->context || !arg || !out ? 1u
+                : !source || !source->heap || !source->heap->presentation ? 2u
+                : arg->phSurfacesToPresent[0].SubResourceIndex != 0 ? 3u : 0u;
+    UINT allocation = 0;
+    HRESULT hr = reason ? E_INVALIDARG : E_NOTIMPL;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (!reason) {
+        AGX_D3D12_OWNER *owner = static_cast<AGX_D3D12_OWNER *>(list->device->owner);
+        hr = owner ? AgxD3d12OwnerPreparePresent(owner, source->heap->presentation, &allocation) : E_INVALIDARG;
+        if (FAILED(hr)) reason = 4u;
+    }
+#else
+    if (!reason) reason = 5u;
+#endif
+    if (!reason) {
+        out->hSrcAllocation = allocation;
+        out->hContext = queue->context;
+        out->AddedGpuWork = FALSE;
+        out->BackBufferMultiplicity = 1;
+    }
+    const UINT receipt[] = {reason, arg ? arg->SurfacesToPresent : 0u, arg ? arg->Flags.Value : 0u,
+                            arg ? static_cast<UINT>(arg->FlipInterval) : 0u, allocation,
+                            arg && arg->hDstResource.pDrvPrivate ? 1u : 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-present", reason ? hr : S_OK, receipt, 6);
+    if (reason && list) ListError(list, hr);
+}
 /* C6f */
 static VOID APIENTRY ClearDepthStencilView(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE view, UINT flags,
                                            FLOAT depth, UINT8 stencil, UINT rects, const D3D12DDI_RECT *rect) {
@@ -2788,7 +2832,7 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnOfferResources, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnOfferResources));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnReclaimResources, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnReclaimResources));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetImplicitPhysicalAdapterMask, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetImplicitPhysicalAdapterMask));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetPresentPrivateDriverDataSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetPresentPrivateDriverDataSize));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetPresentPrivateDriverDataSize, GetPresentPrivateDriverDataSize);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnQueryNodeMap, QueryNodeMap);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnRetrieveShaderComment, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnRetrieveShaderComment));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckResourceAllocationHandle, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckResourceAllocationHandle));
@@ -2813,7 +2857,7 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteIndirect, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteIndirect));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceBarrier, ResourceBarrier);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnBlt, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnBlt));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnPresent, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnPresent));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnPresent, Present);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnBeginQuery, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnBeginQuery));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnEndQuery, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnEndQuery));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResolveQueryData, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResolveQueryData));

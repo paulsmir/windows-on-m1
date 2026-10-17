@@ -143,6 +143,11 @@ HRESULT AgxD3d12OwnerCreatePresentationTexture(AGX_D3D12_OWNER *Owner, DXGI_FORM
                                                unsigned Height, int ShaderResource, HANDLE RuntimeResource,
                                                AGX_D3D12_BUFFER *Texture, void **Presentation, UINT *Allocation);
 void AgxD3d12OwnerDestroyPresentationTexture(AGX_D3D12_OWNER *Owner, void *Presentation);
+/* C7c: makes a presentation texture's rendering visible to the kernel
+ * present (agx_d3d10_windows.cpp AgxD3d10WindowsPresentationSubmitSurfaces:
+ * flush for present, publish the allocation's direct map) and returns its
+ * D3DKMT allocation in *Allocation. */
+HRESULT AgxD3d12OwnerPreparePresent(AGX_D3D12_OWNER *Owner, void *Presentation, UINT *Allocation);
 /* C8b: a GPU copy between texture regions of the same format class
  * (resource_copy_region); Layers counts array layers from each layer start. */
 HRESULT AgxD3d12OwnerCopyTextureRegion(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Dst, unsigned DstLevel,

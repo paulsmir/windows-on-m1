@@ -598,6 +598,25 @@ extern "C" void AgxD3d12OwnerDestroyPresentationTexture(AGX_D3D12_OWNER *owner, 
   (void)collect_presentations(owner);
 }
 
+/* C7c: the D3D12 present hands the runtime the allocation; rendering on
+ * the owner context must be flushed and the direct map published first
+ * (AgxD3d10WindowsPresentationSubmitSurfaces before AdmissionUmdSubmitPresent) */
+extern "C" HRESULT AgxD3d12OwnerPreparePresent(AGX_D3D12_OWNER *owner, void *presentation, UINT *allocation) {
+  auto *record = static_cast<struct AGX_D3D12_PRESENTATION *>(presentation);
+  if (allocation) *allocation = 0;
+  if (!owner || !owner->Context || !record || !allocation || !record->Resource.KernelAllocation) return E_INVALIDARG;
+  HRESULT hr = AgxWin32AsahiContextFlushForPresent(owner->Context) ? S_OK : E_FAIL;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if (SUCCEEDED(hr) && record->RenderBuffer.Transport.Token &&
+      !AdmissionUmdGpuvaPublishDirectMap(&owner->Runtime, record->RenderBuffer.Transport.Token))
+    hr = E_FAIL;
+#endif
+  receipt("measure-d3d12-prepare-present", hr, record->Resource.KernelAllocation,
+          static_cast<UINT>(record->RenderBuffer.Transport.Token), 0u);
+  if (SUCCEEDED(hr)) *allocation = record->Resource.KernelAllocation;
+  return hr;
+}
+
 /* C8b: texture-to-texture copies on the GPU */
 extern "C" HRESULT AgxD3d12OwnerCopyTextureRegion(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUFFER *dst, unsigned dst_level,
                                                   unsigned dst_layer, unsigned dst_x, unsigned dst_y,
