@@ -1488,6 +1488,7 @@ static int queue_fence_signal(ID3D12Device *device) {
 }
 
 int main(void) {
+    setvbuf(stdout, NULL, _IONBF, 0); /* EXP1368: a crash lost every buffered line */
     IDXGIFactory1 *factory = NULL;
     IDXGIAdapter1 *adapter = NULL;
     ID3D12Device *device = NULL;

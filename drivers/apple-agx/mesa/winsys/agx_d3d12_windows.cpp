@@ -404,6 +404,51 @@ static unsigned level_extent(unsigned extent, unsigned level) {
   return extent ? extent : 1u;
 }
 
+/* Asahi has no clear_render_target/clear_depth_stencil (EXP1368: the
+ * C6a clear called a NULL entry); like the D3D10 frontend overlay
+ * (build-native-asahi-state.py ClearRenderTargetView, D3D-G10a) the view is
+ * bound as a one-layer framebuffer per layer and cleared with pipe->clear,
+ * D3D rects as the scissor. The submit drops the framebuffer binding. */
+static void clear_view_layers(AGX_D3D12_OWNER *owner, const struct pipe_surface &surface, bool depth, unsigned buffers,
+                              const union pipe_color_union *color, double z, unsigned stencil, const RECT *rects,
+                              unsigned rect_count) {
+  struct pipe_context *pipe = owner->Context;
+  struct pipe_resource *resource = surface.texture;
+  const unsigned width = level_extent(resource->width0, surface.level), height = level_extent(resource->height0, surface.level);
+  for (unsigned layer = surface.first_layer; layer <= surface.last_layer; ++layer) {
+    struct pipe_framebuffer_state fb = {};
+    struct pipe_surface slice = surface;
+    slice.first_layer = slice.last_layer = static_cast<uint16_t>(layer);
+    fb.width = width;
+    fb.height = height;
+    fb.layers = 1;
+    if (depth) {
+      fb.zsbuf = slice;
+    } else {
+      fb.nr_cbufs = 1;
+      fb.cbufs[0] = slice;
+    }
+    pipe->set_framebuffer_state(pipe, &fb);
+    if (!rect_count) {
+      pipe->clear(pipe, buffers, 0xf, 0xff, NULL, color, z, stencil);
+      continue;
+    }
+    for (unsigned i = 0; i < rect_count; ++i) {
+      const LONG left = rects[i].left < 0 ? 0 : rects[i].left, top = rects[i].top < 0 ? 0 : rects[i].top;
+      const LONG right = rects[i].right > static_cast<LONG>(width) ? static_cast<LONG>(width) : rects[i].right;
+      const LONG bottom = rects[i].bottom > static_cast<LONG>(height) ? static_cast<LONG>(height) : rects[i].bottom;
+      if (right <= left || bottom <= top) continue;
+      struct pipe_scissor_state scissor = {};
+      scissor.minx = static_cast<uint16_t>(left);
+      scissor.miny = static_cast<uint16_t>(top);
+      scissor.maxx = static_cast<uint16_t>(right);
+      scissor.maxy = static_cast<uint16_t>(bottom);
+      pipe->clear(pipe, buffers, 0xf, 0xff, &scissor, color, z, stencil);
+    }
+  }
+  ++owner->PendingDraws; /* the submit unbinds the framebuffer */
+}
+
 extern "C" HRESULT AgxD3d12OwnerClearRenderTarget(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUFFER *texture,
                                                   DXGI_FORMAT view_format, unsigned level, unsigned first_layer,
                                                   unsigned layers, const float color[4], const RECT *rects,
@@ -422,20 +467,7 @@ extern "C" HRESULT AgxD3d12OwnerClearRenderTarget(AGX_D3D12_OWNER *owner, const 
   surface.texture = resource;
   union pipe_color_union value = {};
   for (unsigned i = 0; i < 4; ++i) value.f[i] = color[i];
-  const unsigned width = level_extent(resource->width0, level), height = level_extent(resource->height0, level);
-  if (!rect_count) {
-    owner->Context->clear_render_target(owner->Context, &surface, &value, 0, 0, width, height, false);
-    return S_OK;
-  }
-  for (unsigned i = 0; i < rect_count; ++i) {
-    const LONG left = rects[i].left < 0 ? 0 : rects[i].left, top = rects[i].top < 0 ? 0 : rects[i].top;
-    const LONG right = rects[i].right > static_cast<LONG>(width) ? static_cast<LONG>(width) : rects[i].right;
-    const LONG bottom = rects[i].bottom > static_cast<LONG>(height) ? static_cast<LONG>(height) : rects[i].bottom;
-    if (right > left && bottom > top)
-      owner->Context->clear_render_target(owner->Context, &surface, &value, static_cast<unsigned>(left),
-                                          static_cast<unsigned>(top), static_cast<unsigned>(right - left),
-                                          static_cast<unsigned>(bottom - top), false);
-  }
+  clear_view_layers(owner, surface, false, PIPE_CLEAR_COLOR0, &value, 0.0, 0, rects, rect_count);
   return S_OK;
 }
 
@@ -475,30 +507,23 @@ extern "C" HRESULT AgxD3d12OwnerClearDepthStencil(AGX_D3D12_OWNER *owner, const 
   if (!owner || !owner->Context || !texture || !texture->Resource || !layers || !(flags & 3u)) return E_INVALIDARG;
   struct pipe_resource *resource = static_cast<struct pipe_resource *>(texture->Resource);
   const enum pipe_format format = FormatTranslate(view_format, TRUE);
-  if (format == PIPE_FORMAT_NONE || level > resource->last_level || first_layer >= resource->array_size ||
-      layers > resource->array_size - first_layer)
+  const struct util_format_description *desc = format != PIPE_FORMAT_NONE ? util_format_description(format) : NULL;
+  if (!desc || desc->colorspace != UTIL_FORMAT_COLORSPACE_ZS || level > resource->last_level ||
+      first_layer >= resource->array_size || layers > resource->array_size - first_layer)
     return E_INVALIDARG;
+  /* stencil only where the format has it; D3D clamps depth to [0, 1] */
+  const bool has_stencil = desc->swizzle[1] != PIPE_SWIZZLE_NONE;
+  const unsigned buffers = ((flags & 1u) ? PIPE_CLEAR_DEPTH : 0u) | ((flags & 2u) && has_stencil ? PIPE_CLEAR_STENCIL : 0u);
+  if (!buffers) return S_OK;
+  const double z = !(depth >= 0.0f) ? 0.0 : depth > 1.0f ? 1.0 : depth;
   struct pipe_surface surface = {};
   surface.format = format;
   surface.level = level;
   surface.first_layer = static_cast<uint16_t>(first_layer);
   surface.last_layer = static_cast<uint16_t>(first_layer + layers - 1);
   surface.texture = resource;
-  const unsigned clear = ((flags & 1u) ? PIPE_CLEAR_DEPTH : 0u) | ((flags & 2u) ? PIPE_CLEAR_STENCIL : 0u);
-  const unsigned width = level_extent(resource->width0, level), height = level_extent(resource->height0, level);
-  if (!rect_count) {
-    owner->Context->clear_depth_stencil(owner->Context, &surface, clear, depth, stencil, 0, 0, width, height, false);
-    return S_OK;
-  }
-  for (unsigned i = 0; i < rect_count; ++i) {
-    const LONG left = rects[i].left < 0 ? 0 : rects[i].left, top = rects[i].top < 0 ? 0 : rects[i].top;
-    const LONG right = rects[i].right > static_cast<LONG>(width) ? static_cast<LONG>(width) : rects[i].right;
-    const LONG bottom = rects[i].bottom > static_cast<LONG>(height) ? static_cast<LONG>(height) : rects[i].bottom;
-    if (right > left && bottom > top)
-      owner->Context->clear_depth_stencil(owner->Context, &surface, clear, depth, stencil, static_cast<unsigned>(left),
-                                          static_cast<unsigned>(top), static_cast<unsigned>(right - left),
-                                          static_cast<unsigned>(bottom - top), false);
-  }
+  union pipe_color_union none = {};
+  clear_view_layers(owner, surface, true, buffers, &none, z, stencil, rects, rect_count);
   return S_OK;
 }
 

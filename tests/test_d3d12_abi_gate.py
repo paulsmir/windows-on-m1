@@ -518,7 +518,7 @@ class D3d12AbiGate(unittest.TestCase):
         owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
         self.assertIn('FormatTranslate(format, (bind & AGX_D3D12_BIND_DEPTH_STENCIL) ? TRUE : FALSE)', owner)
         self.assertIn('fb.zsbuf.texture = texture;', owner)
-        self.assertIn('->clear_depth_stencil(', owner)
+        self.assertIn('desc->swizzle[1] != PIPE_SWIZZLE_NONE', owner)  # stencil only where present
 
     def test_c8b_resource_copy(self):
         # C8b invariants: CopyResource copies whole buffers (the smaller size)

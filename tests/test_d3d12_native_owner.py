@@ -93,8 +93,15 @@ class NativeOwner(unittest.TestCase):
         self.assertIn('copy->Pitch < row', copy)
         self.assertIn('->buffer_map(', copy)
         clear = body(text, 'extern "C" HRESULT AgxD3d12OwnerClearRenderTarget(')
-        self.assertIn('->clear_render_target(', clear)
         self.assertIn('layers > resource->array_size - first_layer', clear)
+        # EXP1368: Asahi implements neither clear_render_target nor
+        # clear_depth_stencil (the C6a clear called NULL); clears bind the
+        # view as a one-layer framebuffer and use pipe->clear
+        self.assertNotIn('->clear_render_target(', text)
+        self.assertNotIn('->clear_depth_stencil(', text)
+        layers = body(text, 'static void clear_view_layers(')
+        self.assertLess(layers.index('pipe->set_framebuffer_state(pipe, &fb);'), layers.index('pipe->clear(pipe, buffers'))
+        self.assertIn('++owner->PendingDraws;', layers)
 
     def test_graphics(self):
         # C6b: VS/PS through the repository's translator; D3D12 always
