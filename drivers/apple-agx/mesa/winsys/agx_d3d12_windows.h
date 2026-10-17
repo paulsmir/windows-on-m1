@@ -31,6 +31,9 @@ typedef struct {
   HANDLE RuntimeDevice;
   AGX_D3D12_ERROR_CALLBACK Error;
   void *ErrorContext;
+  /* the D3D12 device's Win32 generation: the KMD accepts only one per kernel
+   * device, so the owner's context and every queue context use it */
+  unsigned long Generation;
 } AGX_D3D12_OWNER_ARGS;
 
 HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *Args, AGX_D3D12_OWNER **Owner);

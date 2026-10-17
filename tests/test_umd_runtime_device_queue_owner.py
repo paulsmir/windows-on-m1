@@ -33,6 +33,7 @@ class QueueOwnedDevice(unittest.TestCase):
         self.assertNotIn('pfnCreateContextCb', queue)
         self.assertIn('device->KernelContext = queueContext;', queue)
         self.assertIn('device->BorrowedContext = TRUE;', queue)
+        self.assertIn('device->Win32Generation = generation;', queue)
         self.assertTrue(queue.rstrip().endswith('return AdmissionUmdRuntimeDeviceAttach(device);\n}'))
 
     def test_borrowed_context_is_never_destroyed(self):

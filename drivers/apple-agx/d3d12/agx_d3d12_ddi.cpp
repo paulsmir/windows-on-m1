@@ -40,6 +40,7 @@ struct AgxD3d12Adapter {
 };
 static AgxD3d12Adapter adapter_object;
 static D3D12DDI_HRTTABLE list_table;
+static volatile LONG queue_generation; /* per-device Win32 generations */
 static const D3D12DDI_CORELAYER_DEVICECALLBACKS_0003 *callbacks;
 static D3D12DDI_HRTDEVICE runtime_device;
 
@@ -184,6 +185,9 @@ struct AgxD3d12Device {
      * first heap; heaps are its buffer resources and lists copy through it. */
     void *owner;
     BOOL owner_failed;
+    /* EXP1365: the KMD binds one Win32 generation per kernel device, so the
+     * owner's context and every queue context carry this one */
+    ULONG generation;
 };
 static SIZE_T APIENTRY CalcPrivateDeviceSize(D3D12DDI_HADAPTER,
                                              const D3D12DDIARG_CALCPRIVATEDEVICESIZE *arg) {
@@ -199,6 +203,8 @@ static HRESULT APIENTRY CreateDevice(D3D12DDI_HADAPTER,
         device->runtime = arg->hRTDevice;
         device->callbacks = arg->p12UMCallbacks;
         device->kernel = arg->pKTCallbacks;
+        device->generation = ((((GetCurrentProcessId() & 0xffffu) << 16) ^
+                               static_cast<ULONG>(InterlockedIncrement(&queue_generation))) | 0x80000000u);
         callbacks = arg->p12UMCallbacks;
         runtime_device = arg->hRTDevice;
     }
@@ -529,6 +535,7 @@ static AGX_D3D12_OWNER *EnsureOwner(AgxD3d12Device *device) {
     args.RuntimeDevice = device->runtime.handle;
     args.Error = OwnerError;
     args.ErrorContext = device;
+    args.Generation = device->generation;
     AGX_D3D12_OWNER *owner = nullptr;
     const HRESULT hr = AgxD3d12OwnerCreate(&args, &owner);
     device->owner = SUCCEEDED(hr) ? owner : nullptr;
@@ -872,7 +879,6 @@ struct AgxD3d12CommandQueue {
     UINT flags;
     HANDLE context;
 };
-static volatile LONG queue_generation;
 static SIZE_T APIENTRY CalcPrivateCommandQueueSize(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATECOMMANDQUEUE_0001 *) {
     return sizeof(AgxD3d12CommandQueue);
 }
@@ -887,8 +893,7 @@ static HRESULT APIENTRY CreateCommandQueue(D3D12DDI_HDEVICE handle, const D3D12D
     contract.Magic = ADMISSION_WIN32_CONTEXT_MAGIC;
     contract.Version = ADMISSION_WIN32_CONTEXT_VERSION;
     contract.Bytes = sizeof(contract);
-    const ULONG counter = static_cast<ULONG>(InterlockedIncrement(&queue_generation));
-    contract.Generation = (((GetCurrentProcessId() & 0xffffu) << 16) ^ counter) | 0x80000000u;
+    contract.Generation = device->generation;
     D3DDDICB_CREATECONTEXTVIRTUAL context = {};
     context.NodeOrdinal = 0;
     context.EngineAffinity = 1;

@@ -640,10 +640,10 @@ HRESULT AdmissionUmdRuntimeDeviceInitializeForQueue(
     ADMISSION_UMD_DEVICE *device, ADMISSION_UMD_ADAPTER *adapter,
     const D3DDDI_DEVICECALLBACKS *callbacks, HANDLE runtimeDevice,
     D3D10DDI_HRTCORELAYER errorHandle, PFND3D10DDI_SETERROR_CB errorCallback,
-    HANDLE queueContext) {
+    HANDLE queueContext, ULONG generation) {
   if (device == NULL || adapter == NULL ||
       adapter->Magic != ADMISSION_UMD_ADAPTER_MAGIC || callbacks == NULL ||
-      runtimeDevice == NULL || queueContext == NULL ||
+      runtimeDevice == NULL || queueContext == NULL || generation == 0u ||
 #ifdef APPLE_AGX_GPUVA_WINSYS
       callbacks->pfnCreateSynchronizationObject2Cb == NULL ||
       callbacks->pfnDestroySynchronizationObjectCb == NULL ||
@@ -669,7 +669,10 @@ HRESULT AdmissionUmdRuntimeDeviceInitializeForQueue(
   device->KernelCallbacks = callbacks;
   device->SetErrorCallback = errorCallback;
   device->DxgiCallbacks = NULL; /* a D3D12 queue owner never presents */
-  device->Win32Generation = AdmissionUmdNextGeneration();
+  /* The KMD binds one Win32 generation per kernel device (callbacks.c
+   * CreateContext): every context of the D3D12 device and this storage share
+   * the generation the context was created with (EXP1365). */
+  device->Win32Generation = generation;
   AdmissionUmdRetirementInitialize(
       &device->Retirement, device, AdmissionUmdDeallocateResource,
       AdmissionUmdReportResourceError);

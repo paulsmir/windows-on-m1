@@ -202,6 +202,9 @@ class D3d12AbiGate(unittest.TestCase):
         queue = queue[:queue.index('\n}\n')]
         self.assertIn('device->callbacks->pfnCreateContextVirtualCb(arg->hRTCommandQueue, &context)', queue)
         self.assertIn('contract.Magic = ADMISSION_WIN32_CONTEXT_MAGIC;', queue)
+        # EXP1365: one Win32 generation per D3D12 device for all its contexts
+        self.assertIn('contract.Generation = device->generation;', queue)
+        self.assertIn('args.Generation = device->generation;', source)
         self.assertIn('pfnDestroyContextCb(queue->runtime, &destroy)', source)
         for member in ('pfnSignalFence', 'pfnWaitForFence'):
             self.assertIn('AGX_REJECT(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, %s)' % member, source)

@@ -84,7 +84,8 @@ extern "C" HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *owner) {
 }
 
 extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D12_OWNER **out) {
-  if (!args || !out || !args->AdapterCallbacks || !args->KernelCallbacks || !args->RuntimeDevice)
+  if (!args || !out || !args->AdapterCallbacks || !args->KernelCallbacks || !args->RuntimeDevice ||
+      !args->Generation)
     return E_INVALIDARG;
   *out = NULL;
   auto *owner = static_cast<AGX_D3D12_OWNER *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(AGX_D3D12_OWNER)));
@@ -106,7 +107,7 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
     contract.Magic = ADMISSION_WIN32_CONTEXT_MAGIC;
     contract.Version = ADMISSION_WIN32_CONTEXT_VERSION;
     contract.Bytes = sizeof(contract);
-    contract.Generation = ((GetCurrentProcessId() & 0xffffu) << 16) | 0x4000u;
+    contract.Generation = args->Generation;
     D3DDDICB_CREATECONTEXTVIRTUAL context = {};
     context.NodeOrdinal = 0;
     context.EngineAffinity = 1;
@@ -121,7 +122,7 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
     error.handle = owner;
     hr = AdmissionUmdRuntimeDeviceInitializeForQueue(&owner->Runtime, &owner->Adapter, owner->Kernel,
                                                     owner->RuntimeDevice, error, owner_error,
-                                                    owner->KernelContext);
+                                                    owner->KernelContext, args->Generation);
   }
   if (SUCCEEDED(hr)) {
     owner->Owner.Device = &owner->Runtime;

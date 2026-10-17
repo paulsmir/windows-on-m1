@@ -32,6 +32,9 @@ class NativeOwner(unittest.TestCase):
         self.assertNotIn('AdmissionUmdRuntimeDeviceInitialize(&', create)
         self.assertLess(create.index('pfnCreateContextVirtualCb'), create.index('AdmissionUmdRuntimeDeviceInitializeForQueue('))
         self.assertLess(create.index('AgxWin32AsahiScreenCreateForWindows'), create.index('AgxWin32AsahiContextCreate'))
+        # EXP1365: the KMD binds one Win32 generation per kernel device
+        self.assertIn('contract.Generation = args->Generation;', create)
+        self.assertIn('owner->KernelContext, args->Generation);', create)
 
     def test_gpu_copy(self):
         text = OWNER.read_text()

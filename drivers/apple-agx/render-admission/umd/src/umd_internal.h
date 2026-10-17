@@ -341,7 +341,7 @@ HRESULT AdmissionUmdRuntimeDeviceInitializeForQueue(
     ADMISSION_UMD_DEVICE *Device, ADMISSION_UMD_ADAPTER *Adapter,
     const D3DDDI_DEVICECALLBACKS *KernelCallbacks, HANDLE RuntimeDevice,
     D3D10DDI_HRTCORELAYER ErrorHandle, PFND3D10DDI_SETERROR_CB ErrorCallback,
-    HANDLE QueueContext);
+    HANDLE QueueContext, ULONG Generation);
 /* Synchronously quiesces and destroys the runtime kernel context while its
  * callback table is still valid. Success clears the context and borrowed
  * command/list pointers so finalization cannot call it twice. */
