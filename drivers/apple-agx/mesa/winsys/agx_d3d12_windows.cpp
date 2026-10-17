@@ -16,7 +16,6 @@ extern "C" {
 #include "pipe/p_context.h"
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h"
-#include "util/u_box.h"
 
 /* D3D12 C4b owner. Construction mirrors agx_d3d10_windows.cpp
  * (AdmissionUmdRuntimeDeviceInitialize -> AgxWin32AsahiScreenCreateForWindows
@@ -200,8 +199,11 @@ extern "C" HRESULT AgxD3d12OwnerCopy(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUF
       dst_offset > dst->Bytes || bytes > dst->Bytes - dst_offset || src_offset > src->Bytes ||
       bytes > src->Bytes - src_offset || dst->Bytes > 0x7fffffffull || src->Bytes > 0x7fffffffull)
     return E_INVALIDARG;
-  struct pipe_box box;
-  u_box_1d(static_cast<int>(src_offset), static_cast<int>(bytes), &box);
+  struct pipe_box box = {}; /* u_box_1d: the UMD Mesa tree has no util/u_box.h */
+  box.x = static_cast<int>(src_offset);
+  box.width = static_cast<int>(bytes);
+  box.height = 1;
+  box.depth = 1;
   owner->Context->resource_copy_region(owner->Context, static_cast<struct pipe_resource *>(dst->Resource), 0,
                                        static_cast<unsigned>(dst_offset), 0, 0,
                                        static_cast<struct pipe_resource *>(src->Resource), 0, &box);
