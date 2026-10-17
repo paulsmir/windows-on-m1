@@ -78,6 +78,20 @@ class NativeOwner(unittest.TestCase):
         self.assertEqual(order, sorted(order))
         self.assertIn('pipe->sampler_view_release(pipe, views[i]);', dispatch)
 
+    def test_textures(self):
+        # C6a: textures use the D3D10 frontend's DXGI table; footprint copies
+        # map the texture and buffer through the context (which orders them
+        # after recorded GPU work) and bound-check both sides first.
+        text = OWNER.read_text()
+        self.assertIn('enum pipe_format FormatTranslate(DXGI_FORMAT Format, BOOL depth);', text)
+        copy = body(text, 'extern "C" HRESULT AgxD3d12OwnerCopyTexture(')
+        self.assertLess(copy.index('span > copy->Buffer->Bytes - copy->Offset'), copy.index('texture_map('))
+        self.assertIn('copy->Pitch < row', copy)
+        self.assertIn('->buffer_map(', copy)
+        clear = body(text, 'extern "C" HRESULT AgxD3d12OwnerClearRenderTarget(')
+        self.assertIn('->clear_render_target(', clear)
+        self.assertIn('layers > resource->array_size - first_layer', clear)
+
     def test_teardown_order(self):
         text = OWNER.read_text()
         destroy = body(text, 'extern "C" HRESULT AgxD3d12OwnerDestroy(')

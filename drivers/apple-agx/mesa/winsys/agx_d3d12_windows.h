@@ -92,6 +92,34 @@ HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *Owner, const AGX_D3D12_COMPUTE *C
                               const AGX_D3D12_UAV Uavs[AGX_D3D12_UAV_SLOTS],
                               const AGX_D3D12_CBV Cbvs[AGX_D3D12_CBV_SLOTS],
                               const AGX_D3D12_SRV Srvs[AGX_D3D12_SRV_SLOTS], unsigned X, unsigned Y, unsigned Z);
+/* C6a (investigation/analysis/D3D12-C6-graphics.md): textures. Bytes of
+ * one texel block of a DXGI format the owner can create (uncompressed,
+ * 1x1 blocks), 0 otherwise. */
+unsigned AgxD3d12FormatBlockBytes(DXGI_FORMAT Format);
+#define AGX_D3D12_BIND_RENDER_TARGET 0x1u
+#define AGX_D3D12_BIND_SAMPLER 0x2u
+/* A 2D texture (array when Layers > 1) of the owner's screen; Texture->Cpu
+ * is NULL, Bytes the caller's allocation size. */
+HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *Owner, DXGI_FORMAT Format, unsigned Width, unsigned Height,
+                                     unsigned Layers, unsigned Levels, unsigned Bind, unsigned long long Bytes,
+                                     AGX_D3D12_BUFFER *Texture);
+/* Clears layers [FirstLayer, FirstLayer + Layers) of a mip level in the view
+ * format; Rects NULL = the whole level. */
+HRESULT AgxD3d12OwnerClearRenderTarget(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Texture, DXGI_FORMAT ViewFormat,
+                                       unsigned Level, unsigned FirstLayer, unsigned Layers, const float Color[4],
+                                       const RECT *Rects, unsigned RectCount);
+/* A copy between a texture region (Level, Layer, X/Y, Width x Height
+ * texels, Depth layers) and a pitched buffer footprint starting at Offset. */
+typedef struct {
+  const AGX_D3D12_BUFFER *Texture;
+  unsigned Level, Layer, X, Y;
+  unsigned Width, Height, Depth;
+  const AGX_D3D12_BUFFER *Buffer;
+  unsigned long long Offset;
+  unsigned Pitch, SlicePitch;
+  int ToBuffer; /* 1: texture -> buffer, 0: buffer -> texture */
+} AGX_D3D12_TEXTURE_COPY;
+HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *Owner, const AGX_D3D12_TEXTURE_COPY *Copy);
 /* Submits the recorded work and waits for it (C4b orders it before the
  * runtime's later queue signal by completing it first). */
 HRESULT AgxD3d12OwnerSubmitAndWait(AGX_D3D12_OWNER *Owner);

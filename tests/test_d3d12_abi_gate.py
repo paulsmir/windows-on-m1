@@ -185,7 +185,7 @@ class D3d12AbiGate(unittest.TestCase):
                        'pfnGetGPUDescriptorHandleForHeapStart'):
             self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
         # C5c/C5d implement CBV and buffer UAV/SRV views (test_c5c_descriptor_tables)
-        for member in ('pfnCreateSampler', 'pfnCreateRenderTargetView', 'pfnCreateDepthStencilView'):
+        for member in ('pfnCreateSampler', 'pfnCreateDepthStencilView'):
             self.assertIn('AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s)' % member, source)
         heap = source[source.index('static HRESULT APIENTRY CreateDescriptorHeap('):]
         heap = heap[:heap.index('\n}\n')]
@@ -247,12 +247,13 @@ class D3d12AbiGate(unittest.TestCase):
                    'pfnDispatch', 'pfnClearRootArguments', 'pfnSetComputeRoot32BitConstant',
                    'pfnSetComputeRoot32BitConstants', 'pfnSetComputeRootConstantBufferView',
                    'pfnSetComputeRootDescriptorTable', 'pfnSetComputeRootShaderResourceView'}
+        compute |= {'pfnClearRenderTargetView', 'pfnCopyTextureRegion'}  # C6a
         self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList', 'pfnCopyBufferRegion',
                                        'pfnResourceBarrier'} | setters | compute)
         for member in setters:
             self.assertIn('AGX_LIST_STATE(%s)' % member, source)
-        for consumer in ('pfnDrawInstanced', 'pfnDrawIndexedInstanced', 'pfnCopyTextureRegion',
-                         'pfnClearRenderTargetView', 'pfnResourceCopy'):
+        for consumer in ('pfnDrawInstanced', 'pfnDrawIndexedInstanced', 'pfnResourceCopy',
+                         'pfnClearDepthStencilView'):
             self.assertIn('AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, %s)' % consumer, source)
 
     def test_c5_compute_dispatch(self):
@@ -347,6 +348,45 @@ class D3d12AbiGate(unittest.TestCase):
         for member in ('pfnCreateConstantBufferView', 'pfnCreateUnorderedAccessView', 'pfnCopyDescriptors',
                        'pfnCopyDescriptorsSimple', 'pfnCreateShaderResourceView'):
             self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
+
+    def test_c6a_textures(self):
+        # C6a invariants (D3D12-C6-graphics.md): only single-sample 2D
+        # textures of formats the owner creates get an allocation size (any
+        # other texture keeps UINT64_MAX, which refuses creation); a texture
+        # is one owner texture and never a VA range; RTVs are read when a
+        # clear is recorded; CopyTextureRegion handles exactly one buffer
+        # footprint side and one texture subresource side (subresource =
+        # mip + slice * mips) and refuses others with a receipt.
+        source = SOURCE.read_text()
+        def fn(name):
+            start = source.index(name)
+            return source[start:source.index('\n}\n', start)]
+        size = fn('static UINT64 TextureBytes(')
+        for guard in ('arg->ResourceType != D3D12DDI_RT_TEXTURE2D', 'arg->SampleDesc.Count != 1',
+                      'AgxD3d12FormatBlockBytes(arg->Format)'):
+            self.assertIn(guard, size)
+        info = fn('static VOID APIENTRY CheckResourceAllocationInfo(')
+        self.assertIn('info->ResourceDataSize = ~0ULL;', info)
+        create = fn('static HRESULT APIENTRY CreateHeapAndResource(')
+        self.assertIn('AgxD3d12OwnerCreateTexture2D(', create)
+        texture_path = create[create.index('AgxD3d12OwnerCreateTexture2D('):create.index('return hr;')]
+        self.assertNotIn('RegisterHeap', texture_path)
+        clear = fn('static VOID APIENTRY ClearRenderTargetView(')
+        self.assertIn('command.clear.rtv = *rtv;', clear)
+        self.assertIn('rtv->kind != kDescriptorRtv', clear)
+        copy = fn('static VOID APIENTRY CopyTextureRegion(')
+        self.assertIn('(dst.footprint != nullptr) == (src.footprint != nullptr) ? 4u', copy)
+        self.assertIn('copy.level = sub % texture.resource->levels;', copy)
+        self.assertIn('copy.layer = sub / texture.resource->levels;', copy)
+        self.assertIn('"measure-d3d12-copy-texture"', copy)
+        side = fn('static bool CopySide(')
+        self.assertIn('D3D12DDI_RL_SELECT_SUBRESOURCE', side)
+        self.assertIn('D3D12DDI_RL_PLACED_PHYSICAL_SUBRESOURCE_PITCHED', side)
+        execute = fn('static VOID APIENTRY ExecuteCommandLists(')
+        self.assertIn('AgxD3d12OwnerClearRenderTarget(', execute)
+        self.assertIn('AgxD3d12OwnerCopyTexture(', execute)
+        # buffers carry their type so a footprint side is never a texture
+        self.assertIn('resource->type = D3D12DDI_RT_BUFFER;', create)
 
     def test_package_and_receipts(self):
         package = ROOT / 'drivers/apple-agx/render-admission/umd'
