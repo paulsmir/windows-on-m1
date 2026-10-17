@@ -773,6 +773,49 @@ static D3D12DDI_GPU_DESCRIPTOR_HANDLE APIENTRY GetGPUDescriptorHandleForHeapStar
     start.ptr = heap ? heap->gpuva : 0;
     return start;
 }
+/* C3a (EXP1360, D3D12-C3-queue-fences.md): CreateCommandQueue first asks
+ * pfnCalcPrivateCommandQueueSize. The queue and fence objects record what
+ * the runtime gives them; no kernel context or submission exists yet, so
+ * Signal/Wait/ExecuteCommandLists stay fail-closed and their receipts name
+ * the runtime's next request. A fence keeps the GPU VA placements of its
+ * monitored value (a basic monitored fence is signalled by writing there). */
+struct AgxD3d12CommandQueue {
+    D3D12DDI_HRTCOMMANDQUEUE runtime;
+    UINT flags;
+};
+static SIZE_T APIENTRY CalcPrivateCommandQueueSize(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATECOMMANDQUEUE_0001 *) {
+    return sizeof(AgxD3d12CommandQueue);
+}
+static HRESULT APIENTRY CreateCommandQueue(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATECOMMANDQUEUE_0001 *arg) {
+    auto *queue = arg ? static_cast<AgxD3d12CommandQueue *>(arg->hDrvCommandQueue.pDrvPrivate) : nullptr;
+    if (!queue) return E_INVALIDARG;
+    queue->runtime = arg->hRTCommandQueue;
+    queue->flags = static_cast<UINT>(arg->QueueFlags);
+    const UINT receipt[] = {queue->flags, arg->NodeMask};
+    AdmissionUmdDiagnostic("measure-d3d12-queue", S_OK, receipt, 2);
+    return S_OK;
+}
+static VOID APIENTRY DestroyCommandQueue(D3D12DDI_HDEVICE, D3D12DDI_HCOMMANDQUEUE) {}
+struct AgxD3d12Fence {
+    UINT count;
+    D3D12DDI_FENCE fence[1];
+};
+static SIZE_T APIENTRY CalcPrivateFenceSize(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_FENCE *arg) {
+    const UINT count = arg && arg->FenceCount ? arg->FenceCount : 1;
+    return offsetof(AgxD3d12Fence, fence) + count * sizeof(D3D12DDI_FENCE);
+}
+static HRESULT APIENTRY CreateFence(D3D12DDI_HDEVICE, D3D12DDI_HFENCE handle, const D3D12DDIARG_CREATE_FENCE *arg) {
+    auto *fence = static_cast<AgxD3d12Fence *>(handle.pDrvPrivate);
+    if (!fence || !arg || (arg->FenceCount && !arg->Fences)) return E_INVALIDARG;
+    fence->count = arg->FenceCount;
+    if (arg->FenceCount) memcpy(fence->fence, arg->Fences, arg->FenceCount * sizeof(D3D12DDI_FENCE));
+    const UINT64 va = arg->FenceCount ? arg->Fences[0].FenceValue.BaseAddress : 0;
+    const UINT receipt[] = {arg->FenceCount, static_cast<UINT>(va), static_cast<UINT>(va >> 32),
+                            arg->FenceCount ? static_cast<UINT>(arg->Fences[0].Flags) : 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-fence", S_OK, receipt, 4);
+    return S_OK;
+}
+static VOID APIENTRY DestroyFence(D3D12DDI_HDEVICE, D3D12DDI_HFENCE) {}
 static HRESULT APIENTRY CloseAdapter(D3D12DDI_HADAPTER) {
     AdmissionUmdDiagnostic("d3d12-close-adapter", S_OK, nullptr, 0);
     return S_OK;
@@ -816,9 +859,9 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateHullShader, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateHullShader));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDomainShader, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDomainShader));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyShader, DestroyShader);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandQueueSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandQueueSize));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandQueue, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandQueue));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandQueue, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandQueue));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandQueueSize, CalcPrivateCommandQueueSize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandQueue, CreateCommandQueue);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandQueue, DestroyCommandQueue);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandAllocatorSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandAllocatorSize));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandAllocator, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandAllocator));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandAllocator, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandAllocator));
@@ -829,9 +872,9 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandListSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandListSize));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandList, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandList));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandList, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandList));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateFenceSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateFenceSize));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateFence, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateFence));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyFence, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyFence));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateFenceSize, CalcPrivateFenceSize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateFence, CreateFence);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyFence, DestroyFence);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateDescriptorHeapSize, CalcPrivateDescriptorHeapSize);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDescriptorHeap, CreateDescriptorHeap);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyDescriptorHeap, DestroyDescriptorHeap);

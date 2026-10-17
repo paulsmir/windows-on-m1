@@ -191,6 +191,13 @@ class D3d12AbiGate(unittest.TestCase):
         heap = heap[:heap.index('\n}\n')]
         self.assertIn('D3D12DDI_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE', heap)
         self.assertIn('hr = CreateHeap(device, memory, &heap->memory);', heap)
+        # C3a (EXP1360): queue and fence objects record their arguments; no
+        # submission exists, so queue-table Signal/Wait/Execute stay refused.
+        for member in ('pfnCalcPrivateCommandQueueSize', 'pfnCreateCommandQueue', 'pfnDestroyCommandQueue',
+                       'pfnCalcPrivateFenceSize', 'pfnCreateFence', 'pfnDestroyFence'):
+            self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
+        for member in ('pfnExecuteCommandLists', 'pfnSignalFence', 'pfnWaitForFence'):
+            self.assertIn('AGX_REJECT(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, %s)' % member, source)
         # nothing can bind it yet: every command-list DDI stays fail-closed
         self.assertNotRegex(source, r'AGX_ASSIGN\(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, \w+, (?!AGX_REJECT)')
 
