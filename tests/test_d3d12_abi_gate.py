@@ -71,6 +71,13 @@ class D3d12AbiGate(unittest.TestCase):
         stub = source[source.index('struct Rejected<R (APIENTRY *)(A...), Table, Offset>'):]
         self.assertLess(stub.index('AdmissionUmdDiagnostic("measure-d3d12-rejected"'),
                         stub.index('pfnSetErrorCb(runtime_device'))
+        # C1d (EXP1348): device initialisation calls these; they answer
+        # without SetErrorCb and claim no optional capability.
+        for member in ('pfnCheckFormatSupport', 'pfnCheckMultisampleQualityLevels', 'pfnQueryNodeMap'):
+            self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
+        self.assertIn('if (support) *support = 0;', source)
+        self.assertIn('*levels = samples == 1 ? 1u : 0u;', source)
+        self.assertIn('map[i] = 0;', source)
 
     def test_package_and_receipts(self):
         package = ROOT / 'drivers/apple-agx/render-admission/umd'
