@@ -162,6 +162,23 @@ class D3d12AbiGate(unittest.TestCase):
         device = source[source.index('static HRESULT APIENTRY CreateDevice('):]
         device = device[:device.index('\n}\n')]
         self.assertNotIn('PagingQueue', device)
+        # C1j (EXP1354): descriptor sizes hold the AGX descriptors (texture
+        # 24 + PBE 24 + buffer record; sampler 8 + border colour 16); views
+        # written into heaps stay refused until implemented.
+        sizes = source[source.index('static UINT DescriptorBytes('):]
+        sizes = sizes[:sizes.index('\n}\n')]
+        self.assertIn('D3D12DDI_DESCRIPTOR_HEAP_TYPE_SAMPLER ? 32u : 64u', sizes)
+        for member in ('pfnGetDescriptorSizeInBytes', 'pfnCalcPrivateDescriptorHeapSize', 'pfnCreateDescriptorHeap',
+                       'pfnDestroyDescriptorHeap', 'pfnGetCPUDescriptorHandleForHeapStart',
+                       'pfnGetGPUDescriptorHandleForHeapStart'):
+            self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
+        for member in ('pfnCreateShaderResourceView', 'pfnCreateConstantBufferView', 'pfnCreateSampler',
+                       'pfnCreateUnorderedAccessView', 'pfnCreateRenderTargetView', 'pfnCreateDepthStencilView'):
+            self.assertIn('AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s)' % member, source)
+        heap = source[source.index('static HRESULT APIENTRY CreateDescriptorHeap('):]
+        heap = heap[:heap.index('\n}\n')]
+        self.assertIn('D3D12DDI_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE', heap)
+        self.assertIn('hr = CreateHeap(device, memory, &heap->memory);', heap)
         # nothing can bind it yet: every command-list DDI stays fail-closed
         self.assertNotRegex(source, r'AGX_ASSIGN\(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, \w+, (?!AGX_REJECT)')
 

@@ -623,6 +623,85 @@ static D3D12DDI_GPU_VIRTUAL_ADDRESS APIENTRY CheckResourceVirtualAddress(D3D12DD
     auto *resource = static_cast<AgxD3d12Resource *>(handle.pDrvPrivate);
     return resource ? resource->gpuva : 0;
 }
+/* C1j (EXP1354): after its internal compute pipeline the runtime asks the
+ * descriptor sizes; refused, the device is removed. Sizes follow what each
+ * descriptor will hold (Asahi genxml: Texture 24 bytes, PBE 24, Sampler 8,
+ * border colour 16): a CBV/SRV/UAV descriptor = texture + PBE + {buffer
+ * VA, size, kind} in 64 bytes, a sampler = sampler + border colour in 32,
+ * RTV/DSV = a 64-byte CPU record of the view. Shader-visible heaps live in
+ * one CPU-visible C2a heap (16 MiB class bound) kept locked, so a CPU
+ * handle is its pointer and a GPU handle its VA; other heaps are process
+ * memory. The views written into them are not implemented yet. */
+static UINT DescriptorBytes(D3D12DDI_DESCRIPTOR_HEAP_TYPE type) {
+    return type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_SAMPLER ? 32u : 64u;
+}
+static UINT APIENTRY GetDescriptorSizeInBytes(D3D12DDI_HDEVICE, D3D12DDI_DESCRIPTOR_HEAP_TYPE type) {
+    return DescriptorBytes(type);
+}
+struct AgxD3d12DescriptorHeap {
+    AgxD3d12Heap memory; /* shader-visible heaps */
+    void *cpu;
+    UINT64 gpuva;
+    UINT type;
+    UINT descriptors;
+};
+static SIZE_T APIENTRY CalcPrivateDescriptorHeapSize(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_DESCRIPTOR_HEAP_0001 *) {
+    return sizeof(AgxD3d12DescriptorHeap);
+}
+static HRESULT APIENTRY CreateDescriptorHeap(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_DESCRIPTOR_HEAP_0001 *arg,
+                                             D3D12DDI_HDESCRIPTORHEAP heap_handle) {
+    AgxD3d12Device *device = DeviceOf(handle);
+    auto *heap = static_cast<AgxD3d12DescriptorHeap *>(heap_handle.pDrvPrivate);
+    if (!device || !arg || !heap || arg->Type >= D3D12DDI_DESCRIPTOR_HEAP_TYPE_NUM_TYPES || !arg->NumDescriptors)
+        return E_INVALIDARG;
+    memset(heap, 0, sizeof(*heap));
+    heap->type = static_cast<UINT>(arg->Type);
+    heap->descriptors = arg->NumDescriptors;
+    const UINT64 bytes = static_cast<UINT64>(arg->NumDescriptors) * DescriptorBytes(arg->Type);
+    HRESULT hr = S_OK;
+    if (arg->Flags & D3D12DDI_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE) {
+        D3D12DDIARG_CREATEHEAP_0001 memory = {};
+        memory.ByteSize = bytes;
+        memory.Alignment = kHeapPage;
+        memory.MemoryPool = D3D12DDI_MEMORY_POOL_L0;
+        memory.CPUPageProperty = D3D12DDI_CPU_PAGE_PROPERTY_WRITE_COMBINE;
+        hr = CreateHeap(device, memory, &heap->memory);
+        if (SUCCEEDED(hr)) {
+            D3D12DDI_HHEAP memory_handle = {&heap->memory};
+            hr = MapHeap(handle, memory_handle, &heap->cpu);
+            if (FAILED(hr)) ReleaseHeap(device, &heap->memory);
+        }
+        heap->gpuva = SUCCEEDED(hr) ? heap->memory.gpuva : 0;
+    } else {
+        heap->cpu = VirtualAlloc(nullptr, static_cast<SIZE_T>(bytes), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        if (!heap->cpu) hr = E_OUTOFMEMORY;
+    }
+    const UINT receipt[] = {heap->type, heap->descriptors, static_cast<UINT>(arg->Flags), heap->gpuva != 0};
+    AdmissionUmdDiagnostic("measure-d3d12-descriptor-heap", hr, receipt, 4);
+    return hr;
+}
+static VOID APIENTRY DestroyDescriptorHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HDESCRIPTORHEAP heap_handle) {
+    AgxD3d12Device *device = DeviceOf(handle);
+    auto *heap = static_cast<AgxD3d12DescriptorHeap *>(heap_handle.pDrvPrivate);
+    if (!device || !heap) return;
+    if (heap->memory.allocation) ReleaseHeap(device, &heap->memory);
+    else if (heap->cpu) VirtualFree(heap->cpu, 0, MEM_RELEASE);
+    memset(heap, 0, sizeof(*heap));
+}
+static D3D12DDI_CPU_DESCRIPTOR_HANDLE APIENTRY GetCPUDescriptorHandleForHeapStart(D3D12DDI_HDEVICE,
+                                                                                 D3D12DDI_HDESCRIPTORHEAP handle) {
+    auto *heap = static_cast<AgxD3d12DescriptorHeap *>(handle.pDrvPrivate);
+    D3D12DDI_CPU_DESCRIPTOR_HANDLE start = {};
+    start.ptr = heap ? reinterpret_cast<SIZE_T>(heap->cpu) : 0;
+    return start;
+}
+static D3D12DDI_GPU_DESCRIPTOR_HANDLE APIENTRY GetGPUDescriptorHandleForHeapStart(D3D12DDI_HDEVICE,
+                                                                                 D3D12DDI_HDESCRIPTORHEAP handle) {
+    auto *heap = static_cast<AgxD3d12DescriptorHeap *>(handle.pDrvPrivate);
+    D3D12DDI_GPU_DESCRIPTOR_HANDLE start = {};
+    start.ptr = heap ? heap->gpuva : 0;
+    return start;
+}
 static HRESULT APIENTRY CloseAdapter(D3D12DDI_HADAPTER) {
     AdmissionUmdDiagnostic("d3d12-close-adapter", S_OK, nullptr, 0);
     return S_OK;
@@ -682,12 +761,12 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateFenceSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateFenceSize));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateFence, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateFence));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyFence, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyFence));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateDescriptorHeapSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateDescriptorHeapSize));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDescriptorHeap, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDescriptorHeap));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyDescriptorHeap, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyDescriptorHeap));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetDescriptorSizeInBytes, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetDescriptorSizeInBytes));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetCPUDescriptorHandleForHeapStart, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetCPUDescriptorHandleForHeapStart));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetGPUDescriptorHandleForHeapStart, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetGPUDescriptorHandleForHeapStart));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateDescriptorHeapSize, CalcPrivateDescriptorHeapSize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDescriptorHeap, CreateDescriptorHeap);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyDescriptorHeap, DestroyDescriptorHeap);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetDescriptorSizeInBytes, GetDescriptorSizeInBytes);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetCPUDescriptorHandleForHeapStart, GetCPUDescriptorHandleForHeapStart);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetGPUDescriptorHandleForHeapStart, GetGPUDescriptorHandleForHeapStart);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateShaderResourceView, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateShaderResourceView));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateConstantBufferView, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateConstantBufferView));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateSampler, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateSampler));
