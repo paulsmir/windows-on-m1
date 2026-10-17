@@ -449,8 +449,24 @@ static VOID APIENTRY CheckResourceAllocationInfo(D3D12DDI_HDEVICE, const D3D12DD
                             static_cast<UINT>(info->ResourceDataSize >> 16)};
     AdmissionUmdDiagnostic("measure-d3d12-allocation-info", S_OK, receipt, 3);
 }
+/* EXP1355: the first committed buffer failed (0x887a0005) after its
+ * allocation info with no heap receipt; these entry receipts name what the
+ * runtime passes ({heap present, ByteSize/64K, CPU page property, pool,
+ * flags}, {resource present, type, width, layout}). */
+static void HeapAndResourceReceipt(PCSTR stage, const D3D12DDIARG_CREATEHEAP_0001 *heap,
+                                   const D3D12DDIARG_CREATERESOURCE_0003 *resource, UINT handles) {
+    const UINT receipt[] = {heap ? 1u : 0u, heap ? static_cast<UINT>(heap->ByteSize >> 16) : 0u,
+                            heap ? static_cast<UINT>(heap->CPUPageProperty) : 0u,
+                            heap ? static_cast<UINT>(heap->MemoryPool) : 0u,
+                            heap ? static_cast<UINT>(heap->Flags) : 0u, resource ? 1u : 0u,
+                            resource ? static_cast<UINT>(resource->ResourceType) : 0u,
+                            resource ? static_cast<UINT>(resource->Width) : 0u,
+                            resource ? static_cast<UINT>(resource->Layout) : 0u, handles};
+    AdmissionUmdDiagnostic(stage, S_OK, receipt, 10);
+}
 static D3D12DDI_HEAP_AND_RESOURCE_SIZES APIENTRY CalcPrivateHeapAndResourceSizes(
-    D3D12DDI_HDEVICE, const D3D12DDIARG_CREATEHEAP_0001 *, const D3D12DDIARG_CREATERESOURCE_0003 *) {
+    D3D12DDI_HDEVICE, const D3D12DDIARG_CREATEHEAP_0001 *heap, const D3D12DDIARG_CREATERESOURCE_0003 *resource) {
+    HeapAndResourceReceipt("measure-d3d12-heap-sizes", heap, resource, 0);
     return {sizeof(AgxD3d12Heap), sizeof(AgxD3d12Resource)};
 }
 static HRESULT WaitPaging(AgxD3d12Device *device, UINT64 fence) {
@@ -572,6 +588,8 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
     AgxD3d12Device *device = DeviceOf(handle);
     auto *heap = static_cast<AgxD3d12Heap *>(heap_handle.pDrvPrivate);
     auto *resource = static_cast<AgxD3d12Resource *>(resource_handle.pDrvPrivate);
+    HeapAndResourceReceipt("measure-d3d12-create-heap-resource", heap_arg, resource_arg,
+                           (heap ? 1u : 0u) | (resource ? 2u : 0u));
     if (!device) return E_INVALIDARG;
     /* committed buffers only (placed resources and textures: C2b) */
     if (!heap_arg || !heap || (resource_arg && (!resource || resource_arg->ResourceType != D3D12DDI_RT_BUFFER ||
