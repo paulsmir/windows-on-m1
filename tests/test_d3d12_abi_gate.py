@@ -203,10 +203,20 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('device->callbacks->pfnCreateContextVirtualCb(arg->hRTCommandQueue, &context)', queue)
         self.assertIn('contract.Magic = ADMISSION_WIN32_CONTEXT_MAGIC;', queue)
         self.assertIn('pfnDestroyContextCb(queue->runtime, &destroy)', source)
-        for member in ('pfnExecuteCommandLists', 'pfnSignalFence', 'pfnWaitForFence'):
+        for member in ('pfnSignalFence', 'pfnWaitForFence'):
             self.assertIn('AGX_REJECT(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, %s)' % member, source)
+        # C4a: allocators and lists exist; a list records nothing yet, so
+        # ExecuteCommandLists has no GPU work; every recording DDI but
+        # Close/Reset stays fail-closed.
+        self.assertIn('AGX_ASSIGN(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnExecuteCommandLists, ExecuteCommandLists);', source)
+        self.assertIn('device->callbacks->pfnSetCommandListDDITableCb(arg->hRTCommandList, list_table);', source)
+        for member in ('pfnCalcPrivateCommandAllocatorSize', 'pfnCreateCommandAllocator', 'pfnDestroyCommandAllocator',
+                       'pfnResetCommandAllocator', 'pfnCalcPrivateCommandListSize', 'pfnCreateCommandList',
+                       'pfnDestroyCommandList'):
+            self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
         # nothing can bind it yet: every command-list DDI stays fail-closed
-        self.assertNotRegex(source, r'AGX_ASSIGN\(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, \w+, (?!AGX_REJECT)')
+        implemented = set(re.findall(r'AGX_ASSIGN\(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, (\w+), (?!AGX_REJECT)', source))
+        self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList'})
 
     def test_package_and_receipts(self):
         package = ROOT / 'drivers/apple-agx/render-admission/umd'

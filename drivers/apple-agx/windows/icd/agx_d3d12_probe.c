@@ -69,6 +69,34 @@ static int queue_fence_signal(ID3D12Device *device) {
         for (int i = 0; i < 200 && (value = ID3D12Fence_GetCompletedValue(fence)) < 1; ++i) Sleep(10);
         printf("C3 completed value %llu\n", (unsigned long long)value);
         printf("AGX_D3D12_C3: %s\n", SUCCEEDED(hr) && value == 1 ? "PASS" : "FAIL");
+        if (SUCCEEDED(hr) && value == 1) {
+            /* C4a: an empty direct command list executed on the queue, then a
+             * fence signal ordered after it. */
+            ID3D12CommandAllocator *allocator = NULL;
+            ID3D12GraphicsCommandList *list = NULL;
+            HRESULT c4 = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                            &IID_ID3D12CommandAllocator, (void **)&allocator);
+            printf("C4 CreateCommandAllocator hr=0x%08lx\n", (unsigned long)c4);
+            if (SUCCEEDED(c4)) {
+                c4 = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, NULL,
+                                                    &IID_ID3D12GraphicsCommandList, (void **)&list);
+                printf("C4 CreateCommandList hr=0x%08lx\n", (unsigned long)c4);
+            }
+            if (SUCCEEDED(c4)) {
+                c4 = ID3D12GraphicsCommandList_Close(list);
+                printf("C4 Close hr=0x%08lx\n", (unsigned long)c4);
+            }
+            if (SUCCEEDED(c4)) {
+                ID3D12CommandList *lists[] = {(ID3D12CommandList *)list};
+                ID3D12CommandQueue_ExecuteCommandLists(queue, 1, lists);
+                c4 = ID3D12CommandQueue_Signal(queue, fence, 2);
+                for (int i = 0; i < 200 && (value = ID3D12Fence_GetCompletedValue(fence)) < 2; ++i) Sleep(10);
+                printf("C4 execute+signal hr=0x%08lx completed %llu\n", (unsigned long)c4, (unsigned long long)value);
+            }
+            printf("AGX_D3D12_C4A: %s\n", SUCCEEDED(c4) && value == 2 ? "PASS" : "FAIL");
+            if (list) ID3D12GraphicsCommandList_Release(list);
+            if (allocator) ID3D12CommandAllocator_Release(allocator);
+        }
         ID3D12Fence_Release(fence);
     }
     ID3D12CommandQueue_Release(queue);

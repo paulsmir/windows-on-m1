@@ -36,6 +36,7 @@ struct AgxD3d12Adapter {
     BOOL info_valid;
 };
 static AgxD3d12Adapter adapter_object;
+static D3D12DDI_HRTTABLE list_table;
 static const D3D12DDI_CORELAYER_DEVICECALLBACKS_0003 *callbacks;
 static D3D12DDI_HRTDEVICE runtime_device;
 
@@ -849,6 +850,62 @@ static HRESULT APIENTRY CreateFence(D3D12DDI_HDEVICE, D3D12DDI_HFENCE handle, co
     return S_OK;
 }
 static VOID APIENTRY DestroyFence(D3D12DDI_HDEVICE, D3D12DDI_HFENCE) {}
+/* C4a (D3D12-C plan C4): command allocators and command lists. A list
+ * records nothing yet (every recording DDI is still fail-closed), so a
+ * closed list is empty and ExecuteCommandLists has no GPU work to submit;
+ * the runtime's fence signal after it still goes through the queue's
+ * context (C3). The GPU copy (libagx copy kernels) is C4b. */
+static SIZE_T APIENTRY CalcPrivateCommandAllocatorSize(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATECOMMANDALLOCATOR *) {
+    return sizeof(UINT);
+}
+static HRESULT APIENTRY CreateCommandAllocator(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATECOMMANDALLOCATOR *arg) {
+    auto *type = arg ? static_cast<UINT *>(arg->hDrvCommandAllocator.pDrvPrivate) : nullptr;
+    if (!type) return E_INVALIDARG;
+    *type = static_cast<UINT>(arg->Type);
+    return S_OK;
+}
+static VOID APIENTRY DestroyCommandAllocator(D3D12DDI_HDEVICE, D3D12DDI_HCOMMANDALLOCATOR) {}
+static VOID APIENTRY ResetCommandAllocator(D3D12DDI_HCOMMANDALLOCATOR) {}
+struct AgxD3d12CommandList {
+    D3D12DDI_HRTCOMMANDLIST runtime;
+    UINT type;
+    UINT closed;
+    UINT commands; /* recorded commands; 0 until a recording DDI exists */
+};
+static SIZE_T APIENTRY CalcPrivateCommandListSize(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_COMMAND_LIST_0001 *) {
+    return sizeof(AgxD3d12CommandList);
+}
+static HRESULT APIENTRY CreateCommandList(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_COMMAND_LIST_0001 *arg) {
+    AgxD3d12Device *device = DeviceOf(handle);
+    auto *list = arg ? static_cast<AgxD3d12CommandList *>(arg->hDrvCommandList.pDrvPrivate) : nullptr;
+    if (!device || !list) return E_INVALIDARG;
+    memset(list, 0, sizeof(*list));
+    list->runtime = arg->hRTCommandList;
+    list->type = static_cast<UINT>(arg->Type);
+    if (device->callbacks && device->callbacks->pfnSetCommandListDDITableCb && list_table.handle)
+        device->callbacks->pfnSetCommandListDDITableCb(arg->hRTCommandList, list_table);
+    const UINT receipt[] = {list->type, list_table.handle != nullptr ? 1u : 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-command-list", S_OK, receipt, 2);
+    return S_OK;
+}
+static VOID APIENTRY DestroyCommandList(D3D12DDI_HDEVICE, D3D12DDI_HCOMMANDLIST) {}
+static VOID APIENTRY CloseCommandList(D3D12DDI_HCOMMANDLIST handle) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    if (list) list->closed = 1;
+}
+static VOID APIENTRY ResetCommandList(D3D12DDI_HCOMMANDLIST handle, const D3D12DDIARG_RESETCOMMANDLIST *) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    if (list) list->closed = list->commands = 0;
+}
+static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
+    UINT commands = 0;
+    for (UINT i = 0; lists && i < count; ++i) {
+        auto *list = static_cast<AgxD3d12CommandList *>(lists[i].pDrvPrivate);
+        if (list) commands += list->commands;
+    }
+    const UINT receipt[] = {count, commands};
+    AdmissionUmdDiagnostic("measure-d3d12-execute", S_OK, receipt, 2);
+}
 static HRESULT APIENTRY CloseAdapter(D3D12DDI_HADAPTER) {
     AdmissionUmdDiagnostic("d3d12-close-adapter", S_OK, nullptr, 0);
     return S_OK;
@@ -895,16 +952,16 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandQueueSize, CalcPrivateCommandQueueSize);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandQueue, CreateCommandQueue);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandQueue, DestroyCommandQueue);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandAllocatorSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandAllocatorSize));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandAllocator, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandAllocator));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandAllocator, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandAllocator));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnResetCommandAllocator, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnResetCommandAllocator));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandAllocatorSize, CalcPrivateCommandAllocatorSize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandAllocator, CreateCommandAllocator);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandAllocator, DestroyCommandAllocator);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnResetCommandAllocator, ResetCommandAllocator);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivatePipelineStateSize, CalcPrivatePipelineStateSize);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreatePipelineState, CreatePipelineState);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyPipelineState, DestroyPipelineState);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandListSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandListSize));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandList, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandList));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandList, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandList));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandListSize, CalcPrivateCommandListSize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandList, CreateCommandList);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandList, DestroyCommandList);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateFenceSize, CalcPrivateFenceSize);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateFence, CreateFence);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyFence, DestroyFence);
@@ -957,8 +1014,8 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckResourceAllocationHandle, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckResourceAllocationHandle));
 }
 static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003 &f) {
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCloseCommandList, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCloseCommandList));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResetCommandList, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResetCommandList));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCloseCommandList, CloseCommandList);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResetCommandList, ResetCommandList);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawInstanced, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawInstanced));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawIndexedInstanced, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawIndexedInstanced));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDispatch, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDispatch));
@@ -1010,7 +1067,7 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearRootArguments, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearRootArguments));
 }
 static void FillD3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001 &f) {
-    AGX_ASSIGN(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnExecuteCommandLists, AGX_REJECT(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnExecuteCommandLists));
+    AGX_ASSIGN(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnExecuteCommandLists, ExecuteCommandLists);
     f.pfnUnused = nullptr;
     f.pfnUnused2 = nullptr;
     AGX_ASSIGN(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnUpdateTileMappings, AGX_REJECT(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnUpdateTileMappings));
@@ -1027,8 +1084,11 @@ template<class T> static HRESULT FillTable(void *table, SIZE_T size, void (*fill
     return S_OK;
 }
 static HRESULT APIENTRY FillDDITable(D3D12DDI_HADAPTER, D3D12DDI_TABLE_TYPE type, void *table,
-                                     SIZE_T size, UINT version, D3D12DDI_HRTTABLE) {
+                                     SIZE_T size, UINT version, D3D12DDI_HRTTABLE rt_table) {
     HRESULT hr = E_NOTIMPL;
+    /* C4a: a command list must name the runtime table its DDIs come from
+     * (pfnSetCommandListDDITableCb at creation); keep the first one. */
+    if (type == D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D && !list_table.handle) list_table = rt_table;
     switch (type) {
     case D3D12DDI_TABLE_TYPE_DEVICE_CORE:
         hr = FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0003>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0003);
