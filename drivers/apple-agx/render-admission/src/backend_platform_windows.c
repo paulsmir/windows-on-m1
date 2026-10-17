@@ -3777,6 +3777,30 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformGpuTimestampEscape(
   return STATUS_SUCCESS;
 }
 
+_Use_decl_annotations_ NTSTATUS AdmissionPlatformCalibrateGpuClock(
+    ADMISSION_CONTEXT *Context, DXGKARG_CALIBRATEGPUCLOCK *Clock) {
+  ADMISSION_PLATFORM_RUNTIME *runtime;
+  LARGE_INTEGER frequency, now;
+  unsigned long long gpuFrequency = 0u, gpuClock = 0u;
+  KIRQL oldIrql;
+  int ok;
+  if (Context == NULL || Clock == NULL) return STATUS_INVALID_PARAMETER;
+  runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
+  if (runtime == NULL) return STATUS_DEVICE_NOT_READY;
+  RtlZeroMemory(Clock, sizeof(*Clock));
+  KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
+  now = KeQueryPerformanceCounter(&frequency);
+  ok = AdmissionGpuClockCalibrate(&runtime->GpuTimestamps,
+      (unsigned long long)frequency.QuadPart, (unsigned long long)now.QuadPart,
+      &gpuFrequency, &gpuClock);
+  KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
+  if (!ok) return STATUS_NOT_SUPPORTED;
+  Clock->GpuFrequency = gpuFrequency;
+  Clock->GpuClockCounter = gpuClock;
+  Clock->CpuClockCounter = (ULONGLONG)now.QuadPart;
+  return STATUS_SUCCESS;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionPlatformTdrDrillEscape(
     ADMISSION_CONTEXT *Context, const DXGKARG_ESCAPE *Args) {
   ADMISSION_TDR_DRILL drill;

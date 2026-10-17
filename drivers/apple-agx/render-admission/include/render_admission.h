@@ -1917,6 +1917,11 @@ void AdmissionRecordGpuReset(_In_opt_ ADMISSION_CONTEXT *Context);
 /* GPU timestamps escape (ADMISSION_GPU_TIMESTAMP_QUERY), caller's process. */
 NTSTATUS AdmissionPlatformGpuTimestampEscape(_Inout_ ADMISSION_CONTEXT *Context,
     _In_ const DXGKARG_ESCAPE *Args);
+/* C11d: DxgkDdiCalibrateGpuClock (D3DKMTQueryClockCalibration): the GPU
+ * clock in nanoseconds of the firmware timebase, the UMD timestamp units
+ * (AdmissionGpuClockCalibrate); any IRQL <= DISPATCH_LEVEL. */
+NTSTATUS AdmissionPlatformCalibrateGpuClock(_In_ ADMISSION_CONTEXT *Context,
+    _Out_ DXGKARG_CALIBRATEGPUCLOCK *Clock);
 /* G4-r3 TDR drill escape (ADMISSION_TDR_DRILL), in the caller's process. */
 NTSTATUS AdmissionPlatformTdrDrillEscape(_Inout_ ADMISSION_CONTEXT *Context,
     _In_ const DXGKARG_ESCAPE *Args);

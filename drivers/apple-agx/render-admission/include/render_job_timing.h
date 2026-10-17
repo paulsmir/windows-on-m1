@@ -98,6 +98,18 @@ int AdmissionGpuTimestampFind(const ADMISSION_GPU_TIMESTAMP_RING *Ring,
     unsigned int ProcessId, unsigned long long CommandVa,
     ADMISSION_GPU_TIMESTAMP *Out);
 
+/* C11d (D3D12-C11-queries.md): DxgkDdiCalibrateGpuClock values, the D3D12
+ * runtime's GetTimestampFrequency/GetClockCalibration source
+ * (D3DKMTQueryClockCalibration). The UMD's Gallium timestamps are
+ * nanoseconds of the firmware timebase (agx_get_gpu_timestamp: counter time
+ * plus the newest job's firmware-minus-counter offset), so the GPU clock is
+ * reported in nanoseconds: *GpuFrequency = 1e9, *GpuClockNs = (Qpc + newest
+ * End - Qpc offset, 0 before any job, clamped at 0) at Frequency. Returns 0
+ * for a zero frequency. */
+int AdmissionGpuClockCalibrate(const ADMISSION_GPU_TIMESTAMP_RING *Ring,
+    unsigned long long Frequency, unsigned long long Qpc,
+    unsigned long long *GpuFrequency, unsigned long long *GpuClockNs);
+
 /* The escape the UMD sends after its batch completed (DxgkDdiEscape, in the
  * caller's process). Found 1 with Kind/Start/End in firmware ticks;
  * Frequency is the tick frequency (the system counter). CommandVa 0

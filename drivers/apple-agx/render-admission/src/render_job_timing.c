@@ -128,3 +128,22 @@ int AdmissionGpuTimestampFind(const ADMISSION_GPU_TIMESTAMP_RING *ring,
   }
   return 1;
 }
+
+int AdmissionGpuClockCalibrate(const ADMISSION_GPU_TIMESTAMP_RING *ring,
+    unsigned long long frequency, unsigned long long qpc,
+    unsigned long long *gpu_frequency, unsigned long long *gpu_clock_ns) {
+  ADMISSION_GPU_TIMESTAMP newest;
+  unsigned long long ticks = qpc;
+  if (!ring || !frequency || !gpu_frequency || !gpu_clock_ns) return 0;
+  if (AdmissionGpuTimestampFind(ring, 0u, 0u, &newest)) {
+    /* firmware minus counter at the newest completion; either sign */
+    if (newest.End >= newest.Qpc)
+      ticks = qpc + (newest.End - newest.Qpc);
+    else
+      ticks = qpc > newest.Qpc - newest.End ? qpc - (newest.Qpc - newest.End) : 0u;
+  }
+  *gpu_frequency = 1000000000ull;
+  *gpu_clock_ns = (ticks / frequency) * 1000000000ull +
+                  ((ticks % frequency) * 1000000000ull) / frequency;
+  return 1;
+}

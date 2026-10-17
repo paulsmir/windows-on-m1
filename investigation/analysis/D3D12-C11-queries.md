@@ -53,3 +53,20 @@ occlusion + statistics queries around the triangle between two
 timestamps, all resolved to a READBACK buffer. C11A PASS = occlusion ==
 drawn pixels and binary == 1; C11B PASS = IAVertices 3, IAPrimitives 1;
 C11C PASS = t0 != 0, t1 >= t0 and GetTimestampFrequency S_OK non-zero.
+
+## C11d: KMD clock calibration (after EXP1373)
+
+- Measured (EXP1373): GetTimestampFrequency and GetClockCalibration
+  returned E_NOTIMPL with no UMD DDI call -- the runtime's source is
+  D3DKMTQueryClockCalibration ("QueryClockCalibration" in d3d12core;
+  D3DKMT_QUERYCLOCKCALIBRATION carries DXGK_GPUCLOCKDATA), i.e. the KMD's
+  DxgkDdiCalibrateGpuClock, which returned STATUS_NOT_SUPPORTED.
+- Contract: DXGKARG_CALIBRATEGPUCLOCK = DXGK_GPUCLOCKDATA {GpuFrequency,
+  GpuClockCounter, CpuClockCounter}, IRQL <= DISPATCH_LEVEL. The firmware
+  timebase runs at the system-counter frequency (EXP1112) and the UMD's
+  Gallium timestamps are nanoseconds of it (agx_get_gpu_timestamp), so the
+  KMD reports GpuFrequency 1e9 and GpuClockCounter = (QPC + the newest
+  job's End - Qpc offset) in nanoseconds, CpuClockCounter = QPC
+  (AdmissionGpuClockCalibrate, host-tested; node 0 / engine 0 only).
+- UNKNOWN: whether the 26100 runtime then reports the frequency to
+  applications unchanged -- probe C11C.

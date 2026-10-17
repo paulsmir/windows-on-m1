@@ -54,6 +54,27 @@ int main(void) {
   assert(AdmissionGpuTimestampFind(&ring, 100u, 0u, &out) && out.Fence == 200u &&
          out.End == 0x80ULL && out.Qpc == 0x77ULL && !out.Start && !out.Kind &&
          !out.ProcessId && !out.CommandVa);
+  {
+    /* C11d: DxgkDdiCalibrateGpuClock -- the GPU clock in nanoseconds of the
+     * firmware timebase (the UMD's Gallium timestamp units): QPC plus the
+     * newest job's End - Qpc offset, at the counter frequency */
+    static ADMISSION_GPU_TIMESTAMP_RING empty;
+    unsigned long long hz = 0, ns = 0;
+    assert(!AdmissionGpuClockCalibrate(&empty, 0ULL, 24000000ULL, &hz, &ns)); /* no frequency */
+    assert(AdmissionGpuClockCalibrate(&empty, 24000000ULL, 48000000ULL, &hz, &ns) &&
+           hz == 1000000000ULL && ns == 2000000000ULL); /* no job yet: offset 0 */
+    /* the newest job (fence 200): End 0x80, Qpc 0x77 -> offset +9 ticks */
+    assert(AdmissionGpuClockCalibrate(&ring, 24000000ULL, 24000000ULL - 9ULL, &hz, &ns) &&
+           ns == 1000000000ULL);
+    /* firmware behind the counter: a negative offset, clamped at 0 */
+    assert(AdmissionGpuTimestampRecord(&ring, 201u, 7u, b, ADMISSION_GPU_TIMESTAMP_RENDER, 0x10ULL, 0x20ULL, 0x1020ULL));
+    assert(AdmissionGpuClockCalibrate(&ring, 24000000ULL, 24000000ULL + 0x1000ULL, &hz, &ns) &&
+           ns == 1000000000ULL);
+    assert(AdmissionGpuClockCalibrate(&ring, 24000000ULL, 0x10ULL, &hz, &ns) && ns == 0ULL);
+    /* large counters do not overflow (about 24 days at 24 MHz) */
+    assert(AdmissionGpuClockCalibrate(&empty, 24000000ULL, 24000000ULL * 2000000ULL + 12000000ULL, &hz, &ns) &&
+           ns == 2000000ULL * 1000000000ULL + 500000000ULL);
+  }
   return 0;
 }
 '''

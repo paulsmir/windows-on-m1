@@ -657,14 +657,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyProcess(
 }
 #endif
 
+/* C11d: the one node's clock (D3D12 GetTimestampFrequency and
+ * GetClockCalibration; EXP1373 returned E_NOTIMPL without it) */
 _Use_decl_annotations_ NTSTATUS AdmissionDdiCalibrateGpuClock(
     HANDLE Adapter, UINT32 NodeOrdinal, UINT32 EngineOrdinal,
     DXGKARG_CALIBRATEGPUCLOCK *ClockCalibration) {
-  UNUSED(Adapter);
-  UNUSED(NodeOrdinal);
-  UNUSED(EngineOrdinal);
-  UNUSED(ClockCalibration);
-  return STATUS_NOT_SUPPORTED;
+  if (NodeOrdinal != 0u || EngineOrdinal != 0u) return STATUS_INVALID_PARAMETER;
+  return AdmissionPlatformCalibrateGpuClock((ADMISSION_CONTEXT *)Adapter,
+                                            ClockCalibration);
 }
 
 _Use_decl_annotations_ VOID AdmissionDdiSetStablePowerState(
