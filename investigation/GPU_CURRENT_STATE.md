@@ -1,6 +1,6 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-17T10:45Z (read this first)
+## Current as of 2026-10-17T13:30Z (read this first)
 
 Installed after recovery: none (rec1355h). Integration HEAD 1465fd81.
 - PROVEN (EXP1355): D3D12CreateDevice S_OK at FL 11_0 on the AGX adapter
@@ -16,10 +16,18 @@ Installed after recovery: none (rec1355h). Integration HEAD 1465fd81.
   CS 5.0 + compute PSO, GPUVA caps, descriptor sizes (64/32).
 - Shaders/PSOs store their descriptions (compile is C5/C6); every command
   list and view DDI is still fail-closed.
-- OPEN (EXP1355 C2): the first committed 64 KiB upload buffer fails
-  (0x887a0005) after CheckResourceAllocationInfo, before any heap receipt.
-  EXP1356 = entry receipts on CalcPrivateHeapAndResourceSizes /
-  CreateHeapAndResource (1f1ee652, receipt-only).
+- PROVEN (EXP1359): D3D12 C2 -- CreateCommittedResource(UPLOAD buffer)
+  + Map/write/Unmap/Map/read round trip (AGX_D3D12_C2: PASS). A committed
+  heap is one KMD General-class allocation (CPU-visible <= 16 MiB, else
+  GPU-local), MakeResidentCb, ReserveGpuVirtualAddressCb in [64 KiB, 2^39),
+  MapGpuVirtualAddressCb; the runtime passes ByteSize ~0 for committed
+  heaps (size from the resource); it then asks
+  CheckExistingResourceAllocationInfo (allocation handle) and
+  CheckSubresourceInfo on Map/Unmap. Textures/placed resources: not yet.
+- NEXT: C3 (command queue + fences): D3D12DDI fences arrive as GPU VA
+  placements (D3D12DDI_FENCE), so a queue signal must be a GPU-ordered
+  write + monitored-fence notification; design from the Microsoft contract
+  before hardware.
 - Offline tool: guest d3d12core.dll copy + ARM64 disassembly in the
   scratchpad (d3d12core/dis.txt) for runtime validation strings.
 
