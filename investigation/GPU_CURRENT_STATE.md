@@ -1,6 +1,6 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-17T15:45Z (read this first)
+## Current as of 2026-10-17T17:00Z (read this first)
 
 Installed after recovery: none (rec1355h). Integration HEAD 1465fd81.
 - PROVEN (EXP1355): D3D12CreateDevice S_OK at FL 11_0 on the AGX adapter
@@ -34,8 +34,15 @@ Installed after recovery: none (rec1355h). Integration HEAD 1465fd81.
   used in normal runs (DWM/explorer/test processes' cached scenes) and only
   the requester's own cached scenes are evicted -> boot-dependent
   D3DERR_OUTOFVIDEOMEMORY in small D3D11 renders. Separate KMD task.
-- NEXT: C4 (command allocator/list, ExecuteCommandLists, a GPU copy via the
-  libagx copy kernels); C4a = list lifecycle + empty Execute first.
+- PROVEN (EXP1364): D3D12 C4a -- allocator + list (pfnSetCommandListDDITableCb
+  with the COMMAND_LIST_3D runtime table) + the runtime's 13 default-state
+  setters (recorded; every state consumer still fail-closed) + Close +
+  ExecuteCommandLists + Signal ordered after it (fence 2).
+- NEXT: C4b first GPU copy -- plan in investigation/analysis/D3D12-C4-copy.md:
+  a queue-owned Asahi owner built like mesa/winsys/agx_d3d10_windows.cpp on a
+  D3D12 ADMISSION_UMD_DEVICE initializer (queue context, no device context),
+  heaps moved onto winsys class buffers (submission residency needs winsys
+  BOs), CopyBufferRegion replayed with libagx_copy_uint4/uchar.
 - Offline tool: guest d3d12core.dll copy + ARM64 disassembly in the
   scratchpad (d3d12core/dis.txt) for runtime validation strings.
 
