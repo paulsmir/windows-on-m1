@@ -106,6 +106,35 @@ buffers, verified on the CPU.
   context instead (new initializer, RED -> GREEN on the existing
   umd_gpuva_contract harness).
 
+## C4b implementation plan (after EXP1364)
+
+Template: the D3D10 Windows frontend (mesa/winsys/agx_d3d10_windows.cpp)
+owns {ADMISSION_UMD_DEVICE Runtime, ADMISSION_UMD_ASAHI_OWNER Owner,
+AGX_WIN32_ASAHI_BACKEND Backend, owner ops, pipe_screen, pipe_context} and
+builds them with AdmissionUmdRuntimeDeviceInitialize ->
+AgxWin32AsahiScreenCreateForWindows(&Backend, &Runtime.Screen, &OwnerOps,
+&Owner, AdmissionUmdAsahiBatchOperations()) -> AgxWin32AsahiContextCreate.
+
+1. umd_runtime_device.c: a D3D12 initializer taking {adapter,
+   D3DDDI_DEVICECALLBACKS*, hRTDevice, kernel context} instead of
+   D3D10DDIARG_CREATEDEVICE: no context creation (the queue's C3b context),
+   no DXGI callbacks; SetErrorCallback = a shim forwarding to the D3D12
+   core-layer pfnSetErrorCb (RuntimeCoreLayer carries the D3D12 runtime
+   device handle). Paging queue, render monitored fence and screen as today.
+2. mesa/winsys/agx_d3d12_windows.cpp (new, Mesa side): create/destroy the
+   owner for a D3D12 queue; CopyBuffer(dst VA, src VA, bytes) through the
+   Asahi context (libagx_copy_uint4/uchar on a compute batch, the same call
+   agx_blit.c makes); Flush + wait for the batch fence.
+3. Heaps: C4b keeps the proven C2a heaps; the copy references their GPU VAs
+   and kernel allocations, so the batch's residency list must include them
+   (owner hook to add external allocation handles), or heaps move to
+   pipe buffers (re-proves C2) -- decide by reading the Asahi batch's BO
+   residency path (agx_batch_add_bo / winsys Held set).
+4. ExecuteCommandLists: replay recorded copies on the queue's owner, flush;
+   the runtime's later Signal on the same context orders after it.
+5. Offline: RED -> GREEN tests for the initializer contract (no context
+   creation, error shim) and for copy recording/replay bounds.
+
 ## Checkpoints
 
 - C4a (EXP1363): empty list execute + signal.
