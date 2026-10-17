@@ -59,10 +59,20 @@ Installed after recovery: none (rec1368h). Integration HEAD 39636057.
   SRV + static sampler, C6F depth (render targets are presentation
   textures since C7b). C7b (EXP1371): DXGI flip swapchain creation S_OK
   with presentation textures (kernel allocation of the runtime resource).
-- RUNNING: EXP1372 (package 394169ad): C8C CopyBufferRegion placed base
-  (c8cdc603; aba2c9cc rejected) + C7c Present (344a9372: no private data,
-  owner flush-for-present + direct-map publish, allocation on the queue
-  context). Next after Present: frame loop / DXGI table, then D3D12 apps.
+- PROVEN (EXP1372): C7c -- the first D3D12 flip-model swapchain present
+  (CreateSwapChainForHwnd, Present S_OK; pfnPresent returns the
+  presentation allocation on the queue context, no private data); C8c
+  placed buffers (CopyBufferRegion adds the resource base).
+- RUNNING: EXP1373 (package 7e6f7586): C9 compute texture views/samplers/
+  typed UAVs (fixes compute texture SRVs bound as buffer views), C10 UAV
+  clears + Discard/SetMarker, C11 queries (C11C measures the timestamp
+  frequency source; KMD CalibrateGpuClock still NOT_SUPPORTED).
+- QUEUED for EXP1374 (committed, probe 6c3b4bba): C12 copy/compute queues
+  + cross-queue waits (measurement), C13 graphics UAVs, C14 ExecuteIndirect
+  (single draw/draw-indexed/dispatch signatures).
+- Major open item for real D3D12 applications: shaders are DXBC only
+  (dxbc_to_nir); SM6 applications ship DXIL -- needs a DXIL front end and
+  the shader-model caps that admit it.
 - Gates learned: no u_format.h inline helpers in the UMD (CRT asserts,
   5726d41f); keep replay frames small (STACK_FRAMES, a5d46dae); check every
   Gallium entry the owner calls is assigned by Asahi.
