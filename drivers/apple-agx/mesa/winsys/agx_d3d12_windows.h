@@ -63,9 +63,11 @@ void AgxD3d12OwnerDestroyCompute(AGX_D3D12_OWNER *Owner, AGX_D3D12_COMPUTE *Comp
 typedef struct {
   const AGX_D3D12_BUFFER *Buffer;
   unsigned long long Offset;
+  unsigned long long Bytes; /* C5c: a view's size; 0 = to the buffer end */
 } AGX_D3D12_UAV;
-/* C5b: a constant buffer at UBO slot b#: a buffer view (Buffer, Offset;
- * up to 64 KiB, the D3D maximum, never past the buffer) or root constants
+/* C5b: a constant buffer at UBO slot b#: a buffer view (Buffer, Offset,
+ * Bytes (0 = to the end); up to 64 KiB, the D3D maximum, never past the
+ * buffer) or root constants
  * (Data, Bytes; copied when the dispatch is recorded); both NULL = unbound. */
 #define AGX_D3D12_CBV_SLOTS 14
 typedef struct {

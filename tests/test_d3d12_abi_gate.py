@@ -184,8 +184,9 @@ class D3d12AbiGate(unittest.TestCase):
                        'pfnDestroyDescriptorHeap', 'pfnGetCPUDescriptorHandleForHeapStart',
                        'pfnGetGPUDescriptorHandleForHeapStart'):
             self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
-        for member in ('pfnCreateShaderResourceView', 'pfnCreateConstantBufferView', 'pfnCreateSampler',
-                       'pfnCreateUnorderedAccessView', 'pfnCreateRenderTargetView', 'pfnCreateDepthStencilView'):
+        # C5c implements CBV and buffer UAV views (test_c5c_descriptor_tables)
+        for member in ('pfnCreateShaderResourceView', 'pfnCreateSampler', 'pfnCreateRenderTargetView',
+                       'pfnCreateDepthStencilView'):
             self.assertIn('AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s)' % member, source)
         heap = source[source.index('static HRESULT APIENTRY CreateDescriptorHeap('):]
         heap = heap[:heap.index('\n}\n')]
@@ -245,7 +246,8 @@ class D3d12AbiGate(unittest.TestCase):
                    'pfnIASetIndexBuffer', 'pfnIASetVertexBuffers', 'pfnSOSetTargets', 'pfnOMSetRenderTargets'}
         compute = {'pfnSetPipelineState', 'pfnSetComputeRootSignature', 'pfnSetComputeRootUnorderedAccessView',
                    'pfnDispatch', 'pfnClearRootArguments', 'pfnSetComputeRoot32BitConstant',
-                   'pfnSetComputeRoot32BitConstants', 'pfnSetComputeRootConstantBufferView'}
+                   'pfnSetComputeRoot32BitConstants', 'pfnSetComputeRootConstantBufferView',
+                   'pfnSetComputeRootDescriptorTable'}
         self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList', 'pfnCopyBufferRegion',
                                        'pfnResourceBarrier'} | setters | compute)
         for member in setters:
@@ -278,7 +280,8 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('root->parameter[index].type != type', view)
         self.assertIn('index >= root->parameters', view)
         dispatch = fn('static VOID APIENTRY Dispatch(')
-        self.assertIn('refusal = 4u; /* root SRV, descriptor table */', dispatch)
+        self.assertIn('refusal = 4u; /* root SRV */', dispatch)
+        self.assertIn('refusal = BindTable(list, root, p, list->compute_root_va[i], &dispatch);', dispatch)
         self.assertIn('if (p.shader_register >= kUavSlots) refusal = 5u;', dispatch)
         self.assertIn('HeapAt(list->device, list->compute_root_va[i]', dispatch)
         # C5b: root CBVs resolve like root UAVs; root constants keep their
@@ -301,6 +304,42 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('UnregisterHeap(device, heap);', fn('static void ReleaseHeap('))
         destroy = fn('static VOID APIENTRY DestroyPipelineState(D3D12DDI_HDEVICE handle')
         self.assertIn('AgxD3d12OwnerDestroyCompute(', destroy)
+
+    def test_c5c_descriptor_tables(self):
+        # C5c invariants: the root signature sizes and keeps every table
+        # range with APPEND offsets resolved; a table binds only CBV/UAV
+        # ranges in space 0 inside its slot counts and its descriptor heap;
+        # descriptors are read at execution (root signature 1.0 descriptors
+        # are volatile until then); views record the buffer heap and byte
+        # range and refuse typed/texture/counter UAVs with a receipt; copies
+        # move whole descriptors.
+        source = SOURCE.read_text()
+        def fn(name):
+            start = source.index(name)
+            return source[start:source.index('\n}\n', start)]
+        size = fn('static SIZE_T APIENTRY CalcPrivateRootSignatureSize(')
+        self.assertIn('ranges * sizeof(AgxD3d12Range)', size)
+        create = fn('static HRESULT APIENTRY CreateRootSignature(')
+        self.assertIn('D3D12DDI_DESCRIPTOR_RANGE_OFFSET_APPEND', create)
+        self.assertIn('? next : in.OffsetInDescriptorsFromTableStart', create)
+        table = fn('static UINT BindTable(')
+        self.assertIn('return 4u;', table)
+        self.assertIn('range.space || range.base_register >= slots', table)
+        self.assertIn('at + sizeof(AgxD3d12Descriptor) > heap->bytes', table)
+        execute = fn('static VOID APIENTRY ExecuteCommandLists(')
+        self.assertIn('view->kind == kDescriptorUavBuffer', execute)
+        self.assertIn('view->kind == kDescriptorCbv', execute)
+        uav = fn('static VOID APIENTRY CreateUnorderedAccessView(')
+        for reason in ('!= D3D12DDI_RD_BUFFER ? 4u', '!stride ? 5u', 'hDrvCounterResource.pDrvPrivate ? 7u',
+                       'bytes > resource->bytes - offset'):
+            self.assertIn(reason, uav)
+        self.assertIn('"measure-d3d12-uav"', uav)
+        cbv = fn('static VOID APIENTRY CreateConstantBufferView(')
+        self.assertIn('HeapAt(device, desc->BufferLocation, &offset)', cbv)
+        self.assertIn('static_cast<SIZE_T>(count) * DescriptorBytes(type)', fn('static VOID APIENTRY CopyDescriptorsSimple('))
+        for member in ('pfnCreateConstantBufferView', 'pfnCreateUnorderedAccessView', 'pfnCopyDescriptors',
+                       'pfnCopyDescriptorsSimple'):
+            self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
 
     def test_package_and_receipts(self):
         package = ROOT / 'drivers/apple-agx/render-admission/umd'

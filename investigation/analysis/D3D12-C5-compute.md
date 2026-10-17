@@ -96,3 +96,28 @@ measure-d3d12-dispatch {0, 256, 1, 1, 1}, measure-d3d12-owner-submit
   constants b1 x2, CBV b0}, scale 5 via SetComputeRoot32BitConstants, bias
   11 via SetComputeRoot32BitConstant, CBV extra.y = 1000; PASS = every
   dword == 5i + 1011, Signal(5).
+
+## C5c: CBV/UAV descriptor tables
+
+- WINDOWS: D3D12DDI_ROOT_DESCRIPTOR_TABLE ranges {type, NumDescriptors
+  (UINT_MAX unbounded), BaseShaderRegister, space, offset or APPEND};
+  pfnCreateConstantBufferView (VA + size), pfnCreateUnorderedAccessView
+  (buffer: FirstElement/NumElements, StructureByteStride or RAW, counter
+  resource), pfnCopyDescriptors(Simple) between CPU and shader-visible
+  heaps, pfnSetComputeRootDescriptorTable (GPU handle). With root signature
+  1.0 descriptors are volatile: they may change until the list executes.
+- AGX/ASAHI: unchanged from C5/C5b (shader buffers, constant buffers).
+- TRANSLATION: a descriptor is a CPU record {kind, owner heap, byte offset,
+  bytes} (lists replay as Gallium bindings, the GPU never reads it); views
+  resolve VA/resource to the owner heap at creation; copies are byte
+  copies; Dispatch maps each CBV/UAV range to slot pointers into the
+  shader-visible heap (an owner heap found by the table's GPU handle) and
+  reads them at ExecuteCommandLists. Typed/texture/counter UAVs write a
+  null descriptor with receipt measure-d3d12-uav {reason}; SRV/sampler
+  ranges refuse the dispatch (reason 4).
+- UNKNOWN: whether the runtime routes CopyDescriptorsSimple to the driver
+  or copies itself (both work with byte-copied records) -- receipts show it.
+- Checkpoint: probe C5C (agx_d3d12_probe_cs_table.hlsl): CPU heap {raw UAV,
+  CBV k = (7, 3)}, CopyDescriptorsSimple to a shader-visible heap,
+  SetDescriptorHeaps + table {UAV u0, CBV b0 APPEND}; PASS = 7i + 3,
+  Signal(6).

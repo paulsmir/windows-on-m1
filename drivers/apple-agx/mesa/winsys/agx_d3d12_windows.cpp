@@ -262,7 +262,8 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
     const AGX_D3D12_BUFFER *buffer = cbvs[i].Buffer;
     if (buffer) {
       if (!buffer->Resource || cbvs[i].Offset >= buffer->Bytes || buffer->Bytes > 0xffffffffull) return E_INVALIDARG;
-      const unsigned long long room = buffer->Bytes - cbvs[i].Offset;
+      unsigned long long room = buffer->Bytes - cbvs[i].Offset;
+      if (cbvs[i].Bytes && cbvs[i].Bytes < room) room = cbvs[i].Bytes;
       constants[i].buffer = static_cast<struct pipe_resource *>(buffer->Resource);
       constants[i].buffer_offset = static_cast<unsigned>(cbvs[i].Offset);
       constants[i].buffer_size = static_cast<unsigned>(room < 65536ull ? room : 65536ull);
@@ -280,7 +281,8 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
       return E_INVALIDARG;
     buffers[i].buffer = static_cast<struct pipe_resource *>(buffer->Resource);
     buffers[i].buffer_offset = static_cast<unsigned>(uavs[i].Offset);
-    buffers[i].buffer_size = static_cast<unsigned>(buffer->Bytes - uavs[i].Offset);
+    const unsigned long long room = buffer->Bytes - uavs[i].Offset;
+    buffers[i].buffer_size = static_cast<unsigned>(uavs[i].Bytes && uavs[i].Bytes < room ? uavs[i].Bytes : room);
   }
   struct pipe_context *pipe = owner->Context;
   pipe->bind_compute_state(pipe, compute->State);
