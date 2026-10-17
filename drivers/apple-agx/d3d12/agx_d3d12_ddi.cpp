@@ -1585,6 +1585,19 @@ struct AgxD3d12ClearUav {
     UINT rects;
     RECT rect[kClearRects];
 };
+/* C11: a query heap (D3D12-C11-queries.md) and a recorded Begin/End/Resolve */
+struct AgxD3d12QueryHeap {
+    UINT type; /* D3D12DDI_QUERY_HEAP_TYPE: occlusion 0, timestamp 1, pipeline statistics 2 */
+    UINT count;
+    void *owner; /* AGX_D3D12_QUERY_HEAP */
+};
+enum : UINT { kQueryBegin = 0, kQueryEnd = 1, kQueryResolve = 2 };
+struct AgxD3d12QueryCommand {
+    AgxD3d12QueryHeap *heap;
+    UINT op, type, index, count;
+    AgxD3d12Heap *dst;
+    UINT64 dst_offset;
+};
 /* C8b: a recorded texture-to-texture copy (whole: every common mip, all
  * layers, full extents) */
 struct AgxD3d12TextureRegionCopy {
@@ -1595,7 +1608,8 @@ struct AgxD3d12TextureRegionCopy {
     UINT whole_levels; /* > 0: ResourceCopy of this many levels */
 };
 enum : UINT { kCommandCopy = 1, kCommandDispatch = 2, kCommandClear = 3, kCommandTextureCopy = 4, kCommandDraw = 5,
-              kCommandClearDepth = 6, kCommandTextureRegionCopy = 7, kCommandClearUav = 8 };
+              kCommandClearDepth = 6, kCommandTextureRegionCopy = 7, kCommandClearUav = 8,
+              kCommandQuery = 9 };
 struct AgxD3d12Command {
     UINT kind;
     union {
@@ -1607,6 +1621,7 @@ struct AgxD3d12Command {
         AgxD3d12ClearDepth clear_depth;
         AgxD3d12TextureRegionCopy region_copy;
         AgxD3d12ClearUav clear_uav;
+        AgxD3d12QueryCommand query;
     };
 };
 /* C8a: commands live in a growing process-heap array owned by the list
@@ -1908,6 +1923,79 @@ static VOID APIENTRY ClearUnorderedAccessViewFloat(D3D12DDI_HCOMMANDLIST handle,
                                                    D3D12DDI_CPU_DESCRIPTOR_HANDLE cpu, D3D12DDI_HRESOURCE,
                                                    const FLOAT values[4], UINT rects, const D3D12DDI_RECT *rect) {
     RecordClearUav(handle, cpu, values, 1u, rects, rect);
+}
+/* C11 (D3D12-C11-queries.md): occlusion (counter and binary), timestamp
+ * and pipeline-statistics heaps of owner Gallium queries; Begin/End and
+ * Resolve are recorded and replayed in list order. */
+static SIZE_T APIENTRY CalcPrivateQueryHeapSize(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_QUERY_HEAP_0001 *) {
+    return sizeof(AgxD3d12QueryHeap);
+}
+static HRESULT APIENTRY CreateQueryHeap(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_QUERY_HEAP_0001 *arg,
+                                        D3D12DDI_HQUERYHEAP heap_handle) {
+    auto *heap = static_cast<AgxD3d12QueryHeap *>(heap_handle.pDrvPrivate);
+    AgxD3d12Device *device = DeviceOf(handle);
+    if (!heap || !arg || !device) return E_INVALIDARG;
+    memset(heap, 0, sizeof(*heap));
+    const UINT type = static_cast<UINT>(arg->Type);
+    HRESULT hr = type > static_cast<UINT>(D3D12DDI_QUERY_HEAP_TYPE_PIPELINE_STATISTICS) || !arg->Count ? E_NOTIMPL : S_OK;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    AGX_D3D12_OWNER *owner = SUCCEEDED(hr) ? EnsureOwner(device) : nullptr;
+    AGX_D3D12_QUERY_HEAP *queries = nullptr;
+    if (SUCCEEDED(hr)) hr = owner ? AgxD3d12OwnerCreateQueryHeap(owner, type, arg->Count, &queries) : E_NOTIMPL;
+    heap->owner = queries;
+#else
+    if (SUCCEEDED(hr)) hr = E_NOTIMPL;
+#endif
+    heap->type = type;
+    heap->count = SUCCEEDED(hr) ? arg->Count : 0u;
+    const UINT receipt[] = {type, arg->Count};
+    AdmissionUmdDiagnostic("measure-d3d12-query-heap", hr, receipt, 2);
+    return hr;
+}
+static VOID APIENTRY DestroyQueryHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HQUERYHEAP heap_handle) {
+    auto *heap = static_cast<AgxD3d12QueryHeap *>(heap_handle.pDrvPrivate);
+    AgxD3d12Device *device = DeviceOf(handle);
+    if (!heap) return;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (device && heap->owner)
+        AgxD3d12OwnerDestroyQueryHeap(static_cast<AGX_D3D12_OWNER *>(device->owner), static_cast<AGX_D3D12_QUERY_HEAP *>(heap->owner));
+#else
+    (void)device;
+#endif
+    memset(heap, 0, sizeof(*heap));
+}
+static void RecordQuery(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HQUERYHEAP heap_handle, UINT op, D3D12DDI_QUERY_TYPE type,
+                        UINT index, UINT count, AgxD3d12Heap *dst, UINT64 dst_offset) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    if (!list) return;
+    auto *heap = static_cast<AgxD3d12QueryHeap *>(heap_handle.pDrvPrivate);
+    const UINT refusal = !heap || !heap->owner ? 1u
+                       : index > heap->count || (op == kQueryResolve ? count > heap->count - index : index >= heap->count) ? 2u
+                       : op == kQueryResolve && !dst ? 4u
+                       : list->commands >= kListCommands ? 3u : 0u;
+    if (refusal) {
+        const UINT receipt[] = {refusal, op, static_cast<UINT>(type), index};
+        AdmissionUmdDiagnostic("measure-d3d12-query-refused", E_INVALIDARG, receipt, 4);
+        ListError(list, E_INVALIDARG);
+        return;
+    }
+    AgxD3d12Command *slot = AppendCommand(list);
+    if (!slot) return;
+    slot->kind = kCommandQuery;
+    slot->query = {heap, op, static_cast<UINT>(type), index, count, dst, dst_offset};
+}
+static VOID APIENTRY BeginQuery(D3D12DDI_HCOMMANDLIST list, D3D12DDI_HQUERYHEAP heap, D3D12DDI_QUERY_TYPE type, UINT index) {
+    RecordQuery(list, heap, kQueryBegin, type, index, 1u, nullptr, 0);
+}
+static VOID APIENTRY EndQuery(D3D12DDI_HCOMMANDLIST list, D3D12DDI_HQUERYHEAP heap, D3D12DDI_QUERY_TYPE type, UINT index) {
+    RecordQuery(list, heap, kQueryEnd, type, index, 1u, nullptr, 0);
+}
+static VOID APIENTRY ResolveQueryData(D3D12DDI_HCOMMANDLIST list, D3D12DDI_HQUERYHEAP heap, D3D12DDI_QUERY_TYPE type,
+                                      UINT start, UINT count, D3D12DDI_HRESOURCE dst_handle, UINT64 offset) {
+    auto *dst = static_cast<AgxD3d12Resource *>(dst_handle.pDrvPrivate);
+    const bool buffer = dst && dst->heap && dst->type == D3D12DDI_RT_BUFFER;
+    RecordQuery(list, heap, kQueryResolve, type, start, count, buffer ? dst->heap : nullptr,
+                buffer ? dst->gpuva - dst->heap->gpuva + offset : 0);
 }
 /* C10: DiscardResource only declares the contents undefined -- keeping
  * them is a valid implementation; SetMarker is for tools (PIX). */
@@ -2804,6 +2892,17 @@ static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, con
                                                     clear.stencil, clear.rects ? clear.rect : nullptr, clear.rects);
             } else if (command.kind == kCommandDraw) {
                 hr = ReplayDraw(owner, command.draw);
+            } else if (command.kind == kCommandQuery) {
+                const AgxD3d12QueryCommand &q = command.query;
+                auto *queries = static_cast<AGX_D3D12_QUERY_HEAP *>(q.heap->owner);
+                if (q.op == kQueryResolve) {
+                    AGX_D3D12_BUFFER dst = HeapBuffer(q.dst);
+                    hr = AgxD3d12OwnerResolveQueries(owner, queries, q.type, q.index, q.count, &dst, q.dst_offset);
+                } else {
+                    hr = AgxD3d12OwnerQuery(owner, queries, q.type, q.index, q.op == kQueryBegin);
+                }
+                const UINT receipt[] = {q.op, q.type, q.index, q.count};
+                if (FAILED(hr)) AdmissionUmdDiagnostic("measure-d3d12-query", hr, receipt, 4);
             } else if (command.kind == kCommandClearUav) {
                 const AgxD3d12ClearUav &clear = command.clear_uav;
                 AGX_D3D12_BUFFER buffer = {};
@@ -2934,9 +3033,9 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnOpenHeapAndResource, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnOpenHeapAndResource));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCopyDescriptors, CopyDescriptors);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCopyDescriptorsSimple, CopyDescriptorsSimple);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateQueryHeapSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateQueryHeapSize));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateQueryHeap, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateQueryHeap));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyQueryHeap, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyQueryHeap));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateQueryHeapSize, CalcPrivateQueryHeapSize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateQueryHeap, CreateQueryHeap);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyQueryHeap, DestroyQueryHeap);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandSignatureSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandSignatureSize));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandSignature, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandSignature));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandSignature, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandSignature));
@@ -2973,9 +3072,9 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceBarrier, ResourceBarrier);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnBlt, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnBlt));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnPresent, Present);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnBeginQuery, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnBeginQuery));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnEndQuery, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnEndQuery));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResolveQueryData, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResolveQueryData));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnBeginQuery, BeginQuery);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnEndQuery, EndQuery);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResolveQueryData, ResolveQueryData);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetPredication, AGX_LIST_STATE(pfnSetPredication));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIaSetTopology, IaSetTopology);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnRsSetViewports, RsSetViewports);

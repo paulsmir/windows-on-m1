@@ -608,6 +608,95 @@ extern "C" HRESULT AgxD3d12OwnerClearUav(AGX_D3D12_OWNER *owner, const AGX_D3D12
   return S_OK;
 }
 
+/* C11: query heaps (agx_query.c: occlusion counters/predicates, timestamps
+ * with the CPU-fallback copy, PIPELINE_STATISTICS_SINGLE per counter) */
+struct AGX_D3D12_QUERY_HEAP {
+  unsigned Type, Count, Slots;
+  struct pipe_query *Query[1]; /* Count * Slots */
+};
+static const unsigned kQueryStatistics = 11; /* D3D12_QUERY_DATA_PIPELINE_STATISTICS */
+
+extern "C" HRESULT AgxD3d12OwnerCreateQueryHeap(AGX_D3D12_OWNER *owner, unsigned type, unsigned count,
+                                                AGX_D3D12_QUERY_HEAP **heap) {
+  if (heap) *heap = NULL;
+  if (!owner || !owner->Context || !heap || !count || type > 2u || count > (1u << 20)) return E_INVALIDARG;
+  const unsigned slots = type == 0 ? 2u : type == 1 ? 1u : kQueryStatistics;
+  const SIZE_T bytes = sizeof(AGX_D3D12_QUERY_HEAP) + (static_cast<SIZE_T>(count) * slots - 1) * sizeof(struct pipe_query *);
+  auto *h = static_cast<AGX_D3D12_QUERY_HEAP *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, bytes));
+  if (!h) return E_OUTOFMEMORY;
+  h->Type = type;
+  h->Count = count;
+  h->Slots = slots;
+  *heap = h;
+  return S_OK;
+}
+
+extern "C" void AgxD3d12OwnerDestroyQueryHeap(AGX_D3D12_OWNER *owner, AGX_D3D12_QUERY_HEAP *heap) {
+  if (!heap) return;
+  for (unsigned i = 0; owner && owner->Context && i < heap->Count * heap->Slots; ++i)
+    if (heap->Query[i]) owner->Context->destroy_query(owner->Context, heap->Query[i]);
+  HeapFree(GetProcessHeap(), 0, heap);
+}
+
+/* the Gallium query of slot s of query index under a D3D12 query type */
+static struct pipe_query *heap_query(struct pipe_context *pipe, AGX_D3D12_QUERY_HEAP *heap, unsigned index, unsigned s,
+                                     unsigned pipe_type, unsigned pipe_index) {
+  struct pipe_query **slot = &heap->Query[index * heap->Slots + s];
+  if (!*slot) *slot = pipe->create_query(pipe, pipe_type, pipe_index);
+  return *slot;
+}
+
+extern "C" HRESULT AgxD3d12OwnerQuery(AGX_D3D12_OWNER *owner, AGX_D3D12_QUERY_HEAP *heap, unsigned type, unsigned index,
+                                      int begin) {
+  if (!owner || !owner->Context || !heap || index >= heap->Count) return E_INVALIDARG;
+  struct pipe_context *pipe = owner->Context;
+  /* D3D12_QUERY_TYPE: 0 occlusion, 1 binary occlusion, 2 timestamp (end
+   * only), 3 pipeline statistics */
+  if ((heap->Type == 0 && type > 1u) || (heap->Type == 1 && (type != 2u || begin)) || (heap->Type == 2 && type != 3u))
+    return E_INVALIDARG;
+  if (heap->Type == 2) {
+    for (unsigned s = 0; s < kQueryStatistics; ++s) {
+      struct pipe_query *q = heap_query(pipe, heap, index, s, PIPE_QUERY_PIPELINE_STATISTICS_SINGLE, s);
+      if (!q || !(begin ? pipe->begin_query(pipe, q) : pipe->end_query(pipe, q))) return E_FAIL;
+    }
+    return S_OK;
+  }
+  const unsigned s = type == 1u ? 1u : 0u;
+  const unsigned pipe_type = heap->Type == 1 ? PIPE_QUERY_TIMESTAMP
+                           : type == 1u     ? PIPE_QUERY_OCCLUSION_PREDICATE : PIPE_QUERY_OCCLUSION_COUNTER;
+  struct pipe_query *q = heap_query(pipe, heap, index, s, pipe_type, 0);
+  if (!q || !(begin ? pipe->begin_query(pipe, q) : pipe->end_query(pipe, q))) return E_FAIL;
+  return S_OK;
+}
+
+extern "C" HRESULT AgxD3d12OwnerResolveQueries(AGX_D3D12_OWNER *owner, AGX_D3D12_QUERY_HEAP *heap, unsigned type,
+                                               unsigned start, unsigned count, const AGX_D3D12_BUFFER *dst,
+                                               unsigned long long offset) {
+  if (!owner || !owner->Context || !heap || !dst || !dst->Resource || start > heap->Count ||
+      count > heap->Count - start)
+    return E_INVALIDARG;
+  const unsigned values = heap->Type == 2 ? kQueryStatistics : 1u;
+  const unsigned long long bytes = static_cast<unsigned long long>(count) * values * 8u;
+  if (offset > dst->Bytes || bytes > dst->Bytes - offset || dst->Bytes > 0xffffffffull || (offset & 7u))
+    return E_INVALIDARG;
+  struct pipe_context *pipe = owner->Context;
+  struct pipe_resource *resource = static_cast<struct pipe_resource *>(dst->Resource);
+  static const UINT64 zero = 0;
+  for (unsigned i = 0; i < count; ++i) {
+    for (unsigned v = 0; v < values; ++v) {
+      const unsigned s = heap->Type == 2 ? v : (type == 1u ? 1u : 0u);
+      struct pipe_query *q = heap->Query[(start + i) * heap->Slots + s];
+      const unsigned at = static_cast<unsigned>(offset + (static_cast<unsigned long long>(i) * values + v) * 8u);
+      if (q)
+        pipe->get_query_result_resource(pipe, q, PIPE_QUERY_WAIT, PIPE_QUERY_TYPE_U64, 0, resource, at);
+      else
+        pipe->clear_buffer(pipe, resource, at, 8u, &zero, 8);
+    }
+  }
+  ++owner->PendingDispatches;
+  return S_OK;
+}
+
 /* C7c: the D3D12 present hands the runtime the allocation; rendering on
  * the owner context must be flushed and the direct map published first
  * (AgxD3d10WindowsPresentationSubmitSurfaces before AdmissionUmdSubmitPresent) */

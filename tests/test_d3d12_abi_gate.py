@@ -262,6 +262,7 @@ class D3d12AbiGate(unittest.TestCase):
         compute |= {'pfnResourceCopy'}  # C8b
         compute |= {'pfnPresent'}  # C7c
         compute |= {'pfnClearUnorderedAccessViewUint', 'pfnClearUnorderedAccessViewFloat', 'pfnDiscardResource', 'pfnSetMarker'}  # C10
+        compute |= {'pfnBeginQuery', 'pfnEndQuery', 'pfnResolveQueryData'}  # C11
         self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList', 'pfnCopyBufferRegion',
                                        'pfnResourceBarrier'} | setters | compute)
         for member in setters:
@@ -652,6 +653,32 @@ class D3d12AbiGate(unittest.TestCase):
         pixel = owner[owner.index('static bool clear_pixel('):]
         pixel = pixel[:pixel.index('\n}\n')]
         self.assertNotIn('util_format_pack_rgba(', pixel)  # u_format.h inline helpers stay out of the UMD
+
+    def test_c11_queries(self):
+        # C11 invariants: occlusion/timestamp/statistics heaps only (other
+        # heap types refuse); Begin/End/Resolve are list commands replayed in
+        # order; a resolve targets a buffer at the resource's base + offset;
+        # the owner resolves on the GPU timeline (get_query_result_resource
+        # with WAIT) and zero-fills queries never used.
+        source = SOURCE.read_text()
+        def fn(name):
+            start = source.index(name)
+            return source[start:source.index('\n}\n', start)]
+        create = fn('static HRESULT APIENTRY CreateQueryHeap(')
+        self.assertIn('type > static_cast<UINT>(D3D12DDI_QUERY_HEAP_TYPE_PIPELINE_STATISTICS) || !arg->Count ? E_NOTIMPL', create)
+        self.assertIn('dst->gpuva - dst->heap->gpuva + offset', fn('static VOID APIENTRY ResolveQueryData('))
+        self.assertIn('slot->kind = kCommandQuery;', fn('static void RecordQuery('))
+        for member in ('pfnCalcPrivateQueryHeapSize', 'pfnCreateQueryHeap', 'pfnDestroyQueryHeap'):
+            self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        r = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerResolveQueries('):]
+        r = r[:r.index('\n}\n')]
+        self.assertIn('get_query_result_resource(pipe, q, PIPE_QUERY_WAIT, PIPE_QUERY_TYPE_U64, 0, resource, at)', r)
+        self.assertIn('pipe->clear_buffer(pipe, resource, at, 8u, &zero, 8);', r)
+        q = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerQuery('):]
+        q = q[:q.index('\n}\n')]
+        self.assertIn('PIPE_QUERY_PIPELINE_STATISTICS_SINGLE, s', q)
+        self.assertIn('(heap->Type == 1 && (type != 2u || begin))', q)  # timestamps: EndQuery only
 
     def test_c8a_growing_lists(self):
         # C8a invariants: a list owns a growing command array (doubling from

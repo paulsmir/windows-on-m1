@@ -152,6 +152,22 @@ HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *Owner, const AGX_D3D12_TEXTURE
  * rects; buffers: [left, right) elements). */
 HRESULT AgxD3d12OwnerClearUav(AGX_D3D12_OWNER *Owner, const AGX_D3D12_UAV *Uav, const void *Values, int Float,
                               const RECT *Rects, unsigned RectCount);
+/* C11 (D3D12-C11-queries.md): a query heap of Gallium queries created on
+ * first use -- HeapType 0 occlusion (OCCLUSION_COUNTER, and
+ * OCCLUSION_PREDICATE for binary occlusion), 1 timestamp (TIMESTAMP),
+ * 2 pipeline statistics (11 PIPELINE_STATISTICS_SINGLE counters in the
+ * D3D12_QUERY_DATA_PIPELINE_STATISTICS order). QueryType is the D3D12 DDI
+ * query type; Resolve writes UINT64 results (statistics: 11 UINT64) for
+ * [Start, Start + Count) at Offset, zero for queries never used. */
+typedef struct AGX_D3D12_QUERY_HEAP AGX_D3D12_QUERY_HEAP;
+HRESULT AgxD3d12OwnerCreateQueryHeap(AGX_D3D12_OWNER *Owner, unsigned HeapType, unsigned Count,
+                                     AGX_D3D12_QUERY_HEAP **Heap);
+void AgxD3d12OwnerDestroyQueryHeap(AGX_D3D12_OWNER *Owner, AGX_D3D12_QUERY_HEAP *Heap);
+HRESULT AgxD3d12OwnerQuery(AGX_D3D12_OWNER *Owner, AGX_D3D12_QUERY_HEAP *Heap, unsigned QueryType, unsigned Index,
+                           int Begin);
+HRESULT AgxD3d12OwnerResolveQueries(AGX_D3D12_OWNER *Owner, AGX_D3D12_QUERY_HEAP *Heap, unsigned QueryType,
+                                    unsigned Start, unsigned Count, const AGX_D3D12_BUFFER *Dst,
+                                    unsigned long long Offset);
 /* C7b (D3D12-C7-present.md): a 2D render target DXGI can share -- a kernel
  * allocation of the runtime resource (the D3D10/11 presentation-resource
  * path: AdmissionUmdCreateResource with the runtime handle, BGRA8/RGBA8,
