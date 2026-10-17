@@ -2456,6 +2456,92 @@ static void OwnerBindings(const AgxD3d12Dispatch &b, AgxD3d12OwnerBindings *o) {
         }
     }
 }
+/* Replay of the large commands in their own (non-inlined) frames, so the
+ * owner-binding records of one command kind are live at a time
+ * (STACK_FRAMES gate: EXP1369 build measured 12944 bytes before this). */
+static __declspec(noinline) HRESULT ReplayDispatch(AGX_D3D12_OWNER *owner, const AgxD3d12Dispatch &dispatch) {
+    AgxD3d12OwnerBindings bind;
+    OwnerBindings(dispatch, &bind);
+    return AgxD3d12OwnerDispatch(owner, &dispatch.pso->compute, bind.uavs, bind.cbvs, bind.srvs, dispatch.groups[0],
+                                 dispatch.groups[1], dispatch.groups[2]);
+}
+struct AgxD3d12DrawScratch {
+    AGX_D3D12_BUFFER rtv_textures[8], vb_buffers[kVertexBuffers], dsv_texture, index_buffer;
+    AGX_D3D12_DRAW draw;
+    AgxD3d12OwnerBindings vs_bind, ps_bind;
+};
+static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const AgxD3d12Draw &d) {
+    /* the draw's owner records (~10 KB) live on the process heap */
+    auto *scratch = static_cast<AgxD3d12DrawScratch *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(AgxD3d12DrawScratch)));
+    if (!scratch) return E_OUTOFMEMORY;
+    AGX_D3D12_BUFFER(&rtv_textures)[8] = scratch->rtv_textures;
+    AGX_D3D12_BUFFER(&vb_buffers)[kVertexBuffers] = scratch->vb_buffers;
+    AGX_D3D12_DRAW &draw = scratch->draw;
+    draw.Pipeline = &d.pso->graphics;
+    draw.NumRtvs = d.rtvs;
+    for (UINT r = 0; r < d.rtvs; ++r) {
+        if (!d.rtv[r].heap) continue;
+        rtv_textures[r] = HeapBuffer(d.rtv[r].heap);
+        draw.Rtv[r].Texture = &rtv_textures[r];
+        draw.Rtv[r].Format = d.rtv[r].format;
+        draw.Rtv[r].Level = d.rtv[r].level;
+        draw.Rtv[r].FirstLayer = d.rtv[r].first_layer;
+        draw.Rtv[r].Layers = d.rtv[r].layers;
+    }
+    AGX_D3D12_BUFFER &dsv_texture = scratch->dsv_texture;
+    if (d.dsv.kind == kDescriptorDsv && d.dsv.heap) {
+        dsv_texture = HeapBuffer(d.dsv.heap);
+        draw.Dsv.Texture = &dsv_texture;
+        draw.Dsv.Format = d.dsv.format;
+        draw.Dsv.Level = d.dsv.level;
+        draw.Dsv.FirstLayer = d.dsv.first_layer;
+        draw.Dsv.Layers = d.dsv.layers;
+    }
+    draw.Viewport[0] = d.viewport.TopLeftX;
+    draw.Viewport[1] = d.viewport.TopLeftY;
+    draw.Viewport[2] = d.viewport.Width;
+    draw.Viewport[3] = d.viewport.Height;
+    draw.Viewport[4] = d.viewport.MinDepth;
+    draw.Viewport[5] = d.viewport.MaxDepth;
+    draw.Scissor = d.scissor;
+    draw.Topology = d.topology;
+    for (UINT v = 0; v < kVertexBuffers; ++v) {
+        if (!d.vb[v].heap) continue;
+        vb_buffers[v] = HeapBuffer(d.vb[v].heap);
+        draw.Vb[v].Buffer = &vb_buffers[v];
+        draw.Vb[v].Offset = d.vb[v].offset;
+        draw.Vb[v].Stride = d.vb[v].stride;
+    }
+    memcpy(draw.BlendFactor, d.blend_factor, sizeof(draw.BlendFactor));
+    draw.StencilRef = d.stencil_ref;
+    draw.VertexCount = d.vertices;
+    draw.InstanceCount = d.instances;
+    draw.StartVertex = d.start_vertex;
+    draw.StartInstance = d.start_instance;
+    AGX_D3D12_BUFFER &index_buffer = scratch->index_buffer;
+    if (d.index_size && d.index_heap) {
+        index_buffer = HeapBuffer(d.index_heap);
+        draw.IndexBuffer = &index_buffer;
+        draw.IndexOffset = d.index_offset;
+        draw.IndexSize = d.index_size;
+        draw.BaseVertex = d.base_vertex;
+        draw.RestartIndex = d.pso->desc.IBStripCutValue == D3D12DDI_INDEX_BUFFER_STRIP_CUT_VALUE_0xFFFF ? 0xffffu
+                          : d.pso->desc.IBStripCutValue == D3D12DDI_INDEX_BUFFER_STRIP_CUT_VALUE_0xFFFFFFFF ? 0xffffffffu
+                                                                                                      : 0u;
+    }
+    AgxD3d12OwnerBindings &vs_bind = scratch->vs_bind, &ps_bind = scratch->ps_bind;
+    OwnerBindings(d.vs_bind, &vs_bind);
+    OwnerBindings(d.ps_bind, &ps_bind);
+    memcpy(draw.Vs.Cbvs, vs_bind.cbvs, sizeof(draw.Vs.Cbvs));
+    memcpy(draw.Vs.Srvs, vs_bind.srvs, sizeof(draw.Vs.Srvs));
+    memcpy(draw.Ps.Cbvs, ps_bind.cbvs, sizeof(draw.Ps.Cbvs));
+    memcpy(draw.Ps.Srvs, ps_bind.srvs, sizeof(draw.Ps.Srvs));
+    memcpy(draw.Vs.Samplers, vs_bind.samplers, sizeof(draw.Vs.Samplers));
+    memcpy(draw.Ps.Samplers, ps_bind.samplers, sizeof(draw.Ps.Samplers));
+    const HRESULT hr = AgxD3d12OwnerDraw(owner, &draw);
+    HeapFree(GetProcessHeap(), 0, scratch);
+    return hr;
+}
 #endif
 static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
     UINT commands = 0;
@@ -2502,71 +2588,7 @@ static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, con
                                                     clear.dsv.first_layer, clear.dsv.layers, clear.flags, clear.depth,
                                                     clear.stencil, clear.rects ? clear.rect : nullptr, clear.rects);
             } else if (command.kind == kCommandDraw) {
-                const AgxD3d12Draw &d = command.draw;
-                AGX_D3D12_BUFFER rtv_textures[8] = {}, vb_buffers[kVertexBuffers] = {};
-                AGX_D3D12_DRAW draw = {};
-                draw.Pipeline = &d.pso->graphics;
-                draw.NumRtvs = d.rtvs;
-                for (UINT r = 0; r < d.rtvs; ++r) {
-                    if (!d.rtv[r].heap) continue;
-                    rtv_textures[r] = HeapBuffer(d.rtv[r].heap);
-                    draw.Rtv[r].Texture = &rtv_textures[r];
-                    draw.Rtv[r].Format = d.rtv[r].format;
-                    draw.Rtv[r].Level = d.rtv[r].level;
-                    draw.Rtv[r].FirstLayer = d.rtv[r].first_layer;
-                    draw.Rtv[r].Layers = d.rtv[r].layers;
-                }
-                AGX_D3D12_BUFFER dsv_texture = {};
-                if (d.dsv.kind == kDescriptorDsv && d.dsv.heap) {
-                    dsv_texture = HeapBuffer(d.dsv.heap);
-                    draw.Dsv.Texture = &dsv_texture;
-                    draw.Dsv.Format = d.dsv.format;
-                    draw.Dsv.Level = d.dsv.level;
-                    draw.Dsv.FirstLayer = d.dsv.first_layer;
-                    draw.Dsv.Layers = d.dsv.layers;
-                }
-                draw.Viewport[0] = d.viewport.TopLeftX;
-                draw.Viewport[1] = d.viewport.TopLeftY;
-                draw.Viewport[2] = d.viewport.Width;
-                draw.Viewport[3] = d.viewport.Height;
-                draw.Viewport[4] = d.viewport.MinDepth;
-                draw.Viewport[5] = d.viewport.MaxDepth;
-                draw.Scissor = d.scissor;
-                draw.Topology = d.topology;
-                for (UINT v = 0; v < kVertexBuffers; ++v) {
-                    if (!d.vb[v].heap) continue;
-                    vb_buffers[v] = HeapBuffer(d.vb[v].heap);
-                    draw.Vb[v].Buffer = &vb_buffers[v];
-                    draw.Vb[v].Offset = d.vb[v].offset;
-                    draw.Vb[v].Stride = d.vb[v].stride;
-                }
-                memcpy(draw.BlendFactor, d.blend_factor, sizeof(draw.BlendFactor));
-                draw.StencilRef = d.stencil_ref;
-                draw.VertexCount = d.vertices;
-                draw.InstanceCount = d.instances;
-                draw.StartVertex = d.start_vertex;
-                draw.StartInstance = d.start_instance;
-                AGX_D3D12_BUFFER index_buffer = {};
-                if (d.index_size && d.index_heap) {
-                    index_buffer = HeapBuffer(d.index_heap);
-                    draw.IndexBuffer = &index_buffer;
-                    draw.IndexOffset = d.index_offset;
-                    draw.IndexSize = d.index_size;
-                    draw.BaseVertex = d.base_vertex;
-                    draw.RestartIndex = d.pso->desc.IBStripCutValue == D3D12DDI_INDEX_BUFFER_STRIP_CUT_VALUE_0xFFFF ? 0xffffu
-                                      : d.pso->desc.IBStripCutValue == D3D12DDI_INDEX_BUFFER_STRIP_CUT_VALUE_0xFFFFFFFF ? 0xffffffffu
-                                                                                                                  : 0u;
-                }
-                AgxD3d12OwnerBindings vs_bind, ps_bind;
-                OwnerBindings(d.vs_bind, &vs_bind);
-                OwnerBindings(d.ps_bind, &ps_bind);
-                memcpy(draw.Vs.Cbvs, vs_bind.cbvs, sizeof(draw.Vs.Cbvs));
-                memcpy(draw.Vs.Srvs, vs_bind.srvs, sizeof(draw.Vs.Srvs));
-                memcpy(draw.Ps.Cbvs, ps_bind.cbvs, sizeof(draw.Ps.Cbvs));
-                memcpy(draw.Ps.Srvs, ps_bind.srvs, sizeof(draw.Ps.Srvs));
-                memcpy(draw.Vs.Samplers, vs_bind.samplers, sizeof(draw.Vs.Samplers));
-                memcpy(draw.Ps.Samplers, ps_bind.samplers, sizeof(draw.Ps.Samplers));
-                hr = AgxD3d12OwnerDraw(owner, &draw);
+                hr = ReplayDraw(owner, command.draw);
             } else if (command.kind == kCommandTextureCopy) {
                 const AgxD3d12TextureCopy &tc = command.texture_copy;
                 AGX_D3D12_BUFFER texture = HeapBuffer(tc.texture), buffer = HeapBuffer(tc.buffer);
@@ -2586,11 +2608,7 @@ static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, con
                 copy.ToBuffer = tc.to_buffer;
                 hr = AgxD3d12OwnerCopyTexture(owner, &copy);
             } else {
-                const AgxD3d12Dispatch &dispatch = command.dispatch;
-                AgxD3d12OwnerBindings bind;
-                OwnerBindings(dispatch, &bind);
-                hr = AgxD3d12OwnerDispatch(owner, &dispatch.pso->compute, bind.uavs, bind.cbvs, bind.srvs,
-                                           dispatch.groups[0], dispatch.groups[1], dispatch.groups[2]);
+                hr = ReplayDispatch(owner, command.dispatch);
             }
         }
 #endif

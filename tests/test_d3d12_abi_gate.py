@@ -236,7 +236,8 @@ class D3d12AbiGate(unittest.TestCase):
         execute = execute[:execute.index('\n}\n')]
         self.assertLess(execute.index('AgxD3d12OwnerCopy('), execute.index('AgxD3d12OwnerSubmitAndWait('))
         # C5: copies and dispatches replay in recording order through one loop
-        self.assertLess(execute.index('AgxD3d12OwnerDispatch('), execute.index('AgxD3d12OwnerSubmitAndWait('))
+        self.assertLess(execute.index('ReplayDispatch(owner, command.dispatch)'), execute.index('AgxD3d12OwnerSubmitAndWait('))
+        self.assertLess(execute.index('ReplayDraw(owner, command.draw)'), execute.index('AgxD3d12OwnerSubmitAndWait('))
         self.assertIn('command.kind == kCommandCopy', execute)
         # nothing can bind it yet: every command-list DDI stays fail-closed
         implemented = set(re.findall(r'AGX_ASSIGN\(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, (\w+), (?!AGX_REJECT)', source))
@@ -435,13 +436,16 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('if (stage != kAnyStage) return 4u; /* graphics UAVs: not yet */', resolve)
         sig = fn('static VOID APIENTRY SetGraphicsRootSignature(')
         self.assertIn('memset(list->graphics_root_va, 0', sig)
-        replay = fn('static VOID APIENTRY ExecuteCommandLists(')
+        replay = fn('static __declspec(noinline) HRESULT ReplayDraw(')
         self.assertIn('OwnerBindings(d.vs_bind, &vs_bind);', replay)
         self.assertIn('OwnerBindings(d.ps_bind, &ps_bind);', replay)
+        # the draw's owner records live on the heap, not in the replay frame
+        # (STACK_FRAMES gate, EXP1369 build: 12944 bytes before)
+        self.assertIn('HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(AgxD3d12DrawScratch))', replay)
         self.assertIn('pso->desc.hGeometryShader.pDrvPrivate', draw)
         self.assertIn('"measure-d3d12-draw"', draw)
         self.assertIn('memcpy(draw.vb, list->vb, sizeof(draw.vb));', draw)
-        self.assertIn('AgxD3d12OwnerDraw(', fn('static VOID APIENTRY ExecuteCommandLists('))
+        self.assertIn('AgxD3d12OwnerDraw(', fn('static __declspec(noinline) HRESULT ReplayDraw('))
         # recorded commands share storage
         self.assertIn('    union {\n        AgxD3d12Copy copy;', source)
 
@@ -459,7 +463,7 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('DXGI_FORMAT_R16_UINT ? 2u : view->Format == DXGI_FORMAT_R32_UINT ? 4u : 0u', ib)
         self.assertIn('AGX_LIST_BIT(pfnIASetIndexBuffer)', ib)
         self.assertIn('indexed && !list->index_heap ? 6u', fn('static void RecordDraw('))
-        self.assertIn('d.pso->desc.IBStripCutValue', fn('static VOID APIENTRY ExecuteCommandLists('))
+        self.assertIn('d.pso->desc.IBStripCutValue', fn('static __declspec(noinline) HRESULT ReplayDraw('))
         owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
         draw = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerDraw('):]
         draw = draw[:draw.index('\n}\n')]
