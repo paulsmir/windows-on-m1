@@ -229,25 +229,65 @@ class D3d12AbiGate(unittest.TestCase):
         copy = copy[:copy.index('\n}\n')]
         self.assertIn('bytes > d->bytes - dst_offset', copy)
         self.assertIn('bytes > r->bytes - src_offset', copy)
-        self.assertIn('list->copies >= kListCopies', copy)
+        self.assertIn('list->commands >= kListCommands', copy)
         execute = source[source.index('static VOID APIENTRY ExecuteCommandLists('):]
         execute = execute[:execute.index('\n}\n')]
         self.assertLess(execute.index('AgxD3d12OwnerCopy('), execute.index('AgxD3d12OwnerSubmitAndWait('))
+        # C5: copies and dispatches replay in recording order through one loop
+        self.assertLess(execute.index('AgxD3d12OwnerDispatch('), execute.index('AgxD3d12OwnerSubmitAndWait('))
+        self.assertIn('command.kind == kCommandCopy', execute)
         # nothing can bind it yet: every command-list DDI stays fail-closed
         implemented = set(re.findall(r'AGX_ASSIGN\(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, (\w+), (?!AGX_REJECT)', source))
         # EXP1363: the runtime's default-state setters are accepted (recorded
         # as received state); every state consumer stays fail-closed.
         setters = {'pfnSetPredication', 'pfnIaSetTopology', 'pfnRsSetViewports', 'pfnRsSetScissorRects',
-                   'pfnOmSetBlendFactor', 'pfnOmSetStencilRef', 'pfnSetPipelineState', 'pfnSetDescriptorHeaps',
+                   'pfnOmSetBlendFactor', 'pfnOmSetStencilRef', 'pfnSetDescriptorHeaps',
                    'pfnIASetIndexBuffer', 'pfnIASetVertexBuffers', 'pfnSOSetTargets', 'pfnOMSetRenderTargets',
                    'pfnClearRootArguments'}
+        compute = {'pfnSetPipelineState', 'pfnSetComputeRootSignature', 'pfnSetComputeRootUnorderedAccessView',
+                   'pfnDispatch'}
         self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList', 'pfnCopyBufferRegion',
-                                       'pfnResourceBarrier'} | setters)
+                                       'pfnResourceBarrier'} | setters | compute)
         for member in setters:
             self.assertIn('AGX_LIST_STATE(%s)' % member, source)
-        for consumer in ('pfnDrawInstanced', 'pfnDrawIndexedInstanced', 'pfnDispatch', 'pfnCopyTextureRegion',
+        for consumer in ('pfnDrawInstanced', 'pfnDrawIndexedInstanced', 'pfnCopyTextureRegion',
                          'pfnClearRenderTargetView', 'pfnResourceCopy'):
             self.assertIn('AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, %s)' % consumer, source)
+
+    def test_c5_compute_dispatch(self):
+        # C5 (D3D12-C5-compute.md). Invariants: the pipeline keeps its own
+        # copy of the compute program (the runtime may destroy the shader
+        # object first); a new root signature resets the root arguments; a
+        # root UAV argument must name a UAV parameter; Dispatch binds only
+        # root UAVs in register space 0 at slot u# and refuses (fail-closed,
+        # with a receipt) any other root parameter until C5b, and resolves
+        # each root VA to a registered owner heap.
+        source = SOURCE.read_text()
+        def fn(name):
+            start = source.index(name)
+            return source[start:source.index('\n}\n', start)]
+        size = fn('static SIZE_T APIENTRY CalcPrivatePipelineStateSize(')
+        self.assertIn('cs->dwords', size)
+        create = fn('static HRESULT APIENTRY CreatePipelineState(')
+        self.assertIn('memcpy(pso->cs, cs->tokens, cs->dwords * sizeof(UINT));', create)
+        root = fn('static VOID APIENTRY SetComputeRootSignature(')
+        self.assertIn('memset(list->compute_root_va, 0, sizeof(list->compute_root_va));', root)
+        uav = fn('static VOID APIENTRY SetComputeRootUnorderedAccessView(')
+        self.assertIn('!= D3D12DDI_ROOT_PARAMETER_TYPE_UAV', uav)
+        self.assertIn('index >= root->parameters', uav)
+        dispatch = fn('static VOID APIENTRY Dispatch(')
+        self.assertIn('if (p.type != D3D12DDI_ROOT_PARAMETER_TYPE_UAV) refusal = 4u;', dispatch)
+        self.assertIn('p.space || p.shader_register >= kUavSlots', dispatch)
+        self.assertIn('HeapAt(list->device, list->compute_root_va[i]', dispatch)
+        self.assertIn('"measure-d3d12-dispatch"', dispatch)
+        self.assertIn('list->commands >= kListCommands', dispatch)
+        reset = fn('static VOID APIENTRY ResetCommandList(')
+        self.assertIn('list->compute_root = nullptr;', reset)
+        # owner heaps are registered while they exist
+        self.assertIn('RegisterHeap(device, heap);', fn('static HRESULT CreateHeap('))
+        self.assertIn('UnregisterHeap(device, heap);', fn('static void ReleaseHeap('))
+        destroy = fn('static VOID APIENTRY DestroyPipelineState(D3D12DDI_HDEVICE handle')
+        self.assertIn('AgxD3d12OwnerDestroyCompute(', destroy)
 
     def test_package_and_receipts(self):
         package = ROOT / 'drivers/apple-agx/render-admission/umd'

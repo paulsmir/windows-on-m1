@@ -188,6 +188,10 @@ struct AgxD3d12Device {
     /* EXP1365: the KMD binds one Win32 generation per kernel device, so the
      * owner's context and every queue context carry this one */
     ULONG generation;
+    /* C5: the owner heaps by GPU VA, so a root descriptor (a VA) resolves
+     * to its buffer and offset */
+    UINT heap_count;
+    struct AgxD3d12Heap *heaps[4096];
 };
 static SIZE_T APIENTRY CalcPrivateDeviceSize(D3D12DDI_HADAPTER,
                                              const D3D12DDIARG_CALCPRIVATEDEVICESIZE *arg) {
@@ -260,6 +264,9 @@ struct AgxD3d12RootParameter {
     UINT visibility;
     UINT offset; /* in DWORDs */
     UINT dwords;
+    /* C5: root constants and root CBV/SRV/UAV name one shader register */
+    UINT shader_register;
+    UINT space;
 };
 struct AgxD3d12RootSignature {
     UINT parameters;
@@ -295,6 +302,14 @@ static HRESULT APIENTRY CreateRootSignature(D3D12DDI_HDEVICE, const D3D12DDIARG_
         out.visibility = static_cast<UINT>(desc.pRootParameters[i].ShaderVisibility);
         out.offset = root->dwords;
         out.dwords = RootParameterDwords(desc.pRootParameters[i]);
+        out.shader_register = out.space = 0;
+        if (desc.pRootParameters[i].ParameterType == D3D12DDI_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS) {
+            out.shader_register = desc.pRootParameters[i].Constants.ShaderRegister;
+            out.space = desc.pRootParameters[i].Constants.RegisterSpace;
+        } else if (desc.pRootParameters[i].ParameterType != D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE) {
+            out.shader_register = desc.pRootParameters[i].Descriptor.ShaderRegister;
+            out.space = desc.pRootParameters[i].Descriptor.RegisterSpace;
+        }
         root->dwords += out.dwords;
     }
     const UINT receipt[] = {root->parameters, root->static_samplers, root->flags, root->dwords};
@@ -385,19 +400,37 @@ static VOID APIENTRY CreateElementLayout(D3D12DDI_HDEVICE, const D3D12DDIARG_CRE
 }
 static VOID APIENTRY DestroyElementLayout(D3D12DDI_HDEVICE, D3D12DDI_HELEMENTLAYOUT) {}
 /* The pipeline state those objects feed (D3D12DDIARG_CREATE_PIPELINE_STATE_0001):
- * it keeps the creation arguments; the AGX compile of its shaders and the
- * state translation are C5/C6, before any command list can bind it (every
- * command-list DDI is still fail-closed). */
+ * it keeps the creation arguments; graphics state translation is C6. C5: a
+ * compute pipeline keeps its own copy of the compute program (the runtime
+ * may destroy the shader object first) and compiles it on the device's
+ * native owner when a list first dispatches it, so device initialisation's
+ * internal compute pipeline needs no owner. */
 struct AgxD3d12PipelineState {
     D3D12DDIARG_CREATE_PIPELINE_STATE_0001 desc;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    AGX_D3D12_COMPUTE compute;
+#endif
+    HRESULT compiled; /* S_FALSE until the first compile */
+    UINT cs_dwords;
+    UINT cs[1];
 };
-static SIZE_T APIENTRY CalcPrivatePipelineStateSize(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_PIPELINE_STATE_0001 *) {
-    return sizeof(AgxD3d12PipelineState);
+static const AgxD3d12Shader *ComputeShaderOf(const D3D12DDIARG_CREATE_PIPELINE_STATE_0001 *arg) {
+    return arg ? static_cast<const AgxD3d12Shader *>(arg->hComputeShader.pDrvPrivate) : nullptr;
+}
+static SIZE_T APIENTRY CalcPrivatePipelineStateSize(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_PIPELINE_STATE_0001 *arg) {
+    const AgxD3d12Shader *cs = ComputeShaderOf(arg);
+    return offsetof(AgxD3d12PipelineState, cs) + (cs && cs->dwords ? cs->dwords : 1) * sizeof(UINT);
 }
 static HRESULT APIENTRY CreatePipelineState(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_PIPELINE_STATE_0001 *arg) {
     auto *pso = arg ? static_cast<AgxD3d12PipelineState *>(arg->hDrvPipelineState.pDrvPrivate) : nullptr;
     if (!pso) return E_INVALIDARG;
+    memset(pso, 0, offsetof(AgxD3d12PipelineState, cs));
     pso->desc = *arg;
+    pso->compiled = S_FALSE;
+    if (const AgxD3d12Shader *cs = ComputeShaderOf(arg)) {
+        pso->cs_dwords = cs->dwords;
+        memcpy(pso->cs, cs->tokens, cs->dwords * sizeof(UINT));
+    }
     const UINT receipt[] = {arg->hComputeShader.pDrvPrivate != nullptr, arg->hVertexShader.pDrvPrivate != nullptr,
                             arg->hPixelShader.pDrvPrivate != nullptr, arg->NumRenderTargets,
                             static_cast<UINT>(arg->RTVFormats[0]), static_cast<UINT>(arg->DSVFormat),
@@ -405,7 +438,7 @@ static HRESULT APIENTRY CreatePipelineState(D3D12DDI_HDEVICE, const D3D12DDIARG_
     AdmissionUmdDiagnostic("measure-d3d12-pso", S_OK, receipt, 8);
     return S_OK;
 }
-static VOID APIENTRY DestroyPipelineState(D3D12DDI_HDEVICE, D3D12DDI_HPIPELINESTATE) {}
+static VOID APIENTRY DestroyPipelineState(D3D12DDI_HDEVICE, D3D12DDI_HPIPELINESTATE);
 /* C1i (EXP1353): after its internal pipeline state the runtime calls
  * pfnMakeResident; refused, the device is removed. No object this stage
  * creates owns a kernel allocation yet (heaps and resources are C2), so
@@ -543,9 +576,32 @@ static AGX_D3D12_OWNER *EnsureOwner(AgxD3d12Device *device) {
     return static_cast<AGX_D3D12_OWNER *>(device->owner);
 }
 #endif
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static void RegisterHeap(AgxD3d12Device *device, AgxD3d12Heap *heap) {
+    if (device->heap_count < ARRAYSIZE(device->heaps)) device->heaps[device->heap_count++] = heap;
+}
+static void UnregisterHeap(AgxD3d12Device *device, AgxD3d12Heap *heap) {
+    for (UINT i = 0; i < device->heap_count; ++i)
+        if (device->heaps[i] == heap) {
+            device->heaps[i] = device->heaps[--device->heap_count];
+            return;
+        }
+}
+static AgxD3d12Heap *HeapAt(AgxD3d12Device *device, UINT64 va, UINT64 *offset) {
+    for (UINT i = 0; va && i < device->heap_count; ++i) {
+        AgxD3d12Heap *heap = device->heaps[i];
+        if (va >= heap->gpuva && va - heap->gpuva < heap->bytes) {
+            *offset = va - heap->gpuva;
+            return heap;
+        }
+    }
+    return nullptr;
+}
+#endif
 static void ReleaseHeap(AgxD3d12Device *device, AgxD3d12Heap *heap) {
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     if (heap->native) {
+        UnregisterHeap(device, heap);
         AGX_D3D12_BUFFER buffer = HeapBuffer(heap);
         AgxD3d12OwnerDestroyBuffer(static_cast<AGX_D3D12_OWNER *>(device->owner), &buffer);
         memset(heap, 0, sizeof(*heap));
@@ -591,6 +647,7 @@ static HRESULT CreateHeap(AgxD3d12Device *device, const D3D12DDIARG_CREATEHEAP_0
             heap->cpu = buffer.Cpu;
             heap->cpu_visible = TRUE; /* Asahi buffers are CPU mapped (UMA) */
             heap->allocation = AgxD3d12OwnerBufferAllocation(owner, &buffer);
+            RegisterHeap(device, heap);
         }
         const UINT receipt[] = {2u, static_cast<UINT>(heap->bytes >> 16), heap->allocation != 0 ? 1u : 0u,
                                 static_cast<UINT>(heap->gpuva >> 16), static_cast<UINT>(heap->gpuva >> 32)};
@@ -959,16 +1016,39 @@ struct AgxD3d12Copy {
     UINT64 src_offset;
     UINT64 bytes;
 };
-static constexpr UINT kListCopies = 64;
+/* C5: a recorded Dispatch: the pipeline and its root UAVs resolved to
+ * heap-relative views at shader-buffer slot u# (register space 0, the
+ * dxbc_to_nir binding of raw/structured UAVs). */
+static constexpr UINT kUavSlots = 8;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static_assert(kUavSlots == AGX_D3D12_UAV_SLOTS, "UAV slots of the owner");
+#endif
+struct AgxD3d12Dispatch {
+    AgxD3d12PipelineState *pso;
+    AgxD3d12Heap *uav_heap[kUavSlots];
+    UINT64 uav_offset[kUavSlots];
+    UINT groups[3];
+};
+enum : UINT { kCommandCopy = 1, kCommandDispatch = 2 };
+struct AgxD3d12Command {
+    UINT kind;
+    AgxD3d12Copy copy;
+    AgxD3d12Dispatch dispatch;
+};
+static constexpr UINT kListCommands = 64;
+static constexpr UINT kRootArguments = 64; /* a root signature costs at most 64 DWORDs */
 struct AgxD3d12CommandList {
     D3D12DDI_HRTCOMMANDLIST runtime;
     UINT type;
     UINT closed;
-    UINT commands; /* recorded commands (C4b: copies) */
+    UINT commands; /* recorded commands, replayed in order */
     UINT64 state;  /* EXP1363: state setters the list received (bit = DDI slot) */
     AgxD3d12Device *device;
-    UINT copies;
-    AgxD3d12Copy copy[kListCopies];
+    /* C5: compute state */
+    AgxD3d12PipelineState *pso;
+    const AgxD3d12RootSignature *compute_root;
+    D3D12DDI_GPU_VIRTUAL_ADDRESS compute_root_va[kRootArguments];
+    AgxD3d12Command command[kListCommands];
 };
 /* EXP1363: creating/resetting a list makes the runtime set its default
  * state (topology, viewports, scissors, blend factor, stencil ref, PSO,
@@ -1012,7 +1092,12 @@ static VOID APIENTRY CloseCommandList(D3D12DDI_HCOMMANDLIST handle) {
 }
 static VOID APIENTRY ResetCommandList(D3D12DDI_HCOMMANDLIST handle, const D3D12DDIARG_RESETCOMMANDLIST *) {
     auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
-    if (list) { list->closed = list->commands = list->copies = 0; list->state = 0; }
+    if (!list) return;
+    list->closed = list->commands = 0;
+    list->state = 0;
+    list->pso = nullptr;
+    list->compute_root = nullptr;
+    memset(list->compute_root_va, 0, sizeof(list->compute_root_va));
 }
 /* C4b: a buffer copy between committed buffers (heap-backed resources). The
  * list records heap-relative ranges; ExecuteCommandLists replays them on the
@@ -1031,12 +1116,98 @@ static VOID APIENTRY CopyBufferRegion(D3D12DDI_HCOMMANDLIST handle, D3D12DDIARG_
     const UINT64 dst_offset = dst.BaseAddress.UMD.Offset, src_offset = src.BaseAddress.UMD.Offset;
     if (!d || !r || !d->heap || !r->heap || !d->heap->native || !r->heap->native || !bytes ||
         dst_offset > d->bytes || bytes > d->bytes - dst_offset || src_offset > r->bytes ||
-        bytes > r->bytes - src_offset || list->copies >= kListCopies) {
+        bytes > r->bytes - src_offset || list->commands >= kListCommands) {
         ListError(list, E_INVALIDARG);
         return;
     }
-    list->copy[list->copies++] = {d->heap, dst_offset, r->heap, src_offset, bytes};
-    ++list->commands;
+    AgxD3d12Command &command = list->command[list->commands++];
+    command.kind = kCommandCopy;
+    command.copy = {d->heap, dst_offset, r->heap, src_offset, bytes};
+}
+/* C5 (investigation/analysis/D3D12-C5-compute.md): compute state. Setting
+ * a root signature resets the root arguments (D3D12 semantics). */
+static AgxD3d12CommandList *ListOf(D3D12DDI_HCOMMANDLIST handle) {
+    return static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+}
+static VOID APIENTRY SetPipelineState(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HPIPELINESTATE pso) {
+    AgxD3d12CommandList *list = ListOf(handle);
+    if (!list) return;
+    list->state |= 1ULL << ((offsetof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetPipelineState) / sizeof(void *)) & 63u);
+    list->pso = static_cast<AgxD3d12PipelineState *>(pso.pDrvPrivate);
+}
+static VOID APIENTRY SetComputeRootSignature(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HROOTSIGNATURE root) {
+    AgxD3d12CommandList *list = ListOf(handle);
+    if (!list) return;
+    list->compute_root = static_cast<const AgxD3d12RootSignature *>(root.pDrvPrivate);
+    memset(list->compute_root_va, 0, sizeof(list->compute_root_va));
+}
+static VOID APIENTRY SetComputeRootUnorderedAccessView(D3D12DDI_HCOMMANDLIST handle, UINT index,
+                                                       D3D12DDI_GPU_VIRTUAL_ADDRESS va) {
+    AgxD3d12CommandList *list = ListOf(handle);
+    if (!list) return;
+    const AgxD3d12RootSignature *root = list->compute_root;
+    if (!root || index >= root->parameters || index >= kRootArguments ||
+        root->parameter[index].type != D3D12DDI_ROOT_PARAMETER_TYPE_UAV) {
+        ListError(list, E_INVALIDARG);
+        return;
+    }
+    list->compute_root_va[index] = va;
+}
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static HRESULT CompileCompute(AgxD3d12Device *device, AgxD3d12PipelineState *pso) {
+    if (pso->compiled != S_FALSE) return pso->compiled;
+    AGX_D3D12_OWNER *owner = EnsureOwner(device);
+    pso->compiled = owner ? AgxD3d12OwnerCreateCompute(owner, pso->cs, &pso->compute) : E_FAIL;
+    return pso->compiled;
+}
+#endif
+static VOID APIENTRY DestroyPipelineState(D3D12DDI_HDEVICE handle, D3D12DDI_HPIPELINESTATE pso_handle) {
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    AgxD3d12Device *device = DeviceOf(handle);
+    auto *pso = static_cast<AgxD3d12PipelineState *>(pso_handle.pDrvPrivate);
+    if (device && device->owner && pso && pso->compiled == S_OK)
+        AgxD3d12OwnerDestroyCompute(static_cast<AGX_D3D12_OWNER *>(device->owner), &pso->compute);
+#else
+    (void)handle;
+    (void)pso_handle;
+#endif
+}
+/* Dispatch resolves the compute root signature now: C5 binds root UAVs
+ * only; any other root parameter (constants, CBV/SRV, tables: C5b) refuses
+ * the dispatch with a receipt naming the reason. */
+static VOID APIENTRY Dispatch(D3D12DDI_HCOMMANDLIST handle, UINT x, UINT y, UINT z) {
+    AgxD3d12CommandList *list = ListOf(handle);
+    if (!list || !x || !y || !z) return; /* an empty grid does nothing */
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    AgxD3d12PipelineState *pso = list->pso;
+    const AgxD3d12RootSignature *root = list->compute_root;
+    AgxD3d12Dispatch dispatch = {};
+    UINT refusal = !pso || !pso->cs_dwords ? 1u : !root ? 2u : list->commands >= kListCommands ? 3u : 0u;
+    for (UINT i = 0; !refusal && i < root->parameters; ++i) {
+        const AgxD3d12RootParameter &p = root->parameter[i];
+        if (p.type != D3D12DDI_ROOT_PARAMETER_TYPE_UAV) refusal = 4u;
+        else if (p.space || p.shader_register >= kUavSlots || i >= kRootArguments) refusal = 5u;
+        else if (!(dispatch.uav_heap[p.shader_register] =
+                       HeapAt(list->device, list->compute_root_va[i], &dispatch.uav_offset[p.shader_register])))
+            refusal = 6u;
+    }
+    if (!refusal && FAILED(CompileCompute(list->device, pso))) refusal = 7u;
+    const UINT receipt[] = {refusal, x, y, z, root ? root->parameters : 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-dispatch", refusal ? E_NOTIMPL : S_OK, receipt, 5);
+    if (refusal) {
+        ListError(list, refusal == 3u || refusal == 6u ? E_INVALIDARG : E_NOTIMPL);
+        return;
+    }
+    dispatch.pso = pso;
+    dispatch.groups[0] = x;
+    dispatch.groups[1] = y;
+    dispatch.groups[2] = z;
+    AgxD3d12Command &command = list->command[list->commands++];
+    command.kind = kCommandDispatch;
+    command.dispatch = dispatch;
+#else
+    ListError(list, E_NOTIMPL);
+#endif
 }
 /* Between copies on one queue the owner's libagx copies already carry
  * AGX_BARRIER_ALL and execution completes before the next list; transitions
@@ -1045,18 +1216,35 @@ static VOID APIENTRY ResourceBarrier(D3D12DDI_HCOMMANDLIST, UINT, const D3D12DDI
 static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
     UINT commands = 0;
     HRESULT hr = S_OK;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     AgxD3d12Device *device = nullptr;
+#endif
     for (UINT i = 0; lists && i < count; ++i) {
         auto *list = static_cast<AgxD3d12CommandList *>(lists[i].pDrvPrivate);
         if (!list) continue;
         commands += list->commands;
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
-        for (UINT c = 0; SUCCEEDED(hr) && c < list->copies; ++c) {
-            const AgxD3d12Copy &copy = list->copy[c];
+        for (UINT c = 0; SUCCEEDED(hr) && c < list->commands; ++c) {
+            const AgxD3d12Command &command = list->command[c];
             device = list->device;
-            AGX_D3D12_BUFFER dst = HeapBuffer(copy.dst), src = HeapBuffer(copy.src);
-            hr = AgxD3d12OwnerCopy(static_cast<AGX_D3D12_OWNER *>(device->owner), &dst, copy.dst_offset, &src,
-                                   copy.src_offset, copy.bytes);
+            auto *owner = static_cast<AGX_D3D12_OWNER *>(device->owner);
+            if (command.kind == kCommandCopy) {
+                const AgxD3d12Copy &copy = command.copy;
+                AGX_D3D12_BUFFER dst = HeapBuffer(copy.dst), src = HeapBuffer(copy.src);
+                hr = AgxD3d12OwnerCopy(owner, &dst, copy.dst_offset, &src, copy.src_offset, copy.bytes);
+            } else {
+                const AgxD3d12Dispatch &dispatch = command.dispatch;
+                AGX_D3D12_BUFFER buffers[kUavSlots] = {};
+                AGX_D3D12_UAV uavs[kUavSlots] = {};
+                for (UINT u = 0; u < kUavSlots; ++u) {
+                    if (!dispatch.uav_heap[u]) continue;
+                    buffers[u] = HeapBuffer(dispatch.uav_heap[u]);
+                    uavs[u].Buffer = &buffers[u];
+                    uavs[u].Offset = dispatch.uav_offset[u];
+                }
+                hr = AgxD3d12OwnerDispatch(owner, &dispatch.pso->compute, uavs, dispatch.groups[0],
+                                           dispatch.groups[1], dispatch.groups[2]);
+            }
         }
 #endif
     }
@@ -1181,7 +1369,7 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResetCommandList, ResetCommandList);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawInstanced, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawInstanced));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawIndexedInstanced, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawIndexedInstanced));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDispatch, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDispatch));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDispatch, Dispatch);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearUnorderedAccessViewUint, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearUnorderedAccessViewUint));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearUnorderedAccessViewFloat, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearUnorderedAccessViewFloat));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearRenderTargetView, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearRenderTargetView));
@@ -1206,9 +1394,9 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnRsSetScissorRects, AGX_LIST_STATE(pfnRsSetScissorRects));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOmSetBlendFactor, AGX_LIST_STATE(pfnOmSetBlendFactor));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOmSetStencilRef, AGX_LIST_STATE(pfnOmSetStencilRef));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetPipelineState, AGX_LIST_STATE(pfnSetPipelineState));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetPipelineState, SetPipelineState);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetDescriptorHeaps, AGX_LIST_STATE(pfnSetDescriptorHeaps));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootSignature, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootSignature));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootSignature, SetComputeRootSignature);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootSignature, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootSignature));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootDescriptorTable, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootDescriptorTable));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootDescriptorTable, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootDescriptorTable));
@@ -1220,7 +1408,7 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootConstantBufferView, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootConstantBufferView));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootShaderResourceView, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootShaderResourceView));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootShaderResourceView, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootShaderResourceView));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootUnorderedAccessView, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootUnorderedAccessView));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootUnorderedAccessView, SetComputeRootUnorderedAccessView);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootUnorderedAccessView, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootUnorderedAccessView));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetIndexBuffer, AGX_LIST_STATE(pfnIASetIndexBuffer));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetVertexBuffers, AGX_LIST_STATE(pfnIASetVertexBuffers));

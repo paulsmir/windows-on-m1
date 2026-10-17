@@ -47,6 +47,29 @@ UINT AgxD3d12OwnerBufferAllocation(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFE
 HRESULT AgxD3d12OwnerCopy(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Dst,
                           unsigned long long DstOffset, const AGX_D3D12_BUFFER *Src,
                           unsigned long long SrcOffset, unsigned long long Bytes);
+/* C5 (investigation/analysis/D3D12-C5-compute.md): a compute shader
+ * compiled from its D3D tokenized program (DXBC -> NIR -> Asahi), with the
+ * thread-group size the program declares. */
+typedef struct {
+  void *State;          /* the context's compute state object */
+  unsigned Block[3];
+} AGX_D3D12_COMPUTE;
+HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *Owner, const UINT *Tokens, AGX_D3D12_COMPUTE *Compute);
+void AgxD3d12OwnerDestroyCompute(AGX_D3D12_OWNER *Owner, AGX_D3D12_COMPUTE *Compute);
+/* A raw/structured UAV bound at shader-buffer slot u#: Buffer NULL = unbound;
+ * the view spans [Offset, Buffer->Bytes) (a D3D12 root descriptor has no
+ * size). */
+#define AGX_D3D12_UAV_SLOTS 8
+typedef struct {
+  const AGX_D3D12_BUFFER *Buffer;
+  unsigned long long Offset;
+} AGX_D3D12_UAV;
+/* Records one dispatch of x*y*z groups; its writes are ordered before every
+ * later recorded command (D3D12 UAV and transition barriers between them
+ * need no further AGX work: the launch ends with a full memory barrier). */
+HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *Owner, const AGX_D3D12_COMPUTE *Compute,
+                              const AGX_D3D12_UAV Uavs[AGX_D3D12_UAV_SLOTS], unsigned X, unsigned Y,
+                              unsigned Z);
 /* Submits the recorded work and waits for it (C4b orders it before the
  * runtime's later queue signal by completing it first). */
 HRESULT AgxD3d12OwnerSubmitAndWait(AGX_D3D12_OWNER *Owner);

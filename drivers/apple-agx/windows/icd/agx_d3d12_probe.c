@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "agx_d3d12_probe_cs.h"
+
 /* C2 checkpoint (D3D12-C-implementation-plan.md): a committed upload buffer
  * and a Map/write/Unmap/Map/read round trip. Runs only after the device
  * exists; each step prints its HRESULT so the receipt names the first one
@@ -127,6 +129,106 @@ static int gpu_copy(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence
     return !(SUCCEEDED(hr) && bad == 0);
 }
 
+/* C5 (D3D12-C5-compute.md): a root signature with one root UAV (u0), a
+ * compute pipeline (agx_d3d12_probe_cs.hlsl: dword i = i * 3 + 7), Dispatch
+ * over a 64 KiB DEFAULT buffer, then a GPU copy to READBACK and a CPU compare. */
+static ID3D12Resource *uav_buffer(ID3D12Device *device) {
+    D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
+    D3D12_RESOURCE_DESC desc = {0};
+    ID3D12Resource *buffer = NULL;
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    desc.Width = 65536;
+    desc.Height = 1;
+    desc.DepthOrArraySize = 1;
+    desc.MipLevels = 1;
+    desc.SampleDesc.Count = 1;
+    desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    HRESULT hr = ID3D12Device_CreateCommittedResource(device, &heap, D3D12_HEAP_FLAG_NONE, &desc,
+                                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS, NULL,
+                                                      &IID_ID3D12Resource, (void **)&buffer);
+    printf("C5 CreateCommittedResource uav hr=0x%08lx\n", (unsigned long)hr);
+    return SUCCEEDED(hr) ? buffer : NULL;
+}
+static int compute_dispatch(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence) {
+    D3D12_ROOT_PARAMETER parameter = {D3D12_ROOT_PARAMETER_TYPE_UAV};
+    D3D12_ROOT_SIGNATURE_DESC root_desc = {1, &parameter};
+    D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {0};
+    ID3DBlob *blob = NULL, *errors = NULL;
+    ID3D12RootSignature *root = NULL;
+    ID3D12PipelineState *pso = NULL;
+    ID3D12Resource *uav = uav_buffer(device);
+    ID3D12Resource *readback = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12GraphicsCommandList *list = NULL;
+    unsigned bad = 16384;
+    UINT64 value = 0;
+    parameter.Descriptor.ShaderRegister = 0;
+    parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    HRESULT hr = uav && readback ? S_OK : E_FAIL;
+    if (SUCCEEDED(hr)) hr = D3D12SerializeRootSignature(&root_desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &errors);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateRootSignature(device, 0, ID3D10Blob_GetBufferPointer(blob),
+                                              ID3D10Blob_GetBufferSize(blob), &IID_ID3D12RootSignature,
+                                              (void **)&root);
+    printf("C5 CreateRootSignature hr=0x%08lx\n", (unsigned long)hr);
+    if (SUCCEEDED(hr)) {
+        pso_desc.pRootSignature = root;
+        pso_desc.CS.pShaderBytecode = g_agx_d3d12_probe_cs;
+        pso_desc.CS.BytecodeLength = sizeof(g_agx_d3d12_probe_cs);
+        hr = ID3D12Device_CreateComputePipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
+        printf("C5 CreateComputePipelineState hr=0x%08lx\n", (unsigned long)hr);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                 &IID_ID3D12CommandAllocator, (void **)&allocator);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, pso,
+                                            &IID_ID3D12GraphicsCommandList, (void **)&list);
+    if (SUCCEEDED(hr)) {
+        D3D12_RESOURCE_BARRIER barrier = {D3D12_RESOURCE_BARRIER_TYPE_TRANSITION};
+        barrier.Transition.pResource = uav;
+        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+        ID3D12GraphicsCommandList_SetComputeRootSignature(list, root);
+        ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(list, 0, ID3D12Resource_GetGPUVirtualAddress(uav));
+        ID3D12GraphicsCommandList_Dispatch(list, 256, 1, 1);
+        ID3D12GraphicsCommandList_ResourceBarrier(list, 1, &barrier);
+        ID3D12GraphicsCommandList_CopyBufferRegion(list, readback, 0, uav, 0, 65536);
+        hr = ID3D12GraphicsCommandList_Close(list);
+        printf("C5 record+close hr=0x%08lx\n", (unsigned long)hr);
+    }
+    if (SUCCEEDED(hr)) {
+        ID3D12CommandList *lists[] = {(ID3D12CommandList *)list};
+        ID3D12CommandQueue_ExecuteCommandLists(queue, 1, lists);
+        hr = ID3D12CommandQueue_Signal(queue, fence, 4);
+        for (int i = 0; i < 300 && (value = ID3D12Fence_GetCompletedValue(fence)) < 4; ++i) Sleep(10);
+        printf("C5 execute+signal hr=0x%08lx completed %llu\n", (unsigned long)hr, (unsigned long long)value);
+    }
+    if (SUCCEEDED(hr) && value == 4) {
+        D3D12_RANGE all = {0, 65536};
+        UINT *dwords = NULL;
+        hr = ID3D12Resource_Map(readback, 0, &all, (void **)&dwords);
+        if (SUCCEEDED(hr) && dwords) {
+            bad = 0;
+            for (unsigned i = 0; i < 16384; ++i) bad += dwords[i] != i * 3u + 7u;
+            printf("C5 readback bad=%u first=%u,%u last=%u\n", bad, dwords[0], dwords[1], dwords[16383]);
+            ID3D12Resource_Unmap(readback, 0, NULL);
+        }
+    }
+    printf("AGX_D3D12_C5: %s\n", SUCCEEDED(hr) && value == 4 && bad == 0 ? "PASS" : "FAIL");
+    if (list) ID3D12GraphicsCommandList_Release(list);
+    if (allocator) ID3D12CommandAllocator_Release(allocator);
+    if (pso) ID3D12PipelineState_Release(pso);
+    if (root) ID3D12RootSignature_Release(root);
+    if (errors) ID3D10Blob_Release(errors);
+    if (blob) ID3D10Blob_Release(blob);
+    if (readback) ID3D12Resource_Release(readback);
+    if (uav) ID3D12Resource_Release(uav);
+    return !(SUCCEEDED(hr) && bad == 0);
+}
+
 /* C3a (D3D12-C3-queue-fences.md): a direct queue, a fence and one Signal;
  * each step prints its HRESULT so the receipts name the DDIs the runtime
  * needs. */
@@ -171,7 +273,8 @@ static int queue_fence_signal(ID3D12Device *device) {
                 printf("C4 execute+signal hr=0x%08lx completed %llu\n", (unsigned long)c4, (unsigned long long)value);
             }
             printf("AGX_D3D12_C4A: %s\n", SUCCEEDED(c4) && value == 2 ? "PASS" : "FAIL");
-            if (SUCCEEDED(c4) && value == 2) (void)gpu_copy(device, queue, fence);
+            if (SUCCEEDED(c4) && value == 2 && gpu_copy(device, queue, fence) == 0)
+                (void)compute_dispatch(device, queue, fence);
             if (list) ID3D12GraphicsCommandList_Release(list);
             if (allocator) ID3D12CommandAllocator_Release(allocator);
         }

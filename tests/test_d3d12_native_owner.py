@@ -47,6 +47,24 @@ class NativeOwner(unittest.TestCase):
         self.assertLess(submit.index('->flush('), submit.index('AgxWin32AsahiContextRetire('))
         self.assertIn('AgxWin32AsahiContextFaulted(', submit)
 
+    def test_compute(self):
+        # C5: the compute program goes through the repository's DXBC -> NIR
+        # translator (as the D3D11 path does); a dispatch binds the UAVs as
+        # shader buffers, ends with a full barrier (D3D12 orders the next
+        # command after it) and drops the bindings so they never outlive a
+        # heap.
+        text = OWNER.read_text()
+        create = body(text, 'extern "C" HRESULT AgxD3d12OwnerCreateCompute(')
+        self.assertIn('dxbc_translate_tokens(', create)
+        self.assertIn('dxbc_nir_compute_info(', create)
+        self.assertIn('->create_compute_state(', create)
+        dispatch = body(text, 'extern "C" HRESULT AgxD3d12OwnerDispatch(')
+        order = [dispatch.index(k) for k in ('bind_compute_state', 'set_shader_buffers(pipe, MESA_SHADER_COMPUTE, 0, AGX_D3D12_UAV_SLOTS, buffers',
+                                             'launch_grid', 'memory_barrier(pipe, PIPE_BARRIER_ALL)',
+                                             'set_shader_buffers(pipe, MESA_SHADER_COMPUTE, 0, AGX_D3D12_UAV_SLOTS, NULL, 0)')]
+        self.assertEqual(order, sorted(order))
+        self.assertIn('uavs[i].Offset >= buffer->Bytes', dispatch)
+
     def test_teardown_order(self):
         text = OWNER.read_text()
         destroy = body(text, 'extern "C" HRESULT AgxD3d12OwnerDestroy(')

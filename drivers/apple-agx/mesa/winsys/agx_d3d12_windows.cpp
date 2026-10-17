@@ -16,6 +16,7 @@ extern "C" {
 #include "pipe/p_context.h"
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h"
+#include "../dxbc/dxbc_to_nir.h"
 
 /* D3D12 C4b owner. Construction mirrors agx_d3d10_windows.cpp
  * (AdmissionUmdRuntimeDeviceInitialize -> AgxWin32AsahiScreenCreateForWindows
@@ -37,6 +38,7 @@ struct AGX_D3D12_OWNER {
   AGX_D3D12_ERROR_CALLBACK Error;
   void *ErrorContext;
   UINT PendingCopies;
+  UINT PendingDispatches;
 };
 
 static VOID APIENTRY owner_error(D3D10DDI_HRTCORELAYER handle, HRESULT error) {
@@ -212,10 +214,80 @@ extern "C" HRESULT AgxD3d12OwnerCopy(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUF
   return S_OK;
 }
 
+/* C5: the D3D11 frontend's compute path (agx_d3d11_ddi.cpp
+ * CreateComputeShader11/Dispatch11) on this owner's context. */
+extern "C" HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *owner, const UINT *tokens,
+                                              AGX_D3D12_COMPUTE *compute) {
+  if (!owner || !owner->Context || !tokens || !compute) return E_INVALIDARG;
+  memset(compute, 0, sizeof(*compute));
+  struct pipe_context *pipe = owner->Context;
+  struct dxbc_nir_error error = {};
+  struct nir_shader *nir = dxbc_translate_tokens(tokens, pipe->screen->nir_options[MESA_SHADER_COMPUTE], &error);
+  if (!nir) {
+    receipt("measure-d3d12-compute", E_NOTIMPL, 0u, error.opcode, error.offset);
+    return E_NOTIMPL;
+  }
+  unsigned block[3] = {}, shared = 0;
+  dxbc_nir_compute_info(nir, block, &shared);
+  struct pipe_compute_state state = {};
+  state.ir_type = PIPE_SHADER_IR_NIR;
+  state.prog = nir;
+  state.static_shared_mem = shared;
+  compute->State = pipe->create_compute_state(pipe, &state);
+  const HRESULT hr = compute->State && block[0] && block[1] && block[2] ? S_OK : E_OUTOFMEMORY;
+  receipt("measure-d3d12-compute", hr, block[0], block[1], block[2]);
+  if (FAILED(hr)) {
+    if (compute->State) pipe->delete_compute_state(pipe, compute->State);
+    memset(compute, 0, sizeof(*compute));
+    return hr;
+  }
+  for (unsigned i = 0; i < 3; ++i) compute->Block[i] = block[i];
+  return S_OK;
+}
+
+extern "C" void AgxD3d12OwnerDestroyCompute(AGX_D3D12_OWNER *owner, AGX_D3D12_COMPUTE *compute) {
+  if (!owner || !owner->Context || !compute || !compute->State) return;
+  owner->Context->delete_compute_state(owner->Context, compute->State);
+  memset(compute, 0, sizeof(*compute));
+}
+
+extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12_COMPUTE *compute,
+                                         const AGX_D3D12_UAV uavs[AGX_D3D12_UAV_SLOTS], unsigned x,
+                                         unsigned y, unsigned z) {
+  if (!owner || !owner->Context || !compute || !compute->State || !uavs || !x || !y || !z)
+    return E_INVALIDARG;
+  struct pipe_shader_buffer buffers[AGX_D3D12_UAV_SLOTS] = {};
+  for (unsigned i = 0; i < AGX_D3D12_UAV_SLOTS; ++i) {
+    const AGX_D3D12_BUFFER *buffer = uavs[i].Buffer;
+    if (!buffer) continue;
+    if (!buffer->Resource || uavs[i].Offset >= buffer->Bytes || buffer->Bytes > 0xffffffffull)
+      return E_INVALIDARG;
+    buffers[i].buffer = static_cast<struct pipe_resource *>(buffer->Resource);
+    buffers[i].buffer_offset = static_cast<unsigned>(uavs[i].Offset);
+    buffers[i].buffer_size = static_cast<unsigned>(buffer->Bytes - uavs[i].Offset);
+  }
+  struct pipe_context *pipe = owner->Context;
+  pipe->bind_compute_state(pipe, compute->State);
+  pipe->set_shader_buffers(pipe, MESA_SHADER_COMPUTE, 0, AGX_D3D12_UAV_SLOTS, buffers,
+                           (1u << AGX_D3D12_UAV_SLOTS) - 1u);
+  struct pipe_grid_info info = {};
+  info.work_dim = 3;
+  for (unsigned i = 0; i < 3; ++i) info.block[i] = compute->Block[i];
+  info.grid[0] = x;
+  info.grid[1] = y;
+  info.grid[2] = z;
+  pipe->launch_grid(pipe, &info);
+  pipe->memory_barrier(pipe, PIPE_BARRIER_ALL);
+  /* the batch holds its buffers; the binding must not outlive the heaps */
+  pipe->set_shader_buffers(pipe, MESA_SHADER_COMPUTE, 0, AGX_D3D12_UAV_SLOTS, NULL, 0);
+  ++owner->PendingDispatches;
+  return S_OK;
+}
+
 extern "C" HRESULT AgxD3d12OwnerSubmitAndWait(AGX_D3D12_OWNER *owner) {
   if (!owner || !owner->Context) return E_INVALIDARG;
-  const UINT copies = owner->PendingCopies;
-  owner->PendingCopies = 0;
+  const UINT copies = owner->PendingCopies | (owner->PendingDispatches << 16);
+  owner->PendingCopies = owner->PendingDispatches = 0;
   owner->Context->flush(owner->Context, NULL, 0);
   const int retired = AgxWin32AsahiContextRetire(owner->Context, 5000u);
   const int faulted = AgxWin32AsahiContextFaulted(owner->Context);
