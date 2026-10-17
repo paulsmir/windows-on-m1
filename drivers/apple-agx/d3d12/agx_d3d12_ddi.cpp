@@ -514,12 +514,20 @@ static HRESULT CreateHeap(AgxD3d12Device *device, const D3D12DDIARG_CREATEHEAP_0
     memset(heap, 0, sizeof(*heap));
     heap->cpu_visible = arg.CPUPageProperty != D3D12DDI_CPU_PAGE_PROPERTY_NOT_AVAILABLE;
     heap->bytes = (arg.ByteSize + kHeapPage - 1) & ~(kHeapPage - 1);
-    if (!adapter_object.info_valid || !k || !k->pfnAllocateCb || !k->pfnReserveGpuVirtualAddressCb ||
-        !k->pfnMapGpuVirtualAddressCb || !k->pfnMakeResidentCb || !arg.ByteSize ||
-        heap->bytes > (heap->cpu_visible ? kCpuVisibleMaximum : kVaLimit - kVaMinimum) || heap->bytes > MAXUINT32)
-        return E_OUTOFMEMORY;
-    HRESULT hr = EnsurePagingQueue(device);
-    if (FAILED(hr)) return hr;
+    /* EXP1355: every early exit names its reason (receipt-only) */
+    const UINT refusal = !adapter_object.info_valid ? 1u
+                       : !k || !k->pfnAllocateCb || !k->pfnReserveGpuVirtualAddressCb ||
+                                 !k->pfnMapGpuVirtualAddressCb || !k->pfnMakeResidentCb ? 2u
+                       : !arg.ByteSize || heap->bytes > MAXUINT32 ||
+                                 heap->bytes > (heap->cpu_visible ? kCpuVisibleMaximum : kVaLimit - kVaMinimum) ? 3u
+                                                                                                             : 0u;
+    HRESULT hr = refusal ? E_OUTOFMEMORY : EnsurePagingQueue(device);
+    if (FAILED(hr)) {
+        const UINT receipt[] = {refusal ? refusal : 4u, heap->cpu_visible ? 1u : 0u,
+                                static_cast<UINT>(heap->bytes >> 16)};
+        AdmissionUmdDiagnostic("measure-d3d12-heap-refused", hr, receipt, 3);
+        return hr;
+    }
     ADMISSION_WIN32_ALLOCATION_CREATE create = {};
     if (!AdmissionAllocationDescribe(static_cast<UINT>(heap->bytes), 1u, 1u,
                                      ADMISSION_WIN32_ALLOCATION_STAGING_CPUVISIBLE,
