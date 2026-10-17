@@ -181,6 +181,11 @@ typedef struct {
   float BlendFactor[4];
   unsigned StencilRef;
   unsigned VertexCount, InstanceCount, StartVertex, StartInstance;
+  /* C6c: per-stage constant buffers and buffer SRVs */
+  struct {
+    AGX_D3D12_CBV Cbvs[AGX_D3D12_CBV_SLOTS];
+    AGX_D3D12_SRV Srvs[AGX_D3D12_SRV_SLOTS];
+  } Vs, Ps;
 } AGX_D3D12_DRAW;
 /* Records one draw; bindings that reference heaps are dropped by the next
  * AgxD3d12OwnerSubmitAndWait. */

@@ -250,6 +250,10 @@ class D3d12AbiGate(unittest.TestCase):
         compute |= {'pfnIaSetTopology', 'pfnRsSetViewports', 'pfnRsSetScissorRects', 'pfnOmSetBlendFactor',
                     'pfnOmSetStencilRef', 'pfnOMSetRenderTargets', 'pfnIASetVertexBuffers', 'pfnDrawInstanced',
                     'pfnSetGraphicsRootSignature'}
+        # C6c: graphics root arguments
+        compute |= {'pfnSetGraphicsRoot32BitConstant', 'pfnSetGraphicsRoot32BitConstants',
+                    'pfnSetGraphicsRootConstantBufferView', 'pfnSetGraphicsRootShaderResourceView',
+                    'pfnSetGraphicsRootDescriptorTable'}
         self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList', 'pfnCopyBufferRegion',
                                        'pfnResourceBarrier'} | setters | compute)
         for member in setters:
@@ -281,16 +285,18 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('root->parameter[index].type != type', view)
         self.assertIn('index >= root->parameters', view)
         dispatch = fn('static VOID APIENTRY Dispatch(')
-        self.assertIn('if (p.shader_register >= kSrvSlots) refusal = 5u;', dispatch)
-        self.assertIn('refusal = BindTable(list, root, p, list->compute_root_va[i], &dispatch);', dispatch)
-        self.assertIn('if (p.shader_register >= kUavSlots) refusal = 5u;', dispatch)
-        self.assertIn('HeapAt(list->device, list->compute_root_va[i]', dispatch)
+        self.assertIn('ResolveRoot(list, root, list->compute_root_va, list->compute_root_dwords, kAnyStage, &dispatch)', dispatch)
+        resolve = fn('static UINT ResolveRoot(')
+        self.assertIn('if (p.shader_register >= kSrvSlots) return 5u;', resolve)
+        self.assertIn('BindTable(list, root, p, va[i], out)', resolve)
+        self.assertIn('if (p.shader_register >= kUavSlots) return 5u;', resolve)
+        self.assertIn('HeapAt(list->device, va[i], &out->uav_offset[p.shader_register])', resolve)
         # C5b: root CBVs resolve like root UAVs; root constants keep their
         # parameter's DWORD range, copied into the recorded dispatch
-        self.assertIn('if (p.shader_register >= kCbSlots) refusal = 5u;', dispatch)
-        self.assertIn('p.offset + p.dwords > kRootArguments', dispatch)
-        self.assertIn('memcpy(dispatch.root_dwords, list->compute_root_dwords', dispatch)
-        constants = fn('static VOID APIENTRY SetComputeRoot32BitConstants(')
+        self.assertIn('if (p.shader_register >= kCbSlots) return 5u;', resolve)
+        self.assertIn('p.offset + p.dwords > kRootArguments', resolve)
+        self.assertIn('memcpy(out->root_dwords, dwords, kRootArguments * sizeof(UINT));', resolve)
+        constants = fn('static void SetRoot32BitConstants(')
         self.assertIn('count > root->parameter[index].dwords - offset', constants)
         self.assertIn('!= D3D12DDI_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS', constants)
         clear = fn('static VOID APIENTRY ClearRootArguments(')
@@ -328,7 +334,7 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('uav ? kUavSlots : srv ? kSrvSlots : kCbSlots', table)
         self.assertIn('range.space || range.base_register >= slots', table)
         self.assertIn('at + sizeof(AgxD3d12Descriptor) > heap->bytes', table)
-        execute = fn('static VOID APIENTRY ExecuteCommandLists(')
+        execute = fn('static void OwnerBindings(')
         self.assertIn('view->kind == kDescriptorUavBuffer', execute)
         self.assertIn('view->kind == kDescriptorCbv', execute)
         uav = fn('static VOID APIENTRY CreateUnorderedAccessView(')
@@ -414,7 +420,17 @@ class D3d12AbiGate(unittest.TestCase):
                             ('OmSetStencilRef', 'pfnOmSetStencilRef'), ('IASetVertexBuffers', 'pfnIASetVertexBuffers')):
             self.assertIn('AGX_LIST_BIT(%s)' % bit, fn('static VOID APIENTRY %s(' % setter))
         draw = fn('static VOID APIENTRY DrawInstanced(')
-        self.assertIn('list->graphics_root && list->graphics_root->parameters ? 4u', draw)
+        # C6c: the graphics root signature resolves per stage by visibility
+        self.assertIn('D3D12DDI_SHADER_VISIBILITY_VERTEX, &vs_bind);', draw)
+        self.assertIn('D3D12DDI_SHADER_VISIBILITY_PIXEL, &ps_bind);', draw)
+        resolve = fn('static UINT ResolveRoot(')
+        self.assertIn('p.visibility != D3D12DDI_SHADER_VISIBILITY_ALL && p.visibility != stage) continue;', resolve)
+        self.assertIn('if (stage != kAnyStage) return 4u; /* graphics UAVs: not yet */', resolve)
+        sig = fn('static VOID APIENTRY SetGraphicsRootSignature(')
+        self.assertIn('memset(list->graphics_root_va, 0', sig)
+        replay = fn('static VOID APIENTRY ExecuteCommandLists(')
+        self.assertIn('OwnerBindings(d.vs_bind, &vs_bind);', replay)
+        self.assertIn('OwnerBindings(d.ps_bind, &ps_bind);', replay)
         self.assertIn('pso->desc.hGeometryShader.pDrvPrivate', draw)
         self.assertIn('"measure-d3d12-draw"', draw)
         self.assertIn('memcpy(draw.vb, list->vb, sizeof(draw.vb));', draw)

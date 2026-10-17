@@ -657,6 +657,57 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
   return hr;
 }
 
+/* C6c: one graphics stage's constant buffers and buffer SRVs (the compute
+ * path's conversions; views are released after the draw). */
+static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, const AGX_D3D12_CBV *cbvs,
+                          const AGX_D3D12_SRV *srvs, struct pipe_sampler_view **views, unsigned *view_count) {
+  *view_count = 0;
+  for (unsigned i = 0; i < AGX_D3D12_CBV_SLOTS; ++i) {
+    struct pipe_constant_buffer cb = {};
+    if (const AGX_D3D12_BUFFER *buffer = cbvs[i].Buffer) {
+      if (!buffer->Resource || cbvs[i].Offset >= buffer->Bytes) return E_INVALIDARG;
+      unsigned long long room = buffer->Bytes - cbvs[i].Offset;
+      if (cbvs[i].Bytes && cbvs[i].Bytes < room) room = cbvs[i].Bytes;
+      cb.buffer = static_cast<struct pipe_resource *>(buffer->Resource);
+      cb.buffer_offset = static_cast<unsigned>(cbvs[i].Offset);
+      cb.buffer_size = static_cast<unsigned>(room < 65536ull ? room : 65536ull);
+    } else if (cbvs[i].Data) {
+      if (!cbvs[i].Bytes || cbvs[i].Bytes > 65536u) return E_INVALIDARG;
+      cb.user_buffer = cbvs[i].Data;
+      cb.buffer_size = cbvs[i].Bytes;
+    }
+    pipe->set_constant_buffer(pipe, stage, i, cb.buffer || cb.user_buffer ? &cb : NULL);
+  }
+  for (unsigned i = 0; i < AGX_D3D12_SRV_SLOTS; ++i) {
+    const AGX_D3D12_BUFFER *buffer = srvs[i].Buffer;
+    if (!buffer) continue;
+    if (!buffer->Resource || srvs[i].Offset >= buffer->Bytes) return E_INVALIDARG;
+    const unsigned long long room = buffer->Bytes - srvs[i].Offset;
+    struct pipe_sampler_view templ = {};
+    templ.format = PIPE_FORMAT_R32_UINT;
+    templ.target = PIPE_BUFFER;
+    templ.swizzle_r = PIPE_SWIZZLE_X;
+    templ.swizzle_g = PIPE_SWIZZLE_Y;
+    templ.swizzle_b = PIPE_SWIZZLE_Z;
+    templ.swizzle_a = PIPE_SWIZZLE_W;
+    templ.u.buf.offset = static_cast<unsigned>(srvs[i].Offset);
+    templ.u.buf.size = static_cast<unsigned>(srvs[i].Bytes && srvs[i].Bytes < room ? srvs[i].Bytes : room) & ~3u;
+    views[i] = pipe->create_sampler_view(pipe, static_cast<struct pipe_resource *>(buffer->Resource), &templ);
+    if (!views[i]) return E_OUTOFMEMORY;
+    *view_count = i + 1;
+  }
+  if (*view_count) pipe->set_sampler_views(pipe, stage, 0, *view_count, 0, views);
+  return S_OK;
+}
+static void unbind_stage(struct pipe_context *pipe, mesa_shader_stage stage, struct pipe_sampler_view **views,
+                         unsigned view_count) {
+  for (unsigned i = 0; i < AGX_D3D12_CBV_SLOTS; ++i) pipe->set_constant_buffer(pipe, stage, i, NULL);
+  if (!view_count) return;
+  pipe->set_sampler_views(pipe, stage, 0, 0, view_count, NULL);
+  for (unsigned i = 0; i < view_count; ++i)
+    if (views[i]) pipe->sampler_view_release(pipe, views[i]);
+}
+
 static enum mesa_prim primitive(unsigned topology) {
   switch (topology) {
   case 1: return MESA_PRIM_POINTS;          /* D3D_PRIMITIVE_TOPOLOGY_POINTLIST */
@@ -767,6 +818,15 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   ref.ref_value[0] = ref.ref_value[1] = static_cast<uint8_t>(draw->StencilRef);
   pipe->set_stencil_ref(pipe, ref);
   pipe->set_sample_mask(pipe, ~0u);
+  struct pipe_sampler_view *vs_views[AGX_D3D12_SRV_SLOTS] = {}, *ps_views[AGX_D3D12_SRV_SLOTS] = {};
+  unsigned vs_view_count = 0, ps_view_count = 0;
+  HRESULT hr = bind_stage(pipe, MESA_SHADER_VERTEX, draw->Vs.Cbvs, draw->Vs.Srvs, vs_views, &vs_view_count);
+  if (SUCCEEDED(hr)) hr = bind_stage(pipe, MESA_SHADER_FRAGMENT, draw->Ps.Cbvs, draw->Ps.Srvs, ps_views, &ps_view_count);
+  if (FAILED(hr)) {
+    unbind_stage(pipe, MESA_SHADER_VERTEX, vs_views, AGX_D3D12_SRV_SLOTS);
+    unbind_stage(pipe, MESA_SHADER_FRAGMENT, ps_views, AGX_D3D12_SRV_SLOTS);
+    return hr;
+  }
   struct pipe_draw_info info = {};
   info.mode = static_cast<uint8_t>(mode);
   info.start_instance = draw->StartInstance;
@@ -775,6 +835,9 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   range.start = draw->StartVertex;
   range.count = draw->VertexCount;
   pipe->draw_vbo(pipe, &info, 0, NULL, &range, 1);
+  /* the batch holds what the draw read; drop the stage bindings */
+  unbind_stage(pipe, MESA_SHADER_VERTEX, vs_views, vs_view_count);
+  unbind_stage(pipe, MESA_SHADER_FRAGMENT, ps_views, ps_view_count);
   ++owner->PendingDraws;
   return S_OK;
 }

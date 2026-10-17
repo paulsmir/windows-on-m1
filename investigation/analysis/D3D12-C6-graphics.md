@@ -129,3 +129,21 @@ Probe C6B: red clear, green triangle (-0.5,-0.5)/(0,0.5)/(0.5,-0.5) from an
 UPLOAD vertex buffer (float2 + float4, stride 24), empty root signature
 (ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT); PASS = centre green, corner red, no
 other colours, 448..576 green pixels.
+
+## C6c: graphics root bindings
+
+- WINDOWS: pfnSetGraphicsRoot32BitConstant(s), pfnSetGraphicsRootConstantBufferView,
+  pfnSetGraphicsRootShaderResourceView, pfnSetGraphicsRootDescriptorTable
+  on the graphics root signature (SetGraphicsRootSignature resets the
+  arguments); D3D12DDI_ROOT_PARAMETER.ShaderVisibility selects the stages
+  that see a parameter (ALL = every stage).
+- AGX/ASAHI: set_constant_buffer / set_sampler_views per stage
+  (MESA_SHADER_VERTEX, MESA_SHADER_FRAGMENT), as compute does.
+- TRANSLATION: ResolveRoot (shared with Dispatch, which ignores visibility)
+  resolves the parameters visible to the VS and to the PS into slot
+  records at draw record; OwnerBindings turns records (root views, table
+  descriptors read at execution, root-constant copies) into owner bindings
+  for both paths; the owner binds each stage before draw_vbo and drops the
+  bindings after it. Graphics UAVs and sampler ranges refuse (reason 4).
+- Checkpoint: probe C6C (agx_d3d12_probe_tri_root.hlsl): root {constants
+  b0 x4 PIXEL = blue, CBV b1 VERTEX = scale (1, 1)}; PASS = centre blue.

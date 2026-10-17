@@ -111,6 +111,10 @@ class NativeOwner(unittest.TestCase):
         self.assertIn('viewport.scale[1] = -hh;', draw)
         self.assertIn('elements[r].src_stride = draw->Vb[slot].Stride;', draw)
         self.assertIn('->draw_vbo(', draw)
+        # C6c: per-stage constant buffers / SRVs bound before draw_vbo and
+        # dropped after it
+        self.assertLess(draw.index('bind_stage(pipe, MESA_SHADER_VERTEX'), draw.index('->draw_vbo('))
+        self.assertLess(draw.index('->draw_vbo('), draw.index('unbind_stage(pipe, MESA_SHADER_FRAGMENT, ps_views, ps_view_count)'))
         submit = body(text, 'extern "C" HRESULT AgxD3d12OwnerSubmitAndWait(')
         self.assertLess(submit.index('set_framebuffer_state(owner->Context, &empty)'), submit.index('->flush('))
 
