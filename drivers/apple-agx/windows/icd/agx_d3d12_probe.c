@@ -720,7 +720,10 @@ static int texture_clear_copy(ID3D12Device *device, ID3D12CommandQueue *queue, I
  * visible to the PS only; PASS = centre blue. rooted = 2 (C6d): a yellow
  * quad (-0.5..0.5) from four vertices and six R16 indices through
  * DrawIndexedInstanced; PASS = centre yellow, 960..1088 pixels. */
-static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, int rooted) {
+static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, int mode) {
+    /* EXP1369: the indexed mode must build the C6b (empty) root signature */
+    const int indexed = mode == 2;
+    int rooted = mode == 1;
     D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
     D3D12_RESOURCE_DESC desc = {0};
     D3D12_DESCRIPTOR_HEAP_DESC rtv_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_NONE};
@@ -730,11 +733,9 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     D3D12_ROOT_PARAMETER parameters[2] = {{D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS}, {D3D12_ROOT_PARAMETER_TYPE_CBV}};
     D3D12_ROOT_SIGNATURE_DESC root_desc = {rooted ? 2u : 0u, rooted ? parameters : NULL, 0, NULL,
                                            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT};
-    const int indexed = rooted == 2;
     const char *step = indexed ? "C6D" : rooted ? "C6C" : "C6B";
-    const unsigned char want[3] = {(unsigned char)(indexed ? 255 : 0), (unsigned char)(rooted == 1 ? 0 : 255),
-                                   (unsigned char)(rooted == 1 ? 255 : 0)};
-    if (indexed) rooted = 0; /* the C6b pipeline and root signature */
+    const unsigned char want[3] = {(unsigned char)(indexed ? 255 : 0), (unsigned char)(rooted ? 0 : 255),
+                                   (unsigned char)(rooted ? 255 : 0)};
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {0};
     ID3DBlob *blob = NULL, *errors = NULL;
     ID3D12RootSignature *root = NULL;
@@ -815,7 +816,7 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
         pso_desc.DepthStencilState.FrontFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
         pso_desc.DepthStencilState.BackFace = pso_desc.DepthStencilState.FrontFace;
         pso_desc.InputLayout.pInputElementDescs = elements;
-        pso_desc.InputLayout.NumElements = rooted ? 1 : 2; /* the rooted VS reads POSITION only */
+        pso_desc.InputLayout.NumElements = 2; /* EXP1369: every VS input-signature element needs a layout element */
         pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
         pso_desc.NumRenderTargets = 1;
         pso_desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -1468,15 +1469,7 @@ static int queue_fence_signal(ID3D12Device *device) {
             if (SUCCEEDED(c4) && value == 2) {
                 UINT64 done = ID3D12Fence_GetCompletedValue(fence);
                 if (done >= 3 && texture_clear_copy(device, queue, fence, done) == 0)
-                    if (draw_triangle(device, queue, fence, ID3D12Fence_GetCompletedValue(fence), 0) == 0) {
-                        (void)draw_triangle(device, queue, fence, ID3D12Fence_GetCompletedValue(fence), 1);
-                        (void)draw_triangle(device, queue, fence, ID3D12Fence_GetCompletedValue(fence), 2);
-                        (void)draw_textured(device, queue, fence, ID3D12Fence_GetCompletedValue(fence));
-                        (void)draw_depth(device, queue, fence, ID3D12Fence_GetCompletedValue(fence));
-                        (void)placed_buffer(device, queue, fence, ID3D12Fence_GetCompletedValue(fence));
-                        /* C7A last: a refused swapchain may remove the device */
-                        (void)swapchain_present(device, queue, fence, ID3D12Fence_GetCompletedValue(fence));
-                    }
+                    (void)draw_triangle(device, queue, fence, ID3D12Fence_GetCompletedValue(fence), 0);
             }
             if (list) ID3D12GraphicsCommandList_Release(list);
             if (allocator) ID3D12CommandAllocator_Release(allocator);
@@ -1485,6 +1478,27 @@ static int queue_fence_signal(ID3D12Device *device) {
     }
     ID3D12CommandQueue_Release(queue);
     return FAILED(hr);
+}
+
+/* EXP1369: a refused step removes its device, so the later steps run on a
+ * fresh device each (device, direct queue, fence from 0). */
+typedef int (*probe_step)(ID3D12Device *, ID3D12CommandQueue *, ID3D12Fence *, UINT64);
+static int step_c6c(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 1); }
+static int step_c6d(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_triangle(d, q, f, b, 2); }
+static int run_isolated(IDXGIAdapter1 *adapter, const char *name, probe_step step) {
+    ID3D12Device *device = NULL;
+    ID3D12CommandQueue *queue = NULL;
+    ID3D12Fence *fence = NULL;
+    D3D12_COMMAND_QUEUE_DESC desc = {D3D12_COMMAND_LIST_TYPE_DIRECT};
+    HRESULT hr = D3D12CreateDevice((IUnknown *)adapter, D3D_FEATURE_LEVEL_11_0, &IID_ID3D12Device, (void **)&device);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommandQueue(device, &desc, &IID_ID3D12CommandQueue, (void **)&queue);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateFence(device, 0, D3D12_FENCE_FLAG_NONE, &IID_ID3D12Fence, (void **)&fence);
+    printf("%s fresh device/queue/fence hr=0x%08lx\n", name, (unsigned long)hr);
+    int failed = FAILED(hr) ? 1 : step(device, queue, fence, 0);
+    if (fence) ID3D12Fence_Release(fence);
+    if (queue) ID3D12CommandQueue_Release(queue);
+    if (device) ID3D12Device_Release(device);
+    return failed;
 }
 
 int main(void) {
@@ -1507,6 +1521,12 @@ int main(void) {
                 failed |= committed_buffer_round_trip(device);
                 failed |= queue_fence_signal(device);
                 ID3D12Device_Release(device);
+                (void)run_isolated(adapter, "C6C", step_c6c);
+                (void)run_isolated(adapter, "C6D", step_c6d);
+                (void)run_isolated(adapter, "C6E", draw_textured);
+                (void)run_isolated(adapter, "C6F", draw_depth);
+                (void)run_isolated(adapter, "C8C", placed_buffer);
+                (void)run_isolated(adapter, "C7A", swapchain_present);
             }
             IDXGIAdapter1_Release(adapter);
             IDXGIFactory1_Release(factory);
