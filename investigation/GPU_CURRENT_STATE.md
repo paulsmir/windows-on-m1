@@ -1,8 +1,8 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-17T17:00Z (read this first)
+## Current as of 2026-10-17T18:40Z (read this first)
 
-Installed after recovery: none (rec1355h). Integration HEAD 1465fd81.
+Installed after recovery: none (rec1366h). Integration HEAD 2bd82a4f.
 - PROVEN (EXP1355): D3D12CreateDevice S_OK at FL 11_0 on the AGX adapter
   (APPLE_AGX_D3D12=1 profile only; ordinary processes still E_NOTIMPL).
   The 26100 runtime's device initialisation, measured one refused DDI per
@@ -38,11 +38,20 @@ Installed after recovery: none (rec1355h). Integration HEAD 1465fd81.
   with the COMMAND_LIST_3D runtime table) + the runtime's 13 default-state
   setters (recorded; every state consumer still fail-closed) + Close +
   ExecuteCommandLists + Signal ordered after it (fence 2).
-- NEXT: C4b first GPU copy -- plan in investigation/analysis/D3D12-C4-copy.md:
-  a queue-owned Asahi owner built like mesa/winsys/agx_d3d10_windows.cpp on a
-  D3D12 ADMISSION_UMD_DEVICE initializer (queue context, no device context),
-  heaps moved onto winsys class buffers (submission residency needs winsys
-  BOs), CopyBufferRegion replayed with libagx_copy_uint4/uchar.
+- PROVEN (EXP1366): D3D12 C4b -- CopyBufferRegion UPLOAD->DEFAULT->READBACK
+  on the GPU, readback bad=0. Each D3D12 device owns a native Asahi owner
+  (mesa/winsys/agx_d3d12_windows.cpp: its own GPU-VA context, UMD device
+  storage via AdmissionUmdRuntimeDeviceInitializeForQueue, Asahi screen +
+  context as the D3D10 frontend); heaps are owner buffers; lists replay on
+  the owner, then flush + retire before the runtime's queue signal. The KMD
+  binds ONE Win32 generation per kernel device (callbacks.c), so the owner
+  and every queue context carry the device's generation (EXP1365 failed
+  without it).
+- BUILT, queued: EXP1367 = C5 compute PSO (DXBC->NIR at first dispatch) +
+  root UAV + Dispatch (13c34dbf, package 77fc0b9e, probe b1c6a77e). C5b
+  root constants + root CBV committed (91ef0741, probe ab70174f) for the run
+  after it; C5c CBV/UAV descriptor tables + views + CopyDescriptors in
+  progress. Design: investigation/analysis/D3D12-C5-compute.md.
 - Offline tool: guest d3d12core.dll copy + ARM64 disassembly in the
   scratchpad (d3d12core/dis.txt) for runtime validation strings.
 
