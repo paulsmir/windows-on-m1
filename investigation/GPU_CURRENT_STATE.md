@@ -54,10 +54,15 @@ Installed after recovery: none (rec1368h). Integration HEAD 39636057.
   pipe->clear_render_target nor pipe->clear_depth_stencil -> D3D12 clears
   bind the view as a framebuffer and use pipe->clear (78042ce7, as the
   D3D10 overlay D3D-G10a). Probe stdout is unbuffered now.
-- RUNNING: EXP1369 (package d8cdb901, probe 23714e56): clear fix + C6b
-  first draw + C6c graphics root bindings + C6d indexed + C6e textures/
-  samplers + C6f depth + C8a growing lists + C8b CopyResource + C8c placed
-  buffers + C7A swapchain/present measurement (design D3D12-C7-present.md).
+- PROVEN (EXP1369-1371): C5B-C5D compute bindings; C6A clear/copy; C6B
+  first triangle; C6C graphics root bindings, C6D indexed, C6E texture
+  SRV + static sampler, C6F depth (render targets are presentation
+  textures since C7b). C7b (EXP1371): DXGI flip swapchain creation S_OK
+  with presentation textures (kernel allocation of the runtime resource).
+- RUNNING: EXP1372 (package 394169ad): C8C CopyBufferRegion placed base
+  (c8cdc603; aba2c9cc rejected) + C7c Present (344a9372: no private data,
+  owner flush-for-present + direct-map publish, allocation on the queue
+  context). Next after Present: frame loop / DXGI table, then D3D12 apps.
 - Gates learned: no u_format.h inline helpers in the UMD (CRT asserts,
   5726d41f); keep replay frames small (STACK_FRAMES, a5d46dae); check every
   Gallium entry the owner calls is assigned by Asahi.
