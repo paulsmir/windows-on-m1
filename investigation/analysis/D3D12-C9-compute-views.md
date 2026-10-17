@@ -52,7 +52,9 @@ path's bind_stage handles texture views; compute now binds through it.
   owner binds typed UAVs as images u# for one launch, untyped as shader
   buffers; CBVs/SRVs go through bind_stage; sampler CSOs are created for
   the launch and deleted after it.
-- Owner buffers get PIPE_BIND_SHADER_IMAGE; textures with the UAV flag too.
+- No explicit PIPE_BIND_SHADER_IMAGE (EXP1373: it made every owner heap
+  allocation fail); Asahi infers the image bind for linear single-layer
+  resources and set_shader_images decompresses written textures.
 
 ## WHAT IS STILL UNKNOWN
 

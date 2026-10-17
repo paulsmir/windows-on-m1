@@ -133,7 +133,6 @@ unsigned AgxD3d12FormatBlockBytes(DXGI_FORMAT Format);
 #define AGX_D3D12_BIND_RENDER_TARGET 0x1u
 #define AGX_D3D12_BIND_SAMPLER 0x2u
 #define AGX_D3D12_BIND_DEPTH_STENCIL 0x4u /* C6f: also translates typeless formats as depth */
-#define AGX_D3D12_BIND_UNORDERED_ACCESS 0x8u /* C9: shader images */
 /* A 2D texture (array when Layers > 1) of the owner's screen; Texture->Cpu
  * is NULL, Bytes the caller's allocation size. */
 HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *Owner, DXGI_FORMAT Format, unsigned Width, unsigned Height,

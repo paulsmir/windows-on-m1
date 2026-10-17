@@ -912,8 +912,7 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
         AGX_D3D12_BUFFER texture = {};
         const UINT bind = ((resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET) ? AGX_D3D12_BIND_RENDER_TARGET : 0u) |
                           ((resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE) ? AGX_D3D12_BIND_SAMPLER : 0u) |
-                          ((resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_DEPTH_STENCIL) ? AGX_D3D12_BIND_DEPTH_STENCIL : 0u) |
-                          ((resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0022_UNORDERED_ACCESS) ? AGX_D3D12_BIND_UNORDERED_ACCESS : 0u);
+                          ((resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_DEPTH_STENCIL) ? AGX_D3D12_BIND_DEPTH_STENCIL : 0u);
         /* C7b: a 2D render target the runtime can share (DXGI swapchain
          * buffers among them) gets a kernel allocation of the runtime
          * resource -- the D3D10/11 presentation-resource contract (BGRA8 or

@@ -209,7 +209,10 @@ extern "C" HRESULT AgxD3d12OwnerCreateBuffer(AGX_D3D12_OWNER *owner, unsigned lo
   templ.array_size = 1;
   templ.usage = PIPE_USAGE_STAGING;
   templ.bind = PIPE_BIND_VERTEX_BUFFER | PIPE_BIND_INDEX_BUFFER | PIPE_BIND_CONSTANT_BUFFER |
-               PIPE_BIND_SHADER_BUFFER | PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_SHADER_IMAGE; /* C9: typed UAVs */
+               PIPE_BIND_SHADER_BUFFER | PIPE_BIND_SAMPLER_VIEW;
+  /* EXP1373: an explicit PIPE_BIND_SHADER_IMAGE made resource_create fail
+   * for every heap; Asahi infers the image bind for linear single-layer
+   * resources (agx_resource_create), which typed buffer UAVs use. */
   struct pipe_resource *resource = owner->Screen->resource_create(owner->Screen, &templ);
   if (!resource) return E_OUTOFMEMORY;
   void *cpu = AgxWin32AsahiBufferWriteMap(owner->Context, resource);
@@ -328,8 +331,9 @@ extern "C" HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *owner, DXGI_FOR
   templ.usage = PIPE_USAGE_DEFAULT;
   templ.bind = ((bind & AGX_D3D12_BIND_RENDER_TARGET) ? PIPE_BIND_RENDER_TARGET : 0) |
                ((bind & AGX_D3D12_BIND_SAMPLER) ? PIPE_BIND_SAMPLER_VIEW : 0) |
-               ((bind & AGX_D3D12_BIND_DEPTH_STENCIL) ? PIPE_BIND_DEPTH_STENCIL : 0) |
-               ((bind & AGX_D3D12_BIND_UNORDERED_ACCESS) ? PIPE_BIND_SHADER_IMAGE : 0);
+               ((bind & AGX_D3D12_BIND_DEPTH_STENCIL) ? PIPE_BIND_DEPTH_STENCIL : 0);
+  /* no explicit PIPE_BIND_SHADER_IMAGE (EXP1373, see the buffer path):
+   * set_shader_images decompresses a written image itself */
   if (height > 0xffffu || layers > 0xffffu) return E_INVALIDARG;
   struct pipe_resource *resource = owner->Screen->resource_create(owner->Screen, &templ);
   receipt("measure-d3d12-texture", resource ? S_OK : E_OUTOFMEMORY, static_cast<UINT>(templ.format), width | (height << 16),

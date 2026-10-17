@@ -505,7 +505,15 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('if (typed) stride = AgxD3d12FormatBlockBytes(arg->Format);', uav)
         self.assertIn('out->format = typed ? arg->Format : DXGI_FORMAT_UNKNOWN;', fn('static VOID APIENTRY CreateShaderResourceView('))
         self.assertIn('uav->Texture = 1;', fn('static bool DescriptorUav('))
-        self.assertIn('D3D12DDI_RESOURCE_FLAG_0022_UNORDERED_ACCESS) ? AGX_D3D12_BIND_UNORDERED_ACCESS', source)
+        # EXP1373: an explicit PIPE_BIND_SHADER_IMAGE made every owner heap
+        # allocation fail (C4B onward E_OUTOFMEMORY); Asahi infers the bind
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        create = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerCreateBuffer('):]
+        create = create[:create.index('\n}\n')]
+        self.assertNotIn('| PIPE_BIND_SHADER_IMAGE', create)
+        texture = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerCreateTexture2D('):]
+        texture = texture[:texture.index('\n}\n')]
+        self.assertNotIn('? PIPE_BIND_SHADER_IMAGE', texture)
         table = fn('static UINT BindTable(')
         self.assertIn('D3D12DDI_DESCRIPTOR_RANGE_TYPE_SAMPLER', table)
         bindings = fn('static void OwnerBindings(')
