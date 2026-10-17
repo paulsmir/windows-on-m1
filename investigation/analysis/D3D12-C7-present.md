@@ -62,3 +62,24 @@ to PRESENT, Present(0, 0), signal; every step prints its HRESULT; the UMD
 receipts (d3d12-fill-table, measure-d3d12-create-heap-resource,
 measure-d3d12-rejected) name the first missing DDI. It runs last in the
 probe because a refused swapchain may remove the device.
+
+## C7A result (EXP1370) and C7b
+
+- Measured: CreateSwapChainForHwnd created both 64x64 RGBA8 buffers
+  through CreateHeapAndResource (heap flags RT_DS_TEXTURES, a runtime
+  resource handle) and a fence, then dxgi.dll threw E_INVALIDARG from
+  CDXGISwapChainApplicationClass::FinalConstruct (ThrowFailure, +0x6bdfc);
+  the static call sequence there is CreateBuffers ->
+  CreateProxiesAndActivateFlip (flip proxies, OpenResourceFor11On12,
+  windowed/fullscreen proxies), the step that shares the buffers' kernel
+  resources. Our textures were winsys allocations without the runtime
+  resource (no kernel resource to share).
+- C7b: 2D render targets of the presentation formats (BGRA8/BGRA8_SRGB/
+  RGBA8, one mip/layer/sample) with a runtime resource handle are created
+  like D3D10/11 presentation resources: AdmissionUmdCreateResource with the
+  runtime handle (BIND_PRESENT, KMD present-resource private data), the
+  allocation adopted by the screen and imported into the owner as a linear
+  texture; destruction releases the runtime resource immediately and the
+  record once the allocation is no longer registered.
+- UNKNOWN: whether DXGI then accepts the buffers, and which present DDIs
+  follow (pfnPresent of the command-list table is next) -- C7A again.

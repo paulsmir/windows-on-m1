@@ -45,7 +45,39 @@ struct AGX_D3D12_OWNER {
   UINT PendingCopies;
   UINT PendingDispatches;
   UINT PendingDraws; /* C6b: draws whose framebuffer/vertex bindings the submit drops */
+  struct AGX_D3D12_PRESENTATION *PendingPresentations; /* C7b: released, kernel allocation still registered */
 };
+
+/* C7b: a presentation texture (agx_d3d10_windows.cpp
+ * AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE) */
+struct AGX_D3D12_PRESENTATION {
+  ADMISSION_UMD_RESOURCE Resource;
+  AGX_WIN32_SCREEN_BUFFER RenderBuffer;
+  struct pipe_resource *RenderResource;
+  struct AGX_D3D12_PRESENTATION *Next;
+};
+
+/* Destroys released presentations whose kernel allocation the screen no
+ * longer tracks (agx_d3d10_windows.cpp collect_presentations). */
+static BOOL collect_presentations(AGX_D3D12_OWNER *owner) {
+  struct AGX_D3D12_PRESENTATION **link = &owner->PendingPresentations;
+  while (*link) {
+    struct AGX_D3D12_PRESENTATION *record = *link;
+    (void)AgxWin32AsahiCollect(&owner->Backend);
+    if (AdmissionUmdScreenAllocationRegistered(&owner->Runtime, record->Resource.KernelAllocation)) {
+      link = &record->Next;
+      continue;
+    }
+    D3D10DDI_HDEVICE device = {};
+    D3D10DDI_HRESOURCE resource = {};
+    device.pDrvPrivate = &owner->Runtime;
+    resource.pDrvPrivate = &record->Resource;
+    AdmissionUmdDestroyResource(device, resource);
+    *link = record->Next;
+    HeapFree(GetProcessHeap(), 0, record);
+  }
+  return owner->PendingPresentations == NULL;
+}
 
 static VOID APIENTRY owner_error(D3D10DDI_HRTCORELAYER handle, HRESULT error) {
   AGX_D3D12_OWNER *owner = static_cast<AGX_D3D12_OWNER *>(handle.handle);
@@ -70,6 +102,11 @@ extern "C" HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *owner) {
   if (!owner) return S_OK;
   BOOL consumed = FALSE;
   HRESULT hr = S_OK;
+  if (owner->Context && owner->PendingPresentations) {
+    owner->Context->flush(owner->Context, NULL, 0);
+    (void)AgxWin32AsahiContextRetire(owner->Context, 5000u);
+    (void)collect_presentations(owner);
+  }
   owner->Backend.Closing = 1;
   if (owner->Context) {
     if (!AgxWin32AsahiContextDestroy(owner->Context)) return HRESULT_FROM_WIN32(ERROR_BUSY);
@@ -469,6 +506,96 @@ extern "C" HRESULT AgxD3d12OwnerClearRenderTarget(AGX_D3D12_OWNER *owner, const 
   for (unsigned i = 0; i < 4; ++i) value.f[i] = color[i];
   clear_view_layers(owner, surface, false, PIPE_CLEAR_COLOR0, &value, 0.0, 0, rects, rect_count);
   return S_OK;
+}
+
+/* C7b: the D3D10 frontend's presentation resources for D3D12 swapchain
+ * buffers (AgxD3d10WindowsPresentationCreate + attach_presentation_render_resource) */
+extern "C" HRESULT AgxD3d12OwnerCreatePresentationTexture(AGX_D3D12_OWNER *owner, DXGI_FORMAT format, unsigned width,
+                                                          unsigned height, int shader_resource, HANDLE runtime_resource,
+                                                          AGX_D3D12_BUFFER *texture, void **presentation, UINT *allocation) {
+  if (!owner || !owner->Screen || !owner->Context || !runtime_resource || !texture || !presentation || !allocation)
+    return E_INVALIDARG;
+  memset(texture, 0, sizeof(*texture));
+  *presentation = NULL;
+  *allocation = 0;
+  (void)collect_presentations(owner);
+  auto *record = static_cast<struct AGX_D3D12_PRESENTATION *>(
+      HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(struct AGX_D3D12_PRESENTATION)));
+  if (!record) return E_OUTOFMEMORY;
+  D3D10DDI_MIPINFO mip = {width, height, 1u, width, height, 1u};
+  D3D11DDIARG_CREATERESOURCE create = {};
+  create.pMipInfoList = &mip;
+  create.ResourceDimension = D3D10DDIRESOURCE_TEXTURE2D;
+  create.Usage = D3D10_DDI_USAGE_DEFAULT;
+  create.BindFlags = D3D10_DDI_BIND_RENDER_TARGET | D3D10_DDI_BIND_PRESENT |
+                     (shader_resource ? D3D10_DDI_BIND_SHADER_RESOURCE : 0u);
+  create.Format = format;
+  create.SampleDesc.Count = 1;
+  create.MipLevels = 1;
+  create.ArraySize = 1;
+  D3D10DDI_HDEVICE device = {};
+  D3D10DDI_HRESOURCE resource = {};
+  D3D10DDI_HRTRESOURCE runtime = {};
+  device.pDrvPrivate = &owner->Runtime;
+  resource.pDrvPrivate = &record->Resource;
+  runtime.handle = runtime_resource;
+  AdmissionUmdCreateResource(device, &create, resource, runtime);
+  HRESULT hr = record->Resource.Magic == ADMISSION_UMD_RESOURCE_MAGIC && record->Resource.Retirement
+                   ? S_OK : (FAILED(owner->Runtime.LastScreenError) ? owner->Runtime.LastScreenError : E_INVALIDARG);
+  if (SUCCEEDED(hr)) {
+    const ADMISSION_ALLOCATION_DESCRIPTION *desc = &record->Resource.DirectFlip.Allocation;
+    const AGX_WIN32_ASAHI_LINEAR_FORMAT linear = desc->Format == (UINT)D3DDDIFMT_A8R8G8B8 ? AgxWin32AsahiLinearFormatBgra8Unorm
+                                                                                          : AgxWin32AsahiLinearFormatRgba8Unorm;
+    const APPLE_AGX_U32 access = AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite | AppleAgxWin32BufferGpuRead |
+                                 AppleAgxWin32BufferGpuWrite;
+    if (desc->Format != (UINT)D3DDDIFMT_A8R8G8B8 && desc->Format != (UINT)D3DDDIFMT_A8B8G8R8) hr = E_INVALIDARG;
+    if (SUCCEEDED(hr))
+      hr = AdmissionUmdScreenAdoptAllocation(&owner->Runtime, record->Resource.KernelAllocation, desc->Size, 0x10000ULL,
+                                             AgxWin32BufferClassGeneral, access, record->Resource.WrittenPrimary,
+                                             desc->CpuVisible == 0u, &record->RenderBuffer);
+    if (SUCCEEDED(hr)) {
+      record->RenderResource = AgxWin32AsahiImportLinearColor32(owner->Screen, &record->RenderBuffer, desc->Width,
+                                                                desc->Height, desc->Pitch, desc->Size, linear);
+      if (!record->RenderResource) {
+        (void)AgxWin32ScreenDestroyBuffer(&owner->Runtime.Screen, &record->RenderBuffer);
+        memset(&record->RenderBuffer, 0, sizeof(record->RenderBuffer));
+        hr = FAILED(owner->Runtime.LastScreenError) ? owner->Runtime.LastScreenError : E_FAIL;
+      }
+    }
+    if (FAILED(hr)) AdmissionUmdDestroyResource(device, resource);
+  }
+  receipt("measure-d3d12-presentation", hr, static_cast<UINT>(format), width | (height << 16),
+          record->Resource.KernelAllocation);
+  if (FAILED(hr)) {
+    HeapFree(GetProcessHeap(), 0, record);
+    return hr;
+  }
+  texture->Resource = record->RenderResource;
+  texture->GpuVa = AgxWin32AsahiBufferGpuAddress(record->RenderResource);
+  texture->Bytes = record->Resource.DirectFlip.Allocation.Size;
+  *presentation = record;
+  *allocation = record->Resource.KernelAllocation;
+  return S_OK;
+}
+
+/* The runtime frees its resource when DestroyHeapAndResource returns, so
+ * the runtime-owned kernel resource goes now and the record waits until
+ * the screen stops tracking the allocation (agx_d3d10_windows.cpp
+ * AgxD3d10WindowsPresentationDestroy). */
+extern "C" void AgxD3d12OwnerDestroyPresentationTexture(AGX_D3D12_OWNER *owner, void *presentation) {
+  auto *record = static_cast<struct AGX_D3D12_PRESENTATION *>(presentation);
+  if (!owner || !record) return;
+  if (record->RenderResource) AgxWin32AsahiResourceRelease(&record->RenderResource);
+  if (owner->Context) owner->Context->flush(owner->Context, NULL, 0);
+  D3D10DDI_HDEVICE device = {};
+  D3D10DDI_HRESOURCE resource = {};
+  device.pDrvPrivate = &owner->Runtime;
+  resource.pDrvPrivate = &record->Resource;
+  HRESULT released = AdmissionUmdReleaseRuntimeResource(device, resource);
+  if (FAILED(released)) AdmissionUmdSetError(&owner->Runtime, released);
+  record->Next = owner->PendingPresentations;
+  owner->PendingPresentations = record;
+  (void)collect_presentations(owner);
 }
 
 /* C8b: texture-to-texture copies on the GPU */

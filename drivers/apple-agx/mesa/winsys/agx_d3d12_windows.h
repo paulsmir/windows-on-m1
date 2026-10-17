@@ -133,6 +133,16 @@ typedef struct {
   int ToBuffer; /* 1: texture -> buffer, 0: buffer -> texture */
 } AGX_D3D12_TEXTURE_COPY;
 HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *Owner, const AGX_D3D12_TEXTURE_COPY *Copy);
+/* C7b (D3D12-C7-present.md): a 2D render target DXGI can share -- a kernel
+ * allocation of the runtime resource (the D3D10/11 presentation-resource
+ * path: AdmissionUmdCreateResource with the runtime handle, BGRA8/RGBA8,
+ * one mip/layer/sample) imported into the owner as a linear texture.
+ * *Allocation receives the D3DKMT allocation, *Presentation the record the
+ * destroy call takes. */
+HRESULT AgxD3d12OwnerCreatePresentationTexture(AGX_D3D12_OWNER *Owner, DXGI_FORMAT Format, unsigned Width,
+                                               unsigned Height, int ShaderResource, HANDLE RuntimeResource,
+                                               AGX_D3D12_BUFFER *Texture, void **Presentation, UINT *Allocation);
+void AgxD3d12OwnerDestroyPresentationTexture(AGX_D3D12_OWNER *Owner, void *Presentation);
 /* C8b: a GPU copy between texture regions of the same format class
  * (resource_copy_region); Layers counts array layers from each layer start. */
 HRESULT AgxD3d12OwnerCopyTextureRegion(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Dst, unsigned DstLevel,

@@ -559,6 +559,33 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('resource->bytes = heap->bytes;', create)
         self.assertIn('heap->allocation && !heap->alias', fn('static VOID APIENTRY DestroyHeapAndResource('))
 
+    def test_c7b_presentation_textures(self):
+        # C7b invariants (EXP1370: dxgi.dll CreateProxiesAndActivateFlip
+        # refused our swapchain buffers): 2D render targets of the
+        # presentation formats with a runtime resource handle get a kernel
+        # allocation of that resource through the owner's presentation path;
+        # their heap reports that allocation and releases through it.
+        source = SOURCE.read_text()
+        def fn(name):
+            start = source.index(name)
+            return source[start:source.index('\n}\n', start)]
+        create = fn('static HRESULT APIENTRY CreateHeapAndResource(')
+        self.assertIn('runtime_resource.handle', create)
+        self.assertIn('AgxD3d12OwnerCreatePresentationTexture(', create)
+        self.assertIn('resource_arg->MipLevels == 1 && resource_arg->DepthOrArraySize == 1', create)
+        self.assertIn('presentable ? presentation_allocation : AgxD3d12OwnerBufferAllocation(owner, &texture)', create)
+        release = fn('static void ReleaseHeap(')
+        self.assertLess(release.index('AgxD3d12OwnerDestroyPresentationTexture('), release.index('AgxD3d12OwnerDestroyBuffer('))
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        p = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerCreatePresentationTexture('):]
+        p = p[:p.index('\n}\n')]
+        for step in ('AdmissionUmdCreateResource(device, &create, resource, runtime);', 'AdmissionUmdScreenAdoptAllocation(',
+                     'AgxWin32AsahiImportLinearColor32(', 'D3D10_DDI_BIND_PRESENT'):
+            self.assertIn(step, p)
+        d = owner[owner.index('extern "C" void AgxD3d12OwnerDestroyPresentationTexture('):]
+        d = d[:d.index('\n}\n')]
+        self.assertLess(d.index('AdmissionUmdReleaseRuntimeResource('), d.index('collect_presentations(owner)'))
+
     def test_c8a_growing_lists(self):
         # C8a invariants: a list owns a growing command array (doubling from
         # 64), every recorder appends through it and stops with a list error

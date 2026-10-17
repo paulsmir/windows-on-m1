@@ -560,6 +560,7 @@ static constexpr UINT64 kVaLimit = 1ULL << 39;
 static constexpr UINT64 kCpuVisibleMaximum = ADMISSION_WIN32_ALLOCATION_LEGACY_MAX_BYTES;
 struct AgxD3d12Heap {
     void *native; /* C4b: the owner's buffer resource (pipe_resource) */
+    void *presentation; /* C7b: the owner presentation record of a shareable render target */
     BOOL alias;   /* C8c: a placed resource's view of its parent heap (owns nothing) */
     D3DKMT_HANDLE allocation;
     UINT64 gpuva;
@@ -722,6 +723,11 @@ static AgxD3d12Heap *HeapAt(AgxD3d12Device *device, UINT64 va, UINT64 *offset) {
 #endif
 static void ReleaseHeap(AgxD3d12Device *device, AgxD3d12Heap *heap) {
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (heap->native && heap->presentation) {
+        AgxD3d12OwnerDestroyPresentationTexture(static_cast<AGX_D3D12_OWNER *>(device->owner), heap->presentation);
+        memset(heap, 0, sizeof(*heap));
+        return;
+    }
     if (heap->native) {
         UnregisterHeap(device, heap);
         AGX_D3D12_BUFFER buffer = HeapBuffer(heap);
@@ -856,7 +862,7 @@ static HRESULT CreateHeap(AgxD3d12Device *device, const D3D12DDIARG_CREATEHEAP_0
     return hr;
 }
 static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATEHEAP_0001 *heap_arg,
-                                              D3D12DDI_HHEAP heap_handle, D3D12DDI_HRTRESOURCE,
+                                              D3D12DDI_HHEAP heap_handle, D3D12DDI_HRTRESOURCE runtime_resource,
                                               const D3D12DDIARG_CREATERESOURCE_0003 *resource_arg,
                                               const D3D12DDI_CLEAR_VALUES *, D3D12DDI_HRESOURCE resource_handle) {
     AgxD3d12Device *device = DeviceOf(handle);
@@ -865,6 +871,7 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
     HeapAndResourceReceipt("measure-d3d12-create-heap-resource", heap_arg, resource_arg,
                            (heap ? 1u : 0u) | (resource ? 2u : 0u));
     if (!device) return E_INVALIDARG;
+    (void)runtime_resource; /* C7b: used by the native owner's presentation textures */
     /* C8c: a placed buffer -- no heap description; ReuseBufferGPUVA names
      * the resource of an existing heap and the byte offset in it (the
      * encoding this assumes; receipt measure-d3d12-placed records it). */
@@ -909,15 +916,31 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
         const UINT bind = ((resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET) ? AGX_D3D12_BIND_RENDER_TARGET : 0u) |
                           ((resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE) ? AGX_D3D12_BIND_SAMPLER : 0u) |
                           ((resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_DEPTH_STENCIL) ? AGX_D3D12_BIND_DEPTH_STENCIL : 0u);
+        /* C7b: a 2D render target the runtime can share (DXGI swapchain
+         * buffers among them) gets a kernel allocation of the runtime
+         * resource -- the D3D10/11 presentation-resource contract (BGRA8 or
+         * RGBA8, one mip, layer and sample, linear) */
+        const bool presentable = (bind & AGX_D3D12_BIND_RENDER_TARGET) && runtime_resource.handle &&
+                                 resource_arg->MipLevels == 1 && resource_arg->DepthOrArraySize == 1 &&
+                                 (resource_arg->Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
+                                  resource_arg->Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB ||
+                                  resource_arg->Format == DXGI_FORMAT_R8G8B8A8_UNORM);
+        UINT presentation_allocation = 0;
         HRESULT hr = !owner ? E_NOTIMPL
-                   : AgxD3d12OwnerCreateTexture2D(owner, resource_arg->Format, static_cast<UINT>(resource_arg->Width),
-                                                  resource_arg->Height, resource_arg->DepthOrArraySize,
-                                                  resource_arg->MipLevels, bind, bytes, &texture);
+                   : presentable
+                         ? AgxD3d12OwnerCreatePresentationTexture(owner, resource_arg->Format,
+                                                                  static_cast<UINT>(resource_arg->Width), resource_arg->Height,
+                                                                  (bind & AGX_D3D12_BIND_SAMPLER) != 0,
+                                                                  runtime_resource.handle, &texture, &heap->presentation,
+                                                                  &presentation_allocation)
+                         : AgxD3d12OwnerCreateTexture2D(owner, resource_arg->Format, static_cast<UINT>(resource_arg->Width),
+                                                        resource_arg->Height, resource_arg->DepthOrArraySize,
+                                                        resource_arg->MipLevels, bind, bytes, &texture);
         if (SUCCEEDED(hr)) {
             heap->native = texture.Resource;
             heap->gpuva = texture.GpuVa;
             heap->bytes = bytes;
-            heap->allocation = AgxD3d12OwnerBufferAllocation(owner, &texture);
+            heap->allocation = presentable ? presentation_allocation : AgxD3d12OwnerBufferAllocation(owner, &texture);
             resource->heap = heap;
             resource->bytes = bytes;
             resource->type = D3D12DDI_RT_TEXTURE2D;
@@ -928,7 +951,7 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
             resource->levels = resource_arg->MipLevels;
         }
         const UINT receipt[] = {static_cast<UINT>(resource_arg->Format), static_cast<UINT>(resource_arg->Width),
-                                resource_arg->Height, static_cast<UINT>(bytes >> 16), bind};
+                                resource_arg->Height, static_cast<UINT>(bytes >> 16), bind | (presentable ? 0x100u : 0u)};
         AdmissionUmdDiagnostic("measure-d3d12-committed-texture", hr, receipt, 5);
         return hr;
     }
