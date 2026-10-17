@@ -1,8 +1,8 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-17T19:10Z (read this first)
+## Current as of 2026-10-17T19:50Z (read this first)
 
-Installed after recovery: none (rec1367h). Integration HEAD 8a704b45.
+Installed after recovery: none (rec1368h). Integration HEAD 39636057.
 - PROVEN (EXP1355): D3D12CreateDevice S_OK at FL 11_0 on the AGX adapter
   (APPLE_AGX_D3D12=1 profile only; ordinary processes still E_NOTIMPL).
   The 26100 runtime's device initialisation, measured one refused DDI per
@@ -49,15 +49,18 @@ Installed after recovery: none (rec1367h). Integration HEAD 8a704b45.
   without it).
 - PROVEN (EXP1367): D3D12 C5 -- compute PSO (DXBC -> NIR on the owner at
   the first dispatch) + root UAV + Dispatch; readback 3i+7 bad=0.
-- QUEUED: EXP1368 (package 2e45ed9d, probe a240db07) = C5b root
-  constants/CBV, C5c CBV/UAV tables + views + CopyDescriptors, C5d buffer
-  SRVs, C6a 2D textures/RTV/clear/CopyTextureRegion, C6b graphics PSO +
-  DrawInstanced (first D3D12 draw); one PASS line per step.
-- COMMITTED after it: C6c graphics root bindings per stage (b691b003), C6d
-  index buffers + DrawIndexedInstanced (5a101ab3); C6e texture SRVs +
-  samplers in progress. Design: investigation/analysis/D3D12-C5-compute.md,
-  D3D12-C6-graphics.md. Build gate learned: no u_format.h inline helpers in
-  the UMD (CRT asserts fail check_no_crt_asserts.py; 5726d41f).
+- EXP1368: C5B root constants/CBV and C5C CBV/UAV tables PASS (gating);
+  C5D executed, comparison lost; C6A crashed: Asahi implements neither
+  pipe->clear_render_target nor pipe->clear_depth_stencil -> D3D12 clears
+  bind the view as a framebuffer and use pipe->clear (78042ce7, as the
+  D3D10 overlay D3D-G10a). Probe stdout is unbuffered now.
+- RUNNING: EXP1369 (package d8cdb901, probe 23714e56): clear fix + C6b
+  first draw + C6c graphics root bindings + C6d indexed + C6e textures/
+  samplers + C6f depth + C8a growing lists + C8b CopyResource + C8c placed
+  buffers + C7A swapchain/present measurement (design D3D12-C7-present.md).
+- Gates learned: no u_format.h inline helpers in the UMD (CRT asserts,
+  5726d41f); keep replay frames small (STACK_FRAMES, a5d46dae); check every
+  Gallium entry the owner calls is assigned by Asahi.
 - Offline tool: guest d3d12core.dll copy + ARM64 disassembly in the
   scratchpad (d3d12core/dis.txt) for runtime validation strings.
 
