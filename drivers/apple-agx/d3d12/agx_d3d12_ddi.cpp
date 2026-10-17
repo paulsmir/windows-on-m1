@@ -486,10 +486,10 @@ static void ReleaseHeap(AgxD3d12Device *device, AgxD3d12Heap *heap) {
         (void)device->kernel->pfnFreeGpuVirtualAddressCb(device->runtime.handle, &va);
     }
     if (heap->allocation && device->kernel->pfnDeallocateCb) {
-        D3DDDICB_DEALLOCATE free = {};
-        free.NumAllocations = 1;
-        free.HandleList = &heap->allocation;
-        (void)device->kernel->pfnDeallocateCb(device->runtime.handle, &free);
+        D3DDDICB_DEALLOCATE release = {};
+        release.NumAllocations = 1;
+        release.HandleList = &heap->allocation;
+        (void)device->kernel->pfnDeallocateCb(device->runtime.handle, &release);
     }
     memset(heap, 0, sizeof(*heap));
 }
@@ -559,7 +559,7 @@ static HRESULT CreateHeap(AgxD3d12Device *device, const D3D12DDIARG_CREATEHEAP_0
         hr = k->pfnMapGpuVirtualAddressCb(device->runtime.handle, &map);
         if (SUCCEEDED(hr) || hr == E_PENDING) hr = map.VirtualAddress == heap->gpuva ? WaitPaging(device, map.PagingFenceValue) : E_FAIL;
     }
-    const UINT receipt[] = {heap->cpu_visible, static_cast<UINT>(heap->bytes >> 16), heap->allocation != 0,
+    const UINT receipt[] = {static_cast<UINT>(heap->cpu_visible), static_cast<UINT>(heap->bytes >> 16), heap->allocation != 0u,
                             static_cast<UINT>(heap->gpuva >> 16), static_cast<UINT>(heap->gpuva >> 32)};
     AdmissionUmdDiagnostic("measure-d3d12-heap", hr, receipt, 5);
     if (FAILED(hr)) ReleaseHeap(device, heap);
