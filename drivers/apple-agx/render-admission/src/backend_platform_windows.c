@@ -416,9 +416,10 @@ static VOID AdmissionFwTimingCaptureWindows(
 /* GPU timestamps: at a job's completion keep its firmware start/end for the
  * UMD. A render job's 3D work names template objects 28/29 as its
  * timestamp_pointers (the captured 3D microsequence brackets the fragment
- * work with Timestamp ops; EXP1112 decoded them per job); a compute job
- * that requested timestamps names its sidecar block (requested start/end at
- * 0x10/0x18). The job is still pending, so its kind and block are valid. */
+ * work with Timestamp ops; EXP1112 decoded them per job); an envelope
+ * compute job names its sidecar block (the firmware writes the job's
+ * start/end at 0x00/0x08). The job is still pending, so its kind and block
+ * are valid. */
 static VOID AdmissionGpuTimestampCaptureWindows(
     ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence) {
   const APPLE_AGX_BACKEND_JOB_IMAGE *job = &runtime->Backend.PendingJob;
@@ -439,8 +440,11 @@ static VOID AdmissionGpuTimestampCaptureWindows(
       RtlZeroMemory(runtime->ComputeTsWords, sizeof(runtime->ComputeTsWords));
     KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
     if (block == NULL) return;
-    RtlCopyMemory(&start, block + 0x10u, sizeof(start));
-    RtlCopyMemory(&gpuEnd, block + 0x18u, sizeof(gpuEnd));
+    /* EXP1342: the G13 firmware writes the job's own timestamps
+     * (timestamp_pointers, block 0x00/0x08: e.g. 144 ms for a 144 ms
+     * dispatch); the requested ones (0x10/0x18) stay 0. */
+    RtlCopyMemory(&start, block + 0x00u, sizeof(start));
+    RtlCopyMemory(&gpuEnd, block + 0x08u, sizeof(gpuEnd));
     kind = ADMISSION_GPU_TIMESTAMP_COMPUTE;
   } else {
     const APPLE_AGX_EXP208_RELOCATION_OBJECT *s = &runtime->QueueObjects[28u];

@@ -71,8 +71,8 @@ unsigned long long AdmissionJobTimingDeltaUs(
  * VA (unique while the batch is in flight: its command BO returns to the
  * pool only after the UMD retired it); the record also holds the owning
  * process and the submission fence (newest record wins). Render jobs: the
- * 3D work's timestamp_pointers (template objects 28/29); compute jobs that
- * requested them: the sidecar block's requested start/end. Values are
+ * 3D work's timestamp_pointers (template objects 28/29); envelope compute
+ * jobs: the sidecar block's job start/end (EXP1342). Values are
  * firmware ticks; Qpc is the KMD's performance counter when it took them
  * at completion (EXP1112: the firmware timebase runs at the counter's
  * frequency, offset from the guest's QPC by the hypervisor's stolen time),
