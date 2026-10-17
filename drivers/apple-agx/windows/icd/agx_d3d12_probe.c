@@ -1504,6 +1504,124 @@ static int compute_images(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D1
     return !(SUCCEEDED(hr) && quadrants_ok && typed_bad == 0);
 }
 
+/* C10 (D3D12-C10-uav-clears.md): ClearUnorderedAccessViewUint of a raw
+ * buffer view (all words 0x12345678, then elements [100, 200) = 7) and
+ * ClearUnorderedAccessViewFloat of a 64x64 RGBA8 texture UAV (blue, then
+ * rect (0,0)-(32,32) red); C10A = buffer words, C10B = texture pixels. */
+static int clear_uavs(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
+    D3D12_RESOURCE_DESC tex_desc = {0};
+    D3D12_DESCRIPTOR_HEAP_DESC gpu_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 2, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE};
+    D3D12_DESCRIPTOR_HEAP_DESC cpu_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 2, D3D12_DESCRIPTOR_HEAP_FLAG_NONE};
+    ID3D12DescriptorHeap *gpu_heap = NULL, *cpu_heap = NULL;
+    ID3D12Resource *texture = NULL;
+    ID3D12Resource *buffer = uav_buffer(device);
+    ID3D12Resource *buffer_back = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+    ID3D12Resource *image_back = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12GraphicsCommandList *list = NULL;
+    D3D12_CPU_DESCRIPTOR_HANDLE cpu0 = {0}, cpu1 = {0}, vis0 = {0}, vis1 = {0};
+    D3D12_GPU_DESCRIPTOR_HANDLE gpu0 = {0}, gpu1 = {0};
+    unsigned buffer_bad = 16384;
+    int pixels_ok = 0;
+    tex_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    tex_desc.Width = 64;
+    tex_desc.Height = 64;
+    tex_desc.DepthOrArraySize = 1;
+    tex_desc.MipLevels = 1;
+    tex_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    tex_desc.SampleDesc.Count = 1;
+    tex_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    HRESULT hr = buffer && buffer_back && image_back ? S_OK : E_FAIL;
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommittedResource(device, &heap, D3D12_HEAP_FLAG_NONE, &tex_desc,
+                                                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS, NULL, &IID_ID3D12Resource,
+                                                  (void **)&texture);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateDescriptorHeap(device, &gpu_desc, &IID_ID3D12DescriptorHeap, (void **)&gpu_heap);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateDescriptorHeap(device, &cpu_desc, &IID_ID3D12DescriptorHeap, (void **)&cpu_heap);
+    if (SUCCEEDED(hr)) {
+        D3D12_UNORDERED_ACCESS_VIEW_DESC raw = {DXGI_FORMAT_R32_TYPELESS, D3D12_UAV_DIMENSION_BUFFER};
+        const UINT step = ID3D12Device_GetDescriptorHandleIncrementSize(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+        raw.Buffer.NumElements = 16384;
+        raw.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
+        ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(cpu_heap, &cpu0);
+        ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(gpu_heap, &vis0);
+        ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(gpu_heap, &gpu0);
+        cpu1.ptr = cpu0.ptr + step;
+        vis1.ptr = vis0.ptr + step;
+        gpu1.ptr = gpu0.ptr + step;
+        ID3D12Device_CreateUnorderedAccessView(device, buffer, NULL, &raw, cpu0);
+        ID3D12Device_CreateUnorderedAccessView(device, buffer, NULL, &raw, vis0);
+        ID3D12Device_CreateUnorderedAccessView(device, texture, NULL, NULL, cpu1);
+        ID3D12Device_CreateUnorderedAccessView(device, texture, NULL, NULL, vis1);
+        hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                 &IID_ID3D12CommandAllocator, (void **)&allocator);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, NULL,
+                                            &IID_ID3D12GraphicsCommandList, (void **)&list);
+    printf("C10 resources/views hr=0x%08lx\n", (unsigned long)hr);
+    if (SUCCEEDED(hr)) {
+        const UINT word[4] = {0x12345678u, 0, 0, 0}, seven[4] = {7u, 0, 0, 0};
+        const FLOAT blue[4] = {0.0f, 0.0f, 1.0f, 1.0f}, red[4] = {1.0f, 0.0f, 0.0f, 1.0f};
+        const D3D12_RECT range = {100, 0, 200, 1}, corner = {0, 0, 32, 32};
+        D3D12_TEXTURE_COPY_LOCATION src = {0}, back = {0};
+        src.pResource = texture;
+        src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        back.pResource = image_back;
+        back.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        back.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        back.PlacedFootprint.Footprint.Width = 64;
+        back.PlacedFootprint.Footprint.Height = 64;
+        back.PlacedFootprint.Footprint.Depth = 1;
+        back.PlacedFootprint.Footprint.RowPitch = 256;
+        ID3D12GraphicsCommandList_SetDescriptorHeaps(list, 1, &gpu_heap);
+        ID3D12GraphicsCommandList_ClearUnorderedAccessViewUint(list, gpu0, cpu0, buffer, word, 0, NULL);
+        ID3D12GraphicsCommandList_ClearUnorderedAccessViewUint(list, gpu0, cpu0, buffer, seven, 1, &range);
+        ID3D12GraphicsCommandList_ClearUnorderedAccessViewFloat(list, gpu1, cpu1, texture, blue, 0, NULL);
+        ID3D12GraphicsCommandList_ClearUnorderedAccessViewFloat(list, gpu1, cpu1, texture, red, 1, &corner);
+        transition(list, buffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        transition(list, texture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        ID3D12GraphicsCommandList_CopyBufferRegion(list, buffer_back, 0, buffer, 0, 65536);
+        ID3D12GraphicsCommandList_CopyTextureRegion(list, &back, 0, 0, 0, &src, NULL);
+        hr = run_list(queue, fence, list, base + 1, "C10 clears");
+    }
+    if (SUCCEEDED(hr)) {
+        D3D12_RANGE all = {0, 65536};
+        const UINT *dwords = NULL;
+        hr = ID3D12Resource_Map(buffer_back, 0, &all, (void **)&dwords);
+        if (SUCCEEDED(hr) && dwords) {
+            buffer_bad = 0;
+            for (unsigned i = 0; i < 16384; ++i) buffer_bad += dwords[i] != (i >= 100 && i < 200 ? 7u : 0x12345678u);
+            printf("C10A buffer bad=%u words=0x%08x,0x%08x,0x%08x\n", buffer_bad, dwords[0], dwords[150], dwords[300]);
+            ID3D12Resource_Unmap(buffer_back, 0, NULL);
+        }
+    }
+    if (SUCCEEDED(hr)) {
+        D3D12_RANGE all = {0, 16384};
+        const unsigned char *bytes = NULL;
+        hr = ID3D12Resource_Map(image_back, 0, &all, (void **)&bytes);
+        if (SUCCEEDED(hr) && bytes) {
+            const unsigned char *in = bytes + 8 * 256 + 8 * 4, *out = bytes + 48 * 256 + 48 * 4;
+            pixels_ok = in[0] == 255 && in[1] == 0 && in[2] == 0 && in[3] == 255 && out[0] == 0 && out[1] == 0 &&
+                        out[2] == 255 && out[3] == 255;
+            printf("C10B texture in=%u,%u,%u,%u out=%u,%u,%u,%u\n", in[0], in[1], in[2], in[3], out[0], out[1], out[2], out[3]);
+            ID3D12Resource_Unmap(image_back, 0, NULL);
+        }
+    }
+    printf("AGX_D3D12_C10A: %s\n", SUCCEEDED(hr) && buffer_bad == 0 ? "PASS" : "FAIL");
+    printf("AGX_D3D12_C10B: %s\n", SUCCEEDED(hr) && pixels_ok ? "PASS" : "FAIL");
+    if (list) ID3D12GraphicsCommandList_Release(list);
+    if (allocator) ID3D12CommandAllocator_Release(allocator);
+    if (cpu_heap) ID3D12DescriptorHeap_Release(cpu_heap);
+    if (gpu_heap) ID3D12DescriptorHeap_Release(gpu_heap);
+    if (texture) ID3D12Resource_Release(texture);
+    if (image_back) ID3D12Resource_Release(image_back);
+    if (buffer_back) ID3D12Resource_Release(buffer_back);
+    if (buffer) ID3D12Resource_Release(buffer);
+    return !(SUCCEEDED(hr) && buffer_bad == 0 && pixels_ok);
+}
+
 /* C7A (D3D12-C7-present.md, measurement): a flip-model swapchain on the
  * direct queue -- window, CreateSwapChainForHwnd (2 x 64x64 RGBA8,
  * FLIP_DISCARD), back buffer 0 cleared green through an RTV, transition to
@@ -1696,6 +1814,7 @@ int main(void) {
                 (void)run_isolated(adapter, "C6F", draw_depth);
                 (void)run_isolated(adapter, "C8C", placed_buffer);
                 (void)run_isolated(adapter, "C9", compute_images);
+                (void)run_isolated(adapter, "C10", clear_uavs);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
             }
             IDXGIAdapter1_Release(adapter);
