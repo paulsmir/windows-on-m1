@@ -78,6 +78,22 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('if (support) *support = 0;', source)
         self.assertIn('*levels = samples == 1 ? 1u : 0u;', source)
         self.assertIn('map[i] = 0;', source)
+        # C1e (EXP1349 + d3d12core 26100 row-major validation): SubCaps[0]
+        # nonzero, alignments nonzero powers of two within the runtime limits.
+        sets = caps[caps.index('case D3D12DDICAPS_TYPE_TEXTURE_LAYOUT_SETS:'):]
+        sets = sets[:sets.index('break;')]
+        fields = dict(re.findall(r'd\.SubCaps\[0\]\.(\w+) = (\d+);', sets))
+        self.assertEqual(set(fields), {'MaxElementSize', 'BaseOffsetAlignment',
+                                       'PitchAlignment', 'DepthPitchAlignment'})
+        limits = {'MaxElementSize': 0xffff, 'BaseOffsetAlignment': 512,
+                  'PitchAlignment': 256, 'DepthPitchAlignment': 256}
+        for name, value in fields.items():
+            value = int(value)
+            self.assertTrue(0 < value <= limits[name], name)
+            if name != 'MaxElementSize':
+                self.assertEqual(value & (value - 1), 0, name)
+        self.assertNotIn('SubCaps[1]', sets)
+        self.assertNotIn('d.Flags', sets)
 
     def test_package_and_receipts(self):
         package = ROOT / 'drivers/apple-agx/render-admission/umd'

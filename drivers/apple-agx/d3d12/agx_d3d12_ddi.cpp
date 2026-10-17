@@ -138,9 +138,19 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
         break;
     case D3D12DDICAPS_TYPE_TEXTURE_LAYOUT_SETS:
         /* EXP1346: asked for row-major ({D3D12DDI_TL_ROW_MAJOR, functional
-         * unit}) and creation failed on E_NOTIMPL; zero sub-caps: no
-         * row-major layout, as SupportsRowMajorTexture says. */
-        hr = Answer<D3D12DDI_ROW_MAJOR_LAYOUT_CAPS>(arg, [](auto &) {});
+         * unit}) and creation failed on E_NOTIMPL. EXP1349 + d3d12core 26100:
+         * the runtime rejects SubCaps[0].MaxElementSize 0 and requires each
+         * alignment to be a nonzero power of two (base <= 512, pitch and
+         * depth pitch <= 256) even without row-major textures. The AGX linear
+         * contract (Asahi genxml Texture/PBE Address and Stride shr(4),
+         * linear layer stride shr(7); ail: largest element 16 bytes): one
+         * sub-cap for every functional unit, fixed depth pitch. */
+        hr = Answer<D3D12DDI_ROW_MAJOR_LAYOUT_CAPS>(arg, [](auto &d) {
+            d.SubCaps[0].MaxElementSize = 16;
+            d.SubCaps[0].BaseOffsetAlignment = 16;
+            d.SubCaps[0].PitchAlignment = 16;
+            d.SubCaps[0].DepthPitchAlignment = 128;
+        });
         break;
     default:
         break;
