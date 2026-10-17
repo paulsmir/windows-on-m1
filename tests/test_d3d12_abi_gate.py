@@ -196,6 +196,13 @@ class D3d12AbiGate(unittest.TestCase):
         for member in ('pfnCalcPrivateCommandQueueSize', 'pfnCreateCommandQueue', 'pfnDestroyCommandQueue',
                        'pfnCalcPrivateFenceSize', 'pfnCreateFence', 'pfnDestroyFence'):
             self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
+        # C3b (EXP1361): the runtime signals through the kernel contexts a
+        # queue owns; each queue owns one created for its runtime handle.
+        queue = source[source.index('static HRESULT APIENTRY CreateCommandQueue('):]
+        queue = queue[:queue.index('\n}\n')]
+        self.assertIn('device->callbacks->pfnCreateContextVirtualCb(arg->hRTCommandQueue, &context)', queue)
+        self.assertIn('contract.Magic = ADMISSION_WIN32_CONTEXT_MAGIC;', queue)
+        self.assertIn('pfnDestroyContextCb(queue->runtime, &destroy)', source)
         for member in ('pfnExecuteCommandLists', 'pfnSignalFence', 'pfnWaitForFence'):
             self.assertIn('AGX_REJECT(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, %s)' % member, source)
         # nothing can bind it yet: every command-list DDI stays fail-closed

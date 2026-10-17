@@ -779,23 +779,56 @@ static D3D12DDI_GPU_DESCRIPTOR_HANDLE APIENTRY GetGPUDescriptorHandleForHeapStar
  * Signal/Wait/ExecuteCommandLists stay fail-closed and their receipts name
  * the runtime's next request. A fence keeps the GPU VA placements of its
  * monitored value (a basic monitored fence is signalled by writing there). */
+/* C3b (EXP1361): CreateFence carried no GPU VA (the runtime owns the
+ * monitored fence) and Signal failed in the runtime (E_INVALIDARG) without
+ * a driver call: the runtime signals through the kernel contexts a queue
+ * owns, and this queue owned none. Each queue therefore owns one GPU
+ * virtual-address kernel context, created through the core-layer
+ * pfnCreateContextVirtualCb(hRTCommandQueue) with the KMD context contract
+ * the D3D11 device uses (ADMISSION_WIN32_CONTEXT_CREATE). */
 struct AgxD3d12CommandQueue {
     D3D12DDI_HRTCOMMANDQUEUE runtime;
     UINT flags;
+    HANDLE context;
 };
+static volatile LONG queue_generation;
 static SIZE_T APIENTRY CalcPrivateCommandQueueSize(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATECOMMANDQUEUE_0001 *) {
     return sizeof(AgxD3d12CommandQueue);
 }
-static HRESULT APIENTRY CreateCommandQueue(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATECOMMANDQUEUE_0001 *arg) {
+static HRESULT APIENTRY CreateCommandQueue(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATECOMMANDQUEUE_0001 *arg) {
+    AgxD3d12Device *device = DeviceOf(handle);
     auto *queue = arg ? static_cast<AgxD3d12CommandQueue *>(arg->hDrvCommandQueue.pDrvPrivate) : nullptr;
-    if (!queue) return E_INVALIDARG;
+    if (!device || !queue || !device->callbacks || !device->callbacks->pfnCreateContextVirtualCb) return E_INVALIDARG;
+    memset(queue, 0, sizeof(*queue));
     queue->runtime = arg->hRTCommandQueue;
     queue->flags = static_cast<UINT>(arg->QueueFlags);
-    const UINT receipt[] = {queue->flags, arg->NodeMask};
-    AdmissionUmdDiagnostic("measure-d3d12-queue", S_OK, receipt, 2);
-    return S_OK;
+    ADMISSION_WIN32_CONTEXT_CREATE contract = {};
+    contract.Magic = ADMISSION_WIN32_CONTEXT_MAGIC;
+    contract.Version = ADMISSION_WIN32_CONTEXT_VERSION;
+    contract.Bytes = sizeof(contract);
+    const ULONG counter = static_cast<ULONG>(InterlockedIncrement(&queue_generation));
+    contract.Generation = (((GetCurrentProcessId() & 0xffffu) << 16) ^ counter) | 0x80000000u;
+    D3DDDICB_CREATECONTEXTVIRTUAL context = {};
+    context.NodeOrdinal = 0;
+    context.EngineAffinity = 1;
+    context.pPrivateDriverData = &contract;
+    context.PrivateDriverDataSize = sizeof(contract);
+    HRESULT hr = device->callbacks->pfnCreateContextVirtualCb(arg->hRTCommandQueue, &context);
+    if (SUCCEEDED(hr) && !context.hContext) hr = E_FAIL;
+    queue->context = SUCCEEDED(hr) ? context.hContext : nullptr;
+    const UINT receipt[] = {queue->flags, arg->NodeMask, queue->context != nullptr ? 1u : 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-queue", hr, receipt, 3);
+    return hr;
 }
-static VOID APIENTRY DestroyCommandQueue(D3D12DDI_HDEVICE, D3D12DDI_HCOMMANDQUEUE) {}
+static VOID APIENTRY DestroyCommandQueue(D3D12DDI_HDEVICE handle, D3D12DDI_HCOMMANDQUEUE queue_handle) {
+    AgxD3d12Device *device = DeviceOf(handle);
+    auto *queue = static_cast<AgxD3d12CommandQueue *>(queue_handle.pDrvPrivate);
+    if (!device || !queue || !queue->context || !device->callbacks || !device->callbacks->pfnDestroyContextCb) return;
+    D3DDDICB_DESTROYCONTEXT destroy = {};
+    destroy.hContext = queue->context;
+    (void)device->callbacks->pfnDestroyContextCb(queue->runtime, &destroy);
+    queue->context = nullptr;
+}
 struct AgxD3d12Fence {
     UINT count;
     D3D12DDI_FENCE fence[1];
