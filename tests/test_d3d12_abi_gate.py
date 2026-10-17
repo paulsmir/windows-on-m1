@@ -32,6 +32,14 @@ class D3d12AbiGate(unittest.TestCase):
                 self.assertEqual(set(assignments), set(expected))
                 self.assertEqual(len(assignments), len(expected))
 
+    def test_adapter_handle_is_a_driver_object(self):
+        # A3 (EXP1343): a NULL driver adapter handle made the runtime refuse
+        # the adapter before GetSupportedVersions.
+        source = SOURCE.read_text()
+        self.assertNotIn('hAdapter.pDrvPrivate = nullptr', source)
+        self.assertIn('arg->hAdapter.pDrvPrivate = &adapter_object;', source)
+        self.assertIn('adapter_object.runtime = arg->hRTAdapter;', source)
+
     def test_no_unimplemented_feature_is_advertised(self):
         source = SOURCE.read_text()
         self.assertIn('D3D12DDI_SUPPORTED_0003', source)

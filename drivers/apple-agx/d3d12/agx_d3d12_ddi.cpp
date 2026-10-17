@@ -10,6 +10,16 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 extern "C" VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status, const UINT *Values, UINT Count);
 
 namespace {
+/* D3D12 A3 (EXP1343: OpenAdapter12 returned a NULL driver adapter handle
+ * and the runtime answered DXGI_ERROR_UNSUPPORTED without calling any
+ * adapter function): the adapter object the runtime passes back to every
+ * D3D12DDI_HADAPTER function, holding the runtime adapter and its
+ * callbacks (the KMD caps query of D3D12 OpenAdapter). */
+struct AgxD3d12Adapter {
+    D3D12DDI_HRTADAPTER runtime;
+    const D3DDDI_ADAPTERCALLBACKS *callbacks;
+};
+static AgxD3d12Adapter adapter_object;
 static const D3D12DDI_CORELAYER_DEVICECALLBACKS_0003 *callbacks;
 static D3D12DDI_HRTDEVICE runtime_device;
 
@@ -227,7 +237,9 @@ extern "C" HRESULT APIENTRY OpenAdapter12(D3D12DDIARG_OPENADAPTER *arg) {
                             arg && arg->pAdapterCallbacks != nullptr};
     AdmissionUmdDiagnostic("d3d12-open-adapter", arg && arg->pAdapterFuncs ? S_OK : E_INVALIDARG, receipt, 3);
     if (!arg || !arg->pAdapterFuncs) return E_INVALIDARG;
-    arg->hAdapter.pDrvPrivate = nullptr;
+    adapter_object.runtime = arg->hRTAdapter;
+    adapter_object.callbacks = arg->pAdapterCallbacks;
+    arg->hAdapter.pDrvPrivate = &adapter_object;
     FillD3D12DDI_ADAPTERFUNCS(*arg->pAdapterFuncs);
     return S_OK;
 }
