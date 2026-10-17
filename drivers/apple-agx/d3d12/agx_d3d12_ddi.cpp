@@ -876,12 +876,17 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
         const UINT reason = !base || !base->heap ? 1u
                           : offset > base->heap->bytes || resource_arg->Width > base->heap->bytes - offset ? 6u : 0u;
         if (!reason && heap) {
-            /* the placed resource's heap object aliases the parent: Map
-             * returns the parent's base (the runtime adds the placement
-             * offset), and destroying it releases nothing */
+            /* the placed resource's heap object aliases the parent and
+             * destroying it releases nothing. EXP1370: the runtime maps a
+             * placed resource through this heap object and does not add
+             * the placement offset (CPU and GPU disagreed at offset 64 KiB,
+             * 256/65536 bytes equal), so it starts at the resource. */
             *heap = *base->heap;
             heap->alias = TRUE;
             heap->locks = 0;
+            if (heap->cpu) heap->cpu = static_cast<BYTE *>(heap->cpu) + offset;
+            heap->gpuva += offset;
+            heap->bytes -= offset;
         }
         if (!reason) {
             resource->heap = base->heap;
