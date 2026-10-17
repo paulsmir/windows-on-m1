@@ -305,6 +305,72 @@ static VOID APIENTRY CreateComputeShader(D3D12DDI_HDEVICE, const UINT *code, D3D
     StoreShader(code, handle);
 }
 static VOID APIENTRY DestroyShader(D3D12DDI_HDEVICE, D3D12DDI_HSHADER) {}
+/* C1h (EXP1352): after its internal vertex shader (VS 4.0, 15 DWORDs) the
+ * runtime builds the state objects a graphics pipeline state references
+ * (D3D12DDIARG_CREATE_PIPELINE_STATE_0001: hBlendState, hRasterizerState,
+ * hDepthStencilState, hElementLayout); a refused pfnCalcPrivateBlendStateSize
+ * removes the device. Each object keeps a copy of its description; the
+ * pipeline state translates them to AGX state (C6). */
+template<class Desc, UINT Kind> struct AgxD3d12State {
+    static SIZE_T APIENTRY size(D3D12DDI_HDEVICE, const Desc *) { return sizeof(Desc); }
+    template<class Handle> static VOID APIENTRY create(D3D12DDI_HDEVICE, const Desc *desc, Handle handle) {
+        if (!desc || !handle.pDrvPrivate) {
+            if (callbacks && callbacks->pfnSetErrorCb) callbacks->pfnSetErrorCb(runtime_device, E_INVALIDARG);
+            return;
+        }
+        memcpy(handle.pDrvPrivate, desc, sizeof(Desc));
+        const UINT receipt[] = {Kind, static_cast<UINT>(sizeof(Desc))};
+        AdmissionUmdDiagnostic("measure-d3d12-state", S_OK, receipt, 2);
+    }
+    template<class Handle> static VOID APIENTRY destroy(D3D12DDI_HDEVICE, Handle) {}
+};
+using BlendState = AgxD3d12State<D3D12DDI_BLEND_DESC, 1>;
+using DepthStencilState = AgxD3d12State<D3D12DDI_DEPTH_STENCIL_DESC, 2>;
+using RasterizerState = AgxD3d12State<D3D12DDI_RASTERIZER_DESC, 3>;
+struct AgxD3d12ElementLayout {
+    UINT elements;
+    D3D12DDIARG_INPUT_ELEMENT_DESC element[1];
+};
+static SIZE_T APIENTRY CalcPrivateElementLayoutSize(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATEELEMENTLAYOUT *arg) {
+    const UINT count = arg ? arg->NumElements : 0;
+    return offsetof(AgxD3d12ElementLayout, element) + (count ? count : 1) * sizeof(D3D12DDIARG_INPUT_ELEMENT_DESC);
+}
+static VOID APIENTRY CreateElementLayout(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATEELEMENTLAYOUT *arg,
+                                         D3D12DDI_HELEMENTLAYOUT handle) {
+    auto *layout = static_cast<AgxD3d12ElementLayout *>(handle.pDrvPrivate);
+    if (!arg || !layout || (arg->NumElements && !arg->pVertexElements)) {
+        if (callbacks && callbacks->pfnSetErrorCb) callbacks->pfnSetErrorCb(runtime_device, E_INVALIDARG);
+        return;
+    }
+    layout->elements = arg->NumElements;
+    if (arg->NumElements)
+        memcpy(layout->element, arg->pVertexElements, arg->NumElements * sizeof(D3D12DDIARG_INPUT_ELEMENT_DESC));
+    const UINT receipt[] = {4u, arg->NumElements};
+    AdmissionUmdDiagnostic("measure-d3d12-state", S_OK, receipt, 2);
+}
+static VOID APIENTRY DestroyElementLayout(D3D12DDI_HDEVICE, D3D12DDI_HELEMENTLAYOUT) {}
+/* The pipeline state those objects feed (D3D12DDIARG_CREATE_PIPELINE_STATE_0001):
+ * it keeps the creation arguments; the AGX compile of its shaders and the
+ * state translation are C5/C6, before any command list can bind it (every
+ * command-list DDI is still fail-closed). */
+struct AgxD3d12PipelineState {
+    D3D12DDIARG_CREATE_PIPELINE_STATE_0001 desc;
+};
+static SIZE_T APIENTRY CalcPrivatePipelineStateSize(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_PIPELINE_STATE_0001 *) {
+    return sizeof(AgxD3d12PipelineState);
+}
+static HRESULT APIENTRY CreatePipelineState(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_PIPELINE_STATE_0001 *arg) {
+    auto *pso = arg ? static_cast<AgxD3d12PipelineState *>(arg->hDrvPipelineState.pDrvPrivate) : nullptr;
+    if (!pso) return E_INVALIDARG;
+    pso->desc = *arg;
+    const UINT receipt[] = {arg->hComputeShader.pDrvPrivate != nullptr, arg->hVertexShader.pDrvPrivate != nullptr,
+                            arg->hPixelShader.pDrvPrivate != nullptr, arg->NumRenderTargets,
+                            static_cast<UINT>(arg->RTVFormats[0]), static_cast<UINT>(arg->DSVFormat),
+                            static_cast<UINT>(arg->PrimitiveTopologyType), arg->SampleDesc.Count};
+    AdmissionUmdDiagnostic("measure-d3d12-pso", S_OK, receipt, 8);
+    return S_OK;
+}
+static VOID APIENTRY DestroyPipelineState(D3D12DDI_HDEVICE, D3D12DDI_HPIPELINESTATE) {}
 static HRESULT APIENTRY CloseAdapter(D3D12DDI_HADAPTER) {
     AdmissionUmdDiagnostic("d3d12-close-adapter", S_OK, nullptr, 0);
     return S_OK;
@@ -325,18 +391,18 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckFormatSupport, CheckFormatSupport);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckMultisampleQualityLevels, CheckMultisampleQualityLevels);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetMipPacking, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetMipPacking));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateElementLayoutSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateElementLayoutSize));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateElementLayout, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateElementLayout));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyElementLayout, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyElementLayout));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateBlendStateSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateBlendStateSize));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateBlendState, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateBlendState));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyBlendState, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyBlendState));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateDepthStencilStateSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateDepthStencilStateSize));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDepthStencilState, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDepthStencilState));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyDepthStencilState, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyDepthStencilState));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateRasterizerStateSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateRasterizerStateSize));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateRasterizerState, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateRasterizerState));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyRasterizerState, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyRasterizerState));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateElementLayoutSize, CalcPrivateElementLayoutSize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateElementLayout, CreateElementLayout);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyElementLayout, DestroyElementLayout);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateBlendStateSize, BlendState::size);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateBlendState, BlendState::create<D3D12DDI_HBLENDSTATE>);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyBlendState, BlendState::destroy<D3D12DDI_HBLENDSTATE>);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateDepthStencilStateSize, DepthStencilState::size);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDepthStencilState, DepthStencilState::create<D3D12DDI_HDEPTHSTENCILSTATE>);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyDepthStencilState, DepthStencilState::destroy<D3D12DDI_HDEPTHSTENCILSTATE>);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateRasterizerStateSize, RasterizerState::size);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateRasterizerState, RasterizerState::create<D3D12DDI_HRASTERIZERSTATE>);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyRasterizerState, RasterizerState::destroy<D3D12DDI_HRASTERIZERSTATE>);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateShaderSize, CalcPrivateShaderSize);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateVertexShader, CreateShader);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreatePixelShader, CreateShader);
@@ -355,9 +421,9 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandAllocator, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandAllocator));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandAllocator, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandAllocator));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnResetCommandAllocator, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnResetCommandAllocator));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivatePipelineStateSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivatePipelineStateSize));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreatePipelineState, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreatePipelineState));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyPipelineState, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyPipelineState));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivatePipelineStateSize, CalcPrivatePipelineStateSize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreatePipelineState, CreatePipelineState);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyPipelineState, DestroyPipelineState);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandListSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandListSize));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandList, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandList));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandList, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandList));

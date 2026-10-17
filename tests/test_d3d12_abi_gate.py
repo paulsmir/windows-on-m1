@@ -117,6 +117,18 @@ class D3d12AbiGate(unittest.TestCase):
             self.assertIn('AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s)' % member, source)
         self.assertIn('memcpy(shader->tokens, code, code[1] * sizeof(UINT));', source)
         self.assertIn('(dwords ? dwords : 1) * sizeof(UINT)', source)
+        # C1h (EXP1352): the four state objects a graphics pipeline state
+        # references keep copies of their descriptions.
+        for member in ('ElementLayout', 'BlendState', 'DepthStencilState', 'RasterizerState'):
+            for prefix in ('pfnCalcPrivate%sSize', 'pfnCreate%s', 'pfnDestroy%s'):
+                name = prefix % member
+                self.assertNotIn('AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s)' % name, source)
+        for kind, desc in ((1, 'D3D12DDI_BLEND_DESC'), (2, 'D3D12DDI_DEPTH_STENCIL_DESC'), (3, 'D3D12DDI_RASTERIZER_DESC')):
+            self.assertIn('AgxD3d12State<%s, %d>' % (desc, kind), source)
+        for member in ('pfnCalcPrivatePipelineStateSize', 'pfnCreatePipelineState', 'pfnDestroyPipelineState'):
+            self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
+        # nothing can bind it yet: every command-list DDI stays fail-closed
+        self.assertNotRegex(source, r'AGX_ASSIGN\(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, \w+, (?!AGX_REJECT)')
 
     def test_package_and_receipts(self):
         package = ROOT / 'drivers/apple-agx/render-admission/umd'
