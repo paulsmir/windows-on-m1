@@ -884,16 +884,13 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
                           : offset > base->heap->bytes || resource_arg->Width > base->heap->bytes - offset ? 6u : 0u;
         if (!reason && heap) {
             /* the placed resource's heap object aliases the parent and
-             * destroying it releases nothing. EXP1370: the runtime maps a
-             * placed resource through this heap object and does not add
-             * the placement offset (CPU and GPU disagreed at offset 64 KiB,
-             * 256/65536 bytes equal), so it starts at the resource. */
+             * destroying it releases nothing. The runtime adds the placement
+             * offset to a Map itself (EXP1371: offsetting the alias moved
+             * the CPU view past the resource), so the alias starts where
+             * the parent does. */
             *heap = *base->heap;
             heap->alias = TRUE;
             heap->locks = 0;
-            if (heap->cpu) heap->cpu = static_cast<BYTE *>(heap->cpu) + offset;
-            heap->gpuva += offset;
-            heap->bytes -= offset;
         }
         if (!reason) {
             resource->heap = base->heap;
@@ -1708,7 +1705,7 @@ static VOID APIENTRY CopyBufferRegion(D3D12DDI_HCOMMANDLIST handle, D3D12DDIARG_
     if (!list) return;
     const UINT64 dst_offset = dst.BaseAddress.UMD.Offset, src_offset = src.BaseAddress.UMD.Offset;
     if (!d || !r || !d->heap || !r->heap || !d->heap->native || !r->heap->native || !bytes ||
-        dst_offset > d->bytes || bytes > d->bytes - dst_offset || src_offset > r->bytes ||
+        d->type != D3D12DDI_RT_BUFFER || r->type != D3D12DDI_RT_BUFFER || dst_offset > d->bytes || bytes > d->bytes - dst_offset || src_offset > r->bytes ||
         bytes > r->bytes - src_offset || list->commands >= kListCommands) {
         ListError(list, E_INVALIDARG);
         return;
@@ -1717,7 +1714,9 @@ static VOID APIENTRY CopyBufferRegion(D3D12DDI_HCOMMANDLIST handle, D3D12DDIARG_
     if (!slot) return;
     AgxD3d12Command &command = *slot;
     command.kind = kCommandCopy;
-    command.copy = {d->heap, dst_offset, r->heap, src_offset, bytes};
+    /* offsets are resource-relative; a placed resource starts inside its
+     * heap (EXP1371 C8C: copying from the heap start read the wrong bytes) */
+    command.copy = {d->heap, d->gpuva - d->heap->gpuva + dst_offset, r->heap, r->gpuva - r->heap->gpuva + src_offset, bytes};
 }
 /* C6a (investigation/analysis/D3D12-C6-graphics.md) */
 static VOID APIENTRY ClearRenderTargetView(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE view,

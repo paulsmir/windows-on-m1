@@ -552,9 +552,15 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('resource_arg->ReuseBufferGPUVA.BaseAddress.UMD.hResource.pDrvPrivate', create)
         self.assertIn('resource_arg->Width > base->heap->bytes - offset ? 6u', create)
         self.assertIn('heap->alias = TRUE;', create)
-        # EXP1370: Map of a placed resource goes through its own heap object
-        # without the placement offset
-        self.assertIn('heap->cpu = static_cast<BYTE *>(heap->cpu) + offset;', create)
+        # EXP1371: the runtime adds the placement offset to a Map itself, so
+        # the alias heap must not be offset; copies add the resource's base
+        # inside its heap (C8C read the heap start)
+        self.assertNotIn('heap->cpu = static_cast<BYTE *>(heap->cpu) + offset;', create)
+        self.assertNotIn('heap->gpuva += offset;', create)
+        copy = fn('static VOID APIENTRY CopyBufferRegion(')
+        self.assertIn('d->gpuva - d->heap->gpuva + dst_offset', copy)
+        self.assertIn('r->gpuva - r->heap->gpuva + src_offset', copy)
+        self.assertIn('d->type != D3D12DDI_RT_BUFFER', copy)
         self.assertIn('"measure-d3d12-placed"', create)
         self.assertIn('resource->bytes = heap->bytes;', create)
         self.assertIn('heap->allocation && !heap->alias', fn('static VOID APIENTRY DestroyHeapAndResource('))
