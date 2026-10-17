@@ -89,6 +89,23 @@ buffers, verified on the CPU.
   runs through Mesa's own launch path. Offline: the existing
   agx_win32_gpuva_test.c harness exercises an ops table without hardware.
 
+- Scope found (umd_win32_screen.c AdmissionUmdScreenInitialize): the screen
+  takes a transport table (CreateBuffer/MapBuffer/UnmapBuffer/DestroyBuffer/
+  SubmitClear/WaitFence/RetireFence), screen hooks (QueryDevice,
+  CreateClassBuffer) and the GPUVA ops; all are implemented over
+  ADMISSION_UMD_DEVICE (~2800 lines in umd_win32_screen.c and
+  umd_gpuva_windows.c). The D3D12 pKTCallbacks is the same
+  D3DDDI_DEVICECALLBACKS type, so the shortest truthful route is an embedded
+  ADMISSION_UMD_DEVICE inside the D3D12 device: KernelCallbacks = D3D12
+  pKTCallbacks, RuntimeDevice = hRTDevice, Adapter = an ADMISSION_UMD_ADAPTER
+  filled from the D3D12 adapter's device-info query, KernelContext = the
+  queue's context (C3b) so the copy submissions and the runtime's fence
+  signal share one ordered context (d3d12core rejects contexts that belong to
+  another queue), paging queue from C2a. AdmissionUmdRuntimeDeviceInitialize
+  creates a device-level context; the D3D12 variant must take the queue
+  context instead (new initializer, RED -> GREEN on the existing
+  umd_gpuva_contract harness).
+
 ## Checkpoints
 
 - C4a (EXP1363): empty list execute + signal.
