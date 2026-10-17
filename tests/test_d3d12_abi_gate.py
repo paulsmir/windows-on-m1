@@ -161,6 +161,11 @@ class D3d12AbiGate(unittest.TestCase):
         # its resource and the rounding cannot wrap to 0.
         self.assertIn('sized.ByteSize = (resource_arg->Width + kHeapPage - 1) & ~(kHeapPage - 1);', create)
         self.assertIn('heap->bytes = arg.ByteSize > kVaLimit ? ~0ULL :', heap)
+        # EXP1357: the runtime asks an existing resource's allocation info
+        # and kernel allocation handle before Map.
+        self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckExistingResourceAllocationInfo, '
+                      'CheckExistingResourceAllocationInfo);', source)
+        self.assertIn('*allocation = resource && resource->heap ? resource->heap->allocation : 0;', source)
         self.assertIn('D3D12DDI_RT_BUFFER', create)
         # the paging queue is created with the first heap, not with the device
         device = source[source.index('static HRESULT APIENTRY CreateDevice('):]

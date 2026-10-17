@@ -659,6 +659,25 @@ static VOID APIENTRY UnmapHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP heap_hand
     (void)device->kernel->pfnUnlockCb(device->runtime.handle, &unlock);
     heap->cpu = nullptr;
 }
+/* EXP1357: after the first committed buffer the runtime asks the existing
+ * resource's allocation info and kernel allocation handle; refused, the
+ * device was removed before Map. A committed buffer reports the layout its
+ * creation used (row-major, 64 KiB granule) and its heap's allocation. */
+static VOID APIENTRY CheckExistingResourceAllocationInfo(D3D12DDI_HDEVICE, D3D12DDI_HRESOURCE handle,
+                                                         D3D12DDI_RESOURCE_ALLOCATION_INFO *info,
+                                                         D3DKMT_HANDLE *allocation) {
+    auto *resource = static_cast<AgxD3d12Resource *>(handle.pDrvPrivate);
+    if (info) {
+        memset(info, 0, sizeof(*info));
+        info->ResourceDataAlignment = kHeapPage;
+        info->Layout = D3D12DDI_TL_ROW_MAJOR;
+        info->ResourceDataSize = resource && resource->heap ? resource->heap->bytes : ~0ULL;
+    }
+    if (allocation) *allocation = resource && resource->heap ? resource->heap->allocation : 0;
+    const UINT receipt[] = {resource && resource->heap ? 1u : 0u,
+                            resource && resource->heap ? static_cast<UINT>(resource->heap->bytes >> 16) : 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-existing-allocation-info", S_OK, receipt, 2);
+}
 static D3D12DDI_GPU_VIRTUAL_ADDRESS APIENTRY CheckResourceVirtualAddress(D3D12DDI_HDEVICE, D3D12DDI_HRESOURCE handle) {
     auto *resource = static_cast<AgxD3d12Resource *>(handle.pDrvPrivate);
     return resource ? resource->gpuva : 0;
@@ -840,7 +859,7 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckResourceVirtualAddress, CheckResourceVirtualAddress);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckResourceAllocationInfo, CheckResourceAllocationInfo);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckSubresourceInfo, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckSubresourceInfo));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckExistingResourceAllocationInfo, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckExistingResourceAllocationInfo));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckExistingResourceAllocationInfo, CheckExistingResourceAllocationInfo);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnOfferResources, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnOfferResources));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnReclaimResources, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnReclaimResources));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetImplicitPhysicalAdapterMask, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetImplicitPhysicalAdapterMask));
