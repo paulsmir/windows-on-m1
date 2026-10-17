@@ -81,3 +81,51 @@ RTV heap + RTV, ClearRenderTargetView (0.25, 0.5, 0.75, 1.0), transition,
 CopyTextureRegion to a READBACK footprint (pitch 256) -> every pixel
 (64, 128, 191, 255); then CopyTextureRegion UPLOAD footprint -> texture ->
 READBACK, pattern compare. Signals 8 and 9.
+
+## C6b
+
+### WINDOWS CONTRACT
+
+- D3D12DDIARG_CREATE_PIPELINE_STATE_0001: hVertexShader/hPixelShader
+  (tokenized programs from pfnCreateVertexShader/PixelShader), hBlendState,
+  hRasterizerState, hDepthStencilState, hElementLayout (elements carry the
+  runtime-resolved InputRegister), SampleMask, PrimitiveTopologyType,
+  RTVFormats; the runtime may destroy the state objects after the pipeline.
+- List state: pfnOMSetRenderTargets (CPU RTV handles, consumed at record;
+  single-range form), pfnRsSetViewports/ScissorRects, pfnIaSetTopology,
+  pfnIASetVertexBuffers (VA, size, stride), pfnOmSetBlendFactor/StencilRef,
+  pfnSetGraphicsRootSignature; pfnDrawInstanced. D3D12 always scissors.
+
+### AGX/ASAHI CONTRACT
+
+- The D3D10 frontend's translations (OutputMerger.cpp blend/depth-stencil,
+  Rasterizer.cpp rasterizer + viewport scale/translate with y flipped,
+  InputAssembly.cpp elements indexed by input register, Draw.cpp element
+  strides applied per draw); create_vs/fs_state(NIR from dxbc_to_nir, I/O
+  linked by register number); pipe_framebuffer_state with by-value
+  surfaces; draw_vbo.
+
+### TRANSLATION
+
+- Pipeline: copies of VS/PS tokens and state descriptions; compiled on the
+  owner at its first draw (shaders + blend/DSA/rasterizer CSOs + element
+  records); the vertex-elements CSO is created with the draw's strides and
+  cached per pipeline until they change.
+- Draw: snapshot of RTVs, viewport 0, scissor 0, topology, vertex buffers
+  (VA -> owner heap + offset), blend factor, stencil ref; replay sets the
+  framebuffer and state and calls draw_vbo; the submit unbinds framebuffer
+  and vertex buffers before flushing.
+- Refused with measure-d3d12-draw {reason}: graphics root parameters
+  (C6c), GS/HS/DS, no RTV; DSVs (measure-d3d12-render-targets-refused).
+
+### WHAT IS STILL UNKNOWN
+
+- Hardware: whether the owner's render pass on a D3D12 device context runs
+  like the D3D11 path's (same Asahi context type; first D3D12 render).
+
+### Checkpoint
+
+Probe C6B: red clear, green triangle (-0.5,-0.5)/(0,0.5)/(0.5,-0.5) from an
+UPLOAD vertex buffer (float2 + float4, stride 24), empty root signature
+(ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT); PASS = centre green, corner red, no
+other colours, 448..576 green pixels.

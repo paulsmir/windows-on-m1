@@ -92,6 +92,24 @@ class NativeOwner(unittest.TestCase):
         self.assertIn('->clear_render_target(', clear)
         self.assertIn('layers > resource->array_size - first_layer', clear)
 
+    def test_graphics(self):
+        # C6b: VS/PS through the repository's translator; D3D12 always
+        # scissors; viewports as the D3D10 frontend (y flipped, half-z);
+        # element strides come from the draw (cached per pipeline); the submit
+        # drops framebuffer and vertex-buffer bindings so they never outlive
+        # the heaps.
+        text = OWNER.read_text()
+        create = body(text, 'extern "C" HRESULT AgxD3d12OwnerCreateGraphics(')
+        self.assertIn('rast.scissor = 1;', create)
+        self.assertIn('rast.clip_halfz = 1;', create)
+        self.assertIn('dxbc_translate_tokens(', body(text, 'static void *create_shader('))
+        draw = body(text, 'extern "C" HRESULT AgxD3d12OwnerDraw(')
+        self.assertIn('viewport.scale[1] = -hh;', draw)
+        self.assertIn('elements[r].src_stride = draw->Vb[slot].Stride;', draw)
+        self.assertIn('->draw_vbo(', draw)
+        submit = body(text, 'extern "C" HRESULT AgxD3d12OwnerSubmitAndWait(')
+        self.assertLess(submit.index('set_framebuffer_state(owner->Context, &empty)'), submit.index('->flush('))
+
     def test_teardown_order(self):
         text = OWNER.read_text()
         destroy = body(text, 'extern "C" HRESULT AgxD3d12OwnerDestroy(')

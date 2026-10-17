@@ -240,20 +240,21 @@ class D3d12AbiGate(unittest.TestCase):
         implemented = set(re.findall(r'AGX_ASSIGN\(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, (\w+), (?!AGX_REJECT)', source))
         # EXP1363: the runtime's default-state setters are accepted (recorded
         # as received state); every state consumer stays fail-closed.
-        setters = {'pfnSetPredication', 'pfnIaSetTopology', 'pfnRsSetViewports', 'pfnRsSetScissorRects',
-                   'pfnOmSetBlendFactor', 'pfnOmSetStencilRef', 'pfnSetDescriptorHeaps',
-                   'pfnIASetIndexBuffer', 'pfnIASetVertexBuffers', 'pfnSOSetTargets', 'pfnOMSetRenderTargets'}
+        setters = {'pfnSetPredication', 'pfnSetDescriptorHeaps', 'pfnIASetIndexBuffer', 'pfnSOSetTargets'}
         compute = {'pfnSetPipelineState', 'pfnSetComputeRootSignature', 'pfnSetComputeRootUnorderedAccessView',
                    'pfnDispatch', 'pfnClearRootArguments', 'pfnSetComputeRoot32BitConstant',
                    'pfnSetComputeRoot32BitConstants', 'pfnSetComputeRootConstantBufferView',
                    'pfnSetComputeRootDescriptorTable', 'pfnSetComputeRootShaderResourceView'}
         compute |= {'pfnClearRenderTargetView', 'pfnCopyTextureRegion'}  # C6a
+        # C6b: graphics state setters (real; each still records its default-state bit) and DrawInstanced
+        compute |= {'pfnIaSetTopology', 'pfnRsSetViewports', 'pfnRsSetScissorRects', 'pfnOmSetBlendFactor',
+                    'pfnOmSetStencilRef', 'pfnOMSetRenderTargets', 'pfnIASetVertexBuffers', 'pfnDrawInstanced',
+                    'pfnSetGraphicsRootSignature'}
         self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList', 'pfnCopyBufferRegion',
                                        'pfnResourceBarrier'} | setters | compute)
         for member in setters:
             self.assertIn('AGX_LIST_STATE(%s)' % member, source)
-        for consumer in ('pfnDrawInstanced', 'pfnDrawIndexedInstanced', 'pfnResourceCopy',
-                         'pfnClearDepthStencilView'):
+        for consumer in ('pfnDrawIndexedInstanced', 'pfnResourceCopy', 'pfnClearDepthStencilView'):
             self.assertIn('AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, %s)' % consumer, source)
 
     def test_c5_compute_dispatch(self):
@@ -387,6 +388,39 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('AgxD3d12OwnerCopyTexture(', execute)
         # buffers carry their type so a footprint side is never a texture
         self.assertIn('resource->type = D3D12DDI_RT_BUFFER;', create)
+
+    def test_c6b_draw(self):
+        # C6b invariants: a pipeline keeps copies of its VS/PS programs and
+        # state descriptions (the runtime may destroy the objects); RTVs are
+        # read when OMSetRenderTargets is recorded; every real setter still
+        # records its default-state bit (EXP1363); a draw snapshots the list
+        # state and refuses graphics root parameters, GS/HS/DS and a missing
+        # RTV with a receipt; depth-stencil views refuse until C6c.
+        source = SOURCE.read_text()
+        def fn(name):
+            start = source.index(name)
+            return source[start:source.index('\n}\n', start)]
+        size = fn('static SIZE_T APIENTRY CalcPrivatePipelineStateSize(')
+        self.assertIn('(vs ? vs->dwords : 0) + (ps ? ps->dwords : 0)', size)
+        create = fn('static HRESULT APIENTRY CreatePipelineState(')
+        for copy in ('memcpy(pso->cs + pso->cs_dwords, vs->tokens', 'memcpy(&pso->blend,', 'memcpy(&pso->rasterizer,',
+                     'memcpy(&pso->depth_stencil,', 'memcpy(pso->element, layout->element'):
+            self.assertIn(copy, create)
+        rt = fn('static VOID APIENTRY OMSetRenderTargets(')
+        self.assertIn('list->rtv[i] = view && view->kind == kDescriptorRtv ? *view', rt)
+        self.assertIn('AGX_LIST_BIT(pfnOMSetRenderTargets)', rt)
+        for setter, bit in (('RsSetViewports', 'pfnRsSetViewports'), ('RsSetScissorRects', 'pfnRsSetScissorRects'),
+                            ('IaSetTopology', 'pfnIaSetTopology'), ('OmSetBlendFactor', 'pfnOmSetBlendFactor'),
+                            ('OmSetStencilRef', 'pfnOmSetStencilRef'), ('IASetVertexBuffers', 'pfnIASetVertexBuffers')):
+            self.assertIn('AGX_LIST_BIT(%s)' % bit, fn('static VOID APIENTRY %s(' % setter))
+        draw = fn('static VOID APIENTRY DrawInstanced(')
+        self.assertIn('list->graphics_root && list->graphics_root->parameters ? 4u', draw)
+        self.assertIn('pso->desc.hGeometryShader.pDrvPrivate', draw)
+        self.assertIn('"measure-d3d12-draw"', draw)
+        self.assertIn('memcpy(draw.vb, list->vb, sizeof(draw.vb));', draw)
+        self.assertIn('AgxD3d12OwnerDraw(', fn('static VOID APIENTRY ExecuteCommandLists('))
+        # recorded commands share storage
+        self.assertIn('    union {\n        AgxD3d12Copy copy;', source)
 
     def test_package_and_receipts(self):
         package = ROOT / 'drivers/apple-agx/render-admission/umd'

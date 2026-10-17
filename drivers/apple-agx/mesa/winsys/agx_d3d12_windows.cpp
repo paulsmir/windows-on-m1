@@ -44,6 +44,7 @@ struct AGX_D3D12_OWNER {
   void *ErrorContext;
   UINT PendingCopies;
   UINT PendingDispatches;
+  UINT PendingDraws; /* C6b: draws whose framebuffer/vertex bindings the submit drops */
 };
 
 static VOID APIENTRY owner_error(D3D10DDI_HRTCORELAYER handle, HRESULT error) {
@@ -487,8 +488,301 @@ extern "C" HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *owner, const AGX_D3
   return hr;
 }
 
+/* C6b: graphics pipelines and draws, translated as the D3D10 frontend does
+ * (OutputMerger.cpp blend/depth-stencil, Rasterizer.cpp rasterizer and
+ * viewports, InputAssembly.cpp elements by input register, Draw.cpp
+ * per-draw element strides). */
+static unsigned blend_factor(unsigned blend) {
+  switch (blend) {
+  case D3D10_DDI_BLEND_ZERO: return PIPE_BLENDFACTOR_ZERO;
+  case D3D10_DDI_BLEND_ONE: return PIPE_BLENDFACTOR_ONE;
+  case D3D10_DDI_BLEND_SRC_COLOR: return PIPE_BLENDFACTOR_SRC_COLOR;
+  case D3D10_DDI_BLEND_INV_SRC_COLOR: return PIPE_BLENDFACTOR_INV_SRC_COLOR;
+  case D3D10_DDI_BLEND_SRC_ALPHA: return PIPE_BLENDFACTOR_SRC_ALPHA;
+  case D3D10_DDI_BLEND_INV_SRC_ALPHA: return PIPE_BLENDFACTOR_INV_SRC_ALPHA;
+  case D3D10_DDI_BLEND_DEST_ALPHA: return PIPE_BLENDFACTOR_DST_ALPHA;
+  case D3D10_DDI_BLEND_INV_DEST_ALPHA: return PIPE_BLENDFACTOR_INV_DST_ALPHA;
+  case D3D10_DDI_BLEND_DEST_COLOR: return PIPE_BLENDFACTOR_DST_COLOR;
+  case D3D10_DDI_BLEND_INV_DEST_COLOR: return PIPE_BLENDFACTOR_INV_DST_COLOR;
+  case D3D10_DDI_BLEND_SRC_ALPHASAT: return PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE;
+  case D3D10_DDI_BLEND_BLEND_FACTOR: return PIPE_BLENDFACTOR_CONST_COLOR;
+  case D3D10_DDI_BLEND_INVBLEND_FACTOR: return PIPE_BLENDFACTOR_INV_CONST_COLOR;
+  case D3D10_DDI_BLEND_SRC1_COLOR: return PIPE_BLENDFACTOR_SRC1_COLOR;
+  case D3D10_DDI_BLEND_INV_SRC1_COLOR: return PIPE_BLENDFACTOR_INV_SRC1_COLOR;
+  case D3D10_DDI_BLEND_SRC1_ALPHA: return PIPE_BLENDFACTOR_SRC1_ALPHA;
+  case D3D10_DDI_BLEND_INV_SRC1_ALPHA: return PIPE_BLENDFACTOR_INV_SRC1_ALPHA;
+  default: return PIPE_BLENDFACTOR_ONE;
+  }
+}
+static unsigned blend_op(unsigned op) {
+  switch (op) {
+  case D3D10_DDI_BLEND_OP_SUBTRACT: return PIPE_BLEND_SUBTRACT;
+  case D3D10_DDI_BLEND_OP_REV_SUBTRACT: return PIPE_BLEND_REVERSE_SUBTRACT;
+  case D3D10_DDI_BLEND_OP_MIN: return PIPE_BLEND_MIN;
+  case D3D10_DDI_BLEND_OP_MAX: return PIPE_BLEND_MAX;
+  default: return PIPE_BLEND_ADD;
+  }
+}
+static unsigned comparison(unsigned func) {
+  switch (func) {
+  case D3D10_DDI_COMPARISON_NEVER: return PIPE_FUNC_NEVER;
+  case D3D10_DDI_COMPARISON_LESS: return PIPE_FUNC_LESS;
+  case D3D10_DDI_COMPARISON_EQUAL: return PIPE_FUNC_EQUAL;
+  case D3D10_DDI_COMPARISON_LESS_EQUAL: return PIPE_FUNC_LEQUAL;
+  case D3D10_DDI_COMPARISON_GREATER: return PIPE_FUNC_GREATER;
+  case D3D10_DDI_COMPARISON_NOT_EQUAL: return PIPE_FUNC_NOTEQUAL;
+  case D3D10_DDI_COMPARISON_GREATER_EQUAL: return PIPE_FUNC_GEQUAL;
+  default: return PIPE_FUNC_ALWAYS;
+  }
+}
+static unsigned stencil_op(unsigned op) {
+  switch (op) {
+  case D3D10_DDI_STENCIL_OP_ZERO: return PIPE_STENCIL_OP_ZERO;
+  case D3D10_DDI_STENCIL_OP_REPLACE: return PIPE_STENCIL_OP_REPLACE;
+  case D3D10_DDI_STENCIL_OP_INCR_SAT: return PIPE_STENCIL_OP_INCR;
+  case D3D10_DDI_STENCIL_OP_DECR_SAT: return PIPE_STENCIL_OP_DECR;
+  case D3D10_DDI_STENCIL_OP_INVERT: return PIPE_STENCIL_OP_INVERT;
+  case D3D10_DDI_STENCIL_OP_INCR: return PIPE_STENCIL_OP_INCR_WRAP;
+  case D3D10_DDI_STENCIL_OP_DECR: return PIPE_STENCIL_OP_DECR_WRAP;
+  default: return PIPE_STENCIL_OP_KEEP;
+  }
+}
+static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_shader_stage stage) {
+  struct dxbc_nir_error error = {};
+  struct nir_shader *nir = dxbc_translate_tokens(tokens, pipe->screen->nir_options[stage], &error);
+  receipt("measure-d3d12-graphics-shader", nir ? S_OK : E_NOTIMPL, static_cast<UINT>(stage), error.opcode, error.offset);
+  if (!nir) return NULL;
+  struct pipe_shader_state state = {};
+  state.type = PIPE_SHADER_IR_NIR;
+  state.ir.nir = nir;
+  return stage == MESA_SHADER_VERTEX ? pipe->create_vs_state(pipe, &state) : pipe->create_fs_state(pipe, &state);
+}
+
+extern "C" void AgxD3d12OwnerDestroyGraphics(AGX_D3D12_OWNER *owner, AGX_D3D12_GRAPHICS *graphics) {
+  if (!owner || !owner->Context || !graphics) return;
+  struct pipe_context *pipe = owner->Context;
+  if (graphics->Vs) pipe->delete_vs_state(pipe, graphics->Vs);
+  if (graphics->Fs) pipe->delete_fs_state(pipe, graphics->Fs);
+  if (graphics->Blend) pipe->delete_blend_state(pipe, graphics->Blend);
+  if (graphics->DepthStencil) pipe->delete_depth_stencil_alpha_state(pipe, graphics->DepthStencil);
+  if (graphics->Rasterizer) pipe->delete_rasterizer_state(pipe, graphics->Rasterizer);
+  if (graphics->Velems) pipe->delete_vertex_elements_state(pipe, graphics->Velems);
+  memset(graphics, 0, sizeof(*graphics));
+}
+
+extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX_D3D12_GRAPHICS_DESC *desc,
+                                               AGX_D3D12_GRAPHICS *graphics) {
+  if (!owner || !owner->Context || !desc || !desc->Vs || !graphics || desc->NumElements > AGX_D3D12_MAX_ELEMENTS)
+    return E_INVALIDARG;
+  memset(graphics, 0, sizeof(*graphics));
+  struct pipe_context *pipe = owner->Context;
+  graphics->Vs = create_shader(pipe, desc->Vs, MESA_SHADER_VERTEX);
+  graphics->Fs = desc->Ps ? create_shader(pipe, desc->Ps, MESA_SHADER_FRAGMENT) : NULL;
+  struct pipe_blend_state blend = {};
+  blend.independent_blend_enable = desc->IndependentBlend ? 1 : 0;
+  blend.alpha_to_coverage = desc->AlphaToCoverage ? 1 : 0;
+  for (unsigned i = 0; i < 8; ++i) {
+    const unsigned s = desc->IndependentBlend ? i : 0;
+    blend.rt[i].blend_enable = desc->Rt[s].BlendEnable ? 1 : 0;
+    blend.rt[i].colormask = desc->Rt[s].WriteMask & 0xf;
+    blend.rt[i].rgb_func = blend_op(desc->Rt[s].Op);
+    const bool rgb_minmax = desc->Rt[s].Op == D3D10_DDI_BLEND_OP_MIN || desc->Rt[s].Op == D3D10_DDI_BLEND_OP_MAX;
+    blend.rt[i].rgb_src_factor = rgb_minmax ? PIPE_BLENDFACTOR_ONE : blend_factor(desc->Rt[s].Src);
+    blend.rt[i].rgb_dst_factor = rgb_minmax ? PIPE_BLENDFACTOR_ONE : blend_factor(desc->Rt[s].Dst);
+    blend.rt[i].alpha_func = blend_op(desc->Rt[s].OpAlpha);
+    const bool a_minmax = desc->Rt[s].OpAlpha == D3D10_DDI_BLEND_OP_MIN || desc->Rt[s].OpAlpha == D3D10_DDI_BLEND_OP_MAX;
+    blend.rt[i].alpha_src_factor = a_minmax ? PIPE_BLENDFACTOR_ONE : blend_factor(desc->Rt[s].SrcAlpha);
+    blend.rt[i].alpha_dst_factor = a_minmax ? PIPE_BLENDFACTOR_ONE : blend_factor(desc->Rt[s].DstAlpha);
+  }
+  graphics->Blend = pipe->create_blend_state(pipe, &blend);
+  struct pipe_depth_stencil_alpha_state dsa = {};
+  dsa.depth_enabled = desc->DepthEnable ? 1 : 0;
+  dsa.depth_writemask = desc->DepthEnable && desc->DepthWrite ? 1 : 0;
+  dsa.depth_func = comparison(desc->DepthFunc);
+  if (desc->StencilEnable) {
+    for (unsigned f = 0; f < 2; ++f) {
+      const auto &face = f ? desc->Back : desc->Front;
+      dsa.stencil[f].enabled = 1;
+      dsa.stencil[f].func = comparison(face.Func);
+      dsa.stencil[f].fail_op = stencil_op(face.Fail);
+      dsa.stencil[f].zpass_op = stencil_op(face.Pass);
+      dsa.stencil[f].zfail_op = stencil_op(face.DepthFail);
+      dsa.stencil[f].valuemask = desc->StencilReadMask & 0xff;
+      dsa.stencil[f].writemask = desc->StencilWriteMask & 0xff;
+    }
+  }
+  graphics->DepthStencil = pipe->create_depth_stencil_alpha_state(pipe, &dsa);
+  struct pipe_rasterizer_state rast = {};
+  rast.flatshade_first = 1;
+  rast.front_ccw = desc->FrontCounterClockwise ? 1 : 0;
+  rast.cull_face = desc->CullMode == D3D10_DDI_CULL_FRONT ? PIPE_FACE_FRONT
+                 : desc->CullMode == D3D10_DDI_CULL_BACK ? PIPE_FACE_BACK : PIPE_FACE_NONE;
+  rast.fill_front = rast.fill_back = desc->FillMode == D3D10_DDI_FILL_WIREFRAME ? PIPE_POLYGON_MODE_LINE : PIPE_POLYGON_MODE_FILL;
+  rast.scissor = 1; /* D3D12 always scissors */
+  rast.offset_units = static_cast<float>(desc->DepthBias);
+  rast.offset_scale = desc->SlopeScaledDepthBias;
+  rast.offset_clamp = desc->DepthBiasClamp;
+  rast.offset_tri = desc->DepthBias || desc->SlopeScaledDepthBias ? 1 : 0;
+  rast.half_pixel_center = 1;
+  rast.clip_halfz = 1;
+  rast.depth_clip_near = rast.depth_clip_far = desc->DepthClipEnable ? 1 : 0;
+  rast.depth_clamp = 1;
+  rast.point_quad_rasterization = 1;
+  rast.point_size = 1.0f;
+  rast.point_line_tri_clip = 1;
+  rast.line_width = 1.0f;
+  graphics->Rasterizer = pipe->create_rasterizer_state(pipe, &rast);
+  HRESULT hr = graphics->Vs && (graphics->Fs || !desc->Ps) && graphics->Blend && graphics->DepthStencil &&
+                       graphics->Rasterizer ? S_OK : E_NOTIMPL;
+  graphics->NumElements = desc->NumElements;
+  for (unsigned i = 0; SUCCEEDED(hr) && i < desc->NumElements; ++i) {
+    const enum pipe_format format = FormatTranslate(desc->Element[i].Format, FALSE);
+    if (format == PIPE_FORMAT_NONE || desc->Element[i].Slot >= AGX_D3D12_VB_SLOTS ||
+        desc->Element[i].Register >= AGX_D3D12_MAX_ELEMENTS)
+      hr = E_NOTIMPL;
+    graphics->Element[i].Slot = desc->Element[i].Slot;
+    graphics->Element[i].Offset = desc->Element[i].Offset;
+    graphics->Element[i].Register = desc->Element[i].Register;
+    graphics->Element[i].Divisor = desc->Element[i].PerInstance ? (desc->Element[i].StepRate ? desc->Element[i].StepRate : ~0u) : 0u;
+    graphics->Element[i].Format = static_cast<unsigned>(format);
+  }
+  receipt("measure-d3d12-graphics", hr, graphics->Fs != NULL ? 1u : 0u, desc->NumElements,
+          (graphics->Blend != NULL) | ((graphics->DepthStencil != NULL) << 1) | ((graphics->Rasterizer != NULL) << 2));
+  if (FAILED(hr)) AgxD3d12OwnerDestroyGraphics(owner, graphics);
+  return hr;
+}
+
+static enum mesa_prim primitive(unsigned topology) {
+  switch (topology) {
+  case 1: return MESA_PRIM_POINTS;          /* D3D_PRIMITIVE_TOPOLOGY_POINTLIST */
+  case 2: return MESA_PRIM_LINES;           /* LINELIST */
+  case 3: return MESA_PRIM_LINE_STRIP;      /* LINESTRIP */
+  case 4: return MESA_PRIM_TRIANGLES;       /* TRIANGLELIST */
+  case 5: return MESA_PRIM_TRIANGLE_STRIP;  /* TRIANGLESTRIP */
+  case 10: return MESA_PRIM_LINES_ADJACENCY;
+  case 11: return MESA_PRIM_LINE_STRIP_ADJACENCY;
+  case 12: return MESA_PRIM_TRIANGLES_ADJACENCY;
+  case 13: return MESA_PRIM_TRIANGLE_STRIP_ADJACENCY;
+  default: return MESA_PRIM_COUNT;
+  }
+}
+
+extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRAW *draw) {
+  if (!owner || !owner->Context || !draw || !draw->Pipeline || !draw->Pipeline->Vs || draw->NumRtvs > 8)
+    return E_INVALIDARG;
+  const enum mesa_prim mode = primitive(draw->Topology);
+  if (mode == MESA_PRIM_COUNT) return E_NOTIMPL;
+  if (!draw->VertexCount || !draw->InstanceCount) return S_OK;
+  struct pipe_context *pipe = owner->Context;
+  AGX_D3D12_GRAPHICS *graphics = draw->Pipeline;
+  /* framebuffer from the RTVs: the size is the smallest bound level */
+  struct pipe_framebuffer_state fb = {};
+  fb.nr_cbufs = static_cast<uint8_t>(draw->NumRtvs);
+  unsigned width = 0, height = 0;
+  for (unsigned i = 0; i < draw->NumRtvs; ++i) {
+    if (!draw->Rtv[i].Texture || !draw->Rtv[i].Texture->Resource) continue;
+    struct pipe_resource *texture = static_cast<struct pipe_resource *>(draw->Rtv[i].Texture->Resource);
+    const enum pipe_format format = FormatTranslate(draw->Rtv[i].Format, FALSE);
+    if (format == PIPE_FORMAT_NONE || draw->Rtv[i].Level > texture->last_level || !draw->Rtv[i].Layers) return E_INVALIDARG;
+    fb.cbufs[i].format = format;
+    fb.cbufs[i].level = draw->Rtv[i].Level;
+    fb.cbufs[i].first_layer = static_cast<uint16_t>(draw->Rtv[i].FirstLayer);
+    fb.cbufs[i].last_layer = static_cast<uint16_t>(draw->Rtv[i].FirstLayer + draw->Rtv[i].Layers - 1);
+    fb.cbufs[i].texture = texture;
+    const unsigned w = level_extent(texture->width0, draw->Rtv[i].Level), h = level_extent(texture->height0, draw->Rtv[i].Level);
+    width = width && width < w ? width : w;
+    height = height && height < h ? height : h;
+  }
+  if (!width || !height) return E_INVALIDARG;
+  fb.width = width;
+  fb.height = height;
+  fb.layers = 1;
+  /* vertex elements with this draw's strides (cached per pipeline) */
+  struct pipe_vertex_element elements[AGX_D3D12_MAX_ELEMENTS] = {};
+  unsigned count = 0, vb_count = 0;
+  bool strides_match = graphics->Velems != NULL;
+  for (unsigned i = 0; i < graphics->NumElements; ++i) {
+    const unsigned r = graphics->Element[i].Register, slot = graphics->Element[i].Slot;
+    elements[r].src_offset = static_cast<uint16_t>(graphics->Element[i].Offset);
+    elements[r].vertex_buffer_index = static_cast<uint8_t>(slot);
+    elements[r].src_format = static_cast<uint8_t>(graphics->Element[i].Format);
+    elements[r].src_stride = draw->Vb[slot].Stride;
+    elements[r].instance_divisor = graphics->Element[i].Divisor;
+    count = count > r + 1 ? count : r + 1;
+    vb_count = vb_count > slot + 1 ? vb_count : slot + 1;
+    strides_match = strides_match && graphics->VelemsStrides[slot] == draw->Vb[slot].Stride;
+  }
+  for (unsigned r = 0; r < count; ++r)
+    if (!elements[r].src_format) elements[r].src_format = PIPE_FORMAT_R32G32B32A32_FLOAT; /* a hole reads vertex 0 of slot 0 */
+  if (count && !strides_match) {
+    if (graphics->Velems) pipe->delete_vertex_elements_state(pipe, graphics->Velems);
+    graphics->Velems = pipe->create_vertex_elements_state(pipe, count, elements);
+    for (unsigned s = 0; s < AGX_D3D12_VB_SLOTS; ++s) graphics->VelemsStrides[s] = draw->Vb[s].Stride;
+    if (!graphics->Velems) return E_OUTOFMEMORY;
+  }
+  struct pipe_vertex_buffer buffers[AGX_D3D12_VB_SLOTS] = {};
+  for (unsigned s = 0; s < vb_count; ++s) {
+    const AGX_D3D12_BUFFER *buffer = draw->Vb[s].Buffer;
+    if (!buffer) continue;
+    if (!buffer->Resource || draw->Vb[s].Offset >= buffer->Bytes) return E_INVALIDARG;
+    buffers[s].buffer.resource = static_cast<struct pipe_resource *>(buffer->Resource);
+    buffers[s].buffer_offset = static_cast<unsigned>(draw->Vb[s].Offset);
+  }
+  pipe->set_framebuffer_state(pipe, &fb);
+  pipe->bind_vs_state(pipe, graphics->Vs);
+  pipe->bind_fs_state(pipe, graphics->Fs);
+  pipe->bind_blend_state(pipe, graphics->Blend);
+  pipe->bind_depth_stencil_alpha_state(pipe, graphics->DepthStencil);
+  pipe->bind_rasterizer_state(pipe, graphics->Rasterizer);
+  if (count) pipe->bind_vertex_elements_state(pipe, graphics->Velems);
+  pipe->set_vertex_buffers(pipe, vb_count, buffers);
+  struct pipe_viewport_state viewport = {};
+  const float hw = draw->Viewport[2] / 2.0f, hh = draw->Viewport[3] / 2.0f;
+  viewport.scale[0] = hw;
+  viewport.scale[1] = -hh;
+  viewport.scale[2] = draw->Viewport[5] - draw->Viewport[4];
+  viewport.translate[0] = hw + draw->Viewport[0];
+  viewport.translate[1] = hh + draw->Viewport[1];
+  viewport.translate[2] = draw->Viewport[4];
+  viewport.swizzle_x = PIPE_VIEWPORT_SWIZZLE_POSITIVE_X;
+  viewport.swizzle_y = PIPE_VIEWPORT_SWIZZLE_POSITIVE_Y;
+  viewport.swizzle_z = PIPE_VIEWPORT_SWIZZLE_POSITIVE_Z;
+  viewport.swizzle_w = PIPE_VIEWPORT_SWIZZLE_POSITIVE_W;
+  pipe->set_viewport_states(pipe, 0, 1, &viewport);
+  struct pipe_scissor_state scissor = {};
+  scissor.minx = static_cast<uint16_t>(draw->Scissor.left < 0 ? 0 : draw->Scissor.left);
+  scissor.miny = static_cast<uint16_t>(draw->Scissor.top < 0 ? 0 : draw->Scissor.top);
+  scissor.maxx = static_cast<uint16_t>(draw->Scissor.right < 0 ? 0 : draw->Scissor.right);
+  scissor.maxy = static_cast<uint16_t>(draw->Scissor.bottom < 0 ? 0 : draw->Scissor.bottom);
+  pipe->set_scissor_states(pipe, 0, 1, &scissor);
+  struct pipe_blend_color blend_color = {};
+  for (unsigned i = 0; i < 4; ++i) blend_color.color[i] = draw->BlendFactor[i];
+  pipe->set_blend_color(pipe, &blend_color);
+  struct pipe_stencil_ref ref = {};
+  ref.ref_value[0] = ref.ref_value[1] = static_cast<uint8_t>(draw->StencilRef);
+  pipe->set_stencil_ref(pipe, ref);
+  pipe->set_sample_mask(pipe, ~0u);
+  struct pipe_draw_info info = {};
+  info.mode = static_cast<uint8_t>(mode);
+  info.start_instance = draw->StartInstance;
+  info.instance_count = draw->InstanceCount;
+  struct pipe_draw_start_count_bias range = {};
+  range.start = draw->StartVertex;
+  range.count = draw->VertexCount;
+  pipe->draw_vbo(pipe, &info, 0, NULL, &range, 1);
+  ++owner->PendingDraws;
+  return S_OK;
+}
+
 extern "C" HRESULT AgxD3d12OwnerSubmitAndWait(AGX_D3D12_OWNER *owner) {
   if (!owner || !owner->Context) return E_INVALIDARG;
+  if (owner->PendingDraws) {
+    /* drop the draw bindings so they never outlive the heaps */
+    struct pipe_framebuffer_state empty = {};
+    owner->Context->set_framebuffer_state(owner->Context, &empty);
+    owner->Context->set_vertex_buffers(owner->Context, 0, NULL);
+    owner->PendingDraws = 0;
+  }
   const UINT copies = owner->PendingCopies | (owner->PendingDispatches << 16);
   owner->PendingCopies = owner->PendingDispatches = 0;
   owner->Context->flush(owner->Context, NULL, 0);

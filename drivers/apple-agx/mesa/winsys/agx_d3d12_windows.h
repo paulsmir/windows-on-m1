@@ -120,6 +120,71 @@ typedef struct {
   int ToBuffer; /* 1: texture -> buffer, 0: buffer -> texture */
 } AGX_D3D12_TEXTURE_COPY;
 HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *Owner, const AGX_D3D12_TEXTURE_COPY *Copy);
+/* C6b (D3D12-C6-graphics.md): a graphics pipeline. State fields carry the
+ * D3D10/11/12 DDI numeric values (D3D12DDI_BLEND_* == D3D10_DDI_BLEND_*,
+ * comparison/stencil/cull/fill likewise); Vs/Ps are tokenized programs. */
+#define AGX_D3D12_MAX_ELEMENTS 16
+typedef struct {
+  const UINT *Vs;
+  const UINT *Ps; /* NULL = no pixel shader */
+  int AlphaToCoverage, IndependentBlend;
+  struct {
+    int BlendEnable;
+    unsigned Src, Dst, Op, SrcAlpha, DstAlpha, OpAlpha, WriteMask;
+  } Rt[8];
+  unsigned SampleMask;
+  unsigned FillMode, CullMode;
+  int FrontCounterClockwise, DepthBias, DepthClipEnable;
+  float DepthBiasClamp, SlopeScaledDepthBias;
+  int DepthEnable, DepthWrite, StencilEnable;
+  unsigned DepthFunc, StencilReadMask, StencilWriteMask;
+  struct {
+    unsigned Fail, DepthFail, Pass, Func;
+  } Front, Back;
+  unsigned NumElements;
+  struct {
+    unsigned Slot, Offset, Register, PerInstance, StepRate;
+    DXGI_FORMAT Format;
+  } Element[AGX_D3D12_MAX_ELEMENTS];
+} AGX_D3D12_GRAPHICS_DESC;
+typedef struct {
+  void *Vs, *Fs, *Blend, *DepthStencil, *Rasterizer;
+  unsigned NumElements;
+  struct {
+    unsigned Slot, Offset, Register, Divisor, Format; /* pipe format */
+  } Element[AGX_D3D12_MAX_ELEMENTS];
+  /* the vertex-elements CSO of the last strides drawn (D3D12 strides come
+   * from IASetVertexBuffers) */
+  void *Velems;
+  unsigned VelemsStrides[16];
+} AGX_D3D12_GRAPHICS;
+HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *Owner, const AGX_D3D12_GRAPHICS_DESC *Desc,
+                                    AGX_D3D12_GRAPHICS *Graphics);
+void AgxD3d12OwnerDestroyGraphics(AGX_D3D12_OWNER *Owner, AGX_D3D12_GRAPHICS *Graphics);
+#define AGX_D3D12_VB_SLOTS 16
+typedef struct {
+  AGX_D3D12_GRAPHICS *Pipeline;
+  unsigned NumRtvs;
+  struct {
+    const AGX_D3D12_BUFFER *Texture; /* NULL = unbound slot */
+    DXGI_FORMAT Format;
+    unsigned Level, FirstLayer, Layers;
+  } Rtv[8];
+  float Viewport[6]; /* TopLeftX, TopLeftY, Width, Height, MinDepth, MaxDepth */
+  RECT Scissor;
+  unsigned Topology; /* D3D_PRIMITIVE_TOPOLOGY */
+  struct {
+    const AGX_D3D12_BUFFER *Buffer; /* NULL = unbound */
+    unsigned long long Offset;
+    unsigned Stride;
+  } Vb[AGX_D3D12_VB_SLOTS];
+  float BlendFactor[4];
+  unsigned StencilRef;
+  unsigned VertexCount, InstanceCount, StartVertex, StartInstance;
+} AGX_D3D12_DRAW;
+/* Records one draw; bindings that reference heaps are dropped by the next
+ * AgxD3d12OwnerSubmitAndWait. */
+HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *Owner, const AGX_D3D12_DRAW *Draw);
 /* Submits the recorded work and waits for it (C4b orders it before the
  * runtime's later queue signal by completing it first). */
 HRESULT AgxD3d12OwnerSubmitAndWait(AGX_D3D12_OWNER *Owner);
