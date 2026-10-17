@@ -1,6 +1,6 @@
 # D3D12 C9: compute texture views, samplers and typed UAVs
 
-Status 2026-10-18. C5-C5d bound buffer views to compute; C6e added texture
+Status 2026-10-17. C5-C5d bound buffer views to compute; C6e added texture
 SRVs and samplers to draws. C9 gives compute the same view set and adds the
 typed UAVs (RWTexture2D, typed RWBuffer) D3D12 applications use for
 post-processing, culling and mip generation.

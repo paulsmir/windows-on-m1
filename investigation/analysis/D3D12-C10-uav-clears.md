@@ -1,6 +1,6 @@
 # D3D12 C10: UAV clears, DiscardResource, SetMarker
 
-Status 2026-10-18. Rejected list DDIs that ordinary D3D12 applications call
+Status 2026-10-17. Rejected list DDIs that ordinary D3D12 applications call
 on every frame: ClearUnorderedAccessView{Uint,Float}, DiscardResource and
 SetMarker (PIX events).
 
