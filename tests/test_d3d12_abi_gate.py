@@ -94,6 +94,18 @@ class D3d12AbiGate(unittest.TestCase):
                 self.assertEqual(value & (value - 1), 0, name)
         self.assertNotIn('SubCaps[1]', sets)
         self.assertNotIn('d.Flags', sets)
+        # C1f (EXP1350): the runtime creates a root signature during device
+        # initialisation; the driver records the D3D12 root argument cost.
+        for member in ('pfnCalcPrivateRootSignatureSize', 'pfnCreateRootSignature', 'pfnDestroyRootSignature'):
+            self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
+        cost = source[source.index('static UINT RootParameterDwords('):]
+        cost = cost[:cost.index('\n}\n')]
+        self.assertIn('D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE: return 1;', cost)
+        self.assertIn('D3D12DDI_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS: return p.Constants.Num32BitValues;', cost)
+        self.assertIn('default: return 2;', cost)
+        size = source[source.index('static SIZE_T APIENTRY CalcPrivateRootSignatureSize('):]
+        size = size[:size.index('\n}\n')]
+        self.assertIn('NumParameters', size)
 
     def test_package_and_receipts(self):
         package = ROOT / 'drivers/apple-agx/render-admission/umd'

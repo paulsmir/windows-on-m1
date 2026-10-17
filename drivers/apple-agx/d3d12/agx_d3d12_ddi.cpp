@@ -215,6 +215,58 @@ static VOID APIENTRY CheckMultisampleQualityLevels(D3D12DDI_HDEVICE, DXGI_FORMAT
 static VOID APIENTRY QueryNodeMap(D3D12DDI_HDEVICE, UINT adapters, UINT *map) {
     for (UINT i = 0; map && i < adapters; ++i) map[i] = 0; /* physical adapter i -> node 0 */
 }
+/* C1f (EXP1350): device initialisation creates a root signature after the
+ * layout-sets caps; a refused pfnCalcPrivateRootSignatureSize removes the
+ * device (0x887a0005). The driver object records the root argument layout
+ * in DWORDs as D3D12 defines its cost (descriptor table 1, root constants
+ * Num32BitValues, root CBV/SRV/UAV 2); C5 lowers bindings from it. */
+struct AgxD3d12RootParameter {
+    UINT type;
+    UINT visibility;
+    UINT offset; /* in DWORDs */
+    UINT dwords;
+};
+struct AgxD3d12RootSignature {
+    UINT parameters;
+    UINT static_samplers;
+    UINT flags;
+    UINT dwords;
+    AgxD3d12RootParameter parameter[1];
+};
+static UINT RootParameterDwords(const D3D12DDI_ROOT_PARAMETER &p) {
+    switch (p.ParameterType) {
+    case D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE: return 1;
+    case D3D12DDI_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS: return p.Constants.Num32BitValues;
+    default: return 2; /* root CBV/SRV/UAV: a 64-bit GPU virtual address */
+    }
+}
+static SIZE_T APIENTRY CalcPrivateRootSignatureSize(D3D12DDI_HDEVICE,
+                                                    const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0001 *arg) {
+    const UINT count = arg && arg->pRootSignature ? arg->pRootSignature->NumParameters : 0;
+    return offsetof(AgxD3d12RootSignature, parameter) + (count ? count : 1) * sizeof(AgxD3d12RootParameter);
+}
+static HRESULT APIENTRY CreateRootSignature(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0001 *arg,
+                                            D3D12DDI_HROOTSIGNATURE handle) {
+    auto *root = static_cast<AgxD3d12RootSignature *>(handle.pDrvPrivate);
+    if (!arg || !arg->pRootSignature || !root) return E_INVALIDARG;
+    const D3D12DDI_ROOT_SIGNATURE &desc = *arg->pRootSignature;
+    root->parameters = desc.NumParameters;
+    root->static_samplers = desc.NumStaticSamplers;
+    root->flags = static_cast<UINT>(desc.Flags);
+    root->dwords = 0;
+    for (UINT i = 0; i < desc.NumParameters; ++i) {
+        AgxD3d12RootParameter &out = root->parameter[i];
+        out.type = static_cast<UINT>(desc.pRootParameters[i].ParameterType);
+        out.visibility = static_cast<UINT>(desc.pRootParameters[i].ShaderVisibility);
+        out.offset = root->dwords;
+        out.dwords = RootParameterDwords(desc.pRootParameters[i]);
+        root->dwords += out.dwords;
+    }
+    const UINT receipt[] = {root->parameters, root->static_samplers, root->flags, root->dwords};
+    AdmissionUmdDiagnostic("measure-d3d12-root-signature", S_OK, receipt, 4);
+    return S_OK;
+}
+static VOID APIENTRY DestroyRootSignature(D3D12DDI_HDEVICE, D3D12DDI_HROOTSIGNATURE) {}
 static HRESULT APIENTRY CloseAdapter(D3D12DDI_HADAPTER) {
     AdmissionUmdDiagnostic("d3d12-close-adapter", S_OK, nullptr, 0);
     return S_OK;
@@ -286,9 +338,9 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateUnorderedAccessView, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateUnorderedAccessView));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateRenderTargetView, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateRenderTargetView));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDepthStencilView, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDepthStencilView));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateRootSignatureSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateRootSignatureSize));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateRootSignature, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateRootSignature));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyRootSignature, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyRootSignature));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateRootSignatureSize, CalcPrivateRootSignatureSize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateRootSignature, CreateRootSignature);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyRootSignature, DestroyRootSignature);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnSerializeObject, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnSerializeObject));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyObjectSerialization, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyObjectSerialization));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateDeserializedObjectSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateDeserializedObjectSize));
