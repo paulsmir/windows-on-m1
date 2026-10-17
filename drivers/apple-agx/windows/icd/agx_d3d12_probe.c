@@ -1268,6 +1268,88 @@ static int draw_depth(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fen
     return !(SUCCEEDED(hr) && ok);
 }
 
+/* C7A (D3D12-C7-present.md, measurement): a flip-model swapchain on the
+ * direct queue -- window, CreateSwapChainForHwnd (2 x 64x64 RGBA8,
+ * FLIP_DISCARD), back buffer 0 cleared green through an RTV, transition to
+ * PRESENT, Present(0, 0); every step prints its HRESULT and the UMD
+ * receipts name the DDIs the runtime and DXGI call or refuse. */
+static LRESULT CALLBACK probe_window_proc(HWND window, UINT message, WPARAM w, LPARAM l) {
+    return DefWindowProcW(window, message, w, l);
+}
+static int swapchain_present(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    WNDCLASSW wc = {0};
+    HWND window = NULL;
+    IDXGIFactory2 *factory = NULL;
+    IDXGISwapChain1 *swapchain = NULL;
+    ID3D12Resource *buffer = NULL;
+    ID3D12DescriptorHeap *rtv_heap = NULL;
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12GraphicsCommandList *list = NULL;
+    D3D12_DESCRIPTOR_HEAP_DESC rtv_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_NONE};
+    DXGI_SWAP_CHAIN_DESC1 desc = {0};
+    D3D12_CPU_DESCRIPTOR_HANDLE rtv = {0};
+    HRESULT hr;
+    wc.lpfnWndProc = probe_window_proc;
+    wc.hInstance = GetModuleHandleW(NULL);
+    wc.lpszClassName = L"AgxD3d12Probe";
+    RegisterClassW(&wc);
+    window = CreateWindowExW(0, wc.lpszClassName, L"AGX D3D12 C7A", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 100, 100, 160, 160,
+                             NULL, NULL, wc.hInstance, NULL);
+    hr = window ? CreateDXGIFactory1(&IID_IDXGIFactory2, (void **)&factory) : E_FAIL;
+    printf("C7A window %p factory hr=0x%08lx\n", (void *)window, (unsigned long)hr);
+    desc.Width = 64;
+    desc.Height = 64;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    desc.BufferCount = 2;
+    desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    if (SUCCEEDED(hr)) {
+        hr = IDXGIFactory2_CreateSwapChainForHwnd(factory, (IUnknown *)queue, window, &desc, NULL, NULL, &swapchain);
+        printf("C7A CreateSwapChainForHwnd hr=0x%08lx\n", (unsigned long)hr);
+    }
+    if (SUCCEEDED(hr)) {
+        hr = IDXGISwapChain1_GetBuffer(swapchain, 0, &IID_ID3D12Resource, (void **)&buffer);
+        printf("C7A GetBuffer hr=0x%08lx\n", (unsigned long)hr);
+    }
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateDescriptorHeap(device, &rtv_desc, &IID_ID3D12DescriptorHeap, (void **)&rtv_heap);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                 &IID_ID3D12CommandAllocator, (void **)&allocator);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, NULL,
+                                            &IID_ID3D12GraphicsCommandList, (void **)&list);
+    if (SUCCEEDED(hr)) {
+        const FLOAT green[4] = {0.0f, 1.0f, 0.0f, 1.0f};
+        ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(rtv_heap, &rtv);
+        ID3D12Device_CreateRenderTargetView(device, buffer, NULL, rtv);
+        transition(list, buffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        ID3D12GraphicsCommandList_ClearRenderTargetView(list, rtv, green, 0, NULL);
+        transition(list, buffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+        hr = run_list(queue, fence, list, base + 1, "C7A clear");
+    }
+    if (SUCCEEDED(hr)) {
+        hr = IDXGISwapChain1_Present(swapchain, 0, 0);
+        printf("C7A Present hr=0x%08lx\n", (unsigned long)hr);
+        if (SUCCEEDED(hr)) {
+            hr = ID3D12CommandQueue_Signal(queue, fence, base + 2);
+            UINT64 value = 0;
+            for (int i = 0; i < 300 && (value = ID3D12Fence_GetCompletedValue(fence)) < base + 2; ++i) Sleep(10);
+            printf("C7A signal after present hr=0x%08lx completed %llu\n", (unsigned long)hr, (unsigned long long)value);
+            if (value < base + 2) hr = E_FAIL;
+        }
+    }
+    printf("AGX_D3D12_C7A: %s\n", SUCCEEDED(hr) ? "PASS" : "FAIL");
+    if (list) ID3D12GraphicsCommandList_Release(list);
+    if (allocator) ID3D12CommandAllocator_Release(allocator);
+    if (rtv_heap) ID3D12DescriptorHeap_Release(rtv_heap);
+    if (buffer) ID3D12Resource_Release(buffer);
+    if (swapchain) IDXGISwapChain1_Release(swapchain);
+    if (factory) IDXGIFactory2_Release(factory);
+    if (window) DestroyWindow(window);
+    return FAILED(hr);
+}
+
 /* C3a (D3D12-C3-queue-fences.md): a direct queue, a fence and one Signal;
  * each step prints its HRESULT so the receipts name the DDIs the runtime
  * needs. */
@@ -1325,6 +1407,8 @@ static int queue_fence_signal(ID3D12Device *device) {
                         (void)draw_triangle(device, queue, fence, ID3D12Fence_GetCompletedValue(fence), 2);
                         (void)draw_textured(device, queue, fence, ID3D12Fence_GetCompletedValue(fence));
                         (void)draw_depth(device, queue, fence, ID3D12Fence_GetCompletedValue(fence));
+                        /* C7A last: a refused swapchain may remove the device */
+                        (void)swapchain_present(device, queue, fence, ID3D12Fence_GetCompletedValue(fence));
                     }
             }
             if (list) ID3D12GraphicsCommandList_Release(list);
