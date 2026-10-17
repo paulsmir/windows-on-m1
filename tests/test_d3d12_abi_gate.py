@@ -157,6 +157,10 @@ class D3d12AbiGate(unittest.TestCase):
         create = source[source.index('static HRESULT APIENTRY CreateHeapAndResource('):]
         create = create[:create.index('\n}\n')]
         self.assertIn('return E_NOTIMPL;', create)
+        # EXP1356: a committed heap's ByteSize can be >= 2^48; it is sized by
+        # its resource and the rounding cannot wrap to 0.
+        self.assertIn('sized.ByteSize = (resource_arg->Width + kHeapPage - 1) & ~(kHeapPage - 1);', create)
+        self.assertIn('heap->bytes = arg.ByteSize > kVaLimit ? ~0ULL :', heap)
         self.assertIn('D3D12DDI_RT_BUFFER', create)
         # the paging queue is created with the first heap, not with the device
         device = source[source.index('static HRESULT APIENTRY CreateDevice('):]

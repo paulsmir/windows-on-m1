@@ -513,7 +513,7 @@ static HRESULT CreateHeap(AgxD3d12Device *device, const D3D12DDIARG_CREATEHEAP_0
     const D3DDDI_DEVICECALLBACKS *k = device->kernel;
     memset(heap, 0, sizeof(*heap));
     heap->cpu_visible = arg.CPUPageProperty != D3D12DDI_CPU_PAGE_PROPERTY_NOT_AVAILABLE;
-    heap->bytes = (arg.ByteSize + kHeapPage - 1) & ~(kHeapPage - 1);
+    heap->bytes = arg.ByteSize > kVaLimit ? ~0ULL : (arg.ByteSize + kHeapPage - 1) & ~(kHeapPage - 1);
     /* EXP1355: every early exit names its reason (receipt-only) */
     const UINT refusal = !adapter_object.info_valid ? 1u
                        : !k || !k->pfnAllocateCb || !k->pfnReserveGpuVirtualAddressCb ||
@@ -531,8 +531,11 @@ static HRESULT CreateHeap(AgxD3d12Device *device, const D3D12DDIARG_CREATEHEAP_0
     ADMISSION_WIN32_ALLOCATION_CREATE create = {};
     if (!AdmissionAllocationDescribe(static_cast<UINT>(heap->bytes), 1u, 1u,
                                      ADMISSION_WIN32_ALLOCATION_STAGING_CPUVISIBLE,
-                                     ADMISSION_WIN32_ALLOCATION_FORMAT_A8, 1u, &create.Allocation))
+                                     ADMISSION_WIN32_ALLOCATION_FORMAT_A8, 1u, &create.Allocation)) {
+        const UINT receipt[] = {5u, heap->cpu_visible ? 1u : 0u, static_cast<UINT>(heap->bytes >> 16)};
+        AdmissionUmdDiagnostic("measure-d3d12-heap-refused", E_INVALIDARG, receipt, 3);
         return E_INVALIDARG;
+    }
     create.Magic = ADMISSION_WIN32_ALLOCATION_MAGIC;
     create.Version = ADMISSION_WIN32_ALLOCATION_VERSION;
     if (!heap->cpu_visible) {
@@ -601,9 +604,20 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
     if (!device) return E_INVALIDARG;
     /* committed buffers only (placed resources and textures: C2b) */
     if (!heap_arg || !heap || (resource_arg && (!resource || resource_arg->ResourceType != D3D12DDI_RT_BUFFER ||
-                                                resource_arg->Width > heap_arg->ByteSize)))
+                                                !resource_arg->Width || resource_arg->Width > kVaLimit - kVaMinimum)))
         return E_NOTIMPL;
-    HRESULT hr = CreateHeap(device, *heap_arg, heap);
+    /* EXP1356: for a committed resource the runtime passed a heap ByteSize
+     * >= 2^48 (receipt ByteSize>>16 = 0xffffffff); the 64 KiB rounding
+     * wrapped it to 0. A committed heap holds exactly its resource, so it is
+     * sized by the resource's allocation info whenever ByteSize is not a
+     * size this device can map. */
+    D3D12DDIARG_CREATEHEAP_0001 sized = *heap_arg;
+    if (resource_arg && (!sized.ByteSize || sized.ByteSize > kVaLimit - kVaMinimum))
+        sized.ByteSize = (resource_arg->Width + kHeapPage - 1) & ~(kHeapPage - 1);
+    const UINT size_receipt[] = {static_cast<UINT>(heap_arg->ByteSize), static_cast<UINT>(heap_arg->ByteSize >> 32),
+                                 static_cast<UINT>(sized.ByteSize >> 16)};
+    AdmissionUmdDiagnostic("measure-d3d12-committed-size", S_OK, size_receipt, 3);
+    HRESULT hr = CreateHeap(device, sized, heap);
     if (SUCCEEDED(hr) && resource_arg) {
         resource->heap = heap;
         resource->gpuva = heap->gpuva;
