@@ -871,7 +871,26 @@ struct AgxD3d12CommandList {
     UINT type;
     UINT closed;
     UINT commands; /* recorded commands; 0 until a recording DDI exists */
+    UINT64 state;  /* EXP1363: state setters the list received (bit = DDI slot) */
 };
+/* EXP1363: creating/resetting a list makes the runtime set its default
+ * state (topology, viewports, scissors, blend factor, stencil ref, PSO,
+ * descriptor heaps, predication, SO targets, render targets, IA buffers,
+ * root arguments); refused, the device was removed. Every consumer of that
+ * state (draws, dispatches, clears, copies) is still fail-closed, so a list
+ * records only which state it received; C5/C6 replace each setter with the
+ * stored values its consumer needs. */
+template<class T, UINT Slot> struct ListState;
+template<class R, class... A, UINT Slot> struct ListState<R (APIENTRY *)(D3D12DDI_HCOMMANDLIST, A...), Slot> {
+    static R APIENTRY call(D3D12DDI_HCOMMANDLIST handle, A...) {
+        auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+        if (list) list->state |= 1ULL << (Slot & 63u);
+        if constexpr (!std::is_void_v<R>) return R{};
+    }
+};
+#define AGX_LIST_STATE(M) \
+    ListState<decltype(((D3D12DDI_COMMAND_LIST_FUNCS_3D_0003 *)0)->M), \
+              static_cast<UINT>(offsetof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, M) / sizeof(void *))>::call
 static SIZE_T APIENTRY CalcPrivateCommandListSize(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_COMMAND_LIST_0001 *) {
     return sizeof(AgxD3d12CommandList);
 }
@@ -895,7 +914,7 @@ static VOID APIENTRY CloseCommandList(D3D12DDI_HCOMMANDLIST handle) {
 }
 static VOID APIENTRY ResetCommandList(D3D12DDI_HCOMMANDLIST handle, const D3D12DDIARG_RESETCOMMANDLIST *) {
     auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
-    if (list) list->closed = list->commands = 0;
+    if (list) { list->closed = list->commands = 0; list->state = 0; }
 }
 static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
     UINT commands = 0;
@@ -1037,14 +1056,14 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnBeginQuery, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnBeginQuery));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnEndQuery, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnEndQuery));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResolveQueryData, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResolveQueryData));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetPredication, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetPredication));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIaSetTopology, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIaSetTopology));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnRsSetViewports, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnRsSetViewports));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnRsSetScissorRects, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnRsSetScissorRects));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOmSetBlendFactor, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOmSetBlendFactor));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOmSetStencilRef, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOmSetStencilRef));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetPipelineState, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetPipelineState));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetDescriptorHeaps, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetDescriptorHeaps));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetPredication, AGX_LIST_STATE(pfnSetPredication));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIaSetTopology, AGX_LIST_STATE(pfnIaSetTopology));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnRsSetViewports, AGX_LIST_STATE(pfnRsSetViewports));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnRsSetScissorRects, AGX_LIST_STATE(pfnRsSetScissorRects));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOmSetBlendFactor, AGX_LIST_STATE(pfnOmSetBlendFactor));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOmSetStencilRef, AGX_LIST_STATE(pfnOmSetStencilRef));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetPipelineState, AGX_LIST_STATE(pfnSetPipelineState));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetDescriptorHeaps, AGX_LIST_STATE(pfnSetDescriptorHeaps));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootSignature, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootSignature));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootSignature, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootSignature));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootDescriptorTable, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootDescriptorTable));
@@ -1059,12 +1078,12 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootShaderResourceView, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootShaderResourceView));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootUnorderedAccessView, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootUnorderedAccessView));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootUnorderedAccessView, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootUnorderedAccessView));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetIndexBuffer, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetIndexBuffer));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetVertexBuffers, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetVertexBuffers));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSOSetTargets, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSOSetTargets));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOMSetRenderTargets, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOMSetRenderTargets));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetIndexBuffer, AGX_LIST_STATE(pfnIASetIndexBuffer));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetVertexBuffers, AGX_LIST_STATE(pfnIASetVertexBuffers));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSOSetTargets, AGX_LIST_STATE(pfnSOSetTargets));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOMSetRenderTargets, AGX_LIST_STATE(pfnOMSetRenderTargets));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetMarker, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetMarker));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearRootArguments, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearRootArguments));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearRootArguments, AGX_LIST_STATE(pfnClearRootArguments));
 }
 static void FillD3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001 &f) {
     AGX_ASSIGN(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnExecuteCommandLists, ExecuteCommandLists);

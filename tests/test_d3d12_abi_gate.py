@@ -216,7 +216,18 @@ class D3d12AbiGate(unittest.TestCase):
             self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
         # nothing can bind it yet: every command-list DDI stays fail-closed
         implemented = set(re.findall(r'AGX_ASSIGN\(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, (\w+), (?!AGX_REJECT)', source))
-        self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList'})
+        # EXP1363: the runtime's default-state setters are accepted (recorded
+        # as received state); every state consumer stays fail-closed.
+        setters = {'pfnSetPredication', 'pfnIaSetTopology', 'pfnRsSetViewports', 'pfnRsSetScissorRects',
+                   'pfnOmSetBlendFactor', 'pfnOmSetStencilRef', 'pfnSetPipelineState', 'pfnSetDescriptorHeaps',
+                   'pfnIASetIndexBuffer', 'pfnIASetVertexBuffers', 'pfnSOSetTargets', 'pfnOMSetRenderTargets',
+                   'pfnClearRootArguments'}
+        self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList'} | setters)
+        for member in setters:
+            self.assertIn('AGX_LIST_STATE(%s)' % member, source)
+        for consumer in ('pfnDrawInstanced', 'pfnDrawIndexedInstanced', 'pfnDispatch', 'pfnCopyBufferRegion',
+                         'pfnClearRenderTargetView', 'pfnResourceBarrier'):
+            self.assertIn('AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, %s)' % consumer, source)
 
     def test_package_and_receipts(self):
         package = ROOT / 'drivers/apple-agx/render-admission/umd'
