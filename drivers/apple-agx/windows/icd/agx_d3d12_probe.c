@@ -50,6 +50,31 @@ static int committed_buffer_round_trip(ID3D12Device *device) {
     return FAILED(hr);
 }
 
+/* C3a (D3D12-C3-queue-fences.md): a direct queue, a fence and one Signal;
+ * each step prints its HRESULT so the receipts name the DDIs the runtime
+ * needs. */
+static int queue_fence_signal(ID3D12Device *device) {
+    D3D12_COMMAND_QUEUE_DESC desc = {D3D12_COMMAND_LIST_TYPE_DIRECT};
+    ID3D12CommandQueue *queue = NULL;
+    ID3D12Fence *fence = NULL;
+    HRESULT hr = ID3D12Device_CreateCommandQueue(device, &desc, &IID_ID3D12CommandQueue, (void **)&queue);
+    printf("C3 CreateCommandQueue hr=0x%08lx\n", (unsigned long)hr);
+    if (FAILED(hr)) return 1;
+    hr = ID3D12Device_CreateFence(device, 0, D3D12_FENCE_FLAG_NONE, &IID_ID3D12Fence, (void **)&fence);
+    printf("C3 CreateFence hr=0x%08lx\n", (unsigned long)hr);
+    if (SUCCEEDED(hr)) {
+        hr = ID3D12CommandQueue_Signal(queue, fence, 1);
+        printf("C3 Signal hr=0x%08lx\n", (unsigned long)hr);
+        UINT64 value = 0;
+        for (int i = 0; i < 200 && (value = ID3D12Fence_GetCompletedValue(fence)) < 1; ++i) Sleep(10);
+        printf("C3 completed value %llu\n", (unsigned long long)value);
+        printf("AGX_D3D12_C3: %s\n", SUCCEEDED(hr) && value == 1 ? "PASS" : "FAIL");
+        ID3D12Fence_Release(fence);
+    }
+    ID3D12CommandQueue_Release(queue);
+    return FAILED(hr);
+}
+
 int main(void) {
     IDXGIFactory1 *factory = NULL;
     IDXGIAdapter1 *adapter = NULL;
@@ -67,6 +92,7 @@ int main(void) {
             failed = FAILED(hr);
             if (device) {
                 failed |= committed_buffer_round_trip(device);
+                failed |= queue_fence_signal(device);
                 ID3D12Device_Release(device);
             }
             IDXGIAdapter1_Release(adapter);
