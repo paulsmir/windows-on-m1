@@ -437,7 +437,8 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('D3D12DDI_SHADER_VISIBILITY_PIXEL, &ps_bind);', draw)
         resolve = fn('static UINT ResolveRoot(')
         self.assertIn('p.visibility != D3D12DDI_SHADER_VISIBILITY_ALL && p.visibility != stage) continue;', resolve)
-        self.assertIn('if (stage != kAnyStage) return 4u; /* graphics UAVs: not yet */', resolve)
+        self.assertNotIn('graphics UAVs: not yet', resolve)  # C13: graphics UAVs bind per stage
+        self.assertIn('memcpy(draw.Ps.Uavs, ps_bind.uavs, sizeof(draw.Ps.Uavs));', source)
         sig = fn('static VOID APIENTRY SetGraphicsRootSignature(')
         self.assertIn('memset(list->graphics_root_va, 0', sig)
         replay = fn('static __declspec(noinline) HRESULT ReplayDraw(')

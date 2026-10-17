@@ -59,11 +59,20 @@ class NativeOwner(unittest.TestCase):
         self.assertIn('dxbc_nir_compute_info(', create)
         self.assertIn('->create_compute_state(', create)
         dispatch = body(text, 'extern "C" HRESULT AgxD3d12OwnerDispatch(')
-        order = [dispatch.index(k) for k in ('bind_compute_state', 'set_shader_buffers(pipe, MESA_SHADER_COMPUTE, 0, AGX_D3D12_UAV_SLOTS, buffers',
-                                             'launch_grid', 'memory_barrier(pipe, PIPE_BARRIER_ALL)',
-                                             'set_shader_buffers(pipe, MESA_SHADER_COMPUTE, 0, AGX_D3D12_UAV_SLOTS, NULL, 0)')]
+        order = [dispatch.index(k) for k in ('bind_stage(pipe, MESA_SHADER_COMPUTE, cbvs, srvs, uavs, views, &view_count)',
+                                             'bind_compute_state', 'launch_grid', 'memory_barrier(pipe, PIPE_BARRIER_ALL)',
+                                             'unbind_stage(pipe, MESA_SHADER_COMPUTE, views, view_count)')]
         self.assertEqual(order, sorted(order))
-        self.assertIn('uavs[i].Offset >= buffer->Bytes', dispatch)
+        # C13: UAVs of every stage bind in bind_stage (buffers u#, typed
+        # images u#) and unbind_stage drops both so no binding outlives a heap
+        stage_b = body(text, 'static HRESULT bind_stage(')
+        self.assertIn('uavs[i].Offset >= buffer->Bytes', stage_b)
+        self.assertIn('pipe->set_shader_images(pipe, stage, 0, AGX_D3D12_UAV_SLOTS, 0, images);', stage_b)
+        unbind = body(text, 'static void unbind_stage(')
+        self.assertIn('pipe->set_shader_buffers(pipe, stage, 0, AGX_D3D12_UAV_SLOTS, NULL, 0);', unbind)
+        self.assertIn('pipe->set_shader_images(pipe, stage, 0, 0, AGX_D3D12_UAV_SLOTS, NULL);', unbind)
+        draw_fn = body(text, 'extern "C" HRESULT AgxD3d12OwnerDraw(')
+        self.assertIn('draw->Ps.Uavs, ps_views, &ps_view_count', draw_fn)
         # C5b/C5d/C9: CBVs (capped at 64 KiB and the buffer end) and SRVs bind
         # through the draw stages' bind_stage before the launch and unbind
         # (views released) after it -- EXP1372 offline: the compute path's
@@ -72,14 +81,13 @@ class NativeOwner(unittest.TestCase):
         self.assertIn('room < 65536ull ? room : 65536ull', stage)
         self.assertIn('if (srvs[i].Texture) {', stage)
         self.assertIn('FormatTranslate(srvs[i].Format, FALSE) : PIPE_FORMAT_R32_UINT', stage)
-        order = [dispatch.index(k) for k in ('bind_stage(pipe, MESA_SHADER_COMPUTE, cbvs, srvs, views, &view_count)',
+        order = [dispatch.index(k) for k in ('bind_stage(pipe, MESA_SHADER_COMPUTE, cbvs, srvs, uavs, views, &view_count)',
                                              'launch_grid', 'unbind_stage(pipe, MESA_SHADER_COMPUTE, views, view_count)')]
         self.assertEqual(order, sorted(order))
         self.assertNotIn('templ.format = PIPE_FORMAT_R32_UINT;', dispatch)
         # C9: compute samplers live for one launch; typed UAVs are images u#
         order = [dispatch.index(k) for k in ('create_sampler(pipe, &samplers[i])', 'bind_sampler_states(pipe, MESA_SHADER_COMPUTE, 0, state_count, states)',
-                                             'set_shader_images(pipe, MESA_SHADER_COMPUTE, 0, image_count, 0, images)', 'launch_grid',
-                                             'set_shader_images(pipe, MESA_SHADER_COMPUTE, 0, 0, image_count, NULL)',
+                                             'launch_grid',
                                              'bind_sampler_states(pipe, MESA_SHADER_COMPUTE, 0, state_count, none)')]
         self.assertEqual(order, sorted(order))
         image = body(text, 'static bool uav_image(')

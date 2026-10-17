@@ -271,6 +271,7 @@ typedef struct {
     AGX_D3D12_CBV Cbvs[AGX_D3D12_CBV_SLOTS];
     AGX_D3D12_SRV Srvs[AGX_D3D12_SRV_SLOTS];
     AGX_D3D12_SAMPLER Samplers[AGX_D3D12_SAMPLER_SLOTS]; /* C6e */
+    AGX_D3D12_UAV Uavs[AGX_D3D12_UAV_SLOTS]; /* C13: graphics UAVs (u# in every stage) */
   } Vs, Ps;
 } AGX_D3D12_DRAW;
 /* Records one draw; bindings that reference heaps are dropped by the next

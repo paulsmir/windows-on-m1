@@ -2499,7 +2499,6 @@ static UINT ResolveRoot(AgxD3d12CommandList *list, const AgxD3d12RootSignature *
         if (p.space || i >= kRootArguments) return 5u;
         if (p.type == D3D12DDI_ROOT_PARAMETER_TYPE_UAV) {
             if (p.shader_register >= kUavSlots) return 5u;
-            if (stage != kAnyStage) return 4u; /* graphics UAVs: not yet */
             if (!(out->uav_heap[p.shader_register] = HeapAt(list->device, va[i], &out->uav_offset[p.shader_register])))
                 return 6u;
         } else if (p.type == D3D12DDI_ROOT_PARAMETER_TYPE_CBV) {
@@ -2512,9 +2511,6 @@ static UINT ResolveRoot(AgxD3d12CommandList *list, const AgxD3d12RootSignature *
             out->cb_count[p.shader_register] = p.dwords;
         } else if (p.type == D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE) {
             if (const UINT refusal = BindTable(list, root, p, va[i], out)) return refusal;
-            if (stage != kAnyStage)
-                for (UINT u = 0; u < kUavSlots; ++u)
-                    if (out->uav_descriptor[u]) return 4u; /* graphics UAVs: not yet */
         } else if (p.type == D3D12DDI_ROOT_PARAMETER_TYPE_SRV) {
             if (p.shader_register >= kSrvSlots) return 5u;
             if (!(out->srv_heap[p.shader_register] = HeapAt(list->device, va[i], &out->srv_offset[p.shader_register])))
@@ -2841,6 +2837,8 @@ static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const Agx
     memcpy(draw.Ps.Srvs, ps_bind.srvs, sizeof(draw.Ps.Srvs));
     memcpy(draw.Vs.Samplers, vs_bind.samplers, sizeof(draw.Vs.Samplers));
     memcpy(draw.Ps.Samplers, ps_bind.samplers, sizeof(draw.Ps.Samplers));
+    memcpy(draw.Vs.Uavs, vs_bind.uavs, sizeof(draw.Vs.Uavs)); /* C13 */
+    memcpy(draw.Ps.Uavs, ps_bind.uavs, sizeof(draw.Ps.Uavs));
     const HRESULT hr = AgxD3d12OwnerDraw(owner, &draw);
     HeapFree(GetProcessHeap(), 0, scratch);
     return hr;
