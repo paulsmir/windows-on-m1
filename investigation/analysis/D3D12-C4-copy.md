@@ -62,6 +62,23 @@ buffers, verified on the CPU.
   same GPU VA space) -- hardware.
 - The CPMT size requirement for G13 (the KMD passes it to the parser).
 
+## Reuse points (source, Mesa asahi)
+
+- honeykrisp hk_dispatch_precomp (src/asahi/vulkan/hk_cmd_buffer.c):
+  `agx_get_precompiled(&dev->bg_eot, idx)` uploads the precompiled libagx
+  kernel into USC memory once (agx_bg_eot cache), `agx_usc_words_precomp`
+  writes the USC words for the kernel arguments, and
+  `hk_dispatch_with_usc_launch` encodes the CDM launch; gallium does the same
+  through libagx_copy_uint4(batch, agx_1d(n), AGX_BARRIER_ALL, dst, src)
+  (src/gallium/drivers/asahi/agx_blit.c).
+- All three need an agx_device (BO allocation, USC window placement). In this
+  UMD the agx_device over the KMD is the GPUVA winsys, which is tied to the
+  D3D11 ADMISSION_UMD_DEVICE (callbacks, paging queue, render sync object,
+  screen buffers). C4b's main work item: an agx_device for the D3D12 device
+  (either a winsys context built from the D3D12 device's kernel callbacks and
+  queue context, or a narrow D3D12 implementation of the BO/USC hooks
+  agx_bg_eot needs) -- decide after reading agx_win32_gpuva*.c ownership.
+
 ## Checkpoints
 
 - C4a (EXP1363): empty list execute + signal.
