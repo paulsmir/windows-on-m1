@@ -267,6 +267,44 @@ static HRESULT APIENTRY CreateRootSignature(D3D12DDI_HDEVICE, const D3D12DDIARG_
     return S_OK;
 }
 static VOID APIENTRY DestroyRootSignature(D3D12DDI_HDEVICE, D3D12DDI_HROOTSIGNATURE) {}
+/* C1g (EXP1351): device initialisation creates a shader after its (empty)
+ * root signature; a refused pfnCalcPrivateShaderSize removes the device.
+ * The shader object keeps a copy of the D3D10+ tokenized program
+ * (pShaderCode[0] = program type and version, pShaderCode[1] = length in
+ * DWORDs); compilation to AGX (DXBC -> NIR -> libagx) happens when a
+ * pipeline state is created (C5). */
+struct AgxD3d12Shader {
+    UINT stage; /* the stage the runtime created it for (D3D10_SB program type) */
+    UINT dwords;
+    UINT tokens[1];
+};
+static SIZE_T APIENTRY CalcPrivateShaderSize(D3D12DDI_HDEVICE, const UINT *code, D3D12DDI_HROOTSIGNATURE,
+                                             const D3D12DDIARG_STAGE_IO_SIGNATURES *) {
+    const UINT dwords = code ? code[1] : 0;
+    return offsetof(AgxD3d12Shader, tokens) + (dwords ? dwords : 1) * sizeof(UINT);
+}
+static void StoreShader(const UINT *code, D3D12DDI_HSHADER handle) {
+    auto *shader = static_cast<AgxD3d12Shader *>(handle.pDrvPrivate);
+    if (!code || !shader || code[1] < 2) {
+        if (callbacks && callbacks->pfnSetErrorCb) callbacks->pfnSetErrorCb(runtime_device, E_INVALIDARG);
+        return;
+    }
+    shader->stage = code[0] >> 16;
+    shader->dwords = code[1];
+    memcpy(shader->tokens, code, code[1] * sizeof(UINT));
+    const UINT receipt[] = {shader->stage, code[0] & 0xffffu, shader->dwords};
+    AdmissionUmdDiagnostic("measure-d3d12-shader", S_OK, receipt, 3);
+}
+static VOID APIENTRY CreateShader(D3D12DDI_HDEVICE, const UINT *code, D3D12DDI_HROOTSIGNATURE,
+                                  D3D12DDI_HSHADER handle, const D3D12DDIARG_STAGE_IO_SIGNATURES *,
+                                  D3D12DDI_CREATE_SHADER_FLAGS) {
+    StoreShader(code, handle);
+}
+static VOID APIENTRY CreateComputeShader(D3D12DDI_HDEVICE, const UINT *code, D3D12DDI_HROOTSIGNATURE,
+                                         D3D12DDI_HSHADER handle, D3D12DDI_CREATE_SHADER_FLAGS) {
+    StoreShader(code, handle);
+}
+static VOID APIENTRY DestroyShader(D3D12DDI_HDEVICE, D3D12DDI_HSHADER) {}
 static HRESULT APIENTRY CloseAdapter(D3D12DDI_HADAPTER) {
     AdmissionUmdDiagnostic("d3d12-close-adapter", S_OK, nullptr, 0);
     return S_OK;
@@ -299,17 +337,17 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateRasterizerStateSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateRasterizerStateSize));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateRasterizerState, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateRasterizerState));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyRasterizerState, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyRasterizerState));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateShaderSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateShaderSize));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateVertexShader, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateVertexShader));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreatePixelShader, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreatePixelShader));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateGeometryShader, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateGeometryShader));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateComputeShader, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateComputeShader));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateShaderSize, CalcPrivateShaderSize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateVertexShader, CreateShader);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreatePixelShader, CreateShader);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateGeometryShader, CreateShader);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateComputeShader, CreateComputeShader);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateGeometryShaderWithStreamOutput, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateGeometryShaderWithStreamOutput));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateGeometryShaderWithStreamOutput, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateGeometryShaderWithStreamOutput));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateTessellationShaderSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateTessellationShaderSize));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateHullShader, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateHullShader));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDomainShader, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDomainShader));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyShader, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyShader));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyShader, DestroyShader);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandQueueSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandQueueSize));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandQueue, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandQueue));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandQueue, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandQueue));

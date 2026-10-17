@@ -106,6 +106,17 @@ class D3d12AbiGate(unittest.TestCase):
         size = source[source.index('static SIZE_T APIENTRY CalcPrivateRootSignatureSize('):]
         size = size[:size.index('\n}\n')]
         self.assertIn('NumParameters', size)
+        # C1g (EXP1351): shader objects keep the tokenized program (length in
+        # pShaderCode[1]); hull/domain and GS stream output stay refused.
+        for member, fn in (('pfnCalcPrivateShaderSize', 'CalcPrivateShaderSize'),
+                           ('pfnCreateVertexShader', 'CreateShader'), ('pfnCreatePixelShader', 'CreateShader'),
+                           ('pfnCreateGeometryShader', 'CreateShader'),
+                           ('pfnCreateComputeShader', 'CreateComputeShader'), ('pfnDestroyShader', 'DestroyShader')):
+            self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, fn), source)
+        for member in ('pfnCreateHullShader', 'pfnCreateDomainShader', 'pfnCreateGeometryShaderWithStreamOutput'):
+            self.assertIn('AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s)' % member, source)
+        self.assertIn('memcpy(shader->tokens, code, code[1] * sizeof(UINT));', source)
+        self.assertIn('(dwords ? dwords : 1) * sizeof(UINT)', source)
 
     def test_package_and_receipts(self):
         package = ROOT / 'drivers/apple-agx/render-admission/umd'
