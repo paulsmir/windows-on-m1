@@ -420,6 +420,111 @@ AdmissionUmdRuntimeErrorCallback(const D3D10DDIARG_CREATEDEVICE *Args,
   return FALSE;
 }
 
+/* The device storage after its kernel context exists: paging queue, render
+ * monitored fence and the native screen. Shared by the D3D10/11 device (which
+ * created its own context) and the D3D12 queue owner (whose context belongs
+ * to the D3D12 command queue and is never destroyed here: BorrowedContext). */
+static HRESULT AdmissionUmdRuntimeDeviceAttach(ADMISSION_UMD_DEVICE *device) {
+  HRESULT result;
+  {
+    D3DDDICB_CREATEPAGINGQUEUE pagingQueue;
+    ZeroMemory(&pagingQueue, sizeof(pagingQueue));
+    pagingQueue.Priority = D3DDDI_PAGINGQUEUE_PRIORITY_NORMAL;
+    pagingQueue.PhysicalAdapterIndex = 0u;
+    result = device->KernelCallbacks->pfnCreatePagingQueueCb(
+        device->RuntimeDevice.handle, &pagingQueue);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    {
+      UINT values[5] = { (UINT)pagingQueue.Priority,
+          pagingQueue.PhysicalAdapterIndex, pagingQueue.hPagingQueue != 0u,
+          pagingQueue.hSyncObject != 0u,
+          pagingQueue.FenceValueCPUVirtualAddress != NULL };
+      AdmissionUmdDiagnostic("g4-create-paging-queue-cb", result,
+                             values, ARRAYSIZE(values));
+    }
+#endif
+    if (FAILED(result) || pagingQueue.hPagingQueue == 0u ||
+        pagingQueue.hSyncObject == 0u ||
+        pagingQueue.FenceValueCPUVirtualAddress == NULL) {
+      D3DDDICB_DESTROYCONTEXT destroyContext;
+      ZeroMemory(&destroyContext, sizeof(destroyContext));
+      destroyContext.hContext = device->KernelContext;
+      if (!device->BorrowedContext)
+        (void)device->KernelCallbacks->pfnDestroyContextCb(
+          device->RuntimeDevice.handle, &destroyContext);
+      ZeroMemory(device, sizeof(*device));
+      return FAILED(result) ? result : E_FAIL;
+    }
+    device->PagingQueue = pagingQueue.hPagingQueue;
+    device->PagingSyncObject = pagingQueue.hSyncObject;
+    device->PagingFenceAddress =
+        (volatile UINT64 *)pagingQueue.FenceValueCPUVirtualAddress;
+  }
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  {
+    D3DDDICB_CREATESYNCHRONIZATIONOBJECT2 renderFence;
+    ZeroMemory(&renderFence, sizeof(renderFence));
+    renderFence.Info.Type = D3DDDI_MONITORED_FENCE;
+    renderFence.Info.MonitoredFence.InitialFenceValue = 0;
+    renderFence.Info.MonitoredFence.EngineAffinity = 1;
+    result = device->KernelCallbacks->pfnCreateSynchronizationObject2Cb(
+        device->RuntimeDevice.handle, &renderFence);
+    {
+      UINT values[4] = { (UINT)renderFence.Info.Type,
+          renderFence.Info.MonitoredFence.EngineAffinity,
+          renderFence.hSyncObject != 0u,
+          renderFence.Info.MonitoredFence.FenceValueCPUVirtualAddress != NULL };
+      AdmissionUmdDiagnostic("g4-create-render-fence-cb", result,
+                             values, ARRAYSIZE(values));
+    }
+    if (FAILED(result) || !renderFence.hSyncObject ||
+        !renderFence.Info.MonitoredFence.FenceValueCPUVirtualAddress) {
+      D3DDDI_DESTROYPAGINGQUEUE destroyQueue = {};
+      D3DDDICB_DESTROYCONTEXT destroyContext = {};
+      destroyQueue.hPagingQueue = device->PagingQueue;
+      destroyContext.hContext = device->KernelContext;
+      (void)device->KernelCallbacks->pfnDestroyPagingQueueCb(
+          device->RuntimeDevice.handle, &destroyQueue);
+      if (!device->BorrowedContext)
+        (void)device->KernelCallbacks->pfnDestroyContextCb(
+          device->RuntimeDevice.handle, &destroyContext);
+      ZeroMemory(device, sizeof(*device));
+      return FAILED(result) ? result : E_FAIL;
+    }
+    device->RenderSyncObject = renderFence.hSyncObject;
+    device->RenderFenceAddress =
+        (volatile UINT64 *)renderFence.Info.MonitoredFence.FenceValueCPUVirtualAddress;
+  }
+#endif
+  result = AdmissionUmdScreenInitialize(device);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  AdmissionUmdDiagnostic("g4-screen-initialize", result, NULL, 0u);
+#endif
+  if (FAILED(result)) {
+    D3DDDICB_DESTROYCONTEXT destroyContext;
+    D3DDDI_DESTROYPAGINGQUEUE destroyQueue;
+    ZeroMemory(&destroyQueue, sizeof(destroyQueue));
+    destroyQueue.hPagingQueue = device->PagingQueue;
+    (void)device->KernelCallbacks->pfnDestroyPagingQueueCb(
+        device->RuntimeDevice.handle, &destroyQueue);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    D3DDDICB_DESTROYSYNCHRONIZATIONOBJECT destroyFence = {};
+    destroyFence.hSyncObject = device->RenderSyncObject;
+    (void)device->KernelCallbacks->pfnDestroySynchronizationObjectCb(
+        device->RuntimeDevice.handle, &destroyFence);
+#endif
+    ZeroMemory(&destroyContext, sizeof(destroyContext));
+    destroyContext.hContext = device->KernelContext;
+    if (!device->BorrowedContext)
+        (void)device->KernelCallbacks->pfnDestroyContextCb(
+        device->RuntimeDevice.handle, &destroyContext);
+    ZeroMemory(device, sizeof(*device));
+    return result;
+  }
+
+  return S_OK;
+}
+
 HRESULT AdmissionUmdRuntimeDeviceInitialize(
     ADMISSION_UMD_DEVICE *device, ADMISSION_UMD_ADAPTER *adapter,
     const D3D10DDIARG_CREATEDEVICE *Args) {
@@ -528,100 +633,49 @@ HRESULT AdmissionUmdRuntimeDeviceInitialize(
   device->PatchList = createContext.pPatchLocationList;
   device->PatchListSize = createContext.PatchLocationListSize;
 #endif
-  {
-    D3DDDICB_CREATEPAGINGQUEUE pagingQueue;
-    ZeroMemory(&pagingQueue, sizeof(pagingQueue));
-    pagingQueue.Priority = D3DDDI_PAGINGQUEUE_PRIORITY_NORMAL;
-    pagingQueue.PhysicalAdapterIndex = 0u;
-    result = device->KernelCallbacks->pfnCreatePagingQueueCb(
-        device->RuntimeDevice.handle, &pagingQueue);
-#ifdef APPLE_AGX_GPUVA_WINSYS
-    {
-      UINT values[5] = { (UINT)pagingQueue.Priority,
-          pagingQueue.PhysicalAdapterIndex, pagingQueue.hPagingQueue != 0u,
-          pagingQueue.hSyncObject != 0u,
-          pagingQueue.FenceValueCPUVirtualAddress != NULL };
-      AdmissionUmdDiagnostic("g4-create-paging-queue-cb", result,
-                             values, ARRAYSIZE(values));
-    }
-#endif
-    if (FAILED(result) || pagingQueue.hPagingQueue == 0u ||
-        pagingQueue.hSyncObject == 0u ||
-        pagingQueue.FenceValueCPUVirtualAddress == NULL) {
-      D3DDDICB_DESTROYCONTEXT destroyContext;
-      ZeroMemory(&destroyContext, sizeof(destroyContext));
-      destroyContext.hContext = device->KernelContext;
-      (void)device->KernelCallbacks->pfnDestroyContextCb(
-          device->RuntimeDevice.handle, &destroyContext);
-      ZeroMemory(device, sizeof(*device));
-      return FAILED(result) ? result : E_FAIL;
-    }
-    device->PagingQueue = pagingQueue.hPagingQueue;
-    device->PagingSyncObject = pagingQueue.hSyncObject;
-    device->PagingFenceAddress =
-        (volatile UINT64 *)pagingQueue.FenceValueCPUVirtualAddress;
-  }
-#ifdef APPLE_AGX_GPUVA_WINSYS
-  {
-    D3DDDICB_CREATESYNCHRONIZATIONOBJECT2 renderFence;
-    ZeroMemory(&renderFence, sizeof(renderFence));
-    renderFence.Info.Type = D3DDDI_MONITORED_FENCE;
-    renderFence.Info.MonitoredFence.InitialFenceValue = 0;
-    renderFence.Info.MonitoredFence.EngineAffinity = 1;
-    result = device->KernelCallbacks->pfnCreateSynchronizationObject2Cb(
-        device->RuntimeDevice.handle, &renderFence);
-    {
-      UINT values[4] = { (UINT)renderFence.Info.Type,
-          renderFence.Info.MonitoredFence.EngineAffinity,
-          renderFence.hSyncObject != 0u,
-          renderFence.Info.MonitoredFence.FenceValueCPUVirtualAddress != NULL };
-      AdmissionUmdDiagnostic("g4-create-render-fence-cb", result,
-                             values, ARRAYSIZE(values));
-    }
-    if (FAILED(result) || !renderFence.hSyncObject ||
-        !renderFence.Info.MonitoredFence.FenceValueCPUVirtualAddress) {
-      D3DDDI_DESTROYPAGINGQUEUE destroyQueue = {};
-      D3DDDICB_DESTROYCONTEXT destroyContext = {};
-      destroyQueue.hPagingQueue = device->PagingQueue;
-      destroyContext.hContext = device->KernelContext;
-      (void)device->KernelCallbacks->pfnDestroyPagingQueueCb(
-          device->RuntimeDevice.handle, &destroyQueue);
-      (void)device->KernelCallbacks->pfnDestroyContextCb(
-          device->RuntimeDevice.handle, &destroyContext);
-      ZeroMemory(device, sizeof(*device));
-      return FAILED(result) ? result : E_FAIL;
-    }
-    device->RenderSyncObject = renderFence.hSyncObject;
-    device->RenderFenceAddress =
-        (volatile UINT64 *)renderFence.Info.MonitoredFence.FenceValueCPUVirtualAddress;
-  }
-#endif
-  result = AdmissionUmdScreenInitialize(device);
-#ifdef APPLE_AGX_GPUVA_WINSYS
-  AdmissionUmdDiagnostic("g4-screen-initialize", result, NULL, 0u);
-#endif
-  if (FAILED(result)) {
-    D3DDDICB_DESTROYCONTEXT destroyContext;
-    D3DDDI_DESTROYPAGINGQUEUE destroyQueue;
-    ZeroMemory(&destroyQueue, sizeof(destroyQueue));
-    destroyQueue.hPagingQueue = device->PagingQueue;
-    (void)device->KernelCallbacks->pfnDestroyPagingQueueCb(
-        device->RuntimeDevice.handle, &destroyQueue);
-#ifdef APPLE_AGX_GPUVA_WINSYS
-    D3DDDICB_DESTROYSYNCHRONIZATIONOBJECT destroyFence = {};
-    destroyFence.hSyncObject = device->RenderSyncObject;
-    (void)device->KernelCallbacks->pfnDestroySynchronizationObjectCb(
-        device->RuntimeDevice.handle, &destroyFence);
-#endif
-    ZeroMemory(&destroyContext, sizeof(destroyContext));
-    destroyContext.hContext = device->KernelContext;
-    (void)device->KernelCallbacks->pfnDestroyContextCb(
-        device->RuntimeDevice.handle, &destroyContext);
-    ZeroMemory(device, sizeof(*device));
-    return result;
-  }
+  return AdmissionUmdRuntimeDeviceAttach(device);
+}
 
-  return S_OK;
+HRESULT AdmissionUmdRuntimeDeviceInitializeForQueue(
+    ADMISSION_UMD_DEVICE *device, ADMISSION_UMD_ADAPTER *adapter,
+    const D3DDDI_DEVICECALLBACKS *callbacks, HANDLE runtimeDevice,
+    D3D10DDI_HRTCORELAYER errorHandle, PFND3D10DDI_SETERROR_CB errorCallback,
+    HANDLE queueContext) {
+  if (device == NULL || adapter == NULL ||
+      adapter->Magic != ADMISSION_UMD_ADAPTER_MAGIC || callbacks == NULL ||
+      runtimeDevice == NULL || queueContext == NULL ||
+#ifdef APPLE_AGX_GPUVA_WINSYS
+      callbacks->pfnCreateSynchronizationObject2Cb == NULL ||
+      callbacks->pfnDestroySynchronizationObjectCb == NULL ||
+      callbacks->pfnReserveGpuVirtualAddressCb == NULL ||
+      callbacks->pfnMapGpuVirtualAddressCb == NULL ||
+      callbacks->pfnFreeGpuVirtualAddressCb == NULL ||
+      callbacks->pfnSubmitCommandCb == NULL ||
+      callbacks->pfnSignalSynchronizationObjectFromGpu2Cb == NULL ||
+#endif
+      callbacks->pfnAllocateCb == NULL || callbacks->pfnDeallocateCb == NULL ||
+      callbacks->pfnLockCb == NULL || callbacks->pfnUnlockCb == NULL ||
+      callbacks->pfnSignalSynchronizationObject2Cb == NULL ||
+      callbacks->pfnMakeResidentCb == NULL || callbacks->pfnEvictCb == NULL ||
+      callbacks->pfnWaitForSynchronizationObjectFromCpuCb == NULL ||
+      callbacks->pfnCreatePagingQueueCb == NULL ||
+      callbacks->pfnDestroyPagingQueueCb == NULL)
+    return E_INVALIDARG;
+  ZeroMemory(device, sizeof(*device));
+  device->Magic = ADMISSION_UMD_DEVICE_MAGIC;
+  device->Adapter = adapter;
+  device->RuntimeDevice.handle = runtimeDevice;
+  device->RuntimeCoreLayer = errorHandle;
+  device->KernelCallbacks = callbacks;
+  device->SetErrorCallback = errorCallback;
+  device->DxgiCallbacks = NULL; /* a D3D12 queue owner never presents */
+  device->Win32Generation = AdmissionUmdNextGeneration();
+  AdmissionUmdRetirementInitialize(
+      &device->Retirement, device, AdmissionUmdDeallocateResource,
+      AdmissionUmdReportResourceError);
+  device->KernelContext = queueContext;
+  device->BorrowedContext = TRUE;
+  return AdmissionUmdRuntimeDeviceAttach(device);
 }
 
 HRESULT AdmissionUmdRuntimeDeviceDestroyKernelContext(
@@ -633,6 +687,11 @@ HRESULT AdmissionUmdRuntimeDeviceDestroyKernelContext(
   if(!device || !destroyed || device->Magic!=ADMISSION_UMD_DEVICE_MAGIC)
     return E_INVALIDARG;
   if(!device->KernelContext) { *destroyed=TRUE;return S_OK; }
+  if(device->BorrowedContext) {
+    /* the D3D12 command queue owns and destroys this context */
+    device->KernelContext=NULL;device->BorrowedContext=FALSE;
+    *destroyed=TRUE;return S_OK;
+  }
   if(!device->KernelCallbacks || !device->KernelCallbacks->pfnDestroyContextCb)
     return E_INVALIDARG;
   liveContext=device->KernelContext;

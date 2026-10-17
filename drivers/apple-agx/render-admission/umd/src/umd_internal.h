@@ -164,6 +164,10 @@ typedef struct _ADMISSION_UMD_DEVICE {
   PFND3D10DDI_SETERROR_CB SetErrorCallback;
   DXGI_DDI_BASE_CALLBACKS *DxgiCallbacks;
   HANDLE KernelContext;
+  /* D3D12 C4b: KernelContext belongs to a D3D12 command queue (created with
+   * the core-layer CreateContextVirtualCb for its hRTCommandQueue); the
+   * device never destroys it. */
+  BOOL BorrowedContext;
   HANDLE QuiescedKernelContext;
   BOOL KernelContextQuiesced;
   ULONG Win32Generation;
@@ -330,6 +334,14 @@ HRESULT AdmissionUmdRuntimeAdapterInitialize(
 HRESULT AdmissionUmdRuntimeDeviceInitialize(
     ADMISSION_UMD_DEVICE *Device, ADMISSION_UMD_ADAPTER *Adapter,
     const D3D10DDIARG_CREATEDEVICE *Args);
+/* D3D12 C4b: the same device storage (paging queue, render monitored fence,
+ * native screen) on a D3D12 command queue's kernel context. ErrorHandle and
+ * ErrorCallback forward device errors to the D3D12 runtime. */
+HRESULT AdmissionUmdRuntimeDeviceInitializeForQueue(
+    ADMISSION_UMD_DEVICE *Device, ADMISSION_UMD_ADAPTER *Adapter,
+    const D3DDDI_DEVICECALLBACKS *KernelCallbacks, HANDLE RuntimeDevice,
+    D3D10DDI_HRTCORELAYER ErrorHandle, PFND3D10DDI_SETERROR_CB ErrorCallback,
+    HANDLE QueueContext);
 /* Synchronously quiesces and destroys the runtime kernel context while its
  * callback table is still valid. Success clears the context and borrowed
  * command/list pointers so finalization cannot call it twice. */
