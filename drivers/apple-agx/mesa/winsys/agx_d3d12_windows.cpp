@@ -356,12 +356,17 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
 
 /* C6a: textures, render-target clears and footprint copies (the D3D10
  * frontend's RTV/clear path, OutputMerger.cpp, on this owner's context). */
+/* Bytes of a 1x1 texel block, 0 for other block shapes; read from the
+ * format table directly -- u_format.h's inline helpers carry CRT asserts,
+ * which the package's assertion gate (check_no_crt_asserts.py) refuses. */
+static unsigned block_bytes(enum pipe_format format) {
+  const struct util_format_description *desc = format != PIPE_FORMAT_NONE ? util_format_description(format) : NULL;
+  if (!desc || desc->block.width != 1 || desc->block.height != 1 || desc->block.bits % 8) return 0;
+  return desc->block.bits / 8;
+}
+
 extern "C" unsigned AgxD3d12FormatBlockBytes(DXGI_FORMAT format) {
-  const enum pipe_format pformat = FormatTranslate(format, FALSE);
-  if (pformat == PIPE_FORMAT_NONE || util_format_get_blockwidth(pformat) != 1 ||
-      util_format_get_blockheight(pformat) != 1)
-    return 0;
-  return util_format_get_blocksize(pformat);
+  return block_bytes(FormatTranslate(format, FALSE));
 }
 
 extern "C" HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *owner, DXGI_FORMAT format, unsigned width,
@@ -442,9 +447,9 @@ extern "C" HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *owner, const AGX_D3
   struct pipe_context *pipe = owner->Context;
   struct pipe_resource *texture = static_cast<struct pipe_resource *>(copy->Texture->Resource);
   struct pipe_resource *buffer = static_cast<struct pipe_resource *>(copy->Buffer->Resource);
-  const unsigned block = util_format_get_blocksize(texture->format);
+  const unsigned block = block_bytes(texture->format);
   const unsigned long long row = static_cast<unsigned long long>(copy->Width) * block;
-  if (!block || util_format_get_blockwidth(texture->format) != 1 || copy->Level > texture->last_level ||
+  if (!block || copy->Level > texture->last_level ||
       copy->X + copy->Width > level_extent(texture->width0, copy->Level) ||
       copy->Y + copy->Height > level_extent(texture->height0, copy->Level) || copy->Layer >= texture->array_size ||
       copy->Depth > texture->array_size - copy->Layer || copy->Pitch < row ||

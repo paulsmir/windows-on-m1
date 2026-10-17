@@ -84,6 +84,10 @@ class NativeOwner(unittest.TestCase):
         # after recorded GPU work) and bound-check both sides first.
         text = OWNER.read_text()
         self.assertIn('enum pipe_format FormatTranslate(DXGI_FORMAT Format, BOOL depth);', text)
+        # EXP1368 build: u_format.h inline helpers carry CRT asserts that the
+        # package's assertion gate refuses; block sizes come from the table
+        self.assertNotIn('util_format_get_block', text)
+        self.assertIn('util_format_description(format)', text)
         copy = body(text, 'extern "C" HRESULT AgxD3d12OwnerCopyTexture(')
         self.assertLess(copy.index('span > copy->Buffer->Bytes - copy->Offset'), copy.index('texture_map('))
         self.assertIn('copy->Pitch < row', copy)
