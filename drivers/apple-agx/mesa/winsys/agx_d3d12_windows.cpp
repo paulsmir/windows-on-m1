@@ -18,6 +18,7 @@ extern "C" {
 #include "pipe/p_state.h"
 #include "../dxbc/dxbc_to_nir.h"
 #include "util/format/u_format.h"
+#include "util/u_surface.h"
 
 /* The D3D10 frontend's DXGI -> pipe format table (gallium/frontends/d3d10umd
  * Format.cpp, linked in the native runtime archive). */
@@ -500,6 +501,111 @@ extern "C" void AgxD3d12OwnerDestroyPresentationTexture(AGX_D3D12_OWNER *owner, 
   record->Next = owner->PendingPresentations;
   owner->PendingPresentations = record;
   (void)collect_presentations(owner);
+}
+
+/* C10: one pixel of a typed UAV's format (agx_d3d11_ddi.cpp pack_uint_bits
+ * for Uint; the format's float packer for Float, pure-integer formats
+ * taking the values converted to integers) */
+static bool clear_pixel(enum pipe_format format, const void *values, int is_float, uint8_t out[16]) {
+  const struct util_format_description *desc = util_format_description(format);
+  memset(out, 0, 16);
+  if (!desc || desc->block.width != 1 || desc->block.height != 1 || desc->block.bits > 128) return false;
+  UINT bits32[4] = {};
+  const bool integer = util_format_is_pure_uint(format) || util_format_is_pure_sint(format);
+  if (is_float && !integer) {
+    const struct util_format_pack_description *pack = util_format_pack_description(format);
+    if (!pack || !pack->pack_rgba_float) return false;
+    pack->pack_rgba_float(out, 0, static_cast<const float *>(values), 0, 1, 1);
+    return true;
+  }
+  for (unsigned c = 0; c < 4; ++c)
+    bits32[c] = is_float ? static_cast<UINT>(static_cast<int>(static_cast<const float *>(values)[c]))
+                         : static_cast<const UINT *>(values)[c];
+  for (unsigned c = 0; c < desc->nr_channels && c < 4; ++c) {
+    const unsigned size = desc->channel[c].size, shift = desc->channel[c].shift;
+    const uint64_t v = size >= 32 ? bits32[c] : (bits32[c] & ((1u << size) - 1u));
+    for (unsigned b = 0; b < size && shift + b < 128; ++b)
+      if (v & (1ull << b)) out[(shift + b) / 8] |= static_cast<uint8_t>(1u << ((shift + b) % 8));
+  }
+  return true;
+}
+
+extern "C" HRESULT AgxD3d12OwnerClearUav(AGX_D3D12_OWNER *owner, const AGX_D3D12_UAV *uav, const void *values,
+                                         int is_float, const RECT *rects, unsigned rect_count) {
+  if (!owner || !owner->Context || !uav || !uav->Buffer || !uav->Buffer->Resource || !values || (rect_count && !rects))
+    return E_INVALIDARG;
+  struct pipe_context *pipe = owner->Context;
+  struct pipe_resource *resource = static_cast<struct pipe_resource *>(uav->Buffer->Resource);
+  const unsigned long long room = uav->Offset < uav->Buffer->Bytes ? uav->Buffer->Bytes - uav->Offset : 0;
+  const unsigned long long bytes = uav->Bytes && uav->Bytes < room ? uav->Bytes : room;
+  if (!uav->Format) {
+    /* raw/structured: Values[0] in every word; a float clear has no
+     * defined meaning for untyped views */
+    if (is_float || resource->target != PIPE_BUFFER || !bytes || uav->Buffer->Bytes > 0xffffffffull ||
+        (uav->Offset & 3u) || (bytes & 3u))
+      return E_INVALIDARG;
+    for (unsigned r = 0; r < (rect_count ? rect_count : 1u); ++r) {
+      unsigned long long first = 0, last = bytes / 4;
+      if (rect_count) {
+        first = rects[r].left < 0 ? 0 : static_cast<unsigned long long>(rects[r].left);
+        last = static_cast<unsigned long long>(rects[r].right) < last ? static_cast<unsigned long long>(rects[r].right) : last;
+        if (rects[r].right <= rects[r].left || first >= last) continue;
+      }
+      pipe->clear_buffer(pipe, resource, static_cast<unsigned>(uav->Offset + first * 4),
+                         static_cast<unsigned>((last - first) * 4), values, 4);
+    }
+    ++owner->PendingDispatches;
+    return S_OK;
+  }
+  const enum pipe_format format = FormatTranslate(uav->Format, FALSE);
+  uint8_t pixel[16];
+  if (format == PIPE_FORMAT_NONE || !clear_pixel(format, values, is_float, pixel)) return E_INVALIDARG;
+  const unsigned block = util_format_description(format)->block.bits / 8;
+  if (!uav->Texture) {
+    if (resource->target != PIPE_BUFFER || !bytes || !block || uav->Buffer->Bytes > 0xffffffffull) return E_INVALIDARG;
+    for (unsigned r = 0; r < (rect_count ? rect_count : 1u); ++r) {
+      unsigned long long first = 0, last = bytes / block;
+      if (rect_count) {
+        first = rects[r].left < 0 ? 0 : static_cast<unsigned long long>(rects[r].left);
+        last = static_cast<unsigned long long>(rects[r].right) < last ? static_cast<unsigned long long>(rects[r].right) : last;
+        if (rects[r].right <= rects[r].left || first >= last) continue;
+      }
+      pipe->clear_buffer(pipe, resource, static_cast<unsigned>(uav->Offset + first * block),
+                         static_cast<unsigned>((last - first) * block), pixel, static_cast<int>(block));
+    }
+    ++owner->PendingDispatches;
+    return S_OK;
+  }
+  if (resource->target == PIPE_BUFFER || uav->Level > resource->last_level || !uav->Layers ||
+      uav->FirstLayer >= resource->array_size || uav->Layers > resource->array_size - uav->FirstLayer)
+    return E_INVALIDARG;
+  const unsigned width = resource->width0 >> uav->Level ? resource->width0 >> uav->Level : 1u;
+  const unsigned height = resource->height0 >> uav->Level ? resource->height0 >> uav->Level : 1u;
+  for (unsigned r = 0; r < (rect_count ? rect_count : 1u); ++r) {
+    struct pipe_box box = {};
+    box.width = static_cast<int>(width);
+    box.height = static_cast<int>(height);
+    if (rect_count) {
+      const LONG l = rects[r].left < 0 ? 0 : rects[r].left, t = rects[r].top < 0 ? 0 : rects[r].top;
+      const LONG rr = rects[r].right > static_cast<LONG>(width) ? static_cast<LONG>(width) : rects[r].right;
+      const LONG b = rects[r].bottom > static_cast<LONG>(height) ? static_cast<LONG>(height) : rects[r].bottom;
+      if (rr <= l || b <= t) continue;
+      box.x = static_cast<int>(l);
+      box.y = static_cast<int>(t);
+      box.width = static_cast<int>(rr - l);
+      box.height = static_cast<int>(b - t);
+    }
+    box.z = static_cast<int16_t>(uav->FirstLayer);
+    box.depth = static_cast<int16_t>(uav->Layers);
+    /* Asahi implements no clear_texture (EXP1330): Gallium's default
+     * clears through a render target or on the CPU */
+    if (pipe->clear_texture)
+      pipe->clear_texture(pipe, resource, uav->Level, &box, pixel);
+    else
+      u_default_clear_texture(pipe, resource, uav->Level, &box, pixel);
+  }
+  ++owner->PendingDispatches;
+  return S_OK;
 }
 
 /* C7c: the D3D12 present hands the runtime the allocation; rendering on

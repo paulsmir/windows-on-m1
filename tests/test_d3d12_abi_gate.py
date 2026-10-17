@@ -261,6 +261,7 @@ class D3d12AbiGate(unittest.TestCase):
         compute |= {'pfnClearDepthStencilView'}  # C6f
         compute |= {'pfnResourceCopy'}  # C8b
         compute |= {'pfnPresent'}  # C7c
+        compute |= {'pfnClearUnorderedAccessViewUint', 'pfnClearUnorderedAccessViewFloat', 'pfnDiscardResource', 'pfnSetMarker'}  # C10
         self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList', 'pfnCopyBufferRegion',
                                        'pfnResourceBarrier'} | setters | compute)
         for member in setters:
@@ -342,7 +343,8 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('range.space || range.base_register >= slots', table)
         self.assertIn('at + sizeof(AgxD3d12Descriptor) > heap->bytes', table)
         execute = fn('static void OwnerBindings(')
-        self.assertIn('view->kind == kDescriptorUavBuffer', execute)
+        self.assertIn('DescriptorUav(*view, &o->uav_buffers[u], &o->uavs[u])', execute)
+        self.assertIn('view.kind != kDescriptorUavBuffer', source[source.index('static bool DescriptorUav('):])
         self.assertIn('view->kind == kDescriptorCbv', execute)
         uav = fn('static VOID APIENTRY CreateUnorderedAccessView(')
         for reason in ('!= D3D12DDI_RD_BUFFER ? 4u', '!stride ? 5u', 'hDrvCounterResource.pDrvPrivate ? 7u',
@@ -499,7 +501,7 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('out->kind = typed ? kDescriptorUavTypedBuffer : kDescriptorUavBuffer;', uav)
         self.assertIn('if (typed) stride = AgxD3d12FormatBlockBytes(arg->Format);', uav)
         self.assertIn('out->format = typed ? arg->Format : DXGI_FORMAT_UNKNOWN;', fn('static VOID APIENTRY CreateShaderResourceView('))
-        self.assertIn('o->uavs[u].Texture = 1;', fn('static void OwnerBindings('))
+        self.assertIn('uav->Texture = 1;', fn('static bool DescriptorUav('))
         self.assertIn('D3D12DDI_RESOURCE_FLAG_0022_UNORDERED_ACCESS) ? AGX_D3D12_BIND_UNORDERED_ACCESS', source)
         table = fn('static UINT BindTable(')
         self.assertIn('D3D12DDI_DESCRIPTOR_RANGE_TYPE_SAMPLER', table)
@@ -624,6 +626,32 @@ class D3d12AbiGate(unittest.TestCase):
         p = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerPreparePresent('):]
         p = p[:p.index('\n}\n')]
         self.assertLess(p.index('AgxWin32AsahiContextFlushForPresent('), p.index('AdmissionUmdGpuvaPublishDirectMap('))
+
+    def test_c10_uav_clears(self):
+        # C10 invariants: UAV clears read the CPU descriptor at record time
+        # (it may be reused afterwards), refuse float clears of untyped views
+        # and more rects than recorded; replay converts the descriptor with
+        # the dispatch path's DescriptorUav; the owner clears untyped views
+        # word-wise and typed views with one pixel of their format.
+        source = SOURCE.read_text()
+        def fn(name):
+            start = source.index(name)
+            return source[start:source.index('\n}\n', start)]
+        record = fn('static void RecordClearUav(')
+        self.assertIn('clear.view = *view;', record)
+        self.assertIn('is_float && view->kind == kDescriptorUavBuffer ? 4u', record)
+        self.assertIn('rects > kClearRects', record)
+        self.assertIn('DescriptorUav(*view, &o->uav_buffers[u], &o->uavs[u])', fn('static void OwnerBindings('))
+        self.assertIn('AgxD3d12OwnerClearUav(owner, &uav, clear.values', source)
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        c = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerClearUav('):]
+        c = c[:c.index('\n}\n')]
+        self.assertIn('pipe->clear_buffer(pipe, resource, static_cast<unsigned>(uav->Offset + first * 4)', c)
+        self.assertIn('u_default_clear_texture(pipe, resource, uav->Level, &box, pixel);', c)
+        self.assertIn('clear_pixel(format, values, is_float, pixel)', c)
+        pixel = owner[owner.index('static bool clear_pixel('):]
+        pixel = pixel[:pixel.index('\n}\n')]
+        self.assertNotIn('util_format_pack_rgba(', pixel)  # u_format.h inline helpers stay out of the UMD
 
     def test_c8a_growing_lists(self):
         # C8a invariants: a list owns a growing command array (doubling from

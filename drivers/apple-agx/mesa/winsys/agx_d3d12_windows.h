@@ -144,6 +144,14 @@ typedef struct {
   int ToBuffer; /* 1: texture -> buffer, 0: buffer -> texture */
 } AGX_D3D12_TEXTURE_COPY;
 HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *Owner, const AGX_D3D12_TEXTURE_COPY *Copy);
+/* C10 (D3D12-C10-uav-clears.md): ClearUnorderedAccessView{Uint,Float} of
+ * one view (the D3D11 path's clear_typed/pack_uint_bits): untyped views
+ * take Values[0] in every 32-bit word (Uint only); typed views one pixel of
+ * their format (Uint: the low bits of each value per channel; Float: the
+ * values converted) over the view, or over each rect (textures: x/y
+ * rects; buffers: [left, right) elements). */
+HRESULT AgxD3d12OwnerClearUav(AGX_D3D12_OWNER *Owner, const AGX_D3D12_UAV *Uav, const void *Values, int Float,
+                              const RECT *Rects, unsigned RectCount);
 /* C7b (D3D12-C7-present.md): a 2D render target DXGI can share -- a kernel
  * allocation of the runtime resource (the D3D10/11 presentation-resource
  * path: AdmissionUmdCreateResource with the runtime handle, BGRA8/RGBA8,

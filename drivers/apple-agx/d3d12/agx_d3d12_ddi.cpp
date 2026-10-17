@@ -1576,6 +1576,15 @@ struct AgxD3d12ClearDepth {
     UINT rects;
     RECT rect[kClearRects];
 };
+/* C10: a recorded ClearUnorderedAccessView{Uint,Float} (the CPU descriptor
+ * is read at record time) */
+struct AgxD3d12ClearUav {
+    AgxD3d12Descriptor view;
+    UINT values[4]; /* UINTs, or FLOAT bits when is_float */
+    UINT is_float;
+    UINT rects;
+    RECT rect[kClearRects];
+};
 /* C8b: a recorded texture-to-texture copy (whole: every common mip, all
  * layers, full extents) */
 struct AgxD3d12TextureRegionCopy {
@@ -1586,7 +1595,7 @@ struct AgxD3d12TextureRegionCopy {
     UINT whole_levels; /* > 0: ResourceCopy of this many levels */
 };
 enum : UINT { kCommandCopy = 1, kCommandDispatch = 2, kCommandClear = 3, kCommandTextureCopy = 4, kCommandDraw = 5,
-              kCommandClearDepth = 6, kCommandTextureRegionCopy = 7 };
+              kCommandClearDepth = 6, kCommandTextureRegionCopy = 7, kCommandClearUav = 8 };
 struct AgxD3d12Command {
     UINT kind;
     union {
@@ -1597,6 +1606,7 @@ struct AgxD3d12Command {
         AgxD3d12Draw draw;
         AgxD3d12ClearDepth clear_depth;
         AgxD3d12TextureRegionCopy region_copy;
+        AgxD3d12ClearUav clear_uav;
     };
 };
 /* C8a: commands live in a growing process-heap array owned by the list
@@ -1855,6 +1865,54 @@ static VOID APIENTRY Present(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMANDQUEU
     AdmissionUmdDiagnostic("measure-d3d12-present", reason ? hr : S_OK, receipt, 6);
     if (reason && list) ListError(list, hr);
 }
+/* C10 (D3D12-C10-uav-clears.md): UAV clears record the CPU descriptor
+ * (untyped, typed buffer or texture view) with the values and rects. */
+static void RecordClearUav(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE cpu, const void *values,
+                           UINT is_float, UINT rects, const D3D12DDI_RECT *rect) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    if (!list) return;
+    const auto *view = reinterpret_cast<const AgxD3d12Descriptor *>(cpu.ptr);
+    const bool uav = view && (view->kind == kDescriptorUavBuffer || view->kind == kDescriptorUavTypedBuffer ||
+                              view->kind == kDescriptorUavTexture);
+    const UINT refusal = !uav || !view->heap || !values ? 1u
+                       : rects > kClearRects || (rects && !rect) ? 2u
+                       : is_float && view->kind == kDescriptorUavBuffer ? 4u /* float clears need a format */
+                       : list->commands >= kListCommands ? 3u : 0u;
+    const UINT receipt[] = {refusal, view ? view->kind : 0u, is_float, rects};
+    AdmissionUmdDiagnostic("measure-d3d12-clear-uav", refusal ? E_INVALIDARG : S_OK, receipt, 4);
+    if (refusal) {
+        ListError(list, E_INVALIDARG);
+        return;
+    }
+    AgxD3d12Command *slot = AppendCommand(list);
+    if (!slot) return;
+    slot->kind = kCommandClearUav;
+    AgxD3d12ClearUav &clear = slot->clear_uav;
+    clear.view = *view;
+    memcpy(clear.values, values, sizeof(clear.values));
+    clear.is_float = is_float;
+    clear.rects = rects;
+    for (UINT i = 0; i < rects; ++i) {
+        clear.rect[i].left = rect[i].left;
+        clear.rect[i].top = rect[i].top;
+        clear.rect[i].right = rect[i].right;
+        clear.rect[i].bottom = rect[i].bottom;
+    }
+}
+static VOID APIENTRY ClearUnorderedAccessViewUint(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_GPU_DESCRIPTOR_HANDLE,
+                                                  D3D12DDI_CPU_DESCRIPTOR_HANDLE cpu, D3D12DDI_HRESOURCE,
+                                                  const UINT values[4], UINT rects, const D3D12DDI_RECT *rect) {
+    RecordClearUav(handle, cpu, values, 0u, rects, rect);
+}
+static VOID APIENTRY ClearUnorderedAccessViewFloat(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_GPU_DESCRIPTOR_HANDLE,
+                                                   D3D12DDI_CPU_DESCRIPTOR_HANDLE cpu, D3D12DDI_HRESOURCE,
+                                                   const FLOAT values[4], UINT rects, const D3D12DDI_RECT *rect) {
+    RecordClearUav(handle, cpu, values, 1u, rects, rect);
+}
+/* C10: DiscardResource only declares the contents undefined -- keeping
+ * them is a valid implementation; SetMarker is for tools (PIX). */
+static VOID APIENTRY DiscardResource(D3D12DDI_HCOMMANDLIST, D3D12DDI_HRESOURCE, const D3D12DDIARG_DISCARD_RESOURCE_0003 *) {}
+static VOID APIENTRY SetMarker(D3D12DDI_HCOMMANDLIST, UINT64) {}
 /* C6f */
 static VOID APIENTRY ClearDepthStencilView(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE view, UINT flags,
                                            FLOAT depth, UINT8 stencil, UINT rects, const D3D12DDI_RECT *rect) {
@@ -2525,24 +2583,33 @@ static void OwnerSampler(const D3D12DDI_SAMPLER_DESC &d, AGX_D3D12_SAMPLER *s) {
     s->MaxLod = d.MaxLOD;
     memcpy(s->BorderColor, d.BorderColor, sizeof(s->BorderColor));
 }
+/* C9/C10: the owner UAV of a UAV descriptor -- raw/structured or typed
+ * buffer range, or (image u#) a texture level and slice range */
+static bool DescriptorUav(const AgxD3d12Descriptor &view, AGX_D3D12_BUFFER *buffer, AGX_D3D12_UAV *uav) {
+    memset(uav, 0, sizeof(*uav));
+    if (!view.heap || (view.kind != kDescriptorUavBuffer && view.kind != kDescriptorUavTypedBuffer &&
+                       view.kind != kDescriptorUavTexture))
+        return false;
+    *buffer = HeapBuffer(view.heap);
+    uav->Buffer = buffer;
+    if (view.kind == kDescriptorUavTexture) {
+        uav->Format = view.format;
+        uav->Texture = 1;
+        uav->Level = view.level;
+        uav->FirstLayer = view.first_layer;
+        uav->Layers = view.layers;
+        return true;
+    }
+    uav->Offset = view.offset;
+    uav->Bytes = view.bytes;
+    uav->Format = view.kind == kDescriptorUavTypedBuffer ? view.format : DXGI_FORMAT_UNKNOWN;
+    return true;
+}
 static void OwnerBindings(const AgxD3d12Dispatch &b, AgxD3d12OwnerBindings *o) {
     memset(o, 0, sizeof(*o));
     for (UINT u = 0; u < kUavSlots; ++u) {
         const AgxD3d12Descriptor *view = b.uav_descriptor[u];
-        if (view && (view->kind == kDescriptorUavBuffer || view->kind == kDescriptorUavTypedBuffer) && view->heap) {
-            o->uav_buffers[u] = HeapBuffer(view->heap);
-            o->uavs[u] = {&o->uav_buffers[u], view->offset, view->bytes};
-            o->uavs[u].Format = view->kind == kDescriptorUavTypedBuffer ? view->format : DXGI_FORMAT_UNKNOWN;
-        } else if (view && view->kind == kDescriptorUavTexture && view->heap) {
-            /* C9: image u# of a texture level and slice range */
-            o->uav_buffers[u] = HeapBuffer(view->heap);
-            o->uavs[u].Buffer = &o->uav_buffers[u];
-            o->uavs[u].Format = view->format;
-            o->uavs[u].Texture = 1;
-            o->uavs[u].Level = view->level;
-            o->uavs[u].FirstLayer = view->first_layer;
-            o->uavs[u].Layers = view->layers;
-        }
+        if (view) (void)DescriptorUav(*view, &o->uav_buffers[u], &o->uavs[u]);
         if (!b.uav_heap[u]) continue;
         o->uav_buffers[u] = HeapBuffer(b.uav_heap[u]);
         o->uavs[u] = {&o->uav_buffers[u], b.uav_offset[u], 0};
@@ -2737,6 +2804,14 @@ static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, con
                                                     clear.stencil, clear.rects ? clear.rect : nullptr, clear.rects);
             } else if (command.kind == kCommandDraw) {
                 hr = ReplayDraw(owner, command.draw);
+            } else if (command.kind == kCommandClearUav) {
+                const AgxD3d12ClearUav &clear = command.clear_uav;
+                AGX_D3D12_BUFFER buffer = {};
+                AGX_D3D12_UAV uav = {};
+                hr = DescriptorUav(clear.view, &buffer, &uav)
+                         ? AgxD3d12OwnerClearUav(owner, &uav, clear.values, static_cast<int>(clear.is_float),
+                                                 clear.rects ? clear.rect : nullptr, clear.rects)
+                         : E_INVALIDARG;
             } else if (command.kind == kCommandTextureCopy) {
                 const AgxD3d12TextureCopy &tc = command.texture_copy;
                 AGX_D3D12_BUFFER texture = HeapBuffer(tc.texture), buffer = HeapBuffer(tc.buffer);
@@ -2883,11 +2958,11 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawInstanced, DrawInstanced);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawIndexedInstanced, DrawIndexedInstanced);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDispatch, Dispatch);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearUnorderedAccessViewUint, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearUnorderedAccessViewUint));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearUnorderedAccessViewFloat, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearUnorderedAccessViewFloat));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearUnorderedAccessViewUint, ClearUnorderedAccessViewUint);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearUnorderedAccessViewFloat, ClearUnorderedAccessViewFloat);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearRenderTargetView, ClearRenderTargetView);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearDepthStencilView, ClearDepthStencilView);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDiscardResource, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDiscardResource));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDiscardResource, DiscardResource);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTextureRegion, CopyTextureRegion);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceCopy, ResourceCopy);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTiles, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTiles));
@@ -2927,7 +3002,7 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetVertexBuffers, AGX_VB_SETTER);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSOSetTargets, AGX_LIST_STATE(pfnSOSetTargets));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOMSetRenderTargets, OMSetRenderTargets);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetMarker, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetMarker));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetMarker, SetMarker);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearRootArguments, ClearRootArguments);
 }
 static void FillD3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001 &f) {
