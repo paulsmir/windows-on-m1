@@ -371,6 +371,27 @@ static HRESULT APIENTRY CreatePipelineState(D3D12DDI_HDEVICE, const D3D12DDIARG_
     return S_OK;
 }
 static VOID APIENTRY DestroyPipelineState(D3D12DDI_HDEVICE, D3D12DDI_HPIPELINESTATE) {}
+/* C1i (EXP1353): after its internal pipeline state the runtime calls
+ * pfnMakeResident; refused, the device is removed. No object this stage
+ * creates owns a kernel allocation yet (heaps and resources are C2), so
+ * residency has nothing to page in: S_OK without a paging fence. The
+ * receipt names what the runtime asks for (count and the first types). */
+static void ResidencyReceipt(PCSTR stage, UINT count, const D3D12DDI_HANDLE_AND_TYPE *objects) {
+    UINT receipt[5] = {count};
+    for (UINT i = 0; objects && i < count && i < 4; ++i) receipt[1 + i] = static_cast<UINT>(objects[i].Type);
+    AdmissionUmdDiagnostic(stage, S_OK, receipt, 5);
+}
+static HRESULT APIENTRY MakeResident(D3D12DDI_HDEVICE, D3D12DDIARG_MAKERESIDENT_0001 *arg) {
+    if (!arg) return E_INVALIDARG;
+    ResidencyReceipt("measure-d3d12-make-resident", arg->NumObjects, arg->pObjects);
+    arg->WaitMask = 0;
+    return S_OK;
+}
+static HRESULT APIENTRY Evict(D3D12DDI_HDEVICE, const D3D12DDIARG_EVICT *arg) {
+    if (!arg) return E_INVALIDARG;
+    ResidencyReceipt("measure-d3d12-evict", arg->NumObjects, arg->pObjects);
+    return S_OK;
+}
 static HRESULT APIENTRY CloseAdapter(D3D12DDI_HADAPTER) {
     AdmissionUmdDiagnostic("d3d12-close-adapter", S_OK, nullptr, 0);
     return S_OK;
@@ -454,8 +475,8 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateHeapAndResourceSizes, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateHeapAndResourceSizes));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateHeapAndResource, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateHeapAndResource));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyHeapAndResource, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyHeapAndResource));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnMakeResident, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnMakeResident));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnEvict, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnEvict));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnMakeResident, MakeResident);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnEvict, Evict);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateOpenedHeapAndResourceSizes, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateOpenedHeapAndResourceSizes));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnOpenHeapAndResource, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnOpenHeapAndResource));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCopyDescriptors, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCopyDescriptors));

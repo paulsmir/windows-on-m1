@@ -127,6 +127,12 @@ class D3d12AbiGate(unittest.TestCase):
             self.assertIn('AgxD3d12State<%s, %d>' % (desc, kind), source)
         for member in ('pfnCalcPrivatePipelineStateSize', 'pfnCreatePipelineState', 'pfnDestroyPipelineState'):
             self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
+        # C1i (EXP1353): residency succeeds while no object owns a kernel
+        # allocation; heap creation (which would) is still refused.
+        for member in ('pfnMakeResident', 'pfnEvict'):
+            self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
+        self.assertIn('AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateHeapAndResource)', source)
+        self.assertIn('arg->WaitMask = 0;', source)
         # nothing can bind it yet: every command-list DDI stays fail-closed
         self.assertNotRegex(source, r'AGX_ASSIGN\(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, \w+, (?!AGX_REJECT)')
 
