@@ -1685,6 +1685,130 @@ static int clear_uavs(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fen
     return !(SUCCEEDED(hr) && buffer_bad == 0 && pixels_ok);
 }
 
+/* C12 (measurement): COPY and COMPUTE queues -- the copy queue uploads a
+ * pattern (5i + 1) into a DEFAULT buffer and signals 1; the compute queue
+ * waits for 1, runs the C5 dispatch (3i + 7) into a second buffer and
+ * signals 2; the direct queue waits for 2 and copies both to READBACK.
+ * C12A = copy-queue data, C12B = compute-queue data. */
+static int queue_types(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    D3D12_COMMAND_QUEUE_DESC copy_desc = {D3D12_COMMAND_LIST_TYPE_COPY}, compute_desc = {D3D12_COMMAND_LIST_TYPE_COMPUTE};
+    D3D12_ROOT_PARAMETER parameter = {D3D12_ROOT_PARAMETER_TYPE_UAV};
+    D3D12_ROOT_SIGNATURE_DESC root_desc = {1, &parameter};
+    D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {0};
+    ID3DBlob *blob = NULL, *errors = NULL;
+    ID3D12RootSignature *root = NULL;
+    ID3D12PipelineState *pso = NULL;
+    ID3D12CommandQueue *copy_queue = NULL, *compute_queue = NULL;
+    ID3D12CommandAllocator *allocators[3] = {NULL, NULL, NULL};
+    ID3D12GraphicsCommandList *lists[3] = {NULL, NULL, NULL};
+    ID3D12Resource *upload = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+    ID3D12Resource *copied = uav_buffer(device), *computed = uav_buffer(device);
+    ID3D12Resource *readback_a = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+    ID3D12Resource *readback_b = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+    const D3D12_COMMAND_LIST_TYPE types[3] = {D3D12_COMMAND_LIST_TYPE_COPY, D3D12_COMMAND_LIST_TYPE_COMPUTE, D3D12_COMMAND_LIST_TYPE_DIRECT};
+    unsigned bad_a = 16384, bad_b = 16384;
+    UINT64 value = 0;
+    UINT *dwords = NULL;
+    parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    HRESULT hr = upload && copied && computed && readback_a && readback_b ? S_OK : E_FAIL;
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommandQueue(device, &copy_desc, &IID_ID3D12CommandQueue, (void **)&copy_queue);
+    printf("C12 CreateCommandQueue COPY hr=0x%08lx\n", (unsigned long)hr);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateCommandQueue(device, &compute_desc, &IID_ID3D12CommandQueue, (void **)&compute_queue);
+    printf("C12 CreateCommandQueue COMPUTE hr=0x%08lx\n", (unsigned long)hr);
+    if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(upload, 0, NULL, (void **)&dwords);
+    if (SUCCEEDED(hr)) {
+        for (unsigned i = 0; i < 16384; ++i) dwords[i] = 5u * i + 1u;
+        ID3D12Resource_Unmap(upload, 0, NULL);
+        hr = D3D12SerializeRootSignature(&root_desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &errors);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateRootSignature(device, 0, ID3D10Blob_GetBufferPointer(blob),
+                                              ID3D10Blob_GetBufferSize(blob), &IID_ID3D12RootSignature, (void **)&root);
+    if (SUCCEEDED(hr)) {
+        pso_desc.pRootSignature = root;
+        pso_desc.CS.pShaderBytecode = g_agx_d3d12_probe_cs;
+        pso_desc.CS.BytecodeLength = sizeof(g_agx_d3d12_probe_cs);
+        hr = ID3D12Device_CreateComputePipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
+    }
+    for (int i = 0; i < 3 && SUCCEEDED(hr); ++i) {
+        hr = ID3D12Device_CreateCommandAllocator(device, types[i], &IID_ID3D12CommandAllocator, (void **)&allocators[i]);
+        if (SUCCEEDED(hr))
+            hr = ID3D12Device_CreateCommandList(device, 0, types[i], allocators[i], i == 1 ? pso : NULL,
+                                                &IID_ID3D12GraphicsCommandList, (void **)&lists[i]);
+    }
+    printf("C12 pipeline/allocators/lists hr=0x%08lx\n", (unsigned long)hr);
+    if (SUCCEEDED(hr)) {
+        ID3D12CommandList *one[1];
+        transition(lists[0], copied, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST);
+        ID3D12GraphicsCommandList_CopyBufferRegion(lists[0], copied, 0, upload, 0, 65536);
+        transition(lists[0], copied, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
+        ID3D12GraphicsCommandList_SetComputeRootSignature(lists[1], root);
+        ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(lists[1], 0, ID3D12Resource_GetGPUVirtualAddress(computed));
+        ID3D12GraphicsCommandList_Dispatch(lists[1], 256, 1, 1);
+        transition(lists[1], computed, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON);
+        ID3D12GraphicsCommandList_CopyBufferRegion(lists[2], readback_a, 0, copied, 0, 65536);
+        ID3D12GraphicsCommandList_CopyBufferRegion(lists[2], readback_b, 0, computed, 0, 65536);
+        for (int i = 0; i < 3 && SUCCEEDED(hr); ++i) hr = ID3D12GraphicsCommandList_Close(lists[i]);
+        printf("C12 record+close hr=0x%08lx\n", (unsigned long)hr);
+        if (SUCCEEDED(hr)) {
+            one[0] = (ID3D12CommandList *)lists[0];
+            ID3D12CommandQueue_ExecuteCommandLists(copy_queue, 1, one);
+            hr = ID3D12CommandQueue_Signal(copy_queue, fence, base + 1);
+            printf("C12 copy queue execute+signal hr=0x%08lx\n", (unsigned long)hr);
+        }
+        if (SUCCEEDED(hr)) {
+            hr = ID3D12CommandQueue_Wait(compute_queue, fence, base + 1);
+            printf("C12 compute queue Wait hr=0x%08lx\n", (unsigned long)hr);
+        }
+        if (SUCCEEDED(hr)) {
+            one[0] = (ID3D12CommandList *)lists[1];
+            ID3D12CommandQueue_ExecuteCommandLists(compute_queue, 1, one);
+            hr = ID3D12CommandQueue_Signal(compute_queue, fence, base + 2);
+            printf("C12 compute queue execute+signal hr=0x%08lx\n", (unsigned long)hr);
+        }
+        if (SUCCEEDED(hr)) hr = ID3D12CommandQueue_Wait(queue, fence, base + 2);
+        if (SUCCEEDED(hr)) {
+            one[0] = (ID3D12CommandList *)lists[2];
+            ID3D12CommandQueue_ExecuteCommandLists(queue, 1, one);
+            hr = ID3D12CommandQueue_Signal(queue, fence, base + 3);
+            for (int i = 0; i < 300 && (value = ID3D12Fence_GetCompletedValue(fence)) < base + 3; ++i) Sleep(10);
+            printf("C12 direct queue execute+signal hr=0x%08lx completed %llu\n", (unsigned long)hr, (unsigned long long)value);
+        }
+    }
+    if (SUCCEEDED(hr) && value >= base + 3) {
+        D3D12_RANGE all = {0, 65536};
+        if (SUCCEEDED(ID3D12Resource_Map(readback_a, 0, &all, (void **)&dwords)) && dwords) {
+            bad_a = 0;
+            for (unsigned i = 0; i < 16384; ++i) bad_a += dwords[i] != 5u * i + 1u;
+            ID3D12Resource_Unmap(readback_a, 0, NULL);
+        }
+        if (SUCCEEDED(ID3D12Resource_Map(readback_b, 0, &all, (void **)&dwords)) && dwords) {
+            bad_b = 0;
+            for (unsigned i = 0; i < 16384; ++i) bad_b += dwords[i] != 3u * i + 7u;
+            ID3D12Resource_Unmap(readback_b, 0, NULL);
+        }
+        printf("C12 readback copy bad=%u compute bad=%u\n", bad_a, bad_b);
+    }
+    printf("AGX_D3D12_C12A: %s\n", bad_a == 0 ? "PASS" : "FAIL");
+    printf("AGX_D3D12_C12B: %s\n", bad_b == 0 ? "PASS" : "FAIL");
+    for (int i = 0; i < 3; ++i) {
+        if (lists[i]) ID3D12GraphicsCommandList_Release(lists[i]);
+        if (allocators[i]) ID3D12CommandAllocator_Release(allocators[i]);
+    }
+    if (pso) ID3D12PipelineState_Release(pso);
+    if (root) ID3D12RootSignature_Release(root);
+    if (errors) ID3D10Blob_Release(errors);
+    if (blob) ID3D10Blob_Release(blob);
+    if (compute_queue) ID3D12CommandQueue_Release(compute_queue);
+    if (copy_queue) ID3D12CommandQueue_Release(copy_queue);
+    if (readback_b) ID3D12Resource_Release(readback_b);
+    if (readback_a) ID3D12Resource_Release(readback_a);
+    if (computed) ID3D12Resource_Release(computed);
+    if (copied) ID3D12Resource_Release(copied);
+    if (upload) ID3D12Resource_Release(upload);
+    return !(bad_a == 0 && bad_b == 0);
+}
+
 /* C7A (D3D12-C7-present.md, measurement): a flip-model swapchain on the
  * direct queue -- window, CreateSwapChainForHwnd (2 x 64x64 RGBA8,
  * FLIP_DISCARD), back buffer 0 cleared green through an RTV, transition to
@@ -1880,6 +2004,7 @@ int main(void) {
                 (void)run_isolated(adapter, "C9", compute_images);
                 (void)run_isolated(adapter, "C10", clear_uavs);
                 (void)run_isolated(adapter, "C11", step_c11);
+                (void)run_isolated(adapter, "C12", queue_types);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
             }
             IDXGIAdapter1_Release(adapter);
