@@ -110,6 +110,7 @@ HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *Owner, const AGX_D3D12_COMPUTE *C
 unsigned AgxD3d12FormatBlockBytes(DXGI_FORMAT Format);
 #define AGX_D3D12_BIND_RENDER_TARGET 0x1u
 #define AGX_D3D12_BIND_SAMPLER 0x2u
+#define AGX_D3D12_BIND_DEPTH_STENCIL 0x4u /* C6f: also translates typeless formats as depth */
 /* A 2D texture (array when Layers > 1) of the owner's screen; Texture->Cpu
  * is NULL, Bytes the caller's allocation size. */
 HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *Owner, DXGI_FORMAT Format, unsigned Width, unsigned Height,
@@ -132,6 +133,10 @@ typedef struct {
   int ToBuffer; /* 1: texture -> buffer, 0: buffer -> texture */
 } AGX_D3D12_TEXTURE_COPY;
 HRESULT AgxD3d12OwnerCopyTexture(AGX_D3D12_OWNER *Owner, const AGX_D3D12_TEXTURE_COPY *Copy);
+/* C6f: clears depth (Flags bit 0) and/or stencil (bit 1) of a depth view */
+HRESULT AgxD3d12OwnerClearDepthStencil(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Texture, DXGI_FORMAT ViewFormat,
+                                       unsigned Level, unsigned FirstLayer, unsigned Layers, unsigned Flags,
+                                       float Depth, unsigned Stencil, const RECT *Rects, unsigned RectCount);
 /* C6b (D3D12-C6-graphics.md): a graphics pipeline. State fields carry the
  * D3D10/11/12 DDI numeric values (D3D12DDI_BLEND_* == D3D10_DDI_BLEND_*,
  * comparison/stencil/cull/fill likewise); Vs/Ps are tokenized programs. */
@@ -182,6 +187,11 @@ typedef struct {
     DXGI_FORMAT Format;
     unsigned Level, FirstLayer, Layers;
   } Rtv[8];
+  struct {
+    const AGX_D3D12_BUFFER *Texture; /* C6f: NULL = no depth-stencil view */
+    DXGI_FORMAT Format;
+    unsigned Level, FirstLayer, Layers;
+  } Dsv;
   float Viewport[6]; /* TopLeftX, TopLeftY, Width, Height, MinDepth, MaxDepth */
   RECT Scissor;
   unsigned Topology; /* D3D_PRIMITIVE_TOPOLOGY */

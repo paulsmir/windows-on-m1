@@ -873,7 +873,8 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
         memset(resource, 0, sizeof(*resource));
         AGX_D3D12_BUFFER texture = {};
         const UINT bind = ((resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET) ? AGX_D3D12_BIND_RENDER_TARGET : 0u) |
-                          ((resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE) ? AGX_D3D12_BIND_SAMPLER : 0u);
+                          ((resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE) ? AGX_D3D12_BIND_SAMPLER : 0u) |
+                          ((resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_DEPTH_STENCIL) ? AGX_D3D12_BIND_DEPTH_STENCIL : 0u);
         HRESULT hr = !owner ? E_NOTIMPL
                    : AgxD3d12OwnerCreateTexture2D(owner, resource_arg->Format, static_cast<UINT>(resource_arg->Width),
                                                   resource_arg->Height, resource_arg->DepthOrArraySize,
@@ -1014,7 +1015,7 @@ static UINT APIENTRY GetDescriptorSizeInBytes(D3D12DDI_HDEVICE, D3D12DDI_DESCRIP
  * owner (Gallium bindings), so a descriptor is a CPU record of the view --
  * the buffer heap and byte range -- never read by the GPU. */
 enum : UINT { kDescriptorNone = 0, kDescriptorCbv = 1, kDescriptorUavBuffer = 2, kDescriptorSrvBuffer = 3,
-              kDescriptorRtv = 4, kDescriptorSrvTexture = 5, kDescriptorSampler = 6 };
+              kDescriptorRtv = 4, kDescriptorSrvTexture = 5, kDescriptorSampler = 6, kDescriptorDsv = 7 };
 struct AgxD3d12Descriptor {
     UINT kind;
     UINT reserved;
@@ -1117,6 +1118,29 @@ static VOID APIENTRY CreateRenderTargetView(D3D12DDI_HDEVICE, const D3D12DDIARG_
         out->layers = layers;
     }
     ViewReceipt("measure-d3d12-rtv", reason, arg ? static_cast<UINT>(arg->Format) : 0u,
+                arg ? static_cast<UINT>(arg->ResourceDimension) : 0u);
+}
+/* C6f: 2D (array) DSVs of committed depth textures (read at record) */
+static VOID APIENTRY CreateDepthStencilView(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_DEPTH_STENCIL_VIEW *arg,
+                                            D3D12DDI_CPU_DESCRIPTOR_HANDLE dest) {
+    auto *out = reinterpret_cast<AgxD3d12Descriptor *>(dest.ptr);
+    if (!out) return;
+    memset(out, 0, sizeof(*out));
+    const auto *resource = arg ? static_cast<const AgxD3d12Resource *>(arg->hDrvResource.pDrvPrivate) : nullptr;
+    UINT reason = !arg || !resource || !resource->heap ? 1u
+                : resource->type != D3D12DDI_RT_TEXTURE2D || arg->ResourceDimension != D3D12DDI_RD_TEXTURE2D ? 4u
+                : arg->Tex2D.MipSlice >= resource->levels || arg->Tex2D.FirstArraySlice >= resource->layers ? 6u : 0u;
+    if (!reason) {
+        out->kind = kDescriptorDsv;
+        out->heap = resource->heap;
+        out->format = arg->Format == DXGI_FORMAT_UNKNOWN ? resource->format : arg->Format;
+        out->level = arg->Tex2D.MipSlice;
+        out->first_layer = arg->Tex2D.FirstArraySlice;
+        out->layers = arg->Tex2D.ArraySize == UINT_MAX || arg->Tex2D.ArraySize > resource->layers - arg->Tex2D.FirstArraySlice
+                          ? resource->layers - arg->Tex2D.FirstArraySlice : (arg->Tex2D.ArraySize ? arg->Tex2D.ArraySize : 1u);
+        out->reserved = static_cast<UINT>(arg->Flags); /* read-only depth/stencil */
+    }
+    ViewReceipt("measure-d3d12-dsv", reason, arg ? static_cast<UINT>(arg->Format) : 0u,
                 arg ? static_cast<UINT>(arg->ResourceDimension) : 0u);
 }
 /* C5d: raw and structured buffer SRVs (read as 32-bit words); typed
@@ -1435,6 +1459,7 @@ struct AgxD3d12Draw {
     AgxD3d12Dispatch vs_bind, ps_bind;
     UINT rtvs;
     AgxD3d12Descriptor rtv[8];
+    AgxD3d12Descriptor dsv; /* C6f: kind 0 = none */
     D3D12DDI_VIEWPORT viewport;
     RECT scissor;
     UINT topology;
@@ -1448,7 +1473,17 @@ struct AgxD3d12Draw {
     UINT index_size;
     INT base_vertex;
 };
-enum : UINT { kCommandCopy = 1, kCommandDispatch = 2, kCommandClear = 3, kCommandTextureCopy = 4, kCommandDraw = 5 };
+/* C6f: a recorded ClearDepthStencilView */
+struct AgxD3d12ClearDepth {
+    AgxD3d12Descriptor dsv;
+    UINT flags; /* D3D12_CLEAR_FLAG_DEPTH 1, _STENCIL 2 */
+    FLOAT depth;
+    UINT stencil;
+    UINT rects;
+    RECT rect[kClearRects];
+};
+enum : UINT { kCommandCopy = 1, kCommandDispatch = 2, kCommandClear = 3, kCommandTextureCopy = 4, kCommandDraw = 5,
+              kCommandClearDepth = 6 };
 struct AgxD3d12Command {
     UINT kind;
     union {
@@ -1457,6 +1492,7 @@ struct AgxD3d12Command {
         AgxD3d12Clear clear;
         AgxD3d12TextureCopy texture_copy;
         AgxD3d12Draw draw;
+        AgxD3d12ClearDepth clear_depth;
     };
 };
 static constexpr UINT kListCommands = 64;
@@ -1478,6 +1514,7 @@ struct AgxD3d12CommandList {
     UINT graphics_root_dwords[kRootArguments];
     UINT rtvs;
     AgxD3d12Descriptor rtv[8];
+    AgxD3d12Descriptor dsv; /* C6f */
     D3D12DDI_VIEWPORT viewport;
     RECT scissor;
     UINT topology;
@@ -1543,6 +1580,7 @@ static VOID APIENTRY ResetCommandList(D3D12DDI_HCOMMANDLIST handle, const D3D12D
     memset(list->graphics_root_va, 0, sizeof(list->graphics_root_va));
     memset(list->graphics_root_dwords, 0, sizeof(list->graphics_root_dwords));
     list->rtvs = 0;
+    memset(&list->dsv, 0, sizeof(list->dsv));
     memset(&list->viewport, 0, sizeof(list->viewport));
     memset(&list->scissor, 0, sizeof(list->scissor));
     list->topology = 0;
@@ -1601,6 +1639,33 @@ static VOID APIENTRY ClearRenderTargetView(D3D12DDI_HCOMMANDLIST handle, D3D12DD
         command.clear.rect[i].top = rect[i].top;
         command.clear.rect[i].right = rect[i].right;
         command.clear.rect[i].bottom = rect[i].bottom;
+    }
+}
+/* C6f */
+static VOID APIENTRY ClearDepthStencilView(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE view, UINT flags,
+                                           FLOAT depth, UINT8 stencil, UINT rects, const D3D12DDI_RECT *rect) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    if (!list) return;
+    const auto *dsv = reinterpret_cast<const AgxD3d12Descriptor *>(view.ptr);
+    if (!dsv || dsv->kind != kDescriptorDsv || !dsv->heap || !(flags & 3u) || rects > kClearRects || (rects && !rect) ||
+        list->commands >= kListCommands) {
+        const UINT receipt[] = {dsv ? dsv->kind : 0u, flags, rects};
+        AdmissionUmdDiagnostic("measure-d3d12-clear-depth-refused", E_INVALIDARG, receipt, 3);
+        ListError(list, E_INVALIDARG);
+        return;
+    }
+    AgxD3d12Command &command = list->command[list->commands++];
+    command.kind = kCommandClearDepth;
+    command.clear_depth.dsv = *dsv;
+    command.clear_depth.flags = flags & 3u;
+    command.clear_depth.depth = depth;
+    command.clear_depth.stencil = stencil;
+    command.clear_depth.rects = rects;
+    for (UINT i = 0; i < rects; ++i) {
+        command.clear_depth.rect[i].left = rect[i].left;
+        command.clear_depth.rect[i].top = rect[i].top;
+        command.clear_depth.rect[i].right = rect[i].right;
+        command.clear_depth.rect[i].bottom = rect[i].bottom;
     }
 }
 /* One side of CopyTextureRegion: a texture subresource
@@ -1709,14 +1774,17 @@ static VOID APIENTRY OMSetRenderTargets(D3D12DDI_HCOMMANDLIST handle, UINT count
     if (!list) return;
     list->state |= AGX_LIST_BIT(pfnOMSetRenderTargets);
     list->rtvs = 0;
-    if (count > 8 || (count && !rtvs) || (dsv && dsv->ptr)) {
-        /* depth-stencil views are C6c */
+    memset(&list->dsv, 0, sizeof(list->dsv));
+    if (count > 8 || (count && !rtvs)) {
         const UINT receipt[] = {count, dsv && dsv->ptr ? 1u : 0u};
-        if (count || (dsv && dsv->ptr)) {
-            AdmissionUmdDiagnostic("measure-d3d12-render-targets-refused", E_NOTIMPL, receipt, 2);
-            ListError(list, E_NOTIMPL);
-        }
+        AdmissionUmdDiagnostic("measure-d3d12-render-targets-refused", E_INVALIDARG, receipt, 2);
+        ListError(list, E_INVALIDARG);
         return;
+    }
+    if (dsv && dsv->ptr) {
+        /* C6f: the DSV is read now, like the RTVs */
+        const auto *view = reinterpret_cast<const AgxD3d12Descriptor *>(dsv->ptr);
+        if (view->kind == kDescriptorDsv) list->dsv = *view;
     }
     for (UINT i = 0; i < count; ++i) {
         const SIZE_T at = single_range ? rtvs[0].ptr + i * DescriptorBytes(D3D12DDI_DESCRIPTOR_HEAP_TYPE_RTV) : rtvs[i].ptr;
@@ -2124,7 +2192,7 @@ static void RecordDraw(AgxD3d12CommandList *list, UINT vertices, UINT instances,
     UINT refusal = !pso || !pso->vs_dwords ? 1u
                  : pso->desc.hGeometryShader.pDrvPrivate || pso->desc.hHullShader.pDrvPrivate ||
                            pso->desc.hDomainShader.pDrvPrivate ? 4u
-                 : !list->rtvs || !list->rtv[0].heap ? 5u
+                 : (!list->rtvs || !list->rtv[0].heap) && list->dsv.kind != kDescriptorDsv ? 5u
                  : indexed && !list->index_heap ? 6u
                  : list->commands >= kListCommands ? 3u : 0u;
     AgxD3d12Dispatch vs_bind = {}, ps_bind = {};
@@ -2147,6 +2215,7 @@ static void RecordDraw(AgxD3d12CommandList *list, UINT vertices, UINT instances,
     draw.ps_bind = ps_bind;
     draw.rtvs = list->rtvs;
     memcpy(draw.rtv, list->rtv, sizeof(draw.rtv));
+    draw.dsv = list->dsv;
     draw.viewport = list->viewport;
     draw.scissor = list->scissor;
     draw.topology = list->topology;
@@ -2304,6 +2373,12 @@ static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, con
                 hr = AgxD3d12OwnerClearRenderTarget(owner, &texture, clear.rtv.format, clear.rtv.level,
                                                     clear.rtv.first_layer, clear.rtv.layers, clear.color,
                                                     clear.rects ? clear.rect : nullptr, clear.rects);
+            } else if (command.kind == kCommandClearDepth) {
+                const AgxD3d12ClearDepth &clear = command.clear_depth;
+                AGX_D3D12_BUFFER texture = HeapBuffer(clear.dsv.heap);
+                hr = AgxD3d12OwnerClearDepthStencil(owner, &texture, clear.dsv.format, clear.dsv.level,
+                                                    clear.dsv.first_layer, clear.dsv.layers, clear.flags, clear.depth,
+                                                    clear.stencil, clear.rects ? clear.rect : nullptr, clear.rects);
             } else if (command.kind == kCommandDraw) {
                 const AgxD3d12Draw &d = command.draw;
                 AGX_D3D12_BUFFER rtv_textures[8] = {}, vb_buffers[kVertexBuffers] = {};
@@ -2318,6 +2393,15 @@ static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, con
                     draw.Rtv[r].Level = d.rtv[r].level;
                     draw.Rtv[r].FirstLayer = d.rtv[r].first_layer;
                     draw.Rtv[r].Layers = d.rtv[r].layers;
+                }
+                AGX_D3D12_BUFFER dsv_texture = {};
+                if (d.dsv.kind == kDescriptorDsv && d.dsv.heap) {
+                    dsv_texture = HeapBuffer(d.dsv.heap);
+                    draw.Dsv.Texture = &dsv_texture;
+                    draw.Dsv.Format = d.dsv.format;
+                    draw.Dsv.Level = d.dsv.level;
+                    draw.Dsv.FirstLayer = d.dsv.first_layer;
+                    draw.Dsv.Layers = d.dsv.layers;
                 }
                 draw.Viewport[0] = d.viewport.TopLeftX;
                 draw.Viewport[1] = d.viewport.TopLeftY;
@@ -2468,7 +2552,7 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateSampler, CreateSampler);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateUnorderedAccessView, CreateUnorderedAccessView);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateRenderTargetView, CreateRenderTargetView);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDepthStencilView, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDepthStencilView));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDepthStencilView, CreateDepthStencilView);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateRootSignatureSize, CalcPrivateRootSignatureSize);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateRootSignature, CreateRootSignature);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyRootSignature, DestroyRootSignature);
@@ -2514,7 +2598,7 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearUnorderedAccessViewUint, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearUnorderedAccessViewUint));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearUnorderedAccessViewFloat, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearUnorderedAccessViewFloat));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearRenderTargetView, ClearRenderTargetView);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearDepthStencilView, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearDepthStencilView));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearDepthStencilView, ClearDepthStencilView);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDiscardResource, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDiscardResource));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTextureRegion, CopyTextureRegion);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceCopy, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceCopy));

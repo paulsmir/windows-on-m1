@@ -182,3 +182,20 @@ other colours, 448..576 green pixels.
 - Checkpoint: probe C6E: 2x2 RGBA8 texture (green, blue / white, black)
   uploaded with CopyTextureRegion, PS SRV table + static point-clamp
   sampler, full-target triangle strip; PASS = the four quadrants.
+
+## C6f: depth-stencil
+
+- WINDOWS: TEXTURE2D with ALLOW_DEPTH_STENCIL (D32_FLOAT, D24_UNORM_S8_UINT,
+  D16_UNORM, typeless families), pfnCreateDepthStencilView (Tex2D MipSlice,
+  slices, read-only flags), pfnClearDepthStencilView (flags depth 1 /
+  stencil 2, depth, stencil, rects), OMSetRenderTargets DSV handle (read at
+  record), pipeline DepthStencilState.
+- AGX/ASAHI: resource_create with PIPE_BIND_DEPTH_STENCIL and the depth
+  translation of the format, pipe_framebuffer_state.zsbuf,
+  clear_depth_stencil, the DSA CSO from C6b.
+- TRANSLATION: DSV record {heap, format, mip, layers}; ClearDepthStencilView
+  records the view; draws snapshot the DSV into zsbuf; depth-only draws
+  (no RTV) are allowed; the framebuffer size is the smallest attachment.
+- Checkpoint: probe C6F: D32_FLOAT cleared to 1, near green triangle (z
+  0.25) then far blue quad (z 0.75, LESS); PASS = centre green, corner
+  blue.

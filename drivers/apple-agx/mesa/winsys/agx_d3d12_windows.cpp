@@ -378,7 +378,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *owner, DXGI_FOR
   memset(texture, 0, sizeof(*texture));
   struct pipe_resource templ = {};
   templ.target = layers > 1 ? PIPE_TEXTURE_2D_ARRAY : PIPE_TEXTURE_2D;
-  templ.format = FormatTranslate(format, FALSE);
+  templ.format = FormatTranslate(format, (bind & AGX_D3D12_BIND_DEPTH_STENCIL) ? TRUE : FALSE);
   templ.width0 = width;
   templ.height0 = static_cast<uint16_t>(height);
   templ.depth0 = 1;
@@ -386,7 +386,8 @@ extern "C" HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *owner, DXGI_FOR
   templ.last_level = static_cast<uint8_t>(levels - 1);
   templ.usage = PIPE_USAGE_DEFAULT;
   templ.bind = ((bind & AGX_D3D12_BIND_RENDER_TARGET) ? PIPE_BIND_RENDER_TARGET : 0) |
-               ((bind & AGX_D3D12_BIND_SAMPLER) ? PIPE_BIND_SAMPLER_VIEW : 0);
+               ((bind & AGX_D3D12_BIND_SAMPLER) ? PIPE_BIND_SAMPLER_VIEW : 0) |
+               ((bind & AGX_D3D12_BIND_DEPTH_STENCIL) ? PIPE_BIND_DEPTH_STENCIL : 0);
   if (height > 0xffffu || layers > 0xffffu) return E_INVALIDARG;
   struct pipe_resource *resource = owner->Screen->resource_create(owner->Screen, &templ);
   receipt("measure-d3d12-texture", resource ? S_OK : E_OUTOFMEMORY, static_cast<UINT>(templ.format), width | (height << 16),
@@ -432,6 +433,41 @@ extern "C" HRESULT AgxD3d12OwnerClearRenderTarget(AGX_D3D12_OWNER *owner, const 
     const LONG bottom = rects[i].bottom > static_cast<LONG>(height) ? static_cast<LONG>(height) : rects[i].bottom;
     if (right > left && bottom > top)
       owner->Context->clear_render_target(owner->Context, &surface, &value, static_cast<unsigned>(left),
+                                          static_cast<unsigned>(top), static_cast<unsigned>(right - left),
+                                          static_cast<unsigned>(bottom - top), false);
+  }
+  return S_OK;
+}
+
+/* C6f: the D3D10 frontend's ClearDepthStencilView (OutputMerger.cpp) */
+extern "C" HRESULT AgxD3d12OwnerClearDepthStencil(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUFFER *texture,
+                                                  DXGI_FORMAT view_format, unsigned level, unsigned first_layer,
+                                                  unsigned layers, unsigned flags, float depth, unsigned stencil,
+                                                  const RECT *rects, unsigned rect_count) {
+  if (!owner || !owner->Context || !texture || !texture->Resource || !layers || !(flags & 3u)) return E_INVALIDARG;
+  struct pipe_resource *resource = static_cast<struct pipe_resource *>(texture->Resource);
+  const enum pipe_format format = FormatTranslate(view_format, TRUE);
+  if (format == PIPE_FORMAT_NONE || level > resource->last_level || first_layer >= resource->array_size ||
+      layers > resource->array_size - first_layer)
+    return E_INVALIDARG;
+  struct pipe_surface surface = {};
+  surface.format = format;
+  surface.level = level;
+  surface.first_layer = static_cast<uint16_t>(first_layer);
+  surface.last_layer = static_cast<uint16_t>(first_layer + layers - 1);
+  surface.texture = resource;
+  const unsigned clear = ((flags & 1u) ? PIPE_CLEAR_DEPTH : 0u) | ((flags & 2u) ? PIPE_CLEAR_STENCIL : 0u);
+  const unsigned width = level_extent(resource->width0, level), height = level_extent(resource->height0, level);
+  if (!rect_count) {
+    owner->Context->clear_depth_stencil(owner->Context, &surface, clear, depth, stencil, 0, 0, width, height, false);
+    return S_OK;
+  }
+  for (unsigned i = 0; i < rect_count; ++i) {
+    const LONG left = rects[i].left < 0 ? 0 : rects[i].left, top = rects[i].top < 0 ? 0 : rects[i].top;
+    const LONG right = rects[i].right > static_cast<LONG>(width) ? static_cast<LONG>(width) : rects[i].right;
+    const LONG bottom = rects[i].bottom > static_cast<LONG>(height) ? static_cast<LONG>(height) : rects[i].bottom;
+    if (right > left && bottom > top)
+      owner->Context->clear_depth_stencil(owner->Context, &surface, clear, depth, stencil, static_cast<unsigned>(left),
                                           static_cast<unsigned>(top), static_cast<unsigned>(right - left),
                                           static_cast<unsigned>(bottom - top), false);
   }
@@ -809,6 +845,21 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
     fb.cbufs[i].last_layer = static_cast<uint16_t>(draw->Rtv[i].FirstLayer + draw->Rtv[i].Layers - 1);
     fb.cbufs[i].texture = texture;
     const unsigned w = level_extent(texture->width0, draw->Rtv[i].Level), h = level_extent(texture->height0, draw->Rtv[i].Level);
+    width = width && width < w ? width : w;
+    height = height && height < h ? height : h;
+  }
+  if (const AGX_D3D12_BUFFER *dsv = draw->Dsv.Texture) {
+    /* C6f: the depth-stencil view joins the framebuffer and its size */
+    struct pipe_resource *texture = static_cast<struct pipe_resource *>(dsv->Resource);
+    const enum pipe_format format = FormatTranslate(draw->Dsv.Format, TRUE);
+    if (!texture || format == PIPE_FORMAT_NONE || draw->Dsv.Level > texture->last_level || !draw->Dsv.Layers)
+      return E_INVALIDARG;
+    fb.zsbuf.format = format;
+    fb.zsbuf.level = draw->Dsv.Level;
+    fb.zsbuf.first_layer = static_cast<uint16_t>(draw->Dsv.FirstLayer);
+    fb.zsbuf.last_layer = static_cast<uint16_t>(draw->Dsv.FirstLayer + draw->Dsv.Layers - 1);
+    fb.zsbuf.texture = texture;
+    const unsigned w = level_extent(texture->width0, draw->Dsv.Level), h = level_extent(texture->height0, draw->Dsv.Level);
     width = width && width < w ? width : w;
     height = height && height < h ? height : h;
   }

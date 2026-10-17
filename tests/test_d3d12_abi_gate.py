@@ -187,8 +187,8 @@ class D3d12AbiGate(unittest.TestCase):
                        'pfnGetGPUDescriptorHandleForHeapStart'):
             self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
         # C5c/C5d implement CBV and buffer UAV/SRV views (test_c5c_descriptor_tables)
-        for member in ('pfnCreateDepthStencilView',):
-            self.assertIn('AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s)' % member, source)
+        # C6f: every view DDI is implemented (DSVs too)
+        self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDepthStencilView, CreateDepthStencilView);', source)
         heap = source[source.index('static HRESULT APIENTRY CreateDescriptorHeap('):]
         heap = heap[:heap.index('\n}\n')]
         self.assertIn('D3D12DDI_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE', heap)
@@ -257,11 +257,12 @@ class D3d12AbiGate(unittest.TestCase):
                     'pfnSetGraphicsRootConstantBufferView', 'pfnSetGraphicsRootShaderResourceView',
                     'pfnSetGraphicsRootDescriptorTable'}
         compute |= {'pfnIASetIndexBuffer', 'pfnDrawIndexedInstanced'}  # C6d
+        compute |= {'pfnClearDepthStencilView'}  # C6f
         self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList', 'pfnCopyBufferRegion',
                                        'pfnResourceBarrier'} | setters | compute)
         for member in setters:
             self.assertIn('AGX_LIST_STATE(%s)' % member, source)
-        for consumer in ('pfnResourceCopy', 'pfnClearDepthStencilView'):
+        for consumer in ('pfnResourceCopy',):
             self.assertIn('AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, %s)' % consumer, source)
 
     def test_c5_compute_dispatch(self):
@@ -489,6 +490,28 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('view->kind == kDescriptorSrvTexture', bindings)
         self.assertIn('{0, 0, 0, 0}, {0, 0, 0, 1}, {1, 1, 1, 1}, {0, 0, 0, 1}, {1, 1, 1, 1}', bindings)
         self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateSampler, CreateSampler);', source)
+
+    def test_c6f_depth(self):
+        # C6f invariants: depth textures carry the depth-stencil bind (typeless
+        # formats translate as depth); DSVs are read when OMSetRenderTargets
+        # or ClearDepthStencilView is recorded; a draw needs an RTV or a DSV;
+        # a clear needs the depth or stencil flag.
+        source = SOURCE.read_text()
+        def fn(name):
+            start = source.index(name)
+            return source[start:source.index('\n}\n', start)]
+        self.assertIn('D3D12DDI_RESOURCE_FLAG_0003_DEPTH_STENCIL) ? AGX_D3D12_BIND_DEPTH_STENCIL', fn('static HRESULT APIENTRY CreateHeapAndResource('))
+        self.assertIn('out->kind = kDescriptorDsv;', fn('static VOID APIENTRY CreateDepthStencilView('))
+        rt = fn('static VOID APIENTRY OMSetRenderTargets(')
+        self.assertIn('if (view->kind == kDescriptorDsv) list->dsv = *view;', rt)
+        clear = fn('static VOID APIENTRY ClearDepthStencilView(')
+        self.assertIn('command.clear_depth.dsv = *dsv;', clear)
+        self.assertIn('!(flags & 3u)', clear)
+        self.assertIn("list->dsv.kind != kDescriptorDsv ? 5u", fn('static void RecordDraw('))
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        self.assertIn('FormatTranslate(format, (bind & AGX_D3D12_BIND_DEPTH_STENCIL) ? TRUE : FALSE)', owner)
+        self.assertIn('fb.zsbuf.texture = texture;', owner)
+        self.assertIn('->clear_depth_stencil(', owner)
 
     def test_package_and_receipts(self):
         package = ROOT / 'drivers/apple-agx/render-admission/umd'

@@ -15,6 +15,7 @@
 #include "agx_d3d12_probe_ps_root.h"
 #include "agx_d3d12_probe_vs_tex.h"
 #include "agx_d3d12_probe_ps_tex.h"
+#include "agx_d3d12_probe_vs_depth.h"
 
 /* C2 checkpoint (D3D12-C-implementation-plan.md): a committed upload buffer
  * and a Map/write/Unmap/Map/read round trip. Runs only after the device
@@ -1098,6 +1099,175 @@ static int draw_textured(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     return !(SUCCEEDED(hr) && quadrants_ok);
 }
 
+/* C6f (D3D12-C6-graphics.md): depth testing -- a D32_FLOAT depth buffer
+ * cleared to 1.0, a near green triangle (z 0.25) drawn first, then a far
+ * blue full-target quad (z 0.75) with DepthFunc LESS; PASS = centre green
+ * (the far quad fails there), a point outside the triangle blue. */
+static int draw_depth(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
+    D3D12_RESOURCE_DESC desc = {0}, depth_desc = {0};
+    D3D12_DESCRIPTOR_HEAP_DESC rtv_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_NONE};
+    D3D12_DESCRIPTOR_HEAP_DESC dsv_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_NONE};
+    D3D12_INPUT_ELEMENT_DESC elements[2] = {
+        {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+        {"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}};
+    D3D12_ROOT_SIGNATURE_DESC root_desc = {0, NULL, 0, NULL, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT};
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {0};
+    ID3DBlob *blob = NULL, *errors = NULL;
+    ID3D12RootSignature *root = NULL;
+    ID3D12PipelineState *pso = NULL;
+    ID3D12Resource *target = NULL, *depth = NULL;
+    ID3D12DescriptorHeap *rtv_heap = NULL, *dsv_heap = NULL;
+    ID3D12Resource *vertices = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+    ID3D12Resource *readback = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12GraphicsCommandList *list = NULL;
+    D3D12_CPU_DESCRIPTOR_HANDLE rtv = {0}, dsv = {0};
+    unsigned char *bytes = NULL;
+    int ok = 0;
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    desc.Width = 64;
+    desc.Height = 64;
+    desc.DepthOrArraySize = 1;
+    desc.MipLevels = 1;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+    depth_desc = desc;
+    depth_desc.Format = DXGI_FORMAT_D32_FLOAT;
+    depth_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+    HRESULT hr = vertices && readback ? S_OK : E_FAIL;
+    if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(vertices, 0, NULL, (void **)&bytes);
+    if (SUCCEEDED(hr)) {
+        /* triangle (near, green) then a quad as a strip (far, blue); 7 floats per vertex */
+        const float data[7][7] = {{-0.5f, -0.5f, 0.25f, 0, 1, 0, 1}, {0.0f, 0.5f, 0.25f, 0, 1, 0, 1},
+                                  {0.5f, -0.5f, 0.25f, 0, 1, 0, 1}, {-1, -1, 0.75f, 0, 0, 1, 1},
+                                  {-1, 1, 0.75f, 0, 0, 1, 1}, {1, -1, 0.75f, 0, 0, 1, 1}, {1, 1, 0.75f, 0, 0, 1, 1}};
+        memcpy(bytes, data, sizeof(data));
+        ID3D12Resource_Unmap(vertices, 0, NULL);
+        hr = ID3D12Device_CreateCommittedResource(device, &heap, D3D12_HEAP_FLAG_NONE, &desc,
+                                                  D3D12_RESOURCE_STATE_RENDER_TARGET, NULL, &IID_ID3D12Resource,
+                                                  (void **)&target);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommittedResource(device, &heap, D3D12_HEAP_FLAG_NONE, &depth_desc,
+                                                  D3D12_RESOURCE_STATE_DEPTH_WRITE, NULL, &IID_ID3D12Resource,
+                                                  (void **)&depth);
+    printf("C6F CreateCommittedResource depth hr=0x%08lx\n", (unsigned long)hr);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateDescriptorHeap(device, &rtv_desc, &IID_ID3D12DescriptorHeap, (void **)&rtv_heap);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateDescriptorHeap(device, &dsv_desc, &IID_ID3D12DescriptorHeap, (void **)&dsv_heap);
+    if (SUCCEEDED(hr)) {
+        ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(rtv_heap, &rtv);
+        ID3D12Device_CreateRenderTargetView(device, target, NULL, rtv);
+        ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(dsv_heap, &dsv);
+        ID3D12Device_CreateDepthStencilView(device, depth, NULL, dsv);
+        hr = D3D12SerializeRootSignature(&root_desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &errors);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateRootSignature(device, 0, ID3D10Blob_GetBufferPointer(blob),
+                                              ID3D10Blob_GetBufferSize(blob), &IID_ID3D12RootSignature,
+                                              (void **)&root);
+    if (SUCCEEDED(hr)) {
+        pso_desc.pRootSignature = root;
+        pso_desc.VS.pShaderBytecode = g_agx_d3d12_probe_vs_depth;
+        pso_desc.VS.BytecodeLength = sizeof(g_agx_d3d12_probe_vs_depth);
+        pso_desc.PS.pShaderBytecode = g_agx_d3d12_probe_ps;
+        pso_desc.PS.BytecodeLength = sizeof(g_agx_d3d12_probe_ps);
+        pso_desc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
+        pso_desc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ZERO;
+        pso_desc.BlendState.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+        pso_desc.BlendState.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+        pso_desc.BlendState.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
+        pso_desc.BlendState.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+        pso_desc.BlendState.RenderTarget[0].LogicOp = D3D12_LOGIC_OP_NOOP;
+        pso_desc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+        pso_desc.SampleMask = 0xffffffffu;
+        pso_desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+        pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+        pso_desc.RasterizerState.DepthClipEnable = TRUE;
+        pso_desc.DepthStencilState.DepthEnable = TRUE;
+        pso_desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+        pso_desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
+        pso_desc.DepthStencilState.FrontFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
+        pso_desc.DepthStencilState.FrontFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
+        pso_desc.DepthStencilState.FrontFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
+        pso_desc.DepthStencilState.FrontFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+        pso_desc.DepthStencilState.BackFace = pso_desc.DepthStencilState.FrontFace;
+        pso_desc.InputLayout.pInputElementDescs = elements;
+        pso_desc.InputLayout.NumElements = 2;
+        pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        pso_desc.NumRenderTargets = 1;
+        pso_desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+        pso_desc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+        pso_desc.SampleDesc.Count = 1;
+        hr = ID3D12Device_CreateGraphicsPipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
+        printf("C6F CreateGraphicsPipelineState hr=0x%08lx\n", (unsigned long)hr);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                 &IID_ID3D12CommandAllocator, (void **)&allocator);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, pso,
+                                            &IID_ID3D12GraphicsCommandList, (void **)&list);
+    if (SUCCEEDED(hr)) {
+        const FLOAT red[4] = {1.0f, 0.0f, 0.0f, 1.0f};
+        D3D12_VIEWPORT viewport = {0.0f, 0.0f, 64.0f, 64.0f, 0.0f, 1.0f};
+        D3D12_RECT scissor = {0, 0, 64, 64};
+        D3D12_VERTEX_BUFFER_VIEW vbv = {0};
+        D3D12_TEXTURE_COPY_LOCATION target_loc = {0}, back = {0};
+        vbv.BufferLocation = ID3D12Resource_GetGPUVirtualAddress(vertices);
+        vbv.SizeInBytes = sizeof(float) * 49;
+        vbv.StrideInBytes = sizeof(float) * 7;
+        target_loc.pResource = target;
+        target_loc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        back.pResource = readback;
+        back.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        back.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        back.PlacedFootprint.Footprint.Width = 64;
+        back.PlacedFootprint.Footprint.Height = 64;
+        back.PlacedFootprint.Footprint.Depth = 1;
+        back.PlacedFootprint.Footprint.RowPitch = 256;
+        ID3D12GraphicsCommandList_ClearRenderTargetView(list, rtv, red, 0, NULL);
+        ID3D12GraphicsCommandList_ClearDepthStencilView(list, dsv, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, NULL);
+        ID3D12GraphicsCommandList_SetGraphicsRootSignature(list, root);
+        ID3D12GraphicsCommandList_OMSetRenderTargets(list, 1, &rtv, FALSE, &dsv);
+        ID3D12GraphicsCommandList_RSSetViewports(list, 1, &viewport);
+        ID3D12GraphicsCommandList_RSSetScissorRects(list, 1, &scissor);
+        ID3D12GraphicsCommandList_IASetVertexBuffers(list, 0, 1, &vbv);
+        ID3D12GraphicsCommandList_IASetPrimitiveTopology(list, D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        ID3D12GraphicsCommandList_DrawInstanced(list, 3, 1, 0, 0);
+        ID3D12GraphicsCommandList_IASetPrimitiveTopology(list, D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+        ID3D12GraphicsCommandList_DrawInstanced(list, 4, 1, 3, 0);
+        transition(list, target, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        ID3D12GraphicsCommandList_CopyTextureRegion(list, &back, 0, 0, 0, &target_loc, NULL);
+        hr = run_list(queue, fence, list, base + 1, "C6F draw");
+    }
+    if (SUCCEEDED(hr)) {
+        D3D12_RANGE all = {0, 16384};
+        hr = ID3D12Resource_Map(readback, 0, &all, (void **)&bytes);
+        if (SUCCEEDED(hr) && bytes) {
+            const unsigned char *centre = bytes + 32 * 256 + 32 * 4, *corner = bytes + 4 * 256 + 4 * 4;
+            ok = centre[0] == 0 && centre[1] == 255 && centre[2] == 0 && corner[0] == 0 && corner[1] == 0 && corner[2] == 255;
+            printf("C6F centre=%u,%u,%u corner=%u,%u,%u\n", centre[0], centre[1], centre[2], corner[0], corner[1], corner[2]);
+            ID3D12Resource_Unmap(readback, 0, NULL);
+        }
+    }
+    printf("AGX_D3D12_C6F: %s\n", SUCCEEDED(hr) && ok ? "PASS" : "FAIL");
+    if (list) ID3D12GraphicsCommandList_Release(list);
+    if (allocator) ID3D12CommandAllocator_Release(allocator);
+    if (pso) ID3D12PipelineState_Release(pso);
+    if (root) ID3D12RootSignature_Release(root);
+    if (errors) ID3D10Blob_Release(errors);
+    if (blob) ID3D10Blob_Release(blob);
+    if (dsv_heap) ID3D12DescriptorHeap_Release(dsv_heap);
+    if (rtv_heap) ID3D12DescriptorHeap_Release(rtv_heap);
+    if (depth) ID3D12Resource_Release(depth);
+    if (target) ID3D12Resource_Release(target);
+    if (readback) ID3D12Resource_Release(readback);
+    if (vertices) ID3D12Resource_Release(vertices);
+    return !(SUCCEEDED(hr) && ok);
+}
+
 /* C3a (D3D12-C3-queue-fences.md): a direct queue, a fence and one Signal;
  * each step prints its HRESULT so the receipts name the DDIs the runtime
  * needs. */
@@ -1154,6 +1324,7 @@ static int queue_fence_signal(ID3D12Device *device) {
                         (void)draw_triangle(device, queue, fence, ID3D12Fence_GetCompletedValue(fence), 1);
                         (void)draw_triangle(device, queue, fence, ID3D12Fence_GetCompletedValue(fence), 2);
                         (void)draw_textured(device, queue, fence, ID3D12Fence_GetCompletedValue(fence));
+                        (void)draw_depth(device, queue, fence, ID3D12Fence_GetCompletedValue(fence));
                     }
             }
             if (list) ID3D12GraphicsCommandList_Release(list);
