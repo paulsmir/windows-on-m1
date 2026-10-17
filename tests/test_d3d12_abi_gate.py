@@ -65,6 +65,12 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('return E_NOTIMPL;', source)
         self.assertIn('pfnSetErrorCb', source)
         self.assertIn('pfnSetCommandListErrorCb', source)
+        # EXP1347: a refused DDI leaves an unbudgeted receipt naming its
+        # table and member before the runtime sees the error.
+        self.assertEqual(source.count('Rejected<decltype'), 1)  # only AGX_REJECT
+        stub = source[source.index('struct Rejected<R (APIENTRY *)(A...), Table, Offset>'):]
+        self.assertLess(stub.index('AdmissionUmdDiagnostic("measure-d3d12-rejected"'),
+                        stub.index('pfnSetErrorCb(runtime_device'))
 
     def test_package_and_receipts(self):
         package = ROOT / 'drivers/apple-agx/render-admission/umd'
