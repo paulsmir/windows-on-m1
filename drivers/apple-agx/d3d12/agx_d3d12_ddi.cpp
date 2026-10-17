@@ -56,19 +56,75 @@ static HRESULT APIENTRY GetVersions(D3D12DDI_HADAPTER, UINT32 *count, UINT64 *ve
 /* C1: the pipeline level the development profile admits (D3D12 drivers
  * start at FL 11_0; the C8 baseline gates admission outside the profile). */
 static const D3D12DDI_3DPIPELINELEVEL kProfileLevel = D3D12DDI_3DPIPELINELEVEL_11_0;
+/* Answers a caps type with T, its remaining bytes zero (a larger, newer
+ * structure keeps every later field at its "not supported" zero). */
+template<class T, class F> static HRESULT Answer(const D3D12DDIARG_GETCAPS *arg, F fill) {
+    if (arg->DataSize < sizeof(T)) return E_INVALIDARG;
+    memset(arg->pData, 0, arg->DataSize);
+    fill(*static_cast<T *>(arg->pData));
+    return S_OK;
+}
 static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *arg) {
     HRESULT hr = E_NOTIMPL;
-    if (arg && arg->pData) {
-        if (arg->Type == D3D12DDICAPS_TYPE_0081_3DPIPELINESUPPORT1 &&
-            arg->DataSize >= sizeof(D3D12DDI_3DPIPELINESUPPORT1_DATA_0081)) {
-            auto *data = static_cast<D3D12DDI_3DPIPELINESUPPORT1_DATA_0081 *>(arg->pData);
-            data->MaximumDriverSupportedFeatureLevel = kProfileLevel;
-            hr = S_OK;
-        } else if (arg->Type == D3D12DDICAPS_TYPE_3DPIPELINESUPPORT &&
-                   arg->DataSize >= sizeof(D3D12DDI_3DPIPELINELEVEL)) {
-            *static_cast<D3D12DDI_3DPIPELINELEVEL *>(arg->pData) = kProfileLevel;
+    if (arg && arg->pData) switch (arg->Type) {
+    case D3D12DDICAPS_TYPE_0081_3DPIPELINESUPPORT1:
+        /* HighestRuntimeSupportedFeatureLevel is the runtime's input: only
+         * the output field is written. */
+        if (arg->DataSize >= sizeof(D3D12DDI_3DPIPELINESUPPORT1_DATA_0081)) {
+            static_cast<D3D12DDI_3DPIPELINESUPPORT1_DATA_0081 *>(arg->pData)
+                ->MaximumDriverSupportedFeatureLevel = kProfileLevel;
             hr = S_OK;
         }
+        break;
+    case D3D12DDICAPS_TYPE_3DPIPELINESUPPORT:
+        hr = Answer<D3D12DDI_3DPIPELINELEVEL>(arg, [](auto &d) { d = kProfileLevel; });
+        break;
+    /* EXP1345: after CreateDevice the runtime asks D3D12_OPTIONS (28 bytes,
+     * the 0003 structure) and fails creation on E_NOTIMPL. C1 answers the
+     * 0003-era device caps with the plan's minimum: binding and heap tier
+     * 1, nothing optional; AGX is a unified-memory tile-based deferred
+     * renderer (Asahi); no coherence is claimed. */
+    case D3D12DDICAPS_TYPE_D3D12_OPTIONS:
+        hr = Answer<D3D12DDI_D3D12_OPTIONS_DATA_0003>(arg, [](auto &d) {
+            d.ResourceBindingTier = D3D12DDI_RESOURCE_BINDING_TIER_1;
+            d.ConservativeRasterizationTier = D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_NOT_SUPPORTED;
+            d.TiledResourcesTier = D3D12DDI_TILED_RESOURCES_TIER_NOT_SUPPORTED;
+            d.CrossNodeSharingTier = D3D12DDI_CROSS_NODE_SHARING_TIER_NOT_SUPPORTED;
+            d.VPAndRTArrayIndexFromAnyShaderFeedingRasterizerSupportedWithoutGSEmulation = FALSE;
+            d.OutputMergerLogicOp = FALSE;
+            d.ResourceHeapTier = D3D12DDI_RESOURCE_HEAP_TIER_1;
+        });
+        break;
+    case D3D12DDICAPS_TYPE_MEMORY_ARCHITECTURE:
+        hr = Answer<D3D12DDI_MEMORY_ARCHITECTURE_CAPS>(arg, [](auto &d) {
+            d.UMA = TRUE; d.IOCoherent = FALSE; d.CacheCoherent = FALSE;
+        });
+        break;
+    case D3D12DDICAPS_TYPE_SHADER:
+        hr = Answer<D3D12DDI_SHADER_CAPS_0003>(arg, [](auto &d) {
+            d.MinPrecision = D3D12DDI_SHADER_MIN_PRECISION_NONE;
+            d.Doubles = FALSE; d.ShaderSpecifiedStencilRef = FALSE;
+            d.TypedUAVLoadAdditionalFormats = FALSE; d.ROVs = FALSE;
+        });
+        break;
+    case D3D12DDICAPS_TYPE_ARCHITECTURE_INFO:
+        hr = Answer<D3D12DDI_ARCHITECTURE_INFO_DATA>(arg, [](auto &d) {
+            d.TileBasedDeferredRenderer = TRUE;
+        });
+        break;
+    case D3D12DDICAPS_TYPE_GPUVA_CAPS:
+        /* D3D12 FL 11_0 needs at least 31 bits per resource; resources are
+         * single GPUVA allocations below 4 GiB. */
+        hr = Answer<D3D12DDI_GPUVA_CAPS_0004>(arg, [](auto &d) {
+            d.MaxGPUVirtualAddressBitsPerResource = 32;
+        });
+        break;
+    case D3D12DDICAPS_TYPE_TEXTURE_LAYOUT:
+        /* no device-dependent layouts or swizzles, no 64 KiB standard swizzle */
+        hr = Answer<D3D12DDI_TEXTURE_LAYOUT_CAPS>(arg, [](auto &) {});
+        break;
+    default:
+        break;
     }
     const UINT receipt[] = {arg ? static_cast<UINT>(arg->Type) : 0, arg ? arg->DataSize : 0};
     AdmissionUmdDiagnostic("d3d12-caps", hr, receipt, 2);
