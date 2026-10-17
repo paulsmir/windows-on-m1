@@ -16,6 +16,7 @@
 #include "agx_d3d12_probe_vs_tex.h"
 #include "agx_d3d12_probe_ps_tex.h"
 #include "agx_d3d12_probe_vs_depth.h"
+#include "agx_d3d12_probe_cs_img.h"
 
 /* C2 checkpoint (D3D12-C-implementation-plan.md): a committed upload buffer
  * and a Map/write/Unmap/Map/read round trip. Runs only after the device
@@ -1335,6 +1336,174 @@ static int placed_buffer(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     return !(SUCCEEDED(hr) && bad == 0);
 }
 
+/* C9 (D3D12-C9-compute-views.md): one dispatch reads a 2x2 texture SRV
+ * through a static point sampler and writes a 64x64 RWTexture2D (RGBA8,
+ * ALLOW_UNORDERED_ACCESS) and a typed RWBuffer<uint> (R32_UINT buffer UAV);
+ * C9A = the image shows the four texels as quadrants (texture SRV + sampler
+ * in compute, texture UAV), C9B = typed[y * 64 + x] == x + 1000 y. */
+static int compute_images(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
+    D3D12_RESOURCE_DESC dst_desc = {0}, tex_desc = {0};
+    D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 3, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE};
+    D3D12_DESCRIPTOR_RANGE ranges[2] = {{D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, 0}, {D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 2, 0, 0, 1}};
+    D3D12_ROOT_PARAMETER parameter = {D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE};
+    D3D12_STATIC_SAMPLER_DESC sampler = {D3D12_FILTER_MIN_MAG_MIP_POINT, D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+                                         D3D12_TEXTURE_ADDRESS_MODE_CLAMP, D3D12_TEXTURE_ADDRESS_MODE_CLAMP, 0.0f, 1,
+                                         D3D12_COMPARISON_FUNC_NEVER, D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK, 0.0f,
+                                         D3D12_FLOAT32_MAX, 0, 0, D3D12_SHADER_VISIBILITY_ALL};
+    D3D12_ROOT_SIGNATURE_DESC root_desc = {1, &parameter, 1, &sampler, D3D12_ROOT_SIGNATURE_FLAG_NONE};
+    D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {0};
+    ID3DBlob *blob = NULL, *errors = NULL;
+    ID3D12RootSignature *root = NULL;
+    ID3D12PipelineState *pso = NULL;
+    ID3D12DescriptorHeap *views = NULL;
+    ID3D12Resource *dst = NULL, *texture = NULL;
+    ID3D12Resource *typed = uav_buffer(device);
+    ID3D12Resource *upload = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+    ID3D12Resource *image_back = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+    ID3D12Resource *typed_back = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12GraphicsCommandList *list = NULL;
+    unsigned char *bytes = NULL;
+    int quadrants_ok = 0;
+    unsigned typed_bad = 4096;
+    parameter.DescriptorTable.NumDescriptorRanges = 2;
+    parameter.DescriptorTable.pDescriptorRanges = ranges;
+    dst_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    dst_desc.Width = 64;
+    dst_desc.Height = 64;
+    dst_desc.DepthOrArraySize = 1;
+    dst_desc.MipLevels = 1;
+    dst_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    dst_desc.SampleDesc.Count = 1;
+    dst_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    tex_desc = dst_desc;
+    tex_desc.Width = 2;
+    tex_desc.Height = 2;
+    tex_desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+    HRESULT hr = typed && upload && image_back && typed_back ? S_OK : E_FAIL;
+    if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(upload, 0, NULL, (void **)&bytes);
+    if (SUCCEEDED(hr)) {
+        const unsigned char row0[8] = {0, 255, 0, 255, 0, 0, 255, 255}, row1[8] = {255, 255, 255, 255, 0, 0, 0, 255};
+        memcpy(bytes, row0, sizeof(row0));
+        memcpy(bytes + 256, row1, sizeof(row1));
+        ID3D12Resource_Unmap(upload, 0, NULL);
+        hr = ID3D12Device_CreateCommittedResource(device, &heap, D3D12_HEAP_FLAG_NONE, &dst_desc,
+                                                  D3D12_RESOURCE_STATE_UNORDERED_ACCESS, NULL, &IID_ID3D12Resource,
+                                                  (void **)&dst);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommittedResource(device, &heap, D3D12_HEAP_FLAG_NONE, &tex_desc,
+                                                  D3D12_RESOURCE_STATE_COPY_DEST, NULL, &IID_ID3D12Resource,
+                                                  (void **)&texture);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateDescriptorHeap(device, &heap_desc, &IID_ID3D12DescriptorHeap, (void **)&views);
+    D3D12_GPU_DESCRIPTOR_HANDLE gpu_start = {0};
+    if (SUCCEEDED(hr)) {
+        D3D12_CPU_DESCRIPTOR_HANDLE cpu;
+        D3D12_UNORDERED_ACCESS_VIEW_DESC typed_desc = {DXGI_FORMAT_R32_UINT, D3D12_UAV_DIMENSION_BUFFER};
+        const UINT step = ID3D12Device_GetDescriptorHandleIncrementSize(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+        typed_desc.Buffer.NumElements = 4096;
+        ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(views, &cpu);
+        ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(views, &gpu_start);
+        ID3D12Device_CreateShaderResourceView(device, texture, NULL, cpu);
+        cpu.ptr += step;
+        ID3D12Device_CreateUnorderedAccessView(device, dst, NULL, NULL, cpu);
+        cpu.ptr += step;
+        ID3D12Device_CreateUnorderedAccessView(device, typed, NULL, &typed_desc, cpu);
+        hr = D3D12SerializeRootSignature(&root_desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &errors);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateRootSignature(device, 0, ID3D10Blob_GetBufferPointer(blob),
+                                              ID3D10Blob_GetBufferSize(blob), &IID_ID3D12RootSignature,
+                                              (void **)&root);
+    printf("C9 resources/views/root hr=0x%08lx\n", (unsigned long)hr);
+    if (SUCCEEDED(hr)) {
+        pso_desc.pRootSignature = root;
+        pso_desc.CS.pShaderBytecode = g_agx_d3d12_probe_cs_img;
+        pso_desc.CS.BytecodeLength = sizeof(g_agx_d3d12_probe_cs_img);
+        hr = ID3D12Device_CreateComputePipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
+        printf("C9 CreateComputePipelineState hr=0x%08lx\n", (unsigned long)hr);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                 &IID_ID3D12CommandAllocator, (void **)&allocator);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, pso,
+                                            &IID_ID3D12GraphicsCommandList, (void **)&list);
+    if (SUCCEEDED(hr)) {
+        D3D12_TEXTURE_COPY_LOCATION up = {0}, tex_loc = {0}, dst_loc = {0}, back = {0};
+        up.pResource = upload;
+        up.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        up.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        up.PlacedFootprint.Footprint.Width = 2;
+        up.PlacedFootprint.Footprint.Height = 2;
+        up.PlacedFootprint.Footprint.Depth = 1;
+        up.PlacedFootprint.Footprint.RowPitch = 256;
+        tex_loc.pResource = texture;
+        tex_loc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        dst_loc.pResource = dst;
+        dst_loc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        back.pResource = image_back;
+        back.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        back.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        back.PlacedFootprint.Footprint.Width = 64;
+        back.PlacedFootprint.Footprint.Height = 64;
+        back.PlacedFootprint.Footprint.Depth = 1;
+        back.PlacedFootprint.Footprint.RowPitch = 256;
+        ID3D12GraphicsCommandList_CopyTextureRegion(list, &tex_loc, 0, 0, 0, &up, NULL);
+        transition(list, texture, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        ID3D12GraphicsCommandList_SetDescriptorHeaps(list, 1, &views);
+        ID3D12GraphicsCommandList_SetComputeRootSignature(list, root);
+        ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(list, 0, gpu_start);
+        ID3D12GraphicsCommandList_Dispatch(list, 8, 8, 1);
+        transition(list, dst, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        transition(list, typed, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        ID3D12GraphicsCommandList_CopyTextureRegion(list, &back, 0, 0, 0, &dst_loc, NULL);
+        ID3D12GraphicsCommandList_CopyBufferRegion(list, typed_back, 0, typed, 0, 16384);
+        hr = run_list(queue, fence, list, base + 1, "C9 dispatch");
+    }
+    if (SUCCEEDED(hr)) {
+        D3D12_RANGE all = {0, 16384};
+        hr = ID3D12Resource_Map(image_back, 0, &all, (void **)&bytes);
+        if (SUCCEEDED(hr) && bytes) {
+            const unsigned char *tl = bytes + 16 * 256 + 16 * 4, *tr = bytes + 16 * 256 + 48 * 4;
+            const unsigned char *bl = bytes + 48 * 256 + 16 * 4, *br = bytes + 48 * 256 + 48 * 4;
+            quadrants_ok = tl[0] == 0 && tl[1] == 255 && tl[2] == 0 && tr[0] == 0 && tr[1] == 0 && tr[2] == 255 &&
+                           bl[0] == 255 && bl[1] == 255 && bl[2] == 255 && br[0] == 0 && br[1] == 0 && br[2] == 0;
+            printf("C9A quadrants tl=%u,%u,%u tr=%u,%u,%u bl=%u,%u,%u br=%u,%u,%u\n", tl[0], tl[1], tl[2], tr[0], tr[1],
+                   tr[2], bl[0], bl[1], bl[2], br[0], br[1], br[2]);
+            ID3D12Resource_Unmap(image_back, 0, NULL);
+        }
+    }
+    if (SUCCEEDED(hr)) {
+        D3D12_RANGE all = {0, 16384};
+        const UINT *dwords = NULL;
+        hr = ID3D12Resource_Map(typed_back, 0, &all, (void **)&dwords);
+        if (SUCCEEDED(hr) && dwords) {
+            typed_bad = 0;
+            for (unsigned i = 0; i < 4096; ++i) typed_bad += dwords[i] != (i % 64u) + (i / 64u) * 1000u;
+            printf("C9B typed readback bad=%u first=%u,%u\n", typed_bad, dwords[0], dwords[65]);
+            ID3D12Resource_Unmap(typed_back, 0, NULL);
+        }
+    }
+    printf("AGX_D3D12_C9A: %s\n", SUCCEEDED(hr) && quadrants_ok ? "PASS" : "FAIL");
+    printf("AGX_D3D12_C9B: %s\n", SUCCEEDED(hr) && typed_bad == 0 ? "PASS" : "FAIL");
+    if (list) ID3D12GraphicsCommandList_Release(list);
+    if (allocator) ID3D12CommandAllocator_Release(allocator);
+    if (pso) ID3D12PipelineState_Release(pso);
+    if (root) ID3D12RootSignature_Release(root);
+    if (errors) ID3D10Blob_Release(errors);
+    if (blob) ID3D10Blob_Release(blob);
+    if (views) ID3D12DescriptorHeap_Release(views);
+    if (texture) ID3D12Resource_Release(texture);
+    if (dst) ID3D12Resource_Release(dst);
+    if (typed_back) ID3D12Resource_Release(typed_back);
+    if (image_back) ID3D12Resource_Release(image_back);
+    if (upload) ID3D12Resource_Release(upload);
+    if (typed) ID3D12Resource_Release(typed);
+    return !(SUCCEEDED(hr) && quadrants_ok && typed_bad == 0);
+}
+
 /* C7A (D3D12-C7-present.md, measurement): a flip-model swapchain on the
  * direct queue -- window, CreateSwapChainForHwnd (2 x 64x64 RGBA8,
  * FLIP_DISCARD), back buffer 0 cleared green through an RTV, transition to
@@ -1526,6 +1695,7 @@ int main(void) {
                 (void)run_isolated(adapter, "C6E", draw_textured);
                 (void)run_isolated(adapter, "C6F", draw_depth);
                 (void)run_isolated(adapter, "C8C", placed_buffer);
+                (void)run_isolated(adapter, "C9", compute_images);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
             }
             IDXGIAdapter1_Release(adapter);
