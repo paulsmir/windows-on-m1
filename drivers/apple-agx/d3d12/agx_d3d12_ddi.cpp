@@ -1393,6 +1393,11 @@ struct AgxD3d12Draw {
     FLOAT blend_factor[4];
     UINT stencil_ref;
     UINT vertices, instances, start_vertex, start_instance;
+    /* C6d: indexed draws (index_size 0 = not indexed) */
+    AgxD3d12Heap *index_heap;
+    UINT64 index_offset;
+    UINT index_size;
+    INT base_vertex;
 };
 enum : UINT { kCommandCopy = 1, kCommandDispatch = 2, kCommandClear = 3, kCommandTextureCopy = 4, kCommandDraw = 5 };
 struct AgxD3d12Command {
@@ -1430,6 +1435,10 @@ struct AgxD3d12CommandList {
     AgxD3d12VertexBuffer vb[kVertexBuffers];
     FLOAT blend_factor[4];
     UINT stencil_ref;
+    /* C6d: the index buffer view */
+    AgxD3d12Heap *index_heap;
+    UINT64 index_offset;
+    UINT index_size;
     AgxD3d12Command command[kListCommands];
 };
 /* EXP1363: creating/resetting a list makes the runtime set its default
@@ -1491,6 +1500,9 @@ static VOID APIENTRY ResetCommandList(D3D12DDI_HCOMMANDLIST handle, const D3D12D
     memset(list->vb, 0, sizeof(list->vb));
     memset(list->blend_factor, 0, sizeof(list->blend_factor));
     list->stencil_ref = 0;
+    list->index_heap = nullptr;
+    list->index_offset = 0;
+    list->index_size = 0;
 }
 /* C4b: a buffer copy between committed buffers (heap-backed resources). The
  * list records heap-relative ranges; ExecuteCommandLists replays them on the
@@ -1636,8 +1648,10 @@ static VOID APIENTRY CopyTextureRegion(D3D12DDI_HCOMMANDLIST handle, const D3D12
 /* C6b: graphics state setters (each also records its default-state bit) */
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 #define AGX_VB_SETTER IASetVertexBuffers
+#define AGX_IB_SETTER IASetIndexBuffer
 #else
 #define AGX_VB_SETTER AGX_LIST_STATE(pfnIASetVertexBuffers)
+#define AGX_IB_SETTER AGX_LIST_STATE(pfnIASetIndexBuffer)
 #endif
 #define AGX_LIST_BIT(M) (1ULL << ((offsetof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, M) / sizeof(void *)) & 63u))
 static VOID APIENTRY OMSetRenderTargets(D3D12DDI_HCOMMANDLIST handle, UINT count, const D3D12DDI_CPU_DESCRIPTOR_HANDLE *rtvs,
@@ -1720,6 +1734,20 @@ static VOID APIENTRY IASetVertexBuffers(D3D12DDI_HCOMMANDLIST handle, UINT start
         vb.stride = views[i].StrideInBytes;
         if (!vb.heap) ListError(list, E_INVALIDARG);
     }
+}
+/* C6d: R16_UINT/R32_UINT index buffers; a null view unbinds */
+static VOID APIENTRY IASetIndexBuffer(D3D12DDI_HCOMMANDLIST handle, const D3D12DDI_INDEX_BUFFER_VIEW *view) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    if (!list) return;
+    list->state |= AGX_LIST_BIT(pfnIASetIndexBuffer);
+    list->index_heap = nullptr;
+    list->index_offset = 0;
+    list->index_size = 0;
+    if (!view || !view->BufferLocation) return;
+    const UINT size = view->Format == DXGI_FORMAT_R16_UINT ? 2u : view->Format == DXGI_FORMAT_R32_UINT ? 4u : 0u;
+    list->index_heap = size ? HeapAt(list->device, view->BufferLocation, &list->index_offset) : nullptr;
+    list->index_size = list->index_heap ? size : 0u;
+    if (!list->index_heap) ListError(list, E_INVALIDARG);
 }
 static HRESULT CompileGraphics(AgxD3d12Device *device, AgxD3d12PipelineState *pso) {
     if (pso->compiled != S_FALSE) return pso->compiled;
@@ -2010,9 +2038,8 @@ static VOID APIENTRY Dispatch(D3D12DDI_HCOMMANDLIST handle, UINT x, UINT y, UINT
  * graphics root signature for the VS and the PS. Geometry/tessellation
  * stages, graphics UAVs, samplers and depth-stencil views refuse with
  * receipt measure-d3d12-draw {reason}. */
-static VOID APIENTRY DrawInstanced(D3D12DDI_HCOMMANDLIST handle, UINT vertices, UINT instances, UINT start_vertex,
-                                   UINT start_instance) {
-    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+static void RecordDraw(AgxD3d12CommandList *list, UINT vertices, UINT instances, UINT start_vertex, INT base_vertex,
+                       UINT start_instance, bool indexed) {
     if (!list || !vertices || !instances) return;
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     AgxD3d12PipelineState *pso = list->pso;
@@ -2020,6 +2047,7 @@ static VOID APIENTRY DrawInstanced(D3D12DDI_HCOMMANDLIST handle, UINT vertices, 
                  : pso->desc.hGeometryShader.pDrvPrivate || pso->desc.hHullShader.pDrvPrivate ||
                            pso->desc.hDomainShader.pDrvPrivate ? 4u
                  : !list->rtvs || !list->rtv[0].heap ? 5u
+                 : indexed && !list->index_heap ? 6u
                  : list->commands >= kListCommands ? 3u : 0u;
     AgxD3d12Dispatch vs_bind = {}, ps_bind = {};
     if (!refusal) refusal = ResolveRoot(list, list->graphics_root, list->graphics_root_va, list->graphics_root_dwords,
@@ -2027,8 +2055,8 @@ static VOID APIENTRY DrawInstanced(D3D12DDI_HCOMMANDLIST handle, UINT vertices, 
     if (!refusal) refusal = ResolveRoot(list, list->graphics_root, list->graphics_root_va, list->graphics_root_dwords,
                                         D3D12DDI_SHADER_VISIBILITY_PIXEL, &ps_bind);
     if (!refusal && FAILED(CompileGraphics(list->device, pso))) refusal = 7u;
-    const UINT receipt[] = {refusal, vertices, instances, list->rtvs, list->topology};
-    AdmissionUmdDiagnostic("measure-d3d12-draw", refusal ? E_NOTIMPL : S_OK, receipt, 5);
+    const UINT receipt[] = {refusal, vertices, instances, list->rtvs, list->topology, indexed ? list->index_size : 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-draw", refusal ? E_NOTIMPL : S_OK, receipt, 6);
     if (refusal) {
         ListError(list, refusal == 3u ? E_INVALIDARG : E_NOTIMPL);
         return;
@@ -2051,11 +2079,30 @@ static VOID APIENTRY DrawInstanced(D3D12DDI_HCOMMANDLIST handle, UINT vertices, 
     draw.instances = instances;
     draw.start_vertex = start_vertex;
     draw.start_instance = start_instance;
+    if (indexed) {
+        draw.index_heap = list->index_heap;
+        draw.index_offset = list->index_offset;
+        draw.index_size = list->index_size;
+        draw.base_vertex = base_vertex;
+    }
 #else
     (void)start_vertex;
+    (void)base_vertex;
     (void)start_instance;
+    (void)indexed;
     ListError(list, E_NOTIMPL);
 #endif
+}
+static VOID APIENTRY DrawInstanced(D3D12DDI_HCOMMANDLIST handle, UINT vertices, UINT instances, UINT start_vertex,
+                                   UINT start_instance) {
+    RecordDraw(static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate), vertices, instances, start_vertex, 0,
+               start_instance, false);
+}
+/* C6d: the strip cut value comes from the pipeline (IBStripCutValue) */
+static VOID APIENTRY DrawIndexedInstanced(D3D12DDI_HCOMMANDLIST handle, UINT indices, UINT instances, UINT start_index,
+                                          INT base_vertex, UINT start_instance) {
+    RecordDraw(static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate), indices, instances, start_index, base_vertex,
+               start_instance, true);
 }
 /* Between copies on one queue the owner's libagx copies already carry
  * AGX_BARRIER_ALL and execution completes before the next list; transitions
@@ -2171,6 +2218,17 @@ static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, con
                 draw.InstanceCount = d.instances;
                 draw.StartVertex = d.start_vertex;
                 draw.StartInstance = d.start_instance;
+                AGX_D3D12_BUFFER index_buffer = {};
+                if (d.index_size && d.index_heap) {
+                    index_buffer = HeapBuffer(d.index_heap);
+                    draw.IndexBuffer = &index_buffer;
+                    draw.IndexOffset = d.index_offset;
+                    draw.IndexSize = d.index_size;
+                    draw.BaseVertex = d.base_vertex;
+                    draw.RestartIndex = d.pso->desc.IBStripCutValue == D3D12DDI_INDEX_BUFFER_STRIP_CUT_VALUE_0xFFFF ? 0xffffu
+                                      : d.pso->desc.IBStripCutValue == D3D12DDI_INDEX_BUFFER_STRIP_CUT_VALUE_0xFFFFFFFF ? 0xffffffffu
+                                                                                                                  : 0u;
+                }
                 AgxD3d12OwnerBindings vs_bind, ps_bind;
                 OwnerBindings(d.vs_bind, &vs_bind);
                 OwnerBindings(d.ps_bind, &ps_bind);
@@ -2327,7 +2385,7 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCloseCommandList, CloseCommandList);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResetCommandList, ResetCommandList);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawInstanced, DrawInstanced);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawIndexedInstanced, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawIndexedInstanced));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawIndexedInstanced, DrawIndexedInstanced);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDispatch, Dispatch);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearUnorderedAccessViewUint, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearUnorderedAccessViewUint));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearUnorderedAccessViewFloat, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearUnorderedAccessViewFloat));
@@ -2369,7 +2427,7 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootShaderResourceView, SetGraphicsRootShaderResourceView);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootUnorderedAccessView, SetComputeRootUnorderedAccessView);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootUnorderedAccessView, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootUnorderedAccessView));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetIndexBuffer, AGX_LIST_STATE(pfnIASetIndexBuffer));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetIndexBuffer, AGX_IB_SETTER);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetVertexBuffers, AGX_VB_SETTER);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSOSetTargets, AGX_LIST_STATE(pfnSOSetTargets));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOMSetRenderTargets, OMSetRenderTargets);

@@ -714,7 +714,9 @@ static int texture_clear_copy(ID3D12Device *device, ID3D12CommandQueue *queue, I
  * triangle's area bounds. Signals base + 1. */
 /* rooted = 1 (C6c): agx_d3d12_probe_tri_root.hlsl -- VS scale (1, 1) from
  * a root CBV visible to the VS only, PS colour blue from root constants
- * visible to the PS only; PASS = centre blue. */
+ * visible to the PS only; PASS = centre blue. rooted = 2 (C6d): a yellow
+ * quad (-0.5..0.5) from four vertices and six R16 indices through
+ * DrawIndexedInstanced; PASS = centre yellow, 960..1088 pixels. */
 static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, int rooted) {
     D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
     D3D12_RESOURCE_DESC desc = {0};
@@ -725,8 +727,11 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     D3D12_ROOT_PARAMETER parameters[2] = {{D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS}, {D3D12_ROOT_PARAMETER_TYPE_CBV}};
     D3D12_ROOT_SIGNATURE_DESC root_desc = {rooted ? 2u : 0u, rooted ? parameters : NULL, 0, NULL,
                                            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT};
-    const char *step = rooted ? "C6C" : "C6B";
-    const unsigned char want[3] = {0, (unsigned char)(rooted ? 0 : 255), (unsigned char)(rooted ? 255 : 0)};
+    const int indexed = rooted == 2;
+    const char *step = indexed ? "C6D" : rooted ? "C6C" : "C6B";
+    const unsigned char want[3] = {(unsigned char)(indexed ? 255 : 0), (unsigned char)(rooted == 1 ? 0 : 255),
+                                   (unsigned char)(rooted == 1 ? 255 : 0)};
+    if (indexed) rooted = 0; /* the C6b pipeline and root signature */
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {0};
     ID3DBlob *blob = NULL, *errors = NULL;
     ID3D12RootSignature *root = NULL;
@@ -758,8 +763,13 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     if (SUCCEEDED(hr)) hr = ID3D12Resource_Map(vertices, 0, NULL, (void **)&bytes);
     if (SUCCEEDED(hr)) {
         const float data[3][6] = {{-0.5f, -0.5f, 0, 1, 0, 1}, {0.0f, 0.5f, 0, 1, 0, 1}, {0.5f, -0.5f, 0, 1, 0, 1}};
+        const float quad[4][6] = {{-0.5f, -0.5f, 1, 1, 0, 1}, {-0.5f, 0.5f, 1, 1, 0, 1},
+                                  {0.5f, -0.5f, 1, 1, 0, 1}, {0.5f, 0.5f, 1, 1, 0, 1}};
+        const unsigned short indices[6] = {0, 1, 2, 2, 1, 3};
         const float scale[4] = {1.0f, 1.0f, 0.0f, 0.0f};
-        memcpy(bytes, data, sizeof(data));
+        if (indexed) memcpy(bytes, quad, sizeof(quad));
+        else memcpy(bytes, data, sizeof(data));
+        memcpy(bytes + 512, indices, sizeof(indices));
         memcpy(bytes + 256, scale, sizeof(scale)); /* the root CBV (256-byte aligned) */
         ID3D12Resource_Unmap(vertices, 0, NULL);
         hr = ID3D12Device_CreateCommittedResource(device, &heap, D3D12_HEAP_FLAG_NONE, &desc,
@@ -823,7 +833,7 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
         D3D12_VERTEX_BUFFER_VIEW vbv = {0};
         D3D12_TEXTURE_COPY_LOCATION tex_loc = {0}, buf_loc = {0};
         vbv.BufferLocation = ID3D12Resource_GetGPUVirtualAddress(vertices);
-        vbv.SizeInBytes = sizeof(float) * 18;
+        vbv.SizeInBytes = sizeof(float) * 24;
         vbv.StrideInBytes = sizeof(float) * 6;
         tex_loc.pResource = texture;
         tex_loc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
@@ -846,10 +856,16 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
         ID3D12GraphicsCommandList_RSSetScissorRects(list, 1, &scissor);
         ID3D12GraphicsCommandList_IASetPrimitiveTopology(list, D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         ID3D12GraphicsCommandList_IASetVertexBuffers(list, 0, 1, &vbv);
-        ID3D12GraphicsCommandList_DrawInstanced(list, 3, 1, 0, 0);
+        if (indexed) {
+            D3D12_INDEX_BUFFER_VIEW ibv = {ID3D12Resource_GetGPUVirtualAddress(vertices) + 512, 12, DXGI_FORMAT_R16_UINT};
+            ID3D12GraphicsCommandList_IASetIndexBuffer(list, &ibv);
+            ID3D12GraphicsCommandList_DrawIndexedInstanced(list, 6, 1, 0, 0, 0);
+        } else {
+            ID3D12GraphicsCommandList_DrawInstanced(list, 3, 1, 0, 0);
+        }
         transition(list, texture, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
         ID3D12GraphicsCommandList_CopyTextureRegion(list, &buf_loc, 0, 0, 0, &tex_loc, NULL);
-        hr = run_list(queue, fence, list, base + 1, rooted ? "C6C draw" : "C6B draw");
+        hr = run_list(queue, fence, list, base + 1, indexed ? "C6D draw" : rooted ? "C6C draw" : "C6B draw");
     }
     if (SUCCEEDED(hr)) {
         D3D12_RANGE all = {0, 16384};
@@ -871,7 +887,8 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
         }
     }
     /* the triangle covers 32x32/2 = 512 pixels; edge rules move a row or two */
-    const int pass = SUCCEEDED(hr) && centre_ok && corner_ok && other == 0 && green >= 448 && green <= 576;
+    const unsigned low = indexed ? 960u : 448u, high = indexed ? 1088u : 576u;
+    const int pass = SUCCEEDED(hr) && centre_ok && corner_ok && other == 0 && green >= low && green <= high;
     printf("AGX_D3D12_%s: %s\n", step, pass ? "PASS" : "FAIL");
     if (list) ID3D12GraphicsCommandList_Release(list);
     if (allocator) ID3D12CommandAllocator_Release(allocator);
@@ -938,8 +955,10 @@ static int queue_fence_signal(ID3D12Device *device) {
             if (SUCCEEDED(c4) && value == 2) {
                 UINT64 done = ID3D12Fence_GetCompletedValue(fence);
                 if (done >= 3 && texture_clear_copy(device, queue, fence, done) == 0)
-                    if (draw_triangle(device, queue, fence, ID3D12Fence_GetCompletedValue(fence), 0) == 0)
+                    if (draw_triangle(device, queue, fence, ID3D12Fence_GetCompletedValue(fence), 0) == 0) {
                         (void)draw_triangle(device, queue, fence, ID3D12Fence_GetCompletedValue(fence), 1);
+                        (void)draw_triangle(device, queue, fence, ID3D12Fence_GetCompletedValue(fence), 2);
+                    }
             }
             if (list) ID3D12GraphicsCommandList_Release(list);
             if (allocator) ID3D12CommandAllocator_Release(allocator);

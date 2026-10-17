@@ -240,7 +240,7 @@ class D3d12AbiGate(unittest.TestCase):
         implemented = set(re.findall(r'AGX_ASSIGN\(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, (\w+), (?!AGX_REJECT)', source))
         # EXP1363: the runtime's default-state setters are accepted (recorded
         # as received state); every state consumer stays fail-closed.
-        setters = {'pfnSetPredication', 'pfnSetDescriptorHeaps', 'pfnIASetIndexBuffer', 'pfnSOSetTargets'}
+        setters = {'pfnSetPredication', 'pfnSetDescriptorHeaps', 'pfnSOSetTargets'}
         compute = {'pfnSetPipelineState', 'pfnSetComputeRootSignature', 'pfnSetComputeRootUnorderedAccessView',
                    'pfnDispatch', 'pfnClearRootArguments', 'pfnSetComputeRoot32BitConstant',
                    'pfnSetComputeRoot32BitConstants', 'pfnSetComputeRootConstantBufferView',
@@ -254,11 +254,12 @@ class D3d12AbiGate(unittest.TestCase):
         compute |= {'pfnSetGraphicsRoot32BitConstant', 'pfnSetGraphicsRoot32BitConstants',
                     'pfnSetGraphicsRootConstantBufferView', 'pfnSetGraphicsRootShaderResourceView',
                     'pfnSetGraphicsRootDescriptorTable'}
+        compute |= {'pfnIASetIndexBuffer', 'pfnDrawIndexedInstanced'}  # C6d
         self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList', 'pfnCopyBufferRegion',
                                        'pfnResourceBarrier'} | setters | compute)
         for member in setters:
             self.assertIn('AGX_LIST_STATE(%s)' % member, source)
-        for consumer in ('pfnDrawIndexedInstanced', 'pfnResourceCopy', 'pfnClearDepthStencilView'):
+        for consumer in ('pfnResourceCopy', 'pfnClearDepthStencilView'):
             self.assertIn('AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, %s)' % consumer, source)
 
     def test_c5_compute_dispatch(self):
@@ -419,7 +420,7 @@ class D3d12AbiGate(unittest.TestCase):
                             ('IaSetTopology', 'pfnIaSetTopology'), ('OmSetBlendFactor', 'pfnOmSetBlendFactor'),
                             ('OmSetStencilRef', 'pfnOmSetStencilRef'), ('IASetVertexBuffers', 'pfnIASetVertexBuffers')):
             self.assertIn('AGX_LIST_BIT(%s)' % bit, fn('static VOID APIENTRY %s(' % setter))
-        draw = fn('static VOID APIENTRY DrawInstanced(')
+        draw = fn('static void RecordDraw(')
         # C6c: the graphics root signature resolves per stage by visibility
         self.assertIn('D3D12DDI_SHADER_VISIBILITY_VERTEX, &vs_bind);', draw)
         self.assertIn('D3D12DDI_SHADER_VISIBILITY_PIXEL, &ps_bind);', draw)
@@ -437,6 +438,28 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('AgxD3d12OwnerDraw(', fn('static VOID APIENTRY ExecuteCommandLists('))
         # recorded commands share storage
         self.assertIn('    union {\n        AgxD3d12Copy copy;', source)
+
+    def test_c6d_indexed(self):
+        # C6d invariants: only R16_UINT/R32_UINT index buffers bind (VA ->
+        # owner heap); an indexed draw without one refuses; the strip cut
+        # value comes from the pipeline's IBStripCutValue; the owner turns the
+        # index buffer's byte offset into whole indices and refuses a
+        # misaligned one.
+        source = SOURCE.read_text()
+        def fn(name):
+            start = source.index(name)
+            return source[start:source.index('\n}\n', start)]
+        ib = fn('static VOID APIENTRY IASetIndexBuffer(')
+        self.assertIn('DXGI_FORMAT_R16_UINT ? 2u : view->Format == DXGI_FORMAT_R32_UINT ? 4u : 0u', ib)
+        self.assertIn('AGX_LIST_BIT(pfnIASetIndexBuffer)', ib)
+        self.assertIn('indexed && !list->index_heap ? 6u', fn('static void RecordDraw('))
+        self.assertIn('d.pso->desc.IBStripCutValue', fn('static VOID APIENTRY ExecuteCommandLists('))
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        draw = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerDraw('):]
+        draw = draw[:draw.index('\n}\n')]
+        self.assertIn('draw->IndexOffset % draw->IndexSize', draw)
+        self.assertIn('range.start += static_cast<unsigned>(draw->IndexOffset / draw->IndexSize);', draw)
+        self.assertIn('range.index_bias = draw->BaseVertex;', draw)
 
     def test_package_and_receipts(self):
         package = ROOT / 'drivers/apple-agx/render-admission/umd'

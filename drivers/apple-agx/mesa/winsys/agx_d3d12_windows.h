@@ -181,6 +181,13 @@ typedef struct {
   float BlendFactor[4];
   unsigned StencilRef;
   unsigned VertexCount, InstanceCount, StartVertex, StartInstance;
+  /* C6d: an indexed draw (IndexSize 2 or 4): VertexCount/StartVertex count
+   * indices; RestartIndex 0 = no strip cut */
+  const AGX_D3D12_BUFFER *IndexBuffer;
+  unsigned long long IndexOffset;
+  unsigned IndexSize;
+  int BaseVertex;
+  unsigned RestartIndex;
   /* C6c: per-stage constant buffers and buffer SRVs */
   struct {
     AGX_D3D12_CBV Cbvs[AGX_D3D12_CBV_SLOTS];

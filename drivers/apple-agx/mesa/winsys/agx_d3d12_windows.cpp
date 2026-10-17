@@ -834,6 +834,22 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   struct pipe_draw_start_count_bias range = {};
   range.start = draw->StartVertex;
   range.count = draw->VertexCount;
+  if (draw->IndexSize) {
+    /* the index buffer's byte offset becomes whole indices of the draw */
+    const AGX_D3D12_BUFFER *ib = draw->IndexBuffer;
+    if (!ib || !ib->Resource || (draw->IndexSize != 2 && draw->IndexSize != 4) || draw->IndexOffset % draw->IndexSize ||
+        draw->IndexOffset >= ib->Bytes) {
+      unbind_stage(pipe, MESA_SHADER_VERTEX, vs_views, vs_view_count);
+      unbind_stage(pipe, MESA_SHADER_FRAGMENT, ps_views, ps_view_count);
+      return E_INVALIDARG;
+    }
+    info.index_size = static_cast<uint16_t>(draw->IndexSize);
+    info.index.resource = static_cast<struct pipe_resource *>(ib->Resource);
+    info.primitive_restart = draw->RestartIndex != 0;
+    info.restart_index = draw->RestartIndex;
+    range.start += static_cast<unsigned>(draw->IndexOffset / draw->IndexSize);
+    range.index_bias = draw->BaseVertex;
+  }
   pipe->draw_vbo(pipe, &info, 0, NULL, &range, 1);
   /* the batch holds what the draw read; drop the stage bindings */
   unbind_stage(pipe, MESA_SHADER_VERTEX, vs_views, vs_view_count);

@@ -147,3 +147,17 @@ other colours, 448..576 green pixels.
   bindings after it. Graphics UAVs and sampler ranges refuse (reason 4).
 - Checkpoint: probe C6C (agx_d3d12_probe_tri_root.hlsl): root {constants
   b0 x4 PIXEL = blue, CBV b1 VERTEX = scale (1, 1)}; PASS = centre blue.
+
+## C6d: indexed draws
+
+- WINDOWS: pfnIASetIndexBuffer (D3D12DDI_INDEX_BUFFER_VIEW: VA, size, R16_UINT
+  or R32_UINT), pfnDrawIndexedInstanced (IndexCountPerInstance,
+  InstanceCount, StartIndexLocation, BaseVertexLocation, StartInstance),
+  pipeline IBStripCutValue (0xFFFF / 0xFFFFFFFF / disabled).
+- AGX/ASAHI: pipe_draw_info.index_size/index.resource/primitive_restart/
+  restart_index; pipe_draw_start_count_bias.start (indices) and index_bias.
+- TRANSLATION: index buffer VA -> owner heap + byte offset; the owner adds
+  offset / index size to the start index (D3D12 aligns the location to the
+  index size; a misaligned one refuses). Other index formats refuse.
+- Checkpoint: probe C6D: a yellow quad from 4 vertices + 6 R16 indices;
+  PASS = centre yellow, 960..1088 pixels.
