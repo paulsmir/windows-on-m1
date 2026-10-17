@@ -573,10 +573,11 @@ static HRESULT CreateHeap(AgxD3d12Device *device, const D3D12DDIARG_CREATEHEAP_0
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     /* C4b: the heap is a buffer of the device's native owner, so copies and
      * their submission residency see it (winsys BOs only, D3D12-C4-copy.md). */
-    {
-        AGX_D3D12_OWNER *owner = arg.ByteSize && heap->bytes <= MAXUINT32 ? EnsureOwner(device) : nullptr;
+    /* Without an owner (its creation failed) the heap falls back to the C2a
+     * kernel allocation below; copies refuse such heaps. */
+    if (AGX_D3D12_OWNER *owner = arg.ByteSize && heap->bytes <= MAXUINT32 ? EnsureOwner(device) : nullptr) {
         AGX_D3D12_BUFFER buffer = {};
-        HRESULT native = owner ? AgxD3d12OwnerCreateBuffer(owner, heap->bytes, &buffer) : E_OUTOFMEMORY;
+        HRESULT native = AgxD3d12OwnerCreateBuffer(owner, heap->bytes, &buffer);
         if (SUCCEEDED(native)) {
             heap->native = buffer.Resource;
             heap->gpuva = buffer.GpuVa;
