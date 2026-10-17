@@ -1763,7 +1763,13 @@ static AgxD3d12Command *AppendCommand(AgxD3d12CommandList *list) {
         list->command = static_cast<AgxD3d12Command *>(grown);
         list->capacity = capacity;
     }
-    return &list->command[list->commands++];
+    /* EXP1374: slots are reused across Reset and grown without zeroing;
+     * recorders set only the fields their command uses (a direct draw left
+     * the C14 indirect stream with a previous command's bytes), so every
+     * slot starts zeroed */
+    AgxD3d12Command *slot = &list->command[list->commands++];
+    memset(slot, 0, sizeof(*slot));
+    return slot;
 }
 static VOID APIENTRY CopyBufferRegion(D3D12DDI_HCOMMANDLIST handle, D3D12DDIARG_BUFFER_PLACEMENT dst,
                                       D3D12DDIARG_BUFFER_PLACEMENT src, UINT64 bytes) {

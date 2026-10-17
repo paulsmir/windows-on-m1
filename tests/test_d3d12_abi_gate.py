@@ -690,6 +690,15 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('PIPE_QUERY_PIPELINE_STATISTICS_SINGLE, s', q)
         self.assertIn('(heap->Type == 1 && (type != 2u || begin))', q)  # timestamps: EndQuery only
 
+    def test_command_slots_start_zeroed(self):
+        # EXP1374: AppendCommand handed out reused/realloc'd slots unzeroed;
+        # a direct draw then replayed a previous command's bytes as its C14
+        # indirect stream (device removed in C6C/C6D, crash in C6F)
+        source = SOURCE.read_text()
+        start = source.index('static AgxD3d12Command *AppendCommand(')
+        append = source[start:source.index('\n}\n', start)]
+        self.assertIn('memset(slot, 0, sizeof(*slot));', append)
+
     def test_c14_execute_indirect(self):
         # C14 invariants: only single Draw/DrawIndexed/Dispatch signatures
         # (the Gallium indirect layouts) with a stride covering the record;
