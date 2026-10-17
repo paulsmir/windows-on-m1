@@ -1,6 +1,6 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
-## Current as of 2026-10-17T13:30Z (read this first)
+## Current as of 2026-10-17T15:45Z (read this first)
 
 Installed after recovery: none (rec1355h). Integration HEAD 1465fd81.
 - PROVEN (EXP1355): D3D12CreateDevice S_OK at FL 11_0 on the AGX adapter
@@ -24,10 +24,18 @@ Installed after recovery: none (rec1355h). Integration HEAD 1465fd81.
   heaps (size from the resource); it then asks
   CheckExistingResourceAllocationInfo (allocation handle) and
   CheckSubresourceInfo on Map/Unmap. Textures/placed resources: not yet.
-- NEXT: C3 (command queue + fences): D3D12DDI fences arrive as GPU VA
-  placements (D3D12DDI_FENCE), so a queue signal must be a GPU-ordered
-  write + monitored-fence notification; design from the Microsoft contract
-  before hardware.
+- PROVEN (EXP1362): D3D12 C3 -- CreateCommandQueue + CreateFence +
+  Signal + GetCompletedValue == 1. The 0003 runtime owns the monitored
+  fence (D3D12DDI_FENCE VA 0) and signals it through the kernel contexts a
+  queue owns: each queue creates one GPU-VA context with the core-layer
+  pfnCreateContextVirtualCb(hRTCommandQueue) (KMD WAWC contract); the
+  driver's pfnSignalFence is not called.
+- Found (EXP1361 attempt 2): the KMD 1024-unit private scene pool is ~92%
+  used in normal runs (DWM/explorer/test processes' cached scenes) and only
+  the requester's own cached scenes are evicted -> boot-dependent
+  D3DERR_OUTOFVIDEOMEMORY in small D3D11 renders. Separate KMD task.
+- NEXT: C4 (command allocator/list, ExecuteCommandLists, a GPU copy via the
+  libagx copy kernels); C4a = list lifecycle + empty Execute first.
 - Offline tool: guest d3d12core.dll copy + ARM64 disassembly in the
   scratchpad (d3d12core/dis.txt) for runtime validation strings.
 
