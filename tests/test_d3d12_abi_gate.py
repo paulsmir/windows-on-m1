@@ -43,7 +43,16 @@ class D3d12AbiGate(unittest.TestCase):
     def test_no_unimplemented_feature_is_advertised(self):
         source = SOURCE.read_text()
         self.assertIn('D3D12DDI_SUPPORTED_0003', source)
-        self.assertNotIn('D3D12DDI_3DPIPELINELEVEL_11_0', source)
+        # C1: the development profile (APPLE_AGX_D3D12=1, checked first in
+        # OpenAdapter12) answers only the 3D pipeline caps with FL 11_0.
+        self.assertEqual(source.count('D3D12DDI_3DPIPELINELEVEL_11_0'), 1)
+        self.assertIn('static const D3D12DDI_3DPIPELINELEVEL kProfileLevel = D3D12DDI_3DPIPELINELEVEL_11_0;', source)
+        caps = source[source.index('static HRESULT APIENTRY GetCaps('):]
+        caps = caps[:caps.index('\n}\n')]
+        self.assertEqual(set(re.findall(r'D3D12DDICAPS_TYPE_\w+', caps)),
+                         {'D3D12DDICAPS_TYPE_0081_3DPIPELINESUPPORT1', 'D3D12DDICAPS_TYPE_3DPIPELINESUPPORT'})
+        opener = source[source.index('extern "C" HRESULT APIENTRY OpenAdapter12('):]
+        self.assertLess(opener.index('APPLE_AGX_D3D12'), opener.index('FillD3D12DDI_ADAPTERFUNCS'))
         self.assertIn('return E_NOTIMPL;', source)
         self.assertIn('pfnSetErrorCb', source)
         self.assertIn('pfnSetCommandListErrorCb', source)
