@@ -218,6 +218,13 @@ static D3DKMT_HANDLE allocation_handle(ADMISSION_UMD_DEVICE *device,
   return handle;
 }
 
+/* D3D12 C4b: the kernel allocation behind a screen-buffer token, for the
+ * D3D12 runtime's CheckExistingResourceAllocationInfo. */
+D3DKMT_HANDLE AdmissionUmdScreenKernelAllocation(ADMISSION_UMD_DEVICE *device,
+                                                 uint64_t token) {
+  return allocation_handle(device, token);
+}
+
 static int reserve_va(void *context, uint64_t bytes, uint64_t minimum,
                       uint64_t maximum, uint64_t *va) {
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;

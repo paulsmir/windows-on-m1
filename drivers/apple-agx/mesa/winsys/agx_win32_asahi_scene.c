@@ -257,6 +257,14 @@ int AgxWin32AsahiBufferCopy(struct pipe_context *ctx,
   BITSET_SET(d->data_valid,0);
   return 1;
 }
+/* D3D12 C4b: the GPU virtual address of a buffer resource (Asahi's own
+ * mapping, agx_map_gpu), which D3D12 reports as the resource's address and
+ * records in copies; 0 for anything but a buffer with storage. */
+APPLE_AGX_U64 AgxWin32AsahiBufferGpuAddress(struct pipe_resource *resource) {
+  if(!resource || resource->target!=PIPE_BUFFER) return 0;
+  struct agx_resource *native=agx_resource(resource);
+  return native->bo ? agx_map_gpu(native) : 0;
+}
 int AgxWin32AsahiResourceBusy(struct pipe_context *ctx,struct pipe_resource *resource) {
   if(!ctx || !resource || resource->screen!=ctx->screen) return 1;
   struct agx_context *native=agx_context(ctx);

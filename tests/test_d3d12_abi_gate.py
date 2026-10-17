@@ -214,6 +214,22 @@ class D3d12AbiGate(unittest.TestCase):
                        'pfnResetCommandAllocator', 'pfnCalcPrivateCommandListSize', 'pfnCreateCommandList',
                        'pfnDestroyCommandList'):
             self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
+        # C4b: heaps are buffers of the native owner (winsys BOs) so copies
+        # and their residency see them; CopyBufferRegion records heap-relative
+        # ranges and ExecuteCommandLists replays them through the owner, then
+        # waits, before the runtime's queue signal.
+        self.assertIn('#include "agx_d3d12_windows.h"', source)
+        create = source[source.index('static HRESULT CreateHeap('):]
+        create = create[:create.index('\n}\n')]
+        self.assertLess(create.index('AgxD3d12OwnerCreateBuffer'), create.index('EXP1355: every early exit'))
+        copy = source[source.index('static VOID APIENTRY CopyBufferRegion('):]
+        copy = copy[:copy.index('\n}\n')]
+        self.assertIn('bytes > d->bytes - dst_offset', copy)
+        self.assertIn('bytes > r->bytes - src_offset', copy)
+        self.assertIn('list->copies >= kListCopies', copy)
+        execute = source[source.index('static VOID APIENTRY ExecuteCommandLists('):]
+        execute = execute[:execute.index('\n}\n')]
+        self.assertLess(execute.index('AgxD3d12OwnerCopy('), execute.index('AgxD3d12OwnerSubmitAndWait('))
         # nothing can bind it yet: every command-list DDI stays fail-closed
         implemented = set(re.findall(r'AGX_ASSIGN\(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, (\w+), (?!AGX_REJECT)', source))
         # EXP1363: the runtime's default-state setters are accepted (recorded
@@ -222,11 +238,12 @@ class D3d12AbiGate(unittest.TestCase):
                    'pfnOmSetBlendFactor', 'pfnOmSetStencilRef', 'pfnSetPipelineState', 'pfnSetDescriptorHeaps',
                    'pfnIASetIndexBuffer', 'pfnIASetVertexBuffers', 'pfnSOSetTargets', 'pfnOMSetRenderTargets',
                    'pfnClearRootArguments'}
-        self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList'} | setters)
+        self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList', 'pfnCopyBufferRegion',
+                                       'pfnResourceBarrier'} | setters)
         for member in setters:
             self.assertIn('AGX_LIST_STATE(%s)' % member, source)
-        for consumer in ('pfnDrawInstanced', 'pfnDrawIndexedInstanced', 'pfnDispatch', 'pfnCopyBufferRegion',
-                         'pfnClearRenderTargetView', 'pfnResourceBarrier'):
+        for consumer in ('pfnDrawInstanced', 'pfnDrawIndexedInstanced', 'pfnDispatch', 'pfnCopyTextureRegion',
+                         'pfnClearRenderTargetView', 'pfnResourceCopy'):
             self.assertIn('AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, %s)' % consumer, source)
 
     def test_package_and_receipts(self):

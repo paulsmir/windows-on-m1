@@ -15,6 +15,9 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 extern "C" {
 #include "apple_agx_win32_device_info.h"
 #include "render_win32_transport.h"
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+#include "agx_d3d12_windows.h"
+#endif
 /* agx_win32_screen.c (compiled into this UMD) */
 int AgxWin32DeviceInfoValid(const AGX_WIN32_DEVICE_INFO *Info);
 }
@@ -177,6 +180,10 @@ struct AgxD3d12Device {
     /* C2: created with the first heap, so device creation is unchanged */
     D3DKMT_HANDLE paging_queue;
     volatile UINT64 *paging_fence;
+    /* C4b: the native Asahi owner (agx_d3d12_windows.cpp), created with the
+     * first heap; heaps are its buffer resources and lists copy through it. */
+    void *owner;
+    BOOL owner_failed;
 };
 static SIZE_T APIENTRY CalcPrivateDeviceSize(D3D12DDI_HADAPTER,
                                              const D3D12DDIARG_CALCPRIVATEDEVICESIZE *arg) {
@@ -200,8 +207,17 @@ static HRESULT APIENTRY CreateDevice(D3D12DDI_HADAPTER,
     AdmissionUmdDiagnostic("d3d12-create-device", hr, receipt, 3);
     return hr;
 }
-static void APIENTRY DestroyDevice(D3D12DDI_HDEVICE) {
+static void APIENTRY DestroyDevice(D3D12DDI_HDEVICE handle) {
     AdmissionUmdDiagnostic("d3d12-destroy-device", S_OK, nullptr, 0);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    auto *device = static_cast<AgxD3d12Device *>(handle.pDrvPrivate);
+    if (device && device->owner) {
+        (void)AgxD3d12OwnerDestroy(static_cast<AGX_D3D12_OWNER *>(device->owner));
+        device->owner = nullptr;
+    }
+#else
+    (void)handle;
+#endif
     callbacks = nullptr;
 }
 static HRESULT APIENTRY GetOptionalDDITables(D3D12DDI_HADAPTER, UINT32 *entries,
@@ -419,6 +435,7 @@ static constexpr UINT64 kVaMinimum = 0x10000ULL;
 static constexpr UINT64 kVaLimit = 1ULL << 39;
 static constexpr UINT64 kCpuVisibleMaximum = ADMISSION_WIN32_ALLOCATION_LEGACY_MAX_BYTES;
 struct AgxD3d12Heap {
+    void *native; /* C4b: the owner's buffer resource (pipe_resource) */
     D3DKMT_HANDLE allocation;
     UINT64 gpuva;
     UINT64 bytes;
@@ -489,7 +506,45 @@ static HRESULT EnsurePagingQueue(AgxD3d12Device *device) {
     device->paging_fence = static_cast<volatile UINT64 *>(queue.FenceValueCPUVirtualAddress);
     return S_OK;
 }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static AGX_D3D12_BUFFER HeapBuffer(const AgxD3d12Heap *heap) {
+    AGX_D3D12_BUFFER buffer = {};
+    buffer.Resource = heap->native;
+    buffer.GpuVa = heap->gpuva;
+    buffer.Cpu = heap->cpu;
+    buffer.Bytes = heap->bytes;
+    return buffer;
+}
+static void OwnerError(void *context, HRESULT error) {
+    auto *device = static_cast<AgxD3d12Device *>(context);
+    if (device && device->callbacks && device->callbacks->pfnSetErrorCb)
+        device->callbacks->pfnSetErrorCb(device->runtime, error);
+}
+static AGX_D3D12_OWNER *EnsureOwner(AgxD3d12Device *device) {
+    if (device->owner || device->owner_failed) return static_cast<AGX_D3D12_OWNER *>(device->owner);
+    AGX_D3D12_OWNER_ARGS args = {};
+    args.AdapterCallbacks = adapter_object.callbacks;
+    args.RuntimeAdapter = adapter_object.runtime.handle;
+    args.KernelCallbacks = device->kernel;
+    args.RuntimeDevice = device->runtime.handle;
+    args.Error = OwnerError;
+    args.ErrorContext = device;
+    AGX_D3D12_OWNER *owner = nullptr;
+    const HRESULT hr = AgxD3d12OwnerCreate(&args, &owner);
+    device->owner = SUCCEEDED(hr) ? owner : nullptr;
+    device->owner_failed = FAILED(hr);
+    return static_cast<AGX_D3D12_OWNER *>(device->owner);
+}
+#endif
 static void ReleaseHeap(AgxD3d12Device *device, AgxD3d12Heap *heap) {
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (heap->native) {
+        AGX_D3D12_BUFFER buffer = HeapBuffer(heap);
+        AgxD3d12OwnerDestroyBuffer(static_cast<AGX_D3D12_OWNER *>(device->owner), &buffer);
+        memset(heap, 0, sizeof(*heap));
+        return;
+    }
+#endif
     if (heap->locks && device->kernel->pfnUnlockCb) {
         D3DDDICB_UNLOCK unlock = {};
         unlock.NumAllocations = 1;
@@ -515,6 +570,26 @@ static HRESULT CreateHeap(AgxD3d12Device *device, const D3D12DDIARG_CREATEHEAP_0
     memset(heap, 0, sizeof(*heap));
     heap->cpu_visible = arg.CPUPageProperty != D3D12DDI_CPU_PAGE_PROPERTY_NOT_AVAILABLE;
     heap->bytes = arg.ByteSize > kVaLimit ? ~0ULL : (arg.ByteSize + kHeapPage - 1) & ~(kHeapPage - 1);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    /* C4b: the heap is a buffer of the device's native owner, so copies and
+     * their submission residency see it (winsys BOs only, D3D12-C4-copy.md). */
+    {
+        AGX_D3D12_OWNER *owner = arg.ByteSize && heap->bytes <= MAXUINT32 ? EnsureOwner(device) : nullptr;
+        AGX_D3D12_BUFFER buffer = {};
+        HRESULT native = owner ? AgxD3d12OwnerCreateBuffer(owner, heap->bytes, &buffer) : E_OUTOFMEMORY;
+        if (SUCCEEDED(native)) {
+            heap->native = buffer.Resource;
+            heap->gpuva = buffer.GpuVa;
+            heap->cpu = buffer.Cpu;
+            heap->cpu_visible = TRUE; /* Asahi buffers are CPU mapped (UMA) */
+            heap->allocation = AgxD3d12OwnerBufferAllocation(owner, &buffer);
+        }
+        const UINT receipt[] = {2u, static_cast<UINT>(heap->bytes >> 16), heap->allocation != 0 ? 1u : 0u,
+                                static_cast<UINT>(heap->gpuva >> 16), static_cast<UINT>(heap->gpuva >> 32)};
+        AdmissionUmdDiagnostic("measure-d3d12-heap", native, receipt, 5);
+        return native;
+    }
+#endif
     /* EXP1355: every early exit names its reason (receipt-only) */
     const UINT refusal = !adapter_object.info_valid ? 1u
                        : !k || !k->pfnAllocateCb || !k->pfnReserveGpuVirtualAddressCb ||
@@ -636,6 +711,10 @@ static VOID APIENTRY DestroyHeapAndResource(D3D12DDI_HDEVICE handle, D3D12DDI_HH
 static HRESULT APIENTRY MapHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP heap_handle, VOID **data) {
     AgxD3d12Device *device = DeviceOf(handle);
     auto *heap = static_cast<AgxD3d12Heap *>(heap_handle.pDrvPrivate);
+    if (device && heap && data && heap->native && heap->cpu) {
+        *data = heap->cpu; /* C4b: persistent mapping of the owner's buffer */
+        return S_OK;
+    }
     if (!device || !heap || !data || !heap->allocation || !heap->cpu_visible || !device->kernel->pfnLockCb)
         return E_INVALIDARG;
     if (!heap->locks) {
@@ -653,7 +732,7 @@ static HRESULT APIENTRY MapHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP heap_han
 static VOID APIENTRY UnmapHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP heap_handle) {
     AgxD3d12Device *device = DeviceOf(handle);
     auto *heap = static_cast<AgxD3d12Heap *>(heap_handle.pDrvPrivate);
-    if (!device || !heap || !heap->locks || --heap->locks) return;
+    if (!device || !heap || heap->native || !heap->locks || --heap->locks) return;
     D3DDDICB_UNLOCK unlock = {};
     unlock.NumAllocations = 1;
     unlock.phAllocations = &heap->allocation;
@@ -866,12 +945,24 @@ static HRESULT APIENTRY CreateCommandAllocator(D3D12DDI_HDEVICE, const D3D12DDIA
 }
 static VOID APIENTRY DestroyCommandAllocator(D3D12DDI_HDEVICE, D3D12DDI_HCOMMANDALLOCATOR) {}
 static VOID APIENTRY ResetCommandAllocator(D3D12DDI_HCOMMANDALLOCATOR) {}
+/* C4b: a recorded CopyBufferRegion (heap-relative byte ranges). */
+struct AgxD3d12Copy {
+    AgxD3d12Heap *dst;
+    UINT64 dst_offset;
+    AgxD3d12Heap *src;
+    UINT64 src_offset;
+    UINT64 bytes;
+};
+static constexpr UINT kListCopies = 64;
 struct AgxD3d12CommandList {
     D3D12DDI_HRTCOMMANDLIST runtime;
     UINT type;
     UINT closed;
-    UINT commands; /* recorded commands; 0 until a recording DDI exists */
+    UINT commands; /* recorded commands (C4b: copies) */
     UINT64 state;  /* EXP1363: state setters the list received (bit = DDI slot) */
+    AgxD3d12Device *device;
+    UINT copies;
+    AgxD3d12Copy copy[kListCopies];
 };
 /* EXP1363: creating/resetting a list makes the runtime set its default
  * state (topology, viewports, scissors, blend factor, stencil ref, PSO,
@@ -899,6 +990,7 @@ static HRESULT APIENTRY CreateCommandList(D3D12DDI_HDEVICE handle, const D3D12DD
     auto *list = arg ? static_cast<AgxD3d12CommandList *>(arg->hDrvCommandList.pDrvPrivate) : nullptr;
     if (!device || !list) return E_INVALIDARG;
     memset(list, 0, sizeof(*list));
+    list->device = device;
     list->runtime = arg->hRTCommandList;
     list->type = static_cast<UINT>(arg->Type);
     if (device->callbacks && device->callbacks->pfnSetCommandListDDITableCb && list_table.handle)
@@ -914,16 +1006,62 @@ static VOID APIENTRY CloseCommandList(D3D12DDI_HCOMMANDLIST handle) {
 }
 static VOID APIENTRY ResetCommandList(D3D12DDI_HCOMMANDLIST handle, const D3D12DDIARG_RESETCOMMANDLIST *) {
     auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
-    if (list) { list->closed = list->commands = 0; list->state = 0; }
+    if (list) { list->closed = list->commands = list->copies = 0; list->state = 0; }
 }
+/* C4b: a buffer copy between committed buffers (heap-backed resources). The
+ * list records heap-relative ranges; ExecuteCommandLists replays them on the
+ * device's native owner (libagx copy kernels) and waits for completion, so
+ * the runtime's later queue signal follows finished work. */
+static void ListError(AgxD3d12CommandList *list, HRESULT error) {
+    if (list && list->device && list->device->callbacks && list->device->callbacks->pfnSetCommandListErrorCb)
+        list->device->callbacks->pfnSetCommandListErrorCb(list->runtime, error);
+}
+static VOID APIENTRY CopyBufferRegion(D3D12DDI_HCOMMANDLIST handle, D3D12DDIARG_BUFFER_PLACEMENT dst,
+                                      D3D12DDIARG_BUFFER_PLACEMENT src, UINT64 bytes) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    auto *d = static_cast<AgxD3d12Resource *>(dst.BaseAddress.UMD.hResource.pDrvPrivate);
+    auto *r = static_cast<AgxD3d12Resource *>(src.BaseAddress.UMD.hResource.pDrvPrivate);
+    if (!list) return;
+    const UINT64 dst_offset = dst.BaseAddress.UMD.Offset, src_offset = src.BaseAddress.UMD.Offset;
+    if (!d || !r || !d->heap || !r->heap || !d->heap->native || !r->heap->native || !bytes ||
+        dst_offset > d->bytes || bytes > d->bytes - dst_offset || src_offset > r->bytes ||
+        bytes > r->bytes - src_offset || list->copies >= kListCopies) {
+        ListError(list, E_INVALIDARG);
+        return;
+    }
+    list->copy[list->copies++] = {d->heap, dst_offset, r->heap, src_offset, bytes};
+    ++list->commands;
+}
+/* Between copies on one queue the owner's libagx copies already carry
+ * AGX_BARRIER_ALL and execution completes before the next list; transitions
+ * need no AGX work yet. */
+static VOID APIENTRY ResourceBarrier(D3D12DDI_HCOMMANDLIST, UINT, const D3D12DDIARG_RESOURCE_BARRIER_0003 *) {}
 static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
     UINT commands = 0;
+    HRESULT hr = S_OK;
+    AgxD3d12Device *device = nullptr;
     for (UINT i = 0; lists && i < count; ++i) {
         auto *list = static_cast<AgxD3d12CommandList *>(lists[i].pDrvPrivate);
-        if (list) commands += list->commands;
+        if (!list) continue;
+        commands += list->commands;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+        for (UINT c = 0; SUCCEEDED(hr) && c < list->copies; ++c) {
+            const AgxD3d12Copy &copy = list->copy[c];
+            device = list->device;
+            AGX_D3D12_BUFFER dst = HeapBuffer(copy.dst), src = HeapBuffer(copy.src);
+            hr = AgxD3d12OwnerCopy(static_cast<AGX_D3D12_OWNER *>(device->owner), &dst, copy.dst_offset, &src,
+                                   copy.src_offset, copy.bytes);
+        }
+#endif
     }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (SUCCEEDED(hr) && device && device->owner)
+        hr = AgxD3d12OwnerSubmitAndWait(static_cast<AGX_D3D12_OWNER *>(device->owner));
+    if (FAILED(hr) && device && device->callbacks && device->callbacks->pfnSetErrorCb)
+        device->callbacks->pfnSetErrorCb(device->runtime, hr);
+#endif
     const UINT receipt[] = {count, commands};
-    AdmissionUmdDiagnostic("measure-d3d12-execute", S_OK, receipt, 2);
+    AdmissionUmdDiagnostic("measure-d3d12-execute", hr, receipt, 2);
 }
 static HRESULT APIENTRY CloseAdapter(D3D12DDI_HADAPTER) {
     AdmissionUmdDiagnostic("d3d12-close-adapter", S_OK, nullptr, 0);
@@ -1046,11 +1184,11 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTextureRegion, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTextureRegion));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceCopy, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceCopy));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTiles, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTiles));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyBufferRegion, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyBufferRegion));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyBufferRegion, CopyBufferRegion);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceResolveSubresource, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceResolveSubresource));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteBundle, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteBundle));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteIndirect, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteIndirect));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceBarrier, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceBarrier));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceBarrier, ResourceBarrier);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnBlt, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnBlt));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnPresent, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnPresent));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnBeginQuery, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnBeginQuery));

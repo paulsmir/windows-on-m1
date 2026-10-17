@@ -89,6 +89,7 @@ int AgxWin32AsahiResourceBusy(struct pipe_context *, struct pipe_resource *);
 int AgxWin32AsahiBufferCopy(struct pipe_context *, struct pipe_resource *,
     APPLE_AGX_U64, struct pipe_resource *, APPLE_AGX_U64, APPLE_AGX_U64);
 void *AgxWin32AsahiBufferCurrentMap(struct pipe_context *, struct pipe_resource *);
+APPLE_AGX_U64 AgxWin32AsahiBufferGpuAddress(struct pipe_resource *);
 void *AgxWin32AsahiBufferWriteMap(struct pipe_context *, struct pipe_resource *);
 void AgxWin32AsahiContextDiagnostic(struct pipe_context *,
     APPLE_AGX_U32 State[16], APPLE_AGX_U32 Bindings[16]);

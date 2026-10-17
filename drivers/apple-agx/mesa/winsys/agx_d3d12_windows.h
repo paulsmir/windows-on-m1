@@ -1,0 +1,54 @@
+#ifndef AGX_D3D12_WINDOWS_H
+#define AGX_D3D12_WINDOWS_H
+/* D3D12 C4b (investigation/analysis/D3D12-C4-copy.md): the native Asahi owner
+ * of a D3D12 device -- UMD device storage on its own GPU-VA kernel context,
+ * the Asahi screen and context -- built like the D3D10 Windows frontend
+ * (agx_d3d10_windows.cpp). D3D12 heaps are buffer resources of this screen
+ * and CopyBufferRegion runs through the context's resource_copy_region
+ * (Asahi: libagx_copy_uint4/uchar on a compute batch). No Mesa types cross
+ * this boundary. */
+#include <windows.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct AGX_D3D12_OWNER AGX_D3D12_OWNER;
+
+typedef struct {
+  void *Resource;            /* struct pipe_resource * */
+  unsigned long long GpuVa;  /* Asahi's GPU mapping of the buffer */
+  void *Cpu;                 /* persistent CPU mapping */
+  unsigned long long Bytes;
+} AGX_D3D12_BUFFER;
+
+typedef void (*AGX_D3D12_ERROR_CALLBACK)(void *Context, HRESULT Error);
+
+typedef struct {
+  const void *AdapterCallbacks; /* const D3DDDI_ADAPTERCALLBACKS * */
+  HANDLE RuntimeAdapter;
+  const void *KernelCallbacks;  /* const D3DDDI_DEVICECALLBACKS * */
+  HANDLE RuntimeDevice;
+  AGX_D3D12_ERROR_CALLBACK Error;
+  void *ErrorContext;
+} AGX_D3D12_OWNER_ARGS;
+
+HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *Args, AGX_D3D12_OWNER **Owner);
+HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *Owner);
+HRESULT AgxD3d12OwnerCreateBuffer(AGX_D3D12_OWNER *Owner, unsigned long long Bytes,
+                                  AGX_D3D12_BUFFER *Buffer);
+void AgxD3d12OwnerDestroyBuffer(AGX_D3D12_OWNER *Owner, AGX_D3D12_BUFFER *Buffer);
+/* The D3DKMT allocation handle behind a buffer (0 when unknown). */
+UINT AgxD3d12OwnerBufferAllocation(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Buffer);
+/* Records one GPU copy; byte ranges must lie inside both buffers. */
+HRESULT AgxD3d12OwnerCopy(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Dst,
+                          unsigned long long DstOffset, const AGX_D3D12_BUFFER *Src,
+                          unsigned long long SrcOffset, unsigned long long Bytes);
+/* Submits the recorded work and waits for it (C4b orders it before the
+ * runtime's later queue signal by completing it first). */
+HRESULT AgxD3d12OwnerSubmitAndWait(AGX_D3D12_OWNER *Owner);
+
+#ifdef __cplusplus
+}
+#endif
+#endif

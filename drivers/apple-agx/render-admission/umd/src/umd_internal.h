@@ -353,6 +353,10 @@ HRESULT AdmissionUmdRuntimeDeviceDestroyKernelContext(
 HRESULT AdmissionUmdRuntimeDeviceFinalize(ADMISSION_UMD_DEVICE *Device,
                                           BOOL *Consumed);
 HRESULT AdmissionUmdScreenInitialize(ADMISSION_UMD_DEVICE *Device);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+D3DKMT_HANDLE AdmissionUmdScreenKernelAllocation(ADMISSION_UMD_DEVICE *Device,
+                                                 uint64_t Token);
+#endif
 HRESULT AdmissionUmdScreenFinalize(ADMISSION_UMD_DEVICE *Device,
                                    ULONG *Undeallocated);
 BOOL AdmissionUmdScreenHasLiveSources(ADMISSION_UMD_DEVICE *Device);
