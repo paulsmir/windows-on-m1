@@ -1,5 +1,24 @@
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
+## Current as of 2026-10-17T01:07Z (read this first)
+
+Installed: PACKAGE1343 (c99fde69 = integration driver sources; WOW64 UMD
+out84 on closure 104, GL ICD out61, m1n1 5b857603). FL 11_0 default.
+- PROVEN (EXP1340-EXP1343): D3D GPU timestamps for render and compute.
+  The KMD keeps each job's firmware start/end by (process, command GPU VA)
+  -- render: the 3D work's template objects 28/29 (start objects can be
+  stale, the winsys clamps them); compute: every envelope compute job runs
+  the timestamp microsequence and the firmware writes its own
+  timestamp_pointers (sidecar block 0x00/0x08; the requested words stay 0)
+  -- and returns them by escape; the winsys writes them (ns) into the
+  batch's struct agx_timestamps slot when queries are attached, also to
+  batches already submitted (Dispatch11's barrier); D3D TIMESTAMP is
+  Mesa's query, TIMESTAMPDISJOINT 1 GHz, not disjoint. agx_timestamp_smoke
+  PASS ARM64/x86 (compute 36/146 ms, render 50/171 ms tracking the work);
+  no regression.
+- Open: D3D12.
+- Scratchpad tools vanish: restore from .local/scratchpad-tools-backup.
+
 ## Current as of 2026-10-16T23:36Z (read this first)
 
 Installed: PACKAGE1341 (1597dd77: EXP1340's GPU-timestamp sources + a
