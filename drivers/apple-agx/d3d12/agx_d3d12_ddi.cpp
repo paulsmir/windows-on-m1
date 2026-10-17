@@ -560,6 +560,7 @@ static constexpr UINT64 kVaLimit = 1ULL << 39;
 static constexpr UINT64 kCpuVisibleMaximum = ADMISSION_WIN32_ALLOCATION_LEGACY_MAX_BYTES;
 struct AgxD3d12Heap {
     void *native; /* C4b: the owner's buffer resource (pipe_resource) */
+    BOOL alias;   /* C8c: a placed resource's view of its parent heap (owns nothing) */
     D3DKMT_HANDLE allocation;
     UINT64 gpuva;
     UINT64 bytes;
@@ -864,6 +865,34 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
     HeapAndResourceReceipt("measure-d3d12-create-heap-resource", heap_arg, resource_arg,
                            (heap ? 1u : 0u) | (resource ? 2u : 0u));
     if (!device) return E_INVALIDARG;
+    /* C8c: a placed buffer -- no heap description; ReuseBufferGPUVA names
+     * the resource of an existing heap and the byte offset in it (the
+     * encoding this assumes; receipt measure-d3d12-placed records it). */
+    if (!heap_arg && resource && resource_arg && resource_arg->ResourceType == D3D12DDI_RT_BUFFER) {
+        const auto *base = static_cast<const AgxD3d12Resource *>(resource_arg->ReuseBufferGPUVA.BaseAddress.UMD.hResource.pDrvPrivate);
+        const UINT64 offset = resource_arg->ReuseBufferGPUVA.BaseAddress.UMD.Offset;
+        if (heap) memset(heap, 0, sizeof(*heap));
+        memset(resource, 0, sizeof(*resource));
+        const UINT reason = !base || !base->heap ? 1u
+                          : offset > base->heap->bytes || resource_arg->Width > base->heap->bytes - offset ? 6u : 0u;
+        if (!reason && heap) {
+            /* the placed resource's heap object aliases the parent: Map
+             * returns the parent's base (the runtime adds the placement
+             * offset), and destroying it releases nothing */
+            *heap = *base->heap;
+            heap->alias = TRUE;
+            heap->locks = 0;
+        }
+        if (!reason) {
+            resource->heap = base->heap;
+            resource->gpuva = base->heap->gpuva + offset;
+            resource->bytes = resource_arg->Width;
+            resource->type = D3D12DDI_RT_BUFFER;
+        }
+        const UINT receipt[] = {reason, base ? 1u : 0u, static_cast<UINT>(offset), static_cast<UINT>(resource_arg->Width)};
+        AdmissionUmdDiagnostic("measure-d3d12-placed", reason ? E_NOTIMPL : S_OK, receipt, 4);
+        return reason ? E_NOTIMPL : S_OK;
+    }
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     /* C6a: a committed 2D texture is one owner texture */
     if (heap_arg && heap && resource && resource_arg && resource_arg->ResourceType == D3D12DDI_RT_TEXTURE2D) {
@@ -920,6 +949,14 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
         resource->gpuva = heap->gpuva;
         resource->bytes = resource_arg->Width;
         resource->type = D3D12DDI_RT_BUFFER;
+    } else if (SUCCEEDED(hr) && resource) {
+        /* C8c: a heap alone -- its resource handle spans the heap, so placed
+         * resources can name it */
+        memset(resource, 0, sizeof(*resource));
+        resource->heap = heap;
+        resource->gpuva = heap->gpuva;
+        resource->bytes = heap->bytes;
+        resource->type = D3D12DDI_RT_BUFFER;
     }
     return hr;
 }
@@ -928,7 +965,7 @@ static VOID APIENTRY DestroyHeapAndResource(D3D12DDI_HDEVICE handle, D3D12DDI_HH
     AgxD3d12Device *device = DeviceOf(handle);
     auto *heap = static_cast<AgxD3d12Heap *>(heap_handle.pDrvPrivate);
     if (resource_handle.pDrvPrivate) memset(resource_handle.pDrvPrivate, 0, sizeof(AgxD3d12Resource));
-    if (device && heap && heap->allocation) ReleaseHeap(device, heap);
+    if (device && heap && heap->allocation && !heap->alias) ReleaseHeap(device, heap);
 }
 static HRESULT APIENTRY MapHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP heap_handle, VOID **data) {
     AgxD3d12Device *device = DeviceOf(handle);

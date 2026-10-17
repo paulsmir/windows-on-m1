@@ -539,6 +539,23 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('->resource_copy_region(', region)
         self.assertIn('block_bytes(d->format) != block_bytes(s->format)', region)
 
+    def test_c8c_placed_buffers(self):
+        # C8c invariants: a placed buffer (no heap description) resolves
+        # ReuseBufferGPUVA to its parent heap with a bounds check; its heap
+        # object aliases the parent and destroying it releases nothing; a
+        # heap created alone gets a resource record spanning it.
+        source = SOURCE.read_text()
+        def fn(name):
+            start = source.index(name)
+            return source[start:source.index('\n}\n', start)]
+        create = fn('static HRESULT APIENTRY CreateHeapAndResource(')
+        self.assertIn('resource_arg->ReuseBufferGPUVA.BaseAddress.UMD.hResource.pDrvPrivate', create)
+        self.assertIn('resource_arg->Width > base->heap->bytes - offset ? 6u', create)
+        self.assertIn('heap->alias = TRUE;', create)
+        self.assertIn('"measure-d3d12-placed"', create)
+        self.assertIn('resource->bytes = heap->bytes;', create)
+        self.assertIn('heap->allocation && !heap->alias', fn('static VOID APIENTRY DestroyHeapAndResource('))
+
     def test_c8a_growing_lists(self):
         # C8a invariants: a list owns a growing command array (doubling from
         # 64), every recorder appends through it and stops with a list error

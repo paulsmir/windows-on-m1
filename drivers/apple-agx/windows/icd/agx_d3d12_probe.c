@@ -1268,6 +1268,72 @@ static int draw_depth(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fen
     return !(SUCCEEDED(hr) && ok);
 }
 
+/* C8C (placed resources): a 64 KiB buffer placed at offset 64 KiB in a
+ * 128 KiB UPLOAD heap, written through Map, copied on the GPU into a
+ * committed READBACK buffer and compared. Signals base + 1. */
+static int placed_buffer(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    D3D12_HEAP_DESC heap_desc = {0};
+    D3D12_RESOURCE_DESC desc = {0};
+    ID3D12Heap *heap = NULL;
+    ID3D12Resource *placed = NULL;
+    ID3D12Resource *readback = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+    ID3D12CommandAllocator *allocator = NULL;
+    ID3D12GraphicsCommandList *list = NULL;
+    unsigned char *bytes = NULL;
+    unsigned bad = 65536;
+    heap_desc.SizeInBytes = 131072;
+    heap_desc.Properties.Type = D3D12_HEAP_TYPE_UPLOAD;
+    heap_desc.Flags = D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS;
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    desc.Width = 65536;
+    desc.Height = 1;
+    desc.DepthOrArraySize = 1;
+    desc.MipLevels = 1;
+    desc.SampleDesc.Count = 1;
+    desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    HRESULT hr = readback ? ID3D12Device_CreateHeap(device, &heap_desc, &IID_ID3D12Heap, (void **)&heap) : E_FAIL;
+    printf("C8C CreateHeap hr=0x%08lx\n", (unsigned long)hr);
+    if (SUCCEEDED(hr)) {
+        hr = ID3D12Device_CreatePlacedResource(device, heap, 65536, &desc, D3D12_RESOURCE_STATE_GENERIC_READ, NULL,
+                                               &IID_ID3D12Resource, (void **)&placed);
+        printf("C8C CreatePlacedResource hr=0x%08lx\n", (unsigned long)hr);
+    }
+    if (SUCCEEDED(hr)) {
+        hr = ID3D12Resource_Map(placed, 0, NULL, (void **)&bytes);
+        printf("C8C Map hr=0x%08lx gpuva=0x%llx\n", (unsigned long)hr, (unsigned long long)ID3D12Resource_GetGPUVirtualAddress(placed));
+    }
+    if (SUCCEEDED(hr)) {
+        for (unsigned i = 0; i < 65536; ++i) bytes[i] = (unsigned char)(i * 11u + 9u);
+        ID3D12Resource_Unmap(placed, 0, NULL);
+        hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                 &IID_ID3D12CommandAllocator, (void **)&allocator);
+    }
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, NULL,
+                                            &IID_ID3D12GraphicsCommandList, (void **)&list);
+    if (SUCCEEDED(hr)) {
+        ID3D12GraphicsCommandList_CopyBufferRegion(list, readback, 0, placed, 0, 65536);
+        hr = run_list(queue, fence, list, base + 1, "C8C copy");
+    }
+    if (SUCCEEDED(hr)) {
+        D3D12_RANGE all = {0, 65536};
+        hr = ID3D12Resource_Map(readback, 0, &all, (void **)&bytes);
+        if (SUCCEEDED(hr) && bytes) {
+            bad = 0;
+            for (unsigned i = 0; i < 65536; ++i) bad += bytes[i] != (unsigned char)(i * 11u + 9u);
+            printf("C8C readback bad=%u\n", bad);
+            ID3D12Resource_Unmap(readback, 0, NULL);
+        }
+    }
+    printf("AGX_D3D12_C8C: %s\n", SUCCEEDED(hr) && bad == 0 ? "PASS" : "FAIL");
+    if (list) ID3D12GraphicsCommandList_Release(list);
+    if (allocator) ID3D12CommandAllocator_Release(allocator);
+    if (placed) ID3D12Resource_Release(placed);
+    if (heap) ID3D12Heap_Release(heap);
+    if (readback) ID3D12Resource_Release(readback);
+    return !(SUCCEEDED(hr) && bad == 0);
+}
+
 /* C7A (D3D12-C7-present.md, measurement): a flip-model swapchain on the
  * direct queue -- window, CreateSwapChainForHwnd (2 x 64x64 RGBA8,
  * FLIP_DISCARD), back buffer 0 cleared green through an RTV, transition to
@@ -1407,6 +1473,7 @@ static int queue_fence_signal(ID3D12Device *device) {
                         (void)draw_triangle(device, queue, fence, ID3D12Fence_GetCompletedValue(fence), 2);
                         (void)draw_textured(device, queue, fence, ID3D12Fence_GetCompletedValue(fence));
                         (void)draw_depth(device, queue, fence, ID3D12Fence_GetCompletedValue(fence));
+                        (void)placed_buffer(device, queue, fence, ID3D12Fence_GetCompletedValue(fence));
                         /* C7A last: a refused swapchain may remove the device */
                         (void)swapchain_present(device, queue, fence, ID3D12Fence_GetCompletedValue(fence));
                     }
