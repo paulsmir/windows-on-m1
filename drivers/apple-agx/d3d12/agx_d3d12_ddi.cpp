@@ -12,6 +12,12 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include <cstddef>
 #include <cstring>
 #include <type_traits>
+extern "C" {
+#include "apple_agx_win32_device_info.h"
+#include "render_win32_transport.h"
+/* agx_win32_screen.c (compiled into this UMD) */
+int AgxWin32DeviceInfoValid(const AGX_WIN32_DEVICE_INFO *Info);
+}
 
 /* the UMD trace logger (umd_runtime_device.c; C linkage through umd_internal.h) */
 extern "C" VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status, const UINT *Values, UINT Count);
@@ -25,6 +31,9 @@ namespace {
 struct AgxD3d12Adapter {
     D3D12DDI_HRTADAPTER runtime;
     const D3DDDI_ADAPTERCALLBACKS *callbacks;
+    /* C2: the KMD buffer classes (the D3D10 adapter's query, umd_runtime_device.c) */
+    AGX_WIN32_DEVICE_INFO info;
+    BOOL info_valid;
 };
 static AgxD3d12Adapter adapter_object;
 static const D3D12DDI_CORELAYER_DEVICECALLBACKS_0003 *callbacks;
@@ -164,6 +173,9 @@ struct AgxD3d12Device {
     D3D12DDI_HRTDEVICE runtime;
     const D3D12DDI_CORELAYER_DEVICECALLBACKS_0003 *callbacks;
     const D3DDDI_DEVICECALLBACKS *kernel;
+    /* C2: created with the first heap, so device creation is unchanged */
+    D3DKMT_HANDLE paging_queue;
+    volatile UINT64 *paging_fence;
 };
 static SIZE_T APIENTRY CalcPrivateDeviceSize(D3D12DDI_HADAPTER,
                                              const D3D12DDIARG_CALCPRIVATEDEVICESIZE *arg) {
@@ -392,6 +404,225 @@ static HRESULT APIENTRY Evict(D3D12DDI_HDEVICE, const D3D12DDIARG_EVICT *arg) {
     ResidencyReceipt("measure-d3d12-evict", arg->NumObjects, arg->pObjects);
     return S_OK;
 }
+/* C2a (D3D12-C plan C2): committed heaps and buffers. A heap is one KMD
+ * General-class allocation (render_win32_transport.h, the GPUVA winsys's
+ * class buffer contract: CPU-visible system memory up to 16 MiB for heaps
+ * with a CPU page property, GPU-local otherwise), made resident and mapped
+ * at a 64 KiB-aligned GPU VA in the winsys window [64 KiB, 2^39); it stays
+ * resident until destroyed, so pfnMakeResident/pfnEvict have nothing to
+ * page. A committed buffer is the whole heap. Textures and placed
+ * resources are not implemented yet: their allocation info reports
+ * UINT64_MAX and their creation fails. */
+static constexpr UINT64 kHeapPage = 0x10000ULL;
+static constexpr UINT64 kVaMinimum = 0x10000ULL;
+static constexpr UINT64 kVaLimit = 1ULL << 39;
+static constexpr UINT64 kCpuVisibleMaximum = ADMISSION_WIN32_ALLOCATION_LEGACY_MAX_BYTES;
+struct AgxD3d12Heap {
+    D3DKMT_HANDLE allocation;
+    UINT64 gpuva;
+    UINT64 bytes;
+    BOOL cpu_visible;
+    UINT locks;
+    void *cpu;
+};
+struct AgxD3d12Resource {
+    AgxD3d12Heap *heap;
+    UINT64 gpuva;
+    UINT64 bytes;
+};
+static AgxD3d12Device *DeviceOf(D3D12DDI_HDEVICE handle) {
+    return static_cast<AgxD3d12Device *>(handle.pDrvPrivate);
+}
+static VOID APIENTRY CheckResourceAllocationInfo(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATERESOURCE_0003 *arg,
+                                                 D3D12DDI_RESOURCE_OPTIMIZATION_FLAGS, UINT64, UINT,
+                                                 D3D12DDI_RESOURCE_ALLOCATION_INFO *info) {
+    if (!info) return;
+    memset(info, 0, sizeof(*info));
+    info->ResourceDataAlignment = kHeapPage;
+    info->Layout = D3D12DDI_TL_ROW_MAJOR;
+    if (arg && arg->ResourceType == D3D12DDI_RT_BUFFER && arg->Width && arg->Width <= kVaLimit - kVaMinimum)
+        info->ResourceDataSize = (arg->Width + kHeapPage - 1) & ~(kHeapPage - 1);
+    else
+        info->ResourceDataSize = ~0ULL; /* not implemented: textures (C2b) */
+    const UINT receipt[] = {arg ? static_cast<UINT>(arg->ResourceType) : 0u,
+                            arg ? static_cast<UINT>(arg->Width) : 0u,
+                            static_cast<UINT>(info->ResourceDataSize >> 16)};
+    AdmissionUmdDiagnostic("measure-d3d12-allocation-info", S_OK, receipt, 3);
+}
+static D3D12DDI_HEAP_AND_RESOURCE_SIZES APIENTRY CalcPrivateHeapAndResourceSizes(
+    D3D12DDI_HDEVICE, const D3D12DDIARG_CREATEHEAP_0001 *, const D3D12DDIARG_CREATERESOURCE_0003 *) {
+    return {sizeof(AgxD3d12Heap), sizeof(AgxD3d12Resource)};
+}
+static HRESULT WaitPaging(AgxD3d12Device *device, UINT64 fence) {
+    for (UINT i = 0; fence && device->paging_fence && *device->paging_fence < fence; ++i) {
+        if (i > 4000) return E_FAIL; /* about 4 s */
+        Sleep(1);
+    }
+    return S_OK;
+}
+static HRESULT EnsurePagingQueue(AgxD3d12Device *device) {
+    if (device->paging_queue) return S_OK;
+    if (!device->kernel || !device->kernel->pfnCreatePagingQueueCb) return E_FAIL;
+    D3DDDICB_CREATEPAGINGQUEUE queue = {};
+    queue.Priority = D3DDDI_PAGINGQUEUE_PRIORITY_NORMAL;
+    HRESULT hr = device->kernel->pfnCreatePagingQueueCb(device->runtime.handle, &queue);
+    if (FAILED(hr) || !queue.hPagingQueue || !queue.FenceValueCPUVirtualAddress)
+        return FAILED(hr) ? hr : E_FAIL;
+    device->paging_queue = queue.hPagingQueue;
+    device->paging_fence = static_cast<volatile UINT64 *>(queue.FenceValueCPUVirtualAddress);
+    return S_OK;
+}
+static void ReleaseHeap(AgxD3d12Device *device, AgxD3d12Heap *heap) {
+    if (heap->locks && device->kernel->pfnUnlockCb) {
+        D3DDDICB_UNLOCK unlock = {};
+        unlock.NumAllocations = 1;
+        unlock.phAllocations = &heap->allocation;
+        (void)device->kernel->pfnUnlockCb(device->runtime.handle, &unlock);
+    }
+    if (heap->gpuva && device->kernel->pfnFreeGpuVirtualAddressCb) {
+        D3DDDICB_FREEGPUVIRTUALADDRESS va = {};
+        va.BaseAddress = heap->gpuva;
+        va.Size = heap->bytes;
+        (void)device->kernel->pfnFreeGpuVirtualAddressCb(device->runtime.handle, &va);
+    }
+    if (heap->allocation && device->kernel->pfnDeallocateCb) {
+        D3DDDICB_DEALLOCATE free = {};
+        free.NumAllocations = 1;
+        free.HandleList = &heap->allocation;
+        (void)device->kernel->pfnDeallocateCb(device->runtime.handle, &free);
+    }
+    memset(heap, 0, sizeof(*heap));
+}
+static HRESULT CreateHeap(AgxD3d12Device *device, const D3D12DDIARG_CREATEHEAP_0001 &arg, AgxD3d12Heap *heap) {
+    const D3DDDI_DEVICECALLBACKS *k = device->kernel;
+    memset(heap, 0, sizeof(*heap));
+    heap->cpu_visible = arg.CPUPageProperty != D3D12DDI_CPU_PAGE_PROPERTY_NOT_AVAILABLE;
+    heap->bytes = (arg.ByteSize + kHeapPage - 1) & ~(kHeapPage - 1);
+    if (!adapter_object.info_valid || !k || !k->pfnAllocateCb || !k->pfnReserveGpuVirtualAddressCb ||
+        !k->pfnMapGpuVirtualAddressCb || !k->pfnMakeResidentCb || !arg.ByteSize ||
+        heap->bytes > (heap->cpu_visible ? kCpuVisibleMaximum : kVaLimit - kVaMinimum) || heap->bytes > MAXUINT32)
+        return E_OUTOFMEMORY;
+    HRESULT hr = EnsurePagingQueue(device);
+    if (FAILED(hr)) return hr;
+    ADMISSION_WIN32_ALLOCATION_CREATE create = {};
+    if (!AdmissionAllocationDescribe(static_cast<UINT>(heap->bytes), 1u, 1u,
+                                     ADMISSION_WIN32_ALLOCATION_STAGING_CPUVISIBLE,
+                                     ADMISSION_WIN32_ALLOCATION_FORMAT_A8, 1u, &create.Allocation))
+        return E_INVALIDARG;
+    create.Magic = ADMISSION_WIN32_ALLOCATION_MAGIC;
+    create.Version = ADMISSION_WIN32_ALLOCATION_VERSION;
+    if (!heap->cpu_visible) {
+        create.Version = ADMISSION_WIN32_ALLOCATION_VERSION_LOCAL;
+        create.Allocation.Type = ADMISSION_WIN32_ALLOCATION_GPU_LOCAL;
+        create.Allocation.CpuVisible = 0u;
+    }
+    create.Bytes = sizeof(create);
+    create.ClassId = AgxWin32BufferClassGeneral;
+    create.Flags = AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite | AppleAgxWin32BufferGpuRead |
+                   AppleAgxWin32BufferGpuWrite;
+    D3DDDI_ALLOCATIONINFO info = {};
+    info.pPrivateDriverData = &create;
+    info.PrivateDriverDataSize = sizeof(create);
+    D3DDDICB_ALLOCATE allocate = {};
+    allocate.NumAllocations = 1;
+    allocate.pAllocationInfo = &info;
+    hr = k->pfnAllocateCb(device->runtime.handle, &allocate);
+    heap->allocation = info.hAllocation;
+    if (SUCCEEDED(hr) && !heap->allocation) hr = E_FAIL;
+    if (SUCCEEDED(hr)) {
+        D3DDDI_MAKERESIDENT resident = {};
+        resident.hPagingQueue = device->paging_queue;
+        resident.NumAllocations = 1;
+        resident.AllocationList = &heap->allocation;
+        resident.Flags.MustSucceed = 1;
+        hr = k->pfnMakeResidentCb(device->runtime.handle, &resident);
+        if (hr == E_PENDING) hr = WaitPaging(device, resident.PagingFenceValue);
+    }
+    if (SUCCEEDED(hr)) {
+        D3DDDI_RESERVEGPUVIRTUALADDRESS reserve = {};
+        reserve.MinimumAddress = kVaMinimum;
+        reserve.MaximumAddress = kVaLimit;
+        reserve.Size = heap->bytes;
+        hr = k->pfnReserveGpuVirtualAddressCb(device->runtime.handle, &reserve);
+        heap->gpuva = reserve.VirtualAddress;
+        if (SUCCEEDED(hr) && (heap->gpuva < kVaMinimum || (heap->gpuva & (kHeapPage - 1)) ||
+                              heap->gpuva >= kVaLimit || heap->bytes > kVaLimit - heap->gpuva))
+            hr = E_FAIL;
+    }
+    if (SUCCEEDED(hr)) {
+        D3DDDI_MAPGPUVIRTUALADDRESS map = {};
+        map.hPagingQueue = device->paging_queue;
+        map.BaseAddress = heap->gpuva;
+        map.hAllocation = heap->allocation;
+        map.SizeInPages = heap->bytes >> 12;
+        map.Protection.Write = 1;
+        hr = k->pfnMapGpuVirtualAddressCb(device->runtime.handle, &map);
+        if (SUCCEEDED(hr) || hr == E_PENDING) hr = map.VirtualAddress == heap->gpuva ? WaitPaging(device, map.PagingFenceValue) : E_FAIL;
+    }
+    const UINT receipt[] = {heap->cpu_visible, static_cast<UINT>(heap->bytes >> 16), heap->allocation != 0,
+                            static_cast<UINT>(heap->gpuva >> 16), static_cast<UINT>(heap->gpuva >> 32)};
+    AdmissionUmdDiagnostic("measure-d3d12-heap", hr, receipt, 5);
+    if (FAILED(hr)) ReleaseHeap(device, heap);
+    return hr;
+}
+static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATEHEAP_0001 *heap_arg,
+                                              D3D12DDI_HHEAP heap_handle, D3D12DDI_HRTRESOURCE,
+                                              const D3D12DDIARG_CREATERESOURCE_0003 *resource_arg,
+                                              const D3D12DDI_CLEAR_VALUES *, D3D12DDI_HRESOURCE resource_handle) {
+    AgxD3d12Device *device = DeviceOf(handle);
+    auto *heap = static_cast<AgxD3d12Heap *>(heap_handle.pDrvPrivate);
+    auto *resource = static_cast<AgxD3d12Resource *>(resource_handle.pDrvPrivate);
+    if (!device) return E_INVALIDARG;
+    /* committed buffers only (placed resources and textures: C2b) */
+    if (!heap_arg || !heap || (resource_arg && (!resource || resource_arg->ResourceType != D3D12DDI_RT_BUFFER ||
+                                                resource_arg->Width > heap_arg->ByteSize)))
+        return E_NOTIMPL;
+    HRESULT hr = CreateHeap(device, *heap_arg, heap);
+    if (SUCCEEDED(hr) && resource_arg) {
+        resource->heap = heap;
+        resource->gpuva = heap->gpuva;
+        resource->bytes = resource_arg->Width;
+    }
+    return hr;
+}
+static VOID APIENTRY DestroyHeapAndResource(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP heap_handle,
+                                            D3D12DDI_HRESOURCE resource_handle) {
+    AgxD3d12Device *device = DeviceOf(handle);
+    auto *heap = static_cast<AgxD3d12Heap *>(heap_handle.pDrvPrivate);
+    if (resource_handle.pDrvPrivate) memset(resource_handle.pDrvPrivate, 0, sizeof(AgxD3d12Resource));
+    if (device && heap && heap->allocation) ReleaseHeap(device, heap);
+}
+static HRESULT APIENTRY MapHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP heap_handle, VOID **data) {
+    AgxD3d12Device *device = DeviceOf(handle);
+    auto *heap = static_cast<AgxD3d12Heap *>(heap_handle.pDrvPrivate);
+    if (!device || !heap || !data || !heap->allocation || !heap->cpu_visible || !device->kernel->pfnLockCb)
+        return E_INVALIDARG;
+    if (!heap->locks) {
+        D3DDDICB_LOCK lock = {};
+        lock.hAllocation = heap->allocation;
+        lock.Flags.LockEntire = 1;
+        HRESULT hr = device->kernel->pfnLockCb(device->runtime.handle, &lock);
+        if (FAILED(hr) || !lock.pData) return FAILED(hr) ? hr : E_FAIL;
+        heap->cpu = lock.pData;
+    }
+    ++heap->locks;
+    *data = heap->cpu;
+    return S_OK;
+}
+static VOID APIENTRY UnmapHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP heap_handle) {
+    AgxD3d12Device *device = DeviceOf(handle);
+    auto *heap = static_cast<AgxD3d12Heap *>(heap_handle.pDrvPrivate);
+    if (!device || !heap || !heap->locks || --heap->locks) return;
+    D3DDDICB_UNLOCK unlock = {};
+    unlock.NumAllocations = 1;
+    unlock.phAllocations = &heap->allocation;
+    (void)device->kernel->pfnUnlockCb(device->runtime.handle, &unlock);
+    heap->cpu = nullptr;
+}
+static D3D12DDI_GPU_VIRTUAL_ADDRESS APIENTRY CheckResourceVirtualAddress(D3D12DDI_HDEVICE, D3D12DDI_HRESOURCE handle) {
+    auto *resource = static_cast<AgxD3d12Resource *>(handle.pDrvPrivate);
+    return resource ? resource->gpuva : 0;
+}
 static HRESULT APIENTRY CloseAdapter(D3D12DDI_HADAPTER) {
     AdmissionUmdDiagnostic("d3d12-close-adapter", S_OK, nullptr, 0);
     return S_OK;
@@ -470,11 +701,11 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyObjectSerialization, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyObjectSerialization));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateDeserializedObjectSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateDeserializedObjectSize));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDeserializedObject, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDeserializedObject));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnMapHeap, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnMapHeap));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnUnmapHeap, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnUnmapHeap));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateHeapAndResourceSizes, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateHeapAndResourceSizes));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateHeapAndResource, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateHeapAndResource));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyHeapAndResource, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyHeapAndResource));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnMapHeap, MapHeap);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnUnmapHeap, UnmapHeap);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateHeapAndResourceSizes, CalcPrivateHeapAndResourceSizes);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateHeapAndResource, CreateHeapAndResource);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyHeapAndResource, DestroyHeapAndResource);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnMakeResident, MakeResident);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnEvict, Evict);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateOpenedHeapAndResourceSizes, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateOpenedHeapAndResourceSizes));
@@ -487,8 +718,8 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandSignatureSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandSignatureSize));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandSignature, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandSignature));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandSignature, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyCommandSignature));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckResourceVirtualAddress, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckResourceVirtualAddress));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckResourceAllocationInfo, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckResourceAllocationInfo));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckResourceVirtualAddress, CheckResourceVirtualAddress);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckResourceAllocationInfo, CheckResourceAllocationInfo);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckSubresourceInfo, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckSubresourceInfo));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckExistingResourceAllocationInfo, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckExistingResourceAllocationInfo));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnOfferResources, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnOfferResources));
@@ -600,6 +831,15 @@ extern "C" HRESULT APIENTRY OpenAdapter12(D3D12DDIARG_OPENADAPTER *arg) {
     if (!arg || !arg->pAdapterFuncs) return E_INVALIDARG;
     adapter_object.runtime = arg->hRTAdapter;
     adapter_object.callbacks = arg->pAdapterCallbacks;
+    adapter_object.info_valid = FALSE;
+    if (arg->pAdapterCallbacks && arg->pAdapterCallbacks->pfnQueryAdapterInfoCb) {
+        D3DDDICB_QUERYADAPTERINFO query = {};
+        query.pPrivateDriverData = &adapter_object.info;
+        query.PrivateDriverDataSize = sizeof(adapter_object.info);
+        adapter_object.info_valid =
+            SUCCEEDED(arg->pAdapterCallbacks->pfnQueryAdapterInfoCb(arg->hRTAdapter.handle, &query)) &&
+            AgxWin32DeviceInfoValid(&adapter_object.info);
+    }
     arg->hAdapter.pDrvPrivate = &adapter_object;
     FillD3D12DDI_ADAPTERFUNCS(*arg->pAdapterFuncs);
     return S_OK;

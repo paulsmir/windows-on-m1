@@ -131,8 +131,37 @@ class D3d12AbiGate(unittest.TestCase):
         # allocation; heap creation (which would) is still refused.
         for member in ('pfnMakeResident', 'pfnEvict'):
             self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
-        self.assertIn('AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateHeapAndResource)', source)
         self.assertIn('arg->WaitMask = 0;', source)
+        # C2a: committed heaps are one KMD General-class allocation, resident
+        # and mapped until destroyed (so residency stays a no-op), inside the
+        # GPUVA winsys window; CPU-visible heaps obey the 16 MiB class bound;
+        # textures and placed resources are refused.
+        for member, fn in (('pfnCheckResourceAllocationInfo', 'CheckResourceAllocationInfo'),
+                           ('pfnCalcPrivateHeapAndResourceSizes', 'CalcPrivateHeapAndResourceSizes'),
+                           ('pfnCreateHeapAndResource', 'CreateHeapAndResource'),
+                           ('pfnDestroyHeapAndResource', 'DestroyHeapAndResource'),
+                           ('pfnMapHeap', 'MapHeap'), ('pfnUnmapHeap', 'UnmapHeap'),
+                           ('pfnCheckResourceVirtualAddress', 'CheckResourceVirtualAddress')):
+            self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, fn), source)
+        heap = source[source.index('static HRESULT CreateHeap('):]
+        heap = heap[:heap.index('\n}\n')]
+        self.assertIn('create.ClassId = AgxWin32BufferClassGeneral;', heap)
+        self.assertIn('resident.Flags.MustSucceed = 1;', heap)
+        self.assertLess(heap.index('k->pfnMakeResidentCb(device'), heap.index('k->pfnMapGpuVirtualAddressCb(device'))
+        self.assertIn('map.SizeInPages = heap->bytes >> 12;', heap)
+        self.assertIn('heap->cpu_visible ? kCpuVisibleMaximum', heap)
+        self.assertIn('static constexpr UINT64 kVaMinimum = 0x10000ULL;', source)
+        self.assertIn('static constexpr UINT64 kVaLimit = 1ULL << 39;', source)
+        self.assertIn('static constexpr UINT64 kCpuVisibleMaximum = ADMISSION_WIN32_ALLOCATION_LEGACY_MAX_BYTES;', source)
+        self.assertIn('info->ResourceDataSize = ~0ULL;', source)
+        create = source[source.index('static HRESULT APIENTRY CreateHeapAndResource('):]
+        create = create[:create.index('\n}\n')]
+        self.assertIn('return E_NOTIMPL;', create)
+        self.assertIn('D3D12DDI_RT_BUFFER', create)
+        # the paging queue is created with the first heap, not with the device
+        device = source[source.index('static HRESULT APIENTRY CreateDevice('):]
+        device = device[:device.index('\n}\n')]
+        self.assertNotIn('PagingQueue', device)
         # nothing can bind it yet: every command-list DDI stays fail-closed
         self.assertNotRegex(source, r'AGX_ASSIGN\(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, \w+, (?!AGX_REJECT)')
 
