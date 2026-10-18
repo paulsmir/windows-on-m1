@@ -26,9 +26,28 @@ The eight-core assisted checkpoint reached the lock screen inside the hardware b
 completed bounded load on all processors, remained responsive during independent SSH probes,
 and retained healthy built-in keyboard and Precision Touchpad devices. It is still an
 experimental checkpoint: standalone cold boot, suspend/resume, long-duration thermal stress,
-and GPU acceleration remain separate qualification gates.  The J313 AGX resource
-contract and firmware-only G1 lifecycle now pass their hardware gate, but no render work
-or Windows graphics adapter exists yet.
+and GPU acceleration remain separate qualification gates.
+
+### GPU (Apple AGX) -- experimental
+
+The AGX is a Windows WDDM render adapter (`drivers/apple-agx`): a kernel-mode driver
+that runs the AGX firmware queues, and user-mode drivers that compile and submit work
+through the Asahi Gallium driver from Mesa.
+
+- **Direct3D 11 at feature level 11_0** is the default: the accelerated DWM desktop and
+  D3D11 applications render on the AGX (system GL/D3D smoke suites pass).
+- **OpenGL** through the AGX OpenGL ICD: Counter-Strike 1.6 plays fullscreen (standard
+  benchmark about 43 fps; vsync-capped at 60 Hz without the Steam overlay).
+- **Direct3D 12** (in progress, opt-in profile): device creation at FL 11_0, buffers,
+  textures, compute and graphics pipelines with root signatures and descriptor tables,
+  depth, flip-model swapchain present, placed buffers, UAV clears, query heaps with GPU
+  timestamps, copy/compute queues and ExecuteIndirect pass their hardware checkpoints.
+  DXBC shaders only; DXIL (shader model 6) is the next major step.
+- Not yet: MSAA, video decode/encode, power management, standalone (non-assisted) GPU boot.
+
+Progress and every hardware experiment are recorded in
+[investigation/GPU_CURRENT_STATE.md](investigation/GPU_CURRENT_STATE.md) and
+[investigation/EXPERIMENTS.md](investigation/EXPERIMENTS.md).
 
 Only `j313` is currently supported. This is not a general Apple Silicon Windows installer.
 
