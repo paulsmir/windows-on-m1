@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "scope": "Actual-function PSO tuple publication; same original six EXP1409 cases",
+  "approved_before": "EXP1409_GREEN_RETRY1",
+  "approved_files": {
+    "drivers/apple-agx/d3d12/agx_d3d12_ddi.cpp": "1f450a3a915fc8b1dab01ffa6b0c776b3bee6a11aa9dfe50ff94685a7bc29d47",
+    "drivers/apple-agx/mesa/winsys/agx_d3d12_windows.h": "0c9cc64504e39cfc5e13f07e326afacccbda4205a7b05927b4b68a05138be269",
+    "drivers/apple-agx/mesa/dxbc/dxbc_bindings.h": "d5df6baa41dced92a9519cd6784e72c4687bb01bc6b9e33e4f9b799216933494",
+    "drivers/apple-agx/mesa/dxbc/dxbc_resources.h": "b7b3b4b09b42a3f58526691a862dcc4eac46a3726ab5e7b61388d5442d8bee09",
+    ".local/reference/wdk26100/d3d12umddi.h": "d338e00bbd079cfed42434b5bd8cb9c658238cfe22747fb7d3b7cff3a3cabc28",
+    "tests/d3d12_pso_publication_fixture.cpp": "717e165d3bd7a07db91335a6595c7a3e10397450c596ab99202496ab0a94976d",
+    "tests/d3d12_pso_publication_source.py": "024d5cbeea7369c407d5c999288423fa9df69d872dc2f2cec60ba9bd4edefe06",
+    "tests/test_d3d12_pso_publication.py": "6066d06ff048accbb3c86bf7959bfba6d3c00110a16217c75ff0bdd79f2197e9"
+  },
+  "approved_functions": {
+    "private_PSO": "c4a3a7e1ac4be3cf6c79093e0f51b4acea0a495c083d32f158a1b30b343e3996",
+    "CompileCompute": "2089ba544cce6b818284a7e82be05fbaea3b3d807c137b8112d56cf6ad81658f",
+    "CompileGraphics": "b0acde1d98b7ff568bbbf2b74d97b2faf68c960f2a3336ab58315983f3d1ea91",
+    "DestroyPipelineState": "2d85cd68360cf69bf89d7c324ed8852d4e87241f3492d88664f9609dddde8d75"
+  },
+  "compiler": {
+    "path": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++",
+    "resolved": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang",
+    "sha256": "1590ac950a3d627817d09ade5cb60b2115f17a72182a3141e010b4bcc482a0c9",
+    "version_stdout": "Apple clang version 21.0.0 (clang-2100.3.34.2)\nTarget: arm64-apple-darwin27.0.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin\n",
+    "sdk": "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk",
+    "sdk_settings_sha256": "7b93ad7e534cc4b31c6a4e39d19b5e0288acf2168c2649479a796d1cb51939fb"
+  },
+  "red_evidence": {
+    "experiment": "EXP1409",
+    "before": "7797cdf4",
+    "manifest_sha256": "391704945a99460e2abf3843d75b712284f2824cdec162779c1f615a9f7f2b3b"
+  }
+}

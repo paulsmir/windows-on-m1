@@ -511,6 +511,8 @@ static constexpr UINT kPipelineElements = 16;
 struct AgxD3d12PipelineState {
     D3D12DDIARG_CREATE_PIPELINE_STATE_0001 desc;
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    /* Different recording threads may first use the same PSO concurrently. */
+    SRWLOCK compile_lock;
     AGX_D3D12_COMPUTE compute;
     AGX_D3D12_GRAPHICS graphics;
 #endif
@@ -540,6 +542,9 @@ static HRESULT APIENTRY CreatePipelineState(D3D12DDI_HDEVICE, const D3D12DDIARG_
     auto *pso = arg ? static_cast<AgxD3d12PipelineState *>(arg->hDrvPipelineState.pDrvPrivate) : nullptr;
     if (!pso) return E_INVALIDARG;
     memset(pso, 0, offsetof(AgxD3d12PipelineState, cs));
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    InitializeSRWLock(&pso->compile_lock);
+#endif
     pso->desc = *arg;
     pso->compiled = S_FALSE;
     if (const AgxD3d12Shader *cs = ComputeShaderOf(arg)) {
@@ -2556,7 +2561,12 @@ static VOID APIENTRY IASetIndexBuffer(D3D12DDI_HCOMMANDLIST handle, const D3D12D
     if (!list->index_heap) ListError(list, E_INVALIDARG);
 }
 static HRESULT CompileGraphics(AgxD3d12Device *device, AgxD3d12PipelineState *pso) {
-    if (pso->compiled != S_FALSE) return pso->compiled;
+    AcquireSRWLockExclusive(&pso->compile_lock);
+    if (pso->compiled != S_FALSE) {
+        const HRESULT result = pso->compiled;
+        ReleaseSRWLockExclusive(&pso->compile_lock);
+        return result;
+    }
     AGX_D3D12_OWNER *owner = EnsureOwner(device);
     AGX_D3D12_GRAPHICS_DESC desc = {};
     desc.Vs = pso->vs_dwords ? pso->cs + pso->cs_dwords : nullptr;
@@ -2606,7 +2616,9 @@ static HRESULT CompileGraphics(AgxD3d12Device *device, AgxD3d12PipelineState *ps
         desc.Element[i].Format = pso->element[i].Format;
     }
     pso->compiled = owner && pso->elements <= kPipelineElements ? AgxD3d12OwnerCreateGraphics(owner, &desc, &pso->graphics) : E_FAIL;
-    return pso->compiled;
+    const HRESULT result = pso->compiled;
+    ReleaseSRWLockExclusive(&pso->compile_lock);
+    return result;
 }
 #endif
 /* C5 (investigation/analysis/D3D12-C5-compute.md): compute state. Setting
@@ -2718,10 +2730,17 @@ static VOID APIENTRY SetGraphicsRootUnorderedAccessView(D3D12DDI_HCOMMANDLIST ha
 }
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 static HRESULT CompileCompute(AgxD3d12Device *device, AgxD3d12PipelineState *pso) {
-    if (pso->compiled != S_FALSE) return pso->compiled;
+    AcquireSRWLockExclusive(&pso->compile_lock);
+    if (pso->compiled != S_FALSE) {
+        const HRESULT result = pso->compiled;
+        ReleaseSRWLockExclusive(&pso->compile_lock);
+        return result;
+    }
     AGX_D3D12_OWNER *owner = EnsureOwner(device);
     pso->compiled = owner ? AgxD3d12OwnerCreateCompute(owner, pso->cs, &pso->compute) : E_FAIL;
-    return pso->compiled;
+    const HRESULT result = pso->compiled;
+    ReleaseSRWLockExclusive(&pso->compile_lock);
+    return result;
 }
 #endif
 static VOID APIENTRY DestroyPipelineState(D3D12DDI_HDEVICE handle, D3D12DDI_HPIPELINESTATE pso_handle) {
