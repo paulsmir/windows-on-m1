@@ -205,3 +205,93 @@ Only after equality and ABI/capability review can a driver layout declaration be
 considered. No new hardware checkpoint or recovery action is justified by this
 math-only pass; the existing frozen C21 fresh-device copy/load/store/plane-render
 probe will verify actual admitted behavior after a truthful layout contract exists.
+
+## Bounded pattern-sharing follow-up
+
+A separate original property test now compares the Windows lane's non-stacked0004
+CPU decoder with the AIL oracle and actual `ail_tile` bytes. This closes a narrower
+question than general descriptor admission: can **native Morton tile candidates
+already present in one resource** cover several of that resource's mips?
+
+Files `tests/windows_ail_swizzle_coalescing_fixture.c` and
+`tests/test_windows_ail_swizzle_coalescing.py` do not change the decoder or the
+existing 72-layout comparison. The finite basis is exactly the distinct `(Tx,Ty)`
+pairs returned by actual AIL for that resource. Candidate addresses use that tile's
+bit pattern plus per-mip base, candidate row stride and actual AIL depth stride.
+For every candidate/mip pair, all active XY/byte coordinates are compared with the
+already actual-AIL-validated address accessor. Exhaustive subset search finds the
+minimum number of distinct candidates covering all mips. A separate dynamic program
+finds the minimum number of **contiguous covered mip runs**, so unique pattern
+counts are not silently equated with transition-slot counts. Finally a winning
+cover executes actual AIL tiling and checks every logical byte at every active Z,
+including exact addresses and no alias.
+
+Sharing is possible when added high coordinate bits are unused; counting native
+tile dimensions alone overestimates the descriptor requirement. Sharing can also
+work between adjacent native tile sizes when their block-row arithmetic matches.
+This is coordinate equality, not a general rule based only on allocated extent.
+
+Observed finite-basis outcomes for full mip chains:
+
+| Resource | Bytes/texel | Native pairs | Minimum distinct candidate cover |
+| --- | --- | --- | --- |
+| 4x4x8 | 4 / 8 / 16 | 3 | 1 |
+| 32x32x4 | 4 / 8 / 16 | 6 | 1 |
+| 64x2048x2 | 4 / 8 | 7 | 4 |
+| 64x2048x2 | 16 | 6 | 4 |
+| 2048x64x2 | 4 | 7 | 7 |
+| 2048x64x2 | 8 / 16 | 6 | 6 |
+| 129x129x3 | 4 / 8 / 16 | 7 / 7 / 6 | 1 |
+| 513x257x1 | 4 / 8 / 16 | 7 / 6 / 6 | 1 |
+| 63x65x3 | 4 / 8 / 16 | 6 / 6 / 5 | 2 |
+
+The 2048x64 result excludes only the six-slot fit **in this native-candidate basis**.
+It does not prove that another legal bit pattern, pre-swizzle parameterization or
+Windows-declared layout cannot represent the resource. Conversely the one-pattern
+C21 probe shapes still require the exact Windows ABI/capability review before any
+admission. No shape restriction or capability was added by these tests.
+
+Reproduce:
+
+```
+AGX_LOCAL_TREE=/Users/pavel/public_windows/.local \
+ python3 -m unittest discover -s tests -p test_windows_ail_swizzle_coalescing.py -v
+```
+
+The actual-byte gate covers 27 resources, 207 mips and 24,120,488 bytes across
+B=4/8/16, both elongated orientations, NPOT thresholds, 1x17/17x1 and probe shapes.
+ASan/UBSan is enabled; the run remains below 60 seconds. The temporary log is
+`/tmp/agx-c21-swizzle-coalescing.log`. This is an offline address-equivalence gate,
+not a new hardware experiment or general layout-support claim.
+
+Final follow-up verification: PASS, 1 test in 22.573 seconds with ASan/UBSan.
+The minimum contiguous-run counts equal the minimum distinct-pattern counts for
+all 27 tested resources; specifically 1 for both C21 probe shapes, 4 for
+64x2048x2/B4 and 7 for its transposed 2048x64x2/B4 case.
+
+## Complete native blocks before a bounded two-pattern declaration
+
+Logical-coordinate equality above is insufficient to declare a larger swizzle
+block: a 4096-byte declared tail block at native mip offset128 would overlap
+other physical mips. The next property gate therefore retains each native block
+and checks complete aligned intervals, their disjointness across mips/Z, and
+containment in the pure native extent. It covers square POT sides1..32, every
+depth1..2048, one/two legal requested levels and the two explicit four-byte
+formats R32_UINT/RGBA8. Parent verification passed in0.446s with ASan/UBSan:
+49,150 resources,73,724 mips and62,939,144 disjoint complete native blocks.
+
+These resources need at most two native patterns, so their proposed registry
+uses the legacy two-slot DESC_0003 contract. Microsoft's pinned Parameterized
+Swizzle documentation says such drivers should reject TEXTURE_LAYOUT1; that
+query changes the runtime to six slots/DESC_0004. The test-only nonstacked0004
+math reference has the same primary low-bit mapping needed here; it is not a
+serialized WDK ABI descriptor. Production packed100-byte descriptors, indexed
+GetCaps, allocation/create/existing reflection and real stride metadata remain
+separate implementation gates.
+
+Primary specification: [Microsoft ResourceHeaps.md at71e431fa](https://github.com/microsoft/DirectX-Specs/blob/71e431fa0f713818c6a3a66f49ab0e6732712d15/d3d/ResourceHeaps.md).
+Documentation is CC-BY4.0 and code examples MIT at that repository's pinned
+licenses. These fixtures and decoder are original implementations of the
+observable mathematical contract; no external example code is copied. The
+linked native AIL keeps its existing MIT notices. Stacked flags and ambiguous
+high-constant cases remain explicitly unsupported by the test reference.
