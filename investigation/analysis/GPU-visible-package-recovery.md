@@ -22,7 +22,7 @@ broker, while Windows cannot start the experiment KMD. m1n1/Mu images, bindings,
 interrupt routing and memory map are unchanged.
 
 TRANSLATION: verify J313/admin, exactly one APPL0002, exact staged/bound package,
-service and hashes, explicit DWORD G3Armed/B1Armed zero. Persist service Start4
+service and hashes, proven absent or explicit DWORD-zero G3Armed/B1Armed. Persist service Start4
 through SCM and RegFlushKey plus a new Flush(true) receipt. No hot stop or unload.
 Then ordered restart, wait only for this experiment's launcher, inspect both USB
 endpoints and proxy under the serial guard, launch the hash-verified normal
@@ -37,6 +37,12 @@ collected. Failure stops before the next phase; emergency hidden recovery is
 reserved for a GPU-visible guest that cannot be recovered, with both control
 planes checked before operator action. Recovery ACTUAL must record Code32 and
 final Code28/PackageAbsent evidence; source/syntax checks alone are insufficient.
+
+Arm-source correction: lifecycle.c AdmissionConsumeGpuvaArm requires DWORD1, then
+ZwDeleteValueKey/ZwFlushKey consumes it. Live keys are absent after consumption;
+absence proven by successful key opening/enumeration is disarmed, while read
+errors and nonzero/wrong-type values fail. Receipt preserves Absent versus
+ExplicitZero. Native AST-extracted gate regression covers11 cases.
 
 Verification before use: bash -n on the host; native PowerShell AST parse on the
 builder; static identity-before-mutation/durable-PASS review. No artificial RED

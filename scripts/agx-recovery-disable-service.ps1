@@ -29,14 +29,24 @@ function Assert-Hash([string]$Path, [string]$Expected) {
     return $actual
 }
 function Assert-Disarmed {
-    # Both values must be present DWORD zero. Missing/read-error is uncertain,
-    # not evidence that a possibly armed next launch is safe.
+    # lifecycle.c AdmissionConsumeGpuvaArm deletes and flushes DWORD1 before
+    # GPU access. Proven absence is therefore unarmed, as is explicit DWORD0.
+    # Registry-open/enumeration/type/value read errors remain fail-closed.
     $key = Get-Item -LiteralPath $deviceKey
+    $names = @($key.GetValueNames())
+    $states = [ordered]@{}
     foreach ($name in @('G3Armed', 'B1Armed')) {
-        if ($key.GetValueNames() -notcontains $name -or
-            $key.GetValueKind($name) -ne [Microsoft.Win32.RegistryValueKind]::DWord -or
-            [int64]$key.GetValue($name) -ne 0) { throw "one-shot arm not proven zero: $name" }
+        if ($names -notcontains $name) {
+            $states[$name] = [ordered]@{ Present = $false; Kind = $null; Value = $null; State = 'Absent' }
+            continue
+        }
+        $kind = $key.GetValueKind($name)
+        $value = $key.GetValue($name)
+        if ($kind -ne [Microsoft.Win32.RegistryValueKind]::DWord -or
+            $null -eq $value -or [int64]$value -ne 0) { throw "one-shot arm not proven disarmed: $name" }
+        $states[$name] = [ordered]@{ Present = $true; Kind = 'DWord'; Value = 0; State = 'ExplicitZero' }
     }
+    return $states
 }
 
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -55,7 +65,7 @@ $infHash = Assert-Hash (Join-Path $env:windir "INF\$ExpectedPublishedName") $Exp
 $storeInfHash = Assert-Hash $staged[0].OriginalFileName $ExpectedInfSha256
 $sysHash = Assert-Hash $sys $ExpectedSysSha256
 $umdHash = Assert-Hash $umd $ExpectedUmdSha256
-Assert-Disarmed
+$armsBefore = Assert-Disarmed
 $drivers = @(Get-CimInstance Win32_SystemDriver -Filter "Name='AppleAgxAdmission'")
 if ($drivers.Count -ne 1) { throw 'driver service identity uncertain' }
 $startBefore = [int](Get-ItemProperty -LiteralPath $serviceKey -Name Start).Start
@@ -80,7 +90,9 @@ $result = [ordered]@{
     BeforeBootUtc = $bootUtc; DeviceId = $id; BeforeProblemCode = [int]$devices[0].Problem;
     PublishedName = $ExpectedPublishedName; BoundInf = $bound; BoundService = $boundService;
     InfSha256 = $infHash; StoreInfSha256 = $storeInfHash; SysSha256 = $sysHash; UmdSha256 = $umdHash;
-    G3Armed = 0; B1Armed = 0; StartBefore = $startBefore; StartAfter = $null;
+    G3Armed = $armsBefore.G3Armed.Value; B1Armed = $armsBefore.B1Armed.Value;
+    ArmsBefore = $armsBefore; ArmsBeforeMutation = $null; ArmsAfterMutation = $null;
+    StartBefore = $startBefore; StartAfter = $null;
     ServiceStateBefore = $drivers[0].State; MutationAttempted = $false; ScExitCode = $null;
     SystemHiveFlushed = $false; Verdict = 'PENDING';
     NextRequiredAction = 'Parent performs ordered Windows reboot, GPU-visible normal-profile launch, and verifies Code32 plus service Stopped before exact cleanup';
@@ -91,7 +103,7 @@ try {
     # opened. Never overwrite a previous recovery receipt or an existing file.
     $stream = [IO.FileStream]::new($receiptFile, [IO.FileMode]::CreateNew,
         [IO.FileAccess]::Write, [IO.FileShare]::Read)
-    Assert-Disarmed
+    $result.ArmsBeforeMutation = Assert-Disarmed
     $result.MutationAttempted = $true
     $scOutput = @(& "$env:windir\System32\sc.exe" config $serviceName 'start=' disabled 2>&1 | ForEach-Object { "$_" })
     $result.ScExitCode = $LASTEXITCODE
@@ -99,7 +111,7 @@ try {
     if ($result.ScExitCode -ne 0) { throw "sc config failed: $scOutput" }
     $result.StartAfter = [int](Get-ItemProperty -LiteralPath $serviceKey -Name Start).Start
     if ($result.StartAfter -ne 4) { throw 'service Start is not disabled' }
-    Assert-Disarmed
+    $result.ArmsAfterMutation = Assert-Disarmed
     $flush = [AgxRecoveryRegistryFlush]::RegFlushKey($systemKey.Handle)
     if ($flush -ne 0) { throw "SYSTEM hive flush failed: $flush" }
     $result.SystemHiveFlushed = $true
