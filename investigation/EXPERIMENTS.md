@@ -57719,3 +57719,66 @@ EXP1428 CURRENT_DURABLE_CANONICAL ACTUAL 2026-10-18T20:31:43Z: under6b7c3f98 exa
 EXP1430 BUILD ACTUAL 2026-10-18T20:31:43Z: root31776exit0/PACKAGE1430BUILD_PASS/exact5279/693sources/PDBS_SAVED/ARM64stack13824/WOW6544. Original4nativeartifacts+arm64buildlogpreservedBEFORErepack; manifestf0b18183eabde3e2df47cf719fefabbf4dee7cc463d1c52808ed5c69fbbbd42c. SYS652274984fdce2c06680fe03f0f42c4e25ad9ca20873bbee866f38ae006339cf; UMD094ab0c34773da3f41f860b95ea80c4170449cb4fe0abe8d13f8e0ef68344fe1; INF68fea84c62cbf9b130d9ee2054c0c291283936558038853afedc575c86d6172e; CAT74e6c144a4225e2e3aa311d2745f95709edbc902d826855f7ab1f95fedebb57a. Signing/repack/stage/finalhardwareBEFOREstillnotrun.
 
 EXP1430 HARDWARE_PHASE BEFORE 2026-10-18T20:32:19Z: exactimmutable5279/base939c+ONLY3Downeroneguarddelete, sourcecheckPASS/noC23/C15. Why1426all5realnativeallocationS_OKthenfalsebuffer-onlyVA0OOM; officialtextureGPUVA0+actualhelpercontract andreal11RED3->GREEN0 supportsrepair. Codegatesall5PASS_SHA52a0293d760f79bbe2eb781b100740dfd373d8d2988e6966aee86fd54baa14ca/phasebeforeSHAdae05ea783c8ff98d2ae928be85e1f77d383507533c3b5741802454b49be7895; focused44PASS/full1592exact119baseline10skip/Windows3rc0/nativepackage693/PDB/stack13824-6544. Originalnativeartifactsprotectedf0b18183. Rootownerimplementation757f4802a2d31e4f7a8581df384fb89e2626e6a8 andindependentunlinkedC1582645900cd17e10ed4f032d0e4647a49064eb4a7 committedseparately; onlyowner3Dfunctionin5279. All33OPENreviewindexedunchanged/R47R48R85ACCEPT/historicalothersDEFER. Previous1426finalACTUAL/CHANGES24cd5dbd/RECOVERY_DONE/durability830ada69/inertCode28Absent8CPU. Original54probeec529+pool5574copiedhashMATCH. Rootexplicitmarkerhardware1430.approved written; exactbash /Users/pavel/public_windows/.local/preparation-1430/run1430.sh >scratchpad/run1430.log2>&1. Authorizedpipelinefirstrepack/signhash/stageexactpackage/factoryV2 andappendcommitfullartifactmanifest+recoveryBEFORE, thenonefullownerlaunch. NOsource/GitledgereditsuntilautomaticfullBEFOREcommit appears. Expected54uniqueALLPASS, C21admission/dataoracles; anyfailreceiptsfirst/newID/no rerun. CSenabled/fullregressions+pressure+corpus; exactvisiblecontrollerrollbacknohiddenboot. No parallelguestcontrollers.
+EXP1430 BEFORE 2026-10-18T20:33Z (PACKAGE1430: AppleAgxOpenGL32.dll d51ebf72bc4afc25 (KMD/ARM64 UMD 5279bc4fcdfd04b4c3218da832a0f3e9c5e47bab (3D owner zero-buffer-GPUVA false-failure only; original54steps; no C23/C15/caps) + ICDout61 + WOWUMDout88 1625ffde + INF1235; pinned m1n1 5b857603/Mu361a2134), INF a0750e41, sys 65227498, UMD 094ab0c3, catalog 1c02e391, DriverVer 30.0.1430.0; smoke ddd752e3d31672f4; m1n1 5b857603 (macho 3e5e9f1f, IOMFB_FULL_OWNER=1 AGX_LOCAL_RESERVE_V2=1; 4096-record broker page-table registry, on fa45bc58), Mu 361a2134 J313_EFI-m2f2c.fd (1c7d87d6, reserve ABI v3 on 71c9b2d551), run_uefi.py integration; manifest/hardware-manifest/full-owner1430.sh e0f69499e15d84f3 daea0466feafb654 58c6ce66f4626c30 ; C: free 27.9 GB; recovery rec1430h/recover.sh; probe probe1430.sh (a7ea3c0b692cceec); then the standard benchmark (EXP1184 harness: playnoovl).
+FROZEN EXP1430 PHASE PLAN — root final code-gate approval and launch marker are separately required.
+WHY THIS HYPOTHESIS:
+1. EXP1426 repaired public allocation sizes/alignment for allC21, then all5 failCreateCommittedResource8007000e; prior49 controlsPASS. ActualDDIcreate/EnsureOwner/nativeallocateS_OK precede runtimeerror.
+2. Exact939c ownerTexture3D calls actualbuffer-onlyGPUVA helper; helper target!=PIPE_BUFFER returns0; ownerreleases successfulvolume and returnsE_OUTOFMEMORY. Existing2D permits0. Hoststand-in returnedfakepositiveVA and hid this deterministicerror.
+3. Only3Downerfunction repair proposed, with actualhelper/owner REDGREEN before hardware; no C23/C15/caps/layout/sizing change.
+ATOMIC CONTRACT: none -- one independently observable3D owner admission correction.
+WINDOWS CONTRACT: existing0003 limitedcommitted/default3D resource; public texture object success does not require publicbufferGPUVA. Microsoft ID3D12Resource::GetGPUVirtualAddress https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12resource-getgpuvirtualaddress returns zero for all texture resources. Existing2D and ResourceIdentity/OwnerBufferAllocation use native resource/BO; copies and views retain resource handles. Texture heaps bypass RegisterHeap; public buffer-address lookups remain buffer-only. Primary source helper scene.c263 is unchanged; no invented native addresses.
+AGX/ASAHI CONTRACT: actualresource-create_with_modifiers returns texture/BO; nativeBufferGpuAddress explicitlybuffer-only. Preserve nativephysicaladdresses insideAsahiresource, no helper ABI broadening.
+TRANSLATION: BASE939cf61a78833349e7be51e028fd9ddf82a2e85a plusONLYAgxD3d12OwnerCreateTexture3D change; allowvalidtexturewithoutbufferVA afterprovennativeallocation. Exact5279bc4fcdfd04b4c3218da832a0f3e9c5e47bab ownerSHAe198c606110d9f66af332efa6ea69e8302ad1e2aac700156987829e9f11a5a94. Onlyoneguarddeletion, byteidenticaloutside3Dfunction. Actualhelper+actualconstructors RED11checks3fail->GREEN11zero; controlledquery/factory/map boundaries, genuineallocationNULL stillOOM. Manifestc3c46d581c75edef2c2d161ae458c14734e323c059e7ed9c0b4fb4e8068c65fd; old3Dfunctionequals939c andhardwarecandidate equalsnew3Dfunction. Main1Drepair notincluded.
+WHAT IS STILL UNKNOWN: actualpublicvolumeCreate/copy/SRV/UAV/planeRTV behavior afterownerfalsefailure removed. Hardwareverifies mappedcontract, not guessingcaps.
+Expected: original54probeec529c1282caa21ba967c33757a97a4a5535f03b7777a10bfe3282d6e07e571a; all54uniquePASS. C21A-E nowproceed beyondCreate intoexactcopy/load/store/planeRTV oracles; prior49 unchangedcontrolsPASS. Pool55740036f90c78f8e6a96c33ab4ecebbc0b11360ec87f28aaac72e9d0d96f5d3 remainsindependentcontrol. No C23/noC15publisher/noR1/noadditionalcaps.
+Prerequisites: exact1426source939c reviewed49PASS5C21FAIL_CREATE_OOM, TOOL_END/NEWEXP_DONE; orderedvisibleRECOVERY_DONE/PackageAbsent. No priorALL54PASS requirement and no fakeaccepted1426 marker. Sourcefreeze/codegates/build/sign/PDB/hash/stack gates mustfinish; rootexplicitapprovalrequired. BuildPACKAGE1430PASS/693source/PDBS_SAVED/ARM64stack13824/WOW6544. Exact5279syntax3rc0 manifest184fa3a31bb72b1865f9cba33ddf2a86b814b23c9d778ba936372e5a6e78cc66; focused44PASS10.827s. Fullsuite final comparison is an explicit codegate that must be recorded before launch. Nativeoriginal4+buildlog preservedPRErepack: preservationf0b18183eabde3e2df47cf719fefabbf4dee7cc463d1c52808ed5c69fbbbd42c. Hardware final signed/staged hashes plus manifest/profile/recovery-sourceJSON are appended and committed by authorized pipeline BEFORE actual full-ownerlaunch. This text alone grants no dispatch.
+Controls: inheritedSMOKE73PASS+knownMSAA-a000r; fl11cs-a/x/debug; GL/internalGL/CS userwindowguard; corpus64/4expectedcreatefail/nohang/pixeldiff, DWM0, pool5workersfreshforeignpressure, intentionalLONGJOB only.
+Recovery: currentnormalGPU-visibleinertAPPL0002; FactoryV2exactvisiblewrapper/sourceJSON pinnedbeforelaunch. Rootsolecontroller; evidencefirstthenexactservice-disable/orderedreboot/Code32removal/orderednormalCode28Absent. No hiddenboot/no secondcontroller. Preserveoriginalnative4artifacts+receipt BEFORErepack. NewEXP1430 paths only; active1426 untouched.
+
+REVIEW: current REVIEW.md SHA753bdfe638d6171954875a5fc9a58c09761999ffcab89b9d216f566c7e1300c5; same33OPENindexeddecisions from.local/c23-review-before-commit/review.md a4c2b28f apply. R47 ACCEPT immutablefirmwarebuildprofile; R48 ACCEPT soleport/launcherowner; R85 ACCEPT source/profile/nativeABI/artifactcompatibility gates. Historicalother30 DEFER individuallyasindexed unchanged, thissingletextureconstructorpredicate changesno admission/scheduler/power/GPUVApolicy/firmware/lifecycle.
+
+FINAL OFFLINE APPROVAL: actualhelper11RED3->GREEN0/focused44PASS10.827s/full1592tests215.739s exact119oldbaseline(noadded/noremoved,10skips), full64384265c73b29f76d42fd2addcbbd886bbe8f2129e216d93bfe95d0ca60bbaf. Mainimplementation757f4802a2d31e4f7a8581df384fb89e2626e6a8; C15separate82645900cd17e10ed4f032d0e4647a49064eb4a7 EXCLUDED. Exact5279threeWindowsprofiles0; package original preservationf0b18183/source693/PDB/stack13824-6544. CodegatesJSON SHA52a0293d760f79bbe2eb781b100740dfd373d8d2988e6966aee86fd54baa14ca. Previous1426ACTUAL/CHANGES24cd5dbd plus visibleRECOVERY_DONE/Code28AbsentnoService8CPU/durability830ada69. No packagecarryover. Finalsign/stage/recovery-sourcehashmanifest will be recorded by pipeline beforeactualboot.
+PACKAGE_ARTIFACTS:
+a0750e41a91eb8f79cbcb34b8de197d2b8a6b268781600a40144dcd81caebd98  /Users/pavel/public_windows/.local/experiments/EXP1430-d3d12-volume-owner-address/AppleAgxRenderAdmission.inf
+652274984fdce2c06680fe03f0f42c4e25ad9ca20873bbee866f38ae006339cf  /Users/pavel/public_windows/.local/experiments/EXP1430-d3d12-volume-owner-address/AppleAgxRenderAdmission.sys
+094ab0c34773da3f41f860b95ea80c4170449cb4fe0abe8d13f8e0ef68344fe1  /Users/pavel/public_windows/.local/experiments/EXP1430-d3d12-volume-owner-address/AppleAgxRenderAdmissionUmd.dll
+1c02e39197111e88416ae808166594e206be6d61dd6e1a9522ccb1ad2833c5c4  /Users/pavel/public_windows/.local/experiments/EXP1430-d3d12-volume-owner-address/appleagxrenderadmission.cat
+d51ebf72bc4afc255c902039d89c2268ca77f11d7f514344f8aececc59f0a379  /Users/pavel/public_windows/.local/experiments/EXP1430-d3d12-volume-owner-address/AppleAgxOpenGL32.dll
+1625ffde0685757457143f6eb8cb31f60aae0b98c5cf91cd5cdbc01accd7e7ac  /Users/pavel/public_windows/.local/experiments/EXP1430-d3d12-volume-owner-address/AppleAgxRenderAdmissionUmd32.dll
+e0f69499e15d84f397be55f7c26ec736edd8f3e5b821ac107208814c59967369  /Users/pavel/public_windows/.local/experiments/EXP1430-d3d12-volume-owner-address/manifest.json
+daea0466feafb6548871dba439fea1c89508769a2268e79f8cbc0613d12ef947  /Users/pavel/public_windows/.local/experiments/EXP1430-d3d12-volume-owner-address/hardware-manifest.json
+e5babbb73b900d14b2928633b3ce658a3ac302ef9821f87660e940a6a2b59f32  /Users/pavel/public_windows/.local/experiments/EXP1430-d3d12-volume-owner-address/kmd-build-receipt.json
+58c6ce66f4626c303a2cd0e258a64b74eae8d0e2482d70a8b2337ef528a902e4  /Users/pavel/public_windows/.local/experiments/EXP1430-d3d12-volume-owner-address/full-owner1430.sh
+SOURCE_ARTIFACTS:
+96b3158a398281e80279b79a77c19c842c47b324e716f4207ae6980523794943  /Users/pavel/public_windows/.local/experiments/EXP1430-d3d12-volume-owner-address/source.zip
+127e732b663efd4a53e98b01ede862488ed072bcc71ec8764bb3a4baade5f3e3  /Users/pavel/public_windows/.local/experiments/EXP1430-d3d12-volume-owner-address/source-manifest.json
+RECOVERY SOURCE:
+{
+  "ExperimentDirectory": "/Volumes/pwdev/public_windows/.local/experiments/EXP1430-d3d12-volume-owner-address",
+  "ExperimentId": "1430",
+  "Files": {
+    "DisableServiceHelper": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recovery-disable-service.ps1",
+      "Sha256": "7ab9f020ece3157b34091778366de7fd9058c3c65d9f8758bf94470e7ec28bcb"
+    },
+    "ExactLauncherSelector": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-select-exact-launcher.py",
+      "Sha256": "bed44fabe7e97270d8d1399e2140fff60b730252b9971570211fbb4a0a15e2aa"
+    },
+    "HostShell": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recover-visible.sh",
+      "Sha256": "38909f549c08ac3f0f88d1ce8737b4a2556c7441b91121723e27246503d2be10"
+    },
+    "LegacyHidden": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1430-d3d12-volume-owner-address/evidence/rec1430h/recover.sh.legacy-hidden",
+      "Sha256": "67565beec4523991e28e979d79c898228f1dd874c6b2cc92c7bfc29ee86603b2"
+    },
+    "Wrapper": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1430-d3d12-volume-owner-address/evidence/rec1430h/recover.sh",
+      "Sha256": "52132cf5047014534d6010d1658d813ab716a88b111066baee4804dab0c6954a"
+    }
+  },
+  "RecoveryMode": "GpuVisibleServiceDisabledOrderedReboot",
+  "Version": 2,
+  "Worktree": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler"
+}
