@@ -3,6 +3,10 @@
 
 This only writes host artifacts. It never launches Windows, executes a recovery
 script, contacts SSH, or changes the immutable legacy recovery bytes.
+
+Read-only template selection verifies historical wrapper/legacy bytes. Recorded
+HostShell/helper hashes are provenance; current mutable source may legitimately
+differ. Normal installation still refuses same-ID source drift.
 """
 from __future__ import annotations
 
@@ -85,6 +89,70 @@ def create_exclusive(path: Path, data: bytes, mode: int) -> None:
     os.chmod(path, mode)
 
 
+def wrapper_bytes(host: Path, experiment: Path, number: str) -> bytes:
+    return ("#!/bin/bash\n# Installed by agx-install-visible-recovery.py; ordinary GPU-visible recovery.\n"
+            f"exec /bin/bash -- {quote(str(host))} {quote(str(experiment))} {quote(number)}\n").encode()
+
+
+def legacy_template(experiment_dir: Path, experiment_id: str, worktree: Path | None = None) -> Path:
+    """Read-only selection for cloning a previous generated recovery template."""
+    if not re.fullmatch(r"[1-9][0-9]*", experiment_id):
+        raise RecoveryInstallError("experiment ID must be a positive decimal number")
+    experiment = experiment_dir.resolve(strict=True)
+    if not experiment.is_dir() or not re.fullmatch(rf"EXP{experiment_id}-.+", experiment.name):
+        raise RecoveryInstallError("experiment directory/ID mismatch")
+    root = (worktree or Path(__file__).resolve().parents[1]).resolve(strict=True)
+    recovery = experiment / "evidence" / f"rec{experiment_id}h"
+    if not recovery.is_dir() or recovery.is_symlink():
+        raise RecoveryInstallError("expected recovery directory absent or symlinked")
+    script = recovery / "recover.sh"
+    backup = recovery / "recover.sh.legacy-hidden"
+    manifest = recovery / "visible-recovery-source.json"
+    original = read_regular(script)
+    backup_data = read_regular(backup) if backup.exists() or backup.is_symlink() else None
+    host = root / "scripts/agx-recover-visible.sh"
+    helper = root / "scripts/agx-recovery-disable-service.ps1"
+    if original == wrapper_bytes(host, experiment, experiment_id):
+        if backup_data is None:
+            raise RecoveryInstallError("visible wrapper has no preserved legacy original")
+        assert_legacy(backup_data, experiment, experiment_id)
+        selected = backup
+    else:
+        assert_legacy(original, experiment, experiment_id)
+        if backup_data is not None and backup_data != original:
+            raise RecoveryInstallError("existing legacy backup differs")
+        selected = script
+    if manifest.exists() or manifest.is_symlink():
+        try:
+            source = json.loads(read_regular(manifest))
+        except (UnicodeError, json.JSONDecodeError) as exc:
+            raise RecoveryInstallError("invalid visible recovery source manifest") from exc
+        if not isinstance(source, dict) or source.get("Version") != 1 or \
+                source.get("ExperimentId") != experiment_id or \
+                source.get("ExperimentDirectory") != str(experiment) or \
+                source.get("Worktree") != str(root) or \
+                source.get("RecoveryMode") != "GpuVisibleServiceDisabledOrderedReboot":
+            raise RecoveryInstallError("source manifest experiment/worktree identity mismatch")
+        files = source.get("Files")
+        expected = {"Wrapper": script, "LegacyHidden": backup,
+                    "HostShell": host, "DisableServiceHelper": helper}
+        if not isinstance(files, dict) or set(files) != set(expected):
+            raise RecoveryInstallError("source manifest artifact set mismatch")
+        for name, path in expected.items():
+            record = files[name]
+            if (not isinstance(record, dict) or record.get("Path") != str(path)
+                    or not isinstance(record.get("Sha256"), str)
+                    or not re.fullmatch(r"[0-9a-f]{64}", record["Sha256"])):
+                raise RecoveryInstallError(f"source manifest artifact identity mismatch: {name}")
+            # Wrapper/legacy are immutable experiment-local bytes. Recorded
+            # host/helper hashes remain historical provenance: do not compare
+            # them to today's mutable source merely to clone a safe template.
+            # Normal install() deliberately retains its stricter source rule.
+            if name in ("Wrapper", "LegacyHidden") and record["Sha256"] != digest(read_regular(path)):
+                raise RecoveryInstallError(f"source manifest artifact digest mismatch: {name}")
+    return selected
+
+
 def install(experiment_dir: Path, experiment_id: str, worktree: Path | None = None) -> dict:
     if not re.fullmatch(r"[1-9][0-9]*", experiment_id):
         raise RecoveryInstallError("experiment ID must be a positive decimal number")
@@ -102,8 +170,7 @@ def install(experiment_dir: Path, experiment_id: str, worktree: Path | None = No
     backup = recovery / "recover.sh.legacy-hidden"
     manifest = recovery / "visible-recovery-source.json"
     original = read_regular(script)
-    wrapper = ("#!/bin/bash\n# Installed by agx-install-visible-recovery.py; ordinary GPU-visible recovery.\n"
-               f"exec /bin/bash -- {quote(str(host))} {quote(str(experiment))} {quote(experiment_id)}\n").encode()
+    wrapper = wrapper_bytes(host, experiment, experiment_id)
     backup_bytes = read_regular(backup) if backup.exists() or backup.is_symlink() else None
     manifest_bytes = read_regular(manifest) if manifest.exists() or manifest.is_symlink() else None
 
@@ -152,8 +219,13 @@ def main() -> int:
     parser.add_argument("experiment_dir", type=Path)
     parser.add_argument("experiment_id", help="numeric experiment ID, e.g. 1381")
     parser.add_argument("--worktree", type=Path)
+    parser.add_argument("--legacy-template-only", action="store_true",
+                        help="read-only: print the validated previous legacy template path")
     args = parser.parse_args()
     try:
+        if args.legacy_template_only:
+            print(legacy_template(args.experiment_dir, args.experiment_id, args.worktree))
+            return 0
         result = install(args.experiment_dir, args.experiment_id, args.worktree)
     except (RecoveryInstallError, OSError) as exc:
         parser.exit(2, f"VISIBLE_RECOVERY_INSTALL_REFUSED: {exc}\n")

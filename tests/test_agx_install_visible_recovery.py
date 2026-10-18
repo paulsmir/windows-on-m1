@@ -3,6 +3,8 @@ import importlib.util
 import json
 from pathlib import Path
 import shlex
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -106,6 +108,55 @@ waitcycle; nohup $R/launch-hidden.sh > $R/launch.log 2>&1 & sshup
         with self.assertRaises(FACTORY.RecoveryInstallError): self.install()
         self.assertEqual(self.manifest.read_bytes(), good_manifest)
         self.assertEqual(self.backup.read_bytes(), self.legacy)
+
+    def test_legacy_template_only_selects_original_without_writes(self):
+        before = [(p.relative_to(self.rec), p.read_bytes(), p.stat().st_mtime_ns)
+                  for p in self.rec.iterdir()]
+        selected = FACTORY.legacy_template(self.experiment, "9999", self.worktree)
+        self.assertEqual(selected, self.script.resolve())
+        self.assertEqual(before, [(p.relative_to(self.rec), p.read_bytes(), p.stat().st_mtime_ns)
+                                 for p in self.rec.iterdir()])
+
+    def test_legacy_template_only_selects_visible_backup_and_validates_hashes(self):
+        self.install()
+        before = [(p, p.read_bytes(), p.stat().st_mtime_ns) for p in self.rec.iterdir()]
+        self.assertEqual(FACTORY.legacy_template(self.experiment, "9999", self.worktree), self.backup.resolve())
+        self.assertEqual(before, [(p, p.read_bytes(), p.stat().st_mtime_ns) for p in self.rec.iterdir()])
+        # Remains structurally plausible: only immutable source hash detects it.
+        self.backup.write_bytes(self.legacy + b"# tampered after installation\n")
+        with self.assertRaises(FACTORY.RecoveryInstallError):
+            FACTORY.legacy_template(self.experiment, "9999", self.worktree)
+
+    def test_legacy_template_identity_refusal_and_historical_source_provenance(self):
+        self.install()
+        with self.assertRaises(FACTORY.RecoveryInstallError):
+            FACTORY.legacy_template(self.experiment, "9998", self.worktree)
+        self.backup.write_bytes(self.legacy.replace(b"cleanup9999", b"cleanup9998"))
+        with self.assertRaises(FACTORY.RecoveryInstallError):
+            FACTORY.legacy_template(self.experiment, "9999", self.worktree)
+        self.backup.unlink(); target = self.rec / "outside.sh"; target.write_bytes(self.legacy)
+        self.backup.symlink_to(target)
+        with self.assertRaises(FACTORY.RecoveryInstallError):
+            FACTORY.legacy_template(self.experiment, "9999", self.worktree)
+        self.backup.unlink(); self.backup.write_bytes(self.legacy)
+        before_manifest = self.manifest.read_bytes()
+        (self.worktree / "scripts/agx-recovery-disable-service.ps1").write_text("# changed source\n")
+        (self.worktree / "scripts/agx-recover-visible.sh").write_text("#!/bin/bash\n# new workflow revision\n")
+        self.assertEqual(FACTORY.legacy_template(self.experiment, "9999", self.worktree), self.backup.resolve())
+        self.assertEqual(self.manifest.read_bytes(), before_manifest)
+        # Historical selection is safe; same-run source-manifest replacement
+        # still constitutes an overwrite and must remain refused.
+        with self.assertRaises(FACTORY.RecoveryInstallError): self.install()
+
+    def test_legacy_template_cli_prints_only_path_and_never_writes(self):
+        self.install()
+        before = [(p, p.read_bytes(), p.stat().st_mtime_ns) for p in self.rec.iterdir()]
+        run = subprocess.run([sys.executable, str(ROOT / "scripts/agx-install-visible-recovery.py"),
+            str(self.experiment), "9999", "--worktree", str(self.worktree), "--legacy-template-only"],
+            capture_output=True, text=True)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertEqual(run.stdout, str(self.backup.resolve()) + "\n")
+        self.assertEqual(before, [(p, p.read_bytes(), p.stat().st_mtime_ns) for p in self.rec.iterdir()])
 
     def test_other_experiment_or_symlinked_original_refuses(self):
         with self.assertRaises(FACTORY.RecoveryInstallError): FACTORY.install(self.experiment, "9998", self.worktree)
