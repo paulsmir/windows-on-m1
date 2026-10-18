@@ -1490,7 +1490,7 @@ static_assert(kUavSlots == AGX_D3D12_UAV_SLOTS, "UAV slots of the owner");
  * dispatch's copy of the root DWORDs; the copy keeps 3 DWORDs of slack so
  * a 16-byte-rounded read stays inside it). */
 static constexpr UINT kCbSlots = 14; /* D3D12_COMMONSHADER_CONSTANT_BUFFER_HW_SLOT_COUNT */
-static constexpr UINT kSrvSlots = 16; /* C5d: buffer SRVs t0..t15 */
+static constexpr UINT kSrvSlots = 128; /* Tier1 SRVs t0..t127, matching Asahi sampler views */
 static constexpr UINT kSamplerSlots = 16; /* C6e: s0..s15 */
 static constexpr UINT kRootArguments = 64; /* a root signature costs at most 64 DWORDs */
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER

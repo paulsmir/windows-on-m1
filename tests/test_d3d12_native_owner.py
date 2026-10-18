@@ -183,6 +183,35 @@ int main() {
             result = subprocess.run([str(exe)], capture_output=True)
             self.assertEqual(result.returncode, 0, 'indirect draw skipped because direct counts are zero')
 
+    def test_tier1_srv_upper_bound_is_usable(self):
+        # EXP1378 follow-up: legal root SRV t127 was refused with reason5.
+        # Execute the real ResolveRoot bound predicate, not a second planner.
+        ddi = (ROOT / 'drivers/apple-agx/d3d12/agx_d3d12_ddi.cpp').read_text()
+        limit = re.search(r'kSrvSlots = (\d+)', ddi)
+        owner_limit = re.search(r'#define AGX_D3D12_SRV_SLOTS (\d+)',
+                               OWNER.with_suffix('.h').read_text())
+        self.assertEqual(limit.group(1), owner_limit.group(1))
+        resolve = body(ddi, 'static UINT ResolveRoot(')
+        predicate = re.search(r'if \((p.shader_register >= kSrvSlots)\) return 5u;', resolve)
+        self.assertIsNotNone(predicate)
+        source = r"""
+static const unsigned kSrvSlots = LIMIT;
+struct Parameter { unsigned shader_register; };
+unsigned refused(unsigned reg) { Parameter p = {reg}; if (PREDICATE) return 5u; return 0u; }
+int main() {
+    for (unsigned reg = 0; reg < 128; ++reg) if (refused(reg)) return 1;
+    return refused(128) == 5u && refused(0xffffffffu) == 5u ? 0 : 2;
+}
+""".replace('LIMIT', limit.group(1)).replace('PREDICATE', predicate.group(1))
+        compiler = shutil.which('clang++') or shutil.which('c++')
+        self.assertIsNotNone(compiler)
+        with tempfile.TemporaryDirectory() as tmp:
+            cpp, exe = Path(tmp) / 'slots.cpp', Path(tmp) / 'slots'
+            cpp.write_text(source)
+            subprocess.run([compiler, str(cpp), '-o', str(exe)], check=True, capture_output=True)
+            result = subprocess.run([str(exe)], capture_output=True)
+            self.assertEqual(result.returncode, 0, 'Tier1 root SRV t16..t127 must be usable')
+
     def test_teardown_order(self):
         text = OWNER.read_text()
         destroy = body(text, 'extern "C" HRESULT AgxD3d12OwnerDestroy(')

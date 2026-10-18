@@ -85,7 +85,7 @@ typedef struct {
 /* C5d: a raw/structured buffer SRV t#, bound as an R32_UINT texel buffer
  * (the dxbc_to_nir convention: one 32-bit word per texel); Bytes 0 = to the
  * buffer end. C9: a typed buffer SRV has its DXGI Format (Texture 0). */
-#define AGX_D3D12_SRV_SLOTS 16
+#define AGX_D3D12_SRV_SLOTS 128
 typedef struct {
   const AGX_D3D12_BUFFER *Buffer;
   unsigned long long Offset;
