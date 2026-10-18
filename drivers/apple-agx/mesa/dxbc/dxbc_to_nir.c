@@ -2862,6 +2862,12 @@ dxbc_to_nir_hs(const struct dxbc_program *program,
 }
 
 void
+dxbc_nir_lower_fragment_position(nir_shader *nir)
+{
+   NIR_PASS(_, nir, nir_lower_wpos_center);
+}
+
+void
 dxbc_nir_finalize(nir_shader *nir)
 {
    bool progress;

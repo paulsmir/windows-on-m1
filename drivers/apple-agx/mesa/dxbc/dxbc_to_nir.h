@@ -66,6 +66,11 @@ dxbc_to_nir_hs(const struct dxbc_program *program,
  * standard optimization loop; the shader info is gathered and validated. */
 void dxbc_nir_finalize(struct nir_shader *nir);
 
+/* Asahi's integer pixel-coordinate lowering requires frontend fragment-center
+ * normalization. Call exactly once on a fresh fragment shader, before handing
+ * it to Asahi. Kept explicit: other frontends may already normalize position. */
+void dxbc_nir_lower_fragment_position(struct nir_shader *nir);
+
 /* Parse a tokenized program (version and length tokens first), translate
  * and finalize it.  NULL when the program is malformed (error->opcode is
  * 0x10000 | the dxbc_status) or not handled yet. */
