@@ -1,53 +1,104 @@
-# Active AGX D3D12 loop — 2026-10-18T17:54Z
+# AGX D3D12 current state — 2026-10-18T19:09Z
 
-Worktree `/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler`, branch `integration/ad04-windows-compiler`. Russian reports; autonomous loop; preserve dirtymu. Read skill/AGENTS/CLAUDE method for commands. Older state history is preserved in Git and EXPERIMENTS; this file is the current compact snapshot.
+Worktree /Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler,
+branch integration/ad04-windows-compiler. Russian updates. Root owns Git/ledgers/
+guest/launcher. Preserve dirty mu. Read skill and CLAUDE_WORKING_METHOD for tools.
 
-## EXP1407 completed; RECOVERY DONE; EXP1414 HOLD
+## PRIORITY: EXP1424 ACTIVE, never restart it
 
-- EXP1404 accepted47PASS/C19A-D4096bad0/C20A-Bexact/alloldcontrols; finalhostmanifest2364bec91fb8786540daf7bb0abad3dd037dc9ecf5eb847db0c63f8b4a6c2fd2. RECOVERY_DONE normalGPUvisibleAbsent/Code28/noService8CPU,AfterBoot17:10:25.9287030Z/manifestE10B3F8E2095BB4A006D729FCC13438F1368B0C71E75591A670649C1BE08FEAD. PostrunUSBdisconnectrecoveredwithsamefullowneronlyforcleanup,NOreprobe/hidden/physicalaction. ACTUAL9c5e2598/acceptedmarkerwritten.
-- EXP1407 hardwareCOMPLETE NEWEXP_DONE; no rerun. Source3ae2c234783bb8a653fbda9f1f1d04d5136ff618/693files/BUILD_PASS/PDB/stack13824. BEFORE288ec860. Rootwrapper63609/newexp1407.log/chain1407/watchdog1407; factoryV2/stage23hashesPASS; D3D12slot17:40:22Z:prior47PASS, C21A-E FAIL at allocation query SizeInBytes=-65536/alignment65536 beforeCreate; noGPUvolumeexecution. kmd_private_pool investigates actual0003query/admission ONLY. CSactuallySKIPPED17:17underuserwindow. RECOVERY_DONE root23346exit0/rec1407.log; normalCode28/PackageAbsent/noService8CPU/AfterBoot17:47:02.9812110Z/manifestF13D30D1EBB910873EF93691685ABCC86310A79021226B523C9437374FD3D2C5. Finalhostmanifest7c97eba503449e3ab916ffb8c9755b296c393c44d9d9da483a4fd41c27d6e6b2/2261files. ACTUALthiscommit/C21REJECTED. NormalEXP950launcherownsrecoveryguest. No1407.acceptedmarker; next1419BUILDdiagnostic+C22, not1414. ACTUAL83eca840; rootexp1407.reviewed marker exactknown47PASS/5FAIL, noacceptedmarker.
-- EXP1414 BUILT/PDB/stack13824, source1f6c6a0a9436298faaaec6b339b695bdb2690d1f=1407+ONLYPSOfixfc58a816/probe086e58ee;2filedriverguard+fullblobs. Mainprobeec529c1282caa21ba967c33757a97a4a5535f03b7777a10bfe3282d6e07e571a/54steps(C22A/B). HOLD:inheritsfailedC21, doNOTlaunch/accept1407; requiresnewcausalfix/source/newID orseparateacceptedbaseline; no packagecarryover. Scriptsinventorybb903449.
-- RootC22actualfunctionsREDlostobjects->GREEN6PASS/3Windowssyntax/full1581same119baseline. C15runtimeR1payload/framingprovedinnewruntime-r1-contract.md; no productionDXIL/R1/SM6caps. Externalallocator1413/Context1415/parseownership1416/Buildervoid1417GREENnarrowonly,9archivesunchanged. Comprehensiveexceptiongraph+zero-native-cacheR1foundation preparationinparallel.
+- Supervisor/user required immediate next hardware after1419; offline DXIL must
+  not block bench. EXP1424_START19:08:17Z; root session64461 (run1424.sh).
+  Scratchpad run1424/chain1424/newexp1424/watchdog1424.log.
+- Directory .local/experiments/EXP1424-d3d12-volume-sparse-estimate.
+  Immutable build source507812fbe921f27d411eb521df0f30f83985076e =
+  exact1419source542c688816dbfec539742d342cff13a80bac7415 + ONLYowner CPP.
+  OwnerSHA18d902b7bfa9f719c7695f68fc5e168b61d0fca2a341dac543625f20e877d5a4.
+  Sole fix removes false SparseTableSizeBytes nonzero refusal in texture3d_layout.
+- Implementation366ca2ed/ledger e335fe1b. Real nativequery+actualowner functional
+  RED5 -> GREEN5, exact5sizes/mips/strides/nonzeroPotentialSparse/noBO/device;
+  9focusedPASS/3Windowsrc0; full1583tests210.099s exact119oldbaseline signatures.
+  Two serialguard failures are known environmental difference vs117baseline.
+  Full log34d2e83fa61bf120cd5956ae8d33ea0fa5db76cf2ec6109cd1077a36daa0cff9.
+- BUILD1424_DONE/PACKAGEPASS/source693/PDB/ARM64stack13824/WOW6544.
+  Native original4artifactSHAs verified/preserved native-build-evidence.
+  Original54probe ec529c1282caa21ba967c33757a97a4a5535f03b7777a10bfe3282d6e07e571a.
+  Sourceprobe unchanged2db6352e; DDI75a934b9 diagnostics retained.
+- Hardware BEFORE9f52f568; stageHASHES_MATCH23/PASS/FactoryV2PASS.
+  Current launch underway; no extra guest commands/proxy. Wait TOOL_d3d12-on_END
+  and NEWEXP_DONE, parse ALL54 tags espC21A-E/C22A-B/regressions.
+- ExpectedALL54PASS. C21 GPU stages have not yet been demonstrated. Fix does NOT
+  add sparse resources/extraBOs/caps/layout changes. AIL potential sparse table
+  size is computed forALLimages/excludedsize_B; ordinarytemplateflags0.
+- Exactrec1424h/recover.sh SHA40d07eebdf90fcfd9c2807d4adce97bd29801cdc54391e0fced9f1d5a630b005.
+  After evidence, use controller alone toRECOVERY_DONE/normalCode28/Absent/
+  noService8CPU. FactoryV2 host38909f54/helper7ab9f020/selectorbed44fab unchanged.
+  Never pre-reboot before controller service-disarm guard; no ordinary hiddenboot.
+- Finalprep inventory83eaf7d5ad78def570b014e0207229bfed3c148f8bfcbb38a08bd230acfef616.
+  Previous1419 reviewed marker exists; no acceptedC21 marker. CS allowed again.
 
-## Accepted boundaries
+## EXP1419 COMPLETE / recorded / removed
 
-- C19 half-pixel center correction679bbdce verified by EXP1403 numeric/EXP1408 actual opaque helper and EXP1404 C19A-D4096pixels bad0. Apply once ONLY fresh DXBC fragment shader before native create_fs_state. VS, GL/TGSI/D3D11 unchanged.
-- C20 typed extents validated EXP1404 exact C20A/B outputs. C21 typed-volume EXP1407 FAILbeforeCreate at publicallocation query; causepending, not a renderfailure.
-- KMD foreign-cache policy0c458548 validated again1404: five workersPASS/fresh request pressure0->1/global1005->998/freed7x64KiB from foreignDWM/privateallocation succeeds. No proven lost-unit leak. No silent pool-capacity increase.
-- EXP1404 regression baseline:73SMOKEPASS+knownMSAA-a000r only;fl11cs-a/x/debugPASS;GL52.8/internalGL59.7fps;corpus414each/createfail64+4/nohangs-pixeldiffs;83emptyDWMfaultfiles. One intentional LONGJOB kind4 recovery only. Done-file numeric exit missing: positive tags/oracles are evidence, never infer exit0.
-- EXP1404 CS44.383fps alreadycompleted16:13--16:15Z before user steering; preserve actualreceipt. 1407 CSskipped17:17Z with exactreason; deadline17:22Z passed, future1414 dispatch resumes automatically.
+- ACTUAL/CHANGES40f958d8; source542c6888/probeec529c12, 54unique=49PASS+5C21FAIL.
+  C22A/B hardwarePASS:2recordingthreads/CloseS_OK/fence1, compute2x16384exact,
+  graphics2x4096exact/512color/tailpoison. No generic context/reentry guarantee.
+- C21A-E allocation failed beforeCreate;10records5pairs reason3/E_NOTIMPL.
+  Actualvalidinputs/native fields zero in publicowner output. Source and real
+  composed regression identify false owner sparse-estimate guard.
+- 73SMOKEPASS+knownMSAA-a000r, fl11cs-a/x/debugPASS, GL51.7/internalGL59.6,
+  CS3771/81.476=46.283fps, corpus414each/createfail64+4/zero hangs-pixeldiffs,
+  DWM0, KMD_POOL5workersPASS/foreign_reclaim1. OnlyintentionalLONGJOB recovery.
+- RECOVERY_DONE18:31Z; BeforeBoot18:28:22.6782180Z/AfterBoot18:30:21.8223260Z.
+  DurabilityDC1FEADA0CCEA259FC5EE023637CF70F6AF5B02187A5925BDE72093C7CCB7113.
+  Finalmanifest2263files9f44881931618edb4fc34213cc3e09a0b7c217a90dbd4f21958a75233e7e3e6f.
+  No hiddenboot/physicalaction. Source-only sparse independentreview c5c0d8e6.
+- OlderacceptedC19/C20 in1404, KMDforeign-cachepolicy0c458548 validatedagain;
+  no provenlost-unit leak. 1407C21failed/recovered/recorded83eca840.
+  Neverlaunchold1414(PSOfixnowvalidated1419); it was built but superseded.
 
-## C15 requestedlicense task complete; CPU prep only
+## C15 parallel CPU work, must not delay1424
 
-- Userrequestedlicense review+plan committed75632532/processrowea9cc8b0; selecteddxil-spirv8434b063 runtimeYESwithMIT/BSD/Khronosnotices/pins, optionalclosuresnotautomaticallyapproved. No externalimplementationcopiedtoGit.
--1395Windows9libsPASS/manifestlive-logexceptionpreserved;1396ownedadapter e0aa4ca4PASSonekey;1397originalSM6fixture4b3cf49a/DXILb22b71c9/5namespacekeys andindependentvectorsPASS.
--1398mixedmapactualNIR c6248a6bPASS:CBVUBO0/SRVtxf0-1/UAVSSBO0-1/actualfreeze120perms/reject-valid+legacy;verdictf2905124/SPV24e3df26.1401semanticsce3798acPASSfixedIR384words/346stores/3negative346each/postIRunchanged;verdict7e9e1482. No generalinterpreter/GPU/ownerproof.
--1402originalC11WindowsARM64/MDstaticlink9libsPASS;hostmanifestdbab8c3c/47original+21dist+52hostfilesverified;EXENOTRUNuntil1400.1399stoppedbeforecompiler atDirectoryInfo pathguard; typefixactualASTregressionPASS; original1399preserved.
-- Runtimegate6952c182: exactlocalD3D12Core26100.9549SHA052241d7, constructorversiontableordinals0003=1/0010=2/0011=3;modelinitordinal<3skips1012andretains5.1,consumerclamps.0011firsteligibleforTHISruntime (notuniversalnorm). receiptmanifest19d60ad6.
-- MatchedPDB1412+typedproducer/adapter/framingproof nowinD3D12-C15-runtime-r1-contract.md; oldstaticpass193949d5preserved. NoNULLinheritguess. OwnedCPUlibrarydesign ea8e86b8 isdesignonly; OOM allocatorfailurepolicy andownerconcurrency/reentry remainunclosed. No R1/SM6cap/productionlink change.
+- License+plan75632532/processrowea9cc8b0 selected8434b0639fb2a48ce13aac08a420ecce5d23df0e
+  runtime83TUs/9archives/197inputs MIT/BSD/Khronosnotices conditions. No external
+  implementation copiedGit. Current driverCORE0003/SM5.1; no DXIL/R1/SM6caps.
+- Zero-native-cache6callbackfoundation c18d74e3/host59/Windows2compiler0;
+  referencevalidator be917753/host81/Windows2compiler0/16B offsets0,8, unlinked.
+- ExactR1runtime payload+PROGRAMframing d8747afd; tableproof2590f409:
+  ordinals2/3 ->COREfeature2/3 ->list0003(408B)/queue0001(56B);
+  tableNum=listindex beforeappend, notversion. MainR1typed/ownership gates open.
+- Composite production candidate outsideGit .local/c15-composite-ownership:
+  pristine8434+12fileRAIIpatchdf3470cac9939a1acf0f0f11982970971d409476fe1a3141ccd8b7cae17bb863.
+  183sites/180migrated3owned, independentownership+197/83/9closure review.
+  Old170audit preserved; actualoldscope171 plus12extra selected-graph sites.
+  Original19noexceptfacade; wrappererrorsREPORTED vsprofileUNSUPPORTED fixed.
+- EXP1421 HOSTretry3 PASS bysm51: freezea6d657e9e0ad09d4992d20c302faef097041c995b2e232cb03630022a448c325,
+  /Users/pavel/public_windows/.local/c15-composite-host-1421-retry3;11rc0/
+  83upstreamCpp+5projectTUs/9fresharchives/19facadeexports/twonominalfixturesPASS.
+  Artifact408entries0464799f955896302f2da304686aa206dd3ff27f5cd7e68640c9f3d9d9d789e6;
+  outerreceipt9bf83747b8618680bf5e072646a06dcfaeb2da84d429c5871c840f4697180f4b.
+  MixedSPV2152B24e3df26411f940c71e4dc2322d38226cb3c1d50725e07d27b890aa9b2b307d4
+  EXACT1398host validatedinput. Mapb2d13468feae64f3bd6f1901c8fadf5ab6a0a040ec865333d2db0cb20d575d40.
+  Root still needs verify/indexACTUAL; optionalreplay pinned1406/1398/1401tools
+  requiresfreshBEFORE, no recompilation. Earlierattempts preserved: outputpath,
+  two exactASan/SDKtool-input pins, thenhostlink-isysroot fixes, notfunctionalRED.
+- Windows composite NOTYETAUTHORIZED: all83+facade need effectiveEHs/EHc-
+  (final/EHsc-), MD, rsp/CL/_CL_ parser. ExternalpurePythonhelper22testPREP
+  .local/c15-msvc-eh-parser-prep/before-inputs.json4b3687471b15b23be2fb4bd115ecb0a467b5791b34dd3f23008af34cd1b33df2.
+  Tests unrun; do not use old nominalregex ascompleteWindowsproof.
+- Fault sweep NOTAUTHORIZED/UNRUN. Original15filedbdca33bPREP preserved in
+  .local/c15-composite-fault-prep-v1-frozen. Currentpartialamendment has sticky
+  flags/parser/symbolvalidator drafts, NOnewfreeze. Oldmanifestnotauthoritative
+  forchangedtree. Agentturnauto-security-reviewfailed; doNOTclaimamendmentcomplete
+  orfullOOM. No projection/compiler/injectedexecution occurred.
+- EXP1422routinghypothesis STOPPED/noRED/compiler/codefix: sameLUIDordinary
+  CreateDevice singleton, proposedA/Bprobe invalid; GSrefusal occursRecordDraw.
+  ProspectiveR1ownership/errorpolicyonly, primaryfindings1e3ffe2a.
 
-## Paths and rules
+## Control paths
 
-Scratchpad `/private/tmp/claude-502/-Volumes-pwdev-public-windows/8c9ead37-29d6-4c63-9bb0-35c6eb850f40/scratchpad`; backups `/Users/pavel/public_windows/.local/scratchpad-tools-backup`; XP `/Users/pavel/public_windows/.local/experiments`.
-BoundedSSH: perl alarm25 + `/Users/pavel/public_windows/.local/tandem/airssh -o ConnectTimeout=10 'echo up'`. Builder pauls@192.168.1.24/keywindows_builder. Do not issueparallelguestcommands duringrecovery. NeverrequestphysicalbeforeboundedSSH+USB/owner/proxy checks. Before/ACTUAL/CHANGES+exacthash/sign/stackgates eachrun; no attribution. Fullsuite last1561same119baselinefailures; newerfocusedtestsPASS, neverclaimwholesuiteGREEN.
-
-## User Steam window (2026-10-18)
-Until17:22Z epoch1792344120 SKIP CS benchmark only, reasonexact `CS benchmark skipped: Steam account in use by the user`; do notscoreabsence/launchfailureasregression. SMOKE/GL/corpus/DWM unchanged. Use scripts/agx-cs-benchmark-window.sh at CS step for1407andfuturetemplates; automaticallyresumesaftercutoff. Active1404 alreadycompletedCS16:13:02--16:15:24Z beforeinstruction44.383fps/processstoppedbyharness; preservehistoricalreceipt,no rerun, do notclaimitwasneverlaunched. Active1404scriptnotedited.
-
-## C15 current offline gates
-
-- EXP1418 original unlinked ZERO_NATIVE_CACHE six typed0010 callbacks. No production registration/model/caps/PSO-layout changes. Hostactualmodule59checksPASS/6actualWDKdeclarations/ASanUBSan; hostmanifest24eba427e7bdf3672676ed1536dcba2937746b24bf360870bab941b0f3d7f1fb. ActualWindowsARM64object+ABI gate BEFOREc6d5dfa6, actualgatePASS exactfrozenPS1fe2e5a71/manifestef304105;2nativecompilerexit0/object6437B/COFF0xaa64/SHA117553279866ac147cae3b13d9d45b0b6f7c6e7739bdcf011e7780f30fa6522d/23pinsindependentlyverified/manifest58d66143a6d2d739005ad5ee426b3eef13e0018c0915683f377461f2686b4033. No link/resolverdefinitions/guestexecution. IntegrationrequiresstabledeviceidentityuntilALLchildlibrariesdestroyed/realPSOownership/ordinaryR1wrappers.
-- Fullsuite1418 complete1582tests205.648s/68fail51error8skip/exact119baseline unchanged; logf1010e1a. Optinhost59checksandWindows2compiler0 alreadyPASS. Source/H/CPP remain frozen.
-- External dxil-spirv OOM candidates1413allocator/1415Context/1416parse-ownership/1417Buildervoid eachnarrowRED->GREEN only. No sourcecache or9archive changes, no fullOOMclaim. sm51_parser prepares ONE coherent pristine8434 productionpatch/allBuilder+SPIRVModuleownership policy; no full83TUbuild untilnewBEFORE. Selectedcompiler-fullgraph exception/noexceptfacade/fail-at-N gates remainopen.
-
-## EXP1419 BUILT; RUNNING; next C15 CPU work
-
-- BUILD1419PASS session90921exit0/logscratchpadbuild1419.log, BEFORE8d2aa949; source542c688816dbfec539742d342cff13a80bac7415=exact1f6c6a0a+ONLYDDI queryreceipts75a934b93814953da194da4540cacad91a83e14497dbef0e2e53cff760472172. Refrefs/agx-experiments/EXP1419. Snapshot693line observed; PACKAGEPASS/PDB/ARM64stack13824/WOW6544; original4hashesverified/receiptSHAa43874597e7d5e40fa044bf49cee8c00b81c8069532268956df27ad2dc670a00/native-build-evidence saved. HardwareACTIVE root82666/run1419.log/chain1419.log/newexp1419.log/watchdog1419.log. BEFOREda9d0cd3;stage23hashesPASS/FactoryV2PASS/fullownerdesktopalive. Do NOT restart; awaitTOOL_d3d12-on_END+NEWEXP_DONE thenparseC21pairedreason/C22A-B andregressions/exactrec1419h. FreshXP EXP1419-d3d12-volume-query-publication. Inventoryb11010141fcdbbc397f4450c55c10af04bfea2e6defd489ace905a2ffb8f0dc2. Exactunchanged54step probeec529c12.
-- GoalC21 diagnostic reason/input/output/actualqueryHRESULT distinguishes preDDI/domain/layout/alignment/nativequery/runtimepostquery; native/layout/admission/caps unchanged. IndependentC22A/B firstusePSOpublishlockfix testedactualfunctions6PASS, Windows3rc0/full1582same119baseline. Expected47oldPASS+C22A/BPASS; known5C21allocationFAIL allowed asbaseline, NOT acceptedfeature. ATOMIC CONTRACT none--separate steps. Neverlaunch1414 inheritedbadC21withoutdiagnostic. Normalrecover1407DONE/packageAbsent; no guestharnessyet.
-- C15 EXP1420 originalLibraryReference CPUvalidator: externalhost81PASS then EXACTsameH8f48/CPPade13 adoptedunlinkedrepo+durabletests; durablehost81PASS BEFORE3cb01b22/manifesta2fff91c. Fullsuite1420complete1582/117fail-error-signatures/noADDEDvs119baseline; unrelated2serialguardtests passed/nochange/no fixclaim. Helper+81checkdurabletests committedbe917753; logc4a2daba. Native1420BEFOREf23e53d3/scripts822d247f/exact2argvb544dcc7; nativegatePASS2compiler0/COFF7132B/SHA b80443919f9c73c6ff8cddbbca8d6ef2fc75e7349f297238fefc454f1f3831e3/24filemanifestfe23aab1 rootverified, freshbuilderdirectory, no link/guest/lifetimefix/R1admission.
-- ExactR1commandtablemappingPROVED/2590f409:ordinals2/3 ->COREfeature2/3 ->explicitselectorslist408/queue56 ->WDK0003/0001; FilltableNumlistindexbeforeappend. Source10inputs12outputsverified; nextactualtypedcanarygate remains. sm51_parser actuallyRESUMEDbyfollowup17:56(previoussendmessagesdidnotwakecompletedagent);ONEcoherentexternalcompilerownership productionpatchPREP:77Instructionguards/memberFunctionRAII/owningBlockfactory/80SPIRVModule+8Buildermigrations done; inventorycorrected171vsold170(extra*entrynewBlockmisfiltered), preservecorrection, no compileyet; no full83TUcompile untilnewBEFORE. Existing C15runtime exactR1shader/PSOpayload/programframing proved, zeroCachecallbacks isolated1418PASS/c18d74e3; no productionCORE/R1/SM6 change.
-
-## C15 current composite compiler / stopped hypothesis
-
-- EXP1421reservedforcoherentcompiler build, NOTyetcompiled. sm51_parser READY4820d4a3/productionpatchd7bca4de reviewedindependently(c18ownership/kmdclosure197inputs83TUs9targets); noextraownershipblocker, fullOOMnotproved. CombinedamendmentINPROGRESS: CAdapterstage/count/name failuretaxonomy, finalMSVC/EHsc- forall83+facade (officialMS /EHc assumptionmustclear), concretefreshbuild/compile/linkrunner/tool/header/oldarchiveguards. PreserveoldREADY+bytes. NeedNEWfreeze/review/rootBEFORE beforeconfigure/build; fail-at-Noverlay stillPLANONLY. No externalimplementationcopiedGit/sourcecache/old9archivesunchanged.
-- EXP1422sourceproposalSTOPPED NOcompiler/RED/native/productionedit/hardware. Globalcallbackrisk notconfirmedreachablecurrentprofile; ordinarysameLUIDCreateDevice singleton and GSrefusal occursRecordDraw, invalidatesproposedA/Bprobe. SourceSTOP42bfa7ac/primary1e3ffe2a; do notresumewithfabricatedDDIsequence orrefactorwithoutnewlegalcontractevidence.
+SP /private/tmp/claude-502/-Volumes-pwdev-public-windows/8c9ead37-29d6-4c63-9bb0-35c6eb850f40/scratchpad.
+XP /Users/pavel/public_windows/.local/experiments; T /Users/pavel/public_windows/.local/tandem.
+BoundedSSH perl alarm25 +T/airssh-oConnectTimeout10. UseT/airscp, no guessedkeys.
+Builder pauls@192.168.1.24/key /Users/pavel/.ssh/windows_builder.
+USB L41/L43; no rawproxy withactiveowner. Checkbothplanes beforephysicalrequest.
+No assistant attribution. Ledgerbefore/actual everybuild/run/recovery; CHANGES
+fullcommit/statusimplemented unlesshardwareevidence; test_change_ledger.py.
