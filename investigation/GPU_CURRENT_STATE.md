@@ -6,38 +6,36 @@ ledgers, guest, launcher. Preserve dirty mu. Never restart active hardware.
 Skill /Users/pavel/.codex/skills/agx-d3d12-loop/SKILL.md and
 investigation/CLAUDE_WORKING_METHOD.md govern tools. CS allowed again.
 
-## EXP1426 ACTIVE, alignment ONLY; do not touch guest/proxy
+## EXP1426 ACTIVE, D3D12 completed; wait full harness, do NOT touch guest
 
-- Rootchain session90538; START19:52:34Z. PREP.local/preparation-1426-alignment.
-  SP chain1426-alignment/newexp1426-alignment/watchdog1426/run1426.log.
-  Exact source939cf61a78833349e7be51e028fd9ddf82a2e85a, parent1424source507812fb.
-  ONE DDI filefb162cd3fbf1eb1fdc4c4cc145e1fe5dc885c3b6d8e8d8c96f22c8ccb5b927ea;
-  sixlines=fourassignments+2comments: absent AdditionalDataHeaderAlignment=1,
-  AdditionalDataAlignment=1 inquery+existing callbacks. MetadataSizesremain0.
-  No C23/C15, owner/caps/swizzle/KMD/firmware/recovery change.
-- WHY:1424DDIquerysuccess butpublicinvalid; exactsavedpublicruntimeworker1e8a60/84
-  computesalignment-1 and rejects0 asoverflow evenforzero-sizedregions.
-  1 isourminimumtruthfulbytealignment, NOTMicrosoftnormativequote.
-- Implementation35c6af14/CHANGES3b8cae91. ActualexactWDKcallbacks RED/GREEN
-  baseline240checks72->0/currentC23324checks96->0/all4compile0/20pinsunchanged.
-  Durablefocused14PASS10.028s; finalfull1589/213.465s EXACT119oldbaseline,
-  noadded/removed, SHA2161111224ce824e66819c62d0aa2f29b0e98377f9bb857a166870b955a080e2.
-  Windows3rc0/manifest0bd8969f. PACKAGE1426PASS/PDB/693source/ARM64stack13824/WOW6544.
-- Originalnative4artifacts+buildlog protected BEFORErepack inX/native-build-evidence:
-  receipt2956fd68/preservation405209c3bb156b1f6a453ecd400166f69b51c2e7d15ce887deea786b819aa9d6.
-  Rootindependentlyverifiedall5files. Source/PDBhashesinHARDWARE_PHASEBEFOREe05280af.
-- Original54probeec529c1282caa21ba967c33757a97a4a5535f03b7777a10bfe3282d6e07e571a;
-  pool55740036f90c78f8e6a96c33ab4ecebbc0b11360ec87f28aaac72e9d0d96f5d3.
-  Exactmarkerhardware1426.approved written. PREPfd0bba8b/codegates16431e58.
-- FinalhardwareBEFORE auto committedfe125086; rootledgereditsnowallowed. Active
-  fullregressions19:52:34Z onward, latestMSAAsteps20:18Z, DWM0/alive.
-  Finalcoherent30.0.1426.0/SYS6956d919/UMD8d8422d1/INF336cb65d/CAT4b3d4a1f.
-  DoNOTrestart/ad-hocguestSSH. Pipeline90538owns bench untilNEWEXP_DONE.
-- ExpectedALL54PASS, especiallyC21A-E publicallocation/Create/data/pixels.
-  Do notclaimownerfixprovesGPU. WaitTOOL_d3d12-on_END ANDNEWEXP_DONE, inspectALLtags/
-  regressions, thenFactoryV2rec1426h -> RECOVERY_DONE/Code28AbsentnoService8CPU.
-  FactoryDIR-then-ID order: python3 scripts/agx-install-visible-recovery.py "$DIR" "$ID" --worktree "$W".
-  No pre-reboot; controllerownsStart4durability/normalCode32/exactcleanup/secondrestart.
+- Source939cf61a78833349e7be51e028fd9ddf82a2e85a/package30.0.1426.0.
+  Pipeline90538 active/newexp1426-alignment.log; TOOL_d3d12-on_END20:20Z,
+  NEWEXP_DONE notyet. LatestLONGJOBintentionalhang903ms/kind4, DWM0.
+- 54unique tags=49PASS+5C21FAIL. C14A/C22PASS. C21A/B/C/Epublicallocation
+  now131072/alignment65536; D65536/alignment65536. Alignmentfix35c6af14
+  provenatpublicqueryboundary. AllfiveCreateCommittedResource now8007000e.
+- PROVEN source+receiptcause: volumeDDIcreate invoked; EnsureOwnerPASS,
+  nativeallocateS_OK(4x131072,D65536), ordinarymapE_PENDING, then runtimeOOM.
+  OwnerCreateTexture3D rejectsGpuVa0 from AgxWin32AsahiBufferGpuAddress;
+  actualscene.c263 returns0 for ANY nonPIPE_BUFFER. Nativehelpercorrect;
+  textureconstructorfalsefailure. Existing2D permits0; publicMicrosoftGetGPUVA
+  docs specify alltextureGPUVA0. Currentoldofflinefixture alwaysfakepositive
+  VA foranytarget hidbug. Nextregression mustcomposeactualhelper+actualowner.
+- EXP1427built6df+57probe C23 MUSTNOTlaunch: prerequisiteALL54PASS unmet;
+  its1DownerhassamefalsezeroVAguard. Offlinegatescompleted/PASS_ROOT_APPROVED
+  only (beforecbbb7d5e/codegates4c4a326b), NOlaunchmarkerwritten. Preservepackage.
+- NEXT hardwareEXP1430: frozenBASE939c +ONLYowner3DfalsezeroVAfailurefix,
+  old54probeec529c/pool5574; noC23/C15. Agentkmdprivatepipelineprep, sm51
+  privateactualhelper+ownerRED/GREENproposal. Rootaloneapplies/commits/builds.
+  After1430verdict, updatedC23candidatecanfollow; nodependentfeaturebundle.
+- CS46.772fps/3771frames80.626s; GL52.8fps/internalGL59.7fps. CurrentMSAAknown
+  only, kmd-poolPASSworkers5/foreign_reclaim1, fl11cs-a/xPASS. Finalcorpuspending.
+- AfterNEWEXP_DONE collectfullresults, idempotentFactoryV2 andrec1426h controller
+  ->RECOVERY_DONE/Code28AbsentnoService8CPU. NOpre-reboot/guestcommandsoutside
+  controller; factoryDIRthenID. Wrapper130ecae1b98c23a09f9162b5cf879292791ba743cea2ab954d2fdaed241149e6.
+- FinalhardwareBEFOREfe125086. SYS6956d919/UMD8d8422d1/INF336cb65d/CAT4b3d4a1f.
+  Originalnative4+log protectedmanifest405209c3bb156b1f6a453ecd400166f69b51c2e7d15ce887deea786b819aa9d6.
+  Full1589 exact119baseline noadded/syntax3rc0/stack13824-6544 proofretained.
 
 ## EXP1424 COMPLETE / ACTUAL-CHANGES221e30cb / recovery done
 
@@ -61,7 +59,7 @@ investigation/CLAUDE_WORKING_METHOD.md govern tools. CS allowed again.
   immutable939csourcewasrecordedbeforebuild, latefullentryf6e6283f notmislabelled.
   Rootorchestrationnowchecksreturncodebeforedependentactions. No hiddenboot/reset.
 
-## C23 software complete, hardware1427 NEXT after1426 verdict
+## C23 software prepared; hardware1427 HELD, next requires zeroVA fix
 
 - Implementationeb34f8ee/CHANGES94dfbe30; noteD3D12-C23-texture1d.md.
   LimitedcommittedDEFAULT/nonarray1D width1..16384/legalmips/R32UINT-RGBA8,
@@ -81,8 +79,8 @@ investigation/CLAUDE_WORKING_METHOD.md govern tools. CS allowed again.
   receipt07e1cef95b5ab9c6fb8d32bf8684d1629494f42834a7a2f34983794d0ba5854f.
   Exact6dfWindows3rc0 attempt2 manifest14d121124e4b35e49500e5c439d8f27a6658fbcd08ee43021a1f8f4f36526173;
   attempt1quoteparseFAILpreserved. ACTUAL48f17a5c. Prep.local/preparation-1427
-  codegatesandbeforeDRAFT/rootapprovalPENDING; noautolaunchbefore1426ALL54PASS
-  andRECOVERY_DONE. Agentkmdread-onlyreviewingremainingfields.
+  codegates+beforeofflineREADY e1f7ddfb; launchblockedbecause1426notALL54PASS.
+  Neverlaunchunchanged6df; same1DzeroVAfalsefailurefound. Preserveoldartifacts.
 
 ## C15 current CPU result and next independent software work
 
@@ -122,14 +120,17 @@ investigation/CLAUDE_WORKING_METHOD.md govern tools. CS allowed again.
   actualparser+zeroCache/CShaderownedstorage trustedspans only. PREP8784255c;
   ACTUAL64ff5e54/artifactmanifest497794f1b5ad22ca9348267200ac2b70aafd963cd09b58e8aa88a81d4c622347.
   Coreprivate.local/c15-shader-owned-core-prep, notadopted. Nativeobjectgate
-  freshcurrentSDK/toolclosure+durablemoduleproposal agentc18; NOCLauthorizedyet.
+  Native3objectgateBEFORE8f900653/V2approval9c11acb2 isRUNNINGagentc18session76681;
+  rawboundedPython/actualSDK/ARM64COFF/3096native+1800runtimepins, no link/run.
   No DDIpolicy/rootlease/registration/IRvalidation/SM6productionlinkclaim.
 - C24arrayssourcepolicy: canonicalPIPE_TEXTURE_1D_ARRAYevenarray_size1;
   nonarraylogicalview single_layer_view=true ->actualsampler1D/PBE2D;
   arraylogical falseevenselectedcount1 ->both2D_ARRAY, matchesactualNIRwrite.
   No targetmutation/arrays>=2hack. Privatecount1CPUgatePREP68e4484, 4argv
   includingactualagx_state.c+u_helpers.c uncompiled; agentsm51reviewingSDKflags.
-  No compiler/FXC/NIR/implementationauthorizedyet.
+  EXP1429firstcompileSTOPmissingxf86drm; remaining3argvUNRUN/37+6958pinsstable.
+  Receiptb8f3d17e; one sourcepass8ee8f70b foundnoexistingapprovedlibdrmheader.
+  No guessedshims/newdeps/retry; smalleractualsource-isolationproposaldeferred.
 - FaultsweepNOTAUTHORIZED/UNRUN. Prioragentauto-security-reviewrejected task;
   originalPREP preserved, partialamendmentnotfrozen. DoNOTretryidenticalflagged
   task/routearoundrestriction; no fullOOM/helper-loop/arbitraryshaderclaim.
