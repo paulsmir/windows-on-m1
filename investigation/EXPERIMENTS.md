@@ -57374,3 +57374,5 @@ RECOVERY SOURCE:
   "Version": 2,
   "Worktree": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler"
 }
+
+EXP1420 FULLSUITE/IMPLEMENTATION ACTUAL 2026-10-18T17:59:10Z:1582tests205.202s/67fail50errors8skip/117signatures/NOADDEDvs119baseline. Removed2unrelatedserialguardbusyport-locktests passedwithoutsourcechange; preservecomparison, NOserialguardfixclaim. LogSHA c4a2daba8e82723645164b9d5685889c4e3d185ea90864bf79c3f0b5cdacec62. All15durableinputpinsrehashedunchangedbeforenoteappend. Originalhelper+durabletests committedbe917753/unlinked/noR1caps. PositiveexactR1tablefamily sourceproof2590f409/contractSHAb1707c7e/10primaryinputs12outputpinsverified; no hardware action forproof.

@@ -267,3 +267,9 @@ justified for this runtime by implementation evidence; it is not a universal
 claim derived from header age. Structural0003 program-body compatibility alone
 does not expose SM6. Keep caps/negotiation unchanged until the complete selected
 typed adapters, library and compiler/owner contract are implemented and verified.
+
+## 2026-10-18 concrete R1 CPU prerequisites
+
+License decision and selected closure remain unchanged. Isolated original zero-native-cache six-callback foundation c18d74e3 and explicit same-device LibraryReference validator be917753 passed actual-module host59/81 checks and realWindows ARM64 object/ABI gates; they remain unlinked. See D3D12-C15-zero-native-cache-foundation.md and D3D12-C15-zero-cache-reference-validator.md.
+
+Positive exact-runtime table proof2590f409 closes the earlier table-family uncertainty for inspected D3D12Core26100.9549: ordinal2/3 uses list0003(408B) and queue0001(56B), with tableNum a list index, not version. See D3D12-C15-r1-command-tables.md. Actual typed Fill/canary/index0-1/HRTTABLE identity tests, per-device ownership/error routing/child teardown, typed ordinary R1 constructors and complete checked compiler exception/failure policy remain admission gates. No R1/SM6 advertisement or production DXIL linkage follows solely from the CPU proofs.
