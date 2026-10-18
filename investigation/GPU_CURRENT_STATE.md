@@ -1,3 +1,39 @@
+# CURRENT URGENT BOUNDARY — EXP1436 completed, recovery admission stopped
+
+2026-10-18 UTC (local date may be19). Continue in Russian; do not stop loop.
+EXP1436 TOOL_d3d12-on_END ANDNEWEXP_DONE present; root68717finished0.
+53unique non-E tags ALLPASS; C21C bothreadbacks bad_bytes0/padding64960,
+C14A/C22AB/C7A PASS. KnownC21E uncompleted/same23Bubfe stderr/numericexitblank.
+73SMOKEPASS+knownMSAA-a000r;fl11cs-a/x/debugPASS; poolworkers5foreign_reclaim1PASS;
+GL52.9/internal59.6/CS47.232; corpus414each64/4createfail/nohangpixeldiff; DWM0;
+onlyintentionalLONGJOBkind4/902ms. Resultsnapshot49783a0d266c67a96ee2bf8cfe30ede64a7dd2062af187b92c5cd96e7b2f105c.
+
+RECOVERY ATTEMPT1 STOP3 atselector expectedoneowner found0 BEFOREguestmutation.
+WindowsSSHup/USB41+43present/no live run_uefi/full-owner/watchdog. No physicalask.
+Host exit causeunknown; nohupharnesshasnokill. Correctlayer is HOST recovery.
+Originalhost38909... andlog/sourceJSON preservedinXP/evidence/rec1436h/host-before-no-owner.sh,
+attempt1-owner-missing.log, attempt1-visible-recovery-source.json.
+AgentkmdpreparingSOURCEONLY optionalAGX_RECOVERY_ALLOW_NO_OWNER=1 selection/waitdown
+patch+realBashfunctiontests; no sharedwrite/executionyet. Rootwillreview/apply/test/
+preregisternewattempt, preserving exactpackagehash checks/GPU-visible normalrecovery.
+Do not weaken selector globally/fakePID/reboot manually/launchanothercontroller.
+Currentwrapperd0a975620e87e325dc26071264d9adde58c15a39a0aa512faf57f199900d09f5
+execs mutablehost script; sourceJSONHostSHA ishistoricalprovenance. DO NOTregenerate
+same-IDfactory afterhostchange (immutablemanifestrefuses); legacy-template-only
+read-onlyvalidationpermitsnewhostprovenance andfuture1438factorywillrecordnewhash.
+RootRECOVERY_BEFORE177afe86; actual/finalCHANGESstillpendingRECOVERY_DONE.
+
+C15newprovider adoptedDIRTY/UNCOMMITTED: header/cpp+fixture/helper/optintest/nativeAPI
+consumer +doc. HOST79+old114467/424029PASS, CURRENT1PASS2.010s/4argv/62pins,
+native4objectsW4WX0/4906pins/AA64 manifest a4dab6d275105d7a4923dc68c098c9d79819951b0af8af8ceb90b3023b40f239.
+Full1599/216.630s exact119baseline(68fail51errors12skip)/postpinsMATCH,
+SHA3aa2d28e373cd87c7949e9f3d66e1c1753d08353483446253d74e8014a4014ae.
+Needrecord+commitprovider/CHANGES whenrecoveryworkpermits; no productionlink/Winpolicy.
+sm51completedSOURCEONLYrootencoderplan .local/c15-root-compatibility-source-plan,
+noimplementationyet. Root canreadlater; urgenthostrecoveryfirst.
+
+The details below are historical context; current block supersedes active/pending lines.
+
 # AGX D3D12 continuation — current root update after1430recovery
 
 Worktree /Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler,
