@@ -123,3 +123,12 @@ boot is reserved for a GPU-visible guest that cannot be recovered.
 EXP1380 guard verification: package affected45/full1509 applies to driver changes;
 recovery guard80e35fbb separately passed11 native PowerShell cases and actual
 Code32/serviceStopped -> Code28/PackageAbsent transition.
+
+Recovery template generation: prepare.sh must select the previous original with
+`agx-install-visible-recovery.py PREVIOUS_DIR PREVIOUS_ID --legacy-template-only`;
+never apply old waitcycle text patches to an installed visible wrapper. Repeat the
+normal factory invocation immediately before recovery to verify recorded current
+host source hashes idempotently. If preparation stops after stage, only resume
+before first hardware launch after verifying all package hashes, manifest, same
+boot event, Code28, no live binding and expected arm; never repeat installation
+blindly. Preserve stopped logs and preregister the continuation.

@@ -1,3 +1,10 @@
+## EXP1381 active (2026-10-18)
+
+- C18 SRVcomponentmapping8120126d/probe25276db2, pinnedsource56fe3977, probe1b2809d4; SYS0a4112f4/UMD7b2315f2/catalog4ff72eef. BEFORE6d51681b, allbuild/hash/stack gatesPASS. Singlefeature versusEXP1380; C17/KMD inheritedcontrols. Do not restart activeexperiment.
+- Preparation13:34stagedhash23PASS thenhostlegacytemplateassertion stoppedbeforehardware. Originalstoplog newexp1381-prepare-stop.log retained. Regeneratedhostrecoveryfrom1380immutablelegacy, factoryinstalledvisiblewrapper; sameguestboot/Code28/unbound/arm1/allhashes readonlyresumePASS. Continued13:37:53; fullownerguestbooted andinitialGLsmokePASS. Scratchpadnewexp1381.log/chain1381/watchdog1381/run1381.log; waitTOOL_d3d12-on_END andNEWEXP_DONE then exactvisible recovery.
+- Recovery1381wrapper is factorygenerated, .legacy-hidden retainedunused; sourceJSON pins hostshell969f5fd1/helper7ab9f020. Do not change those files silently; repeatfactoryverification beforecallingrecover.sh. Recovery nowservice-disablednormalCode32->exactcleanup->durableCode28PackageAbsent8CPU; cleanupwaitsownedrestart/finalproof ifSSHends. No parallelguestcommands duringrecovery.
+- Queued1382C19source53e02537/probe67a9fd5c and1383C20source80fe9e3c/probea56a3132 alreadybuilt; eachneeds predecessorverdict/RECOVERY_DONE andseparatehardwareBEFORE. 1384BUILD_ONLY nativequeryfoundation2bea74dd/687files compiling; NEVERlaunch1384, noDDI/caps/3Dadmission. C21purepolicyadapter sourceinprogress underagent; excludedfromallpinnedcandidates. Preserve dirtymu.
+
 ## EXP1380 completed and rolled back (2026-10-18)
 
 - PROVEN: static singleton SM5.1 namespace mapping4fd66dfd/8d4e54c5. All39D3D12PASS; C17A bad0 first17/29 last49166/81944; C17B counter=image512; C17C quadrants exact. Counted/no-countC14 andhighslotC16 preserved. Source2bd3b5d0, SYS c3e81ad5/UMD dd75e9a5, probe4f6e18cf. Arrays/dynamic selection/fullSM5.1 notclaimed.
