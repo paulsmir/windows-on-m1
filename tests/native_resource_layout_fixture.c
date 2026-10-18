@@ -9,9 +9,12 @@
 #include "util/u_inlines.h"
 #include "util/bitset.h"
 #include "asahi/layout/layout.h"
+#include "asahi/genxml/agx_pack.h"
 #include "agx_win32_asahi_layout.h"
 #define AGX_DBG_NOCOMPRESS (1u<<0)
 #define AGX_DBG_NOWC (1u<<1)
+#define AGX_DBG_NOMSAA (1u<<2)
+static bool agx_vbo_supports_format(enum pipe_format f) {(void)f;assert(!"unexpected vertex-only query");return false;}
 #define AGX_BO_WRITEBACK (1u<<0)
 #define AGX_BO_SHAREABLE (1u<<1)
 struct agx_device {unsigned debug;};
@@ -112,6 +115,21 @@ static void check_explicit(struct agx_screen *screen,const struct pipe_resource 
 }
 int main(int argc,char **argv) {
    (void)argv;
+   if(argc>2) {
+      struct pipe_resource invalid={0};invalid.target=PIPE_TEXTURE_3D;
+      invalid.width0=invalid.height0=invalid.depth0=8;invalid.array_size=1;invalid.last_level=1;
+      invalid.bind=PIPE_BIND_SAMPLER_VIEW|PIPE_BIND_RENDER_TARGET;
+      enum pipe_format bad[]={PIPE_FORMAT_NONE,PIPE_FORMAT_R32G32B32_FLOAT,PIPE_FORMAT_A8_UNORM,
+         PIPE_FORMAT_Z32_FLOAT,PIPE_FORMAT_COUNT,PIPE_FORMAT_R9G9B9E5_FLOAT};
+      unsigned before_bo=bo_calls,before_device=device_accesses;
+      for(unsigned i=0;i<sizeof(bad)/sizeof(bad[0]);++i) {
+         invalid.format=bad[i];AGX_WIN32_ASAHI_RESOURCE_LAYOUT out,zero={0};memset(&out,0xff,sizeof(out));
+         assert(!AgxWin32AsahiQueryUncompressedResourceLayout(&invalid,&out));
+         assert(!memcmp(&out,&zero,sizeof(out)));
+      }
+      assert(bo_calls==before_bo &&device_accesses==before_device);
+      puts("PASS pure layout invalid-format rejection NONE/RGB96/A8/depth/range/unsupportedRT query-bo=0 screen-device=0");return 0;
+   }
    struct agx_screen screen={0};struct pipe_resource t={0};
    t.target=PIPE_TEXTURE_2D_ARRAY;t.format=PIPE_FORMAT_R8G8B8A8_UNORM;
    t.width0=t.height0=4;t.depth0=1;t.array_size=64;t.last_level=1;t.bind=PIPE_BIND_SAMPLER_VIEW;

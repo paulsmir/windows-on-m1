@@ -63,6 +63,9 @@ class NativeResourceLayout(unittest.TestCase):
             declarations.append('static int\n' + function(cls.projected, 'agx_resource_layout_query'))
         declarations.append('static struct pipe_resource *\n' + function(cls.projected, 'agx_resource_create_with_modifiers'))
         declarations.append('int\n' + function(cls.projected, 'AgxWin32AsahiQueryResourceLayout'))
+        declarations.append('static bool\n' + function(cls.original, 'agx_is_format_supported'))
+        if '\nagx_uncompressed_query_format_valid(' in cls.projected:
+            declarations.append('static bool\n' + function(cls.projected, 'agx_uncompressed_query_format_valid'))
         declarations.append('static int\n' + function(cls.projected, 'agx_query_uncompressed_resource_layout'))
         declarations.append('int\n' + function(cls.projected, 'AgxWin32AsahiQueryUncompressedResourceLayout'))
         fixture = (ROOT / 'tests/native_resource_layout_fixture.c').read_text()
@@ -98,6 +101,11 @@ class NativeResourceLayout(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn('query-bo=0', r.stdout)
         print(r.stdout.strip())
+
+    def test_pure_query_refuses_invalid_formats_without_assert_or_device(self):
+        r=subprocess.run([str(self.exe),'--pure','--invalid'],capture_output=True,text=True)
+        self.assertEqual(r.returncode,0,r.stdout+r.stderr)
+        self.assertIn('invalid-format rejection NONE/RGB96/A8/depth/range/unsupportedRT',r.stdout)
 
     def test_projection_rejects_changed_prefix(self):
         changed = self.original.replace('templ->depth0 == 1', 'templ->depth0 == 2', 1)

@@ -439,11 +439,30 @@ AgxWin32AsahiQueryResourceLayout(struct pipe_screen *screen,
    return agx_resource_layout_query(screen, templ, modifiers, count, false, result);
 }
 
+static bool agx_is_format_supported(struct pipe_screen *pscreen, enum pipe_format format,
+   enum pipe_texture_target target, unsigned sample_count, unsigned storage_sample_count, unsigned usage);
+
+static bool
+agx_uncompressed_query_format_valid(const struct pipe_resource *templ)
+{
+   if (!templ || templ->format == PIPE_FORMAT_NONE || (unsigned)templ->format >= PIPE_FORMAT_COUNT ||
+       (unsigned)templ->target >= PIPE_MAX_TEXTURE_TYPES || templ->nr_samples > 1 || templ->nr_storage_samples > 1)
+      return false;
+   const struct util_format_description *desc = util_format_description(templ->format);
+   if (!desc || desc->block.width != 1 || desc->block.height != 1 || desc->block.depth != 1 ||
+       desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS)
+      return false;
+   /* Execute the native target/format/usage policy. Single sampling avoids
+    * the only device/debug lookup; caller bind flags remain unchanged. */
+   return agx_is_format_supported(NULL, templ->format, templ->target, 1, 1,
+      templ->bind | PIPE_BIND_SAMPLER_VIEW);
+}
+
 static int
 agx_query_uncompressed_resource_layout(const struct pipe_resource *templ,
    uint64_t modifier, AGX_WIN32_ASAHI_RESOURCE_LAYOUT *result)
 {
-   if (modifier != DRM_FORMAT_MOD_APPLE_GPU_TILED) {
+   if (!agx_uncompressed_query_format_valid(templ) || modifier != DRM_FORMAT_MOD_APPLE_GPU_TILED) {
       if (result) memset(result, 0, sizeof(*result));
       return 0;
    }
