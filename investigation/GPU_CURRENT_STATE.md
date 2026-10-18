@@ -124,7 +124,28 @@ not whole-suite GREEN. Current user date can be19; ledger timestamps are UTC.
   Actual0001fields, NodeMask/order/activeunions/ranges/all13samplerfields/exactfloatbits;
   excludespointers/padding/privateoffsets/GPUVA. Conservative rawAPPEND spelling/
   arrayorderkey, notMicrosoftserializedblob/broadsemanticequivalence. ExactUINTMAX
-  endpoint/profile/flags/namespaceadmissionremainOPEN. Noimplementationyet.
+  endpoint/profile/flags/namespaceadmissionremainOPEN. Encoding implementation
+  now exists only under the narrowed structural/data contract below.
+- NEW root key873c7f342e6630cfb059a9943389495b0efd3b54/CHANGES494f7eaf,
+  docD3D12-C15-root-description-key.md. UNLINKED original AGXRKEY1/actual0001
+  explicitspans; activeunion/rawenumFLOATwords/order/NodeMask; no admission,
+  APPENDresolution/endpoints/cost/namespacepolicy or Microsoftblobclaim.
+  EXP1441 host979checks/4literaloracles/4commands0/empty stderr; CURRENT1PASS
+  1.953s/68pins; default1skipbeforeexternalaccess. Native2W4WX/NOMINMAXobjects
+  0/AA64/actualdependencyclosure/4900postpins, no link/execution; manifest
+  fca9df7e0fc3c5f17969b15cbd026d42c702645ed17b987fc951697474886821.
+  Full1609/217.440s exact119baseline/noaddedremoved/13skip/post6pinsMATCH,
+  SHA09ba9ae63379df80b4de021ba4d9c9ad6d373be96fd710a8d1e0763c96b037be.
+  Currentoutputmanifest511eebdc5ca63839069f7ce15b14955a37b4fc65f7c6fdfae51c72fa6b76c0fc.
+  InitialaliasmetadataSTOP and attempt1fourenumfixturecompileerrors preserved;
+  attempt2changedonlyfourWDKspellings, source6ba98/headerf3a90unchanged.
+- NextSOURCEONLYconcurrentproviderdesign53ba6db3 in
+  .local/c15-concurrent-cpu-domain-design/design.md: thinwrappercannotcompose
+  oldmutableCalc/Copy/release/report. ProposedinternalBegin/Execute/Endpins,
+  narrowregistrylocks/coreandsinkoutside/pinnedgenerationresolver/scopedborrow/
+  releaseBusy/quiescence. kmdagent preparingprivateSOURCEONLYprototype;
+  noexecutionauthorizedyet, no sharedwrites. Root/DDIcapacity/runtimecontext/
+  Windowsreadability/librarybridge/errorpolicy remainOPEN; no DDIregistration.
 - FailedFillpublication666abec6/row64ff5e54 host137RED6GREEN0; globaltokenlifetime
   stillnotfixed, excludedallhardware1436/38/39. Earlierfaultsweepautomaticsecurity
   rejection preserved; do not retryidenticalrequest. No C21E/nativefaultwork.
