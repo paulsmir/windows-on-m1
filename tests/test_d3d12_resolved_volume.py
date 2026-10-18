@@ -58,7 +58,7 @@ class ResolvedVolume(unittest.TestCase):
   prefix=prefix[:start]+'''extern "C" int AgxWin32AsahiQueryUncompressedResourceLayout(const pipe_resource *t,AGX_WIN32_ASAHI_RESOURCE_LAYOUT *r){
    ++query_calls;queried=*t;memset(r,0,sizeof(*r));if(!query_ok)return 0;
    ail_layout a={};a.width_px=t->width0;a.height_px=t->height0;a.depth_px=t->depth0;a.sample_count_sa=1;a.levels=t->last_level+1;a.mipmapped_z=true;a.tiling=AIL_TILING_GPU;a.format=t->format;a.renderable=true;ail_make_miptree(&a);
-   r->SizeBytes=a.size_B;r->LayerStrideBytes=a.layer_stride_B;r->RequestedLevels=t->last_level+1;r->AllocatedLevels=a.levels;r->Modifier=0x1234;
+   r->SizeBytes=a.size_B;r->LayerStrideBytes=a.layer_stride_B;r->SparseTableSizeBytes=a.sparse_table_size_B;r->RequestedLevels=t->last_level+1;r->AllocatedLevels=a.levels;r->Modifier=0x1234;
    for(unsigned i=0;i<a.levels;i++)r->LevelOffsets[i]=a.level_offsets_B[i];return 1;
   }
   '''+prefix[end:]

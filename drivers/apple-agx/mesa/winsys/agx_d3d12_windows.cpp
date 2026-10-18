@@ -394,7 +394,7 @@ static bool texture3d_layout(DXGI_FORMAT format,unsigned width,unsigned height,u
   if(!texture3d_template(format,width,height,depth,levels,bind,templ) ||
       !AgxWin32AsahiQueryUncompressedResourceLayout(templ,layout) || !layout->SizeBytes ||
       layout->SizeBytes>0xffff0000ULL || (layout->Flags&AGX_WIN32_ASAHI_LAYOUT_COMPRESSED) ||
-      layout->MetadataOffsetBytes || layout->CompressionLayerStrideBytes || layout->SparseTableSizeBytes)
+      layout->MetadataOffsetBytes || layout->CompressionLayerStrideBytes)
     return false;
   *bytes=(layout->SizeBytes+0xffffULL)&~0xffffULL;
   return true;
