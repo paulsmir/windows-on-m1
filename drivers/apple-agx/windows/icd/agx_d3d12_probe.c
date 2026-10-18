@@ -3574,13 +3574,13 @@ int main(void) {
                 (void)run_isolated(adapter, "C21B", step_c21b);
                 (void)run_isolated(adapter, "C21C", step_c21c);
                 (void)run_isolated(adapter, "C21D", volume_rtv);
-                (void)run_isolated(adapter, "C21E", volume_sample);
                 (void)run_isolated(adapter, "C22A", step_c22a);
                 (void)run_isolated(adapter, "C22B", step_c22b);
                 (void)run_isolated(adapter,"C23A",texture1d_copy);
                 (void)run_isolated(adapter,"C23B",step_c23b);
                 (void)run_isolated(adapter,"C23C",step_c23c);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
+                (void)run_isolated(adapter, "C21E", volume_sample);
             }
             IDXGIAdapter1_Release(adapter);
             IDXGIFactory1_Release(factory);
