@@ -14,6 +14,9 @@ namespace {
 int device_a, device_b;
 struct Pso { bool compiled; } pso_a{true}, uncompiled_a{false}, pso_b{false};
 bool pso_a_live = true;
+bool device_a_live = true;
+bool resolver_under_lock = false;
+unsigned pso_resolver_calls;
 unsigned checks;
 void require(bool value, const char *why) {
     ++checks;
@@ -32,11 +35,14 @@ struct Storage {
 }
 
 extern "C" const void *AgxD3d12ZeroCacheResolveDevice(D3D12DDI_HDEVICE h) {
-    if (h.pDrvPrivate == &device_a) return &device_a;
+    resolver_under_lock |= agx_host_srw_depth != 0;
+    if (h.pDrvPrivate == &device_a && device_a_live) return &device_a;
     if (h.pDrvPrivate == &device_b) return &device_b;
     return nullptr;
 }
 extern "C" const void *AgxD3d12ZeroCacheResolvePsoOwner(D3D12DDI_HPIPELINESTATE h) {
+    resolver_under_lock |= agx_host_srw_depth != 0;
+    ++pso_resolver_calls;
     if ((h.pDrvPrivate == &pso_a && pso_a_live) || h.pDrvPrivate == &uncompiled_a) return &device_a;
     if (h.pDrvPrivate == &pso_b) return &device_b;
     return nullptr;
@@ -50,6 +56,15 @@ int main() {
                        MAP_PRIVATE | MAP_ANON, -1, 0);
     require(guard != MAP_FAILED, "inaccessible initial/output/handle guard page");
     const D3D12DDI_HDEVICE unknown{guard};
+    const D3D12DDI_LIBRARY_REFERENCE_0010 ordinary{{nullptr}, UINT_MAX};
+    require(AgxD3d12ZeroCacheValidateLibraryReference(a, &ordinary) == S_OK, "live ordinary null-library reference");
+    require(AgxD3d12ZeroCacheValidateLibraryReference(a, nullptr) == E_INVALIDARG, "null record is invalid, not ordinary shorthand");
+    require(AgxD3d12ZeroCacheValidateLibraryReference(invalid, &ordinary) == E_INVALIDARG, "ordinary requires valid device");
+    require(AgxD3d12ZeroCacheValidateLibraryReference(unknown, &ordinary) == E_INVALIDARG, "ordinary rejects unknown device unread");
+    require(AgxD3d12ZeroCacheValidateLibraryReference(unknown, static_cast<const D3D12DDI_LIBRARY_REFERENCE_0010 *>(guard)) == E_INVALIDARG, "invalid device rejected before descriptor access");
+    device_a_live = false;
+    require(AgxD3d12ZeroCacheValidateLibraryReference(a, &ordinary) == E_INVALIDARG, "ordinary rejects dead device");
+    device_a_live = true; // Restore resolver before creating or destroying any child.
     D3D12DDIARG_CREATE_PIPELINE_LIBRARY_0010 empty{0, nullptr};
     D3D12DDIARG_CREATE_PIPELINE_LIBRARY_0010 guarded{0, guard};
     D3D12DDIARG_CREATE_PIPELINE_LIBRARY_0010 nonzero{1, guard};
@@ -75,6 +90,25 @@ int main() {
     require(first.bytes == snapshot, "cross-device create cannot corrupt foreign header");
     require(AgxD3d12ZeroCacheCreatePipelineLibrary(b, &empty, second.handle()) == S_OK, "second device independent library");
 
+    D3D12DDI_LIBRARY_REFERENCE_0010 own{first.handle(), UINT_MAX};
+    D3D12DDI_LIBRARY_REFERENCE_0010 foreign{second.handle(), 0};
+    D3D12DDI_LIBRARY_REFERENCE_0010 inaccessible{{guard}, UINT_MAX};
+    const unsigned before_reference_pso_calls = pso_resolver_calls;
+    require(AgxD3d12ZeroCacheValidateLibraryReference(a, &own) == S_OK, "owned live maximum index reference");
+    require(AgxD3d12ZeroCacheValidateLibraryReference(a, &own) == S_OK, "repeated index reference stores nothing");
+    own.PipelineIndex = 0;
+    require(AgxD3d12ZeroCacheValidateLibraryReference(a, &own) == S_OK, "opaque zero index reference");
+    require(AgxD3d12ZeroCacheValidateLibraryReference(b, &own) == E_INVALIDARG, "foreign caller device reference rejected");
+    require(AgxD3d12ZeroCacheValidateLibraryReference(a, &foreign) == E_INVALIDARG, "foreign library rejected");
+    require(AgxD3d12ZeroCacheValidateLibraryReference(a, &inaccessible) == E_INVALIDARG, "unknown inaccessible library never dereferenced");
+    require(AgxD3d12ZeroCacheValidateLibraryReference(invalid, &own) == E_INVALIDARG, "nonnull reference rejects invalid device");
+    require(AgxD3d12ZeroCacheValidateLibraryReference(unknown, &own) == E_INVALIDARG, "nonnull reference rejects unknown device");
+    device_a_live = false;
+    require(AgxD3d12ZeroCacheValidateLibraryReference(a, &own) == E_INVALIDARG, "nonnull reference rejects resolver-dead device");
+    device_a_live = true; // Test failure channel only; NOT a child/device teardown fix.
+    require(pso_resolver_calls == before_reference_pso_calls, "reference validator never resolves or retains PSO");
+    require(first.bytes == snapshot, "reference validation does not mutate native cache header");
+    require(AgxD3d12ZeroCacheValidateLibraryReference(b, &foreign) == S_OK, "foreign device's own library survives rejects");
     require(!uncompiled_a.compiled, "PSO is deliberately uncompiled");
     require(AgxD3d12ZeroCacheAddPipelineStateToLibrary(a, first.handle(), {&uncompiled_a}, UINT_MAX) == S_OK, "owned uncompiled PSO and opaque maximum index");
     require(AgxD3d12ZeroCacheAddPipelineStateToLibrary(a, first.handle(), {&pso_a}, 0) == S_OK, "owned compiled PSO");
@@ -117,6 +151,8 @@ int main() {
     require(AgxD3d12ZeroCacheSerializeLibrary(a, first.handle(), guard) == S_OK, "valid library survived invalid Destroy");
     AgxD3d12ZeroCacheDestroyPipelineLibrary(a, first.handle());
     require(first.outside_untouched(size), "Destroy touches owned header only");
+    require(AgxD3d12ZeroCacheValidateLibraryReference(a, &own) == E_INVALIDARG, "destroyed library reference rejected");
+    require(AgxD3d12ZeroCacheValidateLibraryReference(a, &ordinary) == S_OK, "ordinary valid after library destruction");
     require(AgxD3d12ZeroCacheSerializeLibrary(a, first.handle(), output.data()) == E_INVALIDARG, "destroyed library rejected");
     require(AgxD3d12ZeroCacheAddPipelineStateToLibrary(a, first.handle(), {&pso_a}, 0) == E_INVALIDARG, "destroyed library Add rejected");
     AgxD3d12ZeroCacheDestroyPipelineLibrary(a, first.handle());
@@ -131,6 +167,8 @@ int main() {
     require(AgxD3d12ZeroCacheSerializeLibrary(b, first.handle(), guard) == S_OK, "new device live header");
     AgxD3d12ZeroCacheDestroyPipelineLibrary(b, first.handle());
     require(output == canary, "all paths preserve output canaries");
+    require(!resolver_under_lock, "all actual module resolvers execute outside SRW lock");
+    require(agx_host_srw_depth == 0, "all library paths release SRW");
     require(munmap(guard, static_cast<SIZE_T>(page)) == 0, "guard released");
-    std::printf("ZERO_NATIVE_CACHE_PASS checks=%u callbacks=6 actual_WDK_declarations=YES host_Windows_ABI=NO no_registration=YES\n", checks);
+    std::printf("ZERO_NATIVE_CACHE_REFERENCE_PASS checks=%u callbacks=6 reference_validator=YES actual_WDK_declarations=YES host_Windows_ABI=NO no_registration=YES\n", checks);
 }

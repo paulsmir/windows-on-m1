@@ -1,4 +1,4 @@
-"""Opt-in original ZERO_NATIVE_CACHE host contract; parent BEFORE required."""
+"""Opt-in original ZERO_NATIVE_CACHE/reference host contract; parent BEFORE required."""
 import json
 import os
 from pathlib import Path
@@ -55,8 +55,8 @@ class ZeroCacheLibrary(unittest.TestCase):
                 self.fail(('HOST_COMPILE_FAILED' if i == 0 else 'FUNCTIONAL_CONTRACT_FAILED') +
                           ': ' + run.stderr.decode(errors='replace'))
             if i == 1:
-                self.assertIn(b'ZERO_NATIVE_CACHE_PASS', run.stdout)
-                self.assertIn(b'callbacks=6 actual_WDK_declarations=YES host_Windows_ABI=NO', run.stdout)
+                self.assertIn(b'ZERO_NATIVE_CACHE_REFERENCE_PASS checks=81', run.stdout)
+                self.assertIn(b'callbacks=6 reference_validator=YES actual_WDK_declarations=YES host_Windows_ABI=NO', run.stdout)
                 print(run.stdout.decode().strip())
         manifest = {p.name: {'bytes': p.stat().st_size, 'sha256': sha(p)}
                     for p in sorted(out.iterdir()) if p.is_file()}

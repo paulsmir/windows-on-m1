@@ -51,6 +51,15 @@ bool Owned(const Library *library, const void *owner) {
 }
 }
 
+HRESULT APIENTRY AgxD3d12ZeroCacheValidateLibraryReference(
+    D3D12DDI_HDEVICE device, const D3D12DDI_LIBRARY_REFERENCE_0010 *reference) {
+    const void *owner = AgxD3d12ZeroCacheResolveDevice(device);
+    if (!owner || !reference) return E_INVALIDARG;
+    if (!reference->hLibrary.pDrvPrivate) return S_OK;
+    RegistryGuard guard;
+    return Owned(*Find(reference->hLibrary.pDrvPrivate), owner) ? S_OK : E_INVALIDARG;
+}
+
 SIZE_T APIENTRY AgxD3d12ZeroCacheCalcPrivatePipelineLibrarySize(
     D3D12DDI_HDEVICE device,
     const D3D12DDIARG_CREATE_PIPELINE_LIBRARY_0010 *args) {

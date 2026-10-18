@@ -20,6 +20,19 @@ extern "C" {
 const void *AgxD3d12ZeroCacheResolveDevice(D3D12DDI_HDEVICE device);
 const void *AgxD3d12ZeroCacheResolvePsoOwner(D3D12DDI_HPIPELINESTATE pipeline);
 
+/* Internal CPU adapter helper, NOT a new WDK callback or capability.
+ * reference==NULL is E_INVALIDARG (not an omitted/ordinary reference).
+ * A readable record with hLibrary.pDrvPrivate==NULL is the ordinary no-library
+ * path and succeeds only for a live valid device. PipelineIndex is unused.
+ * A nonnull library must be live and owned by that same device. Unknown library
+ * addresses are compared with registered addresses before any dereference.
+ * Nonnull reference must point to a readable actual WDK record. No retention,
+ * native work or lifetime extension is performed; existing runtime object
+ * lifetime and resolver identity stability preconditions still apply.
+ */
+HRESULT APIENTRY AgxD3d12ZeroCacheValidateLibraryReference(
+    D3D12DDI_HDEVICE, const D3D12DDI_LIBRARY_REFERENCE_0010 *reference);
+
 SIZE_T APIENTRY AgxD3d12ZeroCacheCalcPrivatePipelineLibrarySize(
     D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_PIPELINE_LIBRARY_0010 *);
 /* Create requires runtime-owned, writable, suitably aligned private storage of

@@ -24,6 +24,11 @@ def render(out):
     if text.count(first) != 1 or text.count(last) != 1:
         raise RuntimeError('ambiguous actual WDK library declarations')
     declarations = text[text.index(first):text.index(last)]
+    reference_first = 'typedef struct D3D12DDI_LIBRARY_REFERENCE_0010'
+    reference_last = 'typedef struct D3D12DDIARG_CREATEELEMENTLAYOUT_0010'
+    if text.count(reference_first) != 1 or text.count(reference_last) != 1:
+        raise RuntimeError('ambiguous actual WDK library-reference declaration')
+    reference = text[text.index(reference_first):text.index(reference_last)]
     names = [
         'CALC_PRIVATE_PIPELINE_LIBRARY_SIZE', 'CREATE_PIPELINE_LIBRARY',
         'DESTROY_PIPELINE_LIBRARY', 'ADD_PIPELINE_STATE_TO_LIBRARY',
@@ -36,10 +41,11 @@ def render(out):
     sdk.mkdir()
     (sdk / 'windows.h').write_bytes((ROOT / 'tests/d3d12_zero_cache_host_windows.h').read_bytes())
     (sdk / 'd3d12umddi.h').write_text(
-        '#pragma once\n#include <windows.h>\n' + declarations)
+        '#pragma once\n#include <windows.h>\n' + reference + declarations)
     result = {
         'scope': 'Actual WDK records/typedefs plus original host shim; NOT Windows ABI',
         'WDK': str(WDK), 'WDK_sha256': WDK_SHA256,
+        'reference_declarations_sha256': hashlib.sha256(reference.encode()).hexdigest(),
         'declarations_sha256': hashlib.sha256(declarations.encode()).hexdigest(),
         'generated_files': {str(p.relative_to(out)): sha(p) for p in sorted(sdk.iterdir())},
     }

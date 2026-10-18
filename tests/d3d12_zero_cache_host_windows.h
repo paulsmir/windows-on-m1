@@ -16,7 +16,8 @@ struct D3D12DDI_HPIPELINELIBRARY { void *pDrvPrivate; };
 #define _Out_
 #define S_OK static_cast<HRESULT>(0)
 #define E_INVALIDARG static_cast<HRESULT>(0x80070057u)
+inline thread_local unsigned agx_host_srw_depth = 0;
 struct SRWLOCK { std::mutex mutex; };
 #define SRWLOCK_INIT {}
-inline void AcquireSRWLockExclusive(SRWLOCK *lock) { lock->mutex.lock(); }
-inline void ReleaseSRWLockExclusive(SRWLOCK *lock) { lock->mutex.unlock(); }
+inline void AcquireSRWLockExclusive(SRWLOCK *lock) { lock->mutex.lock(); ++agx_host_srw_depth; }
+inline void ReleaseSRWLockExclusive(SRWLOCK *lock) { --agx_host_srw_depth; lock->mutex.unlock(); }
