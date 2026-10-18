@@ -244,3 +244,19 @@ executable SHA256
 All prior compiler-fail and numeric-RED receipts remain at their original paths.
 No package/build/guest/hardware/commit/ledger action was performed by this lane.
 Hardware C19A-D bad0/4096 and unchanged old41 remain the future1404 discriminator.
+
+Windows full-owner syntax found an include-boundary problem after the numeric
+fix: direct nir.h in the D3D12 owner was unavailable. The owner intentionally
+uses opaque NIR through dxbc_to_nir.h. Commit679bbdce keeps the fresh-fragment
+call site but moves the actual NIR_PASS into typed C helper
+dxbc_nir_lower_fragment_position in the existing DXBC C module. No generic
+finalizer or other frontend invokes it. The package-local ARM64 runtime closure
+already compiles this module, providing its symbol without changing WOWout88.
+
+EXP1408 repeats the same actualowner/realDXBC/realAsahi numeric gate through
+the real helper:72pairs, Z/W, exactlyonce, VS untouched allPASS. Thirty ABI/owner
+tests and allthree Windows syntax configurationsPASS. Receipts
+.local/c19-pixel-center-offline-1408/artifacts.json
+SHA818f59ca63a0c4614edfd97cb385bf35d46fc6948d6fddbbc39d03d5e27bcaca.
+Native linking and GPU verification remain EXP1404 gates. Original1403GREEN
+and failed1404syntax receipts remain unchanged.
