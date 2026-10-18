@@ -354,3 +354,59 @@ error cleanup design remain valid, but a C facade cannot close this dependency
 failure boundary. The next distinct gate is an explicitly scoped external
 allocator/error-propagation design and deterministic fault-injection plan; no
 hardware experiment or repeated source archaeology is justified.
+
+## EXP1396 BUILD_ONLY: initial original adapter implementation
+
+Parent preregistered RED in dc3102c9 and the frozen GREEN implementation SHA in
+4d64d6ce. No hardware, guest or dependency rebuild. Original NEW
+`mesa/dxil/agx_dxil_owned.{h,c}` uses the committed explicit-length framing parser
+and existing reviewed host archives. It supports ONLY one compute6.0 entry with
+static singleton raw UAV declarations; SRV/CBV/sampler/counter/range extensions
+remain refused. This is an offline API, not a driver build input or DDI path.
+
+The new-feature RED was a compile failure because the declared original owned
+adapter implementation did not yet exist. It is not evidence of an upstream
+functional defect. Then the implementation was written and frozen at SHA256
+`6224d2ec8bf9cdbf02b43772755f7c9c6d1537e7a3fff85d7f182697474ae2c7` before the
+parent authorized GREEN compilation/run.
+
+Exact authorized host command, phase red then green:
+
+```
+AGX_C15_OWNED_RECEIPTS=/Users/pavel/public_windows/.local/c15-owned-1396 AGX_C15_OWNED_PHASE=green PYTHONPATH=tests python3 -m unittest test_dxil_owned -v
+```
+
+`tests/test_dxil_owned.py` is explicitly opt-in: ordinary discovery does not launch
+this separately preregistered external compiler/link checkpoint. It records exact
+clang/clang++ commands, every source/header/archive hash and raw step outputs.
+It compiles only the original parser/adapter/actual-C-API fixture with C11,
+Wall/Wextra/Werror, O1 and ASan/UBSan, then links the existing nine Release archives.
+Those upstream archives were NOT rebuilt with sanitizer instrumentation, so this
+is not complete external-code ASan coverage. No compiler install/fetch/new DXC
+shader or production build-script edit occurred.
+
+Actual result:
+
+```
+C15_OWNED_CONVERTER_PASS one_key=YES raw_and_container=YES scan_false_success_verified=YES reject_then_valid_same_thread=YES output_after_TLS=YES map_sorted_multikey=UNPROVEN internal_OOM=UNPROVEN
+```
+
+The fixture first verifies actual upstream scan returns SUCCESS despite a false
+resource callback, then verifies converter remap rejection and normal cleanup.
+It performs repeated owned valid/limit-rejected/valid calls on the same thread,
+checks exact semantic u0/space0->dense UAV slot0, SPIR-V descriptor set2/binding0,
+workgroup64x1x1, immutable input/output canaries and owned SPIR-V after the adapter
+has destroyed converter/blob/TLS. Raw program input is checked separately from
+container input. Missing entry and malformed program return no owned output.
+
+Map collection has sticky rejection, sorts before slot assignment and uses frozen
+lookup callbacks, but the existing one-key fixture cannot prove multi-space order
+independence. That needs the separately designed new HLSL/DXC checkpoint; it is
+explicitly unclaimed here. No promise of recoverable internal library OOM follows.
+The external allocator blocker above remains a production-integration gate.
+
+Receipts: `/Users/pavel/public_windows/.local/c15-owned-1396/before-inputs.json`,
+`red/{inputs,commands,results}.json`, `green/{inputs,commands,results}.json`, raw
+numbered stdout/stderr files, original objects/executable and
+`EXP1396-verdict.json`. SPIR-V was inspected from owned memory after teardown and
+then freed; no persistent SPIR-V file was emitted by this minimal fixture.
