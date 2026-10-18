@@ -1,4 +1,4 @@
-# AGX D3D12 continuation — 2026-10-18T20:35:11Z
+# AGX D3D12 continuation — current root update after1430recovery
 
 Worktree /Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler,
 branch integration/ad04-windows-compiler. Russian reports, continuous authorized
@@ -8,43 +8,34 @@ Preserve user dirty mu; no attribution/push/PR/newthread/goal/automation.
 Read skill /Users/pavel/.codex/skills/agx-d3d12-loop/SKILL.md and
 investigation/CLAUDE_WORKING_METHOD.md. CS allowed again.
 
-## EXP1430 ACTIVE — do not restart / no ad-hoc guest SSH or proxy
+## EXP1430 COMPLETE / RECOVERY_DONE — next EXP1436 native PBE fix
 
-- Root run1430 session15972, START20:32:19Z. PREP.local/preparation-1430.
-  SP run1430/chain1430/newexp1430/watchdog1430.log. Current exact package
-  repacked/staged HASHES_MATCH23/ARTIFACTS_AND_STAGE_PASS/FactoryV2PASS;
-  auto full artifact/profile/recovery BEFORE committed547892b0.
-- Exact immutable5279bc4fcdfd04b4c3218da832a0f3e9c5e47bab, parent939cf61a;
-  ONLY one guard deleted inside OwnerCreateTexture3D. Owner wholefile
-  e198c606110d9f66af332efa6ea69e8302ad1e2aac700156987829e9f11a5a94.
-  No C23/C15publisher/core/caps/KMD/firmware/recovery delta.
-- WHY1426 native allocationS_OK but owner rejectsGpuVa0 from BUFFER-only helper.
-  Actual scene.c263 returns0 for nonPIPE_BUFFER; Microsoft GetGPUVirtualAddress
-  explicitlyalltextures0, existing2D accepts0. StopfalseOOM, nativehelperunchanged.
-- Main correction757f4802a2d31e4f7a8581df384fb89e2626e6a8 includes same1D+3D
-  invariant +durableactualhelperregression; CHANGES8e85ac26. HardwareONLY3D.
-  ActualRED11checks3fail ->GREEN11zero; truefactoryNULLstillOOM/queryrefusal
-  noallocate/nonbuffernevermaps/bufferpositive retained; ASanUBSanempty.
-  Receipt c3c46d581c75edef2c2d161ae458c14734e323c059e7ed9c0b4fb4e8068c65fd.
-- Focused44PASS10.827s. Full1592/215.739s/68fail51errors10skip EXACT119oldbaseline
-  noadded/noremoved, SHA64384265c73b29f76d42fd2addcbbd886bbe8f2129e216d93bfe95d0ca60bbaf.
-  Not whole-suiteGREEN. Exact5279Windows3rc0/6source+toolpins/backupSHAsPASS,
-  syntaxmanifest184fa3a31bb72b1865f9cba33ddf2a86b814b23c9d778ba936372e5a6e78cc66.
-- PACKAGE1430PASS/693sources/PDB/ARM64stack13824/WOW6544. ORIGINAL4artifacts+log
-  protected PRErepack: native-build-evidence/preservation-manifest.json
-  f0b18183eabde3e2df47cf719fefabbf4dee7cc463d1c52808ed5c69fbbbd42c.
-  NativeSYS652274984fdce2c06680fe03f0f42c4e25ad9ca20873bbee866f38ae006339cf;
-  UMD094ab0c34773da3f41f860b95ea80c4170449cb4fe0abe8d13f8e0ef68344fe1.
-  Final30.0.1430.0 INFa0750e41/CAT1c02e391/ICDd51ebf72/WOW1625ffde.
-- Original54probeec529c1282caa21ba967c33757a97a4a5535f03b7777a10bfe3282d6e07e571a,
-  pool55740036f90c78f8e6a96c33ab4ecebbc0b11360ec87f28aaac72e9d0d96f5d3.
-  Codegates52a0293d/rootphase8e85ac26/hardware1430.approved verified.
-- Expect54uniqueALLPASS, C21A-E advance to actualcopy/SRV/UAV/planeRTV exactoracles.
-  Wait TOOL_d3d12-on_END ANDNEWEXP_DONE, inspect all tags/receipts/regressions.
-  Then idempotentFactoryDIRthenID and rec1430h/recover.sh controller to
-  RECOVERY_DONE/normalCode28AbsentnoService8CPU. No pre-reboot/secondcontroller.
-  Wrapper52132cf5047014534d6010d1658d813ab716a88b111066baee4804dab0c6954a;
-  host38909f54/helper7ab9f020/selectorbed44fab unchanged.
+- ACTUAL/CHANGES committed d7ce1829; exact source5279/package30.0.1430.0.
+- 50 emitted tags:49PASS/1FAIL C21C; C21E/C22A/C22B/C7A UNREACHED.
+  All5C21 creates nowS_OK: falseownerVAguard correction confirmed. C21A/B/D PASS.
+  C21C mip0PASS/mip1bad32 first9216=8192+Z2*512, last2of4planes wrong.
+- Native Gallium PBE encodes selected depth4 plus level1; actualHoneykrisp
+  sameAGXABI encodes baseDepth8 plus level1. Fix owns native packer overlay,
+  conditional on normalizedPIPE_TEXTURE_3D; force2Darray/singleplane preserved.
+- C21E stderr exact Unhandled ALU op ubfe; finalvertexreceipt precedes native
+  synchronous create_vs_state precompile. Exact exit/exception unknown.
+  Automatic security review rejected further delegated C21Eanalysis/reproducer;
+  user informed, do not retry identical request or route around rejection.
+- Hardware controls73SMOKEPASS+knownMSAAonly; fl11cs-a/x/debugPASS; pool6workers/
+  foreign_reclaim1PASS;GL52.0/internal59.6/CS46.671fps;corpus414each64+4expected,
+  nohang/pixeldiff,DWM0; intentionalLONGJOBkind4/902ms only.
+- Root recovery36462 RECOVERY_DONE: exactpackageAbsent/Code28/noService/8CPU.
+  Boot21:07:29.5627910Z ->21:09:38.3886230Z; durabilityfinalSHA
+  d30153f9d0bafbbd482d46bee3c97efb276917df5de9c02c861eb04371ba5ffb;
+  final2271filemanifest27ab9c3c4b969fedd452cfe31b9e713602e9db034130e522dba4c02e3563e4cb.
+- Next1436ONLYproductionPBEbaseDepthfix; narrowactualnativepairedpackerRED/GREEN
+  retry3 pending (priorCPPfixturecompileSTOPs notfunctionalRED). No C23/C15/caps.
+  Diagnosticorder alsoexplicit: move unchanged C21E isolatedstep LAST so C22/C7
+  controls measured beforeknownfailure. SourceprefixthroughC21Cbyteidentical;
+  54logicalchecks preserved; source23df8488, builtARM64EXE3d5960170549453e1a97808c
+  babf9554170a3bad56cf09b5e637f650e3315a48. No shader/compilerfixclaim.
+  Probeorderbuildmanifestf078fa3c371ace782d8dba59c028e14d2e6e6e1b658a4d89ce2b0a8e7cea2291.
+- Guest currently idle recovered; next package not built or approved yet.
 
 ## EXP1426 COMPLETE / ACTUAL+CHANGES24cd5dbd / exact package removed
 
@@ -65,7 +56,7 @@ investigation/CLAUDE_WORKING_METHOD.md. CS allowed again.
   validated. 1404C19/C20accepted. KMDforeigncache0c458548 repeatedlyvalidated,
   no provenlost-unit leak; never mask inUMD/increasecapacitywithoutcause.
 
-## C23 / EXP1431 PREBUILT and OFFLINE READY, hardware HELD
+## C23 / EXP1431 PREBUILT — UNLAUNCHED / SUPERSEDED prerequisite
 
 - C23mainimplementationeb34f8ee/CHANGES94dfbe30, noteD3D12-C23-texture1d.md.
   BoundedcommittedDEFAULTnonarray1D width1..16384/legalmips/R32UINT-RGBA8,
@@ -184,3 +175,15 @@ investigation/CLAUDE_WORKING_METHOD.md. CS allowed again.
   durableorderedreboot/exactcleanup/secondnormalpreflight; no pre-reboot.
 - Agentsc18_crash/sm51_parser/kmd_private_pool; completedagent needsFOLLOWUP_TASK,
   notsend_messagealone. Do not waitindefinitely; bench1419supervisorwarningapplies.
+
+## Latest offline C15/C24 (supersedes pending statements above)
+
+- C15 taggedlegacy/DXILownedstorage e28a1096b0e3cabcba260163b96e3f8420630890,
+  CHANGESd7ce1829: host114467+424029checks/all6rc0/stderrEMPTY; native3AA64WX0;
+  CURRENTdurable1PASS1.987s/sixrc0/57postpins. Full1593/213.369s exact119baseline
+  (68fail51errors11skip), noadded/noremoved, SHA0744348cba0274ce6dce34d50ac85762b625ea46a0707b1fe10109253603e48b.
+  Still unlinked, no trustedprovider/VOID-DDI/lifetime/caps/GPUclaim.
+- C24 FXC1434twoactualheadersPASS; actualNIR3rc0/load1Darray/storeimagearrayPASS,
+  metadataOTHERuntilnewenum. Implementation SOURCEONLY .local/c24-array-implementation-prep,
+  patchad6e8a7a, ten proposedCPUargv UNRUN. Selectedactualpackers18casesPASS
+  does not establishgeneralarrayquery/GPU; holdcandidatebehindcurrentPBEfix.
