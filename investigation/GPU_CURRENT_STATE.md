@@ -1,3 +1,10 @@
+## EXP1387 complete and recovered; EXP1390 next (2026-10-18T15:02:58Z)
+
+- All41D3D12PASS: C13 initialization checkpoint, C14 counted/no-count512, C16/C17 preserved, C18A/B copiedRGBA8 maps4096pixelsbad0, C7PresentPASS. Source d5bfef7a plusonlye8initfix vs1381; finalmanifest30829edbb669b54850c6feca624bb790c7f489c1a565b075c4acd34a05b44292.
+- Regression73SMOKEPASS+knownMSAAonly; KMD_POOL5workers/20newforeignreclaimsPASS (856->849 seven64KiBunits); fl11cs-a/x/debugPASS; DWMfaults0/corpus64-4zero hangs/pixeldiffs, onlyintentionalLONGJOB. GL52.6/internal59.5, separateCS46.510fps.
+- RECOVERY_DONE PackageAbsent/oneCode28/noService/8CPU, AfterBoot15:01:23.4705780Z/durablemanifestA534AB5F. FactoryV2 integratedcanonicalguard validated; noforcedreset/hiddenboot. Noexperiment package remains.
+- NEXT startpreparedscratchpad/run1390.sh forC19;1391C20 then1392C21 separately afterpredecessorverdict/recovery. Allbuilt/sign/hash/stackPASS. Neverold1382/1383. C15license taskcompleted75632532/ea9cc8b0; build1395PASS gates butoriginalartifactmanifest haslive-loghash bookkeepingdefect undercompletecollection. No runtimeARM64execution/SM6caps/productionlink.
+
 ## EXP1387 active: all41D3D12PASS; wait harness/recovery (2026-10-18T14:57Z)
 
 - EXP1387 started14:26:19Z, BEFORE1a3611d7; source d5bfef7af7109ed15ac9b7a43fa8aff8b83e4381 =exactC18 56fe3977 plusONLY devicezeroing e8e0b35a. Sameprobe1b2809d4; SYSac32d026/UMDc491c572/INFb52d6e27/cat649d45d5, pinnedm1n1/Mu unchanged. DO NOTRESTART activeexperiment. Logs scratchpadnewexp1387/chain1387/watchdog1387/run1387; wrapperexecsession93769.
