@@ -644,7 +644,12 @@ static UINT AgxD3d12FormatBlockBytes(DXGI_FORMAT) { return 0; } /* textures need
  * 0 = not a texture this device creates (format, samples, dimension). */
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 static bool VolumeLayoutInfo(const D3D12DDIARG_CREATERESOURCE_0003 *arg,AGX_D3D12_VOLUME_LAYOUT *layout,
-                             D3D12DDI_TEXTURE_LAYOUT *resolved,UINT8 *transition) {
+                             D3D12DDI_TEXTURE_LAYOUT *resolved,UINT8 *transition,
+                             UINT *reason=nullptr,HRESULT *queryStatus=nullptr) {
+    /* Diagnostic-only: 0 success, 1 input domain, 2 incoming layout,
+     * 3 native query refusal; HRESULT 1 means query was not called. */
+    if(reason)*reason=1u;
+    if(queryStatus)*queryStatus=static_cast<HRESULT>(1);
     if(!arg || !layout || arg->ResourceType!=D3D12DDI_RT_TEXTURE3D || arg->SampleDesc.Count!=1 ||
        arg->SampleDesc.Quality || !arg->Width || arg->Width>32 || arg->Height!=arg->Width ||
        (arg->Width&(arg->Width-1)) || !arg->DepthOrArraySize || arg->DepthOrArraySize>2048 ||
@@ -653,11 +658,16 @@ static bool VolumeLayoutInfo(const D3D12DDIARG_CREATERESOURCE_0003 *arg,AGX_D3D1
        (arg->Flags&~(D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET|D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE))) return false;
     UINT index=0;for(UINT side=32;side>arg->Width;side>>=1) ++index;
     const auto selected=static_cast<D3D12DDI_TEXTURE_LAYOUT>(0x100u+index);
+    if(reason)*reason=2u;
     if(arg->Layout!=D3D12DDI_TL_UNDEFINED && arg->Layout!=selected) return false;
     const UINT bind=((arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET)?AGX_D3D12_BIND_RENDER_TARGET:0u)|
                     ((arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE)?AGX_D3D12_BIND_SAMPLER:0u);
-    if(FAILED(AgxD3d12QueryTexture3DLayout(arg->Format,static_cast<UINT>(arg->Width),arg->Height,
-        arg->DepthOrArraySize,arg->MipLevels,bind,layout))) return false;
+    if(reason)*reason=3u;
+    const HRESULT status=AgxD3d12QueryTexture3DLayout(arg->Format,static_cast<UINT>(arg->Width),arg->Height,
+        arg->DepthOrArraySize,arg->MipLevels,bind,layout);
+    if(queryStatus)*queryStatus=status;
+    if(FAILED(status)) return false;
+    if(reason)*reason=0u;
     if(resolved)*resolved=selected;
     if(transition)*transition=(arg->MipLevels>1 && arg->Width>1)?1u:0xffu;
     return true;
@@ -700,9 +710,25 @@ static VOID APIENTRY CheckResourceAllocationInfo(D3D12DDI_HDEVICE, const D3D12DD
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     if(arg && arg->ResourceType==D3D12DDI_RT_TEXTURE3D) {
         AGX_D3D12_VOLUME_LAYOUT layout={};
+        const UINT input[] = {static_cast<UINT>(arg->ResourceType),static_cast<UINT>(arg->Width),
+            static_cast<UINT>(arg->Width>>32),arg->Height,arg->DepthOrArraySize,arg->MipLevels,
+            static_cast<UINT>(arg->Format),arg->SampleDesc.Count,arg->SampleDesc.Quality,
+            static_cast<UINT>(arg->Layout),static_cast<UINT>(arg->Flags),
+            static_cast<UINT>(alignmentRestriction),static_cast<UINT>(alignmentRestriction>>32)};
+        AdmissionUmdDiagnostic("measure-d3d12-volume-query-input",S_OK,input,13);
+        UINT reason=4u; /* alignment restriction rejected, native query not called */
+        HRESULT queryStatus=static_cast<HRESULT>(1);
         if((!alignmentRestriction || (!(alignmentRestriction&(alignmentRestriction-1)) && alignmentRestriction>=kHeapPage)) &&
-           VolumeLayoutInfo(arg,&layout,&info->Layout,&info->MipLevelSwizzleTransition)) info->ResourceDataSize=layout.Bytes;
+           VolumeLayoutInfo(arg,&layout,&info->Layout,&info->MipLevelSwizzleTransition,&reason,&queryStatus)) info->ResourceDataSize=layout.Bytes;
         else {info->Layout=D3D12DDI_TL_UNDEFINED;info->ResourceDataSize=~0ULL;}
+        const UINT output[] = {reason,static_cast<UINT>(info->ResourceDataSize),
+            static_cast<UINT>(info->ResourceDataSize>>32),static_cast<UINT>(info->ResourceDataAlignment),
+            static_cast<UINT>(info->ResourceDataAlignment>>32),static_cast<UINT>(info->Layout),
+            info->MipLevelSwizzleTransition,static_cast<UINT>(layout.NativeBytes),
+            static_cast<UINT>(layout.NativeBytes>>32),static_cast<UINT>(layout.DepthStride),
+            static_cast<UINT>(layout.DepthStride>>32),static_cast<UINT>(layout.MipOffsets[0]),
+            static_cast<UINT>(layout.MipOffsets[1])};
+        AdmissionUmdDiagnostic("measure-d3d12-volume-query-output",queryStatus,output,13);
         return;
     }
 #else
