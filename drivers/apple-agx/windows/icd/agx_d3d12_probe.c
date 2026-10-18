@@ -1062,8 +1062,10 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
  * sampling a 2x2 RGBA8 texture (green, blue / white, black) uploaded with
  * CopyTextureRegion, SRV t0 from a shader-visible table, static point-clamp
  * sampler s0, both visible to the PS; PASS = the four 32x32 quadrants. */
-static int draw_textured_impl(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, int spaces) {
-    const char *step = spaces ? "C17C" : "C6E";
+static int draw_textured_impl(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, int variant) {
+    const int spaces = variant == 1;
+    const int mapping = variant >= 2;
+    const char *step = variant == 2 ? "C18A" : variant == 3 ? "C18B" : spaces ? "C17C" : "C6E";
     D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
     D3D12_RESOURCE_DESC desc = {0}, tex_desc = {0};
     D3D12_DESCRIPTOR_HEAP_DESC rtv_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_NONE};
@@ -1092,6 +1094,8 @@ static int draw_textured_impl(ID3D12Device *device, ID3D12CommandQueue *queue, I
     D3D12_GPU_DESCRIPTOR_HANDLE srv_gpu = {0};
     unsigned char *bytes = NULL;
     int quadrants_ok = 0;
+    const unsigned char mapped_texels[4][4] = {{17,61,109,151}, {29,83,137,173}, {43,97,163,199}, {59,113,181,227}};
+    if (mapping) srv_desc_heap.NumDescriptors = 2;
     parameter.DescriptorTable.NumDescriptorRanges = 1;
     parameter.DescriptorTable.pDescriptorRanges = &range;
     parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
@@ -1116,8 +1120,8 @@ static int draw_textured_impl(ID3D12Device *device, ID3D12CommandQueue *queue, I
         const float quad[4][6] = {{-1, -1, 0, 1, 0, 0}, {-1, 1, 0, 0, 0, 0}, {1, -1, 1, 1, 0, 0}, {1, 1, 1, 0, 0, 0}};
         const unsigned char row0[8] = {0, 255, 0, 255, 0, 0, 255, 255}, row1[8] = {255, 255, 255, 255, 0, 0, 0, 255};
         memcpy(bytes, quad, sizeof(quad));
-        memcpy(bytes + 512, row0, sizeof(row0));
-        memcpy(bytes + 512 + 256, row1, sizeof(row1));
+        memcpy(bytes + 512, mapping ? mapped_texels[0] : row0, sizeof(row0));
+        memcpy(bytes + 512 + 256, mapping ? mapped_texels[2] : row1, sizeof(row1));
         ID3D12Resource_Unmap(upload, 0, NULL);
         hr = ID3D12Device_CreateCommittedResource(device, &heap, D3D12_HEAP_FLAG_NONE, &desc,
                                                   D3D12_RESOURCE_STATE_RENDER_TARGET, NULL, &IID_ID3D12Resource,
@@ -1134,7 +1138,19 @@ static int draw_textured_impl(ID3D12Device *device, ID3D12CommandQueue *queue, I
         ID3D12Device_CreateRenderTargetView(device, target, NULL, rtv);
         ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(srv_heap, &srv_cpu);
         ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(srv_heap, &srv_gpu);
-        ID3D12Device_CreateShaderResourceView(device, texture, NULL, srv_cpu);
+        if (mapping) {
+            D3D12_SHADER_RESOURCE_VIEW_DESC view = {0};
+            view.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+            view.Texture2D.MipLevels = 1;
+            view.Shader4ComponentMapping = variant == 2 ? D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(2,0,4,5)
+                                                       : D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(1,2,3,0);
+            ID3D12Device_CreateShaderResourceView(device, texture, &view, srv_cpu);
+            UINT stride = ID3D12Device_GetDescriptorHandleIncrementSize(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            D3D12_CPU_DESCRIPTOR_HANDLE copied = {srv_cpu.ptr + stride};
+            ID3D12Device_CopyDescriptorsSimple(device, 1, copied, srv_cpu, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            srv_gpu.ptr += stride;
+        } else ID3D12Device_CreateShaderResourceView(device, texture, NULL, srv_cpu);
         hr = D3D12SerializeRootSignature(&root_desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &errors);
     }
     if (SUCCEEDED(hr))
@@ -1223,7 +1239,7 @@ static int draw_textured_impl(ID3D12Device *device, ID3D12CommandQueue *queue, I
         ID3D12GraphicsCommandList_DrawInstanced(list, 4, 1, 0, 0);
         transition(list, target, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
         ID3D12GraphicsCommandList_CopyTextureRegion(list, &back, 0, 0, 0, &target_loc, NULL);
-        hr = run_list(queue, fence, list, base + 1, spaces ? "C17C draw" : "C6E draw");
+        hr = run_list(queue, fence, list, base + 1, step);
     }
     if (SUCCEEDED(hr)) {
         D3D12_RANGE all = {0, 16384};
@@ -1235,6 +1251,19 @@ static int draw_textured_impl(ID3D12Device *device, ID3D12CommandQueue *queue, I
                            bl[0] == 255 && bl[1] == 255 && bl[2] == 255 && br[0] == 0 && br[1] == 0 && br[2] == 0;
             printf("%s quadrants tl=%u,%u,%u tr=%u,%u,%u bl=%u,%u,%u br=%u,%u,%u\n", step, tl[0], tl[1], tl[2], tr[0], tr[1],
                    tr[2], bl[0], bl[1], bl[2], br[0], br[1], br[2]);
+            if (mapping) {
+                unsigned bad = 0;
+                for (UINT y = 0; y < 64; ++y) for (UINT x = 0; x < 64; ++x) {
+                    const unsigned char *source = mapped_texels[(y >= 32 ? 2 : 0) + (x >= 32 ? 1 : 0)];
+                    const unsigned char expected[4] = {variant == 2 ? source[2] : source[1],
+                        variant == 2 ? source[0] : source[2], variant == 2 ? 0 : source[3],
+                        variant == 2 ? 255 : source[0]};
+                    if (memcmp(bytes + y * 256 + x * 4, expected, 4)) ++bad;
+                }
+                quadrants_ok = bad == 0;
+                printf("%s mapped copied-SRV pixels=4096 bad=%u first=%u,%u,%u,%u last=%u,%u,%u,%u\n",
+                    step, bad, bytes[0], bytes[1], bytes[2], bytes[3], bytes[16380], bytes[16381], bytes[16382], bytes[16383]);
+            }
             ID3D12Resource_Unmap(readback, 0, NULL);
         }
     }
@@ -1260,6 +1289,8 @@ static int draw_textured_impl(ID3D12Device *device, ID3D12CommandQueue *queue, I
  * (the far quad fails there), a point outside the triangle blue. */
 static int draw_textured(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_textured_impl(d, q, f, b, 0); }
 static int step_c17c(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_textured_impl(d, q, f, b, 1); }
+static int step_c18a(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_textured_impl(d, q, f, b, 2); }
+static int step_c18b(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return draw_textured_impl(d, q, f, b, 3); }
 
 static int draw_depth(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
     D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
@@ -2281,6 +2312,8 @@ int main(void) {
                 (void)run_isolated(adapter, "C17A", compute_spaces);
                 (void)run_isolated(adapter, "C17B", step_c17b);
                 (void)run_isolated(adapter, "C17C", step_c17c);
+                (void)run_isolated(adapter, "C18A", step_c18a);
+                (void)run_isolated(adapter, "C18B", step_c18b);
                 (void)run_isolated(adapter, "C7A", swapchain_present);
             }
             IDXGIAdapter1_Release(adapter);
