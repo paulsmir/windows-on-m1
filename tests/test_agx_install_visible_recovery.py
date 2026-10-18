@@ -23,6 +23,7 @@ class VisibleRecoveryInstall(unittest.TestCase):
         (self.worktree / "scripts").mkdir(parents=True)
         (self.worktree / "scripts/agx-recover-visible.sh").write_text("#!/bin/bash\nexit 0\n")
         (self.worktree / "scripts/agx-recovery-disable-service.ps1").write_text("# fixture only\n")
+        (self.worktree / "scripts/agx-select-exact-launcher.py").write_text("# fixture selector only\n")
         self.experiment = self.root / "EXP9999-new candidate's"
         self.rec = self.experiment / "evidence/rec9999h"
         self.rec.mkdir(parents=True)
@@ -52,6 +53,28 @@ waitcycle; nohup $R/launch-hidden.sh > $R/launch.log 2>&1 & sshup
         self.assertEqual(json.loads(self.manifest.read_text()), result)
         for artifact in result["Files"].values():
             self.assertEqual(FACTORY.digest(Path(artifact["Path"]).read_bytes()), artifact["Sha256"])
+
+    def test_new_manifest_pins_exact_launcher_dependency(self):
+        result = self.install()
+        self.assertEqual(result["Version"], 2)
+        record = result["Files"]["ExactLauncherSelector"]
+        path = self.worktree / "scripts/agx-select-exact-launcher.py"
+        self.assertEqual(record, {"Path": str(path.resolve()), "Sha256": FACTORY.digest(path.read_bytes())})
+        before = self.manifest.read_bytes()
+        path.write_text("# changed selector\n")
+        with self.assertRaises(FACTORY.RecoveryInstallError): self.install()
+        self.assertEqual(self.manifest.read_bytes(), before)
+
+    def test_historical_v1_template_remains_readonly_compatible(self):
+        self.install()
+        source = json.loads(self.manifest.read_text())
+        source["Version"] = 1
+        source["Files"].pop("ExactLauncherSelector", None)
+        self.manifest.write_text(json.dumps(source))
+        before = self.manifest.read_bytes()
+        self.assertEqual(FACTORY.legacy_template(self.experiment, "9999", self.worktree), self.backup.resolve())
+        self.assertEqual(self.manifest.read_bytes(), before)
+        with self.assertRaises(FACTORY.RecoveryInstallError): self.install()
 
     def test_idempotent_same_input_preserves_all_artifact_bytes_and_mtimes(self):
         first = self.install()

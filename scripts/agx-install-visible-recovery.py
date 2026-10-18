@@ -127,7 +127,7 @@ def legacy_template(experiment_dir: Path, experiment_id: str, worktree: Path | N
             source = json.loads(read_regular(manifest))
         except (UnicodeError, json.JSONDecodeError) as exc:
             raise RecoveryInstallError("invalid visible recovery source manifest") from exc
-        if not isinstance(source, dict) or source.get("Version") != 1 or \
+        if not isinstance(source, dict) or source.get("Version") not in (1, 2) or \
                 source.get("ExperimentId") != experiment_id or \
                 source.get("ExperimentDirectory") != str(experiment) or \
                 source.get("Worktree") != str(root) or \
@@ -136,6 +136,8 @@ def legacy_template(experiment_dir: Path, experiment_id: str, worktree: Path | N
         files = source.get("Files")
         expected = {"Wrapper": script, "LegacyHidden": backup,
                     "HostShell": host, "DisableServiceHelper": helper}
+        if source["Version"] == 2:
+            expected["ExactLauncherSelector"] = root / "scripts/agx-select-exact-launcher.py"
         if not isinstance(files, dict) or set(files) != set(expected):
             raise RecoveryInstallError("source manifest artifact set mismatch")
         for name, path in expected.items():
@@ -163,6 +165,8 @@ def install(experiment_dir: Path, experiment_id: str, worktree: Path | None = No
     host = root / "scripts/agx-recover-visible.sh"
     helper = root / "scripts/agx-recovery-disable-service.ps1"
     host_bytes, helper_bytes = read_regular(host), read_regular(helper)
+    selector = root / "scripts/agx-select-exact-launcher.py"
+    selector_bytes = read_regular(selector)
     recovery = experiment / "evidence" / f"rec{experiment_id}h"
     if not recovery.is_dir() or recovery.is_symlink():
         raise RecoveryInstallError("expected recovery directory absent or symlinked")
@@ -188,7 +192,7 @@ def install(experiment_dir: Path, experiment_id: str, worktree: Path | None = No
         legacy = original
 
     result = {
-        "Version": 1,
+        "Version": 2,
         "ExperimentId": experiment_id,
         "ExperimentDirectory": str(experiment),
         "Worktree": str(root),
@@ -198,6 +202,7 @@ def install(experiment_dir: Path, experiment_id: str, worktree: Path | None = No
             "LegacyHidden": {"Path": str(backup), "Sha256": digest(legacy)},
             "HostShell": {"Path": str(host), "Sha256": digest(host_bytes)},
             "DisableServiceHelper": {"Path": str(helper), "Sha256": digest(helper_bytes)},
+            "ExactLauncherSelector": {"Path": str(selector), "Sha256": digest(selector_bytes)},
         },
     }
     expected_manifest = (json.dumps(result, indent=2, sort_keys=True) + "\n").encode()

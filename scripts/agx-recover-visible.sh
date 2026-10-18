@@ -38,8 +38,8 @@ launch_normal() {
   cp /Users/pavel/public_windows/.local/experiments/EXP950-dwm-output-trace/normal2-contract.bin "$R/normal-$1-contract.bin"
 }
 # Select only this experiment's contract owner. Never terminate other launchers.
-owners=$(pgrep -f "[r]un_uefi.py.*${N}/contract.bin" || true)
-[ "$(printf '%s\n' "$owners" | sed '/^$/d' | wc -l | tr -d ' ')" = 1 ] || { echo EXACT_OWNER_NOT_FOUND; exit 3; }
+owners=$(python3 "$W/scripts/agx-select-exact-launcher.py" "$N" --worktree "$W") || { echo EXACT_OWNER_NOT_FOUND; exit 3; }
+[[ "$owners" =~ ^[1-9][0-9]*$ ]] || { echo EXACT_OWNER_NOT_FOUND; exit 3; }
 printf '%s\n' "$owners" > "$R/visible-previous-owner.pid"
 python3 - "$N" "$X" "$W" <<'PY'
 from pathlib import Path
