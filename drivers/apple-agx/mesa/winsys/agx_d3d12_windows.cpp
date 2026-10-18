@@ -13,6 +13,7 @@ extern "C" {
 }
 #include "agx_win32_asahi_scene.h"
 #include "agx_d3d12_windows.h"
+#include "agx_d3d12_view_mapping.h"
 #include "pipe/p_context.h"
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h"
@@ -1064,6 +1065,21 @@ static bool uav_image(const AGX_D3D12_UAV *uav, struct pipe_image_view *image) {
   return true;
 }
 
+/* C18: Asahi composes this view swizzle with the format's own swizzle.
+ * PIPE_SWIZZLE_1 retains the image format's integer/float ONE semantics. */
+static bool srv_component_mapping(unsigned mapping, struct pipe_sampler_view *view) {
+  if (!AgxD3d12ComponentMappingValid(mapping)) return false;
+  static const unsigned swizzle[6] = {
+    PIPE_SWIZZLE_X, PIPE_SWIZZLE_Y, PIPE_SWIZZLE_Z,
+    PIPE_SWIZZLE_W, PIPE_SWIZZLE_0, PIPE_SWIZZLE_1
+  };
+  view->swizzle_r = swizzle[mapping & 7u];
+  view->swizzle_g = swizzle[(mapping >> 3) & 7u];
+  view->swizzle_b = swizzle[(mapping >> 6) & 7u];
+  view->swizzle_a = swizzle[(mapping >> 9) & 7u];
+  return true;
+}
+
 /* One stage's constant buffers, SRVs and (C13) UAVs: raw/structured UAVs
  * as shader buffers u#, typed UAVs as images u# (the dxbc_to_nir slots in
  * every stage); views are released and UAVs unbound by unbind_stage. */
@@ -1091,10 +1107,11 @@ static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, co
     const AGX_D3D12_BUFFER *buffer = srvs[i].Buffer;
     if (!buffer) continue;
     struct pipe_sampler_view templ = {};
-    templ.swizzle_r = PIPE_SWIZZLE_X;
-    templ.swizzle_g = PIPE_SWIZZLE_Y;
-    templ.swizzle_b = PIPE_SWIZZLE_Z;
-    templ.swizzle_a = PIPE_SWIZZLE_W;
+    if (!srv_component_mapping(srvs[i].ComponentMapping, &templ)) return E_INVALIDARG;
+    /* Raw/structured SRVs are reconstructed from scalar dword fetches,
+     * so they cannot use a post-vector-fetch mapping in this owner yet. */
+    if (!srvs[i].Texture && !srvs[i].Format &&
+        srvs[i].ComponentMapping != AGX_D3D12_COMPONENT_MAPPING_IDENTITY) return E_INVALIDARG;
     if (srvs[i].Texture) {
       /* C6e: a texture view (gallium/frontends/d3d10umd CreateShaderResourceView) */
       struct pipe_resource *texture = static_cast<struct pipe_resource *>(buffer->Resource);

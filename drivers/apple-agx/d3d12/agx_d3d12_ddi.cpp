@@ -13,6 +13,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include <climits>
 #include <cstring>
 #include <type_traits>
+#include "agx_d3d12_view_mapping.h"
 extern "C" {
 #include "apple_agx_win32_device_info.h"
 #include "render_win32_transport.h"
@@ -1091,6 +1092,7 @@ struct AgxD3d12Descriptor {
     UINT first_layer;
     UINT layers;
     UINT levels; /* C6e: texture SRVs */
+    UINT component_mapping; /* C18: encoded SRV fetch-result routing */
 };
 /* C6e: a sampler descriptor */
 struct AgxD3d12SamplerDescriptor {
@@ -1237,6 +1239,11 @@ static VOID APIENTRY CreateShaderResourceView(D3D12DDI_HDEVICE, const D3D12DDIAR
     auto *out = reinterpret_cast<AgxD3d12Descriptor *>(dest.ptr);
     if (!out) return;
     memset(out, 0, sizeof(*out));
+    /* C18: mapping is descriptor state, including typed buffer views. */
+    if (arg && !AgxD3d12ComponentMappingValid(arg->Shader4ComponentMapping)) {
+        ViewReceipt("measure-d3d12-srv", 8u, arg->Shader4ComponentMapping, 0u);
+        return;
+    }
     const auto *resource = arg ? static_cast<const AgxD3d12Resource *>(arg->hDrvResource.pDrvPrivate) : nullptr;
     /* C6e: 2D (array) texture SRVs of committed textures */
     if (arg && resource && resource->heap && resource->type == D3D12DDI_RT_TEXTURE2D) {
@@ -1245,6 +1252,7 @@ static VOID APIENTRY CreateShaderResourceView(D3D12DDI_HDEVICE, const D3D12DDIAR
                     : v.MostDetailedMip >= resource->levels || v.FirstArraySlice >= resource->layers ? 6u : 0u;
         if (!reason) {
             out->kind = kDescriptorSrvTexture;
+            out->component_mapping = arg->Shader4ComponentMapping;
             out->heap = resource->heap;
             out->format = arg->Format == DXGI_FORMAT_UNKNOWN ? resource->format : arg->Format;
             out->level = v.MostDetailedMip;
@@ -1266,6 +1274,7 @@ static VOID APIENTRY CreateShaderResourceView(D3D12DDI_HDEVICE, const D3D12DDIAR
 #endif
     UINT reason = !arg || !resource || !resource->heap ? 1u
                 : arg->ResourceDimension != D3D12DDI_RD_BUFFER ? 4u
+                : !typed && arg->Shader4ComponentMapping != AGX_D3D12_COMPONENT_MAPPING_IDENTITY ? 8u
                 : !stride ? 5u /* a typed format the owner cannot address */
                 : 0u;
     const UINT64 offset = reason ? 0 : arg->Buffer.FirstElement * stride;
@@ -1276,6 +1285,7 @@ static VOID APIENTRY CreateShaderResourceView(D3D12DDI_HDEVICE, const D3D12DDIAR
 #endif
     if (!reason) {
         out->kind = kDescriptorSrvBuffer;
+        out->component_mapping = arg->Shader4ComponentMapping;
         out->heap = resource->heap;
         out->offset = resource->gpuva - resource->heap->gpuva + offset;
         out->bytes = bytes;
@@ -2921,11 +2931,13 @@ static void OwnerBindings(const AgxD3d12Dispatch &b, AgxD3d12OwnerBindings *o) {
         if (view && view->kind == kDescriptorSrvBuffer && view->heap) {
             o->srv_buffers[s] = HeapBuffer(view->heap);
             o->srvs[s] = {&o->srv_buffers[s], view->offset, view->bytes};
+            o->srvs[s].ComponentMapping = view->component_mapping;
             o->srvs[s].Format = view->format; /* C9: typed buffer SRVs; raw/structured UNKNOWN */
         } else if (view && view->kind == kDescriptorSrvTexture && view->heap) {
             o->srv_buffers[s] = HeapBuffer(view->heap);
             o->srvs[s].Buffer = &o->srv_buffers[s];
             o->srvs[s].Texture = 1;
+            o->srvs[s].ComponentMapping = view->component_mapping;
             o->srvs[s].Format = view->format;
             o->srvs[s].FirstLevel = view->level;
             o->srvs[s].Levels = view->levels;
@@ -2934,6 +2946,7 @@ static void OwnerBindings(const AgxD3d12Dispatch &b, AgxD3d12OwnerBindings *o) {
         } else if (b.srv_heap[s]) {
             o->srv_buffers[s] = HeapBuffer(b.srv_heap[s]);
             o->srvs[s] = {&o->srv_buffers[s], b.srv_offset[s], 0};
+            o->srvs[s].ComponentMapping = AGX_D3D12_COMPONENT_MAPPING_IDENTITY;
         }
     }
     for (UINT s = 0; s < kSamplerSlots; ++s) {

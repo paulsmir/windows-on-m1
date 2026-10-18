@@ -96,6 +96,7 @@ typedef struct {
   int Texture;
   DXGI_FORMAT Format;
   unsigned FirstLevel, Levels, FirstLayer, Layers;
+  unsigned ComponentMapping; /* C18: encoded WDK SRV component mapping */
 } AGX_D3D12_SRV;
 /* C6e: a sampler s# in the D3D10/11/12 DDI encoding (filter bits, address
  * modes 1..5, comparison 1..8) */
