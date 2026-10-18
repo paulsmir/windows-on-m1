@@ -57407,3 +57407,65 @@ EXP1424 BUILD BEFORE 2026-10-18T19:04:34Z: immutableBUILD_INPUT 507812fbe921f27d
 EXP1421 HOSTretry2 ACTUAL / HOSTretry3 BEFORE 2026-10-18T19:05:50Z: retry2 configure0/83compile+fresh9archive0/actualdep+project5unitcompilePASS, firsthostlinkfailed ld libraryc++notfound becausefinallinkdidnotpassSDKsysroot; no nominalexecuted. Preservealloutputs/freezes. Minimalhostlink-only adds-isysroot withsamepinnedMacOSX27.0.sdk; libc++.tbd d5813bdd04b5208c8a1e684594de78347082365be2776835f1e1e5faa89d9bcd andlibSystem.tbd01089e97e7372fdda64ef480f2c99d483daf0c7fc99298a137425ee3230588ab alreadyprovenancepinned/no newdependency. NewREADYa6d657e9e0ad09d4992d20c302faef097041c995b2e232cb03630022a448c325/2707filesrootverified/ONLYrunnerchanged46b08e398f491fce1fb696b2dd719c60c0935e58f8a8b3b1f45a1984bb6c8df2, source/flags/9orderunchanged. Exact CMAKE_BUILD_PARALLEL_LEVEL=4 /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 /Users/pavel/public_windows/.local/c15-composite-ownership/scripts/build_nominal.py --platform host --run-root /Users/pavel/public_windows/.local/c15-composite-host-1421-retry3 --expected-freeze-sha256 a6d657e9e0ad09d4992d20c302faef097041c995b2e232cb03630022a448c325. Freshroot/nooverwrite/same83+19facade+2originalnominalmarkers/rc0/ASanUBSan. AgentmayexecuteHOSTONLYonceparallel; rootnotwaitingforDXILtoinstall1424. Windows/faultsweepnotauthorized/no guest/profile/capschanges.
 
 EXP1424 OFFLINE/BUILD ACTUAL 2026-10-18T19:08:16Z: composedRED5->GREEN5;9focusedPASS/3Windowsrc0/full1583exact119knownbaselineunchanged; logSHA34d2e83fa61bf120cd5956ae8d33ea0fa5db76cf2ec6109cd1077a36daa0cff9. Implementationcommitted/CHANGESimplemented. Frozen507812fbe921f27d411eb521df0f30f83985076e packageBUILD_PASS/source693/PDB/ARM64stack13824/WOW6544/native4originalhashesrootverified. Native-build-evidence receiptSHA206b89288a0ea97921fb5eac8587f9f48584b409abb08a14cd05a58cfb4c9bf8 savedBEFORErepackage. AlllaunchgatesnowGREEN exceptdynamicstage/sign/hash/fullBEFORE handlednextnewexp. Final1424inventorySHA83eaf7d5ad78def570b014e0207229bfed3c148f8bfcbb38a08bd230acfef616 resolvesbeforeSourcePin; originalbuildinventoryb4d467preserved. Rootlaunchrun1424now, no moreofflinewait.
+EXP1424 BEFORE 2026-10-18T19:09Z (PACKAGE1424: AppleAgxOpenGL32.dll d51ebf72bc4afc25 (KMD/ARM64 UMD 507812fbe921f27d411eb521df0f30f83985076e (C21 ordinary-volume sparse-estimate guard fix; prior49PASS controls including C22A/B;54-step probe; FL11_0 opt-in; b_ndebug) + ICDout61 + WOWUMDout88 1625ffde + INF1235; pinned m1n1 5b857603/Mu361a2134), INF 75ba7aad, sys 3f654aa4, UMD 968e462f, catalog 0f76f713, DriverVer 30.0.1424.0; smoke ddd752e3d31672f4; m1n1 5b857603 (macho 3e5e9f1f, IOMFB_FULL_OWNER=1 AGX_LOCAL_RESERVE_V2=1; 4096-record broker page-table registry, on fa45bc58), Mu 361a2134 J313_EFI-m2f2c.fd (1c7d87d6, reserve ABI v3 on 71c9b2d551), run_uefi.py integration; manifest/hardware-manifest/full-owner1424.sh e4dfd1619b3a9da2 6426aec829723882 c8f37f37e581dd37 ; C: free 28.03 GB; recovery rec1424h/recover.sh; probe probe1424.sh (f5606c7a415145a5); then the standard benchmark (EXP1184 harness: playnoovl).
+ATOMIC CONTRACT: one independently observable C21 owner allocation-query correction. Remove the false interpretation that a positive AIL potential sparse-table estimate means active sparse storage. C22A/B, C19/C20 and all prior49 PASS are unchanged controls. No new caps, native layout, probe shader or diagnostic variable.
+WHY THIS HYPOTHESIS:
+1. EXP1419 actual paired records show all five valid C21 requests reach owner pure query and receive E_NOTIMPL/reason3; prior49 including C22A/B PASS. Failure is before Create/GPU volume execution, not runtime arguments or a render result.
+2. AIL layout.h explicitly calculates sparse_table_size_B for every image, including nonsparse, without adding it to size_B. ail_make_miptree calls its calculation unconditionally. Sparse-map allocation is conditional on sparse_resident; our ordinary owner template has flags0. The owner incorrectly refused any positive estimate.
+3. Actual composed native-query/AIL -> owner regression reproduced five E_NOTIMPL results with correct ordinary extent and positive potential sparse field. Parent recorded compiler SDK repair separately and preserved first attempts. Sole guard removal gives the same five cases GREEN, zero query BO/device accesses. Durable actual-composition unittest retains the full native result; earlier stand-ins omitted this field.
+WINDOWS CONTRACT: FULL GRAPHICS existing0003/FL11_0 opt-in. Allocation query returns truthful ordinary committed-default volume bytes/alignment/resolved layout before Create. Keep bounded POT square1..32/depth1..2048/levels1..2/two-format domain and every existing copy/view/layout restriction. No R1/DXIL/library/default-profile or feature-cap switch.
+AGX/ASAHI CONTRACT: potential sparse-table extent is descriptive metadata for a possible different resource mode. It does not enlarge ordinary image size or require a sparse-map BO. Actual owner/native create remains the same ordinary one-BO template/modifier/AIL mapping. Compression/metadata rejection remains. No KMD/firmware/power/UAT/queue/recovery change.
+TRANSLATION: exact immutable1419 source542c688816dbfec539742d342cff13a80bac7415 plus ONLY owner agx_d3d12_windows.cpp SHA25618d902b7bfa9f719c7695f68fc5e168b61d0fca2a341dac543625f20e877d5a4. Remove only ||layout->SparseTableSizeBytes from texture3d_layout. Do not zero the native field, increase size or permit actual sparse templates. Existing DDI diagnostics75a934b9 are preserved. Query remains screen/context/BO-free and actual creation uses the same template.
+WHAT IS STILL UNKNOWN: C21 actual Windows volume allocation/create/copy/load/store/plane-render/sampled-PS behavior was never reached because allocation admission failed. Offline evidence closes the documented CPU predicate; this run verifies the already-designed downstream mappings. No complete FL11 or arbitrary3D conformance claim.
+Expected: ALL54 unique D3D12 checkpoints PASS. Prior49 including C22A/B remain controls. C21A/B/C/E allocation131072/alignment65536 and D65536/alignment65536; existing five input/output receipt pairs reason0/S_OK and exact native dimensions/layout fields. Keep original C21 exact copy/compute/UAV/plane-RTV/PS pixel oracles, fresh devices and all-face/mip/plane poison. Unexpected later-stage failure is a new bounded lifecycle result, not silently covered by allocation success.
+Failure: any C21 allocation refusal/incorrect extent or data/pixel mismatch; any missing/duplicate/FAIL step; prior49 regression; timeout/incomplete submitted fence, unexpected TDR/bugcheck/guest loss. Preserve evidence. No cap probing or automatic patch/retry under same ID.
+Controls: KMD_POOL five workers PASS and fresh foreign-cache pressure receipt. 73 SMOKE PASS plus only known MSAA-a000r; fl11cs-a/x/debug PASS; corpus64/4 expected createfail with zero hangs/pixel differences; DWM faults0; only intentional LONGJOB recovery. Report GL/internalGL/CS measurements separately. Existing bounded waits/process-timeout safety unchanged.
+Recovery/prerequisites: launch ONLY after exact reviewed1419 source542c6888, captured49PASS plus five specific C21 allocationFAIL and paired native-query-refusal evidence, root reviewed marker, and RECOVERY_DONE PackageAbsent. Marker format: EXP1419_REVIEWED SOURCE_REV=542c688816dbfec539742d342cff13a80bac7415 C21_NATIVE_QUERY_FAILED in scratchpad/exp1419.reviewed. rec1419.log must contain RECOVERY_DONE and PackageAbsent. Parent controls active1419 recovery; no parallel guest commands. Same normal GPU-visible inert8CPU recovery guest; exact experiment devnode/package removal; no ordinary hidden boot. FactoryV2 immutable visible-recovery sources/selector/sourceJSON checked before launch and recovery.
+Sourcepin: 507812fbe921f27d411eb521df0f30f83985076e. verify-source1424.sh refuses PENDING; parent must replace PENDING in source1424.rev AND exact-pin guard. Exact driver delta from542c is ONE owner CPP file. Preserved DDI75a934b93814953da194da4540cacad91a83e14497dbef0e2e53cff760472172 and probe source2db6352e4f2e405f20aecd7cd83c285e2e5450c89dd3662c7ea848e481b9f3ec. No sourcepatch or HEAD fallback. Parent records completed focused/full/three Windows syntax results and full artifact/launch/firmware hashes before hardware.
+Artifacts: original54-step probeec529c1282caa21ba967c33757a97a4a5535f03b7777a10bfe3282d6e07e571a; pool55740036f90c78f8e6a96c33ab4ecebbc0b11360ec87f28aaac72e9d0d96f5d3; WOWout88SHA1625ffde0685757457143f6eb8cb31f60aae0b98c5cf91cd5cdbc01accd7e7ac; ICDout61 inherited. Per-package native closure rebuilt from approved source; exact archive/source provenance, signing, PDB preservation and both STACK_FRAMES PASS required. Do not relabel1419/1414 binaries as a new1424 driver build.
+Evidence: .local/experiments/EXP1424-d3d12-volume-sparse-estimate/evidence/EXP1424, stdout/UMD paired volume-query records/pool before-after/regressions, rec1424h durable recovery receipts. Reserve a fresh XP directory only after root freeze; never delete/overwrite prior evidence. This preparation did not build, launch, stage or contact a guest.
+USER CS WINDOW: cutoff2026-10-18T17:22:00Z epoch1792344120 expired. Existing dispatcher automatically resumes CS. Skip only if actually before cutoff, recording exact reason CS benchmark skipped: Steam account in use by the user. Other suites unchanged.
+PACKAGE_ARTIFACTS:
+75ba7aadc68729991d03eb110463af596c71677ae3f7366ffd781abebcff6eb7  /Users/pavel/public_windows/.local/experiments/EXP1424-d3d12-volume-sparse-estimate/AppleAgxRenderAdmission.inf
+3f654aa4ed449ed9468013db489182371a10d82f46b2db9f324e2857c3145bcd  /Users/pavel/public_windows/.local/experiments/EXP1424-d3d12-volume-sparse-estimate/AppleAgxRenderAdmission.sys
+968e462f8ae73ff4e267b167df3885b5b4c0974523cc94b35240ace0a895b49a  /Users/pavel/public_windows/.local/experiments/EXP1424-d3d12-volume-sparse-estimate/AppleAgxRenderAdmissionUmd.dll
+0f76f7139278ae858e4bf1bcc45f75c677aa51b6ccb78f7885ce2817a22542df  /Users/pavel/public_windows/.local/experiments/EXP1424-d3d12-volume-sparse-estimate/appleagxrenderadmission.cat
+d51ebf72bc4afc255c902039d89c2268ca77f11d7f514344f8aececc59f0a379  /Users/pavel/public_windows/.local/experiments/EXP1424-d3d12-volume-sparse-estimate/AppleAgxOpenGL32.dll
+1625ffde0685757457143f6eb8cb31f60aae0b98c5cf91cd5cdbc01accd7e7ac  /Users/pavel/public_windows/.local/experiments/EXP1424-d3d12-volume-sparse-estimate/AppleAgxRenderAdmissionUmd32.dll
+e4dfd1619b3a9da2c0b090332b2b8fdf6162759b0ea916e2a45688cfd2fb09ca  /Users/pavel/public_windows/.local/experiments/EXP1424-d3d12-volume-sparse-estimate/manifest.json
+6426aec829723882650a7f290266a3f9ae6e38691a55b2a924ae9ef0378a6c07  /Users/pavel/public_windows/.local/experiments/EXP1424-d3d12-volume-sparse-estimate/hardware-manifest.json
+45aa51044a19a3aacdc62aee2dad112a5ce01ad4199a4d259f051c423a6e13d3  /Users/pavel/public_windows/.local/experiments/EXP1424-d3d12-volume-sparse-estimate/kmd-build-receipt.json
+c8f37f37e581dd37b978c14fc0f517d0f77e5f1a8142db1315aa986d1ef2f25e  /Users/pavel/public_windows/.local/experiments/EXP1424-d3d12-volume-sparse-estimate/full-owner1424.sh
+SOURCE_ARTIFACTS:
+0d8182c118285326a480bf1ef5974e7e9a74109f5a4b7b8267474a9b76ebd609  /Users/pavel/public_windows/.local/experiments/EXP1424-d3d12-volume-sparse-estimate/source.zip
+c917c01f369932bc089f087dbf6ae103b81aba53442bf3d8e8691b03a8a6c1f3  /Users/pavel/public_windows/.local/experiments/EXP1424-d3d12-volume-sparse-estimate/source-manifest.json
+RECOVERY SOURCE:
+{
+  "ExperimentDirectory": "/Volumes/pwdev/public_windows/.local/experiments/EXP1424-d3d12-volume-sparse-estimate",
+  "ExperimentId": "1424",
+  "Files": {
+    "DisableServiceHelper": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recovery-disable-service.ps1",
+      "Sha256": "7ab9f020ece3157b34091778366de7fd9058c3c65d9f8758bf94470e7ec28bcb"
+    },
+    "ExactLauncherSelector": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-select-exact-launcher.py",
+      "Sha256": "bed44fabe7e97270d8d1399e2140fff60b730252b9971570211fbb4a0a15e2aa"
+    },
+    "HostShell": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recover-visible.sh",
+      "Sha256": "38909f549c08ac3f0f88d1ce8737b4a2556c7441b91121723e27246503d2be10"
+    },
+    "LegacyHidden": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1424-d3d12-volume-sparse-estimate/evidence/rec1424h/recover.sh.legacy-hidden",
+      "Sha256": "4a4e6d2529b17fd9b2abc5ebebed8bfe458b11bfcae7d5db4c8b50abd774d9fb"
+    },
+    "Wrapper": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1424-d3d12-volume-sparse-estimate/evidence/rec1424h/recover.sh",
+      "Sha256": "40d07eebdf90fcfd9c2807d4adce97bd29801cdc54391e0fced9f1d5a630b005"
+    }
+  },
+  "RecoveryMode": "GpuVisibleServiceDisabledOrderedReboot",
+  "Version": 2,
+  "Worktree": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler"
+}
