@@ -43,3 +43,6 @@ Worktree `/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-comp
 
 Scratchpad `/private/tmp/claude-502/-Volumes-pwdev-public-windows/8c9ead37-29d6-4c63-9bb0-35c6eb850f40/scratchpad`; backups `/Users/pavel/public_windows/.local/scratchpad-tools-backup`; XP `/Users/pavel/public_windows/.local/experiments`.
 BoundedSSH: perl alarm25 + `/Users/pavel/public_windows/.local/tandem/airssh -o ConnectTimeout=10 'echo up'`. Builder pauls@192.168.1.24/keywindows_builder. Do not issueparallelguestcommands duringrecovery. NeverrequestphysicalbeforeboundedSSH+USB/owner/proxy checks. Before/ACTUAL/CHANGES+exacthash/sign/stackgates eachrun; no attribution. Fullsuite last1561same119baselinefailures; newerfocusedtestsPASS, neverclaimwholesuiteGREEN.
+
+## User Steam window (2026-10-18)
+Until17:22Z epoch1792344120 SKIP CS benchmark only, reasonexact `CS benchmark skipped: Steam account in use by the user`; do notscoreabsence/launchfailureasregression. SMOKE/GL/corpus/DWM unchanged. Use scripts/agx-cs-benchmark-window.sh at CS step for1407andfuturetemplates; automaticallyresumesaftercutoff. Active1404 alreadycompletedCS16:13:02--16:15:24Z beforeinstruction44.383fps/processstoppedbyharness; preservehistoricalreceipt,no rerun, do notclaimitwasneverlaunched. Active1404scriptnotedited.
