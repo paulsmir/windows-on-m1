@@ -11,7 +11,7 @@ Worktree `/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-comp
 ## Immediate next: repair Windows include gate, build EXP1404
 
 - EXP1405 CPU_ONLY PASS: same immutable1402 EXE/fixture/21dist; actual sharedcapture controls exit0/7 and nativecaller exit0/map5/ownedSPV2152B/inputunchanged. SameBoot Code28/noService8CPU. Finalmanifest342e45f372a8b82e28fb7c79641ae3ffbeeb3dec2f5d322cda020f84456c2d9c.1400 NULL-exit failure preserved.
-- EXP1406 BEFORE630fe7b1: replay nativeSPV1a5bef14 through existing validator/1398structural/1401semantic binaries, no new compile or guest operation; results pending.
+- EXP1406 BEFORE630fe7b1: replay nativeSPV1a5bef14 through existing validator/1398structural/1401semantic binaries, no new compile or guest operation; CPU_ONLY_PASS: validator/class-slots/384words/346stores/3negatives correct;17receiptfiles verified manifest65e64adb. No nativeGPUproof.
 - C19 fix committedced15565, actualnumericRED->GREEN72pairs passed.1404source7768ec52/1407source6631ae04 immutable companions. Windows syntax1404: DDI native/NONErc0; owner rc2 missingnir.h. No package buildstarted. Diagnose actualnative/syncheck includes before minimalrepair, then newsourcepins/BEFORE. Never treat wrapperexit0 as compilergreen.
 - Old1392HOLD remains; next hardware1404 C19+C20 separate fresh-device contracts, then1407C21 after accepted1404 and durable rollback.
 

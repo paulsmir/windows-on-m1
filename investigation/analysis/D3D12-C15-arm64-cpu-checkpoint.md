@@ -34,3 +34,17 @@ SHA342e45f372a8b82e28fb7c79641ae3ffbeeb3dec2f5d322cda020f84456c2d9c.
 This proves the limited Windows ARM64 C API/CRT/TLS invocation and exit capture.
 It does not prove GPU/DDI/SM6 capabilities, internal allocation failure handling
 or general shader conformance. Native SPIR-V semantics are a separate EXP1406.
+
+EXP1406 CPU_ONLY_PASS: the immutable native1405 SPIR-V passed Vulkan1.1
+validation, existing1398 class/slot lowering, and existing1401 restricted actualNIR
+semantic replay. Allthree process returns were0; 34input hashes/sizes/paths
+unchanged before/after. 192lanes/173active/19tail/384words/346stores matched,
+three negative variants each produced346mismatches and unsupported/bounds
+were refused. Both UAV arrays equal independent1397 expected data. Structural
+and semantic postNIR byte-match SHA3129a611189d61e21248ad7ea790a0ab4eac8fc07b1b10d02b8b9b3b174ed67e.
+
+Receipt.local/c15-native-replay-1406/artifact-hashes.json SHA65e64adbbf13aa9738df2f1157a8e4e638c7f2c4579b969ca738a7348527f0ca
+covers17files independently verified by coordinator. No new compile, fetch,
+source or guest operation. No inference for differing host/native SPIR-V bytes.
+This closes fixedshader nativeCPU semantic validation; GPU/driver/DDI/SM6,
+internal OOM and general shader conformance remain separate gates.
