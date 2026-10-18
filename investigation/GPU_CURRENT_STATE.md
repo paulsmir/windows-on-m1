@@ -1,3 +1,9 @@
+## 2026-10-18T02:04Z EXP1377 D3D12 checkpoint (recovery completed)
+
+- EXP1377 exact-source rerun passed the EXP1376 idle SEGSTATS hang and reached NEWEXP_DONE. C11A sequential occlusion, C12A/B COPY/COMPUTE queues and cross-queue waits, and C13A graphics root UAV all PASS. C14A indirect draw with count buffer: DDI, close, execute and fence S_OK, but zero pixels and zero UAV counter; C14B indirect dispatch PASS. C7A present PASS, DWM faults 0, corpus 64/4, benchmark 59.6 fps. Evidence: EXP1377/tool-d3d12-on-{std.txt,umd.log}.
+- Active causal target: distinguish count-buffer handling from argument-buffer handling in Asahi's `util_draw_indirect` path with one no-count indirect draw probe. No driver fix is justified yet. This is a measurement hypothesis, not a proven cause.
+- Recovery completed at 2026-10-18T02:35Z: `rec1377h/recover.sh` reports RECOVERY_DONE and Package Absent; bounded Windows SSH succeeds on resume.
+
 # J313 GPU: CS 1.6 plays fullscreen on the AGX OpenGL ICD (standard benchmark 43.2 fps; without the Steam overlay UI paced at the 60 Hz vsync cap)
 
 ## Current as of 2026-10-17T19:50Z (read this first)
@@ -2497,3 +2503,5 @@ Do not claim whole-suite GREEN or fix unrelated harnesses.
 - Performance: VidMm CPU mappings of staging read at 60-90 MB/s irrespective of Cached/aperture/AccessedPhysically (EXP1016-1020 rejected); ordinary process memory 2.5 GB/s. Unshared staging now lives in VirtualAlloc memory (6a0ae7f2, EXP1022): staging hash 2.46 GB/s, DWM submit gap 34 ms.
 - Current best package: EXP1022 (6a0ae7f2). Operator: desktop after Win+D, visible rate ~0.5 fps, missing text in Start/taskbar, mis-rendered icons.
 - Active next causal targets: (1) visible frame path (only 16-64 DWM presents / 24-39 DCP swaps per ~4 min while render runs; m1n1 per-swap snapshots removed in EXP1023 gave 24->39 swaps only) — instrument submit->present/flip->SetVidPnSourceAddress->DCP latch->VSync timeline; (2) glyph/text rendering correctness; (3) initial black screen until Win+D; (4) open: 0x10E dump at EXP1014 rollback restart (archived), WATCHDOG TDRs in EXP1017/EXP1018.
+
+EXP1377 recovery correction 2026-10-18T02:35Z: rec1377h/recover.sh RECOVERY_DONE, normal guest preflight PASS, Package Absent (scratchpad rec1377.log). The pending-recovery note above is superseded.
