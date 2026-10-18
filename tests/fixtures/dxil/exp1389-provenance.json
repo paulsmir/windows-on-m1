@@ -1,0 +1,35 @@
+{
+  "origin": "project-authored original EXP1389 compiler-only shader, copied unchanged from .local/c15-sm6-8434b063; no upstream shader or implementation",
+  "compiler": "existing Windows SDK 10.0.26100.0 x64 dxc.exe 1.8.2502.11",
+  "compiler_sha256": "7c6918a0e2d4e437629fa8549f5ce800970494780f363bbbe1e3d3034f435aee",
+  "arguments": [
+    "-T",
+    "cs_6_0",
+    "-E",
+    "main",
+    "-HV",
+    "2018",
+    "-O3",
+    "-Ges"
+  ],
+  "files": {
+    "exp1389_cs60.hlsl": {
+      "bytes": 263,
+      "sha256": "d9493d63709a0fc4a546f97cfa5033f6a7f14c90360d56aa7d119ddc188356e0"
+    },
+    "exp1389_cs60.dxil": {
+      "bytes": 2824,
+      "sha256": "f3934fccef3b1428d62ed6a675540cab1bf674faaf85c67320e3ed83c6c62bb4"
+    }
+  },
+  "dxil_program": {
+    "offset": 1548,
+    "bytes": 1276,
+    "sha256": "b2c39e1fbc25150750de33858b45f7fb17091013f799c3e68eea3c017c164df7"
+  },
+  "bitcode": {
+    "offset": 1572,
+    "bytes": 1252
+  },
+  "scope": "structural framing tests only; not DXIL semantic validation, translator linkage, runtime or hardware acceptance"
+}
