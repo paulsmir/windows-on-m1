@@ -57880,3 +57880,62 @@ EXP1437 C24_ARRAY_CANDIDATE_CPU ACTUAL 2026-10-18T21:22:41.146868+00:00: exactON
 EXP1436 BUILD ACTUAL 2026-10-18T21:23:51.528258+00:00: build44812rc0/PACKAGE1436BUILD_PASS/693sourceintegrity5aeb6046d2a1084bd4560bcfe1fe4936fb1329d6/PDBsaved/stackARM6413824WOW6544PASS. Sourcezip e2ccde7c97bc51fa3f784b19515ee50635a8178246a4734bc0cb601a6c93490c/source-manifest c60e36971fac535b82b03b7d142afef0878f6a169bf17b70a0e86852b01b0bcd. Nativeoriginal4+buildlog fetched/preservedbeforeanyrepack: preservationdf5e3e9c2e8aeef34fc88fe98e57c9d42af9f54953c10f6d8f74a64276345d9b; SYS341be905cea1b9b2ea3611e05599641560962467ab0c3d5112d36d33093368e5/UMD8d434312362c91ff28cb6f0926b5b47c495c14686b79b737857ddb101e99da35. Rootpipelineinteropreviewcd4601f5d46b3fad459728fce0d4fc55fa92eb1520ef77bfa0e307ef1e5894ad validatedsourcearchive/fixexactbuildlog2linecheck/stagedrcptb277cefecf9f05866a45705220775ca20f5c980c9819d6b2d614f0d77a02f899. DiagnosticEXE3d596/pool5574copiedandhashchecked. Fullroot13110pendinghardlaunchgate; no stage/install/launch yet.
 
 EXP1436 OFFLINE_GATES ACTUAL / HARDWARE_PHASE BEFORE 2026-10-18T21:25:11.436894+00:00: correctedrootfull1594/195.875s/68fail51errors11skip exact119baseline noadded/noremoved SHA0ede804992d96ccb2d7e3e64123d128b1c1bb496804b2ba883d4e751c87ed5a9; originalwrongcwd1330run preserved. CURRENT31targetedPASS/nativeactualRED2GREEN0/WindowsC++same5279inherited/nativeprojectedcompilefreshPACKAGE1436PASS/PDB/stack13824+6544/originalpreservationdf5e3e9c allgateSHAreviewed. Implementation5c1003de/probeorder0009d25d/CHANGESf878cc05; immutablehardware5aeb6046 excludesC23/C15. Exactbash /Users/pavel/public_windows/.local/preparation-1436/run1436.sh (sourceverifier/completecodegates/recovery1430/preciseprobe3d596/pool5574); pipeline willrepack/sign/fetch/hash/stageverify/FactoryV2recordexactfullartifact/profile/recoveryBEFORE thenrun-probe. Productionfactortrue3DPBEbaseDepth only, diagnosticC21ElastafterunchangedC21Cprefix. Expect53nonEcontrols inclC21Cdatapass; Eoutcomeseparate, nofake54. FullSMOKE/GL/CS/corpus/DWM/poolregressions, CSallowed. GuestSSHup/inertrecoveredAbsent; solepipelinecontroller, noordinaryhiddenboot/nointerposedreboot. Hardwaremarkerrootwritten; preserveoriginalnative4+log; exactpackagefinalhashesrecordedbyserialpipelineBEFOREinstall/launch.
+EXP1436 BEFORE 2026-10-18T21:26Z (PACKAGE1436: AppleAgxOpenGL32.dll d51ebf72bc4afc25 (KMD/ARM64 UMD 5aeb6046d2a1084bd4560bcfe1fe4936fb1329d6 (PBE baseDepth helper only; original54logicalchecks withC21Elast; no C23/C15/caps) + ICDout61 + WOWUMDout88 1625ffde + INF1235; pinned m1n1 5b857603/Mu361a2134), INF cf2a59b6, sys 341be905, UMD 8d434312, catalog 94fcffc1, DriverVer 30.0.1436.0; smoke ddd752e3d31672f4; m1n1 5b857603 (macho 3e5e9f1f, IOMFB_FULL_OWNER=1 AGX_LOCAL_RESERVE_V2=1; 4096-record broker page-table registry, on fa45bc58), Mu 361a2134 J313_EFI-m2f2c.fd (1c7d87d6, reserve ABI v3 on 71c9b2d551), run_uefi.py integration; manifest/hardware-manifest/full-owner1436.sh 2003c526925517c4 08d03fa3fa0a6f43 c5b6582e14f0870c ; C: free 27.72 GB; recovery rec1436h/recover.sh; probe probe1436.sh (ea12047631fcd42c); then the standard benchmark (EXP1184 harness: playnoovl).
+EXP1436 phase BEFORE — immutable source 5aeb6046d2a1084bd4560bcfe1fe4936fb1329d6; launch requires complete gates and exact final package hashes.
+WHY THIS HYPOTHESIS:
+1. Root has selected the source-derived 3D PBE baseDepth mismatch at the C21C boundary in recovered1430. actual7argvRED33checks2mip1failures/GREEN33checks0+18non3Dcontrols artifact4b894663688846f6f27652744644860c8b18c501fe1f25eeb17934236f5edd30 evidence is required before any package build.
+2. Base5279 already contains the successful-texture/publicGPUVA0 admission fix. This candidate changes only build-native-asahi-state.py projector PBEbaseDepth helper; no owner/DDI/query/caps/R1/C23/C15publisher orcurrentHEAD feature is included.
+3. Existing C21E process-ending diagnostic prevented independent remaining controls from being collected. A separately reviewed order-only change moves unchangedC21E last afterC22A/C22B/C7A; targetprefix throughC21C remains byte-identical. This is transparent testorder bookkeeping, notcompilerfaultfix.
+ATOMIC CONTRACT: PBEbaseDepth sourcefix is the single production variable. Diagnostic probeorder is separately conditional/preregistered afterunchangedC21Cprefix; no new shader/input/step omission.
+WINDOWS CONTRACT: unchanged0003 limited3D/defaultheap/formats/copy/SRV/UAV/planeRTV/publicVA0 ABI from5279; exact54logicalchecks retained. No newlyadvertisedbehavior.
+AGX/ASAHI CONTRACT: Mesa agx_state.c1130/1223 PBEselecteddepth withlevel vsHoneykrisp hk_image_view.c391baseDepth withlevel; st_atom_image.c112 confirms ownerselectedrange. ActualpairednativeCPURED2GREEN0; normalizedtarget3D-onlyconditional preservesforcedarray/singleplane. Rootfreezes exactPBEbaseDepthhelper/nativeREDGREEN evidence; preserveallotherAsahi nativecreation/layout/packing behavior andsharedprefix.
+TRANSLATION: BASE5279bc4fcdfd04b4c3218da832a0f3e9c5e47bab +EXACTTWOFILES drivers/apple-agx/mesa/scripts/build-native-asahi-state.py anddrivers/apple-agx/windows/icd/agx_d3d12_probe.c. ProjectorcandidateSHA c20bbc89fb2b3dcc99307b06026ccc927150a1d9e688b5229d1e35c6fe8dc7de; probeC23df848829f07585345cf3355844e9c2de36bdbc607daa799d0932c665041b64. Originalallshaderheaders/functions unchanged. C21Cprefix6ea1181fe0034cdb2f1734ad9c8fc8a7d93844cdb83435f91899b6309abba894. DiagnosticorderEXE3d5960170549453e1a97808cbabf9554170a3bad56cf09b5e637f650e3315a48 (246272B,ARM64AA64,build-only,notexecuted); receiptf078fa3c371ace782d8dba59c028e14d2e6e6e1b658a4d89ce2b0a8e7cea2291.
+WHAT IS STILL UNKNOWN: actualC21C store/readback afterPBEhelperrepair; remainingcontrols previouslyafterC21E; C21E maystillterminate andisnotfixed/testedbythisproductiondelta. Expected53nonEchecks includingC21C independentlyrecorded; retainexactC21E actual outcome separately. Neverreport54ALLPASS whenEuncompleted.
+Prerequisites: exact1430ACTUAL reviewed; recoveredvisibleguestPackageAbsent perrootd7ce1829/fullreceipthashbd8a1dfb8dbf7a0eb86fd2152da04f7a094b52ea47f5341aa4189ff1961869eb; FactoryV2samevisiblelaunch/recovery; nointerposedhiddenboot/nopackagecarryover. Sourcefreeze/twofilehashes/nativeactualREDGREEN/focused/Windows3/fullbaseline/nativepackage/PDB/stacks/originalnativeartifactpreservation/sign/stage exacthashes must allPASS beforelaunch (build/fullsuitecurrentlyinprogress). BUILD1436approval andHARDWARE1436approval are separate absentmarkers untilrootwritesexactpin.
+Controls: C14A/regressionpool55740036f90c78f8e6a96c33ab4ecebbc0b11360ec87f28aaac72e9d0d96f5d3; inheritedSMOKE73PASS+knownMSAA-a000r; fl11cs-a/x/debug; GL/internalGL/CS userwindowguard; corpus64/4expectedcreatefail/nohang/pixeldiff,DWM0; poolactual6workersfreshforeignpressure; intentionalLONGJOB only. No defaultenable/caps/profile/firmware change.
+Build draft: bash .local/preparation-1436/build1436.sh (refuses untilsource/pre-packagecodegate+BUILD1436approval). Pipeline draft: bash .local/preparation-1436/run1436.sh (refuses untilcompletecodegates/recovery/HARDWARE1436approval). Existing1430FactoryV2/WOWout88/ICDout61/INF1235/m1n15b857603/Mu361a2134/sourceJSON/nativeABI checks retained. Onlyroot mayrecordfinalhardwareBEFORE/dispatch.
+Recovery: rootsolecontroller; collectevidence thenremoveexactexperimentpackage/service withsameGPU-visibleFactoryV2, orderednormalCode28Absent. Preserveknown-good emergencyhiddenimage butnoordinaryhiddenboot. NewEXP1436paths only; original1430 artifacts immutable.
+PACKAGE_ARTIFACTS:
+cf2a59b6a49e4b3222c2338c727a36e26e6515fd3d841774b0fe7c750904307b  /Users/pavel/public_windows/.local/experiments/EXP1436-d3d12-volume-pbe-depth/AppleAgxRenderAdmission.inf
+341be905cea1b9b2ea3611e05599641560962467ab0c3d5112d36d33093368e5  /Users/pavel/public_windows/.local/experiments/EXP1436-d3d12-volume-pbe-depth/AppleAgxRenderAdmission.sys
+8d434312362c91ff28cb6f0926b5b47c495c14686b79b737857ddb101e99da35  /Users/pavel/public_windows/.local/experiments/EXP1436-d3d12-volume-pbe-depth/AppleAgxRenderAdmissionUmd.dll
+94fcffc1b7803ea6180bc90c23328c7256565887fa509dca21eca10f5aa27e33  /Users/pavel/public_windows/.local/experiments/EXP1436-d3d12-volume-pbe-depth/appleagxrenderadmission.cat
+d51ebf72bc4afc255c902039d89c2268ca77f11d7f514344f8aececc59f0a379  /Users/pavel/public_windows/.local/experiments/EXP1436-d3d12-volume-pbe-depth/AppleAgxOpenGL32.dll
+1625ffde0685757457143f6eb8cb31f60aae0b98c5cf91cd5cdbc01accd7e7ac  /Users/pavel/public_windows/.local/experiments/EXP1436-d3d12-volume-pbe-depth/AppleAgxRenderAdmissionUmd32.dll
+2003c526925517c46cc2e70afeb7057d1a88e5a67d334457543e9752f021a4ee  /Users/pavel/public_windows/.local/experiments/EXP1436-d3d12-volume-pbe-depth/manifest.json
+08d03fa3fa0a6f43424b6e6a871315efa14c8a5fe70d0a8a0191240de9b3481b  /Users/pavel/public_windows/.local/experiments/EXP1436-d3d12-volume-pbe-depth/hardware-manifest.json
+468a3a5ea8e251b8a707f13c9db9e21045bf3e7a544bed2c2c5940e237a26cd1  /Users/pavel/public_windows/.local/experiments/EXP1436-d3d12-volume-pbe-depth/kmd-build-receipt.json
+c5b6582e14f0870c7d4c92f1bbb43f1b5bba5d96617183ddebff06ab786ed6de  /Users/pavel/public_windows/.local/experiments/EXP1436-d3d12-volume-pbe-depth/full-owner1436.sh
+SOURCE_ARTIFACTS:
+e2ccde7c97bc51fa3f784b19515ee50635a8178246a4734bc0cb601a6c93490c  /Users/pavel/public_windows/.local/experiments/EXP1436-d3d12-volume-pbe-depth/source.zip
+c60e36971fac535b82b03b7d142afef0878f6a169bf17b70a0e86852b01b0bcd  /Users/pavel/public_windows/.local/experiments/EXP1436-d3d12-volume-pbe-depth/source-manifest.json
+RECOVERY SOURCE:
+{
+  "ExperimentDirectory": "/Volumes/pwdev/public_windows/.local/experiments/EXP1436-d3d12-volume-pbe-depth",
+  "ExperimentId": "1436",
+  "Files": {
+    "DisableServiceHelper": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recovery-disable-service.ps1",
+      "Sha256": "7ab9f020ece3157b34091778366de7fd9058c3c65d9f8758bf94470e7ec28bcb"
+    },
+    "ExactLauncherSelector": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-select-exact-launcher.py",
+      "Sha256": "bed44fabe7e97270d8d1399e2140fff60b730252b9971570211fbb4a0a15e2aa"
+    },
+    "HostShell": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recover-visible.sh",
+      "Sha256": "38909f549c08ac3f0f88d1ce8737b4a2556c7441b91121723e27246503d2be10"
+    },
+    "LegacyHidden": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1436-d3d12-volume-pbe-depth/evidence/rec1436h/recover.sh.legacy-hidden",
+      "Sha256": "85efdd3e60179aa0b2aa14e9b993d1f9bec973bac44d11ed173a1d9478ee1060"
+    },
+    "Wrapper": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1436-d3d12-volume-pbe-depth/evidence/rec1436h/recover.sh",
+      "Sha256": "d0a975620e87e325dc26071264d9adde58c15a39a0aa512faf57f199900d09f5"
+    }
+  },
+  "RecoveryMode": "GpuVisibleServiceDisabledOrderedReboot",
+  "Version": 2,
+  "Worktree": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler"
+}
