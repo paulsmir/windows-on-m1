@@ -8,7 +8,7 @@ struct AgxCpuRoot { uint64_t value; };
 struct AgxCpuInputLease { uint64_t value; };
 enum class AgxCpuProviderStatus {
  Ok, Invalid, NotLiveDevice, NotLiveRoot, WrongDevice, RetiredDevice,
- Busy, ProjectOOM, Exhausted, CoreFailure
+ Busy, ProjectOOM, Exhausted, CoreFailure, Reentrant
 };
 struct AgxCpuProviderResult {
  AgxCpuProviderStatus status;
@@ -16,27 +16,34 @@ struct AgxCpuProviderResult {
  bool core_called;
 };
 using AgxCpuFailureSink=void(*)(void *,AgxCpuDevice,AgxCpuProviderResult) noexcept;
-/* ALL external calls on one provider must be caller-serialized/nonreentrant.
- * The sole allowed internal reentry is synchronous read-only ResolveIdentity
- * from the existing zero-cache core hook during Calculate/Copy. It cannot mutate
- * registry state. Failure sinks must not call provider APIs.
- * Different providers may be independent;
- * this is NOT a thread-safe registry or Windows/runtime lifetime provider.
- * No registry locks exist/are held during core copy or the failure sink.
- * Sinks must not throw, reenter, or mutate source/input/destination buffers.
- * Sink/context stay valid while registered OR any input lease retains device;
- * RetireDevice alone does not end that caller-owned context lifetime.
- * All destination/output records are writable, disjoint from inputs/storage.
- * Failure sink coverage: AcquireInput with a known live device, and failed
- * Calculate/Copy with a known lease. Other APIs return status only. Unknown
- * device/lease/null-output failures have no safely resolved sink.
- * DDI handles are opaque identity values, never dereferenced by this module.
- * Caller owns handle identity lifetime; IDs never reuse, even if handle addresses
- * are retired/re-registered. Library children must be destroyed before device
- * retirement as required by the existing zero-cache module contract.
+/* Unlinked CPU domain, method-specific concurrency only; NOT a runtime/DDI
+ * lifetime provider. Client owns the raw provider entry lifetime: Destroy must
+ * not race an unretained entry (notably pre-admission registration). Established
+ * leases/operations/scopes/tickets can make a concurrent Destroy probe Busy;
+ * actual deletion still requires external caller-entry quiescence. After Destroy
+ * success no caller may
+ * enter; outstanding leases/operations/scopes/tickets make Destroy Busy.
+ *
+ * Registry mutations/refcounts are synchronized. Core and sinks run outside
+ * registry locks. Same-domain mutation from core/sink reentry returns Reentrant;
+ * read-only pinned identity resolution is permitted. Sinks/resolvers do not
+ * throw or mutate borrowed input/output. Different providers are independent.
+ * All input/output/storage pointers obey the existing readable, stable,
+ * writable and disjoint CPU preconditions; this is not pointer validation.
+ *
+ * RetireDevice closes new device/root/input/operation admissions but preserves
+ * known-lease failure reporting, as the serialized935 contract did. Sink/context
+ * remain valid until explicit BeginQuiesce + successful TryQuiesce, OR all
+ * registrations/leases are destroyed under the legacy serialized contract.
+ * BeginQuiesce closes sink admission. Already admitted sink/core work may finish;
+ * no callback starts after successful TryQuiesce. This is a CPU client guarantee,
+ * not permission to wait in a real DestroyDevice callback.
+ * Library children must be destroyed before retirement (existing zero-cache
+ * precondition). Borrowed PROGRAM/signature arrays stay stable until successful
+ * ReleaseInput; Release is Busy while any operation owns that lease.
  */
 AgxCpuProvider *AgxCpuProviderCreate();
-AgxCpuProviderStatus AgxCpuProviderDestroy(AgxCpuProvider **); /* Busy: leases remain. */
+AgxCpuProviderStatus AgxCpuProviderDestroy(AgxCpuProvider **); /* Caller entry-quiescence; Busy if pins remain. */
 AgxCpuProviderStatus AgxCpuRegisterDevice(AgxCpuProvider *,D3D12DDI_HDEVICE,
  AgxCpuFailureSink,void *context,AgxCpuDevice *);
 AgxCpuProviderStatus AgxCpuRetireDevice(AgxCpuProvider *,AgxCpuDevice);
@@ -62,7 +69,31 @@ AgxCpuProviderStatus AgxCpuLeaseRootBytes(AgxCpuProvider *,AgxCpuInputLease,
 AgxCpuProviderResult AgxCpuCalculate(AgxCpuProvider *,AgxCpuInputLease,AgxShaderOwnedLayout *);
 AgxCpuProviderResult AgxCpuCopyOwned(AgxCpuProvider *,AgxCpuInputLease,void *storage,
  SIZE_T capacity,AgxShaderOwned **);
-/* Only an original CPU fixture supplies zero-cache's real integration hook via
- * this lookup. Membership is compared before any record access. Identity is
- * borrowed while provider/device lease lives; not a production resolver. */
+/* LEGACY ONLY: caller-serialized borrowed lookup, unchanged935 semantics.
+ * No concurrent lifetime safety is promised for this unpinned return value.
+ * New concurrent clients MUST use ResolvePinnedDeviceIdentity instead. */
 const void *AgxCpuResolveDeviceIdentity(AgxCpuProvider *,D3D12DDI_HDEVICE);
+
+struct AgxCpuOperation { uint64_t value; };
+struct AgxCpuDeviceScope { uint64_t value; };
+struct AgxCpuQuiesceTicket { uint64_t value; };
+/* One-use Ready->Running->Finished->Ended. End while Running is Busy. Independent
+ * operations may execute concurrently; same operation/output is client-owned.
+ * Admission before device retirement permits completion after closing. */
+AgxCpuProviderResult AgxCpuBeginOperation(AgxCpuProvider *,AgxCpuInputLease,AgxCpuOperation *);
+AgxCpuProviderResult AgxCpuCalculatePinned(AgxCpuProvider *,AgxCpuOperation,AgxShaderOwnedLayout *);
+AgxCpuProviderResult AgxCpuCopyPinned(AgxCpuProvider *,AgxCpuOperation,void *,SIZE_T,AgxShaderOwned **);
+AgxCpuProviderStatus AgxCpuEndOperation(AgxCpuProvider *,AgxCpuOperation *);
+AgxCpuProviderStatus AgxCpuOperationRootBytes(AgxCpuProvider *,AgxCpuOperation,AgxShaderTrustedSpan *);
+/* Explicit new-client scope around actual zero-cache library calls. Scope Begin/
+ * End must occur on the same thread, strict LIFO. No runtime-global setter. */
+AgxCpuProviderStatus AgxCpuBeginDeviceScope(AgxCpuProvider *,AgxCpuDevice,AgxCpuDeviceScope *);
+AgxCpuProviderStatus AgxCpuEndDeviceScope(AgxCpuProvider *,AgxCpuDeviceScope *);
+const void *AgxCpuResolvePinnedDeviceIdentity(AgxCpuProvider *,D3D12DDI_HDEVICE);
+AgxCpuProviderStatus AgxCpuBeginQuiesce(AgxCpuProvider *,AgxCpuDevice,AgxCpuQuiesceTicket *);
+/* Busy does not consume the ticket; Ok consumes it and closes membership. Live
+ * leases may retain root/device memory, but cannot dispatch a new sink afterward.
+ * Legacy LeaseRootBytes is borrowed only to successful Release; serialize that
+ * raw span's consumption with Release. OperationRootBytes consumption must also
+ * finish before that operation is Ended; an operation token is not a second pin. */
+AgxCpuProviderStatus AgxCpuTryQuiesce(AgxCpuProvider *,AgxCpuQuiesceTicket *);
