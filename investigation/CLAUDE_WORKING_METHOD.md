@@ -103,3 +103,23 @@ Performance correction: the ~59.6fps regression reference in older summaries
 is the internal GL2400-frame benchmark, not the CS timedemo. EXP1377 CS did not
 launch (BENCH_COPY_FAIL); EXP1378 post-harness CS44.784fps and EXP1379 early
 CS46.391fps are separate measurements. Preserve that distinction.
+
+## Ordinary recovery update after EXP1380
+
+After prepare generates recNNNNh/recover.sh, run
+`python3 scripts/agx-install-visible-recovery.py "$N" "$X" --worktree "$W"`
+before hardware BEFORE. Append its visible-recovery-source.json hashes to BEFORE.
+The factory preserves the original emergency hidden helper without overwriting it.
+The same recover.sh entry now calls the tracked GPU-visible rollback: exact
+identity/disarmed guard, service Start4 and durable receipt, ordered normal boot,
+Code32/serviceStopped, exact package removal, durable restart and normal
+Code28/PackageAbsent/noService/8CPU preflight. Source lifecycle consumes arms by
+deleting them; proven absence and explicit DWORD0 are distinct safe states.
+Keep all guest commands inside the active recovery controller. Cleanup may order
+a restart after an SSH timeout/EOF; require owned reset plus durable preflight,
+and never repeat deletion solely because the client timed out. Emergency hidden
+boot is reserved for a GPU-visible guest that cannot be recovered.
+
+EXP1380 guard verification: package affected45/full1509 applies to driver changes;
+recovery guard80e35fbb separately passed11 native PowerShell cases and actual
+Code32/serviceStopped -> Code28/PackageAbsent transition.
