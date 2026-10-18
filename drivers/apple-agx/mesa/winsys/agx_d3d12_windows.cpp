@@ -440,7 +440,7 @@ static bool texture1d_template(DXGI_FORMAT format,unsigned width,unsigned levels
   unsigned legal=1;for(unsigned n=width;n>1;n>>=1)++legal;if(levels>legal)return false;
   const enum pipe_format physical=FormatTranslate(format,FALSE);
   if(physical==PIPE_FORMAT_NONE || block_bytes(physical)!=4)return false;
-  memset(templ,0,sizeof(*templ));templ->target=PIPE_TEXTURE_1D;templ->format=physical;
+  memset(templ,0,sizeof(*templ));templ->target=PIPE_TEXTURE_1D_ARRAY;templ->format=physical;
   templ->width0=width;templ->height0=templ->depth0=templ->array_size=1;
   templ->last_level=static_cast<uint8_t>(levels-1);templ->nr_samples=templ->nr_storage_samples=1;
   templ->usage=PIPE_USAGE_DEFAULT;templ->bind=(bind&AGX_D3D12_BIND_SAMPLER)?PIPE_BIND_SAMPLER_VIEW:0;
@@ -466,6 +466,50 @@ extern "C" HRESULT AgxD3d12QueryTexture1DLayout(DXGI_FORMAT format,unsigned widt
   result->DepthStride=layout.LayerStrideBytes;
   memcpy(result->MipOffsets,layout.LevelOffsets,levels*sizeof(result->MipOffsets[0]));return S_OK;
 }
+/* C24 bounds are pinned FL11_0 D3D12_REQ_TEXTURE1D_* / SUBRESOURCES. */
+static bool texture1d_array_template(DXGI_FORMAT format,unsigned width,unsigned layers,unsigned levels,
+    unsigned bind,struct pipe_resource *templ) {
+  if(!layers || layers>2048 || !levels || levels>30720u/layers ||
+     !texture1d_template(format,width,levels,bind,templ)) return false;
+  templ->array_size=static_cast<uint16_t>(layers);return true;
+}
+extern "C" HRESULT AgxD3d12QueryTexture1DArrayLayout(DXGI_FORMAT format,unsigned width,unsigned layers,
+    unsigned levels,unsigned bind,AGX_D3D12_VOLUME_LAYOUT *result) {
+  if(!result)return E_INVALIDARG;memset(result,0,sizeof(*result));
+  struct pipe_resource templ={};AGX_WIN32_ASAHI_RESOURCE_LAYOUT layout={};
+  if(!texture1d_array_template(format,width,layers,levels,bind,&templ) ||
+     !AgxWin32AsahiQueryUncompressedResourceLayout(&templ,&layout) || !layout.SizeBytes ||
+     layout.SizeBytes>0xffff0000ULL || !layout.LayerStrideBytes ||
+     layout.LayerStrideBytes>layout.SizeBytes/layers || layout.SizeBytes!=layout.LayerStrideBytes*layers ||
+     layout.MetadataOffsetBytes || layout.CompressionLayerStrideBytes ||
+     (layout.Flags&AGX_WIN32_ASAHI_LAYOUT_COMPRESSED) ||
+     !(layout.Flags&AGX_WIN32_ASAHI_LAYOUT_WRITEABLE_IMAGE) ||
+     !(layout.Flags&AGX_WIN32_ASAHI_LAYOUT_PAGE_ALIGNED_LAYERS) ||
+     layout.RequestedLevels!=levels || layout.AllocatedLevels<levels || layout.AllocatedLevels>16)return E_NOTIMPL;
+  for(unsigned m=0;m<levels;++m) {
+    const unsigned w=width>>m?width>>m:1u;
+    const unsigned long long off=layout.LevelOffsets[m],span=4ull*w;
+    if(off%4 || off>layout.LayerStrideBytes || span>layout.LayerStrideBytes-off ||
+       (m+1<layout.AllocatedLevels && (layout.LevelOffsets[m+1]<off || span>layout.LevelOffsets[m+1]-off)))return E_NOTIMPL;
+  }
+  result->Bytes=(layout.SizeBytes+0xffffULL)&~0xffffULL;result->NativeBytes=layout.SizeBytes;
+  result->DepthStride=layout.LayerStrideBytes;
+  memcpy(result->MipOffsets,layout.LevelOffsets,levels*sizeof(result->MipOffsets[0]));return S_OK;
+}
+extern "C" HRESULT AgxD3d12OwnerCreateTexture1DArray(AGX_D3D12_OWNER *owner,DXGI_FORMAT format,
+    unsigned width,unsigned layers,unsigned levels,unsigned bind,unsigned long long bytes,AGX_D3D12_BUFFER *texture) {
+  if(!texture)return E_INVALIDARG;memset(texture,0,sizeof(*texture));
+  AGX_D3D12_VOLUME_LAYOUT checked={};struct pipe_resource templ={};AGX_WIN32_ASAHI_RESOURCE_LAYOUT layout={};
+  if(!owner || !owner->Screen || FAILED(AgxD3d12QueryTexture1DArrayLayout(format,width,layers,levels,bind,&checked)) ||
+     bytes!=checked.Bytes || !texture1d_array_template(format,width,layers,levels,bind,&templ) ||
+     !AgxWin32AsahiQueryUncompressedResourceLayout(&templ,&layout))return E_NOTIMPL;
+  if(!owner->Screen->is_format_supported || !owner->Screen->resource_create_with_modifiers ||
+     !owner->Screen->is_format_supported(owner->Screen,templ.format,templ.target,1,1,templ.bind))return E_NOTIMPL;
+  struct pipe_resource *resource=owner->Screen->resource_create_with_modifiers(owner->Screen,&templ,&layout.Modifier,1);
+  if(!resource)return E_OUTOFMEMORY;
+  texture->Resource=resource;texture->GpuVa=AgxWin32AsahiBufferGpuAddress(resource);texture->Bytes=bytes;return S_OK;
+}
+
 extern "C" HRESULT AgxD3d12OwnerCreateTexture1D(AGX_D3D12_OWNER *owner,DXGI_FORMAT format,unsigned width,
     unsigned levels,unsigned bind,unsigned long long bytes,AGX_D3D12_BUFFER *texture) {
   if(!texture)return E_INVALIDARG;memset(texture,0,sizeof(*texture));
@@ -1219,8 +1263,9 @@ static void *create_sampler(struct pipe_context *pipe, const AGX_D3D12_SAMPLER *
 static bool uav_dimension_matches(uint8_t dimension, const AGX_D3D12_UAV *uav) {
   if (dimension == DXBC_UAV_UNUSED) return true;
   const struct pipe_resource *resource = static_cast<const struct pipe_resource *>(uav->Buffer->Resource);
-  const bool line = resource->target == PIPE_TEXTURE_1D;
-  if (dimension == DXBC_UAV_1D) return line && uav->Texture && uav->Format;
+  const bool line = resource->target == PIPE_TEXTURE_1D || resource->target == PIPE_TEXTURE_1D_ARRAY;
+  if (dimension == DXBC_UAV_1D) return line && uav->Texture && uav->Format && uav->Layers==1;
+  if (dimension == DXBC_UAV_1D_ARRAY) return line && uav->Texture && uav->Format;
   return !line;
 }
 
@@ -1315,10 +1360,12 @@ static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, co
       templ.format = format;
       templ.target = texture->target;
       const uint8_t dimension = dimensions ? dimensions[i] : DXBC_SRV_UNUSED;
-      if(texture->target==PIPE_TEXTURE_1D) {
+      if(texture->target==PIPE_TEXTURE_1D || texture->target==PIPE_TEXTURE_1D_ARRAY) {
         if(dimension==DXBC_SRV_UNUSED) continue;
-        if(dimension!=DXBC_SRV_1D || srvs[i].Cube || srvs[i].FirstLayer || srvs[i].Layers!=1) return E_INVALIDARG;
-      } else if(dimension==DXBC_SRV_1D) return E_INVALIDARG;
+        if(srvs[i].Cube || (dimension!=DXBC_SRV_1D && dimension!=DXBC_SRV_1D_ARRAY) ||
+           (dimension==DXBC_SRV_1D && srvs[i].Layers!=1)) return E_INVALIDARG;
+        templ.target=dimension==DXBC_SRV_1D_ARRAY?PIPE_TEXTURE_1D_ARRAY:PIPE_TEXTURE_1D;
+      } else if(dimension==DXBC_SRV_1D || dimension==DXBC_SRV_1D_ARRAY) return E_INVALIDARG;
       if(texture->target==PIPE_TEXTURE_3D) {
         if(dimension==DXBC_SRV_UNUSED) continue;
         if(dimension!=DXBC_SRV_3D || srvs[i].Cube || srvs[i].FirstLayer || srvs[i].Layers!=1) return E_INVALIDARG;
@@ -1342,7 +1389,7 @@ static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, co
       *view_count = i + 1;
       continue;
     }
-    if (dimensions && (dimensions[i] == DXBC_SRV_CUBE || dimensions[i] == DXBC_SRV_CUBE_ARRAY || dimensions[i] == DXBC_SRV_3D || dimensions[i] == DXBC_SRV_1D)) return E_INVALIDARG;
+    if (dimensions && (dimensions[i] == DXBC_SRV_CUBE || dimensions[i] == DXBC_SRV_CUBE_ARRAY || dimensions[i] == DXBC_SRV_3D || dimensions[i] == DXBC_SRV_1D || dimensions[i] == DXBC_SRV_1D_ARRAY)) return E_INVALIDARG;
     if (!buffer->Resource || srvs[i].Offset >= buffer->Bytes) return E_INVALIDARG;
     const unsigned long long room = buffer->Bytes - srvs[i].Offset;
     /* C9: a typed buffer SRV reads texels of its format */
@@ -1366,10 +1413,14 @@ static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, co
     if (!buffer) continue;
     if (!buffer->Resource) return E_INVALIDARG;
     if (uav_dimensions && uav_dimensions[i] == DXBC_UAV_UNUSED &&
-        static_cast<const struct pipe_resource *>(buffer->Resource)->target == PIPE_TEXTURE_1D) continue;
+        (static_cast<const struct pipe_resource *>(buffer->Resource)->target == PIPE_TEXTURE_1D ||
+         static_cast<const struct pipe_resource *>(buffer->Resource)->target == PIPE_TEXTURE_1D_ARRAY)) continue;
     if (uav_dimensions && !uav_dimension_matches(uav_dimensions[i], &uavs[i])) return E_INVALIDARG;
     if (uavs[i].Format) {
       if (!uav_image(&uavs[i], &images[i])) return E_INVALIDARG;
+      const auto target=static_cast<const struct pipe_resource *>(buffer->Resource)->target;
+      if(target==PIPE_TEXTURE_1D || target==PIPE_TEXTURE_1D_ARRAY)
+        images[i].u.tex.single_layer_view=uav_dimensions && uav_dimensions[i]==DXBC_UAV_1D;
       continue;
     }
     if (uavs[i].Offset >= buffer->Bytes || buffer->Bytes > 0xffffffffull) return E_INVALIDARG;

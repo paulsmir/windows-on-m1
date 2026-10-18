@@ -33,7 +33,12 @@ def query_base():
     for n in ['D3D12DDICAPS_TYPE','D3D12DDI_SWIZZLE_PATTERN','D3D12DDI_SWIZZLE_BIT_ENTRY','D3D12DDI_SWIZZLE_PATTERN_DESC_0003','D3D12DDI_TEXTURE_LAYOUT_CAPS','D3D12DDI_TEXTURE_LAYOUT_CAPS_0001','D3D12DDIARG_GETCAPS','D3D12DDI_RESOURCE_ALLOCATION_INFO','D3D12DDI_SUBRESOURCE_INFO','D3D12DDI_RESOURCE_OPTIMIZATION_FLAGS']:
         s+=declaration(n)+'\n'
     s+='#include "windows_swizzle_reference.h"\n'
-    for m in ['static unsigned block_bytes(','extern "C" unsigned AgxD3d12FormatBlockBytes(', 'static bool texture3d_template(', 'static bool texture3d_layout(', 'extern "C" HRESULT AgxD3d12QueryTexture3DLayout(', 'static bool texture1d_template(', 'extern "C" HRESULT AgxD3d12QueryTexture1DLayout(']:s+=block(owner,m)+'\n'
+    for m in ['static unsigned block_bytes(','extern "C" unsigned AgxD3d12FormatBlockBytes(', 'static bool texture3d_template(', 'static bool texture3d_layout(', 'extern "C" HRESULT AgxD3d12QueryTexture3DLayout(', 'static bool texture1d_template(', 'extern "C" HRESULT AgxD3d12QueryTexture1DLayout(', 'static bool texture1d_array_template(', 'extern "C" HRESULT AgxD3d12QueryTexture1DArrayLayout(']:s+=block(owner,m)+'\n'
+    wdk=(ROOT/'.local/reference/wdk26100/d3d12umddi.h').read_text()
+    for name in ('D3D12_REQ_SUBRESOURCES','D3D12_REQ_TEXTURE1D_ARRAY_AXIS_DIMENSION','D3D12_REQ_TEXTURE1D_U_DIMENSION'):
+        match=re.search(r'const UINT '+name+r'\s*=.*?;',wdk)
+        if not match:raise AssertionError('pinned actual WDK constant missing: '+name)
+        s+=match[0]+'\n'
     for m in ['static bool VolumeLayoutInfo(','static bool LineLayoutInfo(','static UINT64 TextureBytes(','static HRESULT VolumeLayoutCaps(']:s+=block(ddi,m)+'\n'
     s+='\nstruct D3D12DDI_HDEVICE{void*pDrvPrivate;};struct D3D12DDI_HRESOURCE{void*pDrvPrivate;};using D3DKMT_HANDLE=unsigned;enum{D3D12DDI_RT_BUFFER=1};static constexpr UINT64 kVaMinimum=0x10000ULL,kVaLimit=1ULL<<39;\nstatic void AdmissionUmdDiagnostic(const char*,HRESULT,const UINT*,UINT){}\n'
     s+=block(ddi,'struct AgxD3d12Heap {')+';\n'+block(ddi,'struct AgxD3d12Resource {')+';\n'
@@ -54,13 +59,13 @@ struct AgxD3d12Device{};static AGX_D3D12_OWNER test_owner;static unsigned ensure
 static AGX_D3D12_OWNER *EnsureOwner(AgxD3d12Device*){++ensure_calls;return &test_owner;}
 static D3DKMT_HANDLE AgxD3d12OwnerBufferAllocation(AGX_D3D12_OWNER*,AGX_D3D12_BUFFER*){return 77;}
 '''
-    return s+block(owner,'extern "C" HRESULT AgxD3d12OwnerCreateTexture1D(')+'\n'+block(ddi,'static HRESULT CreateLineResource(')+'\n'+(ROOT/'tests/d3d12_texture1d_create_fixture.cpp').read_text()
+    return s+block(owner,'extern "C" HRESULT AgxD3d12OwnerCreateTexture1DArray(')+'\n'+block(owner,'extern "C" HRESULT AgxD3d12OwnerCreateTexture1D(')+'\n'+block(ddi,'static HRESULT CreateLineResource(')+'\n'+(ROOT/'tests/d3d12_texture1d_create_fixture.cpp').read_text()
 
 def copy_source():
     ddi,_,_=sources();s=(ROOT/'tests/d3d12_volume_record_fixture.cpp').read_text().split('int main()')[0]
     if 'D3D12DDI_RT_TEXTURE1D' not in s:s=s.replace('D3D12DDI_RT_BUFFER=1,','D3D12DDI_RT_TEXTURE1D=2,D3D12DDI_RT_BUFFER=1,')
     s=s.replace('/* ACTUAL_RECORD_TYPES */',block(ddi,'struct AgxD3d12TextureCopy {')+';\n'+block(ddi,'struct AgxD3d12TextureRegionCopy {')+';')
-    code=block(ddi,'struct AgxD3d12CopySide {')+';\n'+'\n'.join(block(ddi,m) for m in ['static bool CopySide(','static void CopyVolumeTextureRegion(','static VOID APIENTRY CopyTextureRegion('])
+    code=block(ddi,'struct AgxD3d12CopySide {')+';\n'+'\n'.join(block(ddi,m) for m in ['static bool CopySide(','static bool LineSubresource(','static void CopyLineTextureRegion(','static void CopyVolumeTextureRegion(','static VOID APIENTRY CopyTextureRegion('])
     return s.replace('/* ACTUAL_RECORDING */',code)+(ROOT/'tests/d3d12_texture1d_copy_fixture.cpp').read_text()
 
 def view_source():

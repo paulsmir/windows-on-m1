@@ -13,11 +13,13 @@ enum dxbc_srv_dimension {
    DXBC_SRV_CUBE_ARRAY = 3,
    DXBC_SRV_3D = 4,
    DXBC_SRV_1D = 5,
+   DXBC_SRV_1D_ARRAY = 6,
 };
 #define DXBC_UAV_DIMENSION_SLOTS 8
 enum dxbc_uav_dimension {
    DXBC_UAV_UNUSED = 0,
    DXBC_UAV_OTHER = 1,
    DXBC_UAV_1D = 2,
+   DXBC_UAV_1D_ARRAY = 3,
 };
 #endif

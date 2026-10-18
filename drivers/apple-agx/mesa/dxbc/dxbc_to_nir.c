@@ -3065,7 +3065,7 @@ bool dxbc_nir_srv_dimensions(const struct nir_shader *nir,
                default: break;
                }
             }
-            uint8_t dimension = tex->sampler_dim == GLSL_SAMPLER_DIM_1D && !tex->is_array ? DXBC_SRV_1D :
+            uint8_t dimension = tex->sampler_dim == GLSL_SAMPLER_DIM_1D ? (tex->is_array ? DXBC_SRV_1D_ARRAY : DXBC_SRV_1D) :
                                 tex->sampler_dim == GLSL_SAMPLER_DIM_3D ? DXBC_SRV_3D :
                                 tex->sampler_dim != GLSL_SAMPLER_DIM_CUBE ? DXBC_SRV_OTHER :
                                 tex->is_array ? DXBC_SRV_CUBE_ARRAY : DXBC_SRV_CUBE;
@@ -3125,9 +3125,8 @@ bool dxbc_nir_uav_dimensions(const struct nir_shader *nir,
                 slot < DXBC_NIR_UAV_COUNTER_SLOT + DXBC_UAV_DIMENSION_SLOTS)
                slot -= DXBC_NIR_UAV_COUNTER_SLOT;
             if (slot >= DXBC_UAV_DIMENSION_SLOTS) goto fail;
-            uint8_t dimension = image &&
-               nir_intrinsic_image_dim(intr) == GLSL_SAMPLER_DIM_1D &&
-               !nir_intrinsic_image_array(intr) ? DXBC_UAV_1D : DXBC_UAV_OTHER;
+            uint8_t dimension = image && nir_intrinsic_image_dim(intr) == GLSL_SAMPLER_DIM_1D ?
+               (nir_intrinsic_image_array(intr) ? DXBC_UAV_1D_ARRAY : DXBC_UAV_1D) : DXBC_UAV_OTHER;
             if (dimensions[slot] && dimensions[slot] != dimension) goto fail;
             dimensions[slot] = dimension;
          }

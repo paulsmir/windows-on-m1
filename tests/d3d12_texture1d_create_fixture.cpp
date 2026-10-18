@@ -10,11 +10,11 @@ int main(){
   assert(CreateLineResource(&device,&h,&heap,&arg,&resource)==E_NOTIMPL&&ensure_calls==before);
   arg.Layout=a.Layout;assert(CreateLineResource(&device,&h,&heap,&arg,&resource)==S_OK&&ensure_calls==before+1);
   assert(resource.type==D3D12DDI_RT_TEXTURE1D&&resource.width==width&&resource.height==1&&resource.layers==1&&resource.levels==requested&&resource.bytes==a.ResourceDataSize&&heap.volume);
-  auto*n=static_cast<pipe_resource*>(heap.native);assert(n->target==PIPE_TEXTURE_1D&&n->width0==width&&n->height0==1&&n->array_size==1&&n->last_level==requested-1);
+  auto*n=static_cast<pipe_resource*>(heap.native);assert(n->target==PIPE_TEXTURE_1D_ARRAY&&n->width0==width&&n->height0==1&&n->array_size==1&&n->last_level==requested-1);
   D3D12DDI_RESOURCE_ALLOCATION_INFO reflected={};D3DKMT_HANDLE allocation=0;CheckExistingResourceAllocationInfo({}, {&resource},&reflected,&allocation);assert(!memcmp(&a,&reflected,sizeof(a))&&allocation==77);
   c23_native_release(n);before=ensure_calls;
   for(UINT bad=0;bad<12;bad++){auto v=arg;auto hh=h;
-   switch(bad){case 0:v.Height=2;break;case 1:v.DepthOrArraySize=2;break;case 2:v.Width=16385;break;case 3:v.MipLevels=0;break;case 4:v.MipLevels=16;break;case 5:v.Format=99;break;case 6:v.Flags=1;break;case 7:v.Layout=1;break;case 8:hh.Alignment=4096;break;case 9:hh.CPUPageProperty=D3D12DDI_CPU_PAGE_PROPERTY_WRITE_COMBINE;break;case 10:hh.ByteSize=1;break;case 11:v.SampleDesc.Count=2;break;}
+   switch(bad){case 0:v.Height=2;break;case 1:v.DepthOrArraySize=D3D12_REQ_TEXTURE1D_ARRAY_AXIS_DIMENSION+1;break;case 2:v.Width=16385;break;case 3:v.MipLevels=0;break;case 4:v.MipLevels=16;break;case 5:v.Format=99;break;case 6:v.Flags=1;break;case 7:v.Layout=1;break;case 8:hh.Alignment=4096;break;case 9:hh.CPUPageProperty=D3D12DDI_CPU_PAGE_PROPERTY_WRITE_COMBINE;break;case 10:hh.ByteSize=1;break;case 11:v.SampleDesc.Count=2;break;}
    assert(CreateLineResource(&device,&hh,&heap,&v,&resource)==E_NOTIMPL&&ensure_calls==before);
   }
  }

@@ -152,6 +152,8 @@ typedef struct {
     unsigned long long Bytes, NativeBytes, DepthStride, MipOffsets[16];
 } AGX_D3D12_VOLUME_LAYOUT;
 /* C23: same pointer-free native extent/mip record, ordinary nonarray Texture1D. */
+HRESULT AgxD3d12QueryTexture1DArrayLayout(DXGI_FORMAT Format,unsigned Width,unsigned Layers,unsigned Levels,unsigned Bind,AGX_D3D12_VOLUME_LAYOUT *Layout);
+HRESULT AgxD3d12OwnerCreateTexture1DArray(AGX_D3D12_OWNER *Owner,DXGI_FORMAT Format,unsigned Width,unsigned Layers,unsigned Levels,unsigned Bind,unsigned long long Bytes,AGX_D3D12_BUFFER *Texture);
 HRESULT AgxD3d12QueryTexture1DLayout(DXGI_FORMAT Format,unsigned Width,unsigned Levels,unsigned Bind,AGX_D3D12_VOLUME_LAYOUT *Layout);
 HRESULT AgxD3d12OwnerCreateTexture1D(AGX_D3D12_OWNER *Owner,DXGI_FORMAT Format,unsigned Width,unsigned Levels,unsigned Bind,unsigned long long Bytes,AGX_D3D12_BUFFER *Texture);
 HRESULT AgxD3d12QueryTexture3DLayout(DXGI_FORMAT Format,unsigned Width,unsigned Height,unsigned Depth,

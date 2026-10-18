@@ -2,6 +2,7 @@
 from pathlib import Path
 import os,subprocess,tempfile,unittest,re
 from test_d3d12_view_mapping import block
+from d3d12_volume_fixture_dependencies import line_query_dependencies
 from test_dxbc_to_nir import local_tree,host_flags
 ROOT=Path(__file__).resolve().parents[1]
 DDI=ROOT/'drivers/apple-agx/d3d12/agx_d3d12_ddi.cpp'
@@ -14,6 +15,7 @@ class ResolvedVolume(unittest.TestCase):
   funcs='\n'.join(block(owner,x) for x in ['static unsigned block_bytes(', 'extern "C" unsigned AgxD3d12FormatBlockBytes(', 'static bool texture1d_template(', 'extern "C" HRESULT AgxD3d12QueryTexture1DLayout(', 'static bool texture3d_template(', 'static bool texture3d_layout(', 'extern "C" HRESULT AgxD3d12QueryTexture3DLayout(', 'extern "C" HRESULT AgxD3d12QueryTexture3D(', 'extern "C" HRESULT AgxD3d12OwnerCreateTexture3D('])
   source=(ROOT/'tests/d3d12_volume_query_fixture.cpp').read_text().split('int main()')[0]
   if 'D3D12DDI_RT_TEXTURE1D=' not in source:source=source.replace('D3D12DDI_RT_TEXTURE2D=3,','D3D12DDI_RT_TEXTURE1D=2,D3D12DDI_RT_TEXTURE2D=3,')
+  funcs+='\n'+line_query_dependencies(owner)
   funcs+='\n'+block(ddi,'static bool LineLayoutInfo(')
   funcs+='\n'+block(ddi,'static bool VolumeLayoutInfo(')
   record='typedef struct {unsigned long long Bytes, NativeBytes, DepthStride, MipOffsets[16];} AGX_D3D12_VOLUME_LAYOUT;'
@@ -47,6 +49,7 @@ class ResolvedVolume(unittest.TestCase):
   if not b or not m:self.skipTest('host Mesa unavailable')
   owner=OWNER.read_text();ddi=DDI.read_text();self.assertIn('return CreateVolumeResource(device,heap_arg,heap,resource_arg,resource);',block(ddi,'static HRESULT APIENTRY CreateHeapAndResource('));h=(ROOT/'.local/reference/wdk26100/d3d12umddi.h').read_text()
   funcs='\n'.join(block(owner,x) for x in ['static unsigned block_bytes(', 'extern "C" unsigned AgxD3d12FormatBlockBytes(', 'static bool texture1d_template(', 'extern "C" HRESULT AgxD3d12QueryTexture1DLayout(', 'static bool texture3d_template(', 'static bool texture3d_layout(', 'extern "C" HRESULT AgxD3d12QueryTexture3DLayout(', 'extern "C" HRESULT AgxD3d12QueryTexture3D(', 'extern "C" HRESULT AgxD3d12OwnerCreateTexture3D('])
+  funcs+='\n'+line_query_dependencies(owner)
   funcs+='\n'+block(ddi,'static bool LineLayoutInfo(')
   funcs+='\n'+block(ddi,'static bool VolumeLayoutInfo(')
   prefix=(ROOT/'tests/d3d12_volume_query_fixture.cpp').read_text().split('int main()')[0]

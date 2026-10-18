@@ -646,13 +646,15 @@ static UINT AgxD3d12FormatBlockBytes(DXGI_FORMAT) { return 0; } /* textures need
 /* Existing0x105 registry entry is the4BPP1x1 block pattern; every1D mip uses it. */
 static bool LineLayoutInfo(const D3D12DDIARG_CREATERESOURCE_0003 *arg,AGX_D3D12_VOLUME_LAYOUT *layout,
                            D3D12DDI_TEXTURE_LAYOUT *resolved) {
- if(!arg || !layout || arg->ResourceType!=D3D12DDI_RT_TEXTURE1D || arg->Height!=1 || arg->DepthOrArraySize!=1 ||
+ if(!arg || !layout || arg->ResourceType!=D3D12DDI_RT_TEXTURE1D || arg->Height!=1 || (!arg->DepthOrArraySize || arg->DepthOrArraySize>D3D12_REQ_TEXTURE1D_ARRAY_AXIS_DIMENSION) ||
     arg->SampleDesc.Count!=1 || arg->SampleDesc.Quality ||
     (arg->Flags&~D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE))return false;
  const auto selected=static_cast<D3D12DDI_TEXTURE_LAYOUT>(0x105u);
  if(arg->Layout!=D3D12DDI_TL_UNDEFINED && arg->Layout!=selected)return false;
  const UINT bind=(arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE)?AGX_D3D12_BIND_SAMPLER:0u;
- if(arg->Width>16384 || FAILED(AgxD3d12QueryTexture1DLayout(arg->Format,static_cast<UINT>(arg->Width),arg->MipLevels,bind,layout)))return false;
+ if(arg->Width>D3D12_REQ_TEXTURE1D_U_DIMENSION || !arg->MipLevels ||
+    arg->MipLevels>D3D12_REQ_SUBRESOURCES/arg->DepthOrArraySize ||
+    FAILED(AgxD3d12QueryTexture1DArrayLayout(arg->Format,static_cast<UINT>(arg->Width),arg->DepthOrArraySize,arg->MipLevels,bind,layout)))return false;
  if(resolved)*resolved=selected;return true;
 }
 
@@ -1021,7 +1023,7 @@ static HRESULT CreateLineResource(AgxD3d12Device *device,const D3D12DDIARG_CREAT
     const UINT bind=((arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET)?AGX_D3D12_BIND_RENDER_TARGET:0u)|
                     ((arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE)?AGX_D3D12_BIND_SAMPLER:0u);
     AGX_D3D12_BUFFER texture={};
-    HRESULT hr=AgxD3d12OwnerCreateTexture1D(owner,arg->Format,static_cast<UINT>(arg->Width),arg->MipLevels,bind,layout.Bytes,&texture);
+    HRESULT hr=AgxD3d12OwnerCreateTexture1DArray(owner,arg->Format,static_cast<UINT>(arg->Width),arg->DepthOrArraySize,arg->MipLevels,bind,layout.Bytes,&texture);
     if(FAILED(hr))return hr;
     memset(heap,0,sizeof(*heap));memset(resource,0,sizeof(*resource));
     heap->native=texture.Resource;heap->gpuva=texture.GpuVa;heap->bytes=layout.Bytes;heap->volume=TRUE;
@@ -1261,7 +1263,11 @@ static VOID APIENTRY CheckSubresourceInfo(D3D12DDI_HDEVICE, D3D12DDI_HRESOURCE h
     if (!info) return;
     memset(info, 0, sizeof(*info));
     if(resource && resource->type==D3D12DDI_RT_TEXTURE1D) {
-        if(subresource<resource->levels) {info->Offset=resource->volume_offsets[subresource];info->RowStride=4ull*(resource->width>>subresource?resource->width>>subresource:1u);info->DepthStride=resource->volume_depth_stride;}
+        if(resource->levels && resource->layers && subresource<static_cast<UINT64>(resource->levels)*resource->layers) {
+            const UINT mip=subresource%resource->levels,slice=subresource/resource->levels;
+            info->Offset=static_cast<UINT64>(slice)*resource->volume_depth_stride+resource->volume_offsets[mip];
+            info->RowStride=4ull*(resource->width>>mip?resource->width>>mip:1u);info->DepthStride=resource->volume_depth_stride;
+        }
     } else if(resource && resource->type==D3D12DDI_RT_TEXTURE3D) {
         if(subresource<resource->levels) {
             const UINT side=(resource->width>>subresource)?resource->width>>subresource:1u;
@@ -1367,11 +1373,12 @@ static VOID APIENTRY CreateUnorderedAccessView(D3D12DDI_HDEVICE handle, const D3
     const auto *resource = arg ? static_cast<const AgxD3d12Resource *>(arg->hDrvResource.pDrvPrivate) : nullptr;
     if(arg && resource && resource->heap && resource->type==D3D12DDI_RT_TEXTURE1D) {
         const auto &v=arg->Tex1D;
+        const UINT layers=v.ArraySize==UINT_MAX && resource->layers==1 && !v.FirstArraySlice?1u:v.ArraySize;
         const UINT reason=arg->ResourceDimension!=D3D12DDI_RD_TEXTURE1D || v.MipSlice>=resource->levels ||
-            v.FirstArraySlice || (v.ArraySize!=1 && v.ArraySize!=UINT_MAX) ||
+            v.FirstArraySlice>=resource->layers || !layers || layers>resource->layers-v.FirstArraySlice ||
             (arg->Format!=DXGI_FORMAT_UNKNOWN && arg->Format!=resource->format)?6u:0u;
         if(!reason) {out->kind=kDescriptorUavTexture;out->heap=resource->heap;out->format=resource->format;
-            out->level=v.MipSlice;out->levels=out->layers=1;}
+            out->level=v.MipSlice;out->levels=1;out->first_layer=v.FirstArraySlice;out->layers=layers;}
         ViewReceipt("measure-d3d12-uav",reason,static_cast<UINT>(arg->Format),v.MipSlice);return;
     }
     if(arg && resource && resource->heap && resource->type==D3D12DDI_RT_TEXTURE3D) {
@@ -1503,14 +1510,15 @@ static VOID APIENTRY CreateShaderResourceView(D3D12DDI_HDEVICE, const D3D12DDIAR
     const auto *resource = arg ? static_cast<const AgxD3d12Resource *>(arg->hDrvResource.pDrvPrivate) : nullptr;
     if(arg && resource && resource->heap && resource->type==D3D12DDI_RT_TEXTURE1D) {
         const auto &v=arg->Tex1D;UINT levels=0;
+        const UINT layers=v.ArraySize==UINT_MAX && resource->layers==1 && !v.FirstArraySlice?1u:v.ArraySize;
         UINT reason=arg->ResourceDimension!=D3D12DDI_RD_TEXTURE1D || v.ResourceMinLODClamp!=0.0f ||
-            v.MostDetailedMip>=resource->levels || v.FirstArraySlice ||
-            (v.ArraySize!=1 && v.ArraySize!=UINT_MAX) ||
+            v.MostDetailedMip>=resource->levels || v.FirstArraySlice>=resource->layers ||
+            !layers || layers>resource->layers-v.FirstArraySlice ||
             (arg->Format!=DXGI_FORMAT_UNKNOWN && arg->Format!=resource->format)?6u:0u;
         if(!reason) {levels=v.MipLevels==UINT_MAX?resource->levels-v.MostDetailedMip:v.MipLevels;
             if(!levels || levels>resource->levels-v.MostDetailedMip)reason=6u;}
         if(!reason) {out->kind=kDescriptorSrvTexture;out->heap=resource->heap;out->format=resource->format;
-            out->level=v.MostDetailedMip;out->levels=levels;out->layers=1;out->component_mapping=arg->Shader4ComponentMapping;}
+            out->level=v.MostDetailedMip;out->levels=levels;out->first_layer=v.FirstArraySlice;out->layers=layers;out->component_mapping=arg->Shader4ComponentMapping;}
         ViewReceipt("measure-d3d12-srv",reason,static_cast<UINT>(arg->Format),levels);return;
     }
     if(arg && resource && resource->heap && resource->type==D3D12DDI_RT_TEXTURE3D) {
@@ -2152,7 +2160,7 @@ static VOID APIENTRY ResourceCopy(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOUR
         }
         AgxD3d12Command *slot=AppendCommand(list);if(!slot)return;
         slot->kind=kCommandTextureRegionCopy;auto &r=slot->region_copy;r.dst=d->heap;r.src=s->heap;
-        r.width=s->width;r.height=s->height;r.layers=s->layers;r.whole_levels=s->levels;r.volume=1;return;
+        r.width=s->width;r.height=s->height;r.layers=s->layers;r.whole_levels=s->levels;r.volume=s->type==D3D12DDI_RT_TEXTURE3D;return;
     }
     const UINT refusal = !d || !s || !d->heap || !s->heap || !d->heap->native || !s->heap->native ? 1u
                        : (d->type == D3D12DDI_RT_TEXTURE2D) != (s->type == D3D12DDI_RT_TEXTURE2D) ? 4u
@@ -2393,6 +2401,54 @@ static bool CopySide(const D3D12DDIARG_BUFFER_PLACEMENT *placement, D3D12DDIARG_
     if (layout.Layout == D3D12DDI_RL_SELECT_SUBRESOURCE) return side->resource->type == D3D12DDI_RT_TEXTURE2D || side->resource->type == D3D12DDI_RT_TEXTURE3D || side->resource->type == D3D12DDI_RT_TEXTURE1D;
     return side->footprint && side->resource->type != D3D12DDI_RT_TEXTURE2D && side->resource->type != D3D12DDI_RT_TEXTURE3D && side->resource->type != D3D12DDI_RT_TEXTURE1D;
 }
+/* An array subresource is (mip,slice), not a minified volume Z range. */
+static bool LineSubresource(const AgxD3d12Resource *resource,UINT64 index,UINT *level,UINT *layer) {
+  if(!resource || resource->type!=D3D12DDI_RT_TEXTURE1D || !resource->levels || !resource->layers ||
+     index>=static_cast<UINT64>(resource->levels)*resource->layers)return false;
+  *level=static_cast<UINT>(index%resource->levels);*layer=static_cast<UINT>(index/resource->levels);return true;
+}
+static void CopyLineTextureRegion(AgxD3d12CommandList *list,
+    const AgxD3d12CopySide &dst,const AgxD3d12CopySide &src,
+    UINT dst_x,UINT dst_y,UINT dst_z,const D3D12DDI_BOX *box) {
+  auto fail=[&](){ListError(list,E_INVALIDARG);};
+  auto width=[](const AgxD3d12Resource *r,UINT l){return r->width>>l?r->width>>l:1u;};
+  if(dst_y || dst_z || (box && (box->Left<0 || box->Right<=box->Left ||
+      box->Top || box->Bottom!=1 || box->Front || box->Back!=1))) {fail();return;}
+  if(!dst.footprint && !src.footprint) {
+    UINT dl=0,ds=0,sl=0,ss=0;
+    if(!LineSubresource(dst.resource,dst.offset,&dl,&ds) || !LineSubresource(src.resource,src.offset,&sl,&ss) ||
+       dst.resource->format!=src.resource->format) {fail();return;}
+    const UINT sx=box?static_cast<UINT>(box->Left):0u;
+    const UINT count=box?static_cast<UINT>(box->Right-box->Left):width(src.resource,sl);
+    const UINT sw=width(src.resource,sl),dw=width(dst.resource,dl);
+    if(sx>sw || count>sw-sx || dst_x>dw || count>dw-dst_x) {fail();return;}
+    AgxD3d12Command *slot=AppendCommand(list);if(!slot)return;
+    slot->kind=kCommandTextureRegionCopy;auto &r=slot->region_copy;
+    r.dst=dst.resource->heap;r.src=src.resource->heap;r.dst_level=dl;r.src_level=sl;
+    r.dst_layer=ds;r.src_layer=ss;r.dst_x=dst_x;r.src_x=sx;r.width=count;r.height=r.layers=1;return;
+  }
+  const bool to_buffer=dst.footprint!=nullptr;
+  const auto &t=to_buffer?src:dst;const auto &b=to_buffer?dst:src;UINT level=0,layer=0;
+  if(!LineSubresource(t.resource,t.offset,&level,&layer) || !b.footprint ||
+     b.resource->type!=D3D12DDI_RT_BUFFER || b.footprint->Format!=t.resource->format ||
+     !b.footprint->PhysicalWidth || b.footprint->PhysicalHeight!=1 || b.footprint->PhysicalDepth!=1) {fail();return;}
+  const UINT tw=width(t.resource,level),fw=b.footprint->PhysicalWidth,block=AgxD3d12FormatBlockBytes(t.resource->format);
+  const UINT sx=box?static_cast<UINT>(box->Left):0u;
+  const UINT count=box?static_cast<UINT>(box->Right-box->Left):(to_buffer?tw:fw);
+  const UINT tx=to_buffer?sx:dst_x,bx=to_buffer?dst_x:sx;
+  if(!block || !count || tx>tw || count>tw-tx || bx>fw || count>fw-bx ||
+     b.footprint->Pitch<static_cast<UINT64>(fw)*block || b.resource->gpuva<b.resource->heap->gpuva) {fail();return;}
+  const UINT64 base=b.resource->gpuva-b.resource->heap->gpuva;
+  const UINT64 point=static_cast<UINT64>(bx)*block,span=static_cast<UINT64>(count)*block;
+  if(b.offset>b.resource->bytes || point>b.resource->bytes-b.offset || span>b.resource->bytes-b.offset-point ||
+     base>b.resource->heap->bytes || b.offset>b.resource->heap->bytes-base ||
+     point>b.resource->heap->bytes-base-b.offset || span>b.resource->heap->bytes-base-b.offset-point) {fail();return;}
+  AgxD3d12Command *slot=AppendCommand(list);if(!slot)return;slot->kind=kCommandTextureCopy;auto &c=slot->texture_copy;
+  c.texture=t.resource->heap;c.buffer=b.resource->heap;c.level=level;c.layer=layer;c.x=tx;
+  c.width=count;c.height=c.depth=1;c.offset=base+b.offset+point;
+  c.pitch=b.footprint->Pitch;c.slice_pitch=b.footprint->SlicePitch;c.to_buffer=to_buffer;
+}
+
 /* C21 LIMITED volume copy: a volume subresource is one entire mip, never a
  * modulo-decoded array slice. Buffer coordinates use real runtime pitches. */
 static void CopyVolumeTextureRegion(AgxD3d12CommandList *list,
@@ -2465,7 +2521,10 @@ static VOID APIENTRY CopyTextureRegion(D3D12DDI_HCOMMANDLIST handle, const D3D12
     UINT refusal = !CopySide(dst_placement, dst_layout, &dst) || !CopySide(src_placement, src_layout, &src) ? 1u
                  : dst.footprint && src.footprint ? 4u /* buffer <-> buffer footprints */
                  : list->commands >= kListCommands ? 3u : 0u;
-    if(!refusal && (dst.resource->type==D3D12DDI_RT_TEXTURE3D || src.resource->type==D3D12DDI_RT_TEXTURE3D || dst.resource->type==D3D12DDI_RT_TEXTURE1D || src.resource->type==D3D12DDI_RT_TEXTURE1D)) {
+    if(!refusal && (dst.resource->type==D3D12DDI_RT_TEXTURE1D || src.resource->type==D3D12DDI_RT_TEXTURE1D)) {
+        CopyLineTextureRegion(list,dst,src,dst_x,dst_y,dst_z,box);return;
+    }
+    if(!refusal && (dst.resource->type==D3D12DDI_RT_TEXTURE3D || src.resource->type==D3D12DDI_RT_TEXTURE3D)) {
         CopyVolumeTextureRegion(list,dst,src,dst_x,dst_y,dst_z,box);return;
     }
     if (!refusal && !dst.footprint && !src.footprint) {
