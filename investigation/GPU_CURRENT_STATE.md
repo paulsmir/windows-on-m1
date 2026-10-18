@@ -1,142 +1,126 @@
-# AGX D3D12 current state — 2026-10-18T19:09Z
+# AGX D3D12 continuation — 2026-10-18T19:54Z
 
 Worktree /Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler,
-branch integration/ad04-windows-compiler. Russian updates. Root owns Git/ledgers/
-guest/launcher. Preserve dirty mu. Read skill and CLAUDE_WORKING_METHOD for tools.
+branch integration/ad04-windows-compiler. Russian reports. Root alone owns Git,
+ledgers, guest, launcher. Preserve dirty mu. Never restart active hardware.
+Skill /Users/pavel/.codex/skills/agx-d3d12-loop/SKILL.md and
+investigation/CLAUDE_WORKING_METHOD.md govern tools. CS allowed again.
 
-## PRIORITY: EXP1424 ACTIVE, never restart it
+## EXP1426 ACTIVE, alignment ONLY; do not touch guest/proxy
 
-- Supervisor/user required immediate next hardware after1419; offline DXIL must
-  not block bench. EXP1424_START19:08:17Z; root session64461 (run1424.sh).
-  Scratchpad run1424/chain1424/newexp1424/watchdog1424.log.
-- Directory .local/experiments/EXP1424-d3d12-volume-sparse-estimate.
-  Immutable build source507812fbe921f27d411eb521df0f30f83985076e =
-  exact1419source542c688816dbfec539742d342cff13a80bac7415 + ONLYowner CPP.
-  OwnerSHA18d902b7bfa9f719c7695f68fc5e168b61d0fca2a341dac543625f20e877d5a4.
-  Sole fix removes false SparseTableSizeBytes nonzero refusal in texture3d_layout.
-- Implementation366ca2ed/ledger e335fe1b. Real nativequery+actualowner functional
-  RED5 -> GREEN5, exact5sizes/mips/strides/nonzeroPotentialSparse/noBO/device;
-  9focusedPASS/3Windowsrc0; full1583tests210.099s exact119oldbaseline signatures.
-  Two serialguard failures are known environmental difference vs117baseline.
-  Full log34d2e83fa61bf120cd5956ae8d33ea0fa5db76cf2ec6109cd1077a36daa0cff9.
-- BUILD1424_DONE/PACKAGEPASS/source693/PDB/ARM64stack13824/WOW6544.
-  Native original4artifactSHAs verified/preserved native-build-evidence.
-  Original54probe ec529c1282caa21ba967c33757a97a4a5535f03b7777a10bfe3282d6e07e571a.
-  Sourceprobe unchanged2db6352e; DDI75a934b9 diagnostics retained.
-- Hardware BEFORE9f52f568; stageHASHES_MATCH23/PASS/FactoryV2PASS.
-  Current launch underway; no extra guest commands/proxy. Wait TOOL_d3d12-on_END
-  and NEWEXP_DONE, parse ALL54 tags espC21A-E/C22A-B/regressions.
-- ExpectedALL54PASS. C21 GPU stages have not yet been demonstrated. Fix does NOT
-  add sparse resources/extraBOs/caps/layout changes. AIL potential sparse table
-  size is computed forALLimages/excludedsize_B; ordinarytemplateflags0.
-- Exactrec1424h/recover.sh SHA40d07eebdf90fcfd9c2807d4adce97bd29801cdc54391e0fced9f1d5a630b005.
-  After evidence, use controller alone toRECOVERY_DONE/normalCode28/Absent/
-  noService8CPU. FactoryV2 host38909f54/helper7ab9f020/selectorbed44fab unchanged.
-  Never pre-reboot before controller service-disarm guard; no ordinary hiddenboot.
-- Finalprep inventory83eaf7d5ad78def570b014e0207229bfed3c148f8bfcbb38a08bd230acfef616.
-  Previous1419 reviewed marker exists; no acceptedC21 marker. CS allowed again.
+- Rootchain session90538; START19:52:34Z. PREP.local/preparation-1426-alignment.
+  SP chain1426-alignment/newexp1426-alignment/watchdog1426/run1426.log.
+  Exact source939cf61a78833349e7be51e028fd9ddf82a2e85a, parent1424source507812fb.
+  ONE DDI filefb162cd3fbf1eb1fdc4c4cc145e1fe5dc885c3b6d8e8d8c96f22c8ccb5b927ea;
+  sixlines=fourassignments+2comments: absent AdditionalDataHeaderAlignment=1,
+  AdditionalDataAlignment=1 inquery+existing callbacks. MetadataSizesremain0.
+  No C23/C15, owner/caps/swizzle/KMD/firmware/recovery change.
+- WHY:1424DDIquerysuccess butpublicinvalid; exactsavedpublicruntimeworker1e8a60/84
+  computesalignment-1 and rejects0 asoverflow evenforzero-sizedregions.
+  1 isourminimumtruthfulbytealignment, NOTMicrosoftnormativequote.
+- Implementation35c6af14/CHANGES3b8cae91. ActualexactWDKcallbacks RED/GREEN
+  baseline240checks72->0/currentC23324checks96->0/all4compile0/20pinsunchanged.
+  Durablefocused14PASS10.028s; finalfull1589/213.465s EXACT119oldbaseline,
+  noadded/removed, SHA2161111224ce824e66819c62d0aa2f29b0e98377f9bb857a166870b955a080e2.
+  Windows3rc0/manifest0bd8969f. PACKAGE1426PASS/PDB/693source/ARM64stack13824/WOW6544.
+- Originalnative4artifacts+buildlog protected BEFORErepack inX/native-build-evidence:
+  receipt2956fd68/preservation405209c3bb156b1f6a453ecd400166f69b51c2e7d15ce887deea786b819aa9d6.
+  Rootindependentlyverifiedall5files. Source/PDBhashesinHARDWARE_PHASEBEFOREe05280af.
+- Original54probeec529c1282caa21ba967c33757a97a4a5535f03b7777a10bfe3282d6e07e571a;
+  pool55740036f90c78f8e6a96c33ab4ecebbc0b11360ec87f28aaac72e9d0d96f5d3.
+  Exactmarkerhardware1426.approved written. PREPfd0bba8b/codegates16431e58.
+- Pipeline currently repack/staging: coherent30.0.1426.0/nativeSYS6956d919,
+  UMD8d8422d1/INF336cb65d/CAT4b3d4a1f/ICDd51ebf72/WOW1625ffde.
+  It APPENDS/COMMITSfullfinalhashBEFORE beforeactualfull-ownerlaunch. DO NOTedit
+  EXPERIMENTS.md/Git untilthatautomaticcommitappears (gitlogcurrentlye05280af).
+- ExpectedALL54PASS, especiallyC21A-E publicallocation/Create/data/pixels.
+  Do notclaimownerfixprovesGPU. WaitTOOL_d3d12-on_END ANDNEWEXP_DONE, inspectALLtags/
+  regressions, thenFactoryV2rec1426h -> RECOVERY_DONE/Code28AbsentnoService8CPU.
+  FactoryDIR-then-ID order: python3 scripts/agx-install-visible-recovery.py "$DIR" "$ID" --worktree "$W".
+  No pre-reboot; controllerownsStart4durability/normalCode32/exactcleanup/secondrestart.
 
-## EXP1419 COMPLETE / recorded / removed
+## EXP1424 COMPLETE / ACTUAL-CHANGES221e30cb / recovery done
 
-- ACTUAL/CHANGES40f958d8; source542c6888/probeec529c12, 54unique=49PASS+5C21FAIL.
-  C22A/B hardwarePASS:2recordingthreads/CloseS_OK/fence1, compute2x16384exact,
-  graphics2x4096exact/512color/tailpoison. No generic context/reentry guarantee.
-- C21A-E allocation failed beforeCreate;10records5pairs reason3/E_NOTIMPL.
-  Actualvalidinputs/native fields zero in publicowner output. Source and real
-  composed regression identify false owner sparse-estimate guard.
-- 73SMOKEPASS+knownMSAA-a000r, fl11cs-a/x/debugPASS, GL51.7/internalGL59.6,
-  CS3771/81.476=46.283fps, corpus414each/createfail64+4/zero hangs-pixeldiffs,
-  DWM0, KMD_POOL5workersPASS/foreign_reclaim1. OnlyintentionalLONGJOB recovery.
-- RECOVERY_DONE18:31Z; BeforeBoot18:28:22.6782180Z/AfterBoot18:30:21.8223260Z.
-  DurabilityDC1FEADA0CCEA259FC5EE023637CF70F6AF5B02187A5925BDE72093C7CCB7113.
-  Finalmanifest2263files9f44881931618edb4fc34213cc3e09a0b7c217a90dbd4f21958a75233e7e3e6f.
-  No hiddenboot/physicalaction. Source-only sparse independentreview c5c0d8e6.
-- OlderacceptedC19/C20 in1404, KMDforeign-cachepolicy0c458548 validatedagain;
-  no provenlost-unit leak. 1407C21failed/recovered/recorded83eca840.
-  Neverlaunchold1414(PSOfixnowvalidated1419); it was built but superseded.
+- Source507812fbe921f27d411eb521df0f30f83985076e; original54probe.
+  49PASS+5C21publicFAILbeforeCreate, C14A/C22A-BPASS; no duplicates.
+  All5pairedDDIqueryoutputsreason0/S_OK/exactsize/layout/transition. Thusowner
+  sparse-estimatefix366ca2ed hardwarequeryboundaryVALIDATED; C21featureREJECTED.
+  C21A/B/C/E131072/align65536/layout103/trans1/stride16384/off0,128;
+  D65536/layout100/trans1/off0,4096. Public0xffffffffffff0000 leadsnext1426.
+- Regressions73SMOKEPASS+knownMSAA-a000r;fl11cs-a/x/debugPASS;GL53.0fps;
+  CS3771/81.027=46.540fps;corpus414each/createfail64+4/nohangs-pixeldiff;DWM0;
+  KMD_POOLPASSworkers6/foreign_reclaim1. OnlyintentionalLONGJOB903ms/kind4.
+- RECOVERY_DONE/root77269exit0; normalCode28/PackageAbsent/noService8CPU,
+  BeforeBoot19:41:58.4734950Z/AfterBoot19:44:01.4210970Z. Durability-final
+  b288a2d47f42f00eb40db896b23e266b6a2a8d558154c5bbf321d5e6bd5ccc6c.
+  Finalmanifest2354files7eeca122882215b08650b97cb51ddd4f3cb9406df68be7af03756d8465c6be74.
+- Prior1419ACTUAL40f958d8/49PASS+5nativequeryFAIL/recovered. C22fc58a816 validated;
+  1404C19/C20 accepted, KMDforeigncache0c458548 validatedrepeatedly/no lost-unit leak.
+- Processerrorsareexplicitlyrecorded: factoryargsfirstreversedthenidempotentPASS;
+  detailedBUILD1426_BEFOREappendfailedwrongm1n1pathbutorchestrationcontinued;
+  immutable939csourcewasrecordedbeforebuild, latefullentryf6e6283f notmislabelled.
+  Rootorchestrationnowchecksreturncodebeforedependentactions. No hiddenboot/reset.
 
-## C15 parallel CPU work, must not delay1424
+## C23 software complete, hardware1427 NEXT after1426 verdict
 
-- License+plan75632532/processrowea9cc8b0 selected8434b0639fb2a48ce13aac08a420ecce5d23df0e
-  runtime83TUs/9archives/197inputs MIT/BSD/Khronosnotices conditions. No external
-  implementation copiedGit. Current driverCORE0003/SM5.1; no DXIL/R1/SM6caps.
-- Zero-native-cache6callbackfoundation c18d74e3/host59/Windows2compiler0;
-  referencevalidator be917753/host81/Windows2compiler0/16B offsets0,8, unlinked.
-- ExactR1runtime payload+PROGRAMframing d8747afd; tableproof2590f409:
-  ordinals2/3 ->COREfeature2/3 ->list0003(408B)/queue0001(56B);
-  tableNum=listindex beforeappend, notversion. MainR1typed/ownership gates open.
-- Composite production candidate outsideGit .local/c15-composite-ownership:
-  pristine8434+12fileRAIIpatchdf3470cac9939a1acf0f0f11982970971d409476fe1a3141ccd8b7cae17bb863.
-  183sites/180migrated3owned, independentownership+197/83/9closure review.
-  Old170audit preserved; actualoldscope171 plus12extra selected-graph sites.
-  Original19noexceptfacade; wrappererrorsREPORTED vsprofileUNSUPPORTED fixed.
-- EXP1421 HOSTretry3 PASS bysm51: freezea6d657e9e0ad09d4992d20c302faef097041c995b2e232cb03630022a448c325,
-  /Users/pavel/public_windows/.local/c15-composite-host-1421-retry3;11rc0/
-  83upstreamCpp+5projectTUs/9fresharchives/19facadeexports/twonominalfixturesPASS.
-  Artifact408entries0464799f955896302f2da304686aa206dd3ff27f5cd7e68640c9f3d9d9d789e6;
-  outerreceipt9bf83747b8618680bf5e072646a06dcfaeb2da84d429c5871c840f4697180f4b.
-  MixedSPV2152B24e3df26411f940c71e4dc2322d38226cb3c1d50725e07d27b890aa9b2b307d4
-  EXACT1398host validatedinput. Mapb2d13468feae64f3bd6f1901c8fadf5ab6a0a040ec865333d2db0cb20d575d40.
-  Root still needs verify/indexACTUAL; optionalreplay pinned1406/1398/1401tools
-  requiresfreshBEFORE, no recompilation. Earlierattempts preserved: outputpath,
-  two exactASan/SDKtool-input pins, thenhostlink-isysroot fixes, notfunctionalRED.
-- Windows composite BUILD_ONLY PASS: EH22host/native22PASS (actualWindowsAPI),
-  newfreeze91b52456d500be58b505b1543db3c52686c42979480944b50ecdf71cd75143a8,
-  83freshCpp/9libs/25commands0/separatefacade/ARM64link/PEimports/notices.
-  All83effectiveEH native models s-on/c-off/a-off/MD; root3798hashesverified.
-  .local/c15-composite-windows-1421-retry1-result manifest703dd966cdb93758956ac38b836efa74d41e9ee240664b0f25ae5fafc279f7d3.
-  FirstconfigurefailedrawRCbackslash; retryONLYRC/MTpathspellingfixed, samepins.
-  NEVERexecutedARM64EXEs; no nativejob/OOM/productionlink/capclaim.
-  Durable composite host/build note tracks exactresults. C23 Texture1D nextprep
-  underway outsideGit; C15 failed-firstFill tokenpublication actualtestprep.
-- Fault sweep NOTAUTHORIZED/UNRUN. Original15filedbdca33bPREP preserved in
-  .local/c15-composite-fault-prep-v1-frozen. Currentpartialamendment has sticky
-  flags/parser/symbolvalidator drafts, NOnewfreeze. Oldmanifestnotauthoritative
-  forchangedtree. Agentturnauto-security-reviewfailed; doNOTclaimamendmentcomplete
-  orfullOOM. No projection/compiler/injectedexecution occurred.
-- EXP1422routinghypothesis STOPPED/noRED/compiler/codefix: sameLUIDordinary
-  CreateDevice singleton, proposedA/Bprobe invalid; GSrefusal occursRecordDraw.
-  ProspectiveR1ownership/errorpolicyonly, primaryfindings1e3ffe2a.
+- Implementationeb34f8ee/CHANGES94dfbe30; noteD3D12-C23-texture1d.md.
+  LimitedcommittedDEFAULT/nonarray1D width1..16384/legalmips/R32UINT-RGBA8,
+  samepurecompleteAILquery/create, existing0x105/transitionff, checkedcopies/
+  SRV/UAV, ownedcompute+VS/PSUAVdimensionmetadata andunused1Dskip. NoCAPSdelta.
+- Actualquery65534cases/458782mipsRED->GREEN/BO0device0; create12negatives,
+  actualview/bind_stagecrossdim-unusedNULL/copy10negativesPASS; FXC2PASS;
+  actualDXBC->NIR+Asahipreprocess/validationPASS. Windows3rc0,57probe
+  ccf5127118f9c41958851183e415005122cf805226df39c6461bd4c48d4a3d55.
+- Durable5PASS7.931s/legacy25PASS3.343s;9newoldfixtureerrorsfromfirstfullclosed;
+  final1589fullnowexact119baseline. Mainalsohascanonicalalignment35c6fix.
+- OldisolatedC23a875/preparation-1426 UNBUILT/UNLAUNCHED/supersededforhardware.
+  NeedNEW1427snapshot parent939c+ONLY9C23files (6production/probe+2headers),
+  exactupdatedWindows3syntax/build/provenance, prebuildWHILE1426active so noidle.
+  Hardwareafter1426review+recovery. If1426newfailure, receiptsfirst/rootcausaldecision.
 
-## Control paths
+## C15 current CPU result and next independent software work
+
+- License+plan75632532/processrowea9cc8b0; selecteddxil-spirv8434b0639fb2a48ce13aac08a420ecce5d23df0e
+  MIT/BSD/Khronos197inputs/83Cpp/9archives+notices. ExternalimplementationoutsideGit.
+- Compositeexternalproductionpatchdf3470.../12files/183sites180migrated3owned,
+  original19noexceptfacade. Host1421retry3twofixturesASanUBSanPASS; Windowsfull83
+  fresh9/separatefacade/25commands0/nativeeffectiveEHs-on/c-off/a-off/MD/PEimports/
+  noticesBUILD_ONLYPASS. NoteD3D12-C15-composite-host-gate.md, full3798hashes
+  703dd966cdb93758956ac38b836efa74d41e9ee240664b0f25ae5fafc279f7d3.
+- EXP1425 CPU_ONLYnativeguesttwofreshARM64EXEs onee7308831/mixed00747769
+  eachPASS/rc0/no timeout, exact5keymap/inputpostunchanged. Controllerexit1
+  REVIEW_REQUIRED because stricthostSPVSHA. NativeSPV2152B1a5bef149143573bf7fcd8ca2d07772e054f8b61f6958363f8f3ce22e408c07f
+  vsHOST24e3df. Only4words consistentID40/41renaming; exactold1406nativebytes.
+  RootpostCPUguardCode28noService8CPU/SAMEBOOT/unchangedB288durabilityPASS.
+  X.local/experiments/EXP1425-c15-native-nominal/remote+normalbefore/after.
+- NewOFFLINEsemanticreview3f9d2131 executed3existingtools once/all40pinsstable:
+  spirv-valVulkan1.1PASS;actualNIRstructuralPASS;semantic384words/192lanes
+  (173active19tail)/346storesPASS; negatives3x346bad/unsupported-boundsREFUSE.
+  postNIR3129a611189d61e21248ad7ea790a0ab4eac8fc07b1b10d02b8b9b3b174ed67e.
+  .local/c15-native-replay-1425-run/artifact-hashes.json4a2c98eb43daf555388a06402d6da04816677c00e2b0da839e281ae2c16a7865.
+  KEEP originalREVIEW_REQUIREDresult; appendsemanticreviewACTUAL/CHANGES after
+  active1426pipelineautomaticBEFOREcommit. 1425finalindex/notePENDING.
+- OriginalunlinkedR1CPUmodules c18d74e3 zeroNativeCache6callbacks/59host,
+  be917753 LibraryReference81host/WindowsABI2PASS. ExactruntimeR1payloadd8747afd;
+  positive2590f409 ordinal2/3->list0003(408)/queue0001(56), tableNum=indexnotversion.
+- ConfirmedfailedFillpublication:actual137checksRED6/GREEN0 after267headerpins,
+  .local/c15-failed-table-publication-adoption patchfc1f6fab UNAPPLIED. Tinyfix
+  publishesfirstvalidglobaltokenonlyafterFillTableSUCCEEDED; no crossdevicefix.
+  DurableactualcurrentFill/helper/optinrunner prepared, notexecuted. Canintegrate
+  AFTER1427snapshot so no unregisteredhardwarevariable; sourcepinhardwareexcludesit.
+- FaultsweepNOTAUTHORIZED/UNRUN. Prioragentauto-security-reviewrejected task;
+  originalPREP preserved, partialamendmentnotfrozen. DoNOTretryidenticalflagged
+  task/routearoundrestriction; no fullOOM/helper-loop/arbitraryshaderclaim.
+- No productionDXIL/R1/SM6caps/link. C15CPUjobsdoNOTestablishGPUorOOMbehavior.
+
+## Paths and coordination
 
 SP /private/tmp/claude-502/-Volumes-pwdev-public-windows/8c9ead37-29d6-4c63-9bb0-35c6eb850f40/scratchpad.
 XP /Users/pavel/public_windows/.local/experiments; T /Users/pavel/public_windows/.local/tandem.
-BoundedSSH perl alarm25 +T/airssh-oConnectTimeout10. UseT/airscp, no guessedkeys.
-Builder pauls@192.168.1.24/key /Users/pavel/.ssh/windows_builder.
-USB L41/L43; no rawproxy withactiveowner. Checkbothplanes beforephysicalrequest.
-No assistant attribution. Ledgerbefore/actual everybuild/run/recovery; CHANGES
-fullcommit/statusimplemented unlesshardwareevidence; test_change_ledger.py.
-
-## 19:32Z continuation — root source now has uncommitted C23, active1424 unchanged
-
-- EXP1424 stillactive standardregressions; doNOTrestart/SSH/proxy. Scratchpad
-  newexp1424.log now aroundnirprofile tests. NeedTOOL_d3d12-on_END+NEWEXP_DONE
-  ->allevidence/normalrec1424h->ACTUAL/CHANGES. CS46.540fps/GL53.0 observed.
-- C23 EXP1426sourceprep: rootAPPLIEDonly293f910f+v2023c954b patches6files.
-  Sourcepins.local/c23-shared-gates/full/inputs.json; DDI350cb069/owner02d88f5c;
-  C15failedFillpublicationfixNOTapplied. Dirtymu preserved. Fullsuite26785
-  active .local/c23-shared-gates/full/full.log BEFOREb91f3f32. Known119baseline;
-  expect3newfixtureoldbind_stagearity failures (privateadaptationpending).
-- C23actualnativequery65534cases/458782mips REDallrefused->GREEN0fail/BO0device0.
-  .local/c23-texture1d-retry1/verdictb0e3a6bc; baselinecompilerSTOPrecorded.
-  FXC2PASS/actualDXBC812B866b3384 and1016B00c83bb7; headersb0f80a2a/3ad2a2f6.
-  NewUAVmetadata/checknecessary1Dvsnon1D; helper60PASS5f6706f1, v2unused1Dskip
-  sourceprepared/combined. Existingnon1Dpolicyunchanged; noCAPSdelta.
-- ActiveC23gates: kmd ONE10companion+actualNIRcommands under45e84000,
-  .local/c23-companion-prep/PREPd817d900/commands49287e92/22pins; freshrun.
-  sm51 ONEWindows3syntax+57stepprobeBUILD under034cd156,
-  .local/c23-windows-gates-prep/7b47d0fa/22ccwrapper, freshbuilderreceiptroot.
-  No executableson guest. C18 preparing1426templatesafterdurableFilltest.
-  C23probe=old54+C23A/B/C; prerequisite1424reviewedALL54PASS+RECOVERY_DONEAbsent.
-  If1424C21fails, prioritizeitsactualboundary, neverautolaunchC23.
-- C15confirmedfailedFillpublication CPUactual137checksRED6/GREEN0 underd95eb2d8,
-  afterone264->267actualheaderclosure repairSTOP. Root58artifacthashesverified
-  manifest54407ffe/verdictcc2ba3c7; ACTUALb0c4e618. Originalsmalldurableadoption
-  patchfc1f6fab in.local/c15-failed-table-publication-adoption UNAPPLIED; hold
-  untilC23sourcefreeze toavoidunregisteredhardwarevariable. No crossdevicefix.
-- EXP1425CPU_ONLYnominalPREP ready .local/c15-native-nominal-1425-prep.
-  ONLYAFTER1424RECOVERY_DONE/ownBEFORE: ZIPb20d9d18/manifestb94604ac/runner968c1364;
-  twofreshARM64callers onee7308831/mixed00747769 CPU-only30sdeadlines/CRTinventory/
-  exactPASS+map/SPV24e3dfcompare; noGPU/driverinstall/faults. Rootaloneguest.
-  No1425BEFORErecordedyet/no uploador run. DoesnotblocknextC23packagebuild.
+BoundedSSH perl alarm25+T/airssh-oConnectTimeout10; useT/airscp/noguessedkey.
+Builderpauls@192.168.1.24/key /Users/pavel/.ssh/windows_builder. Submoduleis
+m1n1_windows (NOTm1n1); Mu361a2134dirtyuserchangespreserved. USBL41/L43;
+no rawproxy/ad-hocguestSSH withactiveharness/controller. Checkbothplanes beforephysicalrequest.
+Agentsc18_crash/sm51_parser/kmd_private_pool available; completedagentneedsFOLLOWUP_TASK,
+notjustsend_message. RootownsallGit/ledger/guest; agentsprivateprep/buildonlywhenpreregistered.
+No attribution/push/PR/newthread/goal/automation. tests/test_change_ledger.py2PASS.

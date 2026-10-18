@@ -92,3 +92,38 @@ No upstream source, exception flags, archive graph or policy changed in this rep
 Neither ARM64 executable was run. Successful native compilation/linking closes the
 selected Windows build gate and does not establish a Windows converter job, an
 allocation failure sweep, production linkage or R1/SM6 admission.
+
+## EXP1425 observed native ARM64 jobs and semantic review
+
+After EXP1424 RECOVERY_DONE, the two freshly linked ARM64 callers executed on the
+normal GPU-visible inert guest. Each returned observed rc0 and its original PASS
+marker without timeout. Refusal followed by a valid same-thread job and output
+after TLS exit passed for the two original fixtures. All28 input hashes remained
+unchanged; the mixed binding map matched all five keys/slots. The surrounding
+read-only guard retained Code28/no service/8CPU, the same boot and unchanged
+recovery durability manifest. No driver, package, GPU or capability operation
+was part of this CPU-only checkpoint.
+
+The original controller returned1/REVIEW_REQUIRED because native mixed SPIR-V
+differed from the expected host SHA. Its result is preserved. Native2152-byte
+SHA1a5bef149143573bf7fcd8ca2d07772e054f8b61f6958363f8f3ce22e408c07f
+differs from host24e3df in four words: OpTypeBool result41->40, OpULessThan
+type41->40/result40->41, and OpBranchConditional condition40->41. Primary grammar
+comparison found these are all uses of the two IDs. Native bytes also equal the
+previous EXP1406 native input. This supports consistent ID renaming; semantic
+validation below is separately observed rather than inferred from byte shape.
+
+Under new BEFORE3f9d2131, exactly three existing pinned tools ran once with all40
+pins unchanged: spirv-val Vulkan1.1, structural actual-NIR and independent semantic
+actual-NIR. All returned0. Structural checks retained CBV0/SRV0,1/UAV0,1 and no raw
+alias. Semantic384 words matched independent EXP1397 vectors over192 lanes
+(173 active,19 tail),346 stores. Deliberate srv_swap/seed_loss/wrong_slot controls
+each produced346 bad words; unsupported/bounds cases refused. The post-NIR files
+matched SHA3129a611189d61e21248ad7ea790a0ab4eac8fc07b1b10d02b8b9b3b174ed67e.
+Replay artifact manifest4a2c98eb43daf555388a06402d6da04816677c00e2b0da839e281ae2c16a7865
+is in .local/c15-native-replay-1425-run.
+
+Verdict: native ordinary CAPI/CRT/TLS jobs and the specific emitted mixed shader
+semantics are proven. The strict host-byte oracle failure remains an original
+observation, resolved by this appended semantic review. Internal OOM/fault sweep,
+arbitrary shader behavior, production driver linkage and R1/SM6 caps remain unproven.

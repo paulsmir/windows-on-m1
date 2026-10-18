@@ -57644,3 +57644,5 @@ RECOVERY SOURCE:
   "Version": 2,
   "Worktree": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler"
 }
+
+EXP1425 SEMANTIC_REVIEW ACTUAL 2026-10-18T19:56:48Z: originalnative2jobsPASS/rc0 andstrictcontrollerhostSHA REVIEW_REQUIRED preserved. Newoffline3commandsallrc0/all40pinsprepoststable. spirv-valVulkan1.1PASS; actualNIRstructuralCBV0/SRV0,1/UAV0,1/no rawaliasPASS; semantic384words/192lanes173active19tail/346stores exact1397vectorsPASS; negatives3x346bad/unsupported-boundsREFUSE. Structural-semanticpostNIRbyteidentical3129a611189d61e21248ad7ea790a0ab4eac8fc07b1b10d02b8b9b3b174ed67e; replaymanifest4a2c98eb43daf555388a06402d6da04816677c00e2b0da839e281ae2c16a7865/rootverified. ConsistentID40/41renaming explains4wordhostdifference; nativeexactold1406bytes. AppendverdictCPU_CAPI_NOMINAL_AND_SELECTED_SEMANTICS_PASS whileoriginalREVIEW_REQUIREDfileunchanged. PostguardCode28AbsentnoService8CPU/sameboot0/unchangedB288durability; no CPUfixture rerun/GPU/packagechange. CompleteCPU-onlyfinalhostindexforthcoming; no internalOOM/SM6caps/nativeGPUclaim.
