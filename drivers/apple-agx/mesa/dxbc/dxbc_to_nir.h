@@ -15,6 +15,7 @@
 #define DXBC_TO_NIR_H
 
 #include "dxbc_parse.h"
+#include "dxbc_resources.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -115,6 +116,11 @@ dxbc_translate_tokens_xfb(const uint32_t *tokens,
                           const struct nir_shader_compiler_options *options,
                           const struct dxbc_nir_xfb *xfb,
                           struct dxbc_nir_error *error);
+
+/* Capture immutable direct-slot cube requirements before shader creation
+ * consumes NIR.  False for dynamic/ambiguous bindings; output is cleared. */
+bool dxbc_nir_srv_dimensions(const struct nir_shader *nir,
+                             uint8_t dimensions[DXBC_RESOURCE_SLOTS]);
 
 /* The thread-group size (dcl_thread_group) and groupshared bytes of a
  * translated compute shader: the block the frontend's Dispatch launches and

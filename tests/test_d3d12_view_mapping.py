@@ -41,6 +41,7 @@ class ViewMapping(unittest.TestCase):
         if 'static bool srv_component_mapping(' in owner:
             code += block(owner, 'static bool srv_component_mapping(') + '\n'
         code += block(owner, 'static HRESULT bind_stage(') + '\n'
+        metadata_arg = ', shader_dimensions' if 'const uint8_t *dimensions' in code else ''
         mesa_format = (local_tree('reference', 'mesa') / 'src/util/format/u_format.c').read_text()
         code += block(mesa_format, 'void util_format_compose_swizzles(') + '\n'
         code += block(mesa_format, 'void util_format_apply_color_swizzle(') + '\n'
@@ -50,11 +51,11 @@ class ViewMapping(unittest.TestCase):
         fixture = (ROOT / 'tests/d3d12_view_mapping_fixture.cpp').read_text()
         cls.tmp = tempfile.TemporaryDirectory(prefix='d3d12-view-mapping-')
         source = Path(cls.tmp.name) / 'mapping.cpp'
-        source.write_text(fixture.replace('/* PRODUCTION_VIEW_MAPPING */', code).replace('/* PRODUCTION_OWNER_SRV */', owner_srv))
+        source.write_text(fixture.replace('/* PRODUCTION_VIEW_MAPPING */', code).replace('/* PRODUCTION_OWNER_SRV */', owner_srv).replace('/* DIMENSIONS_ARGUMENT */', metadata_arg))
         cls.exe = Path(cls.tmp.name) / 'mapping'
         run = subprocess.run([os.environ.get('CXX', 'clang++'), '-std=c++17',
             '-fsanitize=address,undefined', '-DAPPLE_AGX_D3D12_NATIVE_OWNER',
-            *host_flags(build), '-I', str(local_tree('reference', 'mesa') / 'src/gallium/include'), '-I', str(ROOT / 'drivers/apple-agx/mesa/winsys'),
+            *host_flags(build), '-I', str(local_tree('reference', 'mesa') / 'src/gallium/include'), '-I', str(ROOT / 'drivers/apple-agx/mesa/winsys'), '-I', str(ROOT / 'drivers/apple-agx/mesa/dxbc'),
             str(source), '-o', str(cls.exe)], capture_output=True, text=True)
         if run.returncode:
             raise AssertionError(run.stderr)
@@ -75,3 +76,6 @@ class ViewMapping(unittest.TestCase):
 
     def test_root_srv_default_is_explicit_identity(self):
         self.run_case('root')
+
+    def test_cube_and_one_element_array_target_and_bounds(self):
+        self.run_case('cube')

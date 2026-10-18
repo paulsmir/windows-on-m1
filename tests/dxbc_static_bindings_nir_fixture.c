@@ -10,7 +10,37 @@
 static unsigned size_vec4(const struct glsl_type *type, bool bindless) {
    (void)bindless; return glsl_count_attribute_slots(type, false);
 }
+static void dimensions(void) {
+   glsl_type_singleton_init_or_ref();
+   nir_builder b=nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT,&agx_nir_options,"cube dimensions");
+   uint8_t dims[DXBC_RESOURCE_SLOTS];
+   nir_tex_instr *t[2];
+   for(unsigned i=0;i<2;++i) {
+      t[i]=nir_tex_instr_create(b.shader,2);
+      t[i]->op=nir_texop_txl; t[i]->sampler_dim=GLSL_SAMPLER_DIM_CUBE;
+      t[i]->is_array=i!=0; t[i]->texture_index=7+i; t[i]->sampler_index=0;
+      t[i]->dest_type=nir_type_float32; t[i]->coord_components=3+i;
+      t[i]->src[0]=nir_tex_src_for_ssa(nir_tex_src_coord,
+         nir_trim_vector(&b,nir_imm_vec4(&b,1,0,0,0),3+i));
+      t[i]->src[1]=nir_tex_src_for_ssa(nir_tex_src_lod,nir_imm_float(&b,0));
+      nir_def_init(&t[i]->instr,&t[i]->def,4,32);nir_builder_instr_insert(&b,&t[i]->instr);
+   }
+   nir_validate_shader(b.shader,"cube dimensions source");
+   assert(dxbc_nir_srv_dimensions(b.shader,dims));
+   assert(dims[7]==DXBC_SRV_CUBE && dims[8]==DXBC_SRV_CUBE_ARRAY && dims[0]==DXBC_SRV_UNUSED);
+   // A single cube-array view remains array even though cube count lives outside NIR.
+   t[1]->texture_index=7;
+   assert(!dxbc_nir_srv_dimensions(b.shader,dims));
+   for(unsigned i=0;i<DXBC_RESOURCE_SLOTS;++i) assert(!dims[i]);
+   t[1]->texture_index=DXBC_RESOURCE_SLOTS;
+   assert(!dxbc_nir_srv_dimensions(b.shader,dims));
+   t[1]->texture_index=8;
+   nir_tex_instr_add_src(t[1],nir_tex_src_texture_offset,nir_imm_int(&b,0));
+   assert(!dxbc_nir_srv_dimensions(b.shader,dims));
+   ralloc_free(b.shader);glsl_type_singleton_decref();puts("PASS cube dimension metadata");
+}
 int main(int argc, char **argv) {
+   if(argc==2 && !strcmp(argv[1],"--dimensions")) {dimensions();return 0;}
    assert(argc==2 || argc==3); FILE *f=fopen(argv[1],"rb"); assert(f);
    fseek(f,0,SEEK_END); long size=ftell(f); rewind(f);
    void *data=malloc(size); assert(fread(data,1,size,f)==(size_t)size); fclose(f);
@@ -33,7 +63,9 @@ int main(int argc, char **argv) {
    nir_shader *old=dxbc_translate_tokens(chunk,&agx_nir_options,&e);
    bool pixel_uav=argc==3 && !strcmp(argv[2],"--pixel-uav");
    bool texture=argc==3 && !strcmp(argv[2],"--texture");
-   if(argc==3 && !pixel_uav && !texture) {
+   bool cube=argc==3 && (!strcmp(argv[2],"--cube") || !strcmp(argv[2],"--cube-array"));
+   bool cube_array=cube && !strcmp(argv[2],"--cube-array");
+   if(argc==3 && !pixel_uav && !texture && !cube) {
       nir_shader *mapped=dxbc_translate_tokens_bindings(chunk,&agx_nir_options,limits,&map,&e);
       if(!strcmp(argv[2],"--refuse") || !strcmp(argv[2],"--translate-fail")) {
          assert(!old && !mapped && !map.active && !map.count);
@@ -54,13 +86,20 @@ int main(int argc, char **argv) {
    /* The existing path refuses CBV/texture SM5.1 dimensions.  A raw-UAV-
     * only PS was already accepted there using its ID as an old slot;
     * this D3D12 change does not alter that legacy behavior. */
-   if(pixel_uav) assert(old);
+   if(pixel_uav || cube) assert(old);
    else assert(!old);
    ralloc_free(old);
    nir_shader *nir=dxbc_translate_tokens_bindings(chunk,&agx_nir_options,limits,&map,&e);
    if(!nir) { fprintf(stderr,"REFUSED %s\n",e.message); return 1; }
-   assert(map.active);
-   if(pixel_uav) {
+   if(cube) {
+      uint8_t dims[DXBC_RESOURCE_SLOTS];
+      assert(!map.active && !map.count && dxbc_nir_srv_dimensions(nir,dims));
+      assert(dims[0]==(cube_array?DXBC_SRV_CUBE_ARRAY:DXBC_SRV_CUBE));
+      for(unsigned i=1;i<DXBC_RESOURCE_SLOTS;++i) assert(dims[i]==DXBC_SRV_UNUSED);
+   } else assert(map.active);
+   if(cube) {
+      assert(nir->info.stage==MESA_SHADER_FRAGMENT);
+   } else if(pixel_uav) {
       const struct dxbc_binding *u=dxbc_binding_find(&map,DXBC_BINDING_UAV,4,1);
       assert(map.count==1 && u && u->id==0 && u->slot==0);
       assert(nir->info.stage==MESA_SHADER_FRAGMENT);
@@ -72,12 +111,23 @@ int main(int argc, char **argv) {
    } else {
       assert(map.count==3);
    }
-   unsigned stores=0, cbvs=0, atomics=0, textures=0;
+   unsigned stores=0, cbvs=0, atomics=0, textures=0, sizes=0, levels=0;
    nir_foreach_function_impl(impl,nir) nir_foreach_block(block,impl)
       nir_foreach_instr(ins,block) {
        if(ins->type==nir_instr_type_tex) {
          nir_tex_instr *tex=nir_instr_as_tex(ins);
          assert(tex->texture_index==0 && tex->sampler_index==0);
+         if(cube) {
+            assert(tex->sampler_dim==GLSL_SAMPLER_DIM_CUBE && tex->is_array==cube_array);
+            if(tex->op==nir_texop_txl) assert(tex->coord_components==(cube_array?4:3));
+            if(tex->op==nir_texop_txs) {
+               assert(tex->def.num_components==(cube_array?3:2));
+               int lod=nir_tex_instr_src_index(tex,nir_tex_src_lod);
+               assert(lod>=0 && nir_src_is_const(tex->src[lod].src) && nir_src_as_uint(tex->src[lod].src)==0);
+               ++sizes;
+            }
+            if(tex->op==nir_texop_query_levels) {assert(tex->def.num_components==1);++levels;}
+         }
          ++textures;
        }
        if(ins->type==nir_instr_type_intrinsic) {
@@ -96,7 +146,8 @@ int main(int argc, char **argv) {
          }
       }
       }
-   if(pixel_uav) assert(atomics==1 && !textures);
+   if(cube) assert(textures>=3 && sizes==1 && levels==1 && !atomics);
+   else if(pixel_uav) assert(atomics==1 && !textures);
    else if(texture) assert(textures==1 && !atomics);
    else assert(stores==3 && cbvs==1);
    nir_validate_shader(nir,"static bindings");
@@ -106,7 +157,8 @@ int main(int argc, char **argv) {
    agx_preprocess_nir(nir); nir_validate_shader(nir,"static bindings Asahi");
    assert(!memcmp(chunk,saved,bytes));
    ralloc_free(nir); glsl_type_singleton_decref(); free(saved); free(data);
-   if(pixel_uav) puts("PASS pixel-uav u1/space4->slot0 NIR+Asahi");
+   if(cube) puts(cube_array?"PASS cube-array t0 NIR+Asahi":"PASS cube t0 NIR+Asahi");
+   else if(pixel_uav) puts("PASS pixel-uav u1/space4->slot0 NIR+Asahi");
    else if(texture) puts("PASS texture t0/space5->slot0 s0/space6->slot0 NIR+Asahi");
    else puts("PASS store-slots=0,1 cbv-slot=0 NIR+Asahi");
    return 0;

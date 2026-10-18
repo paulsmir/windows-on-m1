@@ -3037,3 +3037,38 @@ dxbc_translate_tokens_bindings(const uint32_t *tokens,
    error->offset = perr.offset;
    return NULL;
 }
+
+bool dxbc_nir_srv_dimensions(const struct nir_shader *nir,
+                             uint8_t dimensions[DXBC_RESOURCE_SLOTS])
+{
+   if (!dimensions) return false;
+   memset(dimensions, 0, DXBC_RESOURCE_SLOTS);
+   if (!nir) return false;
+   nir_foreach_function_impl(impl, nir) {
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_tex) continue;
+            const nir_tex_instr *tex = nir_instr_as_tex(instr);
+            if (tex->texture_index >= DXBC_RESOURCE_SLOTS) goto fail;
+            for (unsigned i = 0; i < tex->num_srcs; ++i) {
+               switch (tex->src[i].src_type) {
+               case nir_tex_src_texture_deref:
+               case nir_tex_src_texture_offset:
+               case nir_tex_src_texture_handle:
+                  goto fail;
+               default: break;
+               }
+            }
+            uint8_t dimension = tex->sampler_dim != GLSL_SAMPLER_DIM_CUBE ? DXBC_SRV_OTHER :
+                                tex->is_array ? DXBC_SRV_CUBE_ARRAY : DXBC_SRV_CUBE;
+            uint8_t *slot = &dimensions[tex->texture_index];
+            if (*slot != DXBC_SRV_UNUSED && *slot != dimension) goto fail;
+            *slot = dimension;
+         }
+      }
+   }
+   return true;
+fail:
+   memset(dimensions, 0, DXBC_RESOURCE_SLOTS);
+   return false;
+}

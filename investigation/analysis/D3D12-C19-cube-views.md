@@ -1,10 +1,10 @@
 # D3D12 C19: cube and cube-array SRVs over existing 2D arrays
 
-Status: read-only source/design preparation, 2026-10-18. Parent is validating
-C18; no C19 production edit is authorized until the parent pins that snapshot
-and hands off implementation. This note owns no package, build, hardware run,
-commit or experiment verdict. Classification: FULL GRAPHICS view/texture
-translation, with existing KMD/firmware contracts unchanged.
+Status: offline implementation, 2026-10-18. Parent pinned C18 package source
+snapshot `56fe3977d3909012636dc87aaff9f0d177526574` (678 files), then authorized
+C19 production/tests implementation. Parent owns probe/builder/hardware,
+commits and ledgers. Classification: FULL GRAPHICS view/texture translation,
+with existing KMD/firmware contracts unchanged.
 
 ## Sources inspected
 
@@ -200,21 +200,22 @@ For face f in [0,5], cube c in [0,1] and resource mip m in [0,1], define exact b
     B = 43 + 89*m
     A = 151 + 7*f + 11*c + 13*m
 
-All values fit 8 bits and uniquely expose face, cube and mip. Each 64x64 output
-chooses face=floor(6*x/64) and samples exact center axis directions, in order
-+X,-X,+Y,-Y,+Z,-Z. Constant axes avoid seams, interpolation and orientation
+All values fit 8 bits and uniquely expose face, cube and mip. Each 64x64 output uses the parent's implemented 3x2 face grid:
+face=floor(3*(x+0.5)/64)+(y>=32 ? 3 : 0), matching SV_Position at pixel centers,
+and samples exact center axis directions, in order +X,-X,+Y,-Y,+Z,-Z. Constant axes avoid seams, interpolation and orientation
 ambiguity. Expected bytes come from the formula for every pixel; require
 4096 pixels * 4 channels exact and print first mismatch.
 
 | Checkpoint | View / shader | Expected cube/mip |
 | --- | --- | --- |
 |C19A|firstFace 0, NumCubes 1, firstMip 0; TextureCube|c0,m0|
-|C19B|firstFace 0, NumCubes 2, firstMip 0; TextureCubeArray, cube index y/32|c0 above/c1 below,m0|
+|C19B|firstFace 0, NumCubes 1, firstMip 0, MipLevels 1; TextureCubeArray index 0|c0,m0|
 |C19C|firstFace 6, NumCubes 1, firstMip 1, MipLevels 1; TextureCubeArray index 0|c1,m1|
+|C19D|firstFace 0, NumCubes 2, firstMip 1, MipLevels 1; TextureCubeArray index 1|c1,m1|
 
 Each checkpoint uses a fresh isolated device and its own
-AGX_D3D12_C19A/B/C: PASS|FAIL receipt. C19C is the discriminating one-element
-cube-array plus nonzero face/mip origin case. Keep C19A nonarray and C19B
+AGX_D3D12_C19A/B/C/D: PASS|FAIL receipt. C19C is the discriminating one-element
+cube-array plus nonzero face/mip origin case. Keep C19A nonarray, C19B one-element array, and C19D
 multiple-array controls so a target mistake cannot pass by sampling cube 0.
 Use existing identity component mapping and a legacy/simple root signature;
 C17/C18 remain controls. Do not change format/capability flags or firmware.
@@ -231,8 +232,63 @@ verifies the designed face/address/mip sampling on J313. No MinLOD behavior or
 
 ## Experiment and recovery boundary
 
-Parent must first pin C18 source snapshot. Later C19 build/package/launch needs
+C18 snapshot is pinned as above. Later C19 build/package/launch needs
 its own BEFORE hypothesis, hashes and recovery artifact and ACTUAL verdict.
 Use the established full-owner profile, evidence-first exact package cleanup
 and inert GPU-visible recovery. This note does not modify the compact GPU
 state or authorize a launch.
+
+
+## Implemented source and verification checkpoint
+
+`dxbc_resources.h` defines compact UNUSED/OTHER/CUBE/CUBE_ARRAY classifications
+for 128 direct physical SRV slots. `dxbc_nir_srv_dimensions` inspects actual owned
+finalized NIR before Gallium shader-state creation consumes it; it validates
+direct texture sources, slot bounds and conflicting dimensions and clears output
+on refusal. Compute/VS/PS compiled objects own the 128-byte arrays by value.
+Owner compile paths populate them and bind_stage consumes existing pointers;
+no additional per-binding scratch arrays or borrowed NIR pointers are used.
+
+CPU SRV `cube` classification survives descriptor copy/replay; owner views use
+the shader's classification to choose CUBE/CUBE_ARRAY even for one-element
+arrays over the same 2D-array backing. Unused cube bindings are skipped; used
+cube/noncube or nonarray/multiple-cube mismatches refuse. Cube creation enforces
+finite face/mip ranges with subtraction/division before multiplication, accepts
+the all-remaining mip sentinel and rejects zero/invalid counts or nonzero/NaN
+MinLOD. Existing valid 2D/buffer behavior and C17 maps remain unchanged. New
+owner SRV checks use subtraction before addition/narrowing. Descriptor stride
+remains 64 bytes on host (production sizeof assertion <=64).
+
+GetDimensions requires no shim. `emit_resinfo` emits NIR txs 2 components for
+nonarray cube and 3 for cube-array (z=number of cubes), plus query_levels 1.
+Asahi `agx_state.c:722-739` packs descriptor.depth=faceCount/6;
+`src/asahi/libagx/texture.cl:12-62` adds descriptor.first_level to queried LOD,
+minifies width/height, preserves array depth and sets cube height=width;
+`:79-88` returns query level count=(last_level-first_level)+1.
+Thus a view at firstFace 6/firstMip 1 reports minified width 2/height 2, cubeCount 1
+and levelCount 1 over the 4x4/2x2 two-mip backing. A two-cube view at mip 1 reports
+cubeCount 2. The parent's actual FXC shaders guard the exact cube count (1/2), positive
+square width/height and positive level count before sampling; pixel colors
+independently distinguish the selected resource mip.
+
+RED `/tmp/agx-c19-views-red.log` reproduces current cube SRV refusal in the
+production extraction harness; `/tmp/agx-c19-dim-red.log` proves missing NIR
+classification fails the actual-NIR cube/one-element-array assertion. GREEN
+production harness covers cube/nonarray and one-element-array target selection,
+firstFace 6/mip 1, count 2, all-mips sentinel, fitting firstFace 1, finite overflow/
+zero/empty/square/MinLOD failures, unused bindings and dimension mismatches.
+Actual FXC headers ps_cube, ps_cube_array and ps_cube_array_second are decoded
+directly by the dedicated test; all translate with correct slot 0 metadata,
+3/4 sample coordinates, 2/3 textureSize components, 1 query-level component,
+and validate after AGX preprocessing. No Asahi implementation code is copied.
+
+Affected D3D12 suite 41 tests PASS 0.986s; DXBC 13 tests PASS 7.523s, corpus 439
+translated/13 refused/0 crashes. Logs `/tmp/agx-c19-targeted-final.log` and
+`/tmp/agx-c19-dxbc-final.log`. Existing native-owner source assertions are
+updated only for the added explicit metadata pointer in bind_stage calls.
+Builder syntax/stack/probe gates, full-suite comparison, commits and experiment
+preregistration remain parent-owned. No C19 hardware verdict is established.
+
+## Parent package gate
+
+Full1513 tests167.539s:68fail51errors2skips; identical119failure/error signatures toC18baseline. Three pinnedMSVC syntaxvariants rc0; ARM64probe67a9fd5c9424669de9173c4f5d36e3253d65135c7bbbb84ad26cb60a4cac2514. All3exactFXCshaders NIR+AGXvalidated; D3D1241PASS, DXBC13PASS/corpus439/13/0. C20typedextenttests added after fullsuite discovery intentionallyremainRED outside thiscandidate; theirsourcefix is excluded fromC19snapshot. REVIEW historicalR113/G3 DEFER; R85/R47 ACCEPT exactsource/profile/hash; R48 oneUSBowner; R97 noarchaeology; R14 targeted/full once.

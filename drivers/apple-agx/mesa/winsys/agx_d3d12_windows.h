@@ -9,6 +9,7 @@
  * this boundary. */
 #include <windows.h>
 #include "../dxbc/dxbc_bindings.h"
+#include "../dxbc/dxbc_resources.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -55,6 +56,7 @@ typedef struct {
   void *State;          /* the context's compute state object */
   unsigned Block[3];
   struct dxbc_binding_map Bindings; /* C17: immutable SM5.1 semantic-to-slot map */
+  uint8_t SrvDimensions[DXBC_RESOURCE_SLOTS]; /* C19: owned direct-slot requirements */
 } AGX_D3D12_COMPUTE;
 HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *Owner, const UINT *Tokens, AGX_D3D12_COMPUTE *Compute);
 void AgxD3d12OwnerDestroyCompute(AGX_D3D12_OWNER *Owner, AGX_D3D12_COMPUTE *Compute);
@@ -97,6 +99,7 @@ typedef struct {
   DXGI_FORMAT Format;
   unsigned FirstLevel, Levels, FirstLayer, Layers;
   unsigned ComponentMapping; /* C18: encoded WDK SRV component mapping */
+  unsigned Cube; /* C19: cube-class view; actual arrayness from compiled shader */
 } AGX_D3D12_SRV;
 /* C6e: a sampler s# in the D3D10/11/12 DDI encoding (filter bits, address
  * modes 1..5, comparison 1..8) */
@@ -245,6 +248,7 @@ typedef struct {
   void *Velems;
   unsigned VelemsStrides[16];
   struct dxbc_binding_map VsBindings, PsBindings;
+  uint8_t VsSrvDimensions[DXBC_RESOURCE_SLOTS], PsSrvDimensions[DXBC_RESOURCE_SLOTS];
 } AGX_D3D12_GRAPHICS;
 HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *Owner, const AGX_D3D12_GRAPHICS_DESC *Desc,
                                     AGX_D3D12_GRAPHICS *Graphics);

@@ -64,7 +64,7 @@ class NativeOwner(unittest.TestCase):
         self.assertIn('dxbc_nir_compute_info(', create)
         self.assertIn('->create_compute_state(', create)
         dispatch = body(text, 'extern "C" HRESULT AgxD3d12OwnerDispatch(')
-        order = [dispatch.index(k) for k in ('bind_stage(pipe, MESA_SHADER_COMPUTE, cbvs, srvs, uavs, views, &view_count)',
+        order = [dispatch.index(k) for k in ('bind_stage(pipe, MESA_SHADER_COMPUTE, cbvs, srvs, uavs, views, &view_count, compute->SrvDimensions)',
                                              'bind_compute_state', 'launch_grid', 'memory_barrier(pipe, PIPE_BARRIER_ALL)',
                                              'unbind_stage(pipe, MESA_SHADER_COMPUTE, views, view_count)')]
         self.assertEqual(order, sorted(order))
@@ -86,7 +86,7 @@ class NativeOwner(unittest.TestCase):
         self.assertIn('room < 65536ull ? room : 65536ull', stage)
         self.assertIn('if (srvs[i].Texture) {', stage)
         self.assertIn('FormatTranslate(srvs[i].Format, FALSE) : PIPE_FORMAT_R32_UINT', stage)
-        order = [dispatch.index(k) for k in ('bind_stage(pipe, MESA_SHADER_COMPUTE, cbvs, srvs, uavs, views, &view_count)',
+        order = [dispatch.index(k) for k in ('bind_stage(pipe, MESA_SHADER_COMPUTE, cbvs, srvs, uavs, views, &view_count, compute->SrvDimensions)',
                                              'launch_grid', 'unbind_stage(pipe, MESA_SHADER_COMPUTE, views, view_count)')]
         self.assertEqual(order, sorted(order))
         self.assertNotIn('templ.format = PIPE_FORMAT_R32_UINT;', dispatch)

@@ -24,6 +24,7 @@ extern "C" {
 /* The D3D10 frontend's DXGI -> pipe format table (gallium/frontends/d3d10umd
  * Format.cpp, linked in the native runtime archive). */
 enum pipe_format FormatTranslate(DXGI_FORMAT Format, BOOL depth);
+static_assert(AGX_D3D12_SRV_SLOTS == DXBC_RESOURCE_SLOTS, "NIR SRV dimension metadata capacity");
 
 /* D3D12 C4b owner. Construction mirrors agx_d3d10_windows.cpp
  * (AdmissionUmdRuntimeDeviceInitialize -> AgxWin32AsahiScreenCreateForWindows
@@ -278,6 +279,11 @@ extern "C" HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *owner, const UINT
       owner_binding_limits, &compute->Bindings, &error);
   if (!nir) {
     receipt("measure-d3d12-compute", E_NOTIMPL, 0u, error.opcode, error.offset);
+    return E_NOTIMPL;
+  }
+  if (!dxbc_nir_srv_dimensions(nir, compute->SrvDimensions)) {
+    ralloc_free(nir);
+    memset(compute, 0, sizeof(*compute));
     return E_NOTIMPL;
   }
   unsigned block[3] = {}, shared = 0;
@@ -897,11 +903,16 @@ static unsigned stencil_op(unsigned op) {
   }
 }
 static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_shader_stage stage,
-                           struct dxbc_binding_map *bindings) {
+                           struct dxbc_binding_map *bindings, uint8_t dimensions[DXBC_RESOURCE_SLOTS]) {
   struct dxbc_nir_error error = {};
   struct nir_shader *nir = dxbc_translate_tokens_bindings(tokens, pipe->screen->nir_options[stage], owner_binding_limits, bindings, &error);
   receipt("measure-d3d12-graphics-shader", nir ? S_OK : E_NOTIMPL, static_cast<UINT>(stage), error.opcode, error.offset);
   if (!nir) return NULL;
+  if (!dxbc_nir_srv_dimensions(nir, dimensions)) {
+    ralloc_free(nir);
+    memset(bindings, 0, sizeof(*bindings));
+    return NULL;
+  }
   struct pipe_shader_state state = {};
   state.type = PIPE_SHADER_IR_NIR;
   state.ir.nir = nir;
@@ -926,8 +937,8 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
     return E_INVALIDARG;
   memset(graphics, 0, sizeof(*graphics));
   struct pipe_context *pipe = owner->Context;
-  graphics->Vs = create_shader(pipe, desc->Vs, MESA_SHADER_VERTEX, &graphics->VsBindings);
-  graphics->Fs = desc->Ps ? create_shader(pipe, desc->Ps, MESA_SHADER_FRAGMENT, &graphics->PsBindings) : NULL;
+  graphics->Vs = create_shader(pipe, desc->Vs, MESA_SHADER_VERTEX, &graphics->VsBindings, graphics->VsSrvDimensions);
+  graphics->Fs = desc->Ps ? create_shader(pipe, desc->Ps, MESA_SHADER_FRAGMENT, &graphics->PsBindings, graphics->PsSrvDimensions) : NULL;
   struct pipe_blend_state blend = {};
   blend.independent_blend_enable = desc->IndependentBlend ? 1 : 0;
   blend.alpha_to_coverage = desc->AlphaToCoverage ? 1 : 0;
@@ -1085,7 +1096,7 @@ static bool srv_component_mapping(unsigned mapping, struct pipe_sampler_view *vi
  * every stage); views are released and UAVs unbound by unbind_stage. */
 static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, const AGX_D3D12_CBV *cbvs,
                           const AGX_D3D12_SRV *srvs, const AGX_D3D12_UAV *uavs, struct pipe_sampler_view **views,
-                          unsigned *view_count) {
+                          unsigned *view_count, const uint8_t *dimensions) {
   *view_count = 0;
   for (unsigned i = 0; i < AGX_D3D12_CBV_SLOTS; ++i) {
     struct pipe_constant_buffer cb = {};
@@ -1117,11 +1128,22 @@ static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, co
       struct pipe_resource *texture = static_cast<struct pipe_resource *>(buffer->Resource);
       const enum pipe_format format = FormatTranslate(srvs[i].Format, FALSE);
       if (!texture || format == PIPE_FORMAT_NONE || !srvs[i].Levels || !srvs[i].Layers ||
-          srvs[i].FirstLevel + srvs[i].Levels - 1 > texture->last_level ||
-          srvs[i].FirstLayer + srvs[i].Layers > texture->array_size)
+          srvs[i].FirstLevel > texture->last_level || srvs[i].Levels - 1u > texture->last_level - srvs[i].FirstLevel ||
+          srvs[i].FirstLayer >= texture->array_size || srvs[i].Layers > texture->array_size - srvs[i].FirstLayer)
         return E_INVALIDARG;
       templ.format = format;
       templ.target = texture->target;
+      const uint8_t dimension = dimensions ? dimensions[i] : DXBC_SRV_UNUSED;
+      if (srvs[i].Cube) {
+        if (dimension == DXBC_SRV_UNUSED) continue;
+        if ((texture->target != PIPE_TEXTURE_2D_ARRAY && texture->target != PIPE_TEXTURE_2D) ||
+            texture->width0 != texture->height0 || texture->nr_samples > 1 || srvs[i].Layers % 6u ||
+            (dimension != DXBC_SRV_CUBE && dimension != DXBC_SRV_CUBE_ARRAY) ||
+            (dimension == DXBC_SRV_CUBE && srvs[i].Layers != 6u)) return E_INVALIDARG;
+        templ.target = dimension == DXBC_SRV_CUBE ? PIPE_TEXTURE_CUBE : PIPE_TEXTURE_CUBE_ARRAY;
+      } else if (dimension == DXBC_SRV_CUBE || dimension == DXBC_SRV_CUBE_ARRAY) {
+        return E_INVALIDARG;
+      }
       templ.u.tex.first_level = static_cast<uint8_t>(srvs[i].FirstLevel);
       templ.u.tex.last_level = static_cast<uint8_t>(srvs[i].FirstLevel + srvs[i].Levels - 1);
       templ.u.tex.first_layer = static_cast<uint16_t>(srvs[i].FirstLayer);
@@ -1131,6 +1153,7 @@ static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, co
       *view_count = i + 1;
       continue;
     }
+    if (dimensions && (dimensions[i] == DXBC_SRV_CUBE || dimensions[i] == DXBC_SRV_CUBE_ARRAY)) return E_INVALIDARG;
     if (!buffer->Resource || srvs[i].Offset >= buffer->Bytes) return E_INVALIDARG;
     const unsigned long long room = buffer->Bytes - srvs[i].Offset;
     /* C9: a typed buffer SRV reads texels of its format */
@@ -1214,7 +1237,7 @@ extern "C" HRESULT AgxD3d12OwnerDispatch(AGX_D3D12_OWNER *owner, const AGX_D3D12
    * UAVs as images);
    * Asahi uploads a user buffer when it is set, so root constants are
    * captured here */
-  HRESULT hr = bind_stage(pipe, MESA_SHADER_COMPUTE, cbvs, srvs, uavs, views, &view_count);
+  HRESULT hr = bind_stage(pipe, MESA_SHADER_COMPUTE, cbvs, srvs, uavs, views, &view_count, compute->SrvDimensions);
   void *none[AGX_D3D12_SAMPLER_SLOTS] = {};
   if (FAILED(hr)) {
     unbind_stage(pipe, MESA_SHADER_COMPUTE, views, AGX_D3D12_SRV_SLOTS);
@@ -1388,9 +1411,9 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   if (ps_sampler_count) pipe->bind_sampler_states(pipe, MESA_SHADER_FRAGMENT, 0, ps_sampler_count, ps_samplers);
   struct pipe_sampler_view *vs_views[AGX_D3D12_SRV_SLOTS] = {}, *ps_views[AGX_D3D12_SRV_SLOTS] = {};
   unsigned vs_view_count = 0, ps_view_count = 0;
-  HRESULT hr = bind_stage(pipe, MESA_SHADER_VERTEX, draw->Vs.Cbvs, draw->Vs.Srvs, draw->Vs.Uavs, vs_views, &vs_view_count);
+  HRESULT hr = bind_stage(pipe, MESA_SHADER_VERTEX, draw->Vs.Cbvs, draw->Vs.Srvs, draw->Vs.Uavs, vs_views, &vs_view_count, draw->Pipeline->VsSrvDimensions);
   if (SUCCEEDED(hr))
-    hr = bind_stage(pipe, MESA_SHADER_FRAGMENT, draw->Ps.Cbvs, draw->Ps.Srvs, draw->Ps.Uavs, ps_views, &ps_view_count);
+    hr = bind_stage(pipe, MESA_SHADER_FRAGMENT, draw->Ps.Cbvs, draw->Ps.Srvs, draw->Ps.Uavs, ps_views, &ps_view_count, draw->Pipeline->PsSrvDimensions);
   if (FAILED(hr)) {
     unbind_stage(pipe, MESA_SHADER_VERTEX, vs_views, AGX_D3D12_SRV_SLOTS);
     unbind_stage(pipe, MESA_SHADER_FRAGMENT, ps_views, AGX_D3D12_SRV_SLOTS);

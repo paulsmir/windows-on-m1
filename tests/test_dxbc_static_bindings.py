@@ -42,6 +42,8 @@ class DxbcStaticBindings(unittest.TestCase):
                 *map(str, libs), '-L/opt/homebrew/opt/zstd/lib', '-lzstd', '-lz', '-lpthread'],
                 capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, r.stderr)
+            r = subprocess.run([str(exe), '--dimensions'], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stdout+r.stderr)
             r = subprocess.run([str(exe), str(FIXTURES / 'cs51static.dxbc')],
                 capture_output=True, text=True, timeout=60)
             self.assertEqual(r.returncode, 0, r.stdout+r.stderr)
@@ -60,7 +62,10 @@ class DxbcStaticBindings(unittest.TestCase):
             import re
             for name, mode, expected in [
                 ('ps_spaces', '--pixel-uav', 'u1/space4->slot0'),
-                ('tex_spaces', '--texture', 't0/space5->slot0 s0/space6->slot0')]:
+                ('tex_spaces', '--texture', 't0/space5->slot0 s0/space6->slot0'),
+                ('ps_cube', '--cube', 'cube t0'),
+                ('ps_cube_array', '--cube-array', 'cube-array t0'),
+                ('ps_cube_array_second', '--cube-array', 'cube-array t0')]:
                 with self.subTest(graphics=name):
                     header = (ROOT / 'drivers/apple-agx/windows/icd' /
                               f'agx_d3d12_probe_{name}.h').read_text()

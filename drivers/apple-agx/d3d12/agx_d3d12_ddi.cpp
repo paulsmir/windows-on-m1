@@ -1093,6 +1093,7 @@ struct AgxD3d12Descriptor {
     UINT layers;
     UINT levels; /* C6e: texture SRVs */
     UINT component_mapping; /* C18: encoded SRV fetch-result routing */
+    UINT cube; /* C19: cube-class SRV; arrayness belongs to the shader */
 };
 /* C6e: a sampler descriptor */
 struct AgxD3d12SamplerDescriptor {
@@ -1245,6 +1246,33 @@ static VOID APIENTRY CreateShaderResourceView(D3D12DDI_HDEVICE, const D3D12DDIAR
         return;
     }
     const auto *resource = arg ? static_cast<const AgxD3d12Resource *>(arg->hDrvResource.pDrvPrivate) : nullptr;
+    /* C19: a cube view reuses an ordinary square 2D-array allocation.
+     * The shader distinguishes nonarray cubes from one-element cube arrays. */
+    if (arg && resource && resource->heap && resource->type == D3D12DDI_RT_TEXTURE2D &&
+        arg->ResourceDimension == D3D12DDI_RD_TEXTURECUBE) {
+        const D3D12DDIARG_TEXCUBE_SHADER_RESOURCE_VIEW &v = arg->TexCube;
+        UINT reason = resource->width != resource->height || v.ResourceMinLODClamp != 0.0f ? 4u
+                    : !v.NumCubes || v.First2DArrayFace >= resource->layers ||
+                      v.NumCubes > (resource->layers - v.First2DArrayFace) / 6u ||
+                      v.MostDetailedMip >= resource->levels ? 6u : 0u;
+        const UINT levels = reason ? 0u : v.MipLevels == UINT_MAX ? resource->levels - v.MostDetailedMip : v.MipLevels;
+        if (!reason && (!levels || levels > resource->levels - v.MostDetailedMip ||
+                        v.First2DArrayFace + v.NumCubes * 6u - 1u > 0xffffu ||
+                        v.MostDetailedMip + levels - 1u > 0xffu)) reason = 6u;
+        if (!reason) {
+            out->kind = kDescriptorSrvTexture;
+            out->component_mapping = arg->Shader4ComponentMapping;
+            out->cube = 1;
+            out->heap = resource->heap;
+            out->format = arg->Format == DXGI_FORMAT_UNKNOWN ? resource->format : arg->Format;
+            out->level = v.MostDetailedMip;
+            out->levels = levels;
+            out->first_layer = v.First2DArrayFace;
+            out->layers = v.NumCubes * 6u;
+        }
+        ViewReceipt("measure-d3d12-srv", reason, static_cast<UINT>(arg->Format), 0xc0000000u | levels);
+        return;
+    }
     /* C6e: 2D (array) texture SRVs of committed textures */
     if (arg && resource && resource->heap && resource->type == D3D12DDI_RT_TEXTURE2D) {
         const D3D12DDIARG_TEX2D_SHADER_RESOURCE_VIEW_0002 &v = arg->Tex2D;
@@ -2937,6 +2965,7 @@ static void OwnerBindings(const AgxD3d12Dispatch &b, AgxD3d12OwnerBindings *o) {
             o->srv_buffers[s] = HeapBuffer(view->heap);
             o->srvs[s].Buffer = &o->srv_buffers[s];
             o->srvs[s].Texture = 1;
+            o->srvs[s].Cube = view->cube;
             o->srvs[s].ComponentMapping = view->component_mapping;
             o->srvs[s].Format = view->format;
             o->srvs[s].FirstLevel = view->level;
