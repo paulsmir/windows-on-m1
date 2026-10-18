@@ -65,7 +65,7 @@ investigation/CLAUDE_WORKING_METHOD.md. CS allowed again.
   validated. 1404C19/C20accepted. KMDforeigncache0c458548 repeatedlyvalidated,
   no provenlost-unit leak; never mask inUMD/increasecapacitywithoutcause.
 
-## C23 / EXP1431 PREBUILD ACTIVE, hardware HELD
+## C23 / EXP1431 PREBUILT and OFFLINE READY, hardware HELD
 
 - C23mainimplementationeb34f8ee/CHANGES94dfbe30, noteD3D12-C23-texture1d.md.
   BoundedcommittedDEFAULTnonarray1D width1..16384/legalmips/R32UINT-RGBA8,
@@ -82,11 +82,13 @@ investigation/CLAUDE_WORKING_METHOD.md. CS allowed again.
   withbothinvalidguardsremoved; DDI12d55 WITHOUTC15publisher, no unlinkedC15files.
   Source9manifest68d451d35a6fe0e71ee94f0a0790626688c463642e0bce6aa8209af32e2a5db7.
   PREP.local/preparation-1431/sourceverifierPASS. BUILD_BEFORE8104c510,
-  rootbuildsession57315 ACTIVE. Snapshot must695 andstack13824/6544/PDB/native
-  freshclosurePASS; preserve original4+buildlog PRErepack. NOhardwareapproval.
-- Need exactNEW1431Windows3syntax; agentkmdpreparing privateproposal fromgitshow
-  c282, no compilerauthorizedyet. InheritedactualNIR/query/create and full1592
-  proofs remain, all7codegates/finalbefore/approval later. Probe57ccf5127118f9c41958851183e415005122cf805226df39c6461bd4c48d4a3d55 unchanged.
+  rootbuildsession57315DONE/PACKAGEPASS/695/PDB/stack13824+6544.
+  Originalnative4+logpreserved2283063cd1b722fb648184c4cbcd153a6f6ec26dae1a6c9a14ada65a1f815f2e.
+  Receipt4fc7c3b61d19cc1e1b5d3c6a7aab82492b4afe2e72da358986e7437544b28ec4. NOhardwareapproval.
+- ExactNEW1431Windows3rc0/source-toolpostpins/backup6PASSmanifest766921c85007d87c252a39478e4a2ba47a8a9bfe78245328090a97b0fd7775cd.
+  All7codegates+phasebeforeOFFLINEREADY9b4d0d81/json2d10595c33670d26ae58e57b0689e5587a922d1b67abf7bdb3d274c402286396.
+  Probe57ccf5127118f9c41958851183e415005122cf805226df39c6461bd4c48d4a3d55+pool5574 copiedto1431names/hashMATCH. NOlaunchmarker.
+  Inheritancescopeexplicit: currentfull1592vsfrozenDDIwithoutpublisher +prior6df1589 andfreshc282syntax, notsamewholesourcefullclaim.
 - Hardware requires actual1430ALL54PASS/NEWEXP_DONE+exactRECOVERY_DONE. Any1430new
   fail ->receiptsfirst/newcausaltarget, noautolaunchofdependentC23.
 
@@ -120,6 +122,17 @@ investigation/CLAUDE_WORKING_METHOD.md. CS allowed again.
   independent29fe4cd921747a4d1e7aec50b3b61296c94ba7316f59804bd0275c06d899a472.
   Firstpath-spellingSTOP(no compiler)/nativeinitialABIwarningSTOP preserved.
   Defaultfullskipsbeforetoolwork; full1592exact119baseline/10skip.
+- NEWunlinkedlegacyPROGRAMframer 826c7bcf17df24925ccfffd7ac8b8c5b4d440a80 /CHANGESrowpendingthiscommit.
+  OriginalhostwarningPASSthenrefinedHOST4rc0/allstderrEMPTY/3664checks/12actualFXC
+  compareCURRENTfullparser. NewC5f57/header75bb; checkedspan N<=floor(B/4) proves
+  product<=SIZE_MAX on32/64, no32executionclaim. Native54fb6a05 2AA64C-C++header
+  objects/W4WX0/4901postpins; manifestd084857077afd8df6512f037314ba2368dec93c3de08c159f03935e87ddaf9b1.
+  DurableCURRENT0b5a53ae1testPASS0.443s/4rc0/allstderrEMPTY/3664/36pinsstable,
+  manifest3e685cb71e0a55d4384b4749e23872f632737a00fae280f1f4ec58a96ffd576b.
+  Full1593/213.192s/exact119baselineNOaddedNOremoved/11skip SHA3a4624e275fb84e960e0f2bf4a032887f5ae7ce2504c951cdbed2bac5f56558c.
+  NoteD3D12-C15-legacy-program-frame.md. No existingparser/project/DDI/capschange;
+  hardware1430/1431EXCLUDE. Agentc18privateplan/patch taggedownedLEGACY-DXILstorage
+  continuity next, preserveownedlayout/oldDXILmagic+114467oracle, no newbridgeyet.
 - No IRvalidity/fullOOM/trustedprovider/componentlifetime/DDIregistration/production
   DXILlink/SM6capsclaim. Agentc18ONEsourcepass nextreadablePROGRAMspan/rootowned
   provider/VOID-DDIerrorpolicy/minimalbridgeplan. Faultsweep NOTAUTHORIZED/UNRUN;
@@ -135,9 +148,20 @@ investigation/CLAUDE_WORKING_METHOD.md. CS allowed again.
   remaining3argvUNRUN.37direct+6958headerpinsstable; receiptb8f3d17eb0eb272b96577f35ac914a90c7c22b10989a1de6c4f2128cdff27974.
   One sourcepass8ee8f70b foundno originalapprovedlibdrmheader/configureddep,
   agx_stateobjectneverpreviouslybuilt. No shim/newinstall/retry; actual27SDK+tool1590.
-- Agentsm51prepares smallerunchangedactual5descriptorfunctions sourceview outside
-  Git, actualpipe/AIL/packheaders/field-derivedboundarydecls. NO compiler/FXC/NIR/
-  driverimplementationauthorizedyet. Need honestclosure+BEFORE, never fakePASS.
+- Selectedactual10functionsourceview gate1432 preservedSTOPs: missingendianflag,
+  originalprintfuint64format, thennonheaderASanignorelistf0180e94. EachnewBEFORE/freshroot;
+  nativebodiesunchanged, no shims. FinalRETRY3 under54fb6a05 PASS4rc0/allstderrEMPTY/
+  18cases2formats/canonicalARRAY1nonarrayBYTEIDENTICAL/count1ARRAYdim3depth1/
+  layer1-2offset+0x4000-0x8000/stride16384; actual.dclosures/post55+6958pinsstable.
+  Receipta9f97c4b5bf8f3b1d0f813010e12bcfb3bf33e3d8816c47c9c00be6e141d4ac5.
+  FinitealreadywritableGPUlayoutCPUonly, notquerylegalization/GPU/generalarrays.
+- Sourcepath84663323 confirmsquery+createSAMEinitializer/updatebase/inferIMAGE
+  uncompresseddepth0==1 regardlessarraysize->setup->AIL. No unsupportedmigrationguess.
+- EXP1434FXC2 BEFOREd162a42b authorizedfreshsource .local/c24-fxc-array-prep
+  twoCS5_0actualheadersONLY; agentsm51EXECUTINGcompile+dataextractafteractualSHAfreeze.
+  Before5dcb2d7a/script5f8215e7/HLSL7018b8f4+d43c5f81; newbuilderc24-texture1d-array-fxc-fresh.
+  NO NIRcompilerpermissionuntilactualFXCbytesfrozen/newBEFORE; CURRENTmetadataOTHER
+  untilC24enum implementation. No newdriver/caps/guestmutation.
 
 ## Process / paths
 
