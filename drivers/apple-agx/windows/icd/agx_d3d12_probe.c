@@ -910,9 +910,11 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
             results = SUCCEEDED(qh) ? committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST) : NULL;
             printf("C11 CreateQueryHeap x3 hr=0x%08lx\n", (unsigned long)qh);
             if (results) {
+                /* EXP1375: one occlusion query active at a time (Asahi keeps one
+                 * per context): the counter around this draw, binary around a
+                 * repeat of it */
                 ID3D12GraphicsCommandList_EndQuery(list, timestamps, D3D12_QUERY_TYPE_TIMESTAMP, 0);
                 ID3D12GraphicsCommandList_BeginQuery(list, occlusion, D3D12_QUERY_TYPE_OCCLUSION, 0);
-                ID3D12GraphicsCommandList_BeginQuery(list, occlusion, D3D12_QUERY_TYPE_BINARY_OCCLUSION, 1);
                 ID3D12GraphicsCommandList_BeginQuery(list, statistics, D3D12_QUERY_TYPE_PIPELINE_STATISTICS, 0);
             }
         }
@@ -936,8 +938,10 @@ static int draw_triangle(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
         }
         if (queried && results) {
             ID3D12GraphicsCommandList_EndQuery(list, statistics, D3D12_QUERY_TYPE_PIPELINE_STATISTICS, 0);
-            ID3D12GraphicsCommandList_EndQuery(list, occlusion, D3D12_QUERY_TYPE_BINARY_OCCLUSION, 1);
             ID3D12GraphicsCommandList_EndQuery(list, occlusion, D3D12_QUERY_TYPE_OCCLUSION, 0);
+            ID3D12GraphicsCommandList_BeginQuery(list, occlusion, D3D12_QUERY_TYPE_BINARY_OCCLUSION, 1);
+            ID3D12GraphicsCommandList_DrawInstanced(list, 3, 1, 0, 0);
+            ID3D12GraphicsCommandList_EndQuery(list, occlusion, D3D12_QUERY_TYPE_BINARY_OCCLUSION, 1);
             ID3D12GraphicsCommandList_EndQuery(list, timestamps, D3D12_QUERY_TYPE_TIMESTAMP, 1);
             ID3D12GraphicsCommandList_ResolveQueryData(list, occlusion, D3D12_QUERY_TYPE_OCCLUSION, 0, 1, results, 0);
             ID3D12GraphicsCommandList_ResolveQueryData(list, occlusion, D3D12_QUERY_TYPE_BINARY_OCCLUSION, 1, 1, results, 8);
@@ -1760,7 +1764,10 @@ static int queue_types(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fe
     ID3D12CommandAllocator *allocators[3] = {NULL, NULL, NULL};
     ID3D12GraphicsCommandList *lists[3] = {NULL, NULL, NULL};
     ID3D12Resource *upload = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
-    ID3D12Resource *copied = uav_buffer(device), *computed = uav_buffer(device);
+    /* EXP1375: a COPY list may only use COMMON/COPY states (Close refused the
+     * UAV transition), so the copy target is a plain DEFAULT buffer */
+    ID3D12Resource *copied = committed_buffer(device, D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_COMMON);
+    ID3D12Resource *computed = uav_buffer(device);
     ID3D12Resource *readback_a = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
     ID3D12Resource *readback_b = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
     const D3D12_COMMAND_LIST_TYPE types[3] = {D3D12_COMMAND_LIST_TYPE_COPY, D3D12_COMMAND_LIST_TYPE_COMPUTE, D3D12_COMMAND_LIST_TYPE_DIRECT};
@@ -1797,17 +1804,17 @@ static int queue_types(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fe
     printf("C12 pipeline/allocators/lists hr=0x%08lx\n", (unsigned long)hr);
     if (SUCCEEDED(hr)) {
         ID3D12CommandList *one[1];
-        transition(lists[0], copied, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST);
-        ID3D12GraphicsCommandList_CopyBufferRegion(lists[0], copied, 0, upload, 0, 65536);
-        transition(lists[0], copied, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
+        ID3D12GraphicsCommandList_CopyBufferRegion(lists[0], copied, 0, upload, 0, 65536); /* COMMON -> COPY_DEST promotes */
         ID3D12GraphicsCommandList_SetComputeRootSignature(lists[1], root);
         ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(lists[1], 0, ID3D12Resource_GetGPUVirtualAddress(computed));
         ID3D12GraphicsCommandList_Dispatch(lists[1], 256, 1, 1);
         transition(lists[1], computed, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON);
         ID3D12GraphicsCommandList_CopyBufferRegion(lists[2], readback_a, 0, copied, 0, 65536);
         ID3D12GraphicsCommandList_CopyBufferRegion(lists[2], readback_b, 0, computed, 0, 65536);
-        for (int i = 0; i < 3 && SUCCEEDED(hr); ++i) hr = ID3D12GraphicsCommandList_Close(lists[i]);
-        printf("C12 record+close hr=0x%08lx\n", (unsigned long)hr);
+        for (int i = 0; i < 3 && SUCCEEDED(hr); ++i) {
+            hr = ID3D12GraphicsCommandList_Close(lists[i]);
+            printf("C12 close list %d (type %d) hr=0x%08lx\n", i, (int)types[i], (unsigned long)hr);
+        }
         if (SUCCEEDED(hr)) {
             one[0] = (ID3D12CommandList *)lists[0];
             ID3D12CommandQueue_ExecuteCommandLists(copy_queue, 1, one);
