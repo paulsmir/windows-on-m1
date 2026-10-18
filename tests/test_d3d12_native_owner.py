@@ -12,6 +12,10 @@ Invariants caught (investigation/analysis/D3D12-C4-copy.md):
 """
 from pathlib import Path
 import unittest
+import re
+import shutil
+import subprocess
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 OWNER = ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp'
@@ -147,6 +151,37 @@ class NativeOwner(unittest.TestCase):
         self.assertIn('state.compare_mode = PIPE_TEX_COMPARE_R_TO_TEXTURE;', sampler)
         stage = body(text, 'static HRESULT bind_stage(')
         self.assertIn('templ.target = texture->target;', stage)
+
+    def test_indirect_draw_does_not_use_direct_counts_for_early_out(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        # EXP1377: ExecuteIndirect records zero direct counts. The owner must
+        # reach Gallium, which reads actual counts from the argument buffer.
+        draw = body(OWNER.read_text(), 'extern "C" HRESULT AgxD3d12OwnerDraw(')
+        guard = re.search(r'if \(([^;\n]*VertexCount[^;\n]*)\) return S_OK;', draw)
+        self.assertIsNotNone(guard)
+        compiler = shutil.which('clang++') or shutil.which('c++')
+        self.assertIsNotNone(compiler, 'C++ compiler required for draw guard regression')
+        source = r"""
+struct Draw { unsigned VertexCount, InstanceCount; struct { void *Buffer; } Indirect; };
+bool skipped(const Draw *draw) { return GUARD; }
+int main() {
+    for (unsigned indirect = 0; indirect < 2; ++indirect)
+        for (unsigned vertices : {0u, 1u, 3u})
+            for (unsigned instances : {0u, 1u, 2u}) {
+                Draw d = {vertices, instances, {indirect ? (void *)&indirect : nullptr}};
+                bool expected = !indirect && (!vertices || !instances);
+                if (skipped(&d) != expected) return 1;
+            }
+    return 0;
+}
+""".replace('GUARD', guard.group(1))
+        source = '#include <initializer_list>\n' + source
+        with tempfile.TemporaryDirectory() as tmp:
+            cpp, exe = Path(tmp) / 'guard.cpp', Path(tmp) / 'guard'
+            cpp.write_text(source)
+            subprocess.run([compiler, '-std=c++11', str(cpp), '-o', str(exe)], check=True, capture_output=True)
+            result = subprocess.run([str(exe)], capture_output=True)
+            self.assertEqual(result.returncode, 0, 'indirect draw skipped because direct counts are zero')
 
     def test_teardown_order(self):
         text = OWNER.read_text()

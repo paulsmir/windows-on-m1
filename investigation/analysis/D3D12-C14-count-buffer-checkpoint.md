@@ -18,3 +18,118 @@ Asahi's count-buffer path uses a CPU read through `util_draw_indirect`; its no-c
 ## Smallest falsifiable checkpoint
 
 On a fresh D3D12 device, repeat C14 with the same upload arguments and state but pass no count buffer and `MaxCommandCount=1`. A drawn triangle and counter 512 would exclude the shared argument buffer, graphics state, and base indirect draw path, making the count path the next target. Zero draw would direct investigation to the argument mapping or offset instead. This is a probe-only change, with the existing C14 count-buffer step retained as a control. Recover with the new experiment's exact `recNNNNh/recover.sh`; stage no package until EXP1377 recovery reports `RECOVERY_DONE` and `Package: Absent`.
+
+## Owner defect found before EXP1378
+
+The no-count experiment is superseded as a diagnostic-only plan by a deterministic
+owner defect: `AgxD3d12OwnerDraw` returned S_OK on zero direct VertexCount or
+InstanceCount before inspecting Indirect.Buffer. ExecuteIndirect deliberately
+records those direct fields as zero (DDI ExecuteIndirect -> RecordDraw). Thus both
+counted and uncounted indirect draws were discarded before Gallium; the Asahi
+count mapping was never reached. Fix only this owner early-out: apply it to direct
+draws. Keep both C14A and C14NCA as hardware checks of the same fix.
+
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? The extracted production early-out
+is compiled and executed for direct/indirect commands and zero/nonzero counts;
+indirect draws must reach Gallium regardless of direct fields. RED reproduced the
+EXP1377 defect, then GREEN with the owner fix. No AGX register, DMA, power, m1n1,
+Mu, KMD, shader or advertised capability change is required.
+
+WINDOWS CONTRACT: ExecuteIndirect DRAW reads VertexCountPerInstance and
+InstanceCount from the 16-byte argument record, not direct DrawInstanced values.
+AGX/ASAHI CONTRACT: draw_vbo accepts pipe_draw_indirect_info and obtains counts
+from indirect arguments (util_draw_indirect for the optional count buffer).
+TRANSLATION: preserve indirect buffer to draw_vbo; skip zero direct counts only
+for direct draws. Owner owns this distinction.
+WHAT IS STILL UNKNOWN: actual rendering and PS UAV count after removing the
+owner early-out; EXP1378 checks counted and uncounted draws against C13 control.
+
+## Tandem review at C14 owner fix
+
+Read shared `/Users/pavel/public_windows/.local/tandem/REVIEW.md` (the worktree-local path is absent).
+
+REVIEW R113: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R111: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R110: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R109: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R108: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R107: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R106: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R105: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R104: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R103: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R102: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R100: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R99: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R98: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R97: ACCEPT — current source identifies one deterministic owner defect; no historical comparison needed.
+
+REVIEW R96: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R95: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R94: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R91: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R90: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R88: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R86: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R85: ACCEPT — retain pinned m1n1/Mu launch profiles and record exact hashes; no firmware changes.
+
+REVIEW R74: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R71: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R69: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R65: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R64: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R63: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R57: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R55: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R54: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R49: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R48: ACCEPT — use the existing single-launcher pipeline; do not open another proxy connection.
+
+REVIEW R47: ACCEPT — retain pinned m1n1/Mu launch profiles and record exact hashes; no firmware changes.
+
+REVIEW R45: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R40: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R37: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
+
+REVIEW R14: ACCEPT — incremental builder, affected tests first, full suite once before implementation commit.
+
+Official source: https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12graphicscommandlist-executeindirect (argument interpretation and optional count buffer).
+
+Verification: Windows builder syncheck reports rc=0 for native DDI, non-native DDI, and native owner. ARM64 probe BUILD_PASS SHA-256 4e6808ff29c86afadfbc636d89033c3c1aaab9068cbf207a533dcee3a1fe7de9. Full repository unittest discovery attempted; unrelated environment/legacy tests report missing ninja and compile/runtime failures outside the changed modules (baseline not yet measured); detailed output retained in /tmp/agx-c14-full-tests.log. Relevant 31 tests pass.
+
+Build-only attempt before owner defect discovery: source 139fc962, package1378 build PASS and both stack gates PASS. It contains no owner fix and is discarded without installation or launch. Build receipt/source manifest/log archived in .local/experiments/EXP1378-discarded-probe-only-build. Final EXP1378 must rebuild from the owner-fix commit; no code snapshot ambiguity is permitted.
+
+Full host suite result: 1498 tests in 164.674 s, failures=68, errors=51, skipped=2. No D3D12 ABI/native-owner test failed. Failures include missing ninja, stale source-shape assertions, and standalone C fixtures outside the owner change. This is not a clean full-suite baseline; do not claim full repository GREEN. Summary and full output retained at .local/experiments/EXP1378-verification/.

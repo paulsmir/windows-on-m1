@@ -1248,7 +1248,8 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
     return E_INVALIDARG;
   const enum mesa_prim mode = primitive(draw->Topology);
   if (mode == MESA_PRIM_COUNT) return E_NOTIMPL;
-  if (!draw->VertexCount || !draw->InstanceCount) return S_OK;
+  /* Indirect counts live in the argument buffer, not these direct fields. */
+  if (!draw->Indirect.Buffer && (!draw->VertexCount || !draw->InstanceCount)) return S_OK;
   struct pipe_context *pipe = owner->Context;
   AGX_D3D12_GRAPHICS *graphics = draw->Pipeline;
   /* framebuffer from the RTVs: the size is the smallest bound level */
