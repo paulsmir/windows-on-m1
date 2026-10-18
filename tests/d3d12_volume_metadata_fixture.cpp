@@ -12,7 +12,7 @@ enum {D3D12DDI_RT_TEXTURE1D=2,D3D12DDI_RT_BUFFER=1,D3D12DDI_RT_TEXTURE2D=3,D3D12
 using DXGI_FORMAT=unsigned;using D3D12DDI_TEXTURE_LAYOUT=unsigned;using UINT8=unsigned char;
 struct D3D12DDI_HDEVICE {void *pDrvPrivate;};struct D3D12DDI_HHEAP {void *pDrvPrivate;};struct D3D12DDI_HRESOURCE {void *pDrvPrivate;};
 struct D3D12DDI_SUBRESOURCE_INFO {UINT64 Offset,RowStride,DepthStride;unsigned short RowBytePreSwizzleOffset,ColumnPreSwizzleOffset,DepthPreSwizzleOffset;};
-struct D3D12DDI_RESOURCE_ALLOCATION_INFO {UINT64 ResourceDataSize,ResourceDataAlignment;unsigned Layout;UINT8 MipLevelSwizzleTransition;};
+struct D3D12DDI_RESOURCE_ALLOCATION_INFO {UINT64 ResourceDataSize,AdditionalDataHeaderSize,AdditionalDataSize,ResourceDataAlignment,AdditionalDataHeaderAlignment,AdditionalDataAlignment;unsigned Layout;UINT8 MipLevelSwizzleTransition;};
 struct D3DDDICB_LOCK {D3DKMT_HANDLE hAllocation;struct {int LockEntire;} Flags;void *pData;};
 struct Kernel {HRESULT (*pfnLockCb)(void *,D3DDDICB_LOCK *);};
 struct AgxD3d12Device {Kernel *kernel;struct {void *handle;} runtime;};

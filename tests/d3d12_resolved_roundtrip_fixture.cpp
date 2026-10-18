@@ -22,7 +22,8 @@ int main(){
   CheckResourceAllocationInfo({},&r,0,0,0,&alloc);
   assert(alloc.ResourceDataSize!=~0ull && alloc.Layout>=0x100 && alloc.Layout<=0x105 && ensure_calls==before);
   assert(alloc.MipLevelSwizzleTransition==((levels>1&&side>1)?1:255));
-  assert(!alloc.AdditionalDataHeaderAlignment&&!alloc.AdditionalDataAlignment);
+  assert(alloc.AdditionalDataHeaderSize==0 && alloc.AdditionalDataSize==0);
+  assert(alloc.AdditionalDataHeaderAlignment==1 && alloc.AdditionalDataAlignment==1);
   AgxD3d12Heap heap={};AgxD3d12Resource resource={};D3D12DDIARG_CREATEHEAP_0001 h={};h.CPUPageProperty=D3D12DDI_CPU_PAGE_PROPERTY_NOT_AVAILABLE;
   assert(CreateVolumeResource(&device,&h,&heap,&r,&resource)==E_NOTIMPL && ensure_calls==before);
   r.Layout=alloc.Layout;

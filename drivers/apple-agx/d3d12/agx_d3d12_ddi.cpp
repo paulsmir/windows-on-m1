@@ -722,6 +722,9 @@ static VOID APIENTRY CheckResourceAllocationInfo(D3D12DDI_HDEVICE, const D3D12DD
     if (!info) return;
     memset(info, 0, sizeof(*info));
     info->ResourceDataAlignment = kHeapPage;
+    /* Absent metadata has byte alignment, including zero-sized regions. */
+    info->AdditionalDataHeaderAlignment = 1;
+    info->AdditionalDataAlignment = 1;
     info->Layout = D3D12DDI_TL_ROW_MAJOR;
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     if(arg && arg->ResourceType==D3D12DDI_RT_TEXTURE1D) {
@@ -1237,6 +1240,9 @@ static VOID APIENTRY CheckExistingResourceAllocationInfo(D3D12DDI_HDEVICE, D3D12
     if (info) {
         memset(info, 0, sizeof(*info));
         info->ResourceDataAlignment = kHeapPage;
+    /* Absent metadata has byte alignment, including zero-sized regions. */
+    info->AdditionalDataHeaderAlignment = 1;
+    info->AdditionalDataAlignment = 1;
         info->Layout = resource && (resource->type==D3D12DDI_RT_TEXTURE3D || resource->type==D3D12DDI_RT_TEXTURE1D) ? resource->volume_layout:D3D12DDI_TL_ROW_MAJOR;
         info->ResourceDataSize = resource && resource->heap ? resource->heap->bytes : ~0ULL;
         if(resource && (resource->type==D3D12DDI_RT_TEXTURE3D || resource->type==D3D12DDI_RT_TEXTURE1D)) info->MipLevelSwizzleTransition=resource->volume_transition;
