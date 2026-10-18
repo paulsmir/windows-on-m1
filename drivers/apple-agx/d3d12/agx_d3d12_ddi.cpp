@@ -3757,7 +3757,6 @@ static HRESULT APIENTRY FillDDITable(D3D12DDI_HADAPTER, D3D12DDI_TABLE_TYPE type
     HRESULT hr = E_NOTIMPL;
     /* C4a: a command list must name the runtime table its DDIs come from
      * (pfnSetCommandListDDITableCb at creation); keep the first one. */
-    if (type == D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D && !list_table.handle) list_table = rt_table;
     switch (type) {
     case D3D12DDI_TABLE_TYPE_DEVICE_CORE:
         hr = FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0003>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0003);
@@ -3771,6 +3770,8 @@ static HRESULT APIENTRY FillDDITable(D3D12DDI_HADAPTER, D3D12DDI_TABLE_TYPE type
     default:
         break;
     }
+    if (SUCCEEDED(hr) && type == D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D && !list_table.handle)
+        list_table = rt_table;
     const UINT receipt[] = {static_cast<UINT>(type), static_cast<UINT>(size), version};
     AdmissionUmdDiagnostic("d3d12-fill-table", hr, receipt, 3);
     return hr;
