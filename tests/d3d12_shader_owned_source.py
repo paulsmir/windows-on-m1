@@ -2,6 +2,7 @@
 from pathlib import Path
 import hashlib,json,re
 from d3d12_zero_cache_library_source import render as render_library, WDK as LIBRARY_WDK
+from legacy_program_frame_source import render as render_legacy, inputs as legacy_inputs, NAMES as LEGACY_NAMES
 ROOT=Path(__file__).resolve().parents[1]
 WDK=ROOT/'.local/reference/wdk26100/d3d12umddi.h'
 WDK_SHA='d338e00bbd079cfed42434b5bd8cb9c658238cfe22747fb7d3b7cff3a3cabc28'
@@ -11,19 +12,25 @@ TOOL=Path('/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xc
 SDK=Path('/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk')
 def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 def source_inputs():
- return [ROOT/x for x in [
+ own=[ROOT/x for x in [
  'drivers/apple-agx/d3d12/agx_d3d12_shader_owned_core.cpp','drivers/apple-agx/d3d12/agx_d3d12_shader_owned_core.h',
  'drivers/apple-agx/d3d12/agx_d3d12_zero_cache_library.cpp','drivers/apple-agx/d3d12/agx_d3d12_zero_cache_library.h',
  'drivers/apple-agx/mesa/dxil/agx_dxil_program.c','drivers/apple-agx/mesa/dxil/agx_dxil_program.h',
  'tests/d3d12_shader_owned_fixture.cpp','tests/d3d12_shader_owned_source.py','tests/test_d3d12_shader_owned.py',
  'tests/d3d12_zero_cache_library_source.py','tests/d3d12_zero_cache_host_windows.h',
- 'tests/fixtures/dxil/exp1397_spaces_cs60.dxil']]+[WDK,LIBRARY_WDK]
+ 'tests/fixtures/dxil/exp1397_spaces_cs60.dxil','tests/d3d12_shader_program_continuity_fixture.cpp','tests/legacy_program_frame_source.py']]+[WDK,LIBRARY_WDK]
+ return list(dict.fromkeys(own+legacy_inputs()))
 def commands(receipts,generated):
- r,g=Path(receipts),Path(generated);flags=['-isysroot',str(SDK),'-fsanitize=address,undefined','-fno-omit-frame-pointer']
- d=ROOT/'drivers/apple-agx/d3d12';p=ROOT/'drivers/apple-agx/mesa/dxil'
- return [[str(TOOL/'clang'),'-std=c11',*flags,'-c',str(p/'agx_dxil_program.c'),'-o',str(r/'parser.o')],
- [str(TOOL/'clang++'),'-std=c++17',*flags,'-I',str(g/'host-sdk'),'-I',str(d),'-I',str(p),str(d/'agx_d3d12_shader_owned_core.cpp'),str(d/'agx_d3d12_zero_cache_library.cpp'),str(ROOT/'tests/d3d12_shader_owned_fixture.cpp'),str(r/'parser.o'),'-o',str(r/'fixture')],
- [str(r/'fixture'),str(g/'exp1397.program')]]
+ r,g=Path(receipts).resolve(),Path(generated).resolve();flags=['-isysroot',str(SDK),'-fsanitize=address,undefined','-fno-omit-frame-pointer']
+ d=ROOT/'drivers/apple-agx/d3d12';p=ROOT/'drivers/apple-agx/mesa/dxil';l=ROOT/'drivers/apple-agx/mesa/dxbc'
+ link=[str(TOOL/'clang++'),'-std=c++17',*flags,'-I',str(g/'host-sdk'),'-I',str(d),'-I',str(p),'-I',str(l),str(d/'agx_d3d12_shader_owned_core.cpp'),str(d/'agx_d3d12_zero_cache_library.cpp')]
+ objects=[str(r/'legacy.o'),str(r/'dxil.o')]
+ return [[str(TOOL/'clang'),'-std=c11',*flags,'-c',str(l/'agx_legacy_program_frame.c'),'-o',str(r/'legacy.o')],
+ [str(TOOL/'clang'),'-std=c11',*flags,'-c',str(p/'agx_dxil_program.c'),'-o',str(r/'dxil.o')],
+ link+[str(ROOT/'tests/d3d12_shader_owned_fixture.cpp'),*objects,'-o',str(r/'dxil-baseline')],
+ [str(r/'dxil-baseline'),str(g/'exp1397.program')],
+ link+[str(ROOT/'tests/d3d12_shader_program_continuity_fixture.cpp'),*objects,'-o',str(r/'continuity')],
+ [str(r/'continuity'),str(g/'exp1397.program'),*[str(g/'legacy-programs'/(n+'.program'))for n in LEGACY_NAMES]]]
 def render(out):
  out=Path(out);assert sha(WDK)==WDK_SHA
  # Existing library helper emits actual WDK library declarations and original shim.
@@ -46,6 +53,7 @@ struct D3D12DDIARG_SIGNATURE_ENTRY_0012;struct D3D12DDIARG_TESSELLATION_IO_SIGNA
   if data[at:at+4]==b'DXIL':programs.append(data[at+8:at+8+u(at+4)])
  assert len(programs)==1 and len(programs[0])==1680;(out/'exp1397.program').write_bytes(programs[0])
  (out/'actual-shader-wdk-records.json').write_text(json.dumps(records,indent=2)+'\n')
+ render_legacy(out/'legacy-programs')
  manifest={'scope':'actual current modules/WDK records; host aliases NOT Windows ABI; framing/storage NOT IR validity',
  'inputs':{str(p):{'bytes':p.stat().st_size,'sha256':sha(p)}for p in source_inputs()},
  'generated':{str(p.relative_to(out)):{'bytes':p.stat().st_size,'sha256':sha(p)}for p in sorted(out.rglob('*'))if p.is_file()and p.name!='shader-generated-inputs.json'}}

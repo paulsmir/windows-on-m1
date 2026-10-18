@@ -81,3 +81,57 @@ Default discovery skips this opt-in test before compiler work. Full1592/215.739s
 retains exactly119 baseline failures/errors/no additions or removals/10skips.
 No whole-suite GREEN, IR-validity, full-OOM, trusted-provider, VOID-DDI policy,
 component lifetime, registration, production DXIL link or SM6 capability claim.
+
+## Tagged LEGACY/DXIL continuity (EXP1435 foundation, unlinked)
+
+Ownedobjectmagic nowdistinguishesLegacyDxbc/Dxil via typedgetter; this isNOT a
+legacyPROGRAMmagic orshaderFlags encoding. ExistingDXILmagic/88Bownedlayout and
+Calc/CreateABI remainunchanged. SharedCalculate dispatches actualnewlegacyframer
+(SM4.0/4.1/5.0/5.1) oractualboundedDXILparser(SM6.0), selectedCS/VS/PSonly. GS/HS/DS
+remaininternalUnsupported, notnewdrivercaps. PROGRAM/signatures/rootbytes areowned,
+kind/outputpublishedlast. Trustedspan/rootprovider/lifetime/VOIDpolicy unchanged.
+
+PrivateHOST1747262e actualsixargvrc0/stderr0: unchangedDXIL114467 baseline and
+continuity424029checks/9reallegacyFXCaccepts/3deferredstagefiles/realDXILcontrol,
+60acceptedstoragecases/18internalrefusals;post45pinsunchanged. Outputmanifest
+0857ef612b74939e7ffaf3b241ac31dcf4f69509a7d5b3fbec99a802d660857b.
+NativeactualSDK88B/getter/typegate SOURCEproposal separate; doNOTclaimitsrunhere.
+
+Existingdurableoptin isexpanded toSIXderivedcommands, defaultstillONEskip before
+tools. BothactualCframers compile, unchangedDXILbaseline link/run(steps3/4), actual
+continuityoracle link/run(steps5/6). Exactmarkers114467/424029, allstderrEMPTY,
+60sbound/raw/posthashes. SourceclosureincludesactualcurrentlegacyframerC/H, actual
+legacyrenderer +itscurrent12FXCfixtures/inputs, newcontinuityfixture, bothSDKpaths
+andcurrentparser/zeroCache/core. Renderer generates12reallegacyPROGRAMs under
+legacy-programs; noarchivedfallback ornewtest-onlyproductionhooks. Newdurable
+executionrequiresitsOWNcurrentrepo/source-generation approval/BEFORE afteradoption;
+privateHOSTPASSnotretrospectivelycalledadoptedtestrun. No productionlink/registration.
+
+## Tagged legacy and DXIL continuity, observed follow-up
+
+Private candidate HOST1747262e preserved the unchanged114467 DXIL oracle and
+passed424029 continuity checks: nine actual legacy CS/VS/PS programs, three internal
+GS/HS/DS Unsupported cases, actual DXIL control,60storage accepts/18refusals.
+All6argvrc0/stderrEMPTY/post45pins stable. This internal domain is not a driver
+stage/model advertisement. SharedCalculate frames once perCalc/Create, checked
+self extent excludes caller tail, and private kind/output publish after copies.
+Old DXIL magic, public helper signatures and88-byte header remain unchanged;
+legacy uses a different owned-object tag, never PROGRAM magic or shader flags.
+GetProgramKind requires a live owned object, not an arbitrary DDI handle. No
+atomic cross-thread publication or provider lifetime guarantee is added.
+
+Exact native1435 under6bc26807:3MSVC/WX objectsAA64/rc0/stderrEMPTY, actual SDK
+records and88-byte/offset/getter assertions passed;4905postpins/21downloads match.
+Manifest1e32d2310d9bfa685689f4f30d482ab20f3ad68c47e450273f05f56b1fadc7b6.
+No native linking/execution.
+
+After adoption, the EXISTING opt-in regression now derives6commands with both
+CURRENT framers, unchanged DXIL fixture and new continuity oracle. No archived
+candidate fallback. Undercfee2900 one unittestPASS1.987s/all6rc0/stderrEMPTY,
+114467+424029 checks,57postinputs stable. Outputmanifest
+cbd67d6e92b975a48712282506a5029e6fc4aab090a9843a59d856de866eb95e.
+Full1593tests213.369s/exact119baseline failures-errors/no added or removed/11skips;
+SHA0744348cba0274ce6dce34d50ac85762b625ea46a0707b1fe10109253603e48b.
+No whole-suite GREEN. This remains unlinked CPU framing/storage; IR validity,
+root/provider lifetime, VOID-DDI policy, registration, production link and SM6
+capability are not established. Immutable hardware1430/1431 exclude this follow-up.

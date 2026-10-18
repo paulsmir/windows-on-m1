@@ -22,3 +22,11 @@ using Create=AgxShaderStorageStatus(*)(D3D12DDI_HDEVICE,const D3D12DDIARG_CREATE
 static_assert(std::is_same<decltype(&AgxShaderOwnedCalculate),Calc>::value,"internal Calc exact typed input");
 static_assert(std::is_same<decltype(&AgxShaderOwnedCreate),Create>::value,"internal Create exact typed input");
 // Internal helpers intentionally do NOT assert equality to VOID DDI PFNs.
+
+static_assert(sizeof(AgxShaderOwned)==88,"preserve existing ARM64 owned record extent");
+static_assert(offsetof(AgxShaderOwned,magic)==0,"private owned format/kind tag");
+static_assert(offsetof(AgxShaderOwned,stage)==8,"preserve stage field");
+static_assert(offsetof(AgxShaderOwned,flags)==12,"flags not overloaded by program kind");
+static_assert(offsetof(AgxShaderOwned,layout)==16,"preserve layout field");
+using Kind=AgxShaderProgramKind(*)(const AgxShaderOwned *);
+static_assert(std::is_same<decltype(&AgxShaderOwnedGetProgramKind),Kind>::value,"kind getter exact return type");

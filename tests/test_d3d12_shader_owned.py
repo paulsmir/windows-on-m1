@@ -30,7 +30,7 @@ class ShaderOwned(unittest.TestCase):
   for name in ['clang','clang++']:
    self.assertEqual(sha(TOOL/name),TOOL_SHA)
    self.assertEqual(str((TOOL/name).resolve()),approved['tool_resolved'][name])
-  expected=commands(out,generated);self.assertEqual(approved['commands'],expected)
+  expected=commands(out,generated);self.assertEqual(len(expected),6);self.assertEqual(approved['commands'],expected)
   out.mkdir(parents=True);(out/'approval.json').write_bytes(approval.read_bytes())
   results=[];error=None
   try:
@@ -41,8 +41,9 @@ class ShaderOwned(unittest.TestCase):
      (out/f'{n}.stdout').write_bytes(e.stdout or b'');(out/f'{n}.stderr').write_bytes(e.stderr or b'');results.append({'step':n,'rc':None,'timeout60':True});raise RuntimeError('BOUNDED_HOST_TIMEOUT')
     (out/f'{n}.stdout').write_bytes(r.stdout);(out/f'{n}.stderr').write_bytes(r.stderr)
     results.append({'step':n,'start_utc':started,'end_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'rc':r.returncode})
-    if r.returncode:raise RuntimeError('COMPILE_OR_FUNCTIONAL_STOP step='+str(n)+' rc='+str(r.returncode))
-    if n==3:self.assertIn(b'SHADER_OWNED_CORE_PASS checks=114467 actual_modules=YES native_ABI=NO framing_only=YES no_registration=YES',r.stdout)
+    if r.returncode or r.stderr:raise RuntimeError('NONZERO_RC_OR_STDERR_STOP step='+str(n)+' rc='+str(r.returncode))
+    if n==4:self.assertIn(b'SHADER_OWNED_CORE_PASS checks=114467 actual_modules=YES native_ABI=NO framing_only=YES no_registration=YES',r.stdout)
+    if n==6:self.assertIn(b'OWNED_PROGRAM_CONTINUITY_PASS checks=424029 legacy_FXC_files=9 deferred_GS_HS_DS=3 DXIL_control=1 storage_accepts=60 internal_refusals=18 actual_modules=YES IR_validation=NO',r.stdout)
   except Exception as e:error=str(e)
   finally:
    (out/'results.json').write_text(json.dumps(results,indent=2)+'\n')

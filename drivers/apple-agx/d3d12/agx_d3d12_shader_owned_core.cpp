@@ -16,8 +16,10 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include "agx_d3d12_shader_owned_core.h"
 #include "agx_d3d12_zero_cache_library.h"
 #include "agx_dxil_program.h"
+#include "agx_legacy_program_frame.h"
 namespace {
-constexpr uint64_t kOwnedMagic=0x4147585348445231ull;
+constexpr uint64_t kOwnedMagic=0x4147585348445231ull; /* Existing DXIL format. */
+constexpr uint64_t kOwnedLegacyMagic=0x4147585348445232ull;
 bool append(SIZE_T &end,SIZE_T alignment,SIZE_T count,SIZE_T element,SIZE_T &offset){
  const auto max=std::numeric_limits<SIZE_T>::max();
  if(end>max-(alignment-1)||count>max/element)return false;
@@ -45,11 +47,12 @@ void signatures(unsigned char *base,SIZE_T offset,const D3D12DDIARG_SIGNATURE_EN
  }
 }
 }
-AgxShaderStorageStatus AgxShaderOwnedCalculate(D3D12DDI_HDEVICE device,
+static AgxShaderStorageStatus Calculate(D3D12DDI_HDEVICE device,
  const D3D12DDIARG_CREATE_SHADER_0010 *args,uint32_t stage,
- const AgxShaderTrustedInput *input,AgxShaderOwnedLayout *output){
+ const AgxShaderTrustedInput *input,AgxShaderOwnedLayout *output,AgxShaderProgramKind *kind){
  if(!output)return AgxShaderStorageStatus::Invalid;
  std::memset(output,0,sizeof(*output));
+ *kind=AgxShaderProgramKind::Unknown;
  if(!args||!input)return AgxShaderStorageStatus::Invalid;
  if(AgxD3d12ZeroCacheValidateLibraryReference(device,&args->LibraryReference)!=S_OK)
   return AgxShaderStorageStatus::LibraryRejected;
@@ -59,31 +62,50 @@ AgxShaderStorageStatus AgxShaderOwnedCalculate(D3D12DDI_HDEVICE device,
     (input->root.bytes&&!input->root.data))return AgxShaderStorageStatus::Invalid;
  if(input->program.bytes<8)return AgxShaderStorageStatus::Invalid;
  uint32_t version=0;std::memcpy(&version,input->program.data,sizeof(version));
- if((version&0xffu)!=0x60u)return AgxShaderStorageStatus::Unsupported;
+ const unsigned model=version&0xffu;
+ if(model!=0x40u&&model!=0x41u&&model!=0x50u&&model!=0x51u&&model!=0x60u)
+  return AgxShaderStorageStatus::Unsupported;
  const auto *io=args->IOSignatures.Standard;
  const SIZE_T ni=io?io->NumInputSignatureEntries:0,no=io?io->NumOutputSignatureEntries:0;
  const auto *si=io?io->pInputSignatureDeprecated:nullptr;
  const auto *so=io?io->pOutputSignatureDeprecated:nullptr;
  if(!span(input->input_signature,si,ni,sizeof(*si))||!span(input->output_signature,so,no,sizeof(*so)))
   return AgxShaderStorageStatus::Invalid;
- agx_dxil_profile profile={uint32_t(1u<<stage),0x60,0x60};agx_dxil_program parsed={};
- auto status=agx_dxil_parse(input->program.data,input->program.bytes,AGX_DXIL_INPUT_PROGRAM,&profile,&parsed);
- if(status==AGX_DXIL_PARSE_INVALID)return AgxShaderStorageStatus::Invalid;
- if(status!=AGX_DXIL_PARSE_OK)return AgxShaderStorageStatus::Unsupported;
- AgxShaderOwnedLayout l={};l.total=sizeof(AgxShaderOwned);l.program_bytes=parsed.program_bytes;
+ SIZE_T program_bytes=0;AgxShaderProgramKind parsed_kind=AgxShaderProgramKind::Unknown;
+ if(model==0x60u){
+  agx_dxil_profile profile={uint32_t(1u<<stage),0x60,0x60};agx_dxil_program parsed={};
+  auto status=agx_dxil_parse(input->program.data,input->program.bytes,AGX_DXIL_INPUT_PROGRAM,&profile,&parsed);
+  if(status==AGX_DXIL_PARSE_INVALID)return AgxShaderStorageStatus::Invalid;
+  if(status!=AGX_DXIL_PARSE_OK)return AgxShaderStorageStatus::Unsupported;
+  program_bytes=parsed.program_bytes;parsed_kind=AgxShaderProgramKind::Dxil;
+ }else{
+  agx_legacy_frame_profile profile={uint32_t(1u<<stage),0xfu};agx_legacy_program_frame parsed={};
+  auto status=agx_legacy_frame_program(input->program.data,input->program.bytes,&profile,&parsed);
+  if(status==AGX_LEGACY_FRAME_INVALID)return AgxShaderStorageStatus::Invalid;
+  if(status!=AGX_LEGACY_FRAME_OK)return AgxShaderStorageStatus::Unsupported;
+  program_bytes=parsed.program_bytes;parsed_kind=AgxShaderProgramKind::LegacyDxbc;
+ }
+ AgxShaderOwnedLayout l={};l.total=sizeof(AgxShaderOwned);l.program_bytes=program_bytes;
  l.input_count=ni;l.output_count=no;l.root_bytes=input->root.bytes;
  if(!append(l.total,alignof(uint32_t),l.program_bytes,1,l.program_offset)||
     !append(l.total,alignof(AgxShaderOwnedSignature),ni,sizeof(AgxShaderOwnedSignature),l.input_offset)||
     !append(l.total,alignof(AgxShaderOwnedSignature),no,sizeof(AgxShaderOwnedSignature),l.output_offset)||
     !append(l.total,1,l.root_bytes,1,l.root_offset))return AgxShaderStorageStatus::Overflow;
- *output=l;return AgxShaderStorageStatus::Ok;
+ *output=l;*kind=parsed_kind;return AgxShaderStorageStatus::Ok;
+}
+AgxShaderStorageStatus AgxShaderOwnedCalculate(D3D12DDI_HDEVICE device,
+ const D3D12DDIARG_CREATE_SHADER_0010 *args,uint32_t stage,
+ const AgxShaderTrustedInput *input,AgxShaderOwnedLayout *output){
+ AgxShaderProgramKind kind=AgxShaderProgramKind::Unknown;
+ return Calculate(device,args,stage,input,output,&kind);
 }
 AgxShaderStorageStatus AgxShaderOwnedCreate(D3D12DDI_HDEVICE device,
  const D3D12DDIARG_CREATE_SHADER_0010 *args,uint32_t stage,
  const AgxShaderTrustedInput *input,void *storage,SIZE_T capacity,AgxShaderOwned **output){
  if(!output)return AgxShaderStorageStatus::Invalid;
  *output=nullptr;AgxShaderOwnedLayout layout={};
- const auto status=AgxShaderOwnedCalculate(device,args,stage,input,&layout);
+ AgxShaderProgramKind kind=AgxShaderProgramKind::Unknown;
+ const auto status=Calculate(device,args,stage,input,&layout,&kind);
  if(status!=AgxShaderStorageStatus::Ok)return status;
  if(!storage||reinterpret_cast<uintptr_t>(storage)%alignof(AgxShaderOwned)||capacity<layout.total)
   return AgxShaderStorageStatus::StorageInvalid;
@@ -101,6 +123,13 @@ AgxShaderStorageStatus AgxShaderOwnedCreate(D3D12DDI_HDEVICE device,
  signatures(base,layout.input_offset,io?io->pInputSignatureDeprecated:nullptr,layout.input_count);
  signatures(base,layout.output_offset,io?io->pOutputSignatureDeprecated:nullptr,layout.output_count);
  if(layout.root_bytes)std::memcpy(base+layout.root_offset,input->root.data,layout.root_bytes);
- owned->magic=kOwnedMagic;*output=owned;return AgxShaderStorageStatus::Ok;
+ owned->magic=kind==AgxShaderProgramKind::Dxil?kOwnedMagic:kOwnedLegacyMagic;*output=owned;return AgxShaderStorageStatus::Ok;
 }
 static_assert(std::is_trivially_destructible<AgxShaderOwned>::value,"CPU private storage has no external cleanup");
+
+AgxShaderProgramKind AgxShaderOwnedGetProgramKind(const AgxShaderOwned *owned){
+ if(!owned)return AgxShaderProgramKind::Unknown;
+ if(owned->magic==kOwnedMagic)return AgxShaderProgramKind::Dxil;
+ if(owned->magic==kOwnedLegacyMagic)return AgxShaderProgramKind::LegacyDxbc;
+ return AgxShaderProgramKind::Unknown;
+}

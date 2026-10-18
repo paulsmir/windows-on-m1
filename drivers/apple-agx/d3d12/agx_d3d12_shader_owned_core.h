@@ -3,6 +3,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+enum class AgxShaderProgramKind { Unknown, LegacyDxbc, Dxil };
 enum class AgxShaderStorageStatus { Ok, Invalid, Unsupported, LibraryRejected, Overflow, StorageInvalid };
 struct AgxShaderTrustedSpan { const void *data; SIZE_T bytes; };
 /* Future verified provider guarantees lifetime/readability through Calc/Create,
@@ -25,7 +26,7 @@ struct AgxShaderOwnedSignature {
  uint8_t mask;
 };
 struct AgxShaderOwned {
- uint64_t magic;
+ uint64_t magic; /* Private object format/kind tag, NOT PROGRAM magic. */
  uint32_t stage, flags;
  AgxShaderOwnedLayout layout;
  /* Trailing bytes contain PROGRAM, canonical signatures and root snapshot.
@@ -37,3 +38,7 @@ AgxShaderStorageStatus AgxShaderOwnedCalculate(D3D12DDI_HDEVICE,
 AgxShaderStorageStatus AgxShaderOwnedCreate(D3D12DDI_HDEVICE,
  const D3D12DDIARG_CREATE_SHADER_0010 *, uint32_t stage,
  const AgxShaderTrustedInput *, void *storage, SIZE_T capacity, AgxShaderOwned **);
+
+/* Input must be a live owned CPU object (or NULL), not an arbitrary DDI handle.
+ * The existing DXIL tag/layout is preserved; no pointer validation is supplied. */
+AgxShaderProgramKind AgxShaderOwnedGetProgramKind(const AgxShaderOwned *);
