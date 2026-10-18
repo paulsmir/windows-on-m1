@@ -1,4 +1,4 @@
-# AGX D3D12 continuation — 2026-10-18T19:54Z
+# AGX D3D12 continuation — 2026-10-18T20:19Z
 
 Worktree /Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler,
 branch integration/ad04-windows-compiler. Russian reports. Root alone owns Git,
@@ -29,10 +29,10 @@ investigation/CLAUDE_WORKING_METHOD.md govern tools. CS allowed again.
 - Original54probeec529c1282caa21ba967c33757a97a4a5535f03b7777a10bfe3282d6e07e571a;
   pool55740036f90c78f8e6a96c33ab4ecebbc0b11360ec87f28aaac72e9d0d96f5d3.
   Exactmarkerhardware1426.approved written. PREPfd0bba8b/codegates16431e58.
-- Pipeline currently repack/staging: coherent30.0.1426.0/nativeSYS6956d919,
-  UMD8d8422d1/INF336cb65d/CAT4b3d4a1f/ICDd51ebf72/WOW1625ffde.
-  It APPENDS/COMMITSfullfinalhashBEFORE beforeactualfull-ownerlaunch. DO NOTedit
-  EXPERIMENTS.md/Git untilthatautomaticcommitappears (gitlogcurrentlye05280af).
+- FinalhardwareBEFORE auto committedfe125086; rootledgereditsnowallowed. Active
+  fullregressions19:52:34Z onward, latestMSAAsteps20:18Z, DWM0/alive.
+  Finalcoherent30.0.1426.0/SYS6956d919/UMD8d8422d1/INF336cb65d/CAT4b3d4a1f.
+  DoNOTrestart/ad-hocguestSSH. Pipeline90538owns bench untilNEWEXP_DONE.
 - ExpectedALL54PASS, especiallyC21A-E publicallocation/Create/data/pixels.
   Do notclaimownerfixprovesGPU. WaitTOOL_d3d12-on_END ANDNEWEXP_DONE, inspectALLtags/
   regressions, thenFactoryV2rec1426h -> RECOVERY_DONE/Code28AbsentnoService8CPU.
@@ -74,9 +74,15 @@ investigation/CLAUDE_WORKING_METHOD.md govern tools. CS allowed again.
 - Durable5PASS7.931s/legacy25PASS3.343s;9newoldfixtureerrorsfromfirstfullclosed;
   final1589fullnowexact119baseline. Mainalsohascanonicalalignment35c6fix.
 - OldisolatedC23a875/preparation-1426 UNBUILT/UNLAUNCHED/supersededforhardware.
-  NeedNEW1427snapshot parent939c+ONLY9C23files (6production/probe+2headers),
-  exactupdatedWindows3syntax/build/provenance, prebuildWHILE1426active so noidle.
-  Hardwareafter1426review+recovery. If1426newfailure, receiptsfirst/rootcausaldecision.
+  Frozen1427source6df685308581b7a4a5539c28621a7e665a764a7b parent939c EXACT9C23files.
+  BUILD1427_DONE/PACKAGEPASS/root6892exit0; snapshot695files(693base+2headers),
+  stack13824/6544/PDBsaved. Original4artifacts+logprotectedPRErepack:
+  preservationf5079bdf65bfe8a7a4f5d758bc70c8e2db3aa9f575f94fbd21414bbe9b69006e,
+  receipt07e1cef95b5ab9c6fb8d32bf8684d1629494f42834a7a2f34983794d0ba5854f.
+  Exact6dfWindows3rc0 attempt2 manifest14d121124e4b35e49500e5c439d8f27a6658fbcd08ee43021a1f8f4f36526173;
+  attempt1quoteparseFAILpreserved. ACTUAL48f17a5c. Prep.local/preparation-1427
+  codegatesandbeforeDRAFT/rootapprovalPENDING; noautolaunchbefore1426ALL54PASS
+  andRECOVERY_DONE. Agentkmdread-onlyreviewingremainingfields.
 
 ## C15 current CPU result and next independent software work
 
@@ -98,16 +104,32 @@ investigation/CLAUDE_WORKING_METHOD.md govern tools. CS allowed again.
   (173active19tail)/346storesPASS; negatives3x346bad/unsupported-boundsREFUSE.
   postNIR3129a611189d61e21248ad7ea790a0ab4eac8fc07b1b10d02b8b9b3b174ed67e.
   .local/c15-native-replay-1425-run/artifact-hashes.json4a2c98eb43daf555388a06402d6da04816677c00e2b0da839e281ae2c16a7865.
-  KEEP originalREVIEW_REQUIREDresult; appendsemanticreviewACTUAL/CHANGES after
-  active1426pipelineautomaticBEFOREcommit. 1425finalindex/notePENDING.
+  Finalreviewnote509fe28e/index+CHANGESe8a63e01. Final47filesCPUmanifest
+  94319a0a7c0be5174b22a97fcd4c79b19a01629cd46e7d588ff6cb4d59e9d252.
+  OriginalREVIEW_REQUIRED preserved; CPUselectednominalsemanticsPASS, notOOM/GPU.
 - OriginalunlinkedR1CPUmodules c18d74e3 zeroNativeCache6callbacks/59host,
   be917753 LibraryReference81host/WindowsABI2PASS. ExactruntimeR1payloadd8747afd;
   positive2590f409 ordinal2/3->list0003(408)/queue0001(56), tableNum=indexnotversion.
-- ConfirmedfailedFillpublication:actual137checksRED6/GREEN0 after267headerpins,
-  .local/c15-failed-table-publication-adoption patchfc1f6fab UNAPPLIED. Tinyfix
-  publishesfirstvalidglobaltokenonlyafterFillTableSUCCEEDED; no crossdevicefix.
-  DurableactualcurrentFill/helper/optinrunner prepared, notexecuted. Canintegrate
-  AFTER1427snapshot so no unregisteredhardwarevariable; sourcepinhardwareexcludesit.
+- FailedFillpublicationFIX666abec669e344d3cc494812319720c5f6a3e553; CHANGES64ff5e54.
+  Three-linepostsuccesspublish preservesfirstvalidpolicy/nocrossdevicelifetimefix.
+  Actual137checks6->0; durableCURRENTDDI+actualSDK3native0/137PASS, V2outer0,
+  277pinsstable/manifest944c04ed2ab4b6362e4264c3464f6eafd02d871636223607f6f6d512313b9434.
+  V1outerFAIL(stderrEAPStop)/innerPASSpreserved;V2rawPythoncapturerepairseparate.
+  Full1590/220.503s/9skip/exact119baselineNOaddedNOremoved SHA
+  dc9c5bc8914c746ce3c048671da2e2c0a4c999c3e2da594021e89c8fe73fd781.
+  EXCLUDEDfromfrozen1426/1427. NoR1/SM6caps.
+- EXP1428unlinkedshader-ownedCPUcore HOSTPASS114467ASanUBSanchecks/3argv0,
+  actualparser+zeroCache/CShaderownedstorage trustedspans only. PREP8784255c;
+  ACTUAL64ff5e54/artifactmanifest497794f1b5ad22ca9348267200ac2b70aafd963cd09b58e8aa88a81d4c622347.
+  Coreprivate.local/c15-shader-owned-core-prep, notadopted. Nativeobjectgate
+  freshcurrentSDK/toolclosure+durablemoduleproposal agentc18; NOCLauthorizedyet.
+  No DDIpolicy/rootlease/registration/IRvalidation/SM6productionlinkclaim.
+- C24arrayssourcepolicy: canonicalPIPE_TEXTURE_1D_ARRAYevenarray_size1;
+  nonarraylogicalview single_layer_view=true ->actualsampler1D/PBE2D;
+  arraylogical falseevenselectedcount1 ->both2D_ARRAY, matchesactualNIRwrite.
+  No targetmutation/arrays>=2hack. Privatecount1CPUgatePREP68e4484, 4argv
+  includingactualagx_state.c+u_helpers.c uncompiled; agentsm51reviewingSDKflags.
+  No compiler/FXC/NIR/implementationauthorizedyet.
 - FaultsweepNOTAUTHORIZED/UNRUN. Prioragentauto-security-reviewrejected task;
   originalPREP preserved, partialamendmentnotfrozen. DoNOTretryidenticalflagged
   task/routearoundrestriction; no fullOOM/helper-loop/arbitraryshaderclaim.
