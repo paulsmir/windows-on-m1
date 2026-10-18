@@ -1,3 +1,10 @@
+## 2026-10-18 C14 owner fix prepared for EXP1378
+
+- EXP1377 rollback completed, Package Absent, bounded SSH succeeds.
+- Proven offline cause: owner discarded indirect draws on zero direct VertexCount/InstanceCount before reading Indirect.Buffer. ExecuteIndirect intentionally records zero direct fields. Fix 44323d3d restricts the early-out to direct draws; compiled predicate regression RED -> GREEN, 31 affected tests PASS, builder syncheck 3x rc=0.
+- Next hardware checkpoint EXP1378: one owner predicate fix, counted C14A and uncounted C14NCA, existing C13/C14B controls. No KMD/firmware/caps changes. Full host suite attempted: 1498 tests, 68 failures/51 errors/2 skipped outside D3D12 modules; details .local/experiments/EXP1378-verification.
+- Initial probe-only package1378 source 139fc962 was built but never installed; discarded and receipt archived. Final package must include 44323d3d. Analysis: investigation/analysis/D3D12-C14-count-buffer-checkpoint.md.
+
 ## 2026-10-18T02:04Z EXP1377 D3D12 checkpoint (recovery completed)
 
 - EXP1377 exact-source rerun passed the EXP1376 idle SEGSTATS hang and reached NEWEXP_DONE. C11A sequential occlusion, C12A/B COPY/COMPUTE queues and cross-queue waits, and C13A graphics root UAV all PASS. C14A indirect draw with count buffer: DDI, close, execute and fence S_OK, but zero pixels and zero UAV counter; C14B indirect dispatch PASS. C7A present PASS, DWM faults 0, corpus 64/4, benchmark 59.6 fps. Evidence: EXP1377/tool-d3d12-on-{std.txt,umd.log}.
