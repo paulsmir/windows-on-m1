@@ -70,7 +70,7 @@ Installed after recovery: none (rec1368h). Integration HEAD 39636057.
   dispatch. Defects found and fixed on the way: explicit shader-image bind
   broke owner allocation (EXP1373, bd71aa17); unzeroed command slots
   (EXP1374, cb9ffad1). Known limits: one active occlusion query (Asahi);
-  timestamps are the CPU fallback at replay.
+  timestamps resolve to batch end times (GPU time, batch granularity).
 - RUNNING: EXP1376 (package dc8d857f, probe c510ff8a): graphics root UAV
   setter (c93c9b20) -> C13 PS UAVs and C14 indirect draws; C11A
   sequential occlusion; C12 copy/compute queues measurement.
