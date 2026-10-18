@@ -8,12 +8,12 @@ Worktree `/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-comp
 - REC1390 controller toolsession75685 finished. No forcedhostreset/physicalaction/hiddenboot; exactoem5cleanupSSH0, twoorderedrestartsCode32->Code28. FactoryV2Host38909f54/helper7ab9f020/selectorbed44fab unchanged. Normal launcher EXP950/launch-normal2.sh owns currentrecovery guest; do not rawproxy whileowned.
 - Normal recovery staysGPUvisible/brokerdisabled; emergencyhidden385onlyifnormalunrecoverable. Full-ownerdriverexperiments inherit pinned m1n1 5b857603/Mu361a2134 from1390; exacthashes in hardware-manifest. No package retention.
 
-## EXP1404 accepted; next EXP1407 C21
+## ACTIVE EXP1407; next EXP1414 BUILT and gated
 
-- EXP1404 complete47D3D12PASS/C19A-D4096bad0/C20A-Bexacttypedvalues+length3;73SMOKE+knownMSAA/fl11csPASS/GL52.8/internal59.7/corpus64-4zeroissues/DWM0/privatepool5workersPASS. Finalhostmanifest2364bec91fb8786540daf7bb0abad3dd037dc9ecf5eb847db0c63f8b4a6c2fd2. ACTUAL/CHANGESthiscommit.
-- REC1404 DONE normalGPUvisiblePackageAbsent/oneCode28/noService8CPU; durableAfterBoot2026-10-18T17:10:25.9287030Z/manifestE10B3F8E2095BB4A006D729FCC13438F1368B0C71E75591A670649C1BE08FEAD. Postrun16:55USB/SSHdisconnectprecededfailedrollback;causeunknown. BoundedproxyNOP thenexactsamefullownerbootONLYforcleanup;originaltracepre-resume-full.log. No reprobe/hiddenboot/physicalaction. Controller40708finished.
-- EXP1407 BUILT/PDBs/stack13824/source3ae2c234783bb8a653fbda9f1f1d04d5136ff618/693files. Parentmaywriteaccepted1404markerthenrun1407. Newexp1407usesCSwindowguarduntil17:22Z; no packagecarryover. Holdledgerwritesuntil1407BEFOREcommit.
-- C22PSOfixfc58a816 host6PASS/3Windowssyntax/full1581same119baseline. ProbeC22A/B086e58ee builderPASS/ARM64SHAec529c1282caa21ba967c33757a97a4a5535f03b7777a10bfe3282d6e07e571a,SPe1414. NoC22packagebuilt yet; derive1414from1407+onlyPSOfix/probe. C15CPU-only1413allocatorGREEN/1415ContextGREEN, externalpatchesnotproduction;9archivesunchanged.
+- EXP1404 accepted47PASS/C19A-D4096bad0/C20A-Bexact/alloldcontrols; finalhostmanifest2364bec91fb8786540daf7bb0abad3dd037dc9ecf5eb847db0c63f8b4a6c2fd2. RECOVERY_DONE normalGPUvisibleAbsent/Code28/noService8CPU,AfterBoot17:10:25.9287030Z/manifestE10B3F8E2095BB4A006D729FCC13438F1368B0C71E75591A670649C1BE08FEAD. PostrunUSBdisconnectrecoveredwithsamefullowneronlyforcleanup,NOreprobe/hidden/physicalaction. ACTUAL9c5e2598/acceptedmarkerwritten.
+- EXP1407 RUNNING, doNOTrestart. Source3ae2c234783bb8a653fbda9f1f1d04d5136ff618/693files/BUILD_PASS/PDB/stack13824. BEFORE288ec860. Rootwrapper63609/newexp1407.log/chain1407/watchdog1407; factoryV2/stage23hashesPASS; C21A-E laterD3D12slot. CSactuallySKIPPED17:17underuserwindow. No recoveryactive. WaitTOOL_d3d12-on_END/NEWEXP_DONEthenall52verdict+regressions/exactvisiblecleanuprec1407h.
+- EXP1414 BUILT/PDB/stack13824, source1f6c6a0a9436298faaaec6b339b695bdb2690d1f=1407+ONLYPSOfixfc58a816/probe086e58ee;2filedriverguard+fullblobs. Mainprobeec529c1282caa21ba967c33757a97a4a5535f03b7777a10bfe3282d6e07e571a/54steps(C22A/B). Holdlaunchuntil1407all52PASS+parentacceptedexactsource+RECOVERY_DONEAbsent; no packagecarryover. Scriptsinventorybb903449.
+- RootC22actualfunctionsREDlostobjects->GREEN6PASS/3Windowssyntax/full1581same119baseline. C15runtimeR1payload/framingprovedinnewruntime-r1-contract.md; no productionDXIL/R1/SM6caps. Externalallocator1413/Context1415/parseownership1416/Buildervoid1417GREENnarrowonly,9archivesunchanged. Comprehensiveexceptiongraph+zero-native-cacheR1foundation preparationinparallel.
 
 ## C19 failure and causal repair next
 
@@ -36,7 +36,7 @@ Worktree `/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-comp
 -1398mixedmapactualNIR c6248a6bPASS:CBVUBO0/SRVtxf0-1/UAVSSBO0-1/actualfreeze120perms/reject-valid+legacy;verdictf2905124/SPV24e3df26.1401semanticsce3798acPASSfixedIR384words/346stores/3negative346each/postIRunchanged;verdict7e9e1482. No generalinterpreter/GPU/ownerproof.
 -1402originalC11WindowsARM64/MDstaticlink9libsPASS;hostmanifestdbab8c3c/47original+21dist+52hostfilesverified;EXENOTRUNuntil1400.1399stoppedbeforecompiler atDirectoryInfo pathguard; typefixactualASTregressionPASS; original1399preserved.
 - Runtimegate6952c182: exactlocalD3D12Core26100.9549SHA052241d7, constructorversiontableordinals0003=1/0010=2/0011=3;modelinitordinal<3skips1012andretains5.1,consumerclamps.0011firsteligibleforTHISruntime (notuniversalnorm). receiptmanifest19d60ad6.
-- TypedR1libraryelision staticpass193949d5insufficientwithoutmatchedPDB/per-versiondispatchassociation; noNULLinheritguess. OwnedCPUlibrarydesign ea8e86b8 isdesignonly; OOM allocatorfailurepolicy andownerconcurrency/reentry remainunclosed. No R1/SM6cap/productionlink change.
+- MatchedPDB1412+typedproducer/adapter/framingproof nowinD3D12-C15-runtime-r1-contract.md; oldstaticpass193949d5preserved. NoNULLinheritguess. OwnedCPUlibrarydesign ea8e86b8 isdesignonly; OOM allocatorfailurepolicy andownerconcurrency/reentry remainunclosed. No R1/SM6cap/productionlink change.
 
 ## Paths and rules
 
