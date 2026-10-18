@@ -31,6 +31,12 @@ typedef struct {
 int AgxWin32AsahiQueryResourceLayout(struct pipe_screen *screen,
    const struct pipe_resource *templ, const uint64_t *modifiers, int count,
    AGX_WIN32_ASAHI_RESOURCE_LAYOUT *result);
+/* Pure explicit-modifier query for the supported uncompressed GPU-tiled
+ * layout only. It neither constructs nor borrows a Screen/device/context.
+ * The selected modifier is returned in result; callers need no DRM constant.
+ * The native template preconditions above apply. */
+int AgxWin32AsahiQueryUncompressedResourceLayout(const struct pipe_resource *templ,
+   AGX_WIN32_ASAHI_RESOURCE_LAYOUT *result);
 #ifdef __cplusplus
 }
 #endif

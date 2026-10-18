@@ -47,15 +47,24 @@ class NativeResourceLayout(unittest.TestCase):
         resource = state[struct_start:state.index('\n};', struct_start) + 3]
         declarations = []
         for name in ('agx_resource_setup', 'agx_linear_allowed', 'agx_twiddled_allowed',
-                     'agx_compression_allowed', 'agx_select_modifier_from_list', 'agx_select_best_modifier'):
+                     'agx_compression_allowed', 'agx_select_best_modifier'):
             ret = 'void' if name == 'agx_resource_setup' else 'uint64_t' if name.startswith('agx_select') else 'bool'
             declarations.append('static ' + ret + '\n' + function(cls.original, name))
+        declarations.append('static uint64_t\n' + function(cls.original, 'agx_select_modifier_from_list')
+                            .replace('agx_select_modifier_from_list(', 'reference_select_modifier_from_list(', 1))
         declarations.append('static struct pipe_resource *\n' + function(cls.original,
-            'agx_resource_create_with_modifiers').replace('agx_resource_create_with_modifiers(', 'reference_create(', 1))
-        if '\nagx_resource_layout_init(' in cls.projected:
-            declarations.append('static bool\n' + function(cls.projected, 'agx_resource_layout_init'))
+            'agx_resource_create_with_modifiers').replace('agx_resource_create_with_modifiers(', 'reference_create(', 1)
+            .replace('agx_select_modifier_from_list(', 'reference_select_modifier_from_list('))
+        if '\nagx_select_uncompressed_modifier(' in cls.projected:
+            declarations.append('static uint64_t\n' + function(cls.projected, 'agx_select_uncompressed_modifier'))
+        declarations.append('static uint64_t\n' + function(cls.projected, 'agx_select_modifier_from_list'))
+        declarations.append('static bool\n' + function(cls.projected, 'agx_resource_layout_init'))
+        if '\nagx_resource_layout_query(' in cls.projected:
+            declarations.append('static int\n' + function(cls.projected, 'agx_resource_layout_query'))
         declarations.append('static struct pipe_resource *\n' + function(cls.projected, 'agx_resource_create_with_modifiers'))
         declarations.append('int\n' + function(cls.projected, 'AgxWin32AsahiQueryResourceLayout'))
+        declarations.append('static int\n' + function(cls.projected, 'agx_query_uncompressed_resource_layout'))
+        declarations.append('int\n' + function(cls.projected, 'AgxWin32AsahiQueryUncompressedResourceLayout'))
         fixture = (ROOT / 'tests/native_resource_layout_fixture.c').read_text()
         win32_bo = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_win32_asahi_bo.c').read_text()
         bo_start = win32_bo.index('struct agx_bo *agx_bo_create(')
@@ -92,5 +101,17 @@ class NativeResourceLayout(unittest.TestCase):
 
     def test_projection_rejects_changed_prefix(self):
         changed = self.original.replace('templ->depth0 == 1', 'templ->depth0 == 2', 1)
+        with self.assertRaises(ValueError):
+            project(changed)
+
+    def test_screen_free_explicit_modifier_query_matches_native_without_device_access(self):
+        r = subprocess.run([str(self.exe), 'explicit'], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn('screen-free=19', r.stdout)
+        print(r.stdout.strip())
+
+    def test_projection_rejects_setup_that_starts_using_device(self):
+        changed = self.original.replace('   struct pipe_resource *templ = &nresource->base;',
+            '   struct pipe_resource *templ = dev ? &nresource->base : NULL;', 1)
         with self.assertRaises(ValueError):
             project(changed)

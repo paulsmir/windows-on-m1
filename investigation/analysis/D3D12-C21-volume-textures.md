@@ -1,7 +1,8 @@
 # D3D12 C21: coherent volume resource, copy and view contract
 
-Status: offline layout-query foundation after parent-pinned C20 snapshot
-`80fe9e3c` (686 files), 2026-10-18. The volume resource/copy/view design below
+Status: offline layout-query foundation plus pure explicit-policy adapter,
+2026-10-18. Parent pinned foundation `2bea74dd` (687 files) after C20
+`80fe9e3c` (686 files), then authorized the adapter extension. The volume resource/copy/view design below
 remains unimplemented. Parent authorized only the shared native pre-BO query
 projection, original header, deterministic tests and this note. No DDI/owner/
 probe/resource admission, capabilities, package/hardware verdict or commit is
@@ -310,8 +311,8 @@ Asahi assignment sites; no repeated layout comparison was performed.
 | --- | --- | --- |
 |screen.resource_create_unbacked|Declared in pipe/p_screen.h:656-663 with an explicit no-backing-memory contract; never assigned by current Asahi agx_pipe.c and not added by the Windows winsys/overlay|No callable implementation here; do not call the NULL pointer|
 |screen.get_resource_info / resource_get_info|No such assigned query in current Asahi or relevant pipe_screen API|Unavailable|
-|screen.resource_get_param|Assigned at agx_pipe.c:2480; implementation:299-328 supports stride, mip offset, modifier and plane count, then returns false for other parameters|Post-create only; no allocation-size result|
-|screen.resource_get_handle|Assigned:2479; implementation reports handle.size=layout.size_B at:289-293|Requires an existing resource/BO and may export a handle; not a pre-create no-allocation query|
+|screen.resource_get_param|Assigned upstream at agx_pipe.c:2480; implementation:299-328 supports stride, mip offset, modifier and plane count; Windows native projection removes the assignment|Unavailable as Windows-owner fallback; upstream is post-create and has no allocation-size result|
+|screen.resource_get_handle|Assigned upstream:2479; reports handle.size=layout.size_B at:289-293; Windows native projection removes the assignment|Unavailable as Windows-owner fallback; upstream requires resource/BO and may export a handle|
 |screen.resource_create_with_modifiers|Assigned:2481; existing implementation:483-586 calls ail_make_miptree and agx_bo_create|Allocates native BO; not an unbacked query|
 |public ail_make_miptree|Declared in asahi/layout/layout.h:379; implementation layout.c:329-386 updates caller-owned ail_layout only|Callable, no BO allocation; exact only with the same validated inputs and modifier decisions as native construction|
 
@@ -490,3 +491,104 @@ Full1519 tests163.466s:68fail51errors2skips; all119failure/error signatures matc
 
 Subsequent source-only decision: pinnedCheckResourceAllocationInfo0003 usesUINT64 alignment andseparate ResourceData/AdditionalData sizes. Microsoft ResourceHeaps requiresquery-before-create, deterministicconcurrentqueries andresolvedlayout consistency. EnsureOwner isunsynchronized and createskernelcontext/nativeScreen/Context; ScreencreatesrodataBO. Thereforeallocationqueriesmustnot callEnsureOwner orassumeexistingowner. Existing2D/presentationreflection isindependentlyobservable; preserveit untilseparatelydesigned/tested. Initial3D shoulduseoneexplicit supporteduncompressedGPU-tiledmodifier forqueryandcreation, withpureexplicit-policyadapter/sharedprefix; nofakescreen andnoexplicitPIPE_BIND_SHADER_IMAGE. Windows modifierpolicyreadsNOCOMPRESS; currentselectorreadsdev.debug eagerly evenwithexplicituncompressedlist. Factor thatpolicy dependence withsource-equivalence tests beforeDDIintegration. Existingupstreamget_resource_param/get_handle assignmentsareremovedbyWindowsprojection andcannotbeafallback. Thesearefuturedesignfindings, notpartofthisfoundationimplementation.
 Sources: https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3d12umddi/nc-d3d12umddi-pfnd3d12ddi_checkresourceallocationinfo_0003 and https://microsoft.github.io/DirectX-Specs/d3d/ResourceHeaps.html
+
+
+## Pinned allocation-info integration decision (no DDI change)
+
+Inspected pinned WDK d3d12umddi.h:573-592 and:1833-1835, plus Microsoft's
+[exact 0003 callback](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3d12umddi/nc-d3d12umddi-pfnd3d12ddi_checkresourceallocationinfo_0003)
+and [ResourceHeaps allocation-info contract](https://microsoft.github.io/DirectX-Specs/d3d/ResourceHeaps.html#checkresourceallocationinfo).
+The current ABI takes UINT64 AlignmentRestriction and UINT VisibleNodeMask;
+it returns separate resource/additional data sizes and alignments plus layout.
+Do not substitute the 0022 UINT32 parameter ABI. Query precedes creation,
+resolves layout, must be deterministic under concurrent queries and monotone
+with increasing dimensions. Explicit row-major/standard layouts retain their
+specified meaning. The new query adapter does not implement these DDI inputs,
+layout resolution or ResourceDataSize bookkeeping yet.
+
+Current DDI allocation-info ignores its device handle and calculates metadata
+without owner creation. CreateDevice at agx_d3d12_ddi.cpp:204-220 initializes
+runtime/kernel callbacks and generation. EnsureOwner at:686-701 has no
+synchronization and calls AgxD3d12OwnerCreate, which creates a kernel context,
+Windows Asahi screen and rendering context (owner cpp:138-198). The screen
+constructor also allocates a rodata BO. Invoking this lazy factory from a
+concurrent pre-create query would move first kernel/BO initialization earlier
+and introduce an initialization race; no source evidence justifies assuming an
+owner already exists or that the callback is serialized. Do not use EnsureOwner
+as a one-line query adapter.
+
+Smallest initial volume integration uses one source-supported uncompressed
+GPU-tiled modifier for both query and actual creation, with no explicit
+PIPE_BIND_SHADER_IMAGE change. The fixed policy avoids mutable compression/
+auxiliary-allocation transitions in the first opaque committed-volume contract.
+Returned Modifier can be passed to the existing resource_create_with_modifiers
+callback. Derive aligned runtime size from the proven layout extent and actual
+backend 64 KiB rule, with checked arithmetic; do not count auxiliary bytes twice.
+A separate decision must handle AlignmentRestriction/visible-node/optimization
+inputs and keep existing-allocation reporting consistent with stored resolved
+layout/size. This is not permission for unsupported row-major/standard/small-
+alignment or resource dimensions to succeed.
+
+Replacing existing 2D TextureBytes, presentation sizing or CheckExistingResource-
+AllocationInfo's unconditional ROW_MAJOR is independently observable from new
+volume admission. Those paths require their own deterministic regression and
+experiment checkpoint. Native private/rounded BO storage alone is not evidence
+of physical underallocation; do not call the old metadata mismatch a hardware
+memory-size failure. Complete 3D/FL11_0 support additionally requires applicable
+volume RTV behavior; an initial SRV/full-mip UAV subset is experimental partial
+implementation, not complete 3D validation or a new capability claim.
+
+## Pure fixed-policy adapter implementation and evidence
+
+Public original API:
+
+    AgxWin32AsahiQueryUncompressedResourceLayout(templ, result)
+
+It takes no Screen/device/context or DRM constant from the caller. Native code
+selects exactly DRM_FORMAT_MOD_APPLE_GPU_TILED internally and returns the
+selected Modifier in the existing plain-C result. The existing Screen-query API
+with an optional modifier list is unchanged. An arbitrary-modifier helper is
+private; other policies fail closed there and are tested through actual native
+selectors/constructors.
+
+The source transform factors the original second uncompressed-list predicate
+into one pure helper calling actual agx_twiddled_allowed. The real selector
+still executes its original first compression/debug branch in the same order,
+then the pure helper in the original second-branch position. Shared layout
+initialization accepts that fixed policy for Screen-free calls, sets base.screen
+NULL and passes NULL dev only to the actual agx_resource_setup whose dev
+parameter is unused. It never calls agx_device(NULL), constructs a fake Screen,
+initializes an owner or borrows device state. Remaining inferred-bind/setup/
+AIL/native-size logic and result filling are shared with normal creation and
+the existing Screen query.
+
+Besides the unchanged constructor-prefix/raw-file gates, the actual setup
+function is pinned to SHA256
+`bcbabce335f4e22331b94cf47db56faa0542e4c6835698fb41645e0bd90e2dfb`.
+If that setup gains a device dependency, projection refuses and requires source
+review rather than dereferencing NULL. A regression mutates exactly that risk
+and verifies refusal.
+
+The sanitizer fixture now compiles both original and projected list selectors,
+both full constructors, the shared helpers and actual AIL. It compares native
+layouts, BO request sizes and constructor policy-debug message traces, including
+NOCOMPRESS and compressed cases. Screen-free calls must produce the same entire
+result as a real-Screen query of the exact single-modifier list and perform zero
+BO calls, zero device lookups and no policy-debug side effects. A 2D/3D matrix
+also tests bad modifiers, forced-linear/buffer rejection, native >=4GiB failure,
+NULL arguments, and unchanged template metadata. No context-creation API is
+called by or linked into the query path.
+
+RED `/tmp/agx-c21-pure-red.log`: the supported explicit query incorrectly
+refused a native-valid template before implementation. GREEN
+`/tmp/agx-c21-pure-green.log`: 4 new/updated layout tests and 14 related tests PASS
+(the last related run 0.811s); 22 native comparison cases, 19 Screen-free policy
+cases, 3 compressed/3 linear/8 volume/6 rejections, 7 allocator-padding cases. Every
+query has 0 BO calls; Screen-free calls have 0 device lookups. Host scratch 808 bytes
+and result 328 bytes remain unchanged. Python compile and diff checks pass.
+
+Only generated-native script, original native header, dedicated tests and this
+note change. No DDI/owner/probe, BO allocator, resource/cap admission, builder,
+hardware, commit or ledger changes are performed by this lane.
+
+Pureadapter parentfullgate:1534tests,69fail51errors2skips. Baseline119failure/error signatures unchanged; onlyadditionalfailure is intentionallyRED futurevolume sizingtest (TextureBytes3D0 vsrequired0x20000), outsidepureadapteracceptance. No hidden/excludedtestfiles. Nativequerymatrix22comparisons/19Screenfreecases and14relatedtestsPASS; query0BO/0devicelookups. Volumeowner/DDIfileswereheldimmutable duringfullrun; futurecopyREDfixture preparedseparately.

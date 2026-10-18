@@ -334,7 +334,53 @@ def project_resource_layout(pipe):
     reference = '   pipe_reference_init(&nresource->base.reference, 1);\n\n'
     if prefix.count(refusal) != 2 or prefix.count(reference) != 1:
         raise ValueError('Native resource layout ownership anchors changed')
+    # Screen-free queries pass NULL dev only to this exact reviewed setup,
+    # whose dev parameter is unused. Any future dependency requires review.
+    setup = pipe.index('static void\nagx_resource_setup(')
+    setup_end = pipe.index('\n}\n', setup) + 3
+    if hashlib.sha256(pipe[setup:setup_end].encode()).hexdigest() != 'bcbabce335f4e22331b94cf47db56faa0542e4c6835698fb41645e0bd90e2dfb':
+        raise ValueError('Pinned native resource setup changed')
+    selection = """   if (modifiers) {
+      nresource->modifier =
+         agx_select_modifier_from_list(nresource, modifiers, count);
+   } else {
+      nresource->modifier = agx_select_best_modifier(nresource);
+   }
+"""
+    if prefix.count(selection) != 1:
+        raise ValueError('Native resource modifier selection changed')
     shared = prefix.replace(refusal, '      return false;').replace(reference, '')
+    shared = shared.replace(selection, """   if (uncompressed_query) {
+      nresource->modifier = agx_select_uncompressed_modifier(nresource);
+   } else {
+""" + selection + """   }
+""", 1)
+    uncompressed = """   if (agx_twiddled_allowed(pres) &&
+       drm_find_modifier(DRM_FORMAT_MOD_APPLE_GPU_TILED, modifiers, count))
+      return DRM_FORMAT_MOD_APPLE_GPU_TILED;
+"""
+    if pipe.count(uncompressed) != 1:
+        raise ValueError('Native uncompressed modifier branch changed')
+    # Keep the preceding compression/debug branch and its ordering intact.
+    pipe = pipe.replace(uncompressed, """   const uint64_t uncompressed = agx_select_uncompressed_modifier(pres);
+   if (uncompressed != DRM_FORMAT_MOD_INVALID &&
+       drm_find_modifier(uncompressed, modifiers, count))
+      return uncompressed;
+""", 1)
+    selector = """static uint64_t
+agx_select_uncompressed_modifier(const struct agx_resource *pres)
+{
+   return agx_twiddled_allowed(pres) ? DRM_FORMAT_MOD_APPLE_GPU_TILED
+                                   : DRM_FORMAT_MOD_INVALID;
+}
+
+"""
+    selector_at = pipe.index('static uint64_t\nagx_select_modifier_from_list(')
+    pipe = pipe[:selector_at] + selector + pipe[selector_at:]
+    # Selector insertion shifts the constructor/prefix positions.
+    constructor = pipe.index(marker)
+    start = pipe.index('   nresource->base = *templ;', constructor)
+    end = pipe.index('   if (templ->target == PIPE_BUFFER)', start)
     helper = '''
 /* C21: both creation and the no-BO query execute the original layout policy.
  * Called only with a validated native resource template. */
@@ -342,25 +388,25 @@ static bool
 agx_resource_layout_init(struct pipe_screen *screen,
                          const struct pipe_resource *templ,
                          const uint64_t *modifiers, int count,
-                         struct agx_resource *nresource)
+                         struct agx_resource *nresource, bool uncompressed_query)
 {
-   struct agx_device *dev = agx_device(screen);
+   struct agx_device *dev = screen ? agx_device(screen) : NULL;
 ''' + shared + '''   return true;
 }
 
-int
-AgxWin32AsahiQueryResourceLayout(struct pipe_screen *screen,
+static int
+agx_resource_layout_query(struct pipe_screen *screen,
    const struct pipe_resource *templ, const uint64_t *modifiers, int count,
-   AGX_WIN32_ASAHI_RESOURCE_LAYOUT *result)
+   bool uncompressed_query, AGX_WIN32_ASAHI_RESOURCE_LAYOUT *result)
 {
    if (!result)
       return 0;
    memset(result, 0, sizeof(*result));
-   if (!screen || !templ || count < 0 || (count > 0 && !modifiers))
+   if ((!screen && !uncompressed_query) || !templ || count < 0 || (count > 0 && !modifiers))
       return 0;
 
    struct agx_resource resource = {0};
-   if (!agx_resource_layout_init(screen, templ, modifiers, count, &resource))
+   if (!agx_resource_layout_init(screen, templ, modifiers, count, &resource, uncompressed_query))
       return 0;
    const struct ail_layout *layout = &resource.layout;
    STATIC_ASSERT(AGX_WIN32_ASAHI_LAYOUT_LEVELS == AIL_MAX_MIP_LEVELS);
@@ -385,8 +431,35 @@ AgxWin32AsahiQueryResourceLayout(struct pipe_screen *screen,
    return 1;
 }
 
+int
+AgxWin32AsahiQueryResourceLayout(struct pipe_screen *screen,
+   const struct pipe_resource *templ, const uint64_t *modifiers, int count,
+   AGX_WIN32_ASAHI_RESOURCE_LAYOUT *result)
+{
+   return agx_resource_layout_query(screen, templ, modifiers, count, false, result);
+}
+
+static int
+agx_query_uncompressed_resource_layout(const struct pipe_resource *templ,
+   uint64_t modifier, AGX_WIN32_ASAHI_RESOURCE_LAYOUT *result)
+{
+   if (modifier != DRM_FORMAT_MOD_APPLE_GPU_TILED) {
+      if (result) memset(result, 0, sizeof(*result));
+      return 0;
+   }
+   return agx_resource_layout_query(NULL, templ, &modifier, 1, true, result);
+}
+
+int
+AgxWin32AsahiQueryUncompressedResourceLayout(const struct pipe_resource *templ,
+   AGX_WIN32_ASAHI_RESOURCE_LAYOUT *result)
+{
+   return agx_query_uncompressed_resource_layout(templ,
+      DRM_FORMAT_MOD_APPLE_GPU_TILED, result);
+}
+
 '''
-    replacement = '''   if (!agx_resource_layout_init(screen, templ, modifiers, count, nresource)) {
+    replacement = '''   if (!agx_resource_layout_init(screen, templ, modifiers, count, nresource, false)) {
       free(nresource);
       return NULL;
    }
