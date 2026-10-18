@@ -10,9 +10,10 @@ Read skill /Users/pavel/.codex/skills/agx-d3d12-loop/SKILL.md and
 investigation/CLAUDE_WORKING_METHOD.md. Full suite has119 known failures/errors,
 not whole-suite GREEN. Current user date can be19; ledger timestamps are UTC.
 
-## EXP1439 ACTIVE — root tool session81544, sole guest controller
+## EXP1439 RECOVERING — root tool session60577, sole guest controller
 
-- START22:46:38Z. PREP.local/preparation-1439; SP/run1439-entry/chain1439/
+- Run81544finished. START22:46:38Z/TOOL_END23:14:20Z/NEWEXP_DONEobserved23:18:54Z.
+  PREP.local/preparation-1439; SP/run1439-entry/chain1439/
   newexp1439/watchdog1439.log. Native prebuilt; finalrepack/stageHASHES_MATCH23PASS.
 - Immutableb5fcb91ceee169544e8bafba6f74f2a43d11864a parent27dcaeb addsC24arrays
   only/exact8files/697sources; PBEc20/protectedDDI/noC15publisher/caps/KMD/firmwaredelta.
@@ -20,7 +21,14 @@ not whole-suite GREEN. Current user date can be19; ledger timestamps are UTC.
   actual1438a0d52257/56nonE/C23ABC/fullregressions/Code28Absent8CPU/RECOVERY_DONE.
 - Package30.0.1439.0/DriverVer10/19/2026: SYSf934d455/UMD38c9d0d7/INF432e817c/
   CAT1ecd2c86/ICDd51ebf72/WOW1625ffde. FactoryV2wrapper26ce7b5a/host10f7771d.
-- Expect59nonE (accepted56+3C24ABC) plusC21Eactualseparate; neverfakeALL60.
+- ACTUAL59unique nonEALLPASS inclC24ABC/C23ABC/C14A/C21C; C24A/C6subresources/
+  165texels/paddingbad0; C24Bdims18/2/1+c2400001marker/bad_words0. C21Euncompleted
+  exact23Bubfe/numericexitblank(seconds10), neverALL60.73SMOKE+knownMSAAonly,
+  GL52.6/internal59.5/CS47.253;pool6/foreign1PASS;fl11allPASS;corpus414each64/4
+  nohangpixeldiff/allDWM0/onlyintentionalLONGJOBkind4/902ms. Result9cdb0f36
+  at evidence/root1439-result/result.json. RECOVERY_BEFORE recorded;60577uses
+  AGX_RECOVERY_ALLOW_NO_OWNER=1 exactguardedhost10f. Code32Stopped/exactcleanup
+  passed, secondnormalbootup/finaldurabilitypending. Do NOTrestart/adhocSSH.
   New60AA64probe610d7166/C21Elast; previouscodegatessee1439sectionbelow.
 - WaitTOOL_d3d12-on_END ANDNEWEXP_DONE, inspect data/regressions thenexact
   visible rec1439h/recover.sh. No parallelguestSSH/rawproxy/manualprereboot.
@@ -86,7 +94,7 @@ not whole-suite GREEN. Current user date can be19; ledger timestamps are UTC.
   Legacy-template-onlyread-onlyvalidationallowsoldprovenance; new1438factory
   recordsnewhost10f. Helper7ab9/selectorbed4/normalEXP950 unchanged.
 
-## EXP1439 C24 source/offline gates — ACTIVE above
+## EXP1439 C24 source/offline gates — RECOVERING above
 
 - Sourceb5fcb91ceee169544e8bafba6f74f2a43d11864a parent27dcaeb. OriginalC24runtime
   hunksappliedtempindex, exact8files697sources; currentC15publisherneverselected;
@@ -103,7 +111,7 @@ not whole-suite GREEN. Current user date can be19; ledger timestamps are UTC.
   logpreserved8d8bb637d6fbbadbd0e385e8401819029cc03200f5b6579e2240f4174e0dc720.
   Probe60AA64 268288B610d71669249d0b83454cfdace09a70a914d0da9a33e5dc3e82af195aa8e9b51,
   sourcebd55bc78, build-onlyreceipt8fb515f8. Allcodegatescomplete; hardwaremarkerABSENT.
-- Prior1438accepted/recovered; current1439ACTIVE. Expected59nonE+C21Eactualseparate.
+- Prior1438accepted/recovered; current1439all59nonEPASS/recoverypending. C21Eactualseparate.
   Old1431/1427packages NEVERLAUNCHED/superseded; preserve, neverreuseunchanged.
 
 ## C15 CPU/ABI progression — unlinked, no SM6/runtime claim
@@ -198,6 +206,37 @@ not whole-suite GREEN. Current user date can be19; ledger timestamps are UTC.
   exact0010 CalcSIZE_T/CreateVOID/noindependentlengthorcapacity; D3D10sameparams/
   SIZE_T(-1)referenceNOTsilentlytransferred. No pointercapacity/TLSCalcCreatehandoff.
   Windowsreadability/capacity/errorpolicy/runtimecontext/librarybridge remainOPEN.
+- C15minimumSM6registration sourceauditc2dfb64a in
+  .local/c15-sm6-registration-contract-plan/plan.md: currentCORE0003experimental
+  partialbaseline remainsunchanged; CPU0010successdoesnotregisteroradmitSM6.
+  FirstexplicitpinnedWDKtargetR1/0011+CORE0010, notuniversalminimumproof.
+  MandatoryGS/SO/HSDS/resourceformatcompleteness remainproduction/admissiondebt;
+  WaveOps/Int64optional/noFL12guess. No cap/modelprobe/defaultenableproposed.
+- NEWprivatecheckedadapter EXP1444: .local/c15-checked-adapter-adoption-prep,
+ 4fileproposal769010d3/b619edc8; adapter0edd46cd equalsaccepted1421candidate,
+ originalMITfacade19exports, zero directupstreamcalls; publicABI/profile/legacy
+ unchanged. Composite8434+df3470/197inputs/9archives/notices distinctpristine,
+ all9archiveSHA revalidated. New9commands0/allMDclosure/post7009pinsMATCH.
+ Expected2nominalstderrs exactaccepted1421ab62(71B)/367e(34B), restEMPTY.
+ STOPabd47(SDKSettingsJSONMDmissing) then5f19(assumedemptystderr) preserved;
+ rootaddedexplicitSDKmetadata7b93+ASanf018+6958headers/no sourceflagschange;
+ supplementonlylast2commands. Final709e3c53f467a9035b7731145ff656e186bd6acbca4cec51b7f032609cf2e5e5.
+ NewmixedSPV24e3+map byteequalaccepted1421; inheritsNIR1442inputproof/no rerun.
+ Notadoptedyet; kmdSOURCEpreparingdurableCURRENTrecipe; oldpristineoptins
+ mustnotbesilentlyusedwithcheckedcomposite. No generalOOM/native/GPUclaim.
+- Windowslibvtn sourceclosure narrowed further: actual18frontendfiles match
+ primary;8nativeNIRheaders exactHOSTLF->CRLF bytes;LLVM20tools hashpinned.
+ MissingseparateSIMDarchive provedgenuine1TU streaming-load-memcpy.c byNinja/
+ utilMeson/currentprojector; no drop/mergeassumption. Revised19commandSOURCE
+ proposal .local/c15-windows-libvtn-with-simd-source-prep (cb673636), notexecuted.
+ Finalfinitepreflight initiallylongcmdrc1STOP60f5, no remote readerstarted;
+ same-readonlyscript via shortstdintransport succeeded2.67s/feb853e2. SixSIMD
+ sourceheadersmatchprimary/remainingblake3c11hashes/294LLVMresourcefiles/
+ actualMDdefaultlibs fromCOFFdata +productionCRT3+11NinjaWinlibs collected.
+ sm51preparingrunnable19argv/build+archive+linkconsumercontroller, stillNO
+ compiler/generation/link/executable/guest/GPUrun. No ignoredToolsdependency;
+ fourHOSTgeneratedinputs mustbindexactgenerator/grammar/rules. Futurebuild
+ rootmustpreregisterexactmanifest/commands beforeauthorizingexecution.
 - FailedFillpublication666abec6/row64ff5e54 host137RED6GREEN0; globaltokenlifetime
   stillnotfixed, excludedallhardware1436/38/39. Earlierfaultsweepautomaticsecurity
   rejection preserved; do not retryidenticalrequest. No C21E/nativefaultwork.
