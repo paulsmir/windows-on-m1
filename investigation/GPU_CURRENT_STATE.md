@@ -10,33 +10,41 @@ Read skill /Users/pavel/.codex/skills/agx-d3d12-loop/SKILL.md and
 investigation/CLAUDE_WORKING_METHOD.md. Full suite has119 known failures/errors,
 not whole-suite GREEN. Current user date can be19; ledger timestamps are UTC.
 
-## EXP1438 ACTIVE — root tool session11367, sole guest controller
+## EXP1439 ACTIVE — root tool session81544, sole guest controller
 
-- START22:09:26Z. PREP.local/preparation-1438; SP/run1438-entry/chain1438/
-  newexp1438/watchdog1438.log. Currentrepack/stageHASHES_MATCH23/PASS.
-- Immutable27dcaeb1812d4c3fe907b7fc3a363d235fb2757a parent5aeb6046: exact9C23files
-  fromc282, ownerf55zeroVAguardsremoved, protectedDDI12d55withoutC15publisher;
-  nativePBEprojectorc20bbc89 unchanged. NoC24/C15/SM6/caps/KMD/firmware delta.
-- Native695/PDB/stackARM6413824+WOW6544PASS; original4+buildlogpreserved
-  147dcc5450bf89c3c96b851c5e380060e829c5170888ed88982cc0d5b73aaf74.
-  Probe57/36isolatedcalls source7d9ef8d8, EXE254464B
-  3713b6581cc44cfb476c1898a8deb12677aa3bbe8b46df16b49b99d5f7aeb594.
-  OriginalexternalpostmetadataSTOPb9e52(commandtoolong) preserved; separate
-  read-only47entrysupplement8332b169PASS closedgap withoutrecompile/PErun.
-- Source6C++inputs equal1431Windows3PASS; oldC23query65534/458782mips,
-  create12/view/copy10/NIR proofs inherited precisely. Fullscope in
-  fullsuite-inheritance1438.json: prior1594C23+PBE+unlinkedC15 vsfrozenDDIwithout
-  publisher, notsamewhole-treefullclaim; no currentC24fallback.
-- Repacked30.0.1438.0 DriverVer10/19/2026(localbuilderdate): SYS8c8cae6f,
-  UMDad4ab566, INFfc34aa4f, CATb5c66547, ICDd51ebf72/WOW1625ffde.
-  Pipeline seriallyrecordsfullhash/profile/FactoryV2BEFORE beforeinstall/launch.
-- PhaseBEFORE8349bf37; exactsourcehardwaremarkerpresent/prereqsPASS.
-  Parent1436actual294bb740+RECOVERY_DONE accepted. BothTOOL_END/NEWEXP_DONE
-  explicitguards. Chainstagesrcpt1438 itself; do not invoke newexp directly.
-- Expected56nonE checks =53oldcontrols+3C23ABC. C21E retainedLAST andactualoutcome
-  separate; uncompleted isnotPASS. Wait TOOL_d3d12-on_END ANDNEWEXP_DONE, inspect
-  data/receipts/fullregressions, thenexactvisible rec1438h/recover.sh.
-  No parallelguestSSH/rawproxy; no manual pre-reboot or ordinaryhiddenboot.
+- START22:46:38Z. PREP.local/preparation-1439; SP/run1439-entry/chain1439/
+  newexp1439/watchdog1439.log. Native prebuilt; finalrepack/stageHASHES_MATCH23PASS.
+- Immutableb5fcb91ceee169544e8bafba6f74f2a43d11864a parent27dcaeb addsC24arrays
+  only/exact8files/697sources; PBEc20/protectedDDI/noC15publisher/caps/KMD/firmwaredelta.
+- PhaseBEFORE7b1feed3; finalartifactBEFORE8d8e9b83. PrerequisiteJSON nowrootaccepted
+  actual1438a0d52257/56nonE/C23ABC/fullregressions/Code28Absent8CPU/RECOVERY_DONE.
+- Package30.0.1439.0/DriverVer10/19/2026: SYSf934d455/UMD38c9d0d7/INF432e817c/
+  CAT1ecd2c86/ICDd51ebf72/WOW1625ffde. FactoryV2wrapper26ce7b5a/host10f7771d.
+- Expect59nonE (accepted56+3C24ABC) plusC21Eactualseparate; neverfakeALL60.
+  New60AA64probe610d7166/C21Elast; previouscodegatessee1439sectionbelow.
+- WaitTOOL_d3d12-on_END ANDNEWEXP_DONE, inspect data/regressions thenexact
+  visible rec1439h/recover.sh. No parallelguestSSH/rawproxy/manualprereboot.
+  Existingguardedno-ownerflag permittedundernewRECOVERY_BEFORE, no hiddenboot.
+
+## EXP1438 COMPLETE / exact package removed / ACTUAL+CHANGESa0d52257
+
+- Source27dcaeb1812d4c3fe907b7fc3a363d235fb2757a/package30.0.1438.0.
+  Exact9C23files/acceptedPBEc20/noC15C24capsKMDfirmwaredelta. SYS8c8cae6f/
+  UMDad4ab566/INFfc34aa4f/CATb5c66547; native695/original147dcc54 retained.
+- START22:09:26Z/TOOL_END22:37:01Z/NEWEXP_DONE22:40:29Z.56unique nonEALLPASS;
+  C23ABC37/18dimensions/bad_words0 and A/Cbad_bytes0/padding65316. C14A/allC14/
+  C21A-D/C22AB/C7A PASS; C21Cbothmipsbad0/padding64960.
+- C21E UNCOMPLETED/exact23Bubfestderr/numericexitblank(seconds10), nofixclaim.
+ 73SMOKEPASS+knownMSAA-a000ronly;fl11cs-a/x/debugPASS;poolworkers6/foreign1PASS;
+ GL52.4/internal59.5/CS3771frames80.786s46.679fps. Corpus414each64/4createfail,
+ nohangpixeldiff/allDWMfaults0; onlyintentionalLONGJOBkind4/902ms.
+- GuardedNO_HOST_OWNER/liveSSHhost10f ->Code32Stopped/exactcleanup/orderednormal
+ Code28Absent/noService8CPU/RECOVERY_DONE. BeforeBoot22:42:11.5978240Z/
+ AfterBoot22:44:09.4090380Z. Rawstdoutcopiedbyteidenticaldurability-final.json
+ ea8743f1eb3cc288ebfb2cc40f640ec7671cafadd7f2b7db9ea4e480a96fdb72.
+- Originalresult97ba5064 preserved; finalresulta1fc6155d37f1dc47520781193708f249daa3040858037832b9ac57b529f0306;
+ final2259filemanifest1117deac3b2bd17c0c3cd41a5cde399bc226d0ab6b37767976d2e02b684a8d18.
+ PhysicalUSBinput/RDPnotindependentlytested; no unexpectedstopobserved.
 
 ## EXP1436 COMPLETE / exact package removed / ACTUAL+CHANGES294bb740
 
@@ -78,7 +86,7 @@ not whole-suite GREEN. Current user date can be19; ledger timestamps are UTC.
   Legacy-template-onlyread-onlyvalidationallowsoldprovenance; new1438factory
   recordsnewhost10f. Helper7ab9/selectorbed4/normalEXP950 unchanged.
 
-## EXP1439 C24 PREBUILT / OFFLINE READY / hardware HELD
+## EXP1439 C24 source/offline gates — ACTIVE above
 
 - Sourceb5fcb91ceee169544e8bafba6f74f2a43d11864a parent27dcaeb. OriginalC24runtime
   hunksappliedtempindex, exact8files697sources; currentC15publisherneverselected;
@@ -95,7 +103,7 @@ not whole-suite GREEN. Current user date can be19; ledger timestamps are UTC.
   logpreserved8d8bb637d6fbbadbd0e385e8401819029cc03200f5b6579e2240f4174e0dc720.
   Probe60AA64 268288B610d71669249d0b83454cfdace09a70a914d0da9a33e5dc3e82af195aa8e9b51,
   sourcebd55bc78, build-onlyreceipt8fb515f8. Allcodegatescomplete; hardwaremarkerABSENT.
-- Wait1438C23ABC+56nonE/regressions/RECOVERY_DONE. Future59nonE+C21Eactualseparate.
+- Prior1438accepted/recovered; current1439ACTIVE. Expected59nonE+C21Eactualseparate.
   Old1431/1427packages NEVERLAUNCHED/superseded; preserve, neverreuseunchanged.
 
 ## C15 CPU/ABI progression — unlinked, no SM6/runtime claim
@@ -144,8 +152,24 @@ not whole-suite GREEN. Current user date can be19; ledger timestamps are UTC.
   oldmutableCalc/Copy/release/report. ProposedinternalBegin/Execute/Endpins,
   narrowregistrylocks/coreandsinkoutside/pinnedgenerationresolver/scopedborrow/
   releaseBusy/quiescence. kmdagent preparingprivateSOURCEONLYprototype;
-  noexecutionauthorizedyet, no sharedwrites. Root/DDIcapacity/runtimecontext/
+  Privateprototype nowEXP1443PASS121new+old114467/424029/79, exact10rc0/empty
+  stderr/post70directpinsMATCH, result1807393c284b966cd0d6f51c56df8d36d1de7dceb4192032206d28cf9b92b7c0.
+  Notadoptedyet; kmdpreparingdurableCURRENTROOT/nativeobjectsourceproposal. Root/DDIcapacity/runtimecontext/
   Windowsreadability/librarybridge/errorpolicy remainOPEN; no DDIregistration.
+- NEWprivateNIRmap EXP1442CPU PASS: .local/c15-map-nir-lowering-attempt3-prep,
+  pass2f91d331/header0e64bf73/fixture43fdf6ed; originaltwoaccessorcompileerrors
+  preserved inattempt2, correctedonlynir_def_instrAPI. Fourrc0/empty stderr/
+  actualMMDclosure/44direct+6958headerpostpinsMATCH. Sevenrefusals unchangedNIR/map,
+  actualNIR192lanes173active19tail384words346stores/bothvectorsmatch; UBO0,
+  rawSRVtxf0,1/UAVSSBO0,1/noVulkanintrinsics/workgroup64x1x1/validationPASS.
+  Result563e7784a691e323e46f98e11d25f47f54f5451646963f864e41a8a9647a4b06.
+  PrivateUNLINKED/noexternalcodecopy; no translator/backend/preprocess/runtime/
+  generaloperationadmission/GPUclaim. sm51preparingdurableCURRENTROOTproposal.
+  SeparateWindowslibvtnclosure remainsunproved; sourceplan87eae1f6 in
+  .local/c15-owned-conversion-boundary-source-plan/PLAN.md. Capacity sourceplan
+  1c99061c in .local/c15-runtime-input-capacity-source-plan/PLAN.md foundexact0010
+  CalcSIZE_T/CreateVOID/noindependentlengthorcapacity; D3D10sameparams/-1docs
+  NOTsilentlytransferred. No pointerderivedcapacity/TLSCalcCreatehandoff.
 - FailedFillpublication666abec6/row64ff5e54 host137RED6GREEN0; globaltokenlifetime
   stillnotfixed, excludedallhardware1436/38/39. Earlierfaultsweepautomaticsecurity
   rejection preserved; do not retryidenticalrequest. No C21E/nativefaultwork.
