@@ -19,6 +19,7 @@ extern "C" {
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h"
 #include "../dxbc/dxbc_to_nir.h"
+#include "nir.h"
 #include "util/format/u_format.h"
 #include "util/u_surface.h"
 
@@ -1024,6 +1025,10 @@ static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_s
     memset(bindings, 0, sizeof(*bindings));
     return NULL;
   }
+  /* Asahi consumes integer pixel_coord. This fresh D3D fragment NIR must
+   * acquire the half-pixel center exactly once before native preprocessing. */
+  if (stage == MESA_SHADER_FRAGMENT)
+    NIR_PASS(_, nir, nir_lower_wpos_center);
   struct pipe_shader_state state = {};
   state.type = PIPE_SHADER_IR_NIR;
   state.ir.nir = nir;
