@@ -57584,3 +57584,63 @@ EXPECTED: all54uniquePASS; prior49unchangedcontrols, C21A/B/C/E publicallocation
 FAILURE: anymissing/duplicate/FAILstep, incorrectallocation/data/pixels, prior49regression, timeout/fencehang/TDR/bugcheck/guestloss. Preservefirstfailure/evidence; noautomaticpatch/retry/capadjustment. Parentownsrollbackexactexperimentpackage tosameGPUvisibleinert recovery, no ordinaryhiddenboot.
 LAUNCHHELD: hardware1426.approved ABSENT. Root must append finalHARDWAREBEFORE andcreate exactmarker HARDWARE1426_BEFORE_APPROVED SOURCE_REV=939cf61a78833349e7be51e028fd9ddf82a2e85a only afterallartifact/recoverychecks. Preparation supplies no authorization.
 
+EXP1426 BEFORE 2026-10-18T19:53Z (PACKAGE1426: AppleAgxOpenGL32.dll d51ebf72bc4afc25 (KMD/ARM64 UMD 939cf61a78833349e7be51e028fd9ddf82a2e85a (ONLY DDI AdditionalDataHeaderAlignment/AdditionalDataAlignment normalization;1424reason0S_OK DDI/query expected extents but public C21allocationFAIL; unchanged54-step probe/owner/caps; b_ndebug) + ICDout61 + WOWUMDout88 1625ffde + INF1235; pinned m1n1 5b857603/Mu361a2134), INF 336cb65d, sys 6956d919, UMD 8d8422d1, catalog 4b3d4a1f, DriverVer 30.0.1426.0; smoke ddd752e3d31672f4; m1n1 5b857603 (macho 3e5e9f1f, IOMFB_FULL_OWNER=1 AGX_LOCAL_RESERVE_V2=1; 4096-record broker page-table registry, on fa45bc58), Mu 361a2134 J313_EFI-m2f2c.fd (1c7d87d6, reserve ABI v3 on 71c9b2d551), run_uefi.py integration; manifest/hardware-manifest/full-owner1426.sh f322efbbd4694db7 389d91eb19709255 887f0307c5255c13 ; C: free 28.09 GB; recovery rec1426h/recover.sh; probe probe1426.sh (de9950515e07772a); then the standard benchmark (EXP1184 harness: playnoovl).
+PREPARED EXP1426 HARDWARE BEFORE — root must record final package/launch hashes and create explicit launch marker. THIS PREPARATION DID NOT EXECUTE HARDWARE.
+ATOMIC CONTRACT: one canonical absent-metadata allocation-output invariant, four assignments across two callback records. CheckResourceAllocationInfo.AdditionalDataHeaderAlignment=1 and.AdditionalDataAlignment=1; CheckExistingResourceAllocationInfo publishes the same two values. Both metadata sizes remain0; resource size/alignment, layout, transition and handle remain unchanged. Query/create/existing reflection must describe the same absence of metadata. These are one correction to two representations of the same allocation record, not independent cap/behavior probes. The pinned WDK record names independent regions/alignments; official ResourceHeaps query/existing-allocation sections define their shared resource contract. Bytealignment1 is our minimum valid no-constraint representation, NOT a normative Microsoft quotation. Saved actual D3D12Core composition proves zero alignment triggers unsignedoverflow even when region size0.
+WHY THIS HYPOTHESIS:
+1. EXP1424 exactsource507812fbe921f27d411eb521df0f30f83985076e:49priorPASS; allfive C21publicallocationqueries return-65536. Allfive paired native/DDIqueries now reason0/S_OK with correct131072(A/B/C/E)/65536(D), alignment65536/layout103/100. This excludes ownerqueryrefusal and locates failure after successful DDIpublication, beforeCreate/GPUwork.
+2. Already-saved matchingD3D12Core SHA052241d7... sourceinspection shows actual publiccomposition forms UINT64(-1)+headeralignment, addsresourcesize andrejectsoverflow; zeroheader/additionalalignment takes thefailurebranch. It never supplies1 automatically for zerosizedmetadata. Canonical1 preservesallregionextents while eliminating that exact overflow.
+3. Actualcallback+exactWDK record regressions: baseline240checks/72oldfailures->0; currentC23324checks/96oldfailures->0; allcompile0. Focused14PASS10.028s; full1589/213.465s exact119baseline signatures/noadded; Windows3profilesrc0 exact939c. This is a deterministicruntime-facingmapping, not guessing a capability.
+WINDOWS CONTRACT: FULL GRAPHICS current0003/FL11_0 opt-in. Publish truthful resource and absentmetadata size/alignment at allocationquery andexistingresource reflection. Exactsource939cf61a78833349e7be51e028fd9ddf82a2e85a differsfrom1424 ONLYDDIsixlines (two comments/fourassignments), DDIfb162cd3fbf1eb1fdc4c4cc145e1fe5dc885c3b6d8e8d8c96f22c8ccb5b927ea. No caps/model/format/interface change.
+AGX/ASAHI CONTRACT: allowner/nativequery/resource/copy/view/layout/GPU behavior unchanged. Owner18d902/probe2db635source/54-step probeec529c12/pool55740036. Ordinaryextent/mip/stride/layout already correct atDDI. No KMD/firmware/power/UAT/queue/recovery change.
+TRANSLATION: same validphysicalextent plus canonicalnonzeroalignments for absentzero-sizedmetadata. Existingmetadata headerunionhigh32 remains0; no fake3rdtransition ormetadataBO. SameFactoryV2normalGPU-visible8CPUinert recovery andCSenabled. C23 movedEXP1427 and NOTincluded; C15CPUoutputs/IDrenaming are independent and NOproductionpublisher/caps change.
+WHAT IS STILL UNKNOWN: internalruntime postquerycomposition in thisdriver path afterfix, then previouslyunreachedC21Create/copy/load/UAV/RTV/PS execution. No furtherdiagnosticvariable is added. A laterCreate/GPU/pixel failure is new bounded evidence, not part of allocationPASS.
+PREREQUISITES: 1424ACTUAL/CHANGES221e30cb recorded; exactreviewmarker EXP1424_REVIEWED SOURCE_REV=507812fbe921f27d411eb521df0f30f83985076e C21_POSTQUERY_FAILED; preserved54unique49PASS+5publicFAIL+fiveDDISUCCESSexpectedextents; RECOVERY_DONEPackageAbsent rec1424.log. ParentconfirmedpostCPU1425 samebootinertCode28/noService8CPU/PASS andnoactiveguestjob; noCPU/GPUjobsparallel.
+CODE/BUILD GATES: code-gates1426.json pins all evidence. PACKAGE1426PASS; ARM64stack13824/WOW6544; exactPDBs; originalnativebuildreceipt2956fd68c9d83d02811e59b159ed0f36db0bae9ede1cfc9114dbe8f0fe854cb0 andpreservation405209c3bb156b1f6a453ecd400166f69b51c2e7d15ce887deea786b819aa9d6 protected. Repack/sign outputs mustnotalterprotectedoriginalreceipt. Root records finalsignedpackage/catalog/manifest/FW/launch/rollbackhashes beforedispatch.
+EXPECTED: all54uniquePASS; prior49unchangedcontrols, C21A/B/C/E publicallocation131072/alignment65536,D65536/alignment65536; unchangedexactdata/pixel/poison oracles, pool5workersPASS, known73SMOKEonlyMSAAa000r, standardbenchincludingCS, onlyintentionalLONGJOBrecovery. No completeFL11/arbitrary3Dclaim.
+FAILURE: anymissing/duplicate/FAILstep, incorrectallocation/data/pixels, prior49regression, timeout/fencehang/TDR/bugcheck/guestloss. Preservefirstfailure/evidence; noautomaticpatch/retry/capadjustment. Parentownsrollbackexactexperimentpackage tosameGPUvisibleinert recovery, no ordinaryhiddenboot.
+LAUNCHHELD: hardware1426.approved ABSENT. Root must append finalHARDWAREBEFORE andcreate exactmarker HARDWARE1426_BEFORE_APPROVED SOURCE_REV=939cf61a78833349e7be51e028fd9ddf82a2e85a only afterallartifact/recoverychecks. Preparation supplies no authorization.
+PACKAGE_ARTIFACTS:
+336cb65d04bb7d7d4cdf6406e030e626553615a8a05e0ea22ac4f03531559f67  /Users/pavel/public_windows/.local/experiments/EXP1426-d3d12-volume-additional-alignment/AppleAgxRenderAdmission.inf
+6956d919654dd42f900f25fbf780d2cdd7036350a500bf078856ff78c55376c9  /Users/pavel/public_windows/.local/experiments/EXP1426-d3d12-volume-additional-alignment/AppleAgxRenderAdmission.sys
+8d8422d119e02417cc3610ac44f4610afbc97afbde30997136ec250da60a19d0  /Users/pavel/public_windows/.local/experiments/EXP1426-d3d12-volume-additional-alignment/AppleAgxRenderAdmissionUmd.dll
+4b3d4a1f527efb040bab95e6ca2f05ef39cd23d6d1af754e71cda84a0ad279e2  /Users/pavel/public_windows/.local/experiments/EXP1426-d3d12-volume-additional-alignment/appleagxrenderadmission.cat
+d51ebf72bc4afc255c902039d89c2268ca77f11d7f514344f8aececc59f0a379  /Users/pavel/public_windows/.local/experiments/EXP1426-d3d12-volume-additional-alignment/AppleAgxOpenGL32.dll
+1625ffde0685757457143f6eb8cb31f60aae0b98c5cf91cd5cdbc01accd7e7ac  /Users/pavel/public_windows/.local/experiments/EXP1426-d3d12-volume-additional-alignment/AppleAgxRenderAdmissionUmd32.dll
+f322efbbd4694db7ac76ee3475125165873283242145b62442c34bad9e39c610  /Users/pavel/public_windows/.local/experiments/EXP1426-d3d12-volume-additional-alignment/manifest.json
+389d91eb19709255d1059c243806020f02264ede0479b2f11c9eccddb7d573ec  /Users/pavel/public_windows/.local/experiments/EXP1426-d3d12-volume-additional-alignment/hardware-manifest.json
+ee5b10b3c0e449d6e9bc603bead3a650715550eb622c19a23330ad9baffc4349  /Users/pavel/public_windows/.local/experiments/EXP1426-d3d12-volume-additional-alignment/kmd-build-receipt.json
+887f0307c5255c130e339c2f8fb52c13e9f678884d9f293cec744e1e0e69b743  /Users/pavel/public_windows/.local/experiments/EXP1426-d3d12-volume-additional-alignment/full-owner1426.sh
+SOURCE_ARTIFACTS:
+5c8409712f6037679cf648aecb7af7cc12264dea2e5f28f3b17199561c858b15  /Users/pavel/public_windows/.local/experiments/EXP1426-d3d12-volume-additional-alignment/source.zip
+02aa6902541d955e2b7ecaa3de349b6e3e008c8e043bcd175a08830674a46b23  /Users/pavel/public_windows/.local/experiments/EXP1426-d3d12-volume-additional-alignment/source-manifest.json
+RECOVERY SOURCE:
+{
+  "ExperimentDirectory": "/Volumes/pwdev/public_windows/.local/experiments/EXP1426-d3d12-volume-additional-alignment",
+  "ExperimentId": "1426",
+  "Files": {
+    "DisableServiceHelper": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recovery-disable-service.ps1",
+      "Sha256": "7ab9f020ece3157b34091778366de7fd9058c3c65d9f8758bf94470e7ec28bcb"
+    },
+    "ExactLauncherSelector": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-select-exact-launcher.py",
+      "Sha256": "bed44fabe7e97270d8d1399e2140fff60b730252b9971570211fbb4a0a15e2aa"
+    },
+    "HostShell": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recover-visible.sh",
+      "Sha256": "38909f549c08ac3f0f88d1ce8737b4a2556c7441b91121723e27246503d2be10"
+    },
+    "LegacyHidden": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1426-d3d12-volume-additional-alignment/evidence/rec1426h/recover.sh.legacy-hidden",
+      "Sha256": "e767d4711ced5f3d6d8ca97effc3b1d09e8db6c53b40c8f0e353f705f74dac44"
+    },
+    "Wrapper": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1426-d3d12-volume-additional-alignment/evidence/rec1426h/recover.sh",
+      "Sha256": "130ecae1b98c23a09f9162b5cf879292791ba743cea2ab954d2fdaed241149e6"
+    }
+  },
+  "RecoveryMode": "GpuVisibleServiceDisabledOrderedReboot",
+  "Version": 2,
+  "Worktree": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler"
+}
