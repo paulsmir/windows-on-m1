@@ -37,6 +37,7 @@ class TypedSrvExtent(unittest.TestCase):
         code='\n'.join(defines)
         code+='\n'+block(asahi,'static inline uint32_t\nagx_texture_buffer_size_el(')
         code+='\n'+block(owner,'static bool srv_component_mapping(')
+        code+='\n'+block(owner,'static bool uav_dimension_matches(')
         code+='\n'+block(owner,'static HRESULT bind_stage(')
         cls.tmp=tempfile.TemporaryDirectory(prefix='d3d12-typed-srv-extent-')
         src=Path(cls.tmp.name)/'extent.cpp';cls.exe=Path(cls.tmp.name)/'extent'

@@ -40,8 +40,9 @@ class ViewMapping(unittest.TestCase):
         code += 'static void Replay(const Bindings &b, OwnerBindings *o) {\n' + replay + '\n}\n'
         if 'static bool srv_component_mapping(' in owner:
             code += block(owner, 'static bool srv_component_mapping(') + '\n'
+        code += block(owner, 'static bool uav_dimension_matches(') + '\n'
         code += block(owner, 'static HRESULT bind_stage(') + '\n'
-        metadata_arg = ', shader_dimensions' if 'const uint8_t *dimensions' in code else ''
+        metadata_arg = ', shader_dimensions, nullptr' if 'const uint8_t *uav_dimensions' in code else ', shader_dimensions' if 'const uint8_t *dimensions' in code else ''
         mesa_format = (local_tree('reference', 'mesa') / 'src/util/format/u_format.c').read_text()
         code += block(mesa_format, 'void util_format_compose_swizzles(') + '\n'
         code += block(mesa_format, 'void util_format_apply_color_swizzle(') + '\n'

@@ -33,9 +33,9 @@ int main() {
  AGX_D3D12_BUFFER buffer={&native,0,65536};AGX_D3D12_CBV cbvs[14]={};AGX_D3D12_UAV uavs[8]={};AGX_D3D12_SRV srvs[128]={};
  srvs[0].Buffer=&buffer;srvs[0].Texture=1;srvs[0].Format=resource.format;srvs[0].FirstLevel=1;srvs[0].Levels=1;srvs[0].Layers=1;srvs[0].ComponentMapping=AGX_D3D12_COMPONENT_MAPPING_IDENTITY;
  uint8_t dimensions[128]={};dimensions[0]=DXBC_SRV_3D;pipe_sampler_view *views[128]={};unsigned count=0;
- assert(bind_stage(&pipe,MESA_SHADER_COMPUTE,cbvs,srvs,uavs,views,&count,dimensions)==S_OK);
+ assert(bind_stage(&pipe,MESA_SHADER_COMPUTE,cbvs,srvs,uavs,views,&count,dimensions,nullptr)==S_OK);
  assert(captured.target==PIPE_TEXTURE_3D &&captured.u.tex.first_level==1 &&captured.u.tex.last_level==1 &&count==1);
- dimensions[0]=DXBC_SRV_OTHER;assert(bind_stage(&pipe,MESA_SHADER_COMPUTE,cbvs,srvs,uavs,views,&count,dimensions)==E_INVALIDARG);
+ dimensions[0]=DXBC_SRV_OTHER;assert(bind_stage(&pipe,MESA_SHADER_COMPUTE,cbvs,srvs,uavs,views,&count,dimensions,nullptr)==E_INVALIDARG);
  AGX_D3D12_UAV uv={};uv.Buffer=&buffer;uv.Texture=1;uv.Format=resource.format;uv.Level=1;uv.Layers=4;pipe_image_view image={};
  assert(uav_image(&uv,&image) &&image.resource==&native &&image.u.tex.last_layer==3);
  uv.FirstLayer=1;uv.Layers=3;assert(!uav_image(&uv,&image));

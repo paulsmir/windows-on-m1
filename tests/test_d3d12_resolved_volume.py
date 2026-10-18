@@ -11,8 +11,10 @@ class ResolvedVolume(unittest.TestCase):
   b=local_tree('accelerated-desktop-ad03','mesa-build');m=local_tree('reference','mesa')
   if not b or not m:self.skipTest('host Mesa unavailable')
   owner=OWNER.read_text();ddi=DDI.read_text()
-  funcs='\n'.join(block(owner,x) for x in ['static unsigned block_bytes(', 'extern "C" unsigned AgxD3d12FormatBlockBytes(', 'static bool texture3d_template(', 'static bool texture3d_layout(', 'extern "C" HRESULT AgxD3d12QueryTexture3DLayout(', 'extern "C" HRESULT AgxD3d12QueryTexture3D(', 'extern "C" HRESULT AgxD3d12OwnerCreateTexture3D('])
+  funcs='\n'.join(block(owner,x) for x in ['static unsigned block_bytes(', 'extern "C" unsigned AgxD3d12FormatBlockBytes(', 'static bool texture1d_template(', 'extern "C" HRESULT AgxD3d12QueryTexture1DLayout(', 'static bool texture3d_template(', 'static bool texture3d_layout(', 'extern "C" HRESULT AgxD3d12QueryTexture3DLayout(', 'extern "C" HRESULT AgxD3d12QueryTexture3D(', 'extern "C" HRESULT AgxD3d12OwnerCreateTexture3D('])
   source=(ROOT/'tests/d3d12_volume_query_fixture.cpp').read_text().split('int main()')[0]
+  if 'D3D12DDI_RT_TEXTURE1D=' not in source:source=source.replace('D3D12DDI_RT_TEXTURE2D=3,','D3D12DDI_RT_TEXTURE1D=2,D3D12DDI_RT_TEXTURE2D=3,')
+  funcs+='\n'+block(ddi,'static bool LineLayoutInfo(')
   funcs+='\n'+block(ddi,'static bool VolumeLayoutInfo(')
   record='typedef struct {unsigned long long Bytes, NativeBytes, DepthStride, MipOffsets[16];} AGX_D3D12_VOLUME_LAYOUT;'
   source=source.replace('/* VOLUME_LAYOUT_RECORD */',record).replace('/* ACTUAL_QUERY */',funcs).replace('/* ACTUAL_TEXTURE_BYTES */',block(ddi,'static UINT64 TextureBytes('))
@@ -44,10 +46,12 @@ class ResolvedVolume(unittest.TestCase):
   b=local_tree('accelerated-desktop-ad03','mesa-build');m=local_tree('reference','mesa')
   if not b or not m:self.skipTest('host Mesa unavailable')
   owner=OWNER.read_text();ddi=DDI.read_text();self.assertIn('return CreateVolumeResource(device,heap_arg,heap,resource_arg,resource);',block(ddi,'static HRESULT APIENTRY CreateHeapAndResource('));h=(ROOT/'.local/reference/wdk26100/d3d12umddi.h').read_text()
-  funcs='\n'.join(block(owner,x) for x in ['static unsigned block_bytes(', 'extern "C" unsigned AgxD3d12FormatBlockBytes(', 'static bool texture3d_template(', 'static bool texture3d_layout(', 'extern "C" HRESULT AgxD3d12QueryTexture3DLayout(', 'extern "C" HRESULT AgxD3d12QueryTexture3D(', 'extern "C" HRESULT AgxD3d12OwnerCreateTexture3D('])
+  funcs='\n'.join(block(owner,x) for x in ['static unsigned block_bytes(', 'extern "C" unsigned AgxD3d12FormatBlockBytes(', 'static bool texture1d_template(', 'extern "C" HRESULT AgxD3d12QueryTexture1DLayout(', 'static bool texture3d_template(', 'static bool texture3d_layout(', 'extern "C" HRESULT AgxD3d12QueryTexture3DLayout(', 'extern "C" HRESULT AgxD3d12QueryTexture3D(', 'extern "C" HRESULT AgxD3d12OwnerCreateTexture3D('])
+  funcs+='\n'+block(ddi,'static bool LineLayoutInfo(')
   funcs+='\n'+block(ddi,'static bool VolumeLayoutInfo(')
   prefix=(ROOT/'tests/d3d12_volume_query_fixture.cpp').read_text().split('int main()')[0]
   prefix=prefix.replace('using D3D12DDI_TEXTURE_LAYOUT=unsigned;','').replace('#define D3D12DDI_TL_UNDEFINED 0','').replace('unsigned Flags,Layout;','unsigned Flags;D3D12DDI_TEXTURE_LAYOUT Layout;').replace('enum {D3D12DDI_RT_TEXTURE2D=3,','enum {D3D12DDI_RT_BUFFER=1,D3D12DDI_RT_TEXTURE2D=3,')
+  if 'D3D12DDI_RT_TEXTURE1D=' not in prefix:prefix=prefix.replace('D3D12DDI_RT_TEXTURE2D=3,','D3D12DDI_RT_TEXTURE1D=2,D3D12DDI_RT_TEXTURE2D=3,')
   prefix='using UINT32=unsigned;using UINT16=unsigned short;\n'+prefix
   record='typedef struct {unsigned long long Bytes, NativeBytes, DepthStride, MipOffsets[16];} AGX_D3D12_VOLUME_LAYOUT;'
   def declaration(name):

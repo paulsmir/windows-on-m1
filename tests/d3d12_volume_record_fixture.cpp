@@ -7,7 +7,7 @@ using LONG=int;using BOOL=int;using UINT=unsigned;using UINT64=unsigned long lon
 #define S_OK 0
 #define E_INVALIDARG (-1)
 #define E_NOTIMPL (-2)
-enum {D3D12DDI_RT_BUFFER=1,D3D12DDI_RT_TEXTURE2D=3,D3D12DDI_RT_TEXTURE3D=4};
+enum {D3D12DDI_RT_TEXTURE1D=2,D3D12DDI_RT_BUFFER=1,D3D12DDI_RT_TEXTURE2D=3,D3D12DDI_RT_TEXTURE3D=4};
 enum {D3D12DDI_RL_SELECT_SUBRESOURCE=1,D3D12DDI_RL_PLACED_PHYSICAL_SUBRESOURCE_PITCHED=2};
 enum {kCommandTextureCopy=4,kCommandTextureRegionCopy=7};
 struct AgxD3d12Heap {void *native;UINT64 gpuva,bytes;};

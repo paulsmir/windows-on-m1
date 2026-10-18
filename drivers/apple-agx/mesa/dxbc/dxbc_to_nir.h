@@ -127,6 +127,11 @@ dxbc_translate_tokens_xfb(const uint32_t *tokens,
 bool dxbc_nir_srv_dimensions(const struct nir_shader *nir,
                              uint8_t dimensions[DXBC_RESOURCE_SLOTS]);
 
+/* Direct image and raw/structured UAV requirements before native consumes NIR.
+ * False for dynamic/ambiguous/unhandled image bindings; output is cleared. */
+bool dxbc_nir_uav_dimensions(const struct nir_shader *nir,
+                            uint8_t dimensions[DXBC_UAV_DIMENSION_SLOTS]);
+
 /* The thread-group size (dcl_thread_group) and groupshared bytes of a
  * translated compute shader: the block the frontend's Dispatch launches and
  * the static shared memory of its pipe_compute_state. */

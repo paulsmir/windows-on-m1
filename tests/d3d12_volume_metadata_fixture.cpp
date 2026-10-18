@@ -8,7 +8,7 @@ using UINT=unsigned;using UINT64=unsigned long long;using BOOL=int;using D3DKMT_
 #define E_INVALIDARG (-1)
 #define E_FAIL (-2)
 #define FAILED(x) ((x)<0)
-enum {D3D12DDI_RT_BUFFER=1,D3D12DDI_RT_TEXTURE2D=3,D3D12DDI_RT_TEXTURE3D=4,D3D12DDI_TL_UNDEFINED=0,D3D12DDI_TL_ROW_MAJOR=1};
+enum {D3D12DDI_RT_TEXTURE1D=2,D3D12DDI_RT_BUFFER=1,D3D12DDI_RT_TEXTURE2D=3,D3D12DDI_RT_TEXTURE3D=4,D3D12DDI_TL_UNDEFINED=0,D3D12DDI_TL_ROW_MAJOR=1};
 using DXGI_FORMAT=unsigned;using D3D12DDI_TEXTURE_LAYOUT=unsigned;using UINT8=unsigned char;
 struct D3D12DDI_HDEVICE {void *pDrvPrivate;};struct D3D12DDI_HHEAP {void *pDrvPrivate;};struct D3D12DDI_HRESOURCE {void *pDrvPrivate;};
 struct D3D12DDI_SUBRESOURCE_INFO {UINT64 Offset,RowStride,DepthStride;unsigned short RowBytePreSwizzleOffset,ColumnPreSwizzleOffset,DepthPreSwizzleOffset;};

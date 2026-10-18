@@ -17,10 +17,10 @@ class VolumeQuery(unittest.TestCase):
         owner=OWNER.read_text();ddi=DDI.read_text()
         funcs=block(owner,'static unsigned block_bytes(')+'\n'
         funcs+=block(owner,'extern "C" unsigned AgxD3d12FormatBlockBytes(')+'\n'
-        for name in ['static bool texture3d_template(', 'static bool texture3d_layout(', 'extern "C" HRESULT AgxD3d12QueryTexture3DLayout(', 'extern "C" HRESULT AgxD3d12QueryTexture3D(', 'extern "C" HRESULT AgxD3d12OwnerCreateTexture3D(']:
+        for name in ['static bool texture1d_template(', 'extern "C" HRESULT AgxD3d12QueryTexture1DLayout(', 'static bool texture3d_template(', 'static bool texture3d_layout(', 'extern "C" HRESULT AgxD3d12QueryTexture3DLayout(', 'extern "C" HRESULT AgxD3d12QueryTexture3D(', 'extern "C" HRESULT AgxD3d12OwnerCreateTexture3D(']:
             if name in owner:funcs+=block(owner,name)+'\n'
         record='typedef struct {unsigned long long Bytes, NativeBytes, DepthStride, MipOffsets[16];} AGX_D3D12_VOLUME_LAYOUT;'
-        funcs+=block(ddi,'static bool VolumeLayoutInfo(')+'\n'
+        funcs+=block(ddi,'static bool VolumeLayoutInfo(')+'\n'+block(ddi,'static bool LineLayoutInfo(')+'\n'
         source=(ROOT/'tests/d3d12_volume_query_fixture.cpp').read_text().replace('/* VOLUME_LAYOUT_RECORD */',record).replace('/* ACTUAL_QUERY */',funcs).replace('/* ACTUAL_TEXTURE_BYTES */',block(ddi,'static UINT64 TextureBytes('))
         with tempfile.TemporaryDirectory(prefix='d3d12-volume-') as tmp:
             path=Path(tmp)/'query.cpp';exe=Path(tmp)/'query';path.write_text(source)
@@ -62,6 +62,7 @@ class VolumeViews(unittest.TestCase):
         prefix+='''
 struct D3D12DDIARG_TEX2D_UNORDERED_ACCESS_VIEW_0002 {UINT MipSlice,FirstArraySlice,ArraySize,PlaneSlice;};
 struct D3D12DDIARG_CREATE_UNORDERED_ACCESS_VIEW_0002 {
+ struct {UINT MipSlice,FirstArraySlice,ArraySize;} Tex1D;
  struct {void *pDrvPrivate;} hDrvResource; DXGI_FORMAT Format;UINT ResourceDimension;
  D3D12DDIARG_TEX2D_UNORDERED_ACCESS_VIEW_0002 Tex2D;
  struct {UINT MipSlice,FirstW,WSize;} Tex3D;
@@ -83,7 +84,7 @@ struct D3D12DDIARG_CREATE_RENDER_TARGET_VIEW_0002 {
         prefix+='\nusing LONG=int;struct RECT {LONG left,top,right,bottom;};struct AGX_D3D12_OWNER {pipe_context *Context;unsigned PendingDraws;};\n'
         code+='\n'+block(owner,'static unsigned level_extent(unsigned extent, unsigned level) {')
         code+='\n'+block(owner,'static unsigned texture_layer_extent(const struct pipe_resource *resource,unsigned level) {')
-        for marker in ['static bool uav_image(', 'static bool srv_component_mapping(', 'static HRESULT bind_stage(',
+        for marker in ['static bool uav_dimension_matches(', 'static bool uav_image(', 'static bool srv_component_mapping(', 'static HRESULT bind_stage(',
                        'static void clear_view_layers(', 'extern "C" HRESULT AgxD3d12OwnerClearRenderTarget(']:
             code+='\n'+block(owner,marker)
         source=prefix+code+(ROOT/'tests/d3d12_volume_views_fixture.cpp').read_text()

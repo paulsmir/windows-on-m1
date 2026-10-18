@@ -56,6 +56,7 @@ typedef struct {
   void *State;          /* the context's compute state object */
   unsigned Block[3];
   struct dxbc_binding_map Bindings; /* C17: immutable SM5.1 semantic-to-slot map */
+  uint8_t UavDimensions[DXBC_UAV_DIMENSION_SLOTS];
   uint8_t SrvDimensions[DXBC_RESOURCE_SLOTS]; /* C19: owned direct-slot requirements */
 } AGX_D3D12_COMPUTE;
 HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *Owner, const UINT *Tokens, AGX_D3D12_COMPUTE *Compute);
@@ -150,6 +151,9 @@ HRESULT AgxD3d12OwnerCreateTexture2D(AGX_D3D12_OWNER *Owner, DXGI_FORMAT Format,
 typedef struct {
     unsigned long long Bytes, NativeBytes, DepthStride, MipOffsets[16];
 } AGX_D3D12_VOLUME_LAYOUT;
+/* C23: same pointer-free native extent/mip record, ordinary nonarray Texture1D. */
+HRESULT AgxD3d12QueryTexture1DLayout(DXGI_FORMAT Format,unsigned Width,unsigned Levels,unsigned Bind,AGX_D3D12_VOLUME_LAYOUT *Layout);
+HRESULT AgxD3d12OwnerCreateTexture1D(AGX_D3D12_OWNER *Owner,DXGI_FORMAT Format,unsigned Width,unsigned Levels,unsigned Bind,unsigned long long Bytes,AGX_D3D12_BUFFER *Texture);
 HRESULT AgxD3d12QueryTexture3DLayout(DXGI_FORMAT Format,unsigned Width,unsigned Height,unsigned Depth,
     unsigned Levels,unsigned Bind,AGX_D3D12_VOLUME_LAYOUT *Layout);
 HRESULT AgxD3d12QueryTexture3D(DXGI_FORMAT Format,unsigned Width,unsigned Height,unsigned Depth,
@@ -261,6 +265,7 @@ typedef struct {
   unsigned VelemsStrides[16];
   struct dxbc_binding_map VsBindings, PsBindings;
   uint8_t VsSrvDimensions[DXBC_RESOURCE_SLOTS], PsSrvDimensions[DXBC_RESOURCE_SLOTS];
+  uint8_t VsUavDimensions[DXBC_UAV_DIMENSION_SLOTS], PsUavDimensions[DXBC_UAV_DIMENSION_SLOTS];
 } AGX_D3D12_GRAPHICS;
 HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *Owner, const AGX_D3D12_GRAPHICS_DESC *Desc,
                                     AGX_D3D12_GRAPHICS *Graphics);

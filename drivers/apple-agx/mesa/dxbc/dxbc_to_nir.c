@@ -3065,7 +3065,8 @@ bool dxbc_nir_srv_dimensions(const struct nir_shader *nir,
                default: break;
                }
             }
-            uint8_t dimension = tex->sampler_dim == GLSL_SAMPLER_DIM_3D ? DXBC_SRV_3D :
+            uint8_t dimension = tex->sampler_dim == GLSL_SAMPLER_DIM_1D && !tex->is_array ? DXBC_SRV_1D :
+                                tex->sampler_dim == GLSL_SAMPLER_DIM_3D ? DXBC_SRV_3D :
                                 tex->sampler_dim != GLSL_SAMPLER_DIM_CUBE ? DXBC_SRV_OTHER :
                                 tex->is_array ? DXBC_SRV_CUBE_ARRAY : DXBC_SRV_CUBE;
             uint8_t *slot = &dimensions[tex->texture_index];
@@ -3077,5 +3078,63 @@ bool dxbc_nir_srv_dimensions(const struct nir_shader *nir,
    return true;
 fail:
    memset(dimensions, 0, DXBC_RESOURCE_SLOTS);
+   return false;
+}
+
+/* C23: retain only the new 1D/non-1D distinction; existing other UAV
+ * dimensions keep their prior owner policy. Gather before native consumes NIR. */
+bool dxbc_nir_uav_dimensions(const struct nir_shader *nir,
+                            uint8_t dimensions[DXBC_UAV_DIMENSION_SLOTS])
+{
+   if (!dimensions) return false;
+   memset(dimensions, 0, DXBC_UAV_DIMENSION_SLOTS);
+   if (!nir) return false;
+   nir_foreach_function_impl(impl, nir) {
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic) continue;
+            const nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            unsigned source = 0;
+            bool image = false;
+            switch (intr->intrinsic) {
+            case nir_intrinsic_image_load:
+            case nir_intrinsic_image_sparse_load:
+            case nir_intrinsic_image_store:
+            case nir_intrinsic_image_atomic:
+            case nir_intrinsic_image_atomic_swap:
+            case nir_intrinsic_image_size:
+            case nir_intrinsic_image_levels:
+            case nir_intrinsic_image_samples:
+               image = true;
+               break;
+            case nir_intrinsic_store_ssbo: source = 1; break;
+            case nir_intrinsic_load_ssbo:
+            case nir_intrinsic_ssbo_atomic:
+            case nir_intrinsic_ssbo_atomic_swap:
+            case nir_intrinsic_get_ssbo_size:
+               break;
+            default:
+               /* Deref/bindless/unhandled image forms cannot establish a
+                * direct slot; do not silently label them unused. */
+               if (nir_intrinsic_has_image_dim(intr)) goto fail;
+               continue;
+            }
+            if (!nir_src_is_const(intr->src[source])) goto fail;
+            unsigned slot = nir_src_as_uint(intr->src[source]);
+            if (!image && slot >= DXBC_NIR_UAV_COUNTER_SLOT &&
+                slot < DXBC_NIR_UAV_COUNTER_SLOT + DXBC_UAV_DIMENSION_SLOTS)
+               slot -= DXBC_NIR_UAV_COUNTER_SLOT;
+            if (slot >= DXBC_UAV_DIMENSION_SLOTS) goto fail;
+            uint8_t dimension = image &&
+               nir_intrinsic_image_dim(intr) == GLSL_SAMPLER_DIM_1D &&
+               !nir_intrinsic_image_array(intr) ? DXBC_UAV_1D : DXBC_UAV_OTHER;
+            if (dimensions[slot] && dimensions[slot] != dimension) goto fail;
+            dimensions[slot] = dimension;
+         }
+      }
+   }
+   return true;
+fail:
+   memset(dimensions, 0, DXBC_UAV_DIMENSION_SLOTS);
    return false;
 }
