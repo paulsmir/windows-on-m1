@@ -170,3 +170,33 @@ investigation/CLAUDE_WORKING_METHOD.md. CS allowed again.
   kmdagentauthorizedONEexecutionafterfixtureprep; noPE/guest.
 - sm51agentONEsource-onlyC15nextbridgeplan(readablePROGRAM/rootownedprovider/
   VOID-DDIpolicy) separatefromblockedC21E/faultsweep; no compiler/guest/edits.
+
+## Latest completed offline gates (2026-10-18T21:45Z onward)
+
+- C24 committed daa2eb13/CHANGES8e095263, status implemented only. CURRENT48PASS
+  12.781s after dependency-only oldvolume fixture correction. Full1598/221.991s
+  exact119baseline(68fail51errors11skip)/noaddednoremoved, allpostpinsMATCH;
+  SHA1b857f34ad564d012dd38e668d6474a4b865ad84cb7642e7d5e9ea12e73ca0b5.
+  Originalfull123vs119 preserved71a82d69, no volume assertions changed.
+- C24 frozen1439 b5fcb91ceee169544e8bafba6f74f2a43d11864a parent27dcaeb:
+  exact8files697sources, original5runtimehunks/tempindex+bd55probe+2FXCheaders;
+  no currentC15publisher, protectedDDIfunctions/PBEc20 retained. PREP.local/preparation-1439.
+  ExactfrozenWindows3PASSreceiptb0917b36b5dc8b79b7547abe515a8bc9be9f188fb317f9ce479df9d302f80b71;
+  BUILD_BEFORE8e095263, build1589DONE/PACKAGE1439PASS/PDB/stack13824+6544.
+  Originalnative4+logpreserved8d8bb637d6fbbadbd0e385e8401819029cc03200f5b6579e2240f4174e0dc720.
+  AllofflinecodegatesCOMPLETE; hardwaremarkerABSENT. Wait1438C23ABC/56nonE/regressions/recovery;
+  futureexpect59nonE+C21Eseparate. Probe60AA64 268288B610d71669249d0b83454cfdace09a70a914d0da9a33e5dc3e82af195aa8e9b51,
+  receipt8fb515f81693bede1d5a121909e5d5fe0c5ab543c6bfb3973b2076a4ceb244cb.
+- C23 package1438 allofflinecodegatesCOMPLETE/nativeoriginal147dcc5450bf89c3c96b851c5e380060e829c5170888ed88982cc0d5b73aaf74;
+  rootno stage/signrepack/hardware yet; waitsactive1436result/recovery. Bothnextpackagesready.
+- C15 sourceplan ce83ffc2/processrow658bce18 adopted next explicitspan/rootprovider,
+  docsD3D12-C15-readable-program-provider.md. CPUprovider privateoriginal
+  .local/c15-shader-provider-prep, sourceheader3fe02b33/cppfbb8d425/fixtureb85b3eb0.
+  EXP1440 BEFORE1845892f actualONE8argvALL0/allstderrEMPTY/prepost110+runnerpinsMATCH;
+  old114467/424029unchanged, new79checksPASS. Receiptbdd960e20d0193eeaed9a40d0befe939c28ae09c7fa1db22bf8770e67c466480.
+  Caller-serialized only, ownedopaque rootbytes, borrowedstablePROGRAM/signaturearrays,
+  nonreentrantnoexceptCPU sink, contextthroughlastlease; no threading/readability/HRESULT/
+  canonicalextraction/OOM-recovery/productionDDI/SM6claim. No fault/nativecompiler/translator/GPU.
+  sm51preparingSOURCEONLY currentROOTdurable4argv/native3objectproposal; noadoption/compileyet.
+- Currentguest1436 progressing through FL11/d10 controls, DWM0sofar; stillWAIT
+  TOOL_d3d12-on_END ANDNEWEXP_DONE beforeanalysis/recovery. No parallelguestcommands.
