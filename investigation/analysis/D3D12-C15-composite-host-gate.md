@@ -56,3 +56,15 @@ SDK link fix, then independently frozen before Windows composite compilation.
 
 No production driver linkage, R1/SM6 capability advertisement, Windows composite
 execution or hardware behavior is established by these host results.
+
+## Observed native argument gate
+
+The exact22 tests also passed on the pinned Windows builder Python08a64dc7,
+in0.086s with return0. The wrapper independently observed os.name nt and the
+actual Windows_CommandLineToArgvW backend on a fixed lexical sample before the
+tests. The new result directory is .local/c15-eh-native1421-result; final21-file
+manifest8b0129a66a796d149e9b082bd1d9f1f3dbcd66ae71bef58f08432169c0a5a410,
+native receipt270e275adadcb933a3644882421591c18e06bca70465f62a4662233a4e8ff6ef,
+lexical receipt4c4416da831e6e0f75a81296de8eca53f5aa2a7603d76dbf13f2ebcd74a444c1.
+This closes the selected parser API branch gate. The composite Windows build
+and its actual83 compile commands remain a separate unexecuted checkpoint.
