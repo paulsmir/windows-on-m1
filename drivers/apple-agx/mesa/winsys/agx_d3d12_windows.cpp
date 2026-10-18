@@ -1161,7 +1161,10 @@ static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, co
     if (templ.format == PIPE_FORMAT_NONE) return E_INVALIDARG;
     templ.target = PIPE_BUFFER;
     templ.u.buf.offset = static_cast<unsigned>(srvs[i].Offset);
-    templ.u.buf.size = static_cast<unsigned>(srvs[i].Bytes && srvs[i].Bytes < room ? srvs[i].Bytes : room) & ~3u;
+    templ.u.buf.size = static_cast<unsigned>(srvs[i].Bytes && srvs[i].Bytes < room ? srvs[i].Bytes : room);
+    /* C20: typed elements may be1/2 bytes. Only raw/structured dword
+     * fetches round their byte span; typed views retain every element. */
+    if (!srvs[i].Format) templ.u.buf.size &= ~3u;
     views[i] = pipe->create_sampler_view(pipe, static_cast<struct pipe_resource *>(buffer->Resource), &templ);
     if (!views[i]) return E_OUTOFMEMORY;
     *view_count = i + 1;
