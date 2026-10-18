@@ -322,3 +322,13 @@ followed by an already valid baseline shader. The recovery is the existing exact
 package rollback to the inert GPU-visible guest. No such package/build/run is
 authorized or performed by this note, and there is no reason here to alter KMD,
 power, MMIO or firmware state.
+
+## Later exact-runtime implementation evidence
+
+The [26100.9549 static gate receipt](D3D12-C15-sm60-minimum-ddi-evidence.md)
+now proves why0011 is needed for this saved runtime. Its constructor maps the
+selected interface/build to an ordinal;0003 is1 and0011 is3. Shader-model
+initialization starts at5.1 and returns before query1012 for ordinal<3; the public
+consumer clamps against that same maximum. This resolves the selected-runtime
+eligibility question without a capability/hardware probe. It does not establish
+a cross-runtime normative minimum or complete the typed/library companions.

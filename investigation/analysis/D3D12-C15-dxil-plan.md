@@ -258,3 +258,12 @@ LibraryReference field elision, repeated-index rules, runtime opaque-payload
 framing or DDI-specific mismatch propagation. Internal CPU storage tests alone
 cannot close those typed boundaries or justify a negotiation/capability change;
 retain the existing0003 path until the complete selected contract is established.
+
+The subsequent [exact-runtime eligibility proof](D3D12-C15-sm60-minimum-ddi-evidence.md)
+resolves the minimum for our saved26100.9549 binary: negotiated0003 maps to
+ordinal1, while the model initializer skips caps1012 for ordinals below3 and
+retains SM5.1. Ordinal3 is0011. Thus the selected coherent0011 route is now
+justified for this runtime by implementation evidence; it is not a universal
+claim derived from header age. Structural0003 program-body compatibility alone
+does not expose SM6. Keep caps/negotiation unchanged until the complete selected
+typed adapters, library and compiler/owner contract are implemented and verified.
