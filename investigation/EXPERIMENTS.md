@@ -56979,3 +56979,48 @@ REC-EXP1387 BEFORE 2026-10-18T14:58:30Z: NEWEXP_DONE/all41D3D12PASS/KMD_POOL5wor
 
 EXP1387 ACTUAL 2026-10-18T15:02:58Z: CONFIRMED device-private initialization checkpoint and C18 bounded SRV mapping. Exact source d5bfef7af7109ed15ac9b7a43fa8aff8b83e4381 = EXP1381 plus only e8e0b35a zeroing; unchanged probe1b2809d4. TOOL_d3d12-on14:53:53-14:54:04Z all41PASS/0FAIL/0missing: C13counter=drawn512; C14 counted/no-count each512 and dispatchbad0; C16 highslot16384wordsbad0; C17 spaces preserved; C18A(B,R,0,1) and C18B(G,B,A,R) copiedRGBA8SRVs each4096pixelsbad0; C7PresentPASS. C18 does not prove all integer/format combinations. NEWEXP_DONE14:57Z. Dedicated KMD_POOL5workers pixels/fences/cleanexitPASS, pressurecount0->20, last requester1388/victimExplorer4628/global856->849/freed7x65536=458752B/requester4/request1MiB/root0x9d6108000/largest21units; confirms foreign-cache policy, no lost-unit leak claim. Regressions73SMOKEPASS plus only knownMSAA-a000rFAIL; fl11cs-a/x/debugPASS; GL52.6/internalGL59.5fps, separateCS3771frames/81.079s=46.510fps; corpus64/4 createfail with zero hangs/pixeldiffs; DWMfaults0. Only intentionalLONGJOB recovery1kind4/fence0x23eeb/903ms, deadlineexpiries4/longest1322ms. No observed bugcheck/guesthang; SSH/display/storage/DWM/explorer alive, keyboard/mouse/RDP/perCPUtimers not independently measured. FinalhostmanifestSHA256 30829edbb669b54850c6feca624bb790c7f489c1a565b075c4acd34a05b44292. NEXT separately prepared EXP1390C19 cube source7df15192/probe67a9fd5c, then1391typedextent/1392volume; C15 parallel offline work only.
 REC-EXP1387 ACTUAL 2026-10-18T15:02:58Z: RECOVERY_DONE PackageAbsent normalGPUvisible oneCode28/noService/8CPU. FactoryV2 canonical owner selector integrated guard PASS; exact serviceStart3->4/SystemHiveFlushed, ordered Windows restart, normalCode32/serviceStopped, exact oem5 cleanupSSH0/Staged0/Sysfalse/Umdfalse, second ordered restart and durablePreflightPASS. BeforeBoot14:59:38.1470550Z AfterBoot15:01:23.4705780Z manifestA534AB5F4FC147CAA9047F33B94F64928C4FF66AA59B4FB268858DF3FAAE68F3. No forcedhostreset/physicalaction/hiddenboot/duplicatecleanup. All guestcommands controller-owned; durableJSONs downloaded aftercompletion; finalmanifest above.
+EXP1390 BEFORE 2026-10-18T15:04Z (PACKAGE1390: AppleAgxOpenGL32.dll d51ebf72bc4afc25 (KMD/ARM64 UMD7df15192 (C19 cube views plus inherited device initialization; FL11_0 opt-in; b_ndebug) + ICDout61 + WOWUMDout88 1625ffde + INF1235; pinned m1n1 5b857603/Mu361a2134), INF e7feb049, sys ebba5e05, UMD 1bbdb0a3, catalog 30342f57, DriverVer 30.0.1390.0; smoke ddd752e3d31672f4; m1n1 5b857603 (macho 3e5e9f1f, IOMFB_FULL_OWNER=1 AGX_LOCAL_RESERVE_V2=1; 4096-record broker page-table registry, on fa45bc58), Mu 361a2134 J313_EFI-m2f2c.fd (1c7d87d6, reserve ABI v3 on 71c9b2d551), run_uefi.py integration; manifest/hardware-manifest/full-owner1390.sh e1e79b5d6a6b77ef 1d940e2ca0c4bebc 4d50bf533cb482c0 ; C: free 28.78 GB; recovery rec1390h/recover.sh; probe probe1390.sh (f1d15de778c922b2); then the standard benchmark (EXP1184 harness: playnoovl).
+WHY THIS HYPOTHESIS:
+1. Current cube SRVs were refused; actual shader metadata distinguishes cube from one-element cube array, unlike allocation shape alone. Real descriptor/replay/owner and exact FXC/NIR/Asahi tests prove the deterministic mapping.
+ATOMIC CONTRACT: shader-derived per-stage dimensions and cube/array sampler-view target form one view invariant; C18/device-zeroing/KMD are inherited controls.
+WINDOWS CONTRACT: FULL GRAPHICS cube face/mip spans and NumCubes; distinguish cube/array; checked nonzero finite mip ranges, first face multiples and clamp rules.
+AGX/ASAHI CONTRACT: Existing 2D-array allocation, PIPE_TEXTURE_CUBE/CUBE_ARRAY view target, face count divided by6 for cube-array dimensions; actual assigned Asahi sampler-view entry.
+TRANSLATION: Immutable shader dimension metadata selects view target; original backing retained; validate face/mip ranges without overflow. No caps, firmware or shader-model change.
+WHAT IS STILL UNKNOWN: Actual AGX descriptor propagation for all six faces, offset/mip and array index; no bit probing.
+Expected: C19A ordinary cube; B single cube array; C firstFace6/mip1; D two-cube array index1/mip1. All4096 exact pixels per step from24 distinct face/mip colors; GetDimensions exact. All prior41D3D12 lines includingC18/C14 remainPASS. KMD_POOL inheritedcontrol must show freshforeignpressure receipt +pixel/fence/exit checks;73SMOKE PASS+knownMSAA only, fl11cs-a/x/debugPASS, corpus64/4zero hangs/pixeldiffs, DWMfaults0, onlyintentionalLONGJOB recovery. GL/internalGL and distinctCS timedemo reported separately.
+Failure: anybad/missing newstep, oldcontrol regression, unexpectedTDR/bugcheck/guestloss. Per-step verdicts; recover and newID onhang.
+Recovery: recordEXP1387verdict and exactGPUvisible RECOVERY_DONE/PackageAbsent beforeinstall. Same normal inert8CPUguest; exacthashverified experiment-local package. FactoryV2wrapper/sourcepins beforehardware, verifyagainbeforerecovery. No ordinaryhiddenboot or concurrentguestcommands duringcontroller.
+Evidence: .local/experiments/EXP1390-d3d12-cube-init/evidence/EXP1390, exactprobestdout/UMD+KMDpressurebefore/after, allregressions, rec1390h. Build SOURCE_REV=7df1519222fe7f13f274a43c3dfb063cde129b33 bashscratchpad/build1390.sh; manual launchbashscratchpad/run1390.sh onlyafterprerequisite/verdict.
+Pinned source 7df1519222fe7f13f274a43c3dfb063cde129b33; sourcezipSHA256 bd61328fb9da1269e8757056dc38e5269aec1b9aa95d2b081d02cdd86ee457ce; sourcemanifestSHA256 3b5271c3679dcb686977ff4d4ef0feb105f77aacd67ac576bdaf6e897d38027e. Immutable snapshot excludes all later C15/worktree source anddirtymu fromreusedfirmware. Package/build/sign/stackgatesPASS (ARM64largest13824/x866544). Finalpackage/manifest/hardware/recoveryhashes generated bynewexpBEFORE.
+agx_d3d12_probe_e1390_arm64.exe SHA256 67a9fd5c9424669de9173c4f5d36e3253d65135c7bbbb84ad26cb60a4cac2514
+agx_d3d12_kmd_pool_probe_e1390_arm64.exe SHA256 55740036f90c78f8e6a96c33ab4ecebbc0b11360ec87f28aaac72e9d0d96f5d3
+RECOVERY SOURCE:
+{
+  "ExperimentDirectory": "/Volumes/pwdev/public_windows/.local/experiments/EXP1390-d3d12-cube-init",
+  "ExperimentId": "1390",
+  "Files": {
+    "DisableServiceHelper": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recovery-disable-service.ps1",
+      "Sha256": "7ab9f020ece3157b34091778366de7fd9058c3c65d9f8758bf94470e7ec28bcb"
+    },
+    "ExactLauncherSelector": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-select-exact-launcher.py",
+      "Sha256": "bed44fabe7e97270d8d1399e2140fff60b730252b9971570211fbb4a0a15e2aa"
+    },
+    "HostShell": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recover-visible.sh",
+      "Sha256": "38909f549c08ac3f0f88d1ce8737b4a2556c7441b91121723e27246503d2be10"
+    },
+    "LegacyHidden": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1390-d3d12-cube-init/evidence/rec1390h/recover.sh.legacy-hidden",
+      "Sha256": "5669cba4228d4b8d5b2aa1d149f9a34a9e566f37a7baef41c07889c96a70c277"
+    },
+    "Wrapper": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1390-d3d12-cube-init/evidence/rec1390h/recover.sh",
+      "Sha256": "96b55229e8b970fd95d3281a66f22db04c9e8bb18c03aa3fbc64dd61b6ebe7c0"
+    }
+  },
+  "RecoveryMode": "GpuVisibleServiceDisabledOrderedReboot",
+  "Version": 2,
+  "Worktree": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler"
+}
