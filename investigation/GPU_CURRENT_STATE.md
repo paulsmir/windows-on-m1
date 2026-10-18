@@ -8,12 +8,12 @@ Worktree `/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-comp
 - REC1390 controller toolsession75685 finished. No forcedhostreset/physicalaction/hiddenboot; exactoem5cleanupSSH0, twoorderedrestartsCode32->Code28. FactoryV2Host38909f54/helper7ab9f020/selectorbed44fab unchanged. Normal launcher EXP950/launch-normal2.sh owns currentrecovery guest; do not rawproxy whileowned.
 - Normal recovery staysGPUvisible/brokerdisabled; emergencyhidden385onlyifnormalunrecoverable. Full-ownerdriverexperiments inherit pinned m1n1 5b857603/Mu361a2134 from1390; exacthashes in hardware-manifest. No package retention.
 
-## Active EXP1404; EXP1407 built and gated
+## EXP1404 accepted; next EXP1407 C21
 
-- EXP1404 RUNNING, do not restart. Sourcea19a2ddae3bb0b89a09f4cfe48a69f8f399ce278/686files/buildPASS/PDBs/ARM64stack13824. BEFORE633ef7cc; helper/sign/stage23hashes/factoryV2PASS. Rootrunwrapper session21493; scratchpadnewexp1404.log/chain1404.log/watchdog1404.log. Hardware regressions underway, D3D12C19/C20slot later. No active recovery. WaitTOOL_d3d12-on_END/NEWEXP_DONE, collect+normalvisibleexactrollbackrec1404h.
-- EXP1407 BUILD_DONE/PDBs/stack13824, source3ae2c234783bb8a653fbda9f1f1d04d5136ff618/693files, originalnative-build-evidenceall4hashesverified. DO NOTlaunch until1404all47PASS+acceptedmarker+durableRECOVERY_DONEPackageAbsent. Scriptsguarded; rootmustwriteacceptedmarkerexplicitly. No installedpackagecarryover.
-- EXP1405CPU_ONLY and1406nativeSPVsemanticPASS; cpu1405.donewritten. No CPUguestcommandsduringhardware.
-- C19helper679bbdce/EXP1408numeric72pairs/3Windowsrc0. C22PSOfixfc58a816 nowcommitted/durabletests: actualREDlostobjects/cachedfailureoverwrite thenGREEN6PASS,3WindowssyntaxPASS,full1581same119baseline. C22probe/packageNOTYETprepared; rootownsprobe afterdelegatepreparationfailedbeforeedits. FutureC22package differsfromacceptedC21onlyPSOfix, noC15productionadmission.
+- EXP1404 complete47D3D12PASS/C19A-D4096bad0/C20A-Bexacttypedvalues+length3;73SMOKE+knownMSAA/fl11csPASS/GL52.8/internal59.7/corpus64-4zeroissues/DWM0/privatepool5workersPASS. Finalhostmanifest2364bec91fb8786540daf7bb0abad3dd037dc9ecf5eb847db0c63f8b4a6c2fd2. ACTUAL/CHANGESthiscommit.
+- REC1404 DONE normalGPUvisiblePackageAbsent/oneCode28/noService8CPU; durableAfterBoot2026-10-18T17:10:25.9287030Z/manifestE10B3F8E2095BB4A006D729FCC13438F1368B0C71E75591A670649C1BE08FEAD. Postrun16:55USB/SSHdisconnectprecededfailedrollback;causeunknown. BoundedproxyNOP thenexactsamefullownerbootONLYforcleanup;originaltracepre-resume-full.log. No reprobe/hiddenboot/physicalaction. Controller40708finished.
+- EXP1407 BUILT/PDBs/stack13824/source3ae2c234783bb8a653fbda9f1f1d04d5136ff618/693files. Parentmaywriteaccepted1404markerthenrun1407. Newexp1407usesCSwindowguarduntil17:22Z; no packagecarryover. Holdledgerwritesuntil1407BEFOREcommit.
+- C22PSOfixfc58a816 host6PASS/3Windowssyntax/full1581same119baseline. ProbeC22A/B086e58ee builderPASS/ARM64SHAec529c1282caa21ba967c33757a97a4a5535f03b7777a10bfe3282d6e07e571a,SPe1414. NoC22packagebuilt yet; derive1414from1407+onlyPSOfix/probe. C15CPU-only1413allocatorGREEN/1415ContextGREEN, externalpatchesnotproduction;9archivesunchanged.
 
 ## C19 failure and causal repair next
 
