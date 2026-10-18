@@ -1,3 +1,9 @@
+## EXP1379 preparation (SRV capacity, 2026-10-18)
+
+- Driver a1a954ef raises the shared UMD/owner SRV limit16->128; compiled root-bound regression RED->GREEN. No caps, KMD, firmware or register-space change. Probe a9dd189f adds fresh-device C16A root t127/table t126/UAV u7/CBV b13; expected5*i+207 for16384 words; ARM64 probe98a330e1.
+- Targeted32testsPASS; syntax3x rc0. Full1499 tests has the exact same68failures/51errors/2skips as prior baseline, no new failure signatures. Logs EXP1379-verification. Next gate package1379 build and both stack frames<=16384 before any hardware install.
+- Guest currently normal/inert, EXP1378 rec1378h RECOVERY_DONE PackageAbsent. Do not repeat its hidden recovery before staging. Scripts scratchpad build1379.sh/newexp-kmd1379.sh/before1379.txt; chain/run to pin final snapshot after build.
+
 ## EXP1378 completed and rolled back (2026-10-18)
 
 - PROVEN: owner fix44323d3d, counted ExecuteIndirect DRAW C14A and no-count C14NCA both drawn=PS-counter=512; dispatch C14B bad0; all34 D3D12 checkpoints PASS. Package efa17240, probe4e6808ff. Cause was owner zero direct-count early-out, before Asahi; no count-map fix required.
