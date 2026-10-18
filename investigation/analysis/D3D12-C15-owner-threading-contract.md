@@ -113,3 +113,139 @@ Windows/object-lifetime rules.
 
 Source-license boundary: this note paraphrases Microsoft CC-BY4.0 documentation
 at the pinned link. It copies no external implementation or sample code.
+
+## Follow-up: complete current call graph and synchronization boundary
+
+One bounded source pass after the initial note; no implementation or tests added.
+Primary native evidence is `.local/reference/mesa/docs/gallium/screen.rst`,
+**Thread safety**, lines1090–1097: screen methods must support concurrent use,
+whereas a rendering context need not; different contexts sharing a screen may
+be used from different threads. Therefore a single shared pipe_context needs
+UMD-controlled exclusive use. A screen's own locking cannot substitute for that.
+
+Additional inspected implementations:
+`mesa/winsys/agx_d3d12_windows.cpp`, `agx_win32_asahi_scene.c`,
+`render-admission/umd/src/umd_runtime_device.c`, `umd_win32_screen.c`,
+`umd_gpuva_windows.c`, `umd_asahi_owner.c` (all under `drivers/apple-agx`).
+The Asahi context retirement wrapper directly traverses native batch slots,
+active/submitted bitsets and synchronizes batches. It is not a separate
+thread-safe completion service to call while another thread changes that context.
+
+### Actual outward callbacks
+
+| Boundary | Observed source path and callbacks |
+| --- | --- |
+|Owner construction|OwnerCreate -> RuntimeAdapterInitialize -> adapter QueryAdapterInfoCb; then kernel CreateContextVirtualCb; InitializeForQueue -> RuntimeDeviceAttach -> CreatePagingQueueCb/CreateSynchronizationObject2Cb -> ScreenInitialize -> native screen/context construction.|
+|Native BO allocation/mapping|Screen resource creation -> Win32 transport -> AllocateCb; GPUVA helpers -> ReserveGpuVirtualAddressCb, MapGpuVirtualAddressCb, MakeResidentCb and paging waits; mapped staging paths also use LockCb/UnlockCb. Native initialization can allocate internal resources through these same paths.|
+|Submission/retirement|Context flush/native batch transport -> SubmitCommandCb, synchronization callbacks, GPUVA transfer/identity EscapeCb; retire polls native batches and transport completion.|
+|Destruction/failure cleanup|OwnerDestroy flushes/retires pending presentations, destroys context/screen, finalizes runtime state, destroys paging/synchronization objects and the owned kernel context; underlying BO release can DeallocateCb/FreeGpuVirtualAddressCb/EvictCb.|
+|Core error report|AdmissionUmdSetError -> owner_error -> DDI OwnerError -> device->callbacks->pfnSetErrorCb. This is an outward runtime callback from within an owner operation today.|
+
+These are callback-presence observations, not evidence that any callback actually
+reenters a D3D12 DDI. WDK CORELAYERCALLBACKS_0003 explicitly separates SetError /
+SetCommandListError / SetCommandListDDITable from its kernel-callback entries;
+owner construction currently uses the D3DDDI_DEVICECALLBACKS table for its kernel
+context and transport. Both families must be considered before holding a lock.
+
+Existing inner ScreenBufferLock sections reserve/publish buffer slots and release
+the lock before AllocateCb (`umd_win32_screen.c` around614), then reacquire it to
+finish bookkeeping. Asahi owner Enter/Leave/Associate/Detach/Identity use this
+inner lock. They do not acquire any existing D3D12 device or context lock. This
+establishes a prospective context-gate -> inner transport-lock order, but not
+permission to hold either lock across arbitrary runtime reentry.
+
+### All shared-context operation families
+
+- Compute and graphics PSO creation/deletion use pipe create/delete state calls;
+  DXBC/NIR translation also reads the published screen's immutable NIR options.
+- Buffer creation maps a newly created resource through the native wrapper;
+  texture/presentation creation and release touch the owner's Screen/Runtime.
+  They must participate in owner lifetime even where no pipe_context call occurs.
+- Render-target/depth/UAV clears, buffer/texture copies, query creation-on-use,
+  begin/end/resolve and image/sampler binding use the shared context.
+- Dispatch and Draw bind state, execute, unbind temporary views and update
+  PendingDispatches/PendingDraws/PendingCopies. SubmitAndWait consumes those
+  fields, flushes and retires the same native context.
+- Presentation preparation flushes for present; presentation destruction flushes
+  and updates PendingPresentations; OwnerDestroy consumes that linked list and
+  finally destroys Context/Screen/Runtime.
+
+Public-to-public nested calls in this file are OwnerCreate failure -> OwnerDestroy
+and OwnerCreateGraphics failure -> OwnerDestroyGraphics. Other shared helpers
+(clear_view_layers, bind_stage, heap_query, collect_presentations) are internal.
+An exclusive nonrecursive lock naively added to every public entry would deadlock
+those cleanup calls. Recursive locking would avoid that symptom while allowing
+unsafe logical reentry into partially modified context state; it is not a proof
+of correctness.
+
+### Concrete minimal state and lock contract
+
+The following is the candidate contract to enforce, rather than a claim that a
+particular Windows primitive has already been proved safe across callbacks:
+
+1. **Publication/lifetime state:** one per-device short metadata lock guards
+   EMPTY/CREATING/READY/FAILED/CLOSING, creator thread identity, published owner,
+   cached creation result and active owner leases. It is never held during native
+   construction, destruction, kernel/core callbacks, or a blocking wait. The
+   selected creator claims CREATING, drops the lock, builds an unpublished owner,
+   then publishes one terminal result and wakes waiters. No lock-free plain-field
+   fast path may race that state. CLOSING prevents new leases and drains active
+   operations before one destruction. No redundant successfully created owner is
+   silently lost. A same-thread CREATING reentry policy remains unresolved below.
+2. **Registry:** a separate short shared/exclusive metadata lock guards heap_count
+   and every heap array read/update. Register/unregister/lookup do not call owner,
+   runtime or native code while holding it. Unregister removes visibility before
+   resource release; release occurs after unlocking. Lookup returns a borrowed
+   object only under the runtime/application's valid lifetime guarantee; the lock
+   alone does not extend that lifetime. Independent resource changes must not
+   expose half-written records. Do not introduce whole-DDI serialization merely
+   to protect this small array.
+3. **Native owner transaction gate:** exactly one operation may mutate/use the
+   shared context and Pending* state at a time, across ALL queues on that device.
+   The transaction for ExecuteCommandLists starts before replay of its first
+   command and ends after SubmitAndWait and retirement. Per-command locks are
+   insufficient: another queue could otherwise interleave query begin/end or
+   split a replay from the flush that consumes its state. Present preparation,
+   creation/deletion of context state, copies/maps and teardown use the same gate.
+   Screen-only work at least holds a lifetime lease; pure layout queries need
+   neither owner nor gate. Pure compiler work may eventually occur outside the
+   gate if it owns its immutable inputs and mutable compiler/cache state.
+4. **Composition/order:** acquire a lifetime lease under publication metadata,
+   release metadata, then acquire the context transaction gate. A short registry
+   lookup during that transaction is permitted only if no registry path waits
+   for the gate while holding the registry lock. Release the transaction gate
+   before releasing the final lifetime lease or doing outward core error reports.
+   Native inner locks are below the context gate; no newly introduced metadata
+   lock may be held across those callbacks. Internal cleanup helpers require an
+   already-held transaction and must not reacquire it.
+5. **Error delivery:** owner_error can record an operation-local error for the
+   entering DDI transaction, with the actual SetErrorCb delivered by that DDI
+   after the context gate is released. Delivery must stay on the original caller
+   thread and retain the correct device/runtime handle. This is a proposed
+   mechanism requiring deterministic propagation tests, not an implemented change.
+   It does not remove kernel callbacks from the native transaction.
+
+### Decisive remaining normative uncertainty: callback reentry
+
+The bounded review of pinned headers, the D3D12 DDI threading specification and
+[AllocateCb documentation](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3dumddi/nc-d3dumddi-pfnd3dddi_allocatecb)
+did not establish whether the specific allocation/context/residency/submission
+callbacks may synchronously enter another UMD DDI on the same device, or wait
+for work requiring that same device's native transaction. Callback signatures
+and their kernel-facing purpose are not sufficient to prove nonreentrancy.
+The SetError callback path is visibly outward, but its downstream behavior is
+also not defined by the inspected local declaration. No runtime trace resolves
+this point in the present work.
+
+Accordingly the candidate above is NOT yet permission to put a nonrecursive
+mutex around the complete native callback-containing operation. A stateful gate
+without an OS lock held across callbacks still has a logical wait dependency;
+it can deadlock on the same reentry. Nor is returning E_FAIL on legal reentry a
+supported substitute absent a contract. Stop this design pass at this exact
+uncertainty. The next source question is the normative same-device callback
+reentry guarantee, followed by a forced reentry callback-stub test against the
+chosen owner-state/gate behavior. No hardware run is justified to guess it.
+
+The general older Microsoft UMD threading page describing Direct3D9/DirectDraw
+single-device serialization is not applicable evidence for this negotiated
+D3D12 free-threaded contract. Keep that historical model separate.

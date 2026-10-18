@@ -232,3 +232,20 @@ context usage under that call model. Correct initial zeroing remains a separate
 already-fixed invariant; none of this attributes EXP1381's poison value to a race.
 These are implementation and offline regression gates, not reasons to probe caps
 or reinterpret the compiler-only EXP1389 result as runtime readiness.
+
+The [owned converter contract](D3D12-C15-owned-converter-contract.md) derives the
+actual C API scan, frozen binding map, reported-error cleanup and same-thread TLS
+lifetime. Resource scan success does not prove complete traversal: its adapter
+needs sticky rejection. Resource representation must survive the SPIR-V/NIR bridge;
+descriptor sets alone cannot prevent SRV/UAV aliasing after lowering.
+
+The reviewed pin has no supported recoverable internal OOM contract. In
+particular, failed arena backing allocation and unchecked custom allocator
+returns are not repaired by an outer C facade or enabling exceptions alone.
+Production UMD integration is gated on a separately reviewed upstream fix/new pin
+with checked allocation, safe partial-object ownership and actual-library fault
+injection. Preserve MIT notices and pin/hash every external delta; do not copy
+external implementation into this repository. A bounded original offline adapter
+may prove normal success and reported errors while explicitly retaining this
+production blocker. The Windows MSVC exception policy must be measured separately
+from the existing host build's confirmed -fno-exceptions flag.
