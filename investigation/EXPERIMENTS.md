@@ -56808,3 +56808,49 @@ KMD_POOL13:19:32..13:19:43Z; workerexecution2s,5freshprocesses allpixels/fences/
 Regressions73SMOKEPASS plus onlyknownMSAA-a000r unsupportedFAIL; GL51.4fps/internalGL59.5fps; distinctCS3771frames80.776s46.685fps. Corpus createfail64/4, nohangs/pixeldifferences; DWMfaults0 throughout, DWM/exploreralive. One intentionalLONGJOB firmware recovery (kind4/fence0x23fdf,last901ms), no unintendedrecovery/observedbugcheck/guesthang; stopcode/parameters N/A. SSH/storage/normalUSBcontrol functional;8CPUreported; no independent keyboard/mouse/RDP/operatorvisual/perCPUtimer test. GPUdraw/present/readback checkpointsPASS.
 RECOVERY_DONE via GPU-visible service-disablednormal route, nothidden: serviceStart3->4 persisted/receipt; firstnormalCode32/serviceStopped; exactoem5 and pinnedINF/SYS/UMD removal. CleanupSSH30s expired but cleanupordereditsownrestart; no deletionrepeat, proxyNOPPASS and finalnormalcontinuation. DurablePreflightPASS BeforeBoot2026-10-18T13:28:21.4569730Z AfterBoot2026-10-18T13:30:02.1490920Z, manifestA25D7CA28E6204B6F8D481B7599C52602DFCB226EA985E8231FBAC5FA7BB2544, PackageAbsent, exactlyoneinertCode28/noService/8CPU. Emergencyhiddenimage/originalscript retained unused. Coreworkflow1796e576+guard80e35fbb verified with continuation;93255cc0 timeoutstrategy awaits next fullorchestration run.
 Evidence .local/experiments/EXP1380-d3d12-spaces-kmd-pressure/evidence/EXP1380 and rec1380h/visible-*,durable-json; decodedpressure private-pressure-decoded.json. Finalhostmanifest SHA256 e87762f642daf69a7dda50fcc8002e0ff62959179e5e9da1a2584d470bb4a46d; package manifestbe2473dfaaf3d7387c885a25ff82fe48ddd6dbf88d87c416af15bb37ec9575ee; sourcemanifest493a49d8b31aa3d238f6bd1d8349a22d5988ddf646ff0205bca45723a0200677. NEXT EXP1381C18componentmapping (source56fe3977) alreadybuilt andgated;1382C19/1383C20queued. C21layoutqueryfoundationoffline only. REVIEWR85/R47 ACCEPT pinnedhashes/profile;R48 exactowner/serialguard;R113 service-disabledvisible route; historicalotherboundariesDEFER.
+
+EXP1381 PREPARE continuation BEFORE 2026-10-18T13:37:53Z: package/stageHASHES_MATCH23 andstagePASS alreadycompleted, Code28/G3Armed1/8CPU, BootEvent268591/13:30:02.1490920Z, manifest671A2947ACEC8BF0038B4931FADF2B9C43B8D9F2AC878B9C5B6A93A4DB67672C. Hostprepare then assertedwaitcyclechanged because itclonedpreviousvisiblewrapperinstead ofpreservedlegacytemplate; nofull-ownerhardwarelaunch occurred. Correctedprepare templateselection topreviousrecover.sh.legacy-hidden, regeneratedonlyhostrecoveryartifacts, factoryinstalledvisiblewrapper/hashmanifest. Resumeexactstagedphaseafterhostallartifacthashesandsameguestboot/Code28/nobinding/arm1/INFhashread-onlychecks; no repackagerestage/reinstallation/rebootuntilfullBEFORE. Source/packageidentical56fe3977. Futureprepare usessavedlegacytemplate. Evidence scratchpadnewexp1381.log(stopped),repair-recovery1381.sh, resume-stage1381.ps1; originalstoplog preservedbeforecontinuation.
+EXP1381 BEFORE 2026-10-18T13:37Z (PACKAGE1381: AppleAgxOpenGL32.dll d51ebf72bc4afc25 (KMD/ARM64 UMD56fe3977 (C18 SRV component mapping8120126d/probe25276db2; inherited EXP1380 C17/KMD; FL11_0 default opt-in; b_ndebug) + ICDout61 + WOWUMDout88 1625ffde + INF1235; pinned m1n1 5b857603/Mu361a2134; probe1b2809d4), INF 434c4e72, sys 0a4112f4, UMD 7b2315f2, catalog 4ff72eef, DriverVer 30.0.1381.0; smoke ddd752e3d31672f4; m1n1 5b857603 (macho 3e5e9f1f, IOMFB_FULL_OWNER=1 AGX_LOCAL_RESERVE_V2=1; 4096-record broker page-table registry, on fa45bc58), Mu 361a2134 J313_EFI-m2f2c.fd (1c7d87d6, reserve ABI v3 on 71c9b2d551), run_uefi.py integration; manifest/hardware-manifest/full-owner1381.sh 671a2947acec8bf0 19625e4539ec7322 aa55eda5907e84ad ; C: free 29.11 GB; recovery rec1381h/recover.sh; probe probe1381.sh (6514cb5c23c3d99b); then the standard benchmark (EXP1184 harness: playnoovl).
+WHY THIS HYPOTHESIS:
+1. Production CreateSRV discarded Shader4ComponentMapping and owner hardcodedXYZW. Real create/copy/replay/completebind_stage extraction RED3 -> GREEN3 proves preserved mapping and explicit root identity.
+2. Pinned WDK sixselectors map directly to Gallium swizzles; actual Mesa composition/typedONE tests cover allselectors and float/UINT/SINT. Asahi already composes view andformat swizzles. This local view-state defect is causally closer than shader/root/KMD changes.
+ATOMIC CONTRACT: SRV descriptor mapping, replay metadata, owner view swizzles and explicit root identity form one value-propagation invariant. Single feature C18. C17 and KMD are inherited controls, not additional newvariables. Separate C18A/B freshdevices check complementary channel maps and exactRGBA, same feature.
+WINDOWS CONTRACT: FULL GRAPHICS. SRV fetch results obey fourencodedselectors; forceONE uses formatnumeric type. Descriptor copies preservemapping; root SRV usesidentity. Unsupported raw/structured nonidentity mapping refuses explicitly, ratherthan applying vector mapping to scalar dwordfetches.
+AGX/ASAHI CONTRACT: existing sampler-view swizzles are composed with native format swizzles in agx_pack_texture; no resource format/layout, shadercompiler, KMD, firmware, power or caps changes.
+TRANSLATION: carry encoded value through64Bdescriptor and ownerSRV, decode exactX/Y/Z/W/ZERO/ONE, preserve identity on descriptorlessroot paths. Validate encoding; no stack-growing arrays.
+WHAT IS STILL UNKNOWN: actual descriptor state propagation toAGX texturefetch and descriptor-copy behavior under the designed exactpixel oracle. No diagnosticcapability guessing.
+Expected: C18A(B,R,0,1) and C18B(G,B,A,R), each4096exactRGBA pixels from asymmetric2x2input, copiedSRV(secondslot). All precedingD3D12 steps includingC14/C16/C17 remainPASS. Legacy KMD_POOL is regressioncontrol and its verdict remainsseparate; fl11cs-a/x pass. Regression target73SMOKE PASS+knownMSAA, GL~52/internalGL~59.6, CSfps reportedseparately, corpus64/4 nohangs/pixeldifferences, DWMfaults0, onlyintentionalLONGJOB recovery.
+Failure: anyC18pixelbad/missingstep, oldD3D12regression, unanticipatedTDR/bugcheck/guestloss. Preserve per-step evidence; donot call unobservedpressure aKMDPASS.
+Prerequisite: record EXP1380 verdicts and collect evidence; exactrec1380h RECOVERY_DONE/PackageAbsent beforeinstall. Candidate built ahead whileEXP1380runs; no automaticinstall authorization from buildsuccess alone.
+Recovery: samepinnednormal GPU-visible inert8CPUguest; exactexperimentpackage/hashonly. Afterevidence reboot then evidence/rec1381h/recover.sh -> RECOVERY_DONE PackageAbsent. Hang exactlauncherstop/recover and newID.
+Evidence: .local/experiments/EXP1381-d3d12-srv-component-map/evidence/EXP1381/tool-d3d12-on-{std.txt,umd.log}; ordinaryregressions andrcpt-tool-kmd-pool-before/after, recoveryreceipts. Build bashscratchpad/build1381.sh; launch bashscratchpad/run1381.sh afterprerequisite. Package/manifest/hardware/recovery hashes in generatedBEFORE.
+Pinned source 56fe3977d3909012636dc87aaff9f0d177526574; archiveSHA256 6f466a33195d91f5c2977f2c68b59c5335d8efbe3c99d409c025d0bc7967f4ff; source-manifestSHA256 cfd19327c34f3ccf722266dc291b290d510aae475909d94c63688b85707b3acc. FutureC19/C20/C21 changes excluded from thissnapshot; reuseddirtymu excluded frompinnedMuimage.
+agx_d3d12_probe_e1381_arm64.exe SHA256 1b2809d42b11b519f9077a9cee38938f6cc1f7d6e8b9df6bcf8796550c9f1023
+agx_d3d12_kmd_pool_probe_e1381_arm64.exe SHA256 55740036f90c78f8e6a96c33ab4ecebbc0b11360ec87f28aaac72e9d0d96f5d3
+Offline40D3D12PASS/13DXBCPASS corpus439/13/0; full1512 same119failure signatures; syntax3xrc0; packageBUILD PASS; ARM64stack13824/x866544PASS.
+RECOVERY SOURCE:
+{
+  "ExperimentDirectory": "/Volumes/pwdev/public_windows/.local/experiments/EXP1381-d3d12-srv-component-map",
+  "ExperimentId": "1381",
+  "Files": {
+    "DisableServiceHelper": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recovery-disable-service.ps1",
+      "Sha256": "7ab9f020ece3157b34091778366de7fd9058c3c65d9f8758bf94470e7ec28bcb"
+    },
+    "HostShell": {
+      "Path": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agx-recover-visible.sh",
+      "Sha256": "969f5fd18673460aeb273c8c3353a8425a2547bc978ab8f4ffb344292c476dee"
+    },
+    "LegacyHidden": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1381-d3d12-srv-component-map/evidence/rec1381h/recover.sh.legacy-hidden",
+      "Sha256": "435dc02ef031294ea3a84eec8f829f8931d82ba44e5435288bad6acfb173aee6"
+    },
+    "Wrapper": {
+      "Path": "/Volumes/pwdev/public_windows/.local/experiments/EXP1381-d3d12-srv-component-map/evidence/rec1381h/recover.sh",
+      "Sha256": "c029f3604e762e6c6d0e19debaab9364d17ea38156e2e22ad063f8d13b64542f"
+    }
+  },
+  "RecoveryMode": "GpuVisibleServiceDisabledOrderedReboot",
+  "Version": 1,
+  "Worktree": "/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler"
+}
