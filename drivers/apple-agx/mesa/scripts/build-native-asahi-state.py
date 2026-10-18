@@ -16,6 +16,16 @@ import shutil
 import subprocess
 
 
+def project_3d_pbe_base_depth(state):
+    """Encode true 3D PBE base depth; preserve normalized array/2D views."""
+    old = '         unsigned layers = view->u.tex.last_layer - layer + 1;'
+    if state.count(old) != 1:
+        raise ValueError('Ambiguous native 3D PBE layer anchor')
+    return state.replace(old, '         unsigned layers = target == PIPE_TEXTURE_3D\n'
+                              '                              ? tex->base.depth0\n'
+                              '                              : view->u.tex.last_layer - layer + 1;', 1)
+
+
 def project_shader_failure(state, shader, device):
     """Project checked executable allocation through shader/device creation.
 
@@ -5595,6 +5605,7 @@ uint32_t AgxWin32NativeBuildPipelineTest(struct agx_batch *batch,
         # original no-capture path remains byte-for-byte behaviorally native.
         state_target=out/'src/gallium/drivers/asahi/agx_state.c'
         state_text=state_target.read_text()
+        state_text=project_3d_pbe_base_depth(state_text)
         shader_ir='''   nir_shader *nir = cso->type == PIPE_SHADER_IR_NIR
                         ? cso->ir.nir
                         : tgsi_to_nir(cso->tokens, pctx->screen, false);'''
