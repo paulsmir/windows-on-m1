@@ -63,13 +63,17 @@ Installed after recovery: none (rec1368h). Integration HEAD 39636057.
   (CreateSwapChainForHwnd, Present S_OK; pfnPresent returns the
   presentation allocation on the queue context, no private data); C8c
   placed buffers (CopyBufferRegion adds the resource base).
-- RUNNING: EXP1373 (package 7e6f7586): C9 compute texture views/samplers/
-  typed UAVs (fixes compute texture SRVs bound as buffer views), C10 UAV
-  clears + Discard/SetMarker, C11 queries (C11C measures the timestamp
-  frequency source; KMD CalibrateGpuClock still NOT_SUPPORTED).
-- QUEUED for EXP1374 (committed, probe 6c3b4bba): C12 copy/compute queues
-  + cross-queue waits (measurement), C13 graphics UAVs, C14 ExecuteIndirect
-  (single draw/draw-indexed/dispatch signatures).
+- PROVEN (EXP1375): C9 compute texture SRVs + samplers + typed UAVs
+  (texture and buffer images), C10 UAV clears (Uint/Float, rects), C11
+  query heaps (statistics, binary occlusion, timestamps), C11d KMD
+  DxgkDdiCalibrateGpuClock (GetTimestampFrequency 1e9), C14 indirect
+  dispatch. Defects found and fixed on the way: explicit shader-image bind
+  broke owner allocation (EXP1373, bd71aa17); unzeroed command slots
+  (EXP1374, cb9ffad1). Known limits: one active occlusion query (Asahi);
+  timestamps are the CPU fallback at replay.
+- RUNNING: EXP1376 (package dc8d857f, probe c510ff8a): graphics root UAV
+  setter (c93c9b20) -> C13 PS UAVs and C14 indirect draws; C11A
+  sequential occlusion; C12 copy/compute queues measurement.
 - Major open item for real D3D12 applications: shaders are DXBC only
   (dxbc_to_nir); SM6 applications ship DXIL -- needs a DXIL front end and
   the shader-model caps that admit it.
